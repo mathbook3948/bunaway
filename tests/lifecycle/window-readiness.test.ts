@@ -6,10 +6,10 @@ import {
   validateWindowOutput,
 } from "@bunaway/plugin-windows";
 import {
-  type HostContext,
   type Hello,
-  parseMessage,
+  type HostContext,
   PROTOCOL_VERSION,
+  parseMessage,
   SDK_READY_FEATURE,
   serializeMessage,
 } from "@bunaway/protocol";

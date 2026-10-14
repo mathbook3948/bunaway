@@ -90,7 +90,7 @@ WebView audio는 ICoreWebView2_8의 IsMuted와 IsDocumentPlayingAudio를 같은 
 하나이며 HWND 파괴 전에 제거한다. 전송 용량과 복구는
 [공개 창 이벤트 계약](../../../docs/site/src/content/docs/reference/host/windows.mdx)을 따른다.
 
-트레이 구현과 전용 상수는 `plugins/tray/src/tray.ts`, Job 객체 상수는 `job.ts`에 둔다. 개발 CLI와 공유하는
+트레이 구현과 전용 상수는 `plugins/tray/src/platforms/windows-tray.ts`, Job 객체 상수는 `job.ts`에 둔다. 개발 CLI와 공유하는
 종료 메시지와 창 클래스 접두어는 `runtime-bun/windows-control`의 단일 정의를 사용한다.
 Worker 패킷은 `runtime-bun/worker-channel`의 공통 구현을 사용한다.
 Win32 콜백에서는 `Channel.poll()`로 최대 128개의 Worker 메시지를 처리한다.

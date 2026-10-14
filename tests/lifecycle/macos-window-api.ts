@@ -27,11 +27,11 @@ try {
     appEntry,
     `
     import {defineApp} from ${JSON.stringify(backend)};
-    import {windowsPlugin, windows} from ${JSON.stringify(plugin)};
+    import windows from ${JSON.stringify(plugin)};
     let phase = 0;
     let failure;
     const documents = new Map();
-    export default defineApp({modules: [], plugins: [windowsPlugin, {name:"startup-check",version:"1",async setup(){
+    export default defineApp({modules: [], plugins: [windows, {name:"startup-check",version:"1",async setup(){
       const list = await windows.list();
       if (list.length !== 3 || !list.some(item => item.view === "main" && item.open) || !list.some(item => item.view === "reader" && item.open) || !list.some(item => item.view === "lazy" && !item.open)) throw new Error("Setup host routing or grants failed.");
       await windows.recreate({view:"main"});
@@ -126,7 +126,7 @@ try {
     source,
     `
     import {createClient} from ${JSON.stringify(client)};
-    import {windows} from ${JSON.stringify(plugin)};
+    import windows from ${JSON.stringify(plugin)};
     const client = createClient();
     const name = location.pathname.split(".")[0].slice(1);
     const check = (ok, message) => {if (!ok) throw new Error(message);};

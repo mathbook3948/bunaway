@@ -1,5 +1,5 @@
 import { createClient } from "@bunaway/client";
-import { windows } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 
 const role = location.pathname.slice(1, -5);
 const client = createClient();

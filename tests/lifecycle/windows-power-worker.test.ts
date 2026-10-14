@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 import { type CommandContext, command } from "@bunaway/backend";
 import { bindHostAPI } from "@bunaway/core";
-import { power, powerPlugin } from "@bunaway/plugin-power";
+import power from "@bunaway/plugin-power";
 import {
   type HostContext,
   type HostResponse,
@@ -27,9 +27,9 @@ test.skipIf(process.platform !== "win32")(
       generation: crypto.randomUUID(),
     };
     const registration = {
-      name: powerPlugin.name,
-      version: powerPlugin.version,
-      native: powerPlugin.native,
+      name: power._definition.name,
+      version: power._definition.version,
+      native: power._definition.native,
     };
     const registry = new NativeRegistry([
       registration,
@@ -69,11 +69,11 @@ test.skipIf(process.platform !== "win32")(
         [
           {
             ...registration,
-            execution: "io",
+            thread: "worker",
           },
         ],
-        `import { powerPlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/power/dist/native/windows.js"))};
-export const pluginImports = { power: { operations: async () => ({ createOperations: powerPlugin.nativePlatforms.windows.create }) } };`,
+        `import power from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/power/dist/native/windows.js"))};
+export const pluginImports = { power: { operations: async () => ({ createOperations: power._definition.nativePlatforms.windows.create }) } };`,
       );
       worker = new Worker(resolve(assets, "host-operations.js"), {
         workerData: {
@@ -222,7 +222,7 @@ export const pluginImports = { power: { operations: async () => ({ createOperati
             },
           );
           policy = {
-            permissions: powerPlugin.native.operations.map(
+            permissions: power._definition.native.operations.map(
               (operation) => operation.name,
             ),
           };

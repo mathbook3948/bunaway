@@ -3,7 +3,7 @@ import type {
   NativeWindow,
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
-import { validateWindowCall, windowsPlugin } from "@bunaway/plugin-windows";
+import windows, { validateWindowCall } from "@bunaway/plugin-windows";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
 
@@ -112,7 +112,7 @@ function fixture() {
 
 test("print UI uses its own operation grant and strict browser/system contract", () => {
   const registry = new NativeRegistry([
-    windowsPlugin,
+    windows._definition,
   ]);
   expect(registry.operation("windows.showPrintUI").name).toBe(
     "windows.showPrintUI",

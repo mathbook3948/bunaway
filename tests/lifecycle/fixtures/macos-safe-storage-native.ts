@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { NativeAdapter } from "@bunaway/plugin";
-import { MacosKeychain } from "../../../plugins/safe-storage/src/macos-keychain.ts";
-import { macosOperations } from "../../../plugins/safe-storage/src/macos-operations.ts";
+import type { NativePluginAdapter } from "@bunaway/plugin";
+import { MacosKeychain } from "../../../plugins/safe-storage/src/platforms/macos-keychain.ts";
+import { macosSafeStorageOperations as macosOperations } from "../../fixtures/injected-native-plugins.ts";
 import { keychainFixture } from "./macos-keychain.ts";
 
 const APP_ID = "tests.bunaway.safe-storage.synthetic";
@@ -13,7 +13,7 @@ const [mode, path, ciphertextPath] = process.argv.slice(2);
 const fixture = keychainFixture();
 
 if (mode === "decrypt") {
-  let ownedAdapter: NativeAdapter | undefined;
+  let ownedAdapter: NativePluginAdapter | undefined;
   try {
     assert(path && ciphertextPath);
     const reference = fixture.open(path);
@@ -24,7 +24,7 @@ if (mode === "decrypt") {
     const adapter = ownedAdapter;
     const ciphertext = await Bun.file(ciphertextPath).text();
     assert.equal(
-      adapter.execute(
+      await adapter.execute(
         "safe-storage.decryptString",
         {
           ciphertext,
@@ -41,8 +41,8 @@ if (mode === "decrypt") {
 } else {
   const root = await mkdtemp(join(tmpdir(), "bunaway-keychain-"));
   const keychainPath = join(root, "synthetic.keychain");
-  let ownedAdapter: NativeAdapter | undefined;
-  let ownedOther: NativeAdapter | undefined;
+  let ownedAdapter: NativePluginAdapter | undefined;
+  let ownedOther: NativePluginAdapter | undefined;
   try {
     const reference = fixture.create(keychainPath);
     ownedAdapter = macosOperations(
@@ -56,7 +56,7 @@ if (mode === "decrypt") {
     );
     const other = ownedOther;
     assert.equal(
-      adapter.execute("safe-storage.isAvailable", null, "backend"),
+      await adapter.execute("safe-storage.isAvailable", null, "backend"),
       true,
     );
     for (const text of [
@@ -64,7 +64,7 @@ if (mode === "decrypt") {
       "\uFEFF한글\u0000🙂",
       "🙂".repeat(16384),
     ]) {
-      const ciphertext = adapter.execute(
+      const ciphertext = await adapter.execute(
         "safe-storage.encryptString",
         {
           text,
@@ -72,7 +72,7 @@ if (mode === "decrypt") {
         "backend",
       );
       assert.equal(
-        other.execute(
+        await other.execute(
           "safe-storage.decryptString",
           {
             ciphertext,
@@ -91,7 +91,7 @@ if (mode === "decrypt") {
       ]).toString("base64"),
       Buffer.alloc(256 * 1024, 255).toString("base64"),
     ]) {
-      const ciphertext = adapter.execute(
+      const ciphertext = await adapter.execute(
         "safe-storage.encryptBytes",
         {
           bytes,
@@ -99,7 +99,7 @@ if (mode === "decrypt") {
         "backend",
       );
       assert.equal(
-        other.execute(
+        await other.execute(
           "safe-storage.decryptBytes",
           {
             ciphertext,
@@ -109,7 +109,7 @@ if (mode === "decrypt") {
         bytes,
       );
     }
-    const ciphertext = adapter.execute(
+    const ciphertext = await adapter.execute(
       "safe-storage.encryptString",
       {
         text: "restart 한글🙂",
@@ -122,23 +122,24 @@ if (mode === "decrypt") {
     }
     const damaged = Buffer.from(ciphertext, "base64");
     damaged[damaged.length - 1] = (damaged.at(-1) ?? 0) ^ 1;
-    assert.throws(() =>
-      adapter.execute(
-        "safe-storage.decryptString",
-        {
-          ciphertext: damaged.toString("base64"),
-        },
-        "backend",
-      ),
+    await assert.rejects(
+      async () =>
+        await adapter.execute(
+          "safe-storage.decryptString",
+          {
+            ciphertext: damaged.toString("base64"),
+          },
+          "backend",
+        ),
     );
     fixture.lock();
     assert.equal(
-      adapter.execute("safe-storage.isAvailable", null, "backend"),
+      await adapter.execute("safe-storage.isAvailable", null, "backend"),
       false,
     );
     fixture.unlock();
     assert.equal(
-      other.execute(
+      await other.execute(
         "safe-storage.decryptString",
         {
           ciphertext,
@@ -158,8 +159,9 @@ if (mode === "decrypt") {
     }
     await adapter.dispose();
     await adapter.dispose();
-    assert.throws(() =>
-      adapter.execute("safe-storage.isAvailable", null, "backend"),
+    await assert.rejects(
+      async () =>
+        await adapter.execute("safe-storage.isAvailable", null, "backend"),
     );
     const inputPath = join(root, "ciphertext.txt");
     await writeFile(inputPath, ciphertext);

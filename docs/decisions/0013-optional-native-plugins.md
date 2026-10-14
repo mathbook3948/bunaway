@@ -36,19 +36,28 @@ status: accepted
    추가 처리가 없는 API는 그대로 공개한다. 플랫폼 구현은 src/platforms/<platform>.ts에서
    연결하며 내부 파일은 공개 진입점을 역으로 import하지 않는다.
    외부 제작자에게 같은 내부 파일 분리를 요구하지는 않는다.
+   공식 플러그인은 공통 스키마와 타입을 contract.ts에 모으고 실제 네이티브 구현과
+   플랫폼 전용 보조 파일을 platforms 아래에 둔다. 여러 OS가 같은 구현을 사용하면
+   platforms 안에서 공유하며 동일한 구현을 복제하지 않는다.
+   내부 import에는 package.json의 비공개 별칭을 사용한다. 예를 들어 storage는
+   #storage/contract와 #storage/platforms/windows로 참조하며 src와 확장자는 매핑에서 처리한다.
+   별칭은 소스와 배포된 타입 선언을 각각 해석할 수 있어야 하고, 실행 번들에는 남기지 않는다.
    package.json의 bunaway.plugin은 dist/index.js를 가리킨다. API와 플랫폼 구현 정보를
    defineNativePlugin의 선언 한곳에 두고 별도 plugin.json은 사용하지 않는다.
    플러그인 버전은 package.json에만 작성한다. 빌드가 읽어 모든 등록 출력에 기록하며
    원본을 직접 import한 등록 객체의 버전은 development다.
-   platforms에는 직접 import한 구현 팩터리 create와 io 또는 ui 실행 위치를 작성한다.
+   platforms에는 직접 import한 구현 팩터리 create와 선택적인 thread를 작성한다. thread는 worker 또는 ui이며 기본값은 worker다.
    src/platforms/<platform>.ts를 빌드 경계로 사용해 중립 출력에서는 모든 OS 구현을 제외하고
    native/<platform> 출력에는 대상 OS 구현만 포함한다. 호스트는 이 패키지 export를 지연 import한다.
    SDK는 외부 의존성으로 유지한다. 설치 패키지 밖으로 연결되는 export는 거부한다. 일부 작업만 구현한다면 operations에
    짧은 작업 이름을 지정한다. 생략하면 전체 작업을 지원한다. 이 목록은 지원 조회와
    호출 검사에 함께 사용하며 미지원 작업은 권한 검사 뒤 UNSUPPORTED를 반환한다.
-   반환한 definition의 nativePlatforms는 실행 위치, 지원 작업과 열거되지 않는 create 함수를 제공한다.
+   내부 _definition의 nativePlatforms는 실행 위치, 지원 작업과 열거되지 않는 create 함수를 제공한다.
    함수는 JSON과 structured clone에 포함하지 않는다. 일반 앱 플러그인의 platforms
-   배열이 가진 앱 시작 제한과 구분하고 기존 definition과 api 반환 형태는 유지한다.
+   배열이 가진 앱 시작 제한과 구분한다.
+   2026-10-14부터 반환값 하나를 default export하고 앱 등록과 호출에 함께 사용한다.
+   내부 등록 정보는 열거되지 않는 읽기 전용 _definition에 둔다. defineApp과 CLI가 읽고
+   Core에는 기존 등록 계약을 전달한다. 편의 호출은 선택적인 calls 조립 함수로 유지한다.
    화면 번들에 백엔드 컨텍스트와 네이티브 구현을 포함하지 않으며 선언을 읽는 것만으로
    연결과 플랫폼 자원을 초기화하지 않는다. 생성 앱은 환경별 타입을 각각 검사한다.
    제작자는 operations에 input과 output을 선언하고 공식 플러그인은 contract.ts에서 가져온다.
@@ -75,6 +84,25 @@ status: accepted
    계약에 맞춘다. macOS의 기존 자식 프로세스 구현 때문에 별도 앱 진입점을 만들지 않는다.
 
 ## 기존 결정과 이관
+
+2026-10-14의 공식 플러그인 이관은 플랫폼별 operations에 작업마다 input, output 스키마와
+handler를 선언한다. 최상위 공통 작업 맵과 작업별 플랫폼 handlers를 대체한다.
+platforms에는 operations와 선택적인 thread, initialize, dispose를 둔다.
+지원 작업은 플랫폼별 operations 키에서 파생하며 검증에도 해당 플랫폼의 스키마를 사용한다.
+공개 인터페이스와 값 스키마의 재사용은 플러그인 작성자가 정한다.
+두 플랫폼의 input, output과 handler가 같으면 완성된 작업 목록 하나를 공유할 수 있다.
+초기화와 정리, 실행 스레드는 목록을 공유해도 플랫폼마다 지정한다.
+스키마만 있는 공통 작업 목록을 펼쳐 handler를 덧붙이는 형식은 사용하지 않는다.
+기능 함수는 해당 작업에서 파싱한 입력과 호스트 context를 받는다. 작성 SDK가 기존
+플랫폼 등록과 실행 경계에 연결하며 별도 지원 목록과 execute, executeUI를 작성하지
+않는다. Windows 창 제어의 기존 coordinator는 창 수명과 권한 검사를 유지하며 각 handler가 호출한다. 설치, 등록, 권한과
+플랫폼 자원 초기화 경계, ADR 0018의 파싱과 실행 승인 순서는 바꾸지 않는다.
+플랫폼 작업을 별도 모듈에 둘 때는 `defineNativeOperation<Instance>()`으로 각 작업의
+스키마에서 handler 입력과 반환 타입을 추론할 수 있다. 실행 계약은 같다.
+
+2026-10-14부터 실행 위치 설정은 `thread?: "worker" | "ui"`로 작성한다. 기본값은
+`worker`이며 UI 스레드가 필요한 구현만 `ui`를 지정한다. 초기화, 작업 실행과 정리는
+지정한 스레드에서 수행한다. 이전 execution과 io 설정은 새 선언과 manifest에서 사용하지 않는다.
 
 [ADR 0002](./0002-host-owned-call-context.md)의 호출 출처와 신뢰 모델,
 [ADR 0006](./0006-windows-bun-ui-worker.md)의 Windows 실행 책임,

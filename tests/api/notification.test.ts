@@ -1,18 +1,16 @@
 import { expect, test } from "bun:test";
 import type { CommandContext } from "@bunaway/plugin-api";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import { notification, notificationPlugin } from "@bunaway/plugin-notification";
+import notification from "@bunaway/plugin-notification";
 import { type HostContext, NativeRegistry } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
-import {
-  notificationOperations,
-  validateNotificationInput,
-} from "#plugins/notification/src/contract";
+import { validateNotificationInput } from "#plugins/notification/src/contract";
+import { notificationOperations } from "#plugins/notification/src/operations";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("notification", notificationOperations);
 const registry = new NativeRegistry([
-  notificationPlugin,
+  notification._definition,
 ]);
 
 test("notification status and Settings require separate permissions and null-only inputs", async () => {
@@ -205,7 +203,7 @@ test("public helpers preserve caller context, cancellation and native failures",
 
 test("native WinRT status and fixed Settings calls balance resources on failures and preserve existing STA ownership", () => {
   const module = new URL(
-    "../../plugins/notification/src/winrt.ts",
+    "../../plugins/notification/src/platforms/windows.ts",
     import.meta.url,
   ).href;
   const child = Bun.spawnSync([

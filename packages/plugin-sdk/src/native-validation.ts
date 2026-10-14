@@ -1,6 +1,10 @@
 import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
 import type { z } from "zod";
-import type { NativeAdapter, NativeOperationDefinition } from "./index.ts";
+import type {
+  NativeAdapter,
+  NativeAdapterFactory,
+  NativeOperationDefinition,
+} from "./index.ts";
 
 /** SDK-owned adapter. Preparation parses input before the host grants synchronous I/O execution. */
 export interface NativePluginAdapter extends Omit<NativeAdapter, "execute"> {
@@ -37,7 +41,7 @@ async function parse(
 
 /** Wrap a platform adapter without moving asynchronous parsing into the authorized native I/O step. */
 export function validatedAdapter(
-  adapter: NativeAdapter,
+  adapter: ReturnType<NativeAdapterFactory>,
   schemas: ReadonlyMap<string, NativeOperationDefinition>,
 ): NativePluginAdapter {
   let disposed = false;
@@ -96,7 +100,11 @@ export function validatedAdapter(
           true,
         );
       }
-      return parse(schema.output, adapter.execute(name, parsed, source), true);
+      return parse(
+        schema.output,
+        await adapter.execute(name, parsed, source),
+        true,
+      );
     };
   };
   const busy = adapter.busy?.bind(adapter);

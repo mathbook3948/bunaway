@@ -1,5 +1,5 @@
 import { createClient } from "@bunaway/client";
-import { windows } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 
 const client = createClient();
 await client.ready;

@@ -4,19 +4,21 @@ description: Windows와 macOS의 텍스트, 이미지와 다중 형식 클립보
 sidebar: { order: 6 }
 ---
 
-`@bunaway/plugin-clipboard`를 설치하고 앱의 `plugins`에 `clipboardPlugin`을 등록합니다. Windows와 macOS 어댑터를 제공합니다. 파일 목록은 Windows에서만 제공합니다.
+기본 export(`default`)를 `clipboard`로 가져와 앱에 등록하고 호출합니다.
+
+`@bunaway/plugin-clipboard`를 설치하고 앱의 `plugins`에 `clipboard`를 등록합니다. Windows와 macOS 어댑터를 제공합니다. 파일 목록은 Windows에서만 제공합니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
-import { clipboardPlugin } from "@bunaway/plugin-clipboard";
+import clipboard from "@bunaway/plugin-clipboard";
 
-export default defineApp({ modules: [], plugins: [clipboardPlugin] });
+export default defineApp({ modules: [], plugins: [clipboard] });
 ```
 
 화면과 앱 백엔드는 같은 패키지에서 `clipboard`를 가져옵니다.
 
 ```ts
-import { clipboard } from "@bunaway/plugin-clipboard";
+import clipboard from "@bunaway/plugin-clipboard";
 
 await clipboard.writeText({ text: "안녕하세요 😀" });
 const text = await clipboard.readText(null);

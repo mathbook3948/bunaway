@@ -1,26 +1,26 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { safeStorageOperations } from "./contract.ts";
-import { createOperations as createMacosOperations } from "./platforms/macos.ts";
-import { createOperations } from "./platforms/windows.ts";
-
-const plugin = defineNativePlugin({
+import { safeStorageOperations } from "#safe-storage/operations";
+import {
+  dispose as disposeMacos,
+  initialize as initializeMacos,
+} from "#safe-storage/platforms/macos";
+import {
+  dispose as disposeWindows,
+  initialize as initializeWindows,
+} from "#safe-storage/platforms/windows";
+/** Promise-based encryption/decryption on the I/O Worker; never falls back to plaintext. */
+export default defineNativePlugin({
   name: "safe-storage",
   platforms: {
     macos: {
-      execution: "io",
-      create: createMacosOperations,
+      initialize: initializeMacos,
+      dispose: disposeMacos,
+      operations: safeStorageOperations,
     },
     windows: {
-      execution: "io",
-      create: createOperations,
+      initialize: initializeWindows,
+      dispose: disposeWindows,
+      operations: safeStorageOperations,
     },
   },
-  operations: safeStorageOperations,
 });
-
-/** Optional Windows DPAPI and macOS Keychain protection. Registration does not grant access. */
-export const safeStoragePlugin = plugin.definition;
-export default safeStoragePlugin;
-
-/** Promise-based encryption/decryption on the I/O Worker; never falls back to plaintext. */
-export const safeStorage = plugin.api;

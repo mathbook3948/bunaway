@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { BunawayError } from "@bunaway/plugin";
 import { MacosStorage } from "../../plugins/storage/src/platforms/macos.ts";
+import { executeMacosStorage } from "../fixtures/macos-storage-operations.ts";
 import { verifyMacosDirectories } from "./macos-storage-directories.ts";
 
 const mode = process.argv[2];
@@ -140,13 +141,13 @@ if (mode === "racer") {
   const storage = new MacosStorage();
   try {
     assert.equal(
-      storage.execute("storage.readText", {
+      executeMacosStorage(storage, "storage.readText", {
         path: `${pathArgument}/restart.txt`,
       }),
       "restart 한글\0✓",
     );
     assert.equal(
-      storage.execute("storage.readBytes", {
+      executeMacosStorage(storage, "storage.readBytes", {
         path: `${pathArgument}/restart.bin`,
       }),
       "AP+A",
@@ -160,7 +161,8 @@ if (mode === "racer") {
   );
   const storage = new MacosStorage();
   const call = (operation: string, path: string, text?: string) =>
-    storage.execute(
+    executeMacosStorage(
+      storage,
       operation,
       text === undefined
         ? {
@@ -172,12 +174,12 @@ if (mode === "racer") {
           },
     );
   const bytes = (operation: string, path: string, value: Buffer) =>
-    storage.execute(operation, {
+    executeMacosStorage(storage, operation, {
       path,
       bytes: value.toString("base64"),
     });
   const transfer = (operation: string, from: string, to: string) =>
-    storage.execute(operation, {
+    executeMacosStorage(storage, operation, {
       from,
       to,
     });
@@ -189,7 +191,7 @@ if (mode === "racer") {
     other.dispose();
     expectCode(
       () =>
-        other.execute("storage.exists", {
+        executeMacosStorage(other, "storage.exists", {
           path: `${root}/missing`,
         }),
       "CANCELLED",
@@ -487,7 +489,7 @@ if (mode === "racer") {
                   ),
                 );
               } else if (i % 3 === 1) {
-                storage.execute("storage.createDirectory", {
+                executeMacosStorage(storage, "storage.createDirectory", {
                   path: `${raceRoot}/slot/generated`,
                   recursive: true,
                 });
@@ -557,27 +559,27 @@ if (mode === "racer") {
     );
     const final = new MacosStorage();
     try {
-      final.execute("storage.exists", {
+      executeMacosStorage(final, "storage.exists", {
         path: source,
       });
       const before = readdirSync("/dev/fd").length;
       for (let i = 0; i < 300; i++) {
-        final.execute("storage.exists", {
+        executeMacosStorage(final, "storage.exists", {
           path: source,
         });
-        final.execute("storage.readDirectory", {
+        executeMacosStorage(final, "storage.readDirectory", {
           path: `${root}/directories`,
         });
         expectCode(
           () =>
-            final.execute("storage.readDirectory", {
+            executeMacosStorage(final, "storage.readDirectory", {
               path: `${root}/entry-limit`,
             }),
           "INVALID_ARGUMENT",
         );
         expectCode(
           () =>
-            final.execute("storage.stat", {
+            executeMacosStorage(final, "storage.stat", {
               path: `${root}/symlink`,
             }),
           "PERMISSION_DENIED",

@@ -5,10 +5,10 @@ import {
   type CoreFactory,
   createCore as create,
 } from "@bunaway/core";
-import { capabilitiesPlugin } from "@bunaway/plugin-capabilities";
-import { logPlugin } from "@bunaway/plugin-log";
-import { storagePlugin } from "@bunaway/plugin-storage";
-import { windowsPlugin } from "@bunaway/plugin-windows";
+import capabilities from "@bunaway/plugin-capabilities";
+import log from "@bunaway/plugin-log";
+import storage from "@bunaway/plugin-storage";
+import windows from "@bunaway/plugin-windows";
 import {
   BunawayError,
   type HostCall,
@@ -16,9 +16,9 @@ import {
   NativeRegistry,
   type Policy,
 } from "@bunaway/protocol";
-import { capabilitiesOperations } from "../../plugins/capabilities/src/contract.ts";
-import { logOperations } from "../../plugins/log/src/contract.ts";
-import { storageOperations } from "../../plugins/storage/src/contract.ts";
+import { capabilitiesOperations } from "../../plugins/capabilities/src/operations.ts";
+import { windowsOperations as logOperations } from "../../plugins/log/src/operations.ts";
+import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
 import { windowDefinitions } from "../../plugins/windows/src/contract.ts";
 import { pluginParsers } from "./plugin-parsers.ts";
 
@@ -28,16 +28,16 @@ function present<T>(value: T | undefined): T {
   return value;
 }
 export const plugins = [
-  storagePlugin,
-  logPlugin,
-  capabilitiesPlugin,
-  windowsPlugin,
+  storage._definition,
+  log._definition,
+  capabilities._definition,
+  windows._definition,
 ];
 export const registry = new NativeRegistry(plugins);
 const parsers = new Map([
   [
     "storage",
-    pluginParsers("storage", storageOperations),
+    pluginParsers("storage", windowsOperations),
   ],
   [
     "log",
@@ -82,22 +82,22 @@ export async function validateHostInput(call: HostCall): Promise<HostCall> {
 // Use contracts from the plugin declarations that build the shared registry.
 export const contracts = {
   "storage.readText": present(
-    storagePlugin.native.operations.find(
+    storage._definition.native.operations.find(
       (operation) => operation.name === "storage.readText",
     ),
   ),
   "storage.writeText": present(
-    storagePlugin.native.operations.find(
+    storage._definition.native.operations.find(
       (operation) => operation.name === "storage.writeText",
     ),
   ),
   "log.write": present(
-    logPlugin.native.operations.find(
+    log._definition.native.operations.find(
       (operation) => operation.name === "log.write",
     ),
   ),
   "capabilities.get": present(
-    capabilitiesPlugin.native.operations.find(
+    capabilities._definition.native.operations.find(
       (operation) => operation.name === "capabilities.get",
     ),
   ),

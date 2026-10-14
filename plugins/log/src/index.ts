@@ -1,27 +1,25 @@
-import { defineNativePlugin } from "@bunaway/plugin";
-import { logOperations } from "./contract.ts";
-import { createLog } from "./logger.ts";
-import { createOperations as createMacosOperations } from "./platforms/macos.ts";
-import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
+import { defineNativePlugin, type NativeEnvironment } from "@bunaway/plugin";
+import { createLog } from "#log/logger";
+import { macosOperations, windowsOperations } from "#log/operations";
 
-const plugin = defineNativePlugin({
-  name: "log",
-  platforms: {
-    macos: {
-      execution: "io",
-      create: createMacosOperations,
-    },
-    windows: {
-      execution: "io",
-      create: createWindowsOperations,
-    },
-  },
-  operations: logOperations,
-});
-/** Plugin contract for app log writes. */
-export const logPlugin = plugin.definition;
-export default logPlugin;
+const dataRoot = (environment: NativeEnvironment) => environment.dataRoot;
 
 /** Write structured app messages through the registered host operation. */
-export const log = createLog(plugin.api.write);
-export type { LogInput } from "./contract.ts";
+export default defineNativePlugin(
+  {
+    name: "log",
+    platforms: {
+      macos: {
+        initialize: dataRoot,
+        operations: macosOperations,
+      },
+      windows: {
+        initialize: dataRoot,
+        operations: windowsOperations,
+      },
+    },
+  },
+  (api) => createLog(api.write),
+);
+
+export type { LogInput } from "#log/contract";

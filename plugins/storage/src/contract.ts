@@ -1,9 +1,50 @@
+import type { NativeInvokeOptions } from "@bunaway/plugin";
 import { z } from "zod";
-import { storageBytesSchema } from "./bytes.ts";
-import {
-  directoryEntrySchema,
-  MAX_DIRECTORY_ENTRIES,
-} from "./directory-entries.ts";
+
+/** A bounded listing fits the JSON transport even for maximally escaped Windows filenames. */
+export const MAX_DIRECTORY_ENTRIES = 256;
+export const MAX_FILENAME_CHARACTERS = 255;
+
+/** An observed child name and kind. This does not authorize or follow the child target. */
+export const directoryEntrySchema = z.strictObject({
+  name: z.string().min(1).max(MAX_FILENAME_CHARACTERS),
+  kind: z.enum([
+    "file",
+    "directory",
+    "link",
+  ]),
+});
+export type StorageDirectoryEntry = z.infer<typeof directoryEntrySchema>;
+
+/** Binary operations leave room for base64, path and envelope in a 1 MiB message. */
+export const MAX_STORAGE_BYTES = 256 * 1024;
+const MAX_BASE64_CHARACTERS = 4 * Math.ceil(MAX_STORAGE_BYTES / 3);
+/** Canonical padded base64, including empty bytes, with a decoded size bound. */
+export const storageBytesSchema = z
+  .string()
+  .max(MAX_BASE64_CHARACTERS)
+  .regex(
+    /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\s\S])/,
+  )
+  .refine((value) => {
+    let padding = 0;
+    if (value.endsWith("==")) {
+      padding = 2;
+    } else if (value.endsWith("=")) {
+      padding = 1;
+    }
+    const size = (value.length / 4) * 3 - padding;
+    if (size > MAX_STORAGE_BYTES) {
+      return false;
+    }
+    if (!padding) {
+      return true;
+    }
+    const alphabet =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const last = alphabet.indexOf(value[value.length - padding - 1] ?? "");
+    return (last & (padding === 2 ? 15 : 3)) === 0;
+  }, "Bytes must use canonical base64 within the decoded size limit.");
 
 const PATH_PATTERN = "^[^\\u0000\\r\\n]+$(?![\\s\\S])";
 const pathFields = {
@@ -30,7 +71,7 @@ const storageTimes = {
     z.null(),
   ]),
 } as const;
-const storageMetadata = z.union([
+export const storageMetadataSchema = z.union([
   z.strictObject({
     kind: z.enum([
       "file",
@@ -46,102 +87,82 @@ const storageMetadata = z.union([
     ...storageTimes,
   }),
 ]);
-/** Text, bytes and metadata contracts for paths selected by the application. */
-export const storageOperations = {
-  readText: {
-    input: z.strictObject(pathFields),
-    output: z.string(),
-  },
-  writeText: {
-    input: z.strictObject({
-      ...pathFields,
-      text: z.string(),
-    }),
-    output: z.null(),
-  },
-  readBytes: {
-    input: z.strictObject(pathFields),
-    output: storageBytesSchema,
-  },
-  writeBytes: {
-    input: z.strictObject({
-      ...pathFields,
-      bytes: storageBytesSchema,
-    }),
-    output: z.null(),
-  },
-  appendBytes: {
-    input: z.strictObject({
-      ...pathFields,
-      bytes: storageBytesSchema,
-    }),
-    output: z.null(),
-  },
-  appendText: {
-    input: z.strictObject({
-      ...pathFields,
-      text: z.string(),
-    }),
-    output: z.null(),
-  },
-  copyFile: {
-    input: z.strictObject({
-      from: pathFields.path,
-      to: pathFields.path,
-    }),
-    output: z.null(),
-  },
-  move: {
-    input: z.strictObject({
-      from: pathFields.path,
-      to: pathFields.path,
-    }),
-    output: z.null(),
-  },
-  readDirectory: {
-    input: z.strictObject(pathFields),
-    output: z.array(directoryEntrySchema).max(MAX_DIRECTORY_ENTRIES),
-  },
-  createDirectory: {
-    input: z.strictObject({
-      ...pathFields,
-      recursive: z.boolean().default(false),
-    }),
-    output: z.null(),
-  },
-  remove: {
-    input: z.strictObject(pathFields),
-    output: z.null(),
-  },
-  exists: {
-    input: z.strictObject(pathFields),
-    output: z.boolean(),
-  },
-  stat: {
-    input: z.strictObject(pathFields),
-    output: z.union([
-      storageMetadata,
-      z.null(),
-    ]),
-  },
-} as const;
+/** Shared value schemas, independent of platform resource ownership. */
+export const storageLocationSchema = z.strictObject(pathFields);
+export const storageWriteSchema = z.strictObject({
+  ...pathFields,
+  text: z.string(),
+});
+export const storageBytesWriteSchema = z.strictObject({
+  ...pathFields,
+  bytes: storageBytesSchema,
+});
+export const storageTransferSchema = z.strictObject({
+  from: pathFields.path,
+  to: pathFields.path,
+});
+export const storageDirectoryCreateSchema = z.strictObject({
+  ...pathFields,
+  recursive: z.boolean().default(false),
+});
+export const storageDirectoryEntriesSchema = z
+  .array(directoryEntrySchema)
+  .max(MAX_DIRECTORY_ENTRIES);
 /** Path accepted by read and metadata operations. */
-export type StorageLocation = z.infer<typeof storageOperations.readText.input>;
-/** Path and text accepted by `storage.writeText`. */
-export type StorageWrite = z.infer<typeof storageOperations.writeText.input>;
-/** File or directory metadata returned by `storage.stat`. */
-export type StorageMetadata = NonNullable<
-  z.infer<typeof storageOperations.stat.output>
->;
-
+export type StorageLocation = z.infer<typeof storageLocationSchema>;
+/** Path and text accepted by text writes and appends. */
+export type StorageWrite = z.infer<typeof storageWriteSchema>;
+/** File or directory metadata returned by storage.stat. */
+export type StorageMetadata = z.infer<typeof storageMetadataSchema>;
 /** Path and canonical base64 accepted by byte writes and appends. */
-export type StorageBytesWrite = z.infer<
-  typeof storageOperations.writeBytes.input
->;
-/** Source and destination selected by the application; transfers never replace existing targets. */
-export type StorageTransfer = z.infer<typeof storageOperations.copyFile.input>;
-
+export type StorageBytesWrite = z.infer<typeof storageBytesWriteSchema>;
+/** Source and destination; transfers never replace existing targets. */
+export type StorageTransfer = z.infer<typeof storageTransferSchema>;
 /** Directory creation input after recursive defaults are resolved. */
 export type StorageDirectoryCreate = z.infer<
-  typeof storageOperations.createDirectory.input
+  typeof storageDirectoryCreateSchema
 >;
+
+/** Public storage interface chosen by the plugin author; native support may differ by platform. */
+export interface Storage {
+  readText(
+    input: StorageLocation,
+    options?: NativeInvokeOptions,
+  ): Promise<string>;
+  writeText(input: StorageWrite, options?: NativeInvokeOptions): Promise<null>;
+  readBytes(
+    input: StorageLocation,
+    options?: NativeInvokeOptions,
+  ): Promise<string>;
+  writeBytes(
+    input: StorageBytesWrite,
+    options?: NativeInvokeOptions,
+  ): Promise<null>;
+  appendText(input: StorageWrite, options?: NativeInvokeOptions): Promise<null>;
+  appendBytes(
+    input: StorageBytesWrite,
+    options?: NativeInvokeOptions,
+  ): Promise<null>;
+  copyFile(
+    input: StorageTransfer,
+    options?: NativeInvokeOptions,
+  ): Promise<null>;
+  move(input: StorageTransfer, options?: NativeInvokeOptions): Promise<null>;
+  readDirectory(
+    input: StorageLocation,
+    options?: NativeInvokeOptions,
+  ): Promise<StorageDirectoryEntry[]>;
+  createDirectory(
+    input: z.input<typeof storageDirectoryCreateSchema>,
+    options?: NativeInvokeOptions,
+  ): Promise<null>;
+  remove(input: StorageLocation, options?: NativeInvokeOptions): Promise<null>;
+  exists(
+    input: StorageLocation,
+    options?: NativeInvokeOptions,
+  ): Promise<boolean>;
+  stat(
+    input: StorageLocation,
+    options?: NativeInvokeOptions,
+  ): Promise<StorageMetadata | null>;
+}

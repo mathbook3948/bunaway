@@ -46,8 +46,8 @@ test("isolated power package ships the I/O adapter but keeps FFI out of the brow
     await writeFile(
       resolve(project, "src-bunaway/app.ts"),
       `import { defineApp } from "@bunaway/backend";
-import { powerPlugin } from "@bunaway/plugin-power";
-export default defineApp({ modules: [], plugins: [powerPlugin] });
+import power from "@bunaway/plugin-power";
+export default defineApp({ modules: [], plugins: [power] });
 `,
     );
     await writeJson(resolve(project, "src-bunaway/policy.json"), {
@@ -76,7 +76,7 @@ export default defineApp({ modules: [], plugins: [powerPlugin] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-power",
     ]);
-    expect(plugins[0]?.targets.windows?.execution).toBe("io");
+    expect(plugins[0]?.targets.windows?.thread).toBe("worker");
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "power",
     ]);
@@ -99,7 +99,7 @@ export default defineApp({ modules: [], plugins: [powerPlugin] });
     const browserEntry = resolve(project, "power-browser.ts");
     await writeFile(
       browserEntry,
-      `import { power } from "@bunaway/plugin-power";
+      `import power from "@bunaway/plugin-power";
 void power.getStatus();
 `,
     );
@@ -113,9 +113,7 @@ void power.getStatus();
     expect(browser.success).toBe(true);
     expect(
       Object.keys(browser.metafile?.inputs ?? {}).some((path) =>
-        /(?:plugins[\\/]power[\\/]src[\\/](?:win32|platforms[\\/]windows)\.ts|bun:ffi)/.test(
-          path,
-        ),
+        /(?:plugins[\\/]power[\\/]src[\\/]platforms[\\/]|bun:ffi)/.test(path),
       ),
     ).toBe(false);
   } finally {

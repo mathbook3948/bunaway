@@ -49,7 +49,7 @@ test("handler keys infer immutable support and typed parsing without dispatch sw
     operations: schemas,
     platforms: {
       windows: {
-        execution: "io",
+        thread: "worker",
         create: factory,
       },
     },
@@ -65,7 +65,7 @@ test("handler keys infer immutable support and typed parsing without dispatch sw
       operations: schemas,
       platforms: {
         windows: {
-          execution: "io",
+          thread: "worker",
           create: factory,
           operations: [
             "length",
@@ -78,11 +78,11 @@ test("handler keys infer immutable support and typed parsing without dispatch sw
     "length",
   ]);
   expect(Object.isFrozen(factory.operations)).toBe(true);
-  expect(plugin.definition.nativePlatforms.windows?.operations).toEqual([
+  expect(plugin._definition.nativePlatforms.windows?.operations).toEqual([
     "length",
   ]);
   const adapter =
-    plugin.definition.nativePlatforms.windows?.create(environment);
+    plugin._definition.nativePlatforms.windows?.create(environment);
   if (!adapter?.executeUI) {
     throw new Error("Missing mapped adapter");
   }
@@ -150,13 +150,13 @@ test("contextual preparation parses once and rechecks cancellation and authority
     operations,
     platforms: {
       windows: {
-        execution: "io",
+        thread: "worker",
         create: factory,
       },
     },
   });
   const adapter =
-    plugin.definition.nativePlatforms.windows?.create(environment);
+    plugin._definition.nativePlatforms.windows?.create(environment);
   if (!adapter) {
     throw new Error("Missing adapter");
   }
@@ -233,17 +233,17 @@ test("mapped adapters clean earlier resources after later setup fails", async ()
       },
       platforms: {
         windows: {
-          execution: "ui",
+          thread: "ui",
           create,
         },
       },
-    }).definition;
+    })._definition;
   });
   const catalog = plugins.map((plugin) => ({
     name: plugin.name,
     version: plugin.version,
     native: plugin.native,
-    execution: "ui" as const,
+    thread: "ui" as const,
     supportedOperations: [
       `${plugin.name}.run`,
     ],

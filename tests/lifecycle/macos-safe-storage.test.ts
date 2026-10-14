@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
-import { transformMacosEnvelope } from "../../plugins/safe-storage/src/macos-envelope.ts";
+import { transformMacosEnvelope } from "../../plugins/safe-storage/src/platforms/macos-envelope.ts";
 import {
   keychainError,
   type MacosKeyStore,
-} from "../../plugins/safe-storage/src/macos-key-store.ts";
-import { macosOperations } from "../../plugins/safe-storage/src/macos-operations.ts";
+} from "../../plugins/safe-storage/src/platforms/macos-key-store.ts";
+import { macosSafeStorageOperations as macosOperations } from "../fixtures/injected-native-plugins.ts";
 
 function fixture() {
   let stored: Buffer | null = null;
@@ -64,13 +64,31 @@ function fixture() {
   };
 }
 
-test("macOS operations are lazy, do not provision on availability or decrypt, and wipe per-call keys", () => {
+test("macOS operations are lazy, do not provision on availability or decrypt, and wipe per-call keys", async () => {
   const f = fixture();
   const adapter = macosOperations("tests.bunaway.safe-storage", f.open);
   expect(f.counts.opened).toBe(0);
-  expect(adapter.execute("safe-storage.isAvailable", null, "backend")).toBe(
-    true,
-  );
+  for (const name of [
+    "safe-storage.constructor",
+    "other.isAvailable",
+  ]) {
+    await expect(adapter.execute(name, null, "backend")).rejects.toMatchObject({
+      code: "UNSUPPORTED",
+    });
+  }
+  await expect(
+    adapter.execute(
+      "safe-storage.encryptString",
+      {
+        text: 1,
+      },
+      "backend",
+    ),
+  ).rejects.toThrow("Invalid plugin input.");
+  expect(f.counts.opened).toBe(0);
+  expect(
+    await adapter.execute("safe-storage.isAvailable", null, "backend"),
+  ).toBe(true);
   expect(f.counts).toMatchObject({
     read: 0,
     add: 0,
@@ -81,7 +99,7 @@ test("macOS operations are lazy, do not provision on availability or decrypt, an
     "tests.bunaway.safe-storage",
     false,
   ).toString("base64");
-  expect(() =>
+  await expect(
     adapter.execute(
       "safe-storage.decryptBytes",
       {
@@ -89,14 +107,14 @@ test("macOS operations are lazy, do not provision on availability or decrypt, an
       },
       "backend",
     ),
-  ).toThrow("missing");
+  ).rejects.toThrow("missing");
   expect(f.counts.add).toBe(0);
   for (const text of [
     "",
     "\uFEFF한글\u0000🙂",
     "🙂".repeat(16384),
   ]) {
-    const ciphertext = adapter.execute(
+    const ciphertext = await adapter.execute(
       "safe-storage.encryptString",
       {
         text,
@@ -104,7 +122,7 @@ test("macOS operations are lazy, do not provision on availability or decrypt, an
       "backend",
     );
     expect(
-      adapter.execute(
+      await adapter.execute(
         "safe-storage.decryptString",
         {
           ciphertext,
@@ -122,7 +140,7 @@ test("macOS operations are lazy, do not provision on availability or decrypt, an
     ]).toString("base64"),
     Buffer.alloc(256 * 1024, 255).toString("base64"),
   ]) {
-    const ciphertext = adapter.execute(
+    const ciphertext = await adapter.execute(
       "safe-storage.encryptBytes",
       {
         bytes,
@@ -130,7 +148,7 @@ test("macOS operations are lazy, do not provision on availability or decrypt, an
       "backend",
     );
     expect(
-      adapter.execute(
+      await adapter.execute(
         "safe-storage.decryptBytes",
         {
           ciphertext,
@@ -141,12 +159,12 @@ test("macOS operations are lazy, do not provision on availability or decrypt, an
   }
   expect(f.counts.add).toBe(1);
   expect(f.copies.every((key) => key.equals(Buffer.alloc(32)))).toBe(true);
-  adapter.dispose();
-  adapter.dispose();
+  await adapter.dispose();
+  await adapter.dispose();
   expect(f.counts.disposed).toBe(1);
-  expect(() =>
+  await expect(
     adapter.execute("safe-storage.isAvailable", null, "backend"),
-  ).toThrow("disposed");
+  ).rejects.toThrow("disposed");
   f.replace(null);
 });
 
@@ -189,10 +207,10 @@ test("macOS AES-GCM matches an independent cryptography AESGCM vector and authen
   ).not.toEqual(transformMacosEnvelope(Buffer.from("same"), key, appId, false));
 });
 
-test("macOS cancellation, denied, locked and unavailable reads never overwrite or regenerate an existing key", () => {
+test("macOS cancellation, denied, locked and unavailable reads never overwrite or regenerate an existing key", async () => {
   const f = fixture();
   const adapter = macosOperations("tests.bunaway.safe-storage", f.open);
-  const ciphertext = adapter.execute(
+  const ciphertext = await adapter.execute(
     "safe-storage.encryptString",
     {
       text: "synthetic fixture",
@@ -208,9 +226,9 @@ test("macOS cancellation, denied, locked and unavailable reads never overwrite o
     -25295,
   ]) {
     f.fail(status);
-    expect(adapter.execute("safe-storage.isAvailable", null, "backend")).toBe(
-      false,
-    );
+    expect(
+      await adapter.execute("safe-storage.isAvailable", null, "backend"),
+    ).toBe(false);
     for (const [name, input] of [
       [
         "safe-storage.encryptString",
@@ -226,7 +244,7 @@ test("macOS cancellation, denied, locked and unavailable reads never overwrite o
       ],
     ] as const) {
       try {
-        adapter.execute(name, input, "backend");
+        await adapter.execute(name, input, "backend");
         throw new Error("Expected Keychain failure");
       } catch (error) {
         expect(error).toMatchObject({
@@ -238,7 +256,7 @@ test("macOS cancellation, denied, locked and unavailable reads never overwrite o
   }
   f.restore();
   expect(
-    adapter.execute(
+    await adapter.execute(
       "safe-storage.decryptString",
       {
         ciphertext,
@@ -247,7 +265,7 @@ test("macOS cancellation, denied, locked and unavailable reads never overwrite o
     ),
   ).toBe("synthetic fixture");
   f.replace(Buffer.from("malformed"));
-  expect(() =>
+  await expect(
     adapter.execute(
       "safe-storage.encryptString",
       {
@@ -255,16 +273,16 @@ test("macOS cancellation, denied, locked and unavailable reads never overwrite o
       },
       "backend",
     ),
-  ).toThrow("invalid size");
+  ).rejects.toThrow("invalid size");
   expect(f.counts.add).toBe(1);
-  adapter.dispose();
+  await adapter.dispose();
   f.replace(null);
 });
 
-test("macOS malformed envelopes are rejected before Keychain access and decryptString rejects non-UTF8 or oversized text", () => {
+test("macOS malformed envelopes are rejected before Keychain access and decryptString rejects non-UTF8 or oversized text", async () => {
   const f = fixture();
   const adapter = macosOperations("tests.bunaway.safe-storage", f.open);
-  expect(() =>
+  await expect(
     adapter.execute(
       "safe-storage.decryptString",
       {
@@ -272,7 +290,7 @@ test("macOS malformed envelopes are rejected before Keychain access and decryptS
       },
       "backend",
     ),
-  ).toThrow("authenticate");
+  ).rejects.toThrow("authenticate");
   expect(f.counts.opened).toBe(0);
   for (const bytes of [
     Buffer.from([
@@ -280,14 +298,14 @@ test("macOS malformed envelopes are rejected before Keychain access and decryptS
     ]),
     Buffer.from("x".repeat(32769)),
   ]) {
-    const ciphertext = adapter.execute(
+    const ciphertext = await adapter.execute(
       "safe-storage.encryptBytes",
       {
         bytes: bytes.toString("base64"),
       },
       "backend",
     );
-    expect(() =>
+    await expect(
       adapter.execute(
         "safe-storage.decryptString",
         {
@@ -295,13 +313,13 @@ test("macOS malformed envelopes are rejected before Keychain access and decryptS
         },
         "backend",
       ),
-    ).toThrow();
+    ).rejects.toThrow();
   }
-  adapter.dispose();
+  await adapter.dispose();
   f.replace(null);
 });
 
-test("macOS concurrent key creation uses the stored winner and wipes the discarded candidate", () => {
+test("macOS concurrent key creation uses the stored winner and wipes the discarded candidate", async () => {
   const f = fixture();
   const winner = randomBytes(32);
   let candidate: Buffer | undefined;
@@ -311,7 +329,7 @@ test("macOS concurrent key creation uses the stored winner and wipes the discard
     return false;
   };
   const adapter = macosOperations("tests.bunaway.safe-storage", f.open);
-  const ciphertext = adapter.execute(
+  const ciphertext = await adapter.execute(
     "safe-storage.encryptString",
     {
       text: "race",
@@ -331,7 +349,7 @@ test("macOS concurrent key creation uses the stored winner and wipes the discard
       true,
     ).toString(),
   ).toBe("race");
-  adapter.dispose();
+  await adapter.dispose();
   winner.fill(0);
   f.replace(null);
 });

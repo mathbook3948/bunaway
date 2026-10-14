@@ -5,7 +5,7 @@ import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
 import {
   WindowOperations,
   type WindowState,
-} from "#plugins/windows/src/coordinator";
+} from "#plugins/windows/src/platforms/coordinator";
 
 const WINDOW_READY_TIMEOUT_MS = 30_000;
 const CLEANUP_TIMEOUT_ADVANCE_MS = 40_000;

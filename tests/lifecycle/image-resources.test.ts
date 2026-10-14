@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
+import { defineNativePlugin } from "@bunaway/plugin";
 import { MAX_IMAGE_BYTES, MAX_RESOURCES } from "#plugins/image/src/contract";
-import { ImageResources } from "#plugins/image/src/resources";
+import { imageOperations } from "#plugins/image/src/operations";
+import { ImagePlatform } from "#plugins/image/src/platforms/image-platform";
+import { ImageResources } from "#plugins/image/src/platforms/resources";
+
+import { verifyMacosImage } from "../fixtures/macos-image.ts";
 
 test("image IDs retain exact pixels and become unavailable after idempotent disposal or app shutdown", () => {
   const resources = new ImageResources();
@@ -146,4 +151,37 @@ test("empty resources still consume slots and disposal restores capacity without
     }).id,
   ).not.toBe(oldId);
   resources.dispose();
+});
+
+test("image probe validates direct calls, permissions and cancellation before native codec work", async () => {
+  const codecReached = new Error("Native codec boundary reached.");
+  let disposed = 0;
+  const plugin = defineNativePlugin({
+    name: "image",
+    platforms: {
+      macos: {
+        initialize: () =>
+          new ImagePlatform({
+            decode() {
+              throw new Error("Unexpected decode before encoding.");
+            },
+            encode() {
+              throw codecReached;
+            },
+            resize() {
+              throw new Error("Unexpected resize before encoding.");
+            },
+            dispose() {
+              disposed++;
+            },
+          }),
+        dispose: (instance: ImagePlatform) => instance.dispose(),
+        operations: imageOperations,
+      },
+    },
+  });
+  // Run the shared installed/compiled probe on every OS up to its first real codec call.
+  // A stale execution or permission assertion fails before this sentinel is reached.
+  await expect(verifyMacosImage(plugin)).rejects.toBe(codecReached);
+  expect(disposed).toBe(2);
 });

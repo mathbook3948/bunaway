@@ -6,9 +6,9 @@ import { pathToFileURL } from "node:url";
 import { PLATFORMS } from "@bunaway/plugin-api";
 import {
   BunawayError,
+  type HostResponse,
   NativeRegistry,
   type Policy,
-  type HostResponse,
 } from "@bunaway/protocol";
 import { pluginImportsSource } from "#cli/app-modules";
 import { writeJson } from "#cli/files";
@@ -34,7 +34,7 @@ test("CLI independently accepts known platforms and rejects unknown declarations
       const entry = resolve(root, `declaration-${index}.mjs`);
       await Bun.write(
         entry,
-        `export default { name: "demo", version: "1", native: { operations: [{ name: "demo.read" }] }, nativePlatforms: { ${JSON.stringify(platform)}: { execution: "io", create() { throw new Error("Factories must remain lazy."); } } } };`,
+        `export default { _definition: { name: "demo", version: "1", native: { operations: [{ name: "demo.read" }] }, nativePlatforms: { ${JSON.stringify(platform)}: { thread: "worker", create() { throw new Error("Factories must remain lazy."); } } } } };`,
       );
       if (PLATFORMS.some((supported) => supported === platform)) {
         const declaration = await readPluginDeclaration(entry, root);
@@ -56,11 +56,11 @@ test("CLI independently accepts known platforms and rejects unknown declarations
 });
 
 test.each([
-  "io",
+  "worker",
   "ui",
 ] as const)(
   "single-entry discovery preserves lazy %s adapters and partial support",
-  async (execution) => {
+  async (thread) => {
     const root = await mkdtemp(
       resolve(tmpdir(), "bunaway-plugin-declaration-"),
     );
@@ -114,7 +114,7 @@ test.each([
         native,
         nativePlatforms: {
           windows: {
-            execution,
+            thread,
             create: "factory",
             operations: [
               "read",
@@ -125,7 +125,7 @@ test.each([
       const marker = resolve(root, "initialized");
       await Bun.write(
         entry,
-        `import { createOperations } from "./windows.ts"; export default ${JSON.stringify(declaration).replaceAll('"factory"', "createOperations")};`,
+        `import { createOperations } from "./windows.ts"; export default { _definition: ${JSON.stringify(declaration).replaceAll('"factory"', "createOperations")} };`,
       );
       await Bun.write(
         resolve(plugin, "src/windows.ts"),
@@ -154,19 +154,13 @@ test.each([
         (await import(pathToFileURL(resolve(root, "imports.js")).href))
           .pluginImports,
       );
-      const inactive = await operations(
-        [],
-        root,
-        execution,
-        undefined,
-        catalog,
-      );
+      const inactive = await operations([], root, thread, undefined, catalog);
       await inactive.dispose();
       expect(await Bun.file(marker).exists()).toBe(false);
       const adapter = await operations(
         installed,
         root,
-        execution,
+        thread,
         undefined,
         catalog,
       );
@@ -205,18 +199,18 @@ test.each([
 
       await Bun.write(
         entry,
-        `import { createOperations } from "./windows.ts"; export default ${JSON.stringify(
+        `import { createOperations } from "./windows.ts"; export default { _definition: ${JSON.stringify(
           {
             ...declaration,
             nativePlatforms: {
               windows: {
-                execution,
+                thread,
                 create: "factory",
                 operations: [],
               },
             },
           },
-        ).replaceAll('"factory"', "createOperations")};`,
+        ).replaceAll('"factory"', "createOperations")} };`,
       );
       const empty = await installedPlugins(root, "0.0.0");
       await writePluginManifest(root, empty);
@@ -232,7 +226,7 @@ test.each([
       const emptyAdapter = await operations(
         empty,
         root,
-        execution,
+        thread,
         undefined,
         emptyCatalog,
       );
@@ -271,22 +265,30 @@ test.each([
 
       for (const target of [
         {
-          execution: "other",
+          execution: "ui",
           create: "factory",
         },
         {
-          execution,
+          thread: "io",
+          create: "factory",
+        },
+        {
+          thread: "other",
+          create: "factory",
+        },
+        {
+          thread,
           create: null,
         },
         {
-          execution,
+          thread,
           create: "factory",
           operations: [
             "missing",
           ],
         },
         {
-          execution,
+          thread,
           create: "factory",
           operations: [
             "read",
@@ -296,14 +298,14 @@ test.each([
       ]) {
         await Bun.write(
           entry,
-          `import { createOperations } from "./windows.ts"; export default ${JSON.stringify(
+          `import { createOperations } from "./windows.ts"; export default { _definition: ${JSON.stringify(
             {
               ...declaration,
               nativePlatforms: {
                 windows: target,
               },
             },
-          ).replaceAll('"factory"', "createOperations")};`,
+          ).replaceAll('"factory"', "createOperations")} };`,
         );
         await expect(installedPlugins(root, "0.0.0")).rejects.toThrow();
       }
@@ -320,17 +322,17 @@ test.each([
       );
       await Bun.write(
         entry,
-        `import { createOperations } from "./windows.ts"; export default ${JSON.stringify(
+        `import { createOperations } from "./windows.ts"; export default { _definition: ${JSON.stringify(
           {
             ...declaration,
             nativePlatforms: {
               windows: {
-                execution,
+                thread,
                 create: "factory",
               },
             },
           },
-        ).replaceAll('"factory"', "createOperations")};`,
+        ).replaceAll('"factory"', "createOperations")} };`,
       );
       await writeJson(manifestPath, {
         ...(await Bun.file(manifestPath).json()),
@@ -386,11 +388,11 @@ test("plugins without a Windows adapter check operation grants before returning 
     );
     await Bun.write(
       resolve(plugin, "index.ts"),
-      `export default {
+      `export default { _definition: {
       name: "files", version: "1.0.0", nativePlatforms: {}, native: {
         operations: [{ name: "files.read" }]
       }
-    };`,
+    } };`,
     );
     const installed = await installedPlugins(root, "0.0.0");
     await writePluginManifest(root, installed);
@@ -403,13 +405,13 @@ test("plugins without a Windows adapter check operation grants before returning 
       (await import(pathToFileURL(resolve(root, "plugin-imports.js")).href))
         .pluginImports,
     );
-    expect(catalog[0]?.execution).toBeUndefined();
+    expect(catalog[0]?.thread).toBeUndefined();
     expect(catalog[0]?.operations).toBeUndefined();
     const registry = pluginRegistry(installed, catalog);
     const adapters = await operations(
       installed,
       root,
-      "io",
+      "worker",
       undefined,
       catalog,
     );
@@ -514,11 +516,11 @@ test("external plugins keep their own versions while SDK compatibility stays exa
     });
     await Bun.write(
       resolve(plugin, "index.ts"),
-      `export default {
+      `export default { _definition: {
       name: "demo", version: "1.2.3", nativePlatforms: {}, native: {
         operations: [{ name: "demo.ping" }]
       }
-    };`,
+    } };`,
     );
     for (const field of [
       "dependencies",
@@ -646,12 +648,12 @@ test("installed plugin catalog accepts multiple valid packages over the active r
       };
       await Bun.write(
         resolve(plugin, "index.ts"),
-        `export default ${JSON.stringify({
+        `export default { _definition: ${JSON.stringify({
           name,
           version: "1.0.0",
           nativePlatforms: {},
           native,
-        })};`,
+        })} };`,
       );
     }
     await writeJson(resolve(root, "package.json"), {

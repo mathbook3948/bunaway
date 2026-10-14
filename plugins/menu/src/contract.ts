@@ -1,30 +1,29 @@
 import type { NativeMenuItem } from "@bunaway/plugin-api/native";
 import { z } from "zod";
-
 export const MAX_MENU_RESOURCES = 32;
 export const MAX_MENU_ITEMS = 256;
 export const MAX_MENU_DEPTH = 8;
 export const MAX_MENU_WAITERS = 16;
-const id = z
+export const idSchema = z
   .string()
   .min(1)
   .max(128)
   .regex(/^[A-Za-z0-9_.-]+$(?![\s\S])/);
-const label = z
+export const labelSchema = z
   .string()
   .min(1)
   .max(512)
   .regex(/^[^\0\t\r\n\uD800-\uDFFF]*$(?![\s\S])/u);
 const base = {
-  id,
+  id: idSchema,
   visible: z.boolean().default(true),
 };
 const action = {
   ...base,
-  label,
+  label: labelSchema,
   enabled: z.boolean().default(true),
   checked: z.boolean().default(false),
-  group: id.nullable().default(null),
+  group: idSchema.nullable().default(null),
 };
 // Bound the tree before recursive parsing so hostile input cannot exhaust the JS stack.
 type MenuItemInput =
@@ -107,7 +106,7 @@ const itemSchema: z.ZodType<NativeMenuItem, MenuItemInput> = z.lazy(() =>
     z.strictObject({
       ...base,
       type: z.literal("submenu"),
-      label,
+      label: labelSchema,
       enabled: z.boolean().default(true),
       items: z.array(itemSchema),
     }),
@@ -154,20 +153,20 @@ export const menuItemsSchema = boundedTree
     };
     visit(items);
   });
-const resource = z.strictObject({
-  menuId: id,
+export const resourceSchema = z.strictObject({
+  menuId: idSchema,
   items: menuItemsSchema,
 });
-const target = z.strictObject({
-  menuId: id,
+export const targetSchema = z.strictObject({
+  menuId: idSchema,
 });
-const clicked = z.strictObject({
-  menuId: id,
-  itemId: id,
+export const clickedSchema = z.strictObject({
+  menuId: idSchema,
+  itemId: idSchema,
   source: z.literal("tray"),
   windowId: z.null(),
 });
-const insertedItem = z
+export const insertedItemSchema = z
   .custom<MenuItemInput>((value) => value !== null && typeof value === "object")
   .superRefine((value, context) => {
     if (
@@ -182,71 +181,24 @@ const insertedItem = z
     }
   })
   .pipe(itemSchema);
-export const menuOperations = {
-  create: {
-    input: resource,
-    output: resource,
-  },
-  get: {
-    input: target,
-    output: resource.nullable(),
-  },
-  list: {
-    input: z.null(),
-    output: z.array(id).max(MAX_MENU_RESOURCES),
-  },
-  replace: {
-    input: resource,
-    output: resource,
-  },
-  remove: {
-    input: target,
-    output: z.boolean(),
-  },
-  insert: {
-    input: z.strictObject({
-      menuId: id,
-      parentId: id.nullable().default(null),
-      index: z.number().int().min(0).max(MAX_MENU_ITEMS),
-      item: insertedItem,
-    }),
-    output: resource,
-  },
-  removeItem: {
-    input: z.strictObject({
-      menuId: id,
-      itemId: id,
-    }),
-    output: resource,
-  },
-  updateItem: {
-    input: z.strictObject({
-      menuId: id,
-      itemId: id,
-      changes: z.strictObject({
-        label: label.optional(),
-        enabled: z.boolean().optional(),
-        visible: z.boolean().optional(),
-        checked: z.boolean().optional(),
-      }),
-    }),
-    output: resource,
-  },
-  setTrayMenu: {
-    input: z.strictObject({
-      menuId: id.nullable(),
-    }),
-    output: z.null(),
-  },
-  getTrayMenu: {
-    input: z.null(),
-    output: id.nullable(),
-  },
-  waitForClick: {
-    input: z.null(),
-    output: clicked,
-  },
-};
+export const insertSchema = z.strictObject({
+  menuId: idSchema,
+  parentId: idSchema.nullable().default(null),
+  index: z.number().int().min(0).max(MAX_MENU_ITEMS),
+  item: insertedItemSchema,
+});
+export const itemTargetSchema = z.strictObject({
+  menuId: idSchema,
+  itemId: idSchema,
+});
+export const updateItemSchema = itemTargetSchema.extend({
+  changes: z.strictObject({
+    label: labelSchema.optional(),
+    enabled: z.boolean().optional(),
+    visible: z.boolean().optional(),
+    checked: z.boolean().optional(),
+  }),
+});
 /** Selection reports IDs; checkbox and radio state changes remain explicit app operations. */
 export const menuEvents = {
   "menu.clicked": {

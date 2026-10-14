@@ -4,7 +4,9 @@ description: shell 없이 argv로 Windows 실행 파일을 실행하고 제한�
 sidebar: { order: 9 }
 ---
 
-`@bunaway/plugin-process`를 설치하고 앱의 `plugins`에 `processPlugin`을 등록합니다.
+기본 export(`default`)를 `processes`로 가져와 앱에 등록하고 호출합니다.
+
+`@bunaway/plugin-process`를 설치하고 앱의 `plugins`에 `processes`를 등록합니다.
 현재 Windows에서 제공합니다. 화면과 백엔드는 `processes.run`을 사용합니다.
 
 ## 앱의 실행 규칙과 권한
@@ -15,7 +17,7 @@ sidebar: { order: 9 }
 전달하면 그 프로그램이 제공하는 파일 접근이나 코드 실행도 허용할 수 있습니다.
 
 ```ts
-import { processes, processPlugin } from "@bunaway/plugin-process";
+import processes from "@bunaway/plugin-process";
 import { BunawayError } from "@bunaway/protocol";
 
 async function makeReport(year: number) {

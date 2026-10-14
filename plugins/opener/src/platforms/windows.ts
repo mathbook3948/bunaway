@@ -1,12 +1,16 @@
 import { dlopen } from "bun:ffi";
-import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
-import { validateOpenerInput } from "../contract.ts";
-import { normalizeApplicationPath, normalizeFilePath } from "../path.ts";
-import { createShell } from "../shell.ts";
-import { normalizeUrl } from "../url.ts";
-import { createFiles } from "../windows-file.ts";
-import { trashWindowsFile, validateTrashDrive } from "../windows-trash.ts";
+import { createFiles } from "#opener/platforms/windows-file";
+import {
+  normalizeApplicationPath,
+  normalizeFilePath,
+} from "#opener/platforms/windows-path";
+import { createShell } from "#opener/platforms/windows-shell";
+import {
+  trashWindowsFile,
+  validateTrashDrive,
+} from "#opener/platforms/windows-trash";
+import { normalizeUrl } from "#opener/url";
 
 const COINIT_APARTMENTTHREADED = 0x2;
 
@@ -40,10 +44,8 @@ function createApartment() {
   };
 }
 
-/** Prepare the I/O adapter, including the STA used for Explorer requests. */
-export function createOperations(
-  _environment: NativeEnvironment,
-): NativeAdapter {
+/** Prepare the STA and retain each resource until all shell references are released. */
+export function initialize() {
   const apartment = createApartment();
   const shell = (() => {
     try {
@@ -65,64 +67,92 @@ export function createOperations(
       throw error;
     }
   })();
-  let disposed = false;
   return {
-    execute(name, input) {
-      if (disposed) {
-        throw new BunawayError({
-          code: "CANCELLED",
-          message: "Opener has been disposed.",
-        });
-      }
-      // The host authorizes the current context and operation immediately before
-      // dispatch to this I/O worker. There is no async gap before pinning the path.
-      const payload = validateOpenerInput(name, input);
-      if ("app" in payload) {
-        const app = normalizeApplicationPath(payload.app);
-        files.withFile(app, () => {
-          if ("url" in payload) {
-            shell.open(app, normalizeUrl(payload.url));
-          } else {
-            const path = normalizeFilePath(payload.path);
-            files.withFile(path, () => shell.open(app, path));
-          }
-        });
-      } else if ("url" in payload) {
-        shell.open(normalizeUrl(payload.url));
-      } else {
-        const path = normalizeFilePath(payload.path);
-        if (name === "opener.trashFile") {
-          validateTrashDrive(path);
-          files.withTrashFile(path, (verifyIdentity) =>
-            trashWindowsFile(path, verifyIdentity),
-          );
-          return null;
-        }
-        files.withFile(path, () => {
-          if (name === "opener.openFile") {
-            shell.open(path);
-          } else {
-            shell.reveal(path);
-          }
-        });
-      }
-      return null;
-    },
-    dispose() {
-      if (disposed) {
-        return;
-      }
-      disposed = true;
-      // Keep COM initialized until the last shell reference has been released.
-      try {
-        files.dispose();
-      } finally {
-        try {
-          shell.dispose();
-        } finally {
-          apartment.dispose();
-        }
-      }
-    },
+    apartment,
+    shell,
+    files,
+    disposed: false,
   };
+}
+
+type State = ReturnType<typeof initialize>;
+
+function active(state: State): void {
+  if (state.disposed) {
+    throw new BunawayError({
+      code: "CANCELLED",
+      message: "Opener has been disposed.",
+    });
+  }
+}
+
+export function openUrl(state: State, url: string): null {
+  active(state);
+  state.shell.open(normalizeUrl(url));
+  return null;
+}
+
+export function openFile(state: State, path: string): null {
+  active(state);
+  const selected = normalizeFilePath(path);
+  state.files.withFile(selected, () => state.shell.open(selected));
+  return null;
+}
+
+export function revealFile(state: State, path: string): null {
+  active(state);
+  const selected = normalizeFilePath(path);
+  state.files.withFile(selected, () => state.shell.reveal(selected));
+  return null;
+}
+
+export function trashFile(state: State, path: string): null {
+  active(state);
+  const selected = normalizeFilePath(path);
+  validateTrashDrive(selected);
+  state.files.withTrashFile(selected, (verifyIdentity) =>
+    trashWindowsFile(selected, verifyIdentity),
+  );
+  return null;
+}
+
+export function openFileWith(
+  state: State,
+  path: string,
+  application: string,
+): null {
+  active(state);
+  const app = normalizeApplicationPath(application);
+  state.files.withFile(app, () => {
+    const selected = normalizeFilePath(path);
+    state.files.withFile(selected, () => state.shell.open(app, selected));
+  });
+  return null;
+}
+
+export function openUrlWith(
+  state: State,
+  url: string,
+  application: string,
+): null {
+  active(state);
+  const app = normalizeApplicationPath(application);
+  state.files.withFile(app, () => state.shell.open(app, normalizeUrl(url)));
+  return null;
+}
+
+export function dispose(state: State): void {
+  if (state.disposed) {
+    return;
+  }
+  state.disposed = true;
+  try {
+    state.files.dispose();
+  } finally {
+    try {
+      state.shell.dispose();
+    } finally {
+      state.apartment.dispose();
+    }
+  }
 }

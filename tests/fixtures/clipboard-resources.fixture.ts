@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
-import type { JsonValue } from "@bunaway/protocol";
+import { type JsonValue, validateValue } from "@bunaway/protocol";
+import createOperationsDefinition from "#plugins/clipboard/src/index";
+import { createClipboard } from "#plugins/clipboard/src/platforms/windows-bindings";
 import {
   encodeHTML,
   MAX_NATIVE_FORMAT_BYTES,
-} from "#plugins/clipboard/src/codecs";
-import { createOperations } from "#plugins/clipboard/src/platforms/windows";
-import { createClipboard } from "#plugins/clipboard/src/win32";
+} from "#plugins/clipboard/src/platforms/windows-codecs";
 import { state } from "./clipboard-ffi.ts";
+import { nativeFactory as createOperationsFactory } from "./native-platform.ts";
+
+const createOperations = createOperationsFactory(
+  createOperationsDefinition,
+  "windows",
+);
 
 const environment = {
   dataRoot: ".",
@@ -62,10 +68,7 @@ const execute = (name: string, input: JsonValue = null, signal?: AbortSignal) =>
         }
       : {}),
   });
-assert.throws(
-  () => adapter.execute("clipboard.clear", null, "backend"),
-  hasCode("UNSUPPORTED"),
-);
+
 await assert.rejects(
   async () =>
     adapter.executeUI?.("clipboard.clear", null, "backend", {
@@ -193,15 +196,18 @@ await execute("writeFormats", {
 });
 assert.deepEqual(
   await execute("getFormats"),
-  items.map((item) => item.format),
+  validateValue(
+    {},
+    items.map((item) => item.format),
+  ),
 );
 assert.deepEqual(
   await execute("readFormats", {
     formats: items.map((item) => item.format),
   }),
-  items,
+  validateValue({}, items),
 );
-assert.deepEqual(await execute("readImage"), image);
+assert.deepEqual(await execute("readImage"), validateValue({}, image));
 assert.equal(
   await execute("hasFormat", {
     format: "text/html",
@@ -226,7 +232,7 @@ assert.deepEqual(
       "image/bmp",
     ],
   }),
-  [
+  validateValue({}, [
     {
       format: "text/html",
       data: null,
@@ -235,7 +241,7 @@ assert.deepEqual(
       format: "image/bmp",
       data: image,
     },
-  ],
+  ]),
 );
 // Partial preparation must preserve existing image data and free the first allocation.
 state.failAtAllocation = state.allocationCalls + 2;
@@ -249,7 +255,7 @@ await assert.rejects(
 );
 assert.equal(state.clears, beforePrepare);
 assert.equal(state.allocations.size, 0);
-assert.deepEqual(await execute("readImage"), image);
+assert.deepEqual(await execute("readImage"), validateValue({}, image));
 state.failAtAllocation = 0;
 // A failure after the first transfer preserves that Windows-owned format and frees the rest.
 state.failAtSet = state.setCalls + 2;
@@ -296,12 +302,12 @@ assert.deepEqual(
       "text/html",
     ],
   }),
-  [
+  validateValue({}, [
     {
       format: "text/html",
       data: "<b>external</b>",
     },
-  ],
+  ]),
 );
 external.fill(0);
 await execute("writeText", {

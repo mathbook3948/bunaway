@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
-import { storagePlugin } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 import { API_LIMITS, type HostContext } from "@bunaway/protocol";
 import { Channel, type Packet } from "#native/windows/bun/channel";
 import { viewDirName } from "#native/windows/bun/view-profile";
@@ -148,9 +148,9 @@ test.skipIf(process.platform !== "win32")(
           dataRoot,
           plugins: [
             {
-              name: storagePlugin.name,
-              version: storagePlugin.version,
-              native: storagePlugin.native,
+              name: storage._definition.name,
+              version: storage._definition.version,
+              native: storage._definition.native,
             },
           ],
         },

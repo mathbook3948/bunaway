@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import { clipboard, clipboardPlugin } from "@bunaway/plugin-clipboard";
+import clipboard from "@bunaway/plugin-clipboard";
 import {
   type HostContext,
   NativeRegistry,
@@ -9,13 +9,13 @@ import {
 } from "@bunaway/protocol";
 import { installedPlugins } from "#cli/plugins";
 import { bindHostAPI } from "#core/host-api";
-import { clipboardOperations } from "#plugins/clipboard/src/contract";
-import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
+import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/contract";
+import { windowsOperations as clipboardOperations } from "#plugins/clipboard/src/operations";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("clipboard", clipboardOperations);
 const registry = new NativeRegistry([
-  clipboardPlugin,
+  clipboard._definition,
 ]);
 test("clipboard has separate read, write and clear permissions with strict Unicode contracts", async () => {
   expect([
@@ -227,8 +227,8 @@ test("clipboard is independently discoverable as a Windows and macOS UI plugin",
   );
   const plugin = plugins.find(({ name }) => name === "clipboard");
   expect(plugin?.packageName).toBe("@bunaway/plugin-clipboard");
-  expect(plugin?.targets.windows?.execution).toBe("ui");
-  expect(plugin?.targets.macos?.execution).toBe("ui");
+  expect(plugin?.targets.windows?.thread).toBe("ui");
+  expect(plugin?.targets.macos?.thread).toBe("ui");
   expect(plugin?.targets.macos?.supportedOperations).toEqual(
     Object.keys(clipboardOperations).map((name) => `clipboard.${name}`),
   );

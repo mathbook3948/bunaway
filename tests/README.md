@@ -1,5 +1,42 @@
 # Tests
 
+계약 테스트는 `bun test ./tests`처럼 저장소의 실제 테스트 경로에 `./`를 붙여 실행한다.
+경로 접두사가 없는 `bun test tests/api`는 파일명 필터로 해석해 build 디렉터리의 과거
+테스트 복사본까지 실행할 수 있다. 집중 검사에도 `bun test ./tests/api`를 사용한다.
+`fixtures/native-platform.ts`는 실제 플러그인 정의의 SDK factory를 사용한다. 네이티브 드라이버를 주입하는
+fixture도 운영 작업 목록과 자원 소유자를 재사용하며 별도 dispatch 구현을 만들지 않는다.
+`cli/plugin-build.test.ts`는 재내보내기와 operation 객체, 네이티브 스키마 변환 보존 및 공개 선언에서 내부 타입 제외를 검사한다.
+패키지 내부의 # 별칭도 상대 import와 같은 OS 분리와 빌드 실패 시 출력 보존을 적용한다.
+조건부 # 별칭의 browser와 bun, import와 require 선택, 중첩 wildcard 별칭과 외부 의존성 유지도 검사한다.
+외부 의존성에는 Bun 전용 exports와 플랫폼 경계에 해당하는 파일 이름을 사용하며 내부와 외부 대상이 섞인 별칭도 검사한다.
+`cli/plugin-imports.test.ts`는 중첩 조건의 default 복귀, 배열과 wildcard 우선순위, module과 node 및 환경 조건을 Bun 결과와 비교하고 null 차단도 확인한다.
+로컬 browser 대체, 비공개 별칭의 false 제외와 tsconfig 별칭도 Bun 결과와 비교한다. Bun이 거부하는 제외 경로는 빌드 실패를 유지한다.
+`cli/plugin-build.test.ts`는 dist만 설치한 브라우저 소비자에서 대체와 제외 결과를 실행하고 네이티브 출력의 원본 구현 및 플랫폼 분리를 확인한다.
+dist만 설치한 소비자 프로세스에서 두 출력과 실제 어댑터를 실행하고, 네이티브 대상의 해석 실패 뒤 기존 출력을 비교한다.
+`cli/distribution.test.ts`는 설치한 CLI로 별칭을 사용하는 외부 플러그인을 빌드한 뒤,
+src 없이 dist만 설치해 공개 호출과 재내보낸 타입을 검사한다.
+원본 구현을 직접 검사하는 tests/tsconfig.json은 bunaway-source 조건으로 각 플러그인의
+소스를 선택한다. 배포 패키지를 검사하는 생성 앱은 이 조건을 사용하지 않는다.
+
+`api/native-plugin-object.test.ts`는 기본 export를 직접 호출하고 `defineApp`에 등록하는 계약,
+이벤트 타입 추론, 숨겨진 등록 메타데이터와 예약 이름의 충돌 거부를 검사한다.
+
+공식 플러그인 fixture는 스키마만 있는 공통 계약 목록 대신 완성된 작업 선언의 스키마를 사용한다.
+`api/native-handler-platform.test.ts`는 동기 handler의 반환 타입도 보존하는지 검사한다.
+동시 정리의 공유, 실패 후 재시도와 성공 후 반복 방지, 비동기 초기화의 타입 및 런타임 거부,
+늦게 반환된 인스턴스 회수와 초기화 및 회수 실패의 진단도 검사한다.
+
+`api/native-handler-platform.test.ts`는 플랫폼별 operations 키에서 지원 정보 생성, 인스턴스별 초기화와
+정리, 기본 worker 스레드와 명시적인 ui 스레드, 동기 및 비동기 반환, 입력과 출력 변환 횟수,
+미지원 작업과 안전한 오류, 동일 작업의 플랫폼별 스키마 선택을 검사한다. `api/native-plugins.test.ts`와 `cli/plugins.test.ts`는
+이전 execution 설정과 잘못된 thread 값의 거부도 검사한다.
+`lifecycle/plugin-async-parsing.test.ts`는 실제 I/O Worker에서 handler 실행 context 전달과
+입력 콜백의 권한 승인, 실행 재승인 및 취소된 파서의 늦은 완료를 검사한다.
+storage의 플랫폼별 작업 샘플은 기존 `windows-bun-storage.ts`의 실제 Win32 핸들 검사와
+`windows-storage-metadata.ts`의 WebView, I/O Worker 호출을 함께 사용한다.
+macOS는 `macos-storage.ts`와 `macos-storage-directories.ts`에서 기존 descriptor 검사를
+유지하며 `macos-storage-host.ts`에서 실제 SDK와 I/O Worker 호출을 검증한다.
+
 `lifecycle/macos-safe-storage.test.ts`는 합성 Keychain으로 lazy 준비, 키 생성 경합,
 접근 실패 뒤 키 보존과 재시도, 작업별 키 지우기, 버전과 namespace 인증, 변조와 크기 상한을
 검사한다. AES-GCM은 Python cryptography로 생성한 고정 벡터와 비교한다.
@@ -790,7 +827,7 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 
 `api/power.test.ts`는 배터리의 0과 unknown, 배터리 없음, DWORD tick 순환,
 독립 blocker ID와 128개 상한, 부분 활성 실패 및 반복 정리를 검사한다.
-`power-cleanup.test.ts`는 실제 어댑터와 두 handle 소유자를 번들해 격리된 Win32 바인딩에서
+`power-cleanup.test.ts`는 플러그인 정의의 SDK factory와 실제 어댑터, 두 handle 소유자를 번들해 격리된 Win32 바인딩에서
 public 요청 해제와 활성 rollback 해제가 함께 실패해도 모든 handle을 재시도하고,
 미해제 handle이 있는 동안 DLL을 유지하며 두 단계의 오류를 보고하는지 검사한다.
 `cli/power.test.ts`는 isolated tarball 설치와 I/O 어댑터 발견, browser의 FFI 제외를 검사한다.
@@ -828,7 +865,11 @@ WTS 등록 실패, 상태 알림 합치기, lifecycle 순서와 큐 초과를 �
 
 `api/image.test.ts`와 `lifecycle/image-resources.test.ts`는 선택 image 플러그인의
 Zod 계약과 canonical base64, 빈 이미지, operation 권한, ID 해제와 앱 종료,
-count와 메모리 quota 및 생성 취소의 정리를 확인한다. `windows-image.test.ts`는
+count와 메모리 quota 및 생성 취소의 정리를 확인한다. `image-resources.test.ts`는
+macOS 공통 probe에 가짜 codec을 주입해 모든 OS에서 직접 호출, 권한과 취소 검사를
+실행한다. 소스, 설치 패키지와 compiled probe는 같은 플러그인 진입점과 fixture의
+호스트 권한 검사를 사용하며, 실제 WKWebView 권한은 `macos-image-host.ts`에서 검증한다.
+`windows-image.test.ts`는
 `host:windows`에 포함하며 공통 SDK와 실제 UI Worker, WIC에서 PNG와 data URL의
 RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최대 PNG,
 정책 거부와 결과 전달 전 취소를 확인한다. 실제 파일 경로 접근, WebView 표시,

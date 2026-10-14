@@ -18,7 +18,7 @@ import type {
 const contractJson = (value: unknown) =>
   JSON.parse(JSON.stringify(validateValue({}, value)));
 
-/** The validated dispatcher owned by one host execution thread. */
+/** The validated dispatcher owned by one host thread. */
 type PluginOperations = {
   prepare(
     operation: string,
@@ -100,7 +100,7 @@ export async function disposeAll(
 export async function operations(
   plugins: readonly NativeRegistration[],
   dataRoot: string,
-  execution: "io" | "ui",
+  thread: "worker" | "ui",
   windows: NativeEnvironment["windows"] | undefined,
   catalog: readonly PackagedPlugin[],
   app?: NativeEnvironment["app"],
@@ -116,7 +116,7 @@ export async function operations(
         operation.startsWith(`${entry.name}.`),
       );
       return (
-        plugin?.execution !== undefined &&
+        plugin?.thread !== undefined &&
         (plugin.supportedOperations === undefined ||
           plugin.supportedOperations.includes(operation))
       );
@@ -160,7 +160,7 @@ export async function operations(
     // Do not import or initialize implementations for unregistered plugins or the other worker.
     for (const plugin of catalog) {
       if (
-        plugin.execution === execution &&
+        plugin.thread === thread &&
         plugin.operations &&
         plugins.some(
           (registered) => registered.name === plugin.name && registered.native,

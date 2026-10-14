@@ -47,13 +47,14 @@ async function browserPlugin(name: string) {
     `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
   );
 }
-const [{ storage }, { log }, { capabilities }] = await Promise.all(
-  [
-    "storage",
-    "log",
-    "capabilities",
-  ].map(browserPlugin),
-);
+const [{ default: storage }, { default: log }, { default: capabilities }] =
+  await Promise.all(
+    [
+      "storage",
+      "log",
+      "capabilities",
+    ].map(browserPlugin),
+  );
 const readText = contracts["storage.readText"];
 
 class Bridge implements WebViewBridge {

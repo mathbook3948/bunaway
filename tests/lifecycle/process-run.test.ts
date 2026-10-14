@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { BunawayError } from "@bunaway/protocol";
-import { runProcess } from "#plugins/process/src/run";
+import { runProcess } from "#plugins/process/src/platforms/windows-process";
 import { processExitProbe } from "../fixtures/process-exit-probe.ts";
 
 const defaults = {

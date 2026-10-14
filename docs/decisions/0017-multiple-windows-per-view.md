@@ -176,6 +176,6 @@ shared environment의 초기화와 참조 수 변경은 프로필 소유 경로�
 현재 사용할 수 있는 API와 새 결정, 계약 테스트와 실제 OS 실행 검증을 문서에서 구분한다.
 
 근거: [창 선언 검증](../../packages/runtime-bun/src/window-config.ts),
-[창 작업](../../plugins/windows/src/coordinator.ts), [권한과 조회](../../plugins/windows/src/windows.ts),
+[창 작업](../../plugins/windows/src/platforms/coordinator.ts), [권한과 조회](../../plugins/windows/src/windows.ts),
 [UI 소유권과 전달](../../native/windows/bun/ui.ts), [프로필](../../native/windows/bun/webview.ts),
 [Core 세션과 이벤트](../../packages/core/src/create-core.ts).

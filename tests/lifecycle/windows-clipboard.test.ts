@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import { clipboard, clipboardPlugin } from "@bunaway/plugin-clipboard";
+import clipboard from "@bunaway/plugin-clipboard";
 import {
   BunawayError,
   type HostCall,
@@ -17,9 +17,9 @@ import {
 import { bindHostAPI } from "#core/host-api";
 import { disposeAll } from "#native/host-api/bun/plugins";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
-import type { ClipboardItem } from "#plugins/clipboard/src/formats";
-import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
-import { createClipboard } from "#plugins/clipboard/src/win32";
+import type { ClipboardItem } from "#plugins/clipboard/src/contract";
+import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/contract";
+import { createClipboard } from "#plugins/clipboard/src/platforms/windows-bindings";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 const PM_REMOVE = 1;
@@ -73,7 +73,7 @@ test.skipIf(
       }
     }, 5);
     const registry = new NativeRegistry([
-      clipboardPlugin,
+      clipboard._definition,
     ]);
     const permissions = {
       permissions: [
@@ -97,7 +97,7 @@ test.skipIf(
       dataRoot: root,
       loader: "",
       plugins: [
-        clipboardPlugin,
+        clipboard._definition,
       ],
     };
     const pending = new Map<string, (response: HostResponse) => void>();
@@ -147,7 +147,7 @@ test.skipIf(
       }
       const operationsPath = resolve(
         import.meta.dir,
-        "../../plugins/clipboard/src/platforms/windows.ts",
+        "../../plugins/clipboard/src/index.ts",
       );
       const disposedPath = resolve(root, "disposed.txt");
       await bundleUIPluginFixture(
@@ -155,13 +155,14 @@ test.skipIf(
         [
           {
             name: "clipboard",
-            version: clipboardPlugin.version,
-            native: clipboardPlugin.native,
-            execution: "ui",
+            version: clipboard._definition.version,
+            native: clipboard._definition.native,
+            thread: "ui",
           },
         ],
         `
-import { createOperations } from ${JSON.stringify(operationsPath)};
+import definition from ${JSON.stringify(operationsPath)};
+const createOperations = definition._definition.nativePlatforms.windows.create;
 import { writeFileSync } from "node:fs";
 export const pluginImports = { clipboard: { operations: async () => ({ createOperations(environment) {
   const adapter = createOperations(environment);
@@ -478,7 +479,7 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
       const holderPath = resolve(root, "holder.ts");
       await Bun.write(
         holderPath,
-        `import { createClipboard } from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/clipboard/src/win32.ts"))};
+        `import { createClipboard } from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/clipboard/src/platforms/windows-bindings.ts"))};
 const owner = createClipboard();
 try {
   const deadline = Date.now() + 2000;

@@ -64,8 +64,8 @@ test("installed opener package validates and loads through the generated Windows
     await writeFile(
       resolve(project, "src-bunaway/app.ts"),
       `import { defineApp } from "@bunaway/backend";
-import { openerPlugin } from "@bunaway/plugin-opener";
-export default defineApp({ modules: [], plugins: [openerPlugin] });
+import opener from "@bunaway/plugin-opener";
+export default defineApp({ modules: [], plugins: [opener] });
 `,
     );
     await writeJson(resolve(project, "src-bunaway/policy.json"), {
@@ -99,8 +99,8 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-opener",
     ]);
-    expect(plugins[0]?.targets.windows?.execution).toBe("io");
-    expect(plugins[0]?.targets.macos?.execution).toBe("io");
+    expect(plugins[0]?.targets.windows?.thread).toBe("worker");
+    expect(plugins[0]?.targets.macos?.thread).toBe("worker");
     expect(plugins[0]?.targets.macos?.supportedOperations).toEqual([
       "opener.openUrl",
       "opener.openFile",
@@ -163,12 +163,12 @@ export default defineApp({ modules: [], plugins: [openerPlugin] });
     const browserEntry = resolve(project, "opener-browser.ts");
     await writeFile(
       browserEntry,
-      `import { openFile, openUrl, revealFile, openFileWith, openUrlWith } from "@bunaway/plugin-opener";
-void openUrl("https://example.com/");
-void openFile("C:/file.txt");
-void revealFile("C:/file.txt");
-void openFileWith("C:/file.txt", "C:/editor.exe");
-void openUrlWith("https://example.com/", "C:/browser.exe");
+      `import opener from "@bunaway/plugin-opener";
+void opener.openUrl("https://example.com/");
+void opener.openFile("C:/file.txt");
+void opener.revealFile("C:/file.txt");
+void opener.openFileWith("C:/file.txt", "C:/editor.exe");
+void opener.openUrlWith("https://example.com/", "C:/browser.exe");
 `,
     );
     const browser = await Bun.build({
@@ -181,9 +181,7 @@ void openUrlWith("https://example.com/", "C:/browser.exe");
     expect(browser.success).toBe(true);
     expect(
       Object.keys(browser.metafile?.inputs ?? {}).some((path) =>
-        /(?:plugins[\\/]opener[\\/]src[\\/](?:windows|shell)\.ts|bun:ffi)/.test(
-          path,
-        ),
+        /(?:plugins[\\/]opener[\\/]src[\\/]platforms[\\/]|bun:ffi)/.test(path),
       ),
     ).toBe(false);
 
@@ -223,7 +221,7 @@ void openUrlWith("https://example.com/", "C:/browser.exe");
       const adapters = await operations(
         appPlugins,
         project,
-        "io",
+        "worker",
         undefined,
         packagedPlugins,
       );

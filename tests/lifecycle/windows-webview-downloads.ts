@@ -6,7 +6,7 @@ import type { Socket } from "node:net";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineApp } from "@bunaway/backend";
-import { windows, windowsPlugin } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 import type { HostContext, Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { kernel } from "#native/windows/bun/win32-bindings";
@@ -606,7 +606,7 @@ if (!process.argv.includes("--child")) {
     modules: [],
     events: {},
     plugins: [
-      windowsPlugin,
+      windows,
       {
         name: "download-test",
         version: "1.0.0",

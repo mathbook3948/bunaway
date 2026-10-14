@@ -35,7 +35,7 @@ test.each([
       const plugin = {
         name: "owned",
         version: "development",
-        execution: "io" as const,
+        thread: "worker" as const,
         native: {
           operations: [
             {
@@ -55,7 +55,7 @@ test.each([
         `
         import {workerData} from "node:worker_threads";
         import {defineNativePlugin} from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
-        import {ImageResources} from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/image/src/resources.ts"))};
+        import {ImageResources} from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/image/src/platforms/resources.ts"))};
         import {z} from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
         const state=new Int32Array(workerData.state);
         const slots=${JSON.stringify(slots)};
@@ -66,7 +66,7 @@ test.each([
         const plugin=defineNativePlugin({name:"owned",operations:{
           create:{input:z.null(),output:z.object({id:z.string()}).strict()},
           inspect:{input:z.null(),output:z.object({retained:z.boolean(),aborted:z.boolean()}).strict()},
-        },platforms:{windows:{execution:"io",create:()=>({
+        },platforms:{windows:{thread:"worker",create:()=>({
           execute(){throw new Error("Context required");},
           executeUI(name,_input,_source,context){
             if(name==="owned.inspect") return {retained:retained(),aborted:creationSignal.aborted};
@@ -83,7 +83,7 @@ test.each([
           },
           dispose(){resources.dispose();Atomics.store(state,slots.disposed,1);}
         })}}});
-        export const pluginImports={owned:{operations:async()=>({createOperations:plugin.definition.nativePlatforms.windows.create})}};
+        export const pluginImports={owned:{operations:async()=>({createOperations:plugin._definition.nativePlatforms.windows.create})}};
       `,
       );
       const runtime = {

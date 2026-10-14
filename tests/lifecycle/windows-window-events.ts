@@ -1,15 +1,12 @@
-import assert from "node:assert/strict";
 import { dlopen, ptr } from "bun:ffi";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
+import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineApp } from "@bunaway/backend";
-import {
+import windows, {
   windowEvents,
   windowSnapshotSchema,
-  windows,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import {
   type HostContext,
@@ -18,6 +15,7 @@ import {
 } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
@@ -174,7 +172,7 @@ if (!process.argv.includes("--child")) {
   const app = defineApp({
     modules: [],
     plugins: [
-      windowsPlugin,
+      windows,
     ],
     commands: {
       "test.record": {

@@ -21,7 +21,7 @@ const plugin = defineNativePlugin({
   },
   platforms: {
     windows: {
-      execution: "io",
+      thread: "worker",
       create: () => ({
         execute: (_name, input) => input,
         dispose() {},
@@ -29,11 +29,11 @@ const plugin = defineNativePlugin({
     },
   },
 });
-const registration = JSON.parse(JSON.stringify(plugin.definition));
+const registration = JSON.parse(JSON.stringify(plugin._definition));
 const registry = new NativeRegistry([
   registration,
 ]);
-const adapter = plugin.definition.nativePlatforms.windows?.create({
+const adapter = plugin._definition.nativePlatforms.windows?.create({
   dataRoot: ".",
   capabilities: [],
 });

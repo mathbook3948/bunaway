@@ -1,5 +1,5 @@
 import { createClient } from "@bunaway/client";
-import { storage } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 
 const client = createClient();
 const file = {

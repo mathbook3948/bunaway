@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineApp } from "@bunaway/backend";
-import { windows, windowsPlugin } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 import type { HostContext, Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
@@ -394,7 +394,7 @@ if (!process.argv.includes("--child")) {
   const app = defineApp({
     modules: [],
     plugins: [
-      windowsPlugin,
+      windows,
       {
         name: "owned-modal-test",
         version: "1.0.0",

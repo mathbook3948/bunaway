@@ -4,8 +4,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AppDefinition } from "@bunaway/core";
-import { trayPlugin } from "@bunaway/plugin-tray";
-import { windowsPlugin } from "@bunaway/plugin-windows";
+import tray from "@bunaway/plugin-tray";
+import windows from "@bunaway/plugin-windows";
 import {
   AUTOSTART_ARGUMENT,
   AUTOSTART_HIDDEN_ARGUMENT,
@@ -24,7 +24,7 @@ import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const windowRegistry = new NativeRegistry([
-  windowsPlugin,
+  windows._definition,
 ]);
 
 let uiReadyResolve: () => void = () => {};
@@ -37,7 +37,7 @@ const uiRestored = new Promise<void>((resolveRestored) => {
 });
 export const desktopTestApp = {
   plugins: [
-    windowsPlugin,
+    windows._definition,
   ],
   commands: {
     "test.ready": {
@@ -401,7 +401,7 @@ if (!process.argv.includes("--child")) {
           ...desktopTestApp.plugins,
           ...(trayLifecycle || scenario === "dev-hide"
             ? [
-                trayPlugin,
+                tray._definition,
               ]
             : []),
           {

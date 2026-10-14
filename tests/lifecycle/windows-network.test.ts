@@ -1,18 +1,18 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
-import { networkPlugin as macosNetworkPlugin } from "@bunaway/plugin-network/native/macos";
-import { networkPlugin as windowsNetworkPlugin } from "@bunaway/plugin-network/native/windows";
+import macosNetworkPlugin from "@bunaway/plugin-network/native/macos";
+import windowsNetworkPlugin from "@bunaway/plugin-network/native/windows";
 import type { JsonValue } from "@bunaway/protocol";
-import { networkOperations } from "#plugins/network/src/contract";
+import { windowsOperations as networkOperations } from "#plugins/network/src/operations";
 
 const platforms = [
   [
     "windows",
-    windowsNetworkPlugin.nativePlatforms.windows,
+    windowsNetworkPlugin._definition.nativePlatforms.windows,
   ],
   [
     "macos",
-    macosNetworkPlugin.nativePlatforms.macos,
+    macosNetworkPlugin._definition.nativePlatforms.macos,
   ],
 ] as const;
 

@@ -163,6 +163,6 @@ options는 선택적 입력이며 기존 `{ view }`, `null` 결과와 재생성 
 지원 범위를 정한 결정 PR은 이 이슈를 닫지 않으며, 구현 PR은 실제 구현과 검증 뒤 닫는다.
 
 근거: [선언 검증](../../packages/runtime-bun/src/window-config.ts),
-[창 schema](../../plugins/windows/src/contract.ts), [창 작업](../../plugins/windows/src/coordinator.ts),
+[창 schema](../../plugins/windows/src/contract.ts), [창 작업](../../plugins/windows/src/platforms/coordinator.ts),
 [권한과 조회](../../plugins/windows/src/windows.ts), [UI 소유권](../../native/windows/bun/ui.ts),
 [ID 발급](../../native/windows/bun/win32.ts), [프로필](../../native/windows/bun/webview.ts).

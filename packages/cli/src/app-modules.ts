@@ -15,7 +15,7 @@ export function pluginImportsSource(
   return `export const pluginImports = {${plugins
     .map((plugin) => {
       const target = plugin.targets[platform];
-      return `[${JSON.stringify(plugin.name)}]: {${target ? `operations: () => import(${JSON.stringify(target.operations)}).then(({ default: plugin }) => ({ createOperations: plugin.nativePlatforms[${JSON.stringify(platform)}].create }))` : ""}}`;
+      return `[${JSON.stringify(plugin.name)}]: {${target ? `operations: () => import(${JSON.stringify(target.operations)}).then(({ default: plugin }) => ({ createOperations: plugin._definition.nativePlatforms[${JSON.stringify(platform)}].create }))` : ""}}`;
     })
     .join(",")}};\n`;
 }

@@ -1,56 +1,48 @@
 import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
 import { z } from "zod";
-import { fileInput } from "./path.ts";
-import { urlInput } from "./url.ts";
-/** File and HTTP or HTTPS request contracts shared by callers and native execution. */
-export const openerOperations = {
-  openUrl: {
-    input: urlInput,
-    output: z.null(),
-  },
-  openFile: {
-    input: fileInput,
-    output: z.null(),
-  },
-  trashFile: {
-    input: fileInput,
-    output: z.null(),
-  },
-  revealFile: {
-    input: fileInput,
-    output: z.null(),
-  },
-  openFileWith: {
-    input: fileInput.extend({
-      app: fileInput.shape.path,
-    }),
-    output: z.null(),
-  },
-  openUrlWith: {
-    input: urlInput.extend({
-      app: fileInput.shape.path,
-    }),
-    output: z.null(),
-  },
-} as const;
+
+// Explorer's file operations use ordinary Win32 paths, not extended device paths.
+export const MAX_FILE_PATH_LENGTH = 259;
+export const fileInput = z.strictObject({
+  path: z
+    .string()
+    .refine(
+      (value) => Array.from(value).length <= MAX_FILE_PATH_LENGTH,
+      "Text exceeds the Unicode character limit.",
+    ),
+});
+
+export const MAX_URL_LENGTH = 8192;
+export const urlInput = z.strictObject({
+  url: z
+    .string()
+    .refine(
+      (value) => Array.from(value).length <= MAX_URL_LENGTH,
+      "Text exceeds the Unicode character limit.",
+    ),
+});
+
+/** Selected application paths are validated again by each platform before native execution. */
+export const fileWithAppSchema = fileInput.extend({
+  app: fileInput.shape.path,
+});
+export const urlWithAppSchema = urlInput.extend({
+  app: fileInput.shape.path,
+});
 /** Validate a native call, rejecting operations outside this plugin with UNSUPPORTED. */
 export function validateOpenerInput(operation: string, input: JsonValue) {
   try {
     switch (operation) {
       case "opener.openUrl":
-        return openerOperations.openUrl.input.parse(validateValue({}, input));
+        return urlInput.parse(validateValue({}, input));
       case "opener.openFile":
       case "opener.revealFile":
       case "opener.trashFile":
-        return openerOperations.openFile.input.parse(validateValue({}, input));
+        return fileInput.parse(validateValue({}, input));
       case "opener.openFileWith":
-        return openerOperations.openFileWith.input.parse(
-          validateValue({}, input),
-        );
+        return fileWithAppSchema.parse(validateValue({}, input));
       case "opener.openUrlWith":
-        return openerOperations.openUrlWith.input.parse(
-          validateValue({}, input),
-        );
+        return urlWithAppSchema.parse(validateValue({}, input));
       default:
         throw new BunawayError({
           code: "UNSUPPORTED",

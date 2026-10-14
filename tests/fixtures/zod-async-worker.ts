@@ -81,7 +81,7 @@ const plugin = defineNativePlugin({
   operations: definitions,
   platforms: {
     windows: {
-      execution: "ui",
+      thread: "ui",
       create: () => ({
         execute: (_name, input) => input,
         executeUI: (_name, input) => input,
@@ -90,7 +90,7 @@ const plugin = defineNativePlugin({
     },
   },
 });
-const adapter = plugin.definition.nativePlatforms.windows?.create({
+const adapter = plugin._definition.nativePlatforms.windows?.create({
   dataRoot: ".",
   capabilities: [],
 });

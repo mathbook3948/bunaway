@@ -22,12 +22,12 @@ Windows 구현을 우선하며 기존 네이티브 플러그인 경계 검증을
 
 기본 창, WebView와 종료 순서는 호스트가 계속 소유한다. 트레이의 Shell_NotifyIcon,
 ICO와 팝업 HMENU 구현은 `@bunaway/plugin-tray`가 소유한다. 기본 Open/Quit 메뉴도
-이 패키지 안에 있으므로 menuPlugin 없이 기본 복원과 종료를 제공한다.
-menuPlugin은 선택적인 메뉴 정의와 변경, 연결 및 클릭 대기를 소유한다.
+이 패키지 안에 있으므로 menu 없이 기본 복원과 종료를 제공한다.
+menu은 선택적인 메뉴 정의와 변경, 연결 및 클릭 대기를 소유한다.
 트레이 없는 최소 앱과 CLI 배포물에는 이 구현을 넣지 않는다.
 
 이전 결정에서 호스트 자원 관리로 남긴 트레이 구현을 이 경계로 옮긴다.
-`desktop.tray`는 복원과 실행 유지 설정으로 유지하지만 앱이 trayPlugin을 설치하고
+`desktop.tray`는 복원과 실행 유지 설정으로 유지하지만 앱이 `tray`를 설치하고
 등록해야 한다. 빠진 경우 시작을 UNSUPPORTED로 거부한다. 숨김 시작, 마지막 창 닫기,
 Open/Quit과 종료 취소의 의미는 바꾸지 않는다. macOS의 트레이와 desktop은 계속 미지원이다.
 
@@ -55,10 +55,10 @@ export default defineApp({ modules: [], desktop: { tray: { tooltip: "Notes" } } 
 호스트의 실행 위치, DLL이나 메시지 창 설정은 앱에 노출하지 않는다.
 
 ```ts
-import { trayPlugin } from "@bunaway/plugin-tray";
+import tray from "@bunaway/plugin-tray";
 export default defineApp({
   modules: [],
-  plugins: [trayPlugin],
+  plugins: [tray],
   desktop: { tray: { tooltip: "Notes" } },
 });
 ```
@@ -68,7 +68,7 @@ export default defineApp({
 이전에는 지원 목록과 dispatch를 함께 유지하고 다시 파싱해 타입을 좁혔다.
 
 ```ts
-platforms: { windows: { execution: "ui", create, operations: ["read"] } }
+platforms: { windows: { thread: "ui", create, operations: ["read"] } }
 // create 내부
 executeUI(name, input) {
   switch (name) {
@@ -92,5 +92,12 @@ const create = defineNativeAdapter(operations, {
   dispose() {},
 });
 // index.ts
-platforms: { windows: { execution: "ui", create } }
+platforms: { windows: { thread: "ui", create } }
 ```
+
+## 2026-10-14: 플랫폼별 작업 선언
+
+위 함수 맵 예시는 당시 이관 단계를 기록한다. 현재 공식 플러그인은
+[ADR 0013](./0013-optional-native-plugins.md)의 플랫폼별 operations에 작업마다
+input, output과 handler를 선언한다. 공유 상태가 필요하면 플랫폼의 initialize와
+dispose를 사용한다. 기존 create 어댑터는 외부 플러그인 호환을 위해 유지한다.

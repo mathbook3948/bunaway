@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
-import { os, osPlugin } from "@bunaway/plugin-os";
+import os from "@bunaway/plugin-os";
 import { NativeRegistry } from "@bunaway/protocol";
-import { osOperations } from "#plugins/os/src/contract";
+import { osOperations } from "#plugins/os/src/operations";
 import { assertWindowsRegionCode } from "../fixtures/windows-region-code.ts";
 
 test("OS reads have independent permissions and strict null inputs", () => {
   const registry = new NativeRegistry([
-    osPlugin,
+    os._definition,
   ]);
   expect(Object.keys(os)).toEqual([
     "info",

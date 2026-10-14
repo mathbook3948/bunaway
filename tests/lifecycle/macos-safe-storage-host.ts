@@ -57,7 +57,7 @@ try {
     recursive: true,
   });
   const allOperations = Object.values(
-    fixturePlugin.definition.native.operations,
+    fixturePlugin._definition.native.operations,
   ).map((value) => value.name);
   const viewOperations = allOperations.filter(
     (name) => name !== "safe-storage.decryptBytes",
@@ -114,14 +114,14 @@ try {
       (plugin) => plugin.name === "windows",
     ),
     {
-      name: fixturePlugin.definition.name,
-      version: fixturePlugin.definition.version,
+      name: fixturePlugin._definition.name,
+      version: fixturePlugin._definition.version,
       packageName: "fixture-safe-storage",
       root,
-      native: fixturePlugin.definition.native,
+      native: fixturePlugin._definition.native,
       targets: {
         macos: {
-          execution: "io",
+          thread: "worker",
           operations: resolve(
             root,
             "tests/fixtures/macos-safe-storage/plugin.ts",

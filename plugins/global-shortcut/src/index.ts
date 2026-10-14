@@ -1,23 +1,22 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { globalShortcutEvents, globalShortcutOperations } from "./contract.ts";
-import { createOperations } from "./platforms/windows.ts";
-
-const plugin = defineNativePlugin({
+import { globalShortcutEvents } from "#global-shortcut/contract";
+import { globalShortcutOperations } from "#global-shortcut/operations";
+import { dispose, initialize } from "#global-shortcut/platforms/windows";
+/** Register, inspect, remove and suspend app-owned Windows global shortcuts. */
+export default defineNativePlugin({
+  events: {
+    "globalShortcut.pressed":
+      globalShortcutEvents["globalShortcut.pressed"].payload,
+  },
   name: "globalShortcut",
   platforms: {
     windows: {
-      execution: "ui",
-      create: createOperations,
+      thread: "ui",
+      initialize,
+      dispose,
+      operations: globalShortcutOperations,
     },
   },
-  operations: globalShortcutOperations,
 });
-/** Optional global shortcuts; registration grants no operation or event permissions. */
-export const globalShortcutPlugin = Object.freeze({
-  ...plugin.definition,
-  events: globalShortcutEvents,
-});
-export default globalShortcutPlugin;
-/** Register, inspect, remove and suspend app-owned Windows global shortcuts. */
-export const globalShortcut = plugin.api;
-export type { GlobalShortcut } from "./contract.ts";
+
+export type { GlobalShortcut } from "#global-shortcut/contract";

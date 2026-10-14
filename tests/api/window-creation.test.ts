@@ -1,8 +1,7 @@
 import { expect, test } from "bun:test";
-import {
+import windows, {
   parseWindowCall,
   validateWindowCall,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import { windowDefinitions } from "../../plugins/windows/src/contract.ts";
@@ -11,7 +10,7 @@ import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 const parsers = pluginParsers("windows", windowDefinitions);
 
 const registry = new NativeRegistry([
-  windowsPlugin,
+  windows._definition,
 ]);
 
 test.each([

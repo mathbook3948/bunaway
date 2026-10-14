@@ -33,15 +33,14 @@ export default app;
 플러그인의 이름과 버전, 의존성, 지원 플랫폼과 필요한 권한, 명령과 이벤트 목록도 유지됩니다.
 
 기존 객체형 앱 정의도 지원합니다.
+네이티브 플러그인은 `defineApp()`의 `plugins`에 default export를 전달해 등록합니다.
 
 ```ts
 import type { AppDefinition } from "@bunaway/backend";
-import { windowsPlugin } from "@bunaway/plugin-windows";
 export default {
   commands: {},
   events: {},
   state: { count: 0 },
-  plugins: [windowsPlugin] as const,
 } satisfies AppDefinition;
 ```
 
@@ -73,7 +72,7 @@ CLI는 작성한 설정과 정책을 검사합니다. 호출할 명령의 권한
 
 `CommandsOf<typeof app>`는 앱에 직접 선언한 명령과 정적으로 나열한 기능 모듈의 input/output을,
 `EventsOf<typeof app>`는 해당 이벤트와 정적으로 나열한 플러그인의 이벤트 payload를 추론합니다.
-객체형 앱 정의에서 플러그인 이벤트 타입을 추론하려면 위 예제처럼 `plugins` 배열에
+객체형 앱 정의에서 플러그인 이벤트 타입을 추론하려면 `plugins` 배열에
 `as const`를 붙여 등록 목록을 tuple로 유지합니다. `defineApp()`에 배열을 직접 전달하면
 별도 지정 없이 tuple로 추론합니다. 일반 배열로 선언한 플러그인 목록의 이벤트는
 `EventsOf`에 포함하지 않습니다.
@@ -82,19 +81,19 @@ CLI는 작성한 설정과 정책을 검사합니다. 호출할 명령의 권한
 
 ## 데스크톱 앱 동작
 
-트레이를 사용하려면 @bunaway/plugin-tray 설치와 trayPlugin 등록이 필요합니다.
+트레이를 사용하려면 @bunaway/plugin-tray 설치와 tray 등록이 필요합니다.
 
 현재 Windows Bun 호스트에서 제공합니다. macOS의 현재 런타임에 `desktop`을 지정하면
 `UNSUPPORTED`로 시작에 실패합니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
-import { trayPlugin } from "@bunaway/plugin-tray";
+import tray from "@bunaway/plugin-tray";
 
 let hasUnsavedWork = false;
 export default defineApp({
   modules: [],
-  plugins: [trayPlugin],
+  plugins: [tray],
   desktop: {
     closeBehavior: "hide",
     tray: { tooltip: "Memo" },

@@ -3,14 +3,16 @@ title: power
 description: Windows 전원과 입력 idle 조회, 앱 수명의 절전 및 화면 유지 요청.
 ---
 
-`@bunaway/plugin-power`를 설치하고 `powerPlugin`을 앱의 plugins에 등록합니다.
+기본 export(`default`)를 `power`로 가져와 앱에 등록하고 호출합니다.
+
+`@bunaway/plugin-power`를 설치하고 `power`를 앱의 plugins에 등록합니다.
 Windows I/O 실행을 지원하며 다른 플랫폼은 `UNSUPPORTED`입니다.
 각 작업에는 `power.<작업명>` 권한이 필요합니다. 화면에서 직접 호출하면 해당
 `plugin.power.<작업명>` command도 허용합니다. 등록은 권한을 부여하지 않습니다.
 
 ```ts
-import { power, powerPlugin } from "@bunaway/plugin-power";
-// 앱 정의: plugins: [powerPlugin]
+import power from "@bunaway/plugin-power";
+// 앱 정의: plugins: [power]
 const status = await power.getStatus();
 const request = await power.startBlocker({ type: "display", reason: "미디어 재생 중" });
 try {

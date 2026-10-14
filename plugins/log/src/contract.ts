@@ -1,24 +1,19 @@
 import { z } from "zod";
 /** Structured log input and completion contract. */
-export const logOperations = {
-  write: {
-    input: z.strictObject({
-      level: z.enum([
-        "debug",
-        "info",
-        "warn",
-        "error",
-      ]),
-      message: z
-        .string()
-        .refine(
-          (value) => Array.from(value).length <= 1024,
-          "Text exceeds the Unicode character limit.",
-        ),
-      details: z.json().exactOptional(),
-    }),
-    output: z.null(),
-  },
-} as const;
+export const logInputSchema = z.strictObject({
+  level: z.enum([
+    "debug",
+    "info",
+    "warn",
+    "error",
+  ]),
+  message: z
+    .string()
+    .refine(
+      (value) => Array.from(value).length <= 1024,
+      "Text exceeds the Unicode character limit.",
+    ),
+  details: z.json().exactOptional(),
+});
 /** Input accepted by `log.write` and the level-specific helpers. */
-export type LogInput = z.infer<typeof logOperations.write.input>;
+export type LogInput = z.infer<typeof logInputSchema>;

@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { trayPlugin } from "@bunaway/plugin-tray";
-import { validateWindowOutput, windowsPlugin } from "@bunaway/plugin-windows";
+import tray from "@bunaway/plugin-tray";
+import windows, { validateWindowOutput } from "@bunaway/plugin-windows";
 import type { JsonValue } from "@bunaway/protocol";
 import {
   Channel,
@@ -46,7 +46,7 @@ async function startUI(
         {
           name: "parser",
           version: "1",
-          execution: "ui" as const,
+          thread: "ui" as const,
           native: {
             operations: [
               {
@@ -74,13 +74,13 @@ async function startUI(
     },
     plugins: [
       {
-        name: windowsPlugin.name,
-        version: windowsPlugin.version,
-        native: windowsPlugin.native,
+        name: windows._definition.name,
+        version: windows._definition.version,
+        native: windows._definition.native,
       },
       ...(registerTray
         ? [
-            trayPlugin,
+            tray._definition,
           ]
         : []),
       ...parserPlugins,
@@ -140,16 +140,16 @@ async function startUI(
     directory,
     [
       {
-        name: windowsPlugin.name,
-        version: windowsPlugin.version,
-        native: windowsPlugin.native,
-        execution: "ui",
+        name: windows._definition.name,
+        version: windows._definition.version,
+        native: windows._definition.native,
+        thread: "ui",
       },
       {
-        name: trayPlugin.name,
-        version: trayPlugin.version,
-        native: trayPlugin.native,
-        execution: "ui",
+        name: tray._definition.name,
+        version: tray._definition.version,
+        native: tray._definition.native,
+        thread: "ui",
       },
       ...parserPlugins,
     ],
@@ -175,14 +175,14 @@ async function startUI(
         }
         return value;
       }),output:z.string(),
-    }},platforms:{windows:{execution:"ui",create:()=>({
+    }},platforms:{windows:{thread:"ui",create:()=>({
       execute,
       ...(${JSON.stringify(parserExecution)} === "ui" ? {async executeUI(name,input){return execute(name,input);}} : {}),
       dispose(){Atomics.add(cleanup,cleanupSlots.adapter,1);},
     })}}});
     export const pluginImports = {tray: {operations: async()=>({createOperations(environment){
       environment.tray.initialize(()=>new Tray()); return {execute(){throw new Error("Unexpected tray call")},dispose(){}};
-    }})},parser:{operations:async()=>({createOperations:parser.definition.nativePlatforms.windows.create})}, windows: {
+    }})},parser:{operations:async()=>({createOperations:parser._definition.nativePlatforms.windows.create})}, windows: {
       operations: () => import(${JSON.stringify(resolve(import.meta.dir, "../../plugins/windows/src/platforms/windows.ts"))}),
     } };`,
   );

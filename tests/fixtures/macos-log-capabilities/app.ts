@@ -1,9 +1,9 @@
 import { mkdir, rename, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { defineApp, type CommandContext } from "@bunaway/backend";
-import { capabilities, capabilitiesPlugin } from "@bunaway/plugin-capabilities";
-import { log, logPlugin } from "@bunaway/plugin-log";
-import { windowsPlugin } from "@bunaway/plugin-windows";
+import { type CommandContext, defineApp } from "@bunaway/backend";
+import capabilities from "@bunaway/plugin-capabilities";
+import log from "@bunaway/plugin-log";
+import windows from "@bunaway/plugin-windows";
 
 const dataRoot = process.env.HOME;
 const temporary = process.env.TMPDIR;
@@ -15,9 +15,9 @@ let denied = false;
 export default defineApp({
   modules: [],
   plugins: [
-    logPlugin,
-    capabilitiesPlugin,
-    windowsPlugin,
+    log,
+    capabilities,
+    windows,
     {
       name: "log-startup",
       version: "1",

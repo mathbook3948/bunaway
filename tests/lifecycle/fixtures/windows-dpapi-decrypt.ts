@@ -1,7 +1,7 @@
-import { safeStoragePlugin } from "@bunaway/plugin-safe-storage/native/windows";
+import safeStorage from "@bunaway/plugin-safe-storage/native/windows";
 
 const path = process.argv[2];
-const create = safeStoragePlugin.nativePlatforms.windows?.create;
+const create = safeStorage._definition.nativePlatforms.windows?.create;
 if (!path || !create) {
   throw new Error("DPAPI restart fixture requires input and Windows.");
 }

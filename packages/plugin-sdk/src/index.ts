@@ -3,6 +3,12 @@ import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import { z } from "zod";
 import type { NativeInvokeOptions } from "#transport";
 import {
+  handlerAdapterFactory,
+  type NativeHandler,
+  type NativeHandlerContext,
+  type NativePlatformDefinition,
+} from "./native-platform.ts";
+import {
   type NativePluginAdapter,
   validatedAdapter,
 } from "./native-validation.ts";
@@ -20,6 +26,7 @@ export type {
   NativeHandlers,
 } from "./native-handlers.ts";
 export { defineNativeAdapter } from "./native-handlers.ts";
+export type { NativeHandlerContext } from "./native-platform.ts";
 export type { NativePluginAdapter } from "./native-validation.ts";
 
 /** Host-selected values available when a native adapter is created. */
@@ -76,9 +83,16 @@ export type NativeAdapter = {
   dispose(): void | Promise<void>;
 };
 /** Create an adapter on its owning host worker; importing the factory must not initialize OS resources. */
-export type NativeAdapterFactory = (
-  environment: NativeEnvironment,
-) => NativeAdapter;
+export type NativeAdapterFactory = (environment: NativeEnvironment) => Omit<
+  NativeAdapter,
+  "execute"
+> & {
+  execute(
+    operation: string,
+    input: JsonValue,
+    source: string,
+  ): JsonValue | Promise<JsonValue>;
+};
 /** Input and output schemas for one named native operation. */
 export type NativeOperationDefinition = {
   /** Parsed with parseAsync before execution; raw and parsed values must be JSON. */
@@ -86,32 +100,43 @@ export type NativeOperationDefinition = {
   /** Parsed with parseAsync after execution; raw and parsed values must be JSON. */
   readonly output: z.ZodType;
 };
-/** Declarative contract used to register operations and construct their callers. */
-export type NativePluginDefinition = {
-  /** Plugin name used as the prefix for operation and permission identifiers. */
+/** Metadata shared by both platform declarations and existing adapter factories. */
+type NativePluginMetadata = {
   readonly name: string;
-  /** Platform factories imported from src/platforms/<platform>.ts. Omit unsupported platforms. */
-  readonly platforms?: Readonly<
-    Partial<
-      Record<
-        import("@bunaway/plugin-api").Platform,
-        {
-          readonly execution: "io" | "ui";
-          readonly create: NativeAdapterFactory;
-          /** Short operation names implemented on this platform; omission means all declared operations. */
-          readonly operations?: readonly string[];
-        }
-      >
-    >
-  >;
-  /** Events declared alongside operations in the same registration. */
   readonly events?: NonNullable<
     import("@bunaway/plugin-api").PluginDefinition["events"]
   >;
-  /** Operations keyed by the caller-facing method name. */
-  readonly operations: Readonly<Record<string, NativeOperationDefinition>>;
 };
-/** Promise-based caller shape inferred from a plugin's operation schemas. */
+type LegacyNativePlatform = {
+  readonly thread?: "worker" | "ui";
+  readonly create: NativeAdapterFactory;
+  readonly operations?: readonly string[];
+};
+/** Declare complete operations per platform, or schemas for an existing adapter factory. */
+export type NativePluginDefinition = NativePluginMetadata &
+  (
+    | {
+        readonly platforms: Readonly<
+          Partial<
+            Record<
+              import("@bunaway/plugin-api").Platform,
+              NativePlatformDefinition
+            >
+          >
+        >;
+      }
+    | {
+        readonly operations: Readonly<
+          Record<string, NativeOperationDefinition>
+        >;
+        readonly platforms?: Readonly<
+          Partial<
+            Record<import("@bunaway/plugin-api").Platform, LegacyNativePlatform>
+          >
+        >;
+      }
+  );
+/** Promise-based caller shape inferred from the declared operation schemas. */
 export type NativePluginAPI<
   O extends Record<string, NativeOperationDefinition>,
 > = {
@@ -120,83 +145,304 @@ export type NativePluginAPI<
     options?: NativeInvokeOptions,
   ) => Promise<z.output<O[K]["output"]>>;
 };
+/** Type a platform command from its schemas and the instance returned by initialize. */
+export function defineNativeOperation<Instance>() {
+  return <
+    const Input extends z.ZodType,
+    const Output extends z.ZodType,
+    Handler extends (
+      input: z.output<Input>,
+      context: NativeHandlerContext<Instance>,
+    ) => z.input<Output> | Promise<z.input<Output>>,
+  >(operation: {
+    readonly input: Input;
+    readonly output: Output;
+    readonly handler: Handler;
+  }) => operation;
+}
+type NativePluginResult<Metadata, API> = API & {
+  /** @internal Registration metadata for app composition, CLI discovery and native hosts. */
+  readonly _definition: Readonly<
+    Metadata & {
+      version: string;
+      native: {
+        operations: {
+          name: string;
+        }[];
+      };
+      nativePlatforms: Readonly<
+        Partial<
+          Record<
+            import("@bunaway/plugin-api").Platform,
+            {
+              readonly thread: "worker" | "ui";
+              readonly operations?: readonly string[];
+              readonly create: (
+                environment: NativeEnvironment,
+              ) => NativePluginAdapter;
+            }
+          >
+        >
+      >;
+    }
+  >;
+};
+type PlatformInstance<Target> = Target extends {
+  initialize: (environment: NativeEnvironment) => infer Instance;
+}
+  ? Instance
+  : undefined;
+type PlatformOperationNames<Platforms> = {
+  [Platform in keyof Platforms]: Platforms[Platform] extends NativePlatformDefinition
+    ? keyof Platforms[Platform]["operations"]
+    : never;
+}[keyof Platforms];
+type PlatformOperation<Platforms, Name> = {
+  [Platform in keyof Platforms]: Platforms[Platform] extends NativePlatformDefinition
+    ? Name extends keyof Platforms[Platform]["operations"]
+      ? Platforms[Platform]["operations"][Name]
+      : never
+    : never;
+}[keyof Platforms];
+/** Project only caller inputs/results; implementation and schema types stay private. */
+type PlatformAPI<Platforms> = {
+  readonly [Name in PlatformOperationNames<Platforms> & string]: (
+    input: z.input<
+      Extract<
+        PlatformOperation<Platforms, Name>,
+        NativeOperationDefinition
+      >["input"]
+    >,
+    options?: NativeInvokeOptions,
+  ) => Promise<
+    z.output<
+      Extract<
+        PlatformOperation<Platforms, Name>,
+        NativeOperationDefinition
+      >["output"]
+    >
+  >;
+};
+/** Materialize metadata before declaration emit, without retaining the platform type argument. */
+type PluginMetadata<Definition> = {
+  [Key in keyof Definition as Key extends "platforms" | "operations"
+    ? never
+    : Key]: Definition[Key];
+};
+type CheckedPlatform<Target extends NativePlatformDefinition> = {
+  readonly initialize?: (
+    environment: NativeEnvironment,
+  ) => Exclude<PlatformInstance<Target>, PromiseLike<unknown>>;
+  readonly dispose?: (
+    instance: PlatformInstance<Target>,
+  ) => void | Promise<void>;
+  readonly busy?: (instance: PlatformInstance<Target>) => boolean;
+  readonly operations: {
+    readonly [Name in keyof Target["operations"]]: {
+      readonly handler: (
+        input: z.output<Target["operations"][Name]["input"]>,
+        context: NativeHandlerContext<PlatformInstance<Target>>,
+      ) =>
+        | z.input<Target["operations"][Name]["output"]>
+        | Promise<z.input<Target["operations"][Name]["output"]>>;
+    };
+  };
+};
 /**
- * Define operations and return the validated host contract with typed `api`
- * callers. Input and output parsing runs on the owning adapter, never during transport.
- * Policies grant access by operation name. Applications own resource access
- * rules. Plugins own OS consent and may request it
- * inside an explicitly invoked operation; declaration imports never prompt.
- * The declaration is checked immediately, before any caller is created.
- * Plugin builds record the package.json version; direct source imports use
- * `development` until the package is built.
+ * Declare input/output schemas and a handler inside each platform's operations.
+ * Initialization, parsing, execution and cleanup stay on the owning host thread.
+ * Support and caller names come from operation keys; schemas remain local to each platform.
+ * Imports never initialize native resources or request OS consent.
+ * The result can be default-exported, registered in defineApp and called directly.
+ * Optional calls maps the generated operations to a fresh public API or callable function.
+ * The SDK freezes that API and attaches non-enumerable internal registration metadata.
  */
-export function defineNativePlugin<const D extends NativePluginDefinition>(
-  definition: D,
-) {
-  const { operations: definitions, platforms = {}, ...metadata } = definition;
-  // Keep executable schemas local; copying pairs prevents later declaration replacement.
-  const schemas = new Map(
-    Object.entries(definitions).map(([name, operation]) => {
-      if (
-        !(operation.input instanceof z.ZodType) ||
-        !(operation.output instanceof z.ZodType)
-      ) {
-        throw new Error("Plugin inputs and outputs must be Zod schemas.");
-      }
-      return [
-        `${definition.name}.${name}`,
-        {
-          input: operation.input,
-          output: operation.output,
-        },
-      ] as const;
-    }),
-  );
-  // Build metadata must not become Core's incompatible-platform startup restriction.
+export function defineNativePlugin<
+  const Metadata extends NativePluginMetadata,
+  const Platforms extends Partial<
+    Record<import("@bunaway/plugin-api").Platform, NativePlatformDefinition>
+  >,
+  API extends object = PlatformAPI<Platforms>,
+>(
+  definition: Metadata & {
+    readonly platforms: Platforms & {
+      readonly [Platform in keyof Platforms]: Platforms[Platform] extends NativePlatformDefinition
+        ? CheckedPlatform<Platforms[Platform]>
+        : never;
+    };
+  },
+  calls?: (operations: PlatformAPI<Platforms>) => API,
+): NativePluginResult<PluginMetadata<Metadata>, API>;
+/** Existing low-level adapters and defineNativeAdapter keep their schema declaration. */
+export function defineNativePlugin<
+  const Metadata extends NativePluginMetadata,
+  const O extends Record<string, NativeOperationDefinition>,
+  API extends object = NativePluginAPI<O>,
+>(
+  definition: Metadata & {
+    readonly operations: O;
+    readonly platforms?: Readonly<
+      Partial<
+        Record<import("@bunaway/plugin-api").Platform, LegacyNativePlatform>
+      >
+    >;
+  },
+  calls?: (operations: NativePluginAPI<O>) => API,
+): NativePluginResult<PluginMetadata<Metadata>, API>;
+export function defineNativePlugin(
+  definition: NativePluginDefinition,
+  calls?: (operations: never) => object,
+  // The plugin builder supplies the package version; source imports use development.
+  version = "development",
+): unknown {
+  const legacyDefinitions =
+    "operations" in definition ? definition.operations : undefined;
+  const {
+    platforms: declaredPlatforms,
+    operations: _operations,
+    ...metadata
+  } = {
+    ...definition,
+    operations: legacyDefinitions,
+  };
+  const platforms = declaredPlatforms ?? {};
+  const names = new Set<string>();
+  const readSchemas = (
+    definitions: Readonly<Record<string, NativeOperationDefinition>>,
+  ) =>
+    new Map(
+      Object.entries(definitions).map(([name, operation]) => {
+        if (
+          [
+            "_definition",
+            "then",
+            "toJSON",
+          ].includes(name)
+        ) {
+          throw new Error(`Reserved native plugin operation name: ${name}.`);
+        }
+        if (
+          !operation ||
+          !(operation.input instanceof z.ZodType) ||
+          !(operation.output instanceof z.ZodType)
+        ) {
+          throw new Error("Plugin inputs and outputs must be Zod schemas.");
+        }
+        if (Object.hasOwn(operation, "handlers")) {
+          throw new Error(
+            "Declare native handlers inside platform operations.",
+          );
+        }
+        const fullName = `${definition.name}.${name}`;
+        names.add(fullName);
+        return [
+          fullName,
+          {
+            input: operation.input,
+            output: operation.output,
+          },
+        ] as const;
+      }),
+    );
+  const legacySchemas = legacyDefinitions && readSchemas(legacyDefinitions);
   const nativePlatforms = Object.fromEntries(
     Object.entries(platforms).map(([platform, target]) => {
       if (
         !PLATFORMS.some((supported) => supported === platform) ||
         !target ||
-        ![
-          "io",
-          "ui",
-        ].includes(target.execution)
+        typeof target !== "object" ||
+        Array.isArray(target) ||
+        Object.hasOwn(target, "execution") ||
+        (target.thread !== undefined &&
+          target.thread !== "worker" &&
+          target.thread !== "ui")
       ) {
         throw new Error("Invalid native plugin platform declaration.");
       }
-      if (typeof target.create !== "function") {
-        throw new Error("Native plugin platforms require an adapter factory.");
-      }
-      const supportedOperations =
-        "operations" in target.create
-          ? (
-              target.create as import("./native-handlers.ts").NativeHandlerFactory
-            ).operations
-          : target.operations;
-      if (target.operations !== undefined && "operations" in target.create) {
-        throw new Error(
-          "Handler maps infer support; omit the platform operations list.",
-        );
-      }
-      if (
-        supportedOperations !== undefined &&
-        (!Array.isArray(supportedOperations) ||
-          new Set(supportedOperations).size !== supportedOperations.length ||
-          supportedOperations.some(
-            (operation) =>
-              typeof operation !== "string" ||
-              !Object.hasOwn(definitions, operation),
-          ))
-      ) {
-        throw new Error("Invalid native plugin operation support.");
+      let schemas: ReadonlyMap<string, NativeOperationDefinition>;
+      let supportedOperations: readonly string[] | undefined;
+      let create: NativeAdapterFactory;
+      if ("create" in target) {
+        if (typeof target.create !== "function") {
+          throw new Error(
+            "Native plugin platforms require an adapter factory.",
+          );
+        }
+        if (
+          !legacySchemas ||
+          Object.hasOwn(target, "initialize") ||
+          Object.hasOwn(target, "dispose")
+        ) {
+          throw new Error("Native handlers require a lifecycle platform.");
+        }
+        schemas = legacySchemas;
+        create = target.create;
+        if ("operations" in create) {
+          if (target.operations !== undefined) {
+            throw new Error(
+              "Handler maps infer support; omit the platform operations list.",
+            );
+          }
+          supportedOperations = (
+            create as import("./native-handlers.ts").NativeHandlerFactory
+          ).operations;
+        } else {
+          supportedOperations = target.operations;
+        }
+        if (
+          supportedOperations !== undefined &&
+          (!Array.isArray(supportedOperations) ||
+            new Set(supportedOperations).size !== supportedOperations.length ||
+            supportedOperations.some(
+              (operation) =>
+                typeof operation !== "string" ||
+                !schemas.has(`${definition.name}.${operation}`),
+            ))
+        ) {
+          throw new Error("Invalid native plugin operation support.");
+        }
+      } else {
+        if (
+          legacyDefinitions ||
+          (target.initialize !== undefined &&
+            typeof target.initialize !== "function") ||
+          (target.dispose !== undefined &&
+            typeof target.dispose !== "function") ||
+          (target.busy !== undefined && typeof target.busy !== "function") ||
+          !target.operations ||
+          typeof target.operations !== "object" ||
+          Array.isArray(target.operations)
+        ) {
+          throw new Error("Invalid native platform lifecycle.");
+        }
+        schemas = readSchemas(target.operations);
+        const handlers = new Map<string, NativeHandler>();
+        for (const [name, operation] of Object.entries(target.operations)) {
+          if (
+            !operation ||
+            typeof operation !== "object" ||
+            Array.isArray(operation)
+          ) {
+            throw new Error("Invalid native operation handler.");
+          }
+          const handler: unknown = Reflect.get(operation, "handler");
+          if (typeof handler !== "function") {
+            throw new Error("Invalid native operation handler.");
+          }
+          // Dynamic dispatch is erased here; this platform's schemas surround every invocation.
+          handlers.set(name, handler as NativeHandler);
+        }
+        supportedOperations = [
+          ...handlers.keys(),
+        ];
+        create = handlerAdapterFactory(target, handlers);
       }
       return [
         platform,
         Object.freeze(
           Object.defineProperty(
             {
-              execution: target.execution,
+              thread: target.thread ?? "worker",
               ...(supportedOperations === undefined
                 ? {}
                 : {
@@ -207,33 +453,25 @@ export function defineNativePlugin<const D extends NativePluginDefinition>(
             },
             "create",
             {
-              // Factories stay local to each worker; JSON and structured clone carry only metadata.
+              // Executable factories stay local; JSON and structured clone carry only metadata.
               value: (environment: NativeEnvironment) =>
-                validatedAdapter(target.create(environment), schemas),
+                validatedAdapter(create(environment), schemas),
             },
           ),
-        ) as {
-          readonly execution: "io" | "ui";
-          readonly operations?: readonly string[];
-          readonly create: (
-            environment: NativeEnvironment,
-          ) => NativePluginAdapter;
-        },
+        ),
       ];
     }),
   );
-  const operations = [
-    ...schemas.keys(),
-  ].map((name) => ({
-    name,
-  }));
   const registration = {
     ...metadata,
-    // Package builds replace this source-only marker with their package.json version.
-    version: "development",
+    version,
     nativePlatforms: Object.freeze(nativePlatforms),
     native: {
-      operations,
+      operations: [
+        ...names,
+      ].map((name) => ({
+        name,
+      })),
     },
   };
   const registry = new NativeRegistry([
@@ -245,14 +483,30 @@ export function defineNativePlugin<const D extends NativePluginDefinition>(
     ].map((operation) => [
       operation.name.slice(definition.name.length + 1),
       async (input: JsonValue, options?: NativeInvokeOptions) => {
-        // Declaration imports never initialize the backend or a WebView connection.
         const { call } = await import("#transport");
         return call(operation, input, options);
       },
     ]),
-  ) as unknown as NativePluginAPI<D["operations"]>;
-  return {
-    definition: Object.freeze(registration),
-    api: Object.freeze(api),
-  };
+  );
+  // Overloads preserve each operation's schema types; the implementation erases them at this call.
+  const publicAPI = calls ? calls(Object.freeze(api) as never) : api;
+  if (
+    !publicAPI ||
+    (typeof publicAPI !== "object" && typeof publicAPI !== "function") ||
+    [
+      "_definition",
+      "then",
+      "toJSON",
+    ].some((name) => name in publicAPI) ||
+    !Object.isExtensible(publicAPI)
+  ) {
+    throw new Error(
+      "Native plugin calls must return an extensible API without reserved properties.",
+    );
+  }
+  return Object.freeze(
+    Object.defineProperty(publicAPI, "_definition", {
+      value: Object.freeze(registration),
+    }),
+  );
 }

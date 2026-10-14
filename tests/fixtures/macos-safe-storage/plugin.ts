@@ -2,20 +2,23 @@ import assert from "node:assert/strict";
 import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { isMainThread } from "node:worker_threads";
-import { defineNativePlugin } from "@bunaway/plugin";
-import { safeStorageOperations } from "../../../plugins/safe-storage/src/contract.ts";
-import { MacosKeychain } from "../../../plugins/safe-storage/src/macos-keychain.ts";
-import { createOperations } from "../../../plugins/safe-storage/src/platforms/macos.ts";
+import { defineNativePlugin, type NativeEnvironment } from "@bunaway/plugin";
+import { safeStorageOperations } from "../../../plugins/safe-storage/src/operations.ts";
+import {
+  dispose,
+  initialize,
+} from "../../../plugins/safe-storage/src/platforms/macos.ts";
+import { MacosKeychain } from "../../../plugins/safe-storage/src/platforms/macos-keychain.ts";
 import { keychainFixture } from "../../lifecycle/fixtures/macos-keychain.ts";
 
 /** Production factory and schemas with only the Keychain location isolated for native host tests. */
 export const fixturePlugin = defineNativePlugin({
   name: "safe-storage",
-  operations: safeStorageOperations,
   platforms: {
     macos: {
-      execution: "io",
-      create(environment) {
+      operations: safeStorageOperations,
+      dispose,
+      initialize(environment: NativeEnvironment) {
         assert.equal(isMainThread, false);
         assert.equal(environment.app?.id, "tests.macos.safe-storage");
         assert.equal(
@@ -28,7 +31,7 @@ export const fixturePlugin = defineNativePlugin({
           resolve(temporary, "trusted-app.json"),
           JSON.stringify(environment.app),
         );
-        return createOperations(environment, (appId) => {
+        return initialize(environment, (appId) => {
           const fixture = keychainFixture();
           let provider: MacosKeychain;
           try {
@@ -66,4 +69,4 @@ export const fixturePlugin = defineNativePlugin({
   },
 });
 
-export default fixturePlugin.definition;
+export default fixturePlugin;

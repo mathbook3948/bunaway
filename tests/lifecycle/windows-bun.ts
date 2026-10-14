@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runWindowsApp } from "#native/windows/bun/entry";
-import { closeWindowsApp } from "#cli/windows-dev-launch";
 import type { AppDefinition } from "@bunaway/core";
+import log from "@bunaway/plugin-log";
 import type { HostContext, Policy } from "@bunaway/protocol";
-import { logPlugin } from "@bunaway/plugin-log";
+import { closeWindowsApp } from "#cli/windows-dev-launch";
+import { runWindowsApp } from "#native/windows/bun/entry";
 import pin from "../../runtime/build-manifests/windows-x64.json";
 import { contracts } from "../fixtures/host-plugins.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
@@ -256,7 +256,7 @@ if (!process.argv.includes("--child")) {
       },
     },
     plugins: [
-      logPlugin,
+      log._definition,
       {
         name: "setup",
         version: "1",

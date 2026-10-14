@@ -46,8 +46,8 @@ test("isolated image package ships the I/O adapter but keeps FFI out of the brow
     await writeFile(
       resolve(project, "src-bunaway/app.ts"),
       `import { defineApp } from "@bunaway/backend";
-import { imagePlugin } from "@bunaway/plugin-image";
-export default defineApp({ modules: [], plugins: [imagePlugin] });
+import image from "@bunaway/plugin-image";
+export default defineApp({ modules: [], plugins: [image] });
 `,
     );
     await writeJson(resolve(project, "src-bunaway/policy.json"), {
@@ -76,8 +76,8 @@ export default defineApp({ modules: [], plugins: [imagePlugin] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-image",
     ]);
-    expect(plugins[0]?.targets.windows?.execution).toBe("ui");
-    expect(plugins[0]?.targets.macos?.execution).toBe("io");
+    expect(plugins[0]?.targets.windows?.thread).toBe("ui");
+    expect(plugins[0]?.targets.macos?.thread).toBe("worker");
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "image",
     ]);
@@ -120,9 +120,9 @@ export default defineApp({ modules: [], plugins: [imagePlugin] });
       const consumer = resolve(project, "native-consumer.ts");
       await writeFile(
         consumer,
-        `import imagePlugin from "@bunaway/plugin-image/native/macos";
+        `import image from "@bunaway/plugin-image/native/macos";
 import { verifyMacosImage } from ${JSON.stringify(resolve(import.meta.dir, "../fixtures/macos-image.ts"))};
-await verifyMacosImage(imagePlugin.nativePlatforms.macos.create);
+await verifyMacosImage(image);
 `,
       );
       const child = Bun.spawn(
@@ -146,7 +146,7 @@ await verifyMacosImage(imagePlugin.nativePlatforms.macos.create);
     const browserEntry = resolve(project, "image-browser.ts");
     await writeFile(
       browserEntry,
-      `import { image } from "@bunaway/plugin-image";
+      `import image from "@bunaway/plugin-image";
 void image.getInfo({ id: "00000000-0000-4000-8000-000000000000" });
 `,
     );
@@ -160,9 +160,7 @@ void image.getInfo({ id: "00000000-0000-4000-8000-000000000000" });
     expect(browser.success).toBe(true);
     expect(
       Object.keys(browser.metafile?.inputs ?? {}).some((path) =>
-        /(?:plugins[\\/]image[\\/]src[\\/](?:wic|image-io|image-io-bindings|platforms[\\/](?:windows|macos))\.ts|bun:ffi)/.test(
-          path,
-        ),
+        /(?:plugins[\\/]image[\\/]src[\\/]platforms[\\/]|bun:ffi)/.test(path),
       ),
     ).toBe(false);
   } finally {

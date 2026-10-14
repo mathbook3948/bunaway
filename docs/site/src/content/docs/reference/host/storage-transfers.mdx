@@ -10,7 +10,7 @@ storage.move({ from, to }): Promise<null>
 ```
 
 `copyFile`은 Windows와 macOS에서 지원하며 `move`는 Windows에서 지원합니다.
-macOS move는 검사한 source 객체를 고정할 수 없어 이름을 바꾸기 전에 `UNSUPPORTED`로 실패합니다. `storagePlugin`을 등록하고
+macOS move는 검사한 source 객체를 고정할 수 없어 이름을 바꾸기 전에 `UNSUPPORTED`로 실패합니다. `storage`를 등록하고
 `storage.copyFile` 또는 `storage.move` 권한을 각각 허용합니다.
 직접 화면 호출에는 해당 이름 앞에 `plugin.`을 붙인 명령 권한도 필요합니다.
 이 권한은 다른 전송 작업이나 일반 읽기와 쓰기를 허용하지 않습니다.
@@ -33,7 +33,7 @@ macOS move는 검사한 source 객체를 고정할 수 없어 이름을 바꾸�
 복사본은 OS의 상속 ACL과 새 생성 및 쓰기 시각을 사용하며 원본의 ACL, 속성과 시각을 복제하지 않습니다.
 
 ```ts
-import { storage } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 
 await storage.copyFile({
   from: "C:/notes/한글.txt",

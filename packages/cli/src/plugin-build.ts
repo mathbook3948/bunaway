@@ -5,8 +5,9 @@ import {
   ownedDirectory,
   publishOwnedDirectory,
 } from "../../packaging/src/directories.ts";
+import { buildPluginBundle } from "./plugin-imports.ts";
 import { readPluginDeclaration } from "./plugins.ts";
-import { run } from "./processes.ts";
+import { run, runWorker } from "./processes.ts";
 
 const PLATFORM_MODULE_FILTER = new RegExp(
   String.raw`(?:^|[\\/])platforms[\\/](${PLATFORMS.join("|")})\.ts$`,
@@ -14,8 +15,8 @@ const PLATFORM_MODULE_FILTER = new RegExp(
 
 /**
  * Build src/index.ts into a browser-safe declaration and one native export per
- * declared OS. Platform modules export createOperations and initialize resources
- * only when that factory is called. TypeScript must be installed by the author.
+ * declared OS. Platform modules export native functions and initialize resources
+ * only during host activation. TypeScript must be installed by the author.
  * The package.json version is embedded in every output's registration.
  * Failed builds preserve the previous dist directory.
  */
@@ -37,12 +38,13 @@ export async function buildNativePlugin(directory = "."): Promise<string> {
   await ownedDirectory(root, resolve(root, "dist"));
   const stage = await mkdtemp(resolve(root, ".plugin-build-"));
   try {
-    const inferredSupport = new Map<string, readonly string[]>();
+    // Inspect once per boundary. Every output must see the same declaration shape.
+    const platformStubs = new Map<string, string>();
     const build = async (platform?: string) => {
       const output = platform
         ? resolve(stage, "native", `${platform}.js`)
         : resolve(stage, "index.js");
-      const result = await Bun.build({
+      const result = await buildPluginBundle(root, {
         entrypoints: [
           resolve(root, "src/index.ts"),
         ],
@@ -79,11 +81,10 @@ export async function buildNativePlugin(directory = "."): Promise<string> {
                 },
                 () => ({
                   // Bun 1.4.2 drops external star re-exports from virtual modules.
-                  contents: `export { BunawayError, NativeEventWaiters, defineNativeAdapter } from "./bunaway-plugin-sdk-external";
+                  contents: `export { BunawayError, NativeEventWaiters, defineNativeAdapter, defineNativeOperation } from "./bunaway-plugin-sdk-external";
 import { defineNativePlugin as define } from "./bunaway-plugin-sdk-external";
-export function defineNativePlugin(declaration) {
-  const plugin = define(declaration);
-  return { ...plugin, definition: Object.freeze({ ...plugin.definition, version: ${JSON.stringify(version)} }) };
+export function defineNativePlugin(declaration, calls) {
+  return define(declaration, calls, ${JSON.stringify(version)});
 }`,
                   loader: "js",
                 }),
@@ -92,7 +93,7 @@ export function defineNativePlugin(declaration) {
                 {
                   filter: PLATFORM_MODULE_FILTER,
                 },
-                ({ path }) => {
+                async ({ path }) => {
                   // Bun has resolved extensions and aliases before this boundary is checked.
                   const imported = resolve(path);
                   if (
@@ -111,13 +112,27 @@ export function defineNativePlugin(declaration) {
                       "Native platform modules must be in src/platforms/<platform>.ts.",
                     );
                   }
-                  const os = PLATFORMS.find(
-                    (os) =>
-                      imported === resolve(root, "src/platforms", `${os}.ts`),
-                  );
-                  const support = os && inferredSupport.get(os);
+                  let stub = platformStubs.get(imported);
+                  if (stub === undefined) {
+                    const result: unknown = JSON.parse(
+                      await runWorker(
+                        "plugin-platform.ts",
+                        "platformModuleStub",
+                        [
+                          imported,
+                          root,
+                        ],
+                        root,
+                      ),
+                    );
+                    if (typeof result !== "string") {
+                      throw new Error("Invalid native platform build output.");
+                    }
+                    stub = result;
+                    platformStubs.set(imported, stub);
+                  }
                   return {
-                    contents: `export function createOperations() { throw new Error("Load the plugin native/<platform> export on its owning host."); }${support ? `Object.defineProperty(createOperations, "operations", {value:${JSON.stringify(support)}});` : ""}`,
+                    contents: stub,
                     loader: "js",
                   };
                 },
@@ -151,24 +166,10 @@ export function defineNativePlugin(declaration) {
     for (const platform of Object.keys(declaration.nativePlatforms)) {
       await build(platform);
       // Imports are portable by contract: inspect keys without invoking setup or initializing OS resources.
-      const native = await readPluginDeclaration(
+      await readPluginDeclaration(
         resolve(stage, "native", `${platform}.js`),
         root,
       );
-      const support = native.nativePlatforms[platform]?.operations;
-      if (
-        support !== undefined &&
-        declaration.nativePlatforms[platform]?.operations === undefined
-      ) {
-        inferredSupport.set(platform, support);
-      }
-    }
-    if (inferredSupport.size) {
-      // Recreate safe stubs with the inferred keys, preserving support in browser and all native exports.
-      await build();
-      for (const platform of Object.keys(declaration.nativePlatforms)) {
-        await build(platform);
-      }
     }
     await run(
       [

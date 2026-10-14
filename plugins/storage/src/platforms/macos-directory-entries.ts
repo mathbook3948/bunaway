@@ -2,8 +2,7 @@ import { BunawayError } from "@bunaway/plugin";
 import {
   MAX_FILENAME_CHARACTERS,
   type StorageDirectoryEntry,
-} from "../directory-entries.ts";
-
+} from "#storage/contract";
 // Darwin arm64's 64-bit inode dirent layout, used by its unversioned readdir symbol.
 export const DARWIN_DIRENT_HEADER_BYTES = 21;
 const MAX_DARWIN_NAME_BYTES = 1023;

@@ -42,7 +42,7 @@ test("generated manifest rejects invalid versions, contracts, routing and SDK pa
       plugins: [
         {
           ...manifest.plugins[0],
-          execution: "io",
+          thread: "worker",
           supportedOperations: [
             "example.missing",
           ],
@@ -85,7 +85,7 @@ test("generated manifest rejects invalid versions, contracts, routing and SDK pa
       plugins: [
         {
           ...manifest.plugins[0],
-          execution: "main",
+          thread: "main",
         },
       ],
     },
@@ -255,7 +255,7 @@ test("regeneration preserves app data, drops removed plugins and rejects mismatc
       plugins: [
         {
           ...manifest.plugins[0],
-          execution: "ui",
+          thread: "ui",
         },
       ],
     });

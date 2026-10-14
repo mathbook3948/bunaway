@@ -1,7 +1,7 @@
 import { createClient } from "@bunaway/client";
-import { capabilities } from "@bunaway/plugin-capabilities";
-import { log } from "@bunaway/plugin-log";
-import { windows } from "@bunaway/plugin-windows";
+import capabilities from "@bunaway/plugin-capabilities";
+import log from "@bunaway/plugin-log";
+import windows from "@bunaway/plugin-windows";
 
 const client = createClient();
 

@@ -3,7 +3,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { openerPlugin } from "@bunaway/plugin-opener";
+import opener from "@bunaway/plugin-opener";
 import type { HostContext, HostResponse } from "@bunaway/protocol";
 import { Channel } from "#native/windows/bun/channel";
 import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
@@ -20,11 +20,14 @@ test.skipIf(process.platform !== "win32")(
     });
     const workerPath = resolve(root, "probe.ts");
     const shellModule = pathToFileURL(
-      resolve(import.meta.dir, "../../plugins/opener/src/shell.ts"),
+      resolve(
+        import.meta.dir,
+        "../../plugins/opener/src/platforms/windows-shell.ts",
+      ),
     ).href;
     const operationsModule = resolve(
       import.meta.dir,
-      "../../plugins/opener/src/platforms/windows.ts",
+      "../../plugins/opener/src/index.ts",
     );
     await Bun.write(
       workerPath,
@@ -32,8 +35,9 @@ test.skipIf(process.platform !== "win32")(
 import { dlopen, ptr } from "bun:ffi";
 import { parentPort } from "node:worker_threads";
 import { createShell } from ${JSON.stringify(shellModule)};
-import { createOperations } from ${JSON.stringify(operationsModule)};
-import { createFiles } from ${JSON.stringify(resolve("plugins/opener/src/windows-file.ts"))};
+import definition from ${JSON.stringify(operationsModule)};
+const createOperations = definition._definition.nativePlatforms.windows.create;
+import { createFiles } from ${JSON.stringify(resolve("plugins/opener/src/platforms/windows-file.ts"))};
 import { writeFileSync, mkdirSync, linkSync, symlinkSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 const sample = ${JSON.stringify(resolve(root, "한글 공백, 😀.txt"))};
@@ -91,9 +95,9 @@ try {
     for (const action of ["openFile", "revealFile"]) {
       const call = (path) => adapter.execute("opener." + action, { path }, "backend");
       const missing = sample + ".missing";
-      assert.throws(() => call(missing), (error) => error.code === "INVALID_ARGUMENT" && error.details.reason === "FILE_NOT_FOUND");
+      await assert.rejects(() => call(missing), (error) => error.code === "INVALID_ARGUMENT" && error.details.reason === "FILE_NOT_FOUND");
       const directory = ${JSON.stringify(root)};
-      assert.throws(() => call(directory), (error) => error.code === "INVALID_ARGUMENT");
+      await assert.rejects(() => call(directory), (error) => error.code === "INVALID_ARGUMENT");
       const lockApi = dlopen("kernel32.dll", {
         CreateFileW: { args: ["ptr", "u32", "u32", "ptr", "u32", "u32", "u64"], returns: "u64" },
         CloseHandle: { args: ["u64"], returns: "i32" },
@@ -101,18 +105,18 @@ try {
       const lock = lockApi.symbols.CreateFileW(ptr(Buffer.from(sample + "\\0", "utf16le")), 0x80000000, 0, null, 3, 0, 0n);
       assert.notEqual(lock, 0xffffffffffffffffn);
       try {
-        assert.throws(() => call(sample), (error) => error.code === "PERMISSION_DENIED");
+        await assert.rejects(() => call(sample), (error) => error.code === "PERMISSION_DENIED");
       } finally { lockApi.symbols.CloseHandle(lock); lockApi.close(); }
     }
-    assert.throws(
+    await assert.rejects(
       () => adapter.execute("opener.openUrl", { url: "file:///C:/secret.txt" }, "backend"),
       (error) => error instanceof Error && "code" in error && error.code === "INVALID_ARGUMENT",
     );
-    assert.throws(
+    await assert.rejects(
       () => adapter.execute("opener.missing", { url: "https://example.com/" }, "backend"),
       (error) => error instanceof Error && "code" in error && error.code === "UNSUPPORTED",
     );
-    assert.throws(
+    await assert.rejects(
       () => adapter.execute("opener.openUrl", { url: 42 }, "backend"),
       (error) => error instanceof Error && "code" in error && error.code === "INVALID_ARGUMENT",
     );
@@ -120,7 +124,7 @@ try {
     await adapter.dispose();
     await adapter.dispose();
   }
-  assert.throws(
+  await assert.rejects(
     () => adapter.execute("opener.openUrl", { url: "https://example.com/" }, "backend"),
     (error) => error instanceof Error && "code" in error && error.code === "CANCELLED",
   );
@@ -157,7 +161,10 @@ parentPort?.close();
     }, 15000);
     try {
       await exited;
-      expect(exitCode).toBe(0);
+      expect(
+        exitCode,
+        failure instanceof Error ? failure.stack : undefined,
+      ).toBe(0);
       expect(failure).toBeUndefined();
       expect(result).toBe("passed");
     } finally {
@@ -186,7 +193,7 @@ test.skipIf(process.platform !== "win32")(
     });
     const operationsModule = resolve(
       import.meta.dir,
-      "../../plugins/opener/src/platforms/windows.ts",
+      "../../plugins/opener/src/index.ts",
     );
     const disposedPath = resolve(dataRoot, "opener-disposed.txt");
     await bundleIOPluginFixture(
@@ -194,9 +201,9 @@ test.skipIf(process.platform !== "win32")(
       [
         {
           name: "opener",
-          version: openerPlugin.version,
-          native: openerPlugin.native,
-          execution: "io",
+          version: opener._definition.version,
+          native: opener._definition.native,
+          thread: "worker",
         },
       ],
       `import assert from "node:assert/strict";
@@ -210,15 +217,16 @@ const qualifier = new Uint32Array(1);
 const apartmentType = () => ole.symbols.CoGetApartmentType(ptr(apartment), ptr(qualifier));
 export const pluginImports = { opener: {
   operations: async () => {
-    const { createOperations } = await import(${JSON.stringify(operationsModule)});
+    const { default: definition } = await import(${JSON.stringify(operationsModule)});
+    const createOperations = definition._definition.nativePlatforms.windows.create;
     return { createOperations(environment) {
       assert(apartmentType() < 0, "I/O worker must start without COM initialization");
       const adapter = createOperations(environment);
       assert.equal(apartmentType(), 0);
       assert([0, 3].includes(apartment[0]), "Opener must own an STA");
-      return { ...adapter, dispose() {
-        adapter.dispose();
-        adapter.dispose();
+      return { ...adapter, async dispose() {
+        await adapter.dispose();
+        await adapter.dispose();
         assert(apartmentType() < 0, "Disposal must balance the adapter's COM initialization");
         writeFileSync(${JSON.stringify(disposedPath)}, "STA");
         ole.close();
@@ -242,9 +250,9 @@ export const pluginImports = { opener: {
           assets: dataRoot,
           plugins: [
             {
-              name: openerPlugin.name,
-              version: openerPlugin.version,
-              native: openerPlugin.native,
+              name: opener._definition.name,
+              version: opener._definition.version,
+              native: opener._definition.native,
             },
           ],
         },

@@ -7,9 +7,9 @@ import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
 import { run } from "#cli/processes";
-import { clipboardOperations } from "#plugins/clipboard/src/contract";
-import { MAX_IMAGE_BYTES } from "#plugins/clipboard/src/formats";
-import { createPasteboard } from "#plugins/clipboard/src/macos-pasteboard";
+import { MAX_IMAGE_BYTES } from "#plugins/clipboard/src/contract";
+import { macosOperations as clipboardOperations } from "#plugins/clipboard/src/operations";
+import { createPasteboard } from "#plugins/clipboard/src/platforms/macos-pasteboard";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
 
 // The general pasteboard is shared with the desktop. Run this fixture only on
@@ -36,9 +36,9 @@ try {
     appEntry,
     `
     import {defineApp} from ${JSON.stringify(backend)};
-    import {clipboard, clipboardPlugin} from ${JSON.stringify(plugin)};
-    import {windowsPlugin} from ${JSON.stringify(windows)};
-    export default defineApp({modules:[], plugins:[clipboardPlugin, windowsPlugin, {
+    import clipboard from ${JSON.stringify(plugin)};
+    import windows from ${JSON.stringify(windows)};
+    export default defineApp({modules:[], plugins:[clipboard, windows, {
       name:"clipboard-fixture", version:"1",
       async setup() {
         await clipboard.clear(null);
@@ -112,8 +112,8 @@ try {
     source,
     `
     import {createClient} from ${JSON.stringify(client)};
-    import {clipboard} from ${JSON.stringify(plugin)};
-    import {windows} from ${JSON.stringify(windows)};
+    import clipboard from ${JSON.stringify(plugin)};
+    import windows from ${JSON.stringify(windows)};
     const client = createClient();
     const check = (ok, message) => {if (!ok) throw new Error(message);};
     const same = (left, right, message) => check(JSON.stringify(left) === JSON.stringify(right), message);

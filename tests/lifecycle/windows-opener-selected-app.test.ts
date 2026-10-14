@@ -1,7 +1,12 @@
 import { expect, test } from "bun:test";
 import { link, mkdir, realpath, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { createOperations } from "#plugins/opener/src/platforms/windows";
+import createOperationsDefinition from "#plugins/opener/src/index";
+import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
+const createOperations = createOperationsFactory(
+  createOperationsDefinition,
+  "windows",
+);
 
 test.skipIf(process.platform !== "win32")(
   "selected-app opener validates both pinned files before dispatch and cleans up failures",
@@ -23,7 +28,7 @@ test.skipIf(process.platform !== "win32")(
       dataRoot: home,
       capabilities: [],
     });
-    const call = (
+    const call = async (
       name: string,
       payload:
         | {
@@ -34,15 +39,15 @@ test.skipIf(process.platform !== "win32")(
             app: string;
             url: string;
           },
-    ) => adapter.execute(name, payload, "backend");
+    ) => await adapter.execute(name, payload, "backend");
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
-        expect(() =>
+        await expect(
           call("opener.openUrlWith", {
             app: `${app}.missing.exe`,
             url: "https://example.com/",
           }),
-        ).toThrow(
+        ).rejects.toThrow(
           expect.objectContaining({
             code: "INVALID_ARGUMENT",
             details: {
@@ -50,12 +55,12 @@ test.skipIf(process.platform !== "win32")(
             },
           }),
         );
-        expect(() =>
+        await expect(
           call("opener.openFileWith", {
             app,
             path: `${target}.missing`,
           }),
-        ).toThrow(
+        ).rejects.toThrow(
           expect.objectContaining({
             code: "INVALID_ARGUMENT",
             details: {
@@ -63,34 +68,34 @@ test.skipIf(process.platform !== "win32")(
             },
           }),
         );
-        expect(() =>
+        await expect(
           call("opener.openFileWith", {
             app,
             path: home,
           }),
-        ).toThrow(
+        ).rejects.toThrow(
           expect.objectContaining({
             code: "INVALID_ARGUMENT",
           }),
         );
-        expect(() =>
+        await expect(
           call("opener.openUrlWith", {
             app: target,
             url: "https://example.com/",
           }),
-        ).toThrow(
+        ).rejects.toThrow(
           expect.objectContaining({
             code: "INVALID_ARGUMENT",
           }),
         );
       }
       await link(app, linkedApp);
-      expect(() =>
+      await expect(
         call("opener.openUrlWith", {
           app,
           url: "https://example.com/",
         }),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "PERMISSION_DENIED",
         }),
@@ -101,12 +106,12 @@ test.skipIf(process.platform !== "win32")(
       await rm(target);
       await adapter.dispose();
       await adapter.dispose();
-      expect(() =>
+      await expect(
         call("opener.openUrlWith", {
           app,
           url: "https://example.com/",
         }),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "CANCELLED",
         }),

@@ -53,17 +53,19 @@ test("isolated network package ships both async adapters and keeps Bun transport
       "macos",
     ] as const) {
       const target = plugin?.targets[platform];
-      expect(target?.execution).toBe("ui");
+      expect(target?.thread).toBe("ui");
       expect(target?.operations).toBeDefined();
       if (!target?.operations) {
         throw new Error("Missing native network export");
       }
-      const declaration = (await import(pathToFileURL(target.operations).href))
+      const nativePlugin = (await import(pathToFileURL(target.operations).href))
         .default;
-      const adapter = declaration.nativePlatforms[platform].create({
-        dataRoot: home,
-        capabilities: [],
-      });
+      const adapter = nativePlugin._definition.nativePlatforms[platform].create(
+        {
+          dataRoot: home,
+          capabilities: [],
+        },
+      );
       try {
         expect(adapter.executeUI).toBeFunction();
         const response = await adapter.executeUI(
@@ -85,17 +87,18 @@ test("isolated network package ships both async adapters and keeps Bun transport
         expect(Buffer.from(response.bodyBase64, "base64").toString()).toBe(
           "isolated network",
         );
-        await expect(
-          adapter.execute(
-            "network.request",
-            {
-              url: "http://127.0.0.1",
-            },
-            "backend",
-          ),
-        ).rejects.toMatchObject({
-          code: "UNSUPPORTED",
-        });
+        // Complete operation handlers support trusted direct adapter calls as well as contextual dispatch.
+        const direct = await adapter.execute(
+          "network.request",
+          {
+            url: server.url.href,
+          },
+          "backend",
+        );
+        expect(direct.status).toBe(200);
+        expect(Buffer.from(direct.bodyBase64, "base64").toString()).toBe(
+          "isolated network",
+        );
       } finally {
         await adapter.dispose();
       }
@@ -103,7 +106,7 @@ test("isolated network package ships both async adapters and keeps Bun transport
     const browserEntry = resolve(project, "network-browser.ts");
     await Bun.write(
       browserEntry,
-      'import {network} from "@bunaway/plugin-network"; void network.request({url:"https://example.com"});',
+      'import network from "@bunaway/plugin-network"; void network.request({url:"https://example.com"});',
     );
     const browser = await Bun.build({
       entrypoints: [

@@ -1,22 +1,16 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { pathOperations } from "./contract.ts";
-import { createOperations } from "./platforms/windows.ts";
-
-const plugin = defineNativePlugin({
+import { pathOperations } from "#path/operations";
+import { dispose, initialize } from "#path/platforms/windows";
+/** Promise-based Windows lexical path helpers and current-user directory queries. */
+export default defineNativePlugin({
   name: "path",
   platforms: {
     windows: {
-      execution: "io",
-      create: createOperations,
+      initialize,
+      dispose,
+      operations: pathOperations,
     },
   },
-  operations: pathOperations,
 });
 
-/** Optional Windows path and current-user known folder contract. */
-export const pathPlugin = plugin.definition;
-export default pathPlugin;
-
-/** Promise-based Windows lexical path helpers and current-user directory queries. */
-export const path = plugin.api;
-export type { UserDirectory } from "./contract.ts";
+export type { UserDirectory } from "#path/contract";

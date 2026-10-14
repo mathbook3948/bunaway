@@ -13,6 +13,7 @@ export type {
   OpenRequest,
   Platform,
   PluginDefinition,
+  PluginRegistration,
   QuitReason,
   StateStore,
   StopHook,

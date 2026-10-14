@@ -6,7 +6,19 @@ sidebar: { order: 6 }
 
 설치한 플러그인은 `defineApp({ modules, plugins })`의 plugins 배열에 등록합니다.
 일반 TypeScript 플러그인은 명령과 이벤트, setup을 제공할 수 있습니다.
-네이티브 플러그인은 필요한 패키지를 개별 설치합니다.
+네이티브 플러그인은 필요한 패키지를 개별 설치합니다. `defineNativePlugin()`의 결과는
+그대로 등록하고 호출할 수 있습니다. `PluginRegistration`은 일반 `PluginDefinition`과
+이 네이티브 플러그인을 함께 받는 입력 타입입니다.
+
+```ts
+import { defineApp } from "@bunaway/backend";
+import appearance from "@bunaway/plugin-appearance";
+
+export default defineApp({ modules: [], plugins: [appearance] });
+// 화면 또는 백엔드 명령 안에서: await appearance.getPreferences()
+```
+
+아래 필드는 일반 TypeScript 플러그인의 등록 계약입니다.
 
 | 필드 | 필수 | 의미 |
 | --- | --- | --- |
@@ -25,7 +37,7 @@ sidebar: { order: 6 }
 
 중복 이름, 없는 의존성과 의존 순환은 `INVALID_ARGUMENT`입니다.
 미지원 플랫폼은 `UNSUPPORTED`, 필요한 backend 권한의 누락은 `INVALID_ARGUMENT`입니다.
-현재 개별 네이티브 어댑터는 Windows를 지원합니다.
+지원 플랫폼과 작업은 각 플러그인의 레퍼런스를 따릅니다.
 
 ## 시작과 종료
 

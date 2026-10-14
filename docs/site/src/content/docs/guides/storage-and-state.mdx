@@ -24,7 +24,7 @@ description: 메모리 상태와 영구 저장을 구분하고 Host API 경로�
 ```ts
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { storage } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 import settings from "../bunaway.json";
 
 const messagePath = join(

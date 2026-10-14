@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import { image, imagePlugin } from "@bunaway/plugin-image";
+import image from "@bunaway/plugin-image";
 import {
   BunawayError,
   type HostCall,
@@ -29,7 +29,7 @@ test.skipIf(process.platform !== "win32")(
       recursive: true,
     });
     const registry = new NativeRegistry([
-      imagePlugin,
+      image._definition,
     ]);
     const contextId = "image-native" as HostContext;
     const config: UIConfig = {
@@ -52,7 +52,7 @@ test.skipIf(process.platform !== "win32")(
       dataRoot: root,
       loader: "",
       plugins: [
-        imagePlugin,
+        image._definition,
       ],
     };
     const pending = new Map<string, (response: HostResponse) => void>();
@@ -72,16 +72,16 @@ test.skipIf(process.platform !== "win32")(
         [
           {
             name: "image",
-            version: imagePlugin.version,
-            native: imagePlugin.native,
-            execution: "ui",
+            version: image._definition.version,
+            native: image._definition.native,
+            thread: "ui",
           },
         ],
         `
 import imageDefinition from ${JSON.stringify(nativePath)};
 import { writeFileSync } from "node:fs";
 export const pluginImports = { image: { operations: async () => ({ createOperations(environment) {
-  const adapter = imageDefinition.nativePlatforms.windows.create(environment);
+  const adapter = imageDefinition._definition.nativePlatforms.windows.create(environment);
   return { ...adapter, busy: () => true, async executeUI(name, input, source, context) {
     console.log(JSON.stringify({ event: "image-test-operation", name, phase: "begin" }));
     let result;

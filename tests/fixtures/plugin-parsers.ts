@@ -32,11 +32,11 @@ export function pluginParsers(
       ),
       platforms: {
         windows: {
-          execution: "io",
+          thread: "worker",
           create,
         },
       },
-    }).definition.nativePlatforms.windows?.create({
+    })._definition.nativePlatforms.windows?.create({
       dataRoot: ".",
       capabilities: [],
     });

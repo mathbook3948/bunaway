@@ -1,15 +1,15 @@
 # @bunaway/plugin-clipboard
 
 `src/index.ts`는 계약과 플랫폼 선언을 조립하고 공개 API를 export한다.
-`src/contract.ts`는 작업 스키마와 네이티브 호출 검증을 소유하며 텍스트 제한은 `src/text.ts`에서 공유한다.
+`src/contract.ts`는 공통 스키마와 타입, 텍스트 제한과 네이티브 호출 검증을 소유한다.
 플랫폼 구현은 계약을 직접 읽으며 공개 진입점을 역으로 import하지 않는다.
 
-Windows와 macOS의 텍스트, HTML, RTF와 RGBA 이미지 클립보드를 제공하는 선택 패키지다. 파일 목록은 Windows에서만 제공한다. 설치 후 `clipboardPlugin`을 앱의 `plugins`에 등록하고 호출 출처에 작업별 권한을 허용한다. 화면과 백엔드 모두 같은 `clipboard`를 사용한다.
+Windows와 macOS의 텍스트, HTML, RTF와 RGBA 이미지 클립보드를 제공하는 선택 패키지다. 파일 목록은 Windows에서만 제공한다. 설치 후 `clipboard`를 앱의 `plugins`에 등록하고 호출 출처에 작업별 권한을 허용한다. 화면과 백엔드 모두 같은 `clipboard`를 사용한다.
 
 ```ts
-import { clipboard, clipboardPlugin } from "@bunaway/plugin-clipboard";
+import clipboard from "@bunaway/plugin-clipboard";
 
-// 앱 정의의 plugins: [clipboardPlugin]
+// 앱 정의의 plugins: [clipboard]
 await clipboard.writeText({ text: "한글 😀" });
 const text = await clipboard.readText(null);
 await clipboard.clear(null);
@@ -42,7 +42,7 @@ setup, 호출 출처 권한, Unicode, 다중 형식과 RGBA를 검사한다. 일
 내용을 지운다. 결과는 `build/macos-clipboard-results.json`에 기록한다. macOS arm64 CI
 통과 전에는 구현 범위를 검증 완료로 판단하지 않는다.
 
-macOS 바인딩은 `src/macos-pasteboard.ts`, bounded TIFF codec은 `src/macos-tiff.ts`가
+macOS 바인딩은 `src/platforms/macos-pasteboard.ts`, bounded TIFF codec은 `src/platforms/macos-tiff.ts`가
 소유한다. TIFF의 `SampleFormat`은 생략하거나 sample 수만큼 unsigned integer 값 `1`을
 지정해야 하며 signed, floating-point와 다른 해석은 거부한다.
 작업마다 autorelease pool을 해제하고 `NSData`는 길이 검사 뒤 복사한다.

@@ -12,9 +12,9 @@ import {
   serializeProcessFrame,
 } from "@bunaway/protocol";
 import {
-  type DownloadResource,
   DownloadCleanupError,
   DownloadCleanupRetries,
+  type DownloadResource,
   Downloads,
 } from "#native/windows/bun/downloads";
 

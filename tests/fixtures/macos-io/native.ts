@@ -1,2 +1,2 @@
 import { probe } from "./probe.ts";
-export default probe.definition;
+export default probe;

@@ -1,6 +1,5 @@
 import { BunawayError, type NativeInvokeOptions } from "@bunaway/plugin";
-import type { Capabilities } from "./contract.ts";
-
+import type { Capabilities } from "#capabilities/contract";
 /**
  * Create the public query and enforce unique names in the host response.
  * Duplicate names reject with an `INTERNAL` error.

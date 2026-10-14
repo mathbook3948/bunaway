@@ -1,27 +1,27 @@
 # @bunaway/plugin-opener
 
-`src/index.ts`는 계약과 플랫폼 선언을 조립하고 공개 함수를 export합니다.
+`src/index.ts`는 계약과 플랫폼 선언을 조립하고 `defineNativePlugin` 결과를 바로 default export합니다.
 `src/contract.ts`는 작업 스키마와 네이티브 호출 검증, `src/calls.ts`는 편의 호출을 담당합니다.
 플랫폼 구현은 계약을 직접 읽으며 공개 진입점을 역으로 import하지 않습니다.
 
-`@bunaway/plugin-opener`는 HTTP 또는 HTTPS 주소를 기본 브라우저로 열고, Windows와 macOS에서 파일을 기본 연결 앱으로 열거나 Explorer와 Finder에 선택을 요청합니다. 앱에 패키지를 설치하고 `openerPlugin`을 등록한 다음, 호출 출처에 작업별 권한을 허용해야 합니다.
+`@bunaway/plugin-opener`는 HTTP 또는 HTTPS 주소를 기본 브라우저로 열고, Windows와 macOS에서 파일을 기본 연결 앱으로 열거나 Explorer와 Finder에 선택을 요청합니다. 앱에 패키지를 설치하고 `opener`를 등록한 다음, 호출 출처에 작업별 권한을 허용해야 합니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
-import { openerPlugin } from "@bunaway/plugin-opener";
+import opener from "@bunaway/plugin-opener";
 
-export default defineApp({ modules: [], plugins: [openerPlugin] });
+export default defineApp({ modules: [], plugins: [opener] });
 ```
 
 화면과 백엔드에서 다음 함수를 사용합니다.
 
 ```ts
-import { openFile, openUrl, revealFile, trashFile } from "@bunaway/plugin-opener";
+import opener from "@bunaway/plugin-opener";
 
-await openUrl("https://example.com/search?q=한글 값");
-await openFile("C:/Users/me/Documents/한글 보고서.txt");
-await revealFile("C:/Users/me/Documents/한글 보고서.txt");
-await trashFile("C:/Users/me/Documents/삭제할 파일.txt");
+await opener.openUrl("https://example.com/search?q=한글 값");
+await opener.openFile("C:/Users/me/Documents/한글 보고서.txt");
+await opener.revealFile("C:/Users/me/Documents/한글 보고서.txt");
+await opener.trashFile("C:/Users/me/Documents/삭제할 파일.txt");
 ```
 
 ## 계약과 구현
@@ -30,7 +30,7 @@ await trashFile("C:/Users/me/Documents/삭제할 파일.txt");
 
 작업 계약은 `opener.openUrl`, 입력 `{ url: string }`, 결과 `null`, 권한 `opener.openUrl`입니다. 주소 대상에 대한 별도 권한 범위는 없습니다. 권한을 허용하면 모든 HTTP 및 HTTPS 주소를 열 수 있습니다.
 
-파일 함수는 `openFile(path: string, options?: NativeInvokeOptions): Promise<null>`과 `revealFile(path: string, options?: NativeInvokeOptions): Promise<null>`입니다. Host operation은 각각 `opener.openFile`, `opener.revealFile`이며 입력은 `{ path: string }`, 결과는 `null`입니다. 권한은 각각 `opener.openFile`, `opener.revealFile`입니다. 화면에서 직접 호출하려면 뷰의 `commands`에 `plugin.opener.openFile`, `plugin.opener.revealFile`도 허용합니다.
+파일 함수는 `opener.openFile(path: string, options?: NativeInvokeOptions): Promise<null>`과 `opener.revealFile(path: string, options?: NativeInvokeOptions): Promise<null>`입니다. Host operation은 각각 `opener.openFile`, `opener.revealFile`이며 입력은 `{ path: string }`, 결과는 `null`입니다. 권한은 각각 `opener.openFile`, `opener.revealFile`입니다. 화면에서 직접 호출하려면 뷰의 `commands`에 `plugin.opener.openFile`, `plugin.opener.revealFile`도 허용합니다.
 
 파일 작업은 각각의 작업 이름을 허용합니다. 아래는 해당 뷰의 `host` 설정이며, setup 등 백엔드 자체 호출은 같은 이름을 `backend.permissions`에 둡니다.
 
@@ -101,7 +101,7 @@ URL fragment 따옴표, 앱 Job 밖의 실행과 앱 종료 후 생존을 확인
 
 ## 휴지통
 
-`trashFile(path: string, options?: NativeInvokeOptions): Promise<null>`은 기존 파일을 Windows 휴지통으로 보냅니다. Host operation과 권한은 `opener.trashFile`, 입력은 `{ path: string }`입니다. 화면 직접 호출은 뷰의 `commands`에 `plugin.opener.trashFile`도 허용합니다. 성공한 `null`은 OS가 휴지통의 새 항목을 반환했다는 뜻입니다. 복원 API는 제공하지 않습니다.
+`opener.trashFile(path: string, options?: NativeInvokeOptions): Promise<null>`은 기존 파일을 Windows 휴지통으로 보냅니다. Host operation과 권한은 `opener.trashFile`, 입력은 `{ path: string }`입니다. 화면 직접 호출은 뷰의 `commands`에 `plugin.opener.trashFile`도 허용합니다. 성공한 `null`은 OS가 휴지통의 새 항목을 반환했다는 뜻입니다. 복원 API는 제공하지 않습니다.
 
 기존 파일 경로, 링크, 별칭과 읽기 접근 검사를 적용하며 로컬 고정 드라이브만 지원합니다. UNC 공유와 이동식 드라이브는 `UNSUPPORTED`입니다. I/O STA의 `IFileOperation`으로 파일 하나만 처리하고 HTML 파일의 연결된 `_files` 폴더는 삭제하지 않습니다. `FOFX_RECYCLEONDELETE`로 휴지통 이동을 요청하고 삭제 직전 콜백에 휴지통 플래그가 없으면 거부합니다. 프레임워크는 이동 실패를 일반 삭제로 재시도하지 않습니다. OS 오류, 중단 또는 휴지통 항목을 확인할 수 없는 결과는 실패로 반환합니다. 시스템의 영구 삭제 경고도 유지하므로 OS 설정에 따라 대화 상자가 표시될 수 있습니다. 콜백의 플래그는 가능한 경우 휴지통으로 이동하라는 요청이며 모든 OS 내부 실패 경로의 결과를 사전에 증명하지 않습니다. 휴지통 비활성화, 용량 초과와 경고 UI 동작은 아직 검증하지 않았습니다. 휴지통 항목이 없는 사후 결과를 거부하는 것만으로 이미 발생한 삭제를 복구할 수는 없습니다.
 

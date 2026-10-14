@@ -1,12 +1,7 @@
 import { expect, test } from "bun:test";
 import type { CommandContext } from "@bunaway/plugin-api";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import {
-  autostartPlugin,
-  disableAutostart,
-  enableAutostart,
-  getAutostartStatus,
-} from "@bunaway/plugin-autostart";
+import autostart from "@bunaway/plugin-autostart";
 import {
   AUTOSTART_ARGUMENT,
   AUTOSTART_HIDDEN_ARGUMENT,
@@ -15,18 +10,21 @@ import {
 } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
 import { operations } from "#native/host-api/bun/plugins";
-import { autostartOperations } from "#plugins/autostart/src/contract";
+import type { AppLaunch } from "#plugins/autostart/src/contract";
+import { autostartOperations } from "#plugins/autostart/src/operations";
 import {
-  type AppLaunch,
   commandLine,
   registrationName,
-} from "#plugins/autostart/src/launch";
-import { registryCommand, startupState } from "#plugins/autostart/src/registry";
+} from "#plugins/autostart/src/platforms/windows-launch";
+import {
+  registryCommand,
+  startupState,
+} from "#plugins/autostart/src/platforms/windows-registry";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("autostart", autostartOperations);
 const registry = new NativeRegistry([
-  autostartPlugin,
+  autostart._definition,
 ]);
 const app: AppLaunch = {
   id: "com.example.app",
@@ -427,15 +425,15 @@ test("public helpers use caller context and preserve native errors", async () =>
       const: null,
     },
     run: async (_input: unknown, _context: CommandContext) => {
-      await disableAutostart();
+      await autostart.disableAutostart();
       await expect(
-        enableAutostart([
+        autostart.enableAutostart([
           "--login",
         ]),
       ).rejects.toMatchObject({
         code: "PERMISSION_DENIED",
       });
-      await expect(getAutostartStatus()).rejects.toMatchObject({
+      await expect(autostart.getAutostartStatus()).rejects.toMatchObject({
         code: "PERMISSION_DENIED",
       });
       return null;
@@ -463,8 +461,8 @@ test("host supplies trusted app metadata only to a registered adapter", async ()
   let observed: unknown;
   const catalog = [
     {
-      ...autostartPlugin,
-      execution: "io" as const,
+      ...autostart._definition,
+      thread: "worker" as const,
       operations: async () => ({
         createOperations: (
           environment: import("@bunaway/plugin").NativeEnvironment,
@@ -478,15 +476,22 @@ test("host supplies trusted app metadata only to a registered adapter", async ()
       }),
     },
   ];
-  const unregistered = await operations([], ".", "io", undefined, catalog, app);
+  const unregistered = await operations(
+    [],
+    ".",
+    "worker",
+    undefined,
+    catalog,
+    app,
+  );
   expect(observed).toBeUndefined();
   await unregistered.dispose();
   const registered = await operations(
     [
-      autostartPlugin,
+      autostart._definition,
     ],
     ".",
-    "io",
+    "worker",
     undefined,
     catalog,
     app,
@@ -496,7 +501,7 @@ test("host supplies trusted app metadata only to a registered adapter", async ()
 });
 test("MSIX package identity is unsupported and native DLL disposal is idempotent", () => {
   const registryModule = new URL(
-    "../../plugins/autostart/src/registry.ts",
+    "../../plugins/autostart/src/platforms/windows-registry.ts",
     import.meta.url,
   ).href;
   const child = Bun.spawnSync([

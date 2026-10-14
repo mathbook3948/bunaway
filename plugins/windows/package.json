@@ -29,5 +29,12 @@
   },
   "devDependencies": {
     "@bunaway/plugin": "workspace:*"
+  },
+  "imports": {
+    "#windows/*": {
+      "bunaway-source": "./src/*.ts",
+      "types": "./dist/types/*.d.ts",
+      "default": "./src/*.ts"
+    }
   }
 }

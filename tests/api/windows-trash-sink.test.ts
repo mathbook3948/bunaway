@@ -1,7 +1,7 @@
-import { expect, test } from "bun:test";
 import { CFunction, type Pointer, read } from "bun:ffi";
+import { expect, test } from "bun:test";
 import { BunawayError } from "@bunaway/protocol";
-import { createTrashProgressSink } from "#plugins/opener/src/windows-trash";
+import { createTrashProgressSink } from "#plugins/opener/src/platforms/windows-trash";
 
 /** Call the real FFI callback ABI without asking the OS to delete any file. */
 function call(

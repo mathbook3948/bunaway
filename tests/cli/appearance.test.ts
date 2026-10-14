@@ -46,8 +46,8 @@ test("isolated appearance package ships Windows I/O and macOS UI adapters but ke
     await writeFile(
       resolve(project, "src-bunaway/app.ts"),
       `import { defineApp } from "@bunaway/backend";
-import { appearancePlugin } from "@bunaway/plugin-appearance";
-export default defineApp({ modules: [], plugins: [appearancePlugin] });
+import appearance from "@bunaway/plugin-appearance";
+export default defineApp({ modules: [], plugins: [appearance] });
 `,
     );
     await writeJson(resolve(project, "src-bunaway/policy.json"), {
@@ -76,8 +76,8 @@ export default defineApp({ modules: [], plugins: [appearancePlugin] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-appearance",
     ]);
-    expect(plugins[0]?.targets.windows?.execution).toBe("io");
-    expect(plugins[0]?.targets.macos?.execution).toBe("ui");
+    expect(plugins[0]?.targets.windows?.thread).toBe("worker");
+    expect(plugins[0]?.targets.macos?.thread).toBe("ui");
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "appearance",
     ]);
@@ -102,7 +102,7 @@ export default defineApp({ modules: [], plugins: [appearancePlugin] });
     const browserEntry = resolve(project, "appearance-browser.ts");
     await writeFile(
       browserEntry,
-      `import { appearance } from "@bunaway/plugin-appearance";
+      `import appearance from "@bunaway/plugin-appearance";
 void appearance.getPreferences();
 `,
     );
@@ -116,7 +116,7 @@ void appearance.getPreferences();
     expect(browser.success).toBe(true);
     expect(
       Object.keys(browser.metafile?.inputs ?? {}).some((path) =>
-        /(?:plugins[\\/]appearance[\\/]src[\\/](?:win32|macos|platforms[\\/](?:windows|macos))\.ts|bun:ffi)/.test(
+        /(?:plugins[\\/]appearance[\\/]src[\\/]platforms[\\/]|bun:ffi)/.test(
           path,
         ),
       ),

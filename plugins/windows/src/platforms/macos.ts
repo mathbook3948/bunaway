@@ -1,1 +1,1 @@
-export { createOperations } from "../native-adapter.ts";
+export { createOperations } from "#windows/platforms/native-adapter";

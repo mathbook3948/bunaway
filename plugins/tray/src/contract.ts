@@ -5,11 +5,11 @@ import {
 import { z } from "zod";
 
 const coordinate = z.number().int().min(-2147483648).max(2147483647);
-const position = z.strictObject({
+export const positionSchema = z.strictObject({
   x: coordinate,
   y: coordinate,
 });
-const tooltip = z
+export const tooltipSchema = z
   .string()
   .max(MAX_TRAY_TOOLTIP_UNITS)
   .refine(
@@ -17,16 +17,16 @@ const tooltip = z
     "Tray tooltip exceeds the UTF-16 limit.",
   )
   .regex(/^[^\0\uD800-\uDFFF]*$(?![\s\S])/u);
-const ico = z
+export const icoSchema = z
   .string()
   .min(4)
   .max(Math.ceil(MAX_TRAY_ICO_BYTES / 3) * 4)
   .regex(
     /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\s\S])/,
   );
-const snapshot = z.strictObject({
+export const snapshotSchema = z.strictObject({
   id: z.literal("main"),
-  tooltip,
+  tooltip: tooltipSchema,
   icon: z.enum([
     "app",
     "custom",
@@ -48,51 +48,8 @@ export const trayEventSchema = z.strictObject({
     "double-click",
     "context-menu",
   ]),
-  position: position.nullable(),
+  position: positionSchema.nullable(),
 });
-/** Controls for the app's configured tray; each operation has its own permission. */
-export const trayOperations = {
-  get: {
-    input: z.null(),
-    output: snapshot.nullable(),
-  },
-  getBounds: {
-    input: z.null(),
-    output: position
-      .extend({
-        width: z.number().int().min(0).max(2147483647),
-        height: z.number().int().min(0).max(2147483647),
-      })
-      .nullable(),
-  },
-  setTooltip: {
-    input: z.strictObject({
-      tooltip,
-    }),
-    output: z.null(),
-  },
-  setIcon: {
-    input: z.strictObject({
-      ico: ico.nullable(),
-    }),
-    output: z.null(),
-  },
-  setClickBehavior: {
-    input: z.strictObject({
-      showOnLeftClick: z.boolean(),
-      menuOnRightClick: z.boolean(),
-    }),
-    output: z.null(),
-  },
-  focus: {
-    input: z.null(),
-    output: z.boolean(),
-  },
-  waitForEvent: {
-    input: z.null(),
-    output: trayEventSchema,
-  },
-};
 export const trayEvents = {
   "tray.input": {
     type: "object",

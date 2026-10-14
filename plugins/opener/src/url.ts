@@ -1,14 +1,6 @@
 import { BunawayError } from "@bunaway/plugin";
-import { z } from "zod";
-export const MAX_URL_LENGTH = 8192;
-export const urlInput = z.strictObject({
-  url: z
-    .string()
-    .refine(
-      (value) => Array.from(value).length <= MAX_URL_LENGTH,
-      "Text exceeds the Unicode character limit.",
-    ),
-});
+import { MAX_URL_LENGTH } from "#opener/contract";
+
 const invalidUrl = () =>
   new BunawayError({
     code: "INVALID_ARGUMENT",

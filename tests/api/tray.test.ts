@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { defineNativePlugin } from "@bunaway/plugin";
 import type {
   NativeTrayEvent,
   NativeTrayServices,
@@ -8,19 +7,25 @@ import {
   MAX_TRAY_ICO_BYTES,
   MAX_TRAY_TOOLTIP_UNITS,
 } from "@bunaway/plugin-api/native";
-import { trayPlugin } from "@bunaway/plugin-tray";
+import tray from "@bunaway/plugin-tray";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
-import { trayOperations } from "#plugins/tray/src/contract";
-import { createOperations } from "#plugins/tray/src/platforms/windows";
-import { trayIconImage } from "#plugins/tray/src/tray-icon-data";
+import createOperationsDefinition from "#plugins/tray/src/index";
+import { trayOperations } from "#plugins/tray/src/operations";
+import { trayIconImage } from "#plugins/tray/src/platforms/windows-icon-data";
+import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 import { trayIco, trayPngIco } from "../fixtures/tray-icon.ts";
+
+const createOperations = createOperationsFactory(
+  createOperationsDefinition,
+  "windows",
+);
 
 test("tray inputs are strict, bounded and grant each operation independently", async () => {
   const parsers = pluginParsers("tray", trayOperations);
   expect([
     ...new NativeRegistry([
-      trayPlugin,
+      tray._definition,
     ]).operations.keys(),
   ]).toEqual(Object.keys(trayOperations).map((name) => `tray.${name}`));
   for (const tooltip of [
@@ -159,16 +164,7 @@ test("tray notifications and controls keep ownership in host services and cancel
       events.push(payload);
     },
   };
-  const adapter = defineNativePlugin({
-    name: "tray",
-    operations: trayOperations,
-    platforms: {
-      windows: {
-        execution: "ui",
-        create: createOperations,
-      },
-    },
-  }).definition.nativePlatforms.windows?.create({
+  const adapter = createOperations({
     dataRoot: "unused",
     capabilities: [],
     tray: services,
@@ -266,8 +262,8 @@ test("tray notifications and controls keep ownership in host services and cancel
   const settled = Promise.allSettled([
     pending,
   ]);
-  adapter.dispose();
-  adapter.dispose();
+  await adapter.dispose();
+  await adapter.dispose();
   expect(unsubscribed).toBe(true);
   expect(await settled).toMatchObject([
     {

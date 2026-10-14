@@ -9,29 +9,23 @@ import {
   readSync,
   writeSync,
 } from "node:fs";
-import {
-  BunawayError,
-  type JsonValue,
-  type NativeAdapter,
-} from "@bunaway/plugin";
-import { MAX_STORAGE_BYTES } from "../bytes.ts";
-import type {
-  StorageBytesWrite,
-  StorageDirectoryCreate,
-  StorageLocation,
-  StorageMetadata,
-  StorageTransfer,
-  StorageWrite,
-} from "../contract.ts";
+import { BunawayError } from "@bunaway/plugin";
 import {
   MAX_DIRECTORY_ENTRIES,
+  MAX_STORAGE_BYTES,
+  type StorageBytesWrite,
+  type StorageDirectoryCreate,
   type StorageDirectoryEntry,
-} from "../directory-entries.ts";
+  type StorageLocation,
+  type StorageMetadata,
+  type StorageTransfer,
+  type StorageWrite,
+} from "#storage/contract";
 import {
   DARWIN_DIRENT_HEADER_BYTES,
   darwinDirectoryEntry,
   darwinDirectoryRecordLength,
-} from "./macos-directory-entries.ts";
+} from "#storage/platforms/macos-directory-entries";
 
 const LIB_SYSTEM = "/usr/lib/libSystem.B.dylib";
 const MAX_PATH_BYTES = 1024;
@@ -55,12 +49,6 @@ const ELOOP = 62;
 const ENOTSUP = 45;
 const EXDEV = 18;
 
-type StorageInput =
-  | StorageLocation
-  | StorageWrite
-  | StorageBytesWrite
-  | StorageDirectoryCreate
-  | StorageTransfer;
 type Parent = {
   fd: number;
   name: string;
@@ -72,15 +60,12 @@ type Target = {
 };
 
 /** Construct only on the host's I/O worker; imports allocate no OS resources. */
-export function createOperations(): NativeAdapter {
-  const storage = new MacosStorage();
-  return {
-    execute(operation, input) {
-      // The host registry validates the public schema before this boundary.
-      return storage.execute(operation, input as StorageInput);
-    },
-    dispose: () => storage.dispose(),
-  };
+export function createStorage(): MacosStorage {
+  return new MacosStorage();
+}
+/** Release bindings owned by one host instance. */
+export function disposeStorage(storage: MacosStorage): void {
+  storage.dispose();
 }
 
 function createBindings() {
@@ -334,6 +319,7 @@ export class MacosStorage {
     allowMissing: boolean,
     action: (parent: Parent) => T,
   ): T | null {
+    this.requireOpen();
     const segments = selectedPath(path);
     const name = segments.pop();
     if (!name) {
@@ -444,152 +430,167 @@ export class MacosStorage {
     }
   }
 
-  /** Dispatch schema-validated operations, retaining the public directory contracts. */
-  execute(operation: string, input: StorageInput): JsonValue {
+  private requireOpen(): void {
     if (this.disposed) {
       throw new BunawayError({
         code: "CANCELLED",
         message: "Storage adapter is disposed.",
       });
     }
-    if ("from" in input) {
-      selectedPath(input.from);
-      selectedPath(input.to);
-      if (operation === "storage.copyFile") {
-        return this.copyFile(input);
-      }
-      throw new BunawayError({
-        code: "UNSUPPORTED",
-        message: "Unknown storage operation.",
-      });
-    }
-    if (operation === "storage.createDirectory") {
-      return this.createDirectory(input);
-    }
-    if (operation === "storage.readDirectory") {
-      return this.withParent(input.path, false, false, (parent) =>
-        this.withTarget(
-          parent,
-          constants.O_RDONLY,
-          false,
-          true,
-          ({ fd, info }) => {
-            if (!info.isDirectory()) {
-              fail("INVALID_ARGUMENT", "Storage target is not a directory.");
-            }
-            return this.readDirectory(fd);
-          },
-        ),
-      );
-    }
-    const querying =
-      operation === "storage.exists" || operation === "storage.stat";
-    const appending =
-      operation === "storage.appendText" || operation === "storage.appendBytes";
-    const writingText =
-      operation === "storage.writeText" || operation === "storage.appendText";
-    const writingBytes =
-      operation === "storage.writeBytes" || operation === "storage.appendBytes";
-    const writing = writingText || writingBytes;
-    const readingBytes = operation === "storage.readBytes";
-    if (
-      !querying &&
-      !writing &&
-      !readingBytes &&
-      operation !== "storage.readText"
-    ) {
-      throw new BunawayError({
-        code: "UNSUPPORTED",
-        message: "Unknown storage operation.",
-      });
-    }
-    let bytes: Buffer | undefined;
-    if (writingText) {
-      if (!("text" in input)) {
-        fail("INVALID_ARGUMENT", "Storage text is required.");
-      }
-      bytes = Buffer.from(input.text);
-    } else if (writingBytes) {
-      if (!("bytes" in input)) {
-        fail("INVALID_ARGUMENT", "Storage bytes are required.");
-      }
-      bytes = Buffer.from(input.bytes, "base64");
-    }
-    // Never use O_TRUNC: validate the opened object before changing any bytes.
-    const flags = writing
-      ? constants.O_WRONLY |
-        constants.O_CREAT |
-        (appending ? constants.O_APPEND : 0)
-      : constants.O_RDONLY;
-    const result = this.withParent(input.path, writing, querying, (parent) =>
-      this.withTarget(parent, flags, querying, querying, ({ fd, info }) => {
-        if (querying) {
-          return operation === "storage.exists" ? true : metadata(info);
-        }
-        if (bytes !== undefined) {
-          this.writeBytes(fd, bytes);
-          if (!appending) {
-            this.fileAction(() => ftruncateSync(fd, bytes.length));
-          }
-          this.fileAction(() => fsyncSync(fd));
-          return null;
-        }
-        const limit = readingBytes ? MAX_STORAGE_BYTES : MAX_FILE_BYTES;
-        if (info.size < 0n || info.size > BigInt(limit)) {
-          throw new Error("Storage file too large.");
-        }
-        const contents = this.readBytes(fd, Number(info.size));
-        return readingBytes
-          ? contents.toString("base64")
-          : new TextDecoder("utf-8", {
-              fatal: true,
-              ignoreBOM: true,
-            }).decode(contents);
-      }),
-    );
-    return result === null && operation === "storage.exists" ? false : result;
   }
 
-  /** Make missing components relative to checked parents; failures retain created directories. */
-  private createDirectory(
-    input: StorageLocation | StorageDirectoryCreate,
-  ): null {
-    this.withParent(
+  /** Read bounded UTF-8 text from checked descriptors, preserving BOM text. */
+  readText(input: StorageLocation): string {
+    return new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(this.readFile(input.path, MAX_FILE_BYTES));
+  }
+
+  /** Read bounded bytes as canonical base64. */
+  readBytes(input: StorageLocation): string {
+    return this.readFile(input.path, MAX_STORAGE_BYTES).toString("base64");
+  }
+
+  /** Replace text only after inspecting the opened object. */
+  writeText(input: StorageWrite): null {
+    return this.writeFile(input.path, Buffer.from(input.text), false);
+  }
+
+  /** Append text using O_APPEND and sync before reporting success. */
+  appendText(input: StorageWrite): null {
+    return this.writeFile(input.path, Buffer.from(input.text), true);
+  }
+
+  /** Replace bytes only after inspecting the opened object. */
+  writeBytes(input: StorageBytesWrite): null {
+    return this.writeFile(
       input.path,
-      "recursive" in input && input.recursive,
+      Buffer.from(input.bytes, "base64"),
       false,
-      (parent) => {
-        if (
-          this.api.symbols.mkdirat(
-            parent.fd,
-            ptr(Buffer.from(`${parent.name}\0`)),
-            DIRECTORY_MODE,
-          ) < 0
-        ) {
-          const code = this.errno();
-          if (code !== EEXIST) {
-            this.nativeFailure("Storage directory creation failed", code);
+    );
+  }
+
+  /** Append bytes using O_APPEND and sync before reporting success. */
+  appendBytes(input: StorageBytesWrite): null {
+    return this.writeFile(input.path, Buffer.from(input.bytes, "base64"), true);
+  }
+
+  /** Only missing parents or targets produce false; other failures propagate. */
+  exists(input: StorageLocation): boolean {
+    return (
+      this.withParent(input.path, false, true, (parent) =>
+        this.withTarget(parent, constants.O_RDONLY, true, true, () => true),
+      ) !== null
+    );
+  }
+
+  /** Read checked object metadata; only missing parents or targets produce null. */
+  stat(input: StorageLocation): StorageMetadata | null {
+    return this.withParent(input.path, false, true, (parent) =>
+      this.withTarget(parent, constants.O_RDONLY, true, true, ({ info }) =>
+        metadata(info),
+      ),
+    );
+  }
+
+  /** Enumerate a checked directory without reopening names or following child links. */
+  readDirectory(input: StorageLocation): StorageDirectoryEntry[] {
+    const result = this.withParent(input.path, false, false, (parent) =>
+      this.withTarget(
+        parent,
+        constants.O_RDONLY,
+        false,
+        true,
+        ({ fd, info }) => {
+          if (!info.isDirectory()) {
+            fail("INVALID_ARGUMENT", "Storage target is not a directory.");
           }
+          return this.listEntries(fd);
+        },
+      ),
+    );
+    if (result === null) {
+      throw new Error("Storage directory was not opened.");
+    }
+    return result;
+  }
+
+  /** Keep checked descriptors alive until the bounded read completes. */
+  private readFile(path: string, maxBytes: number): Buffer {
+    const result = this.withParent(path, false, false, (parent) =>
+      this.withTarget(
+        parent,
+        constants.O_RDONLY,
+        false,
+        false,
+        ({ fd, info }) => {
+          if (info.size < 0n || info.size > BigInt(maxBytes)) {
+            throw new Error("Storage file too large.");
+          }
+          return this.readFileBytes(fd, Number(info.size));
+        },
+      ),
+    );
+    if (result === null) {
+      throw new Error("Storage file was not opened.");
+    }
+    return result;
+  }
+
+  /** Check first, then write, truncate replacements and sync before releasing descriptors. */
+  private writeFile(path: string, bytes: Buffer, append: boolean): null {
+    // Never use O_TRUNC: validate the opened object before changing any bytes.
+    const flags =
+      constants.O_WRONLY |
+      constants.O_CREAT |
+      (append ? constants.O_APPEND : 0);
+    this.withParent(path, true, false, (parent) =>
+      this.withTarget(parent, flags, false, false, ({ fd }) => {
+        this.writeFileBytes(fd, bytes);
+        if (!append) {
+          this.fileAction(() => ftruncateSync(fd, bytes.length));
         }
-        return this.withTarget(
-          parent,
-          constants.O_RDONLY,
-          false,
-          true,
-          ({ info }) => {
-            if (!info.isDirectory()) {
-              fail("INVALID_ARGUMENT", "Storage target is not a directory.");
-            }
-            return null;
-          },
-        );
-      },
+        this.fileAction(() => fsyncSync(fd));
+        return null;
+      }),
     );
     return null;
   }
 
+  /** Make missing components relative to checked parents; failures retain created directories. */
+  createDirectory(input: StorageDirectoryCreate): null {
+    this.withParent(input.path, input.recursive, false, (parent) => {
+      if (
+        this.api.symbols.mkdirat(
+          parent.fd,
+          ptr(Buffer.from(`${parent.name}\0`)),
+          DIRECTORY_MODE,
+        ) < 0
+      ) {
+        const code = this.errno();
+        if (code !== EEXIST) {
+          this.nativeFailure("Storage directory creation failed", code);
+        }
+      }
+      return this.withTarget(
+        parent,
+        constants.O_RDONLY,
+        false,
+        true,
+        ({ info }) => {
+          if (!info.isDirectory()) {
+            fail("INVALID_ARGUMENT", "Storage target is not a directory.");
+          }
+          return null;
+        },
+      );
+    });
+    return null;
+  }
+
   /** Enumerate the checked object; the stream owns a duplicate while the caller owns fd. */
-  private readDirectory(fd: number): StorageDirectoryEntry[] {
+  private listEntries(fd: number): StorageDirectoryEntry[] {
     // The fixed syscall's third word is zero: choose the lowest unused fd and
     // set CLOEXEC atomically, including while another worker spawns a process.
     const duplicate = this.api.symbols.__fcntl(fd, F_DUPFD_CLOEXEC, null);
@@ -649,7 +650,7 @@ export class MacosStorage {
     }
   }
 
-  private readBytes(fd: number, size: number): Buffer {
+  private readFileBytes(fd: number, size: number): Buffer {
     const bytes = Buffer.alloc(size);
     let offset = 0;
     while (offset < size) {
@@ -670,7 +671,7 @@ export class MacosStorage {
     return bytes;
   }
 
-  private writeBytes(fd: number, bytes: Buffer): void {
+  private writeFileBytes(fd: number, bytes: Buffer): void {
     let offset = 0;
     while (offset < bytes.length) {
       const count = this.fileAction(() =>
@@ -690,7 +691,11 @@ export class MacosStorage {
   }
 
   /** Read the bounded source before creating a destination; O_EXCL never replaces a raced name. */
-  private copyFile(input: StorageTransfer): null {
+  copyFile(input: StorageTransfer): null {
+    this.requireOpen();
+    // Validate both spellings before reading the source or creating the destination.
+    selectedPath(input.from);
+    selectedPath(input.to);
     this.withParent(input.from, false, false, (parent) =>
       this.withTarget(
         parent,
@@ -698,7 +703,7 @@ export class MacosStorage {
         false,
         false,
         ({ fd, info }) => {
-          const bytes = this.readBytes(fd, safeSize(info, MAX_FILE_BYTES));
+          const bytes = this.readFileBytes(fd, safeSize(info, MAX_FILE_BYTES));
           this.withParent(input.to, false, false, (destination) =>
             this.withTarget(
               destination,
@@ -706,7 +711,7 @@ export class MacosStorage {
               false,
               false,
               (target) => {
-                this.writeBytes(target.fd, bytes);
+                this.writeFileBytes(target.fd, bytes);
                 this.fileAction(() => fsyncSync(target.fd));
                 // A failed copy may leave a partial file. Unlinking by name could
                 // delete a replacement; POSIX has no unlink-by-open-handle API.

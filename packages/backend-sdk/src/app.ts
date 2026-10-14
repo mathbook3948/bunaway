@@ -3,6 +3,7 @@ import type {
   CommandRegistry,
   EventRegistry,
   PluginDefinition,
+  PluginRegistration,
 } from "@bunaway/plugin-api";
 import { bindCommandHost, bindPluginHost } from "@bunaway/plugin-api/host";
 import type { ModuleDefinition } from "./module.ts";
@@ -25,7 +26,7 @@ type AppOptions<
   M extends readonly ModuleDefinition[],
   C extends CommandRegistry,
   E extends EventRegistry,
-  P extends readonly PluginDefinition[],
+  P extends readonly PluginRegistration[],
 > = Pick<AppDefinition, "state" | "desktop"> & {
   readonly modules: M;
   readonly commands?: C;
@@ -34,8 +35,13 @@ type AppOptions<
 };
 
 // Keep concrete event schemas while retaining the bound lifecycle's callable contract.
-type BoundPlugins<P extends readonly PluginDefinition[]> = {
-  readonly [K in keyof P]: P[K] extends {
+type RegistrationOf<P> = P extends {
+  readonly _definition: infer D;
+}
+  ? D
+  : P;
+type BoundPlugins<P extends readonly PluginRegistration[]> = {
+  readonly [K in keyof P]: RegistrationOf<P[K]> extends {
     readonly events: infer E extends EventRegistry;
   }
     ? Omit<PluginDefinition, "events"> & {
@@ -68,8 +74,12 @@ export function defineApp<
   const M extends readonly ModuleDefinition[],
   const C extends CommandRegistry = Record<never, never>,
   const E extends EventRegistry = Record<never, never>,
-  const P extends readonly PluginDefinition[] = readonly PluginDefinition[],
+  const P extends readonly PluginRegistration[] = readonly PluginRegistration[],
 >(options: AppOptions<M, C, E, P>) {
+  // Core owns registrations; public native plugin methods stay with their callers.
+  const plugins = options.plugins?.map((plugin) =>
+    "_definition" in plugin ? plugin._definition : plugin,
+  );
   const commands = new Map<string, CommandRegistry[string]>();
   const events = new Map<string, EventRegistry[string]>();
   const commandOwners = new Map<string, string>();
@@ -88,7 +98,7 @@ export function defineApp<
     collect(module.events, events, eventOwners, "event", owner);
   });
   // Plugins stay in Core's lifecycle, but their names cannot collide with app modules.
-  options.plugins?.forEach((plugin, index) => {
+  plugins?.forEach((plugin, index) => {
     const owner = `plugin "${plugin.name}" (plugins[${index}])`;
     for (const name of Object.keys(plugin.commands ?? {})) {
       claimName(commandOwners, name, "command", owner);
@@ -122,12 +132,12 @@ export function defineApp<
       : {
           state: options.state,
         }),
-    ...(options.plugins === undefined
+    ...(plugins === undefined
       ? {}
       : {
           // Binding preserves event schemas and order; expose the input tuple for EventsOf.
           plugins: Object.freeze(
-            options.plugins.map(bindPluginHost),
+            plugins.map(bindPluginHost),
           ) as unknown as BoundPlugins<P>,
         }),
   });

@@ -1,28 +1,35 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { appearanceOperations } from "./contract.ts";
-import { createOperations as createMacosOperations } from "./platforms/macos.ts";
-import { createOperations } from "./platforms/windows.ts";
-
-const plugin = defineNativePlugin({
-  name: "appearance",
-  platforms: {
-    macos: {
-      execution: "ui",
-      create: createMacosOperations,
-    },
-    windows: {
-      execution: "io",
-      create: createOperations,
+import { appearanceOperations } from "#appearance/operations";
+import {
+  dispose as disposeMacos,
+  initialize as initializeMacos,
+} from "#appearance/platforms/macos";
+import {
+  dispose as disposeWindows,
+  initialize as initializeWindows,
+} from "#appearance/platforms/windows";
+/** Query preferences. Theme overrides and accessibility support control are separate host features. */
+export default defineNativePlugin(
+  {
+    name: "appearance",
+    platforms: {
+      macos: {
+        thread: "ui",
+        initialize: initializeMacos,
+        dispose: disposeMacos,
+        operations: appearanceOperations,
+      },
+      windows: {
+        initialize: initializeWindows,
+        dispose: disposeWindows,
+        operations: appearanceOperations,
+      },
     },
   },
-  operations: appearanceOperations,
-});
-/** Read OS appearance and accessibility preferences with an independent operation grant. */
-export const appearancePlugin = plugin.definition;
-export default appearancePlugin;
-/** Query preferences. Theme overrides and accessibility support control are separate host features. */
-export const appearance = Object.freeze({
-  getPreferences: (options?: import("@bunaway/plugin").NativeInvokeOptions) =>
-    plugin.api.getPreferences(null, options),
-});
-export type { AppearancePreferences } from "./contract.ts";
+  (api) => ({
+    getPreferences: (options?: import("@bunaway/plugin").NativeInvokeOptions) =>
+      api.getPreferences(null, options),
+  }),
+);
+
+export type { AppearancePreferences } from "#appearance/contract";

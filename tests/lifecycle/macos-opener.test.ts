@@ -11,13 +11,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NativeRegistry } from "@bunaway/protocol";
-import { openerPlugin } from "../../plugins/opener/src/index.ts";
-import { createFiles } from "../../plugins/opener/src/macos-file.ts";
-import { normalizeMacosFilePath } from "../../plugins/opener/src/macos-path.ts";
-import {
-  createAdapter,
-  createOperations,
-} from "../../plugins/opener/src/platforms/macos.ts";
+import opener from "../../plugins/opener/src/index.ts";
+import { createFiles } from "../../plugins/opener/src/platforms/macos-file.ts";
+import { normalizeMacosFilePath } from "../../plugins/opener/src/platforms/macos-path.ts";
+import { createOpenerAdapter as createAdapter } from "../fixtures/injected-native-plugins.ts";
+import { nativeFactory } from "../fixtures/native-platform.ts";
+
+const createOperations = nativeFactory(opener, "macos");
 
 test("macOS file syntax preserves POSIX names without changing Windows helpers", () => {
   for (const path of [
@@ -50,7 +50,7 @@ test("macOS file syntax preserves POSIX names without changing Windows helpers",
   }
 });
 
-test("isolated macOS opener preserves validation, acceptance, ownership and unsupported selected apps", () => {
+test("isolated macOS opener preserves validation, acceptance, ownership and unsupported selected apps", async () => {
   const calls: string[] = [];
   const adapter = createAdapter(
     {
@@ -87,7 +87,7 @@ test("isolated macOS opener preserves validation, acceptance, ownership and unsu
     "revealFile",
   ]) {
     expect(
-      adapter.execute(
+      await adapter.execute(
         `opener.${operation}`,
         {
           path,
@@ -97,7 +97,7 @@ test("isolated macOS opener preserves validation, acceptance, ownership and unsu
     ).toBeNull();
   }
   expect(
-    adapter.execute(
+    await adapter.execute(
       "opener.openUrl",
       {
         url: "https://localhost/한글 값?q=a&b=c#fragment",
@@ -168,20 +168,22 @@ test("isolated macOS opener preserves validation, acceptance, ownership and unsu
       "UNSUPPORTED",
     ],
   ] as const) {
-    expect(() => adapter.execute(operation, payload, "backend")).toThrow(
+    await expect(
+      adapter.execute(operation, payload, "backend"),
+    ).rejects.toThrow(
       expect.objectContaining({
         code,
       }),
     );
   }
   expect(calls).toHaveLength(7);
-  adapter.dispose();
-  adapter.dispose();
+  await adapter.dispose();
+  await adapter.dispose();
   expect(calls.slice(-2)).toEqual([
     "files:dispose",
     "workspace:dispose",
   ]);
-  expect(() =>
+  await expect(
     adapter.execute(
       "opener.openUrl",
       {
@@ -189,7 +191,7 @@ test("isolated macOS opener preserves validation, acceptance, ownership and unsu
       },
       "backend",
     ),
-  ).toThrow(
+  ).rejects.toThrow(
     expect.objectContaining({
       code: "CANCELLED",
     }),
@@ -198,7 +200,7 @@ test("isolated macOS opener preserves validation, acceptance, ownership and unsu
 
 test("each macOS opener operation keeps its independent host permission", () => {
   const registry = new NativeRegistry([
-    openerPlugin,
+    opener._definition,
   ]);
   for (const operation of [
     "opener.openUrl",
@@ -249,7 +251,7 @@ test("each macOS opener operation keeps its independent host permission", () => 
   }
 });
 
-test("macOS resource cleanup still releases the workspace when file cleanup fails", () => {
+test("macOS resource cleanup still releases the workspace when file cleanup fails", async () => {
   let cleaned = 0;
   const adapter = createAdapter(
     {
@@ -269,8 +271,8 @@ test("macOS resource cleanup still releases the workspace when file cleanup fail
       },
     },
   );
-  expect(() => adapter.dispose()).toThrow("cleanup failed");
-  adapter.dispose();
+  await expect(adapter.dispose()).rejects.toThrow("cleanup failed");
+  await adapter.dispose();
   expect(cleaned).toBe(1);
 });
 
@@ -364,13 +366,13 @@ test.skipIf(process.platform !== "darwin")(
 
 test.skipIf(process.platform !== "darwin")(
   "real macOS workspace binding load, malformed requests and repeated disposal",
-  () => {
+  async () => {
     const adapter = createOperations({
       dataRoot: "/private/tmp",
       capabilities: [],
     });
     try {
-      expect(() =>
+      await expect(
         adapter.execute(
           "opener.openUrl",
           {
@@ -378,12 +380,12 @@ test.skipIf(process.platform !== "darwin")(
           },
           "backend",
         ),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "INVALID_ARGUMENT",
         }),
       );
-      expect(() =>
+      await expect(
         adapter.execute(
           "opener.openFileWith",
           {
@@ -392,14 +394,14 @@ test.skipIf(process.platform !== "darwin")(
           },
           "backend",
         ),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "UNSUPPORTED",
         }),
       );
     } finally {
-      adapter.dispose();
-      adapter.dispose();
+      await adapter.dispose();
+      await adapter.dispose();
     }
   },
 );

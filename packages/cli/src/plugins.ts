@@ -22,7 +22,7 @@ export type InstalledPlugin = {
   targets: Record<
     string,
     {
-      execution: "io" | "ui";
+      thread: "worker" | "ui";
       operations: string;
       supportedOperations?: string[];
     }
@@ -40,7 +40,7 @@ export async function readPluginDeclaration(
     [
       process.execPath,
       "-e",
-      `const { default: plugin } = await import(${JSON.stringify(pathToFileURL(entry).href)}); const packageName = ${JSON.stringify(packageName ?? null)}; process.stdout.write(JSON.stringify({ name: plugin.name, version: plugin.version, native: plugin.native, nativePlatforms: plugin.nativePlatforms && Object.fromEntries(Object.entries(plugin.nativePlatforms).map(([os, target]) => [os, { ...target, create: typeof target.create === "function", ...(packageName ? { module: Bun.resolveSync(packageName + "/native/" + os, ${JSON.stringify(directory)}) } : {}) }])) }));`,
+      `const { default: exported } = await import(${JSON.stringify(pathToFileURL(entry).href)}); const plugin = exported?._definition; if (!plugin || typeof plugin !== "object") throw new Error("Native plugin default export must be a defineNativePlugin result."); const packageName = ${JSON.stringify(packageName ?? null)}; process.stdout.write(JSON.stringify({ name: plugin.name, version: plugin.version, native: plugin.native, nativePlatforms: plugin.nativePlatforms && Object.fromEntries(Object.entries(plugin.nativePlatforms).map(([os, target]) => [os, { ...target, create: typeof target.create === "function", ...(packageName ? { module: Bun.resolveSync(packageName + "/native/" + os, ${JSON.stringify(directory)}) } : {}) }])) }));`,
     ],
     {
       cwd: directory,
@@ -60,7 +60,7 @@ export async function readPluginDeclaration(
     nativePlatforms: Record<
       string,
       {
-        execution: "io" | "ui";
+        thread: "worker" | "ui";
         create: boolean;
         module?: string;
         operations?: string[];
@@ -90,11 +90,12 @@ export async function readPluginDeclaration(
       !target ||
       typeof target !== "object" ||
       Array.isArray(target) ||
+      Object.hasOwn(target, "execution") ||
       !PLATFORMS.some((supported) => supported === platform) ||
       ![
-        "io",
+        "worker",
         "ui",
-      ].includes(target.execution)
+      ].includes(target.thread)
     ) {
       throw new Error("Invalid native plugin target.");
     }
@@ -228,7 +229,7 @@ export async function installedPlugins(
       // Normalize Windows short names and linked paths before comparing with the canonical package root.
       const nativeEntry = await realpath(target.module ?? "");
       targets[platform] = {
-        execution: target.execution,
+        thread: target.thread,
         operations: await contained(root, relative(root, nativeEntry)),
         ...(target.operations === undefined
           ? {}
@@ -280,7 +281,7 @@ export async function writePluginManifest(
       native: plugin.native,
       ...(plugin.targets[platform]
         ? {
-            execution: plugin.targets[platform]?.execution,
+            thread: plugin.targets[platform]?.thread,
             ...(plugin.targets[platform]?.supportedOperations === undefined
               ? {}
               : {

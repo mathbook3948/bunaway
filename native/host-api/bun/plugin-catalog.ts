@@ -16,7 +16,7 @@ export async function loadPluginCatalog(
       !Object.hasOwn(pluginImports, plugin.name) ||
       !imports ||
       (typeof imports.operations === "function") !==
-        (plugin.execution !== undefined)
+        (plugin.thread !== undefined)
     ) {
       throw new Error(
         `Generated plugin imports do not match the manifest: ${plugin.name}.`,

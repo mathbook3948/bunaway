@@ -8,7 +8,7 @@ import {
   MAX_WINDOW_DIMENSION,
   type WindowSpec,
 } from "@bunaway/plugin-api/native";
-import { windows, windowsPlugin } from "@bunaway/plugin-windows";
+import windows from "@bunaway/plugin-windows";
 import type { HostContext, Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { Windows } from "#native/windows/bun/win32";
@@ -591,7 +591,7 @@ if (!process.argv.includes("--child")) {
       },
     },
     plugins: [
-      windowsPlugin,
+      windows,
       {
         name: "initial-placement-test",
         version: "1.0.0",

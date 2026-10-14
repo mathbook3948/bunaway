@@ -6,17 +6,23 @@ import {
   AUTOSTART_ARGUMENT,
   AUTOSTART_HIDDEN_ARGUMENT,
 } from "@bunaway/protocol";
+import type { AppLaunch } from "#plugins/autostart/src/contract";
+import createOperationsDefinition from "#plugins/autostart/src/index";
 import {
-  type AppLaunch,
   commandLine,
   registrationName,
-} from "#plugins/autostart/src/launch";
-import { createOperations } from "#plugins/autostart/src/platforms/windows";
+} from "#plugins/autostart/src/platforms/windows-launch";
 import {
   APPROVAL_KEY,
   createRegistry,
   RUN_KEY,
-} from "#plugins/autostart/src/registry";
+} from "#plugins/autostart/src/platforms/windows-registry";
+import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
+
+const createOperations = createOperationsFactory(
+  createOperationsDefinition,
+  "windows",
+);
 
 // Only UUID-named values are touched. Production code never writes approval.
 function editApproval(name: string, state: number | null): void {
@@ -63,7 +69,7 @@ test.skipIf(process.platform !== "win32")(
     try {
       expect(registry.read(RUN_KEY, name)).toBeNull();
       expect(
-        adapter.execute("autostart.getStatus", null, "backend"),
+        await adapter.execute("autostart.getStatus", null, "backend"),
       ).toMatchObject({
         registered: false,
         startupState: "unknown",
@@ -80,7 +86,7 @@ test.skipIf(process.platform !== "win32")(
         matchesCurrentLaunch: true,
       };
       expect(
-        adapter.execute(
+        await adapter.execute(
           "autostart.enable",
           {
             args,
@@ -89,7 +95,7 @@ test.skipIf(process.platform !== "win32")(
         ),
       ).toMatchObject(expected);
       expect(
-        adapter.execute(
+        await adapter.execute(
           "autostart.enable",
           {
             args,
@@ -99,7 +105,7 @@ test.skipIf(process.platform !== "win32")(
       ).toMatchObject(expected);
       registry.write(name, '"C:\\Old app.exe" "old argument"');
       expect(
-        adapter.execute("autostart.getStatus", null, "backend"),
+        await adapter.execute("autostart.getStatus", null, "backend"),
       ).toMatchObject({
         registered: true,
         executablePath: "C:\\Old app.exe",
@@ -111,7 +117,7 @@ test.skipIf(process.platform !== "win32")(
       editApproval(name, 3);
       const before = registry.read(APPROVAL_KEY, name);
       expect(
-        adapter.execute(
+        await adapter.execute(
           "autostart.enable",
           {
             args,
@@ -123,7 +129,7 @@ test.skipIf(process.platform !== "win32")(
         startupState: "disabled",
       });
       expect(registry.read(APPROVAL_KEY, name)).toEqual(before);
-      expect(() =>
+      await expect(
         adapter.execute(
           "autostart.enable",
           {
@@ -132,7 +138,7 @@ test.skipIf(process.platform !== "win32")(
           },
           "backend",
         ),
-      ).toThrow("desktop.tray");
+      ).rejects.toThrow("desktop.tray");
       expect(registry.read(APPROVAL_KEY, name)).toEqual(before);
       const hiddenAdapter = createOperations({
         dataRoot: ".",
@@ -144,7 +150,7 @@ test.skipIf(process.platform !== "win32")(
       });
       try {
         expect(
-          hiddenAdapter.execute(
+          await hiddenAdapter.execute(
             "autostart.enable",
             {
               args,
@@ -164,25 +170,29 @@ test.skipIf(process.platform !== "win32")(
       } finally {
         await hiddenAdapter.dispose();
       }
-      expect(adapter.execute("autostart.disable", null, "backend")).toBeNull();
-      expect(adapter.execute("autostart.disable", null, "backend")).toBeNull();
+      expect(
+        await adapter.execute("autostart.disable", null, "backend"),
+      ).toBeNull();
+      expect(
+        await adapter.execute("autostart.disable", null, "backend"),
+      ).toBeNull();
       expect(registry.read(APPROVAL_KEY, name)).toEqual(before);
       expect(
-        adapter.execute("autostart.getStatus", null, "backend"),
+        await adapter.execute("autostart.getStatus", null, "backend"),
       ).toMatchObject({
         registered: false,
         startupState: "disabled",
       });
       editApproval(name, 2);
       expect(
-        adapter.execute("autostart.getStatus", null, "backend"),
+        await adapter.execute("autostart.getStatus", null, "backend"),
       ).toMatchObject({
         startupState: "enabled",
         registered: false,
       });
       registry.write(name, "C:\\Program Files\\external.exe argument");
       expect(
-        adapter.execute("autostart.getStatus", null, "backend"),
+        await adapter.execute("autostart.getStatus", null, "backend"),
       ).toMatchObject({
         registered: true,
         commandLine: "C:\\Program Files\\external.exe argument",
@@ -192,7 +202,7 @@ test.skipIf(process.platform !== "win32")(
       });
       registry.write(name, "relative.exe bad");
       expect(
-        adapter.execute("autostart.getStatus", null, "backend"),
+        await adapter.execute("autostart.getStatus", null, "backend"),
       ).toMatchObject({
         registered: true,
         commandLine: "relative.exe bad",
@@ -200,7 +210,7 @@ test.skipIf(process.platform !== "win32")(
         args: null,
         matchesCurrentLaunch: false,
       });
-      expect(() =>
+      await expect(
         adapter.execute(
           "autostart.enable",
           {
@@ -210,8 +220,8 @@ test.skipIf(process.platform !== "win32")(
           },
           "backend",
         ),
-      ).toThrow();
-      expect(() =>
+      ).rejects.toThrow();
+      await expect(
         adapter.execute(
           "autostart.enable",
           {
@@ -221,9 +231,9 @@ test.skipIf(process.platform !== "win32")(
           },
           "backend",
         ),
-      ).toThrow();
+      ).rejects.toThrow();
       expect(
-        adapter.execute("autostart.getStatus", null, "backend"),
+        await adapter.execute("autostart.getStatus", null, "backend"),
       ).toMatchObject({
         commandLine: "relative.exe bad",
       });
@@ -234,9 +244,9 @@ test.skipIf(process.platform !== "win32")(
       await adapter.dispose();
       await adapter.dispose();
     }
-    expect(() =>
+    await expect(
       adapter.execute("autostart.getStatus", null, "backend"),
-    ).toThrow();
+    ).rejects.toThrow();
   },
   30000,
 );
@@ -363,7 +373,7 @@ test.skipIf(process.platform !== "win32")(
       app,
     });
     try {
-      const status = adapter.execute(
+      const status = await adapter.execute(
         "autostart.enable",
         {
           args,

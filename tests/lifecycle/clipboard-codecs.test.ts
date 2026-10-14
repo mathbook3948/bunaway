@@ -7,7 +7,7 @@ import {
   encodeFiles,
   encodeHTML,
   encodeImage,
-} from "#plugins/clipboard/src/codecs";
+} from "#plugins/clipboard/src/platforms/windows-codecs";
 
 const image = {
   width: 2,

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { dlopen, ptr } from "bun:ffi";
-import { createOperations } from "#plugins/opener/src/platforms/windows";
+import createOperationsDefinition from "#plugins/opener/src/index";
+import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
+const createOperations = createOperationsFactory(
+  createOperationsDefinition,
+  "windows",
+);
 
 if (
   process.platform !== "win32" ||
@@ -89,7 +94,7 @@ try {
 
   // The nonce ties the loopback request to this invocation of the default browser.
   assert.equal(
-    opener.execute(
+    await opener.execute(
       "opener.openUrl",
       {
         url: inputUrl,

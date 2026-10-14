@@ -42,7 +42,7 @@ async function checkShutdown(
     const definition = {
       name: "waiting",
       version: "development",
-      execution: "io" as const,
+      thread: "worker" as const,
       native: {
         operations: [
           {
@@ -56,11 +56,11 @@ async function checkShutdown(
       adapter,
       `
       import {existsSync,writeFileSync} from "node:fs";
-      import {ImageResources} from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/image/src/resources.ts"))};
+      import {ImageResources} from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/image/src/platforms/resources.ts"))};
       import {defineNativePlugin} from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
       import {z} from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
       const resources=new ImageResources();
-      export const plugin=defineNativePlugin({name:"waiting",operations:{run:{input:z.null(),output:z.null()}},platforms:{windows:{execution:"io",create:()=>({
+      export const plugin=defineNativePlugin({name:"waiting",operations:{run:{input:z.null(),output:z.null()}},platforms:{windows:{thread:"worker",create:()=>({
         execute(){throw new Error("Context required");},
         executeUI(_name,_input,source,context){
           if(source!=="backend") throw new Error("Wrong source");
@@ -84,7 +84,7 @@ async function checkShutdown(
     );
     const imports = `
       import {plugin} from ${JSON.stringify(adapter)};
-      export const pluginImports={waiting:{operations:async()=>({createOperations:plugin.definition.nativePlatforms.windows.create})}};
+      export const pluginImports={waiting:{operations:async()=>({createOperations:plugin._definition.nativePlatforms.windows.create})}};
     `;
     await bundleIOPluginFixture(
       directory,
@@ -152,8 +152,8 @@ async function checkShutdown(
       import {defineApp} from ${JSON.stringify(Bun.resolveSync("@bunaway/backend", import.meta.dir))};
       import {runWindowsApp} from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/entry.ts"))};
       import {plugin} from ${JSON.stringify(adapter)};
-      const app=defineApp({modules:[],commands:{},events:{},desktop:{closeBehavior:"keep-alive"},plugins:[plugin.definition,{name:"setup",version:"1",async setup(){
-        const pending=plugin.api.run(null).catch(error=>{if(error.code!=="CANCELLED") throw error;});
+      const app=defineApp({modules:[],commands:{},events:{},desktop:{closeBehavior:"keep-alive"},plugins:[plugin._definition,{name:"setup",version:"1",async setup(){
+        const pending=plugin.run(null).catch(error=>{if(error.code!=="CANCELLED") throw error;});
         while(!existsSync(${JSON.stringify(started)})) await Bun.sleep(5);
         return async()=>{
           await pending;

@@ -2,18 +2,16 @@ import { dlopen, ptr } from "bun:ffi";
 import { expect, test } from "bun:test";
 import type { NativeShortcutServices } from "@bunaway/plugin-api/native";
 import type { JsonValue } from "@bunaway/protocol";
-import {
-  hotkeyCodes,
-  shortcutSchema,
-} from "#plugins/global-shortcut/src/contract";
-import { createShortcutOperations } from "#plugins/global-shortcut/src/shortcut-adapter";
+import { shortcutSchema } from "#plugins/global-shortcut/src/contract";
+import { hotkeyCodes } from "#plugins/global-shortcut/src/platforms/windows-bindings";
+import { createShortcutOperations } from "../fixtures/injected-native-plugins.ts";
 
 test.skipIf(process.platform !== "win32")(
   "actual Windows registration, OS input, conflict rollback, suspension and cleanup",
   async () => {
     const { Windows } = await import("#native/windows/bun/win32");
     const { Win32Shortcuts } = await import(
-      "#plugins/global-shortcut/src/win32"
+      "#plugins/global-shortcut/src/platforms/windows-bindings"
     );
     const windows = new Windows(() => {});
     const native = dlopen("user32.dll", {
@@ -178,6 +176,8 @@ test.skipIf(process.platform !== "win32")(
         native.symbols.RegisterHotKey(competing, 1, codes.modifiers, codes.key),
       ).toBe(0);
       const waiting = invoke("waitForPress", null);
+      // Finish a normal call so async parsing installs the wait before OS input.
+      expect(await invoke("isRegistered", shortcut)).toBe(true);
       press();
       await pumpUntil(() => events.length === 1);
       expect(events[0]).toEqual({
@@ -256,7 +256,7 @@ test.skipIf(process.platform !== "win32")(
       expect(native.symbols.UnregisterHotKey(competing, 1)).not.toBe(0);
       competitorRegistered = false;
       await invoke("register", shortcut);
-      adapter.dispose();
+      await adapter.dispose();
       expect(native.symbols.IsWindow(hwnd)).toBe(0);
       competitorRegistered =
         native.symbols.RegisterHotKey(
@@ -266,7 +266,7 @@ test.skipIf(process.platform !== "win32")(
           codes.key,
         ) !== 0;
       expect(competitorRegistered).toBe(true);
-      adapter.dispose();
+      await adapter.dispose();
     } finally {
       // SendInput can insert only part of a batch on failure. Release every test key during cleanup.
       const keys = [
@@ -286,7 +286,7 @@ test.skipIf(process.platform !== "win32")(
         native.symbols.UnregisterHotKey(competing, 1);
       }
       try {
-        adapter.dispose();
+        await adapter.dispose();
       } finally {
         windows.destroy(competing);
         windows.dispose();

@@ -1,10 +1,6 @@
 import { z } from "zod";
-
 export const MAX_GLOBAL_SHORTCUTS = 128;
 export const MAX_SHORTCUT_WAITERS = 16;
-export const WM_HOTKEY = 0x0312;
-export const MOD_NOREPEAT = 0x4000;
-export const MAX_HOTKEY_ID = 0xbfff;
 const modifiers = [
   "Control",
   "Alt",
@@ -103,50 +99,6 @@ export const shortcutSchema = z.strictObject({
     ),
 });
 export type GlobalShortcut = z.output<typeof shortcutSchema>;
-export const globalShortcutOperations = {
-  register: {
-    input: shortcutSchema,
-    output: z.null(),
-  },
-  registerMany: {
-    input: z.strictObject({
-      shortcuts: z.array(shortcutSchema).min(1).max(MAX_GLOBAL_SHORTCUTS),
-    }),
-    output: z.null(),
-  },
-  isRegistered: {
-    input: shortcutSchema,
-    output: z.boolean(),
-  },
-  list: {
-    input: z.null(),
-    output: z.array(shortcutSchema).max(MAX_GLOBAL_SHORTCUTS),
-  },
-  unregister: {
-    input: shortcutSchema,
-    output: z.boolean(),
-  },
-  unregisterAll: {
-    input: z.null(),
-    output: z.null(),
-  },
-  setSuspended: {
-    input: z.strictObject({
-      suspended: z.boolean(),
-    }),
-    output: z.null(),
-  },
-  isSuspended: {
-    input: z.null(),
-    output: z.boolean(),
-  },
-  waitForPress: {
-    input: z.null(),
-    output: z.strictObject({
-      shortcut: shortcutSchema,
-    }),
-  },
-};
 export const globalShortcutEvents = {
   "globalShortcut.pressed": {
     payload: {
@@ -194,47 +146,4 @@ export function shortcutId(shortcut: GlobalShortcut): string {
     ...shortcut.modifiers,
     shortcut.key,
   ].join("+");
-}
-const modifierFlags = {
-  Alt: 1,
-  Control: 2,
-  Shift: 4,
-  Super: 8,
-} as const;
-const namedKeys = {
-  Backspace: 0x08,
-  Tab: 0x09,
-  Enter: 0x0d,
-  Escape: 0x1b,
-  Space: 0x20,
-  PageUp: 0x21,
-  PageDown: 0x22,
-  End: 0x23,
-  Home: 0x24,
-  Left: 0x25,
-  Up: 0x26,
-  Right: 0x27,
-  Down: 0x28,
-  Insert: 0x2d,
-  Delete: 0x2e,
-} as const;
-/** Map the validated contract to Win32 modifiers and virtual-key codes. */
-export function hotkeyCodes(shortcut: GlobalShortcut): {
-  modifiers: number;
-  key: number;
-} {
-  const modifiers = shortcut.modifiers.reduce(
-    (flags, modifier) => flags | modifierFlags[modifier],
-    0,
-  );
-  const key =
-    shortcut.key.length === 1
-      ? shortcut.key.charCodeAt(0)
-      : shortcut.key.startsWith("F")
-        ? 0x70 + Number(shortcut.key.slice(1)) - 1
-        : namedKeys[shortcut.key as keyof typeof namedKeys];
-  return {
-    modifiers,
-    key,
-  };
 }

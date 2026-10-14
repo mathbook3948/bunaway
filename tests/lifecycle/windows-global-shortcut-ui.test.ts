@@ -1,13 +1,13 @@
 import { dlopen } from "bun:ffi";
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { globalShortcutPlugin } from "@bunaway/plugin-global-shortcut";
-import { menuPlugin } from "@bunaway/plugin-menu";
-import { trayPlugin } from "@bunaway/plugin-tray";
+import globalShortcut from "@bunaway/plugin-global-shortcut";
+import menu from "@bunaway/plugin-menu";
+import tray from "@bunaway/plugin-tray";
 import type { HostResponse, JsonValue } from "@bunaway/protocol";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
@@ -46,22 +46,24 @@ test.skipIf(process.platform !== "win32").each([
         import.meta.dir,
         "../../plugins/global-shortcut/dist/native/windows.js",
       );
-      const plugins = combined
-        ? [
-            globalShortcutPlugin,
-            menuPlugin,
-            trayPlugin,
-          ]
-        : [
-            globalShortcutPlugin,
-          ];
+      const plugins = (
+        combined
+          ? [
+              globalShortcut,
+              menu,
+              tray,
+            ]
+          : [
+              globalShortcut,
+            ]
+      ).map((plugin) => plugin._definition);
       const extraImports = combined
         ? `import menu from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/menu/dist/native/windows.js"))};
 import tray from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/tray/dist/native/windows.js"))};`
         : "";
       const extraFactories = combined
-        ? `, menu: { operations: async () => ({ createOperations: menu.nativePlatforms.windows.create }) },
-tray: { operations: async () => ({ createOperations: tray.nativePlatforms.windows.create }) }`
+        ? `, menu: { operations: async () => ({ createOperations: menu._definition.nativePlatforms.windows.create }) },
+tray: { operations: async () => ({ createOperations: tray._definition.nativePlatforms.windows.create }) }`
         : "";
       await bundleUIPluginFixture(
         root,
@@ -69,7 +71,7 @@ tray: { operations: async () => ({ createOperations: tray.nativePlatforms.window
           name: plugin.name,
           version: plugin.version,
           native: plugin.native,
-          execution: "ui",
+          thread: "ui",
         })),
         `
 import plugin from ${JSON.stringify(entrypoint)};
@@ -77,7 +79,7 @@ import { writeFileSync } from "node:fs";
 ${extraImports}
 export const pluginImports = { globalShortcut: { operations: async () => ({ createOperations(environment) {
   const services = environment.shortcuts;
-  return plugin.nativePlatforms.windows.create({ ...environment, shortcuts: { ...services,
+  return plugin._definition.nativePlatforms.windows.create({ ...environment, shortcuts: { ...services,
     createWindow(receive) { const hwnd = services.createWindow(receive); writeFileSync(${JSON.stringify(hwndPath)}, hwnd.toString()); return hwnd; },
   } });
 } }) } ${extraFactories} };`,

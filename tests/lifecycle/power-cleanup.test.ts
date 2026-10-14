@@ -7,6 +7,7 @@ test("compiled power adapter retries failed rollback handles despite public clea
   const output = await mkdtemp(resolve(tmpdir(), "bunaway-power-cleanup-"));
   try {
     const entry = resolve(output, "cleanup.js");
+    let substituted = false;
     const result = await Bun.build({
       entrypoints: [
         resolve(import.meta.dir, "../fixtures/power-cleanup.ts"),
@@ -18,27 +19,32 @@ test("compiled power adapter retries failed rollback handles despite public clea
           setup(build) {
             build.onLoad(
               {
-                filter: /[\\/]power[\\/]src[\\/]win32\.ts$/,
+                filter:
+                  /[\\/]power[\\/]src[\\/]platforms[\\/]windows-bindings\.ts$/,
               },
-              async (args) => ({
-                // Route the bindings while retaining the real adapter and handle owners.
-                contents: (await Bun.file(args.path).text()).replace(
-                  '"bun:ffi"',
-                  JSON.stringify(
-                    resolve(
-                      import.meta.dir,
-                      "../fixtures/power-cleanup-ffi.ts",
+              async (args) => {
+                substituted = true;
+                return {
+                  // Route the bindings while retaining the real adapter and handle owners.
+                  contents: (await Bun.file(args.path).text()).replace(
+                    '"bun:ffi"',
+                    JSON.stringify(
+                      resolve(
+                        import.meta.dir,
+                        "../fixtures/power-cleanup-ffi.ts",
+                      ),
                     ),
                   ),
-                ),
-                loader: "ts",
-              }),
+                  loader: "ts",
+                };
+              },
             );
           },
         },
       ],
     });
     expect(result.success, result.logs.map(String).join("\n")).toBe(true);
+    expect(substituted).toBe(true);
     const artifact = result.outputs[0];
     expect(artifact).toBeDefined();
     if (!artifact) {

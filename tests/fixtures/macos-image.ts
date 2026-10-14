@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { deflateSync } from "node:zlib";
-import type {
-  NativeAdapter,
-  NativeEnvironment,
-  NativePluginAdapter,
-} from "@bunaway/plugin";
 import type { JsonValue } from "@bunaway/protocol";
+import { nativeFactory } from "./native-platform.ts";
 
 /** Build independent PNG inputs, including palette and grayscale layouts that the encoder never emits. */
 function pngChunk(name: string, payload: Buffer): Buffer {
@@ -136,10 +132,11 @@ const operationNames = [
 
 /** Exercise a real native adapter, also reused by the compiled and isolated-install consumers. */
 export async function verifyMacosImage(
-  create: (
-    environment: NativeEnvironment,
-  ) => NativeAdapter | NativePluginAdapter,
+  plugin: Parameters<typeof nativeFactory>[0],
 ) {
+  // Every consumer uses the SDK factory with the same fixture host permission checks.
+  // Real WKWebView authorization is covered separately by macos-image-host.ts.
+  const create = nativeFactory(plugin, "macos");
   const adapter = create({
     dataRoot: "/unused-image-fixture",
     capabilities: [],
@@ -218,18 +215,52 @@ export async function verifyMacosImage(
     );
   };
   try {
+    // Direct SDK execution is supported and validates schemas without a host context.
+    const direct = await adapter.execute(
+      "image.createRGBA",
+      {
+        width: 0,
+        height: 0,
+        rgba: "",
+      },
+      "backend",
+    );
+    assert(direct && typeof direct === "object" && !Array.isArray(direct));
+    assert(typeof direct.id === "string");
+    assert.deepEqual(structuredClone(direct), {
+      id: direct.id,
+      width: 0,
+      height: 0,
+      empty: true,
+    });
+    assert.deepEqual(
+      await call("getInfo", {
+        id: direct.id,
+      }),
+      {
+        width: 0,
+        height: 0,
+        empty: true,
+      },
+    );
+    assert.equal(
+      await call("dispose", {
+        id: direct.id,
+      }),
+      true,
+    );
     await error(
       () =>
         adapter.execute(
           "image.createRGBA",
           {
             width: 0,
-            height: 0,
+            height: 1,
             rgba: "",
           },
           "backend",
         ),
-      "UNSUPPORTED",
+      "INVALID_ARGUMENT",
     );
     const bytes = Buffer.from([
       255,

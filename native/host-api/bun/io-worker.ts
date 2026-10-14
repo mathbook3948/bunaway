@@ -28,7 +28,7 @@ const config = workerData as {
 const adapters = await operations(
   config.plugins,
   config.dataRoot,
-  "io",
+  "worker",
   undefined,
   await loadPluginCatalog(config.assets),
   config.app,

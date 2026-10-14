@@ -1,24 +1,20 @@
 import { expect, test } from "bun:test";
 import type { CommandContext } from "@bunaway/plugin-api";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import {
-  openerPlugin,
-  openFileWith,
-  openUrlWith,
-} from "@bunaway/plugin-opener";
+import opener from "@bunaway/plugin-opener";
 import {
   type HostCall,
   type HostContext,
   NativeRegistry,
 } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
-import { openerOperations } from "#plugins/opener/src/contract";
-import { normalizeApplicationPath } from "#plugins/opener/src/path";
+import { windowsOperations as openerOperations } from "#plugins/opener/src/operations";
+import { normalizeApplicationPath } from "#plugins/opener/src/platforms/windows-path";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("opener", openerOperations);
 const registry = new NativeRegistry([
-  openerPlugin,
+  opener._definition,
 ]);
 
 test("selected applications require absolute native executable paths", () => {
@@ -162,33 +158,36 @@ test("selected-app helpers normalize one target and preserve context, permission
     },
     run: async (_input: unknown, _context: CommandContext) => {
       expect(
-        await openFileWith("c:/한글 폴더/공백 값.txt", "c:/앱/editor.exe"),
+        await opener.openFileWith(
+          "c:/한글 폴더/공백 값.txt",
+          "c:/앱/editor.exe",
+        ),
       ).toBeNull();
       expect(
-        await openUrlWith(
+        await opener.openUrlWith(
           'https://example.com/경로?q=공백 값#"',
           "c:/앱/browser.exe",
         ),
       ).toBeNull();
       await expect(
-        openFileWith("C:/report.txt", "C:/editor.cmd"),
+        opener.openFileWith("C:/report.txt", "C:/editor.cmd"),
       ).rejects.toMatchObject({
         code: "INVALID_ARGUMENT",
       });
       await expect(
-        openUrlWith("custom://example.com/", "C:/browser.exe"),
+        opener.openUrlWith("custom://example.com/", "C:/browser.exe"),
       ).rejects.toMatchObject({
         code: "INVALID_ARGUMENT",
       });
       failure = "PERMISSION_DENIED";
       await expect(
-        openFileWith("C:/report.txt", "C:/editor.exe"),
+        opener.openFileWith("C:/report.txt", "C:/editor.exe"),
       ).rejects.toMatchObject({
         code: "PERMISSION_DENIED",
       });
       failure = "INTERNAL";
       await expect(
-        openUrlWith("https://example.com/", "C:/browser.exe"),
+        opener.openUrlWith("https://example.com/", "C:/browser.exe"),
       ).rejects.toMatchObject({
         code: "INTERNAL",
       });

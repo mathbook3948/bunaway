@@ -30,7 +30,7 @@ Windows drive와 UNC 경로를 허용하며 extended-length와 device 경로, �
 상위 디렉터리와 대상의 네이티브 핸들을 검사하고 고정한 뒤 입출력합니다.
 
 ```ts
-import { storage } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 
 await storage.writeBytes({ path: "C:/notes/data.bin", bytes: "AP8=" });
 await storage.appendBytes({ path: "C:/notes/data.bin", bytes: "gA==" });
@@ -43,7 +43,7 @@ const encoded = await storage.readBytes({ path: "C:/notes/data.bin" }); // "AP+A
 
 ## 권한과 저장 동작
 
-`storagePlugin`을 등록하고 작업별로 `storage.readBytes`, `storage.writeBytes`,
+`storage`를 등록하고 작업별로 `storage.readBytes`, `storage.writeBytes`,
 `storage.appendBytes`, `storage.appendText` 권한을 허용합니다. 직접 화면 호출에는
 같은 이름 앞에 `plugin.`을 붙인 명령 권한도 필요합니다.
 읽기, 대체 쓰기, append와 텍스트 작업의 권한은 각각 독립적입니다.

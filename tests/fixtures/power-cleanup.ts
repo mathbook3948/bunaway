@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createOperations } from "../../plugins/power/src/platforms/windows.ts";
+import power from "../../plugins/power/src/index.ts";
 import { powerCleanup } from "./power-cleanup-ffi.ts";
 
 for (const failures of [
@@ -12,11 +12,13 @@ for (const failures of [
   powerCleanup.libraries.length = 0;
   powerCleanup.registeredCloseFailures = failures;
   powerCleanup.rollbackCloseFailed = false;
-  const adapter = createOperations({
+  const platform = power._definition.nativePlatforms.windows;
+  assert(platform);
+  const adapter = platform.create({
     dataRoot: ".",
     capabilities: [],
   });
-  const registered = adapter.execute(
+  const registered = await adapter.execute(
     "power.startBlocker",
     {
       type: "system",
@@ -24,8 +26,8 @@ for (const failures of [
     },
     "backend",
   );
-  assert.throws(
-    () =>
+  await assert.rejects(
+    async () =>
       adapter.execute(
         "power.startBlocker",
         {
@@ -36,9 +38,12 @@ for (const failures of [
       ),
     AggregateError,
   );
-  assert.deepEqual(adapter.execute("power.listBlockers", null, "backend"), [
-    registered,
-  ]);
+  assert.deepEqual(
+    await adapter.execute("power.listBlockers", null, "backend"),
+    [
+      registered,
+    ],
+  );
   assert.deepEqual(
     [
       ...powerCleanup.open,
@@ -48,8 +53,8 @@ for (const failures of [
       2n,
     ],
   );
-  assert.throws(
-    () => adapter.dispose(),
+  await assert.rejects(
+    async () => await adapter.dispose(),
     (error: unknown) => {
       assert(error instanceof AggregateError);
       assert.equal(error.errors.length, failures === 1 ? 1 : 2);
@@ -83,7 +88,7 @@ for (const failures of [
         ]
       : [],
   );
-  assert.throws(
+  await assert.rejects(
     () => adapter.execute("power.listBlockers", null, "backend"),
     (error: unknown) =>
       error instanceof Error && "code" in error && error.code === "CANCELLED",

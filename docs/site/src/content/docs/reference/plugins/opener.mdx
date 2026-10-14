@@ -4,31 +4,33 @@ description: Windows와 macOS에서 URL과 파일을 기본 앱으로 열고 파
 sidebar: { order: 5 }
 ---
 
+기본 export(`default`)를 `opener`로 가져와 앱에 등록하고 호출합니다.
+
 ```ts
-openUrl(url: string, options?: NativeInvokeOptions): Promise<null>
-openFile(path: string, options?: NativeInvokeOptions): Promise<null>
-revealFile(path: string, options?: NativeInvokeOptions): Promise<null>
-openFileWith(path: string, app: string, options?: NativeInvokeOptions): Promise<null>
-openUrlWith(url: string, app: string, options?: NativeInvokeOptions): Promise<null>
+opener.openUrl(url: string, options?: NativeInvokeOptions): Promise<null>
+opener.openFile(path: string, options?: NativeInvokeOptions): Promise<null>
+opener.revealFile(path: string, options?: NativeInvokeOptions): Promise<null>
+opener.openFileWith(path: string, app: string, options?: NativeInvokeOptions): Promise<null>
+opener.openUrlWith(url: string, app: string, options?: NativeInvokeOptions): Promise<null>
 ```
 
-`@bunaway/plugin-opener`를 설치하고 앱의 `plugins`에 `openerPlugin`을 등록합니다. 세 함수는 Windows와 macOS 어댑터를 제공합니다. macOS 네이티브 실행 검증은 현재 진행 중입니다.
+`@bunaway/plugin-opener`를 설치하고 앱의 `plugins`에 `opener`를 등록합니다. 세 함수는 Windows와 macOS 어댑터를 제공합니다. macOS 네이티브 실행 검증은 현재 진행 중입니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
-import { openerPlugin } from "@bunaway/plugin-opener";
+import opener from "@bunaway/plugin-opener";
 
-export default defineApp({ modules: [], plugins: [openerPlugin] });
+export default defineApp({ modules: [], plugins: [opener] });
 ```
 
 화면이나 앱 백엔드에서 세 함수를 호출합니다.
 
 ```ts
-import { openFile, openUrl, revealFile, trashFile } from "@bunaway/plugin-opener";
+import opener from "@bunaway/plugin-opener";
 
-await openUrl("https://example.com/search?q=한글 값");
-await openFile("C:/Users/me/Documents/한글 보고서.txt");
-await revealFile("C:/Users/me/Documents/한글 보고서.txt");
+await opener.openUrl("https://example.com/search?q=한글 값");
+await opener.openFile("C:/Users/me/Documents/한글 보고서.txt");
+await opener.revealFile("C:/Users/me/Documents/한글 보고서.txt");
 ```
 
 `openFile`은 파일을 기본 연결 앱으로 엽니다. `revealFile`은 부모 폴더에서 해당 파일 하나를 선택하도록 Windows Explorer나 macOS Finder에 요청합니다. 성공한 `null` 결과는 OS가 요청을 접수했다는 뜻입니다. 브라우저나 기본 앱의 표시와 실행 완료, 파일 읽기 완료 또는 Explorer 선택 완료를 기다리지 않습니다.
@@ -40,7 +42,7 @@ await revealFile("C:/Users/me/Documents/한글 보고서.txt");
 경로와 쿼리에 공백이나 한글을 쓸 수 있습니다. 호출할 때 URL 규칙에 따라 정규화되고, 인코딩된 주소가 브라우저로 전달됩니다.
 
 ```ts
-await openUrl("https://example.com/도움말?q=검색어 입력");
+await opener.openUrl("https://example.com/도움말?q=검색어 입력");
 ```
 
 ## 파일 입력
@@ -60,16 +62,16 @@ macOS의 `path`는 `/Users/me/Documents/보고서.txt`처럼 절대 POSIX 경로
 Windows 핸들의 고정 보장과 구분해야 합니다.
 
 ```ts
-await openFile("/Users/me/Documents/한글 보고서.txt");
-await revealFile("/Users/me/Documents/한글 보고서.txt");
+await opener.openFile("/Users/me/Documents/한글 보고서.txt");
+await opener.revealFile("/Users/me/Documents/한글 보고서.txt");
 ```
 
 ## 휴지통
 
-`trashFile(path: string, options?: NativeInvokeOptions): Promise<null>`로 기존 파일 하나를 Windows 휴지통으로 보냅니다. `opener.trashFile` 권한을 허용하며 화면에서 직접 호출하려면 `plugin.opener.trashFile` 명령도 허용합니다. 입력은 다른 파일 작업과 같은 `{ path: string }`입니다.
+`opener.trashFile(path: string, options?: NativeInvokeOptions): Promise<null>`로 기존 파일 하나를 Windows 휴지통으로 보냅니다. `opener.trashFile` 권한을 허용하며 화면에서 직접 호출하려면 `plugin.opener.trashFile` 명령도 허용합니다. 입력은 다른 파일 작업과 같은 `{ path: string }`입니다.
 
 ```ts
-await trashFile("C:/Users/me/Documents/삭제할 파일.txt");
+await opener.trashFile("C:/Users/me/Documents/삭제할 파일.txt");
 ```
 
 성공한 `null`은 Windows가 휴지통의 새 항목을 반환했음을 뜻합니다. 로컬 고정 드라이브만 지원하며 UNC 공유와 이동식 드라이브는 `UNSUPPORTED`입니다. 기존 경로, 읽기 권한, 링크와 별칭 검사를 적용합니다. 디렉터리를 받지 않고 HTML 파일의 연결된 `_files` 폴더도 삭제하지 않습니다. `FOFX_RECYCLEONDELETE`로 휴지통 이동을 요청하고 삭제 직전 콜백에 휴지통 플래그가 없으면 거부합니다. 프레임워크는 이동 실패를 일반 삭제로 재시도하지 않습니다. OS 오류나 중단, 휴지통 항목을 확인할 수 없는 결과는 실패로 반환합니다. 시스템의 영구 삭제 경고를 유지하므로 OS 설정에 따라 대화 상자가 표시될 수 있습니다. 콜백 플래그는 가능한 경우 휴지통 이동을 요청하며 OS 내부 실패 경로의 결과를 사전에 증명하지 않습니다. 휴지통 비활성화, 용량 초과와 경고 UI는 아직 검증하지 않았습니다. 사후 결과를 거부해도 이미 발생한 삭제를 복구할 수는 없습니다.
@@ -114,13 +116,13 @@ setup에서 호출할 때는 같은 작업 이름을 루트 `backend.permissions
 
 ## 지정 앱으로 열기
 
-지정 앱 함수는 Windows 전용이며 macOS에서는 제공하지 않습니다. `openFileWith(path, app)`과 `openUrlWith(url, app)`은 지정한 Windows 실행 파일에 대상 하나를 전달합니다. `app`은 절대 `.exe` 경로여야 하며 위의 파일 경로, 실제 이름과 링크 검사 규칙을 따릅니다. 셸 명령, `.cmd`, `.bat`, `.lnk`, 별도 실행 인자는 받지 않습니다. 파일 대상은 `openFile`과 같은 검사를, URL은 `openUrl`과 같은 HTTP/HTTPS 검사를 받습니다.
+지정 앱 함수는 Windows 전용이며 macOS에서는 제공하지 않습니다. `opener.openFileWith(path, app)`과 `opener.openUrlWith(url, app)`은 지정한 Windows 실행 파일에 대상 하나를 전달합니다. `app`은 절대 `.exe` 경로여야 하며 위의 파일 경로, 실제 이름과 링크 검사 규칙을 따릅니다. 셸 명령, `.cmd`, `.bat`, `.lnk`, 별도 실행 인자는 받지 않습니다. 파일 대상은 `openFile`과 같은 검사를, URL은 `openUrl`과 같은 HTTP/HTTPS 검사를 받습니다.
 
 ```ts
-import { openFileWith, openUrlWith } from "@bunaway/plugin-opener";
+import opener from "@bunaway/plugin-opener";
 
-await openFileWith("C:/Documents/한글 보고서.txt", "C:/Apps/editor.exe");
-await openUrlWith("https://example.com/도움말", "C:/Apps/browser.exe");
+await opener.openFileWith("C:/Documents/한글 보고서.txt", "C:/Apps/editor.exe");
+await opener.openUrlWith("https://example.com/도움말", "C:/Apps/browser.exe");
 ```
 
 각각 `opener.openFileWith`, `opener.openUrlWith` 권한이 필요합니다. 화면에서 직접 호출하면 뷰의 `commands`에도 `plugin.opener.openFileWith`, `plugin.opener.openUrlWith`를 허용합니다. 기존 opener 권한은 두 작업을 허용하지 않습니다. 입력은 각각 `{ path, app }`, `{ url, app }`이고 결과는 `null`입니다.

@@ -4,11 +4,9 @@ import type {
   NativeWindow,
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
-import {
+import windows, {
   validateWindowCall,
   validateWindowOutput,
-  windows,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import { type HostContext, NativeRegistry } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
@@ -117,7 +115,7 @@ test("taskbar schemas require bounded progress only for determinate states", () 
   }
   expect(validateWindowOutput(operation, null)).toBeNull();
   expect(() => validateWindowOutput(operation, true)).toThrow();
-  expect(windowsPlugin.nativePlatforms.macos?.operations).not.toContain(
+  expect(windows._definition.nativePlatforms.macos?.operations).not.toContain(
     "setTaskbarProgress",
   );
 });
@@ -309,7 +307,7 @@ test("taskbar SDK helper preserves command context and forwards the exact operat
         };
       },
       new NativeRegistry([
-        windowsPlugin,
+        windows._definition,
       ]),
     ),
   };

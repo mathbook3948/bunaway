@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { cropPixels } from "#plugins/image/src/crop";
-import { ImageResources } from "#plugins/image/src/resources";
+import { cropPixels } from "#plugins/image/src/platforms/crop";
+import { ImageResources } from "#plugins/image/src/platforms/resources";
 
 const source = {
   width: 3,

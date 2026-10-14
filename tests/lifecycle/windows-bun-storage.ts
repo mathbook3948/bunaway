@@ -16,9 +16,10 @@ import {
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
-import { storagePlugin as builtStorage } from "@bunaway/plugin-storage/native/windows";
-import { BunawayError } from "@bunaway/protocol";
+import builtStorage from "@bunaway/plugin-storage/native/windows";
+import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import { WindowsStorage } from "#plugins/storage/src/platforms/windows";
+import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
 
 const root = resolve(
   import.meta.dir,
@@ -32,13 +33,13 @@ otherStorage.dispose();
 otherStorage.dispose();
 assert.throws(
   () =>
-    otherStorage.execute("storage.exists", {
+    execute(otherStorage, "storage.exists", {
       path: temporaryPath("absent.txt"),
     }),
   (error) => error instanceof BunawayError && error.code === "CANCELLED",
 );
 assert.equal(
-  storage.execute("storage.exists", {
+  execute(storage, "storage.exists", {
     path: temporaryPath("absent.txt"),
   }),
   false,
@@ -76,12 +77,34 @@ const api = dlopen("kernel32.dll", {
   },
 });
 
+/** Exercise checked native handles directly; SDK parsing is tested separately below. */
+function execute(
+  instance: WindowsStorage,
+  operation: string,
+  input: JsonValue,
+): JsonValue {
+  const name = operation.slice("storage.".length);
+  const method: unknown = Reflect.get(instance, name);
+  if (
+    !operation.startsWith("storage.") ||
+    !Object.hasOwn(windowsOperations, name) ||
+    typeof method !== "function"
+  ) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Unknown storage operation.",
+    });
+  }
+  // Only declared storage methods are selected; each returns its JSON-compatible native result.
+  return method.call(instance, input) as JsonValue;
+}
 function wide(text: string): Buffer {
   return Buffer.from(`${text}\0`, "utf16le");
 }
 
 function call(operation: string, path: string, text?: string) {
-  return storage.execute(
+  return execute(
+    storage,
     operation,
     text === undefined
       ? {
@@ -274,7 +297,8 @@ async function main(): Promise<void> {
       ),
     );
     const binary = (operation: string, bytes?: Buffer) =>
-      storage.execute(
+      execute(
+        storage,
         operation,
         bytes === undefined
           ? {
@@ -349,7 +373,7 @@ async function main(): Promise<void> {
     );
 
     const transfer = (operation: string, from: string, to: string) =>
-      storage.execute(operation, {
+      execute(storage, operation, {
         from,
         to,
       });
@@ -358,7 +382,7 @@ async function main(): Promise<void> {
     const byteCopy = temporaryPath("byte transfer copy.bin");
     const byteMoved = temporaryPath("byte transfer renamed.bin");
     assert.equal(
-      storage.execute("storage.writeBytes", {
+      execute(storage, "storage.writeBytes", {
         path: byteSource,
         bytes: "AP+A",
       }),
@@ -366,7 +390,7 @@ async function main(): Promise<void> {
     );
     assert.equal(transfer("storage.copyFile", byteSource, byteCopy), null);
     assert.equal(
-      storage.execute("storage.appendBytes", {
+      execute(storage, "storage.appendBytes", {
         path: byteCopy,
         bytes: "AA==",
       }),
@@ -562,7 +586,7 @@ async function main(): Promise<void> {
     assert.equal((await stat(temporaryPath("empty-copy.txt"))).size, 0);
 
     // Exercise the generated native export and Zod defaults as well as the source FFI class.
-    const create = builtStorage.nativePlatforms.windows?.create;
+    const create = builtStorage._definition.nativePlatforms.windows?.create;
     assert(create, "Built Windows storage adapter is missing.");
     const built = create({
       dataRoot: root,
@@ -711,7 +735,7 @@ async function main(): Promise<void> {
     }
     const directoryPath = temporaryPath("directory API/한글");
     const createDirectory = (path: string, recursive = false) =>
-      storage.execute("storage.createDirectory", {
+      execute(storage, "storage.createDirectory", {
         path,
         recursive,
       });
@@ -774,7 +798,7 @@ async function main(): Promise<void> {
       ]) {
         expectError(
           () =>
-            storage.execute(operation, {
+            execute(storage, operation, {
               path: target,
               recursive: true,
             }),
@@ -969,7 +993,7 @@ async function main(): Promise<void> {
       ]) {
         expectError(
           () =>
-            storage.execute(operation, {
+            execute(storage, operation, {
               path: dataPath(path),
               bytes: "AA==",
             }),
@@ -1113,8 +1137,11 @@ async function main(): Promise<void> {
     try {
       // Truncate the file after opening it to verify reads recheck the handle.
       await writeFile(target, "short");
-      assert.throws(() => storage.readText(handle, 22), /changed during read/);
-      assert.equal(storage.readText(handle, 0), "");
+      assert.throws(
+        () => storage.readTextFromHandle(handle, 22),
+        /changed during read/,
+      );
+      assert.equal(storage.readTextFromHandle(handle, 0), "");
     } finally {
       assert(api.symbols.CloseHandle(handle));
     }

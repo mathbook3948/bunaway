@@ -1,8 +1,11 @@
 import type { NativeInvokeOptions, NativePluginAPI } from "@bunaway/plugin";
-import type { openerOperations } from "./contract.ts";
-import { normalizeMacosFilePath } from "./macos-path.ts";
-import { normalizeApplicationPath, normalizeFilePath } from "./path.ts";
-import { normalizeUrl } from "./url.ts";
+import type { windowsOperations } from "#opener/operations";
+import { normalizeMacosFilePath } from "#opener/platforms/macos-path";
+import {
+  normalizeApplicationPath,
+  normalizeFilePath,
+} from "#opener/platforms/windows-path";
+import { normalizeUrl } from "#opener/url";
 
 /** Accept either path spelling; the host adapter enforces its own platform. */
 function normalizeOpenerFilePath(input: unknown): string {
@@ -14,7 +17,8 @@ function normalizeOpenerFilePath(input: unknown): string {
 }
 
 /** Build public helpers around the plugin's typed operations. */
-export function createOpener(api: NativePluginAPI<typeof openerOperations>) {
+export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
+  /** Open an absolute HTTP or HTTPS URL. Success means the OS accepted the request. */
   async function openUrl(
     url: string,
     options?: NativeInvokeOptions,
@@ -27,6 +31,7 @@ export function createOpener(api: NativePluginAPI<typeof openerOperations>) {
     );
   }
 
+  /** Open an existing absolute file with its default app on Windows or macOS. Success is request acceptance. */
   async function openFile(
     path: string,
     options?: NativeInvokeOptions,
@@ -39,6 +44,7 @@ export function createOpener(api: NativePluginAPI<typeof openerOperations>) {
     );
   }
 
+  /** Select an existing absolute file in Explorer or Finder. Success is request acceptance. */
   async function revealFile(
     path: string,
     options?: NativeInvokeOptions,
@@ -50,6 +56,7 @@ export function createOpener(api: NativePluginAPI<typeof openerOperations>) {
       options,
     );
   }
+  /** Open an existing file with a selected absolute .exe application. Success is request acceptance. */
   async function openFileWith(
     path: string,
     app: string,
@@ -64,6 +71,7 @@ export function createOpener(api: NativePluginAPI<typeof openerOperations>) {
     );
   }
 
+  /** Open an HTTP or HTTPS URL with a selected absolute .exe application. Success is request acceptance. */
   async function openUrlWith(
     url: string,
     app: string,
@@ -77,6 +85,7 @@ export function createOpener(api: NativePluginAPI<typeof openerOperations>) {
       options,
     );
   }
+  /** Recycle an existing Windows file. Success means the Shell reported an item in the Recycle Bin. */
   async function trashFile(
     path: string,
     options?: NativeInvokeOptions,

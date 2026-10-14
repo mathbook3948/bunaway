@@ -1,50 +1,36 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { storageOperations } from "./contract.ts";
-import { createOperations as createMacosOperations } from "./platforms/macos.ts";
-import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
-
-const plugin = defineNativePlugin({
+import { storageOperations } from "#storage/operations";
+import {
+  createStorage as createMacosStorage,
+  disposeStorage as disposeMacosStorage,
+} from "#storage/platforms/macos";
+import { createStorage, disposeStorage } from "#storage/platforms/windows";
+import { windowsOperations } from "#storage/platforms/windows-operations";
+/** Typed storage operations; the application chooses paths and access rules. */
+export default defineNativePlugin({
   name: "storage",
   platforms: {
-    macos: {
-      execution: "io",
-      create: createMacosOperations,
-      // Darwin's name-based rename and delete cannot preserve the checked source identity.
-      operations: [
-        "readText",
-        "writeText",
-        "readBytes",
-        "writeBytes",
-        "appendBytes",
-        "appendText",
-        "copyFile",
-        "readDirectory",
-        "createDirectory",
-        "exists",
-        "stat",
-      ],
-    },
     windows: {
-      execution: "io",
-      create: createWindowsOperations,
+      initialize: createStorage,
+      dispose: disposeStorage,
+      operations: windowsOperations,
+    },
+    macos: {
+      initialize: createMacosStorage,
+      dispose: disposeMacosStorage,
+      // Darwin rename/delete cannot preserve the checked object's identity.
+      operations: storageOperations,
     },
   },
-  operations: storageOperations,
 });
-/** Plugin contract for text, bytes, metadata and directory access at application-selected paths. */
-export const storagePlugin = plugin.definition;
-export default storagePlugin;
-
-/** Typed storage operations; the application chooses paths and access rules. */
-export const storage = plugin.api;
 
 export type {
+  Storage,
   StorageBytesWrite,
   StorageDirectoryCreate,
+  StorageDirectoryEntry,
   StorageLocation,
   StorageMetadata,
   StorageTransfer,
   StorageWrite,
-} from "./contract.ts";
-
-export type { StorageDirectoryEntry } from "./directory-entries.ts";
+} from "#storage/contract";

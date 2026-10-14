@@ -1,18 +1,16 @@
 import { expect, test } from "bun:test";
 import type { CommandContext } from "@bunaway/plugin-api";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
-import {
+import appearance, {
   type AppearancePreferences,
-  appearance,
-  appearancePlugin,
 } from "@bunaway/plugin-appearance";
 import { type HostContext, NativeRegistry } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
-import { appearanceOperations } from "#plugins/appearance/src/contract";
+import { appearanceOperations } from "#plugins/appearance/src/operations";
 import {
   booleanPreference,
   colorRef,
-} from "#plugins/appearance/src/preferences";
+} from "#plugins/appearance/src/platforms/windows";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const snapshot: AppearancePreferences = {
@@ -33,7 +31,7 @@ const snapshot: AppearancePreferences = {
 };
 const parsers = pluginParsers("appearance", appearanceOperations);
 const registry = new NativeRegistry([
-  appearancePlugin,
+  appearance._definition,
 ]);
 
 test("appearance validates strict input and preserves unknown theme/transparency values", async () => {

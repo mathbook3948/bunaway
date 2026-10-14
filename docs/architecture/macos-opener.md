@@ -37,7 +37,7 @@ POSIX descriptor는 경로 이름의 rename이나 교체를 막지 않는다. NS
 검사한다. NativeAdapter의 동기 `execute`는 권한 token을 받지 않으며 승인된 호출만 받는다.
 파일 검사와 NSWorkspace 호출 사이에는 비동기 대기가 없다.
 
-`src/index.ts`는 macOS `execution: "io"`에 `openUrl`, `openFile`, `revealFile`만 등록한다.
+`src/index.ts`는 macOS `thread: "worker"`에 `openUrl`, `openFile`, `revealFile`만 등록한다.
 지정 앱 두 작업은 macOS 지원 목록에서 제외한다. 공개 기본 파일 helper는 POSIX와 Windows
 경로 표기를 받으며 해당 OS 어댑터가 플랫폼 검증을 수행한다. 기존 Windows
 `normalizeFilePath`와 `.exe`용 `normalizeApplicationPath`는 그대로 유지한다.

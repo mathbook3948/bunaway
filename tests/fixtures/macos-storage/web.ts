@@ -1,6 +1,6 @@
 import { createClient } from "@bunaway/client";
-import { storage } from "@bunaway/plugin-storage";
-import { windows } from "@bunaway/plugin-windows";
+import storage from "@bunaway/plugin-storage";
+import windows from "@bunaway/plugin-windows";
 
 // This fixture is bundled only for the real browser document.
 declare const location: {

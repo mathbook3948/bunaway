@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { appearanceOperations } from "#plugins/appearance/src/contract";
+import { appearanceOperations } from "#plugins/appearance/src/operations";
+import { nativeFactory } from "../fixtures/native-platform.ts";
 
 test.skipIf(process.platform !== "darwin")(
   "packaged appearance adapter loads AppKit in a fresh process and owns its framework lifetime",
@@ -13,9 +14,9 @@ test.skipIf(process.platform !== "darwin")(
         process.execPath,
         "--no-env-file",
         "-e",
-        `const {appearancePlugin} = await import(${JSON.stringify(entry)});
-const first = appearancePlugin.nativePlatforms.macos.create({dataRoot:".",capabilities:[]});
-const second = appearancePlugin.nativePlatforms.macos.create({dataRoot:".",capabilities:[]});
+        `const { default: appearance } = await import(${JSON.stringify(entry)});
+const first = appearance._definition.nativePlatforms.macos.create({dataRoot:".",capabilities:[]});
+const second = appearance._definition.nativePlatforms.macos.create({dataRoot:".",capabilities:[]});
 try {
   await first.dispose();
   await first.dispose();
@@ -51,12 +52,13 @@ try {
 test.skipIf(process.platform !== "darwin")(
   "real AppKit preferences, sRGB colors, appearance restoration and independent adapter lifetimes",
   async () => {
-    const [{ createOperations }, { Objc }, { dlopen, linkSymbols }] =
+    const [{ default: nativeDefinition }, { Objc }, { dlopen, linkSymbols }] =
       await Promise.all([
-        import("#plugins/appearance/src/platforms/macos"),
+        import("#plugins/appearance/src/index"),
         import("#native/macos/bun/objc"),
         import("bun:ffi"),
       ]);
+    const createOperations = nativeFactory(nativeDefinition, "macos");
     const objc = new Objc();
     const runtime = dlopen("/usr/lib/libobjc.A.dylib", {
       objc_msgSend: {
@@ -103,35 +105,37 @@ test.skipIf(process.platform !== "darwin")(
       dataRoot: ".",
       capabilities: [],
     });
-    const read = () =>
+    const read = async () =>
       appearanceOperations.getPreferences.output.parse(
-        second.execute("appearance.getPreferences", null, "backend"),
+        await second.execute("appearance.getPreferences", null, "backend"),
       );
     try {
       await first.dispose();
       await first.dispose();
-      expect(() =>
+      await expect(
         first.execute("appearance.getPreferences", null, "backend"),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "CANCELLED",
         }),
       );
-      expect(() =>
+      await expect(
         second.execute("appearance.unknown", null, "backend"),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "UNSUPPORTED",
         }),
       );
-      expect(() =>
+      await expect(
         second.execute("appearance.getPreferences", {}, "backend"),
-      ).toThrow(
+      ).rejects.toThrow(
         expect.objectContaining({
           code: "INVALID_ARGUMENT",
         }),
       );
-      objc.withAutoreleasePool(() => {
+      // Keep borrowed Cocoa objects alive across awaited SDK calls on this thread.
+      const pool = objc.object("NSAutoreleasePool");
+      try {
         const app = objc.send(objc.class("NSApplication"), "sharedApplication");
         const original = objc.send(app, "appearance");
         const appearanceClass = objc.class("NSAppearance");
@@ -189,7 +193,7 @@ test.skipIf(process.platform !== "darwin")(
                 themeNames,
               ),
             );
-            const snapshot = read();
+            const snapshot = await read();
             console.log(
               `AppKit appearance: requested=${name}, effective=${objc.text(objc.send(effectiveAppearance, "name"))}, nativeMatch=${nativeMatch}, adapterTheme=${snapshot.appsTheme}`,
             );
@@ -334,7 +338,7 @@ test.skipIf(process.platform !== "darwin")(
               objc.string("NSAppearanceNameDarkAqua"),
             ),
           );
-          expect(read().appsTheme).toBe("dark");
+          expect((await read()).appsTheme).toBe("dark");
           Bun.gc(true);
           const initialMemory = process.memoryUsage().rss;
           for (let iteration = 0; iteration < 20; iteration++) {
@@ -345,11 +349,15 @@ test.skipIf(process.platform !== "darwin")(
             try {
               for (let readIndex = 0; readIndex < 50; readIndex++) {
                 appearanceOperations.getPreferences.output.parse(
-                  adapter.execute("appearance.getPreferences", null, "backend"),
+                  await adapter.execute(
+                    "appearance.getPreferences",
+                    null,
+                    "backend",
+                  ),
                 );
               }
             } finally {
-              void adapter.dispose();
+              void (await adapter.dispose());
             }
           }
           Bun.gc(true);
@@ -358,7 +366,7 @@ test.skipIf(process.platform !== "darwin")(
           expect(process.memoryUsage().rss - initialMemory).toBeLessThan(
             64 * 1024 * 1024,
           );
-          expect(read().appsTheme).toBe("dark");
+          expect((await read()).appsTheme).toBe("dark");
           expect(objc.send(appearanceClass, "currentDrawingAppearance")).toBe(
             previousDrawing,
           );
@@ -366,7 +374,9 @@ test.skipIf(process.platform !== "darwin")(
           objc.send(app, "setAppearance:", original);
           objc.send(appearanceClass, "setCurrentAppearance:", previousDrawing);
         }
-      });
+      } finally {
+        objc.send(pool, "drain");
+      }
     } finally {
       await first.dispose();
       await second.dispose();

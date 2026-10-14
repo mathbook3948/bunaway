@@ -1,5 +1,5 @@
 import { createClient } from "@bunaway/client";
-import { path } from "@bunaway/plugin-path";
+import path from "@bunaway/plugin-path";
 
 const client = createClient();
 let report = {

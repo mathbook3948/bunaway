@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { isMainThread, threadId } from "node:worker_threads";
 import { BunawayError, defineNativePlugin } from "@bunaway/plugin";
 import { z } from "zod";
-import { ImageResources } from "../../../plugins/image/src/resources.ts";
+import { ImageResources } from "../../../plugins/image/src/platforms/resources.ts";
 
 const id = z.string().regex(/^[a-z0-9-]+$/);
 const input = z
@@ -91,7 +91,7 @@ export const probe = defineNativePlugin({
   },
   platforms: {
     macos: {
-      execution: "io",
+      thread: "worker",
       operations: [
         "run",
         "inspect",

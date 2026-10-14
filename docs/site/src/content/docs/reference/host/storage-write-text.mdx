@@ -14,7 +14,7 @@ signal과 deadline의 의미는 [호출 취소와 기한](/reference/client/invo
 앱이 지정한 경로의 파일에 텍스트를 씁니다. 기존 파일 내용은 새 텍스트로 대체하며 없는 상위 디렉터리는 만듭니다.
 
 ```ts
-import { storage } from "@bunaway/plugin-storage";
+import storage from "@bunaway/plugin-storage";
 
 await storage.writeText({
   path: "C:/Users/me/Documents/messages/current.txt",
@@ -33,7 +33,7 @@ await storage.writeText({
 text에는 별도 글자 수 제한이 없지만 전체 요청은 UTF-8 기준 1 MiB 이하여야 합니다.
 앱 명령의 입력 스키마에 더 작은 상한을 정할 수 있으며 템플릿은 10,000자로 제한합니다.
 
-storagePlugin을 등록하고 permissions에 `storage.writeText`를 지정합니다.
+`storage`를 등록하고 permissions에 `storage.writeText`를 지정합니다.
 UI에서 직접 호출하려면 commands에 `plugin.storage.writeText`도 허용합니다. 읽기 권한만 있으면 쓰기를 거부합니다.
 저장 위치와 파일별 접근 제한은 앱 명령에서 정하고 화면에는 그 명령만 허용합니다.
 Windows에서는 상위 디렉터리를 고정하기 위해 디렉터리 목록 접근 권한도 필요합니다. 이 운영체제 접근이 거부되면 `PERMISSION_DENIED`로 실패합니다.

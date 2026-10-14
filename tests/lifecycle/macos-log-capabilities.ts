@@ -251,7 +251,7 @@ try {
     plugin.native.operations.map((operation) => ({
       name: operation.name,
       support:
-        plugin.execution !== undefined &&
+        plugin.thread !== undefined &&
         (plugin.supportedOperations === undefined ||
           plugin.supportedOperations.includes(operation.name))
           ? "supported"

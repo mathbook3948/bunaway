@@ -5,8 +5,8 @@ declare const location: {
   search: string;
 };
 
-import { appearance } from "@bunaway/plugin-appearance";
-import { windows } from "@bunaway/plugin-windows";
+import appearance from "@bunaway/plugin-appearance";
+import windows from "@bunaway/plugin-windows";
 
 const client = createClient();
 const view = location.pathname.includes("denied") ? "denied" : "main";

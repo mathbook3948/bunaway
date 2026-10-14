@@ -3,10 +3,11 @@ import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { notificationPlugin } from "@bunaway/plugin-notification";
-import { openerPlugin } from "@bunaway/plugin-opener";
+import notification from "@bunaway/plugin-notification";
+import opener from "@bunaway/plugin-opener";
 import type { HostContext, HostResponse } from "@bunaway/protocol";
 import { Channel } from "#native/windows/bun/channel";
+import { nativeFactory } from "../fixtures/native-platform.ts";
 import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
 import {
   cleanupFailedNotificationShortcutCreation,
@@ -20,7 +21,7 @@ test.skipIf(process.platform !== "win32")(
     // AppUserModelID is process-wide. Isolate the host identity and UUID shortcut from the rest of the suite.
     if (process.env.BUNAWAY_NOTIFICATION_FIXTURE !== "1") {
       const module = new URL(
-        "../../plugins/notification/src/winrt.ts",
+        "../../plugins/notification/src/platforms/windows.ts",
         import.meta.url,
       ).href;
       // A separate unregistered process prevents failed WinRT identity lookup from caching the wrong app context.
@@ -206,13 +207,13 @@ try {
       }
       const trace = resolve(root, "trace.json");
       const manifest = [
-        notificationPlugin,
-        openerPlugin,
-      ].map(({ name, version, native }) => ({
+        notification,
+        opener,
+      ].map(({ _definition: { name, version, native } }) => ({
         name,
         version,
         native,
-        execution: "io" as const,
+        thread: "worker" as const,
       }));
       const notificationModule = resolve(
         "plugins/notification/dist/native/windows.js",
@@ -237,7 +238,7 @@ export const pluginImports = {
   notification: { operations: () => import(${JSON.stringify(notificationModule)}).then(({default: plugin}) => ({
     createOperations(environment) {
       assert.equal(environment.app.id, ${JSON.stringify(appId)});
-      const adapter = plugin.nativePlatforms.windows.create(environment);
+      const adapter = plugin._definition.nativePlatforms.windows.create(environment);
       return { ...adapter, async prepare(name, input, source) {
         const execute = await adapter.prepare(name, input, source);
         return async () => {
@@ -274,7 +275,7 @@ export const pluginImports = {
       }};
     }
   })) },
-  opener: { operations: () => import(${JSON.stringify(openerModule)}).then(({default: plugin}) => ({createOperations: plugin.nativePlatforms.windows.create})) },
+  opener: { operations: () => import(${JSON.stringify(openerModule)}).then(({default: plugin}) => ({createOperations: plugin._definition.nativePlatforms.windows.create})) },
 };
 `,
       );
@@ -291,9 +292,9 @@ export const pluginImports = {
             dataRoot: root,
             assets: root,
             plugins: [
-              notificationPlugin,
-              openerPlugin,
-            ].map(({ name, version, native }) => ({
+              notification,
+              opener,
+            ].map(({ _definition: { name, version, native } }) => ({
               name,
               version,
               native,
@@ -472,9 +473,10 @@ test.skipIf(
 )(
   "disposable desktop accepts the fixed Windows notification Settings request",
   async () => {
-    const { createOperations } = await import(
-      "#plugins/notification/src/platforms/windows"
+    const { default: nativeDefinition } = await import(
+      "#plugins/notification/src/index"
     );
+    const createOperations = nativeFactory(nativeDefinition, "windows");
     const adapter = createOperations({
       dataRoot: ".",
       capabilities: [],
@@ -489,7 +491,7 @@ test.skipIf(
     });
     try {
       expect(
-        adapter.execute("notification.openSettings", null, "backend"),
+        await adapter.execute("notification.openSettings", null, "backend"),
       ).toBeNull();
     } finally {
       await adapter.dispose();

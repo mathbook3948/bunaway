@@ -1,24 +1,27 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { imageOperations } from "./contract.ts";
-import { createOperations as createMacosOperations } from "./platforms/macos.ts";
-import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
-
-const plugin = defineNativePlugin({
+import { imageOperations } from "#image/operations";
+import {
+  dispose as disposeMacos,
+  initialize as initializeMacos,
+} from "#image/platforms/macos";
+import {
+  dispose as disposeWindows,
+  initialize as initializeWindows,
+} from "#image/platforms/windows";
+/** Create, query, encode and explicitly dispose app-owned image resources. */
+export default defineNativePlugin({
   name: "image",
   platforms: {
     macos: {
-      execution: "io",
-      create: createMacosOperations,
+      initialize: initializeMacos,
+      dispose: disposeMacos,
+      operations: imageOperations,
     },
     windows: {
-      execution: "ui",
-      create: createWindowsOperations,
+      thread: "ui",
+      initialize: initializeWindows,
+      dispose: disposeWindows,
+      operations: imageOperations,
     },
   },
-  operations: imageOperations,
 });
-/** Optional image resources; registration grants no operations or filesystem access. */
-export const imagePlugin = plugin.definition;
-export default imagePlugin;
-/** Create, query, encode and explicitly dispose app-owned image resources. */
-export const image = plugin.api;

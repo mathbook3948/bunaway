@@ -1,20 +1,16 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { osOperations } from "./contract.ts";
-import { createOperations } from "./platforms/windows.ts";
-
-const plugin = defineNativePlugin({
+import { osOperations } from "#os/operations";
+import { dispose, initialize } from "#os/platforms/windows";
+/** Read OS and bundled Bun metadata. Architecture describes the running process. */
+export default defineNativePlugin({
   name: "os",
-  operations: osOperations,
   platforms: {
     windows: {
-      execution: "io",
-      create: createOperations,
+      initialize,
+      dispose,
+      operations: osOperations,
     },
   },
 });
-/** Optional Windows metadata plugin. Each read requires its own operation permission. */
-export const osPlugin = plugin.definition;
-export default osPlugin;
-/** Read OS and bundled Bun metadata. Architecture describes the running process. */
-export const os = plugin.api;
-export type { OSInfo, OSLocale, OSUsage } from "./contract.ts";
+
+export type { OSInfo, OSLocale, OSUsage } from "#os/contract";

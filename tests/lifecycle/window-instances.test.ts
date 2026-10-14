@@ -6,17 +6,16 @@ import type {
   WindowSpec,
   WindowState,
 } from "@bunaway/plugin-api/native";
-import {
+import windows, {
   validateWindowCall,
   validateWindowOutput,
-  windowsPlugin,
 } from "@bunaway/plugin-windows";
 import {
   BunawayError,
   type JsonValue,
   NativeRegistry,
 } from "@bunaway/protocol";
-import { WindowOperations } from "#plugins/windows/src/coordinator";
+import { WindowOperations } from "#plugins/windows/src/platforms/coordinator";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
@@ -495,7 +494,7 @@ test("getCurrent uses authenticated request ownership rather than the first wind
     permissions: windowPermissions(),
   };
   const registry = new NativeRegistry([
-    windowsPlugin,
+    windows._definition,
   ]);
   expect(registry.operation("windows.listInstances").name).toBe(
     "windows.listInstances",

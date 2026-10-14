@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { menuPlugin } from "@bunaway/plugin-menu";
-import { trayPlugin } from "@bunaway/plugin-tray";
+import menu from "@bunaway/plugin-menu";
+import tray from "@bunaway/plugin-tray";
 import type { HostResponse, JsonValue } from "@bunaway/protocol";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
@@ -44,22 +44,22 @@ test.skipIf(process.platform !== "win32")(
         root,
         [
           {
-            name: trayPlugin.name,
-            version: trayPlugin.version,
-            native: trayPlugin.native,
-            execution: "ui",
+            name: tray._definition.name,
+            version: tray._definition.version,
+            native: tray._definition.native,
+            thread: "ui",
           },
           {
-            name: menuPlugin.name,
-            version: menuPlugin.version,
-            native: menuPlugin.native,
-            execution: "ui",
+            name: menu._definition.name,
+            version: menu._definition.version,
+            native: menu._definition.native,
+            thread: "ui",
           },
         ],
         `import tray from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/tray/dist/native/windows.js"))};
 import plugin from ${JSON.stringify(operationPath)};
-const createOperations = plugin.nativePlatforms.windows.create;
-export const pluginImports = {tray: {operations: async () => ({createOperations: tray.nativePlatforms.windows.create})}, menu: { operations: async () => ({ createOperations }) } };`,
+const createOperations = plugin._definition.nativePlatforms.windows.create;
+export const pluginImports = {tray: {operations: async () => ({createOperations: tray._definition.nativePlatforms.windows.create})}, menu: { operations: async () => ({ createOperations }) } };`,
       );
       const config: UIConfig = {
         runtime: {
@@ -78,14 +78,14 @@ export const pluginImports = {tray: {operations: async () => ({createOperations:
           },
         },
         plugins: [
-          menuPlugin,
-          trayPlugin,
+          menu._definition,
+          tray._definition,
         ],
         policy: {
           version: 1,
           views: [],
           backend: {
-            permissions: menuPlugin.native.operations.map(
+            permissions: menu._definition.native.operations.map(
               (operation) => operation.name,
             ),
           },
