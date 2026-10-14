@@ -10,7 +10,7 @@ import { appearanceOperations } from "#plugins/appearance/src/operations";
 import {
   booleanPreference,
   colorRef,
-} from "#plugins/appearance/src/preferences";
+} from "#plugins/appearance/src/platforms/windows";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const snapshot: AppearancePreferences = {

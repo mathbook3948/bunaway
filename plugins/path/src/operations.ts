@@ -5,8 +5,8 @@ import {
   pathTextSchema,
   qualifiedPathSchema,
   userDirectorySchema,
-} from "./contract.ts";
-import type { WindowsPath } from "./platforms/windows.ts";
+} from "#path/contract";
+import type { WindowsPath } from "#path/platforms/windows";
 
 const operation = defineNativeOperation<WindowsPath>();
 /** Windows lexical path helpers and OS-selected user directories, not filesystem access. */

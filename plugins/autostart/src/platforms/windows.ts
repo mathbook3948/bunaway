@@ -2,15 +2,19 @@ import { win32 } from "node:path";
 import type { NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
-import type { AutostartStatus, enableSchema } from "../contract.ts";
-import { commandLine, matchesLaunch, registrationName } from "../launch.ts";
+import type { AutostartStatus, enableSchema } from "#autostart/contract";
+import {
+  commandLine,
+  matchesLaunch,
+  registrationName,
+} from "#autostart/platforms/windows-launch";
 import {
   APPROVAL_KEY,
   createRegistry,
   RUN_KEY,
   registryCommand,
   startupState,
-} from "../registry.ts";
+} from "#autostart/platforms/windows-registry";
 
 type EnableInput = z.output<typeof enableSchema>;
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Windows } from "../../native/windows/bun/win32.ts";
-import { Tray } from "../../plugins/tray/src/tray.ts";
+import { Tray } from "../../plugins/tray/src/platforms/windows-tray.ts";
 import { TASKBAR_CREATED, trayCleanup } from "./tray-cleanup-platform.ts";
 
 const windows = new Windows(() => {});

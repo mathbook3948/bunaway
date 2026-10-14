@@ -4,11 +4,11 @@ import type { JsonValue } from "@bunaway/protocol";
 import { NativeRegistry } from "@bunaway/protocol";
 import {
   type GlobalShortcut,
-  hotkeyCodes,
   shortcutSchema,
 } from "#plugins/global-shortcut/src/contract";
 import { globalShortcutOperations } from "#plugins/global-shortcut/src/operations";
-import type { ShortcutDriver } from "#plugins/global-shortcut/src/shortcut-adapter";
+import type { ShortcutDriver } from "#plugins/global-shortcut/src/platforms/windows";
+import { hotkeyCodes } from "#plugins/global-shortcut/src/platforms/windows-bindings";
 import { createShortcutOperations } from "../fixtures/injected-native-plugins.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 

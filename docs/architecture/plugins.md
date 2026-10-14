@@ -121,7 +121,7 @@ plugins/<name>/
   package.json
   src/
     index.ts                 계약과 플랫폼 선언 조립, 공개 export
-    contract.ts              재사용할 값 스키마, 타입과 계약 검증
+    contract.ts              플러그인 공통 스키마, 타입과 계약 검증
     operations.ts            input, output, handler를 갖춘 작업 목록
     calls.ts                 편의 호출 처리, 필요한 기능만 작성
     platforms/
@@ -150,6 +150,18 @@ bun 조건으로 백엔드를 검사한다. typecheck는 두 검사를 모두 �
 화면 함수는 마지막 인자로 NativeInvokeOptions의 signal과 deadline을 받는다.
 백엔드 함수는 명령 또는 setup의 호출 범위를 따르며 별도 옵션을 받지 않는다.
 index.ts는 선언 조립과 공개 export를 담당한다. contract.ts는 OS 자원이나 공개 진입점에 의존하지 않는다.
+공통 입력과 출력, 여러 구현이 공유하는 타입은 contract.ts에서 정의하며 스키마가 있는 타입은
+스키마에서 추론한다. 구현의 내부 상태와 네이티브 바인딩 타입은 해당 구현 파일에 둔다.
+platforms에는 실제 OS 구현과 플랫폼 전용 보조 파일을 둔다. 진입점 밖의 구현을 호출하기만 하는
+래퍼는 합치며, network와 windows처럼 여러 OS가 같은 구현을 쓰면 platforms 안에서 공유한다.
+
+공식 플러그인의 내부 import는 패키지별 비공개 별칭을 사용한다. storage의
+`#storage/contract`, `#storage/platforms/windows`는 package.json의 `imports`로 해석한다.
+소스에는 `./src/*.ts`, 배포 타입에는 `./dist/types/*.d.ts`를 연결한다. 플러그인의
+tsconfig는 rootDir을 src, outDir을 dist/types로 지정해 자체 검사에서 원본 타입을 해석한다.
+테스트처럼 패키지 밖에서 원본 구현을 검사할 때는 customConditions의 `bunaway-source`로
+소스를 선택한다. 이 조건은 저장소 검사에만 사용하며 앱 개발자에게 요구하지 않는다.
+CLI는 패키지 내부 별칭을 번들에 포함하고, 실제로 해석한 플랫폼 파일에서 OS 코드를 분리한다.
 알고리즘과 편의 호출은 역할에 맞는 내부 파일로 분리한다.
 `logger.ts`의 수준별 로그 함수는 생성된 `write`를 받아 만들고, `query.ts`는
 생성된 `get` 결과의 이름 중복을 검사한다.

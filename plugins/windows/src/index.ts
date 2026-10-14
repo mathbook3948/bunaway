@@ -6,10 +6,10 @@ import {
 } from "@bunaway/plugin";
 import type { JsonValue } from "@bunaway/protocol";
 import type { z } from "zod";
-import { createWindows } from "./calls.ts";
-import { windowDefinitions, windowEvents } from "./contract.ts";
-import { createOperations as createMacosOperations } from "./platforms/macos.ts";
-import { createOperations as createWindowsOperations } from "./platforms/windows.ts";
+import { createWindows } from "#windows/calls";
+import { windowDefinitions, windowEvents } from "#windows/contract";
+import { createOperations as createMacosOperations } from "#windows/platforms/macos";
+import { createOperations as createWindowsOperations } from "#windows/platforms/windows";
 
 type WindowDefinitions = typeof windowDefinitions;
 type PlatformOperations<Names extends keyof WindowDefinitions> = {
@@ -125,14 +125,19 @@ export default defineNativePlugin(
 );
 
 export type {
+  Monitor,
+  MonitorSnapshot,
   WindowCall,
   WindowEvents,
   WindowInput,
   WindowOperation,
   WindowOutput,
-} from "./contract.ts";
+} from "#windows/contract";
 export {
   isWindowOperation,
+  monitorChangeSchema,
+  monitorSchema,
+  monitorSnapshotSchema,
   parseWindowCall,
   validateWindowCall,
   validateWindowOutput,
@@ -140,11 +145,4 @@ export {
   windowOperations,
   windowReadinessSchema,
   windowSnapshotSchema,
-} from "./contract.ts";
-
-export type { Monitor, MonitorSnapshot } from "./monitor-contract.ts";
-export {
-  monitorChangeSchema,
-  monitorSchema,
-  monitorSnapshotSchema,
-} from "./monitor-contract.ts";
+} from "#windows/contract";

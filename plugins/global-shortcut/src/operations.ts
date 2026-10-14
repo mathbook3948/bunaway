@@ -1,7 +1,10 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
-import { MAX_GLOBAL_SHORTCUTS, shortcutSchema } from "./contract.ts";
-import type { initialize } from "./platforms/windows.ts";
+import {
+  MAX_GLOBAL_SHORTCUTS,
+  shortcutSchema,
+} from "#global-shortcut/contract";
+import type { initialize } from "#global-shortcut/platforms/windows";
 
 const operation = defineNativeOperation<ReturnType<typeof initialize>>();
 /** App-owned Windows shortcuts and cancellable press waits. Each operation needs its own grant. */

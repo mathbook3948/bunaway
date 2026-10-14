@@ -1,14 +1,13 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { imageOperations } from "./operations.ts";
+import { imageOperations } from "#image/operations";
 import {
   dispose as disposeMacos,
   initialize as initializeMacos,
-} from "./platforms/macos.ts";
+} from "#image/platforms/macos";
 import {
   dispose as disposeWindows,
   initialize as initializeWindows,
-} from "./platforms/windows.ts";
-
+} from "#image/platforms/windows";
 /** Create, query, encode and explicitly dispose app-owned image resources. */
 export default defineNativePlugin({
   name: "image",

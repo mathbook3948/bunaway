@@ -1,13 +1,17 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
-import { fileWithAppSchema, urlWithAppSchema } from "./contract.ts";
-import { fileInput } from "./path.ts";
+import {
+  fileInput,
+  fileWithAppSchema,
+  urlInput,
+  urlWithAppSchema,
+} from "#opener/contract";
 import {
   type initialize as initializeMacos,
   openFile as openMacosFile,
   openUrl as openMacosUrl,
   revealFile as revealMacosFile,
-} from "./platforms/macos.ts";
+} from "#opener/platforms/macos";
 import {
   type initialize as initializeWindows,
   openFile as openWindowsFile,
@@ -16,8 +20,7 @@ import {
   openUrlWith as openWindowsUrlWith,
   revealFile as revealWindowsFile,
   trashFile as trashWindowsFile,
-} from "./platforms/windows.ts";
-import { urlInput } from "./url.ts";
+} from "#opener/platforms/windows";
 
 const macosOperation =
   defineNativeOperation<ReturnType<typeof initializeMacos>>();

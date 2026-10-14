@@ -1,9 +1,15 @@
 import { expect, test } from "bun:test";
 import power from "@bunaway/plugin-power";
 import { NativeRegistry } from "@bunaway/protocol";
-import { MAX_POWER_BLOCKERS, PowerBlockers } from "#plugins/power/src/blockers";
 import { powerOperations } from "#plugins/power/src/operations";
-import { idleSeconds, powerStatus } from "#plugins/power/src/status";
+import {
+  MAX_POWER_BLOCKERS,
+  PowerBlockers,
+} from "#plugins/power/src/platforms/windows-blockers";
+import {
+  idleSeconds,
+  powerStatus,
+} from "#plugins/power/src/platforms/windows-status";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("power", powerOperations);
@@ -280,7 +286,7 @@ test("duplicate blocker starts remain independent; capacity, failed activation a
 
 test("display activation rolls back system counts, retains failed closes, and closes after OS-terminated counts", async () => {
   const { PowerRequestHandles } = await import(
-    "#plugins/power/src/request-handles"
+    "#plugins/power/src/platforms/windows-request-handles"
   );
   const calls: string[] = [];
   let sequence = 0n;

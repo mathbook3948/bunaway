@@ -1,7 +1,6 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { notificationOperations } from "./operations.ts";
-import { dispose, initialize } from "./platforms/windows.ts";
-
+import { notificationOperations } from "#notification/operations";
+import { dispose, initialize } from "#notification/platforms/windows";
 /**
  * Query the host-selected app's Windows notification setting or open the fixed notification Settings page.
  * getStatus takes no input and does not register an identity. openSettings only requests OS navigation;
@@ -26,4 +25,7 @@ export default defineNativePlugin(
   }),
 );
 
-export type { NotificationSetting, NotificationStatus } from "./contract.ts";
+export type {
+  NotificationSetting,
+  NotificationStatus,
+} from "#notification/contract";

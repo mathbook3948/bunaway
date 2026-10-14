@@ -11,6 +11,7 @@ test.each([
   ".ts",
   "",
   ".js",
+  "#",
 ])(
   "plugin build separates OS code and preserves output on failure (extension %j)",
   async (extension) => {
@@ -24,14 +25,23 @@ test.each([
       await mkdir(resolve(root, "src/platforms"), {
         recursive: true,
       });
-      await writeJson(resolve(root, "package.json"), {
+      const manifest = {
         name: "test-plugin",
         version: "1",
         type: "module",
-      });
+        imports: {
+          "#demo/*": {
+            types: "./dist/types/*.d.ts",
+            default: "./src/*.ts",
+          },
+        },
+      };
+      await writeJson(resolve(root, "package.json"), manifest);
       await writeJson(resolve(root, "tsconfig.json"), {
         extends: resolve(frameworkRoot, "tsconfig.base.json"),
         compilerOptions: {
+          rootDir: "./src",
+          outDir: "./dist/types",
           types: [
             "bun",
           ],
@@ -46,11 +56,13 @@ test.each([
         `import { z } from "zod";
 export const operations = { read: { input: z.null(), output: z.string().transform(value => value + "!") } } as const;`,
       );
-      const unified = extension === ".ts";
+      const unified = extension === ".ts" || extension === "#";
+      const prefix = extension === "#" ? "#demo" : ".";
+      const suffix = extension === "#" ? "" : extension;
       const imports = PLATFORMS.map((platform) =>
         unified
-          ? `import { initialize as ${platform}, dispose as ${platform}Dispose } from "./platforms/${platform}${extension}";`
-          : `import { createOperations as ${platform} } from "./platforms/${platform}${extension}";`,
+          ? `import { initialize as ${platform}, dispose as ${platform}Dispose } from "${prefix}/platforms/${platform}${suffix}";`
+          : `import { createOperations as ${platform} } from "${prefix}/platforms/${platform}${suffix}";`,
       ).join("\n");
       const targets = PLATFORMS.map((platform) =>
         unified
@@ -58,7 +70,7 @@ export const operations = { read: { input: z.null(), output: z.string().transfor
           : `${platform}: { thread: "worker", create: ${platform} }`,
       ).join(", ");
       const source = `import { defineNativeOperation, defineNativePlugin } from "@bunaway/plugin";
-import { operations } from "./contract.ts";
+import { operations } from "${prefix}/contract${suffix}";
 ${imports}
 const plugin = defineNativePlugin({ name: "demo", ${unified ? "" : "operations,"} platforms: { ${targets} } });
 export const api = plugin;
@@ -92,6 +104,7 @@ export const createOperations: NativeAdapterFactory = () => ({ execute: () => "$
       expect(neutral).not.toContain("bun:ffi");
       expect(neutral).not.toContain("kernel32.dll");
       expect(neutral).not.toContain("ONLY_MARKER");
+      expect(neutral).not.toContain('from "#demo/');
       const browser = await Bun.build({
         entrypoints: [
           resolve(root, "dist/index.js"),
@@ -104,6 +117,7 @@ export const createOperations: NativeAdapterFactory = () => ({ execute: () => "$
         const bundle = await Bun.file(
           resolve(root, "dist/native", `${platform}.js`),
         ).text();
+        expect(bundle).not.toContain('from "#demo/');
         for (const other of PLATFORMS) {
           const marker = `${other.toUpperCase()}_ONLY_MARKER`;
           if (other === platform) {
@@ -157,9 +171,8 @@ export const createOperations: NativeAdapterFactory = () => ({ execute: () => "$
         await Bun.write(entry, source);
       }
       await writeJson(resolve(root, "package.json"), {
-        name: "test-plugin",
+        ...manifest,
         version: "2",
-        type: "module",
       });
       await buildNativePlugin(root);
       const updated = await Bun.file(resolve(root, "dist/index.js")).text();
@@ -177,9 +190,8 @@ export const createOperations: NativeAdapterFactory = () => ({ execute: () => "$
         "",
       ]) {
         await writeJson(resolve(root, "package.json"), {
-          name: "test-plugin",
+          ...manifest,
           version,
-          type: "module",
         });
         await expect(buildNativePlugin(root)).rejects.toThrow(
           "package.json version",

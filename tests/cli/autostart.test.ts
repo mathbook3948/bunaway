@@ -120,7 +120,7 @@ void autostart.getAutostartStatus();
     expect(browser.success).toBe(true);
     expect(
       Object.keys(browser.metafile?.inputs ?? {}).some((path) =>
-        /(?:plugins[\\/]autostart[\\/]src[\\/](?:windows|registry|launch)\.ts|bun:ffi)/.test(
+        /(?:plugins[\\/]autostart[\\/]src[\\/]platforms[\\/]|bun:ffi)/.test(
           path,
         ),
       ),

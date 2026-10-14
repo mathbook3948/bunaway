@@ -1,9 +1,11 @@
 import { BunawayError } from "@bunaway/protocol";
-import { createFiles, type MacosFiles } from "../macos-file.ts";
-import { normalizeMacosFilePath } from "../macos-path.ts";
-import { createWorkspace, type MacosWorkspace } from "../macos-workspace.ts";
-import { normalizeUrl } from "../url.ts";
-
+import { createFiles, type MacosFiles } from "#opener/platforms/macos-file";
+import { normalizeMacosFilePath } from "#opener/platforms/macos-path";
+import {
+  createWorkspace,
+  type MacosWorkspace,
+} from "#opener/platforms/macos-workspace";
+import { normalizeUrl } from "#opener/url";
 /** Own one workspace and checked-file provider, including disposal after use. */
 export function createState(workspace: MacosWorkspace, files: MacosFiles) {
   return {

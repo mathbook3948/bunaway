@@ -6,7 +6,7 @@ import {
   statSync,
 } from "node:fs";
 import { resolve } from "node:path";
-import type { LogInput } from "../contract.ts";
+import type { LogInput } from "#log/contract";
 
 const LOG_ROTATION_THRESHOLD_BYTES = 1024 * 1024;
 

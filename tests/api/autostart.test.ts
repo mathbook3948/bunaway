@@ -10,13 +10,16 @@ import {
 } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
 import { operations } from "#native/host-api/bun/plugins";
+import type { AppLaunch } from "#plugins/autostart/src/contract";
+import { autostartOperations } from "#plugins/autostart/src/operations";
 import {
-  type AppLaunch,
   commandLine,
   registrationName,
-} from "#plugins/autostart/src/launch";
-import { autostartOperations } from "#plugins/autostart/src/operations";
-import { registryCommand, startupState } from "#plugins/autostart/src/registry";
+} from "#plugins/autostart/src/platforms/windows-launch";
+import {
+  registryCommand,
+  startupState,
+} from "#plugins/autostart/src/platforms/windows-registry";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("autostart", autostartOperations);
@@ -498,7 +501,7 @@ test("host supplies trusted app metadata only to a registered adapter", async ()
 });
 test("MSIX package identity is unsupported and native DLL disposal is idempotent", () => {
   const registryModule = new URL(
-    "../../plugins/autostart/src/registry.ts",
+    "../../plugins/autostart/src/platforms/windows-registry.ts",
     import.meta.url,
   ).href;
   const child = Bun.spawnSync([

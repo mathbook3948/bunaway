@@ -1,14 +1,17 @@
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
-import { nullableTextSchema } from "../contract.ts";
 import {
   type ClipboardFormat,
   fitsFormatBudget,
   imageSchema,
+  nullableTextSchema,
   type writeFormatsSchema,
-} from "../formats.ts";
-import { createPasteboard, type Pasteboard } from "../macos-pasteboard.ts";
-import { invalidPasteboardData } from "../macos-tiff.ts";
+} from "#clipboard/contract";
+import {
+  createPasteboard,
+  type Pasteboard,
+} from "#clipboard/platforms/macos-pasteboard";
+import { invalidPasteboardData } from "#clipboard/platforms/macos-tiff";
 
 const formats: ClipboardFormat[] = [
   "text/plain",

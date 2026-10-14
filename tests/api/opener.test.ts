@@ -10,13 +10,14 @@ import {
   type Policy,
 } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
-import createOperationsDefinition from "#plugins/opener/src/index";
-import { windowsOperations as openerOperations } from "#plugins/opener/src/operations";
 import {
   MAX_FILE_PATH_LENGTH,
-  normalizeFilePath,
-} from "#plugins/opener/src/path";
-import { MAX_URL_LENGTH, normalizeUrl } from "#plugins/opener/src/url";
+  MAX_URL_LENGTH,
+} from "#plugins/opener/src/contract";
+import createOperationsDefinition from "#plugins/opener/src/index";
+import { windowsOperations as openerOperations } from "#plugins/opener/src/operations";
+import { normalizeFilePath } from "#plugins/opener/src/platforms/windows-path";
+import { normalizeUrl } from "#plugins/opener/src/url";
 import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 

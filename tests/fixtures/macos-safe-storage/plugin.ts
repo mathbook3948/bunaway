@@ -3,12 +3,12 @@ import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { isMainThread } from "node:worker_threads";
 import { defineNativePlugin, type NativeEnvironment } from "@bunaway/plugin";
-import { MacosKeychain } from "../../../plugins/safe-storage/src/macos-keychain.ts";
 import { safeStorageOperations } from "../../../plugins/safe-storage/src/operations.ts";
 import {
   dispose,
   initialize,
 } from "../../../plugins/safe-storage/src/platforms/macos.ts";
+import { MacosKeychain } from "../../../plugins/safe-storage/src/platforms/macos-keychain.ts";
 import { keychainFixture } from "../../lifecycle/fixtures/macos-keychain.ts";
 
 /** Production factory and schemas with only the Keychain location isolated for native host tests. */

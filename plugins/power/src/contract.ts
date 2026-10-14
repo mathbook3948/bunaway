@@ -1,5 +1,4 @@
 import { z } from "zod";
-
 export const MAX_POWER_BLOCKERS = 128;
 
 const nullableBoolean = z.union([

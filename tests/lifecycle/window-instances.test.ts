@@ -15,7 +15,7 @@ import {
   type JsonValue,
   NativeRegistry,
 } from "@bunaway/protocol";
-import { WindowOperations } from "#plugins/windows/src/coordinator";
+import { WindowOperations } from "#plugins/windows/src/platforms/coordinator";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 

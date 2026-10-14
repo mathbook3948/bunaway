@@ -113,9 +113,7 @@ void power.getStatus();
     expect(browser.success).toBe(true);
     expect(
       Object.keys(browser.metafile?.inputs ?? {}).some((path) =>
-        /(?:plugins[\\/]power[\\/]src[\\/](?:win32|platforms[\\/]windows)\.ts|bun:ffi)/.test(
-          path,
-        ),
+        /(?:plugins[\\/]power[\\/]src[\\/]platforms[\\/]|bun:ffi)/.test(path),
       ),
     ).toBe(false);
   } finally {

@@ -1,7 +1,6 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { osOperations } from "./operations.ts";
-import { dispose, initialize } from "./platforms/windows.ts";
-
+import { osOperations } from "#os/operations";
+import { dispose, initialize } from "#os/platforms/windows";
 /** Read OS and bundled Bun metadata. Architecture describes the running process. */
 export default defineNativePlugin({
   name: "os",
@@ -14,4 +13,4 @@ export default defineNativePlugin({
   },
 });
 
-export type { OSInfo, OSLocale, OSUsage } from "./contract.ts";
+export type { OSInfo, OSLocale, OSUsage } from "#os/contract";

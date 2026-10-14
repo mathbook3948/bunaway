@@ -1,5 +1,4 @@
 import { z } from "zod";
-
 /** Transport limits leave space for protocol envelopes and base64 expansion. */
 export const MAX_BODY_BYTES = 64 * 1024;
 export const MAX_HEADER_BYTES = 16 * 1024;

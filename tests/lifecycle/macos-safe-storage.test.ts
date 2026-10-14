@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
-import { transformMacosEnvelope } from "../../plugins/safe-storage/src/macos-envelope.ts";
+import { transformMacosEnvelope } from "../../plugins/safe-storage/src/platforms/macos-envelope.ts";
 import {
   keychainError,
   type MacosKeyStore,
-} from "../../plugins/safe-storage/src/macos-key-store.ts";
+} from "../../plugins/safe-storage/src/platforms/macos-key-store.ts";
 import { macosSafeStorageOperations as macosOperations } from "../fixtures/injected-native-plugins.ts";
 
 function fixture() {

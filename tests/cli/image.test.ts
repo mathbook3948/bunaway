@@ -160,9 +160,7 @@ void image.getInfo({ id: "00000000-0000-4000-8000-000000000000" });
     expect(browser.success).toBe(true);
     expect(
       Object.keys(browser.metafile?.inputs ?? {}).some((path) =>
-        /(?:plugins[\\/]image[\\/]src[\\/](?:wic|image-io|image-io-bindings|platforms[\\/](?:windows|macos))\.ts|bun:ffi)/.test(
-          path,
-        ),
+        /(?:plugins[\\/]image[\\/]src[\\/]platforms[\\/]|bun:ffi)/.test(path),
       ),
     ).toBe(false);
   } finally {

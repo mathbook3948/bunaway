@@ -11,8 +11,8 @@ import {
   resizeSchema,
   resourceSchema,
   rgbaSchema,
-} from "./contract.ts";
-import type { ImagePlatform } from "./image-platform.ts";
+} from "#image/contract";
+import type { ImagePlatform } from "#image/platforms/image-platform";
 
 const operation = defineNativeOperation<ImagePlatform>();
 /** Both codecs share complete image operations, including cancellation and app-owned resource lifetime. */

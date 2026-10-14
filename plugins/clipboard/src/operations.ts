@@ -1,16 +1,17 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
-import { hasFormatSchema, nullableTextSchema } from "./contract.ts";
 import {
   formatSchema,
+  hasFormatSchema,
   imageSchema,
+  nullableTextSchema,
   readFormatsSchema,
   readResultSchema,
   writeFormatsSchema,
-} from "./formats.ts";
-import type { MacosClipboard } from "./platforms/macos.ts";
-import type { WindowsClipboard } from "./platforms/windows.ts";
-import { writeTextSchema } from "./text.ts";
+  writeTextSchema,
+} from "#clipboard/contract";
+import type { MacosClipboard } from "#clipboard/platforms/macos";
+import type { WindowsClipboard } from "#clipboard/platforms/windows";
 
 const macosOperation = defineNativeOperation<MacosClipboard>();
 const windowsOperation = defineNativeOperation<WindowsClipboard>();

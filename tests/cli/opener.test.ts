@@ -181,9 +181,7 @@ void opener.openUrlWith("https://example.com/", "C:/browser.exe");
     expect(browser.success).toBe(true);
     expect(
       Object.keys(browser.metafile?.inputs ?? {}).some((path) =>
-        /(?:plugins[\\/]opener[\\/]src[\\/](?:windows|shell)\.ts|bun:ffi)/.test(
-          path,
-        ),
+        /(?:plugins[\\/]opener[\\/]src[\\/]platforms[\\/]|bun:ffi)/.test(path),
       ),
     ).toBe(false);
 

@@ -11,7 +11,7 @@ import tray from "@bunaway/plugin-tray";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import createOperationsDefinition from "#plugins/tray/src/index";
 import { trayOperations } from "#plugins/tray/src/operations";
-import { trayIconImage } from "#plugins/tray/src/tray-icon-data";
+import { trayIconImage } from "#plugins/tray/src/platforms/windows-icon-data";
 import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 import { trayIco, trayPngIco } from "../fixtures/tray-icon.ts";

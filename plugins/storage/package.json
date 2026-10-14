@@ -27,5 +27,12 @@
   },
   "dependencies": {
     "zod": "4.6.5"
+  },
+  "imports": {
+    "#storage/*": {
+      "bunaway-source": "./src/*.ts",
+      "types": "./dist/types/*.d.ts",
+      "default": "./src/*.ts"
+    }
   }
 }

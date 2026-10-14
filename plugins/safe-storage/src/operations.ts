@@ -8,7 +8,7 @@ import {
   type SafeStorageInstance,
   textInputSchema,
   textSchema,
-} from "./contract.ts";
+} from "#safe-storage/contract";
 
 /** Both implementations share one contract; each operation still needs its own policy grant. */
 const operation = defineNativeOperation<SafeStorageInstance>();

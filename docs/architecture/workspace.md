@@ -35,6 +35,12 @@ Bun workspaces에는 `docs/site`, `packages/*`, `plugins/*`와
 CLI의 실행 파일 컴파일 구현을, `#native/windows/bun/channel`은 Windows 채널 구현을
 가리킨다. 이 경로는 저장소 도구용이며 생성 앱의 의존성이나 패키지 export를 대체하지 않는다.
 
+공식 플러그인 내부에서는 각 패키지의 비공개 imports를 사용한다. 예를 들어
+`#storage/contract`와 `#storage/platforms/windows`는 storage 패키지의 소스를 가리킨다.
+이는 저장소 루트의 `#plugins/*`와 별개이며 플러그인을 따로 설치해도 자체 manifest로 해석한다.
+공개 타입은 같은 별칭의 types 조건으로 dist/types를 읽는다. 원본 구현을 직접 검사하는
+저장소 테스트만 bunaway-source 조건으로 src를 선택한다.
+
 모든 패키지는 비공개다. `protocol`은 스키마, 검증, 직렬화, 버전 협상을 구현했고
 `client-sdk`는 화면용 `invoke`, `listen`와 인자 없는 `createClient()`를
 제공하며 문서별 WebView 연결, hello, 준비 대기, 페이지 종료 시 정리를 내부에서 처리한다.
@@ -49,8 +55,8 @@ core와 protocol은 portable 환경을 유지한다.
 `@bunaway/runtime-bun/window-config` 경로로 개발 및 창 설정 helper를 사용한다. CLI는
 create/validate/doctor/dev/build와 vanilla, Vite, React, Vue, Svelte 템플릿을
 구현했다. 저장, 로그와 기능 조회 플러그인은 plugins/의 개별 패키지다. 각 패키지는
-index.ts에 기능을 선언하고 windows.ts에 플랫폼 구현을 둔다. 비교와 편의 호출의 처리
-로직은 역할에 따라 logger.ts, scope.ts와 query.ts로 분리한다.
+index.ts에 기능을 선언하고 contract.ts에 공통 계약, platforms에 실제 플랫폼 구현을 둔다.
+편의 호출은 calls.ts나 logger.ts처럼 역할에 맞는 파일에 둔다.
 추가 처리 없는 기능에는 내부 처리 파일을 요구하지 않는다.
 다른 내부 파일과 폴더는 제작자가 선택한다.
 

@@ -6,7 +6,6 @@ PNG, JPEG와 BMP bytes, data URL에서 앱 소유 이미지 리소스를 만들�
 
 ```ts
 import image from "@bunaway/plugin-image";
-import image from "@bunaway/plugin-image";
 
 // 앱 정의에 plugins: [image]을 등록한다.
 const resource = await image.createRGBA({ width: 1, height: 1, rgba: "/wAAgA==" });

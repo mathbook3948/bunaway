@@ -6,6 +6,11 @@
 `fixtures/native-platform.ts`는 실제 플러그인 정의의 SDK factory를 사용한다. 네이티브 드라이버를 주입하는
 fixture도 운영 작업 목록과 자원 소유자를 재사용하며 별도 dispatch 구현을 만들지 않는다.
 `cli/plugin-build.test.ts`는 재내보내기와 operation 객체, 네이티브 스키마 변환 보존 및 공개 선언에서 내부 타입 제외를 검사한다.
+패키지 내부의 # 별칭도 상대 import와 같은 OS 분리와 빌드 실패 시 출력 보존을 적용한다.
+`cli/distribution.test.ts`는 설치한 CLI로 별칭을 사용하는 외부 플러그인을 빌드한 뒤,
+src 없이 dist만 설치해 공개 호출과 재내보낸 타입을 검사한다.
+원본 구현을 직접 검사하는 tests/tsconfig.json은 bunaway-source 조건으로 각 플러그인의
+소스를 선택한다. 배포 패키지를 검사하는 생성 앱은 이 조건을 사용하지 않는다.
 
 `api/native-plugin-object.test.ts`는 기본 export를 직접 호출하고 `defineApp`에 등록하는 계약,
 이벤트 타입 추론, 숨겨진 등록 메타데이터와 예약 이름의 충돌 거부를 검사한다.

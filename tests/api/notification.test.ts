@@ -203,7 +203,7 @@ test("public helpers preserve caller context, cancellation and native failures",
 
 test("native WinRT status and fixed Settings calls balance resources on failures and preserve existing STA ownership", () => {
   const module = new URL(
-    "../../plugins/notification/src/winrt.ts",
+    "../../plugins/notification/src/platforms/windows.ts",
     import.meta.url,
   ).href;
   const child = Bun.spawnSync([

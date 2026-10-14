@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { MAX_IMAGE_BYTES, MAX_RESOURCES } from "#plugins/image/src/contract";
-import { ImageResources } from "#plugins/image/src/resources";
+import { ImageResources } from "#plugins/image/src/platforms/resources";
 
 test("image IDs retain exact pixels and become unavailable after idempotent disposal or app shutdown", () => {
   const resources = new ImageResources();

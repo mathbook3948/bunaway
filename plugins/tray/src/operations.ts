@@ -6,7 +6,7 @@ import {
   snapshotSchema,
   tooltipSchema,
   trayEventSchema,
-} from "./contract.ts";
+} from "#tray/contract";
 import {
   focus,
   get,
@@ -16,7 +16,7 @@ import {
   setIcon,
   setTooltip,
   waitForEvent,
-} from "./platforms/windows.ts";
+} from "#tray/platforms/windows";
 
 const operation = defineNativeOperation<ReturnType<typeof initialize>>();
 /** Controls and input waits for the app's configured Windows tray. */

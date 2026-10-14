@@ -1,8 +1,8 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
-import { logInputSchema } from "./contract.ts";
-import { write as writeMacos } from "./platforms/macos.ts";
-import { write as writeWindows } from "./platforms/windows.ts";
+import { logInputSchema } from "#log/contract";
+import { write as writeMacos } from "#log/platforms/macos";
+import { write as writeWindows } from "#log/platforms/windows";
 
 const operation = defineNativeOperation<string>();
 /** Each platform declares its own native log writer and receives the trusted caller source. */

@@ -1,6 +1,6 @@
 import { defineNativeOperation } from "@bunaway/plugin";
-import { processInputSchema, processResultSchema } from "./contract.ts";
-import { type initialize, run } from "./platforms/windows.ts";
+import { processInputSchema, processResultSchema } from "#process/contract";
+import { type initialize, run } from "#process/platforms/windows";
 
 const operation = defineNativeOperation<ReturnType<typeof initialize>>();
 /** One bounded Windows process invocation without a shell or persistent handle. */

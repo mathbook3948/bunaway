@@ -1,10 +1,11 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { PLATFORMS } from "@bunaway/plugin-api";
 import {
   ownedDirectory,
   publishOwnedDirectory,
 } from "../../packaging/src/directories.ts";
+import { inside } from "./files.ts";
 import { readPluginDeclaration } from "./plugins.ts";
 import { run, runWorker } from "./processes.ts";
 
@@ -54,6 +55,21 @@ export async function buildNativePlugin(directory = "."): Promise<string> {
           {
             name: "bunaway-plugin-platforms",
             setup(builder) {
+              // Bundle package-local imports so installed outputs never resolve back to src.
+              builder.onResolve(
+                {
+                  filter: /^#/,
+                },
+                ({ path, importer }) => {
+                  const resolved = Bun.resolveSync(path, dirname(importer));
+                  if (inside(resolve(root, "src"), resolved)) {
+                    return {
+                      path: resolved,
+                      external: false,
+                    };
+                  }
+                },
+              );
               // Keep the shared SDK external while supplying this package's build metadata.
               builder.onResolve(
                 {

@@ -5,8 +5,8 @@ import type {
   ClipboardFormat,
   imageSchema,
   writeFormatsSchema,
-} from "../formats.ts";
-import { createClipboard } from "../win32.ts";
+} from "#clipboard/contract";
+import { createClipboard } from "#clipboard/platforms/windows-bindings";
 
 const OPEN_TIMEOUT_MS = 250;
 const OPEN_RETRY_MS = 10;

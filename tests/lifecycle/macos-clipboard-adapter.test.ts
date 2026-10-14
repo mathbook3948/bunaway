@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import type { JsonValue } from "@bunaway/protocol";
-import type { ClipboardItem } from "#plugins/clipboard/src/formats";
-import { MAX_IMAGE_BYTES } from "#plugins/clipboard/src/formats";
-import type { Pasteboard } from "#plugins/clipboard/src/macos-pasteboard";
+import type { ClipboardItem } from "#plugins/clipboard/src/contract";
+import { MAX_IMAGE_BYTES } from "#plugins/clipboard/src/contract";
+import type { Pasteboard } from "#plugins/clipboard/src/platforms/macos-pasteboard";
 import {
   decodeTIFF,
   encodeTIFF,
   MAX_TIFF_BYTES,
-} from "#plugins/clipboard/src/macos-tiff";
+} from "#plugins/clipboard/src/platforms/macos-tiff";
 import { pasteboardOperations } from "../fixtures/injected-native-plugins.ts";
 
 const image = {

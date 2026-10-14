@@ -1,6 +1,6 @@
 import { defineNativePlugin, type NativeEnvironment } from "@bunaway/plugin";
-import { capabilitiesOperations } from "./operations.ts";
-import { createCapabilities } from "./query.ts";
+import { capabilitiesOperations } from "#capabilities/operations";
+import { createCapabilities } from "#capabilities/query";
 
 const snapshot = (environment: NativeEnvironment) => environment.capabilities;
 
@@ -22,4 +22,4 @@ export default defineNativePlugin(
   (api) => createCapabilities(api.get),
 );
 
-export type { Capabilities } from "./contract.ts";
+export type { Capabilities } from "#capabilities/contract";

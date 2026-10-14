@@ -1,7 +1,6 @@
 import { defineNativePlugin, type NativeInvokeOptions } from "@bunaway/plugin";
-import { powerOperations } from "./operations.ts";
-import { dispose, initialize } from "./platforms/windows.ts";
-
+import { powerOperations } from "#power/operations";
+import { dispose, initialize } from "#power/platforms/windows";
 /** Each operation needs its own grant. Repeated starts allocate independently stoppable requests. */
 export default defineNativePlugin(
   {
@@ -28,4 +27,4 @@ export type {
   PowerBlocker,
   PowerBlockerType,
   PowerStatus,
-} from "./contract.ts";
+} from "#power/contract";

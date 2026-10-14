@@ -1,5 +1,4 @@
 import { z } from "zod";
-
 /** Combined captured stdout/stderr and input limits, before base64 expansion. */
 export const MAX_PROCESS_BYTES = 64 * 1024;
 const MAX_COMMAND_LINE_UNITS = 32766;

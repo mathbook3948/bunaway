@@ -1,6 +1,5 @@
 import type { NativeInvokeOptions, NativePluginAPI } from "@bunaway/plugin";
-import type { windowDefinitions } from "./contract.ts";
-
+import type { windowDefinitions } from "#windows/contract";
 /** Add argument-free window lookup helpers to the typed operations. */
 export function createWindows(api: NativePluginAPI<typeof windowDefinitions>) {
   return {

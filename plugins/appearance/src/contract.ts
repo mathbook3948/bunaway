@@ -27,3 +27,8 @@ export const preferencesSchema = z.strictObject({
   }),
 });
 export type AppearancePreferences = z.output<typeof preferencesSchema>;
+
+/** Both platforms read the same preference snapshot without platform-specific handler decisions. */
+export type AppearanceInstance = {
+  read(): AppearancePreferences;
+};

@@ -8,8 +8,8 @@ import {
   idleTimeSchema,
   MAX_POWER_BLOCKERS,
   statusSchema,
-} from "./contract.ts";
-import type { WindowsPower } from "./platforms/windows.ts";
+} from "#power/contract";
+import type { WindowsPower } from "#power/platforms/windows";
 
 const operation = defineNativeOperation<WindowsPower>();
 /** Windows power queries and independently owned sleep/display request handles. */

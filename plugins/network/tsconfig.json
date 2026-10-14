@@ -3,6 +3,8 @@
   "include": ["src/**/*.ts"],
   "compilerOptions": {
     "types": ["bun"],
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "rootDir": "./src",
+    "outDir": "./dist/types"
   }
 }

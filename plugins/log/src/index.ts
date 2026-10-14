@@ -1,6 +1,6 @@
 import { defineNativePlugin, type NativeEnvironment } from "@bunaway/plugin";
-import { createLog } from "./logger.ts";
-import { macosOperations, windowsOperations } from "./operations.ts";
+import { createLog } from "#log/logger";
+import { macosOperations, windowsOperations } from "#log/operations";
 
 const dataRoot = (environment: NativeEnvironment) => environment.dataRoot;
 
@@ -22,4 +22,4 @@ export default defineNativePlugin(
   (api) => createLog(api.write),
 );
 
-export type { LogInput } from "./contract.ts";
+export type { LogInput } from "#log/contract";

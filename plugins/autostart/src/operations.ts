@@ -1,12 +1,12 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
-import { enableSchema, statusSchema } from "./contract.ts";
+import { enableSchema, statusSchema } from "#autostart/contract";
 import {
   disable,
   enable,
   getStatus,
   type initialize,
-} from "./platforms/windows.ts";
+} from "#autostart/platforms/windows";
 
 const operation = defineNativeOperation<ReturnType<typeof initialize>>();
 /** Complete Windows login registration operations. Imports never register the app. */

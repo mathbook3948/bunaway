@@ -6,19 +6,19 @@ import {
   AUTOSTART_ARGUMENT,
   AUTOSTART_HIDDEN_ARGUMENT,
 } from "@bunaway/protocol";
+import type { AppLaunch } from "#plugins/autostart/src/contract";
+import createOperationsDefinition from "#plugins/autostart/src/index";
 import {
-  type AppLaunch,
   commandLine,
   registrationName,
-} from "#plugins/autostart/src/launch";
-import createOperationsDefinition from "#plugins/autostart/src/index";
-import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
-
+} from "#plugins/autostart/src/platforms/windows-launch";
 import {
   APPROVAL_KEY,
   createRegistry,
   RUN_KEY,
-} from "#plugins/autostart/src/registry";
+} from "#plugins/autostart/src/platforms/windows-registry";
+import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
+
 const createOperations = createOperationsFactory(
   createOperationsDefinition,
   "windows",

@@ -55,7 +55,7 @@ test.each([
         `
         import {workerData} from "node:worker_threads";
         import {defineNativePlugin} from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
-        import {ImageResources} from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/image/src/resources.ts"))};
+        import {ImageResources} from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/image/src/platforms/resources.ts"))};
         import {z} from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
         const state=new Int32Array(workerData.state);
         const slots=${JSON.stringify(slots)};

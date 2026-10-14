@@ -1,9 +1,8 @@
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
-import { PowerBlockers } from "../blockers.ts";
-import type { blockerInputSchema } from "../contract.ts";
-import { createPower } from "../win32.ts";
-
+import type { blockerInputSchema } from "#power/contract";
+import { createPower } from "#power/platforms/windows-bindings";
+import { PowerBlockers } from "#power/platforms/windows-blockers";
 /** Own DLLs and power request handles on the host I/O worker. */
 export class WindowsPower {
   private readonly native = createPower();

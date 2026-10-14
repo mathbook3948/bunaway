@@ -1,3 +1,4 @@
+import type { NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
 import { z } from "zod";
 
@@ -67,3 +68,5 @@ export function validateAutostartInput(operation: string, input: JsonValue) {
     });
   }
 }
+
+export type AppLaunch = NonNullable<NativeEnvironment["app"]>;

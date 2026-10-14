@@ -1,7 +1,6 @@
 import { BunawayError } from "@bunaway/plugin";
-import { safeStorageLimits } from "../contract.ts";
-import { WindowsDataProtection } from "../dpapi.ts";
-
+import { safeStorageLimits } from "#safe-storage/contract";
+import { WindowsDataProtection } from "#safe-storage/platforms/windows-dpapi";
 /** Lazily bind DPAPI so an unavailable provider can still be queried safely. */
 export class WindowsSafeStorage {
   private native: WindowsDataProtection | undefined;

@@ -1,7 +1,7 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
-import { infoSchema, localeSchema, usageSchema } from "./contract.ts";
-import type { initialize } from "./platforms/windows.ts";
+import { infoSchema, localeSchema, usageSchema } from "#os/contract";
+import type { initialize } from "#os/platforms/windows";
 
 const operation = defineNativeOperation<ReturnType<typeof initialize>>();
 /** Read-only Windows metadata; no paths or environment variables are exposed. */

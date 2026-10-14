@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test";
 import storage from "@bunaway/plugin-storage";
 import { NativeRegistry, serializeHostResponse } from "@bunaway/protocol";
-import {
-  directoryEntries,
-  MAX_DIRECTORY_ENTRIES,
-} from "../../plugins/storage/src/directory-entries.ts";
+import { MAX_DIRECTORY_ENTRIES } from "../../plugins/storage/src/contract.ts";
+import { directoryEntries } from "../../plugins/storage/src/platforms/windows-directory-entries.ts";
 import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 

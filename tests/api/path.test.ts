@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import path from "@bunaway/plugin-path/native/windows";
 import { NativeRegistry } from "@bunaway/protocol";
-import { knownFolderId } from "../../plugins/path/src/known-folders.ts";
 import { pathOperations } from "../../plugins/path/src/operations.ts";
+import { knownFolderId } from "../../plugins/path/src/platforms/windows-known-folders.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("path", pathOperations);

@@ -1,6 +1,5 @@
 import type { NativeMenuItem } from "@bunaway/plugin-api/native";
 import { z } from "zod";
-
 export const MAX_MENU_RESOURCES = 32;
 export const MAX_MENU_ITEMS = 256;
 export const MAX_MENU_DEPTH = 8;

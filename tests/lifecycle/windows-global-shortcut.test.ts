@@ -2,10 +2,8 @@ import { dlopen, ptr } from "bun:ffi";
 import { expect, test } from "bun:test";
 import type { NativeShortcutServices } from "@bunaway/plugin-api/native";
 import type { JsonValue } from "@bunaway/protocol";
-import {
-  hotkeyCodes,
-  shortcutSchema,
-} from "#plugins/global-shortcut/src/contract";
+import { shortcutSchema } from "#plugins/global-shortcut/src/contract";
+import { hotkeyCodes } from "#plugins/global-shortcut/src/platforms/windows-bindings";
 import { createShortcutOperations } from "../fixtures/injected-native-plugins.ts";
 
 test.skipIf(process.platform !== "win32")(
@@ -13,7 +11,7 @@ test.skipIf(process.platform !== "win32")(
   async () => {
     const { Windows } = await import("#native/windows/bun/win32");
     const { Win32Shortcuts } = await import(
-      "#plugins/global-shortcut/src/win32"
+      "#plugins/global-shortcut/src/platforms/windows-bindings"
     );
     const windows = new Windows(() => {});
     const native = dlopen("user32.dll", {

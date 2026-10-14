@@ -12,7 +12,7 @@ import {
   type resourceSchema,
   type targetSchema,
   type updateItemSchema,
-} from "../contract.ts";
+} from "#menu/contract";
 
 type ResourceInput = z.output<typeof resourceSchema>;
 type TargetInput = z.output<typeof targetSchema>;

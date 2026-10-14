@@ -10,24 +10,22 @@ import {
   writeSync,
 } from "node:fs";
 import { BunawayError } from "@bunaway/plugin";
-import { MAX_STORAGE_BYTES } from "../bytes.ts";
-import type {
-  StorageBytesWrite,
-  StorageDirectoryCreate,
-  StorageLocation,
-  StorageMetadata,
-  StorageTransfer,
-  StorageWrite,
-} from "../contract.ts";
 import {
   MAX_DIRECTORY_ENTRIES,
+  MAX_STORAGE_BYTES,
+  type StorageBytesWrite,
+  type StorageDirectoryCreate,
   type StorageDirectoryEntry,
-} from "../directory-entries.ts";
+  type StorageLocation,
+  type StorageMetadata,
+  type StorageTransfer,
+  type StorageWrite,
+} from "#storage/contract";
 import {
   DARWIN_DIRENT_HEADER_BYTES,
   darwinDirectoryEntry,
   darwinDirectoryRecordLength,
-} from "./macos-directory-entries.ts";
+} from "#storage/platforms/macos-directory-entries";
 
 const LIB_SYSTEM = "/usr/lib/libSystem.B.dylib";
 const MAX_PATH_BYTES = 1024;

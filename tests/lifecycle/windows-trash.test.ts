@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import {
   link,
   mkdir,
-  readFile,
   readdir,
+  readFile,
   rm,
   symlink,
   unlink,
@@ -11,9 +11,9 @@ import {
 } from "node:fs/promises";
 import { join, parse, resolve } from "node:path";
 import createOperationsDefinition from "#plugins/opener/src/index";
+import { createFiles } from "#plugins/opener/src/platforms/windows-file";
 import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
 
-import { createFiles } from "#plugins/opener/src/windows-file";
 const createOperations = createOperationsFactory(
   createOperationsDefinition,
   "windows",

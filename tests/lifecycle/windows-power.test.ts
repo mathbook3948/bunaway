@@ -1,13 +1,13 @@
-import { nativeFactory } from "../fixtures/native-platform.ts";
 import { expect, test } from "bun:test";
 import { powerOperations } from "#plugins/power/src/operations";
+import { nativeFactory } from "../fixtures/native-platform.ts";
 
 test.skipIf(process.platform !== "win32")(
   "real Windows power status, session idle and power request handle lifecycle",
   async () => {
     const [{ createPower }, { default: nativeDefinition }, { dlopen, ptr }] =
       await Promise.all([
-        import("#plugins/power/src/win32"),
+        import("#plugins/power/src/platforms/windows-bindings"),
         import("#plugins/power/src/index"),
         import("bun:ffi"),
       ]);

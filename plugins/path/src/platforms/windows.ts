@@ -1,7 +1,6 @@
 import { win32 } from "node:path";
-import type { UserDirectory } from "../contract.ts";
-import { WindowsKnownFolders } from "../known-folders.ts";
-
+import type { UserDirectory } from "#path/contract";
+import { WindowsKnownFolders } from "#path/platforms/windows-known-folders";
 /** Windows path semantics never inherit the I/O Worker's current working directory. */
 export class WindowsPath {
   private folders: WindowsKnownFolders | undefined;

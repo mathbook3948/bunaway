@@ -9,7 +9,7 @@ test.skipIf(process.platform !== "win32")(
   "actual tray tooltip/ICO updates, mouse defaults and Explorer re-registration preserve ownership",
   async () => {
     const { Windows } = await import("#native/windows/bun/win32");
-    const { Tray } = await import("#plugins/tray/src/tray");
+    const { Tray } = await import("#plugins/tray/src/platforms/windows-tray");
     let createdWindows = 0;
     class StartupWindows extends Windows {
       override create(

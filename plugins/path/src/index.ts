@@ -1,7 +1,6 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { pathOperations } from "./operations.ts";
-import { dispose, initialize } from "./platforms/windows.ts";
-
+import { pathOperations } from "#path/operations";
+import { dispose, initialize } from "#path/platforms/windows";
 /** Promise-based Windows lexical path helpers and current-user directory queries. */
 export default defineNativePlugin({
   name: "path",
@@ -14,4 +13,4 @@ export default defineNativePlugin({
   },
 });
 
-export type { UserDirectory } from "./contract.ts";
+export type { UserDirectory } from "#path/contract";

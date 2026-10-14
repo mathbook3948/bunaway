@@ -3,4 +3,4 @@ export {
   initialize,
   runExchange,
   runRequest,
-} from "../bun-adapter.ts";
+} from "#network/platforms/shared";

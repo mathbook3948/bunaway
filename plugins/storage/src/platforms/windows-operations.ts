@@ -1,8 +1,11 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
-import { storageLocationSchema, storageTransferSchema } from "../contract.ts";
-import { storageOperations } from "../operations.ts";
-import type { WindowsStorage } from "./windows.ts";
+import {
+  storageLocationSchema,
+  storageTransferSchema,
+} from "#storage/contract";
+import { storageOperations } from "#storage/operations";
+import type { WindowsStorage } from "#storage/platforms/windows";
 
 const operation = defineNativeOperation<WindowsStorage>();
 /** Windows adds handle-preserving move and removal to the shared storage operations. */

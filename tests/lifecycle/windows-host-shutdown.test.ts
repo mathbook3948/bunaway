@@ -56,7 +56,7 @@ async function checkShutdown(
       adapter,
       `
       import {existsSync,writeFileSync} from "node:fs";
-      import {ImageResources} from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/image/src/resources.ts"))};
+      import {ImageResources} from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/image/src/platforms/resources.ts"))};
       import {defineNativePlugin} from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
       import {z} from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
       const resources=new ImageResources();

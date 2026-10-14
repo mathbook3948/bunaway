@@ -4,17 +4,17 @@ import {
   exchangeResultSchema,
   requestInputSchema,
   responseSchema,
-} from "./contract.ts";
+} from "#network/contract";
 import {
   type initialize as initializeMacos,
   runExchange as runMacosExchange,
   runRequest as runMacosRequest,
-} from "./platforms/macos.ts";
+} from "#network/platforms/macos";
 import {
   type initialize as initializeWindows,
   runExchange as runWindowsExchange,
   runRequest as runWindowsRequest,
-} from "./platforms/windows.ts";
+} from "#network/platforms/windows";
 
 const macosOperation =
   defineNativeOperation<ReturnType<typeof initializeMacos>>();

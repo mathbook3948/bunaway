@@ -1,7 +1,7 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
-import { storageBytesSchema } from "./bytes.ts";
 import {
+  storageBytesSchema,
   storageBytesWriteSchema,
   storageDirectoryCreateSchema,
   storageDirectoryEntriesSchema,
@@ -9,9 +9,9 @@ import {
   storageMetadataSchema,
   storageTransferSchema,
   storageWriteSchema,
-} from "./contract.ts";
-import type { MacosStorage } from "./platforms/macos.ts";
-import type { WindowsStorage } from "./platforms/windows.ts";
+} from "#storage/contract";
+import type { MacosStorage } from "#storage/platforms/macos";
+import type { WindowsStorage } from "#storage/platforms/windows";
 
 /** Complete operations shared by both storage implementations; imports allocate no native resources. */
 const operation = defineNativeOperation<MacosStorage | WindowsStorage>();

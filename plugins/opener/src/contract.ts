@@ -1,6 +1,27 @@
 import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
-import { fileInput } from "./path.ts";
-import { urlInput } from "./url.ts";
+import { z } from "zod";
+
+// Explorer's file operations use ordinary Win32 paths, not extended device paths.
+export const MAX_FILE_PATH_LENGTH = 259;
+export const fileInput = z.strictObject({
+  path: z
+    .string()
+    .refine(
+      (value) => Array.from(value).length <= MAX_FILE_PATH_LENGTH,
+      "Text exceeds the Unicode character limit.",
+    ),
+});
+
+export const MAX_URL_LENGTH = 8192;
+export const urlInput = z.strictObject({
+  url: z
+    .string()
+    .refine(
+      (value) => Array.from(value).length <= MAX_URL_LENGTH,
+      "Text exceeds the Unicode character limit.",
+    ),
+});
+
 /** Selected application paths are validated again by each platform before native execution. */
 export const fileWithAppSchema = fileInput.extend({
   app: fileInput.shape.path,

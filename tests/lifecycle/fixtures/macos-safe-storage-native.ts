@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { NativePluginAdapter } from "@bunaway/plugin";
-import { MacosKeychain } from "../../../plugins/safe-storage/src/macos-keychain.ts";
+import { MacosKeychain } from "../../../plugins/safe-storage/src/platforms/macos-keychain.ts";
 import { macosSafeStorageOperations as macosOperations } from "../../fixtures/injected-native-plugins.ts";
 import { keychainFixture } from "./macos-keychain.ts";
 

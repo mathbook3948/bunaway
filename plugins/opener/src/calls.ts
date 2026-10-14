@@ -1,8 +1,11 @@
 import type { NativeInvokeOptions, NativePluginAPI } from "@bunaway/plugin";
-import { normalizeMacosFilePath } from "./macos-path.ts";
-import type { windowsOperations } from "./operations.ts";
-import { normalizeApplicationPath, normalizeFilePath } from "./path.ts";
-import { normalizeUrl } from "./url.ts";
+import type { windowsOperations } from "#opener/operations";
+import { normalizeMacosFilePath } from "#opener/platforms/macos-path";
+import {
+  normalizeApplicationPath,
+  normalizeFilePath,
+} from "#opener/platforms/windows-path";
+import { normalizeUrl } from "#opener/url";
 
 /** Accept either path spelling; the host adapter enforces its own platform. */
 function normalizeOpenerFilePath(input: unknown): string {

@@ -36,6 +36,12 @@ status: accepted
    추가 처리가 없는 API는 그대로 공개한다. 플랫폼 구현은 src/platforms/<platform>.ts에서
    연결하며 내부 파일은 공개 진입점을 역으로 import하지 않는다.
    외부 제작자에게 같은 내부 파일 분리를 요구하지는 않는다.
+   공식 플러그인은 공통 스키마와 타입을 contract.ts에 모으고 실제 네이티브 구현과
+   플랫폼 전용 보조 파일을 platforms 아래에 둔다. 여러 OS가 같은 구현을 사용하면
+   platforms 안에서 공유하며 동일한 구현을 복제하지 않는다.
+   내부 import에는 package.json의 비공개 별칭을 사용한다. 예를 들어 storage는
+   #storage/contract와 #storage/platforms/windows로 참조하며 src와 확장자는 매핑에서 처리한다.
+   별칭은 소스와 배포된 타입 선언을 각각 해석할 수 있어야 하고, 실행 번들에는 남기지 않는다.
    package.json의 bunaway.plugin은 dist/index.js를 가리킨다. API와 플랫폼 구현 정보를
    defineNativePlugin의 선언 한곳에 두고 별도 plugin.json은 사용하지 않는다.
    플러그인 버전은 package.json에만 작성한다. 빌드가 읽어 모든 등록 출력에 기록하며

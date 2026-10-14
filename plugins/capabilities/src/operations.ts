@@ -1,6 +1,6 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
-import { type Capabilities, capabilitiesSchema } from "./contract.ts";
+import { type Capabilities, capabilitiesSchema } from "#capabilities/contract";
 
 const operation = defineNativeOperation<Capabilities>();
 /** Share the complete operation over the host-selected support snapshot on both platforms. */

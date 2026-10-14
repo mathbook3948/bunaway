@@ -10,7 +10,6 @@ Windows 사용자별 로그인 자동 실행을 제공하는 선택 네이티브
 
 ```ts
 import autostart from "@bunaway/plugin-autostart";
-import autostart from "@bunaway/plugin-autostart";
 
 // defineApp({ modules: [], plugins: [autostart] })으로 등록합니다.
 await autostart.enableAutostart(["--login", "한글 값", '인용"값']);

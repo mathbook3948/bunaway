@@ -1,12 +1,11 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { storageOperations } from "./operations.ts";
+import { storageOperations } from "#storage/operations";
 import {
   createStorage as createMacosStorage,
   disposeStorage as disposeMacosStorage,
-} from "./platforms/macos.ts";
-import { createStorage, disposeStorage } from "./platforms/windows.ts";
-import { windowsOperations } from "./platforms/windows-operations.ts";
-
+} from "#storage/platforms/macos";
+import { createStorage, disposeStorage } from "#storage/platforms/windows";
+import { windowsOperations } from "#storage/platforms/windows-operations";
 /** Typed storage operations; the application chooses paths and access rules. */
 export default defineNativePlugin({
   name: "storage",
@@ -29,10 +28,9 @@ export type {
   Storage,
   StorageBytesWrite,
   StorageDirectoryCreate,
+  StorageDirectoryEntry,
   StorageLocation,
   StorageMetadata,
   StorageTransfer,
   StorageWrite,
-} from "./contract.ts";
-
-export type { StorageDirectoryEntry } from "./directory-entries.ts";
+} from "#storage/contract";

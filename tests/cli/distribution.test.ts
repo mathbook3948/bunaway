@@ -3,6 +3,7 @@ import {
   cp,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   realpath,
   rename,
@@ -29,7 +30,7 @@ import { packFramework } from "#cli-scripts/pack";
 import { DevelopmentApp } from "#native/windows/bun/development-app";
 import { createProject, packageDirectory } from "./project.ts";
 
-test("installed CLI builds an author's direct factory imports into portable package exports", async () => {
+test("installed CLI bundles private plugin imports and publishes types without source files", async () => {
   const home = await realpath(
     await mkdtemp(resolve(tmpdir(), "bunaway-plugin-author-")),
   );
@@ -49,6 +50,12 @@ test("installed CLI builds an author's direct factory imports into portable pack
       name: "@example/plugin-built",
       version: "1.2.3",
       type: "module",
+      imports: {
+        "#built/*": {
+          types: "./dist/types/*.d.ts",
+          default: "./src/*.ts",
+        },
+      },
       bunaway: {
         plugin: "./dist/index.js",
       },
@@ -77,6 +84,8 @@ test("installed CLI builds an author's direct factory imports into portable pack
         strict: true,
         noEmit: true,
         allowImportingTsExtensions: true,
+        rootDir: "./src",
+        outDir: "./dist/types",
         types: [
           "bun",
         ],
@@ -87,12 +96,18 @@ test("installed CLI builds an author's direct factory imports into portable pack
     });
     await Bun.write(
       resolve(plugin, "src/index.ts"),
+      `import { defineNativePlugin } from "@bunaway/plugin";
+import { operations } from "#built/contract";
+import { createOperations } from "#built/platforms/windows";
+export default defineNativePlugin({ name: "built", platforms: { windows: { thread: "worker", create: createOperations } }, operations });
+export type { ReadResult } from "#built/contract";`,
+    );
+    await Bun.write(
+      resolve(plugin, "src/contract.ts"),
       `import { z } from "zod";
-import { defineNativePlugin } from "@bunaway/plugin";
-import { createOperations } from "./platforms/windows.ts";
-const plugin = defineNativePlugin({ name: "built", platforms: { windows: { thread: "worker", create: createOperations } }, operations: { read: { input: z.null(), output: z.string() } } });
-export default plugin;
-export const built = plugin;`,
+const resultSchema = z.string();
+export type ReadResult = z.output<typeof resultSchema>;
+export const operations = { read: { input: z.null(), output: resultSchema } };`,
     );
     await Bun.write(
       resolve(plugin, "src/platforms/windows.ts"),
@@ -129,11 +144,16 @@ export const createOperations: NativeAdapterFactory = () => { const api = dlopen
     await command(project, [
       "install",
     ]);
+    const installed = await installedPackageRoot(
+      project,
+      "@example/plugin-built",
+    );
+    expect(await readdir(installed)).not.toContain("src");
     const imported = resolve(project, "src/plugin-contract.ts");
     await Bun.write(
       imported,
-      `import { built } from "@example/plugin-built";
-const text: Promise<string> = built.read(null);
+      `import built, { type ReadResult } from "@example/plugin-built";
+const text: Promise<ReadResult> = built.read(null);
 // @ts-expect-error invalid plugin input
 built.read("wrong");`,
     );
@@ -149,6 +169,7 @@ built.read("wrong");`,
     ).text();
     expect(neutral).not.toContain("kernel32.dll");
     expect(neutral).not.toContain("bun:ffi");
+    expect(neutral).not.toContain('from "#built/');
     const valid = await validateProject(project);
     expect(
       valid.nativePlugins?.find((plugin) => plugin.name === "built")?.version,
@@ -1637,7 +1658,7 @@ test("a standalone plugin install does not install Core, Backend SDK or sibling 
     const inputs = Object.keys(built.metafile?.inputs ?? {});
     expect(
       inputs.some((name) =>
-        /(?:@bunaway[\\/](?:backend|core)[\\/]|node:async_hooks|src[\\/]windows\.ts)/.test(
+        /(?:@bunaway[\\/](?:backend|core)[\\/]|node:async_hooks|src[\\/]platforms[\\/])/.test(
           name,
         ),
       ),

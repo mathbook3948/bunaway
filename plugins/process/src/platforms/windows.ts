@@ -1,7 +1,7 @@
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
-import type { ProcessResult, processInputSchema } from "../contract.ts";
-import { runProcess } from "../run.ts";
+import type { ProcessResult, processInputSchema } from "#process/contract";
+import { runProcess } from "#process/platforms/windows-process";
 
 const MAX_ACTIVE_PROCESSES = 8;
 type ProcessInput = z.output<typeof processInputSchema>;

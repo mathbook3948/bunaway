@@ -1,14 +1,13 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { appearanceOperations } from "./operations.ts";
+import { appearanceOperations } from "#appearance/operations";
 import {
   dispose as disposeMacos,
   initialize as initializeMacos,
-} from "./platforms/macos.ts";
+} from "#appearance/platforms/macos";
 import {
   dispose as disposeWindows,
   initialize as initializeWindows,
-} from "./platforms/windows.ts";
-
+} from "#appearance/platforms/windows";
 /** Query preferences. Theme overrides and accessibility support control are separate host features. */
 export default defineNativePlugin(
   {
@@ -33,4 +32,4 @@ export default defineNativePlugin(
   }),
 );
 
-export type { AppearancePreferences } from "./contract.ts";
+export type { AppearancePreferences } from "#appearance/contract";

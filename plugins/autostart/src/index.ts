@@ -1,8 +1,7 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { createAutostart } from "./calls.ts";
-import { autostartOperations } from "./operations.ts";
-import { dispose, initialize } from "./platforms/windows.ts";
-
+import { createAutostart } from "#autostart/calls";
+import { autostartOperations } from "#autostart/operations";
+import { dispose, initialize } from "#autostart/platforms/windows";
 /** Optional user-scoped Windows login registration. Importing does not register the app. */
 export default defineNativePlugin(
   {
@@ -18,4 +17,4 @@ export default defineNativePlugin(
   createAutostart,
 );
 
-export type { AutostartOptions, AutostartStatus } from "./contract.ts";
+export type { AutostartOptions, AutostartStatus } from "#autostart/contract";

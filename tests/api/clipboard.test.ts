@@ -9,8 +9,8 @@ import {
 } from "@bunaway/protocol";
 import { installedPlugins } from "#cli/plugins";
 import { bindHostAPI } from "#core/host-api";
+import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/contract";
 import { windowsOperations as clipboardOperations } from "#plugins/clipboard/src/operations";
-import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("clipboard", clipboardOperations);

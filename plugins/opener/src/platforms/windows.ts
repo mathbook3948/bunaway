@@ -1,10 +1,16 @@
 import { dlopen } from "bun:ffi";
 import { BunawayError } from "@bunaway/protocol";
-import { normalizeApplicationPath, normalizeFilePath } from "../path.ts";
-import { createShell } from "../shell.ts";
-import { normalizeUrl } from "../url.ts";
-import { createFiles } from "../windows-file.ts";
-import { trashWindowsFile, validateTrashDrive } from "../windows-trash.ts";
+import { createFiles } from "#opener/platforms/windows-file";
+import {
+  normalizeApplicationPath,
+  normalizeFilePath,
+} from "#opener/platforms/windows-path";
+import { createShell } from "#opener/platforms/windows-shell";
+import {
+  trashWindowsFile,
+  validateTrashDrive,
+} from "#opener/platforms/windows-trash";
+import { normalizeUrl } from "#opener/url";
 
 const COINIT_APARTMENTTHREADED = 0x2;
 

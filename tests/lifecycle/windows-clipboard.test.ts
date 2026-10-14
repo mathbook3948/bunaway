@@ -17,9 +17,9 @@ import {
 import { bindHostAPI } from "#core/host-api";
 import { disposeAll } from "#native/host-api/bun/plugins";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
-import type { ClipboardItem } from "#plugins/clipboard/src/formats";
-import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
-import { createClipboard } from "#plugins/clipboard/src/win32";
+import type { ClipboardItem } from "#plugins/clipboard/src/contract";
+import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/contract";
+import { createClipboard } from "#plugins/clipboard/src/platforms/windows-bindings";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 const PM_REMOVE = 1;
@@ -479,7 +479,7 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
       const holderPath = resolve(root, "holder.ts");
       await Bun.write(
         holderPath,
-        `import { createClipboard } from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/clipboard/src/win32.ts"))};
+        `import { createClipboard } from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/clipboard/src/platforms/windows-bindings.ts"))};
 const owner = createClipboard();
 try {
   const deadline = Date.now() + 2000;

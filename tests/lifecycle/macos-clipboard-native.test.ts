@@ -2,12 +2,17 @@ import { ptr } from "bun:ffi";
 import { expect, test } from "bun:test";
 import type { JsonValue } from "@bunaway/protocol";
 import { Objc } from "#native/macos/bun/objc";
-import type { ClipboardItem } from "#plugins/clipboard/src/formats";
-import { MAX_IMAGE_BYTES } from "#plugins/clipboard/src/formats";
-import { createPasteboard } from "#plugins/clipboard/src/macos-pasteboard";
-import { encodeTIFF, MAX_TIFF_BYTES } from "#plugins/clipboard/src/macos-tiff";
+import type { ClipboardItem } from "#plugins/clipboard/src/contract";
+import {
+  MAX_IMAGE_BYTES,
+  MAX_TEXT_LENGTH,
+} from "#plugins/clipboard/src/contract";
+import { createPasteboard } from "#plugins/clipboard/src/platforms/macos-pasteboard";
+import {
+  encodeTIFF,
+  MAX_TIFF_BYTES,
+} from "#plugins/clipboard/src/platforms/macos-tiff";
 import { pasteboardOperations } from "../fixtures/injected-native-plugins.ts";
-import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/text";
 
 test.skipIf(
   process.platform !== "darwin" || process.env.BUNAWAY_CLIPBOARD_NATIVE !== "1",

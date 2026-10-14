@@ -21,7 +21,7 @@ test.skipIf(process.platform !== "win32")(
     // AppUserModelID is process-wide. Isolate the host identity and UUID shortcut from the rest of the suite.
     if (process.env.BUNAWAY_NOTIFICATION_FIXTURE !== "1") {
       const module = new URL(
-        "../../plugins/notification/src/winrt.ts",
+        "../../plugins/notification/src/platforms/windows.ts",
         import.meta.url,
       ).href;
       // A separate unregistered process prevents failed WinRT identity lookup from caching the wrong app context.

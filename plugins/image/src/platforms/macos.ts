@@ -1,6 +1,5 @@
-import { createImageIO } from "../image-io.ts";
-import { ImagePlatform } from "../image-platform.ts";
-
+import { ImagePlatform } from "#image/platforms/image-platform";
+import { createImageIO } from "#image/platforms/macos-codec";
 export function initialize(): ImagePlatform {
   return new ImagePlatform(createImageIO());
 }

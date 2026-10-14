@@ -1,14 +1,13 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { safeStorageOperations } from "./operations.ts";
+import { safeStorageOperations } from "#safe-storage/operations";
 import {
   dispose as disposeMacos,
   initialize as initializeMacos,
-} from "./platforms/macos.ts";
+} from "#safe-storage/platforms/macos";
 import {
   dispose as disposeWindows,
   initialize as initializeWindows,
-} from "./platforms/windows.ts";
-
+} from "#safe-storage/platforms/windows";
 /** Promise-based encryption/decryption on the I/O Worker; never falls back to plaintext. */
 export default defineNativePlugin({
   name: "safe-storage",

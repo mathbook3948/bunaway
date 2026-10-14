@@ -9,7 +9,7 @@ import {
   resourceSchema,
   targetSchema,
   updateItemSchema,
-} from "./contract.ts";
+} from "#menu/contract";
 import {
   create,
   get,
@@ -23,7 +23,7 @@ import {
   setTrayMenu,
   updateItem,
   waitForClick,
-} from "./platforms/windows.ts";
+} from "#menu/platforms/windows";
 
 const operation = defineNativeOperation<ReturnType<typeof initialize>>();
 /** Windows menu resources, tray attachment and cancellable selection waits. */

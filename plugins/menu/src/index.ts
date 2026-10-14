@@ -1,8 +1,7 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { menuEvents } from "./contract.ts";
-import { menuOperations } from "./operations.ts";
-import { dispose, initialize } from "./platforms/windows.ts";
-
+import { menuEvents } from "#menu/contract";
+import { menuOperations } from "#menu/operations";
+import { dispose, initialize } from "#menu/platforms/windows";
 /** Typed menu resource and tray attachment operations. */
 export default defineNativePlugin({
   name: "menu",

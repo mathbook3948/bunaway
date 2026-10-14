@@ -1,20 +1,18 @@
 import { dlopen, ptr } from "bun:ffi";
 import { win32 } from "node:path";
 import { BunawayError } from "@bunaway/plugin";
-import { MAX_STORAGE_BYTES } from "../bytes.ts";
-import type {
-  StorageBytesWrite,
-  StorageDirectoryCreate,
-  StorageLocation,
-  StorageMetadata,
-  StorageTransfer,
-  StorageWrite,
-} from "../contract.ts";
 import {
-  directoryEntries,
   MAX_DIRECTORY_ENTRIES,
+  MAX_STORAGE_BYTES,
+  type StorageBytesWrite,
+  type StorageDirectoryCreate,
   type StorageDirectoryEntry,
-} from "../directory-entries.ts";
+  type StorageLocation,
+  type StorageMetadata,
+  type StorageTransfer,
+  type StorageWrite,
+} from "#storage/contract";
+import { directoryEntries } from "#storage/platforms/windows-directory-entries";
 
 const MAX_STORAGE_PATH_SEGMENT_BYTES = 255;
 const MAX_STORAGE_FILE_BYTES = 4 * 1024 * 1024;

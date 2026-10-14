@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { resizeNearestPixels } from "#plugins/image/src/resize";
+import { resizeNearestPixels } from "#plugins/image/src/platforms/resize";
 
 const source = {
   width: 2,

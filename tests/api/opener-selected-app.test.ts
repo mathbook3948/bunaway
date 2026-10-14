@@ -9,7 +9,7 @@ import {
 } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
 import { windowsOperations as openerOperations } from "#plugins/opener/src/operations";
-import { normalizeApplicationPath } from "#plugins/opener/src/path";
+import { normalizeApplicationPath } from "#plugins/opener/src/platforms/windows-path";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("opener", openerOperations);

@@ -1,19 +1,19 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import type { Pasteboard } from "../../plugins/clipboard/src/macos-pasteboard.ts";
 import { macosOperations as clipboardOperations } from "../../plugins/clipboard/src/operations.ts";
 import {
   dispose as disposeClipboard,
   MacosClipboard,
 } from "../../plugins/clipboard/src/platforms/macos.ts";
+import type { Pasteboard } from "../../plugins/clipboard/src/platforms/macos-pasteboard.ts";
 import { globalShortcutOperations } from "../../plugins/global-shortcut/src/operations.ts";
-import { initializeShortcutOperations } from "../../plugins/global-shortcut/src/shortcut-adapter.ts";
+import { initializeShortcutOperations } from "../../plugins/global-shortcut/src/platforms/windows.ts";
 import { macosOperations as openerOperations } from "../../plugins/opener/src/operations.ts";
 import {
   createState,
   dispose as disposeOpener,
 } from "../../plugins/opener/src/platforms/macos.ts";
-import { MacosSafeStorage } from "../../plugins/safe-storage/src/macos-operations.ts";
 import { safeStorageOperations } from "../../plugins/safe-storage/src/operations.ts";
+import { MacosSafeStorage } from "../../plugins/safe-storage/src/platforms/macos.ts";
 import { nativeFactory } from "./native-platform.ts";
 
 const environment = {

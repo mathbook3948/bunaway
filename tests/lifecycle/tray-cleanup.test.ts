@@ -10,6 +10,7 @@ test("compiled Tray retains failed native releases and stops callbacks during re
     "../fixtures/tray-cleanup-platform.ts",
   );
   try {
+    let substituted = false;
     const result = await Bun.build({
       entrypoints: [
         resolve(import.meta.dir, "../fixtures/tray-cleanup.ts"),
@@ -22,7 +23,7 @@ test("compiled Tray retains failed native releases and stops callbacks during re
             build.onResolve(
               {
                 filter:
-                  /(win32|tray-bindings|windows-buffers|tray-icon|popup-menu)\.ts$/,
+                  /(?:^#tray\/platforms\/windows-(bindings|buffers|icon|popup-menu)$|\/native\/windows\/bun\/win32\.ts$)/,
               },
               () => ({
                 path: platform,
@@ -30,22 +31,27 @@ test("compiled Tray retains failed native releases and stops callbacks during re
             );
             build.onLoad(
               {
-                filter: /[\\/]plugins[\\/]tray[\\/]src[\\/]tray\.ts$/,
+                filter:
+                  /[\\/]plugins[\\/]tray[\\/]src[\\/]platforms[\\/]windows-tray\.ts$/,
               },
-              async (args) => ({
-                // Replace only the native binding import; compile the actual resource owner unchanged.
-                contents: (await Bun.file(args.path).text()).replace(
-                  '"bun:ffi"',
-                  JSON.stringify(platform),
-                ),
-                loader: "ts",
-              }),
+              async (args) => {
+                substituted = true;
+                return {
+                  // Replace only the native binding import; compile the actual resource owner unchanged.
+                  contents: (await Bun.file(args.path).text()).replace(
+                    '"bun:ffi"',
+                    JSON.stringify(platform),
+                  ),
+                  loader: "ts",
+                };
+              },
             );
           },
         },
       ],
     });
     expect(result.success, result.logs.map(String).join("\n")).toBe(true);
+    expect(substituted).toBe(true);
     const artifact = result.outputs[0];
     if (!artifact) {
       throw new Error("Missing tray cleanup fixture artifact");

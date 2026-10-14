@@ -1,10 +1,12 @@
 import { type NativeEnvironment, NativeEventWaiters } from "@bunaway/plugin";
-import type { NativeTrayServices } from "@bunaway/plugin-api/native";
-import { MAX_TRAY_WAITERS } from "@bunaway/plugin-api/native";
+import {
+  MAX_TRAY_WAITERS,
+  type NativeTrayServices,
+} from "@bunaway/plugin-api/native";
 import { BunawayError, validateValue } from "@bunaway/protocol";
 import type { z } from "zod";
-import type { trayEventSchema } from "../contract.ts";
-import { Tray } from "../tray.ts";
+import type { trayEventSchema } from "#tray/contract";
+import { Tray } from "#tray/platforms/windows-tray";
 
 function requireTray(
   services: NativeTrayServices | undefined,

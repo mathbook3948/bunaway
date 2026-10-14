@@ -12,6 +12,7 @@ test("clipboard resource failures and cancellable retries use isolated Win32 bin
     recursive: true,
   });
   try {
+    let substituted = false;
     const build = await Bun.build({
       entrypoints: [
         resolve(import.meta.dir, "../fixtures/clipboard-resources.fixture.ts"),
@@ -24,21 +25,26 @@ test("clipboard resource failures and cancellable retries use isolated Win32 bin
           setup(builder) {
             builder.onLoad(
               {
-                filter: /[\\/]clipboard[\\/]src[\\/]win32\.ts$/,
+                filter:
+                  /[\\/]clipboard[\\/]src[\\/]platforms[\\/]windows-bindings\.ts$/,
               },
-              async (args) => ({
-                contents: (await Bun.file(args.path).text()).replace(
-                  '"bun:ffi"',
-                  JSON.stringify(replacement),
-                ),
-                loader: "ts",
-              }),
+              async (args) => {
+                substituted = true;
+                return {
+                  contents: (await Bun.file(args.path).text()).replace(
+                    '"bun:ffi"',
+                    JSON.stringify(replacement),
+                  ),
+                  loader: "ts",
+                };
+              },
             );
           },
         },
       ],
     });
     expect(build.success).toBe(true);
+    expect(substituted).toBe(true);
     const child = Bun.spawn(
       [
         process.execPath,

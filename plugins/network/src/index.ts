@@ -1,14 +1,13 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { macosOperations, windowsOperations } from "./operations.ts";
+import { macosOperations, windowsOperations } from "#network/operations";
 import {
   dispose as disposeMacos,
   initialize as initializeMacos,
-} from "./platforms/macos.ts";
+} from "#network/platforms/macos";
 import {
   dispose as disposeWindows,
   initialize as initializeWindows,
-} from "./platforms/windows.ts";
-
+} from "#network/platforms/windows";
 /** Bounded HTTP requests and WebSocket exchanges. Cancellation releases in-flight resources. */
 export default defineNativePlugin({
   name: "network",
@@ -28,4 +27,4 @@ export default defineNativePlugin({
   },
 });
 
-export type { NetworkRequest, NetworkResponse } from "./contract.ts";
+export type { NetworkRequest, NetworkResponse } from "#network/contract";

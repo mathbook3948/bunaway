@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
-import { validateValue, type JsonValue } from "@bunaway/protocol";
+import { type JsonValue, validateValue } from "@bunaway/protocol";
+import createOperationsDefinition from "#plugins/clipboard/src/index";
+import { createClipboard } from "#plugins/clipboard/src/platforms/windows-bindings";
 import {
   encodeHTML,
   MAX_NATIVE_FORMAT_BYTES,
-} from "#plugins/clipboard/src/codecs";
-import createOperationsDefinition from "#plugins/clipboard/src/index";
+} from "#plugins/clipboard/src/platforms/windows-codecs";
+import { state } from "./clipboard-ffi.ts";
 import { nativeFactory as createOperationsFactory } from "./native-platform.ts";
 
-import { createClipboard } from "#plugins/clipboard/src/win32";
-import { state } from "./clipboard-ffi.ts";
 const createOperations = createOperationsFactory(
   createOperationsDefinition,
   "windows",

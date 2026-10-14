@@ -1,8 +1,7 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { globalShortcutEvents } from "./contract.ts";
-import { globalShortcutOperations } from "./operations.ts";
-import { dispose, initialize } from "./platforms/windows.ts";
-
+import { globalShortcutEvents } from "#global-shortcut/contract";
+import { globalShortcutOperations } from "#global-shortcut/operations";
+import { dispose, initialize } from "#global-shortcut/platforms/windows";
 /** Register, inspect, remove and suspend app-owned Windows global shortcuts. */
 export default defineNativePlugin({
   events: {
@@ -20,4 +19,4 @@ export default defineNativePlugin({
   },
 });
 
-export type { GlobalShortcut } from "./contract.ts";
+export type { GlobalShortcut } from "#global-shortcut/contract";

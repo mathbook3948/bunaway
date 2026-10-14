@@ -1,7 +1,6 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { processOperations } from "./operations.ts";
-import { dispose, initialize } from "./platforms/windows.ts";
-
+import { processOperations } from "#process/operations";
+import { dispose, initialize } from "#process/platforms/windows";
 /** Run one bounded process without a shell or persistent process handle. */
 export default defineNativePlugin({
   name: "process",
@@ -15,4 +14,4 @@ export default defineNativePlugin({
   },
 });
 
-export type { ProcessInput, ProcessResult } from "./contract.ts";
+export type { ProcessInput, ProcessResult } from "#process/contract";

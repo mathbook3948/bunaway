@@ -20,7 +20,10 @@ test.skipIf(process.platform !== "win32")(
     });
     const workerPath = resolve(root, "probe.ts");
     const shellModule = pathToFileURL(
-      resolve(import.meta.dir, "../../plugins/opener/src/shell.ts"),
+      resolve(
+        import.meta.dir,
+        "../../plugins/opener/src/platforms/windows-shell.ts",
+      ),
     ).href;
     const operationsModule = resolve(
       import.meta.dir,
@@ -34,7 +37,7 @@ import { parentPort } from "node:worker_threads";
 import { createShell } from ${JSON.stringify(shellModule)};
 import definition from ${JSON.stringify(operationsModule)};
 const createOperations = definition._definition.nativePlatforms.windows.create;
-import { createFiles } from ${JSON.stringify(resolve("plugins/opener/src/windows-file.ts"))};
+import { createFiles } from ${JSON.stringify(resolve("plugins/opener/src/platforms/windows-file.ts"))};
 import { writeFileSync, mkdirSync, linkSync, symlinkSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 const sample = ${JSON.stringify(resolve(root, "한글 공백, 😀.txt"))};

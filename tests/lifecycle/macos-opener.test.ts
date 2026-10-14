@@ -12,8 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NativeRegistry } from "@bunaway/protocol";
 import opener from "../../plugins/opener/src/index.ts";
-import { createFiles } from "../../plugins/opener/src/macos-file.ts";
-import { normalizeMacosFilePath } from "../../plugins/opener/src/macos-path.ts";
+import { createFiles } from "../../plugins/opener/src/platforms/macos-file.ts";
+import { normalizeMacosFilePath } from "../../plugins/opener/src/platforms/macos-path.ts";
 import { createOpenerAdapter as createAdapter } from "../fixtures/injected-native-plugins.ts";
 import { nativeFactory } from "../fixtures/native-platform.ts";
 

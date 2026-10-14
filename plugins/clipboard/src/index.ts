@@ -1,15 +1,14 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { macosOperations, windowsOperations } from "./operations.ts";
+import { macosOperations, windowsOperations } from "#clipboard/operations";
 import {
   dispose as disposeMacos,
   initialize as initializeMacos,
-} from "./platforms/macos.ts";
+} from "#clipboard/platforms/macos";
 import {
   busy as busyWindows,
   dispose as disposeWindows,
   initialize as initializeWindows,
-} from "./platforms/windows.ts";
-
+} from "#clipboard/platforms/windows";
 /** Read, replace, discover or clear bounded platform clipboard formats. */
 export default defineNativePlugin({
   name: "clipboard",
