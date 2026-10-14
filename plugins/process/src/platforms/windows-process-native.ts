@@ -15,6 +15,7 @@ const FILE_FLAG_OVERLAPPED = 0x40000000;
 const STARTF_USESTDHANDLES = 0x100;
 const EXTENDED_STARTUPINFO_PRESENT = 0x00080000;
 const CREATE_NO_WINDOW = 0x08000000;
+const CREATE_UNICODE_ENVIRONMENT = 0x00000400;
 const PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x20002n;
 const PROC_THREAD_ATTRIBUTE_JOB_LIST = 0x2000dn;
 const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9;
@@ -50,6 +51,44 @@ function quoteArgument(value: string) {
   return `"${value.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/g, "$1$1")}"`;
 }
 
+/** Snapshot Bun's trusted environment, including dotenv values absent from the OS block. */
+function runnerEnvironment() {
+  const entries = Object.entries(process.env).filter(
+    (
+      entry,
+    ): entry is [
+      string,
+      string,
+    ] => entry[1] !== undefined,
+  );
+  for (const [name, value] of entries) {
+    // Environment strings are NUL separated. Reject malformed trusted state
+    // instead of accidentally turning one value into another variable.
+    const driveDirectory = /^=[A-Za-z]:$/.test(name);
+    if (
+      name.length === 0 ||
+      name.includes("\0") ||
+      (name.includes("=") && !driveDirectory) ||
+      value.includes("\0")
+    ) {
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Process environment is invalid.",
+      });
+    }
+  }
+  // Windows requires case-insensitive Unicode order, independent of locale.
+  entries.sort(([left], [right]) => {
+    const a = left.toUpperCase();
+    const b = right.toUpperCase();
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+  return Buffer.from(
+    `${entries.map(([name, value]) => `${name}=${value}`).join("\0")}\0\0`,
+    "utf16le",
+  );
+}
+
 /**
  * Create one invocation Job atomically with the child and own its complete lifetime.
  * The inherited host Job remains an ancestor; neither Job allows breakaway. Only
@@ -76,14 +115,22 @@ export async function runWindowsProcess(
   const inputBytes = Buffer.from(input.stdinBase64 ?? "", "base64");
   const overlapped = Buffer.alloc(32); // OVERLAPPED, Win64
   const transferred = Buffer.alloc(4);
-  const fail = () =>
-    new BunawayError({
+  const fail = (operation = "Win32 process operation") => {
+    const nativeCode = api.symbols.GetLastError();
+    const error = new BunawayError({
       code: "INTERNAL",
       message: "Process execution failed.",
     });
-  const requireSuccess = (result: number) => {
+    // Trusted diagnostics retain the native operation/code. The public wire
+    // error contains only the sanitized message and code, never this cause.
+    Object.defineProperty(error, "cause", {
+      value: new Error(`${operation} failed (Win32 ${nativeCode}).`),
+    });
+    return error;
+  };
+  const requireSuccess = (result: number, operation?: string) => {
     if (!result) {
-      throw fail();
+      throw fail(operation);
     }
   };
   const own = (handle: bigint) => {
@@ -424,6 +471,7 @@ export async function runWindowsProcess(
         .join(" ")}\0`,
       "utf16le",
     );
+    const environment = runnerEnvironment();
     signal.throwIfAborted();
     // JOB_LIST makes assignment part of creation. Failure never launches an
     // uncontained child; host crashes cannot leave a suspended, unassigned process.
@@ -434,12 +482,15 @@ export async function runWindowsProcess(
         null,
         null,
         1,
-        EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
-        null,
+        EXTENDED_STARTUPINFO_PRESENT |
+          CREATE_NO_WINDOW |
+          CREATE_UNICODE_ENVIRONMENT,
+        ptr(environment),
         null,
         ptr(startup),
         ptr(information),
       ),
+      "CreateProcessW",
     );
     child = own(information.readBigUInt64LE(0));
     const thread = own(information.readBigUInt64LE(8));

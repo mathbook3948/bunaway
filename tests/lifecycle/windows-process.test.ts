@@ -45,10 +45,22 @@ test.skipIf(process.platform !== "win32")(
       const first = new AbortController();
       const second = new AbortController();
       const input = { executablePath: process.execPath, args: ["-e", "setInterval(() => {}, 1000)"], maxOutputBytes: 65536, timeoutMs: 30000 };
-      const a = run(state, input, first.signal).catch(error => error.code);
-      const b = run(state, input, second.signal).catch(error => error.code);
+      const outcomes = [];
+      const observe = (label, task) => task.catch(error => {
+        const outcome = { label, code: error.code, cause: error.cause?.message };
+        outcomes.push(outcome);
+        return error.code;
+      });
+      const a = observe("first", run(state, input, first.signal));
+      const b = observe("second", run(state, input, second.signal));
       try {
-        if (activeDescendants() !== 2) throw new Error("Host Job lost its descendants");
+        const descendantsAtCreation = activeDescendants();
+        if (descendantsAtCreation !== 2) {
+          // Drain synchronous startup failures before cancellation can replace
+          // their errors. This retains the immediate count assertion above.
+          await Bun.sleep(0);
+          throw new Error("Host Job lost its descendants: " + JSON.stringify({ descendantsAtCreation, outcomes }));
+        }
         first.abort();
         if (await a !== "CANCELLED") throw new Error("First invocation did not cancel");
         if (activeDescendants() !== 1 || state.active.size !== 1) throw new Error("Cancellation crossed invocation ownership");
@@ -87,6 +99,109 @@ test.skipIf(process.platform !== "win32")(
         error: "",
       });
       expect(output).toBe("contained");
+    } finally {
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
+  "private JOB_LIST preserves explicit parent membership and reports startup failures",
+  async () => {
+    const root = await mkdtemp(
+      join(tmpdir(), "bunaway-process-job-membership-"),
+    );
+    const runnerModule = resolve(
+      import.meta.dir,
+      "../../plugins/process/src/platforms/windows-process.ts",
+    );
+    const pidFile = join(root, "pid");
+    const script = `
+      import { dlopen, ptr } from "bun:ffi";
+      const { runProcess } = await import(${JSON.stringify(runnerModule)});
+      const api = dlopen("kernel32.dll", {
+        CreateJobObjectW: { args: ["ptr", "ptr"], returns: "u64" },
+        GetCurrentProcess: { args: [], returns: "u64" },
+        SetInformationJobObject: { args: ["u64", "i32", "ptr", "u32"], returns: "i32" },
+        AssignProcessToJobObject: { args: ["u64", "u64"], returns: "i32" },
+        IsProcessInJob: { args: ["u64", "u64", "ptr"], returns: "i32" },
+        OpenProcess: { args: ["u32", "i32", "u32"], returns: "u64" },
+        CloseHandle: { args: ["u64"], returns: "i32" },
+        GetLastError: { args: [], returns: "u32" },
+      });
+      const check = (result, operation) => {
+        if (!result) throw new Error(operation + " failed: " + api.symbols.GetLastError());
+      };
+      const host = api.symbols.CreateJobObjectW(null, null);
+      check(host, "CreateJobObjectW");
+      const limits = Buffer.alloc(144);
+      limits.writeUInt32LE(0x2000, 16);
+      check(api.symbols.SetInformationJobObject(host, 9, ptr(limits), limits.length), "SetInformationJobObject");
+      check(api.symbols.AssignProcessToJobObject(host, api.symbols.GetCurrentProcess()), "AssignProcessToJobObject");
+      const member = Buffer.alloc(4);
+      check(api.symbols.IsProcessInJob(api.symbols.GetCurrentProcess(), host, ptr(member)), "parent IsProcessInJob");
+      if (member.readUInt32LE() !== 1) throw new Error("Parent is not in the host Job");
+      const controller = new AbortController();
+      const task = runProcess({
+        executablePath: process.execPath,
+        args: [${JSON.stringify(resolve(import.meta.dir, "../fixtures/process-ready.ts"))}, ${JSON.stringify(pidFile)}],
+        maxOutputBytes: 65536, timeoutMs: 30000,
+      }, controller.signal);
+      const outcome = task.catch(error => ({ code: error.code, cause: error.cause?.message }));
+      let child = 0n;
+      try {
+        const ready = (async () => {
+          const deadline = Date.now() + 2000;
+          while (!(await Bun.file(${JSON.stringify(pidFile)}).exists())) {
+            if (Date.now() >= deadline) throw new Error("Child did not publish its PID");
+            await Bun.sleep(2);
+          }
+        })();
+        await Promise.race([ready, outcome.then(result => { throw new Error("Process startup failed: " + JSON.stringify(result)); })]);
+        const pid = Number(await Bun.file(${JSON.stringify(pidFile)}).text());
+        child = api.symbols.OpenProcess(0x00101000, 0, pid);
+        check(child, "OpenProcess");
+        check(api.symbols.IsProcessInJob(child, host, ptr(member)), "child IsProcessInJob");
+        if (member.readUInt32LE() !== 1) throw new Error("Private JOB_LIST lost parent Job membership");
+        process.stdout.write("parent-and-child-contained");
+      } finally {
+        controller.abort();
+        await outcome;
+        if (child) check(api.symbols.CloseHandle(child), "CloseHandle");
+        api.close();
+        // The host is itself in the kill-on-close Job. Its handle belongs to
+        // process exit, exactly like containAppProcess, rather than this block.
+      }
+    `;
+    try {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "-e",
+          script,
+        ],
+        {
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 5000,
+        },
+      );
+      const [exitCode, output, error] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect({
+        exitCode,
+        error,
+      }).toEqual({
+        exitCode: 0,
+        error: "",
+      });
+      expect(output).toBe("parent-and-child-contained");
     } finally {
       await rm(root, {
         recursive: true,

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { BunawayError } from "@bunaway/protocol";
 import {
   dispose,
@@ -17,6 +18,80 @@ const defaults = {
   maxOutputBytes: 65536,
   timeoutMs: 30000,
 };
+
+test("argv invocation inherits Bun dotenv values without loading dotenv in the child", async () => {
+  const root = await mkdtemp(join(tmpdir(), "bunaway-process-environment-"));
+  const key = `BUNAWAY_PROCESS_ENV_${crypto.randomUUID().replaceAll("-", "_")}`;
+  const emptyKey = `${key}_EMPTY`;
+  const value = "한글 😀 = & spaces";
+  expect(process.env[key]).toBeUndefined();
+  expect(process.env[emptyKey]).toBeUndefined();
+  const runnerModule = pathToFileURL(
+    resolve(
+      import.meta.dir,
+      "../../plugins/process/src/platforms/windows-process.ts",
+    ),
+  ).href;
+  try {
+    const envFile = join(root, "runner.env");
+    const runnerFile = join(root, "runner.ts");
+    await Bun.write(envFile, `${key}=${JSON.stringify(value)}\n${emptyKey}=\n`);
+    await Bun.write(
+      runnerFile,
+      `
+      import assert from "node:assert/strict";
+      const { runProcess } = await import(${JSON.stringify(runnerModule)});
+      assert.equal(process.env[${JSON.stringify(key)}], ${JSON.stringify(value)});
+      assert.equal(process.env[${JSON.stringify(emptyKey)}], "");
+      const result = await runProcess({
+        executablePath: process.execPath,
+        args: ["--no-env-file", "-e", ${JSON.stringify(`process.stdout.write(JSON.stringify([process.env[${JSON.stringify(key)}], process.env[${JSON.stringify(emptyKey)}]]));`)}],
+        maxOutputBytes: 65536, timeoutMs: 30000,
+      }, new AbortController().signal);
+      assert.equal(result.exitCode, 0);
+      process.stdout.write(Buffer.from(result.stdoutBase64, "base64"));
+    `,
+    );
+    const parent = Bun.spawn(
+      [
+        process.execPath,
+        "--env-file",
+        envFile,
+        runnerFile,
+      ],
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 5000,
+      },
+    );
+    const [exitCode, output, error] = await Promise.all([
+      parent.exited,
+      new Response(parent.stdout).text(),
+      new Response(parent.stderr).text(),
+    ]);
+    expect({
+      exitCode,
+      error,
+    }).toEqual({
+      exitCode: 0,
+      error: "",
+    });
+    expect(JSON.parse(output)).toEqual([
+      value,
+      "",
+    ]);
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
 
 test("argv invocation preserves special arguments, binary stdin/stdout/stderr and nonzero completion", async () => {
   const args = [
