@@ -52,8 +52,10 @@ export async function captureNativeChild(
 ) {
   assert(
     child.stdout !== null &&
+      child.stdout !== undefined &&
       typeof child.stdout !== "number" &&
       child.stderr !== null &&
+      child.stderr !== undefined &&
       typeof child.stderr !== "number",
     "Native fixture diagnostics require piped stdout and stderr.",
   );
