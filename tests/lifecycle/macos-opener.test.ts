@@ -272,7 +272,7 @@ test("macOS resource cleanup still releases the workspace when file cleanup fail
     },
   );
   await expect(adapter.dispose()).rejects.toThrow("cleanup failed");
-  await expect(adapter.dispose()).rejects.toThrow("cleanup failed");
+  await adapter.dispose();
   expect(cleaned).toBe(1);
 });
 

@@ -133,7 +133,9 @@ test.skipIf(process.platform !== "darwin")(
           code: "INVALID_ARGUMENT",
         }),
       );
-      objc.withAutoreleasePool(async () => {
+      // Keep borrowed Cocoa objects alive across awaited SDK calls on this thread.
+      const pool = objc.object("NSAutoreleasePool");
+      try {
         const app = objc.send(objc.class("NSApplication"), "sharedApplication");
         const original = objc.send(app, "appearance");
         const appearanceClass = objc.class("NSAppearance");
@@ -372,7 +374,9 @@ test.skipIf(process.platform !== "darwin")(
           objc.send(app, "setAppearance:", original);
           objc.send(appearanceClass, "setCurrentAppearance:", previousDrawing);
         }
-      });
+      } finally {
+        objc.send(pool, "drain");
+      }
     } finally {
       await first.dispose();
       await second.dispose();
