@@ -1425,8 +1425,9 @@ for (const failureMode of [
   "broken-start",
   "broken-shared",
   "missing-shared",
+  "process-start-failure",
 ]) {
-  test(`dev recovers from initial source failure: ${failureMode}`, async () => {
+  test(`dev recovers from initial startup failure: ${failureMode}`, async () => {
     const child = Bun.spawn(
       [
         process.execPath,

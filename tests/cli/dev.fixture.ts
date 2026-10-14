@@ -28,6 +28,8 @@ await Bun.write(
   setInterval(async () => { if (await Bun.file(${JSON.stringify(close)}).exists()) process.exit(0); }, 20);
 `,
 );
+const failureMode = process.argv[3];
+let buildAttempts = 0;
 mock.module(import.meta.resolve("#cli/build"), () => ({
   ...build,
   prepareNative: async () => ({
@@ -39,7 +41,10 @@ mock.module(import.meta.resolve("#cli/build"), () => ({
   buildProject: async () => ({
     output: root,
     package: root,
-    executable: process.execPath,
+    executable:
+      failureMode === "process-start-failure" && buildAttempts++ === 0
+        ? resolve(root, ".bunaway/missing-host")
+        : process.execPath,
     arguments: [
       host,
     ],
@@ -64,7 +69,6 @@ const uiText = await Bun.file(ui).text();
 const backendText = await Bun.file(backend).text();
 const shared = resolve(root, "shared/development-value.ts");
 const sharedImport = 'import "../shared/development-value.ts";\n';
-const failureMode = process.argv[3];
 const brokenStart = [
   "broken-start",
   "broken-shared",
@@ -148,11 +152,15 @@ try {
       finished = true;
     },
   );
-  if (brokenStart) {
+  if (brokenStart || failureMode === "process-start-failure") {
     await waitFor(async () => buildFailed);
     expect(finished).toBe(false);
     expect(await starts()).toBe(0);
-    await expect(fetch(first.url)).rejects.toThrow();
+    if (failureMode === "process-start-failure") {
+      expect((await fetch(first.url)).ok).toBe(true);
+    } else {
+      await expect(fetch(first.url)).rejects.toThrow();
+    }
     if (failureMode === "broken-start") {
       await Bun.write(backend, sharedImport + backendText);
     } else {
