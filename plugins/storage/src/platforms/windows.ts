@@ -66,6 +66,27 @@ const FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000;
 const FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
 const DIRECTORY_OPEN_FLAGS =
   FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS;
+const UNICODE_STRING_BYTES = 16;
+const HANDLE_BYTES = 8;
+const IO_STATUS_BLOCK_BYTES = 16;
+const OBJECT_ATTRIBUTES_BYTES = 48;
+const OBJECT_NAME_OFFSET = 16;
+const OBJECT_ATTRIBUTES_FLAGS_OFFSET = 24;
+const OBJ_CASE_INSENSITIVE = 0x40;
+const FILE_ATTRIBUTE_NORMAL = 0x80;
+const FILE_OPEN = 1;
+const FILE_CREATE = 2;
+const FILE_OPEN_IF = 3;
+const NATIVE_FILE_DISPOSITIONS = {
+  [CREATE_NEW]: FILE_CREATE,
+  [OPEN_EXISTING]: FILE_OPEN,
+  [OPEN_ALWAYS]: FILE_OPEN_IF,
+};
+type FileDisposition = keyof typeof NATIVE_FILE_DISPOSITIONS;
+const FILE_SYNCHRONOUS_IO_NONALERT = 0x20;
+const FILE_NON_DIRECTORY_FILE = 0x40;
+const FILE_OPEN_FOR_BACKUP_INTENT = 0x4000;
+const FILE_OPEN_REPARSE_POINT = 0x200000;
 
 /** Initialize bindings only when the host activates this platform instance. */
 export function createStorage(): WindowsStorage {
@@ -81,18 +102,6 @@ function wide(text: string): Buffer {
 }
 function createBindings() {
   return dlopen("kernel32.dll", {
-    CreateFileW: {
-      args: [
-        "ptr",
-        "u32",
-        "u32",
-        "ptr",
-        "u32",
-        "u32",
-        "u64",
-      ],
-      returns: "u64",
-    },
     CreateDirectoryW: {
       args: [
         "ptr",
@@ -179,9 +188,40 @@ function createBindings() {
     },
   });
 }
-/** Native rename accepts a simple name relative to the source's already opened parent. */
-function createRenameBindings() {
+/** Native file operations return their status without a separate thread-local error read. */
+function createFileBindings() {
   return dlopen("ntdll.dll", {
+    RtlDosPathNameToNtPathName_U_WithStatus: {
+      args: [
+        "buffer",
+        "buffer",
+        "ptr",
+        "ptr",
+      ],
+      returns: "i32",
+    },
+    RtlFreeUnicodeString: {
+      args: [
+        "buffer",
+      ],
+      returns: "void",
+    },
+    NtCreateFile: {
+      args: [
+        "buffer",
+        "u32",
+        "buffer",
+        "buffer",
+        "ptr",
+        "u32",
+        "u32",
+        "u32",
+        "u32",
+        "ptr",
+        "u32",
+      ],
+      returns: "i32",
+    },
     NtSetInformationFile: {
       args: [
         "u64",
@@ -276,7 +316,7 @@ function selectedPath(path: string) {
 type TargetOptions = {
   access: number;
   share: number;
-  disposition: number;
+  disposition: FileDisposition;
   allowDirectories: boolean;
   allowMissing: boolean;
   createParents: boolean;
@@ -292,7 +332,10 @@ const METADATA_TARGET_OPTIONS: TargetOptions = {
   createParents: false,
 };
 /** Transfers pin object identity and exclude new writers; destination creation never overwrites. */
-function transferOptions(access: number, disposition: number): TargetOptions {
+function transferOptions(
+  access: number,
+  disposition: FileDisposition,
+): TargetOptions {
   return {
     access,
     share: FILE_SHARE_READ,
@@ -305,15 +348,15 @@ function transferOptions(access: number, disposition: number): TargetOptions {
 export class WindowsStorage {
   private readonly api = createBindings();
   private disposed = false;
-  private renameApi: ReturnType<typeof createRenameBindings> | null = null;
+  private fileApi: ReturnType<typeof createFileBindings> | null = null;
   /** Release this instance's bindings; other storage adapters retain their resources. */
   dispose(): void {
     if (this.disposed) {
       return;
     }
     this.disposed = true;
-    this.renameApi?.close();
-    this.renameApi = null;
+    this.fileApi?.close();
+    this.fileApi = null;
     this.api.close();
   }
   private check(value: number | bigint, message: string): void {
@@ -344,25 +387,67 @@ export class WindowsStorage {
   private close(handle: bigint) {
     this.check(this.api.symbols.CloseHandle(handle), "CloseHandle failed");
   }
+  /** Preserve synchronous CreateFileW access/sharing semantics while capturing failure as NTSTATUS. */
   private open(
     path: string,
     access: number,
     share: number,
-    disposition: number,
+    disposition: FileDisposition,
     flags: number,
     allowMissing = false,
   ): bigint {
-    const handle = this.api.symbols.CreateFileW(
-      ptr(wide(path)),
-      access,
-      share,
+    this.fileApi ??= createFileBindings();
+    const api = this.fileApi;
+    const name = Buffer.alloc(UNICODE_STRING_BYTES);
+    const handle = Buffer.alloc(HANDLE_BYTES);
+    const converted = api.symbols.RtlDosPathNameToNtPathName_U_WithStatus(
+      wide(path),
+      name,
       null,
-      disposition,
-      flags,
-      0n,
+      null,
     );
-    if (handle === 0n || handle === 0xffffffffffffffffn) {
-      const code = this.api.symbols.GetLastError();
+    if (converted < 0) {
+      this.fail(
+        "Storage path conversion failed",
+        api.symbols.RtlNtStatusToDosError(converted >>> 0),
+      );
+    }
+    let status: number;
+    try {
+      const attributes = Buffer.alloc(OBJECT_ATTRIBUTES_BYTES);
+      attributes.writeUInt32LE(OBJECT_ATTRIBUTES_BYTES);
+      attributes.writeBigUInt64LE(BigInt(ptr(name)), OBJECT_NAME_OFFSET);
+      attributes.writeUInt32LE(
+        OBJ_CASE_INSENSITIVE,
+        OBJECT_ATTRIBUTES_FLAGS_OFFSET,
+      );
+      const statusBlock = Buffer.alloc(IO_STATUS_BLOCK_BYTES);
+      // CreateFileW's u64 result is boxed by Bun before JS can read GetLastError.
+      // That allocation (or a cold error-reader thunk) can overwrite the error.
+      // Receive the handle in caller-owned memory and use the returned NTSTATUS.
+      // CreateFileW also requests attribute reads and synchronization, including for write-only opens.
+      status = api.symbols.NtCreateFile(
+        handle,
+        access | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+        attributes,
+        statusBlock,
+        null,
+        FILE_ATTRIBUTE_NORMAL,
+        share,
+        NATIVE_FILE_DISPOSITIONS[disposition],
+        FILE_SYNCHRONOUS_IO_NONALERT |
+          FILE_OPEN_REPARSE_POINT |
+          (flags & FILE_FLAG_BACKUP_SEMANTICS
+            ? FILE_OPEN_FOR_BACKUP_INTENT
+            : FILE_NON_DIRECTORY_FILE),
+        null,
+        0,
+      );
+    } finally {
+      api.symbols.RtlFreeUnicodeString(name);
+    }
+    if (status < 0) {
+      const code = api.symbols.RtlNtStatusToDosError(status >>> 0);
       if (code === ERROR_FILE_NOT_FOUND || code === ERROR_PATH_NOT_FOUND) {
         if (allowMissing) {
           return 0n;
@@ -374,7 +459,11 @@ export class WindowsStorage {
       }
       this.fail("Storage open failed", code);
     }
-    return handle;
+    const opened = handle.readBigUInt64LE(0);
+    if (opened === 0n || opened === 0xffffffffffffffffn) {
+      throw new Error("Storage open returned an invalid handle.");
+    }
+    return opened;
   }
   private info(handle: bigint) {
     const info = Buffer.alloc(BY_HANDLE_FILE_INFORMATION_BYTES);
@@ -892,10 +981,10 @@ export class WindowsStorage {
           const rename = Buffer.alloc(FILE_RENAME_INFO_BYTES + name.length);
           rename.writeUInt32LE(name.length, FILE_RENAME_NAME_LENGTH_OFFSET);
           name.copy(rename, FILE_RENAME_NAME_OFFSET);
-          const statusBlock = Buffer.alloc(16);
-          this.renameApi ??= createRenameBindings();
-          const api = this.renameApi;
-          // CreateFileW without OVERLAPPED creates a synchronous file object. Buffers and all
+          const statusBlock = Buffer.alloc(IO_STATUS_BLOCK_BYTES);
+          this.fileApi ??= createFileBindings();
+          const api = this.fileApi;
+          // Opening with FILE_SYNCHRONOUS_IO_NONALERT creates a synchronous file object. Buffers and all
           // pins stay alive until NtSetInformationFile has completed the native operation.
           const status = api.symbols.NtSetInformationFile(
             source.handle,

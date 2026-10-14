@@ -1,6 +1,7 @@
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
 import type { ProcessResult, processInputSchema } from "#process/contract";
+import { runWindowsProcess } from "#process/platforms/windows-process-native";
 
 type RunInput = z.output<typeof processInputSchema>;
 
@@ -54,12 +55,15 @@ async function capture(
   }
 }
 
-/** Execute trusted parsed argv with Bun, own both pipes and wait for direct-child termination on every path. */
+/** Execute parsed argv and retain ownership until processes and pipes have been drained. */
 export async function runProcess(
   input: RunInput,
   signal: AbortSignal,
 ): Promise<ProcessResult> {
   signal.throwIfAborted();
+  if (process.platform === "win32") {
+    return runWindowsProcess(input, signal);
+  }
   const failure = new AbortController();
   const executionSignal = AbortSignal.any([
     signal,

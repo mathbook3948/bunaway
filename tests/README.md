@@ -95,6 +95,14 @@ compile하고 원본 파일을 제거한 뒤 실행한다. 실제 macOS native C
 앱과 화면의 코드는 `fixtures/macos-log-capabilities/`의 타입 검사 대상이며 실행 전
 정책 권한 이름도 실제 설치된 플러그인 계약으로 검사한다.
 
+`lifecycle/windows-ui-lifecycle.test.ts`는 운영 UI Worker와 창 플러그인을 실행하며 Win32와
+WebView 경계만 제어한다. 닫기 확인 거부와 마지막 창의 quit 취소, 재생성 성공 시 임시
+프로필 보존, constructor와 controller 생성 실패 및 네이티브 정리 후 재생성 취소를
+검사한다. 실제 임시 디렉터리와 저장 파일로 프로필의 보존과 삭제를 확인하고,
+반복 종료와 부모 입력 복원 재시도에서 HWND와 COM 정리가 중복되지 않는지 검사한다.
+이는 계약 및 자원 소유권 검사이며 실제 HWND, COM, WebView2 실행은 기존
+`mise run host:windows`와 Windows native CI에서 별도로 검증한다.
+
 다운로드 UI-loop regression은 생성된 worker 경계에서 전용 `windows-download-cleanup/ui.ts`를
 번들하고 실제 승인 transfer의 cancel 자원만 일시적으로 실패시킨다. 소유 창을 닫는 동안
 다른 창의 SDK 응답과 세 번째 창의 native cleanup이 진행하고, 소유자의 재시도도 복구되는지
@@ -446,7 +454,14 @@ manifest 생성과 카탈로그 로딩에서 작업 이름만 전달하며 작�
 작업 중과 게시 직전에 작업 경로가 링크로 바뀌어도 외부 파일을 게시하지 않고 이전 출력을 보존하는지 검사한다.
 
 `cli/restart-controller.test.ts`는 코드 교체 응답을 기다리는 중 받은 UI 변경의 즉시 무효화,
-연속 저장 대기와 종료 시 대기 취소를 검사한다. `cli/distribution.test.ts`는 설치한 CommonJS
+조절한 타이머로 연속 저장 대기와 종료 시 대기 취소를 검사한다. 정리 중 연속 저장,
+빌드와 실행 준비 중 취소, 실행 실패 후 재시도, 마지막 작업 완료 직후 저장도 확인한다.
+`cli/dev-ownership.test.ts`는 앱과 개발 서버의 소유권 이전, 늦게 완료한 실행의 회수,
+이전 프로세스 종료 알림 제외, 반복 종료와 감시 범위의 복구를 명시적인 완료 신호로 검사한다. 개발 종료 신호는 진행 중인 서버 시작을 취소하지만 준비된 서버는 앱 정리가 끝날 때까지 유지하는지 확인한다.
+`cli/dev-server.test.ts`는 종료 신호 뒤에도 실제 준비된 서버가 응답하고 명시적 정리 뒤 포트를 해제하는지 확인한다.
+`cli/cli.test.ts`는 실제 감시와 서버 프로세스로 소스 및 앱 프로세스 실행 실패 후 재시도,
+서버 재사용과 교체 및 앱 종료 뒤 서버 정리를 확인한다. 시작 중 알림으로 첫 빌드가 폐기돼도 실제 실행 시도에서 실패하도록 주입하고, 복구 저장 전에는 후속 빌드의 실행을 기다린다. 이 계약 검사는 실제 Windows WebView 실행을 대신하지 않는다.
+`cli/distribution.test.ts`는 설치한 CommonJS
 플러그인의 `.cjs`, `.js` 진입점을 실제로 번들하고 로드해 export와 교체 전후 객체 동일성을 검사한다.
 조건별 import/require 결과와 require 전용 진입점, 차단된 import 거부 및 setup 플러그인의
 바인딩 객체 재사용도 확인한다. Host API 테스트는 같은 플러그인을 재사용한 앱의 실행 컨텍스트가 독립적인지 검사한다.

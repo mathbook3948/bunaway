@@ -308,6 +308,9 @@ export class MacosWebview {
               decision ?? null,
               allowed ? WK_NAVIGATION_ALLOW : WK_NAVIGATION_CANCEL,
             );
+            this.diagnostics.record("action-policy-returned", {
+              allowed,
+            });
           },
         },
         {
@@ -346,6 +349,9 @@ export class MacosWebview {
               decision ?? null,
               allowed ? WK_NAVIGATION_ALLOW : WK_NAVIGATION_CANCEL,
             );
+            this.diagnostics.record("response-policy-returned", {
+              allowed,
+            });
           },
         },
         {
