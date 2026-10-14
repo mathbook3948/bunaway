@@ -7,11 +7,16 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const repository = resolve(import.meta.dir, "../..");
+const checker = resolve(repository, "docs/site/scripts/check-reference.mjs");
+const typescriptPackage = dirname(
+  createRequire(checker).resolve("typescript/package.json"),
+);
 const sdk = pathToFileURL(
   resolve(repository, "packages/plugin-sdk/src/index.ts"),
 ).href;
@@ -24,6 +29,7 @@ const operationNames = [
 ];
 
 type Scenario = {
+  typescriptLocation?: "site" | "root";
   documented?: string[];
   extraPlugin?: boolean;
   missingDeclaration?: boolean;
@@ -126,13 +132,21 @@ export default defineNativePlugin({name: "added", platforms: { linux: { operatio
     await mkdir(scripts, {
       recursive: true,
     });
-    await copyFile(
-      resolve(repository, "docs/site/scripts/check-reference.mjs"),
-      resolve(scripts, "check-reference.mjs"),
+    await copyFile(checker, resolve(scripts, "check-reference.mjs"));
+    // Link the resolved package itself: a workspace node_modules directory may
+    // depend on hoisted packages or contain relative links that cannot relocate.
+    const modules = resolve(
+      root,
+      scenario.typescriptLocation === "site"
+        ? "docs/site/node_modules"
+        : "node_modules",
     );
+    await mkdir(modules, {
+      recursive: true,
+    });
     await symlink(
-      resolve(repository, "docs/site/node_modules"),
-      resolve(root, "docs/site/node_modules"),
+      typescriptPackage,
+      resolve(modules, "typescript"),
       "junction",
     );
     const child = Bun.spawn(
@@ -166,13 +180,20 @@ export default defineNativePlugin({name: "added", platforms: { linux: { operatio
   }
 }
 
-test("discovers spread, generated and platform operations despite renamed declarations without native side effects", async () => {
-  const result = await checkReference();
-  expect(result.exitCode).toBe(0);
-  expect(result.output).toContain(
-    "4 public exports, members, commands, operations",
-  );
-});
+for (const typescriptLocation of [
+  "site",
+  "root",
+] as const) {
+  test(`discovers spread, generated and platform operations with TypeScript installed at ${typescriptLocation} without native side effects`, async () => {
+    const result = await checkReference({
+      typescriptLocation,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.output).toContain(
+      "4 public exports, members, commands, operations",
+    );
+  });
+}
 
 for (const omitted of [
   "renamed.generated",
