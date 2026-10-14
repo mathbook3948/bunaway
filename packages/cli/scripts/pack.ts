@@ -9,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
+import cliPackage from "../package.json";
 import {
   checkArtifact,
   copyFramework,
@@ -235,14 +236,17 @@ export async function packFramework(
       engines: {
         bun: info.bun,
       },
-      dependencies: Object.fromEntries(
-        Object.values(info.packages)
-          .filter((name) => name !== "@bunaway/cli")
-          .map((name) => [
-            name,
-            dependency(name),
-          ]),
-      ),
+      dependencies: {
+        esbuild: cliPackage.dependencies.esbuild,
+        ...Object.fromEntries(
+          Object.values(info.packages)
+            .filter((name) => name !== "@bunaway/cli")
+            .map((name) => [
+              name,
+              dependency(name),
+            ]),
+        ),
+      },
       bin: {
         bunaway: "./packages/cli/dist/distribution-main.js",
       },
@@ -278,6 +282,10 @@ export async function packFramework(
           resolve(frameworkRoot, `packages/cli/src/${entry}.ts`),
         ],
         target: "bun",
+        // esbuild locates its platform executable relative to its installed package.
+        external: [
+          "esbuild",
+        ],
       });
       if (!built.success || built.outputs.length !== 1) {
         throw new Error(`CLI bundle failed: ${built.logs.join("\n")}`);

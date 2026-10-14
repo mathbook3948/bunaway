@@ -14,7 +14,8 @@
     "@bunaway/packaging": "workspace:*",
     "@bunaway/plugin-api": "workspace:*",
     "@bunaway/protocol": "workspace:*",
-    "@bunaway/runtime-bun": "workspace:*"
+    "@bunaway/runtime-bun": "workspace:*",
+    "esbuild": "0.28.2"
   },
   "scripts": {
     "typecheck": "tsc --project tsconfig.json"

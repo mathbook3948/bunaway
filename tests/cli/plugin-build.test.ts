@@ -1,11 +1,212 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PLATFORMS } from "@bunaway/plugin-api";
 import { frameworkRoot, writeJson } from "#cli/files";
 import { buildNativePlugin } from "#cli/plugin-build";
 import { readPluginDeclaration } from "#cli/plugins";
+
+test("conditional package imports follow the build target and import kind in src-free distributions", async () => {
+  await mkdir(resolve(frameworkRoot, "build"), {
+    recursive: true,
+  });
+  const root = await mkdtemp(
+    resolve(frameworkRoot, "build/plugin-conditions-"),
+  );
+  try {
+    const manifest = {
+      name: "conditional-plugin",
+      version: "1",
+      type: "module",
+      exports: {
+        ".": "./dist/index.js",
+        "./native": "./dist/native/linux.js",
+      },
+      imports: {
+        "#helper": {
+          browser: {
+            import: "./src/browser.ts",
+            require: "./src/browser-require.ts",
+          },
+          bun: {
+            import: "./src/bun.ts",
+            require: "./src/bun-require.ts",
+          },
+          default: "./src/browser.ts",
+        },
+        "#leaf/*": "./src/leaves/*.ts",
+        "#platform": "./src/platforms/linux.ts",
+        "#dependency": "conditional-dependency",
+        "#mixed": {
+          types: "./src/bun.ts",
+          browser: "conditional-dependency",
+          bun: "./src/bun.ts",
+        },
+      },
+    };
+    await writeJson(resolve(root, "package.json"), manifest);
+    await writeJson(resolve(root, "tsconfig.json"), {
+      extends: resolve(frameworkRoot, "tsconfig.base.json"),
+      compilerOptions: {
+        types: [
+          "bun",
+        ],
+      },
+      include: [
+        "src/**/*.ts",
+      ],
+    });
+    await Bun.write(
+      resolve(root, "src/index.ts"),
+      `
+import { defineNativePlugin } from "@bunaway/plugin";
+import { z } from "zod";
+import { createOperations } from "#platform";
+import { value } from "#helper";
+import dependency from "conditional-dependency";
+import aliasDependency from "#dependency";
+import * as mixed from "#mixed";
+export { value, dependency, aliasDependency, mixed };
+export const required: string = require("#helper").value;
+export default defineNativePlugin({name:"demo", operations:{read:{input:z.null(),output:z.string()}}, platforms:{linux:{thread:"worker",create:createOperations}}});
+`,
+    );
+    for (const target of [
+      "browser",
+      "bun",
+    ]) {
+      for (const kind of [
+        "import",
+        "require",
+      ]) {
+        const suffix = kind === "require" ? "-require" : "";
+        const marker = `${target.toUpperCase()}${kind === "require" ? "_REQUIRE" : ""}_HELPER`;
+        await Bun.write(
+          resolve(root, `src/${target}${suffix}.ts`),
+          `export { value } from "#leaf/${target}${suffix}";`,
+        );
+        await Bun.write(
+          resolve(root, `src/leaves/${target}${suffix}.ts`),
+          `export const value = ${JSON.stringify(marker)};`,
+        );
+      }
+    }
+    await Bun.write(
+      resolve(root, "src/platforms/linux.ts"),
+      `
+import type { NativeAdapterFactory } from "@bunaway/plugin";
+import { value } from "#helper";
+export const createOperations: NativeAdapterFactory = () => ({execute: () => value + "LINUX_ONLY_MARKER", dispose() {}});
+`,
+    );
+    const dependency = resolve(root, "node_modules/conditional-dependency");
+    await mkdir(dependency, {
+      recursive: true,
+    });
+    await writeJson(resolve(dependency, "package.json"), {
+      name: "conditional-dependency",
+      exports: {
+        types: "./index.d.ts",
+        bun: "./platforms/windows.ts",
+      },
+    });
+    await Bun.write(
+      resolve(dependency, "platforms/windows.ts"),
+      'module.exports = { value: "EXTERNAL_DEPENDENCY_MARKER" };',
+    );
+    await Bun.write(
+      resolve(dependency, "index.d.ts"),
+      "declare const dependency: { value: string }; export default dependency;",
+    );
+    await buildNativePlugin(root);
+    const outputs = new Map<string, string>();
+    for (const [file, target, excluded] of [
+      [
+        "index.js",
+        "BROWSER",
+        "BUN",
+      ],
+      [
+        "native/linux.js",
+        "BUN",
+        "BROWSER",
+      ],
+    ] as const) {
+      const source = await Bun.file(resolve(root, "dist", file)).text();
+      outputs.set(file, source);
+      expect(source).toContain(`${target}_HELPER`);
+      expect(source).toContain(`${target}_REQUIRE_HELPER`);
+      expect(source).not.toContain(`${excluded}_HELPER`);
+      expect(source).not.toContain(`${excluded}_REQUIRE_HELPER`);
+      expect(source).not.toContain("EXTERNAL_DEPENDENCY_MARKER");
+      expect(source).toContain('from "conditional-dependency"');
+      expect(source).not.toContain('from "#dependency"');
+      expect(source).not.toContain('from "#mixed"');
+      expect(source).not.toContain('from "#helper"');
+      expect(source).not.toContain('from "#leaf/');
+      expect(source.includes("LINUX_ONLY_MARKER")).toBe(target === "BUN");
+    }
+    // Install only the published files, so package-local runtime resolution cannot find src.
+    const consumer = resolve(root, "consumer");
+    const installed = resolve(consumer, "node_modules/conditional-plugin");
+    await cp(resolve(root, "dist"), resolve(installed, "dist"), {
+      recursive: true,
+    });
+    await writeJson(resolve(installed, "package.json"), manifest);
+    expect(await Bun.file(resolve(installed, "src/index.ts")).exists()).toBe(
+      false,
+    );
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `
+import assert from "node:assert/strict";
+import dependency from "conditional-dependency";
+for (const [entry, target] of [["conditional-plugin", "BROWSER"], ["conditional-plugin/native", "BUN"]]) {
+  const output = await import(entry);
+  assert.equal(output.value, target + "_HELPER");
+  assert.equal(output.required, target + "_REQUIRE_HELPER");
+  assert.equal(output.dependency, dependency);
+  assert.equal(output.aliasDependency, dependency);
+  assert.equal(output.mixed.value, target === "BROWSER" ? dependency.value : "BUN_HELPER");
+  if (target === "BUN") {
+    const adapter = output.default._definition.nativePlatforms.linux.create({dataRoot:".", capabilities:[]});
+    try { assert.equal(await adapter.execute("demo.read", null, "backend"), "BUN_HELPERLINUX_ONLY_MARKER"); }
+    finally { await adapter.dispose(); }
+  }
+}
+`,
+      ],
+      {
+        cwd: consumer,
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const stdout = new Response(child.stdout).text();
+    const stderr = new Response(child.stderr).text();
+    expect(await child.exited, `${await stdout}\n${await stderr}`).toBe(0);
+    // Fail after neutral output succeeds, while resolving the native target's graph.
+    await Bun.write(
+      resolve(root, "src/bun.ts"),
+      'export { value } from "./missing.ts";',
+    );
+    await expect(buildNativePlugin(root)).rejects.toThrow();
+    for (const [file, source] of outputs) {
+      expect(await Bun.file(resolve(root, "dist", file)).text()).toBe(source);
+    }
+    expect(
+      (await readdir(root)).some((name) => name.startsWith(".plugin-build-")),
+    ).toBe(false);
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 30000);
 
 test.each([
   ".ts",

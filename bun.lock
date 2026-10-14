@@ -73,6 +73,7 @@
         "@bunaway/plugin-api": "workspace:*",
         "@bunaway/protocol": "workspace:*",
         "@bunaway/runtime-bun": "workspace:*",
+        "esbuild": "0.28.2",
       },
     },
     "packages/client-sdk": {
