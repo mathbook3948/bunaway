@@ -320,6 +320,9 @@ test.skipIf(!iscc)(
       await writeRegistry(runKey, nextName, app(movedDir));
       expect(await runInstaller(join(movedDir, "unins000.exe"), [])).toBe(0);
       expect(await registryValue(runKey, nextName)).toBe("");
+    } catch (error) {
+      console.error("Native autostart lifecycle fixture failed:", error);
+      throw error;
     } finally {
       for (const registration of [
         name,
@@ -331,6 +334,9 @@ test.skipIf(!iscc)(
       await rm(f.root, {
         recursive: true,
         force: true,
+        // Exited Inno processes can briefly retain Windows filesystem handles.
+        maxRetries: 5,
+        retryDelay: 50,
       });
     }
   },
@@ -449,6 +455,9 @@ test.skipIf(!iscc)(
       restore = undefined;
       expect(await runInstaller(join(installDir, "unins000.exe"), [])).toBe(0);
       expect(await registryValue(key, nextName)).toBe("");
+    } catch (error) {
+      console.error("Native autostart recovery fixture failed:", error);
+      throw error;
     } finally {
       if (restore) {
         await restore();
@@ -459,6 +468,8 @@ test.skipIf(!iscc)(
       await rm(f.root, {
         recursive: true,
         force: true,
+        maxRetries: 5,
+        retryDelay: 50,
       });
     }
   },
@@ -605,6 +616,9 @@ try {
       expect(await runInstaller(join(otherDir, "unins000.exe"), [])).toBe(0);
       expect(await registryValue(runKey, name)).toBe(foreign);
       expect(await approval()).toBe(disabled);
+    } catch (error) {
+      console.error("Native autostart writer exclusion fixture failed:", error);
+      throw error;
     } finally {
       await Bun.write(release, "release");
       if (uninstaller) {
@@ -615,10 +629,14 @@ try {
       await rm(f.root, {
         recursive: true,
         force: true,
+        maxRetries: 5,
+        retryDelay: 50,
       });
       await rm(other.root, {
         recursive: true,
         force: true,
+        maxRetries: 5,
+        retryDelay: 50,
       });
     }
   },
