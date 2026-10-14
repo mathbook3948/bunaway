@@ -1,12 +1,21 @@
 import { expect, test } from "bun:test";
 import {
+  MAX_BINARY_BYTES,
+  MAX_BOOKMARK_LENGTH,
+} from "#plugins/clipboard/src/contract";
+import {
+  decodeBinary,
+  decodeBookmark,
   decodeFiles,
   decodeHTML,
   decodeImage,
   decodeRTF,
+  encodeBinary,
   encodeFiles,
   encodeHTML,
   encodeImage,
+  encodeItem,
+  MAX_NATIVE_FORMAT_BYTES,
 } from "#plugins/clipboard/src/platforms/windows-codecs";
 
 const image = {
@@ -176,4 +185,78 @@ test("DROPFILES preserves Unicode paths and requires bounded wide lists with a d
   expect(() => decodeRTF(Buffer.from("{\\rtf1 한글}\0", "utf8"))).toThrow(
     invalid,
   );
+});
+
+test("Windows URL bookmarks require bounded, terminated Unicode HTTP URLs", () => {
+  for (const url of [
+    "https://example.com/한글😀",
+    "http://example.com/?x=1",
+    "https://example.com/" +
+      "x".repeat(MAX_BOOKMARK_LENGTH - "https://example.com/".length),
+  ]) {
+    expect(
+      decodeBookmark(
+        encodeItem({
+          format: "application/x-bunaway-bookmark",
+          data: {
+            url,
+          },
+        }),
+      ),
+    ).toEqual({
+      url,
+    });
+  }
+  for (const bytes of [
+    Buffer.alloc(0),
+    Buffer.from([
+      1,
+    ]),
+    Buffer.from("https://example.com/", "utf16le"),
+    Buffer.from("https://example.com/\ud800\0", "utf16le"),
+    Buffer.from("javascript:alert(1)\0", "utf16le"),
+    Buffer.from(
+      `https://example.com/${"x".repeat(MAX_BOOKMARK_LENGTH)}\0`,
+      "utf16le",
+    ),
+    Buffer.alloc(MAX_NATIVE_FORMAT_BYTES + 1),
+  ]) {
+    expect(() => decodeBookmark(bytes)).toThrow(invalid);
+  }
+});
+
+test("private binary framing preserves empty and maximum bytes, excludes allocation padding and rejects malformed lengths", () => {
+  for (const data of [
+    "",
+    "AA==",
+    "AP+A/w==",
+    Buffer.alloc(MAX_BINARY_BYTES, 255).toString("base64"),
+  ]) {
+    const encoded = encodeBinary(data);
+    expect(decodeBinary(encoded)).toBe(data);
+    expect(
+      decodeBinary(
+        Buffer.concat([
+          encoded,
+          Buffer.alloc(16, 255),
+        ]),
+      ),
+    ).toBe(data);
+  }
+  const wrongVersion = encodeBinary("AA==");
+  wrongVersion[7] = 50;
+  const missingPayload = encodeBinary("AA==");
+  missingPayload.writeUInt32LE(2, 8);
+  const oversized = encodeBinary("");
+  oversized.writeUInt32LE(MAX_BINARY_BYTES + 1, 8);
+  for (const bytes of [
+    Buffer.alloc(0),
+    Buffer.alloc(11),
+    wrongVersion,
+    missingPayload,
+    oversized,
+    Buffer.alloc(MAX_NATIVE_FORMAT_BYTES + 1),
+  ]) {
+    expect(() => decodeBinary(bytes)).toThrow(invalid);
+  }
 });

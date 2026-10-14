@@ -13,12 +13,12 @@ import {
 } from "#clipboard/platforms/macos-pasteboard";
 import { invalidPasteboardData } from "#clipboard/platforms/macos-tiff";
 
-const formats: ClipboardFormat[] = [
+const formats = [
   "text/plain",
   "text/html",
   "text/rtf",
   "image/bmp",
-];
+] as const;
 
 /** Own one main-thread pasteboard binding and its synchronous commits. */
 export class MacosClipboard {

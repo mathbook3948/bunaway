@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { type JsonValue, validateValue } from "@bunaway/protocol";
+import {
+  MAX_BINARY_BYTES,
+  MAX_BINARY_FORMATS,
+} from "#plugins/clipboard/src/contract";
 import createOperationsDefinition from "#plugins/clipboard/src/index";
 import { createClipboard } from "#plugins/clipboard/src/platforms/windows-bindings";
 import {
+  encodeBinary,
   encodeHTML,
   MAX_NATIVE_FORMAT_BYTES,
 } from "#plugins/clipboard/src/platforms/windows-codecs";
@@ -310,6 +315,286 @@ assert.deepEqual(
   ]),
 );
 external.fill(0);
+const extensions = [
+  {
+    format: "application/x-bunaway-bookmark",
+    data: {
+      url: "https://example.com/한글😀",
+    },
+  },
+  {
+    format: "application/x-bunaway-binary/memo",
+    data: "AP+A/w==",
+  },
+  {
+    format: "text/plain",
+    data: "URL fallback",
+  },
+];
+for (const [operation, input] of [
+  [
+    "readFormats",
+    {
+      formats: extensions.map((item) => item.format),
+    },
+  ],
+  [
+    "writeFormats",
+    {
+      items: extensions,
+    },
+  ],
+  [
+    "hasFormat",
+    {
+      format: "application/x-bunaway-bookmark",
+    },
+  ],
+] as const) {
+  await assert.rejects(
+    async () =>
+      adapter.executeUI?.(
+        `clipboard.${operation}`,
+        validateValue({}, input),
+        "backend",
+        {
+          ...context,
+          permissions: {
+            permissions: [
+              "clipboard.writeText",
+            ],
+          },
+        },
+      ),
+    hasCode("PERMISSION_DENIED"),
+  );
+}
+await execute(
+  "writeFormats",
+  validateValue(
+    {},
+    {
+      items: extensions,
+    },
+  ),
+);
+assert.deepEqual(
+  await execute("readFormats", {
+    formats: extensions.map((item) => item.format),
+  }),
+  validateValue({}, extensions),
+);
+assert.deepEqual(await execute("getFormats"), [
+  "text/plain",
+  "application/x-bunaway-bookmark",
+]);
+for (const data of [
+  "",
+  Buffer.alloc(MAX_BINARY_BYTES, 255).toString("base64"),
+]) {
+  await execute("writeFormats", {
+    items: [
+      {
+        format: "application/x-bunaway-binary/memo",
+        data,
+      },
+    ],
+  });
+  assert.deepEqual(
+    await execute("readFormats", {
+      formats: [
+        "application/x-bunaway-binary/memo",
+      ],
+    }),
+    validateValue({}, [
+      {
+        format: "application/x-bunaway-binary/memo",
+        data,
+      },
+    ]),
+  );
+}
+for (const failure of [
+  "alloc",
+  "lock",
+  "register",
+  "empty",
+  "set",
+]) {
+  await execute("writeText", {
+    text: "preserve before extension failure",
+  });
+  const before: number = state.clears;
+  const beforeFree = state.frees;
+  state.fail = failure;
+  // The new binary name makes registration failure observable after bookmark preparation.
+  await assert.rejects(
+    async () =>
+      execute(
+        "writeFormats",
+        validateValue(
+          {},
+          {
+            items: [
+              extensions[0],
+              {
+                format: `application/x-bunaway-binary/failure-${failure}`,
+                data: "AA==",
+              },
+            ],
+          },
+        ),
+      ),
+    hasCode("INTERNAL"),
+  );
+  state.fail = "";
+  assert.equal(state.clears, before + (failure === "set" ? 1 : 0));
+  assert.equal(state.allocations.size, 0);
+  assert.equal(state.locks, 0);
+  assert.equal(state.opened, false);
+  let expectedFrees = 2;
+  if (failure === "alloc") {
+    expectedFrees = 0;
+  } else if (failure === "lock" || failure === "register") {
+    expectedFrees = 1;
+  }
+  assert.equal(state.frees - beforeFree, expectedFrees);
+  if (failure !== "set") {
+    assert.equal(
+      await execute("readText"),
+      "preserve before extension failure",
+    );
+  }
+}
+state.failAtSet = state.setCalls + 2;
+const beforeExtensionFree = state.frees;
+await assert.rejects(
+  async () =>
+    execute(
+      "writeFormats",
+      validateValue(
+        {},
+        {
+          items: extensions,
+        },
+      ),
+    ),
+  hasCode("INTERNAL"),
+);
+state.failAtSet = 0;
+assert.equal(state.frees, beforeExtensionFree + 2);
+assert.deepEqual(
+  await execute("readFormats", {
+    formats: [
+      "application/x-bunaway-bookmark",
+      "application/x-bunaway-binary/memo",
+    ],
+  }),
+  validateValue({}, [
+    extensions[0],
+    {
+      format: "application/x-bunaway-binary/memo",
+      data: null,
+    },
+  ]),
+);
+const binaryId = state.registered.get("application/x-bunaway-binary/memo");
+const bookmarkId = state.registered.get("UniformResourceLocatorW");
+assert(binaryId !== undefined && bookmarkId !== undefined);
+for (const [format, id, malformed] of [
+  [
+    "application/x-bunaway-binary/memo",
+    binaryId,
+    [
+      Buffer.alloc(11),
+      Buffer.alloc(MAX_NATIVE_FORMAT_BYTES + 1),
+      Buffer.from("BUNBIN01\x01\x00\x00\x00", "binary"),
+    ],
+  ],
+  [
+    "application/x-bunaway-bookmark",
+    bookmarkId,
+    [
+      Buffer.from("https://example.com/", "utf16le"),
+      Buffer.from("file:///C:/private\0", "utf16le"),
+      Buffer.alloc(MAX_NATIVE_FORMAT_BYTES + 1),
+    ],
+  ],
+] as const) {
+  for (const bytes of malformed) {
+    state.formats.set(id, bytes);
+    const freesBeforeRead = state.frees;
+    await assert.rejects(
+      async () =>
+        execute("readFormats", {
+          formats: [
+            format,
+          ],
+        }),
+      hasCode("INTERNAL"),
+    );
+    assert.equal(state.frees, freesBeforeRead);
+    assert.equal(state.opened, false);
+    assert.equal(state.locks, 0);
+  }
+}
+const externalBinary = encodeBinary("AP+A/w==");
+state.formats.set(binaryId, externalBinary);
+const copiedBinary = await execute("readFormats", {
+  formats: [
+    "application/x-bunaway-binary/memo",
+  ],
+});
+externalBinary.fill(0);
+assert.deepEqual(
+  copiedBinary,
+  validateValue({}, [
+    {
+      format: "application/x-bunaway-binary/memo",
+      data: "AP+A/w==",
+    },
+  ]),
+);
+// The per-owner registration limit applies before clearing; existing names remain usable.
+const alreadyRegistered = Array.from(state.registered.keys()).filter((name) =>
+  name.startsWith("application/x-bunaway-binary/"),
+).length;
+for (let index = alreadyRegistered; index < MAX_BINARY_FORMATS; index++) {
+  assert.equal(
+    await execute("hasFormat", {
+      format: `application/x-bunaway-binary/capacity-${index}`,
+    }),
+    false,
+  );
+}
+const beforeCapacity = state.clears;
+await assert.rejects(
+  async () =>
+    execute("writeFormats", {
+      items: [
+        {
+          format: "text/plain",
+          data: "prepared",
+        },
+        {
+          format: "application/x-bunaway-binary/over-capacity",
+          data: "",
+        },
+      ],
+    }),
+  hasCode("BUSY"),
+);
+assert.equal(state.clears, beforeCapacity);
+assert.equal(state.allocations.size, 0);
+await execute(
+  "writeFormats",
+  validateValue(
+    {},
+    {
+      items: extensions,
+    },
+  ),
+);
 await execute("writeText", {
   text: "old",
 });
@@ -318,8 +603,26 @@ await assert.rejects(async () => execute("clear"), hasCode("BUSY"));
 const clears = state.clears;
 const controller = new AbortController();
 const cancelled = execute("clear", null, controller.signal);
+const allocationCallsBeforeCancel = state.allocationCalls;
 setTimeout(() => controller.abort(), 15);
 await assert.rejects(async () => cancelled, hasCode("CANCELLED"));
+assert.equal(state.allocationCalls, allocationCallsBeforeCancel);
+assert.equal(state.clears, clears);
+const binaryController = new AbortController();
+const binaryCancelled = execute(
+  "writeFormats",
+  validateValue(
+    {},
+    {
+      items: extensions,
+    },
+  ),
+  binaryController.signal,
+);
+setTimeout(() => binaryController.abort(), 15);
+await assert.rejects(async () => binaryCancelled, hasCode("CANCELLED"));
+assert.equal(state.allocationCalls, allocationCallsBeforeCancel);
+assert.equal(state.clears, clears);
 const afterRelease = execute("writeText", {
   text: "retry",
 });

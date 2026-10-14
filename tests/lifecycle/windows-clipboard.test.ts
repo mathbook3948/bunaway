@@ -18,7 +18,10 @@ import { bindHostAPI } from "#core/host-api";
 import { disposeAll } from "#native/host-api/bun/plugins";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
 import type { ClipboardItem } from "#plugins/clipboard/src/contract";
-import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/contract";
+import {
+  MAX_BINARY_BYTES,
+  MAX_TEXT_LENGTH,
+} from "#plugins/clipboard/src/contract";
 import { createClipboard } from "#plugins/clipboard/src/platforms/windows-bindings";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
@@ -416,6 +419,72 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
           data: image,
         },
       ]);
+      const extended: ClipboardItem[] = [
+        {
+          format: "application/x-bunaway-bookmark",
+          data: {
+            url: "https://example.com/한글😀",
+          },
+        },
+        {
+          format: "application/x-bunaway-binary/native-fixture",
+          data: "AP+A/w==",
+        },
+        {
+          format: "text/plain",
+          data: "URL fallback",
+        },
+      ];
+      await invoke(() =>
+        clipboard.writeFormats({
+          items: extended,
+        }),
+      );
+      expect(
+        await invoke(() =>
+          clipboard.readFormats({
+            formats: extended.map((item) => item.format),
+          }),
+        ),
+      ).toEqual(extended);
+      expect(await invoke(() => clipboard.getFormats(null))).toEqual([
+        "text/plain",
+        "application/x-bunaway-bookmark",
+      ]);
+      await acquire();
+      try {
+        // A second owner resolves the same registered names and reads Windows-owned allocations.
+        expect(owner.readFormats(extended.map((item) => item.format))).toEqual(
+          extended,
+        );
+      } finally {
+        owner.close();
+      }
+      for (const data of [
+        "",
+        Buffer.alloc(MAX_BINARY_BYTES, 255).toString("base64"),
+      ]) {
+        const items: ClipboardItem[] = [
+          {
+            format: "application/x-bunaway-binary/native-fixture",
+            data,
+          },
+        ];
+        await invoke(() =>
+          clipboard.writeFormats({
+            items,
+          }),
+        );
+        expect(
+          await invoke(() =>
+            clipboard.readFormats({
+              formats: [
+                "application/x-bunaway-binary/native-fixture",
+              ],
+            }),
+          ),
+        ).toEqual(items);
+      }
       // A custom, non-text format must produce null, without clearing its data.
       const user = dlopen("user32.dll", {
         RegisterClipboardFormatW: {
@@ -510,6 +579,28 @@ try {
             code: "BUSY",
           },
         );
+        await expect(
+          invoke(() =>
+            clipboard.writeFormats({
+              items: extended,
+            }),
+          ),
+        ).rejects.toMatchObject({
+          code: "BUSY",
+        });
+        const binaryController = new AbortController();
+        const binaryCancelled = invoke(
+          () =>
+            clipboard.writeFormats({
+              items: extended,
+            }),
+          binaryController,
+        );
+        await Bun.sleep(40);
+        binaryController.abort();
+        await expect(binaryCancelled).rejects.toMatchObject({
+          code: "CANCELLED",
+        });
         const controller = new AbortController();
         const cancelled = invoke(() => clipboard.clear(null), controller);
         await Bun.sleep(40);

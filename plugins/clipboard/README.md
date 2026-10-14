@@ -4,7 +4,7 @@
 `src/contract.ts`는 공통 스키마와 타입, 텍스트 제한과 네이티브 호출 검증을 소유한다.
 플랫폼 구현은 계약을 직접 읽으며 공개 진입점을 역으로 import하지 않는다.
 
-Windows와 macOS의 텍스트, HTML, RTF와 RGBA 이미지 클립보드를 제공하는 선택 패키지다. 파일 목록은 Windows에서만 제공한다. 설치 후 `clipboard`를 앱의 `plugins`에 등록하고 호출 출처에 작업별 권한을 허용한다. 화면과 백엔드 모두 같은 `clipboard`를 사용한다.
+Windows와 macOS의 텍스트, HTML, RTF와 RGBA 이미지 클립보드를 제공하는 선택 패키지다. 파일 목록, URL bookmark와 사용자 정의 binary 형식은 Windows에서만 제공한다. 설치 후 `clipboard`를 앱의 `plugins`에 등록하고 호출 출처에 작업별 권한을 허용한다. 화면과 백엔드 모두 같은 `clipboard`를 사용한다.
 
 ```ts
 import clipboard from "@bunaway/plugin-clipboard";
@@ -15,9 +15,9 @@ const text = await clipboard.readText(null);
 await clipboard.clear(null);
 ```
 
-공개 입력, 반환값, 권한, 오류와 취소 규칙은 [API 레퍼런스](../../docs/site/src/content/docs/reference/plugins/clipboard.mdx)에 둔다. bookmark, 임의 binary 형식과 변경 이벤트는 제공하지 않는다.
+공개 입력, 반환값, 권한, 오류와 취소 규칙은 [API 레퍼런스](../../docs/site/src/content/docs/reference/plugins/clipboard.mdx)에 둔다. URL bookmark와 private namespace의 bounded binary 값은 기존 다중 형식 API로 제공한다. 변경 이벤트는 제공하지 않는다.
 
-`readImage`와 `writeImage`는 크기와 base64 RGBA 픽셀을 전달한다. `readFormats`와 `writeFormats`는 지원 형식을 한 번의 열기 구간에서 읽거나 교체하며 `getFormats`와 `hasFormat`은 지원 형식의 가용성을 조회한다. 발견 결과에는 Windows가 변환해 제공할 수 있는 형식도 포함된다. 네이티브 이미지 ID나 별도 이미지 저장소는 만들지 않는다.
+`readImage`와 `writeImage`는 크기와 base64 RGBA 픽셀을 전달한다. `readFormats`와 `writeFormats`는 지원 형식을 한 번의 열기 구간에서 읽거나 교체하며 `getFormats`와 `hasFormat`은 지원 형식의 가용성을 조회한다. 발견 결과에는 Windows가 변환해 제공할 수 있는 기본 형식도 포함된다. 사용자 정의 binary 이름은 `hasFormat`과 `readFormats`에서 명시한다. 네이티브 이미지 ID나 별도 이미지 저장소는 만들지 않는다.
 
 ## Windows 소유권과 수명
 
@@ -71,3 +71,11 @@ Remove-Item Env:BUNAWAY_CLIPBOARD_NATIVE
 실제 검사는 데스크톱 클립보드를 변경한다. 이전 Unicode 텍스트를 마지막에 복원하지만 이미지 등 다른 형식은 복원하지 않는다. 검증 중 다른 앱의 복사 작업과 경쟁할 수 있다.
 
 2026-10-10 로컬 Windows x64, Bun 1.4.2에서 기존 텍스트 SDK/UI Worker 왕복 검사가 통과했다. 새 형식의 실제 Windows 결과는 해당 PR의 정확한 head CI를 확인한다. 최소 Windows 버전과 다른 플랫폼, 다른 앱의 붙여넣기는 별도 검증이 필요하다.
+
+## Windows URL bookmark와 private binary
+
+URL bookmark는 `application/x-bunaway-bookmark`의 `{ url }`로 전달하고 등록 이름 `UniformResourceLocatorW`의 NUL 종료 UTF-16 URL에 대응한다. Windows 제목은 지원하지 않으며 HTTP와 HTTPS URL만 UTF-16 code unit 2,048개까지 받는다. 텍스트 fallback은 앱이 같은 batch에 명시한다.
+
+사용자 정의 binary는 `application/x-bunaway-binary/<name>`의 canonical base64 값이다. 소문자로 시작하는 1부터 64자 ASCII 이름과 디코딩한 262,144바이트 상한, 빈 bytes와 없는 형식의 구분을 정의한다. native 등록 이름은 전체 식별자이며 `BUNBIN01`, 32-bit little-endian 길이와 payload를 저장한다. 읽기는 native 메모리 상한과 framing을 검사하며 allocation padding을 반환하지 않는다. 어댑터 수명마다 서로 다른 binary 이름은 64개까지이고 상한 뒤에도 기존 이름은 계속 쓴다. 상세 값과 실패 계약은 API 레퍼런스를 따른다.
+
+기존 `clipboard-codecs`, `clipboard-formats`와 `clipboard-resources` 검사는 URL과 binary의 empty, 최대값, malformed, 중복, 이름과 transport 상한을 포함한다. 격리한 Win32 경계에서는 등록, 할당, 잠금, 준비와 부분 이전 실패, 차용한 데이터의 복사, 점유 중 취소와 종료 정리를 확인한다. 기존 `windows-clipboard` 네이티브 검사에는 실제 UI Worker의 bookmark와 binary, 독립 owner 및 empty와 최대 bytes 왕복을 추가했다. 이 추가 시나리오의 실제 Windows 실행 결과는 해당 PR의 기존 native CI에서 확인해야 하며 다른 앱의 붙여넣기 호환성을 보장하지 않는다.

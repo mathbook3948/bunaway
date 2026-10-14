@@ -40,11 +40,25 @@ export type Pasteboard = {
   dispose(): void;
 };
 
-/** Shared file-list inputs describe Windows paths and have no macOS representation. */
+/** Only explicitly mapped representations are supported on macOS. */
 export function supportedFormat(
   format: ClipboardFormat,
 ): format is SupportedFormat {
-  return format !== "application/x-bunaway-file-list";
+  return (
+    format === "text/plain" ||
+    format === "text/html" ||
+    format === "text/rtf" ||
+    format === "image/bmp"
+  );
+}
+
+function supportedItem(item: ClipboardItem): item is Extract<
+  ClipboardItem,
+  {
+    format: SupportedFormat;
+  }
+> {
+  return supportedFormat(item.format);
 }
 
 /**
@@ -298,10 +312,10 @@ export function createPasteboard(name?: string): Pasteboard {
         });
       },
       write(items) {
-        if (items.some((item) => !supportedFormat(item.format))) {
+        if (items.some((item) => !supportedItem(item))) {
           throw new BunawayError({
             code: "UNSUPPORTED",
-            message: "macOS clipboard file lists are unsupported.",
+            message: "This clipboard format is unsupported on macOS.",
           });
         }
         transaction((board) => {
@@ -309,10 +323,10 @@ export function createPasteboard(name?: string): Pasteboard {
           const item = requireObject(send(classOf("NSPasteboardItem"), "new"));
           try {
             for (const entry of items) {
-              if (entry.format === "application/x-bunaway-file-list") {
+              if (!supportedItem(entry)) {
                 throw new BunawayError({
                   code: "UNSUPPORTED",
-                  message: "macOS clipboard file lists are unsupported.",
+                  message: "This clipboard format is unsupported on macOS.",
                 });
               }
               const bytes =

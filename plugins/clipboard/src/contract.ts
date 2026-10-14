@@ -15,13 +15,23 @@ export const writeTextSchema = z.strictObject({
   text: textSchema,
 });
 
-/** Supported Windows formats; discovery omits formats this adapter cannot decode. */
-export const formatSchema = z.enum([
+/** Built-in discovery omits arbitrary registered names. */
+export const builtInFormatSchema = z.enum([
   "text/plain",
   "text/html",
   "text/rtf",
   "application/x-bunaway-file-list",
   "image/bmp",
+  "application/x-bunaway-bookmark",
+]);
+/** Private registered names cannot alias Windows formats with other ownership rules. */
+export const binaryFormatSchema = z.templateLiteral([
+  "application/x-bunaway-binary/",
+  z.string().regex(/^[a-z][a-z0-9._-]{0,63}$(?![\s\S])/),
+]);
+export const formatSchema = z.union([
+  builtInFormatSchema,
+  binaryFormatSchema,
 ]);
 export type ClipboardFormat = z.infer<typeof formatSchema>;
 export const MAX_IMAGE_BYTES = 524_288;
@@ -30,9 +40,60 @@ export const MAX_FILES = 64;
 export const MAX_PATH_LENGTH = 1024;
 
 const base64Pattern =
-  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\s\S])/;
 const alphabet =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+/** Unused bits in the last base64 sextet must be zero for a canonical encoding. */
+function canonicalBase64Length(value: string): number | null {
+  let padding = 0;
+  if (value.endsWith("==")) {
+    padding = 2;
+  } else if (value.endsWith("=")) {
+    padding = 1;
+  }
+  const last = alphabet.indexOf(value[value.length - padding - 1] ?? "");
+  if (padding !== 0 && (last & (padding === 2 ? 15 : 3)) !== 0) {
+    return null;
+  }
+  return (value.length / 4) * 3 - padding;
+}
+export const MAX_BINARY_BYTES = 262_144;
+export const MAX_BINARY_FORMATS = 64;
+export const MAX_BOOKMARK_LENGTH = 2048;
+/** Opaque bytes use canonical base64, including the empty string for zero bytes. */
+export const binarySchema = z
+  .string()
+  .max(Math.ceil(MAX_BINARY_BYTES / 3) * 4)
+  .regex(base64Pattern)
+  .refine((value) => {
+    const length = canonicalBase64Length(value);
+    return length !== null && length <= MAX_BINARY_BYTES;
+  }, "Binary data must be bounded canonical base64.");
+/** A Windows URL bookmark has no title and never opens the URL. */
+export const bookmarkSchema = z.strictObject({
+  url: textSchema
+    .max(MAX_BOOKMARK_LENGTH)
+    .regex(/^https?:\/\/[^\s]+$(?![\s\S])/u)
+    .refine((value) => {
+      try {
+        if (
+          Array.from(value).some(
+            (character) =>
+              character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
+          )
+        ) {
+          return false;
+        }
+        const url = new URL(value);
+        return (
+          (url.protocol === "https:" || url.protocol === "http:") &&
+          url.hostname !== ""
+        );
+      } catch {
+        return false;
+      }
+    }, "Bookmarks require an absolute HTTP or HTTPS URL."),
+});
 /** JSON carries tightly packed RGBA pixels as canonical base64, without a native resource ID. */
 export const imageSchema = z
   .strictObject({
@@ -45,19 +106,8 @@ export const imageSchema = z
   })
   .refine((image) => {
     const bytes = image.width * image.height * 4;
-    let padding = 0;
-    if (image.rgba.endsWith("==")) {
-      padding = 2;
-    } else if (image.rgba.endsWith("=")) {
-      padding = 1;
-    }
-    const last = alphabet.indexOf(
-      image.rgba[image.rgba.length - padding - 1] ?? "",
-    );
     return (
-      bytes <= MAX_IMAGE_BYTES &&
-      (image.rgba.length / 4) * 3 - padding === bytes &&
-      (padding === 0 || (last & (padding === 2 ? 15 : 3)) === 0)
+      bytes <= MAX_IMAGE_BYTES && canonicalBase64Length(image.rgba) === bytes
     );
   }, "Image dimensions and canonical RGBA bytes must agree.");
 export type ClipboardImage = z.infer<typeof imageSchema>;
@@ -92,7 +142,7 @@ export const rtfSchema = textSchema
     "RTF must use ASCII bytes and Unicode escapes.",
   )
   .regex(/^\{\\rtf[1-9]/);
-export const itemSchema = z.discriminatedUnion("format", [
+const builtInItemSchema = z.discriminatedUnion("format", [
   z.strictObject({
     format: z.literal("text/plain"),
     data: textSchema,
@@ -112,6 +162,17 @@ export const itemSchema = z.discriminatedUnion("format", [
   z.strictObject({
     format: z.literal("image/bmp"),
     data: imageSchema,
+  }),
+  z.strictObject({
+    format: z.literal("application/x-bunaway-bookmark"),
+    data: bookmarkSchema,
+  }),
+]);
+export const itemSchema = z.union([
+  builtInItemSchema,
+  z.strictObject({
+    format: binaryFormatSchema,
+    data: binarySchema,
   }),
 ]);
 export type ClipboardItem = z.infer<typeof itemSchema>;
