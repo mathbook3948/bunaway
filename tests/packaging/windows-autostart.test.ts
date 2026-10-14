@@ -357,9 +357,9 @@ test.skipIf(!iscc)(
         `AutostartRunKey = '${runKey}'`,
         `AutostartRunKey = '${key}'`,
       );
-    async function denyWrites() {
+    async function denyRights(rights: "SetValue" | "QueryValues") {
       const descriptor = await powershell(
-        `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(key)},[Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,[System.Security.AccessControl.RegistryRights]::ReadPermissions -bor [System.Security.AccessControl.RegistryRights]::ChangePermissions); try { $acl=$key.GetAccessControl([System.Security.AccessControl.AccessControlSections]::Access); $acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access); $rule=[System.Security.AccessControl.RegistryAccessRule]::new([System.Security.Principal.WindowsIdentity]::GetCurrent().User,[System.Security.AccessControl.RegistryRights]::SetValue,[System.Security.AccessControl.AccessControlType]::Deny); $acl.AddAccessRule($rule); $key.SetAccessControl($acl) } finally { $key.Dispose() }`,
+        `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(key)},[Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,[System.Security.AccessControl.RegistryRights]::ReadPermissions -bor [System.Security.AccessControl.RegistryRights]::ChangePermissions); try { $acl=$key.GetAccessControl([System.Security.AccessControl.AccessControlSections]::Access); $acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access); $rule=[System.Security.AccessControl.RegistryAccessRule]::new([System.Security.Principal.WindowsIdentity]::GetCurrent().User,[System.Security.AccessControl.RegistryRights]::${rights},[System.Security.AccessControl.AccessControlType]::Deny); $acl.AddAccessRule($rule); $key.SetAccessControl($acl) } finally { $key.Dispose() }`,
       );
       return () =>
         powershell(
@@ -371,7 +371,7 @@ test.skipIf(!iscc)(
         (await f.install(installDir, f.id, true, "autostart", isolated)).code,
       ).toBe(0);
       const oldCommand = await registryValue(key, name);
-      restore = await denyWrites();
+      restore = await denyRights("SetValue");
       // New ID requires explicit opt-in; a native write denial must retain old Run.
       expect(
         (await f.install(installDir, nextId, true, "autostart", isolated)).code,
@@ -384,7 +384,7 @@ test.skipIf(!iscc)(
       // Model successful new registration followed by failed old retirement. Both
       // values are real and the following retry reaches RegDeleteValue with denied SetValue.
       await writeRegistry(key, nextName, oldCommand);
-      restore = await denyWrites();
+      restore = await denyRights("SetValue");
       expect(
         (await f.install(installDir, nextId, true, "autostart", isolated)).code,
       ).not.toBe(0);
@@ -405,7 +405,37 @@ test.skipIf(!iscc)(
       expect(await registryValue(key, name)).toBe("");
       expect(await registryValue(key, nextName)).toBe(oldCommand);
       expect(await pending()).toBe("");
-      restore = await denyWrites();
+      const stablePayload = await Bun.file(join(installDir, "App.exe")).text();
+      restore = await denyRights("QueryValues");
+      expect(
+        (await f.install(installDir, nextId, true, "autostart", isolated)).code,
+      ).not.toBe(0);
+      expect(await Bun.file(join(installDir, "App.exe")).text()).toBe(
+        stablePayload,
+      );
+      await restore();
+      restore = undefined;
+      await powershell(
+        `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(key)},$true); try { $key.SetValue(${quote(nextName)},42,[Microsoft.Win32.RegistryValueKind]::DWord) } finally { $key.Dispose() }`,
+      );
+      expect(
+        (await f.install(installDir, nextId, true, "autostart", isolated)).code,
+      ).not.toBe(0);
+      expect(await registryValue(key, nextName)).toBe("42");
+      expect(await Bun.file(join(installDir, "App.exe")).text()).toBe(
+        stablePayload,
+      );
+      const oversized = `${oldCommand} "${"x".repeat(260)}"`;
+      await writeRegistry(key, nextName, oversized);
+      expect(
+        (await f.install(installDir, nextId, true, "autostart", isolated)).code,
+      ).not.toBe(0);
+      expect(await registryValue(key, nextName)).toBe(oversized);
+      expect(await Bun.file(join(installDir, "App.exe")).text()).toBe(
+        stablePayload,
+      );
+      await writeRegistry(key, nextName, oldCommand);
+      restore = await denyRights("SetValue");
       expect(await runInstaller(join(installDir, "unins000.exe"), [])).not.toBe(
         0,
       );
