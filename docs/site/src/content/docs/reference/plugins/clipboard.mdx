@@ -93,7 +93,7 @@ HTML은 전체 문서가 아닌 fragment를 받습니다. CF_HTML의 fragment by
 
 ## Windows URL bookmark와 사용자 정의 binary 형식
 
-`application/x-bunaway-bookmark`의 `data`는 `{ url }`입니다. `url`은 공백과 control character가 없는 절대 HTTP 또는 HTTPS URL이며 UTF-16 code unit 2,048개까지 허용합니다. URL 문자열은 정규화하지 않고 보존합니다. Windows의 `UniformResourceLocatorW`에는 제목이 없으므로 `title`을 받거나 반환하지 않습니다. 파일 접근 bookmark나 URL 열기 권한을 부여하지 않습니다. 일반 텍스트 붙여넣기도 필요하면 같은 `writeFormats` 호출에 `text/plain`을 함께 지정합니다.
+`application/x-bunaway-bookmark`의 `data`는 `{ url }`입니다. `url`은 공백과 control character가 없는 절대 HTTP 또는 HTTPS URL이며 UTF-16 code unit 2,048개까지 허용합니다. HTTP(S) 스킴은 대소문자와 무관하게 검사하며 URL 문자열은 정규화하지 않고 보존합니다. Windows의 `UniformResourceLocatorW`에는 제목이 없으므로 `title`을 받거나 반환하지 않습니다. 파일 접근 bookmark나 URL 열기 권한을 부여하지 않습니다. 일반 텍스트 붙여넣기도 필요하면 같은 `writeFormats` 호출에 `text/plain`을 함께 지정합니다.
 
 ```ts
 await clipboard.writeFormats({ items: [

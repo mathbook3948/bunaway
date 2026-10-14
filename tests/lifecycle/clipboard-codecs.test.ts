@@ -260,3 +260,25 @@ test("private binary framing preserves empty and maximum bytes, excludes allocat
     expect(() => decodeBinary(bytes)).toThrow(invalid);
   }
 });
+
+test("external UniformResourceLocatorW accepts case-insensitive HTTP schemes and preserves native text", () => {
+  for (const url of [
+    "HTTPS://example.com/Path?Name=Value#Anchor",
+    "HTTP://example.com/Path",
+    "hTtPs://EXAMPLE.com/한글😀?a=%2F",
+  ]) {
+    expect(decodeBookmark(Buffer.from(`${url}\0`, "utf16le"))).toEqual({
+      url,
+    });
+  }
+  for (const url of [
+    "FILE:///C:/private",
+    "JAVASCRIPT:alert(1)",
+    "HtTpS://",
+    "HTTPS://example.com/\n",
+  ]) {
+    expect(() => decodeBookmark(Buffer.from(`${url}\0`, "utf16le"))).toThrow(
+      invalid,
+    );
+  }
+});

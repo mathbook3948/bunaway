@@ -675,3 +675,52 @@ test("bookmark contracts bound supplementary URLs in UTF-16 units and match nati
     });
   }
 });
+
+test("bookmark writes and results accept HTTP scheme casing without normalizing the URL", async () => {
+  for (const url of [
+    "HTTPS://example.com/Path?Name=Value#Anchor",
+    "HTTP://example.com/Path",
+    "hTtPs://EXAMPLE.com/한글😀?a=%2F",
+  ]) {
+    const item = {
+      format: "application/x-bunaway-bookmark",
+      data: {
+        url,
+      },
+    } as const;
+    expect(
+      (
+        await parsers.validateCall({
+          operation: "clipboard.writeFormats",
+          payload: {
+            items: [
+              item,
+            ],
+          },
+        })
+      ).payload,
+    ).toEqual({
+      items: [
+        item,
+      ],
+    });
+    expect(
+      validateClipboardInput("clipboard.writeFormats", {
+        items: [
+          item,
+        ],
+      }),
+    ).toEqual({
+      items: [
+        item,
+      ],
+    });
+    expect(
+      await parsers.validateOutput("clipboard.readFormats", [
+        item,
+      ]),
+    ).toEqual([
+      item,
+    ]);
+  }
+});

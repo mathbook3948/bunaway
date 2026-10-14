@@ -77,7 +77,7 @@ export const bookmarkSchema = z.strictObject({
       (url) => url.length <= MAX_BOOKMARK_LENGTH,
       "URLs cannot exceed the UTF-16 code unit limit.",
     )
-    .regex(/^https?:\/\/[^\s]+$(?![\s\S])/u)
+    .regex(/^[Hh][Tt][Tt][Pp][Ss]?:\/\/[^\s]+$(?![\s\S])/u)
     .refine((value) => {
       try {
         if (

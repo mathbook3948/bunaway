@@ -1,4 +1,4 @@
-import { dlopen, ptr } from "bun:ffi";
+import { dlopen, ptr, toArrayBuffer } from "bun:ffi";
 import { expect, test } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -111,6 +111,9 @@ test.skipIf(
     let captured = false;
     let cleaned = false;
     let fatal: unknown;
+    let workerExitCode: number | undefined;
+    let workerOutput = "";
+    const packetTrace: string[] = [];
     async function restoreClipboard() {
       if (!captured) {
         return;
@@ -179,10 +182,23 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
       );
       worker = new Worker(pathToFileURL(resolve(root, "ui.js")), {
         workerData: config,
+        stdout: true,
+        stderr: true,
       });
+      const retainOutput = (bytes: Buffer) => {
+        workerOutput = `${workerOutput}${bytes.toString()}`.slice(-16_384);
+      };
+      worker.stdout?.on("data", retainOutput);
+      worker.stderr?.on("data", retainOutput);
       const exited = new Promise<number>((resolveExit, reject) => {
-        worker?.once("exit", resolveExit);
-        worker?.once("error", reject);
+        worker?.once("exit", (code) => {
+          workerExitCode = code;
+          resolveExit(code);
+        });
+        worker?.once("error", (error) => {
+          fatal = error;
+          reject(error);
+        });
       });
       let readyResolve = () => {};
       const ready = new Promise<void>((done) => {
@@ -193,6 +209,12 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
         config.runtime,
         "main",
         (packet) => {
+          packetTrace.push(
+            `${packet.kind}${"requestId" in packet ? `:${packet.requestId}` : ""}`,
+          );
+          if (packetTrace.length > 32) {
+            packetTrace.shift();
+          }
           if (packet.kind === "ready") {
             readyResolve();
           } else if (packet.kind === "prepare") {
@@ -250,17 +272,31 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
             signal.removeEventListener("abort", aborted);
             done(response);
           };
-          const timeout = setTimeout(
-            () =>
-              complete({
-                kind: "error",
-                error: {
-                  code: "TIMEOUT",
-                  message: `Native fixture timed out: ${call.operation}`,
-                },
-              }),
-            5000,
-          );
+          const timeout = setTimeout(() => {
+            // Retain the actual worker/channel failure instead of obscuring it behind a missing reply.
+            console.error("Clipboard UI request timed out", {
+              operation: call.operation,
+              requestId,
+              workerExitCode,
+              cleaned,
+              fatal:
+                fatal instanceof Error
+                  ? {
+                      message: fatal.message,
+                      stack: fatal.stack,
+                    }
+                  : fatal,
+              packetTrace,
+              workerOutput,
+            });
+            complete({
+              kind: "error",
+              error: {
+                code: "TIMEOUT",
+                message: `Native fixture timed out: ${call.operation}`,
+              },
+            });
+          }, 5000);
           pending.set(requestId, complete);
           signal.addEventListener("abort", aborted, {
             once: true,
@@ -461,6 +497,36 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
       } finally {
         owner.close();
       }
+      for (const url of [
+        "HTTPS://example.com/Path?Name=Value#Anchor",
+        "HTTP://example.com/Path",
+        "hTtPs://EXAMPLE.com/한글😀?a=%2F",
+      ]) {
+        const item: ClipboardItem = {
+          format: "application/x-bunaway-bookmark",
+          data: {
+            url,
+          },
+        };
+        await invoke(() =>
+          clipboard.writeFormats({
+            items: [
+              item,
+            ],
+          }),
+        );
+        expect(
+          await invoke(() =>
+            clipboard.readFormats({
+              formats: [
+                item.format,
+              ],
+            }),
+          ),
+        ).toEqual([
+          item,
+        ]);
+      }
       const bookmarkPrefix = "https://example.com/";
       const remainingBookmarkUnits =
         MAX_BOOKMARK_LENGTH - bookmarkPrefix.length;
@@ -576,6 +642,28 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
           ],
           returns: "ptr",
         },
+        GlobalLock: {
+          args: [
+            "ptr",
+          ],
+          returns: "ptr",
+        },
+        GlobalUnlock: {
+          args: [
+            "ptr",
+          ],
+          returns: "bool",
+        },
+        SetLastError: {
+          args: [
+            "u32",
+          ],
+          returns: "void",
+        },
+        GetLastError: {
+          args: [],
+          returns: "u32",
+        },
         GlobalFree: {
           args: [
             "ptr",
@@ -584,6 +672,71 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
         },
       });
       try {
+        for (const url of [
+          "HTTPS://example.com/Path?Name=Value#Anchor",
+          "HTTP://example.com/Path",
+          "hTtPs://EXAMPLE.com/한글😀?a=%2F",
+        ]) {
+          await acquire();
+          try {
+            const name = Buffer.from("UniformResourceLocatorW\0", "utf16le");
+            const format = user.symbols.RegisterClipboardFormatW(ptr(name));
+            expect(format).toBeGreaterThan(0);
+            const bytes = Buffer.from(`${url}\0`, "utf16le");
+            const handle = kernel.symbols.GlobalAlloc(
+              GMEM_MOVEABLE | GMEM_ZEROINIT,
+              bytes.byteLength,
+            );
+            expect(handle).not.toBeNull();
+            let transferred = false;
+            try {
+              const address = kernel.symbols.GlobalLock(handle);
+              expect(address).not.toBeNull();
+              try {
+                if (!address) {
+                  throw new Error(
+                    "External bookmark allocation could not be locked.",
+                  );
+                }
+                new Uint8Array(toArrayBuffer(address, 0, bytes.byteLength)).set(
+                  bytes,
+                );
+              } finally {
+                kernel.symbols.SetLastError(0);
+                if (!kernel.symbols.GlobalUnlock(handle)) {
+                  expect(kernel.symbols.GetLastError()).toBe(0);
+                }
+              }
+              owner.clear();
+              if (!user.symbols.SetClipboardData(format, handle)) {
+                throw new Error("External bookmark could not be installed.");
+              }
+              transferred = true;
+            } finally {
+              if (!transferred) {
+                expect(kernel.symbols.GlobalFree(handle)).toBeNull();
+              }
+            }
+          } finally {
+            owner.close();
+          }
+          expect(
+            await invoke(() =>
+              clipboard.readFormats({
+                formats: [
+                  "application/x-bunaway-bookmark",
+                ],
+              }),
+            ),
+          ).toEqual([
+            {
+              format: "application/x-bunaway-bookmark",
+              data: {
+                url,
+              },
+            },
+          ]);
+        }
         await acquire();
         try {
           owner.clear();

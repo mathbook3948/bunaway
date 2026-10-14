@@ -537,6 +537,52 @@ assert.deepEqual(
 const binaryId = state.registered.get("application/x-bunaway-binary/memo");
 const bookmarkId = state.registered.get("UniformResourceLocatorW");
 assert(binaryId !== undefined && bookmarkId !== undefined);
+for (const url of [
+  "HTTPS://example.com/Path?Name=Value#Anchor",
+  "HTTP://example.com/Path",
+  "hTtPs://EXAMPLE.com/한글😀?a=%2F",
+]) {
+  const item = {
+    format: "application/x-bunaway-bookmark",
+    data: {
+      url,
+    },
+  };
+  await execute("writeFormats", {
+    items: [
+      item,
+    ],
+  });
+  assert.deepEqual(
+    await execute("readFormats", {
+      formats: [
+        item.format,
+      ],
+    }),
+    validateValue({}, [
+      item,
+    ]),
+  );
+  // Install an independently encoded borrowed native block instead of using the plugin's encoder.
+  const externalBookmark = Buffer.from(`${url}\0`, "utf16le");
+  state.formats.set(bookmarkId, externalBookmark);
+  const freesBeforeRead = state.frees;
+  const externalResult = await execute("readFormats", {
+    formats: [
+      item.format,
+    ],
+  });
+  externalBookmark.fill(0);
+  assert.deepEqual(
+    externalResult,
+    validateValue({}, [
+      item,
+    ]),
+  );
+  assert.equal(state.frees, freesBeforeRead);
+  assert.equal(state.opened, false);
+  assert.equal(state.locks, 0);
+}
 for (const [format, id, malformed] of [
   [
     "application/x-bunaway-binary/memo",
