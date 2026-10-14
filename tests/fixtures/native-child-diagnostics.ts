@@ -71,7 +71,10 @@ export async function printNativeChildDiagnostics(
         );
       }
     } catch (error) {
-      console.error(`Could not read native fixture diagnostics: ${path}`, error);
+      console.error(
+        `Could not read native fixture diagnostics: ${path}`,
+        error,
+      );
     }
   }
 }
