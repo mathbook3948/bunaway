@@ -97,7 +97,7 @@ test.skipIf(process.platform !== "win32")(
 );
 
 test.skipIf(process.platform !== "win32")(
-  "repeated success and startup failure close native invocation handles",
+  "repeated success, cancellation and startup failure close native invocation handles",
   async () => {
     const api = dlopen("kernel32.dll", {
       GetCurrentProcess: {
@@ -136,9 +136,30 @@ test.skipIf(process.platform !== "win32")(
     try {
       // Warm the runtime's process/FFI paths before comparing native handle ownership.
       await run(state, input);
+      const cancelledInput = {
+        ...input,
+        args: [
+          "-e",
+          "setInterval(() => {}, 1000)",
+        ],
+        stdinBase64: Buffer.alloc(65536, 255).toString("base64"),
+      };
+      const cancel = async () => {
+        const controller = new AbortController();
+        const observed = run(state, cancelledInput, controller.signal).catch(
+          (error: unknown) => error,
+        );
+        // Creation and overlapped input start before run yields to the caller.
+        controller.abort();
+        expect(await observed).toMatchObject({
+          code: "CANCELLED",
+        });
+      };
+      await cancel();
       const before = count();
       for (let attempt = 0; attempt < 12; attempt++) {
         expect((await run(state, input)).exitCode).toBe(0);
+        await cancel();
         await expect(
           run(state, {
             ...input,
