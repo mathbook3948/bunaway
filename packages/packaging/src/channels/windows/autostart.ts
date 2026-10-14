@@ -1,4 +1,5 @@
 import { AUTOSTART_ARGUMENT } from "@bunaway/protocol";
+import { renderAutostartLockCode } from "./autostart-lock.ts";
 
 /**
  * Manages only packaged Run values whose quoted executable matches this install
@@ -20,6 +21,8 @@ type TAutostartOwner = record
 end;
 var PreviousAutostartOwner, PendingAutostartOwner: TAutostartOwner;
     AutostartDataSaved: Boolean;
+
+${renderAutostartLockCode()}
 
 function IsAutostartAppId(const Id: String): Boolean;
 var I: Integer;
@@ -159,7 +162,7 @@ begin
     RaiseException('Autostart command exceeds the Windows Run limit of 260 UTF-16 code units.');
 end;
 
-procedure PreflightAutostart;
+procedure PreflightAutostartLocked;
 var Command, Desired: String; Current: TAutostartOwner;
 begin
   Current := CurrentAutostartOwner;
@@ -174,6 +177,14 @@ begin
     RaiseException('Autostart registration belongs to another installation.');
 end;
 
+procedure PreflightAutostart;
+var Handles: TAutostartMutexHandles;
+begin
+  AcquireAutostartLocks(AutostartAppId, PreviousAutostartOwner.AppId, PendingAutostartOwner.AppId, Handles);
+  try PreflightAutostartLocked;
+  finally ReleaseAutostartLocks(Handles); end;
+end;
+
 procedure RemoveAutostartOwner(const Owner: TAutostartOwner);
 var Command: String;
 begin
@@ -184,34 +195,41 @@ begin
 end;
 
 procedure InstallAutostart;
-var Desired, Command: String;
+var Desired, Command: String; Handles: TAutostartMutexHandles;
 begin
-  PreflightAutostart;
-  Desired := DesiredAutostartCommand;
-  if (Desired <> '') or ValidAutostartOwner(PreviousAutostartOwner) or ValidAutostartOwner(PendingAutostartOwner) then
-    if not AutostartDataSaved then RaiseException('Could not persist autostart recovery identity.');
-  // Write the new command first. A failed write leaves the predecessor intact;
-  // later failures retain the journal so retry/uninstall can remove both owners.
-  if Desired <> '' then begin
-    if QueryAutostartCommand(AutostartAppId, Command) and
-       not IsKnownAutostartCommand(AutostartAppId, Command) then
-      RaiseException('Autostart registration belongs to another installation.');
-    if Command <> Desired then
-      if not RegWriteStringValue(HKCU64, AutostartRunKey, AutostartName(AutostartAppId), Desired) then
-        RaiseException('Could not register autostart command.');
-  end else RemoveAutostartOwner(CurrentAutostartOwner);
-  // Matching paths authorize cleanup; a new command for the same name no longer
-  // matches its old owner and is retained. Foreign replacements are also retained.
-  if (Desired = '') or not SameAutostartOwner(PreviousAutostartOwner, CurrentAutostartOwner) then
-    RemoveAutostartOwner(PreviousAutostartOwner);
-  if (Desired = '') or not SameAutostartOwner(PendingAutostartOwner, CurrentAutostartOwner) then
-    RemoveAutostartOwner(PendingAutostartOwner);
+  AcquireAutostartLocks(AutostartAppId, PreviousAutostartOwner.AppId, PendingAutostartOwner.AppId, Handles);
+  try
+    PreflightAutostartLocked;
+    Desired := DesiredAutostartCommand;
+    if (Desired <> '') or ValidAutostartOwner(PreviousAutostartOwner) or ValidAutostartOwner(PendingAutostartOwner) then
+      if not AutostartDataSaved then RaiseException('Could not persist autostart recovery identity.');
+    // Write the new command first. A failed write leaves the predecessor intact;
+    // later failures retain the journal so retry/uninstall can remove both owners.
+    if Desired <> '' then begin
+      if QueryAutostartCommand(AutostartAppId, Command) and
+         not IsKnownAutostartCommand(AutostartAppId, Command) then
+        RaiseException('Autostart registration belongs to another installation.');
+      if Command <> Desired then
+        if not RegWriteStringValue(HKCU64, AutostartRunKey, AutostartName(AutostartAppId), Desired) then
+          RaiseException('Could not register autostart command.');
+    end else RemoveAutostartOwner(CurrentAutostartOwner);
+    // Matching paths authorize cleanup; a new command for the same name no longer
+    // matches its old owner and is retained. Foreign replacements are also retained.
+    if (Desired = '') or not SameAutostartOwner(PreviousAutostartOwner, CurrentAutostartOwner) then
+      RemoveAutostartOwner(PreviousAutostartOwner);
+    if (Desired = '') or not SameAutostartOwner(PendingAutostartOwner, CurrentAutostartOwner) then
+      RemoveAutostartOwner(PendingAutostartOwner);
+  finally ReleaseAutostartLocks(Handles); end;
 end;
 
 procedure UninstallAutostart;
+var Handles: TAutostartMutexHandles;
 begin
-  RemoveAutostartOwner(PendingAutostartOwner);
-  RemoveAutostartOwner(CurrentAutostartOwner);
+  AcquireAutostartLocks(AutostartAppId, PreviousAutostartOwner.AppId, PendingAutostartOwner.AppId, Handles);
+  try
+    RemoveAutostartOwner(PendingAutostartOwner);
+    RemoveAutostartOwner(CurrentAutostartOwner);
+  finally ReleaseAutostartLocks(Handles); end;
 end;
 
 procedure RegisterAutostartData(PreviousDataKey: Integer);

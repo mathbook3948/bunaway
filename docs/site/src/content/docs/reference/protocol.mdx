@@ -167,3 +167,8 @@ Worker 연결에 같은 앱과 코어 계약을 적용합니다. 프로세스 IP
 수동 실행도 같은 인자를 전달할 수 있으므로 운영체제 실행 출처를 인증하지 않습니다.
 앱 개발자는 [autostart API](/reference/plugins/autostart/)로 등록하고 `onOpen.launchReason`으로
 호출 모드를 확인합니다.
+
+`AUTOSTART_MUTEX_PREFIX`와 `AUTOSTART_MUTEX_WAIT_MS`는 설치 프로그램과 런타임의
+Run 쓰기 조율 계약입니다. `Global\Bunaway.Autostart.` 접두어 뒤에 현재 사용자 SID와
+전체 Run 값 이름을 붙이며 최대 5초 동안 소유권을 기다립니다. 앱 권한이나 자동 실행
+동의의 근거로 사용하지 않습니다.

@@ -108,8 +108,11 @@ async function powershell(script: string): Promise<string> {
       "powershell.exe",
       "-NoProfile",
       "-NonInteractive",
-      "-Command",
-      `$ErrorActionPreference='Stop'; ${script}`,
+      "-EncodedCommand",
+      Buffer.from(
+        `$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); ${script}`,
+        "utf16le",
+      ).toString("base64"),
     ],
     {
       stdout: "pipe",
@@ -453,6 +456,166 @@ test.skipIf(!iscc)(
         `[Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree(${quote(`Software\\Bunaway\\Tests\\${f.identifier}`)},$false)`,
       );
       await rm(f.root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+  120_000,
+);
+
+test.skipIf(!iscc)(
+  "native Run ownership inspection excludes runtime writers and installers with another installation ID",
+  async () => {
+    if (!iscc) {
+      throw new Error("Expected ISCC.");
+    }
+    const f = await fixture(iscc);
+    const other = await fixture(iscc);
+    const name = `bunaway.packaged.${f.id}`;
+    const installDir = join(f.root, "installed");
+    const otherDir = join(other.root, "installed");
+    const ready = join(f.root, "retirement-ready");
+    const release = join(f.root, "retirement-release");
+    const gate = (script: string) => {
+      const inspection = `  if QueryAutostartCommand(Owner.AppId, Command) and IsAutostartCommandOwner(Command, Owner) then
+    if not RegDeleteValue(HKCU64, AutostartRunKey, AutostartName(Owner.AppId)) then
+      RaiseException('Could not remove owned autostart registration.');`;
+      expect(script).toContain(inspection);
+      return script.replace(
+        inspection,
+        `  if QueryAutostartCommand(Owner.AppId, Command) and IsAutostartCommandOwner(Command, Owner) then begin
+    if not SaveStringToFile(${quote(ready)}, 'ready', False) then RaiseException('Could not publish retirement gate.');
+    while not FileExists(${quote(release)}) do Sleep(20);
+    if not RegDeleteValue(HKCU64, AutostartRunKey, AutostartName(Owner.AppId)) then
+      RaiseException('Could not remove owned autostart registration.');
+  end;`,
+      );
+    };
+    const runtimeSource = join(f.root, "runtime-writer.ts");
+    // Import the actual native entrypoint, including its read/compare/write path.
+    const { fileURLToPath } = await import("node:url");
+    const runtimeModule = fileURLToPath(
+      new URL(
+        "../../plugins/autostart/src/platforms/windows.ts",
+        import.meta.url,
+      ),
+    );
+    await Bun.write(
+      runtimeSource,
+      `
+import { initialize, enable, dispose } from ${JSON.stringify(runtimeModule)};
+const state = initialize({ dataRoot: '.', capabilities: [], app: {
+  id: ${JSON.stringify(f.id)}, launch: { mode: 'packaged', executablePath: 'C:\\\\Foreign\\\\App.exe', args: [] }
+} });
+try {
+  enable(state, { args: ['--replacement'] });
+  console.log('UPDATED');
+} catch (error) {
+  if (error?.code !== 'BUSY') throw error;
+  console.log('BUSY');
+} finally { dispose(state); }
+`,
+    );
+    async function runtimeWriter() {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          runtimeSource,
+        ],
+        {
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 15000,
+        },
+      );
+      const [out, err, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      expect(code, err).toBe(0);
+      return out.trim();
+    }
+    let uninstaller: ReturnType<typeof Bun.spawn> | undefined;
+    try {
+      expect(
+        (await f.install(installDir, f.id, true, "autostart", gate)).code,
+      ).toBe(0);
+      const original = await registryValue(runKey, name);
+      await powershell(
+        `$key=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey(${quote(approvedKey)}); try { $key.SetValue(${quote(name)},[byte[]](3,0,0,0,10,20,30,40,50,60,70,80),[Microsoft.Win32.RegistryValueKind]::Binary) } finally { $key.Dispose() }`,
+      );
+      const approval = () =>
+        powershell(
+          `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(approvedKey)}); try { [Convert]::ToBase64String($key.GetValue(${quote(name)})) } finally { $key.Dispose() }`,
+        );
+      const disabled = await approval();
+      uninstaller = Bun.spawn(
+        [
+          join(installDir, "unins000.exe"),
+          "/VERYSILENT",
+          "/SUPPRESSMSGBOXES",
+          "/NORESTART",
+        ],
+        {
+          stdout: "ignore",
+          stderr: "ignore",
+          timeout: 45000,
+        },
+      );
+      const deadline = Date.now() + 10000;
+      while (!(await Bun.file(ready).exists()) && Date.now() < deadline) {
+        await Bun.sleep(20);
+      }
+      expect(await Bun.file(ready).exists()).toBe(true);
+      expect(await runtimeWriter()).toBe("BUSY");
+      expect(await registryValue(runKey, name)).toBe(original);
+      const contender = await other.compile(otherDir, f.id);
+      const log = join(other.root, "contender.log");
+      expect(
+        await runInstaller(contender.setup, [
+          `/DIR=${otherDir}`,
+          "/TASKS=autostart",
+          `/LOG=${log}`,
+        ]),
+      ).not.toBe(0);
+      expect(await Bun.file(log).text()).toContain(
+        "Another process is maintaining this autostart registration.",
+      );
+      expect(await Bun.file(join(otherDir, "App.exe")).exists()).toBe(false);
+      expect(await registryValue(runKey, name)).toBe(original);
+      expect(await approval()).toBe(disabled);
+      await Bun.write(release, "release");
+      expect(await uninstaller.exited).toBe(0);
+      expect(await registryValue(runKey, name)).toBe("");
+      expect(
+        await runInstaller(contender.setup, [
+          `/DIR=${otherDir}`,
+          "/TASKS=autostart",
+        ]),
+      ).toBe(0);
+      expect(await registryValue(runKey, name)).toContain(
+        join(otherDir, "App.exe"),
+      );
+      expect(await runtimeWriter()).toBe("UPDATED");
+      const foreign = await registryValue(runKey, name);
+      expect(foreign).toContain('"C:\\Foreign\\App.exe"');
+      expect(await runInstaller(join(otherDir, "unins000.exe"), [])).toBe(0);
+      expect(await registryValue(runKey, name)).toBe(foreign);
+      expect(await approval()).toBe(disabled);
+    } finally {
+      await Bun.write(release, "release");
+      if (uninstaller) {
+        await uninstaller.exited;
+      }
+      await deleteRegistryValue(runKey, name);
+      await deleteRegistryValue(approvedKey, name);
+      await rm(f.root, {
+        recursive: true,
+        force: true,
+      });
+      await rm(other.root, {
         recursive: true,
         force: true,
       });
