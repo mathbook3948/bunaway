@@ -21,6 +21,11 @@ src 없이 dist만 설치해 공개 호출과 재내보낸 타입을 검사한�
 `api/native-plugin-object.test.ts`는 기본 export를 직접 호출하고 `defineApp`에 등록하는 계약,
 이벤트 타입 추론, 숨겨진 등록 메타데이터와 예약 이름의 충돌 거부를 검사한다.
 
+`lifecycle/macos-appearance.ts`는 각 실행의 stdout, stderr와 종료 원인을
+`build/macos-native-logs/appearance/`에 보존한다. 기존 30초 기한에 도달하면
+호스트가 종료 코드 0을 반환해도 실패로 처리하고, 보고서 누락을 포함한 실패 시
+임시 디렉터리를 지우기 전에 호스트 로그를 출력한다.
+
 공식 플러그인 fixture는 스키마만 있는 공통 계약 목록 대신 완성된 작업 선언의 스키마를 사용한다.
 `api/native-handler-platform.test.ts`는 동기 handler의 반환 타입도 보존하는지 검사한다.
 동시 정리의 공유, 실패 후 재시도와 성공 후 반복 방지, 비동기 초기화의 타입 및 런타임 거부,
