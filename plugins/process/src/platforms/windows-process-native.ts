@@ -64,7 +64,12 @@ export async function runWindowsProcess(
   const handles = new Set<bigint>();
   let job = 0n;
   let child = 0n;
-  let attributes: Buffer | undefined;
+  let attributes:
+    | {
+        list: Buffer;
+        values: Buffer[];
+      }
+    | undefined;
   let writer = 0n;
   let writePending = false;
   // These buffers remain alive until overlapped input has completed or been cancelled.
@@ -271,7 +276,7 @@ export async function runWindowsProcess(
       failed = true;
     }
     if (attributes) {
-      api.symbols.DeleteProcThreadAttributeList(ptr(attributes));
+      api.symbols.DeleteProcThreadAttributeList(ptr(attributes.list));
     }
     // Close every handle even if termination or a preceding close failed. The
     // non-inherited kill-on-close Job remains the final failure fallback.
@@ -366,13 +371,19 @@ export async function runWindowsProcess(
     requireSuccess(
       api.symbols.InitializeProcThreadAttributeList(ptr(list), 2, 0, ptr(size)),
     );
-    attributes = list;
+    attributes = {
+      list,
+      values: [],
+    };
     const standardHandles = Buffer.alloc(24);
     standardHandles.writeBigUInt64LE(stdin, 0);
     standardHandles.writeBigUInt64LE(stdout.write, 8);
     standardHandles.writeBigUInt64LE(stderr.write, 16);
     const jobs = Buffer.alloc(8);
     jobs.writeBigUInt64LE(job);
+    // Win32 retains the value pointers until DeleteProcThreadAttributeList.
+    // Keep their buffers reachable through the attribute owner across later allocations.
+    attributes.values.push(standardHandles, jobs);
     requireSuccess(
       api.symbols.UpdateProcThreadAttribute(
         ptr(list),
