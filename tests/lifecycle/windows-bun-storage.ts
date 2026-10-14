@@ -133,6 +133,148 @@ function expectDenied(path: string): void {
   }
 }
 
+/** Exercise the failed PR180 sequence without retrying any operation. */
+async function checkOpenErrorCapture(
+  label: string,
+  executeOperation: (
+    operation: string,
+    input: JsonValue,
+  ) => JsonValue | Promise<JsonValue>,
+): Promise<void> {
+  const directory = temporaryPath(`open-error-${label}`);
+  await executeOperation("storage.createDirectory", {
+    path: directory,
+    recursive: false,
+  });
+  for (let iteration = 0; iteration < 32; iteration++) {
+    const source = `${directory}/source-${iteration}.bin`;
+    const copied = `${directory}/copy-${iteration}.bin`;
+    const moved = `${directory}/moved-${iteration}.bin`;
+    let phase = "missing target";
+    try {
+      assert.equal(
+        await executeOperation("storage.exists", {
+          path: moved,
+        }),
+        false,
+      );
+      assert.equal(
+        await executeOperation("storage.stat", {
+          path: moved,
+        }),
+        null,
+      );
+      await assert.rejects(
+        async () =>
+          executeOperation("storage.readBytes", {
+            path: moved,
+          }),
+        (error) =>
+          error instanceof BunawayError && error.code === "INVALID_ARGUMENT",
+      );
+      phase = "write/copy/append";
+      assert.equal(
+        await executeOperation("storage.writeBytes", {
+          path: source,
+          bytes: "AP+A",
+        }),
+        null,
+      );
+      assert.equal(
+        await executeOperation("storage.copyFile", {
+          from: source,
+          to: copied,
+        }),
+        null,
+      );
+      assert.equal(
+        await executeOperation("storage.appendBytes", {
+          path: copied,
+          bytes: "AA==",
+        }),
+        null,
+      );
+      // Reclaim cells before the missing-destination probe to exercise FFI result boxing.
+      Bun.gc(true);
+      phase = "move into missing destination";
+      assert.equal(
+        await executeOperation("storage.move", {
+          from: copied,
+          to: moved,
+        }),
+        null,
+      );
+      assert.equal(
+        await executeOperation("storage.exists", {
+          path: copied,
+        }),
+        false,
+      );
+      assert.equal(
+        await executeOperation("storage.readBytes", {
+          path: source,
+        }),
+        "AP+A",
+      );
+      assert.equal(
+        await executeOperation("storage.readBytes", {
+          path: moved,
+        }),
+        "AP+AAA==",
+      );
+      phase = "existing destination";
+      await assert.rejects(
+        async () =>
+          executeOperation("storage.copyFile", {
+            from: source,
+            to: moved,
+          }),
+        (error) =>
+          error instanceof BunawayError && error.code === "INVALID_ARGUMENT",
+      );
+      assert.equal(
+        await executeOperation("storage.readBytes", {
+          path: source,
+        }),
+        "AP+A",
+      );
+      assert.equal(
+        await executeOperation("storage.readBytes", {
+          path: moved,
+        }),
+        "AP+AAA==",
+      );
+      phase = "cleanup";
+      assert.equal(
+        await executeOperation("storage.remove", {
+          path: source,
+        }),
+        null,
+      );
+      assert.equal(
+        await executeOperation("storage.remove", {
+          path: moved,
+        }),
+        null,
+      );
+    } catch (error) {
+      console.error(
+        `Storage open capture regression: export=${label}, iteration=${iteration}, phase=${phase}, Bun=${Bun.version}, revision=${Bun.revision}`,
+      );
+      throw error;
+    }
+  }
+  assert.equal(
+    await executeOperation("storage.remove", {
+      path: directory,
+    }),
+    null,
+  );
+  console.log(
+    `PASS storage open error capture: ${label}, 32 write/copy/append/move sequences, missing targets and collision preservation`,
+  );
+}
+
 /** Checks the metadata shape and nullable Windows timestamps. */
 function assertMetadata(
   value: unknown,
@@ -585,6 +727,10 @@ async function main(): Promise<void> {
     );
     assert.equal((await stat(temporaryPath("empty-copy.txt"))).size, 0);
 
+    await checkOpenErrorCapture("source", (operation, input) =>
+      execute(storage, operation, input),
+    );
+
     // Exercise the generated native export and Zod defaults as well as the source FFI class.
     const create = builtStorage._definition.nativePlatforms.windows?.create;
     assert(create, "Built Windows storage adapter is missing.");
@@ -594,6 +740,9 @@ async function main(): Promise<void> {
     });
     const builtDirectory = temporaryPath("built adapter/한글");
     try {
+      await checkOpenErrorCapture("built", (operation, input) =>
+        built.execute(operation, input, "backend"),
+      );
       await built.execute(
         "storage.createDirectory",
         {
