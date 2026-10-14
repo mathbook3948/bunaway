@@ -11,8 +11,10 @@ import {
 } from "#plugins/clipboard/src/contract";
 import { windowsOperations as clipboardOperations } from "#plugins/clipboard/src/operations";
 import {
+  decodeBookmark,
   decodeFiles,
   encodeFiles,
+  encodeItem,
 } from "#plugins/clipboard/src/platforms/windows-codecs";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
@@ -569,4 +571,107 @@ test("bookmark and private binary contracts preserve bounded values without new 
   await expect(
     parsers.validateOutput("clipboard.readFormats", oversized),
   ).rejects.toThrow();
+});
+
+test("bookmark contracts bound supplementary URLs in UTF-16 units and match native round trips", async () => {
+  const prefix = "https://example.com/";
+  let maximum = "";
+  for (const length of [
+    MAX_BOOKMARK_LENGTH - 1,
+    MAX_BOOKMARK_LENGTH,
+  ]) {
+    const remaining = length - prefix.length;
+    const url = `${prefix}${"😀".repeat(Math.floor(remaining / 2))}${"x".repeat(remaining % 2)}`;
+    const item = {
+      format: "application/x-bunaway-bookmark",
+      data: {
+        url,
+      },
+    } as const;
+    expect(url.length).toBe(length);
+    expect(
+      (
+        await parsers.validateCall({
+          operation: "clipboard.writeFormats",
+          payload: {
+            items: [
+              item,
+            ],
+          },
+        })
+      ).payload,
+    ).toEqual({
+      items: [
+        item,
+      ],
+    });
+    expect(
+      validateClipboardInput("clipboard.writeFormats", {
+        items: [
+          item,
+        ],
+      }),
+    ).toEqual({
+      items: [
+        item,
+      ],
+    });
+    expect(decodeBookmark(encodeItem(item))).toEqual(item.data);
+    expect(
+      await parsers.validateOutput("clipboard.readFormats", [
+        item,
+      ]),
+    ).toEqual([
+      item,
+    ]);
+    maximum = url;
+  }
+  for (const url of [
+    `${maximum}x`,
+    `${prefix}${"😀".repeat(1024)}`,
+  ]) {
+    const item = {
+      format: "application/x-bunaway-bookmark",
+      data: {
+        url,
+      },
+    } as const;
+    expect(url.length).toBeGreaterThan(MAX_BOOKMARK_LENGTH);
+    expect(Array.from(url).length).toBeLessThanOrEqual(MAX_BOOKMARK_LENGTH);
+    await expect(
+      parsers.validateCall({
+        operation: "clipboard.writeFormats",
+        payload: {
+          items: [
+            item,
+          ],
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    expect(() =>
+      validateClipboardInput("clipboard.writeFormats", {
+        items: [
+          item,
+        ],
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        code: "INVALID_ARGUMENT",
+      }),
+    );
+    expect(() => decodeBookmark(encodeItem(item))).toThrow(
+      expect.objectContaining({
+        code: "INTERNAL",
+      }),
+    );
+    await expect(
+      parsers.validateOutput("clipboard.readFormats", [
+        item,
+      ]),
+    ).rejects.toMatchObject({
+      code: "INTERNAL",
+    });
+  }
 });

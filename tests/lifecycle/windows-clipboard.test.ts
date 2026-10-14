@@ -20,6 +20,7 @@ import { Channel, type UIConfig } from "#native/windows/bun/channel";
 import type { ClipboardItem } from "#plugins/clipboard/src/contract";
 import {
   MAX_BINARY_BYTES,
+  MAX_BOOKMARK_LENGTH,
   MAX_TEXT_LENGTH,
 } from "#plugins/clipboard/src/contract";
 import { createClipboard } from "#plugins/clipboard/src/platforms/windows-bindings";
@@ -459,6 +460,72 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
         );
       } finally {
         owner.close();
+      }
+      const bookmarkPrefix = "https://example.com/";
+      const remainingBookmarkUnits =
+        MAX_BOOKMARK_LENGTH - bookmarkPrefix.length;
+      const maximumBookmarkURL = `${bookmarkPrefix}${"😀".repeat(Math.floor(remainingBookmarkUnits / 2))}${"x".repeat(remainingBookmarkUnits % 2)}`;
+      const maximumBookmark: ClipboardItem = {
+        format: "application/x-bunaway-bookmark",
+        data: {
+          url: maximumBookmarkURL,
+        },
+      };
+      expect(maximumBookmarkURL.length).toBe(MAX_BOOKMARK_LENGTH);
+      await invoke(() =>
+        clipboard.writeFormats({
+          items: [
+            maximumBookmark,
+          ],
+        }),
+      );
+      expect(
+        await invoke(() =>
+          clipboard.readFormats({
+            formats: [
+              "application/x-bunaway-bookmark",
+            ],
+          }),
+        ),
+      ).toEqual([
+        maximumBookmark,
+      ]);
+      for (const url of [
+        `${maximumBookmarkURL}x`,
+        `${bookmarkPrefix}${"😀".repeat(1024)}`,
+      ]) {
+        await expect(
+          invoke(() =>
+            clipboard.writeFormats({
+              items: [
+                {
+                  format: "text/plain",
+                  data: "must not replace the bookmark",
+                },
+                {
+                  format: "application/x-bunaway-bookmark",
+                  data: {
+                    url,
+                  },
+                },
+              ],
+            }),
+          ),
+        ).rejects.toMatchObject({
+          code: "INVALID_ARGUMENT",
+        });
+        expect(
+          await invoke(() =>
+            clipboard.readFormats({
+              formats: [
+                "application/x-bunaway-bookmark",
+              ],
+            }),
+          ),
+        ).toEqual([
+          maximumBookmark,
+        ]);
+        expect(await invoke(() => clipboard.readText(null))).toBeNull();
       }
       for (const data of [
         "",

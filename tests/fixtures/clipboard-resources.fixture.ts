@@ -3,6 +3,7 @@ import { type JsonValue, validateValue } from "@bunaway/protocol";
 import {
   MAX_BINARY_BYTES,
   MAX_BINARY_FORMATS,
+  MAX_BOOKMARK_LENGTH,
 } from "#plugins/clipboard/src/contract";
 import createOperationsDefinition from "#plugins/clipboard/src/index";
 import { createClipboard } from "#plugins/clipboard/src/platforms/windows-bindings";
@@ -95,6 +96,41 @@ await assert.rejects(
   hasCode("INVALID_ARGUMENT"),
 );
 assert.equal(state.clears, 0);
+// Reject excessive UTF-16 units before allocating or replacing the existing clipboard.
+const bookmarkPrefix = "https://example.com/";
+const remainingBookmarkUnits = MAX_BOOKMARK_LENGTH - bookmarkPrefix.length;
+const maximumBookmarkURL = `${bookmarkPrefix}${"😀".repeat(Math.floor(remainingBookmarkUnits / 2))}${"x".repeat(remainingBookmarkUnits % 2)}`;
+const beforeBookmarkClears: number = state.clears;
+const beforeBookmarkAllocations = state.allocationCalls;
+const originalBookmarkData = state.data;
+for (const url of [
+  `${maximumBookmarkURL}x`,
+  `${bookmarkPrefix}${"😀".repeat(1024)}`,
+]) {
+  await assert.rejects(
+    async () =>
+      execute("writeFormats", {
+        items: [
+          {
+            format: "text/plain",
+            data: "must not replace previous text",
+          },
+          {
+            format: "application/x-bunaway-bookmark",
+            data: {
+              url,
+            },
+          },
+        ],
+      }),
+    hasCode("INVALID_ARGUMENT"),
+  );
+  assert.equal(state.clears, beforeBookmarkClears);
+  assert.equal(state.allocationCalls, beforeBookmarkAllocations);
+  assert.equal(state.data, originalBookmarkData);
+  assert.equal(state.opened, false);
+}
+assert.equal(await execute("readText"), "old");
 
 for (const failure of [
   "alloc",

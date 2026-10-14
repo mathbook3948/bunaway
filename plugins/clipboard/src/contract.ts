@@ -73,6 +73,10 @@ export const binarySchema = z
 export const bookmarkSchema = z.strictObject({
   url: textSchema
     .max(MAX_BOOKMARK_LENGTH)
+    .refine(
+      (url) => url.length <= MAX_BOOKMARK_LENGTH,
+      "URLs cannot exceed the UTF-16 code unit limit.",
+    )
     .regex(/^https?:\/\/[^\s]+$(?![\s\S])/u)
     .refine((value) => {
       try {
