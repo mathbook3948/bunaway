@@ -1410,8 +1410,11 @@ test("external development orchestrates UI updates, backend restarts and server 
   const errors = new Response(child.stderr).text();
   const timer = setTimeout(() => child.kill(), 25000);
   try {
-    expect(await child.exited, await errors).toBe(0);
-    expect(await output).toContain("PASS frontend HMR ownership");
+    const code = await child.exited;
+    const stdout = await output;
+    const stderr = await errors;
+    expect(code, `${stdout}\n${stderr}`).toBe(0);
+    expect(stdout).toContain("PASS frontend HMR ownership");
   } finally {
     clearTimeout(timer);
     if (child.exitCode === null) {
@@ -1425,8 +1428,9 @@ for (const failureMode of [
   "broken-start",
   "broken-shared",
   "missing-shared",
+  "process-start-failure",
 ]) {
-  test(`dev recovers from initial source failure: ${failureMode}`, async () => {
+  test(`dev recovers from initial startup failure: ${failureMode}`, async () => {
     const child = Bun.spawn(
       [
         process.execPath,
@@ -1444,12 +1448,26 @@ for (const failureMode of [
     const timer = setTimeout(() => child.kill(), 25000);
     try {
       const code = await child.exited;
-      const stderr = await errors;
-      expect(code, stderr).toBe(0);
+      const [stdout, stderr] = await Promise.all([
+        output,
+        errors,
+      ]);
+      if (code !== 0) {
+        const diagnostics = Bun.file(
+          resolve(project, ".bunaway/dev-fixture-failure.txt"),
+        );
+        const phase = (await diagnostics.exists())
+          ? await diagnostics.text()
+          : "No saved fixture failure.";
+        throw new Error(
+          `Development fixture ${failureMode} failed (exit ${code}).\n` +
+            `${phase}\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+        );
+      }
       expect(stderr).toContain(
         "Dev build failed; fix sources and save to retry",
       );
-      expect(await output).toContain("PASS frontend HMR ownership");
+      expect(stdout).toContain("PASS frontend HMR ownership");
     } finally {
       clearTimeout(timer);
       if (child.exitCode === null) {

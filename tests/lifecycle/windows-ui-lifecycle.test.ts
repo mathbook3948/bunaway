@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -14,7 +15,10 @@ import {
 } from "#native/windows/bun/channel";
 import { writePluginFixture } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
-import { uiCleanupSlots } from "../fixtures/windows-ui-cleanup.ts";
+import {
+  uiCleanupSlots,
+  uiLifecycleSlots,
+} from "../fixtures/windows-ui-cleanup.ts";
 
 const timeoutMs = 10_000;
 const parserSlots = {
@@ -29,6 +33,13 @@ async function startUI(
   parserExecution?: "ui" | "sync",
   trayFailures?: number,
   registerTray = true,
+  lifecycleOptions: {
+    isolated?: boolean;
+    failCreationNumber?: number;
+    creationFailure?: "controller" | "constructor";
+    holdProfileReuse?: boolean;
+    closeBehavior?: "keep-alive" | "quit";
+  } = {},
 ) {
   const directory = await mkdtemp(resolve(tmpdir(), "bunaway-ui-lifecycle-"));
   const parsing = new Int32Array(
@@ -40,6 +51,17 @@ async function startUI(
     new SharedArrayBuffer(
       Object.keys(uiCleanupSlots).length * Int32Array.BYTES_PER_ELEMENT,
     ),
+  );
+  const lifecycle = new Int32Array(
+    new SharedArrayBuffer(
+      Object.keys(uiLifecycleSlots).length * Int32Array.BYTES_PER_ELEMENT,
+    ),
+  );
+  Atomics.store(lifecycle, uiLifecycleSlots.confirmClose, 1);
+  Atomics.store(
+    lifecycle,
+    uiLifecycleSlots.holdProfileReuse,
+    lifecycleOptions.holdProfileReuse ? 1 : 0,
   );
   const parserPlugins = parserExecution
     ? [
@@ -67,7 +89,7 @@ async function startUI(
     dataRoot: directory,
     loader: "fixture",
     desktop: {
-      closeBehavior: "keep-alive",
+      closeBehavior: lifecycleOptions.closeBehavior ?? "keep-alive",
       tray: {
         tooltip: "Fixture",
       },
@@ -89,6 +111,11 @@ async function startUI(
       {
         view: "main",
         title: "Main",
+        ...(lifecycleOptions.isolated
+          ? {
+              profile: "isolated" as const,
+            }
+          : {}),
         home: "https://app.bunaway.local",
         window: {
           width: 800,
@@ -232,6 +259,9 @@ async function startUI(
       ...configuration,
       parsing: parsing.buffer,
       cleanup: cleanup.buffer,
+      lifecycle: lifecycle.buffer,
+      failCreationNumber: lifecycleOptions.failCreationNumber,
+      creationFailure: lifecycleOptions.creationFailure,
       trayFailures,
       ...(failView
         ? {
@@ -315,6 +345,8 @@ async function startUI(
   return {
     parsing,
     cleanup,
+    lifecycle,
+    directory,
     channel,
     packets,
     call,
@@ -331,6 +363,382 @@ async function startUI(
     },
   };
 }
+
+/** The production profile owner allocates this directory before controlled WebView creation. */
+async function isolatedProfile(ui: { directory: string }): Promise<string> {
+  const root = resolve(ui.directory, "webview", "temporary");
+  const paths = await readdir(root);
+  expect(paths).toHaveLength(1);
+  return resolve(root, paths[0] ?? "");
+}
+
+test(
+  "declined user close and recreation preserve the live lifetime and isolated profile",
+  async () => {
+    const ui = await startUI(undefined, "ui", undefined, true, {
+      isolated: true,
+    });
+    const target = {
+      view: "main",
+    };
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      const before = await ui.call("windows.getSnapshot", target);
+      const profile = await isolatedProfile(ui);
+      await writeFile(resolve(profile, "storage"), "private");
+      await ui.call("windows.setCloseConfirmation", {
+        ...target,
+        message: "Close?",
+      });
+      Atomics.store(ui.lifecycle, uiLifecycleSlots.confirmClose, 0);
+      await ui.call("parser.run", "user-close");
+      await ui.waitFor(
+        () => Atomics.load(ui.lifecycle, uiLifecycleSlots.confirmations) === 1,
+      );
+      const failure = await ui
+        .call("windows.recreate", target)
+        .catch((error: unknown) => error);
+      expect(String(failure)).toContain("CANCELLED");
+      expect(await ui.call("windows.getSnapshot", target)).toEqual(before);
+      expect(await readFile(resolve(profile, "storage"), "utf8")).toBe(
+        "private",
+      );
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.close)).toBe(0);
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.detach)).toBe(0);
+      // Forced renderer retirement bypasses the same declined confirmation.
+      await ui.call("parser.run", "force-close");
+      await ui.waitFor(() => !existsSync(profile));
+      for (let tick = 0; tick < 3; tick++) {
+        expect(await ui.call("windows.isDestroyed", target)).toBe(true);
+      }
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+      for (const slot of [
+        uiLifecycleSlots.close,
+        uiLifecycleSlots.detach,
+        uiLifecycleSlots.finish,
+        uiLifecycleSlots.destroy,
+      ]) {
+        expect(Atomics.load(ui.lifecycle, slot)).toBe(1);
+      }
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "cancelled last-window quit permits another close without retiring native resources",
+  async () => {
+    const ui = await startUI(undefined, "ui", undefined, true, {
+      closeBehavior: "quit",
+    });
+    const target = {
+      view: "main",
+    };
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      const before = await ui.call("windows.getSnapshot", target);
+      await ui.call("parser.run", "user-close");
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "quit-request"),
+      );
+      await ui.channel.send({
+        kind: "quit-cancelled",
+      });
+      // Let the pending close observe cancellation before requesting another close.
+      for (let tick = 0; tick < 3; tick++) {
+        expect(await ui.call("windows.getSnapshot", target)).toEqual(before);
+      }
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.close)).toBe(0);
+      await ui.call("parser.run", "user-close");
+      await ui.waitFor(
+        () =>
+          ui.packets.filter((packet) => packet.kind === "quit-request")
+            .length === 2,
+      );
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.close)).toBe(1);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "successful recreation retains isolated storage and final shutdown releases each native lifetime once",
+  async () => {
+    const ui = await startUI(undefined, undefined, undefined, true, {
+      isolated: true,
+    });
+    const target = {
+      view: "main",
+    };
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      const before = await ui.call("windows.getSnapshot", target);
+      const profile = await isolatedProfile(ui);
+      await writeFile(resolve(profile, "storage"), "private");
+      expect(await ui.call("windows.recreate", target)).toBeNull();
+      expect(await ui.call("windows.getSnapshot", target)).not.toEqual(before);
+      expect(await isolatedProfile(ui)).toBe(profile);
+      expect(await readFile(resolve(profile, "storage"), "utf8")).toBe(
+        "private",
+      );
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.finish)).toBe(1);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+      expect(existsSync(profile)).toBe(false);
+      for (const slot of [
+        uiLifecycleSlots.close,
+        uiLifecycleSlots.detach,
+        uiLifecycleSlots.finish,
+        uiLifecycleSlots.destroy,
+      ]) {
+        expect(Atomics.load(ui.lifecycle, slot)).toBe(2);
+      }
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test.each([
+  "controller",
+  "constructor",
+] as const)(
+  "replacement %s failure releases retained storage and permits a fresh isolated creation",
+  async (creationFailure) => {
+    const ui = await startUI(undefined, undefined, undefined, true, {
+      isolated: true,
+      failCreationNumber: 2,
+      creationFailure,
+    });
+    const target = {
+      view: "main",
+    };
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      const profile = await isolatedProfile(ui);
+      await writeFile(resolve(profile, "storage"), "private");
+      const failure = await ui
+        .call("windows.recreate", target)
+        .catch((error: unknown) => error);
+      expect(String(failure)).toContain("INTERNAL");
+      await ui.waitFor(() => !existsSync(profile));
+      expect(await ui.call("windows.listInstances", null)).toEqual([]);
+      expect(ui.packets.some((packet) => packet.kind === "fatal")).toBe(false);
+      expect(await ui.call("windows.create", target)).toBeNull();
+      const fresh = await isolatedProfile(ui);
+      expect(fresh).not.toBe(profile);
+      expect(existsSync(resolve(fresh, "storage"))).toBe(false);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+      for (const slot of [
+        uiLifecycleSlots.close,
+        uiLifecycleSlots.detach,
+        uiLifecycleSlots.finish,
+        uiLifecycleSlots.destroy,
+      ]) {
+        expect(Atomics.load(ui.lifecycle, slot)).toBe(
+          creationFailure === "controller" || slot === uiLifecycleSlots.destroy
+            ? 3
+            : 2,
+        );
+      }
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "modal input restoration retries after COM completion without repeating native cleanup",
+  async () => {
+    const ui = await startUI();
+    const main = {
+      view: "main",
+    };
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      const parent = validateWindowOutput(
+        "windows.listInstances",
+        await ui.call("windows.listInstances", null),
+      )[0];
+      expect(parent).toBeDefined();
+      const child = validateWindowOutput(
+        "windows.createInstance",
+        await ui.call("windows.createInstance", {
+          view: "editor",
+        }),
+      );
+      const target = {
+        view: child.viewId,
+        windowId: child.windowId,
+      };
+      await ui.call("windows.setParent", {
+        ...target,
+        parent: parent?.windowId ?? null,
+        modal: true,
+      });
+      expect(await ui.call("windows.isEnabled", main)).toBe(false);
+      Atomics.store(ui.lifecycle, uiLifecycleSlots.inputRestoreFailures, 1);
+      expect(await ui.call("windows.close", target)).toBe(true);
+      await ui.waitFor(
+        async () => (await ui.call("windows.isEnabled", main)) === true,
+      );
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.inputRestores)).toBe(
+        2,
+      );
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.finish)).toBe(1);
+      expect(
+        ui.packets.some(
+          (packet) =>
+            packet.kind === "diagnostic" &&
+            packet.event === "window-input-restore-retry",
+        ),
+      ).toBe(true);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.finish)).toBe(2);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test.each([
+  "destroy",
+  "shutdown",
+] as const)(
+  "%s cancels a replacement after native release and deletes its retained profile without repeating cleanup",
+  async (action) => {
+    const ui = await startUI(undefined, undefined, undefined, true, {
+      isolated: true,
+      holdProfileReuse: true,
+    });
+    const target = {
+      view: "main",
+    };
+    const requestId = crypto.randomUUID();
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      // Keep another live lifetime so destroying the replacement does not commit app shutdown.
+      await ui.call("windows.createInstance", {
+        view: "editor",
+      });
+      const profile = await isolatedProfile(ui);
+      await ui.channel.send({
+        kind: "operation",
+        context: "backend" as UIConfig["backendContext"],
+        source: "backend",
+        requestId,
+        call: {
+          operation: "windows.recreate",
+          payload: target,
+        },
+      });
+      await ui.waitFor(
+        () => Atomics.load(ui.lifecycle, uiLifecycleSlots.finish) === 1,
+      );
+      // Native release completes while the shared environment still prevents profile reuse.
+      expect(existsSync(profile)).toBe(true);
+      expect(
+        ui.packets.some(
+          (packet) =>
+            packet.kind === "host-response" && packet.requestId === requestId,
+        ),
+      ).toBe(false);
+      if (action === "destroy") {
+        expect(await ui.call("windows.destroy", target)).toBe(true);
+        await ui.waitFor(() =>
+          ui.packets.some(
+            (packet) =>
+              packet.kind === "host-response" && packet.requestId === requestId,
+          ),
+        );
+        expect(
+          ui.packets.find(
+            (packet) =>
+              packet.kind === "host-response" && packet.requestId === requestId,
+          ),
+        ).toMatchObject({
+          response: {
+            kind: "error",
+            error: {
+              code: "CANCELLED",
+            },
+          },
+        });
+        await ui.waitFor(() => !existsSync(profile));
+        expect(await ui.call("windows.listInstances", null)).toHaveLength(1);
+        expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.finish)).toBe(1);
+      }
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+      expect(existsSync(profile)).toBe(false);
+      for (const slot of [
+        uiLifecycleSlots.close,
+        uiLifecycleSlots.detach,
+        uiLifecycleSlots.finish,
+        uiLifecycleSlots.destroy,
+      ]) {
+        expect(Atomics.load(ui.lifecycle, slot)).toBe(2);
+      }
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
 
 test.each([
   1,

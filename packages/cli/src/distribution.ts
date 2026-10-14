@@ -59,6 +59,7 @@ export const frameworkPaths = [
   "native/windows/bun/deps.json",
   "native/windows/bun/channel.ts",
   "native/windows/bun/ui.ts",
+  "native/windows/bun/window-lifecycle.ts",
   "native/windows/bun/webview.ts",
   "native/windows/bun/downloads.ts",
   "native/windows/bun/webview-downloads.ts",

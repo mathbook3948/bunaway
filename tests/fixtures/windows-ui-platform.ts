@@ -4,15 +4,19 @@ import type {
   NativeMonitorServices,
   WindowSpec,
 } from "@bunaway/plugin-api/native";
-import { uiCleanupSlots } from "./windows-ui-cleanup.ts";
+import { uiCleanupSlots, uiLifecycleSlots } from "./windows-ui-cleanup.ts";
 
 // Controlled native boundary for the real UI Worker. No HWND, DLL or COM is loaded.
 const controls = workerData as {
   failView?: string;
   trayFailures?: number;
   cleanup: SharedArrayBuffer;
+  lifecycle: SharedArrayBuffer;
+  failCreationNumber?: number;
+  creationFailure?: "controller" | "constructor";
 };
 const cleanup = new Int32Array(controls.cleanup);
+const lifecycle = new Int32Array(controls.lifecycle);
 export const WM_CLOSE = 16;
 export const WM_SIZE = 5;
 export const WM_ENTERSIZEMOVE = 561;
@@ -67,6 +71,7 @@ export class Windows {
       view: string;
       visible: boolean;
       closable: boolean;
+      enabled: boolean;
     }
   >();
   create(
@@ -81,6 +86,7 @@ export class Windows {
       view: "",
       visible,
       closable: true,
+      enabled: true,
     });
     return hwnd;
   }
@@ -147,7 +153,36 @@ export class Windows {
   isClosable(hwnd: bigint): boolean {
     return this.read(hwnd).closable;
   }
+  setOwner(child: bigint, parent: bigint): void {
+    this.read(child);
+    if (parent !== 0n) {
+      this.read(parent);
+    }
+  }
+  isEnabled(hwnd: bigint): boolean {
+    return this.read(hwnd).enabled;
+  }
+  setEnabled(hwnd: bigint, enabled: boolean): void {
+    if (enabled) {
+      Atomics.add(lifecycle, uiLifecycleSlots.inputRestores, 1);
+      if (Atomics.load(lifecycle, uiLifecycleSlots.inputRestoreFailures) > 0) {
+        Atomics.sub(lifecycle, uiLifecycleSlots.inputRestoreFailures, 1);
+        throw new Error("Injected parent input restoration failure");
+      }
+    }
+    this.read(hwnd).enabled = enabled;
+  }
+  getTitle(hwnd: bigint): string {
+    return this.read(hwnd).view;
+  }
+  confirmClose(): boolean {
+    Atomics.add(lifecycle, uiLifecycleSlots.confirmations, 1);
+    return Atomics.load(lifecycle, uiLifecycleSlots.confirmClose) === 1;
+  }
   destroy(hwnd: bigint): void {
+    if (this.read(hwnd).view) {
+      Atomics.add(lifecycle, uiLifecycleSlots.destroy, 1);
+    }
     assert(this.windows.delete(hwnd));
   }
   pump(): void {}
@@ -182,6 +217,8 @@ export function requestFixtureClose(view: string, force: boolean): void {
 /** Match the controller callback's failure plus forced-close notification. */
 export class WebView {
   failure: unknown;
+  private static creations = 0;
+  private readonly creationNumber = ++WebView.creations;
   constructor(
     readonly hwnd: bigint,
     spec: WindowSpec,
@@ -194,12 +231,21 @@ export class WebView {
       close(force?: boolean): void;
     },
   ) {
+    if (
+      this.creationNumber === controls.failCreationNumber &&
+      controls.creationFailure === "constructor"
+    ) {
+      throw new Error("WebView constructor failed in fixture");
+    }
     closeRequests.set(hwnd, {
       view: spec.view,
       close: hooks.close,
     });
     queueMicrotask(() => {
-      if (spec.view === controls.failView) {
+      if (
+        spec.view === controls.failView ||
+        this.creationNumber === controls.failCreationNumber
+      ) {
         this.failure = new Error("Controller completion failed in fixture");
         hooks.close(true);
       } else {
@@ -212,16 +258,20 @@ export class WebView {
   }
   navigate(): void {}
   send(): void {}
-  requestClose(): void {}
+  requestClose(): void {
+    Atomics.add(lifecycle, uiLifecycleSlots.close, 1);
+  }
   detach(): boolean {
+    Atomics.add(lifecycle, uiLifecycleSlots.detach, 1);
     return true;
   }
   finish(): boolean {
+    Atomics.add(lifecycle, uiLifecycleSlots.finish, 1);
     closeRequests.delete(this.hwnd);
     return true;
   }
   canReuseProfile(): boolean {
-    return true;
+    return Atomics.load(lifecycle, uiLifecycleSlots.holdProfileReuse) === 0;
   }
 }
 
