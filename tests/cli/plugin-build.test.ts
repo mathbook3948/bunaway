@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import assert from "node:assert/strict";
 import { cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -6,6 +7,160 @@ import { PLATFORMS } from "@bunaway/plugin-api";
 import { frameworkRoot, writeJson } from "#cli/files";
 import { buildNativePlugin } from "#cli/plugin-build";
 import { readPluginDeclaration } from "#cli/plugins";
+
+test("browser replacements survive plugin builds and consumers installed without source", async () => {
+  await mkdir(resolve(frameworkRoot, "build"), {
+    recursive: true,
+  });
+  const root = await mkdtemp(
+    resolve(frameworkRoot, "build/plugin-browser-consumer-"),
+  );
+  try {
+    const manifest = {
+      name: "browser-plugin",
+      version: "1.2.3",
+      type: "module",
+      exports: {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js",
+      },
+      imports: {
+        "#helper": "./src/helper.ts",
+        "#disabled": "./src/disabled.ts",
+      },
+      browser: {
+        "./src/helper.ts": "./src/browser.ts",
+        "#disabled": false,
+      },
+    };
+    await writeJson(resolve(root, "package.json"), manifest);
+    await writeJson(resolve(root, "tsconfig.json"), {
+      extends: resolve(frameworkRoot, "tsconfig.base.json"),
+      compilerOptions: {
+        types: [
+          "bun",
+        ],
+      },
+      include: [
+        "src/**/*.ts",
+      ],
+    });
+    await Bun.write(
+      resolve(root, "src/helper.ts"),
+      'export const value = "NATIVE_HELPER";',
+    );
+    await Bun.write(
+      resolve(root, "src/browser.ts"),
+      'export const value = "BROWSER_HELPER";',
+    );
+    await Bun.write(
+      resolve(root, "src/disabled.ts"),
+      'export const value = "DISABLED_HELPER";',
+    );
+    await Bun.write(
+      resolve(root, "src/platforms/linux.ts"),
+      'export function read() { return "LINUX_NATIVE"; }',
+    );
+    await Bun.write(
+      resolve(root, "src/index.ts"),
+      `
+import { defineNativePlugin } from "@bunaway/plugin";
+import { z } from "zod";
+import { read } from "./platforms/linux.ts";
+import { value } from "#helper";
+import * as disabled from "#disabled";
+export { value };
+export const required: string = require("#helper").value;
+export const disabledValue = disabled.value ?? null;
+export const disabledRequired: string | null = require("#disabled").value ?? null;
+export const dynamic = async () => (await import("#helper")).value;
+export default defineNativePlugin({ name: "demo", platforms: { linux: { operations: {
+  read: { input: z.null(), output: z.string(), handler: read }
+} } } });
+`,
+    );
+    await buildNativePlugin(root);
+    const neutral = await Bun.file(resolve(root, "dist/index.js")).text();
+    expect(neutral).toContain("BROWSER_HELPER");
+    for (const excluded of [
+      "NATIVE_HELPER",
+      "DISABLED_HELPER",
+      "LINUX_NATIVE",
+      'from "#',
+    ]) {
+      expect(neutral).not.toContain(excluded);
+    }
+    const native = await Bun.file(resolve(root, "dist/native/linux.js")).text();
+    expect(native).toContain("NATIVE_HELPER");
+    expect(native).toContain("DISABLED_HELPER");
+    expect(native).toContain("LINUX_NATIVE");
+    expect(native).not.toContain("BROWSER_HELPER");
+
+    const consumer = resolve(root, "consumer");
+    const installed = resolve(consumer, "node_modules/browser-plugin");
+    await cp(resolve(root, "dist"), resolve(installed, "dist"), {
+      recursive: true,
+    });
+    await writeJson(resolve(installed, "package.json"), manifest);
+    expect(await Bun.file(resolve(installed, "src/index.ts")).exists()).toBe(
+      false,
+    );
+    const entry = resolve(consumer, "index.ts");
+    await Bun.write(
+      entry,
+      'export { default, value, required, disabledValue, disabledRequired, dynamic } from "browser-plugin";',
+    );
+    const browser = await Bun.build({
+      entrypoints: [
+        entry,
+      ],
+      target: "browser",
+      format: "esm",
+    });
+    expect(browser.success).toBe(true);
+    const browserOutput = browser.outputs[0];
+    assert(browserOutput);
+    await Bun.write(resolve(consumer, "browser.js"), browserOutput);
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `
+import assert from "node:assert/strict";
+const browser = await import("./browser.js");
+assert.equal(browser.value, "BROWSER_HELPER");
+assert.equal(browser.required, "BROWSER_HELPER");
+assert.equal(await browser.dynamic(), "BROWSER_HELPER");
+assert.equal(browser.disabledValue, null);
+assert.equal(browser.disabledRequired, null);
+assert.equal(browser.default._definition.version, "1.2.3");
+const native = await import("browser-plugin/native/linux");
+assert.equal(native.value, "NATIVE_HELPER");
+assert.equal(native.required, "NATIVE_HELPER");
+assert.equal(await native.dynamic(), "NATIVE_HELPER");
+assert.equal(native.disabledValue, "DISABLED_HELPER");
+assert.equal(native.disabledRequired, "DISABLED_HELPER");
+const adapter = native.default._definition.nativePlatforms.linux.create({dataRoot:".", capabilities:[]});
+try { assert.equal(await adapter.execute("demo.read", null, "backend"), "LINUX_NATIVE"); }
+finally { await adapter.dispose(); }
+`,
+      ],
+      {
+        cwd: consumer,
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const stdout = new Response(child.stdout).text();
+    const stderr = new Response(child.stderr).text();
+    expect(await child.exited, `${await stdout}\n${await stderr}`).toBe(0);
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 30000);
 
 test("conditional package imports follow the build target and import kind in src-free distributions", async () => {
   await mkdir(resolve(frameworkRoot, "build"), {

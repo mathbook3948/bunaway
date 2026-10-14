@@ -1,12 +1,13 @@
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { build } from "esbuild";
 import { inside } from "./files.ts";
 
 /**
- * Run Bun's plugin bundle while esbuild owns target-aware package-import resolution.
+ * Run Bun's plugin bundle while esbuild identifies external package-import targets.
  * Bun 1.4.2 externalizes #imports before resolving them and has no post-remap hook.
  * esbuild resolves the package map before externalizing dependency targets, without
- * requiring those dependencies to expose an entry for this build target.
+ * requiring those dependencies to expose an entry for this build target. Bun owns
+ * local resolution, including browser replacements and disabled modules.
  */
 export async function buildPluginBundle(
   root: string,
@@ -49,15 +50,23 @@ export async function buildPluginBundle(
           resolver.onStart(async () => {
             output = await Bun.build({
               ...config,
+              // Externalize dependencies below, after resolving package maps. Bun must
+              // retain local imports so its browser remaps and disabled modules still run.
+              packages: "bundle",
               plugins: [
+                ...(config.plugins ?? []),
                 {
                   name: "bunaway-plugin-imports",
                   setup(builder) {
                     builder.onResolve(
                       {
-                        filter: /^#/,
+                        filter: /^[^./]/,
                       },
                       async ({ path, importer, kind }) => {
+                        // Windows entrypoints start with a drive letter, not a slash.
+                        if (isAbsolute(path)) {
+                          return;
+                        }
                         if (
                           kind !== "import-statement" &&
                           kind !== "dynamic-import" &&
@@ -82,12 +91,12 @@ export async function buildPluginBundle(
                         }
                         if (
                           !resolved.external &&
-                          inside(resolve(root, "src"), resolved.path)
+                          (!path.startsWith("#") ||
+                            inside(resolve(root, "src"), resolved.path))
                         ) {
-                          return {
-                            path: resolved.path,
-                            external: false,
-                          };
+                          // Let Bun apply its complete local resolver, including browser
+                          // remaps. Returning an absolute file would bypass that step.
+                          return;
                         }
                         return {
                           // Preserve the selected package, not an alias that could select
@@ -99,7 +108,6 @@ export async function buildPluginBundle(
                     );
                   },
                 },
-                ...(config.plugins ?? []),
               ],
             });
           });

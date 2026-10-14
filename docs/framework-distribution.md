@@ -57,9 +57,9 @@ CLI 패키지는 Zod 4.6.5의 Promise 소유권 패치와 MIT 라이선스를 �
 
 ## 설치 구성
 
-CLI는 플러그인의 조건부 package import를 해석하는 esbuild를 일반 의존성으로 설치한다.
+CLI는 플러그인의 조건부 package import에서 외부 패키지 대상을 판별하는 esbuild를 일반 의존성으로 설치한다.
 esbuild 실행 파일은 해당 패키지의 플랫폼별 설치 구성을 사용하며 CLI JavaScript 번들에 포함하지 않는다.
-플러그인과 앱의 최종 JavaScript는 Bun으로 빌드한다.
+로컬 import의 browser 대체와 제외 설정 및 최종 JavaScript 번들은 Bun이 처리한다.
 
 개별 네이티브 패키지는 필요할 때 설치하고 AppDefinition.plugins에 등록한다.
 CLI는 직접 설치한 플러그인의 manifest와 SDK peer 버전, 패키지 내부 경로를 검사한다.

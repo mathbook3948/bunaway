@@ -54,8 +54,10 @@ export async function save(text: string): Promise<null> {
 package.json의 `#imports` 해석에는 CLI 의존성인 esbuild resolver를 사용한다.
 Bun 1.4.2의 `packages: external`은 별칭을 해석하기 전에 외부 처리하며, 전체 번들 해석은
 별칭이 가리킨 외부 패키지의 대상별 exports까지 요구하기 때문이다.
-resolver는 import와 require, 중첩 조건과 패턴을 해석하고 src 내부 파일만 Bun에 전달한다.
+resolver는 import와 require, 중첩 조건과 패턴을 해석해 외부 패키지를 판별한다.
+src 내부 파일과 tsconfig 별칭은 Bun이 해석하므로 로컬 browser 대체와 제외 설정도 유지한다.
 외부 패키지를 가리킨 별칭은 선택된 패키지 이름의 외부 참조로 바꾸며 구현을 읽거나 번들에 포함하지 않는다.
+현재 Bun이 지원하지 않는 제외 경로는 원본 구현을 포함하는 대신 빌드를 실패로 처리한다.
 플랫폼 스텁과 JavaScript 생성은 계속 Bun이 담당한다.
 
 ### storage의 플랫폼별 작업 선언

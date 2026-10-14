@@ -10,6 +10,8 @@ fixture도 운영 작업 목록과 자원 소유자를 재사용하며 별도 di
 조건부 # 별칭의 browser와 bun, import와 require 선택, 중첩 wildcard 별칭과 외부 의존성 유지도 검사한다.
 외부 의존성에는 Bun 전용 exports와 플랫폼 경계에 해당하는 파일 이름을 사용하며 내부와 외부 대상이 섞인 별칭도 검사한다.
 `cli/plugin-imports.test.ts`는 중첩 조건의 default 복귀, 배열과 wildcard 우선순위, module과 node 및 환경 조건을 Bun 결과와 비교하고 null 차단도 확인한다.
+로컬 browser 대체, 비공개 별칭의 false 제외와 tsconfig 별칭도 Bun 결과와 비교한다. Bun이 거부하는 제외 경로는 빌드 실패를 유지한다.
+`cli/plugin-build.test.ts`는 dist만 설치한 브라우저 소비자에서 대체와 제외 결과를 실행하고 네이티브 출력의 원본 구현 및 플랫폼 분리를 확인한다.
 dist만 설치한 소비자 프로세스에서 두 출력과 실제 어댑터를 실행하고, 네이티브 대상의 해석 실패 뒤 기존 출력을 비교한다.
 `cli/distribution.test.ts`는 설치한 CLI로 별칭을 사용하는 외부 플러그인을 빌드한 뒤,
 src 없이 dist만 설치해 공개 호출과 재내보낸 타입을 검사한다.
