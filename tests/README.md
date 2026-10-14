@@ -1035,6 +1035,9 @@ iOS 실제 호스트 검사는 직접 WebSocket과 최초 연결을 강제로 �
 `lifecycle/macos-webview-diagnostics.test.ts`는 창별 64개 기록 상한과 미등록 NSError
 domain 제거, signed code를 검사한다. 실제 macOS arm64에서는 NSError의 -999 code를
 FFI로 읽는 ABI도 확인하며 기존 macOS native 실행기에 포함한다.
+`action-policy`와 `response-policy`는 정책 결과를 기록하고, 각각의 `-returned` 단계는
+네이티브 decision handler 호출이 반환한 뒤 기록한다. 허용 결정과 호출 완료를 구분하며
+이 기록만으로 WebKit의 이후 탐색 진행을 보장하지 않는다.
 `macos-network.ts`의 성공 결과에는 고정 WebView 단계 기록을 함께 보관한다.
 실패한 실행은 기존 catch가 출력한 호스트 로그를 기존 CI artifact의 host.log에서 확인한다.
 #170의 raw report, counter와 pipe 보관 작업을 이 변경에 복제하지 않는다.
