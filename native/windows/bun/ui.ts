@@ -41,6 +41,7 @@ import {
   WM_SIZE,
 } from "./win32.ts";
 import { disposeWin32Bindings, hr, kernel, ole } from "./win32-bindings.ts";
+import { WindowLifecycle } from "./window-lifecycle.ts";
 import { WindowProfiles } from "./window-profiles.ts";
 import { WindowReadinessTracker } from "./window-readiness.ts";
 import {
@@ -116,7 +117,7 @@ function visibility(action: "show" | "hide") {
     return;
   }
   for (const view of views.values()) {
-    if (view.boundary.closed) {
+    if (view.lifecycle.closed) {
       continue;
     }
     nativeWindows.show(view.native.hwnd, false);
@@ -133,7 +134,7 @@ function showWindows() {
     [
       ...views.values(),
     ].filter(
-      (view) => view.boundary.policy.id === spec.view && !view.boundary.closed,
+      (view) => view.boundary.policy.id === spec.view && !view.lifecycle.closed,
     ),
   );
   if (live.length) {
@@ -148,7 +149,7 @@ function showWindows() {
     adapters?.busy() ||
     [
       ...views.values(),
-    ].some((view) => !view.cleaned)
+    ].some((view) => !view.lifecycle.cleanupComplete)
   ) {
     return;
   }
@@ -158,7 +159,8 @@ function showWindows() {
     const view = [
       ...views.values(),
     ].find(
-      (view) => view.boundary.policy.id === first.view && !view.boundary.closed,
+      (view) =>
+        view.boundary.policy.id === first.view && !view.lifecycle.closed,
     );
     assert(view);
     windows.showForDesktop(view.native.hwnd);
@@ -168,15 +170,11 @@ function showWindows() {
 type ViewState = {
   key: string;
   startup: boolean;
-  released: boolean;
+  lifecycle: WindowLifecycle;
   boundary: ViewBoundary;
   native: WebView;
-  detached: boolean;
-  cleaned: boolean;
   ready: boolean;
   navigationStarted: boolean;
-  pendingClose: boolean;
-  forceClose: boolean;
   replacementCancelled: boolean;
   inputRestoreDeadlineMs?: number;
   downloadCleanupRetries?: DownloadCleanupRetries;
@@ -246,18 +244,20 @@ function hasPendingClose(view: ViewState): boolean {
  * Destroy its HWND before finishing COM cleanup.
  */
 function cleanupView(view: ViewState) {
-  if (!view.boundary.closed || view.cleaned) {
+  if (!view.lifecycle.closed || view.lifecycle.cleanupComplete) {
     return;
   }
-  if (view.released) {
-    view.cleaned = profiles.release(view.key, replacements.has(view.key));
+  if (view.lifecycle.phase === "released") {
+    view.lifecycle.settleProfile(replacements.has(view.key), () =>
+      profiles.release(view.key, false),
+    );
     return;
   }
   const windowId = view.readiness.snapshot().windowId;
   if (!relations.canRelease(windowId)) {
     return;
   }
-  if (!view.detached) {
+  if (view.lifecycle.phase === "closing") {
     if (
       view.downloadCleanupRetries &&
       !view.downloadCleanupRetries.canAttempt(
@@ -298,43 +298,50 @@ function cleanupView(view: ViewState) {
       delete view.downloadCleanupRetries;
     }
     windows?.destroy(view.native.hwnd);
-    view.detached = true;
+    view.lifecycle.detached();
   }
-  if (view.detached && !view.cleaned) {
-    if (view.native.finish()) {
-      try {
-        relations.release(windowId);
-      } catch (error) {
-        if (!(error instanceof WindowInputRestoreError)) {
-          throw error;
-        }
-        if (view.inputRestoreDeadlineMs === undefined) {
-          view.inputRestoreDeadlineMs = Date.now() + WINDOW_CLEANUP_TIMEOUT_MS;
-          log("window-input-restore-retry", {
-            view: view.readiness.snapshot().viewId,
-            message: error.message,
-          });
-        }
-        if (Date.now() >= view.inputRestoreDeadlineMs) {
-          throw error;
-        }
-        return;
-      }
-      modalWindows.delete(windowId);
-      view.released = true;
-      view.cleaned = profiles.release(view.key, replacements.has(view.key));
+  if (view.lifecycle.phase === "detached") {
+    if (!view.native.finish()) {
+      return;
     }
+    view.lifecycle.finished();
   }
+  if (view.lifecycle.phase === "finished") {
+    try {
+      relations.release(windowId);
+    } catch (error) {
+      if (!(error instanceof WindowInputRestoreError)) {
+        throw error;
+      }
+      if (view.inputRestoreDeadlineMs === undefined) {
+        view.inputRestoreDeadlineMs = Date.now() + WINDOW_CLEANUP_TIMEOUT_MS;
+        log("window-input-restore-retry", {
+          view: view.readiness.snapshot().viewId,
+          message: error.message,
+        });
+      }
+      if (Date.now() >= view.inputRestoreDeadlineMs) {
+        throw error;
+      }
+      return;
+    }
+    modalWindows.delete(windowId);
+    view.lifecycle.released();
+  }
+  view.lifecycle.settleProfile(replacements.has(view.key), () =>
+    profiles.release(view.key, false),
+  );
 }
-/** Shutdown turns every pending replacement into final cleanup, including already released controllers. */
+/** Cancel profile retention while leaving already completed native cleanup intact. */
+function cancelReplacement(key: string) {
+  replacements.delete(key);
+  views.get(key)?.lifecycle.cancelReplacement();
+}
+/** Shutdown turns every pending replacement into final profile cleanup. */
 function cancelReplacements() {
   for (const key of replacements.keys()) {
-    const view = views.get(key);
-    if (view?.released) {
-      view.cleaned = false;
-    }
+    cancelReplacement(key);
   }
-  replacements.clear();
 }
 const windowRequests = new NativeRequests();
 const approved = new Map<string, HostContext>();
@@ -387,15 +394,8 @@ const channel = new Channel(
       windowRequests.cancelAll();
       approved.clear();
       uiCalls.clear();
-      for (const view of views.values()) {
-        relations.markClosing(view.readiness.snapshot().windowId);
-        view.boundary.revoke("shutdown");
-        view.readiness?.terminate({
-          code: "CANCELLED",
-          message: "App shutdown.",
-        });
-        view.boundary.closed = true;
-        view.native.requestClose();
+      for (const [key, view] of views) {
+        commitClose(key, view, "shutdown");
       }
     } else if (packet.kind === "server") {
       viewByContext(packet.route.context)?.boundary.send(
@@ -603,13 +603,13 @@ function startViews() {
     (!startupNavigationStarted &&
       [
         ...views.values(),
-      ].some((view) => !view.ready && !view.boundary.closed))
+      ].some((view) => !view.ready && !view.lifecycle.closed))
   ) {
     return;
   }
   startupNavigationStarted = true;
   for (const view of views.values()) {
-    if (view.ready && !view.boundary.closed && !view.navigationStarted) {
+    if (view.ready && !view.lifecycle.closed && !view.navigationStarted) {
       view.navigationStarted = true;
       view.native.navigate();
     }
@@ -626,12 +626,12 @@ async function closeWindow(
   const view = views.get(viewId);
   assert(view);
   const forced = mode === "force" || mode === "destroy";
-  view.pendingClose = false;
+  view.lifecycle.takeCloseRequest();
   if (forced) {
-    replacements.delete(viewId);
+    cancelReplacement(viewId);
   }
   // A recreation may have retired this lifetime already; public destroy must still decide app shutdown.
-  if (view.boundary.closed && mode !== "destroy") {
+  if (view.lifecycle.closed && mode !== "destroy") {
     return true;
   }
   assert(windows);
@@ -666,7 +666,7 @@ async function closeWindow(
       mode === "destroy" &&
       [
         ...views.values(),
-      ].every((candidate) => candidate.boundary.closed)
+      ].every((candidate) => candidate.lifecycle.closed)
     ) {
       signalClosing();
     }
@@ -690,7 +690,7 @@ async function closeWindow(
     }
     for (const child of subtree) {
       if (
-        child.view.boundary.closed ||
+        child.view.lifecycle.closed ||
         !child.view.confirmation ||
         (mode === "close" && quitPending)
       ) {
@@ -706,14 +706,14 @@ async function closeWindow(
           child.view.confirmation,
         )
       ) {
-        return view.boundary.closed;
+        return view.lifecycle.closed;
       }
-      if (stopping || closingSent || view.boundary.closed) {
+      if (stopping || closingSent || view.lifecycle.closed) {
         return true;
       }
     }
     // Native confirmation pumps messages, so recheck shutdown before committing closure.
-    if (view.boundary.closed) {
+    if (view.lifecycle.closed) {
       return true;
     }
     if (
@@ -724,20 +724,20 @@ async function closeWindow(
           ...views.values(),
         ].filter(
           (candidate) =>
-            !candidate.boundary.closed &&
+            !candidate.lifecycle.closed &&
             !subtree.some((child) => child.view === candidate),
         ).length === 0)
     ) {
       requestQuit("last-window");
       while (
         quitPending &&
-        !view.boundary.closed &&
+        !view.lifecycle.closed &&
         !stopping &&
         !closingSent
       ) {
         await Bun.sleep(5);
       }
-      return view.boundary.closed || stopping || closingSent;
+      return view.lifecycle.closed || stopping || closingSent;
     }
     if (mode === "recreate") {
       replacements.set(viewId, {
@@ -760,21 +760,28 @@ async function closeWindow(
 }
 
 /** Retires sessions before native release. The cleanup pump releases descendants first. */
-function commitClose(viewId: string, view: ViewState) {
-  if (view.boundary.closed) {
+function commitClose(
+  viewId: string,
+  view: ViewState,
+  reason: "closing" | "shutdown" = "closing",
+) {
+  if (!view.lifecycle.commitClose()) {
     return;
   }
   relations.markClosing(view.readiness.snapshot().windowId);
-  view.boundary.revoke("closing");
+  view.boundary.revoke(reason);
   view.readiness?.terminate({
     code: "CANCELLED",
-    message: "Window closed.",
+    message: reason === "shutdown" ? "App shutdown." : "Window closed.",
   });
+  // The boundary keeps its own document gate; native retirement is owned by the lifecycle.
   view.boundary.closed = true;
   view.native.requestClose();
-  log("view-window-closed", {
-    view: viewId,
-  });
+  if (reason === "closing") {
+    log("view-window-closed", {
+      view: viewId,
+    });
+  }
 }
 const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices =
   {
@@ -821,9 +828,9 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       const view = views.get(viewId);
       return view
         ? {
-            closed: view.boundary.closed,
+            closed: view.lifecycle.closed,
             cleaned:
-              view.cleaned &&
+              view.lifecycle.cleanupComplete &&
               (!replacements.has(viewId) || view.native.canReuseProfile()),
             ready: view.ready,
             failure: view.native.failure,
@@ -833,14 +840,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         : undefined;
     },
     create: createWindow,
-    creationSettled: (key) => {
-      replacements.delete(key);
-      const view = views.get(key);
-      // A failed replacement can leave a cleaned old lifetime with a preserved temporary profile.
-      if (view?.boundary.closed && view.cleaned) {
-        view.cleaned = false;
-      }
-    },
+    creationSettled: cancelReplacement,
     close: (viewId, replacing = true) =>
       closeWindow(viewId, replacing ? "recreate" : "handoff"),
     destroy: (viewId) => closeWindow(viewId, "force"),
@@ -1000,7 +1000,7 @@ function createWindow(
     const parent = windows.getById(replacement.parent);
     if (
       !parent ||
-      viewById(parent.windowId)?.boundary.closed ||
+      viewById(parent.windowId)?.lifecycle.closed ||
       closingWindows.has(replacement.parent)
     ) {
       throw new BunawayError({
@@ -1067,7 +1067,7 @@ function createWindow(
   });
   const close = (force = false) => {
     const view = views.get(instanceKey);
-    if (view && !view.boundary.closed) {
+    if (view && !view.lifecycle.closed) {
       // Native caption and WebView-requested closes share user policy; renderer failure still retires resources.
       if (!force && windows && !windows.isClosable(view.native.hwnd)) {
         return;
@@ -1075,10 +1075,7 @@ function createWindow(
       if (!force && hasPendingClose(view)) {
         return;
       }
-      if (force) {
-        view.forceClose = true;
-      }
-      view.pendingClose = true;
+      view.lifecycle.requestClose(force);
     }
   };
   const window = windows.create(
@@ -1130,7 +1127,7 @@ function createWindow(
         if (
           current &&
           current.native === native &&
-          !current.boundary.closed &&
+          !current.lifecycle.closed &&
           !stopping &&
           !closingSent
         ) {
@@ -1203,16 +1200,12 @@ function createWindow(
   views.set(instanceKey, {
     key: instanceKey,
     startup: !startRequested,
-    released: false,
+    lifecycle: new WindowLifecycle(),
     readiness,
     boundary,
     native,
-    detached: false,
-    cleaned: false,
     ready: false,
     navigationStarted: false,
-    pendingClose: false,
-    forceClose: false,
     replacementCancelled: false,
     confirmation: null,
     deadline: Date.now() + WINDOW_PREPARATION_TIMEOUT_MS,
@@ -1595,7 +1588,7 @@ try {
     for (const [viewId, view] of views) {
       // Controller errors also queue a forced close. Report startup failure before
       // that close retires the boundary and makes the failure look like normal exit.
-      if (view.native.failure && !view.boundary.closed) {
+      if (view.native.failure && !view.lifecycle.closed) {
         view.readiness?.terminate({
           code: "INTERNAL",
           message: "WebView creation failed.",
@@ -1605,15 +1598,17 @@ try {
         }
         void closeWindow(viewId, "force").catch(fail);
       }
-      if (view.pendingClose) {
-        view.pendingClose = false;
-        if (view.forceClose || !hasPendingClose(view)) {
-          void closeWindow(viewId, view.forceClose ? "force" : "close").catch(
-            fail,
-          );
-        }
+      const closeRequest = view.lifecycle.takeCloseRequest();
+      if (
+        closeRequest &&
+        (closeRequest === "forced" || !hasPendingClose(view))
+      ) {
+        void closeWindow(
+          viewId,
+          closeRequest === "forced" ? "force" : "close",
+        ).catch(fail);
       }
-      if (!view.ready && !view.boundary.closed && Date.now() > view.deadline) {
+      if (!view.ready && !view.lifecycle.closed && Date.now() > view.deadline) {
         view.readiness?.terminate({
           code: "TIMEOUT",
           message: "WebView creation timed out.",
@@ -1623,16 +1618,16 @@ try {
         }
         void closeWindow(viewId, "force").catch(fail);
       }
-      if (!view.boundary.closed && Date.now() > view.documentDeadline) {
+      if (!view.lifecycle.closed && Date.now() > view.documentDeadline) {
         view.readiness?.expireDocument();
       }
-      if (!view.boundary.closed && Date.now() > view.sdkDeadline) {
+      if (!view.lifecycle.closed && Date.now() > view.sdkDeadline) {
         view.readiness?.expireSdk();
       }
       view.boundary.scanDeadlines();
       cleanupView(view);
       if (
-        view.cleaned &&
+        view.lifecycle.cleanupComplete &&
         !replacements.has(viewId) &&
         config.windows.find((spec) => spec.view === view.boundary.policy.id)
           ?.instances === "multiple"
@@ -1647,7 +1642,7 @@ try {
       !adapters?.busy() &&
       [
         ...views.values(),
-      ].every((view) => view.boundary.closed)
+      ].every((view) => view.lifecycle.closed)
     ) {
       signalClosing();
     }
@@ -1682,15 +1677,8 @@ try {
   windowRequests.cancelAll();
   uiCalls.clear();
   approved.clear();
-  for (const view of views.values()) {
-    relations.markClosing(view.readiness.snapshot().windowId);
-    view.boundary.revoke("shutdown");
-    view.readiness?.terminate({
-      code: "CANCELLED",
-      message: "App shutdown.",
-    });
-    view.boundary.closed = true;
-    view.native.requestClose();
+  for (const [key, view] of views) {
+    commitClose(key, view, "shutdown");
   }
   const deadline = Date.now() + WINDOW_CLEANUP_TIMEOUT_MS;
   try {
@@ -1698,7 +1686,7 @@ try {
     while (
       [
         ...views.values(),
-      ].some((view) => !view.cleaned)
+      ].some((view) => !view.lifecycle.cleanupComplete)
     ) {
       assert(Date.now() < deadline, "STA cleanup timed out");
       windows?.pump();

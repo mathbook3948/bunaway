@@ -59,6 +59,7 @@ I/O Worker는 기존 C++ 작업 큐의 동기 파일 작업을 이식해 사용�
 | `native/windows/bun/channel.ts` | Windows UI 설정 타입, 공통 Worker 통신 재노출 |
 | `packages/runtime-bun/src/worker-channel.ts` | 내부 메시지 타입, 검증, 수신 확인, 큐 상한, 실패 처리 |
 | `native/windows/bun/ui.ts` | UI Worker 진입점, 창/뷰 맵, 문서 세대, 세션, 권한 승인 |
+| `native/windows/bun/window-lifecycle.ts` | 창 종료 요청과 네이티브 정리 단계, 재생성용 프로필 보존 상태 |
 | `native/windows/bun/win32.ts` | DLL 바인딩, Win32 구조체, 문자열, HWND와 메시지 pump |
 | `native/windows/bun/webview.ts` | COM 인터페이스, vtable, 콜백, 환경/controller, 탐색, 자원, 프레임 이벤트 |
 | `native/windows/bun/host-operations.ts` | 파일 I/O Worker 진입점, 작업 시작 승인 후 정책, 파일 범위 검사와 실행 |
@@ -68,6 +69,14 @@ I/O Worker는 기존 C++ 작업 큐의 동기 파일 작업을 이식해 사용�
 메시지, 정책, Host operation 스키마와 `client-sdk`도 재사용한다.
 `runtime-bun/src/runtime.ts`의 stdin/stdout 경로는 기존 제품용으로 유지한다.
 공통 Bun 서비스의 실제 중복이 생길 때만 해당 패키지에서 분리한다.
+
+창 수명은 활성, 종료 확정, controller 분리와 HWND 파괴, COM 정리 완료, 소유 관계
+해제 순서로 진행한다. UI의 메시지 pump가 네이티브 작업을 수행한 뒤 각 단계를
+전환한다. 부모 입력 복원에 실패하면 COM 정리를 반복하지 않고 소유 관계 해제부터
+재시도한다. 재생성을 위한 프로필 보존은 네이티브 정리 완료와 별개로 기록하며,
+재생성 취소와 실패 또는 앱 종료 시 보존한 임시 프로필의 최종 삭제를 다시 진행한다.
+사용자 닫기 거부와 quit 취소는 활성 창의 수명을 유지한다. 문서와 SDK 준비 상태,
+Host 요청 취소와 소유 창 관계는 각각 기존 소유자가 관리한다.
 
 ## 내부 연결 계약
 
