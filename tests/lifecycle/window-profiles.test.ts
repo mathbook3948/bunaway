@@ -411,7 +411,7 @@ test("invalid progress falls back safely and failed persistence reports loss of 
     ]);
     expect(existsSync(dead)).toBe(false);
     expect(existsSync(live)).toBe(true);
-    expect(readdirSync(resolve(root, "webview"))).toEqual([
+    expect(readdirSync(resolve(root, "webview")).sort()).toEqual([
       ".temporary-cleanup-cursor",
       "temporary",
     ]);
