@@ -10,7 +10,7 @@ Public cancellation or a call deadline can reject the caller's promise before ca
 process death or pipe cleanup completes. The adapter continues to own termination and both pipe
 readers; its internal execution task and disposal wait for the invocation's entire process tree to exit. Plugin timeout and output
 failure use the same owned cleanup path. Public rejection is not a termination barrier.
-Each invocation creates a private kill-on-close Job Object as part of CreateProcessW, before the child
+On Windows 10 or later, each invocation creates a private kill-on-close Job Object as part of CreateProcessW, before the child
 can run. It preserves the inherited host Job, restricts handle inheritance to standard I/O, and ends
 remaining descendants when the foreground root exits. Cancellation, timeout and output failure also
 terminate that Job and wait for native process death. Failed Job setup never launches an uncontained

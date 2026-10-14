@@ -210,19 +210,19 @@ export async function runWindowsProcess(
     if (!writer) {
       return;
     }
-    if (
+    const cancellationFailed =
       writePending &&
       !api.symbols.CancelIoEx(writer, ptr(overlapped)) &&
-      api.symbols.GetLastError() !== ERROR_NOT_FOUND
-    ) {
-      throw new ProcessCleanupError();
-    }
+      api.symbols.GetLastError() !== ERROR_NOT_FOUND;
     // CancelIoEx requests cancellation. The native buffer cannot be released until completion.
     while (!writeFinished()) {
       await Bun.sleep(POLL_INTERVAL_MS);
     }
     close(writer);
     writer = 0n;
+    if (cancellationFailed) {
+      throw new ProcessCleanupError();
+    }
   };
   const terminate = async () => {
     if (!child) {

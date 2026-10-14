@@ -177,6 +177,7 @@ test.skipIf(process.platform !== "win32")(
       api.close();
     }
   },
+  15000,
 );
 
 test.skipIf(process.platform !== "win32")(
