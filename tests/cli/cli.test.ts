@@ -1428,8 +1428,9 @@ for (const failureMode of [
   "broken-start",
   "broken-shared",
   "missing-shared",
+  "process-start-failure",
 ]) {
-  test(`dev recovers from initial source failure: ${failureMode}`, async () => {
+  test(`dev recovers from initial startup failure: ${failureMode}`, async () => {
     const child = Bun.spawn(
       [
         process.execPath,
@@ -1447,9 +1448,22 @@ for (const failureMode of [
     const timer = setTimeout(() => child.kill(), 25000);
     try {
       const code = await child.exited;
-      const stderr = await errors;
-      const stdout = await output;
-      expect(code, `${stdout}\n${stderr}`).toBe(0);
+      const [stdout, stderr] = await Promise.all([
+        output,
+        errors,
+      ]);
+      if (code !== 0) {
+        const diagnostics = Bun.file(
+          resolve(project, ".bunaway/dev-fixture-failure.txt"),
+        );
+        const phase = (await diagnostics.exists())
+          ? await diagnostics.text()
+          : "No saved fixture failure.";
+        throw new Error(
+          `Development fixture ${failureMode} failed (exit ${code}).\n` +
+            `${phase}\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+        );
+      }
       expect(stderr).toContain(
         "Dev build failed; fix sources and save to retry",
       );

@@ -2,6 +2,7 @@ import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
 import type { ProcessResult, processInputSchema } from "#process/contract";
 import { runProcess } from "#process/platforms/windows-process";
+import { ProcessCleanupError } from "#process/platforms/windows-process-native";
 
 const MAX_ACTIVE_PROCESSES = 8;
 type ProcessInput = z.output<typeof processInputSchema>;
@@ -57,6 +58,9 @@ export async function run(
   try {
     return await task;
   } catch (error) {
+    if (error instanceof ProcessCleanupError) {
+      throw error;
+    }
     if (signal.aborted) {
       throw signal.reason instanceof BunawayError
         ? signal.reason
