@@ -111,11 +111,18 @@ async function starts() {
   }
 }
 /** Polls child-process state with a deadline so orchestration stalls cannot hang. */
-async function waitFor(check: () => Promise<boolean>) {
+async function waitFor(phase: string, check: () => Promise<boolean>) {
   const deadline = Date.now() + 10000;
   while (!(await check())) {
-    if (Date.now() > deadline) {
-      throw new Error("Timed out waiting for development orchestration.");
+    if (finished || Date.now() > deadline) {
+      throw new Error(
+        `Development fixture ${failureMode ?? "normal"} stalled during ${phase}: ` +
+          `buildAttempts=${buildAttempts}, buildFailed=${buildFailed}, ` +
+          `hostStarts=${await starts()}, finished=${finished}.`,
+        {
+          cause: runningError,
+        },
+      );
     }
     await Bun.sleep(40);
   }
@@ -124,6 +131,7 @@ const first = settings();
 const second = settings();
 let running: Promise<void> | undefined;
 let finished = false;
+let runningError: unknown;
 try {
   await Bun.write(shared, 'console.error("shared dependency");\n');
   await Bun.write(backend, sharedImport + backendText);
@@ -148,12 +156,13 @@ try {
     () => {
       finished = true;
     },
-    () => {
+    (error) => {
       finished = true;
+      runningError = error;
     },
   );
   if (brokenStart || failureMode === "process-start-failure") {
-    await waitFor(async () => buildFailed);
+    await waitFor("initial failure report", async () => buildFailed);
     expect(finished).toBe(false);
     expect(await starts()).toBe(0);
     if (failureMode === "process-start-failure") {
@@ -167,7 +176,10 @@ try {
       await Bun.write(shared, 'console.error("repaired shared dependency");\n');
     }
   }
-  await waitFor(async () => (await starts()) === 1);
+  await waitFor(
+    "initial/recovered app launch",
+    async () => (await starts()) === 1,
+  );
   // UI edits stay in Vite's HMR loop; backend edits replace the native host.
   await Bun.write(ui, `${uiText}\n// frontend update\n`);
   await Bun.sleep(350);
@@ -176,10 +188,13 @@ try {
     backend,
     `${sharedImport}${backendText}\n// backend update\n`,
   );
-  await waitFor(async () => (await starts()) === 2);
+  await waitFor("backend edit restart", async () => (await starts()) === 2);
   expect((await fetch(first.url)).ok).toBe(true);
   await Bun.write(shared, 'console.error("updated shared dependency");\n');
-  await waitFor(async () => (await starts()) === 3);
+  await waitFor(
+    "shared dependency restart",
+    async () => (await starts()) === 3,
+  );
   expect((await fetch(first.url)).ok).toBe(true);
   await Bun.write(
     configPath,
@@ -189,7 +204,10 @@ try {
     }),
   );
   // Reconfiguration must stop the first server before the replacement owns its port.
-  await waitFor(async () => (await starts()) === 4);
+  await waitFor(
+    "frontend server replacement",
+    async () => (await starts()) === 4,
+  );
   await expect(fetch(first.url)).rejects.toThrow();
   expect((await fetch(second.url)).ok).toBe(true);
   await Bun.write(close, "close");

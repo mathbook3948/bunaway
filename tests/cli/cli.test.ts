@@ -1445,12 +1445,20 @@ for (const failureMode of [
     const timer = setTimeout(() => child.kill(), 25000);
     try {
       const code = await child.exited;
-      const stderr = await errors;
-      expect(code, stderr).toBe(0);
+      const [stdout, stderr] = await Promise.all([
+        output,
+        errors,
+      ]);
+      if (code !== 0) {
+        throw new Error(
+          `Development fixture ${failureMode} failed (exit ${code}).\n` +
+            `stdout:\n${stdout}\nstderr:\n${stderr}`,
+        );
+      }
       expect(stderr).toContain(
         "Dev build failed; fix sources and save to retry",
       );
-      expect(await output).toContain("PASS frontend HMR ownership");
+      expect(stdout).toContain("PASS frontend HMR ownership");
     } finally {
       clearTimeout(timer);
       if (child.exitCode === null) {
