@@ -859,7 +859,11 @@ WTS 등록 실패, 상태 알림 합치기, lifecycle 순서와 큐 초과를 �
 
 `api/image.test.ts`와 `lifecycle/image-resources.test.ts`는 선택 image 플러그인의
 Zod 계약과 canonical base64, 빈 이미지, operation 권한, ID 해제와 앱 종료,
-count와 메모리 quota 및 생성 취소의 정리를 확인한다. `windows-image.test.ts`는
+count와 메모리 quota 및 생성 취소의 정리를 확인한다. `image-resources.test.ts`는
+macOS 공통 probe에 가짜 codec을 주입해 모든 OS에서 직접 호출, 권한과 취소 검사를
+실행한다. 소스, 설치 패키지와 compiled probe는 같은 플러그인 진입점과 fixture의
+호스트 권한 검사를 사용하며, 실제 WKWebView 권한은 `macos-image-host.ts`에서 검증한다.
+`windows-image.test.ts`는
 `host:windows`에 포함하며 공통 SDK와 실제 UI Worker, WIC에서 PNG와 data URL의
 RGBA alpha 왕복, JPEG와 BMP, 잘못된 encoded 입력과 decode 크기, 최대 PNG,
 정책 거부와 결과 전달 전 취소를 확인한다. 실제 파일 경로 접근, WebView 표시,

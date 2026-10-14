@@ -122,7 +122,7 @@ export default defineApp({ modules: [], plugins: [image] });
         consumer,
         `import image from "@bunaway/plugin-image/native/macos";
 import { verifyMacosImage } from ${JSON.stringify(resolve(import.meta.dir, "../fixtures/macos-image.ts"))};
-await verifyMacosImage(image._definition.nativePlatforms.macos.create);
+await verifyMacosImage(image);
 `,
       );
       const child = Bun.spawn(
