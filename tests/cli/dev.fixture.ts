@@ -3,6 +3,7 @@
 import { expect, mock } from "bun:test";
 import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { inspect } from "node:util";
 import * as build from "#cli/build";
 import * as windowsDevLaunch from "#cli/windows-dev-launch";
 
@@ -13,6 +14,10 @@ if (!root) {
 const marker = resolve(root, ".bunaway/host-starts.txt");
 const close = resolve(root, ".bunaway/close-host.txt");
 const host = resolve(root, ".bunaway/dev-host.ts");
+const diagnostics = resolve(root, ".bunaway/dev-fixture-failure.txt");
+await rm(diagnostics, {
+  force: true,
+});
 await rm(marker, {
   force: true,
 });
@@ -76,9 +81,11 @@ const brokenStart = [
 ].includes(failureMode ?? "");
 const originalError = console.error;
 let buildFailed = false;
+let buildFailureMessage: string | undefined;
 console.error = (...args: unknown[]) => {
   if (String(args[0]).includes("Dev build failed")) {
     buildFailed = true;
+    buildFailureMessage = String(args[0]);
   }
   originalError(...args);
 };
@@ -166,6 +173,9 @@ try {
     expect(finished).toBe(false);
     expect(await starts()).toBe(0);
     if (failureMode === "process-start-failure") {
+      expect(buildFailureMessage).toContain("ENOENT");
+      expect(buildFailureMessage).toContain("missing-host");
+      expect(buildAttempts).toBe(1);
       expect((await fetch(first.url)).ok).toBe(true);
     } else {
       await expect(fetch(first.url)).rejects.toThrow();
@@ -216,6 +226,13 @@ try {
   console.log(
     "PASS frontend HMR ownership, backend restart, server reconfiguration and window-close teardown",
   );
+} catch (error) {
+  const message = `Development fixture failure before cleanup:\n${inspect(error)}\n`;
+  // Windows self-signalling can terminate before an unhandled rejection is printed.
+  // Save and emit the original failure before cleanup so the parent retains its phase and cause.
+  await Bun.write(diagnostics, message);
+  console.error(message);
+  throw error;
 } finally {
   // This generated project is shared by later tests, so restore every edited input.
   if (running) {

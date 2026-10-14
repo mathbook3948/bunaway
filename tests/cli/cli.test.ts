@@ -1450,9 +1450,15 @@ for (const failureMode of [
         errors,
       ]);
       if (code !== 0) {
+        const diagnostics = Bun.file(
+          resolve(project, ".bunaway/dev-fixture-failure.txt"),
+        );
+        const phase = (await diagnostics.exists())
+          ? await diagnostics.text()
+          : "No saved fixture failure.";
         throw new Error(
           `Development fixture ${failureMode} failed (exit ${code}).\n` +
-            `stdout:\n${stdout}\nstderr:\n${stderr}`,
+            `${phase}\nstdout:\n${stdout}\nstderr:\n${stderr}`,
         );
       }
       expect(stderr).toContain(

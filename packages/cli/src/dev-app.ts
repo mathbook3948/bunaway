@@ -1,3 +1,4 @@
+import { access } from "node:fs/promises";
 import { resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import type { AppReloadResult } from "@bunaway/runtime-bun/development";
@@ -71,6 +72,9 @@ async function launchDevApp(
   if (process.platform === "win32") {
     await verifyWindowsLaunch(built.package);
   }
+  // Check the entrypoint before IPC setup so a missing package file reaches the same
+  // recoverable filesystem-error path on every platform without allocating a channel.
+  await access(built.executable);
   if (signal.aborted || !isCurrent()) {
     return;
   }
