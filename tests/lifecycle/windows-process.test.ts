@@ -1,3 +1,4 @@
+import { dlopen, ptr } from "bun:ffi";
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -17,7 +18,145 @@ import {
   type TransportEvent,
 } from "@bunaway/protocol";
 import { processOperations } from "#plugins/process/src/operations";
+import {
+  dispose,
+  initialize,
+  run,
+} from "#plugins/process/src/platforms/windows";
 import { processExitProbe } from "../fixtures/process-exit-probe.ts";
+
+test.skipIf(process.platform !== "win32")(
+  "invocation Jobs preserve the inherited host Job and isolate concurrent invocations",
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "bunaway-process-host-job-"));
+    const jobModule = resolve(
+      import.meta.dir,
+      "../../native/windows/bun/job.ts",
+    );
+    const runnerModule = resolve(
+      import.meta.dir,
+      "../../plugins/process/src/platforms/windows.ts",
+    );
+    const script = `
+      const { containAppProcess, activeDescendants } = await import(${JSON.stringify(jobModule)});
+      const { initialize, run, dispose } = await import(${JSON.stringify(runnerModule)});
+      containAppProcess(${JSON.stringify(root)});
+      const state = initialize();
+      const first = new AbortController();
+      const second = new AbortController();
+      const input = { executablePath: process.execPath, args: ["-e", "setInterval(() => {}, 1000)"], maxOutputBytes: 65536, timeoutMs: 30000 };
+      const a = run(state, input, first.signal).catch(error => error.code);
+      const b = run(state, input, second.signal).catch(error => error.code);
+      try {
+        if (activeDescendants() !== 2) throw new Error("Host Job lost its descendants");
+        first.abort();
+        if (await a !== "CANCELLED") throw new Error("First invocation did not cancel");
+        if (activeDescendants() !== 1 || state.active.size !== 1) throw new Error("Cancellation crossed invocation ownership");
+        second.abort();
+        if (await b !== "CANCELLED") throw new Error("Second invocation did not cancel");
+        if (activeDescendants() !== 0) throw new Error("Host Job still owns descendants");
+        process.stdout.write("contained");
+      } finally {
+        first.abort(); second.abort();
+        await Promise.allSettled([a, b]);
+        await dispose(state);
+      }
+    `;
+    try {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "-e",
+          script,
+        ],
+        {
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const [exitCode, output, error] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect({
+        exitCode,
+        error,
+      }).toEqual({
+        exitCode: 0,
+        error: "",
+      });
+      expect(output).toBe("contained");
+    } finally {
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
+  "repeated success and startup failure close native invocation handles",
+  async () => {
+    const api = dlopen("kernel32.dll", {
+      GetCurrentProcess: {
+        args: [],
+        returns: "u64",
+      },
+      GetProcessHandleCount: {
+        args: [
+          "u64",
+          "ptr",
+        ],
+        returns: "i32",
+      },
+    });
+    const count = () => {
+      const value = Buffer.alloc(4);
+      assert(
+        api.symbols.GetProcessHandleCount(
+          api.symbols.GetCurrentProcess(),
+          ptr(value),
+        ),
+      );
+      return value.readUInt32LE();
+    };
+    const state = initialize();
+    const input = {
+      executablePath: process.execPath,
+      args: [
+        "-e",
+        "void 0;",
+      ],
+      stdinBase64: "",
+      maxOutputBytes: 65536,
+      timeoutMs: 30000,
+    };
+    try {
+      // Warm the runtime's process/FFI paths before comparing native handle ownership.
+      await run(state, input);
+      const before = count();
+      for (let attempt = 0; attempt < 12; attempt++) {
+        expect((await run(state, input)).exitCode).toBe(0);
+        await expect(
+          run(state, {
+            ...input,
+            executablePath:
+              "C:/bunaway-nonexistent-process-fixture/missing.exe",
+          }),
+        ).rejects.toMatchObject({
+          code: "INTERNAL",
+        });
+      }
+      expect(count()).toBe(before);
+      expect(state.active.size).toBe(0);
+    } finally {
+      await dispose(state);
+      api.close();
+    }
+  },
+);
 
 test.skipIf(process.platform !== "win32")(
   "public process cancellation rejects before delayed bridge delivery and retains eventual child cleanup",
