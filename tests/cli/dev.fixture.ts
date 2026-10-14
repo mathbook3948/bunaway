@@ -5,6 +5,8 @@ import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { inspect } from "node:util";
 import * as build from "#cli/build";
+import type { Project } from "#cli/config";
+import { DevApp } from "#cli/dev-app";
 import * as windowsDevLaunch from "#cli/windows-dev-launch";
 
 const root = process.argv[2];
@@ -37,6 +39,28 @@ const failureMode = process.argv[3];
 let buildAttempts = 0;
 let startupRepaired = failureMode !== "process-start-failure";
 const repairStartup = Promise.withResolvers<void>();
+let startupFailure: unknown;
+if (failureMode === "process-start-failure") {
+  const PlatformDevApp = DevApp;
+  mock.module(import.meta.resolve("#cli/dev-app"), () => ({
+    DevApp: class extends PlatformDevApp {
+      override async start(
+        project: Project,
+        built: build.BuiltPackage,
+        isCurrent: () => boolean,
+      ): Promise<void> {
+        try {
+          await super.start(project, built, isCurrent);
+        } catch (error) {
+          // Observe the real platform launch failure before the controller renders it.
+          // Error.toString() omits the structured code on Windows.
+          startupFailure = error;
+          throw error;
+        }
+      }
+    },
+  }));
+}
 mock.module(import.meta.resolve("#cli/build"), () => ({
   ...build,
   prepareNative: async () => ({
@@ -184,7 +208,10 @@ try {
     expect(finished).toBe(false);
     expect(await starts()).toBe(0);
     if (failureMode === "process-start-failure") {
-      expect(buildFailureMessage).toContain("ENOENT");
+      expect(startupFailure).toMatchObject({
+        code: "ENOENT",
+        path: resolve(root, ".bunaway/missing-host"),
+      });
       expect(buildFailureMessage).toContain("missing-host");
       expect(failureReports).toBe(1);
       expect((await fetch(first.url)).ok).toBe(true);
