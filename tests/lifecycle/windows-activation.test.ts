@@ -10,14 +10,26 @@ import type {
 import { createOperations } from "#plugins/windows/src/platforms/windows";
 
 const WM_ACTIVATE = 0x0006;
+const WM_SETFOCUS = 0x0007;
+const WM_KILLFOCUS = 0x0008;
+const MAX_ACTIVATION_RECORDS = 64;
 
 test.skipIf(process.platform !== "win32")(
   "two real Win32 windows preserve input on inactive display and report observed activation transitions",
   async () => {
     const { Windows } = await import("#native/windows/bun/win32");
-    const { user, wide } = await import("#native/windows/bun/win32-bindings");
+    const { user, kernel, wide } = await import(
+      "#native/windows/bun/win32-bindings"
+    );
     const { ptr } = await import("bun:ffi");
     const driver = dlopen("user32.dll", {
+      GetWindowThreadProcessId: {
+        args: [
+          "u64",
+          "ptr",
+        ],
+        returns: "u32",
+      },
       SetActiveWindow: {
         args: [
           "u64",
@@ -50,6 +62,37 @@ test.skipIf(process.platform !== "win32")(
       changes: WindowChange[];
     }[] = [];
     let targetActivations = 0;
+    let phase = "create";
+    const activationRecords: object[] = [];
+    /** Keep the state at each native call boundary without pumping or changing input. */
+    function recordActivation(details: object = {}) {
+      activationRecords.push({
+        phase,
+        currentThread: kernel.symbols.GetCurrentThreadId(),
+        active: driver.symbols.GetActiveWindow().toString(),
+        focus: driver.symbols.GetFocus().toString(),
+        foreground: driver.symbols.GetForegroundWindow().toString(),
+        ...details,
+      });
+      if (activationRecords.length > MAX_ACTIVATION_RECORDS) {
+        activationRecords.shift();
+      }
+    }
+    function recordMessage(view: string, message: number, wparam: bigint) {
+      if (
+        [
+          WM_ACTIVATE,
+          WM_SETFOCUS,
+          WM_KILLFOCUS,
+        ].includes(message)
+      ) {
+        recordActivation({
+          view,
+          message,
+          wparam: wparam.toString(),
+        });
+      }
+    }
     const unused = (): never => {
       throw new Error("Unexpected native call");
     };
@@ -159,13 +202,19 @@ test.skipIf(process.platform !== "win32")(
       expect(native.failure).toBeUndefined();
     }
     try {
-      const first = native.create("Inactive display input", 400, 300, () => {});
+      const first = native.create(
+        "Inactive display input",
+        400,
+        300,
+        (message, wparam) => recordMessage("main", message, wparam),
+      );
       handles.set("main", first);
       const second = native.create(
         "Inactive display target",
         500,
         350,
         (message, wparam) => {
+          recordMessage("editor", message, wparam);
           if (message === WM_ACTIVATE && (wparam & 0xffffn) !== 0n) {
             targetActivations++;
           }
@@ -190,6 +239,25 @@ test.skipIf(process.platform !== "win32")(
         null,
       );
       expect(input).not.toBe(0n);
+      const ownership = [
+        first,
+        second,
+        input,
+      ].map((hwnd) => {
+        const processId = new Uint32Array(1);
+        const threadId = driver.symbols.GetWindowThreadProcessId(
+          hwnd,
+          ptr(processId),
+        );
+        expect(threadId).toBe(kernel.symbols.GetCurrentThreadId());
+        expect(processId[0]).toBe(process.pid);
+        return {
+          hwnd: hwnd.toString(),
+          threadId,
+          processId: processId[0],
+        };
+      });
+      console.log("Win32 activation ownership", JSON.stringify(ownership));
       for (const [view, hwnd] of handles) {
         native.observe(hwnd, view, (snapshot, changes) =>
           events.push({
@@ -204,6 +272,7 @@ test.skipIf(process.platform !== "win32")(
         "maximized",
         "minimized-from-maximized",
       ] as const) {
+        phase = `${state}:placement`;
         native.unmaximize(second);
         if (state === "maximized" || state === "minimized-from-maximized") {
           native.maximize(second);
@@ -215,19 +284,41 @@ test.skipIf(process.platform !== "win32")(
           false,
           true,
         ]) {
+          phase = `${state}:${hidden ? "hidden" : "visible"}:setup`;
           if (hidden) {
             native.show(second, false);
           }
           native.focus(first);
-          driver.symbols.SetActiveWindow(first);
-          driver.symbols.SetFocus(input);
+          recordActivation({
+            after: "native.focus",
+          });
+          // Dispatch placement and foreground setup messages before setting the
+          // thread-active HWND and EDIT focus used as the preservation baseline.
           native.pump();
+          recordActivation({
+            after: "setup pump",
+          });
+          driver.symbols.SetActiveWindow(first);
+          recordActivation({
+            after: "SetActiveWindow",
+          });
+          driver.symbols.SetFocus(input);
+          recordActivation({
+            after: "SetFocus",
+          });
+          expect(driver.symbols.GetActiveWindow()).toBe(first);
+          expect(driver.symbols.GetFocus()).toBe(input);
+          native.pump();
+          recordActivation({
+            after: "pump",
+          });
           expect(driver.symbols.GetActiveWindow()).toBe(first);
           expect(driver.symbols.GetFocus()).toBe(input);
           const before = native.getSnapshot(second);
           const activationsBefore = targetActivations;
           const foregroundBefore = driver.symbols.GetForegroundWindow();
           const start = events.length;
+          phase = `${state}:${hidden ? "hidden" : "visible"}:showInactive`;
           expect(await invoke("windows.showInactive", "editor")).toBeNull();
           checkEvents();
           expect(driver.symbols.GetActiveWindow()).toBe(first);
@@ -323,6 +414,12 @@ test.skipIf(process.platform !== "win32")(
           .map((event) => event.snapshot.revision);
         expect(new Set(revisions).size).toBe(revisions.length);
       }
+    } catch (error) {
+      console.error(
+        "Win32 activation trace",
+        JSON.stringify(activationRecords),
+      );
+      throw error;
     } finally {
       for (const hwnd of [
         ...handles.values(),

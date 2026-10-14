@@ -351,6 +351,9 @@ Linux와 macOS에서는 기존 추출 트리와 루트의 심볼릭 링크가 �
 `api/window-activation.test.ts`는 `showInactive`, `blur`, `activate`의 입력과 결과,
 작업 권한과 열린 창 검사, 설정 순서의 후보 선택과 OS 전환 거부를 검사한다.
 `lifecycle/windows-activation.test.ts`는 실제 두 Win32 창과 EDIT 입력 필드를 사용한다.
+창 배치와 전경 요청의 메시지를 처리한 뒤 스레드 활성 창과 EDIT 포커스를 설정하며,
+다시 메시지를 처리하기 전후에 같은 입력 상태인지 검사한다. 각 HWND의 소유 스레드와
+프로세스를 확인하고 실패 시 최근 64개 활성화 메시지와 호출 전후 입력 상태를 출력한다.
 일반, 최소화, 최대화와 최대화에서 최소화한 창을 표시하거나 숨긴 뒤 `showInactive`를
 호출해 활성 창과 키보드 입력 포커스 보존, 표시 상태와 이벤트, snapshot의 일치를 확인한다.
 `activate`가 숨김과 최소화를 유지하는지도 검사한다. 전경 전환을 OS가 거부한 실행은
@@ -759,6 +762,9 @@ Apple 공증 서비스와 도구 실패는 테스트 자식 프로세스의 PATH
 `api/storage-transfers.test.ts`는 두 endpoint, 추가 옵션 거부와 독립적인 전송 권한을 검사한다.
 `windows-bun-storage.ts`는 실제 source 및 destination 핸들로 여러 chunk의 임의 바이트,
 빈 파일, 기존 대상 보존, 크기 상한, 링크와 경로 거부 및 같은 parent의 파일과 디렉터리 rename을 확인한다.
+소스와 빌드된 어댑터 각각에서 write/copy/append/move를 32회 수행하며 없는 대상의
+오류 분류, 기존 대상 충돌과 원본 보존도 확인한다. 각 move 전에 GC를 실행해
+FFI 반환값 할당이 네이티브 오류 상태에 영향을 주는 경로를 검사하며 작업을 재시도하지 않는다.
 다른 parent 이동은 source를 유지한 채 UNSUPPORTED로 거부하며, 다른 볼륨은 식별 가능한 경우에만 검사한다.
 `windows-storage-metadata.ts`는 실제 WebView2와 I/O Worker에서 copy/move와 원본 및 복사본,
 일반 쓰기 권한 거부를 검사하며 `mise run host:windows`에 포함한다.
