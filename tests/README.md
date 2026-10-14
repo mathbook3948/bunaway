@@ -95,6 +95,14 @@ compile하고 원본 파일을 제거한 뒤 실행한다. 실제 macOS native C
 앱과 화면의 코드는 `fixtures/macos-log-capabilities/`의 타입 검사 대상이며 실행 전
 정책 권한 이름도 실제 설치된 플러그인 계약으로 검사한다.
 
+`lifecycle/windows-ui-lifecycle.test.ts`는 운영 UI Worker와 창 플러그인을 실행하며 Win32와
+WebView 경계만 제어한다. 닫기 확인 거부와 마지막 창의 quit 취소, 재생성 성공 시 임시
+프로필 보존, constructor와 controller 생성 실패 및 네이티브 정리 후 재생성 취소를
+검사한다. 실제 임시 디렉터리와 저장 파일로 프로필의 보존과 삭제를 확인하고,
+반복 종료와 부모 입력 복원 재시도에서 HWND와 COM 정리가 중복되지 않는지 검사한다.
+이는 계약 및 자원 소유권 검사이며 실제 HWND, COM, WebView2 실행은 기존
+`mise run host:windows`와 Windows native CI에서 별도로 검증한다.
+
 다운로드 UI-loop regression은 생성된 worker 경계에서 전용 `windows-download-cleanup/ui.ts`를
 번들하고 실제 승인 transfer의 cancel 자원만 일시적으로 실패시킨다. 소유 창을 닫는 동안
 다른 창의 SDK 응답과 세 번째 창의 native cleanup이 진행하고, 소유자의 재시도도 복구되는지
