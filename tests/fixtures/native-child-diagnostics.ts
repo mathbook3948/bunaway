@@ -5,13 +5,14 @@ import { resolve } from "node:path";
 /**
  * Drain both child pipes and retain their exact bytes before callers inspect exit or reports.
  * Each launch owns a separate directory so restart failures cannot replace earlier evidence.
- * Reject an externally terminated child even if its graceful shutdown returned zero.
- * The caller retains ownership of deadlines, termination and native resources.
+ * Record deadline termination before sending its signal, even if shutdown returns zero.
+ * The caller retains ownership of native resources and cleanup after other failures.
  */
 export async function captureNativeChild(
   child: Bun.Subprocess,
   directory: string,
   phase: string,
+  timeoutMs?: number,
 ) {
   assert(
     child.stdout !== null &&
@@ -21,11 +22,24 @@ export async function captureNativeChild(
     "Native fixture diagnostics require piped stdout and stderr.",
   );
   const started = Date.now();
-  const [stdout, stderr, exitCode] = await Promise.all([
+  let timedOut = false;
+  const deadline =
+    timeoutMs === undefined
+      ? undefined
+      : setTimeout(() => {
+          if (child.exitCode === null) {
+            timedOut = true;
+            child.kill("SIGTERM");
+          }
+        }, timeoutMs);
+  const completed = Promise.all([
     new Response(child.stdout).arrayBuffer(),
     new Response(child.stderr).arrayBuffer(),
     child.exited,
   ]);
+  const [stdout, stderr, exitCode] = await completed.finally(() => {
+    clearTimeout(deadline);
+  });
   await mkdir(directory, {
     recursive: true,
   });
@@ -40,6 +54,8 @@ export async function captureNativeChild(
         exitCode,
         signal: child.signalCode,
         killed: child.killed,
+        timedOut,
+        timeoutMs,
         elapsedMs: Date.now() - started,
       },
       null,
@@ -47,8 +63,8 @@ export async function captureNativeChild(
     )}\n`,
   );
   assert(
-    !child.killed,
-    `Native fixture was terminated before completion: ${phase} (exit ${exitCode}).`,
+    !timedOut,
+    `Native fixture deadline expired before completion: ${phase} (exit ${exitCode}).`,
   );
   return {
     exitCode,

@@ -264,7 +264,6 @@ try {
       },
       stdout: "pipe",
       stderr: "pipe",
-      timeout: 90_000,
     },
   );
   child = launched;
@@ -272,6 +271,7 @@ try {
     launched,
     diagnostics,
     "webview controls",
+    90_000,
   );
   assert.equal(exitCode, 0, `${stdout}\n${stderr}`);
   const report = await Bun.file(resolve(dataRoot, "temp/report.json")).json();

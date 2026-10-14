@@ -254,7 +254,6 @@ try {
         },
         stdout: "pipe",
         stderr: "pipe",
-        timeout: 30_000,
       },
     );
     child = launched;
@@ -263,6 +262,7 @@ try {
       launched,
       launchDiagnostics,
       restarted ? "storage restart" : "storage initial",
+      30_000,
     );
     assert.equal(exitCode, 0, `${stdout}\n${stderr}`);
     for (const view of [
