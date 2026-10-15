@@ -987,6 +987,7 @@ test("modal polling observes validated control intent immediately but defers res
       fixtures.cancel.packet,
       fixtures["cancel-context"].packet,
       fixtures.shutdown.packet,
+      fixtures.operation.packet,
     ]) {
       port1.postMessage({
         runtime,
@@ -1002,7 +1003,10 @@ test("modal polling observes validated control intent immediately but defers res
     ]);
     expect(dispatched).toEqual([]);
     await Promise.resolve();
-    expect(dispatched).toEqual(observed);
+    expect(dispatched).toEqual([
+      ...observed,
+      "operation",
+    ]);
     port1.postMessage({
       runtime,
       sequence: ++sequence,

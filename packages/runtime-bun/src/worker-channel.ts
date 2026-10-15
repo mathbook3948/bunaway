@@ -606,7 +606,13 @@ export class Channel {
           [],
         );
       };
-      if (this.polling && packet.kind !== "server") {
+      if (
+        this.polling &&
+        (packet.kind === "cancel" ||
+          packet.kind === "cancel-context" ||
+          packet.kind === "session-failure" ||
+          packet.kind === "shutdown")
+      ) {
         this.observePolled?.(packet);
       }
       // Resource changes must not re-enter a Win32/COM callback while polling its acknowledgements.
