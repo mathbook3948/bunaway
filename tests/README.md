@@ -8,6 +8,12 @@ macOS storage, appearance와 WebView controls 실행기는 보고서가 없거�
 진단 디렉터리를 사용한다. 종료 코드가 0이어도 기존 보고서 검사를 모두 통과해야 한다.
 `lifecycle/native-child-diagnostics.test.ts`는 실제 프로세스에서 성공과 실패, 큰 출력과
 CLIXML 및 UTF-8이 아닌 바이트의 보존과 POSIX 기한 초과 종료 뒤 0 반환의 거부를 검사한다.
+`fixtures/macos-startup-diagnostics.ts`는 storage와 controls 자식의 기존 기한을 유지하며
+부모에서 host 및 현재 사용자 WebKit 서비스의 PID, 상태와 CPU 시간을 최대 네 번 기록한다.
+WebKit 서비스는 특정 창 소유로 단정하지 않는다. 초기 지연 checkpoint 또는 10초 이상 실행에서
+짧은 sample을 한 번 수집하고 허용한 함수 분류의 개수만 저장한다. 원본 stack, 명령행, 경로와
+URL은 저장하지 않는다. 진단 명령은 2초로 제한하고 자식 종료 시 함께 정리한다.
+기존 host 로그의 delegate 오류, 종료 및 asset 도달 단계와 `startup-processes.json`을 비교한다.
 Windows native CI의 호스트 단계는
 cmd 파일 리다이렉션으로 출력을 보관하고 원래 종료 코드를 반환하므로 중첩 PowerShell
 진단이 XML 파서 오류로 바뀌지 않는다. notification의 PowerShell probe도 같은 실행기를

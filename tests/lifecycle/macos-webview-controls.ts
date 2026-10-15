@@ -7,11 +7,8 @@ import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
-
-import {
-  captureNativeChild,
-  printNativeChildDiagnostics,
-} from "../fixtures/native-child-diagnostics.ts";
+import { captureMacosNativeChild } from "../fixtures/macos-startup-diagnostics.ts";
+import { printNativeChildDiagnostics } from "../fixtures/native-child-diagnostics.ts";
 
 assert.equal(process.platform, "darwin");
 assert.equal(process.arch, "arm64");
@@ -267,11 +264,12 @@ try {
     },
   );
   child = launched;
-  const { exitCode, stdout, stderr } = await captureNativeChild(
+  const { exitCode, stdout, stderr } = await captureMacosNativeChild(
     launched,
     diagnostics,
     "webview controls",
     90_000,
+    dataRoot,
   );
   assert.equal(exitCode, 0, `${stdout}\n${stderr}`);
   const report = await Bun.file(resolve(dataRoot, "temp/report.json")).json();
