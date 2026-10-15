@@ -8,7 +8,7 @@ description: Windows와 macOS의 테마, 시스템 색과 접근성 설정 조�
 `@bunaway/plugin-appearance`를 설치하고 `appearance`를 앱의 plugins에 등록합니다.
 `appearance.getPreferences()`에는 `appearance.getPreferences` 작업 권한이 필요합니다.
 화면에서 직접 호출하면 commands에 `plugin.appearance.getPreferences`도 허용합니다.
-Windows의 I/O 실행과 macOS arm64의 UI 실행을 지원합니다. macOS 조회는 AppKit의
+Windows와 macOS arm64의 UI 실행을 지원합니다. macOS 조회는 AppKit의
 메인 스레드에서 처리하며 다른 플랫폼은 `UNSUPPORTED`입니다.
 
 ```ts
@@ -33,8 +33,8 @@ const preferences = await appearance.getPreferences();
 아니면 null이며 임의 기본값으로 대체하지 않습니다. 고대비가 적용되면 실제 렌더링 색은
 테마 선호와 다를 수 있습니다. accentColor에는 DWM 알파 값을 포함하지 않습니다.
 플래그는 실제 스크린 리더 프로세스나 WebView 접근성 트리의 활성 여부를 보장하지 않습니다.
-Windows 설정 변경 이벤트를 구독하거나 설정, 창, WebView의 테마를 변경하지 않습니다.
-앱 명령 또는 화면 초기화에서 조회하고 필요한 시점에 다시 조회하세요.
+Windows에서는 `appearance.changed`로 OS 설정 변경을 구독할 수 있습니다. 아래의 창 프레임
+테마 API와 별개로 `getPreferences()`는 항상 OS 설정을 읽습니다.
 
 macOS 매핑은 다음과 같습니다.
 
@@ -68,3 +68,70 @@ WebView 접근성 트리의 활성 여부를 나타내지 않습니다. 설정�
 권한 거부는 `PERMISSION_DENIED`, OS 조회 실패는 `INTERNAL`입니다.
 호스트 종료 뒤 호출은 `CANCELLED`입니다. 실제 사용자 테마 전환, 고대비 화면 및 보조 기술의
 동작 검증은 사용자 세션의 수동 검증이 필요합니다.
+
+## Windows 변경 구독
+
+`appearance.changed`의 payload는 `AppearancePreferences`입니다. 화면 정책의 events에
+`appearance.changed`, host.permissions에 `appearance.getPreferences`를 모두 허용해야 합니다.
+구독한 현재 세션에만 전달하며 OS의 테마, accent, 시스템 색, 접근성 설정 변경과 절전 복귀 때
+값을 다시 읽습니다. 같은 값의 반복 알림은 보내지 않습니다. 초기 값은 `getPreferences()`로
+조회합니다. macOS에서는 이 이벤트를 발생시키지 않습니다.
+
+```ts
+const stop = await client.listen("appearance.changed", ({ payload: preferences }) => {
+  console.log(preferences.appsTheme, preferences.accentColor, preferences.highContrast);
+}, { onError(error) { console.error(error); } });
+// 컴포넌트 정리 때 호출합니다.
+await stop();
+```
+
+읽기 실패는 기존 값을 유지하고 호스트 진단에 기록합니다. 다음 OS 알림에서 다시 시도합니다.
+구독 해제와 문서 이동 뒤에는 이전 세션으로 이벤트를 보내지 않습니다. 플러그인 종료 때
+네이티브 구독과 DLL을 정리합니다. OS 설정의 실제 전환과 보조 기술 표시는 수동 검증 대상입니다.
+
+## Windows 앱 기본값과 창 프레임 테마
+
+`appearance.getTheme({ windowId })`와 `appearance.setTheme({ windowId, theme })`는
+신뢰된 백엔드에서 호출합니다. 각각 `appearance.getTheme`, `appearance.setTheme` 권한이
+필요하며 화면에서 직접 호출하거나 화면 명령의 호출 권한을 이어받으면 `PERMISSION_DENIED`입니다.
+이 API는 Windows의 기본 창 프레임을 제어합니다. HTML/CSS, WebView2 프로필, Windows 사용자
+설정은 변경하지 않습니다. 웹 콘텐츠는 반환된 상태에 맞춰 앱의 스타일을 적용할 수 있습니다.
+
+```ts
+// 신뢰된 백엔드의 시작 또는 백그라운드 작업에서 호출합니다.
+await appearance.setTheme({ windowId: null, theme: "dark" });
+const appTheme = await appearance.getTheme({ windowId: null });
+// windows.list() 등으로 얻은 현재 창 수명 ID를 사용합니다.
+await appearance.setTheme({ windowId, theme: "system" });
+// null은 이 창의 override를 없애고 앱 기본값을 다시 따르게 합니다.
+await appearance.setTheme({ windowId, theme: null });
+```
+
+| 입력 또는 결과 | 의미 |
+| --- | --- |
+| windowId: null | 앱 기본값. 시작값은 system이며 기존 상속 창과 이후 생성할 창에 적용 |
+| windowId: string | 현재 네이티브 창 수명 ID. 파괴되었거나 알 수 없는 ID는 INVALID_ARGUMENT |
+| theme | system, light 또는 dark. 창에는 null로 상속을 복구할 수 있지만 앱 기본값에 null은 INVALID_ARGUMENT |
+| preference | 창 override 또는 앱 기본값으로 결정한 요청 선호 |
+| override | 이 창에 직접 지정한 선호. 앱 조회와 상속 창은 null |
+| effectiveTheme | 앱 조회는 관측한 OS 설정으로 결정한 기본값, 창 조회는 마지막 적용에 성공한 light 또는 dark. 고대비 또는 알 수 없는 system 선호는 null |
+| highContrast | 마지막으로 관측한 OS 고대비 상태 |
+
+`system`은 OS의 앱 테마 선호를 따릅니다. 창의 명시적 `system`은 앱의 light/dark 기본값보다
+우선합니다. 고대비가 활성화되면 DWM dark mode를 끄고 Windows 색 처리를 우선합니다.
+요청한 선호는 유지하므로 고대비 종료 뒤 다시 적용합니다. OS 선호가 없으면 dark mode를 끄되
+`effectiveTheme`은 null로 유지합니다. 이 값은 화면의 픽셀 색이나 WebView의 CSS 색을 읽은 결과가
+아니며 OS 설정 변경 알림을 처리한 시점의 상태입니다. 창 적용에 실패하면 이전 effectiveTheme을
+유지하며 preference는 요청 선호를 나타냅니다.
+
+문서 reload는 같은 창의 override를 유지합니다. 창 파괴와 재생성은 기존 override를 버리고
+앱 기본값을 따릅니다. 앱 재시작이나 플러그인 재초기화는 system으로 돌아가며 디스크에 저장하지
+않습니다. 플러그인 종료는 살아 있는 창의 DWM dark mode를 해제합니다.
+
+Windows의 `DWMWA_USE_IMMERSIVE_DARK_MODE`를 사용합니다. 해당 DWM 속성을 지원하지 않는
+Windows에서는 OS 조회와 변경 이벤트를 계속 제공하지만 창 테마 조회와 지정은 `UNSUPPORTED`입니다.
+앱 기본값 조회는 적용된 창 상태와 별개로 요청 선호를 반환합니다.
+macOS 및 다른 플랫폼의 새 테마 작업도 `UNSUPPORTED`입니다. 네이티브 적용 실패는 `INTERNAL`이며
+앱 기본값 변경 중 실패하면 이전 선호와 기존 창의 적용 상태를 복원하려 시도합니다. 복원도 실패하면
+INTERNAL을 반환하며 다음 변경 알림에서 다시 적용합니다. 실제 프레임 색, 사용자 테마 전환 및
+고대비 렌더링은 대화형 Windows 세션에서 추가 검증해야 합니다.

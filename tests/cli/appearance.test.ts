@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { pluginImportsSource } from "#cli/app-modules";
+import { bundleAssets } from "#cli/build";
 import { validateProject } from "#cli/config";
 import { packageFilename } from "#cli/distribution";
 import { writeJson } from "#cli/files";
@@ -12,7 +13,7 @@ import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
 import { pluginRegistry } from "#native/host-api/bun/plugins";
 import { createProject, packageDirectory } from "./project.ts";
 
-test("isolated appearance package ships Windows I/O and macOS UI adapters but keeps FFI out of the browser", async () => {
+test("isolated appearance package ships Windows and macOS UI adapters but keeps FFI out of the browser", async () => {
   const home = await realpath(
     await mkdtemp(resolve(tmpdir(), "bunaway-appearance-install-")),
   );
@@ -76,7 +77,7 @@ export default defineApp({ modules: [], plugins: [appearance] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-appearance",
     ]);
-    expect(plugins[0]?.targets.windows?.thread).toBe("worker");
+    expect(plugins[0]?.targets.windows?.thread).toBe("ui");
     expect(plugins[0]?.targets.macos?.thread).toBe("ui");
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "appearance",
@@ -114,6 +115,10 @@ void appearance.getPreferences();
       metafile: true,
     });
     expect(browser.success).toBe(true);
+    // Build through the installed CLI's explicit source inventory, not the repository checkout.
+    const hostAssets = resolve(home, "windows-host");
+    await bundleAssets(valid, hostAssets, true);
+    expect(await Bun.file(resolve(hostAssets, "ui.js")).exists()).toBe(true);
     expect(
       Object.keys(browser.metafile?.inputs ?? {}).some((path) =>
         /(?:plugins[\\/]appearance[\\/]src[\\/]platforms[\\/]|bun:ffi)/.test(

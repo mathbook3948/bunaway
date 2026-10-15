@@ -603,8 +603,15 @@ export type NativeSystemEvents = {
   ): void;
 };
 
+export type {
+  NativeAppearanceWindow,
+  NativeAppearanceWindows,
+} from "./native-appearance.ts";
+
 /** UI-thread services used by installed native plugins. */
 export type NativeWindowServices = {
+  /** Opt-in frame appearance controls, scoped to each native lifetime. */
+  appearance?: import("./native-appearance.ts").NativeAppearanceWindows;
   /** Live display queries. Absent on platforms without monitor support. */
   monitors?: NativeMonitorServices;
   /** Optional OS change notifications. Absent on hosts without a native notification window. */

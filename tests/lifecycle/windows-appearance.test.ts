@@ -1,6 +1,6 @@
-import { nativeFactory } from "../fixtures/native-platform.ts";
 import { expect, test } from "bun:test";
 import { appearanceOperations } from "#plugins/appearance/src/operations";
+import { nativeFactory } from "../fixtures/native-platform.ts";
 
 test.skipIf(process.platform !== "win32")(
   "real Windows appearance queries match native accessibility and colors, retain DLL ownership and reject use after disposal",
@@ -104,6 +104,99 @@ test.skipIf(process.platform !== "win32")(
       await first.dispose();
       await second.dispose();
       driver.close();
+    }
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
+  "real DWM frame preferences are window-local, reset on disposal and invalidate destroyed lifetimes",
+  async () => {
+    const [
+      { Windows },
+      { disposeWin32Bindings },
+      { AppearanceWindows },
+      { initialize },
+      { createAppearanceController },
+      { dlopen, ptr },
+    ] = await Promise.all([
+      import("#native/windows/bun/win32"),
+      import("#native/windows/bun/win32-bindings"),
+      import("#native/windows/bun/appearance"),
+      import("#plugins/appearance/src/platforms/windows-preferences"),
+      import("#plugins/appearance/src/platforms/windows-controller"),
+      import("bun:ffi"),
+    ]);
+    const windows = new Windows(() => {});
+    const driver = dlopen("dwmapi.dll", {
+      DwmGetWindowAttribute: {
+        args: [
+          "u64",
+          "u32",
+          "ptr",
+          "u32",
+        ],
+        returns: "i32",
+      },
+    });
+    const service = new AppearanceWindows();
+    const reader = initialize();
+    const controller = createAppearanceController(reader, {
+      appearance: service,
+    });
+    const first = windows.create("Appearance first", 240, 200, () => {}, false);
+    const second = windows.create(
+      "Appearance second",
+      240,
+      200,
+      () => {},
+      false,
+    );
+    const dark = (hwnd: bigint) => {
+      const value = Buffer.alloc(4);
+      expect(
+        driver.symbols.DwmGetWindowAttribute(hwnd, 20, ptr(value), 4),
+      ).toBeGreaterThanOrEqual(0);
+      return value.readInt32LE() !== 0;
+    };
+    try {
+      service.attach("first", first);
+      service.attach("second", second);
+      const system = reader.read();
+      expect(dark(first)).toBe(
+        !system.highContrast && system.appsTheme === "dark",
+      );
+      controller.setTheme(null, "dark");
+      expect(dark(first)).toBe(!system.highContrast);
+      expect(dark(second)).toBe(!system.highContrast);
+      controller.setTheme("second", "light");
+      expect(dark(first)).toBe(!system.highContrast);
+      expect(dark(second)).toBe(false);
+      expect(windows.isVisible(first)).toBe(false);
+      expect(windows.isVisible(second)).toBe(false);
+      controller.setTheme("second", null);
+      expect(dark(second)).toBe(!system.highContrast);
+      controller.setTheme("first", "system");
+      expect(dark(first)).toBe(
+        !system.highContrast && system.appsTheme === "dark",
+      );
+      service.detach("first");
+      expect(() => controller.getTheme("first")).toThrow(
+        expect.objectContaining({
+          code: "INVALID_ARGUMENT",
+        }),
+      );
+      controller.dispose();
+      controller.dispose();
+      expect(dark(second)).toBe(false);
+    } finally {
+      service.detach("first");
+      service.detach("second");
+      controller.dispose();
+      windows.destroy(first);
+      windows.destroy(second);
+      windows.dispose();
+      driver.close();
+      disposeWin32Bindings();
     }
   },
 );

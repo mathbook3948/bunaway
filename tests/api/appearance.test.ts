@@ -162,3 +162,213 @@ test("appearance helper preserves source context, response and native denial", a
   });
   expect(calls).toBe(2);
 });
+
+test("frame theme contracts are additive, independently granted and Windows-only", async () => {
+  const { windowsAppearanceOperations } = await import(
+    "#plugins/appearance/src/operations"
+  );
+  const parser = pluginParsers("appearance", windowsAppearanceOperations);
+  for (const theme of [
+    "system",
+    "light",
+    "dark",
+    null,
+  ]) {
+    await expect(
+      parser.validateCall({
+        operation: "appearance.setTheme",
+        payload: {
+          windowId: "window-1",
+          theme,
+        },
+      }),
+    ).resolves.toMatchObject({
+      payload: {
+        theme,
+      },
+    });
+  }
+  for (const payload of [
+    {
+      theme: "dark",
+    },
+    {
+      windowId: null,
+      theme: "auto",
+    },
+    {
+      windowId: "",
+      theme: "light",
+    },
+    {
+      windowId: null,
+      theme: "dark",
+      global: true,
+    },
+  ]) {
+    await expect(
+      parser.validateCall({
+        operation: "appearance.setTheme",
+        payload,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  expect(appearance._definition.nativePlatforms.windows?.operations).toContain(
+    "setTheme",
+  );
+  expect(
+    appearance._definition.nativePlatforms.macos?.operations,
+  ).not.toContain("setTheme");
+  expect(
+    registry.allowed(
+      {
+        permissions: [
+          "appearance.getPreferences",
+        ],
+      },
+      {
+        operation: "appearance.setTheme",
+        payload: {
+          windowId: null,
+          theme: "dark",
+        },
+      },
+    ),
+  ).toBe(false);
+  expect(
+    registry.allowed(
+      {
+        permissions: [
+          "appearance.setTheme",
+        ],
+      },
+      {
+        operation: "appearance.setTheme",
+        payload: {
+          windowId: null,
+          theme: "dark",
+        },
+      },
+    ),
+  ).toBe(true);
+  let changes = 0;
+  const { createAppearanceController } = await import(
+    "#plugins/appearance/src/platforms/windows-controller"
+  );
+  const controller = createAppearanceController(
+    {
+      read: () => snapshot,
+      dispose() {},
+    },
+    {
+      appearance: {
+        subscribe(receive) {
+          const release = receive({
+            windowId: "window-1",
+            setDark() {
+              changes++;
+            },
+          });
+          return release;
+        },
+      },
+    },
+  );
+  try {
+    expect(() =>
+      windowsAppearanceOperations.setTheme.handler(
+        {
+          windowId: "window-1",
+          theme: "dark",
+        },
+        {
+          instance: controller,
+          source: "untrusted-view",
+        },
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: "PERMISSION_DENIED",
+      }),
+    );
+    expect(changes).toBe(1);
+    expect(
+      windowsAppearanceOperations.setTheme.handler(
+        {
+          windowId: "window-1",
+          theme: "dark",
+        },
+        {
+          instance: controller,
+          source: "backend",
+        },
+      ),
+    ).toMatchObject({
+      preference: "dark",
+      override: "dark",
+      highContrast: true,
+      effectiveTheme: null,
+    });
+  } finally {
+    controller.dispose();
+  }
+});
+
+test("appearance events require a live route and the preference read grant", async () => {
+  const { publishSystemEvent } = await import(
+    "#native/windows/bun/system-events"
+  );
+  const recipients = [
+    {
+      policy: {
+        host: {
+          permissions: [
+            "appearance.getPreferences",
+          ],
+        },
+      },
+      eventRoute: () => ({}),
+    },
+    {
+      policy: {
+        host: {
+          permissions: [],
+        },
+      },
+      eventRoute: () => ({}),
+    },
+    {
+      policy: {
+        host: {
+          permissions: [
+            "appearance.getPreferences",
+          ],
+        },
+      },
+      eventRoute: () => null,
+    },
+  ];
+  const delivered: unknown[] = [];
+  publishSystemEvent(
+    registry,
+    recipients,
+    "appearance.changed",
+    snapshot,
+    "appearance.getPreferences",
+    (recipient, event, payload) =>
+      delivered.push([
+        recipient,
+        event,
+        payload,
+      ]),
+  );
+  expect(delivered).toEqual([
+    [
+      recipients[0],
+      "appearance.changed",
+      snapshot,
+    ],
+  ]);
+});
