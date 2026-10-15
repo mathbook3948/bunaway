@@ -107,7 +107,34 @@ test.skipIf(process.platform !== "win32")(
           },
         ],
         `import plugin from ${JSON.stringify(nativePath)};
-export const pluginImports = { dialog: { operations: async () => ({ createOperations: plugin._definition.nativePlatforms.windows.create }) } };`,
+export const pluginImports = { dialog: { operations: async () => ({ createOperations(environment) {
+  const services = environment.dialogs;
+  return plugin._definition.nativePlatforms.windows.create({ ...environment, dialogs: {
+    ...services,
+    createWindow(receive) {
+      let timerReported = false;
+      return services.createWindow((...args) => {
+        if (args[0] === 0x0113 && !timerReported) {
+          timerReported = true;
+          console.log(JSON.stringify({ event: "dialog-native-timer" }));
+        }
+        receive(...args);
+      });
+    },
+    watchCancellation(requestId) {
+      const watcher = services.watchCancellation(requestId);
+      let reported = false;
+      return { ...watcher, cancelled() {
+        const value = watcher.cancelled();
+        if (value && !reported) {
+          reported = true;
+          console.log(JSON.stringify({ event: "dialog-native-cancel-observed", requestId }));
+        }
+        return value;
+      }};
+    }
+  }});
+} }) } };`,
       );
       const config: UIConfig = {
         runtime: {
@@ -325,15 +352,36 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
       const cancelled = invoke("dialog.openFile");
       await until(() => find(cancelled.title) !== 0n, "abort modal");
       const cancelledHwnd = find(cancelled.title);
-      channel.notify({
-        kind: "cancel",
-        context: config.backendContext,
-        requestId: cancelled.requestId,
-      });
-      await until(
-        () => native.symbols.IsWindow(cancelledHwnd) === 0,
-        "abort cleanup",
-      );
+      let cancelAcknowledged = false;
+      void channel
+        .send({
+          kind: "cancel",
+          context: config.backendContext,
+          requestId: cancelled.requestId,
+        })
+        .then(() => {
+          cancelAcknowledged = true;
+        })
+        .catch((error) => {
+          fatal = error;
+        });
+      try {
+        await until(
+          () => native.symbols.IsWindow(cancelledHwnd) === 0,
+          "abort cleanup",
+        );
+      } catch (error) {
+        throw new Error(
+          `Dialog abort state: ${JSON.stringify({
+            cancelAcknowledged,
+            visible: native.symbols.IsWindowVisible(cancelledHwnd),
+            current: buttonState(cancelled.title, 2),
+          })}`,
+          {
+            cause: error,
+          },
+        );
+      }
       // Cancelled host responses are suppressed; a following call proves the STA and adapter recovered.
       pending.delete(cancelled.requestId);
       const recovered = invoke("dialog.openFile");
