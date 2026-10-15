@@ -11,6 +11,7 @@ export class NativeRequests {
     }
   >();
 
+  private modalShutdownObserved = false;
   private readonly modalInterrupts = new Set<{
     requestId?: string;
     context?: HostContext;
@@ -28,6 +29,11 @@ export class NativeRequests {
       cancel,
     };
     this.modalInterrupts.add(entry);
+    // WndProc polls before delivering WM_ENTERMENULOOP. A terminal shutdown
+    // observed in that gap must also terminate the newly registered native loop.
+    if (this.modalShutdownObserved) {
+      cancel();
+    }
     return () => {
       this.modalInterrupts.delete(entry);
     };
@@ -49,6 +55,9 @@ export class NativeRequests {
           context: HostContext;
         },
   ): void {
+    if (packet.kind === "shutdown") {
+      this.modalShutdownObserved = true;
+    }
     for (const entry of this.modalInterrupts) {
       if (
         packet.kind === "shutdown" ||

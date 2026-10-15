@@ -77,3 +77,20 @@ test("modal interruption matches the active request and context without releasin
   requests.cancel("popup");
   expect(signal.aborted).toBe(true);
 });
+
+test("shutdown observed before native menu entry also interrupts late registrations", () => {
+  const requests = new NativeRequests();
+  requests.interruptModal({
+    kind: "shutdown",
+  });
+  let interrupted = 0;
+  const unsubscribe = requests.onModalInterrupt(undefined, () => {
+    interrupted++;
+  });
+  expect(interrupted).toBe(1);
+  unsubscribe();
+  requests.interruptModal({
+    kind: "shutdown",
+  });
+  expect(interrupted).toBe(1);
+});
