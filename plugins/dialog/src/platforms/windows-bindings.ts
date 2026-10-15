@@ -364,19 +364,28 @@ export function createDialog(
         }
         let callbackFailure: unknown;
         let closing = false;
+        let pollReported = false;
         const hwnd = services.createWindow((message) => {
           if (message !== WM_TIMER || closing) {
             return;
           }
           try {
-            if (!poll()) {
+            const report = !pollReported;
+            pollReported = true;
+            if (report) console.log("dialog poll enter");
+            const interrupted = poll();
+            if (report) console.log("dialog poll returned", interrupted);
+            if (!interrupted) {
               return;
             }
           } catch (error) {
+            console.error("dialog poll failed", error);
             callbackFailure ??= error;
           }
           // Timer WndProc stays on this STA. Never throw through Windows' callback stack.
+          console.log("dialog Close enter");
           const result = close(E_ABORT);
+          console.log("dialog Close returned", result);
           if (result >= 0) {
             closing = true;
           } else {

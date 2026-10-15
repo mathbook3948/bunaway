@@ -371,16 +371,20 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
           "abort cleanup",
         );
       } catch (error) {
-        throw new Error(
-          `Dialog abort state: ${JSON.stringify({
-            cancelAcknowledged,
-            visible: native.symbols.IsWindowVisible(cancelledHwnd),
-            current: buttonState(cancelled.title, 2),
-          })}`,
-          {
-            cause: error,
-          },
-        );
+        const state = {
+          cancelAcknowledged,
+          visible: native.symbols.IsWindowVisible(cancelledHwnd),
+          current: buttonState(cancelled.title, 2),
+        };
+        // Unwind the failed modal call so deferred callback failures can be reported.
+        await dismiss(cancelled.title, 2);
+        await until(() => cancelAcknowledged || !!fatal, "failed abort unwind");
+        console.error("Dialog abort after modal unwind", {
+          fatal,
+        });
+        throw new Error(`Dialog abort state: ${JSON.stringify(state)}`, {
+          cause: error,
+        });
       }
       // Cancelled host responses are suppressed; a following call proves the STA and adapter recovered.
       pending.delete(cancelled.requestId);
