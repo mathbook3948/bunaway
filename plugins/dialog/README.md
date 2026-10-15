@@ -12,7 +12,10 @@ handlers or cleanup inside the native callback. After Show returns, the existing
 performs cancellation and shutdown. Ordinary concurrent UI calls serialize through the bounded host
 channel. Native reentry fails BUSY. The picker closes on call cancellation, committed shutdown or a
 retired captured owner. User dismissal is a successful `{ cancelled: true }`; lifecycle cancellation
-is an error. COM references and the timer window remain owned until the modal stack unwinds.
+is an error. Cancellation first calls IFileDialog.Close, then requests WM_CLOSE synchronously on the
+current dialog HWND obtained through IOleWindow. This covers shell dialogs that acknowledge Close
+without leaving Show from a timer callback. It never looks up windows by title or destroys a shell-owned HWND.
+COM references and the timer window remain owned until the modal stack unwinds.
 
 Microsoft references: [Common Item Dialog](https://learn.microsoft.com/en-us/windows/win32/shell/common-file-dialog),
 [Show](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-imodalwindow-show),

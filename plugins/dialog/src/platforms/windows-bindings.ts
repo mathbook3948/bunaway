@@ -21,6 +21,7 @@ import type { DialogDriver } from "#dialog/platforms/windows";
 const HRESULT_CANCELLED = 0x800704c7;
 const E_ABORT = -2147467260;
 const WM_TIMER = 0x0113;
+const WM_CLOSE = 0x0010;
 const WM_QUIT = 0x0012;
 const PM_REMOVE = 1;
 const TIMER_ID = 1n;
@@ -45,6 +46,7 @@ const OPEN_CLASS = guid("dc1c5a9c-e88a-4dde-a5a1-60f82a20aef7");
 const SAVE_CLASS = guid("c0b4e2f3-ba21-4773-8dba-335ec946eb8b");
 const OPEN_IID = guid("d57c7288-d4ad-4768-be02-9d969532d960");
 const SAVE_IID = guid("84bccd23-5fde-4cdb-aea4-af64b83d78ab");
+const OLE_WINDOW_IID = guid("00000114-0000-0000-c000-000000000046");
 const SHELL_ITEM_IID = guid("43826d1e-e718-42ee-bc55-a1e261c37bfe");
 
 function check(result: number, stage: string): void {
@@ -97,11 +99,21 @@ export function createDialog(
   });
   let apartment = false;
   let dialog: Pointer | undefined;
+  let dialogWindow: Pointer | undefined;
   let disposed = false;
   const bindings: ReturnType<typeof CFunction>[] = [];
   const user = (() => {
     try {
       return dlopen("user32.dll", {
+        SendMessageW: {
+          args: [
+            "u64",
+            "u32",
+            "u64",
+            "i64",
+          ],
+          returns: "i64",
+        },
         SetTimer: {
           args: [
             "u64",
@@ -189,8 +201,14 @@ export function createDialog(
     }
     disposed = true;
     try {
-      if (dialog) {
-        release(dialog);
+      try {
+        if (dialogWindow) {
+          release(dialogWindow);
+        }
+      } finally {
+        if (dialog) {
+          release(dialog);
+        }
       }
     } finally {
       for (const binding of bindings) {
@@ -339,6 +357,17 @@ export function createDialog(
     const close = method(object, 23, [
       "i32",
     ]);
+    dialogWindow = outObject(
+      (output) =>
+        method(object, 0, [
+          "ptr",
+          "ptr",
+        ])(ptr(OLE_WINDOW_IID), output),
+      "QueryInterface(IOleWindow)",
+    );
+    const getWindow = method(dialogWindow, 3, [
+      "ptr",
+    ]);
     const pathOf = (item: Pointer): string => {
       const output = new BigUint64Array(1);
       check(
@@ -385,7 +414,6 @@ export function createDialog(
         let closing = false;
         let handling = false;
         let active = true;
-        let pollReported = false;
         const hwnd = services.createWindow(() => {});
         let callback: JSCallback | undefined;
         let timer = false;
@@ -399,34 +427,23 @@ export function createDialog(
               handling = true;
               try {
                 try {
-                  const report = !pollReported;
-                  pollReported = true;
-                  if (report) {
-                    console.log("dialog timerproc poll enter", Date.now());
-                  }
                   const interrupted = poll();
-                  if (report) {
-                    console.log(
-                      "dialog timerproc poll returned",
-                      interrupted,
-                      Date.now(),
-                    );
-                  }
                   if (!interrupted) {
                     return;
                   }
                 } catch (error) {
                   callbackFailure ??= error;
                 }
-                console.log("dialog timerproc Close enter", Date.now());
                 const result = close(E_ABORT);
-                console.log(
-                  "dialog timerproc Close returned",
-                  result,
-                  Date.now(),
-                );
                 if (result >= 0) {
                   closing = true;
+                  // Shell Close can acknowledge cancellation without unwinding Show from a timer.
+                  // Resolve only this COM object's HWND and request closure synchronously on its STA.
+                  // No queued close message may outlive Show or target a subsequently reused HWND.
+                  const window = new BigUint64Array(1);
+                  if (getWindow(ptr(window)) >= 0 && window[0]) {
+                    user.symbols.SendMessageW(window[0], WM_CLOSE, 0n, 0n);
+                  }
                 } else if (!closing) {
                   callbackFailure ??= new BunawayError({
                     code: "INTERNAL",

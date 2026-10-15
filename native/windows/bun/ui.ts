@@ -374,6 +374,7 @@ const fail = (error: unknown) => {
 };
 // Observers only record intent; normal packet dispatch and native cleanup remain deferred.
 const modalCancellationObservers = new Set<(packet: Packet) => void>();
+let modalShutdownRequested = false;
 const channel = new Channel(
   parentPort,
   config.runtime,
@@ -496,9 +497,15 @@ const channel = new Channel(
         allowed,
       });
     } else if (packet.kind === "cancel") {
-      approved.delete(packet.requestId);
-      uiCalls.delete(packet.requestId);
-      windowRequests.cancel(packet.requestId);
+      if (approved.get(packet.requestId) === packet.context) {
+        approved.delete(packet.requestId);
+      }
+      if (uiCalls.get(packet.requestId)?.context === packet.context) {
+        uiCalls.delete(packet.requestId);
+      }
+      if (windowRequests.context(packet.requestId) === packet.context) {
+        windowRequests.cancel(packet.requestId);
+      }
     } else if (packet.kind === "cancel-context") {
       discardContext(packet.context);
     } else if (packet.kind === "host-result") {
@@ -517,6 +524,9 @@ const channel = new Channel(
   },
   fail,
   (packet) => {
+    if (packet.kind === "shutdown") {
+      modalShutdownRequested = true;
+    }
     for (const observe of modalCancellationObservers) {
       observe(packet);
     }
@@ -1393,11 +1403,13 @@ try {
           const context = requestId
             ? windowRequests.context(requestId)
             : undefined;
-          let cancelled = false;
+          let cancelled = modalShutdownRequested;
           const observe = (packet: Packet) => {
             if (
               packet.kind === "shutdown" ||
-              (packet.kind === "cancel" && packet.requestId === requestId) ||
+              (packet.kind === "cancel" &&
+                packet.requestId === requestId &&
+                packet.context === context) ||
               (packet.kind === "cancel-context" &&
                 packet.context === context) ||
               (packet.kind === "session-failure" &&
@@ -1441,7 +1453,7 @@ try {
           };
         },
         poll: () => channel.poll(),
-        stopping: () => stopping || closingSent,
+        stopping: () => stopping || closingSent || modalShutdownRequested,
       },
       shortcuts: {
         createWindow(receive) {

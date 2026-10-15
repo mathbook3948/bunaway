@@ -107,34 +107,7 @@ test.skipIf(process.platform !== "win32")(
           },
         ],
         `import plugin from ${JSON.stringify(nativePath)};
-export const pluginImports = { dialog: { operations: async () => ({ createOperations(environment) {
-  const services = environment.dialogs;
-  return plugin._definition.nativePlatforms.windows.create({ ...environment, dialogs: {
-    ...services,
-    createWindow(receive) {
-      let timerReported = false;
-      return services.createWindow((...args) => {
-        if (args[0] === 0x0113 && !timerReported) {
-          timerReported = true;
-          console.log(JSON.stringify({ event: "dialog-native-timer" }));
-        }
-        receive(...args);
-      });
-    },
-    watchCancellation(requestId) {
-      const watcher = services.watchCancellation(requestId);
-      let reported = false;
-      return { ...watcher, cancelled() {
-        const value = watcher.cancelled();
-        if (value && !reported) {
-          reported = true;
-          console.log(JSON.stringify({ event: "dialog-native-cancel-observed", requestId }));
-        }
-        return value;
-      }};
-    }
-  }});
-} }) } };`,
+export const pluginImports = { dialog: { operations: async () => ({ createOperations: plugin._definition.nativePlatforms.windows.create }) } };`,
       );
       const config: UIConfig = {
         runtime: {
@@ -349,6 +322,23 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
         },
       });
 
+      const unrelated = invoke("dialog.openFile");
+      await until(() => find(unrelated.title) !== 0n, "unrelated cancel modal");
+      channel.notify({
+        kind: "cancel",
+        context: "unrelated-context" as UIConfig["backendContext"],
+        requestId: unrelated.requestId,
+      });
+      await Bun.sleep(100);
+      expect(native.symbols.IsWindowVisible(find(unrelated.title))).not.toBe(0);
+      await dismiss(unrelated.title, 2);
+      expect(await unrelated.result()).toEqual({
+        kind: "result",
+        payload: {
+          cancelled: true,
+        },
+      });
+
       const cancelled = invoke("dialog.openFile");
       await until(() => find(cancelled.title) !== 0n, "abort modal");
       const cancelledHwnd = find(cancelled.title);
@@ -399,7 +389,9 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
       });
 
       const shutdown = invoke("dialog.selectFolder");
+      const queuedAtShutdown = invoke("dialog.openFile");
       await until(() => find(shutdown.title) !== 0n, "shutdown modal");
+      expect(find(queuedAtShutdown.title)).toBe(0n);
       const shutdownHwnd = find(shutdown.title);
       channel.notify({
         kind: "shutdown",
@@ -408,6 +400,7 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
       expect(await exited).toBe(0);
       expect(fatal).toBeUndefined();
       expect(native.symbols.IsWindow(shutdownHwnd)).toBe(0);
+      expect(find(queuedAtShutdown.title)).toBe(0n);
     } finally {
       for (const title of titles) {
         const hwnd = find(title);
