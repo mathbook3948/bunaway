@@ -55,7 +55,8 @@
     "@bunaway/plugin-notification": "workspace:*",
     "@bunaway/plugin-global-shortcut": "workspace:*",
     "@bunaway/plugin-menu": "workspace:*",
-    "@bunaway/plugin-tray": "workspace:*"
+    "@bunaway/plugin-tray": "workspace:*",
+    "@bunaway/plugin-dialog": "workspace:*"
   },
   "imports": {
     "#cli/*": "./packages/cli/src/*.ts",

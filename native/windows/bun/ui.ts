@@ -372,6 +372,8 @@ const fail = (error: unknown) => {
   failure ??= error;
   stopping = true;
 };
+// Observers only record intent; normal packet dispatch and native cleanup remain deferred.
+const modalCancellationObservers = new Set<(packet: Packet) => void>();
 const channel = new Channel(
   parentPort,
   config.runtime,
@@ -514,6 +516,11 @@ const channel = new Channel(
     }
   },
   fail,
+  (packet) => {
+    for (const observe of modalCancellationObservers) {
+      observe(packet);
+    }
+  },
 );
 
 /** Observe plugin completion independently of grant acceptance and discard cancelled results. */
@@ -1374,6 +1381,61 @@ try {
     packagedPlugins,
     undefined,
     {
+      dialogs: {
+        watchCancellation(requestId) {
+          const context = requestId
+            ? windowRequests.context(requestId)
+            : undefined;
+          let cancelled = false;
+          const observe = (packet: Packet) => {
+            if (
+              packet.kind === "shutdown" ||
+              (packet.kind === "cancel" && packet.requestId === requestId) ||
+              (packet.kind === "cancel-context" &&
+                packet.context === context) ||
+              (packet.kind === "session-failure" &&
+                packet.route.context === context)
+            ) {
+              cancelled = true;
+            }
+          };
+          modalCancellationObservers.add(observe);
+          return {
+            cancelled: () => cancelled,
+            dispose: () => {
+              modalCancellationObservers.delete(observe);
+            },
+          };
+        },
+        origin: (requestId) =>
+          windowServices.lookup?.byRequest?.(requestId) ?? null,
+        createWindow(receive) {
+          assert(windows);
+          return windows.create(config.runtime.id, 200, 200, receive, false);
+        },
+        destroyWindow(hwnd) {
+          assert(windows);
+          windows.destroy(hwnd);
+        },
+        owner(windowId) {
+          const view = [
+            ...views.values(),
+          ].find(
+            (view) =>
+              view.readiness.snapshot().windowId === windowId &&
+              !view.lifecycle.closed,
+          );
+          if (!view) {
+            return null;
+          }
+          return {
+            hwnd: view.native.hwnd,
+            alive: () => !view.lifecycle.closed,
+          };
+        },
+        poll: () => channel.poll(),
+        stopping: () => stopping || closingSent,
+      },
       shortcuts: {
         createWindow(receive) {
           assert(windows);

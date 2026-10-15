@@ -1,0 +1,321 @@
+import { dlopen, ptr } from "bun:ffi";
+import { expect, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { Worker } from "node:worker_threads";
+import dialog from "@bunaway/plugin-dialog";
+import type { HostResponse, JsonValue } from "@bunaway/protocol";
+import { Channel, type UIConfig } from "#native/windows/bun/channel";
+import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
+
+// The main test thread can observe and dismiss real modal dialogs while the UI STA is in Show.
+test.skipIf(process.platform !== "win32")(
+  "real UI STA file dialogs select paths, serialize, cancel and drain on shutdown",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "bunaway-dialog-"));
+    let worker: Worker | undefined;
+    let channel: Channel | undefined;
+    let cleaned = false;
+    let fatal: unknown;
+    const pending = new Map<string, (response: HostResponse) => void>();
+    const native = dlopen("user32.dll", {
+      FindWindowW: {
+        args: [
+          "ptr",
+          "ptr",
+        ],
+        returns: "u64",
+      },
+      IsWindow: {
+        args: [
+          "u64",
+        ],
+        returns: "i32",
+      },
+      PostMessageW: {
+        args: [
+          "u64",
+          "u32",
+          "u64",
+          "i64",
+        ],
+        returns: "i32",
+      },
+    });
+    const titles: string[] = [];
+    const find = (title: string) => {
+      const text = Buffer.from(`${title}\0`, "utf16le");
+      return BigInt(native.symbols.FindWindowW(null, ptr(text)));
+    };
+    const until = async (condition: () => boolean, stage: string) => {
+      const deadline = Date.now() + 10000;
+      while (!condition()) {
+        if (fatal || Date.now() > deadline) {
+          throw new Error(`Dialog ${stage} failed: ${JSON.stringify(fatal)}`);
+        }
+        await Bun.sleep(10);
+      }
+    };
+    try {
+      const nativePath = resolve(
+        import.meta.dir,
+        "../../plugins/dialog/dist/native/windows.js",
+      );
+      await bundleUIPluginFixture(
+        root,
+        [
+          {
+            name: "dialog",
+            version: dialog._definition.version,
+            native: dialog._definition.native,
+            thread: "ui",
+          },
+        ],
+        `import plugin from ${JSON.stringify(nativePath)};
+export const pluginImports = { dialog: { operations: async () => ({ createOperations: plugin._definition.nativePlatforms.windows.create }) } };`,
+      );
+      const config: UIConfig = {
+        runtime: {
+          id: "dialog-native",
+          generation: crypto.randomUUID(),
+        },
+        backendContext: "backend" as UIConfig["backendContext"],
+        windows: [],
+        assets: root,
+        dataRoot: root,
+        loader: "",
+        desktop: {
+          closeBehavior: "keep-alive",
+        },
+        plugins: [
+          dialog._definition,
+        ],
+        policy: {
+          version: 1,
+          views: [],
+          backend: {
+            permissions: [
+              "dialog.openFile",
+              "dialog.saveFile",
+              "dialog.selectFolder",
+            ],
+          },
+        },
+      };
+      worker = new Worker(pathToFileURL(resolve(root, "ui.js")), {
+        workerData: config,
+      });
+      const exited = new Promise<number>((done, reject) => {
+        worker?.once("exit", done);
+        worker?.once("error", reject);
+      });
+      let ready = false;
+      channel = new Channel(
+        worker,
+        config.runtime,
+        "main",
+        (packet) => {
+          if (packet.kind === "ready") {
+            ready = true;
+          } else if (packet.kind === "prepare") {
+            channel?.notify({
+              kind: "grant",
+              context: packet.context,
+              requestId: packet.requestId,
+              allowed: true,
+            });
+          } else if (packet.kind === "host-response") {
+            pending.get(packet.requestId)?.(packet.response);
+            pending.delete(packet.requestId);
+          } else if (packet.kind === "cleaned") {
+            cleaned = true;
+          } else if (packet.kind === "fatal") {
+            fatal = packet.error;
+          }
+        },
+        (error) => {
+          fatal = error;
+        },
+      );
+      await until(() => ready, "startup");
+      const invoke = (
+        operation: string,
+        payload: Record<string, JsonValue> = {},
+      ) => {
+        const requestId = crypto.randomUUID();
+        const title = `Bunaway dialog ${requestId}`;
+        titles.push(title);
+        let response: HostResponse | undefined;
+        pending.set(requestId, (value) => {
+          response = value;
+        });
+        channel?.notify({
+          kind: "operation",
+          context: config.backendContext,
+          requestId,
+          source: "backend",
+          call: {
+            operation,
+            payload: {
+              ...payload,
+              title,
+            },
+          },
+        });
+        return {
+          title,
+          requestId,
+          result: async () => {
+            await until(() => response !== undefined, "response");
+            return response;
+          },
+        };
+      };
+      const dismiss = async (title: string, button: 1 | 2) => {
+        await until(() => find(title) !== 0n, "appearance");
+        const hwnd = find(title);
+        expect(hwnd).not.toBe(0n);
+        // Native command injection tests Windows' real OK/Cancel processing, not physical input.
+        expect(
+          native.symbols.PostMessageW(hwnd, 0x0111, BigInt(button), 0n),
+        ).not.toBe(0);
+        return hwnd;
+      };
+      const selected = resolve(root, "한글-open.txt");
+      await writeFile(selected, "selected without granting storage permission");
+      const open = invoke("dialog.openFile", {
+        defaultDirectory: root,
+        defaultFileName: "한글-open.txt",
+        filters: [
+          {
+            name: "Text",
+            extensions: [
+              "txt",
+            ],
+          },
+        ],
+      });
+      await dismiss(open.title, 1);
+      expect(await open.result()).toEqual({
+        kind: "result",
+        payload: {
+          cancelled: false,
+          paths: [
+            selected,
+          ],
+        },
+      });
+      const folder = invoke("dialog.selectFolder", {
+        defaultDirectory: root,
+      });
+      await dismiss(folder.title, 1);
+      expect(await folder.result()).toEqual({
+        kind: "result",
+        payload: {
+          cancelled: false,
+          paths: [
+            root,
+          ],
+        },
+      });
+      const save = invoke("dialog.saveFile", {
+        defaultDirectory: root,
+        defaultFileName: "new-file",
+        defaultExtension: "txt",
+        filters: [
+          {
+            name: "Text",
+            extensions: [
+              "txt",
+            ],
+          },
+        ],
+      });
+      await dismiss(save.title, 1);
+      const savePath = resolve(root, "new-file.txt");
+      expect(await save.result()).toEqual({
+        kind: "result",
+        payload: {
+          cancelled: false,
+          paths: [
+            savePath,
+          ],
+        },
+      });
+      expect(await Bun.file(savePath).exists()).toBe(false);
+
+      const first = invoke("dialog.openFile");
+      await until(() => find(first.title) !== 0n, "first modal");
+      const second = invoke("dialog.saveFile");
+      await Bun.sleep(100);
+      expect(find(second.title)).toBe(0n);
+      await dismiss(first.title, 2);
+      expect(await first.result()).toEqual({
+        kind: "result",
+        payload: {
+          cancelled: true,
+        },
+      });
+      await dismiss(second.title, 2);
+      expect(await second.result()).toEqual({
+        kind: "result",
+        payload: {
+          cancelled: true,
+        },
+      });
+
+      const cancelled = invoke("dialog.openFile");
+      await until(() => find(cancelled.title) !== 0n, "abort modal");
+      const cancelledHwnd = find(cancelled.title);
+      channel.notify({
+        kind: "cancel",
+        context: config.backendContext,
+        requestId: cancelled.requestId,
+      });
+      await until(
+        () => native.symbols.IsWindow(cancelledHwnd) === 0,
+        "abort cleanup",
+      );
+      // Cancelled host responses are suppressed; a following call proves the STA and adapter recovered.
+      pending.delete(cancelled.requestId);
+      const recovered = invoke("dialog.openFile");
+      await dismiss(recovered.title, 2);
+      expect(await recovered.result()).toEqual({
+        kind: "result",
+        payload: {
+          cancelled: true,
+        },
+      });
+
+      const shutdown = invoke("dialog.selectFolder");
+      await until(() => find(shutdown.title) !== 0n, "shutdown modal");
+      const shutdownHwnd = find(shutdown.title);
+      channel.notify({
+        kind: "shutdown",
+      });
+      await until(() => cleaned, "shutdown cleanup");
+      expect(await exited).toBe(0);
+      expect(fatal).toBeUndefined();
+      expect(native.symbols.IsWindow(shutdownHwnd)).toBe(0);
+    } finally {
+      for (const title of titles) {
+        const hwnd = find(title);
+        if (hwnd) {
+          native.symbols.PostMessageW(hwnd, 0x0111, 2n, 0n);
+        }
+      }
+      channel?.close();
+      await worker?.terminate();
+      native.close();
+      await rm(root, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
+    }
+  },
+  90000,
+);
