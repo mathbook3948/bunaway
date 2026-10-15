@@ -1,9 +1,9 @@
 # notification
 
 `@bunaway/plugin-notification`은 Windows의 알림 API 지원과 현재 앱의 OS 알림 설정을
-조회하고 Windows 알림 설정 페이지를 여는 선택 네이티브 플러그인이다.
+조회하고 Windows 알림 설정 페이지를 열며 실행 중 toast를 표시하는 선택 네이티브 플러그인이다.
 `defineNativePlugin`과 Zod 계약으로 `notification.getStatus`, `notification.openSettings`를
-선언하며 각 작업은 같은 이름의 독립 정책 권한을 요구한다.
+`notification.show`, `notification.clear`를 선언하며 각 작업은 같은 이름의 독립 정책 권한을 요구한다.
 공개 helper는 `notification.getStatus()`와 `notification.openSettings()`이다.
 
 자세한 반환값, 권한, 오류와 사용 예는
@@ -21,10 +21,11 @@
 `support: "unsupported", setting: null`이다. Windows가 반환하는 사용자, 앱, 그룹 정책과
 manifest 차단을 구분하며 모르는 값은 `unknown`이다. Windows가 현재 앱의 알림 상태를 찾지
 못하면 `UNSUPPORTED`이며 다른 실제 조회 실패도 오류로 반환한다. 조회를 위해 알림을 보내거나
-상태를 자동 생성하지 않는다. 첫 알림과 상태 초기화 정책은 후속 표시 기능의 범위다. `enabled`는 실제 toast
+상태를 자동 생성하지 않는다. `show`는 요청한 첫 알림을 실제 전송하며 OS 상태를 만들 수 있다. `enabled`는 실제 toast
 표시나 activation 가능성을 보장하지 않는다.
 
-각 동기 요청은 I/O Worker에서 STA WinRT 초기화, HSTRING과 COM 참조를 정리한다.
+플러그인은 UI Worker의 기존 STA와 메시지 pump를 사용한다. 상태와 설정 요청은 호출별
+WinRT 초기화, HSTRING과 COM 참조를 정리하고 toast는 이벤트 해제까지 자체 STA 참조를 유지한다.
 opener가 먼저 초기화한 STA가 있어도 자신의 초기화 횟수만 해제한다. 어댑터 종료는
 DLL을 정리하며 반복 종료는 안전하다. 정책과 취소 검사는 네이티브 실행 직전에
 호스트가 수행한다. 이미 접수한 설정 열기 요청은 취소나 종료로 되돌리지 않는다.
@@ -34,9 +35,43 @@ DLL을 정리하며 반복 종료는 안전하다. 정책과 취소 검사는 �
 화면 표시, 사용자 동의나 설정 변경 완료가 아니다. Windows 데스크톱 알림에는 동의
 팝업 요청 API가 없으므로 사용자가 설정에서 변경한 뒤 상태를 다시 조회해야 한다.
 
-알림 표시, 이벤트와 toast activation은 구현하지 않았다. 바로가기나 COM activator도
-자동 등록하지 않으며 시작 메뉴 바로가기를 만들지 않는 기존 설치 선택을 보존한다.
-이 후속 기능에는 설치/제거, 실행 중 및 종료 상태 activation 전달 계약과 검증이 필요하다.
+## Toast 표시와 실행 중 이벤트
+
+`show({ id, group?, title, body?, data?, silent?, suppressPopup? })`는 WinRT에 toast를
+전달하고 `{ id, group }`을 반환한다. 반환은 OS 접수이며 화면 표시를 보장하지 않는다.
+`id`와 `group`은 영문 대소문자, 숫자, `.`, `_`, `-`로 된 1~16자이며 기본 group은
+`bunaway`이다. 같은 앱 ID, group, id는 이전 알림을 교체한다. 제목은 1~256자,
+본문은 최대 2048자다. XML에 사용할 수 없는 제어 문자와 단독 surrogate는 거부하고
+나머지 텍스트는 XML escape한다. 임의 XML, 파일, 이미지, 실행 명령이나 URI는 받지 않는다.
+`silent` 기본값은 false이며 true이면 소리를 억제한다. `suppressPopup` 기본값도 false이며
+true이면 popup 대신 알림 기록으로 전달한다. OS 설정에 따른 억제는 별개다.
+`data`는 최대 2048자의 앱 문자열 또는 null이며 Windows activation 인수에 넣지 않는다.
+
+`notification.clicked`는 `{ id, group, data }`, `notification.dismissed`는
+`{ id, group, reason }`, `notification.failed`는 `{ id, group, hresult }`를 전달한다.
+이벤트는 실제 native callback에서 만들며 show 성공만으로 clicked나 표시 이벤트를 만들지 않는다.
+reason은 `userCanceled`, `applicationHidden`, `timedOut`, `unknown`이다.
+failed의 HRESULT는 unsigned 32비트 값이다. Show 자체의 동기 실패는 호출 오류로 반환한다.
+이벤트 정책, 살아 있는 구독 경로와 `notification.show` 권한을 모두 가진 뷰에만 전달한다.
+백엔드 이벤트 구독이나 `onOpen` 라우팅은 추가하지 않는다.
+
+`clear({ id, group? })`는 같은 앱의 해당 popup과 기록만 제거하고 null을 반환한다.
+이전 프로세스가 남긴 같은 ID의 기록도 제거할 수 있다. 앱 전체 기록은 지우지 않는다.
+교체와 clear 이후 이전 객체에서 늦게 온 callback은 버린다. clear와 앱 종료는 별도
+합성 dismissed 이벤트를 만들지 않는다. timeout dismissed 뒤에도 같은 객체의 후속 callback을
+받기 위해 소유권을 유지한다. 동시에 최대 64개의 ID/group을 소유하며 clear로 반환한다.
+한계에 도달하면 새 ID의 show는 `BUSY`이다. 같은 ID 교체는 가능하다.
+종료는 이번 실행이 소유한 알림을 지우고 구독, COM 객체, callback과 DLL을 정리한다.
+지연된 native Release는 STA marshaling pump에서 최대 1초 동안 기다리며 실패는 숨기지 않는다.
+
+시작 메뉴 바로가기와 process AppUserModelID가 일치하는 unpackaged Windows x64를
+대상으로 한다. MSIX는 패키지 식별자 연동 전까지 `UNSUPPORTED`이다. 플러그인은 바로가기,
+COM activator, URL handler를 자동 등록하지 않으며 기존 설치 선택을 보존한다.
+실행 중인 프로세스가 받은 Activated callback만 clicked로 전달한다. 종료 상태에서 앱을
+시작하거나 `onOpen`으로 전달하지 않는다. 알림 센터에서 나중에 클릭하거나 비정상 종료 후
+남은 알림의 activation은 보장하지 않는다. 강제 종료는 정리를 실행할 수 없으며 앱은
+다음 실행에서 알고 있는 ID/group을 clear할 수 있다. 액션 버튼, 이미지, 예약과 영속
+activation은 후속 범위다.
 
 기준 API: [CreateToastNotifier](https://learn.microsoft.com/en-us/uwp/api/windows.ui.notifications.toastnotificationmanager.createtoastnotifier),
 [Setting](https://learn.microsoft.com/en-us/uwp/api/windows.ui.notifications.toastnotifier.setting),
@@ -63,6 +98,15 @@ DLL을 정리하며 반복 종료는 안전하다. 정책과 취소 검사는 �
   변경을 확인하지 않는다.
 
 사용자가 Windows 설정에서 앱/전체 알림을 끄거나 정책으로 차단하는 시나리오, 실제
-설정 페이지 표시와 집중 지원, MSIX, 실제 toast와 클릭/종료 activation은 수동 검증 또는
+설정 페이지 표시와 집중 지원, MSIX, 실제 popup 화면과 사용자의 클릭/종료 activation은 수동 검증 또는
 후속 구현 범위다. 기본 CI 통과로 이 항목을 완료했다고 판단하지 않는다.
 
+
+- `bun test tests/api/notification-toast.test.ts`: 입력/출력, 작업별 권한과 이벤트 수신 권한,
+  XML escape, 교체와 stale callback, 소유권 상한, 실패 후 재시도 및 지연 Release를 검사한다.
+  격리된 FFI fixture는 실제 JSCallback vtable을 호출하지만 Windows 실행 증거는 아니다.
+- `bun --no-env-file test tests/lifecycle/windows-toast.test.ts`: Windows에서 UUID 바로가기와
+  소리/popup을 억제한 알림을 사용해 실제 Show, XML, 교체, 개별 제거와 종료 후 history를
+  독립적인 WinRT projection으로 확인한다. 별도 STA/MTA fixture는 실제 COM marshaling,
+  callback 실행 스레드와 지연 Release 정리를 확인한다. `host:windows`에도 포함한다.
+  이 검사는 실제 사용자의 클릭이나 종료 상태 activation을 검증하지 않는다.

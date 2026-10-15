@@ -2,9 +2,15 @@ import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
 import type { NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import type {
+  NotificationResult,
   NotificationSetting,
   NotificationStatus,
+  ResolvedNotification,
 } from "#notification/contract";
+
+import { drainToastCleanup } from "#notification/platforms/toast-cleanup";
+import { createToastController } from "#notification/platforms/toast-controller";
+import { createWindowsToastDriver } from "#notification/platforms/windows-toasts";
 
 const POINTER_BYTES = 8;
 const RO_INIT_SINGLETHREADED = 0;
@@ -353,9 +359,37 @@ export function initialize(environment: NativeEnvironment) {
       message: "Notification status requires a host-selected app identity.",
     });
   }
-  return createNotifications(app.id);
+  const status = createNotifications(app.id);
+  let toasts: ReturnType<typeof createToastController> | undefined;
+  const getToasts = () => {
+    if (!environment.windows?.systemEvents) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message: "Toast callbacks require the native UI event service.",
+      });
+    }
+    const events = environment.windows.systemEvents;
+    toasts ??= createToastController(
+      createWindowsToastDriver(app.id),
+      (event, payload) => events.publish(event, payload, "notification.show"),
+    );
+    return toasts;
+  };
+  return {
+    getStatus: status.getStatus,
+    openSettings: status.openSettings,
+    show: (input: ResolvedNotification) => getToasts().show(input),
+    clear: (input: NotificationResult) => getToasts().clear(input),
+    async dispose() {
+      // The regular UI pump has stopped. Drain marshaled releases before unloading DLLs or our STA.
+      if (toasts) {
+        await drainToastCleanup(() => toasts?.dispose());
+      }
+      status.dispose();
+    },
+  };
 }
 
 export function dispose(instance: ReturnType<typeof initialize>) {
-  instance.dispose();
+  return instance.dispose();
 }

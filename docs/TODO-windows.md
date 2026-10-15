@@ -426,14 +426,16 @@ Windows의 비활성화 기록을 수정하지 않는다.
 
 - [x] Windows toast API 지원 여부와 앱, 사용자, 정책의 알림 차단 상태를 조회한다.
 - [ ] 필요한 OS 권한 요청의 플랫폼별 계약을 제공한다. Windows 데스크톱 경로에는 알림 동의 팝업이 없으며 설정 변경은 사용자에게 맡긴다.
-- [ ] 제목, 본문, 아이콘, 이미지와 소리를 지정해 알림을 표시한다.
-- [ ] show, click, close와 failed 이벤트를 제공한다.
-- [ ] 알림 ID, 그룹과 취소, 교체 동작을 정의한다.
+- [x] 제목과 본문의 text-only toast, silent와 popup 억제 옵션을 제공한다.
+- [ ] 아이콘, 이미지와 사용자 지정 소리를 제공한다.
+- [x] 실행 중 native clicked, dismissed와 failed callback을 전달한다. Show 접수는 반환값으로 구분한다.
+- [ ] 실제 popup 표시 완료 이벤트와 사용자 클릭의 GUI 검증을 제공한다.
+- [x] 앱 범위 ID/group, 같은 ID 교체와 개별 clear를 제공한다. 종료 시 이번 실행의 알림을 정리한다.
 - [ ] 액션 버튼과 인라인 응답 입력을 제공한다.
 - [ ] 앱이 종료된 상태의 toast activation을 앱 시작과 `onOpen`에 연결한다.
-- [ ] silent, timeout과 표시 우선순위의 플랫폼별 동작을 정의한다.
+- [ ] timeout과 표시 우선순위의 플랫폼별 동작을 정의한다. silent는 Windows에서 구현했다.
 - [ ] Windows toast XML과 고급 알림 콘텐츠의 지원을 결정한다.
-- [ ] OS에 남은 알림 조회와 개별, 그룹, 전체 제거의 플랫폼별 지원을 결정한다.
+- [ ] OS에 남은 알림 조회와 그룹, 전체 제거의 플랫폼별 지원을 결정한다. Windows 개별 ID/group 제거는 구현했다.
 - [ ] 예약 알림과 pending 조회, 취소의 플랫폼별 지원을 제공한다.
 - [ ] 첨부 파일과 클릭 액션 종류를 등록한다.
 - [x] Windows 알림 설정 페이지로 이동하는 요청과 사용자에 의한 차단 상태를 제공한다.
@@ -441,7 +443,8 @@ Windows의 비활성화 기록을 수정하지 않는다.
 `@bunaway/plugin-notification`은 현재 호스트 앱 ID로 WinRT `ToastNotifier.Setting`을
 조회하며 `notification.getStatus`와 `notification.openSettings` 권한을 분리한다.
 설정 열기는 `ms-settings:notifications` 요청 접수이며 동의나 설정 변경 완료를 뜻하지 않는다.
-알림 표시, shortcut/COM activator 등록과 종료 상태의 activation 전달은 아직 구현하지 않았다.
+`show`와 `clear` 및 실행 중 callback 전달을 구현했다. shortcut/COM activator 등록과
+종료 상태의 activation 전달은 아직 구현하지 않았다.
 시작 메뉴 바로가기를 생성하지 않는 기존 설치 선택도 보존한다. 조회에는 설치 바로가기의
 AppUserModelID 등록과 같은 process AppUserModelID가 필요하며 첫 알림 전에는 OS 알림 상태도
 없을 수 있다. Windows가 상태를 찾지 못하면 `UNSUPPORTED`로 거부하며 조회는 알림을 보내거나
