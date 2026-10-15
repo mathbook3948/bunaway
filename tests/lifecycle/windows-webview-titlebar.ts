@@ -28,10 +28,10 @@ await writeFile(
   `<!doctype html><title>Custom titlebar</title>
   <style>header { app-region: drag; height: 48px; } button { app-region: no-drag; }</style>
   <header>Window title <button aria-label="Example titlebar button">Action</button></header>
-  <script>addEventListener("load", () => chrome.webview.postMessage(JSON.stringify({
+  <script>addEventListener("load", () => chrome.webview.postMessage({
     drag: getComputedStyle(document.querySelector("header")).getPropertyValue("app-region"),
     noDrag: getComputedStyle(document.querySelector("button")).getPropertyValue("app-region")
-  })));</script>`,
+  }));</script>`,
 );
 hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
 const windows = new Windows(() => {});
