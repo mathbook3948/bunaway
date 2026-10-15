@@ -14,6 +14,43 @@ import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 test.skipIf(process.platform !== "win32")(
   "real UI STA file dialogs select paths, serialize, cancel and drain on shutdown",
   async () => {
+    // Shell can retain process-wide COM helpers after the UI STA has released its own references.
+    // Isolate this fixture so later tests can still assert their initial apartment state.
+    if (process.env.BUNAWAY_DIALOG_FIXTURE !== "1") {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "--no-env-file",
+          "test",
+          import.meta.path,
+        ],
+        {
+          env: {
+            ...process.env,
+            BUNAWAY_DIALOG_FIXTURE: "1",
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+          // Leave cleanup time inside the existing 90-second test deadline.
+          timeout: 85000,
+          killSignal: "SIGKILL",
+        },
+      );
+      try {
+        const [stdout, stderr, code] = await Promise.all([
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+          child.exited,
+        ]);
+        expect(code, `${stdout}\n${stderr}`).toBe(0);
+      } finally {
+        if (child.exitCode === null) {
+          child.kill();
+          await child.exited;
+        }
+      }
+      return;
+    }
     // Runner TEMP can contain an 8.3 alias; shell items return the resolved long path.
     const root = await realpath(
       await mkdtemp(resolve(tmpdir(), "bunaway-dialog-")),

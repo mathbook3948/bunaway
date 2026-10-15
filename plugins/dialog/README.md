@@ -28,6 +28,8 @@ recent-item insertion and test-file creation. A path remains subject to later re
 `tests/lifecycle/worker-packets.test.ts` checks that modal intent observation follows validation and
 precedes deferred dispatch. `tests/lifecycle/windows-dialog.test.ts` uses the real UI Worker and Windows
 COM dialogs with injected native OK/Cancel commands, and tests abort, sequential dialogs and shutdown.
+The real dialog fixture runs in a child process because Shell can retain process-wide COM helpers
+after the owning UI STA unwinds. All modal assertions run unchanged inside that process.
 It is included in `host:windows`. Linux contract results do not establish Windows native execution.
 Physical input, multiple-monitor layout, overwrite prompts, multi-selection UI and actual owner-window
 retirement remain manual/native follow-up coverage.
