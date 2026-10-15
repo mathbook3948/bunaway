@@ -323,6 +323,13 @@ export class WindowOperations {
             message: "Window request cancelled.",
           });
         }
+        // Capability failures are intentional public errors, not internal controller diagnostics.
+        if (
+          view?.failure instanceof BunawayError &&
+          view.failure.code === "UNSUPPORTED"
+        ) {
+          throw view.failure;
+        }
         if (
           !view ||
           view.closed ||

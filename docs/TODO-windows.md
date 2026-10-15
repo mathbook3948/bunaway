@@ -188,12 +188,12 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `setTitle`과 `getTitle`로 Windows 창 title을 실행 중 변경하고 조회한다. 선언과 다른 인스턴스를 변경하지 않으며 닫기 확인 창에도 현재 title을 사용한다.
 - [ ] 창 icon을 실행 중 변경하고 조회한다. 이미지 입력과 배포 리소스 계약을 정의한다.
 - [ ] decorations와 frame의 초기 설정, 변경과 조회를 제공한다.
-- [ ] 사용자 타이틀바의 drag 영역, no-drag 영역과 resize 영역을 제공한다.
+- [x] Windows `titlebar: "custom"`과 WebView2 CSS `app-region: drag/no-drag`, 네이티브 resize 테두리를 제공한다. 전체 테두리 제거와 caption overlay는 미지원이며 물리 마우스 및 접근성 도구 검증은 별도다.
 - [ ] 프로그램에서 창 이동과 방향별 크기 조절을 시작한다.
 - [ ] 네이티브 제목 표시줄 버튼을 유지하는 title-bar overlay를 제공한다.
-- [ ] alwaysOnTop의 설정과 조회를 제공한다.
+- [x] `window.alwaysOnTop`, `setAlwaysOnTop`, `isAlwaysOnTop`으로 활성화 없는 topmost 설정과 조회를 제공한다.
 - [ ] alwaysOnBottom 및 창 Z 순서 이동의 지원 범위를 결정한다.
-- [ ] skipTaskbar의 설정과 조회를 제공한다.
+- [x] `window.skipTaskbar`, `setSkipTaskbar`, `isSkipTaskbar`를 제공한다. 실행 중 변경은 숨겨진 일반 창에서만 허용하며 tool-window style로 작업 표시줄과 Alt+Tab에서 제외한다.
 - [ ] 키오스크 모드와 일반 전체화면의 차이를 정의한다.
 - [ ] 창 background color, 투명 배경과 opacity를 제공한다.
 - [ ] shadow의 설정과 조회를 제공한다.

@@ -1110,3 +1110,10 @@ OS snapshot 중복 제거, 조회와 적용 오류 복구, 구독 해제 및 HWN
 `lifecycle/windows-appearance.test.ts`는 실제 DWM 속성 readback으로 두 HWND의 독립 설정,
 기본 system 선호와 정리를 검사합니다. 사용자 설정은 변경하지 않으며 실제 테마 전환과
 고대비 렌더링의 시각 검증을 대신하지 않습니다.
+
+`lifecycle/windows-display.test.ts`는 기본 style 보존과 실제 Windows의 custom caption,
+네이티브 resize hit test, topmost/tool-window flag, content 크기와 전체화면 복원을 검사합니다.
+`lifecycle/windows-webview-titlebar.ts`는 실제 WebView2의 Settings9 설정, CSS drag/no-drag
+문서와 탐색 후 재구성, 전체화면 복원, 미지원 COM 인터페이스 및 자원 정리를 검사합니다.
+Windows native 실행기에 포함하며 결과는 `build/windows-webview-titlebar-results.json`에 기록합니다.
+물리 마우스 드래그, 우클릭 메뉴 조작, 다중 모니터 DPI 이동과 screen reader 검증은 별도입니다.

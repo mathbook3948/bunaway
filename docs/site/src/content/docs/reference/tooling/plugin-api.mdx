@@ -224,3 +224,11 @@ UI 호스트는 디스플레이 알림을 메시지 처리 뒤 합쳐서 관찰�
 정리 함수는 해당 창 수명 종료 때 실행합니다. subscribe가 반환한 정리 함수는 모든 창의
 DWM dark mode를 해제하고 DLL을 닫습니다. 한 번에 하나의 플러그인 소유자만 구독합니다.
 이미 종료한 창이나 해제한 구독의 setDark는 CANCELLED이며 HWND는 플러그인에 노출하지 않습니다.
+
+Windows의 선택적 `getTitlebar`, `setAlwaysOnTop`, `isAlwaysOnTop`, `setSkipTaskbar`,
+`isSkipTaskbar`는 창 caption 모드와 표시 옵션을 제공합니다. `WindowSpec.window`는
+`titlebar`, `alwaysOnTop`, `skipTaskbar`를 선언합니다. 설정의 기본값은 system, false, false입니다.
+custom은 caption만 제거하며 resize frame과 시스템 메뉴는 유지합니다. WebView2가 CSS
+app-region의 drag/no-drag를 처리하고 없는 런타임은 UNSUPPORTED를 반환합니다.
+setSkipTaskbar는 변경할 때 숨겨진 일반 창을 요구하며 그 외 상태는 BUSY입니다.
+네이티브 HWND와 WebView가 자원을 소유하며 새 창은 선언의 기본값에서 시작합니다.
