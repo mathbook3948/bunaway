@@ -8,11 +8,8 @@ import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
 import { run } from "#cli/processes";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
-
-import {
-  captureNativeChild,
-  printNativeChildDiagnostics,
-} from "../fixtures/native-child-diagnostics.ts";
+import { captureMacosNativeChild } from "../fixtures/macos-startup-diagnostics.ts";
+import { printNativeChildDiagnostics } from "../fixtures/native-child-diagnostics.ts";
 
 assert.equal(process.platform, "darwin");
 assert.equal(process.arch, "arm64");
@@ -258,11 +255,12 @@ try {
     );
     child = launched;
     launchDiagnostics = resolve(diagnostics, restarted ? "restart" : "initial");
-    const { exitCode, stdout, stderr } = await captureNativeChild(
+    const { exitCode, stdout, stderr } = await captureMacosNativeChild(
       launched,
       launchDiagnostics,
       restarted ? "storage restart" : "storage initial",
       30_000,
+      resolve(home, "Library/Application Support/bunaway/tests.macos.storage"),
     );
     assert.equal(exitCode, 0, `${stdout}\n${stderr}`);
     for (const view of [

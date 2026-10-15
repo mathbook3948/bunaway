@@ -289,6 +289,12 @@ try {
 } catch (error) {
   if (launchDiagnostics && launchDataRoot) {
     await printNativeChildDiagnostics(launchDiagnostics, launchDataRoot);
+    const logs = resolve(launchDataRoot, "logs");
+    if (await Bun.file(resolve(logs, "host.log")).exists()) {
+      await cp(logs, resolve(launchDiagnostics, "host-logs"), {
+        recursive: true,
+      });
+    }
   }
   throw error;
 } finally {

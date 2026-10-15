@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { type CommandContext, defineApp } from "@bunaway/backend";
 import windows from "@bunaway/plugin-windows";
@@ -19,10 +20,31 @@ export function controlsApp(origin: string, outside: string) {
   let pageFailure: string | undefined;
   let fragmentCalls = 0;
   let spoofedCalls = 0;
+  const progress = resolve(process.env.TMPDIR ?? "", "controls-progress.json");
+  // Persist from the backend Worker itself: a blocked UI thread may not flush console output.
+  const checkpoint = (stage: string, error?: unknown) => {
+    writeFileSync(
+      `${progress}.tmp`,
+      JSON.stringify({
+        stage,
+        timestamp: Date.now(),
+        arrivals: Object.fromEntries(arrivals),
+        held: Object.fromEntries(held),
+        cancelled: Object.fromEntries(cancelled),
+        ...(error === undefined
+          ? {}
+          : {
+              error: String(error),
+            }),
+      }),
+    );
+    renameSync(`${progress}.tmp`, progress);
+  };
   const waitFor = async (
     check: () => boolean | Promise<boolean>,
     stage: string,
   ) => {
+    checkpoint(`waiting: ${stage}`);
     const deadline = Date.now() + 15_000;
     while (!(await check())) {
       if (pageFailure) {
@@ -31,6 +53,7 @@ export function controlsApp(origin: string, outside: string) {
       assert(Date.now() < deadline, `Timed out: ${stage}`);
       await Bun.sleep(10);
     }
+    checkpoint(`completed: ${stage}`);
   };
   const ready = controlsClientReadiness({
     arrivals,
@@ -238,10 +261,12 @@ export function controlsApp(origin: string, outside: string) {
       ],
     ]) {
       assert(url && path);
+      checkpoint(`navigate requested: ${path}`);
       await windows.navigateWebView({
         ...main,
         url,
       });
+      checkpoint(`navigate returned: ${path}`);
       await ready(path);
       assert.equal(
         (await windows.getWebViewState(main)).url,
@@ -319,6 +344,8 @@ export function controlsApp(origin: string, outside: string) {
             try {
               report = await exercise();
             } catch (error) {
+              // Retain the primary failure before asking a possibly stalled UI for diagnostic state.
+              checkpoint("failed; state query pending", error);
               console.error(error);
               report = {
                 pass: false,
@@ -330,6 +357,7 @@ export function controlsApp(origin: string, outside: string) {
                   error: String(error),
                 })),
               };
+              checkpoint("failed; state query completed", error);
             }
             await Bun.write(
               resolve(process.env.TMPDIR ?? "", "report.json"),

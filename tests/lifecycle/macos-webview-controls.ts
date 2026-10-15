@@ -7,6 +7,8 @@ import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
+import { captureMacosNativeChild } from "../fixtures/macos-startup-diagnostics.ts";
+import { printNativeChildDiagnostics } from "../fixtures/native-child-diagnostics.ts";
 
 assert.equal(process.platform, "darwin");
 assert.equal(process.arch, "arm64");
@@ -15,6 +17,7 @@ const directory = await mkdtemp(
   resolve(tmpdir(), "bunaway-macos-webview-controls-"),
 );
 const result = resolve(root, "build/macos-webview-controls-results.json");
+const diagnostics = resolve(root, "build/macos-webview-controls-diagnostics");
 const dataRoot = resolve(
   directory,
   "home/Library/Application Support/bunaway/tests.macos.webview-controls",
@@ -258,15 +261,17 @@ try {
       },
       stdout: "pipe",
       stderr: "pipe",
-      timeout: 90_000,
     },
   );
   child = launched;
-  const stdout = new Response(launched.stdout).text();
-  const stderr = new Response(launched.stderr).text();
-  const exitCode = await launched.exited;
-  await stdout;
-  assert.equal(exitCode, 0, await stderr);
+  const { exitCode, stdout, stderr } = await captureMacosNativeChild(
+    launched,
+    diagnostics,
+    "webview controls",
+    90_000,
+    dataRoot,
+  );
+  assert.equal(exitCode, 0, `${stdout}\n${stderr}`);
   const report = await Bun.file(resolve(dataRoot, "temp/report.json")).json();
   assert.equal(report.pass, true, JSON.stringify(report));
   assert(
@@ -351,16 +356,20 @@ try {
     pageLifecycle,
     cacheProbeDocuments,
   });
-  const diagnostics = resolve(root, "build/macos-webview-controls-diagnostics");
+  await printNativeChildDiagnostics(diagnostics, dataRoot);
   await mkdir(diagnostics, {
     recursive: true,
   });
+  const progress = Bun.file(resolve(dataRoot, "temp/controls-progress.json"));
+  if (await progress.exists()) {
+    const contents = await progress.text();
+    await Bun.write(resolve(diagnostics, "controls-progress.json"), contents);
+    console.error(`Backend controls progress: ${contents}`);
+  }
   if (await Bun.file(resolve(dataRoot, "logs/host.log")).exists()) {
     await cp(resolve(dataRoot, "logs"), diagnostics, {
       recursive: true,
     });
-    // Keep actionable lifecycle evidence in the job log when artifact downloads are unavailable.
-    console.error(await Bun.file(resolve(dataRoot, "logs/host.log")).text());
   }
   await writeJson(result, {
     pass: false,

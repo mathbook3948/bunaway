@@ -241,6 +241,7 @@ jobs:
             build/macos-webview-controls-diagnostics/
             build/macos-storage-results.json
             build/macos-storage-native/native.log
+            build/macos-appearance-results.json
             build/macos-storage-host-results.json
             build/macos-storage-host-diagnostics/
             build/macos-io-diagnostics/

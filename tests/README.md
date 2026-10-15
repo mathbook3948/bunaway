@@ -1,5 +1,24 @@
 # Tests
 
+`fixtures/native-child-diagnostics.ts`는 실제 자식 프로세스의 stdout과 stderr를 동시에 읽고
+원본 바이트와 종료 코드, signal, 실행 단계와 경과 시간을 보관한다.
+실행기가 기한 초과로 중단한 자식은 정상 정리로 0을 반환해도 실행 실패로 처리한다.
+macOS storage, appearance와 WebView controls 실행기는 보고서가 없거나 검사에 실패하면
+보관한 출력과 호스트 로그를 CI 로그에도 출력한다. 재시작과 권한 시나리오는 서로 다른
+진단 디렉터리를 사용한다. 종료 코드가 0이어도 기존 보고서 검사를 모두 통과해야 한다.
+`lifecycle/native-child-diagnostics.test.ts`는 실제 프로세스에서 성공과 실패, 큰 출력과
+CLIXML 및 UTF-8이 아닌 바이트의 보존과 POSIX 기한 초과 종료 뒤 0 반환의 거부를 검사한다.
+`fixtures/macos-startup-diagnostics.ts`는 storage와 controls 자식의 기존 기한을 유지하며
+부모에서 host 및 현재 사용자 WebKit 서비스의 PID, 상태와 CPU 시간을 최대 네 번 기록한다.
+WebKit 서비스는 특정 창 소유로 단정하지 않는다. 초기 지연 checkpoint 또는 10초 이상 실행에서
+짧은 sample을 한 번 수집하고 허용한 함수 분류의 개수만 저장한다. 원본 stack, 명령행, 경로와
+URL은 저장하지 않는다. 진단 명령은 2초로 제한하고 자식 종료 시 함께 정리한다.
+기존 host 로그의 delegate 오류, 종료 및 asset 도달 단계와 `startup-processes.json`을 비교한다.
+Windows native CI의 호스트 단계는
+cmd 파일 리다이렉션으로 출력을 보관하고 원래 종료 코드를 반환하므로 중첩 PowerShell
+진단이 XML 파서 오류로 바뀌지 않는다. notification의 PowerShell probe도 같은 실행기를
+사용하며 기존 20초 기한, 단계별 경과 시간과 원본 출력을 Windows native 로그에 보관한다.
+
 계약 테스트는 `bun test ./tests`처럼 저장소의 실제 테스트 경로에 `./`를 붙여 실행한다.
 경로 접두사가 없는 `bun test tests/api`는 파일명 필터로 해석해 build 디렉터리의 과거
 테스트 복사본까지 실행할 수 있다. 집중 검사에도 `bun test ./tests/api`를 사용한다.
@@ -351,6 +370,9 @@ Linux와 macOS에서는 기존 추출 트리와 루트의 심볼릭 링크가 �
 `api/window-activation.test.ts`는 `showInactive`, `blur`, `activate`의 입력과 결과,
 작업 권한과 열린 창 검사, 설정 순서의 후보 선택과 OS 전환 거부를 검사한다.
 `lifecycle/windows-activation.test.ts`는 실제 두 Win32 창과 EDIT 입력 필드를 사용한다.
+창 배치와 전경 요청의 메시지를 처리한 뒤 스레드 활성 창과 EDIT 포커스를 설정하며,
+다시 메시지를 처리하기 전후에 같은 입력 상태인지 검사한다. 각 HWND의 소유 스레드와
+프로세스를 확인하고 실패 시 최근 64개 활성화 메시지와 호출 전후 입력 상태를 출력한다.
 일반, 최소화, 최대화와 최대화에서 최소화한 창을 표시하거나 숨긴 뒤 `showInactive`를
 호출해 활성 창과 키보드 입력 포커스 보존, 표시 상태와 이벤트, snapshot의 일치를 확인한다.
 `activate`가 숨김과 최소화를 유지하는지도 검사한다. 전경 전환을 OS가 거부한 실행은
@@ -701,6 +723,9 @@ show state와 fullscreen 복원 실패가 프로세스 내부의 이전 검사 �
 메시지를 추가로 pump하지 않으며 geometry와 show-state assertion은 그대로 유지한다.
 
 `windows-size-constraints.test.ts`는 전체 계약 검사의 같은 프로세스에서 계속 실행한다.
+fullscreen 경계 비교 구간에서는 복원, 제약과 크기 변경, fullscreen 진입, 표시 상태와 DPI
+변경 직후의 최근 여덟 상태를 보관한다. 실제 outer 좌표와 placement, 최소화 여부를 함께
+기록하며 창 상태 변경 순서와 기존 assertion은 유지한다.
 Windows 계약 CI는 전체 검사 뒤 같은 파일을 새 Bun 프로세스에서 한 번 실행해 결과를 비교한다.
 기존 표시, 포커스, DPI, 전체화면 assertion과 30초 기한을 유지하며 재시도하지 않는다.
 `BUNAWAY_SIZE_CONSTRAINTS_DIAGNOSTICS=1`이면 숨김 요청, 입력 창 포커스 지정, 제약 갱신,
@@ -766,6 +791,9 @@ Apple 공증 서비스와 도구 실패는 테스트 자식 프로세스의 PATH
 `api/storage-transfers.test.ts`는 두 endpoint, 추가 옵션 거부와 독립적인 전송 권한을 검사한다.
 `windows-bun-storage.ts`는 실제 source 및 destination 핸들로 여러 chunk의 임의 바이트,
 빈 파일, 기존 대상 보존, 크기 상한, 링크와 경로 거부 및 같은 parent의 파일과 디렉터리 rename을 확인한다.
+소스와 빌드된 어댑터 각각에서 write/copy/append/move를 32회 수행하며 없는 대상의
+오류 분류, 기존 대상 충돌과 원본 보존도 확인한다. 각 move 전에 GC를 실행해
+FFI 반환값 할당이 네이티브 오류 상태에 영향을 주는 경로를 검사하며 작업을 재시도하지 않는다.
 다른 parent 이동은 source를 유지한 채 UNSUPPORTED로 거부하며, 다른 볼륨은 식별 가능한 경우에만 검사한다.
 `windows-storage-metadata.ts`는 실제 WebView2와 I/O Worker에서 copy/move와 원본 및 복사본,
 일반 쓰기 권한 거부를 검사하며 `mise run host:windows`에 포함한다.
@@ -1039,11 +1067,21 @@ iOS 실제 호스트 검사는 직접 WebSocket과 최초 연결을 강제로 �
 `lifecycle/macos-webview-diagnostics.test.ts`는 창별 64개 기록 상한과 미등록 NSError
 domain 제거, signed code를 검사한다. 실제 macOS arm64에서는 NSError의 -999 code를
 FFI로 읽는 ABI도 확인하며 기존 macOS native 실행기에 포함한다.
+`action-policy`와 `response-policy`는 정책 결과를 기록하고, 각각의 `-returned` 단계는
+네이티브 decision handler 호출이 반환한 뒤 기록한다. 허용 결정과 호출 완료를 구분하며
+이 기록만으로 WebKit의 이후 탐색 진행을 보장하지 않는다.
 `macos-network.ts`의 성공 결과에는 고정 WebView 단계 기록을 함께 보관한다.
 실패한 실행은 기존 catch가 출력한 호스트 로그를 기존 CI artifact의 host.log에서 확인한다.
 #170의 raw report, counter와 pipe 보관 작업을 이 변경에 복제하지 않는다.
 기존 19개 assertion과 기한은 유지하며 통과한 단일 실행으로 과거 startup timeout의
 원인이 해결됐다고 판단하지 않는다.
+
+Windows 호스트의 `webview-creation`은 환경 요청, 반환과 완료, 각 창의 환경 수신,
+컨트롤러 요청, 반환과 완료 및 설정 완료를 기록한다. 창 ID, 단조 시계의 전체 및 현재
+단계 경과 시간과 대기 중인 생성 수로 지연 구간을 구분한다. `webview-creation-timeout`은
+기존 30초 준비 기한을 넘긴 시점의 단계와 UI 준비, 시작 요청, 창 수명 상태를 기록한다.
+`webview-ready`는 컨트롤러 획득 시의 기존 기록이며 설정 완료나 SDK 준비를 뜻하지 않는다.
+콜백, 메시지 pump, 기한과 준비 완료 조건은 변경하지 않는다.
 
 `lifecycle/macos-webview-readiness.test.ts`는 실제 controls 웹 fixture와 SDK를 browser
 번들로 만들고 별도 Bun 자식에서 arrival 응답을 보류한다. arrival과 loading=false만으로
@@ -1051,6 +1089,10 @@ FFI로 읽는 ABI도 확인하며 기존 macOS native 실행기에 포함한다.
 확인하는지 검사한다. 이전 문서의 held 수가 남아 있는 두 번째, 세 번째 연결도 포함한다.
 네이티브 controls fixture는 같은 준비 절차를 사용하고 기존 assertion과 15초 기한을 유지한다.
 이 검사는 fixture의 명령 시작 순서를 검증하며 WKWebView 실행은 기존 native CI에서 확인한다.
+실패 artifact의 `controls-progress.json`은 backend Worker가 동기식으로 교체한 마지막
+준비 대기 단계와 arrival, held, cancelled 수를 보관한다. 대소문자 URL 탐색의 호출 전후,
+실패 후 진단 상태 조회의 전후도 기록하므로 UI 로그가 멈춰도 대기 지점을 구분할 수 있다.
+이 기록만으로 네이티브 호출이 멈췄다고 판단하지 않는다.
 
 Windows 자산 probe는 두 Worker의 결과와 종료를 모두 확인한 뒤 프로세스를 마칩니다.
 프로세스 종료 직후 Windows의 이미지 핸들 해제가 지연될 때는 해당 임시 폴더의 정리만

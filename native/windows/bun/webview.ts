@@ -101,6 +101,39 @@ export class WebView {
   private downloads: WebViewDownloads | undefined;
   private loading = false;
   private stoppedNavigationId: bigint | undefined;
+  private readonly creationStarted = performance.now();
+  private creationPhase = "environment-waiting";
+  private phaseStarted = this.creationStarted;
+
+  /** Snapshot startup progress without querying COM or changing the preparation deadline. */
+  creationSnapshot() {
+    const now = performance.now();
+    return {
+      phase: this.creationPhase,
+      elapsedMs: Math.round(now - this.creationStarted),
+      phaseElapsedMs: Math.round(now - this.phaseStarted),
+      pendingCreations: this.creating,
+      closing: this.closing,
+    };
+  }
+
+  /** Fixed creation milestones remain bounded even when the native completion arrives during cleanup. */
+  private creationStage(stage: string, result?: number): void {
+    // A synchronous request return must not overwrite a reentrant completion's phase.
+    if (!stage.endsWith("-returned")) {
+      this.creationPhase = stage;
+      this.phaseStarted = performance.now();
+    }
+    this.hooks.log("webview-creation", {
+      stage,
+      ...this.creationSnapshot(),
+      ...(result === undefined
+        ? {}
+        : {
+            result,
+          }),
+    });
+  }
 
   /** Begin async WebView2 creation; ready fires after configuration, independently of HWND visibility. */
   constructor(
@@ -184,6 +217,7 @@ export class WebView {
       ],
       (result, created) => {
         this.creating--;
+        this.creationStage("controller-completed", Number(result));
         try {
           if (this.closing && (Number(result) < 0 || !created)) {
             return;
@@ -224,6 +258,7 @@ export class WebView {
             ])(1),
             "put_IsVisible",
           );
+          this.creationStage("configured");
           this.hooks.ready();
         } catch (error) {
           this.failure = error;
@@ -239,6 +274,7 @@ export class WebView {
         "ptr",
       ],
       (result, created) => {
+        this.creationStage("environment-completed", Number(result));
         if (Number(result) < 0 || !created) {
           for (const member of this.group.waiting) {
             member.creating--;
@@ -263,6 +299,7 @@ export class WebView {
     } else {
       this.group.waiting.add(this);
       if (!existing) {
+        this.creationStage("environment-requested");
         const result =
           this.loader.symbols.CreateCoreWebView2EnvironmentWithOptions(
             null,
@@ -270,6 +307,7 @@ export class WebView {
             null,
             environment.pointer,
           );
+        this.creationStage("environment-returned", result);
         if (result < 0) {
           this.creating--;
           this.group.waiting.delete(this);
@@ -287,6 +325,7 @@ export class WebView {
   /** Each member retains the same environment but owns its own controller and callback tokens. */
   private receiveEnvironment(environment: Pointer): void {
     this.creating--;
+    this.creationStage("environment-received");
     this.environment = environment;
     addRef(environment);
     try {
@@ -310,10 +349,12 @@ export class WebView {
         return;
       }
       this.creating++;
+      this.creationStage("controller-requested");
       const result = method(environment, 3, [
         "u64",
         "ptr",
       ])(this.hwnd, controller.pointer);
+      this.creationStage("controller-returned", result);
       if (result < 0) {
         this.creating--;
       }
