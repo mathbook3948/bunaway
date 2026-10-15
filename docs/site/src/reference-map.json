@@ -799,6 +799,7 @@
       "pages": {
         "reference/tooling/plugin-api": [
           "systemEvents",
+          "appearance",
           "specs",
           "supportsCreationOptions",
           "validateCreation",
@@ -1408,7 +1409,11 @@
       "windows.getMonitorNearestRect",
       "windows.getCursorPosition"
     ],
-    "reference/plugins/appearance": ["appearance.getPreferences"],
+    "reference/plugins/appearance": [
+      "appearance.getPreferences",
+      "appearance.getTheme",
+      "appearance.setTheme"
+    ],
     "reference/plugins/power": [
       "power.getStatus",
       "power.getIdleTime",

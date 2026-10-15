@@ -515,8 +515,8 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 - [x] Windows에서 모니터 추가, 제거와 display metrics 변경 이벤트 및 versioned snapshot 복구를 제공한다.
 - [x] Windows 커서의 물리 화면 좌표를 조회한다. 창 기준 physical/logical 변환은 기존 toLogical과 toPhysical을 사용한다.
 - [ ] 모니터별 좌표 변환과 혼합 DPI의 전역 논리 좌표계 지원 범위를 결정한다.
-- [ ] system/light/dark 테마를 앱과 창에 지정하고 조회한다.
-- [ ] 테마, accent color와 시스템 색 변경을 알린다.
+- [ ] system/light/dark 테마를 앱과 창에 지정하고 조회한다. 네이티브 프레임의 앱 기본값과 창 override는 구현했으며 WebView 콘텐츠 테마는 남아 있다.
+- [x] 테마, accent color와 시스템 색 변경을 알린다. appearance.changed는 고대비와 접근성 설정도 포함하며 동일 값은 생략한다.
 - [x] Windows 고대비와 OS forced colors 플래그, 시스템 색을 조회한다.
 - [ ] inverted colors 상태를 조회한다.
 - [x] Windows client-area animation 기준 reduced motion과 저장된 transparency 선호를 조회한다.
@@ -557,9 +557,9 @@ Modern Standby 및 사용자 절전 후 동작은 하드웨어 수동 검증으�
 `@bunaway/plugin-appearance`의 getPreferences로 저장된 앱 및 시스템 테마 선호,
 DWM accent와 시스템 색, 접근성 플래그를 조회한다. theme와 transparency의 누락 또는
 알 수 없는 DWORD는 null이다. [appearance API](./site/src/content/docs/reference/plugins/appearance.mdx)를 따른다.
-조회 구현과 실제 Windows 회귀를 추가했으며 테마 지정, 변경 이벤트, 접근성 지원 제어와
+조회와 프레임 테마 지정, 변경 이벤트 및 실제 Windows 회귀를 추가했다. 접근성 지원 제어와
 WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
-창별 테마 지정은 공유 WebView 프로필의 색 선호와 창별 override 관계를 결정해야 한다.
+프레임은 앱 기본값과 창별 override를 구분한다. WebView 콘텐츠 테마는 공유 프로필의 색 선호와 창별 override 관계를 결정해야 한다.
 
 ## 14. WebView 생성, 배치와 기본 제어
 

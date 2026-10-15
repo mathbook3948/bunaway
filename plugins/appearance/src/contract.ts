@@ -28,7 +28,101 @@ export const preferencesSchema = z.strictObject({
 });
 export type AppearancePreferences = z.output<typeof preferencesSchema>;
 
+export const themePreferenceSchema = z.enum([
+  "system",
+  "light",
+  "dark",
+]);
+export type ThemePreference = z.output<typeof themePreferenceSchema>;
+/** A window override is null when it inherits the app preference. High contrast suspends frame dark mode. */
+export const themeStateSchema = z.strictObject({
+  preference: themePreferenceSchema,
+  override: themePreferenceSchema.nullable(),
+  effectiveTheme: theme,
+  highContrast: z.boolean(),
+});
+export type ThemeState = z.output<typeof themeStateSchema>;
+
 /** Both platforms read the same preference snapshot without platform-specific handler decisions. */
 export type AppearanceInstance = {
   read(): AppearancePreferences;
 };
+
+const eventTheme = {
+  anyOf: [
+    {
+      enum: [
+        "light",
+        "dark",
+      ],
+    },
+    {
+      const: null,
+    },
+  ],
+} as const;
+const eventColor = {
+  type: "string",
+  pattern: "^#[0-9a-f]{6}$",
+} as const;
+/** Native events use the protocol's portable schema representation. */
+export const appearanceEvents = {
+  "appearance.changed": {
+    type: "object",
+    properties: {
+      appsTheme: eventTheme,
+      systemTheme: eventTheme,
+      accentColor: eventColor,
+      highContrast: {
+        type: "boolean",
+      },
+      forcedColors: {
+        type: "boolean",
+      },
+      reducedMotion: {
+        type: "boolean",
+      },
+      transparencyEnabled: {
+        anyOf: [
+          {
+            type: "boolean",
+          },
+          {
+            const: null,
+          },
+        ],
+      },
+      screenReaderEnabled: {
+        type: "boolean",
+      },
+      colors: {
+        type: "object",
+        properties: {
+          window: eventColor,
+          windowText: eventColor,
+          highlight: eventColor,
+          highlightText: eventColor,
+        },
+        required: [
+          "window",
+          "windowText",
+          "highlight",
+          "highlightText",
+        ],
+        additionalProperties: false,
+      },
+    },
+    required: [
+      "appsTheme",
+      "systemTheme",
+      "accentColor",
+      "highContrast",
+      "forcedColors",
+      "reducedMotion",
+      "transparencyEnabled",
+      "screenReaderEnabled",
+      "colors",
+    ],
+    additionalProperties: false,
+  },
+} as const;

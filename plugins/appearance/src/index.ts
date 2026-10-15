@@ -1,5 +1,9 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { appearanceOperations } from "#appearance/operations";
+import { appearanceEvents } from "#appearance/contract";
+import {
+  appearanceOperations,
+  windowsAppearanceOperations,
+} from "#appearance/operations";
 import {
   dispose as disposeMacos,
   initialize as initializeMacos,
@@ -8,10 +12,11 @@ import {
   dispose as disposeWindows,
   initialize as initializeWindows,
 } from "#appearance/platforms/windows";
-/** Query preferences. Theme overrides and accessibility support control are separate host features. */
+/** Query OS appearance, observe changes and control Windows native frame preferences. */
 export default defineNativePlugin(
   {
     name: "appearance",
+    events: appearanceEvents,
     platforms: {
       macos: {
         thread: "ui",
@@ -20,16 +25,22 @@ export default defineNativePlugin(
         operations: appearanceOperations,
       },
       windows: {
+        thread: "ui",
         initialize: initializeWindows,
         dispose: disposeWindows,
-        operations: appearanceOperations,
+        operations: windowsAppearanceOperations,
       },
     },
   },
   (api) => ({
+    ...api,
     getPreferences: (options?: import("@bunaway/plugin").NativeInvokeOptions) =>
       api.getPreferences(null, options),
   }),
 );
 
-export type { AppearancePreferences } from "#appearance/contract";
+export type {
+  AppearancePreferences,
+  ThemePreference,
+  ThemeState,
+} from "#appearance/contract";
