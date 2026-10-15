@@ -18,6 +18,8 @@ import {
 export {
   AUTOSTART_ARGUMENT,
   AUTOSTART_HIDDEN_ARGUMENT,
+  AUTOSTART_MUTEX_PREFIX,
+  AUTOSTART_MUTEX_WAIT_MS,
 } from "./autostart-launch.ts";
 
 export {

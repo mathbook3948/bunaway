@@ -3,6 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { frameworkRoot } from "#cli/files";
+import {
+  captureNativeChild,
+  printNativeChildDiagnostics,
+} from "../fixtures/native-child-diagnostics.ts";
 
 // Windows PATH can select a standalone JRE. Use the compiler's JDK for both commands.
 const javac = Bun.which(
@@ -26,7 +30,17 @@ test.skipIf(!javac || !java)(
       throw new Error("A JDK is required");
     }
     const root = await mkdtemp(resolve(tmpdir(), "bunaway-android-assets-"));
-    async function run(executable: string, args: string[]): Promise<string> {
+    async function run(
+      phase: "compile" | "harness",
+      executable: string,
+      args: string[],
+    ): Promise<string> {
+      const diagnostics = resolve(
+        frameworkRoot,
+        "build/windows-matrix-logs/android-backend-assets",
+        phase,
+      );
+      console.error(`Android backend assets ${phase}: ${executable}`);
       const child = Bun.spawn(
         [
           executable,
@@ -35,19 +49,24 @@ test.skipIf(!javac || !java)(
         {
           stdout: "pipe",
           stderr: "pipe",
-          timeout: 15000,
         },
       );
-      const [output, errors, code] = await Promise.all([
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-        child.exited,
-      ]);
-      expect(code, `${output}\n${errors}`).toBe(0);
-      return output;
+      try {
+        const { stdout, stderr, exitCode } = await captureNativeChild(
+          child,
+          diagnostics,
+          phase,
+          15000,
+        );
+        expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
+        return stdout;
+      } catch (error) {
+        await printNativeChildDiagnostics(diagnostics, root);
+        throw error;
+      }
     }
     try {
-      await run(javac, [
+      await run("compile", javac, [
         "--release",
         "17",
         "-encoding",
@@ -64,7 +83,7 @@ test.skipIf(!javac || !java)(
         ),
       ]);
       expect(
-        await run(java, [
+        await run("harness", java, [
           "-cp",
           root,
           "dev.bunaway.host.BackendAssetsHarness",

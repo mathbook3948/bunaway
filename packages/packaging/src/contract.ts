@@ -135,6 +135,8 @@ export interface ChannelConfig {
   webView2?: "check" | "bootstrap";
   desktopShortcut?: boolean;
   startMenuShortcut?: boolean;
+  /** Offer an unchecked current-user login task in per-user EXE installers. */
+  autostart?: boolean;
   /** Optional installer tasks register candidates; Windows users choose defaults. */
   associations?: {
     files?: {

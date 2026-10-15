@@ -50,6 +50,7 @@ const CHANNEL_KEYS: Record<ChannelId, string[]> = {
     "webView2",
     "desktopShortcut",
     "startMenuShortcut",
+    "autostart",
     "associations",
     "uninstall",
     "signing",
@@ -67,6 +68,7 @@ const CHANNEL_KEYS: Record<ChannelId, string[]> = {
     "webView2",
     "desktopShortcut",
     "startMenuShortcut",
+    "autostart",
     "associations",
     "uninstall",
     "signing",
@@ -480,12 +482,18 @@ export function parsePackaging(text: string): PackagingConfig {
       for (const flag of [
         "desktopShortcut",
         "startMenuShortcut",
+        "autostart",
         "unvirtualizedData",
       ] as const) {
         const value = optionalBoolean(options[flag], `${channelPath}.${flag}`);
         if (value !== undefined) {
           channelConfig[flag] = value;
         }
+      }
+      if (channelConfig.autostart && channelConfig.scope === "perMachine") {
+        fail(
+          `bunaway.json.bundle: ${channelPath}.autostart requires perUser scope.`,
+        );
       }
       if (options.uninstall !== undefined) {
         const uninstall = record(options.uninstall, `${channelPath}.uninstall`);

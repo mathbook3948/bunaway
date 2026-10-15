@@ -1,6 +1,6 @@
 import { dlopen, type Pointer, ptr, read, toArrayBuffer } from "bun:ffi";
 import { toUSVString } from "node:util";
-import { BunawayError } from "@bunaway/protocol";
+import { AUTOSTART_MUTEX_PREFIX, BunawayError } from "@bunaway/protocol";
 export const RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 export const APPROVAL_KEY =
   "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run";
@@ -17,6 +17,14 @@ const KEY_SET_VALUE_64 = 0x0002 | 0x0100;
 const READ_RAW_64 = 0x0000ffff | 0x10000000 | 0x00010000;
 const MAX_VALUE_BYTES = 65536;
 const APPROVAL_BYTES = 12;
+const TOKEN_QUERY = 0x0008;
+const TOKEN_USER = 1;
+const TOKEN_USER_BUFFER_BYTES = 256;
+const MAX_SID_STRING_UNITS = 256;
+const MUTEX_ACCESS = 0x00100000 | 0x0001;
+const WAIT_ACQUIRED = 0;
+const WAIT_ABANDONED = 128;
+const WAIT_TIMEOUT = 258;
 
 function wide(value: string): Buffer {
   return Buffer.from(`${value}\0`, "utf16le");
@@ -37,6 +45,31 @@ function check(result: number): void {
  */
 export function createRegistry() {
   const registry = dlopen("advapi32.dll", {
+    OpenProcessToken: {
+      args: [
+        "u64",
+        "u32",
+        "ptr",
+      ],
+      returns: "i32",
+    },
+    GetTokenInformation: {
+      args: [
+        "u64",
+        "u32",
+        "ptr",
+        "u32",
+        "ptr",
+      ],
+      returns: "i32",
+    },
+    ConvertSidToStringSidW: {
+      args: [
+        "ptr",
+        "ptr",
+      ],
+      returns: "i32",
+    },
     RegGetValueW: {
       args: [
         "u64",
@@ -112,6 +145,7 @@ export function createRegistry() {
     registry.close();
     throw error;
   }
+  let userSid: string | undefined;
   let disposed = false;
   function active(): void {
     if (disposed) {
@@ -121,7 +155,59 @@ export function createRegistry() {
       });
     }
   }
+  /** Check and mutate one Run identity while all participating processes are excluded. */
+  function withRunLock<T>(name: string, work: () => T): T {
+    active();
+    userSid ??= currentUserSid(registry.symbols, kernel.symbols);
+    const mutexName = wide(`${AUTOSTART_MUTEX_PREFIX}${userSid}.${name}`);
+    const handle = kernel.symbols.CreateMutexExW(
+      null,
+      ptr(mutexName),
+      0,
+      MUTEX_ACCESS,
+    );
+    if (!handle) {
+      check(kernel.symbols.GetLastError());
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Could not create autostart mutex.",
+      });
+    }
+    let owned = false;
+    try {
+      // Keep cancellation and unrelated I/O operations responsive. Contention
+      // returns BUSY immediately; only installers wait for another writer.
+      const result = kernel.symbols.WaitForSingleObject(handle, 0);
+      if (result === WAIT_TIMEOUT) {
+        throw new BunawayError({
+          code: "BUSY",
+          message:
+            "Another process is maintaining this autostart registration.",
+        });
+      }
+      owned = result === WAIT_ACQUIRED || result === WAIT_ABANDONED;
+      if (!owned) {
+        check(kernel.symbols.GetLastError());
+        throw new BunawayError({
+          code: "INTERNAL",
+          message: "Could not acquire autostart mutex.",
+        });
+      }
+      return work();
+    } finally {
+      try {
+        if (owned && !kernel.symbols.ReleaseMutex(handle)) {
+          check(kernel.symbols.GetLastError());
+        }
+      } finally {
+        if (!kernel.symbols.CloseHandle(handle)) {
+          check(kernel.symbols.GetLastError());
+        }
+      }
+    }
+  }
   return {
+    withRunLock,
     /** MSIX requires a manifest StartupTask, not this unpackaged Run implementation. */
     unpackaged(): void {
       active();
@@ -173,66 +259,71 @@ export function createRegistry() {
       };
     },
     write(name: string, command: string): void {
-      active();
-      const path = wide(RUN_KEY);
-      const value = wide(name);
-      const data = wide(command);
-      const handle = new BigUint64Array(1);
-      check(
-        registry.symbols.RegCreateKeyExW(
+      withRunLock(name, () => {
+        const path = wide(RUN_KEY);
+        const value = wide(name);
+        const data = wide(command);
+        const handle = new BigUint64Array(1);
+        check(
+          registry.symbols.RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            ptr(path),
+            0,
+            null,
+            0,
+            KEY_SET_VALUE_64,
+            null,
+            ptr(handle),
+            null,
+          ),
+        );
+        try {
+          check(
+            registry.symbols.RegSetValueExW(
+              handle[0] ?? 0n,
+              ptr(value),
+              0,
+              REG_SZ,
+              ptr(data),
+              data.length,
+            ),
+          );
+        } finally {
+          check(registry.symbols.RegCloseKey(handle[0] ?? 0n));
+        }
+      });
+    },
+    remove(name: string): void {
+      withRunLock(name, () => {
+        const path = wide(RUN_KEY);
+        const value = wide(name);
+        const handle = new BigUint64Array(1);
+        const result = registry.symbols.RegOpenKeyExW(
           HKEY_CURRENT_USER,
           ptr(path),
           0,
-          null,
-          0,
           KEY_SET_VALUE_64,
-          null,
           ptr(handle),
-          null,
-        ),
-      );
-      try {
-        check(
-          registry.symbols.RegSetValueExW(
+        );
+        if (
+          result === ERROR_FILE_NOT_FOUND ||
+          result === ERROR_PATH_NOT_FOUND
+        ) {
+          return;
+        }
+        check(result);
+        try {
+          const deleted = registry.symbols.RegDeleteValueW(
             handle[0] ?? 0n,
             ptr(value),
-            0,
-            REG_SZ,
-            ptr(data),
-            data.length,
-          ),
-        );
-      } finally {
-        check(registry.symbols.RegCloseKey(handle[0] ?? 0n));
-      }
-    },
-    remove(name: string): void {
-      active();
-      const path = wide(RUN_KEY);
-      const value = wide(name);
-      const handle = new BigUint64Array(1);
-      const result = registry.symbols.RegOpenKeyExW(
-        HKEY_CURRENT_USER,
-        ptr(path),
-        0,
-        KEY_SET_VALUE_64,
-        ptr(handle),
-      );
-      if (result === ERROR_FILE_NOT_FOUND || result === ERROR_PATH_NOT_FOUND) {
-        return;
-      }
-      check(result);
-      try {
-        const deleted = registry.symbols.RegDeleteValueW(
-          handle[0] ?? 0n,
-          ptr(value),
-        );
-        if (deleted !== ERROR_FILE_NOT_FOUND) {
-          check(deleted);
+          );
+          if (deleted !== ERROR_FILE_NOT_FOUND) {
+            check(deleted);
+          }
+        } finally {
+          check(registry.symbols.RegCloseKey(handle[0] ?? 0n));
         }
-      } finally {
-        check(registry.symbols.RegCloseKey(handle[0] ?? 0n));
-      }
+      });
     },
     parse(command: string): string[] {
       active();
@@ -295,6 +386,42 @@ function loadShell() {
 }
 function loadKernel() {
   return dlopen("kernel32.dll", {
+    GetCurrentProcess: {
+      args: [],
+      returns: "u64",
+    },
+    GetLastError: {
+      args: [],
+      returns: "u32",
+    },
+    CloseHandle: {
+      args: [
+        "u64",
+      ],
+      returns: "i32",
+    },
+    CreateMutexExW: {
+      args: [
+        "ptr",
+        "ptr",
+        "u32",
+        "u32",
+      ],
+      returns: "u64",
+    },
+    WaitForSingleObject: {
+      args: [
+        "u64",
+        "u32",
+      ],
+      returns: "u32",
+    },
+    ReleaseMutex: {
+      args: [
+        "u64",
+      ],
+      returns: "i32",
+    },
     LocalFree: {
       args: [
         "ptr",
@@ -309,6 +436,93 @@ function loadKernel() {
       returns: "i32",
     },
   });
+}
+
+/** Resolve the effective process user's stable SID without relying on environment names. */
+function currentUserSid(
+  registry: {
+    OpenProcessToken: (
+      process: number | bigint,
+      access: number,
+      token: Pointer,
+    ) => number;
+    GetTokenInformation: (
+      token: number | bigint,
+      kind: number,
+      data: Pointer,
+      bytes: number,
+      size: Pointer,
+    ) => number;
+    ConvertSidToStringSidW: (sid: Pointer, text: Pointer) => number;
+  },
+  kernel: ReturnType<typeof loadKernel>["symbols"],
+): string {
+  const token = new BigUint64Array(1);
+  if (
+    !registry.OpenProcessToken(
+      kernel.GetCurrentProcess(),
+      TOKEN_QUERY,
+      ptr(token),
+    )
+  ) {
+    check(kernel.GetLastError());
+    throw new BunawayError({
+      code: "INTERNAL",
+      message: "Could not inspect autostart user token.",
+    });
+  }
+  try {
+    // TOKEN_USER contains one SID_AND_ATTRIBUTES plus a SID of at most 68 bytes.
+    const info = Buffer.alloc(TOKEN_USER_BUFFER_BYTES);
+    const size = new Uint32Array(1);
+    if (
+      !registry.GetTokenInformation(
+        token[0] ?? 0n,
+        TOKEN_USER,
+        ptr(info),
+        info.length,
+        ptr(size),
+      )
+    ) {
+      check(kernel.GetLastError());
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Could not read autostart user SID.",
+      });
+    }
+    const textAddress = new BigUint64Array(1);
+    // The native TOKEN_USER starts with a SID pointer into the owned info buffer.
+    const sid = Number(info.readBigUInt64LE(0)) as Pointer;
+    if (!registry.ConvertSidToStringSidW(sid, ptr(textAddress))) {
+      check(kernel.GetLastError());
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Could not format autostart user SID.",
+      });
+    }
+    const address = Number(textAddress[0]) as Pointer;
+    try {
+      let units = 0;
+      while (units < MAX_SID_STRING_UNITS && read.u16(address, units * 2)) {
+        units++;
+      }
+      if (units === MAX_SID_STRING_UNITS) {
+        throw new BunawayError({
+          code: "INTERNAL",
+          message: "Autostart user SID exceeds its read limit.",
+        });
+      }
+      return Buffer.from(toArrayBuffer(address, 0, units * 2)).toString(
+        "utf16le",
+      );
+    } finally {
+      kernel.LocalFree(address);
+    }
+  } finally {
+    if (!kernel.CloseHandle(token[0] ?? 0n)) {
+      check(kernel.GetLastError());
+    }
+  }
 }
 
 /** Read only strict REG_SZ, keeping invalid external edits separate from an absent value. */
