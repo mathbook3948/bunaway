@@ -723,6 +723,9 @@ show state와 fullscreen 복원 실패가 프로세스 내부의 이전 검사 �
 메시지를 추가로 pump하지 않으며 geometry와 show-state assertion은 그대로 유지한다.
 
 `windows-size-constraints.test.ts`는 전체 계약 검사의 같은 프로세스에서 계속 실행한다.
+fullscreen 경계 비교 구간에서는 복원, 제약과 크기 변경, fullscreen 진입, 표시 상태와 DPI
+변경 직후의 최근 여덟 상태를 보관한다. 실제 outer 좌표와 placement, 최소화 여부를 함께
+기록하며 창 상태 변경 순서와 기존 assertion은 유지한다.
 Windows 계약 CI는 전체 검사 뒤 같은 파일을 새 Bun 프로세스에서 한 번 실행해 결과를 비교한다.
 기존 표시, 포커스, DPI, 전체화면 assertion과 30초 기한을 유지하며 재시도하지 않는다.
 `BUNAWAY_SIZE_CONSTRAINTS_DIAGNOSTICS=1`이면 숨김 요청, 입력 창 포커스 지정, 제약 갱신,

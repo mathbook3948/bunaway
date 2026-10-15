@@ -200,6 +200,12 @@ test.skipIf(process.platform !== "win32")(
           user.symbols.GetWindowPlacement(window, pointer),
         ),
       );
+      const rect = Buffer.alloc(16);
+      assert(
+        withBuffer(rect, (pointer) =>
+          user.symbols.GetWindowRect(window, pointer),
+        ),
+      );
       const ownerProcess = new Uint32Array(1);
       const ownerThread = messaging.symbols.GetWindowThreadProcessId(
         window,
@@ -226,6 +232,7 @@ test.skipIf(process.platform !== "win32")(
         fullscreen: windows?.isFullscreen(window),
         showCmd: placement.readUInt32LE(8),
         flags: placement.readUInt32LE(4),
+        outer: Array.from(new Int32Array(rect.buffer, rect.byteOffset, 4)),
         normal: Array.from(
           new Int32Array(placement.buffer, placement.byteOffset + 28, 4),
         ),
@@ -645,6 +652,7 @@ test.skipIf(process.platform !== "win32")(
       assertLogicalClientSize(window, originalDpi, 600, 450);
 
       user.symbols.ShowWindow(window, SW_MINIMIZE);
+      stateDiagnostic("before-fullscreen-minimized", originalDpi, true);
       windows.setSizeConstraints(window, {
         minWidth: 620,
         minHeight: 480,
@@ -654,6 +662,7 @@ test.skipIf(process.platform !== "win32")(
       assert(user.symbols.IsIconic(window));
       assertPlacementLogicalSize(window, originalDpi, 620, 480);
       user.symbols.ShowWindow(window, SW_RESTORE);
+      stateDiagnostic("before-fullscreen-restored", originalDpi, true);
       assertLogicalClientSize(window, originalDpi, 620, 480);
 
       windows.setSizeConstraints(window, {
@@ -662,18 +671,27 @@ test.skipIf(process.platform !== "win32")(
         maxWidth: 800,
         maxHeight: 600,
       });
+      stateDiagnostic("before-fullscreen-constraints", originalDpi, true);
       windows.setSize(window, 600, 450);
+      stateDiagnostic("before-fullscreen-sized", originalDpi, true);
       windows.setFullscreen(window, true);
+      stateDiagnostic("after-fullscreen-entry", originalDpi, true);
       for (const visible of [
         false,
         true,
       ]) {
         user.symbols.ShowWindow(window, visible ? SW_SHOW : SW_HIDE);
+        stateDiagnostic(
+          "fullscreen-after-show-or-hide",
+          windows.getDpi(window),
+          visible,
+        );
         for (const dpi of [
           doubleDpi,
           originalDpi,
         ]) {
           sendDpiChanged(window, dpi);
+          stateDiagnostic("fullscreen-after-DPI", dpi, visible);
           assertFullscreenMonitorBounds(window);
           assert.equal(user.symbols.IsWindowVisible(window) !== 0, visible);
           assert.deepEqual(windows.getSizeConstraints(window), {
