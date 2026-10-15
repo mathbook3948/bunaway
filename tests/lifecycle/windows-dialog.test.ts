@@ -372,6 +372,7 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
         );
       } catch (error) {
         const state = {
+          time: Date.now(),
           cancelAcknowledged,
           visible: native.symbols.IsWindowVisible(cancelledHwnd),
           current: buttonState(cancelled.title, 2),

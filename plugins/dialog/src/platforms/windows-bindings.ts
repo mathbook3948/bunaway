@@ -1,6 +1,7 @@
 import {
   CFunction,
   dlopen,
+  JSCallback,
   type Pointer,
   ptr,
   read,
@@ -20,6 +21,8 @@ import type { DialogDriver } from "#dialog/platforms/windows";
 const HRESULT_CANCELLED = 0x800704c7;
 const E_ABORT = -2147467260;
 const WM_TIMER = 0x0113;
+const WM_QUIT = 0x0012;
+const PM_REMOVE = 1;
 const TIMER_ID = 1n;
 const POLL_INTERVAL_MS = 25;
 const FOS_FORCEFILESYSTEM = 0x40;
@@ -114,6 +117,22 @@ export function createDialog(
             "u64",
           ],
           returns: "i32",
+        },
+        PeekMessageW: {
+          args: [
+            "ptr",
+            "u64",
+            "u32",
+            "u32",
+            "u32",
+          ],
+          returns: "i32",
+        },
+        PostQuitMessage: {
+          args: [
+            "i32",
+          ],
+          returns: "void",
         },
       });
     } catch (error) {
@@ -364,44 +383,84 @@ export function createDialog(
         }
         let callbackFailure: unknown;
         let closing = false;
+        let handling = false;
+        let active = true;
         let pollReported = false;
-        const hwnd = services.createWindow((message) => {
-          if (message !== WM_TIMER || closing) {
-            return;
-          }
-          try {
-            const report = !pollReported;
-            pollReported = true;
-            if (report) {
-              console.log("dialog poll enter");
-            }
-            const interrupted = poll();
-            if (report) {
-              console.log("dialog poll returned", interrupted);
-            }
-            if (!interrupted) {
-              return;
-            }
-          } catch (error) {
-            console.error("dialog poll failed", error);
-            callbackFailure ??= error;
-          }
-          // Timer WndProc stays on this STA. Never throw through Windows' callback stack.
-          console.log("dialog Close enter");
-          const result = close(E_ABORT);
-          console.log("dialog Close returned", result);
-          if (result >= 0) {
-            closing = true;
-          } else {
-            callbackFailure ??= new BunawayError({
-              code: "INTERNAL",
-              message: "Windows could not close the file dialog.",
-            });
-          }
-        });
+        const hwnd = services.createWindow(() => {});
+        let callback: JSCallback | undefined;
         let timer = false;
         try {
-          if (!user.symbols.SetTimer(hwnd, TIMER_ID, POLL_INTERVAL_MS, null)) {
+          callback = new JSCallback(
+            () => {
+              if (!active || handling) {
+                return;
+              }
+              // COM calls can pump messages. Guard before polling or attempting Close.
+              handling = true;
+              try {
+                try {
+                  const report = !pollReported;
+                  pollReported = true;
+                  if (report) {
+                    console.log("dialog timerproc poll enter", Date.now());
+                  }
+                  const interrupted = poll();
+                  if (report) {
+                    console.log(
+                      "dialog timerproc poll returned",
+                      interrupted,
+                      Date.now(),
+                    );
+                  }
+                  if (!interrupted) {
+                    return;
+                  }
+                } catch (error) {
+                  callbackFailure ??= error;
+                }
+                console.log("dialog timerproc Close enter", Date.now());
+                const result = close(E_ABORT);
+                console.log(
+                  "dialog timerproc Close returned",
+                  result,
+                  Date.now(),
+                );
+                if (result >= 0) {
+                  closing = true;
+                } else if (!closing) {
+                  callbackFailure ??= new BunawayError({
+                    code: "INTERNAL",
+                    message: "Windows could not close the file dialog.",
+                    details: {
+                      hresult: result >>> 0,
+                    },
+                  });
+                }
+              } catch (error) {
+                // Never propagate exceptions through a native TIMERPROC stack.
+                callbackFailure ??= error;
+              } finally {
+                handling = false;
+              }
+            },
+            {
+              args: [
+                "u64",
+                "u32",
+                "u64",
+                "u32",
+              ],
+              returns: "void",
+            },
+          );
+          if (
+            !user.symbols.SetTimer(
+              hwnd,
+              TIMER_ID,
+              POLL_INTERVAL_MS,
+              callback.ptr,
+            )
+          ) {
             throw new BunawayError({
               code: "INTERNAL",
               message: "Dialog cancellation timer failed.",
@@ -490,11 +549,35 @@ export function createDialog(
             paths,
           };
         } finally {
+          active = false;
           if (timer) {
             user.symbols.KillTimer(hwnd, TIMER_ID);
           }
-          // Destroying the HWND invalidates queued WM_TIMER messages before DLL disposal.
-          services.destroyWindow(hwnd);
+          // KillTimer leaves queued callback pointers. Drain this private HWND before releasing ours.
+          const message = Buffer.alloc(48); // MSG on Win64.
+          let quitCode: number | undefined;
+          while (
+            user.symbols.PeekMessageW(
+              ptr(message),
+              hwnd,
+              WM_TIMER,
+              WM_TIMER,
+              PM_REMOVE,
+            )
+          ) {
+            // PeekMessage retrieves WM_QUIT regardless of the requested filter.
+            if (message.readUInt32LE(8) === WM_QUIT) {
+              quitCode = message.readInt32LE(16);
+            }
+          }
+          try {
+            services.destroyWindow(hwnd);
+          } finally {
+            callback?.close();
+            if (quitCode !== undefined) {
+              user.symbols.PostQuitMessage(quitCode);
+            }
+          }
         }
       },
       dispose,
