@@ -557,3 +557,18 @@ SDK가 반환하는 `NativePluginAdapter.prepare(operation, input, source, conte
 입력을 한 번 파싱하고 한 번만 실행할 수 있는 함수를 반환합니다. 선택적 context는 UI와
 I/O 모두 같은 취소와 실행 직전 재검사를 적용합니다. 이 단계는 호스트 통합용이며
 함수 맵 작성자가 직접 호출할 필요는 없습니다.
+
+### Windows 네이티브 메뉴 트리
+
+Windows UI 플러그인은 `@bunaway/plugin/windows-menu`의 `NativePopupMenu`를 사용해
+검증된 `NativeMenuItem` 트리의 HMENU를 소유할 수 있습니다. 생성자의 두 번째 인자를
+`true`로 지정하면 메뉴바 루트를 만듭니다. 기본값은 팝업입니다. 이 진입점은 Windows Bun
+전용이며 브라우저나 공통 계약에서 가져오지 않습니다. import만으로 DLL을 열지 않습니다.
+`handle`은 루트, `selected(command)`는 팝업 결과, `selectedAt(handle, position)`은
+`WM_MENUCOMMAND` 결과를 해석합니다. `contains(handle)`은 같은 트리인지 확인합니다.
+소유자는 HWND에서 분리한 뒤 `dispose()`로 전체 트리를 해제합니다. 성공한 해제는 반복해도
+안전하며 실패한 해제는 소유자가 보관하고 재시도해야 합니다.
+
+`NativeEnvironment.menus.windows`는 창 수명 조회, 메시지와 종료 구독, 메뉴 변경 후
+콘텐츠 갱신 및 네이티브 모달 루프 중단을 제공합니다. 중단 콜백은 `EndMenu`처럼 루프 종료만
+요청하며 창과 플러그인 자원 정리는 일반 Worker dispatch에서 수행합니다.

@@ -163,8 +163,12 @@ export const targetSchema = z.strictObject({
 export const clickedSchema = z.strictObject({
   menuId: idSchema,
   itemId: idSchema,
-  source: z.literal("tray"),
-  windowId: z.null(),
+  source: z.enum([
+    "tray",
+    "window",
+    "context",
+  ]),
+  windowId: idSchema.nullable(),
 });
 export const insertedItemSchema = z
   .custom<MenuItemInput>((value) => value !== null && typeof value === "object")
@@ -211,10 +215,21 @@ export const menuEvents = {
         type: "string",
       },
       source: {
-        const: "tray",
+        enum: [
+          "tray",
+          "window",
+          "context",
+        ],
       },
       windowId: {
-        const: null,
+        anyOf: [
+          {
+            type: "string",
+          },
+          {
+            const: null,
+          },
+        ],
       },
     },
     required: [
@@ -226,3 +241,17 @@ export const menuEvents = {
     additionalProperties: false,
   },
 } as const;
+
+/** Targets a particular HWND lifetime, never a view or a raw native handle. */
+export const windowTargetSchema = z.strictObject({
+  windowId: idSchema,
+});
+export const windowMenuSchema = windowTargetSchema.extend({
+  menuId: idSchema.nullable(),
+});
+/** Context-popup coordinates are physical screen pixels (including negative monitor origins). */
+export const contextMenuSchema = windowTargetSchema.extend({
+  menuId: idSchema,
+  x: z.number().int().min(-2147483648).max(2147483647),
+  y: z.number().int().min(-2147483648).max(2147483647),
+});

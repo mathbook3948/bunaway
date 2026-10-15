@@ -5,7 +5,8 @@
   "type": "module",
   "license": "UNLICENSED",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./windows-menu": "./src/windows-menu.ts"
   },
   "imports": {
     "#transport": {

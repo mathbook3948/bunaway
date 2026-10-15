@@ -1579,6 +1579,7 @@ export class Windows {
     dpi: number,
     style: bigint,
     exStyle: bigint,
+    hasMenu = false,
   ): ClientSize {
     const rect = new Int32Array([
       0,
@@ -1590,7 +1591,7 @@ export class Windows {
       user.symbols.AdjustWindowRectExForDpi(
         ptr(rect),
         Number(style),
-        0,
+        hasMenu ? 1 : 0,
         Number(exStyle),
         dpi,
       ),
@@ -1623,6 +1624,7 @@ export class Windows {
       dpi,
       style,
       exStyle,
+      user.symbols.GetMenu(window) !== 0n,
     );
     assert(
       user.symbols.SetWindowPos(
@@ -1635,6 +1637,26 @@ export class Windows {
         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
       ),
     );
+    if (user.symbols.GetMenu(window)) {
+      // AdjustWindowRectExForDpi counts one menu row. After width settles, account
+      // for native wrapping without moving or activating the owner.
+      const actual = this.clientSize(window);
+      const missingHeight = physicalPixels(size.height, dpi) - actual.height;
+      if (missingHeight !== 0) {
+        const outer = this.getBounds(window, "outer");
+        assert(
+          user.symbols.SetWindowPos(
+            window,
+            0n,
+            0,
+            0,
+            outer.width,
+            outer.height + missingHeight,
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+          ),
+        );
+      }
+    }
   }
 
   private getPlacement(window: bigint) {
@@ -1725,7 +1747,14 @@ export class Windows {
       placement.readInt32LE(rectOffset + 12) -
       placement.readInt32LE(rectOffset + 4);
     const { exStyle } = this.windowStyles(window);
-    const frame = this.outerSizeFor(0, 0, dpi, style, exStyle);
+    const frame = this.outerSizeFor(
+      0,
+      0,
+      dpi,
+      style,
+      exStyle,
+      user.symbols.GetMenu(window) !== 0n,
+    );
     return {
       width: ((outerWidth - frame.width) * DEFAULT_DPI) / dpi,
       height: ((outerHeight - frame.height) * DEFAULT_DPI) / dpi,
@@ -1748,6 +1777,7 @@ export class Windows {
       dpi,
       style,
       exStyle,
+      user.symbols.GetMenu(window) !== 0n,
     );
     const rectOffset = WINDOWPLACEMENT_NORMAL_RECT_OFFSET;
     const left = placement.readInt32LE(rectOffset);
@@ -1795,6 +1825,7 @@ export class Windows {
       dpi,
       style,
       exStyle,
+      user.symbols.GetMenu(window) !== 0n,
     );
     const maximum = this.outerSizeFor(
       constraints.maxWidth ?? 0,
@@ -1802,6 +1833,7 @@ export class Windows {
       dpi,
       style,
       exStyle,
+      user.symbols.GetMenu(window) !== 0n,
     );
     const info = new DataView(
       toArrayBuffer(callbackPointer(lparam), 0, MINMAXINFO_SIZE),
@@ -1848,7 +1880,14 @@ export class Windows {
     }
     const dpi = this.getDpi(window);
     const { style, exStyle } = this.windowStyles(window);
-    const frame = this.outerSizeFor(0, 0, dpi, style, exStyle);
+    const frame = this.outerSizeFor(
+      0,
+      0,
+      dpi,
+      style,
+      exStyle,
+      user.symbols.GetMenu(window) !== 0n,
+    );
     const size = constrainedOuterSize(
       position.getInt32(24, true),
       position.getInt32(28, true),
@@ -2022,7 +2061,7 @@ export class Windows {
       user.symbols.AdjustWindowRectExForDpi(
         ptr(frame),
         Number(style & ~WS_MAXIMIZE & ~WS_MINIMIZE),
-        0,
+        user.symbols.GetMenu(window) !== 0n ? 1 : 0,
         Number(exStyle),
         dpi,
       ),
@@ -2142,6 +2181,37 @@ export class Windows {
               ("width" in geometry ? 0 : SWP_NOSIZE),
           ),
         );
+      }
+      if (
+        !placement &&
+        area === "content" &&
+        "width" in geometry &&
+        user.symbols.GetMenu(window)
+      ) {
+        this.setClientSize(
+          window,
+          clampWindowSize(
+            logicalPixels(geometry.width, dpi),
+            logicalPixels(geometry.height, dpi),
+            this.getSizeConstraints(window),
+          ),
+          dpi,
+        );
+        if ("x" in geometry) {
+          const content = this.getBounds(window, "content");
+          const outer = this.getBounds(window, "outer");
+          assert(
+            user.symbols.SetWindowPos(
+              window,
+              0n,
+              outer.x + geometry.x - content.x,
+              outer.y + geometry.y - content.y,
+              0,
+              0,
+              SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+            ),
+          );
+        }
       }
     } finally {
       this.changingGeometry.delete(window);

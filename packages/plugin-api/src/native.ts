@@ -1,6 +1,10 @@
 import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 
-export type { NativeMenuItem, NativeMenuServices } from "./native-menu.ts";
+export type {
+  NativeMenuItem,
+  NativeMenuServices,
+  NativeMenuWindowHost,
+} from "./native-menu.ts";
 export type { NativeShortcutServices } from "./native-shortcut.ts";
 export type {
   NativeTrayEvent,

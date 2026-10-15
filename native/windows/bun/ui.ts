@@ -66,6 +66,20 @@ let windows: Windows | undefined;
 let systemEvents: SystemEvents | undefined;
 let adapters: Awaited<ReturnType<typeof operations>> | undefined;
 let tray: NativeTrayOwner | undefined;
+type MenuListener = {
+  receive(message: number, wparam: bigint, lparam: bigint): void;
+  closing(): void;
+};
+const menuListeners = new Map<string, Set<MenuListener>>();
+/** Close plugin-owned menus before Windows can destroy the associated native handles. */
+function closeWindowMenus(windowId: string) {
+  for (const listener of [
+    ...(menuListeners.get(windowId) ?? []),
+  ]) {
+    listener.closing();
+  }
+  menuListeners.delete(windowId);
+}
 const trayListeners = new Set<
   (event: import("@bunaway/plugin-api/native").NativeTrayEvent) => void
 >();
@@ -297,6 +311,7 @@ function cleanupView(view: ViewState) {
       });
       delete view.downloadCleanupRetries;
     }
+    closeWindowMenus(windowId);
     windows?.destroy(view.native.hwnd);
     view.lifecycle.detached();
   }
@@ -514,6 +529,7 @@ const channel = new Channel(
     }
   },
   fail,
+  (packet) => windowRequests.interruptModal(packet),
 );
 
 /** Observe plugin completion independently of grant acceptance and discard cancelled results. */
@@ -768,6 +784,7 @@ function commitClose(
   if (!view.lifecycle.commitClose()) {
     return;
   }
+  closeWindowMenus(view.readiness.snapshot().windowId);
   relations.markClosing(view.readiness.snapshot().windowId);
   view.boundary.revoke(reason);
   view.readiness?.terminate({
@@ -1082,7 +1099,15 @@ function createWindow(
     spec.title,
     spec.window.width,
     spec.window.height,
-    (message) => {
+    (message, wparam, lparam) => {
+      const owner = menuListeners.size ? views.get(instanceKey) : undefined;
+      if (owner && !owner.lifecycle.closed) {
+        for (const listener of [
+          ...(menuListeners.get(owner.readiness.snapshot().windowId) ?? []),
+        ]) {
+          listener.receive(message, wparam, lparam);
+        }
+      }
       if (isMonitorChangeMessage(message)) {
         monitorTracker?.invalidate();
       }
@@ -1453,6 +1478,48 @@ try {
         },
       },
       menus: {
+        windows: {
+          resolve(windowId) {
+            const view = viewById(windowId);
+            if (!view || view.lifecycle.closed || stopping) {
+              throw new BunawayError({
+                code: "INVALID_ARGUMENT",
+                message: "Window lifetime is unavailable.",
+              });
+            }
+            return view.native.hwnd;
+          },
+          subscribe(windowId, receive, closing) {
+            const listeners =
+              menuListeners.get(windowId) ?? new Set<MenuListener>();
+            const listener = {
+              receive,
+              closing,
+            };
+            listeners.add(listener);
+            menuListeners.set(windowId, listeners);
+            return () => {
+              listeners.delete(listener);
+              if (!listeners.size) {
+                menuListeners.delete(windowId);
+              }
+            };
+          },
+          interrupt: (signal, cancel) =>
+            windowRequests.onModalInterrupt(signal, cancel),
+          changed(windowId) {
+            const view = viewById(windowId);
+            if (view && !view.lifecycle.closed) {
+              try {
+                view.native.resize();
+                windows?.getSnapshot(view.native.hwnd);
+              } catch (error) {
+                // Native SetMenu has committed. Report host failure without rolling back plugin state alone.
+                fail(error);
+              }
+            }
+          },
+        },
         setTrayMenu(items, selected) {
           if (stopping && items === undefined && !tray) {
             return;
