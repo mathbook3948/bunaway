@@ -1,6 +1,6 @@
 import { dlopen, ptr } from "bun:ffi";
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -14,7 +14,10 @@ import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 test.skipIf(process.platform !== "win32")(
   "real UI STA file dialogs select paths, serialize, cancel and drain on shutdown",
   async () => {
-    const root = await mkdtemp(resolve(tmpdir(), "bunaway-dialog-"));
+    // Runner TEMP can contain an 8.3 alias; shell items return the resolved long path.
+    const root = await realpath(
+      await mkdtemp(resolve(tmpdir(), "bunaway-dialog-")),
+    );
     let worker: Worker | undefined;
     let channel: Channel | undefined;
     let cleaned = false;
