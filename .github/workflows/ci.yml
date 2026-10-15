@@ -87,7 +87,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-matrix-diagnostics
-          path: build/windows-matrix-logs/
+          path: |
+            build/windows-matrix-logs/
+            build/windows-native-logs/notification/
           if-no-files-found: warn
           retention-days: 7
       - name: Preserve fixture DMG diagnostics
@@ -123,11 +125,15 @@ jobs:
       - name: Verify ZIP extraction in Unicode cache paths
         run: mise exec -- bun --no-env-file test tests/cli/native-build.test.ts
       - name: Build and test Bun FFI WebView2 host
-        shell: pwsh
+        # Nested Windows PowerShell probes can emit CLIXML on stderr. Preserve
+        # native bytes before any PowerShell pipeline attempts to deserialize them.
+        shell: cmd
         run: |
-          New-Item -ItemType Directory -Force -Path build/windows-native-logs | Out-Null
-          mise run host:windows 2>&1 | Tee-Object -FilePath build/windows-native-logs/host.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if not exist build\windows-native-logs mkdir build\windows-native-logs
+          mise run host:windows > build\windows-native-logs\host.log 2>&1
+          set "BUNAWAY_NATIVE_EXIT_CODE=%ERRORLEVEL%"
+          type build\windows-native-logs\host.log
+          exit /b %BUNAWAY_NATIVE_EXIT_CODE%
       - name: Verify geometry in fresh native processes
         shell: pwsh
         run: |

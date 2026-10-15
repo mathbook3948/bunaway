@@ -175,6 +175,7 @@ export function installerStages(
           outputBaseName,
           desktopShortcut,
           startMenuShortcut,
+          autostart: config.autostart ?? false,
           ...(config.associations
             ? {
                 associations: config.associations,
