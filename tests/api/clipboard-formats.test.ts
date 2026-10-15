@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { serializeHostResponse } from "@bunaway/protocol";
 import {
   imageSchema,
+  MAX_BINARY_BYTES,
+  MAX_BOOKMARK_LENGTH,
   MAX_IMAGE_BYTES,
   MAX_PATH_LENGTH,
   validateClipboardInput,
@@ -9,8 +11,10 @@ import {
 } from "#plugins/clipboard/src/contract";
 import { windowsOperations as clipboardOperations } from "#plugins/clipboard/src/operations";
 import {
+  decodeBookmark,
   decodeFiles,
   encodeFiles,
+  encodeItem,
 } from "#plugins/clipboard/src/platforms/windows-codecs";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
@@ -333,4 +337,390 @@ test("clipboard results preserve format tags, missing data and strict image boun
   ).rejects.toMatchObject({
     code: "INTERNAL",
   });
+});
+
+test("bookmark and private binary contracts preserve bounded values without new operation grants", async () => {
+  const binary = "application/x-bunaway-binary/memo.v1";
+  expect(
+    await parsers.validateOutput("clipboard.getFormats", [
+      "text/plain",
+      "text/html",
+      "text/rtf",
+      "application/x-bunaway-file-list",
+      "image/bmp",
+      "application/x-bunaway-bookmark",
+    ]),
+  ).toHaveLength(6);
+  const longestName = `application/x-bunaway-binary/${"x".repeat(64)}`;
+  expect(
+    (
+      await parsers.validateCall({
+        operation: "clipboard.hasFormat",
+        payload: {
+          format: longestName,
+        },
+      })
+    ).payload,
+  ).toEqual({
+    format: longestName,
+  });
+  for (const data of [
+    "",
+    "AA==",
+    "AP+A/w==",
+    Buffer.alloc(MAX_BINARY_BYTES, 255).toString("base64"),
+  ]) {
+    const items = [
+      {
+        format: binary,
+        data,
+      },
+    ];
+    expect(
+      (
+        await parsers.validateCall({
+          operation: "clipboard.writeFormats",
+          payload: {
+            items,
+          },
+        })
+      ).payload,
+    ).toEqual({
+      items,
+    });
+    expect(
+      await parsers.validateOutput("clipboard.readFormats", items),
+    ).toEqual(items);
+    serializeHostResponse({
+      kind: "result",
+      payload: items,
+    });
+  }
+  const url =
+    "https://example.com/" +
+    "x".repeat(MAX_BOOKMARK_LENGTH - "https://example.com/".length);
+  const items = [
+    {
+      format: "application/x-bunaway-bookmark",
+      data: {
+        url,
+      },
+    },
+    {
+      format: binary,
+      data: "AA==",
+    },
+  ];
+  expect(
+    (
+      await parsers.validateCall({
+        operation: "clipboard.writeFormats",
+        payload: {
+          items,
+        },
+      })
+    ).payload,
+  ).toEqual({
+    items,
+  });
+  expect(await parsers.validateOutput("clipboard.readFormats", items)).toEqual(
+    items,
+  );
+  expect(
+    await parsers.validateOutput("clipboard.readFormats", [
+      {
+        format: binary,
+        data: null,
+      },
+    ]),
+  ).toEqual([
+    {
+      format: binary,
+      data: null,
+    },
+  ]);
+  for (const item of [
+    {
+      format: binary,
+      data: "AB==",
+    },
+    {
+      format: binary,
+      data: "AAB=",
+    },
+    {
+      format: binary,
+      data: "AA",
+    },
+    {
+      format: binary,
+      data: "AA==\n",
+    },
+    {
+      format: binary,
+      data: Buffer.alloc(MAX_BINARY_BYTES + 1).toString("base64"),
+    },
+    {
+      format: binary,
+      data: [
+        0,
+      ],
+    },
+    {
+      format: "application/x-bunaway-binary/",
+      data: "",
+    },
+    {
+      format: "application/x-bunaway-binary/HTML Format",
+      data: "",
+    },
+    {
+      format: "application/x-bunaway-binary/Memo",
+      data: "",
+    },
+    {
+      format: "application/x-bunaway-binary/memo/child",
+      data: "",
+    },
+    {
+      format: `application/x-bunaway-binary/${"x".repeat(65)}`,
+      data: "",
+    },
+    {
+      format: "application/x-bunaway-binary/memo\n",
+      data: "",
+    },
+    ...[
+      "",
+      "javascript:alert(1)",
+      "file:///C:/private",
+      "https://",
+      "https://example.com/\n",
+      "https://example.com/\ud800",
+      `${url}x`,
+    ].map((url) => ({
+      format: "application/x-bunaway-bookmark",
+      data: {
+        url,
+      },
+    })),
+    {
+      format: "application/x-bunaway-bookmark",
+      data: {
+        url,
+        title: "unused",
+      },
+    },
+  ]) {
+    await expect(
+      parsers.validateCall({
+        operation: "clipboard.writeFormats",
+        payload: {
+          items: [
+            item,
+          ],
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    await expect(
+      parsers.validateOutput("clipboard.readFormats", [
+        item,
+      ]),
+    ).rejects.toThrow();
+  }
+  await expect(
+    parsers.validateCall({
+      operation: "clipboard.writeFormats",
+      payload: {
+        items: [
+          {
+            format: binary,
+            data: "",
+          },
+          {
+            format: binary,
+            data: "AA==",
+          },
+        ],
+      },
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  const oversized = Array.from(
+    {
+      length: 3,
+    },
+    (_, index) => ({
+      format: `application/x-bunaway-binary/budget-${index}`,
+      data: Buffer.alloc(MAX_BINARY_BYTES).toString("base64"),
+    }),
+  );
+  await expect(
+    parsers.validateCall({
+      operation: "clipboard.writeFormats",
+      payload: {
+        items: oversized,
+      },
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  await expect(
+    parsers.validateOutput("clipboard.readFormats", oversized),
+  ).rejects.toThrow();
+});
+
+test("bookmark contracts bound supplementary URLs in UTF-16 units and match native round trips", async () => {
+  const prefix = "https://example.com/";
+  let maximum = "";
+  for (const length of [
+    MAX_BOOKMARK_LENGTH - 1,
+    MAX_BOOKMARK_LENGTH,
+  ]) {
+    const remaining = length - prefix.length;
+    const url = `${prefix}${"😀".repeat(Math.floor(remaining / 2))}${"x".repeat(remaining % 2)}`;
+    const item = {
+      format: "application/x-bunaway-bookmark",
+      data: {
+        url,
+      },
+    } as const;
+    expect(url.length).toBe(length);
+    expect(
+      (
+        await parsers.validateCall({
+          operation: "clipboard.writeFormats",
+          payload: {
+            items: [
+              item,
+            ],
+          },
+        })
+      ).payload,
+    ).toEqual({
+      items: [
+        item,
+      ],
+    });
+    expect(
+      validateClipboardInput("clipboard.writeFormats", {
+        items: [
+          item,
+        ],
+      }),
+    ).toEqual({
+      items: [
+        item,
+      ],
+    });
+    expect(decodeBookmark(encodeItem(item))).toEqual(item.data);
+    expect(
+      await parsers.validateOutput("clipboard.readFormats", [
+        item,
+      ]),
+    ).toEqual([
+      item,
+    ]);
+    maximum = url;
+  }
+  for (const url of [
+    `${maximum}x`,
+    `${prefix}${"😀".repeat(1024)}`,
+  ]) {
+    const item = {
+      format: "application/x-bunaway-bookmark",
+      data: {
+        url,
+      },
+    } as const;
+    expect(url.length).toBeGreaterThan(MAX_BOOKMARK_LENGTH);
+    expect(Array.from(url).length).toBeLessThanOrEqual(MAX_BOOKMARK_LENGTH);
+    await expect(
+      parsers.validateCall({
+        operation: "clipboard.writeFormats",
+        payload: {
+          items: [
+            item,
+          ],
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    expect(() =>
+      validateClipboardInput("clipboard.writeFormats", {
+        items: [
+          item,
+        ],
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        code: "INVALID_ARGUMENT",
+      }),
+    );
+    expect(() => decodeBookmark(encodeItem(item))).toThrow(
+      expect.objectContaining({
+        code: "INTERNAL",
+      }),
+    );
+    await expect(
+      parsers.validateOutput("clipboard.readFormats", [
+        item,
+      ]),
+    ).rejects.toMatchObject({
+      code: "INTERNAL",
+    });
+  }
+});
+
+test("bookmark writes and results accept HTTP scheme casing without normalizing the URL", async () => {
+  for (const url of [
+    "HTTPS://example.com/Path?Name=Value#Anchor",
+    "HTTP://example.com/Path",
+    "hTtPs://EXAMPLE.com/한글😀?a=%2F",
+  ]) {
+    const item = {
+      format: "application/x-bunaway-bookmark",
+      data: {
+        url,
+      },
+    } as const;
+    expect(
+      (
+        await parsers.validateCall({
+          operation: "clipboard.writeFormats",
+          payload: {
+            items: [
+              item,
+            ],
+          },
+        })
+      ).payload,
+    ).toEqual({
+      items: [
+        item,
+      ],
+    });
+    expect(
+      validateClipboardInput("clipboard.writeFormats", {
+        items: [
+          item,
+        ],
+      }),
+    ).toEqual({
+      items: [
+        item,
+      ],
+    });
+    expect(
+      await parsers.validateOutput("clipboard.readFormats", [
+        item,
+      ]),
+    ).toEqual([
+      item,
+    ]);
+  }
 });

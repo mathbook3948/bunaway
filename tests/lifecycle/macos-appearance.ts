@@ -8,6 +8,10 @@ import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
 import { run } from "#cli/processes";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
+import {
+  captureNativeChild,
+  printNativeChildDiagnostics,
+} from "../fixtures/native-child-diagnostics.ts";
 
 assert.equal(process.platform, "darwin");
 assert.equal(process.arch, "arm64");
@@ -24,6 +28,8 @@ await run(
 const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-appearance-"));
 let child: ReturnType<typeof Bun.spawn> | undefined;
 const results: object[] = [];
+let launchDiagnostics: string | undefined;
+let launchDataRoot: string | undefined;
 try {
   for (const backendAllowed of [
     true,
@@ -193,6 +199,16 @@ try {
     for (let launch = 0; launch < 2; launch++) {
       const home = resolve(scenario, `home-${launch}`);
       await mkdir(home);
+      const dataRoot = resolve(
+        home,
+        "Library/Application Support/bunaway/tests.macos.appearance",
+      );
+      launchDataRoot = dataRoot;
+      launchDiagnostics = resolve(
+        root,
+        "build/macos-native-logs/appearance",
+        `${backendAllowed ? "allowed" : "denied"}-${launch}`,
+      );
       const launched = Bun.spawn(
         [
           signedExecutable,
@@ -206,21 +222,20 @@ try {
           },
           stdout: "pipe",
           stderr: "pipe",
-          timeout: 30_000,
         },
       );
       child = launched;
-      const stdout = new Response(launched.stdout).text();
-      const stderr = new Response(launched.stderr).text();
-      const code = await launched.exited;
-      const dataRoot = resolve(
-        home,
-        "Library/Application Support/bunaway/tests.macos.appearance",
+      // Preserve deadline termination even when the host handles SIGTERM with a zero exit.
+      const { exitCode, stdout, stderr } = await captureNativeChild(
+        launched,
+        launchDiagnostics,
+        `appearance ${backendAllowed ? "allowed" : "denied"} launch ${launch}`,
+        30_000,
       );
       const log = await Bun.file(resolve(dataRoot, "logs/host.log"))
         .text()
         .catch(() => "No host log.");
-      assert.equal(code, 0, `${await stdout}\n${await stderr}\n${log}`);
+      assert.equal(exitCode, 0, `${stdout}\n${stderr}\n${log}`);
       const report = await Bun.file(
         resolve(dataRoot, "temp/report.json"),
       ).json();
@@ -271,6 +286,11 @@ try {
   console.log(
     "PASS signed compiled macOS appearance: repeated AppKit reads, backend/view grants and denials, strict input, bounded colors, adapter lifetimes and repeated host shutdown",
   );
+} catch (error) {
+  if (launchDiagnostics && launchDataRoot) {
+    await printNativeChildDiagnostics(launchDiagnostics, launchDataRoot);
+  }
+  throw error;
 } finally {
   if (child?.exitCode === null) {
     child.kill("SIGKILL");

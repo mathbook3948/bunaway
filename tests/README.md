@@ -21,6 +21,11 @@ src 없이 dist만 설치해 공개 호출과 재내보낸 타입을 검사한�
 `api/native-plugin-object.test.ts`는 기본 export를 직접 호출하고 `defineApp`에 등록하는 계약,
 이벤트 타입 추론, 숨겨진 등록 메타데이터와 예약 이름의 충돌 거부를 검사한다.
 
+`lifecycle/macos-appearance.ts`는 각 실행의 stdout, stderr와 종료 원인을
+`build/macos-native-logs/appearance/`에 보존한다. 기존 30초 기한에 도달하면
+호스트가 종료 코드 0을 반환해도 실패로 처리하고, 보고서 누락을 포함한 실패 시
+임시 디렉터리를 지우기 전에 호스트 로그를 출력한다.
+
 공식 플러그인 fixture는 스키마만 있는 공통 계약 목록 대신 완성된 작업 선언의 스키마를 사용한다.
 `api/native-handler-platform.test.ts`는 동기 handler의 반환 타입도 보존하는지 검사한다.
 동시 정리의 공유, 실패 후 재시도와 성공 후 반복 방지, 비동기 초기화의 타입 및 런타임 거부,
@@ -907,7 +912,9 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 어댑터의 timeout, capacity와 폐기를 실제 `.exe`로 확인한다. 실제 core/client 공개 호출에서 취소
 전달을 보류해 공개 Promise 거부 시 자식이 아직 살아 있음을 확인하고, 전달 후 어댑터의 정리와
 자식 종료를 확인한다. 공개 Promise 거부는 종료 완료를 보장하지 않는다. 두 검사는 `host:windows`에 포함되며
-호출별 손자 정리나 제삼자 도구의 부수 효과를 검증하지 않는다.
+`process-run.test.ts`는 Windows에서 취소, timeout, 출력 초과와 루트 종료 후 호출별 손자 정리도
+검사한다. 내부 호출이 끝난 즉시 보관한 process handle의 종료 상태를 확인하며, 실패에는 종료 방식과
+루트 또는 손자의 PID를 표시한다. 출력 초과 오류는 정리 실패와 구분한다. 제삼자 도구의 부수 효과는 검증하지 않는다.
 자식은 PID 파일 쓰기를 완료한 뒤 rename으로 준비를 알린다. 두 생존 검사는 파일 생성과 쓰기 사이의
 경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.
 

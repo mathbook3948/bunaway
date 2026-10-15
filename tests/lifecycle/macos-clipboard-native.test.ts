@@ -185,6 +185,52 @@ test.skipIf(
           data: null,
         },
       ]);
+      for (const item of [
+        {
+          format: "application/x-bunaway-bookmark",
+          data: {
+            url: "https://example.com/",
+          },
+        },
+        {
+          format: "application/x-bunaway-binary/macos-fixture",
+          data: "AA==",
+        },
+      ] as const) {
+        await expect(
+          invoke("clipboard.writeFormats", {
+            items: [
+              {
+                format: "text/plain",
+                data: "prepared",
+              },
+              item,
+            ],
+          }),
+        ).rejects.toThrow(
+          expect.objectContaining({
+            code: "UNSUPPORTED",
+          }),
+        );
+        expect(observer.read("text/plain").data).toBe("fallback 한글 😀");
+        expect(
+          await invoke("clipboard.hasFormat", {
+            format: item.format,
+          }),
+        ).toBe(false);
+        expect(
+          await invoke("clipboard.readFormats", {
+            formats: [
+              item.format,
+            ],
+          }),
+        ).toEqual([
+          {
+            format: item.format,
+            data: null,
+          },
+        ]);
+      }
       const maximum = {
         width: 512,
         height: 256,

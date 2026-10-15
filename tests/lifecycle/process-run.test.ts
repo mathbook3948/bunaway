@@ -199,6 +199,12 @@ test.skipIf(process.platform !== "win32")(
           await Bun.write(releaseFile, "release");
         }
         const result = await observed;
+        const exitStates = probes.map((probe, index) => ({
+          ending,
+          role: index === 0 ? "root" : "leaf",
+          pid: pids[index],
+          exited: probe.exited(),
+        }));
         expect(result).toMatchObject(
           ending === "complete"
             ? {
@@ -215,9 +221,22 @@ test.skipIf(process.platform !== "win32")(
                       : "INTERNAL",
               },
         );
+        if (ending === "overflow") {
+          expect(result).toMatchObject({
+            code: "INTERNAL",
+            message: "Process output exceeds the limit.",
+          });
+        }
         // Capture identities while alive and require native death before the
         // invocation settles. A PID lookup after return could hide PID reuse.
-        expect(probes.every((probe) => probe.exited())).toBe(true);
+        expect(exitStates).toEqual(
+          pids.map((pid, index) => ({
+            ending,
+            role: index === 0 ? "root" : "leaf",
+            pid,
+            exited: true,
+          })),
+        );
         expect(state.active.size).toBe(0);
       } finally {
         controller.abort();
