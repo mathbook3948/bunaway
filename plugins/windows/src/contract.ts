@@ -253,6 +253,14 @@ const creationResult = {
             useContentSize: z.boolean().exactOptional(),
             preventOverflow: z.boolean().exactOptional(),
             focusable: z.boolean().exactOptional(),
+            titlebar: z
+              .enum([
+                "system",
+                "custom",
+              ])
+              .exactOptional(),
+            alwaysOnTop: z.boolean().exactOptional(),
+            skipTaskbar: z.boolean().exactOptional(),
             maximized: z.boolean().exactOptional(),
             fullscreen: z.boolean().exactOptional(),
           })
@@ -845,6 +853,27 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isFocusable": windowStateResult,
+  "windows.getTitlebar": {
+    input: windowTarget,
+    output: z.enum([
+      "system",
+      "custom",
+    ]),
+  },
+  "windows.setAlwaysOnTop": {
+    input: windowTarget.extend({
+      alwaysOnTop: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isAlwaysOnTop": windowStateResult,
+  "windows.setSkipTaskbar": {
+    input: windowTarget.extend({
+      skipTaskbar: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isSkipTaskbar": windowStateResult,
   "windows.setMinimizable": {
     input: windowTarget.extend({
       minimizable: z.boolean(),

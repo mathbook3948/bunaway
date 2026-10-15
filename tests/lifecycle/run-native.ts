@@ -65,6 +65,7 @@ if (target === "windows-x64") {
     await test("windows-webview-downloads.ts");
     await test("windows-webview-controls.ts");
     await test("windows-webview-audio.ts");
+    await test("windows-webview-titlebar.ts");
     await test("windows-initial-placement.ts");
     await test("windows-window-events.ts");
     await test("windows-monitor-events.ts");
@@ -111,6 +112,7 @@ if (target === "windows-x64") {
         ...[
           "tests/lifecycle/desktop.test.ts",
           "tests/lifecycle/windows-os.test.ts",
+          "tests/lifecycle/windows-display.test.ts",
           "tests/lifecycle/windows-process.test.ts",
           "tests/lifecycle/process-run.test.ts",
           "tests/lifecycle/windows-network.test.ts",

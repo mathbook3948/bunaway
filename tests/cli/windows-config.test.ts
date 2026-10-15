@@ -590,3 +590,66 @@ test("instance configuration errors describe the shared instance limit", () => {
     `Multiple windows require maxInstances from 1 through ${MAX_WINDOW_INSTANCES}; single permits only 1.`,
   );
 });
+
+test("display declarations preserve explicit defaults and reject invalid options", () => {
+  const first = specs[0];
+  assert(first);
+  for (const titlebar of [
+    "system",
+    "custom",
+  ] as const) {
+    for (const enabled of [
+      true,
+      false,
+    ]) {
+      const input = {
+        ...first,
+        window: {
+          ...first.window,
+          titlebar,
+          alwaysOnTop: enabled,
+          skipTaskbar: enabled,
+        },
+      };
+      expect(
+        readWindowSpecs(
+          [
+            input,
+          ],
+          policy,
+        ),
+      ).toEqual([
+        input,
+      ]);
+    }
+  }
+  for (const option of [
+    {
+      titlebar: "frameless",
+    },
+    {
+      titlebar: null,
+    },
+    {
+      alwaysOnTop: 1,
+    },
+    {
+      skipTaskbar: "true",
+    },
+  ]) {
+    expect(() =>
+      readWindowSpecs(
+        [
+          {
+            ...first,
+            window: {
+              ...first.window,
+              ...option,
+            },
+          },
+        ],
+        policy,
+      ),
+    ).toThrow();
+  }
+});
