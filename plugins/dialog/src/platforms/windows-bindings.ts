@@ -372,9 +372,13 @@ export function createDialog(
           try {
             const report = !pollReported;
             pollReported = true;
-            if (report) console.log("dialog poll enter");
+            if (report) {
+              console.log("dialog poll enter");
+            }
             const interrupted = poll();
-            if (report) console.log("dialog poll returned", interrupted);
+            if (report) {
+              console.log("dialog poll returned", interrupted);
+            }
             if (!interrupted) {
               return;
             }
