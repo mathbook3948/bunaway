@@ -45,6 +45,16 @@ if (target === "windows-x64") {
   const { buildHostFixture } = await import("#native/windows/bun/package");
   const output = await buildHostFixture();
   if (!values["skip-tests"]) {
+    // Keep style/geometry probes in an owned process, independent of shared UI-service lifetimes.
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/windows-display.test.ts"),
+      ],
+      root,
+    );
     for (const scenario of [
       [],
       [
@@ -65,6 +75,7 @@ if (target === "windows-x64") {
     await test("windows-webview-downloads.ts");
     await test("windows-webview-controls.ts");
     await test("windows-webview-audio.ts");
+    await test("windows-webview-titlebar.ts");
     await test("windows-initial-placement.ts");
     await test("windows-window-events.ts");
     await test("windows-monitor-events.ts");

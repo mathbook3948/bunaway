@@ -1782,3 +1782,40 @@ test("macOS I/O receives only the trusted host app identity and rejects a caller
     });
   }
 }, 20000);
+
+test("macOS explicitly rejects window display declarations including default-valued options", () => {
+  const config = workerConfig("unused");
+  const first = config.windows[0];
+  if (!first) {
+    throw new Error("Missing test window.");
+  }
+  for (const option of [
+    {
+      titlebar: "custom",
+    },
+    {
+      titlebar: "system",
+    },
+    {
+      alwaysOnTop: false,
+    },
+    {
+      skipTaskbar: false,
+    },
+  ]) {
+    expect(() =>
+      readMacosWindowSpecs(
+        [
+          {
+            ...first,
+            window: {
+              ...first.window,
+              ...option,
+            },
+          },
+        ],
+        config.policy,
+      ),
+    ).toThrow("Window display options are not implemented on macOS");
+  }
+});

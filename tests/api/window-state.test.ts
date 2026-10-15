@@ -32,6 +32,8 @@ const registry = new NativeRegistry([
 const stateQueries = [
   ...queries,
   "isFocusable",
+  "isAlwaysOnTop",
+  "isSkipTaskbar",
   "isMinimizable",
   "isMaximizable",
   "isClosable",
@@ -122,6 +124,8 @@ function fixture() {
     isVisible: false,
     isFocused: false,
     isFocusable: true,
+    isAlwaysOnTop: false,
+    isSkipTaskbar: false,
     isMinimizable: true,
     isMaximizable: true,
     isClosable: true,
@@ -169,6 +173,17 @@ function fixture() {
     setSizeConstraints() {},
     setSize() {},
     setPosition() {},
+    getTitlebar: () => "custom",
+    setAlwaysOnTop(value) {
+      apply("setAlwaysOnTop");
+      observed.isAlwaysOnTop = value;
+    },
+    isAlwaysOnTop: () => observed.isAlwaysOnTop,
+    setSkipTaskbar(value) {
+      apply("setSkipTaskbar");
+      observed.isSkipTaskbar = value;
+    },
+    isSkipTaskbar: () => observed.isSkipTaskbar,
     setFocusable(value) {
       apply("setFocusable");
       observed.isFocusable = value;
@@ -265,6 +280,9 @@ function fixture() {
         | (typeof controls)[number]
         | (typeof stateQueries)[number]
         | "setFocusable"
+        | "getTitlebar"
+        | "setAlwaysOnTop"
+        | "setSkipTaskbar"
         | "setMinimizable"
         | "setMaximizable"
         | "setClosable"
@@ -275,6 +293,8 @@ function fixture() {
       view = "main",
       payload: {
         focusable?: boolean;
+        alwaysOnTop?: boolean;
+        skipTaskbar?: boolean;
         minimizable?: boolean;
         maximizable?: boolean;
         closable?: boolean;
@@ -882,4 +902,86 @@ test("normal excludes minimized, maximized and fullscreen but not hidden or unfo
     code: "INVALID_ARGUMENT",
   });
   expect(f.actions).toEqual([]);
+});
+
+test("display controls retain independent permissions, strict input and closed/unsupported guards", async () => {
+  for (const [setter, getter, field] of [
+    [
+      "setAlwaysOnTop",
+      "isAlwaysOnTop",
+      "alwaysOnTop",
+    ],
+    [
+      "setSkipTaskbar",
+      "isSkipTaskbar",
+      "skipTaskbar",
+    ],
+  ] as const) {
+    const f = fixture();
+    expect(await f.invoke(getter)).toBe(false);
+    for (const value of [
+      true,
+      false,
+    ]) {
+      expect(
+        await f.invoke(setter, "main", {
+          [field]: value,
+        }),
+      ).toBeNull();
+      expect(await f.invoke(getter)).toBe(value);
+    }
+    for (const value of [
+      null,
+      1,
+      "true",
+    ]) {
+      expect(() =>
+        validateWindowCall({
+          operation: `windows.${setter}`,
+          payload: {
+            view: "main",
+            [field]: value,
+          },
+        }),
+      ).toThrow();
+    }
+    f.permissions.permissions = [
+      `windows.${getter}`,
+    ];
+    await expect(
+      f.invoke(setter, "main", {
+        [field]: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "PERMISSION_DENIED",
+    });
+    expect(f.actions).toHaveLength(2);
+    f.permissions.permissions = windowPermissions();
+    f.setClosed();
+    await expect(
+      f.invoke(setter, "main", {
+        [field]: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    const unsupported = fixture();
+    delete unsupported.native[setter];
+    await expect(
+      unsupported.invoke(setter, "main", {
+        [field]: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED",
+    });
+  }
+  const f = fixture();
+  expect(await f.invoke("getTitlebar")).toBe("custom");
+  expect(() =>
+    validateWindowOutput("windows.getTitlebar", "frameless"),
+  ).toThrow();
+  f.permissions.permissions = [];
+  await expect(f.invoke("getTitlebar")).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
 });
