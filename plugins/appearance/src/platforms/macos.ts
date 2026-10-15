@@ -15,7 +15,6 @@ const SYSTEM = "/usr/lib/libSystem.B.dylib";
 const AQUA = "NSAppearanceNameAqua";
 const DARK_AQUA = "NSAppearanceNameDarkAqua";
 const RTLD_DEFAULT = BigInt.asUintN(64, -2n);
-const cstring = (value: string) => Buffer.from(`${value}\0`);
 
 function failure(message: string): never {
   throw new BunawayError({
@@ -62,7 +61,7 @@ export function initialize() {
     libraries.push(appkit);
     const stackBlock = system.symbols.dlsym(
       RTLD_DEFAULT,
-      ptr(cstring("_NSConcreteStackBlock")),
+      "_NSConcreteStackBlock",
     );
     if (!stackBlock) {
       failure("macOS appearance block runtime is unavailable.");
@@ -110,6 +109,15 @@ export function initialize() {
         ],
         returns: "u64",
       },
+      string: {
+        ptr: message,
+        args: [
+          "u64",
+          "u64",
+          "cstring",
+        ],
+        returns: "u64",
+      },
       boolean: {
         ptr: message,
         args: [
@@ -143,7 +151,7 @@ export function initialize() {
       if (cached !== undefined) {
         return cached;
       }
-      const address = runtime.symbols.sel_registerName(ptr(cstring(name)));
+      const address = runtime.symbols.sel_registerName(name);
       if (!address) {
         failure("macOS appearance selector is unavailable.");
       }
@@ -152,7 +160,7 @@ export function initialize() {
       return value;
     };
     const type = (name: string): bigint => {
-      const address = runtime.symbols.objc_getClass(ptr(cstring(name)));
+      const address = runtime.symbols.objc_getClass(name);
       if (!address) {
         failure("macOS appearance class is unavailable.");
       }
@@ -175,12 +183,16 @@ export function initialize() {
       }
       return object;
     };
+    // A numeric pointer cannot keep a temporary Buffer alive while later arguments
+    // allocate. Let Bun own UTF-8 conversion for the duration of each native call.
     const string = (value: string) =>
       required(
-        send(
-          type("NSString"),
-          "stringWithUTF8String:",
-          BigInt(ptr(cstring(value))),
+        BigInt(
+          messages.symbols.string(
+            type("NSString"),
+            selector("stringWithUTF8String:"),
+            value,
+          ),
         ),
         `NSString.stringWithUTF8String: ${value}`,
       );
