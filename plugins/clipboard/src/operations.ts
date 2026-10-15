@@ -1,7 +1,7 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
-  formatSchema,
+  builtInFormatSchema,
   hasFormatSchema,
   imageSchema,
   nullableTextSchema,
@@ -44,7 +44,9 @@ export const macosOperations = {
   }),
   getFormats: macosOperation({
     input: z.null(),
-    output: z.array(formatSchema).max(5),
+    output: z
+      .array(builtInFormatSchema)
+      .max(builtInFormatSchema.options.length),
     handler: (_input, { instance }) => instance.getFormats(),
   }),
   hasFormat: macosOperation({
@@ -93,7 +95,9 @@ export const windowsOperations = {
   }),
   getFormats: windowsOperation({
     input: z.null(),
-    output: z.array(formatSchema).max(5),
+    output: z
+      .array(builtInFormatSchema)
+      .max(builtInFormatSchema.options.length),
     handler: (_input, { instance, signal }) => instance.getFormats(signal),
   }),
   hasFormat: windowsOperation({

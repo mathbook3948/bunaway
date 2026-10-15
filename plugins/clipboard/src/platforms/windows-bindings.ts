@@ -1,14 +1,17 @@
 import { dlopen, ptr, toArrayBuffer } from "bun:ffi";
 import { BunawayError, validateValue } from "@bunaway/protocol";
 import {
+  builtInFormatSchema,
   type ClipboardFormat,
   type ClipboardItem,
   fitsFormatBudget,
-  formatSchema,
+  MAX_BINARY_FORMATS,
   MAX_TEXT_LENGTH,
   textSchema,
 } from "#clipboard/contract";
 import {
+  decodeBinary,
+  decodeBookmark,
   decodeFiles,
   decodeHTML,
   decodeImage,
@@ -198,6 +201,7 @@ export function createClipboard() {
     }
   }
   const registered = new Map<string, number>();
+  let binaryFormats = 0;
   function nativeFormat(format: ClipboardFormat): number {
     switch (format) {
       case "text/plain":
@@ -207,11 +211,30 @@ export function createClipboard() {
       case "image/bmp":
         return CF_DIBV5;
       default: {
-        const name =
-          format === "text/html" ? "HTML Format" : "Rich Text Format";
+        let name: string;
+        switch (format) {
+          case "text/html":
+            name = "HTML Format";
+            break;
+          case "text/rtf":
+            name = "Rich Text Format";
+            break;
+          case "application/x-bunaway-bookmark":
+            name = "UniformResourceLocatorW";
+            break;
+          default:
+            name = format;
+        }
         const existing = registered.get(name);
         if (existing !== undefined) {
           return existing;
+        }
+        const binary = format.startsWith("application/x-bunaway-binary/");
+        if (binary && binaryFormats >= MAX_BINARY_FORMATS) {
+          throw new BunawayError({
+            code: "BUSY",
+            message: "Clipboard binary format registration limit reached.",
+          });
         }
         const wideName = Buffer.from(`${name}\0`, "utf16le");
         const value = api.RegisterClipboardFormatW(ptr(wideName));
@@ -219,6 +242,9 @@ export function createClipboard() {
           throw failed();
         }
         registered.set(name, value);
+        if (binary) {
+          binaryFormats++;
+        }
         return value;
       }
     }
@@ -359,8 +385,17 @@ export function createClipboard() {
                 format,
                 data: decodeFiles(bytes),
               };
+            case "application/x-bunaway-bookmark":
+              return {
+                format,
+                data: decodeBookmark(bytes),
+              };
+            default:
+              return {
+                format,
+                data: decodeBinary(bytes),
+              };
           }
-          return invalidClipboardData();
         },
       );
       if (!fitsFormatBudget(items)) {
@@ -374,8 +409,8 @@ export function createClipboard() {
         (format === "image/bmp" && api.IsClipboardFormatAvailable(CF_DIB))
       );
     },
-    getFormats(): ClipboardFormat[] {
-      return formatSchema.options.filter((format) =>
+    getFormats() {
+      return builtInFormatSchema.options.filter((format) =>
         clipboard.hasFormat(format),
       );
     },

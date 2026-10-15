@@ -1,9 +1,12 @@
 import { BunawayError } from "@bunaway/protocol";
 import {
+  bookmarkSchema,
   type ClipboardImage,
   type ClipboardItem,
   filesSchema,
   imageSchema,
+  MAX_BINARY_BYTES,
+  MAX_BOOKMARK_LENGTH,
   MAX_FILES,
   MAX_IMAGE_BYTES,
   MAX_PATH_LENGTH,
@@ -258,7 +261,69 @@ export function encodeItem(item: ClipboardItem): Buffer {
       return encodeFiles(item.data);
     case "image/bmp":
       return encodeImage(item.data);
+    case "application/x-bunaway-bookmark":
+      return Buffer.from(`${item.data.url}\0`, "utf16le");
+    default:
+      return encodeBinary(item.data);
   }
+}
+
+const BINARY_MAGIC = Buffer.from("BUNBIN01", "ascii");
+const BINARY_HEADER_BYTES = BINARY_MAGIC.length + 4;
+
+/** A versioned length prefix preserves empty bytes and excludes HGLOBAL allocation padding. */
+export function encodeBinary(base64: string): Buffer {
+  const payload = Buffer.from(base64, "base64");
+  const bytes = Buffer.alloc(BINARY_HEADER_BYTES + payload.length);
+  BINARY_MAGIC.copy(bytes);
+  bytes.writeUInt32LE(payload.length, BINARY_MAGIC.length);
+  payload.copy(bytes, BINARY_HEADER_BYTES);
+  return bytes;
+}
+
+/** Copy only the declared payload; trailing allocator bytes never become application data. */
+export function decodeBinary(bytes: Buffer): string {
+  if (
+    bytes.length < BINARY_HEADER_BYTES ||
+    bytes.length > MAX_NATIVE_FORMAT_BYTES ||
+    !bytes.subarray(0, BINARY_MAGIC.length).equals(BINARY_MAGIC)
+  ) {
+    invalidClipboardData();
+  }
+  const length = bytes.readUInt32LE(BINARY_MAGIC.length);
+  if (
+    length > MAX_BINARY_BYTES ||
+    BINARY_HEADER_BYTES + length > bytes.length
+  ) {
+    invalidClipboardData();
+  }
+  return bytes
+    .subarray(BINARY_HEADER_BYTES, BINARY_HEADER_BYTES + length)
+    .toString("base64");
+}
+
+/** CFSTR_INETURLW contains one NUL-terminated UTF-16 URL without a title. */
+export function decodeBookmark(bytes: Buffer): {
+  url: string;
+} {
+  if (
+    bytes.length < 2 ||
+    bytes.length > MAX_NATIVE_FORMAT_BYTES ||
+    bytes.length % 2 !== 0
+  ) {
+    invalidClipboardData();
+  }
+  let end = 0;
+  while (end < bytes.length && bytes.readUInt16LE(end) !== 0) {
+    end += 2;
+  }
+  if (end === bytes.length || end / 2 > MAX_BOOKMARK_LENGTH) {
+    invalidClipboardData();
+  }
+  const result = bookmarkSchema.safeParse({
+    url: bytes.subarray(0, end).toString("utf16le"),
+  });
+  return result.success ? result.data : invalidClipboardData();
 }
 export function decodeRTF(bytes: Buffer): string {
   const end = bytes.indexOf(0);

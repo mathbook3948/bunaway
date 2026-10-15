@@ -2,9 +2,12 @@ import { expect, test } from "bun:test";
 import { appearanceOperations } from "#plugins/appearance/src/operations";
 import { nativeFactory } from "../fixtures/native-platform.ts";
 
-test.skipIf(process.platform !== "darwin")(
-  "packaged appearance adapter loads AppKit in a fresh process and owns its framework lifetime",
-  async () => {
+test.skipIf(process.platform !== "darwin").each([
+  false,
+  true,
+])(
+  "packaged appearance adapter loads AppKit in a fresh process and owns its framework lifetime (GC stress: %s)",
+  async (stress) => {
     const entry = Bun.resolveSync(
       "@bunaway/plugin-appearance/native/macos",
       import.meta.dir,
@@ -20,9 +23,15 @@ const second = appearance._definition.nativePlatforms.macos.create({dataRoot:"."
 try {
   await first.dispose();
   await first.dispose();
-  const result = await second.execute("appearance.getPreferences", null, "backend");
+  ${stress ? "Bun.unsafe.gcAggressionLevel(2);" : ""}
+  let result;
+  for (let index = 0; index < ${stress ? 1000 : 1}; index++) {
+    result = await second.execute("appearance.getPreferences", null, "backend");
+    if (${stress} && index % 10 === 0) Bun.gc(true);
+  }
   console.log(JSON.stringify(result));
 } finally {
+  ${stress ? "Bun.unsafe.gcAggressionLevel(0);" : ""}
   await first.dispose();
   await second.dispose();
 }`,

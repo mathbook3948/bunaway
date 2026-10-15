@@ -1,24 +1,38 @@
-import { defineNativeOperation } from "@bunaway/plugin";
+import { BunawayError, defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
-import { logInputSchema } from "#log/contract";
-import { write as writeMacos } from "#log/platforms/macos";
-import { write as writeWindows } from "#log/platforms/windows";
+import type { AppLog } from "#log/app-log";
+import { logConfigurationSchema, logInputSchema } from "#log/contract";
 
-const operation = defineNativeOperation<string>();
-/** Each platform declares its own native log writer and receives the trusted caller source. */
-export const macosOperations = {
-  write: operation({
-    input: logInputSchema,
-    output: z.null(),
-    handler: (input, { instance, source }) =>
-      writeMacos(instance, input, source),
-  }),
-};
+const operation = defineNativeOperation<AppLog>();
+/** Shared file contract; the host supplies the instance and trusted caller source. */
 export const windowsOperations = {
   write: operation({
     input: logInputSchema,
     output: z.null(),
-    handler: (input, { instance, source }) =>
-      writeWindows(instance, input, source),
+    handler: (input, { instance, source }) => instance.write(input, source),
   }),
+  configure: operation({
+    input: logConfigurationSchema,
+    output: z.null(),
+    handler(input, { instance, source }) {
+      if (source !== "backend") {
+        throw new BunawayError({
+          code: "PERMISSION_DENIED",
+          message: "Only the backend can configure app logging.",
+        });
+      }
+      return instance.configure(input);
+    },
+  }),
+  flush: operation({
+    input: z.null(),
+    output: z.null(),
+    handler: (_input, { instance }) => instance.flush(),
+  }),
+};
+
+export const macosOperations = {
+  write: windowsOperations.write,
+  configure: windowsOperations.configure,
+  flush: windowsOperations.flush,
 };

@@ -8,7 +8,6 @@ import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
 import { run } from "#cli/processes";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
-
 import {
   captureNativeChild,
   printNativeChildDiagnostics,
@@ -31,7 +30,6 @@ let child: ReturnType<typeof Bun.spawn> | undefined;
 const results: object[] = [];
 let launchDiagnostics: string | undefined;
 let launchDataRoot: string | undefined;
-const diagnostics = resolve(root, "build/macos-appearance-diagnostics");
 try {
   for (const backendAllowed of [
     true,
@@ -201,6 +199,16 @@ try {
     for (let launch = 0; launch < 2; launch++) {
       const home = resolve(scenario, `home-${launch}`);
       await mkdir(home);
+      const dataRoot = resolve(
+        home,
+        "Library/Application Support/bunaway/tests.macos.appearance",
+      );
+      launchDataRoot = dataRoot;
+      launchDiagnostics = resolve(
+        root,
+        "build/macos-native-logs/appearance",
+        `${backendAllowed ? "allowed" : "denied"}-${launch}`,
+      );
       const launched = Bun.spawn(
         [
           signedExecutable,
@@ -217,21 +225,8 @@ try {
         },
       );
       child = launched;
-      const dataRoot = resolve(
-        home,
-        "Library/Application Support/bunaway/tests.macos.appearance",
-      );
-      launchDataRoot = dataRoot;
-      launchDiagnostics = resolve(
-        diagnostics,
-        backendAllowed ? "allowed" : "denied",
-        `launch-${launch}`,
-      );
-      const {
-        exitCode: code,
-        stdout,
-        stderr,
-      } = await captureNativeChild(
+      // Preserve deadline termination even when the host handles SIGTERM with a zero exit.
+      const { exitCode, stdout, stderr } = await captureNativeChild(
         launched,
         launchDiagnostics,
         `appearance ${backendAllowed ? "allowed" : "denied"} launch ${launch}`,
@@ -240,7 +235,7 @@ try {
       const log = await Bun.file(resolve(dataRoot, "logs/host.log"))
         .text()
         .catch(() => "No host log.");
-      assert.equal(code, 0, `${stdout}\n${stderr}\n${log}`);
+      assert.equal(exitCode, 0, `${stdout}\n${stderr}\n${log}`);
       const report = await Bun.file(
         resolve(dataRoot, "temp/report.json"),
       ).json();
