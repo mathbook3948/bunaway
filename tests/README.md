@@ -913,7 +913,9 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 어댑터의 timeout, capacity와 폐기를 실제 `.exe`로 확인한다. 실제 core/client 공개 호출에서 취소
 전달을 보류해 공개 Promise 거부 시 자식이 아직 살아 있음을 확인하고, 전달 후 어댑터의 정리와
 자식 종료를 확인한다. 공개 Promise 거부는 종료 완료를 보장하지 않는다. 두 검사는 `host:windows`에 포함되며
-호출별 손자 정리나 제삼자 도구의 부수 효과를 검증하지 않는다.
+`process-run.test.ts`는 Windows에서 취소, timeout, 출력 초과와 루트 종료 후 호출별 손자 정리도
+검사한다. 내부 호출이 끝난 즉시 보관한 process handle의 종료 상태를 확인하며, 실패에는 종료 방식과
+루트 또는 손자의 PID를 표시한다. 출력 초과 오류는 정리 실패와 구분한다. 제삼자 도구의 부수 효과는 검증하지 않는다.
 자식은 PID 파일 쓰기를 완료한 뒤 rename으로 준비를 알린다. 두 생존 검사는 파일 생성과 쓰기 사이의
 경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.
 
