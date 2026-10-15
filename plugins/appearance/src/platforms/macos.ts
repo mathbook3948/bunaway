@@ -166,9 +166,12 @@ export function initialize() {
       second = 0n,
     ): bigint =>
       BigInt(messages.symbols.object(object, selector(name), first, second));
-    const required = (object: bigint): bigint => {
+    let reads = 0;
+    const required = (object: bigint, operation: string): bigint => {
       if (object === 0n) {
-        failure("macOS appearance query returned no value.");
+        failure(
+          `macOS appearance query returned no value: ${operation} (read=${reads}, mainThread=${system.symbols.pthread_main_np()}).`,
+        );
       }
       return object;
     };
@@ -179,13 +182,20 @@ export function initialize() {
           "stringWithUTF8String:",
           BigInt(ptr(cstring(value))),
         ),
+        `NSString.stringWithUTF8String: ${value}`,
       );
     const boolean = (object: bigint, name: string) =>
       messages.symbols.boolean(object, selector(name));
     const color = (name: string): string => {
-      const native = required(send(type("NSColor"), name));
-      const space = required(send(type("NSColorSpace"), "sRGBColorSpace"));
-      const rgb = required(send(native, "colorUsingColorSpace:", space));
+      const native = required(send(type("NSColor"), name), `NSColor.${name}`);
+      const space = required(
+        send(type("NSColorSpace"), "sRGBColorSpace"),
+        "NSColorSpace.sRGBColorSpace",
+      );
+      const rgb = required(
+        send(native, "colorUsingColorSpace:", space),
+        `NSColor.${name}.colorUsingColorSpace: sRGB`,
+      );
       const components = [
         "redComponent",
         "greenComponent",
@@ -211,19 +221,31 @@ export function initialize() {
             message: "Appearance adapter is disposed.",
           });
         }
+        reads++;
+        const allocated = required(
+          send(type("NSAutoreleasePool"), "alloc"),
+          "NSAutoreleasePool.alloc",
+        );
         const pool = required(
-          send(send(type("NSAutoreleasePool"), "alloc"), "init"),
+          send(allocated, "init"),
+          "NSAutoreleasePool.init",
         );
         try {
           const application = required(
             send(type("NSApplication"), "sharedApplication"),
+            "NSApplication.sharedApplication",
           );
-          const appearance = required(send(application, "effectiveAppearance"));
+          const appearance = required(
+            send(application, "effectiveAppearance"),
+            "NSApplication.effectiveAppearance",
+          );
           const names = required(
             send(type("NSArray"), "arrayWithObject:", string(AQUA)),
+            "NSArray.arrayWithObject:",
           );
           const choices = required(
             send(names, "arrayByAddingObject:", string(DARK_AQUA)),
+            "NSArray.arrayByAddingObject:",
           );
           const match = send(
             appearance,
@@ -242,6 +264,7 @@ export function initialize() {
           }
           const workspace = required(
             send(type("NSWorkspace"), "sharedWorkspace"),
+            "NSWorkspace.sharedWorkspace",
           );
           let result: AppearancePreferences | undefined;
           let failed = false;
