@@ -943,6 +943,13 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
           relations.setEnabled(id, enabled);
         },
         isEnabled: () => nativeWindows.isEnabled(hwnd),
+        getTitlebar: () => nativeWindows.getTitlebar(hwnd),
+        setAlwaysOnTop: (alwaysOnTop) =>
+          nativeWindows.setAlwaysOnTop(hwnd, alwaysOnTop),
+        isAlwaysOnTop: () => nativeWindows.isAlwaysOnTop(hwnd),
+        setSkipTaskbar: (skipTaskbar) =>
+          nativeWindows.setSkipTaskbar(hwnd, skipTaskbar),
+        isSkipTaskbar: () => nativeWindows.isSkipTaskbar(hwnd),
         setFocusable: (focusable) =>
           nativeWindows.setFocusable(hwnd, focusable),
         isFocusable: () => nativeWindows.isFocusable(hwnd),
@@ -1652,10 +1659,18 @@ try {
       // Controller errors also queue a forced close. Report startup failure before
       // that close retires the boundary and makes the failure look like normal exit.
       if (view.native.failure && !view.lifecycle.closed) {
-        view.readiness?.terminate({
-          code: "INTERNAL",
-          message: "WebView creation failed.",
-        });
+        const error = view.native.failure;
+        view.readiness?.terminate(
+          error instanceof BunawayError && error.code === "UNSUPPORTED"
+            ? {
+                code: error.code,
+                message: error.message,
+              }
+            : {
+                code: "INTERNAL",
+                message: "WebView creation failed.",
+              },
+        );
         if (view.startup) {
           throw view.native.failure;
         }

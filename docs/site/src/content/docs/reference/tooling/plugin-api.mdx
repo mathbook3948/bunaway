@@ -216,3 +216,12 @@ error를 이벤트로 전달합니다. 오류 진입과 복구도 revision을 �
 UI 호스트는 디스플레이 알림을 메시지 처리 뒤 합쳐서 관찰하며 주기적으로 조회하지 않습니다.
 전달에는 뷰의 `windows.monitorsChanged` 이벤트 허용과 `windows.getMonitorSnapshot` 조회 권한이
 모두 필요합니다.
+
+
+Windows의 선택적 `getTitlebar`, `setAlwaysOnTop`, `isAlwaysOnTop`, `setSkipTaskbar`,
+`isSkipTaskbar`는 창 caption 모드와 표시 옵션을 제공합니다. `WindowSpec.window`는
+`titlebar`, `alwaysOnTop`, `skipTaskbar`를 선언합니다. 설정의 기본값은 system, false, false입니다.
+custom은 caption만 제거하며 resize frame과 시스템 메뉴는 유지합니다. WebView2가 CSS
+app-region의 drag/no-drag를 처리하고 없는 런타임은 UNSUPPORTED를 반환합니다.
+setSkipTaskbar는 변경할 때 숨겨진 일반 창을 요구하며 그 외 상태는 BUSY입니다.
+네이티브 HWND와 WebView가 자원을 소유하며 새 창은 선언의 기본값에서 시작합니다.

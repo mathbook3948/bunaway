@@ -153,6 +153,12 @@ export type WindowSpec = {
     maxHeight?: number | null;
     /** Permit user and host foreground activation, default true. Windows false uses WS_EX_NOACTIVATE. */
     focusable?: boolean;
+    /** System caption by default. Custom uses CSS app-region drag/no-drag and retains native resize borders. Windows only. */
+    titlebar?: "system" | "custom";
+    /** Place above ordinary windows without activation, default false. Windows only. */
+    alwaysOnTop?: boolean;
+    /** Hide from the taskbar and Alt+Tab using tool-window style, default false. Windows only. */
+    skipTaskbar?: boolean;
     /** Start maximized, retaining the initial normal placement for restoration. Windows only. */
     maximized?: boolean;
     /** Start fullscreen. When combined with maximized, exit restores maximized state. Windows only. */
@@ -319,6 +325,16 @@ export type NativeWindow = {
   setFocusable?(focusable: boolean): void;
   /** Reads whether the native window permits activation. Independent of isFocused. Windows only. */
   isFocusable?(): boolean;
+  /** Read the creation-time caption mode, including during fullscreen. Windows only. */
+  getTitlebar?(): "system" | "custom";
+  /** Change topmost placement without activation. Native ownership can affect related window Z order. Windows only. */
+  setAlwaysOnTop?(alwaysOnTop: boolean): void;
+  /** Read live topmost style. Windows only. */
+  isAlwaysOnTop?(): boolean;
+  /** Change taskbar/Alt+Tab exclusion on a hidden, normal window. BUSY otherwise. Windows only. */
+  setSkipTaskbar?(skipTaskbar: boolean): void;
+  /** Read explicit tool-window exclusion; owned windows may also be absent from the taskbar. Windows only. */
+  isSkipTaskbar?(): boolean;
   /** Changes the native minimize button and user system commands. Programmatic minimize remains available. Windows only. */
   setMinimizable?(minimizable: boolean): void;
   /** Reads the normal window's native minimize-button setting. Windows only. */

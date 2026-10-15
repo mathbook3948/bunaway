@@ -39,6 +39,15 @@ import {
   physicalPixels,
 } from "./window-size.ts";
 
+import {
+  initialWindowStyles,
+  WS_CAPTION,
+  WS_EX_NOACTIVATE,
+  WS_EX_TOOLWINDOW,
+  WS_EX_TOPMOST,
+  WS_OVERLAPPEDWINDOW,
+} from "./window-style.ts";
+
 export const WM_SIZE = 0x0005;
 const WM_ACTIVATE = 0x0006;
 const WA_INACTIVE = 0n;
@@ -73,8 +82,6 @@ const GWL_STYLE = -16;
 const GWL_EXSTYLE = -20;
 const GWLP_HWNDPARENT = -8;
 const GW_OWNER = 4;
-const WS_EX_TOOLWINDOW = 0x80n;
-const WS_EX_NOACTIVATE = 0x08000000n;
 const IDI_APPLICATION = 32512n;
 const IMAGE_ICON = 1;
 const LR_LOADFROMFILE = 0x10;
@@ -106,7 +113,6 @@ const WINDOWPLACEMENT_NORMAL_RECT_OFFSET = 28;
 const WINDOWPLACEMENT_FLAGS_OFFSET = 4;
 const WINDOWPLACEMENT_SHOW_CMD_OFFSET = 8;
 const WPF_RESTORETOMAXIMIZED = 0x2;
-const WS_OVERLAPPEDWINDOW = 0x00cf0000;
 const WS_MINIMIZEBOX = 0x00020000n;
 const WS_MAXIMIZEBOX = 0x00010000n;
 const WS_THICKFRAME = 0x00040000n;
@@ -366,6 +372,19 @@ export class Windows {
             }
             if (message === WM_SYSCOMMAND) {
               const command = wparam & SYSTEM_COMMAND_MASK;
+              // CSS caption regions remain in the document during fullscreen. Do not let
+              // their native gestures desynchronize the HWND from the saved fullscreen state.
+              if (
+                this.isFullscreen(window) &&
+                this.getTitlebar(window) === "custom" &&
+                (command === SC_MOVE ||
+                  command === SC_SIZE ||
+                  command === SC_MINIMIZE ||
+                  command === SC_MAXIMIZE ||
+                  command === SC_RESTORE)
+              ) {
+                return 0n;
+              }
               if (
                 (command === SC_MINIMIZE && !this.isMinimizable(window)) ||
                 (command === SC_MAXIMIZE && !this.isMaximizable(window)) ||
@@ -593,10 +612,11 @@ export class Windows {
       dpi = x[0] ?? 0;
       assert(dpi, "Monitor DPI is unavailable.");
     }
+    const { style, exStyle } = initialWindowStyles(options);
     return initialWindowPlacement(
       options,
       dpi,
-      this.outerSizeFor(0, 0, dpi, BigInt(WS_OVERLAPPEDWINDOW), 0n),
+      this.outerSizeFor(0, 0, dpi, style, exStyle),
       this.getWorkArea(monitor),
     );
   }
@@ -663,8 +683,17 @@ export class Windows {
     visible = true,
     options: SizeConstraints &
       WindowPlacement &
-      Pick<WindowSpec["window"], "maximized" | "fullscreen" | "focusable"> = {},
+      Pick<
+        WindowSpec["window"],
+        | "maximized"
+        | "fullscreen"
+        | "focusable"
+        | "titlebar"
+        | "alwaysOnTop"
+        | "skipTaskbar"
+      > = {},
   ) {
+    const { style, exStyle } = initialWindowStyles(options);
     const initialConstraints = resolvedConstraints(options);
     const placement = {
       ...options,
@@ -679,10 +708,10 @@ export class Windows {
     try {
       window = withWide(title, (titlePointer) =>
         user.symbols.CreateWindowExW(
-          options.focusable === false ? Number(WS_EX_NOACTIVATE) : 0,
+          Number(exStyle),
           ptr(this.name),
           titlePointer,
-          WS_OVERLAPPEDWINDOW,
+          Number(style),
           planned.position?.x ?? CW_USEDEFAULT,
           planned.position?.y ?? CW_USEDEFAULT,
           planned.outer.width,
@@ -700,6 +729,26 @@ export class Windows {
     this.windows.set(window, receive);
     this.constraints.set(window, initialConstraints);
     try {
+      if (options.titlebar === "custom") {
+        // CreateWindowEx can add WS_CAPTION to an overlapped window. Remove it
+        // after creation while hidden, retaining overlapped placement and system-menu semantics.
+        this.setStyle(window, this.windowStyles(window).style & ~WS_CAPTION);
+        assert(
+          user.symbols.SetWindowPos(
+            window,
+            0n,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE |
+              SWP_NOSIZE |
+              SWP_NOZORDER |
+              SWP_NOACTIVATE |
+              SWP_FRAMECHANGED,
+          ),
+        );
+      }
       // The HWND's largest monitor overlap can differ from the requested point's monitor.
       // Recompute after every initial DPI transition, retaining the selected placement work area.
       this.applyInitialPlacement(window, placement);
@@ -832,6 +881,101 @@ export class Windows {
   isFocused(window: bigint): boolean {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");
     return user.symbols.GetForegroundWindow() === window;
+  }
+
+  /** Read the normal caption mode even while fullscreen temporarily removes all decorations. */
+  getTitlebar(window: bigint): "system" | "custom" {
+    return (this.normalStyle(window) & WS_CAPTION) === WS_CAPTION
+      ? "system"
+      : "custom";
+  }
+
+  isAlwaysOnTop(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return !!(this.windowStyles(window).exStyle & WS_EX_TOPMOST);
+  }
+
+  /** Change native Z order without altering activation, visibility or geometry. */
+  setAlwaysOnTop(window: bigint, alwaysOnTop: boolean): void {
+    if (this.isAlwaysOnTop(window) === alwaysOnTop) {
+      return;
+    }
+    const HWND_TOPMOST = -1n;
+    const HWND_NOTOPMOST = -2n;
+    const SWP_NOOWNERZORDER = 0x200;
+    assert(
+      user.symbols.SetWindowPos(
+        window,
+        alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+        0,
+        0,
+        0,
+        0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER,
+      ),
+    );
+  }
+
+  isSkipTaskbar(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return !!(this.windowStyles(window).exStyle & WS_EX_TOOLWINDOW);
+  }
+
+  /** Tool-window style changes also change WINDOWPLACEMENT's coordinate convention.
+   * Require a hidden normal window so no saved iconic/zoomed/fullscreen placement is reinterpreted.
+   * Explorer observes the new style on the next explicit show without a hidden focus transfer.
+   */
+  setSkipTaskbar(window: bigint, skipTaskbar: boolean): void {
+    if (this.isSkipTaskbar(window) === skipTaskbar) {
+      return;
+    }
+    if (
+      this.isVisible(window) ||
+      this.isMinimized(window) ||
+      this.isMaximized(window) ||
+      this.isFullscreen(window)
+    ) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "Hide and restore the window before changing skipTaskbar.",
+      });
+    }
+    const { exStyle } = this.windowStyles(window);
+    const dpi = this.getDpi(window);
+    const content = this.clientSizeInDips(window, dpi);
+    this.changingGeometry.add(window);
+    try {
+      this.setStyle(
+        window,
+        skipTaskbar ? exStyle | WS_EX_TOOLWINDOW : exStyle & ~WS_EX_TOOLWINDOW,
+        GWL_EXSTYLE,
+      );
+      // A tool window has a smaller system caption. Preserve exact client pixels
+      // and constraints rather than allowing FRAMECHANGED to resize the content.
+      const { style, exStyle: nextExStyle } = this.windowStyles(window);
+      const outer = this.outerSizeFor(
+        content.width,
+        content.height,
+        dpi,
+        style,
+        nextExStyle,
+      );
+      assert(
+        user.symbols.SetWindowPos(
+          window,
+          0n,
+          0,
+          0,
+          outer.width,
+          outer.height,
+          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        ),
+      );
+      this.rememberNormalMonitor(window);
+    } finally {
+      this.changingGeometry.delete(window);
+      this.observeChanges(window);
+    }
   }
 
   isFocusable(window: bigint): boolean {
