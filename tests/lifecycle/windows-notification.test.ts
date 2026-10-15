@@ -7,6 +7,10 @@ import notification from "@bunaway/plugin-notification";
 import opener from "@bunaway/plugin-opener";
 import type { HostContext, HostResponse } from "@bunaway/protocol";
 import { Channel } from "#native/windows/bun/channel";
+import {
+  captureNativeChild,
+  printNativeChildDiagnostics,
+} from "../fixtures/native-child-diagnostics.ts";
 import { nativeFactory } from "../fixtures/native-platform.ts";
 import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
 import {
@@ -93,13 +97,17 @@ try {
         throw error;
       }
       // Compare FFI to a strict projected getter. PowerShell's ordinary property syntax can suppress getter failures.
-      const probe = Bun.spawnSync(
+      const probeChild = Bun.spawn(
         [
           "powershell.exe",
           "-NoProfile",
           "-EncodedCommand",
           Buffer.from(
-            `$ErrorActionPreference='Stop'; try {
+            `$ErrorActionPreference='Stop';
+        $probeClock=[Diagnostics.Stopwatch]::StartNew();
+        function Write-ProbeStage($phase) { [Console]::Error.WriteLine("notification-probe-stage stage=$phase elapsedMs=" + $probeClock.ElapsedMilliseconds) }
+        Write-ProbeStage 'CSharp.Compile';
+        try {
         Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class NotificationIdentity {
           [DllImport("shell32.dll", CharSet=CharSet.Unicode)] public static extern int SetCurrentProcessExplicitAppUserModelID(string id);
           public static int HistoryCount(object target, System.Reflection.MethodInfo method, string id) {
@@ -112,11 +120,14 @@ try {
             return count;
           }
         }';
+        Write-ProbeStage 'Process.Identity';
         if ([NotificationIdentity]::SetCurrentProcessExplicitAppUserModelID('${appId}') -lt 0) { throw 'Process identity setup failed' }
+        Write-ProbeStage 'WinRT.CreateNotifier';
         $manager=[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime];
         $notifier=$manager::CreateToastNotifier('${appId}');
         # Unpackaged settings need an existing notification database entry (Microsoft Toolkit's PreRegisterIdentityLessApp).
         # This disposable fixture alone primes that entry; production getStatus never sends a toast.
+        Write-ProbeStage 'Toast.Prepare';
         $xml=[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType=WindowsRuntime]::new();
         $xml.LoadXml('<toast><visual><binding template="ToastGeneric"><text>Bunaway notification regression fixture</text></binding></visual></toast>');
         $toastType=[Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType=WindowsRuntime];
@@ -134,8 +145,10 @@ try {
         if ($null -eq $expiry.GetValue($toast,$null)) { throw 'Expiration was not applied' }
         $primaryError=$null; $cleanupError=$null; $stage='Show';
         try {
+        Write-ProbeStage 'Toast.Show';
         $notifier.Show($toast);
         $stage='Setting';
+        Write-ProbeStage 'Setting.Poll';
         $notifierType=[Windows.UI.Notifications.ToastNotifier, Windows.UI.Notifications, ContentType=WindowsRuntime];
         $property=$notifierType.GetProperty('Setting');
         if ($null -eq $property) { throw 'Setting property is unavailable' }
@@ -154,7 +167,9 @@ try {
           [Console]::Error.WriteLine("notification-primary stage=$stage " + $primaryError.ToString());
         } finally {
           try {
+            Write-ProbeStage 'History.Remove';
             $manager::History.Remove('${toastTag}','${toastGroup}','${appId}');
+            Write-ProbeStage 'History.Count';
             $historyType=[Windows.UI.Notifications.ToastNotificationHistory, Windows.UI.Notifications, ContentType=WindowsRuntime];
             $getHistory=$historyType.GetMethod('GetHistory',[Type[]]@([string]));
             if ($null -eq $getHistory) { throw 'Projected GetHistory method is unavailable' }
@@ -174,6 +189,7 @@ try {
       } catch {
         [Console]::Error.WriteLine($_.Exception.ToString());
         try {
+          Write-ProbeStage 'Platform.Diagnostics';
           $services=Get-CimInstance Win32_Service -Filter "Name='WpnService' OR Name LIKE 'WpnUserService%'" | Select-Object Name,State,StartMode;
           $os=Get-CimInstance Win32_OperatingSystem;
           [Console]::Error.WriteLine('notification-platform ' + (@{ os=$os.Caption; productType=$os.ProductType; services=@($services) } | ConvertTo-Json -Compress -Depth 3));
@@ -184,9 +200,34 @@ try {
           ).toString("base64"),
         ],
         {
-          timeout: 20000,
+          stdout: "pipe",
+          stderr: "pipe",
         },
       );
+      const probeDiagnostics = resolve(
+        import.meta.dir,
+        "../../build/windows-native-logs/notification",
+        appId,
+      );
+      let probe: Awaited<ReturnType<typeof captureNativeChild>>;
+      try {
+        probe = await captureNativeChild(
+          probeChild,
+          probeDiagnostics,
+          "notification projected getter",
+          20_000,
+        );
+      } catch (error) {
+        if (probeChild.exitCode === null) {
+          probeChild.kill("SIGKILL");
+        }
+        await probeChild.exited;
+        await printNativeChildDiagnostics(probeDiagnostics, root);
+        throw error;
+      }
+      if (probe.exitCode !== 0) {
+        await printNativeChildDiagnostics(probeDiagnostics, root);
+      }
       expect(
         probe.exitCode,
         `stdout=${probe.stdout.toString()}\n${probe.stderr.toString()}`,

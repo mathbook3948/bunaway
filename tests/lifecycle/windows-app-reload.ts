@@ -73,6 +73,7 @@ await writeFile(
 import { command, defineApp } from "@bunaway/backend";
 import { BunawayError } from "@bunaway/plugin";
 import storage from "@bunaway/plugin-storage";
+import { rename } from "node:fs/promises";
 import { version, step, called } from "../shared/counter.ts";
 export const app = defineApp({ modules: [], plugins: [storage], state: { count: 0 },
   events: { "counter.changed": { type: "integer" } as const, ...(version === 3 ? { "counter.extra": { type: "integer" } as const } : {}) },
@@ -94,7 +95,10 @@ export const app = defineApp({ modules: [], plugins: [storage], state: { count: 
       return storage.readText({ path: ${JSON.stringify(storagePath)} });
     } }),
     "probe.report": command({ input: {}, output: { const: null } as const, async handle(payload) {
-      await Bun.write(${JSON.stringify(reports)} + "/" + version + ".json", JSON.stringify(payload));
+      const report = ${JSON.stringify(reports)} + "/" + version + ".json";
+      // Publish a complete sample. The supervisor reads while the next sample is written.
+      await Bun.write(report + ".pending", JSON.stringify(payload));
+      await rename(report + ".pending", report);
       return null;
     } }),
   },
