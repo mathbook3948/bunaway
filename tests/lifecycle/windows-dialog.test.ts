@@ -34,6 +34,25 @@ test.skipIf(process.platform !== "win32")(
         ],
         returns: "i32",
       },
+      IsWindowVisible: {
+        args: [
+          "u64",
+        ],
+        returns: "i32",
+      },
+      IsWindowEnabled: {
+        args: [
+          "u64",
+        ],
+        returns: "i32",
+      },
+      GetDlgItem: {
+        args: [
+          "u64",
+          "i32",
+        ],
+        returns: "u64",
+      },
       PostMessageW: {
         args: [
           "u64",
@@ -48,6 +67,17 @@ test.skipIf(process.platform !== "win32")(
     const find = (title: string) => {
       const text = Buffer.from(`${title}\0`, "utf16le");
       return BigInt(native.symbols.FindWindowW(null, ptr(text)));
+    };
+    const buttonState = (title: string, id: 1 | 2) => {
+      const hwnd = find(title);
+      const control = BigInt(native.symbols.GetDlgItem(hwnd, id));
+      return {
+        hwnd: hwnd.toString(),
+        dialogVisible: native.symbols.IsWindowVisible(hwnd),
+        control: control.toString(),
+        visible: native.symbols.IsWindowVisible(control),
+        enabled: native.symbols.IsWindowEnabled(control),
+      };
     };
     const until = async (condition: () => boolean, stage: string) => {
       const deadline = Date.now() + 10000;
@@ -168,18 +198,41 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
           title,
           requestId,
           result: async () => {
-            await until(() => response !== undefined, "response");
+            try {
+              await until(
+                () => response !== undefined,
+                `${operation} response`,
+              );
+            } catch (error) {
+              throw new Error(
+                `${operation} button state: ${JSON.stringify(buttonState(title, 1))}`,
+                {
+                  cause: error,
+                },
+              );
+            }
             return response;
           },
         };
       };
       const dismiss = async (title: string, button: 1 | 2) => {
-        await until(() => find(title) !== 0n, "appearance");
+        await until(() => {
+          const state = buttonState(title, button);
+          return (
+            state.control !== "0" &&
+            state.dialogVisible !== 0 &&
+            state.visible !== 0 &&
+            state.enabled !== 0
+          );
+        }, `button ${button} readiness`);
         const hwnd = find(title);
+        const control = BigInt(native.symbols.GetDlgItem(hwnd, button));
         expect(hwnd).not.toBe(0n);
-        // Native command injection tests Windows' real OK/Cancel processing, not physical input.
+        expect(control).not.toBe(0n);
+        // BN_CLICKED carries the control HWND. A null lParam represents a menu command.
+        // Native notification injection tests real OK/Cancel processing, not physical input.
         expect(
-          native.symbols.PostMessageW(hwnd, 0x0111, BigInt(button), 0n),
+          native.symbols.PostMessageW(hwnd, 0x0111, BigInt(button), control),
         ).not.toBe(0);
         return hwnd;
       };
@@ -303,7 +356,12 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
       for (const title of titles) {
         const hwnd = find(title);
         if (hwnd) {
-          native.symbols.PostMessageW(hwnd, 0x0111, 2n, 0n);
+          native.symbols.PostMessageW(
+            hwnd,
+            0x0111,
+            2n,
+            BigInt(native.symbols.GetDlgItem(hwnd, 2)),
+          );
         }
       }
       channel?.close();
