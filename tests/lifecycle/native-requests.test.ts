@@ -94,3 +94,34 @@ test("shutdown observed before native menu entry also interrupts late registrati
   });
   expect(interrupted).toBe(1);
 });
+
+test("session failure interrupts only its context without aborting listeners on the native stack", () => {
+  const requests = new NativeRequests();
+  const context = "menu" as HostContext;
+  const signal = requests.begin("popup", context);
+  let interrupted = 0;
+  const unsubscribe = requests.onModalInterrupt(signal, () => interrupted++);
+  for (const owner of [
+    "other" as HostContext,
+    context,
+  ]) {
+    requests.interruptModal({
+      kind: "session-failure",
+      route: {
+        viewId: "view",
+        documentGeneration: 0,
+        context: owner,
+      },
+      error: {
+        code: "INTERNAL",
+        message: "Session closed.",
+      },
+    });
+    expect(interrupted).toBe(owner === context ? 1 : 0);
+    expect(signal.aborted).toBe(false);
+    expect(requests.context("popup")).toBe(context);
+  }
+  unsubscribe();
+  requests.cancelContext(context);
+  expect(signal.aborted).toBe(true);
+});

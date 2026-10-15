@@ -26,6 +26,8 @@ const channel = new Channel(
       requests.cancel(packet.requestId);
     } else if (packet.kind === "cancel-context") {
       requests.cancelContext(packet.context);
+    } else if (packet.kind === "session-failure") {
+      requests.cancelContext(packet.route.context);
     } else if (packet.kind === "shutdown") {
       requests.cancelAll();
     }

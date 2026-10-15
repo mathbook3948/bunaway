@@ -51,7 +51,8 @@ export class NativeRequests {
         (packet.kind === "cancel" &&
           packet.requestId === entry.requestId &&
           packet.context === entry.context) ||
-        (packet.kind === "cancel-context" && packet.context === entry.context) ||
+        (packet.kind === "cancel-context" &&
+          packet.context === entry.context) ||
         (packet.kind === "session-failure" &&
           packet.route.context === entry.context)
       ) {

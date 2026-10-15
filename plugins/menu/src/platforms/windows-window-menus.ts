@@ -11,6 +11,7 @@ const WM_ENTERMENULOOP = 0x0211;
 const WM_EXITMENULOOP = 0x0212;
 const WM_CLOSE = 0x0010;
 const WM_MENUCOMMAND = 0x0126;
+const WM_TIMER = 0x0113;
 const TPM_RETURNCMD = 0x0100;
 const TPM_RIGHTBUTTON = 0x0002;
 // A native modal menu loop must continue polling the host's cancellation packets.
@@ -121,6 +122,7 @@ export class WindowMenus implements WindowMenuDriver {
     try {
       if (tree) {
         let stopModal: (() => void) | undefined;
+        let modalCancelled = false;
         const unlisten = this.host.subscribe(
           windowId,
           (message, position, handle) => {
@@ -129,12 +131,23 @@ export class WindowMenus implements WindowMenuDriver {
             }
             if (message === WM_ENTERMENULOOP && position === 0n) {
               stopModal?.();
+              modalCancelled = false;
               stopModal = this.keepModalResponsive(hwnd, undefined, () => {
+                modalCancelled = true;
                 this.native.symbols.EndMenu();
               });
             } else if (message === WM_EXITMENULOOP && position === 0n) {
               stopModal?.();
               stopModal = undefined;
+              modalCancelled = false;
+            } else if (
+              message === WM_TIMER &&
+              position === BigInt(MENU_TIMER_ID) &&
+              modalCancelled
+            ) {
+              // EndMenu can run before tracking starts in WM_ENTERMENULOOP.
+              // The owned timer retries after Windows has entered its modal loop.
+              this.native.symbols.EndMenu();
             } else if (message === WM_CLOSE && stopModal) {
               this.native.symbols.EndMenu();
             }

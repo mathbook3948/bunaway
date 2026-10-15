@@ -986,6 +986,7 @@ test("modal polling observes validated control intent immediately but defers res
     for (const packet of [
       fixtures.cancel.packet,
       fixtures["cancel-context"].packet,
+      fixtures["session-failure"].packet,
       fixtures.shutdown.packet,
       fixtures.operation.packet,
     ]) {
@@ -999,6 +1000,7 @@ test("modal polling observes validated control intent immediately but defers res
     expect(observed).toEqual([
       "cancel",
       "cancel-context",
+      "session-failure",
       "shutdown",
     ]);
     expect(dispatched).toEqual([]);
@@ -1017,7 +1019,7 @@ test("modal polling observes validated control intent immediately but defers res
       },
     });
     receiver.poll();
-    expect(observed).toHaveLength(3);
+    expect(observed).toHaveLength(4);
     expect(failures).toHaveLength(1);
   } finally {
     receiver.close();

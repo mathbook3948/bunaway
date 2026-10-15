@@ -114,6 +114,11 @@ test.skipIf(process.platform !== "win32")(
             }
           },
           false,
+          id === "two"
+            ? {
+                titlebar: "custom",
+              }
+            : {},
         );
         handles.set(id, hwnd);
         windows.observe(hwnd, id, () => {});
@@ -145,6 +150,14 @@ test.skipIf(process.platform !== "win32")(
       expect(content.height).toBe(
         Math.round((300 * windows.getDpi(first)) / 96),
       );
+      for (const skipTaskbar of [
+        true,
+        false,
+      ]) {
+        windows.setSkipTaskbar(first, skipTaskbar);
+        expect(windows.getBounds(first, "content").width).toBe(content.width);
+        expect(windows.getBounds(first, "content").height).toBe(content.height);
+      }
       const wrapped = menuItemsSchema.parse(
         Array.from(
           {
@@ -169,6 +182,20 @@ test.skipIf(process.platform !== "win32")(
       expect(windows.getBounds(second, "content").height).toBe(
         Math.round((300 * windows.getDpi(second)) / 96),
       );
+      const wrappedContent = windows.getBounds(second, "content");
+      for (const skipTaskbar of [
+        true,
+        false,
+      ]) {
+        windows.setSkipTaskbar(second, skipTaskbar);
+        expect(windows.getBounds(second, "content").width).toBe(
+          wrappedContent.width,
+        );
+        expect(windows.getBounds(second, "content").height).toBe(
+          wrappedContent.height,
+        );
+        expect(windows.getTitlebar(second)).toBe("custom");
+      }
       menus.set(
         "one",
         menuItemsSchema.parse([
@@ -285,6 +312,7 @@ test.skipIf(process.platform !== "win32")(
 for (const cancellation of [
   "cancel",
   "cancel-context",
+  "session-failure",
   "shutdown",
   "bar-shutdown",
   "bar-early-shutdown",
@@ -358,6 +386,19 @@ for (const cancellation of [
                 channel.notify({
                   kind: "cancel-context",
                   context,
+                });
+              } else if (cancellation === "session-failure") {
+                channel.notify({
+                  kind: "session-failure",
+                  route: {
+                    viewId: "popup",
+                    documentGeneration: 0,
+                    context,
+                  },
+                  error: {
+                    code: "INTERNAL",
+                    message: "Session closed.",
+                  },
                 });
               } else {
                 channel.notify({

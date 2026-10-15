@@ -952,25 +952,7 @@ export class Windows {
       );
       // A tool window has a smaller system caption. Preserve exact client pixels
       // and constraints rather than allowing FRAMECHANGED to resize the content.
-      const { style, exStyle: nextExStyle } = this.windowStyles(window);
-      const outer = this.outerSizeFor(
-        content.width,
-        content.height,
-        dpi,
-        style,
-        nextExStyle,
-      );
-      assert(
-        user.symbols.SetWindowPos(
-          window,
-          0n,
-          0,
-          0,
-          outer.width,
-          outer.height,
-          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-        ),
-      );
+      this.setClientSize(window, content, dpi, true);
       this.rememberNormalMonitor(window);
     } finally {
       this.changingGeometry.delete(window);
@@ -1760,7 +1742,12 @@ export class Windows {
     assert(previousStyle !== 0n || error === 0, `SetWindowLongPtrW: ${error}`);
   }
 
-  private setClientSize(window: bigint, size: ClientSize, dpi: number) {
+  private setClientSize(
+    window: bigint,
+    size: ClientSize,
+    dpi: number,
+    frameChanged = false,
+  ) {
     const { style, exStyle } = this.windowStyles(window);
     const outerSize = this.outerSizeFor(
       size.width,
@@ -1778,7 +1765,10 @@ export class Windows {
         0,
         outerSize.width,
         outerSize.height,
-        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+        SWP_NOMOVE |
+          SWP_NOZORDER |
+          SWP_NOACTIVATE |
+          (frameChanged ? SWP_FRAMECHANGED : 0),
       ),
     );
     if (user.symbols.GetMenu(window)) {
