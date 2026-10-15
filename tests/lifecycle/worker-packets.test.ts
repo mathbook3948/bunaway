@@ -962,6 +962,70 @@ test("a nested client cancellation retains its separate lane when client data is
   }
 });
 
+test("modal polling observes validated control intent immediately but defers resource dispatch", async () => {
+  const { port1, port2 } = new MessageChannel();
+  const observed: Packet["kind"][] = [];
+  const dispatched: Packet["kind"][] = [];
+  const failures: unknown[] = [];
+  const receiver = new Channel(
+    port2,
+    runtime,
+    "ui",
+    (packet) => {
+      dispatched.push(packet.kind);
+    },
+    (error) => {
+      failures.push(error);
+    },
+    (packet) => {
+      observed.push(packet.kind);
+    },
+  );
+  try {
+    let sequence = 0;
+    for (const packet of [
+      fixtures.cancel.packet,
+      fixtures["cancel-context"].packet,
+      fixtures.shutdown.packet,
+      fixtures.operation.packet,
+    ]) {
+      port1.postMessage({
+        runtime,
+        sequence: ++sequence,
+        packet,
+      });
+    }
+    receiver.poll();
+    expect(observed).toEqual([
+      "cancel",
+      "cancel-context",
+      "shutdown",
+    ]);
+    expect(dispatched).toEqual([]);
+    await Promise.resolve();
+    expect(dispatched).toEqual([
+      ...observed,
+      "operation",
+    ]);
+    port1.postMessage({
+      runtime,
+      sequence: ++sequence,
+      packet: {
+        kind: "cancel",
+        context: 3,
+        requestId: "bad",
+      },
+    });
+    receiver.poll();
+    expect(observed).toHaveLength(3);
+    expect(failures).toHaveLength(1);
+  } finally {
+    receiver.close();
+    port1.close();
+    port2.close();
+  }
+});
+
 test("polled cancellation interrupts native loops synchronously while ordinary cleanup remains deferred", async () => {
   const { port1, port2 } = new MessageChannel();
   const received: string[] = [];

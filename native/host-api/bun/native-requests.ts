@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { API_LIMITS, type HostContext } from "@bunaway/protocol";
+import type { Packet } from "@bunaway/runtime-bun/worker-channel";
 
 /** Own active native calls. Cancellation releases capacity while callers still observe late settlement. */
 export class NativeRequests {
@@ -40,21 +41,7 @@ export class NativeRequests {
   }
 
   /** Called only with validated channel packets while polling a native callback. Never releases resources. */
-  interruptModal(
-    packet:
-      | {
-          kind: "shutdown";
-        }
-      | {
-          kind: "cancel";
-          requestId: string;
-          context: HostContext;
-        }
-      | {
-          kind: "cancel-context";
-          context: HostContext;
-        },
-  ): void {
+  interruptModal(packet: Packet): void {
     if (packet.kind === "shutdown") {
       this.modalShutdownObserved = true;
     }
@@ -64,7 +51,9 @@ export class NativeRequests {
         (packet.kind === "cancel" &&
           packet.requestId === entry.requestId &&
           packet.context === entry.context) ||
-        (packet.kind === "cancel-context" && packet.context === entry.context)
+        (packet.kind === "cancel-context" && packet.context === entry.context) ||
+        (packet.kind === "session-failure" &&
+          packet.route.context === entry.context)
       ) {
         entry.cancel();
       }
