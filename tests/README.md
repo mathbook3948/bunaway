@@ -1103,3 +1103,10 @@ harness의 기존 15초 제한을 각각 유지하며 출력과 경과 시간, �
 `build/windows-matrix-logs/android-backend-assets/`에 보존합니다.
 PR #191과 같은 native child observer 및 notification 진단을 사용하고 Windows stderr를
 원본 파일로 수집해 PowerShell의 CLIXML 해석 오류가 실제 실패 출력을 가리지 않게 합니다.
+
+
+`lifecycle/appearance-controller.test.ts`는 Windows 프레임의 앱 기본값, 창 override, 고대비 우선,
+OS snapshot 중복 제거, 조회와 적용 오류 복구, 구독 해제 및 HWND 수명 분리를 검사합니다.
+`lifecycle/windows-appearance.test.ts`는 실제 DWM 속성 readback으로 두 HWND의 독립 설정,
+기본 system 선호와 정리를 검사합니다. 사용자 설정은 변경하지 않으며 실제 테마 전환과
+고대비 렌더링의 시각 검증을 대신하지 않습니다.

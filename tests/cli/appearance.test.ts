@@ -12,7 +12,7 @@ import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
 import { pluginRegistry } from "#native/host-api/bun/plugins";
 import { createProject, packageDirectory } from "./project.ts";
 
-test("isolated appearance package ships Windows I/O and macOS UI adapters but keeps FFI out of the browser", async () => {
+test("isolated appearance package ships Windows and macOS UI adapters but keeps FFI out of the browser", async () => {
   const home = await realpath(
     await mkdtemp(resolve(tmpdir(), "bunaway-appearance-install-")),
   );
@@ -76,7 +76,7 @@ export default defineApp({ modules: [], plugins: [appearance] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-appearance",
     ]);
-    expect(plugins[0]?.targets.windows?.thread).toBe("worker");
+    expect(plugins[0]?.targets.windows?.thread).toBe("ui");
     expect(plugins[0]?.targets.macos?.thread).toBe("ui");
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "appearance",

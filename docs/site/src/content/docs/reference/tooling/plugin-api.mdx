@@ -216,3 +216,11 @@ error를 이벤트로 전달합니다. 오류 진입과 복구도 revision을 �
 UI 호스트는 디스플레이 알림을 메시지 처리 뒤 합쳐서 관찰하며 주기적으로 조회하지 않습니다.
 전달에는 뷰의 `windows.monitorsChanged` 이벤트 허용과 `windows.getMonitorSnapshot` 조회 권한이
 모두 필요합니다.
+
+
+선택적 `NativeWindowServices.appearance`는 Windows UI 스레드의 창 프레임 수명 서비스를
+제공합니다. `NativeAppearanceWindows.subscribe(receive)`는 기존 창과 이후 생성하는 창마다
+`NativeAppearanceWindow`의 `windowId`, `setDark(dark)`를 전달합니다. receive가 반환한
+정리 함수는 해당 창 수명 종료 때 실행합니다. subscribe가 반환한 정리 함수는 모든 창의
+DWM dark mode를 해제하고 DLL을 닫습니다. 한 번에 하나의 플러그인 소유자만 구독합니다.
+이미 종료한 창이나 해제한 구독의 setDark는 CANCELLED이며 HWND는 플러그인에 노출하지 않습니다.
