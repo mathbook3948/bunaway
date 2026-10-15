@@ -142,6 +142,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-opener-job.test.ts",
           "tests/lifecycle/windows-opener-selected-app.test.ts",
           "tests/lifecycle/windows-notification.test.ts",
+          "tests/lifecycle/windows-toast.test.ts",
           "tests/cli/windows-assets.test.ts",
           "tests/cli/windows-compile.test.ts",
         ].map((name) => resolve(root, name)),

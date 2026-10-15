@@ -17,10 +17,15 @@ test("notification status and Settings require separate permissions and null-onl
   expect([
     ...registry.operations.keys(),
   ]).toEqual([
+    "notification.show",
+    "notification.clear",
     "notification.getStatus",
     "notification.openSettings",
   ]);
-  for (const operation of registry.operations.keys()) {
+  for (const operation of [
+    "notification.getStatus",
+    "notification.openSettings",
+  ]) {
     expect(
       registry.allowed(
         {

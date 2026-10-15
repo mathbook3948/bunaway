@@ -1207,6 +1207,8 @@
     "reference/plugins/process": ["process.run"],
     "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
     "reference/plugins/notification": [
+      "notification.show",
+      "notification.clear",
       "notification.getStatus",
       "notification.openSettings"
     ],

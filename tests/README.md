@@ -1105,6 +1105,14 @@ PR #191과 같은 native child observer 및 notification 진단을 사용하고 
 원본 파일로 수집해 PowerShell의 CLIXML 해석 오류가 실제 실패 출력을 가리지 않게 합니다.
 
 
+`api/notification-toast.test.ts`는 toast 입력, XML escape, 작업별 권한, 이벤트 수신 권한,
+교체와 지연 callback 차단, 64개 소유권 상한과 실패 후 정리를 검사한다. 격리된 FFI
+fixture는 실제 JSCallback vtable로 Invoke와 지연 Release를 실행한다.
+`lifecycle/windows-toast.test.ts`는 실제 Windows UUID 바로가기와 popup/소리 억제 알림으로
+Show, XML, 교체와 개별 clear 및 종료 후 history 제거를 검사한다. 별도 STA/MTA 검사는
+실제 COM marshaling, callback 실행 스레드와 지연 Release를 확인한다. `host:windows`에
+포함하며 실제 사용자 클릭, popup 렌더링과 cold-start activation 검증은 아니다.
+
 `lifecycle/windows-display.test.ts`는 기본 style 보존과 실제 Windows의 custom caption,
 네이티브 resize hit test, topmost/tool-window flag, content 크기와 전체화면 복원을 검사합니다.
 `lifecycle/windows-webview-titlebar.ts`는 실제 WebView2의 Settings9 설정, CSS drag/no-drag
