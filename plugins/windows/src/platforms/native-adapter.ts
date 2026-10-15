@@ -37,6 +37,13 @@ function unsupportedTitle() {
   });
 }
 
+function unsupportedDisplay() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window display options are not implemented on this platform.",
+  });
+}
+
 function unsupportedMovement() {
   return new BunawayError({
     code: "UNSUPPORTED",
@@ -330,6 +337,33 @@ export function createOperations(
           throw unsupportedRelations();
         }
         return window.isEnabled();
+      case "windows.getTitlebar":
+        if (!window.getTitlebar) {
+          throw unsupportedDisplay();
+        }
+        return window.getTitlebar();
+      case "windows.setAlwaysOnTop":
+        if (!window.setAlwaysOnTop) {
+          throw unsupportedDisplay();
+        }
+        window.setAlwaysOnTop(call.payload.alwaysOnTop);
+        break;
+      case "windows.isAlwaysOnTop":
+        if (!window.isAlwaysOnTop) {
+          throw unsupportedDisplay();
+        }
+        return window.isAlwaysOnTop();
+      case "windows.setSkipTaskbar":
+        if (!window.setSkipTaskbar) {
+          throw unsupportedDisplay();
+        }
+        window.setSkipTaskbar(call.payload.skipTaskbar);
+        break;
+      case "windows.isSkipTaskbar":
+        if (!window.isSkipTaskbar) {
+          throw unsupportedDisplay();
+        }
+        return window.isSkipTaskbar();
       case "windows.setFocusable":
         if (!window.setFocusable) {
           throw unsupportedFocusability();

@@ -18,6 +18,7 @@ import {
 import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
 import { WebViewDownloads } from "./webview-downloads.ts";
+import { enableCustomTitlebar } from "./webview-titlebar.ts";
 import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 
 const embedded = Bun.embeddedFiles.some(
@@ -418,6 +419,9 @@ export class WebView {
     );
     const settings = getObject(this.webview, 3);
     try {
+      if (this.spec.window.titlebar === "custom") {
+        enableCustomTitlebar(settings);
+      }
       for (const [slot, value] of [
         [
           6,

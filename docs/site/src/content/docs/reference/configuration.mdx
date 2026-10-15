@@ -74,6 +74,9 @@ Ctrl+C나 SIGTERM으로 빌드를 중단하면 실행한 명령과 하위 프로
 | `window.useContentSize` | Windows 전용 boolean, 기본 `true`. `false`이면 width/height를 논리 outer 크기로 해석. min/max는 항상 content 제약 |
 | `window.preventOverflow` | Windows 전용 boolean, 기본 `false`. 선택한 모니터의 작업 영역에 초기 outer 크기와 위치를 보정 |
 | `window.focusable` | Windows 전용 boolean, 기본 `true`. `false`는 사용자 클릭과 호스트의 전경 활성화를 차단하며 Windows 기본 동작상 작업 표시줄에도 나타나지 않음 |
+| `window.titlebar` | Windows 전용 `"system"` 또는 `"custom"`, 기본 `"system"`. custom은 시스템 caption을 제거하고 네이티브 resize 테두리를 유지함. WebView2 CSS `app-region: drag/no-drag`로 사용자 타이틀바를 구성함 |
+| `window.alwaysOnTop` | Windows 전용 boolean, 기본 `false`. 활성화 없이 일반 창보다 위에 배치함 |
+| `window.skipTaskbar` | Windows 전용 boolean, 기본 `false`. tool-window style로 작업 표시줄과 Alt+Tab에서 제외함 |
 | `window.maximized` | Windows 전용 boolean, 기본 `false`. 초기 최대화. 일반 복원 영역에는 초기 크기와 위치 적용 |
 | `window.fullscreen` | Windows 전용 boolean, 기본 `false`. 초기 전체화면. maximized와 함께 켜면 전체화면 해제 뒤 최대화 복원 |
 

@@ -1111,3 +1111,10 @@ PR #191과 같은 native child observer 및 notification 진단을 사용하고 
 검사하며 `host:windows`에 포함한다. 물리 입력과 overwrite UI, 다중 선택 UI 및 실제 소유 창
 파괴는 별도 검증이다. `worker-packets.test.ts`는 검증한 모달 제어 패킷의 의도 관측이 즉시
 실행되고 일반 dispatch와 자원 변경은 Promise 작업으로 지연되는지 검사한다.
+
+`lifecycle/windows-display.test.ts`는 기본 style 보존과 실제 Windows의 custom caption,
+네이티브 resize hit test, topmost/tool-window flag, content 크기와 전체화면 복원을 검사합니다.
+`lifecycle/windows-webview-titlebar.ts`는 실제 WebView2의 Settings9 설정, CSS drag/no-drag
+문서와 탐색 후 재구성, 전체화면 복원, 미지원 COM 인터페이스 및 자원 정리를 검사합니다.
+Windows native 실행기에 포함하며 결과는 `build/windows-webview-titlebar-results.json`에 기록합니다.
+물리 마우스 드래그, 우클릭 메뉴 조작, 다중 모니터 DPI 이동과 screen reader 검증은 별도입니다.

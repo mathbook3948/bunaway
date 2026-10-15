@@ -218,6 +218,14 @@ UI 호스트는 디스플레이 알림을 메시지 처리 뒤 합쳐서 관찰�
 모두 필요합니다.
 
 
+Windows의 선택적 `getTitlebar`, `setAlwaysOnTop`, `isAlwaysOnTop`, `setSkipTaskbar`,
+`isSkipTaskbar`는 창 caption 모드와 표시 옵션을 제공합니다. `WindowSpec.window`는
+`titlebar`, `alwaysOnTop`, `skipTaskbar`를 선언합니다. 설정의 기본값은 system, false, false입니다.
+custom은 caption만 제거하며 resize frame과 시스템 메뉴는 유지합니다. WebView2가 CSS
+app-region의 drag/no-drag를 처리하고 없는 런타임은 UNSUPPORTED를 반환합니다.
+setSkipTaskbar는 변경할 때 숨겨진 일반 창을 요구하며 그 외 상태는 BUSY입니다.
+네이티브 HWND와 WebView가 자원을 소유하며 새 창은 선언의 기본값에서 시작합니다.
+
 ## NativeDialogServices
 
 Windows UI STA의 선택적 파일 선택 서비스입니다. `origin(requestId)`은 호스트가 인증한
@@ -227,3 +235,4 @@ Windows UI STA의 선택적 파일 선택 서비스입니다. `origin(requestId)
 `watchCancellation(requestId?)`은 검증한 제어 패킷의 취소 의도를 관측하는 수명입니다.
 반환한 `cancelled()`로 확인하고 `dispose()`로 해제합니다. 관측 중에는 일반 작업, abort
 리스너나 네이티브 정리를 실행하지 않습니다. 모달 스택이 반환한 뒤 정상 dispatch를 재개합니다.
+
