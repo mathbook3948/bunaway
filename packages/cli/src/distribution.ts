@@ -78,6 +78,7 @@ export const frameworkPaths = [
   "native/windows/bun/window-placement.ts",
   "native/windows/bun/window-events.ts",
   "native/windows/bun/system-events.ts",
+  "native/windows/bun/appearance.ts",
   "native/windows/bun/session-notifications.ts",
   "native/windows/bun/window-readiness.ts",
   "native/windows/bun/window-relations.ts",
