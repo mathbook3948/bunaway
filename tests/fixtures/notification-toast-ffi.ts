@@ -459,6 +459,10 @@ const adapter = factory({
     },
   },
 });
+const executeUI = adapter.executeUI;
+assert(executeUI);
+const invokeUI = async (...args: Parameters<typeof executeUI>) =>
+  executeUI(...args);
 const beforeDenied = shown;
 const request = {
   requestId: "fixture",
@@ -470,7 +474,7 @@ const request = {
   },
 };
 await assert.rejects(
-  adapter.executeUI(
+  invokeUI(
     "notification.show",
     {
       id: "api",
@@ -489,7 +493,7 @@ await assert.rejects(
   },
 );
 await assert.rejects(
-  adapter.executeUI(
+  invokeUI(
     "notification.show",
     {
       id: "api",
@@ -505,7 +509,7 @@ await assert.rejects(
 const abort = new AbortController();
 abort.abort();
 await assert.rejects(
-  adapter.executeUI(
+  invokeUI(
     "notification.show",
     {
       id: "api",
@@ -519,7 +523,7 @@ await assert.rejects(
   ),
 );
 assert.equal(shown, beforeDenied);
-await adapter.executeUI(
+await invokeUI(
   "notification.show",
   {
     id: "api",
@@ -551,7 +555,7 @@ await Promise.resolve();
 assert.deepEqual(published, [
   "notification.clicked",
 ]);
-await adapter.executeUI(
+await invokeUI(
   "notification.clear",
   {
     id: "api",

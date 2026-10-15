@@ -113,7 +113,7 @@ if (workerData?.toastMarshalWorker) {
       returns: "i32",
     },
   });
-  const worker = new Worker(import.meta.url, {
+  const worker = new Worker(new URL(import.meta.url), {
     workerData: {
       toastMarshalWorker: true,
     },
