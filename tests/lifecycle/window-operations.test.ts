@@ -18,6 +18,9 @@ test("initial state overrides are fieldwise and recreation restores declared sta
     ...main.window,
     maximized: true,
     fullscreen: true,
+    titlebar: "custom",
+    alwaysOnTop: true,
+    skipTaskbar: true,
   };
   await f.operations.execute(
     {
@@ -27,6 +30,9 @@ test("initial state overrides are fieldwise and recreation restores declared sta
         options: {
           window: {
             fullscreen: false,
+            titlebar: "system",
+            alwaysOnTop: false,
+            skipTaskbar: false,
           },
         },
       },
@@ -36,6 +42,9 @@ test("initial state overrides are fieldwise and recreation restores declared sta
   expect(f.createdSpecs[0]?.window).toEqual({
     ...main.window,
     fullscreen: false,
+    titlebar: "system",
+    alwaysOnTop: false,
+    skipTaskbar: false,
   });
   const first = f.views.get("main");
   assert(first);
@@ -1113,4 +1122,37 @@ test("creation titles use the same UTF-16 bound as declarations before closing a
   });
   expect(f.views.get("main")?.closed).toBe(false);
   expect(f.createdSpecs[0]?.title.length).toBe(1024);
+});
+
+test("unsupported native creation retains its capability error and cleans the reserved window", async () => {
+  const f = fixture();
+  f.setCreationReady(false);
+  f.setTick(async () => {
+    const view = f.views.get("main");
+    assert(view);
+    view.failure = new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Custom titlebars require WebView2 non-client region support.",
+    });
+  });
+  await expect(
+    f.operations.execute(
+      {
+        operation: "windows.create",
+        payload: {
+          view: "main",
+          options: {
+            window: {
+              titlebar: "custom",
+            },
+          },
+        },
+      },
+      "unsupported-titlebar",
+    ),
+  ).rejects.toMatchObject({
+    code: "UNSUPPORTED",
+    message: "Custom titlebars require WebView2 non-client region support.",
+  });
+  expect(f.operations.replacing.size).toBe(0);
 });

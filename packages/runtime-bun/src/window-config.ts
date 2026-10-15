@@ -119,6 +119,9 @@ export function readWindowSpecs(
             "useContentSize",
             "preventOverflow",
             "focusable",
+            "titlebar",
+            "alwaysOnTop",
+            "skipTaskbar",
             "maximized",
             "fullscreen",
           ].includes(key),
@@ -131,15 +134,27 @@ export function readWindowSpecs(
         "Window placement requires paired integer x/y, boolean options and no center/position conflict.",
       );
     }
+    const titlebar = size.titlebar;
+    if (
+      titlebar !== undefined &&
+      titlebar !== "system" &&
+      titlebar !== "custom"
+    ) {
+      throw new Error("Window titlebar must be system or custom.");
+    }
     const focusable = size.focusable;
     if (focusable !== undefined && typeof focusable !== "boolean") {
       throw new Error("Window focusable must be a boolean.");
     }
-    const initialState: Pick<WindowSpec["window"], "maximized" | "fullscreen"> =
-      {};
+    const initialState: Pick<
+      WindowSpec["window"],
+      "maximized" | "fullscreen" | "alwaysOnTop" | "skipTaskbar"
+    > = {};
     for (const name of [
       "maximized",
       "fullscreen",
+      "alwaysOnTop",
+      "skipTaskbar",
     ] as const) {
       const option = size[name];
       if (option === undefined) {
@@ -256,6 +271,11 @@ export function readWindowSpecs(
               focusable,
             }),
         ...initialState,
+        ...(titlebar === undefined
+          ? {}
+          : {
+              titlebar,
+            }),
         ...(size.x === undefined
           ? {}
           : {
