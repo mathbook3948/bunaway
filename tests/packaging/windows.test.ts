@@ -260,7 +260,7 @@ test.each([
   "win-direct",
   "win-store-unpackaged",
 ] as const)(
-  "%s forwards the matching target minimum Windows version to Inno",
+  "%s forwards target minimum Windows version and autostart opt-in to Inno",
   async (channel) => {
     const root = await realpath(
       await mkdtemp(join(tmpdir(), "bunaway-inno-minimum-")),
@@ -296,6 +296,7 @@ test.each([
           channels: {
             [channel]: {
               webView2: "check",
+              autostart: true,
             },
           },
         }),
@@ -329,9 +330,12 @@ test.each([
       };
       await stages.find((stage) => stage.id === "stage")?.run(ctx);
       await stages.find((stage) => stage.id === "assemble")?.run(ctx);
-      expect(
-        await Bun.file(join(ctx.staging, "app.test-setup-1.0.0.iss")).text(),
-      ).toContain("MinVersion=10.0.22621\n");
+      const rendered = await Bun.file(
+        join(ctx.staging, "app.test-setup-1.0.0.iss"),
+      ).text();
+      expect(rendered).toContain("MinVersion=10.0.22621\n");
+      expect(rendered).toContain('Name: "autostart";');
+      expect(rendered).toContain("AutostartAppId = 'com.example.app'");
     } finally {
       discovery.mockRestore();
       compiler.mockRestore();

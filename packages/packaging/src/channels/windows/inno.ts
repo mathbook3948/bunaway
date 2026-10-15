@@ -6,6 +6,7 @@ import {
   type StageContext,
 } from "../../contract.ts";
 import { renderAssociationCode } from "./associations.ts";
+import { renderAutostartCode } from "./autostart.ts";
 import { findIscc, findWindowsKitTool, must } from "./common.ts";
 import { innoIdentity } from "./inno-identity.ts";
 import { renderInstallationStateCode } from "./installation-state.ts";
@@ -31,6 +32,7 @@ export interface InnoOptions {
   iconFile?: string;
   desktopShortcut: boolean;
   startMenuShortcut: boolean;
+  autostart?: boolean;
   webView2: "check" | "bootstrap";
   // Absolute path to Microsoft's Evergreen bootstrapper; only valid for
   // webView2="bootstrap". Store EXE/MSI submissions must be standalone and
@@ -95,6 +97,9 @@ export function renderInnoScript(options: InnoOptions): string {
     throw new Error(
       "perMachine installs must preserve user data; cleanup requires a perUser install.",
     );
+  }
+  if (!perUser && options.autostart) {
+    throw new Error("Installer autostart requires perUser scope.");
   }
   const shortcutName = installerDirectoryName(options.name);
   const directoryName = issLiteral(shortcutName);
@@ -164,7 +169,7 @@ export function renderInnoScript(options: InnoOptions): string {
     );
   }
 
-  if (options.desktopShortcut || options.associations) {
+  if (options.desktopShortcut || options.associations || options.autostart) {
     lines.push("", "[Tasks]");
   }
   if (options.associations?.files) {
@@ -175,6 +180,11 @@ export function renderInnoScript(options: InnoOptions): string {
   if (options.associations?.urlSchemes) {
     lines.push(
       'Name: "urlschemes"; Description: "URL 열기 앱으로 등록"; GroupDescription: "앱 연결:"; Flags: unchecked',
+    );
+  }
+  if (options.autostart) {
+    lines.push(
+      'Name: "autostart"; Description: "로그인 시 자동 실행"; GroupDescription: "자동 실행:"; Flags: unchecked checkedonce',
     );
   }
   if (options.desktopShortcut) {
@@ -293,6 +303,14 @@ type
     "  end;",
     "end;",
     "",
+    ...(perUser
+      ? [
+          renderAutostartCode(
+            options.appId ?? options.identifier,
+            options.autostart ?? false,
+          ),
+        ]
+      : []),
     "procedure PreflightPendingExecutable;",
     "var CurrentExecutableName, CurrentInstallDir: String;",
     "    HasDistinctPredecessor, ChangesInstallationIdentity: Boolean;",
@@ -351,6 +369,11 @@ type
     "    ValidateInstallationSnapshot;",
     "    PreflightPendingExecutable;",
     "    PreflightAssociations;",
+    ...(perUser
+      ? [
+          "    PreflightAutostart;",
+        ]
+      : []),
     "  except",
     "    Result := GetExceptionMessage;",
     "    Exit;",
@@ -474,6 +497,11 @@ end;
     "begin",
     "  if CurUninstallStep <> usUninstall then Exit;",
     "  ValidateInstallationSnapshot;",
+    ...(perUser
+      ? [
+          "  UninstallAutostart;",
+        ]
+      : []),
     "  RemovePendingAssociationOwner;",
     "  RemoveAssociations(AssociationExecutable);",
     "  RemovePreviousExecutable(PendingAssociationExecutableName, PendingAssociationInstallDir);",
@@ -562,6 +590,11 @@ end;
     "  try",
     "    ValidateInstallationSnapshot;",
     "    InstallAssociations;",
+    ...(perUser
+      ? [
+          "    InstallAutostart;",
+        ]
+      : []),
     "  except",
     "    PostInstallError := GetExceptionMessage;",
     "    Log(PostInstallError);",
@@ -569,6 +602,11 @@ end;
     "  try",
     "    ValidateInstallationSnapshot;",
     "    CompleteInstallation;",
+    ...(perUser
+      ? [
+          "    if PostInstallError = '' then ClearPendingAutostartOwner;",
+        ]
+      : []),
     "    // Association reconciliation alone does not finish shortcut and payload cleanup.",
     "    // Keep the trusted predecessor until every required post-install stage succeeds.",
     "    if (PostInstallError = '') and PendingAssociationDataSaved then begin",
@@ -607,6 +645,11 @@ end;
     "    PreviousExecutableName := '';",
     "  PreviousInstallDir := InstallationSnapshot.InstallDir;",
     "  LoadPendingAssociationOwner;",
+    ...(perUser
+      ? [
+          "  LoadAutostartOwners;",
+        ]
+      : []),
     "  // A failed upgrade already recorded the new EXE. Reuse its trusted pending",
     "  // predecessor for the existing close-resource, shortcut and EXE cleanup policy.",
     "  if (PendingAssociationExecutableName <> '') and (PendingAssociationInstallDir <> '') and",
@@ -633,6 +676,11 @@ end;
     "  if not Result then Exit;",
     "  CaptureInstallationSnapshot;",
     "  LoadPendingAssociationOwner;",
+    ...(perUser
+      ? [
+          "  LoadAutostartOwners;",
+        ]
+      : []),
     "end;",
     "",
     "procedure RegisterPreviousData(PreviousDataKey: Integer);",
@@ -656,6 +704,11 @@ end;
     `    if not SetPreviousData(PreviousDataKey, 'ExecutableName', '${executableLiteral}') or`,
     "       not SetPreviousData(PreviousDataKey, 'InstallDir', ExpandConstant('{app}')) then",
     "      RaiseException('Could not persist current installation identity.');",
+    ...(perUser
+      ? [
+          "    RegisterAutostartData(PreviousDataKey);",
+        ]
+      : []),
     "    PendingAssociationDataSaved := True;",
     `    InstallationSnapshot.ExecutableName := '${executableLiteral}';`,
     "    InstallationSnapshot.InstallDir := ExpandConstant('{app}');",

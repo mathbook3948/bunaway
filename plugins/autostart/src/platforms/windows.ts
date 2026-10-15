@@ -68,11 +68,13 @@ export function enable(
 ) {
   state.registry.unpackaged();
   const command = commandLine(state.app, input.args, input.hidden);
-  // Repeating the request must not rewrite Run during a login launch.
-  if (registryCommand(state.registry.read(RUN_KEY, state.name)) !== command) {
-    state.registry.write(state.name, command);
-  }
-  return getStatus(state);
+  return state.registry.withRunLock(state.name, () => {
+    // Repeating the request must not rewrite Run during a login launch.
+    if (registryCommand(state.registry.read(RUN_KEY, state.name)) !== command) {
+      state.registry.write(state.name, command);
+    }
+    return getStatus(state);
+  });
 }
 
 export function disable(state: ReturnType<typeof initialize>): null {

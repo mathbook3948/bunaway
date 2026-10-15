@@ -1076,3 +1076,13 @@ Windows 호스트의 `webview-creation`은 환경 요청, 반환과 완료, 각 
 준비 대기 단계와 arrival, held, cancelled 수를 보관한다. 대소문자 URL 탐색의 호출 전후,
 실패 후 진단 상태 조회의 전후도 기록하므로 UI 로그가 멈춰도 대기 지점을 구분할 수 있다.
 이 기록만으로 네이티브 호출이 멈췄다고 판단하지 않는다.
+
+Windows 자산 probe는 두 Worker의 결과와 종료를 모두 확인한 뒤 프로세스를 마칩니다.
+프로세스 종료 직후 Windows의 이미지 핸들 해제가 지연될 때는 해당 임시 폴더의 정리만
+정해진 횟수 안에서 재시도합니다. 기능 검증이나 테스트 실행은 재시도하지 않습니다.
+앱 재로드 fixture는 완성한 JSON 보고서를 rename으로 교체해 폴링 중인 독자가
+쓰기 도중의 빈 파일을 읽지 않게 합니다. Android backend 추출 검사는 컴파일과
+harness의 기존 15초 제한을 각각 유지하며 출력과 경과 시간, 종료 상태를
+`build/windows-matrix-logs/android-backend-assets/`에 보존합니다.
+PR #191과 같은 native child observer 및 notification 진단을 사용하고 Windows stderr를
+원본 파일로 수집해 PowerShell의 CLIXML 해석 오류가 실제 실패 출력을 가리지 않게 합니다.

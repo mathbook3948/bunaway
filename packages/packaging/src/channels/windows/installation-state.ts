@@ -22,6 +22,8 @@ type TInstallationSnapshot = record
   ExecutableName: String;
   InstallDir: String;
   PendingOwner: String;
+  AutostartAppId: String;
+  PendingAutostartOwner: String;
 end;
 var MaintenanceMutexHandle: THandle;
     InstallationSnapshot: TInstallationSnapshot;
@@ -86,12 +88,14 @@ begin
   Result.ExecutableName := ReadInstallationIdentityValue('ExecutableName');
   Result.InstallDir := ReadInstallationIdentityValue('InstallDir');
   Result.PendingOwner := ReadInstallationIdentityValue('PendingAssociationOwner');
+  Result.AutostartAppId := ReadInstallationIdentityValue('AutostartAppId');
+  Result.PendingAutostartOwner := ReadInstallationIdentityValue('PendingAutostartOwner');
 end;
 
 procedure CaptureInstallationSnapshot;
 begin
   // Cooperating setup/uninstall processes hold the maintenance mutex for their
-  // entire lifetime, so the three fields form one consistent identity snapshot.
+  // entire lifetime, so the identity fields form one consistent identity snapshot.
   InstallationSnapshot := ReadInstallationSnapshot;
   InstallationSnapshotLoaded := True;
 end;
@@ -106,7 +110,9 @@ begin
   // Do not refresh only one field and combine it with a cached pending identity.
   if (Current.ExecutableName <> InstallationSnapshot.ExecutableName) or
      (Current.InstallDir <> InstallationSnapshot.InstallDir) or
-     (Current.PendingOwner <> InstallationSnapshot.PendingOwner) then
+     (Current.PendingOwner <> InstallationSnapshot.PendingOwner) or
+     (Current.AutostartAppId <> InstallationSnapshot.AutostartAppId) or
+     (Current.PendingAutostartOwner <> InstallationSnapshot.PendingAutostartOwner) then
     RaiseException('Installation state changed while this setup or uninstall was open. Close it and start again.');
 end;
 `,

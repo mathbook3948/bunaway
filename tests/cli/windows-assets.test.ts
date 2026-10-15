@@ -12,9 +12,9 @@ import {
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { webAsset } from "#native/windows/bun/web-assets";
 import { bundleWindowsHost } from "#cli/assets";
 import { compiledAssetArguments } from "#cli/windows-compile";
+import { webAsset } from "#native/windows/bun/web-assets";
 
 test("compiled host preserves file imports from the app and both workers after staging is removed", async () => {
   const root = await realpath(
@@ -81,8 +81,13 @@ const plugin = (await catalog[0].operations()).createOperations({});
 const { default: app } = await import("./app.js");
 const workers = await Promise.all(["ui", "host-operations"].map(name => new Promise((resolve, reject) => {
   const worker = new Worker(new URL(name + ".js", import.meta.url));
-  worker.once("message", resolve);
+  let result;
+  worker.once("message", value => { result = value; });
   worker.once("error", reject);
+  worker.once("exit", code => {
+    if (code !== 0 || result === undefined) reject(new Error("Asset worker exited without its result: " + code));
+    else resolve(result);
+  });
 })));
 console.log(JSON.stringify({ app: await app.read(), workers, lazy, plugin: plugin.execute(), failure: hostResponse(() => plugin.execute(true)) }));
 `,
@@ -225,10 +230,18 @@ parentPort.close();
         },
       ],
     });
+  } catch (error) {
+    // Cleanup errors must not hide the feature assertion or child diagnostics.
+    console.error("Compiled asset fixture failed:", error);
+    throw error;
   } finally {
     await rm(root, {
       recursive: true,
       force: true,
+      // Windows can briefly retain the exited image's file/directory handles.
+      // Retry only this owned cleanup, within the unchanged fixture deadline.
+      maxRetries: process.platform === "win32" ? 5 : 0,
+      retryDelay: 50,
     });
   }
 }, 30000);

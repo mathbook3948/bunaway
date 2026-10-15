@@ -71,6 +71,16 @@ Inno Setup 스크립트를 생성, 컴파일한다. 앱 바로가기와 설치 �
 - `webView2`: `bootstrap`(기본: 설치 시 런타임이 없으면 Microsoft 공식
   Evergreen 부트스트랩을 무인 실행) 또는 `check`(감지만).
 - `desktopShortcut`(기본 false), `startMenuShortcut`(기본 true).
+- `autostart`(기본 false): `perUser` 설치에 선택하지 않은 로그인 작업을 추가한다.
+  업데이트도 이전 선택을 재사용하지 않으며 `/TASKS="autostart"`로 명시적으로 동의한다.
+  작업 해제는 소유한 Run 등록을 제거한다. 옵션이 없으면 런타임 등록을 보존하고 경로만 갱신한다.
+  앱 ID와 EXE를 기록해 ID 변경, 경로 변경, 재시도와 제거에서 해당 설치의 값만 정리한다.
+  인자와 숨김 모드를 유지하고 `StartupApproved`는 변경하지 않는다.
+  다른 실행 경로의 값은 남기며 등록 충돌과 조회 및 쓰기 오류는 설치 실패로 보고한다.
+  설치 후 실패는 rollback하지 않으며 이전 소유자 기록을 보존한다.
+  `perMachine`에서는 작업과 사용자 Run 정리를 제공하지 않는다.
+  전체 명령줄 제한, ID 변경과 복구의 자세한 계약은
+  [로그인 자동 실행](../../docs/site/src/content/docs/reference/packaging/channels.mdx#로그인-자동-실행)을 따른다.
 - `associations`: 선택적 `files`와 `urlSchemes` 선언으로 설치 작업
   `fileassociations`, `urlschemes`를 추가한다. 새 설치에서는 선택하지 않으며
   무인 설치는 `/TASKS="fileassociations,urlschemes"`로 동의한다.
