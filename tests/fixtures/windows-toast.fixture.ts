@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { parentPort, Worker, workerData } from "node:worker_threads";
 import { notificationShowSchema } from "#plugins/notification/src/contract";
-import { drainToastCleanup } from "#plugins/notification/src/platforms/toast-cleanup";
+import {
+  createToastSettler,
+  drainToastCleanup,
+} from "#plugins/notification/src/platforms/toast-cleanup";
 import { createToastController } from "#plugins/notification/src/platforms/toast-controller";
 import {
   checkToast,
@@ -230,6 +233,7 @@ if (workerData?.toastMarshalWorker) {
     controller = createToastController(
       createWindowsToastDriver(appId),
       () => {},
+      createToastSettler,
     );
     const first = notificationShowSchema.parse({
       id: "fixture",

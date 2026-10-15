@@ -8,7 +8,10 @@ import type {
   ResolvedNotification,
 } from "#notification/contract";
 
-import { drainToastCleanup } from "#notification/platforms/toast-cleanup";
+import {
+  createToastSettler,
+  drainToastCleanup,
+} from "#notification/platforms/toast-cleanup";
 import { createToastController } from "#notification/platforms/toast-controller";
 import { createWindowsToastDriver } from "#notification/platforms/windows-toasts";
 
@@ -372,6 +375,7 @@ export function initialize(environment: NativeEnvironment) {
     toasts ??= createToastController(
       createWindowsToastDriver(app.id),
       (event, payload) => events.publish(event, payload, "notification.show"),
+      createToastSettler,
     );
     return toasts;
   };

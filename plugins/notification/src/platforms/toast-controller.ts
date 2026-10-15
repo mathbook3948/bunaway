@@ -24,6 +24,9 @@ export type ToastDriver = {
 export function createToastController(
   driver: ToastDriver,
   publish: (event: string, payload: JsonValue) => void,
+  // Native STA controllers supply one bounded synchronous settling budget per operation.
+  beginSettle: () => (cleanup: () => void) => void = () => (cleanup) =>
+    cleanup(),
 ) {
   type Entry = {
     input: ResolvedNotification;
@@ -58,7 +61,8 @@ export function createToastController(
   return {
     show(input: ResolvedNotification): NotificationResult {
       active();
-      drain();
+      const settle = beginSettle();
+      settle(drain);
       const identity = {
         id: input.id,
         group: input.group,
@@ -104,7 +108,7 @@ export function createToastController(
       // Keep retired ownership if revocation is still pending. The next operation or dispose retries it.
       // Show has already succeeded, so cleanup must not turn its acknowledgement into an ambiguous failure.
       try {
-        drain();
+        settle(drain);
       } catch {
         /* Retained in retired until the next explicit operation. */
       }
@@ -112,7 +116,8 @@ export function createToastController(
     },
     clear(identity: NotificationResult): null {
       active();
-      drain();
+      const settle = beginSettle();
+      settle(drain);
       // This also clears a matching history item from an earlier process, without clearing other app items.
       driver.clear(identity);
       const id = key(identity);
@@ -121,7 +126,7 @@ export function createToastController(
         retire(entry);
         entries.delete(id);
       }
-      drain();
+      settle(drain);
       return null;
     },
     dispose(): void {

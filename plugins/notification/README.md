@@ -62,7 +62,8 @@ failed의 HRESULT는 unsigned 32비트 값이다. Show 자체의 동기 실패�
 받기 위해 소유권을 유지한다. 동시에 최대 64개의 ID/group을 소유하며 clear로 반환한다.
 한계에 도달하면 새 ID의 show는 `BUSY`이다. 같은 ID 교체는 가능하다.
 종료는 이번 실행이 소유한 알림을 지우고 구독, COM 객체, callback과 DLL을 정리한다.
-지연된 native Release는 STA marshaling pump에서 최대 1초 동안 기다리며 실패는 숨기지 않는다.
+교체와 clear는 지연된 native Release를 STA marshaling pump에서 작업당 최대 1초 기다린다.
+종료는 전체 정리에 하나의 1초 한도를 사용하며 실패는 숨기지 않는다.
 
 시작 메뉴 바로가기와 process AppUserModelID가 일치하는 unpackaged Windows x64를
 대상으로 한다. MSIX는 패키지 식별자 연동 전까지 `UNSUPPORTED`이다. 플러그인은 바로가기,

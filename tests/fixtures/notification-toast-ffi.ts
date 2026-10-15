@@ -555,6 +555,8 @@ await Promise.resolve();
 assert.deepEqual(published, [
   "notification.clicked",
 ]);
+// Event revocation may enqueue Release to this STA before the ordinary UI pump gets a turn.
+deferRelease = true;
 await invokeUI(
   "notification.clear",
   {
@@ -563,6 +565,8 @@ await invokeUI(
   "backend",
   request,
 );
+assert.equal(delayedReleases.length, 0);
+assert.equal(waitHandles, 0);
 await adapter.dispose();
 await adapter.dispose();
 assert.equal(initialized, uninitialized);
