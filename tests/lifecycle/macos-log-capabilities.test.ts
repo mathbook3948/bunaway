@@ -406,6 +406,14 @@ test("macOS capability discovery uses installed executable operations and includ
         support: "unsupported",
       },
       {
+        name: "log.configure",
+        support: "unsupported",
+      },
+      {
+        name: "log.flush",
+        support: "unsupported",
+      },
+      {
         name: "capabilities.get",
         support: "supported",
       },

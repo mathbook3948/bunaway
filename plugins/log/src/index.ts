@@ -1,8 +1,13 @@
-import { defineNativePlugin, type NativeEnvironment } from "@bunaway/plugin";
+import { defineNativePlugin, type NativeInvokeOptions } from "@bunaway/plugin";
+import type { AppLog } from "#log/app-log";
 import { createLog } from "#log/logger";
 import { macosOperations, windowsOperations } from "#log/operations";
+import { initialize as initializeMacos } from "#log/platforms/macos";
+import { initialize as initializeWindows } from "#log/platforms/windows";
 
-const dataRoot = (environment: NativeEnvironment) => environment.dataRoot;
+const dispose = (log: AppLog) => {
+  log.flush();
+};
 
 /** Write structured app messages through the registered host operation. */
 export default defineNativePlugin(
@@ -10,16 +15,24 @@ export default defineNativePlugin(
     name: "log",
     platforms: {
       macos: {
-        initialize: dataRoot,
+        initialize: initializeMacos,
+        dispose,
         operations: macosOperations,
       },
       windows: {
-        initialize: dataRoot,
+        initialize: initializeWindows,
+        dispose,
         operations: windowsOperations,
       },
     },
   },
-  (api) => createLog(api.write),
+  (api) => ({
+    ...createLog(api.write),
+    /** Update backend-owned settings with the separate log.configure permission. */
+    configure: api.configure,
+    /** Flush active and retained files to the OS with log.flush permission. An empty log stays absent. */
+    flush: (options?: NativeInvokeOptions) => api.flush(null, options),
+  }),
 );
 
-export type { LogInput } from "#log/contract";
+export type { LogConfiguration, LogInput } from "#log/contract";

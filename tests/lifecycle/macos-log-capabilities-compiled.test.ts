@@ -31,16 +31,20 @@ const catalog = plugins.map(plugin => {
 const dispatcher = await operations(plugins, process.argv[2], "worker", undefined, catalog);
 try {
   const support = await dispatcher.execute("capabilities.get", null, "backend");
-  assert.deepEqual(JSON.parse(JSON.stringify(support)), [{name:"log.write",support:"supported"},{name:"capabilities.get",support:"supported"}]);
+  assert.deepEqual(JSON.parse(JSON.stringify(support)), [{name:"log.write",support:"supported"},{name:"log.configure",support:"supported"},{name:"log.flush",support:"supported"},{name:"capabilities.get",support:"supported"}]);
   for (const capability of support) {
-    const input = capability.name === "log.write" ? {level:"info",message:"compiled 한글 😀"} : null;
+    const input = capability.name === "log.write" ? {level:"info",message:"compiled 한글 😀"} : capability.name === "log.configure" ? {} : null;
     await dispatcher.execute(capability.name, input, "backend");
   }
   await Promise.all(Array.from({length:32},(_,index)=>dispatcher.execute("log.write",{level:"info",message:"ordered",details:{index}},"view:main")));
+  await dispatcher.execute("log.configure", {minimumLevel:"error",maxFileBytes:4096,maxArchives:2}, "backend");
+  await dispatcher.execute("log.write",{level:"debug",message:"filtered"},"view:main");
+  await assert.rejects(dispatcher.execute("log.configure",{},"view:main"),{code:"PERMISSION_DENIED"});
+  await dispatcher.execute("log.flush",null,"backend");
 } finally { await dispatcher.dispose(); }
 const partial = await operations(plugins, process.argv[2], "worker", undefined, catalog.map(plugin=>({...plugin,supportedOperations:plugin.name === "log" ? [] : ["capabilities.get"]})));
 try {
-  assert.deepEqual(JSON.parse(JSON.stringify(await partial.execute("capabilities.get",null,"backend"))),[{name:"log.write",support:"unsupported"},{name:"capabilities.get",support:"supported"}]);
+  assert.deepEqual(JSON.parse(JSON.stringify(await partial.execute("capabilities.get",null,"backend"))),[{name:"log.write",support:"unsupported"},{name:"log.configure",support:"unsupported"},{name:"log.flush",support:"unsupported"},{name:"capabilities.get",support:"supported"}]);
   await assert.rejects(partial.execute("log.write",{level:"info",message:"unsupported"},"backend"),{code:"UNSUPPORTED"});
 } finally { await partial.dispose(); }
 console.log("compiled macOS adapters passed");

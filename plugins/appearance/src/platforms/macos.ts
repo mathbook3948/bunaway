@@ -15,7 +15,6 @@ const SYSTEM = "/usr/lib/libSystem.B.dylib";
 const AQUA = "NSAppearanceNameAqua";
 const DARK_AQUA = "NSAppearanceNameDarkAqua";
 const RTLD_DEFAULT = BigInt.asUintN(64, -2n);
-const cstring = (value: string) => Buffer.from(`${value}\0`);
 
 function failure(message: string): never {
   throw new BunawayError({
@@ -62,7 +61,7 @@ export function initialize() {
     libraries.push(appkit);
     const stackBlock = system.symbols.dlsym(
       RTLD_DEFAULT,
-      ptr(cstring("_NSConcreteStackBlock")),
+      "_NSConcreteStackBlock",
     );
     if (!stackBlock) {
       failure("macOS appearance block runtime is unavailable.");
@@ -110,6 +109,15 @@ export function initialize() {
         ],
         returns: "u64",
       },
+      string: {
+        ptr: message,
+        args: [
+          "u64",
+          "u64",
+          "cstring",
+        ],
+        returns: "u64",
+      },
       boolean: {
         ptr: message,
         args: [
@@ -143,7 +151,7 @@ export function initialize() {
       if (cached !== undefined) {
         return cached;
       }
-      const address = runtime.symbols.sel_registerName(ptr(cstring(name)));
+      const address = runtime.symbols.sel_registerName(name);
       if (!address) {
         failure("macOS appearance selector is unavailable.");
       }
@@ -152,7 +160,7 @@ export function initialize() {
       return value;
     };
     const type = (name: string): bigint => {
-      const address = runtime.symbols.objc_getClass(ptr(cstring(name)));
+      const address = runtime.symbols.objc_getClass(name);
       if (!address) {
         failure("macOS appearance class is unavailable.");
       }
@@ -166,26 +174,40 @@ export function initialize() {
       second = 0n,
     ): bigint =>
       BigInt(messages.symbols.object(object, selector(name), first, second));
-    const required = (object: bigint): bigint => {
+    let reads = 0;
+    const required = (object: bigint, operation: string): bigint => {
       if (object === 0n) {
-        failure("macOS appearance query returned no value.");
+        failure(
+          `macOS appearance query returned no value: ${operation} (read=${reads}, mainThread=${system.symbols.pthread_main_np()}).`,
+        );
       }
       return object;
     };
+    // A numeric pointer cannot keep a temporary Buffer alive while later arguments
+    // allocate. Let Bun own UTF-8 conversion for the duration of each native call.
     const string = (value: string) =>
       required(
-        send(
-          type("NSString"),
-          "stringWithUTF8String:",
-          BigInt(ptr(cstring(value))),
+        BigInt(
+          messages.symbols.string(
+            type("NSString"),
+            selector("stringWithUTF8String:"),
+            value,
+          ),
         ),
+        `NSString.stringWithUTF8String: ${value}`,
       );
     const boolean = (object: bigint, name: string) =>
       messages.symbols.boolean(object, selector(name));
     const color = (name: string): string => {
-      const native = required(send(type("NSColor"), name));
-      const space = required(send(type("NSColorSpace"), "sRGBColorSpace"));
-      const rgb = required(send(native, "colorUsingColorSpace:", space));
+      const native = required(send(type("NSColor"), name), `NSColor.${name}`);
+      const space = required(
+        send(type("NSColorSpace"), "sRGBColorSpace"),
+        "NSColorSpace.sRGBColorSpace",
+      );
+      const rgb = required(
+        send(native, "colorUsingColorSpace:", space),
+        `NSColor.${name}.colorUsingColorSpace: sRGB`,
+      );
       const components = [
         "redComponent",
         "greenComponent",
@@ -211,19 +233,31 @@ export function initialize() {
             message: "Appearance adapter is disposed.",
           });
         }
+        reads++;
+        const allocated = required(
+          send(type("NSAutoreleasePool"), "alloc"),
+          "NSAutoreleasePool.alloc",
+        );
         const pool = required(
-          send(send(type("NSAutoreleasePool"), "alloc"), "init"),
+          send(allocated, "init"),
+          "NSAutoreleasePool.init",
         );
         try {
           const application = required(
             send(type("NSApplication"), "sharedApplication"),
+            "NSApplication.sharedApplication",
           );
-          const appearance = required(send(application, "effectiveAppearance"));
+          const appearance = required(
+            send(application, "effectiveAppearance"),
+            "NSApplication.effectiveAppearance",
+          );
           const names = required(
             send(type("NSArray"), "arrayWithObject:", string(AQUA)),
+            "NSArray.arrayWithObject:",
           );
           const choices = required(
             send(names, "arrayByAddingObject:", string(DARK_AQUA)),
+            "NSArray.arrayByAddingObject:",
           );
           const match = send(
             appearance,
@@ -242,6 +276,7 @@ export function initialize() {
           }
           const workspace = required(
             send(type("NSWorkspace"), "sharedWorkspace"),
+            "NSWorkspace.sharedWorkspace",
           );
           let result: AppearancePreferences | undefined;
           let failed = false;

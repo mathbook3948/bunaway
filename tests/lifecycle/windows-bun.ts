@@ -1,4 +1,4 @@
-import { dlopen } from "bun:ffi";
+import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -97,6 +97,20 @@ if (!process.argv.includes("--child")) {
     },
   );
   const driver = dlopen("user32.dll", {
+    GetWindowThreadProcessId: {
+      args: [
+        "u64",
+        "ptr",
+      ],
+      returns: "u32",
+    },
+    GetGUIThreadInfo: {
+      args: [
+        "u32",
+        "ptr",
+      ],
+      returns: "i32",
+    },
     PostMessageW: {
       args: [
         "u64",
@@ -108,6 +122,7 @@ if (!process.argv.includes("--child")) {
     },
   });
   let hwnd = 0n;
+  const started = performance.now();
   let requested = false;
   let inModal = false;
   let entered = false;
@@ -122,6 +137,40 @@ if (!process.argv.includes("--child")) {
   let during = latest;
   let text = "";
   let pending = "";
+  // Query the owning thread without posting input or altering the deadline.
+  const diagnose = (phase: string) => {
+    const owner = Buffer.alloc(4);
+    const thread = driver.symbols.GetWindowThreadProcessId(hwnd, ptr(owner));
+    // GUITHREADINFO is 72 bytes in the pinned Windows x64 host.
+    const info = Buffer.alloc(72);
+    info.writeUInt32LE(info.length);
+    const available =
+      thread !== 0 && driver.symbols.GetGUIThreadInfo(thread, ptr(info)) !== 0;
+    console.error(
+      JSON.stringify({
+        fixture: "windows-bun",
+        phase,
+        elapsedMs: performance.now() - started,
+        childPid: child.pid,
+        windowPid: owner.readUInt32LE(),
+        thread,
+        hwnd: hwnd.toString(),
+        requested,
+        entered,
+        left,
+        latest,
+        gui: available
+          ? {
+              flags: info.readUInt32LE(4),
+              active: info.readBigUInt64LE(8).toString(),
+              focus: info.readBigUInt64LE(16).toString(),
+              capture: info.readBigUInt64LE(24).toString(),
+              moveSize: info.readBigUInt64LE(40).toString(),
+            }
+          : null,
+      }),
+    );
+  };
   const decoder = new TextDecoder();
   const stdout = child.stdout.pipeTo(
     new WritableStream({
@@ -154,6 +203,7 @@ if (!process.argv.includes("--child")) {
             requested = true;
             // Request the native move loop. Its actual entry starts the observation interval.
             assert(driver.symbols.PostMessageW(hwnd, 0x112, 0xf010n, 0n));
+            diagnose("move-requested");
           }
           if (event.event === "modal-enter") {
             entered = true;
@@ -164,11 +214,13 @@ if (!process.argv.includes("--child")) {
               () => driver.symbols.PostMessageW(hwnd, 0x1f, 0n, 0n),
               MODAL_OBSERVATION_MS,
             );
+            diagnose("modal-enter");
           }
           if (event.event === "modal-exit") {
             left = true;
             inModal = false;
             clearTimeout(modalExitTimer);
+            diagnose("modal-exit");
           }
           if (event.event === "backend-tick") {
             latest = event;
@@ -181,7 +233,13 @@ if (!process.argv.includes("--child")) {
     }),
   );
   const stderr = new Response(child.stderr).text();
-  const timer = setTimeout(() => child.kill(), 60000);
+  const timer = setTimeout(() => {
+    try {
+      diagnose("deadline");
+    } finally {
+      child.kill();
+    }
+  }, 60000);
   const code = await child.exited;
   clearTimeout(timer);
   try {

@@ -1,6 +1,6 @@
 ---
 title: log.write
-description: Host 로그에 메시지와 추가 데이터를 기록합니다.
+description: 앱 로그의 수준, 회전과 보관을 설정하고 메시지를 기록합니다.
 sidebar: { order: 3 }
 ---
 
@@ -43,17 +43,68 @@ await log.write({
 플러그인에 `requiredPermissions: ["log.write"]`를 선언하면 시작할 때 backend.permissions에 권한이 명시됐는지 검사합니다.
 성공 결과는 `null`입니다.
 
-Windows 구현은 앱 데이터의 `logs/app.log`에 JSON 줄을 추가하고
-기록에 시간과 원래 `source`를 포함합니다. 1 MiB를 넘은 기존 로그는 다음 기록 시 한 번 회전합니다.
-저장 위치와 로그 회전 방식은 플랫폼별 호스트가 정합니다.
+## 설정과 flush
 
-macOS 어댑터도 호스트의 앱 데이터 `logs/app.log`에 같은 JSON 줄을 기록하고
-1 MiB를 넘은 로그는 다음 기록 시 `app.log.1`로 교체합니다. 현재 로그와 회전한 로그
-한 개만 유지하며 각 파일은 마지막 기록 하나의 크기만큼 1 MiB를 넘을 수 있습니다.
-새 로그 파일은 소유자만 읽고 쓸 수 있게 만들고, 새 로그 디렉터리도 소유자만 접근할 수
-있게 만듭니다. 기존 파일과 디렉터리의 권한은 변경하지 않습니다.
-기록과 회전은 호스트의 I/O Worker에서 순서대로 완료하며 종료 후 새 기록은 `CANCELLED`입니다.
+```ts
+log.configure(settings, options?): Promise<null>
+log.flush(options?): Promise<null>
+```
+
+`LogConfiguration`은 `log.configure`의 입력 타입이며 `LogInput`은 기록 입력 타입입니다.
+Windows와 macOS는 같은 설정과 파일 계약을 사용합니다. 설정은 앱 인스턴스에 속하며
+앱을 다시 시작하면 기본값으로 돌아갑니다. 생략한 필드는 현재 값을 유지합니다.
+
+| 설정 | 기본값 | 허용 값과 동작 |
+| --- | --- | --- |
+| `minimumLevel` | `debug` | `debug`, `info`, `warn`, `error` 순서에서 지정한 수준 이상만 기록 |
+| `target` | `appData` | `appData`만 허용. 호스트가 지정한 앱 데이터의 `logs/app.log`에 기록 |
+| `maxFileBytes` | 1,048,576, 1 MiB | 1,024부터 67,108,864까지의 정수 바이트 |
+| `maxArchives` | `1` | `0`부터 `10`까지의 정수. `0`이면 회전한 파일을 보관하지 않음 |
+
+설정은 `log.configure` 권한이 있는 백엔드 호출만 허용합니다. 화면은 같은 권한을
+받더라도 `PERMISSION_DENIED`입니다. 화면에서 호출한 앱 명령도 화면 출처를 유지하므로
+설정을 바꿀 수 없습니다. 앱 플러그인의 setup에서 설정하는 예시입니다.
+
+```ts
+import log from "@bunaway/plugin-log";
+
+const logging = {
+  name: "app-logging",
+  requiredPermissions: ["log.configure", "log.write", "log.flush"],
+  async setup() {
+    await log.configure({ minimumLevel: "info", maxFileBytes: 4 * 1024 * 1024, maxArchives: 3 });
+    await log.info("앱을 시작했습니다");
+    await log.flush();
+  },
+};
+// 앱 plugins에 log와 logging을 등록하고 backend.permissions에 위 세 권한을 허용합니다.
+```
+
+기록에는 시간과 원래 `source`를 포함합니다. `maxFileBytes`를 넘은 기존 로그는
+다음 기록 전에 회전합니다. 정확히 같은 크기의 파일은 기록 하나를 더 받습니다.
+`app.log.1`이 가장 최근 기록이며, 기존 파일은 `.2`부터 설정한 보관 수까지 이동합니다.
+각 파일은 마지막 기록 하나의 크기만큼 기준 크기를 넘을 수 있습니다.
+설정 변경과 회전 시 보관 수를 넘는 `.1`부터 `.10` 범위의 앱 로그 파일을 제거합니다.
+다른 이름의 파일은 정리하지 않습니다. 정리 실패 시 이전 설정을 유지하지만,
+이미 제거한 오래된 파일은 복구하지 않습니다. 회전의 여러 파일 변경은 원자적이지 않습니다.
+
+최소 수준보다 낮은 기록도 입력과 권한 검사를 거치고 `null`을 반환합니다.
+파일이나 디렉터리를 만들지 않습니다. 파일 시스템 오류와 관계없이 버려진 기록은
+다시 처리하지 않습니다.
+
+`log.flush()`에는 별도의 `log.flush` 권한이 필요합니다. 화면 호출은
+commands의 `plugin.log.flush`도 허용해야 합니다. 이미 받아 완료한 기록의 현재 파일과
+보관 파일에 `fsync`를 수행합니다. 기록이 없으면 파일을 만들지 않습니다.
+기록과 회전은 I/O Worker에서 동기적으로 완료하며 버퍼에 기록을 남기지 않습니다.
+플러그인 종료도 같은 flush를 수행합니다. flush 실패는 호출자나 종료 소유자에게
+전달하고 다시 시도할 수 있으며 종료 시작 뒤 새 작업은 `CANCELLED`입니다.
+flush는 전원 손실 시 파일 이름 변경이나 삭제까지 복구되는 트랜잭션을 보장하지 않습니다.
+
+새 로그 파일은 소유자 읽기와 쓰기 모드, 새 디렉터리는 소유자 접근 모드로 만듭니다.
+Windows에서는 운영체제 ACL이 실제 접근을 정합니다. 기존 권한은 변경하지 않습니다.
 앱 데이터 경로와 원래 호출 출처는 호스트가 지정하며 화면에서 바꿀 수 없습니다.
+로그 디렉터리의 링크, 로그 파일의 링크와 비정규 파일은 거부합니다.
+동시에 파일 시스템을 변경하는 다른 프로세스에 대한 경로 격리 보장은 제공하지 않습니다.
 
 권한 부족은 `PERMISSION_DENIED`, 입력 위반은 `INVALID_ARGUMENT`, 일반 기록 실패는 `INTERNAL`입니다.
 details는 전달한 데이터를 기록합니다. 비밀번호나 토큰 등 민감한 값은 호출 전에 앱에서 제외합니다.

@@ -124,7 +124,7 @@ console.error = (...args: unknown[]) => {
   }
   originalError(...args);
 };
-/** Reserves a loopback port and configures a real server fixture on it. */
+/** Chooses an available loopback port for a real server fixture. */
 function settings() {
   const listener = Bun.serve({
     hostname: "127.0.0.1",
@@ -170,7 +170,6 @@ async function waitFor(phase: string, check: () => Promise<boolean>) {
   }
 }
 const first = settings();
-const second = settings();
 let running: Promise<void> | undefined;
 let finished = false;
 let runningError: unknown;
@@ -246,6 +245,10 @@ try {
     async () => (await starts()) === 3,
   );
   expect((await fetch(first.url)).ok).toBe(true);
+  // Keep the first server bound while choosing its replacement so the OS cannot
+  // reuse its port and accidentally turn reconfiguration into unchanged settings.
+  const second = settings();
+  expect(second.url).not.toBe(first.url);
   await Bun.write(
     configPath,
     JSON.stringify({
