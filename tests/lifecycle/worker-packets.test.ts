@@ -961,3 +961,51 @@ test("a nested client cancellation retains its separate lane when client data is
     port2.close();
   }
 });
+
+test("polled cancellation interrupts native loops synchronously while ordinary cleanup remains deferred", async () => {
+  const { port1, port2 } = new MessageChannel();
+  const received: string[] = [];
+  const interrupted: string[] = [];
+  const errors: unknown[] = [];
+  const receiver = new Channel(
+    port2,
+    runtime,
+    "ui",
+    (packet) => {
+      received.push(packet.kind);
+    },
+    (error) => errors.push(error),
+    (packet) => interrupted.push(packet.kind),
+  );
+  try {
+    const packets: Packet[] = [
+      {
+        kind: "shutdown",
+      },
+      fixtures.cancel.packet,
+      fixtures["cancel-context"].packet,
+      fixtures.operation.packet,
+    ];
+    for (const [index, packet] of packets.entries()) {
+      port1.postMessage({
+        runtime,
+        sequence: index + 1,
+        packet,
+      });
+    }
+    receiver.poll();
+    expect(interrupted).toEqual([
+      "shutdown",
+      "cancel",
+      "cancel-context",
+    ]);
+    expect(received).toEqual([]);
+    await Promise.resolve();
+    expect(received).toEqual(packets.map((packet) => packet.kind));
+    expect(errors).toEqual([]);
+  } finally {
+    receiver.close();
+    port1.close();
+    port2.close();
+  }
+});

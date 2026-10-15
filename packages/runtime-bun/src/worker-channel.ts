@@ -553,6 +553,15 @@ export class Channel {
     private readonly side: Side,
     private readonly receive: (packet: Packet) => void | Promise<void>,
     private readonly fail: (error: unknown) => void,
+    /** Only end a native modal loop. Normal packet delivery and resource changes remain deferred. */
+    private readonly interruptModal?: (
+      packet: Extract<
+        Packet,
+        {
+          kind: "cancel" | "cancel-context" | "shutdown";
+        }
+      >,
+    ) => void,
   ) {
     port.on("message", this.accept);
   }
@@ -604,6 +613,14 @@ export class Channel {
           [],
         );
       };
+      if (
+        this.polling &&
+        (packet.kind === "cancel" ||
+          packet.kind === "cancel-context" ||
+          packet.kind === "shutdown")
+      ) {
+        this.interruptModal?.(packet);
+      }
       // Resource changes must not re-enter a Win32/COM callback while polling its acknowledgements.
       const completion =
         this.polling && packet.kind !== "server"

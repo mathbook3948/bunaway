@@ -29,3 +29,51 @@ test("native cancellation releases slots and isolates late completions from a re
   expect(requests.finish("healthy", healthy)).toBe(true);
   expect(requests.context("healthy")).toBeUndefined();
 });
+
+test("modal interruption matches the active request and context without releasing its slot", () => {
+  const requests = new NativeRequests();
+  const context = "menu" as HostContext;
+  const signal = requests.begin("popup", context);
+  let interrupted = 0;
+  const unsubscribe = requests.onModalInterrupt(signal, () => {
+    interrupted++;
+  });
+  requests.interruptModal({
+    kind: "cancel",
+    requestId: "other",
+    context,
+  });
+  requests.interruptModal({
+    kind: "cancel",
+    requestId: "popup",
+    context: "other" as HostContext,
+  });
+  requests.interruptModal({
+    kind: "cancel-context",
+    context: "other" as HostContext,
+  });
+  expect(interrupted).toBe(0);
+  requests.interruptModal({
+    kind: "cancel",
+    requestId: "popup",
+    context,
+  });
+  expect(interrupted).toBe(1);
+  expect(signal.aborted).toBe(false);
+  expect(requests.context("popup")).toBe(context);
+  requests.interruptModal({
+    kind: "cancel-context",
+    context,
+  });
+  requests.interruptModal({
+    kind: "shutdown",
+  });
+  expect(interrupted).toBe(3);
+  unsubscribe();
+  requests.interruptModal({
+    kind: "shutdown",
+  });
+  expect(interrupted).toBe(3);
+  requests.cancel("popup");
+  expect(signal.aborted).toBe(true);
+});
