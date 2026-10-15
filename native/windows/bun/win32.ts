@@ -729,6 +729,26 @@ export class Windows {
     this.windows.set(window, receive);
     this.constraints.set(window, initialConstraints);
     try {
+      if (options.titlebar === "custom") {
+        // CreateWindowEx can add WS_CAPTION to an overlapped window. Remove it
+        // after creation while hidden, retaining overlapped placement and system-menu semantics.
+        this.setStyle(window, this.windowStyles(window).style & ~WS_CAPTION);
+        assert(
+          user.symbols.SetWindowPos(
+            window,
+            0n,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE |
+              SWP_NOSIZE |
+              SWP_NOZORDER |
+              SWP_NOACTIVATE |
+              SWP_FRAMECHANGED,
+          ),
+        );
+      }
       // The HWND's largest monitor overlap can differ from the requested point's monitor.
       // Recompute after every initial DPI transition, retaining the selected placement work area.
       this.applyInitialPlacement(window, placement);
@@ -865,7 +885,9 @@ export class Windows {
 
   /** Read the normal caption mode even while fullscreen temporarily removes all decorations. */
   getTitlebar(window: bigint): "system" | "custom" {
-    return this.normalStyle(window) & WS_CAPTION ? "system" : "custom";
+    return (this.normalStyle(window) & WS_CAPTION) === WS_CAPTION
+      ? "system"
+      : "custom";
   }
 
   isAlwaysOnTop(window: bigint): boolean {
