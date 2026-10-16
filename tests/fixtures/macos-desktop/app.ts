@@ -1,6 +1,7 @@
 import { appendFileSync, readFileSync } from "node:fs";
 import { defineApp } from "@bunaway/backend";
 import windows from "@bunaway/plugin-windows";
+import { BunawayError } from "@bunaway/protocol";
 import { driver } from "./driver.ts";
 import { readDesktopFixture } from "./fixture-config.ts";
 
@@ -61,6 +62,33 @@ function codeOf(error: unknown): string {
       ? Reflect.get(error, "code")
       : undefined;
   return typeof code === "string" ? code : "UNKNOWN";
+}
+
+/**
+ * One-line description of a failed scenario script for the `script-failed:` log line. Unlike
+ * `codeOf`, it keeps the free text: the log is a test artifact, and a bare `INTERNAL` from the host
+ * hides which operation failed and why. A BunawayError contributes its code, message and details,
+ * any other error its name and message, and both add the cause when one exists.
+ */
+function describeFailure(error: unknown): string {
+  const parts: string[] = [];
+  if (error instanceof BunawayError) {
+    parts.push(
+      `${error.name} code=${error.code} message=${error.message} details=${JSON.stringify(error.details)}`,
+    );
+  } else if (error instanceof Error) {
+    parts.push(`${error.name}: ${error.message}`);
+  } else {
+    parts.push(String(error));
+  }
+  const cause = error instanceof Error ? error.cause : undefined;
+  if (cause !== undefined) {
+    const causeCode = Reflect.get(Object(cause), "code");
+    parts.push(
+      `cause=${String(cause)}${causeCode === undefined ? "" : ` causeCode=${String(causeCode)}`}`,
+    );
+  }
+  return parts.join(" ").replaceAll(/\s*\n\s*/g, " ");
 }
 
 /** The windowId of the live fixture window of `view`, or undefined while none exists. */
@@ -221,7 +249,7 @@ export default defineApp({
           await firstOpen;
           await script();
         })().catch((error) => {
-          log(`script-failed:${String(error).replaceAll("\n", " ")}`);
+          log(`script-failed:${describeFailure(error)}`);
         });
       },
     },

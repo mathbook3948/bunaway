@@ -673,6 +673,10 @@ macOS 전용 설정과 리소스 경계 페이지도 `fixtures/desktop/host/`에
 Cmd+Q 입력은 확인할 수 없어 알림, 자기 자신에게 보낸 Apple event와 `NSApp terminate:`로 대신한다.
 `macos-desktop-host.test.ts`, `macos-desktop-requests.test.ts`, `macos-quit-reason.test.ts`,
 `macos-backend-shutdown.test.ts`와 `macos-window-lifecycle.test.ts`는 Linux에서 실행하는 계약 검사다.
+`macos-desktop-fixture.test.ts`는 같은 픽스처 앱을 가짜 호스트에 연결해 시나리오 스크립트가 첫 `onOpen` 뒤
+백엔드 문맥에서 `driver.drive`를 호출하는지, 호출 실패의 코드와 details가 `script-failed:` 로그에 남는지 검사한다.
+`macos-bun.test.ts`는 `executeUI`가 없는 UI 스레드 플러그인이 백엔드 호출에서 `execute`로 실행되는지,
+일반 오류가 호출자에게는 `INTERNAL`로만 전달되고 호스트 로그에는 작업 이름과 원인이 남는지도 확인한다.
 `macos-window-api.ts`는 실제 compiled 호스트와 WKWebView를 연결해 여러 시작 창,
 지연 생성, 권한별 목록, 표시와 포커스 조회, 반복 생성과 개별 닫기를 검사한다.
 또한 `getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`의 창 ID 조회와

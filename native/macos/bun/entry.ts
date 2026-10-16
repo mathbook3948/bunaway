@@ -522,6 +522,11 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       response = hostResponse(() => payload);
     } catch (error) {
       ioCalls.delete(packet.requestId);
+      // The response hides non-protocol errors from the caller as INTERNAL, so the host log is the
+      // only place that keeps the operation and the original cause.
+      if (!(error instanceof BunawayError)) {
+        console.error(`Host operation ${packet.call.operation} failed:`, error);
+      }
       response = hostResponse(() => {
         throw error;
       });

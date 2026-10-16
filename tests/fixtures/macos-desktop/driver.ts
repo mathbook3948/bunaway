@@ -44,6 +44,9 @@ const request = z
  * Quit command, a quit Apple event, closing a window, a reopen Apple event and the workspace
  * power-off notification. Stimuli run in a later main-thread turn, so the call returns at once with
  * the number of visible fixture windows before them; the outcome is read from the app's hooks.
+ *
+ * The adapter defines no `executeUI`, so the host runs this UI-thread operation through `execute`
+ * for any caller. The backend scripts are the only caller in practice.
  */
 export const driver = defineNativePlugin({
   name: "driver",
@@ -227,9 +230,6 @@ export const driver = defineNativePlugin({
               }, 0);
             }
             return o.withAutoreleasePool(visibleWindows);
-          },
-          executeUI() {
-            throw new Error("The driver is called by the backend only.");
           },
           dispose() {},
         };
