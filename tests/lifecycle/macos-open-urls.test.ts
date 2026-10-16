@@ -125,3 +125,42 @@ test("a request whose entries were not copied is rejected by its received count"
     rejected: [],
   });
 });
+
+test("the size limit applies to the normalized URLs, which percent-encoding can lengthen", () => {
+  // Each " a" becomes "%20a", so the raw input is shorter than the normalized form.
+  const prefix = "https://h/";
+  const pairs = Math.floor((MAX_OPEN_URLS_BYTES - prefix.length) / 4);
+  const filler = "a".repeat(MAX_OPEN_URLS_BYTES - prefix.length - pairs * 4);
+  const exact = normalizeOpenUrls([
+    prefix + " a".repeat(pairs) + filler,
+  ]);
+  expect(exact.urls).toHaveLength(1);
+  expect(Buffer.byteLength(exact.urls[0] ?? "")).toBe(MAX_OPEN_URLS_BYTES);
+  expect(
+    normalizeOpenUrls([
+      prefix + " a".repeat(pairs + 1) + filler,
+    ]),
+  ).toEqual({
+    rejectedAll: "too-large",
+    urls: [],
+    rejected: [],
+  });
+});
+
+test("a file URL whose path cannot be decoded is rejected alone as an invalid file path", () => {
+  const result = normalizeOpenUrls([
+    "bunaway-test://kept",
+    "file:///tmp/%E0%A4%A",
+    "file:///tmp/ok.txt",
+  ]);
+  expect(result.urls).toEqual([
+    "bunaway-test://kept",
+    "file:///tmp/ok.txt",
+  ]);
+  expect(result.rejected).toEqual([
+    {
+      index: 1,
+      reason: "invalid-file-path",
+    },
+  ]);
+});

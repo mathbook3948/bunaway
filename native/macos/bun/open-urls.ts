@@ -35,6 +35,17 @@ export type NormalizedOpenUrls =
 const ENCODED_SEPARATOR = /%2f/i;
 const ENCODED_NUL = /%00/;
 
+/** Result shared by every whole-request rejection for size. */
+const TOO_LARGE = {
+  rejectedAll: "too-large",
+  urls: [],
+  rejected: [],
+} as const satisfies NormalizedOpenUrls;
+
+function utf8Bytes(strings: readonly string[]): number {
+  return strings.reduce((bytes, value) => bytes + Buffer.byteLength(value), 0);
+}
+
 /**
  * Normalizes a `file:` URL to the canonical form of the path it names (POSIX). Returns the
  * rejection reason instead when the URL cannot name a local file unambiguously.
@@ -85,9 +96,10 @@ function canonicalFileUrl(url: URL):
  * request, which covers both URL scheme and document opens) into the `onOpenUrls` list.
  *
  * The request is limited like launch arguments (ADR 0013): more than `MAX_OPEN_URLS` entries or
- * more than `MAX_OPEN_URLS_BYTES` UTF-8 bytes in total rejects all of it. Otherwise each entry is
- * judged alone: an invalid URL or an ambiguous `file:` URL (a remote host, an encoded `/` or NUL
- * in the path) is rejected, a `file:` URL becomes its canonical form, and any other URL becomes
+ * more than `MAX_OPEN_URLS_BYTES` UTF-8 bytes in total rejects all of it. The byte limit is checked
+ * on the raw input first and again on the normalized URLs, because percent-encoding can make them
+ * longer. Otherwise each entry is judged alone: an invalid URL or an ambiguous `file:` URL (a
+ * remote host, an encoded `/` or NUL in the path) is rejected, a `file:` URL becomes its canonical form, and any other URL becomes
  * `URL.href`. Never throws. Rejections carry only the entry index and a reason, because URLs may
  * hold secrets that must not reach diagnostics.
  *
@@ -105,16 +117,8 @@ export function normalizeOpenUrls(
       rejected: [],
     };
   }
-  const totalBytes = rawUrls.reduce(
-    (bytes, raw) => bytes + Buffer.byteLength(raw),
-    0,
-  );
-  if (totalBytes > MAX_OPEN_URLS_BYTES) {
-    return {
-      rejectedAll: "too-large",
-      urls: [],
-      rejected: [],
-    };
+  if (utf8Bytes(rawUrls) > MAX_OPEN_URLS_BYTES) {
+    return TOO_LARGE;
   }
   const urls: string[] = [];
   const rejected: RejectedOpenUrl[] = [];
@@ -141,6 +145,10 @@ export function normalizeOpenUrls(
       });
     }
   });
+  // Normalization can lengthen a URL (spaces or non-ASCII become percent escapes).
+  if (utf8Bytes(urls) > MAX_OPEN_URLS_BYTES) {
+    return TOO_LARGE;
+  }
   return {
     urls,
     rejected,

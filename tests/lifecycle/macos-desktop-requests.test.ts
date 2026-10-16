@@ -240,6 +240,40 @@ test("shutdown discards queued open requests and later ones", async () => {
   expect(opened).toEqual([]);
 });
 
+test("a request is not taken from the queue once stopping began during an earlier send", async () => {
+  let stopping = false;
+  const { desktop, opened, holdOpenUrls } = requests(() => stopping);
+  holdOpenUrls(async () => {
+    stopping = true;
+  });
+  desktop.configure(config);
+  desktop.openUrls([
+    "a:1",
+  ]);
+  desktop.openUrls([
+    "a:2",
+  ]);
+  await settle();
+  expect(opened).toEqual([
+    [
+      "a:1",
+    ],
+  ]);
+  // Stopping is final in production; clearing it here shows a:2 stayed queued instead of being
+  // taken and discarded, so the next drain still delivers it ahead of a:3.
+  stopping = false;
+  holdOpenUrls(async () => {});
+  desktop.openUrls([
+    "a:3",
+  ]);
+  await settle();
+  expect(opened.map((urls) => urls[0])).toEqual([
+    "a:1",
+    "a:2",
+    "a:3",
+  ]);
+});
+
 test("a failed send is reported and does not block the next open request", async () => {
   const { desktop, opened, diagnostics, holdOpenUrls } = requests();
   let failNext = true;

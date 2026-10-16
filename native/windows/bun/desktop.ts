@@ -265,7 +265,9 @@ export class DesktopLifecycle {
    * Queues an open request for already-normalized absolute URLs from the operating
    * system. Before ready() it is buffered without showing the app, and delivered
    * after onReady and the initial open. Afterwards the app is shown first, like a
-   * second instance. An empty list is ignored. Throws if stopped or full.
+   * second instance, but unlike open() a failed show is only reported and onOpenUrls still
+   * runs, because the operating system delivers these URLs once and they must not be lost to a
+   * display failure. An empty list is ignored. Throws if stopped or full.
    */
   openUrls(urls: readonly string[]): void {
     if (this.ending) {
@@ -285,7 +287,11 @@ export class DesktopLifecycle {
       return;
     }
     this.enqueueCounted(async () => {
-      await this.context.show();
+      try {
+        await this.context.show();
+      } catch (error) {
+        this.report(error);
+      }
       await this.options?.onOpenUrls?.(frozen, this.context);
     });
   }

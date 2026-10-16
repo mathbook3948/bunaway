@@ -1514,6 +1514,39 @@ test("a failing onOpenUrls is reported and later requests still run", async () =
   expect(errors).toHaveLength(2);
 });
 
+test("a failing show is reported and onOpenUrls still receives the URLs", async () => {
+  const urls: (readonly string[])[] = [];
+  const errors: unknown[] = [];
+  const showFailure = new Error("show failed");
+  const lifecycle = new DesktopLifecycle(
+    {
+      onOpenUrls: (received) => {
+        urls.push(received);
+      },
+    },
+    async (action) => {
+      if (action === "show") {
+        throw showFailure;
+      }
+    },
+    () => {},
+    (error) => errors.push(error),
+  );
+  lifecycle.ready();
+  lifecycle.openUrls([
+    "https://live.example/",
+  ]);
+  await tick();
+  expect(errors).toEqual([
+    showFailure,
+  ]);
+  expect(urls).toEqual([
+    [
+      "https://live.example/",
+    ],
+  ]);
+});
+
 test("the pre-ready URL buffer is bounded and discarded by shutdown", async () => {
   const { lifecycle, seen } = recordingLifecycle();
   for (let index = 0; index < 64; index++) {

@@ -119,12 +119,17 @@ macOS는 `application:openURLs:` delegate로 받는다. 이 메서드를 구현�
 호스트가 직접 설치하는 Apple event 핸들러는 quit 이벤트(`aevt`/`quit`)로 한정하므로 `GURL`과 `odoc`은
 AppKit의 기본 핸들러가 처리한다. 앱 실행 인자가 아니므로 `openArguments`와 무관하다.
 
-메인 스레드가 요청을 검증한다. 요청 전체는 항목 256개 또는 64 KiB를 넘으면 거부한다. 항목 단위로는
+메인 스레드가 요청을 검증한다. 요청 전체는 항목 256개 또는 64 KiB를 넘으면 거부한다. 64 KiB는 원시 입력과
+정규화한 URL 각각의 UTF-8 합계에 적용하며, 퍼센트 인코딩으로 길어져 정규화 뒤 넘어도
+요청 전체를 거부한다(`too-large`). 항목 단위로는
 잘못된 URL, 로컬이 아닌 호스트의 파일 URL, 인코딩된 구분자(`%2F`)나 NUL이 있는 항목을 진단과 함께
 버리고, 파일 URL은 정규형으로 바꾼다. 검증은 ADR 0013의 규칙과 같은 한도를 쓴다. 입력은 앱이 검증할
 데이터이며 Host API의 권한을 더하지 않는다.
 준비 뒤 도착한 요청은 Windows의 두 번째 실행처럼 앱을 먼저 표시(`show()`와 같음)한 뒤 `onOpenUrls`를
-호출한다.
+호출한다. 다만 표시가 실패하면 실패만 보고하고 `onOpenUrls`는 그대로 호출한다. OS는 요청을 한 번만
+전달하므로 표시 실패로 URL을 잃지 않기 위해서다. Windows 두 번째 실행의 `onOpen` 경로는 기존대로
+표시 실패를 `onOpen` 실패로 다룬다. 종료가 확정된 뒤 도착한 요청은 `onOpenUrls` 없이 버리고
+`open-urls-dropped` 진단(`reason: "ending"`)을 남긴다.
 
 #### 준비 전 요청은 호스트가 보관한다
 
@@ -229,7 +234,8 @@ macOS에서 계속 `UNSUPPORTED`이므로 그에 관한 규칙은 적용되지 �
 - 세션 종료에서 macOS도 `onQuit`을 보장하지 않는다.
 - `DesktopOptions`에 `onOpenUrls`와 `onReopen`, 공개 타입 `ReopenEvent`가 추가된다. Windows도 `onOpenUrls`를
   `files-and-urls` 모드의 실행 인자에서 호출하고, `onOpen`의 의미는 바뀌지 않는다.
-- 준비 전 OS 열기 요청은 호스트가 최대 64개까지 보관한다.
+- 준비 전 OS 열기 요청은 macOS 메인 스레드가 백엔드 설정 전에 최대 16개, 백엔드가 준비 전에
+  최대 64개를 보관하고 넘치면 버린다.
 
 ## 검증
 
@@ -243,3 +249,7 @@ Linux에서는 종료 원인 분류(`quit-reason`), 세션 종료 대기, 백엔
 CI에서 확인하지 못하는 항목이 있다. 실제 로그아웃, 재시작, 시스템 종료는 실행하지 않고
 같은 알림과 quit Apple event를 주입한다. 사용자의 Dock 클릭은 자기 자신에게 보낸 reopen Apple
 event로 대신한다. 실제 Cmd+Q 키 입력은 `NSApp terminate:`로, Dock의 Quit은 quit Apple event로 대신한다.
+
+콜드 런치 전달은 native에서 검증하지 않는다. 번들과 LaunchServices 등록이 필요하기 때문이다. 대신 fake
+AppKit host 테스트(`tests/lifecycle/macos-desktop-host.test.ts`)가 첫 pump와 desktop-config 전에 전달한 요청이
+`onReady`, 초기 `onOpen`, `onOpenUrls` 순서로 도착하는지 확인한다.

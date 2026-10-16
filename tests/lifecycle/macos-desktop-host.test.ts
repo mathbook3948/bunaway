@@ -32,6 +32,12 @@ type Scenario = {
    * `releaseSetup()`. The driver then starts as soon as the setup is held.
    */
   holdSetup?: boolean;
+  /**
+   * Driver code run synchronously while the fake application is constructed, which is before its
+   * first tick and before the backend's `desktop-config` can arrive. It receives the application
+   * hooks as `application`, the earliest point a cold-launch open request can be delivered.
+   */
+  atLaunch?: string;
   /** Expected process exit code. */
   exitCode?: number;
 };
@@ -165,6 +171,8 @@ async function runScenario(scenario: Scenario) {
                 contents: `export class MacosApplication {
                   constructor(hooks) {
                     globalThis.application = hooks;
+                    // Synchronous on purpose: the constructor runs before the first tick is scheduled.
+                    globalThis.onApplicationCreated?.(hooks);
                     this.timer = setInterval(() => hooks.tick(), 5);
                   }
                   activate() {}
@@ -219,6 +227,9 @@ async function runScenario(scenario: Scenario) {
       };
       const note = (line) => appendFileSync(${JSON.stringify(events)}, line + "\\n");
       const releaseSetup = () => Bun.write(${JSON.stringify(setupGate)}, "");
+      globalThis.onApplicationCreated = (application) => {
+        ${scenario.atLaunch ?? ""}
+      };
       (async () => {
         await until(${JSON.stringify(scenario.holdSetup ? "setupHeld" : OPEN_LINE)});
         ${scenario.drive}
@@ -365,6 +376,27 @@ test("macOS open requests reach onOpenUrls normalized, in order, after onReady a
   expect(log.filter((line) => line.startsWith("onOpenUrls"))).toHaveLength(2);
 });
 
+test("macOS cold-launch open requests delivered before the first pump reach onOpenUrls after onReady and the initial onOpen", async () => {
+  const { log } = await runScenario({
+    desktop: OPEN_URLS_DESKTOP,
+    atLaunch: `
+      application.openUrlsRequested(["BunAway-Test://open/first", "file://localhost/tmp/launch.txt"]);
+      application.openUrlsRequested(["bunaway-test://open/second"]);`,
+    drive: `
+      await until("onOpenUrls:bunaway-test://open/second");
+      note("presented:" + (globalThis.presented ?? 0));
+      process.emit("SIGTERM", "SIGTERM");`,
+  });
+  expect(log.slice(0, 4)).toEqual([
+    "onReady",
+    OPEN_LINE,
+    "onOpenUrls:bunaway-test://open/first|file:///tmp/launch.txt",
+    "onOpenUrls:bunaway-test://open/second",
+  ]);
+  // Delivering held requests shows no window.
+  expect(log).toContain("presented:0");
+});
+
 test("macOS reopen with onReopen registered is forwarded and the host does not show a window itself", async () => {
   const { log } = await runScenario({
     desktop: OPEN_URLS_DESKTOP,
@@ -502,12 +534,19 @@ test("macOS backend drops native events after an approved quit committed the shu
   let worker: Worker | undefined;
   try {
     const app = resolve(directory, "app.ts");
+    const opened = resolve(directory, "opened");
     await Bun.write(
       app,
-      `export default {
+      `import { writeFileSync } from "node:fs";
+      export default {
         commands: {},
         events: { ping: {} },
-        desktop: { beforeQuit() {} },
+        desktop: {
+          beforeQuit() {},
+          onOpenUrls() {
+            writeFileSync(${JSON.stringify(opened)}, "");
+          },
+        },
       };`,
     );
     await bundleMacosHost(
@@ -605,6 +644,32 @@ test("macOS backend drops native events after an approved quit committed the shu
     await channel.send(ping);
     await Bun.sleep(100);
     expect(eventsDelivered()).toBe(1);
+    // An open request arriving after the commit is dropped with its own diagnostic, not reported
+    // as a failed callback, and the diagnostic carries only the count.
+    await channel.send({
+      kind: "open-urls",
+      urls: [
+        "https://late.example/",
+      ],
+    });
+    await until(
+      () => received.some((packet) => packet.kind === "diagnostic"),
+      "the open-urls diagnostic",
+    );
+    const diagnostics = received.filter(
+      (packet) => packet.kind === "diagnostic",
+    );
+    expect(diagnostics).toEqual([
+      {
+        kind: "diagnostic",
+        event: "open-urls-dropped",
+        fields: {
+          reason: "ending",
+          count: 1,
+        },
+      },
+    ]);
+    expect(await Bun.file(opened).exists()).toBe(false);
 
     // The main thread finishes the orderly shutdown and the Worker exits cleanly.
     await channel.send({

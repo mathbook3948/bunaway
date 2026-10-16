@@ -187,11 +187,12 @@ export class DesktopRequests {
       if (!(await this.configuration.promise)) {
         return;
       }
-      for (
-        let request = this.requests.shift();
-        request && !this.hooks.stopping();
-        request = this.requests.shift()
-      ) {
+      // Check stopping before taking a request, so one is never removed and silently lost.
+      while (!this.hooks.stopping()) {
+        const request = this.requests.shift();
+        if (!request) {
+          break;
+        }
         try {
           await this.send(request);
         } catch (error) {

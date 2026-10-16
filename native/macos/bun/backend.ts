@@ -150,6 +150,21 @@ const channel = new Channel(
       return;
     }
     if (packet.kind === "open-urls") {
+      if (stopping || shutdownCommitted) {
+        // Not a callback failure: the app already approved the quit. The count is enough for
+        // diagnostics, since URLs may hold secrets.
+        void channel
+          .send({
+            kind: "diagnostic",
+            event: "open-urls-dropped",
+            fields: {
+              reason: "ending",
+              count: packet.urls.length,
+            },
+          })
+          .catch(() => {});
+        return;
+      }
       try {
         requireDesktop().openUrls(packet.urls);
       } catch (error) {
