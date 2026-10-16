@@ -444,7 +444,7 @@ await windows.close({ view: "dialog" });
 | `windows.create` | `{ view, options? }` | `Promise<null>`. 설정한 창을 생성하고 WebView 준비를 기다림. 열린 창은 `BUSY` |
 | `windows.recreate` | `{ view, options? }` | `Promise<null>`. 닫기 확인 후 기존 창과 WebView를 정리하고 설정대로 다시 생성. 닫힌 창도 생성 가능 |
 | `windows.show` | `{ view, windowId? }` | `Promise<null>`. 창 표시 |
-| `windows.showInactive` | `{ view, windowId? }` | `Promise<null>`. 일반, 최소화 또는 최대화 상태를 유지하며 창 표시. 활성화 요청 없음. macOS는 `orderFront:`로 표시하며 key window 전환과 앱 활성화를 하지 않음 |
+| `windows.showInactive` | `{ view, windowId? }` | `Promise<null>`. 일반, 최소화 또는 최대화 상태를 유지하며 창 표시. 활성화 요청 없음. macOS는 `orderFront:`로 표시하며 key window 전환과 앱 활성화를 하지 않음. 이미 보이거나 최소화된 창은 그대로 둠(사용자가 최소화한 뒤 숨긴 창은 다시 표시하지 않음) |
 | `windows.hide` | `{ view, windowId? }` | `Promise<null>`. 창 숨김. 창과 세션은 유지 |
 | `windows.focus` | `{ view, windowId? }` | `Promise<null>`. 숨기거나 최소화한 창을 표시하고 포커스 요청. OS가 거부하면 `BUSY` |
 | `windows.blur` | `{ view, windowId? }` | `Promise<boolean>`. 같은 앱의 허용된 다른 창으로 전환해 대상 창이 비활성인지 반환 |
