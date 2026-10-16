@@ -17,6 +17,7 @@ import {
 import { DialogCloseRequest } from "#plugins/dialog/src/platforms/windows-bindings";
 import {
   encodeTaskDialogConfig,
+  escapeMnemonic,
   messageButtonIndex,
   TASKDIALOG_BUTTON_SIZE,
   TASKDIALOGCONFIG_SIZE,
@@ -756,6 +757,50 @@ test("showMessage abort, shutdown and owner retirement stay CANCELLED after nati
   }
 });
 
+test("a driver failure after host interruption is CANCELLED, otherwise it passes through", () => {
+  const nativeFailure = () =>
+    new BunawayError({
+      code: "INTERNAL",
+      message: "Windows message dialog returned an unexpected button.",
+    });
+  for (const cause of [
+    "abort",
+    "owner",
+    "none",
+  ] as const) {
+    const controller = new AbortController();
+    const f = fixture();
+    const state = new WindowsDialogs(f.services, undefined, () => ({
+      show: (_owner, poll) => {
+        if (cause === "abort") {
+          controller.abort();
+        }
+        if (cause === "owner") {
+          f.closeOwner();
+        }
+        expect(poll()).toBe(cause !== "none");
+        throw nativeFailure();
+      },
+      dispose() {},
+    }));
+    expect(() =>
+      state.showMessage(
+        {
+          ownerWindowId: "owner",
+          message: "Hi",
+        },
+        "backend",
+        controller.signal,
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: cause === "none" ? "INTERNAL" : "CANCELLED",
+      }),
+    );
+    expect(state.busy()).toBe(false);
+  }
+});
+
 test("native reentry is BUSY across showMessage and file dialogs", () => {
   const f = fixture();
   const state = new WindowsDialogs(
@@ -947,6 +992,37 @@ test("encodeTaskDialogConfig encodes custom buttons, checkbox, owner and cancel 
     expect(buttons?.readBigUInt64LE(index * 12 + 4)).not.toBe(0n);
   }
   expect(config.readBigUInt64LE(64)).not.toBe(0n);
+});
+
+test("escapeMnemonic doubles every ampersand and leaves other labels unchanged", () => {
+  expect(escapeMnemonic("Save & Close")).toBe("Save && Close");
+  expect(escapeMnemonic("&&")).toBe("&&&&");
+  expect(escapeMnemonic("Plain")).toBe("Plain");
+});
+
+test("encodeTaskDialogConfig escapes mnemonics in button and checkbox labels only", () => {
+  const { keepAlive } = encodeTaskDialogConfig(
+    {
+      title: "A & B",
+      message: "C & D",
+      detail: "E & F",
+      buttons: [
+        "Save & Close",
+        "Cancel",
+      ],
+      checkbox: {
+        label: "Don't ask & tell",
+      },
+    },
+    fakeNative,
+    fakeAddress,
+  );
+  const strings = keepAlive.map((buffer) => buffer.toString("utf16le"));
+  expect(strings).toContain("Save && Close\0");
+  expect(strings).toContain("Don't ask && tell\0");
+  expect(strings).toContain("A & B\0");
+  expect(strings).toContain("C & D\0");
+  expect(strings).toContain("E & F\0");
 });
 
 test("encodeTaskDialogConfig allows cancellation only when a cancel button resolves and maps icons", () => {

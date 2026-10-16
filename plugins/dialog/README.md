@@ -40,8 +40,12 @@ each call writes a private temporary manifest file, creates an activation contex
 deletes the file immediately, and activates the context on the UI STA around loading comctl32 and the
 modal call. Cancellation is polled from the `TDN_TIMER` callback (about 200 ms, coarser than the 25 ms
 picker timer) and closes the dialog with a synchronous `TDM_CLICK_BUTTON`. Callbacks never throw through
-native frames. Custom buttons use ids offset from the button index, and the cancel button is mapped to
-`IDCANCEL` so Escape resolves to it.
+native frames. Custom buttons use ids `CUSTOM_BUTTON_ID_BASE + index`. When a cancel button resolves,
+`TDF_ALLOW_DIALOG_CANCELLATION` is set so Escape, the title-bar close button and Alt+F4 make TaskDialog
+return `IDCANCEL`, and `messageButtonIndex` converts `IDCANCEL` to the resolved cancel index. Without a
+cancel button the flag is unset and `IDCANCEL` is ignored. TaskDialog reads `&` in custom button and
+checkbox labels as an access-key mnemonic, so `escapeMnemonic` doubles it (`&` to `&&`) and the label
+displays literally. The title, message and detail are not escaped.
 
 Microsoft references: [TaskDialogIndirect](https://learn.microsoft.com/en-us/windows/win32/api/commctrl/nf-commctrl-taskdialogindirect),
 [TASKDIALOGCONFIG](https://learn.microsoft.com/en-us/windows/win32/api/commctrl/ns-commctrl-taskdialogconfig),
@@ -61,5 +65,6 @@ Physical input, multiple-monitor layout, overwrite prompts, multi-selection UI a
 retirement remain manual/native follow-up coverage.
 
 The packed (pshpack1) `TASKDIALOGCONFIG` layout is verified by Linux contract tests. Real TaskDialog
-behavior (custom button click, checkbox, Escape through `IDCANCEL`, abort) is covered only by the
+behavior (custom button click, checkbox, `IDCANCEL` mapping, the injected Escape key message, ignored
+`IDCANCEL` without a cancel button, abort and recovery after abort) is covered only by the
 Windows-only lifecycle test.

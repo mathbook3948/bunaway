@@ -428,6 +428,8 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
 
       // Message dialogs (TaskDialog). Posted TDM_* messages are processed by the dialog's own loop.
       const WM_COMMAND = 0x0111;
+      const WM_KEYDOWN = 0x0100;
+      const VK_ESCAPE = 0x1b;
       const TDM_CLICK_BUTTON = 0x0466;
       const TDM_CLICK_VERIFICATION = 0x0471;
       const openMessage = async (payload: Record<string, JsonValue>) => {
@@ -507,6 +509,63 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
         "message abort cleanup",
       );
       pending.delete(abortedMessage.requestId);
+      // A following call proves the STA and adapter recovered. IDOK is the common OK button.
+      const afterAbort = await openMessage({});
+      native.symbols.PostMessageW(
+        find(afterAbort.title),
+        TDM_CLICK_BUTTON,
+        1n,
+        0n,
+      );
+      expect(await afterAbort.result()).toEqual({
+        kind: "result",
+        payload: {
+          button: 0,
+          checkboxChecked: false,
+        },
+      });
+      // Without TDF_ALLOW_DIALOG_CANCELLATION (several buttons, no cancelButton), IDCANCEL is ignored.
+      const uncancellable = await openMessage({
+        buttons: customButtons,
+      });
+      const uncancellableHwnd = find(uncancellable.title);
+      native.symbols.PostMessageW(uncancellableHwnd, WM_COMMAND, 2n, 0n);
+      // Longer than the ~200 ms TDN_TIMER poll, so a wrongly accepted IDCANCEL would have closed it.
+      await Bun.sleep(300);
+      expect(native.symbols.IsWindow(uncancellableHwnd)).not.toBe(0);
+      expect(native.symbols.IsWindowVisible(uncancellableHwnd)).not.toBe(0);
+      native.symbols.PostMessageW(
+        uncancellableHwnd,
+        TDM_CLICK_BUTTON,
+        1000n,
+        0n,
+      );
+      expect(await uncancellable.result()).toEqual({
+        kind: "result",
+        payload: {
+          button: 0,
+          checkboxChecked: false,
+        },
+      });
+      // Injected keyboard message processing, not physical input: the dialog loop's IsDialogMessage
+      // translates Escape into IDCANCEL, which maps to the non-default cancel button.
+      const escapeKey = await openMessage({
+        buttons: customButtons,
+        cancelButton: 2,
+      });
+      native.symbols.PostMessageW(
+        find(escapeKey.title),
+        WM_KEYDOWN,
+        BigInt(VK_ESCAPE),
+        0n,
+      );
+      expect(await escapeKey.result()).toEqual({
+        kind: "result",
+        payload: {
+          button: 2,
+          checkboxChecked: false,
+        },
+      });
 
       const shutdown = invoke("dialog.selectFolder");
       const queuedAtShutdown = invoke("dialog.openFile");

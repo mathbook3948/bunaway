@@ -108,6 +108,14 @@ export type EncodedTaskDialog = {
 const wide = (value: string) => Buffer.from(`${value}\0`, "utf16le");
 
 /**
+ * Escape `&` so TaskDialog shows it literally. Button and verification (checkbox) labels treat a
+ * single `&` as an access-key mnemonic prefix; the main instruction, content and title do not.
+ */
+export function escapeMnemonic(label: string): string {
+  return label.replaceAll("&", "&&");
+}
+
+/**
  * Encode the request into the packed x64 TASKDIALOGCONFIG. Pure apart from reading buffer addresses
  * through `addressOf`, so tests can verify the layout without calling native code.
  */
@@ -171,7 +179,7 @@ export function encodeTaskDialogConfig(
     input.buttons.forEach((label, index) => {
       const offset = index * TASKDIALOG_BUTTON_SIZE;
       buttons.writeInt32LE(customButtonId(index), offset);
-      buttons.writeBigUInt64LE(text(label), offset + 4);
+      buttons.writeBigUInt64LE(text(escapeMnemonic(label)), offset + 4);
     });
     keepAlive.push(buttons);
     config.writeUInt32LE(input.buttons.length, CONFIG_OFFSET.cButtons);
@@ -185,7 +193,11 @@ export function encodeTaskDialogConfig(
     config.writeInt32LE(IDOK, CONFIG_OFFSET.nDefaultButton);
   }
   config.writeBigUInt64LE(
-    text(input.checkbox?.label),
+    text(
+      input.checkbox === undefined
+        ? undefined
+        : escapeMnemonic(input.checkbox.label),
+    ),
     CONFIG_OFFSET.pszVerificationText,
   );
   config.writeBigUInt64LE(native.callback, CONFIG_OFFSET.pfCallback);
@@ -325,6 +337,8 @@ export function createMessageDialog(
       actctx.writeUInt32LE(ACTCTXW_SIZE, 0);
       actctx.writeBigUInt64LE(BigInt(ptr(path)), ACTCTXW_SOURCE_OFFSET);
       context = BigInt(kernel.symbols.CreateActCtxW(ptr(actctx)));
+      // The manifest path is referenced only by address in `actctx`, so it must outlive CreateActCtxW.
+      void path.length;
     } finally {
       rmSync(directory, {
         recursive: true,

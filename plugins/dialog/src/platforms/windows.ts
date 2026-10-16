@@ -138,24 +138,36 @@ export class WindowsDialogs {
     let interrupted = false;
     try {
       driver = create(services);
-      const result = driver.show(owner?.hwnd ?? 0n, () => {
-        services.poll();
-        interrupted ||=
-          !!cancelled() ||
-          cancellation.cancelled() ||
-          !!(owner && !owner.alive());
-        return interrupted;
-      });
-      checkCancelled();
-      if (
+      const interruptedByHost = () =>
         interrupted ||
+        !!cancelled() ||
         cancellation.cancelled() ||
-        (owner && !owner.alive())
-      ) {
-        throw new BunawayError({
+        !!(owner && !owner.alive());
+      const cancelledByHost = () =>
+        new BunawayError({
           code: "CANCELLED",
           message: "Dialog owner closed or call was cancelled.",
         });
+      let result: Result;
+      try {
+        result = driver.show(owner?.hwnd ?? 0n, () => {
+          services.poll();
+          // Latched: once the host interrupts, the dialog stays interrupted even if the owner state flips back.
+          interrupted = interruptedByHost();
+          return interrupted;
+        });
+      } catch (error) {
+        // After host interruption the driver force-closes its dialog, so a native failure that
+        // follows is a consequence of that close and the caller must see the cancellation instead.
+        if (interruptedByHost()) {
+          checkCancelled();
+          throw cancelledByHost();
+        }
+        throw error;
+      }
+      checkCancelled();
+      if (interruptedByHost()) {
+        throw cancelledByHost();
       }
       return result;
     } finally {

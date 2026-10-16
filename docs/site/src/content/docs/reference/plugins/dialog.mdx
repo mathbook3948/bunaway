@@ -69,10 +69,10 @@ if (!result.cancelled) {
 | `message: string` | 필수. 1~4096자의 주 안내 문구. |
 | `detail?: string` | 1~8192자의 보조 설명. |
 | `type?: "none" \| "info" \| "warning" \| "error" \| "question"` | 기본 `"none"`. 아이콘만 바꾸며 버튼 구성이나 결과에는 영향이 없습니다. |
-| `buttons?: string[]` | 1~8개 버튼 라벨(각 1~64자). 생략하면 운영체제 언어의 확인 버튼 하나이며 인덱스는 0입니다. |
+| `buttons?: string[]` | 1~8개 버튼 라벨(각 1~64자). 생략하면 운영체제 언어의 확인 버튼 하나이며 인덱스는 0입니다. `&`를 포함한 라벨 문자는 그대로 표시됩니다. |
 | `defaultButton?: number` | 처음 포커스를 받는 버튼 인덱스. 기본 0. |
 | `cancelButton?: number` | ESC, 창 닫기 버튼과 Alt+F4가 반환할 버튼 인덱스. |
-| `checkbox?: { label: string; checked?: boolean }` | 확인란. `label`은 1~256자이고 `checked` 기본값은 `false`입니다. |
+| `checkbox?: { label: string; checked?: boolean }` | 확인란. `label`은 1~256자이고 `checked` 기본값은 `false`입니다. `label`의 `&`도 그대로 표시됩니다. |
 
 `defaultButton`과 `cancelButton`은 `buttons`의 길이보다 작은 정수여야 합니다. `buttons`를
 생략하면 길이를 1로 봅니다. 범위를 벗어난 인덱스, 빈 `buttons` 배열, 9개 이상의 버튼은
