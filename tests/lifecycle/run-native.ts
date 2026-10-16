@@ -70,7 +70,24 @@ if (target === "windows-x64") {
       await test("windows-bun.ts", scenario);
     }
     await test("windows-cli-arguments.ts");
-    await test("windows-bun-window-api.ts");
+    // DIAGNOSTIC (#94, temporary; remove before merge): repeat the window API
+    // scenario to reproduce intermittent "WebView cleanup timed out".
+    const diagFailures: string[] = [];
+    for (let attempt = 1; attempt <= 8; attempt++) {
+      const started = performance.now();
+      let outcome = "pass";
+      try {
+        await test("windows-bun-window-api.ts");
+      } catch (error) {
+        outcome = `fail: ${String(error).slice(0, 300)}`;
+        diagFailures.push(`#${attempt} ${outcome}`);
+      }
+      const tasks = Bun.spawnSync(["tasklist", "/FI", "IMAGENAME eq msedgewebview2.exe", "/FO", "CSV", "/NH"]);
+      const left = tasks.stdout.toString().split("\n").filter((line) => line.includes("msedgewebview2")).length;
+      console.log(`DIAG94 attempt=${attempt} ${outcome} seconds=${Math.round((performance.now() - started) / 1000)} msedgewebview2_left=${left}`);
+    }
+    console.log(`DIAG94 failures=${diagFailures.length}/8`);
+    assert.deepEqual(diagFailures, [], "DIAG94 window API repetitions failed");
     await test("windows-webview-print-ui.ts");
     await test("windows-webview-downloads.ts");
     await test("windows-webview-controls.ts");
