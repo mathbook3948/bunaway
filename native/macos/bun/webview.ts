@@ -2,7 +2,7 @@ import { type Pointer, ptr, toArrayBuffer } from "bun:ffi";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { extname, resolve } from "node:path";
 import { clampWindowSize } from "@bunaway/plugin-api/native";
-import { BunawayError } from "@bunaway/protocol";
+import { BunawayError, type WireError } from "@bunaway/protocol";
 import type { MacosApplication } from "./application.ts";
 import type { MacosConfig } from "./config.ts";
 import { Objc, type ObjcObject } from "./objc.ts";
@@ -16,6 +16,9 @@ const WK_USER_SCRIPT_INJECTION_AT_DOCUMENT_START = 0;
 const WK_NAVIGATION_CANCEL = 0;
 const WK_NAVIGATION_ALLOW = 1;
 const WK_PERMISSION_DENY = 0;
+const NS_URL_ERROR_CANCELLED = -999;
+/** WebKitErrorFrameLoadInterruptedByPolicyChange. */
+const WEBKIT_ERROR_FRAME_LOAD_INTERRUPTED = 102;
 const NS_UNBOUNDED_CONTENT_SIZE = 3.4028234663852886e38;
 const BRIDGE = `(() => {
   const listeners = new Set();
@@ -69,6 +72,8 @@ export class MacosWebview {
   private coreReady = false;
   private navigationStarted = false;
   private provisionalNavigation: ObjcObject | null = null;
+  /** Latest top-level document navigation; unlike provisionalNavigation it survives commit until completion. */
+  private documentNavigation: ObjcObject | null = null;
   readonly controls: MacosWebviewControls;
   readonly ready: Promise<void>;
 
@@ -80,6 +85,10 @@ export class MacosWebview {
       receive(source: string, raw: string): void;
       revoke(reason: string): void;
       close(): void;
+      /** The window became key; never called after close. */
+      activated(): void;
+      /** The current document navigation finished, or failed with the given outcome. */
+      documentComplete(error: WireError | null): void;
       log(event: string, fields?: object): void;
       fail(error: unknown): void;
     },
@@ -106,6 +115,17 @@ export class MacosWebview {
               hooks.close();
             }
             return false;
+          },
+        },
+        {
+          // Records the most recently activated window for lastActive lookup.
+          selector: "windowDidBecomeKey:",
+          arguments: 1,
+          encoding: "v@:@",
+          call: () => {
+            if (!this.closed) {
+              hooks.activated();
+            }
           },
         },
       ]);
@@ -362,6 +382,7 @@ export class MacosWebview {
             if (!this.closed) {
               this.diagnostics.record("provisional");
               this.provisionalNavigation = navigation ?? null;
+              this.documentNavigation = navigation ?? null;
               // This callback marks a new document. Fragment/history-state changes retain their session.
               hooks.revoke("navigation");
             }
@@ -405,6 +426,15 @@ export class MacosWebview {
               success: false,
               source: this.source(),
             });
+            if (!this.closed && navigation === this.documentNavigation) {
+              this.documentNavigation = null;
+              hooks.documentComplete({
+                code: this.isCancelledNavigation(error)
+                  ? "CANCELLED"
+                  : "INTERNAL",
+                message: "Document navigation did not complete.",
+              });
+            }
           },
         })),
         {
@@ -421,12 +451,16 @@ export class MacosWebview {
           selector: "webView:didFinishNavigation:",
           arguments: 2,
           encoding: "v@:@@",
-          call: () => {
+          call: (_self, _cmd, _view, navigation) => {
             this.diagnostics.record("finished");
             hooks.log("navigation-completed", {
               success: true,
               source: this.source(),
             });
+            if (!this.closed && navigation === this.documentNavigation) {
+              this.documentNavigation = null;
+              hooks.documentComplete(null);
+            }
           },
         },
         {
@@ -466,8 +500,10 @@ export class MacosWebview {
       );
       o.send(o.send(this.window, "contentView"), "addSubview:", this.webview);
       o.send(this.window, "center");
-      o.send(this.window, "makeKeyAndOrderFront:", null);
-      application.activate();
+      // Hidden creation never orders front, takes key status or activates the app.
+      if (config.window.visible !== false && !config.window.showWhenReady) {
+        this.present();
+      }
       const viewPolicy = config.policy.views.find(
         (view) => view.id === config.window.view,
       );
@@ -535,6 +571,31 @@ export class MacosWebview {
   start(): void {
     this.coreReady = true;
     this.navigateWhenReady();
+  }
+  /** Initial display: order front, take key status and activate the app. */
+  present(): void {
+    this.objc.withAutoreleasePool(() => {
+      this.objc.send(this.window, "makeKeyAndOrderFront:", null);
+      this.application.activate();
+    });
+  }
+  /**
+   * Show without activating the app or changing the key window. AppKit mapping:
+   * `orderFront:` (not `makeKeyAndOrderFront:`) orders the window in without key status,
+   * and a miniaturized window is left in the Dock so minimized state is preserved.
+   */
+  showInactive(): void {
+    const o = this.objc;
+    o.withAutoreleasePool(() => {
+      // Like SW_SHOWNA, an already visible or miniaturized window keeps its z-order.
+      if (o.send(this.window, "isMiniaturized") || this.isVisible()) {
+        return;
+      }
+      o.send(this.window, "orderFront:", null);
+      if (!this.isVisible()) {
+        throw new Error("AppKit declined window visibility.");
+      }
+    });
   }
   show(visible: boolean): void {
     const o = this.objc;
@@ -609,6 +670,19 @@ export class MacosWebview {
           this.objc.integer(error, "code"),
         )
       : {};
+  }
+  /** Cancellation by a newer load or a policy change is not a document failure. */
+  private isCancelledNavigation(error: ObjcObject | null): boolean {
+    if (!error) {
+      return false;
+    }
+    const domain = this.objc.text(this.objc.send(error, "domain"));
+    const code = Number(this.objc.integer(error, "code"));
+    return (
+      (domain === "NSURLErrorDomain" && code === NS_URL_ERROR_CANCELLED) ||
+      (domain === "WebKitErrorDomain" &&
+        code === WEBKIT_ERROR_FRAME_LOAD_INTERRUPTED)
+    );
   }
   /** Observe a stalled initial bridge at 5, 10 and 15 seconds without changing its deadline. */
   observeStartup(): void {

@@ -39,6 +39,63 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+/**
+ * Reject window options macOS cannot honor. Shared by declared windows and per-call
+ * creation options, so an unsupported request fails before any window is closed.
+ */
+export function assertMacosWindowOptions(spec: WindowSpec): void {
+  if (
+    [
+      "titlebar",
+      "alwaysOnTop",
+      "skipTaskbar",
+    ].some((key) => Object.hasOwn(spec.window, key))
+  ) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Window display options are not implemented on macOS.",
+    });
+  }
+  if (spec.window.focusable !== undefined) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Initial window focusability is not implemented on macOS.",
+    });
+  }
+  if (
+    [
+      "maximized",
+      "fullscreen",
+    ].some((key) => Object.hasOwn(spec.window, key))
+  ) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Initial window state options are not implemented on macOS.",
+    });
+  }
+  if (
+    [
+      "x",
+      "y",
+      "center",
+      "useContentSize",
+      "preventOverflow",
+    ].some((key) => Object.hasOwn(spec.window, key))
+  ) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Initial window placement options are not implemented on macOS.",
+    });
+  }
+  if (spec.instances === "multiple" || spec.profile === "isolated") {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message:
+        "Multiple windows and isolated instance profiles are not implemented on macOS.",
+    });
+  }
+}
+
 /** Preserve the host-owned asset origin's exact port while sharing window and policy validation. */
 export function readMacosWindowSpecs(
   declarations: unknown,
@@ -75,80 +132,13 @@ export function readMacosWindowSpecs(
     origin = home.origin;
   }
   const specs = readWindowSpecs(declarations, policy, origin);
-  if (
-    specs.some((spec) =>
-      [
-        "titlebar",
-        "alwaysOnTop",
-        "skipTaskbar",
-      ].some((key) => Object.hasOwn(spec.window, key)),
-    )
-  ) {
-    throw new BunawayError({
-      code: "UNSUPPORTED",
-      message: "Window display options are not implemented on macOS.",
-    });
-  }
-  if (specs.some((spec) => spec.window.focusable !== undefined)) {
-    throw new BunawayError({
-      code: "UNSUPPORTED",
-      message: "Initial window focusability is not implemented on macOS.",
-    });
-  }
-  if (
-    specs.some((spec) =>
-      [
-        "maximized",
-        "fullscreen",
-      ].some((key) => Object.hasOwn(spec.window, key)),
-    )
-  ) {
-    throw new BunawayError({
-      code: "UNSUPPORTED",
-      message: "Initial window state options are not implemented on macOS.",
-    });
-  }
-  if (
-    specs.some((spec) =>
-      [
-        "x",
-        "y",
-        "center",
-        "useContentSize",
-        "preventOverflow",
-      ].some((key) => Object.hasOwn(spec.window, key)),
-    )
-  ) {
-    throw new BunawayError({
-      code: "UNSUPPORTED",
-      message: "Initial window placement options are not implemented on macOS.",
-    });
-  }
-  if (
-    specs.some(
-      (spec) => spec.instances === "multiple" || spec.profile === "isolated",
-    )
-  ) {
-    throw new BunawayError({
-      code: "UNSUPPORTED",
-      message:
-        "Multiple windows and isolated instance profiles are not implemented on macOS.",
-    });
+  for (const spec of specs) {
+    assertMacosWindowOptions(spec);
   }
   if (!specs.some((spec) => spec.startup !== false)) {
     throw new BunawayError({
       code: "UNSUPPORTED",
       message: WINDOWLESS_STARTUP_MESSAGE,
-    });
-  }
-  if (
-    specs.some(
-      (spec) => spec.visible !== undefined || spec.showWhenReady !== undefined,
-    )
-  ) {
-    throw new BunawayError({
-      code: "UNSUPPORTED",
-      message: "Hidden window preparation is not implemented on macOS.",
     });
   }
   return specs;

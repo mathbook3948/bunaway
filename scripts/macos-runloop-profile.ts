@@ -71,6 +71,8 @@ try {
     {
       receive() {},
       revoke() {},
+      activated() {},
+      documentComplete() {},
       close() {
         failure = new Error("Profile window closed.");
       },

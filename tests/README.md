@@ -75,7 +75,9 @@ disposable private Keychain을 만들고 공유 Bun과 ad-hoc compiled 실행 �
 내부 provider만 disposable Keychain으로 지정하며 검증한 패키지의 identity 전달,
 호출자의 appId 거부, 개별 정책, 문자열과 바이트 왕복, 동일 실행 파일의 재시작 복호화와
 Core 정리 뒤 네이티브 정리를 확인한다. 결과는 `build/macos-safe-storage-results.json`이다.
-`macos-bun.test.ts`의 identity 회귀는 실제 Worker와 호스트 수명을 사용하지만 네이티브 UI를
+`macos-bun.test.ts`의 macOS 설정 단위 검사는 선언과 호출별 창 옵션에서 `visible`과
+`showWhenReady`를 허용하고 배치, titlebar, alwaysOnTop, 초기 상태와 multiple 선언을 `UNSUPPORTED`로
+거부하는지 확인한다. 같은 파일의 identity 회귀는 실제 Worker와 호스트 수명을 사용하지만 네이티브 UI를
 대체한 계약 검사다. 이 검사나 번들 성공을 macOS 실행 증거로 보고하지 않는다.
 
 초기 `maximized`와 `fullscreen`은 `windows-bun-window-api.ts`에서 일반 복원 영역과
@@ -666,6 +668,10 @@ macOS 전용 설정과 리소스 경계 페이지도 `fixtures/desktop/host/`에
 미디어 검사는 설치된 delegate와 네이티브 decision block을 사용하며 실제 장치를 열지 않는다.
 `macos-window-api.ts`는 실제 compiled 호스트와 WKWebView를 연결해 여러 시작 창,
 지연 생성, 권한별 목록, 표시와 포커스 조회, 반복 생성과 개별 닫기를 검사한다.
+또한 `getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`의 창 ID 조회와
+닫은 창의 마지막 활성 기록 제거, `visible: false`와 `showWhenReady: "sdk"`의 숨김 생성,
+`getReadiness`와 `windows.readiness` 이벤트(닫힌 창의 `CANCELLED` 결과 보존 포함),
+미지원 생성 옵션의 `UNSUPPORTED` 거부와 기존 창 유지, `showInactive`가 포커스를 바꾸지 않는지도 확인한다.
 보조 창을 닫아도 주 창과 백엔드가 유지되고, 마지막 창의 자기 재생성이 새 세션으로
 완료되며, 마지막 닫기에서 호스트가 한 번 종료되는지 확인한다. 영속 프로필은 검사하지 않는다.
 브리지에 최상위 `Date`, 객체와 배열 안의 `Date`를 보내도 앱이 종료되지 않고,

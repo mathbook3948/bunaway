@@ -96,15 +96,29 @@ try {
           "setSize",
           "getOuterBounds",
           "toLogical",
+          "getById",
+          "getCurrent",
+          "getFocused",
+          "getLastActive",
+          "listInstances",
+          "getReadiness",
+          "showInactive",
+          "isDestroyed",
         ].map((name) => `plugin.windows.${name}`),
       ],
-      events: [],
+      events:
+        view === "main"
+          ? [
+              "windows.readiness",
+            ]
+          : [],
       host: {
         permissions: [
           ...(view === "main"
             ? windowPermissions()
             : [
                 "windows.list",
+                "windows.getCurrent",
               ]),
         ],
       },
@@ -131,8 +145,23 @@ try {
     const name = location.pathname.split(".")[0].slice(1);
     const check = (ok, message) => {if (!ok) throw new Error(message);};
     const error = async (work, code) => {try {await work(); throw new Error("Expected " + code);} catch (error) {check(error.code === code, "Expected " + code + ": " + error.message);}};
+    const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+    const until = async (work, message) => {
+      for (let attempt = 0; attempt < 600; attempt++) {
+        if (await work()) return;
+        await sleep(10);
+      }
+      throw new Error("Timed out: " + message);
+    };
+    const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+    const prepared = async (view) => {
+      const state = await windows.getReadiness({view});
+      return state.document === "ready" && state.sdk === "ready";
+    };
     try {
       check(await client.invoke("test.echo", name) === name, "view routing");
+      const current = await windows.getCurrent();
+      check(current?.viewId === name && typeof current.windowId === "string", "current identity");
       if (name !== "main") {
         const list = await windows.list();
         check(list.length === 3 && list.some(item => item.view === name), "declared catalog");
@@ -142,6 +171,11 @@ try {
       } else {
         const phase = await client.invoke("test.phase", null);
         if (phase === 1) {
+          // Subscribe before the hidden window exists so no lazy transition is missed.
+          const lazyReadiness = [];
+          await client.listen("windows.readiness", (event) => {
+            if (event.payload.viewId === "lazy") lazyReadiness.push(event.payload);
+          }, {onError: console.error});
           await client.invoke("test.wait", {view:"reader",count:1});
           const list = await windows.list();
           check(list.length === 3 && list.find(item => item.view === "lazy").open === false, "startup false");
@@ -150,20 +184,84 @@ try {
           check(await windows.isVisible({view:"reader"}) === false, "hide");
           await windows.show({view:"reader"});
           check(await windows.isVisible({view:"reader"}) === true, "show");
-          try {await windows.focus({view:"reader"}); check(await windows.isFocused({view:"reader"}), "focus");} catch (error) {check(error.code === "BUSY", "focus error");}
+          let readerFocused = false;
+          try {await windows.focus({view:"reader"}); readerFocused = await windows.isFocused({view:"reader"}); check(readerFocused, "focus");} catch (error) {check(error.code === "BUSY", "focus error");}
+          const instances = await windows.listInstances();
+          const mainIdentity = instances.find(item => item.viewId === "main");
+          const readerIdentity = instances.find(item => item.viewId === "reader");
+          check(mainIdentity && readerIdentity && same(mainIdentity, current), "listInstances");
+          check(same(await windows.getById({windowId: current.windowId}), current), "getById");
+          check(await windows.getById({windowId: crypto.randomUUID()}) === null, "getById unknown");
+          const declared = (identity) => identity === null || instances.some(item => same(item, identity));
+          const focused = await windows.getFocused();
+          const lastActive = await windows.getLastActive();
+          if (readerFocused) {
+            check(same(focused, readerIdentity), "focused identity");
+            check(same(lastActive, readerIdentity), "last active identity");
+          } else {
+            check(declared(focused) && declared(lastActive), "focus lookup identity");
+          }
+          // Hidden creation: no visibility, key window change or app activation until showInactive.
+          await windows.create({view:"lazy", options:{visible:false}});
+          check(await windows.isVisible({view:"lazy"}) === false, "hidden create");
+          const hidden = await windows.getReadiness({view:"lazy"});
+          check(hidden.nativeCreated === true && hidden.viewId === "lazy", "hidden readiness identity");
+          await error(() => windows.recreate({view:"lazy", options:{window:{alwaysOnTop:true}}}), "UNSUPPORTED");
+          check((await windows.getReadiness({view:"lazy"})).windowId === hidden.windowId, "unsupported option left window open");
+          await until(() => prepared("lazy"), "hidden lazy readiness");
+          await until(() => lazyReadiness.some((state) => state.windowId === hidden.windowId && state.sdk === "ready"), "hidden lazy readiness event");
+          await client.invoke("test.wait", {view:"lazy",count:1});
+          check(await windows.isVisible({view:"lazy"}) === false, "hidden after ready");
+          const mainFocusedBefore = await windows.isFocused({view:"main"});
+          const readerFocusedBefore = await windows.isFocused({view:"reader"});
+          await windows.showInactive({view:"lazy"});
+          check(await windows.isVisible({view:"lazy"}) === true, "showInactive visible");
+          check(await windows.isFocused({view:"lazy"}) === false, "showInactive not focused");
+          check(await windows.isFocused({view:"main"}) === mainFocusedBefore, "showInactive kept main focus");
+          check(await windows.isFocused({view:"reader"}) === readerFocusedBefore, "showInactive kept reader focus");
+          if (readerFocused) check(same(await windows.getLastActive(), readerIdentity), "showInactive kept last active");
+          check(await windows.close({view:"lazy"}) === true, "close hidden lazy");
+          await until(() => lazyReadiness.some((state) => state.windowId === hidden.windowId && state.document === "cancelled"), "cancelled readiness event");
+          const retained = await windows.getReadiness({view:"lazy"});
+          check(retained.windowId === hidden.windowId && retained.document === "cancelled" && retained.sdk === "cancelled" && retained.error?.code === "CANCELLED", "retained readiness");
+          // A closed lifetime's windowId no longer targets anything.
+          check(await windows.getById({windowId: hidden.windowId}) === null, "getById closed");
+          check(await windows.isDestroyed({view:"lazy", windowId: hidden.windowId}) === true, "isDestroyed closed");
+          await error(() => windows.show({view:"lazy", windowId: hidden.windowId}), "INVALID_ARGUMENT");
+          // Show once the SDK session is acknowledged; a new native lifetime has a new ID.
+          await windows.create({view:"lazy", options:{showWhenReady:"sdk"}});
+          // Read readiness, then visibility, then readiness again, with nothing in between: if the SDK is still not ready after the visibility read, the window was observed hidden before ready.
+          const automatic = await windows.getReadiness({view:"lazy"});
+          const earlyVisible = await windows.isVisible({view:"lazy"});
+          const afterVisibility = await windows.getReadiness({view:"lazy"});
+          check(automatic.windowId !== hidden.windowId, "recreated windowId");
+          check(await windows.isDestroyed({view:"lazy", windowId: automatic.windowId}) === false, "isDestroyed live");
+          check(await windows.isDestroyed({view:"lazy", windowId: hidden.windowId}) === true, "isDestroyed stale");
+          await error(() => windows.showInactive({view:"lazy", windowId: hidden.windowId}), "INVALID_ARGUMENT");
+          check(afterVisibility.windowId === automatic.windowId, "same window while checking early visibility");
+          if (afterVisibility.sdk !== "ready") check(earlyVisible === false, "hidden before sdk ready");
+          await until(() => windows.isVisible({view:"lazy"}), "showWhenReady visibility");
+          check(lazyReadiness.some((state) => state.windowId === automatic.windowId && state.sdk !== "ready"), "pre-ready state published");
+          check((await windows.getReadiness({view:"lazy"})).sdk === "ready", "visible after sdk ready");
+          await client.invoke("test.wait", {view:"lazy",count:2});
+          await windows.showInactive({view:"lazy", windowId: automatic.windowId});
+          check(await windows.isVisible({view:"lazy"}) === true, "showInactive by live windowId");
+          check(await windows.close({view:"lazy"}) === true, "close automatic lazy");
           await error(() => windows.setSize({view:"reader",width:400,height:400}), "UNSUPPORTED");
           await error(() => windows.getOuterBounds({view:"reader"}), "UNSUPPORTED");
           await error(() => windows.toLogical({view:"reader",value:{width:400,height:400}}), "UNSUPPORTED");
           for (let index = 0; index < 3; index++) {
             await windows.create({view:"lazy"});
-            await client.invoke("test.wait", {view:"lazy",count:index*2+1});
+            await client.invoke("test.wait", {view:"lazy",count:index*2+3});
             await error(() => windows.create({view:"lazy"}), "BUSY");
             await windows.recreate({view:"lazy"});
-            await client.invoke("test.wait", {view:"lazy",count:index*2+2});
+            await client.invoke("test.wait", {view:"lazy",count:index*2+4});
             check(await windows.close({view:"lazy"}) === true, "close lazy");
             await error(() => windows.isVisible({view:"lazy"}), "INVALID_ARGUMENT");
           }
           check(await windows.close({view:"reader"}) === true, "close reader");
+          const afterReaderClose = await windows.getLastActive();
+          check(afterReaderClose === null || afterReaderClose.viewId !== "reader", "closed window is not last active");
           await windows.create({view:"reader"});
           check(await windows.close({view:"reader"}) === true, "close recreated reader");
           await windows.recreate({view:"main"});
@@ -230,7 +328,7 @@ try {
       },
       stdout: "pipe",
       stderr: "pipe",
-      timeout: 30_000,
+      timeout: 45_000,
     },
   );
   child = launched;
@@ -268,7 +366,7 @@ try {
   );
   assert.equal(records.at(-1).failed, false);
   console.log(
-    "PASS compiled macOS multi-window API, operation grants, repeated creation, fresh sessions and last-window self recreation",
+    "PASS compiled macOS multi-window API, operation grants, window identity lookup, hidden creation, readiness, showInactive, repeated creation, fresh sessions and last-window self recreation",
   );
 } catch (error) {
   const log = resolve(

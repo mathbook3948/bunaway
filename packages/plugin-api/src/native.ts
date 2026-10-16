@@ -172,9 +172,9 @@ export type WindowSpec = {
   profile?: "shared" | "isolated";
   /** Whether the runtime creates one instance of this definition during startup. */
   startup?: boolean;
-  /** Initial visibility, default true. Hidden creation never activates the window. Windows only. */
+  /** Initial visibility, default true. Hidden creation never activates the window. */
   visible?: boolean;
-  /** Create hidden and show once after the document, or document and SDK, are ready. Windows only. */
+  /** Create hidden and show once after the document, or document and SDK, are ready. */
   showWhenReady?: "document" | "sdk";
 };
 
@@ -297,7 +297,7 @@ export type NativeWindow = {
   audio?: NativeWebViewAudio;
   /** Reads a versioned state and physical outer-bounds snapshot for recovery after subscribing. */
   getSnapshot(): WindowSnapshot;
-  /** Reads the latest preparation outcome, including a retained closed-window outcome. Windows only. */
+  /** Reads the latest preparation outcome, including a retained closed-window outcome. */
   getReadiness(): WindowReadiness;
   /** Shows or hides the native window. */
   show(visible: boolean): void;

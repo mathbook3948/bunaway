@@ -44,8 +44,11 @@ WebView를 위한 추가 네이티브 바이너리는 필요하지 않다.
 
 현재 대상은 macOS arm64다. 다중 창, 명령과 이벤트, 뷰별 정책과 세션, 사용자 지정
 자산 스킴, 렌더러 복구와 종료를 제공한다. `app.windows`와 `startup: false`를 지원한다.
-`@bunaway/plugin-windows`는 목록, 생성과 재생성, show/hide/focus/close 및 표시와
-포커스 조회를 제공한다. 다른 창 작업은 `UNSUPPORTED`다. 로그와 기능 조회는
+`@bunaway/plugin-windows`는 목록, 생성과 재생성, show/showInactive/hide/focus/close,
+표시와 포커스 조회, 창 ID 조회, `getReadiness`와 `windows.readiness`, 숨김 생성
+(`visible: false`, `showWhenReady`)을 제공한다. 창 ID는 네이티브 창을 만들거나 재생성할 때마다
+새로 발급하며 뷰마다 창 하나만 지원한다. `getSnapshot`, `windows.changed`, 크기와 위치,
+상태 변경, `activate`, 다중 인스턴스 등 다른 창 작업은 `UNSUPPORTED`다. 로그와 기능 조회는
 등록한 I/O 어댑터로 실행한다. `desktop`, 저장과 opener 어댑터는 지원하지 않는다.
 
 창마다 임시 `WKWebsiteDataStore`를 따로 만들고 같은 뷰의 재생성에서 유지한다.

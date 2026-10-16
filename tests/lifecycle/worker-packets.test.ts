@@ -175,6 +175,7 @@ const fixtures = {
       payload: null,
     },
     "main",
+    "macos-backend",
   ),
   server: fixture(
     {

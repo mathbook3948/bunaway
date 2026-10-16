@@ -1,18 +1,29 @@
 import type {
   NativeWindow,
   NativeWindowServices,
+  WindowIdentity,
+  WindowReadiness,
   WindowSpec,
   WindowState,
 } from "@bunaway/plugin-api/native";
-import { BunawayError, type ServerMessage } from "@bunaway/protocol";
+import {
+  API_LIMITS,
+  BunawayError,
+  type HostCall,
+  type HostContext,
+  type ServerMessage,
+} from "@bunaway/protocol";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 import type { Packet, Route } from "@bunaway/runtime-bun/worker-channel";
+// Platform-neutral readiness logic shared with the Windows host; it has no native dependency.
+import { WindowReadinessTracker } from "../../windows/bun/window-readiness.ts";
 import type { MacosApplication } from "./application.ts";
-import type { MacosConfig } from "./config.ts";
+import { assertMacosWindowOptions, type MacosConfig } from "./config.ts";
 import { macosOrigin } from "./urls.ts";
 import { MacosWebview } from "./webview.ts";
 
-const WINDOW_STARTUP_TIMEOUT_MS = 30_000;
+/** Bounds native setup and, separately, document and SDK preparation. */
+const WINDOW_PREPARATION_TIMEOUT_MS = 30_000;
 const unsupported = (): never => {
   throw new BunawayError({
     code: "UNSUPPORTED",
@@ -20,7 +31,13 @@ const unsupported = (): never => {
   });
 };
 type View = {
+  /** Native lifetime ID, replaced whenever the view is created or recreated. */
+  windowId: string;
   state: WindowState;
+  /** Created before the native window, so a construction failure is still published and retained. */
+  readiness: WindowReadinessTracker;
+  documentDeadline: number;
+  sdkDeadline: number;
   /** Startup windows end the app on setup failure; dynamic creation reports to its caller. */
   startup: boolean;
   boundary: ViewBoundary;
@@ -30,6 +47,8 @@ type View = {
 /** Own each window's native resources and protocol boundary; closing one view leaves the others live. */
 export class MacosWindows {
   private readonly views = new Map<string, View>();
+  /** Window that most recently became key; cleared when that window closes. */
+  private lastActiveWindowId: string | undefined;
   readonly services: NativeWindowServices;
 
   constructor(
@@ -40,7 +59,23 @@ export class MacosWindows {
       stopping(): boolean;
       busy(): boolean;
       cancelled(requestId: string): boolean;
+      /** Host context that issued an in-flight request, if it is still tracked. */
+      requestContext(requestId: string): HostContext | undefined;
       forward(packet: Packet): void;
+      /**
+       * Whether the recipient's host permissions allow the call and its operation is
+       * registered; readiness events are gated by the getReadiness operation.
+       */
+      observes(host: ViewBoundary["policy"]["host"], call: HostCall): boolean;
+      /** Send one ordered native event; rejects when the channel queue is full or closed. */
+      nativeEvent(
+        packet: Extract<
+          Packet,
+          {
+            kind: "native-event";
+          }
+        >,
+      ): Promise<void>;
       capacity(count: number, pending: number): boolean;
       log(event: string, fields?: object): void;
       fail(error: unknown): void;
@@ -50,6 +85,46 @@ export class MacosWindows {
     this.services = {
       specs: config.windows,
       read: (view) => this.views.get(view)?.state,
+      supportsCreationOptions: true,
+      validateCreation: (spec) => assertMacosWindowOptions(spec),
+      instances: () =>
+        [
+          ...this.views,
+        ].map(([key, view]) => ({
+          key,
+          identity: this.identity(view),
+        })),
+      lookup: {
+        byId: (windowId) => {
+          const view = this.viewById(windowId);
+          return view && !view.state.cleaned ? this.identity(view) : null;
+        },
+        byView: (viewId) => {
+          const view = this.views.get(viewId);
+          return view && !view.state.closed ? this.identity(view) : null;
+        },
+        byRequest: (requestId) => {
+          const context = this.hooks.requestContext(requestId);
+          const view =
+            context &&
+            [
+              ...this.views.values(),
+            ].find((item) => item.boundary.active(context));
+          return view ? this.identity(view) : null;
+        },
+        focused: () => {
+          const view = [
+            ...this.views.values(),
+          ].find((item) => !item.state.closed && item.native?.isFocused());
+          return view ? this.identity(view) : null;
+        },
+        lastActive: () => {
+          const view = this.lastActiveWindowId
+            ? this.viewById(this.lastActiveWindowId)
+            : undefined;
+          return view && !view.state.closed ? this.identity(view) : null;
+        },
+      },
       create: (spec) => this.create(spec),
       close: (view) => this.closeView(view),
       window: (view) => this.window(view),
@@ -83,14 +158,19 @@ export class MacosWindows {
         view: spec.view,
         ...fields,
       });
+    const now = Date.now();
+    const windowId = crypto.randomUUID();
     const view: View = {
       startup,
+      windowId,
+      documentDeadline: now + WINDOW_PREPARATION_TIMEOUT_MS,
+      sdkDeadline: now + WINDOW_PREPARATION_TIMEOUT_MS,
       state: {
         closed: false,
         cleaned: false,
         ready: false,
         failure: undefined,
-        deadline: Date.now() + WINDOW_STARTUP_TIMEOUT_MS,
+        deadline: now + WINDOW_PREPARATION_TIMEOUT_MS,
       },
       boundary: new ViewBoundary(policy, {
         origin: macosOrigin,
@@ -106,9 +186,50 @@ export class MacosWindows {
         forward: this.hooks.forward,
         deliver: (text) => view.native?.deliver(text),
         log,
+        // The tracker is built in the same literal, so every hook resolves it lazily through `view`.
+        sessionOpened: (route) => {
+          view.sdkDeadline = Date.now() + API_LIMITS.handshakeTimeoutMs;
+          view.readiness.sessionOpened(route.documentGeneration);
+        },
+        sdkReady: (route) =>
+          view.readiness.sdkComplete(route.documentGeneration),
+        revoked: (reason, generation, error) => {
+          if (reason === "navigation") {
+            view.documentDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
+            view.sdkDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
+            view.readiness.reset(generation);
+          } else {
+            view.readiness.sessionEnded(
+              generation,
+              error ?? {
+                code: "CANCELLED",
+                message: "SDK session ended.",
+              },
+            );
+          }
+        },
       }),
+      readiness: new WindowReadinessTracker(
+        windowId,
+        spec.view,
+        spec.showWhenReady,
+        {
+          publish: (state) => this.publishReadiness(state),
+          show: () => {
+            if (
+              this.views.get(spec.view) === view &&
+              !view.state.closed &&
+              !this.hooks.stopping()
+            ) {
+              view.native?.present();
+            }
+          },
+        },
+      ),
     };
     this.views.set(spec.view, view);
+    // Publish before native construction so subscribers also observe a creation failure.
+    this.publishReadiness(view.readiness.snapshot());
     try {
       view.native = new MacosWebview(
         {
@@ -124,6 +245,10 @@ export class MacosWindows {
           close: () => {
             this.closeView(spec.view);
           },
+          activated: () => {
+            this.lastActiveWindowId = view.windowId;
+          },
+          documentComplete: (error) => view.readiness.documentComplete(error),
           log,
           fail: this.hooks.fail,
         },
@@ -145,6 +270,11 @@ export class MacosWindows {
           return;
         }
         view.state.failure = error;
+        // Terminate first so closing does not overwrite the failure with CANCELLED.
+        view.readiness.terminate({
+          code: "INTERNAL",
+          message: "WebView creation failed.",
+        });
         if (view.startup) {
           this.hooks.fail(error);
         }
@@ -153,6 +283,11 @@ export class MacosWindows {
       });
     } catch (error) {
       view.state.failure = error;
+      // Publish and retain the failure; no native window exists to report it later.
+      view.readiness.terminate({
+        code: "INTERNAL",
+        message: "WebView creation failed.",
+      });
       view.state.closed = true;
       view.state.cleaned = true;
       throw error;
@@ -167,6 +302,13 @@ export class MacosWindows {
     view.state.closed = true;
     view.boundary.closed = true;
     view.boundary.revoke("closing");
+    view.readiness.terminate({
+      code: "CANCELLED",
+      message: "Window closed.",
+    });
+    if (this.lastActiveWindowId === view.windowId) {
+      this.lastActiveWindowId = undefined;
+    }
     this.hooks.log("window-closed", {
       view: viewId,
     });
@@ -174,22 +316,92 @@ export class MacosWindows {
     return true;
   }
 
+  /** Broadcast preparation to subscribed live sessions with getReadiness permission. */
+  private publishReadiness(state: WindowReadiness): void {
+    if (this.hooks.stopping()) {
+      return;
+    }
+    for (const recipient of this.views.values()) {
+      const route = recipient.boundary.eventRoute("windows.readiness");
+      if (
+        !route ||
+        !this.hooks.observes(recipient.boundary.policy.host, {
+          operation: "windows.getReadiness",
+          payload: {
+            view: state.viewId,
+          },
+        })
+      ) {
+        continue;
+      }
+      void this.hooks
+        .nativeEvent({
+          kind: "native-event",
+          route,
+          event: "windows.readiness",
+          payload: {
+            ...state,
+          },
+        })
+        .catch((error) => {
+          if (this.hooks.stopping() || !recipient.boundary.matches(route)) {
+            return;
+          }
+          if (error instanceof BunawayError && error.code === "BUSY") {
+            recipient.boundary.fail(route, {
+              code: "BUSY",
+              message: "Native event queue full.",
+            });
+            return;
+          }
+          this.hooks.fail(error);
+        });
+    }
+  }
+
+  private identity(view: View): WindowIdentity {
+    return {
+      windowId: view.windowId,
+      viewId: view.boundary.policy.id,
+    };
+  }
+
+  private viewById(windowId: string): View | undefined {
+    return [
+      ...this.views.values(),
+    ].find((view) => view.windowId === windowId);
+  }
+
+  /**
+   * Resolve the operation target. Readiness is retained on the view after close, so only
+   * the native methods resolve the AppKit window lazily and fail once it is cleaned.
+   */
   private window(viewId: string): NativeWindow {
-    const native = this.views.get(viewId)?.native;
-    if (!native) {
+    const view = this.views.get(viewId);
+    if (!view) {
       throw new Error("Missing native window.");
     }
+    const native = (): MacosWebview => {
+      if (!view.native) {
+        throw new Error("Missing native window.");
+      }
+      return view.native;
+    };
     return {
-      webview: native.controls,
+      get webview() {
+        return native().controls;
+      },
       getSnapshot: unsupported,
-      getReadiness: unsupported,
-      show: (visible) => native.show(visible),
-      showInactive: unsupported,
-      focus: () => native.focus(),
+      getReadiness: () => {
+        return view.readiness.snapshot();
+      },
+      show: (visible) => native().show(visible),
+      showInactive: () => native().showInactive(),
+      focus: () => native().focus(),
       activate: unsupported,
       close: () => this.closeView(viewId),
-      isVisible: () => native.isVisible(),
-      isFocused: () => native.isFocused(),
+      isVisible: () => native().isVisible(),
+      isFocused: () => native().isFocused(),
       getBounds: unsupported,
       getDpi: unsupported,
       minimize: unsupported,
@@ -240,10 +452,22 @@ export class MacosWindows {
         Date.now() > view.state.deadline
       ) {
         view.state.failure = new Error("macOS window setup timed out.");
+        view.readiness.terminate({
+          code: "TIMEOUT",
+          message: "WebView creation timed out.",
+        });
         if (view.startup) {
           this.hooks.fail(view.state.failure);
         }
         this.closeView(view.boundary.policy.id);
+      }
+      if (!view.state.closed) {
+        if (Date.now() > view.documentDeadline) {
+          view.readiness.expireDocument();
+        }
+        if (Date.now() > view.sdkDeadline) {
+          view.readiness.expireSdk();
+        }
       }
       view.native?.observeStartup();
       view.boundary.scanDeadlines();
@@ -264,6 +488,10 @@ export class MacosWindows {
     for (const view of this.views.values()) {
       view.boundary.closed = true;
       view.boundary.revoke("closing");
+      view.readiness.terminate({
+        code: "CANCELLED",
+        message: "App shutdown.",
+      });
     }
   }
   close(): void {

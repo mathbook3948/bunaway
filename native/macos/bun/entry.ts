@@ -473,6 +473,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
           (context !== config.backendContext && !ui?.boundary(context))
         );
       },
+      requestContext: (requestId) => requests.context(requestId),
       forward: (packet) => {
         if (packet.kind === "revoke") {
           requests.cancelContext(packet.route.context);
@@ -488,6 +489,11 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         }
         channel?.notify(packet);
       },
+      observes: (host, call) =>
+        !!registry &&
+        registry.operations.has(call.operation) &&
+        registry.allowed(host, call),
+      nativeEvent: (packet) => channel?.send(packet) ?? Promise.resolve(),
       capacity: (count, pending) => channel?.canSend(count, pending) ?? false,
       log: diagnostic,
       fail,
