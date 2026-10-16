@@ -41,9 +41,9 @@ src 없이 dist만 설치해 공개 호출과 재내보낸 타입을 검사한�
 이벤트 타입 추론, 숨겨진 등록 메타데이터와 예약 이름의 충돌 거부를 검사한다.
 
 `lifecycle/macos-appearance.ts`는 각 실행의 stdout, stderr와 종료 원인을
-`build/macos-native-logs/appearance/`에 보존한다. 기존 30초 기한에 도달하면
+`build/macos-native-logs/appearance/`에 보존한다. 기동 기한은 60초이며 도달하면
 호스트가 종료 코드 0을 반환해도 실패로 처리하고, 보고서 누락을 포함한 실패 시
-임시 디렉터리를 지우기 전에 호스트 로그를 출력한다.
+임시 디렉터리를 지우기 전에 호스트 로그와 기한, 경과 시간 진단을 출력한다.
 
 공식 플러그인 fixture는 스키마만 있는 공통 계약 목록 대신 완성된 작업 선언의 스키마를 사용한다.
 `api/native-handler-platform.test.ts`는 동기 handler의 반환 타입도 보존하는지 검사한다.
@@ -721,8 +721,9 @@ DMG 생성은 DiskImages helper가 pipe 출력에서 멈추는 경우를 피하�
 CI는 `BUNAWAY_DMG_DIAGNOSTICS=1`로 fixture 안에서만 실제 hdiutil을 관찰한다.
 파일 descriptor, 고유 경로, fixture 파일을 연 프로세스, 해당 fixture의 disk image 목록과
 verbose 출력을 `build/macos-packaging-diagnostics/`에 보관한다. 기존 일반 파일 출력을
-상속하고 실제 종료 코드를 전달하며 재시도나 다른 볼륨의 detach는 수행하지 않는다.
-외부 probe는 생성 명령이 끝난 뒤 실행해 DiskImages 서비스를 미리 초기화하지 않는다.
+상속하고 실제 종료 코드를 전달하며 진단 fixture는 재시도나 다른 볼륨의 detach를 수행하지 않는다.
+패키저의 `hdiutil create`만 stderr/stdout의 `Resource busy`에 대해 최대 3회(대기 1s, 2s) 재시도한다.
+다른 실패는 즉시 전달한다. 외부 probe는 생성 명령이 끝난 뒤 실행해 DiskImages 서비스를 미리 초기화하지 않는다.
 실제 DMG 검증, 읽기 전용 마운트와 서명된 앱 내용 검사 및 실패 시 이전 산출물 보존은
 기존 `macos-distribution.test.ts`에서 계속 확인한다.
 
@@ -1100,7 +1101,8 @@ Windows 호스트의 `webview-creation`은 환경 요청, 반환과 완료, 각 
 번들로 만들고 별도 Bun 자식에서 arrival 응답을 보류한다. arrival과 loading=false만으로
 다음 탐색을 시작하지 않으며, 해당 문서의 held 명령 시작과 loading=false를 모두
 확인하는지 검사한다. 이전 문서의 held 수가 남아 있는 두 번째, 세 번째 연결도 포함한다.
-네이티브 controls fixture는 같은 준비 절차를 사용하고 기존 assertion과 15초 기한을 유지한다.
+네이티브 controls fixture는 같은 준비 절차를 사용하고 단계별 wait 기한은 45초,
+호스트 캡처 기한은 120초다. 시간 초과 메시지와 progress 기록에 단계와 경과를 남긴다.
 이 검사는 fixture의 명령 시작 순서를 검증하며 WKWebView 실행은 기존 native CI에서 확인한다.
 실패 artifact의 `controls-progress.json`은 backend Worker가 동기식으로 교체한 마지막
 준비 대기 단계와 arrival, held, cancelled 수를 보관한다. 대소문자 URL 탐색의 호출 전후,

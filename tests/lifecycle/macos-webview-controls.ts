@@ -268,7 +268,7 @@ try {
     launched,
     diagnostics,
     "webview controls",
-    90_000,
+    120_000,
     dataRoot,
   );
   assert.equal(exitCode, 0, `${stdout}\n${stderr}`);

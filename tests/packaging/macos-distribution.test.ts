@@ -243,6 +243,25 @@ describe
       if (failure) {
         env.BUNAWAY_TEST_TOOL_FAILURE = failure;
       }
+      // Tool state sits beside the fixtures, not in the scratch directory that must end empty.
+      env.BUNAWAY_TEST_TOOL_STATE = resolve(bin, "hdiutil-calls");
+    }
+    const packageDmg = (artifacts: string, expected: number) =>
+      run(
+        "package",
+        [
+          "--channel",
+          "mac-direct",
+          "--app",
+          app,
+          "--out-dir",
+          artifacts,
+        ],
+        expected,
+      );
+    /** Number of hdiutil invocations recorded by the fixture (one byte each). */
+    async function hdiutilCalls(): Promise<number> {
+      return (await Bun.file(env.BUNAWAY_TEST_TOOL_STATE ?? "").text()).length;
     }
     function sign(
       channel = "mac-direct",
@@ -682,18 +701,32 @@ describe
       const dmg = resolve(artifacts, "Fixture-1.2.3-4.dmg");
       await writeFile(dmg, "last-good");
       await replaceTool("hdiutil", "dmg");
-      await run(
-        "package",
-        [
-          "--channel",
-          "mac-direct",
-          "--app",
-          app,
-          "--out-dir",
-          artifacts,
-        ],
-        1,
-      );
+      await packageDmg(artifacts, 1);
+      expect(await Bun.file(dmg).text()).toBe("last-good");
+      expect(await readdir(stage)).toEqual([]);
+      // A non-busy failure must not be retried.
+      expect(await hdiutilCalls()).toBe(1);
+    });
+    test("DMG build retries a transient busy failure and replaces the partial image", async () => {
+      const artifacts = resolve(root, "artifacts");
+      await mkdir(artifacts);
+      await replaceTool("hdiutil", "dmg-busy-once");
+      const output = await packageDmg(artifacts, 0);
+      expect(output).toContain("attempt 1/3");
+      expect(await hdiutilCalls()).toBe(2);
+      expect(
+        await Bun.file(resolve(artifacts, "Fixture-1.2.3-4.dmg")).text(),
+      ).toBe("fixture-dmg");
+      expect(await readdir(stage)).toEqual([]);
+    });
+    test("DMG build stops retrying a persistent busy failure after three attempts", async () => {
+      const artifacts = resolve(root, "artifacts");
+      await mkdir(artifacts);
+      const dmg = resolve(artifacts, "Fixture-1.2.3-4.dmg");
+      await writeFile(dmg, "last-good");
+      await replaceTool("hdiutil", "dmg-busy-always");
+      await packageDmg(artifacts, 1);
+      expect(await hdiutilCalls()).toBe(3);
       expect(await Bun.file(dmg).text()).toBe("last-good");
       expect(await readdir(stage)).toEqual([]);
     });
