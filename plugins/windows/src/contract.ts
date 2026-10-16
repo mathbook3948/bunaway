@@ -568,11 +568,12 @@ export const windowLifecycleSchema = {
  * Covers the title bar, Alt+F4 and system menu, WebView `window.close()` and the public `windows.close`.
  * It is not sent for recreation, splashscreen handoff, trusted `windows.destroy`, closing children with a
  * parent, app quit, shutdown or session end, nor when `closeBehavior` hides the window. While a request is
- * pending, further user closes of that window are ignored and `windows.close` fails with BUSY. There is no
- * deadline; a navigation or revoked session of the document, the document ending its last
- * `windows.closeRequested` subscription (for example after a listener failure), trusted destruction, app
- * quit and session end also end the wait. A request that ends without an answer leaves the window open.
- * Only the Windows host emits this event.
+ * pending, further user closes of that window are ignored while `windows.close` and `windows.recreate`
+ * fail with BUSY and the wait continues. There is no deadline; a navigation or revoked session of the
+ * document, the document ending its last `windows.closeRequested` subscription (for example after a
+ * listener failure), a forced close, trusted `windows.destroy`, app quit and session end also end the
+ * wait. A request that ends without an answer leaves the window open. Only the Windows host emits this
+ * event.
  */
 export const windowCloseRequestedSchema = {
   type: "object",

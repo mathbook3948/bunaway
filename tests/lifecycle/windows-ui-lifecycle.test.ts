@@ -1440,6 +1440,93 @@ test(
   timeoutMs + 5_000,
 );
 
+test(
+  "recreating the only keep-alive window does not report empty while the replacement is being created",
+  async () => {
+    const ui = await startUI(undefined, "ui", undefined, true, {
+      holdCreationNumber: 2,
+    });
+    const emptyPackets = () =>
+      ui.packets.filter((packet) => packet.kind === "windows-empty").length;
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      // The replacement's controller stays pending: the old window is closed and none is ready yet.
+      const recreation = ui.call("windows.recreate", {
+        view: "main",
+      });
+      await ui.waitFor(
+        async () => (await ui.call("parser.run", "held-controller")) === "held",
+      );
+      for (let tick = 0; tick < 3; tick++) {
+        await ui.call("parser.run", "held-controller");
+      }
+      expect(emptyPackets()).toBe(0);
+      expect(await ui.call("parser.run", "ready-held")).toBe("settled");
+      await recreation;
+      for (let tick = 0; tick < 3; tick++) {
+        await ui.call("parser.run", "held-controller");
+      }
+      expect(emptyPackets()).toBe(0);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+      expect(emptyPackets()).toBe(0);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "a failed replacement of the only keep-alive window reports empty exactly once",
+  async () => {
+    const ui = await startUI(undefined, "ui", undefined, true, {
+      holdCreationNumber: 2,
+    });
+    const emptyPackets = () =>
+      ui.packets.filter((packet) => packet.kind === "windows-empty").length;
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      const recreation = ui
+        .call("windows.recreate", {
+          view: "main",
+        })
+        .catch((error: unknown) => error);
+      await ui.waitFor(
+        async () => (await ui.call("parser.run", "held-controller")) === "held",
+      );
+      expect(emptyPackets()).toBe(0);
+      expect(await ui.call("parser.run", "fail-held")).toBe("settled");
+      await recreation;
+      await ui.waitFor(() => emptyPackets() === 1);
+      for (let tick = 0; tick < 3; tick++) {
+        await ui.call("parser.run", "held-controller");
+      }
+      expect(emptyPackets()).toBe(1);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+      expect(emptyPackets()).toBe(1);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
 const WM_QUERYENDSESSION = 0x0011;
 const WM_ENDSESSION = 0x0016;
 /** A message the session handler does not consume, used as a UI thread round trip. */

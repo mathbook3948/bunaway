@@ -138,15 +138,17 @@ let windowsWereLive = false;
 let windowsEmptyReported = false;
 /**
  * Tells the main thread once per transition to zero live windows while the app stays resident.
- * Only windows whose controller is ready (the point where `created` is published) count as live, so
- * a window still being created cannot re-arm the report and one that fails creation stays invisible.
+ * Windows whose controller is ready (the point where `created` is published) and windows still
+ * replacing a live one count as live, so a recreation reports only if the replacement creation
+ * fails, and then once. A new (non-replacement) window still being created cannot re-arm the report
+ * and one that fails creation stays invisible.
  * A windowless start, a pending recreation, and an app already committed to shutdown never report.
  * Runs on every pump turn so a window that becomes live again re-arms the next report.
  */
 function reportWindowsEmpty() {
   const anyLive = [
     ...views.values(),
-  ].some((view) => view.ready && !view.lifecycle.closed);
+  ].some((view) => (view.ready || view.replacing) && !view.lifecycle.closed);
   if (anyLive) {
     windowsWereLive = true;
     windowsEmptyReported = false;
@@ -240,6 +242,11 @@ type ViewState = {
   boundary: ViewBoundary;
   native: WebView;
   ready: boolean;
+  /**
+   * Creation that replaces a window that was live. It counts as live for windows-empty until its
+   * controller is ready or creation fails, so a recreation is not mistaken for an empty app.
+   */
+  replacing: boolean;
   navigationStarted: boolean;
   replacementCancelled: boolean;
   inputRestoreDeadlineMs?: number;
@@ -1388,6 +1395,7 @@ function createWindow(
           const view = views.get(instanceKey);
           assert(view);
           view.ready = true;
+          view.replacing = false;
           // The controller exists now; a retired or replaced lifetime never announces itself.
           if (view.native === native && !view.lifecycle.closed) {
             publishLifecycle(view, "created");
@@ -1425,6 +1433,7 @@ function createWindow(
     boundary,
     native,
     ready: false,
+    replacing: replacement !== undefined,
     navigationStarted: false,
     replacementCancelled: false,
     confirmation: null,

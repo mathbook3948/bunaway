@@ -99,14 +99,16 @@ payload는 `{ windowId, viewId, phase }`이고 `phase`는 `created`, `ready`, `c
   앱이 이미 저장 확인을 마쳤는데 운영체제 확인을 다시 묻지 않기 위해서다.
 - `requestId`는 windowId 안에서 증가하는 양의 정수다. 이미 답했거나 취소된 요청에 답하면
   `INVALID_ARGUMENT`("No pending close request.")다.
-- 대기 중 같은 창의 반복 사용자 닫기는 무시하고 공개 `windows.close`는 `BUSY`다.
+- 대기 중 같은 창의 반복 사용자 닫기는 무시하고 공개 `windows.close`와
+  `windows.recreate`는 `BUSY`다. 대기는 계속된다.
 - 문서 탐색이나 세션 철회, 마지막 `windows.closeRequested` 구독의 해제, 이벤트를 전달할 수 없는 상태는
   요청을 취소하며 창은 열려 있다. 구독 해제 뒤 다음 사용자 닫기는 구독이 없는 경우와 같이 진행하고,
   새 구독은 새 요청을 받는다.
 - `windows.respondClose`는 신뢰된 백엔드 또는 질문을 받은 창 자신의 문서만 호출할 수 있다.
   requestId는 작은 증가 정수라 추측할 수 있으므로, 인증된 문서 세션의 창이 대상 창과 다르면
   `PERMISSION_DENIED`다. 호스트 요청에서 호출 창을 확인할 수 없으면 거부한다.
-- 강제 닫기, `windows.destroy`, 재생성, 앱 종료와 세션 종료는 창을 닫고 대기를 끝낸다.
+- 강제 닫기, `windows.destroy`, 앱 종료와 세션 종료는 창을 닫고 대기를 끝낸다.
+  대기가 없을 때의 재생성은 질문 없이 창을 닫는다.
   closeBehavior `hide`, 재생성, splashscreen 전환, 부모와 함께 닫히는 자식은 요청을 보내지 않는다.
 - 자동 기한을 두지 않는다. 저장 시간은 앱이 정하며 신뢰된 destroy, 앱 종료, 세션 종료가 영구 대기를 막는다.
   기한을 두면 저장 중인 문서를 호스트가 임의로 닫거나 열어 두는 둘 중 하나를 골라야 한다.
@@ -118,7 +120,9 @@ payload는 `{ windowId, viewId, phase }`이고 `phase`는 `created`, `ready`, `c
 ## macOS
 
 `desktop` 옵션 전체가 기존처럼 `UNSUPPORTED`이므로 네 훅은 macOS에서 동작하지 않는다.
-macOS의 `windows.respondClose`는 `UNSUPPORTED`이고 `windows.closeRequested`와 `windows.lifecycle`은 발행하지 않는다.
+`windows.respondClose`는 macOS 호스트에 등록되지 않은 작업이므로 Windows 정책에만 넣어야 한다.
+macOS 정책에 넣으면 시작 시 "Policy references an unregistered operation."으로 실패한다.
+macOS는 `windows.closeRequested`와 `windows.lifecycle`은 발행하지 않는다.
 세션 종료 처리도 구현하지 않는다. 기존 macOS 닫기와 종료 동작은 바꾸지 않으며 대응은 ADR 0010의 순서를 따른다.
 
 ## 검증

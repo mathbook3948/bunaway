@@ -278,6 +278,8 @@ async function checkShutdownDuringStart(
   try {
     const hooks = resolve(directory, "hooks.log");
     const uiPackets = resolve(directory, "ui-packets.log");
+    const startReceived = resolve(directory, "start-received");
+    const signaled = resolve(directory, "signaled");
     await bundleIOPluginFixture(
       directory,
       [],
@@ -286,12 +288,22 @@ async function checkShutdownDuringStart(
     const commit = {
       closing: 'channel.notify({kind:"closing",reason:"window-destroyed"});',
       "tray-quit": 'channel.notify({kind:"quit-request",reason:"tray"});',
-      signal: 'process.kill(process.pid,"SIGINT");',
+      // On Windows, Bun's process.kill goes through libuv uv_kill, which handles SIGINT with
+      // TerminateProcess (exit 1), so the signal handler never runs. On every platform the main
+      // thread therefore emits SIGINT itself (see run-source.ts) while this handler stays blocked,
+      // so the start acknowledgement is sent after the signal.
+      signal: `
+        writeFileSync(${JSON.stringify(startReceived)},"start");
+        const waitDeadline=Date.now()+5000;
+        while(!existsSync(${JSON.stringify(signaled)})) {
+          if(Date.now()>=waitDeadline) throw new Error("Main thread did not signal during start");
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,5);
+        }`,
     }[trigger];
     await Bun.write(
       resolve(directory, "ui.js"),
       `
-      import {appendFileSync} from "node:fs";
+      import {appendFileSync,existsSync,writeFileSync} from "node:fs";
       import {parentPort,workerData} from "node:worker_threads";
       import {Channel} from ${JSON.stringify(resolve(import.meta.dir, "../../packages/runtime-bun/src/worker-channel.ts"))};
       const channel=new Channel(parentPort,workerData.runtime,"ui",packet=>{
@@ -327,9 +339,19 @@ async function checkShutdownDuringStart(
     await Bun.write(
       source,
       `
-      import {appendFileSync} from "node:fs";
+      import {appendFileSync,existsSync,writeFileSync} from "node:fs";
       import {defineApp} from ${JSON.stringify(Bun.resolveSync("@bunaway/backend", import.meta.dir))};
       import {runWindowsApp} from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/entry.ts"))};
+      ${
+        trigger === "signal"
+          ? `const watch=setInterval(()=>{
+        if(!existsSync(${JSON.stringify(startReceived)})) return;
+        clearInterval(watch);
+        process.emit("SIGINT","SIGINT");
+        writeFileSync(${JSON.stringify(signaled)},"signaled");
+      },5);`
+          : ""
+      }
       const note=text=>appendFileSync(${JSON.stringify(hooks)},text+"\\n");
       const app=defineApp({modules:[],commands:{},events:{},desktop:{
         closeBehavior:"keep-alive",
