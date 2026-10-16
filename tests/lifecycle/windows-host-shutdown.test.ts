@@ -112,9 +112,9 @@ async function checkShutdown(
           kind:packet.kind==="authorize-input" ? "input-authorized" : "authorized",
           context:packet.context,requestId:packet.requestId,allowed:true
         });
-        else if(packet.kind==="start") {${mode === "handoff" ? "" : 'channel.notify({kind:"closing"});'}}
+        else if(packet.kind==="start") {${mode === "handoff" ? "" : 'channel.notify({kind:"closing",reason:"window-destroyed"});'}}
         // Accept the result into UI ownership, then close before forwarding it to Core.
-        else if(packet.kind==="host-result") setTimeout(()=>channel.notify({kind:"closing"}),100);
+        else if(packet.kind==="host-result") setTimeout(()=>channel.notify({kind:"closing",reason:"window-destroyed"}),100);
         else if(packet.kind==="shutdown") void (async()=>{
           await channel.send({kind:"cleaned"});await channel.drain();channel.close();parentPort.close();
         })().catch(error=>{console.error(error);process.exit(1);});
@@ -245,6 +245,201 @@ async function checkShutdown(
       forced: false,
       activeProcesses: 0,
     });
+  } finally {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+}
+
+test.each([
+  "closing",
+  "tray-quit",
+  "signal",
+] as const)(
+  "a %s shutdown committed before the start acknowledgement ends in an orderly quit despite the initial open",
+  (trigger) => checkShutdownDuringStart(trigger),
+  15_000,
+);
+
+/**
+ * Run the production coordinator with a launch request while a fixture UI Worker commits shutdown
+ * from inside its `start` handler, so the commit lands before the host sees the start acknowledgement.
+ * The host must still run onWillQuit and onQuit, skip the app's open callback, and tell the UI about
+ * any shutdown it decided itself before the final `shutdown` packet.
+ */
+async function checkShutdownDuringStart(
+  trigger: "closing" | "tray-quit" | "signal",
+) {
+  const directory = await mkdtemp(
+    resolve(tmpdir(), "bunaway-windows-start-race-"),
+  );
+  try {
+    const hooks = resolve(directory, "hooks.log");
+    const uiPackets = resolve(directory, "ui-packets.log");
+    const startReceived = resolve(directory, "start-received");
+    const signaled = resolve(directory, "signaled");
+    await bundleIOPluginFixture(
+      directory,
+      [],
+      "export const pluginImports={};",
+    );
+    const commit = {
+      closing: 'channel.notify({kind:"closing",reason:"window-destroyed"});',
+      "tray-quit": 'channel.notify({kind:"quit-request",reason:"tray"});',
+      // On Windows, Bun's process.kill goes through libuv uv_kill, which handles SIGINT with
+      // TerminateProcess (exit 1), so the signal handler never runs. On every platform the main
+      // thread therefore emits SIGINT itself (see run-source.ts) while this handler stays blocked,
+      // so the start acknowledgement is sent after the signal.
+      signal: `
+        writeFileSync(${JSON.stringify(startReceived)},"start");
+        const waitDeadline=Date.now()+5000;
+        while(!existsSync(${JSON.stringify(signaled)})) {
+          if(Date.now()>=waitDeadline) throw new Error("Main thread did not signal during start");
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,5);
+        }`,
+    }[trigger];
+    await Bun.write(
+      resolve(directory, "ui.js"),
+      `
+      import {appendFileSync,existsSync,writeFileSync} from "node:fs";
+      import {parentPort,workerData} from "node:worker_threads";
+      import {Channel} from ${JSON.stringify(resolve(import.meta.dir, "../../packages/runtime-bun/src/worker-channel.ts"))};
+      const channel=new Channel(parentPort,workerData.runtime,"ui",packet=>{
+        appendFileSync(${JSON.stringify(uiPackets)},packet.kind+"\\n");
+        if(packet.kind==="start") {${commit}}
+        else if(packet.kind==="shutdown") void (async()=>{
+          await channel.send({kind:"cleaned"});await channel.drain();channel.close();parentPort.close();
+        })().catch(error=>{console.error(error);process.exit(1);});
+        else if(!["shutdown-committed","cancel","cancel-context"].includes(packet.kind)) throw new Error("Unexpected UI control "+packet.kind);
+      },error=>{console.error(error);process.exit(1);});
+      channel.notify({kind:"ready"});
+    `,
+    );
+    const config = {
+      runtime: {
+        id: "windows-start-race",
+        generation: crypto.randomUUID(),
+      },
+      backendContext: "backend",
+      dataRoot: directory,
+      assets: directory,
+      loader: "fixture",
+      windows: [],
+      policy: {
+        version: 1,
+        views: [],
+        backend: {
+          permissions: [],
+        },
+      },
+    };
+    const source = resolve(directory, "run-source.ts");
+    await Bun.write(
+      source,
+      `
+      import {appendFileSync,existsSync,writeFileSync} from "node:fs";
+      import {defineApp} from ${JSON.stringify(Bun.resolveSync("@bunaway/backend", import.meta.dir))};
+      import {runWindowsApp} from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/entry.ts"))};
+      ${
+        trigger === "signal"
+          ? `const watch=setInterval(()=>{
+        if(!existsSync(${JSON.stringify(startReceived)})) return;
+        clearInterval(watch);
+        process.emit("SIGINT","SIGINT");
+        writeFileSync(${JSON.stringify(signaled)},"signaled");
+      },5);`
+          : ""
+      }
+      const note=text=>appendFileSync(${JSON.stringify(hooks)},text+"\\n");
+      const app=defineApp({modules:[],commands:{},events:{},desktop:{
+        closeBehavior:"keep-alive",
+        onOpen(){note("onOpen");},
+        onWillQuit(reason){note("onWillQuit:"+reason);},
+        onQuit(reason){note("onQuit:"+reason);},
+      }});
+      try{await runWindowsApp(app,${JSON.stringify(config)},{argv:["app.exe","file.txt"],cwd:${JSON.stringify(directory)}});}catch(error){console.error(error);process.exitCode=1;}
+    `,
+    );
+    const build = await Bun.build({
+      entrypoints: [
+        source,
+      ],
+      target: "bun",
+      outdir: directory,
+      naming: "run.js",
+      plugins: [
+        {
+          name: "windows-coordinator-platform-fixture",
+          setup(build) {
+            build.onResolve(
+              {
+                filter: /^\.\/job\.ts$/,
+              },
+              () => ({
+                path: "job",
+                namespace: "fixture-job",
+              }),
+            );
+            build.onLoad(
+              {
+                filter: /.*/,
+                namespace: "fixture-job",
+              },
+              () => ({
+                contents:
+                  "export function containAppProcess(){} export function activeDescendants(){return 0;}",
+                loader: "js",
+              }),
+            );
+            build.onResolve(
+              {
+                filter: /^bunaway:plugin-imports$/,
+              },
+              () => ({
+                path: resolve(directory, "plugin-imports.js"),
+              }),
+            );
+          },
+        },
+      ],
+    });
+    expect(build.success, build.logs.map(String).join("\n")).toBe(true);
+    for (const output of build.outputs) {
+      await Bun.write(output.path, await output.arrayBuffer());
+    }
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve(directory, "run.js"),
+      ],
+      {
+        stdout: "ignore",
+        stderr: "pipe",
+        timeout: 10_000,
+      },
+    );
+    const errors = new Response(child.stderr).text();
+    expect(await child.exited, await errors).toBe(0);
+    const reason = {
+      closing: "window-destroyed",
+      "tray-quit": "tray",
+      signal: "interrupted",
+    }[trigger];
+    expect((await Bun.file(hooks).text()).trim().split("\n")).toEqual([
+      `onWillQuit:${reason}`,
+      `onQuit:${reason}`,
+    ]);
+    const received = (await Bun.file(uiPackets).text()).trim().split("\n");
+    const committed = received.indexOf("shutdown-committed");
+    if (trigger === "closing") {
+      // The UI reported this shutdown itself, so the host has nothing to announce.
+      expect(committed).toBe(-1);
+    } else {
+      expect(committed).toBeGreaterThan(-1);
+      expect(committed).toBeLessThan(received.indexOf("shutdown"));
+    }
   } finally {
     await rm(directory, {
       recursive: true,

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type {
   NativeWindow,
   NativeWindowServices,
+  WindowAttentionMode,
 } from "@bunaway/plugin-api/native";
 import windows, {
   validateWindowCall,
@@ -117,6 +118,7 @@ test("window state schemas accept only a view and validate null or boolean outpu
 /** Supply explicit native resources while keeping permission and lifecycle dispatch real. */
 function fixture() {
   const actions: string[] = [];
+  const attentionModes: WindowAttentionMode[] = [];
   let closed = false;
   let fullscreen = false;
   const observed = {
@@ -191,6 +193,13 @@ function fixture() {
       observed.isContentProtected = value;
     },
     isContentProtected: () => observed.isContentProtected,
+    requestAttention(mode) {
+      apply("requestAttention");
+      attentionModes.push(mode);
+    },
+    cancelAttention() {
+      apply("cancelAttention");
+    },
     setFocusable(value) {
       apply("setFocusable");
       observed.isFocusable = value;
@@ -281,6 +290,7 @@ function fixture() {
   return {
     native,
     actions,
+    attentionModes,
     permissions,
     invoke: (
       name:
@@ -291,6 +301,8 @@ function fixture() {
         | "setAlwaysOnTop"
         | "setSkipTaskbar"
         | "setContentProtection"
+        | "requestAttention"
+        | "cancelAttention"
         | "setMinimizable"
         | "setMaximizable"
         | "setClosable"
@@ -304,6 +316,7 @@ function fixture() {
         alwaysOnTop?: boolean;
         skipTaskbar?: boolean;
         contentProtection?: boolean;
+        mode?: string | number | null;
         minimizable?: boolean;
         maximizable?: boolean;
         closable?: boolean;
@@ -1009,4 +1022,79 @@ test("macOS target declares the content protection operations its adapter implem
       "isContentProtected",
     ]),
   );
+});
+
+test("attention requests resolve the default mode, validate input and stay separate from focus", async () => {
+  const f = fixture();
+  expect(await f.invoke("requestAttention")).toBeNull();
+  expect(
+    await f.invoke("requestAttention", "main", {
+      mode: "continuous",
+    }),
+  ).toBeNull();
+  expect(f.attentionModes).toEqual([
+    "untilFocused",
+    "continuous",
+  ]);
+  expect(await f.invoke("cancelAttention")).toBeNull();
+  expect(f.actions).toEqual([
+    "requestAttention",
+    "requestAttention",
+    "cancelAttention",
+  ]);
+  expect(await f.invoke("isFocused")).toBe(false);
+  for (const mode of [
+    null,
+    1,
+    "always",
+    "",
+  ]) {
+    expect(() =>
+      validateWindowCall({
+        operation: "windows.requestAttention",
+        payload: {
+          view: "main",
+          mode,
+        },
+      }),
+    ).toThrow();
+    await expect(
+      f.invoke("requestAttention", "main", {
+        mode,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  expect(() =>
+    validateWindowCall({
+      operation: "windows.cancelAttention",
+      payload: {
+        view: "main",
+        mode: "continuous",
+      },
+    }),
+  ).toThrow();
+  expect(f.attentionModes).toHaveLength(2);
+  for (const name of [
+    "requestAttention",
+    "cancelAttention",
+  ] as const) {
+    f.permissions.permissions = [];
+    await expect(f.invoke(name)).rejects.toMatchObject({
+      code: "PERMISSION_DENIED",
+    });
+    f.permissions.permissions = windowPermissions();
+    const unsupported = fixture();
+    delete unsupported.native[name];
+    await expect(unsupported.invoke(name)).rejects.toMatchObject({
+      code: "UNSUPPORTED",
+      message:
+        "Window attention requests are not implemented on this platform.",
+    });
+  }
+  f.setClosed();
+  await expect(f.invoke("cancelAttention")).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
 });

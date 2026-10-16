@@ -107,6 +107,11 @@ export class MacosWebview {
       }
       return value;
     };
+    // Construction runs outside the application's tick pools (startup windows, `windows.recreate`).
+    // Without its own pool, objects AppKit and WebKit autorelease here, including retains on the
+    // window, are never freed, so a closed window stays in `[NSApp windows]`. Everything that must
+    // outlive the constructor is owned (alloc/init, released in `close`), not autoreleased.
+    const pool = o.object("NSAutoreleasePool");
     try {
       const windowDelegate = o.delegate([
         {
@@ -567,6 +572,8 @@ export class MacosWebview {
     } catch (error) {
       this.close();
       throw error;
+    } finally {
+      o.send(pool, "drain");
     }
   }
 

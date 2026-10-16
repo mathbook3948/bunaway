@@ -14,7 +14,10 @@ import {
   type MessageDialogFactory,
   WindowsDialogs,
 } from "#plugins/dialog/src/platforms/windows";
-import { DialogCloseRequest } from "#plugins/dialog/src/platforms/windows-bindings";
+import {
+  DialogCloseRequest,
+  fileDialogOptions,
+} from "#plugins/dialog/src/platforms/windows-bindings";
 import {
   encodeTaskDialogConfig,
   escapeMnemonic,
@@ -1141,4 +1144,222 @@ test("encodeTaskDialogConfig allows cancellation only when a cancel button resol
       type === "question" ? TDF_USE_HICON_MAIN : 0,
     );
   }
+});
+
+test("accepts hidden-file and overwrite options and rejects misplaced or non-boolean values", async () => {
+  let allocations = 0;
+  const received: {
+    kind: string;
+    showHiddenFiles?: boolean | undefined;
+    confirmOverwrite?: boolean | undefined;
+  }[] = [];
+  const f = fixture((kind, input) => {
+    allocations++;
+    received.push({
+      kind,
+      showHiddenFiles: input.showHiddenFiles,
+      confirmOverwrite: input.confirmOverwrite,
+    });
+    return {
+      show: () => ({
+        cancelled: true,
+      }),
+      dispose() {},
+    };
+  });
+  for (const kind of [
+    "openFile",
+    "selectFolder",
+    "saveFile",
+  ] as const) {
+    for (const showHiddenFiles of [
+      true,
+      false,
+    ]) {
+      await expect(
+        f.invoke(kind, {
+          showHiddenFiles,
+        }),
+      ).resolves.toEqual({
+        cancelled: true,
+      });
+    }
+    await expect(
+      f.invoke(kind, {
+        showHiddenFiles: "yes",
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  for (const confirmOverwrite of [
+    true,
+    false,
+  ]) {
+    await expect(
+      f.invoke("saveFile", {
+        confirmOverwrite,
+      }),
+    ).resolves.toEqual({
+      cancelled: true,
+    });
+  }
+  const accepted = allocations;
+  // Accepted options reach the driver unchanged.
+  expect(received).toEqual([
+    ...(
+      [
+        "openFile",
+        "selectFolder",
+        "saveFile",
+      ] as const
+    ).flatMap((kind) => [
+      {
+        kind,
+        showHiddenFiles: true,
+        confirmOverwrite: undefined,
+      },
+      {
+        kind,
+        showHiddenFiles: false,
+        confirmOverwrite: undefined,
+      },
+    ]),
+    {
+      kind: "saveFile",
+      showHiddenFiles: undefined,
+      confirmOverwrite: true,
+    },
+    {
+      kind: "saveFile",
+      showHiddenFiles: undefined,
+      confirmOverwrite: false,
+    },
+  ]);
+  await expect(
+    f.invoke("saveFile", {
+      confirmOverwrite: 1,
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  for (const kind of [
+    "openFile",
+    "selectFolder",
+  ] as const) {
+    await expect(
+      f.invoke(kind, {
+        confirmOverwrite: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  expect(allocations).toBe(accepted);
+  await f.adapter.dispose();
+});
+
+test("fileDialogOptions applies hidden-file and overwrite flags over the OS defaults", () => {
+  const FOS_OVERWRITEPROMPT = 0x2;
+  const FOS_FORCESHOWHIDDEN = 0x10000000;
+  const fixed = 0x40 | 0x02000000 | 0x10000;
+  const base = fileDialogOptions("openFile", {}, 0);
+  expect(base).toBe(fixed);
+  expect(fileDialogOptions("selectFolder", {}, 0)).toBe(fixed | 0x20);
+  expect(
+    fileDialogOptions(
+      "openFile",
+      {
+        multiple: true,
+      },
+      0,
+    ),
+  ).toBe(fixed | 0x200);
+  expect(fileDialogOptions("saveFile", {}, FOS_OVERWRITEPROMPT)).toBe(
+    fixed | FOS_OVERWRITEPROMPT,
+  );
+  expect(
+    fileDialogOptions(
+      "saveFile",
+      {
+        multiple: true,
+      },
+      0,
+    ),
+  ).toBe(fixed);
+  expect(fileDialogOptions("saveFile", {}, 0) & FOS_OVERWRITEPROMPT).toBe(0);
+  for (const kind of [
+    "openFile",
+    "selectFolder",
+    "saveFile",
+  ] as const) {
+    expect(
+      fileDialogOptions(
+        kind,
+        {
+          showHiddenFiles: true,
+        },
+        0,
+      ) & FOS_FORCESHOWHIDDEN,
+    ).toBe(FOS_FORCESHOWHIDDEN);
+    expect(
+      fileDialogOptions(
+        kind,
+        {
+          showHiddenFiles: false,
+        },
+        0,
+      ) & FOS_FORCESHOWHIDDEN,
+    ).toBe(0);
+  }
+  expect(
+    fileDialogOptions(
+      "saveFile",
+      {
+        confirmOverwrite: false,
+      },
+      FOS_OVERWRITEPROMPT | 0x8,
+    ),
+  ).toBe(fixed | 0x8);
+  expect(
+    fileDialogOptions(
+      "saveFile",
+      {
+        confirmOverwrite: true,
+      },
+      0,
+    ),
+  ).toBe(fixed | FOS_OVERWRITEPROMPT);
+  for (const kind of [
+    "openFile",
+    "selectFolder",
+  ] as const) {
+    expect(
+      fileDialogOptions(
+        kind,
+        {
+          confirmOverwrite: false,
+        },
+        FOS_OVERWRITEPROMPT,
+      ) & FOS_OVERWRITEPROMPT,
+    ).toBe(FOS_OVERWRITEPROMPT);
+    expect(
+      fileDialogOptions(
+        kind,
+        {
+          confirmOverwrite: true,
+        },
+        0,
+      ) & FOS_OVERWRITEPROMPT,
+    ).toBe(0);
+  }
+  const everything = fileDialogOptions(
+    "saveFile",
+    {
+      showHiddenFiles: true,
+      confirmOverwrite: false,
+    },
+    0xffffffff,
+  );
+  expect(everything).toBe((0xffffffff & ~0x2) >>> 0);
 });

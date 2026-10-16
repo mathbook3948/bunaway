@@ -303,6 +303,12 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "i32",
   },
+  FlashWindowEx: {
+    args: [
+      "ptr",
+    ],
+    returns: "i32",
+  },
   GetForegroundWindow: {
     args: [],
     returns: "u64",

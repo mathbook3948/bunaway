@@ -61,6 +61,14 @@ export class ViewBoundary {
       sdkReady?(route: Route): void;
       sessionOpened?(route: Route): void;
       revoked?(reason: string, generation: number, error?: WireError): void;
+      /**
+       * Called after a subscription attempt for `event` ends without leaving that subscription
+       * active: a confirmed subscription removed by the client's `unlisten` or by the host, or a
+       * pending `listen` that Core answered with an error. Another pending `listen` for the same
+       * event may still keep `eventRoute(event)` defined, so observers that need a confirmed
+       * subscription should re-check `subscribed(event)`.
+       */
+      subscriptionEnded?(event: string): void;
     },
   ) {}
   private error(id: string, error: WireError) {
@@ -319,7 +327,7 @@ export class ViewBoundary {
             : {}),
         });
         if (message.kind === "unlisten") {
-          session.subscriptions.delete(message.subscriptionId);
+          this.endSubscription(session.subscriptions, message.subscriptionId);
         }
       } else if (message.kind === "cancel") {
         const pending = session.pending.get(message.id);
@@ -368,6 +376,36 @@ export class ViewBoundary {
   }
   /** Captures the current negotiated document route for host-originated events. */
   eventRoute(event: string): Route | undefined {
+    const session = this.eventSession(event);
+    if (!session) {
+      return undefined;
+    }
+    // A listen can already be registered in Core while its result is still crossing the channel.
+    for (const request of session.pending.values()) {
+      if (request.kind === "listen" && request.event === event) {
+        return session.route;
+      }
+    }
+    return this.subscribed(event) ? session.route : undefined;
+  }
+  /**
+   * Whether the current document holds a confirmed subscription to `event`. Unlike `eventRoute`, a
+   * `listen` whose result has not been delivered yet does not count, because Core may still reject it.
+   */
+  subscribed(event: string): boolean {
+    const session = this.eventSession(event);
+    if (!session) {
+      return false;
+    }
+    for (const subscription of session.subscriptions.values()) {
+      if (subscription.event === event) {
+        return true;
+      }
+    }
+    return false;
+  }
+  /** The negotiated session of an open boundary whose policy allows `event`, if any. */
+  private eventSession(event: string) {
     const session = this.session;
     if (
       this.closed ||
@@ -376,18 +414,7 @@ export class ViewBoundary {
     ) {
       return undefined;
     }
-    // A listen can already be registered in Core while its result is still crossing the channel.
-    for (const subscription of session.subscriptions.values()) {
-      if (subscription.event === event) {
-        return session.route;
-      }
-    }
-    for (const request of session.pending.values()) {
-      if (request.kind === "listen" && request.event === event) {
-        return session.route;
-      }
-    }
-    return undefined;
+    return session;
   }
 
   matches(route: Route) {
@@ -512,6 +539,14 @@ export class ViewBoundary {
         });
       }
       session.pending.delete(message.id);
+      if (
+        pending.kind === "listen" &&
+        message.kind === "error" &&
+        pending.event
+      ) {
+        // The pending listen that kept eventRoute(event) defined is gone; observers re-check.
+        this.hooks.subscriptionEnded?.(pending.event);
+      }
     } else if (message.kind === "event") {
       const subscription = session.subscriptions.get(message.subscriptionId);
       if (!subscription) {
@@ -530,7 +565,7 @@ export class ViewBoundary {
       }
       subscription.sequence = message.sequence;
     } else {
-      session.subscriptions.delete(message.subscriptionId);
+      this.endSubscription(session.subscriptions, message.subscriptionId);
     }
     this.hooks.deliver(text);
     this.hooks.log("web-delivered", {
@@ -547,6 +582,23 @@ export class ViewBoundary {
           }
         : {}),
     });
+  }
+  /** Removes a subscription and reports its event; unknown IDs are ignored without notification. */
+  private endSubscription(
+    subscriptions: Map<
+      string,
+      {
+        event: string;
+      }
+    >,
+    subscriptionId: string,
+  ) {
+    const subscription = subscriptions.get(subscriptionId);
+    if (!subscription) {
+      return;
+    }
+    subscriptions.delete(subscriptionId);
+    this.hooks.subscriptionEnded?.(subscription.event);
   }
   private expire(id: string) {
     const session = this.session;

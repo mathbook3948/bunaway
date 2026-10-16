@@ -97,6 +97,7 @@ const macosOperations = {
   showInactive: operation("showInactive"),
   setContentProtection: operation("setContentProtection"),
   isContentProtected: operation("isContentProtected"),
+  respondClose: operation("respondClose"),
 };
 
 function dispose(instance: NativeAdapter) {
@@ -125,7 +126,9 @@ export default defineNativePlugin(
         initialize: createMacosOperations,
         dispose,
         busy,
-        // macOS supplies basic window and WebView services, identity lookup, readiness, inactive show and content protection; geometry remains unsupported.
+        // macOS supplies basic window and WebView services, identity lookup, readiness, inactive show, content protection,
+        // `windows.lifecycle` and the `windows.closeRequested` flow answered by `windows.respondClose`;
+        // geometry remains unsupported.
         operations: macosOperations,
       },
     },

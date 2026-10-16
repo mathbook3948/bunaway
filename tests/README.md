@@ -666,6 +666,19 @@ macOS 전용 설정과 리소스 경계 페이지도 `fixtures/desktop/host/`에
 같은 실행기의 `macos-webview-regressions.ts`는 실제 AppKit 창의 초기 크기 보정,
 최소, 최대 제약과 제한 해제, WebKit UI delegate의 미디어 권한 거부를 확인한다.
 미디어 검사는 설치된 delegate와 네이티브 decision block을 사용하며 실제 장치를 열지 않는다.
+`lifecycle/macos-desktop.ts`는 `run-native.ts`가 등록하는 실제 AppKit 실행기로 `quit-veto`,
+`last-window`, `keep-alive`, `close-lifecycle`, `session-end`, `session-end-quit-reason`, `session-end-reply`, `sigterm`
+시나리오에서 Quit 명령과 `beforeQuit` 취소, 수명주기 훅 순서, Dock 재활성화, 창 수명 이벤트와 닫기 요청,
+세션 종료를 검사한다. `session-end-reply`는 별도 프로세스(`fixtures/macos-desktop/quit-event-sender.ts`)가
+응답을 기다리며 quit Apple event를 보내, 응답이 앱 정리 뒤 `SESSION_END_WAIT_MS` 안에 오는지 확인한다.
+macos-native CI에서 실행하며 실제 로그아웃, 재시작, 시스템 종료와 사용자의 Dock 클릭,
+Cmd+Q 입력은 확인할 수 없어 알림, 자기 자신에게 보낸 Apple event와 `NSApp terminate:`로 대신한다.
+`macos-desktop-host.test.ts`, `macos-desktop-requests.test.ts`, `macos-quit-reason.test.ts`,
+`macos-backend-shutdown.test.ts`와 `macos-window-lifecycle.test.ts`는 Linux에서 실행하는 계약 검사다.
+`macos-desktop-fixture.test.ts`는 같은 픽스처 앱을 가짜 호스트에 연결해 시나리오 스크립트가 첫 `onOpen` 뒤
+백엔드 문맥에서 `driver.drive`를 호출하는지, 호출 실패의 코드와 details가 `script-failed:` 로그에 남는지 검사한다.
+`macos-bun.test.ts`는 `executeUI`가 없는 UI 스레드 플러그인이 백엔드 호출에서 `execute`로 실행되는지,
+일반 오류가 호출자에게는 `INTERNAL`로만 전달되고 호스트 로그에는 작업 이름과 원인이 남는지도 확인한다.
 `macos-window-api.ts`는 실제 compiled 호스트와 WKWebView를 연결해 여러 시작 창,
 지연 생성, 권한별 목록, 표시와 포커스 조회, 반복 생성과 개별 닫기를 검사한다.
 또한 `getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`의 창 ID 조회와
@@ -969,7 +982,9 @@ text/binary 메시지, timeout과 SDK deadline, 취소 뒤 실제 TCP 정리와 
 `build/macos-native-logs/network-diagnostics/`에 보존한다. report가 있으면 미완성 파일도 원본으로
 보존하며 임시 package를 제거하기 전에 기존 macOS native artifact 경로에 기록한다.
 `macos-network-diagnostics.test.ts`는 살아 있는 실제 child의 pipe 수집과 package 제거 뒤
-진단 보존, 실행 전 실패와 이전 report 정리를 검사한다. 기존 assertion과 제한시간은 유지한다.
+진단 보존, 실행 전 실패와 이전 report 정리를 검사한다. 기존 assertion은 유지하고, 느린 macOS runner를
+고려해 단계별 대기(WKWebView report, HTTP abort cleanup)는 45초(기존 20초), host 프로세스 제한은
+120초(기존 30초)로 늘렸다. timeout 메시지와 진행 로그에는 단계, 경과 시간과 기한이 기록된다.
 `cli/network.test.ts`는 isolated tarball 설치의 두 OS native export에서 실제 HTTP를 실행하고
 browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS, 외부 proxy와 OS 인증은 검증하지 않는다.
 
@@ -1144,7 +1159,10 @@ Show, XML, 교체와 개별 clear 및 종료 후 history 제거를 검사한다.
 포함하며 실제 사용자 클릭, popup 렌더링과 cold-start activation 검증은 아니다.
 
 `lifecycle/windows-display.test.ts`는 기본 style 보존과 실제 Windows의 custom caption,
-네이티브 resize hit test, topmost/tool-window flag, content 크기와 전체화면 복원을 검사합니다.
+네이티브 resize hit test, topmost/tool-window flag, content 크기와 전체화면 복원을
+검사합니다. 작업 표시줄 attention 요청이 창을 활성화하거나 표시하지 않는지,
+소멸한 창을 거부하는지도 실제 HWND로 확인합니다. 잘못된 FLASHWINFO가 last-error로 보고되는지
+검사하고, 작업 표시줄 shell이 있으면 HSHELL_FLASH 알림이 도착하는지도 확인합니다.
 콘텐츠 보호는 생성 시 적용과 런타임 전환 뒤의 display affinity를 독립적인 `GetWindowDisplayAffinity`
 호출로 확인합니다. `lifecycle/macos-bun.test.ts`는 macOS가 `contentProtection` 선언을 받아들이는지 검사하고,
 실제 `sharingType` 동작은 macOS 네이티브 실행의 `lifecycle/macos-window-api.ts`가 확인합니다.
