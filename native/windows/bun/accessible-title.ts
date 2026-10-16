@@ -49,21 +49,8 @@ export class AccessibleTitles {
       ) => number)
     | undefined;
   private readonly cache = new Map<bigint, string>();
-  /**
-   * MSAAPROPID is passed by value; the x64 ABI turns that into a pointer to a
-   * 16-byte-aligned temporary. Keep the backing store rooted for the process lifetime.
-   */
-  private readonly namePropertyStorage: Buffer;
-  private readonly nameProperty: Pointer;
-
-  constructor() {
-    const bytes = guid("608d3df8-8128-4aa7-a428-f55e49267291");
-    this.namePropertyStorage = Buffer.alloc(bytes.length + 16);
-    const base = Number(ptr(this.namePropertyStorage));
-    const aligned = (base + 15) & ~15;
-    bytes.copy(this.namePropertyStorage, aligned - base);
-    this.nameProperty = aligned as Pointer;
-  }
+  // Native calls read this buffer, so it is a field that outlives each call.
+  private readonly nameProperty = guid("608d3df8-8128-4aa7-a428-f55e49267291");
 
   private bind(slot: number, args: BindingType[], returns: "i32" | "u32") {
     assert(this.object);
@@ -87,12 +74,13 @@ export class AccessibleTitles {
     if (this.object) {
       return;
     }
-    // Lifecycle tests construct Windows without going through ui.ts; AccProp still needs an STA.
+    // Lifecycle tests construct Windows without ui.ts; AccProp still needs an STA.
     const init = ole.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED);
     if (init < 0 && init !== RPC_E_CHANGED_MODE) {
       hr(init, "CoInitializeEx(STA)");
     }
-    this.library = openLibrary();
+    const library = openLibrary();
+    this.library = library;
     const out = new BigUint64Array(1);
     const clsid = guid("b5f8350b-0548-48b1-a6ee-88bd00b4a5e7");
     const iid = guid("6e26e776-04f0-495d-80e4-3330352e3169");
@@ -100,7 +88,7 @@ export class AccessibleTitles {
       hr(
         withBuffer(clsid, (clsidPtr) =>
           withBuffer(iid, (iidPtr) =>
-            this.library!.symbols.CoCreateInstance(
+            library.symbols.CoCreateInstance(
               clsidPtr,
               null,
               CLSCTX_SERVER,
@@ -114,7 +102,7 @@ export class AccessibleTitles {
       assert(out[0], "Null accessible title COM object");
       this.object = Number(out[0]) as Pointer;
       this.release = this.bind(SLOT_RELEASE, [], "u32");
-      // MSAAPROPID is a 16-byte GUID; the x64 ABI passes it by pointer.
+      // MSAAPROPID is a 16-byte GUID, which the x64 ABI passes by pointer.
       this.setName = this.bind(
         SLOT_SET_HWND_PROP_STR,
         [
@@ -161,7 +149,7 @@ export class AccessibleTitles {
           window,
           OBJID_CLIENT,
           CHILDID_SELF,
-          this.nameProperty,
+          ptr(this.nameProperty),
           text,
         ),
       ),
@@ -204,7 +192,7 @@ export class AccessibleTitles {
         window,
         OBJID_CLIENT,
         CHILDID_SELF,
-        this.nameProperty,
+        ptr(this.nameProperty),
         1,
       ),
       "IAccPropServices.ClearHwndProps",
