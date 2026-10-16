@@ -31,6 +31,7 @@ const request = z
       "close",
       "reopen",
       "powerOff",
+      "powerOffThenQuitEvent",
       "visibleWindows",
       "windowCount",
     ]),
@@ -225,6 +226,11 @@ export const driver = defineNativePlugin({
           } else if (action === "reopen") {
             // What the Dock click sends; AppKit then asks the delegate to handle the reopen.
             sendSelfEvent("aevt", "rapp");
+          } else if (action === "powerOffThenQuitEvent") {
+            // One stimulus: a second drive call could arrive after the power-off already began the
+            // shutdown and be cancelled, so the quit Apple event follows in the same turn.
+            perform("powerOff", undefined);
+            perform("quitEvent", undefined);
           } else if (action === "powerOff") {
             const workspace = o.send(o.class("NSWorkspace"), "sharedWorkspace");
             o.send(

@@ -283,12 +283,11 @@ const scripts: Record<string, () => Promise<void>> = {
   },
   async "session-end"() {
     log("driving-session-end");
-    step("power-off");
-    await drive("powerOff");
-    // The quit Apple event that follows is part of the session end: the host suspends it and
-    // replies after cleanup, without blocking the main thread.
-    step("quit-event");
-    await drive("quitEvent");
+    // The quit Apple event that follows the power-off is part of the session end: the host
+    // suspends it and replies after cleanup, without blocking the main thread. Both go in one
+    // stimulus so the second is not a host call cancelled by the shutdown the first began.
+    step("power-off-quit-event");
+    await drive("powerOffThenQuitEvent");
   },
   async "session-end-quit-reason"() {
     step("wait-main-page");
