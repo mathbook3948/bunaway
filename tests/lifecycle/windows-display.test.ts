@@ -129,6 +129,46 @@ test.skipIf(process.platform !== "win32")(
 );
 
 test.skipIf(process.platform !== "win32")(
+  "taskbar attention requests never activate or show the window and reject destroyed windows",
+  async () => {
+    const [{ Windows }, { user }] = await Promise.all([
+      import("#native/windows/bun/win32"),
+      import("#native/windows/bun/win32-bindings"),
+    ]);
+    const native = new Windows(() => {});
+    let hwnd = 0n;
+    try {
+      hwnd = native.create("Attention", 640, 480, () => {}, false, {});
+      native.showInactive(hwnd);
+      const foreground = user.symbols.GetForegroundWindow();
+      native.requestAttention(hwnd, "untilFocused");
+      native.requestAttention(hwnd, "continuous");
+      native.cancelAttention(hwnd);
+      native.cancelAttention(hwnd);
+      expect(native.isVisible(hwnd)).toBe(true);
+      expect(user.symbols.GetForegroundWindow()).toBe(foreground);
+      native.show(hwnd, false);
+      native.requestAttention(hwnd, "continuous");
+      native.cancelAttention(hwnd);
+      expect(native.isVisible(hwnd)).toBe(false);
+      native.destroy(hwnd);
+      expect(() => native.requestAttention(hwnd, "untilFocused")).toThrow(
+        "Window is no longer valid",
+      );
+      expect(() => native.cancelAttention(hwnd)).toThrow(
+        "Window is no longer valid",
+      );
+      hwnd = 0n;
+    } finally {
+      if (hwnd) {
+        native.destroy(hwnd);
+      }
+      native.dispose();
+    }
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
   "tool-window caption changes preserve constrained system-caption content",
   async () => {
     const { Windows } = await import("#native/windows/bun/win32");

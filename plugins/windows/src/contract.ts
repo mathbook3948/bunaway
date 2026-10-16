@@ -7,6 +7,7 @@ import {
   MAX_WINDOWS,
   MIN_WINDOW_COORDINATE,
   MIN_WINDOW_DIMENSION,
+  type WindowAttentionMode,
 } from "@bunaway/plugin-api/native";
 import {
   errorSchema,
@@ -188,6 +189,12 @@ const windowTarget = z.strictObject({
   view: viewTarget.shape.view,
   windowId: viewTarget.shape.view.exactOptional(),
 });
+
+/** Must stay aligned with the plugin API's `WindowAttentionMode`. */
+const attentionMode = z.enum([
+  "untilFocused",
+  "continuous",
+]) satisfies z.ZodType<WindowAttentionMode>;
 
 const windowResult = {
   input: windowTarget,
@@ -874,6 +881,13 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isSkipTaskbar": windowStateResult,
+  "windows.requestAttention": {
+    input: windowTarget.extend({
+      mode: attentionMode.exactOptional(),
+    }),
+    output: z.null(),
+  },
+  "windows.cancelAttention": windowResult,
   "windows.setMinimizable": {
     input: windowTarget.extend({
       minimizable: z.boolean(),
