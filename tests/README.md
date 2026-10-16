@@ -912,12 +912,18 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 `power-cleanup.test.ts`는 플러그인 정의의 SDK factory와 실제 어댑터, 두 handle 소유자를 번들해 격리된 Win32 바인딩에서
 public 요청 해제와 활성 rollback 해제가 함께 실패해도 모든 handle을 재시도하고,
 미해제 handle이 있는 동안 DLL을 유지하며 두 단계의 오류를 보고하는지 검사한다.
-`cli/power.test.ts`는 isolated tarball 설치와 I/O 어댑터 발견, browser의 FFI 제외를 검사한다.
+`cli/power.test.ts`는 isolated tarball 설치와 UI 어댑터 발견, browser의 FFI 제외를 검사한다.
 `windows-power.test.ts`는 실제 GetSystemPowerStatus와 session idle query, PowerCreateRequest,
 system/display 활성 및 GetHandleInformation으로 명시 해제와 종료 시 handle 정리를 확인한다.
-`windows-power-worker.test.ts`는 빌드한 공개 power API에서 실제 I/O Worker까지 상태와 idle,
+`windows-power-ui.test.ts`는 빌드한 공개 power API에서 실제 UI Worker까지 상태와 idle,
 독립 ID, 개별 권한 거부, 명시 해제와 종료 정리를 확인한다.
-`mise run host:windows`에 포함하며 물리 배터리 전환, 화면 꺼짐과 idle 절전 또는
+`power-status-events.test.ts`는 전원 상태 변경 감시가 baseline 한 번 읽기, 상태 변경 알림과 resume의
+재조회, 동일 값 생략, 무관한 신호 무시, 읽기 실패 시 baseline 유지와 반복 가능한 해제를 검사하고,
+`api/power.test.ts`는 `power.statusChanged`의 portable schema가 상태 schema와 일치하며 이벤트 정책과
+읽기 권한을 모두 가진 경로에만 전달되는지 검사한다. `power-cleanup.test.ts`는 구독 해제 실패에도
+blocker와 DLL 정리를 계속하고 재시도할 수 있는지 함께 검사한다.
+`windows-power-events.test.ts`는 실제 숨은 알림 HWND에 합성 전원 방송을 보내 재조회, 변경 게시, 해제 뒤
+HWND 파괴와 미전달을 확인한다. `mise run host:windows`에 포함하며 물리 배터리 전환, 화면 꺼짐과 idle 절전 또는
 Modern Standby 및 사용자 절전 후 요청 종료의 하드웨어 검증을 대신하지 않는다.
 
 `appearance.test.ts`는 선호의 null, 색 형식과 개별 operation 권한, 호출 컨텍스트를 확인한다.
