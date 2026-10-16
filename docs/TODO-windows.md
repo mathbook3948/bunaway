@@ -204,7 +204,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 스크린샷과 화면 공유에서 창을 제외하는 content protection을 제공한다.
 - [ ] mouse click-through와 이동 이벤트 전달 여부를 제공한다.
 - [ ] cursor icon, visible, position과 grab의 지원 범위를 제공한다.
-- [ ] 창 포커스 요청과 별개로 작업 표시줄을 점멸하는 attention API를 제공한다.
+- [x] 창 포커스 요청과 별개로 작업 표시줄을 점멸하는 attention API를 제공한다. `requestAttention`과 `cancelAttention`을 제공하며 Windows는 FlashWindowEx로 포커스 이동 없이 작업 표시줄 버튼을 점멸하고 untilFocused와 continuous 모드를 지원한다.
 - [ ] 지정 모니터에서 전체화면으로 전환하고 모니터 제거 시 복원한다.
 - [ ] Windows snapped와 tablet-mode 상태 조회의 지원을 결정한다.
 - [ ] 접근성용 창 제목을 일반 제목과 별도로 설정한다.

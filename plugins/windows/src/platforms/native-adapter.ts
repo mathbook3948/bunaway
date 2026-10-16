@@ -1,6 +1,7 @@
 import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
 import {
   hasValidWindowSizeConstraints,
+  type WindowAttentionMode,
   type WindowIdentity,
   type WindowSizeConstraints,
 } from "@bunaway/plugin-api/native";
@@ -8,6 +9,9 @@ import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import { validateWindowCall, type WindowCall } from "#windows/contract";
 import { WindowOperations } from "#windows/platforms/coordinator";
 import { convertGeometry } from "#windows/platforms/window-geometry";
+
+/** Flash mode applied when `windows.requestAttention` omits `mode`. */
+const DEFAULT_ATTENTION_MODE: WindowAttentionMode = "untilFocused";
 
 function unsupportedRelations() {
   return new BunawayError({
@@ -41,6 +45,13 @@ function unsupportedDisplay() {
   return new BunawayError({
     code: "UNSUPPORTED",
     message: "Window display options are not implemented on this platform.",
+  });
+}
+
+function unsupportedAttention() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window attention requests are not implemented on this platform.",
   });
 }
 
@@ -373,6 +384,18 @@ export function createOperations(
           throw unsupportedDisplay();
         }
         return window.isSkipTaskbar();
+      case "windows.requestAttention":
+        if (!window.requestAttention) {
+          throw unsupportedAttention();
+        }
+        window.requestAttention(call.payload.mode ?? DEFAULT_ATTENTION_MODE);
+        break;
+      case "windows.cancelAttention":
+        if (!window.cancelAttention) {
+          throw unsupportedAttention();
+        }
+        window.cancelAttention();
+        break;
       case "windows.setFocusable":
         if (!window.setFocusable) {
           throw unsupportedFocusability();

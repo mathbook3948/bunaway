@@ -7,6 +7,7 @@ import {
   MAX_WINDOW_DIMENSION,
   MIN_WINDOW_DIMENSION,
   type NativeWindow,
+  type WindowAttentionMode,
   type WindowBounds,
   type WindowChange,
   type WindowIdentity,
@@ -127,6 +128,11 @@ const MONITORINFO_SIZE = 40;
 const RECT_SIZE = 16;
 const WINDOWPLACEMENT_SIZE = 44;
 const WINDOWPOS_SIZE = 40;
+const FLASHWINFO_SIZE = 32; // Win64
+const FLASHW_STOP = 0;
+const FLASHW_TRAY = 0x2;
+const FLASHW_TIMER = 0x4;
+const FLASHW_TIMERNOFG = 0xc;
 const MAX_WINDOW_TITLE_LENGTH = 1024;
 
 type SizeConstraints = Partial<WindowSizeConstraints>;
@@ -969,6 +975,43 @@ export class Windows {
       this.changingGeometry.delete(window);
       this.observeChanges(window);
     }
+  }
+
+  /**
+   * Flash only the taskbar button, leaving the caption (and any custom titlebar)
+   * untouched. Never activates, shows or reorders the window. A hidden, skipTaskbar
+   * or owned window has no taskbar button, so nothing visible flashes but the call
+   * still succeeds. `untilFocused` on the foreground window stops immediately.
+   * Repeated calls replace the previous mode. Throws if the window is destroyed or
+   * FlashWindowEx reports a failure through the last error (see `flash`).
+   */
+  requestAttention(window: bigint, mode: WindowAttentionMode): void {
+    this.flash(
+      window,
+      FLASHW_TRAY | (mode === "continuous" ? FLASHW_TIMER : FLASHW_TIMERNOFG),
+    );
+  }
+
+  /** Stop flashing and restore the taskbar button; succeeds when not flashing. */
+  cancelAttention(window: bigint): void {
+    this.flash(window, FLASHW_STOP);
+  }
+
+  private flash(window: bigint, flags: number): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    const info = Buffer.alloc(FLASHWINFO_SIZE);
+    info.writeUInt32LE(FLASHWINFO_SIZE, 0); // cbSize
+    info.writeBigUInt64LE(window, 8); // hwnd
+    info.writeUInt32LE(flags, 16); // dwFlags
+    // uCount and dwTimeout stay 0: flash until stopped at the system blink rate.
+    // The return value is the previous caption-active state, so 0 is a normal result
+    // for an inactive window. Failure is visible only through the last error, which
+    // is cleared first so a stale error from an earlier call cannot be reported.
+    kernel.symbols.SetLastError(0);
+    const previousCaptionActive = user.symbols.FlashWindowEx(ptr(info));
+    const error =
+      previousCaptionActive === 0 ? kernel.symbols.GetLastError() : 0;
+    assert(error === 0, `FlashWindowEx: ${error}`);
   }
 
   isFocusable(window: bigint): boolean {
