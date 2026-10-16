@@ -2,6 +2,12 @@ import { dlopen } from "bun:ffi";
 import { expect, test } from "bun:test";
 import type { WindowChange, WindowSnapshot } from "@bunaway/plugin-api/native";
 
+const HWND_TOPMOST = -1n;
+const HWND_NOTOPMOST = -2n;
+const SWP_NOSIZE = 0x1;
+const SWP_NOMOVE = 0x2;
+const SWP_NOACTIVATE = 0x10;
+
 test.skipIf(process.platform !== "win32")(
   "native move loops keep event acknowledgements and ordered server delivery live beyond channel capacity",
   async () => {
@@ -42,6 +48,18 @@ test.skipIf(process.platform !== "win32")(
           "i64",
         ],
         returns: "i64",
+      },
+      SetWindowPos: {
+        args: [
+          "u64",
+          "i64",
+          "i32",
+          "i32",
+          "i32",
+          "i32",
+          "u32",
+        ],
+        returns: "i32",
       },
     });
     const events: {
@@ -124,6 +142,54 @@ test.skipIf(process.platform !== "win32")(
       windows.unmaximize(hwnd);
       check("enterFullscreen", () => windows.setFullscreen(hwnd, true));
       check("leaveFullscreen", () => windows.setFullscreen(hwnd, false));
+      // A topmost toggle changes only Z order, so it must not also report move or resize.
+      const checkAlwaysOnTop = (
+        change: "enterAlwaysOnTop" | "leaveAlwaysOnTop",
+        action: () => void,
+      ) => {
+        const start = events.length;
+        check(change, action);
+        expect(events.slice(start).flatMap((event) => event.changes)).toEqual([
+          change,
+        ]);
+        expect(events.at(-1)?.snapshot.state.alwaysOnTop).toBe(
+          change === "enterAlwaysOnTop",
+        );
+      };
+      checkAlwaysOnTop("enterAlwaysOnTop", () =>
+        windows.setAlwaysOnTop(hwnd, true),
+      );
+      checkAlwaysOnTop("leaveAlwaysOnTop", () =>
+        windows.setAlwaysOnTop(hwnd, false),
+      );
+      const beforeSameAlwaysOnTop = events.length;
+      windows.setAlwaysOnTop(hwnd, false);
+      windows.pump();
+      expect(events).toHaveLength(beforeSameAlwaysOnTop);
+      // Calling SetWindowPos directly simulates another process changing Z order
+      // and reaches the window through the same native position message.
+      checkAlwaysOnTop("enterAlwaysOnTop", () =>
+        driver.symbols.SetWindowPos(
+          hwnd,
+          HWND_TOPMOST,
+          0,
+          0,
+          0,
+          0,
+          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        ),
+      );
+      checkAlwaysOnTop("leaveAlwaysOnTop", () =>
+        driver.symbols.SetWindowPos(
+          hwnd,
+          HWND_NOTOPMOST,
+          0,
+          0,
+          0,
+          0,
+          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        ),
+      );
       for (let index = 1; index < events.length; index++) {
         expect(events[index]?.snapshot.revision).toBeGreaterThan(
           events[index - 1]?.snapshot.revision ?? 0,

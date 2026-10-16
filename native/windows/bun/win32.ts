@@ -471,6 +471,7 @@ export class Windows {
             this.rememberNormalMonitor(window);
           }
           if (message === WM_WINDOWPOSCHANGED) {
+            // Z-order and topmost changes from any process arrive here.
             this.observeChanges(window);
           }
           if (message === WM_ACTIVATE && this.windows.has(window)) {
@@ -1250,6 +1251,7 @@ export class Windows {
         minimized: this.isMinimized(window),
         maximized: this.isMaximized(window),
         fullscreen: this.isFullscreen(window),
+        alwaysOnTop: this.isAlwaysOnTop(window),
       },
       bounds: this.getBounds(window, "outer"),
     };

@@ -110,6 +110,7 @@ export class Windows {
         minimized: false,
         maximized: false,
         fullscreen: false,
+        alwaysOnTop: false,
       },
       bounds: {
         x: 0,

@@ -372,6 +372,14 @@ if (!process.argv.includes("--child")) {
             ...target,
             fullscreen: false,
           });
+          await windows.setAlwaysOnTop({
+            ...target,
+            alwaysOnTop: true,
+          });
+          await windows.setAlwaysOnTop({
+            ...target,
+            alwaysOnTop: false,
+          });
           const expected = [
             "hidden",
             "shown",
@@ -385,6 +393,8 @@ if (!process.argv.includes("--child")) {
             "restore",
             "enterFullscreen",
             "leaveFullscreen",
+            "enterAlwaysOnTop",
+            "leaveAlwaysOnTop",
           ];
           await waitFor(() =>
             expected.every((change) =>

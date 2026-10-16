@@ -420,6 +420,9 @@ export const windowSnapshotSchema = {
         fullscreen: {
           type: "boolean",
         },
+        alwaysOnTop: {
+          type: "boolean",
+        },
       },
       required: [
         "visible",
@@ -427,6 +430,7 @@ export const windowSnapshotSchema = {
         "minimized",
         "maximized",
         "fullscreen",
+        "alwaysOnTop",
       ],
       additionalProperties: false,
     },
@@ -532,7 +536,7 @@ export const windowEvents = {
       changes: {
         type: "array",
         minItems: 1,
-        maxItems: 14,
+        maxItems: 16,
         uniqueItems: true,
         items: {
           type: "string",
@@ -547,6 +551,8 @@ export const windowEvents = {
             "restore",
             "enterFullscreen",
             "leaveFullscreen",
+            "enterAlwaysOnTop",
+            "leaveAlwaysOnTop",
             "move",
             "resize",
             "moved",
