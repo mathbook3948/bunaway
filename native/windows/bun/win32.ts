@@ -971,7 +971,8 @@ export class Windows {
    * untouched. Never activates, shows or reorders the window. A hidden, skipTaskbar
    * or owned window has no taskbar button, so nothing visible flashes but the call
    * still succeeds. `untilFocused` on the foreground window stops immediately.
-   * Repeated calls replace the previous mode.
+   * Repeated calls replace the previous mode. Throws if the window is destroyed or
+   * FlashWindowEx reports a failure through the last error (see `flash`).
    */
   requestAttention(window: bigint, mode: WindowAttentionMode): void {
     this.flash(
@@ -992,8 +993,14 @@ export class Windows {
     info.writeBigUInt64LE(window, 8); // hwnd
     info.writeUInt32LE(flags, 16); // dwFlags
     // uCount and dwTimeout stay 0: flash until stopped at the system blink rate.
-    // The return value is the previous caption state, not success, so it is ignored.
-    user.symbols.FlashWindowEx(ptr(info));
+    // The return value is the previous caption-active state, so 0 is a normal result
+    // for an inactive window. Failure is visible only through the last error, which
+    // is cleared first so a stale error from an earlier call cannot be reported.
+    kernel.symbols.SetLastError(0);
+    const previousCaptionActive = user.symbols.FlashWindowEx(ptr(info));
+    const error =
+      previousCaptionActive === 0 ? kernel.symbols.GetLastError() : 0;
+    assert(error === 0, `FlashWindowEx: ${error}`);
   }
 
   isFocusable(window: bigint): boolean {
