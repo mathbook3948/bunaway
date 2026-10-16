@@ -309,6 +309,98 @@ test.skipIf(process.platform !== "win32")(
   10000,
 );
 
+// Abort at tracking entry, where EndMenu can be ignored until the owned timer retries it.
+// Windows may end tracking before WM_INITMENUPOPUP once WM_ENTERMENULOOP aborted,
+// so only the WM_INITMENUPOPUP case can observe the temporary HMENU.
+for (const { trigger, message: triggerMessage, observesHandle } of [
+  {
+    trigger: "WM_ENTERMENULOOP",
+    message: 0x0211,
+    observesHandle: false,
+  },
+  {
+    trigger: "WM_INITMENUPOPUP",
+    message: 0x0117,
+    observesHandle: true,
+  },
+] as const) {
+  test.skipIf(process.platform !== "win32")(
+    `real context popup aborted at ${trigger} still exits its modal loop`,
+    async () => {
+      const { Windows } = await import("#native/windows/bun/win32");
+      const { WindowMenus } = await import(
+        "#plugins/menu/src/platforms/windows-window-menus"
+      );
+      const native = dlopen("user32.dll", {
+        IsMenu: {
+          args: [
+            "u64",
+          ],
+          returns: "i32",
+        },
+      });
+      const controller = new AbortController();
+      const listeners = new Set<
+        (message: number, wparam: bigint, lparam: bigint) => void
+      >();
+      let popupHandle = 0n;
+      const windows = new Windows(() => {});
+      const hwnd = windows.create(
+        "Context menu tracking entry regression",
+        400,
+        300,
+        (message, wparam, lparam) => {
+          for (const receive of [
+            ...listeners,
+          ]) {
+            receive(message, wparam, lparam);
+          }
+          if (message === 0x0117) {
+            popupHandle = wparam; // WM_INITMENUPOPUP
+          }
+          if (message === triggerMessage) {
+            controller.abort();
+          }
+        },
+        true,
+      );
+      const menus = new WindowMenus({
+        resolve: () => hwnd,
+        subscribe(_id, receive) {
+          listeners.add(receive);
+          return () => {
+            listeners.delete(receive);
+          };
+        },
+        changed() {},
+        interrupt: () => () => {},
+      });
+      try {
+        const items = menuItemsSchema.parse([
+          {
+            id: "item",
+            type: "item",
+            label: "Item",
+          },
+        ]);
+        expect(() =>
+          menus.popup("one", items, 100, 100, controller.signal),
+        ).toThrow("Menu popup cancelled");
+        if (observesHandle) {
+          expect(popupHandle).not.toBe(0n);
+          expect(native.symbols.IsMenu(popupHandle)).toBe(0);
+        }
+      } finally {
+        menus.dispose();
+        windows.destroy(hwnd);
+        windows.dispose();
+        native.close();
+      }
+    },
+    10000,
+  );
+}
+
 for (const cancellation of [
   "cancel",
   "cancel-context",
@@ -316,6 +408,7 @@ for (const cancellation of [
   "shutdown",
   "bar-shutdown",
   "bar-early-shutdown",
+  "popup-early-shutdown",
 ] as const) {
   test.skipIf(process.platform !== "win32")(
     `actual Worker ${cancellation} interrupts only the matching native context popup`,
@@ -330,7 +423,7 @@ for (const cancellation of [
           workerData: {
             generation,
             bar: cancellation.startsWith("bar-"),
-            early: cancellation === "bar-early-shutdown",
+            early: cancellation.endsWith("early-shutdown"),
             ready,
           },
         },
@@ -352,7 +445,7 @@ for (const cancellation of [
           if (packet.kind !== "diagnostic") {
             return;
           }
-          if (packet.event === "bar-ready") {
+          if (packet.event === "early-ready") {
             sentCancellation = true;
             channel.notify({
               kind: "shutdown",
@@ -362,7 +455,7 @@ for (const cancellation of [
           }
           if (packet.event === "popup-enter" && !entered) {
             entered = true;
-            if (cancellation === "bar-early-shutdown") {
+            if (cancellation.endsWith("early-shutdown")) {
               return;
             }
             channel.notify({

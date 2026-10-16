@@ -43,6 +43,9 @@ const windows = new Windows(
   undefined,
   () => channel.poll(),
 );
+// WM_ENTERMENULOOP is always sent when the native loop starts, while
+// WM_INITMENUPOPUP may be skipped once EndMenu was requested.
+const enterMessage = workerData.bar || workerData.early ? 0x0211 : 0x0117;
 const listeners = new Set<
   (message: number, wparam: bigint, lparam: bigint) => void
 >();
@@ -56,10 +59,7 @@ const hwnd = windows.create(
     ]) {
       receive(message, wparam, lparam);
     }
-    if (
-      (workerData.bar && message === 0x0211) ||
-      (!workerData.bar && message === 0x0117)
-    ) {
+    if (message === enterMessage) {
       channel.notify({
         kind: "diagnostic",
         event: "popup-enter",
@@ -81,6 +81,21 @@ const menus = new WindowMenus({
     requests.onModalInterrupt(requestSignal, cancel),
   changed() {},
 });
+/** Lets the parent queue shutdown so the native loop observes it as soon as it starts. */
+function waitForEarlyShutdown() {
+  const ready = new Int32Array(workerData.ready);
+  channel.notify({
+    kind: "diagnostic",
+    event: "early-ready",
+    fields: {},
+  });
+  Atomics.wait(ready, 0, 0, 3000);
+  assert.equal(
+    Atomics.load(ready, 0),
+    1,
+    "Parent did not queue early shutdown.",
+  );
+}
 try {
   await channel.send({
     kind: "ready",
@@ -120,18 +135,7 @@ try {
         () => {},
       );
       if (workerData.early) {
-        const ready = new Int32Array(workerData.ready);
-        channel.notify({
-          kind: "diagnostic",
-          event: "bar-ready",
-          fields: {},
-        });
-        Atomics.wait(ready, 0, 0, 3000);
-        assert.equal(
-          Atomics.load(ready, 0),
-          1,
-          "Parent did not queue early shutdown.",
-        );
+        waitForEarlyShutdown();
       }
       // SC_KEYMENU enters the real native menu-bar loop, without sending global keyboard input.
       user.symbols.SendMessageW(hwnd, 0x0112, 0xf100n, 0n);
@@ -140,6 +144,9 @@ try {
       user.close();
     }
   } else {
+    if (workerData.early) {
+      waitForEarlyShutdown();
+    }
     try {
       menus.popup("one", items, 100, 100, new AbortController().signal, signal);
     } catch (error) {

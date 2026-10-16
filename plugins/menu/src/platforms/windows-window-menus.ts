@@ -283,7 +283,21 @@ export class WindowMenus implements WindowMenuDriver {
     };
     this.popupActive = true;
     try {
-      unsubscribe = this.host.subscribe(windowId, () => {}, cancel);
+      unsubscribe = this.host.subscribe(
+        windowId,
+        (message, wparam) => {
+          if (
+            closed &&
+            message === WM_TIMER &&
+            wparam === BigInt(MENU_TIMER_ID)
+          ) {
+            // EndMenu can run before TrackPopupMenuEx starts tracking.
+            // The owned timer retries after Windows has entered its modal loop.
+            this.native.symbols.EndMenu();
+          }
+        },
+        cancel,
+      );
       stopModal = this.keepModalResponsive(hwnd, requestSignal, cancel);
       signal.addEventListener("abort", cancel, {
         once: true,
