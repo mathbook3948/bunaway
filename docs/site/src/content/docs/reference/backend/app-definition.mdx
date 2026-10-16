@@ -208,6 +208,8 @@ CLI 옵션과 subcommand를 처리하는 앱은 `desktop.openArguments: "raw"`�
 `onReady`, `onAllWindowsClosed`, `onWillQuit`과 `onQuit`이 예외를 던지거나 거부하면 진단을 남기고
 앱은 실행이나 종료를 이어 갑니다. `onWillQuit`과 `onQuit`은 각각 최대 3초까지만 기다립니다.
 기한이 지나면 진단을 남기고 종료를 계속하므로 이 두 훅에서는 짧은 정리 작업만 합니다.
+`onWillQuit`이 실행될 때 호스트는 이미 종료 중이라 이 훅 안의 창이나 클립보드 같은 호스트 작업은
+항상 `CANCELLED`로 실패합니다. 상태 저장과 앱 자원 정리처럼 앱 내부 작업만 합니다.
 호스트 실패(시작 실패, UI Worker 중단)에서는 두 훅을 호출하지 않습니다.
 
 ### Windows 세션 종료
@@ -215,7 +217,8 @@ CLI 옵션과 subcommand를 처리하는 앱은 `desktop.openArguments: "raw"`�
 로그오프, 재시작과 시스템 종료는 취소할 수 없는 종료입니다. 대화상자를 표시하지 않고
 `beforeQuit`를 호출하지 않으며 대기 중인 `beforeQuit`의 거부도 무시합니다. 호스트는 시스템 종료를
 차단하지 않습니다. 대기 중인 닫기 확인과 [닫기 요청](/reference/host/windows/#닫기-요청)도 버립니다.
-`onWillQuit("session-end")`과 플러그인 StopHook은 약 4초 안에 끝나야 합니다. 그 뒤에는 운영체제가
+`onWillQuit("session-end")`과 플러그인 StopHook은 약 4초 안에 끝나야 하며 두 단계가 이 시간을 나눠 씁니다.
+`onWillQuit`이 3초를 쓰면 StopHook에는 1초가 남습니다. 그 뒤에는 운영체제가
 프로세스를 끝낼 수 있으므로 `onQuit`과 네이티브 정리를 보장하지 않습니다.
 다른 앱이 종료를 취소하면 앱은 계속 실행합니다. 중요한 데이터는 사용자가 작업하는 동안 저장합니다.
 

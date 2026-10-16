@@ -60,6 +60,8 @@ async function startUI(
     lifecycleEvents?: boolean;
     /** Lets both views listen to `windows.closeRequested` and answer it with `windows.respondClose`. */
     closeRequestEvents?: boolean;
+    /** Leaves every `listen` unanswered, as while its result is still crossing the channel. */
+    withholdListenResult?: boolean;
   } = {},
 ) {
   const directory = await mkdtemp(resolve(tmpdir(), "bunaway-ui-lifecycle-"));
@@ -366,7 +368,11 @@ async function startUI(
           })
           .catch(rememberError);
       }
-      if (packet.kind === "client" && packet.message.kind === "listen") {
+      if (
+        packet.kind === "client" &&
+        packet.message.kind === "listen" &&
+        !lifecycleOptions.withholdListenResult
+      ) {
         void channel
           .send({
             kind: "server",
@@ -1661,10 +1667,15 @@ function closeRequestEvents(packets: Packet[]) {
  * confirmation both counts in `confirmations` and keeps the window open.
  */
 async function startCloseRequestUI(
-  options: { closeBehavior?: "keep-alive" | "quit"; subscribe?: boolean } = {},
+  options: {
+    closeBehavior?: "keep-alive" | "quit";
+    subscribe?: boolean;
+    withholdListenResult?: boolean;
+  } = {},
 ) {
   const ui = await startUI(undefined, "ui", undefined, true, {
     closeRequestEvents: true,
+    withholdListenResult: options.withholdListenResult ?? false,
     closeBehavior: options.closeBehavior ?? "keep-alive",
   });
   const target = {
@@ -1788,6 +1799,31 @@ test(
       await settle();
       expect(await isDestroyed()).toBe(false);
       expect(closeRequestEvents(ui.packets)).toEqual([]);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "a closeRequested listen that Core has not confirmed does not make the close wait for the app",
+  async () => {
+    const { ui, settle, isDestroyed } = await startCloseRequestUI({
+      withholdListenResult: true,
+    });
+    try {
+      await ui.call("parser.run", "user-close");
+      await ui.waitFor(
+        () => Atomics.load(ui.lifecycle, uiLifecycleSlots.confirmations) === 1,
+      );
+      await settle();
+      expect(closeRequestEvents(ui.packets)).toEqual([]);
+      expect(await isDestroyed()).toBe(false);
       await ui.channel.send({
         kind: "shutdown",
       });

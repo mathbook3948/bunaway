@@ -1227,6 +1227,31 @@ test("a committed non-cancellable shutdown skips beforeQuit and later quit check
   expect(checks).toBe(0);
 });
 
+test("a beforeQuit failure after a session end committed is reported and the quit still succeeds", async () => {
+  const failure = new Error("unsaved work");
+  const errors: unknown[] = [];
+  let failCheck: (error: Error) => void = () => {};
+  const lifecycle = new DesktopLifecycle(
+    {
+      beforeQuit: () =>
+        new Promise<void>((_resolve, reject) => {
+          failCheck = reject;
+        }),
+    },
+    async () => {},
+    () => {},
+    (error) => errors.push(error),
+  );
+  const quit = lifecycle.quit("api");
+  await tick();
+  lifecycle.commitShutdown("session-end");
+  failCheck(failure);
+  expect(await quit).toBe(true);
+  expect(errors).toEqual([
+    failure,
+  ]);
+});
+
 test("shutdown hooks that fail or exceed the deadline are reported and do not block shutdown", async () => {
   const errors: unknown[] = [];
   const failure = new Error("hook failed");

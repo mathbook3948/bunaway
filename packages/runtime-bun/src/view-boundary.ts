@@ -62,9 +62,11 @@ export class ViewBoundary {
       sessionOpened?(route: Route): void;
       revoked?(reason: string, generation: number, error?: WireError): void;
       /**
-       * Called after an active subscription is removed, either by the client's `unlisten` or by the
-       * host ending it. `event` is the subscription's event name; a pending `listen` for the same
-       * event may still keep `eventRoute(event)` defined.
+       * Called after a subscription attempt for `event` ends without leaving that subscription
+       * active: a confirmed subscription removed by the client's `unlisten` or by the host, or a
+       * pending `listen` that Core answered with an error. Another pending `listen` for the same
+       * event may still keep `eventRoute(event)` defined, so observers that need a confirmed
+       * subscription should re-check `subscribed(event)`.
        */
       subscriptionEnded?(event: string): void;
     },
@@ -374,6 +376,36 @@ export class ViewBoundary {
   }
   /** Captures the current negotiated document route for host-originated events. */
   eventRoute(event: string): Route | undefined {
+    const session = this.eventSession(event);
+    if (!session) {
+      return undefined;
+    }
+    // A listen can already be registered in Core while its result is still crossing the channel.
+    for (const request of session.pending.values()) {
+      if (request.kind === "listen" && request.event === event) {
+        return session.route;
+      }
+    }
+    return this.subscribed(event) ? session.route : undefined;
+  }
+  /**
+   * Whether the current document holds a confirmed subscription to `event`. Unlike `eventRoute`, a
+   * `listen` whose result has not been delivered yet does not count, because Core may still reject it.
+   */
+  subscribed(event: string): boolean {
+    const session = this.eventSession(event);
+    if (!session) {
+      return false;
+    }
+    for (const subscription of session.subscriptions.values()) {
+      if (subscription.event === event) {
+        return true;
+      }
+    }
+    return false;
+  }
+  /** The negotiated session of an open boundary whose policy allows `event`, if any. */
+  private eventSession(event: string) {
     const session = this.session;
     if (
       this.closed ||
@@ -382,18 +414,7 @@ export class ViewBoundary {
     ) {
       return undefined;
     }
-    // A listen can already be registered in Core while its result is still crossing the channel.
-    for (const subscription of session.subscriptions.values()) {
-      if (subscription.event === event) {
-        return session.route;
-      }
-    }
-    for (const request of session.pending.values()) {
-      if (request.kind === "listen" && request.event === event) {
-        return session.route;
-      }
-    }
-    return undefined;
+    return session;
   }
 
   matches(route: Route) {
@@ -518,6 +539,14 @@ export class ViewBoundary {
         });
       }
       session.pending.delete(message.id);
+      if (
+        pending.kind === "listen" &&
+        message.kind === "error" &&
+        pending.event
+      ) {
+        // The pending listen that kept eventRoute(event) defined is gone; observers re-check.
+        this.hooks.subscriptionEnded?.(pending.event);
+      }
     } else if (message.kind === "event") {
       const subscription = session.subscriptions.get(message.subscriptionId);
       if (!subscription) {

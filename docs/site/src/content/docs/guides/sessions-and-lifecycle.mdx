@@ -60,7 +60,8 @@ Windows에서 시작 창을 생략하려면 트레이 또는 `desktop.closeBehav
 `onReady`는 시작 창의 생성 직전에, `onAllWindowsClosed`는 앱이 계속 실행되는 중에 마지막 창이 닫힐 때 호출합니다.
 `reason`과 호출 시점은 [데스크톱 앱 동작](/reference/backend/app-definition/#수명주기-훅의-호출-시점)을 확인하세요.
 Windows 로그오프와 시스템 종료는 취소할 수 없고 `beforeQuit`를 호출하지 않습니다. `onWillQuit`과 StopHook은
-약 4초 안에 끝나야 하며 `onQuit`은 호출하지 못할 수 있습니다.
+약 4초를 나눠 쓰며 `onQuit`은 호출하지 못할 수 있습니다.
+`onWillQuit` 안의 창이나 클립보드 같은 호스트 작업은 항상 `CANCELLED`로 실패하므로 앱 내부 정리만 합니다.
 
 창을 닫기 전에 저장을 마쳐야 하면 문서에서 `windows.closeRequested`를 구독하고
 `windows.respondClose`로 허용 여부를 답합니다. 자세한 흐름은 [닫기 요청](/reference/host/windows/#닫기-요청)을 따릅니다.

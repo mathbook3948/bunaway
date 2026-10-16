@@ -318,9 +318,10 @@ export class DesktopLifecycle {
   }
   /**
    * Shares concurrent quit checks.
-   * Returns false if before-quit vetoes or fails. A veto that settles after a
+   * Returns false if before-quit vetoes or fails. A veto or failure that settles after a
    * non-cancellable shutdown was committed (for example a session end) is moot
-   * and returns true, so the host never reports a cancelled quit for it.
+   * and returns true, so the host never reports a cancelled quit for it. A failure is
+   * still reported.
    */
   quit(reason: QuitReason): Promise<boolean> {
     if (this.ending) {
@@ -347,7 +348,8 @@ export class DesktopLifecycle {
           return true;
         } catch (error) {
           this.report(error);
-          return false;
+          // A failure after a non-cancellable shutdown committed cannot cancel it.
+          return this.ending;
         }
       })
       .finally(() => {

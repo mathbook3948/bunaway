@@ -709,9 +709,11 @@ function cancelCloseRequests() {
 }
 /**
  * Whether the app has asked to decide this window's user close itself: its current document listens
- * for `windows.closeRequested` and may answer with `windows.respondClose`. Without a subscription the
- * close never waits on an app, and a policy that cannot answer would otherwise wait forever. Ending
- * the last subscription while a request is pending cancels that request and keeps the window open.
+ * holds a confirmed `windows.closeRequested` subscription and may answer with `windows.respondClose`.
+ * A listen that Core has not confirmed yet does not count, since it may still be rejected. Without a
+ * subscription the close never waits on an app, and a policy that cannot answer would otherwise wait
+ * forever. Ending the last subscription while a request is pending cancels that request and keeps
+ * the window open.
  */
 function appDecidesClose(view: ViewState): boolean {
   return (
@@ -725,7 +727,7 @@ function appDecidesClose(view: ViewState): boolean {
         view: view.boundary.policy.id,
       },
     }) &&
-    view.boundary.eventRoute("windows.closeRequested") !== undefined
+    view.boundary.subscribed("windows.closeRequested")
   );
 }
 /**
@@ -1216,12 +1218,13 @@ function createWindow(
       views.get(instanceKey)?.readiness?.sdkComplete(route.documentGeneration),
     subscriptionEnded: (event) => {
       const view = views.get(instanceKey);
-      // Without any listener left, nobody can answer the pending question. Cancelling keeps the
-      // window open and releases its closing reservation through closeWindow's cleanup.
+      // Without a confirmed listener left, nobody can answer the pending question; a pending or
+      // rejected listen does not count. Cancelling keeps the window open and releases its closing
+      // reservation through closeWindow's cleanup.
       if (
         event === "windows.closeRequested" &&
         view &&
-        view.boundary.eventRoute("windows.closeRequested") === undefined
+        !view.boundary.subscribed("windows.closeRequested")
       ) {
         view.closeRequests.cancel();
       }
