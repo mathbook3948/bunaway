@@ -313,7 +313,8 @@ export type NativeWindow = {
    * Answers the pending `windows.closeRequested` question of this window. `allow: true` lets the
    * close continue and replaces only this window's own close confirmation; `false` keeps the window open.
    * Throws INVALID_ARGUMENT when `requestId` is not the pending request. The platform adapter admits
-   * only the trusted backend and this window's own document as callers. Windows only.
+   * only the trusted backend and this window's own document as callers. Windows and macOS; macOS has
+   * no close confirmation, so `allow: true` there only continues the close order.
    */
   respondClose?(requestId: number, allow: boolean): void;
   /** Trusted backend destruction bypasses confirmation, tray hiding and quit veto. Windows only. */

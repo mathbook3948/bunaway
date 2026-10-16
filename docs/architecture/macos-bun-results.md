@@ -88,7 +88,8 @@ CPU 시간은 84.43ms였다. 단일 로컬 idle 측정이며 다른 입력 규�
 AppKit와 Bun의 이벤트 루프를 함께 진행하기 위한 비용이며 처리 간격의 보장은 아니다.
 
 새 구현으로 GitHub Actions를 실행한 결과, 최소 macOS 버전과 Intel 실행 결과는 없다.
-네이티브 저장 플러그인, 다중 창, `desktop`, Developer ID, 공증과 설치 검증도 남아 있다.
+네이티브 저장 플러그인, 다중 창, 트레이를 제외한 `desktop`의 이 기록 이후 실행 결과(ADR 0021),
+Developer ID, 공증과 설치 검증도 남아 있다.
 
 전체 검사 `mise run -t node@22.22.3 check`는 668개 통과, 플랫폼 조건 23개 건너뛰기와 실패 0개를 기록했다.
 Windows 실제 GUI와 설치 도구 회귀는 이 macOS 실행에서 수행하지 않았다.

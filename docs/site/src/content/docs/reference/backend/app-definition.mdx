@@ -83,8 +83,9 @@ CLI는 작성한 설정과 정책을 검사합니다. 호출할 명령의 권한
 
 트레이를 사용하려면 @bunaway/plugin-tray 설치와 tray 등록이 필요합니다.
 
-현재 Windows Bun 호스트에서 제공합니다. macOS의 현재 런타임에 `desktop`을 지정하면
-`UNSUPPORTED`로 시작에 실패합니다.
+Windows와 macOS Bun 호스트에서 제공합니다. macOS는 트레이를 지원하지 않으므로 `tray`와
+`closeBehavior: "hide"`를 지정하면 `UNSUPPORTED`로 시작에 실패합니다. 아래 예시의 트레이와 `"hide"`는 Windows 전용입니다.
+macOS에서 지원하는 `closeBehavior`는 `"quit"`(기본)과 `"keep-alive"`입니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
@@ -113,8 +114,8 @@ export default defineApp({
 
 | DesktopOptions 필드 | 기본값 | 동작 |
 | --- | --- | --- |
-| `closeBehavior` | `"quit"` | 마지막 창 닫기로 종료를 요청합니다. `"hide"`는 해당 창을 숨기며 트레이가 필요합니다. `"keep-alive"`는 마지막 창을 실제로 닫아도 앱을 유지합니다 |
-| `tray` | 없음 | `{ tooltip: string }`. tooltip은 1~127자의 NUL 없는 문자열입니다 |
+| `closeBehavior` | `"quit"` | 마지막 창 닫기로 종료를 요청합니다. `"hide"`는 해당 창을 숨기며 트레이가 필요합니다. `"keep-alive"`는 마지막 창을 실제로 닫아도 앱을 유지합니다. macOS는 `"hide"`를 `UNSUPPORTED`로 거부합니다 |
+| `tray` | 없음 | `{ tooltip: string }`. tooltip은 1~127자의 NUL 없는 문자열입니다. macOS는 `UNSUPPORTED`로 거부합니다 |
 | `openArguments` | `"files-and-urls"` | `"raw"`는 파일/URL 메타데이터 해석 없이 원래 argv를 전달하며 `files`와 `urls`는 빈 배열입니다 |
 | `onOpen` | 없음 | `(request: OpenRequest, context: DesktopContext) => void \| Promise<void>` |
 | `onReady` | 없음 | `(context: DesktopContext) => void \| Promise<void>` |
@@ -145,6 +146,10 @@ CLI 옵션과 subcommand를 처리하는 앱은 `desktop.openArguments: "raw"`�
 [앱 CLI 인자](/reference/backend/cli/)의 `defineCLI`로 `request.argv`를 검사합니다.
 기본 `"files-and-urls"` 모드의 URL 오류는 훅 호출 전에 요청을 실패시킵니다. raw 모드는
 파일 열기나 URL 검증을 수행하지 않으며 문자열의 의미는 앱의 parser와 schema가 결정합니다.
+macOS 호스트는 앱 실행 인자를 받지 않고 OS의 파일과 URL 열기 요청도 아직 전달하지 않습니다.
+macOS의 `onOpen`은 시작할 때 한 번만 호출하며 `argv`는 `[]`, `cwd`는 프로세스의 작업 디렉터리,
+`files`와 `urls`는 빈 배열입니다. 두 번째 실행의 전달도 없습니다.
+Dock 아이콘을 눌러 창을 다시 여는 동작은 `show()`와 같게 처리하며 `onOpen`을 호출하지 않습니다.
 `onOpen`은 초기 실행을 먼저 처리하고 이후 요청을 순서대로 처리합니다.
 열기 훅이 실패하면 진단을 남기고 다음 요청을 처리합니다.
 훅이 완료되지 않으면 뒤의 요청도 대기하므로 앱에서 오래 걸리는 작업의 수명을 관리합니다.
@@ -179,7 +184,13 @@ CLI 옵션과 subcommand를 처리하는 앱은 `desktop.openArguments: "raw"`�
 설정과 지연 생성 예시는 [창 없는 시작](/guides/windows/#창-없는-시작)을 따릅니다.
 
 `QuitReason`은 마지막 창의 닫기 `"last-window"`, 트레이 Quit `"tray"`,
-`DesktopContext.quit()`의 `"api"`입니다. `beforeQuit`가 `false`를 반환하거나 예외를 던지면
+`DesktopContext.quit()`의 `"api"`, macOS의 Quit 명령 `"quit-command"`입니다.
+`"quit-command"`는 앱 메뉴의 Quit과 Cmd+Q, Dock의 Quit을 포함하며 Windows에서는 발생하지 않습니다.
+`QuitReason`을 `switch`로 빠짐없이 처리하는 앱은 이 값도 처리해야 합니다.
+macOS의 최소 앱 메뉴에는 "Quit 프로세스이름"(Cmd+Q) 항목만 있습니다.
+macOS에서 `beforeQuit`가 `false`를 반환하면 열린 창과 세션을 모두 유지합니다.
+기본 `"quit"`에서 마지막 창은 `beforeQuit`가 승인할 때까지 열려 있습니다.
+`beforeQuit`가 `false`를 반환하거나 예외를 던지면
 창과 세션을 유지하고 종료를 취소합니다. 동시 종료 요청은 같은 검사 결과를 사용합니다.
 반환값이 `true` 또는 `undefined`이면 기존 종료 절차와 플러그인 StopHook을 실행합니다.
 기본 `"quit"`에서는 공개 [windows API](/reference/host/windows/)로 마지막 창을 닫을 때도 종료 검사를 거칩니다.
@@ -202,26 +213,31 @@ CLI 옵션과 subcommand를 처리하는 앱은 `desktop.openArguments: "raw"`�
 `ShutdownReason`은 `QuitReason`에 `"window-destroyed"`, `"session-end"`, `"interrupted"`를 더한 값입니다.
 `"window-destroyed"`는 [신뢰된 `windows.destroy`](/reference/host/windows/#부모-모달과-신뢰된-종료)로
 마지막 창을 파괴했을 때, `"interrupted"`는 `bunaway dev`의 종료 요청이나 SIGINT, SIGTERM일 때,
-`"session-end"`는 Windows 로그오프와 시스템 종료일 때입니다.
+`"session-end"`는 Windows 로그오프와 시스템 종료, macOS 로그아웃, 재시작과 시스템 종료일 때입니다.
+macOS에서 사용자 결정 없이 마지막 창이 사라지는 창 생성 실패도 `"window-destroyed"`입니다.
 `onWillQuit`과 `onQuit`에는 처음 확정된 종료 원인 하나를 전달합니다.
 
 `onReady`, `onAllWindowsClosed`, `onWillQuit`과 `onQuit`이 예외를 던지거나 거부하면 진단을 남기고
 앱은 실행이나 종료를 이어 갑니다. `onWillQuit`과 `onQuit`은 각각 최대 3초까지만 기다립니다.
 기한이 지나면 진단을 남기고 종료를 계속하므로 이 두 훅에서는 짧은 정리 작업만 합니다.
-`onWillQuit`이 실행될 때 호스트는 이미 종료 중이라 이 훅 안의 창이나 클립보드 같은 호스트 작업은
-항상 `CANCELLED`로 실패합니다. 상태 저장과 앱 자원 정리처럼 앱 내부 작업만 합니다.
+`onWillQuit`은 Host API 범위 밖에서 실행하므로 이 훅 안에서 창이나 클립보드 같은 호스트 작업을 직접 부르면
+`INVALID_ARGUMENT`로 실패합니다. 앞서 명령이나 플러그인 `setup`이 시작한 작업은 종료가 확정된 시점부터
+(`onWillQuit` 실행 중 포함) `CANCELLED`로 실패합니다. 상태 저장과 앱 자원 정리처럼 앱 내부 작업만 합니다.
+`onReady`, `onOpen`, `onAllWindowsClosed`, `beforeQuit`도 Host API 범위 밖에서 실행합니다. 호스트 API는 명령이나
+플러그인 `setup`(과 그 안에서 시작한 작업)에서 부르고, 훅에서는 인자로 받는 `DesktopContext`의 `show`, `hide`, `quit`만 사용합니다.
 호스트 실패(시작 실패, UI Worker 중단)에서는 두 훅을 호출하지 않습니다.
 
-### Windows 세션 종료
+### 세션 종료
 
-로그오프, 재시작과 시스템 종료는 취소할 수 없는 종료입니다. 대화상자를 표시하지 않고
+Windows와 macOS에서 로그오프, 재시작과 시스템 종료는 취소할 수 없는 종료입니다. 대화상자를 표시하지 않고
 `beforeQuit`를 호출하지 않으며 대기 중인 `beforeQuit`의 거부도 무시합니다. 호스트는 시스템 종료를
 차단하지 않습니다. 대기 중인 닫기 확인과 [닫기 요청](/reference/host/windows/#닫기-요청)도 버립니다.
 `onWillQuit("session-end")`과 플러그인 StopHook은 약 4초 안에 끝나야 하며 두 단계가 이 시간을 나눠 씁니다.
 `onWillQuit`이 3초를 쓰면 StopHook에는 1초가 남습니다. 그 뒤에는 운영체제가
 프로세스를 끝낼 수 있으므로 `onQuit`과 네이티브 정리를 보장하지 않습니다.
 다른 앱이 종료를 취소하면 앱은 계속 실행합니다. 중요한 데이터는 사용자가 작업하는 동안 저장합니다.
-
+macOS도 약 4초 안에 `onWillQuit`과 StopHook이 끝나면 곧바로, 아니면 4초 뒤 종료 요청에 답하고
+앱을 로그아웃에서 막지 않습니다. 이후 시스템이 프로세스를 끝내므로 `onQuit`은 호출되지 않을 수 있습니다.
 `onOpen`과 나머지 수명주기 훅은 앱 수명주기 콜백입니다. 명령이나 플러그인 setup의 Host 호출 컨텍스트를
 자동으로 제공하지 않으므로 `storage`, `log`, `capabilities` 직접 호출의 실행 범위로 사용하지 않습니다.
 

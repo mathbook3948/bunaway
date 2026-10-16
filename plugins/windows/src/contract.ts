@@ -535,7 +535,7 @@ export const windowReadinessSchema = {
  * Each phase is emitted at most once per windowId in that order. A window whose creation failed before
  * `created` emits nothing. Nothing is emitted once app shutdown or session end has begun, because sessions
  * are being torn down. The closed window's own sessions are revoked first, so it never receives its own
- * `closed` or `destroyed`. Only the Windows host emits this event.
+ * `closed` or `destroyed`. The Windows and macOS hosts emit this event.
  */
 export const windowLifecycleSchema = {
   type: "object",
@@ -572,8 +572,9 @@ export const windowLifecycleSchema = {
  * fail with BUSY and the wait continues. There is no deadline; a navigation or revoked session of the
  * document, the document ending its last `windows.closeRequested` subscription (for example after a
  * listener failure), a forced close, trusted `windows.destroy`, app quit and session end also end the
- * wait. A request that ends without an answer leaves the window open. Only the Windows host emits this
- * event.
+ * wait. A request that ends without an answer leaves the window open. The Windows and macOS hosts emit
+ * this event; on macOS the user closes are the title bar button, `performClose:` and the public `windows.close`, since a
+ * WebView `window.close()` does not close the window there.
  */
 export const windowCloseRequestedSchema = {
   type: "object",

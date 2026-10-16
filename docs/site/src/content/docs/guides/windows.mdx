@@ -83,6 +83,7 @@ profile의 기본값 shared는 웹 저장소를 공유하며 isolated는 창마�
 Windows에서는 모든 창에 `startup: false`를 지정하거나 `app.windows`를 빈 배열로 작성합니다.
 앱 정의에는 `desktop.tray` 또는 `desktop.closeBehavior: "keep-alive"`를 지정해야 합니다.
 나중에 창을 열려면 위 예제처럼 사전 선언 창과 해당 뷰 정책을 유지합니다.
+macOS는 트레이와 창 없는 시작을 지원하지 않습니다. `desktop.closeBehavior: "keep-alive"`를 지정해도 시작 창이 하나 이상 필요하며, 없으면 호스트가 시작할 때 `UNSUPPORTED`로 거부합니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";

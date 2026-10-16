@@ -1,21 +1,28 @@
 /**
  * `last-window` follows a window close, `tray` follows the tray's Quit action,
- * and `api` follows a call to `DesktopContext.quit()`.
+ * and `api` follows a call to `DesktopContext.quit()`. `quit-command` is the
+ * macOS Quit command: the app menu's Quit item or Cmd+Q, the Dock's Quit, or a
+ * quit Apple event that is not a logout, restart or shutdown. Windows never
+ * produces it.
  */
-export type QuitReason = "last-window" | "tray" | "api";
+export type QuitReason = "last-window" | "tray" | "api" | "quit-command";
 
 /**
  * Why an orderly shutdown was committed. Quit requests keep their `QuitReason`
  * after `beforeQuit` approves them. `window-destroyed` follows a trusted
  * destruction of the last window or an automatic close once no window can
  * remain. `interrupted` follows the development CLI's quit request or a
- * SIGINT/SIGTERM delivered to the host. `session-end` follows the Windows
- * WM_ENDSESSION notification (shutdown, restart, logoff or Restart Manager
- * close) and cannot be cancelled: `beforeQuit` is not consulted, no dialog is
- * shown and the host never blocks the session. `onWillQuit` and the plugin
- * stop hooks must finish within the roughly 4 second wait the host holds the
- * window procedure open; `onQuit` is not guaranteed because the OS may end
- * the process after that. macOS has no session-end implementation.
+ * SIGINT/SIGTERM delivered to the host. `session-end` follows the operating
+ * system ending the session (shutdown, restart or logoff) and cannot be
+ * cancelled: `beforeQuit` is not consulted, no dialog is shown and the host
+ * never blocks the session. On Windows it follows WM_ENDSESSION (including a
+ * Restart Manager close); on macOS it follows
+ * a quit Apple event whose quit reason is logout, restart or shutdown (an
+ * NSWorkspaceWillPowerOffNotification may signal it earlier, but is not relied
+ * on). `onWillQuit` and the plugin stop hooks must
+ * finish within the roughly 4 second wait the host holds the operating
+ * system's request open; `onQuit` is not guaranteed because the OS may end the
+ * process after that.
  */
 export type ShutdownReason =
   | QuitReason
@@ -73,7 +80,11 @@ export type DesktopOptions = {
    * Framework autostart prefix handling and launchReason still apply in either mode.
    */
   readonly openArguments?: "files-and-urls" | "raw";
-  /** Handles initial launches and requests to open another file or URL in the running app. */
+  /**
+   * Handles initial launches and requests to open another file or URL in the running app.
+   * Desktop hooks run outside any Host API scope, so Host API calls made directly in them fail
+   * with `INVALID_ARGUMENT`. Call them from a command or a plugin `setup`, or use `context`.
+   */
   onOpen?(request: OpenRequest, context: DesktopContext): void | Promise<void>;
   /**
    * Called once after Core has started, the backend is ready and the UI
@@ -101,7 +112,10 @@ export type DesktopOptions = {
    * immediately when the shutdown cannot be cancelled. It runs before Core stops
    * its backend and plugin stop hooks, and before window teardown. The result is
    * ignored and the shutdown cannot be cancelled. The host waits up to 3 seconds,
-   * then reports a diagnostic and continues. It is not called when the host fails
+   * then reports a diagnostic and continues. It runs outside any Host API scope, so
+   * a Host API call made directly here fails with `INVALID_ARGUMENT`; work started
+   * earlier by a command or plugin setup fails with `CANCELLED` because the
+   * host already stopped accepting host calls when the shutdown was committed. Keep it to app-internal cleanup. It is not called when the host fails
    * (for example a startup failure or a UI Worker crash).
    */
   onWillQuit?(reason: ShutdownReason): void | Promise<void>;
