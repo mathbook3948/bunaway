@@ -142,7 +142,11 @@ export const driver = defineNativePlugin({
             null,
           );
         };
-        /** Fixture windows in creation order; other AppKit windows are ignored by title. */
+        /**
+         * Fixture windows in AppKit's order, which is creation order; other windows are ignored by
+         * title. The list can include a replaced window that the host already closed and released,
+         * because AppKit keeps listing a non-visible window until it is deallocated.
+         */
         const fixtureWindows = (): {
           window: ObjcObject;
           title: string;
@@ -165,11 +169,13 @@ export const driver = defineNativePlugin({
           }
           return found;
         };
-        const visibleWindows = () =>
+        /** The fixture windows that are on screen, which excludes replaced and closed ones. */
+        const visibleFixtureWindows = () =>
           fixtureWindows().filter(
             ({ window }) =>
               (Number(o.integer(window, "isVisible")) & BOOL_MASK) !== 0,
-          ).length;
+          );
+        const visibleWindows = () => visibleFixtureWindows().length;
         /**
          * Proves the main thread keeps running timers after a termination request: a thread blocked
          * inside a nested run loop (the NSTerminateLater path) would never reach this turn, because
@@ -190,11 +196,20 @@ export const driver = defineNativePlugin({
             sendSelfEvent("aevt", "quit", title);
             recordMainTickAfterTermination();
           } else if (action === "close") {
-            const target = fixtureWindows().find(
+            // Only a visible window is one the user could close. After `windows.recreate` the
+            // replaced window may still be listed ahead of its successor, and `performClose:` on it
+            // does nothing because it has no delegate and is already closed.
+            const matches = fixtureWindows().filter(
               (candidate) => candidate.title === title,
             );
-            if (!target) {
-              throw new Error(`No fixture window titled ${title}.`);
+            const visible = visibleFixtureWindows().filter(
+              (candidate) => candidate.title === title,
+            );
+            const [target] = visible;
+            if (!target || visible.length !== 1) {
+              throw new Error(
+                `Expected one visible fixture window titled ${title}, found ${visible.length} visible of ${matches.length}.`,
+              );
             }
             // performClose: runs windowShouldClose: like the close button does.
             o.send(target.window, "performClose:", null);
@@ -220,6 +235,11 @@ export const driver = defineNativePlugin({
               // where the test treats it like a failed script.
               setTimeout(() => {
                 try {
+                  // Shows how far the script got when a stimulus has no visible effect.
+                  appendFileSync(
+                    eventsPath,
+                    `driven:${title ? `${action}:${title}` : action}\n`,
+                  );
                   o.withAutoreleasePool(() => perform(action, title));
                 } catch (error) {
                   appendFileSync(

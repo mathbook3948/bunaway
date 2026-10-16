@@ -20,6 +20,8 @@ if (!dataRoot) {
 }
 const { scenario, events: logPath } = readDesktopFixture(dataRoot);
 const log = (line: string) => appendFileSync(logPath, `${line}\n`);
+/** Marks the scenario step about to run, so a timed-out script shows how far it got. */
+const step = (name: string) => log(`step:${name}`);
 const lines = () => readFileSync(logPath, "utf8").trim().split("\n");
 
 const POLL_MS = 10;
@@ -125,35 +127,52 @@ setInterval(() => {
 
 const scripts: Record<string, () => Promise<void>> = {
   async "quit-veto"() {
+    step("wait-main-page");
     await until(logged("page:main"), "the main page");
     // `[NSApp terminate:]`, as the Quit menu item does, is vetoed once.
+    step("terminate");
     await drive("terminate");
+    step("wait-first-before-quit");
     await until(logged("beforeQuit:quit-command"), "the first beforeQuit");
+    step("wait-round-trip-after-veto");
     await until(
       logged("pageRoundTrip:quit-veto"),
       "a page command after the veto",
     );
     await Bun.sleep(SETTLE_MS);
     // The Dock's Quit item arrives as an Apple event without a quit reason.
+    step("quit-event");
     await drive("quitEvent");
   },
   async "last-window"() {
+    step("wait-main-page");
     await until(logged("page:main"), "the main page");
+    step("wait-observer-page");
     await until(logged("page:observer"), "the observer page");
+    step("close-main");
     await drive("close", "main");
+    step("wait-main-destroyed");
     await until(logged("lifecycle:destroyed:main"), "main destroyed");
     // The observer window is now the last one.
+    step("close-observer");
     await drive("close", "observer");
   },
   async "keep-alive"() {
+    step("wait-main-page");
     await until(logged("page:main"), "the main page");
+    step("wait-observer-page");
     await until(logged("page:observer"), "the observer page");
     log(`mainWindow:before:${await windowIdOf("main")}`);
+    step("close-main");
     await drive("close", "main");
+    step("wait-main-destroyed");
     await until(logged("lifecycle:destroyed:main"), "main destroyed");
+    step("close-observer");
     await drive("close", "observer");
+    step("wait-all-windows-closed");
     await until(logged("onAllWindowsClosed"), "onAllWindowsClosed");
     // The backend keeps running with no window left.
+    step("wait-ticks");
     const ticksWhenEmpty = ticks;
     await until(
       () => ticks >= ticksWhenEmpty + TICKS_AFTER_ALL_CLOSED,
@@ -161,55 +180,75 @@ const scripts: Record<string, () => Promise<void>> = {
     );
     log(`tickAfterAllClosed:${ticks - ticksWhenEmpty}`);
     // A real reopen Apple event brings back a new window instead of the closed one.
+    step("reopen");
     await drive("reopen");
+    step("wait-recreated-main");
     const recreated = await waitFor(
       () => windowIdOf("main"),
       "a recreated main window",
     );
     log(`mainWindow:after:${recreated}`);
+    step("quit-event");
     await drive("quitEvent");
   },
   async "close-lifecycle"() {
+    step("wait-main-page");
     await until(logged("page:main"), "the main page");
+    step("wait-observer-page");
     await until(logged("page:observer"), "the observer page");
     // The observer subscribes after main's first creation. Recreating main gives it a complete
     // created, ready, closed and destroyed sequence to watch.
+    step("recreate-main");
     await windows.recreate({
       view: "main",
     });
+    step("wait-recreated-main-page");
     await until(loggedTimes("page:main", 2), "the recreated main page");
+    step("wait-recreated-main-ready");
     await until(
       loggedTimes("lifecycle:ready:main", 1),
       "the recreated main ready",
     );
+    step("wait-replaced-main-destroyed");
     await until(
       loggedTimes("lifecycle:destroyed:main", 1),
       "the replaced main destroyed",
     );
     // The main page declines its first close request and accepts the second. While the first is
     // pending, the page asks us (test.pendingClose) to probe it.
+    step("close-main-to-decline");
     await drive("close", "main");
+    step("wait-decline");
     await until(logged("answered:main:decline"), "the declined close");
+    step("count-visible-windows");
     log(`visibleAfterDecline:${await drive("visibleWindows")}`);
+    step("close-main-to-accept");
     await drive("close", "main");
+    step("wait-main-destroyed");
     await until(loggedTimes("lifecycle:destroyed:main", 2), "main destroyed");
     // Closing the last window then asks beforeQuit and ends the app.
+    step("close-observer");
     await drive("close", "observer");
   },
   async "session-end"() {
     log("driving-session-end");
+    step("power-off");
     await drive("powerOff");
     // The quit Apple event that follows is part of the session end: the host suspends it and
     // replies after cleanup, without blocking the main thread.
+    step("quit-event");
     await drive("quitEvent");
   },
   async "session-end-quit-reason"() {
+    step("wait-main-page");
     await until(logged("page:main"), "the main page");
     log("driving-session-end");
     // No power-off notification: only the quit reason of the Apple event marks a session end.
+    step("quit-event-shut");
     await drive("quitEvent", "shut");
   },
   async sigterm() {
+    step("ready-for-signal");
     log("ready-for-signal");
   },
 };
@@ -247,6 +286,7 @@ export default defineApp({
         // Not awaited: setup must finish for the app to start, and the first open comes after it.
         void (async () => {
           await firstOpen;
+          step("start");
           await script();
         })().catch((error) => {
           log(`script-failed:${describeFailure(error)}`);
