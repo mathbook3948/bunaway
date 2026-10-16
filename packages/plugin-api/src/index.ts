@@ -142,6 +142,7 @@ export type {
   DesktopOptions,
   OpenRequest,
   QuitReason,
+  ReopenEvent,
   ShutdownReason,
 } from "./desktop.ts";
 

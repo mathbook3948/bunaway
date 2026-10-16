@@ -17,7 +17,7 @@ bunaway는 **Windows를 먼저 완성하고 다른 플랫폼을 같은 Bun 기�
 | 개별 네이티브 플러그인 | 저장, 로그, 기능 조회 | 어댑터 미구현 | 미구현 |
 | [로그인 자동 실행](/reference/plugins/autostart/) | 사용자 Run 등록, 조회와 해제. MSIX 제외 | 미지원 | 미지원 |
 | [알림 상태와 설정](/reference/plugins/notification/) | WinRT 상태 조회와 설정 열기 요청. MSIX 상태 조회 제외 | 미지원 | 미지원 |
-| 앱 열기 요청, 종료 취소, 트레이 | Windows 인자 전달, WebView2 숨김, 종료 취소와 CLI 중단 검증 | 종료 취소, 수명주기 훅, 세션 종료와 Dock 재활성화 지원. 트레이, `"hide"`, 파일과 URL 열기는 `UNSUPPORTED` 또는 미구현 | 미지원 |
+| 앱 열기 요청, 종료 취소, 트레이 | Windows 인자 전달, WebView2 숨김, 종료 취소와 CLI 중단 검증 | 종료 취소, 수명주기 훅, 세션 종료, Dock 재활성화(`onReopen`)와 OS 파일, URL 열기(`onOpenUrls`) 지원. 트레이와 `"hide"`는 `UNSUPPORTED`, 앱 번들의 URL scheme과 문서 형식 등록은 미구현 | 미지원 |
 | 개발 UI DevTools, CLI 백엔드 inspector | 구현, 실제 GUI 검증은 남음 | 미지원 | 미지원 |
 | 앱 실행 파일, 앱 아이콘과 실행 실패 안내 | 콘솔 없는 EXE, 창과 트레이 아이콘, 오류 대화상자 | Bun compiled 앱 번들 | 미지원 |
 

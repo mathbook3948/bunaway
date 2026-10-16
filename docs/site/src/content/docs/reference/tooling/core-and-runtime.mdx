@@ -223,7 +223,7 @@ Windows와 macOS 호스트는 다음 런타임 경로를 공유합니다. 호스
 
 | 경로 | export와 책임 |
 | --- | --- |
-| `@bunaway/runtime-bun/worker-channel` | `Channel`은 Worker 메시지 검증, 수신 확인과 용량 제한을 소유합니다. `validatePacket(value, incoming)`은 수신 측에 허용된 패킷을 반환하고 잘못된 입력을 예외로 거부합니다. `MAX_WINDOWS`는 창 설정 경로의 같은 상수를 재수출합니다. |
+| `@bunaway/runtime-bun/worker-channel` | `Channel`은 Worker 메시지 검증, 수신 확인과 용량 제한을 소유합니다. `validatePacket(value, incoming)`은 수신 측에 허용된 패킷을 반환하고 잘못된 입력을 예외로 거부합니다. `MAX_WINDOWS`는 창 설정 경로의 같은 상수를 재수출합니다. `MAX_OPEN_URLS`(`256`)와 `MAX_OPEN_URLS_BYTES`(64 KiB)는 한 번의 파일, URL 열기 요청이 담을 수 있는 항목 수와 UTF-8 바이트 합계의 상한입니다. |
 | `@bunaway/runtime-bun/view-boundary` | `ViewBoundary`는 신뢰된 렌더러 출처와 뷰 정책을 바탕으로 메시지를 검사하고, 문서 세대별 요청과 구독을 관리합니다. |
 | `@bunaway/runtime-bun/diagnostic-log` | `DiagnosticLog`는 진단 로그를 순서대로 기록하고 이전 로그 한 개를 보관합니다. |
 

@@ -46,6 +46,12 @@ export type OpenRequest = {
   readonly files: readonly string[];
 };
 
+/** Describes a macOS reopen request, such as a Dock icon click. */
+export type ReopenEvent = {
+  /** Whether the app had a visible window when the operating system asked to reopen it. */
+  readonly hasVisibleWindows: boolean;
+};
+
 /** Lifecycle controls exposed only to trusted app callbacks. */
 export interface DesktopContext {
   /**
@@ -86,6 +92,41 @@ export type DesktopOptions = {
    * with `INVALID_ARGUMENT`. Call them from a command or a plugin `setup`, or use `context`.
    */
   onOpen?(request: OpenRequest, context: DesktopContext): void | Promise<void>;
+  /**
+   * Receives the absolute URLs the app was asked to open, in request order. Files arrive as
+   * `file:` URLs (the absolute path normalized to a file URL); every other entry is a normalized
+   * absolute URL (`new URL(x).href`). It is never called with an empty list, and the array is frozen.
+   *
+   * On Windows the URLs come from the launch arguments of the initial launch and of each second
+   * instance, only in `openArguments: "files-and-urls"` mode; in `raw` mode argv is not interpreted
+   * and `onOpenUrls` is not called from argv. On macOS they come from the operating system open
+   * requests (Finder, `open`, URL schemes) delivered through AppKit.
+   *
+   * It runs on the same serialized queue as `onReady` and `onOpen`. Requests that arrive before the
+   * app is ready are buffered and delivered after `onReady` and the initial `onOpen`. A thrown or
+   * rejected callback is reported and the app keeps running. Desktop hooks run outside any Host API
+   * scope, so Host API calls made directly in them fail with `INVALID_ARGUMENT`. Call them from a
+   * command or a plugin `setup`, or use `context`.
+   */
+  onOpenUrls?(
+    urls: readonly string[],
+    context: DesktopContext,
+  ): void | Promise<void>;
+  /**
+   * macOS only: called when the operating system asks to reopen the running app, such as a Dock icon
+   * click (`applicationShouldHandleReopen:hasVisibleWindows:`). Windows never calls it.
+   *
+   * When registered, the host shows no window itself and the app decides, for example with
+   * `context.show()`. When not registered, the host keeps its default: if no window is visible it
+   * behaves like `context.show()`. Reopen events that arrive before the app is ready are dropped
+   * when `onReopen` is registered, because the startup windows are already opening.
+   *
+   * It runs on the same serialized queue as `onOpen`. A thrown or rejected callback is reported and
+   * the app keeps running. Desktop hooks run outside any Host API scope, so Host API calls made
+   * directly in them fail with `INVALID_ARGUMENT`. Call them from a command or a plugin `setup`, or
+   * use `context`.
+   */
+  onReopen?(event: ReopenEvent, context: DesktopContext): void | Promise<void>;
   /**
    * Called once after Core has started, the backend is ready and the UI
    * reported that native creation of the startup windows has begun. This does

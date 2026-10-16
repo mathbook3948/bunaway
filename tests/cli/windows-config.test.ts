@@ -609,6 +609,7 @@ test("display declarations preserve explicit defaults and reject invalid options
           titlebar,
           alwaysOnTop: enabled,
           skipTaskbar: enabled,
+          contentProtection: enabled,
         },
       };
       expect(
@@ -635,6 +636,9 @@ test("display declarations preserve explicit defaults and reject invalid options
     },
     {
       skipTaskbar: "true",
+    },
+    {
+      contentProtection: "true",
     },
   ]) {
     expect(() =>

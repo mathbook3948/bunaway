@@ -130,6 +130,9 @@ let windowsGone = 0;
 const desktop = new DesktopRequests({
   stopping: () => false,
   sendQuitRequest: (reason) => quitRequests.push(reason),
+  sendOpenUrls: async () => {},
+  deliverReopen: async () => {},
+  diagnostic: () => {},
 });
 const windows = new MacosWindows(
   config,
@@ -272,6 +275,7 @@ const lifecycleSeenBy = (view: string) =>
 await settle();
 desktop.configure({
   closeBehavior: mode === "quit" ? "quit" : "keep-alive",
+  reopenHandler: false,
 });
 // Only the quit scenario asks the document; keep-alive closes straight away.
 subscribe(

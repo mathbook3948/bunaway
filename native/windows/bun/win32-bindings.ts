@@ -352,6 +352,20 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "i32",
   },
+  SetWindowDisplayAffinity: {
+    args: [
+      "u64",
+      "u32",
+    ],
+    returns: "i32",
+  },
+  GetWindowDisplayAffinity: {
+    args: [
+      "u64",
+      "ptr",
+    ],
+    returns: "i32",
+  },
   SetWindowPos: {
     args: [
       "u64",

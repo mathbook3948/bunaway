@@ -29,6 +29,7 @@ macOS는 [ADR 0021](./0021-macos-desktop-lifecycle.md)에 따라 같은 계약�
 - `onReady`는 Core와 백엔드가 준비되고 UI가 시작 창의 네이티브 생성을 시작했다고 보고한 뒤
   한 번 호출한다. 문서나 SDK 준비를 뜻하지 않는다. `onOpen`과 같은 직렬 큐에서 초기
   `onOpen`보다 먼저 실행하며 초기 `onOpen`은 그 완료 뒤 시작한다.
+  `onOpenUrls`와 보관한 OS 열기 요청은 초기 `onOpen` 뒤에 이어진다([ADR 0021](./0021-macos-desktop-lifecycle.md)).
 - `onAllWindowsClosed`는 앱이 계속 실행되는 상태에서 살아 있는 창이 0개로 바뀔 때마다 호출한다.
   `keep-alive`와 트레이 앱이 대상이다. 컨트롤러가 준비되어 `created`가 발행된 창만 살아 있는 창으로 센다.
   생성 중인 창은 세지 않으며, 생성이 실패해도 호출이 반복되지 않는다. 종료 중이거나 승인된 마지막 창의 종료, 창 없는 시작에서는 호출하지 않는다.

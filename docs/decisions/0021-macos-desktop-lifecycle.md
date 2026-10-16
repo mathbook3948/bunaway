@@ -5,6 +5,7 @@ status: accepted
 # macOS에서 desktop 수명주기와 창 닫기 계약을 AppKit에 연결한다
 
 결정일: 2026-10-16
+갱신일: 2026-10-16 (OS 열기 요청과 재활성화 결정을 설계안에서 확정으로 바꿈)
 
 [ADR 0013](./0013-desktop-lifecycle.md)과 [ADR 0020](./0020-close-and-quit-lifecycle.md)의 계약을
 macOS Bun FFI 호스트([ADR 0015](./0015-macos-bun-ffi.md))에 연결한다.
@@ -32,8 +33,8 @@ macOS는 `keep-alive`여도 모든 창이 `startup: false`이거나 `app.windows
 시작할 때 `UNSUPPORTED`로 거부한다. 두 플랫폼에서 같은 앱 정의가 동작하려면 시작 창을 하나 이상
 선언해야 한다.
 
-지원하는 훅은 `onReady`, `onOpen`(초기 실행만), `onAllWindowsClosed`(`keep-alive`), `beforeQuit`,
-`onWillQuit`, `onQuit`과 `ShutdownReason`이다. 순서는 ADR 0020과 같다. `beforeQuit`, 종료 확정,
+지원하는 훅은 `onReady`, `onOpen`(초기 실행만), `onOpenUrls`, `onReopen`, `onAllWindowsClosed`
+(`keep-alive`), `beforeQuit`, `onWillQuit`, `onQuit`과 `ShutdownReason`이다. 순서는 ADR 0020과 같다. `beforeQuit`, 종료 확정,
 `onWillQuit`, Core 정지와 플러그인 StopHook, 네이티브 정리, `onQuit` 순서이며 종료 확정 뒤에는
 수명 이벤트와 닫기 요청을 내지 않는다. `onWillQuit`과 `onQuit`의 기한은 각각 3초다.
 
@@ -91,13 +92,82 @@ Cancel은 호스트가 승인한 시점에만 종료하므로 취소 뒤 창, �
 SIGINT와 SIGTERM은 `"interrupted"`로 `beforeQuit`를 우회한다. 사용자 결정 없이 마지막 창이
 자동으로 사라지는 경우(창 생성 실패)에 `quit`이면 `"window-destroyed"`다.
 
-### Dock 재활성화
+### OS 열기 요청과 재활성화
 
-표시 중인 창이 없을 때 `applicationShouldHandleReopen:hasVisibleWindows:`가 호출되면 호스트는
-`DesktopContext.show()`와 같은 동작을 한다. 살아 있는 창을 표시하거나 첫 선언 창을 생성한다.
-`onOpen`은 호출하지 않는다. Dock 클릭은 새 파일이나 URL을 전달하지 않는 활성화이므로 `OpenRequest`
-(argv, files, urls)로 표현할 내용이 없다. Windows의 두 번째 실행은 인자를 실제로 전달하므로
-`onOpen`을 호출한다는 차이가 있다. 반환값은 `NO`로 AppKit의 추가 동작을 막는다.
+macOS에서 Finder, `open`, URL scheme으로 전달되는 파일과 URL은 새 훅 `onOpenUrls`로, Dock 클릭 같은
+재활성화는 새 훅 `onReopen`으로 앱에 알린다. `OpenRequest`와 `onOpen`의 의미(실행 인자)는 바꾸지
+않는다. 파일과 URL을 `OpenRequest.source`에 합치는 안(`"os-open"` 추가)은 `argv`가 없는 요청을
+`onOpen`에 섞어 인자 기반 의미를 흐리므로 택하지 않았다.
+
+#### onOpenUrls
+
+`onOpenUrls(urls, context)`는 URL과 파일을 함께 받는다. 파일은 절대 경로를 정규화한 `file:` URL이고
+나머지는 정규화한 절대 URL(`new URL(x).href`)이다. 빈 목록으로는 호출하지 않으며 배열은 동결한다.
+`onReady`, `onOpen`과 같은 직렬 큐에서 실행하고, 훅이 던지거나 reject해도 보고만 하고 앱은 계속
+실행한다.
+
+Windows는 초기 실행과 두 번째 실행의 실행 인자에서 URL을 만든다. 기존 단일 인스턴스 파이프
+(`native/windows/bun/instance.ts`)가 두 번째 실행의 인자를 이미 전달하므로 단일 인스턴스 범위에
+들어가며 새 전달 경로는 없다. `openArguments: "files-and-urls"`일 때만 만들고 `"raw"`는 argv를
+해석하지 않으므로 URL이 없다. 한 번의 실행에 대한 순서는 (두 번째 실행이고 숨김이 아니면 표시) 뒤
+`onOpen(OpenRequest)`, 그 뒤 URL이 있으면 `onOpenUrls`다. `onOpen`의 `argv`, `files`, `urls` 의미는
+그대로다. `onOpen`이 실패해도 `onOpenUrls`는 실행한다. 인자 해석이 실패하면(잘못된 URL) 보고하고
+둘 다 실행하지 않는다.
+
+macOS는 `application:openURLs:` delegate로 받는다. 이 메서드를 구현하면 AppKit이 kAEGetURL(`GURL`)과
+`odoc`(Finder, `open`)를 모두 이 경로로 전달한다. 구형 `application:openFiles:`는 구현하지 않는다.
+호스트가 직접 설치하는 Apple event 핸들러는 quit 이벤트(`aevt`/`quit`)로 한정하므로 `GURL`과 `odoc`은
+AppKit의 기본 핸들러가 처리한다. 앱 실행 인자가 아니므로 `openArguments`와 무관하다.
+
+메인 스레드가 요청을 검증한다. 요청 전체는 항목 256개 또는 64 KiB를 넘으면 거부한다. 64 KiB는 원시 입력과
+정규화한 URL 각각의 UTF-8 합계에 적용하며, 퍼센트 인코딩으로 길어져 정규화 뒤 넘어도
+요청 전체를 거부한다(`too-large`). 항목 단위로는
+잘못된 URL, 로컬이 아닌 호스트의 파일 URL, 인코딩된 구분자(`%2F`)나 NUL이 있는 항목을 진단과 함께
+버리고, 파일 URL은 정규형으로 바꾼다. 검증은 ADR 0013의 규칙과 같은 한도를 쓴다. 입력은 앱이 검증할
+데이터이며 Host API의 권한을 더하지 않는다.
+준비 뒤 도착한 요청은 Windows의 두 번째 실행처럼 앱을 먼저 표시(`show()`와 같음)한 뒤 `onOpenUrls`를
+호출한다. 다만 표시가 실패하면 실패만 보고하고 `onOpenUrls`는 그대로 호출한다. OS는 요청을 한 번만
+전달하므로 표시 실패로 URL을 잃지 않기 위해서다. Windows 두 번째 실행의 `onOpen` 경로는 기존대로
+표시 실패를 `onOpen` 실패로 다룬다. 종료가 확정된 뒤 도착한 요청은 `onOpenUrls` 없이 버리고
+`open-urls-dropped` 진단(`reason: "ending"`)을 남긴다.
+
+#### 준비 전 요청은 호스트가 보관한다
+
+준비 전에 도착한 OS 열기 요청을 앱이 조회하는 API(`getInitialOpenUrls` 같은)는 만들지 않고 호스트가
+보관했다가 순서대로 전달한다. 훅은 정적 앱 정의에 선언되고 호스트는 앱 정의를 읽은 뒤에야 OS
+요청을 받으므로, 훅을 늦게 등록해서 요청을 놓치는 경합이 없다. Electron은 `open-url`과 `open-file`을
+`will-finish-launching` 전에 등록해야 한다([Electron app 문서](https://www.electronjs.org/docs/latest/api/app)).
+Tauri의 deep-link 플러그인은 `getCurrent()`와 `onOpenUrl`을 함께 써야 하고 앱이 초기 URL과 실행 중
+URL의 중복을 직접 제거해야 한다([Tauri deep-linking](https://v2.tauri.app/plugin/deep-linking/)).
+보관 방식은 전달 경로, 순서, 직렬 큐를 하나로 유지하고 앱이 두 경로를 맞출 필요를 없앤다.
+
+순서 계약은 ADR 0020/0021의 `onReady`, `onOpen` 순서를 잇는다. `onReady`, 초기 `onOpen`, 초기 실행의
+`onOpenUrls`(Windows 인자), 보관한 OS 요청(도착 순서), 이후 요청 순이다. 보관한 요청은 앱을 표시하지
+않는다. 시작 창이 이미 열리는 중이기 때문이다. 보관 한도는 64개로 열기 큐 한도와 같고 넘치면
+보고한다. macOS는 메인 스레드가 백엔드가 옵션을 보고할 때까지 요청을 먼저 잡아 두었다가 한 번에 하나씩
+보내며, 이때 대기 요청은 최대 16개이고 넘치는 요청은 진단을 남기고 버린다. 준비 전에 종료가 확정되면 보관한 요청은 버리고 훅을 실행하지 않는다. `onReady`와 초기
+`onOpen`을 실행하지 않는 기존 규칙과 같다.
+
+#### onReopen
+
+`onReopen({ hasVisibleWindows }, context)`는 macOS 전용이며 `applicationShouldHandleReopen:hasVisibleWindows:`
+(Dock 클릭, reopen Apple event)마다 플래그와 함께 호출한다. 등록하지 않으면 기존 동작을 유지한다.
+표시 중인 창이 없을 때 `DesktopContext.show()`와 같게 처리하고 창이 있으면 아무것도 하지 않는다.
+등록하면 호스트는 창을 표시하지 않고 앱이 정한다(예: `context.show()`). 등록했을 때 준비 전의
+reopen은 버린다. 시작 창이 이미 열리는 중이기 때문이다. Windows는 호출하지 않는다. Windows의 재실행은
+두 번째 실행이므로 `onOpen`과 `onOpenUrls`로 간다. delegate의 반환값은 계속 `NO`다.
+메인 스레드는 reopen을 열기 요청과 같은 도착 순서 큐에 넣고 한 번에 하나씩 백엔드에 보내 수락을 기다린다.
+아직 보내지 않은 reopen이 큐 끝에 있으면 최신 `hasVisibleWindows`로 합치고, 백엔드도 아직 시작하지 않은
+대기 reopen을 최신 값 하나로 합친다.
+Dock 클릭은 `OpenRequest`로 표현할 입력이 없어 `onOpen`은 호출하지 않는다.
+
+#### 후속 작업
+
+- macOS 패키징은 아직 Info.plist의 `CFBundleURLTypes`와 `CFBundleDocumentTypes`를 만들지 않는다.
+  설치된 앱은 scheme과 문서 형식이 LaunchServices에 등록되지 않으므로 OS가 앱으로 열어 주지 않는다.
+  Windows 패키징에는 이미 `associations`가 있다.
+- macOS는 LaunchServices가 열기 요청을 실행 중인 앱으로 보내므로 단일 인스턴스 장치가 필요 없다.
+- AppKit 전달의 실제 동작은 macos-native CI에서만 검증한다.
 
 ### 세션 종료
 
@@ -150,70 +220,11 @@ macOS에서 계속 `UNSUPPORTED`이므로 그에 관한 규칙은 적용되지 �
 ### 아직 지원하지 않는 것
 
 - 메뉴 막대 아이콘(`tray`)과 그에 의존하는 `closeBehavior: "hide"`, 창 없는 시작.
-- `onOpen`의 OS 파일, URL 열기. `application:openURLs:`와 `application:openFiles:`를 구현하지 않으므로
-  초기 `onOpen`만 호출한다. 이 요청은 `source: "initial"`, `launchReason: "manual"`, `argv: []`,
-  현재 프로세스의 작업 디렉터리이며 `files`와 `urls`는 비어 있다. macOS 호스트는 앱 실행 인자를
-  받지 않는다. `openArguments`는 이 값에서 차이가 없다.
-- 단일 인스턴스 잠금과 두 번째 실행 전달, 앱 hide/show, 닫기 확인 메시지, `shown`과 `hidden` 이벤트.
-
-## onOpen 확장 설계안 (구현하지 않음)
-
-이 절은 후속 작업을 위한 설계안이며 구현이 아니다. macOS에서 Finder나 `open`, URL scheme으로 파일과
-URL이 전달될 때 `onOpen`에 어떻게 닿게 할지 정한다. Dock 재활성화는 어느 안에서도 `show()`로 둔다.
-
-### 공통 요구
-
-- 전달 지점은 `application:openURLs:`(macOS 10.13 이상의 권장 delegate)다. 구형
-  `application:openFiles:`는 같은 경로로 합치며, 둘 다 구현하지 않는다.
-- 검증은 ADR 0013을 따른다. 파일 URL은 POSIX 절대 경로로 변환하고, 인코딩된 구분자(`%2F`)와 NUL을
-  거부한다. 그 외 URL은 정규화한 절대 URL로 `urls`에 담는다. 인자 최대 256개와 64 KiB의 입력 한도,
-  앱 열기 작업 64개 한도, 실패 시 진단을 남기고 다음 요청을 계속하는 규칙을 같이 쓴다.
-- 순서는 Windows의 초기 요청과 같다. AppKit은 `applicationDidFinishLaunching:` 전후에 열기 요청을
-  줄 수 있으므로, 메인 스레드가 delegate를 설치한 직후부터 요청을 보관하고 `ready` 뒤 백엔드의
-  `onOpen` 직렬 큐로 넘긴다. `onReady` 다음, 초기 `onOpen` 앞이나 뒤 중 하나로 고정해야 한다.
-  OS 열기가 앱 실행을 일으킨 경우 이 요청이 초기 요청을 대신한다.
-- 입력은 앱이 검증할 데이터이며 Host API의 저장 권한을 추가하지 않는다.
-
-### 안 A: `OpenRequest.source`에 `"os-open"` 추가
-
-`OpenRequest.source`를 `"initial" | "second-instance" | "os-open"`으로 넓히고
-`application:openURLs:`의 항목을 `files`와 `urls`로 나누어 전달한다. `argv`는 `[]`, `cwd`는 프로세스
-작업 디렉터리, `launchReason`은 `"manual"`이다.
-
-- 공개 타입 변경: `packages/plugin-api/src/desktop.ts`의 `OpenRequest.source` 유니온에 값 하나를 더한다.
-  필드 추가는 없다. `files`와 `urls`는 이미 `OpenRequest`에 있고 `openArguments: "raw"`에서는 `argv`가
-  비어 있으므로 raw 모드는 OS 열기를 받지 못한다는 설명을 더해야 한다.
-- 문서 변경: 앱 정의 문서의 OpenRequest 표와 `onOpen` 설명, 이 ADR의 지원 범위.
-- Windows 영향: Windows는 `"os-open"`을 발행하지 않는다. Windows의 OS 연결은 실행기에 인자를 넘기므로
-  기존 `initial`, `second-instance`가 그대로다. `source`를 `switch`로 완전하게 처리하는 앱은 새 값을
-  처리해야 하며 `QuitReason`의 `"quit-command"`와 같은 종류의 확장이다.
-- 장점: 파일과 URL을 이미 `OpenRequest`로 받는 앱 코드가 그대로 동작한다. 새 콜백과 새 옵션이 없다.
-  `source`로 인자 기반 실행과 OS 열기를 구분할 수 있다.
-- 단점: `argv`가 없는 요청이라 argv에 의존하는 앱은 이 요청에서 정보를 얻지 못한다. `source`가
-  늘어날 때마다 완전 처리 앱의 타입 오류가 생긴다.
-
-### 안 B: 별도 콜백 `onOpenUrls`와 `onReopen`
-
-`DesktopOptions`에 `onOpenUrls?(urls, context)` 같은 콜백을 더하고 재활성화는 `onReopen(context)`로
-알린다. `OpenRequest`는 바꾸지 않는다.
-
-- 공개 타입 변경: `DesktopOptions`에 콜백을 두 개 더한다. 이름과 인자, 직렬 큐 공유 여부, 한도,
-  `openArguments`와의 관계를 새로 정해야 한다.
-- 문서 변경: 새 필드 행과 호출 시점 표, 각 콜백의 오류와 순서 설명.
-- Windows 영향: Windows는 두 콜백을 호출하지 않는다. 두 번째 실행의 파일과 URL은 `onOpen`으로,
-  macOS의 OS 열기는 `onOpenUrls`로 가므로 같은 의미의 열기 처리가 플랫폼별 콜백으로 갈라진다.
-- 장점: `OpenRequest`의 의미(실행 인자)를 유지하고 재활성화를 앱이 감지할 수 있다.
-- 단점: 앱이 같은 파일 열기 로직을 두 콜백에 연결해야 한다. 공개 API가 늘고 단일 앱 정의로 플랫폼을
-  맞춘다는 ADR 0010의 방향과 어긋난다.
-
-### 권장
-
-OS 파일과 URL 열기에는 안 A를 권장한다. `OpenRequest`에는 이미 `files`와 `urls`가 있고 앱의 열기
-로직이 한 곳에 모이며 공개 타입의 변경이 유니온 값 하나로 끝난다. Windows와 macOS에서 같은 앱
-정의가 같은 콜백으로 파일을 받는다.
-재활성화는 안 B의 `onReopen`을 만들지 않고 `show()`로 유지한다. 새 입력이 없는 활성화는 열기 요청이
-아니며, 호스트가 창을 되살리면 앱이 따로 처리할 일이 거의 없다. 앱이 재활성화에 반응해야 하는 요구가
-확인되면 그때 `onAllWindowsClosed`와 같은 수명주기 훅으로 별도 ADR에서 다룬다.
+- `onOpen`의 인자 기반 요청. macOS의 `onOpen`은 초기 요청만 호출한다. 이 요청은
+  `source: "initial"`, `launchReason: "manual"`, `argv: []`, 현재 프로세스의 작업 디렉터리이며 `files`와
+  `urls`는 비어 있다. macOS 호스트는 앱 실행 인자를 받지 않는다. OS의 파일과 URL 열기는 `onOpenUrls`로
+  받는다.
+- 단일 인스턴스 잠금과 두 번째 실행 전달(LaunchServices가 대신한다), 앱 hide/show, 닫기 확인 메시지, `shown`과 `hidden` 이벤트.
 
 ## 영향
 
@@ -221,14 +232,24 @@ OS 파일과 URL 열기에는 안 A를 권장한다. `OpenRequest`에는 이미 
 - 앱 정의의 `desktop`을 macOS에서 쓸 수 있다. 트레이, `"hide"`, 창 없는 시작은 기존처럼 거부한다.
 - `windows.respondClose`를 macOS 정책에 넣을 수 있다.
 - 세션 종료에서 macOS도 `onQuit`을 보장하지 않는다.
+- `DesktopOptions`에 `onOpenUrls`와 `onReopen`, 공개 타입 `ReopenEvent`가 추가된다. Windows도 `onOpenUrls`를
+  `files-and-urls` 모드의 실행 인자에서 호출하고, `onOpen`의 의미는 바뀌지 않는다.
+- 준비 전 OS 열기 요청은 macOS 메인 스레드가 백엔드 설정 전에 최대 16개, 백엔드가 준비 전에
+  최대 64개를 보관하고 넘치면 버린다.
 
 ## 검증
 
 Linux에서는 종료 원인 분류(`quit-reason`), 세션 종료 대기, 백엔드 종료 순서, 요청 보류, 패킷
-처리와 창 수명 규칙을 단위와 계약 테스트로 확인한다. 이 통과는 실제 AppKit 동작의 검증이 아니다.
+처리, 창 수명 규칙, OS 열기 요청의 검증과 보관, 한도와 `onOpenUrls`, `onReopen` 호출 순서를 단위와
+계약 테스트로 확인한다. 이 통과는 실제 AppKit 동작의 검증이 아니다.
 실제 AppKit 동작은 macos-native CI에서 `tests/lifecycle/macos-desktop.ts`의 시나리오로 실행한다.
-`tests/lifecycle/run-native.ts`가 이 실행기를 등록한다.
+`tests/lifecycle/run-native.ts`가 이 실행기를 등록한다. 시나리오는 앱이 자기 자신에게 `GURL`,
+`odoc`, reopen Apple event를 보내 `onOpenUrls`와 `onReopen`을 확인한다.
 
 CI에서 확인하지 못하는 항목이 있다. 실제 로그아웃, 재시작, 시스템 종료는 실행하지 않고
 같은 알림과 quit Apple event를 주입한다. 사용자의 Dock 클릭은 자기 자신에게 보낸 reopen Apple
 event로 대신한다. 실제 Cmd+Q 키 입력은 `NSApp terminate:`로, Dock의 Quit은 quit Apple event로 대신한다.
+
+콜드 런치 전달은 native에서 검증하지 않는다. 번들과 LaunchServices 등록이 필요하기 때문이다. 대신 fake
+AppKit host 테스트(`tests/lifecycle/macos-desktop-host.test.ts`)가 첫 pump와 desktop-config 전에 전달한 요청이
+`onReady`, 초기 `onOpen`, `onOpenUrls` 순서로 도착하는지 확인한다.

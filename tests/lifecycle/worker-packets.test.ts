@@ -9,6 +9,8 @@ import {
 } from "@bunaway/protocol";
 import {
   Channel,
+  MAX_OPEN_URLS,
+  MAX_OPEN_URLS_BYTES,
   type Packet,
   type Route,
   validatePacket,
@@ -117,8 +119,25 @@ const fixtures = {
     {
       kind: "desktop-config",
       closeBehavior: "keep-alive",
+      reopenHandler: true,
     },
     "macos-main",
+  ),
+  "open-urls": fixture(
+    {
+      kind: "open-urls",
+      urls: [
+        "bunaway-test://open/path?q=1",
+      ],
+    },
+    "macos-backend",
+  ),
+  reopen: fixture(
+    {
+      kind: "reopen",
+      hasVisibleWindows: false,
+    },
+    "macos-backend",
   ),
   "native-stopped": fixture(
     {
@@ -797,6 +816,7 @@ test("macOS desktop lifecycle packets travel only in their declared direction wi
       {
         kind: "desktop-config",
         closeBehavior: "quit",
+        reopenHandler: false,
       },
       "macos-main",
     ).kind,
@@ -807,6 +827,7 @@ test("macOS desktop lifecycle packets travel only in their declared direction wi
       {
         kind: "desktop-config",
         closeBehavior: "hide",
+        reopenHandler: false,
       },
       "macos-main",
     ),
@@ -816,10 +837,57 @@ test("macOS desktop lifecycle packets travel only in their declared direction wi
       {
         kind: "desktop-config",
         closeBehavior: "quit",
+        reopenHandler: false,
       },
       "macos-backend",
     ),
   ).toThrow("Invalid Worker direction");
+  // Main thread to backend: bounded open-URL lists and the reopen notice.
+  expect(
+    validatePacket(
+      {
+        kind: "open-urls",
+        urls: [
+          "bunaway-test://a",
+        ],
+      },
+      "macos-backend",
+    ).kind,
+  ).toBe("open-urls");
+  for (const urls of [
+    "bunaway-test://a",
+    [
+      1,
+    ],
+    Array.from(
+      {
+        length: MAX_OPEN_URLS + 1,
+      },
+      () => "a:",
+    ),
+    [
+      "x".repeat(MAX_OPEN_URLS_BYTES + 1),
+    ],
+  ]) {
+    expect(() =>
+      validatePacket(
+        {
+          kind: "open-urls",
+          urls,
+        },
+        "macos-backend",
+      ),
+    ).toThrow("Invalid open URL list");
+  }
+  expect(() =>
+    validatePacket(
+      {
+        kind: "reopen",
+        hasVisibleWindows: "yes",
+      },
+      "macos-backend",
+    ),
+  ).toThrow("Invalid Worker flag");
   // Main thread to backend: native teardown finished, and the resident app lost its last window.
   expect(
     validatePacket(
@@ -1131,6 +1199,8 @@ const reservedPackets: {
       "shutdown",
       "closing",
       "desktop-config",
+      "open-urls",
+      "reopen",
       "native-stopped",
       "windows-empty",
       "session-end",

@@ -45,7 +45,7 @@ WebView를 위한 추가 네이티브 바이너리는 필요하지 않다.
 현재 대상은 macOS arm64다. 다중 창, 명령과 이벤트, 뷰별 정책과 세션, 사용자 지정
 자산 스킴, 렌더러 복구와 종료를 제공한다. `app.windows`와 `startup: false`를 지원한다.
 `@bunaway/plugin-windows`는 목록, 생성과 재생성, show/showInactive/hide/focus/close,
-표시와 포커스 조회, 창 ID 조회, `getReadiness`와 `windows.readiness`, 숨김 생성
+표시와 포커스 조회, 창 ID 조회, `getReadiness`와 `windows.readiness`, `setContentProtection`과 `isContentProtected`, 숨김 생성
 (`visible: false`, `showWhenReady`)을 제공한다. 창 ID는 네이티브 창을 만들거나 재생성할 때마다
 새로 발급하며 뷰마다 창 하나만 지원한다. `getSnapshot`, `windows.changed`, 크기와 위치,
 상태 변경, `activate`, 다중 인스턴스 등 다른 창 작업은 `UNSUPPORTED`다. 로그와 기능 조회는
@@ -67,7 +67,8 @@ WebView를 위한 추가 네이티브 바이너리는 필요하지 않다.
 `entry.ts`가 백엔드 Worker를 시작하기 전에 메인 스레드에서 한 번 조회해 Worker에 넘기며, 실패는 `webview-version-unavailable`로 기록하고 값을 `null`로 둔다.
 `process-group.ts`는 하위 프로세스의 종료와 호스트 비정상 종료 감시를 소유한다.
 `application.ts`는 앱 delegate, 최소 메인 메뉴, 종료 Apple event 핸들러와 모든 창이 공유하는 이벤트 루프를 소유한다.
-`desktop-requests.ts`는 백엔드가 `desktop` 옵션을 보고하기 전의 Quit과 재활성화를 보류하고,
+`desktop-requests.ts`는 백엔드가 `desktop` 옵션을 보고하기 전의 Quit과 재활성화, URL 열기 요청을 순서대로 보류하고,
+`open-urls.ts`는 AppKit이 전달한 URL 문자열을 `onOpenUrls` 목록으로 정규화하며,
 `quit-reason.ts`와 `session-end-termination.ts`는 종료 원인 분류와 세션 종료의 응답 보류를,
 `backend-shutdown.ts`는 백엔드 쪽 종료 순서를 맡는다.
 `objc.ts`는 Objective-C FFI 바인딩과 콜백을, `webview.ts`는 개별 AppKit 창과 WKWebView를 소유한다.

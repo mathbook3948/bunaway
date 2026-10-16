@@ -150,6 +150,36 @@ const channel = new Channel(
       desktop?.commitShutdown(packet.reason);
       return;
     }
+    if (packet.kind === "open-urls") {
+      if (stopping || shutdownCommitted) {
+        // Not a callback failure: the app already approved the quit. The count is enough for
+        // diagnostics, since URLs may hold secrets.
+        void channel
+          .send({
+            kind: "diagnostic",
+            event: "open-urls-dropped",
+            fields: {
+              reason: "ending",
+              count: packet.urls.length,
+            },
+          })
+          .catch(() => {});
+        return;
+      }
+      try {
+        requireDesktop().openUrls(packet.urls);
+      } catch (error) {
+        // A full or ending open queue loses only this request; the app keeps running.
+        reportDesktopFailure(error);
+      }
+      return;
+    }
+    if (packet.kind === "reopen") {
+      requireDesktop().reopen({
+        hasVisibleWindows: packet.hasVisibleWindows,
+      });
+      return;
+    }
     if (packet.kind === "windows-empty") {
       if (!stopping) {
         requireDesktop().windowsEmpty();
@@ -300,6 +330,7 @@ try {
         kind: "desktop-config",
         closeBehavior:
           app.desktop?.closeBehavior === "keep-alive" ? "keep-alive" : "quit",
+        reopenHandler: typeof app.desktop?.onReopen === "function",
       });
       // Each native contract has its own size budget; never combine contracts into one packet.
       const batchCount = Math.max(1, plugins.length);
@@ -435,15 +466,11 @@ try {
       // would turn an orderly shutdown into a host failure, so skip the launch callbacks.
       if (!stopping && !orderly) {
         // onReady is queued ahead of the initial open so that open callbacks wait for it.
-        desktop.ready();
         // The macOS host accepts no launch arguments (boot.ts takes only --package and --dev-url).
-        desktop.open(
-          {
-            argv: [],
-            cwd: process.cwd(),
-          },
-          "initial",
-        );
+        desktop.ready({
+          argv: [],
+          cwd: process.cwd(),
+        });
       }
     }
   }

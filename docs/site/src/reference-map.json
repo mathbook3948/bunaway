@@ -455,6 +455,8 @@
       "pages": {
         "reference/tooling/core-and-runtime": [
           "MAX_WINDOWS",
+          "MAX_OPEN_URLS",
+          "MAX_OPEN_URLS_BYTES",
           "validatePacket",
           "Channel"
         ]
@@ -688,6 +690,8 @@
           "isAlwaysOnTop",
           "setSkipTaskbar",
           "isSkipTaskbar",
+          "setContentProtection",
+          "isContentProtected",
           "requestAttention",
           "cancelAttention",
           "setMinimizable",
@@ -1100,6 +1104,8 @@
           "tray",
           "openArguments",
           "onOpen",
+          "onOpenUrls",
+          "onReopen",
           "onReady",
           "onAllWindowsClosed",
           "beforeQuit",
@@ -1120,6 +1126,13 @@
           "urls",
           "files"
         ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/desktop.ts",
+      "type": "ReopenEvent",
+      "pages": {
+        "reference/backend/app-definition": ["hasVisibleWindows"]
       }
     },
     {
@@ -1405,6 +1418,8 @@
       "windows.isAlwaysOnTop",
       "windows.setSkipTaskbar",
       "windows.isSkipTaskbar",
+      "windows.setContentProtection",
+      "windows.isContentProtected",
       "windows.requestAttention",
       "windows.cancelAttention",
       "windows.setMinimizable",

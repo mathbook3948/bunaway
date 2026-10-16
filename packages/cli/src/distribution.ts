@@ -106,6 +106,7 @@ export const frameworkPaths = [
     "config.ts",
     "process-group.ts",
     "desktop-requests.ts",
+    "open-urls.ts",
     "backend-shutdown.ts",
     "quit-reason.ts",
     "session-end-termination.ts",

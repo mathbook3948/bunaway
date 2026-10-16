@@ -29,6 +29,7 @@ export type {
   Platform,
   PluginDefinition,
   QuitReason,
+  ReopenEvent,
   ShutdownReason,
   StateStore,
   StopHook,

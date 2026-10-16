@@ -172,6 +172,7 @@ const application = new MacosApplication({
   quitRequested: () => {},
   sessionEnding: () => {},
   reopened: () => {},
+  openUrlsRequested: () => {},
   tick: () => {},
   fail: (error) => {
     failure = error;
