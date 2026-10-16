@@ -283,6 +283,44 @@ async function bundleTestHost(
   expect(build.success).toBe(true);
 }
 
+test("macOS dynamic window whose native constructor throws publishes and retains INTERNAL readiness", async () => {
+  // The fixture replaces the AppKit modules, so this runs on every platform.
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "--no-env-file",
+      resolve(
+        import.meta.dir,
+        "fixtures/macos-window-creation-failure.fixture.ts",
+      ),
+    ],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 10000,
+    },
+  );
+  const [output, errors, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  expect(code, `${output}\n${errors}`).toBe(0);
+  expect(JSON.parse(output)).toEqual({
+    createError: "native constructor failed",
+    // The initial pending snapshot has no error; the failure event follows it.
+    published: [
+      null,
+      "INTERNAL",
+    ],
+    readiness: {
+      document: "failed",
+      sdk: "failed",
+      error: "INTERNAL",
+    },
+  });
+});
+
 test("macOS asset origins reject credentials and preserve non-default ports", () => {
   expect(macosOrigin("bunaway://app.bunaway.local/a")).toBe(
     "https://app.bunaway.local",

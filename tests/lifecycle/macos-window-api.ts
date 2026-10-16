@@ -225,9 +225,15 @@ try {
           check(retained.windowId === hidden.windowId && retained.document === "cancelled" && retained.sdk === "cancelled" && retained.error?.code === "CANCELLED", "retained readiness");
           // Show once the SDK session is acknowledged; a new native lifetime has a new ID.
           await windows.create({view:"lazy", options:{showWhenReady:"sdk"}});
+          // Read readiness, then visibility, then readiness again, with nothing in between: if the SDK is still not ready after the visibility read, the window was observed hidden before ready.
           const automatic = await windows.getReadiness({view:"lazy"});
+          const earlyVisible = await windows.isVisible({view:"lazy"});
+          const afterVisibility = await windows.getReadiness({view:"lazy"});
           check(automatic.windowId !== hidden.windowId, "recreated windowId");
+          check(afterVisibility.windowId === automatic.windowId, "same window while checking early visibility");
+          if (afterVisibility.sdk !== "ready") check(earlyVisible === false, "hidden before sdk ready");
           await until(() => windows.isVisible({view:"lazy"}), "showWhenReady visibility");
+          check(lazyReadiness.some((state) => state.windowId === automatic.windowId && state.sdk !== "ready"), "pre-ready state published");
           check((await windows.getReadiness({view:"lazy"})).sdk === "ready", "visible after sdk ready");
           await client.invoke("test.wait", {view:"lazy",count:2});
           check(await windows.close({view:"lazy"}) === true, "close automatic lazy");

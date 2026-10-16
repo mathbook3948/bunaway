@@ -34,8 +34,8 @@ type View = {
   /** Native lifetime ID, replaced whenever the view is created or recreated. */
   windowId: string;
   state: WindowState;
-  /** Absent when native construction failed; preserved after close as the retained outcome. */
-  readiness?: WindowReadinessTracker | undefined;
+  /** Created before the native window, so a construction failure is still published and retained. */
+  readiness: WindowReadinessTracker;
   documentDeadline: number;
   sdkDeadline: number;
   /** Startup windows end the app on setup failure; dynamic creation reports to its caller. */
@@ -159,9 +159,10 @@ export class MacosWindows {
         ...fields,
       });
     const now = Date.now();
+    const windowId = crypto.randomUUID();
     const view: View = {
       startup,
-      windowId: crypto.randomUUID(),
+      windowId,
       documentDeadline: now + WINDOW_PREPARATION_TIMEOUT_MS,
       sdkDeadline: now + WINDOW_PREPARATION_TIMEOUT_MS,
       state: {
@@ -185,20 +186,20 @@ export class MacosWindows {
         forward: this.hooks.forward,
         deliver: (text) => view.native?.deliver(text),
         log,
-        // The tracker is created after the boundary, so every hook resolves it lazily.
+        // The tracker is built in the same literal, so every hook resolves it lazily through `view`.
         sessionOpened: (route) => {
           view.sdkDeadline = Date.now() + API_LIMITS.handshakeTimeoutMs;
-          view.readiness?.sessionOpened(route.documentGeneration);
+          view.readiness.sessionOpened(route.documentGeneration);
         },
         sdkReady: (route) =>
-          view.readiness?.sdkComplete(route.documentGeneration),
+          view.readiness.sdkComplete(route.documentGeneration),
         revoked: (reason, generation, error) => {
           if (reason === "navigation") {
             view.documentDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
             view.sdkDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
-            view.readiness?.reset(generation);
+            view.readiness.reset(generation);
           } else {
-            view.readiness?.sessionEnded(
+            view.readiness.sessionEnded(
               generation,
               error ?? {
                 code: "CANCELLED",
@@ -208,8 +209,27 @@ export class MacosWindows {
           }
         },
       }),
+      readiness: new WindowReadinessTracker(
+        windowId,
+        spec.view,
+        spec.showWhenReady,
+        {
+          publish: (state) => this.publishReadiness(state),
+          show: () => {
+            if (
+              this.views.get(spec.view) === view &&
+              !view.state.closed &&
+              !this.hooks.stopping()
+            ) {
+              view.native?.present();
+            }
+          },
+        },
+      ),
     };
     this.views.set(spec.view, view);
+    // Publish before native construction so subscribers also observe a creation failure.
+    this.publishReadiness(view.readiness.snapshot());
     try {
       view.native = new MacosWebview(
         {
@@ -228,30 +248,12 @@ export class MacosWindows {
           activated: () => {
             this.lastActiveWindowId = view.windowId;
           },
-          documentComplete: (error) => view.readiness?.documentComplete(error),
+          documentComplete: (error) => view.readiness.documentComplete(error),
           log,
           fail: this.hooks.fail,
         },
         this.application,
       );
-      view.readiness = new WindowReadinessTracker(
-        view.windowId,
-        spec.view,
-        spec.showWhenReady,
-        {
-          publish: (state) => this.publishReadiness(state),
-          show: () => {
-            if (
-              this.views.get(spec.view) === view &&
-              !view.state.closed &&
-              !this.hooks.stopping()
-            ) {
-              view.native?.present();
-            }
-          },
-        },
-      );
-      this.publishReadiness(view.readiness.snapshot());
       log("window-created");
       const ready = view.native.ready.then(() => {
         if (view.state.closed) {
@@ -269,7 +271,7 @@ export class MacosWindows {
         }
         view.state.failure = error;
         // Terminate first so closing does not overwrite the failure with CANCELLED.
-        view.readiness?.terminate({
+        view.readiness.terminate({
           code: "INTERNAL",
           message: "WebView creation failed.",
         });
@@ -281,6 +283,11 @@ export class MacosWindows {
       });
     } catch (error) {
       view.state.failure = error;
+      // Publish and retain the failure; no native window exists to report it later.
+      view.readiness.terminate({
+        code: "INTERNAL",
+        message: "WebView creation failed.",
+      });
       view.state.closed = true;
       view.state.cleaned = true;
       throw error;
@@ -295,7 +302,7 @@ export class MacosWindows {
     view.state.closed = true;
     view.boundary.closed = true;
     view.boundary.revoke("closing");
-    view.readiness?.terminate({
+    view.readiness.terminate({
       code: "CANCELLED",
       message: "Window closed.",
     });
@@ -386,12 +393,6 @@ export class MacosWindows {
       },
       getSnapshot: unsupported,
       getReadiness: () => {
-        if (!view.readiness) {
-          throw new BunawayError({
-            code: "INVALID_ARGUMENT",
-            message: "Window is not open.",
-          });
-        }
         return view.readiness.snapshot();
       },
       show: (visible) => native().show(visible),
@@ -451,7 +452,7 @@ export class MacosWindows {
         Date.now() > view.state.deadline
       ) {
         view.state.failure = new Error("macOS window setup timed out.");
-        view.readiness?.terminate({
+        view.readiness.terminate({
           code: "TIMEOUT",
           message: "WebView creation timed out.",
         });
@@ -462,10 +463,10 @@ export class MacosWindows {
       }
       if (!view.state.closed) {
         if (Date.now() > view.documentDeadline) {
-          view.readiness?.expireDocument();
+          view.readiness.expireDocument();
         }
         if (Date.now() > view.sdkDeadline) {
-          view.readiness?.expireSdk();
+          view.readiness.expireSdk();
         }
       }
       view.native?.observeStartup();
@@ -487,7 +488,7 @@ export class MacosWindows {
     for (const view of this.views.values()) {
       view.boundary.closed = true;
       view.boundary.revoke("closing");
-      view.readiness?.terminate({
+      view.readiness.terminate({
         code: "CANCELLED",
         message: "App shutdown.",
       });
