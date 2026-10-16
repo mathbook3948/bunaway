@@ -10,6 +10,18 @@ import type { HostResponse, JsonValue } from "@bunaway/protocol";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
+// Win32 and TaskDialog message and key constants used to drive real dialogs.
+const WM_COMMAND = 0x0111;
+const WM_KEYDOWN = 0x0100;
+const VK_ESCAPE = 0x1b;
+const VK_RETURN = 0x0d;
+const TDM_CLICK_BUTTON = 0x0466;
+const TDM_CLICK_VERIFICATION = 0x0471;
+const IDOK = 1n;
+const IDCANCEL = 2n;
+// TaskDialog assigns custom button ids starting here, in button order.
+const FIRST_CUSTOM_BUTTON_ID = 1000n;
+
 // The main test thread can observe and dismiss real modal dialogs while the UI STA is in Show.
 test.skipIf(process.platform !== "win32")(
   "real UI STA file dialogs select paths, serialize, cancel and drain on shutdown",
@@ -104,6 +116,7 @@ test.skipIf(process.platform !== "win32")(
       },
     });
     const titles: string[] = [];
+    const messageTitles = new Set<string>();
     const find = (title: string) => {
       const text = Buffer.from(`${title}\0`, "utf16le");
       return BigInt(native.symbols.FindWindowW(null, ptr(text)));
@@ -170,6 +183,7 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
               "dialog.openFile",
               "dialog.saveFile",
               "dialog.selectFolder",
+              "dialog.showMessage",
             ],
           },
         },
@@ -217,6 +231,9 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
         const requestId = crypto.randomUUID();
         const title = `Bunaway dialog ${requestId}`;
         titles.push(title);
+        if (operation === "dialog.showMessage") {
+          messageTitles.add(title);
+        }
         let response: HostResponse | undefined;
         pending.set(requestId, (value) => {
           response = value;
@@ -425,6 +442,164 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
         },
       });
 
+      // Message dialogs (TaskDialog). Posted TDM_* messages are processed by the dialog's own loop.
+      const openMessage = async (payload: Record<string, JsonValue>) => {
+        const call = invoke("dialog.showMessage", {
+          message: "Proceed?",
+          ...payload,
+        });
+        await until(
+          () => native.symbols.IsWindowVisible(find(call.title)) !== 0,
+          "message dialog visibility",
+        );
+        return call;
+      };
+      const customButtons = [
+        "Keep",
+        "Delete",
+        "Later",
+      ];
+      const clicked = await openMessage({
+        buttons: customButtons,
+        defaultButton: 1,
+      });
+      native.symbols.PostMessageW(
+        find(clicked.title),
+        TDM_CLICK_BUTTON,
+        1002n,
+        0n,
+      );
+      expect(await clicked.result()).toEqual({
+        kind: "result",
+        payload: {
+          button: 2,
+          checkboxChecked: false,
+        },
+      });
+      const checked = await openMessage({
+        buttons: customButtons,
+        checkbox: {
+          label: "Remember",
+        },
+      });
+      const checkedHwnd = find(checked.title);
+      native.symbols.PostMessageW(checkedHwnd, TDM_CLICK_VERIFICATION, 1n, 0n);
+      native.symbols.PostMessageW(checkedHwnd, TDM_CLICK_BUTTON, 1001n, 0n);
+      expect(await checked.result()).toEqual({
+        kind: "result",
+        payload: {
+          button: 1,
+          checkboxChecked: true,
+        },
+      });
+      const escaped = await openMessage({
+        buttons: customButtons,
+        cancelButton: 0,
+      });
+      native.symbols.PostMessageW(find(escaped.title), WM_COMMAND, 2n, 0n);
+      expect(await escaped.result()).toEqual({
+        kind: "result",
+        payload: {
+          button: 0,
+          checkboxChecked: false,
+        },
+      });
+      const abortedMessage = await openMessage({});
+      const abortedHwnd = find(abortedMessage.title);
+      void channel
+        .send({
+          kind: "cancel",
+          context: config.backendContext,
+          requestId: abortedMessage.requestId,
+        })
+        .catch((error) => {
+          fatal = error;
+        });
+      await until(
+        () => native.symbols.IsWindow(abortedHwnd) === 0,
+        "message abort cleanup",
+      );
+      pending.delete(abortedMessage.requestId);
+      // A following call proves the STA and adapter recovered. IDOK is the common OK button.
+      const afterAbort = await openMessage({});
+      native.symbols.PostMessageW(
+        find(afterAbort.title),
+        TDM_CLICK_BUTTON,
+        1n,
+        0n,
+      );
+      expect(await afterAbort.result()).toEqual({
+        kind: "result",
+        payload: {
+          button: 0,
+          checkboxChecked: false,
+        },
+      });
+      // Without TDF_ALLOW_DIALOG_CANCELLATION (several buttons, no cancelButton), IDCANCEL is ignored.
+      const uncancellable = await openMessage({
+        buttons: customButtons,
+      });
+      const uncancellableHwnd = find(uncancellable.title);
+      native.symbols.PostMessageW(uncancellableHwnd, WM_COMMAND, IDCANCEL, 0n);
+      // The IDCANCEL above and the click below land in the same dialog thread queue and run FIFO.
+      // Had IDCANCEL been accepted, the dialog would have closed with the cancel result before the
+      // click, so the result would not be button 0. The result assertion is the actual check; the
+      // brief sleep and IsWindow check only confirm the dialog is still open before clicking.
+      await Bun.sleep(50);
+      expect(native.symbols.IsWindow(uncancellableHwnd)).not.toBe(0);
+      native.symbols.PostMessageW(
+        uncancellableHwnd,
+        TDM_CLICK_BUTTON,
+        FIRST_CUSTOM_BUTTON_ID,
+        0n,
+      );
+      expect(await uncancellable.result()).toEqual({
+        kind: "result",
+        payload: {
+          button: 0,
+          checkboxChecked: false,
+        },
+      });
+      // Injected keyboard message processing, not physical input: the dialog loop's IsDialogMessage
+      // translates Escape into IDCANCEL, which maps to the non-default cancel button.
+      const escapeKey = await openMessage({
+        buttons: customButtons,
+        cancelButton: 2,
+      });
+      native.symbols.PostMessageW(
+        find(escapeKey.title),
+        WM_KEYDOWN,
+        BigInt(VK_ESCAPE),
+        0n,
+      );
+      expect(await escapeKey.result()).toEqual({
+        kind: "result",
+        payload: {
+          button: 2,
+          checkboxChecked: false,
+        },
+      });
+
+      // Injected Enter: IsDialogMessage translates it into the default button's command.
+      const enterKey = await openMessage({
+        buttons: customButtons,
+        cancelButton: 2,
+        defaultButton: 1,
+      });
+      native.symbols.PostMessageW(
+        find(enterKey.title),
+        WM_KEYDOWN,
+        BigInt(VK_RETURN),
+        0n,
+      );
+      expect(await enterKey.result()).toEqual({
+        kind: "result",
+        payload: {
+          button: 1,
+          checkboxChecked: false,
+        },
+      });
+
       const shutdown = invoke("dialog.selectFolder");
       const queuedAtShutdown = invoke("dialog.openFile");
       await until(() => find(shutdown.title) !== 0n, "shutdown modal");
@@ -444,10 +619,23 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
         if (hwnd) {
           native.symbols.PostMessageW(
             hwnd,
-            0x0111,
-            2n,
+            WM_COMMAND,
+            IDCANCEL,
             BigInt(native.symbols.GetDlgItem(hwnd, 2)),
           );
+          // Message dialogs without a cancel button ignore IDCANCEL, so also click the first custom
+          // button and the common OK button to close multi-button and common-button dialogs.
+          // TDM_* is a TaskDialog message (the same value means something else to file dialogs),
+          // so it is sent only to message dialogs.
+          if (messageTitles.has(title)) {
+            native.symbols.PostMessageW(
+              hwnd,
+              TDM_CLICK_BUTTON,
+              FIRST_CUSTOM_BUTTON_ID,
+              0n,
+            );
+            native.symbols.PostMessageW(hwnd, TDM_CLICK_BUTTON, IDOK, 0n);
+          }
         }
       }
       channel?.close();
