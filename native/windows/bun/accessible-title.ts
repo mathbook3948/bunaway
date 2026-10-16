@@ -1,12 +1,16 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
 import assert from "node:assert/strict";
 import { guid } from "./guid.ts";
-import { hr, withWide } from "./win32-bindings.ts";
+import { hr, ole, withBuffer, withWide } from "./win32-bindings.ts";
 
-const CLSCTX_INPROC_SERVER = 1;
+/** MSDN samples use CLSCTX_SERVER for AccPropServices. */
+const CLSCTX_SERVER = 5;
 /** OBJID_CLIENT as the unsigned DWORD that IAccPropServices expects. */
 const OBJID_CLIENT = 0xfffffffc;
 const CHILDID_SELF = 0;
+const COINIT_APARTMENTTHREADED = 2;
+/** RPC_E_CHANGED_MODE: COM already initialized on this thread with a different model. */
+const RPC_E_CHANGED_MODE = -2147417850;
 /** IAccPropServices vtable slots, in oleacc.idl order after IUnknown. */
 const SLOT_RELEASE = 2;
 const SLOT_SET_HWND_PROP_STR = 7;
@@ -45,8 +49,21 @@ export class AccessibleTitles {
       ) => number)
     | undefined;
   private readonly cache = new Map<bigint, string>();
-  // Native calls read these buffers, so they are fields that outlive each call.
-  private readonly nameProperty = guid("608d3df8-8128-4aa7-a428-f55e49267291");
+  /**
+   * MSAAPROPID is passed by value; the x64 ABI turns that into a pointer to a
+   * 16-byte-aligned temporary. Keep the backing store rooted for the process lifetime.
+   */
+  private readonly namePropertyStorage: Buffer;
+  private readonly nameProperty: Pointer;
+
+  constructor() {
+    const bytes = guid("608d3df8-8128-4aa7-a428-f55e49267291");
+    this.namePropertyStorage = Buffer.alloc(bytes.length + 16);
+    const base = Number(ptr(this.namePropertyStorage));
+    const aligned = (base + 15) & ~15;
+    bytes.copy(this.namePropertyStorage, aligned - base);
+    this.nameProperty = aligned as Pointer;
+  }
 
   private bind(slot: number, args: BindingType[], returns: "i32" | "u32") {
     assert(this.object);
@@ -70,25 +87,34 @@ export class AccessibleTitles {
     if (this.object) {
       return;
     }
+    // Lifecycle tests construct Windows without going through ui.ts; AccProp still needs an STA.
+    const init = ole.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED);
+    if (init < 0 && init !== RPC_E_CHANGED_MODE) {
+      hr(init, "CoInitializeEx(STA)");
+    }
     this.library = openLibrary();
     const out = new BigUint64Array(1);
     const clsid = guid("b5f8350b-0548-48b1-a6ee-88bd00b4a5e7");
     const iid = guid("6e26e776-04f0-495d-80e4-3330352e3169");
     try {
       hr(
-        this.library.symbols.CoCreateInstance(
-          ptr(clsid),
-          null,
-          CLSCTX_INPROC_SERVER,
-          ptr(iid),
-          ptr(out),
+        withBuffer(clsid, (clsidPtr) =>
+          withBuffer(iid, (iidPtr) =>
+            this.library!.symbols.CoCreateInstance(
+              clsidPtr,
+              null,
+              CLSCTX_SERVER,
+              iidPtr,
+              ptr(out),
+            ),
+          ),
         ),
         "CoCreateInstance(IAccPropServices)",
       );
       assert(out[0], "Null accessible title COM object");
       this.object = Number(out[0]) as Pointer;
       this.release = this.bind(SLOT_RELEASE, [], "u32");
-      // MSAAPROPID is a 16-byte GUID, which the x64 ABI passes by pointer.
+      // MSAAPROPID is a 16-byte GUID; the x64 ABI passes it by pointer.
       this.setName = this.bind(
         SLOT_SET_HWND_PROP_STR,
         [
@@ -135,7 +161,7 @@ export class AccessibleTitles {
           window,
           OBJID_CLIENT,
           CHILDID_SELF,
-          ptr(this.nameProperty),
+          this.nameProperty,
           text,
         ),
       ),
@@ -178,7 +204,7 @@ export class AccessibleTitles {
         window,
         OBJID_CLIENT,
         CHILDID_SELF,
-        ptr(this.nameProperty),
+        this.nameProperty,
         1,
       ),
       "IAccPropServices.ClearHwndProps",
