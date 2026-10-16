@@ -54,7 +54,7 @@ export class MacosWebviewControls implements NativeWebView {
       return false;
     }
     const responder = o.send(this.window, "firstResponder");
-    // The window itself or a non-view responder (for example a field editor owner) is not the WebView.
+    // A non-view responder (the window itself or a view or window controller) is not the WebView.
     if (!responder || !o.send(responder, "isKindOfClass:", o.class("NSView"))) {
       return false;
     }

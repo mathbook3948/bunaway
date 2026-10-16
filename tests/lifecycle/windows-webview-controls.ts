@@ -28,7 +28,10 @@ const MOUSEEVENTF_ABSOLUTE = 0x8000;
 const ABSOLUTE_COORDINATE_RANGE = 65535;
 const SM_CXSCREEN = 0;
 const SM_CYSCREEN = 1;
-const SHORT_FOCUS_WAIT_MS = 1_500;
+// Side-by-side layout for the focus scenario; sizes shrink to fit small CI screens.
+const LAYOUT_MARGIN = 20;
+const MAX_LAYOUT_WIDTH = 440;
+const MAX_LAYOUT_HEIGHT = 360;
 
 if (!process.argv.includes("--child")) {
   await mkdir(resolve(assets, "web"), {
@@ -101,7 +104,7 @@ if (!process.argv.includes("--child")) {
     ),
   );
   console.log(
-    "PASS actual WebView2 controls: state, origin and redirect denial, history, reload, stop, session cancellation, zoom and development-only DevTools",
+    "PASS actual WebView2 controls: state, origin and redirect denial, history, reload, stop, session cancellation, zoom, WebView focus, destroyed state and development-only DevTools",
     reports,
   );
 } else {
@@ -160,6 +163,9 @@ if (!process.argv.includes("--child")) {
   const main = {
     view: "main",
   };
+  const peer = {
+    view: "peer",
+  };
   const waitFor = async (check: () => boolean | Promise<boolean>) => {
     const deadline = Date.now() + 15_000;
     while (!(await check())) {
@@ -175,7 +181,14 @@ if (!process.argv.includes("--child")) {
       ],
       returns: "u64",
     },
-    GetWindowRect: {
+    GetClientRect: {
+      args: [
+        "u64",
+        "ptr",
+      ],
+      returns: "i32",
+    },
+    ClientToScreen: {
       args: [
         "u64",
         "ptr",
@@ -198,26 +211,36 @@ if (!process.argv.includes("--child")) {
     },
   });
   /**
-   * Send a real left click at the center of a window, as a user would to give its WebView
-   * keyboard focus. Test-only: host code never moves focus on behalf of a state read.
+   * Send a real left click at the center of a window's client area, as a user would to
+   * activate it and give its WebView keyboard focus. The client area is the WebView, so the
+   * click does not land on the caption. Test-only: host code never moves focus on behalf of
+   * a state read. The window must be visible and unobstructed at that point.
    */
-  const clickWindowCenter = (view: string) => {
+  const clickClientCenter = (view: string) => {
     const caption = windowCaption(view);
     const hwnd = input.symbols.FindWindowW(
       null,
       ptr(Buffer.from(`${caption}\0`, "utf16le")),
     );
     assert(hwnd !== 0n, `Window ${caption} was not found`);
-    const rect = new Int32Array(4);
-    assert(input.symbols.GetWindowRect(hwnd, ptr(rect)));
-    const [left = 0, top = 0, right = 0, bottom = 0] = rect;
+    // RECT is left, top, right, bottom with left and top fixed at 0 for client coordinates.
+    const clientRect = new Int32Array(4);
+    assert(input.symbols.GetClientRect(hwnd, ptr(clientRect)));
+    const [, , clientWidth = 0, clientHeight = 0] = clientRect;
+    // POINT is x then y; ClientToScreen rewrites it in place.
+    const center = new Int32Array([
+      Math.floor(clientWidth / 2),
+      Math.floor(clientHeight / 2),
+    ]);
+    assert(input.symbols.ClientToScreen(hwnd, ptr(center)));
+    const [screenX = 0, screenY = 0] = center;
     const screenWidth = input.symbols.GetSystemMetrics(SM_CXSCREEN);
     const screenHeight = input.symbols.GetSystemMetrics(SM_CYSCREEN);
     const x = Math.round(
-      (((left + right) / 2) * ABSOLUTE_COORDINATE_RANGE) / (screenWidth - 1),
+      (screenX * ABSOLUTE_COORDINATE_RANGE) / (screenWidth - 1),
     );
     const y = Math.round(
-      (((top + bottom) / 2) * ABSOLUTE_COORDINATE_RANGE) / (screenHeight - 1),
+      (screenY * ABSOLUTE_COORDINATE_RANGE) / (screenHeight - 1),
     );
     const steps = [
       MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE,
@@ -239,17 +262,37 @@ if (!process.argv.includes("--child")) {
   };
   const isMainWebViewFocused = async () =>
     (await windows.getWebViewState(main)).focused;
-  /** Wait until the main WebView holds keyboard focus, clicking only if activation alone is not enough. */
-  const focusMainWebView = async () => {
-    await windows.focus(main);
-    const deadline = Date.now() + SHORT_FOCUS_WAIT_MS;
-    while (Date.now() < deadline && !(await isMainWebViewFocused())) {
-      await Bun.sleep(10);
+  /**
+   * Make a visible window the foreground window with its WebView holding keyboard focus.
+   * SetForegroundWindow is not relied on: the foreground lock refuses it when the child
+   * process is neither the foreground process nor the last input receiver, so focus() may
+   * fail with BUSY. A real click is always accepted. Judgments use state after the click.
+   */
+  const activateByClick = async (target: { view: string }) => {
+    let focusSucceeded = false;
+    try {
+      await windows.focus(target);
+      focusSucceeded = true;
+    } catch (error) {
+      const declined =
+        error instanceof Error && "code" in error && error.code === "BUSY";
+      if (!declined) {
+        throw error;
+      }
     }
-    if (!(await isMainWebViewFocused())) {
-      clickWindowCenter("main");
+    // Observation only: window activation without WebView focus is informative, not a failure.
+    if (
+      focusSucceeded &&
+      (await windows.isFocused(target)) &&
+      !(await windows.getWebViewState(target)).focused
+    ) {
+      console.log(
+        `Observed: ${target.view} is focused but its WebView is not right after windows.focus`,
+      );
     }
-    await waitFor(isMainWebViewFocused);
+    clickClientCenter(target.view);
+    await waitFor(() => windows.isFocused(target));
+    await waitFor(async () => (await windows.getWebViewState(target)).focused);
   };
   const ready = async (path: string, count = 1) => {
     await waitFor(() => (arrivals.get(path) ?? 0) >= count);
@@ -324,6 +367,70 @@ if (!process.argv.includes("--child")) {
       (await windows.getWebViewState(main)).url,
       `${origin}/index.html`,
     );
+    // Focus runs before DevTools so a DevTools top-level window cannot take the
+    // foreground or the input focus during the scenario.
+    assert.equal(await windows.isDestroyed(peer), false);
+    // Show both windows side by side so a click on one never lands on the other.
+    const screenWidth = input.symbols.GetSystemMetrics(SM_CXSCREEN);
+    const screenHeight = input.symbols.GetSystemMetrics(SM_CYSCREEN);
+    const layoutWidth = Math.min(
+      MAX_LAYOUT_WIDTH,
+      Math.floor(screenWidth / 2) - LAYOUT_MARGIN * 2,
+    );
+    const layoutHeight = Math.min(
+      MAX_LAYOUT_HEIGHT,
+      screenHeight - LAYOUT_MARGIN * 4,
+    );
+    for (const [target, x] of [
+      [
+        main,
+        LAYOUT_MARGIN,
+      ],
+      [
+        peer,
+        Math.floor(screenWidth / 2) + LAYOUT_MARGIN,
+      ],
+    ] as const) {
+      await windows.showInactive(target);
+      await windows.setOuterBounds({
+        ...target,
+        unit: "physical",
+        x,
+        y: LAYOUT_MARGIN,
+        width: layoutWidth,
+        height: layoutHeight,
+      });
+    }
+    // (a) Activating peer takes the input focus away from the main WebView.
+    await activateByClick(peer);
+    assert.equal(await windows.isFocused(peer), true);
+    await waitFor(async () => !(await isMainWebViewFocused()));
+    // (b) Activating main gives its WebView the input focus.
+    await activateByClick(main);
+    assert.equal(await windows.isFocused(main), true);
+    assert.equal(await isMainWebViewFocused(), true);
+    // Reading state must not move focus.
+    const focusBefore = {
+      window: await windows.isFocused(main),
+      webView: await isMainWebViewFocused(),
+    };
+    await windows.getWebViewState(main);
+    await windows.getWebViewState(peer);
+    assert.deepEqual(
+      {
+        window: await windows.isFocused(main),
+        webView: await isMainWebViewFocused(),
+      },
+      focusBefore,
+    );
+    // (c) Activating peer again removes the focus from main.
+    await activateByClick(peer);
+    await waitFor(async () => !(await isMainWebViewFocused()));
+    assert.equal(await windows.isFocused(main), false);
+    // Hide both again so the remaining steps run in the original hidden state.
+    await windows.hide(main);
+    await windows.hide(peer);
+
     if (development) {
       await windows.openDevTools(main);
     } else {
@@ -401,34 +508,6 @@ if (!process.argv.includes("--child")) {
       url: `${origin}/index.html`,
     });
     await ready("/index.html", 4);
-
-    // Focus: peer takes the foreground, then the main WebView regains input focus.
-    const peer = {
-      view: "peer",
-    };
-    assert.equal(await windows.isDestroyed(peer), false);
-    await windows.focus(peer);
-    await waitFor(async () => await windows.isFocused(peer));
-    await waitFor(async () => !(await isMainWebViewFocused()));
-    await focusMainWebView();
-    assert.equal(await windows.isFocused(main), true);
-    // Reading state must not move focus.
-    const focusBefore = {
-      window: await windows.isFocused(main),
-      webView: await isMainWebViewFocused(),
-    };
-    await windows.getWebViewState(main);
-    await windows.getWebViewState(peer);
-    assert.deepEqual(
-      {
-        window: await windows.isFocused(main),
-        webView: await isMainWebViewFocused(),
-      },
-      focusBefore,
-    );
-    await windows.focus(peer);
-    await waitFor(async () => !(await isMainWebViewFocused()));
-    assert.equal(await windows.isFocused(main), false);
 
     // Destroyed: a WebView lives exactly as long as its window.
     await windows.close(peer);

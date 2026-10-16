@@ -331,8 +331,9 @@ WebView 생성 중에는 `BUSY`입니다. macOS는 single 뷰의 제어를 지�
 `focused`는 창이 운영체제의 활성(foreground) 창이고 키보드 입력 포커스가 그 창의
 WebView 안에 있을 때만 `true`입니다. `focused`가 `true`이면 `windows.isFocused`도
 `true`입니다. 반대로 `windows.isFocused`가 `true`여도 키보드 포커스가 WebView 밖에
-있으면 `focused`는 `false`일 수 있습니다. 조회는 포커스를 바꾸지 않습니다. 창과 WebView는 같은 수명을 가지므로 WebView의 destroyed 상태는
-`windows.isDestroyed`와 같고, 닫힌 창의 `getWebViewState`는 `INVALID_ARGUMENT`입니다.
+있으면 `focused`는 `false`일 수 있습니다. 조회는 포커스를 바꾸지 않습니다. 창과
+WebView는 같은 수명을 가지므로 WebView의 destroyed 상태는 `windows.isDestroyed`와
+같고, 닫힌 창의 `getWebViewState`는 `INVALID_ARGUMENT`입니다.
 
 | 메서드 | 추가 입력 | 결과 |
 | --- | --- | --- |
