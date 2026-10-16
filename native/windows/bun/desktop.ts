@@ -151,6 +151,8 @@ export class DesktopLifecycle {
   /** `starting` until ready() runs; OS URL requests are buffered and reopen events dropped meanwhile. */
   private phase: "starting" | "live" = "starting";
   private bufferedUrlRequests: (readonly string[])[] = [];
+  /** The queued `onReopen` event that has not started yet; later reopens replace it. */
+  private pendingReopen: ReopenEvent | undefined;
   /** First committed shutdown cause; later causes never replace it. */
   private shutdownReason: ShutdownReason | undefined;
   private willQuitDone = false;
@@ -291,13 +293,26 @@ export class DesktopLifecycle {
    * Queues onReopen with the macOS reopen event. Events before ready() are dropped,
    * because the startup windows are already opening. The host decides what to do
    * when onReopen is not registered.
+   *
+   * Reopens that arrive while an earlier one is still waiting to start collapse into that queued
+   * run, which receives the latest event. A reopen that arrives while onReopen is running queues
+   * one more run, so the app always sees the newest state without a backlog building up.
    */
   reopen(event: ReopenEvent): void {
     if (this.phase !== "live") {
       return;
     }
+    if (this.pendingReopen) {
+      this.pendingReopen = event;
+      return;
+    }
+    this.pendingReopen = event;
     this.enqueue(async () => {
-      await this.options?.onReopen?.(event, this.context);
+      const latest = this.pendingReopen;
+      this.pendingReopen = undefined;
+      if (latest) {
+        await this.options?.onReopen?.(latest, this.context);
+      }
     });
   }
   /**

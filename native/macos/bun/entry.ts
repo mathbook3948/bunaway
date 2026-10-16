@@ -106,6 +106,23 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
           ...urls,
         ],
       }) ?? Promise.resolve(),
+    // An app with `onReopen` decides what a reopen shows. Without it the host brings the windows
+    // back when none is visible. Either way a reopen is not an open request. The hook runs only
+    // while draining, after construction, so reading `desktopRequests` here is safe.
+    deliverReopen: (hasVisibleWindows) => {
+      if (desktopRequests.reopenHandler) {
+        return (
+          channel?.send({
+            kind: "reopen",
+            hasVisibleWindows,
+          }) ?? Promise.resolve()
+        );
+      }
+      if (!hasVisibleWindows) {
+        ui?.requestShow();
+      }
+      return Promise.resolve();
+    },
     diagnostic,
   });
   /**
@@ -583,25 +600,17 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         }),
       // A session end never waits for the app's options or decision.
       sessionEnding: () => beginShutdown("session-end"),
-      // An app with `onReopen` decides what a reopen shows. Without it the host brings the windows
-      // back when none is visible. Either way a reopen is not an open request.
       reopened: (hasVisibleWindows) =>
-        desktopRequests.defer("reopen", () => {
-          if (desktopRequests.reopenHandler) {
-            channel?.notify({
-              kind: "reopen",
-              hasVisibleWindows,
-            });
-          } else if (!hasVisibleWindows) {
-            ui?.requestShow();
-          }
-        }),
-      openUrlsRequested: (rawUrls) => {
-        const { urls, rejected, rejectedAll } = normalizeOpenUrls(rawUrls);
+        desktopRequests.reopen(hasVisibleWindows),
+      openUrlsRequested: (rawUrls, receivedCount) => {
+        const { urls, rejected, rejectedAll } = normalizeOpenUrls(
+          rawUrls,
+          receivedCount,
+        );
         if (rejectedAll || rejected.length > 0) {
           // Only counts and reasons: the URLs may hold secrets.
           diagnostic("open-urls-rejected", {
-            received: rawUrls.length,
+            received: receivedCount,
             rejectedAll,
             rejected,
           });

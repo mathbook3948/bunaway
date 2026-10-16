@@ -63,7 +63,15 @@ function canonicalFileUrl(url: URL):
   }
   try {
     return {
-      href: pathToFileURL(fileURLToPath(url)).href,
+      // macOS paths are POSIX; the explicit option keeps the result the same on any test host.
+      href: pathToFileURL(
+        fileURLToPath(url, {
+          windows: false,
+        }),
+        {
+          windows: false,
+        },
+      ).href,
     };
   } catch {
     return {
@@ -82,11 +90,15 @@ function canonicalFileUrl(url: URL):
  * in the path) is rejected, a `file:` URL becomes its canonical form, and any other URL becomes
  * `URL.href`. Never throws. Rejections carry only the entry index and a reason, because URLs may
  * hold secrets that must not reach diagnostics.
+ *
+ * @param receivedCount How many URLs AppKit delivered. It can exceed `rawUrls.length` because the
+ * caller skips copying a request that is over the entry limit; such a request is rejected whole.
  */
 export function normalizeOpenUrls(
   rawUrls: readonly string[],
+  receivedCount = rawUrls.length,
 ): NormalizedOpenUrls {
-  if (rawUrls.length > MAX_OPEN_URLS) {
+  if (receivedCount > MAX_OPEN_URLS) {
     return {
       rejectedAll: "too-many-urls",
       urls: [],

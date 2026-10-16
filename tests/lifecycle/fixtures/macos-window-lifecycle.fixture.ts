@@ -131,6 +131,7 @@ const desktop = new DesktopRequests({
   stopping: () => false,
   sendQuitRequest: (reason) => quitRequests.push(reason),
   sendOpenUrls: async () => {},
+  deliverReopen: async () => {},
   diagnostic: () => {},
 });
 const windows = new MacosWindows(

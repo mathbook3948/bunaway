@@ -1,4 +1,5 @@
 import { dlopen, type Pointer } from "bun:ffi";
+import { MAX_OPEN_URLS } from "@bunaway/runtime-bun/worker-channel";
 import { Objc, type ObjcObject } from "./objc.ts";
 import {
   CORE_EVENT_CLASS,
@@ -131,8 +132,12 @@ export class MacosApplication {
     sessionEnding(): void;
     /** The user reopened the app (Dock click or reopen Apple event), with or without a visible window. */
     reopened(hasVisibleWindows: boolean): void;
-    /** The OS asked the app to open URLs (a URL scheme or documents), as raw `absoluteString`s in order. */
-    openUrlsRequested(urls: string[]): void;
+    /**
+     * The OS asked the app to open URLs (a URL scheme or documents), as raw `absoluteString`s in
+     * order. `receivedCount` is how many the OS delivered; `urls` is empty when that exceeds
+     * `MAX_OPEN_URLS`, because such a request is rejected whole and not worth copying.
+     */
+    openUrlsRequested(urls: string[], receivedCount: number): void;
   }) {
     const o = this.objc;
     runtimeOwners.push(o);
@@ -194,7 +199,13 @@ export class MacosApplication {
         encoding: "v@:@@",
         call: (_self, _cmd, _sender, urls) => {
           if (urls && !this.closed && !hooks.stopping()) {
-            hooks.openUrlsRequested(this.urlStrings(urls));
+            const receivedCount = Number(o.integer(urls, "count"));
+            hooks.openUrlsRequested(
+              receivedCount > MAX_OPEN_URLS
+                ? []
+                : this.urlStrings(urls, receivedCount),
+              receivedCount,
+            );
           }
         },
       },
@@ -325,10 +336,9 @@ export class MacosApplication {
   }
 
   /** Copies an `NSArray<NSURL *>` into JavaScript strings so nothing native outlives the callback. */
-  private urlStrings(urls: Pointer): string[] {
+  private urlStrings(urls: Pointer, count: number): string[] {
     const o = this.objc;
     return o.withAutoreleasePool(() => {
-      const count = Number(o.integer(urls, "count"));
       const strings: string[] = [];
       for (let index = 0; index < count; index++) {
         const url = o.send(urls, "objectAtIndex:", index);

@@ -1579,3 +1579,30 @@ test("onReopen is dropped before ready and delivered in queue order afterwards",
     "reopen:true",
   ]);
 });
+
+test("reopens that arrive while onReopen runs collapse into one more run with the latest event", async () => {
+  const gate = Promise.withResolvers<void>();
+  const { lifecycle, seen } = recordingLifecycle({
+    async onReopen(event) {
+      seen.push(`reopen:${event.hasVisibleWindows}`);
+      await gate.promise;
+    },
+  });
+  lifecycle.ready();
+  lifecycle.reopen({
+    hasVisibleWindows: false,
+  });
+  await tick();
+  for (let count = 0; count < 5; count++) {
+    lifecycle.reopen({
+      hasVisibleWindows: count % 2 === 0,
+    });
+  }
+  gate.resolve();
+  await tick();
+  expect(seen).toEqual([
+    "ready",
+    "reopen:false",
+    "reopen:true",
+  ]);
+});

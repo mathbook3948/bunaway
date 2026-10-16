@@ -133,6 +133,7 @@ const windows = new MacosWindows(config, {} as never, {
     stopping: () => false,
     sendQuitRequest: () => {},
     sendOpenUrls: async () => {},
+    deliverReopen: async () => {},
     diagnostic: () => {},
   }),
   windowsGone: () => {},

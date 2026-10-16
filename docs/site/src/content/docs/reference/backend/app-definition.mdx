@@ -165,11 +165,11 @@ macOS 호스트는 앱 실행 인자를 받지 않습니다. macOS의 `onOpen`�
 | 플랫폼 | 입력 | 비고 |
 | --- | --- | --- |
 | Windows | 초기 실행과 두 번째 실행의 인자 | `openArguments: "files-and-urls"`일 때만 호출합니다. `"raw"`는 인자를 해석하지 않으므로 호출하지 않습니다 |
-| macOS | Finder, `open` 명령, URL scheme 요청 | `openArguments`와 무관합니다 |
+| macOS | Finder, `open` 명령, URL scheme 요청 | `openArguments`와 무관합니다. 현재 패키징은 Info.plist에 `CFBundleURLTypes`와 `CFBundleDocumentTypes`를 만들지 않으므로, 설치된 앱이 사용자 정의 URL scheme이나 문서 열기를 운영체제에서 받으려면 이 항목을 Info.plist에 직접 추가해야 합니다 |
 
 한 번의 Windows 실행에서는 `onOpen(request)`을 먼저 호출하고, URL이 있으면 `onOpenUrls`를 이어서
 호출합니다. `onOpen`이 실패해도 `onOpenUrls`는 호출합니다. 인자의 URL이 잘못되어 요청이 실패하면 둘 다
-호출하지 않습니다. macOS에서 앱이 준비된 뒤 요청을 받으면 앱을 먼저 표시한 뒤 `onOpenUrls`를 호출합니다.
+호출하지 않습니다. 같은 파일이나 URL이 `onOpen`의 `argv`와 `onOpenUrls`에 모두 전달되므로 Windows에서 두 콜백을 함께 등록했다면 한쪽에서만 처리하세요. macOS에서 앱이 준비된 뒤 요청을 받으면 앱을 먼저 표시한 뒤 `onOpenUrls`를 호출합니다.
 macOS의 URL은 호스트가 검증합니다. 한 요청이 항목 256개 또는 64 KiB를 넘으면 요청 전체를 거부하고,
 잘못된 URL, 로컬이 아닌 호스트의 파일 URL, 인코딩된 경로 구분자(`%2F`)나 NUL을 포함한 항목은 진단을
 남기고 제외합니다.
@@ -183,8 +183,12 @@ macOS의 URL은 호스트가 검증합니다. 한 요청이 항목 256개 또는
 ```ts
 desktop: {
   async onOpenUrls(urls, desktop) {
-    // 파일은 file: URL로 옵니다. 필요한 문서만 앱에서 검증한 뒤 엽니다.
-    for (const url of urls) await openDocument(new URL(url));
+    // 파일은 file: URL로 옵니다. 허용한 scheme만 처리하고 나머지는 무시합니다.
+    const allowed = ["file:", "myapp:"];
+    for (const url of urls) {
+      const parsed = URL.parse(url);
+      if (parsed && allowed.includes(parsed.protocol)) await openDocument(parsed);
+    }
     await desktop.show();
   },
 },
@@ -198,6 +202,8 @@ desktop: {
 - 등록하지 않으면 표시 중인 창이 없을 때 `show()`와 같게 처리하고, 창이 있으면 아무것도 하지 않습니다.
 - 등록하면 호스트는 창을 표시하지 않으며 앱이 결정합니다. 예를 들어 `context.show()`를 호출합니다.
   앱이 준비되기 전의 요청은 시작 창이 이미 열리는 중이므로 버립니다.
+- 앱이 `onReopen`을 실행하는 동안 또는 앞선 열기 요청을 처리하는 동안 재활성화가 이어지면 연속한 요청은
+  하나로 합치고 가장 최근의 `hasVisibleWindows`로 한 번만 호출합니다.
 
 Windows는 이 훅을 호출하지 않습니다. Windows에서 앱을 다시 실행하면 두 번째 실행으로 `onOpen`과
 `onOpenUrls`가 호출됩니다. 훅은 `onOpen`과 같은 큐에서 실행하며 실패하면 진단을 남기고 앱은 계속 실행합니다.

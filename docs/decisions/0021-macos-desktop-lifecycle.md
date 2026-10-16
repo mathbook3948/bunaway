@@ -151,6 +151,9 @@ URL의 중복을 직접 제거해야 한다([Tauri deep-linking](https://v2.taur
 등록하면 호스트는 창을 표시하지 않고 앱이 정한다(예: `context.show()`). 등록했을 때 준비 전의
 reopen은 버린다. 시작 창이 이미 열리는 중이기 때문이다. Windows는 호출하지 않는다. Windows의 재실행은
 두 번째 실행이므로 `onOpen`과 `onOpenUrls`로 간다. delegate의 반환값은 계속 `NO`다.
+메인 스레드는 reopen을 열기 요청과 같은 도착 순서 큐에 넣고 한 번에 하나씩 백엔드에 보내 수락을 기다린다.
+아직 보내지 않은 reopen이 큐 끝에 있으면 최신 `hasVisibleWindows`로 합치고, 백엔드도 아직 시작하지 않은
+대기 reopen을 최신 값 하나로 합친다.
 Dock 클릭은 `OpenRequest`로 표현할 입력이 없어 `onOpen`은 호출하지 않는다.
 
 #### 후속 작업

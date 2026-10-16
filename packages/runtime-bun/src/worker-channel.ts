@@ -362,7 +362,11 @@ const packetDefinitions = {
     ],
     "control",
   ),
-  /** macOS main thread to backend: the user reopened the app (Dock click or reopen Apple event). */
+  /**
+   * macOS main thread to backend: the user reopened the app (Dock click or reopen Apple event).
+   * The main thread sends one at a time and waits for the acknowledgement, merging reopens that
+   * arrive meanwhile.
+   */
   reopen: definePacket(
     {
       hasVisibleWindows: flag,

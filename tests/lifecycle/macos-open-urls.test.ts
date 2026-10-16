@@ -117,3 +117,11 @@ test("a request over the entry or size limit is rejected as a whole", () => {
     ]).rejectedAll,
   ).toBe("too-large");
 });
+
+test("a request whose entries were not copied is rejected by its received count", () => {
+  expect(normalizeOpenUrls([], MAX_OPEN_URLS + 1)).toEqual({
+    rejectedAll: "too-many-urls",
+    urls: [],
+    rejected: [],
+  });
+});

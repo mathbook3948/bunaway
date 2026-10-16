@@ -7,15 +7,29 @@ import {
 function requests(stopping = () => false) {
   const sent: MacosQuitRequestReason[] = [];
   const opened: (readonly string[])[] = [];
+  /** Every reopen delivery in order, with the `hasVisibleWindows` it carried. */
+  const reopened: boolean[] = [];
+  /** Every delivery of either kind in the order the backend would see it. */
+  const order: string[] = [];
+  let reopenInFlight = 0;
+  let maxReopenInFlight = 0;
   const diagnostics: {
     event: string;
     fields: object;
   }[] = [];
   /** Settles the `sendOpenUrls` calls in order; by default each is accepted at once. */
   let acceptOpenUrls: (() => Promise<void>) | undefined;
+  /** Settles the `deliverReopen` calls in order; by default each is accepted at once. */
+  let acceptReopen: (() => Promise<void>) | undefined;
   return {
     sent,
     opened,
+    reopened,
+    order,
+    maxReopenInFlight: () => maxReopenInFlight,
+    holdReopen(hold: () => Promise<void>) {
+      acceptReopen = hold;
+    },
     diagnostics,
     holdOpenUrls(hold: () => Promise<void>) {
       acceptOpenUrls = hold;
@@ -25,7 +39,19 @@ function requests(stopping = () => false) {
       sendQuitRequest: (reason) => sent.push(reason),
       sendOpenUrls: async (urls) => {
         opened.push(urls);
+        order.push(`open:${urls.join(",")}`);
         await acceptOpenUrls?.();
+      },
+      deliverReopen: async (hasVisibleWindows) => {
+        reopened.push(hasVisibleWindows);
+        order.push(`reopen:${hasVisibleWindows}`);
+        reopenInFlight++;
+        maxReopenInFlight = Math.max(maxReopenInFlight, reopenInFlight);
+        try {
+          await acceptReopen?.();
+        } finally {
+          reopenInFlight--;
+        }
       },
       diagnostic: (event, fields) =>
         diagnostics.push({
@@ -46,7 +72,7 @@ test("requests that arrive before the backend's options wait for them and collap
   expect(desktop.closeBehavior).toBeUndefined();
   desktop.defer("quit-command", () => runs.push("quit"));
   desktop.defer("quit-command", () => runs.push("quit again"));
-  desktop.defer("reopen", () => runs.push("reopen"));
+  desktop.defer("show", () => runs.push("show"));
   expect(runs).toEqual([]);
   desktop.configure({
     closeBehavior: "keep-alive",
@@ -55,7 +81,7 @@ test("requests that arrive before the backend's options wait for them and collap
   await desktop.configured();
   expect(runs).toEqual([
     "quit",
-    "reopen",
+    "show",
   ]);
   expect(desktop.closeBehavior).toBe("keep-alive");
   expect(desktop.reopenHandler).toBe(true);
@@ -70,7 +96,7 @@ test("a deferred request is dropped when shutdown began before the options arriv
   let stopping = false;
   const { desktop } = requests(() => stopping);
   const runs: string[] = [];
-  desktop.defer("reopen", () => runs.push("reopen"));
+  desktop.defer("show", () => runs.push("show"));
   stopping = true;
   desktop.abandon();
   expect(await desktop.configured()).toBeUndefined();
@@ -238,6 +264,106 @@ test("a failed send is reported and does not block the next open request", async
       fields: {
         reason: "send-failed",
         count: 1,
+        message: "channel closed",
+      },
+    },
+  ]);
+});
+
+test("reopens before the options arrive merge and deliver the latest value once", async () => {
+  const { desktop, reopened } = requests();
+  desktop.reopen(false);
+  desktop.reopen(true);
+  desktop.reopen(false);
+  await settle();
+  expect(reopened).toEqual([]);
+  desktop.configure(config);
+  await settle();
+  expect(reopened).toEqual([
+    false,
+  ]);
+});
+
+test("a burst of reopens during a slow delivery sends one in flight plus one merged", async () => {
+  const { desktop, reopened, diagnostics, holdReopen, maxReopenInFlight } =
+    requests();
+  const gate = Promise.withResolvers<void>();
+  let call = 0;
+  holdReopen(() => (call++ === 0 ? gate.promise : Promise.resolve()));
+  desktop.configure(config);
+  desktop.reopen(true);
+  await settle();
+  for (let count = 0; count < 100; count++) {
+    desktop.reopen(count % 2 === 0);
+  }
+  await settle();
+  expect(reopened).toEqual([
+    true,
+  ]);
+  gate.resolve();
+  await settle();
+  // The last of the 100 calls has count 99, so hasVisibleWindows is false.
+  expect(reopened).toEqual([
+    true,
+    false,
+  ]);
+  expect(maxReopenInFlight()).toBe(1);
+  expect(diagnostics).toEqual([]);
+});
+
+test("open and reopen requests keep arrival order and only adjacent reopens merge", async () => {
+  const { desktop, order } = requests();
+  desktop.openUrls([
+    "a:A",
+  ]);
+  desktop.reopen(true);
+  desktop.openUrls([
+    "a:B",
+  ]);
+  desktop.reopen(false);
+  desktop.reopen(true);
+  desktop.configure(config);
+  await settle();
+  expect(order).toEqual([
+    "open:a:A",
+    "reopen:true",
+    "open:a:B",
+    "reopen:true",
+  ]);
+});
+
+test("reopen requests do not count against the open request bound", async () => {
+  const { desktop, opened, reopened, diagnostics } = requests();
+  for (let index = 0; index < 16; index++) {
+    desktop.openUrls([
+      `a:${index}`,
+    ]);
+    desktop.reopen(index % 2 === 0);
+  }
+  expect(diagnostics).toEqual([]);
+  desktop.configure(config);
+  await settle();
+  expect(opened).toHaveLength(16);
+  expect(reopened).toHaveLength(16);
+});
+
+test("a failed reopen delivery is reported and the next request still runs", async () => {
+  const { desktop, opened, diagnostics, holdReopen } = requests();
+  holdReopen(async () => {
+    throw new Error("channel closed");
+  });
+  desktop.configure(config);
+  desktop.reopen(true);
+  desktop.openUrls([
+    "a:1",
+  ]);
+  await settle();
+  expect(opened).toHaveLength(1);
+  expect(diagnostics).toEqual([
+    {
+      event: "reopen-dropped",
+      fields: {
+        reason: "send-failed",
         message: "channel closed",
       },
     },
