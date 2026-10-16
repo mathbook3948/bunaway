@@ -305,16 +305,17 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 우선순위 P1. 소유자: 메뉴는 선택 데스크톱 API, 전역 단축키는 공식 플러그인 후보.
 출처: [T-menu], [E-menu], [E-menu-item], [E-shortcut], [T-global-shortcut].
 
-- [ ] 앱 메뉴바와 창별 메뉴를 생성, 교체, 조회하고 제거한다.
+- [x] 창별 메뉴바를 연결, 교체, 조회하고 분리한다.
+- [ ] 앱 전체 기본 메뉴바를 자동으로 연결한다.
 - [ ] 메뉴바 visible과 auto-hide를 설정하고 조회한다.
-- [ ] 지정 창과 위치에 컨텍스트 메뉴를 표시하고 닫는다.
+- [x] 지정 창과 물리 화면 좌표에 컨텍스트 메뉴를 표시하고 선택 또는 취소로 닫는다. AbortSignal 취소로 닫으며 별도 close 작업은 제공하지 않는다.
 - [x] 공유 메뉴 리소스에서 일반, separator, checkbox, radio와 submenu 항목을 제공한다.
 - [ ] 메뉴 icon 항목을 제공한다.
 - [x] 메뉴 리소스 ID 조회, create, replace, remove와 목록 조회, 항목 insert와 remove를 제공한다. `insert`의 index 0과 배열 길이로 prepend와 append를 처리한다.
-- [x] 메뉴 리소스의 항목 label, enabled, visible와 checked를 실행 중 변경한다. 연결한 트레이의 다음 팝업에 반영한다.
+- [x] 메뉴 리소스의 항목 label, enabled, visible와 checked를 실행 중 변경한다. 연결한 트레이의 다음 팝업과 창 메뉴바에 반영한다.
 - [ ] 메뉴 항목 icon을 실행 중 변경한다.
 - [x] 트레이 메뉴 선택을 `menu.clicked`로 전달한다. 앱 창에 속하지 않아 `windowId`는 null이다.
-- [ ] 창 메뉴 click 이벤트와 소유 창 정보를 전달한다.
+- [x] 창 메뉴바와 컨텍스트 팝업 선택을 `menu.clicked`로 전달하고 소유 windowId를 포함한다.
 - [ ] accelerator, 표시 문자열과 실제 등록 여부를 구분한다.
 - [ ] Undo, Redo, Cut, Copy, Paste, Select All 등 기본 menu role을 제공한다.
 - [ ] About, Quit, 창 전환과 도움말 등 플랫폼 기본 메뉴 항목을 제공한다.
@@ -335,7 +336,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 물리 키보드와 키보드 레이아웃별 사용자 입력, 다른 플랫폼은 별도 검증과 구현이 남아 있다.
 
 공유 메뉴 계약과 트레이 연결은 [menu API](./site/src/content/docs/reference/plugins/menu.mdx)를 따른다.
-실제 HMENU와 창 없는 UI Worker 회귀를 Windows CI 실행기에 포함한다.
+실제 HMENU와 창 없는 UI Worker 회귀, 창 메뉴바 연결과 분리, 실제 Worker 컨텍스트 팝업 취소 회귀를 Windows 테스트에 포함한다.
+메뉴바 자동 숨김, 편집 role과 accelerator는 미구현이다. 다중 행 메뉴바의 최소/최대 크기, 최소화 복원과 혼합 DPI는 별도 검증이 남아 있다.
 사용자 포인터와 키보드 메뉴 조작, Explorer 재시작 중 사용자 정의 메뉴는 수동 검증이 남아 있다.
 
 ## 08. 로그인 시 자동 실행

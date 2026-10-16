@@ -986,6 +986,7 @@ test("modal polling observes validated control intent immediately but defers res
     for (const packet of [
       fixtures.cancel.packet,
       fixtures["cancel-context"].packet,
+      fixtures["session-failure"].packet,
       fixtures.shutdown.packet,
       fixtures.operation.packet,
     ]) {
@@ -999,6 +1000,7 @@ test("modal polling observes validated control intent immediately but defers res
     expect(observed).toEqual([
       "cancel",
       "cancel-context",
+      "session-failure",
       "shutdown",
     ]);
     expect(dispatched).toEqual([]);
@@ -1017,8 +1019,56 @@ test("modal polling observes validated control intent immediately but defers res
       },
     });
     receiver.poll();
-    expect(observed).toHaveLength(3);
+    expect(observed).toHaveLength(4);
     expect(failures).toHaveLength(1);
+  } finally {
+    receiver.close();
+    port1.close();
+    port2.close();
+  }
+});
+
+test("polled cancellation interrupts native loops synchronously while ordinary cleanup remains deferred", async () => {
+  const { port1, port2 } = new MessageChannel();
+  const received: string[] = [];
+  const interrupted: string[] = [];
+  const errors: unknown[] = [];
+  const receiver = new Channel(
+    port2,
+    runtime,
+    "ui",
+    (packet) => {
+      received.push(packet.kind);
+    },
+    (error) => errors.push(error),
+    (packet) => interrupted.push(packet.kind),
+  );
+  try {
+    const packets: Packet[] = [
+      {
+        kind: "shutdown",
+      },
+      fixtures.cancel.packet,
+      fixtures["cancel-context"].packet,
+      fixtures.operation.packet,
+    ];
+    for (const [index, packet] of packets.entries()) {
+      port1.postMessage({
+        runtime,
+        sequence: index + 1,
+        packet,
+      });
+    }
+    receiver.poll();
+    expect(interrupted).toEqual([
+      "shutdown",
+      "cancel",
+      "cancel-context",
+    ]);
+    expect(received).toEqual([]);
+    await Promise.resolve();
+    expect(received).toEqual(packets.map((packet) => packet.kind));
+    expect(errors).toEqual([]);
   } finally {
     receiver.close();
     port1.close();

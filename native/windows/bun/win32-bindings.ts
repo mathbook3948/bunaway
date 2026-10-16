@@ -129,6 +129,12 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "i32",
   },
+  GetMenu: {
+    args: [
+      "u64",
+    ],
+    returns: "u64",
+  },
   GetSystemMenu: {
     args: [
       "u64",

@@ -175,6 +175,7 @@ mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
         return 1;
       },
       GetDpiForWindow: () => monitorInfo(monitorFor(windowRect)).dpi,
+      GetMenu: () => 0n,
       GetWindowLongPtrW: (_window: bigint, index: number) =>
         index === GWL_STYLE ? style : 0n,
       SetWindowLongPtrW(_window: bigint, _index: number, next: bigint) {

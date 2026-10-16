@@ -553,7 +553,7 @@ export class Channel {
     private readonly side: Side,
     private readonly receive: (packet: Packet) => void | Promise<void>,
     private readonly fail: (error: unknown) => void,
-    /** Record cancellation intent only. Must not dispatch operations, abort arbitrary listeners or release native resources. */
+    /** Record cancellation or end an owned native modal loop only. Never dispatch operations, abort arbitrary listeners or release native resources. */
     private readonly observePolled?: (packet: Packet) => void,
   ) {
     port.on("message", this.accept);

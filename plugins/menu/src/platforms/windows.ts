@@ -14,6 +14,11 @@ import {
   type updateItemSchema,
 } from "#menu/contract";
 
+import {
+  type WindowMenuDriver,
+  WindowMenus,
+} from "#menu/platforms/windows-window-menus";
+
 type ResourceInput = z.output<typeof resourceSchema>;
 type TargetInput = z.output<typeof targetSchema>;
 
@@ -53,6 +58,22 @@ function locate(
 
 /** Own bounded menu definitions, tray attachment and cancellable click waits. */
 export function initialize(environment: NativeEnvironment) {
+  return initializeMenuOperations(environment, () => {
+    if (!environment.menus?.windows) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message: "Native window menus are unavailable.",
+      });
+    }
+    return new WindowMenus(environment.menus.windows);
+  });
+}
+
+/** Resource state is shared by the real adapter and tests with an injected native owner. */
+export function initializeMenuOperations(
+  environment: NativeEnvironment,
+  createWindowMenus: () => WindowMenuDriver,
+) {
   const resources = new Map<string, NativeMenuItem[]>();
   const clicks = new NativeEventWaiters<z.output<typeof clickedSchema>>(
     MAX_MENU_WAITERS,
@@ -61,6 +82,92 @@ export function initialize(environment: NativeEnvironment) {
   let changed = false;
   let revision = 0;
   let disposed = false;
+  let cleanupComplete = false;
+  let windowRevision = 0;
+  let windowMenus: WindowMenuDriver | undefined;
+  const windowAttachments = new Map<
+    string,
+    {
+      menuId: string;
+      revision: number;
+    }
+  >();
+  let popup:
+    | {
+        menuId: string;
+        windowId: string;
+        controller: AbortController;
+      }
+    | undefined;
+  const driver = () => (windowMenus ??= createWindowMenus());
+  const busy = () => {
+    throw new BunawayError({
+      code: "BUSY",
+      message: "Menu resource is attached to another owner.",
+    });
+  };
+  const publish = (
+    menuId: string,
+    itemId: string,
+    source: "tray" | "window" | "context",
+    windowId: string | null,
+  ) => {
+    const payload = {
+      menuId,
+      itemId,
+      source,
+      windowId,
+    };
+    clicks.publish(payload);
+    environment.menus?.emit("menu.clicked", payload);
+  };
+  const cancelPopup = (menuId: string) => {
+    if (popup?.menuId === menuId) {
+      popup.controller.abort();
+    }
+  };
+  const setWindow = (
+    windowId: string,
+    menuId: string | null,
+    items: NativeMenuItem[] | null,
+  ) => {
+    if (
+      menuId !== null &&
+      (attached === menuId ||
+        [
+          ...windowAttachments,
+        ].some(([id, entry]) => id !== windowId && entry.menuId === menuId))
+    ) {
+      busy();
+    }
+    const nextRevision = ++windowRevision;
+    driver().set(
+      windowId,
+      items === null ? null : structuredClone(items),
+      (itemId) => {
+        if (
+          !disposed &&
+          menuId !== null &&
+          windowAttachments.get(windowId)?.revision === nextRevision
+        ) {
+          publish(menuId, itemId, "window", windowId);
+        }
+      },
+      () => {
+        if (windowAttachments.get(windowId)?.revision === nextRevision) {
+          windowAttachments.delete(windowId);
+        }
+      },
+    );
+    if (menuId === null) {
+      windowAttachments.delete(windowId);
+    } else {
+      windowAttachments.set(windowId, {
+        menuId,
+        revision: nextRevision,
+      });
+    }
+  };
   const snapshot = (menuId: string, items: NativeMenuItem[]) => ({
     menuId,
     items: structuredClone(items),
@@ -68,6 +175,14 @@ export function initialize(environment: NativeEnvironment) {
   const requireMenu = (menuId: string) =>
     resources.get(menuId) ?? invalid("Menu resource does not exist.");
   const attach = (menuId: string | null, items: NativeMenuItem[] | null) => {
+    if (
+      menuId !== null &&
+      [
+        ...windowAttachments.values(),
+      ].some((entry) => entry.menuId === menuId)
+    ) {
+      busy();
+    }
     if (!environment.menus) {
       throw new BunawayError({
         code: "UNSUPPORTED",
@@ -82,14 +197,7 @@ export function initialize(environment: NativeEnvironment) {
         if (disposed || revision !== nextRevision || menuId === null) {
           return;
         }
-        const payload = {
-          menuId,
-          itemId,
-          source: "tray" as const,
-          windowId: null,
-        };
-        clicks.publish(payload);
-        environment.menus?.emit("menu.clicked", payload);
+        publish(menuId, itemId, "tray", null);
       },
     );
     revision = nextRevision;
@@ -103,8 +211,14 @@ export function initialize(environment: NativeEnvironment) {
     } catch {
       return invalid("Invalid menu tree.");
     }
+    cancelPopup(menuId);
     if (attached === menuId) {
       attach(menuId, parsed);
+    }
+    for (const [windowId, entry] of windowAttachments) {
+      if (entry.menuId === menuId) {
+        setWindow(windowId, menuId, parsed);
+      }
     }
     resources.set(menuId, parsed);
     return snapshot(menuId, parsed);
@@ -112,23 +226,100 @@ export function initialize(environment: NativeEnvironment) {
   return {
     resources,
     clicks,
+    setWindow,
+    getWindow(windowId: string) {
+      driver().validate(windowId);
+      return windowAttachments.get(windowId)?.menuId ?? null;
+    },
+    detachResource(menuId: string) {
+      cancelPopup(menuId);
+      for (const [windowId, entry] of windowAttachments) {
+        if (entry.menuId === menuId) {
+          setWindow(windowId, null, null);
+        }
+      }
+    },
+    showContext(
+      {
+        menuId,
+        windowId,
+        x,
+        y,
+      }: {
+        menuId: string;
+        windowId: string;
+        x: number;
+        y: number;
+      },
+      signal?: AbortSignal,
+    ) {
+      const items = structuredClone(requireMenu(menuId));
+      if (popup) {
+        throw new BunawayError({
+          code: "BUSY",
+          message: "A context menu is already open.",
+        });
+      }
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      if (signal?.aborted) {
+        abort();
+      }
+      signal?.addEventListener("abort", abort, {
+        once: true,
+      });
+      popup = {
+        menuId,
+        windowId,
+        controller,
+      };
+      try {
+        const itemId = driver().popup(
+          windowId,
+          items,
+          x,
+          y,
+          controller.signal,
+          signal,
+        );
+        if (controller.signal.aborted || disposed) {
+          throw new BunawayError({
+            code: "CANCELLED",
+            message: "Menu popup cancelled.",
+          });
+        }
+        if (itemId !== null) {
+          publish(menuId, itemId, "context", windowId);
+        }
+        return itemId;
+      } finally {
+        popup = undefined;
+        signal?.removeEventListener("abort", abort);
+      }
+    },
     requireMenu,
     attach,
     commit,
     snapshot,
     getAttached: () => attached,
     dispose() {
-      if (disposed) {
+      if (cleanupComplete) {
         return;
       }
       disposed = true;
+      popup?.controller.abort();
       clicks.dispose();
       revision++;
+      windowMenus?.dispose();
+      windowMenus = undefined;
+      windowAttachments.clear();
       resources.clear();
       if (changed) {
         environment.menus?.setTrayMenu(undefined);
+        changed = false;
       }
       attached = null;
+      cleanupComplete = true;
     },
   };
 }
@@ -171,6 +362,7 @@ export function remove(state: State, { menuId }: TargetInput) {
   if (!state.resources.has(menuId)) {
     return false;
   }
+  state.detachResource(menuId);
   if (state.getAttached() === menuId) {
     state.attach(null, null);
   }
@@ -254,4 +446,23 @@ export function waitForClick(state: State, signal?: AbortSignal) {
 
 export function dispose(state: State): void {
   state.dispose();
+}
+
+/** Attach or detach a persistent menu bar on one live window lifetime. */
+export function setWindowMenu(
+  state: State,
+  {
+    windowId,
+    menuId,
+  }: {
+    windowId: string;
+    menuId: string | null;
+  },
+): null {
+  state.setWindow(
+    windowId,
+    menuId,
+    menuId === null ? null : state.requireMenu(menuId),
+  );
+  return null;
 }

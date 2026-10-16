@@ -2,6 +2,7 @@ import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
   clickedSchema,
+  contextMenuSchema,
   idSchema,
   insertSchema,
   itemTargetSchema,
@@ -9,6 +10,8 @@ import {
   resourceSchema,
   targetSchema,
   updateItemSchema,
+  windowMenuSchema,
+  windowTargetSchema,
 } from "#menu/contract";
 import {
   create,
@@ -21,6 +24,7 @@ import {
   removeItem,
   replace,
   setTrayMenu,
+  setWindowMenu,
   updateItem,
   waitForClick,
 } from "#menu/platforms/windows";
@@ -79,6 +83,22 @@ export const menuOperations = {
     input: z.null(),
     output: idSchema.nullable(),
     handler: (_input, { instance }) => getTrayMenu(instance),
+  }),
+  setWindowMenu: operation({
+    input: windowMenuSchema,
+    output: z.null(),
+    handler: (input, { instance }) => setWindowMenu(instance, input),
+  }),
+  getWindowMenu: operation({
+    input: windowTargetSchema,
+    output: idSchema.nullable(),
+    handler: ({ windowId }, { instance }) => instance.getWindow(windowId),
+  }),
+  showContextMenu: operation({
+    input: contextMenuSchema,
+    output: idSchema.nullable(),
+    handler: (input, { instance, signal }) =>
+      instance.showContext(input, signal),
   }),
   waitForClick: operation({
     input: z.null(),

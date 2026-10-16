@@ -274,6 +274,13 @@
       }
     },
     {
+      "name": "@bunaway/plugin/windows-menu",
+      "source": "packages/plugin-sdk/src/windows-menu.ts",
+      "pages": {
+        "reference/tooling/native-plugins": ["NativePopupMenu"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-api",
       "source": "packages/plugin-api/src/index.ts",
       "pages": {
@@ -1457,6 +1464,9 @@
       "menu.updateItem",
       "menu.setTrayMenu",
       "menu.getTrayMenu",
+      "menu.setWindowMenu",
+      "menu.getWindowMenu",
+      "menu.showContextMenu",
       "menu.waitForClick"
     ],
     "reference/plugins/tray": [

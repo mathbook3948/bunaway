@@ -1104,6 +1104,12 @@ harness의 기존 15초 제한을 각각 유지하며 출력과 경과 시간, �
 PR #191과 같은 native child observer 및 notification 진단을 사용하고 Windows stderr를
 원본 파일로 수집해 PowerShell의 CLIXML 해석 오류가 실제 실패 출력을 가리지 않게 합니다.
 
+`lifecycle/windows-window-menu.test.ts`는 실제 HMENU의 창별 소유, 중첩 선택, 다른 트리 선택 거부,
+동적 교체, 콘텐츠 크기와 창 파괴 전 분리를 검사한다. 시스템 및 사용자 정의 타이틀바에서
+`skipTaskbar` 변경 뒤 단일 행과 여러 행 메뉴의 콘텐츠 크기가 보존되는지도 검사한다.
+실제 UI Worker fixture는 요청 취소, 컨텍스트 폐기, 세션 실패와 종료 패킷으로
+TrackPopupMenuEx 모달 루프를 끝내고 핸들을 해제한다. 메뉴 막대 진입 전 종료 경합도 포함한다.
+사용자 포인터 메뉴 선택, 물리 키보드 탐색과 혼합 DPI 검증을 대신하지 않는다.
 
 `api/dialog.test.ts`는 실제 작업 정의로 입력, 개별 권한, 정확한 창 출처, 사용자 취소와
 호출 실패, 정리를 검사한다. 이후 tick에서 Close가 수락되면 앞선 Close 실패보다 우선해
