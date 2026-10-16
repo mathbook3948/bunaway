@@ -82,9 +82,21 @@ if (target === "windows-x64") {
         outcome = `fail: ${String(error).slice(0, 300)}`;
         diagFailures.push(`#${attempt} ${outcome}`);
       }
-      const tasks = Bun.spawnSync(["tasklist", "/FI", "IMAGENAME eq msedgewebview2.exe", "/FO", "CSV", "/NH"]);
-      const left = tasks.stdout.toString().split("\n").filter((line) => line.includes("msedgewebview2")).length;
-      console.log(`DIAG94 attempt=${attempt} ${outcome} seconds=${Math.round((performance.now() - started) / 1000)} msedgewebview2_left=${left}`);
+      const tasks = Bun.spawnSync([
+        "tasklist",
+        "/FI",
+        "IMAGENAME eq msedgewebview2.exe",
+        "/FO",
+        "CSV",
+        "/NH",
+      ]);
+      const left = tasks.stdout
+        .toString()
+        .split("\n")
+        .filter((line) => line.includes("msedgewebview2")).length;
+      console.log(
+        `DIAG94 attempt=${attempt} ${outcome} seconds=${Math.round((performance.now() - started) / 1000)} msedgewebview2_left=${left}`,
+      );
     }
     console.log(`DIAG94 failures=${diagFailures.length}/8`);
     assert.deepEqual(diagFailures, [], "DIAG94 window API repetitions failed");
