@@ -22,6 +22,7 @@ const owner = {
 const base = {
   ...owner,
   defaultDirectory: text(MAX_DIALOG_PATH_UNITS).optional(),
+  showHiddenFiles: z.boolean().optional(),
 };
 const file = {
   ...base,
@@ -48,6 +49,15 @@ const file = {
     .optional(),
   defaultExtension: extension.optional(),
 };
+/**
+ * File and folder dialog inputs.
+ *
+ * `showHiddenFiles` (all three dialogs): true forces hidden and system items to be listed. When
+ * omitted or false, the user's Explorer setting decides. `confirmOverwrite` (`saveFile` only): true
+ * or false forces the "replace existing file" prompt on or off. When omitted, the Windows default
+ * prompt applies. Passing `confirmOverwrite` to `openFile` or `selectFolder` is rejected as
+ * INVALID_ARGUMENT. The OS New Folder control cannot be disabled on Windows, so no option exists.
+ */
 export const openFileSchema = z.strictObject({
   ...file,
   multiple: z.boolean().optional(),
@@ -56,7 +66,10 @@ export const selectFolderSchema = z.strictObject({
   ...base,
   multiple: z.boolean().optional(),
 });
-export const saveFileSchema = z.strictObject(file);
+export const saveFileSchema = z.strictObject({
+  ...file,
+  confirmOverwrite: z.boolean().optional(),
+});
 export const resultSchema = z.discriminatedUnion("cancelled", [
   z.strictObject({
     cancelled: z.literal(true),
@@ -149,6 +162,8 @@ export function resolveCancelButton(
 ): number | undefined {
   return cancelButton ?? (buttonCount === 1 ? 0 : undefined);
 }
-export type DialogInput = z.output<typeof openFileSchema>;
+/** Every file dialog field across the three inputs. All are optional, so each schema's output is assignable. */
+export type DialogInput = z.output<typeof openFileSchema> &
+  z.output<typeof saveFileSchema>;
 export type DialogResult = z.output<typeof resultSchema>;
 export type DialogKind = "openFile" | "selectFolder" | "saveFile";
