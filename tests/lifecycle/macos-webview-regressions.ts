@@ -69,6 +69,8 @@ let pageReady = false;
 let received = 0;
 const events: string[] = [];
 const hooks = {
+  activated() {},
+  documentComplete() {},
   receive(_source: string, raw: string) {
     const message: unknown = JSON.parse(raw);
     if (message && typeof message === "object" && "ready" in message) {

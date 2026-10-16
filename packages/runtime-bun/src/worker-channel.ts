@@ -398,6 +398,7 @@ const packetDefinitions = {
     },
     [
       "main",
+      "macos-backend",
     ],
     "native-event",
   ),

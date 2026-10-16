@@ -8,9 +8,11 @@ description: 창 제어와 조회, geometry, 네이티브 창 이벤트 및 구�
 `@bunaway/plugin-windows`를 설치하고 앱의 `plugins`에 `windows`를 등록합니다. 명령 핸들러나 setup은 이 패키지의 `windows`를 호출합니다. 화면에서도 같은 경로를 import하며 해당 뷰의 commands에 `plugin.windows.<작업>`을 허용해야 합니다.
 
 창 제어 플러그인은 Windows와 macOS에서 실행합니다. macOS는 `list`, `create`, `recreate`,
-`show`, `hide`, `focus`, `close`, `isVisible`, `isFocused`, `isDestroyed`와
-아래 WebView 기본 제어를 지원합니다. `openDevTools`를 포함한 그 외 작업은
-`UNSUPPORTED`입니다. Linux와 모바일은 네이티브 호스트를 지원하지 않습니다.
+`show`, `showInactive`, `hide`, `focus`, `close`, `isVisible`, `isFocused`, `isDestroyed`,
+창 식별자 조회(`getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`),
+`getReadiness`와 `windows.readiness`, 아래 WebView 기본 제어를 지원합니다.
+`getSnapshot`, `windows.changed`, 크기와 위치, 상태 변경, `activate`, `blur`,
+`openDevTools`를 포함한 그 외 작업은 `UNSUPPORTED`입니다. Linux와 모바일은 네이티브 호스트를 지원하지 않습니다.
 플러그인을 등록하지 않은 앱도 설정한 시작 창과 WebView를 사용할 수 있습니다.
 
 크기와 DPI 처리는 [Per Monitor v2](https://learn.microsoft.com/en-us/windows/win32/hidpi/dpi-awareness-context)를 사용하므로 Windows 10 버전 1703 이상이 필요합니다.
@@ -105,7 +107,10 @@ Windows의 `create`와 `recreate`는 `{ view, options? }`를 받습니다. optio
 제약의 `null`은 해당 제약을, `showWhenReady: null`은 자동 표시를 이번 생성에서 해제합니다.
 제목은 1–1024자이며 NUL을 허용하지 않습니다. options는 선언을 변경하지 않으며
 옵션 없는 다음 재생성은 원래 선언으로 돌아갑니다. home, 프로필, startup과 임의 ID는 허용하지 않습니다.
-macOS는 options 생략과 빈 객체를 허용하고 비어 있지 않은 options는 `UNSUPPORTED`입니다.
+macOS는 `title`, `window`의 크기와 크기 제약, `visible`, `showWhenReady`만 받습니다.
+`window`의 `x`, `y`, `center`, `useContentSize`, `preventOverflow`, `titlebar`, `alwaysOnTop`,
+`skipTaskbar`, `focusable`, `maximized`, `fullscreen`을 지정하면 기존 창을 닫기 전에
+`UNSUPPORTED`로 거부합니다. macOS에서 `createInstance`와 `recreateInstance`는 사용할 수 없습니다.
 
 `options.window`의 `x`, `y`, `center`, `useContentSize`, `preventOverflow`는
 [초기 창 설정](/reference/configuration/#app)과 같은 단위와 작업 영역 계약을 사용합니다.
@@ -116,7 +121,7 @@ startup, create, recreate, createInstance와 recreateInstance에 모두 적용�
 `maximized`, `fullscreen`도 boolean이며 기본은 `false`입니다. 초기 일반 영역을 설정한 뒤
 최대화, 전체화면 순서로 적용합니다. 둘 다 켜면 전체화면 해제 뒤 최대화 상태로 돌아갑니다.
 `visible: false`와 `showWhenReady`의 숨김 생성도 유지합니다. 초기 전체화면 해제는 현재 표시 상태를
-유지하며 선언이나 다음 생성의 옵션을 바꾸지 않습니다. macOS는 초기 상태 옵션을 `UNSUPPORTED`로 거부합니다.
+유지하며 선언이나 다음 생성의 옵션을 바꾸지 않습니다. macOS는 `maximized`와 `fullscreen`을 `UNSUPPORTED`로 거부하지만 `visible`과 `showWhenReady`는 적용합니다.
 필드별로 선언과 병합한 결과에서 x/y가 한 축만 있거나 `center: true`와 좌표가 함께 있으면
 `INVALID_ARGUMENT`입니다. 선언의 한 축만 바꾸는 것은 나머지 축이 선언에 있을 때 허용합니다.
 선언 좌표를 지우려면 `{ x: null, y: null }`, center를 해제하려면 `{ center: false }`로 지정합니다.
@@ -158,6 +163,7 @@ multiple에서는 현재 창이 하나여도 반드시 ID를 전달합니다. �
 `INVALID_ARGUMENT`입니다. 재생성은 새 ID를 발급하고 이전 ID의 제어는 거부합니다.
 닫힌 ID의 getById는 null이며 허용한 view의 isDestroyed는 true입니다.
 getCurrent는 인증된 호출자 세션의 창을 반환하고 백엔드 호출은 null입니다.
+macOS도 네이티브 창을 만들거나 재생성할 때마다 새 `windowId`를 발급합니다.
 
 선언의 `profile` 기본값은 `"shared"`입니다. 같은 뷰의 창은 하나의 WebView2 환경과
 영속 웹 저장소를 공유하고 controller와 IPC 세션은 별도로 소유합니다. 창 하나를 닫아도
@@ -295,7 +301,7 @@ Windows와 macOS의 각 창은 WebView 하나를 소유합니다. 아래 작업�
 대상을 선택하고 작업마다 별도 `windows.<작업>` 권한을 요구합니다. multiple 뷰는
 windowId가 필요합니다. 닫힌 창이나 다른 뷰의 ID는 `INVALID_ARGUMENT`이며,
 WebView 생성 중에는 `BUSY`입니다. macOS는 single 뷰의 제어를 지원하며
-`openDevTools`, 창 ID 조회와 readiness API는 `UNSUPPORTED`입니다.
+`openDevTools`는 `UNSUPPORTED`입니다.
 
 | 메서드 | 추가 입력 | 결과 |
 | --- | --- | --- |
@@ -325,7 +331,7 @@ URL은 1–8192자이며 NUL을 허용하지 않습니다. HTTP/HTTPS URL만 허
 허용한 새 문서의 탐색이 시작되면 이전 SDK 세션과 진행 중 명령을 폐기합니다.
 자기 문서를 바꾸는 화면 호출은 이전 연결에서 결과를 받지 못할 수 있으므로 새 문서에서
 클라이언트를 초기화하세요. 같은 문서의 fragment 이동은 기존 세션과 documentGeneration을
-유지합니다. Windows에서는 완료와 실패를 `getReadiness` 또는 `windows.readiness`로 확인합니다.
+유지합니다. Windows와 macOS에서는 완료와 실패를 `getReadiness` 또는 `windows.readiness`로 확인합니다.
 `loading`은 허용된 최상위 문서의 탐색 시작부터 해당 탐색 완료까지이며 paint나 SDK 준비를
 뜻하지 않습니다. Windows의 stop 취소 완료는 기존 준비 계약의 `cancelled` 상태로 전달합니다.
 macOS의 `loading`은 WKWebView가 보고한 현재 로딩 상태입니다. 완료, 실패와 중단은 모두
@@ -418,10 +424,10 @@ await windows.close({ view: "dialog" });
 
 | API | 입력 | 결과와 동작 |
 | --- | --- | --- |
-| `windows.getSnapshot` | `{ view, windowId? }` | `Promise<WindowSnapshot>`. 현재 창 식별자, 관찰 revision, 표시 상태와 물리 outer bounds를 한 번에 조회 |
+| `windows.getSnapshot` | `{ view, windowId? }` | `Promise<WindowSnapshot>`. 현재 창 식별자, 관찰 revision, 표시 상태와 물리 outer bounds를 한 번에 조회. macOS는 `UNSUPPORTED` |
 | `windows.listInstances` | 인자 없음. Host operation 입력은 `null` | `Promise<WindowIdentity[]>`. 허용된 살아 있는 창의 ID 목록. 숨김과 준비 중인 창을 포함하고 선언 순서와 생성 순서로 정렬 |
-| `windows.createInstance` | `{ view, options? }` | `Promise<WindowIdentity>`. 새 창을 만들고 WebView 설정 완료 뒤 `{ windowId, viewId }` 반환 |
-| `windows.recreateInstance` | `{ view, windowId, options? }` | 같은 ID 형태. 살아 있는 해당 창만 교체하고 새 ID 반환 |
+| `windows.createInstance` | `{ view, options? }` | `Promise<WindowIdentity>`. 새 창을 만들고 WebView 설정 완료 뒤 `{ windowId, viewId }` 반환. macOS는 `UNSUPPORTED` |
+| `windows.recreateInstance` | `{ view, windowId, options? }` | 같은 ID 형태. 살아 있는 해당 창만 교체하고 새 ID 반환. macOS는 `UNSUPPORTED` |
 | `windows.list` | 인자 없음. Host operation 입력은 `null` | `Promise<{ view: string; open: boolean }[]>`. 허용된 뷰 정의와 하나 이상의 창이 열려 있는지 |
 | `windows.getById` | `{ windowId }` | `Promise<WindowIdentity \| null>`. 해당 네이티브 수명의 살아 있는 창 |
 | `windows.getCurrent` | 인자 없음. Host operation 입력은 `null` | 같은 식별자 형태. 인증된 호출 출처의 현재 창 |
@@ -438,7 +444,7 @@ await windows.close({ view: "dialog" });
 | `windows.create` | `{ view, options? }` | `Promise<null>`. 설정한 창을 생성하고 WebView 준비를 기다림. 열린 창은 `BUSY` |
 | `windows.recreate` | `{ view, options? }` | `Promise<null>`. 닫기 확인 후 기존 창과 WebView를 정리하고 설정대로 다시 생성. 닫힌 창도 생성 가능 |
 | `windows.show` | `{ view, windowId? }` | `Promise<null>`. 창 표시 |
-| `windows.showInactive` | `{ view, windowId? }` | `Promise<null>`. 일반, 최소화 또는 최대화 상태를 유지하며 창 표시. 활성화 요청 없음 |
+| `windows.showInactive` | `{ view, windowId? }` | `Promise<null>`. 일반, 최소화 또는 최대화 상태를 유지하며 창 표시. 활성화 요청 없음. macOS는 `orderFront:`로 표시하며 key window 전환과 앱 활성화를 하지 않음. 이미 보이거나 최소화된 창은 그대로 둠(사용자가 최소화한 뒤 숨긴 창은 다시 표시하지 않음) |
 | `windows.hide` | `{ view, windowId? }` | `Promise<null>`. 창 숨김. 창과 세션은 유지 |
 | `windows.focus` | `{ view, windowId? }` | `Promise<null>`. 숨기거나 최소화한 창을 표시하고 포커스 요청. OS가 거부하면 `BUSY` |
 | `windows.blur` | `{ view, windowId? }` | `Promise<boolean>`. 같은 앱의 허용된 다른 창으로 전환해 대상 창이 비활성인지 반환 |
@@ -543,6 +549,14 @@ WebView 준비 전에도 식별할 수 있습니다.
 다른 앱 창을 실제로 활성화하면 그 활성화를 새로 기록합니다.
 기록은 이 호스트 실행에만 유지하며 앱 종료 뒤에는 보존하지 않습니다.
 
+macOS도 같은 다섯 조회(`getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`)를
+제공합니다. 네이티브 창을 만들거나 재생성할 때마다 새 `windowId`를 발급하며 문서 탐색은 ID를
+유지합니다. `getFocused`는 앱이 활성 상태일 때 key window를, `getLastActive`는 마지막으로
+key window가 된 창을 반환하고 그 창을 닫으면 기록을 지웁니다. key window가 닫힐 때 AppKit이
+다른 창을 key window로 바꾸면 그 창이 새 기록입니다. macOS는 뷰마다 창 하나만 지원하므로
+`listInstances`는 열린 뷰마다 한 항목을 선언 순서로 반환하며 `createInstance`와
+`recreateInstance`는 사용할 수 없습니다.
+
 조회는 창 생성, 표시, 포커스나 활성화를 요청하지 않습니다. `getById`의 `windowId`는
 1~128자의 영문, 숫자, `_`, `.`, `:`, `-` 문자열이며 잘못된 입력은 `INVALID_ARGUMENT`입니다.
 호스트 종료와 호출 취소는 `CANCELLED`입니다. 식별자 추적을 제공하지 않는 플랫폼은
@@ -561,8 +575,8 @@ const destroyed = await windows.isDestroyed({ view: "editor" });
 
 ## 표시와 활성 창 전환
 
-다음은 Windows의 계약입니다. `showInactive`, `blur`, `activate`는 macOS에서
-`UNSUPPORTED`입니다. 여기서 활성 창과 포커스된 창은 `isFocused`와 같은 OS 전경 창을
+다음은 Windows의 계약입니다. `blur`와 `activate`는 macOS에서 `UNSUPPORTED`이며,
+macOS의 `showInactive`는 아래에서 따로 설명합니다. 여기서 활성 창과 포커스된 창은 `isFocused`와 같은 OS 전경 창을
 뜻합니다. 창 안의 입력 요소로 키보드 포커스를 옮기는 API는 아닙니다.
 API 표의 활성화 요청은 기본 `focusable: true` 기준입니다.
 `false`에서는 [활성화 허용](#활성화-허용)의 비활성 표시와 상태 변경 계약을 적용합니다.
@@ -615,6 +629,9 @@ Windows는 [전경 전환을 제한](https://learn.microsoft.com/en-us/windows/w
 서로 다른 창의 이벤트 사이에는 전역 순서를 보장하지 않습니다. 거부나 반복 호출에서
 상태가 바뀌지 않으면 이벤트를 만들지 않습니다. 조회한 snapshot의 상태와 revision은
 동일한 관찰을 사용합니다.
+
+macOS의 `showInactive`는 `orderFront:`로 창을 표시하며 key window 전환이나 앱 활성화를
+요청하지 않습니다. 최소화한 창은 최소화 상태로 남습니다.
 
 ```ts
 await windows.showInactive({ view: "editor" });
@@ -699,7 +716,14 @@ splash 창이 주 창의 직접 또는 간접 부모이면 `INVALID_ARGUMENT`이
 isolated splash의 임시 프로필도 최종 종료로 정리하며 다시 생성하면 새 프로필을 사용합니다.
 그 뒤 마지막 주 창의 일반 닫기는 기존 종료 취소와 트레이 규칙을 따릅니다.
 요청을 실행하기 전 취소하면 전환하지 않습니다. 이미 표시와 닫기를 확정한 뒤에는 그 변경을 되돌리지 않습니다.
-macOS의 준비 조회, 이벤트와 splashscreen 전환은 아직 지원하지 않습니다.
+macOS도 `getReadiness`와 `windows.readiness`를 같은 형태와 권한으로 제공합니다.
+웹 문서 완료는 WKWebView 메인 프레임의 탐색 완료이고, 탐색 취소와 정책에 따른 중단은
+`"cancelled"`입니다. SDK 완료는 승인된 세션의 준비 확인이며 문서와 SDK의 기한,
+닫힌 창의 마지막 결과 보존, 창 닫기와 앱 종료의 `CANCELLED`("Window closed."
+또는 "App shutdown."), 생성 실패의 `INTERNAL`, 생성 기한 초과의 `TIMEOUT`은 Windows와 같습니다.
+`visible: false`와 `showWhenReady`로 숨겨서 생성한 창은 준비 중에 앞으로 나오거나 key window가
+되거나 앱을 활성화하지 않습니다. 준비 조건을 만족하면 최초 표시와 같이 key window 전환과
+앱 활성화를 요청해 한 번 표시합니다. macOS의 splashscreen 전환은 아직 지원하지 않습니다.
 
 ## 활성화 허용
 

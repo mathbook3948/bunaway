@@ -66,8 +66,8 @@ Windows의 `create`와 `recreate`에 선택적인 `options`를 추가하는 범�
 알 수 없는 필드와 잘못된 옵션은 `INVALID_ARGUMENT`로 거부한다.
 UI 자산과 출처는 배포 때 검증한 선언으로 고정하며, 부모와 모달은 열린 두 창에
 기존 `setParent`로 설정한다. 위치는 생성 뒤 기존 geometry API로 변경한다.
-macOS는 기존 `{ view }`와 빈 `options`를 허용한다. 비어 있지 않은 유효한 options는
-어댑터 구현 전 `UNSUPPORTED`로 거부한다. 다른 플랫폼 지원을 Windows 구현의 선행 조건으로 삼지 않는다.
+macOS는 기존 `{ view }`와 빈 `options`를 허용한다. 현재 macOS 어댑터는 title, 크기와 제약,
+`visible`, `showWhenReady`만 받고 나머지 유효한 options는 `UNSUPPORTED`로 거부한다. 다른 플랫폼 지원을 Windows 구현의 선행 조건으로 삼지 않는다.
 
 ## 권한, 생성 순서와 자원 제한
 
@@ -132,7 +132,7 @@ windowId를 추가 인자로 받는 것만으로 이 문제들이 해결되지 �
 | --- | --- |
 | app.windows에 같은 view 두 번 선언 | 시작 전 설정 오류. 지연 또는 숨김 선언도 예외 없음. 뷰별 하나 제한과 별도 ID 사용을 진단. SDK WireError가 아님. |
 | Windows create/recreate에 유효한 options 전달 | 선언값과 병합해 이번 생성에만 적용. options 생략 또는 빈 객체는 선언값 사용. |
-| macOS create/recreate에 비어 있지 않은 유효한 options 전달 | 기존 창을 닫기 전에 `UNSUPPORTED`. options 생략 또는 빈 객체는 허용. |
+| macOS create/recreate에 지원하지 않는 유효한 options 전달 | 기존 창을 닫기 전에 `UNSUPPORTED`. options 생략, 빈 객체와 title, 크기, 제약, `visible`, `showWhenReady`는 허용. |
 | create/recreate에 잘못된 options, 허용하지 않은 필드나 caller windowId 전달 | 공개 registry와 Host 입력 schema 또는 병합값 검증에서 `INVALID_ARGUMENT`. 기존 창과 예약 유지. |
 | 형식이 유효한 view에 생성 권한 없음 | `PERMISSION_DENIED`. 선언 여부와 무관하게 권한을 먼저 검사. |
 | 권한을 가진 미선언 view | `INVALID_ARGUMENT`. 카탈로그에 새 항목을 만들지 않음. |
