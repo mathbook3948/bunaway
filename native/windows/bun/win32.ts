@@ -2263,13 +2263,15 @@ export class Windows {
    * untouched instead of falling back to another monitor. Monitor enumeration failures are
    * INTERNAL.
    *
-   * For normal windows and for minimized/maximized windows (where only the normal restore
-   * bounds move), the size is measured again after placement. If it changed (the OS applied a
-   * suggested rectangle for a DPI change, or re-maximizing on a monitor with another DPI
-   * rescaled the restore rectangle), the window is centered once more in the same work area
-   * with the new size. If that second placement changes the size again, the result follows
-   * the existing DPI handling and may not be exactly centered, so callers verify with the
-   * outer (or normal) bounds.
+   * For a normal window, the outer size is measured again after placement. If a DPI change
+   * altered it, the window is centered once more in the same work area with the new size. If
+   * that second placement changes the size again, the result follows the existing DPI
+   * handling and may not be exactly centered, so callers verify with the outer bounds.
+   *
+   * While minimized or maximized, the normal restore bounds are placed and, if their measured
+   * size changed, placed once more the same way. When the target monitor has another DPI,
+   * where a maximized window ends up and the restored size and position follow Windows' DPI
+   * handling; this has not been verified on real multiple monitors.
    */
   center(window: bigint, monitorId?: string): void {
     const editsNormalBounds =
