@@ -17,6 +17,7 @@ import { WILL_QUIT_DEADLINE_MS } from "../../windows/bun/desktop.ts";
 import { MacosApplication } from "./application.ts";
 import type { MacosConfig } from "./config.ts";
 import { DesktopRequests } from "./desktop-requests.ts";
+import { normalizeOpenUrls } from "./open-urls.ts";
 import { containMacosProcess } from "./process-group.ts";
 import { MacosWindows } from "./windows.ts";
 
@@ -98,6 +99,31 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         kind: "quit-request",
         reason,
       }),
+    sendOpenUrls: (urls) =>
+      channel?.send({
+        kind: "open-urls",
+        urls: [
+          ...urls,
+        ],
+      }) ?? Promise.resolve(),
+    // An app with `onReopen` decides what a reopen shows. Without it the host brings the windows
+    // back when none is visible. Either way a reopen is not an open request. The hook runs only
+    // while draining, after construction, so reading `desktopRequests` here is safe.
+    deliverReopen: (hasVisibleWindows) => {
+      if (desktopRequests.reopenHandler) {
+        return (
+          channel?.send({
+            kind: "reopen",
+            hasVisibleWindows,
+          }) ?? Promise.resolve()
+        );
+      }
+      if (!hasVisibleWindows) {
+        ui?.requestShow();
+      }
+      return Promise.resolve();
+    },
+    diagnostic,
   });
   /**
    * Begins shutdown once; later calls do nothing. Every path ends in the same teardown, but only an
@@ -373,6 +399,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       } else if (packet.kind === "desktop-config") {
         desktopRequests.configure({
           closeBehavior: packet.closeBehavior,
+          reopenHandler: packet.reopenHandler,
         });
       } else if (packet.kind === "desktop-control") {
         if (packet.action !== "show") {
@@ -573,11 +600,25 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         }),
       // A session end never waits for the app's options or decision.
       sessionEnding: () => beginShutdown("session-end"),
-      // Reopening is not an open request; it only brings the windows back.
-      reopened: () =>
-        desktopRequests.defer("reopen", () => {
-          ui?.requestShow();
-        }),
+      reopened: (hasVisibleWindows) =>
+        desktopRequests.reopen(hasVisibleWindows),
+      openUrlsRequested: (rawUrls, receivedCount) => {
+        const { urls, rejected, rejectedAll } = normalizeOpenUrls(
+          rawUrls,
+          receivedCount,
+        );
+        if (rejectedAll || rejected.length > 0) {
+          // Only counts and reasons: the URLs may hold secrets.
+          diagnostic("open-urls-rejected", {
+            received: receivedCount,
+            rejectedAll,
+            rejected,
+          });
+        }
+        if (urls.length > 0) {
+          desktopRequests.openUrls(urls);
+        }
+      },
     });
     ui = new MacosWindows(config, application, {
       ready: () => ready,

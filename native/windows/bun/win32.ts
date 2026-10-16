@@ -115,6 +115,10 @@ const WINDOWPLACEMENT_NORMAL_RECT_OFFSET = 28;
 const WINDOWPLACEMENT_FLAGS_OFFSET = 4;
 const WINDOWPLACEMENT_SHOW_CMD_OFFSET = 8;
 const WPF_RESTORETOMAXIMIZED = 0x2;
+/** SetWindowDisplayAffinity values: no protection, black content in captures, omitted from captures. */
+const WDA_NONE = 0x0;
+const WDA_MONITOR = 0x1;
+const WDA_EXCLUDEFROMCAPTURE = 0x11;
 const WS_MINIMIZEBOX = 0x00020000n;
 const WS_MAXIMIZEBOX = 0x00010000n;
 const WS_THICKFRAME = 0x00040000n;
@@ -709,6 +713,7 @@ export class Windows {
         | "titlebar"
         | "alwaysOnTop"
         | "skipTaskbar"
+        | "contentProtection"
       > = {},
   ) {
     const { style, exStyle } = initialWindowStyles(options);
@@ -747,6 +752,10 @@ export class Windows {
     this.windows.set(window, receive);
     this.constraints.set(window, initialConstraints);
     try {
+      // Protect before the window is first shown, so no frame is ever capturable.
+      if (options.contentProtection) {
+        this.setContentProtection(window, true);
+      }
       if (options.titlebar === "custom") {
         // CreateWindowEx can add WS_CAPTION to an overlapped window. Remove it
         // after creation while hidden, retaining overlapped placement and system-menu semantics.
@@ -976,6 +985,46 @@ export class Windows {
       this.changingGeometry.delete(window);
       this.observeChanges(window);
     }
+  }
+
+  /**
+   * Read the OS display affinity, which is the source of truth. It reflects which level
+   * the setter's fallback applied, and keeping no separate managed state avoids drift.
+   */
+  isContentProtected(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    const affinity = Buffer.alloc(4);
+    assert(
+      user.symbols.GetWindowDisplayAffinity(window, ptr(affinity)),
+      `GetWindowDisplayAffinity: ${kernel.symbols.GetLastError()}`,
+    );
+    return affinity.readUInt32LE(0) !== WDA_NONE;
+  }
+
+  /**
+   * Exclude the window from screenshots and screen sharing. WDA_EXCLUDEFROMCAPTURE omits the
+   * window from captures; Windows 10 before version 2004 treats it like WDA_MONITOR, which keeps
+   * the window in captures with black content. If the call is rejected, it is retried with
+   * WDA_MONITOR. Fails when neither affinity can be applied.
+   */
+  setContentProtection(window: bigint, enabled: boolean): void {
+    if (this.isContentProtected(window) === enabled) {
+      return;
+    }
+    if (!enabled) {
+      assert(
+        user.symbols.SetWindowDisplayAffinity(window, WDA_NONE),
+        `SetWindowDisplayAffinity: ${kernel.symbols.GetLastError()}`,
+      );
+      return;
+    }
+    if (user.symbols.SetWindowDisplayAffinity(window, WDA_EXCLUDEFROMCAPTURE)) {
+      return;
+    }
+    assert(
+      user.symbols.SetWindowDisplayAffinity(window, WDA_MONITOR),
+      `Content protection is unavailable: ${kernel.symbols.GetLastError()}`,
+    );
   }
 
   /**

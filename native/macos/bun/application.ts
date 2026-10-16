@@ -1,4 +1,5 @@
-import { dlopen } from "bun:ffi";
+import { dlopen, type Pointer } from "bun:ffi";
+import { MAX_OPEN_URLS } from "@bunaway/runtime-bun/worker-channel";
 import { Objc, type ObjcObject } from "./objc.ts";
 import {
   CORE_EVENT_CLASS,
@@ -129,8 +130,14 @@ export class MacosApplication {
     quitRequested(): void;
     /** The OS session is ending: commit an uncancellable shutdown. Called once. */
     sessionEnding(): void;
-    /** The user reopened the app (Dock click) while no window is visible. */
-    reopened(): void;
+    /** The user reopened the app (Dock click or reopen Apple event), with or without a visible window. */
+    reopened(hasVisibleWindows: boolean): void;
+    /**
+     * The OS asked the app to open URLs (a URL scheme or documents), as raw `absoluteString`s in
+     * order. `receivedCount` is how many the OS delivered; `urls` is empty when that exceeds
+     * `MAX_OPEN_URLS`, because such a request is rejected whole and not worth copying.
+     */
+    openUrlsRequested(urls: string[], receivedCount: number): void;
   }) {
     const o = this.objc;
     runtimeOwners.push(o);
@@ -168,18 +175,38 @@ export class MacosApplication {
         call: () => false,
       },
       {
-        // Dock click or reopen Apple event. The host shows its windows itself, so AppKit does nothing more.
+        // Dock click or reopen Apple event. The host decides what to show, so AppKit does nothing more.
         selector: "applicationShouldHandleReopen:hasVisibleWindows:",
         arguments: 2,
         returns: "bool",
         encoding: "B@:@B",
         // The first two callback arguments are `self` and `_cmd`, as for every delegate method.
         call: (_self, _cmd, _sender, hasVisibleWindows) => {
-          const visible = (Number(hasVisibleWindows) & BOOL_MASK) !== 0;
-          if (!this.closed && !visible && !hooks.stopping()) {
-            hooks.reopened();
+          if (!this.closed && !hooks.stopping()) {
+            hooks.reopened((Number(hasVisibleWindows) & BOOL_MASK) !== 0);
           }
           return false;
+        },
+      },
+      {
+        // On macOS 10.13+ AppKit routes both the URL scheme Apple event (`GURL`/`GURL`) and the
+        // document open event (`aevt`/`odoc`) here when this method exists, so
+        // `application:openFiles:` is deliberately not implemented. The quit handler installed
+        // after `finishLaunching` only replaces `aevt`/`quit`; AppKit's default `GURL` and `odoc`
+        // handlers stay installed and dispatch to this delegate.
+        selector: "application:openURLs:",
+        arguments: 2,
+        encoding: "v@:@@",
+        call: (_self, _cmd, _sender, urls) => {
+          if (urls && !this.closed && !hooks.stopping()) {
+            const receivedCount = Number(o.integer(urls, "count"));
+            hooks.openUrlsRequested(
+              receivedCount > MAX_OPEN_URLS
+                ? []
+                : this.urlStrings(urls, receivedCount),
+              receivedCount,
+            );
+          }
         },
       },
       {
@@ -306,6 +333,19 @@ export class MacosApplication {
   private appleEvents(): ObjcObject | null {
     const o = this.objc;
     return o.send(o.class("NSAppleEventManager"), "sharedAppleEventManager");
+  }
+
+  /** Copies an `NSArray<NSURL *>` into JavaScript strings so nothing native outlives the callback. */
+  private urlStrings(urls: Pointer, count: number): string[] {
+    const o = this.objc;
+    return o.withAutoreleasePool(() => {
+      const strings: string[] = [];
+      for (let index = 0; index < count; index++) {
+        const url = o.send(urls, "objectAtIndex:", index);
+        strings.push(o.text(o.send(url, "absoluteString")));
+      }
+      return strings;
+    });
   }
 
   /** The `keyAEQuitReason` of a quit Apple event, or undefined when the event carries none. */

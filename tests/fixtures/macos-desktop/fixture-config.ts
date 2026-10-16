@@ -31,3 +31,6 @@ export function readDesktopFixture(dataRoot: string): DesktopFixture {
     JSON.parse(readFileSync(desktopFixturePath(dataRoot), "utf8")),
   );
 }
+
+/** URL the `open-urls` scenario sends as a URL scheme Apple event; the host forwards it unchanged. */
+export const OPEN_URL = "bunaway-test://open/path?q=1";

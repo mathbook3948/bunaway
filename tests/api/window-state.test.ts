@@ -35,6 +35,7 @@ const stateQueries = [
   "isFocusable",
   "isAlwaysOnTop",
   "isSkipTaskbar",
+  "isContentProtected",
   "isMinimizable",
   "isMaximizable",
   "isClosable",
@@ -128,6 +129,7 @@ function fixture() {
     isFocusable: true,
     isAlwaysOnTop: false,
     isSkipTaskbar: false,
+    isContentProtected: false,
     isMinimizable: true,
     isMaximizable: true,
     isClosable: true,
@@ -186,6 +188,11 @@ function fixture() {
       observed.isSkipTaskbar = value;
     },
     isSkipTaskbar: () => observed.isSkipTaskbar,
+    setContentProtection(value) {
+      apply("setContentProtection");
+      observed.isContentProtected = value;
+    },
+    isContentProtected: () => observed.isContentProtected,
     requestAttention(mode) {
       apply("requestAttention");
       attentionModes.push(mode);
@@ -293,6 +300,7 @@ function fixture() {
         | "getTitlebar"
         | "setAlwaysOnTop"
         | "setSkipTaskbar"
+        | "setContentProtection"
         | "requestAttention"
         | "cancelAttention"
         | "setMinimizable"
@@ -307,6 +315,7 @@ function fixture() {
         focusable?: boolean;
         alwaysOnTop?: boolean;
         skipTaskbar?: boolean;
+        contentProtection?: boolean;
         mode?: string | number | null;
         minimizable?: boolean;
         maximizable?: boolean;
@@ -929,6 +938,11 @@ test("display controls retain independent permissions, strict input and closed/u
       "isSkipTaskbar",
       "skipTaskbar",
     ],
+    [
+      "setContentProtection",
+      "isContentProtected",
+      "contentProtection",
+    ],
   ] as const) {
     const f = fixture();
     expect(await f.invoke(getter)).toBe(false);
@@ -997,6 +1011,17 @@ test("display controls retain independent permissions, strict input and closed/u
   await expect(f.invoke("getTitlebar")).rejects.toMatchObject({
     code: "PERMISSION_DENIED",
   });
+});
+
+test("macOS target declares the content protection operations its adapter implements", () => {
+  // The host rejects any operation missing from the target list as UNSUPPORTED before the
+  // shared adapter runs, so a generic adapter test alone cannot catch a missing declaration.
+  expect(windows._definition.nativePlatforms.macos?.operations).toEqual(
+    expect.arrayContaining([
+      "setContentProtection",
+      "isContentProtected",
+    ]),
+  );
 });
 
 test("attention requests resolve the default mode, validate input and stay separate from focus", async () => {

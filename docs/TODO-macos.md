@@ -40,7 +40,7 @@
 | 실행 | 고정 Bun 1.4.2, 직접 FFI, 같은 PID의 백엔드 Worker, arm64 네이티브 CI 통과 | 최소 OS와 Intel 실행 검증 |
 | 창 | 다중 창, 생성과 재생성, 기본 제어, 초기 크기 제약, 창 ID 조회, 준비 이벤트, 숨김 생성, `showInactive` | 모달과 sheet, 상주 앱 |
 | WebView | 명령, 이벤트, 정책, 자산 스킴, 탐색과 리소스 경계, 복구 | 영속 프로필과 세션 제어 API |
-| 종료 | Worker 정리, 기한 초과 강제 종료, 프로세스 그룹 정리, `desktop`의 `beforeQuit`, 수명주기 훅, 세션 종료, Dock 재활성화 | 트레이, `"hide"`, 창 없는 상주 앱, OS 파일과 URL 열기 |
+| 종료 | Worker 정리, 기한 초과 강제 종료, 프로세스 그룹 정리, `desktop`의 `beforeQuit`, 수명주기 훅, 세션 종료, Dock 재활성화(`onReopen`), OS 파일과 URL 열기(`onOpenUrls`) | 트레이, `"hide"`, 창 없는 상주 앱 |
 | 네이티브 플러그인 | 등록과 권한 검증, 기본 창 어댑터 | 저장, 로그, 기능 조회, opener와 창 제어 확장 |
 | 배포 | compiled `.app`, 서명 및 DMG/PKG 조립 도구 | CLI 채널 연결, Developer ID, 공증, 설치와 Store 검증 |
 
@@ -133,8 +133,8 @@
 우선순위 P1. 소유자: 호스트와 desktop API.
 
 `app.desktop`은 `tray`와 `closeBehavior: "hide"`를 제외하고 지원하며, `tray`는 `UNSUPPORTED`로 거부한다.
-`onOpen`은 시작할 때의 초기 요청만 호출하고 `argv`는 `[]`이며 OS의 파일과 URL 열기는 전달하지 않는다.
-macOS의 Quit 명령은 `QuitReason`의 `"quit-command"`다. 매핑과 남은 설계는
+`onOpen`은 시작할 때의 초기 요청만 호출하고 `argv`는 `[]`이다. OS의 파일과 URL 열기는 `onOpenUrls`로 전달한다.
+macOS의 Quit 명령은 `QuitReason`의 `"quit-command"`다. 매핑과 결정은
 [ADR 0021](./decisions/0021-macos-desktop-lifecycle.md)을 따른다. 실제 AppKit 시나리오는
 macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 로그아웃과 사용자의 Dock 클릭은 CI에서 확인하지 못한다.
 
@@ -144,11 +144,11 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 - [x] 정상 종료와 SIGINT/SIGTERM에서 관리하는 프로세스 그룹을 정리한다.
 - [x] 호스트 SIGKILL 뒤 감시 프로세스가 pipe EOF를 받아 같은 그룹의 자손을 정리한다.
 - [ ] 공통 `desktop` 계약의 `onOpen`, `beforeQuit`와 종료 이유를 연결한다. `beforeQuit`와 종료 이유는 연결했다.
-  `onOpen`은 초기 요청만 호출하며 OS 파일과 URL 열기(`application:openURLs:`)가 남아 있다. 설계안은 ADR 0021을 따른다.
+  `onOpen`은 초기 요청만 호출하고 OS 파일과 URL 열기는 `application:openURLs:`로 `onOpenUrls`에 연결했다(ADR 0021).
 - [ ] 단일 인스턴스 잠금과 두 번째 실행의 argv/cwd, 파일과 URL 전달을 제공한다.
-- [ ] ready 이전 파일 열기, URL 열기와 종료 요청의 순서를 정한다.
+- [x] ready 이전 파일 열기, URL 열기와 종료 요청의 순서를 정한다. 호스트가 보관했다가 `onOpenUrls`로 전달한다(ADR 0021).
 - [ ] 마지막 창 닫기, 앱 종료, app hide/show와 Dock 재활성화를 구분한다. 마지막 창 닫기, Quit 명령과
-  Dock 재활성화(`show()`와 같은 동작, `onOpen` 없음)는 구분했다. app hide/show가 남아 있다.
+  Dock 재활성화(`onReopen`, 미등록이면 `show()`와 같은 동작)는 구분했다. app hide/show가 남아 있다.
 - [x] 종료 취소 뒤 기존 창과 세션을 유지하고 개발 CLI 중단은 취소를 우회한다. `beforeQuit`가 거부하면 창, 세션과
   백엔드를 유지하고 SIGINT/SIGTERM은 `"interrupted"`로 `beforeQuit`를 우회한다. `quit-veto`, `sigterm` 시나리오로 확인한다.
 - [x] Windows의 `onReady`, `onWillQuit`, `onQuit`, `onAllWindowsClosed`와 `ShutdownReason`에 맞춰 macOS 훅을 제공한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)과 [ADR 0021](./decisions/0021-macos-desktop-lifecycle.md)을 따른다.
@@ -197,8 +197,8 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 
 - [ ] HTTP/HTTPS URL을 기본 브라우저에서 여는 macOS opener 어댑터를 제공한다.
 - [ ] 파일 및 폴더 열기, 지정 앱 열기, Finder에서 표시와 휴지통 이동을 제공한다.
-- [ ] URL scheme과 파일 유형 연결의 plist 설정, OS 열기 요청과 `onOpen`을 연결한다. 초기 `onOpen`만 호출하며
-  `application:openURLs:`와 plist 설정이 남아 있다. 설계안은 [ADR 0021](./decisions/0021-macos-desktop-lifecycle.md)을 따른다.
+- [ ] URL scheme과 파일 유형 연결의 plist 설정(`CFBundleURLTypes`, `CFBundleDocumentTypes`)을 생성한다. OS 열기 요청과
+  `onOpenUrls`의 연결은 끝났다([ADR 0021](./decisions/0021-macos-desktop-lifecycle.md)).
 - [ ] universal link의 설정, 검증과 시작 전 요청 처리를 제공한다.
 - [ ] 기본 앱 등록 상태와 최근 문서의 추가, 조회 및 삭제를 제공한다.
 - [ ] Dock icon, badge, bounce, menu와 진행 상태의 지원 범위를 정한다.

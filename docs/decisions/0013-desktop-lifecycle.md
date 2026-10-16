@@ -22,6 +22,8 @@ ADR 0006은 같은 앱 데이터 디렉터리의 중복 실행을 거부하고 �
 2026-10-16 변경: macOS는 `tray`와 `closeBehavior: "hide"`를 제외한 `desktop`을 지원한다.
 `tray`는 `UNSUPPORTED`로 거부한다. 범위는 [ADR 0021](./0021-macos-desktop-lifecycle.md)을 따른다.
 다른 플랫폼을 같은 계약에 맞추는 작업은 ADR 0010의 순서를 따른다.
+2026-10-16 변경: 파일과 URL을 받는 `onOpenUrls`와 macOS 재활성화 `onReopen`이 추가된다. `onOpen`의 의미는
+그대로이며 순서와 한도는 [ADR 0021](./0021-macos-desktop-lifecycle.md)의 "OS 열기 요청과 재활성화"를 따른다.
 
 `host.lock`의 독점 소유와 Job 정리는 유지한다. 두 번째 실행은 앱을 import하거나
 Worker, WebView를 생성하지 않고 기존 소유자에게 인자와 호출자의 작업 디렉터리를

@@ -86,8 +86,7 @@ const core = await createCore(app, {
   },
 });
 const desktop = new DesktopLifecycle(app.desktop, async () => {}, () => {}, (error) => console.error(error));
-desktop.ready();
-desktop.open({ argv: [], cwd: process.cwd() }, "initial");
+desktop.ready({ argv: [], cwd: process.cwd() });
 appendFileSync(logPath, "page:main\\npage:observer\\n");
 const deadline = Date.now() + ${STEP_TIMEOUT_MS};
 while (!(failDrive ? readLog().some((line) => line.startsWith("script-failed:")) : calls.some((call) => call.operation === "driver.drive"))) {

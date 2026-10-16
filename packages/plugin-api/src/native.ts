@@ -165,6 +165,8 @@ export type WindowSpec = {
     alwaysOnTop?: boolean;
     /** Hide from the taskbar and Alt+Tab using tool-window style, default false. Windows only. */
     skipTaskbar?: boolean;
+    /** Exclude the window from screenshots and screen sharing, default false. Windows and macOS. */
+    contentProtection?: boolean;
     /** Start maximized, retaining the initial normal placement for restoration. Windows only. */
     maximized?: boolean;
     /** Start fullscreen. When combined with maximized, exit restores maximized state. Windows only. */
@@ -349,6 +351,10 @@ export type NativeWindow = {
   setSkipTaskbar?(skipTaskbar: boolean): void;
   /** Read explicit tool-window exclusion; owned windows may also be absent from the taskbar. Windows only. */
   isSkipTaskbar?(): boolean;
+  /** Change screenshot and screen-sharing exclusion. Windows 10 before 2004 shows black content instead of omitting the window; macOS 15 and later is best effort. Windows and macOS. */
+  setContentProtection?(contentProtection: boolean): void;
+  /** Read live exclusion from the OS, including the Windows black-content fallback. Windows and macOS. */
+  isContentProtected?(): boolean;
   /** Flashes the taskbar button without focusing, showing or reordering the window. Repeated calls replace the previous mode. Windows only. */
   requestAttention?(mode: WindowAttentionMode): void;
   /** Stops taskbar flashing and restores the button. Succeeds when the window is not flashing. Windows only. */
