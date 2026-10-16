@@ -1,6 +1,7 @@
-# Native file dialogs
+# Native dialogs
 
-Optional `@bunaway/plugin-dialog` provides `openFile`, `selectFolder`, and `saveFile` on Windows.
+Optional `@bunaway/plugin-dialog` provides the file pickers `openFile`, `selectFolder` and `saveFile`
+and the message dialog `showMessage` on Windows.
 Register the default export and grant each operation independently. See the
 [public reference](../../docs/site/src/content/docs/reference/plugins/dialog.mdx) for inputs,
 owner authorization, cancellation, limits and examples. Choosing paths never grants storage access.
@@ -24,7 +25,38 @@ Microsoft references: [Common Item Dialog](https://learn.microsoft.com/en-us/win
 The implementation preserves default existence/overwrite checks, forces filesystem results, and disables
 recent-item insertion and test-file creation. A path remains subject to later replacement or deletion.
 
-`tests/api/dialog.test.ts` uses the actual operation definitions with a controlled native driver.
+## Message dialog
+
+`showMessage` validates the request (`messageSchema` in `src/contract.ts`) before any native
+allocation and returns `{ button, checkboxChecked }`. Unlike the pickers, user dismissal is a normal
+button result: Escape, the title-bar close button and Alt+F4 return the resolved cancel button
+(`resolveCancelButton`). With several buttons and no `cancelButton` they are disabled, so the user must
+click a button. Host abort, deadline, shutdown and owner retirement are CANCELLED or TIMEOUT errors,
+never a button result. Owner rules, the single UI-thread queue and BUSY on native reentry are shared
+with the pickers through the same `run` path in `src/platforms/windows.ts`. Only for `showMessage`, a
+native failure that follows host interruption (the forced close) is reported as CANCELLED with the
+failure as `cause`; pickers keep surfacing native Close failures.
+
+The dialog is `TaskDialogIndirect` from comctl32 v6. `bun.exe` has no Common-Controls v6 manifest, so
+each call writes a private temporary manifest file, creates an activation context with `CreateActCtxW`,
+deletes the file immediately, and activates the context on the UI STA around loading comctl32 and the
+modal call. Cancellation is polled from the `TDN_TIMER` callback (about 200 ms, coarser than the 25 ms
+picker timer) and closes the dialog with a synchronous `TDM_CLICK_BUTTON`. Callbacks never throw through
+native frames. Custom buttons use ids `CUSTOM_BUTTON_ID_BASE + index`. When a cancel button resolves,
+`TDF_ALLOW_DIALOG_CANCELLATION` is set so Escape, the title-bar close button and Alt+F4 make TaskDialog
+return `IDCANCEL`, and `messageButtonIndex` converts `IDCANCEL` to the resolved cancel index. Without a
+cancel button the flag is unset and `IDCANCEL` is ignored. TaskDialog reads `&` in custom button and
+checkbox labels as an access-key mnemonic, so `escapeMnemonic` doubles it (`&` to `&&`) and the label
+displays literally. The title, message and detail are not escaped.
+
+Microsoft references: [TaskDialogIndirect](https://learn.microsoft.com/en-us/windows/win32/api/commctrl/nf-commctrl-taskdialogindirect),
+[TASKDIALOGCONFIG](https://learn.microsoft.com/en-us/windows/win32/api/commctrl/ns-commctrl-taskdialogconfig),
+[CreateActCtxW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createactctxw).
+
+## Tests
+
+`tests/api/dialog.test.ts` uses the actual operation definitions with a controlled native driver,
+including message input validation, the cancel rule and results.
 `tests/lifecycle/worker-packets.test.ts` checks that modal intent observation follows validation and
 precedes deferred dispatch. `tests/lifecycle/windows-dialog.test.ts` uses the real UI Worker and Windows
 COM dialogs with injected native OK/Cancel commands, and tests abort, sequential dialogs and shutdown.
@@ -33,3 +65,8 @@ after the owning UI STA unwinds. All modal assertions run unchanged inside that 
 It is included in `host:windows`. Linux contract results do not establish Windows native execution.
 Physical input, multiple-monitor layout, overwrite prompts, multi-selection UI and actual owner-window
 retirement remain manual/native follow-up coverage.
+
+The packed (pshpack1) `TASKDIALOGCONFIG` layout is verified by Linux contract tests. Real TaskDialog
+behavior (custom button click, checkbox, `IDCANCEL` mapping, the injected Escape key message, ignored
+`IDCANCEL` without a cancel button, abort and recovery after abort) is covered only by the
+Windows-only lifecycle test.
