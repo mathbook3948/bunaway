@@ -189,7 +189,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 창 icon을 실행 중 변경하고 조회한다. 이미지 입력과 배포 리소스 계약을 정의한다.
 - [ ] decorations와 frame의 초기 설정, 변경과 조회를 제공한다. `titlebar: "custom"`과 CSS drag는 구현됐으며 전체 decorations/frame API는 남아 있다.
 - [x] Windows `titlebar: "custom"`과 WebView2 CSS `app-region: drag/no-drag`, 네이티브 resize 테두리를 제공한다. 전체 테두리 제거와 caption overlay는 미지원이며 물리 마우스 및 접근성 도구 검증은 별도다.
-- [ ] 프로그램에서 창 이동과 방향별 크기 조절을 시작한다. 사용자 CSS `app-region: drag` 이동은 구현됐으며 코드로 이동·크기 조절을 시작하는 API는 남아 있다.
+- [ ] 프로그램에서 창 이동과 방향별 크기 조절을 시작한다. 사용자 CSS `app-region: drag` 이동은 구현됐으며 코드로 이동과 크기 조절을 시작하는 API는 남아 있다.
 - [ ] 네이티브 제목 표시줄 버튼을 유지하는 title-bar overlay를 제공한다.
 - [x] `window.alwaysOnTop`, `setAlwaysOnTop`, `isAlwaysOnTop`으로 활성화 없는 topmost 설정과 조회를 제공한다.
 - [ ] alwaysOnBottom 및 창 Z 순서 이동의 지원 범위를 결정한다.
@@ -233,7 +233,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] always-on-top 변경 이벤트를 제공한다.
 - [ ] close-requested 이벤트와 비동기 저장 후 닫기 승인 흐름을 제공한다. 현재 확인 메시지는 비동기 저장 훅이 아니다.
 - [x] DPI 변경을 resize 전환과 bounds의 `dpi`로 전달한다.
-- [x] theme 변경 이벤트를 제공한다. Windows는 `appearance.changed`로 테마·고대비·접근성 설정을 알리며 동일 값은 생략한다. 13절 테마 항목과 같다.
+- [x] theme 변경 이벤트를 제공한다. Windows는 `appearance.changed`로 테마, 고대비와 접근성 설정을 알리며 동일 값은 생략한다. 13절 테마 항목과 같다.
 - [ ] Windows shutdown, logoff의 query-session-end와 session-end를 처리한다.
 - [ ] app-command와 system-context-menu 이벤트를 제공한다.
 - [x] 창 이벤트 구독 해제, 탐색과 재생성 후 새 구독, 종료 시 정리를 보장한다.
@@ -489,7 +489,7 @@ MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이�
 - [x] Windows clipboard의 bookmark(`application/x-bunaway-bookmark`) 형식 읽기와 쓰기를 제공한다. URL만 포함하며 title과 열기는 없다.
 - [x] `getFormats`와 `hasFormat`으로 지원하는 다섯 MIME 형식의 가용성을 조회한다. 임의 Windows 등록 형식의 열거는 포함하지 않는다.
 - [x] `readFormats`와 `writeFormats`로 한 번의 clipboard 열기 구간에서 여러 형식을 읽거나 교체한다. 준비 실패는 기존 내용을 보존하며 비우기 이후 부분 등록 실패는 되돌리지 않는다.
-- [x] Windows clipboard의 사용자 정의 binary 형식(`application/x-bunaway-binary/...`) 읽기와 쓰기를 제공한다. 형식당 256 KiB, 한 번에 최대 64개다.
+- [x] Windows clipboard의 사용자 정의 binary 형식(`application/x-bunaway-binary/...`) 읽기와 쓰기를 제공한다. 형식당 256 KiB, 어댑터 수명마다 서로 다른 이름 64개까지다.
 - [ ] 클립보드 변경 이벤트의 지원을 결정한다.
 - [x] Windows `@bunaway/plugin-image`에서 PNG, JPEG와 BMP bytes, RGBA와 data URL로 앱 소유 이미지 리소스를 만든다.
 - [ ] 파일 경로에서 이미지 리소스를 읽는 API와 저장소 접근 정책을 연결한다.
@@ -870,7 +870,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [x] Inno Setup 기반 direct와 Store unpackaged 채널의 설치 파일 생성 경로가 있다.
 - [x] 앱 이름과 ICO 아이콘을 가진 GUI EXE로 실행하고 시작 실패 대화상자와 로그를 제공한다.
 - [x] 설치 옵션에 파일 연결과 URL scheme 처리 후보 등록의 opt-in을 연결한다.
-- [x] 설치 옵션에 autostart의 opt-in을 연결한다. 08절 설치·런타임 연결과 같다.
+- [x] 설치 옵션에 autostart의 opt-in을 연결한다. 08절의 설치와 런타임 연결과 같다.
 - [x] 업데이트에서 기존 설치 폴더, 앱 데이터와 설정된 경로의 바로가기를 유지한다.
   Inno 설치는 기존 설치 폴더와 앱 데이터를 유지하고,
   설정된 경로의 앱 바로가기가 같은 설치의 이전 EXE를 가리킬 때 대상과 기본 아이콘을 갱신한다.
