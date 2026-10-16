@@ -968,7 +968,9 @@ text/binary 메시지, timeout과 SDK deadline, 취소 뒤 실제 TCP 정리와 
 `build/macos-native-logs/network-diagnostics/`에 보존한다. report가 있으면 미완성 파일도 원본으로
 보존하며 임시 package를 제거하기 전에 기존 macOS native artifact 경로에 기록한다.
 `macos-network-diagnostics.test.ts`는 살아 있는 실제 child의 pipe 수집과 package 제거 뒤
-진단 보존, 실행 전 실패와 이전 report 정리를 검사한다. 기존 assertion과 제한시간은 유지한다.
+진단 보존, 실행 전 실패와 이전 report 정리를 검사한다. 기존 assertion은 유지하고, 느린 macOS runner를
+고려해 단계별 대기(WKWebView report, HTTP abort cleanup)는 45초(기존 20초), host 프로세스 제한은
+120초(기존 30초)로 늘렸다. timeout 메시지와 진행 로그에는 단계, 경과 시간과 기한이 기록된다.
 `cli/network.test.ts`는 isolated tarball 설치의 두 OS native export에서 실제 HTTP를 실행하고
 browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS, 외부 proxy와 OS 인증은 검증하지 않는다.
 
