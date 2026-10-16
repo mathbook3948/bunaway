@@ -26,6 +26,8 @@ const WM_QUIT = 0x0012;
 const PM_REMOVE = 1;
 const TIMER_ID = 1n;
 const POLL_INTERVAL_MS = 25;
+const FOS_OVERWRITEPROMPT = 0x2;
+const FOS_FORCESHOWHIDDEN = 0x10000000;
 const FOS_FORCEFILESYSTEM = 0x40;
 const FOS_PICKFOLDERS = 0x20;
 const FOS_ALLOWMULTISELECT = 0x200;
@@ -112,6 +114,42 @@ export class DialogCloseRequest {
     }
     return undefined;
   }
+}
+
+/**
+ * Compute the IFileDialog option flags for a request.
+ *
+ * Starts from the dialog's GetOptions `defaults` so Windows' path/file existence defaults are kept.
+ * Always adds FOS_FORCEFILESYSTEM, FOS_DONTADDTORECENT and FOS_NOTESTFILECREATE (never create a test
+ * file). Adds FOS_PICKFOLDERS for selectFolder, FOS_ALLOWMULTISELECT for non-save `multiple`, and
+ * FOS_FORCESHOWHIDDEN when `showHiddenFiles` is true. For saveFile, `confirmOverwrite` true sets
+ * FOS_OVERWRITEPROMPT, false clears it, and omitting it leaves the OS default untouched.
+ * The result is an unsigned 32-bit value because the hidden flag and `~` yield signed numbers.
+ */
+export function fileDialogOptions(
+  kind: DialogKind,
+  input: DialogInput,
+  defaults: number,
+): number {
+  let flags =
+    defaults | FOS_FORCEFILESYSTEM | FOS_DONTADDTORECENT | FOS_NOTESTFILECREATE;
+  if (kind === "selectFolder") {
+    flags |= FOS_PICKFOLDERS;
+  }
+  if (kind !== "saveFile" && input.multiple) {
+    flags |= FOS_ALLOWMULTISELECT;
+  }
+  if (input.showHiddenFiles === true) {
+    flags |= FOS_FORCESHOWHIDDEN;
+  }
+  if (kind === "saveFile") {
+    if (input.confirmOverwrite === true) {
+      flags |= FOS_OVERWRITEPROMPT;
+    } else if (input.confirmOverwrite === false) {
+      flags &= ~FOS_OVERWRITEPROMPT;
+    }
+  }
+  return flags >>> 0;
 }
 
 /** Own one COM dialog, its DLLs and vtable bindings. Importing this module allocates no OS resources. */
@@ -299,18 +337,7 @@ export function createDialog(
       ])(ptr(options)),
       "GetOptions",
     );
-    // Preserve Windows' path/file existence and overwrite confirmation defaults. Never create a test file.
-    let flags =
-      (options[0] ?? 0) |
-      FOS_FORCEFILESYSTEM |
-      FOS_DONTADDTORECENT |
-      FOS_NOTESTFILECREATE;
-    if (kind === "selectFolder") {
-      flags |= FOS_PICKFOLDERS;
-    }
-    if (!save && input.multiple) {
-      flags |= FOS_ALLOWMULTISELECT;
-    }
+    const flags = fileDialogOptions(kind, input, options[0] ?? 0);
     check(
       method(object, 9, [
         "u32",

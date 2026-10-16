@@ -35,6 +35,8 @@ dialog.showMessage(input: MessageInput, options?: NativeInvokeOptions): Promise<
 | `ownerWindowId?: string` | 전체 | 살아 있는 창 수명 ID. 뷰는 자신의 호출 창만 지정할 수 있습니다. |
 | `title?: string` | 전체 | 1~256자의 제목. NUL은 거부합니다. 메시지 대화상자에서 생략하면 Windows가 실행 파일 이름을 표시합니다. |
 | `defaultDirectory?: string` | 열기, 폴더, 저장 | 처음 표시할 기존 디렉터리. 경로 해석 실패는 오류입니다. |
+| `showHiddenFiles?: boolean` | 열기, 폴더, 저장 | 기본 `false`. `true`이면 숨김 및 시스템 항목을 강제로 표시합니다. 생략하거나 `false`이면 사용자의 탐색기 설정을 따릅니다. |
+| `confirmOverwrite?: boolean` | 저장 | `true`이면 기존 파일 덮어쓰기 확인을 켜고 `false`이면 끕니다. 생략하면 Windows 기본 확인을 유지합니다. 열기와 폴더에 지정하면 `INVALID_ARGUMENT`입니다. |
 | `multiple?: boolean` | 열기, 폴더 | 기본 `false`. `true`이면 파일 또는 폴더를 여러 개 선택합니다. |
 | `filters?: { name: string; extensions: string[] }[]` | 열기, 저장 | 1~32개 필터. 이름은 1~128자, 확장자는 필터당 1~32개입니다. |
 | `defaultFileName?: string` | 열기, 저장 | 기본 파일 이름. 1~255자이며 경로 구분자, Windows 예약 문자와 NUL은 거부합니다. |
@@ -42,8 +44,8 @@ dialog.showMessage(input: MessageInput, options?: NativeInvokeOptions): Promise<
 
 확장자는 영문자나 숫자로 시작하고 영문자, 숫자, `_`, `-`로 이루어진 1~32자입니다.
 필터 확장자 `*`는 모든 파일을 표시합니다. 필터는 표시와 선택 안내이며 파일 내용이나
-보안 경계를 검증하지 않습니다. 숨김 파일 표시나 overwrite 확인을 끄는 옵션은 제공하지 않습니다.
-저장은 Windows의 기존 overwrite 확인을 유지합니다. 저장 경로를 선택해도 파일을 쓰지 않습니다.
+보안 경계를 검증하지 않습니다. 저장 경로를 선택해도 파일을 쓰지 않습니다.
+파일과 폴더 대화상자는 OS 기본 새 폴더 UI를 유지하며, Windows에서 이를 끄는 옵션은 없습니다.
 
 ```ts
 // 앱 명령 안에서 현재 호출의 권한과 취소를 상속합니다.
