@@ -21,6 +21,7 @@ import {
   APP_SHUTDOWN_MESSAGE,
   APP_WINDOW_CLASS_PREFIX,
 } from "@bunaway/runtime-bun/windows-control";
+import { monitorServices } from "./monitors.ts";
 import type { SessionMessageHandler } from "./session-end.ts";
 import { Taskbar } from "./taskbar.ts";
 import {
@@ -32,6 +33,7 @@ import { completedGeometryChanges, windowChanges } from "./window-events.ts";
 import {
   centerInWorkArea,
   initialWindowPlacement,
+  selectMonitorWorkArea,
   type WorkArea,
 } from "./window-placement.ts";
 import {
@@ -2251,18 +2253,51 @@ export class Windows {
     );
   }
 
-  /** Center using physical outer bounds; iconic/zoomed HWNDs keep their display state and size. */
-  center(window: bigint): void {
+  /**
+   * Center physical outer bounds in one monitor work area; iconic/zoomed HWNDs keep their
+   * display state and only their normal restoration bounds move.
+   *
+   * Without `monitorId` the area belongs to the monitor nearest the normal bounds. With one,
+   * the public monitor ID is resolved against the monitors connected right now, before any
+   * geometry changes, so an unknown ID throws INVALID_ARGUMENT and leaves the window
+   * untouched instead of falling back to another monitor. Monitor enumeration failures are
+   * INTERNAL.
+   *
+   * Moving a normal (not minimized or maximized) window, hidden or shown, to a monitor with another DPI makes the OS apply a
+   * suggested rectangle that changes the outer size. The window is then centered once more
+   * in the same area using the new size. If that second move changes the DPI again (an
+   * oversized window straddling mixed-DPI monitors), the result follows the existing
+   * OS-suggested-rectangle handling and may not be exactly centered, so callers verify with
+   * the outer bounds.
+   */
+  center(window: bigint, monitorId?: string): void {
+    const editsNormalBounds =
+      this.isMinimized(window) || this.isMaximized(window);
     const bounds = this.getBounds(
       window,
-      this.isMinimized(window) || this.isMaximized(window) ? "normal" : "outer",
+      editsNormalBounds ? "normal" : "outer",
     );
-    const area = this.getWorkArea(this.getPlacementMonitor(undefined, window));
+    const area =
+      monitorId === undefined
+        ? this.getWorkArea(this.getPlacementMonitor(undefined, window))
+        : selectMonitorWorkArea(monitorServices.list(), monitorId);
     this.setGeometry(
       window,
       "outer",
       centerInWorkArea(area, bounds.width, bounds.height),
     );
+    if (editsNormalBounds) {
+      // The HWND keeps its DPI until restore, which follows the existing restore contract.
+      return;
+    }
+    const placed = this.getBounds(window, "outer");
+    if (placed.width !== bounds.width || placed.height !== bounds.height) {
+      this.setGeometry(
+        window,
+        "outer",
+        centerInWorkArea(area, placed.width, placed.height),
+      );
+    }
   }
 
   /**

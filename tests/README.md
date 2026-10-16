@@ -407,6 +407,8 @@ OS가 전경 전환 요청을 거부하면 해당 활성화 전환을 `UNTESTED`
 공개 registry 및 직렬화 Host 경계의 허용된 표시 옵션과 잘못된 옵션, URL, 프로필과 임의 ID 거부를 확인한다.
 `lifecycle/windows-window-placement.test.ts`는 ADR 0019의 작업 영역 배치, content/outer 크기,
 음수 좌표, DPI 96/120/144/192의 반올림, 최소 크기 충돌과 좌표 범위를 순수 계산으로 검사한다.
+런타임 `windows.center`의 `monitorId`는 정확한 ID 일치, 음수 원점과 위쪽 모니터의 작업 영역,
+알 수 없는 ID의 `INVALID_ARGUMENT`와 주 모니터 대체 금지, DPI 변경 뒤 한 번의 재중앙 계산을 같은 파일에서 검사한다.
 single/multiple 계약 회귀는 병합 오류와 네이티브 배치 검증이 예약 및 기존 창 종료보다 먼저
 실행되고 호출별 옵션이 선언을 바꾸지 않는지 확인한다. macOS 선언의 미지원 오류도 검사한다.
 `lifecycle/windows-initial-placement.ts`는 실제 HWND와 WebView2에서 초기 선언, single과
@@ -888,7 +890,10 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 디스플레이 열거와 MONITORINFOEXW rectangle, 주 모니터, 점과 rectangle 선택, 최소화 전
 모니터 및 반복 callback 정리를 검사한다. `windows-bun-window-api.ts`는 실제 WebView2의
 명령 컨텍스트에서 같은 조회와 권한 거부를 검사한다. 두 네이티브 검사는
-`mise run host:windows`에 포함한다. CI의 디스플레이 구성에서 실행하며 실제 다중 물리
+`mise run host:windows`에 포함한다. `windows-bun-window-api.ts`는 `windows.center`에 현재 모니터의 공개 ID를
+넘겨 작업 영역 중앙 배치와 상태 보존을 확인하고, 연결되지 않은 ID가 `INVALID_ARGUMENT`로 거부되며
+창 위치를 바꾸지 않는지도 검사한다. `api/window-geometry.test.ts`는 `monitorId` 스키마와 어댑터 전달,
+`center` 미지원 시 `UNSUPPORTED`를 검사한다. CI의 디스플레이 구성에서 실행하며 실제 다중 물리
 모니터의 hotplug, 혼합 DPI와 회전 또는 사용자 커서 조작 검증을 대신하지 않는다.
 
 

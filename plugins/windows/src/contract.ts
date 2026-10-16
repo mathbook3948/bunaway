@@ -1151,7 +1151,12 @@ export const windowOperations = {
     }),
     output: z.null(),
   },
-  "windows.center": windowResult,
+  "windows.center": {
+    input: windowTarget.extend({
+      monitorId: monitorSchema.shape.id.exactOptional(),
+    }),
+    output: z.null(),
+  },
   "windows.setFullscreen": {
     input: z.strictObject({
       view: viewTarget.shape.view,

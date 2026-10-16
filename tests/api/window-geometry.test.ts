@@ -398,7 +398,8 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
     geometry: JsonValue;
   }[] = [];
   const areas: string[] = [];
-  let centerCalls = 0;
+  const centerRequests: (string | undefined)[] = [];
+  let centerAvailable = true;
   const services: NativeWindowServices = {
     specs: [
       {
@@ -466,9 +467,13 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
       setSizeConstraints() {},
       setSize() {},
       setPosition() {},
-      center() {
-        centerCalls++;
-      },
+      ...(centerAvailable
+        ? {
+            center(monitorId?: string) {
+              centerRequests.push(monitorId);
+            },
+          }
+        : {}),
       setGeometry(area, geometry) {
         applied.push({
           area,
@@ -506,7 +511,24 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
       context,
     ),
   ).toBeNull();
-  expect(centerCalls).toBe(1);
+  expect(centerRequests).toEqual([
+    undefined,
+  ]);
+  expect(
+    await execute(
+      "windows.center",
+      {
+        view: "main",
+        monitorId: "\\\\.\\DISPLAY2",
+      },
+      "backend",
+      context,
+    ),
+  ).toBeNull();
+  expect(centerRequests).toEqual([
+    undefined,
+    "\\\\.\\DISPLAY2",
+  ]);
   for (const state of [
     "fullscreen",
     "closed",
@@ -565,7 +587,31 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
   ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
-  expect(centerCalls).toBe(1);
+  expect(centerRequests).toHaveLength(2);
+  for (const monitorId of [
+    undefined,
+    "\\\\.\\DISPLAY2",
+  ]) {
+    centerAvailable = false;
+    await expect(
+      execute(
+        "windows.center",
+        monitorId === undefined
+          ? {
+              view: "main",
+            }
+          : {
+              view: "main",
+              monitorId,
+            },
+        "backend",
+        context,
+      ),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED",
+    });
+    centerAvailable = true;
+  }
   for (const { name, geometry } of setters) {
     const operation = `windows.${name}`;
     const payload = {
@@ -868,6 +914,18 @@ test("centering accepts only authenticated window targets and null results", () 
     view: "main",
     windowId: "window-1",
   });
+  expect(
+    validateWindowCall({
+      operation: "windows.center",
+      payload: {
+        view: "main",
+        monitorId: "\\\\.\\DISPLAY1",
+      },
+    }).payload,
+  ).toEqual({
+    view: "main",
+    monitorId: "\\\\.\\DISPLAY1",
+  });
   for (const payload of [
     null,
     {},
@@ -877,6 +935,23 @@ test("centering accepts only authenticated window targets and null results", () 
     {
       view: "main",
       monitor: "primary",
+    },
+    {
+      view: "main",
+      monitorId: "",
+    },
+    {
+      view: "main",
+      monitorId: "x".repeat(33),
+    },
+    {
+      view: "main",
+      monitorId: 1,
+    },
+    {
+      view: "main",
+      monitorId: "\\\\.\\DISPLAY1",
+      x: 1,
     },
     {
       view: "main",

@@ -6,6 +6,7 @@ import {
 import {
   centerInWorkArea,
   initialWindowPlacement,
+  selectMonitorWorkArea,
 } from "#native/windows/bun/window-placement";
 import { logicalPixels, physicalPixels } from "#native/windows/bun/window-size";
 
@@ -346,4 +347,87 @@ test("an 8K work area at 100 percent scaling accepts the largest content minimum
   });
   expect(plan.outer.width).toBeLessThanOrEqual(area.width);
   expect(plan.outer.height).toBeLessThanOrEqual(area.height);
+});
+
+const leftMonitor = {
+  id: "\\\\.\\DISPLAY2",
+  workArea: work,
+};
+const primaryMonitor = {
+  id: "\\\\.\\DISPLAY1",
+  workArea: {
+    x: 0,
+    y: 0,
+    width: 2560,
+    height: 1400,
+  },
+};
+const topMonitor = {
+  id: "\\\\.\\DISPLAY3",
+  workArea: {
+    x: 0,
+    y: -1080,
+    width: 1920,
+    height: 1040,
+  },
+};
+const monitors = [
+  primaryMonitor,
+  leftMonitor,
+  topMonitor,
+];
+
+test("runtime center selects the exact monitor work area including negative origins", () => {
+  expect(selectMonitorWorkArea(monitors, leftMonitor.id)).toEqual(work);
+  expect(selectMonitorWorkArea(monitors, topMonitor.id)).toEqual(
+    topMonitor.workArea,
+  );
+  expect(selectMonitorWorkArea(monitors, primaryMonitor.id)).toEqual(
+    primaryMonitor.workArea,
+  );
+  expect(
+    centerInWorkArea(selectMonitorWorkArea(monitors, leftMonitor.id), 816, 639),
+  ).toEqual({
+    x: -1368,
+    y: 101,
+  });
+  expect(
+    centerInWorkArea(selectMonitorWorkArea(monitors, topMonitor.id), 816, 639),
+  ).toEqual({
+    x: 552,
+    y: -879,
+  });
+});
+
+test("runtime center rejects unknown monitors without falling back", () => {
+  for (const monitorId of [
+    "\\\\.\\DISPLAY999",
+    "\\\\.\\display1",
+    "",
+  ]) {
+    let failure: unknown;
+    try {
+      selectMonitorWorkArea(monitors, monitorId);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  expect(() => selectMonitorWorkArea([], primaryMonitor.id)).toThrow();
+});
+
+test("runtime center recenters a DPI-changed outer size in the same selected work area", () => {
+  const area = selectMonitorWorkArea(monitors, primaryMonitor.id);
+  // The window is first centered with its pre-move 96 DPI size, then once more with the
+  // size the OS-suggested rectangle produced at 144 DPI.
+  expect(centerInWorkArea(area, 816, 639)).toEqual({
+    x: 872,
+    y: 381,
+  });
+  expect(centerInWorkArea(area, 1224, 958)).toEqual({
+    x: 668,
+    y: 221,
+  });
 });
