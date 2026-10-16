@@ -698,6 +698,7 @@ reach onOpenUrls after onReady and the initial onOpen"가 fake AppKit에서 첫 
 닫은 창의 마지막 활성 기록 제거, `visible: false`와 `showWhenReady: "sdk"`의 숨김 생성,
 `getReadiness`와 `windows.readiness` 이벤트(닫힌 창의 `CANCELLED` 결과 보존 포함),
 미지원 생성 옵션의 `UNSUPPORTED` 거부와 기존 창 유지, `showInactive`가 포커스를 바꾸지 않는지도 확인한다.
+선언한 `contentProtection`의 생성 시 적용과 `setContentProtection`, `isContentProtected` 전환도 확인한다.
 보조 창을 닫아도 주 창과 백엔드가 유지되고, 마지막 창의 자기 재생성이 새 세션으로
 완료되며, 마지막 닫기에서 호스트가 한 번 종료되는지 확인한다. 영속 프로필은 검사하지 않는다.
 브리지에 최상위 `Date`, 객체와 배열 안의 `Date`를 보내도 앱이 종료되지 않고,
@@ -1175,6 +1176,9 @@ Show, XML, 교체와 개별 clear 및 종료 후 history 제거를 검사한다.
 검사합니다. 작업 표시줄 attention 요청이 창을 활성화하거나 표시하지 않는지,
 소멸한 창을 거부하는지도 실제 HWND로 확인합니다. 잘못된 FLASHWINFO가 last-error로 보고되는지
 검사하고, 작업 표시줄 shell이 있으면 HSHELL_FLASH 알림이 도착하는지도 확인합니다.
+콘텐츠 보호는 생성 시 적용과 런타임 전환 뒤의 display affinity를 독립적인 `GetWindowDisplayAffinity`
+호출로 확인합니다. `lifecycle/macos-bun.test.ts`는 macOS가 `contentProtection` 선언을 받아들이는지 검사하고,
+실제 `sharingType` 동작은 macOS 네이티브 실행의 `lifecycle/macos-window-api.ts`가 확인합니다.
 `lifecycle/windows-webview-titlebar.ts`는 실제 WebView2의 Settings9 설정, CSS drag/no-drag
 문서와 탐색 후 재구성, 전체화면 복원, 미지원 COM 인터페이스 및 자원 정리를 검사합니다.
 Windows native 실행기에 포함하며 결과는 `build/windows-webview-titlebar-results.json`에 기록합니다.

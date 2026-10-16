@@ -2,8 +2,9 @@
 
 창 생성은 사전 선언 뷰의 single 또는 Windows의 multiple 모드를 따른다. [ADR 0016](../decisions/0016-window-creation-contract.md)은
 Windows의 호출별 표시 옵션 범위를 정의한다. create와 recreate는 `{ view, options? }`를 받는다.
-제목, 부분 크기와 제약, 표시와 준비 후 표시를 생성마다 병합하고 검증한다. macOS는 title, 크기와 제약, visible, showWhenReady만 받고
+제목, 부분 크기와 제약, 표시와 준비 후 표시를 생성마다 병합하고 검증한다. macOS는 title, 크기와 제약, contentProtection, visible, showWhenReady만 받고
 배치, titlebar, alwaysOnTop, skipTaskbar, focusable, maximized, fullscreen은 기존 창을 닫기 전에 `UNSUPPORTED`로 거부한다.
+macOS는 `contentProtection`을 `NSWindow.sharingType`으로 지원하지만 macOS 15 이상의 ScreenCaptureKit 기반 캡처는 이를 무시할 수 있다.
 새 옵션의 실제 Windows 검증은 CI의 windows-native 작업에서 수행한다.
 [ADR 0017](../decisions/0017-multiple-windows-per-view.md)은
 single 기본값과 multiple 선택, 창별 ID와 세션, 프로필 공유 및 격리를 정의한다.
@@ -134,7 +135,7 @@ Windows의 `setContentPosition`, `setOuterSize`, `setContentBounds`, `setOuterBo
 설정 후 조회 및 `windows.changed` 일치를 확인했다. 합성 DPI 메시지와 실제 물리
 모니터 이동의 검증 범위는 [실행 기록](../architecture/windows-bun-results.md)에 구분했다.
 macOS는 `app.windows`, 지연 생성과 재생성, 목록 및 열림 여부, show/hide/focus/close,
-표시와 포커스 조회, `getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`를 제공한다.
+표시와 포커스 조회, `getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`, `setContentProtection`, `isContentProtected`를 제공한다.
 창 ID는 네이티브 수명마다 새로 발급한다. 뷰마다 임시 WebKit 프로필을 분리하고 실행 중 재생성에서
 유지한다. 뷰마다 창 하나만 지원하므로 createInstance, recreateInstance, multiple과 isolated는 `UNSUPPORTED`다.
 `getSnapshot`, `windows.changed`, 크기, 위치, 전체화면, 닫기 확인 등 다른 공개 창 작업도 `UNSUPPORTED`다.

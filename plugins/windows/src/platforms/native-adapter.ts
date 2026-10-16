@@ -384,6 +384,17 @@ export function createOperations(
           throw unsupportedDisplay();
         }
         return window.isSkipTaskbar();
+      case "windows.setContentProtection":
+        if (!window.setContentProtection) {
+          throw unsupportedDisplay();
+        }
+        window.setContentProtection(call.payload.contentProtection);
+        break;
+      case "windows.isContentProtected":
+        if (!window.isContentProtected) {
+          throw unsupportedDisplay();
+        }
+        return window.isContentProtected();
       case "windows.requestAttention":
         if (!window.requestAttention) {
           throw unsupportedAttention();

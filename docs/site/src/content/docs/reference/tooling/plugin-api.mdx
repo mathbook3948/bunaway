@@ -237,6 +237,9 @@ Windows의 선택적 `getTitlebar`, `setAlwaysOnTop`, `isAlwaysOnTop`, `setSkipT
 custom은 caption만 제거하며 resize frame과 시스템 메뉴는 유지합니다. WebView2가 CSS
 app-region의 drag/no-drag를 처리하고 없는 런타임은 UNSUPPORTED를 반환합니다.
 setSkipTaskbar는 변경할 때 숨겨진 일반 창을 요구하며 그 외 상태는 BUSY입니다.
+선택적 `setContentProtection(contentProtection)`과 `isContentProtected()`는 스크린샷과 화면 공유에서
+창을 제외하는 상태를 변경하고 조회합니다. `WindowSpec.window.contentProtection`으로 선언하며 기본값은 false입니다.
+창 상태와 관계없이 변경할 수 있고 적용할 수 없으면 실패합니다.
 선택적 `requestAttention(mode)`와 `cancelAttention()`은 포커스나 표시 상태를 바꾸지 않고 작업 표시줄
 버튼의 점멸을 시작하고 멈춥니다. mode는 `WindowAttentionMode`(`untilFocused` 또는 `continuous`)입니다.
 네이티브 HWND와 WebView가 자원을 소유하며 새 창은 선언의 기본값에서 시작합니다.
