@@ -18,6 +18,7 @@ const application = new MacosApplication({
   },
   sessionEnding() {},
   reopened() {},
+  openUrlsRequested() {},
   fail(error) {
     failure = error;
   },

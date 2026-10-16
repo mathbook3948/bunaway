@@ -143,10 +143,11 @@ Windows의 앱 정의 `desktop`에 인자, 딥링크, 파일 열기와 종료 �
 구현했다. 초기 계약, 번들, 타입 검사는 Linux에서 수행했고 후속 Windows x64, Bun 1.4.2에서
 실제 WebView2의 hide, veto, dev-veto, dev-hide, dev-pending 시나리오와 PowerShell 5.1 인자 전달을 통과했다.
 Windows 실행기는 같은 시나리오를 실행한다. URL scheme과 파일 연결의 OS 등록은 미구현이다.
-macOS Bun FFI 런타임은 `desktop`의 종료 취소, 수명주기 훅, 세션 종료와 Dock 재활성화를 지원하고
+macOS Bun FFI 런타임은 `desktop`의 종료 취소, 수명주기 훅, 세션 종료, Dock 재활성화(`onReopen`)와 OS 파일, URL 열기(`onOpenUrls`)를 지원하고
 `windows.lifecycle`, `windows.closeRequested`, `windows.respondClose`도 제공한다
 ([ADR 0021](../decisions/0021-macos-desktop-lifecycle.md)). `desktop.tray`와 `closeBehavior: "hide"`는
-`UNSUPPORTED`이며 OS의 파일과 URL 열기, 단일 인스턴스 전달은 미구현이다. 실제 AppKit 시나리오는
+`UNSUPPORTED`이며 앱 번들의 `CFBundleURLTypes`와 `CFBundleDocumentTypes` 생성은 미구현이다. 단일 인스턴스 전달은
+LaunchServices가 대신하므로 필요 없다. 실제 AppKit 시나리오는
 macos-native CI에서 실행하지만 실제 로그아웃과 사용자의 Dock 클릭은 CI에서 확인하지 못한다.
 
 

@@ -1,9 +1,18 @@
-import { appendFileSync, readFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { defineApp } from "@bunaway/backend";
 import windows from "@bunaway/plugin-windows";
 import { BunawayError } from "@bunaway/protocol";
 import { driver } from "./driver.ts";
-import { readDesktopFixture } from "./fixture-config.ts";
+import { OPEN_URL, readDesktopFixture } from "./fixture-config.ts";
 
 /**
  * App under test for tests/lifecycle/macos-desktop.ts. The scenario name and the log path come from
@@ -49,12 +58,17 @@ const countOf = (line: string) =>
 /** Waits until `line` was logged `count` times, for lines a recreated window repeats. */
 const loggedTimes = (line: string, count: number) => () =>
   countOf(line) >= count;
-const drive = (action: string, title?: string) =>
+const drive = (action: string, title?: string, value?: string) =>
   driver.drive({
     action: action as "terminate",
     ...(title
       ? {
           title,
+        }
+      : {}),
+    ...(value
+      ? {
+          value,
         }
       : {}),
   });
@@ -281,6 +295,58 @@ const scripts: Record<string, () => Promise<void>> = {
     step("close-observer");
     await drive("close", "observer");
   },
+  async "open-urls"() {
+    step("wait-main-page");
+    await until(logged("page:main"), "the main page");
+    step("open-url");
+    await drive("openUrl", undefined, OPEN_URL);
+    step("wait-open-url");
+    await until(logged(`openedUrl:${OPEN_URL}`), "the URL scheme open");
+    // A file with a space and a non-ASCII name, in a real path so no symlink changes its spelling.
+    const folder = mkdtempSync(
+      resolve(realpathSync(tmpdir()), "bunaway-open-"),
+    );
+    const file = resolve(folder, "open file \u00e9.txt");
+    writeFileSync(file, "");
+    log(`openFileExpected:${pathToFileURL(file).href}`);
+    step("open-file");
+    await drive("openFile", undefined, file);
+    step("wait-open-file");
+    await until(
+      () => lines().some((line) => line.startsWith("openedUrl:file:")),
+      "the document open",
+    );
+    step("quit-event");
+    await drive("quitEvent");
+  },
+  async "reopen-handler"() {
+    step("wait-main-page");
+    await until(logged("page:main"), "the main page");
+    step("wait-observer-page");
+    await until(logged("page:observer"), "the observer page");
+    // A reopen while windows are visible reaches the app and creates nothing.
+    step("reopen-visible");
+    await drive("reopen");
+    await until(logged("onReopen:true"), "onReopen with a visible window");
+    await Bun.sleep(SETTLE_MS);
+    log(`windowsAfterVisibleReopen:${(await windows.listInstances()).length}`);
+    step("close-main");
+    await drive("close", "main");
+    step("wait-main-destroyed");
+    await until(logged("lifecycle:destroyed:main"), "main destroyed");
+    step("close-observer");
+    await drive("close", "observer");
+    step("wait-all-windows-closed");
+    await until(logged("onAllWindowsClosed"), "onAllWindowsClosed");
+    // With onReopen registered the host leaves the empty app to the app: no window comes back.
+    step("reopen-hidden");
+    await drive("reopen");
+    await until(logged("onReopen:false"), "onReopen without a visible window");
+    await Bun.sleep(SETTLE_MS);
+    log(`windowsAfterHiddenReopen:${(await windows.listInstances()).length}`);
+    step("quit-event");
+    await drive("quitEvent");
+  },
   async "session-end"() {
     log("driving-session-end");
     // The quit Apple event that follows the power-off is part of the session end: the host
@@ -427,7 +493,7 @@ export default defineApp({
     },
   },
   desktop: {
-    ...(scenario === "keep-alive"
+    ...(scenario === "keep-alive" || scenario === "reopen-handler"
       ? {
           closeBehavior: "keep-alive" as const,
         }
@@ -473,5 +539,20 @@ export default defineApp({
     onAllWindowsClosed() {
       log("onAllWindowsClosed");
     },
+    onOpenUrls(urls) {
+      log(`onOpenUrls:${urls.length}`);
+      for (const url of urls) {
+        log(`openedUrl:${url}`);
+      }
+    },
+    // Registered only for the scenario that checks it, so the other scenarios keep the host's own
+    // reopen behavior (the keep-alive scenario recreates the window).
+    ...(scenario === "reopen-handler"
+      ? {
+          onReopen(event: { hasVisibleWindows: boolean }) {
+            log(`onReopen:${event.hasVisibleWindows}`);
+          },
+        }
+      : {}),
   },
 });

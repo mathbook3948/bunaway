@@ -282,7 +282,9 @@ content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장
 windowless UI Worker와 named pipe에서 초기 및 두 번째 실행의 argv를 onOpen에 전달하고
 match, help, 오류 이후 다음 요청 처리를 확인한다. raw 모드에서 `https://`와 `file:relative.txt`도
 원래 인자로 전달한다. `lifecycle/desktop.test.ts`는 초기 및 전달 요청의 URL 모양 string 옵션과
-기존 파일 URL 검증을 함께 확인한다. `host:windows`에 포함하며 WebView 페이지는 만들지 않는다.
+기존 파일 URL 검증과 onOpenUrls 목록 도출, 호출 순서를 함께 확인한다. `windows-cli-arguments.ts`는 기본 모드의
+초기 및 두 번째 실행에서 `myapp://` URL과 상대 파일 경로가 정규화된 URL과 `file:` URL로 onOpen 뒤에
+onOpenUrls에 전달되는지도 별도 자식 프로세스에서 확인한다. `host:windows`에 포함하며 WebView 페이지는 만들지 않는다.
 raw 모드와 자동 실행 prefix를 함께 사용해 `launchReason`, 앱 argv와 숨김 전달의 표시 상태가
 유지되는지 확인한다. 실제 Windows CLI 초기 요청에서도 자동 실행 prefix를 제거한 앱 인자를 검사한다.
 

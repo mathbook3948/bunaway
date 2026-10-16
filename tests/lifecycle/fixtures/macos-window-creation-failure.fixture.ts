@@ -132,6 +132,8 @@ const windows = new MacosWindows(config, {} as never, {
   desktop: new DesktopRequests({
     stopping: () => false,
     sendQuitRequest: () => {},
+    sendOpenUrls: async () => {},
+    diagnostic: () => {},
   }),
   windowsGone: () => {},
   windowsEmpty: () => {},

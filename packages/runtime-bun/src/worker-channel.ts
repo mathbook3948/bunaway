@@ -114,6 +114,26 @@ function desktopCloseBehavior(
     throw new Error("Invalid desktop close behavior");
   }
 }
+/** Most URLs one open request may carry; the same input limit as ADR 0013's launch arguments. */
+export const MAX_OPEN_URLS = 256;
+/** Most UTF-8 bytes all URLs of one open request may total (64 KiB, as for launch arguments). */
+export const MAX_OPEN_URLS_BYTES = 64 * 1024;
+function openUrlList(value: unknown): asserts value is string[] {
+  if (
+    !Array.isArray(value) ||
+    value.length > MAX_OPEN_URLS ||
+    value.some((url) => typeof url !== "string") ||
+    value.reduce((bytes, url) => bytes + Buffer.byteLength(url), 0) >
+      MAX_OPEN_URLS_BYTES
+  ) {
+    throw new Error("Invalid open URL list");
+  }
+}
+function flag(value: unknown): asserts value is boolean {
+  if (typeof value !== "boolean") {
+    throw new Error("Invalid Worker flag");
+  }
+}
 function quitReason(
   value: unknown,
 ): asserts value is "last-window" | "tray" | "quit-command" {
@@ -321,9 +341,34 @@ const packetDefinitions = {
   "desktop-config": definePacket(
     {
       closeBehavior: desktopCloseBehavior,
+      /** Whether the app registered `onReopen`, which then decides what a reopen does. */
+      reopenHandler: flag,
     },
     [
       "macos-main",
+    ],
+    "control",
+  ),
+  /**
+   * macOS main thread to backend: URLs the OS asked the app to open (a URL scheme or a document),
+   * already normalized and within the open-request limits, in arrival order.
+   */
+  "open-urls": definePacket(
+    {
+      urls: openUrlList,
+    },
+    [
+      "macos-backend",
+    ],
+    "control",
+  ),
+  /** macOS main thread to backend: the user reopened the app (Dock click or reopen Apple event). */
+  reopen: definePacket(
+    {
+      hasVisibleWindows: flag,
+    },
+    [
+      "macos-backend",
     ],
     "control",
   ),

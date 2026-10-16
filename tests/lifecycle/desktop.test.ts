@@ -14,6 +14,7 @@ import {
   DesktopLifecycle,
   desktopLaunch,
   openRequest,
+  parseLaunch,
   validateDesktopStartup,
   WILL_QUIT_DEADLINE_MS,
 } from "#native/windows/bun/desktop";
@@ -1086,6 +1087,8 @@ test("instance deadlines end a slow request and a slow acknowledgement after fiv
 test("lifecycle callbacks must be functions", () => {
   for (const name of [
     "onReady",
+    "onOpenUrls",
+    "onReopen",
     "onAllWindowsClosed",
     "onWillQuit",
     "onQuit",
@@ -1306,5 +1309,273 @@ test("a session end committed during a pending beforeQuit ignores its later veto
   await lifecycle.willQuit();
   expect(seen).toEqual([
     "willQuit:session-end",
+  ]);
+});
+
+test("launch arguments yield ordered absolute URLs while the open request keeps its shape", () => {
+  const input = {
+    argv: [
+      "--flag",
+      "memo://open/42?x=a b",
+      "rel dir\\note.txt",
+      "D:\\data\\x#1.txt",
+      "\\\\server\\share\\x.txt",
+      "file:///C:/a%20b/../c.txt",
+      "--",
+      "--literal",
+    ],
+    cwd: "C:\\work",
+  };
+  const parsed = parseLaunch(input, "initial");
+  expect(parsed.openUrls).toEqual([
+    "memo://open/42?x=a%20b",
+    "file:///C:/work/rel%20dir/note.txt",
+    "file:///D:/data/x%231.txt",
+    "file://server/share/x.txt",
+    "file:///C:/c.txt",
+    "file:///C:/work/--literal",
+  ]);
+  expect(Object.isFrozen(parsed.openUrls)).toBe(true);
+  expect(parsed.request).toEqual(openRequest(input, "initial"));
+  expect(parsed.request.urls).toEqual([
+    "memo://open/42?x=a%20b",
+  ]);
+  expect(parseLaunch(input, "initial", "raw").openUrls).toEqual([]);
+  expect(() =>
+    parseLaunch(
+      {
+        argv: [
+          "http://[bad",
+        ],
+        cwd: "C:\\",
+      },
+      "initial",
+    ),
+  ).toThrow();
+});
+
+/** Records every desktop callback in delivery order for open-URL scenarios. */
+function recordingLifecycle(extra: DesktopOptions = {}) {
+  const seen: string[] = [];
+  const errors: unknown[] = [];
+  const lifecycle = new DesktopLifecycle(
+    {
+      onReady: () => {
+        seen.push("ready");
+      },
+      onOpen: (request) => {
+        seen.push(`open:${request.source}`);
+      },
+      onOpenUrls: (urls) => {
+        seen.push(`urls:${urls.join(",")}`);
+      },
+      onReopen: (event) => {
+        seen.push(`reopen:${event.hasVisibleWindows}`);
+      },
+      ...extra,
+    },
+    async (action) => {
+      seen.push(`control:${action}`);
+    },
+    () => {},
+    (error) => errors.push(error),
+  );
+  return {
+    lifecycle,
+    seen,
+    errors,
+  };
+}
+
+test("onOpenUrls follows onReady, the initial open and buffered OS requests, then live ones show first", async () => {
+  const { lifecycle, seen } = recordingLifecycle();
+  lifecycle.openUrls([
+    "https://a.example/",
+  ]);
+  lifecycle.openUrls([]);
+  lifecycle.openUrls([
+    "https://b.example/",
+    "file:///C:/b.txt",
+  ]);
+  await tick();
+  expect(seen).toEqual([]);
+  lifecycle.ready({
+    argv: [
+      "https://init.example/",
+    ],
+    cwd: "C:\\w",
+  });
+  lifecycle.openUrls([
+    "https://live.example/",
+  ]);
+  await tick();
+  expect(seen).toEqual([
+    "ready",
+    "open:initial",
+    "urls:https://init.example/",
+    "urls:https://a.example/",
+    "urls:https://b.example/,file:///C:/b.txt",
+    "control:show",
+    "urls:https://live.example/",
+  ]);
+});
+
+test("onOpenUrls is not called without URLs, and raw mode never derives them from argv", async () => {
+  const { lifecycle, seen } = recordingLifecycle({
+    openArguments: "raw",
+  });
+  lifecycle.ready({
+    argv: [
+      "https://raw.example/",
+    ],
+    cwd: "C:\\w",
+  });
+  await tick();
+  expect(seen).toEqual([
+    "ready",
+    "open:initial",
+  ]);
+  const files = recordingLifecycle();
+  files.lifecycle.ready({
+    argv: [
+      "--flag",
+    ],
+    cwd: "C:\\w",
+  });
+  await tick();
+  expect(files.seen).toEqual([
+    "ready",
+    "open:initial",
+  ]);
+});
+
+test("a second instance shows the app, then runs onOpen, then onOpenUrls, and each failure is isolated", async () => {
+  const { lifecycle, seen, errors } = recordingLifecycle({
+    onOpen: () => {
+      throw new Error("open failed");
+    },
+  });
+  lifecycle.ready();
+  lifecycle.open(
+    {
+      argv: [
+        "https://second.example/",
+      ],
+      cwd: "C:\\w",
+    },
+    "second-instance",
+  );
+  await tick();
+  expect(seen).toEqual([
+    "ready",
+    "control:show",
+    "urls:https://second.example/",
+  ]);
+  expect(errors).toHaveLength(1);
+  const order = recordingLifecycle();
+  order.lifecycle.ready();
+  order.lifecycle.open(
+    {
+      argv: [
+        "https://second.example/",
+      ],
+      cwd: "C:\\w",
+    },
+    "second-instance",
+  );
+  await tick();
+  expect(order.seen).toEqual([
+    "ready",
+    "control:show",
+    "open:second-instance",
+    "urls:https://second.example/",
+  ]);
+});
+
+test("a failing onOpenUrls is reported and later requests still run", async () => {
+  const { lifecycle, seen, errors } = recordingLifecycle({
+    onOpenUrls: (urls) => {
+      seen.push(`urls:${urls.join(",")}`);
+      throw new Error("urls failed");
+    },
+  });
+  lifecycle.ready();
+  lifecycle.openUrls([
+    "https://one.example/",
+  ]);
+  lifecycle.openUrls([
+    "https://two.example/",
+  ]);
+  await tick();
+  expect(seen.filter((entry) => entry.startsWith("urls:"))).toEqual([
+    "urls:https://one.example/",
+    "urls:https://two.example/",
+  ]);
+  expect(errors).toHaveLength(2);
+});
+
+test("the pre-ready URL buffer is bounded and discarded by shutdown", async () => {
+  const { lifecycle, seen } = recordingLifecycle();
+  for (let index = 0; index < 64; index++) {
+    lifecycle.openUrls([
+      `https://example.test/${index}`,
+    ]);
+  }
+  expect(() =>
+    lifecycle.openUrls([
+      "https://overflow.example/",
+    ]),
+  ).toThrow("Desktop open queue unavailable");
+  lifecycle.commitShutdown("api");
+  expect(() =>
+    lifecycle.openUrls([
+      "https://late.example/",
+    ]),
+  ).toThrow("Desktop open queue unavailable");
+  lifecycle.ready();
+  await tick();
+  expect(seen).toEqual([]);
+});
+
+test("onOpenUrls receives a frozen copy of the URL list", async () => {
+  const received: (readonly string[])[] = [];
+  const lifecycle = new DesktopLifecycle(
+    {
+      onOpenUrls: (urls) => {
+        received.push(urls);
+      },
+    },
+    async () => {},
+    () => {},
+    () => {},
+  );
+  const urls = [
+    "https://a.example/",
+  ];
+  lifecycle.ready();
+  lifecycle.openUrls(urls);
+  urls.push("https://mutated.example/");
+  await tick();
+  expect(received).toEqual([
+    [
+      "https://a.example/",
+    ],
+  ]);
+  expect(Object.isFrozen(received[0])).toBe(true);
+});
+
+test("onReopen is dropped before ready and delivered in queue order afterwards", async () => {
+  const { lifecycle, seen } = recordingLifecycle();
+  lifecycle.reopen({
+    hasVisibleWindows: false,
+  });
+  lifecycle.ready();
+  lifecycle.reopen({
+    hasVisibleWindows: true,
+  });
+  await tick();
+  expect(seen).toEqual([
+    "ready",
+    "reopen:true",
   ]);
 });

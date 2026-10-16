@@ -12,10 +12,11 @@ import { driver } from "../fixtures/macos-desktop/driver.ts";
 import {
   type DesktopFixture,
   desktopFixturePath,
+  OPEN_URL,
 } from "../fixtures/macos-desktop/fixture-config.ts";
 
 /**
- * Real AppKit gate for the macOS close and quit lifecycle (ADR 0020). One compiled app runs nine
+ * Real AppKit gate for the macOS close and quit lifecycle (ADR 0020). One compiled app runs eleven
  * scenarios; a UI-thread driver plugin triggers the delegate and window paths the OS would (including
  * self-addressed reopen and quit Apple events), and the app's desktop hooks record what happened.
  *
@@ -47,7 +48,7 @@ const SENDER_QUIT_REASON = "shut";
 const ERR_AE_EVENT_NOT_PERMITTED = -1743;
 
 const HOOK_LINE =
-  /^(onReady|onOpen|beforeQuit|onWillQuit|onQuit|onAllWindowsClosed|stopHook)(:|$)/;
+  /^(onReady|onOpen|beforeQuit|onWillQuit|onQuit|onAllWindowsClosed|onOpenUrls|onReopen|stopHook)(:|$)/;
 /** `onReady` precedes the initial open in every scenario. */
 const OPEN = [
   "onReady",
@@ -213,6 +214,46 @@ const scenarios: Scenario[] = [
         "reopen reused the closed window",
       );
       assert(at(lines, after) > at(lines, "onAllWindowsClosed"));
+    },
+  },
+  {
+    // c2: the OS asks the app to open a URL scheme link and a document. Both reach onOpenUrls
+    // after onReady and the initial onOpen, normalized.
+    name: "open-urls",
+    hooks: [
+      ...OPEN,
+      "onOpenUrls:1",
+      "onOpenUrls:1",
+      "beforeQuit:quit-command",
+      ...SHUTDOWN_AFTER("quit-command"),
+    ],
+    verify(lines) {
+      const opened = lines.filter((line) => line.startsWith("openedUrl:"));
+      const expectedFile = lines
+        .find((line) => line.startsWith("openFileExpected:"))
+        ?.slice("openFileExpected:".length);
+      assert(expectedFile, "the fixture did not record the expected file URL");
+      assert.deepEqual(opened, [
+        `openedUrl:${OPEN_URL}`,
+        `openedUrl:${expectedFile}`,
+      ]);
+    },
+  },
+  {
+    // c3: with onReopen registered a reopen reaches the app with the window visibility, and the
+    // host does not show a window on its own.
+    name: "reopen-handler",
+    hooks: [
+      ...OPEN,
+      "onReopen:true",
+      "onAllWindowsClosed",
+      "onReopen:false",
+      "beforeQuit:quit-command",
+      ...SHUTDOWN_AFTER("quit-command"),
+    ],
+    verify(lines) {
+      at(lines, "windowsAfterVisibleReopen:2");
+      at(lines, "windowsAfterHiddenReopen:0");
     },
   },
   {
@@ -672,7 +713,7 @@ try {
     reports,
   });
   console.log(
-    "PASS compiled AppKit close and quit lifecycle: Quit veto, last window, keep-alive Apple event reopen, close requests and lifecycle events, repeated recreation without leaked windows, session-end suspended quit event (notification, quit reason and a separate process that waits for the reply) and SIGTERM",
+    "PASS compiled AppKit close and quit lifecycle: Quit veto, last window, keep-alive Apple event reopen, URL scheme and document open Apple events, reopen delivery to onReopen, close requests and lifecycle events, repeated recreation without leaked windows, session-end suspended quit event (notification, quit reason and a separate process that waits for the reply) and SIGTERM",
   );
 } catch (error) {
   const diagnostics = resolve(root, "build/macos-desktop-diagnostics");
