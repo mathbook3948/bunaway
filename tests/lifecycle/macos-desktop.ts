@@ -35,7 +35,7 @@ const LAUNCH_TIMEOUT_MS = 30_000;
 const POLL_MS = 20;
 
 const HOOK_LINE =
-  /^(onReady|onOpen|beforeQuit|onWillQuit|onQuit|onAllWindowsClosed|stopHook)/;
+  /^(onReady|onOpen|beforeQuit|onWillQuit|onQuit|onAllWindowsClosed|stopHook)(:|$)/;
 /** `onReady` precedes the initial open in every scenario. */
 const OPEN = [
   "onReady",
