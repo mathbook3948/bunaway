@@ -51,43 +51,44 @@ function termination(waitMs = 30) {
   };
 }
 
-test("a session end commits shutdown once and holds the termination reply until app cleanup finishes", () => {
+test("a session end commits shutdown once and holds the quit event reply until app cleanup finishes", () => {
   const { calls, session } = termination(10_000);
   expect(session.active).toBe(false);
   session.signal();
   session.signal();
   expect(calls.commits).toBe(1);
   expect(session.active).toBe(true);
-  expect(session.terminateRequested()).toBe("later");
-  // A repeated request while waiting does not start another wait or reply.
-  expect(session.terminateRequested()).toBe("later");
+  expect(session.quitEventReceived()).toBe("later");
+  // A repeated quit event while suspended does not start another wait or reply.
+  expect(session.quitEventReceived()).toBe("later");
   expect(calls.replies).toBe(0);
   session.appCleanedUp();
   session.appCleanedUp();
   expect(calls.replies).toBe(1);
-  expect(session.terminateRequested()).toBe("now");
+  expect(session.quitEventReceived()).toBe("now");
   session.dispose();
+  expect(calls.replies).toBe(1);
 });
 
-test("a termination request that is itself the first session-end signal commits shutdown", () => {
+test("a quit event that is itself the first session-end signal commits shutdown", () => {
   const { calls, session } = termination(10_000);
-  expect(session.terminateRequested()).toBe("later");
+  expect(session.quitEventReceived()).toBe("later");
   expect(calls.commits).toBe(1);
   session.dispose();
 });
 
-test("a termination request after app cleanup is answered immediately without a reply call", () => {
+test("a quit event after app cleanup is answered immediately without a reply call", () => {
   const { calls, session } = termination(10_000);
   session.signal();
   session.appCleanedUp();
-  expect(session.terminateRequested()).toBe("now");
+  expect(session.quitEventReceived()).toBe("now");
   expect(calls.replies).toBe(0);
 });
 
-test("the termination reply is given after the session-end wait even when cleanup never finishes", async () => {
+test("the quit event reply is given after the session-end wait even when cleanup never finishes", async () => {
   const { calls, session } = termination(20);
   session.signal();
-  expect(session.terminateRequested()).toBe("later");
+  expect(session.quitEventReceived()).toBe("later");
   await Bun.sleep(80);
   expect(calls.replies).toBe(1);
   // A late cleanup report does not reply a second time.
@@ -95,10 +96,19 @@ test("the termination reply is given after the session-end wait even when cleanu
   expect(calls.replies).toBe(1);
 });
 
-test("disposing cancels the wait without replying", async () => {
+test("disposing sends a still-owed reply once and cancels the wait", async () => {
   const { calls, session } = termination(20);
-  session.terminateRequested();
+  session.quitEventReceived();
   session.dispose();
+  session.dispose();
+  expect(calls.replies).toBe(1);
   await Bun.sleep(60);
+  expect(calls.replies).toBe(1);
+});
+
+test("disposing without a suspended quit event sends no reply", () => {
+  const { calls, session } = termination(10_000);
+  session.signal();
+  session.dispose();
   expect(calls.replies).toBe(0);
 });

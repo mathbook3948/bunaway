@@ -64,7 +64,7 @@ WebView를 위한 추가 네이티브 바이너리는 필요하지 않다.
 `host-operations.ts`는 Windows와 공유하는 `native/host-api/bun/io-worker.ts`의 큐와 어댑터 수명을 사용한다.
 `windows.ts`는 창별 세션 경계와 지연 생성, 재생성 및 개별 정리를 소유한다.
 `process-group.ts`는 하위 프로세스의 종료와 호스트 비정상 종료 감시를 소유한다.
-`application.ts`는 앱 delegate, 최소 메인 메뉴와 모든 창이 공유하는 이벤트 루프를 소유한다.
+`application.ts`는 앱 delegate, 최소 메인 메뉴, 종료 Apple event 핸들러와 모든 창이 공유하는 이벤트 루프를 소유한다.
 `desktop-requests.ts`는 백엔드가 `desktop` 옵션을 보고하기 전의 Quit과 재활성화를 보류하고,
 `quit-reason.ts`와 `session-end-termination.ts`는 종료 원인 분류와 세션 종료의 응답 보류를,
 `backend-shutdown.ts`는 백엔드 쪽 종료 순서를 맡는다.

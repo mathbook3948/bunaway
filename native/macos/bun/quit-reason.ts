@@ -11,6 +11,12 @@ export function fourCharCode(text: string): number {
 /** Attribute keyword of the quit Apple event that carries why the application is asked to quit (`keyAEQuitReason`). */
 export const KEY_AE_QUIT_REASON = fourCharCode("why?");
 
+/** Event class of the quit Apple event (`kCoreEventClass`). */
+export const CORE_EVENT_CLASS = fourCharCode("aevt");
+
+/** Event ID of the quit Apple event (`kAEQuitApplication`). */
+export const QUIT_APPLICATION_EVENT_ID = fourCharCode("quit");
+
 /**
  * Quit reasons (`kAEReallyLogOut`, `kAERestart`, `kAEShutDown`) that mean the user session is
  * ending. Any other reason, or none, is an ordinary Quit command.
@@ -22,10 +28,12 @@ const SESSION_END_QUIT_REASONS: ReadonlySet<number> = new Set([
 ]);
 
 /**
- * Classifies a request that reached `applicationShouldTerminate:`.
+ * Classifies a quit Apple event handled by the host's own handler (`kCoreEventClass` and
+ * `kAEQuitApplication`). Quit commands that go through `terminate:` (the Quit menu and Cmd+Q)
+ * carry no Apple event and never reach this function.
  *
- * @param quitReasonCode The `keyAEQuitReason` value of the quit Apple event being handled, or
- * `undefined` when none is being handled (`NSApp terminate:`, Cmd+Q and the Dock's Quit send none).
+ * @param quitReasonCode The `keyAEQuitReason` value of the quit Apple event, or `undefined` when
+ * the event has none (an `osascript` quit or the Dock's Quit).
  */
 export function classifyQuit(
   quitReasonCode: number | undefined,

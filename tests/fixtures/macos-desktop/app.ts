@@ -2,18 +2,20 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { defineApp } from "@bunaway/backend";
 import windows from "@bunaway/plugin-windows";
 import { driver } from "./driver.ts";
+import { readDesktopFixture } from "./fixture-config.ts";
 
 /**
  * App under test for tests/lifecycle/macos-desktop.ts. The scenario name and the log path come from
- * the environment, so one compiled app serves every scenario. Each hook appends one line to the log;
- * the test asserts the order. The script for a scenario runs in the backend and drives AppKit
- * through the UI-thread `driver` plugin, never through the page.
+ * the fixture file in the data root (the backend Worker's `HOME`), so one compiled app serves every
+ * scenario. Each hook appends one line to the log; the test asserts the order. The script for a
+ * scenario runs in the backend and drives AppKit through the UI-thread `driver` plugin, never
+ * through the page.
  */
-const scenario = process.env.DESKTOP_SCENARIO ?? "";
-const logPath = process.env.DESKTOP_EVENTS;
-if (!logPath) {
-  throw new Error("Missing DESKTOP_EVENTS.");
+const dataRoot = process.env.HOME;
+if (!dataRoot) {
+  throw new Error("Missing HOME, the data root of the backend Worker.");
 }
+const { scenario, events: logPath } = readDesktopFixture(dataRoot);
 const log = (line: string) => appendFileSync(logPath, `${line}\n`);
 const lines = () => readFileSync(logPath, "utf8").trim().split("\n");
 
@@ -167,8 +169,9 @@ const scripts: Record<string, () => Promise<void>> = {
   async "session-end"() {
     log("driving-session-end");
     await drive("powerOff");
-    // AppKit then asks the app to terminate, which must be answered with NSTerminateLater.
-    await drive("terminate");
+    // The quit Apple event that follows is part of the session end: the host suspends it and
+    // replies after cleanup, without blocking the main thread.
+    await drive("quitEvent");
   },
   async "session-end-quit-reason"() {
     await until(logged("page:main"), "the main page");

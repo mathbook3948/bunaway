@@ -2,7 +2,13 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import type { HostContext } from "@bunaway/protocol";
+import { Worker } from "node:worker_threads";
+import { type HostContext, PROTOCOL_VERSION } from "@bunaway/protocol";
+import {
+  Channel,
+  type Packet,
+  type Route,
+} from "@bunaway/runtime-bun/worker-channel";
 import { appModules } from "#cli/app-modules";
 import { bundleMacosHost } from "#cli/assets";
 import type { MacosConfig } from "#native/macos/bun/config";
@@ -19,15 +25,20 @@ type Scenario = {
   desktop: string;
   /** Number of beforeQuit calls that veto before one is approved. */
   vetoes?: number;
-  /** Driver body, run once the initial `onOpen` was logged. */
+  /** Driver body, run once the initial `onOpen` was logged (or at once with `holdSetup`). */
   drive: string;
+  /**
+   * Holds the backend in a plugin setup, so it is not `ready` yet, until the driver calls
+   * `releaseSetup()`. The driver then starts as soon as the setup is held.
+   */
+  holdSetup?: boolean;
   /** Expected process exit code. */
   exitCode?: number;
 };
 
 const OPEN_LINE = "onOpen:initial:0:string";
 
-function workerConfig(directory: string): MacosConfig {
+function workerConfig(directory: string, events: string[] = []): MacosConfig {
   return {
     runtime: {
       id: "test",
@@ -59,7 +70,7 @@ function workerConfig(directory: string): MacosConfig {
             "https://app.bunaway.local",
           ],
           commands: [],
-          events: [],
+          events,
           host: {
             permissions: [],
           },
@@ -75,14 +86,21 @@ async function runScenario(scenario: Scenario) {
   try {
     const events = resolve(directory, "events.log");
     const app = resolve(directory, "app.ts");
+    const setupGate = resolve(directory, "setup-gate");
     await Bun.write(
       app,
-      `import { appendFileSync } from "node:fs";
+      `import { appendFileSync, existsSync } from "node:fs";
       const log = (line) => appendFileSync(${JSON.stringify(events)}, line + "\\n");
       let vetoes = ${scenario.vetoes ?? 0};
       export default {
         commands: {}, events: {},
-        plugins: [{name: "cleanup", version: "1.0.0", setup() { return () => log("stopHook"); }}],
+        plugins: [{name: "cleanup", version: "1.0.0", async setup() {
+          if (${scenario.holdSetup === true}) {
+            log("setupHeld");
+            while (!existsSync(${JSON.stringify(setupGate)})) await Bun.sleep(5);
+          }
+          return () => log("stopHook");
+        }}],
         desktop: ${scenario.desktop},
       };`,
     );
@@ -199,13 +217,15 @@ async function runScenario(scenario: Scenario) {
           await Bun.sleep(5);
         }
       };
+      const releaseSetup = () => Bun.write(${JSON.stringify(setupGate)}, "");
       (async () => {
-        await until(${JSON.stringify(OPEN_LINE)});
+        await until(${JSON.stringify(scenario.holdSetup ? "setupHeld" : OPEN_LINE)});
         ${scenario.drive}
       })().catch((error) => { console.error(error); process.exit(3); });
       try { await runMacosApp(${JSON.stringify(workerConfig(directory))}); }
       catch (error) { console.error(error.message); process.exitCode = 1; }`,
     );
+    const startedAt = Date.now();
     const child = Bun.spawn(
       [
         process.execPath,
@@ -229,6 +249,7 @@ async function runScenario(scenario: Scenario) {
     return {
       log,
       errors,
+      elapsedMs: Date.now() - startedAt,
     };
   } finally {
     await rm(directory, {
@@ -330,6 +351,29 @@ test("macOS SIGTERM runs the shutdown hooks with the interrupted reason", async 
   ]);
 });
 
+/** Well under the forced shutdown deadline, which a deadlocked shutdown would have to reach. */
+const ORDERLY_STARTUP_SHUTDOWN_BUDGET_MS = 5_000;
+
+test("macOS SIGTERM before the backend is ready shuts down in order without waiting for the forced deadline", async () => {
+  const { log, elapsedMs } = await runScenario({
+    desktop: withClose(),
+    holdSetup: true,
+    drive: `
+      process.kill(process.pid, "SIGTERM");
+      // Setup is still running when the signal arrives; it finishes while shutdown is under way.
+      await Bun.sleep(200);
+      await releaseSetup();`,
+  });
+  // The app never became ready, so only the shutdown hooks run.
+  expect(log).toEqual([
+    "setupHeld",
+    "onWillQuit:interrupted",
+    "stopHook",
+    "onQuit:interrupted",
+  ]);
+  expect(elapsedMs).toBeLessThan(ORDERLY_STARTUP_SHUTDOWN_BUDGET_MS);
+});
+
 test("macOS session end ignores a pending beforeQuit veto and never consults beforeQuit again", async () => {
   const { log } = await runScenario({
     desktop: `{
@@ -367,3 +411,139 @@ test("macOS host failure skips the shutdown hooks but still stops Core", async (
   ]);
   expect(errors).toContain("host failed");
 });
+
+/**
+ * Drives the real backend Worker as the main thread would, without the fake AppKit layer: the test
+ * sends the packets the main thread sends, so the order of a quit and a native event is exact
+ * instead of racing the host's own teardown.
+ */
+test("macOS backend drops native events after an approved quit committed the shutdown", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-backend-"));
+  let worker: Worker | undefined;
+  try {
+    const app = resolve(directory, "app.ts");
+    await Bun.write(
+      app,
+      `export default {
+        commands: {},
+        events: { ping: {} },
+        desktop: { beforeQuit() {} },
+      };`,
+    );
+    await bundleMacosHost(
+      resolve(import.meta.dir, "../../native/macos/bun"),
+      directory,
+      app,
+    );
+    const config = workerConfig(directory, [
+      "ping",
+    ]);
+    worker = new Worker(resolve(directory, "backend.js"), {
+      workerData: config,
+    });
+    const exited = new Promise<number>((done) => worker?.once("exit", done));
+    const failures: unknown[] = [];
+    const received: Packet[] = [];
+    const channel = new Channel(
+      worker,
+      config.runtime,
+      "macos-main",
+      (packet) => {
+        received.push(packet);
+      },
+      (error) => failures.push(error),
+    );
+    const until = async (condition: () => boolean, what: string) => {
+      const deadline = Date.now() + 8000;
+      while (!condition()) {
+        if (failures.length > 0 || Date.now() > deadline) {
+          throw new Error(`Timed out waiting for ${what}: ${failures}`);
+        }
+        await Bun.sleep(5);
+      }
+    };
+    const eventsDelivered = () =>
+      received.filter(
+        (packet) => packet.kind === "server" && packet.message.kind === "event",
+      ).length;
+
+    await until(
+      () => received.some((packet) => packet.kind === "ready"),
+      "backend ready",
+    );
+    // Open a document session and subscribe it to the event, as the page's SDK would.
+    const route: Route = {
+      viewId: "main",
+      context: "context-1" as HostContext,
+      documentGeneration: 1,
+    };
+    await channel.send({
+      kind: "session-open",
+      route,
+    });
+    await channel.send({
+      kind: "client",
+      route,
+      message: {
+        kind: "hello",
+        protocol: PROTOCOL_VERSION,
+        features: [],
+        buildId: "test",
+      },
+    });
+    await channel.send({
+      kind: "client",
+      route,
+      message: {
+        kind: "listen",
+        protocol: PROTOCOL_VERSION,
+        id: "listen-1",
+        event: "ping",
+      },
+    });
+    const ping = {
+      kind: "native-event",
+      route,
+      event: "ping",
+      payload: null,
+    } as const;
+
+    // Before the commit a native event reaches the subscribed session.
+    await channel.send(ping);
+    await until(() => eventsDelivered() === 1, "the first native event");
+
+    // The app approves the quit: the backend commits and tells the main thread.
+    await channel.send({
+      kind: "quit-request",
+      reason: "quit-command",
+    });
+    await until(
+      () => received.some((packet) => packet.kind === "shutdown-committed"),
+      "shutdown-committed",
+    );
+    // The backend accepts the packet but no longer delivers it to the app.
+    await channel.send(ping);
+    await Bun.sleep(100);
+    expect(eventsDelivered()).toBe(1);
+
+    // The main thread finishes the orderly shutdown and the Worker exits cleanly.
+    await channel.send({
+      kind: "shutdown",
+    });
+    await until(
+      () => received.some((packet) => packet.kind === "cleaned"),
+      "cleaned",
+    );
+    await channel.send({
+      kind: "native-stopped",
+    });
+    expect(await exited).toBe(0);
+    expect(failures).toEqual([]);
+  } finally {
+    await worker?.terminate();
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 20000);

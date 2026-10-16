@@ -85,6 +85,11 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
   let descendantCleanup: Promise<void> | undefined;
   /** Settles when the backend reports app-level cleanup (hooks, Core and plugin stop hooks) done. */
   const backendCleaned = Promise.withResolvers<void>();
+  /**
+   * Settles when shutdown begins. The startup wait races it, because the backend only reports
+   * `cleaned` after teardown that this thread must perform, so waiting for `ready` would deadlock.
+   */
+  const shutdownBegun = Promise.withResolvers<void>();
   let nativeTeardown: Promise<void> | undefined;
   const desktopRequests = new DesktopRequests({
     stopping: () => stopping,
@@ -107,6 +112,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       return;
     }
     stopping = true;
+    shutdownBegun.resolve();
     desktopRequests.abandon();
     pendingPlugins.length = 0;
     // Admission reserves one cancellation slot per owned I/O call. Send these
@@ -181,10 +187,16 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         }
       : undefined;
   }
-  /** Keep descendants until both Core hooks and native adapter cleanup have completed. */
+  /**
+   * Keep descendants until both Core hooks and native adapter cleanup have completed. A pending
+   * session-end reply is released only afterwards (success or failure), because the OS may end the
+   * process right after the reply; the session-end wait still bounds how long it is held back.
+   */
   function stopDescendants() {
     if (cleaned && (!ioWorker || ioCleaned)) {
-      descendantCleanup ??= group.stopDescendants();
+      descendantCleanup ??= group
+        .stopDescendants()
+        .finally(() => application?.appCleanedUp());
     }
     return descendantCleanup;
   }
@@ -425,8 +437,6 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       } else if (packet.kind === "cleaned") {
         cleaned = true;
         backendCleaned.resolve();
-        // A pending session-end termination may now be answered: the app finished its cleanup.
-        application?.appCleanedUp();
         stopIO();
         await stopDescendants();
       } else if (packet.kind === "fatal") {
@@ -608,6 +618,10 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     });
     await Promise.race([
       coreReady.promise,
+      // A shutdown begun during startup (an approved quit, a signal) ends the wait: the backend
+      // then waits for this thread's native teardown, which only the `finally` below performs.
+      shutdownBegun.promise,
+      backendCleaned.promise,
       exited.then((code) => {
         // Requested exits use the same cleanup and failure checks as a running app.
         if (!stopping) {
@@ -615,16 +629,17 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         }
       }),
     ]);
-    if (ready) {
+    if (ready && !stopping) {
       ui.start();
+      clearTimeout(startup);
+      // Run until the backend finished its app-level cleanup or ended. Only shutdown asks it to
+      // clean up, so an end without a shutdown request was unexpected.
+      await Promise.race([
+        backendCleaned.promise,
+        exited,
+      ]);
     }
-    clearTimeout(startup);
-    // Run until the backend finished its app-level cleanup or ended. Only shutdown asks it to
-    // clean up, so an end without a shutdown request was unexpected.
-    await Promise.race([
-      backendCleaned.promise,
-      exited,
-    ]);
+    // A shutdown begun during startup is a requested one.
     unrequestedExit = !stopping;
   } catch (error) {
     failure ??= error;

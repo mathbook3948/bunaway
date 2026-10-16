@@ -33,6 +33,15 @@ Quit, Dock의 Quit, Dock 아이콘 클릭이라는 macOS 고유의 진입점이 
 `onWillQuit`, Core 정지와 플러그인 StopHook, 네이티브 정리, `onQuit` 순서이며 종료 확정 뒤에는
 수명 이벤트와 닫기 요청을 내지 않는다. `onWillQuit`과 `onQuit`의 기한은 각각 3초다.
 
+시작이 끝나기 전(백엔드가 준비를 보고하기 전)에 창 닫기나 Quit이 승인되거나 시그널, 세션 종료가
+종료를 확정하면 `onReady`와 초기 `onOpen`은 실행하지 않는다. 이때도 `beforeQuit`(닫기와 Quit일 때),
+`onWillQuit`과 이어지는 정상 종료 순서를 따르며 호스트 실패가 아닌 정상 종료다. 호스트는 시작이
+끝나기를 기다리지 않고 바로 정리 단계로 들어간다. 근거는 ADR 0020이다.
+
+백엔드는 종료를 확정하는 즉시(승인된 종료, 또는 메인 스레드가 알린 원인) `windows.lifecycle`과
+`windows.closeRequested` 같은 네이티브 이벤트를 앱에 전달하지 않는다. 메인 스레드가 확정을 알기
+전에도 마찬가지이며 Windows와 같다.
+
 ### 구조
 
 `DesktopLifecycle`은 백엔드 Worker가 소유하고 메인 스레드(AppKit)는 패킷으로 협력한다.
@@ -58,9 +67,15 @@ Dock의 Quit, 로그아웃, 재시작, 시스템 종료 이유가 없는 quit Ap
 Quit을 받으려면 앱에 Quit 항목이 필요하므로 "Quit <프로세스 이름>"(Cmd+Q)만 있는 최소 메인 메뉴를
 설치한다. 다른 메뉴는 메뉴 기능(TODO-macos 07)의 몫이다.
 
-`applicationShouldTerminate:`는 일반 Quit에 항상 `NSTerminateCancel`을 반환하고 호스트가 비동기
-`beforeQuit`를 직접 실행한다. AppKit의 종료 응답을 `NSTerminateLater`로 미루는 방식도 있지만 취소가
-정상 경로인 `beforeQuit`에서는 응답을 보류한 채 다른 창과 Dock을 상태가 모호한 앱으로 두게 된다.
+`applicationShouldTerminate:`는 `terminate:`가 불린 경우(앱 메뉴의 Quit, Cmd+Q, 코드의 호출)에 항상
+`NSTerminateCancel`을 반환하고 호스트가 비동기 `beforeQuit`를 직접 실행한다. Dock의 Quit과
+`osascript`처럼 세션 종료 이유가 없는 quit Apple event는 호스트가 직접 받아 Quit 명령과 같이
+`beforeQuit`를 묻는다(아래 세션 종료 참고).
+
+AppKit의 종료 응답을 `NSTerminateLater`로 미루는 방식은 쓰지 않는다. 이 값을 반환하면
+`terminate:`가 FFI 호출 안에서 이벤트를 처리하는 중첩 실행 루프를 돌아, Bun JS 스레드(정리 처리,
+4초 대체 타이머, 강제 종료 기한)가 실행되지 못하고 응답을 보내지 못할 수 있다. 취소가 정상 경로인
+`beforeQuit`에서는 응답을 보류한 채 다른 창과 Dock을 상태가 모호한 앱으로 두는 문제도 있다.
 Cancel은 호스트가 승인한 시점에만 종료하므로 취소 뒤 창, 세션, 백엔드를 그대로 유지하며 Windows의
 종료 취소와 같다. 승인된 종료는 호스트의 정상 종료 절차가 프로세스를 끝낸다.
 
@@ -86,12 +101,19 @@ SIGINT와 SIGTERM은 `"interrupted"`로 `beforeQuit`를 우회한다. 사용자 
 `kAEShutDown`인 quit Apple event는 `"session-end"`로 취소할 수 없는 종료를 확정한다.
 `beforeQuit`를 호출하지 않고 대기 중인 거부는 무시한다. 닫기 요청도 버린다.
 
-이 경우 `applicationShouldTerminate:`는 `NSTerminateLater`를 반환한다. 취소를 반환하면 사용자의
-로그아웃을 중단시키기 때문이다. 호스트는 `onWillQuit`과 플러그인 StopHook이 끝나면, 또는 4초
-(`SESSION_END_WAIT_MS`) 뒤 중 먼저 오는 때에 `replyToApplicationShouldTerminate:`로 YES를 답한다.
-이후 AppKit이 프로세스를 끝내므로 `onQuit`과 남은 네이티브 정리는 보장하지 않는다.
-이는 Windows `WM_ENDSESSION` 처리와 같은 4초 예산과 같은 보장 범위다. 앱은 로그아웃을
-취소하지 않는다. 여기서 `NSTerminateLater`를 일반 Quit에 쓰지 않는 이유는 위와 같다.
+호스트는 `finishLaunching` 뒤에 quit Apple event(`kCoreEventClass` `aevt`, `kAEQuitApplication`
+`quit`)의 핸들러를 `NSAppleEventManager`로 직접 설치해 AppKit의 기본 핸들러를 대체한다. 그래서 quit
+이벤트는 `terminate:`에 닿지 않는다. 종료 이유가 `rlgo`, `rest`, `shut`이거나
+`NSWorkspaceWillPowerOffNotification` 뒤라면 핸들러는 취소할 수 없는 종료를 확정하고
+`suspendCurrentAppleEvent`로 이벤트를 보류한 뒤 곧바로 반환한다. 호스트는 앱 정리(`onWillQuit`,
+플러그인 StopHook, 하위 프로세스와 I/O 정리)가 끝나면, 또는 4초(`SESSION_END_WAIT_MS`) 뒤 중 먼저
+오는 때에, 보류한 모든 이벤트를 `resumeWithSuspensionID:`로 재개한다. 응답은 오류가 아닌 성공이라
+로그아웃을 취소하지 않는다. 애플리케이션 객체를 닫을 때도 재개한다.
+이후 호스트의 정상 종료 절차가 프로세스를 끝내지만 운영체제가 응답 직후 끝낼 수 있으므로
+`onQuit`과 마지막 네이티브 정리는 보장하지 않는다.
+이는 Windows `WM_ENDSESSION` 처리와 같은 4초 예산과 같은 보장 범위다.
+`NSTerminateLater`를 쓰지 않는 이유는 위와 같고, 취소를 반환하면 사용자의 로그아웃을 중단시키므로
+`applicationShouldTerminate:`의 Cancel에도 맡기지 않는다.
 
 ### 창 수명 이벤트와 닫기 요청
 
@@ -189,4 +211,4 @@ Linux에서는 종료 원인 분류(`quit-reason`), 세션 종료 대기, 백엔
 
 CI에서 확인하지 못하는 항목이 있다. 실제 로그아웃, 재시작, 시스템 종료는 실행하지 않고
 같은 알림과 quit Apple event를 주입한다. 사용자의 Dock 클릭은 자기 자신에게 보낸 reopen Apple
-event로 대신한다. 실제 Cmd+Q 키 입력은 `NSApp terminate:`와 quit Apple event로 대신한다.
+event로 대신한다. 실제 Cmd+Q 키 입력은 `NSApp terminate:`로, Dock의 Quit은 quit Apple event로 대신한다.

@@ -1,9 +1,10 @@
 import { dlopen } from "bun:ffi";
 import { appendFileSync } from "node:fs";
-import { defineNativePlugin } from "@bunaway/plugin";
+import { defineNativePlugin, type NativeEnvironment } from "@bunaway/plugin";
 import { z } from "zod";
 import { Objc, type ObjcObject } from "../../../native/macos/bun/objc.ts";
 import { fourCharCode } from "../../../native/macos/bun/quit-reason.ts";
+import { readDesktopFixture } from "./fixture-config.ts";
 
 /** Same name AppKit posts before a logout, restart or shutdown. */
 const POWER_OFF_NOTIFICATION = "NSWorkspaceWillPowerOffNotification";
@@ -37,15 +38,6 @@ const request = z
   })
   .strict();
 
-/** The app's event log, shared with the backend so the test sees one ordered record. */
-function eventsPath(): string {
-  const path = process.env.DESKTOP_EVENTS;
-  if (!path) {
-    throw new Error("Missing DESKTOP_EVENTS.");
-  }
-  return path;
-}
-
 /**
  * Stimulus driver for tests/lifecycle/macos-desktop.ts. It runs on the UI thread, where AppKit
  * lives, so the backend can trigger the same delegate and window paths a user or the OS would:
@@ -64,7 +56,9 @@ export const driver = defineNativePlugin({
   platforms: {
     macos: {
       thread: "ui",
-      create() {
+      create(environment: NativeEnvironment) {
+        // The app's event log, shared with the backend so the test sees one ordered record.
+        const eventsPath = readDesktopFixture(environment.dataRoot).events;
         const o = new Objc();
         const app = o.send(o.class("NSApplication"), "sharedApplication");
         if (!app) {
@@ -175,11 +169,12 @@ export const driver = defineNativePlugin({
           ).length;
         /**
          * Proves the main thread keeps running timers after a termination request: a thread blocked
-         * by NSTerminateLater handling would never reach this turn.
+         * inside a nested run loop (the NSTerminateLater path) would never reach this turn, because
+         * the host suspends a session-end quit Apple event instead of waiting inside the handler.
          */
         const recordMainTickAfterTermination = () => {
           setTimeout(() => {
-            appendFileSync(eventsPath(), "main-tick-after-terminate\n");
+            appendFileSync(eventsPath, "main-tick-after-terminate\n");
           }, MAIN_TICK_DELAY_MS);
         };
         const perform = (action: string, title: string | undefined) => {
@@ -225,7 +220,7 @@ export const driver = defineNativePlugin({
                   o.withAutoreleasePool(() => perform(action, title));
                 } catch (error) {
                   appendFileSync(
-                    eventsPath(),
+                    eventsPath,
                     `script-failed:driver:${String(error).replaceAll("\n", " ")}\n`,
                   );
                 }

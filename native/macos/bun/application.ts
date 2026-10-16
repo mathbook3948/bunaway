@@ -1,14 +1,18 @@
 import { dlopen } from "bun:ffi";
 import { Objc, type ObjcObject } from "./objc.ts";
-import { classifyQuit, KEY_AE_QUIT_REASON } from "./quit-reason.ts";
+import {
+  CORE_EVENT_CLASS,
+  classifyQuit,
+  KEY_AE_QUIT_REASON,
+  QUIT_APPLICATION_EVENT_ID,
+} from "./quit-reason.ts";
 import { SessionEndTermination } from "./session-end-termination.ts";
 
 const NS_APPLICATION_ACTIVATION_POLICY_REGULAR = 0;
-// NSApplicationTerminateReply: the app answers cancel (the host runs its own asynchronous quit check),
-// now (terminate immediately) or later (reply through replyToApplicationShouldTerminate:).
+// NSApplicationTerminateReply cancel: the host never lets AppKit terminate the process, because it
+// runs its own asynchronous quit check and orderly shutdown. Answering later would make
+// `terminate:` spin a nested run loop inside the FFI call that pumps events, blocking the JS thread.
 const NS_TERMINATE_CANCEL = 0;
-const NS_TERMINATE_NOW = 1;
-const NS_TERMINATE_LATER = 2;
 /** Broadcast by NSWorkspace shortly before the system powers off (shutdown or restart). */
 const POWER_OFF_NOTIFICATION = "NSWorkspaceWillPowerOffNotification";
 /** `enumCodeValue` is a 32-bit OSType returned in a 64-bit register whose upper half is undefined. */
@@ -17,6 +21,12 @@ const OSTYPE_MASK = 0xffffffffn;
 const BOOL_MASK = 0xff;
 const UI_PUMP_INTERVAL_MS = 5;
 const MAX_EVENTS_PER_TICK = 64;
+/**
+ * An `NSAppleEventManagerSuspensionID`: an opaque pointer, not an Objective-C object, that is only
+ * passed back to `resumeWithSuspensionID:`. It shares the pointer-sized `ObjcObject` register type
+ * of the message bridge and must never receive messages.
+ */
+type AppleEventSuspensionId = ObjcObject;
 // Registered delegate IMPs must remain callable until process exit.
 const runtimeOwners: Objc[] = [];
 
@@ -42,6 +52,11 @@ export class MacosApplication {
   private closed = false;
   private readonly profiles = new Map<string, ObjcObject>();
   private readonly sessionEnd: SessionEndTermination;
+  /**
+   * Suspensions of the session-end quit Apple events whose replies are still owed to the OS. The OS
+   * may send several quit events during one session end, and each suspension must be resumed once.
+   */
+  private readonly suspendedQuitEvents: AppleEventSuspensionId[] = [];
 
   constructor(hooks: {
     tick(): void;
@@ -64,37 +79,55 @@ export class MacosApplication {
     this.app = app;
     this.sessionEnd = new SessionEndTermination({
       commit: () => hooks.sessionEnding(),
-      reply: () =>
-        o.withAutoreleasePool(() =>
-          o.send(app, "replyToApplicationShouldTerminate:", 1),
-        ),
+      reply: () => this.resumeQuitEvent(),
     });
     this.delegate = o.delegate([
       {
+        // Reached only by `terminate:` (the Quit menu, Cmd+Q or code); quit Apple events are handled
+        // by `handleQuitEvent:withReplyEvent:` and never get here.
         selector: "applicationShouldTerminate:",
         arguments: 1,
         returns: "ptr",
         encoding: "Q@:@",
         call: () => {
-          if (this.closed) {
-            return NS_TERMINATE_CANCEL;
+          if (!this.closed && !hooks.stopping() && !this.sessionEnd.active) {
+            hooks.quitRequested();
           }
+          return NS_TERMINATE_CANCEL;
+        },
+      },
+      {
+        // Replaces AppKit's quit handler, which would call `terminate:`. The handler returns at
+        // once, so the JS thread keeps running while a session-end reply is held back.
+        selector: "handleQuitEvent:withReplyEvent:",
+        arguments: 2,
+        encoding: "v@:@@",
+        call: (_self, _cmd, event) => {
+          if (this.closed) {
+            return;
+          }
+          const quitReason = event ? this.quitReasonCode(event) : undefined;
           if (
             this.sessionEnd.active ||
-            classifyQuit(this.currentQuitReasonCode()) === "session-end"
+            classifyQuit(quitReason) === "session-end"
           ) {
-            // The OS ends the session whatever the app does, so never cancel: answering cancel
-            // would abort the user's logout. Hold the reply back while the app cleans up.
-            return this.sessionEnd.terminateRequested() === "now"
-              ? NS_TERMINATE_NOW
-              : NS_TERMINATE_LATER;
+            // The OS ends the session whatever the app does, so the event is never answered with an
+            // error, which would abort the user's logout. Suspend it while the app cleans up.
+            if (this.sessionEnd.quitEventReceived() === "later") {
+              const suspension = this.suspendQuitEvent();
+              if (suspension) {
+                this.suspendedQuitEvents.push(suspension);
+              } else if (this.suspendedQuitEvents.length === 0) {
+                // Without a suspension the event is replied to when this handler returns. When
+                // earlier events are still suspended they keep waiting for app cleanup instead.
+                this.sessionEnd.appCleanedUp();
+              }
+            }
+            return;
           }
           if (!hooks.stopping()) {
             hooks.quitRequested();
           }
-          // The host runs its own asynchronous beforeQuit and orderly shutdown, so AppKit's own
-          // termination is always declined here. An approved quit ends the process by shutdown.
-          return NS_TERMINATE_CANCEL;
         },
       },
       {
@@ -150,6 +183,17 @@ export class MacosApplication {
     );
     o.send(app, "setDelegate:", this.delegate);
     o.send(app, "finishLaunching");
+    // Installed after launch so it replaces the default handler AppKit registers for the quit event.
+    o.withAutoreleasePool(() =>
+      o.send(
+        this.appleEvents(),
+        "setEventHandler:andSelector:forEventClass:andEventID:",
+        this.delegate,
+        o.selector("handleQuitEvent:withReplyEvent:"),
+        CORE_EVENT_CLASS,
+        QUIT_APPLICATION_EVENT_ID,
+      ),
+    );
     // One bounded main-thread turn serves every window and leaves Bun time for Worker I/O.
     this.timer = setInterval(() => {
       if (this.closed) {
@@ -224,27 +268,50 @@ export class MacosApplication {
     );
   }
 
-  /**
-   * The `keyAEQuitReason` of the quit Apple event being handled, or undefined when termination
-   * did not come from one (`terminate:` from the menu, Cmd+Q and the Dock's Quit send none).
-   * Only meaningful inside `applicationShouldTerminate:`.
-   */
-  private currentQuitReasonCode(): number | undefined {
+  private appleEvents(): ObjcObject | null {
     const o = this.objc;
-    const event = o.send(
-      o.send(o.class("NSAppleEventManager"), "sharedAppleEventManager"),
-      "currentAppleEvent",
+    return o.send(o.class("NSAppleEventManager"), "sharedAppleEventManager");
+  }
+
+  /** The `keyAEQuitReason` of a quit Apple event, or undefined when the event carries none. */
+  private quitReasonCode(event: ObjcObject): number | undefined {
+    const o = this.objc;
+    const reason = o.send(
+      event,
+      "attributeDescriptorForKeyword:",
+      KEY_AE_QUIT_REASON,
     );
-    const reason =
-      event &&
-      o.send(event, "attributeDescriptorForKeyword:", KEY_AE_QUIT_REASON);
     if (!reason) {
       return undefined;
     }
     return Number(BigInt(o.integer(reason, "enumCodeValue")) & OSTYPE_MASK);
   }
 
-  /** App cleanup finished (`onWillQuit` and the plugin stop hooks): releases a waiting session-end reply. */
+  /**
+   * Suspends the quit Apple event being handled, so its reply is sent later by
+   * `resumeQuitEvent` while the handler returns at once. Only valid inside the event handler.
+   */
+  private suspendQuitEvent(): AppleEventSuspensionId | null {
+    return this.objc.send(this.appleEvents(), "suspendCurrentAppleEvent");
+  }
+
+  /** Sends the success reply of every suspended quit event that is still owed, each once. */
+  private resumeQuitEvent(): void {
+    for (const suspension of this.suspendedQuitEvents.splice(0)) {
+      this.objc.withAutoreleasePool(() =>
+        this.objc.send(
+          this.appleEvents(),
+          "resumeWithSuspensionID:",
+          suspension,
+        ),
+      );
+    }
+  }
+
+  /**
+   * App cleanup finished (`onWillQuit`, the plugin stop hooks and descendant cleanup): releases a
+   * suspended session-end quit event so the OS gets its reply.
+   */
   appCleanedUp(): void {
     this.sessionEnd.appCleanedUp();
   }
@@ -284,7 +351,16 @@ export class MacosApplication {
     }
     this.closed = true;
     clearInterval(this.timer);
+    // Replies to a still-suspended quit event first, so the OS is never left waiting.
     this.sessionEnd.dispose();
+    this.objc.withAutoreleasePool(() =>
+      this.objc.send(
+        this.appleEvents(),
+        "removeEventHandlerForEventClass:andEventID:",
+        CORE_EVENT_CLASS,
+        QUIT_APPLICATION_EVENT_ID,
+      ),
+    );
     this.objc.send(
       this.workspaceNotifications(),
       "removeObserver:",

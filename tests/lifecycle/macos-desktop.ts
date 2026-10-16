@@ -8,6 +8,10 @@ import { compileMacosApp } from "#cli/macos-compile";
 import { type InstalledPlugin, installedPlugins } from "#cli/plugins";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
 import { driver } from "../fixtures/macos-desktop/driver.ts";
+import {
+  type DesktopFixture,
+  desktopFixturePath,
+} from "../fixtures/macos-desktop/fixture-config.ts";
 
 /**
  * Real AppKit gate for the macOS close and quit lifecycle (ADR 0020). One compiled app runs seven
@@ -15,9 +19,9 @@ import { driver } from "../fixtures/macos-desktop/driver.ts";
  * self-addressed reopen and quit Apple events), and the app's desktop hooks record what happened.
  *
  * Not covered, because CI cannot log out: a real logout, restart or shutdown. The `session-end`
- * scenario posts NSWorkspaceWillPowerOffNotification and then calls `[NSApp terminate:]`;
+ * scenario posts NSWorkspaceWillPowerOffNotification and then sends a quit Apple event;
  * `session-end-quit-reason` sends a quit Apple event whose quit reason is `shut`. Both exercise the
- * NSTerminateLater branch of the delegate.
+ * host's quit event handler, which suspends the event and replies after app cleanup.
  */
 
 assert.equal(process.platform, "darwin");
@@ -25,7 +29,7 @@ assert.equal(process.arch, "arm64");
 const root = resolve(import.meta.dir, "../..");
 const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-desktop-"));
 
-/** Upper bound for a session-end shutdown. The delegate may wait SESSION_END_WAIT_MS (4000) before it gives up. */
+/** Upper bound for a session-end shutdown. The host may hold the quit event reply for SESSION_END_WAIT_MS (4000) before it gives up. */
 const SESSION_END_BUDGET_MS = 3000;
 const LAUNCH_TIMEOUT_MS = 30_000;
 const POLL_MS = 20;
@@ -161,8 +165,8 @@ const scenarios: Scenario[] = [
     },
   },
   {
-    // e: session end skips beforeQuit and replies NSTerminateLater without blocking Bun. AppKit
-    // exits right after cleanup, so onQuit and the host's last log record may be missing.
+    // e: session end skips beforeQuit and suspends the quit Apple event without blocking Bun. The
+    // OS may end the process right after the reply, so onQuit and the host's last log record may be missing.
     name: "session-end",
     hooks: [
       ...OPEN,
@@ -366,6 +370,12 @@ try {
     });
     const eventsPath = resolve(home, "events.log");
     await Bun.write(eventsPath, "");
+    // The host hands the backend and the native plugins a sanitized environment, so the scenario
+    // reaches them through a file in the data root instead of environment variables.
+    await writeJson(desktopFixturePath(dataRoot), {
+      scenario: scenario.name,
+      events: eventsPath,
+    } satisfies DesktopFixture);
     const readLines = async () =>
       (await Bun.file(eventsPath).text()).split("\n").filter(Boolean);
     const launched = Bun.spawn(
@@ -378,8 +388,6 @@ try {
         env: {
           ...process.env,
           HOME: home,
-          DESKTOP_SCENARIO: scenario.name,
-          DESKTOP_EVENTS: eventsPath,
         },
         stdout: "pipe",
         stderr: "pipe",
@@ -448,7 +456,7 @@ try {
     scenario.verify?.(lines);
     if (scenario.name.startsWith("session-end")) {
       assert(sessionEndStartedAt !== undefined, "session end was not driven");
-      // Replying NSTerminateLater must leave Bun's event loop running, so cleanup completes and the
+      // Suspending the quit event must leave Bun's event loop running, so cleanup completes and the
       // reply is given long before the 4 s fallback timer. A blocked loop would only exit at the fallback.
       assert(
         exitedAt - sessionEndStartedAt < SESSION_END_BUDGET_MS,
@@ -485,7 +493,7 @@ try {
     reports,
   });
   console.log(
-    "PASS compiled AppKit close and quit lifecycle: Quit veto, last window, keep-alive Apple event reopen, close requests and lifecycle events, session-end NSTerminateLater (notification and quit reason) and SIGTERM",
+    "PASS compiled AppKit close and quit lifecycle: Quit veto, last window, keep-alive Apple event reopen, close requests and lifecycle events, session-end suspended quit event (notification and quit reason) and SIGTERM",
   );
 } catch (error) {
   const diagnostics = resolve(root, "build/macos-desktop-diagnostics");

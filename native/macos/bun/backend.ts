@@ -38,6 +38,12 @@ const appLoaded = Promise.withResolvers<void>();
  * thread. A host failure never sets it, which is what skips `onWillQuit` and `onQuit`.
  */
 let orderly = false;
+/**
+ * True from the moment a shutdown was committed, before the `shutdown` packet arrives (which sets
+ * `stopping`). Native events such as window lifecycle and close requests are dropped from then on,
+ * so the app sees none after it approved a quit. Separate from `stopping`, which gates `shutdown`.
+ */
+let shutdownCommitted = false;
 /** First cause the main thread reported through `closing`, kept for a lifecycle that does not exist yet. */
 let reportedCause: ShutdownReason | undefined;
 /** Settles when the main thread has torn down all native resources (`native-stopped`). */
@@ -138,6 +144,7 @@ const channel = new Channel(
     if (packet.kind === "closing") {
       // The main thread decided alone (signal, session end, vanished last window): the first cause wins.
       orderly = true;
+      shutdownCommitted = true;
       reportedCause ??= packet.reason;
       desktop?.commitShutdown(packet.reason);
       return;
@@ -196,6 +203,9 @@ const channel = new Channel(
       return;
     }
     if (packet.kind === "native-event") {
+      if (shutdownCommitted) {
+        return;
+      }
       const session = sessions.get(packet.route.context);
       // A stale route belongs to a revoked or navigated document and is dropped silently.
       if (
@@ -250,8 +260,10 @@ try {
         action,
       }),
     () => {
-      // An approved quit: the main thread begins teardown and sends `shutdown` next.
+      // An approved quit: stop delivering native events at once and tell the main thread first, so
+      // it begins teardown and sends `shutdown` next.
       orderly = true;
+      shutdownCommitted = true;
       channel.notify({
         kind: "shutdown-committed",
       });
