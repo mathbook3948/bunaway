@@ -16,7 +16,7 @@ import type { MacosConfig } from "#native/macos/bun/config";
 /**
  * The real main-thread host (entry.ts) and backend Worker run against a fake AppKit layer, so the
  * order of the app's lifecycle hooks is checked on every platform. The fake exposes the hooks that
- * AppKit would call (`quitRequested`, `sessionEnding`, `reopened`, a window close) to the driver.
+ * AppKit would call (`quitRequested`, `sessionEnding`, `reopened`, `openUrlsRequested`, a window close) to the driver.
  * Real AppKit behavior is covered by tests/lifecycle/macos-desktop.ts on macOS.
  */
 
@@ -32,6 +32,12 @@ type Scenario = {
    * `releaseSetup()`. The driver then starts as soon as the setup is held.
    */
   holdSetup?: boolean;
+  /**
+   * Driver code run synchronously while the fake application is constructed, which is before its
+   * first tick and before the backend's `desktop-config` can arrive. It receives the application
+   * hooks as `application`, the earliest point a cold-launch open request can be delivered.
+   */
+  atLaunch?: string;
   /** Expected process exit code. */
   exitCode?: number;
 };
@@ -165,6 +171,8 @@ async function runScenario(scenario: Scenario) {
                 contents: `export class MacosApplication {
                   constructor(hooks) {
                     globalThis.application = hooks;
+                    // Synchronous on purpose: the constructor runs before the first tick is scheduled.
+                    globalThis.onApplicationCreated?.(hooks);
                     this.timer = setInterval(() => hooks.tick(), 5);
                   }
                   activate() {}
@@ -206,7 +214,7 @@ async function runScenario(scenario: Scenario) {
     );
     await Bun.write(
       resolve(directory, "run.ts"),
-      `import { existsSync, readFileSync } from "node:fs";
+      `import { appendFileSync, existsSync, readFileSync } from "node:fs";
       import { runMacosApp } from "./entry.js";
       const events = () => existsSync(${JSON.stringify(events)})
         ? readFileSync(${JSON.stringify(events)}, "utf8").trim().split("\\n") : [];
@@ -217,7 +225,11 @@ async function runScenario(scenario: Scenario) {
           await Bun.sleep(5);
         }
       };
+      const note = (line) => appendFileSync(${JSON.stringify(events)}, line + "\\n");
       const releaseSetup = () => Bun.write(${JSON.stringify(setupGate)}, "");
+      globalThis.onApplicationCreated = (application) => {
+        ${scenario.atLaunch ?? ""}
+      };
       (async () => {
         await until(${JSON.stringify(scenario.holdSetup ? "setupHeld" : OPEN_LINE)});
         ${scenario.drive}
@@ -319,7 +331,7 @@ test("macOS keep-alive reports an empty app once, reopens the first window and q
       webviews[0].close();
       await until("onAllWindowsClosed");
       await Bun.sleep(200);
-      application.reopened();
+      application.reopened(false);
       while (webviews.length < 2) await Bun.sleep(5);
       application.quitRequested();`,
   });
@@ -333,6 +345,97 @@ test("macOS keep-alive reports an empty app once, reopens the first window and q
     "stopHook",
     "onQuit:quit-command",
   ]);
+});
+
+const OPEN_URLS_DESKTOP = `{
+  onReady() { log("onReady"); },
+  onOpen(request) { log("onOpen:" + request.source + ":" + request.argv.length + ":" + typeof request.cwd); },
+  onOpenUrls(urls) { log("onOpenUrls:" + urls.join("|")); },
+  onReopen(event) { log("onReopen:" + event.hasVisibleWindows); },
+  onAllWindowsClosed() { log("onAllWindowsClosed"); },
+  closeBehavior: "keep-alive",
+}`;
+
+test("macOS open requests reach onOpenUrls normalized, in order, after onReady and the initial onOpen", async () => {
+  const { log } = await runScenario({
+    desktop: OPEN_URLS_DESKTOP,
+    drive: `
+      application.openUrlsRequested(["BunAway-Test://open/a", "not a url", "file://localhost/tmp/x.txt"]);
+      application.openUrlsRequested(["bunaway-test://open/b"]);
+      // Nothing valid is left to forward, so no hook call follows.
+      application.openUrlsRequested(["not a url"]);
+      await until("onOpenUrls:bunaway-test://open/b");
+      process.emit("SIGTERM", "SIGTERM");`,
+  });
+  expect(log.slice(0, 4)).toEqual([
+    "onReady",
+    OPEN_LINE,
+    "onOpenUrls:bunaway-test://open/a|file:///tmp/x.txt",
+    "onOpenUrls:bunaway-test://open/b",
+  ]);
+  expect(log.filter((line) => line.startsWith("onOpenUrls"))).toHaveLength(2);
+});
+
+test("macOS cold-launch open requests delivered before the first pump reach onOpenUrls after onReady and the initial onOpen", async () => {
+  const { log } = await runScenario({
+    desktop: OPEN_URLS_DESKTOP,
+    atLaunch: `
+      application.openUrlsRequested(["BunAway-Test://open/first", "file://localhost/tmp/launch.txt"]);
+      application.openUrlsRequested(["bunaway-test://open/second"]);`,
+    drive: `
+      await until("onOpenUrls:bunaway-test://open/second");
+      note("presented:" + (globalThis.presented ?? 0));
+      process.emit("SIGTERM", "SIGTERM");`,
+  });
+  expect(log.slice(0, 4)).toEqual([
+    "onReady",
+    OPEN_LINE,
+    "onOpenUrls:bunaway-test://open/first|file:///tmp/launch.txt",
+    "onOpenUrls:bunaway-test://open/second",
+  ]);
+  // Delivering held requests shows no window.
+  expect(log).toContain("presented:0");
+});
+
+test("macOS reopen with onReopen registered is forwarded and the host does not show a window itself", async () => {
+  const { log } = await runScenario({
+    desktop: OPEN_URLS_DESKTOP,
+    drive: `
+      application.reopened(true);
+      await until("onReopen:true");
+      webviews[0].close();
+      await until("onAllWindowsClosed");
+      await Bun.sleep(100);
+      application.reopened(false);
+      await until("onReopen:false");
+      await Bun.sleep(200);
+      note("windows:" + webviews.length);
+      process.emit("SIGTERM", "SIGTERM");`,
+  });
+  expect(log).toContain("windows:1");
+  expect(log.filter((line) => line.startsWith("onReopen"))).toEqual([
+    "onReopen:true",
+    "onReopen:false",
+  ]);
+});
+
+test("macOS reopen without onReopen shows a window only when none is visible", async () => {
+  const { log } = await runScenario({
+    desktop: withClose("keep-alive"),
+    drive: `
+      application.reopened(true);
+      await Bun.sleep(200);
+      note("visible:" + webviews.length);
+      webviews[0].close();
+      await until("onAllWindowsClosed");
+      await Bun.sleep(100);
+      application.reopened(false);
+      while (webviews.length < 2) await Bun.sleep(5);
+      note("hidden:" + webviews.length);
+      process.emit("SIGTERM", "SIGTERM");`,
+  });
+  expect(log).toContain("visible:1");
+  expect(log).toContain("hidden:2");
 });
 
 /**
@@ -431,12 +534,19 @@ test("macOS backend drops native events after an approved quit committed the shu
   let worker: Worker | undefined;
   try {
     const app = resolve(directory, "app.ts");
+    const opened = resolve(directory, "opened");
     await Bun.write(
       app,
-      `export default {
+      `import { writeFileSync } from "node:fs";
+      export default {
         commands: {},
         events: { ping: {} },
-        desktop: { beforeQuit() {} },
+        desktop: {
+          beforeQuit() {},
+          onOpenUrls() {
+            writeFileSync(${JSON.stringify(opened)}, "");
+          },
+        },
       };`,
     );
     await bundleMacosHost(
@@ -534,6 +644,32 @@ test("macOS backend drops native events after an approved quit committed the shu
     await channel.send(ping);
     await Bun.sleep(100);
     expect(eventsDelivered()).toBe(1);
+    // An open request arriving after the commit is dropped with its own diagnostic, not reported
+    // as a failed callback, and the diagnostic carries only the count.
+    await channel.send({
+      kind: "open-urls",
+      urls: [
+        "https://late.example/",
+      ],
+    });
+    await until(
+      () => received.some((packet) => packet.kind === "diagnostic"),
+      "the open-urls diagnostic",
+    );
+    const diagnostics = received.filter(
+      (packet) => packet.kind === "diagnostic",
+    );
+    expect(diagnostics).toEqual([
+      {
+        kind: "diagnostic",
+        event: "open-urls-dropped",
+        fields: {
+          reason: "ending",
+          count: 1,
+        },
+      },
+    ]);
+    expect(await Bun.file(opened).exists()).toBe(false);
 
     // The main thread finishes the orderly shutdown and the Worker exits cleanly.
     await channel.send({

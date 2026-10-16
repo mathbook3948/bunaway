@@ -15,6 +15,7 @@ export type {
   PluginDefinition,
   PluginRegistration,
   QuitReason,
+  ReopenEvent,
   ShutdownReason,
   StateStore,
   StopHook,

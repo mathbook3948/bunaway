@@ -719,10 +719,7 @@ export async function runWindowsApp(
       // would turn an orderly shutdown into a host failure, so skip the launch callbacks.
       if (!stopping) {
         // onReady is queued ahead of the initial open so that open callbacks wait for it.
-        desktop.ready();
-        if (launch) {
-          desktop.open(launch, "initial");
-        }
+        desktop.ready(launch);
         inbox?.start((input) => desktop.open(input, "second-instance"));
       }
     }

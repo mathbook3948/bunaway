@@ -282,7 +282,9 @@ content/outer 크기, DPI 순환 때 숨김 HWND 정리 및 생성 후 OS 권장
 windowless UI Worker와 named pipe에서 초기 및 두 번째 실행의 argv를 onOpen에 전달하고
 match, help, 오류 이후 다음 요청 처리를 확인한다. raw 모드에서 `https://`와 `file:relative.txt`도
 원래 인자로 전달한다. `lifecycle/desktop.test.ts`는 초기 및 전달 요청의 URL 모양 string 옵션과
-기존 파일 URL 검증을 함께 확인한다. `host:windows`에 포함하며 WebView 페이지는 만들지 않는다.
+기존 파일 URL 검증과 onOpenUrls 목록 도출, 호출 순서를 함께 확인한다. `windows-cli-arguments.ts`는 기본 모드의
+초기 및 두 번째 실행에서 `myapp://` URL과 상대 파일 경로가 정규화된 URL과 `file:` URL로 onOpen 뒤에
+onOpenUrls에 전달되는지도 별도 자식 프로세스에서 확인한다. `host:windows`에 포함하며 WebView 페이지는 만들지 않는다.
 raw 모드와 자동 실행 prefix를 함께 사용해 `launchReason`, 앱 argv와 숨김 전달의 표시 상태가
 유지되는지 확인한다. 실제 Windows CLI 초기 요청에서도 자동 실행 prefix를 제거한 앱 인자를 검사한다.
 
@@ -673,8 +675,19 @@ macOS 전용 설정과 리소스 경계 페이지도 `fixtures/desktop/host/`에
 응답을 기다리며 quit Apple event를 보내, 응답이 앱 정리 뒤 `SESSION_END_WAIT_MS` 안에 오는지 확인한다.
 macos-native CI에서 실행하며 실제 로그아웃, 재시작, 시스템 종료와 사용자의 Dock 클릭,
 Cmd+Q 입력은 확인할 수 없어 알림, 자기 자신에게 보낸 Apple event와 `NSApp terminate:`로 대신한다.
-`macos-desktop-host.test.ts`, `macos-desktop-requests.test.ts`, `macos-quit-reason.test.ts`,
-`macos-backend-shutdown.test.ts`와 `macos-window-lifecycle.test.ts`는 Linux에서 실행하는 계약 검사다.
+`macos-desktop-host.test.ts`, `macos-desktop-requests.test.ts`, `macos-open-urls.test.ts`,
+`macos-quit-reason.test.ts`, `macos-backend-shutdown.test.ts`와 `macos-window-lifecycle.test.ts`는
+Linux에서 실행하는 계약 검사다.
+콜드 런치(앱이 실행 중이 아닐 때 `open` 명령, Finder, URL scheme으로 시작)의 전달은
+번들과 LaunchServices 등록이 필요해 native에서 검증하지 않는다. 대신
+`macos-desktop-host.test.ts`의 "macOS cold-launch open requests delivered before the first pump
+reach onOpenUrls after onReady and the initial onOpen"가 fake AppKit에서 첫 pump와 desktop-config
+전에 열기 요청을 전달해 `onReady`, 초기 `onOpen`, `onOpenUrls` 순서를 확인한다.
+`macos-open-urls.test.ts`는 정규화 뒤 URL 총 크기가 64 KiB를 넘으면 요청 전체를 `too-large`로
+거부하는지와 `invalid-file-path` 거부를 검사한다. `macos-desktop-requests.test.ts`는 종료 중인
+큐가 다음 요청을 꺼내지 않는지도 확인한다. `desktop.test.ts`는 준비 뒤 OS URL 요청의 표시가
+실패해도 실패를 보고하고 `onOpenUrls`를 계속 호출하는지, `macos-desktop-host.test.ts`는 백엔드
+종료 중 도착한 요청이 `open-urls-dropped`(`reason: "ending"`)로 버려지는지 검사한다.
 `macos-desktop-fixture.test.ts`는 같은 픽스처 앱을 가짜 호스트에 연결해 시나리오 스크립트가 첫 `onOpen` 뒤
 백엔드 문맥에서 `driver.drive`를 호출하는지, 호출 실패의 코드와 details가 `script-failed:` 로그에 남는지 검사한다.
 `macos-bun.test.ts`는 `executeUI`가 없는 UI 스레드 플러그인이 백엔드 호출에서 `execute`로 실행되는지,

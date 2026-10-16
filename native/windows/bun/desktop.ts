@@ -1,10 +1,11 @@
 import { win32 } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type {
   DesktopContext,
   DesktopOptions,
   OpenRequest,
   QuitReason,
+  ReopenEvent,
   ShutdownReason,
 } from "@bunaway/core";
 import {
@@ -47,18 +48,34 @@ export function validateDesktopStartup(
   }
 }
 
+/** Launch arguments split into the immutable open request and the ordered `onOpenUrls` list. */
+export type ParsedLaunch = {
+  readonly request: OpenRequest;
+  readonly openUrls: readonly string[];
+};
+
+/** Converts a Windows path to its canonical file URL, including UNC paths. */
+function windowsFileUrl(path: string): string {
+  return pathToFileURL(path, {
+    windows: true,
+  }).href;
+}
+
 /**
- * Splits launch arguments into an immutable request.
+ * Parses launch arguments in one pass into an immutable request and the ordered
+ * absolute URL list for onOpenUrls (files as file URLs, other URLs normalized).
  * In files-and-urls mode, relative files resolve against the launch directory
- * and arguments after -- are positional. Raw mode skips metadata derivation.
+ * and arguments after -- are positional. Raw mode skips metadata derivation
+ * and yields no URLs. An invalid URL or a file URL containing NUL throws.
  */
-export function openRequest(
+export function parseLaunch(
   input: LaunchArguments,
   source: OpenRequest["source"],
   mode: NonNullable<DesktopOptions["openArguments"]> = "files-and-urls",
-): OpenRequest {
+): ParsedLaunch {
   const urls: string[] = [];
   const files: string[] = [];
+  const openUrls: string[] = [];
   const launch = desktopLaunch(input.argv);
   let positional = false;
   for (const arg of mode === "raw" ? [] : launch.argv) {
@@ -80,30 +97,49 @@ export function openRequest(
           throw new Error("File URL must not contain NUL");
         }
         files.push(path);
+        openUrls.push(windowsFileUrl(path));
       } else {
         urls.push(url.href);
+        openUrls.push(url.href);
       }
     } else {
-      files.push(win32.resolve(input.cwd, arg));
+      const path = win32.resolve(input.cwd, arg);
+      files.push(path);
+      openUrls.push(windowsFileUrl(path));
     }
   }
-  return Object.freeze({
-    source,
-    launchReason: launch.launchReason,
-    argv: Object.freeze([
-      ...launch.argv,
-    ]),
-    cwd: input.cwd,
-    urls: Object.freeze(urls),
-    files: Object.freeze(files),
-  });
+  return {
+    request: Object.freeze({
+      source,
+      launchReason: launch.launchReason,
+      argv: Object.freeze([
+        ...launch.argv,
+      ]),
+      cwd: input.cwd,
+      urls: Object.freeze(urls),
+      files: Object.freeze(files),
+    }),
+    openUrls: Object.freeze(openUrls),
+  };
+}
+
+/** Splits launch arguments into an immutable request; see {@link parseLaunch}. */
+export function openRequest(
+  input: LaunchArguments,
+  source: OpenRequest["source"],
+  mode: NonNullable<DesktopOptions["openArguments"]> = "files-and-urls",
+): OpenRequest {
+  return parseLaunch(input, source, mode).request;
 }
 
 /** Longest wait for each of onWillQuit and onQuit before shutdown continues without it. */
 export const WILL_QUIT_DEADLINE_MS = 3000;
 
+/** Most queued open requests, and most OS URL requests buffered before ready. */
+const MAX_PENDING_OPENS = 64;
+
 /**
- * Serializes app callbacks (ready, open, all-windows-closed), runs the app's
+ * Serializes app callbacks (ready, open, open URLs, reopen, all-windows-closed), runs the app's
  * before-quit shutdown gate, and delivers the shutdown notifications once.
  */
 export class DesktopLifecycle {
@@ -112,6 +148,11 @@ export class DesktopLifecycle {
   private stopped = false;
   private callbacks = Promise.resolve();
   private pending = 0;
+  /** `starting` until ready() runs; OS URL requests are buffered and reopen events dropped meanwhile. */
+  private phase: "starting" | "live" = "starting";
+  private bufferedUrlRequests: (readonly string[])[] = [];
+  /** The queued `onReopen` event that has not started yet; later reopens replace it. */
+  private pendingReopen: ReopenEvent | undefined;
   /** First committed shutdown cause; later causes never replace it. */
   private shutdownReason: ShutdownReason | undefined;
   private willQuitDone = false;
@@ -169,6 +210,8 @@ export class DesktopLifecycle {
     for (const name of [
       "onReady",
       "onOpen",
+      "onOpenUrls",
+      "onReopen",
       "onAllWindowsClosed",
       "beforeQuit",
       "onWillQuit",
@@ -193,35 +236,114 @@ export class DesktopLifecycle {
     });
   }
   /**
-   * Queues an open callback, showing the app first for second instances.
-   * Reports callback errors and keeps processing later opens.
-   * Throws if stopped or full.
+   * Queues the open callbacks, showing the app first for second instances: onOpen,
+   * then onOpenUrls when the arguments yield URLs. Each failure is reported and
+   * does not stop the other callback or later opens. A parse failure is reported
+   * and neither callback runs. Throws if stopped or full.
    */
   open(input: LaunchArguments, source: OpenRequest["source"]): void {
-    if (this.ending || this.pending >= 64) {
-      throw new Error("Desktop open queue unavailable");
-    }
-    this.pending++;
-    void this.enqueue(async () => {
+    this.enqueueCounted(async () => {
       if (source === "second-instance" && !desktopLaunch(input.argv).hidden) {
         await this.context.show();
       }
-      await this.options?.onOpen?.(
-        openRequest(input, source, this.options?.openArguments),
-        this.context,
+      const { request, openUrls } = parseLaunch(
+        input,
+        source,
+        this.options?.openArguments,
       );
-    }).finally(() => {
-      this.pending--;
+      try {
+        await this.options?.onOpen?.(request, this.context);
+      } catch (error) {
+        this.report(error);
+      }
+      if (openUrls.length > 0) {
+        await this.options?.onOpenUrls?.(openUrls, this.context);
+      }
     });
   }
   /**
-   * Queues onReady once the backend and UI Worker are up. Call it before the
-   * initial open so that open callbacks start after onReady settles.
+   * Queues an open request for already-normalized absolute URLs from the operating
+   * system. Before ready() it is buffered without showing the app, and delivered
+   * after onReady and the initial open. Afterwards the app is shown first, like a
+   * second instance, but unlike open() a failed show is only reported and onOpenUrls still
+   * runs, because the operating system delivers these URLs once and they must not be lost to a
+   * display failure. An empty list is ignored. Throws if stopped or full.
    */
-  ready(): void {
+  openUrls(urls: readonly string[]): void {
+    if (this.ending) {
+      throw new Error("Desktop open queue unavailable");
+    }
+    if (urls.length === 0) {
+      return;
+    }
+    const frozen = Object.freeze([
+      ...urls,
+    ]);
+    if (this.phase === "starting") {
+      if (this.bufferedUrlRequests.length >= MAX_PENDING_OPENS) {
+        throw new Error("Desktop open queue unavailable");
+      }
+      this.bufferedUrlRequests.push(frozen);
+      return;
+    }
+    this.enqueueCounted(async () => {
+      try {
+        await this.context.show();
+      } catch (error) {
+        this.report(error);
+      }
+      await this.options?.onOpenUrls?.(frozen, this.context);
+    });
+  }
+  /**
+   * Queues onReopen with the macOS reopen event. Events before ready() are dropped,
+   * because the startup windows are already opening. The host decides what to do
+   * when onReopen is not registered.
+   *
+   * Reopens that arrive while an earlier one is still waiting to start collapse into that queued
+   * run, which receives the latest event. A reopen that arrives while onReopen is running queues
+   * one more run, so the app always sees the newest state without a backlog building up.
+   */
+  reopen(event: ReopenEvent): void {
+    if (this.phase !== "live") {
+      return;
+    }
+    if (this.pendingReopen) {
+      this.pendingReopen = event;
+      return;
+    }
+    this.pendingReopen = event;
+    this.enqueue(async () => {
+      const latest = this.pendingReopen;
+      this.pendingReopen = undefined;
+      if (latest) {
+        await this.options?.onReopen?.(latest, this.context);
+      }
+    });
+  }
+  /**
+   * Starts callback delivery once the backend and UI Worker are up. In order it
+   * queues onReady, the initial open (when launch arguments are given), and the
+   * URL requests buffered by openUrls(), then accepts later requests directly.
+   * Open callbacks therefore start after onReady settles. Throws like open() for
+   * the initial launch arguments.
+   */
+  ready(initial?: LaunchArguments): void {
     this.enqueue(async () => {
       await this.options?.onReady?.(this.context);
     });
+    if (initial) {
+      this.open(initial, "initial");
+    }
+    const buffered = this.bufferedUrlRequests;
+    this.bufferedUrlRequests = [];
+    this.phase = "live";
+    // The buffer is already bounded, so these bypass the pending limit and cannot throw.
+    for (const urls of buffered) {
+      this.enqueue(async () => {
+        await this.options?.onOpenUrls?.(urls, this.context);
+      });
+    }
   }
   /** Queues onAllWindowsClosed after the UI reports the last live window closed. */
   windowsEmpty(): void {
@@ -276,6 +398,16 @@ export class DesktopLifecycle {
       })
       .catch(this.report);
     return this.callbacks;
+  }
+  /** Queues an open task that counts against the pending limit; throws if stopped or full. */
+  private enqueueCounted(task: () => Promise<void>): void {
+    if (this.ending || this.pending >= MAX_PENDING_OPENS) {
+      throw new Error("Desktop open queue unavailable");
+    }
+    this.pending++;
+    void this.enqueue(task).finally(() => {
+      this.pending--;
+    });
   }
   /**
    * Awaits a shutdown hook up to the deadline. A failure or timeout is
