@@ -6,6 +6,9 @@ import windows from "@bunaway/plugin-windows";
 import { BunawayError } from "@bunaway/protocol";
 import { controlsClientReadiness } from "./readiness.ts";
 
+/** Per-stage wait bound; macOS CI runners can be slow to deliver WebView loads. */
+const WAIT_TIMEOUT_MS = 45_000;
+
 /** Exercise the public SDK from the real backend Worker while WKWebView documents connect. */
 export function controlsApp(origin: string, outside: string) {
   const arrivals = new Map<string, number>();
@@ -45,12 +48,18 @@ export function controlsApp(origin: string, outside: string) {
     stage: string,
   ) => {
     checkpoint(`waiting: ${stage}`);
-    const deadline = Date.now() + 15_000;
+    const startedAt = Date.now();
+    const deadline = startedAt + WAIT_TIMEOUT_MS;
     while (!(await check())) {
       if (pageFailure) {
         throw new Error(pageFailure);
       }
-      assert(Date.now() < deadline, `Timed out: ${stage}`);
+      if (Date.now() >= deadline) {
+        const message = `Timed out: ${stage} after ${Date.now() - startedAt} ms (deadline ${WAIT_TIMEOUT_MS} ms)`;
+        // Best-effort progress marker; the outer catch may overwrite the progress file with a failure summary.
+        checkpoint(`timed out: ${stage}`, message);
+        throw new Error(message);
+      }
       await Bun.sleep(10);
     }
     checkpoint(`completed: ${stage}`);

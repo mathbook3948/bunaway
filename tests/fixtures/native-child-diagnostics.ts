@@ -105,6 +105,7 @@ export async function captureNativeChild(
         ]
       : [],
   );
+  const elapsedMs = Date.now() - started;
   await mkdir(directory, {
     recursive: true,
   });
@@ -124,7 +125,7 @@ export async function captureNativeChild(
         outputTruncated,
         cancellationErrors,
         timeoutMs,
-        elapsedMs: Date.now() - started,
+        elapsedMs,
       },
       null,
       2,
@@ -132,7 +133,7 @@ export async function captureNativeChild(
   );
   assert(
     !timedOut,
-    `Native fixture deadline expired before completion: ${phase} (exit ${exitCode}).`,
+    `Native fixture deadline expired before completion: ${phase} after ${elapsedMs} ms (deadline ${timeoutMs} ms, exit ${exitCode}).`,
   );
   return {
     exitCode,

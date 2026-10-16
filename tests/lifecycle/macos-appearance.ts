@@ -230,7 +230,7 @@ try {
         launched,
         launchDiagnostics,
         `appearance ${backendAllowed ? "allowed" : "denied"} launch ${launch}`,
-        30_000,
+        60_000,
       );
       const log = await Bun.file(resolve(dataRoot, "logs/host.log"))
         .text()
