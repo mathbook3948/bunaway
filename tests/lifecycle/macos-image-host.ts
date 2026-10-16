@@ -414,15 +414,26 @@ export default { _definition: { ...definition, nativePlatforms: { ...definition.
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line));
+  // Closing the last window joins the app quit (ADR 0020, 0021): like Windows, it closes during
+  // shutdown without a window-closed record, after the quit was approved.
   assert.deepEqual(
     records
       .filter((record) => record.event === "window-closed")
-      .map((record) => record.view)
-      .sort(),
+      .map((record) => record.view),
     [
-      "main",
       "reader",
     ],
+  );
+  const mainRevoked = records.findIndex(
+    (record) =>
+      record.event === "revoke" &&
+      record.view === "main" &&
+      record.reason === "closing",
+  );
+  const closing = records.findIndex((record) => record.event === "closing");
+  assert.ok(
+    mainRevoked !== -1 && closing > mainRevoked,
+    "main closes with the app shutdown",
   );
   assert.equal(
     records.filter((record) => record.event === "host-stopped").length,

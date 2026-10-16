@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
+import type { ShutdownReason } from "@bunaway/core";
 import type {
   NativeTrayOwner,
   WindowReadiness,
@@ -28,10 +29,12 @@ import {
   type UIConfig,
   type WindowSpec,
 } from "./channel.ts";
+import { type CloseDecision, CloseRequests } from "./close-request.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
 import { DownloadCleanupError, DownloadCleanupRetries } from "./downloads.ts";
 import { isMonitorChangeMessage, MonitorTracker } from "./monitor-events.ts";
 import { monitorServices, windowMonitor } from "./monitors.ts";
+import { createSessionMessageHandler } from "./session-end.ts";
 import { createSessionNotifications } from "./session-notifications.ts";
 import { publishSystemEvent, SystemEvents } from "./system-events.ts";
 import { originOf, WebView } from "./webview.ts";
@@ -62,7 +65,12 @@ let failure: unknown;
 let stopping = false;
 let startupNavigationStarted = false;
 let startRequested = false;
-let closingSent = false;
+/**
+ * True once app shutdown is committed, whether this thread reported it (`closing`, `session-end`)
+ * or the main thread decided it alone (`shutdown-committed`). Gates every new close request,
+ * quit request, lifecycle event and visibility change, because nothing may be emitted afterwards.
+ */
+let shutdownCommitted = false;
 let initialized = false;
 let windows: Windows | undefined;
 let systemEvents: SystemEvents | undefined;
@@ -101,18 +109,23 @@ let monitorWindow: bigint | undefined;
 let monitorTracker: MonitorTracker | undefined;
 let showRequested = false;
 let quitPending = false;
-/** Commit app shutdown once, bypassing user quit veto for explicit destruction or host interruption. */
-function signalClosing() {
-  if (closingSent) {
+/**
+ * Commit app shutdown once, bypassing user quit veto for explicit destruction or host interruption.
+ * Only the first reason is delivered, because the main thread reports a single reason to the app.
+ */
+function signalClosing(reason: ShutdownReason) {
+  if (shutdownCommitted) {
     return;
   }
-  closingSent = true;
+  shutdownCommitted = true;
+  cancelCloseRequests();
   channel.notify({
     kind: "closing",
+    reason,
   });
 }
 function requestQuit(reason: "last-window" | "tray") {
-  if (stopping || quitPending) {
+  if (stopping || shutdownCommitted || quitPending) {
     return;
   }
   quitPending = true;
@@ -121,8 +134,44 @@ function requestQuit(reason: "last-window" | "tray") {
     reason,
   });
 }
+let windowsWereLive = false;
+let windowsEmptyReported = false;
+/**
+ * Tells the main thread once per transition to zero live windows while the app stays resident.
+ * Windows whose controller is ready (the point where `created` is published) and windows still
+ * replacing a live one count as live, so a recreation reports only if the replacement creation
+ * fails, and then once. A new (non-replacement) window still being created cannot re-arm the report
+ * and one that fails creation stays invisible.
+ * A windowless start, a pending recreation, and an app already committed to shutdown never report.
+ * Runs on every pump turn so a window that becomes live again re-arms the next report.
+ */
+function reportWindowsEmpty() {
+  const anyLive = [
+    ...views.values(),
+  ].some((view) => (view.ready || view.replacing) && !view.lifecycle.closed);
+  if (anyLive) {
+    windowsWereLive = true;
+    windowsEmptyReported = false;
+    return;
+  }
+  const resident = !!tray || config.desktop?.closeBehavior === "keep-alive";
+  if (
+    !windowsWereLive ||
+    windowsEmptyReported ||
+    !resident ||
+    stopping ||
+    shutdownCommitted ||
+    replacements.size > 0
+  ) {
+    return;
+  }
+  windowsEmptyReported = true;
+  channel.notify({
+    kind: "windows-empty",
+  });
+}
 function visibility(action: "show" | "hide") {
-  if (stopping || closingSent) {
+  if (stopping || shutdownCommitted) {
     return;
   }
   showRequested = action === "show";
@@ -143,7 +192,7 @@ function visibility(action: "show" | "hide") {
 
 /** Restore live views or create the first declaration after old views and API operations finish. */
 function showWindows() {
-  if (!showRequested || stopping || closingSent) {
+  if (!showRequested || stopping || shutdownCommitted) {
     return;
   }
   assert(windows);
@@ -184,6 +233,8 @@ function showWindows() {
   }
   showRequested = false;
 }
+/** Lifetime transitions of one windowId, as published by the `windows.lifecycle` event. */
+type WindowLifecyclePhase = "created" | "ready" | "closed" | "destroyed";
 type ViewState = {
   key: string;
   startup: boolean;
@@ -191,6 +242,11 @@ type ViewState = {
   boundary: ViewBoundary;
   native: WebView;
   ready: boolean;
+  /**
+   * Creation that replaces a window that was live. It counts as live for windows-empty until its
+   * controller is ready or creation fails, so a recreation is not mistaken for an empty app.
+   */
+  replacing: boolean;
   navigationStarted: boolean;
   replacementCancelled: boolean;
   inputRestoreDeadlineMs?: number;
@@ -200,6 +256,10 @@ type ViewState = {
   documentDeadline: number;
   sdkDeadline: number;
   readiness: WindowReadinessTracker;
+  /** Phases already published for this windowId; each is emitted at most once. */
+  publishedLifecycle: Set<WindowLifecyclePhase>;
+  /** The `windows.closeRequested` question this window lifetime may have pending. */
+  closeRequests: CloseRequests;
 };
 const views = new Map<string, ViewState>();
 const profiles = new WindowProfiles(
@@ -346,6 +406,7 @@ function cleanupView(view: ViewState) {
     }
     modalWindows.delete(windowId);
     view.lifecycle.released();
+    publishLifecycle(view, "destroyed");
   }
   view.lifecycle.settleProfile(replacements.has(view.key), () =>
     profiles.release(view.key, false),
@@ -410,6 +471,11 @@ const channel = new Channel(
       visibility(packet.action);
     } else if (packet.kind === "quit-cancelled") {
       quitPending = false;
+    } else if (packet.kind === "shutdown-committed") {
+      // Idempotent: the main thread may repeat it, and a prior closing or session-end already set it.
+      shutdownCommitted = true;
+      quitPending = false;
+      cancelCloseRequests();
     } else if (packet.kind === "shutdown") {
       stopping = true;
       cancelReplacements();
@@ -476,7 +542,7 @@ const channel = new Channel(
         const call = registry.validateCall(operation.call);
         allowed =
           !stopping &&
-          !closingSent &&
+          !shutdownCommitted &&
           (packet.kind !== "grant" || packet.allowed) &&
           !!permissions &&
           (packet.kind !== "grant" || queued?.source === source) &&
@@ -586,7 +652,7 @@ async function executeWindowRequest(
         signal,
         beforeExecute() {
           // Closing commits locally before the main thread sends cancellation packets.
-          if (closingSent || stopping || !activeContext(queued.context)) {
+          if (shutdownCommitted || stopping || !activeContext(queued.context)) {
             throw new BunawayError({
               code: "CANCELLED",
               message: "Host call was cancelled.",
@@ -654,9 +720,61 @@ function startViews() {
     }
   }
 }
+/** Ends every wait on an app close decision, so a shutdown that has begun is never held back by one. */
+function cancelCloseRequests() {
+  for (const view of views.values()) {
+    view.closeRequests.cancel();
+  }
+}
+/**
+ * Whether the app has asked to decide this window's user close itself: its current document listens
+ * holds a confirmed `windows.closeRequested` subscription and may answer with `windows.respondClose`.
+ * A listen that Core has not confirmed yet does not count, since it may still be rejected. Without a
+ * subscription the close never waits on an app, and a policy that cannot answer would otherwise wait
+ * forever. Ending the last subscription while a request is pending cancels that request and keeps
+ * the window open.
+ */
+function appDecidesClose(view: ViewState): boolean {
+  return (
+    !quitPending &&
+    !stopping &&
+    !shutdownCommitted &&
+    registry.operations.has("windows.respondClose") &&
+    registry.allowed(view.boundary.policy.host, {
+      operation: "windows.respondClose",
+      payload: {
+        view: view.boundary.policy.id,
+      },
+    }) &&
+    view.boundary.subscribed("windows.closeRequested")
+  );
+}
+/**
+ * Asks the window's own document whether it may close and waits for the answer.
+ * The wait ends only by `respondClose` or a cancellation: revocation or navigation of the document,
+ * the document ending its last `windows.closeRequested` subscription, an undeliverable event, forced
+ * or shutdown closes and session end. There is no deadline.
+ */
+function askAppToDecideClose(view: ViewState): Promise<CloseDecision> {
+  const { requestId, decision } = view.closeRequests.begin();
+  const { windowId, viewId } = view.readiness.snapshot();
+  sendNativeEvent(
+    view.boundary,
+    "windows.closeRequested",
+    {
+      windowId,
+      viewId,
+      requestId,
+    },
+    () => view.closeRequests.cancel(requestId),
+  );
+  return decision;
+}
 /**
  * Handle user close, window recreation, and forced shutdown requests.
  * Returns false if hidden or declined, including a cancelled final quit.
+ * A user-style close waits for the target document's `windows.respondClose` when it subscribed to
+ * `windows.closeRequested`; the app's approval replaces only the target's own close confirmation.
  */
 async function closeWindow(
   viewId: string,
@@ -707,7 +825,7 @@ async function closeWindow(
         ...views.values(),
       ].every((candidate) => candidate.lifecycle.closed)
     ) {
-      signalClosing();
+      signalClosing("window-destroyed");
     }
     return true;
   }
@@ -727,10 +845,23 @@ async function closeWindow(
       });
       return false;
     }
+    let appApproved = false;
+    if (mode === "close" && appDecidesClose(view)) {
+      const decision = await askAppToDecideClose(view);
+      if (view.lifecycle.closed || stopping || shutdownCommitted) {
+        return true;
+      }
+      // A cancelled request counts as not approved: the document that was asked is gone.
+      if (decision !== "allow") {
+        return false;
+      }
+      appApproved = true;
+    }
     for (const child of subtree) {
       if (
         child.view.lifecycle.closed ||
         !child.view.confirmation ||
+        (child.view === view && appApproved) ||
         (mode === "close" && quitPending)
       ) {
         continue;
@@ -747,7 +878,7 @@ async function closeWindow(
       ) {
         return view.lifecycle.closed;
       }
-      if (stopping || closingSent || view.lifecycle.closed) {
+      if (stopping || shutdownCommitted || view.lifecycle.closed) {
         return true;
       }
     }
@@ -772,11 +903,11 @@ async function closeWindow(
         quitPending &&
         !view.lifecycle.closed &&
         !stopping &&
-        !closingSent
+        !shutdownCommitted
       ) {
         await Bun.sleep(5);
       }
-      return view.lifecycle.closed || stopping || closingSent;
+      return view.lifecycle.closed || stopping || shutdownCommitted;
     }
     if (mode === "recreate") {
       replacements.set(viewId, {
@@ -804,6 +935,8 @@ function commitClose(
   view: ViewState,
   reason: "closing" | "shutdown" = "closing",
 ) {
+  // A forced, recreated or shutdown close ends any wait on the app before the sessions are revoked.
+  view.closeRequests.cancel();
   if (!view.lifecycle.commitClose()) {
     return;
   }
@@ -818,6 +951,7 @@ function commitClose(
   view.boundary.closed = true;
   view.native.requestClose();
   if (reason === "closing") {
+    publishLifecycle(view, "closed");
     log("view-window-closed", {
       view: viewId,
     });
@@ -933,6 +1067,14 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         focus: () => nativeWindows.focus(hwnd),
         activate: () => nativeWindows.activate(hwnd),
         close: () => closeWindow(viewId),
+        respondClose(requestId, allow) {
+          if (!view.closeRequests.respond(requestId, allow)) {
+            throw new BunawayError({
+              code: "INVALID_ARGUMENT",
+              message: "No pending close request.",
+            });
+          }
+        },
         destroy: () => closeWindow(viewId, "destroy"),
         setParent(parent, modal) {
           const id = view.readiness.snapshot().windowId;
@@ -974,6 +1116,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         setSkipTaskbar: (skipTaskbar) =>
           nativeWindows.setSkipTaskbar(hwnd, skipTaskbar),
         isSkipTaskbar: () => nativeWindows.isSkipTaskbar(hwnd),
+        requestAttention: (mode) => nativeWindows.requestAttention(hwnd, mode),
+        cancelAttention: () => nativeWindows.cancelAttention(hwnd),
         setFocusable: (focusable) =>
           nativeWindows.setFocusable(hwnd, focusable),
         isFocusable: () => nativeWindows.isFocusable(hwnd),
@@ -1067,7 +1211,7 @@ function createWindow(
   const boundary = new ViewBoundary(policy, {
     origin: originOf,
     source: () => native.source(),
-    ready: () => startupNavigationStarted && !stopping && !closingSent,
+    ready: () => startupNavigationStarted && !stopping && !shutdownCommitted,
     capacity: (count) =>
       channel.canSend(
         count,
@@ -1096,11 +1240,26 @@ function createWindow(
     },
     sdkReady: (route) =>
       views.get(instanceKey)?.readiness?.sdkComplete(route.documentGeneration),
+    subscriptionEnded: (event) => {
+      const view = views.get(instanceKey);
+      // Without a confirmed listener left, nobody can answer the pending question; a pending or
+      // rejected listen does not count. Cancelling keeps the window open and releases its closing
+      // reservation through closeWindow's cleanup.
+      if (
+        event === "windows.closeRequested" &&
+        view &&
+        !view.boundary.subscribed("windows.closeRequested")
+      ) {
+        view.closeRequests.cancel();
+      }
+    },
     revoked: (reason, generation, error) => {
       const view = views.get(instanceKey);
       if (!view) {
         return;
       }
+      // The question was asked of the revoked document session, which can no longer answer it.
+      view.closeRequests.cancel();
       if (reason === "navigation") {
         view.documentDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
         view.sdkDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
@@ -1167,7 +1326,11 @@ function createWindow(
     hwnd: window.toString(),
   });
   windows.observe(window, spec.view, (snapshot, changes) => {
-    if (stopping || closingSent || views.get(instanceKey)?.native !== native) {
+    if (
+      stopping ||
+      shutdownCommitted ||
+      views.get(instanceKey)?.native !== native
+    ) {
       return;
     }
     sendNativeEvent(boundary, "windows.changed", {
@@ -1180,7 +1343,15 @@ function createWindow(
     spec.view,
     spec.showWhenReady,
     {
-      publish: publishReadiness,
+      publish: (state) => {
+        publishReadiness(state);
+        if (state.document === "ready") {
+          const current = viewById(state.windowId);
+          if (current) {
+            publishLifecycle(current, "ready");
+          }
+        }
+      },
       show: () => {
         const current = views.get(instanceKey);
         if (
@@ -1188,7 +1359,7 @@ function createWindow(
           current.native === native &&
           !current.lifecycle.closed &&
           !stopping &&
-          !closingSent
+          !shutdownCommitted
         ) {
           windows?.show(window, true);
         }
@@ -1229,6 +1400,11 @@ function createWindow(
           const view = views.get(instanceKey);
           assert(view);
           view.ready = true;
+          view.replacing = false;
+          // The controller exists now; a retired or replaced lifetime never announces itself.
+          if (view.native === native && !view.lifecycle.closed) {
+            publishLifecycle(view, "created");
+          }
           startViews();
         },
         log: (event, data) =>
@@ -1262,12 +1438,15 @@ function createWindow(
     boundary,
     native,
     ready: false,
+    replacing: replacement !== undefined,
     navigationStarted: false,
     replacementCancelled: false,
     confirmation: null,
     deadline: Date.now() + WINDOW_PREPARATION_TIMEOUT_MS,
     documentDeadline: Date.now() + WINDOW_PREPARATION_TIMEOUT_MS,
     sdkDeadline: Date.now() + WINDOW_PREPARATION_TIMEOUT_MS,
+    publishedLifecycle: new Set(),
+    closeRequests: new CloseRequests(),
   });
   const identity = windows.getById(readiness.snapshot().windowId);
   assert(identity);
@@ -1295,7 +1474,7 @@ function createWindow(
 function publishReadiness(state: WindowReadiness): void {
   if (
     stopping ||
-    closingSent ||
+    shutdownCommitted ||
     !registry.operations.has("windows.getReadiness")
   ) {
     return;
@@ -1318,14 +1497,53 @@ function publishReadiness(state: WindowReadiness): void {
     });
   }
 }
+/**
+ * Tell open sessions that may enumerate instances about one lifetime phase of a window.
+ * The guard keeps each phase at-most-once per windowId. Shutdown and session end suppress delivery
+ * because sessions are being torn down. A closed window's own boundary is already revoked, so it
+ * is never a recipient of its own closed or destroyed phase. Every later phase requires `created`,
+ * which is published once the WebView controller exists, so a lifetime whose controller never became
+ * ready (creation failed or timed out) emits no lifecycle events at all.
+ */
+function publishLifecycle(view: ViewState, phase: WindowLifecyclePhase): void {
+  if (
+    stopping ||
+    shutdownCommitted ||
+    view.publishedLifecycle.has(phase) ||
+    (phase !== "created" && !view.publishedLifecycle.has("created")) ||
+    !registry.operations.has("windows.listInstances")
+  ) {
+    return;
+  }
+  view.publishedLifecycle.add(phase);
+  const { windowId, viewId } = view.readiness.snapshot();
+  for (const recipient of views.values()) {
+    if (
+      !recipient.boundary.eventRoute("windows.lifecycle") ||
+      !registry.allowed(recipient.boundary.policy.host, {
+        operation: "windows.listInstances",
+        payload: null,
+      })
+    ) {
+      continue;
+    }
+    sendNativeEvent(recipient.boundary, "windows.lifecycle", {
+      windowId,
+      viewId,
+      phase,
+    });
+  }
+}
 /** Reuse the ordered native-event lane; a lost transition revokes its receiving session. */
 function sendNativeEvent(
   boundary: ViewBoundary,
   event: string,
   payload: import("@bunaway/protocol").JsonValue,
+  onUndelivered?: () => void,
 ): void {
   const route = boundary.eventRoute(event);
   if (!route) {
+    onUndelivered?.();
     return;
   }
   void channel
@@ -1336,7 +1554,8 @@ function sendNativeEvent(
       payload,
     })
     .catch((error) => {
-      if (stopping || closingSent || !boundary.matches(route)) {
+      onUndelivered?.();
+      if (stopping || shutdownCommitted || !boundary.matches(route)) {
         return;
       }
       if (error instanceof BunawayError && error.code === "BUSY") {
@@ -1356,7 +1575,7 @@ function publishPluginSystemEvent(
   payload: import("@bunaway/protocol").JsonValue,
   requiredOperation: string,
 ): void {
-  if (stopping || closingSent) {
+  if (stopping || shutdownCommitted) {
     return;
   }
   publishSystemEvent(
@@ -1375,8 +1594,26 @@ try {
   // Keep window and WebView COM work on this STA through cleanup.
   hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   initialized = true;
-  windows = new Windows(signalClosing, config.icon, config.runtime.id, () =>
-    channel.poll(),
+  windows = new Windows(
+    () => signalClosing("interrupted"),
+    config.icon,
+    config.runtime.id,
+    () => channel.poll(),
+    createSessionMessageHandler({
+      begin(flags, release) {
+        // The main thread owns shutdown from here: marking the UI as closing stops new close
+        // confirmations and quit requests, and abandons waits for pending ones. A prior
+        // signalClosing() reason wins on the main thread, which keeps the first reason.
+        shutdownCommitted = true;
+        cancelCloseRequests();
+        channel.notify({
+          kind: "session-end",
+          flags,
+          release,
+        });
+      },
+      report: log,
+    }),
   );
   let notificationWindow: bigint | undefined;
   let sessionNotifications:
@@ -1490,7 +1727,7 @@ try {
           };
         },
         poll: () => channel.poll(),
-        stopping: () => stopping || closingSent || modalShutdownRequested,
+        stopping: () => stopping || shutdownCommitted || modalShutdownRequested,
       },
       shortcuts: {
         createWindow(receive) {
@@ -1502,7 +1739,7 @@ try {
           windows.destroy(hwnd);
         },
         emit(event, payload) {
-          if (stopping || closingSent) {
+          if (stopping || shutdownCommitted) {
             return;
           }
           for (const view of views.values()) {
@@ -1562,7 +1799,7 @@ try {
           };
         },
         emit(event, payload) {
-          if (stopping || closingSent) {
+          if (stopping || shutdownCommitted) {
             return;
           }
           for (const view of views.values()) {
@@ -1626,7 +1863,7 @@ try {
           tray.setMenu(items, selected);
         },
         emit(event, payload) {
-          if (stopping || closingSent) {
+          if (stopping || shutdownCommitted) {
             return;
           }
           for (const view of views.values()) {
@@ -1640,7 +1877,7 @@ try {
     monitorTracker = new MonitorTracker(
       monitorServices.list,
       (change) => {
-        if (stopping || closingSent) {
+        if (stopping || shutdownCommitted) {
           return;
         }
         for (const recipient of views.values()) {
@@ -1810,7 +2047,7 @@ try {
       }
     }
     if (
-      !closingSent &&
+      !shutdownCommitted &&
       !tray &&
       config.desktop?.closeBehavior !== "keep-alive" &&
       !adapters?.busy() &&
@@ -1818,8 +2055,9 @@ try {
         ...views.values(),
       ].every((view) => view.lifecycle.closed)
     ) {
-      signalClosing();
+      signalClosing("window-destroyed");
     }
+    reportWindowsEmpty();
     if (failure) {
       throw failure;
     }

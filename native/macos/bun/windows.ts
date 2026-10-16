@@ -11,14 +11,20 @@ import {
   BunawayError,
   type HostCall,
   type HostContext,
+  type JsonValue,
   type ServerMessage,
 } from "@bunaway/protocol";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 import type { Packet, Route } from "@bunaway/runtime-bun/worker-channel";
-// Platform-neutral readiness logic shared with the Windows host; it has no native dependency.
+// Platform-neutral logic shared with the Windows host; none of it has a native dependency.
+import {
+  type CloseDecision,
+  CloseRequests,
+} from "../../windows/bun/close-request.ts";
 import { WindowReadinessTracker } from "../../windows/bun/window-readiness.ts";
 import type { MacosApplication } from "./application.ts";
 import { assertMacosWindowOptions, type MacosConfig } from "./config.ts";
+import type { DesktopRequests } from "./desktop-requests.ts";
 import { macosOrigin } from "./urls.ts";
 import { MacosWebview } from "./webview.ts";
 
@@ -30,6 +36,8 @@ const unsupported = (): never => {
     message: "Window operation is not implemented on macOS.",
   });
 };
+/** Lifetime transitions of one windowId, as published by the `windows.lifecycle` event. */
+type WindowLifecyclePhase = "created" | "ready" | "closed" | "destroyed";
 type View = {
   /** Native lifetime ID, replaced whenever the view is created or recreated. */
   windowId: string;
@@ -40,8 +48,19 @@ type View = {
   sdkDeadline: number;
   /** Startup windows end the app on setup failure; dynamic creation reports to its caller. */
   startup: boolean;
+  /**
+   * Creation that replaces a window that was live. It counts as live for `windows-empty` until its
+   * WebView is ready, so a recreation is not mistaken for an empty app.
+   */
+  replacing: boolean;
   boundary: ViewBoundary;
   native?: MacosWebview | undefined;
+  /** The `windows.closeRequested` question this window lifetime may have pending. */
+  closeRequests: CloseRequests;
+  /** A user close of this window is waiting for the app or a quit decision; repeated closes are ignored. */
+  closing: boolean;
+  /** Phases already published for this windowId; each is emitted at most once. */
+  publishedLifecycle: Set<WindowLifecyclePhase>;
 };
 
 /** Own each window's native resources and protocol boundary; closing one view leaves the others live. */
@@ -49,6 +68,11 @@ export class MacosWindows {
   private readonly views = new Map<string, View>();
   /** Window that most recently became key; cleared when that window closes. */
   private lastActiveWindowId: string | undefined;
+  /** A show request (desktop control, Dock reopen) that the tick has not applied yet. */
+  private showRequested = false;
+  /** Whether any window has been live since the last `windows-empty`, so it fires once per transition. */
+  private windowsWereLive = false;
+  private windowsEmptyReported = false;
   readonly services: NativeWindowServices;
 
   constructor(
@@ -79,7 +103,12 @@ export class MacosWindows {
       capacity(count: number, pending: number): boolean;
       log(event: string, fields?: object): void;
       fail(error: unknown): void;
-      quit(): void;
+      /** Close behavior, quit requests and requests deferred until the backend reported its options. */
+      desktop: DesktopRequests;
+      /** The last live window vanished without a user decision and the app is not resident: shut down. */
+      windowsGone(): void;
+      /** Every live window closed while the app stays resident (`keep-alive`). */
+      windowsEmpty(): void;
     },
   ) {
     this.services = {
@@ -125,8 +154,9 @@ export class MacosWindows {
           return view && !view.state.closed ? this.identity(view) : null;
         },
       },
-      create: (spec) => this.create(spec),
-      close: (view) => this.closeView(view),
+      create: (spec, replacingLiveWindow) =>
+        this.create(spec, false, replacingLiveWindow === true),
+      close: (view) => this.closeForReplacement(view),
       window: (view) => this.window(view),
       stopping: hooks.stopping,
       cancelled: hooks.cancelled,
@@ -146,7 +176,7 @@ export class MacosWindows {
   }
 
   /** Own setup completion per generation so replacing a startup window cannot leave startup waiting on an old view. */
-  private create(spec: WindowSpec, startup = false): void {
+  private create(spec: WindowSpec, startup = false, replacing = false): void {
     const policy = this.config.policy.views.find(
       (view) => view.id === spec.view,
     );
@@ -162,6 +192,10 @@ export class MacosWindows {
     const windowId = crypto.randomUUID();
     const view: View = {
       startup,
+      replacing,
+      closeRequests: new CloseRequests(),
+      closing: false,
+      publishedLifecycle: new Set(),
       windowId,
       documentDeadline: now + WINDOW_PREPARATION_TIMEOUT_MS,
       sdkDeadline: now + WINDOW_PREPARATION_TIMEOUT_MS,
@@ -193,7 +227,19 @@ export class MacosWindows {
         },
         sdkReady: (route) =>
           view.readiness.sdkComplete(route.documentGeneration),
+        subscriptionEnded: (event) => {
+          // Without a confirmed listener left nobody can answer the pending question; a pending or
+          // rejected listen does not count. Cancelling keeps the window open.
+          if (
+            event === "windows.closeRequested" &&
+            !view.boundary.subscribed("windows.closeRequested")
+          ) {
+            view.closeRequests.cancel();
+          }
+        },
         revoked: (reason, generation, error) => {
+          // The question was asked of the revoked document session, which can no longer answer it.
+          view.closeRequests.cancel();
           if (reason === "navigation") {
             view.documentDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
             view.sdkDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
@@ -214,7 +260,15 @@ export class MacosWindows {
         spec.view,
         spec.showWhenReady,
         {
-          publish: (state) => this.publishReadiness(state),
+          publish: (state) => {
+            this.publishReadiness(state);
+            if (state.document === "ready") {
+              const current = this.viewById(state.windowId);
+              if (current) {
+                this.publishLifecycle(current, "ready");
+              }
+            }
+          },
           show: () => {
             if (
               this.views.get(spec.view) === view &&
@@ -242,8 +296,9 @@ export class MacosWindows {
             view.boundary.receive(source, raw);
           },
           revoke: (reason) => view.boundary.revoke(reason),
+          // The title bar and performClose: reach here (the minimal main menu has no Close item, so Cmd+W does not); the window stays until the close order decides.
           close: () => {
-            this.closeView(spec.view);
+            void this.closeByUser(view, "user").catch(this.hooks.fail);
           },
           activated: () => {
             this.lastActiveWindowId = view.windowId;
@@ -260,6 +315,12 @@ export class MacosWindows {
           return;
         }
         view.state.ready = true;
+        view.replacing = false;
+        // The native window and WebView controller exist and the content rules are installed; a
+        // lifetime whose setup failed or timed out never reaches this point and announces nothing.
+        if (this.views.get(spec.view) === view) {
+          this.publishLifecycle(view, "created");
+        }
         if (this.hooks.ready()) {
           view.native?.start();
         }
@@ -278,7 +339,7 @@ export class MacosWindows {
         if (view.startup) {
           this.hooks.fail(error);
         }
-        this.closeView(spec.view);
+        this.commitClose(view);
         log("window-creation-failed");
       });
     } catch (error) {
@@ -294,11 +355,17 @@ export class MacosWindows {
     }
   }
 
-  private closeView(viewId: string): boolean {
-    const view = this.views.get(viewId);
-    if (!view || view.state.closed) {
+  /**
+   * Retires a window's sessions and marks it closed; the tick releases the native resources later,
+   * outside delegate callbacks. Forced paths (creation failure, recreation) and an approved user
+   * close all end here. Returns false when the window was already closed.
+   */
+  private commitClose(view: View): boolean {
+    if (view.state.closed) {
       return false;
     }
+    // A forced or recreating close ends any wait on the app before the sessions are revoked.
+    view.closeRequests.cancel();
     view.state.closed = true;
     view.boundary.closed = true;
     view.boundary.revoke("closing");
@@ -310,10 +377,131 @@ export class MacosWindows {
       this.lastActiveWindowId = undefined;
     }
     this.hooks.log("window-closed", {
-      view: viewId,
+      view: view.boundary.policy.id,
     });
-    this.maybeQuit();
+    // The closing window's own boundary is revoked, so it never receives its own `closed`.
+    this.publishLifecycle(view, "closed");
     return true;
+  }
+
+  /** The window the coordinator is about to replace: closed without asking the app, but not while a close is pending. */
+  private closeForReplacement(viewId: string): boolean {
+    const view = this.views.get(viewId);
+    if (!view || view.state.closed) {
+      return false;
+    }
+    if (view.closing) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "Window close is already pending.",
+      });
+    }
+    return this.commitClose(view);
+  }
+
+  /**
+   * Handles a user-style close (title bar, `performClose:`, public `windows.close`).
+   * The order is: the window's own `windows.closeRequested` question when its document listens,
+   * then, for the last live window with `closeBehavior: "quit"`, the app's `beforeQuit` through a
+   * quit request, then the close itself. Close confirmation does not exist on macOS.
+   *
+   * The last window stays open, with its sessions, while the quit request is pending: only an
+   * approved quit shuts it down, and a veto leaves everything as it was. Resolves true once the
+   * window is closed or shutdown has begun, false when the close was declined or ignored.
+   *
+   * @param source `user` closes are ignored while another close of the window is pending; the public
+   * `api` close reports BUSY instead.
+   */
+  private async closeByUser(
+    view: View,
+    source: "user" | "api",
+  ): Promise<boolean> {
+    if (view.state.closed || this.views.get(view.boundary.policy.id) !== view) {
+      return true;
+    }
+    if (view.closing) {
+      if (source === "api") {
+        throw new BunawayError({
+          code: "BUSY",
+          message: "Window close is already pending.",
+        });
+      }
+      return false;
+    }
+    view.closing = true;
+    try {
+      if (this.appDecidesClose(view)) {
+        const decision = await this.askAppToDecideClose(view);
+        if (view.state.closed || this.hooks.stopping()) {
+          return true;
+        }
+        // A cancelled request counts as not approved: the document that was asked is gone.
+        if (decision !== "allow") {
+          return false;
+        }
+      }
+      // The close behavior comes from the backend; a close that beats it waits here.
+      const desktop = await this.hooks.desktop.configured();
+      if (!desktop || view.state.closed || this.hooks.stopping()) {
+        return true;
+      }
+      const otherLiveWindows = [
+        ...this.views.values(),
+      ].some((other) => other !== view && !other.state.closed);
+      if (
+        desktop.closeBehavior === "quit" &&
+        (this.hooks.desktop.quitPending || !otherLiveWindows)
+      ) {
+        await this.hooks.desktop.requestQuit("last-window");
+        return view.state.closed || this.hooks.stopping();
+      }
+      this.commitClose(view);
+      return true;
+    } finally {
+      view.closing = false;
+    }
+  }
+
+  /**
+   * Whether the app asked to decide this window's user close itself: no quit is pending, and the
+   * window's current document holds a confirmed `windows.closeRequested` subscription and may
+   * answer with `windows.respondClose`. Without a subscription the close never waits on an app,
+   * and a policy that cannot answer would otherwise wait forever.
+   */
+  private appDecidesClose(view: View): boolean {
+    return (
+      !this.hooks.desktop.quitPending &&
+      !this.hooks.stopping() &&
+      this.hooks.observes(view.boundary.policy.host, {
+        operation: "windows.respondClose",
+        payload: {
+          view: view.boundary.policy.id,
+        },
+      }) &&
+      view.boundary.subscribed("windows.closeRequested")
+    );
+  }
+
+  /**
+   * Asks the window's own document whether it may close and waits for the answer. The wait ends
+   * only by `respondClose` or a cancellation: revocation or navigation of the document, the
+   * document ending its last subscription, an undeliverable event, a forced close or shutdown.
+   * There is no deadline.
+   */
+  private askAppToDecideClose(view: View): Promise<CloseDecision> {
+    const { requestId, decision } = view.closeRequests.begin();
+    const { windowId, viewId } = view.readiness.snapshot();
+    this.sendNativeEvent(
+      view.boundary,
+      "windows.closeRequested",
+      {
+        windowId,
+        viewId,
+        requestId,
+      },
+      () => view.closeRequests.cancel(requestId),
+    );
+    return decision;
   }
 
   /** Broadcast preparation to subscribed live sessions with getReadiness permission. */
@@ -334,29 +522,85 @@ export class MacosWindows {
       ) {
         continue;
       }
-      void this.hooks
-        .nativeEvent({
-          kind: "native-event",
-          route,
-          event: "windows.readiness",
-          payload: {
-            ...state,
-          },
-        })
-        .catch((error) => {
-          if (this.hooks.stopping() || !recipient.boundary.matches(route)) {
-            return;
-          }
-          if (error instanceof BunawayError && error.code === "BUSY") {
-            recipient.boundary.fail(route, {
-              code: "BUSY",
-              message: "Native event queue full.",
-            });
-            return;
-          }
-          this.hooks.fail(error);
-        });
+      this.sendNativeEvent(recipient.boundary, "windows.readiness", {
+        ...state,
+      });
     }
+  }
+
+  /**
+   * Tells open sessions that may enumerate instances about one lifetime phase of a window.
+   * Each phase is published at most once per windowId. Shutdown suppresses delivery because the
+   * sessions are being torn down. Every later phase requires `created`, so a lifetime whose
+   * WebView never became ready (creation failed or timed out) emits no lifecycle events at all.
+   * Recipients need a `windows.lifecycle` subscription and the `windows.listInstances` permission,
+   * the same boundary as listing windows, because the event exposes every window.
+   */
+  private publishLifecycle(view: View, phase: WindowLifecyclePhase): void {
+    if (
+      this.hooks.stopping() ||
+      view.publishedLifecycle.has(phase) ||
+      (phase !== "created" && !view.publishedLifecycle.has("created"))
+    ) {
+      return;
+    }
+    view.publishedLifecycle.add(phase);
+    const { windowId, viewId } = view.readiness.snapshot();
+    for (const recipient of this.views.values()) {
+      if (
+        !recipient.boundary.eventRoute("windows.lifecycle") ||
+        !this.hooks.observes(recipient.boundary.policy.host, {
+          operation: "windows.listInstances",
+          payload: null,
+        })
+      ) {
+        continue;
+      }
+      this.sendNativeEvent(recipient.boundary, "windows.lifecycle", {
+        windowId,
+        viewId,
+        phase,
+      });
+    }
+  }
+
+  /**
+   * Sends one event on the ordered native-event lane of the recipient's current document.
+   * `onUndelivered` runs when the event could not be sent; a full lane revokes the receiving session,
+   * because a lost transition would leave it with a stale view of the windows.
+   */
+  private sendNativeEvent(
+    boundary: ViewBoundary,
+    event: string,
+    payload: JsonValue,
+    onUndelivered?: () => void,
+  ): void {
+    const route = boundary.eventRoute(event);
+    if (!route) {
+      onUndelivered?.();
+      return;
+    }
+    void this.hooks
+      .nativeEvent({
+        kind: "native-event",
+        route,
+        event,
+        payload,
+      })
+      .catch((error) => {
+        onUndelivered?.();
+        if (this.hooks.stopping() || !boundary.matches(route)) {
+          return;
+        }
+        if (error instanceof BunawayError && error.code === "BUSY") {
+          boundary.fail(route, {
+            code: "BUSY",
+            message: "Native event queue full.",
+          });
+          return;
+        }
+        this.hooks.fail(error);
+      });
   }
 
   private identity(view: View): WindowIdentity {
@@ -399,7 +643,7 @@ export class MacosWindows {
       showInactive: () => native().showInactive(),
       focus: () => native().focus(),
       activate: unsupported,
-      close: () => this.closeView(viewId),
+      close: () => this.closeByUser(view, "api"),
       isVisible: () => native().isVisible(),
       isFocused: () => native().isFocused(),
       getBounds: unsupported,
@@ -419,32 +663,147 @@ export class MacosWindows {
       setGeometry: unsupported,
       setFullscreen: unsupported,
       setCloseConfirmation: unsupported,
+      respondClose(requestId, allow) {
+        if (!view.closeRequests.respond(requestId, allow)) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "No pending close request.",
+          });
+        }
+      },
     };
   }
 
-  private maybeQuit(): void {
+  /**
+   * Asks to show the app: the next tick presents every live declared window, or creates the first
+   * declared window when none is live. Repeated requests before that tick collapse into one.
+   * Used by desktop control `show` and by a Dock reopen.
+   */
+  requestShow(): void {
+    this.showRequested = true;
+  }
+
+  /**
+   * Applies a pending show request. Live windows are presented (ordered front, key, app
+   * activated). Without any, the first declared window is created once the old windows and any
+   * `windows.create` or `windows.recreate` operation have finished, so it never races them.
+   */
+  private showDesktop(): void {
+    if (!this.showRequested || this.hooks.stopping()) {
+      return;
+    }
+    const live = this.config.windows.flatMap((spec) => {
+      const view = this.views.get(spec.view);
+      return view && !view.state.closed
+        ? [
+            view,
+          ]
+        : [];
+    });
+    if (live.length) {
+      for (const view of live) {
+        view.native?.present();
+      }
+      this.showRequested = false;
+      return;
+    }
     if (
+      this.hooks.busy() ||
+      [
+        ...this.views.values(),
+      ].some((view) => !view.state.cleaned)
+    ) {
+      return;
+    }
+    // Consumed before creating, so a failing creation is not retried every tick: the next reopen or
+    // `show` request is the next attempt.
+    this.showRequested = false;
+    const first = this.config.windows[0];
+    if (!first) {
+      return;
+    }
+    try {
+      this.create(first);
+    } catch (error) {
+      // `create` already marked the failed view closed and cleaned. A failed reopen must not end the
+      // host through the UI pump; with `closeBehavior: "quit"` the missing window is then handled
+      // like any other lost window by `quitWhenNoWindowRemains`, while `keep-alive` stays resident.
+      this.hooks.log("reopen-window-creation-failed", {
+        view: first.view,
+        code: error instanceof BunawayError ? error.code : "INTERNAL",
+      });
+      return;
+    }
+    this.views.get(first.view)?.native?.present();
+  }
+
+  /**
+   * Ends the app when no window can remain and the close behavior is `quit`, which covers a
+   * window lost to a creation failure or timeout. A user close of the last window never gets here
+   * because that window stays open until the quit is approved.
+   */
+  private quitWhenNoWindowRemains(): void {
+    if (
+      this.hooks.desktop.closeBehavior === "quit" &&
       !this.hooks.stopping() &&
       !this.hooks.busy() &&
-      ![
+      [
         ...this.views.values(),
-      ].some((view) => !view.state.closed)
+      ].every((view) => view.state.closed)
     ) {
-      this.hooks.quit();
+      this.hooks.windowsGone();
     }
   }
+
+  /**
+   * Tells the backend once per transition to zero live windows while the app stays resident.
+   * Windows whose WebView is ready (the point where `created` is published) and windows still
+   * replacing a live one count as live, so a recreation reports only if the replacement fails,
+   * and then once. A new window still being created cannot re-arm the report, and one that fails
+   * creation stays invisible. A pending recreation and shutdown never report.
+   * Runs every tick so a window that becomes live again re-arms the next report.
+   */
+  private reportWindowsEmpty(): void {
+    const anyLive = [
+      ...this.views.values(),
+    ].some(
+      (view) => (view.state.ready || view.replacing) && !view.state.closed,
+    );
+    if (anyLive) {
+      this.windowsWereLive = true;
+      this.windowsEmptyReported = false;
+      return;
+    }
+    if (
+      !this.windowsWereLive ||
+      this.windowsEmptyReported ||
+      this.hooks.desktop.closeBehavior !== "keep-alive" ||
+      this.hooks.stopping() ||
+      this.hooks.busy()
+    ) {
+      return;
+    }
+    this.windowsEmptyReported = true;
+    this.hooks.windowsEmpty();
+  }
+
   start(): void {
     for (const view of this.views.values()) {
       view.native?.start();
     }
   }
-  /** Apply deferred native cleanup outside delegate callbacks, then check creation deadlines and auto-quit. */
+  /**
+   * Applies deferred native cleanup outside delegate callbacks, then checks creation deadlines,
+   * pending show requests and the window-count transitions that end or idle the app.
+   */
   tick(): void {
+    this.showDesktop();
     for (const view of this.views.values()) {
       if (view.state.closed && !view.state.cleaned) {
         view.native?.close();
         view.native = undefined;
         view.state.cleaned = true;
+        this.publishLifecycle(view, "destroyed");
       }
       if (
         !view.state.closed &&
@@ -459,7 +818,7 @@ export class MacosWindows {
         if (view.startup) {
           this.hooks.fail(view.state.failure);
         }
-        this.closeView(view.boundary.policy.id);
+        this.commitClose(view);
       }
       if (!view.state.closed) {
         if (Date.now() > view.documentDeadline) {
@@ -472,7 +831,8 @@ export class MacosWindows {
       view.native?.observeStartup();
       view.boundary.scanDeadlines();
     }
-    this.maybeQuit();
+    this.quitWhenNoWindowRemains();
+    this.reportWindowsEmpty();
   }
   boundary(
     context: import("@bunaway/protocol").HostContext,
@@ -486,6 +846,8 @@ export class MacosWindows {
   }
   revoke(): void {
     for (const view of this.views.values()) {
+      // Shutdown ends every wait on the app's close decision.
+      view.closeRequests.cancel();
       view.boundary.closed = true;
       view.boundary.revoke("closing");
       view.readiness.terminate({

@@ -263,7 +263,7 @@ async function bundleTestHost(
             },
             () => ({
               contents:
-                "export class MacosApplication { activate() {} close() {} }",
+                "export class MacosApplication { activate() {} appCleanedUp() {} close() {} }",
               loader: "js",
             }),
           );
@@ -1144,7 +1144,8 @@ test("macOS shutdown during native registration acknowledges acceptance and skip
           });
         } else if (packet.kind === "cleaned") {
           cleaned = true;
-        } else {
+        } else if (packet.kind !== "desktop-config") {
+          // desktop-config is the backend's normal first packet and is not an error.
           errors.push(packet);
         }
       },
@@ -1814,6 +1815,139 @@ test("macOS I/O receives only the trusted host app identity and rejects a caller
       kind: "result",
       payload: config.app,
     });
+  } finally {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+}, 20000);
+
+test("macOS UI-thread plugin without executeUI runs through execute, and a plain error stays in the host log", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-ui-call-"));
+  const report = resolve(directory, "ui-call.json");
+  const native = {
+    operations: [
+      {
+        name: "probe.source",
+      },
+      {
+        name: "probe.fail",
+      },
+    ],
+  };
+  const modulePath = resolve(directory, "probe.ts");
+  const plugins: InstalledPlugin[] = [
+    {
+      name: "probe",
+      version: "1",
+      native,
+      packageName: "fixture-probe",
+      root: directory,
+      targets: {
+        macos: {
+          thread: "ui",
+          operations: modulePath,
+        },
+      },
+    },
+  ];
+  try {
+    // A legacy adapter: it defines `execute` only, as the macOS desktop fixture driver does.
+    await Bun.write(
+      modulePath,
+      `
+      import { defineNativePlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
+      import { z } from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
+      const plugin = defineNativePlugin({name:"probe",operations:{source:{input:z.null(),output:z.string()},fail:{input:z.null(),output:z.null()}},
+        platforms:{macos:{thread:"ui",create(){return {
+          execute(operation,_input,source){
+            if(operation==="probe.fail") throw new Error("secret internal detail");
+            return source;
+          },dispose(){}
+        };}}}});
+      export default {_definition:{...plugin._definition,version:"1"}};
+    `,
+    );
+    await writePluginManifest(directory, plugins, "macos");
+    await bundleTestHost(directory, plugins);
+    await Bun.write(
+      resolve(directory, "webview.ts"),
+      "export class MacosWebview {}",
+    );
+    await Bun.write(
+      resolve(directory, "backend.js"),
+      `
+      import assert from "node:assert/strict";
+      import { writeFileSync } from "node:fs";
+      import { parentPort, workerData } from "node:worker_threads";
+      import { Channel } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/runtime-bun/src/worker-channel.ts"))};
+      const responses = new Map();
+      const channel = new Channel(parentPort,workerData.runtime,"macos-backend",packet=>{
+        if(packet.kind==="host-response") responses.set(packet.requestId,packet.response);
+        if(packet.kind==="shutdown") void(async()=>{
+          await channel.send({kind:"cleaned"}); await channel.drain(); channel.close(); parentPort.close();
+        })().catch(error=>{console.error(error);process.exit(1)});
+      },error=>{console.error(error);process.exit(1)});
+      await channel.send({kind:"native-register",plugins:[{name:"probe",version:"1",native:${JSON.stringify(native)}}],complete:true});
+      await channel.send({kind:"ready"});
+      const context=workerData.backendContext;
+      for(const [requestId,operation] of [["source","probe.source"],["fail","probe.fail"]]) {
+        await channel.send({kind:"operation",context,source:"backend",requestId,call:{operation,payload:null}});
+        const deadline=Date.now()+5000;
+        while(!responses.has(requestId)){assert(Date.now()<deadline,"UI request timed out");await Bun.sleep(1);}
+      }
+      writeFileSync(${JSON.stringify(report)},JSON.stringify({source:responses.get("source"),fail:responses.get("fail")}));
+    `,
+    );
+    const config = workerConfig(directory);
+    config.windows = [];
+    config.policy.backend.permissions = [
+      "probe.source",
+      "probe.fail",
+    ];
+    await Bun.write(
+      resolve(directory, "run.ts"),
+      `
+      import { existsSync } from "node:fs";
+      import { runMacosApp } from "./entry.js";
+      const timer=setInterval(()=>{if(existsSync(${JSON.stringify(report)})) process.emit("SIGTERM","SIGTERM");},5);
+      try{await runMacosApp(${JSON.stringify(config)});}catch(error){console.error(error);process.exitCode=1;}
+      finally{clearInterval(timer);}
+    `,
+    );
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve(directory, "run.ts"),
+      ],
+      {
+        stdout: "ignore",
+        stderr: "pipe",
+        timeout: 15000,
+      },
+    );
+    const errors = await new Response(child.stderr).text();
+    expect(await child.exited, errors).toBe(0);
+    const results = await Bun.file(report).json();
+    // `execute` received the backend source, so the host routed the UI-thread call to it.
+    expect(results.source).toEqual({
+      kind: "result",
+      payload: "backend",
+    });
+    // The caller sees only the public INTERNAL error; the host log keeps the operation and cause.
+    expect(results.fail).toEqual({
+      kind: "error",
+      error: {
+        code: "INTERNAL",
+        message: "Host operation failed.",
+      },
+    });
+    expect(JSON.stringify(results.fail)).not.toContain(
+      "secret internal detail",
+    );
+    expect(errors).toContain("Host operation probe.fail failed:");
+    expect(errors).toContain("secret internal detail");
   } finally {
     await rm(directory, {
       recursive: true,

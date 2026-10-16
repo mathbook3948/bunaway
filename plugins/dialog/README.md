@@ -23,7 +23,12 @@ Microsoft references: [Common Item Dialog](https://learn.microsoft.com/en-us/win
 [Close](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifiledialog-close),
 [options](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/ne-shobjidl_core-_fileopendialogoptions).
 The implementation preserves default existence/overwrite checks, forces filesystem results, and disables
-recent-item insertion and test-file creation. A path remains subject to later replacement or deletion.
+recent-item insertion and test-file creation. `fileDialogOptions` in
+`src/platforms/windows-bindings.ts` turns `showHiddenFiles` into `FOS_FORCESHOWHIDDEN` and `saveFile`
+`confirmOverwrite` into setting or clearing `FOS_OVERWRITEPROMPT`; omitted options leave the OS
+defaults. `confirmOverwrite` on the other pickers fails schema validation. Windows has no option to
+disable the New Folder control, so none is offered. A path remains subject to later replacement or
+deletion.
 
 ## Message dialog
 
@@ -56,7 +61,8 @@ Microsoft references: [TaskDialogIndirect](https://learn.microsoft.com/en-us/win
 ## Tests
 
 `tests/api/dialog.test.ts` uses the actual operation definitions with a controlled native driver,
-including message input validation, the cancel rule and results.
+including message input validation, the cancel rule and results, and checks the `fileDialogOptions`
+flag computation as a pure function.
 `tests/lifecycle/worker-packets.test.ts` checks that modal intent observation follows validation and
 precedes deferred dispatch. `tests/lifecycle/windows-dialog.test.ts` uses the real UI Worker and Windows
 COM dialogs with injected native OK/Cancel commands, and tests abort, sequential dialogs and shutdown.

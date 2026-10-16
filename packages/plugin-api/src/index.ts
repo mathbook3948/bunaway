@@ -116,6 +116,7 @@ export type {
   DesktopOptions,
   OpenRequest,
   QuitReason,
+  ShutdownReason,
 } from "./desktop.ts";
 
 /** Complete app registration consumed by Core. */

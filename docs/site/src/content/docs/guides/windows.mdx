@@ -83,6 +83,7 @@ profile의 기본값 shared는 웹 저장소를 공유하며 isolated는 창마�
 Windows에서는 모든 창에 `startup: false`를 지정하거나 `app.windows`를 빈 배열로 작성합니다.
 앱 정의에는 `desktop.tray` 또는 `desktop.closeBehavior: "keep-alive"`를 지정해야 합니다.
 나중에 창을 열려면 위 예제처럼 사전 선언 창과 해당 뷰 정책을 유지합니다.
+macOS는 트레이와 창 없는 시작을 지원하지 않습니다. `desktop.closeBehavior: "keep-alive"`를 지정해도 시작 창이 하나 이상 필요하며, 없으면 호스트가 시작할 때 `UNSUPPORTED`로 거부합니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
@@ -118,6 +119,7 @@ export default defineApp({
 트레이 없는 상주 앱에서는 위 `onOpen`을 유지하고 `tray`만 생략할 수 있습니다.
 실행 파일에 `--quit`을 전달하면 같은 앱으로 전달된 요청에서 명시적 종료를 요청합니다.
 `beforeQuit`가 `false`를 반환하거나 실패하면 종료를 취소하므로 다시 요청할 수 있습니다.
+상주 앱에서 열린 창이 모두 닫힌 시점은 `desktop.onAllWindowsClosed`로 받습니다.
 
 백엔드에서 특정 사전 선언 창을 열려면 `@bunaway/plugin-windows`를 등록하고
 플러그인 setup의 실행 컨텍스트로 `context.host.call`을 사용합니다.

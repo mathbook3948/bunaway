@@ -4,7 +4,12 @@ import type {
   NativeMonitorServices,
   WindowSpec,
 } from "@bunaway/plugin-api/native";
-import { uiCleanupSlots, uiLifecycleSlots } from "./windows-ui-cleanup.ts";
+import type { SessionMessageHandler } from "../../native/windows/bun/session-end.ts";
+import {
+  uiCleanupSlots,
+  uiLifecycleSlots,
+  uiWebRequestKinds,
+} from "./windows-ui-cleanup.ts";
 
 // Controlled native boundary for the real UI Worker. No HWND, DLL or COM is loaded.
 const controls = workerData as {
@@ -12,8 +17,11 @@ const controls = workerData as {
   trayFailures?: number;
   cleanup: SharedArrayBuffer;
   lifecycle: SharedArrayBuffer;
+  /** UTF-8 JSON of the next renderer message; its length is in `uiLifecycleSlots.webLength`. */
+  webMessage?: SharedArrayBuffer;
   failCreationNumber?: number;
   creationFailure?: "controller" | "constructor";
+  holdCreationNumber?: number;
 };
 const cleanup = new Int32Array(controls.cleanup);
 const lifecycle = new Int32Array(controls.lifecycle);
@@ -62,6 +70,15 @@ export class Tray {
 
 /** Model only native identity and visibility used by these lifecycle scenarios. */
 export class Windows {
+  /** The UI owner passes its session handler as the fifth argument, as with the real class. */
+  constructor(
+    _shutdown?: () => void,
+    _icon?: string,
+    _appId?: string,
+    _pollMessages?: () => void,
+    private readonly sessionMessage?: SessionMessageHandler,
+  ) {}
+
   validateCreation() {}
 
   private sequence = 0n;
@@ -185,7 +202,25 @@ export class Windows {
     }
     assert(this.windows.delete(hwnd));
   }
-  pump(): void {}
+  /** Delivers one test-requested window message to the UI owner's session handler, like a WndProc. */
+  pump(): void {
+    deliverFixtureWebRequest();
+    if (Atomics.exchange(lifecycle, uiLifecycleSlots.sessionRequest, 0) !== 1) {
+      return;
+    }
+    const result = this.sessionMessage?.(
+      Atomics.load(lifecycle, uiLifecycleSlots.sessionMessage),
+      BigInt(Atomics.load(lifecycle, uiLifecycleSlots.sessionWparam)),
+      BigInt(Atomics.load(lifecycle, uiLifecycleSlots.sessionLparam) >>> 0),
+    );
+    Atomics.store(
+      lifecycle,
+      uiLifecycleSlots.sessionResult,
+      result === undefined ? -1 : Number(result),
+    );
+    Atomics.store(lifecycle, uiLifecycleSlots.sessionDone, 1);
+    Atomics.notify(lifecycle, uiLifecycleSlots.sessionDone);
+  }
   dispose(): void {
     assert.equal(this.windows.size, 0, "Fixture window leaked");
     assert.equal(Atomics.load(cleanup, uiCleanupSlots.com), 1);
@@ -206,6 +241,42 @@ const closeRequests = new Map<
     close(force?: boolean): void;
   }
 >();
+const FIXTURE_SOURCE = "https://app.bunaway.local";
+const webViews = new Map<
+  bigint,
+  {
+    message(source: string, raw: string): void;
+    documentComplete(error: null): void;
+    revoke(reason: string): void;
+  }
+>();
+/** Replay one test-requested renderer action (document completion, navigation or web message) on the UI thread. */
+function deliverFixtureWebRequest(): void {
+  if (Atomics.exchange(lifecycle, uiLifecycleSlots.webRequest, 0) !== 1) {
+    return;
+  }
+  const hwnd = BigInt(Atomics.load(lifecycle, uiLifecycleSlots.webTarget));
+  const target = webViews.get(hwnd);
+  assert(target, "Fixture web target must be a live window.");
+  const kind = Atomics.load(lifecycle, uiLifecycleSlots.webKind);
+  if (kind === uiWebRequestKinds.documentComplete) {
+    target.documentComplete(null);
+  } else if (kind === uiWebRequestKinds.navigation) {
+    target.revoke("navigation");
+  } else if (kind === uiWebRequestKinds.close) {
+    const closeTarget = closeRequests.get(hwnd);
+    assert(closeTarget, "Fixture close target must be a live window.");
+    closeTarget.close(false);
+  } else {
+    assert(controls.webMessage, "Fixture web message buffer is missing.");
+    const length = Atomics.load(lifecycle, uiLifecycleSlots.webLength);
+    // slice() copies out of the shared buffer, which TextDecoder cannot read directly.
+    const bytes = new Uint8Array(controls.webMessage).slice(0, length);
+    target.message(FIXTURE_SOURCE, new TextDecoder().decode(bytes));
+  }
+  Atomics.store(lifecycle, uiLifecycleSlots.webDone, 1);
+  Atomics.notify(lifecycle, uiLifecycleSlots.webDone);
+}
 /** Deliver a controlled WebView close callback through the real UI owner's lifecycle. */
 export function requestFixtureClose(view: string, force: boolean): void {
   const targets = [
@@ -213,6 +284,27 @@ export function requestFixtureClose(view: string, force: boolean): void {
   ].filter((target) => target.view === view);
   assert.equal(targets.length, 1, "Fixture close target must be unique.");
   targets[0]?.close(force);
+}
+/** Controller completion withheld for the creation numbered `holdCreationNumber`, until settled. */
+let heldController:
+  | {
+      ready(): void;
+      fail(): void;
+    }
+  | undefined;
+/**
+ * Completes the withheld controller as ready or failed, as when WebView2 answers late.
+ * Returns whether a controller was waiting.
+ */
+export function settleHeldController(outcome: "ready" | "fail"): boolean {
+  const held = heldController;
+  heldController = undefined;
+  held?.[outcome]();
+  return held !== undefined;
+}
+/** Whether a controller completion is currently withheld. */
+export function hasHeldController(): boolean {
+  return heldController !== undefined;
 }
 /** Match the controller callback's failure plus forced-close notification. */
 export class WebView {
@@ -229,6 +321,9 @@ export class WebView {
     hooks: {
       ready(): void;
       close(force?: boolean): void;
+      message(source: string, raw: string): void;
+      documentComplete(error: null): void;
+      revoke(reason: string): void;
     },
   ) {
     if (
@@ -241,20 +336,29 @@ export class WebView {
       view: spec.view,
       close: hooks.close,
     });
+    webViews.set(hwnd, hooks);
+    const fail = () => {
+      this.failure = new Error("Controller completion failed in fixture");
+      hooks.close(true);
+    };
     queueMicrotask(() => {
-      if (
+      if (this.creationNumber === controls.holdCreationNumber) {
+        heldController = {
+          ready: () => hooks.ready(),
+          fail,
+        };
+      } else if (
         spec.view === controls.failView ||
         this.creationNumber === controls.failCreationNumber
       ) {
-        this.failure = new Error("Controller completion failed in fixture");
-        hooks.close(true);
+        fail();
       } else {
         hooks.ready();
       }
     });
   }
   source(): string {
-    return "https://app.bunaway.local";
+    return FIXTURE_SOURCE;
   }
   navigate(): void {}
   send(): void {}
@@ -268,6 +372,7 @@ export class WebView {
   finish(): boolean {
     Atomics.add(lifecycle, uiLifecycleSlots.finish, 1);
     closeRequests.delete(this.hwnd);
+    webViews.delete(this.hwnd);
     return true;
   }
   canReuseProfile(): boolean {

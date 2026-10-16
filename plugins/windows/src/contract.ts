@@ -7,6 +7,7 @@ import {
   MAX_WINDOWS,
   MIN_WINDOW_COORDINATE,
   MIN_WINDOW_DIMENSION,
+  type WindowAttentionMode,
 } from "@bunaway/plugin-api/native";
 import {
   errorSchema,
@@ -190,6 +191,12 @@ const windowTarget = z.strictObject({
   view: viewTarget.shape.view,
   windowId: viewTarget.shape.view.exactOptional(),
 });
+
+/** Must stay aligned with the plugin API's `WindowAttentionMode`. */
+const attentionMode = z.enum([
+  "untilFocused",
+  "continuous",
+]) satisfies z.ZodType<WindowAttentionMode>;
 
 const windowResult = {
   input: windowTarget,
@@ -523,10 +530,85 @@ export const windowReadinessSchema = {
   ],
   additionalProperties: false,
 } as const;
+/**
+ * One lifetime transition of a single windowId, delivered to every open view whose policy allows
+ * `windows.lifecycle` and `windows.listInstances`.
+ *
+ * - `created`: the native window and its WebView controller exist.
+ * - `ready`: the window's first document reached readiness `ready`; later navigations do not repeat it.
+ *   Not emitted when preparation fails or is cancelled.
+ * - `closed`: the close was committed and its sessions were revoked, including children closed with a
+ *   parent, forced closes and the previous windowId of a recreation.
+ * - `destroyed`: the native window and WebView resources were released, always after `closed`.
+ *
+ * Each phase is emitted at most once per windowId in that order. A window whose creation failed before
+ * `created` emits nothing. Nothing is emitted once app shutdown or session end has begun, because sessions
+ * are being torn down. The closed window's own sessions are revoked first, so it never receives its own
+ * `closed` or `destroyed`. The Windows and macOS hosts emit this event.
+ */
+export const windowLifecycleSchema = {
+  type: "object",
+  properties: {
+    windowId: eventIdentity,
+    viewId: eventIdentity,
+    phase: {
+      enum: [
+        "created",
+        "ready",
+        "closed",
+        "destroyed",
+      ],
+    },
+  },
+  required: [
+    "windowId",
+    "viewId",
+    "phase",
+  ],
+  additionalProperties: false,
+} as const;
+/**
+ * A user close of this window is waiting for the app's decision. Delivered only to the closing window's
+ * own current document, and only while that document listens for it and may call `windows.respondClose`;
+ * otherwise the close proceeds as before (close confirmation, then closing). Answer with
+ * `windows.respondClose({ requestId, allow })`. `requestId` is a positive integer, unique within the
+ * windowId and increasing, so a late answer to an earlier request is rejected.
+ *
+ * Covers the title bar, Alt+F4 and system menu, WebView `window.close()` and the public `windows.close`.
+ * It is not sent for recreation, splashscreen handoff, trusted `windows.destroy`, closing children with a
+ * parent, app quit, shutdown or session end, nor when `closeBehavior` hides the window. While a request is
+ * pending, further user closes of that window are ignored while `windows.close` and `windows.recreate`
+ * fail with BUSY and the wait continues. There is no deadline; a navigation or revoked session of the
+ * document, the document ending its last `windows.closeRequested` subscription (for example after a
+ * listener failure), a forced close, trusted `windows.destroy`, app quit and session end also end the
+ * wait. A request that ends without an answer leaves the window open. The Windows and macOS hosts emit
+ * this event; on macOS the user closes are the title bar button, `performClose:` and the public `windows.close`, since a
+ * WebView `window.close()` does not close the window there.
+ */
+export const windowCloseRequestedSchema = {
+  type: "object",
+  properties: {
+    windowId: eventIdentity,
+    viewId: eventIdentity,
+    requestId: {
+      type: "integer",
+      minimum: 1,
+      maximum: Number.MAX_SAFE_INTEGER,
+    },
+  },
+  required: [
+    "windowId",
+    "viewId",
+    "requestId",
+  ],
+  additionalProperties: false,
+} as const;
 /** Ordered native transitions and preparation snapshots, subject to view event policy. */
 export const windowEvents = {
+  "windows.closeRequested": windowCloseRequestedSchema,
   "windows.monitorsChanged": monitorChangeSchema,
   "windows.readiness": windowReadinessSchema,
+  "windows.lifecycle": windowLifecycleSchema,
   "windows.changed": {
     ...windowSnapshotSchema,
     properties: {
@@ -814,6 +896,22 @@ export const windowOperations = {
     input: windowTarget,
     output: z.boolean(),
   },
+  /**
+   * Answers the pending `windows.closeRequested` request of the target window. `allow: true` lets the
+   * close continue without the target's own close confirmation; `false` keeps the window open.
+   * Fails with INVALID_ARGUMENT when `requestId` is not pending (answered, cancelled or never sent).
+   * Only the trusted backend or the document of the asked window may answer; any other caller fails
+   * with PERMISSION_DENIED, even with a valid `requestId`.
+   */
+  "windows.respondClose": {
+    input: z.strictObject({
+      view: viewTarget.shape.view,
+      windowId: viewTarget.shape.view.exactOptional(),
+      requestId: z.int().min(1).max(Number.MAX_SAFE_INTEGER),
+      allow: z.boolean(),
+    }),
+    output: z.null(),
+  },
   "windows.destroy": windowStateResult,
   "windows.setParent": {
     input: z.strictObject({
@@ -876,6 +974,13 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isSkipTaskbar": windowStateResult,
+  "windows.requestAttention": {
+    input: windowTarget.extend({
+      mode: attentionMode.exactOptional(),
+    }),
+    output: z.null(),
+  },
+  "windows.cancelAttention": windowResult,
   "windows.setMinimizable": {
     input: windowTarget.extend({
       minimizable: z.boolean(),
