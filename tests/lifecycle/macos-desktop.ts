@@ -303,7 +303,8 @@ const scenarios: Scenario[] = [
       "onQuit:session-end",
     ],
     hostStoppedOptional: true,
-    verify: verifyMainThreadStayedAlive,
+    // The quit event comes from another process, not the driver, so no driver tick mark exists;
+    // the reply arriving after cleanup and within the wait budget shows the main thread kept running.
     waitsForQuitReply: true,
   },
   {
