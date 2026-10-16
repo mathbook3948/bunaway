@@ -104,7 +104,11 @@ export function appName(title: unknown, identifier: string): string {
   return title === undefined ? identifier : boundedText("app title", title);
 }
 
-/** Combines host-known metadata with the runtime versions the host measured. */
+/**
+ * Combines host-known metadata with the runtime versions the host measured.
+ * Rejects when `metadata` is absent, because hosts must always supply it and a
+ * `TypeError` on a missing property would not say so.
+ */
 export function toAppInfo(
   metadata: AppMetadata,
   runtime: {
@@ -112,6 +116,12 @@ export function toAppInfo(
     readonly webview: string | null;
   },
 ): AppInfo {
+  // The type says present; JavaScript callers and stale hosts can still omit it.
+  if (!metadata || typeof metadata !== "object") {
+    throw new Error(
+      "Missing app metadata: the host must pass the app name, identifier and versions.",
+    );
+  }
   return {
     name: metadata.name,
     identifier: metadata.identifier,

@@ -71,6 +71,7 @@ async function verifyOpenUrls(repoDir: string): Promise<void> {
           generation: crypto.randomUUID(),
         },
         backendContext: "open-urls-backend" as HostContext,
+        appMetadata: testAppMetadata,
         assets: root,
         dataRoot,
         loader: resolve(

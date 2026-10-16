@@ -15,7 +15,9 @@ AppDefinition을 default export한다.
 패키지 manifest의 앱과 프레임워크 버전을 `AppMetadata`로 모으고 `toAppInfo`가 Bun과 WebView 버전을 더해 `AppInfo`를 만든다.
 `runBunApp`은 이 `AppMetadata`를 `connection.app`으로 받는다.
 `appName(title, identifier)`은 `title`이 없으면 식별자를 이름으로 쓰고, `readPackageVersions`는 패키지 `manifest.json`이
-없으면 버전을 `null`로 둔다. `isAppInfoText`는 CLI와 호스트가 함께 쓰는 문자열 규칙(비어 있지 않고 1024자 이하)이다.
+없으면 버전을 `null`로 둔다. Windows 호스트가 이 함수를 쓴다. macOS 호스트는 `manifest.json`을 필수로 읽고
+`parsePackageVersions`로 파싱한다. `isAppInfoText`는 CLI와 호스트가 함께 쓰는 문자열 규칙(비어 있지 않고
+1024 UTF-16 코드 유닛 이하)이다.
 
 호스트가 보낸 boot의 정책, 백엔드 컨텍스트, 런타임 세대로 `createCore`를 만들고
 플러그인 초기화와 hello 협상 뒤 ready를 보낸다. 초기화 중에도 Host API 요청을

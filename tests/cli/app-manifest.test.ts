@@ -19,6 +19,7 @@ import {
   appName,
   parsePackageVersions,
   readPackageVersions,
+  toAppInfo,
 } from "@bunaway/runtime-bun/app-metadata";
 import { appModules, pluginImportsSource } from "#cli/app-modules";
 import { readAppVersions } from "#cli/app-versions";
@@ -615,4 +616,15 @@ test("generated process backend embeds app metadata as a build-time constant", a
       force: true,
     });
   }
+});
+
+test("toAppInfo rejects missing app metadata with a clear message", () => {
+  expect(() =>
+    toAppInfo(undefined as never, {
+      bun: Bun.version,
+      webview: null,
+    }),
+  ).toThrow(
+    "Missing app metadata: the host must pass the app name, identifier and versions.",
+  );
 });

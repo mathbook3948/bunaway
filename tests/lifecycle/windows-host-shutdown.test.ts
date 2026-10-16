@@ -320,6 +320,7 @@ async function checkShutdownDuringStart(
     `,
     );
     const config = {
+      appMetadata: testAppMetadata,
       runtime: {
         id: "windows-start-race",
         generation: crypto.randomUUID(),

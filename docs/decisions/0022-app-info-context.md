@@ -32,8 +32,8 @@ status: accepted
 | --- | --- |
 | `name` | 앱 설정의 `title`. 매니페스트에 `title`이 없는 이전 패키지는 `appId`를 쓴다. |
 | `identifier` | 앱 설정의 `appId`. 런타임 앱 ID이며 패키징의 `bundle.identifier`가 아니다. |
-| `version` | 빌드가 패키지 `manifest.json`의 `app.version`에 기록한 앱 `package.json`의 버전. 없거나 패키지 `manifest.json` 파일 자체가 없으면 `null` |
-| `runtime.framework` | 빌드가 `framework.version`에 기록한 프레임워크 버전. 없으면 `null` |
+| `version` | 빌드가 패키지 `manifest.json`의 `app.version`에 기록한 앱 `package.json`의 버전. 필드가 없으면 `null`. Windows에서는 패키지 `manifest.json` 파일 자체가 없어도 `null` |
+| `runtime.framework` | 빌드가 `framework.version`에 기록한 프레임워크 버전. 필드가 없으면 `null`. 빌드는 앱이나 프레임워크 `package.json`에 `version`이 없으면 해당 필드를 생략한다. |
 | `runtime.bun` | `Bun.version` |
 | `runtime.webview` | 아래 플랫폼별 규칙. 알 수 없으면 `null` |
 
@@ -44,8 +44,10 @@ status: accepted
 호환성과 검증 규칙은 다음과 같다.
 
 - 이 기능 이전에 만든 패키지와 도구가 직접 구성한 패키지는 패키지 `manifest.json`이나 `title`이 없을 수 있다.
-  Windows와 macOS 호스트는 파일이 없을 때(`ENOENT`)만 `version`과 `framework`를 `null`로 두고,
-  `title`이 없으면 `name`을 `appId`로 대신한다. 다른 읽기 오류와 값이 있는데 잘못된 경우에는 시작이 실패한다.
+  Windows 호스트는 `manifest.json` 파일이 없을 때(`ENOENT`)만 `version`과 `framework`를 `null`로 둔다.
+  macOS 호스트는 기존처럼 `manifest.json`이 반드시 있어야 하며 없으면 시작이 실패한다. 두 호스트 모두
+  `app.version`이나 `framework.version` 필드가 없으면 `null`로 두고 `title`이 없으면 `name`을 `appId`로
+  대신한다. 다른 읽기 오류와 값이 있는데 잘못된 경우에는 시작이 실패한다.
 - 빌드는 같은 한도를 먼저 검사한다. `bunaway.json`의 `app.title`과 앱, 프레임워크 `package.json`의 `version`
   (있을 때)이 비어 있지 않은 문자열이 아니거나 한도를 넘으면 설정 로드나 빌드가 실패한다.
   모든 검사는 `@bunaway/runtime-bun/app-metadata`의 `isAppInfoText`를 쓴다.
