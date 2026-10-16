@@ -49,11 +49,16 @@ const SAVE_IID = guid("84bccd23-5fde-4cdb-aea4-af64b83d78ab");
 const OLE_WINDOW_IID = guid("00000114-0000-0000-c000-000000000046");
 const SHELL_ITEM_IID = guid("43826d1e-e718-42ee-bc55-a1e261c37bfe");
 
-function check(result: number, stage: string): void {
+/** Throw a generic INTERNAL error carrying only the failing stage and HRESULT when `result` is negative. */
+export function check(
+  result: number,
+  stage: string,
+  message = "Windows file dialog failed.",
+): void {
   if (result < 0) {
     throw new BunawayError({
       code: "INTERNAL",
-      message: "Windows file dialog failed.",
+      message,
       details: {
         stage,
         hresult: result >>> 0,

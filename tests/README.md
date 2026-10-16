@@ -1115,7 +1115,8 @@ TrackPopupMenuEx 모달 루프를 끝내고 핸들을 해제한다. 메뉴 막�
 호출 실패, 정리를 검사한다. 이후 tick에서 Close가 수락되면 앞선 Close 실패보다 우선해
 취소로 처리하는지도 검사한다. `lifecycle/windows-dialog.test.ts`는 실제 UI STA와 COM 파일
 대화상자에서 파일, 폴더와 저장 경로, 네이티브 OK/Cancel 명령, 직렬 실행, abort와 shutdown을
-검사하며 `host:windows`에 포함한다. 물리 입력과 overwrite UI, 다중 선택 UI 및 실제 소유 창
+검사한다. 메시지 대화상자는 abort 뒤 복구, 취소 버튼이 없을 때 무시되는 IDCANCEL, 주입한
+Escape와 Enter 키 메시지도 검사하며 `host:windows`에 포함한다. 물리 입력과 overwrite UI, 다중 선택 UI 및 실제 소유 창
 파괴는 별도 검증이다. `worker-packets.test.ts`는 검증한 모달 제어 패킷의 의도 관측이 즉시
 실행되고 일반 dispatch와 자원 변경은 Promise 작업으로 지연되는지 검사한다.
 

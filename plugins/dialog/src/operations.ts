@@ -1,5 +1,7 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import {
+  messageResultSchema,
+  messageSchema,
   openFileSchema,
   resultSchema,
   saveFileSchema,
@@ -27,5 +29,11 @@ export const dialogOperations = {
     output: resultSchema,
     handler: (input, { instance, source, signal, requestId }) =>
       instance.show("saveFile", input, source, signal, requestId),
+  }),
+  showMessage: operation({
+    input: messageSchema,
+    output: messageResultSchema,
+    handler: (input, { instance, source, signal, requestId }) =>
+      instance.showMessage(input, source, signal, requestId),
   }),
 };
