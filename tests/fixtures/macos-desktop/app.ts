@@ -9,7 +9,9 @@ import { readDesktopFixture } from "./fixture-config.ts";
  * the fixture file in the data root (the backend Worker's `HOME`), so one compiled app serves every
  * scenario. Each hook appends one line to the log; the test asserts the order. The script for a
  * scenario runs in the backend and drives AppKit through the UI-thread `driver` plugin, never
- * through the page.
+ * through the page. Desktop hooks run outside any Host API scope, so the scripts do not start from
+ * `onOpen`: the "scenario-runner" plugin starts them in its `setup` scope, which stays alive until
+ * shutdown, and `onOpen` only signals that the first open happened.
  */
 const dataRoot = process.env.HOME;
 if (!dataRoot) {
@@ -186,6 +188,11 @@ const scripts: Record<string, () => Promise<void>> = {
 
 let vetoes = scenario === "quit-veto" ? 1 : 0;
 let opened = false;
+/** Settles when the first `onOpen` ran; the runner plugin waits for it before it starts the script. */
+let signalFirstOpen: () => void = () => undefined;
+const firstOpen = new Promise<void>((resolve) => {
+  signalFirstOpen = resolve;
+});
 
 export default defineApp({
   modules: [],
@@ -197,6 +204,25 @@ export default defineApp({
       version: "1",
       setup() {
         return () => log("stopHook");
+      },
+    },
+    // After `driver` and `windows`: the script calls both from this setup scope, which the
+    // `backend.permissions` of the fixture policy authorize.
+    {
+      name: "scenario-runner",
+      version: "1",
+      setup() {
+        const script = scripts[scenario];
+        if (!script) {
+          throw new Error(`Unknown scenario ${scenario}.`);
+        }
+        // Not awaited: setup must finish for the app to start, and the first open comes after it.
+        void (async () => {
+          await firstOpen;
+          await script();
+        })().catch((error) => {
+          log(`script-failed:${String(error).replaceAll("\n", " ")}`);
+        });
       },
     },
   ],
@@ -290,13 +316,7 @@ export default defineApp({
         return;
       }
       opened = true;
-      const script = scripts[scenario];
-      if (!script) {
-        throw new Error(`Unknown scenario ${scenario}.`);
-      }
-      void script().catch((error) => {
-        log(`script-failed:${String(error).replaceAll("\n", " ")}`);
-      });
+      signalFirstOpen();
     },
     beforeQuit(reason) {
       log(`beforeQuit:${reason}`);
@@ -312,7 +332,7 @@ export default defineApp({
     async onWillQuit(reason) {
       log(`onWillQuit:${reason}`);
       if (scenario === "quit-veto") {
-        // Shutdown is committed, so host operations are cancelled.
+        // The hook has no Host API scope, so a host operation fails with INVALID_ARGUMENT.
         const code = await windows.list().then(
           () => "RESOLVED",
           (error: unknown) => codeOf(error),

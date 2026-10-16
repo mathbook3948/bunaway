@@ -220,8 +220,11 @@ macOS에서 사용자 결정 없이 마지막 창이 사라지는 창 생성 실
 `onReady`, `onAllWindowsClosed`, `onWillQuit`과 `onQuit`이 예외를 던지거나 거부하면 진단을 남기고
 앱은 실행이나 종료를 이어 갑니다. `onWillQuit`과 `onQuit`은 각각 최대 3초까지만 기다립니다.
 기한이 지나면 진단을 남기고 종료를 계속하므로 이 두 훅에서는 짧은 정리 작업만 합니다.
-`onWillQuit`이 실행될 때 호스트는 이미 종료 중이라 이 훅 안의 창이나 클립보드 같은 호스트 작업은
-항상 `CANCELLED`로 실패합니다. 상태 저장과 앱 자원 정리처럼 앱 내부 작업만 합니다.
+`onWillQuit`은 Host API 범위 밖에서 실행하므로 이 훅 안에서 창이나 클립보드 같은 호스트 작업을 직접 부르면
+`INVALID_ARGUMENT`로 실패합니다. 앞서 명령이나 플러그인 `setup`이 시작한 작업은 종료가 확정된 시점부터
+(`onWillQuit` 실행 중 포함) `CANCELLED`로 실패합니다. 상태 저장과 앱 자원 정리처럼 앱 내부 작업만 합니다.
+`onReady`, `onOpen`, `onAllWindowsClosed`, `beforeQuit`도 Host API 범위 밖에서 실행합니다. 호스트 API는 명령이나
+플러그인 `setup`(과 그 안에서 시작한 작업)에서 부르고, 훅에서는 인자로 받는 `DesktopContext`의 `show`, `hide`, `quit`만 사용합니다.
 호스트 실패(시작 실패, UI Worker 중단)에서는 두 훅을 호출하지 않습니다.
 
 ### 세션 종료

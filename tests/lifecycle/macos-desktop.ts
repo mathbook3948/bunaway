@@ -91,7 +91,7 @@ const scenarios: Scenario[] = [
         at(lines, "pageRoundTrip:quit-veto") >
           at(lines, "beforeQuit:quit-command"),
       );
-      at(lines, "onWillQuitHostOperation:CANCELLED");
+      at(lines, "onWillQuitHostOperation:INVALID_ARGUMENT");
     },
   },
   {

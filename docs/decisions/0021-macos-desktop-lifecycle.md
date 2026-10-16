@@ -97,18 +97,34 @@ SIGINT와 SIGTERM은 `"interrupted"`로 `beforeQuit`를 우회한다. 사용자 
 
 ### 세션 종료
 
-`NSWorkspaceWillPowerOffNotification`, 또는 `keyAEQuitReason`이 `kAEReallyLogOut`, `kAERestart`,
-`kAEShutDown`인 quit Apple event는 `"session-end"`로 취소할 수 없는 종료를 확정한다.
+`keyAEQuitReason`이 `kAELogOut`(`logo`), `kAEReallyLogOut`(`rlgo`), `kAERestart`(`rest`),
+`kAEShutDown`(`shut`)인 quit Apple event, 또는 `NSWorkspaceWillPowerOffNotification`은
+`"session-end"`로 취소할 수 없는 종료를 확정한다. loginwindow는 세션이 끝날 때 이 네 값 중 하나를
+이유로 담아 quit 이벤트를 보내며, `kAELogOut`은 사용자가 대화상자를 확인한 뒤의 로그아웃이다.
+`kAEShowRestartDialog`(`rrst`)와 `kAEShowShutdownDialog`(`rsdn`)는 앱에 확인 대화상자를 표시하라고
+요청할 뿐 세션을 끝내지 않으므로 일반 Quit 명령으로 처리한다.
 `beforeQuit`를 호출하지 않고 대기 중인 거부는 무시한다. 닫기 요청도 버린다.
 
 호스트는 `finishLaunching` 뒤에 quit Apple event(`kCoreEventClass` `aevt`, `kAEQuitApplication`
 `quit`)의 핸들러를 `NSAppleEventManager`로 직접 설치해 AppKit의 기본 핸들러를 대체한다. 그래서 quit
-이벤트는 `terminate:`에 닿지 않는다. 종료 이유가 `rlgo`, `rest`, `shut`이거나
+이벤트는 `terminate:`에 닿지 않는다. 종료 이유가 `logo`, `rlgo`, `rest`, `shut`이거나
 `NSWorkspaceWillPowerOffNotification` 뒤라면 핸들러는 취소할 수 없는 종료를 확정하고
 `suspendCurrentAppleEvent`로 이벤트를 보류한 뒤 곧바로 반환한다. 호스트는 앱 정리(`onWillQuit`,
 플러그인 StopHook, 하위 프로세스와 I/O 정리)가 끝나면, 또는 4초(`SESSION_END_WAIT_MS`) 뒤 중 먼저
 오는 때에, 보류한 모든 이벤트를 `resumeWithSuspensionID:`로 재개한다. 응답은 오류가 아닌 성공이라
 로그아웃을 취소하지 않는다. 애플리케이션 객체를 닫을 때도 재개한다.
+
+핸들러는 애플리케이션 객체와 별개인 프로세스 수명의 대상 객체에 등록하고 `close()`에서 제거하지
+않는다. 공개 API로는 AppKit의 이전 핸들러를 복원할 수 없고, 제거하면 `close()` 뒤에 도착하는 quit
+이벤트(예: 세션 종료의 나머지 구간)가 `errAEEventNotHandled`를 받아 loginwindow가 앱이 로그아웃을
+취소했다고 볼 수 있다. 그래서 `close()` 뒤에는 살아 있는 애플리케이션이 없으므로 오류 없이 반환해
+AppKit이 즉시 성공 응답을 보내게 한다.
+
+`NSWorkspaceWillPowerOffNotification`은 AppKit이 프로세스 안에서 게시하는 알림이다. 호스트가 AppKit의
+기본 quit 핸들러를 대체한 뒤에도 게시하는지는 Apple 문서에 없고, 이 저장소에서는 macOS와 웹 접근이
+없어 확인하지 못했다. 따라서 세션 종료 계약은 quit Apple event의 `keyAEQuitReason`(`logo`, `rlgo`,
+`rest`, `shut`)만으로 성립한다. 알림은 더 이른 시점에 오는 추가 신호일 뿐이며, 정확성은 알림이
+오는지에 의존하지 않는다.
 이후 호스트의 정상 종료 절차가 프로세스를 끝내지만 운영체제가 응답 직후 끝낼 수 있으므로
 `onQuit`과 마지막 네이티브 정리는 보장하지 않는다.
 이는 Windows `WM_ENDSESSION` 처리와 같은 4초 예산과 같은 보장 범위다.
