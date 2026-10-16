@@ -166,29 +166,33 @@ test.skipIf(process.platform !== "win32")(
       windows.setAlwaysOnTop(hwnd, false);
       windows.pump();
       expect(events).toHaveLength(beforeSameAlwaysOnTop);
-      // Calling SetWindowPos directly simulates another process changing Z order
-      // and reaches the window through the same native position message.
+      // A same-thread direct SetWindowPos call exercises the same
+      // WM_WINDOWPOSCHANGED path that other processes' calls go through.
       checkAlwaysOnTop("enterAlwaysOnTop", () =>
-        driver.symbols.SetWindowPos(
-          hwnd,
-          HWND_TOPMOST,
-          0,
-          0,
-          0,
-          0,
-          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-        ),
+        expect(
+          driver.symbols.SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+          ),
+        ).not.toBe(0),
       );
       checkAlwaysOnTop("leaveAlwaysOnTop", () =>
-        driver.symbols.SetWindowPos(
-          hwnd,
-          HWND_NOTOPMOST,
-          0,
-          0,
-          0,
-          0,
-          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-        ),
+        expect(
+          driver.symbols.SetWindowPos(
+            hwnd,
+            HWND_NOTOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+          ),
+        ).not.toBe(0),
       );
       for (let index = 1; index < events.length; index++) {
         expect(events[index]?.snapshot.revision).toBeGreaterThan(
@@ -269,6 +273,77 @@ test.skipIf(process.platform !== "win32")(
       }
       windows.dispose();
       driver.close();
+    }
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
+  "real Win32 owner always-on-top changes keep owned window events consistent with queries",
+  async () => {
+    const { Windows } = await import("#native/windows/bun/win32");
+    const windows = new Windows(() => {});
+    const created: bigint[] = [];
+    try {
+      const create = (title: string) => {
+        const hwnd = windows.create(title, 400, 300, () => {}, false);
+        created.push(hwnd);
+        return hwnd;
+      };
+      const owner = create("Always on top owner");
+      const shownOwned = create("Always on top shown owned");
+      const hiddenOwned = create("Always on top hidden owned");
+      windows.setOwner(shownOwned, owner);
+      windows.setOwner(hiddenOwned, owner);
+      windows.show(owner, true);
+      windows.show(shownOwned, true);
+      windows.pump();
+      const observed = [
+        owner,
+        shownOwned,
+        hiddenOwned,
+      ].map((hwnd) => {
+        const events: {
+          snapshot: WindowSnapshot;
+          changes: WindowChange[];
+        }[] = [];
+        windows.observe(hwnd, "main", (snapshot, changes) =>
+          events.push({
+            snapshot,
+            changes,
+          }),
+        );
+        return {
+          hwnd,
+          events,
+          baseline: windows.getSnapshot(hwnd),
+        };
+      });
+      for (const value of [
+        true,
+        false,
+      ]) {
+        windows.setAlwaysOnTop(owner, value);
+        windows.pump();
+        // Read the last event before getSnapshot, which would refresh the
+        // committed snapshot and hide a missed notification. Propagation to
+        // owned windows is OS-defined (a hidden owned window in particular),
+        // so only event and query consistency is asserted for them.
+        for (const { hwnd, events, baseline } of observed) {
+          const reported = (events.at(-1)?.snapshot ?? baseline).state
+            .alwaysOnTop;
+          expect(reported).toBe(windows.isAlwaysOnTop(hwnd));
+        }
+        expect(windows.isAlwaysOnTop(owner)).toBe(value);
+        console.log(
+          `alwaysOnTop=${value}: shown owned window topmost=${windows.isAlwaysOnTop(shownOwned)}`,
+        );
+      }
+      expect(windows.failure).toBeUndefined();
+    } finally {
+      for (const hwnd of created.reverse()) {
+        windows.destroy(hwnd);
+      }
+      windows.dispose();
     }
   },
 );

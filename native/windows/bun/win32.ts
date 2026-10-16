@@ -915,6 +915,33 @@ export class Windows {
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER,
       ),
     );
+    // Win32 propagates topmost to owned windows. Re-read them so their committed
+    // snapshots match even if no position message arrives. Unchanged snapshots
+    // are suppressed, so this is a no-op when Windows already notified them.
+    for (const observed of [
+      ...this.observations.keys(),
+    ]) {
+      if (observed !== window && this.isOwnedBy(observed, window)) {
+        this.observeChanges(observed);
+      }
+    }
+  }
+
+  /** Walks the owner chain of a live window; Win32 owner chains are acyclic. */
+  private isOwnedBy(window: bigint, owner: bigint): boolean {
+    if (!user.symbols.IsWindow(window)) {
+      return false;
+    }
+    for (
+      let current = this.getOwner(window);
+      current !== 0n;
+      current = this.getOwner(current)
+    ) {
+      if (current === owner) {
+        return true;
+      }
+    }
+    return false;
   }
 
   isSkipTaskbar(window: bigint): boolean {
