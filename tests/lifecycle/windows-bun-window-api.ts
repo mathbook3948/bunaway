@@ -8,7 +8,7 @@ import windows from "@bunaway/plugin-windows";
 import type { HostContext, Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { Windows } from "#native/windows/bun/win32";
-import { user } from "#native/windows/bun/win32-bindings";
+import { hr, ole, user } from "#native/windows/bun/win32-bindings";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
@@ -163,6 +163,8 @@ if (!process.argv.includes("--child")) {
       returns: "u32",
     },
   });
+  // No ui.ts here, so this block owns the STA that AccPropServices and the windows need.
+  hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   const nativeWindows = new Windows(() => {});
   try {
     const source = nativeWindows.create(
@@ -625,7 +627,11 @@ if (!process.argv.includes("--child")) {
       }
     }
   } finally {
-    nativeWindows.dispose();
+    try {
+      nativeWindows.dispose();
+    } finally {
+      ole.symbols.CoUninitialize();
+    }
   }
   // Keep transient hidden-state checks in host:windows even when the general test suite
   // runs before WebView2 inputs are prepared and skips its platform-specific coverage.

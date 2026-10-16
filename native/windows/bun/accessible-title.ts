@@ -8,9 +8,6 @@ const CLSCTX_SERVER = 5;
 /** OBJID_CLIENT as the unsigned DWORD that IAccPropServices expects. */
 const OBJID_CLIENT = 0xfffffffc;
 const CHILDID_SELF = 0;
-const COINIT_APARTMENTTHREADED = 2;
-/** RPC_E_CHANGED_MODE: COM already initialized on this thread with a different model. */
-const RPC_E_CHANGED_MODE = -2147417850;
 /** IAccPropServices vtable slots, in oleacc.idl order after IUnknown. */
 const SLOT_RELEASE = 2;
 const SLOT_SET_HWND_PROP_STR = 7;
@@ -22,7 +19,9 @@ type BindingType = "u64" | "u32" | "i32" | "ptr";
  * Own IAccPropServices and the per-window accessible name annotations applied through it.
  *
  * The object is created lazily on first use and must only be called from the UI STA. The Win32
- * window manager owns the instance. IAccPropServices has no getter, so the last applied value of
+ * window manager owns the instance. This class does not initialize or release COM: the STA is
+ * owned by ui.ts (or by the caller when Windows is used without it), so the instance must be
+ * disposed before that owner calls CoUninitialize. IAccPropServices has no getter, so the last applied value of
  * each window is cached in this process and the cache is the source of `get`.
  *
  * COM symbols stay in this module (not win32-bindings) so fixture mocks of win32-bindings do not
@@ -77,14 +76,8 @@ export class AccessibleTitles {
     if (this.object) {
       return;
     }
-    // Lifecycle tests construct Windows without ui.ts; AccProp still needs an STA.
     const library = openLibrary();
     this.library = library;
-    const init = library.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED);
-    if (init < 0 && init !== RPC_E_CHANGED_MODE) {
-      this.dispose();
-      hr(init, "CoInitializeEx(STA)");
-    }
     const out = new BigUint64Array(1);
     const clsid = guid("b5f8350b-0548-48b1-a6ee-88bd00b4a5e7");
     const iid = guid("6e26e776-04f0-495d-80e4-3330352e3169");
@@ -217,13 +210,6 @@ export class AccessibleTitles {
 
 function openLibrary() {
   return dlopen("ole32.dll", {
-    CoInitializeEx: {
-      args: [
-        "ptr",
-        "u32",
-      ],
-      returns: "i32",
-    },
     CoCreateInstance: {
       args: [
         "ptr",
