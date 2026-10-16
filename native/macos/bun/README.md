@@ -49,7 +49,8 @@ WebView를 위한 추가 네이티브 바이너리는 필요하지 않다.
 (`visible: false`, `showWhenReady`)을 제공한다. 창 ID는 네이티브 창을 만들거나 재생성할 때마다
 새로 발급하며 뷰마다 창 하나만 지원한다. `getSnapshot`, `windows.changed`, 크기와 위치,
 상태 변경, `activate`, 다중 인스턴스 등 다른 창 작업은 `UNSUPPORTED`다. 로그와 기능 조회는
-등록한 I/O 어댑터로 실행한다. `desktop`, 저장과 opener 어댑터는 지원하지 않는다.
+등록한 I/O 어댑터로 실행한다. `desktop`은 트레이와 `closeBehavior: "hide"`를 제외하고 지원한다
+([ADR 0021](../../../docs/decisions/0021-macos-desktop-lifecycle.md)). 저장과 opener 어댑터는 지원하지 않는다.
 
 창마다 임시 `WKWebsiteDataStore`를 따로 만들고 같은 뷰의 재생성에서 유지한다.
 앱 실행이 끝나면 데이터는 남기지 않는다. 보조 창을 닫으면 해당 세션과 창만 정리하며,
@@ -65,7 +66,10 @@ WebView를 위한 추가 네이티브 바이너리는 필요하지 않다.
 `webkit-version.ts`는 시스템 WebKit 번들의 `CFBundleShortVersionString`(없으면 `CFBundleVersion`)을 읽는다.
 `entry.ts`가 백엔드 Worker를 시작하기 전에 메인 스레드에서 한 번 조회해 Worker에 넘기며, 실패는 `webview-version-unavailable`로 기록하고 값을 `null`로 둔다.
 `process-group.ts`는 하위 프로세스의 종료와 호스트 비정상 종료 감시를 소유한다.
-`application.ts`는 앱 delegate와 모든 창이 공유하는 이벤트 루프를 소유한다.
+`application.ts`는 앱 delegate, 최소 메인 메뉴, 종료 Apple event 핸들러와 모든 창이 공유하는 이벤트 루프를 소유한다.
+`desktop-requests.ts`는 백엔드가 `desktop` 옵션을 보고하기 전의 Quit과 재활성화를 보류하고,
+`quit-reason.ts`와 `session-end-termination.ts`는 종료 원인 분류와 세션 종료의 응답 보류를,
+`backend-shutdown.ts`는 백엔드 쪽 종료 순서를 맡는다.
 `objc.ts`는 Objective-C FFI 바인딩과 콜백을, `webview.ts`는 개별 AppKit 창과 WKWebView를 소유한다.
 개별 창 정리는 앱 delegate나 이벤트 루프를 해제하지 않는다.
 카탈로그와 플러그인 검증, 응답 변환은 `native/host-api/bun`에서 Windows와 공유한다.

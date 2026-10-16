@@ -543,6 +543,48 @@ test("typed SDK native subscription validates, denies, releases and isolates rec
   }
 });
 
+test("windows.lifecycle payload accepts only the four phases and no extra fields", () => {
+  const lifecycle = {
+    windowId: "window-1",
+    viewId: "editor",
+    phase: "created",
+  };
+  for (const phase of [
+    "created",
+    "ready",
+    "closed",
+    "destroyed",
+  ] as const) {
+    expect(
+      validateValue(windowEvents["windows.lifecycle"], {
+        ...lifecycle,
+        phase,
+      }),
+    ).toEqual({
+      ...lifecycle,
+      phase,
+    });
+  }
+  for (const invalid of [
+    {
+      ...lifecycle,
+      phase: "shown",
+    },
+    {
+      ...lifecycle,
+      extra: true,
+    },
+    {
+      windowId: lifecycle.windowId,
+      phase: lifecycle.phase,
+    },
+  ]) {
+    expect(() =>
+      validateValue(windowEvents["windows.lifecycle"], invalid),
+    ).toThrow();
+  }
+});
+
 test("native Worker event direction, bounded ingress and independent shutdown capacity", async () => {
   const route: Route = {
     viewId: "main",
@@ -589,6 +631,7 @@ test("native Worker event direction, bounded ingress and independent shutdown ca
       channel
         .send({
           kind: "closing",
+          reason: "window-destroyed",
         })
         .catch((error: unknown) => error),
     );

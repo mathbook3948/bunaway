@@ -1,5 +1,10 @@
 import { parentPort, workerData } from "node:worker_threads";
-import { type Core, type CoreSession, createCore } from "@bunaway/core";
+import {
+  type Core,
+  type CoreSession,
+  createCore,
+  type ShutdownReason,
+} from "@bunaway/core";
 import {
   BunawayError,
   type CancellationSignal,
@@ -14,6 +19,8 @@ import {
   type Packet,
   type Route,
 } from "@bunaway/runtime-bun/worker-channel";
+import { DesktopLifecycle } from "../../windows/bun/desktop.ts";
+import { runBackendShutdown } from "./backend-shutdown.ts";
 import type { MacosBackendData } from "./config.ts";
 
 const config: MacosBackendData = workerData;
@@ -23,6 +30,25 @@ if (!parentPort) {
 let core: Core | undefined;
 let stopping = false;
 let booting: Promise<Core> | undefined;
+/** Runs the app's `desktop` callbacks; undefined until the app definition loaded, or when loading failed. */
+let desktop: DesktopLifecycle | undefined;
+/** Settles once loading the app definition ended, in success or failure, so shutdown never races it. */
+const appLoaded = Promise.withResolvers<void>();
+/**
+ * True once an orderly shutdown cause was committed: an approved quit, or `closing` from the main
+ * thread. A host failure never sets it, which is what skips `onWillQuit` and `onQuit`.
+ */
+let orderly = false;
+/**
+ * True from the moment a shutdown was committed, before the `shutdown` packet arrives (which sets
+ * `stopping`). Native events such as window lifecycle and close requests are dropped from then on,
+ * so the app sees none after it approved a quit. Separate from `stopping`, which gates `shutdown`.
+ */
+let shutdownCommitted = false;
+/** First cause the main thread reported through `closing`, kept for a lifecycle that does not exist yet. */
+let reportedCause: ShutdownReason | undefined;
+/** Settles when the main thread has torn down all native resources (`native-stopped`). */
+const nativeStopped = Promise.withResolvers<void>();
 const sessions = new Map<
   string,
   {
@@ -49,6 +75,23 @@ function takeCall(requestId: string) {
   }
   return call;
 }
+/** Reports a failed app callback or an overrun shutdown hook to the host log; the app keeps running. */
+function reportDesktopFailure(error: unknown) {
+  console.error("Desktop callback failed:", error);
+  // Diagnostics are best effort: a full or closed channel must not turn a callback failure into a host failure.
+  void channel
+    .send({
+      kind: "diagnostic",
+      event: "desktop-callback-failed",
+      fields: {
+        message: (error instanceof Error ? error.message : String(error)).slice(
+          0,
+          1024,
+        ),
+      },
+    })
+    .catch(() => {});
+}
 let failed = false;
 const fail = (error: unknown) => {
   if (failed) {
@@ -64,6 +107,13 @@ const fail = (error: unknown) => {
     },
   });
 };
+/** Main-thread desktop packets only follow `desktop-config`, which is sent after the lifecycle exists. */
+function requireDesktop(): DesktopLifecycle {
+  if (!desktop) {
+    throw new Error("Desktop lifecycle is not ready.");
+  }
+  return desktop;
+}
 const channel = new Channel(
   parentPort,
   config.runtime,
@@ -75,6 +125,39 @@ const channel = new Channel(
         throw new Error("Invalid host response context.");
       }
       takeCall(packet.requestId)?.resolve(packet.response);
+      return;
+    }
+    if (packet.kind === "quit-request") {
+      // Accept the request immediately so the main thread's shutdown can still be delivered
+      // while the app is deciding in beforeQuit.
+      void requireDesktop()
+        .quit(packet.reason)
+        .then(async (allowed) => {
+          if (!allowed && !stopping) {
+            await channel.send({
+              kind: "quit-cancelled",
+            });
+          }
+        })
+        .catch(fail);
+      return;
+    }
+    if (packet.kind === "closing") {
+      // The main thread decided alone (signal, session end, vanished last window): the first cause wins.
+      orderly = true;
+      shutdownCommitted = true;
+      reportedCause ??= packet.reason;
+      desktop?.commitShutdown(packet.reason);
+      return;
+    }
+    if (packet.kind === "windows-empty") {
+      if (!stopping) {
+        requireDesktop().windowsEmpty();
+      }
+      return;
+    }
+    if (packet.kind === "native-stopped") {
+      nativeStopped.resolve();
       return;
     }
     if (packet.kind === "shutdown") {
@@ -89,11 +172,20 @@ const channel = new Channel(
       // Return immediately so the Channel can acknowledge shutdown while cleanup
       // waits for setup and sends its own completion packet.
       void (async () => {
+        await appLoaded.promise;
         core ??= await booting?.catch(() => undefined);
-        await core?.stop();
-        sessions.clear();
-        await channel.send({
-          kind: "cleaned",
+        await runBackendShutdown({
+          desktop,
+          orderly,
+          stopCore: async () => {
+            await core?.stop();
+            sessions.clear();
+          },
+          reportCleaned: () =>
+            channel.send({
+              kind: "cleaned",
+            }),
+          nativeStopped: nativeStopped.promise,
         });
         await channel.drain();
         channel.close();
@@ -112,6 +204,9 @@ const channel = new Channel(
       return;
     }
     if (packet.kind === "native-event") {
+      if (shutdownCommitted) {
+        return;
+      }
       const session = sessions.get(packet.route.context);
       // A stale route belongs to a revoked or navigated document and is dropped silently.
       if (
@@ -157,10 +252,33 @@ try {
   // @ts-expect-error app.js is generated by the framework bundler.
   const { default: imported } = await import("./app.js");
   const app: import("@bunaway/core").AppDefinition = imported;
-  if (app.desktop !== undefined) {
+  // The constructor validates the options, so an invalid definition fails before any native setup.
+  desktop = new DesktopLifecycle(
+    app.desktop,
+    (action) =>
+      channel.send({
+        kind: "desktop-control",
+        action,
+      }),
+    () => {
+      // An approved quit: stop delivering native events at once and tell the main thread first, so
+      // it begins teardown and sends `shutdown` next.
+      orderly = true;
+      shutdownCommitted = true;
+      channel.notify({
+        kind: "shutdown-committed",
+      });
+    },
+    reportDesktopFailure,
+  );
+  if (reportedCause) {
+    desktop.commitShutdown(reportedCause);
+  }
+  appLoaded.resolve();
+  if (app.desktop?.tray) {
     throw new BunawayError({
       code: "UNSUPPORTED",
-      message: "macOS desktop lifecycle is not implemented.",
+      message: "macOS menu bar extras (desktop.tray) are not implemented.",
     });
   }
   const plugins = (app.plugins ?? []).flatMap((plugin) =>
@@ -174,10 +292,15 @@ try {
         ]
       : [],
   );
-  if (stopping) {
-    parentPort.close();
-  } else {
+  // A shutdown that arrived during loading closes the port itself once cleanup finished.
+  if (!stopping) {
     booting = (async () => {
+      // The main thread needs the close behavior before it can decide on a window close or a Quit.
+      await channel.send({
+        kind: "desktop-config",
+        closeBehavior:
+          app.desktop?.closeBehavior === "keep-alive" ? "keep-alive" : "quit",
+      });
       // Each native contract has its own size budget; never combine contracts into one packet.
       const batchCount = Math.max(1, plugins.length);
       for (let index = 0; index < batchCount; index++) {
@@ -303,12 +426,29 @@ try {
     })();
     core = await booting;
     if (!stopping) {
+      // The main thread starts the UI while handling `ready`, so the acknowledgement means the
+      // startup windows began native creation.
       await channel.send({
         kind: "ready",
       });
+      // A shutdown committed while the acknowledgement was pending makes `open` throw, which
+      // would turn an orderly shutdown into a host failure, so skip the launch callbacks.
+      if (!stopping && !orderly) {
+        // onReady is queued ahead of the initial open so that open callbacks wait for it.
+        desktop.ready();
+        // The macOS host accepts no launch arguments (boot.ts takes only --package and --dev-url).
+        desktop.open(
+          {
+            argv: [],
+            cwd: process.cwd(),
+          },
+          "initial",
+        );
+      }
     }
   }
 } catch (error) {
+  appLoaded.resolve();
   if (
     !(stopping && error instanceof BunawayError && error.code === "CANCELLED")
   ) {

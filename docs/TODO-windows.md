@@ -204,7 +204,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 스크린샷과 화면 공유에서 창을 제외하는 content protection을 제공한다.
 - [ ] mouse click-through와 이동 이벤트 전달 여부를 제공한다.
 - [ ] cursor icon, visible, position과 grab의 지원 범위를 제공한다.
-- [ ] 창 포커스 요청과 별개로 작업 표시줄을 점멸하는 attention API를 제공한다.
+- [x] 창 포커스 요청과 별개로 작업 표시줄을 점멸하는 attention API를 제공한다. `requestAttention`과 `cancelAttention`을 제공하며 Windows는 FlashWindowEx로 포커스 이동 없이 작업 표시줄 버튼을 점멸하고 untilFocused와 continuous 모드를 지원한다.
 - [ ] 지정 모니터에서 전체화면으로 전환하고 모니터 제거 시 복원한다.
 - [ ] Windows snapped와 tablet-mode 상태 조회의 지원을 결정한다.
 - [ ] 접근성용 창 제목을 일반 제목과 별도로 설정한다.
@@ -223,7 +223,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 
 - [x] 닫기 확인 메시지의 승인과 거절을 처리한다.
 - [x] `windows.changed`로 shown과 hidden 전환을 제공한다.
-- [ ] created, closed, destroyed 공개 이벤트를 제공한다. `windows.readiness`의 ready와 `windows.changed`의 shown/hidden 등은 구현됐다. [#78](https://github.com/mathbook3948/bunaway/issues/78).
+- [x] `windows.lifecycle`로 created, ready, closed, destroyed 이벤트를 windowId마다 한 번씩 순서대로 제공한다. 수신에는 이벤트 정책과 `windows.listInstances` 권한이 필요하다. 실제 WebView2 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [x] `windows.changed`로 실제 전경 창 상태의 focus와 blur 전환을 제공한다.
 - [x] move와 resize 전환에 현재 outer bounds와 DPI를 함께 제공한다.
 - [x] Windows의 네이티브 이동과 크기 조절 루프가 끝나면 `windows.changed`에 `moved`, `resized`를 제공한다. 시작과 최종 geometry의 실제 차이를 판정하고 최종 bounds와 별도 revision을 전달한다.
@@ -231,10 +231,11 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] minimize, maximize, unmaximize와 restore 전환을 제공한다.
 - [x] enterFullscreen과 leaveFullscreen 전환을 제공한다.
 - [ ] always-on-top 변경 이벤트를 제공한다.
-- [ ] close-requested 이벤트와 비동기 저장 후 닫기 승인 흐름을 제공한다. 현재 확인 메시지는 비동기 저장 훅이 아니다.
+- [x] `windows.closeRequested`와 `windows.respondClose`로 비동기 저장 후 닫기 승인 흐름을 제공한다. 창의 문서가 구독할 때만 사용자 닫기를 대기시키고 자동 기한은 두지 않는다. 대기 중 마지막 구독을 해제하면 요청을 취소하고 창을 유지한다. 실제 WebView2 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [x] DPI 변경을 resize 전환과 bounds의 `dpi`로 전달한다.
 - [x] theme 변경 이벤트를 제공한다. Windows는 `appearance.changed`로 테마, 고대비와 접근성 설정을 알리며 동일 값은 생략한다. 13절 테마 항목과 같다.
-- [ ] Windows shutdown, logoff의 query-session-end와 session-end를 처리한다.
+- [x] Windows 로그오프와 시스템 종료의 WM_QUERYENDSESSION은 항상 허용하고 WM_ENDSESSION은 `"session-end"` 원인의 취소 불가 종료로 처리한다. UI 스레드는 최대 4초 동안 `onWillQuit`과 플러그인 StopHook을 기다리며 차단 API는 제공하지 않는다. 실제 HWND 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
+- [ ] 선택적으로 ShutdownBlockReasonCreate 기반의 종료 지연 API를 제공한다. 차단 사유 문자열, 해제 규칙, 차단 중 메시지 처리와 `onQuit` 보장 범위를 먼저 정한다.
 - [ ] app-command와 system-context-menu 이벤트를 제공한다.
 - [x] 창 이벤트 구독 해제, 탐색과 재생성 후 새 구독, 종료 시 정리를 보장한다.
 - [x] `getSnapshot`으로 windowId, revision, 상태와 bounds를 조회하고 구독 후 현재 상태를 복구한다.
@@ -245,6 +246,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 
 창 이벤트는 대상 창의 정책 뷰에 기존 typed `listen`으로 전달한다. `windows.changed`
 구독에는 이벤트 권한이, `getSnapshot`에는 windows.getSnapshot 작업 권한이 필요하다.
+`windows.lifecycle`은 이벤트 권한과 `windows.listInstances` 작업 권한을 가진 모든 열린 뷰에,
+`windows.closeRequested`는 닫히는 창 자신의 문서에만 전달한다.
 초기 이벤트와 과거 이력은 재전송하지 않으며, 같은 값의 반복 관찰은 이벤트를 만들지 않는다.
 창별 windowId와 revision, 구독 수명 및 용량 초과의 `BUSY` 처리 계약은
 [창 API](./site/src/content/docs/reference/host/windows.mdx#창-이벤트)를 따른다.
@@ -259,14 +262,14 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 트레이 숨김과 복원, 마지막 창 닫기와 앱 종료를 구분한다.
 - [x] 개발 CLI 중단과 재시작은 사용자 종료 취소를 우회하고 자원을 정리한다.
 - [x] 정상 종료와 강제 종료에서 관리하는 하위 프로세스를 정리한다.
-- [ ] 앱 ready, before-quit, will-quit, quit과 모든 창 닫힘의 공개 이벤트를 정의한다. [#78](https://github.com/mathbook3948/bunaway/issues/78).
+- [x] `desktop`의 `onReady`, `beforeQuit`, `onWillQuit`, `onQuit`, `onAllWindowsClosed` 훅과 `ShutdownReason`을 Windows에서 제공한다. `onWillQuit`과 `onQuit`은 각각 3초 기한을 둔다. 실제 실행 검증은 CI windows-native에서 수행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [ ] 종료 코드 지정, 강제 exit, relaunch와 인자 보존 API를 제공한다.
-- [x] 앱 이름, 버전, 식별자, 프레임워크와 Bun, WebView 버전을 조회한다. 백엔드 `ctx.app`으로 제공하며 [CommandContext](site/src/content/docs/reference/backend/context.mdx)와 [ADR 0020](decisions/0020-app-info-context.md)에 정리했다.
+- [x] 앱 이름, 버전, 식별자, 프레임워크와 Bun, WebView 버전을 조회한다. 백엔드 `ctx.app`으로 제공하며 [CommandContext](site/src/content/docs/reference/backend/context.mdx)와 [ADR 0022](decisions/0022-app-info-context.md)에 정리했다.
 - [ ] 앱 패키지 경로, 실행 파일, 리소스 경로와 packaged/dev 상태를 조회한다.
 - [ ] 일반 브라우저와 bunaway 앱 WebView 실행 여부를 구분하는 공개 기능을 제공한다. [T-core-live]의 `isTauri`에 대응하는 요구다.
   일반 브라우저, 앱 WebView, SSR에서의 반환값과 브리지 준비 전 동작을 정의하고 테스트한다.
   환경 판별 결과를 권한 승인이나 신뢰된 호출 출처의 증명으로 사용하지 않는지 검증한다.
-- [ ] 앱 전체 포커스, 활성 상태와 창 생성 이벤트를 제공한다. [#78](https://github.com/mathbook3948/bunaway/issues/78).
+- [ ] 앱 전체 포커스와 활성 상태를 제공한다. 창 생성은 `windows.lifecycle`로 제공하며 앱 전체 포커스와 활성 상태가 남았다.
 - [ ] 단일 인스턴스의 추가 데이터 전달과 lock 상태 조회, 해제 필요성을 결정한다.
 - [ ] 앱 ready 전에 들어온 외부 활성화 요청과 종료 요청의 순서를 공개 계약으로 정한다.
 - [ ] 렌더러와 관리 프로세스의 비정상 종료 이벤트를 앱에 제공한다. [#78](https://github.com/mathbook3948/bunaway/issues/78).
@@ -467,7 +470,7 @@ MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이�
 - [x] 파일 열기와 저장 대화상자를 제공한다.
 - [x] 폴더 선택, 다중 파일과 폴더 선택을 제공한다.
 - [x] 파일 형식 필터, 기본 경로와 파일 이름, 기본 확장자를 제공한다.
-- [ ] 숨긴 파일, 새 폴더 생성, overwrite 확인 등 옵션을 제공한다.
+- [x] 숨긴 파일 표시와 저장 overwrite 확인 옵션을 제공한다. 새 폴더 생성은 OS 기본 UI를 유지하며 Windows에서 끄는 옵션은 지원하지 않는다.
 - [x] 부모 창을 지정해 모달 대화상자를 연결한다.
 - [x] 선택 취소, 호출 취소와 부모 창 종료의 결과를 정의한다.
 - [x] 선택한 파일 접근 권한의 수명과 영속화 여부를 정의한다.
@@ -475,9 +478,9 @@ MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이�
 - [ ] 동기 대화상자는 동일 기능의 비동기 API로 대체할지 결정한다. 앱 백엔드 진행을 막지 않는다.
 
 `@bunaway/plugin-dialog`의 구현과 계약, 큐 및 취소 의미는 [dialog 문서](../plugins/dialog/README.md)를 따른다.
-경로 선택은 저장소 접근 권한을 추가하지 않는다. 실제 사용자 입력, overwrite UI, 다중 선택 UI와
+경로 선택은 저장소 접근 권한을 추가하지 않는다. 실제 사용자 입력, 숨김 항목 표시와 overwrite UI, 다중 선택 UI,
 실제 소유 창 파괴는 별도 검증이다. 메시지 대화상자(`dialog.showMessage`)의 실제 TaskDialog 입력도
-별도 네이티브 검증이며, 파일 선택의 고급 옵션만 미구현이다.
+별도 네이티브 검증이다.
 
 ## 12. 클립보드와 이미지 리소스
 

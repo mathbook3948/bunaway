@@ -674,6 +674,7 @@
           "focus",
           "activate",
           "close",
+          "respondClose",
           "destroy",
           "setParent",
           "getParent",
@@ -687,6 +688,8 @@
           "isAlwaysOnTop",
           "setSkipTaskbar",
           "isSkipTaskbar",
+          "requestAttention",
+          "cancelAttention",
           "setMinimizable",
           "isMinimizable",
           "setMaximizable",
@@ -1097,7 +1100,11 @@
           "tray",
           "openArguments",
           "onOpen",
-          "beforeQuit"
+          "onReady",
+          "onAllWindowsClosed",
+          "beforeQuit",
+          "onWillQuit",
+          "onQuit"
         ]
       }
     },
@@ -1383,6 +1390,7 @@
       "windows.isVisible",
       "windows.isFocused",
       "windows.close",
+      "windows.respondClose",
       "windows.destroy",
       "windows.setParent",
       "windows.getParent",
@@ -1397,6 +1405,8 @@
       "windows.isAlwaysOnTop",
       "windows.setSkipTaskbar",
       "windows.isSkipTaskbar",
+      "windows.requestAttention",
+      "windows.cancelAttention",
       "windows.setMinimizable",
       "windows.isMinimizable",
       "windows.setMaximizable",

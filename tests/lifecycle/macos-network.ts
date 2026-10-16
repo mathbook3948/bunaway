@@ -25,6 +25,23 @@ const reportPath = resolve(dataRoot, "temp/report.json");
 let child: ReturnType<typeof Bun.spawn> | undefined;
 let capture: NetworkPipeCapture | undefined;
 let phase = "prepare";
+/** Per-stage wait bound; macOS CI runners can be slow to deliver WKWebView loads. */
+const WAIT_TIMEOUT_MS = 45_000;
+/**
+ * Host process bound. It must exceed the sequential stage waits (report and
+ * abort cleanup, 2 x WAIT_TIMEOUT_MS) plus launch, so the harness never kills
+ * the host before a wait can report its own timeout.
+ */
+const HOST_TIMEOUT_MS = 120_000;
+const WAIT_PROGRESS_INTERVAL_MS = 5_000;
+/** Most recent wait stage, kept for failure diagnostics. */
+let lastWait:
+  | {
+      message: string;
+      elapsedMs: number;
+      deadlineMs: number;
+    }
+  | undefined;
 let failure:
   | {
       error: unknown;
@@ -161,17 +178,43 @@ function failureDetails(error: unknown) {
   };
 }
 
-/** Wait for observable transport progress while surfacing early host exit. */
+/**
+ * Wait for observable transport progress while surfacing early host exit.
+ * Each wait is bounded by WAIT_TIMEOUT_MS, logs progress once per
+ * WAIT_PROGRESS_INTERVAL_MS after that much time has passed, and records its
+ * elapsed time in `lastWait` for failure diagnostics.
+ */
 async function waitFor(
   condition: () => boolean | Promise<boolean>,
   message: string,
 ) {
-  const deadline = Date.now() + 20_000;
+  const startedAt = Date.now();
+  let nextProgressMs = WAIT_PROGRESS_INTERVAL_MS;
   while (!(await condition())) {
     assert(child?.exitCode === null, `Host exited before ${message}`);
-    assert(Date.now() < deadline, `Timed out: ${message}`);
+    const elapsedMs = Date.now() - startedAt;
+    lastWait = {
+      message,
+      elapsedMs,
+      deadlineMs: WAIT_TIMEOUT_MS,
+    };
+    assert(
+      elapsedMs < WAIT_TIMEOUT_MS,
+      `Timed out: ${message} after ${elapsedMs} ms (deadline ${WAIT_TIMEOUT_MS} ms)`,
+    );
+    if (elapsedMs >= nextProgressMs) {
+      console.log(
+        `waiting for ${message}: ${elapsedMs} ms elapsed (deadline ${WAIT_TIMEOUT_MS} ms)`,
+      );
+      nextProgressMs = elapsedMs + WAIT_PROGRESS_INTERVAL_MS;
+    }
     await Bun.sleep(10);
   }
+  lastWait = {
+    message,
+    elapsedMs: Date.now() - startedAt,
+    deadlineMs: WAIT_TIMEOUT_MS,
+  };
 }
 
 try {
@@ -307,7 +350,7 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
       },
       stdout: "pipe",
       stderr: "pipe",
-      timeout: 30_000,
+      timeout: HOST_TIMEOUT_MS,
     },
   );
   child = launched;
@@ -410,6 +453,7 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
   const state = {
     phase,
     failure: failure ? failureDetails(failure.error) : null,
+    lastWait: lastWait ?? null,
     childExitCodeBeforeCleanup: child?.exitCode ?? null,
     requests: {
       ...requests,

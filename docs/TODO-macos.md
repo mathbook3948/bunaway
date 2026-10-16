@@ -2,6 +2,8 @@
 
 기준일: 2026-10-10. bunaway `5cabc6b`의 macOS arm64 구현과 기록된 실행 결과를 기준으로 갱신했다.
 앱과 창의 수명 분리, 다중 창과 기본 창 API는 PR #77, #79와 #84의 병합 결과를 반영했다.
+2026-10-16에 [ADR 0021](./decisions/0021-macos-desktop-lifecycle.md)의 `desktop` 수명주기 구현(05절)을
+반영했다. 이 변경은 기준 커밋 이후 작업이며 macos-native CI 결과는 아직 기록하지 않았다.
 [Windows TODO](./TODO-windows.md)의 기능 영역을 기준으로 macOS의 현재 구현과
 후속 작업을 정리한다. Tauri와 Electron의 비교 자료와 API 색인은 Windows TODO의
 고정 스냅샷을 공유하며, 최신 API 전체를 새로 대조한 문서는 아니다.
@@ -11,7 +13,7 @@
 프로세스의 백엔드 Worker다. 이전 C/ObjC++ 호스트와 Bun 자식 프로세스 실험의
 완료 표시를 현재 구현으로 옮기지 않는다. 별도 개발자 진입점 없이 공통 앱 정의
 하나를 사용하는 모델과 다중 창은 구현했다. 창 플러그인의 기본 제어를 제공하며,
-`desktop`과 저장, 로그 등 다른 네이티브 플러그인 어댑터는 남아 있다.
+`desktop`은 트레이를 제외하고 구현했다. 저장, 로그 등 다른 네이티브 플러그인 어댑터는 남아 있다.
 
 ## 상태와 작업 기준
 
@@ -38,7 +40,7 @@
 | 실행 | 고정 Bun 1.4.2, 직접 FFI, 같은 PID의 백엔드 Worker, arm64 네이티브 CI 통과 | 최소 OS와 Intel 실행 검증 |
 | 창 | 다중 창, 생성과 재생성, 기본 제어, 초기 크기 제약, 창 ID 조회, 준비 이벤트, 숨김 생성, `showInactive` | 모달과 sheet, 상주 앱 |
 | WebView | 명령, 이벤트, 정책, 자산 스킴, 탐색과 리소스 경계, 복구 | 영속 프로필과 세션 제어 API |
-| 종료 | Worker 정리, 기한 초과 강제 종료, 프로세스 그룹 정리 | `desktop`, 종료 취소와 상주 앱 |
+| 종료 | Worker 정리, 기한 초과 강제 종료, 프로세스 그룹 정리, `desktop`의 `beforeQuit`, 수명주기 훅, 세션 종료, Dock 재활성화 | 트레이, `"hide"`, 창 없는 상주 앱, OS 파일과 URL 열기 |
 | 네이티브 플러그인 | 등록과 권한 검증, 기본 창 어댑터 | 저장, 로그, 기능 조회, opener와 창 제어 확장 |
 | 배포 | compiled `.app`, 서명 및 DMG/PKG 조립 도구 | CLI 채널 연결, Developer ID, 공증, 설치와 Store 검증 |
 
@@ -114,10 +116,13 @@
 
 우선순위 P1. 소유자: 호스트와 선택 상태 저장 기능.
 
-- [ ] created, ready, shown, hidden, closed와 destroyed 이벤트를 제공한다.
+- [ ] created, ready, shown, hidden, closed와 destroyed 이벤트를 제공한다. `windows.lifecycle`의
+  created, ready, closed, destroyed는 구현했다. shown과 hidden이 남아 있다.
 - [ ] focus/blur, move/resize와 현재 bounds, 최소화/최대화/복원 이벤트를 제공한다.
 - [ ] 전체화면 전환, backing scale, 화면과 theme 변경 이벤트를 제공한다.
-- [ ] close-requested와 비동기 저장 후 닫기 승인, 확인 메시지를 제공한다.
+- [ ] close-requested와 비동기 저장 후 닫기 승인, 확인 메시지를 제공한다. `windows.closeRequested`와
+  `windows.respondClose`는 구현했다. 확인 메시지(`setCloseConfirmation`)가 남아 있다.
+  WebView의 `window.close()`는 닫기 요청으로 처리하지 않는다.
 - [ ] 구독 해제와 창 재생성 및 종료 시 구독 정리를 보장한다.
 - [ ] 위치, 크기, 최대화, 전체화면과 표시 상태의 선택적 저장 및 복원을 제공한다.
 - [ ] 모니터 제거와 작업 영역 변경 뒤 보이는 위치로 복원한다.
@@ -127,20 +132,29 @@
 
 우선순위 P1. 소유자: 호스트와 desktop API.
 
-`app.desktop`을 선언하면 백엔드는 `UNSUPPORTED`로 시작을 거부한다.
-Windows의 `beforeQuit`, `onOpen`과 트레이 종료 동작은 현재 macOS 기능이 아니다.
+`app.desktop`은 `tray`와 `closeBehavior: "hide"`를 제외하고 지원하며, `tray`는 `UNSUPPORTED`로 거부한다.
+`onOpen`은 시작할 때의 초기 요청만 호출하고 `argv`는 `[]`이며 OS의 파일과 URL 열기는 전달하지 않는다.
+macOS의 Quit 명령은 `QuitReason`의 `"quit-command"`다. 매핑과 남은 설계는
+[ADR 0021](./decisions/0021-macos-desktop-lifecycle.md)을 따른다. 실제 AppKit 시나리오는
+macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 로그아웃과 사용자의 Dock 클릭은 CI에서 확인하지 못한다.
 
 - [x] 번들 Bun을 앱 진입점으로 실행하고 AppKit 메인과 백엔드 Worker를 같은 PID에 둔다.
 - [x] 시작 실패와 UI 초기화 실패에도 코어와 플러그인의 종료를 기다린다.
 - [x] 종료 요청부터 5초 안에 Worker가 정리되지 않으면 강제 종료하고 실패를 기록한다.
 - [x] 정상 종료와 SIGINT/SIGTERM에서 관리하는 프로세스 그룹을 정리한다.
 - [x] 호스트 SIGKILL 뒤 감시 프로세스가 pipe EOF를 받아 같은 그룹의 자손을 정리한다.
-- [ ] 공통 `desktop` 계약의 `onOpen`, `beforeQuit`와 종료 이유를 연결한다.
+- [ ] 공통 `desktop` 계약의 `onOpen`, `beforeQuit`와 종료 이유를 연결한다. `beforeQuit`와 종료 이유는 연결했다.
+  `onOpen`은 초기 요청만 호출하며 OS 파일과 URL 열기(`application:openURLs:`)가 남아 있다. 설계안은 ADR 0021을 따른다.
 - [ ] 단일 인스턴스 잠금과 두 번째 실행의 argv/cwd, 파일과 URL 전달을 제공한다.
 - [ ] ready 이전 파일 열기, URL 열기와 종료 요청의 순서를 정한다.
-- [ ] 마지막 창 닫기, 앱 종료, app hide/show와 Dock 재활성화를 구분한다.
-- [ ] 종료 취소 뒤 기존 창과 세션을 유지하고 개발 CLI 중단은 취소를 우회한다.
-- [ ] ready, before-quit, will-quit, quit과 모든 창 닫힘의 공개 이벤트를 제공한다.
+- [ ] 마지막 창 닫기, 앱 종료, app hide/show와 Dock 재활성화를 구분한다. 마지막 창 닫기, Quit 명령과
+  Dock 재활성화(`show()`와 같은 동작, `onOpen` 없음)는 구분했다. app hide/show가 남아 있다.
+- [x] 종료 취소 뒤 기존 창과 세션을 유지하고 개발 CLI 중단은 취소를 우회한다. `beforeQuit`가 거부하면 창, 세션과
+  백엔드를 유지하고 SIGINT/SIGTERM은 `"interrupted"`로 `beforeQuit`를 우회한다. `quit-veto`, `sigterm` 시나리오로 확인한다.
+- [x] Windows의 `onReady`, `onWillQuit`, `onQuit`, `onAllWindowsClosed`와 `ShutdownReason`에 맞춰 macOS 훅을 제공한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)과 [ADR 0021](./decisions/0021-macos-desktop-lifecycle.md)을 따른다.
+- [x] macOS 로그아웃, 재시작과 시스템 종료를 `"session-end"` 원인의 취소 불가 종료로 처리하고 정리 기한을 정한다. 전원 끄기 알림과 quit Apple event를 처리하고 4초까지 정리를 기다린다. 실제 로그아웃은 CI에서 확인하지 못한다.
+- [x] `windows.lifecycle`과 `windows.closeRequested` 이벤트, `windows.respondClose` 작업을 AppKit 창에 연결한다.
+- [ ] `desktop.tray`, `closeBehavior: "hide"`와 창 없는 시작을 지원한다. 06절의 메뉴 막대 아이콘이 선행 조건이며 지금은 `UNSUPPORTED`다.
 - [ ] exit, relaunch와 인자 보존, 앱 및 런타임 버전, 실행 경로와 packaged 상태를 조회한다.
 - [ ] 앱 WebView와 일반 브라우저 및 SSR 실행을 구분하는 공개 기능을 제공한다.
 - [ ] About 패널, 앱 이름과 데이터 경로 지정, 비정상 종료 이벤트를 제공한다.
@@ -183,7 +197,8 @@ Windows의 `beforeQuit`, `onOpen`과 트레이 종료 동작은 현재 macOS 기
 
 - [ ] HTTP/HTTPS URL을 기본 브라우저에서 여는 macOS opener 어댑터를 제공한다.
 - [ ] 파일 및 폴더 열기, 지정 앱 열기, Finder에서 표시와 휴지통 이동을 제공한다.
-- [ ] URL scheme과 파일 유형 연결의 plist 설정, OS 열기 요청과 `onOpen`을 연결한다.
+- [ ] URL scheme과 파일 유형 연결의 plist 설정, OS 열기 요청과 `onOpen`을 연결한다. 초기 `onOpen`만 호출하며
+  `application:openURLs:`와 plist 설정이 남아 있다. 설계안은 [ADR 0021](./decisions/0021-macos-desktop-lifecycle.md)을 따른다.
 - [ ] universal link의 설정, 검증과 시작 전 요청 처리를 제공한다.
 - [ ] 기본 앱 등록 상태와 최근 문서의 추가, 조회 및 삭제를 제공한다.
 - [ ] Dock icon, badge, bounce, menu와 진행 상태의 지원 범위를 정한다.
@@ -488,7 +503,7 @@ iOS의 WKWebView 구현은 macOS 구현만으로 완료 처리하지 않는다.
 ## 다음 작업 묶음
 
 1. 저장, 로그, 기능 조회 및 opener의 macOS 어댑터: 09, 19, 23, 24. 카탈로그와 기본 창 어댑터는 구현했다.
-2. 모달 및 desktop 수명주기: 01–05. 창 식별과 조회, 숨긴 초기 창, `showInactive`, 준비 이벤트는 구현했다. 공통 선행 계약은 #78에서 관리한다.
+2. 모달 및 desktop 수명주기: 01–05. 창 식별과 조회, 숨긴 초기 창, `showInactive`, 준비 이벤트와 05절의 `desktop` 수명주기 훅은 구현했다. 공통 선행 계약은 #78에서 관리한다.
 3. 메뉴 막대 아이콘, 메뉴, 자동 실행, 알림, 파일 선택과 클립보드: 06–12.
 4. 영속 WebView 프로필, 권한 중재, 모니터와 접근성: 13–18.
 5. CLI 배포 채널 연결, 최소 지원 OS와 Intel, Developer ID, 설치 및 Sandbox 검증: 22, 28. 현재 arm64 제품의 CI는 통과했다.
@@ -499,7 +514,10 @@ iOS의 WKWebView 구현은 macOS 구현만으로 완료 처리하지 않는다.
 - [다중 창 설정과 카탈로그 권한 검증](../native/macos/bun/config.ts)
 - [AppKit 앱 수명과 뷰별 임시 프로필](../native/macos/bun/application.ts)
 - [개별 창 소유권, 생성과 정리 및 세션 경계](../native/macos/bun/windows.ts)
-- [백엔드 Worker와 Host API, desktop 미지원 처리](../native/macos/bun/backend.ts)
+- [백엔드 Worker와 Host API, desktop 훅과 tray 거부](../native/macos/bun/backend.ts)
+- [Quit 요청 보류와 종료 원인 분류](../native/macos/bun/desktop-requests.ts)와
+  [세션 종료 응답 보류](../native/macos/bun/session-end-termination.ts)
+- [실제 AppKit desktop 수명주기 시나리오](../tests/lifecycle/macos-desktop.ts)
 - [시작과 Worker 종료](../native/macos/bun/entry.ts)
 - [AppKit, WKWebView, 정책과 리소스 경계](../native/macos/bun/webview.ts)
 - [프로세스 그룹 소유와 감시](../native/macos/bun/process-group.ts)

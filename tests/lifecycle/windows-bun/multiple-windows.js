@@ -43,6 +43,21 @@ if (role === "denied") {
       onError: console.error,
     },
   );
+  if (role === "main") {
+    // Report every snapshot of the arrival-ordered list; the backend uses the longest one because
+    // concurrent reports may be handled out of order.
+    const lifecycle = [];
+    await client.listen(
+      "windows.lifecycle",
+      (event) => {
+        lifecycle.push(`${event.payload.windowId}:${event.payload.phase}`);
+        void report("lifecycle", JSON.stringify(lifecycle));
+      },
+      {
+        onError: console.error,
+      },
+    );
+  }
   await client.listen(
     "test.action",
     (event) => {

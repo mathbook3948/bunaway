@@ -242,6 +242,7 @@ try {
 } finally {
   ui.packet({
     kind: "closing",
+    reason: "window-destroyed",
   });
   await app;
 }

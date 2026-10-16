@@ -16,6 +16,7 @@ export type {
   PluginDefinition,
   PluginRegistration,
   QuitReason,
+  ShutdownReason,
   StateStore,
   StopHook,
 } from "@bunaway/plugin-api";

@@ -34,7 +34,7 @@ Windows x64 `10.0.26200.0`, Bun 1.4.2에서 실제 트레이와 WebView2의 지�
 트레이 입력은 실제 HWND의 콜백 메시지로 검사했으며 물리 마우스 클릭은 포함하지 않는다.
 macOS 창 없는 시작은 `UNSUPPORTED`이며 [Windows 실행 기록](../architecture/windows-bun-results.md)의 범위를 따른다.
 
-백엔드의 `ctx.app`은 [ADR 0020](../decisions/0020-app-info-context.md)을 따른다. `runtime.webview`는 Windows에서 설치된 WebView2 런타임 버전,
+백엔드의 `ctx.app`은 [ADR 0022](../decisions/0022-app-info-context.md)을 따른다. `runtime.webview`는 Windows에서 설치된 WebView2 런타임 버전,
 macOS에서 시스템 WebKit 버전이며 Android와 iOS는 `null`이다. Windows는 `tests/lifecycle/windows-webview-version.test.ts`와 `mise run host:windows`의 호스트 fixture가, macOS는 `mise run host:macos`의 호스트 fixture(비어 있지 않은 문자열인지 확인)가 이 조회를 실제로 실행해 검증한다.
 
 저장 플러그인은 Windows와 macOS I/O 어댑터를 제공한다. macOS의 열한 작업은 텍스트와 바이트 읽기 및 쓰기, append, exists/stat, copyFile, readDirectory와 createDirectory이며 move와 remove는 미지원이다. 실제 WKWebView와 compiled 호스트의 저장 검증 fixture를 native CI에 포함하며 [저장 어댑터 기록](../architecture/macos-storage-adapter.md)에서 검증 범위와 의존성을 구분한다. 로그와 기능 조회의 macOS 어댑터는 I/O Worker에 연결했으며 창 플러그인의 기본 제어도 macOS에서 제공한다. clipboard는 Windows와 macOS를 지원하며 opener는 이 문서 기준 Windows만 지원한다. 아래 macOS 파일 저장과 네이티브 API 검증 기록은 이관 전 구현의 기록이다. Bun FFI 제품 경로의 명령, 이벤트와 정책, 복구, 종료 검증은 [새 기록](../architecture/macos-bun-results.md)에 둔다.
@@ -146,7 +146,11 @@ Windows의 앱 정의 `desktop`에 인자, 딥링크, 파일 열기와 종료 �
 구현했다. 초기 계약, 번들, 타입 검사는 Linux에서 수행했고 후속 Windows x64, Bun 1.4.2에서
 실제 WebView2의 hide, veto, dev-veto, dev-hide, dev-pending 시나리오와 PowerShell 5.1 인자 전달을 통과했다.
 Windows 실행기는 같은 시나리오를 실행한다. URL scheme과 파일 연결의 OS 등록은 미구현이다.
-macOS Bun FFI 런타임은 `desktop`을 `UNSUPPORTED`로 거부한다.
+macOS Bun FFI 런타임은 `desktop`의 종료 취소, 수명주기 훅, 세션 종료와 Dock 재활성화를 지원하고
+`windows.lifecycle`, `windows.closeRequested`, `windows.respondClose`도 제공한다
+([ADR 0021](../decisions/0021-macos-desktop-lifecycle.md)). `desktop.tray`와 `closeBehavior: "hide"`는
+`UNSUPPORTED`이며 OS의 파일과 URL 열기, 단일 인스턴스 전달은 미구현이다. 실제 AppKit 시나리오는
+macos-native CI에서 실행하지만 실제 로그아웃과 사용자의 Dock 클릭은 CI에서 확인하지 못한다.
 
 
 ## Windows 모니터 조회

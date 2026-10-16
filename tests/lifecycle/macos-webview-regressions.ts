@@ -168,7 +168,10 @@ async function ruleIdentifiers(o: Objc): Promise<string[]> {
 }
 
 const application = new MacosApplication({
-  quit: () => {},
+  stopping: () => false,
+  quitRequested: () => {},
+  sessionEnding: () => {},
+  reopened: () => {},
   tick: () => {},
   fail: (error) => {
     failure = error;
