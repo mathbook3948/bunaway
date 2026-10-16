@@ -2,12 +2,17 @@ import { expect, test } from "bun:test";
 import { defineNativePlugin, type NativeEnvironment } from "@bunaway/plugin";
 import type { NativeDialogServices } from "@bunaway/plugin-api/native";
 import dialog from "@bunaway/plugin-dialog";
-import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
+import {
+  BunawayError,
+  type JsonValue,
+  NativeRegistry,
+} from "@bunaway/protocol";
 import { dialogOperations } from "#plugins/dialog/src/operations";
 import {
   type DialogFactory,
   WindowsDialogs,
 } from "#plugins/dialog/src/platforms/windows";
+import { DialogCloseRequest } from "#plugins/dialog/src/platforms/windows-bindings";
 import { nativeFactory } from "../fixtures/native-platform.ts";
 
 function fixture(
@@ -432,4 +437,47 @@ test("native reentry is BUSY and missing UI services are UNSUPPORTED", () => {
       code: "UNSUPPORTED",
     }),
   );
+});
+
+const REJECTED_CLOSE = -2147467259;
+const HRESULT_CANCELLED_SIGNED = 0x800704c7 | 0;
+
+test("an accepted Close supersedes earlier rejected Close attempts", () => {
+  const laterAccepted = new DialogCloseRequest();
+  expect(laterAccepted.record(REJECTED_CLOSE)).toBe(false);
+  expect(laterAccepted.record(0)).toBe(true);
+  expect(laterAccepted.settle(0)).toEqual({
+    cancelled: true,
+  });
+
+  const laterRejected = new DialogCloseRequest();
+  expect(laterRejected.record(0)).toBe(true);
+  expect(laterRejected.record(REJECTED_CLOSE)).toBe(false);
+  expect(laterRejected.settle(0)).toEqual({
+    cancelled: true,
+  });
+});
+
+test("an unsuperseded Close rejection fails and Show HRESULT decides otherwise", () => {
+  const rejected = new DialogCloseRequest();
+  rejected.record(REJECTED_CLOSE);
+  let failure: unknown;
+  try {
+    rejected.settle(0);
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(BunawayError);
+  expect(failure).toMatchObject({
+    code: "INTERNAL",
+    details: {
+      hresult: REJECTED_CLOSE >>> 0,
+    },
+  });
+
+  const untouched = new DialogCloseRequest();
+  expect(untouched.settle(HRESULT_CANCELLED_SIGNED)).toEqual({
+    cancelled: true,
+  });
+  expect(untouched.settle(0)).toBeUndefined();
 });

@@ -62,6 +62,53 @@ function check(result: number, stage: string): void {
   }
 }
 
+/** Track Shell Close attempts across timer ticks. An accepted Close supersedes earlier rejected attempts. */
+export class DialogCloseRequest {
+  private accepted = false;
+  private rejection: BunawayError | undefined;
+
+  /** Record one IFileDialog::Close HRESULT and report whether Shell accepted it. */
+  record(result: number): boolean {
+    if (result >= 0) {
+      this.accepted = true;
+      this.rejection = undefined;
+      return true;
+    }
+    if (!this.accepted) {
+      this.rejection ??= new BunawayError({
+        code: "INTERNAL",
+        message: "Windows could not close the file dialog.",
+        details: {
+          hresult: result >>> 0,
+        },
+      });
+    }
+    return false;
+  }
+
+  /**
+   * Settle Show's HRESULT after the modal loop unwinds.
+   *
+   * Throws a Close rejection that no later Close superseded. Returns the cancelled result when Close was
+   * accepted or Show reported cancellation, and undefined when Show's HRESULT should be checked normally.
+   */
+  settle(showResult: number):
+    | {
+        cancelled: true;
+      }
+    | undefined {
+    if (this.rejection) {
+      throw this.rejection;
+    }
+    if (this.accepted || showResult >>> 0 === HRESULT_CANCELLED) {
+      return {
+        cancelled: true,
+      };
+    }
+    return undefined;
+  }
+}
+
 /** Own one COM dialog, its DLLs and vtable bindings. Importing this module allocates no OS resources. */
 export function createDialog(
   kind: DialogKind,
@@ -411,7 +458,7 @@ export function createDialog(
           });
         }
         let callbackFailure: unknown;
-        let closing = false;
+        const closeRequest = new DialogCloseRequest();
         let handling = false;
         let active = true;
         const hwnd = services.createWindow(() => {});
@@ -434,9 +481,7 @@ export function createDialog(
                 } catch (error) {
                   callbackFailure ??= error;
                 }
-                const result = close(E_ABORT);
-                if (result >= 0) {
-                  closing = true;
+                if (closeRequest.record(close(E_ABORT))) {
                   // Shell Close can acknowledge cancellation without unwinding Show from a timer.
                   // Resolve only this COM object's HWND and request closure synchronously on its STA.
                   // No queued close message may outlive Show or target a subsequently reused HWND.
@@ -444,14 +489,6 @@ export function createDialog(
                   if (getWindow(ptr(window)) >= 0 && window[0]) {
                     user.symbols.SendMessageW(window[0], WM_CLOSE, 0n, 0n);
                   }
-                } else if (!closing) {
-                  callbackFailure ??= new BunawayError({
-                    code: "INTERNAL",
-                    message: "Windows could not close the file dialog.",
-                    details: {
-                      hresult: result >>> 0,
-                    },
-                  });
                 }
               } catch (error) {
                 // Never propagate exceptions through a native TIMERPROC stack.
@@ -488,10 +525,9 @@ export function createDialog(
           if (callbackFailure) {
             throw callbackFailure;
           }
-          if (closing || result >>> 0 === HRESULT_CANCELLED) {
-            return {
-              cancelled: true,
-            };
+          const cancelled = closeRequest.settle(result);
+          if (cancelled) {
+            return cancelled;
           }
           check(result, "Show");
           const paths: string[] = [];
