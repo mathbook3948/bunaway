@@ -48,7 +48,30 @@ if (tool === "xcrun") {
     fstatSync(1).isFile() && fstatSync(2).isFile(),
     "hdiutil output must use regular files",
   );
-  assert(failure === "dmg", "Unexpected hdiutil replacement");
+  const isBusyMode =
+    failure === "dmg-busy-once" || failure === "dmg-busy-always";
+  assert(failure === "dmg" || isBusyMode, "Unexpected hdiutil replacement");
+  // The invocation count lives outside the packaging scratch directory, which tests require to end empty.
+  const statePath = process.env.BUNAWAY_TEST_TOOL_STATE;
+  assert(statePath, "Missing hdiutil state path");
+  await appendFile(statePath, "x");
+  const invocation = (await Bun.file(statePath).text()).length;
+  const artifact = args[args.length - 1];
+  assert(artifact, "Missing hdiutil artifact path");
+  if (isBusyMode) {
+    if (failure === "dmg-busy-once" && invocation > 1) {
+      // The packager must remove the partial image left by the busy attempt.
+      assert(
+        !(await Bun.file(artifact).exists()),
+        "Partial DMG was not removed before retry",
+      );
+      await writeFile(artifact, "fixture-dmg");
+      process.exit(0);
+    }
+    await writeFile(artifact, "partial");
+    console.error("hdiutil: create failed - Resource busy");
+    process.exit(1);
+  }
   process.exit(47);
 } else if (tool === "mv") {
   if (
