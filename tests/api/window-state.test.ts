@@ -999,3 +999,14 @@ test("display controls retain independent permissions, strict input and closed/u
     code: "PERMISSION_DENIED",
   });
 });
+
+test("macOS target declares the content protection operations its adapter implements", () => {
+  // The host rejects any operation missing from the target list as UNSUPPORTED before the
+  // shared adapter runs, so a generic adapter test alone cannot catch a missing declaration.
+  expect(windows._definition.nativePlatforms.macos?.operations).toEqual(
+    expect.arrayContaining([
+      "setContentProtection",
+      "isContentProtected",
+    ]),
+  );
+});

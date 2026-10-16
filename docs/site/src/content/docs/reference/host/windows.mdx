@@ -10,7 +10,8 @@ description: 창 제어와 조회, geometry, 네이티브 창 이벤트 및 구�
 창 제어 플러그인은 Windows와 macOS에서 실행합니다. macOS는 `list`, `create`, `recreate`,
 `show`, `showInactive`, `hide`, `focus`, `close`, `isVisible`, `isFocused`, `isDestroyed`,
 창 식별자 조회(`getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`),
-`getReadiness`와 `windows.readiness`, 아래 WebView 기본 제어를 지원합니다.
+`getReadiness`와 `windows.readiness`, `setContentProtection`, `isContentProtected`,
+아래 WebView 기본 제어를 지원합니다.
 `getSnapshot`, `windows.changed`, 크기와 위치, 상태 변경, `activate`, `blur`,
 `openDevTools`를 포함한 그 외 작업은 `UNSUPPORTED`입니다. Linux와 모바일은 네이티브 호스트를 지원하지 않습니다.
 플러그인을 등록하지 않은 앱도 설정한 시작 창과 WebView를 사용할 수 있습니다.
@@ -66,8 +67,9 @@ Windows의 owner 관계에 따라 관련 창의 Z 순서도 영향을 받을 수
 `isContentProtected({ view, windowId? })`은 boolean을 반환합니다. 권한은 `windows.setContentProtection`,
 `windows.isContentProtected`입니다. 켜면 스크린샷과 화면 공유에서 창을 제외하며, 창 상태와 관계없이 언제든 변경할 수 있습니다.
 생성할 때는 첫 표시 전에 적용합니다.
-Windows는 `WDA_EXCLUDEFROMCAPTURE`로 창을 캡처에서 제외합니다. Windows 10 버전 2004 이전은 이를 거부하므로
-`WDA_MONITOR`로 대체하며, 이 경우 창은 캡처에 남지만 내용이 검은색으로 보입니다. 끄면 `WDA_NONE`으로 되돌립니다.
+Windows는 `WDA_EXCLUDEFROMCAPTURE`로 창을 캡처에서 제외합니다. Windows 10 버전 2004 이전은 이 값을
+`WDA_MONITOR`처럼 처리해 창을 캡처에 남기고 내용만 검은색으로 표시합니다. 호출이 거부되면
+`WDA_MONITOR`로 다시 시도합니다. 끄면 `WDA_NONE`으로 되돌립니다.
 조회는 OS의 `GetWindowDisplayAffinity` 값을 읽으므로 두 방식 모두 `true`입니다. 어느 쪽도 적용할 수 없으면
 변경은 `INTERNAL` 오류로 실패하고 창 생성도 실패합니다.
 macOS는 `NSWindow.sharingType`을 `None`(보호) 또는 `ReadOnly`(해제)로 설정합니다. macOS 15 이상에서는

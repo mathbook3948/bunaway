@@ -984,10 +984,10 @@ export class Windows {
   }
 
   /**
-   * Exclude the window from screenshots and screen sharing. WDA_EXCLUDEFROMCAPTURE omits
-   * the window from captures entirely. Windows 10 before version 2004 rejects it, so the
-   * fallback WDA_MONITOR is used instead: the window stays in captures but its content
-   * is drawn black. Fails when neither affinity can be applied.
+   * Exclude the window from screenshots and screen sharing. WDA_EXCLUDEFROMCAPTURE omits the
+   * window from captures; Windows 10 before version 2004 treats it like WDA_MONITOR, which keeps
+   * the window in captures with black content. If the call is rejected, it is retried with
+   * WDA_MONITOR. Fails when neither affinity can be applied.
    */
   setContentProtection(window: bigint, enabled: boolean): void {
     if (this.isContentProtected(window) === enabled) {

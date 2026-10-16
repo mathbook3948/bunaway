@@ -135,7 +135,7 @@ Windows의 `setContentPosition`, `setOuterSize`, `setContentBounds`, `setOuterBo
 설정 후 조회 및 `windows.changed` 일치를 확인했다. 합성 DPI 메시지와 실제 물리
 모니터 이동의 검증 범위는 [실행 기록](../architecture/windows-bun-results.md)에 구분했다.
 macOS는 `app.windows`, 지연 생성과 재생성, 목록 및 열림 여부, show/hide/focus/close,
-표시와 포커스 조회, `getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`를 제공한다.
+표시와 포커스 조회, `getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`, `setContentProtection`, `isContentProtected`를 제공한다.
 창 ID는 네이티브 수명마다 새로 발급한다. 뷰마다 임시 WebKit 프로필을 분리하고 실행 중 재생성에서
 유지한다. 뷰마다 창 하나만 지원하므로 createInstance, recreateInstance, multiple과 isolated는 `UNSUPPORTED`다.
 `getSnapshot`, `windows.changed`, 크기, 위치, 전체화면, 닫기 확인 등 다른 공개 창 작업도 `UNSUPPORTED`다.
