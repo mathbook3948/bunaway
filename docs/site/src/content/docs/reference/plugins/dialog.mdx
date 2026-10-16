@@ -1,11 +1,11 @@
 ---
 title: dialog
-description: Windows 파일 열기, 폴더 선택과 저장 경로 선택을 사용합니다.
+description: Windows 파일 열기, 폴더 선택, 저장 경로 선택과 메시지 대화상자를 사용합니다.
 sidebar: { order: 16 }
 ---
 
 `@bunaway/plugin-dialog`을 설치하고 기본 export `dialog`을 앱의 `plugins`에 등록합니다.
-Windows에서 파일과 폴더의 경로를 선택합니다. macOS와 다른 플랫폼은 `UNSUPPORTED`입니다.
+Windows에서 파일과 폴더의 경로를 선택하고 메시지 대화상자로 사용자에게 선택을 받습니다. macOS와 다른 플랫폼은 `UNSUPPORTED`입니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
@@ -20,19 +20,21 @@ export default defineApp({ modules: [], plugins: [dialog] });
 dialog.openFile(input: OpenFileInput, options?: NativeInvokeOptions): Promise<DialogResult>
 dialog.selectFolder(input: SelectFolderInput, options?: NativeInvokeOptions): Promise<DialogResult>
 dialog.saveFile(input: SaveFileInput, options?: NativeInvokeOptions): Promise<DialogResult>
+dialog.showMessage(input: MessageInput, options?: NativeInvokeOptions): Promise<MessageResult>
 ```
 
-세 작업 모두 입력 객체가 필요합니다. 기본 설정은 `{}`로 지정합니다.
-`dialog.openFile`, `dialog.selectFolder`, `dialog.saveFile`은 각각 별도 권한입니다.
+모든 작업에 입력 객체가 필요합니다. 파일 선택의 기본 설정은 `{}`로 지정합니다.
+`dialog.showMessage`는 `message`가 필수입니다.
+`dialog.openFile`, `dialog.selectFolder`, `dialog.saveFile`, `dialog.showMessage`는 각각 별도 권한입니다.
 뷰의 명령은 해당 뷰의 `host.permissions`, setup은 `backend.permissions`에 허용합니다.
-화면에서 플러그인을 직접 호출할 때는 `plugin.dialog.openFile` 등 해당 명령도
+화면에서 플러그인을 직접 호출할 때는 `plugin.dialog.openFile`, `plugin.dialog.showMessage` 등 해당 명령도
 뷰의 `commands`에 허용해야 합니다.
 
 | 입력 | 작업 | 의미 |
 | --- | --- | --- |
 | `ownerWindowId?: string` | 전체 | 살아 있는 창 수명 ID. 뷰는 자신의 호출 창만 지정할 수 있습니다. |
-| `title?: string` | 전체 | 1~256자의 제목. NUL은 거부합니다. |
-| `defaultDirectory?: string` | 전체 | 처음 표시할 기존 디렉터리. 경로 해석 실패는 오류입니다. |
+| `title?: string` | 전체 | 1~256자의 제목. NUL은 거부합니다. 메시지 대화상자에서 생략하면 Windows가 실행 파일 이름을 표시합니다. |
+| `defaultDirectory?: string` | 열기, 폴더, 저장 | 처음 표시할 기존 디렉터리. 경로 해석 실패는 오류입니다. |
 | `multiple?: boolean` | 열기, 폴더 | 기본 `false`. `true`이면 파일 또는 폴더를 여러 개 선택합니다. |
 | `filters?: { name: string; extensions: string[] }[]` | 열기, 저장 | 1~32개 필터. 이름은 1~128자, 확장자는 필터당 1~32개입니다. |
 | `defaultFileName?: string` | 열기, 저장 | 기본 파일 이름. 1~255자이며 경로 구분자, Windows 예약 문자와 NUL은 거부합니다. |
@@ -56,9 +58,54 @@ if (!result.cancelled) {
 }
 ```
 
+## 메시지 대화상자
+
+`dialog.showMessage`는 모달 메시지 대화상자를 표시하고 사용자가 누른 버튼을 반환합니다.
+`ownerWindowId`와 `title`은 위 표와 같은 규칙을 따르며, 나머지 입력은 다음과 같습니다.
+알 수 없는 필드와 NUL 문자는 거부합니다.
+
+| 입력 | 의미 |
+| --- | --- |
+| `message: string` | 필수. 1~4096자의 주 안내 문구. |
+| `detail?: string` | 1~8192자의 보조 설명. |
+| `type?: "none" \| "info" \| "warning" \| "error" \| "question"` | 기본 `"none"`. 아이콘만 바꾸며 버튼 구성이나 결과에는 영향이 없습니다. |
+| `buttons?: string[]` | 1~8개 버튼 라벨(각 1~64자). 생략하면 운영체제 언어의 확인 버튼 하나이며 인덱스는 0입니다. `&`를 포함한 라벨 문자는 그대로 표시됩니다. |
+| `defaultButton?: number` | 처음 포커스를 받는 버튼 인덱스. 기본 0. |
+| `cancelButton?: number` | ESC, 창 닫기 버튼과 Alt+F4가 반환할 버튼 인덱스. |
+| `checkbox?: { label: string; checked?: boolean }` | 확인란. `label`은 1~256자이고 `checked` 기본값은 `false`입니다. `label`의 `&`도 그대로 표시됩니다. |
+
+`defaultButton`과 `cancelButton`은 `buttons`의 길이보다 작은 정수여야 합니다. `buttons`를
+생략하면 길이를 1로 봅니다. 범위를 벗어난 인덱스, 빈 `buttons` 배열, 9개 이상의 버튼은
+대화상자를 표시하기 전에 `INVALID_ARGUMENT`로 거부합니다.
+
+`cancelButton`을 생략하면 버튼이 하나일 때만 0으로 간주합니다. 버튼이 둘 이상이면 ESC,
+제목 표시줄의 닫기 버튼과 Alt+F4가 동작하지 않으므로 사용자가 반드시 버튼을 눌러야 합니다.
+`cancelButton`을 지정하면 ESC, 닫기 버튼과 Alt+F4가 모두 그 인덱스를 반환합니다.
+
+결과는 `{ button: number; checkboxChecked: boolean }`입니다. `button`은 누른 버튼의 인덱스입니다.
+`checkboxChecked`는 항상 포함되며 확인란을 요청하지 않으면 `false`입니다.
+파일 선택과 달리 사용자가 ESC나 닫기로 끝내는 경우도 `cancelButton`에 해당하는 일반 버튼 결과이며
+`{ cancelled: true }`는 없습니다.
+
+```ts
+const result = await dialog.showMessage({
+  title: "파일 삭제",
+  message: "report.docx를 삭제할까요?",
+  detail: "삭제한 파일은 복구할 수 없습니다.",
+  type: "warning",
+  buttons: ["삭제", "취소"],
+  defaultButton: 1,
+  cancelButton: 1,
+  checkbox: { label: "다시 묻지 않기" },
+});
+if (result.button === 0) {
+  // "삭제"를 눌렀습니다. result.checkboxChecked로 확인란 선택 여부를 확인합니다.
+}
+```
+
 ## 결과, 소유 창과 취소
 
-사용자의 Cancel, ESC 또는 대화상자 닫기는 `{ cancelled: true }`입니다.
+파일 선택에서 사용자의 Cancel, ESC 또는 대화상자 닫기는 `{ cancelled: true }`입니다.
 성공은 `{ cancelled: false, paths: string[] }`입니다. 단일 선택과 저장은 경로 하나를
 반환합니다. 다중 선택은 최대 128개이며 결과 순서는 Windows가 반환한 순서입니다.
 각 경로는 최대 32,767 UTF-16 코드 단위, 전체 결과 경로는 최대 131,072 코드 단위입니다.
@@ -69,7 +116,7 @@ if (!result.cancelled) {
 신뢰된 backend setup은 임의의 살아 있는 앱 창을 지정하거나 생략해 소유 창 없이 표시할 수 있습니다.
 없거나 이미 닫힌 창은 `INVALID_ARGUMENT`이며 창을 재생성해도 이전 호출을 새 창에 연결하지 않습니다.
 
-호출 abort, 기한 만료, 문서/세션 종료와 앱 종료는 사용자 취소 결과로 바꾸지 않습니다.
+호출 abort, 기한 만료, 문서/세션 종료와 앱 종료는 사용자 취소 결과나 메시지 대화상자의 버튼 결과로 바꾸지 않습니다.
 호출자는 기존 SDK의 `CANCELLED` 또는 `TIMEOUT` 오류를 받고 호스트는 열린 대화상자를 닫습니다.
 소유 창의 종료가 확정되면 `CANCELLED`입니다. 결과와 취소가 경합하면 완료 전에 관측한 취소를 우선합니다.
 웹 호출에서는 기존 `NativeInvokeOptions`의 `signal`과 기한을 사용할 수 있습니다.
@@ -81,7 +128,7 @@ const controller = new AbortController();
 const result = await dialog.selectFolder({}, { signal: controller.signal });
 ```
 
-Windows UI 스레드는 한 번에 대화상자 하나를 실행합니다. 동시 요청은 기존 호스트의
+소유 창 규칙은 `dialog.showMessage`에도 같게 적용됩니다. Windows UI 스레드는 파일 선택과 메시지를 합쳐 한 번에 대화상자 하나를 실행합니다. 동시 요청은 기존 호스트의
 유한 큐에서 순서대로 실행합니다. 대기 중 취소한 요청은 이후 대화상자를 열지 않습니다.
 다른 Promise 기반 UI 작업과 창 파괴 요청도 현재 모달 호출이 끝난 뒤 실행됩니다.
 네이티브 재진입으로 중첩 호출을 시도하면 `BUSY`입니다. 앱 백엔드 스레드는 계속 실행합니다.
@@ -97,4 +144,6 @@ Windows UI 스레드는 한 번에 대화상자 하나를 실행합니다. 동�
 계약 테스트는 입력, 작업별 권한, 소유 창 범위, 사용자 취소와 호출 실패, 정리와 재진입을 검사합니다.
 Windows 통합 테스트는 실제 UI Worker와 Common Item Dialog에서 파일/폴더/저장 경로 선택,
 user Cancel 명령, 동시 호출, 호스트 abort와 shutdown을 검사하도록 구성했습니다.
+메시지 대화상자는 Linux 계약 테스트로 입력 검증, ESC와 cancel 버튼 규칙, 결과 형식을 검사합니다.
+Windows 통합 테스트는 실제 TaskDialog의 버튼 클릭, 확인란, ESC와 abort를 검사하도록 구성했습니다.
 실제 사람의 키보드/마우스, 여러 모니터, overwrite 확인 UI와 실제 소유 창 파괴는 별도 수동 검증입니다.
