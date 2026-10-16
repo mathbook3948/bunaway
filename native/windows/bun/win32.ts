@@ -932,33 +932,6 @@ export class Windows {
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER,
       ),
     );
-    // Win32 propagates topmost to owned windows. Re-read them so their committed
-    // snapshots match even if no position message arrives. Unchanged snapshots
-    // are suppressed, so this is a no-op when Windows already notified them.
-    for (const observed of [
-      ...this.observations.keys(),
-    ]) {
-      if (observed !== window && this.isOwnedBy(observed, window)) {
-        this.observeChanges(observed);
-      }
-    }
-  }
-
-  /** Walks the owner chain of a live window; Win32 owner chains are acyclic. */
-  private isOwnedBy(window: bigint, owner: bigint): boolean {
-    if (!user.symbols.IsWindow(window)) {
-      return false;
-    }
-    for (
-      let current = this.getOwner(window);
-      current !== 0n;
-      current = this.getOwner(current)
-    ) {
-      if (current === owner) {
-        return true;
-      }
-    }
-    return false;
   }
 
   isSkipTaskbar(window: bigint): boolean {
@@ -1360,6 +1333,20 @@ export class Windows {
     }
     observation.snapshot = current;
     observation.receive(current, changes);
+    if (previous.state.alwaysOnTop !== current.state.alwaysOnTop) {
+      // Win32 can change topmost on related owner and owned windows in one
+      // Z-order operation, and those windows may not receive their own
+      // position message. Re-read them so their committed snapshots match.
+      // Unchanged snapshots are suppressed, and a nested pass only fans out
+      // again after a new topmost commit, so the recursion ends.
+      for (const other of [
+        ...this.observations.keys(),
+      ]) {
+        if (other !== window && user.symbols.IsWindow(other)) {
+          this.observeChanges(other);
+        }
+      }
+    }
   }
 
   /** Query using the same committed revision as events, including changes awaiting a native message. */

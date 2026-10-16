@@ -283,6 +283,20 @@ test.skipIf(process.platform !== "win32")(
     const { Windows } = await import("#native/windows/bun/win32");
     const windows = new Windows(() => {});
     const created: bigint[] = [];
+    const driver = dlopen("user32.dll", {
+      SetWindowPos: {
+        args: [
+          "u64",
+          "i64",
+          "i32",
+          "i32",
+          "i32",
+          "i32",
+          "u32",
+        ],
+        returns: "i32",
+      },
+    });
     try {
       const create = (title: string) => {
         const hwnd = windows.create(title, 400, 300, () => {}, false);
@@ -298,15 +312,24 @@ test.skipIf(process.platform !== "win32")(
       windows.show(shownOwned, true);
       windows.pump();
       const observed = [
-        owner,
-        shownOwned,
-        hiddenOwned,
-      ].map((hwnd) => {
+        {
+          hwnd: owner,
+          viewId: "owner",
+        },
+        {
+          hwnd: shownOwned,
+          viewId: "shown-owned",
+        },
+        {
+          hwnd: hiddenOwned,
+          viewId: "hidden-owned",
+        },
+      ].map(({ hwnd, viewId }) => {
         const events: {
           snapshot: WindowSnapshot;
           changes: WindowChange[];
         }[] = [];
-        windows.observe(hwnd, "main", (snapshot, changes) =>
+        windows.observe(hwnd, viewId, (snapshot, changes) =>
           events.push({
             snapshot,
             changes,
@@ -318,25 +341,66 @@ test.skipIf(process.platform !== "win32")(
           baseline: windows.getSnapshot(hwnd),
         };
       });
+      // Read the last event before getSnapshot, which would refresh the
+      // committed snapshot and hide a missed notification. Propagation to
+      // owned windows is OS-defined (a hidden owned window in particular),
+      // so only event and query consistency is asserted for them.
+      const expectConsistent = () => {
+        for (const { hwnd, events, baseline } of observed) {
+          const reported = (events.at(-1)?.snapshot ?? baseline).state
+            .alwaysOnTop;
+          expect(reported).toBe(windows.isAlwaysOnTop(hwnd));
+        }
+      };
       for (const value of [
         true,
         false,
       ]) {
         windows.setAlwaysOnTop(owner, value);
         windows.pump();
-        // Read the last event before getSnapshot, which would refresh the
-        // committed snapshot and hide a missed notification. Propagation to
-        // owned windows is OS-defined (a hidden owned window in particular),
-        // so only event and query consistency is asserted for them.
-        for (const { hwnd, events, baseline } of observed) {
-          const reported = (events.at(-1)?.snapshot ?? baseline).state
-            .alwaysOnTop;
-          expect(reported).toBe(windows.isAlwaysOnTop(hwnd));
-        }
+        expectConsistent();
         expect(windows.isAlwaysOnTop(owner)).toBe(value);
-        console.log(
-          `alwaysOnTop=${value}: shown owned window topmost=${windows.isAlwaysOnTop(shownOwned)}`,
-        );
+      }
+
+      // An owned window leaving topmost may also change its owner.
+      windows.setAlwaysOnTop(owner, true);
+      windows.setAlwaysOnTop(shownOwned, true);
+      windows.pump();
+      expectConsistent();
+      windows.setAlwaysOnTop(shownOwned, false);
+      windows.pump();
+      expect(windows.isAlwaysOnTop(shownOwned)).toBe(false);
+      expectConsistent();
+      windows.setAlwaysOnTop(owner, false);
+      windows.pump();
+      expectConsistent();
+
+      // The direct call stands in for another process changing the owner's
+      // Z order outside the Windows API wrapper.
+      for (const [zOrder, topmost] of [
+        [
+          HWND_TOPMOST,
+          true,
+        ],
+        [
+          HWND_NOTOPMOST,
+          false,
+        ],
+      ] as const) {
+        expect(
+          driver.symbols.SetWindowPos(
+            owner,
+            zOrder,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+          ),
+        ).not.toBe(0);
+        windows.pump();
+        expect(windows.isAlwaysOnTop(owner)).toBe(topmost);
+        expectConsistent();
       }
       expect(windows.failure).toBeUndefined();
     } finally {
@@ -344,6 +408,7 @@ test.skipIf(process.platform !== "win32")(
         windows.destroy(hwnd);
       }
       windows.dispose();
+      driver.close();
     }
   },
 );

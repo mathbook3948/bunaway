@@ -1088,10 +1088,9 @@ API 호출과 사용자 조작은 같은 네이티브 관찰 경로를 사용합
 `HWND_NOTOPMOST`)은 네이티브 창 위치 변경 알림(`WM_WINDOWPOSCHANGED`)으로
 관찰합니다. 다른 프로세스가 호출한 `SetWindowPos`도 같은 알림 경로로 들어옵니다.
 `SetWindowPos`를 거치지 않는 변경은 다음 창 위치 변경 알림이나 `getSnapshot`
-호출 때 반영합니다. 같은 값으로 호출하면 이벤트가 없습니다. `setAlwaysOnTop`으로
-owner 창을 바꿀 때 Windows가 owned 창의 항상 위 상태도 함께 바꾸면, owned 창의
-view도 `windows.changed`로 `enterAlwaysOnTop` 또는 `leaveAlwaysOnTop`을
-받습니다. 숨긴 owned 창이 함께 바뀌는지는 Windows가 결정합니다. macOS는
+호출 때 반영합니다. 같은 값으로 호출하면 이벤트가 없습니다. 한 창의 항상 위 상태
+변경을 관찰하면 Windows가 함께 바꾼 owner나 owned 창의 view도 같은 시점에
+`enterAlwaysOnTop` 또는 `leaveAlwaysOnTop`을 받습니다. macOS는
 `windows.changed`를 제공하지 않으므로 이 이벤트도 Windows에서만 발행합니다.
 
 연속 move/resize는 관찰한 변경마다 FIFO로 전달합니다. Windows의 `WM_ENTERSIZEMOVE`와
