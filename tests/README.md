@@ -408,7 +408,9 @@ OS가 전경 전환 요청을 거부하면 해당 활성화 전환을 `UNTESTED`
 `lifecycle/windows-window-placement.test.ts`는 ADR 0019의 작업 영역 배치, content/outer 크기,
 음수 좌표, DPI 96/120/144/192의 반올림, 최소 크기 충돌과 좌표 범위를 순수 계산으로 검사한다.
 런타임 `windows.center`의 `monitorId`는 정확한 ID 일치, 음수 원점과 위쪽 모니터의 작업 영역,
-알 수 없는 ID의 `INVALID_ARGUMENT`와 주 모니터 대체 금지, DPI 변경 뒤 한 번의 재중앙 계산을 같은 파일에서 검사한다.
+알 수 없는 ID의 `INVALID_ARGUMENT`와 주 모니터 대체 금지를 같은 파일에서 검사한다.
+DPI가 바뀐 크기에 대해서도 `centerInWorkArea`가 같은 작업 영역의 중앙 좌표를 계산하는지만 순수 계산으로 확인한다.
+네이티브 경로에서 크기 변경을 감지해 다시 중앙에 배치하는 판단은 실제 다중 모니터와 혼합 DPI 검증으로 남아 있다.
 single/multiple 계약 회귀는 병합 오류와 네이티브 배치 검증이 예약 및 기존 창 종료보다 먼저
 실행되고 호출별 옵션이 선언을 바꾸지 않는지 확인한다. macOS 선언의 미지원 오류도 검사한다.
 `lifecycle/windows-initial-placement.ts`는 실제 HWND와 WebView2에서 초기 선언, single과

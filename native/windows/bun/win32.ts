@@ -2263,12 +2263,13 @@ export class Windows {
    * untouched instead of falling back to another monitor. Monitor enumeration failures are
    * INTERNAL.
    *
-   * Moving a normal (not minimized or maximized) window, hidden or shown, to a monitor with another DPI makes the OS apply a
-   * suggested rectangle that changes the outer size. The window is then centered once more
-   * in the same area using the new size. If that second move changes the DPI again (an
-   * oversized window straddling mixed-DPI monitors), the result follows the existing
-   * OS-suggested-rectangle handling and may not be exactly centered, so callers verify with
-   * the outer bounds.
+   * For normal windows and for minimized/maximized windows (where only the normal restore
+   * bounds move), the size is measured again after placement. If it changed (the OS applied a
+   * suggested rectangle for a DPI change, or re-maximizing on a monitor with another DPI
+   * rescaled the restore rectangle), the window is centered once more in the same work area
+   * with the new size. If that second placement changes the size again, the result follows
+   * the existing DPI handling and may not be exactly centered, so callers verify with the
+   * outer (or normal) bounds.
    */
   center(window: bigint, monitorId?: string): void {
     const editsNormalBounds =
@@ -2286,11 +2287,10 @@ export class Windows {
       "outer",
       centerInWorkArea(area, bounds.width, bounds.height),
     );
-    if (editsNormalBounds) {
-      // The HWND keeps its DPI until restore, which follows the existing restore contract.
-      return;
-    }
-    const placed = this.getBounds(window, "outer");
+    const placed = this.getBounds(
+      window,
+      editsNormalBounds ? "normal" : "outer",
+    );
     if (placed.width !== bounds.width || placed.height !== bounds.height) {
       this.setGeometry(
         window,

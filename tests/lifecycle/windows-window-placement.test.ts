@@ -418,10 +418,11 @@ test("runtime center rejects unknown monitors without falling back", () => {
   expect(() => selectMonitorWorkArea([], primaryMonitor.id)).toThrow();
 });
 
-test("runtime center recenters a DPI-changed outer size in the same selected work area", () => {
+test("runtime center computes the same work area center for a DPI-changed outer size", () => {
   const area = selectMonitorWorkArea(monitors, primaryMonitor.id);
-  // The window is first centered with its pre-move 96 DPI size, then once more with the
-  // size the OS-suggested rectangle produced at 144 DPI.
+  // Checks only the coordinate calculation: the pre-move 96 DPI size and the size an
+  // OS-suggested rectangle could produce at 144 DPI, both in the same work area. Detecting
+  // the size change in the native path is not covered here.
   expect(centerInWorkArea(area, 816, 639)).toEqual({
     x: 872,
     y: 381,
