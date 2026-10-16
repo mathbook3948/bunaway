@@ -587,7 +587,8 @@ export class MacosWebview {
   showInactive(): void {
     const o = this.objc;
     o.withAutoreleasePool(() => {
-      if (o.send(this.window, "isMiniaturized")) {
+      // Like SW_SHOWNA, an already visible or miniaturized window keeps its z-order.
+      if (o.send(this.window, "isMiniaturized") || this.isVisible()) {
         return;
       }
       o.send(this.window, "orderFront:", null);
