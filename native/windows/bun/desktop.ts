@@ -5,6 +5,7 @@ import type {
   DesktopOptions,
   OpenRequest,
   QuitReason,
+  ShutdownReason,
 } from "@bunaway/core";
 import {
   AUTOSTART_ARGUMENT,
@@ -98,18 +99,34 @@ export function openRequest(
   });
 }
 
-/** Serializes open callbacks and runs the app's before-quit shutdown gate. */
+/** Longest wait for each of onWillQuit and onQuit before shutdown continues without it. */
+export const WILL_QUIT_DEADLINE_MS = 3000;
+
+/**
+ * Serializes app callbacks (ready, open, all-windows-closed), runs the app's
+ * before-quit shutdown gate, and delivers the shutdown notifications once.
+ */
 export class DesktopLifecycle {
   readonly context: DesktopContext;
   private quitting: Promise<boolean> | undefined;
   private stopped = false;
-  private opens = Promise.resolve();
+  private callbacks = Promise.resolve();
   private pending = 0;
+  /** First committed shutdown cause; later causes never replace it. */
+  private shutdownReason: ShutdownReason | undefined;
+  private willQuitDone = false;
+  private quitDone = false;
+  /**
+   * @param stop Asks the host to begin shutdown after a quit is approved.
+   * @param report Receives callback failures and hook timeouts without ending the app.
+   * @param hookDeadlineMs Wait limit for onWillQuit and onQuit; a parameter so tests need no real wait.
+   */
   constructor(
     readonly options: DesktopOptions | undefined,
     control: (action: "show" | "hide") => Promise<void>,
     private readonly stop: () => void,
     private readonly report: (error: unknown) => void,
+    private readonly hookDeadlineMs = WILL_QUIT_DEADLINE_MS,
   ) {
     if (
       options !== undefined &&
@@ -150,8 +167,12 @@ export class DesktopLifecycle {
       throw new Error("Invalid desktop.tray.tooltip");
     }
     for (const name of [
+      "onReady",
       "onOpen",
+      "onAllWindowsClosed",
       "beforeQuit",
+      "onWillQuit",
+      "onQuit",
     ] as const) {
       if (
         options?.[name] !== undefined &&
@@ -161,12 +182,12 @@ export class DesktopLifecycle {
       }
     }
     this.context = Object.freeze({
-      show: () => (this.stopped ? Promise.resolve() : control("show")),
+      show: () => (this.ending ? Promise.resolve() : control("show")),
       hide: () => {
         if (!options?.tray) {
           return Promise.reject(new Error("Hiding requires a tray"));
         }
-        return this.stopped ? Promise.resolve() : control("hide");
+        return this.ending ? Promise.resolve() : control("hide");
       },
       quit: () => this.quit("api"),
     });
@@ -177,34 +198,132 @@ export class DesktopLifecycle {
    * Throws if stopped or full.
    */
   open(input: LaunchArguments, source: OpenRequest["source"]): void {
-    if (this.stopped || this.pending >= 64) {
+    if (this.ending || this.pending >= 64) {
       throw new Error("Desktop open queue unavailable");
     }
     this.pending++;
-    this.opens = this.opens
+    void this.enqueue(async () => {
+      if (source === "second-instance" && !desktopLaunch(input.argv).hidden) {
+        await this.context.show();
+      }
+      await this.options?.onOpen?.(
+        openRequest(input, source, this.options?.openArguments),
+        this.context,
+      );
+    }).finally(() => {
+      this.pending--;
+    });
+  }
+  /**
+   * Queues onReady once the backend and UI Worker are up. Call it before the
+   * initial open so that open callbacks start after onReady settles.
+   */
+  ready(): void {
+    this.enqueue(async () => {
+      await this.options?.onReady?.(this.context);
+    });
+  }
+  /** Queues onAllWindowsClosed after the UI reports the last live window closed. */
+  windowsEmpty(): void {
+    this.enqueue(async () => {
+      await this.options?.onAllWindowsClosed?.(this.context);
+    });
+  }
+  /**
+   * Records the shutdown cause for onWillQuit and onQuit. The first cause wins,
+   * so a signal during a pending quit check or a UI close report cannot be
+   * reported twice. It also stops queued callbacks and later quit requests.
+   */
+  commitShutdown(reason: ShutdownReason): void {
+    this.shutdownReason ??= reason;
+  }
+  /**
+   * Runs onWillQuit once for an orderly shutdown, before Core and windows stop.
+   * Does nothing when no shutdown cause was committed (a host failure).
+   */
+  async willQuit(): Promise<void> {
+    const reason = this.shutdownReason;
+    if (reason === undefined || this.willQuitDone) {
+      return;
+    }
+    this.willQuitDone = true;
+    await this.runShutdownHook("onWillQuit", this.options?.onWillQuit, reason);
+  }
+  /** Runs onQuit once after Core and the Workers stopped; skipped without a committed cause. */
+  async quitCompleted(): Promise<void> {
+    const reason = this.shutdownReason;
+    if (reason === undefined || this.quitDone) {
+      return;
+    }
+    this.quitDone = true;
+    await this.runShutdownHook("onQuit", this.options?.onQuit, reason);
+  }
+  private get ending(): boolean {
+    return this.stopped || this.shutdownReason !== undefined;
+  }
+  /**
+   * Appends a task to the callback queue. The task is skipped once shutdown
+   * started. Failures are reported and never block later tasks. The returned
+   * promise settles after the task and never rejects.
+   */
+  private enqueue(task: () => Promise<void>): Promise<void> {
+    this.callbacks = this.callbacks
       .then(async () => {
-        if (this.stopped) {
+        if (this.ending) {
           return;
         }
-        if (source === "second-instance" && !desktopLaunch(input.argv).hidden) {
-          await this.context.show();
-        }
-        await this.options?.onOpen?.(
-          openRequest(input, source, this.options?.openArguments),
-          this.context,
-        );
+        await task();
       })
-      .catch(this.report)
-      .finally(() => {
-        this.pending--;
-      });
+      .catch(this.report);
+    return this.callbacks;
+  }
+  /**
+   * Awaits a shutdown hook up to the deadline. A failure or timeout is
+   * reported and shutdown continues; a hook that finishes late is ignored.
+   */
+  private async runShutdownHook(
+    name: "onWillQuit" | "onQuit",
+    hook: ((reason: ShutdownReason) => void | Promise<void>) | undefined,
+    reason: ShutdownReason,
+  ): Promise<void> {
+    if (!hook) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<"expired">((resolve) => {
+      timer = setTimeout(() => resolve("expired"), this.hookDeadlineMs);
+    });
+    // Wrapping in an async function turns a synchronous throw into a rejection.
+    const running = (async () => hook.call(this.options, reason))();
+    try {
+      if (
+        (await Promise.race([
+          running,
+          expired,
+        ])) === "expired"
+      ) {
+        // Observe the late outcome so a hook that fails after the deadline is not unhandled.
+        running.catch(() => {});
+        this.report(
+          new Error(
+            `desktop.${name} did not finish in ${this.hookDeadlineMs} ms`,
+          ),
+        );
+      }
+    } catch (error) {
+      this.report(error);
+    } finally {
+      clearTimeout(timer);
+    }
   }
   /**
    * Shares concurrent quit checks.
-   * Returns false if before-quit vetoes or fails.
+   * Returns false if before-quit vetoes or fails. A veto that settles after a
+   * non-cancellable shutdown was committed (for example a session end) is moot
+   * and returns true, so the host never reports a cancelled quit for it.
    */
   quit(reason: QuitReason): Promise<boolean> {
-    if (this.stopped) {
+    if (this.ending) {
       return Promise.resolve(true);
     }
     if (this.quitting) {
@@ -213,13 +332,18 @@ export class DesktopLifecycle {
     this.quitting = Promise.resolve()
       .then(async () => {
         try {
-          if ((await this.options?.beforeQuit?.(reason)) === false) {
+          const vetoed = (await this.options?.beforeQuit?.(reason)) === false;
+          // A shutdown that cannot be cancelled (session end, window destruction, interrupt)
+          // may commit while the app is still deciding; its veto no longer has any effect.
+          if (this.ending) {
+            return true;
+          }
+          if (vetoed) {
             return false;
           }
-          if (!this.stopped) {
-            this.stopped = true;
-            this.stop();
-          }
+          this.commitShutdown(reason);
+          this.stopped = true;
+          this.stop();
           return true;
         } catch (error) {
           this.report(error);

@@ -1,6 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
 import { MessageChannel } from "node:worker_threads";
-import { Channel, type Packet, type Route } from "#native/windows/bun/channel";
 import { createClient } from "@bunaway/client";
 import { type CoreSession, createCore } from "@bunaway/core";
 import {
@@ -10,6 +9,7 @@ import {
   type TransportEvent,
 } from "@bunaway/protocol";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
+import { Channel, type Packet, type Route } from "#native/windows/bun/channel";
 
 test("Host calls remain BUSY until both Workers acknowledge cancellations, then recover", async () => {
   const child = Bun.spawn(
@@ -821,17 +821,31 @@ test.each([
         sends.push(pending);
       }
       for (let index = 0; index < 16; index++) {
-        const pending = sender.send({
-          kind: side === "ui" ? "closing" : "shutdown",
-        });
+        const pending = sender.send(
+          side === "ui"
+            ? {
+                kind: "closing",
+                reason: "window-destroyed",
+              }
+            : {
+                kind: "shutdown",
+              },
+        );
         void pending.catch((error) => failures.push(error));
         sends.push(pending);
       }
       await expect(sender.send(revoke(128))).rejects.toThrow("full");
       await expect(
-        sender.send({
-          kind: side === "ui" ? "closing" : "shutdown",
-        }),
+        sender.send(
+          side === "ui"
+            ? {
+                kind: "closing",
+                reason: "window-destroyed",
+              }
+            : {
+                kind: "shutdown",
+              },
+        ),
       ).rejects.toThrow("full");
       release();
       await Promise.all(sends);
@@ -1232,6 +1246,7 @@ test("saturated data and diagnostics preserve cancellation, deadlines and lifecy
     // Even with both data and diagnostics full, lifecycle control must be accepted.
     const closing = channel.send({
       kind: "closing",
+      reason: "window-destroyed",
     });
     void closing.catch(() => {});
     await full;
@@ -1740,6 +1755,7 @@ test("multiple views share cancellation capacity until all cancellation acknowle
     // Lifecycle delivery still works while every cancellation slot is occupied.
     await channel.send({
       kind: "closing",
+      reason: "window-destroyed",
     });
     expect(failures).toHaveLength(0);
     expect(

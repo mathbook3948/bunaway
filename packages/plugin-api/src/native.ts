@@ -309,6 +309,12 @@ export type NativeWindow = {
   activate(): boolean;
   /** Starts a normal close request; returns false when it is declined or hides to tray. */
   close(): boolean | Promise<boolean>;
+  /**
+   * Answers the pending `windows.closeRequested` question of this window. `allow: true` lets the
+   * close continue and replaces only this window's own close confirmation; `false` keeps the window open.
+   * Throws INVALID_ARGUMENT when `requestId` is not the pending request. Windows only.
+   */
+  respondClose?(requestId: number, allow: boolean): void;
   /** Trusted backend destruction bypasses confirmation, tray hiding and quit veto. Windows only. */
   destroy?(): boolean | Promise<boolean>;
   /** Sets the owner of this top-level window by native lifetime ID. Null detaches. Windows only. */

@@ -15,6 +15,7 @@ import {
   desktopLaunch,
   openRequest,
   validateDesktopStartup,
+  WILL_QUIT_DEADLINE_MS,
 } from "#native/windows/bun/desktop";
 import {
   forwardToInstance,
@@ -1081,3 +1082,204 @@ test("instance deadlines end a slow request and a slow acknowledgement after fiv
     );
   }
 }, 10000);
+
+test("lifecycle callbacks must be functions", () => {
+  for (const name of [
+    "onReady",
+    "onAllWindowsClosed",
+    "onWillQuit",
+    "onQuit",
+  ]) {
+    expect(
+      () =>
+        new DesktopLifecycle(
+          {
+            // App definitions loaded at runtime may not have passed a TypeScript check.
+            [name]: "not a function",
+          } as unknown as DesktopOptions,
+          async () => {},
+          () => {},
+          () => {},
+        ),
+    ).toThrow(`desktop.${name} must be a function`);
+  }
+});
+
+test("onReady runs before the initial open and a failure does not stop later callbacks", async () => {
+  const seen: string[] = [];
+  const errors: unknown[] = [];
+  const failure = new Error("ready failed");
+  const lifecycle = new DesktopLifecycle(
+    {
+      async onReady() {
+        seen.push("ready:start");
+        await tick();
+        seen.push("ready:end");
+        throw failure;
+      },
+      onOpen(request) {
+        seen.push(`open:${request.source}`);
+      },
+      onAllWindowsClosed() {
+        seen.push("empty");
+      },
+    },
+    async () => {},
+    () => {},
+    (error) => errors.push(error),
+  );
+  lifecycle.ready();
+  lifecycle.open(launch, "initial");
+  lifecycle.windowsEmpty();
+  await tick();
+  await tick();
+  expect(seen).toEqual([
+    "ready:start",
+    "ready:end",
+    "open:initial",
+    "empty",
+  ]);
+  expect(errors).toEqual([
+    failure,
+  ]);
+});
+
+test("ready and all-windows-closed callbacks are skipped once shutdown is committed", async () => {
+  const seen: string[] = [];
+  const lifecycle = new DesktopLifecycle(
+    {
+      onReady: () => {
+        seen.push("ready");
+      },
+      onAllWindowsClosed: () => {
+        seen.push("empty");
+      },
+    },
+    async () => {},
+    () => {},
+    () => {},
+  );
+  lifecycle.commitShutdown("window-destroyed");
+  lifecycle.ready();
+  lifecycle.windowsEmpty();
+  await tick();
+  expect(seen).toEqual([]);
+});
+
+test("willQuit and quitCompleted report the approved quit reason once, in order", async () => {
+  const seen: string[] = [];
+  let stops = 0;
+  const lifecycle: DesktopLifecycle = new DesktopLifecycle(
+    {
+      beforeQuit: () => {
+        seen.push("beforeQuit");
+      },
+      async onWillQuit(reason) {
+        seen.push(`willQuit:${reason}`);
+        // Quitting again from a shutdown hook is harmless.
+        expect(await lifecycle.context.quit()).toBe(true);
+      },
+      async onQuit(reason) {
+        seen.push(`quit:${reason}`);
+        expect(await lifecycle.context.quit()).toBe(true);
+      },
+    },
+    async () => {},
+    () => {
+      stops++;
+    },
+    () => {},
+  );
+  // Nothing was committed yet, so a host failure path delivers no shutdown hook.
+  await lifecycle.willQuit();
+  await lifecycle.quitCompleted();
+  expect(seen).toEqual([]);
+  expect(await lifecycle.quit("tray")).toBe(true);
+  // A later cause such as a signal does not replace the approved reason.
+  lifecycle.commitShutdown("interrupted");
+  await lifecycle.willQuit();
+  await lifecycle.willQuit();
+  await lifecycle.quitCompleted();
+  await lifecycle.quitCompleted();
+  expect(stops).toBe(1);
+  expect(seen).toEqual([
+    "beforeQuit",
+    "willQuit:tray",
+    "quit:tray",
+  ]);
+});
+
+test("a committed non-cancellable shutdown skips beforeQuit and later quit checks", async () => {
+  let checks = 0;
+  const lifecycle = new DesktopLifecycle(
+    {
+      beforeQuit: () => {
+        checks++;
+        return false;
+      },
+    },
+    async () => {},
+    () => {},
+    () => {},
+  );
+  lifecycle.commitShutdown("interrupted");
+  expect(await lifecycle.quit("api")).toBe(true);
+  expect(checks).toBe(0);
+});
+
+test("shutdown hooks that fail or exceed the deadline are reported and do not block shutdown", async () => {
+  const errors: unknown[] = [];
+  const failure = new Error("hook failed");
+  const lifecycle = new DesktopLifecycle(
+    {
+      onWillQuit: () => new Promise<void>(() => {}),
+      onQuit: () => {
+        throw failure;
+      },
+    },
+    async () => {},
+    () => {},
+    (error) => errors.push(error),
+    20,
+  );
+  lifecycle.commitShutdown("session-end");
+  await lifecycle.willQuit();
+  expect(errors).toHaveLength(1);
+  expect(String(errors[0])).toContain("desktop.onWillQuit did not finish");
+  await lifecycle.quitCompleted();
+  expect(errors[1]).toBe(failure);
+  expect(WILL_QUIT_DEADLINE_MS).toBe(3000);
+});
+
+test("a session end committed during a pending beforeQuit ignores its later veto", async () => {
+  const seen: string[] = [];
+  let finish: (value: boolean) => void = () => {};
+  let stops = 0;
+  const lifecycle = new DesktopLifecycle(
+    {
+      beforeQuit: () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve;
+        }),
+      onWillQuit(reason) {
+        seen.push(`willQuit:${reason}`);
+      },
+    },
+    async () => {},
+    () => {
+      stops++;
+    },
+    () => {},
+  );
+  const quitting = lifecycle.quit("last-window");
+  await tick();
+  lifecycle.commitShutdown("session-end");
+  finish(false);
+  // The host sends quit-cancelled only for false, so a moot veto must resolve true.
+  expect(await quitting).toBe(true);
+  expect(stops).toBe(0);
+  await lifecycle.willQuit();
+  expect(seen).toEqual([
+    "willQuit:session-end",
+  ]);
+});

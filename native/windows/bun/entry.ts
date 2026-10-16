@@ -35,6 +35,7 @@ import {
 import { DevelopmentApp } from "./development-app.ts";
 import type { LaunchArguments, listenForInstances } from "./instance.ts";
 import { activeDescendants, containAppProcess } from "./job.ts";
+import { releaseSessionEndWait } from "./session-end.ts";
 
 /**
  * Starts the Windows host and Workers, then creates the app Core.
@@ -95,6 +96,17 @@ export async function runWindowsApp(
   let core: Core | undefined;
   let booting: Promise<Core> | undefined;
   let failure: unknown;
+  /** Wait buffer of a confirmed Windows session end; the UI thread blocks on it until app cleanup. */
+  let sessionEndRelease: SharedArrayBuffer | undefined;
+  /** True once Core stopped or the host failed, so no app cleanup remains for a session end to wait on. */
+  let appCleanupSettled = false;
+  /** Releases the blocked UI thread, now or as soon as a session end registers its buffer. Repeatable. */
+  const settleSessionEnd = () => {
+    appCleanupSettled = true;
+    if (sessionEndRelease) {
+      releaseSessionEndWait(sessionEndRelease);
+    }
+  };
   let cleaned = false;
   let ioCleaned = false;
   let ioReadyResolve: () => void = () => {};
@@ -188,6 +200,8 @@ export async function runWindowsApp(
     readyResolve();
     ioReadyResolve();
     stopResolve();
+    // A failed host cannot finish cleanup, so do not keep Windows waiting on the UI thread.
+    settleSessionEnd();
   };
   const channel = new Channel(worker, config.runtime, "main", receive, fail);
   const ioChannel = new Channel(
@@ -332,7 +346,27 @@ export async function runWindowsApp(
         .catch(fail);
       return;
     }
+    if (packet.kind === "windows-empty") {
+      if (!stopping) {
+        desktop.windowsEmpty();
+      }
+      return;
+    }
+    if (packet.kind === "session-end") {
+      // Windows ends the session regardless of the app: commit before anything else so a pending
+      // beforeQuit result is ignored, then run the normal shutdown. The UI thread stays blocked
+      // in WM_ENDSESSION until settleSessionEnd(), which is immediate when cleanup already ended.
+      sessionEndRelease = packet.release;
+      desktop.commitShutdown("session-end");
+      stopping = true;
+      stopResolve();
+      if (appCleanupSettled) {
+        settleSessionEnd();
+      }
+      return;
+    }
     if (packet.kind === "closing") {
+      desktop.commitShutdown(packet.reason);
       stopping = true;
       stopResolve();
       return;
@@ -433,6 +467,7 @@ export async function runWindowsApp(
     takeCall(id)?.resolve(response);
   }
   const onSignal = () => {
+    desktop.commitShutdown("interrupted");
     stopping = true;
     stopResolve();
   };
@@ -672,6 +707,8 @@ export async function runWindowsApp(
       await channel.send({
         kind: "start",
       });
+      // onReady is queued ahead of the initial open so that open callbacks wait for it.
+      desktop.ready();
       if (launch) {
         desktop.open(launch, "initial");
       }
@@ -685,6 +722,11 @@ export async function runWindowsApp(
     closeReload?.();
     clearTimeout(startupTimer);
     stopping = true;
+    // An orderly shutdown tells the app before Core and window teardown begin;
+    // host failures skip this because the app state can no longer be trusted.
+    if (!failure) {
+      await desktop.willQuit();
+    }
     desktop.dispose();
     await inbox?.close().catch(fail);
     cancelCalls();
@@ -701,6 +743,9 @@ export async function runWindowsApp(
       });
     }
     await core?.stop().catch(fail);
+    // App-level cleanup (onWillQuit and plugin stop hooks) is done: let a blocked session end return.
+    // Worker teardown below continues after the UI thread resumes and processes `shutdown`.
+    settleSessionEnd();
     sessions.clear();
     await channel
       .send({
@@ -717,6 +762,8 @@ export async function runWindowsApp(
       ioExited,
     ]);
     clearTimeout(timeout);
+    // Backstop for a session end registered after the release above (repeat-safe).
+    settleSessionEnd();
     channel.close();
     ioChannel.close();
     const descendants = activeDescendants();
@@ -728,6 +775,9 @@ export async function runWindowsApp(
     await log.drain();
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
+    if (!failure) {
+      await desktop.quitCompleted();
+    }
   }
   if (failure) {
     throw failure;

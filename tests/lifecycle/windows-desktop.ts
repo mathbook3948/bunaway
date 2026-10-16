@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AppDefinition } from "@bunaway/core";
+import type {
+  AppDefinition,
+  DesktopContext,
+  ShutdownReason,
+} from "@bunaway/core";
 import tray from "@bunaway/plugin-tray";
 import windows from "@bunaway/plugin-windows";
 import {
@@ -94,6 +98,17 @@ const hiddenStart = scenario.startsWith("autostart-hidden");
 const trayLifecycle = scenario === "hide" || autostart;
 const devShutdown = scenario.startsWith("dev-");
 const devPending = scenario === "dev-pending";
+// Close-lifecycle scenarios run a keep-alive app that logs every lifecycle hook.
+const closeLifecycle = scenario.endsWith("lifecycle");
+/** Hook events whose relative order the parent verifies. */
+const lifecycleEvents = [
+  "ready",
+  "opened",
+  "all-windows-closed",
+  "will-quit",
+  "desktop-stopped",
+  "quit",
+];
 const repoRoot = process.argv.includes("--repo")
   ? (process.argv[process.argv.indexOf("--repo") + 1] ?? "")
   : resolve(import.meta.dir, "../..");
@@ -183,6 +198,7 @@ if (!process.argv.includes("--child")) {
   let sessionCount = 0;
   let quitCount = 0;
   let stopped = false;
+  const hookOrder: string[] = [];
   const decoder = new TextDecoder();
   const stream = child.stdout.pipeTo(
     new WritableStream({
@@ -198,6 +214,14 @@ if (!process.argv.includes("--child")) {
             continue;
           }
           const event = JSON.parse(line);
+          if (
+            lifecycleEvents.includes(event.event) &&
+            (event.event !== "opened" || event.source === "initial")
+          ) {
+            hookOrder.push(
+              event.reason ? `${event.event}:${event.reason}` : event.event,
+            );
+          }
           if (event.event === "desktop-stopped") {
             stopped = true;
           }
@@ -360,9 +384,31 @@ if (!process.argv.includes("--child")) {
         devPending ? 1 : 0,
         "CLI shutdown must bypass beforeQuit",
       );
-    } else {
+    } else if (!closeLifecycle) {
       assert(reopened);
       assert(trayLifecycle ? hidden && trayQuit : vetoed);
+    }
+    if (closeLifecycle) {
+      // onReady settles before the initial open; shutdown hooks bracket the plugin stop hook.
+      assert.deepEqual(
+        hookOrder,
+        devShutdown
+          ? [
+              "ready",
+              "opened",
+              "will-quit:interrupted",
+              "desktop-stopped",
+              "quit:interrupted",
+            ]
+          : [
+              "ready",
+              "opened",
+              "all-windows-closed",
+              "will-quit:api",
+              "desktop-stopped",
+              "quit:api",
+            ],
+      );
     }
     assert.equal(
       sessionCount,
@@ -427,6 +473,44 @@ if (!process.argv.includes("--child")) {
                 closeBehavior: "hide",
                 tray: {
                   tooltip: "Bunaway lifecycle",
+                },
+              } as const)
+            : {}),
+          ...(closeLifecycle
+            ? ({
+                closeBehavior: "keep-alive",
+                async onReady() {
+                  // A slow onReady proves that the initial onOpen waits for it.
+                  await Bun.sleep(100);
+                  console.log(
+                    JSON.stringify({
+                      event: "ready",
+                    }),
+                  );
+                },
+                async onAllWindowsClosed(context: DesktopContext) {
+                  console.log(
+                    JSON.stringify({
+                      event: "all-windows-closed",
+                    }),
+                  );
+                  assert(await context.quit());
+                },
+                onWillQuit(reason: ShutdownReason) {
+                  console.log(
+                    JSON.stringify({
+                      event: "will-quit",
+                      reason,
+                    }),
+                  );
+                },
+                onQuit(reason: ShutdownReason) {
+                  console.log(
+                    JSON.stringify({
+                      event: "quit",
+                      reason,
+                    }),
+                  );
                 },
               } as const)
             : {}),

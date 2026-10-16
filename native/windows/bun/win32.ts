@@ -20,6 +20,7 @@ import {
   APP_SHUTDOWN_MESSAGE,
   APP_WINDOW_CLASS_PREFIX,
 } from "@bunaway/runtime-bun/windows-control";
+import type { SessionMessageHandler } from "./session-end.ts";
 import { Taskbar } from "./taskbar.ts";
 import {
   type TaskbarProgress,
@@ -225,12 +226,16 @@ export class Windows {
   private readonly smallIcon: bigint;
   private readonly ownedIcons: boolean;
 
-  /** Register the window class and set this STA to per-monitor-v2 awareness. */
+  /**
+   * Register the window class and set this STA to per-monitor-v2 awareness.
+   * `sessionMessage` answers WM_QUERYENDSESSION and WM_ENDSESSION for every window of the class.
+   */
   constructor(
     shutdown: () => void,
     iconPath?: string,
     appId?: string,
     pollMessages?: () => void,
+    private readonly sessionMessage?: SessionMessageHandler,
   ) {
     assert(
       this.taskbarButtonCreated,
@@ -328,6 +333,12 @@ export class Windows {
           assert.equal(kernel.symbols.GetCurrentThreadId(), this.thread);
           // DispatchMessage can remain in a native move/resize loop until the user releases the mouse.
           pollMessages?.();
+          // Session messages reach every top-level HWND of this thread (app, control, tray and
+          // notification windows share this procedure); one handler answers for all of them.
+          const sessionResult = this.sessionMessage?.(message, wparam, lparam);
+          if (sessionResult !== undefined) {
+            return sessionResult;
+          }
           if (
             message === this.taskbarButtonCreated &&
             this.windows.has(window)

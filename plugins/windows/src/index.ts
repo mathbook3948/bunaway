@@ -117,6 +117,8 @@ export default defineNativePlugin(
         dispose,
         busy,
         // macOS supplies basic window and WebView services; geometry, identity and readiness remain unsupported.
+        // The shared `windows.lifecycle` and `windows.closeRequested` events are only emitted by the Windows host,
+        // so `windows.respondClose` is not offered here either.
         operations: macosOperations,
       },
     },

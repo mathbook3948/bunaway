@@ -3,6 +3,7 @@ import {
   receiveMessageOnPort,
   type Worker,
 } from "node:worker_threads";
+import type { ShutdownReason } from "@bunaway/core";
 import {
   API_LIMITS,
   BunawayError,
@@ -109,6 +110,46 @@ function desktopAction(value: unknown): asserts value is "show" | "hide" {
 function quitReason(value: unknown): asserts value is "last-window" | "tray" {
   if (value !== "last-window" && value !== "tray") {
     throw new Error("Invalid quit reason");
+  }
+}
+function shutdownReason(value: unknown): asserts value is ShutdownReason {
+  if (
+    value !== "last-window" &&
+    value !== "tray" &&
+    value !== "api" &&
+    value !== "window-destroyed" &&
+    value !== "session-end" &&
+    value !== "interrupted"
+  ) {
+    throw new Error("Invalid shutdown reason");
+  }
+}
+/** Flags of a Windows WM_ENDSESSION lParam; each is a distinct reason the OS gives for the session end. */
+export type SessionEndFlags = {
+  /** The user is logging off rather than shutting down or restarting. */
+  logoff: boolean;
+  /** The system is ending regardless of what applications do. */
+  critical: boolean;
+  /** Restart Manager asks the app to close so files can be updated. */
+  closeApp: boolean;
+};
+function sessionEndFlags(value: unknown): asserts value is SessionEndFlags {
+  const flags = record(value);
+  if (
+    Object.keys(flags).length !== 3 ||
+    typeof flags.logoff !== "boolean" ||
+    typeof flags.critical !== "boolean" ||
+    typeof flags.closeApp !== "boolean"
+  ) {
+    throw new Error("Invalid session end flags");
+  }
+}
+function sharedFlagBuffer(value: unknown): asserts value is SharedArrayBuffer {
+  if (
+    !(value instanceof SharedArrayBuffer) ||
+    value.byteLength !== Int32Array.BYTES_PER_ELEMENT
+  ) {
+    throw new Error("Invalid shared release buffer");
   }
 }
 function wireError(value: unknown): asserts value is WireError {
@@ -248,7 +289,33 @@ const packetDefinitions = {
     ],
     "control",
   ),
+  /** The UI committed app shutdown without a quit veto; `reason` is the first cause. */
   closing: definePacket(
+    {
+      reason: shutdownReason,
+    },
+    [
+      "main",
+    ],
+    "control",
+  ),
+  /**
+   * Windows confirmed the session ends (WM_ENDSESSION). The UI thread blocks until the main thread
+   * sets and notifies the first Int32 of `release` after app cleanup, or a timeout elapses.
+   * Structured clone shares the buffer; the JSON size check sees it as an empty object.
+   */
+  "session-end": definePacket(
+    {
+      flags: sessionEndFlags,
+      release: sharedFlagBuffer,
+    },
+    [
+      "main",
+    ],
+    "control",
+  ),
+  /** The last live app window closed while the app stays resident. */
+  "windows-empty": definePacket(
     {},
     [
       "main",

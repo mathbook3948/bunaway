@@ -112,9 +112,9 @@ async function checkShutdown(
           kind:packet.kind==="authorize-input" ? "input-authorized" : "authorized",
           context:packet.context,requestId:packet.requestId,allowed:true
         });
-        else if(packet.kind==="start") {${mode === "handoff" ? "" : 'channel.notify({kind:"closing"});'}}
+        else if(packet.kind==="start") {${mode === "handoff" ? "" : 'channel.notify({kind:"closing",reason:"window-destroyed"});'}}
         // Accept the result into UI ownership, then close before forwarding it to Core.
-        else if(packet.kind==="host-result") setTimeout(()=>channel.notify({kind:"closing"}),100);
+        else if(packet.kind==="host-result") setTimeout(()=>channel.notify({kind:"closing",reason:"window-destroyed"}),100);
         else if(packet.kind==="shutdown") void (async()=>{
           await channel.send({kind:"cleaned"});await channel.drain();channel.close();parentPort.close();
         })().catch(error=>{console.error(error);process.exit(1);});

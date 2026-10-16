@@ -287,6 +287,15 @@ export function createOperations(
       }
       case "windows.close":
         return window.close();
+      case "windows.respondClose":
+        if (!window.respondClose) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "Close requests are not implemented on this platform.",
+          });
+        }
+        window.respondClose(call.payload.requestId, call.payload.allow);
+        break;
       case "windows.destroy":
         if (!window.destroy) {
           throw unsupportedRelations();
