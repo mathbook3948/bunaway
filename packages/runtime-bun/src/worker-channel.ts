@@ -107,8 +107,17 @@ function desktopAction(value: unknown): asserts value is "show" | "hide" {
     throw new Error("Invalid desktop action");
   }
 }
-function quitReason(value: unknown): asserts value is "last-window" | "tray" {
-  if (value !== "last-window" && value !== "tray") {
+function desktopCloseBehavior(
+  value: unknown,
+): asserts value is "quit" | "keep-alive" {
+  if (value !== "quit" && value !== "keep-alive") {
+    throw new Error("Invalid desktop close behavior");
+  }
+}
+function quitReason(
+  value: unknown,
+): asserts value is "last-window" | "tray" | "quit-command" {
+  if (value !== "last-window" && value !== "tray" && value !== "quit-command") {
     throw new Error("Invalid quit reason");
   }
 }
@@ -117,6 +126,7 @@ function shutdownReason(value: unknown): asserts value is ShutdownReason {
     value !== "last-window" &&
     value !== "tray" &&
     value !== "api" &&
+    value !== "quit-command" &&
     value !== "window-destroyed" &&
     value !== "session-end" &&
     value !== "interrupted"
@@ -289,13 +299,42 @@ const packetDefinitions = {
     ],
     "control",
   ),
-  /** The UI committed app shutdown without a quit veto; `reason` is the first cause. */
+  /**
+   * App shutdown was committed without a quit veto; `reason` is the first cause. Windows: the UI
+   * reports it to the main thread. macOS: the main thread reports a cause it decided itself
+   * (signal, session end, vanished last window) to the backend, ahead of `shutdown`.
+   */
   closing: definePacket(
     {
       reason: shutdownReason,
     },
     [
       "main",
+      "macos-backend",
+    ],
+    "control",
+  ),
+  /**
+   * macOS backend to main thread, once before the first `native-register`: the app's resolved
+   * desktop options that the AppKit side needs. Until it arrives, app-decided requests wait.
+   */
+  "desktop-config": definePacket(
+    {
+      closeBehavior: desktopCloseBehavior,
+    },
+    [
+      "macos-main",
+    ],
+    "control",
+  ),
+  /**
+   * macOS main thread to backend: native windows, adapters and I/O Worker are torn down, so the
+   * backend may run `onQuit` and exit. Sent on every shutdown, and ignored after a host failure.
+   */
+  "native-stopped": definePacket(
+    {},
+    [
+      "macos-backend",
     ],
     "control",
   ),
@@ -319,6 +358,7 @@ const packetDefinitions = {
     {},
     [
       "main",
+      "macos-backend",
     ],
     "control",
   ),
@@ -337,6 +377,7 @@ const packetDefinitions = {
     },
     [
       "ui",
+      "macos-main",
     ],
     "control",
   ),
@@ -346,6 +387,7 @@ const packetDefinitions = {
     },
     [
       "main",
+      "macos-backend",
     ],
     "control",
   ),
@@ -353,6 +395,7 @@ const packetDefinitions = {
     {},
     [
       "ui",
+      "macos-main",
     ],
     "control",
   ),
@@ -360,6 +403,7 @@ const packetDefinitions = {
     {},
     [
       "ui",
+      "macos-main",
     ],
     "control",
   ),
@@ -523,6 +567,7 @@ const packetDefinitions = {
     },
     [
       "main",
+      "macos-main",
     ],
     "diagnostic",
   ),

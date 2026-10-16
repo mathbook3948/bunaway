@@ -402,3 +402,13 @@ test("the windows plugin declares respondClose among its native operations", () 
   const names = windows._definition.native.operations.map(({ name }) => name);
   expect(names).toContain("windows.respondClose");
 });
+
+test("both desktop platforms register respondClose, so a macOS policy may reference windows.respondClose", () => {
+  // macOS emits windows.closeRequested through the same close order, so its policy needs the answer operation.
+  expect(windows._definition.nativePlatforms.windows?.operations).toContain(
+    "respondClose",
+  );
+  expect(windows._definition.nativePlatforms.macos?.operations).toContain(
+    "respondClose",
+  );
+});

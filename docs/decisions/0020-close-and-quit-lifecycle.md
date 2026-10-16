@@ -7,7 +7,8 @@ status: accepted
 결정일: 2026-10-16
 
 [ADR 0013](./0013-desktop-lifecycle.md)을 확장한다. 0013의 `beforeQuit`, 닫기 동작과
-trusted destroy 계약은 유지한다. Windows 호스트와 SDK가 이 계약을 구현한다.
+trusted destroy 계약은 유지한다. Windows 호스트와 SDK가 이 계약을 구현하며
+macOS는 [ADR 0021](./0021-macos-desktop-lifecycle.md)에 따라 같은 계약을 따른다.
 
 ## 배경
 
@@ -22,6 +23,8 @@ trusted destroy 계약은 유지한다. Windows 호스트와 SDK가 이 계약�
 `DesktopOptions`에 `onReady`, `onWillQuit`, `onQuit`, `onAllWindowsClosed`를 추가하고
 종료 원인 `ShutdownReason`을 `QuitReason | "window-destroyed" | "session-end" | "interrupted"`로
 정의한다. `beforeQuit`는 기존과 같이 `QuitReason`만 받는다.
+2026-10-16 변경: `QuitReason`에 macOS의 Quit 명령을 뜻하는 `"quit-command"`가 추가되어
+`ShutdownReason`도 이 값을 포함한다. Windows는 발행하지 않는다.
 
 - `onReady`는 Core와 백엔드가 준비되고 UI가 시작 창의 네이티브 생성을 시작했다고 보고한 뒤
   한 번 호출한다. 문서나 SDK 준비를 뜻하지 않는다. `onOpen`과 같은 직렬 큐에서 초기
@@ -119,11 +122,13 @@ payload는 `{ windowId, viewId, phase }`이고 `phase`는 `created`, `ready`, `c
 
 ## macOS
 
-`desktop` 옵션 전체가 기존처럼 `UNSUPPORTED`이므로 네 훅은 macOS에서 동작하지 않는다.
-`windows.respondClose`는 macOS 호스트에 등록되지 않은 작업이므로 Windows 정책에만 넣어야 한다.
-macOS 정책에 넣으면 시작 시 "Policy references an unregistered operation."으로 실패한다.
-macOS는 `windows.closeRequested`와 `windows.lifecycle`은 발행하지 않는다.
-세션 종료 처리도 구현하지 않는다. 기존 macOS 닫기와 종료 동작은 바꾸지 않으며 대응은 ADR 0010의 순서를 따른다.
+2026-10-16 변경: macOS도 이 계약을 구현한다. 네 훅, 세션 종료, `windows.lifecycle`,
+`windows.closeRequested`와 `windows.respondClose`가 같은 규칙으로 동작하며 매핑과 차이는
+[ADR 0021](./0021-macos-desktop-lifecycle.md)이 정한다. macOS의 Quit 명령을 위해 `QuitReason`에
+`"quit-command"`를 더했다. `desktop.tray`, `closeBehavior: "hide"`, 창 없는 시작은 macOS에서
+계속 `UNSUPPORTED`다. 이 문서의 닫기 확인과 `windows.destroy` 규칙은 macOS가 두 기능을
+지원하지 않으므로 적용되지 않는다. `windows.respondClose`는 macOS 작업으로 등록되어 있어
+macOS 정책에 넣어도 시작이 실패하지 않는다.
 
 ## 검증
 
@@ -134,3 +139,7 @@ Linux에서는 훅 순서와 기한, 세션 메시지 처리기, 이벤트와 �
 `tests/lifecycle/windows-session-end.ts`의 `window`, `control`, `tray` 시나리오가 실제 HWND에
 세션 종료 메시지를 보낸다. `tests/lifecycle/windows-multiple-windows.ts`는 여러 창의
 `windows.lifecycle`을, `tests/lifecycle/windows-close-request.ts`는 닫기 요청 흐름을 실행한다.
+
+macOS는 같은 단위와 계약 테스트를 Linux에서 실행하고, 실제 AppKit 동작은 macos-native CI의
+`tests/lifecycle/macos-desktop.ts` 시나리오로 확인한다. 실제 로그아웃과 Dock 클릭은 CI에서 확인할 수 없어
+알림과 Apple event로 대신한다. 자세한 범위는 ADR 0021을 따른다.

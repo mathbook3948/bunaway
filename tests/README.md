@@ -666,6 +666,13 @@ macOS 전용 설정과 리소스 경계 페이지도 `fixtures/desktop/host/`에
 같은 실행기의 `macos-webview-regressions.ts`는 실제 AppKit 창의 초기 크기 보정,
 최소, 최대 제약과 제한 해제, WebKit UI delegate의 미디어 권한 거부를 확인한다.
 미디어 검사는 설치된 delegate와 네이티브 decision block을 사용하며 실제 장치를 열지 않는다.
+`lifecycle/macos-desktop.ts`는 `run-native.ts`가 등록하는 실제 AppKit 실행기로 `quit-veto`,
+`last-window`, `keep-alive`, `close-lifecycle`, `session-end`, `session-end-quit-reason`, `sigterm`
+시나리오에서 Quit 명령과 `beforeQuit` 취소, 수명주기 훅 순서, Dock 재활성화, 창 수명 이벤트와 닫기 요청,
+세션 종료를 검사한다. macos-native CI에서 실행하며 실제 로그아웃, 재시작, 시스템 종료와 사용자의 Dock 클릭,
+Cmd+Q 입력은 확인할 수 없어 알림, 자기 자신에게 보낸 Apple event와 `NSApp terminate:`로 대신한다.
+`macos-desktop-host.test.ts`, `macos-desktop-requests.test.ts`, `macos-quit-reason.test.ts`,
+`macos-backend-shutdown.test.ts`와 `macos-window-lifecycle.test.ts`는 Linux에서 실행하는 계약 검사다.
 `macos-window-api.ts`는 실제 compiled 호스트와 WKWebView를 연결해 여러 시작 창,
 지연 생성, 권한별 목록, 표시와 포커스 조회, 반복 생성과 개별 닫기를 검사한다.
 또한 `getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`의 창 ID 조회와

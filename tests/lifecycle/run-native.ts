@@ -236,6 +236,7 @@ if (target === "windows-x64") {
     await test("macos-window-api.ts");
     await test("macos-webview-controls.ts");
     await test("macos-io-host.ts");
+    await test("macos-desktop.ts");
     await test("macos-image-host.ts");
     await run(
       [

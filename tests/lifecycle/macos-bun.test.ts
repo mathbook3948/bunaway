@@ -263,7 +263,7 @@ async function bundleTestHost(
             },
             () => ({
               contents:
-                "export class MacosApplication { activate() {} close() {} }",
+                "export class MacosApplication { activate() {} appCleanedUp() {} close() {} }",
               loader: "js",
             }),
           );
@@ -1144,7 +1144,8 @@ test("macOS shutdown during native registration acknowledges acceptance and skip
           });
         } else if (packet.kind === "cleaned") {
           cleaned = true;
-        } else {
+        } else if (packet.kind !== "desktop-config") {
+          // desktop-config is the backend's normal first packet and is not an error.
           errors.push(packet);
         }
       },

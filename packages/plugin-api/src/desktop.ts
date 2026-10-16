@@ -1,21 +1,27 @@
 /**
  * `last-window` follows a window close, `tray` follows the tray's Quit action,
- * and `api` follows a call to `DesktopContext.quit()`.
+ * and `api` follows a call to `DesktopContext.quit()`. `quit-command` is the
+ * macOS Quit command: the app menu's Quit item or Cmd+Q, the Dock's Quit, or a
+ * quit Apple event that is not a logout, restart or shutdown. Windows never
+ * produces it.
  */
-export type QuitReason = "last-window" | "tray" | "api";
+export type QuitReason = "last-window" | "tray" | "api" | "quit-command";
 
 /**
  * Why an orderly shutdown was committed. Quit requests keep their `QuitReason`
  * after `beforeQuit` approves them. `window-destroyed` follows a trusted
  * destruction of the last window or an automatic close once no window can
  * remain. `interrupted` follows the development CLI's quit request or a
- * SIGINT/SIGTERM delivered to the host. `session-end` follows the Windows
- * WM_ENDSESSION notification (shutdown, restart, logoff or Restart Manager
- * close) and cannot be cancelled: `beforeQuit` is not consulted, no dialog is
- * shown and the host never blocks the session. `onWillQuit` and the plugin
- * stop hooks must finish within the roughly 4 second wait the host holds the
- * window procedure open; `onQuit` is not guaranteed because the OS may end
- * the process after that. macOS has no session-end implementation.
+ * SIGINT/SIGTERM delivered to the host. `session-end` follows the operating
+ * system ending the session (shutdown, restart or logoff) and cannot be
+ * cancelled: `beforeQuit` is not consulted, no dialog is shown and the host
+ * never blocks the session. On Windows it follows WM_ENDSESSION (including a
+ * Restart Manager close); on macOS it follows
+ * NSWorkspaceWillPowerOffNotification or a quit Apple event whose quit reason
+ * is logout, restart or shutdown. `onWillQuit` and the plugin stop hooks must
+ * finish within the roughly 4 second wait the host holds the operating
+ * system's request open; `onQuit` is not guaranteed because the OS may end the
+ * process after that.
  */
 export type ShutdownReason =
   | QuitReason

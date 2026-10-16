@@ -19,7 +19,8 @@ ADR 0006은 같은 앱 데이터 디렉터리의 중복 실행을 거부하고 �
 
 앱 정의에 선택적인 `desktop`을 추가한다. Windows Bun 호스트가 `onOpen`,
 `beforeQuit`, `closeBehavior`, `tray`를 처리한다. 생략하면 마지막 창 닫기로 종료한다.
-현재 macOS 프로세스 런타임은 이 옵션을 `UNSUPPORTED`로 거부한다.
+2026-10-16 변경: macOS는 `tray`와 `closeBehavior: "hide"`를 제외한 `desktop`을 지원한다.
+`tray`는 `UNSUPPORTED`로 거부한다. 범위는 [ADR 0021](./0021-macos-desktop-lifecycle.md)을 따른다.
 다른 플랫폼을 같은 계약에 맞추는 작업은 ADR 0010의 순서를 따른다.
 
 `host.lock`의 독점 소유와 Job 정리는 유지한다. 두 번째 실행은 앱을 import하거나
@@ -67,7 +68,7 @@ Windows 호스트는 앱 정의를 읽은 뒤 트레이 또는 `closeBehavior: "
 트레이 자체는 마지막 창의 닫기 규칙을 변경하지 않는다. 기본 quit은 기존 규칙을 유지한다.
 표시 요청은 반복 입력을 합치고 이전 창 정리와 창 API 작업이 끝난 뒤 생성한다.
 트레이 없는 keep-alive 앱도 숨긴 제어 HWND를 소유해 개발 CLI의 종료 메시지를 받는다.
-종료 때 제어 HWND도 정리한다. macOS의 창 없는 시작은 아직 `UNSUPPORTED`다.
+종료 때 제어 HWND도 정리한다. macOS의 창 없는 시작은 아직 `UNSUPPORTED`다([ADR 0021](./0021-macos-desktop-lifecycle.md)).
 
 URL scheme과 파일 확장자의 OS 등록은 설치 기능이며 이번 변경에 포함하지 않는다.
 등록된 열기 명령이 실행기에 URL이나 파일 인자를 전달하면 동일한 앱 열기 계약을 사용한다.

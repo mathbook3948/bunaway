@@ -111,12 +111,27 @@ const fixtures = {
       reason: "window-destroyed",
     },
     "main",
+    "macos-backend",
+  ),
+  "desktop-config": fixture(
+    {
+      kind: "desktop-config",
+      closeBehavior: "keep-alive",
+    },
+    "macos-main",
+  ),
+  "native-stopped": fixture(
+    {
+      kind: "native-stopped",
+    },
+    "macos-backend",
   ),
   "windows-empty": fixture(
     {
       kind: "windows-empty",
     },
     "main",
+    "macos-backend",
   ),
   "session-end": fixture(
     {
@@ -144,6 +159,7 @@ const fixtures = {
       action: "show",
     },
     "ui",
+    "macos-main",
   ),
   "quit-request": fixture(
     {
@@ -151,18 +167,21 @@ const fixtures = {
       reason: "tray",
     },
     "main",
+    "macos-backend",
   ),
   "quit-cancelled": fixture(
     {
       kind: "quit-cancelled",
     },
     "ui",
+    "macos-main",
   ),
   "shutdown-committed": fixture(
     {
       kind: "shutdown-committed",
     },
     "ui",
+    "macos-main",
   ),
   "session-open": fixture(
     {
@@ -331,6 +350,7 @@ const fixtures = {
       },
     },
     "main",
+    "macos-main",
   ),
   fatal: fixture(
     {
@@ -674,6 +694,167 @@ test("Worker packets validate route identities, document generations and nested 
   ).toThrow();
 });
 
+test("macOS desktop lifecycle packets travel only in their declared direction with their own values", () => {
+  // Main thread to backend: the quit command is a valid quit request reason, `api` never travels.
+  for (const reason of [
+    "last-window",
+    "quit-command",
+  ]) {
+    expect(
+      validatePacket(
+        {
+          kind: "quit-request",
+          reason,
+        },
+        "macos-backend",
+      ).kind,
+    ).toBe("quit-request");
+  }
+  expect(() =>
+    validatePacket(
+      {
+        kind: "quit-request",
+        reason: "api",
+      },
+      "macos-backend",
+    ),
+  ).toThrow("Invalid quit reason");
+  expect(() =>
+    validatePacket(
+      {
+        kind: "quit-request",
+        reason: "quit-command",
+      },
+      "macos-main",
+    ),
+  ).toThrow("Invalid Worker direction");
+  // `closing` is reported to the main thread by the Windows UI and to the macOS backend by its main thread.
+  for (const side of [
+    "main",
+    "macos-backend",
+  ] as const) {
+    expect(
+      validatePacket(
+        {
+          kind: "closing",
+          reason: "session-end",
+        },
+        side,
+      ).kind,
+    ).toBe("closing");
+  }
+  expect(
+    validatePacket(
+      {
+        kind: "closing",
+        reason: "quit-command",
+      },
+      "macos-backend",
+    ).kind,
+  ).toBe("closing");
+  expect(() =>
+    validatePacket(
+      {
+        kind: "closing",
+        reason: "session-end",
+      },
+      "macos-main",
+    ),
+  ).toThrow("Invalid Worker direction");
+  // Backend to main thread.
+  for (const kind of [
+    "shutdown-committed",
+    "quit-cancelled",
+  ] as const) {
+    expect(
+      validatePacket(
+        {
+          kind,
+        },
+        "macos-main",
+      ).kind,
+    ).toBe(kind);
+    expect(() =>
+      validatePacket(
+        {
+          kind,
+        },
+        "macos-backend",
+      ),
+    ).toThrow("Invalid Worker direction");
+  }
+  expect(
+    validatePacket(
+      {
+        kind: "desktop-control",
+        action: "show",
+      },
+      "macos-main",
+    ).kind,
+  ).toBe("desktop-control");
+  expect(
+    validatePacket(
+      {
+        kind: "desktop-config",
+        closeBehavior: "quit",
+      },
+      "macos-main",
+    ).kind,
+  ).toBe("desktop-config");
+  // A hiding app needs a tray, which macOS does not offer.
+  expect(() =>
+    validatePacket(
+      {
+        kind: "desktop-config",
+        closeBehavior: "hide",
+      },
+      "macos-main",
+    ),
+  ).toThrow("Invalid desktop close behavior");
+  expect(() =>
+    validatePacket(
+      {
+        kind: "desktop-config",
+        closeBehavior: "quit",
+      },
+      "macos-backend",
+    ),
+  ).toThrow("Invalid Worker direction");
+  // Main thread to backend: native teardown finished, and the resident app lost its last window.
+  expect(
+    validatePacket(
+      {
+        kind: "native-stopped",
+      },
+      "macos-backend",
+    ).kind,
+  ).toBe("native-stopped");
+  expect(() =>
+    validatePacket(
+      {
+        kind: "native-stopped",
+      },
+      "macos-main",
+    ),
+  ).toThrow("Invalid Worker direction");
+  expect(
+    validatePacket(
+      {
+        kind: "windows-empty",
+      },
+      "macos-backend",
+    ).kind,
+  ).toBe("windows-empty");
+  expect(() =>
+    validatePacket(
+      {
+        kind: "windows-empty",
+      },
+      "macos-main",
+    ),
+  ).toThrow("Invalid Worker direction");
+});
+
 test("Worker packets retain desktop values, operation sources and bounded registration batches", () => {
   expect(
     validatePacket(
@@ -949,6 +1130,8 @@ const reservedPackets: {
       "start",
       "shutdown",
       "closing",
+      "desktop-config",
+      "native-stopped",
       "windows-empty",
       "session-end",
       "cleaned",
