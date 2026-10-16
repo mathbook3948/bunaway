@@ -1,6 +1,7 @@
 import type { NativeAdapter, NativeEnvironment } from "@bunaway/plugin";
 import {
   hasValidWindowSizeConstraints,
+  type WindowAttentionMode,
   type WindowIdentity,
   type WindowSizeConstraints,
 } from "@bunaway/plugin-api/native";
@@ -8,6 +9,9 @@ import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import { validateWindowCall, type WindowCall } from "#windows/contract";
 import { WindowOperations } from "#windows/platforms/coordinator";
 import { convertGeometry } from "#windows/platforms/window-geometry";
+
+/** Flash mode applied when `windows.requestAttention` omits `mode`. */
+const DEFAULT_ATTENTION_MODE: WindowAttentionMode = "untilFocused";
 
 function unsupportedRelations() {
   return new BunawayError({
@@ -41,6 +45,13 @@ function unsupportedDisplay() {
   return new BunawayError({
     code: "UNSUPPORTED",
     message: "Window display options are not implemented on this platform.",
+  });
+}
+
+function unsupportedAttention() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window attention requests are not implemented on this platform.",
   });
 }
 
@@ -287,6 +298,15 @@ export function createOperations(
       }
       case "windows.close":
         return window.close();
+      case "windows.respondClose":
+        if (!window.respondClose) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "Close requests are not implemented on this platform.",
+          });
+        }
+        window.respondClose(call.payload.requestId, call.payload.allow);
+        break;
       case "windows.destroy":
         if (!window.destroy) {
           throw unsupportedRelations();
@@ -364,6 +384,18 @@ export function createOperations(
           throw unsupportedDisplay();
         }
         return window.isSkipTaskbar();
+      case "windows.requestAttention":
+        if (!window.requestAttention) {
+          throw unsupportedAttention();
+        }
+        window.requestAttention(call.payload.mode ?? DEFAULT_ATTENTION_MODE);
+        break;
+      case "windows.cancelAttention":
+        if (!window.cancelAttention) {
+          throw unsupportedAttention();
+        }
+        window.cancelAttention();
+        break;
       case "windows.setFocusable":
         if (!window.setFocusable) {
           throw unsupportedFocusability();
@@ -689,6 +721,39 @@ export function createOperations(
           identity.viewId)
       : identity.viewId;
   }
+  /**
+   * Allows a close answer only from the trusted backend or from the document that was asked.
+   * Request IDs are small increasing integers, so permission alone would let another window's
+   * document approve a close and bypass that window's confirmation. The caller is identified by the
+   * authenticated document session behind the host request, never by the payload, and fails closed
+   * when the platform cannot provide that identity.
+   */
+  function assertAskedWindowAnswers(
+    target: {
+      view: string;
+      windowId?: string;
+    },
+    source: string,
+    requestId: string,
+  ): void {
+    if (source === "backend") {
+      return;
+    }
+    const caller = services.lookup?.byRequest?.(requestId);
+    if (
+      !caller ||
+      source !== `view:${caller.viewId}` ||
+      caller.viewId !== target.view ||
+      identityKey(caller) !==
+        operations.resolveKey(target.view, target.windowId)
+    ) {
+      throw new BunawayError({
+        code: "PERMISSION_DENIED",
+        message:
+          "Close requests are answered only by the asked window's document or the backend.",
+      });
+    }
+  }
   return {
     execute() {
       throw new BunawayError({
@@ -813,6 +878,9 @@ export function createOperations(
           code: "PERMISSION_DENIED",
           message: "Window policy denied.",
         });
+      }
+      if (call.operation === "windows.respondClose") {
+        assertAskedWindowAnswers(call.payload, source, context.requestId);
       }
       if (
         call.operation === "windows.setParent" &&

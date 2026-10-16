@@ -52,6 +52,9 @@ Bun.plugin({
 });
 
 const { MacosWindows } = await import("../../../native/macos/bun/windows.ts");
+const { DesktopRequests } = await import(
+  "../../../native/macos/bun/desktop-requests.ts"
+);
 
 const protocol = PROTOCOL_VERSION;
 const windowSpec = (view: string, startup: boolean) => ({
@@ -126,7 +129,12 @@ const windows = new MacosWindows(config, {} as never, {
   fail: (error: unknown) => {
     throw error;
   },
-  quit: () => {},
+  desktop: new DesktopRequests({
+    stopping: () => false,
+    sendQuitRequest: () => {},
+  }),
+  windowsGone: () => {},
+  windowsEmpty: () => {},
 });
 
 // Subscribe the live main view: client hello opens a session, the server hello negotiates it,

@@ -12,9 +12,12 @@ let previous = performance.now();
 let failure: unknown;
 let view: MacosWebview | undefined;
 const application = new MacosApplication({
-  quit() {
+  stopping: () => false,
+  quitRequested() {
     failure = new Error("Profile app quit.");
   },
+  sessionEnding() {},
+  reopened() {},
   fail(error) {
     failure = error;
   },

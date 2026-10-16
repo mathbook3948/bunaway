@@ -13,13 +13,29 @@ import { hostResponse } from "../../host-api/bun/host-response.ts";
 import { NativeRequests } from "../../host-api/bun/native-requests.ts";
 import { loadPluginCatalog } from "../../host-api/bun/plugin-catalog.ts";
 import { operations, pluginRegistry } from "../../host-api/bun/plugins.ts";
+import { WILL_QUIT_DEADLINE_MS } from "../../windows/bun/desktop.ts";
 import { MacosApplication } from "./application.ts";
 import type { MacosConfig } from "./config.ts";
+import { DesktopRequests } from "./desktop-requests.ts";
 import { containMacosProcess } from "./process-group.ts";
 import { MacosWindows } from "./windows.ts";
 
 const STARTUP_TIMEOUT_MS = 30_000;
+/** Time Core, plugin stop hooks and native cleanup get once shutdown began. */
 const SHUTDOWN_TIMEOUT_MS = 5_000;
+/**
+ * Backstop that terminates the Workers of a shutdown that does not finish. It also covers the
+ * app's `onWillQuit` (before Core stops) and `onQuit` (after native teardown), which the backend
+ * waits for up to `WILL_QUIT_DEADLINE_MS` each. A shorter backstop would kill an app hook the
+ * lifecycle promises to wait for.
+ */
+const FORCED_SHUTDOWN_DEADLINE_MS =
+  SHUTDOWN_TIMEOUT_MS + 2 * WILL_QUIT_DEADLINE_MS;
+/**
+ * Shutdown causes the main thread decides alone and reports to the backend with `closing`.
+ * A cause the backend committed itself (an approved quit) arrives as `shutdown-committed`.
+ */
+type MainShutdownCause = "interrupted" | "session-end" | "window-destroyed";
 
 /** Own UI, backend Worker, channels and shutdown deadlines for one Bun app process. */
 export async function runMacosApp(config: MacosConfig): Promise<void> {
@@ -67,11 +83,37 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
   let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
   let forced = false;
   let descendantCleanup: Promise<void> | undefined;
-  const quit = () => {
+  /** Settles when the backend reports app-level cleanup (hooks, Core and plugin stop hooks) done. */
+  const backendCleaned = Promise.withResolvers<void>();
+  /**
+   * Settles when shutdown begins. The startup wait races it, because the backend only reports
+   * `cleaned` after teardown that this thread must perform, so waiting for `ready` would deadlock.
+   */
+  const shutdownBegun = Promise.withResolvers<void>();
+  let nativeTeardown: Promise<void> | undefined;
+  const desktopRequests = new DesktopRequests({
+    stopping: () => stopping,
+    sendQuitRequest: (reason) =>
+      channel?.notify({
+        kind: "quit-request",
+        reason,
+      }),
+  });
+  /**
+   * Begins shutdown once; later calls do nothing. Every path ends in the same teardown, but only an
+   * orderly shutdown runs the app's shutdown hooks, and only a `cause` is reported to the backend.
+   *
+   * @param cause Set for a cause decided here (signal, session end, last window gone). It is sent
+   * as `closing` ahead of `shutdown`. Omitted when the backend committed the shutdown itself, and
+   * for a host failure, where the hooks are skipped because the app state cannot be trusted.
+   */
+  const beginShutdown = (cause?: MainShutdownCause) => {
     if (stopping) {
       return;
     }
     stopping = true;
+    shutdownBegun.resolve();
+    desktopRequests.abandon();
     pendingPlugins.length = 0;
     // Admission reserves one cancellation slot per owned I/O call. Send these
     // before releasing ownership so Core stop hooks can await native aborts.
@@ -95,16 +137,29 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       void ioWorker?.terminate().catch((error) => {
         failure ??= error;
       });
-    }, SHUTDOWN_TIMEOUT_MS);
+    }, FORCED_SHUTDOWN_DEADLINE_MS);
     ui?.revoke();
-    diagnostic("closing");
+    diagnostic(
+      "closing",
+      cause
+        ? {
+            cause,
+          }
+        : {},
+    );
+    if (cause) {
+      channel?.notify({
+        kind: "closing",
+        reason: cause,
+      });
+    }
     channel?.notify({
       kind: "shutdown",
     });
   };
   const fail = (error: unknown) => {
     failure ??= error;
-    quit();
+    beginShutdown();
   };
   const coreReady = Promise.withResolvers<void>();
   /** Keep shutdown idempotent when backend completion and failure both request it. */
@@ -132,10 +187,16 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         }
       : undefined;
   }
-  /** Keep descendants until both Core hooks and native adapter cleanup have completed. */
+  /**
+   * Keep descendants until both Core hooks and native adapter cleanup have completed. A pending
+   * session-end reply is released only afterwards (success or failure), because the OS may end the
+   * process right after the reply; the session-end wait still bounds how long it is held back.
+   */
   function stopDescendants() {
     if (cleaned && (!ioWorker || ioCleaned)) {
-      descendantCleanup ??= group.stopDescendants();
+      descendantCleanup ??= group
+        .stopDescendants()
+        .finally(() => application?.appCleanedUp());
     }
     return descendantCleanup;
   }
@@ -248,10 +309,28 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       stopIO();
     }
   }
+  /**
+   * Releases native resources once the app no longer needs them: the I/O Worker, then the UI
+   * adapters, then the windows. Shared by every shutdown path, so repeated calls wait for the same
+   * teardown instead of releasing twice.
+   */
+  function tearDownNative(): Promise<void> {
+    nativeTeardown ??= (async () => {
+      stopIO();
+      await ioExited;
+      try {
+        await adapters?.dispose();
+      } catch (error) {
+        failure ??= error;
+      }
+      ui?.close();
+    })();
+    return nativeTeardown;
+  }
   const group = await containMacosProcess((error) => {
     failure ??= error;
     if (channel) {
-      quit();
+      beginShutdown();
     }
   });
   let worker: Worker;
@@ -291,6 +370,25 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
           bunVersion: Bun.version,
         });
         ui?.start();
+      } else if (packet.kind === "desktop-config") {
+        desktopRequests.configure({
+          closeBehavior: packet.closeBehavior,
+        });
+      } else if (packet.kind === "desktop-control") {
+        if (packet.action !== "show") {
+          // The backend rejects hide itself because macOS has no tray to hide into.
+          throw new Error("macOS has no tray to hide the app into.");
+        }
+        if (!stopping) {
+          ui?.requestShow();
+        }
+      } else if (packet.kind === "quit-cancelled") {
+        desktopRequests.quitCancelled();
+      } else if (packet.kind === "shutdown-committed") {
+        // The app approved a quit (beforeQuit, or an api quit): teardown follows without a cause.
+        beginShutdown();
+      } else if (packet.kind === "diagnostic") {
+        diagnostic(packet.event, packet.fields);
       } else if (packet.kind === "server") {
         ui?.send(packet.route, packet.message);
       } else if (packet.kind === "native-register") {
@@ -338,6 +436,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         void executeRequest(packet).catch(fail);
       } else if (packet.kind === "cleaned") {
         cleaned = true;
+        backendCleaned.resolve();
         stopIO();
         await stopDescendants();
       } else if (packet.kind === "fatal") {
@@ -423,6 +522,11 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       response = hostResponse(() => payload);
     } catch (error) {
       ioCalls.delete(packet.requestId);
+      // The response hides non-protocol errors from the caller as INTERNAL, so the host log is the
+      // only place that keeps the operation and the original cause.
+      if (!(error instanceof BunawayError)) {
+        console.error(`Host operation ${packet.call.operation} failed:`, error);
+      }
       response = hostResponse(() => {
         throw error;
       });
@@ -442,11 +546,12 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     }
   }
 
+  let unrequestedExit = false;
   const startup = setTimeout(
     () => fail(new Error("macOS startup timed out.")),
     STARTUP_TIMEOUT_MS,
   );
-  const onSignal = () => quit();
+  const onSignal = () => beginShutdown("interrupted");
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
   try {
@@ -458,9 +563,21 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       runtime: config.runtime,
     });
     application = new MacosApplication({
-      quit,
       tick: () => ui?.tick(),
       fail,
+      stopping: () => stopping,
+      // A Quit command waits for the backend's options like a last-window close does.
+      quitRequested: () =>
+        desktopRequests.defer("quit-command", () => {
+          void desktopRequests.requestQuit("quit-command");
+        }),
+      // A session end never waits for the app's options or decision.
+      sessionEnding: () => beginShutdown("session-end"),
+      // Reopening is not an open request; it only brings the windows back.
+      reopened: () =>
+        desktopRequests.defer("reopen", () => {
+          ui?.requestShow();
+        }),
     });
     ui = new MacosWindows(config, application, {
       ready: () => ready,
@@ -497,10 +614,19 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       capacity: (count, pending) => channel?.canSend(count, pending) ?? false,
       log: diagnostic,
       fail,
-      quit,
+      desktop: desktopRequests,
+      windowsGone: () => beginShutdown("window-destroyed"),
+      windowsEmpty: () =>
+        channel?.notify({
+          kind: "windows-empty",
+        }),
     });
     await Promise.race([
       coreReady.promise,
+      // A shutdown begun during startup (an approved quit, a signal) ends the wait: the backend
+      // then waits for this thread's native teardown, which only the `finally` below performs.
+      shutdownBegun.promise,
+      backendCleaned.promise,
       exited.then((code) => {
         // Requested exits use the same cleanup and failure checks as a running app.
         if (!stopping) {
@@ -508,35 +634,48 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
         }
       }),
     ]);
-    if (ready) {
+    if (ready && !stopping) {
       ui.start();
+      clearTimeout(startup);
+      // Run until the backend finished its app-level cleanup or ended. Only shutdown asks it to
+      // clean up, so an end without a shutdown request was unexpected.
+      await Promise.race([
+        backendCleaned.promise,
+        exited,
+      ]);
     }
-    clearTimeout(startup);
-    const code = await exited;
-    if (code !== 0 || !cleaned || !stopping) {
-      failure ??= new Error(`macOS backend exited without cleanup (${code}).`);
-    }
+    // A shutdown begun during startup is a requested one.
+    unrequestedExit = !stopping;
   } catch (error) {
     failure ??= error;
   } finally {
     clearTimeout(startup);
-    quit();
+    beginShutdown();
+    // Windows and adapters must outlive the app's shutdown hooks, Core and plugin stop hooks, so
+    // teardown starts once the backend reports them done. A failed backend may never report it;
+    // its exit ends the wait.
+    await Promise.race([
+      backendCleaned.promise,
+      exited,
+    ]);
+    await tearDownNative();
+    // The backend runs `onQuit` only after this, so the app sees native resources gone. It is not
+    // awaited: a backend that is already closing never acknowledges, and its exit is awaited next.
+    channel
+      .send({
+        kind: "native-stopped",
+      })
+      .catch(() => {});
     // Keep acknowledgements alive until plugin cleanup and actual Worker exit.
-    await exited;
-    // Failed backend startup may never report cleaned; still dispose native adapters.
-    stopIO();
-    await ioExited;
+    const code = await exited;
+    if (code !== 0 || !cleaned || unrequestedExit) {
+      failure ??= new Error(`macOS backend exited without cleanup (${code}).`);
+    }
     if (shutdownTimer) {
       clearTimeout(shutdownTimer);
     }
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
-    try {
-      await adapters?.dispose();
-    } catch (error) {
-      failure ??= error;
-    }
-    ui?.close();
     application?.close();
     channel.close();
     ioChannel?.close();

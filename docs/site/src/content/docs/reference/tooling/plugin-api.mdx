@@ -115,6 +115,10 @@ Windows 호스트는 활성화 뒤 양쪽 창의 실제 상태를 관찰해 이�
 상태 제어는 `minimize()`, `maximize()`, `unmaximize()`, `restore()`, `toggleMaximize()`입니다. 모두 동기 실행하며 숨긴 창도 표시합니다. `restore()`는 최소화 전 최대화 상태를 복원하고 `unmaximize()`는 일반 크기를 적용합니다. 전체화면 중에는 창 플러그인이 이 다섯 제어를 거부합니다. 크기 제약과 전체화면 복원 정보의 소유자는 계속 호스트입니다.
 상태 조회는 `isMinimized()`, `isMaximized()`, `isFullscreen()`, `isVisible()`, `isFocused()`이며 `boolean`을 반환합니다. 최소화, 최대화, 표시 상태는 실제 HWND에서 읽고 `isFocused()`는 해당 HWND가 OS 전경 창인지 확인합니다. 전체화면은 해당 네이티브 창에 적용한 호스트 모드입니다. 조회는 표시나 포커스를 바꾸지 않습니다. 네이티브 상태 변경 또는 조회 실패는 예외를 던지며 UI 호스트가 공개 `INTERNAL` 오류로 변환합니다.
 두 `close()` 메서드는 동기 또는 비동기로 닫기 수락 여부를 반환합니다.
+Windows와 macOS의 선택적 `NativeWindow.respondClose(requestId, allow)`는 `windows.closeRequested`로 대기 중인
+사용자 닫기에 답합니다. `allow: true`는 그 창 자신의 닫기 확인만 건너뛰고 닫기를 계속하며
+`false`는 창을 유지합니다. macOS에는 닫기 확인이 없어 `true`는 닫기 순서만 계속합니다. 대기 중인 요청이 아니면 `INVALID_ARGUMENT`를 던집니다.
+플러그인은 `windows.respondClose` 작업 권한을 검사한 뒤 호출합니다.
 
 Windows의 선택적 `NativeWindow.destroy()`는 확인, 트레이 숨김과 종료 취소를 우회합니다.
 플러그인은 백엔드 출처와 `windows.destroy` 작업 권한을 검사한 뒤 호출합니다.
@@ -233,6 +237,8 @@ Windows의 선택적 `getTitlebar`, `setAlwaysOnTop`, `isAlwaysOnTop`, `setSkipT
 custom은 caption만 제거하며 resize frame과 시스템 메뉴는 유지합니다. WebView2가 CSS
 app-region의 drag/no-drag를 처리하고 없는 런타임은 UNSUPPORTED를 반환합니다.
 setSkipTaskbar는 변경할 때 숨겨진 일반 창을 요구하며 그 외 상태는 BUSY입니다.
+선택적 `requestAttention(mode)`와 `cancelAttention()`은 포커스나 표시 상태를 바꾸지 않고 작업 표시줄
+버튼의 점멸을 시작하고 멈춥니다. mode는 `WindowAttentionMode`(`untilFocused` 또는 `continuous`)입니다.
 네이티브 HWND와 WebView가 자원을 소유하며 새 창은 선언의 기본값에서 시작합니다.
 
 ## NativeDialogServices

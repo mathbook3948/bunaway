@@ -71,6 +71,12 @@ export function hasValidWindowPlacement<
   );
 }
 
+/**
+ * Taskbar flash duration: `untilFocused` stops when the window becomes the
+ * foreground window, `continuous` runs until `cancelAttention`.
+ */
+export type WindowAttentionMode = "untilFocused" | "continuous";
+
 /** Optional inclusive lower and upper bounds for a window's width and height. */
 export type WindowSizeConstraints = {
   minWidth: number | null;
@@ -309,6 +315,14 @@ export type NativeWindow = {
   activate(): boolean;
   /** Starts a normal close request; returns false when it is declined or hides to tray. */
   close(): boolean | Promise<boolean>;
+  /**
+   * Answers the pending `windows.closeRequested` question of this window. `allow: true` lets the
+   * close continue and replaces only this window's own close confirmation; `false` keeps the window open.
+   * Throws INVALID_ARGUMENT when `requestId` is not the pending request. The platform adapter admits
+   * only the trusted backend and this window's own document as callers. Windows and macOS; macOS has
+   * no close confirmation, so `allow: true` there only continues the close order.
+   */
+  respondClose?(requestId: number, allow: boolean): void;
   /** Trusted backend destruction bypasses confirmation, tray hiding and quit veto. Windows only. */
   destroy?(): boolean | Promise<boolean>;
   /** Sets the owner of this top-level window by native lifetime ID. Null detaches. Windows only. */
@@ -335,6 +349,10 @@ export type NativeWindow = {
   setSkipTaskbar?(skipTaskbar: boolean): void;
   /** Read explicit tool-window exclusion; owned windows may also be absent from the taskbar. Windows only. */
   isSkipTaskbar?(): boolean;
+  /** Flashes the taskbar button without focusing, showing or reordering the window. Repeated calls replace the previous mode. Windows only. */
+  requestAttention?(mode: WindowAttentionMode): void;
+  /** Stops taskbar flashing and restores the button. Succeeds when the window is not flashing. Windows only. */
+  cancelAttention?(): void;
   /** Changes the native minimize button and user system commands. Programmatic minimize remains available. Windows only. */
   setMinimizable?(minimizable: boolean): void;
   /** Reads the normal window's native minimize-button setting. Windows only. */
