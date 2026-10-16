@@ -170,6 +170,7 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
               "dialog.openFile",
               "dialog.saveFile",
               "dialog.selectFolder",
+              "dialog.showMessage",
             ],
           },
         },
@@ -424,6 +425,88 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
           cancelled: true,
         },
       });
+
+      // Message dialogs (TaskDialog). Posted TDM_* messages are processed by the dialog's own loop.
+      const WM_COMMAND = 0x0111;
+      const TDM_CLICK_BUTTON = 0x0466;
+      const TDM_CLICK_VERIFICATION = 0x0471;
+      const openMessage = async (payload: Record<string, JsonValue>) => {
+        const call = invoke("dialog.showMessage", {
+          message: "Proceed?",
+          ...payload,
+        });
+        await until(
+          () => native.symbols.IsWindowVisible(find(call.title)) !== 0,
+          "message dialog visibility",
+        );
+        return call;
+      };
+      const customButtons = [
+        "Keep",
+        "Delete",
+        "Later",
+      ];
+      const clicked = await openMessage({
+        buttons: customButtons,
+        defaultButton: 1,
+      });
+      native.symbols.PostMessageW(
+        find(clicked.title),
+        TDM_CLICK_BUTTON,
+        1002n,
+        0n,
+      );
+      expect(await clicked.result()).toEqual({
+        kind: "result",
+        payload: {
+          button: 2,
+          checkboxChecked: false,
+        },
+      });
+      const checked = await openMessage({
+        buttons: customButtons,
+        checkbox: {
+          label: "Remember",
+        },
+      });
+      const checkedHwnd = find(checked.title);
+      native.symbols.PostMessageW(checkedHwnd, TDM_CLICK_VERIFICATION, 1n, 0n);
+      native.symbols.PostMessageW(checkedHwnd, TDM_CLICK_BUTTON, 1001n, 0n);
+      expect(await checked.result()).toEqual({
+        kind: "result",
+        payload: {
+          button: 1,
+          checkboxChecked: true,
+        },
+      });
+      const escaped = await openMessage({
+        buttons: customButtons,
+        cancelButton: 0,
+      });
+      native.symbols.PostMessageW(find(escaped.title), WM_COMMAND, 2n, 0n);
+      expect(await escaped.result()).toEqual({
+        kind: "result",
+        payload: {
+          button: 0,
+          checkboxChecked: false,
+        },
+      });
+      const abortedMessage = await openMessage({});
+      const abortedHwnd = find(abortedMessage.title);
+      void channel
+        .send({
+          kind: "cancel",
+          context: config.backendContext,
+          requestId: abortedMessage.requestId,
+        })
+        .catch((error) => {
+          fatal = error;
+        });
+      await until(
+        () => native.symbols.IsWindow(abortedHwnd) === 0,
+        "message abort cleanup",
+      );
+      pending.delete(abortedMessage.requestId);
 
       const shutdown = invoke("dialog.selectFolder");
       const queuedAtShutdown = invoke("dialog.openFile");

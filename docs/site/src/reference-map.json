@@ -1481,7 +1481,8 @@
     "reference/plugins/dialog": [
       "dialog.openFile",
       "dialog.selectFolder",
-      "dialog.saveFile"
+      "dialog.saveFile",
+      "dialog.showMessage"
     ]
   },
   "configuration": {
