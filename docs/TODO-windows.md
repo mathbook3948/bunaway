@@ -187,9 +187,9 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] Windows 선언과 생성별 `window.focusable`, 실행 중 `setFocusable`와 `isFocusable`을 제공한다. 비활성 표시와 사용자 및 호스트 활성화 차단, 현재 포커스와 별도 조회 및 재생성 기본값을 유지한다.
 - [x] `setTitle`과 `getTitle`로 Windows 창 title을 실행 중 변경하고 조회한다. 선언과 다른 인스턴스를 변경하지 않으며 닫기 확인 창에도 현재 title을 사용한다.
 - [ ] 창 icon을 실행 중 변경하고 조회한다. 이미지 입력과 배포 리소스 계약을 정의한다.
-- [ ] decorations와 frame의 초기 설정, 변경과 조회를 제공한다.
+- [ ] decorations와 frame의 초기 설정, 변경과 조회를 제공한다. `titlebar: "custom"`과 CSS drag는 구현됐으며 전체 decorations/frame API는 남아 있다.
 - [x] Windows `titlebar: "custom"`과 WebView2 CSS `app-region: drag/no-drag`, 네이티브 resize 테두리를 제공한다. 전체 테두리 제거와 caption overlay는 미지원이며 물리 마우스 및 접근성 도구 검증은 별도다.
-- [ ] 프로그램에서 창 이동과 방향별 크기 조절을 시작한다.
+- [ ] 프로그램에서 창 이동과 방향별 크기 조절을 시작한다. 사용자 CSS `app-region: drag` 이동은 구현됐으며 코드로 이동과 크기 조절을 시작하는 API는 남아 있다.
 - [ ] 네이티브 제목 표시줄 버튼을 유지하는 title-bar overlay를 제공한다.
 - [x] `window.alwaysOnTop`, `setAlwaysOnTop`, `isAlwaysOnTop`으로 활성화 없는 topmost 설정과 조회를 제공한다.
 - [ ] alwaysOnBottom 및 창 Z 순서 이동의 지원 범위를 결정한다.
@@ -233,7 +233,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] always-on-top 변경 이벤트를 제공한다.
 - [x] `windows.closeRequested`와 `windows.respondClose`로 비동기 저장 후 닫기 승인 흐름을 제공한다. 창의 문서가 구독할 때만 사용자 닫기를 대기시키고 자동 기한은 두지 않는다. 대기 중 마지막 구독을 해제하면 요청을 취소하고 창을 유지한다. 실제 WebView2 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [x] DPI 변경을 resize 전환과 bounds의 `dpi`로 전달한다.
-- [ ] theme 변경 이벤트를 제공한다.
+- [x] theme 변경 이벤트를 제공한다. Windows는 `appearance.changed`로 테마, 고대비와 접근성 설정을 알리며 동일 값은 생략한다. 13절 테마 항목과 같다.
 - [x] Windows 로그오프와 시스템 종료의 WM_QUERYENDSESSION은 항상 허용하고 WM_ENDSESSION은 `"session-end"` 원인의 취소 불가 종료로 처리한다. UI 스레드는 최대 4초 동안 `onWillQuit`과 플러그인 StopHook을 기다리며 차단 API는 제공하지 않는다. 실제 HWND 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [ ] 선택적으로 ShutdownBlockReasonCreate 기반의 종료 지연 API를 제공한다. 차단 사유 문자열, 해제 규칙, 차단 중 메시지 처리와 `onQuit` 보장 범위를 먼저 정한다.
 - [ ] app-command와 system-context-menu 이벤트를 제공한다.
@@ -272,7 +272,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 앱 전체 포커스와 활성 상태를 제공한다. 창 생성은 `windows.lifecycle`로 제공하며 앱 전체 포커스와 활성 상태가 남았다.
 - [ ] 단일 인스턴스의 추가 데이터 전달과 lock 상태 조회, 해제 필요성을 결정한다.
 - [ ] 앱 ready 전에 들어온 외부 활성화 요청과 종료 요청의 순서를 공개 계약으로 정한다.
-- [ ] 렌더러와 관리 프로세스의 비정상 종료 이벤트를 앱에 제공한다.
+- [ ] 렌더러와 관리 프로세스의 비정상 종료 이벤트를 앱에 제공한다. [#78](https://github.com/mathbook3948/bunaway/issues/78).
 - [ ] 앱 About 패널과 이름, 버전, 저작권, 라이선스 정보를 제공한다.
 - [ ] 환경변수와 실행 인자의 설정, 개발 옵션과 배포 옵션의 적용 범위를 정의한다.
 - [ ] command-line switch와 argument의 추가, 조회, 존재 확인과 제거에 대응하는 설정 API를 제공한다.
@@ -286,7 +286,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] tooltip, 앱 아이콘과 Open/Quit 메뉴로 트레이를 생성한다. 앱 아이콘을 지정하지 않으면 기본 아이콘을 사용한다.
 - [x] 트레이 클릭으로 살아 있는 창을 복원하고 Quit에 앱 종료 확인을 적용한다.
 - [x] Explorer 재시작 후 트레이 아이콘을 다시 등록한다.
-- [ ] 앱 아이콘과 별도로 트레이용 ICO, PNG 또는 이미지 리소스를 지정한다.
+- [ ] 앱 선언에서 앱 아이콘과 별도로 트레이용 ICO, PNG 또는 이미지 리소스를 지정한다. 실행 중 `tray.setIcon` ICO bytes 적용은 구현됐다.
 - [x] `tray.setIcon`으로 ICO bytes를 적용하거나 앱 아이콘으로 복원하고 `tray.setTooltip`으로 tooltip을 실행 중 변경한다.
 - [ ] 트레이 생성, 조회, 표시, 숨김, 제거와 제거 여부 조회 API를 제공한다.
 - [ ] 여러 트레이 아이콘과 고유 ID, Windows GUID를 지원한다.
@@ -296,7 +296,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 트레이 mouse enter/leave/move를 제공한다.
 - [x] `tray.setClickBehavior`로 오른쪽 메뉴 표시와 왼쪽 창 복원 동작을 설정한다.
 - [x] `tray.focus`로 OS의 트레이 focus 요청 결과를 반환한다.
-- [ ] 지정 위치의 팝업 메뉴 열기와 닫기를 제공한다.
+- [ ] 트레이에서 지정 위치의 팝업 메뉴 열기와 닫기를 제공한다. 창 대상 `menu.showContextMenu`의 좌표 팝업은 구현됐다.
 - [ ] Windows balloon 표시, 제거와 show/click/closed 이벤트의 지원을 결정한다.
 - [ ] 트레이 자원 제거 뒤 숨긴 앱의 실행 유지와 종료 규칙을 정의한다.
 
@@ -355,9 +355,9 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 실제 로그아웃과 로그인에서 숨김 시작, 사용자 비활성화와 트레이 복원을 대화형 검증한다. CI의 직접 실행은 이 검증을 대신하지 않는다.
 - [x] 사용자 범위 등록을 기본으로 하고 관리자 범위는 제공하지 않는다.
 - [x] 앱 이동과 업데이트 후 명시적 재등록으로 오래된 경로와 인자를 갱신한다.
-- [ ] 제거 시 현재 ID의 등록을 해제하고 ID 변경 전 등록을 정리하는 설치 계약을 연결한다.
+- [x] 제거 시 현재 ID의 등록을 해제하고 ID 변경 전 등록을 정리하는 설치 계약을 연결한다. Inno `UninstallAutostart`와 소유자 정리를 사용한다.
 - [x] Windows 작업 관리자에서 사용자가 비활성화한 상태를 별도로 조회하고 갱신 시 보존한다.
-- [ ] 설치 프로그램의 opt-in 설정과 런타임 설정을 연결한다.
+- [x] 설치 프로그램의 opt-in 설정과 런타임 설정을 연결한다. Inno `unchecked checkedonce`와 `DesiredAutostartCommand`를 사용한다.
 - [ ] MSIX manifest StartupTask와 사용자 동의 계약을 구현한다.
 
 현재 `@bunaway/plugin-autostart`는 개발과 배포 앱 ID를 분리하며 등록 변경과 조회 권한도
@@ -490,10 +490,10 @@ MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이�
 - [x] 클립보드 텍스트 읽기, 쓰기와 지우기를 제공한다. `@bunaway/plugin-clipboard`의 작업별 권한, Unicode와 크기 제한, 빈 값, 점유와 취소, 소유권 정리를 정의했다. 2026-10-10 Windows x64의 공통 SDK와 실제 UI Worker 왕복, 별도 프로세스 점유와 취소를 검증했다([계약과 검증](../plugins/clipboard/README.md)).
 - [x] Windows clipboard의 `readImage`와 `writeImage`로 bounded RGBA 이미지 읽기와 쓰기를 제공한다. 공통 이미지 리소스 API와 다른 앱의 붙여넣기 검증은 별도 작업이다.
 - [x] Windows clipboard의 HTML fragment, ASCII RTF와 wide 파일 목록 읽기와 쓰기를 제공한다. 파일 목록은 저장소 접근 권한을 추가하지 않는다.
-- [ ] bookmark 형식의 지원을 제공한다.
+- [x] Windows clipboard의 bookmark(`application/x-bunaway-bookmark`) 형식 읽기와 쓰기를 제공한다. URL만 포함하며 title과 열기는 없다.
 - [x] `getFormats`와 `hasFormat`으로 지원하는 다섯 MIME 형식의 가용성을 조회한다. 임의 Windows 등록 형식의 열거는 포함하지 않는다.
 - [x] `readFormats`와 `writeFormats`로 한 번의 clipboard 열기 구간에서 여러 형식을 읽거나 교체한다. 준비 실패는 기존 내용을 보존하며 비우기 이후 부분 등록 실패는 되돌리지 않는다.
-- [ ] 사용자 정의 binary 형식을 읽고 쓰는 범위와 제한을 정의한다.
+- [x] Windows clipboard의 사용자 정의 binary 형식(`application/x-bunaway-binary/...`) 읽기와 쓰기를 제공한다. 형식당 256 KiB, 어댑터 수명마다 서로 다른 이름 64개까지다.
 - [ ] 클립보드 변경 이벤트의 지원을 결정한다.
 - [x] Windows `@bunaway/plugin-image`에서 PNG, JPEG와 BMP bytes, RGBA와 data URL로 앱 소유 이미지 리소스를 만든다.
 - [ ] 파일 경로에서 이미지 리소스를 읽는 API와 저장소 접근 정책을 연결한다.
@@ -596,7 +596,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] JavaScript, 이미지, WebGL, autoplay와 background throttling 설정을 제공한다.
 - [ ] 기본 글꼴, 글꼴 크기, encoding과 이미지 animation 정책의 지원을 결정한다.
 - [ ] textarea resize, preferred-size와 focus-on-navigation 옵션의 지원을 결정한다.
-- [ ] zoom을 origin별로 공유할지 WebView별로 독립 관리할지 설정한다.
+- [ ] zoom을 origin별로 공유할지 WebView별로 독립 관리할지 설정한다. 컨트롤러 `setZoomFactor`/`zoomFactor` 조회는 구현됐다.
 - [ ] 브라우저 기본 대화상자, context menu와 zoom hotkey 설정을 제공한다.
 - [ ] autofill, password autosave와 HTTP authentication의 명시적 설정을 제공한다.
 - [ ] HTML 전체화면과 네이티브 창 전체화면의 연동 및 이벤트를 제공한다.
@@ -615,11 +615,11 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] selection 변경, 텍스트 삽입과 교체, scroll-to-top/bottom을 제공한다.
 - [ ] 맞춤법 검사 활성화, 언어, dictionary와 사용자 단어를 관리한다.
 - [ ] misspelling 조회, suggestion과 교체 API를 제공한다.
-- [ ] 신뢰된 앱 백엔드의 JavaScript 실행과 결과 반환 계약을 제공한다.
-- [ ] 문서 초기화 script와 CSS 삽입, 제거를 제공한다.
-- [ ] isolated world와 preload의 사용 범위, frame별 적용과 자원 정리를 정의한다.
-- [ ] WebView에서 Node/Bun을 직접 사용하는 Electron nodeIntegration 옵션의 대체 또는 미지원 결정을 기록한다.
-- [ ] frame tree, frame URL과 origin 조회, frame별 작업의 지원 범위를 정의한다.
+- [ ] 신뢰된 앱 백엔드의 JavaScript 실행과 결과 반환 계약을 제공한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
+- [ ] 문서 초기화 script와 CSS 삽입, 제거를 제공한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
+- [ ] isolated world와 preload의 사용 범위, frame별 적용과 자원 정리를 정의한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
+- [ ] WebView에서 Node/Bun을 직접 사용하는 Electron nodeIntegration 옵션의 대체 또는 미지원 결정을 기록한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
+- [ ] frame tree, frame URL과 origin 조회, frame별 작업의 지원 범위를 정의한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [ ] 키보드, 마우스와 wheel의 before-input 이벤트와 취소를 제공한다.
 - [ ] 입력 이벤트 주입, cursor 변경과 IME composition의 지원을 결정한다.
 - [ ] 파일 drop의 enter, over, leave와 drop 이벤트, 경로와 좌표를 제공한다.
@@ -649,11 +649,11 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] online 상태와 변경 이벤트, host와 proxy resolve를 제공한다.
 - [ ] 오프라인, latency와 bandwidth emulation을 제공한다.
 - [ ] preconnect, connection 정리와 network log를 제공한다.
-- [ ] 사용자 정의 앱 protocol의 등록, 해제와 등록 상태 조회를 제공한다.
-- [ ] protocol 응답에 파일, bytes, text, HTTP와 stream을 사용한다.
-- [ ] protocol의 MIME, range, CORS, secure origin과 서비스 워커 지원을 정의한다.
-- [ ] protocol과 세션별 정책을 연결하고 origin 검사와 세션 폐기 계약을 유지한다.
-- [ ] 로컬 파일 경로를 WebView 표시용 URL로 변환하는 공개 기능을 제공한다. [T-core-live]의
+- [ ] 사용자 정의 앱 protocol의 등록, 해제와 등록 상태 조회를 제공한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
+- [ ] protocol 응답에 파일, bytes, text, HTTP와 stream을 사용한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
+- [ ] protocol의 MIME, range, CORS, secure origin과 서비스 워커 지원을 정의한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
+- [ ] protocol과 세션별 정책을 연결하고 origin 검사와 세션 폐기 계약을 유지한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
+- [ ] 로컬 파일 경로를 WebView 표시용 URL로 변환하는 공개 기능을 제공한다. [#158](https://github.com/mathbook3948/bunaway/issues/158). [T-core-live]의
   `convertFileSrc`에 대응하며 URL 변환과 파일 접근 허용을 구분한다. 19절의 파일 접근 규칙과
   17절의 CSP에 연결하고, 허용한 이미지와 미디어 표시, Unicode와 예약 문자 인코딩을 검증한다.
   앱의 거부 경로, 경로 순회, 링크 우회와 접근 철회 후 호출을 차단하는지 테스트한다.
@@ -676,10 +676,10 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 
 - [ ] 권한 check와 request 훅, origin과 frame별 허용와 거부를 제공한다.
 - [ ] 권한 결정의 영속화, 조회와 초기화를 제공한다.
-- [ ] 프로덕션 CSP와 개발용 CSP(`devCSP`)의 설정, 기본값과 적용 대상을 정의한다.
+- [ ] 프로덕션 CSP와 개발용 CSP(`devCSP`)의 설정, 기본값과 적용 대상을 정의한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
   nonce/hash 생성과 자산 연결, 허용 origin, 개발 HMR과 프로덕션 정책의 분리를 제공한다.
   정상 자산 로드, 허용하지 않은 inline script와 외부 origin 차단, 개발 정책의 배포 유출 방지를 검증한다.
-- [ ] 자산과 사용자 정의 protocol 응답의 보안 헤더를 설정하고 CSP와의 적용 관계를 정의한다.
+- [ ] 자산과 사용자 정의 protocol 응답의 보안 헤더를 설정하고 CSP와의 적용 관계를 정의한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
   COOP, COEP, CORP와 `X-Content-Type-Options`의 기본값, 덮어쓰기 규칙과 WebView별 지원을 기록한다.
   실제 응답 헤더와 교차 origin 허용/차단을 개발 및 패키지 실행에서 검증하고 적용 불가 경로를 명시한다.
 - [ ] 카메라와 마이크의 OS 권한 확인 및 요청을 연결한다.
@@ -796,9 +796,9 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [x] HTTP header, body, redirect, proxy와 OS 인증의 지원 범위를 정의한다.
   선택 `network.request`는 제한된 header와 base64 body를 제공하고 redirect를 따라가지 않는다.
   proxy는 Bun의 신뢰된 실행 환경 설정만 사용하며 OS 인증과 WebView cookie 공유는 제공하지 않는다.
-- [ ] HTTP stream, timeout, 취소와 progress를 제공한다.
+- [ ] HTTP stream, timeout, 취소와 progress를 제공한다. [#81](https://github.com/mathbook3948/bunaway/issues/81).
   `network.request`의 제한된 응답, timeout과 호출 취소는 구현했다. 공개 stream과 progress는 남아 있다.
-- [ ] WebSocket 연결, 메시지, close, 상태와 backpressure를 공개 계약으로 제공한다.
+- [ ] WebSocket 연결, 메시지, close, 상태와 backpressure를 공개 계약으로 제공한다. [#81](https://github.com/mathbook3948/bunaway/issues/81).
   `network.exchange`는 호출 하나에 종속된 제한된 text 송신과 text/binary 수신, close와 send buffer
   상한을 제공한다. 장기 연결 handle, 독립 send/receive와 상태 이벤트의 세션 소유권은 남아 있다.
 - [x] 앱이 실행 파일과 인자를 검사하는 command 실행을 제공한다.
@@ -874,7 +874,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [x] Inno Setup 기반 direct와 Store unpackaged 채널의 설치 파일 생성 경로가 있다.
 - [x] 앱 이름과 ICO 아이콘을 가진 GUI EXE로 실행하고 시작 실패 대화상자와 로그를 제공한다.
 - [x] 설치 옵션에 파일 연결과 URL scheme 처리 후보 등록의 opt-in을 연결한다.
-- [ ] 설치 옵션에 autostart의 opt-in을 연결한다.
+- [x] 설치 옵션에 autostart의 opt-in을 연결한다. 08절의 설치와 런타임 연결과 같다.
 - [x] 업데이트에서 기존 설치 폴더, 앱 데이터와 설정된 경로의 바로가기를 유지한다.
   Inno 설치는 기존 설치 폴더와 앱 데이터를 유지하고,
   설정된 경로의 앱 바로가기가 같은 설치의 이전 EXE를 가리킬 때 대상과 기본 아이콘을 갱신한다.
@@ -903,10 +903,10 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [x] 권한, 취소, deadline과 종료된 세션의 늦은 응답 처리를 제공한다.
 - [x] 기본 WebView 연결을 공유하고 HMR과 pagehide에서 수명을 관리한다.
 - [x] `client.once`와 직접 `once`로 첫 유효 이벤트를 한 번만 전달하고 자동 해제한다. 권한, 취소와 오류 계약은 기존 구독을 따른다.
-- [ ] 대상 창, WebView, backend 이벤트 전달의 공개 계약을 제공한다.
+- [ ] 대상 창, WebView, backend 이벤트 전달의 공개 계약을 제공한다. [#81](https://github.com/mathbook3948/bunaway/issues/81).
 - [x] Windows의 `windows.changed` native 이벤트를 동일한 typed 구독 API로 전달한다.
-- [ ] binary payload와 JSON 외 데이터의 전송 계약을 추가한다.
-- [ ] 연속 결과와 대용량 데이터의 channel 또는 stream 전송을 제공한다.
+- [ ] binary payload와 JSON 외 데이터의 전송 계약을 추가한다. [#81](https://github.com/mathbook3948/bunaway/issues/81).
+- [ ] 연속 결과와 대용량 데이터의 channel 또는 stream 전송을 제공한다. [#81](https://github.com/mathbook3948/bunaway/issues/81).
 - [ ] MessagePort와 transferable resource에 해당하는 기능을 제공한다.
 - [ ] 백엔드에서 UI로 요청하고 결과를 받는 기능의 필요성을 결정한다.
 - [ ] native resource handle의 생성, 참조와 해제 계약을 제공한다.
@@ -940,7 +940,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [ ] network log 시작, 종료와 결과 경로를 제공한다.
 - [ ] crash report, minidump와 최근 crash 조회를 제공한다.
 - [ ] crash metadata와 사용자가 선택하는 업로드를 제공한다. 기본 외부 전송은 비활성화한다.
-- [ ] 로그 level, target, rotation, retention과 flush를 제공한다.
+- [x] 로그 level(`minimumLevel`), target(`appData`만), rotation(`maxFileBytes`), retention(`maxArchives`)과 flush를 `log.configure`/`log.flush`로 제공한다.
 - [ ] 시작 시간, 유휴 메모리, 패키지 크기와 명령 지연의 기준 측정을 기록한다.
 - [ ] 각 UI 템플릿의 실제 Windows dev, HMR, build와 package 실행을 검증한다.
 - [ ] 고급 process crash, hang, heap snapshot과 JavaScript stack 수집의 지원 범위를 결정한다.
@@ -977,7 +977,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 
 - [x] macOS를 같은 Bun 앱 정의로 실행하고 직접 FFI와 같은 프로세스의 백엔드 Worker에 연결한다.
 - [x] macOS의 사전 선언 다중 창과 기본 창 수명주기를 공통 네이티브 플러그인 계약에 연결한다.
-- [ ] macOS의 desktop, 나머지 창 API와 선택 네이티브 플러그인 계약을 맞춘다. [macOS TODO](./TODO-macos.md)를 따른다.
+- [ ] macOS의 desktop, 나머지 창 API와 선택 네이티브 플러그인 계약을 맞춘다. [macOS TODO](./TODO-macos.md)를 따른다. [#78](https://github.com/mathbook3948/bunaway/issues/78).
 - [ ] Linux 호스트와 렌더러를 구현하고 X11/Wayland별 기능 차이를 명시한다.
 - [ ] macOS activation policy, app hide/show와 Dock visibility를 제공한다.
 - [ ] Dock icon, badge, bounce, menu와 recent documents를 제공한다.
@@ -1081,7 +1081,7 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
   [초기 UI Worker 실행 기록](./architecture/windows-bun-results.md#2026-10-10-opener-파일-작업)과 구분한다.
 - [ ] suspend/resume, 잠금과 Explorer 재시작 후 자원과 구독을 검증한다.
 - [x] 로컬 Windows x64에서 WebView 장애 복구와 앱 강제 종료 후 Job의 자손 회수를 검증한다.
-- [ ] 최신 Windows 전체 호스트 회귀를 통과하고 WebView 종료와 자식 프로세스 정리를 재검증한다.
+- [ ] 최신 Windows 전체 호스트 회귀를 통과하고 WebView 종료와 자식 프로세스 정리를 재검증한다. [#94](https://github.com/mathbook3948/bunaway/issues/94).
   [geometry 설정 검증 기록](./architecture/windows-bun-results.md#2026-10-10-창-geometry-설정-api)의
   개별 Win32와 WebView2 검사는 통과했지만 전체 호스트 회귀와 단독 재실행에서
   `WebView cleanup timed out` 및 브라우저 자식 프로세스 잔류가 기록됐다.
