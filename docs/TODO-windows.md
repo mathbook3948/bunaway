@@ -201,7 +201,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 모서리와 창 shape의 지원을 결정한다. Electron shape는 실험 기능이다.
 - [ ] roundedCorners와 corner-smoothing CSS를 지원하거나 렌더러별 차이를 명시한다.
 - [ ] Windows thickFrame과 noRedirectionBitmap 같은 생성 옵션의 필요성과 지원 범위를 결정한다.
-- [ ] 스크린샷과 화면 공유에서 창을 제외하는 content protection을 제공한다.
+- [x] `window.contentProtection`, `setContentProtection`, `isContentProtected`를 제공한다. Windows는 `WDA_EXCLUDEFROMCAPTURE`를 쓰고 Windows 10 2004 이전에는 `WDA_MONITOR`로 대체하며, macOS는 `sharingType`을 사용한다.
 - [ ] mouse click-through와 이동 이벤트 전달 여부를 제공한다.
 - [ ] cursor icon, visible, position과 grab의 지원 범위를 제공한다.
 - [ ] 창 포커스 요청과 별개로 작업 표시줄을 점멸하는 attention API를 제공한다.

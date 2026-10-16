@@ -17,6 +17,10 @@ const WK_NAVIGATION_CANCEL = 0;
 const WK_NAVIGATION_ALLOW = 1;
 const WK_PERMISSION_DENY = 0;
 const NS_URL_ERROR_CANCELLED = -999;
+/** NSWindowSharingNone: other processes cannot read the window's contents. */
+const NS_WINDOW_SHARING_NONE = 0;
+/** NSWindowSharingReadOnly: the AppKit default, readable by capture and sharing. */
+const NS_WINDOW_SHARING_READ_ONLY = 1;
 /** WebKitErrorFrameLoadInterruptedByPolicyChange. */
 const WEBKIT_ERROR_FRAME_LOAD_INTERRUPTED = 102;
 const NS_UNBOUNDED_CONTENT_SIZE = 3.4028234663852886e38;
@@ -153,6 +157,10 @@ export class MacosWebview {
       );
       o.send(this.window, "setTitle:", o.string(config.window.title));
       o.send(this.window, "setDelegate:", windowDelegate);
+      // Protect before the window is first ordered in, so no frame is ever capturable.
+      if (size.contentProtection === true) {
+        this.setContentProtection(true);
+      }
       const configuration = o.object("WKWebViewConfiguration");
       this.controller = o.object("WKUserContentController");
       this.retained.push(configuration, this.controller);
@@ -623,6 +631,28 @@ export class MacosWebview {
   }
   isVisible(): boolean {
     return !!this.objc.send(this.window, "isVisible");
+  }
+  /**
+   * Exclude the window from screenshots and screen sharing through NSWindow.sharingType.
+   * On macOS 15 and later, ScreenCaptureKit based capture may ignore sharingType,
+   * so protection is best effort there.
+   */
+  setContentProtection(enabled: boolean): void {
+    const o = this.objc;
+    o.withAutoreleasePool(() => {
+      o.send(
+        this.window,
+        "setSharingType:",
+        enabled ? NS_WINDOW_SHARING_NONE : NS_WINDOW_SHARING_READ_ONLY,
+      );
+    });
+  }
+  /** Read the live NSWindow.sharingType, which is the source of truth for protection. */
+  isContentProtected(): boolean {
+    return (
+      Number(this.objc.integer(this.window, "sharingType")) ===
+      NS_WINDOW_SHARING_NONE
+    );
   }
   isFocused(): boolean {
     return (

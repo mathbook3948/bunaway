@@ -1914,3 +1914,33 @@ test("macOS accepts hidden window preparation and rejects unsupported options pe
     }),
   ).toThrow("Multiple windows and isolated instance profiles");
 });
+
+test("macOS accepts the contentProtection window declaration", () => {
+  const config = workerConfig("unused");
+  const first = config.windows[0];
+  if (!first) {
+    throw new Error("Missing test window.");
+  }
+  for (const contentProtection of [
+    true,
+    false,
+  ]) {
+    const declaration = {
+      ...first,
+      window: {
+        ...first.window,
+        contentProtection,
+      },
+    };
+    expect(
+      readMacosWindowSpecs(
+        [
+          declaration,
+        ],
+        config.policy,
+      ),
+    ).toEqual([
+      declaration,
+    ]);
+  }
+});

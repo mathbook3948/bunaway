@@ -402,6 +402,8 @@ export class MacosWindows {
       close: () => this.closeView(viewId),
       isVisible: () => native().isVisible(),
       isFocused: () => native().isFocused(),
+      setContentProtection: (enabled) => native().setContentProtection(enabled),
+      isContentProtected: () => native().isContentProtected(),
       getBounds: unsupported,
       getDpi: unsupported,
       minimize: unsupported,

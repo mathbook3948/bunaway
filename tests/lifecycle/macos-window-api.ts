@@ -58,6 +58,12 @@ try {
     window: {
       width: 500,
       height: 400,
+      // Declared protection reaches the NSWindow when the hidden lazy window is created.
+      ...(view === "lazy"
+        ? {
+            contentProtection: true,
+          }
+        : {}),
     },
     startup: view !== "lazy",
   }));
@@ -104,6 +110,8 @@ try {
           "getReadiness",
           "showInactive",
           "isDestroyed",
+          "setContentProtection",
+          "isContentProtected",
         ].map((name) => `plugin.windows.${name}`),
       ],
       events:
@@ -186,6 +194,12 @@ try {
           check(await windows.isVisible({view:"reader"}) === true, "show");
           let readerFocused = false;
           try {await windows.focus({view:"reader"}); readerFocused = await windows.isFocused({view:"reader"}); check(readerFocused, "focus");} catch (error) {check(error.code === "BUSY", "focus error");}
+          // Runtime round trip: protection is off by default and follows each toggle.
+          check(await windows.isContentProtected({view:"reader"}) === false, "content protection default");
+          await windows.setContentProtection({view:"reader", contentProtection:true});
+          check(await windows.isContentProtected({view:"reader"}) === true, "content protection enabled");
+          await windows.setContentProtection({view:"reader", contentProtection:false});
+          check(await windows.isContentProtected({view:"reader"}) === false, "content protection disabled");
           const instances = await windows.listInstances();
           const mainIdentity = instances.find(item => item.viewId === "main");
           const readerIdentity = instances.find(item => item.viewId === "reader");
@@ -206,6 +220,7 @@ try {
           check(await windows.isVisible({view:"lazy"}) === false, "hidden create");
           const hidden = await windows.getReadiness({view:"lazy"});
           check(hidden.nativeCreated === true && hidden.viewId === "lazy", "hidden readiness identity");
+          check(await windows.isContentProtected({view:"lazy"}) === true, "declared content protection");
           await error(() => windows.recreate({view:"lazy", options:{window:{alwaysOnTop:true}}}), "UNSUPPORTED");
           check((await windows.getReadiness({view:"lazy"})).windowId === hidden.windowId, "unsupported option left window open");
           await until(() => prepared("lazy"), "hidden lazy readiness");
@@ -366,7 +381,7 @@ try {
   );
   assert.equal(records.at(-1).failed, false);
   console.log(
-    "PASS compiled macOS multi-window API, operation grants, window identity lookup, hidden creation, readiness, showInactive, repeated creation, fresh sessions and last-window self recreation",
+    "PASS compiled macOS multi-window API, operation grants, window identity lookup, hidden creation, readiness, showInactive, content protection, repeated creation, fresh sessions and last-window self recreation",
   );
 } catch (error) {
   const log = resolve(

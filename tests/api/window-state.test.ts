@@ -34,6 +34,7 @@ const stateQueries = [
   "isFocusable",
   "isAlwaysOnTop",
   "isSkipTaskbar",
+  "isContentProtected",
   "isMinimizable",
   "isMaximizable",
   "isClosable",
@@ -126,6 +127,7 @@ function fixture() {
     isFocusable: true,
     isAlwaysOnTop: false,
     isSkipTaskbar: false,
+    isContentProtected: false,
     isMinimizable: true,
     isMaximizable: true,
     isClosable: true,
@@ -184,6 +186,11 @@ function fixture() {
       observed.isSkipTaskbar = value;
     },
     isSkipTaskbar: () => observed.isSkipTaskbar,
+    setContentProtection(value) {
+      apply("setContentProtection");
+      observed.isContentProtected = value;
+    },
+    isContentProtected: () => observed.isContentProtected,
     setFocusable(value) {
       apply("setFocusable");
       observed.isFocusable = value;
@@ -283,6 +290,7 @@ function fixture() {
         | "getTitlebar"
         | "setAlwaysOnTop"
         | "setSkipTaskbar"
+        | "setContentProtection"
         | "setMinimizable"
         | "setMaximizable"
         | "setClosable"
@@ -295,6 +303,7 @@ function fixture() {
         focusable?: boolean;
         alwaysOnTop?: boolean;
         skipTaskbar?: boolean;
+        contentProtection?: boolean;
         minimizable?: boolean;
         maximizable?: boolean;
         closable?: boolean;
@@ -915,6 +924,11 @@ test("display controls retain independent permissions, strict input and closed/u
       "setSkipTaskbar",
       "isSkipTaskbar",
       "skipTaskbar",
+    ],
+    [
+      "setContentProtection",
+      "isContentProtected",
+      "contentProtection",
     ],
   ] as const) {
     const f = fixture();

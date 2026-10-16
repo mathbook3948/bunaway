@@ -21,6 +21,7 @@ test("initial state overrides are fieldwise and recreation restores declared sta
     titlebar: "custom",
     alwaysOnTop: true,
     skipTaskbar: true,
+    contentProtection: true,
   };
   await f.operations.execute(
     {
@@ -33,6 +34,7 @@ test("initial state overrides are fieldwise and recreation restores declared sta
             titlebar: "system",
             alwaysOnTop: false,
             skipTaskbar: false,
+            contentProtection: false,
           },
         },
       },
@@ -45,6 +47,7 @@ test("initial state overrides are fieldwise and recreation restores declared sta
     titlebar: "system",
     alwaysOnTop: false,
     skipTaskbar: false,
+    contentProtection: false,
   });
   const first = f.views.get("main");
   assert(first);
