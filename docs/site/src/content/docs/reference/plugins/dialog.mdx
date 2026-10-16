@@ -1,0 +1,100 @@
+---
+title: dialog
+description: Windows 파일 열기, 폴더 선택과 저장 경로 선택을 사용합니다.
+sidebar: { order: 16 }
+---
+
+`@bunaway/plugin-dialog`을 설치하고 기본 export `dialog`을 앱의 `plugins`에 등록합니다.
+Windows에서 파일과 폴더의 경로를 선택합니다. macOS와 다른 플랫폼은 `UNSUPPORTED`입니다.
+
+```ts
+import { defineApp } from "@bunaway/backend";
+import dialog from "@bunaway/plugin-dialog";
+
+export default defineApp({ modules: [], plugins: [dialog] });
+```
+
+## 작업과 입력
+
+```ts
+dialog.openFile(input: OpenFileInput, options?: NativeInvokeOptions): Promise<DialogResult>
+dialog.selectFolder(input: SelectFolderInput, options?: NativeInvokeOptions): Promise<DialogResult>
+dialog.saveFile(input: SaveFileInput, options?: NativeInvokeOptions): Promise<DialogResult>
+```
+
+세 작업 모두 입력 객체가 필요합니다. 기본 설정은 `{}`로 지정합니다.
+`dialog.openFile`, `dialog.selectFolder`, `dialog.saveFile`은 각각 별도 권한입니다.
+뷰의 명령은 해당 뷰의 `host.permissions`, setup은 `backend.permissions`에 허용합니다.
+화면에서 플러그인을 직접 호출할 때는 `plugin.dialog.openFile` 등 해당 명령도
+뷰의 `commands`에 허용해야 합니다.
+
+| 입력 | 작업 | 의미 |
+| --- | --- | --- |
+| `ownerWindowId?: string` | 전체 | 살아 있는 창 수명 ID. 뷰는 자신의 호출 창만 지정할 수 있습니다. |
+| `title?: string` | 전체 | 1~256자의 제목. NUL은 거부합니다. |
+| `defaultDirectory?: string` | 전체 | 처음 표시할 기존 디렉터리. 경로 해석 실패는 오류입니다. |
+| `multiple?: boolean` | 열기, 폴더 | 기본 `false`. `true`이면 파일 또는 폴더를 여러 개 선택합니다. |
+| `filters?: { name: string; extensions: string[] }[]` | 열기, 저장 | 1~32개 필터. 이름은 1~128자, 확장자는 필터당 1~32개입니다. |
+| `defaultFileName?: string` | 열기, 저장 | 기본 파일 이름. 1~255자이며 경로 구분자, Windows 예약 문자와 NUL은 거부합니다. |
+| `defaultExtension?: string` | 열기, 저장 | 점 없는 기본 확장자. 예: `txt`. |
+
+확장자는 영문자나 숫자로 시작하고 영문자, 숫자, `_`, `-`로 이루어진 1~32자입니다.
+필터 확장자 `*`는 모든 파일을 표시합니다. 필터는 표시와 선택 안내이며 파일 내용이나
+보안 경계를 검증하지 않습니다. 숨김 파일 표시나 overwrite 확인을 끄는 옵션은 제공하지 않습니다.
+저장은 Windows의 기존 overwrite 확인을 유지합니다. 저장 경로를 선택해도 파일을 쓰지 않습니다.
+
+```ts
+// 앱 명령 안에서 현재 호출의 권한과 취소를 상속합니다.
+const result = await dialog.openFile({
+  multiple: true,
+  filters: [{ name: "텍스트", extensions: ["txt", "md"] }],
+});
+if (!result.cancelled) {
+  for (const path of result.paths) {
+    // 앱의 접근 규칙과 별도 storage 작업 권한으로 다음 작업을 결정합니다.
+  }
+}
+```
+
+## 결과, 소유 창과 취소
+
+사용자의 Cancel, ESC 또는 대화상자 닫기는 `{ cancelled: true }`입니다.
+성공은 `{ cancelled: false, paths: string[] }`입니다. 단일 선택과 저장은 경로 하나를
+반환합니다. 다중 선택은 최대 128개이며 결과 순서는 Windows가 반환한 순서입니다.
+각 경로는 최대 32,767 UTF-16 코드 단위, 전체 결과 경로는 최대 131,072 코드 단위입니다.
+상한을 넘으면 일부 경로를 잘라 반환하지 않고 오류로 끝납니다.
+
+뷰에서 시작한 호출은 호스트가 인증한 정확한 창 인스턴스를 소유 창으로 사용합니다.
+`ownerWindowId`를 생략해도 이 관계를 유지합니다. 다른 창 ID는 `PERMISSION_DENIED`입니다.
+신뢰된 backend setup은 임의의 살아 있는 앱 창을 지정하거나 생략해 소유 창 없이 표시할 수 있습니다.
+없거나 이미 닫힌 창은 `INVALID_ARGUMENT`이며 창을 재생성해도 이전 호출을 새 창에 연결하지 않습니다.
+
+호출 abort, 기한 만료, 문서/세션 종료와 앱 종료는 사용자 취소 결과로 바꾸지 않습니다.
+호출자는 기존 SDK의 `CANCELLED` 또는 `TIMEOUT` 오류를 받고 호스트는 열린 대화상자를 닫습니다.
+소유 창의 종료가 확정되면 `CANCELLED`입니다. 결과와 취소가 경합하면 완료 전에 관측한 취소를 우선합니다.
+웹 호출에서는 기존 `NativeInvokeOptions`의 `signal`과 기한을 사용할 수 있습니다.
+백엔드의 명령 호출은 현재 컨텍스트의 취소와 기한을 상속하며 별도 옵션을 받지 않습니다.
+
+```ts
+// 화면 코드. 버튼이나 컴포넌트 수명에서 controller.abort()를 호출할 수 있습니다.
+const controller = new AbortController();
+const result = await dialog.selectFolder({}, { signal: controller.signal });
+```
+
+Windows UI 스레드는 한 번에 대화상자 하나를 실행합니다. 동시 요청은 기존 호스트의
+유한 큐에서 순서대로 실행합니다. 대기 중 취소한 요청은 이후 대화상자를 열지 않습니다.
+다른 Promise 기반 UI 작업과 창 파괴 요청도 현재 모달 호출이 끝난 뒤 실행됩니다.
+네이티브 재진입으로 중첩 호출을 시도하면 `BUSY`입니다. 앱 백엔드 스레드는 계속 실행합니다.
+호출자의 Promise 거부 시점이 네이티브 자원 정리 완료 시점이라는 보장은 없습니다.
+
+## 파일 접근과 검증 범위
+
+선택 결과는 경로 문자열입니다. storage 권한, 파일 핸들, 지속 접근 토큰이나 다른 앱의
+접근 권한을 만들지 않습니다. 선택한 뒤 파일이 바뀌거나 삭제될 수 있으므로 실제 읽기와
+쓰기에서 앱의 대상 검증과 기존 storage 권한을 적용하세요. 최근 항목 목록에 추가하지 않으며,
+저장 가능 여부를 확인하는 임시 파일도 생성하지 않습니다.
+
+계약 테스트는 입력, 작업별 권한, 소유 창 범위, 사용자 취소와 호출 실패, 정리와 재진입을 검사합니다.
+Windows 통합 테스트는 실제 UI Worker와 Common Item Dialog에서 파일/폴더/저장 경로 선택,
+user Cancel 명령, 동시 호출, 호스트 abort와 shutdown을 검사하도록 구성했습니다.
+실제 사람의 키보드/마우스, 여러 모니터, overwrite 확인 UI와 실제 소유 창 파괴는 별도 수동 검증입니다.

@@ -515,6 +515,17 @@
       "pages": {
         "reference/plugins/power": ["default"]
       }
+    },
+    {
+      "name": "@bunaway/plugin-dialog",
+      "source": "plugins/dialog/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/dialog": ["default"]
+      }
     }
   ],
   "members": [
@@ -994,7 +1005,8 @@
           "app",
           "shortcuts",
           "menus",
-          "tray"
+          "tray",
+          "dialogs"
         ]
       }
     },
@@ -1194,6 +1206,21 @@
           "readDirectory",
           "createDirectory",
           "remove"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/native.ts",
+      "type": "NativeDialogServices",
+      "pages": {
+        "reference/tooling/plugin-api": [
+          "watchCancellation",
+          "origin",
+          "createWindow",
+          "destroyWindow",
+          "owner",
+          "poll",
+          "stopping"
         ]
       }
     }
@@ -1450,6 +1477,11 @@
       "tray.setClickBehavior",
       "tray.focus",
       "tray.waitForEvent"
+    ],
+    "reference/plugins/dialog": [
+      "dialog.openFile",
+      "dialog.selectFolder",
+      "dialog.saveFile"
     ]
   },
   "configuration": {

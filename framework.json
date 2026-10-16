@@ -41,6 +41,7 @@
     "notification": "@bunaway/plugin-notification",
     "global-shortcut": "@bunaway/plugin-global-shortcut",
     "menu": "@bunaway/plugin-menu",
-    "tray": "@bunaway/plugin-tray"
+    "tray": "@bunaway/plugin-tray",
+    "dialog": "@bunaway/plugin-dialog"
   }
 }
