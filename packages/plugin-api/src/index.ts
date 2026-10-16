@@ -31,8 +31,11 @@ export interface EventEmitter {
   emit(event: string, payload: JsonValue, target: EventTarget): Promise<void>;
 }
 
-/** Longest accepted `AppInfo` string, in UTF-16 code units, shared by hosts and Core validation. */
-export const APP_INFO_MAX_LENGTH = 256;
+/**
+ * Longest accepted `AppInfo` string, in UTF-16 code units, shared by Core, hosts and the CLI.
+ * Matches the longest window title, because a single-window app's `name` is its title.
+ */
+export const APP_INFO_MAX_LENGTH = 1024;
 
 /** Read-only app metadata resolved by the host when Core starts. */
 export type AppInfo = {

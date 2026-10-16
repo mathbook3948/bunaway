@@ -19,7 +19,8 @@ status: accepted
    Electron의 `app` 모듈도 코어에 있다.
 2. `ctx.app`은 동결된 단일 객체이며 모든 명령과 플러그인 setup 컨텍스트가 공유한다. 권한이 필요 없다.
 3. 호스트가 `CoreServices.app`으로 값을 넘기고 Core는 시작할 때 한 번 검증해 복사본을 동결한다.
-   필드는 비어 있지 않은 문자열이며 길이는 `APP_INFO_MAX_LENGTH`(256 UTF-16 코드 유닛) 이하여야 한다.
+   필드는 비어 있지 않은 문자열이며 길이는 `APP_INFO_MAX_LENGTH`(1024 UTF-16 코드 유닛) 이하여야 한다.
+   한도는 단일 창 앱에서 `name`이 되는 창 제목의 기존 상한과 같아서, 이미 만든 패키지의 제목이 시작을 막지 않는다.
    `version`, `runtime.framework`, `runtime.webview`만 `null`을 허용한다. 위반하면 Core 시작이
    `INVALID_ARGUMENT`로 실패한다. 이는 호스트와 Core 사이의 내부 계약이다.
 4. `NativeEnvironment`는 바꾸지 않는다. 플러그인은 setup 컨텍스트의 `ctx.app`으로 값을 받으며
@@ -29,16 +30,25 @@ status: accepted
 
 | 필드 | 출처 |
 | --- | --- |
-| `name` | 앱 설정의 `title` |
+| `name` | 앱 설정의 `title`. 매니페스트에 `title`이 없는 이전 패키지는 `appId`를 쓴다. |
 | `identifier` | 앱 설정의 `appId`. 런타임 앱 ID이며 패키징의 `bundle.identifier`가 아니다. |
-| `version` | 빌드가 패키지 `manifest.json`의 `app.version`에 기록한 앱 `package.json`의 버전. 없으면 `null` |
+| `version` | 빌드가 패키지 `manifest.json`의 `app.version`에 기록한 앱 `package.json`의 버전. 없거나 패키지 `manifest.json` 파일 자체가 없으면 `null` |
 | `runtime.framework` | 빌드가 `framework.version`에 기록한 프레임워크 버전. 없으면 `null` |
 | `runtime.bun` | `Bun.version` |
 | `runtime.webview` | 아래 플랫폼별 규칙. 알 수 없으면 `null` |
 
 `bundle.release.version`은 설치 프로그램 버전만 바꾸며 `version`은 앱 `package.json`에서 오므로 달라지지 않는다.
 모바일은 백엔드에 패키지 manifest가 없으므로 CLI가 같은 출처의 이름, 식별자, 버전, 프레임워크 버전을
-번들할 때 상수로 포함한다. 파싱은 `@bunaway/runtime-bun/app-metadata`의 같은 함수를 쓴다.
+번들할 때 상수로 포함한다.
+
+호환성과 검증 규칙은 다음과 같다.
+
+- 이 기능 이전에 만든 패키지와 도구가 직접 구성한 패키지는 패키지 `manifest.json`이나 `title`이 없을 수 있다.
+  Windows와 macOS 호스트는 파일이 없을 때(`ENOENT`)만 `version`과 `framework`를 `null`로 두고,
+  `title`이 없으면 `name`을 `appId`로 대신한다. 다른 읽기 오류와 값이 있는데 잘못된 경우에는 시작이 실패한다.
+- 빌드는 같은 한도를 먼저 검사한다. `bunaway.json`의 `app.title`과 앱, 프레임워크 `package.json`의 `version`
+  (있을 때)이 비어 있지 않은 문자열이 아니거나 한도를 넘으면 설정 로드나 빌드가 실패한다.
+  모든 검사는 `@bunaway/runtime-bun/app-metadata`의 `isAppInfoText`를 쓴다.
 
 ## WebView 버전
 

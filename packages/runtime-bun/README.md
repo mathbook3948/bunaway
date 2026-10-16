@@ -1,6 +1,6 @@
 # Bun 런타임 어댑터
 
-`runBunApp(app)`은 stdin/stdout으로 코어를 네이티브 호스트의 프로세스 IPC에 연결하는 어댑터다.
+`runBunApp(app, { app, input?, output?, platform? })`은 stdin/stdout으로 코어를 네이티브 호스트의 프로세스 IPC에 연결하는 어댑터다.
 이 함수는 프로세스 probe와 계약 테스트에서 사용한다. Windows와 macOS 제품 호스트는
 같은 앱 정의를 Bun에서 직접 실행한다. 앱 개발자는 `build.app`에 지정한 파일에서
 AppDefinition을 default export한다.
@@ -14,6 +14,8 @@ AppDefinition을 default export한다.
 `@bunaway/runtime-bun/app-metadata`는 `ctx.app`의 원천 데이터 계약이다. 호스트와 CLI가 앱 설정의 이름과 식별자,
 패키지 manifest의 앱과 프레임워크 버전을 `AppMetadata`로 모으고 `toAppInfo`가 Bun과 WebView 버전을 더해 `AppInfo`를 만든다.
 `runBunApp`은 이 `AppMetadata`를 `connection.app`으로 받는다.
+`appName(title, identifier)`은 `title`이 없으면 식별자를 이름으로 쓰고, `readPackageVersions`는 패키지 `manifest.json`이
+없으면 버전을 `null`로 둔다. `isAppInfoText`는 CLI와 호스트가 함께 쓰는 문자열 규칙(비어 있지 않고 1024자 이하)이다.
 
 호스트가 보낸 boot의 정책, 백엔드 컨텍스트, 런타임 세대로 `createCore`를 만들고
 플러그인 초기화와 hello 협상 뒤 ready를 보낸다. 초기화 중에도 Host API 요청을
@@ -34,7 +36,7 @@ WebView에는 기존 `INTERNAL: Command failed.` 응답만 전달한다.
 실패로 종료한다. [런타임 API](../../docs/site/src/content/docs/reference/tooling/core-and-runtime.mdx)와
 [macOS 실행 기록](../../docs/architecture/macos-native-results.md)을 참고한다.
 
-iOS 내장 Bun의 백엔드 Worker는 `runBunApp(app, { input, output, platform: "ios" })`를 사용한다.
+iOS 내장 Bun의 백엔드 Worker는 `runBunApp(app, { app: appMetadata, input, output, platform: "ios" })`를 사용한다.
 입력은 런타임이 종료하고 출력 스트림은 호출자가 소유한다. Bun entry는 Worker 종료 뒤에도 유지된다.
 
 Android와 iOS의 직접 문서 연결은 같은 `LoopbackChannel`을 사용한다.

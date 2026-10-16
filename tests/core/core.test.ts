@@ -7,6 +7,7 @@ import type {
   PluginDefinition,
   RuntimeServices,
 } from "@bunaway/core";
+import { APP_INFO_MAX_LENGTH } from "@bunaway/plugin-api";
 import {
   API_LIMITS,
   BunawayError,
@@ -581,7 +582,7 @@ test("commands and plugin setup receive the same frozen app info", async () => {
 test("createCore rejects invalid app info from the host", async () => {
   const clock = createClock();
   const { services } = createServices(clock);
-  const tooLong = "x".repeat(257);
+  const tooLong = "x".repeat(APP_INFO_MAX_LENGTH + 1);
   const invalid: unknown[] = [
     null,
     {

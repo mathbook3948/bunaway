@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 const loader = resolve(
@@ -6,7 +7,8 @@ const loader = resolve(
   "../../build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
 );
 
-test.skipIf(process.platform !== "win32")(
+// The Check job runs this file without the pinned SDK; the native job builds the loader first.
+test.skipIf(process.platform !== "win32" || !existsSync(loader))(
   "the pinned WebView2Loader reports the installed runtime version and releases its handles",
   async () => {
     const { readWebViewVersion } = await import(

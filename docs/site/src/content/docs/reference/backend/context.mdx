@@ -23,7 +23,7 @@ sidebar: { order: 3 }
 
 | 필드 | 타입 | 출처 |
 | --- | --- | --- |
-| `name` | `string` | 앱 설정의 `title` |
+| `name` | `string` | 앱 설정의 `title`. 패키지 manifest에 `title`이 없으면 `appId` |
 | `identifier` | `string` | 앱 설정의 `appId` |
 | `version` | `string \| null` | 앱 package.json의 `version` |
 | `runtime.framework` | `string \| null` | 빌드 시점의 bunaway 프레임워크 버전 |
@@ -35,7 +35,8 @@ sidebar: { order: 3 }
 `bundle.release.version`으로 설치 프로그램 버전을 바꿔도 `version`은 달라지지 않습니다.
 Android와 iOS는 빌드할 때 이름, 식별자, 버전, 프레임워크 버전을 백엔드 번들에 포함합니다.
 
-`version`과 `runtime.framework`는 패키지에 버전이 기록되지 않았으면 `null`입니다.
+`version`과 `runtime.framework`는 패키지에 버전이 기록되지 않았거나 패키지 `manifest.json`이 없으면 `null`입니다.
+모든 문자열 필드는 비어 있지 않아야 하며 1024자 이하입니다. 빌드는 `title`과 `version`이 이 조건을 어기면 실패합니다.
 `runtime.webview`는 플랫폼마다 다음과 같이 정해집니다.
 
 | 플랫폼 | `runtime.webview` |

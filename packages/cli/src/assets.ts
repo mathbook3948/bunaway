@@ -2,12 +2,10 @@ import { cp, mkdir, realpath, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
-import {
-  type AppMetadata,
-  parsePackageVersions,
-} from "@bunaway/runtime-bun/app-metadata";
+import { type AppMetadata, appName } from "@bunaway/runtime-bun/app-metadata";
 import type { BunPlugin } from "bun";
 import { appModules, commonJsSdkSource } from "./app-modules.ts";
+import { readAppVersions } from "./app-versions.ts";
 import { type Project, runtimeSettings } from "./config.ts";
 import { release } from "./distribution.ts";
 import {
@@ -478,15 +476,10 @@ export async function bundleWindowsReload(
  * app's package.json version and the framework's package.json version.
  */
 async function mobileAppMetadata(project: Project): Promise<AppMetadata> {
-  // Reuse the package manifest parser so absent or malformed versions behave alike.
-  const versions = parsePackageVersions({
-    app: await json(resolve(project.root, "package.json")),
-    framework: await json(resolve(project.frameworkRoot, "package.json")),
-  });
   return {
-    name: project.app.title,
+    name: appName(project.app.title, project.app.appId),
     identifier: project.app.appId,
-    ...versions,
+    ...(await readAppVersions(project.root, project.frameworkRoot)),
   };
 }
 

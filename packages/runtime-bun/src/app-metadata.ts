@@ -17,12 +17,21 @@ export type AppMetadata = {
   readonly framework: string | null;
 };
 
+/**
+ * Whether `value` is acceptable as an `AppInfo` string: non-empty and at most
+ * `APP_INFO_MAX_LENGTH` UTF-16 code units. The single rule shared by the CLI
+ * (build time) and the hosts (startup); callers add their own error context.
+ */
+export function isAppInfoText(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= APP_INFO_MAX_LENGTH
+  );
+}
+
 function boundedText(field: string, value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    value.length > APP_INFO_MAX_LENGTH
-  ) {
+  if (!isAppInfoText(value)) {
     throw new Error(`Invalid package manifest ${field}.`);
   }
   return value;
@@ -63,18 +72,36 @@ export function parsePackageVersions(
   };
 }
 
-/** Reads and parses the package-level `manifest.json` in `packageRoot`. */
+/**
+ * Reads and parses the package-level `manifest.json` in `packageRoot`.
+ * A missing file yields `null` versions, because packages built before
+ * `ctx.app` existed and hand-assembled packages have none. Other read errors
+ * and malformed content reject.
+ */
 export async function readPackageVersions(
   packageRoot: string,
 ): Promise<Pick<AppMetadata, "version" | "framework">> {
-  return parsePackageVersions(
-    JSON.parse(await readFile(resolve(packageRoot, "manifest.json"), "utf8")),
-  );
+  let text: string;
+  try {
+    text = await readFile(resolve(packageRoot, "manifest.json"), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return {
+        version: null,
+        framework: null,
+      };
+    }
+    throw error;
+  }
+  return parsePackageVersions(JSON.parse(text));
 }
 
-/** Validates the app title used as `AppInfo.name`. */
-export function appName(title: unknown): string {
-  return boundedText("app title", title);
+/**
+ * Resolves the `AppInfo.name` from the app settings `title`. Manifests without
+ * a title fall back to the app identifier; a present title must be valid.
+ */
+export function appName(title: unknown, identifier: string): string {
+  return title === undefined ? identifier : boundedText("app title", title);
 }
 
 /** Combines host-known metadata with the runtime versions the host measured. */

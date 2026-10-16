@@ -55,6 +55,7 @@
           "parsePackageVersions",
           "readPackageVersions",
           "appName",
+          "isAppInfoText",
           "toAppInfo"
         ]
       }

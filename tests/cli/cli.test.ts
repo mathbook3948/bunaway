@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runInNewContext } from "node:vm";
+import { APP_INFO_MAX_LENGTH } from "@bunaway/plugin-api";
 import { buildProject, bundleAssets } from "#cli/build";
 import { readProjectMetadata, validateProject } from "#cli/config";
 import {
@@ -464,6 +465,34 @@ test("unified v1 configuration rejects malformed sections and old flat settings"
     } finally {
       await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
     }
+  }
+}, 30000);
+
+test("app.title accepts exactly the AppInfo limit and rejects longer or empty titles", async () => {
+  const path = resolve(project, "src-bunaway/bunaway.json");
+  const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+  const withTitle = (title: unknown) => ({
+    ...valid,
+    app: {
+      ...valid.app,
+      title,
+    },
+  });
+  try {
+    await writeJson(path, withTitle("t".repeat(APP_INFO_MAX_LENGTH)));
+    expect((await validateProject(project)).app.title).toHaveLength(
+      APP_INFO_MAX_LENGTH,
+    );
+    await writeJson(path, withTitle("t".repeat(APP_INFO_MAX_LENGTH + 1)));
+    await expect(validateProject(project)).rejects.toThrow(
+      `bunaway.json: app.title must be at most ${APP_INFO_MAX_LENGTH} characters.`,
+    );
+    await writeJson(path, withTitle(""));
+    await expect(validateProject(project)).rejects.toThrow(
+      "bunaway.json: app.title must be a nonempty string.",
+    );
+  } finally {
+    await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
   }
 }, 30000);
 

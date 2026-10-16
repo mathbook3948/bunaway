@@ -105,7 +105,7 @@ export async function verifyWindowsPackage(
   const windows = readWindowSpecs(specs, policy, devUrl);
   return {
     appMetadata: {
-      name: appName(config.title),
+      name: appName(config.title, config.appId),
       identifier: config.appId,
       ...(await readPackageVersions(root)),
     },

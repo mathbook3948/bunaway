@@ -220,7 +220,7 @@ export async function verifyMacosPackage(
   );
   return {
     appMetadata: {
-      name: appName(app.title),
+      name: appName(app.title, app.appId),
       identifier: app.appId,
       ...parsePackageVersions(metadata),
     },
