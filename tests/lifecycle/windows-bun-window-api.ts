@@ -565,6 +565,17 @@ if (!process.argv.includes("--child")) {
           const externalTitle = Buffer.from("Native caption\0", "utf16le");
           assert(user.symbols.SetWindowTextW(hwnd, ptr(externalTitle)));
           assert.equal(nativeWindows.getTitle(hwnd), "Native caption");
+          // Accessible titles live beside the caption and never rewrite it.
+          assert.equal(nativeWindows.getAccessibleTitle(hwnd), null);
+          nativeWindows.setAccessibleTitle(hwnd, "읽기용 제목 📝");
+          assert.equal(
+            nativeWindows.getAccessibleTitle(hwnd),
+            "읽기용 제목 📝",
+          );
+          assert.equal(nativeWindows.getTitle(hwnd), "Native caption");
+          nativeWindows.setAccessibleTitle(hwnd, "");
+          assert.equal(nativeWindows.getAccessibleTitle(hwnd), null);
+          nativeWindows.setAccessibleTitle(hwnd, "Destroyed with annotation");
           nativeWindows.setFullscreen(hwnd, true);
           nativeWindows.setFullscreen(hwnd, false);
           assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));

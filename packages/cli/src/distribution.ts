@@ -69,6 +69,7 @@ export const frameworkPaths = [
   "native/windows/bun/web-assets.ts",
   "native/windows/bun/com.ts",
   "native/windows/bun/guid.ts",
+  "native/windows/bun/accessible-title.ts",
   "native/windows/bun/taskbar.ts",
   "native/windows/bun/taskbar-progress.ts",
   "native/windows/bun/win32.ts",

@@ -20,6 +20,7 @@ import {
   APP_SHUTDOWN_MESSAGE,
   APP_WINDOW_CLASS_PREFIX,
 } from "@bunaway/runtime-bun/windows-control";
+import { AccessibleTitles } from "./accessible-title.ts";
 import { Taskbar } from "./taskbar.ts";
 import {
   type TaskbarProgress,
@@ -159,6 +160,7 @@ function callbackPointer(address: bigint): Pointer {
 // One class and one bounded pump per STA, shared by every view.
 export class Windows {
   private readonly taskbar = new Taskbar();
+  private readonly accessibleTitles = new AccessibleTitles();
   private readonly taskbarProgress = new TaskbarProgressController(
     (window, progress) => this.taskbar.apply(window, progress),
   );
@@ -1084,6 +1086,18 @@ export class Windows {
       withWide(title, (text) => user.symbols.SetWindowTextW(window, text)),
       `SetWindowTextW: ${kernel.symbols.GetLastError()}`,
     );
+  }
+
+  /** Set the screen reader name apart from the caption; "" restores the caption. */
+  setAccessibleTitle(window: bigint, title: string): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    this.accessibleTitles.set(window, title);
+  }
+
+  /** Read the last accessible title applied in this process, or null when none is set. */
+  getAccessibleTitle(window: bigint): string | null {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return this.accessibleTitles.get(window);
   }
 
   /** Read live native text with a fixed bound; empty captions are valid native query results. */
@@ -2503,6 +2517,15 @@ export class Windows {
     this.closeControls.delete(window);
     this.interactiveGeometry.delete(window);
     this.immovable.delete(window);
+    try {
+      this.accessibleTitles.forget(window);
+    } catch (error) {
+      // Annotation cleanup is best effort; a failure must not block destroy, and the cache entry is already dropped.
+      console.error(
+        "Could not clear the accessible title before destroy.",
+        error,
+      );
+    }
     assert(user.symbols.DestroyWindow(window));
     this.taskbarProgress.forget(window);
     this.windows.delete(window);
@@ -2549,6 +2572,7 @@ export class Windows {
   dispose() {
     assert.equal(this.windows.size, 0);
     this.taskbar.dispose();
+    this.accessibleTitles.dispose();
     if (this.registered) {
       assert(user.symbols.UnregisterClassW(ptr(this.name), this.instance));
     }

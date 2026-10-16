@@ -64,6 +64,8 @@ Windows의 선택적 `setMinimizable`, `isMinimizable`, `setMaximizable`, `isMax
 
 Windows의 선택적 `setTitle(title)`과 `getTitle()`은 현재 HWND의 UTF-16 제목을 변경하고 조회합니다. 선언을 바꾸지 않으며 조회는 1024 코드 단위로 제한합니다. 네이티브 조회 오류와 길이 초과는 예외로 전달합니다.
 
+Windows의 선택적 `setAccessibleTitle(title)`과 `getAccessibleTitle()`은 캡션과 별도로 스크린 리더 이름을 설정하고 조회합니다. 빈 문자열은 설정을 제거하며, 조회는 이 프로세스가 마지막으로 적용한 값 또는 `null`을 반환합니다.
+
 Windows의 선택적 `NativeWindow.showPrintUI(kind)`는 `"browser" | "system"` 인쇄 UI를
 요청합니다. 프린터 선택과 제출은 사용자에게 맡기며 메서드 반환을 인쇄 완료로 해석하지 않습니다.
 닫힌 WebView는 `INVALID_ARGUMENT`, 생성 중에는 `BUSY`, 인쇄 확장 인터페이스가 없는

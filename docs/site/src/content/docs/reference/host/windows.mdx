@@ -492,6 +492,8 @@ await windows.close({ view: "dialog" });
 | `windows.isFocusable` | `{ view, windowId? }` | `Promise<boolean>`. 네이티브 활성화 허용 여부. 실제 `isFocused`와 별도 |
 | `windows.setTitle` | `{ view, windowId?, title: string }` | `Promise<null>`. 현재 창의 네이티브 제목 변경. 1–1024 UTF-16 코드 단위, NUL 금지 |
 | `windows.getTitle` | `{ view, windowId? }` | `Promise<string>`. 실제 HWND의 현재 제목 조회. 0–1024 UTF-16 코드 단위 |
+| `windows.setAccessibleTitle` | `{ view, windowId?, title: string }` | `Promise<null>`. 스크린 리더가 읽는 창 이름을 캡션과 별도로 설정. 1–1024 UTF-16 코드 단위, NUL 금지. 빈 문자열은 설정을 제거하고 캡션을 다시 사용 |
+| `windows.getAccessibleTitle` | `{ view, windowId? }` | `Promise<string \| null>`. 이 프로세스에서 마지막으로 적용한 접근성 제목. 설정한 적이 없거나 제거했다면 `null` |
 | `windows.setResizable` | `{ view, windowId?, resizable: boolean }` | `Promise<null>`. 사용자 테두리와 시스템 메뉴 크기 조절 허용 변경 |
 | `windows.isResizable` | `{ view, windowId? }` | `Promise<boolean>`. 일반 창의 사용자 크기 조절 허용 여부 |
 | `windows.setMovable` | `{ view, windowId?, movable: boolean }` | `Promise<null>`. 사용자 제목 표시줄과 시스템 메뉴 이동 허용 변경 |
@@ -760,6 +762,13 @@ operation 권한을 따로 요구하며 닫힌 창은 `INVALID_ARGUMENT`입니�
 신뢰된 네이티브 코드가 빈 제목을 적용하면 빈 문자열을 반환합니다. 외부 코드가 지원 길이를 넘기는
 제목을 적용했거나 OS 조회가 실패하면 `INTERNAL`입니다. 변경과 조회 권한은 각각 `windows.setTitle`,
 `windows.getTitle`이며 닫힌 창은 `INVALID_ARGUMENT`입니다. 실행 중 icon 변경은 아직 제공하지 않습니다.
+
+`setAccessibleTitle`은 `IAccPropServices`로 창의 접근성 이름만 바꾸며 `setTitle`과 `getTitle`의 캡션에는 영향을 주지 않습니다.
+빈 문자열을 넘기면 설정을 제거하여 일반 캡션이 다시 스크린 리더 이름이 됩니다.
+`getAccessibleTitle`은 OS를 조회하지 않고 이 프로세스가 마지막으로 적용한 값을 반환하며, 창이 파괴되면 그 값도 사라집니다.
+OS 호출이 실패하면 오류가 전달되고 이전 값이 유지됩니다. 권한은 `windows.setAccessibleTitle`, `windows.getAccessibleTitle`로 나뉘고
+닫힌 창은 `INVALID_ARGUMENT`입니다. macOS에서는 두 연산 모두 `UNSUPPORTED`입니다.
+
 `resizable`과 `movable`의 기본값은 `true`입니다. 이 설정은 사용자 테두리, 제목 표시줄과
 시스템 메뉴 조작에 적용하며 프로그램의 크기, 위치, 최대화와 전체화면 API는 계속 허용합니다.
 `setResizable`은 일반 복원 창의 content 크기와 기존 크기 제약, 표시와 활성화 상태를 유지합니다.
