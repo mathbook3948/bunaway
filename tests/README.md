@@ -1111,6 +1111,12 @@ PR #191과 같은 native child observer 및 notification 진단을 사용하고 
 TrackPopupMenuEx 모달 루프를 끝내고 핸들을 해제한다. 메뉴 막대 진입 전 종료 경합도 포함한다.
 사용자 포인터 메뉴 선택, 물리 키보드 탐색과 혼합 DPI 검증을 대신하지 않는다.
 
+`lifecycle/appearance-controller.test.ts`는 Windows 프레임의 앱 기본값, 창 override, 고대비 우선,
+OS snapshot 중복 제거, 조회와 적용 오류 복구, 구독 해제 및 HWND 수명 분리를 검사합니다.
+`lifecycle/windows-appearance.test.ts`는 실제 DWM 속성 readback으로 두 HWND의 독립 설정,
+기본 system 선호와 정리를 검사합니다. 사용자 설정은 변경하지 않으며 실제 테마 전환과
+고대비 렌더링의 시각 검증을 대신하지 않습니다.
+
 `api/notification-toast.test.ts`는 toast 입력, XML escape, 작업별 권한, 이벤트 수신 권한,
 교체와 지연 callback 차단, 64개 소유권 상한과 실패 후 정리를 검사한다. 격리된 FFI
 fixture는 실제 JSCallback vtable로 Invoke와 지연 Release를 실행한다.

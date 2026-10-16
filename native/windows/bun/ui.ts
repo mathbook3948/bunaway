@@ -20,6 +20,7 @@ import {
   operations,
   pluginRegistry,
 } from "../../host-api/bun/plugins.ts";
+import { AppearanceWindows } from "./appearance.ts";
 import {
   Channel,
   type Packet,
@@ -64,6 +65,7 @@ let closingSent = false;
 let initialized = false;
 let windows: Windows | undefined;
 let systemEvents: SystemEvents | undefined;
+const appearanceWindows = new AppearanceWindows();
 let adapters: Awaited<ReturnType<typeof operations>> | undefined;
 let tray: NativeTrayOwner | undefined;
 type MenuListener = {
@@ -312,6 +314,7 @@ function cleanupView(view: ViewState) {
       delete view.downloadCleanupRetries;
     }
     closeWindowMenus(windowId);
+    appearanceWindows.detach(windowId);
     windows?.destroy(view.native.hwnd);
     view.lifecycle.detached();
   }
@@ -803,6 +806,7 @@ function commitClose(
 const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices =
   {
     specs: config.windows,
+    appearance: appearanceWindows,
     monitors: {
       ...monitorServices,
       snapshot() {
@@ -1171,6 +1175,7 @@ function createWindow(
   publishReadiness(readiness.snapshot());
   // Record partial HWND ownership before environment creation can fail.
   try {
+    appearanceWindows.attach(readiness.snapshot().windowId, window);
     native = new WebView(
       window,
       spec,
@@ -1219,6 +1224,7 @@ function createWindow(
       code: "INTERNAL",
       message: "WebView creation failed.",
     });
+    appearanceWindows.detach(readiness.snapshot().windowId);
     windows.destroy(window);
     profiles.release(instanceKey, false);
     throw error;
