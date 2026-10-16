@@ -1116,6 +1116,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         setSkipTaskbar: (skipTaskbar) =>
           nativeWindows.setSkipTaskbar(hwnd, skipTaskbar),
         isSkipTaskbar: () => nativeWindows.isSkipTaskbar(hwnd),
+        requestAttention: (mode) => nativeWindows.requestAttention(hwnd, mode),
+        cancelAttention: () => nativeWindows.cancelAttention(hwnd),
         setFocusable: (focusable) =>
           nativeWindows.setFocusable(hwnd, focusable),
         isFocusable: () => nativeWindows.isFocusable(hwnd),

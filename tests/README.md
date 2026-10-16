@@ -994,7 +994,9 @@ text/binary 메시지, timeout과 SDK deadline, 취소 뒤 실제 TCP 정리와 
 `build/macos-native-logs/network-diagnostics/`에 보존한다. report가 있으면 미완성 파일도 원본으로
 보존하며 임시 package를 제거하기 전에 기존 macOS native artifact 경로에 기록한다.
 `macos-network-diagnostics.test.ts`는 살아 있는 실제 child의 pipe 수집과 package 제거 뒤
-진단 보존, 실행 전 실패와 이전 report 정리를 검사한다. 기존 assertion과 제한시간은 유지한다.
+진단 보존, 실행 전 실패와 이전 report 정리를 검사한다. 기존 assertion은 유지하고, 느린 macOS runner를
+고려해 단계별 대기(WKWebView report, HTTP abort cleanup)는 45초(기존 20초), host 프로세스 제한은
+120초(기존 30초)로 늘렸다. timeout 메시지와 진행 로그에는 단계, 경과 시간과 기한이 기록된다.
 `cli/network.test.ts`는 isolated tarball 설치의 두 OS native export에서 실제 HTTP를 실행하고
 browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS, 외부 proxy와 OS 인증은 검증하지 않는다.
 
@@ -1169,7 +1171,10 @@ Show, XML, 교체와 개별 clear 및 종료 후 history 제거를 검사한다.
 포함하며 실제 사용자 클릭, popup 렌더링과 cold-start activation 검증은 아니다.
 
 `lifecycle/windows-display.test.ts`는 기본 style 보존과 실제 Windows의 custom caption,
-네이티브 resize hit test, topmost/tool-window flag, content 크기와 전체화면 복원을 검사합니다.
+네이티브 resize hit test, topmost/tool-window flag, content 크기와 전체화면 복원을
+검사합니다. 작업 표시줄 attention 요청이 창을 활성화하거나 표시하지 않는지,
+소멸한 창을 거부하는지도 실제 HWND로 확인합니다. 잘못된 FLASHWINFO가 last-error로 보고되는지
+검사하고, 작업 표시줄 shell이 있으면 HSHELL_FLASH 알림이 도착하는지도 확인합니다.
 `lifecycle/windows-webview-titlebar.ts`는 실제 WebView2의 Settings9 설정, CSS drag/no-drag
 문서와 탐색 후 재구성, 전체화면 복원, 미지원 COM 인터페이스 및 자원 정리를 검사합니다.
 Windows native 실행기에 포함하며 결과는 `build/windows-webview-titlebar-results.json`에 기록합니다.

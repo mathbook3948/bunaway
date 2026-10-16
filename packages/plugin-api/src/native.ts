@@ -71,6 +71,12 @@ export function hasValidWindowPlacement<
   );
 }
 
+/**
+ * Taskbar flash duration: `untilFocused` stops when the window becomes the
+ * foreground window, `continuous` runs until `cancelAttention`.
+ */
+export type WindowAttentionMode = "untilFocused" | "continuous";
+
 /** Optional inclusive lower and upper bounds for a window's width and height. */
 export type WindowSizeConstraints = {
   minWidth: number | null;
@@ -343,6 +349,10 @@ export type NativeWindow = {
   setSkipTaskbar?(skipTaskbar: boolean): void;
   /** Read explicit tool-window exclusion; owned windows may also be absent from the taskbar. Windows only. */
   isSkipTaskbar?(): boolean;
+  /** Flashes the taskbar button without focusing, showing or reordering the window. Repeated calls replace the previous mode. Windows only. */
+  requestAttention?(mode: WindowAttentionMode): void;
+  /** Stops taskbar flashing and restores the button. Succeeds when the window is not flashing. Windows only. */
+  cancelAttention?(): void;
   /** Changes the native minimize button and user system commands. Programmatic minimize remains available. Windows only. */
   setMinimizable?(minimizable: boolean): void;
   /** Reads the normal window's native minimize-button setting. Windows only. */
