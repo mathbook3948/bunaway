@@ -52,6 +52,10 @@ async function withPowerUI(
     },
     backendContext,
     windows: [],
+    // Without windows or a tray the UI worker would commit app shutdown on its first loop iteration and deny every operation.
+    desktop: {
+      closeBehavior: "keep-alive",
+    },
     assets: root,
     dataRoot: root,
     loader: "",
@@ -128,6 +132,13 @@ export const pluginImports = { power: { operations: async () => ({ createOperati
           settle?.resolve(packet.response);
         } else if (packet.kind === "cleaned") {
           cleaned = true;
+        } else if (packet.kind === "closing") {
+          // Keep-alive means any closing packet is an unexpected early shutdown that would deny later operations.
+          fail(
+            new Error(
+              `Power UI worker committed shutdown early: ${packet.reason}`,
+            ),
+          );
         } else if (packet.kind === "fatal") {
           fail(new Error(packet.error.message));
         }
