@@ -334,3 +334,57 @@ test.skipIf(process.platform !== "win32")(
     }
   },
 );
+
+test.skipIf(process.platform !== "win32")(
+  "content protection applies at creation and round-trips through the OS display affinity",
+  async () => {
+    const [{ Windows }, { dlopen, ptr }] = await Promise.all([
+      import("#native/windows/bun/win32"),
+      import("bun:ffi"),
+    ]);
+    // Read the affinity through an independent binding so the test does not rely on the code under test.
+    const affinityApi = dlopen("user32.dll", {
+      GetWindowDisplayAffinity: {
+        args: [
+          "u64",
+          "ptr",
+        ],
+        returns: "i32",
+      },
+    });
+    const WDA_NONE = 0x0;
+    const WDA_MONITOR = 0x1;
+    const WDA_EXCLUDEFROMCAPTURE = 0x11;
+    const rawAffinity = (window: bigint) => {
+      const out = Buffer.alloc(4);
+      expect(
+        affinityApi.symbols.GetWindowDisplayAffinity(window, ptr(out)),
+      ).not.toBe(0);
+      return out.readUInt32LE(0);
+    };
+    const native = new Windows(() => {});
+    let hwnd = 0n;
+    try {
+      hwnd = native.create("Protected", 640, 480, () => {}, false, {
+        contentProtection: true,
+      });
+      expect([
+        WDA_MONITOR,
+        WDA_EXCLUDEFROMCAPTURE,
+      ]).toContain(rawAffinity(hwnd));
+      expect(native.isContentProtected(hwnd)).toBe(true);
+      native.setContentProtection(hwnd, false);
+      expect(rawAffinity(hwnd)).toBe(WDA_NONE);
+      expect(native.isContentProtected(hwnd)).toBe(false);
+      native.setContentProtection(hwnd, true);
+      expect(rawAffinity(hwnd)).not.toBe(WDA_NONE);
+      expect(native.isContentProtected(hwnd)).toBe(true);
+    } finally {
+      if (hwnd) {
+        native.destroy(hwnd);
+      }
+      native.dispose();
+      affinityApi.close();
+    }
+  },
+);

@@ -270,6 +270,7 @@ const creationResult = {
               .exactOptional(),
             alwaysOnTop: z.boolean().exactOptional(),
             skipTaskbar: z.boolean().exactOptional(),
+            contentProtection: z.boolean().exactOptional(),
             maximized: z.boolean().exactOptional(),
             fullscreen: z.boolean().exactOptional(),
           })
@@ -974,6 +975,13 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isSkipTaskbar": windowStateResult,
+  "windows.setContentProtection": {
+    input: windowTarget.extend({
+      contentProtection: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isContentProtected": windowStateResult,
   "windows.requestAttention": {
     input: windowTarget.extend({
       mode: attentionMode.exactOptional(),

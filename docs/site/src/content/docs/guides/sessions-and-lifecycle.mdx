@@ -49,7 +49,8 @@ Windows의 기본 동작은 닫힌 창의 뷰 세션을 폐기하고 마지막 �
 종료를 취소하거나 트레이로 숨기면 기존 창과 세션, 백엔드는 계속 실행합니다.
 macOS는 트레이와 `closeBehavior: "hide"`를 지원하지 않습니다. 기본 `"quit"`과 `"keep-alive"`는 사용할 수 있고,
 Cmd+Q와 앱 메뉴의 Quit은 `beforeQuit`에 `"quit-command"`로 전달합니다. Dock 아이콘을 눌러 창이 없던 앱을 다시 열면
-`DesktopContext.show()`와 같이 창을 표시합니다.
+`DesktopContext.show()`와 같이 창을 표시합니다. `desktop.onReopen`을 등록하면 호스트는 창을 표시하지 않고 앱이 결정합니다.
+파일과 URL 열기 요청은 Windows 실행 인자와 macOS의 OS 열기 모두 `desktop.onOpenUrls`로 받습니다.
 Windows에서 시작 창을 생략하려면 트레이 또는 `desktop.closeBehavior: "keep-alive"`가 필요합니다.
 macOS는 창 없는 시작을 아직 지원하지 않습니다.
 `"keep-alive"`는 마지막 창의 세션을 폐기해도 앱 백엔드를 유지하며 명시적 종료 요청을 기다립니다.

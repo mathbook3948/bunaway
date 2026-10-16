@@ -1,5 +1,6 @@
-import { dlopen } from "bun:ffi";
+import { dlopen, ptr } from "bun:ffi";
 import { appendFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { defineNativePlugin, type NativeEnvironment } from "@bunaway/plugin";
 import { z } from "zod";
 import { Objc, type ObjcObject } from "../../../native/macos/bun/objc.ts";
@@ -18,10 +19,27 @@ const AE_DEFAULT_TIMEOUT = -1;
 /** Short enough to fire before the backend's cleanup finishes, long enough to be a later turn. */
 const MAIN_TICK_DELAY_MS = 10;
 const BOOL_MASK = 0xff;
+/** Apple event class and id of a URL scheme open (`kInternetEventClass`, `kAEGetURL`). */
+const GET_URL_EVENT = "GURL";
+/** Descriptor types of a UTF-8 text value and of a file URL (`typeUTF8Text`, `typeFileURL`). */
+const UTF8_TEXT_TYPE = "utf8";
+const FILE_URL_TYPE = "furl";
+/** `keyDirectObject`: the parameter that carries the URL text or the list of documents. */
+const KEY_DIRECT_OBJECT = "----";
+/** First position of an `NSAppleEventDescriptor` list; the API counts from one. */
+const FIRST_LIST_INDEX = 1;
 const WINDOW_TITLES = [
   "main",
   "observer",
 ];
+
+/** The argument an `openUrl` or `openFile` stimulus needs. */
+function requireValue(action: string, value: string | undefined): string {
+  if (value === undefined) {
+    throw new Error(`The ${action} action needs a value.`);
+  }
+  return value;
+}
 
 const request = z
   .object({
@@ -34,17 +52,21 @@ const request = z
       "powerOffThenQuitEvent",
       "visibleWindows",
       "windowCount",
+      "openUrl",
+      "openFile",
     ]),
     /** Window title for `close` and `windowCount`, or the quit reason code (such as `shut`) for `quitEvent`. */
     title: z.string().optional(),
+    /** The URL text for `openUrl`, or the absolute file path for `openFile`. */
+    value: z.string().optional(),
   })
   .strict();
 
 /**
  * Stimulus driver for tests/lifecycle/macos-desktop.ts. It runs on the UI thread, where AppKit
  * lives, so the backend can trigger the same delegate and window paths a user or the OS would:
- * Quit command, a quit Apple event, closing a window, a reopen Apple event and the workspace
- * power-off notification. Stimuli run in a later main-thread turn, so the call returns at once with
+ * Quit command, a quit Apple event, closing a window, a reopen Apple event, URL scheme and
+ * document open Apple events and the workspace power-off notification. Stimuli run in a later main-thread turn, so the call returns at once with
  * the number of visible fixture windows before them; the outcome is read from the app's hooks.
  * `visibleWindows` and `windowCount` are queries: they run at once and return the visible count or
  * the count of every window with the given title.
@@ -99,16 +121,45 @@ export const driver = defineNativePlugin({
             returns: "ptr",
           },
         });
+        // Descriptors with raw bytes take a 32-bit type code and a length; see the signatures above.
+        const bytesDescriptor = dlopen(OBJC, {
+          objc_msgSend: {
+            args: [
+              "ptr",
+              "ptr",
+              "u32",
+              "ptr",
+              "u64",
+            ],
+            returns: "ptr",
+          },
+        });
+        /** A descriptor of `type` holding the UTF-8 bytes of `text`, which is how a URL travels in an Apple event. */
+        const textDescriptor = (type: string, text: string) => {
+          const bytes = Buffer.from(text, "utf8");
+          const created = bytesDescriptor.symbols.objc_msgSend(
+            o.class("NSAppleEventDescriptor"),
+            o.selector("descriptorWithDescriptorType:bytes:length:"),
+            fourCharCode(type),
+            ptr(bytes),
+            bytes.length,
+          );
+          if (!created) {
+            throw new Error("Apple event descriptor creation failed.");
+          }
+          return created;
+        };
         /**
          * Delivers an Apple event addressed to this process, the way the Dock or `osascript` do.
          * AppKit handles it on the run loop, so its delegate sees the real `currentAppleEvent` and
          * computes window visibility itself. `reason` becomes the quit reason attribute that
-         * separates a logout from a Quit command.
+         * separates a logout from a Quit command. `directObject` becomes the `----` parameter.
          */
         const sendSelfEvent = (
           eventClass: string,
           eventId: string,
           reason?: string,
+          directObject?: ObjcObject,
         ) => {
           const descriptor = o.class("NSAppleEventDescriptor");
           const target = o.send(descriptor, "currentProcessDescriptor");
@@ -136,6 +187,14 @@ export const driver = defineNativePlugin({
                 fourCharCode(reason),
               ),
               fourCharCode("why?"),
+            );
+          }
+          if (directObject) {
+            o.send(
+              event,
+              "setParamDescriptor:forKeyword:",
+              directObject,
+              fourCharCode(KEY_DIRECT_OBJECT),
             );
           }
           sendEvent.symbols.objc_msgSend(
@@ -195,7 +254,11 @@ export const driver = defineNativePlugin({
             appendFileSync(eventsPath, "main-tick-after-terminate\n");
           }, MAIN_TICK_DELAY_MS);
         };
-        const perform = (action: string, title: string | undefined) => {
+        const perform = (
+          action: string,
+          title: string | undefined,
+          value: string | undefined,
+        ) => {
           if (action === "terminate") {
             // The Quit menu item and `[NSApp terminate:]` share this path.
             o.send(app, "terminate:", null);
@@ -226,11 +289,35 @@ export const driver = defineNativePlugin({
           } else if (action === "reopen") {
             // What the Dock click sends; AppKit then asks the delegate to handle the reopen.
             sendSelfEvent("aevt", "rapp");
+          } else if (action === "openUrl") {
+            // What a click on a custom-scheme link sends: the URL as UTF-8 text.
+            sendSelfEvent(
+              GET_URL_EVENT,
+              GET_URL_EVENT,
+              undefined,
+              textDescriptor(UTF8_TEXT_TYPE, requireValue(action, value)),
+            );
+          } else if (action === "openFile") {
+            // What Finder sends for a document: a list holding one file URL descriptor.
+            const documents = o.send(
+              o.class("NSAppleEventDescriptor"),
+              "listDescriptor",
+            );
+            o.send(
+              documents,
+              "insertDescriptor:atIndex:",
+              textDescriptor(
+                FILE_URL_TYPE,
+                pathToFileURL(requireValue(action, value)).href,
+              ),
+              FIRST_LIST_INDEX,
+            );
+            sendSelfEvent("aevt", "odoc", undefined, documents ?? undefined);
           } else if (action === "powerOffThenQuitEvent") {
             // One stimulus: a second drive call could arrive after the power-off already began the
             // shutdown and be cancelled, so the quit Apple event follows in the same turn.
-            perform("powerOff", undefined);
-            perform("quitEvent", undefined);
+            perform("powerOff", undefined, undefined);
+            perform("quitEvent", undefined, undefined);
           } else if (action === "powerOff") {
             const workspace = o.send(o.class("NSWorkspace"), "sharedWorkspace");
             o.send(
@@ -243,7 +330,7 @@ export const driver = defineNativePlugin({
         };
         return {
           execute(_operation, value) {
-            const { action, title } = request.parse(value);
+            const { action, title, value: argument } = request.parse(value);
             if (action !== "visibleWindows" && action !== "windowCount") {
               // A stimulus starts outside this operation's call stack, so the operation returns
               // before AppKit re-enters the host. A failure has no caller left and goes to the log,
@@ -255,7 +342,7 @@ export const driver = defineNativePlugin({
                     eventsPath,
                     `driven:${title ? `${action}:${title}` : action}\n`,
                   );
-                  o.withAutoreleasePool(() => perform(action, title));
+                  o.withAutoreleasePool(() => perform(action, title, argument));
                 } catch (error) {
                   appendFileSync(
                     eventsPath,

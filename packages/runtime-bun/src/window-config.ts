@@ -122,6 +122,7 @@ export function readWindowSpecs(
             "titlebar",
             "alwaysOnTop",
             "skipTaskbar",
+            "contentProtection",
             "maximized",
             "fullscreen",
           ].includes(key),
@@ -148,13 +149,18 @@ export function readWindowSpecs(
     }
     const initialState: Pick<
       WindowSpec["window"],
-      "maximized" | "fullscreen" | "alwaysOnTop" | "skipTaskbar"
+      | "maximized"
+      | "fullscreen"
+      | "alwaysOnTop"
+      | "skipTaskbar"
+      | "contentProtection"
     > = {};
     for (const name of [
       "maximized",
       "fullscreen",
       "alwaysOnTop",
       "skipTaskbar",
+      "contentProtection",
     ] as const) {
       const option = size[name];
       if (option === undefined) {
