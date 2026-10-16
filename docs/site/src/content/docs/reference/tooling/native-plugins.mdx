@@ -557,3 +557,8 @@ SDK가 반환하는 `NativePluginAdapter.prepare(operation, input, source, conte
 입력을 한 번 파싱하고 한 번만 실행할 수 있는 함수를 반환합니다. 선택적 context는 UI와
 I/O 모두 같은 취소와 실행 직전 재검사를 적용합니다. 이 단계는 호스트 통합용이며
 함수 맵 작성자가 직접 호출할 필요는 없습니다.
+
+
+`NativeEnvironment.dialogs`는 Windows UI STA의 선택적 파일 대화상자 서비스입니다.
+정확한 요청 출처와 소유 창을 확인하고, 모달 루프에서 제어 패킷의 취소 의도만 관측합니다.
+네이티브 콜백 안에서 일반 작업이나 자원 정리를 실행하지 않습니다.

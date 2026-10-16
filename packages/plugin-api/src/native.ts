@@ -665,3 +665,26 @@ export type NativeWindowServices = {
   /** Yields to the UI loop while asynchronous window work is pending. */
   tick(): Promise<void>;
 };
+
+/** Host-only services for a modal picker on the existing UI STA. Never exposed to web callers. */
+export type NativeDialogServices = {
+  /** Record control-packet cancellation while normal dispatch is deferred by a native modal loop. */
+  watchCancellation(requestId?: string): {
+    cancelled(): boolean;
+    dispose(): void;
+  };
+  /** Create an invisible host-class window on this STA; the picker must destroy it after Show returns. */
+  createWindow(receive: (message: number) => void): bigint;
+  destroyWindow(hwnd: bigint): void;
+  /** Resolve the authenticated originating window, never a caller-supplied view ID. */
+  origin(requestId: string): WindowIdentity | null;
+  /** Capture an exact native lifetime, never retarget a recreated owner. */
+  owner(windowId: string): {
+    hwnd: bigint;
+    alive(): boolean;
+  } | null;
+  /** Drain synchronous host control packets during the native modal loop. Must not pump COM or Promise jobs. */
+  poll(): void;
+  /** A committed app shutdown cancels even an unowned picker. */
+  stopping(): boolean;
+};

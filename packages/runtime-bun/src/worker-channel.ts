@@ -553,6 +553,8 @@ export class Channel {
     private readonly side: Side,
     private readonly receive: (packet: Packet) => void | Promise<void>,
     private readonly fail: (error: unknown) => void,
+    /** Record cancellation intent only. Must not dispatch operations, abort arbitrary listeners or release native resources. */
+    private readonly observePolled?: (packet: Packet) => void,
   ) {
     port.on("message", this.accept);
   }
@@ -604,6 +606,15 @@ export class Channel {
           [],
         );
       };
+      if (
+        this.polling &&
+        (packet.kind === "cancel" ||
+          packet.kind === "cancel-context" ||
+          packet.kind === "session-failure" ||
+          packet.kind === "shutdown")
+      ) {
+        this.observePolled?.(packet);
+      }
       // Resource changes must not re-enter a Win32/COM callback while polling its acknowledgements.
       const completion =
         this.polling && packet.kind !== "server"
