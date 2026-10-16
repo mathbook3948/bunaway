@@ -46,7 +46,10 @@ show/hide와 상태 조회, 닫은 창의 조회 오류와 미지원 작업의 �
 완료한 뒤 새로운 세션과 유지된 백엔드 상태로 마지막 창을 닫는다.
 포커스 요청은 OS가 거절하면 `BUSY`를 허용하며, 성공하면 실제 key window와 앱의
 활성 상태를 조회한다. 다른 뷰의 임시 프로필 분리와 같은 뷰의 프로필 유지도 검사한다.
-영속 프로필, 준비 이벤트와 모달 창의 완료 검증은 포함하지 않는다.
+창 ID 조회(`getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`),
+숨김 생성(`visible: false`, `showWhenReady`), `getReadiness`와 `windows.readiness`, `showInactive`도
+같은 검사에서 확인한다. 미지원 생성 옵션은 기존 창을 닫기 전에 `UNSUPPORTED`로 거부한다.
+영속 프로필, 모달 창, `getSnapshot`, 다중 인스턴스와 크기, 위치 같은 상태 제어의 완료 검증은 포함하지 않는다.
 
 하위 프로세스 회귀는 백엔드에서 shell과 그 자식 `sleep`을 실행한다. 일반 실행과
 `unref()` 실행, 플러그인 종료 훅의 무한 루프, 호스트 SIGKILL의 네 경로에서

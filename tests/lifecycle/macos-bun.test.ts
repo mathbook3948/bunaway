@@ -14,6 +14,7 @@ import { appModules } from "#cli/app-modules";
 import { bundleMacosHost } from "#cli/assets";
 import { type InstalledPlugin, writePluginManifest } from "#cli/plugins";
 import {
+  assertMacosWindowOptions,
   type MacosConfig,
   readMacosWindowSpecs,
 } from "#native/macos/bun/config";
@@ -1818,4 +1819,60 @@ test("macOS explicitly rejects window display declarations including default-val
       ),
     ).toThrow("Window display options are not implemented on macOS");
   }
+});
+
+test("macOS accepts hidden window preparation and rejects unsupported options per call", () => {
+  const config = workerConfig("unused");
+  const first = config.windows[0];
+  if (!first) {
+    throw new Error("Missing test window.");
+  }
+  for (const preparation of [
+    {
+      visible: false,
+    },
+    {
+      showWhenReady: "document" as const,
+    },
+    {
+      visible: false,
+      showWhenReady: "sdk" as const,
+    },
+  ]) {
+    const [spec] = readMacosWindowSpecs(
+      [
+        {
+          ...first,
+          ...preparation,
+        },
+      ],
+      config.policy,
+    );
+    expect(spec).toMatchObject(preparation);
+    expect(() => assertMacosWindowOptions(spec ?? first)).not.toThrow();
+  }
+  expect(() =>
+    assertMacosWindowOptions({
+      ...first,
+      window: {
+        ...first.window,
+        alwaysOnTop: true,
+      },
+    }),
+  ).toThrow("Window display options are not implemented on macOS");
+  expect(() =>
+    assertMacosWindowOptions({
+      ...first,
+      window: {
+        ...first.window,
+        maximized: true,
+      },
+    }),
+  ).toThrow("Initial window state options are not implemented on macOS");
+  expect(() =>
+    assertMacosWindowOptions({
+      ...first,
+      instances: "multiple",
+    }),
+  ).toThrow("Multiple windows and isolated instance profiles");
 });

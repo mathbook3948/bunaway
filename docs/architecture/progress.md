@@ -14,8 +14,10 @@ AppKit 앱 delegate와 이벤트 루프를 개별 창에서 분리했다. `app.w
 재생성에서 새 세션과 같은 프로필을 사용한다. 보조 창 닫기는 다른 창을 유지하고 마지막
 창 닫기는 앱을 종료한다. 재생성 중에는 자동 종료를 보류한다.
 
-검증 범위는 [Bun FFI 기록](./macos-bun-results.md)을 따른다. 공통 준비 이벤트,
-showInactive, 모달과 sheet, destroy 및 상주 앱의 선행 계약은
+창 ID 조회, 숨김 생성과 `showWhenReady`, `getReadiness`와 `windows.readiness`, `showInactive`도
+macOS에 연결했다. 창 ID는 네이티브 창 수명마다 새로 발급하며 뷰마다 창 하나만 지원한다.
+
+검증 범위는 [Bun FFI 기록](./macos-bun-results.md)을 따른다. 모달과 sheet, destroy 및 상주 앱의 선행 계약은
 [이슈 #78](https://github.com/mathbook3948/bunaway/issues/78)에서 관리한다.
 저장과 로그 등 다른 네이티브 플러그인 어댑터와 영속 프로필은 후속 작업이다.
 

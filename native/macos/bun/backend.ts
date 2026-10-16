@@ -109,6 +109,23 @@ const channel = new Channel(
     if (stopping) {
       return;
     }
+    if (packet.kind === "native-event") {
+      const session = sessions.get(packet.route.context);
+      // A stale route belongs to a revoked or navigated document and is dropped silently.
+      if (
+        !session ||
+        session.route.viewId !== packet.route.viewId ||
+        session.route.documentGeneration !== packet.route.documentGeneration
+      ) {
+        return;
+      }
+      await core?.emitNative(
+        packet.route.context,
+        packet.event,
+        packet.payload,
+      );
+      return;
+    }
     if (packet.kind === "session-open") {
       if (!core || sessions.has(packet.route.context)) {
         throw new Error("Invalid session-open.");

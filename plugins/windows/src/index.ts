@@ -88,6 +88,13 @@ const macosOperations = {
   goBack: operation("goBack"),
   goForward: operation("goForward"),
   setZoomFactor: operation("setZoomFactor"),
+  getById: operation("getById"),
+  getCurrent: operation("getCurrent"),
+  getFocused: operation("getFocused"),
+  getLastActive: operation("getLastActive"),
+  listInstances: operation("listInstances"),
+  getReadiness: operation("getReadiness"),
+  showInactive: operation("showInactive"),
 };
 
 function dispose(instance: NativeAdapter) {
@@ -116,7 +123,7 @@ export default defineNativePlugin(
         initialize: createMacosOperations,
         dispose,
         busy,
-        // macOS supplies basic window and WebView services; geometry, identity and readiness remain unsupported.
+        // macOS supplies basic window and WebView services, identity lookup, readiness and inactive show; geometry remains unsupported.
         operations: macosOperations,
       },
     },
