@@ -1,7 +1,7 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
 import assert from "node:assert/strict";
 import { guid } from "./guid.ts";
-import { hr, ole, withBuffer, withWide } from "./win32-bindings.ts";
+import { hr, withWide } from "./win32-bindings.ts";
 
 /** MSDN samples use CLSCTX_SERVER for AccPropServices. */
 const CLSCTX_SERVER = 5;
@@ -24,6 +24,9 @@ type BindingType = "u64" | "u32" | "i32" | "ptr";
  * The object is created lazily on first use and must only be called from the UI STA. The Win32
  * window manager owns the instance. IAccPropServices has no getter, so the last applied value of
  * each window is cached in this process and the cache is the source of `get`.
+ *
+ * COM symbols stay in this module (not win32-bindings) so fixture mocks of win32-bindings do not
+ * need AccProp-only exports.
  */
 export class AccessibleTitles {
   private object: Pointer | null = null;
@@ -75,27 +78,24 @@ export class AccessibleTitles {
       return;
     }
     // Lifecycle tests construct Windows without ui.ts; AccProp still needs an STA.
-    const init = ole.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED);
-    if (init < 0 && init !== RPC_E_CHANGED_MODE) {
-      hr(init, "CoInitializeEx(STA)");
-    }
     const library = openLibrary();
     this.library = library;
+    const init = library.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED);
+    if (init < 0 && init !== RPC_E_CHANGED_MODE) {
+      this.dispose();
+      hr(init, "CoInitializeEx(STA)");
+    }
     const out = new BigUint64Array(1);
     const clsid = guid("b5f8350b-0548-48b1-a6ee-88bd00b4a5e7");
     const iid = guid("6e26e776-04f0-495d-80e4-3330352e3169");
     try {
       hr(
-        withBuffer(clsid, (clsidPtr) =>
-          withBuffer(iid, (iidPtr) =>
-            library.symbols.CoCreateInstance(
-              clsidPtr,
-              null,
-              CLSCTX_SERVER,
-              iidPtr,
-              ptr(out),
-            ),
-          ),
+        library.symbols.CoCreateInstance(
+          ptr(clsid),
+          null,
+          CLSCTX_SERVER,
+          ptr(iid),
+          ptr(out),
         ),
         "CoCreateInstance(IAccPropServices)",
       );
@@ -217,6 +217,13 @@ export class AccessibleTitles {
 
 function openLibrary() {
   return dlopen("ole32.dll", {
+    CoInitializeEx: {
+      args: [
+        "ptr",
+        "u32",
+      ],
+      returns: "i32",
+    },
     CoCreateInstance: {
       args: [
         "ptr",
