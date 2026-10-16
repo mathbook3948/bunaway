@@ -78,7 +78,7 @@ export class MacosWebview {
   readonly ready: Promise<void>;
 
   constructor(
-    private readonly config: Omit<MacosConfig, "windows"> & {
+    private readonly config: Omit<MacosConfig, "windows" | "appMetadata"> & {
       window: import("@bunaway/plugin-api/native").WindowSpec;
     },
     readonly hooks: {

@@ -9,6 +9,7 @@ import {
   type Packet,
   type UIConfig,
 } from "#native/windows/bun/channel";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 const native = {
@@ -69,6 +70,7 @@ async function waitForSlot(state: Int32Array, index: number) {
 
 function config(dataRoot: string, permissions: string[]): UIConfig {
   return {
+    appMetadata: testAppMetadata,
     runtime: {
       id: `ui-test-${crypto.randomUUID()}`,
       generation: "1",

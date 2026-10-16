@@ -10,6 +10,8 @@ import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
 
 export * from "@bunaway/runtime-bun/worker-channel";
 export type UIConfig = {
+  /** Name, identifier and package versions that become `ctx.app`. */
+  appMetadata: import("@bunaway/runtime-bun/app-metadata").AppMetadata;
   app?: import("@bunaway/plugin").NativeEnvironment["app"];
   runtime: RuntimeIdentity;
   policy: Policy;

@@ -8,6 +8,7 @@
         "test.echo",
         "test.count",
         "test.files",
+        "test.app",
         "test.error",
         "test.hold",
         "test.record",

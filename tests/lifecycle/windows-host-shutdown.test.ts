@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import {
   bundleIOPluginFixture,
   bundleUIPluginFixture,
@@ -125,6 +126,7 @@ async function checkShutdown(
       );
     }
     const config = {
+      appMetadata: testAppMetadata,
       runtime: {
         id: "windows-shutdown",
         generation: crypto.randomUUID(),

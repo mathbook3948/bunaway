@@ -1,9 +1,13 @@
-import { dlopen, type Pointer, ptr, read, toArrayBuffer } from "bun:ffi";
+import { dlopen, type Pointer, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { type HostContext, parsePolicy } from "@bunaway/protocol";
 import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
+import {
+  appName,
+  readPackageVersions,
+} from "@bunaway/runtime-bun/app-metadata";
 import {
   verifyDevelopmentLaunch,
   verifyDevelopmentToolsLaunch,
@@ -11,6 +15,7 @@ import {
 import { readWindowSpecs } from "@bunaway/runtime-bun/window-config";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
 import type { UIConfig } from "./channel.ts";
+import { readWideString } from "./wide-string.ts";
 
 /** Compiled apps read embedded assets; development apps read the package directory. */
 export const isCompiledApp = Bun.embeddedFiles.some(
@@ -47,12 +52,9 @@ export function localAppData() {
     );
     const address = Number(out[0]) as Pointer;
     assert(address);
-    let length = 0;
-    while (length < 65536 && read.u16(address, length)) {
-      length += 2;
-    }
-    assert(length < 65536);
-    return Buffer.from(toArrayBuffer(address, 0, length)).toString("utf16le");
+    const path = readWideString(address, 65536);
+    assert(path !== null);
+    return path;
   } finally {
     if (out[0]) {
       ole.symbols.CoTaskMemFree(Number(out[0]) as Pointer);
@@ -102,6 +104,11 @@ export async function verifyWindowsPackage(
   ];
   const windows = readWindowSpecs(specs, policy, devUrl);
   return {
+    appMetadata: {
+      name: appName(config.title),
+      identifier: config.appId,
+      ...(await readPackageVersions(root)),
+    },
     app: {
       id: config.appId,
       launch: {

@@ -2,10 +2,6 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { type Project, validateProject } from "#cli/config";
-import { appModules } from "#cli/app-modules";
-import { installedPackageRoot } from "#cli/files";
-import { assertAppDefinitionExport, buildWithSdk, sdkPlugin } from "#cli/sdk";
 import { createClient } from "@bunaway/client";
 import {
   PROTOCOL_VERSION,
@@ -15,6 +11,11 @@ import {
   type TransportEvent,
 } from "@bunaway/protocol";
 import { readJsonLines } from "@bunaway/runtime-bun";
+import { appModules } from "#cli/app-modules";
+import { type Project, validateProject } from "#cli/config";
+import { installedPackageRoot } from "#cli/files";
+import { assertAppDefinitionExport, buildWithSdk, sdkPlugin } from "#cli/sdk";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { createProject } from "./project.ts";
 
 /** Bundle the legacy process adapter only for its SDK contract test. */
@@ -47,6 +48,7 @@ async function bundleProcessBackend(
         appModules({
           appEntry: project.appEntry,
           processRuntime: runtime,
+          appMetadata: testAppMetadata,
         }).setup(build);
       },
     },

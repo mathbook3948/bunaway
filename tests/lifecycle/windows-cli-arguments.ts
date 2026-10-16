@@ -11,6 +11,7 @@ import {
   instanceAddress,
   listenForInstances,
 } from "#native/windows/bun/instance";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
 const repo = process.argv.includes("--repo")
@@ -157,6 +158,7 @@ if (!process.argv.includes("--child")) {
         },
       },
       {
+        appMetadata: testAppMetadata,
         runtime: {
           id: "cli-arguments-test",
           generation: crypto.randomUUID(),

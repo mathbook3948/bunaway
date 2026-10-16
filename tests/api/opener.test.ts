@@ -18,6 +18,7 @@ import createOperationsDefinition from "#plugins/opener/src/index";
 import { windowsOperations as openerOperations } from "#plugins/opener/src/operations";
 import { normalizeFilePath } from "#plugins/opener/src/platforms/windows-path";
 import { normalizeUrl } from "#plugins/opener/src/url";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
@@ -180,6 +181,7 @@ test("public file APIs use caller context and preserve OS failure codes", async 
     },
   });
   await command.run(null, {
+    app: testAppInfo,
     signal: controller.signal,
     host,
     state: {
@@ -414,6 +416,7 @@ test("openUrl uses the caller host, and the registered permission controls it", 
       },
     });
     const context: CommandContext = {
+      app: testAppInfo,
       signal: controller.signal,
       host,
       state: {
@@ -477,6 +480,7 @@ test("openUrl preserves a native host execution failure", async () => {
     },
   });
   const context: CommandContext = {
+    app: testAppInfo,
     signal: controller.signal,
     host,
     state: {

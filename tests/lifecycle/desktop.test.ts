@@ -21,6 +21,7 @@ import {
   listenForInstances,
   parseLaunchArguments,
 } from "#native/windows/bun/instance";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 
 test("windowless startup requires a tray or explicit keep-alive, even with open and quit hooks", () => {
   const deferred: WindowSpec[] = [
@@ -850,11 +851,16 @@ test("disposing during a quit check prevents a late completion from restarting s
 test("the current process runtime explicitly rejects desktop options", async () => {
   const { runBunApp } = await import("@bunaway/runtime-bun");
   await expect(
-    runBunApp({
-      commands: {},
-      events: {},
-      desktop: {},
-    }),
+    runBunApp(
+      {
+        commands: {},
+        events: {},
+        desktop: {},
+      },
+      {
+        app: testAppMetadata,
+      },
+    ),
   ).rejects.toMatchObject({
     code: "UNSUPPORTED",
   });

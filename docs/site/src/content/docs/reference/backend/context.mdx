@@ -1,18 +1,81 @@
 ---
 title: CommandContext
-description: 명령에서 취소 신호와 Host API, 앱 상태, 이벤트 발행자를 사용합니다.
+description: 명령에서 앱 정보와 취소 신호, Host API, 앱 상태, 이벤트 발행자를 사용합니다.
 sidebar: { order: 3 }
 ---
 
-핸들러와 플러그인 setup에는 `{ signal, host, state, events }`가 전달됩니다.
+핸들러와 플러그인 setup에는 `{ app, signal, host, state, events }`가 전달됩니다.
 명령의 컨텍스트는 요청이 끝날 때까지 유효합니다. setup의 컨텍스트는 앱 백엔드가 종료될 때까지 사용합니다.
 
 | 필드 | 역할 |
 | --- | --- |
+| `app` | 앱 이름, 식별자, 버전과 런타임 버전을 담은 읽기 전용 정보 |
 | `signal` | 취소, 기한, 세션 종료를 관찰하는 신호 |
 | `host` | 원래 출처의 권한에 묶인 Host API |
 | `state` | 공통 앱 메모리 상태 저장소 |
 | `events` | 선언된 이벤트 발행자 |
+
+## app
+
+`ctx.app`은 앱 자신의 메타데이터인 `AppInfo`입니다. 동결된 객체이며 모든 명령과 플러그인 setup이 같은 값을 받습니다.
+권한이 필요 없고 호출 비용도 없습니다. 값은 Core가 시작될 때 한 번 정해지므로
+실행 중에 바뀌지 않습니다. 예를 들어 앱이 실행되는 동안 WebView2가 업데이트돼도 `webview`는 시작 시점의 버전을 유지합니다.
+
+| 필드 | 타입 | 출처 |
+| --- | --- | --- |
+| `name` | `string` | 앱 설정의 `title` |
+| `identifier` | `string` | 앱 설정의 `appId` |
+| `version` | `string \| null` | 앱 package.json의 `version` |
+| `runtime.framework` | `string \| null` | 빌드 시점의 bunaway 프레임워크 버전 |
+| `runtime.bun` | `string` | 백엔드를 실행하는 Bun의 `Bun.version` |
+| `runtime.webview` | `string \| null` | 플랫폼 WebView 엔진 버전 |
+
+`identifier`는 런타임 앱 ID이며 패키징 설정의 `bundle.identifier`와 다른 값입니다.
+`version`은 빌드가 패키지 manifest에 기록한 앱 package.json의 버전입니다.
+`bundle.release.version`으로 설치 프로그램 버전을 바꿔도 `version`은 달라지지 않습니다.
+Android와 iOS는 빌드할 때 이름, 식별자, 버전, 프레임워크 버전을 백엔드 번들에 포함합니다.
+
+`version`과 `runtime.framework`는 패키지에 버전이 기록되지 않았으면 `null`입니다.
+`runtime.webview`는 플랫폼마다 다음과 같이 정해집니다.
+
+| 플랫폼 | `runtime.webview` |
+| --- | --- |
+| Windows | 설치된 WebView2 런타임 버전. 앱 시작 때 조회합니다. |
+| macOS | 시스템 WebKit 프레임워크의 `CFBundleShortVersionString`, 없으면 `CFBundleVersion` |
+| Android, iOS | 항상 `null` |
+
+Windows나 macOS에서 버전 조회가 실패해도 앱은 시작되고 `runtime.webview`만 `null`이 됩니다.
+호스트 로그에는 `webview-version-unavailable` 항목이 남습니다.
+
+`ctx.app`은 백엔드에서만 사용합니다. UI에서 확인하려면 앱이 직접 명령을 만들어 `ctx.app`을 반환합니다.
+별도의 내장 명령은 없습니다.
+
+```ts
+import { command } from "@bunaway/backend";
+
+const appInfo = command({
+  input: { type: "object", additionalProperties: false },
+  output: {
+    type: "object",
+    properties: {
+      name: { type: "string" },
+      version: { anyOf: [{ type: "string" }, { const: null }] },
+      webview: { anyOf: [{ type: "string" }, { const: null }] },
+    },
+    required: ["name", "version", "webview"],
+    additionalProperties: false,
+  },
+  handle(_input, ctx) {
+    return {
+      name: ctx.app.name,
+      version: ctx.app.version,
+      webview: ctx.app.runtime.webview,
+    };
+  },
+});
+```
+
+운영체제의 종류와 버전 같은 환경 정보는 `ctx.app`이 아니라 [os 플러그인](/reference/plugins/os/)이 제공합니다.
 
 ## signal
 

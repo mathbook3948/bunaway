@@ -7,6 +7,7 @@ import clipboard from "@bunaway/plugin-clipboard";
 import type { HostResponse, JsonValue } from "@bunaway/protocol";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
 import { MAX_BOOKMARK_LENGTH } from "#plugins/clipboard/src/contract";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { writePluginFixture } from "../fixtures/native-worker.ts";
 import { uiCleanupSlots } from "../fixtures/windows-ui-cleanup.ts";
 
@@ -92,6 +93,7 @@ test("clipboard invalid bookmarks return errors through the production UI Worker
     `../../build/clipboard-ui-validation-${crypto.randomUUID()}`,
   );
   const configuration: UIConfig = {
+    appMetadata: testAppMetadata,
     runtime: {
       id: "clipboard-ui-validation",
       generation: crypto.randomUUID(),

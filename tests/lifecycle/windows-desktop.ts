@@ -20,6 +20,7 @@ import {
   listenForInstances,
 } from "#native/windows/bun/instance";
 import { containAppProcess } from "#native/windows/bun/job";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
@@ -486,6 +487,7 @@ if (!process.argv.includes("--child")) {
         },
       },
       {
+        appMetadata: testAppMetadata,
         runtime: {
           id: "desktop-test",
           generation: crypto.randomUUID(),

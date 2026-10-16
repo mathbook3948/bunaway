@@ -31,8 +31,31 @@ export interface EventEmitter {
   emit(event: string, payload: JsonValue, target: EventTarget): Promise<void>;
 }
 
+/** Longest accepted `AppInfo` string, in UTF-16 code units, shared by hosts and Core validation. */
+export const APP_INFO_MAX_LENGTH = 256;
+
+/** Read-only app metadata resolved by the host when Core starts. */
+export type AppInfo = {
+  /** App display name from the app settings `title`. */
+  readonly name: string;
+  /** Stable app identifier from the app settings `appId`. */
+  readonly identifier: string;
+  /** App version from the package manifest, or `null` when the package does not record one. */
+  readonly version: string | null;
+  readonly runtime: {
+    /** Bunaway framework version from the package manifest, or `null` when not recorded. */
+    readonly framework: string | null;
+    /** Version of the Bun runtime executing the backend. */
+    readonly bun: string;
+    /** Platform WebView engine version, or `null` when the host cannot determine it. */
+    readonly webview: string | null;
+  };
+};
+
 /** Execution context and cancellation signal supplied to commands and plugin setup. */
 export type CommandContext = {
+  /** Frozen app metadata shared by every command and plugin setup context. */
+  readonly app: AppInfo;
   /** Aborts when its command is cancelled or finishes, or when the backend stops. */
   readonly signal: CancellationSignal;
   /** Host operations bound to this execution context and its permissions. */

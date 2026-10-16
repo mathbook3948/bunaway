@@ -14,7 +14,11 @@ import {
   parseAppManifest,
   readAppManifest,
 } from "@bunaway/runtime-bun/app-manifest";
-import { pluginImportsSource } from "#cli/app-modules";
+import {
+  parsePackageVersions,
+  readPackageVersions,
+} from "@bunaway/runtime-bun/app-metadata";
+import { appModules, pluginImportsSource } from "#cli/app-modules";
 import { writeJson } from "#cli/files";
 import { writePluginManifest } from "#cli/plugins";
 import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
@@ -377,6 +381,143 @@ test("manifest generation and catalog loading preserve the operation registratio
     expect(() => parseAppManifest(manifest)).toThrow();
   } finally {
     await rm(assets, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+test("package manifest versions are optional strings and malformed values reject startup", async () => {
+  expect(parsePackageVersions({})).toEqual({
+    version: null,
+    framework: null,
+  });
+  expect(
+    parsePackageVersions({
+      app: {
+        id: "dev.example",
+      },
+      framework: {},
+    }),
+  ).toEqual({
+    version: null,
+    framework: null,
+  });
+  expect(
+    parsePackageVersions({
+      app: {
+        version: "1.2.3",
+      },
+      framework: {
+        version: "0.4.5",
+      },
+    }),
+  ).toEqual({
+    version: "1.2.3",
+    framework: "0.4.5",
+  });
+  for (const value of [
+    null,
+    [],
+    {
+      app: null,
+    },
+    {
+      app: [],
+    },
+    {
+      app: {
+        version: "",
+      },
+    },
+    {
+      app: {
+        version: 1,
+      },
+    },
+    {
+      app: {
+        version: null,
+      },
+    },
+    {
+      framework: {
+        version: "x".repeat(257),
+      },
+    },
+    {
+      framework: "0.4.5",
+    },
+  ]) {
+    expect(() => parsePackageVersions(value)).toThrow();
+  }
+  const directory = await mkdtemp(resolve(tmpdir(), "bunaway-package-"));
+  try {
+    await writeJson(resolve(directory, "manifest.json"), {
+      app: {
+        version: "2.0.0",
+      },
+    });
+    expect(await readPackageVersions(directory)).toEqual({
+      version: "2.0.0",
+      framework: null,
+    });
+  } finally {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+test("generated process backend embeds app metadata as a build-time constant", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "bunaway-metadata-"));
+  try {
+    const entry = resolve(directory, "app.ts");
+    await Bun.write(entry, "export default { commands: {}, events: {} };");
+    const runtime = resolve(directory, "runtime.ts");
+    await Bun.write(
+      runtime,
+      "export async function runBunApp(_app: unknown, options: unknown) { console.log(JSON.stringify(options)); }",
+    );
+    const metadata = {
+      name: 'Quote " App',
+      identifier: "dev.example.app",
+      version: null,
+      framework: "0.4.5",
+    };
+    const build = await Bun.build({
+      entrypoints: [
+        "bunaway-generated/backend.ts",
+      ],
+      root: directory,
+      target: "bun",
+      plugins: [
+        appModules({
+          appEntry: entry,
+          processRuntime: runtime,
+          appMetadata: metadata,
+        }),
+      ],
+    });
+    expect(build.success).toBe(true);
+    const output = resolve(directory, "backend.js");
+    await Bun.write(output, build.outputs[0] ?? "");
+    const result = Bun.spawnSync([
+      process.execPath,
+      output,
+    ]);
+    expect(JSON.parse(result.stdout.toString())).toEqual({
+      app: metadata,
+    });
+    expect(() =>
+      appModules({
+        appEntry: entry,
+        processRuntime: runtime,
+      }),
+    ).toThrow("app metadata");
+  } finally {
+    await rm(directory, {
       recursive: true,
       force: true,
     });

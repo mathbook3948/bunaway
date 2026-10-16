@@ -10,6 +10,7 @@ import {
 import { bindHostAPI } from "#core/host-api";
 import { windowsOperations as openerOperations } from "#plugins/opener/src/operations";
 import { normalizeApplicationPath } from "#plugins/opener/src/platforms/windows-path";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("opener", openerOperations);
@@ -195,6 +196,7 @@ test("selected-app helpers normalize one target and preserve context, permission
     },
   });
   await command.run(null, {
+    app: testAppInfo,
     signal: controller.signal,
     host,
     state: {

@@ -1,6 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
 import { MessageChannel } from "node:worker_threads";
-import { Channel, type Packet, type Route } from "#native/windows/bun/channel";
 import { createClient } from "@bunaway/client";
 import { type CoreSession, createCore } from "@bunaway/core";
 import {
@@ -10,6 +9,8 @@ import {
   type TransportEvent,
 } from "@bunaway/protocol";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
+import { Channel, type Packet, type Route } from "#native/windows/bun/channel";
+import { testAppInfo } from "../fixtures/app-info.ts";
 
 test("Host calls remain BUSY until both Workers acknowledge cancellations, then recover", async () => {
   const child = Bun.spawn(
@@ -324,6 +325,7 @@ test("Core and boundary agree on evicted IDs while the oldest reply is in transi
       events: {},
     },
     {
+      app: testAppInfo,
       policy: {
         version: 1,
         views: [
@@ -492,6 +494,7 @@ test.each([
         events: {},
       },
       {
+        app: testAppInfo,
         policy: {
           version: 1,
           views: [
@@ -1495,6 +1498,7 @@ test.each([
       },
     },
     {
+      app: testAppInfo,
       policy,
       hello,
       platform: "windows",

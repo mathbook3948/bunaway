@@ -8,6 +8,7 @@ import { Worker } from "node:worker_threads";
 import tray from "@bunaway/plugin-tray";
 import type { HostResponse, JsonValue } from "@bunaway/protocol";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 import { trayIco } from "../fixtures/tray-icon.ts";
 
@@ -62,6 +63,7 @@ test.skipIf(process.platform !== "win32")(
         `import plugin from ${JSON.stringify(entrypoint)}; export const pluginImports = { tray: { operations: async () => ({ createOperations: plugin._definition.nativePlatforms.windows.create }) } };`,
       );
       const config: UIConfig = {
+        appMetadata: testAppMetadata,
         runtime: {
           id: "tray-controls",
           generation: crypto.randomUUID(),

@@ -18,6 +18,12 @@ const allowed = PLATFORMS.some((name) => name === platform);
 
 목록에 포함된 이름이 해당 플랫폼의 실행이나 모든 네이티브 기능 지원을 보장하지는 않습니다. 실행 환경별 기능 지원은 등록된 작업의 기능 지원 조회로 확인합니다.
 
+## 앱 정보
+
+`AppInfo`는 `ctx.app`의 타입이며 필드는 [CommandContext](/reference/backend/context/)에 있습니다.
+`APP_INFO_MAX_LENGTH`는 `AppInfo` 문자열 하나의 최대 길이인 256 UTF-16 코드 유닛입니다.
+호스트가 넘기는 값은 Core가 시작할 때 이 한도로 검증합니다.
+
 ## 호출 컨텍스트
 
 `@bunaway/plugin-api/host`의 currentHost는 실행 중인 명령이나 setup의 Host API를 반환합니다. bindCommandHost와 bindPluginHost는 같은 호출 컨텍스트에 실행을 묶습니다. 명령이 끝나면 후속 호출을 거부하고 setup의 작업은 백엔드 수명을 따릅니다. Backend SDK와 플러그인 작성 SDK가 같은 컨텍스트를 공유합니다.

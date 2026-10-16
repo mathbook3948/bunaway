@@ -8,14 +8,15 @@ import {
   PROTOCOL_VERSION,
   SDK_READY_FEATURE,
 } from "@bunaway/protocol";
+import { toAppInfo } from "@bunaway/runtime-bun/app-metadata";
 import {
   Channel,
   type Packet,
   type Route,
 } from "@bunaway/runtime-bun/worker-channel";
-import type { MacosConfig } from "./config.ts";
+import type { MacosBackendData } from "./config.ts";
 
-const config: MacosConfig = workerData;
+const config: MacosBackendData = workerData;
 if (!parentPort) {
   throw new Error("macOS backend requires a Bun Worker.");
 }
@@ -198,6 +199,10 @@ try {
         }
       }
       return createCore(app, {
+        app: toAppInfo(config.appMetadata, {
+          bun: Bun.version,
+          webview: config.webview,
+        }),
         policy: config.policy,
         platform: "macos",
         backendContext: config.backendContext,

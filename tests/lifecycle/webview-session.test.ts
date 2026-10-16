@@ -17,6 +17,7 @@ import {
 } from "@bunaway/protocol";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 import type { Packet, Route } from "#native/windows/bun/channel";
+import { testAppInfo } from "../fixtures/app-info.ts";
 
 test.each([
   "invalid-result",
@@ -142,6 +143,7 @@ test.each([
         ],
       },
       {
+        app: testAppInfo,
         policy,
         hello,
         platform: "windows",

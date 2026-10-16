@@ -2,6 +2,10 @@ import { cp, mkdir, realpath, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
+import {
+  type AppMetadata,
+  parsePackageVersions,
+} from "@bunaway/runtime-bun/app-metadata";
 import type { BunPlugin } from "bun";
 import { appModules, commonJsSdkSource } from "./app-modules.ts";
 import { type Project, runtimeSettings } from "./config.ts";
@@ -468,6 +472,24 @@ export async function bundleWindowsReload(
   return hash(resolve(directory, "app.js"));
 }
 
+/**
+ * Resolves the app facts that mobile backends receive as a build-time constant,
+ * from the same sources as the desktop package manifest: the app settings, the
+ * app's package.json version and the framework's package.json version.
+ */
+async function mobileAppMetadata(project: Project): Promise<AppMetadata> {
+  // Reuse the package manifest parser so absent or malformed versions behave alike.
+  const versions = parsePackageVersions({
+    app: await json(resolve(project.root, "package.json")),
+    framework: await json(resolve(project.frameworkRoot, "package.json")),
+  });
+  return {
+    name: project.app.title,
+    identifier: project.app.appId,
+    ...versions,
+  };
+}
+
 /** Bundle packaged web assets and the Android child-process bootstrap from the common app definition. */
 export async function bundleAndroidAssets(
   project: Project,
@@ -480,6 +502,7 @@ export async function bundleAndroidAssets(
     await installedPackageRoot(project.frameworkRoot, "@bunaway/runtime-bun"),
     "src/index.ts",
   );
+  const appMetadata = await mobileAppMetadata(project);
   const backend = await buildWithSdk(
     {
       entrypoints: [
@@ -500,6 +523,7 @@ export async function bundleAndroidAssets(
         appModules({
           appEntry: project.appEntry,
           processRuntime: runtimeEntry,
+          appMetadata,
         }).setup(build);
       },
     },
@@ -518,6 +542,7 @@ export async function bundleIosAssets(
   const sdk = await sdkPlugin(project.root, [], project.nativePlugins);
   await webAssets(project, resolve(assets, "web"), sdk, false);
   const source = resolve(project.frameworkRoot, "native/ios");
+  const appMetadata = await mobileAppMetadata(project);
   const outputs = await buildWithSdk(
     {
       entrypoints: [
@@ -536,6 +561,9 @@ export async function bundleIosAssets(
       name: "ios-app-entry",
       setup(build) {
         sdk.setup(build);
+        appModules({
+          appMetadata,
+        }).setup(build);
         build.onResolve(
           {
             filter: /^\.\/app\.js$/,

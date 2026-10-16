@@ -13,6 +13,7 @@ import {
   type Packet,
   type UIConfig,
 } from "#native/windows/bun/channel";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { writePluginFixture } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 import {
@@ -80,6 +81,7 @@ async function startUI(
       ]
     : [];
   const configuration: UIConfig = {
+    appMetadata: testAppMetadata,
     runtime: {
       id: "ui-lifecycle",
       generation: crypto.randomUUID(),

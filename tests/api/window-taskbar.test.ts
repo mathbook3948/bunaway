@@ -11,6 +11,7 @@ import windows, {
 import { type HostContext, NativeRegistry } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
+import { testAppInfo } from "../fixtures/app-info.ts";
 
 const operation = "windows.setTaskbarProgress";
 const target = {
@@ -282,6 +283,7 @@ test("taskbar SDK helper preserves command context and forwards the exact operat
   const source = "editor" as HostContext;
   let calls = 0;
   const context: CommandContext = {
+    app: testAppInfo,
     signal,
     state: {
       get: () => undefined,

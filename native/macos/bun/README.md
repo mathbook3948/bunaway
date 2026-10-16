@@ -62,6 +62,8 @@ WebView를 위한 추가 네이티브 바이너리는 필요하지 않다.
 `entry.ts`는 UI, Host API와 백엔드 및 I/O Worker의 시작과 종료를 조정하고, `backend.ts`는 앱과 코어를 실행한다.
 `host-operations.ts`는 Windows와 공유하는 `native/host-api/bun/io-worker.ts`의 큐와 어댑터 수명을 사용한다.
 `windows.ts`는 창별 세션 경계와 지연 생성, 재생성 및 개별 정리를 소유한다.
+`webkit-version.ts`는 시스템 WebKit 번들의 `CFBundleShortVersionString`(없으면 `CFBundleVersion`)을 읽는다.
+`entry.ts`가 백엔드 Worker를 시작하기 전에 메인 스레드에서 한 번 조회해 Worker에 넘기며, 실패는 `webview-version-unavailable`로 기록하고 값을 `null`로 둔다.
 `process-group.ts`는 하위 프로세스의 종료와 호스트 비정상 종료 감시를 소유한다.
 `application.ts`는 앱 delegate와 모든 창이 공유하는 이벤트 루프를 소유한다.
 `objc.ts`는 Objective-C FFI 바인딩과 콜백을, `webview.ts`는 개별 AppKit 창과 WKWebView를 소유한다.

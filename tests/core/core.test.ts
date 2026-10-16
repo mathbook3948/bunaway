@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { command } from "@bunaway/backend";
 import type {
   AppDefinition,
+  AppInfo,
   CoreServices,
   PluginDefinition,
   RuntimeServices,
@@ -22,6 +23,7 @@ import {
   validateValue as validateHostResult,
   validateValue,
 } from "@bunaway/protocol";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import { contracts, createCore } from "../fixtures/host-plugins.ts";
 
 // Fake time advances deadlines and shutdown limits without waiting.
@@ -158,6 +160,7 @@ function createServices(
     call: HostCall;
   }[] = [];
   const services: CoreServices = {
+    app: testAppInfo,
     policy,
     hello: {
       kind: "hello",
@@ -497,6 +500,148 @@ test("command round trip validates input, output and binds the session host cont
       },
     },
   ]);
+});
+
+test("commands and plugin setup receive the same frozen app info", async () => {
+  const clock = createClock();
+  const { services, sent } = createServices(clock);
+  const seen: unknown[] = [];
+  // A host-owned object that stays mutable after Core starts.
+  const mutableSource = {
+    ...testAppInfo,
+    runtime: {
+      ...testAppInfo.runtime,
+    },
+  } as {
+    -readonly [Key in keyof AppInfo]: Key extends "runtime"
+      ? {
+          -readonly [Field in keyof AppInfo["runtime"]]: AppInfo["runtime"][Field];
+        }
+      : AppInfo[Key];
+  };
+  const app = createApp({
+    plugins: [
+      {
+        name: "app-info",
+        version: "1",
+        setup(context) {
+          seen.push(context.app);
+        },
+      },
+    ],
+    commands: {
+      "notes.read": command({
+        input: textInput,
+        output: {
+          type: "string",
+        },
+        handle: (_input, context) => {
+          seen.push(context.app);
+          return "ok";
+        },
+      }),
+    },
+  });
+  const { session } = await openSession(
+    {
+      ...services,
+      app: mutableSource,
+    },
+    "view-context-1" as HostContext,
+    "main",
+    app,
+  );
+  mutableSource.name = "changed after start";
+  mutableSource.runtime.webview = "changed";
+  await session.receive({
+    kind: "invoke",
+    protocol: helloMessage.protocol,
+    id: "r1",
+    command: "notes.read",
+    payload: {
+      key: "a",
+    },
+  });
+  await flush();
+  expect(results(sent, "r1")).toMatchObject([
+    {
+      kind: "result",
+    },
+  ]);
+  expect(seen).toEqual([
+    testAppInfo,
+    testAppInfo,
+  ]);
+  expect(seen[1]).toBe(seen[0]);
+  const info = seen[0] as AppInfo;
+  expect(Object.isFrozen(info)).toBe(true);
+  expect(Object.isFrozen(info.runtime)).toBe(true);
+});
+
+test("createCore rejects invalid app info from the host", async () => {
+  const clock = createClock();
+  const { services } = createServices(clock);
+  const tooLong = "x".repeat(257);
+  const invalid: unknown[] = [
+    null,
+    {
+      ...testAppInfo,
+      name: "",
+    },
+    {
+      ...testAppInfo,
+      identifier: tooLong,
+    },
+    {
+      ...testAppInfo,
+      version: undefined,
+    },
+    {
+      ...testAppInfo,
+      version: 1,
+    },
+    {
+      ...testAppInfo,
+      runtime: null,
+    },
+    {
+      ...testAppInfo,
+      runtime: {
+        ...testAppInfo.runtime,
+        bun: null,
+      },
+    },
+    {
+      ...testAppInfo,
+      runtime: {
+        ...testAppInfo.runtime,
+        webview: "",
+      },
+    },
+  ];
+  for (const app of invalid) {
+    await expect(
+      createCore(createApp(), {
+        ...services,
+        app: app as CoreServices["app"],
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  const optional = await createCore(createApp(), {
+    ...services,
+    app: {
+      ...testAppInfo,
+      version: null,
+      runtime: {
+        ...testAppInfo.runtime,
+        framework: null,
+        webview: null,
+      },
+    },
+  });
+  await optional.stop();
 });
 
 test("policy blocks commands the view did not allow and unknown commands fail", async () => {

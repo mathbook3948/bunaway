@@ -11,6 +11,10 @@ AppDefinition을 default export한다.
 `manifest.json`을 읽어 검증한다. 앱 설정, 정책, 플러그인 계약과 개발 SDK 모듈 목록을
 담으며 플러그인 코드를 불러오거나 네이티브 자원을 초기화하지 않는다.
 
+`@bunaway/runtime-bun/app-metadata`는 `ctx.app`의 원천 데이터 계약이다. 호스트와 CLI가 앱 설정의 이름과 식별자,
+패키지 manifest의 앱과 프레임워크 버전을 `AppMetadata`로 모으고 `toAppInfo`가 Bun과 WebView 버전을 더해 `AppInfo`를 만든다.
+`runBunApp`은 이 `AppMetadata`를 `connection.app`으로 받는다.
+
 호스트가 보낸 boot의 정책, 백엔드 컨텍스트, 런타임 세대로 `createCore`를 만들고
 플러그인 초기화와 hello 협상 뒤 ready를 보낸다. 초기화 중에도 Host API 요청을
 발행하고 stdin에서 응답을 처리한다. stdout은 크기, 큐 상한을 가진 NDJSON 전용이므로

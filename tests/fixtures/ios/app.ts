@@ -88,6 +88,13 @@ export const app = defineApp({
         });
       },
     }),
+    "test.app": command({
+      input: nullable,
+      output: {
+        type: "object",
+      },
+      handle: (_value, context) => context.app,
+    }),
     "test.denied": command({
       input: nullable,
       output: nullable,

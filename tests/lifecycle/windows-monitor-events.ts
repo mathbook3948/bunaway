@@ -10,6 +10,7 @@ import {
   validateValue,
 } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
 assert.equal(process.platform, "win32");
@@ -400,6 +401,7 @@ if (!process.argv.includes("--child")) {
   });
   try {
     await runWindowsApp(app, {
+      appMetadata: testAppMetadata,
       runtime: {
         id: "monitor-events",
         generation: crypto.randomUUID(),
