@@ -54,6 +54,9 @@ export class WindowsDialogs {
       signal,
       requestId,
       (services) => this.create(kind, input, services),
+      {
+        cancelFailureAfterInterrupt: false,
+      },
     );
   }
 
@@ -70,6 +73,9 @@ export class WindowsDialogs {
       signal,
       requestId,
       (services) => this.createMessage(input, services),
+      {
+        cancelFailureAfterInterrupt: true,
+      },
     );
   }
 
@@ -77,6 +83,11 @@ export class WindowsDialogs {
    * Shared lifecycle for every modal dialog: authorize the owner, guard re-entry, watch host
    * cancellation, run the driver and dispose it. Host cancellation always surfaces as CANCELLED,
    * even when the native dialog completed with a user result.
+   *
+   * `cancelFailureAfterInterrupt` is a message-dialog-only policy. A TaskDialog is force-closed after
+   * host interruption and that close can produce a native failure, so for messages such a failure
+   * becomes CANCELLED with the native error kept as `cause`. Pickers leave it false and keep
+   * surfacing native Close failures unchanged.
    */
   private run<Result>(
     requestedOwnerWindowId: string | undefined,
@@ -84,6 +95,9 @@ export class WindowsDialogs {
     signal: AbortSignal | undefined,
     requestId: string | undefined,
     create: (services: NativeDialogServices) => DialogDriver<Result>,
+    options: {
+      cancelFailureAfterInterrupt: boolean;
+    },
   ): Result {
     const services = this.services;
     if (!services) {
@@ -94,12 +108,14 @@ export class WindowsDialogs {
     }
     const cancelled = () =>
       this.disposed || signal?.aborted || services.stopping();
+    const cancelledCall = () =>
+      new BunawayError({
+        code: "CANCELLED",
+        message: "Dialog call was cancelled.",
+      });
     const checkCancelled = () => {
       if (cancelled()) {
-        throw new BunawayError({
-          code: "CANCELLED",
-          message: "Dialog call was cancelled.",
-        });
+        throw cancelledCall();
       }
     };
     checkCancelled();
@@ -157,13 +173,14 @@ export class WindowsDialogs {
           return interrupted;
         });
       } catch (error) {
-        // After host interruption the driver force-closes its dialog, so a native failure that
-        // follows is a consequence of that close and the caller must see the cancellation instead.
-        if (interruptedByHost()) {
-          checkCancelled();
-          throw cancelledByHost();
+        if (!options.cancelFailureAfterInterrupt || !interruptedByHost()) {
+          throw error;
         }
-        throw error;
+        // The driver force-closes its dialog after host interruption, so this native failure is a
+        // consequence of that close and the caller must see the cancellation, with the failure as cause.
+        const failure = cancelled() ? cancelledCall() : cancelledByHost();
+        failure.cause = error;
+        throw failure;
       }
       checkCancelled();
       if (interruptedByHost()) {

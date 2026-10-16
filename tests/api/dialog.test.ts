@@ -770,6 +770,7 @@ test("a driver failure after host interruption is CANCELLED, otherwise it passes
   ] as const) {
     const controller = new AbortController();
     const f = fixture();
+    const original = nativeFailure();
     const state = new WindowsDialogs(f.services, undefined, () => ({
       show: (_owner, poll) => {
         if (cause === "abort") {
@@ -779,11 +780,12 @@ test("a driver failure after host interruption is CANCELLED, otherwise it passes
           f.closeOwner();
         }
         expect(poll()).toBe(cause !== "none");
-        throw nativeFailure();
+        throw original;
       },
       dispose() {},
     }));
-    expect(() =>
+    let failure: unknown;
+    try {
       state.showMessage(
         {
           ownerWindowId: "owner",
@@ -791,12 +793,67 @@ test("a driver failure after host interruption is CANCELLED, otherwise it passes
         },
         "backend",
         controller.signal,
-      ),
-    ).toThrow(
-      expect.objectContaining({
-        code: cause === "none" ? "INTERNAL" : "CANCELLED",
-      }),
+      );
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({
+      code: cause === "none" ? "INTERNAL" : "CANCELLED",
+    });
+    // The native failure is kept as the cause of the cancellation and passes through untouched otherwise.
+    expect(cause === "none" ? failure : (failure as Error).cause).toBe(
+      original,
     );
+    expect(state.busy()).toBe(false);
+  }
+});
+
+test("a picker driver failure after host interruption is not rewritten to CANCELLED", () => {
+  for (const cause of [
+    "abort",
+    "owner",
+  ] as const) {
+    const controller = new AbortController();
+    const f = fixture();
+    const original = new BunawayError({
+      code: "INTERNAL",
+      message: "Windows dialog Close was rejected.",
+      details: {
+        hresult: REJECTED_CLOSE >>> 0,
+      },
+    });
+    const state = new WindowsDialogs(f.services, () => ({
+      show: (_owner, poll) => {
+        if (cause === "abort") {
+          controller.abort();
+        } else {
+          f.closeOwner();
+        }
+        expect(poll()).toBe(true);
+        throw original;
+      },
+      dispose() {},
+    }));
+    let failure: unknown;
+    try {
+      state.show(
+        "openFile",
+        {
+          ownerWindowId: "owner",
+        },
+        "backend",
+        controller.signal,
+      );
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBe(original);
+    expect(failure).toMatchObject({
+      code: "INTERNAL",
+      details: {
+        hresult: REJECTED_CLOSE >>> 0,
+      },
+    });
     expect(state.busy()).toBe(false);
   }
 });

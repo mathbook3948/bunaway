@@ -33,7 +33,9 @@ button result: Escape, the title-bar close button and Alt+F4 return the resolved
 (`resolveCancelButton`). With several buttons and no `cancelButton` they are disabled, so the user must
 click a button. Host abort, deadline, shutdown and owner retirement are CANCELLED or TIMEOUT errors,
 never a button result. Owner rules, the single UI-thread queue and BUSY on native reentry are shared
-with the pickers through the same `run` path in `src/platforms/windows.ts`.
+with the pickers through the same `run` path in `src/platforms/windows.ts`. Only for `showMessage`, a
+native failure that follows host interruption (the forced close) is reported as CANCELLED with the
+failure as `cause`; pickers keep surfacing native Close failures.
 
 The dialog is `TaskDialogIndirect` from comctl32 v6. `bun.exe` has no Common-Controls v6 manifest, so
 each call writes a private temporary manifest file, creates an activation context with `CreateActCtxW`,
