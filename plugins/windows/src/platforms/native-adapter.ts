@@ -287,6 +287,15 @@ export function createOperations(
       }
       case "windows.close":
         return window.close();
+      case "windows.respondClose":
+        if (!window.respondClose) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "Close requests are not implemented on this platform.",
+          });
+        }
+        window.respondClose(call.payload.requestId, call.payload.allow);
+        break;
       case "windows.destroy":
         if (!window.destroy) {
           throw unsupportedRelations();
@@ -689,6 +698,39 @@ export function createOperations(
           identity.viewId)
       : identity.viewId;
   }
+  /**
+   * Allows a close answer only from the trusted backend or from the document that was asked.
+   * Request IDs are small increasing integers, so permission alone would let another window's
+   * document approve a close and bypass that window's confirmation. The caller is identified by the
+   * authenticated document session behind the host request, never by the payload, and fails closed
+   * when the platform cannot provide that identity.
+   */
+  function assertAskedWindowAnswers(
+    target: {
+      view: string;
+      windowId?: string;
+    },
+    source: string,
+    requestId: string,
+  ): void {
+    if (source === "backend") {
+      return;
+    }
+    const caller = services.lookup?.byRequest?.(requestId);
+    if (
+      !caller ||
+      source !== `view:${caller.viewId}` ||
+      caller.viewId !== target.view ||
+      identityKey(caller) !==
+        operations.resolveKey(target.view, target.windowId)
+    ) {
+      throw new BunawayError({
+        code: "PERMISSION_DENIED",
+        message:
+          "Close requests are answered only by the asked window's document or the backend.",
+      });
+    }
+  }
   return {
     execute() {
       throw new BunawayError({
@@ -813,6 +855,9 @@ export function createOperations(
           code: "PERMISSION_DENIED",
           message: "Window policy denied.",
         });
+      }
+      if (call.operation === "windows.respondClose") {
+        assertAskedWindowAnswers(call.payload, source, context.requestId);
       }
       if (
         call.operation === "windows.setParent" &&

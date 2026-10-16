@@ -108,6 +108,25 @@ const fixtures = {
   closing: fixture(
     {
       kind: "closing",
+      reason: "window-destroyed",
+    },
+    "main",
+  ),
+  "windows-empty": fixture(
+    {
+      kind: "windows-empty",
+    },
+    "main",
+  ),
+  "session-end": fixture(
+    {
+      kind: "session-end",
+      flags: {
+        logoff: true,
+        critical: false,
+        closeApp: false,
+      },
+      release: new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT),
     },
     "main",
   ),
@@ -136,6 +155,12 @@ const fixtures = {
   "quit-cancelled": fixture(
     {
       kind: "quit-cancelled",
+    },
+    "ui",
+  ),
+  "shutdown-committed": fixture(
+    {
+      kind: "shutdown-committed",
     },
     "ui",
   ),
@@ -686,6 +711,79 @@ test("Worker packets retain desktop values, operation sources and bounded regist
       "main",
     ),
   ).toThrow("Invalid quit reason");
+  for (const reason of [
+    "last-window",
+    "tray",
+    "api",
+    "window-destroyed",
+    "session-end",
+    "interrupted",
+  ]) {
+    expect(
+      validatePacket(
+        {
+          kind: "closing",
+          reason,
+        },
+        "main",
+      ).kind,
+    ).toBe("closing");
+  }
+  for (const closing of [
+    {
+      kind: "closing",
+    },
+    {
+      kind: "closing",
+      reason: "backend",
+    },
+  ]) {
+    expect(() => validatePacket(closing, "main")).toThrow();
+  }
+  expect(() =>
+    validatePacket(
+      {
+        kind: "windows-empty",
+      },
+      "ui",
+    ),
+  ).toThrow("Invalid Worker direction");
+  const sessionEnd = fixtures["session-end"].packet;
+  expect(validatePacket(sessionEnd, "main").kind).toBe("session-end");
+  expect(() => validatePacket(sessionEnd, "ui")).toThrow(
+    "Invalid Worker direction",
+  );
+  for (const invalid of [
+    {
+      ...sessionEnd,
+      flags: {
+        logoff: true,
+        critical: false,
+      },
+    },
+    {
+      ...sessionEnd,
+      flags: {
+        logoff: 1,
+        critical: false,
+        closeApp: false,
+      },
+    },
+    {
+      ...sessionEnd,
+      release: new ArrayBuffer(Int32Array.BYTES_PER_ELEMENT),
+    },
+    {
+      ...sessionEnd,
+      release: new SharedArrayBuffer(8),
+    },
+    {
+      ...sessionEnd,
+      release: undefined,
+    },
+  ]) {
+    expect(() => validatePacket(invalid, "main")).toThrow();
+  }
   for (const source of [
     "view:view:1",
     "backend",
@@ -851,10 +949,13 @@ const reservedPackets: {
       "start",
       "shutdown",
       "closing",
+      "windows-empty",
+      "session-end",
       "cleaned",
       "desktop-control",
       "quit-request",
       "quit-cancelled",
+      "shutdown-committed",
       "fatal",
     ] as const
   ).map((kind) => ({

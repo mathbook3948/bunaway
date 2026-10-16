@@ -8,7 +8,10 @@ import type { HostResponse, JsonValue } from "@bunaway/protocol";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
 import { MAX_BOOKMARK_LENGTH } from "#plugins/clipboard/src/contract";
 import { writePluginFixture } from "../fixtures/native-worker.ts";
-import { uiCleanupSlots } from "../fixtures/windows-ui-cleanup.ts";
+import {
+  uiCleanupSlots,
+  uiLifecycleSlots,
+} from "../fixtures/windows-ui-cleanup.ts";
 
 test("clipboard resource failures and cancellable retries use isolated Win32 bindings", async () => {
   const root = resolve(
@@ -118,6 +121,10 @@ test("clipboard invalid bookmarks return errors through the production UI Worker
   const cleanup = new SharedArrayBuffer(
     Object.keys(uiCleanupSlots).length * Int32Array.BYTES_PER_ELEMENT,
   );
+  // The platform fixture polls these slots on every pump, so the buffer must exist even when unused.
+  const lifecycle = new SharedArrayBuffer(
+    Object.keys(uiLifecycleSlots).length * Int32Array.BYTES_PER_ELEMENT,
+  );
   let worker: Worker | undefined;
   let channel: Channel | undefined;
   try {
@@ -199,6 +206,7 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
       workerData: {
         ...configuration,
         cleanup,
+        lifecycle,
       },
       stdout: true,
       stderr: true,

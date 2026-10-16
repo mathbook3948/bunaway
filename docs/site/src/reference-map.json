@@ -661,6 +661,7 @@
           "focus",
           "activate",
           "close",
+          "respondClose",
           "destroy",
           "setParent",
           "getParent",
@@ -1065,7 +1066,11 @@
           "tray",
           "openArguments",
           "onOpen",
-          "beforeQuit"
+          "onReady",
+          "onAllWindowsClosed",
+          "beforeQuit",
+          "onWillQuit",
+          "onQuit"
         ]
       }
     },
@@ -1351,6 +1356,7 @@
       "windows.isVisible",
       "windows.isFocused",
       "windows.close",
+      "windows.respondClose",
       "windows.destroy",
       "windows.setParent",
       "windows.getParent",

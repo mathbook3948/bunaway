@@ -1,3 +1,4 @@
+import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { release } from "node:os";
@@ -15,6 +16,7 @@ import { runWindowsApp } from "#native/windows/bun/entry";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
+const WM_CLOSE = 0x10;
 const TEST_TIMEOUT_MS = 150_000;
 const STATE_TIMEOUT_MS = 40_000;
 const root =
@@ -322,6 +324,7 @@ if (!process.argv.includes("--child")) {
       events: [
         "test.action",
         "windows.changed",
+        "windows.lifecycle",
       ],
       host: {
         permissions: role === "denied" ? [] : windowPermissions(),
@@ -371,6 +374,54 @@ if (!process.argv.includes("--child")) {
     records.filter(
       (record) => record.windowId === id && record.action === "arrived",
     );
+  /** Phases the `main` document observed for one windowId, from its longest reported snapshot. */
+  function lifecyclePhases(windowId: string): string[] {
+    let longest: readonly string[] = [];
+    for (const record of records) {
+      if (record.action !== "lifecycle") {
+        continue;
+      }
+      const snapshot = validateValue(
+        {
+          type: "array",
+          items: {
+            type: "string",
+          },
+        } as const,
+        JSON.parse(record.value),
+      );
+      if (snapshot.length > longest.length) {
+        longest = snapshot;
+      }
+    }
+    return longest
+      .filter((entry) => entry.startsWith(`${windowId}:`))
+      .map((entry) => entry.slice(windowId.length + 1));
+  }
+  /** The host logs each HWND when it creates a window; the newest entry belongs to the latest instance. */
+  async function newestWindowHandle(view: string): Promise<bigint> {
+    const lines = (await readFile(resolve(dataRoot, "logs/host.log"), "utf8"))
+      .trim()
+      .split("\n");
+    const handles = lines.flatMap((line) => {
+      const record: unknown = JSON.parse(line);
+      return record &&
+        typeof record === "object" &&
+        "event" in record &&
+        record.event === "window-created" &&
+        "view" in record &&
+        record.view === view &&
+        "hwnd" in record &&
+        typeof record.hwnd === "string"
+        ? [
+            BigInt(record.hwnd),
+          ]
+        : [];
+    });
+    const handle = handles.at(-1);
+    assert(handle, `No window-created record for ${view}`);
+    return handle;
+  }
   async function exercise(context: CommandContext): Promise<void> {
     await waitFor(
       () =>
@@ -604,6 +655,37 @@ if (!process.argv.includes("--child")) {
         }),
         null,
       );
+      // `main` observes windows.lifecycle: a user close (WM_CLOSE, no confirmation set) of a new
+      // instance must report exactly created, ready, closed and destroyed, in that order.
+      const observed = await createWhenReady("isolated");
+      await waitFor(() => lifecyclePhases(observed.windowId).includes("ready"));
+      const user32 = dlopen("user32.dll", {
+        PostMessageW: {
+          args: [
+            "u64",
+            "u32",
+            "u64",
+            "i64",
+          ],
+          returns: "i32",
+        },
+      });
+      assert(
+        user32.symbols.PostMessageW(
+          await newestWindowHandle("isolated"),
+          WM_CLOSE,
+          0n,
+          0n,
+        ),
+      );
+      await waitFor(() => lifecyclePhases(observed.windowId).length >= 4);
+      assert.deepEqual(lifecyclePhases(observed.windowId), [
+        "created",
+        "ready",
+        "closed",
+        "destroyed",
+      ]);
+      user32.close();
       const [isolatedA, isolatedB] = await Promise.all([
         windows.createInstance({
           view: "isolated",

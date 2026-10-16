@@ -316,6 +316,218 @@ test("WebView close releases local resources even when the bridge rejects the cl
   await expect(transport.send("{}")).rejects.toThrow("closed");
 });
 
+test("subscriptionEnded reports the event when a client unlistens or the host ends a subscription", () => {
+  const source = "https://app.bunaway.local/index.html";
+  const packets: Packet[] = [];
+  const ended: string[] = [];
+  const boundary = new ViewBoundary(
+    {
+      id: "main",
+      origins: [
+        "https://app.bunaway.local",
+      ],
+      commands: [],
+      events: [
+        "changed",
+        "other",
+      ],
+      host: {
+        permissions: [],
+      },
+    },
+    {
+      origin: (text) => new URL(text).origin,
+      source: () => source,
+      ready: () => true,
+      capacity: () => true,
+      forward: (packet) => packets.push(packet),
+      deliver: () => {},
+      log: () => {},
+      subscriptionEnded: (event) => ended.push(event),
+    },
+  );
+  const receive = (message: object) =>
+    boundary.receive(
+      source,
+      JSON.stringify({
+        protocol: PROTOCOL_VERSION,
+        ...message,
+      }),
+    );
+  receive({
+    kind: "hello",
+    features: [],
+    buildId: "test",
+  });
+  const opened = packets[0];
+  if (opened?.kind !== "session-open") {
+    throw new Error("Missing session");
+  }
+  boundary.send(opened.route, {
+    kind: "hello",
+    protocol: PROTOCOL_VERSION,
+    features: [],
+    buildId: "test",
+  });
+  for (const event of [
+    "changed",
+    "other",
+  ]) {
+    const id = `listen-${event}`;
+    receive({
+      kind: "listen",
+      id,
+      event,
+    });
+    boundary.send(opened.route, {
+      kind: "result",
+      protocol: PROTOCOL_VERSION,
+      id,
+      payload: {
+        subscriptionId: `sub-${event}`,
+      },
+    });
+  }
+  expect(ended).toEqual([]);
+
+  receive({
+    kind: "unlisten",
+    id: "unlisten-changed",
+    subscriptionId: "sub-changed",
+  });
+  expect(ended).toEqual([
+    "changed",
+  ]);
+  expect(boundary.eventRoute("changed")).toBeUndefined();
+  // An unknown or repeated subscription ID is not an ended subscription.
+  receive({
+    kind: "unlisten",
+    id: "unlisten-again",
+    subscriptionId: "sub-changed",
+  });
+  expect(ended).toEqual([
+    "changed",
+  ]);
+
+  boundary.send(opened.route, {
+    kind: "subscription-error",
+    protocol: PROTOCOL_VERSION,
+    subscriptionId: "sub-other",
+    error: {
+      code: "INTERNAL",
+      message: "Subscription ended.",
+    },
+  });
+  expect(ended).toEqual([
+    "changed",
+    "other",
+  ]);
+  expect(boundary.eventRoute("other")).toBeUndefined();
+});
+
+test("a pending listen keeps the event route but only a confirmed listen counts as subscribed, and a rejected listen is reported", () => {
+  const source = "https://app.bunaway.local/index.html";
+  const packets: Packet[] = [];
+  const ended: string[] = [];
+  const boundary = new ViewBoundary(
+    {
+      id: "main",
+      origins: [
+        "https://app.bunaway.local",
+      ],
+      commands: [],
+      events: [
+        "changed",
+      ],
+      host: {
+        permissions: [],
+      },
+    },
+    {
+      origin: (text) => new URL(text).origin,
+      source: () => source,
+      ready: () => true,
+      capacity: () => true,
+      forward: (packet) => packets.push(packet),
+      deliver: () => {},
+      log: () => {},
+      subscriptionEnded: (event) => ended.push(event),
+    },
+  );
+  const receive = (message: object) =>
+    boundary.receive(
+      source,
+      JSON.stringify({
+        protocol: PROTOCOL_VERSION,
+        ...message,
+      }),
+    );
+  receive({
+    kind: "hello",
+    features: [],
+    buildId: "test",
+  });
+  const opened = packets[0];
+  if (opened?.kind !== "session-open") {
+    throw new Error("Missing session");
+  }
+  expect(boundary.subscribed("changed")).toBe(false);
+  boundary.send(opened.route, {
+    kind: "hello",
+    protocol: PROTOCOL_VERSION,
+    features: [],
+    buildId: "test",
+  });
+
+  // While the result is crossing the channel, events are routable but nothing is confirmed.
+  receive({
+    kind: "listen",
+    id: "listen-rejected",
+    event: "changed",
+  });
+  expect(boundary.eventRoute("changed")).toEqual(opened.route);
+  expect(boundary.subscribed("changed")).toBe(false);
+  expect(ended).toEqual([]);
+
+  boundary.send(opened.route, {
+    kind: "error",
+    protocol: PROTOCOL_VERSION,
+    id: "listen-rejected",
+    error: {
+      code: "PERMISSION_DENIED",
+      message: "Not allowed.",
+    },
+  });
+  expect(ended).toEqual([
+    "changed",
+  ]);
+  expect(boundary.eventRoute("changed")).toBeUndefined();
+  expect(boundary.subscribed("changed")).toBe(false);
+
+  // A successful listen is confirmed by its result and does not report an ended subscription.
+  receive({
+    kind: "listen",
+    id: "listen-accepted",
+    event: "changed",
+  });
+  boundary.send(opened.route, {
+    kind: "result",
+    protocol: PROTOCOL_VERSION,
+    id: "listen-accepted",
+    payload: {
+      subscriptionId: "sub-changed",
+    },
+  });
+  expect(boundary.subscribed("changed")).toBe(true);
+  expect(ended).toEqual([
+    "changed",
+  ]);
+
+  // A closed boundary has no subscriptions.
+  boundary.closed = true;
+  expect(boundary.subscribed("changed")).toBe(false);
+});
+
 test("close validates the document and envelope, and can revoke before negotiation", () => {
   const source = "https://app.bunaway.local/index.html";
   const packets: Packet[] = [];

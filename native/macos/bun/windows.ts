@@ -419,6 +419,7 @@ export class MacosWindows {
       setGeometry: unsupported,
       setFullscreen: unsupported,
       setCloseConfirmation: unsupported,
+      respondClose: unsupported,
     };
   }
 

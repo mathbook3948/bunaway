@@ -6,6 +6,9 @@ status: accepted
 
 결정일: 2026-10-07
 
+[ADR 0020](./0020-close-and-quit-lifecycle.md)이 `onReady`, `onWillQuit`, `onQuit`, `onAllWindowsClosed`,
+Windows 세션 종료, 창 수명 이벤트와 닫기 요청을 이 결정에 더한다.
+
 ## 배경
 
 ADR 0006은 같은 앱 데이터 디렉터리의 중복 실행을 거부하고 마지막 창을 닫으면

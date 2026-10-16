@@ -140,7 +140,9 @@ Windows의 `beforeQuit`, `onOpen`과 트레이 종료 동작은 현재 macOS 기
 - [ ] ready 이전 파일 열기, URL 열기와 종료 요청의 순서를 정한다.
 - [ ] 마지막 창 닫기, 앱 종료, app hide/show와 Dock 재활성화를 구분한다.
 - [ ] 종료 취소 뒤 기존 창과 세션을 유지하고 개발 CLI 중단은 취소를 우회한다.
-- [ ] ready, before-quit, will-quit, quit과 모든 창 닫힘의 공개 이벤트를 제공한다.
+- [ ] Windows의 `onReady`, `onWillQuit`, `onQuit`, `onAllWindowsClosed`와 `ShutdownReason`에 맞춰 macOS 훅을 제공한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
+- [ ] macOS 로그아웃, 재시작과 시스템 종료를 `"session-end"` 원인의 취소 불가 종료로 처리하고 정리 기한을 정한다.
+- [ ] `windows.lifecycle`과 `windows.closeRequested` 이벤트, `windows.respondClose` 작업을 AppKit 창에 연결한다. 현재 macOS 호스트에는 `respondClose`가 등록되어 있지 않아 macOS 정책에 넣으면 시작 시 실패하고, 두 이벤트도 발행하지 않는다.
 - [ ] exit, relaunch와 인자 보존, 앱 및 런타임 버전, 실행 경로와 packaged 상태를 조회한다.
 - [ ] 앱 WebView와 일반 브라우저 및 SSR 실행을 구분하는 공개 기능을 제공한다.
 - [ ] About 패널, 앱 이름과 데이터 경로 지정, 비정상 종료 이벤트를 제공한다.

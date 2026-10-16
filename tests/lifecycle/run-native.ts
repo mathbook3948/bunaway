@@ -91,6 +91,7 @@ if (target === "windows-x64") {
     await test("windows-window-readiness.ts");
     await test("windows-multiple-windows.ts");
     await test("windows-owned-modal.ts");
+    await test("windows-close-request.ts");
     await run(
       [
         inputs.bun,
@@ -160,6 +161,8 @@ if (target === "windows-x64") {
       "dev-veto",
       "dev-hide",
       "dev-pending",
+      "lifecycle",
+      "dev-lifecycle",
     ]) {
       await test("windows-desktop.ts", [
         scenario,
@@ -182,6 +185,16 @@ if (target === "windows-x64") {
       "force-tray",
     ]) {
       await test("windows-windowless.ts", [
+        scenario,
+      ]);
+    }
+    // Session end is delivered to a real app window, keep-alive control window and tray window.
+    for (const scenario of [
+      "window",
+      "control",
+      "tray",
+    ]) {
+      await test("windows-session-end.ts", [
         scenario,
       ]);
     }
