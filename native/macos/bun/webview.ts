@@ -541,6 +541,8 @@ export class MacosWebview {
           return this.webview;
         },
         viewPolicy.origins,
+        this.window,
+        () => this.application.isActive(),
       );
       this.diagnostics.record("created");
       this.ready = new Promise<void>((resolveReady, reject) => {

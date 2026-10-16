@@ -1,3 +1,4 @@
+import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -15,6 +16,19 @@ const root =
 const output = resolve(root, "build/windows-webview-controls");
 const assets = resolve(output, "assets");
 const reportPath = resolve(root, "build/windows-webview-controls-results.json");
+/** Unique caption so FindWindowW cannot match an unrelated desktop window. */
+const windowCaption = (view: string) => `Bunaway WebView controls ${view}`;
+// Win32 SendInput constants for one absolute left click.
+const INPUT_SIZE = 40;
+const INPUT_MOUSE = 0;
+const MOUSEEVENTF_MOVE = 0x0001;
+const MOUSEEVENTF_LEFTDOWN = 0x0002;
+const MOUSEEVENTF_LEFTUP = 0x0004;
+const MOUSEEVENTF_ABSOLUTE = 0x8000;
+const ABSOLUTE_COORDINATE_RANGE = 65535;
+const SM_CXSCREEN = 0;
+const SM_CYSCREEN = 1;
+const SHORT_FOCUS_WAIT_MS = 1_500;
 
 if (!process.argv.includes("--child")) {
   await mkdir(resolve(assets, "web"), {
@@ -153,6 +167,90 @@ if (!process.argv.includes("--child")) {
       await Bun.sleep(10);
     }
   };
+  const input = dlopen("user32.dll", {
+    FindWindowW: {
+      args: [
+        "ptr",
+        "ptr",
+      ],
+      returns: "u64",
+    },
+    GetWindowRect: {
+      args: [
+        "u64",
+        "ptr",
+      ],
+      returns: "i32",
+    },
+    GetSystemMetrics: {
+      args: [
+        "i32",
+      ],
+      returns: "i32",
+    },
+    SendInput: {
+      args: [
+        "u32",
+        "ptr",
+        "i32",
+      ],
+      returns: "u32",
+    },
+  });
+  /**
+   * Send a real left click at the center of a window, as a user would to give its WebView
+   * keyboard focus. Test-only: host code never moves focus on behalf of a state read.
+   */
+  const clickWindowCenter = (view: string) => {
+    const caption = windowCaption(view);
+    const hwnd = input.symbols.FindWindowW(
+      null,
+      ptr(Buffer.from(`${caption}\0`, "utf16le")),
+    );
+    assert(hwnd !== 0n, `Window ${caption} was not found`);
+    const rect = new Int32Array(4);
+    assert(input.symbols.GetWindowRect(hwnd, ptr(rect)));
+    const [left = 0, top = 0, right = 0, bottom = 0] = rect;
+    const screenWidth = input.symbols.GetSystemMetrics(SM_CXSCREEN);
+    const screenHeight = input.symbols.GetSystemMetrics(SM_CYSCREEN);
+    const x = Math.round(
+      (((left + right) / 2) * ABSOLUTE_COORDINATE_RANGE) / (screenWidth - 1),
+    );
+    const y = Math.round(
+      (((top + bottom) / 2) * ABSOLUTE_COORDINATE_RANGE) / (screenHeight - 1),
+    );
+    const steps = [
+      MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE,
+      MOUSEEVENTF_LEFTDOWN,
+      MOUSEEVENTF_LEFTUP,
+    ];
+    const events = Buffer.alloc(INPUT_SIZE * steps.length);
+    steps.forEach((flags, index) => {
+      const base = INPUT_SIZE * index;
+      events.writeUInt32LE(INPUT_MOUSE, base);
+      events.writeInt32LE(x, base + 8);
+      events.writeInt32LE(y, base + 12);
+      events.writeUInt32LE(flags, base + 20);
+    });
+    assert.equal(
+      input.symbols.SendInput(steps.length, ptr(events), INPUT_SIZE),
+      steps.length,
+    );
+  };
+  const isMainWebViewFocused = async () =>
+    (await windows.getWebViewState(main)).focused;
+  /** Wait until the main WebView holds keyboard focus, clicking only if activation alone is not enough. */
+  const focusMainWebView = async () => {
+    await windows.focus(main);
+    const deadline = Date.now() + SHORT_FOCUS_WAIT_MS;
+    while (Date.now() < deadline && !(await isMainWebViewFocused())) {
+      await Bun.sleep(10);
+    }
+    if (!(await isMainWebViewFocused())) {
+      clickWindowCenter("main");
+    }
+    await waitFor(isMainWebViewFocused);
+  };
   const ready = async (path: string, count = 1) => {
     await waitFor(() => (arrivals.get(path) ?? 0) >= count);
     await waitFor(async () => {
@@ -172,6 +270,8 @@ if (!process.argv.includes("--child")) {
     const initialState = await windows.getWebViewState(main);
     assert.equal(initialState.title, "/index.html");
     assert.equal(initialState.loading, false);
+    // Hidden windows are never the foreground window.
+    assert.equal(initialState.focused, false);
     assert.equal(initialState.canGoBack, false);
     assert.equal(initialState.canGoForward, false);
     assert.equal(await windows.goBack(main), false);
@@ -301,9 +401,38 @@ if (!process.argv.includes("--child")) {
       url: `${origin}/index.html`,
     });
     await ready("/index.html", 4);
-    await windows.close({
+
+    // Focus: peer takes the foreground, then the main WebView regains input focus.
+    const peer = {
       view: "peer",
-    });
+    };
+    assert.equal(await windows.isDestroyed(peer), false);
+    await windows.focus(peer);
+    await waitFor(async () => await windows.isFocused(peer));
+    await waitFor(async () => !(await isMainWebViewFocused()));
+    await focusMainWebView();
+    assert.equal(await windows.isFocused(main), true);
+    // Reading state must not move focus.
+    const focusBefore = {
+      window: await windows.isFocused(main),
+      webView: await isMainWebViewFocused(),
+    };
+    await windows.getWebViewState(main);
+    await windows.getWebViewState(peer);
+    assert.deepEqual(
+      {
+        window: await windows.isFocused(main),
+        webView: await isMainWebViewFocused(),
+      },
+      focusBefore,
+    );
+    await windows.focus(peer);
+    await waitFor(async () => !(await isMainWebViewFocused()));
+    assert.equal(await windows.isFocused(main), false);
+
+    // Destroyed: a WebView lives exactly as long as its window.
+    await windows.close(peer);
+    assert.equal(await windows.isDestroyed(peer), true);
     await assert.rejects(
       windows.getWebViewState({
         view: "peer",
@@ -441,7 +570,7 @@ if (!process.argv.includes("--child")) {
         "denied",
       ].map((view) => ({
         view,
-        title: view,
+        title: windowCaption(view),
         home: `${origin}/${view === "main" ? "index" : view}.html`,
         visible: false,
         window: {

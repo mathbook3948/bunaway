@@ -767,6 +767,7 @@ export const windowOperations = {
       canGoBack: z.boolean(),
       canGoForward: z.boolean(),
       zoomFactor: z.number().positive(),
+      focused: z.boolean(),
     }),
   },
   "windows.navigateWebView": {

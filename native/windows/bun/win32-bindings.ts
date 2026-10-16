@@ -313,6 +313,20 @@ export const user = dlopen("user32.dll", {
     args: [],
     returns: "u64",
   },
+  GetGUIThreadInfo: {
+    args: [
+      "u32",
+      "ptr",
+    ],
+    returns: "i32",
+  },
+  IsChild: {
+    args: [
+      "u64",
+      "u64",
+    ],
+    returns: "i32",
+  },
   IsZoomed: {
     args: [
       "u64",
