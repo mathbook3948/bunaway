@@ -231,7 +231,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] minimize, maximize, unmaximize와 restore 전환을 제공한다.
 - [x] enterFullscreen과 leaveFullscreen 전환을 제공한다.
 - [ ] always-on-top 변경 이벤트를 제공한다.
-- [x] `windows.closeRequested`와 `windows.respondClose`로 비동기 저장 후 닫기 승인 흐름을 제공한다. 창의 문서가 구독할 때만 사용자 닫기를 대기시키며 자동 기한과 구독 해제에 따른 취소는 제공하지 않는다. 실제 WebView2 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
+- [x] `windows.closeRequested`와 `windows.respondClose`로 비동기 저장 후 닫기 승인 흐름을 제공한다. 창의 문서가 구독할 때만 사용자 닫기를 대기시키고 자동 기한은 두지 않는다. 대기 중 마지막 구독을 해제하면 요청을 취소하고 창을 유지한다. 실제 WebView2 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [x] DPI 변경을 resize 전환과 bounds의 `dpi`로 전달한다.
 - [ ] theme 변경 이벤트를 제공한다.
 - [x] Windows 로그오프와 시스템 종료의 WM_QUERYENDSESSION은 항상 허용하고 WM_ENDSESSION은 `"session-end"` 원인의 취소 불가 종료로 처리한다. UI 스레드는 최대 4초 동안 `onWillQuit`과 플러그인 StopHook을 기다리며 차단 API는 제공하지 않는다. 실제 HWND 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.

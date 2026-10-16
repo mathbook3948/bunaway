@@ -61,6 +61,12 @@ export class ViewBoundary {
       sdkReady?(route: Route): void;
       sessionOpened?(route: Route): void;
       revoked?(reason: string, generation: number, error?: WireError): void;
+      /**
+       * Called after an active subscription is removed, either by the client's `unlisten` or by the
+       * host ending it. `event` is the subscription's event name; a pending `listen` for the same
+       * event may still keep `eventRoute(event)` defined.
+       */
+      subscriptionEnded?(event: string): void;
     },
   ) {}
   private error(id: string, error: WireError) {
@@ -319,7 +325,7 @@ export class ViewBoundary {
             : {}),
         });
         if (message.kind === "unlisten") {
-          session.subscriptions.delete(message.subscriptionId);
+          this.endSubscription(session.subscriptions, message.subscriptionId);
         }
       } else if (message.kind === "cancel") {
         const pending = session.pending.get(message.id);
@@ -530,7 +536,7 @@ export class ViewBoundary {
       }
       subscription.sequence = message.sequence;
     } else {
-      session.subscriptions.delete(message.subscriptionId);
+      this.endSubscription(session.subscriptions, message.subscriptionId);
     }
     this.hooks.deliver(text);
     this.hooks.log("web-delivered", {
@@ -547,6 +553,23 @@ export class ViewBoundary {
           }
         : {}),
     });
+  }
+  /** Removes a subscription and reports its event; unknown IDs are ignored without notification. */
+  private endSubscription(
+    subscriptions: Map<
+      string,
+      {
+        event: string;
+      }
+    >,
+    subscriptionId: string,
+  ) {
+    const subscription = subscriptions.get(subscriptionId);
+    if (!subscription) {
+      return;
+    }
+    subscriptions.delete(subscriptionId);
+    this.hooks.subscriptionEnded?.(subscription.event);
   }
   private expire(id: string) {
     const session = this.session;

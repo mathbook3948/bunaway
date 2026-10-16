@@ -282,7 +282,8 @@ if (!process.argv.includes("--child")) {
             if (devShutdown && !devPending) {
               assert.equal(
                 await closeWindowsApp(child.pid),
-                trayWindow ? 2 : 1,
+                // keep-alive apps also own a control window with the app class.
+                trayWindow || closeLifecycle ? 2 : 1,
               );
               continue;
             }

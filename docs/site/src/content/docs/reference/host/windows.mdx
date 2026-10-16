@@ -494,7 +494,7 @@ await windows.close({ view: "dialog" });
 | `windows.setFullscreen` | `{ view, windowId?, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원 |
 | `windows.setCloseConfirmation` | `{ view, windowId?, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
 | `windows.close` | `{ view, windowId? }` | `Promise<boolean>`. 닫기 승인 시 `true`, 확인이나 앱 종료를 취소하거나 트레이로 숨기면 `false`. 정리 완료를 기다리지는 않음 |
-| `windows.respondClose` | `{ view, windowId?, requestId: number, allow: boolean }` | `Promise<null>`. 대기 중인 [닫기 요청](#닫기-요청)에 답함. Windows 전용 |
+| `windows.respondClose` | `{ view, windowId?, requestId: number, allow: boolean }` | `Promise<null>`. 대기 중인 [닫기 요청](#닫기-요청)에 답함. 백엔드 또는 질문을 받은 창 자신의 문서만 호출할 수 있고 다른 호출자는 `PERMISSION_DENIED`. Windows 전용 |
 
 크기 제약과 `setSize`의 너비, 높이는 96 DPI 기준 논리 픽셀입니다. Windows가 현재 창의 DPI에 맞춰 실제 픽셀 크기로 변환합니다. 사용자 크기 조절, 최대화와 복원에도 제약을 적용합니다. 제약보다 작은 초기 크기와 `setSize` 값은 최소 크기로, 큰 값은 최대 크기로 보정합니다. 최소값이 최대값보다 크거나 값이 정수가 아니거나 200–4096 범위를 벗어나면 `INVALID_ARGUMENT`이며 기존 제약은 바뀌지 않습니다.
 `setMinSize`와 `setMaxSize`는 지정한 쌍을 각각 교체하고 반대쪽 제약은 유지합니다. `setSizeConstraints`는 네 축 제약 전체를 교체하므로 전달하지 않은 축은 해제됩니다. 한 축에만 제약을 둘 수 있습니다.
@@ -935,14 +935,19 @@ await windows.unmaximize({ view: "editor" });
   이미 답했거나 취소된 요청, 보낸 적 없는 요청, 이전 요청에 대한 늦은 답이 해당합니다.
 - 요청이 대기 중일 때 같은 창의 반복 사용자 닫기는 무시하고 공개 `windows.close`는 `BUSY`로 실패합니다.
 
+`respondClose`는 신뢰된 백엔드 또는 질문을 받은 창 자신의 문서만 호출할 수 있습니다. 다른 창의 문서가
+호출하면 유효한 `requestId`여도 `PERMISSION_DENIED`로 실패하고 요청은 그대로 대기합니다.
+
 요청은 답 없이 끝날 수 있으며 이때 창은 열려 있습니다. 창의 문서가 다른 곳으로 탐색하거나 세션이 철회되면,
-또는 이벤트를 전달할 수 없으면 요청을 취소합니다. 강제 닫기, 신뢰된 `windows.destroy`, 재생성,
-앱 종료와 세션 종료는 창을 닫고 대기를 끝냅니다. 다음 닫기는 요청을 보내지 않습니다.
+마지막 `windows.closeRequested` 구독을 해제하면, 또는 이벤트를 전달할 수 없으면 요청을 취소합니다.
+강제 닫기, 신뢰된 `windows.destroy`, 재생성, 앱 종료와 세션 종료는 창을 닫고 대기를 끝냅니다.
+다음 닫기는 요청을 보내지 않습니다.
 `closeBehavior: "hide"`의 숨김, `windows.recreate`, splashscreen 전환, 부모와 함께 닫히는 자식 창에도
 요청을 보내지 않습니다.
 
 대기에는 자동 기한이 없으므로 앱이 반드시 답해야 합니다. 신뢰된 `windows.destroy`와 앱 종료는 대기 중에도
-진행합니다. 대기 중에 구독을 해제해도 요청은 취소하지 않으므로 답할 수 있는 상태를 유지하세요.
+진행합니다. 대기 중에 마지막 `windows.closeRequested` 구독을 해제하면 요청을 취소하고 창은 열려 있습니다.
+리스너가 예외로 끝나 구독이 사라지는 경우도 같으므로 실패해도 답하도록 `try/finally`로 감싸세요.
 
 ```ts
 import { createClient } from "@bunaway/client";
@@ -953,13 +958,18 @@ import type app from "../../src-bunaway/app";
 const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>();
 await client.ready;
 const release = await client.listen("windows.closeRequested", async ({ payload }) => {
-  const saved = await saveDraft(); // 앱이 정의한 비동기 저장 함수입니다.
-  await windows.respondClose({
-    view: "editor",
-    windowId: payload.windowId,
-    requestId: payload.requestId,
-    allow: saved,
-  });
+  let saved = false;
+  try {
+    saved = await saveDraft(); // 앱이 정의한 비동기 저장 함수입니다.
+  } finally {
+    // 저장이 실패해도 답해야 창이 대기 상태로 남지 않습니다.
+    await windows.respondClose({
+      view: "editor",
+      windowId: payload.windowId,
+      requestId: payload.requestId,
+      allow: saved,
+    });
+  }
 }, { onError: (error) => console.error(error.code, error.message) });
 // 컴포넌트 정리에서 await release()를 호출하고 공유 클라이언트는 유지합니다.
 ```

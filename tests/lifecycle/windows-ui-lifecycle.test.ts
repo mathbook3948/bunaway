@@ -1582,6 +1582,66 @@ test(
   timeoutMs + 5_000,
 );
 
+test(
+  "a window whose WebView controller never becomes ready emits no lifecycle events",
+  async () => {
+    const ui = await startUI(undefined, undefined, undefined, true, {
+      lifecycleEvents: true,
+      failCreationNumber: 2,
+      creationFailure: "controller",
+    });
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      const main = validateWindowOutput(
+        "windows.listInstances",
+        await ui.call("windows.listInstances", null),
+      )[0];
+      await listenToLifecycle(ui, "main", main?.windowId ?? "");
+      const failure = await ui
+        .call("windows.createInstance", {
+          view: "editor",
+        })
+        .catch((error: unknown) => error);
+      expect(String(failure)).toContain("INTERNAL");
+      // The failed lifetime is released natively, yet it never announced itself.
+      await ui.waitFor(
+        () => Atomics.load(ui.lifecycle, uiLifecycleSlots.destroy) === 1,
+      );
+      await ui.call("windows.listInstances", null);
+      expect(lifecycleDeliveries(ui.packets, "main")).toEqual([]);
+
+      // A later successful creation still announces `created` once its controller is ready.
+      const created = validateWindowOutput(
+        "windows.createInstance",
+        await ui.call("windows.createInstance", {
+          view: "editor",
+        }),
+      );
+      await ui.waitFor(
+        () =>
+          lifecycleDeliveries(ui.packets, "main", created.windowId).length >= 1,
+      );
+      expect(
+        lifecycleDeliveries(ui.packets, "main").map((event) => event.phase),
+      ).toEqual([
+        "created",
+      ]);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
 /** `windows.closeRequested` deliveries to the `main` session, validated against the public event schema. */
 function closeRequestEvents(packets: Packet[]) {
   return packets.flatMap((packet) =>
@@ -1800,6 +1860,51 @@ test(
         "No pending close request.",
       );
       await settle();
+      expect(await isDestroyed()).toBe(false);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "ending the closeRequested subscription cancels the pending request, keeps the window open and frees later closes",
+  async () => {
+    const { ui, windowId, respond, settle, isDestroyed } =
+      await startCloseRequestUI();
+    try {
+      await ui.call("parser.run", "user-close");
+      await ui.waitFor(() => closeRequestEvents(ui.packets).length === 1);
+      // The document stops listening without answering, as when its listener throws.
+      await ui.deliverWebRequest(windowId, {
+        kind: "unlisten",
+        protocol: PROTOCOL_VERSION,
+        id: "unlisten-close-requested",
+        subscriptionId: "sub-main",
+      });
+      await settle();
+      expect(await isDestroyed()).toBe(false);
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.close)).toBe(0);
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.confirmations)).toBe(
+        0,
+      );
+      expect(String(await respond(1, true).catch((error) => error))).toContain(
+        "No pending close request.",
+      );
+
+      // The reservation is released: a new user close is neither ignored as pending nor asked
+      // again, and takes the confirmation path of a window without a subscription.
+      await ui.call("parser.run", "user-close");
+      await ui.waitFor(
+        () => Atomics.load(ui.lifecycle, uiLifecycleSlots.confirmations) === 1,
+      );
+      await settle();
+      expect(closeRequestEvents(ui.packets)).toHaveLength(1);
       expect(await isDestroyed()).toBe(false);
       await ui.channel.send({
         kind: "shutdown",

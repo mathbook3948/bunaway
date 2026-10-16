@@ -569,9 +569,10 @@ export const windowLifecycleSchema = {
  * It is not sent for recreation, splashscreen handoff, trusted `windows.destroy`, closing children with a
  * parent, app quit, shutdown or session end, nor when `closeBehavior` hides the window. While a request is
  * pending, further user closes of that window are ignored and `windows.close` fails with BUSY. There is no
- * deadline; a navigation or revoked session of the document, trusted destruction, app quit and session end
- * end the wait. A request that ends without an answer leaves the window open. Only the Windows host emits
- * this event.
+ * deadline; a navigation or revoked session of the document, the document ending its last
+ * `windows.closeRequested` subscription (for example after a listener failure), trusted destruction, app
+ * quit and session end also end the wait. A request that ends without an answer leaves the window open.
+ * Only the Windows host emits this event.
  */
 export const windowCloseRequestedSchema = {
   type: "object",
@@ -888,6 +889,8 @@ export const windowOperations = {
    * Answers the pending `windows.closeRequested` request of the target window. `allow: true` lets the
    * close continue without the target's own close confirmation; `false` keeps the window open.
    * Fails with INVALID_ARGUMENT when `requestId` is not pending (answered, cancelled or never sent).
+   * Only the trusted backend or the document of the asked window may answer; any other caller fails
+   * with PERMISSION_DENIED, even with a valid `requestId`.
    */
   "windows.respondClose": {
     input: z.strictObject({

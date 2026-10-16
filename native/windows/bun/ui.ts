@@ -710,7 +710,8 @@ function cancelCloseRequests() {
 /**
  * Whether the app has asked to decide this window's user close itself: its current document listens
  * for `windows.closeRequested` and may answer with `windows.respondClose`. Without a subscription the
- * close never waits on an app, and a policy that cannot answer would otherwise wait forever.
+ * close never waits on an app, and a policy that cannot answer would otherwise wait forever. Ending
+ * the last subscription while a request is pending cancels that request and keeps the window open.
  */
 function appDecidesClose(view: ViewState): boolean {
   return (
@@ -730,7 +731,8 @@ function appDecidesClose(view: ViewState): boolean {
 /**
  * Asks the window's own document whether it may close and waits for the answer.
  * The wait ends only by `respondClose` or a cancellation: revocation or navigation of the document,
- * an undeliverable event, forced or shutdown closes and session end. There is no deadline.
+ * the document ending its last `windows.closeRequested` subscription, an undeliverable event, forced
+ * or shutdown closes and session end. There is no deadline.
  */
 function askAppToDecideClose(view: ViewState): Promise<CloseDecision> {
   const { requestId, decision } = view.closeRequests.begin();
@@ -1212,6 +1214,18 @@ function createWindow(
     },
     sdkReady: (route) =>
       views.get(instanceKey)?.readiness?.sdkComplete(route.documentGeneration),
+    subscriptionEnded: (event) => {
+      const view = views.get(instanceKey);
+      // Without any listener left, nobody can answer the pending question. Cancelling keeps the
+      // window open and releases its closing reservation through closeWindow's cleanup.
+      if (
+        event === "windows.closeRequested" &&
+        view &&
+        view.boundary.eventRoute("windows.closeRequested") === undefined
+      ) {
+        view.closeRequests.cancel();
+      }
+    },
     revoked: (reason, generation, error) => {
       const view = views.get(instanceKey);
       if (!view) {
@@ -1355,6 +1369,10 @@ function createWindow(
           const view = views.get(instanceKey);
           assert(view);
           view.ready = true;
+          // The controller exists now; a retired or replaced lifetime never announces itself.
+          if (view.native === native && !view.lifecycle.closed) {
+            publishLifecycle(view, "created");
+          }
           startViews();
         },
         log: (event, data) =>
@@ -1400,9 +1418,6 @@ function createWindow(
   const identity = windows.getById(readiness.snapshot().windowId);
   assert(identity);
   relations.register(identity);
-  const created = views.get(instanceKey);
-  assert(created);
-  publishLifecycle(created, "created");
   if (replacement?.parent) {
     try {
       relations.setParent(
@@ -1453,13 +1468,16 @@ function publishReadiness(state: WindowReadiness): void {
  * Tell open sessions that may enumerate instances about one lifetime phase of a window.
  * The guard keeps each phase at-most-once per windowId. Shutdown and session end suppress delivery
  * because sessions are being torn down. A closed window's own boundary is already revoked, so it
- * is never a recipient of its own closed or destroyed phase.
+ * is never a recipient of its own closed or destroyed phase. Every later phase requires `created`,
+ * which is published once the WebView controller exists, so a lifetime whose controller never became
+ * ready (creation failed or timed out) emits no lifecycle events at all.
  */
 function publishLifecycle(view: ViewState, phase: WindowLifecyclePhase): void {
   if (
     stopping ||
     closingSent ||
     view.publishedLifecycle.has(phase) ||
+    (phase !== "created" && !view.publishedLifecycle.has("created")) ||
     !registry.operations.has("windows.listInstances")
   ) {
     return;

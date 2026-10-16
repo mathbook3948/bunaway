@@ -60,6 +60,8 @@ export const frameworkPaths = [
   "native/windows/bun/channel.ts",
   "native/windows/bun/ui.ts",
   "native/windows/bun/window-lifecycle.ts",
+  "native/windows/bun/session-end.ts",
+  "native/windows/bun/close-request.ts",
   "native/windows/bun/webview.ts",
   "native/windows/bun/webview-titlebar.ts",
   "native/windows/bun/downloads.ts",
