@@ -94,12 +94,17 @@ export async function must(
 ): Promise<ToolResult> {
   const result = await run(exe, args, options);
   if (result.code !== 0) {
-    const detail = (result.stderr || result.stdout).slice(0, 2000);
-    throw new Error(
-      `${basenameOf(exe)} exited ${result.code}${detail ? `: ${detail}` : ""}`,
-    );
+    throw toolFailure(exe, result);
   }
   return result;
+}
+
+/** Builds the error `must` throws for a nonzero exit, so callers with custom handling report identically. */
+export function toolFailure(exe: string, result: ToolResult): Error {
+  const detail = (result.stderr || result.stdout).slice(0, 2000);
+  return new Error(
+    `${basenameOf(exe)} exited ${result.code}${detail ? `: ${detail}` : ""}`,
+  );
 }
 
 function basenameOf(path: string): string {

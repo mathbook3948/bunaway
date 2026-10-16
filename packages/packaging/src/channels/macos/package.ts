@@ -2,8 +2,79 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, resolve } from "node:path";
-import { must } from "../../tools.ts";
+import { must, run, toolFailure } from "../../tools.ts";
 import { type Channel, directory, plistStrings } from "./common.ts";
+
+const DMG_CREATE_MAX_ATTEMPTS = 3;
+/** Pause before each retry; one entry per retry, so its length is `DMG_CREATE_MAX_ATTEMPTS - 1`. */
+const DMG_CREATE_RETRY_DELAYS_MS = [
+  1_000,
+  2_000,
+];
+const DMG_BUSY_MARKER = "Resource busy";
+
+/**
+ * Create a compressed DMG from `contents` at `artifact`, retrying only transient DiskImages
+ * "Resource busy" failures seen on CI runners (at most {@link DMG_CREATE_MAX_ATTEMPTS} attempts,
+ * waiting {@link DMG_CREATE_RETRY_DELAYS_MS} between them). Any other failure, or a busy failure
+ * on the last attempt, throws immediately with the same error `must` would produce.
+ *
+ * `stage` receives the regular-file output capture and must be owned by the caller.
+ */
+async function createDmg(
+  contents: string,
+  volumeName: string,
+  artifact: string,
+  stage: string,
+): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    // A busy failure may leave a partial image, which would make the next create fail with "file exists".
+    await rm(artifact, {
+      force: true,
+    });
+    const startedAt = performance.now();
+    // Some DiskImages helpers stall when their inherited output is a pipe.
+    // Regular-file capture also preserves failure diagnostics without waiting on helper pipe EOF.
+    const result = await run(
+      "hdiutil",
+      [
+        "create",
+        "-srcfolder",
+        contents,
+        "-format",
+        "UDZO",
+        "-volname",
+        volumeName,
+        artifact,
+      ],
+      {
+        captureDirectory: stage,
+      },
+    );
+    if (result.code === 0) {
+      return;
+    }
+    const isBusy = `${result.stderr}\n${result.stdout}`.includes(
+      DMG_BUSY_MARKER,
+    );
+    const delayMs = DMG_CREATE_RETRY_DELAYS_MS[attempt - 1];
+    if (
+      !isBusy ||
+      attempt >= DMG_CREATE_MAX_ATTEMPTS ||
+      delayMs === undefined
+    ) {
+      throw toolFailure("hdiutil", result);
+    }
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    const summary = (result.stderr || result.stdout)
+      .split("\n")[0]
+      ?.slice(0, 200);
+    console.log(
+      `hdiutil create busy, retrying: attempt ${attempt}/${DMG_CREATE_MAX_ATTEMPTS} took ${elapsedMs} ms, waiting ${delayMs} ms (${summary})`,
+    );
+    await Bun.sleep(delayMs);
+  }
+}
 
 /** Assemble a DMG or PKG in staging and preserve the previous artifact on tool failure. */
 export async function packageApp(options: {
@@ -48,24 +119,7 @@ export async function packageApp(options: {
         resolve(contents, basename(app)),
       ]);
       await symlink("/Applications", resolve(contents, "Applications"));
-      // Some DiskImages helpers stall when their inherited output is a pipe.
-      // Regular-file capture also preserves failure diagnostics without waiting on helper pipe EOF.
-      await must(
-        "hdiutil",
-        [
-          "create",
-          "-srcfolder",
-          contents,
-          "-format",
-          "UDZO",
-          "-volname",
-          name,
-          artifact,
-        ],
-        {
-          captureDirectory: stage,
-        },
-      );
+      await createDmg(contents, name, artifact, stage);
     } else {
       const args = [
         "--component",
