@@ -30,6 +30,8 @@ const STEP_TIMEOUT_MS = 10_000;
 const SETTLE_MS = 300;
 const TICK_MS = 50;
 const TICKS_AFTER_ALL_CLOSED = 3;
+/** Enough replacements to show that none of the replaced windows stays in `[NSApp windows]`. */
+const RECREATIONS = 3;
 const isSessionEnd = scenario.startsWith("session-end");
 
 async function until(predicate: () => boolean, what: string) {
@@ -230,6 +232,55 @@ const scripts: Record<string, () => Promise<void>> = {
     step("close-observer");
     await drive("close", "observer");
   },
+  async "recreate-release"() {
+    step("wait-main-page");
+    await until(logged("page:main"), "the main page");
+    step("wait-observer-page");
+    await until(logged("page:observer"), "the observer page");
+    for (let round = 1; round <= RECREATIONS; round++) {
+      step(`recreate-main-${round}`);
+      await windows.recreate({
+        view: "main",
+      });
+      step(`wait-recreated-main-page-${round}`);
+      await until(
+        loggedTimes("page:main", round + 1),
+        `the main page after recreation ${round}`,
+      );
+      step(`wait-replaced-main-destroyed-${round}`);
+      await until(
+        loggedTimes("lifecycle:destroyed:main", round),
+        `the replaced main destroyed after recreation ${round}`,
+      );
+    }
+    // The host released every replaced window. AppKit deallocates them on a later turn, so poll
+    // until the list holds only the live one instead of reading it once.
+    step("wait-replaced-windows-deallocated");
+    let listed = 0;
+    try {
+      await waitFor(async () => {
+        listed = await drive("windowCount", "main");
+        return listed === 1 ? listed : undefined;
+      }, "one window titled main in [NSApp windows]");
+    } catch (error) {
+      throw new Error(
+        `${String(error)} Last count: ${listed}, after ${RECREATIONS} recreations.`,
+        {
+          cause: error,
+        },
+      );
+    }
+    log(`mainWindowCount:${listed}`);
+    step("close-main");
+    await drive("close", "main");
+    step("wait-main-destroyed");
+    await until(
+      loggedTimes("lifecycle:destroyed:main", RECREATIONS + 1),
+      "main destroyed",
+    );
+    step("close-observer");
+    await drive("close", "observer");
+  },
   async "session-end"() {
     log("driving-session-end");
     step("power-off");
@@ -246,6 +297,15 @@ const scripts: Record<string, () => Promise<void>> = {
     // No power-off notification: only the quit reason of the Apple event marks a session end.
     step("quit-event-shut");
     await drive("quitEvent", "shut");
+  },
+  async "session-end-reply"() {
+    step("wait-main-page");
+    await until(logged("page:main"), "the main page");
+    log("driving-session-end");
+    // The stimulus comes from outside: the harness starts quit-event-sender.ts as a separate
+    // process once it sees this line, and that process waits for the reply to the quit event.
+    step("ready-for-quit-sender");
+    log("ready-for-quit-sender");
   },
   async sigterm() {
     step("ready-for-signal");

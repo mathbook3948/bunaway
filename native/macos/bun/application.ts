@@ -342,8 +342,9 @@ export class MacosApplication {
       this.suspendedQuitEvents.push(suspension);
     } else if (this.suspendedQuitEvents.length === 0) {
       // Without a suspension the event is replied to when this handler returns. When earlier
-      // events are still suspended they keep waiting for app cleanup instead.
-      this.sessionEnd.appCleanedUp();
+      // events are still suspended they keep waiting for app cleanup instead. App cleanup has not
+      // finished, so only the reply obligation ends here.
+      this.sessionEnd.replyNotHeld();
     }
   }
 

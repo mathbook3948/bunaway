@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 
 /** Runs the fixture in its own process because it replaces the AppKit modules globally. */
-async function runFixture(mode: "quit" | "keep-alive") {
+async function runFixture(mode: "quit" | "keep-alive" | "reopen-failure") {
   const child = Bun.spawn(
     [
       process.execPath,
@@ -99,5 +99,29 @@ test("macOS keep-alive closes the last window without a quit request and reports
   });
   expect(result.afterSecondEmpty).toEqual({
     windowsEmpty: 2,
+  });
+});
+
+test("macOS Dock reopen that cannot create its window logs the failure, keeps the app and retries on the next reopen", async () => {
+  const result = await runFixture("reopen-failure");
+  expect(result.afterFailedReopen).toEqual({
+    failures: [],
+    logged: [
+      {
+        event: "reopen-window-creation-failed",
+        view: "a",
+        code: "INTERNAL",
+      },
+    ],
+    windowsGone: 0,
+    aClosed: true,
+  });
+  // The consumed request is not retried by later ticks.
+  expect(result.afterIdleTicks).toEqual({
+    aClosed: true,
+  });
+  expect(result.afterNextReopen).toEqual({
+    failures: [],
+    aClosed: false,
   });
 });

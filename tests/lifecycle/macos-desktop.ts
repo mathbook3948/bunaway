@@ -6,6 +6,7 @@ import { bundleMacosHost } from "#cli/assets";
 import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
 import { type InstalledPlugin, installedPlugins } from "#cli/plugins";
+import { SESSION_END_WAIT_MS } from "../../native/windows/bun/session-end.ts";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
 import { driver } from "../fixtures/macos-desktop/driver.ts";
 import {
@@ -14,14 +15,17 @@ import {
 } from "../fixtures/macos-desktop/fixture-config.ts";
 
 /**
- * Real AppKit gate for the macOS close and quit lifecycle (ADR 0020). One compiled app runs seven
+ * Real AppKit gate for the macOS close and quit lifecycle (ADR 0020). One compiled app runs nine
  * scenarios; a UI-thread driver plugin triggers the delegate and window paths the OS would (including
  * self-addressed reopen and quit Apple events), and the app's desktop hooks record what happened.
  *
  * Not covered, because CI cannot log out: a real logout, restart or shutdown. The `session-end`
  * scenario posts NSWorkspaceWillPowerOffNotification and then sends a quit Apple event;
- * `session-end-quit-reason` sends a quit Apple event whose quit reason is `shut`. Both exercise the
- * host's quit event handler, which suspends the event and replies after app cleanup.
+ * `session-end-quit-reason` sends a quit Apple event whose quit reason is `shut`. Both send with
+ * `kAENoReply`, so nobody waits for the reply. `session-end-reply` therefore sends the same event from
+ * a separate process that waits for the reply (fixtures/macos-desktop/quit-event-sender.ts) and checks
+ * that the reply came after app cleanup and within SESSION_END_WAIT_MS. All three exercise the host's
+ * quit event handler, which suspends the event and replies after app cleanup.
  */
 
 assert.equal(process.platform, "darwin");
@@ -33,6 +37,14 @@ const directory = await mkdtemp(resolve(tmpdir(), "bunaway-macos-desktop-"));
 const SESSION_END_BUDGET_MS = 3000;
 const LAUNCH_TIMEOUT_MS = 30_000;
 const POLL_MS = 20;
+const QUIT_EVENT_SENDER = resolve(
+  root,
+  "tests/fixtures/macos-desktop/quit-event-sender.ts",
+);
+/** Quit reason the sender attaches; one of the reasons that mean a session end. */
+const SENDER_QUIT_REASON = "shut";
+/** `errAEEventNotPermitted`: the system denied this process the right to send Apple events to the app. */
+const ERR_AE_EVENT_NOT_PERMITTED = -1743;
 
 const HOOK_LINE =
   /^(onReady|onOpen|beforeQuit|onWillQuit|onQuit|onAllWindowsClosed|stopHook)(:|$)/;
@@ -53,9 +65,81 @@ type Scenario = {
   optionalTail?: string[];
   /** Whether the host log may lack `host-stopped`; a session end may exit before it. */
   hostStoppedOptional?: boolean;
+  /** Whether a separate process sends the quit event and waits for the reply; the reply is then checked against cleanup. */
+  waitsForQuitReply?: boolean;
   /** Further checks on the whole log. */
   verify?: (lines: string[]) => void;
 };
+
+/** Host log records kept in a failure message; enough to cover a window's load and handshake. */
+const HOST_LOG_TAIL_RECORDS = 60;
+
+/**
+ * The last host log records of a scenario without timestamps, as one line each. A page that fails
+ * before its handshake completes cannot log, so these records (`navigation-completed`,
+ * `session-open`, `web-message-rejected`, `revoke`, `request-timeout`) are the only account of it.
+ */
+async function hostLogTail(dataRoot: string): Promise<string> {
+  const file = Bun.file(resolve(dataRoot, "logs/host.log"));
+  if (!(await file.exists())) {
+    return "host.log: missing";
+  }
+  const records = (await file.text()).split("\n").filter(Boolean);
+  const summary = records.slice(-HOST_LOG_TAIL_RECORDS).map((line) => {
+    try {
+      const { t: _time, ...record } = JSON.parse(line);
+      return JSON.stringify(record);
+    } catch {
+      return line;
+    }
+  });
+  return `host.log tail:\n${summary.join("\n")}`;
+}
+
+/** What the quit event sender reported: its stdout line (see quit-event-sender.ts) and exit code. */
+type SenderOutcome = {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+};
+
+/**
+ * Checks the sender's outcome and the order of the app's cleanup against the reply. The sender
+ * logs `quit-reply-received` right after the reply returned, so a reply that came before
+ * `onWillQuit` or the stop hook shows as an earlier index.
+ */
+function verifyQuitReply(lines: string[], outcome: SenderOutcome) {
+  const detail = `sender stdout: ${outcome.stdout}\nsender stderr: ${outcome.stderr}`;
+  let report: {
+    ok?: boolean;
+    elapsedMs?: number;
+    errorCode?: number;
+  } = {};
+  try {
+    report = JSON.parse(outcome.stdout.trim());
+  } catch {
+    // The assertions below report the missing JSON with the raw output.
+  }
+  const permissionHint =
+    report.errorCode === ERR_AE_EVENT_NOT_PERMITTED
+      ? " (errAEEventNotPermitted: the system denied Apple events from the sender to the app, an Automation permission problem)"
+      : "";
+  assert(
+    outcome.exitCode === 0 && report.ok === true,
+    `quit event sender failed: exit ${outcome.exitCode}, errorCode ${report.errorCode}${permissionHint}\n${detail}`,
+  );
+  const replied = at(lines, "quit-reply-received");
+  const cleanedUp = at(lines, "stopHook");
+  const willQuit = at(lines, "onWillQuit:session-end");
+  assert(
+    cleanedUp < replied && willQuit < replied,
+    `the quit event was answered before app cleanup: onWillQuit at ${willQuit}, stopHook at ${cleanedUp}, reply at ${replied}\n${lines.join("\n")}`,
+  );
+  assert(
+    report.elapsedMs !== undefined && report.elapsedMs < SESSION_END_WAIT_MS,
+    `the quit event reply took ${report.elapsedMs} ms, not under ${SESSION_END_WAIT_MS} ms\n${detail}`,
+  );
+}
 
 /** Index of a line that must exist; ordering checks compare these. */
 function at(lines: string[], line: string): number {
@@ -165,6 +249,19 @@ const scenarios: Scenario[] = [
     },
   },
   {
+    // d2: recreating a window repeatedly leaves one window of that title in `[NSApp windows]`, so the
+    // replaced windows were released and deallocated.
+    name: "recreate-release",
+    hooks: [
+      ...OPEN,
+      "beforeQuit:last-window",
+      ...SHUTDOWN_AFTER("last-window"),
+    ],
+    verify(lines) {
+      at(lines, "mainWindowCount:1");
+    },
+  },
+  {
     // e: session end skips beforeQuit and suspends the quit Apple event without blocking Bun. The
     // OS may end the process right after the reply, so onQuit and the host's last log record may be missing.
     name: "session-end",
@@ -194,6 +291,22 @@ const scenarios: Scenario[] = [
     verify: verifyMainThreadStayedAlive,
   },
   {
+    // f2: the same, but the sender is a separate process that waits for the reply, so the host
+    // must hold the reply back until cleanup instead of answering at once.
+    name: "session-end-reply",
+    hooks: [
+      ...OPEN,
+      "onWillQuit:session-end",
+      "stopHook",
+    ],
+    optionalTail: [
+      "onQuit:session-end",
+    ],
+    hostStoppedOptional: true,
+    verify: verifyMainThreadStayedAlive,
+    waitsForQuitReply: true,
+  },
+  {
     // g: SIGTERM from the harness.
     name: "sigterm",
     hooks: [
@@ -205,6 +318,8 @@ const scenarios: Scenario[] = [
 
 const reports: object[] = [];
 let child: ReturnType<typeof Bun.spawn> | undefined;
+/** Quit event sender of the running scenario. The scenario awaits it; `finally` kills it if a failure left it running. */
+let sender: ReturnType<typeof Bun.spawn> | undefined;
 try {
   const assets = resolve(directory, "assets");
   await mkdir(resolve(assets, "web"), {
@@ -247,6 +362,8 @@ try {
         "windows.closeRequested",
       ],
       permissions: [
+        // test.pendingClose runs in main's command context and probes windows.close there.
+        "windows.close",
         "windows.respondClose",
       ],
     },
@@ -358,7 +475,8 @@ try {
     assets: inventory,
   });
 
-  for (const scenario of scenarios) {
+  /** Launches the compiled app for one scenario and checks its hooks, log and host log. */
+  const runScenario = async (scenario: Scenario) => {
     const home = resolve(directory, scenario.name);
     const dataRoot = resolve(
       home,
@@ -398,6 +516,7 @@ try {
     const output = new Response(launched.stdout).text();
     const errors = new Response(launched.stderr).text();
     let sessionEndStartedAt: number | undefined;
+    let senderOutcome: Promise<SenderOutcome> | undefined;
     // Observe the log while the app runs: the SIGTERM stimulus and the session-end clock need it.
     const watcher = (async () => {
       let signalled = false;
@@ -409,6 +528,40 @@ try {
           lines.includes("driving-session-end")
         ) {
           sessionEndStartedAt = Date.now();
+        }
+        if (
+          scenario.waitsForQuitReply &&
+          senderOutcome === undefined &&
+          lines.includes("ready-for-quit-sender")
+        ) {
+          // The sender blocks until the app replied; a separate process keeps this loop polling.
+          const started = Bun.spawn(
+            [
+              process.execPath,
+              QUIT_EVENT_SENDER,
+              String(launched.pid),
+              SENDER_QUIT_REASON,
+              eventsPath,
+            ],
+            {
+              stdout: "pipe",
+              stderr: "pipe",
+              timeout: LAUNCH_TIMEOUT_MS,
+            },
+          );
+          sender = started;
+          senderOutcome = (async () => {
+            const [stdout, stderr, exitCode] = await Promise.all([
+              new Response(started.stdout).text(),
+              new Response(started.stderr).text(),
+              started.exited,
+            ]);
+            return {
+              exitCode,
+              stdout,
+              stderr,
+            };
+          })();
         }
         if (
           scenario.name === "sigterm" &&
@@ -426,34 +579,48 @@ try {
     await watcher;
     await output;
     const stderr = await errors;
+    // The app is gone, so the sender has its reply or its connection error; await it so its log
+    // line and exit code are final before they are checked.
+    const quitSender = await senderOutcome;
     const lines = await readLines();
+    const hostTail = await hostLogTail(dataRoot);
     assert.equal(
       exitCode,
       0,
-      `${scenario.name}\n${stderr}\n${lines.join("\n")}`,
+      `exit code ${exitCode}\n${stderr}\n${lines.join("\n")}\n${hostTail}`,
     );
     assert.equal(
       lines.filter((line) => line.startsWith("script-failed")).length,
       0,
-      lines.join("\n"),
+      `${lines.join("\n")}\n${hostTail}`,
+    );
+    // A page that failed (or never got past its handshake) logs where it stopped.
+    assert.equal(
+      lines.filter((line) => line.startsWith("page-failed")).length,
+      0,
+      `${lines.join("\n")}\n${hostTail}`,
     );
     const hooks = lines.filter((line) => HOOK_LINE.test(line));
     assert.deepEqual(
       hooks.slice(0, scenario.hooks.length),
       scenario.hooks,
-      `${scenario.name}\n${lines.join("\n")}`,
+      `${lines.join("\n")}\n${hostTail}`,
     );
     // Whatever trails the required hooks must be a leading part of the optional tail.
     const trailing = hooks.slice(scenario.hooks.length);
     assert.deepEqual(
       trailing,
       (scenario.optionalTail ?? []).slice(0, trailing.length),
-      `${scenario.name}\n${lines.join("\n")}`,
+      `${lines.join("\n")}\n${hostTail}`,
     );
     // The initial open carries no arguments and a working directory.
     at(lines, "openArgs:0");
     at(lines, "openCwd:nonempty");
     scenario.verify?.(lines);
+    if (scenario.waitsForQuitReply) {
+      assert(quitSender, "the quit event sender was never started");
+      verifyQuitReply(lines, quitSender);
+    }
     if (scenario.name.startsWith("session-end")) {
       assert(sessionEndStartedAt !== undefined, "session end was not driven");
       // Suspending the quit event must leave Bun's event loop running, so cleanup completes and the
@@ -484,6 +651,17 @@ try {
           : exitedAt - sessionEndStartedAt,
       lines,
     });
+  };
+  for (const scenario of scenarios) {
+    try {
+      await runScenario(scenario);
+    } catch (error) {
+      // Whatever failed, the first line of the message names the scenario.
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`[scenario ${scenario.name}] ${reason}`, {
+        cause: error,
+      });
+    }
   }
   await writeJson(resolve(root, "build/macos-desktop-results.json"), {
     platform: process.platform,
@@ -493,7 +671,7 @@ try {
     reports,
   });
   console.log(
-    "PASS compiled AppKit close and quit lifecycle: Quit veto, last window, keep-alive Apple event reopen, close requests and lifecycle events, session-end suspended quit event (notification and quit reason) and SIGTERM",
+    "PASS compiled AppKit close and quit lifecycle: Quit veto, last window, keep-alive Apple event reopen, close requests and lifecycle events, repeated recreation without leaked windows, session-end suspended quit event (notification, quit reason and a separate process that waits for the reply) and SIGTERM",
   );
 } catch (error) {
   const diagnostics = resolve(root, "build/macos-desktop-diagnostics");
@@ -526,6 +704,10 @@ try {
     child.kill("SIGKILL");
   }
   await child?.exited;
+  if (sender?.exitCode === null) {
+    sender.kill("SIGKILL");
+  }
+  await sender?.exited;
   await rm(directory, {
     recursive: true,
     force: true,

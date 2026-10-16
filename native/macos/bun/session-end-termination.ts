@@ -81,6 +81,18 @@ export class SessionEndTermination {
   }
 
   /**
+   * Ends the reply obligation of a quit event that `quitEventReceived` answered `later` but that
+   * could not be suspended. The OS then replies when the event handler returns, so no `reply` call is
+   * owed and the wait timer is cleared. App cleanup is not marked finished: it is still running, and
+   * `appCleanedUp` stays the only way to record that. Does nothing outside the suspended phase.
+   */
+  replyNotHeld(): void {
+    if (this.phase === "suspended") {
+      this.finish();
+    }
+  }
+
+  /**
    * Ends the wait when the application object closes, sending a still-owed reply so the OS is never
    * left waiting. Safe to repeat.
    */

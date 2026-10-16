@@ -4,10 +4,14 @@ import type { Packet, Route } from "@bunaway/runtime-bun/worker-channel";
 
 /**
  * Drives the real MacosWindows close order, `windows.lifecycle` events and resident-app signals with
- * a fake WebView. `mode` is the first argument: `quit` (default close behavior) or `keep-alive`.
+ * a fake WebView. `mode` is the first argument: `quit` (default close behavior), `keep-alive` or
+ * `reopen-failure` (keep-alive whose Dock reopen cannot create its window).
  * Prints one JSON result for the test to assert.
  */
-const mode = process.argv[2] === "keep-alive" ? "keep-alive" : "quit";
+const mode =
+  process.argv[2] === "keep-alive" || process.argv[2] === "reopen-failure"
+    ? process.argv[2]
+    : "quit";
 const ORIGIN = "https://app.bunaway.local";
 const HOME = `${ORIGIN}/`;
 const protocol = PROTOCOL_VERSION;
@@ -34,6 +38,9 @@ Bun.plugin({
         contents: args.path.endsWith("/webview.ts")
           ? `export class MacosWebview {
               constructor(config, hooks) {
+                if (globalThis.failWebviewCreation) {
+                  throw new Error("fake creation failure");
+                }
                 globalThis.nativeHooks ??= {};
                 globalThis.nativeHooks[config.window.view] = hooks;
                 this.ready = Promise.resolve();
@@ -116,6 +123,8 @@ const delivered: {
   payload: Record<string, unknown>;
 }[] = [];
 const quitRequests: string[] = [];
+const logged: Record<string, unknown>[] = [];
+const failures: string[] = [];
 let windowsEmpty = 0;
 let windowsGone = 0;
 const desktop = new DesktopRequests({
@@ -156,9 +165,18 @@ const windows = new MacosWindows(
       });
     },
     capacity: () => true,
-    log: () => {},
+    log: (event: string, fields?: object) => {
+      logged.push({
+        event,
+        ...fields,
+      });
+    },
+    // Only the failed-reopen scenario inspects host failures; the others must not produce any.
     fail: (error: unknown) => {
-      throw error;
+      if (mode !== "reopen-failure") {
+        throw error;
+      }
+      failures.push(String(error));
     },
     desktop,
     windowsGone: () => {
@@ -253,7 +271,7 @@ const lifecycleSeenBy = (view: string) =>
 
 await settle();
 desktop.configure({
-  closeBehavior: mode,
+  closeBehavior: mode === "quit" ? "quit" : "keep-alive",
 });
 // Only the quit scenario asks the document; keep-alive closes straight away.
 subscribe(
@@ -361,6 +379,45 @@ if (mode === "quit") {
   };
   windows.tick();
   result.windowsGone = windowsGone;
+} else if (mode === "reopen-failure") {
+  nativeHooks.a?.close();
+  nativeHooks.b?.close();
+  await settle();
+  windows.tick();
+  // The Dock reopen cannot create its window: the host keeps running and only logs the failure.
+  const globals = globalThis as unknown as {
+    failWebviewCreation?: boolean;
+  };
+  globals.failWebviewCreation = true;
+  windows.requestShow();
+  windows.tick();
+  await settle();
+  result.afterFailedReopen = {
+    failures: [
+      ...failures,
+    ],
+    logged: logged.filter(
+      (entry) => entry.event === "reopen-window-creation-failed",
+    ),
+    windowsGone,
+    aClosed: isClosed("a"),
+  };
+  // The request was consumed, so later ticks do not retry; the next reopen does.
+  globals.failWebviewCreation = false;
+  windows.tick();
+  windows.tick();
+  result.afterIdleTicks = {
+    aClosed: isClosed("a"),
+  };
+  windows.requestShow();
+  windows.tick();
+  await settle();
+  result.afterNextReopen = {
+    failures: [
+      ...failures,
+    ],
+    aClosed: isClosed("a"),
+  };
 } else {
   // keep-alive: closing windows never asks the app to quit and the last one reports windows-empty.
   nativeHooks.a?.close();

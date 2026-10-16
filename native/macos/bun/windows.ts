@@ -715,12 +715,26 @@ export class MacosWindows {
     ) {
       return;
     }
-    const first = this.config.windows[0];
-    if (first) {
-      this.create(first);
-      this.views.get(first.view)?.native?.present();
-    }
+    // Consumed before creating, so a failing creation is not retried every tick: the next reopen or
+    // `show` request is the next attempt.
     this.showRequested = false;
+    const first = this.config.windows[0];
+    if (!first) {
+      return;
+    }
+    try {
+      this.create(first);
+    } catch (error) {
+      // `create` already marked the failed view closed and cleaned. A failed reopen must not end the
+      // host through the UI pump; with `closeBehavior: "quit"` the missing window is then handled
+      // like any other lost window by `quitWhenNoWindowRemains`, while `keep-alive` stays resident.
+      this.hooks.log("reopen-window-creation-failed", {
+        view: first.view,
+        code: error instanceof BunawayError ? error.code : "INTERNAL",
+      });
+      return;
+    }
+    this.views.get(first.view)?.native?.present();
   }
 
   /**

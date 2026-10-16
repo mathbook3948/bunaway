@@ -335,12 +335,21 @@ test("macOS keep-alive reports an empty app once, reopens the first window and q
   ]);
 });
 
-test("macOS SIGTERM runs the shutdown hooks with the interrupted reason", async () => {
+/**
+ * The host registers its signal handler with `process.on("SIGTERM")` (native/macos/bun/entry.ts), so
+ * `process.emit("SIGTERM")` runs the same listener as a delivered signal on every platform. Emitting
+ * replaces `process.kill` because on Windows a SIGTERM kill terminates the process without running
+ * handlers. OS signal delivery itself is not covered here; the macOS native `sigterm` scenario in
+ * tests/lifecycle/macos-desktop.ts checks it.
+ */
+const EMIT_SIGTERM = 'process.emit("SIGTERM", "SIGTERM");';
+
+test("macOS SIGTERM handler runs the shutdown hooks with the interrupted reason", async () => {
   const { log } = await runScenario({
     desktop: withClose(),
     // A pending veto would not matter either: the signal is not cancellable.
     vetoes: 1_000,
-    drive: 'process.kill(process.pid, "SIGTERM");',
+    drive: EMIT_SIGTERM,
   });
   expect(log).toEqual([
     "onReady",
@@ -354,12 +363,12 @@ test("macOS SIGTERM runs the shutdown hooks with the interrupted reason", async 
 /** Well under the forced shutdown deadline, which a deadlocked shutdown would have to reach. */
 const ORDERLY_STARTUP_SHUTDOWN_BUDGET_MS = 5_000;
 
-test("macOS SIGTERM before the backend is ready shuts down in order without waiting for the forced deadline", async () => {
+test("macOS SIGTERM handler before the backend is ready shuts down in order without waiting for the forced deadline", async () => {
   const { log, elapsedMs } = await runScenario({
     desktop: withClose(),
     holdSetup: true,
     drive: `
-      process.kill(process.pid, "SIGTERM");
+      ${EMIT_SIGTERM}
       // Setup is still running when the signal arrives; it finishes while shutdown is under way.
       await Bun.sleep(200);
       await releaseSetup();`,

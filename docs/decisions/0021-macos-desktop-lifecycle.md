@@ -27,6 +27,10 @@ Quit, Dock의 Quit, Dock 아이콘 클릭이라는 macOS 고유의 진입점이 
 `UNSUPPORTED`로 시작에 실패한다. 복원 경로가 트레이뿐인 `closeBehavior: "hide"`도 같은 이유로
 지원하지 않는다. 지원하는 값은 `"quit"`(기본)과 `"keep-alive"`다.
 창 없는 시작도 계속 `UNSUPPORTED`이며 앱 정의를 읽기 전에 설정 검증이 거부한다.
+Windows는 트레이 또는 `closeBehavior: "keep-alive"`가 있으면 시작 창 없이 실행을 유지하지만,
+macOS는 `keep-alive`여도 모든 창이 `startup: false`이거나 `app.windows`가 비어 있으면 호스트가
+시작할 때 `UNSUPPORTED`로 거부한다. 두 플랫폼에서 같은 앱 정의가 동작하려면 시작 창을 하나 이상
+선언해야 한다.
 
 지원하는 훅은 `onReady`, `onOpen`(초기 실행만), `onAllWindowsClosed`(`keep-alive`), `beforeQuit`,
 `onWillQuit`, `onQuit`과 `ShutdownReason`이다. 순서는 ADR 0020과 같다. `beforeQuit`, 종료 확정,

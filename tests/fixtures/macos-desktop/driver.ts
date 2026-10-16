@@ -32,8 +32,9 @@ const request = z
       "reopen",
       "powerOff",
       "visibleWindows",
+      "windowCount",
     ]),
-    /** Window title for `close`, or the quit reason code (such as `shut`) for `quitEvent`. */
+    /** Window title for `close` and `windowCount`, or the quit reason code (such as `shut`) for `quitEvent`. */
     title: z.string().optional(),
   })
   .strict();
@@ -44,6 +45,8 @@ const request = z
  * Quit command, a quit Apple event, closing a window, a reopen Apple event and the workspace
  * power-off notification. Stimuli run in a later main-thread turn, so the call returns at once with
  * the number of visible fixture windows before them; the outcome is read from the app's hooks.
+ * `visibleWindows` and `windowCount` are queries: they run at once and return the visible count or
+ * the count of every window with the given title.
  *
  * The adapter defines no `executeUI`, so the host runs this UI-thread operation through `execute`
  * for any caller. The backend scripts are the only caller in practice.
@@ -144,8 +147,9 @@ export const driver = defineNativePlugin({
         };
         /**
          * Fixture windows in AppKit's order, which is creation order; other windows are ignored by
-         * title. The list can include a replaced window that the host already closed and released,
-         * because AppKit keeps listing a non-visible window until it is deallocated.
+         * title. The list includes every window AppKit still holds, visible or not. A replaced
+         * window that the host closed and released leaves the list once AppKit deallocates it, which
+         * can be a pump turn after the release; `windowCount` lets a scenario wait for that.
          */
         const fixtureWindows = (): {
           window: ObjcObject;
@@ -176,6 +180,10 @@ export const driver = defineNativePlugin({
               (Number(o.integer(window, "isVisible")) & BOOL_MASK) !== 0,
           );
         const visibleWindows = () => visibleFixtureWindows().length;
+        /** All windows of `title` in `[NSApp windows]`, whatever their visibility. */
+        const windowsTitled = (title: string | undefined) =>
+          fixtureWindows().filter((candidate) => candidate.title === title)
+            .length;
         /**
          * Proves the main thread keeps running timers after a termination request: a thread blocked
          * inside a nested run loop (the NSTerminateLater path) would never reach this turn, because
@@ -196,9 +204,10 @@ export const driver = defineNativePlugin({
             sendSelfEvent("aevt", "quit", title);
             recordMainTickAfterTermination();
           } else if (action === "close") {
-            // Only a visible window is one the user could close. After `windows.recreate` the
-            // replaced window may still be listed ahead of its successor, and `performClose:` on it
-            // does nothing because it has no delegate and is already closed.
+            // Only a visible window is one the user could close. Right after `windows.recreate`
+            // the replaced window can still be listed ahead of its successor until AppKit
+            // deallocates it, and `performClose:` on it does nothing because it has no delegate
+            // and is already closed. Deallocation is asserted separately through `windowCount`.
             const matches = fixtureWindows().filter(
               (candidate) => candidate.title === title,
             );
@@ -229,7 +238,7 @@ export const driver = defineNativePlugin({
         return {
           execute(_operation, value) {
             const { action, title } = request.parse(value);
-            if (action !== "visibleWindows") {
+            if (action !== "visibleWindows" && action !== "windowCount") {
               // A stimulus starts outside this operation's call stack, so the operation returns
               // before AppKit re-enters the host. A failure has no caller left and goes to the log,
               // where the test treats it like a failed script.
@@ -249,7 +258,11 @@ export const driver = defineNativePlugin({
                 }
               }, 0);
             }
-            return o.withAutoreleasePool(visibleWindows);
+            return o.withAutoreleasePool(() =>
+              action === "windowCount"
+                ? windowsTitled(title)
+                : visibleWindows(),
+            );
           },
           dispose() {},
         };

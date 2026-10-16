@@ -138,6 +138,32 @@ test("a session end commits shutdown once and holds the quit event reply until a
   expect(calls.replies).toBe(1);
 });
 
+test("a quit event that cannot be suspended ends the reply duty without marking app cleanup finished", async () => {
+  const { calls, session } = termination(5);
+  expect(session.quitEventReceived()).toBe("later");
+  session.replyNotHeld();
+  // The cleared wait timer never replies, and nothing is owed to the OS.
+  await Bun.sleep(30);
+  expect(calls.replies).toBe(0);
+  // Cleanup finishing later has no suspended event left to release.
+  session.appCleanedUp();
+  expect(calls.replies).toBe(0);
+  expect(session.quitEventReceived()).toBe("now");
+  session.dispose();
+  expect(calls.replies).toBe(0);
+});
+
+test("replyNotHeld outside the suspended phase changes nothing", () => {
+  const { calls, session } = termination(10_000);
+  session.replyNotHeld();
+  expect(session.active).toBe(false);
+  expect(session.quitEventReceived()).toBe("later");
+  session.appCleanedUp();
+  expect(calls.replies).toBe(1);
+  session.replyNotHeld();
+  expect(session.quitEventReceived()).toBe("now");
+});
+
 test("a quit event that is itself the first session-end signal commits shutdown", () => {
   const { calls, session } = termination(10_000);
   expect(session.quitEventReceived()).toBe("later");
