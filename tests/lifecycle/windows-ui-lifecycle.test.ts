@@ -51,6 +51,8 @@ async function startUI(
     isolated?: boolean;
     failCreationNumber?: number;
     creationFailure?: "controller" | "constructor";
+    /** Withholds the controller completion of this creation until `parser.run` settles it. */
+    holdCreationNumber?: number;
     holdProfileReuse?: boolean;
     closeBehavior?: "keep-alive" | "quit";
     /**
@@ -228,7 +230,7 @@ async function startUI(
     ],
     `
     import { workerData } from "node:worker_threads";
-    import { Tray, requestFixtureClose } from ${JSON.stringify(resolve(import.meta.dir, "../fixtures/windows-ui-platform.ts"))};
+    import { Tray, requestFixtureClose, settleHeldController, hasHeldController } from ${JSON.stringify(resolve(import.meta.dir, "../fixtures/windows-ui-platform.ts"))};
     import { defineNativePlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
     import { z } from ${JSON.stringify(Bun.resolveSync("zod", import.meta.dir))};
     const state = new Int32Array(workerData.parsing);
@@ -238,6 +240,8 @@ async function startUI(
     const execute = (_name,input) => {
       Atomics.add(state,slots.executions,1);
       if(input === "user-close" || input === "force-close") requestFixtureClose("main", input === "force-close");
+      if(input === "held-controller") return hasHeldController() ? "held" : "none";
+      if(input === "ready-held" || input === "fail-held") return settleHeldController(input === "ready-held" ? "ready" : "fail") ? "settled" : "none";
       return input;
     };
     const parser = defineNativePlugin({name:"parser",operations:{run:{
@@ -309,6 +313,7 @@ async function startUI(
       webMessage: webMessage.buffer,
       failCreationNumber: lifecycleOptions.failCreationNumber,
       creationFailure: lifecycleOptions.creationFailure,
+      holdCreationNumber: lifecycleOptions.holdCreationNumber,
       trayFailures,
       ...(failView
         ? {
@@ -1340,6 +1345,101 @@ test(
   timeoutMs + 5_000,
 );
 
+test(
+  "a window still being created neither counts as live for the empty report nor re-arms it when creation fails",
+  async () => {
+    const ui = await startUI(undefined, "ui", undefined, true, {
+      holdCreationNumber: 2,
+    });
+    const emptyPackets = () =>
+      ui.packets.filter((packet) => packet.kind === "windows-empty").length;
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      // The editor's controller stays pending, so its creation call stays open.
+      const creation = ui
+        .call("windows.createInstance", {
+          view: "editor",
+        })
+        .catch((error: unknown) => error);
+      await ui.waitFor(
+        async () => (await ui.call("parser.run", "held-controller")) === "held",
+      );
+      // The only created window closes while another is being created: the app is empty.
+      await ui.call("parser.run", "user-close");
+      await ui.waitFor(() => emptyPackets() === 1);
+      // Creation fails before `created`; the creating window never counted, so nothing is re-armed.
+      expect(await ui.call("parser.run", "fail-held")).toBe("settled");
+      expect(String(await creation)).toContain("INTERNAL");
+      for (let tick = 0; tick < 3; tick++) {
+        await ui.call("windows.isDestroyed", {
+          view: "main",
+        });
+      }
+      expect(emptyPackets()).toBe(1);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+      expect(emptyPackets()).toBe(1);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "a window counts as live once its controller is ready, so closing it reports empty again",
+  async () => {
+    const ui = await startUI(undefined, "ui", undefined, true, {
+      holdCreationNumber: 2,
+    });
+    const emptyPackets = () =>
+      ui.packets.filter((packet) => packet.kind === "windows-empty").length;
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      const creation = ui.call("windows.createInstance", {
+        view: "editor",
+      });
+      await ui.waitFor(
+        async () => (await ui.call("parser.run", "held-controller")) === "held",
+      );
+      await ui.call("parser.run", "user-close");
+      await ui.waitFor(() => emptyPackets() === 1);
+      expect(await ui.call("parser.run", "ready-held")).toBe("settled");
+      const editor = validateWindowOutput(
+        "windows.createInstance",
+        await creation,
+      );
+      // The ready editor is live again, so its close is a new transition to zero windows.
+      expect(
+        await ui.call("windows.close", {
+          view: editor.viewId,
+          windowId: editor.windowId,
+        }),
+      ).toBe(true);
+      await ui.waitFor(() => emptyPackets() === 2);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
 const WM_QUERYENDSESSION = 0x0011;
 const WM_ENDSESSION = 0x0016;
 /** A message the session handler does not consume, used as a UI thread round trip. */
@@ -2005,6 +2105,105 @@ test(
       });
       expect(await ui.exited).toBe(0);
       expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.destroy)).toBe(1);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "shutdown-committed cancels the pending close request and stops new ones",
+  async () => {
+    const { ui, windowId } = await startCloseRequestUI();
+    // Host calls are denied once shutdown is committed, so UI thread round trips stand in for settling.
+    const settleUI = async () => {
+      for (let tick = 0; tick < 5; tick++) {
+        await ui.deliverWindowMessage(WM_NULL, 0, 0);
+      }
+    };
+    try {
+      await ui.call("parser.run", "user-close");
+      await ui.waitFor(() => closeRequestEvents(ui.packets).length === 1);
+      // The main thread approved a quit that the UI did not report itself.
+      await ui.channel.send({
+        kind: "shutdown-committed",
+      });
+      await settleUI();
+      // The pending question was cancelled, which keeps the window open.
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.close)).toBe(0);
+      // Another close ends in the confirmation path instead of asking the app again.
+      await ui.deliverWebRequest(windowId, undefined, "close");
+      await ui.waitFor(
+        () => Atomics.load(ui.lifecycle, uiLifecycleSlots.confirmations) === 1,
+      );
+      await settleUI();
+      expect(closeRequestEvents(ui.packets)).toHaveLength(1);
+      expect(ui.packets.some((packet) => packet.kind === "quit-request")).toBe(
+        false,
+      );
+      // The commit is idempotent, and the UI never reports a shutdown the main thread already owns.
+      await ui.channel.send({
+        kind: "shutdown-committed",
+      });
+      await settleUI();
+      expect(ui.packets.some((packet) => packet.kind === "closing")).toBe(
+        false,
+      );
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "windows.lifecycle is not emitted once the main thread committed shutdown",
+  async () => {
+    const ui = await startUI(undefined, undefined, undefined, true, {
+      lifecycleEvents: true,
+    });
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      const main = validateWindowOutput(
+        "windows.listInstances",
+        await ui.call("windows.listInstances", null),
+      )[0];
+      await listenToLifecycle(ui, "main", main?.windowId ?? "");
+      const editor = validateWindowOutput(
+        "windows.createInstance",
+        await ui.call("windows.createInstance", {
+          view: "editor",
+        }),
+      );
+      await ui.waitFor(
+        () =>
+          lifecycleDeliveries(ui.packets, "main", editor.windowId).length > 0,
+      );
+      const delivered = lifecycleDeliveries(ui.packets, "main").length;
+      await ui.channel.send({
+        kind: "shutdown-committed",
+      });
+      // Host calls are not needed: the renderer closes the editor directly on the UI thread.
+      await ui.deliverWebRequest(editor.windowId, undefined, "close");
+      for (let tick = 0; tick < 5; tick++) {
+        await ui.deliverWindowMessage(WM_NULL, 0, 0);
+      }
+      expect(lifecycleDeliveries(ui.packets, "main")).toHaveLength(delivered);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+      expect(lifecycleDeliveries(ui.packets, "main")).toHaveLength(delivered);
     } finally {
       await ui.close();
     }

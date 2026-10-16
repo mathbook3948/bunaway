@@ -158,6 +158,12 @@ const fixtures = {
     },
     "ui",
   ),
+  "shutdown-committed": fixture(
+    {
+      kind: "shutdown-committed",
+    },
+    "ui",
+  ),
   "session-open": fixture(
     {
       kind: "session-open",
@@ -948,6 +954,7 @@ const reservedPackets: {
       "desktop-control",
       "quit-request",
       "quit-cancelled",
+      "shutdown-committed",
       "fatal",
     ] as const
   ).map((kind) => ({

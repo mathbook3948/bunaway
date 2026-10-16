@@ -65,7 +65,12 @@ let failure: unknown;
 let stopping = false;
 let startupNavigationStarted = false;
 let startRequested = false;
-let closingSent = false;
+/**
+ * True once app shutdown is committed, whether this thread reported it (`closing`, `session-end`)
+ * or the main thread decided it alone (`shutdown-committed`). Gates every new close request,
+ * quit request, lifecycle event and visibility change, because nothing may be emitted afterwards.
+ */
+let shutdownCommitted = false;
 let initialized = false;
 let windows: Windows | undefined;
 let systemEvents: SystemEvents | undefined;
@@ -109,10 +114,10 @@ let quitPending = false;
  * Only the first reason is delivered, because the main thread reports a single reason to the app.
  */
 function signalClosing(reason: ShutdownReason) {
-  if (closingSent) {
+  if (shutdownCommitted) {
     return;
   }
-  closingSent = true;
+  shutdownCommitted = true;
   cancelCloseRequests();
   channel.notify({
     kind: "closing",
@@ -120,7 +125,7 @@ function signalClosing(reason: ShutdownReason) {
   });
 }
 function requestQuit(reason: "last-window" | "tray") {
-  if (stopping || closingSent || quitPending) {
+  if (stopping || shutdownCommitted || quitPending) {
     return;
   }
   quitPending = true;
@@ -133,13 +138,15 @@ let windowsWereLive = false;
 let windowsEmptyReported = false;
 /**
  * Tells the main thread once per transition to zero live windows while the app stays resident.
+ * Only windows whose controller is ready (the point where `created` is published) count as live, so
+ * a window still being created cannot re-arm the report and one that fails creation stays invisible.
  * A windowless start, a pending recreation, and an app already committed to shutdown never report.
  * Runs on every pump turn so a window that becomes live again re-arms the next report.
  */
 function reportWindowsEmpty() {
   const anyLive = [
     ...views.values(),
-  ].some((view) => !view.lifecycle.closed);
+  ].some((view) => view.ready && !view.lifecycle.closed);
   if (anyLive) {
     windowsWereLive = true;
     windowsEmptyReported = false;
@@ -151,7 +158,7 @@ function reportWindowsEmpty() {
     windowsEmptyReported ||
     !resident ||
     stopping ||
-    closingSent ||
+    shutdownCommitted ||
     replacements.size > 0
   ) {
     return;
@@ -162,7 +169,7 @@ function reportWindowsEmpty() {
   });
 }
 function visibility(action: "show" | "hide") {
-  if (stopping || closingSent) {
+  if (stopping || shutdownCommitted) {
     return;
   }
   showRequested = action === "show";
@@ -183,7 +190,7 @@ function visibility(action: "show" | "hide") {
 
 /** Restore live views or create the first declaration after old views and API operations finish. */
 function showWindows() {
-  if (!showRequested || stopping || closingSent) {
+  if (!showRequested || stopping || shutdownCommitted) {
     return;
   }
   assert(windows);
@@ -457,6 +464,11 @@ const channel = new Channel(
       visibility(packet.action);
     } else if (packet.kind === "quit-cancelled") {
       quitPending = false;
+    } else if (packet.kind === "shutdown-committed") {
+      // Idempotent: the main thread may repeat it, and a prior closing or session-end already set it.
+      shutdownCommitted = true;
+      quitPending = false;
+      cancelCloseRequests();
     } else if (packet.kind === "shutdown") {
       stopping = true;
       cancelReplacements();
@@ -523,7 +535,7 @@ const channel = new Channel(
         const call = registry.validateCall(operation.call);
         allowed =
           !stopping &&
-          !closingSent &&
+          !shutdownCommitted &&
           (packet.kind !== "grant" || packet.allowed) &&
           !!permissions &&
           (packet.kind !== "grant" || queued?.source === source) &&
@@ -633,7 +645,7 @@ async function executeWindowRequest(
         signal,
         beforeExecute() {
           // Closing commits locally before the main thread sends cancellation packets.
-          if (closingSent || stopping || !activeContext(queued.context)) {
+          if (shutdownCommitted || stopping || !activeContext(queued.context)) {
             throw new BunawayError({
               code: "CANCELLED",
               message: "Host call was cancelled.",
@@ -719,7 +731,7 @@ function appDecidesClose(view: ViewState): boolean {
   return (
     !quitPending &&
     !stopping &&
-    !closingSent &&
+    !shutdownCommitted &&
     registry.operations.has("windows.respondClose") &&
     registry.allowed(view.boundary.policy.host, {
       operation: "windows.respondClose",
@@ -829,7 +841,7 @@ async function closeWindow(
     let appApproved = false;
     if (mode === "close" && appDecidesClose(view)) {
       const decision = await askAppToDecideClose(view);
-      if (view.lifecycle.closed || stopping || closingSent) {
+      if (view.lifecycle.closed || stopping || shutdownCommitted) {
         return true;
       }
       // A cancelled request counts as not approved: the document that was asked is gone.
@@ -859,7 +871,7 @@ async function closeWindow(
       ) {
         return view.lifecycle.closed;
       }
-      if (stopping || closingSent || view.lifecycle.closed) {
+      if (stopping || shutdownCommitted || view.lifecycle.closed) {
         return true;
       }
     }
@@ -884,11 +896,11 @@ async function closeWindow(
         quitPending &&
         !view.lifecycle.closed &&
         !stopping &&
-        !closingSent
+        !shutdownCommitted
       ) {
         await Bun.sleep(5);
       }
-      return view.lifecycle.closed || stopping || closingSent;
+      return view.lifecycle.closed || stopping || shutdownCommitted;
     }
     if (mode === "recreate") {
       replacements.set(viewId, {
@@ -1187,7 +1199,7 @@ function createWindow(
   const boundary = new ViewBoundary(policy, {
     origin: originOf,
     source: () => native.source(),
-    ready: () => startupNavigationStarted && !stopping && !closingSent,
+    ready: () => startupNavigationStarted && !stopping && !shutdownCommitted,
     capacity: (count) =>
       channel.canSend(
         count,
@@ -1302,7 +1314,11 @@ function createWindow(
     hwnd: window.toString(),
   });
   windows.observe(window, spec.view, (snapshot, changes) => {
-    if (stopping || closingSent || views.get(instanceKey)?.native !== native) {
+    if (
+      stopping ||
+      shutdownCommitted ||
+      views.get(instanceKey)?.native !== native
+    ) {
       return;
     }
     sendNativeEvent(boundary, "windows.changed", {
@@ -1331,7 +1347,7 @@ function createWindow(
           current.native === native &&
           !current.lifecycle.closed &&
           !stopping &&
-          !closingSent
+          !shutdownCommitted
         ) {
           windows?.show(window, true);
         }
@@ -1444,7 +1460,7 @@ function createWindow(
 function publishReadiness(state: WindowReadiness): void {
   if (
     stopping ||
-    closingSent ||
+    shutdownCommitted ||
     !registry.operations.has("windows.getReadiness")
   ) {
     return;
@@ -1478,7 +1494,7 @@ function publishReadiness(state: WindowReadiness): void {
 function publishLifecycle(view: ViewState, phase: WindowLifecyclePhase): void {
   if (
     stopping ||
-    closingSent ||
+    shutdownCommitted ||
     view.publishedLifecycle.has(phase) ||
     (phase !== "created" && !view.publishedLifecycle.has("created")) ||
     !registry.operations.has("windows.listInstances")
@@ -1525,7 +1541,7 @@ function sendNativeEvent(
     })
     .catch((error) => {
       onUndelivered?.();
-      if (stopping || closingSent || !boundary.matches(route)) {
+      if (stopping || shutdownCommitted || !boundary.matches(route)) {
         return;
       }
       if (error instanceof BunawayError && error.code === "BUSY") {
@@ -1545,7 +1561,7 @@ function publishPluginSystemEvent(
   payload: import("@bunaway/protocol").JsonValue,
   requiredOperation: string,
 ): void {
-  if (stopping || closingSent) {
+  if (stopping || shutdownCommitted) {
     return;
   }
   publishSystemEvent(
@@ -1574,7 +1590,7 @@ try {
         // The main thread owns shutdown from here: marking the UI as closing stops new close
         // confirmations and quit requests, and abandons waits for pending ones. A prior
         // signalClosing() reason wins on the main thread, which keeps the first reason.
-        closingSent = true;
+        shutdownCommitted = true;
         cancelCloseRequests();
         channel.notify({
           kind: "session-end",
@@ -1697,7 +1713,7 @@ try {
           };
         },
         poll: () => channel.poll(),
-        stopping: () => stopping || closingSent || modalShutdownRequested,
+        stopping: () => stopping || shutdownCommitted || modalShutdownRequested,
       },
       shortcuts: {
         createWindow(receive) {
@@ -1709,7 +1725,7 @@ try {
           windows.destroy(hwnd);
         },
         emit(event, payload) {
-          if (stopping || closingSent) {
+          if (stopping || shutdownCommitted) {
             return;
           }
           for (const view of views.values()) {
@@ -1769,7 +1785,7 @@ try {
           };
         },
         emit(event, payload) {
-          if (stopping || closingSent) {
+          if (stopping || shutdownCommitted) {
             return;
           }
           for (const view of views.values()) {
@@ -1833,7 +1849,7 @@ try {
           tray.setMenu(items, selected);
         },
         emit(event, payload) {
-          if (stopping || closingSent) {
+          if (stopping || shutdownCommitted) {
             return;
           }
           for (const view of views.values()) {
@@ -1847,7 +1863,7 @@ try {
     monitorTracker = new MonitorTracker(
       monitorServices.list,
       (change) => {
-        if (stopping || closingSent) {
+        if (stopping || shutdownCommitted) {
           return;
         }
         for (const recipient of views.values()) {
@@ -2017,7 +2033,7 @@ try {
       }
     }
     if (
-      !closingSent &&
+      !shutdownCommitted &&
       !tray &&
       config.desktop?.closeBehavior !== "keep-alive" &&
       !adapters?.busy() &&

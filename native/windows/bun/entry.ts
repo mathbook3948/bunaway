@@ -128,10 +128,7 @@ export async function runWindowsApp(
         kind: "desktop-control",
         action,
       }),
-    () => {
-      stopping = true;
-      stopResolve();
-    },
+    announceShutdownCommitted,
     (error) => {
       console.error("Desktop callback failed:", error);
       void log
@@ -466,10 +463,21 @@ export async function runWindowsApp(
   function finishCall(id: string, response: HostResponse) {
     takeCall(id)?.resolve(response);
   }
+  /**
+   * Begins shutdown for a cause the UI thread did not report (an approved api, tray or last-window
+   * quit, or a signal). The UI is told before the later `shutdown` packet so it stops emitting window
+   * lifecycle events and close requests as soon as the commit is made. Repeatable.
+   */
+  function announceShutdownCommitted() {
+    stopping = true;
+    channel.notify({
+      kind: "shutdown-committed",
+    });
+    stopResolve();
+  }
   const onSignal = () => {
     desktop.commitShutdown("interrupted");
-    stopping = true;
-    stopResolve();
+    announceShutdownCommitted();
   };
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
@@ -707,12 +715,16 @@ export async function runWindowsApp(
       await channel.send({
         kind: "start",
       });
-      // onReady is queued ahead of the initial open so that open callbacks wait for it.
-      desktop.ready();
-      if (launch) {
-        desktop.open(launch, "initial");
+      // A shutdown committed while the start acknowledgement was pending makes open() throw, which
+      // would turn an orderly shutdown into a host failure, so skip the launch callbacks.
+      if (!stopping) {
+        // onReady is queued ahead of the initial open so that open callbacks wait for it.
+        desktop.ready();
+        if (launch) {
+          desktop.open(launch, "initial");
+        }
+        inbox?.start((input) => desktop.open(input, "second-instance"));
       }
-      inbox?.start((input) => desktop.open(input, "second-instance"));
     }
     await stopRequested;
   } catch (error) {

@@ -356,6 +356,13 @@ const packetDefinitions = {
     ],
     "control",
   ),
+  "shutdown-committed": definePacket(
+    {},
+    [
+      "ui",
+    ],
+    "control",
+  ),
   "session-open": definePacket(
     routedFields,
     [

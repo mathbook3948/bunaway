@@ -21,6 +21,7 @@ const controls = workerData as {
   webMessage?: SharedArrayBuffer;
   failCreationNumber?: number;
   creationFailure?: "controller" | "constructor";
+  holdCreationNumber?: number;
 };
 const cleanup = new Int32Array(controls.cleanup);
 const lifecycle = new Int32Array(controls.lifecycle);
@@ -284,6 +285,27 @@ export function requestFixtureClose(view: string, force: boolean): void {
   assert.equal(targets.length, 1, "Fixture close target must be unique.");
   targets[0]?.close(force);
 }
+/** Controller completion withheld for the creation numbered `holdCreationNumber`, until settled. */
+let heldController:
+  | {
+      ready(): void;
+      fail(): void;
+    }
+  | undefined;
+/**
+ * Completes the withheld controller as ready or failed, as when WebView2 answers late.
+ * Returns whether a controller was waiting.
+ */
+export function settleHeldController(outcome: "ready" | "fail"): boolean {
+  const held = heldController;
+  heldController = undefined;
+  held?.[outcome]();
+  return held !== undefined;
+}
+/** Whether a controller completion is currently withheld. */
+export function hasHeldController(): boolean {
+  return heldController !== undefined;
+}
 /** Match the controller callback's failure plus forced-close notification. */
 export class WebView {
   failure: unknown;
@@ -315,13 +337,21 @@ export class WebView {
       close: hooks.close,
     });
     webViews.set(hwnd, hooks);
+    const fail = () => {
+      this.failure = new Error("Controller completion failed in fixture");
+      hooks.close(true);
+    };
     queueMicrotask(() => {
-      if (
+      if (this.creationNumber === controls.holdCreationNumber) {
+        heldController = {
+          ready: () => hooks.ready(),
+          fail,
+        };
+      } else if (
         spec.view === controls.failView ||
         this.creationNumber === controls.failCreationNumber
       ) {
-        this.failure = new Error("Controller completion failed in fixture");
-        hooks.close(true);
+        fail();
       } else {
         hooks.ready();
       }
