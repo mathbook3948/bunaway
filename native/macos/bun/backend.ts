@@ -6,6 +6,7 @@ import {
   type HostContext,
   type HostResponse,
   PROTOCOL_VERSION,
+  SDK_READY_FEATURE,
 } from "@bunaway/protocol";
 import {
   Channel,
@@ -203,7 +204,10 @@ try {
         hello: {
           kind: "hello",
           protocol: PROTOCOL_VERSION,
-          features: [],
+          // Windows parity: SDK acknowledgement drives readiness and showWhenReady.
+          features: [
+            SDK_READY_FEATURE,
+          ],
           buildId: config.runtime.id,
         },
         runtime: {
