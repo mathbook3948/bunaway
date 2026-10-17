@@ -377,6 +377,38 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
       }
       await invoke(() => clipboard.clear(null));
       expect(await invoke(() => clipboard.readText(null))).toBeNull();
+      // WM_CLIPBOARDUPDATE: an external write and the plugin's own write both notify,
+      // and the payload carries no clipboard content.
+      for (const write of [
+        async () => {
+          await acquire();
+          try {
+            owner.write("external change");
+          } finally {
+            owner.close();
+          }
+        },
+        () =>
+          invoke(() =>
+            clipboard.writeText({
+              text: "own change",
+            }),
+          ),
+      ]) {
+        const change = invoke(() => clipboard.waitForChange(null));
+        // Let the UI Worker register the waiter before the clipboard changes.
+        await Bun.sleep(100);
+        await write();
+        const payload = await change;
+        expect(Object.keys(payload as object).sort()).toEqual([
+          "changedAt",
+          "sequence",
+        ]);
+        expect(payload).toMatchObject({
+          sequence: expect.any(Number),
+          changedAt: expect.any(Number),
+        });
+      }
       const image = {
         width: 2,
         height: 1,

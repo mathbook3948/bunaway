@@ -2,6 +2,7 @@ import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
   builtInFormatSchema,
+  changeSchema,
   hasFormatSchema,
   imageSchema,
   nullableTextSchema,
@@ -117,5 +118,10 @@ export const windowsOperations = {
     output: z.null(),
     handler: ({ items }, { instance, signal }) =>
       instance.writeFormats(items, signal),
+  }),
+  waitForChange: windowsOperation({
+    input: z.null(),
+    output: changeSchema,
+    handler: (_input, { instance, signal }) => instance.waitForChange(signal),
   }),
 };
