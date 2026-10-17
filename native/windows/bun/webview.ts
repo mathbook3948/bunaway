@@ -26,6 +26,9 @@ const embedded = Bun.embeddedFiles.some(
 );
 // COREWEBVIEW2_WEB_ERROR_STATUS from the pinned WebView2 SDK.
 const WEB_ERROR_OPERATION_CANCELED = 14;
+// x64 GUITHREADINFO: cbSize, flags, then hwndActive@8 and hwndFocus@16, ending with rcCaret.
+const GUI_THREAD_INFO_SIZE = 72;
+const GUI_THREAD_INFO_FOCUS_OFFSET = 16;
 const streams = dlopen("shlwapi.dll", {
   SHCreateMemStream: {
     args: [
@@ -902,7 +905,7 @@ export class WebView {
     );
   }
 
-  /** Read actual browser URL, title, history availability and controller zoom. */
+  /** Read actual browser URL, title, history availability, controller zoom and input focus. */
   getState() {
     const webview = this.requireWebView();
     return {
@@ -912,7 +915,34 @@ export class WebView {
       canGoBack: this.historyAvailable(38),
       canGoForward: this.historyAvailable(39),
       zoomFactor: this.zoomFactor(),
+      focused: this.hasInputFocus(),
     };
+  }
+
+  /**
+   * Whether this window is the OS foreground window and keyboard focus sits inside its WebView.
+   *
+   * The controller is parented to the top-level `hwnd`, so the foreground comparison uses it
+   * directly. WebView2 renders in child HWNDs that may belong to another (browser) process, but
+   * IsChild only walks the window tree and ignores process boundaries. A zero thread id asks for
+   * the foreground thread's GUI state. Reading never moves focus.
+   */
+  private hasInputFocus(): boolean {
+    if (user.symbols.GetForegroundWindow() !== this.hwnd) {
+      return false;
+    }
+    const info = new DataView(new ArrayBuffer(GUI_THREAD_INFO_SIZE));
+    info.setUint32(0, GUI_THREAD_INFO_SIZE, true);
+    // Without foreground GUI thread info the focus window cannot be confirmed.
+    if (!user.symbols.GetGUIThreadInfo(0, ptr(info.buffer))) {
+      return false;
+    }
+    const focusWindow = info.getBigUint64(GUI_THREAD_INFO_FOCUS_OFFSET, true);
+    return (
+      focusWindow !== 0n &&
+      focusWindow !== this.hwnd &&
+      user.symbols.IsChild(this.hwnd, focusWindow) !== 0
+    );
   }
 
   private historyAvailable(slot: 38 | 39): boolean {

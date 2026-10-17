@@ -70,6 +70,7 @@ try {
   };
   const app = {
     appId: "tests.macos.io",
+    title: "I/O lifecycle",
     windows: [
       {
         view: "main",

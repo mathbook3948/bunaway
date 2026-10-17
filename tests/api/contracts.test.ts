@@ -43,6 +43,7 @@ import {
   type TransportEvent,
   validateValue,
 } from "@bunaway/protocol";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import {
   bindHostAPI,
   contracts,
@@ -228,6 +229,7 @@ function context(
 ): CommandContext {
   const state = new Map<string, JsonValue>();
   return {
+    app: testAppInfo,
     host,
     signal,
     state: {

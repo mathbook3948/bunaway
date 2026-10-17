@@ -697,7 +697,7 @@ export function createOperations(
             message: "Window centering is not implemented on this platform.",
           });
         }
-        window.center();
+        window.center(call.payload.monitorId);
         break;
       case "windows.setFullscreen":
         window.setFullscreen(call.payload.fullscreen);

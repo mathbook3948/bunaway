@@ -14,6 +14,7 @@ import {
   NativeRegistry,
 } from "@bunaway/protocol";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
+import { testAppInfo, testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 const WORKER_TIMEOUT_MS = 10000;
@@ -43,6 +44,7 @@ async function withPowerUI(
   ]);
   const config: UIConfig = {
     runtime,
+    appMetadata: testAppMetadata,
     policy: {
       version: 1,
       views: [],
@@ -158,6 +160,7 @@ export const pluginImports = { power: { operations: async () => ({ createOperati
     }
     const controller = new AbortController();
     await exercise({
+      app: testAppInfo,
       signal: controller.signal,
       host: bindHostAPI(
         backendContext,

@@ -8,6 +8,7 @@ import { Worker } from "node:worker_threads";
 import dialog from "@bunaway/plugin-dialog";
 import type { HostResponse, JsonValue } from "@bunaway/protocol";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 // Win32 and TaskDialog message and key constants used to drive real dialogs.
@@ -160,6 +161,7 @@ test.skipIf(process.platform !== "win32")(
 export const pluginImports = { dialog: { operations: async () => ({ createOperations: plugin._definition.nativePlatforms.windows.create }) } };`,
       );
       const config: UIConfig = {
+        appMetadata: testAppMetadata,
         runtime: {
           id: "dialog-native",
           generation: crypto.randomUUID(),

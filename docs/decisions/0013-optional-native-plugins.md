@@ -11,6 +11,8 @@ status: accepted
 플러그인 패키지만 설치하도록 한다. Tauri의 설치, 앱 등록, 권한 허용 흐름을 참고하되
 앱 정의와 플러그인 구현은 Bun과 TypeScript를 기준으로 설계한다.
 
+[ADR 0022](./0022-app-info-context.md)의 앱 정보(`ctx.app`)는 앱 자신의 메타데이터이므로 이 결정의 선택 플러그인이 아니라 Core가 제공한다.
+
 ## 결정
 
 1. 저장, 앱 로그, 기능 지원 조회를 각각 `@bunaway/plugin-storage`,

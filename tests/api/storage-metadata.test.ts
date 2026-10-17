@@ -4,6 +4,7 @@ import type { CoreServices } from "@bunaway/core";
 import storage, { type StorageMetadata } from "@bunaway/plugin-storage";
 import { NativeRegistry } from "@bunaway/protocol";
 import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import { bindHostAPI } from "../fixtures/host-plugins.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
@@ -196,6 +197,7 @@ function storagePath(payload: unknown): string {
 function hostContext(callHost: CoreServices["callHost"]): CommandContext {
   const controller = new AbortController();
   return {
+    app: testAppInfo,
     host: bindHostAPI(
       "main" as Parameters<typeof bindHostAPI>[0],
       controller.signal,

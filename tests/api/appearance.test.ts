@@ -11,6 +11,7 @@ import {
   booleanPreference,
   colorRef,
 } from "#plugins/appearance/src/platforms/windows";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const snapshot: AppearancePreferences = {
@@ -149,6 +150,7 @@ test("appearance helper preserves source context, response and native denial", a
     },
   });
   await command.run(null, {
+    app: testAppInfo,
     host,
     signal: controller.signal,
     state: {

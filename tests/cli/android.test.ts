@@ -102,6 +102,7 @@ import text from "./data.txt" with { type: "file" };
 import binary from "./data.bin" with { type: "file" };
 import raw from "./raw.js" with { type: "file" };
 export default defineApp({ modules: [], commands: {
+  "test.app": command({ input: {}, output: { type: "object" }, handle: (_input, context) => context.app }),
   "test.files": command({ input: {}, output: { type: "array", items: { type: "string" } },
     handle: () => Promise.all([text, binary, raw].map(async file =>
       Buffer.from(await Bun.file(new URL(file, import.meta.url)).arrayBuffer()).toString("hex")))
@@ -114,6 +115,7 @@ export default defineApp({ modules: [], commands: {
         ...view,
         commands: [
           "test.files",
+          "test.app",
         ],
       })),
     };
@@ -123,6 +125,13 @@ export default defineApp({ modules: [], commands: {
     );
     const validated = await validateProject(app);
     assertAndroidProject(validated);
+    // The bundler injects these from the app and framework package manifests.
+    const appVersion = JSON.parse(
+      await readFile(resolve(app, "package.json"), "utf8"),
+    ).version;
+    const frameworkVersion = JSON.parse(
+      await readFile(resolve(validated.frameworkRoot, "package.json"), "utf8"),
+    ).version;
     const assets = resolve(root, "assets");
     await runWorker(
       "assets.ts",
@@ -246,6 +255,35 @@ export default defineApp({ modules: [], commands: {
             binary.toString("hex"),
             Buffer.from(raw).toString("hex"),
           ],
+        },
+      });
+      send({
+        kind: "web",
+        context: "view-test",
+        payload: {
+          kind: "invoke",
+          protocol: PROTOCOL_VERSION,
+          id: "app",
+          command: "test.app",
+          payload: null,
+        },
+      });
+      expect(await next()).toMatchObject({
+        kind: "web",
+        context: "view-test",
+        payload: {
+          kind: "result",
+          id: "app",
+          payload: {
+            name: validated.app.title,
+            identifier: validated.app.appId,
+            version: appVersion,
+            runtime: {
+              framework: frameworkVersion,
+              bun: Bun.version,
+              webview: null,
+            },
+          },
         },
       });
       send({

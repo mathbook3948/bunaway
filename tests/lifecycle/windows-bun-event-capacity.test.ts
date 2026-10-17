@@ -1,7 +1,5 @@
 import { expect, test } from "bun:test";
 import { MessageChannel } from "node:worker_threads";
-import { Channel, type Packet, type Route } from "#native/windows/bun/channel";
-import { command } from "#backend/command";
 import {
   type Core,
   type CoreSession,
@@ -14,6 +12,9 @@ import {
   type JsonValue,
   PROTOCOL_VERSION,
 } from "@bunaway/protocol";
+import { command } from "#backend/command";
+import { Channel, type Packet, type Route } from "#native/windows/bun/channel";
+import { testAppInfo } from "../fixtures/app-info.ts";
 
 type ServerPacket = Extract<
   Packet,
@@ -133,6 +134,7 @@ async function eventHarness() {
       ],
     },
     {
+      app: testAppInfo,
       hello,
       policy: {
         version: 1,

@@ -17,6 +17,7 @@ import {
   imageOperations,
   validateImageInput,
 } from "#plugins/image/src/operations";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("image", imageOperations);
@@ -271,6 +272,7 @@ test("image public SDK helpers preserve host scope and resource IDs", async () =
     },
   });
   await command.run(null, {
+    app: testAppInfo,
     signal: controller.signal,
     host,
     state: {

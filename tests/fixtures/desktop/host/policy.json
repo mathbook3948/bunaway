@@ -15,6 +15,7 @@
         "test.tempRead",
         "test.tempWrite",
         "test.capabilities",
+        "test.app",
         "test.log",
         "test.emit",
         "test.hostCancel",

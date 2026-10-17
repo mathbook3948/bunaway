@@ -20,6 +20,7 @@ import {
   registryCommand,
   startupState,
 } from "#plugins/autostart/src/platforms/windows-registry";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("autostart", autostartOperations);
@@ -440,6 +441,7 @@ test("public helpers use caller context and preserve native errors", async () =>
     },
   });
   await command.run(null, {
+    app: testAppInfo,
     host,
     signal: controller.signal,
     state: {

@@ -24,6 +24,7 @@ import {
   releaseSessionEndWait,
   SESSION_END_WAIT_MS,
 } from "#native/windows/bun/session-end";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { writePluginFixture } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 import {
@@ -106,6 +107,7 @@ async function startUI(
       ]
     : [];
   const configuration: UIConfig = {
+    appMetadata: testAppMetadata,
     runtime: {
       id: "ui-lifecycle",
       generation: crypto.randomUUID(),

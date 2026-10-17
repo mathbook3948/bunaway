@@ -19,6 +19,8 @@ export class MacosWebviewControls implements NativeWebView {
     >,
     private readonly requireWebview: () => ObjcObject,
     private readonly origins: readonly string[],
+    private readonly window: ObjcObject,
+    private readonly isApplicationActive: () => boolean,
   ) {}
 
   getState(): ReturnType<NativeWebView["getState"]> {
@@ -37,8 +39,26 @@ export class MacosWebviewControls implements NativeWebView {
         canGoBack: !!o.send(view, "canGoBack"),
         canGoForward: !!o.send(view, "canGoForward"),
         zoomFactor: this.zoomFactor(view),
+        focused: this.hasInputFocus(view),
       };
     });
+  }
+
+  /**
+   * Whether the application is active, the window is key and the first responder is the
+   * WKWebView or one of its descendants. Reading never changes the responder chain.
+   */
+  private hasInputFocus(view: ObjcObject): boolean {
+    const o = this.objc;
+    if (!this.isApplicationActive() || !o.send(this.window, "isKeyWindow")) {
+      return false;
+    }
+    const responder = o.send(this.window, "firstResponder");
+    // A non-view responder (the window itself or a view or window controller) is not the WebView.
+    if (!responder || !o.send(responder, "isKindOfClass:", o.class("NSView"))) {
+      return false;
+    }
+    return responder === view || !!o.send(responder, "isDescendantOf:", view);
   }
 
   navigate(url: string): void {

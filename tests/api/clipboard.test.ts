@@ -11,6 +11,7 @@ import { installedPlugins } from "#cli/plugins";
 import { bindHostAPI } from "#core/host-api";
 import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/contract";
 import { windowsOperations as clipboardOperations } from "#plugins/clipboard/src/operations";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("clipboard", clipboardOperations);
@@ -203,6 +204,7 @@ test("clipboard public functions reuse the active command host and validate at t
     },
   });
   await command.run(null, {
+    app: testAppInfo,
     signal: controller.signal,
     host,
     state: {

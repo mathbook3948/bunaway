@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { APP_INFO_MAX_LENGTH } from "@bunaway/plugin-api";
 import {
   type JsonValue,
   MAX_JSON_DEPTH,
@@ -14,7 +15,14 @@ import {
   parseAppManifest,
   readAppManifest,
 } from "@bunaway/runtime-bun/app-manifest";
-import { pluginImportsSource } from "#cli/app-modules";
+import {
+  appName,
+  parsePackageVersions,
+  readPackageVersions,
+  toAppInfo,
+} from "@bunaway/runtime-bun/app-metadata";
+import { appModules, pluginImportsSource } from "#cli/app-modules";
+import { readAppVersions } from "#cli/app-versions";
 import { writeJson } from "#cli/files";
 import { writePluginManifest } from "#cli/plugins";
 import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
@@ -381,4 +389,242 @@ test("manifest generation and catalog loading preserve the operation registratio
       force: true,
     });
   }
+});
+
+test("package manifest versions are optional strings and malformed values reject startup", async () => {
+  expect(parsePackageVersions({})).toEqual({
+    version: null,
+    framework: null,
+  });
+  expect(
+    parsePackageVersions({
+      app: {
+        id: "dev.example",
+      },
+      framework: {},
+    }),
+  ).toEqual({
+    version: null,
+    framework: null,
+  });
+  expect(
+    parsePackageVersions({
+      app: {
+        version: "1.2.3",
+      },
+      framework: {
+        version: "0.4.5",
+      },
+    }),
+  ).toEqual({
+    version: "1.2.3",
+    framework: "0.4.5",
+  });
+  for (const value of [
+    null,
+    [],
+    {
+      app: null,
+    },
+    {
+      app: [],
+    },
+    {
+      app: {
+        version: "",
+      },
+    },
+    {
+      app: {
+        version: 1,
+      },
+    },
+    {
+      app: {
+        version: null,
+      },
+    },
+    {
+      framework: {
+        version: "x".repeat(APP_INFO_MAX_LENGTH + 1),
+      },
+    },
+    {
+      framework: "0.4.5",
+    },
+  ]) {
+    expect(() => parsePackageVersions(value)).toThrow();
+  }
+  const directory = await mkdtemp(resolve(tmpdir(), "bunaway-package-"));
+  try {
+    await writeJson(resolve(directory, "manifest.json"), {
+      app: {
+        version: "2.0.0",
+      },
+    });
+    expect(await readPackageVersions(directory)).toEqual({
+      version: "2.0.0",
+      framework: null,
+    });
+  } finally {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+test("legacy packages without a package manifest or app title still start", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "bunaway-legacy-"));
+  try {
+    // No manifest.json: packages built before ctx.app and hand-assembled packages.
+    expect(await readPackageVersions(directory)).toEqual({
+      version: null,
+      framework: null,
+    });
+    await writeFile(resolve(directory, "manifest.json"), "{ not json");
+    await expect(readPackageVersions(directory)).rejects.toThrow();
+    await writeJson(resolve(directory, "manifest.json"), []);
+    await expect(readPackageVersions(directory)).rejects.toThrow(
+      "Invalid package manifest.",
+    );
+    // A directory in place of the file is a read error other than ENOENT.
+    await rm(resolve(directory, "manifest.json"));
+    await mkdir(resolve(directory, "manifest.json"));
+    await expect(readPackageVersions(directory)).rejects.toThrow();
+  } finally {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+  expect(appName(undefined, "dev.example")).toBe("dev.example");
+  expect(appName("x".repeat(APP_INFO_MAX_LENGTH), "dev.example")).toHaveLength(
+    APP_INFO_MAX_LENGTH,
+  );
+  for (const title of [
+    "",
+    null,
+    1,
+    "x".repeat(APP_INFO_MAX_LENGTH + 1),
+  ]) {
+    expect(() => appName(title, "dev.example")).toThrow(
+      "Invalid package manifest app title.",
+    );
+  }
+});
+
+test("build-time package versions are optional but must be bounded strings", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "bunaway-versions-"));
+  try {
+    const app = resolve(directory, "app");
+    const framework = resolve(directory, "framework");
+    await mkdir(app);
+    await mkdir(framework);
+    await writeJson(resolve(framework, "package.json"), {
+      version: "0.4.5",
+    });
+    await writeJson(resolve(app, "package.json"), {});
+    expect(await readAppVersions(app, framework)).toEqual({
+      version: null,
+      framework: "0.4.5",
+    });
+    const exact = "1".repeat(APP_INFO_MAX_LENGTH);
+    await writeJson(resolve(app, "package.json"), {
+      version: exact,
+    });
+    expect((await readAppVersions(app, framework)).version).toBe(exact);
+    for (const version of [
+      1,
+      null,
+      "",
+      "1".repeat(APP_INFO_MAX_LENGTH + 1),
+    ]) {
+      await writeJson(resolve(app, "package.json"), {
+        version,
+      });
+      await expect(readAppVersions(app, framework)).rejects.toThrow(
+        "version must be a non-empty string",
+      );
+    }
+    await writeJson(resolve(app, "package.json"), {
+      version: "1.0.0",
+    });
+    await writeJson(resolve(framework, "package.json"), {
+      version: 4,
+    });
+    await expect(readAppVersions(app, framework)).rejects.toThrow(
+      "version must be a non-empty string",
+    );
+  } finally {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+test("generated process backend embeds app metadata as a build-time constant", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "bunaway-metadata-"));
+  try {
+    const entry = resolve(directory, "app.ts");
+    await Bun.write(entry, "export default { commands: {}, events: {} };");
+    const runtime = resolve(directory, "runtime.ts");
+    await Bun.write(
+      runtime,
+      "export async function runBunApp(_app: unknown, options: unknown) { console.log(JSON.stringify(options)); }",
+    );
+    const metadata = {
+      name: 'Quote " App',
+      identifier: "dev.example.app",
+      version: null,
+      framework: "0.4.5",
+    };
+    const build = await Bun.build({
+      entrypoints: [
+        "bunaway-generated/backend.ts",
+      ],
+      root: directory,
+      target: "bun",
+      plugins: [
+        appModules({
+          appEntry: entry,
+          processRuntime: runtime,
+          appMetadata: metadata,
+        }),
+      ],
+    });
+    expect(build.success).toBe(true);
+    const output = resolve(directory, "backend.js");
+    await Bun.write(output, build.outputs[0] ?? "");
+    const result = Bun.spawnSync([
+      process.execPath,
+      output,
+    ]);
+    expect(JSON.parse(result.stdout.toString())).toEqual({
+      app: metadata,
+    });
+    expect(() =>
+      appModules({
+        appEntry: entry,
+        processRuntime: runtime,
+      }),
+    ).toThrow("app metadata");
+  } finally {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+test("toAppInfo rejects missing app metadata with a clear message", () => {
+  expect(() =>
+    toAppInfo(undefined as never, {
+      bun: Bun.version,
+      webview: null,
+    }),
+  ).toThrow(
+    "Missing app metadata: the host must pass the app name, identifier and versions.",
+  );
 });

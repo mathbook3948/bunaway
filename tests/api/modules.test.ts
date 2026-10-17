@@ -18,6 +18,7 @@ import {
   parseMessage,
   type TransportEvent,
 } from "@bunaway/protocol";
+import { testAppInfo } from "../fixtures/app-info.ts";
 
 const textSchema = {
   type: "string",
@@ -73,6 +74,7 @@ const app = defineApp({
 test("module commands retain validation, policy and events through Core and Client", async () => {
   let deliver: (event: TransportEvent) => void = () => {};
   const services: CoreServices = {
+    app: testAppInfo,
     policy: {
       version: 1,
       views: [

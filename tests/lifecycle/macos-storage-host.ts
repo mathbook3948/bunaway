@@ -85,6 +85,7 @@ try {
   ];
   const app = {
     appId: "tests.macos.storage",
+    title: "Storage",
     windows: [
       "main",
       "denied",

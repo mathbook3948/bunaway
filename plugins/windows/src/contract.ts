@@ -428,6 +428,9 @@ export const windowSnapshotSchema = {
         fullscreen: {
           type: "boolean",
         },
+        alwaysOnTop: {
+          type: "boolean",
+        },
       },
       required: [
         "visible",
@@ -435,6 +438,7 @@ export const windowSnapshotSchema = {
         "minimized",
         "maximized",
         "fullscreen",
+        "alwaysOnTop",
       ],
       additionalProperties: false,
     },
@@ -615,7 +619,7 @@ export const windowEvents = {
       changes: {
         type: "array",
         minItems: 1,
-        maxItems: 14,
+        maxItems: 16,
         uniqueItems: true,
         items: {
           type: "string",
@@ -630,6 +634,8 @@ export const windowEvents = {
             "restore",
             "enterFullscreen",
             "leaveFullscreen",
+            "enterAlwaysOnTop",
+            "leaveAlwaysOnTop",
             "move",
             "resize",
             "moved",
@@ -767,6 +773,7 @@ export const windowOperations = {
       canGoBack: z.boolean(),
       canGoForward: z.boolean(),
       zoomFactor: z.number().positive(),
+      focused: z.boolean(),
     }),
   },
   "windows.navigateWebView": {
@@ -1151,7 +1158,12 @@ export const windowOperations = {
     }),
     output: z.null(),
   },
-  "windows.center": windowResult,
+  "windows.center": {
+    input: windowTarget.extend({
+      monitorId: monitorSchema.shape.id.exactOptional(),
+    }),
+    output: z.null(),
+  },
   "windows.setFullscreen": {
     input: z.strictObject({
       view: viewTarget.shape.view,

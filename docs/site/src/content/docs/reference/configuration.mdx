@@ -60,7 +60,7 @@ Ctrl+C나 SIGTERM으로 빌드를 중단하면 실행한 명령과 하위 프로
 | 필드 | 설명 |
 | --- | --- |
 | `appId` | 앱 데이터와 Windows 작업 표시줄의 식별자. 1–64자의 소문자 영숫자, 점, 하이픈. 시작과 끝은 영숫자 |
-| `title` | 앱 이름. 단일 창에서는 창 제목으로도 사용 |
+| `title` | 앱 이름. 단일 창에서는 창 제목으로도 사용. 비어 있지 않은 문자열, 최대 1024자 |
 | `executableName` | 선택. Windows GUI 실행 파일 이름. `.exe`를 포함하며 기본값은 `<appId>.exe`. 경로, 예약 장치 이름, 설치 프로그램의 `uninsNNN.exe` 이름과 Windows 파일 이름 금지 문자는 거부 |
 | `icon` | 선택. 프로젝트 루트 기준 Windows `.ico` 파일. 실행 파일, 창과 트레이에 사용. 생략하면 기본 앱 아이콘 사용 |
 | `view` | 단일 창의 정책 뷰 ID. 이 형식에서는 정책 뷰 하나를 요구 |
@@ -127,8 +127,8 @@ outer 좌표가 signed 32-bit 범위를 벗어나면 거부합니다. 이후 이
 macOS는 새 배치 필드를 명시하면 기본값이나 지연 창에서도 `UNSUPPORTED`입니다.
 실행 중 사용자 크기 조절과 이동 허용은 [창 API](/reference/host/windows/)의
 `setResizable`, `isResizable`, `setMovable`, `isMovable`로 제공합니다.
-실행 중 현재 모니터 중앙 배치는 같은 창 API의 `windows.center`로 제공합니다.
-지정 모니터 선택은 아직 지원하지 않습니다.
+실행 중 중앙 배치는 같은 창 API의 `windows.center`로 제공하며, 현재 모니터 또는 `monitorId`로 지정한 모니터를 사용합니다.
+초기 창 선언에서 모니터를 지정하는 기능은 아직 지원하지 않습니다.
 Windows 창 선언은 0–128개이며 뷰 ID는 중복할 수 없고 정책에 해당 뷰와 home origin이 있어야 합니다.
 Windows 창 항목은 `instances: "single" | "multiple"`을 받으며 기본값은 `"single"`입니다.
 multiple에는 정수 1–128의 `maxInstances`를 반드시 지정합니다. single은 생략 또는 1만 허용합니다.

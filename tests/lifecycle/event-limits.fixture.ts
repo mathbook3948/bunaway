@@ -8,6 +8,7 @@ import {
   serializeProcessFrame,
 } from "@bunaway/protocol";
 import { runBunApp } from "@bunaway/runtime-bun";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 
 const emptyEvent = {
   kind: "event",
@@ -31,71 +32,77 @@ const envelopeBytes = serializeProcessFrame({
   payload: emptyEvent,
 }).length;
 
-await runBunApp({
-  events: {
-    changed: {},
-  },
-  commands: {
-    emit: {
-      input: {
-        enum: [
-          "byte-boundary",
-          "byte-overflow",
-          "message-boundary",
-          "depth-boundary",
-          "depth-overflow",
-          "valid",
-        ],
-      },
-      output: {
-        const: null,
-      },
-      async run(mode, context) {
-        let payload: JsonValue;
-        switch (mode) {
-          case "byte-boundary":
-            payload = "x".repeat(MAX_MESSAGE_BYTES - envelopeBytes);
-            break;
-          case "byte-overflow":
-            payload = "x".repeat(MAX_MESSAGE_BYTES - envelopeBytes + 1);
-            break;
-          case "message-boundary":
-            payload = "x".repeat(
-              MAX_MESSAGE_BYTES - serializeMessage(emptyEvent).length,
-            );
-            break;
-          case "depth-boundary":
-          case "depth-overflow": {
-            // The process envelope and event put the payload at depth two.
-            const depth = MAX_JSON_DEPTH - (mode === "depth-boundary" ? 2 : 1);
-            payload = null;
-            for (let index = 0; index < depth; index++) {
-              payload = [
-                payload,
-              ];
+await runBunApp(
+  {
+    events: {
+      changed: {},
+    },
+    commands: {
+      emit: {
+        input: {
+          enum: [
+            "byte-boundary",
+            "byte-overflow",
+            "message-boundary",
+            "depth-boundary",
+            "depth-overflow",
+            "valid",
+          ],
+        },
+        output: {
+          const: null,
+        },
+        async run(mode, context) {
+          let payload: JsonValue;
+          switch (mode) {
+            case "byte-boundary":
+              payload = "x".repeat(MAX_MESSAGE_BYTES - envelopeBytes);
+              break;
+            case "byte-overflow":
+              payload = "x".repeat(MAX_MESSAGE_BYTES - envelopeBytes + 1);
+              break;
+            case "message-boundary":
+              payload = "x".repeat(
+                MAX_MESSAGE_BYTES - serializeMessage(emptyEvent).length,
+              );
+              break;
+            case "depth-boundary":
+            case "depth-overflow": {
+              // The process envelope and event put the payload at depth two.
+              const depth =
+                MAX_JSON_DEPTH - (mode === "depth-boundary" ? 2 : 1);
+              payload = null;
+              for (let index = 0; index < depth; index++) {
+                payload = [
+                  payload,
+                ];
+              }
+              break;
             }
-            break;
+            // A valid follow-up verifies that a rejected payload leaves the runtime usable.
+            default:
+              payload = "after-rejection";
           }
-          // A valid follow-up verifies that a rejected payload leaves the runtime usable.
-          default:
-            payload = "after-rejection";
-        }
-        await context.events.emit("changed", payload, {
-          kind: "broadcast",
-        });
-        return null;
+          await context.events.emit("changed", payload, {
+            kind: "broadcast",
+          });
+          return null;
+        },
       },
-    },
-    ping: {
-      input: {
-        const: null,
-      },
-      output: {
-        const: null,
-      },
-      async run() {
-        return null;
+      ping: {
+        input: {
+          const: null,
+        },
+        output: {
+          const: null,
+        },
+        async run() {
+          return null;
+        },
       },
     },
   },
-});
+  {
+    app: testAppMetadata,
+  },
+);
