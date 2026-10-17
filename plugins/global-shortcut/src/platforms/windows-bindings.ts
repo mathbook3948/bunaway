@@ -2,7 +2,12 @@ import { dlopen } from "bun:ffi";
 import type { NativeShortcutServices } from "@bunaway/plugin-api/native";
 import type { GlobalShortcut } from "#global-shortcut/contract";
 import type { ShortcutDriver } from "#global-shortcut/platforms/windows";
+import { RELEASE_POLL_INTERVAL_MS } from "#global-shortcut/release-tracker";
 export const WM_HOTKEY = 0x0312;
+const WM_TIMER = 0x0113;
+const RELEASE_TIMER_ID = 1n;
+/** GetAsyncKeyState sets the most significant bit while the key is physically down. */
+const KEY_DOWN_BIT = 0x8000;
 export const MOD_NOREPEAT = 0x4000;
 export const MAX_HOTKEY_ID = 0xbfff;
 
@@ -69,10 +74,34 @@ export class Win32Shortcuts implements ShortcutDriver {
       ],
       returns: "i32",
     },
+    SetTimer: {
+      args: [
+        "u64",
+        "u64",
+        "u32",
+        "ptr",
+      ],
+      returns: "u64",
+    },
+    KillTimer: {
+      args: [
+        "u64",
+        "u64",
+      ],
+      returns: "i32",
+    },
+    GetAsyncKeyState: {
+      args: [
+        "i32",
+      ],
+      returns: "i16",
+    },
   });
   private hwnd: bigint | undefined;
+  private tick: (() => void) | undefined;
   private readonly ids = new Set<number>();
   private receive: ((id: number, packedKeys: bigint) => void) | undefined;
+  private timerActive = false;
   private disposed = false;
 
   constructor(private readonly services: NativeShortcutServices) {}
@@ -85,8 +114,13 @@ export class Win32Shortcuts implements ShortcutDriver {
       throw new Error("Global shortcut driver is disposed.");
     }
     this.hwnd ??= this.services.createWindow((message, wparam, lparam) => {
-      if (message === WM_HOTKEY && !this.disposed) {
+      if (this.disposed) {
+        return;
+      }
+      if (message === WM_HOTKEY) {
         this.receive?.(Number(wparam), lparam);
+      } else if (message === WM_TIMER && wparam === RELEASE_TIMER_ID) {
+        this.tick?.();
       }
     });
     const codes = hotkeyCodes(shortcut);
@@ -102,6 +136,38 @@ export class Win32Shortcuts implements ShortcutDriver {
     }
     this.ids.add(id);
     return true;
+  }
+  isKeyDown(virtualKey: number): boolean {
+    return (
+      (this.native.symbols.GetAsyncKeyState(virtualKey) & KEY_DOWN_BIT) !== 0
+    );
+  }
+  /**
+   * Starts one WM_TIMER on the hidden window. A busy UI thread delays ticks, so a release is
+   * reported late, never lost; WM_TIMER follows the system timer resolution, so a 20 ms request fires about every 20 to 30 ms.
+   */
+  startPolling(tick: () => void) {
+    this.tick = tick;
+    if (this.timerActive || !this.hwnd || this.disposed) {
+      return;
+    }
+    if (
+      !this.native.symbols.SetTimer(
+        this.hwnd,
+        RELEASE_TIMER_ID,
+        RELEASE_POLL_INTERVAL_MS,
+        null,
+      )
+    ) {
+      throw new Error("Global shortcut release timer could not be started.");
+    }
+    this.timerActive = true;
+  }
+  stopPolling() {
+    if (this.timerActive && this.hwnd) {
+      this.native.symbols.KillTimer(this.hwnd, RELEASE_TIMER_ID);
+    }
+    this.timerActive = false;
   }
   unregister(id: number): boolean {
     if (!this.hwnd || !this.ids.has(id)) {
@@ -119,8 +185,10 @@ export class Win32Shortcuts implements ShortcutDriver {
     }
     this.disposed = true;
     this.receive = undefined;
+    this.tick = undefined;
     const errors: unknown[] = [];
     try {
+      this.stopPolling();
       for (const id of this.ids) {
         try {
           if (!this.unregister(id)) {

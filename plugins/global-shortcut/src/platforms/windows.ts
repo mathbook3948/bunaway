@@ -12,11 +12,17 @@ import {
   MAX_HOTKEY_ID,
   Win32Shortcuts,
 } from "#global-shortcut/platforms/windows-bindings";
+import { HeldShortcuts } from "#global-shortcut/release-tracker";
 /** Native registration and hidden-window ownership boundary, shared by runtime and focused tests. */
 export type ShortcutDriver = {
   listen(receive: (id: number, packedKeys: bigint) => void): void;
   register(id: number, shortcut: GlobalShortcut): boolean;
   unregister(id: number): boolean;
+  /** Physical state of a virtual key, independent of focus. */
+  isKeyDown(virtualKey: number): boolean;
+  /** Calls `tick` periodically on the UI thread until `stopPolling` or `dispose`. Idempotent. */
+  startPolling(tick: () => void): void;
+  stopPolling(): void;
   dispose(): void;
 };
 type Registration = {
@@ -53,6 +59,26 @@ export function initializeShortcutOperations(
   let nextId = 1;
   let suspended = false;
   let disposed = false;
+  // RegisterHotKey never reports the key-up, so a pressed shortcut is polled until its key is up.
+  const held = new HeldShortcuts();
+  const emitReleased = (shortcut: GlobalShortcut) =>
+    emit("globalShortcut.released", {
+      shortcut: structuredClone(shortcut),
+    });
+  /** Emits `released` for ended holds and stops the poll timer once nothing is held. */
+  const publishReleased = (shortcuts: GlobalShortcut[]) => {
+    for (const shortcut of shortcuts) {
+      emitReleased(shortcut);
+    }
+    if (held.size === 0) {
+      driver.stopPolling();
+    }
+  };
+  const pollReleased = () => {
+    if (!disposed) {
+      publishReleased(held.poll((key) => driver.isKeyDown(key)));
+    }
+  };
   driver.listen((id, packedKeys) => {
     if (disposed || suspended) {
       return;
@@ -74,8 +100,29 @@ export function initializeShortcutOperations(
     const payload = {
       shortcut: structuredClone(entry.shortcut),
     };
+    // This runs inside the window procedure, so a timer failure must not escape. Without a timer
+    // the key-up cannot be observed: report pressed, then released at once, and record no hold.
+    let polling = true;
+    try {
+      driver.startPolling(pollReleased);
+    } catch (cause) {
+      polling = false;
+      console.error("Global shortcut release polling could not start.", cause);
+    }
+    // A second WM_HOTKEY for a tracked hold means the key went up and down between two polls.
+    // Close the earlier hold first so every pressed has one released.
+    const previous = held.drop(entry.id);
+    if (previous) {
+      emitReleased(previous);
+    }
+    if (polling) {
+      held.hold(entry.id, entry.shortcut, codes.key);
+    }
     presses.publish(payload);
     emit("globalShortcut.pressed", payload);
+    if (!polling) {
+      emitReleased(entry.shortcut);
+    }
   });
   const acquire = (entry: Registration) => {
     if (nextId > MAX_HOTKEY_ID) {
@@ -102,6 +149,13 @@ export function initializeShortcutOperations(
       );
     }
     entry.active = false;
+    // Unbinding or suspending while the key is down completes the pair without waiting for a poll.
+    const dropped = held.drop(entry.id);
+    if (dropped) {
+      publishReleased([
+        dropped,
+      ]);
+    }
   };
   const releaseAll = (entries: Iterable<Registration>) => {
     let failed = false;

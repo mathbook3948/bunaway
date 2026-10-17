@@ -99,44 +99,53 @@ export const shortcutSchema = z.strictObject({
     ),
 });
 export type GlobalShortcut = z.output<typeof shortcutSchema>;
-export const globalShortcutEvents = {
-  "globalShortcut.pressed": {
-    payload: {
+const shortcutEventPayload = {
+  type: "object",
+  properties: {
+    shortcut: {
       type: "object",
       properties: {
-        shortcut: {
-          type: "object",
-          properties: {
-            key: {
-              type: "string",
-              enum: [
-                ...keys,
-              ],
-            },
-            modifiers: {
-              type: "array",
-              items: {
-                type: "string",
-                enum: [
-                  ...modifiers,
-                ],
-              },
-              minItems: 1,
-              maxItems: 4,
-            },
-          },
-          required: [
-            "key",
-            "modifiers",
+        key: {
+          type: "string",
+          enum: [
+            ...keys,
           ],
-          additionalProperties: false,
+        },
+        modifiers: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: [
+              ...modifiers,
+            ],
+          },
+          minItems: 1,
+          maxItems: 4,
         },
       },
       required: [
-        "shortcut",
+        "key",
+        "modifiers",
       ],
       additionalProperties: false,
     },
+  },
+  required: [
+    "shortcut",
+  ],
+  additionalProperties: false,
+} as const;
+
+/**
+ * `released` shares the `pressed` payload. It is a separate event, so views that only allow
+ * `globalShortcut.pressed` never receive it.
+ */
+export const globalShortcutEvents = {
+  "globalShortcut.pressed": {
+    payload: shortcutEventPayload,
+  },
+  "globalShortcut.released": {
+    payload: shortcutEventPayload,
   },
 } as const;
 
