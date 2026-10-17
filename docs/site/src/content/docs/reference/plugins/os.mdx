@@ -47,6 +47,8 @@ translation은 Windows `IsWow64Process2` 결과입니다. `active`는 WOW transl
 
 `os.beep({ kind })`는 Windows `MessageBeep`로 사용자의 사운드 설정에 따른 시스템 소리를 재생합니다.
 `kind`는 `"default"`, `"info"`, `"warning"`, `"error"` 중 하나이며 생략하면 `"default"`입니다.
+`"default"`는 사운드 구성표의 Windows Default Beep(`MB_OK`)이고 나머지는 각각 정보(`MB_ICONASTERISK`),
+경고(`MB_ICONEXCLAMATION`), 오류(`MB_ICONHAND`) 소리입니다.
 `os.beep({})`처럼 빈 객체를 전달할 수 있고 다른 필드나 `null`은 `INVALID_ARGUMENT`입니다.
 재생을 요청하면 바로 `null`을 반환하며 재생 완료를 기다리지 않습니다. 사용자가 시스템 소리를
 끄거나 오디오 장치가 없으면 소리가 나지 않아도 성공할 수 있습니다. `MessageBeep` 호출 자체가 실패하면

@@ -16,9 +16,9 @@ const LOCALE_SISO3166CTRYNAME = 0x5a;
 const MUI_LANGUAGE_NAME = 0x8;
 const MAX_LANGUAGE_BUFFER_CHARS = 128 * (LOCALE_NAME_MAX_LENGTH + 1) + 1;
 
-/** MessageBeep sound types; 0xFFFFFFFF selects the plain default beep. */
+/** MessageBeep sound types; MB_OK (0x0) plays the sound scheme's Default Beep. */
 const BEEP_SOUND_TYPES = {
-  default: 0xffffffff,
+  default: 0x0,
   info: 0x40,
   warning: 0x30,
   error: 0x10,
@@ -28,6 +28,17 @@ function failure(): never {
   throw new BunawayError({
     code: "INTERNAL",
     message: "Windows locale query failed.",
+  });
+}
+
+function openUser32() {
+  return dlopen("user32.dll", {
+    MessageBeep: {
+      args: [
+        "u32",
+      ],
+      returns: "i32",
+    },
   });
 }
 
@@ -85,14 +96,14 @@ export function initialize() {
       returns: "i32",
     },
   });
-  const user32 = dlopen("user32.dll", {
-    MessageBeep: {
-      args: [
-        "u32",
-      ],
-      returns: "i32",
-    },
-  });
+  let user32: ReturnType<typeof openUser32>;
+  try {
+    user32 = openUser32();
+  } catch (error) {
+    // Do not leak the already opened Kernel32 handle when initialization fails.
+    api.close();
+    throw error;
+  }
   let disposed = false;
   const assertActive = () => {
     if (disposed) {
