@@ -85,6 +85,7 @@ if (target === "windows-x64") {
         "--no-env-file",
         "test",
         resolve(root, "tests/lifecycle/windows-system-events.test.ts"),
+        resolve(root, "tests/lifecycle/windows-power-events.test.ts"),
       ],
       root,
     );
@@ -138,7 +139,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-monitor-events.test.ts",
           "tests/lifecycle/windows-host-shutdown.test.ts",
           "tests/lifecycle/windows-power.test.ts",
-          "tests/lifecycle/windows-power-worker.test.ts",
+          "tests/lifecycle/windows-power-ui.test.ts",
           "tests/lifecycle/windows-appearance.test.ts",
           "tests/lifecycle/windows-opener.test.ts",
           "tests/lifecycle/windows-opener-job.test.ts",

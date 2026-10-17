@@ -375,6 +375,10 @@ export type NativeWindow = {
   setTitle?(title: string): void;
   /** Reads the live native title, bounded to 1024 UTF-16 code units. Windows only. */
   getTitle?(): string;
+  /** Sets the screen reader name separately from the caption; an empty string restores the caption. Windows only. */
+  setAccessibleTitle?(title: string): void;
+  /** Reads the last accessible title applied in this process, or null when none is set. Windows only. */
+  getAccessibleTitle?(): string | null;
   /** Changes user border/system-menu resizing without restricting programmatic geometry. Windows only. */
   setResizable?(resizable: boolean): void;
   /** Reads the normal window's resize policy, including while fullscreen. Windows only. */

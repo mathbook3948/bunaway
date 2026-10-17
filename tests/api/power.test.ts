@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 import power from "@bunaway/plugin-power";
-import { NativeRegistry } from "@bunaway/protocol";
+import { NativeRegistry, validateValue } from "@bunaway/protocol";
+import {
+  type PowerStatus,
+  powerEvents,
+  statusSchema,
+} from "#plugins/power/src/contract";
 import { powerOperations } from "#plugins/power/src/operations";
 import {
   MAX_POWER_BLOCKERS,
@@ -328,4 +333,134 @@ test("display activation rolls back system counts, retains failed closes, and cl
   expect(calls).toContain(`clear:${handle}:1`);
   expect(calls).toContain(`clear:${handle}:0`);
   expect(calls.filter((call) => call === `close:${handle}`).length).toBe(1);
+});
+
+test("power.statusChanged portable schema accepts exactly the payloads of statusSchema", () => {
+  const schema = powerEvents["power.statusChanged"];
+  expect(schema.required.map(String)).toEqual(Object.keys(statusSchema.shape));
+  const valid: PowerStatus = {
+    source: "ac",
+    batteryPresent: true,
+    charging: false,
+    batteryPercent: 0,
+    batterySaver: false,
+    remainingSeconds: 0xfffffffe,
+    fullLifeSeconds: null,
+  };
+  const unknownBattery: PowerStatus = {
+    ...valid,
+    source: "unknown",
+    batteryPresent: null,
+    charging: null,
+    batteryPercent: null,
+    remainingSeconds: null,
+  };
+  const invalid = [
+    {
+      ...valid,
+      source: "solar",
+    },
+    {
+      ...valid,
+      batteryPercent: 101,
+    },
+    {
+      ...valid,
+      batteryPercent: 1.5,
+    },
+    {
+      ...valid,
+      remainingSeconds: -1,
+    },
+    {
+      ...valid,
+      fullLifeSeconds: 0xffffffff,
+    },
+    {
+      ...valid,
+      batterySaver: null,
+    },
+    {
+      ...valid,
+      extra: true,
+    },
+    Object.fromEntries(
+      Object.entries(valid).filter(([key]) => key !== "charging"),
+    ),
+  ];
+  for (const payload of [
+    valid,
+    unknownBattery,
+  ]) {
+    expect(statusSchema.safeParse(payload).success).toBe(true);
+    expect(validateValue(schema, payload)).toEqual(payload);
+  }
+  for (const payload of invalid) {
+    expect(statusSchema.safeParse(payload).success).toBe(false);
+    expect(() => validateValue(schema, payload)).toThrow();
+  }
+});
+
+test("power.statusChanged is declared by the plugin and delivered only to routes holding the status read grant", async () => {
+  const { publishSystemEvent } = await import(
+    "#native/windows/bun/system-events"
+  );
+  expect(Object.keys(power._definition.events ?? {})).toEqual([
+    "power.statusChanged",
+  ]);
+  const registry = new NativeRegistry([
+    power._definition,
+  ]);
+  const recipient = (permissions: string[], routed = true) => ({
+    policy: {
+      host: {
+        permissions,
+      },
+    },
+    eventRoute: () => (routed ? {} : null),
+  });
+  const recipients = [
+    recipient([
+      "power.getStatus",
+    ]),
+    recipient([
+      "power.getIdleTime",
+    ]),
+    recipient(
+      [
+        "power.getStatus",
+      ],
+      false,
+    ),
+  ];
+  const status = statusSchema.parse({
+    source: "battery",
+    batteryPresent: true,
+    charging: false,
+    batteryPercent: 42,
+    batterySaver: false,
+    remainingSeconds: null,
+    fullLifeSeconds: null,
+  });
+  const delivered: unknown[] = [];
+  publishSystemEvent(
+    registry,
+    recipients,
+    "power.statusChanged",
+    status,
+    "power.getStatus",
+    (target, event, payload) =>
+      delivered.push([
+        target,
+        event,
+        payload,
+      ]),
+  );
+  expect(delivered).toEqual([
+    [
+      recipients[0],
+      "power.statusChanged",
+      status,
+    ],
+  ]);
 });

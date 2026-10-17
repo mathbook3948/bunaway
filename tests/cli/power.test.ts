@@ -12,7 +12,7 @@ import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
 import { pluginRegistry } from "#native/host-api/bun/plugins";
 import { createProject, packageDirectory } from "./project.ts";
 
-test("isolated power package ships the I/O adapter but keeps FFI out of the browser", async () => {
+test("isolated power package ships the UI adapter but keeps FFI out of the browser", async () => {
   const home = await realpath(
     await mkdtemp(resolve(tmpdir(), "bunaway-power-install-")),
   );
@@ -76,7 +76,7 @@ export default defineApp({ modules: [], plugins: [power] });
     expect(plugins.map(({ packageName }) => packageName)).toEqual([
       "@bunaway/plugin-power",
     ]);
-    expect(plugins[0]?.targets.windows?.thread).toBe("worker");
+    expect(plugins[0]?.targets.windows?.thread).toBe("ui");
     expect(valid.nativePlugins?.map(({ name }) => name)).toEqual([
       "power",
     ]);

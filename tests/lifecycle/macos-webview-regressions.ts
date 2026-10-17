@@ -16,6 +16,17 @@ const BATCH_SIZE = 4_000;
 const MAX_RETAINED_GROWTH_BYTES = 64 * 1024 * 1024;
 const WK_MEDIA_CAPTURE_CAMERA = 0;
 const WK_PERMISSION_DENY = 0;
+/** Minimal module exporting `add(i32, i32) -> i32`, built inline to avoid a committed binary. */
+const ADD_WASM = Buffer.from(
+  [
+    "0061736d01000000", // magic and version
+    "01070160027f7f017f", // type section: (i32, i32) -> i32
+    "03020100", // function section: one function of type 0
+    "070701036164640000", // export section: "add" -> function 0
+    "0a09010700200020016a0b", // code section: local.get 0, local.get 1, i32.add
+  ].join(""),
+  "hex",
+);
 const directory = await mkdtemp(
   resolve(tmpdir(), "bunaway-webview-regressions-"),
 );
@@ -67,6 +78,7 @@ let view: MacosWebview | undefined;
 let failure: unknown;
 let pageReady = false;
 let received = 0;
+let wasmResult: unknown;
 const events: string[] = [];
 const hooks = {
   activated() {},
@@ -75,6 +87,9 @@ const hooks = {
     const message: unknown = JSON.parse(raw);
     if (message && typeof message === "object" && "ready" in message) {
       pageReady = true;
+    }
+    if (message && typeof message === "object" && "wasm" in message) {
+      wasmResult = message.wasm;
     }
     if (
       message &&
@@ -180,6 +195,7 @@ const application = new MacosApplication({
 });
 try {
   await mkdir(resolve(directory, "web"));
+  await Bun.write(resolve(directory, "web/add.wasm"), ADD_WASM);
   await Bun.write(
     resolve(directory, "web/index.html"),
     `<!doctype html><title>Regression</title>
@@ -192,6 +208,12 @@ window.chrome.webview.postMessage(new Date());
 window.chrome.webview.postMessage({payload: new Date()});
 window.chrome.webview.postMessage([new Date()]);
 window.chrome.webview.postMessage({ready: true});
+// Streaming instantiation requires the packaged asset handler to answer application/wasm.
+fetch('add.wasm').then(async response => {
+  const contentType = response.headers.get('Content-Type');
+  const {instance} = await WebAssembly.instantiateStreaming(response);
+  window.chrome.webview.postMessage({wasm: {contentType, sum: instance.exports.add(2, 3)}});
+}).catch(error => window.chrome.webview.postMessage({wasm: {error: String(error)}}));
 </script>`,
   );
   const o = new Objc();
@@ -225,6 +247,12 @@ window.chrome.webview.postMessage({ready: true});
     events.filter((event) => event === "web-message-rejected").length,
     3,
   );
+  await waitFor(() => wasmResult !== undefined);
+  assert.deepEqual(wasmResult, {
+    contentType: "application/wasm",
+    sum: 5,
+  });
+  console.log("PASS packaged .wasm asset streams as application/wasm");
   console.log(
     "PASS invalid native JSON values are rejected before valid bridge traffic",
   );
