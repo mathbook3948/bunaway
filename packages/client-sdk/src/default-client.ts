@@ -4,7 +4,11 @@ import {
   SDK_READY_FEATURE,
 } from "@bunaway/protocol";
 import type { Client, ClientFactory } from "./index.ts";
-import { createWebViewTransport, type WebViewBridge } from "./webview.ts";
+import {
+  createWebViewTransport,
+  isBridge,
+  type WebViewBridge,
+} from "./webview.ts";
 
 // Store the session on the window so UI hot updates and repeated SDK imports
 // cannot send a second hello or reuse request IDs in the same document.
@@ -46,12 +50,7 @@ export function defaultClient(factory: ClientFactory): Client {
   }
 
   const bridge = view.chrome?.webview;
-  if (
-    !bridge ||
-    typeof bridge.postMessage !== "function" ||
-    typeof bridge.addEventListener !== "function" ||
-    typeof bridge.removeEventListener !== "function"
-  ) {
+  if (!isBridge(bridge)) {
     throw new BunawayError({
       code: "UNSUPPORTED",
       message:

@@ -15,7 +15,7 @@ const text = await clipboard.readText(null);
 await clipboard.clear(null);
 ```
 
-공개 입력, 반환값, 권한, 오류와 취소 규칙은 [API 레퍼런스](../../docs/site/src/content/docs/reference/plugins/clipboard.mdx)에 둔다. URL bookmark와 private namespace의 bounded binary 값은 기존 다중 형식 API로 제공한다. 변경 이벤트는 제공하지 않는다.
+공개 입력, 반환값, 권한, 오류와 취소 규칙은 [API 레퍼런스](../../docs/site/src/content/docs/reference/plugins/clipboard.mdx)에 둔다. URL bookmark와 private namespace의 bounded binary 값은 기존 다중 형식 API로 제공한다. Windows는 `clipboard.changed` 이벤트와 `waitForChange`로 내용 없는 변경 알림(`sequence`, `changedAt`)을 제공하며 macOS는 지원하지 않는다.
 
 `readImage`와 `writeImage`는 크기와 base64 RGBA 픽셀을 전달한다. `readFormats`와 `writeFormats`는 지원 형식을 한 번의 열기 구간에서 읽거나 교체하며 `getFormats`와 `hasFormat`은 지원 형식의 가용성을 조회한다. 발견 결과에는 Windows가 변환해 제공할 수 있는 기본 형식도 포함된다. 사용자 정의 binary 이름은 `hasFormat`과 `readFormats`에서 명시한다. 네이티브 이미지 ID나 별도 이미지 저장소는 만들지 않는다.
 
@@ -28,6 +28,8 @@ await clipboard.clear(null);
 쓰기는 모든 형식의 `GMEM_MOVEABLE` 메모리를 준비한 다음 `EmptyClipboard`를 한 번 호출하고 `SetClipboardData`로 각각 등록한다. 준비 중 실패하면 기존 내용은 유지하고 준비된 모든 핸들을 `GlobalFree`로 해제한다. 등록에 성공한 핸들은 Windows가 소유하므로 플러그인은 다시 쓰거나 해제하지 않는다. 비우기 이후 일부 등록이 실패하면 이미 등록한 형식은 남고 나머지 핸들만 해제한다. 이전 데이터를 복원하거나 변경을 원자적으로 되돌리지 않는다. 등록한 데이터는 앱 종료 뒤에도 Windows가 소유한다.
 
 이미지는 top-down sRGB `CF_DIBV5`에 BGRA 채널과 명시적인 alpha mask를 기록한다. 읽기는 `CF_DIBV5`를 우선하고 없으면 `CF_DIB`를 사용한다. 지원하는 24/32-bit DIB만 RGBA로 변환하며 compression, channel mask, row stride, 크기와 profile 경계를 검사한다. HTML은 `HTML Format`의 UTF-8 byte offset으로 fragment를 읽고 쓰며 RTF는 `Rich Text Format`의 ASCII byte stream을 사용한다. 파일 목록은 wide `CF_HDROP`의 `DROPFILES`와 이중 NUL 종료를 검사한다. 파일 목록을 복사하거나 읽는 작업은 파일을 열거나 저장소 권한을 추가하지 않는다.
+
+변경 알림은 호스트의 UI 창 서비스로 만든 숨은 창에 `AddClipboardFormatListener`를 등록하고 `WM_CLIPBOARDUPDATE`마다 `GetClipboardSequenceNumber`를 읽어 발행한다. 같은 sequence는 한 번만 발행하며 payload에는 내용을 담지 않는다. 어댑터 종료는 먼저 `RemoveClipboardFormatListener`와 창 파괴로 알림과 대기를 끝낸다. 등록 실패는 다른 작업에 영향을 주지 않는다. `tests/api/clipboard-change.test.ts`는 계약과 합치기, 대기 수명을, `windows-clipboard` 네이티브 검사는 외부 쓰기와 자기 쓰기 뒤의 실제 수신을 확인한다.
 
 어댑터 종료는 재시도를 취소하고 진행 중 작업의 정리를 기다린 다음 소유자 창과 DLL을 해제한다. 반복 종료는 안전하다. 취소와 기한은 동기 OS 호출의 실행을 중단하거나 이미 완료한 변경을 되돌리지 않는다.
 

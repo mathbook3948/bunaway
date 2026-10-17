@@ -1,7 +1,7 @@
 import { defineNativePlugin } from "@bunaway/plugin";
 import { osOperations } from "#os/operations";
 import { dispose, initialize } from "#os/platforms/windows";
-/** Read OS and bundled Bun metadata. Architecture describes the running process. */
+/** Read OS and bundled Bun metadata and play system sounds. Architecture describes the running process. */
 export default defineNativePlugin({
   name: "os",
   platforms: {
@@ -13,4 +13,4 @@ export default defineNativePlugin({
   },
 });
 
-export type { OSInfo, OSLocale, OSUsage } from "#os/contract";
+export type { OSBeepInput, OSInfo, OSLocale, OSUsage } from "#os/contract";

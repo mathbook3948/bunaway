@@ -50,6 +50,15 @@ export const trayEventSchema = z.strictObject({
   ]),
   position: positionSchema.nullable(),
 });
+/** Pointer hover over the tray icon, derived from shell mouse-move callbacks. */
+export const trayHoverEventSchema = z.strictObject({
+  state: z.enum([
+    "enter",
+    "move",
+    "leave",
+  ]),
+  position: positionSchema.nullable(),
+});
 export const trayEvents = {
   "tray.input": {
     type: "object",
@@ -102,6 +111,47 @@ export const trayEvents = {
     required: [
       "id",
       "button",
+      "state",
+      "position",
+    ],
+    additionalProperties: false,
+  },
+  "tray.hover": {
+    type: "object",
+    properties: {
+      state: {
+        type: "string",
+        enum: [
+          "enter",
+          "move",
+          "leave",
+        ],
+      },
+      position: {
+        anyOf: [
+          {
+            const: null,
+          },
+          {
+            type: "object",
+            properties: {
+              x: {
+                type: "integer",
+              },
+              y: {
+                type: "integer",
+              },
+            },
+            required: [
+              "x",
+              "y",
+            ],
+            additionalProperties: false,
+          },
+        ],
+      },
+    },
+    required: [
       "state",
       "position",
     ],

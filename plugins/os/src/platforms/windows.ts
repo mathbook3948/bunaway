@@ -16,6 +16,14 @@ const LOCALE_SISO3166CTRYNAME = 0x5a;
 const MUI_LANGUAGE_NAME = 0x8;
 const MAX_LANGUAGE_BUFFER_CHARS = 128 * (LOCALE_NAME_MAX_LENGTH + 1) + 1;
 
+/** MessageBeep sound types; MB_OK (0x0) plays the sound scheme's Default Beep. */
+const BEEP_SOUND_TYPES = {
+  default: 0x0,
+  info: 0x40,
+  warning: 0x30,
+  error: 0x10,
+} as const;
+
 function failure(): never {
   throw new BunawayError({
     code: "INTERNAL",
@@ -23,7 +31,18 @@ function failure(): never {
   });
 }
 
-/** Own locale DLL bindings on the host I/O worker and close them on host shutdown. */
+function openUser32() {
+  return dlopen("user32.dll", {
+    MessageBeep: {
+      args: [
+        "u32",
+      ],
+      returns: "i32",
+    },
+  });
+}
+
+/** Own Kernel32 locale and user32 MessageBeep bindings on the host I/O worker and close them on host shutdown. */
 export function initialize() {
   const api = dlopen("kernel32.dll", {
     GetCurrentProcess: {
@@ -77,6 +96,14 @@ export function initialize() {
       returns: "i32",
     },
   });
+  let user32: ReturnType<typeof openUser32>;
+  try {
+    user32 = openUser32();
+  } catch (error) {
+    // Do not leak the already opened Kernel32 handle when initialization fails.
+    api.close();
+    throw error;
+  }
   let disposed = false;
   const assertActive = () => {
     if (disposed) {
@@ -214,6 +241,16 @@ export function initialize() {
         },
       };
     },
+    beep(kind: keyof typeof BEEP_SOUND_TYPES) {
+      assertActive();
+      if (!user32.symbols.MessageBeep(BEEP_SOUND_TYPES[kind])) {
+        throw new BunawayError({
+          code: "INTERNAL",
+          message: "Windows beep failed.",
+        });
+      }
+      return null;
+    },
     locale() {
       assertActive();
       return locale();
@@ -237,6 +274,7 @@ export function initialize() {
     dispose() {
       if (!disposed) {
         disposed = true;
+        user32.close();
         api.close();
       }
     },

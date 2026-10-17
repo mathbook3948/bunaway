@@ -6,6 +6,7 @@
       "pages": {
         "reference/client/create-client": ["createClient"],
         "reference/client/transport": ["createWebViewTransport"],
+        "reference/client/is-bunaway": ["isBunaway"],
         "reference/client/invoke": ["invoke"],
         "reference/tooling/native-plugins": ["invokePlugin"],
         "reference/client/listen": ["listen", "once"]
@@ -320,6 +321,9 @@
           "MIN_WINDOW_DIMENSION",
           "MAX_WINDOW_DIMENSION",
           "isWindowSizeDimension",
+          "MIN_WINDOW_ASPECT_RATIO",
+          "MAX_WINDOW_ASPECT_RATIO",
+          "isWindowAspectRatio",
           "hasValidWindowSizeConstraints",
           "MIN_WINDOW_COORDINATE",
           "MAX_WINDOW_COORDINATE",
@@ -709,6 +713,8 @@
           "isResizable",
           "setMovable",
           "isMovable",
+          "setAspectRatio",
+          "getAspectRatio",
           "minimize",
           "maximize",
           "unmaximize",
@@ -1298,7 +1304,7 @@
   "operations": {
     "reference/plugins/network": ["network.request", "network.exchange"],
     "reference/plugins/process": ["process.run"],
-    "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
+    "reference/plugins/os": ["os.info", "os.usage", "os.locale", "os.beep"],
     "reference/plugins/notification": [
       "notification.show",
       "notification.clear",
@@ -1362,7 +1368,8 @@
       "clipboard.getFormats",
       "clipboard.hasFormat",
       "clipboard.readFormats",
-      "clipboard.writeFormats"
+      "clipboard.writeFormats",
+      "clipboard.waitForChange"
     ],
     "reference/host/windows": [
       "windows.showPrintUI",
@@ -1442,6 +1449,8 @@
       "windows.isResizable",
       "windows.setMovable",
       "windows.isMovable",
+      "windows.setAspectRatio",
+      "windows.getAspectRatio",
       "windows.setSize",
       "windows.setContentPosition",
       "windows.setOuterSize",
