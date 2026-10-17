@@ -6,6 +6,7 @@
       "pages": {
         "reference/client/create-client": ["createClient"],
         "reference/client/transport": ["createWebViewTransport"],
+        "reference/client/is-bunaway": ["isBunaway"],
         "reference/client/invoke": ["invoke"],
         "reference/tooling/native-plugins": ["invokePlugin"],
         "reference/client/listen": ["listen", "once"]

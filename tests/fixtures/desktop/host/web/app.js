@@ -1,6 +1,12 @@
-import { createClient, createWebViewTransport } from "@bunaway/client";
+import {
+  createClient,
+  createWebViewTransport,
+  isBunaway,
+} from "@bunaway/client";
 import { matchesCapabilities } from "./capabilities.ts";
 
+// Sampled in the first script, before any await, to prove the host bridge precedes document scripts.
+const bunawayAtStart = isBunaway();
 const client = createClient({
   transport: createWebViewTransport(window.chrome.webview),
   hello: {
@@ -173,6 +179,11 @@ async function run() {
   results.push({
     name: "connect",
     ok: true,
+  });
+
+  await test("isBunaway is true in the app WebView from the first script", async () => {
+    assert(bunawayAtStart, "isBunaway was false at document start");
+    assert(isBunaway(), "isBunaway was false after connect");
   });
 
   if (multiView) {

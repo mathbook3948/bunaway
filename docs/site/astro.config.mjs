@@ -140,6 +140,9 @@ export default defineConfig({
                   slug: "reference/client/listen",
                 },
                 {
+                  slug: "reference/client/is-bunaway",
+                },
+                {
                   slug: "reference/client/close",
                 },
               ],
