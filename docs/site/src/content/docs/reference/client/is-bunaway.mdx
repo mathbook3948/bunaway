@@ -1,0 +1,58 @@
+---
+title: isBunaway
+description: 일반 브라우저와 bunaway 앱 WebView를 동기적으로 구분합니다.
+sidebar: { order: 4 }
+---
+
+```ts
+isBunaway(): boolean
+```
+
+현재 문서가 bunaway 앱 WebView에서 실행되면 `true`, 일반 브라우저나 SSR이면 `false`를 반환합니다.
+호출은 동기이며 연결을 만들지 않고 오류를 던지지 않습니다.
+
+## 사용법
+
+```ts
+import { isBunaway } from "@bunaway/client";
+
+// 브라우저 미리보기에서만 백엔드 호출 버튼을 숨기는 등 화면을 나눌 때
+if (!isBunaway()) {
+  showBrowserPreviewNotice();
+}
+```
+
+## 반환값
+
+| 실행 환경 | 반환값 |
+| --- | --- |
+| SSR 등 `window`가 없는 환경 | `false` |
+| 일반 브라우저 | `false` |
+| 앱 WebView 최상위 문서 | `true` |
+| 앱 WebView의 자식 프레임(iframe) | 플랫폼별로 다름 |
+
+자식 프레임은 Windows(WebView2)와 macOS에서 `true`, iOS에서 `false`, Android에서는 same-origin 하위 프레임만 `true`입니다.
+`true`여도 호스트는 하위 프레임의 메시지를 받지 않으므로 브리지를 쓸 수 있다는 뜻은 아닙니다.
+
+판별은 호스트가 제공하는 메시지 브리지(`window.chrome.webview`)가 있는지만 확인합니다.
+`postMessage`, `addEventListener`, `removeEventListener`가 모두 함수여야 하며, 하나라도 없으면 `false`입니다.
+
+## 브리지 준비 전 동작
+
+`client.ready`를 기다리지 않습니다. 호스트가 브리지를 문서 스크립트보다 먼저 설치하므로 문서의 첫 스크립트에서도 `true`입니다.
+이 시점 서술은 호스트별 설치 방식에 근거합니다. 실제 실행으로는 Windows host 회귀에서 본문 끝 스크립트가 시작될 때의 값만 확인하며, macOS, iOS, Android는 코드의 주입 방식이 근거입니다.
+
+| 호스트 | 브리지 설치 시점 |
+| --- | --- |
+| Windows | WebView2 런타임이 문서 생성 시 제공 |
+| macOS, iOS | 문서 시작 시점에 실행되는 사용자 스크립트 |
+| Android | 문서 시작 시점에 실행되는 스크립트 |
+
+반환값은 호출 시점의 스냅샷입니다. bunaway는 문서가 로드된 뒤에 브리지를 새로 설치하거나 제거하지 않으므로, 앱 WebView가 아닌 문서에서 bunaway가 결과를 나중에 `true`로 바꾸지 않습니다. 페이지 스크립트가 직접 전역 객체를 바꾸면 결과도 달라질 수 있습니다.
+
+## 신뢰할 수 없는 값
+
+어떤 웹 페이지도 같은 이름의 전역 객체를 만들 수 있고, bunaway가 아닌 WebView2 앱에도 `window.chrome.webview`가 있습니다.
+따라서 결과는 화면을 나누는 힌트로만 사용하세요.
+권한 승인이나 호출 출처의 증명에는 사용하지 않습니다.
+백엔드는 이 값을 받지 않고 세션과 `policy.json`으로 모든 호출을 검사합니다. 백엔드와 플러그인의 `.ts` 소스가 `isBunaway` 심벌을 참조하지 않는 것은 테스트로 확인합니다.

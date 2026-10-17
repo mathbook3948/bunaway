@@ -10,7 +10,10 @@ import {
 import { installedPlugins } from "#cli/plugins";
 import { bindHostAPI } from "#core/host-api";
 import { MAX_TEXT_LENGTH } from "#plugins/clipboard/src/contract";
-import { windowsOperations as clipboardOperations } from "#plugins/clipboard/src/operations";
+import {
+  windowsOperations as clipboardOperations,
+  macosOperations,
+} from "#plugins/clipboard/src/operations";
 import { testAppInfo } from "../fixtures/app-info.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
@@ -31,6 +34,7 @@ test("clipboard has separate read, write and clear permissions with strict Unico
     "clipboard.hasFormat",
     "clipboard.readFormats",
     "clipboard.writeFormats",
+    "clipboard.waitForChange",
   ]);
   for (const text of [
     "",
@@ -232,7 +236,7 @@ test("clipboard is independently discoverable as a Windows and macOS UI plugin",
   expect(plugin?.targets.windows?.thread).toBe("ui");
   expect(plugin?.targets.macos?.thread).toBe("ui");
   expect(plugin?.targets.macos?.supportedOperations).toEqual(
-    Object.keys(clipboardOperations).map((name) => `clipboard.${name}`),
+    Object.keys(macosOperations).map((name) => `clipboard.${name}`),
   );
   const result = await Bun.build({
     entrypoints: [

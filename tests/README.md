@@ -1193,6 +1193,13 @@ Show, XML, 교체와 개별 clear 및 종료 후 history 제거를 검사한다.
 실제 COM marshaling, callback 실행 스레드와 지연 Release를 확인한다. `host:windows`에
 포함하며 실제 사용자 클릭, popup 렌더링과 cold-start activation 검증은 아니다.
 
+`lifecycle/windows-aspect-ratio.test.ts`는 `WM_SIZING` 사각형의 비율 보정 계산을 검사합니다.
+Linux에서도 실행하는 순수 계산은 가장자리별 기준 축과 고정 모서리, 프레임 제외, DPI 변환한 크기 제약,
+시스템 추적 크기와의 교차 및 정수 반올림 경계를 확인합니다. 실제 HWND 검사는 Windows에서만 실행하며
+`host:windows`가 별도 프로세스로 돌립니다. 합성 `WM_SIZING`을 `SendMessageW`로 보내 8개 가장자리의 보정,
+설정 시 현재 크기 불변, 크기 제약과 시스템 최대 크기 처리, `null` 해제 뒤 사각형 보존을 확인합니다.
+실제 마우스 드래그, 혼합 DPI와 다중 모니터는 검사하지 않습니다.
+
 `lifecycle/windows-display.test.ts`는 기본 style 보존과 실제 Windows의 custom caption,
 네이티브 resize hit test, topmost/tool-window flag, content 크기와 전체화면 복원을
 검사합니다. 작업 표시줄 attention 요청이 창을 활성화하거나 표시하지 않는지,

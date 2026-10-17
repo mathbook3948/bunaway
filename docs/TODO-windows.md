@@ -167,7 +167,13 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 초기 배치의 순수 계산과 오류 경계 검증을 완료했다. 음수 좌표, signed 32-bit 경계, DPI 96/120/144/192, content/outer, 제약 충돌과 선언 보존을 검사했다.
 - [x] 초기 배치의 실제 HWND 및 WebView2 집중 검증을 완료했다. Windows Server 2022의 모니터 1개와 DPI 96에서 초기 선언 및 single/multiple 생성과 재생성을 확인했다. multiple은 isolated 프로필이다.
 - [ ] 초기 배치를 다중 물리 모니터, 혼합 DPI와 실제 높은 DPI에서 실행 검증한다. 합성 입력과 CI는 이 범위를 대신하지 않는다.
-- [ ] 고정 aspect ratio와 해제 API를 제공한다.
+- [x] `setAspectRatio`와 `getAspectRatio`로 내용 영역의 너비/높이 비율(0.1–10, `null`은 해제)을 고정하고 조회한다.
+  설정 시 현재 크기는 바꾸지 않고(Electron과 같음) 이후 사용자 크기 조절의 `WM_SIZING` 사각형만 조정한다.
+  끄는 테두리(`WMSZ_*`)에 따라 기준 축과 고정 모서리를 정하며, 비율은 내용 영역 기준이고 기존 크기 제약을
+  현재 DPI의 물리 픽셀로 변환하고 시스템 최소, 최대 추적 크기와 교차해 함께 적용한다.
+  범위가 겹치지 않으면 최소가 이기고, 범위와 비율이 충돌하면 범위를 우선한다.
+  최대화, 전체화면, 스냅과 프로그램의 크기 변경은 비율을 강제하지 않으며 macOS는 `UNSUPPORTED`다.
+  순수 계산과 계약은 단위 테스트로, 실제 HWND의 합성 `WM_SIZING`은 Windows CI에서 확인한다.
 - [x] `setResizable`, `isResizable`, `setMovable`, `isMovable`로 Windows 사용자 크기 조절과 이동을 설정하고 조회한다. 프로그램의 geometry API는 계속 허용하며 전체화면 뒤에도 설정을 유지한다.
 - [ ] 설정과 런타임 크기 제한을 실제 모니터, DPI에 맞게 재검토한다. 현재의 4096 상한을 유지할지 결정한다.
 - [ ] 위치와 크기의 선택적 애니메이션을 지원하거나 플랫폼별 미지원으로 명시한다.
@@ -267,9 +273,10 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 종료 코드 지정, 강제 exit, relaunch와 인자 보존 API를 제공한다.
 - [x] 앱 이름, 버전, 식별자, 프레임워크와 Bun, WebView 버전을 조회한다. 백엔드 `ctx.app`으로 제공하며 [CommandContext](site/src/content/docs/reference/backend/context.mdx)와 [ADR 0022](decisions/0022-app-info-context.md)에 정리했다.
 - [ ] 앱 패키지 경로, 실행 파일, 리소스 경로와 packaged/dev 상태를 조회한다.
-- [ ] 일반 브라우저와 bunaway 앱 WebView 실행 여부를 구분하는 공개 기능을 제공한다. [T-core-live]의 `isTauri`에 대응하는 요구다.
-  일반 브라우저, 앱 WebView, SSR에서의 반환값과 브리지 준비 전 동작을 정의하고 테스트한다.
-  환경 판별 결과를 권한 승인이나 신뢰된 호출 출처의 증명으로 사용하지 않는지 검증한다.
+- [x] 일반 브라우저와 bunaway 앱 WebView 실행 여부를 구분하는 공개 기능을 제공한다. [T-core-live]의 `isTauri`에 대응하는 요구다.
+  `@bunaway/client`의 동기 함수 `isBunaway()`가 호스트 브리지(`window.chrome.webview`) 유무로 판별하며, SSR과 일반 브라우저는 `false`, 앱 WebView는 `true`다.
+  단위 테스트(`tests/api/is-bunaway.test.ts`)와 Windows host 회귀(`tests/fixtures/desktop/host/web/app.js`, 본문 끝 스크립트 시작 시점 샘플)로 검증한다. 문서 첫 스크립트부터 `true`라는 주입 시점은 Windows 실측이 아니라 호스트별 주입 방식(macOS와 iOS 문서 시작 사용자 스크립트, Android 문서 시작 스크립트, Windows WebView2 제공)을 근거로 한 서술이다.
+  결과는 위조 가능하므로 권한 판단에 쓰지 않는다고 문서화하고, 백엔드와 플러그인 `.ts` 소스가 `isBunaway` 심벌을 참조하지 않음을 소스 스캔 테스트로 확인한다.
 - [ ] 앱 전체 포커스와 활성 상태를 제공한다. 창 생성은 `windows.lifecycle`로 제공하며 앱 전체 포커스와 활성 상태가 남았다.
 - [ ] 단일 인스턴스의 추가 데이터 전달과 lock 상태 조회, 해제 필요성을 결정한다.
 - [ ] 앱 ready 전에 들어온 외부 활성화 요청과 종료 요청의 순서를 공개 계약으로 정한다.
@@ -294,7 +301,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 사용자 정의 메뉴와 메뉴의 동적 교체, 제거를 지원한다. `menu.setTrayMenu`로 공유 메뉴 리소스를 연결한다.
 - [x] 왼쪽, 오른쪽, 가운데 버튼의 down/up, double-click과 context-menu 알림을 `tray.input` 및 창 없는 백엔드 `waitForEvent`로 전달한다.
 - [x] 처리 시 관측한 포인터 위치와 `tray.getBounds`의 shell 물리 bounds를 제공한다. 조회 실패는 null이다.
-- [ ] 트레이 mouse enter/leave/move를 제공한다.
+- [x] 트레이 mouse enter/leave/move를 클릭 계열 `tray.input`과 분리한 `tray.hover` 이벤트(`{ state, position }`)로 제공한다. hover 대기 함수는 없다. 첫 `WM_MOUSEMOVE`가 enter, 이후는 50ms 스로틀 move이며, leave는 100ms 타이머로 커서와 `Shell_NotifyIconGetRect`를 비교해 판단한다(최대 약 100ms 지연). 영역을 읽지 못하면 200ms 동안 move가 없을 때 leave이며 지연은 최대 약 300ms다.
 - [x] `tray.setClickBehavior`로 오른쪽 메뉴 표시와 왼쪽 창 복원 동작을 설정한다.
 - [x] `tray.focus`로 OS의 트레이 focus 요청 결과를 반환한다.
 - [ ] 트레이에서 지정 위치의 팝업 메뉴 열기와 닫기를 제공한다. 창 대상 `menu.showContextMenu`의 좌표 팝업은 구현됐다.
@@ -331,7 +338,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
   중지 중 입력 미전달, 신규 등록 실패, 기존 등록 상태 유지, 재개 후 입력 전달과 반복 호출을 검증한다.
   플랫폼별 구현 가능 범위와 종료 시 등록 해제도 확인한다.
 - [x] Windows 전역 단축키의 `globalShortcut.pressed` 이벤트와 명시적 key/modifiers 조합을 제공한다.
-- [ ] 전역 단축키의 released 이벤트를 제공한다. RegisterHotKey 구현은 키 해제를 알리지 않는다.
+- [x] 전역 단축키의 `globalShortcut.released` 이벤트를 제공한다. RegisterHotKey는 키 해제를 알리지 않으므로 WM_HOTKEY 뒤 짧은 WM_TIMER로 주 키의 GetAsyncKeyState를 확인한다.
+  별도 이벤트라서 `pressed`만 허용한 기존 뷰는 영향이 없다. 폴링 주기만큼 늦고 보안 데스크톱 전환 시 조기 발행될 수 있으며, 실제 물리 키보드 검증은 남아 있다.
 - [x] Windows 단축키 충돌, F12와 OS 예약 키, 중복 등록, batch rollback과 종료 정리를 처리한다.
 - [ ] WebView 포커스 시 메뉴 단축키와 UI 입력의 우선순위를 정의한다.
 
@@ -396,7 +404,10 @@ Windows의 비활성화 기록을 수정하지 않는다.
   실제 Windows 실행 결과와 휴지통 비활성화, 용량 초과 및 경고 UI 수동 검증은 별도 확인이 필요하다.
 - [ ] 휴지통 비활성화, 용량 초과와 영구 삭제 경고 UI의 동작을 실제 Windows에서 검증한다.
 - [ ] Windows 바로가기 생성, 읽기와 변경을 제공한다.
-- [ ] OS beep와 이모지 패널의 지원을 결정한다.
+- [x] OS beep와 이모지 패널의 지원을 결정한다.
+  `os.beep`은 `MessageBeep`로 default(`MB_OK`, Windows Default Beep), info, warning, error 소리를 재생하며 독립 `os.beep` 권한을 쓴다.
+  이모지 패널은 Windows에 공식 API가 없고 Win+. 키 합성만 가능하므로 지원하지 않는다.
+  Windows 실행은 `host:windows`의 `windows-os` 회귀에서 호출 성공만 확인하며 실제 소리 출력은 검증하지 않는다.
 - [ ] URL scheme을 등록, 해제하고 기본 처리 앱 여부를 조회한다.
   설치의 opt-in 처리 후보 등록과 제거는 구현했다. 런타임 등록 API와 기본 처리 앱 조회는 남아 있다.
 - [x] 파일 확장자, MIME, 표시 이름과 앱 EXE의 파일 아이콘을 설치에 등록한다.
@@ -438,7 +449,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] Windows toast API 지원 여부와 앱, 사용자, 정책의 알림 차단 상태를 조회한다.
 - [ ] 필요한 OS 권한 요청의 플랫폼별 계약을 제공한다. Windows 데스크톱 경로에는 알림 동의 팝업이 없으며 설정 변경은 사용자에게 맡긴다.
 - [x] 제목과 본문의 text-only toast, silent와 popup 억제 옵션을 제공한다.
-- [ ] 아이콘, 이미지와 사용자 지정 소리를 제공한다.
+- [x] 아이콘, 본문 이미지(inline/hero)와 시스템 소리를 제공한다. 이미지는 로컬 절대 경로, 확장자(png, jpg, jpeg, gif), 고정 드라이브, reparse point와 클라우드 파일 거부, 3,000,000바이트 검사 후 file URI로 전달하고, Windows 비패키지 앱은 임의 소리 파일을 재생할 수 없어 `ms-winsoundevent` 시스템 소리 이름과 loop만 지원한다. `silent`와 `sound`는 함께 줄 수 없다.
 - [x] 실행 중 native clicked, dismissed와 failed callback을 전달한다. Show 접수는 반환값으로 구분한다.
 - [ ] 실제 popup 표시 완료 이벤트와 사용자 클릭의 GUI 검증을 제공한다.
 - [x] 앱 범위 ID/group, 같은 ID 교체와 개별 clear를 제공한다. 종료 시 이번 실행의 알림을 정리한다.
@@ -500,7 +511,7 @@ MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이�
 - [x] `getFormats`와 `hasFormat`으로 지원하는 다섯 MIME 형식의 가용성을 조회한다. 임의 Windows 등록 형식의 열거는 포함하지 않는다.
 - [x] `readFormats`와 `writeFormats`로 한 번의 clipboard 열기 구간에서 여러 형식을 읽거나 교체한다. 준비 실패는 기존 내용을 보존하며 비우기 이후 부분 등록 실패는 되돌리지 않는다.
 - [x] Windows clipboard의 사용자 정의 binary 형식(`application/x-bunaway-binary/...`) 읽기와 쓰기를 제공한다. 형식당 256 KiB, 어댑터 수명마다 서로 다른 이름 64개까지다.
-- [ ] 클립보드 변경 이벤트의 지원을 결정한다.
+- [x] Windows clipboard의 변경 이벤트(`clipboard.changed`)와 `waitForChange`를 제공한다. `AddClipboardFormatListener`와 `WM_CLIPBOARDUPDATE`로 감지하며 payload는 내용 없이 `sequence`와 `changedAt`만 담는다. 같은 sequence의 연속 갱신은 합치고 자기 쓰기도 알린다. macOS는 지원하지 않는다([계약](../plugins/clipboard/README.md)).
 - [x] Windows `@bunaway/plugin-image`에서 PNG, JPEG와 BMP bytes, RGBA와 data URL로 앱 소유 이미지 리소스를 만든다.
 - [ ] 파일 경로에서 이미지 리소스를 읽는 API와 저장소 접근 정책을 연결한다.
 - [x] `image.getInfo`와 `image.getPixels`로 크기, 빈 이미지 여부와 RGBA 픽셀 데이터를 조회한다.
