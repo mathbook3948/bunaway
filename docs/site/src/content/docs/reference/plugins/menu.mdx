@@ -57,7 +57,7 @@ ID는 영문자, 숫자, `_`, `.`, `-`로 된 1~128자입니다.
 
 `type`은 `item`, `separator`, `checkbox`, `radio`, `submenu`입니다.
 `visible` 기본값은 `true`입니다. separator를 제외한 항목의 `label`은 필수이고
-`enabled` 기본값은 `true`입니다. label은 1~512 Unicode 코드 포인트이며 `😀`는 하나로 셉니다. NUL, 탭, 줄바꿈과
+`enabled` 기본값은 `true`입니다. `role`을 지정한 item만 label을 생략할 수 있습니다. label은 1~512 Unicode 코드 포인트이며 `😀`는 하나로 셉니다. NUL, 탭, 줄바꿈과
 잘못된 surrogate를 거부합니다. `&`는 문자로 표시하며 accelerator를 등록하지 않습니다.
 숨긴 항목은 네이티브 메뉴에서 제외합니다.
 
@@ -70,7 +70,7 @@ checkbox와 radio의 `checked` 기본값은 `false`입니다. radio는 `group`�
 `parentId`를 생략하거나 `null`로 지정하면 최상위에 삽입하고, 지정하면 해당 submenu에 삽입합니다.
 `removeItem`은 submenu의 하위 항목도 제거합니다. `updateItem.changes`는 `label`, `enabled`,
 `visible`, `checked`를 받습니다. separator는 visible만, submenu는 checked를 제외한 변경을 받습니다.
-유형과 ID를 바꾸려면 replace를 사용합니다. 변경 후 전체 트리를 검증하며 실패하면 이전 리소스와
+`role`은 바꿀 수 없으므로 유형, ID와 role을 바꾸려면 replace를 사용합니다. 변경 후 전체 트리를 검증하며 실패하면 이전 리소스와
 트레이 연결을 유지합니다.
 
 ## 트레이 연결과 이벤트
@@ -137,6 +137,61 @@ ID입니다. 팝업의 반환값과 `menu.clicked`는 같은 선택을 나타내
 연결과 분리는 창의 바깥 크기를 유지하고 콘텐츠 영역을 변경합니다. 기본 메뉴바 숨김과
 자동 숨김은 제공하지 않으며 분리로 제거합니다.
 
+## 편집 role
+
+`type: "item"`은 선택 필드 `role`을 가질 수 있습니다. checkbox, radio, submenu와 separator는 role을
+받지 않습니다. role은 `undo`, `redo`, `cut`, `copy`, `paste`, `selectAll`입니다.
+
+```ts
+await menu.create({
+  menuId: "main-menu",
+  items: [{
+    id: "edit", type: "submenu", label: "편집",
+    items: [
+      { id: "undo", type: "item", role: "undo" },
+      { id: "redo", type: "item", role: "redo" },
+      { id: "sep", type: "separator" },
+      { id: "cut", type: "item", role: "cut" },
+      { id: "copy", type: "item", role: "copy", label: "복사하기" },
+      { id: "paste", type: "item", role: "paste" },
+      { id: "all", type: "item", role: "selectAll" },
+    ],
+  }],
+});
+```
+
+role 항목을 선택하면 메뉴를 연 창의 페이지에서 현재 포커스된 document에 편집 명령을 직접 실행합니다.
+키 이벤트를 만들지 않으므로 페이지의 `keydown` 처리와 키보드 자판 배열에 영향받지 않고,
+다른 앱에는 입력을 보내지 않습니다. 포커스는 최상위 document에서 같은 origin의 iframe 안으로 따라갑니다.
+cross-origin iframe에 포커스가 있으면 아무것도 실행하지 않습니다.
+`selectAll`은 `selectstart`, `copy`와 `cut`은 해당 ClipboardEvent를 발생시키며 페이지가 이를 막을 수 있습니다.
+`undo`, `redo`, `cut`은 `beforeinput` 이벤트를 만들지 않습니다.
+`paste`는 호스트가 클립보드의 일반 텍스트를 읽어 포커스된 요소에 삽입합니다. `paste` 이벤트 대신
+`beforeinput`(`insertText`)이 발생하고, 일반 텍스트가 아닌 클립보드 내용은 삽입하지 않습니다.
+클립보드가 비었거나 다른 프로세스가 점유 중이면 `paste`는 아무것도 하지 않습니다.
+`paste`는 포커스를 확인한 뒤 텍스트를 넣으므로, 그 사이 포커스가 cross-origin iframe으로 옮겨지면
+해당 프레임이 텍스트를 받을 수 있습니다.
+창이 닫히는 중이거나 WebView가 없으면 선택은 조용히 무시하고 호스트 진단에만 기록합니다.
+role 항목은 `menu.clicked`를 보내지 않고 `waitForClick` 대기자도 깨우지 않으며,
+`showContextMenu`는 `null`을 반환합니다.
+
+`label`을 생략하면 role의 기본 label을 사용하고 `get` 결과에도 채워서 반환합니다.
+기본 label과 메뉴에 표시하는 단축키 문구는 다음과 같습니다. 문구는 표시용이며
+실제 키 입력은 페이지가 직접 처리합니다. `label`을 지정해도 단축키 문구는 유지합니다.
+
+| role | 기본 label | 표시 단축키 |
+| --- | --- | --- |
+| `undo` | Undo | Ctrl+Z |
+| `redo` | Redo | Ctrl+Y |
+| `cut` | Cut | Ctrl+X |
+| `copy` | Copy | Ctrl+C |
+| `paste` | Paste | Ctrl+V |
+| `selectAll` | Select All | Ctrl+A |
+
+트레이 메뉴는 앱 창에 속하지 않아 입력이 다른 앱에 들어갈 수 있으므로 role을 거부합니다.
+role 항목이 있는 리소스의 `setTrayMenu`와, 트레이에 연결한 리소스에 role을 넣는
+`replace`와 `insert`는 `INVALID_ARGUMENT`입니다. 창 메뉴바와 컨텍스트 팝업에서만 사용합니다.
+
 ## 정책과 오류
 
 각 함수는 같은 이름의 독립 Host 권한을 요구합니다. 예를 들어 생성은 `menu.create`,
@@ -151,6 +206,6 @@ ID입니다. 팝업의 반환값과 `menu.clicked`는 같은 선택을 나타내
 취소는 `CANCELLED`, 기한 초과는 `TIMEOUT`이며 완료한 동기 변경을 되돌리지 않습니다.
 네이티브 메뉴 생성 오류는 호스트 진단에 기록합니다.
 
-icon, 기본 role, accelerator와 단축키 우선순위는 아직 제공하지 않습니다.
-Undo, Redo, Cut, Copy, Paste, Select All 역할이나 `Ctrl+...` 단축키를 자동 실행하지 않습니다.
+icon, accelerator 등록과 단축키 우선순위는 아직 제공하지 않습니다.
+편집 role 외의 역할과 `Ctrl+...` 단축키를 자동 실행하지 않습니다.
 라벨의 `&`는 문자 그대로 표시합니다. Windows의 기본 메뉴 탐색 키만 사용합니다.

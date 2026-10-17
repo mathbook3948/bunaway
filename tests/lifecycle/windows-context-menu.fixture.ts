@@ -80,6 +80,7 @@ const menus = new WindowMenus({
   interrupt: (requestSignal, cancel) =>
     requests.onModalInterrupt(requestSignal, cancel),
   changed() {},
+  executeRole() {},
 });
 /** Lets the parent queue shutdown so the native loop observes it as soon as it starts. */
 function waitForEarlyShutdown() {

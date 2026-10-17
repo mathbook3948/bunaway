@@ -2,9 +2,12 @@ import { dlopen, type Pointer, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import type { NativeMenuRole } from "@bunaway/plugin-api/native";
 import { BunawayError, type WireError } from "@bunaway/protocol";
 import type { WindowSpec } from "./channel.ts";
+import { readClipboardText } from "./clipboard-text.ts";
 import {
+  abandonHandlers,
   addRef,
   type ComHandler,
   disposeHandlers,
@@ -13,11 +16,23 @@ import {
   handler,
   method,
   query,
+  reclaimHandlers,
   release,
 } from "./com.ts";
 import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
+import {
+  callDevToolsProtocolMethod,
+  DevToolsStartError,
+} from "./webview-devtools.ts";
 import { WebViewDownloads } from "./webview-downloads.ts";
+import { EditCommandCalls } from "./webview-edit-calls.ts";
+import {
+  type EditCommandReport,
+  editCommandEvaluateParameters,
+  focusTargetEvaluateParameters,
+  interpretEditCommandResult,
+} from "./webview-edit-command.ts";
 import { enableCustomTitlebar } from "./webview-titlebar.ts";
 import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 
@@ -29,6 +44,9 @@ const WEB_ERROR_OPERATION_CANCELED = 14;
 // x64 GUITHREADINFO: cbSize, flags, then hwndActive@8 and hwndFocus@16, ending with rcCaret.
 const GUI_THREAD_INFO_SIZE = 72;
 const GUI_THREAD_INFO_FOCUS_OFFSET = 16;
+// ICoreWebView2Controller::MoveFocus and COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC.
+const WEBVIEW_CONTROLLER_MOVE_FOCUS_SLOT = 12;
+const MOVE_FOCUS_REASON_PROGRAMMATIC = 0;
 const streams = dlopen("shlwapi.dll", {
   SHCreateMemStream: {
     args: [
@@ -81,6 +99,12 @@ export class WebView {
     callback: ComHandler;
   }[] = [];
   private readonly completions: ComHandler[] = [];
+  /** In-flight editing-command completions; released ones are pruned on the next command. */
+  private readonly editCalls = new EditCommandCalls<ComHandler>({
+    dispose: disposeHandlers,
+    abandon: abandonHandlers,
+    reclaim: reclaimHandlers,
+  });
   private creating = 0;
   private closing = false;
   private detached = false;
@@ -905,6 +929,187 @@ export class WebView {
     );
   }
 
+  /** Move keyboard focus into the page, e.g. after a native popup closed; it does not activate the window. */
+  moveFocusToContent(): void {
+    this.requireWebView();
+    assert(this.controller);
+    hr(
+      method(this.controller, WEBVIEW_CONTROLLER_MOVE_FOCUS_SLOT, [
+        "i32",
+      ])(MOVE_FOCUS_REASON_PROGRAMMATIC),
+      "MoveFocus",
+    );
+  }
+
+  /**
+   * Run an editing command in the page's focused document through the DevTools protocol.
+   *
+   * The command runs as `document.execCommand` from a `Runtime.evaluate` call, so it does not
+   * depend on the keyboard layout, produces no key events and never injects input into another
+   * application. The call works with the DevTools UI disabled. Focus is followed from the top
+   * document into nested same-origin frames; a cross-origin frame is skipped. Paste inserts the
+   * clipboard's plain text instead (see `pasteClipboardText`).
+   *
+   * Returns false, doing nothing, while the WebView is closing or not ready. Completion is
+   * observed on the next pump; a refused focus move, a refused command and protocol failures
+   * after the call started (for example a navigating page) are reported through `report`. A
+   * failure to start the call throws. While this view tracks MAX_IN_FLIGHT_EDIT_CALLS calls, or
+   * more than MAX_ABANDONED_COMPLETIONS abandoned handlers are still held, a command starts no
+   * DevTools call and is reported as skipped (`busy`).
+   */
+  executeEditCommand(
+    command: NativeMenuRole,
+    report: EditCommandReport,
+  ): boolean {
+    if (this.closing || !this.webview || !this.controller) {
+      return false;
+    }
+    const webview = this.webview;
+    // Release finished calls and reclaim abandoned handlers first, so only what is still pending
+    // counts toward the limits. This is the only prune of a command; the calls below skip it.
+    this.editCalls.prune();
+    if (this.editCalls.isBusy()) {
+      report.skipped("busy");
+      return true;
+    }
+    // A closed popup normally returns focus to the page; restore it when the host did not.
+    // A minimized or hidden window can refuse; the command may still apply, so continue and
+    // report the refusal separately from the command's own outcome.
+    if (!this.hasInputFocus()) {
+      try {
+        this.moveFocusToContent();
+      } catch (error) {
+        report.focusFailed(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+    if (command === "paste") {
+      this.pasteClipboardText(webview, report);
+      return true;
+    }
+    this.editCalls.start(
+      command,
+      (isActive) =>
+        callDevToolsProtocolMethod(
+          webview,
+          "Runtime.evaluate",
+          JSON.stringify(editCommandEvaluateParameters(command)),
+          ({ hresult, json }) => {
+            // A late completion after cleanup or abandonment must touch no view or host state.
+            if (!isActive()) {
+              return;
+            }
+            const verdict = interpretEditCommandResult(hresult, json);
+            if (verdict.kind === "failed") {
+              report.failed(verdict.reason);
+            } else if (verdict.kind === "skipped") {
+              report.skipped(verdict.reason);
+            } else {
+              report.executed?.(verdict.result);
+            }
+          },
+        ),
+      {
+        prune: false,
+      },
+    );
+    return true;
+  }
+
+  /**
+   * Insert the clipboard's plain text into the focused document.
+   *
+   * `execCommand("paste")` is refused for host-triggered calls, so the host reads CF_UNICODETEXT
+   * once and inserts it with `Input.insertText`, which fires beforeinput (`insertText`) instead
+   * of a paste event. A first `Runtime.evaluate` locates the focused document with the same
+   * frame rules as other roles; the insertion starts from its completion, only while the view
+   * is live and open and the limits of `executeEditCommand` still allow a call. Both calls are
+   * tracked, and neither prunes: the first follows the caller's prune and the second starts
+   * inside a COM callback. Focus is checked before the text is inserted, so focus that
+   * moves to a cross-origin frame in between can still receive the text.
+   */
+  private pasteClipboardText(webview: Pointer, report: EditCommandReport) {
+    const clipboard = readClipboardText();
+    if (clipboard.kind !== "text") {
+      report.skipped(
+        {
+          empty: "clipboard-empty",
+          unavailable: "clipboard-unavailable",
+          "too-large": "clipboard-too-large",
+        }[clipboard.kind],
+      );
+      return;
+    }
+    this.editCalls.start(
+      "paste",
+      (isActiveTarget) =>
+        callDevToolsProtocolMethod(
+          webview,
+          "Runtime.evaluate",
+          JSON.stringify(focusTargetEvaluateParameters()),
+          ({ hresult, json }) => {
+            if (!isActiveTarget() || this.closing) {
+              return;
+            }
+            const verdict = interpretEditCommandResult(hresult, json);
+            if (verdict.kind === "failed") {
+              report.failed(verdict.reason);
+              return;
+            }
+            if (verdict.kind === "skipped") {
+              report.skipped(verdict.reason);
+              return;
+            }
+            // Other commands may have filled the limits since the first call started.
+            if (this.editCalls.isBusy()) {
+              report.skipped("busy");
+              return;
+            }
+            try {
+              this.editCalls.start(
+                "paste",
+                (isActiveInsert) =>
+                  callDevToolsProtocolMethod(
+                    webview,
+                    "Input.insertText",
+                    JSON.stringify({
+                      text: clipboard.text,
+                    }),
+                    ({ hresult: inserted }) => {
+                      if (!isActiveInsert()) {
+                        return;
+                      }
+                      if (inserted < 0) {
+                        report.failed(`0x${(inserted >>> 0).toString(16)}`);
+                      } else {
+                        report.executed?.(verdict.result);
+                      }
+                    },
+                  ),
+                {
+                  prune: false,
+                },
+              );
+            } catch (error) {
+              // Starting inside a COM callback must not unwind into native code. The refused
+              // call's handler stays tracked and is released by a later prune.
+              report.failed(
+                error instanceof DevToolsStartError
+                  ? `0x${(error.hresult >>> 0).toString(16)}`
+                  : error instanceof Error
+                    ? error.message
+                    : String(error),
+              );
+            }
+          },
+        ),
+      {
+        prune: false,
+      },
+    );
+  }
+
   /** Read actual browser URL, title, history availability, controller zoom and input focus. */
   getState() {
     const webview = this.requireWebView();
@@ -1296,6 +1501,21 @@ export class WebView {
     if (this.completions.slice(0, 2).some((callback) => callback.refs > 1)) {
       return false;
     }
+    // WebView2 may keep an in-flight editing-command completion; wait a bounded time for its
+    // release, then abandon it so cleanup completes.
+    if (
+      !this.editCalls.settle(
+        performance.now() - this.closedAt,
+        (editCommand, total, overLimit) =>
+          this.hooks.log("menu-role-completion-abandoned", {
+            command: editCommand,
+            abandoned: total,
+            overLimit,
+          }),
+      )
+    ) {
+      return false;
+    }
     if (this.environment5 && this.browserToken !== undefined) {
       hr(
         method(this.environment5, 13, [
@@ -1327,12 +1547,18 @@ export class WebView {
       this.checkShutdownDeadline();
       return false;
     }
+    // Settled editing completions hold only the owner reference, so they cannot be invoked
+    // again and stay out of the post-detach invocation check.
     const callbacks = [
       ...this.events.map(({ callback }) => callback),
       ...this.completions,
     ];
+    const editHandlers = this.editCalls.handlers();
     assert(
-      callbacks.every((callback) => callback.refs === 1),
+      [
+        ...callbacks,
+        ...editHandlers,
+      ].every((callback) => callback.refs === 1),
       "Outstanding COM reference",
     );
     // Keep this view's trampolines alive through bounded STA pumping before reuse or disposal.
@@ -1361,6 +1587,7 @@ export class WebView {
       ...this.events.map(({ callback }) => callback),
       ...this.completions,
     ]);
+    this.editCalls.release();
     this.events.length = 0;
     this.completions.length = 0;
     this.loader.close();

@@ -1,4 +1,7 @@
-import type { NativeMenuItem } from "@bunaway/plugin-api/native";
+import type {
+  NativeMenuItem,
+  NativeMenuRole,
+} from "@bunaway/plugin-api/native";
 import { z } from "zod";
 export const MAX_MENU_RESOURCES = 32;
 export const MAX_MENU_ITEMS = 256;
@@ -14,6 +17,21 @@ export const labelSchema = z
   .min(1)
   .max(512)
   .regex(/^[^\0\t\r\n\uD800-\uDFFF]*$(?![\s\S])/u);
+/** Editing roles and Electron's Windows default labels; accelerators are drawn by the native menu. */
+export const MENU_ROLE_LABELS = {
+  undo: "Undo",
+  redo: "Redo",
+  cut: "Cut",
+  copy: "Copy",
+  paste: "Paste",
+  selectAll: "Select All",
+} as const satisfies Record<NativeMenuRole, string>;
+export const roleSchema = z.enum(
+  Object.keys(MENU_ROLE_LABELS) as [
+    NativeMenuRole,
+    ...NativeMenuRole[],
+  ],
+);
 const base = {
   id: idSchema,
   visible: z.boolean().default(true),
@@ -34,7 +52,18 @@ type MenuItemInput =
     }
   | {
       id: string;
-      type: "item" | "checkbox" | "radio";
+      type: "item";
+      /** Required unless `role` supplies a default. */
+      label?: string | undefined;
+      role?: NativeMenuRole | undefined;
+      enabled?: boolean | undefined;
+      visible?: boolean | undefined;
+      checked?: boolean | undefined;
+      group?: string | null | undefined;
+    }
+  | {
+      id: string;
+      type: "checkbox" | "radio";
       label: string;
       enabled?: boolean | undefined;
       visible?: boolean | undefined;
@@ -90,27 +119,52 @@ const boundedTree = z
     }
   });
 const itemSchema: z.ZodType<NativeMenuItem, MenuItemInput> = z.lazy(() =>
-  z.discriminatedUnion("type", [
-    z.strictObject({
-      ...base,
-      type: z.literal("separator"),
+  z
+    .discriminatedUnion("type", [
+      z.strictObject({
+        ...base,
+        type: z.literal("separator"),
+      }),
+      z.strictObject({
+        ...action,
+        label: labelSchema.optional(),
+        type: z.literal("item"),
+        role: roleSchema.optional(),
+      }),
+      z.strictObject({
+        ...action,
+        type: z.enum([
+          "checkbox",
+          "radio",
+        ]),
+      }),
+      z.strictObject({
+        ...base,
+        type: z.literal("submenu"),
+        label: labelSchema,
+        enabled: z.boolean().default(true),
+        items: z.array(itemSchema),
+      }),
+    ])
+    .transform((item, context) => {
+      if (item.type !== "item") {
+        return item;
+      }
+      // Only a role item may omit its label; the role then supplies Electron's default.
+      const label = item.label ?? (item.role && MENU_ROLE_LABELS[item.role]);
+      if (label === undefined) {
+        context.issues.push({
+          code: "custom",
+          message: "Menu item label is required without a role.",
+          input: item,
+        });
+        return z.NEVER;
+      }
+      return {
+        ...item,
+        label,
+      };
     }),
-    z.strictObject({
-      ...action,
-      type: z.enum([
-        "item",
-        "checkbox",
-        "radio",
-      ]),
-    }),
-    z.strictObject({
-      ...base,
-      type: z.literal("submenu"),
-      label: labelSchema,
-      enabled: z.boolean().default(true),
-      items: z.array(itemSchema),
-    }),
-  ]),
 );
 /** Resolved tree shared by tray integration and future window menu consumers. */
 export const menuItemsSchema = boundedTree

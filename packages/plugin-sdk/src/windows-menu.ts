@@ -1,6 +1,9 @@
 import { dlopen, type Pointer, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
-import type { NativeMenuItem } from "@bunaway/plugin-api/native";
+import type {
+  NativeMenuItem,
+  NativeMenuRole,
+} from "@bunaway/plugin-api/native";
 
 // Keep UTF-16 storage alive across synchronous native calls, including reentrant callbacks.
 const labels = new Set<Buffer>();
@@ -21,6 +24,22 @@ const MF_CHECKED = 0x8;
 const MIIM_FTYPE = 0x100;
 const MFT_RADIOCHECK = 0x200;
 const MENUITEMINFO_SIZE = 80;
+
+/** Electron's Windows shortcut text for each role. */
+const ROLE_ACCELERATORS = {
+  undo: "Ctrl+Z",
+  redo: "Ctrl+Y",
+  cut: "Ctrl+X",
+  copy: "Ctrl+C",
+  paste: "Ctrl+V",
+  selectAll: "Ctrl+A",
+} as const satisfies Record<NativeMenuRole, string>;
+
+/** A selectable leaf: its app ID and, for a role item, the editing command it stands for. */
+export type SelectedMenuItem = {
+  id: string;
+  role?: NativeMenuRole | undefined;
+};
 
 /** A single native popup tree. Destroying its root releases all attached submenu handles. */
 export class NativePopupMenu {
@@ -73,7 +92,7 @@ export class NativePopupMenu {
     },
   });
   readonly handle: bigint;
-  private readonly commands = new Map<number, string>();
+  private readonly commands = new Map<number, SelectedMenuItem>();
   private nextCommand = 1;
   private disposed = false;
   private readonly handles = new Set<bigint>();
@@ -130,15 +149,26 @@ export class NativePopupMenu {
         } else {
           command = BigInt(this.nextCommand++);
           if (enabled && item.enabled) {
-            this.commands.set(Number(command), item.id);
+            this.commands.set(Number(command), {
+              id: item.id,
+              role: item.type === "item" ? item.role : undefined,
+            });
           }
           if (item.checked) {
             flags |= MF_CHECKED;
           }
         }
-        // Labels are literal text; menu accelerators are a separate future contract.
-        const appended = withWide(item.label.replaceAll("&", "&&"), (label) =>
-          this.native.symbols.AppendMenuW(menu, flags, command, label),
+        // Labels are literal text. A role item in a popup or submenu shows its shortcut as
+        // display-only text after a tab; the page handles the real key itself. Top-level menu-bar
+        // items have no accelerator column, so the text would render as a stray label tail.
+        const accelerator =
+          !menuBar && item.type === "item" && item.role
+            ? `\t${ROLE_ACCELERATORS[item.role]}`
+            : "";
+        const appended = withWide(
+          `${item.label.replaceAll("&", "&&")}${accelerator}`,
+          (label) =>
+            this.native.symbols.AppendMenuW(menu, flags, command, label),
         );
         if (!appended && item.type === "submenu") {
           this.native.symbols.DestroyMenu(command);
@@ -175,14 +205,24 @@ export class NativePopupMenu {
 
   /** Resolve a native menu-bar selection only within this live tree. */
   selectedAt(handle: bigint, position: number): string | null {
-    return this.contains(handle)
-      ? this.selected(this.native.symbols.GetMenuItemID(handle, position))
-      : null;
+    return this.selectedItemAt(handle, position)?.id ?? null;
   }
 
   /** Resolve only a selectable leaf returned by TrackPopupMenuEx. Zero means dismissal. */
   selected(command: number): string | null {
-    return this.disposed ? null : this.commands.get(command) || null;
+    return this.selectedItem(command)?.id ?? null;
+  }
+
+  /** Like `selectedAt`, also reporting the item's role so the caller can run it. */
+  selectedItemAt(handle: bigint, position: number): SelectedMenuItem | null {
+    return this.contains(handle)
+      ? this.selectedItem(this.native.symbols.GetMenuItemID(handle, position))
+      : null;
+  }
+
+  /** Like `selected`, also reporting the item's role so the caller can run it. */
+  selectedItem(command: number): SelectedMenuItem | null {
+    return this.disposed ? null : (this.commands.get(command) ?? null);
   }
 
   /** Idempotently release the entire tree and its FFI binding. */

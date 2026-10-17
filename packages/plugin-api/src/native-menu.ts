@@ -1,3 +1,15 @@
+/**
+ * Editing commands the host runs on the window's page. The names are Chromium editing command
+ * names, so they double as the protocol command sent to the WebView.
+ */
+export type NativeMenuRole =
+  | "undo"
+  | "redo"
+  | "cut"
+  | "copy"
+  | "paste"
+  | "selectAll";
+
 /** An app-scoped menu resource. IDs are unique throughout one resource tree. */
 export type NativeMenuItem =
   | {
@@ -7,7 +19,19 @@ export type NativeMenuItem =
     }
   | {
       id: string;
-      type: "item" | "checkbox" | "radio";
+      type: "item";
+      /** Resolved label; the role's default when the definition omitted it. */
+      label: string;
+      enabled: boolean;
+      visible: boolean;
+      checked: boolean;
+      group: string | null;
+      /** A role item runs its editing command itself and is never reported as a selection. */
+      role?: NativeMenuRole | undefined;
+    }
+  | {
+      id: string;
+      type: "checkbox" | "radio";
       label: string;
       enabled: boolean;
       visible: boolean;
@@ -49,6 +73,11 @@ export type NativeMenuWindowHost = {
   ): () => void;
   /** Register only modal-loop termination for validated cancellation/shutdown. Cleanup stays deferred. */
   interrupt(signal: AbortSignal | undefined, cancel: () => void): () => void;
+  /**
+   * Run a menu role on the window's page. A closed window or missing WebView is ignored with a
+   * diagnostic, because a menu selection is user input and must not fail the app.
+   */
+  executeRole(windowId: string, role: NativeMenuRole): void;
   /** Resize the WebView and refresh the observed content bounds after menu attachment changes. */
   changed(windowId: string): void;
 };

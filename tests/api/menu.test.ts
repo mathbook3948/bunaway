@@ -678,3 +678,207 @@ test("windowless backend click waits are cancellable, bounded and receive no rep
     });
   }
 });
+
+test("role items default their label, keep an explicit label and reject roles elsewhere", () => {
+  const roles = [
+    [
+      "undo",
+      "Undo",
+    ],
+    [
+      "redo",
+      "Redo",
+    ],
+    [
+      "cut",
+      "Cut",
+    ],
+    [
+      "copy",
+      "Copy",
+    ],
+    [
+      "paste",
+      "Paste",
+    ],
+    [
+      "selectAll",
+      "Select All",
+    ],
+  ] as const;
+  expect(
+    menuItemsSchema.parse(
+      roles.map(([role]) => ({
+        id: role,
+        type: "item",
+        role,
+      })),
+    ),
+  ).toMatchObject(
+    roles.map(([role, label]) => ({
+      role,
+      label,
+    })),
+  );
+  expect(
+    menuItemsSchema.parse([
+      {
+        id: "copy",
+        type: "item",
+        role: "copy",
+        label: "복사",
+      },
+    ])[0],
+  ).toMatchObject({
+    role: "copy",
+    label: "복사",
+  });
+  // Plain items carry no role key, so existing snapshots are unchanged.
+  expect(
+    "role" in
+      (menuItemsSchema.parse([
+        item("plain"),
+      ])[0] ?? {}),
+  ).toBe(false);
+  const rejected = [
+    // Without a role, a label is still required.
+    {
+      id: "a",
+      type: "item",
+    },
+    {
+      id: "a",
+      type: "checkbox",
+    },
+    {
+      id: "a",
+      type: "checkbox",
+      label: "A",
+      role: "copy",
+    },
+    {
+      id: "a",
+      type: "radio",
+      label: "A",
+      group: "g",
+      role: "copy",
+    },
+    {
+      id: "a",
+      type: "submenu",
+      label: "A",
+      role: "copy",
+      items: [],
+    },
+    {
+      id: "a",
+      type: "separator",
+      role: "copy",
+    },
+    {
+      id: "a",
+      type: "item",
+      role: "close",
+    },
+    {
+      id: "a",
+      type: "item",
+      role: "copy",
+      checked: true,
+    },
+  ];
+  for (const candidate of rejected) {
+    expect(
+      menuItemsSchema.safeParse([
+        candidate,
+      ]).success,
+    ).toBe(false);
+  }
+  expect(
+    menuOperations.updateItem.input.safeParse({
+      menuId: "m",
+      itemId: "a",
+      changes: {
+        role: "copy",
+      },
+    }).success,
+  ).toBe(false);
+});
+
+test("tray menus reject roles at any depth and keep the previous definition", async () => {
+  const snapshots: (readonly NativeMenuItem[] | null | undefined)[] = [];
+  const { invoke } = fixture({
+    setTrayMenu(items) {
+      snapshots.push(items);
+    },
+    emit() {},
+  });
+  const roleItem = {
+    id: "copy",
+    type: "item",
+    role: "copy",
+  };
+  await invoke("create", {
+    menuId: "roles",
+    items: [
+      {
+        id: "edit",
+        type: "submenu",
+        label: "Edit",
+        items: [
+          roleItem,
+        ],
+      },
+    ],
+  });
+  await expect(
+    invoke("setTrayMenu", {
+      menuId: "roles",
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(await invoke("getTrayMenu", null)).toBeNull();
+  await invoke("create", {
+    menuId: "plain",
+    items: [
+      item("a"),
+    ],
+  });
+  await invoke("setTrayMenu", {
+    menuId: "plain",
+  });
+  const attached = snapshots.length;
+  // Edits to the attached tray menu that introduce a role are refused as a whole.
+  await expect(
+    invoke("insert", {
+      menuId: "plain",
+      index: 0,
+      item: roleItem,
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  await expect(
+    invoke("replace", {
+      menuId: "plain",
+      items: [
+        roleItem,
+      ],
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(snapshots).toHaveLength(attached);
+  expect(
+    await invoke("get", {
+      menuId: "plain",
+    }),
+  ).toMatchObject({
+    items: [
+      {
+        id: "a",
+      },
+    ],
+  });
+});

@@ -11,7 +11,14 @@
 팝업은 표시 종료나 생성 실패 때 해제한다. checkbox와 radio 선택은 상태를 자동 변경하지 않는다.
 `setWindowMenu`는 창에 메뉴를 연결하고 `showContextMenu`는 화면 물리 좌표에 임시 팝업을 표시한다.
 리소스 하나는 트레이나 창 하나에만 연결할 수 있다. 팝업은 독립 복사본을 사용하며 요청 신호로 취소한다.
-가속키, 편집 역할과 앱 전체 기본 메뉴는 지원하지 않는다.
+편집 role(undo, redo, cut, copy, paste, selectAll)은 `type: "item"`에만 허용한다. 스키마가
+생략한 label을 기본 label로 채우고, `NativePopupMenu`가 role의 표시용 단축키 문구를 붙이며 선택 때
+role을 알려 준다. `WindowMenus`는 role 선택을 `menu.clicked` 없이 창 호스트의 `executeRole`로 넘기고,
+호스트가 해당 창 WebView에 DevTools 프로토콜의 `Runtime.evaluate`로 `document.execCommand`를 실행한다(포커스된
+document를 따라가며 키 이벤트는 만들지 않는다). paste는 `execCommand("paste")`가 거부되므로 호스트가
+클립보드의 CF_UNICODETEXT를 한 번 읽어 `Input.insertText`로 넣는다(`paste` 이벤트 대신 `beforeinput`).
+cross-origin iframe에 포커스가 있으면 실행하지 않는다.
+트레이 메뉴는 role을 `INVALID_ARGUMENT`로 거부한다. 가속키 등록과 앱 전체 기본 메뉴는 지원하지 않는다.
 
 `tests/api/menu.test.ts`는 계약, 제한, 권한, 변경 실패 보존과 이전 선택 폐기를 검사한다.
 `tests/lifecycle/windows-menu.test.ts`는 실제 Win32 메뉴의 순서, 상태, Unicode와 자원 해제를 확인한다.
@@ -19,6 +26,8 @@
 `api/window-menu.test.ts`는 창 연결, 변경, 선택 이벤트와 팝업 취소 계약을 검사한다.
 `lifecycle/windows-window-menu.test.ts`는 실제 창 연결과 중첩 메뉴 선택, 크기 보존,
 UI Worker의 팝업 취소 및 메뉴 막대 종료를 검사한다.
+`lifecycle/windows-menu-roles.ts`는 실제 WebView2 창에서 메뉴바와 컨텍스트 팝업의 role 선택이
+textarea, 클립보드와 undo 이력을 바꾸고 선택 이벤트를 만들지 않음을 검사한다.
 Windows 테스트는 `mise run host:windows`에 포함되며 Linux에서는 건너뛴다.
 실제 포인터 클릭, 키보드 메뉴 조작과 Explorer 재시작 중 사용자 정의 메뉴는 수동 검증이 남아 있다.
 

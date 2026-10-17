@@ -328,7 +328,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 트레이 메뉴 선택을 `menu.clicked`로 전달한다. 앱 창에 속하지 않아 `windowId`는 null이다.
 - [x] 창 메뉴바와 컨텍스트 팝업 선택을 `menu.clicked`로 전달하고 소유 windowId를 포함한다.
 - [ ] accelerator, 표시 문자열과 실제 등록 여부를 구분한다.
-- [ ] Undo, Redo, Cut, Copy, Paste, Select All 등 기본 menu role을 제공한다.
+- [x] Undo, Redo, Cut, Copy, Paste, Select All 등 기본 menu role을 제공한다. 6개 role을 `type: "item"`의 선택 필드로 두고, 선택하면 창 WebView의 포커스된 document에 CDP `Runtime.evaluate`와 `document.execCommand`로 실행한다(키 이벤트 없음, paste는 호스트가 읽은 클립보드 텍스트를 `Input.insertText`로 삽입, cross-origin iframe은 건너뜀)(`menu.clicked`와 click waiter 없음). label을 생략하면 Electron 기본 label과 단축키 표시를 쓰며 트레이 메뉴의 role은 `INVALID_ARGUMENT`로 거부한다.
 - [ ] About, Quit, 창 전환과 도움말 등 플랫폼 기본 메뉴 항목을 제공한다.
 - [ ] 메뉴 sublabel과 접근성 label의 플랫폼별 지원을 결정한다.
 - [x] Windows 전역 단축키를 하나 또는 여러 개 등록한다. `globalShortcut.register`와 `registerMany`를 제공한다.

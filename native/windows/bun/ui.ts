@@ -1846,6 +1846,47 @@ try {
           },
           interrupt: (signal, cancel) =>
             windowRequests.onModalInterrupt(signal, cancel),
+          executeRole(windowId, role) {
+            const view = viewById(windowId);
+            if (!view || view.lifecycle.closed || stopping) {
+              log("menu-role-skipped", {
+                role,
+                reason: stopping ? "host-stopping" : "window-closed",
+              });
+              return;
+            }
+            try {
+              const started = view.native.executeEditCommand(role, {
+                focusFailed: (reason) =>
+                  log("menu-role-focus-failed", {
+                    role,
+                    reason,
+                  }),
+                failed: (reason) =>
+                  log("menu-role-failed", {
+                    role,
+                    reason,
+                  }),
+                skipped: (reason) =>
+                  log("menu-role-skipped", {
+                    role,
+                    reason,
+                  }),
+              });
+              if (!started) {
+                log("menu-role-skipped", {
+                  role,
+                  reason: "webview-unavailable",
+                });
+              }
+            } catch (error) {
+              // Menu selection is user input: a failed MoveFocus or protocol start is logged, not thrown.
+              log("menu-role-failed", {
+                role,
+                reason: error instanceof Error ? error.message : String(error),
+              });
+            }
+          },
           changed(windowId) {
             const view = viewById(windowId);
             if (view && !view.lifecycle.closed) {
