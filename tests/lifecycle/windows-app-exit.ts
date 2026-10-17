@@ -279,7 +279,8 @@ async function runChild(scenario: Scenario): Promise<void> {
           generation: crypto.randomUUID(),
         },
         backendContext: "app-exit-backend" as HostContext,
-        assets: directory,
+        // bundleNativeWorker writes the plugin manifest next to the bundle, not into each scenario directory.
+        assets: import.meta.dir,
         dataRoot: directory,
         loader: resolve(
           repository,
