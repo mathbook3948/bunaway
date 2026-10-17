@@ -1,4 +1,8 @@
 import type { Policy } from "@bunaway/protocol";
+import {
+  MAX_LAUNCH_ARGUMENT_BYTES,
+  MAX_LAUNCH_ARGUMENTS,
+} from "./worker-channel.ts";
 
 /** Request to replace the app definition loaded by a development process. */
 export type AppReloadRequest = {
@@ -21,14 +25,23 @@ export type AppRelaunchRequest = {
 };
 
 /**
- * Exit code a development host uses after sending an {@link AppRelaunchRequest}. It lies outside
- * the 0 to 255 range apps can choose, so the CLI knows a request is in flight without a race
- * between the IPC message and the process exit.
+ * Acknowledgement the CLI sends once it recorded an {@link AppRelaunchRequest}. The host exits
+ * only after it (or a short deadline), so the CLI has the request before it sees the exit.
  */
-export const APP_RELAUNCH_EXIT_CODE = 0x10000;
+export type AppRelaunchAck = {
+  kind: "bunaway:relaunch-ack";
+};
 
-/** Most arguments a relaunch request may carry, as for `DesktopContext.relaunch()`. */
-const MAX_APP_RELAUNCH_ARGUMENTS = 256;
+/** True for a well-formed {@link AppRelaunchAck}. */
+export function isAppRelaunchAck(value: unknown): value is AppRelaunchAck {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "kind" in value &&
+    value.kind === "bunaway:relaunch-ack" &&
+    Object.keys(value).length === 1
+  );
+}
 
 /** Validates a relaunch request received from the development host. */
 export function readAppRelaunchRequest(value: unknown): AppRelaunchRequest {
@@ -39,8 +52,9 @@ export function readAppRelaunchRequest(value: unknown): AppRelaunchRequest {
     value.kind !== "bunaway:relaunch-app" ||
     !("argv" in value) ||
     !Array.isArray(value.argv) ||
-    value.argv.length > MAX_APP_RELAUNCH_ARGUMENTS ||
+    value.argv.length > MAX_LAUNCH_ARGUMENTS ||
     value.argv.some((arg) => typeof arg !== "string" || arg.includes("\0")) ||
+    Buffer.byteLength(JSON.stringify(value.argv)) > MAX_LAUNCH_ARGUMENT_BYTES ||
     Object.keys(value).length !== 2
   ) {
     throw new Error("Invalid app relaunch request.");

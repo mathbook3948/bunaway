@@ -86,8 +86,13 @@ export interface DesktopContext {
   /**
    * Requests shutdown and resolves to `false` if a quit hook vetoes it or fails. Runs `beforeQuit`,
    * `onWillQuit`, Core and plugin stop hooks and `onQuit` in order. `true` means the shutdown is
-   * committed; when one was already committed, its exit code stays and `options.exitCode` is
-   * ignored. Rejects with `INVALID_ARGUMENT` for an exit code outside 0 to 255.
+   * committed with this request.
+   *
+   * The first shutdown wins, whether its `beforeQuit` check is pending or it is already committed.
+   * A request that overlaps it with the same exit code (0 when omitted) and the same relaunch
+   * (none, or the same `argv`) shares its result. A different one is not applied and resolves
+   * `false`, and the first shutdown continues unchanged. Rejects with `INVALID_ARGUMENT` for an
+   * exit code outside 0 to 255.
    */
   quit(options?: QuitOptions): Promise<boolean>;
   /**
@@ -102,8 +107,9 @@ export interface DesktopContext {
    * Quits like {@link DesktopContext.quit} and then starts a new process of the same app with
    * `options.argv`. Resolves to `false` if a quit hook vetoes it or fails, and then nothing is
    * relaunched. The new process starts after `onQuit` and waits for this one to exit before it
-   * takes the single-instance lock. A shutdown already committed by another cause wins, including
-   * a plain quit that does not relaunch. The relaunch is skipped when the operating system ends
+   * takes the single-instance lock. Overlap follows the rule of `quit`: a pending or committed
+   * shutdown with a different exit code or without this relaunch wins, and this call resolves
+   * `false` without relaunching. The relaunch is skipped when the operating system ends
    * the session or the host fails. Windows only; macOS rejects with `UNSUPPORTED`. Under
    * `bunaway dev` the CLI restarts the host.
    */

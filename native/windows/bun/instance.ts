@@ -2,12 +2,17 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { createConnection, createServer, type Socket } from "node:net";
 import { win32 } from "node:path";
+import {
+  MAX_LAUNCH_ARGUMENT_BYTES,
+  MAX_LAUNCH_ARGUMENTS,
+} from "@bunaway/runtime-bun/worker-channel";
 
 export type LaunchArguments = {
   argv: string[];
   cwd: string;
 };
-const MAX_BYTES = 64 * 1024;
+/** The pipe frame carries the arguments plus the working directory, so it keeps the same bound. */
+const MAX_BYTES = MAX_LAUNCH_ARGUMENT_BYTES;
 const MAX_PENDING = 32;
 
 /** Derives the per-app named pipe from the canonical data directory. */
@@ -30,7 +35,7 @@ export function parseLaunchArguments(value: unknown): LaunchArguments {
   if (
     Object.keys(input).length !== 2 ||
     !Array.isArray(input.argv) ||
-    input.argv.length > 256 ||
+    input.argv.length > MAX_LAUNCH_ARGUMENTS ||
     input.argv.some((arg) => typeof arg !== "string" || arg.includes("\0")) ||
     typeof input.cwd !== "string" ||
     !win32.isAbsolute(input.cwd) ||

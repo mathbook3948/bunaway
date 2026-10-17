@@ -14,6 +14,11 @@ import {
   BunawayError,
 } from "@bunaway/protocol";
 import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
+import {
+  MAX_LAUNCH_ARGUMENT_BYTES,
+  MAX_LAUNCH_ARGUMENTS,
+  MAX_PROCESS_EXIT_CODE,
+} from "@bunaway/runtime-bun/worker-channel";
 import type { LaunchArguments } from "./instance.ts";
 
 /** Consume only the registration prefix; later and positional marker strings remain app input. */
@@ -136,13 +141,6 @@ export function openRequest(
 /** Longest wait for each of onWillQuit and onQuit before shutdown continues without it. */
 export const WILL_QUIT_DEADLINE_MS = 3000;
 
-/** Largest process exit code every supported platform can report. */
-export const MAX_EXIT_CODE = 255;
-
-/** Most relaunch arguments and their JSON size, matching the single-instance launch limits. */
-const MAX_RELAUNCH_ARGUMENTS = 256;
-const MAX_RELAUNCH_BYTES = 64 * 1024;
-
 /** App-requested relaunch: `argv` is undefined when the initial launch arguments are reused. */
 export type RelaunchRequest = {
   readonly argv: readonly string[] | undefined;
@@ -153,6 +151,33 @@ export type ShutdownRequest = {
   readonly exitCode?: number;
   readonly relaunch?: RelaunchRequest;
 };
+
+/** A request with its defaults resolved, so overlapping requests can be compared. */
+type ResolvedRequest = {
+  readonly exitCode: number;
+  readonly relaunch: boolean;
+  readonly argv: readonly string[] | undefined;
+};
+
+function resolveRequest(request: ShutdownRequest): ResolvedRequest {
+  return {
+    exitCode: request.exitCode ?? 0,
+    relaunch: request.relaunch !== undefined,
+    argv: request.relaunch?.argv,
+  };
+}
+
+function sameRequest(a: ResolvedRequest, b: ResolvedRequest): boolean {
+  return (
+    a.exitCode === b.exitCode &&
+    a.relaunch === b.relaunch &&
+    (a.argv === b.argv ||
+      (a.argv !== undefined &&
+        b.argv !== undefined &&
+        a.argv.length === b.argv.length &&
+        a.argv.every((arg, index) => arg === b.argv?.[index])))
+  );
+}
 
 function invalidArgument(message: string): BunawayError {
   return new BunawayError({
@@ -170,10 +195,10 @@ export function validateExitCode(value: unknown): number {
     typeof value !== "number" ||
     !Number.isInteger(value) ||
     value < 0 ||
-    value > MAX_EXIT_CODE
+    value > MAX_PROCESS_EXIT_CODE
   ) {
     throw invalidArgument(
-      `exitCode must be an integer from 0 to ${MAX_EXIT_CODE}`,
+      `exitCode must be an integer from 0 to ${MAX_PROCESS_EXIT_CODE}`,
     );
   }
   return value;
@@ -216,9 +241,9 @@ function relaunchArguments(value: unknown): readonly string[] | undefined {
   }
   if (
     !Array.isArray(value) ||
-    value.length > MAX_RELAUNCH_ARGUMENTS ||
+    value.length > MAX_LAUNCH_ARGUMENTS ||
     value.some((arg) => typeof arg !== "string" || arg.includes("\0")) ||
-    Buffer.byteLength(JSON.stringify(value)) > MAX_RELAUNCH_BYTES
+    Buffer.byteLength(JSON.stringify(value)) > MAX_LAUNCH_ARGUMENT_BYTES
   ) {
     throw invalidArgument("Invalid relaunch argv");
   }
@@ -237,6 +262,8 @@ const MAX_PENDING_OPENS = 64;
 export class DesktopLifecycle {
   readonly context: DesktopContext;
   private quitting: Promise<boolean> | undefined;
+  /** What the pending quit check asks for, to decide whether an overlapping request joins it. */
+  private pendingRequest: ResolvedRequest | undefined;
   private stopped = false;
   private callbacks = Promise.resolve();
   private pending = 0;
@@ -607,18 +634,28 @@ export class DesktopLifecycle {
   }
   /**
    * Shares concurrent quit checks.
-   * Returns false if before-quit vetoes or fails. A veto or failure that settles after a
+   * Returns false if before-quit vetoes or fails, or if an app request overlaps a pending or
+   * committed shutdown that asked for a different exit code or relaunch (it is not applied). A veto or failure that settles after a
    * non-cancellable shutdown was committed (for example a session end) is moot
    * and returns true, so the host never reports a cancelled quit for it. A failure is
    * still reported.
    */
   quit(reason: QuitReason, request: ShutdownRequest = {}): Promise<boolean> {
+    const wanted = resolveRequest(request);
+    // The first shutdown wins, pending or committed. A host-initiated quit (tray, last window)
+    // joins it whatever it asked for; an app `api` request joins only if it asks for the same
+    // exit code and relaunch. Otherwise it is not applied and resolves false.
+    const joins = (current: ResolvedRequest) =>
+      reason !== "api" || sameRequest(wanted, current);
     if (this.ending) {
-      return Promise.resolve(true);
+      return Promise.resolve(joins(this.committedRequest()));
     }
-    if (this.quitting) {
-      return this.quitting;
+    if (this.quitting && this.pendingRequest) {
+      return joins(this.pendingRequest)
+        ? this.quitting
+        : Promise.resolve(false);
     }
+    this.pendingRequest = wanted;
     this.quitting = Promise.resolve()
       .then(async () => {
         try {
@@ -626,7 +663,7 @@ export class DesktopLifecycle {
           // A shutdown that cannot be cancelled (session end, window destruction, interrupt)
           // may commit while the app is still deciding; its veto no longer has any effect.
           if (this.ending) {
-            return true;
+            return joins(this.committedRequest());
           }
           if (vetoed) {
             return false;
@@ -638,13 +675,29 @@ export class DesktopLifecycle {
         } catch (error) {
           this.report(error);
           // A failure after a non-cancellable shutdown committed cannot cancel it.
-          return this.ending;
+          return this.ending && joins(this.committedRequest());
         }
       })
       .finally(() => {
         this.quitting = undefined;
+        this.pendingRequest = undefined;
       });
     return this.quitting;
+  }
+  /** The request of the committed shutdown; a shutdown without one asked for the defaults. */
+  private committedRequest(): ResolvedRequest {
+    return resolveRequest({
+      ...(this.committedExitCode === undefined
+        ? {}
+        : {
+            exitCode: this.committedExitCode,
+          }),
+      ...(this.relaunchRequested
+        ? {
+            relaunch: this.relaunchRequested,
+          }
+        : {}),
+    });
   }
   /** Prevents a pending before-quit check from initiating another shutdown. */
   dispose() {

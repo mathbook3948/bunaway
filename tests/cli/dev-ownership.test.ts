@@ -42,6 +42,7 @@ const built: BuiltPackage = {
 function appProcess(calls: string[]) {
   const exit = Promise.withResolvers<number>();
   let exitCode: number | null = null;
+  let relaunch: readonly string[] | undefined;
   const app: RunningDevApp = {
     process: {
       pid: 123,
@@ -60,10 +61,17 @@ function appProcess(calls: string[]) {
       async reload() {
         throw new Error("Unexpected reload in lifecycle test.");
       },
+      get relaunch() {
+        return relaunch;
+      },
     },
   };
   return {
     app,
+    /** Records the relaunch request the CLI would have received over IPC. */
+    requestRelaunch(argv: readonly string[]) {
+      relaunch = argv;
+    },
     exit(code: number) {
       exitCode = code;
       exit.resolve(code);
@@ -471,4 +479,93 @@ test("development cancellation reaches an in-flight frontend startup", async () 
   await expect(starting).rejects.toBe(reason);
   expect(observed).toBe(true);
   await frontend.close();
+});
+
+test("an exit after a relaunch request restarts with its arguments once, whatever the exit code", async () => {
+  const calls: string[] = [];
+  const processes = [
+    appProcess(calls),
+    appProcess(calls),
+    appProcess(calls),
+  ];
+  const launchedWith: (readonly string[])[] = [];
+  const exits: number[] = [];
+  let relaunches = 0;
+  const owner = new DevApp(
+    new AbortController().signal,
+    (code) => exits.push(code),
+    undefined,
+    undefined,
+    {
+      async launch(_project, _built, _isCurrent, appArguments) {
+        launchedWith.push(appArguments);
+        return processes[launchedWith.length - 1]?.app;
+      },
+      async stop(app) {
+        await app.process.exited;
+      },
+    },
+    () => {
+      relaunches += 1;
+    },
+  );
+  await owner.start(project, built, () => true);
+  processes[0]?.requestRelaunch([
+    "--again",
+    "x y",
+  ]);
+  // The requested exit code, even a failing one, does not end the session.
+  processes[0]?.exit(5);
+  await Bun.sleep(0);
+  await Bun.sleep(0);
+  expect(relaunches).toBe(1);
+  expect(exits).toEqual([]);
+  // The restart path starts the next host with the requested arguments...
+  await owner.start(project, built, () => true);
+  expect(launchedWith).toEqual([
+    [],
+    [
+      "--again",
+      "x y",
+    ],
+  ]);
+  // ...and a later source-change restart does not repeat them.
+  const restarting = owner.stop();
+  processes[1]?.exit(0);
+  await restarting;
+  await owner.start(project, built, () => true);
+  expect(launchedWith[2]).toEqual([]);
+  const closing = owner.stop();
+  processes[2]?.exit(0);
+  await closing;
+});
+
+test("an exit without a relaunch request reports the exit and does not restart", async () => {
+  const process1 = appProcess([]);
+  const exits: number[] = [];
+  let relaunches = 0;
+  const owner = new DevApp(
+    new AbortController().signal,
+    (code) => exits.push(code),
+    undefined,
+    undefined,
+    {
+      async launch() {
+        return process1.app;
+      },
+      async stop(app) {
+        await app.process.exited;
+      },
+    },
+    () => {
+      relaunches += 1;
+    },
+  );
+  await owner.start(project, built, () => true);
+  process1.exit(0);
+  await process1.app.process.exited;
+  expect(exits).toEqual([
+    0,
+  ]);
+  expect(relaunches).toBe(0);
 });

@@ -1,9 +1,6 @@
 import { resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import {
-  APP_RELAUNCH_EXIT_CODE,
-  type AppReloadResult,
-} from "@bunaway/runtime-bun/development";
+import type { AppReloadResult } from "@bunaway/runtime-bun/development";
 import type { Subprocess } from "bun";
 import { bundleWindowsReload } from "./assets.ts";
 import type { BuiltPackage } from "./build.ts";
@@ -39,8 +36,6 @@ export interface DevAppOperations {
 
 const WINDOWS_CLEANUP_TIMEOUT_MS = 40000;
 const WINDOWS_CLEANUP_POLL_MS = 20;
-const RELAUNCH_MESSAGE_WAIT_MS = 2000;
-const RELAUNCH_MESSAGE_POLL_MS = 10;
 
 /** Stops the app after its reload channel closes, waiting for native cleanup on Windows. */
 async function stopDevApp(app: RunningDevApp): Promise<void> {
@@ -220,6 +215,8 @@ export class DevApp {
     if (!app) {
       return;
     }
+    // Relaunch arguments apply to this one host only, like a packaged app's relaunch.
+    this.appArguments = [];
     this.active = {
       ...app,
       built,
@@ -230,23 +227,12 @@ export class DevApp {
       return;
     }
     const current = this.active;
-    void app.process.exited.then(async (code) => {
+    void app.process.exited.then((code) => {
       if (this.active !== current || this.signal.aborted) {
         return;
       }
-      if (code === APP_RELAUNCH_EXIT_CODE) {
-        // The host wrote its relaunch request just before this exit; wait for the IPC message.
-        const deadline = Date.now() + RELAUNCH_MESSAGE_WAIT_MS;
-        while (
-          current.connection?.relaunch === undefined &&
-          Date.now() < deadline
-        ) {
-          await Bun.sleep(RELAUNCH_MESSAGE_POLL_MS);
-        }
-        if (this.active !== current || this.signal.aborted) {
-          return;
-        }
-      }
+      // The host exits only after the CLI acknowledged its relaunch request, so a request that
+      // was made is already recorded here, whatever the exit code is.
       const relaunch = current.connection?.relaunch;
       if (relaunch !== undefined) {
         // The app asked to start again: keep the session and launch a fresh host.

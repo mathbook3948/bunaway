@@ -140,8 +140,13 @@ payload는 `{ windowId, viewId, phase }`이고 `phase`는 `created`, `ready`, `c
   시간을 제한한다. 이미 확정된 `quit`의 코드와 `relaunch`는 `exit`가 대체한다. 두 번째 `exit`는 무시한다.
   UI는 기존 `shutdown-committed` 처리로 대기 중인 닫기 요청을 취소하므로 UI 스레드는 바뀌지 않는다.
 - `relaunch({ argv, exitCode })`는 한 번의 호출로 종료와 재실행을 함께 요청한다. `quit`과 같은 순서를 따르며
-  `beforeQuit`가 거부하면 `false`를 반환하고 재실행하지 않는다. 먼저 확정된 종료가 이기므로 이미 확정된
-  일반 종료나 세션 종료는 재실행으로 바뀌지 않는다. 호스트 실패와 세션 종료에서는 재실행하지 않는다.
+  `beforeQuit`가 거부하면 `false`를 반환하고 재실행하지 않는다. 호스트 실패와 세션 종료에서는 재실행하지 않는다.
+- 겹친 요청은 먼저 시작된 종료가 이긴다. 이 규칙은 `beforeQuit` 검사가 진행 중인 동안과 종료가 확정된 뒤에
+  모두 적용한다. 앱의 `quit`, `relaunch` 요청이 진행 중이거나 확정된 요청과 종료 코드(생략은 0)와
+  재실행 여부, `argv`가 모두 같으면 그 결과(promise)를 공유한다. 다르면 적용하지 않고 `false`를 반환하며
+  먼저 시작된 종료는 그대로 진행한다. 호출자는 `true`일 때만 자신의 요청이 적용됐다고 볼 수 있다.
+  트레이 Quit이나 마지막 창 닫기처럼 호스트가 낸 요청은 요청 내용이 없으므로 항상 진행 중인 종료에 합류한다.
+  `exit`는 이 규칙에서 예외로 항상 기존 요청을 대체한다.
 - 재실행 인자 기본값은 최초 실행의 `OpenRequest.argv`(개발 스위치와 autostart 접두사 제외)다.
   `argv`를 주면 그것으로 대체하며 256개, JSON 64KiB, NUL 금지 제한은 단일 인스턴스 전달과 같다.
   실행 파일 경로, 환경 변수, 작업 디렉터리는 재정의할 수 없다. 작업 디렉터리는 boot 시점 값을 유지한다.
@@ -155,8 +160,11 @@ Windows 구현은 `runWindowsApp`이 `{ exitCode, relaunch? }`를 반환하게 �
 `Bun.spawn`은 이 플래그를 줄 수 없어 `job.ts`가 `CreateProcessW`를 `CREATE_BREAKAWAY_FROM_JOB`으로 부른다.
 Job의 `BREAKAWAY_OK`는 이 호출 동안에만 켠다. 바깥 Job이 이탈을 거부하면 이 시점에는 종료가 확정되어
 호출자에게 알릴 수 없으므로 `relaunch-failed` 진단을 남기고 요청한 코드로 종료한다.
-`bunaway dev`에서는 호스트가 CLI에 IPC 메시지(`bunaway:relaunch-app`)를 보내고 개발 전용 종료 코드로
-끝나며, CLI가 기존 재시작 경로로 새 호스트를 띄워 개발 세션을 유지한다.
+`bunaway dev`에서는 호스트가 CLI에 IPC 메시지(`bunaway:relaunch-app`)를 보내고 CLI의 확인
+(`bunaway:relaunch-ack`)을 최대 2초 기다린 뒤 요청한 종료 코드로 끝난다. CLI는 요청을 받은 뒤의 종료를
+종료 코드와 관계없이 재실행으로 보고 기존 재시작 경로로 새 호스트를 띄워 개발 세션을 유지한다.
+요청의 `argv`는 그 새 호스트에만 쓰고 이후 소스 변경 재시작에는 붙이지 않는다.
+확인이 오지 않으면 CLI는 일반 종료로 처리한다. 특수 종료 코드에는 의존하지 않는다.
 macOS는 `quit`의 코드와 `exit`를 같은 `DesktopLifecycle`로 지원하고 코드는 `exit-code` 패킷으로 메인
 스레드에 전달한다. 새 프로세스를 만들고 부모 종료를 기다리는 구현은 별도 작업이라 `relaunch`는
 `UNSUPPORTED`로 거부한다.

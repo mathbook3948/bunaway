@@ -4,8 +4,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import type { AppDefinition } from "@bunaway/core";
 import {
-  APP_RELAUNCH_EXIT_CODE,
   type AppRelaunchRequest,
+  isAppRelaunchAck,
 } from "@bunaway/runtime-bun/development";
 import { DiagnosticLog } from "@bunaway/runtime-bun/diagnostic-log";
 import { isCompiledApp, localAppData, verifyWindowsPackage } from "./config.ts";
@@ -100,15 +100,10 @@ if (import.meta.main) {
       await inbox.close().catch(() => {});
     }
     // The app is fully stopped: start the replacement only now, so it never overlaps the old host.
-    let exitCode = result.exitCode;
     if (result.relaunch) {
-      const cliManaged = devtools && process.send !== undefined;
-      if (cliManaged) {
-        exitCode = APP_RELAUNCH_EXIT_CODE;
-      }
       await relaunchHost(result.relaunch.argv, {
         dataRoot: config.dataRoot,
-        cliManaged,
+        cliManaged: devtools && process.send !== undefined,
         host: {
           compiled: isCompiledApp,
           execPath: process.execPath,
@@ -132,7 +127,7 @@ if (import.meta.main) {
         },
       });
     }
-    process.exit(exitCode);
+    process.exit(result.exitCode);
   } catch (error) {
     console.error(error);
     if (isCompiledApp) {
@@ -140,6 +135,64 @@ if (import.meta.main) {
     }
     process.exit(1);
   }
+}
+
+/** The slice of the Node IPC channel to a parent CLI that a relaunch request needs. */
+export type HostIpc = {
+  send?(message: unknown): unknown;
+  on(
+    event: "message" | "disconnect",
+    listener: (message?: unknown) => void,
+  ): unknown;
+  off(
+    event: "message" | "disconnect",
+    listener: (message?: unknown) => void,
+  ): unknown;
+};
+
+/** Longest wait for the CLI to acknowledge a relaunch request before this host exits anyway. */
+export const RELAUNCH_ACK_TIMEOUT_MS = 2000;
+
+/**
+ * Sends the relaunch request and waits for the CLI's acknowledgement, which tells that the CLI
+ * recorded it and will restart the host after this process exits. The wait ends at the
+ * acknowledgement, a closed channel or the deadline, so the exit is never held up for long;
+ * without an acknowledgement the CLI treats the exit as an ordinary one.
+ */
+export async function requestCliRelaunch(
+  ipc: HostIpc,
+  argv: readonly string[],
+  timeoutMs = RELAUNCH_ACK_TIMEOUT_MS,
+): Promise<void> {
+  if (!ipc.send) {
+    throw new Error("No channel to the development CLI");
+  }
+  await new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      ipc.off("message", onMessage);
+      ipc.off("disconnect", done);
+      resolve();
+    };
+    const onMessage = (message?: unknown) => {
+      if (isAppRelaunchAck(message)) {
+        done();
+      }
+    };
+    const timer = setTimeout(done, timeoutMs);
+    ipc.on("message", onMessage);
+    ipc.on("disconnect", done);
+    try {
+      ipc.send?.({
+        kind: "bunaway:relaunch-app",
+        argv,
+      } satisfies AppRelaunchRequest);
+    } catch (error) {
+      // A closed channel cannot acknowledge; surface the failure after cleaning up.
+      done();
+      console.error("Relaunch request failed:", error);
+    }
+  });
 }
 
 /**
@@ -155,19 +208,13 @@ export async function relaunchHost(
     dataRoot: string;
     cliManaged: boolean;
     host: HostLaunch;
+    /** The channel to the owning CLI; a parameter so the CLI branch is testable. */
+    ipc?: HostIpc;
   },
 ): Promise<void> {
   try {
     if (options.cliManaged) {
-      await new Promise<void>((resolve, reject) =>
-        process.send?.(
-          {
-            kind: "bunaway:relaunch-app",
-            argv,
-          } satisfies AppRelaunchRequest,
-          (error: Error | null) => (error ? reject(error) : resolve()),
-        ),
-      );
+      await requestCliRelaunch(options.ipc ?? process, argv);
       return;
     }
     startOutsideAppJob(relaunchCommand(options.host, argv));

@@ -1,4 +1,5 @@
 import {
+  type AppRelaunchAck,
   type AppReloadRequest,
   type AppReloadResult,
   readAppRelaunchRequest,
@@ -46,6 +47,10 @@ export class WindowsAppReload {
     ) {
       try {
         this.relaunchArgv = readAppRelaunchRequest(value).argv;
+        // The host waits for this reply before it exits, so the request is never missed.
+        this.child?.send({
+          kind: "bunaway:relaunch-ack",
+        } satisfies AppRelaunchAck);
       } catch (error) {
         console.error(error);
       }

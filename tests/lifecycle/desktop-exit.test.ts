@@ -89,9 +89,15 @@ test("an approved quit keeps its exit code and the first committed code wins", a
       exitCode: 7,
     }),
   ).toBe(true);
+  // The committed shutdown keeps its code: a different request is not applied.
   expect(
     await desktop.context.quit({
       exitCode: 9,
+    }),
+  ).toBe(false);
+  expect(
+    await desktop.context.quit({
+      exitCode: 7,
     }),
   ).toBe(true);
   desktop.commitShutdown("interrupted", {
@@ -109,7 +115,8 @@ test("an approved quit keeps its exit code and the first committed code wins", a
     await other.desktop.context.quit({
       exitCode: 5,
     }),
-  ).toBe(true);
+  ).toBe(false);
+  expect(await other.desktop.context.quit()).toBe(true);
   expect(other.desktop.exitCode).toBe(0);
 });
 
@@ -164,10 +171,15 @@ test("exit skips beforeQuit, onWillQuit and onQuit but commits once with its cod
   expect(stops).toEqual([
     "stop",
   ]);
-  // Later quit requests are moot and never consult beforeQuit.
+  // Later quit requests never consult beforeQuit; only one matching the exit joins it.
   expect(
     await desktop.context.quit({
       exitCode: 1,
+    }),
+  ).toBe(false);
+  expect(
+    await desktop.context.quit({
+      exitCode: 9,
     }),
   ).toBe(true);
   expect(desktop.exitCode).toBe(9);
@@ -219,8 +231,9 @@ test("exit makes a pending beforeQuit decision moot", async () => {
   });
   await desktop.context.exit(8);
   decision.resolve(false);
-  // The veto arrives after the forced exit and cannot cancel it.
-  expect(await quitting).toBe(true);
+  // The veto arrives after the forced exit and cannot cancel it. The quit's own exit code 3 was
+  // replaced by the exit, so that request was not applied.
+  expect(await quitting).toBe(false);
   expect(desktop.exitCode).toBe(8);
   expect(stops).toEqual([
     "stop",
@@ -272,12 +285,23 @@ test("relaunch records validated arguments and the first committed request wins"
     ],
   });
   expect(desktop.exitCode).toBe(4);
-  // A later plain quit or relaunch cannot change the committed request.
+  // A later request cannot change the committed one; only an identical one joins it.
   expect(
     await desktop.context.relaunch({
       argv: [
         "other",
       ],
+      exitCode: 4,
+    }),
+  ).toBe(false);
+  expect(await desktop.context.quit()).toBe(false);
+  expect(
+    await desktop.context.relaunch({
+      argv: [
+        "--again",
+        "x y",
+      ],
+      exitCode: 4,
     }),
   ).toBe(true);
   expect(desktop.relaunch).toEqual({
@@ -302,8 +326,89 @@ test("relaunch records validated arguments and the first committed request wins"
         "x",
       ],
     }),
-  ).toBe(true);
+  ).toBe(false);
   expect(ended.desktop.relaunch).toBeUndefined();
+});
+
+test("a request overlapping a pending beforeQuit check joins only an identical one", async () => {
+  const decision = Promise.withResolvers<boolean>();
+  let checks = 0;
+  const { desktop, stops } = lifecycle({
+    beforeQuit: () => {
+      checks++;
+      return decision.promise;
+    },
+  });
+  const first = desktop.context.relaunch({
+    argv: [
+      "--again",
+    ],
+    exitCode: 2,
+  });
+  // Identical request: the same pending decision.
+  const same = desktop.context.relaunch({
+    argv: [
+      "--again",
+    ],
+    exitCode: 2,
+  });
+  // Different exit code, different argv, no relaunch, or default argv: not applied.
+  for (const other of [
+    desktop.context.relaunch({
+      argv: [
+        "--again",
+      ],
+      exitCode: 3,
+    }),
+    desktop.context.relaunch({
+      argv: [
+        "--other",
+      ],
+      exitCode: 2,
+    }),
+    desktop.context.relaunch({
+      exitCode: 2,
+    }),
+    desktop.context.quit({
+      exitCode: 2,
+    }),
+  ]) {
+    expect(await other).toBe(false);
+  }
+  // A host-initiated quit (tray, last window) joins whatever is pending.
+  const tray = desktop.quit("tray");
+  expect(checks).toBe(1);
+  expect(stops).toEqual([]);
+  decision.resolve(true);
+  expect(await first).toBe(true);
+  expect(await same).toBe(true);
+  expect(await tray).toBe(true);
+  expect(desktop.exitCode).toBe(2);
+  expect(desktop.relaunch).toEqual({
+    argv: [
+      "--again",
+    ],
+  });
+  expect(stops).toEqual([
+    "stop",
+  ]);
+});
+
+test("a rejected overlapping request does not cancel the pending shutdown", async () => {
+  const decision = Promise.withResolvers<boolean>();
+  const { desktop } = lifecycle({
+    beforeQuit: () => decision.promise,
+  });
+  const first = desktop.context.quit();
+  expect(
+    await desktop.context.quit({
+      exitCode: 9,
+    }),
+  ).toBe(false);
+  decision.resolve(true);
+  expect(await first).toBe(true);
+  expect(desktop.exitCode).toBe(0);
+  expect(desktop.relaunch).toBeUndefined();
 });
 
 test("relaunch rejects with UNSUPPORTED on a host that cannot restart itself", async () => {

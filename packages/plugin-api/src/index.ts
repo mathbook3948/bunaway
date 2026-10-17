@@ -141,7 +141,9 @@ export type {
   DesktopContext,
   DesktopOptions,
   OpenRequest,
+  QuitOptions,
   QuitReason,
+  RelaunchOptions,
   ReopenEvent,
   ShutdownReason,
 } from "./desktop.ts";
