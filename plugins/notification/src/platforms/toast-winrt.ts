@@ -25,23 +25,32 @@ export function guid(value: string): Buffer {
   bytes.subarray(6, 8).reverse();
   return bytes;
 }
+/** HRESULTs reported when the toast activator or its registration is missing on this system. */
+const UNSUPPORTED_TOAST_HRESULTS = new Set([
+  0x80040154,
+  0x80040111,
+  0x80004002,
+  0x80070490,
+]);
+const E_ACCESSDENIED_HRESULT = 0x80070005;
+
+/** Map a failed toast HRESULT to the public error code. */
+function toastFailureCode(
+  hresult: number,
+): "PERMISSION_DENIED" | "UNSUPPORTED" | "INTERNAL" {
+  if (hresult === E_ACCESSDENIED_HRESULT) {
+    return "PERMISSION_DENIED";
+  }
+  return UNSUPPORTED_TOAST_HRESULTS.has(hresult) ? "UNSUPPORTED" : "INTERNAL";
+}
+
 export function checkToast(result: number, stage: string): void {
   if (result >= 0) {
     return;
   }
   const hresult = result >>> 0;
   throw new BunawayError({
-    code:
-      hresult === 0x80070005
-        ? "PERMISSION_DENIED"
-        : [
-              0x80040154,
-              0x80040111,
-              0x80004002,
-              0x80070490,
-            ].includes(hresult)
-          ? "UNSUPPORTED"
-          : "INTERNAL",
+    code: toastFailureCode(hresult),
     message: "Windows toast operation failed.",
     details: {
       stage,

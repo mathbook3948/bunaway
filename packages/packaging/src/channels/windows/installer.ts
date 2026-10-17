@@ -245,7 +245,7 @@ export function installerStages(
         if (!state.installer) {
           throw new Error("no installer to verify.");
         }
-        // Drop intermediate payload dirs — only produced artifacts ship in
+        // Drop intermediate payload dirs; only produced artifacts ship in
         // the output directory.
         if (state.payloadDir) {
           await rm(state.payloadDir, {

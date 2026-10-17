@@ -1,19 +1,10 @@
+import { base64Schema } from "@bunaway/plugin";
 import { z } from "zod";
 /** Transport limits leave space for protocol envelopes and base64 expansion. */
 export const MAX_BODY_BYTES = 64 * 1024;
 export const MAX_HEADER_BYTES = 16 * 1024;
 export const MAX_NETWORK_TIMEOUT_MS = 30_000;
-const MAX_BASE64_CHARS = Math.ceil(MAX_BODY_BYTES / 3) * 4;
-const base64 = z
-  .string()
-  .max(MAX_BASE64_CHARS)
-  .regex(
-    /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\s\S])/,
-  )
-  .refine((value) => {
-    const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
-    return (value.length / 4) * 3 - padding <= MAX_BODY_BYTES;
-  }, "Body exceeds the byte limit.");
+const base64 = base64Schema(MAX_BODY_BYTES, "Body exceeds the byte limit.");
 const header = z.tuple([
   z
     .string()

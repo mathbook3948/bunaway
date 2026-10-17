@@ -85,6 +85,14 @@ type EnvironmentGroup = {
   drainer?: WebView;
 };
 const environments = new Map<string, EnvironmentGroup>();
+
+/** The failure text reported for an edit role whose DevTools call did not start. */
+function describeDevToolsFailure(error: unknown): string {
+  if (error instanceof DevToolsStartError) {
+    return `0x${(error.hresult >>> 0).toString(16)}`;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
 // Slots/IIDs are from the pinned WebView2 SDK 1.0.4129.50, Win64 COM ABI.
 /** Own one controller and its callbacks; profile peers share an environment and its final process drain. */
 export class WebView {
@@ -1094,13 +1102,7 @@ export class WebView {
             } catch (error) {
               // Starting inside a COM callback must not unwind into native code. The refused
               // call's handler stays tracked and is released by a later prune.
-              report.failed(
-                error instanceof DevToolsStartError
-                  ? `0x${(error.hresult >>> 0).toString(16)}`
-                  : error instanceof Error
-                    ? error.message
-                    : String(error),
-              );
+              report.failed(describeDevToolsFailure(error));
             }
           },
         ),

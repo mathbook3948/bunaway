@@ -19,9 +19,10 @@ cmd 파일 리다이렉션으로 출력을 보관하고 원래 종료 코드를 
 진단이 XML 파서 오류로 바뀌지 않는다. notification의 PowerShell probe도 같은 실행기를
 사용하며 기존 20초 기한, 단계별 경과 시간과 원본 출력을 Windows native 로그에 보관한다.
 
-계약 테스트는 `bun test ./tests`처럼 저장소의 실제 테스트 경로에 `./`를 붙여 실행한다.
-경로 접두사가 없는 `bun test tests/api`는 파일명 필터로 해석해 build 디렉터리의 과거
-테스트 복사본까지 실행할 수 있다. 집중 검사에도 `bun test ./tests/api`를 사용한다.
+계약 테스트는 `bun test ./tests`로 실행한다. `bunfig.toml`의 `[test] root`가 `tests`이므로
+`bun test tests/api`처럼 필터로 실행해도 build 디렉터리의 테스트 복사본은 수집하지 않는다.
+`docs/text-style.test.ts`는 `scripts/check-text-style.ts`로 추적 중인 문서와 소스 텍스트에서
+em dash와 middle dot을 거부하며, 같은 스크립트가 commit-msg 훅에서 커밋 메시지를 검사한다.
 `fixtures/native-platform.ts`는 실제 플러그인 정의의 SDK factory를 사용한다. 네이티브 드라이버를 주입하는
 fixture도 운영 작업 목록과 자원 소유자를 재사용하며 별도 dispatch 구현을 만들지 않는다.
 `cli/plugin-build.test.ts`는 재내보내기와 operation 객체, 네이티브 스키마 변환 보존 및 공개 선언에서 내부 타입 제외를 검사한다.

@@ -1,19 +1,9 @@
+import { base64Schema } from "@bunaway/plugin";
 import { z } from "zod";
 /** Combined captured stdout/stderr and input limits, before base64 expansion. */
 export const MAX_PROCESS_BYTES = 64 * 1024;
 const MAX_COMMAND_LINE_UNITS = 32766;
-const base64 = z
-  .string()
-  .max(Math.ceil(MAX_PROCESS_BYTES / 3) * 4)
-  .regex(
-    /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\s\S])/,
-  )
-  .refine(
-    (value) =>
-      (value.length / 4) * 3 -
-        (value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0) <=
-      MAX_PROCESS_BYTES,
-  );
+const base64 = base64Schema(MAX_PROCESS_BYTES);
 const argument = z
   .string()
   .max(4096)

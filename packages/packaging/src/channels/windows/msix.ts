@@ -15,6 +15,13 @@ const GENERAL_CAPABILITIES = new Set([
   "allJoyn",
   "codeGeneration",
 ]);
+/** The manifest namespace prefix a capability name is declared under. */
+function capabilityPrefix(capability: string): "" | "uap:" | "rescap:" {
+  if (GENERAL_CAPABILITIES.has(capability)) {
+    return "";
+  }
+  return UAP_CAPABILITIES.has(capability) ? "uap:" : "rescap:";
+}
 const UAP_CAPABILITIES = new Set([
   "documentsLibrary",
   "picturesLibrary",
@@ -123,14 +130,9 @@ export function renderAppxManifest(options: MsixOptions): string {
         : []),
       ...options.capabilities,
     ]),
-  ].map((cap) => {
-    const prefix = GENERAL_CAPABILITIES.has(cap)
-      ? ""
-      : UAP_CAPABILITIES.has(cap)
-        ? "uap:"
-        : "rescap:";
-    return `<${prefix}Capability Name="${escapeXml(cap)}"/>`;
-  });
+  ].map(
+    (cap) => `<${capabilityPrefix(cap)}Capability Name="${escapeXml(cap)}"/>`,
+  );
   return `<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"

@@ -198,6 +198,25 @@ const input = z.strictObject({
 고정된 Zod 4.6.5에서 문자열의 `max`는 Unicode 코드 포인트 수를 셉니다.
 예를 들어 `z.string().max(1)`은 `"😀"`를 허용합니다.
 
+### 공유 스키마 헬퍼
+
+여러 플러그인이 같은 종류의 상한을 선언할 때는 `@bunaway/plugin`의 헬퍼를 사용합니다.
+규칙을 다시 쓰지 않으므로 모든 플러그인이 같은 잘못된 입력을 같은 방식으로 거부합니다.
+
+```ts
+import { base64Schema } from "@bunaway/plugin";
+
+export const MAX_BODY_BYTES = 64 * 1024;
+const body = base64Schema(MAX_BODY_BYTES, "Body exceeds the byte limit.");
+```
+
+`base64Schema(maxBytes, message?)`는 표준 알파벳과 필요한 `=` padding을 쓰는 canonical
+base64 문자열을 받습니다. 디코딩한 길이가 `maxBytes`를 넘거나 padding이 남긴 bit가 0이
+아니면 거부하고, 빈 문자열은 0바이트로 허용합니다. `message`를 생략하면 공통 메시지를
+사용합니다. `canonicalBase64Bytes(value)`는 같은 규칙으로 디코딩 길이를 돌려주고 canonical이
+아니면 `null`을 반환하며, `base64CharactersFor(bytes)`는 해당 바이트 수를 인코딩하는 데 필요한
+문자 수입니다. 두 함수는 디코딩 길이를 다른 필드와 비교하는 `refine`에서 사용합니다.
+
 ### 실행 흐름
 
 1. 화면이나 백엔드는 작업 이름과 JSON 입력을 보냅니다.

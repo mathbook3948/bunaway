@@ -284,7 +284,10 @@ function environmentBlock(env: RelaunchCommand["env"]): Buffer {
     .sort(([a], [b]) => {
       const left = a.toUpperCase();
       const right = b.toUpperCase();
-      return left < right ? -1 : left > right ? 1 : 0;
+      if (left < right) {
+        return -1;
+      }
+      return left > right ? 1 : 0;
     });
   return Buffer.from(
     `${entries.map(([name, value]) => `${name}=${value}\0`).join("")}\0`,

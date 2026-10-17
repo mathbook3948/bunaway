@@ -10,3 +10,8 @@ pre-commit:
       run: mise exec -- google-java-format --aosp --dry-run --set-exit-if-changed {staged_files}
     - name: whitespace
       run: git diff --cached --check
+
+commit-msg:
+  jobs:
+    - name: text-style
+      run: mise exec -- bun scripts/check-text-style.ts {1}

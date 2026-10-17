@@ -32,7 +32,18 @@
     "rules": {
       "preset": "recommended",
       "style": {
-        "useBlockStatements": "error"
+        "useBlockStatements": "error",
+        "noNestedTernary": "error",
+        "noNonNullAssertion": "error",
+        "useTemplate": "error",
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": {
+            "strictCase": true,
+            "requireAscii": true,
+            "filenameCases": ["kebab-case"]
+          }
+        }
       }
     }
   },
@@ -43,5 +54,17 @@
       "quoteStyle": "double",
       "semicolons": "always"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.astro"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useFilenamingConvention": "off"
+          }
+        }
+      }
+    }
+  ]
 }

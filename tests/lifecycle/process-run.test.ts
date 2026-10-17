@@ -143,6 +143,10 @@ test("argv invocation preserves special arguments, binary stdin/stdout/stderr an
 test.skipIf(process.platform !== "win32")(
   "invocation Jobs reap grandchildren with inherited pipes on cancellation, timeout, overflow and root completion",
   async () => {
+    const failureCodes: Record<string, string> = {
+      timeout: "TIMEOUT",
+      cancel: "CANCELLED",
+    };
     for (const ending of [
       "cancel",
       "timeout",
@@ -213,12 +217,7 @@ test.skipIf(process.platform !== "win32")(
                 signal: null,
               }
             : {
-                code:
-                  ending === "timeout"
-                    ? "TIMEOUT"
-                    : ending === "cancel"
-                      ? "CANCELLED"
-                      : "INTERNAL",
+                code: failureCodes[ending] ?? "INTERNAL",
               },
         );
         if (ending === "overflow") {

@@ -286,7 +286,10 @@
           "defineNativeOperation",
           "BunawayError",
           "NativeEventWaiters",
-          "defineNativeAdapter"
+          "defineNativeAdapter",
+          "base64Schema",
+          "canonicalBase64Bytes",
+          "base64CharactersFor"
         ]
       }
     },

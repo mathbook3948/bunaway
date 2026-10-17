@@ -73,7 +73,10 @@ Biome은 논리 단위 사이의 빈 줄을 자동으로 추가하지 않으므�
 구분해야 합니다.
 
 `mise run format`은 기존 코드에 포맷을 적용하고 `mise run format:check`는
-포맷만 검사합니다. 중괄호 규칙은 `mise run lint`에서 검사합니다.
+포맷만 검사합니다. `mise run lint`는 중괄호 규칙과 함께 중첩 삼항 연산자, non-null
+단언(`!`), 문자열 연결 대신 템플릿 사용, 새 소스 파일 이름의 kebab-case를 검사합니다.
+문서와 소스 텍스트, 커밋 메시지의 em dash(U+2014)와 middle dot(U+00B7)은
+`scripts/check-text-style.ts`가 거부하며 계약 테스트와 commit-msg 훅에서 실행합니다.
 공식 프런트엔드 템플릿의 `src`와 `public`은 기존 Biome 제외 설정을 유지합니다.
 
 ## 커밋 전 검사
@@ -83,7 +86,7 @@ Biome은 논리 단위 사이의 빈 줄을 자동으로 추가하지 않으므�
 `mise.toml`에 2.2.1로 고정되어 있습니다. 새 clone마다 훅 설치가 필요합니다.
 
 pre-commit 훅은 stage한 파일의 Biome 포맷과 린트, 공백 오류와 충돌 마커를
-검사합니다. 기존 `biome.json`의 제외 규칙을 따르며, 자동 수정이나 다시 stage하는
+검사하고 commit-msg 훅은 커밋 메시지의 em dash와 middle dot을 거부합니다. 기존 `biome.json`의 제외 규칙을 따르며, 자동 수정이나 다시 stage하는
 작업은 하지 않습니다. 부분적으로 stage한 파일의 나머지 변경은 검사 중 잠시
 숨기고 완료 후 복원하므로 커밋할 내용만 검사합니다.
 

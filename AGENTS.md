@@ -129,8 +129,9 @@ types, rendering and internal links. Also review explanations and examples for a
 - State general principles without listing specific templates or frameworks; name the currently
   supported choices when explaining them. Distinguish recommendations, required inputs and runtime
   constraints.
-- Do not use em dashes (U+2014) or middle dots (U+00B7) in documentation or user-facing text. Use
-  sentences, commas, colons or conjunctions instead.
+- Do not use em dashes (U+2014) or middle dots (U+00B7) in documentation, source text or commit
+  messages. Use sentences, commas, colons or conjunctions instead. `scripts/check-text-style.ts`
+  enforces this in the contract tests and the commit-msg hook.
 - Write natural, direct Korean with explicit behavior, inputs, results and failures. Avoid
   translationese, noun chains and repeated cautions; state limits once where they affect the task.
   Preserve API names, examples, values and technical meaning.

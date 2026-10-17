@@ -10,20 +10,22 @@ interface SdkReference {
   parent: string;
 }
 
+/** Select the transpiler loader matching an app entry's file extension. */
+function transpilerLoader(extension: string): "tsx" | "jsx" | "ts" | "js" {
+  if (extension === ".tsx") {
+    return "tsx";
+  }
+  if (extension === ".jsx") {
+    return "jsx";
+  }
+  return /\.[cm]?ts$/.test(extension) ? "ts" : "js";
+}
+
 /** Check the app entry's module syntax without executing user code. */
 export async function assertAppDefinitionExport(source: string): Promise<void> {
-  const extension = extname(source);
-  const loader =
-    extension === ".tsx"
-      ? "tsx"
-      : extension === ".jsx"
-        ? "jsx"
-        : /\.[cm]?ts$/.test(extension)
-          ? "ts"
-          : "js";
   try {
     const { exports } = new Bun.Transpiler({
-      loader,
+      loader: transpilerLoader(extname(source)),
     }).scan(await Bun.file(source).text());
     if (!exports.includes("default")) {
       throw new Error("build.app must default-export an AppDefinition.");

@@ -26,6 +26,19 @@ const dataRoot = resolve(output, `data-${process.pid}`);
 const modal = process.argv.includes("--modal");
 const earlyClose = process.argv.includes("--early-close");
 const creationFailure = process.argv.includes("--creation-failure");
+/** The scenario this run exercised, for the PASS line. */
+function scenarioLabel(): string {
+  if (modal) {
+    return "modal backend progress";
+  }
+  if (earlyClose) {
+    return "close during startup";
+  }
+  if (creationFailure) {
+    return "partial creation failure";
+  }
+  return "SDK/core invoke/listen/cancel/setup/stop";
+}
 const policy: Policy = {
   version: 1,
   views: [
@@ -268,9 +281,7 @@ if (!process.argv.includes("--child")) {
     );
     assert.equal(report.pass, true);
   }
-  console.log(
-    `PASS Windows Bun ${modal ? "modal backend progress" : earlyClose ? "close during startup" : creationFailure ? "partial creation failure" : "SDK/core invoke/listen/cancel/setup/stop"}`,
-  );
+  console.log(`PASS Windows Bun ${scenarioLabel()}`);
 } else {
   const server = Bun.serve({
     hostname: "127.0.0.1",

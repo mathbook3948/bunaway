@@ -11,12 +11,11 @@ const pageShown =
         }),
       );
 const client = createClient();
-const view =
-  location.pathname === "/peer.html"
-    ? "peer"
-    : location.pathname === "/denied.html"
-      ? "denied"
-      : "main";
+const viewsByPath = {
+  "/peer.html": "peer",
+  "/denied.html": "denied",
+};
+const view = viewsByPath[location.pathname] ?? "main";
 const check = (ok, message) => {
   if (!ok) {
     throw new Error(message);

@@ -9,6 +9,8 @@ const RELEASE_TIMER_ID = 1n;
 /** GetAsyncKeyState sets the most significant bit while the key is physically down. */
 const KEY_DOWN_BIT = 0x8000;
 export const MOD_NOREPEAT = 0x4000;
+/** Virtual-key code of F1; function keys are numbered consecutively from it. */
+const VK_F1 = 0x70;
 export const MAX_HOTKEY_ID = 0xbfff;
 
 const modifierFlags = {
@@ -43,16 +45,21 @@ export function hotkeyCodes(shortcut: GlobalShortcut): {
     (flags, modifier) => flags | modifierFlags[modifier],
     0,
   );
-  const key =
-    shortcut.key.length === 1
-      ? shortcut.key.charCodeAt(0)
-      : shortcut.key.startsWith("F")
-        ? 0x70 + Number(shortcut.key.slice(1)) - 1
-        : namedKeys[shortcut.key as keyof typeof namedKeys];
   return {
     modifiers,
-    key,
+    key: virtualKeyCode(shortcut.key),
   };
+}
+
+/** Translate a validated key name to its Win32 virtual-key code. */
+function virtualKeyCode(key: string): number {
+  if (key.length === 1) {
+    return key.charCodeAt(0);
+  }
+  if (key.startsWith("F")) {
+    return VK_F1 + Number(key.slice(1)) - 1;
+  }
+  return namedKeys[key as keyof typeof namedKeys];
 }
 
 /** Owns native hotkey bindings and one lazily-created, invisible host message window. */
