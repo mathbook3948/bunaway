@@ -1,4 +1,5 @@
 import { dlopen } from "bun:ffi";
+import { USER32, pick } from "@bunaway/plugin/win32";
 import { attemptAll } from "@bunaway/plugin";
 import type { NativeShortcutServices } from "@bunaway/plugin-api/native";
 import type { GlobalShortcut } from "#global-shortcut/contract";
@@ -66,6 +67,7 @@ function virtualKeyCode(key: string): number {
 /** Owns native hotkey bindings and one lazily-created, invisible host message window. */
 export class Win32Shortcuts implements ShortcutDriver {
   private readonly native = dlopen("user32.dll", {
+    ...pick(USER32, "SetTimer", "KillTimer"),
     RegisterHotKey: {
       args: [
         "u64",
@@ -79,22 +81,6 @@ export class Win32Shortcuts implements ShortcutDriver {
       args: [
         "u64",
         "i32",
-      ],
-      returns: "i32",
-    },
-    SetTimer: {
-      args: [
-        "u64",
-        "u64",
-        "u32",
-        "ptr",
-      ],
-      returns: "u64",
-    },
-    KillTimer: {
-      args: [
-        "u64",
-        "u64",
       ],
       returns: "i32",
     },

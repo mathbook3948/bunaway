@@ -7,10 +7,10 @@ import { WebView } from "#native/windows/bun/webview";
 import { Windows, WM_SIZE } from "#native/windows/bun/win32";
 import {
   disposeWin32Bindings,
-  hr,
   kernel,
   ole,
 } from "#native/windows/bun/win32-bindings";
+import { checkHresult } from "@bunaway/plugin/win32";
 
 const WM_ACTIVATE = 0x0006;
 const WM_SETFOCUS = 0x0007;
@@ -34,7 +34,7 @@ await writeFile(
   resolve(assets, "web/index.html"),
   "<!doctype html><title>Hidden WebView2</title><input autofocus>",
 );
-hr(
+checkHresult(
   ole.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED),
   "CoInitializeEx(STA)",
 );

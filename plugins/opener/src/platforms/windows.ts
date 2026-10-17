@@ -1,4 +1,5 @@
 import { dlopen } from "bun:ffi";
+import { OLE32, pick } from "@bunaway/plugin/win32";
 import { ResourceOwner } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import { createFiles } from "#opener/platforms/windows-file";
@@ -24,17 +25,7 @@ const COINIT_APARTMENTTHREADED = 0x2;
  */
 function createApartment() {
   const ole = dlopen("ole32.dll", {
-    CoInitializeEx: {
-      args: [
-        "ptr",
-        "u32",
-      ],
-      returns: "i32",
-    },
-    CoUninitialize: {
-      args: [],
-      returns: "void",
-    },
+    ...pick(OLE32, "CoInitializeEx", "CoUninitialize"),
   });
   if (ole.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED) < 0) {
     ole.close();

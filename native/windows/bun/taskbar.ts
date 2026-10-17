@@ -1,8 +1,9 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
+import { checkHresult, wide } from "@bunaway/plugin/win32";
+import { OLE32, pick } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { guid } from "./guid.ts";
 import type { TaskbarProgress } from "./taskbar-progress.ts";
-import { hr, wide } from "./win32-bindings.ts";
 import type { PixelRect } from "./window-size.ts";
 
 const CLSCTX_INPROC_SERVER = 1;
@@ -59,7 +60,7 @@ export class Taskbar {
     const clsid = guid("56fdf344-fd6d-11d0-958a-006097c9a090");
     const iid = guid("ea1afb91-9e28-4b86-90e9-9e9f8a5eefaf");
     try {
-      hr(
+      checkHresult(
         this.library.symbols.CoCreateInstance(
           ptr(clsid),
           null,
@@ -72,7 +73,7 @@ export class Taskbar {
       assert(out[0], "Null taskbar COM object");
       this.object = Number(out[0]) as Pointer;
       this.release = this.bind(2, [], "u32");
-      hr(this.bind(3, [])(), "ITaskbarList.HrInit");
+      checkHresult(this.bind(3, [])(), "ITaskbarList.HrInit");
       this.value = this.bind(9, [
         "u64",
         "u64",
@@ -102,7 +103,7 @@ export class Taskbar {
     this.initialize();
     assert(this.state && this.value);
     if ("value" in progress) {
-      hr(
+      checkHresult(
         this.value(
           window,
           BigInt(Math.round(progress.value * PROGRESS_TOTAL)),
@@ -111,7 +112,7 @@ export class Taskbar {
         "ITaskbarList3.SetProgressValue",
       );
     }
-    hr(
+    checkHresult(
       this.state(window, flags[progress.state]),
       "ITaskbarList3.SetProgressState",
     );
@@ -132,7 +133,7 @@ export class Taskbar {
           ]).buffer,
         )
       : null;
-    hr(
+    checkHresult(
       this.clip(window, native ? ptr(native) : 0),
       "ITaskbarList3.SetThumbnailClip",
     );
@@ -143,7 +144,7 @@ export class Taskbar {
     this.initialize();
     assert(this.tooltip);
     const native = toolTip === null ? null : wide(toolTip);
-    hr(
+    checkHresult(
       this.tooltip(window, native ? ptr(native) : 0),
       "ITaskbarList3.SetThumbnailTooltip",
     );
@@ -168,15 +169,6 @@ export class Taskbar {
 
 function openLibrary() {
   return dlopen("ole32.dll", {
-    CoCreateInstance: {
-      args: [
-        "ptr",
-        "ptr",
-        "u32",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(OLE32, "CoCreateInstance"),
   });
 }

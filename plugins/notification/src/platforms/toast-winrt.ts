@@ -7,6 +7,7 @@ import {
   read,
   toArrayBuffer,
 } from "bun:ffi";
+import { COMBASE, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 
 const POINTER_BYTES = 8;
@@ -62,41 +63,17 @@ export function checkToast(result: number, stage: string): void {
 /** One persistent STA reference, with scoped HSTRINGs and COM method bindings. No import-time DLL loads. */
 export function createToastRuntime() {
   const library = dlopen("combase.dll", {
-    RoInitialize: {
-      args: [
-        "u32",
-      ],
-      returns: "i32",
-    },
-    RoUninitialize: {
-      args: [],
-      returns: "void",
-    },
-    RoGetActivationFactory: {
-      args: [
-        "ptr",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(
+      COMBASE,
+      "RoInitialize",
+      "RoUninitialize",
+      "RoGetActivationFactory",
+      "WindowsCreateString",
+      "WindowsDeleteString",
+    ),
     RoActivateInstance: {
       args: [
         "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    WindowsCreateString: {
-      args: [
-        "ptr",
-        "u32",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    WindowsDeleteString: {
-      args: [
         "ptr",
       ],
       returns: "i32",

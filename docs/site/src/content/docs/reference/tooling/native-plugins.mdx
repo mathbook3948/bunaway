@@ -611,6 +611,37 @@ I/O 모두 같은 취소와 실행 직전 재검사를 적용합니다. 이 단�
 정확한 요청 출처와 소유 창을 확인하고, 모달 루프에서 제어 패킷의 취소 의도만 관측합니다.
 네이티브 콜백 안에서 일반 작업이나 자원 정리를 실행하지 않습니다.
 
+### Windows FFI 공유 바인딩
+
+Windows 플랫폼 구현은 `@bunaway/plugin/win32`에서 Win64 FFI 시그니처와 버퍼 헬퍼를
+가져옵니다. 이 모듈은 import만으로 DLL을 열지 않습니다. 어댑터가 `dlopen`을 직접 호출해
+라이브러리 핸들을 소유하고, 심볼 테이블은 공유 시그니처에서 골라 구성합니다.
+
+```ts
+import { dlopen } from "bun:ffi";
+import { KERNEL32, pick, withWide } from "@bunaway/plugin/win32";
+
+const kernel = dlopen("kernel32.dll", {
+  ...pick(KERNEL32, "CreateFileW", "CloseHandle", "GetLastError"),
+  GetFileSizeEx: { args: ["u64", "ptr"], returns: "i32" },
+});
+const handle = withWide(path, (name) =>
+  kernel.symbols.CreateFileW(name, GENERIC_READ, 0, null, OPEN_EXISTING, 0, 0n),
+);
+```
+
+`KERNEL32`, `USER32`, `OLE32`, `SHELL32`, `COMBASE`, `ADVAPI32`는 각 DLL에서 여러
+플러그인이 함께 쓰는 함수의 시그니처입니다. 핸들은 `u64`, 포인터는 `ptr`, BOOL 결과는
+`i32`, HRESULT는 `i32`로 선언하며 네이티브 호스트와 같은 규칙입니다. `pick(table, ...names)`는
+한 `dlopen` 호출에 넣을 시그니처만 선택합니다. 플러그인에만 필요한 함수는 같은 객체에
+직접 선언합니다.
+
+`wide(text)`는 NUL로 끝나는 UTF-16LE 버퍼를 만들고 `withBuffer(buffer, invoke)`와
+`withWide(text, invoke)`는 동기 네이티브 호출이 돌아올 때까지 버퍼를 유지합니다.
+`checkHresult(value, operation)`은 음수 HRESULT에서 작업 이름과 `hresultText(value)`의
+16진수 표기를 담은 오류를 던집니다. `COINIT_APARTMENTTHREADED`와 `COINIT_MULTITHREADED`는
+`CoInitializeEx`에 전달하는 아파트먼트 모델입니다.
+
 ### Windows 네이티브 메뉴 트리
 
 Windows UI 플러그인은 `@bunaway/plugin/windows-menu`의 `NativePopupMenu`를 사용해

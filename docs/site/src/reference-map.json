@@ -307,6 +307,28 @@
       }
     },
     {
+      "name": "@bunaway/plugin/win32",
+      "source": "packages/plugin-sdk/src/win32.ts",
+      "pages": {
+        "reference/tooling/native-plugins": [
+          "wide",
+          "withBuffer",
+          "withWide",
+          "hresultText",
+          "checkHresult",
+          "pick",
+          "KERNEL32",
+          "USER32",
+          "OLE32",
+          "SHELL32",
+          "COMBASE",
+          "ADVAPI32",
+          "COINIT_APARTMENTTHREADED",
+          "COINIT_MULTITHREADED"
+        ]
+      }
+    },
+    {
       "name": "@bunaway/plugin-api",
       "source": "packages/plugin-api/src/index.ts",
       "pages": {

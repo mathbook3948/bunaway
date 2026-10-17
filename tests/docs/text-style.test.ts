@@ -8,10 +8,15 @@ import {
 } from "../../scripts/check-text-style.ts";
 
 const repository = resolve(import.meta.dir, "../..");
+const EM_DASH = String.fromCharCode(0x2014);
+const MIDDLE_DOT = String.fromCharCode(0x00b7);
 
 test("the text style checker reports each forbidden character with its line", () => {
   expect(
-    findTextStyleViolations("doc.md", "fine\nan em dash — here\nmid · dot\n"),
+    findTextStyleViolations(
+      "doc.md",
+      `fine\nan em dash ${EM_DASH} here\nmid ${MIDDLE_DOT} dot\n`,
+    ),
   ).toEqual([
     {
       path: "doc.md",

@@ -1,4 +1,5 @@
 import { dlopen, JSCallback, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
+import { checkHresult, wide, withWide } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import {
   clampWindowSize,
@@ -33,7 +34,7 @@ import {
   TaskbarSettingController,
   type ThumbnailClip,
 } from "./taskbar-progress.ts";
-import { display, hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
+import { display, kernel, user } from "./win32-bindings.ts";
 import { completedGeometryChanges, windowChanges } from "./window-events.ts";
 import {
   centerInWorkArea,
@@ -287,7 +288,7 @@ export class Windows {
         },
       });
       try {
-        hr(
+        checkHresult(
           withWide(appId, (id) =>
             shell.symbols.SetCurrentProcessExplicitAppUserModelID(id),
           ),
@@ -675,7 +676,7 @@ export class Windows {
     } else {
       const x = new Uint32Array(1);
       const y = new Uint32Array(1);
-      hr(
+      checkHresult(
         display.symbols.GetDpiForMonitor(monitor, 0, ptr(x), ptr(y)),
         "GetDpiForMonitor",
       );

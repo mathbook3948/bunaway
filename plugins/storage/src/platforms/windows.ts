@@ -1,4 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { win32 } from "node:path";
 import { BunawayError } from "@bunaway/plugin";
 import {
@@ -102,20 +103,18 @@ function wide(text: string): Buffer {
 }
 function createBindings() {
   return dlopen("kernel32.dll", {
+    ...pick(
+      KERNEL32,
+      "GetLastError",
+      "GetFileInformationByHandle",
+      "GetFinalPathNameByHandleW",
+      "ReadFile",
+      "WriteFile",
+      "CloseHandle",
+    ),
     CreateDirectoryW: {
       args: [
         "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    GetLastError: {
-      args: [],
-      returns: "u32",
-    },
-    GetFileInformationByHandle: {
-      args: [
-        "u64",
         "ptr",
       ],
       returns: "i32",
@@ -138,15 +137,6 @@ function createBindings() {
       ],
       returns: "i32",
     },
-    GetFinalPathNameByHandleW: {
-      args: [
-        "u64",
-        "ptr",
-        "u32",
-        "u32",
-      ],
-      returns: "u32",
-    },
     GetFileSizeEx: {
       args: [
         "u64",
@@ -154,33 +144,7 @@ function createBindings() {
       ],
       returns: "i32",
     },
-    ReadFile: {
-      args: [
-        "u64",
-        "ptr",
-        "u32",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    WriteFile: {
-      args: [
-        "u64",
-        "ptr",
-        "u32",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
     SetEndOfFile: {
-      args: [
-        "u64",
-      ],
-      returns: "i32",
-    },
-    CloseHandle: {
       args: [
         "u64",
       ],

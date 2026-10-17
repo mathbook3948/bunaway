@@ -1,44 +1,22 @@
 import { dlopen } from "bun:ffi";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 
 /** Win64 process, Job and pipe bindings. Each invocation owns the returned library. */
 export function openProcessBindings() {
   return dlopen("kernel32.dll", {
-    GetLastError: {
-      args: [],
-      returns: "u32",
-    },
-    CloseHandle: {
-      args: [
-        "u64",
-      ],
-      returns: "i32",
-    },
-    CreateJobObjectW: {
-      args: [
-        "ptr",
-        "ptr",
-      ],
-      returns: "u64",
-    },
-    SetInformationJobObject: {
-      args: [
-        "u64",
-        "i32",
-        "ptr",
-        "u32",
-      ],
-      returns: "i32",
-    },
-    QueryInformationJobObject: {
-      args: [
-        "u64",
-        "i32",
-        "ptr",
-        "u32",
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(
+      KERNEL32,
+      "GetLastError",
+      "CloseHandle",
+      "CreateJobObjectW",
+      "SetInformationJobObject",
+      "QueryInformationJobObject",
+      "CreateProcessW",
+      "WaitForSingleObject",
+      "ReadFile",
+      "WriteFile",
+      "CreateFileW",
+    ),
     TerminateJobObject: {
       args: [
         "u64",
@@ -72,28 +50,6 @@ export function openProcessBindings() {
         "ptr",
       ],
       returns: "void",
-    },
-    CreateProcessW: {
-      args: [
-        "ptr",
-        "ptr",
-        "ptr",
-        "ptr",
-        "i32",
-        "u32",
-        "ptr",
-        "ptr",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    WaitForSingleObject: {
-      args: [
-        "u64",
-        "u32",
-      ],
-      returns: "u32",
     },
     GetExitCodeProcess: {
       args: [
@@ -130,26 +86,6 @@ export function openProcessBindings() {
       ],
       returns: "i32",
     },
-    ReadFile: {
-      args: [
-        "u64",
-        "ptr",
-        "u32",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    WriteFile: {
-      args: [
-        "u64",
-        "ptr",
-        "u32",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
     CreateNamedPipeW: {
       args: [
         "ptr",
@@ -169,18 +105,6 @@ export function openProcessBindings() {
         "ptr",
       ],
       returns: "i32",
-    },
-    CreateFileW: {
-      args: [
-        "ptr",
-        "u32",
-        "u32",
-        "ptr",
-        "u32",
-        "u32",
-        "u64",
-      ],
-      returns: "u64",
     },
     GetOverlappedResult: {
       args: [

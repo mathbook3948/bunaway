@@ -1,6 +1,6 @@
 import { dlopen, type Pointer, toArrayBuffer } from "bun:ffi";
+import { hresultText, withWide } from "@bunaway/plugin/win32";
 import { type ComHandler, handler, method } from "./com.ts";
-import { withWide } from "./win32-bindings.ts";
 
 // Slot of ICoreWebView2::CallDevToolsProtocolMethod in the pinned WebView2 SDK 1.0.4129.50.
 const CALL_DEVTOOLS_PROTOCOL_METHOD_SLOT = 36;
@@ -104,7 +104,7 @@ export class DevToolsStartError extends Error {
     readonly completion: ComHandler,
   ) {
     super(
-      `CallDevToolsProtocolMethod ${protocolMethod}: 0x${(hresult >>> 0).toString(16)}`,
+      `CallDevToolsProtocolMethod ${protocolMethod}: ${hresultText(hresult)}`,
     );
     this.name = "DevToolsStartError";
   }

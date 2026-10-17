@@ -1,4 +1,5 @@
 import { dlopen } from "bun:ffi";
+import { USER32, pick } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { NativePopupMenu } from "@bunaway/plugin/windows-menu";
 import type {
@@ -47,6 +48,14 @@ type Attachment = {
 /** Own independent HMENU trees. Detach before destroying a tree or its HWND owner. */
 export class WindowMenus implements WindowMenuDriver {
   private readonly native = dlopen("user32.dll", {
+    ...pick(
+      USER32,
+      "DrawMenuBar",
+      "TrackPopupMenuEx",
+      "SetTimer",
+      "KillTimer",
+      "IsWindowEnabled",
+    ),
     SetMenu: {
       args: [
         "u64",
@@ -54,47 +63,8 @@ export class WindowMenus implements WindowMenuDriver {
       ],
       returns: "i32",
     },
-    DrawMenuBar: {
-      args: [
-        "u64",
-      ],
-      returns: "i32",
-    },
-    TrackPopupMenuEx: {
-      args: [
-        "u64",
-        "u32",
-        "i32",
-        "i32",
-        "u64",
-        "ptr",
-      ],
-      returns: "u32",
-    },
     EndMenu: {
       args: [],
-      returns: "i32",
-    },
-    SetTimer: {
-      args: [
-        "u64",
-        "u64",
-        "u32",
-        "ptr",
-      ],
-      returns: "u64",
-    },
-    KillTimer: {
-      args: [
-        "u64",
-        "u64",
-      ],
-      returns: "i32",
-    },
-    IsWindowEnabled: {
-      args: [
-        "u64",
-      ],
       returns: "i32",
     },
   });

@@ -11,7 +11,7 @@ import {
 import { failWithCleanup } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import { openTrayBindings } from "#tray/platforms/windows-bindings";
-import { withWide } from "#tray/platforms/windows-buffers";
+import { withWide } from "@bunaway/plugin/win32";
 import { createTrayIcon } from "#tray/platforms/windows-icon";
 import { NativePopupMenu } from "#tray/platforms/windows-popup-menu";
 import {

@@ -11,13 +11,14 @@
 import { readFileSync } from "node:fs";
 
 /** Characters the writing style replaces with sentences, commas, colons or conjunctions. */
+// Built from code points so a formatter never rewrites the escapes into the characters themselves.
 const FORBIDDEN_CHARACTERS: ReadonlyMap<string, string> = new Map([
   [
-    "—",
+    String.fromCharCode(0x2014),
     "em dash (U+2014)",
   ],
   [
-    "·",
+    String.fromCharCode(0x00b7),
     "middle dot (U+00B7)",
   ],
 ]);
@@ -60,9 +61,10 @@ export function isStyledTextPath(path: string): boolean {
   return TEXT_EXTENSION_PATTERN.test(path) && !EXCLUDED_PATH_PATTERN.test(path);
 }
 
-/** Every tracked file the writing style applies to, relative to the repository root. */
+/** Every tracked or new file the writing style applies to, relative to the repository root. */
 export async function trackedTextPaths(root: string): Promise<string[]> {
-  const listing = await Bun.$`git -C ${root} ls-files -z`.quiet();
+  const listing =
+    await Bun.$`git -C ${root} ls-files -z --cached --others --exclude-standard`.quiet();
   return listing
     .text()
     .split("\0")

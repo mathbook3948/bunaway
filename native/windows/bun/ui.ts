@@ -1,3 +1,4 @@
+import { checkHresult } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
 import type { ShutdownReason } from "@bunaway/core";
@@ -45,7 +46,7 @@ import {
   WM_EXITSIZEMOVE,
   WM_SIZE,
 } from "./win32.ts";
-import { disposeWin32Bindings, hr, kernel, ole } from "./win32-bindings.ts";
+import { disposeWin32Bindings, kernel, ole } from "./win32-bindings.ts";
 import { WindowLifecycle } from "./window-lifecycle.ts";
 import { WindowProfiles } from "./window-profiles.ts";
 import { WindowReadinessTracker } from "./window-readiness.ts";
@@ -1601,7 +1602,7 @@ function publishPluginSystemEvent(
 
 try {
   // Keep window and WebView COM work on this STA through cleanup.
-  hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
+  checkHresult(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   initialized = true;
   windows = new Windows(
     () => signalClosing("interrupted"),
