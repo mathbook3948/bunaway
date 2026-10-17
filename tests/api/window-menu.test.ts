@@ -377,6 +377,45 @@ test("window operations retain independent permissions, strict input and cancell
   await f.adapter.dispose();
 });
 
+test("a rejected tray role change leaves an open popup of the same menu untouched", async () => {
+  const f = fixture();
+  await f.invoke("create", {
+    menuId: "shared",
+    items: [
+      leaf("a"),
+    ],
+  });
+  await f.invoke("setTrayMenu", {
+    menuId: "shared",
+  });
+  f.popup((signal) => {
+    expect(() =>
+      f.state().commit("shared", [
+        {
+          id: "copy",
+          type: "item",
+          role: "copy",
+        },
+      ]),
+    ).toThrow(
+      expect.objectContaining({
+        code: "INVALID_ARGUMENT",
+      }),
+    );
+    expect(signal.aborted).toBe(false);
+    return "a";
+  });
+  expect(
+    await f.invoke("showContextMenu", {
+      menuId: "shared",
+      windowId: "one",
+      x: 1,
+      y: 2,
+    }),
+  ).toBe("a");
+  await f.adapter.dispose();
+});
+
 test("role items attach to windows with resolved labels and a role selection reports nothing", async () => {
   const f = fixture();
   await f.invoke("create", {

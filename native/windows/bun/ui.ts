@@ -1852,15 +1852,21 @@ try {
               return;
             }
             try {
-              view.native.executeEditCommand(role, (reason) =>
+              const started = view.native.executeEditCommand(role, (reason) =>
                 log("menu-role-failed", {
                   role,
                   reason,
                 }),
               );
+              if (!started) {
+                log("menu-role-skipped", {
+                  role,
+                  reason: "webview-unavailable",
+                });
+              }
             } catch (error) {
-              // Menu selection is user input; a missing or closing WebView must not break the app.
-              log("menu-role-skipped", {
+              // Menu selection is user input: a failed MoveFocus or protocol start is logged, not thrown.
+              log("menu-role-failed", {
                 role,
                 reason: error instanceof Error ? error.message : String(error),
               });

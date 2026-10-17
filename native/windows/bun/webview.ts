@@ -927,16 +927,23 @@ export class WebView {
   /**
    * Run an editing command on the page's focused element through the DevTools protocol.
    *
-   * This is the same editor path as Electron's `webContents.copy()`: it does not depend on the
-   * keyboard layout and never injects input into another application. The protocol call works
-   * with the DevTools UI disabled. Completion is observed on the next pump; protocol failures
-   * (for example a navigating page) are reported through `failed` and never thrown.
+   * The command does not depend on the keyboard layout and never injects input into another
+   * application. The protocol call works with the DevTools UI disabled. Chromium may route
+   * `commands` through a synthetic keydown, so a page that calls `preventDefault()` in its
+   * keydown handler might suppress the command; this is unverified and needs an external check.
+   *
+   * Returns false, doing nothing, while the WebView is closing or not ready. Completion is
+   * observed on the next pump; protocol failures after the call started (for example a
+   * navigating page) are reported through `failed`. A failure to start the call throws.
    */
   executeEditCommand(
     command: NativeMenuRole,
     failed: (reason: string) => void,
-  ): void {
-    const webview = this.requireWebView();
+  ): boolean {
+    if (this.closing || !this.webview || !this.controller) {
+      return false;
+    }
+    const webview = this.webview;
     // Completed calls hold only their owner reference and cannot be invoked again.
     const finished = this.editCompletions.filter(
       (completion) => completion.calls > 0 && completion.refs === 1,
@@ -971,6 +978,7 @@ export class WebView {
         },
       ),
     );
+    return true;
   }
 
   /** Read actual browser URL, title, history availability, controller zoom and input focus. */

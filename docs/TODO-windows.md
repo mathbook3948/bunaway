@@ -341,7 +341,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 전역 단축키의 `globalShortcut.released` 이벤트를 제공한다. RegisterHotKey는 키 해제를 알리지 않으므로 WM_HOTKEY 뒤 짧은 WM_TIMER로 주 키의 GetAsyncKeyState를 확인한다.
   별도 이벤트라서 `pressed`만 허용한 기존 뷰는 영향이 없다. 폴링 주기만큼 늦고 보안 데스크톱 전환 시 조기 발행될 수 있으며, 실제 물리 키보드 검증은 남아 있다.
 - [x] Windows 단축키 충돌, F12와 OS 예약 키, 중복 등록, batch rollback과 종료 정리를 처리한다.
-- [x] WebView 포커스 시 메뉴 단축키와 UI 입력의 우선순위를 정의한다. 메뉴는 accelerator를 등록하지 않으므로 키 입력은 항상 포커스된 WebView가 먼저 처리한다. role 항목의 `Ctrl+...` 문구는 표시용이며, 메뉴 선택은 같은 편집 명령을 포커스된 요소에 실행한다.
+- [ ] WebView 포커스 시 메뉴 단축키와 UI 입력의 우선순위를 정의한다.
 
 전역 단축키의 입력, 권한, 중지와 실패 복구 계약은 [globalShortcut API](./site/src/content/docs/reference/plugins/global-shortcut.mdx)를 따른다.
 실제 RegisterHotKey와 SendInput 회귀를 Windows CI 실행기에 포함한다.

@@ -183,11 +183,14 @@ export function initializeMenuOperations(
   });
   const requireMenu = (menuId: string) =>
     resources.get(menuId) ?? invalid("Menu resource does not exist.");
-  const attach = (menuId: string | null, items: NativeMenuItem[] | null) => {
-    // The tray is not tied to an app window, so a role would type into whichever app has focus.
+  /** The tray is not tied to an app window, so a role would type into whichever app has focus. */
+  const requireTrayItems = (items: readonly NativeMenuItem[] | null) => {
     if (items && hasRole(items)) {
       invalid("Tray menus do not support roles.");
     }
+  };
+  const attach = (menuId: string | null, items: NativeMenuItem[] | null) => {
+    requireTrayItems(items);
     if (
       menuId !== null &&
       [
@@ -223,6 +226,10 @@ export function initializeMenuOperations(
       parsed = menuItemsSchema.parse(items);
     } catch {
       return invalid("Invalid menu tree.");
+    }
+    // Validate before cancelling: a rejected change must leave an open popup untouched.
+    if (attached === menuId) {
+      requireTrayItems(parsed);
     }
     cancelPopup(menuId);
     if (attached === menuId) {

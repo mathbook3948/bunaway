@@ -392,6 +392,12 @@ try {
         },
       ],
     },
+    // A top-level menu-bar role item gets no shortcut text.
+    {
+      id: "top-copy",
+      type: "item",
+      role: "copy",
+    },
   ]);
   menus.set(
     "main",
@@ -399,8 +405,10 @@ try {
     (id) => selections.push(id),
     () => {},
   );
-  const submenu = user.symbols.GetSubMenu(user.symbols.GetMenu(hwnd), 0);
+  const menuBar = user.symbols.GetMenu(hwnd);
+  const submenu = user.symbols.GetSubMenu(menuBar, 0);
   assert(submenu, "Edit submenu is missing");
+  assert.equal(menuText(menuBar, 1), "Copy");
 
   // Electron's default labels with their Windows shortcut text.
   assert.deepEqual(
@@ -512,9 +520,12 @@ try {
   ]);
   assert.deepEqual(failures, []);
 
-  // A closing WebView rejects the command; the host contains that failure.
+  // A closing WebView ignores the command and reports that it did not start.
   page.requestClose();
-  assert.throws(() => page.executeEditCommand("copy", () => {}));
+  assert.equal(
+    page.executeEditCommand("copy", () => {}),
+    false,
+  );
   verified = true;
 } finally {
   menus?.dispose();

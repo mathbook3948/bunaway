@@ -158,10 +158,11 @@ export class NativePopupMenu {
             flags |= MF_CHECKED;
           }
         }
-        // Labels are literal text. A role item shows its shortcut as display-only text after a
-        // tab; the page handles the real key itself.
+        // Labels are literal text. A role item in a popup or submenu shows its shortcut as
+        // display-only text after a tab; the page handles the real key itself. Top-level menu-bar
+        // items have no accelerator column, so the text would render as a stray label tail.
         const accelerator =
-          item.type === "item" && item.role
+          !menuBar && item.type === "item" && item.role
             ? `\t${ROLE_ACCELERATORS[item.role]}`
             : "";
         const appended = withWide(
