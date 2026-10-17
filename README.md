@@ -193,7 +193,6 @@ CI도 `mise.toml`의 Bun 버전을 사용한다. 같은 PR, 브랜치의 새 실
 packages/   protocol/  client-sdk/  backend-sdk/  plugin-sdk/  core/  runtime-bun/  cli/
 native/     host-api/  windows/  macos/  linux/  android/  ios/
 runtime/    bun-bundle/  patches/  build-manifests/
-renderers/  system-webview/  chromium/
 plugins/    log/  storage/
 templates/  vanilla/  react/  vue/  svelte/
 examples/   memo/  commands/  lifecycle/  permissions/
