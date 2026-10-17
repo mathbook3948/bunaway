@@ -4,7 +4,10 @@ import type {
   NativeSystemSignal,
 } from "@bunaway/plugin-api/native";
 import { powerEvents } from "#plugins/power/src/contract";
-import { watchPowerLifecycle } from "#plugins/power/src/platforms/windows-lifecycle-events";
+import {
+  type LifecycleTimers,
+  watchPowerLifecycle,
+} from "#plugins/power/src/platforms/windows-lifecycle-events";
 import { watchPowerStatus } from "#plugins/power/src/platforms/windows-status-events";
 
 /** Fake system event service that records subscription options and published events. */
@@ -38,8 +41,8 @@ function fakeSystemEvents() {
         receive(signal);
       }
     },
-    failSessionRegistration: () => {
-      failSessions = true;
+    setSessionFailing: (failing: boolean) => {
+      failSessions = failing;
     },
     unsubscribed: () => unsubscribed,
   };
@@ -101,20 +104,61 @@ test("other signals are ignored and release stops publishing and is repeatable",
   expect(fake.unsubscribed()).toBe(2);
 });
 
-test("a failing session registration keeps suspend and resume events and logs the failure", () => {
-  const fake = fakeSystemEvents();
-  fake.failSessionRegistration();
+/** Manual timers: tests fire pending callbacks explicitly. */
+function fakeTimers() {
+  const pending = new Map<number, () => void>();
+  let next = 0;
+  const timers: LifecycleTimers = {
+    setTimeout: (callback) => {
+      pending.set(++next, callback);
+      return next;
+    },
+    clearTimeout: (handle) => {
+      pending.delete(handle as number);
+    },
+  };
+  return {
+    timers,
+    pending: () => pending.size,
+    /** Fire every currently pending timer once. */
+    fire: () => {
+      for (const [handle, callback] of [
+        ...pending,
+      ]) {
+        pending.delete(handle);
+        callback();
+      }
+    },
+  };
+}
+
+/** Capture console.error calls made while `run` executes. */
+function captureErrors<T>(run: () => T): {
+  result: T;
+  logged: unknown[][];
+} {
   const logged: unknown[][] = [];
   const original = console.error;
   console.error = (...args: unknown[]) => {
     logged.push(args);
   };
-  let release: (() => void) | undefined;
   try {
-    release = watchPowerLifecycle(fake.systemEvents);
+    return {
+      result: run(),
+      logged,
+    };
   } finally {
     console.error = original;
   }
+}
+
+test("a failing session registration keeps suspend and resume events and logs the failure", () => {
+  const fake = fakeSystemEvents();
+  const clock = fakeTimers();
+  fake.setSessionFailing(true);
+  const { result: release, logged } = captureErrors(() =>
+    watchPowerLifecycle(fake.systemEvents, clock.timers),
+  );
   expect(logged).toHaveLength(1);
   for (const signal of [
     "suspend",
@@ -129,6 +173,64 @@ test("a failing session registration keeps suspend and resume events and logs th
   ]);
   release?.();
   expect(fake.unsubscribed()).toBe(1);
+  expect(clock.pending()).toBe(0);
+});
+
+test("a failed session registration is retried until it succeeds and then stops", () => {
+  const fake = fakeSystemEvents();
+  const clock = fakeTimers();
+  fake.setSessionFailing(true);
+  const { result: release } = captureErrors(() =>
+    watchPowerLifecycle(fake.systemEvents, clock.timers),
+  );
+  captureErrors(() => clock.fire());
+  expect(clock.pending()).toBe(1);
+  fake.emit("sessionLocked");
+  expect(fake.published).toEqual([]);
+  fake.setSessionFailing(false);
+  clock.fire();
+  expect(clock.pending()).toBe(0);
+  fake.emit("sessionLocked");
+  fake.emit("sessionUnlocked");
+  expect(fake.published.map(([event]) => event)).toEqual([
+    "power.sessionLocked",
+    "power.sessionUnlocked",
+  ]);
+  release?.();
+  expect(fake.unsubscribed()).toBe(2);
+});
+
+test("session registration retries stop after the bounded window with a second diagnostic", () => {
+  const fake = fakeSystemEvents();
+  const clock = fakeTimers();
+  fake.setSessionFailing(true);
+  const { logged } = captureErrors(() => {
+    watchPowerLifecycle(fake.systemEvents, clock.timers);
+    let rounds = 0;
+    while (clock.pending() > 0) {
+      clock.fire();
+      rounds++;
+    }
+    // 120 s window at 5 s intervals.
+    expect(rounds).toBe(24);
+  });
+  expect(logged).toHaveLength(2);
+});
+
+test("release cancels a pending session retry", () => {
+  const fake = fakeSystemEvents();
+  const clock = fakeTimers();
+  fake.setSessionFailing(true);
+  const { result: release } = captureErrors(() =>
+    watchPowerLifecycle(fake.systemEvents, clock.timers),
+  );
+  expect(clock.pending()).toBe(1);
+  release?.();
+  expect(clock.pending()).toBe(0);
+  fake.setSessionFailing(false);
+  clock.fire();
+  fake.emit("sessionLocked");
+  expect(fake.published).toEqual([]);
 });
 
 // Implementation detail, not a public promise: the system event service does not guarantee subscriber order.

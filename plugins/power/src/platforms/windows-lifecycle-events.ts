@@ -4,7 +4,7 @@ import type {
 } from "@bunaway/plugin-api/native";
 import type { powerEvents } from "#power/contract";
 
-type LifecycleEvent = keyof typeof powerEvents;
+type LifecycleEvent = Exclude<keyof typeof powerEvents, "power.statusChanged">;
 type LifecycleSignals = Partial<Record<NativeSystemSignal, LifecycleEvent>>;
 type LifecycleSystemEvents = Pick<NativeSystemEvents, "subscribe" | "publish">;
 
@@ -22,6 +22,27 @@ const SESSION_SIGNAL_EVENTS: LifecycleSignals = {
 
 /** Lifecycle events share the status read grant, so no extra permission concept exists. */
 const LIFECYCLE_REQUIRED_OPERATION = "power.getStatus";
+
+/** Retry cadence for a session registration that failed, such as right after logon. */
+const SESSION_RETRY_INTERVAL_MS = 5_000;
+const SESSION_RETRY_WINDOW_MS = 120_000;
+
+/** Timer functions, injectable so retries can be tested without waiting. */
+export type LifecycleTimers = {
+  setTimeout(callback: () => void, delayMs: number): unknown;
+  clearTimeout(handle: unknown): void;
+};
+
+const defaultTimers: LifecycleTimers = {
+  setTimeout: (callback, delayMs) => {
+    const handle = setTimeout(callback, delayMs);
+    // A pending retry must not keep the process alive.
+    handle.unref?.();
+    return handle;
+  },
+  clearTimeout: (handle) =>
+    clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
 
 /** Subscribe to the mapped signals and publish each as its payload-free event. */
 function subscribeSignals(
@@ -55,30 +76,69 @@ function subscribeSignals(
  * payload. Suspend and resume use one subscription, and failure to create it throws. Lock and
  * unlock come from WTS notifications for the host process's session and use a separate
  * subscription that opts in to session notifications. Registration can fail, for example right
- * after logon before Terminal Services is ready. That failure is logged and only the lock events
- * are lost, so queries, blockers and suspend/resume events keep working.
+ * after logon before Terminal Services is ready. That failure is logged and registration is
+ * retried every few seconds for a bounded period, stopping on success or release. If it never
+ * succeeds, only the lock events are lost, so queries, blockers and suspend/resume events keep
+ * working, and a second diagnostic is logged.
  * Returns a release function that can be called repeatedly, or undefined when the host has no
  * system event service.
  */
 export function watchPowerLifecycle(
   systemEvents?: LifecycleSystemEvents,
+  timers: LifecycleTimers = defaultTimers,
 ): (() => void) | undefined {
   if (!systemEvents) {
     return undefined;
   }
   const releasePower = subscribeSignals(systemEvents, POWER_SIGNAL_EVENTS);
   let releaseSession: (() => void) | undefined;
-  try {
+  let retryTimer: unknown;
+  let released = false;
+  let retryBudgetMs = SESSION_RETRY_WINDOW_MS;
+
+  const subscribeSession = () => {
     releaseSession = subscribeSignals(systemEvents, SESSION_SIGNAL_EVENTS, {
       sessionNotifications: true,
     });
+  };
+  const scheduleRetry = () => {
+    retryTimer = timers.setTimeout(retrySession, SESSION_RETRY_INTERVAL_MS);
+  };
+  const retrySession = () => {
+    retryTimer = undefined;
+    if (released) {
+      return;
+    }
+    retryBudgetMs -= SESSION_RETRY_INTERVAL_MS;
+    try {
+      subscribeSession();
+    } catch (error) {
+      if (retryBudgetMs > 0) {
+        scheduleRetry();
+        return;
+      }
+      console.error(
+        "Session lock and unlock events stay unavailable: session notification registration kept failing.",
+        error,
+      );
+    }
+  };
+
+  try {
+    subscribeSession();
   } catch (error) {
     console.error(
-      "Session lock and unlock events are unavailable: session notification registration failed.",
+      "Session lock and unlock events are unavailable: session notification registration failed, retrying.",
       error,
     );
+    scheduleRetry();
   }
   return () => {
+    released = true;
+    if (retryTimer !== undefined) {
+      timers.clearTimeout(retryTimer);
+      retryTimer = undefined;
+    }
     const failures: unknown[] = [];
     for (const release of [
       releasePower,
