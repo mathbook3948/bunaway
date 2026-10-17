@@ -1,3 +1,4 @@
+import { INT32_MAX, INT32_MIN } from "@bunaway/plugin-api/native";
 import { z } from "zod";
 
 /**
@@ -5,6 +6,11 @@ import { z } from "zod";
  * instead of repeating the lexical rules, so a limit lives in one place and every plugin
  * rejects the same malformed inputs the same way.
  */
+
+/** A signed 32-bit integer, the range native code stores coordinates and identifiers in. */
+export const int32Schema = z.number().int().min(INT32_MIN).max(INT32_MAX);
+/** A signed 32-bit integer that is zero or more, for sizes and counts. */
+export const nonNegativeInt32Schema = int32Schema.min(0);
 
 /** Standard alphabet, groups of four, with the `=` padding a decoded length requires. */
 const BASE64_PATTERN =

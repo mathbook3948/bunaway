@@ -1,3 +1,4 @@
+import { base64Schema } from "@bunaway/plugin";
 import { z } from "zod";
 
 const MAX_PLAINTEXT_BYTES = 256 * 1024;
@@ -5,23 +6,8 @@ const MAX_CIPHERTEXT_BYTES = 384 * 1024;
 const MAX_TEXT_CHARACTERS = 32 * 1024;
 
 /** Bounded canonical base64, with zero padding bits and no whitespace. */
-function base64(maxBytes: number) {
-  return z
-    .string()
-    .max(4 * Math.ceil(maxBytes / 3))
-    .regex(
-      /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/][AQgw]==|[A-Za-z0-9+/]{2}[AEIMQUYcgkosw048]=)?$(?![\s\S])/,
-    )
-    .refine(
-      (value) =>
-        (value.length / 4) * 3 -
-          (value.endsWith("==") ? 2 : Number(value.endsWith("="))) <=
-        maxBytes,
-    );
-}
-
-export const plaintextSchema = base64(MAX_PLAINTEXT_BYTES);
-export const ciphertextSchema = base64(MAX_CIPHERTEXT_BYTES).min(4);
+export const plaintextSchema = base64Schema(MAX_PLAINTEXT_BYTES);
+export const ciphertextSchema = base64Schema(MAX_CIPHERTEXT_BYTES).min(4);
 // The transport bound is in UTF-16 units. Zod string max counts code points,
 // so retain its coarse bound and enforce JavaScript string length for both directions.
 export const textSchema = z

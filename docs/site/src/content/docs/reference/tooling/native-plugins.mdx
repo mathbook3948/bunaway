@@ -217,6 +217,10 @@ base64 문자열을 받습니다. 디코딩한 길이가 `maxBytes`를 넘거나
 아니면 `null`을 반환하며, `base64CharactersFor(bytes)`는 해당 바이트 수를 인코딩하는 데 필요한
 문자 수입니다. 두 함수는 디코딩 길이를 다른 필드와 비교하는 `refine`에서 사용합니다.
 
+`int32Schema`는 `@bunaway/plugin-api/native`의 `INT32_MIN`부터 `INT32_MAX`까지의 정수이며 화면 좌표처럼
+네이티브 코드가 32-bit 정수로 받는 값에 사용합니다. `nonNegativeInt32Schema`는 같은 범위에서 0 이상인
+크기와 개수용입니다.
+
 ### 실행 흐름
 
 1. 화면이나 백엔드는 작업 이름과 JSON 입력을 보냅니다.

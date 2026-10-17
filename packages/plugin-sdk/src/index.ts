@@ -32,6 +32,8 @@ export {
   base64CharactersFor,
   base64Schema,
   canonicalBase64Bytes,
+  int32Schema,
+  nonNegativeInt32Schema,
 } from "./schemas.ts";
 
 /** Host-selected values available when a native adapter is created. */
