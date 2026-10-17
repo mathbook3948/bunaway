@@ -142,6 +142,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-global-shortcut.test.ts",
           "tests/lifecycle/windows-global-shortcut-ui.test.ts",
           "tests/lifecycle/windows-menu.test.ts",
+          "tests/lifecycle/windows-menu-icon.test.ts",
           "tests/lifecycle/windows-window-menu.test.ts",
           "tests/lifecycle/windows-menu-ui.test.ts",
           "tests/lifecycle/windows-tray-controls.test.ts",

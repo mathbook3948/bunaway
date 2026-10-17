@@ -138,6 +138,7 @@ test("menu definitions resolve defaults and reject invalid trees before recursiv
     enabled: true,
     checked: false,
     group: null,
+    icon: null,
   });
   for (const invalid of [
     [

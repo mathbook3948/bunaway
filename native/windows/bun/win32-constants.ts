@@ -49,6 +49,8 @@ export const MONITOR_DEFAULTTONEAREST = 2;
 export const MONITOR_DEFAULTTOPRIMARY = 1;
 export const PM_REMOVE = 1;
 export const SM_CXSIZEFRAME = 32;
+// GetSystemMetricsForDpi index of the small icon width, the taskbar overlay icon size.
+export const SM_CXSMICON = 49;
 export const SM_CYSIZEFRAME = 33;
 export const SM_CXPADDEDBORDER = 92;
 export const SM_CXMINTRACK = 34;

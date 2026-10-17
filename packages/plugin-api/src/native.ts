@@ -1,5 +1,11 @@
 import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 
+export type { NativeIcoFrame } from "./native-ico.ts";
+export {
+  MAX_NATIVE_ICO_BYTES,
+  parseNativeIco,
+  selectNativeIcoFrame,
+} from "./native-ico.ts";
 export type {
   NativeMenuItem,
   NativeMenuRole,
@@ -308,6 +314,15 @@ export type NativeMonitorServices = {
 };
 
 /**
+ * Creates the HICON for a taskbar overlay at `sizePx` pixels. The host calls it each time it applies the
+ * overlay (on the call and when Explorer recreates the taskbar button) with the window's current small
+ * icon size, and takes ownership of the returned handle: it destroys the handle when the overlay is
+ * replaced, removed or the window is destroyed, or immediately when the shell rejects it. A provider
+ * that cannot build an icon throws, for example INVALID_ARGUMENT, and the host keeps the current overlay.
+ */
+export type NativeOverlayIconProvider = (sizePx: number) => bigint;
+
+/**
  * Native controls exposed to an installed window plugin.
  * The plugin rejects minimized/maximized transitions during fullscreen before invoking these controls.
  * Native failures throw; the UI host converts them to bounded public errors.
@@ -499,6 +514,16 @@ export type NativeWindow = {
   ): void;
   /** Set this window's taskbar thumbnail tooltip, or restore the default for `null` or an empty string. Throws BUSY like `setTaskbarProgress`. Windows only. */
   setThumbnailToolTip?(toolTip: string | null): void;
+  /**
+   * Set this window's taskbar overlay icon from `icon` with an accessibility description, or remove the
+   * overlay for `null`, which ignores `description`. The host owns the handles `icon` returns (see
+   * `NativeOverlayIconProvider`). Errors thrown by `icon` propagate; BUSY like `setTaskbarProgress`.
+   * Windows only.
+   */
+  setOverlayIcon?(
+    icon: NativeOverlayIconProvider | null,
+    description: string,
+  ): void;
   /** Sets or clears the confirmation shown before a user closes the window. */
   setCloseConfirmation(message: string | null): void;
 };

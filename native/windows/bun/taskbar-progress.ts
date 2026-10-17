@@ -1,4 +1,7 @@
-import type { NativeWindow } from "@bunaway/plugin-api/native";
+import type {
+  NativeOverlayIconProvider,
+  NativeWindow,
+} from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
 
 export type TaskbarProgress = Parameters<
@@ -9,6 +12,12 @@ export type TaskbarProgress = Parameters<
 export type ThumbnailClip = Parameters<
   NonNullable<NativeWindow["setThumbnailClip"]>
 >[0];
+
+/** Overlay icon provider with its accessibility description, or null for no overlay. */
+export type OverlayIconSetting = {
+  icon: NativeOverlayIconProvider;
+  description: string;
+} | null;
 
 /** Own one desired taskbar setting per HWND, separately from asynchronous Explorer button creation. */
 export class TaskbarSettingController<T> {
@@ -21,7 +30,11 @@ export class TaskbarSettingController<T> {
     }
   >();
 
-  constructor(private readonly apply: (window: bigint, setting: T) => void) {}
+  /** `copy` isolates the saved setting from later caller mutation; override it for settings structuredClone cannot copy. */
+  constructor(
+    private readonly apply: (window: bigint, setting: T) => void,
+    private readonly copy: (setting: T) => T = structuredClone,
+  ) {}
 
   /** Retry the last accepted setting when Explorer creates or recreates a taskbar button. */
   buttonCreated(window: bigint): void {
@@ -43,7 +56,7 @@ export class TaskbarSettingController<T> {
     }
     this.apply(window, setting);
     this.settings.set(window, {
-      value: structuredClone(setting),
+      value: this.copy(setting),
     });
   }
 

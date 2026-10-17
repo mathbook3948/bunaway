@@ -375,6 +375,9 @@
         ],
         "reference/tooling/native-plugins": [
           "MAX_TRAY_ICO_BYTES",
+          "MAX_NATIVE_ICO_BYTES",
+          "parseNativeIco",
+          "selectNativeIcoFrame",
           "MAX_TRAY_TOOLTIP_UNITS",
           "MAX_TRAY_WAITERS"
         ]
@@ -776,6 +779,7 @@
           "setTaskbarProgress",
           "setThumbnailClip",
           "setThumbnailToolTip",
+          "setOverlayIcon",
           "setCloseConfirmation",
           "getSnapshot",
           "getReadiness",
@@ -1544,6 +1548,7 @@
       "windows.setTaskbarProgress",
       "windows.setThumbnailClip",
       "windows.setThumbnailToolTip",
+      "windows.setOverlayIcon",
       "windows.setCloseConfirmation",
       "windows.getSnapshot",
       "windows.getReadiness",
