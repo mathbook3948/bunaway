@@ -151,6 +151,7 @@ function resetCleanup() {
 }
 
 // A failing subscription release must not skip blocker and native cleanup, and can be retried.
+// The adapter holds three independent subscriptions: status, suspend/resume and session lock.
 resetCleanup();
 let unsubscribes = 0;
 let failUnsubscribe = true;
@@ -178,12 +179,16 @@ await assert.rejects(
   async () => await withEvents.dispose(),
   (error: unknown) => {
     assert(error instanceof AggregateError);
-    assert.equal(error.errors.length, 1);
+    // The status release error, then the lifecycle release aggregating its two subscriptions.
+    assert.equal(error.errors.length, 2);
     assert.equal(error.errors[0].message, "unsubscribe failed");
+    const lifecycle = error.errors[1];
+    assert(lifecycle instanceof AggregateError);
+    assert.equal(lifecycle.errors.length, 2);
     return true;
   },
 );
-assert.equal(unsubscribes, 1);
+assert.equal(unsubscribes, 3);
 assert.deepEqual(
   [
     ...powerCleanup.open,
@@ -197,7 +202,8 @@ assert.deepEqual(powerCleanup.libraries, [
 failUnsubscribe = false;
 await withEvents.dispose();
 await withEvents.dispose();
-assert.equal(unsubscribes, 2);
+// The retry releases every subscription again and later disposals find nothing to release.
+assert.equal(unsubscribes, 6);
 assert.ok(owned);
 
 // A failed subscription during initialization releases the DLLs acquired for the adapter.
