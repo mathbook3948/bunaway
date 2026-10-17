@@ -1,7 +1,9 @@
+import { MAX_NATIVE_ICO_BYTES } from "./native-ico.ts";
+
 /** Win64 NOTIFYICONDATAW has room for 127 UTF-16 units plus the terminating NUL. */
 export const MAX_TRAY_TOOLTIP_UNITS = 127;
-/** Bound image allocation before passing ICO data to Windows. */
-export const MAX_TRAY_ICO_BYTES = 65_536;
+/** Bound image allocation before passing ICO data to Windows. Alias of the shared ICO limit. */
+export const MAX_TRAY_ICO_BYTES = MAX_NATIVE_ICO_BYTES;
 export const MAX_TRAY_WAITERS = 16;
 
 /** Snapshot of the single tray icon declared by desktop.tray. */

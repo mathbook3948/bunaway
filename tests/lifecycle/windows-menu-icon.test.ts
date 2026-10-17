@@ -132,8 +132,9 @@ test.skipIf(process.platform !== "win32")(
       expect(firstBitmap).not.toBe(0n);
       expect(subBitmap).not.toBe(0n);
       expect(nestedBitmap).not.toBe(0n);
-      // Every item gets its own bitmap, so disposing one tree never frees another's.
-      expect(new Set(created).size).toBe(3);
+      // Items with the same icon share one bitmap in a tree; different icons do not.
+      expect(subBitmap).toBe(nestedBitmap);
+      expect(firstBitmap).not.toBe(subBitmap);
       expect(bitmapAt(first.handle, 1)).toBe(0n);
       expect(bitmapAt(first.handle, 2)).toBe(0n);
 
@@ -165,6 +166,16 @@ test.skipIf(process.platform !== "win32")(
       expect(secondBitmap).not.toBe(0n);
       expect(secondBitmap).not.toBe(firstBitmap);
       expect(bitmapAt(second.handle, 3)).toBe(0n);
+
+      // A menu bar draws no image for top-level items but keeps nested popup icons.
+      const bar = new NativePopupMenu(items(dib, png), true);
+      const barSub = native.symbols.GetSubMenu(bar.handle, 3);
+      expect(bitmapAt(bar.handle, 0)).toBe(0n);
+      expect(bitmapAt(bar.handle, 3)).toBe(0n);
+      const barNested = bitmapAt(barSub, 0);
+      expect(barNested).not.toBe(0n);
+      bar.dispose();
+      expect(describe(barNested).written).toBe(0);
 
       first.dispose();
       for (const bitmap of [

@@ -4,6 +4,7 @@ import type {
   NativeMenuItem,
   NativeMenuRole,
 } from "@bunaway/plugin-api/native";
+import { BunawayError } from "@bunaway/protocol";
 import {
   createMenuIconBitmap,
   releaseMenuIconBitmap,
@@ -103,8 +104,11 @@ export class NativePopupMenu {
   private nextCommand = 1;
   private disposed = false;
   private readonly handles = new Set<bigint>();
-  /** Item icon bitmaps are owned by this tree: DestroyMenu does not free them. */
-  private readonly bitmaps: bigint[] = [];
+  /**
+   * Item icon bitmaps by ICO string, owned by this tree because DestroyMenu does not free them.
+   * Items with the same icon share one bitmap, which is released exactly once.
+   */
+  private readonly bitmaps = new Map<string, bigint>();
 
   constructor(
     items: readonly NativeMenuItem[],
@@ -120,23 +124,32 @@ export class NativePopupMenu {
   }
 
   private releaseBitmaps() {
-    for (const bitmap of this.bitmaps.splice(0)) {
+    const owned = [
+      ...this.bitmaps.values(),
+    ];
+    this.bitmaps.clear();
+    for (const bitmap of owned) {
       releaseMenuIconBitmap(bitmap);
     }
   }
 
   /** Attach an icon to the item at `position`. Windows keeps only the handle, so the tree owns the bitmap. */
   private setIcon(menu: bigint, position: number, ico: string) {
-    const bitmap = createMenuIconBitmap(ico);
-    this.bitmaps.push(bitmap);
+    let bitmap = this.bitmaps.get(ico);
+    if (bitmap === undefined) {
+      bitmap = createMenuIconBitmap(ico);
+      this.bitmaps.set(ico, bitmap);
+    }
     const info = Buffer.alloc(MENUITEMINFO_SIZE);
     info.writeUInt32LE(MENUITEMINFO_SIZE, 0);
     info.writeUInt32LE(MIIM_BITMAP, 4);
     info.writeBigUInt64LE(bitmap, MENUITEMINFO_HBMPITEM_OFFSET);
-    assert(
-      this.native.symbols.SetMenuItemInfoW(menu, position, 1, ptr(info)),
-      "Menu icon presentation failed.",
-    );
+    if (!this.native.symbols.SetMenuItemInfoW(menu, position, 1, ptr(info))) {
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Menu icon presentation failed.",
+      });
+    }
   }
 
   private build(
@@ -207,7 +220,12 @@ export class NativePopupMenu {
           this.native.symbols.DestroyMenu(command);
         }
         assert(appended, "Menu item creation failed.");
-        if ((item.type === "item" || item.type === "submenu") && item.icon) {
+        // Top-level menu-bar items have no image column, so they never get a bitmap.
+        if (
+          !menuBar &&
+          (item.type === "item" || item.type === "submenu") &&
+          item.icon
+        ) {
           this.setIcon(menu, position, item.icon);
         }
         position++;

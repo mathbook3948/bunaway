@@ -158,6 +158,14 @@ function rejected(message: string): never {
   });
 }
 
+/** A GDI failure is a host fault, reported as INTERNAL rather than left to a generic Error. */
+function failed(message: string): never {
+  throw new BunawayError({
+    code: "INTERNAL",
+    message,
+  });
+}
+
 /** Whether any BGRA pixel carries a non-zero alpha value. */
 export function hasAlphaChannel(pixels: Uint8Array): boolean {
   for (let offset = 3; offset < pixels.length; offset += BYTES_PER_PIXEL) {
@@ -199,8 +207,8 @@ export function composeMaskedPixels(
  *
  * Icons with an alpha channel keep it. Icons without one take their transparency from the AND mask.
  *
- * Throws INVALID_ARGUMENT when the ICO is malformed or Windows rejects its image, and a plain
- * Error when a GDI resource cannot be created.
+ * Throws INVALID_ARGUMENT when the ICO is malformed or Windows rejects its image, and INTERNAL
+ * when a GDI resource cannot be created or drawn.
  */
 export function createMenuIconBitmap(ico: string): bigint {
   const frames = parseNativeIco(ico) ?? rejected("Invalid menu ICO image.");
@@ -214,7 +222,7 @@ export function createMenuIconBitmap(ico: string): bigint {
     const size = user32.symbols.GetSystemMetrics(SM_CXSMICON);
     const frame = selectNativeIcoFrame(frames, size);
     if (size <= 0 || !frame) {
-      throw new Error("Menu icon size is unavailable.");
+      failed("Menu icon size is unavailable.");
     }
     // RT_ICON bits must be DWORD-aligned, so copy the frame out of the ICO payload.
     const image = Buffer.from(frame.data);
@@ -257,7 +265,7 @@ export function createMenuIconBitmap(ico: string): bigint {
     );
     const address = Number(bits.readBigUInt64LE(0));
     if (!screen || !memory || !bitmap || !address) {
-      throw new Error("Menu icon bitmap creation failed.");
+      failed("Menu icon bitmap creation failed.");
     }
     // The section memory is shared with GDI, so draw, flush, then read through the same view.
     const pixels = new Uint8Array(
@@ -269,7 +277,7 @@ export function createMenuIconBitmap(ico: string): bigint {
       if (
         !user32.symbols.DrawIconEx(memory, 0, 0, icon, size, size, 0, 0n, flags)
       ) {
-        throw new Error("Menu icon drawing failed.");
+        failed("Menu icon drawing failed.");
       }
       gdi32.symbols.GdiFlush();
     };

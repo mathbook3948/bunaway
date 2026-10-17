@@ -1,5 +1,5 @@
 import {
-  MAX_TRAY_ICO_BYTES,
+  MAX_NATIVE_ICO_BYTES,
   type NativeMenuItem,
   type NativeMenuRole,
   parseNativeIco,
@@ -26,7 +26,7 @@ export const labelSchema = z
 export const iconSchema = z
   .string()
   .min(4)
-  .max(Math.ceil(MAX_TRAY_ICO_BYTES / 3) * 4)
+  .max(Math.ceil(MAX_NATIVE_ICO_BYTES / 3) * 4)
   .refine((value) => parseNativeIco(value) !== undefined, "Invalid ICO.");
 /** Editing roles and Electron's Windows default labels; accelerators are drawn by the native menu. */
 export const MENU_ROLE_LABELS = {
