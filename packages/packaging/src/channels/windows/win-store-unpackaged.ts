@@ -7,17 +7,17 @@ import type {
 import { installerStages } from "./installer.ts";
 
 // win-store-unpackaged: Microsoft Store submission as a classic EXE/MSI
-// package. Separate contract from MSIX — the developer owns the versioned,
+// package. Separate contract from MSIX: the developer owns the versioned,
 // immutable download URL and update lifecycle; the framework only produces
 // a submission-ready installer plus a checklist.
 //
 // Official Store EXE/MSI requirements (learn.microsoft.com Windows Apps
 // "Publish your app" unpackaged-app submission docs):
-//  - Standalone offline installer — downloader stubs are rejected, so this
+//  - Standalone offline installer: downloader stubs are rejected, so this
 //    channel never embeds the WebView2 bootstrapper (webView2="check" only,
 //    enforced by bunaway.json.bundle validation).
 //  - Every PE file must carry an Authenticode signature chaining to a
-//    Microsoft Trusted Root Program CA — hence signingRequirement is
+//    Microsoft Trusted Root Program CA, hence signingRequirement is
 //    "required-to-submit" and unsigned output is never submittable.
 //  - The download URL is versioned and immutable once submitted.
 //  - Unattended install is mandatory (Inno supports /VERYSILENT; UAC is fine).
@@ -52,7 +52,7 @@ const adapter: PackageAdapter = {
           downloadUrl: null as string | null,
           notes: [
             "Set downloadUrl to the final HTTPS location before submission; do not reuse the URL across versions.",
-            "This channel does NOT share the MSIX update contract — updates are your installer/URL lifecycle, not Appx updates.",
+            "This channel does NOT share the MSIX update contract. Updates are your installer/URL lifecycle, not Appx updates.",
           ],
         };
         const path = join(ctx.staging, "submission.json");

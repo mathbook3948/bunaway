@@ -1,3 +1,4 @@
+import { attemptAll, failWithCleanup } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import { MAX_POWER_BLOCKERS, type PowerBlockerType } from "#power/contract";
 
@@ -51,18 +52,11 @@ export class PowerRequestHandles {
       }
       return handle;
     } catch (error) {
-      try {
-        this.stop(handle);
-      } catch (cleanup) {
-        throw new AggregateError(
-          [
-            error,
-            cleanup,
-          ],
-          "Windows power request activation and cleanup failed.",
-        );
-      }
-      throw error;
+      failWithCleanup(
+        error,
+        () => this.stop(handle),
+        "Windows power request activation and cleanup failed.",
+      );
     }
   }
 
@@ -86,16 +80,11 @@ export class PowerRequestHandles {
 
   /** Attempt every cleanup and retain failed closes for a subsequent disposal attempt. */
   dispose(): void {
-    const errors: unknown[] = [];
-    for (const handle of this.handles.keys()) {
-      try {
-        this.stop(handle);
-      } catch (error) {
-        errors.push(error);
-      }
-    }
-    if (errors.length) {
-      throw new AggregateError(errors, "Windows power request cleanup failed.");
-    }
+    attemptAll(
+      [
+        ...this.handles.keys(),
+      ].map((handle) => () => this.stop(handle)),
+      "Windows power request cleanup failed.",
+    );
   }
 }

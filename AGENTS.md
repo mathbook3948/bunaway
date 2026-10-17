@@ -8,6 +8,12 @@ Issues and specs live in GitHub Issues for `mathbook3948/bunaway`. See `docs/age
 
 Use a single shared context: `docs/GLOSSARY.md` and ADRs in `docs/decisions/`. See `docs/agents/domain.md`.
 
+### Native change verification
+
+Before changing `native/` or `plugins/*/src/platforms/`, read
+`.claude/skills/native-change-verification/SKILL.md` and work through its checklist: resource
+lifetime, shared FFI signatures, apartments, bounds, cancellation, tests and verified-only docs.
+
 ### Code quality
 
 Assess readability, maintainability, reliability, reuse and efficiency alongside correctness.
@@ -97,10 +103,11 @@ existing debt allows no unrelated rewrites.
   production state or rewriting source merely to test ordinary logic. Retain real process,
   filesystem and packaged-artifact checks when those mechanisms are the behavior under test.
 - Use the Bun version pinned in `mise.toml`, focused checks while working, and `mise run check`
-  before finishing code changes. When platform or distribution paths change, run relevant checks
-  selected from `tests/README.md` and `mise.toml`. Distinguish static, contract and actual native
-  execution results; report failures and checks not run with reasons. Follow Documentation
-  maintenance below for documentation checks.
+  before finishing code changes. When platform or distribution paths change, run the checks the
+  change-type table in `tests/README.md` names; `tests/NOTES.md` records what individual fixtures
+  verify when that detail is needed. Distinguish static, contract and actual native execution
+  results; report failures and checks not run with reasons. Follow Documentation maintenance
+  below for documentation checks.
 
 #### Review and refactoring discipline
 
@@ -129,8 +136,9 @@ types, rendering and internal links. Also review explanations and examples for a
 - State general principles without listing specific templates or frameworks; name the currently
   supported choices when explaining them. Distinguish recommendations, required inputs and runtime
   constraints.
-- Do not use em dashes (U+2014) or middle dots (U+00B7) in documentation or user-facing text. Use
-  sentences, commas, colons or conjunctions instead.
+- Do not use em dashes (U+2014) or middle dots (U+00B7) in documentation, source text or commit
+  messages. Use sentences, commas, colons or conjunctions instead. `scripts/check-text-style.ts`
+  enforces this in the contract tests and the commit-msg hook.
 - Write natural, direct Korean with explicit behavior, inputs, results and failures. Avoid
   translationese, noun chains and repeated cautions; state limits once where they affect the task.
   Preserve API names, examples, values and technical meaning.

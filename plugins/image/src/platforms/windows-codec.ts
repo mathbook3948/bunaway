@@ -6,6 +6,7 @@ import {
   ptr,
   read,
 } from "bun:ffi";
+import { OLE32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import {
   type ImageInterpolation,
@@ -120,27 +121,7 @@ function encodedLength(bytes: Buffer, mime: ImageMime): number {
 /** Own one balanced STA initialization, WIC factory and vtable bindings; no native object escapes a call. */
 export function createWIC() {
   const ole = dlopen("ole32.dll", {
-    CoInitializeEx: {
-      args: [
-        "ptr",
-        "u32",
-      ],
-      returns: "i32",
-    },
-    CoUninitialize: {
-      args: [],
-      returns: "void",
-    },
-    CoCreateInstance: {
-      args: [
-        "ptr",
-        "ptr",
-        "u32",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(OLE32, "CoInitializeEx", "CoUninitialize", "CoCreateInstance"),
   });
   const methods = new Map<string, NativeCall>();
   // Native memory streams borrow their backing arrays. Keep those arrays rooted

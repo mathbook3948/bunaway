@@ -1,4 +1,5 @@
 import { dlopen, JSCallback, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
+import { checkHresult, wide, withWide } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import {
   clampWindowSize,
@@ -35,7 +36,7 @@ import {
   TaskbarSettingController,
   type ThumbnailClip,
 } from "./taskbar-progress.ts";
-import { display, hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
+import { display, kernel, user } from "./win32-bindings.ts";
 import { completedGeometryChanges, windowChanges } from "./window-events.ts";
 import {
   centerInWorkArea,
@@ -61,101 +62,100 @@ import {
   WS_EX_TOPMOST,
   WS_OVERLAPPEDWINDOW,
 } from "./window-style.ts";
+import {
+  COLOR_WINDOW,
+  CW_USEDEFAULT,
+  DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+  FLASHWINFO_SIZE,
+  FLASHW_STOP,
+  FLASHW_TIMER,
+  FLASHW_TIMERNOFG,
+  FLASHW_TRAY,
+  GWLP_HWNDPARENT,
+  GWL_EXSTYLE,
+  GWL_STYLE,
+  GW_OWNER,
+  IDI_APPLICATION,
+  IDYES,
+  IMAGE_ICON,
+  LR_LOADFROMFILE,
+  MA_NOACTIVATE,
+  MB_DEFBUTTON2,
+  MB_ICONQUESTION,
+  MB_YESNO,
+  MENU_ITEM_ERROR,
+  MF_ENABLED,
+  MF_GRAYED,
+  MINMAXINFO_SIZE,
+  MONITORINFO_SIZE,
+  MONITOR_DEFAULTTONEAREST,
+  MONITOR_DEFAULTTOPRIMARY,
+  PM_REMOVE,
+  RECT_SIZE,
+  SC_CLOSE,
+  SC_MAXIMIZE,
+  SC_MINIMIZE,
+  SC_MOVE,
+  SC_RESTORE,
+  SC_SIZE,
+  SM_CXMAXTRACK,
+  SM_CXMINTRACK,
+  SM_CXPADDEDBORDER,
+  SM_CXSIZEFRAME,
+  SM_CXSMICON,
+  SM_CYMAXTRACK,
+  SM_CYMINTRACK,
+  SM_CYSIZEFRAME,
+  SWP_FRAMECHANGED,
+  SWP_NOACTIVATE,
+  SWP_NOMOVE,
+  SWP_NOSIZE,
+  SWP_NOZORDER,
+  SW_HIDE,
+  SW_MINIMIZE,
+  SW_RESTORE,
+  SW_SHOW,
+  SW_SHOWMAXIMIZED,
+  SW_SHOWMINIMIZED,
+  SW_SHOWMINNOACTIVE,
+  SW_SHOWNA,
+  SW_SHOWNOACTIVATE,
+  SW_SHOWNORMAL,
+  SYSTEM_COMMAND_MASK,
+  WA_INACTIVE,
+  WDA_EXCLUDEFROMCAPTURE,
+  WDA_MONITOR,
+  WDA_NONE,
+  WINDOWPLACEMENT_FLAGS_OFFSET,
+  WINDOWPLACEMENT_NORMAL_RECT_OFFSET,
+  WINDOWPLACEMENT_SHOW_CMD_OFFSET,
+  WINDOWPLACEMENT_SIZE,
+  WINDOWPOS_SIZE,
+  WM_ACTIVATE,
+  WM_CLOSE,
+  WM_DISPLAYCHANGE,
+  WM_DPICHANGED,
+  WM_ENTERSIZEMOVE,
+  WM_EXITSIZEMOVE,
+  WM_GETMINMAXINFO,
+  WM_MOUSEACTIVATE,
+  WM_OBSERVE_WINDOW,
+  WM_QUIT,
+  WM_SIZING,
+  WM_SYSCOMMAND,
+  WM_WINDOWPOSCHANGED,
+  WM_WINDOWPOSCHANGING,
+  WPF_RESTORETOMAXIMIZED,
+  WS_MAXIMIZE,
+  WS_MAXIMIZEBOX,
+  WS_MINIMIZE,
+  WS_MINIMIZEBOX,
+  WS_THICKFRAME,
+} from "./win32-constants.ts";
 
-export const WM_SIZE = 0x0005;
-const WM_ACTIVATE = 0x0006;
-const WA_INACTIVE = 0n;
-const WM_OBSERVE_WINDOW = 0x8003;
-export const WM_CLOSE = 0x0010;
-export const WM_QUIT = 0x0012;
-const WM_GETMINMAXINFO = 0x0024;
-const WM_SIZING = 0x0214;
-const WM_WINDOWPOSCHANGING = 0x0046;
-const WM_WINDOWPOSCHANGED = 0x0047;
-const WM_MOUSEACTIVATE = 0x0021;
-const MA_NOACTIVATE = 3n;
-const WM_SYSCOMMAND = 0x0112;
-const SYSTEM_COMMAND_MASK = 0xfff0n;
-const SC_MINIMIZE = 0xf020n;
-const SC_MAXIMIZE = 0xf030n;
-const SC_RESTORE = 0xf120n;
-const WM_DISPLAYCHANGE = 0x007e;
-const SC_CLOSE = 0xf060;
-const MF_ENABLED = 0;
-const MF_GRAYED = 1;
-const MENU_ITEM_ERROR = 0xffffffff;
-const SC_SIZE = 0xf000n;
-const SC_MOVE = 0xf010n;
-export const WM_ENTERSIZEMOVE = 0x0231;
-export const WM_EXITSIZEMOVE = 0x0232;
-const WM_DPICHANGED = 0x02e0;
-
-const COLOR_WINDOW = 5;
-const CW_USEDEFAULT = -2147483648;
-const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4n;
-const GWL_STYLE = -16;
-const GWL_EXSTYLE = -20;
-const GWLP_HWNDPARENT = -8;
-const GW_OWNER = 4;
-const IDI_APPLICATION = 32512n;
-const IMAGE_ICON = 1;
-const LR_LOADFROMFILE = 0x10;
-const MB_DEFBUTTON2 = 0x100;
-const MB_ICONQUESTION = 0x20;
-const MB_YESNO = 0x4;
-const MONITOR_DEFAULTTONEAREST = 2;
-const MONITOR_DEFAULTTOPRIMARY = 1;
-const PM_REMOVE = 1;
-const SM_CXSIZEFRAME = 32;
-const SM_CYSIZEFRAME = 33;
-const SM_CXPADDEDBORDER = 92;
-const SM_CXMINTRACK = 34;
-const SM_CYMINTRACK = 35;
-const SM_CXMAXTRACK = 59;
-const SM_CYMAXTRACK = 60;
-const SW_HIDE = 0;
-const SW_SHOWNORMAL = 1;
-const SW_SHOWNOACTIVATE = 4;
-const SW_MINIMIZE = 6;
-const SW_RESTORE = 9;
-const SW_SHOW = 5;
-const SW_SHOWMAXIMIZED = 3;
-const SW_SHOWMINIMIZED = 2;
-const SW_SHOWMINNOACTIVE = 7;
-const SW_SHOWNA = 8;
-const SWP_FRAMECHANGED = 0x20;
-const SWP_NOMOVE = 0x2;
-const SWP_NOACTIVATE = 0x10;
-const SWP_NOSIZE = 0x1;
-const SWP_NOZORDER = 0x4;
-// GetSystemMetricsForDpi index of the small icon width, the taskbar overlay icon size.
-const SM_CXSMICON = 49;
-const WINDOWPLACEMENT_NORMAL_RECT_OFFSET = 28;
-const WINDOWPLACEMENT_FLAGS_OFFSET = 4;
-const WINDOWPLACEMENT_SHOW_CMD_OFFSET = 8;
-const WPF_RESTORETOMAXIMIZED = 0x2;
-/** SetWindowDisplayAffinity values: no protection, black content in captures, omitted from captures. */
-const WDA_NONE = 0x0;
-const WDA_MONITOR = 0x1;
-const WDA_EXCLUDEFROMCAPTURE = 0x11;
-const WS_MINIMIZEBOX = 0x00020000n;
-const WS_MAXIMIZEBOX = 0x00010000n;
-const WS_THICKFRAME = 0x00040000n;
-const WS_MAXIMIZE = 0x01000000n;
-const WS_MINIMIZE = 0x20000000n;
-const IDYES = 6;
+/** Host policy for the message pump, placement retries and title storage. */
 const MAX_MESSAGES_PER_PUMP = 64;
 const MAX_INITIAL_PLACEMENT_ATTEMPTS = 8;
-const MINMAXINFO_SIZE = 40;
-const MONITORINFO_SIZE = 40;
-const RECT_SIZE = 16;
-const WINDOWPLACEMENT_SIZE = 44;
-const WINDOWPOS_SIZE = 40;
-const FLASHWINFO_SIZE = 32; // Win64
-const FLASHW_STOP = 0;
-const FLASHW_TRAY = 0x2;
-const FLASHW_TIMER = 0x4;
-const FLASHW_TIMERNOFG = 0xc;
 const MAX_WINDOW_TITLE_LENGTH = 1024;
 
 type SizeConstraints = Partial<WindowSizeConstraints>;
@@ -299,7 +299,7 @@ export class Windows {
         },
       });
       try {
-        hr(
+        checkHresult(
           withWide(appId, (id) =>
             shell.symbols.SetCurrentProcessExplicitAppUserModelID(id),
           ),
@@ -691,7 +691,7 @@ export class Windows {
     } else {
       const x = new Uint32Array(1);
       const y = new Uint32Array(1);
-      hr(
+      checkHresult(
         display.symbols.GetDpiForMonitor(monitor, 0, ptr(x), ptr(y)),
         "GetDpiForMonitor",
       );

@@ -77,7 +77,7 @@ test("file-list contracts round-trip Unicode paths at the UTF-16 limit", async (
         {
           format: "application/x-bunaway-file-list",
           data: [
-            path + "x",
+            `${path}x`,
           ],
         },
       ],
@@ -100,7 +100,7 @@ test("file-list contracts round-trip Unicode paths at the UTF-16 limit", async (
     expect(() =>
       decodeFiles(
         encodeFiles([
-          path + "x",
+          `${path}x`,
         ]),
       ),
     ).toThrow(

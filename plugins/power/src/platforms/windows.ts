@@ -1,4 +1,4 @@
-import type { NativeEnvironment } from "@bunaway/plugin";
+import { attemptAll, type NativeEnvironment } from "@bunaway/plugin";
 import type { NativeSystemEvents } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
@@ -112,33 +112,22 @@ export class WindowsPower {
    */
   dispose(): void {
     this.disposed = true;
-    const errors: unknown[] = [];
-    try {
-      this.releaseStatusEvents?.();
-      this.releaseStatusEvents = undefined;
-    } catch (error) {
-      errors.push(error);
-    }
-    try {
-      this.releaseLifecycleEvents?.();
-      this.releaseLifecycleEvents = undefined;
-    } catch (error) {
-      errors.push(error);
-    }
-    try {
-      this.blockers.dispose();
-    } catch (error) {
-      errors.push(error);
-    }
-    try {
-      // Failed activation can retain a native handle without a public blocker ID.
-      this.native.dispose();
-    } catch (error) {
-      errors.push(error);
-    }
-    if (errors.length) {
-      throw new AggregateError(errors, "Power adapter cleanup failed.");
-    }
+    attemptAll(
+      [
+        () => {
+          this.releaseStatusEvents?.();
+          this.releaseStatusEvents = undefined;
+        },
+        () => {
+          this.releaseLifecycleEvents?.();
+          this.releaseLifecycleEvents = undefined;
+        },
+        () => this.blockers.dispose(),
+        // Failed activation can retain a native handle without a public blocker ID.
+        () => this.native.dispose(),
+      ],
+      "Power adapter cleanup failed.",
+    );
   }
 }
 

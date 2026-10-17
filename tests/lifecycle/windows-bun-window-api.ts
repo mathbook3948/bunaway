@@ -9,7 +9,8 @@ import { BunawayError, type HostContext, type Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { monitorServices } from "#native/windows/bun/monitors";
 import { Windows } from "#native/windows/bun/win32";
-import { hr, ole, user } from "#native/windows/bun/win32-bindings";
+import { ole, user } from "#native/windows/bun/win32-bindings";
+import { checkHresult } from "@bunaway/plugin/win32";
 import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { trayIco } from "../fixtures/tray-icon.ts";
@@ -167,7 +168,7 @@ if (!process.argv.includes("--child")) {
     },
   });
   // No ui.ts here, so this block owns the STA that AccPropServices and the windows need.
-  hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
+  checkHresult(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
   const nativeWindows = new Windows(() => {});
   try {
     const source = nativeWindows.create(

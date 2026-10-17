@@ -1,3 +1,4 @@
+import { attemptAll } from "@bunaway/plugin";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import {
   MAX_ACTIVE_TOASTS,
@@ -134,25 +135,20 @@ export function createToastController(
         return;
       }
       stopping = true;
-      const failures: unknown[] = [];
-      for (const [id, entry] of entries) {
-        entry.active = false;
-        try {
-          driver.clear(entry.input);
-          retire(entry);
-          entries.delete(id);
-        } catch (error) {
-          failures.push(error);
-        }
-      }
-      try {
-        drain();
-      } catch (error) {
-        failures.push(error);
-      }
-      if (failures.length) {
-        throw new AggregateError(failures, "Toast cleanup failed.");
-      }
+      attemptAll(
+        [
+          ...[
+            ...entries,
+          ].map(([id, entry]) => () => {
+            entry.active = false;
+            driver.clear(entry.input);
+            retire(entry);
+            entries.delete(id);
+          }),
+          drain,
+        ],
+        "Toast cleanup failed.",
+      );
       driver.dispose();
       disposed = true;
     },

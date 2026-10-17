@@ -44,9 +44,11 @@ test.skipIf(process.platform !== "win32")(
       const status = powerOperations.getStatus.output.parse(
         await adapter.execute("power.getStatus", null, "backend"),
       );
-      expect(status.source).toBe(
-        raw[0] === 1 ? "ac" : raw[0] === 0 ? "battery" : "unknown",
-      );
+      const sources: Record<number, "ac" | "battery"> = {
+        1: "ac",
+        0: "battery",
+      };
+      expect(status.source).toBe(sources[raw[0] ?? -1] ?? "unknown");
       expect(status.batteryPresent).toBe(
         raw[1] === 255 ? null : !((raw[1] ?? 0) & 128),
       );

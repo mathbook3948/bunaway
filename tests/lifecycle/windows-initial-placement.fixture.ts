@@ -102,12 +102,7 @@ function windowMonitor() {
   return selected;
 }
 
-const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
 mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
-  hr: (result: number) => assert(result >= 0),
-  wide,
-  withWide: <T>(text: string, action: (address: Pointer) => T) =>
-    action(ptr(wide(text))),
   kernel: {
     symbols: {
       GetCurrentThreadId: () => 1,

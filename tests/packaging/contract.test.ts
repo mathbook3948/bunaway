@@ -2745,12 +2745,12 @@ relativeLinkTest.each([
             resolve(ctx.staging, link),
             "dir",
           );
+          const spelledPaths: Record<string, string> = {
+            "dot-absolute": `${ctx.staging}/linked/./setup.exe`,
+            "dot-relative": "./linked/setup.exe",
+          };
           ctx.addArtifact(
-            form === "dot-absolute"
-              ? `${ctx.staging}/linked/./setup.exe`
-              : form === "dot-relative"
-                ? "./linked/setup.exe"
-                : `${link}/setup.exe`,
+            spelledPaths[form] ?? `${link}/setup.exe`,
             "installer",
           );
         },

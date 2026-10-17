@@ -2,7 +2,7 @@
 //
 // build vs package: `bunaway build` produces a channel-neutral artifact
 // (dist/<target>) that this contract consumes read-only. `bunaway package
-// <channel>` runs one adapter, which must never mutate the build artifact —
+// <channel>` runs one adapter, which must never mutate the build artifact;
 // everything lands in a runner-owned staging directory that is moved into
 // place atomically, so a failed package run preserves the previous output.
 //
@@ -89,7 +89,7 @@ export const CODES = {
 } as const;
 
 // Resolved, channel-independent metadata derived from bunaway.json.bundle,
-// app.json and package.json. This is the single source adapters read — they
+// app.json and package.json. This is the single source adapters read; they
 // must not re-derive identity fields.
 export interface ResolvedPackaging {
   root: string;
@@ -119,7 +119,7 @@ export interface ResolvedTarget {
   minVersion?: string;
 }
 
-// Developer-provided signing configuration. Values reference credentials —
+// Developer-provided signing configuration. Values reference credentials;
 // never contain secrets. `passwordEnv` names an environment variable read at
 // sign time only.
 export interface SigningConfig {
@@ -278,7 +278,7 @@ export interface AdapterStage {
  */
 export interface StageContext {
   input: AdapterInput;
-  // Runner-owned staging directory. Everything the package needs goes here —
+  // Runner-owned staging directory. Everything the package needs goes here;
   // it is renamed into the output directory only after all stages succeed.
   // Links must be relative and resolve inside staging; absolute links/junctions
   // would break when staging is renamed and are rejected before publication.

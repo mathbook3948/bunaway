@@ -1,4 +1,5 @@
 import type { FFIType, Pointer } from "bun:ffi";
+import { checkHresult, withBuffer, withWide } from "@bunaway/plugin/win32";
 import { CFunction, JSCallback, ptr, read, toArrayBuffer } from "bun:ffi";
 import assert from "node:assert/strict";
 import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
@@ -6,7 +7,7 @@ import { guid } from "./guid.ts";
 
 export { guid } from "./guid.ts";
 
-import { hr, kernel, ole, withBuffer, withWide } from "./win32-bindings.ts";
+import { kernel, ole } from "./win32-bindings.ts";
 
 const thread = kernel.symbols.GetCurrentThreadId();
 export type Arg = number | bigint | null;
@@ -44,7 +45,7 @@ export const release = (object: Pointer) => method(object, 2, [], "u32")();
 /** Read and free COM UTF-16 text by slot or property name; absent or oversized values return empty. */
 export function getString(object: Pointer, slot: number, name?: string) {
   const out = new BigUint64Array(1);
-  hr(
+  checkHresult(
     name === undefined
       ? method(object, slot, [
           "ptr",
@@ -235,7 +236,7 @@ export function handler(
 /** Read an owned interface pointer from an out slot; the caller must release it. */
 export function getObject(object: Pointer, slot: number): Pointer {
   const out = new BigUint64Array(1);
-  hr(
+  checkHresult(
     method(object, slot, [
       "ptr",
     ])(ptr(out)),
@@ -268,7 +269,7 @@ export function query(
   if (optional && result === E_NOINTERFACE) {
     return undefined;
   }
-  hr(result, "QueryInterface");
+  checkHresult(result, "QueryInterface");
   assert(out[0], "Null COM interface");
   return Number(out[0]) as Pointer;
 }

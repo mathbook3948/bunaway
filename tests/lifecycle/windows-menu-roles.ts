@@ -16,11 +16,8 @@ import {
 import { WebView } from "#native/windows/bun/webview";
 import { callDevToolsProtocolMethod } from "#native/windows/bun/webview-devtools";
 import { Windows } from "#native/windows/bun/win32";
-import {
-  disposeWin32Bindings,
-  hr,
-  ole,
-} from "#native/windows/bun/win32-bindings";
+import { disposeWin32Bindings, ole } from "#native/windows/bun/win32-bindings";
+import { checkHresult } from "@bunaway/plugin/win32";
 import { menuItemsSchema } from "#plugins/menu/src/contract";
 import { WindowMenus } from "#plugins/menu/src/platforms/windows-window-menus";
 
@@ -249,7 +246,7 @@ await mkdir(resolve(assets, "web"), {
 await writeFile(resolve(assets, "web/index.html"), pageHtml());
 await writeFile(resolve(assets, "web/frame-b.html"), frameHtml("b"));
 await writeFile(resolve(assets, "web/frame-c.html"), frameHtml("c"));
-hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
+checkHresult(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
 const windows = new Windows(() => {});
 
 const listeners = new Set<

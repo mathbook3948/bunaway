@@ -1,4 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import {
   arch,
   cpus,
@@ -45,10 +46,7 @@ function openUser32() {
 /** Own Kernel32 locale and user32 MessageBeep bindings on the host I/O worker and close them on host shutdown. */
 export function initialize() {
   const api = dlopen("kernel32.dll", {
-    GetCurrentProcess: {
-      args: [],
-      returns: "u64",
-    },
+    ...pick(KERNEL32, "GetCurrentProcess"),
     IsWow64Process2: {
       args: [
         "u64",

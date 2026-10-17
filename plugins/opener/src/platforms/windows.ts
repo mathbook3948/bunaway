@@ -1,4 +1,6 @@
 import { dlopen } from "bun:ffi";
+import { COINIT_APARTMENTTHREADED, OLE32, pick } from "@bunaway/plugin/win32";
+import { ResourceOwner } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import { createFiles } from "#opener/platforms/windows-file";
 import {
@@ -13,8 +15,6 @@ import {
 } from "#opener/platforms/windows-trash";
 import { normalizeUrl } from "#opener/url";
 
-const COINIT_APARTMENTTHREADED = 0x2;
-
 /**
  * Own one balanced COM initialization on the adapter's I/O thread. The process may
  * already hold a multithreaded apartment (for example after SHAddToRecentDocs), which
@@ -23,17 +23,7 @@ const COINIT_APARTMENTTHREADED = 0x2;
  */
 function createApartment() {
   const ole = dlopen("ole32.dll", {
-    CoInitializeEx: {
-      args: [
-        "ptr",
-        "u32",
-      ],
-      returns: "i32",
-    },
-    CoUninitialize: {
-      args: [],
-      returns: "void",
-    },
+    ...pick(OLE32, "CoInitializeEx", "CoUninitialize"),
   });
   if (ole.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED) < 0) {
     ole.close();
@@ -50,58 +40,30 @@ function createApartment() {
   };
 }
 
-/** Prepare the STA and retain each resource until all shell references are released. */
+/**
+ * Prepare the STA and retain each resource until all shell references are released.
+ * The owner releases them in reverse order, on a failed later step as well as on dispose.
+ */
 export function initialize() {
-  const apartment = createApartment();
-  const shell = (() => {
-    try {
-      return createShell();
-    } catch (error) {
-      apartment.dispose();
-      throw error;
-    }
-  })();
-  const files = (() => {
-    try {
-      return createFiles();
-    } catch (error) {
-      try {
-        shell.dispose();
-      } finally {
-        apartment.dispose();
-      }
-      throw error;
-    }
-  })();
-  const recent = (() => {
-    try {
-      return createRecentDocuments();
-    } catch (error) {
-      try {
-        files.dispose();
-      } finally {
-        try {
-          shell.dispose();
-        } finally {
-          apartment.dispose();
-        }
-      }
-      throw error;
-    }
-  })();
+  const owner = new ResourceOwner("Opener cleanup failed.");
+  owner.acquire(createApartment, (apartment) => apartment.dispose());
+  const shell = owner.acquire(createShell, (resource) => resource.dispose());
+  const files = owner.acquire(createFiles, (resource) => resource.dispose());
+  const recent = owner.acquire(createRecentDocuments, (resource) =>
+    resource.dispose(),
+  );
   return {
-    apartment,
+    owner,
     shell,
     files,
     recent,
-    disposed: false,
   };
 }
 
 type State = ReturnType<typeof initialize>;
 
 function active(state: State): void {
-  if (state.disposed) {
+  if (state.owner.disposed) {
     throw new BunawayError({
       code: "CANCELLED",
       message: "Opener has been disposed.",
@@ -197,21 +159,5 @@ export function openUrlWith(
 }
 
 export function dispose(state: State): void {
-  if (state.disposed) {
-    return;
-  }
-  state.disposed = true;
-  try {
-    state.recent.dispose();
-  } finally {
-    try {
-      state.files.dispose();
-    } finally {
-      try {
-        state.shell.dispose();
-      } finally {
-        state.apartment.dispose();
-      }
-    }
-  }
+  state.owner.dispose();
 }

@@ -1,18 +1,22 @@
 import { defineNativeOperation } from "@bunaway/plugin";
+import { z } from "zod";
 import {
   exchangeInputSchema,
   exchangeResultSchema,
+  onlineSchema,
   requestInputSchema,
   responseSchema,
 } from "#network/contract";
 import {
   type initialize as initializeMacos,
   runExchange as runMacosExchange,
+  runIsOnline as runMacosIsOnline,
   runRequest as runMacosRequest,
 } from "#network/platforms/macos";
 import {
   type initialize as initializeWindows,
   runExchange as runWindowsExchange,
+  runIsOnline as runWindowsIsOnline,
   runRequest as runWindowsRequest,
 } from "#network/platforms/windows";
 
@@ -34,6 +38,11 @@ export const macosOperations = {
     handler: (input, { instance, signal }) =>
       runMacosExchange(instance, input, signal),
   }),
+  isOnline: macosOperation({
+    input: z.null(),
+    output: onlineSchema,
+    handler: (_input, { instance }) => runMacosIsOnline(instance),
+  }),
 };
 export const windowsOperations = {
   request: windowsOperation({
@@ -47,5 +56,10 @@ export const windowsOperations = {
     output: exchangeResultSchema,
     handler: (input, { instance, signal }) =>
       runWindowsExchange(instance, input, signal),
+  }),
+  isOnline: windowsOperation({
+    input: z.null(),
+    output: onlineSchema,
+    handler: (_input, { instance }) => runWindowsIsOnline(instance),
   }),
 };

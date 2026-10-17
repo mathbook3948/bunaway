@@ -3,7 +3,7 @@ import {
   defineNativePlugin,
   type NativeOperationDefinition,
 } from "@bunaway/plugin";
-import type { HostResponse } from "@bunaway/protocol";
+import type { HostResponse, JsonValue } from "@bunaway/protocol";
 import { z } from "zod";
 import { hostResponse } from "../../native/host-api/bun/host-response.ts";
 
@@ -76,6 +76,27 @@ for (const [name, schema] of Object.entries(schemas)) {
     output: schema,
   };
 }
+/** A value accepted by the schema family a request names. */
+function sampleInput(mode: string): JsonValue {
+  if (mode === "object" || mode === "record" || mode === "never") {
+    return {
+      first: "first",
+      second: "second",
+    };
+  }
+  if (mode === "array" || mode === "tuple") {
+    return [
+      "first",
+      "second",
+    ];
+  }
+  if (mode === "nested") {
+    return {
+      value: "ok",
+    };
+  }
+  return "ok";
+}
 const plugin = defineNativePlugin({
   name: "async",
   operations: definitions,
@@ -114,28 +135,7 @@ parentPort.on("message", async (request: string) => {
   }
   const [execution, mode, boundary] = request.split(":");
   const name = `async.${mode}${boundary === "input" ? "Input" : "Output"}`;
-  const input = [
-    "object",
-    "record",
-    "never",
-  ].includes(mode ?? "")
-    ? {
-        first: "first",
-        second: "second",
-      }
-    : [
-          "array",
-          "tuple",
-        ].includes(mode ?? "")
-      ? [
-          "first",
-          "second",
-        ]
-      : mode === "nested"
-        ? {
-            value: "ok",
-          }
-        : "ok";
+  const input = sampleInput(mode ?? "");
   let response: HostResponse;
   try {
     const value =

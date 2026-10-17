@@ -30,10 +30,11 @@ function logicalPixels(physicalPixels: number, dpi: number) {
 test.skipIf(process.platform !== "win32")(
   "Windows native callbacks preserve logical size constraints across DPI and fullscreen changes",
   async () => {
-    const [{ Windows }, { user, kernel, withBuffer }, { dlopen, ptr }] =
+    const [{ Windows }, { user, kernel }, { withBuffer }, { dlopen, ptr }] =
       await Promise.all([
         import("#native/windows/bun/win32"),
         import("#native/windows/bun/win32-bindings"),
+        import("@bunaway/plugin/win32"),
         import("bun:ffi"),
       ]);
     const messaging = dlopen("user32.dll", {

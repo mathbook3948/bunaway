@@ -679,6 +679,9 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] certificate 검증 오류, 사용자 trust 판단과 SSL 설정의 지원 범위를 정의한다.
 - [ ] OS proxy, DNS, NTLM과 integrated authentication을 사용하는 네트워크 경로를 제공한다.
 - [ ] online 상태와 변경 이벤트, host와 proxy resolve를 제공한다.
+  online 상태 조회 `network.isOnline`과 변경 이벤트 `network.onlineChanged`는 구현했다.
+  Electron `net.isOnline()`에 대응해 루프백과 link-local이 아닌 주소를 가진 활성 인터페이스 유무만 보고 인터넷 도달은 판단하지 않는다.
+  이벤트는 2초 주기 확인으로 Windows에서만 보낸다. host와 proxy resolve는 남았다.
 - [ ] 오프라인, latency와 bandwidth emulation을 제공한다.
 - [ ] preconnect, connection 정리와 network log를 제공한다.
 - [ ] 사용자 정의 앱 protocol의 등록, 해제와 등록 상태 조회를 제공한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
@@ -986,7 +989,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 
 우선순위 P3. 소유자: 선택 렌더러와 기능 패키지. 출처: [E-view], [E-contents], [E-extensions], [E-texture], [E-ai].
 
-- [ ] CEF 등 선택 Chromium 렌더러를 동일한 SDK와 정책 계약에 연결한다.
+- [ ] CEF 등 선택 Chromium 렌더러를 동일한 SDK와 정책 계약에 연결한다. Tauri가 WebView 계층을 별도 크레이트(wry)로 분리한 것처럼 `packages/` 아래 별도 패키지로 새로 만든다.
 - [ ] renderer capability에 따라 미지원 기능을 명시하고 엔진 선택 방법을 제공한다.
 - [ ] offscreen rendering의 frame, dirty region과 frame rate를 제공한다.
 - [ ] painting 시작, 중단, 상태 조회와 invalidate를 제공한다.

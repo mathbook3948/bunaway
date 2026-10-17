@@ -229,7 +229,11 @@ end;
         );
         const success = outcome === "installed" || outcome === "existing";
         const exit = await proc.exited;
-        expect(exit).toBe(success ? 0 : outcome === "old-os" ? 1 : 7);
+        if (success) {
+          expect(exit).toBe(0);
+        } else {
+          expect(exit).toBe(outcome === "old-os" ? 1 : 7);
+        }
         expect(await Bun.file(host).exists()).toBe(true);
         if (!success) {
           expect(await Bun.file(host).text()).toBe("previous app");

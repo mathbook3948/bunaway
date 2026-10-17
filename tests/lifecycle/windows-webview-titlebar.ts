@@ -10,11 +10,8 @@ import {
 import { WebView } from "#native/windows/bun/webview";
 import { enableCustomTitlebar } from "#native/windows/bun/webview-titlebar";
 import { Windows } from "#native/windows/bun/win32";
-import {
-  disposeWin32Bindings,
-  hr,
-  ole,
-} from "#native/windows/bun/win32-bindings";
+import { disposeWin32Bindings, ole } from "#native/windows/bun/win32-bindings";
+import { checkHresult } from "@bunaway/plugin/win32";
 
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
@@ -33,7 +30,7 @@ await writeFile(
     noDrag: getComputedStyle(document.querySelector("button")).getPropertyValue("app-region")
   }));</script>`,
 );
-hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
+checkHresult(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
 const windows = new Windows(() => {});
 let hwnd = 0n;
 let webview: WebView | undefined;

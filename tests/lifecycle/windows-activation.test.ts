@@ -18,9 +18,8 @@ test.skipIf(process.platform !== "win32")(
   "two real Win32 windows preserve input on inactive display and report observed activation transitions",
   async () => {
     const { Windows } = await import("#native/windows/bun/win32");
-    const { user, kernel, wide } = await import(
-      "#native/windows/bun/win32-bindings"
-    );
+    const { user, kernel } = await import("#native/windows/bun/win32-bindings");
+    const { wide } = await import("@bunaway/plugin/win32");
     const { ptr } = await import("bun:ffi");
     const driver = dlopen("user32.dll", {
       GetWindowThreadProcessId: {
