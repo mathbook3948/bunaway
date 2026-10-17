@@ -319,6 +319,7 @@
           "pick",
           "KERNEL32",
           "USER32",
+          "USER32_MENUS",
           "OLE32",
           "SHELL32",
           "COMBASE",

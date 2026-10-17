@@ -298,6 +298,13 @@ export const USER32 = {
     ],
     returns: "u64",
   },
+} as const satisfies Record<string, FFIFunction>;
+
+/**
+ * user32.dll popup menu functions, kept apart from `USER32` so a host built without the
+ * optional menu and tray plugins carries no menu implementation.
+ */
+export const USER32_MENUS = {
   TrackPopupMenuEx: {
     args: [
       "u64",

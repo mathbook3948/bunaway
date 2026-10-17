@@ -66,5 +66,8 @@ Linux에서는 Windows와 macOS 전용 테스트가 skip되므로 네이티브 �
   dispatch나 검증을 테스트용으로 다시 구현하지 않는다.
 - 파괴적이거나 사용자 환경을 바꾸는 검사(Recent Items 삭제, 레지스트리 autostart 등)는
   `GITHUB_ACTIONS` 같은 CI 조건으로 한정한다.
+- `native/windows/bun`, `native/macos/bun`, `native/host-api/bun`에 파일을 추가하면
+  `packages/cli/src/distribution.ts`의 `frameworkPaths`에도 적는다. `cli/framework-paths.test.ts`가
+  빠진 파일을 거부하므로 설치한 프레임워크의 앱 빌드가 깨지기 전에 드러난다.
 - 변경이 검증한 범위만 문서에 적는다. 특정 fixture가 무엇을 어디까지 검사하는지의 기록은
   [NOTES.md](./NOTES.md)의 해당 절에 덧붙인다.

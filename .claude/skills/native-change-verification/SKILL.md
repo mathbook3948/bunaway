@@ -60,7 +60,15 @@ repeatedly asked for exactly these fixes.
   be in flight.
 - Do not promise ordering between independent events in code or docs unless a test proves it.
 
-## 6. Tests
+## 6. Distribution
+
+- A new file under `native/windows/bun`, `native/macos/bun` or `native/host-api/bun` is added to
+  `frameworkPaths` in `packages/cli/src/distribution.ts`, or the installed framework cannot
+  build apps. `tests/cli/framework-paths.test.ts` fails until it is listed.
+- A new `@bunaway/plugin` export reaches built plugins automatically; a new SDK subpath
+  export needs a `package.json` exports entry and a reference-map entry.
+
+## 7. Tests
 
 - Add the contract test under `tests/api/` for every new input rule and error code.
 - Platform tests use `test.skipIf(process.platform !== "win32")` or the macOS equivalent,
@@ -69,7 +77,7 @@ repeatedly asked for exactly these fixes.
 - Pick the checks from the table in `tests/README.md` and run them on the platform the change
   targets. Report what ran and what could not run here.
 
-## 7. Documentation
+## 8. Documentation
 
 - Document only what the tests verified. Narrow claims about ordering, coalescing and platform
   coverage to the verified cases.
