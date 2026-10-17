@@ -1363,7 +1363,11 @@
     "reference/cli/ios": ["ios"]
   },
   "operations": {
-    "reference/plugins/network": ["network.request", "network.exchange"],
+    "reference/plugins/network": [
+      "network.request",
+      "network.exchange",
+      "network.isOnline"
+    ],
     "reference/plugins/process": ["process.run"],
     "reference/plugins/os": ["os.info", "os.usage", "os.locale", "os.beep"],
     "reference/plugins/notification": [
