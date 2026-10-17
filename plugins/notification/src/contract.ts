@@ -70,18 +70,100 @@ const xmlText = (maximum: number) =>
       /^[\t\n\r\u0020-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]*$/u,
       "Text must contain valid XML characters.",
     );
+/** Image formats the Windows toast renderer accepts for local files. */
+export const TOAST_IMAGE_EXTENSIONS = [
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".bmp",
+] as const;
+/** Windows ignores toast images above 3 MiB, so reject them before the picture silently disappears. */
+export const MAX_TOAST_IMAGE_BYTES = 3 * 1024 * 1024;
+const MAX_TOAST_IMAGE_PATH_LENGTH = 260;
+/**
+ * Windows system sounds addressable as `ms-winsoundevent:Notification.<name>`. Unpackaged apps cannot play
+ * arbitrary files. Only the `Looping.*` names honor `soundLoop`.
+ */
+export const TOAST_SOUNDS = [
+  "Default",
+  "IM",
+  "Mail",
+  "Reminder",
+  "SMS",
+  "Looping.Alarm",
+  "Looping.Alarm2",
+  "Looping.Alarm3",
+  "Looping.Alarm4",
+  "Looping.Alarm5",
+  "Looping.Alarm6",
+  "Looping.Alarm7",
+  "Looping.Alarm8",
+  "Looping.Alarm9",
+  "Looping.Alarm10",
+  "Looping.Call",
+  "Looping.Call2",
+  "Looping.Call3",
+  "Looping.Call4",
+  "Looping.Call5",
+  "Looping.Call6",
+  "Looping.Call7",
+  "Looping.Call8",
+  "Looping.Call9",
+  "Looping.Call10",
+] as const;
+const imagePathSchema = z
+  .string()
+  .max(MAX_TOAST_IMAGE_PATH_LENGTH)
+  // Drive-absolute only: relative paths depend on the host cwd and UNC paths would reach network shares.
+  .regex(/^[A-Za-z]:[\\/]/, "Path must be an absolute local drive path.")
+  .regex(/^[^"<>|*?\p{Cc}]*$/u, "Path contains invalid characters.")
+  .refine(
+    (path) => !path.split(/[\\/]/).includes(".."),
+    "Path must not contain '..'.",
+  )
+  .refine(
+    (path) =>
+      TOAST_IMAGE_EXTENSIONS.some((extension) =>
+        path.toLowerCase().endsWith(extension),
+      ),
+    `Image must be one of ${TOAST_IMAGE_EXTENSIONS.join(", ")}.`,
+  );
 /** Stable tag/group in the host-selected app's namespace. Neither field selects another app. */
 export const notificationIdentitySchema = z.strictObject({
   id: identifierSchema,
   group: identifierSchema.default("bunaway"),
 });
-export const notificationShowSchema = notificationIdentitySchema.extend({
-  title: xmlText(256).min(1),
-  body: xmlText(2048).default(""),
-  data: z.string().max(2048).nullable().default(null),
-  silent: z.boolean().default(false),
-  suppressPopup: z.boolean().default(false),
-});
+export const notificationShowSchema = notificationIdentitySchema
+  .extend({
+    title: xmlText(256).min(1),
+    body: xmlText(2048).default(""),
+    data: z.string().max(2048).nullable().default(null),
+    silent: z.boolean().default(false),
+    suppressPopup: z.boolean().default(false),
+    icon: imagePathSchema.nullable().default(null),
+    image: imagePathSchema.nullable().default(null),
+    imagePlacement: z
+      .enum([
+        "inline",
+        "hero",
+      ])
+      .default("inline"),
+    sound: z.enum(TOAST_SOUNDS).nullable().default(null),
+    soundLoop: z.boolean().default(false),
+  })
+  .refine((input) => !(input.silent && input.sound !== null), {
+    message: "silent and sound are mutually exclusive.",
+    path: [
+      "sound",
+    ],
+  })
+  .refine((input) => !input.soundLoop || input.sound?.startsWith("Looping."), {
+    message: "soundLoop requires a Looping.* sound.",
+    path: [
+      "soundLoop",
+    ],
+  });
 export const notificationResultSchema = z.strictObject({
   id: identifierSchema,
   group: identifierSchema,

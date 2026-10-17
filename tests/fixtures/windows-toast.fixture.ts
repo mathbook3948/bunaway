@@ -1,5 +1,8 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parentPort, Worker, workerData } from "node:worker_threads";
 import { notificationShowSchema } from "#plugins/notification/src/contract";
@@ -8,6 +11,7 @@ import {
   drainToastCleanup,
 } from "#plugins/notification/src/platforms/toast-cleanup";
 import { createToastController } from "#plugins/notification/src/platforms/toast-controller";
+import { assertToastMediaFiles } from "#plugins/notification/src/platforms/toast-media";
 import {
   checkToast,
   createToastDelegate,
@@ -18,6 +22,8 @@ import { createWindowsToastDriver } from "#plugins/notification/src/platforms/wi
 import { createNotificationShortcut } from "./windows-notification-shortcut.ts";
 
 assert.equal(process.platform, "win32");
+const PIXEL_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 const CLICK_IID = "ab54de2d-97d9-5528-b6ad-105afe156530";
 if (workerData?.toastMarshalWorker) {
   assert(parentPort);
@@ -269,6 +275,37 @@ if (workerData?.toastMarshalWorker) {
       0,
       "Targeted clear must remove history",
     );
+    // Windows must accept local icon/hero files and a system sound, with the percent-encoded URI kept in history.
+    const mediaDirectory = await mkdtemp(join(tmpdir(), "bunaway toast "));
+    try {
+      const png = join(mediaDirectory, "pixel é.png");
+      await Bun.write(png, Buffer.from(PIXEL_PNG_BASE64, "base64"));
+      const media = notificationShowSchema.parse({
+        id: "media",
+        group: "bunaway-test",
+        title: "media fixture",
+        icon: png,
+        image: png,
+        imagePlacement: "hero",
+        sound: "Looping.Alarm",
+        soundLoop: true,
+        suppressPopup: true,
+      });
+      assertToastMediaFiles(media);
+      controller.show(media);
+      const shown = await waitHistory((items) => items.length === 1);
+      assert(shown[0]?.includes("appLogoOverride"));
+      assert(shown[0]?.includes("hero"));
+      assert(shown[0]?.includes("pixel%20%C3%A9.png"));
+      assert(shown[0]?.includes("ms-winsoundevent:Notification.Looping.Alarm"));
+      controller.clear(media);
+      await waitHistory((items) => items.length === 0);
+    } finally {
+      await rm(mediaDirectory, {
+        recursive: true,
+        force: true,
+      });
+    }
     controller.show({
       ...first,
       id: "shutdown",

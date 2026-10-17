@@ -13,6 +13,7 @@ import {
   drainToastCleanup,
 } from "#notification/platforms/toast-cleanup";
 import { createToastController } from "#notification/platforms/toast-controller";
+import { assertToastMediaFiles } from "#notification/platforms/toast-media";
 import { createWindowsToastDriver } from "#notification/platforms/windows-toasts";
 
 const POINTER_BYTES = 8;
@@ -382,7 +383,10 @@ export function initialize(environment: NativeEnvironment) {
   return {
     getStatus: status.getStatus,
     openSettings: status.openSettings,
-    show: (input: ResolvedNotification) => getToasts().show(input),
+    show: (input: ResolvedNotification) => {
+      assertToastMediaFiles(input);
+      return getToasts().show(input);
+    },
     clear: (input: NotificationResult) => getToasts().clear(input),
     async dispose() {
       // The regular UI pump has stopped. Drain marshaled releases before unloading DLLs or our STA.
