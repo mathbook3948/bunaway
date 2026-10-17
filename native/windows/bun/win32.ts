@@ -4,6 +4,7 @@ import {
   clampWindowSize,
   hasValidWindowPlacement,
   hasValidWindowSizeConstraints,
+  isWindowAspectRatio,
   MAX_WINDOW_DIMENSION,
   MIN_WINDOW_DIMENSION,
   type NativeWindow,
@@ -22,6 +23,7 @@ import {
   APP_WINDOW_CLASS_PREFIX,
 } from "@bunaway/runtime-bun/windows-control";
 import { AccessibleTitles } from "./accessible-title.ts";
+import { adjustSizingRect } from "./aspect-ratio.ts";
 import { monitorServices } from "./monitors.ts";
 import type { SessionMessageHandler } from "./session-end.ts";
 import { Taskbar } from "./taskbar.ts";
@@ -60,6 +62,7 @@ const WM_OBSERVE_WINDOW = 0x8003;
 export const WM_CLOSE = 0x0010;
 export const WM_QUIT = 0x0012;
 const WM_GETMINMAXINFO = 0x0024;
+const WM_SIZING = 0x0214;
 const WM_WINDOWPOSCHANGING = 0x0046;
 const WM_WINDOWPOSCHANGED = 0x0047;
 const WM_MOUSEACTIVATE = 0x0021;
@@ -203,6 +206,8 @@ export class Windows {
   private readonly closeControls = new Map<bigint, boolean>();
   private readonly interactiveGeometry = new Map<bigint, WindowBounds>();
   private readonly immovable = new Set<bigint>();
+  /** Content width / height locked for user resizing; absent when unlocked. */
+  private readonly aspectRatios = new Map<bigint, number>();
   private readonly initialOuterSizes = new Map<
     bigint,
     {
@@ -381,6 +386,12 @@ export class Windows {
             this.applyMinMaxInfo(window, lparam);
             this.windows.get(window)?.(message, wparam, lparam);
             return 0n;
+          }
+          if (
+            message === WM_SIZING &&
+            this.applySizingAspectRatio(window, wparam, lparam)
+          ) {
+            return 1n; // TRUE: the rectangle was modified.
           }
           if (message === WM_DPICHANGED) {
             this.applyDpiChange(window, wparam, lparam);
@@ -2131,6 +2142,72 @@ export class Windows {
     // for the target monitor. Clamp the resulting WINDOWPOS instead.
   }
 
+  /**
+   * Keep the client ratio while the user drags a border. Maximize, fullscreen
+   * and snap layouts do not send WM_SIZING, so they are not forced to the ratio.
+   * Returns true when the RECT behind lparam was rewritten.
+   */
+  private applySizingAspectRatio(
+    window: bigint,
+    wparam: bigint,
+    lparam: bigint,
+  ): boolean {
+    const ratio = this.aspectRatios.get(window);
+    if (ratio === undefined || this.fullscreen.has(window)) {
+      return false;
+    }
+    const view = new DataView(
+      toArrayBuffer(callbackPointer(lparam), 0, RECT_SIZE),
+    );
+    const dpi = this.getDpi(window);
+    const { style, exStyle } = this.windowStyles(window);
+    const frame = this.outerSizeFor(
+      0,
+      0,
+      dpi,
+      style,
+      exStyle,
+      user.symbols.GetMenu(window) !== 0n,
+    );
+    const adjusted = adjustSizingRect(
+      {
+        left: view.getInt32(0, true),
+        top: view.getInt32(4, true),
+        right: view.getInt32(8, true),
+        bottom: view.getInt32(12, true),
+      },
+      Number(wparam),
+      ratio,
+      frame,
+      dpi,
+      this.getSizeConstraints(window),
+    );
+    view.setInt32(0, adjusted.left, true);
+    view.setInt32(4, adjusted.top, true);
+    view.setInt32(8, adjusted.right, true);
+    view.setInt32(12, adjusted.bottom, true);
+    return true;
+  }
+
+  /**
+   * Lock user resizing to a content width / height ratio, or release it with
+   * null. The current size is left unchanged until the next user resize.
+   */
+  setAspectRatio(window: bigint, ratio: number | null): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    assert(isWindowAspectRatio(ratio), "Invalid window aspect ratio.");
+    if (ratio === null) {
+      this.aspectRatios.delete(window);
+    } else {
+      this.aspectRatios.set(window, ratio);
+    }
+  }
+
+  getAspectRatio(window: bigint): number | null {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return this.aspectRatios.get(window) ?? null;
+  }
+
   private constrainMaximizedSize(window: bigint, lparam: bigint) {
     const constraints =
       this.constraints.get(window) ?? this.creatingConstraints;
@@ -2673,6 +2750,7 @@ export class Windows {
     this.closeControls.delete(window);
     this.interactiveGeometry.delete(window);
     this.immovable.delete(window);
+    this.aspectRatios.delete(window);
     try {
       this.accessibleTitles.forget(window);
     } catch (error) {

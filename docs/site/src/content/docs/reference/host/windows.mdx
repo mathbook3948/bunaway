@@ -531,6 +531,8 @@ await windows.close({ view: "dialog" });
 | `windows.isResizable` | `{ view, windowId? }` | `Promise<boolean>`. 일반 창의 사용자 크기 조절 허용 여부 |
 | `windows.setMovable` | `{ view, windowId?, movable: boolean }` | `Promise<null>`. 사용자 제목 표시줄과 시스템 메뉴 이동 허용 변경 |
 | `windows.isMovable` | `{ view, windowId? }` | `Promise<boolean>`. 사용자 이동 허용 여부 |
+| `windows.setAspectRatio` | `{ view, windowId?, ratio: number \| null }` | `Promise<null>`. 사용자 크기 조절 중 내용 영역의 너비/높이 비율을 고정. `null`은 고정 해제. 0.1–10의 유한한 수 |
+| `windows.getAspectRatio` | `{ view, windowId? }` | `Promise<number \| null>`. 고정한 비율. 고정하지 않았다면 `null` |
 | `windows.center` | `{ view, windowId?, monitorId? }` | `Promise<null>`. `monitorId`가 있으면 그 모니터, 없으면 현재 모니터의 작업 영역 중앙에 창 바깥 영역 배치. 최소화와 최대화 중에는 일반 복원 영역 배치 |
 | `windows.setFullscreen` | `{ view, windowId?, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원 |
 | `windows.setCloseConfirmation` | `{ view, windowId?, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
@@ -813,6 +815,21 @@ OS 호출이 실패하면 오류가 전달되고 이전 값이 유지됩니다. 
 스타일에 적용하고 전체화면을 해제할 때 반영합니다. `isResizable`도 이 일반 창 설정을 반환합니다.
 `movable: false`여도 Windows의 DPI, 디스플레이 변경에 따른 위치 보정은 허용합니다.
 각 설정과 조회는 해당 이름의 operation 권한을 따로 요구합니다. 닫힌 창은 `INVALID_ARGUMENT`입니다.
+
+`setAspectRatio`의 `ratio`는 내용 영역의 너비를 높이로 나눈 값입니다. 16:9는 `16 / 9`로 전달합니다.
+0.1 이상 10 이하의 유한한 수만 허용하고 범위를 벗어나거나 `NaN`이면 `INVALID_ARGUMENT`입니다.
+`null`은 고정을 해제하며 기본값도 `null`입니다. 고정은 창별로 저장되어 창을 닫으면 사라집니다.
+설정하거나 해제할 때 현재 창 크기는 바꾸지 않습니다. 다음 사용자 크기 조절부터 비율을 적용하므로
+즉시 맞추려면 `setSize`를 함께 호출합니다.
+사용자가 테두리를 끌면 Windows가 보낸 크기 사각형을 비율에 맞게 조정합니다.
+좌우 테두리는 너비를, 위아래 테두리는 높이를 기준으로 다른 축을 계산하고, 모서리는 창이 더 커지는 쪽 축을 기준으로 합니다.
+끄는 테두리의 반대편은 고정됩니다. 좌우 테두리를 끌면 아래쪽이, 위아래 테두리를 끌면 오른쪽이 움직입니다.
+비율은 제목 표시줄과 테두리를 뺀 내용 영역에 적용하며, 크기 제약의 논리 픽셀을 창의 현재 DPI로 변환해
+같은 내용 영역 기준으로 비교합니다. 최소, 최대 크기 제약과 비율을 동시에 만족할 수 없으면
+제약을 우선하고 비율은 그 크기에서 어긋날 수 있습니다.
+비율은 사용자 크기 조절에만 적용합니다. 최대화, 전체화면, 스냅과 `setSize` 같은 프로그램의 크기 변경은
+비율을 강제하지 않습니다. `setAspectRatio`와 `getAspectRatio`는 operation 권한을 각각 요구하며
+macOS에서는 `UNSUPPORTED`입니다.
 `center`는 `monitorId`를 생략하면 현재 창에 가장 가까운 모니터의 작업 영역을 사용하며 작업 표시줄 영역을 제외합니다.
 `monitorId`는 모니터 조회 결과의 `id`입니다. 호출하는 시점에 연결된 모니터 목록에서 찾으며,
 연결되지 않았거나 분리된 ID는 `INVALID_ARGUMENT`입니다. 이때 주 모니터나 현재 모니터로 대체하지 않고

@@ -1142,6 +1142,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         isResizable: () => nativeWindows.isResizable(hwnd),
         setMovable: (movable) => nativeWindows.setMovable(hwnd, movable),
         isMovable: () => nativeWindows.isMovable(hwnd),
+        setAspectRatio: (ratio) => nativeWindows.setAspectRatio(hwnd, ratio),
+        getAspectRatio: () => nativeWindows.getAspectRatio(hwnd),
         minimize: () => nativeWindows.minimize(hwnd),
         maximize: () => nativeWindows.maximize(hwnd),
         unmaximize: () => nativeWindows.unmaximize(hwnd),

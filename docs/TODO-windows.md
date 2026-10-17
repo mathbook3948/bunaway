@@ -167,7 +167,12 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 초기 배치의 순수 계산과 오류 경계 검증을 완료했다. 음수 좌표, signed 32-bit 경계, DPI 96/120/144/192, content/outer, 제약 충돌과 선언 보존을 검사했다.
 - [x] 초기 배치의 실제 HWND 및 WebView2 집중 검증을 완료했다. Windows Server 2022의 모니터 1개와 DPI 96에서 초기 선언 및 single/multiple 생성과 재생성을 확인했다. multiple은 isolated 프로필이다.
 - [ ] 초기 배치를 다중 물리 모니터, 혼합 DPI와 실제 높은 DPI에서 실행 검증한다. 합성 입력과 CI는 이 범위를 대신하지 않는다.
-- [ ] 고정 aspect ratio와 해제 API를 제공한다.
+- [x] `setAspectRatio`와 `getAspectRatio`로 내용 영역의 너비/높이 비율(0.1–10, `null`은 해제)을 고정하고 조회한다.
+  설정 시 현재 크기는 바꾸지 않고(Electron과 같음) 이후 사용자 크기 조절의 `WM_SIZING` 사각형만 조정한다.
+  끄는 테두리(`WMSZ_*`)에 따라 기준 축과 고정 모서리를 정하며, 비율은 내용 영역 기준이고 기존 크기 제약을
+  현재 DPI의 물리 픽셀로 변환해 함께 적용한다. 제약과 비율이 충돌하면 제약을 우선한다.
+  최대화, 전체화면, 스냅과 프로그램의 크기 변경은 비율을 강제하지 않으며 macOS는 `UNSUPPORTED`다.
+  순수 계산과 계약은 단위 테스트로, 실제 HWND의 합성 `WM_SIZING`은 Windows CI에서 확인한다.
 - [x] `setResizable`, `isResizable`, `setMovable`, `isMovable`로 Windows 사용자 크기 조절과 이동을 설정하고 조회한다. 프로그램의 geometry API는 계속 허용하며 전체화면 뒤에도 설정을 유지한다.
 - [ ] 설정과 런타임 크기 제한을 실제 모니터, DPI에 맞게 재검토한다. 현재의 4096 상한을 유지할지 결정한다.
 - [ ] 위치와 크기의 선택적 애니메이션을 지원하거나 플랫폼별 미지원으로 명시한다.

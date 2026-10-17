@@ -85,6 +85,21 @@ export type WindowSizeConstraints = {
   maxHeight: number | null;
 };
 
+/** Smallest and largest accepted width / height aspect ratio, so one axis cannot collapse. */
+export const MIN_WINDOW_ASPECT_RATIO = 0.1;
+export const MAX_WINDOW_ASPECT_RATIO = 10;
+
+/** Checks that a ratio is null (no lock) or a finite number within the supported range. */
+export function isWindowAspectRatio(value: unknown): value is number | null {
+  return (
+    value === null ||
+    (typeof value === "number" &&
+      Number.isFinite(value) &&
+      value >= MIN_WINDOW_ASPECT_RATIO &&
+      value <= MAX_WINDOW_ASPECT_RATIO)
+  );
+}
+
 /** Checks that a constraint is null or an integer within the supported dimension range. */
 export function isWindowSizeDimension(value: unknown): value is number | null {
   return (
@@ -387,6 +402,10 @@ export type NativeWindow = {
   setMovable?(movable: boolean): void;
   /** Reads the current user movement policy. Windows only. */
   isMovable?(): boolean;
+  /** Locks user resizing to a content width / height ratio, or releases it with null. Does not resize the window now. Windows only. */
+  setAspectRatio?(ratio: number | null): void;
+  /** Reads the locked content width / height ratio, or null when none is set. Windows only. */
+  getAspectRatio?(): number | null;
   /** Minimizes and displays the window, allowing Windows to activate another window. */
   minimize(): void;
   /** Maximizes and displays the window, requesting activation. */
