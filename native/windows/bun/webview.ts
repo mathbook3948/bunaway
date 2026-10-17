@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import type { NativeMenuRole } from "@bunaway/plugin-api/native";
 import { BunawayError, type WireError } from "@bunaway/protocol";
 import type { WindowSpec } from "./channel.ts";
+import { readClipboardText } from "./clipboard-text.ts";
 import {
   abandonHandlers,
   addRef,
@@ -25,6 +26,7 @@ import { EditCommandCalls } from "./webview-edit-calls.ts";
 import {
   type EditCommandReport,
   editCommandEvaluateParameters,
+  focusTargetEvaluateParameters,
   interpretEditCommandResult,
 } from "./webview-edit-command.ts";
 import { enableCustomTitlebar } from "./webview-titlebar.ts";
@@ -940,7 +942,8 @@ export class WebView {
    * The command runs as `document.execCommand` from a `Runtime.evaluate` call, so it does not
    * depend on the keyboard layout, produces no key events and never injects input into another
    * application. The call works with the DevTools UI disabled. Focus is followed from the top
-   * document into nested same-origin frames; a cross-origin frame is skipped.
+   * document into nested same-origin frames; a cross-origin frame is skipped. Paste inserts the
+   * clipboard's plain text instead (see `pasteClipboardText`).
    *
    * Returns false, doing nothing, while the WebView is closing or not ready. Completion is
    * observed on the next pump; a refused focus move, a refused command and protocol failures
@@ -966,6 +969,10 @@ export class WebView {
         );
       }
     }
+    if (command === "paste") {
+      this.pasteClipboardText(webview, report);
+      return true;
+    }
     this.editCalls.start(command, (isActive) =>
       callDevToolsProtocolMethod(
         webview,
@@ -988,6 +995,82 @@ export class WebView {
       ),
     );
     return true;
+  }
+
+  /**
+   * Insert the clipboard's plain text into the focused document.
+   *
+   * `execCommand("paste")` is refused for host-triggered calls, so the host reads CF_UNICODETEXT
+   * once and inserts it with `Input.insertText`, which fires beforeinput (`insertText`) instead
+   * of a paste event. A first `Runtime.evaluate` locates the focused document with the same
+   * frame rules as other roles; the insertion starts from its completion, only while the view
+   * is live and open. Both calls are tracked, and the second one skips pruning because it
+   * starts inside a COM callback.
+   */
+  private pasteClipboardText(webview: Pointer, report: EditCommandReport) {
+    const clipboard = readClipboardText();
+    if (clipboard.kind !== "text") {
+      report.skipped(
+        {
+          empty: "clipboard-empty",
+          unavailable: "clipboard-unavailable",
+          "too-large": "clipboard-too-large",
+        }[clipboard.kind],
+      );
+      return;
+    }
+    this.editCalls.start("paste", (isActiveTarget) =>
+      callDevToolsProtocolMethod(
+        webview,
+        "Runtime.evaluate",
+        JSON.stringify(focusTargetEvaluateParameters()),
+        ({ hresult, json }) => {
+          if (!isActiveTarget() || this.closing) {
+            return;
+          }
+          const verdict = interpretEditCommandResult(hresult, json);
+          if (verdict.kind === "failed") {
+            report.failed(verdict.reason);
+            return;
+          }
+          if (verdict.kind === "skipped") {
+            report.skipped(verdict.reason);
+            return;
+          }
+          try {
+            this.editCalls.start(
+              "paste",
+              (isActiveInsert) =>
+                callDevToolsProtocolMethod(
+                  webview,
+                  "Input.insertText",
+                  JSON.stringify({
+                    text: clipboard.text,
+                  }),
+                  ({ hresult: inserted }) => {
+                    if (!isActiveInsert()) {
+                      return;
+                    }
+                    if (inserted < 0) {
+                      report.failed(`0x${(inserted >>> 0).toString(16)}`);
+                    } else {
+                      report.executed?.(verdict.result);
+                    }
+                  },
+                ),
+              {
+                prune: false,
+              },
+            );
+          } catch (error) {
+            // Starting inside a COM callback must not unwind into native code.
+            report.failed(
+              error instanceof Error ? error.message : String(error),
+            );
+          }
+        },
+      ),
+    );
   }
 
   /** Read actual browser URL, title, history availability, controller zoom and input focus. */

@@ -47,10 +47,22 @@ export class EditCommandCalls<T extends EditCompletion> {
 
   /**
    * Track a call. `begin` starts the native call and receives the `isActive` guard its callback
-   * must consult; it returns the handler that native now references.
+   * must consult; it returns the handler that native now references. A call started from inside
+   * another call's completion passes `prune: false`.
    */
-  start(command: string, begin: (isActive: () => boolean) => T): void {
-    this.prune();
+  start(
+    command: string,
+    begin: (isActive: () => boolean) => T,
+    {
+      prune = true,
+    }: {
+      prune?: boolean;
+    } = {},
+  ): void {
+    // Pruning disposes handlers, which must not happen inside a COM callback.
+    if (prune) {
+      this.prune();
+    }
     let active = true;
     this.calls.add({
       completion: begin(() => active),

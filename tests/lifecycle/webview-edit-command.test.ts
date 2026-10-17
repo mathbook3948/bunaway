@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   editCommandEvaluateParameters,
+  focusTargetEvaluateParameters,
   interpretEditCommandResult,
 } from "#native/windows/bun/webview-edit-command";
 
@@ -12,13 +13,12 @@ const reply = (value: unknown) =>
     },
   });
 
-test("each role runs its execCommand name from a user gesture without key events", () => {
+test("each execCommand role runs from a user gesture without key events", () => {
   for (const role of [
     "undo",
     "redo",
     "cut",
     "copy",
-    "paste",
     "selectAll",
   ] as const) {
     const parameters = editCommandEvaluateParameters(role) as {
@@ -32,6 +32,14 @@ test("each role runs its execCommand name from a user gesture without key events
     expect(parameters.expression).not.toContain("dispatchEvent");
     expect(parameters.expression).not.toContain("KeyboardEvent");
   }
+});
+
+test("the paste target script locates the focused document without running a command", () => {
+  const parameters = focusTargetEvaluateParameters() as {
+    expression: string;
+  };
+  expect(parameters.expression).not.toContain("execCommand");
+  expect(parameters.expression).toContain("cross-origin-frame");
 });
 
 test("replies are classified without throwing", () => {

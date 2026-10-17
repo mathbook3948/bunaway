@@ -1,14 +1,19 @@
 import type { NativeMenuRole } from "@bunaway/plugin-api/native";
 
-/** `document.execCommand` name for each menu role. */
+/**
+ * Roles run through `document.execCommand`. Paste is excluded: `execCommand("paste")` is
+ * refused for host-triggered calls, so the host inserts clipboard text itself.
+ */
+export type ExecCommandRole = Exclude<NativeMenuRole, "paste">;
+
+/** `document.execCommand` name for each such role. */
 const EXEC_COMMANDS = {
   undo: "undo",
   redo: "redo",
   cut: "cut",
   copy: "copy",
-  paste: "paste",
   selectAll: "selectAll",
-} as const satisfies Record<NativeMenuRole, string>;
+} as const satisfies Record<ExecCommandRole, string>;
 
 /** What the page-side script reports about the document it ran the command in. */
 export type EditCommandOutcome = {
@@ -51,7 +56,23 @@ export type EditCommandVerdict =
  * A frame whose `contentDocument` is null is cross-origin and is left untouched. The command
  * is embedded through JSON.stringify and comes from a fixed set.
  */
-export function editCommandEvaluateParameters(role: NativeMenuRole): object {
+export function editCommandEvaluateParameters(role: ExecCommandRole): object {
+  return focusedDocumentEvaluate(
+    `doc.execCommand(${JSON.stringify(EXEC_COMMANDS[role])})`,
+  );
+}
+
+/**
+ * Build the `Runtime.evaluate` parameters that only locate the focused document, with the same
+ * frame rules as `editCommandEvaluateParameters` and no command. Paste uses it to decide
+ * whether the host may insert clipboard text.
+ */
+export function focusTargetEvaluateParameters(): object {
+  return focusedDocumentEvaluate("true");
+}
+
+/** `action` is a JavaScript expression over `doc` that yields whether the command ran. */
+function focusedDocumentEvaluate(action: string): object {
   return {
     expression: `(() => {
   let doc = document;
@@ -62,7 +83,7 @@ export function editCommandEvaluateParameters(role: NativeMenuRole): object {
     }
     doc = next;
   }
-  const executed = doc.execCommand(${JSON.stringify(EXEC_COMMANDS[role])});
+  const executed = ${action};
   return { outcome: executed ? "executed" : "refused", focused: doc.hasFocus() };
 })()`,
     userGesture: true,

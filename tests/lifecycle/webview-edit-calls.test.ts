@@ -72,6 +72,27 @@ test("a completion released by native is disposed and cleanup proceeds immediate
   expect(f.abandoned).toEqual([]);
 });
 
+test("a call started without pruning leaves released handlers for later", () => {
+  const f = fixture();
+  const first = f.start("undo", []);
+  first.refs = 1;
+  f.calls.start(
+    "paste",
+    () => ({
+      refs: 2,
+      invoke() {},
+    }),
+    {
+      prune: false,
+    },
+  );
+  expect(f.disposed).toEqual([]);
+  f.calls.prune();
+  expect(f.disposed).toEqual([
+    first,
+  ]);
+});
+
 test("a handler released without being invoked is pruned before the next command", () => {
   const f = fixture();
   const first = f.start("undo", []);

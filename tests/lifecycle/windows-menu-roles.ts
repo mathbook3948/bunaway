@@ -15,7 +15,6 @@ import {
 } from "#native/windows/bun/com";
 import { WebView } from "#native/windows/bun/webview";
 import { callDevToolsProtocolMethod } from "#native/windows/bun/webview-devtools";
-import type { EditCommandOutcome } from "#native/windows/bun/webview-edit-command";
 import { Windows } from "#native/windows/bun/win32";
 import {
   disposeWin32Bindings,
@@ -184,17 +183,28 @@ function clearClipboard(owner: bigint): void {
  * would be suppressed and show up as a non-zero keydown count.
  */
 function pageHtml(): string {
-  const frameHtml = `<!doctype html><textarea id="b" rows="4" cols="40"></textarea>`;
-  const srcdoc = frameHtml.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+  const attribute = (html: string) =>
+    html.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+  const frameHtml = (id: string) =>
+    attribute(
+      `<!doctype html><textarea id="${id}" rows="4" cols="40"></textarea>`,
+    );
+  // `f` shares the page origin; `x` is sandboxed without allow-same-origin, so its document is
+  // cross-origin to the page and `contentDocument` is null.
   return `<!doctype html><title>Menu roles</title>
   <textarea id="a" rows="4" cols="40"></textarea>
-  <iframe id="f" srcdoc="${srcdoc}"></iframe>
+  <iframe id="f" srcdoc="${frameHtml("b")}"></iframe>
+  <iframe id="x" sandbox srcdoc="${frameHtml("c")}"></iframe>
   <script>
     window.counts = { keydown: 0, beforeinput: 0, copy: 0, cut: 0, paste: 0, selectstart: 0 };
+    window.inputTypes = [];
     const watch = (target) => {
       for (const type of Object.keys(window.counts)) {
         target.addEventListener(type, (event) => {
           window.counts[type]++;
+          if (type === "beforeinput") {
+            window.inputTypes.push(event.inputType);
+          }
           if (type === "keydown") {
             event.preventDefault();
           }
@@ -202,10 +212,19 @@ function pageHtml(): string {
       }
     };
     watch(window);
-    addEventListener("load", () => {
-      watch(document.getElementById("f").contentWindow);
-      chrome.webview.postMessage("loaded");
-    });
+    // The srcdoc document replaces the initial about:blank window, so listeners attach to the
+    // loaded one; the page reports ready only once that document has its textarea.
+    const frame = document.getElementById("f");
+    let watched = false;
+    const attachFrame = () => {
+      if (!watched && frame.contentDocument?.getElementById("b")) {
+        watched = true;
+        watch(frame.contentWindow);
+        chrome.webview.postMessage("loaded");
+      }
+    };
+    frame.addEventListener("load", attachFrame);
+    addEventListener("load", attachFrame);
   </script>`;
 }
 
@@ -234,8 +253,6 @@ const listeners = new Set<
 const executed: NativeMenuRole[] = [];
 const failures: string[] = [];
 const skips: string[] = [];
-/** Page-side result of the most recent role that ran, for the diagnostic log. */
-let lastExecution: EditCommandOutcome | undefined;
 const selections: string[] = [];
 const pending: ComHandler[] = [];
 let hwnd = 0n;
@@ -374,6 +391,14 @@ try {
         : `(() => { const f = document.getElementById("f"); f.focus(); f.contentDocument.getElementById("b").focus(); return true; })()`,
     );
   type EventCounts = Record<string, number>;
+  /** Poll a page expression until it is truthy. */
+  const waitForPage = async (expression: string, what: string) => {
+    const deadline = Date.now() + STEP_TIMEOUT_MS;
+    while (!(await evaluate(expression))) {
+      assert(Date.now() < deadline, `${what} did not become ready`);
+      await Bun.sleep(POLL_MS);
+    }
+  };
   const eventCounts = (): Promise<EventCounts> =>
     evaluate(`({ ...window.counts })`);
   /** Poll the textarea until it satisfies `accept`, since a command applies asynchronously. */
@@ -395,20 +420,6 @@ try {
     return state;
   };
 
-  /** Wait for the clipboard text; the page is polled so protocol completions keep pumping. */
-  const clipboardWhere = async (expected: string, what: string) => {
-    const deadline = Date.now() + STEP_TIMEOUT_MS;
-    let text = await readClipboard(hwnd);
-    while (text !== expected) {
-      assert(
-        Date.now() < deadline,
-        `${what} left clipboard ${JSON.stringify(text)}`,
-      );
-      await field();
-      text = await readClipboard(hwnd);
-    }
-  };
-
   const host: NativeMenuWindowHost = {
     resolve: () => hwnd,
     subscribe(_id, receive) {
@@ -426,9 +437,6 @@ try {
       page.executeEditCommand(role, {
         failed: (reason) => failures.push(`${role}: ${reason}`),
         skipped: (reason) => skips.push(`${role}: ${reason}`),
-        executed: (result) => {
-          lastExecution = result;
-        },
       });
     },
   };
@@ -505,15 +513,16 @@ try {
     );
 
   /**
-   * Select a role from the menu bar and observe the page. Logs one diagnostic line with the
-   * focus at selection time, field state, clipboard, event counts and the page-side result.
+   * Select a role from the menu bar and observe the page: the field, the clipboard, the page
+   * events it caused and the host's failure and skip reports. Same-origin iframe observations
+   * are also logged as MENU_ROLE_DIRECT_SPIKE lines, since their copy and cut behaviour is
+   * recorded rather than asserted.
    */
   const selectRole = async (frame: Frame, role: NativeMenuRole) => {
-    const focusAtSelect = await evaluate(`${documentOf(frame)}.hasFocus()`);
     const before = await eventCounts();
+    const typesBefore: string[] = await evaluate(`[...window.inputTypes]`);
     const failuresBefore = failures.length;
     const skipsBefore = skips.length;
-    lastExecution = undefined;
     choose(roleItem(role));
     // The command completes on a later pump; each page query below pumps the STA.
     await Bun.sleep(CASCADE_SETTLE_MS);
@@ -526,32 +535,37 @@ try {
         (after[type] ?? 0) - (before[type] ?? 0),
       ]),
     );
-    spike("menu-bar", role, frame, {
-      focusAtSelect,
+    const inputTypes: string[] = (
+      (await evaluate(`[...window.inputTypes]`)) as string[]
+    ).slice(typesBefore.length);
+    const observed = {
       ...state,
       clipboard,
       events,
-      execution: lastExecution ?? null,
+      inputTypes,
       failures: failures.slice(failuresBefore),
       skips: skips.slice(skipsBefore),
-    });
-    return state;
+    };
+    if (frame !== "top") {
+      spike("menu-bar", role, frame, observed);
+    }
+    return observed;
   };
+
+  // The iframe element exists before its srcdoc document is loaded; wait for both textareas.
+  await waitForPage(
+    `document.getElementById("a") !== null && document.getElementById("f").contentDocument?.getElementById("b") != null`,
+    "Test frames",
+  );
 
   for (const frame of [
     "top",
     "same-origin",
   ] as const) {
-    // Only the top frame is asserted; same-origin iframe behaviour is recorded for review.
-    const strict = frame === "top";
-    const expectField = async (
-      accept: (state: FieldState) => boolean,
-      what: string,
-    ) => {
-      if (strict) {
-        await fieldWhere(accept, `${frame} ${what}`, frame);
-      }
-    };
+    // Copy and cut write the clipboard through the page's user activation. Whether that
+    // activation reaches a subframe is recorded for the iframe instead of being asserted, and
+    // the steps that depend on a successful cut follow the same rule.
+    const topFrame = frame === "top";
     clearClipboard(hwnd);
     await focusField(frame);
     await evaluate(
@@ -561,33 +575,77 @@ try {
       text: SEED,
     });
     assert.equal((await fieldIn(frame)).value, SEED);
+    const label = (what: string) => `${frame} ${what}`;
 
-    await selectRole(frame, "selectAll");
-    await expectField(
-      (state) => state.start === 0 && state.end === SEED.length,
-      "Select All",
+    const selectAll = await selectRole(frame, "selectAll");
+    assert.deepEqual(
+      [
+        selectAll.start,
+        selectAll.end,
+        selectAll.events.selectstart,
+      ],
+      [
+        0,
+        SEED.length,
+        1,
+      ],
+      label("Select All"),
     );
-    await selectRole(frame, "copy");
-    if (strict) {
-      await clipboardWhere(SEED, "Copy");
-      assert.equal(
-        (await fieldIn(frame)).value,
-        SEED,
-        "Copy must not change the text",
-      );
+    assert.deepEqual(selectAll.failures, [], label("Select All failures"));
+
+    const copied = await selectRole(frame, "copy");
+    if (topFrame) {
+      assert.equal(copied.clipboard, SEED, label("Copy clipboard"));
+      assert.equal(copied.value, SEED, label("Copy keeps the text"));
+      assert.equal(copied.events.copy, 1, label("Copy event"));
+      assert.deepEqual(copied.failures, [], label("Copy failures"));
     }
     clearClipboard(hwnd);
-    await selectRole(frame, "cut");
-    await expectField((state) => state.value === "", "Cut");
-    if (strict) {
-      await clipboardWhere(SEED, "Cut");
+    const cut = await selectRole(frame, "cut");
+    if (topFrame) {
+      assert.equal(cut.value, "", label("Cut empties the field"));
+      assert.equal(cut.clipboard, SEED, label("Cut clipboard"));
+      assert.equal(cut.events.cut, 1, label("Cut event"));
+      assert.equal(cut.events.beforeinput, 0, label("Cut beforeinput"));
+      assert.deepEqual(cut.failures, [], label("Cut failures"));
     }
-    // Paste is recorded only; Undo and Redo are asserted relative to its outcome.
-    const afterPaste = await selectRole(frame, "paste");
-    await selectRole(frame, "undo");
-    await expectField((state) => state.value !== afterPaste.value, "Undo");
-    await selectRole(frame, "redo");
-    await expectField((state) => state.value === afterPaste.value, "Redo");
+    const cutWorked = cut.value === "";
+
+    const pasted = await selectRole(frame, "paste");
+    assert.equal(pasted.events.paste, 0, label("Paste emits no paste event"));
+    assert.deepEqual(pasted.failures, [], label("Paste failures"));
+    if (pasted.clipboard === null) {
+      // An iframe whose cut did not reach the clipboard leaves nothing to insert.
+      assert(!topFrame, "Top frame cut must leave text on the clipboard");
+      assert.deepEqual(pasted.skips, [
+        "paste: clipboard-empty",
+      ]);
+      assert.deepEqual(pasted.inputTypes, []);
+    } else {
+      assert.equal(
+        pasted.value,
+        pasted.clipboard,
+        label("Paste inserts the clipboard text"),
+      );
+      assert.deepEqual(
+        pasted.inputTypes,
+        [
+          "insertText",
+        ],
+        label("Paste input"),
+      );
+    }
+
+    const undone = await selectRole(frame, "undo");
+    const redone = await selectRole(frame, "redo");
+    if (topFrame || cutWorked) {
+      assert.notEqual(undone.value, pasted.value, label("Undo changes text"));
+      assert.equal(redone.value, pasted.value, label("Redo restores text"));
+      assert.equal(undone.events.beforeinput, 0, label("Undo beforeinput"));
+      assert.equal(redone.events.beforeinput, 0, label("Redo beforeinput"));
+      assert.deepEqual(undone.failures, [], label("Undo failures"));
+      assert.deepEqual(redone.failures, [], label("Redo failures"));
+    }
   }
 
   assert.deepEqual(executed, [
@@ -603,6 +661,40 @@ try {
       "redo",
     ]),
   ]);
+
+  // An empty clipboard skips paste without touching the page.
+  await focusField("top");
+  clearClipboard(hwnd);
+  const emptyClipboard = await selectRole("top", "paste");
+  assert.deepEqual(emptyClipboard.skips, [
+    "paste: clipboard-empty",
+  ]);
+  assert.deepEqual(emptyClipboard.failures, []);
+  assert.equal(emptyClipboard.events.beforeinput, 0);
+
+  // A focused cross-origin frame (a sandboxed iframe without same-origin access) is skipped:
+  // nothing is inserted and nothing fails.
+  await focusField("top");
+  await selectRole("top", "selectAll");
+  assert.equal((await selectRole("top", "copy")).clipboard, SEED);
+  await evaluate(`document.getElementById("x").focus(), true`);
+  const crossOriginBefore = await field();
+  for (const role of [
+    "copy",
+    "paste",
+  ] as const) {
+    const skipped = await selectRole("top", role);
+    assert.deepEqual(
+      skipped.skips,
+      [
+        `${role}: cross-origin-frame`,
+      ],
+      `cross-origin ${role}`,
+    );
+    assert.deepEqual(skipped.failures, []);
+    assert.equal(skipped.events.beforeinput, 0);
+  }
+  assert.deepEqual(await field(), crossOriginBefore);
   assert.deepEqual(selections, [], "Roles must not be reported as selections");
   assert.equal(
     (await eventCounts()).keydown,
@@ -649,28 +741,15 @@ try {
     listeners.delete(driver);
   }
   assert.equal(popupResult, null, "A role popup item reports no selection");
-  const popupState = await fieldWhere(
+  await fieldWhere(
     (state) => state.start === 0 && state.end === SEED.length,
     "Popup Select All",
   );
-  spike("popup", "selectAll", "top", {
-    focusAfterPopup: await evaluate(`document.hasFocus()`),
-    ...popupState,
-    execution: lastExecution ?? null,
-  });
   assert.deepEqual(executed.at(-1), "selectAll");
   assert.deepEqual(selections, [
     "plain",
   ]);
   assert.equal((await eventCounts()).keydown, 0);
-  console.log(
-    `MENU_ROLE_DIRECT_SPIKE ${JSON.stringify({
-      check: "summary",
-      failures,
-      skips,
-      counts: await eventCounts(),
-    })}`,
-  );
 
   // Close with a command still in flight: cleanup must wait for WebView2 to release its
   // completion handler instead of failing the outstanding-reference check.
