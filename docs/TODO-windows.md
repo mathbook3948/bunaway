@@ -432,7 +432,13 @@ Windows의 비활성화 기록을 수정하지 않는다.
   네이티브 호출 회귀와 합성 버튼 재생성 검사를 물리 화면의 표시 검증으로 간주하지 않는다.
 - [ ] overlay icon과 접근성 설명을 설정한다.
 - [ ] thumbnail toolbar 버튼과 클릭 이벤트를 제공한다.
-- [ ] thumbnail clip과 tooltip을 설정한다.
+- [x] thumbnail clip과 tooltip을 설정한다.
+  `windows.setThumbnailClip`은 내용 영역 기준 96 DPI 논리 픽셀 region(`null`이면 해제)을,
+  `windows.setThumbnailToolTip`은 `setTitle`과 같은 형식의 문자열(`null` 또는 빈 문자열이면 해제)을 설정한다.
+  작업 권한과 창 수명을 검사하고 버튼 생성 전에는 `BUSY`, 내용 영역을 벗어난 region은 `INVALID_ARGUMENT`,
+  macOS는 `UNSUPPORTED`다. 버튼 재생성 때 마지막 성공 값을 다시 적용하고 HWND 파괴 때 폐기한다.
+  계약 검증은 `window-thumbnail.test.ts`, 변환과 복원은 `taskbar-thumbnail.test.ts`이며 실제 ITaskbarList3 호출은
+  `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
 - [ ] 창별 앱 표시 이름, relaunch 명령과 아이콘을 설정한다.
 - [ ] Windows elevation과 de-elevation 실행 요구사항의 지원 범위를 결정한다.
 

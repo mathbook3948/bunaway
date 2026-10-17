@@ -10,6 +10,35 @@ export function physicalPixels(logicalPixels: number, dpi: number) {
   return Math.round((logicalPixels * dpi) / DEFAULT_DPI);
 }
 
+/** Physical pixel edges of a client-area rectangle. */
+export type PixelRect = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
+/**
+ * Convert a logical rectangle by rounding its edges, not its size, so adjacent
+ * rectangles still share an edge at fractional scale factors.
+ */
+export function physicalRect(
+  region: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  },
+  dpi: number,
+): PixelRect {
+  return {
+    left: physicalPixels(region.x, dpi),
+    top: physicalPixels(region.y, dpi),
+    right: physicalPixels(region.x + region.width, dpi),
+    bottom: physicalPixels(region.y + region.height, dpi),
+  };
+}
+
 /** Convert a physical pixel dimension back to 96-DPI logical pixels. */
 export function logicalPixels(physicalPixels: number, dpi: number) {
   return Math.round((physicalPixels * DEFAULT_DPI) / dpi);

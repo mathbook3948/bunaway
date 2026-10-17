@@ -30,6 +30,8 @@ import { Taskbar } from "./taskbar.ts";
 import {
   type TaskbarProgress,
   TaskbarProgressController,
+  TaskbarSettingController,
+  type ThumbnailClip,
 } from "./taskbar-progress.ts";
 import { display, hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 import { completedGeometryChanges, windowChanges } from "./window-events.ts";
@@ -44,6 +46,7 @@ import {
   DEFAULT_DPI,
   logicalPixels,
   physicalPixels,
+  physicalRect,
 } from "./window-size.ts";
 
 import {
@@ -184,6 +187,14 @@ export class Windows {
   private readonly taskbarProgress = new TaskbarProgressController(
     (window, progress) => this.taskbar.apply(window, progress),
   );
+  // Clip is kept in DIPs and converted at each application, so a button recreated after a DPI change
+  // gets the current scale.
+  private readonly thumbnailClip = new TaskbarSettingController<ThumbnailClip>(
+    (window, region) => this.applyThumbnailClip(window, region),
+  );
+  private readonly thumbnailToolTip = new TaskbarSettingController<
+    string | null
+  >((window, toolTip) => this.taskbar.setThumbnailToolTip(window, toolTip));
   private readonly taskbarButtonCreated = withWide(
     "TaskbarButtonCreated",
     (name) => user.symbols.RegisterWindowMessageW(name),
@@ -366,14 +377,30 @@ export class Windows {
             message === this.taskbarButtonCreated &&
             this.windows.has(window)
           ) {
-            try {
-              this.taskbarProgress.buttonCreated(window);
-            } catch (error) {
-              // Explorer recreation is asynchronous; retain the last accepted setting for a later retry.
-              console.error(
-                "Could not restore taskbar progress after button creation.",
-                error,
-              );
+            // Each setting restores independently, so one failure cannot skip the others.
+            for (const [name, controller] of [
+              [
+                "progress",
+                this.taskbarProgress,
+              ],
+              [
+                "thumbnail clip",
+                this.thumbnailClip,
+              ],
+              [
+                "thumbnail tooltip",
+                this.thumbnailToolTip,
+              ],
+            ] as const) {
+              try {
+                controller.buttonCreated(window);
+              } catch (error) {
+                // Explorer recreation is asynchronous; retain the last accepted setting for a later retry.
+                console.error(
+                  `Could not restore taskbar ${name} after button creation.`,
+                  error,
+                );
+              }
             }
             return 0n;
           }
@@ -2776,6 +2803,8 @@ export class Windows {
     }
     assert(user.symbols.DestroyWindow(window));
     this.taskbarProgress.forget(window);
+    this.thumbnailClip.forget(window);
+    this.thumbnailToolTip.forget(window);
     this.windows.delete(window);
     this.constraints.delete(window);
     this.dpiByWindow.delete(window);
@@ -2839,5 +2868,36 @@ export class Windows {
   setTaskbarProgress(window: bigint, progress: TaskbarProgress): void {
     assert(this.windows.has(window), "Taskbar target is not a live window");
     this.taskbarProgress.set(window, progress);
+  }
+
+  /**
+   * Clip the taskbar thumbnail to a client-area rectangle in 96 DPI logical pixels, or clear it for null.
+   * Rejects, rather than clamps, a rectangle that leaves the client area, as the shell does.
+   */
+  setThumbnailClip(window: bigint, region: ThumbnailClip): void {
+    assert(this.windows.has(window), "Taskbar target is not a live window");
+    this.thumbnailClip.set(window, region);
+  }
+
+  /** Set the taskbar thumbnail tooltip, or restore the window title for null. */
+  setThumbnailToolTip(window: bigint, toolTip: string | null): void {
+    assert(this.windows.has(window), "Taskbar target is not a live window");
+    this.thumbnailToolTip.set(window, toolTip);
+  }
+
+  private applyThumbnailClip(window: bigint, region: ThumbnailClip): void {
+    if (!region) {
+      this.taskbar.setThumbnailClip(window, null);
+      return;
+    }
+    const rect = physicalRect(region, this.getDpi(window));
+    const client = this.clientSize(window);
+    if (rect.right > client.width || rect.bottom > client.height) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "The thumbnail clip must lie within the window's client area.",
+      });
+    }
+    this.taskbar.setThumbnailClip(window, rect);
   }
 }
