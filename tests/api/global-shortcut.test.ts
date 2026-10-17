@@ -45,12 +45,19 @@ function fixture() {
       released.push(id);
       return native.delete(id);
     },
+    isKeyDown: () => false,
+    startPolling() {},
+    stopPolling() {},
     dispose() {
       disposed++;
       native.clear();
     },
   };
   const adapter = createShortcutOperations(driver, (event, payload) => {
+    // Release reporting has its own focused tests in global-shortcut-release.test.ts.
+    if (event === "globalShortcut.released") {
+      return;
+    }
     expect(event).toBe("globalShortcut.pressed");
     events.push(payload);
   });

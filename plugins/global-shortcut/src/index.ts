@@ -7,6 +7,8 @@ export default defineNativePlugin({
   events: {
     "globalShortcut.pressed":
       globalShortcutEvents["globalShortcut.pressed"].payload,
+    "globalShortcut.released":
+      globalShortcutEvents["globalShortcut.released"].payload,
   },
   name: "globalShortcut",
   platforms: {
