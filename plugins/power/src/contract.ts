@@ -58,3 +58,70 @@ export const blockerInputSchema = z.strictObject({
 export type PowerStatus = z.output<typeof statusSchema>;
 export type PowerBlocker = z.output<typeof blockerSchema>;
 export type PowerBlockerType = PowerBlocker["type"];
+
+const eventNullableBoolean = {
+  anyOf: [
+    {
+      type: "boolean",
+    },
+    {
+      const: null,
+    },
+  ],
+} as const;
+const eventSeconds = {
+  anyOf: [
+    {
+      type: "integer",
+      minimum: 0,
+      maximum: 0xfffffffe,
+    },
+    {
+      const: null,
+    },
+  ],
+} as const;
+/** Native events use the protocol's portable schema representation. The payload equals `statusSchema`. */
+export const powerEvents = {
+  "power.statusChanged": {
+    type: "object",
+    properties: {
+      source: {
+        enum: [
+          "ac",
+          "battery",
+          "unknown",
+        ],
+      },
+      batteryPresent: eventNullableBoolean,
+      charging: eventNullableBoolean,
+      batteryPercent: {
+        anyOf: [
+          {
+            type: "integer",
+            minimum: 0,
+            maximum: 100,
+          },
+          {
+            const: null,
+          },
+        ],
+      },
+      batterySaver: {
+        type: "boolean",
+      },
+      remainingSeconds: eventSeconds,
+      fullLifeSeconds: eventSeconds,
+    },
+    required: [
+      "source",
+      "batteryPresent",
+      "charging",
+      "batteryPercent",
+      "batterySaver",
+      "remainingSeconds",
+      "fullLifeSeconds",
+    ],
+    additionalProperties: false,
+  },
+} as const;

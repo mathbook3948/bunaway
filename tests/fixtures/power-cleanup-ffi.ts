@@ -15,6 +15,10 @@ export function ptr(_buffer: ArrayBufferView): number {
 export function dlopen(library: string) {
   return {
     symbols: {
+      GetSystemPowerStatus() {
+        // The zeroed status buffer decodes to a valid battery snapshot.
+        return 1;
+      },
       PowerCreateRequest() {
         const handle = ++powerCleanup.sequence;
         powerCleanup.open.add(handle);

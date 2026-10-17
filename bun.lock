@@ -331,6 +331,7 @@
       "name": "@bunaway/plugin-power",
       "version": "0.0.0",
       "dependencies": {
+        "@bunaway/plugin-api": "workspace:*",
         "@bunaway/protocol": "workspace:*",
         "zod": "4.6.5",
       },
