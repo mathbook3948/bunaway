@@ -1,37 +1,44 @@
 import { expect, test } from "bun:test";
-import { createRecentDocuments } from "#plugins/opener/src/platforms/windows-recent";
+import {
+  addRecentDocument,
+  clearRecentDocuments,
+  type initialize,
+} from "#plugins/opener/src/platforms/windows";
 
-test("an already aborted signal or a disposed opener fails before any helper thread starts", () => {
-  const OriginalWorker = globalThis.Worker;
-  let created = 0;
-  globalThis.Worker = class extends OriginalWorker {
-    constructor(...args: ConstructorParameters<typeof Worker>) {
-      created += 1;
-      super(...args);
-    }
-  };
-  try {
-    const recent = createRecentDocuments();
-    const aborted = AbortSignal.abort();
-    expect(() => recent.add("C:\\docs\\report.txt", aborted)).toThrow(
-      expect.objectContaining({
-        code: "CANCELLED",
-      }),
-    );
-    expect(() => recent.clear(aborted)).toThrow(
-      expect.objectContaining({
-        code: "CANCELLED",
-      }),
-    );
-    recent.dispose();
-    recent.dispose();
-    expect(() => recent.clear()).toThrow(
-      expect.objectContaining({
-        code: "CANCELLED",
-      }),
-    );
-    expect(created).toBe(0);
-  } finally {
-    globalThis.Worker = OriginalWorker;
-  }
+// Both requests fail on a disposed adapter or an aborted signal before touching the
+// Shell or the file system, so a state without native resources is enough here.
+const state = {
+  disposed: false,
+} as unknown as ReturnType<typeof initialize>;
+
+test("an already aborted signal cancels Recent Items requests before any native call", () => {
+  const aborted = AbortSignal.abort();
+  expect(() =>
+    addRecentDocument(state, "C:\\docs\\report.txt", aborted),
+  ).toThrow(
+    expect.objectContaining({
+      code: "CANCELLED",
+    }),
+  );
+  expect(() => clearRecentDocuments(state, aborted)).toThrow(
+    expect.objectContaining({
+      code: "CANCELLED",
+    }),
+  );
+});
+
+test("a disposed adapter rejects Recent Items requests", () => {
+  const disposed = {
+    disposed: true,
+  } as unknown as ReturnType<typeof initialize>;
+  expect(() => addRecentDocument(disposed, "C:\\docs\\report.txt")).toThrow(
+    expect.objectContaining({
+      code: "CANCELLED",
+    }),
+  );
+  expect(() => clearRecentDocuments(disposed)).toThrow(
+    expect.objectContaining({
+      code: "CANCELLED",
+    }),
+  );
 });

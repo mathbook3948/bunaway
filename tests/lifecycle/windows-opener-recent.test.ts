@@ -1,3 +1,4 @@
+import { dlopen } from "bun:ffi";
 import { expect, test } from "bun:test";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -12,8 +13,6 @@ const createOperations = createOperationsFactory(
 const RECENT_POLL_ATTEMPTS = 50;
 const RECENT_POLL_INTERVAL_MS = 100;
 const RECENT_DIAGNOSTIC_FILE_COUNT = 20;
-// Below the opener's 5 second dispose wait for stuck helpers.
-const DISPOSE_BOUND_MS = 3000;
 // clearRecentDocuments empties the whole user's Shell Recent Items, so a developer's
 // real list must not be touched. Machines opt in with BUNAWAY_OPENER_RECENT_MUTATE=1.
 // GitHub-hosted runners are disposable and count as opted in, because this change does
@@ -44,7 +43,10 @@ const RECENT_POLICY_VALUES = [
     "ClearRecentDocsOnExit",
   ],
 ] as const;
-/** Reports CoGetApartmentType's HRESULT for a thread that never initialized COM. */
+const APTTYPE_MTA = 1;
+const APTTYPEQUALIFIER_IMPLICIT_MTA = 1;
+const COINIT_APARTMENTTHREADED = 0x2;
+/** Reports CoGetApartmentType's HRESULT, type and qualifier for a thread that never initialized COM. */
 const APARTMENT_PROBE_SOURCE = `
 import { dlopen, ptr } from "bun:ffi";
 import { parentPort } from "node:worker_threads";
@@ -53,15 +55,17 @@ const ole = dlopen("ole32.dll", {
 });
 const type = new Uint32Array(1);
 const qualifier = new Uint32Array(1);
-parentPort.postMessage(ole.symbols.CoGetApartmentType(ptr(type), ptr(qualifier)));
+const result = ole.symbols.CoGetApartmentType(ptr(type), ptr(qualifier));
+parentPort.postMessage({ result, type: type[0], qualifier: qualifier[0] });
 ole.close();
 `;
 
 /**
- * Probe a fresh thread. A negative HRESULT (CO_E_NOTINITIALIZED) means the process has
- * no live MTA; a live MTA would make this thread an implicit member and succeed.
+ * Describe what a fresh thread sees. SHAddToRecentDocs may leave a multithreaded apartment
+ * in the process (as in Electron), which makes such a thread an implicit MTA member; that
+ * state is supported and only reported here, never treated as a leak.
  */
-async function freshThreadApartmentResult(): Promise<number> {
+async function freshThreadApartmentState(): Promise<string> {
   const url = URL.createObjectURL(
     new Blob([
       APARTMENT_PROBE_SOURCE,
@@ -69,13 +73,54 @@ async function freshThreadApartmentResult(): Promise<number> {
   );
   const worker = new Worker(url);
   try {
-    return await new Promise<number>((resolveResult, reject) => {
-      worker.onmessage = (event) => resolveResult(event.data as number);
+    const probe = await new Promise<{
+      result: number;
+      type: number;
+      qualifier: number;
+    }>((resolveResult, reject) => {
+      worker.onmessage = (event) => resolveResult(event.data);
       worker.onerror = (event) => reject(new Error(event.message));
     });
+    if (probe.result < 0) {
+      return "no apartment";
+    }
+    return probe.type === APTTYPE_MTA &&
+      probe.qualifier === APTTYPEQUALIFIER_IMPLICIT_MTA
+      ? "implicit MTA"
+      : `explicit apartment type ${probe.type} qualifier ${probe.qualifier}`;
   } finally {
     void worker.terminate();
     URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * Initialize an STA on the calling thread and release it at once. The result is S_OK (0)
+ * when the thread held no initialization and S_FALSE (1) when one was already active,
+ * so comparing it before and after the opener runs shows whether the opener released its own.
+ */
+function probeThreadInitialization(): number {
+  const ole = dlopen("ole32.dll", {
+    CoInitializeEx: {
+      args: [
+        "ptr",
+        "u32",
+      ],
+      returns: "i32",
+    },
+    CoUninitialize: {
+      args: [],
+      returns: "void",
+    },
+  });
+  try {
+    const result = ole.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED);
+    if (result >= 0) {
+      ole.symbols.CoUninitialize();
+    }
+    return result;
+  } finally {
+    ole.close();
   }
 }
 
@@ -179,11 +224,13 @@ async function waitForRecentShortcut(
   return false;
 }
 
-// Runs before windows-opener.test.ts in the shared `bun test ./tests` process, which
-// requires fresh threads to start without COM. The Shell call therefore runs on an
-// isolated STA thread, and this test verifies the process keeps no apartment afterwards.
+// SHAddToRecentDocs runs on the opener's I/O STA, as in Electron, and the Shell may leave
+// a multithreaded apartment in the process afterwards. This test runs before
+// windows-opener.test.ts in the shared `bun test ./tests` process, so those tests also
+// cover that state. Here the opener must keep working in the same process, release only
+// its own COM initialization and initialize again after dispose.
 test.skipIf(process.platform !== "win32")(
-  "recent documents add and clear through an isolated STA and leave no COM apartment in the process",
+  "recent documents add and clear on the opener STA and the opener keeps working with any apartment the Shell leaves",
   async () => {
     const root = resolve(
       import.meta.dir,
@@ -202,11 +249,43 @@ test.skipIf(process.platform !== "win32")(
     });
     const call = async (operation: string, payload: Record<string, string>) =>
       await adapter.execute(operation, payload, "backend");
+    // Existing opener operations that fail validation without launching anything.
+    const expectExistingOperationsWork = async () => {
+      for (const [operation, payload] of [
+        [
+          "opener.openFile",
+          {
+            path: `${target}.missing`,
+          },
+        ],
+        [
+          "opener.revealFile",
+          {
+            path: `${target}.missing`,
+          },
+        ],
+        [
+          "opener.openFileWith",
+          {
+            path: target,
+            app: join(root, "missing.exe"),
+          },
+        ],
+      ] as const) {
+        await expect(call(operation, payload)).rejects.toThrow(
+          expect.objectContaining({
+            code: "INVALID_ARGUMENT",
+            details: {
+              reason: "FILE_NOT_FOUND",
+            },
+          }),
+        );
+      }
+    };
+    // S_OK (0) when this thread holds no COM initialization, S_FALSE (1) when one leaked.
+    const baselineInitialization = probeThreadInitialization();
     try {
-      expect(
-        await freshThreadApartmentResult(),
-        "precondition: no earlier test left a COM apartment in this process",
-      ).toBeLessThan(0);
+      await expectExistingOperationsWork();
       await expect(
         call("opener.addRecentDocument", {
           path: `${target}.missing`,
@@ -240,10 +319,10 @@ test.skipIf(process.platform !== "win32")(
             path: target,
           }),
         ).toBeNull();
-        expect(
-          await freshThreadApartmentResult(),
-          "add must not leave a COM apartment in the process",
-        ).toBeLessThan(0);
+        console.log(
+          `RECENT_APARTMENT after add: a fresh thread sees ${await freshThreadApartmentState()}`,
+        );
+        await expectExistingOperationsWork();
         const disabledReason = await recentHistoryDisabledReason();
         if (disabledReason) {
           // The Shell ignores adds when history is off, so no shortcut can appear or disappear.
@@ -257,10 +336,10 @@ test.skipIf(process.platform !== "win32")(
         }
 
         expect(await call("opener.clearRecentDocuments", {})).toBeNull();
-        expect(
-          await freshThreadApartmentResult(),
-          "clear must not leave a COM apartment in the process",
-        ).toBeLessThan(0);
+        console.log(
+          `RECENT_APARTMENT after clear: a fresh thread sees ${await freshThreadApartmentState()}`,
+        );
+        await expectExistingOperationsWork();
         if (!disabledReason && !(await waitForRecentShortcut(token, false))) {
           throw new Error(
             `The Recent shortcut for ${name} survived clearRecentDocuments.\n${await recentDiagnostics(token)}`,
@@ -272,11 +351,7 @@ test.skipIf(process.platform !== "win32")(
         );
       }
 
-      // Helpers that finished or were removed from tracking must not delay dispose;
-      // only a stuck helper makes it wait out its 5 second bound.
-      const disposeStarted = performance.now();
       await adapter.dispose();
-      expect(performance.now() - disposeStarted).toBeLessThan(DISPOSE_BOUND_MS);
       await adapter.dispose();
       await expect(call("opener.clearRecentDocuments", {})).rejects.toThrow(
         expect.objectContaining({
@@ -284,15 +359,16 @@ test.skipIf(process.platform !== "win32")(
         }),
       );
       expect(
-        await freshThreadApartmentResult(),
-        "dispose must balance the adapter's COM initialization",
-      ).toBeLessThan(0);
+        probeThreadInitialization(),
+        "dispose must release the adapter's own COM initialization",
+      ).toBe(baselineInitialization);
 
-      // A new adapter initializes cleanly after disposal and still validates input.
+      // A new adapter initializes its STA again, even when the Shell left an MTA behind.
       adapter = createOperations({
         dataRoot: root,
         capabilities: [],
       });
+      await expectExistingOperationsWork();
       await expect(
         call("opener.addRecentDocument", {
           path: "relative.txt",

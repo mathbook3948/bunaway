@@ -787,9 +787,12 @@ Explorer와 compiled helper로 파일 및 HTTP/HTTPS URL 하나의 argv 보존�
 `BUNAWAY_OPENER_RECENT_MUTATE=1` 또는 GitHub 호스팅 러너(`RUNNER_ENVIRONMENT=github-hosted`)에서만
 실행하고(self-hosted 러너는 명시적으로 지정해야 한다), 그렇지 않으면
 경고를 남긴다. 최근 항목 기록이 정책으로 꺼진 러너에서는 바로가기 검사를 생략하며 add와 clear 결과가
-검증되지 않는다는 경고를 남긴다. 셸 호출은 전용 STA 스레드에서 실행하므로, 이 테스트는 add, clear,
-dispose 뒤 새 스레드의 `CoGetApartmentType`이 미초기화로 남는지 확인해 뒤이어 같은 프로세스에서
-실행되는 `windows-opener.test.ts`의 COM 전제를 보호한다.
+검증되지 않는다는 경고를 남긴다. `SHAddToRecentDocs`는 opener의 I/O STA에서 직접 호출하며 Electron과
+같이 프로세스에 MTA가 남을 수 있다. 이 테스트는 그 상태에서도 기존 opener 작업이 정상이고 dispose가
+어댑터 자신의 COM 초기화만 해제하며 재초기화가 되는지 같은 프로세스에서 확인한다. COM 불변식은
+"I/O 스레드가 명시적 초기화 없이 시작하고 dispose에서 자신의 초기화를 균형 있게 해제한다"이며,
+`windows-opener.test.ts`는 `CoGetApartmentType`의 암묵적 MTA qualifier로 이를 구분해 테스트 순서와
+무관하게 통과한다.
 Linux의 계약 검사에서 건너뛴 Windows 테스트를 실제 실행 결과로 판단하지 않는다.
 
 `api/path.test.ts`는 Windows 문자열 경로 규칙과 명시적 base, per-drive 상대 경로 거부를 검사한다.
