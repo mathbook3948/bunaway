@@ -1,7 +1,7 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
+import { checkHresult, OLE32, pick, withWide } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { guid } from "./guid.ts";
-import { hr, withWide } from "./win32-bindings.ts";
 
 /** MSDN samples use CLSCTX_SERVER for AccPropServices. */
 const CLSCTX_SERVER = 5;
@@ -82,7 +82,7 @@ export class AccessibleTitles {
     const clsid = guid("b5f8350b-0548-48b1-a6ee-88bd00b4a5e7");
     const iid = guid("6e26e776-04f0-495d-80e4-3330352e3169");
     try {
-      hr(
+      checkHresult(
         library.symbols.CoCreateInstance(
           ptr(clsid),
           null,
@@ -136,7 +136,7 @@ export class AccessibleTitles {
     this.initialize();
     assert(this.setName);
     const setName = this.setName;
-    hr(
+    checkHresult(
       withWide(title, (text) =>
         setName(
           window,
@@ -180,7 +180,7 @@ export class AccessibleTitles {
 
   private clearNative(window: bigint) {
     assert(this.clearName, "Accessible titles are not initialized");
-    hr(
+    checkHresult(
       this.clearName(
         window,
         OBJID_CLIENT,
@@ -210,15 +210,6 @@ export class AccessibleTitles {
 
 function openLibrary() {
   return dlopen("ole32.dll", {
-    CoCreateInstance: {
-      args: [
-        "ptr",
-        "ptr",
-        "u32",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(OLE32, "CoCreateInstance"),
   });
 }

@@ -1,4 +1,5 @@
 import { dlopen, type Pointer, ptr, read, toArrayBuffer } from "bun:ffi";
+import { OLE32, SHELL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/plugin";
 import type { UserDirectory } from "#path/contract";
 
@@ -27,15 +28,7 @@ export function knownFolderId(directory: UserDirectory): Buffer {
 /** Query current-user shell paths, preserving redirection, and own native allocation cleanup. */
 export class WindowsKnownFolders {
   private readonly shell = dlopen("shell32.dll", {
-    SHGetKnownFolderPath: {
-      args: [
-        "ptr",
-        "u32",
-        "u64",
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(SHELL32, "SHGetKnownFolderPath"),
   });
   private readonly ole = this.createAllocator();
   private disposed = false;
@@ -43,12 +36,7 @@ export class WindowsKnownFolders {
   private createAllocator() {
     try {
       return dlopen("ole32.dll", {
-        CoTaskMemFree: {
-          args: [
-            "ptr",
-          ],
-          returns: "void",
-        },
+        ...pick(OLE32, "CoTaskMemFree"),
       });
     } catch (error) {
       this.shell.close();

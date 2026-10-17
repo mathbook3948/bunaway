@@ -1,2 +1,6 @@
 [install]
 exact = true
+
+[test]
+# Discover tests only under tests/, so a path filter never reaches copies in build output.
+root = "tests"

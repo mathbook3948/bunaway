@@ -8,7 +8,9 @@ import {
 // Both requests fail on a disposed adapter or an aborted signal before touching the
 // Shell or the file system, so a state without native resources is enough here.
 const state = {
-  disposed: false,
+  owner: {
+    disposed: false,
+  },
 } as unknown as ReturnType<typeof initialize>;
 
 test("an already aborted signal cancels Recent Items requests before any native call", () => {
@@ -29,7 +31,9 @@ test("an already aborted signal cancels Recent Items requests before any native 
 
 test("a disposed adapter rejects Recent Items requests", () => {
   const disposed = {
-    disposed: true,
+    owner: {
+      disposed: true,
+    },
   } as unknown as ReturnType<typeof initialize>;
   expect(() => addRecentDocument(disposed, "C:\\docs\\report.txt")).toThrow(
     expect.objectContaining({

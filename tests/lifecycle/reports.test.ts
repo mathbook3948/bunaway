@@ -53,15 +53,13 @@ test("native capability reports require the complete catalog and platform suppor
         platform,
       ),
     ).toBe(false);
+    // Windows operations must read supported on win32 and unsupported elsewhere.
+    const invertedSupport = platform === "win32" ? "unsupported" : "supported";
     expect(
       matchesCapabilities(
         capabilities.map((c) => ({
           ...c,
-          support: c.name.startsWith("windows.")
-            ? platform === "win32"
-              ? "unsupported"
-              : "supported"
-            : c.support,
+          support: c.name.startsWith("windows.") ? invertedSupport : c.support,
         })),
         platform,
       ),

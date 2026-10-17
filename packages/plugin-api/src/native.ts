@@ -31,9 +31,13 @@ export {
 export const MIN_WINDOW_DIMENSION = 200;
 export const MAX_WINDOW_DIMENSION = 4096;
 
+/** Native integers (Win32 geometry, sizes and identifiers) are signed 32-bit. */
+export const INT32_MIN = -2147483648;
+export const INT32_MAX = 2147483647;
+
 /** Win32 screen geometry uses signed 32-bit components. */
-export const MIN_WINDOW_COORDINATE = -2147483648;
-export const MAX_WINDOW_COORDINATE = 2147483647;
+export const MIN_WINDOW_COORDINATE = INT32_MIN;
+export const MAX_WINDOW_COORDINATE = INT32_MAX;
 
 /** Initial outer screen position and logical size interpretation. Windows only. */
 export type WindowPlacement = {

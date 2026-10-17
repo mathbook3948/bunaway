@@ -32,8 +32,9 @@ const SWP_NOACTIVATE = 0x10;
 /** Keep both directions live while the real STA is inside DispatchMessage's native move loop. */
 if (workerData) {
   assert(parentPort);
-  const { Windows, WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE } = await import(
-    "#native/windows/bun/win32"
+  const { Windows } = await import("#native/windows/bun/win32");
+  const { WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE } = await import(
+    "#native/windows/bun/win32-constants"
   );
   let stopping = false;
   let failure: unknown;

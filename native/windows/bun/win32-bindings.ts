@@ -1,34 +1,14 @@
-import { dlopen, type Pointer, ptr } from "bun:ffi";
+import { dlopen } from "bun:ffi";
+import { KERNEL32, OLE32, USER32, pick } from "@bunaway/plugin/win32";
 
-/** Build a NUL-terminated UTF-16LE buffer for Win32 W functions. */
-export const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
-const nativeBuffers = new Set<Buffer>();
-/** Hold the buffer until the synchronous native call returns. */
-export function withBuffer<T extends number | bigint>(
-  buffer: Buffer,
-  invoke: (address: Pointer) => T,
-): T {
-  nativeBuffers.add(buffer);
-  try {
-    return invoke(ptr(buffer));
-  } finally {
-    nativeBuffers.delete(buffer);
-  }
-}
-/** Pass a temporary UTF-16LE string buffer to a synchronous native call. */
-export function withWide<T extends number | bigint>(
-  text: string,
-  invoke: (address: Pointer) => T,
-): T {
-  return withBuffer(wide(text), invoke);
-}
-/** Throw with the operation name when a COM HRESULT reports failure. */
-export function hr(value: number, operation: string): void {
-  if (value < 0) {
-    throw new Error(`${operation}: 0x${(value >>> 0).toString(16)}`);
-  }
-}
 export const kernel = dlopen("kernel32.dll", {
+  ...pick(
+    KERNEL32,
+    "GetLastError",
+    "OpenProcess",
+    "WaitForSingleObject",
+    "CloseHandle",
+  ),
   GetModuleHandleW: {
     args: [
       "ptr",
@@ -39,56 +19,15 @@ export const kernel = dlopen("kernel32.dll", {
     args: [],
     returns: "u32",
   },
-  GetLastError: {
-    args: [],
-    returns: "u32",
-  },
   SetLastError: {
     args: [
       "u32",
     ],
     returns: "void",
   },
-  OpenProcess: {
-    args: [
-      "u32",
-      "i32",
-      "u32",
-    ],
-    returns: "u64",
-  },
-  WaitForSingleObject: {
-    args: [
-      "u64",
-      "u32",
-    ],
-    returns: "u32",
-  },
-  CloseHandle: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
 });
 export const ole = dlopen("ole32.dll", {
-  CoInitializeEx: {
-    args: [
-      "ptr",
-      "u32",
-    ],
-    returns: "i32",
-  },
-  CoUninitialize: {
-    args: [],
-    returns: "void",
-  },
-  CoTaskMemFree: {
-    args: [
-      "ptr",
-    ],
-    returns: "void",
-  },
+  ...pick(OLE32, "CoInitializeEx", "CoUninitialize", "CoTaskMemFree"),
 });
 export const display = dlopen("shcore.dll", {
   GetDpiForMonitor: {
@@ -103,6 +42,19 @@ export const display = dlopen("shcore.dll", {
 });
 
 export const user = dlopen("user32.dll", {
+  ...pick(
+    USER32,
+    "DrawMenuBar",
+    "IsWindowEnabled",
+    "RegisterWindowMessageW",
+    "LoadIconW",
+    "DestroyIcon",
+    "GetCursorPos",
+    "SetForegroundWindow",
+    "MessageBoxW",
+    "PeekMessageW",
+    "PostMessageW",
+  ),
   EnumDisplayMonitors: {
     args: [
       "u64",
@@ -150,12 +102,6 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "u32",
   },
-  DrawMenuBar: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
   SetWindowTextW: {
     args: [
       "u64",
@@ -181,12 +127,6 @@ export const user = dlopen("user32.dll", {
     args: [
       "u64",
       "i32",
-    ],
-    returns: "i32",
-  },
-  IsWindowEnabled: {
-    args: [
-      "u64",
     ],
     returns: "i32",
   },
@@ -242,19 +182,6 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "i64",
   },
-  RegisterWindowMessageW: {
-    args: [
-      "ptr",
-    ],
-    returns: "u32",
-  },
-  LoadIconW: {
-    args: [
-      "u64",
-      "u64",
-    ],
-    returns: "u64",
-  },
   LoadImageW: {
     args: [
       "u64",
@@ -266,28 +193,10 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "u64",
   },
-  DestroyIcon: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
-  GetCursorPos: {
-    args: [
-      "ptr",
-    ],
-    returns: "i32",
-  },
   ShowWindow: {
     args: [
       "u64",
       "i32",
-    ],
-    returns: "i32",
-  },
-  SetForegroundWindow: {
-    args: [
-      "u64",
     ],
     returns: "i32",
   },
@@ -449,15 +358,6 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "i32",
   },
-  MessageBoxW: {
-    args: [
-      "u64",
-      "ptr",
-      "ptr",
-      "u32",
-    ],
-    returns: "i32",
-  },
   DestroyWindow: {
     args: [
       "u64",
@@ -481,16 +381,6 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "i32",
   },
-  PeekMessageW: {
-    args: [
-      "ptr",
-      "u64",
-      "u32",
-      "u32",
-      "u32",
-    ],
-    returns: "i32",
-  },
   TranslateMessage: {
     args: [
       "ptr",
@@ -502,15 +392,6 @@ export const user = dlopen("user32.dll", {
       "ptr",
     ],
     returns: "i64",
-  },
-  PostMessageW: {
-    args: [
-      "u64",
-      "u32",
-      "u64",
-      "i64",
-    ],
-    returns: "i32",
   },
 });
 

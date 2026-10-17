@@ -115,9 +115,15 @@ test("window operations use name grants and list all configured windows", async 
       }),
       isVisible: () => true,
       isFocused: () => false,
-      getSizeConstraints: () => ({
-        ...sizeConstraints.get(view)!,
-      }),
+      getSizeConstraints: () => {
+        const constraints = sizeConstraints.get(view);
+        if (!constraints) {
+          throw new Error(`Missing size constraints for ${view}`);
+        }
+        return {
+          ...constraints,
+        };
+      },
       setSizeConstraints: (constraints) => {
         sizeConstraints.set(view, {
           ...constraints,

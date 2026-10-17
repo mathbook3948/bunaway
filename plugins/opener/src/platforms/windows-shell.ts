@@ -1,4 +1,5 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
+import { OLE32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/plugin";
 
 const POINTER_BYTES = 8;
@@ -95,22 +96,7 @@ function checkFileResult(result: number): void {
  */
 export function createShell() {
   const ole = dlopen("ole32.dll", {
-    CoCreateInstance: {
-      args: [
-        "ptr",
-        "ptr",
-        "u32",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    CoTaskMemFree: {
-      args: [
-        "ptr",
-      ],
-      returns: "void",
-    },
+    ...pick(OLE32, "CoCreateInstance", "CoTaskMemFree"),
   });
   const automation = (() => {
     try {

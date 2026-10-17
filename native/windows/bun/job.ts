@@ -1,4 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { mkdirSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
@@ -65,52 +66,19 @@ let owned:
   | undefined;
 function openBindings() {
   return dlopen("kernel32.dll", {
-    CreateFileW: {
-      args: [
-        "ptr",
-        "u32",
-        "u32",
-        "ptr",
-        "u32",
-        "u32",
-        "u64",
-      ],
-      returns: "u64",
-    },
-    GetLastError: {
-      args: [],
-      returns: "u32",
-    },
-    CreateJobObjectW: {
-      args: [
-        "ptr",
-        "ptr",
-      ],
-      returns: "u64",
-    },
-    GetCurrentProcess: {
-      args: [],
-      returns: "u64",
-    },
-    SetInformationJobObject: {
-      args: [
-        "u64",
-        "i32",
-        "ptr",
-        "u32",
-      ],
-      returns: "i32",
-    },
-    QueryInformationJobObject: {
-      args: [
-        "u64",
-        "i32",
-        "ptr",
-        "u32",
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(
+      KERNEL32,
+      "CreateFileW",
+      "GetLastError",
+      "CreateJobObjectW",
+      "GetCurrentProcess",
+      "SetInformationJobObject",
+      "QueryInformationJobObject",
+      "OpenProcess",
+      "WaitForSingleObject",
+      "CloseHandle",
+      "CreateProcessW",
+    ),
     AssignProcessToJobObject: {
       args: [
         "u64",
@@ -118,46 +86,10 @@ function openBindings() {
       ],
       returns: "i32",
     },
-    OpenProcess: {
-      args: [
-        "u32",
-        "i32",
-        "u32",
-      ],
-      returns: "u64",
-    },
     TerminateProcess: {
       args: [
         "u64",
         "u32",
-      ],
-      returns: "i32",
-    },
-    WaitForSingleObject: {
-      args: [
-        "u64",
-        "u32",
-      ],
-      returns: "u32",
-    },
-    CloseHandle: {
-      args: [
-        "u64",
-      ],
-      returns: "i32",
-    },
-    CreateProcessW: {
-      args: [
-        "ptr",
-        "ptr",
-        "ptr",
-        "ptr",
-        "i32",
-        "u32",
-        "ptr",
-        "ptr",
-        "ptr",
-        "ptr",
       ],
       returns: "i32",
     },
@@ -284,7 +216,10 @@ function environmentBlock(env: RelaunchCommand["env"]): Buffer {
     .sort(([a], [b]) => {
       const left = a.toUpperCase();
       const right = b.toUpperCase();
-      return left < right ? -1 : left > right ? 1 : 0;
+      if (left < right) {
+        return -1;
+      }
+      return left > right ? 1 : 0;
     });
   return Buffer.from(
     `${entries.map(([name, value]) => `${name}=${value}\0`).join("")}\0`,

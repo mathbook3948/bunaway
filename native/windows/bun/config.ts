@@ -1,4 +1,5 @@
 import { dlopen, type Pointer, ptr } from "bun:ffi";
+import { OLE32, SHELL32, pick } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -26,23 +27,10 @@ export const isCompiledApp = Bun.embeddedFiles.some(
 /** Returns LocalAppData and releases its Win32 path buffer and DLL handles. */
 export function localAppData() {
   const shell = dlopen("shell32.dll", {
-    SHGetKnownFolderPath: {
-      args: [
-        "ptr",
-        "u32",
-        "u64",
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(SHELL32, "SHGetKnownFolderPath"),
   });
   const ole = dlopen("ole32.dll", {
-    CoTaskMemFree: {
-      args: [
-        "ptr",
-      ],
-      returns: "void",
-    },
+    ...pick(OLE32, "CoTaskMemFree"),
   });
   const out = new BigUint64Array(1);
   try {

@@ -81,7 +81,10 @@ function runnerEnvironment() {
   entries.sort(([left], [right]) => {
     const a = left.toUpperCase();
     const b = right.toUpperCase();
-    return a < b ? -1 : a > b ? 1 : 0;
+    if (a < b) {
+      return -1;
+    }
+    return a > b ? 1 : 0;
   });
   return Buffer.from(
     `${entries.map(([name, value]) => `${name}=${value}`).join("\0")}\0\0`,

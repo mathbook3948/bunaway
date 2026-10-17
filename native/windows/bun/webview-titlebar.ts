@@ -1,7 +1,7 @@
 import type { Pointer } from "bun:ffi";
+import { checkHresult } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import { method, query, release } from "./com.ts";
-import { hr } from "./win32-bindings.ts";
 
 /** Enable native CSS drag/no-drag hit testing before the first navigation.
  * The windowed controller owns region updates, DPI/zoom and document lifetime.
@@ -22,7 +22,7 @@ export function enableCustomTitlebar(settings: Pointer): void {
     });
   }
   try {
-    hr(
+    checkHresult(
       method(settings9, 38, [
         "i32",
       ])(1),

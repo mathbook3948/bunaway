@@ -1,4 +1,5 @@
-import { defineNativePlugin } from "@bunaway/plugin";
+import { defineNativePlugin, type NativeInvokeOptions } from "@bunaway/plugin";
+import { networkEvents } from "#network/contract";
 import { macosOperations, windowsOperations } from "#network/operations";
 import {
   dispose as disposeMacos,
@@ -8,23 +9,34 @@ import {
   dispose as disposeWindows,
   initialize as initializeWindows,
 } from "#network/platforms/windows";
-/** Bounded HTTP requests and WebSocket exchanges. Cancellation releases in-flight resources. */
-export default defineNativePlugin({
-  name: "network",
-  platforms: {
-    macos: {
-      thread: "ui",
-      initialize: initializeMacos,
-      dispose: disposeMacos,
-      operations: macosOperations,
-    },
-    windows: {
-      thread: "ui",
-      initialize: initializeWindows,
-      dispose: disposeWindows,
-      operations: windowsOperations,
+/**
+ * Bounded HTTP requests and WebSocket exchanges. Cancellation releases in-flight resources.
+ * `network.isOnline` reports whether a non-loopback connection exists on Windows and macOS;
+ * `network.onlineChanged` reports changes of that value on Windows.
+ */
+export default defineNativePlugin(
+  {
+    name: "network",
+    events: networkEvents,
+    platforms: {
+      macos: {
+        thread: "ui",
+        initialize: initializeMacos,
+        dispose: disposeMacos,
+        operations: macosOperations,
+      },
+      windows: {
+        thread: "ui",
+        initialize: initializeWindows,
+        dispose: disposeWindows,
+        operations: windowsOperations,
+      },
     },
   },
-});
+  (api) => ({
+    ...api,
+    isOnline: (options?: NativeInvokeOptions) => api.isOnline(null, options),
+  }),
+);
 
 export type { NetworkRequest, NetworkResponse } from "#network/contract";

@@ -1,4 +1,5 @@
 import { dlopen, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/plugin";
 import { safeStorageLimits } from "#safe-storage/contract";
 
@@ -9,12 +10,7 @@ const CRYPTPROTECT_UI_FORBIDDEN = 0x1;
 
 function createBindings() {
   const kernel = dlopen("kernel32.dll", {
-    LocalFree: {
-      args: [
-        "ptr",
-      ],
-      returns: "ptr",
-    },
+    ...pick(KERNEL32, "LocalFree"),
   });
   try {
     const crypt = dlopen("crypt32.dll", {

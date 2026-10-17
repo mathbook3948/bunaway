@@ -1,5 +1,6 @@
 import {
   clampWindowSize,
+  INT32_MAX,
   type WindowSizeConstraints,
 } from "@bunaway/plugin-api/native";
 
@@ -59,8 +60,6 @@ export function clampPixelRect(
     bottom: Math.min(rect.bottom, client.height),
   };
 }
-
-const INT32_MAX = 2147483647;
 
 /** Whether every edge fits the signed 32-bit RECT fields, so native packing cannot truncate it. */
 export function fitsInt32Rect(rect: PixelRect): boolean {

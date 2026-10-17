@@ -21,8 +21,10 @@ I/O Worker 하나가 승인된 Host API를 검사한 파일 핸들로 실행한�
 DevTools 옵션은 영속 등록에 포함하지 않는다.
 `package.ts`는 회귀 패키지를 빌드하고, `tests/lifecycle/run-native.ts`는 준비, 빌드와 테스트 실행을 조정한다.
 
-`win32-bindings.ts`는 DLL 함수 바인딩과 FFI 버퍼 보조 함수를 제공하고, `win32.ts`의
-`Windows`는 창 클래스, HWND, 아이콘, 전체 화면 상태와 메시지 처리를 소유한다.
+`win32-bindings.ts`는 호스트가 여는 DLL 함수 바인딩을 제공한다. 공통 Win64 시그니처와
+FFI 버퍼 보조 함수는 `@bunaway/plugin/win32`에서 가져오고, `win32-constants.ts`는 창 메시지,
+시스템 명령, 표시 상태와 구조체 크기 같은 Win32 상수를 모아 둔다. `win32.ts`의 `Windows`는
+창 클래스, HWND, 아이콘, 전체 화면 상태와 메시지 처리를 소유한다.
 `taskbar-progress.ts`는 HWND별 작업 표시줄 버튼 준비와 마지막 성공 설정을 관리한다.
 등록한 `TaskbarButtonCreated` 메시지 이후에만 설정을 적용하며 버튼 재생성 때 복원한다.
 복원 실패는 진단으로 기록하며 이후 명시적 호출로 다시 적용할 수 있다.

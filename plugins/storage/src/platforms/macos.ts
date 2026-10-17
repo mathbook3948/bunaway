@@ -9,7 +9,7 @@ import {
   readSync,
   writeSync,
 } from "node:fs";
-import { BunawayError } from "@bunaway/plugin";
+import { attemptAll, BunawayError } from "@bunaway/plugin";
 import {
   MAX_DIRECTORY_ENTRIES,
   MAX_STORAGE_BYTES,
@@ -378,17 +378,10 @@ export class MacosStorage {
 
   /** Close all pins once, even if one close fails; an EINTR close must not be retried. */
   private closeParents(parents: number[]): void {
-    const failures: unknown[] = [];
-    for (const fd of parents.reverse()) {
-      try {
-        closeSync(fd);
-      } catch (error) {
-        failures.push(error);
-      }
-    }
-    if (failures.length) {
-      throw new AggregateError(failures, "Storage parent cleanup failed.");
-    }
+    attemptAll(
+      parents.reverse().map((fd) => () => closeSync(fd)),
+      "Storage parent cleanup failed.",
+    );
   }
 
   private withTarget<T>(

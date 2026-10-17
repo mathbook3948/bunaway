@@ -133,12 +133,16 @@ export async function packageProject(
   for (const artifactPath of report.artifacts) {
     console.log(`Artifact: ${artifactPath.path} (${artifactPath.kind})`);
   }
-  console.log(
-    report.ok
-      ? `Packaged ${channel}: usable=${report.usable} submittable=${report.submittable}`
-      : lockFailed
-        ? `Packaging ${channel} failed; no report was published. See diagnostics above.`
-        : `Packaging ${channel} failed; see the report for diagnostics.`,
-  );
+  if (report.ok) {
+    console.log(
+      `Packaged ${channel}: usable=${report.usable} submittable=${report.submittable}`,
+    );
+  } else if (lockFailed) {
+    console.log(
+      `Packaging ${channel} failed; no report was published. See diagnostics above.`,
+    );
+  } else {
+    console.log(`Packaging ${channel} failed; see the report for diagnostics.`);
+  }
   return report;
 }

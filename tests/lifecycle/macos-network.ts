@@ -236,6 +236,15 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
     "request-only",
     "denied",
   ];
+  const viewPermissions: Record<string, string[]> = {
+    main: [
+      "network.request",
+      "network.exchange",
+    ],
+    "request-only": [
+      "network.request",
+    ],
+  };
   const commands = [
     "test.config",
     "test.ready",
@@ -278,17 +287,7 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
         commands,
         events: [],
         host: {
-          permissions:
-            id === "main"
-              ? [
-                  "network.request",
-                  "network.exchange",
-                ]
-              : id === "request-only"
-                ? [
-                    "network.request",
-                  ]
-                : [],
+          permissions: viewPermissions[id] ?? [],
         },
       })),
     },

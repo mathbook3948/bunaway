@@ -1,4 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import type { PowerBlockerType } from "#power/contract";
 import { PowerRequestHandles } from "#power/platforms/windows-request-handles";
@@ -17,6 +18,7 @@ function failure(message: string): never {
 /** Acquire DLLs at adapter creation and retain all native handles until successfully closed. */
 export function createPower() {
   const kernel = dlopen("kernel32.dll", {
+    ...pick(KERNEL32, "CloseHandle"),
     GetSystemPowerStatus: {
       args: [
         "ptr",
@@ -44,12 +46,6 @@ export function createPower() {
       args: [
         "u64",
         "i32",
-      ],
-      returns: "i32",
-    },
-    CloseHandle: {
-      args: [
-        "u64",
       ],
       returns: "i32",
     },

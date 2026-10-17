@@ -1,4 +1,5 @@
 import { dlopen, JSCallback, ptr } from "bun:ffi";
+import { USER32, pick, wide } from "@bunaway/plugin/win32";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -104,8 +105,6 @@ export type EncodedTaskDialog = {
   config: Buffer;
   keepAlive: Buffer[];
 };
-
-const wide = (value: string) => Buffer.from(`${value}\0`, "utf16le");
 
 /**
  * Escape `&` so TaskDialog shows it literally. Button and verification (checkbox) labels treat a
@@ -309,22 +308,7 @@ export function createMessageDialog(
   };
   try {
     const user = dlopen("user32.dll", {
-      SendMessageW: {
-        args: [
-          "u64",
-          "u32",
-          "u64",
-          "i64",
-        ],
-        returns: "i64",
-      },
-      LoadIconW: {
-        args: [
-          "u64",
-          "u64",
-        ],
-        returns: "u64",
-      },
+      ...pick(USER32, "SendMessageW", "LoadIconW"),
     });
     libraries.push(user);
     // CreateActCtxW reads the manifest during the call, so the private directory is removed at once.

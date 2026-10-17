@@ -1,3 +1,4 @@
+import { attemptAll } from "@bunaway/plugin";
 import type {
   NativeSystemEvents,
   NativeSystemSignal,
@@ -139,19 +140,12 @@ export function watchPowerLifecycle(
       timers.clearTimeout(retryTimer);
       retryTimer = undefined;
     }
-    const failures: unknown[] = [];
-    for (const release of [
-      releasePower,
-      releaseSession,
-    ]) {
-      try {
-        release?.();
-      } catch (error) {
-        failures.push(error);
-      }
-    }
-    if (failures.length) {
-      throw new AggregateError(failures, "Power lifecycle release failed.");
-    }
+    attemptAll(
+      [
+        () => releasePower?.(),
+        () => releaseSession?.(),
+      ],
+      "Power lifecycle release failed.",
+    );
   };
 }

@@ -7,6 +7,7 @@ import {
   read,
   toArrayBuffer,
 } from "bun:ffi";
+import { KERNEL32, OLE32, SHELL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/plugin";
 
 const CLSCTX_INPROC_SERVER = 1;
@@ -324,12 +325,7 @@ export function createTrashProgressSink(verifyIdentity: () => void) {
 /** Reject remote and removable paths before filesystem access or Shell queuing. */
 export function validateTrashDrive(path: string): void {
   const kernel = dlopen("kernel32.dll", {
-    GetDriveTypeW: {
-      args: [
-        "ptr",
-      ],
-      returns: "u32",
-    },
+    ...pick(KERNEL32, "GetDriveTypeW"),
   });
   try {
     if (
@@ -357,29 +353,12 @@ export function trashWindowsFile(
   verifyIdentity: () => void,
 ): void {
   const ole = dlopen("ole32.dll", {
-    CoCreateInstance: {
-      args: [
-        "ptr",
-        "ptr",
-        "u32",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(OLE32, "CoCreateInstance"),
   });
   const shell = (() => {
     try {
       return dlopen("shell32.dll", {
-        SHCreateItemFromParsingName: {
-          args: [
-            "ptr",
-            "ptr",
-            "ptr",
-            "ptr",
-          ],
-          returns: "i32",
-        },
+        ...pick(SHELL32, "SHCreateItemFromParsingName"),
       });
     } catch (error) {
       ole.close();
