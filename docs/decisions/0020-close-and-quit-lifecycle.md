@@ -183,8 +183,7 @@ macOS는 `quit`의 코드와 `exit`를 같은 `DesktopLifecycle`로 지원하고
 다른 프레임워크와의 비교. Electron의 `app.exit(code)`는 창을 닫지 않고 `before-quit`, `will-quit`,
 `quit`을 내지 않고 즉시 끝낸다. `exit`가 이 훅 생략을 따른다. Electron의 `app.relaunch()`는 예약만 하고
 `quit` 또는 `exit`를 따로 불러야 하므로 "재실행 예약" 상태가 남는다. 이 설계는 호출 한 번으로 종료와
-재실행을 함께 하는 형태를 택해 그 상태를 없앴다. Tauri의 `exit`와 `restart`가 종료 이벤트를 거치는지는 이
-문서 작성 시점에 공개 문서와 소스로 확인하지 못해 비교하지 않는다. 결정은 Tauri 동작에 의존하지 않는다.
+재실행을 함께 하는 형태를 택해 그 상태를 없앴다.
 
 ## macOS
 
