@@ -228,6 +228,11 @@ test.skipIf(process.platform !== "darwin")(
                 ),
               ),
             );
+            expect(snapshot.invertedColors).toBe(
+              Boolean(
+                objc.send(workspace, "accessibilityDisplayShouldInvertColors"),
+              ),
+            );
             expect(snapshot.reducedMotion).toBe(
               Boolean(
                 objc.send(workspace, "accessibilityDisplayShouldReduceMotion"),

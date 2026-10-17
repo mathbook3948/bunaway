@@ -10,6 +10,8 @@ import { appearanceOperations } from "#plugins/appearance/src/operations";
 import {
   booleanPreference,
   colorRef,
+  isDarkColor,
+  usesInvertedColors,
 } from "#plugins/appearance/src/platforms/windows";
 import { testAppInfo } from "../fixtures/app-info.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
@@ -20,6 +22,7 @@ const snapshot: AppearancePreferences = {
   accentColor: "#123456",
   highContrast: true,
   forcedColors: true,
+  invertedColors: true,
   reducedMotion: false,
   transparencyEnabled: null,
   screenReaderEnabled: false,
@@ -80,6 +83,18 @@ test("appearance validates strict input and preserves unknown theme/transparency
   expect(booleanPreference(null)).toBeNull();
   expect(booleanPreference(2)).toBeNull();
   expect(colorRef(0x00ab3412)).toBe("#1234ab");
+  // The dark limit is the luminance with equal contrast against black and white
+  // (about 0.179), so sRGB gray 0x74 is dark and 0x76 is light.
+  expect(isDarkColor("#000000")).toBe(true);
+  expect(isDarkColor("#0000ff")).toBe(true);
+  expect(isDarkColor("#747474")).toBe(true);
+  expect(isDarkColor("#767676")).toBe(false);
+  expect(isDarkColor("#808080")).toBe(false);
+  expect(isDarkColor("#00ff00")).toBe(false);
+  expect(isDarkColor("#ffffff")).toBe(false);
+  expect(usesInvertedColors(true, "#000000")).toBe(true);
+  expect(usesInvertedColors(true, "#ffffff")).toBe(false);
+  expect(usesInvertedColors(false, "#000000")).toBe(false);
   expect(
     registry.allowed(
       {

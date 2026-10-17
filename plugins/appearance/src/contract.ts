@@ -13,6 +13,7 @@ export const preferencesSchema = z.strictObject({
   accentColor: color,
   highContrast: z.boolean(),
   forcedColors: z.boolean(),
+  invertedColors: z.boolean(),
   reducedMotion: z.boolean(),
   transparencyEnabled: z.union([
     z.boolean(),
@@ -79,6 +80,9 @@ export const appearanceEvents = {
       forcedColors: {
         type: "boolean",
       },
+      invertedColors: {
+        type: "boolean",
+      },
       reducedMotion: {
         type: "boolean",
       },
@@ -118,6 +122,7 @@ export const appearanceEvents = {
       "accentColor",
       "highContrast",
       "forcedColors",
+      "invertedColors",
       "reducedMotion",
       "transparencyEnabled",
       "screenReaderEnabled",
