@@ -166,9 +166,10 @@ Windows 창 플러그인은 모니터 열거, 주 모니터와 대상 창의 모
 물리 다중 모니터의 hotplug, 혼합 DPI와 회전은 수동 검증으로 남긴다.
 
 Windows의 선택 power 플러그인은 AC와 배터리 상태, 호출 세션의 입력 idle 및
-앱 수명의 system/display power request를 제공한다. 다른 플랫폼은 `UNSUPPORTED`다.
+앱 수명의 system/display power request를 제공하고 AC와 배터리 상태 변경을 이벤트로 알린다.
+다른 플랫폼은 `UNSUPPORTED`다.
 [power 계약](../site/src/content/docs/reference/plugins/power.mdx)을 따르며
-실제 상태 query와 request handle 정리는 Windows native CI에 포함한다.
+실제 상태 query, 상태 변경 이벤트 경로와 request handle 정리는 Windows native CI에 포함한다.
 물리 배터리 전환, 화면 timeout, idle 절전과 Modern Standby 검증은 수동 작업이다.
 
 Windows의 선택 appearance 플러그인은 저장된 테마와 transparency 선호, DWM accent,
