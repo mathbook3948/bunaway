@@ -212,19 +212,22 @@ function pageHtml(): string {
       }
     };
     watch(window);
-    // The srcdoc document replaces the initial about:blank window, so listeners attach to the
-    // loaded one; the page reports ready only once that document has its textarea.
-    const frame = document.getElementById("f");
-    let watched = false;
-    const attachFrame = () => {
-      if (!watched && frame.contentDocument?.getElementById("b")) {
-        watched = true;
-        watch(frame.contentWindow);
-        chrome.webview.postMessage("loaded");
+    // The srcdoc document replaces the initial about:blank window, so the listeners must attach
+    // to the loaded one. The test calls this until it reports true; it never blocks the page.
+    window.watchFrame = () => {
+      if (window.frameWatched) {
+        return true;
       }
+      const frame = document.getElementById("f");
+      if (!frame.contentDocument || !frame.contentDocument.getElementById("b")) {
+        return false;
+      }
+      watch(frame.contentWindow);
+      window.frameWatched = true;
+      return true;
     };
-    frame.addEventListener("load", attachFrame);
-    addEventListener("load", attachFrame);
+    // Readiness of the host page does not depend on any iframe having loaded.
+    addEventListener("DOMContentLoaded", () => chrome.webview.postMessage("loaded"));
   </script>`;
 }
 
@@ -253,6 +256,7 @@ const listeners = new Set<
 const executed: NativeMenuRole[] = [];
 const failures: string[] = [];
 const skips: string[] = [];
+const focusFailures: string[] = [];
 const selections: string[] = [];
 const pending: ComHandler[] = [];
 let hwnd = 0n;
@@ -391,11 +395,16 @@ try {
         : `(() => { const f = document.getElementById("f"); f.focus(); f.contentDocument.getElementById("b").focus(); return true; })()`,
     );
   type EventCounts = Record<string, number>;
-  /** Poll a page expression until it is truthy. */
+  /** Poll a page expression until it is truthy; a timeout reports which condition is missing. */
   const waitForPage = async (expression: string, what: string) => {
     const deadline = Date.now() + STEP_TIMEOUT_MS;
     while (!(await evaluate(expression))) {
-      assert(Date.now() < deadline, `${what} did not become ready`);
+      if (Date.now() >= deadline) {
+        const state = await evaluate(
+          `(() => { const f = document.getElementById("f"); return { documentReady: document.readyState, hasTopField: document.getElementById("a") !== null, frameElement: f !== null, frameDocument: f?.contentDocument?.readyState ?? null, frameField: f?.contentDocument?.getElementById("b") != null, crossOriginFrameBlocked: document.getElementById("x")?.contentDocument === null }; })()`,
+        );
+        assert.fail(`${what} did not become ready: ${JSON.stringify(state)}`);
+      }
       await Bun.sleep(POLL_MS);
     }
   };
@@ -437,6 +446,7 @@ try {
       page.executeEditCommand(role, {
         failed: (reason) => failures.push(`${role}: ${reason}`),
         skipped: (reason) => skips.push(`${role}: ${reason}`),
+        focusFailed: (reason) => focusFailures.push(`${role}: ${reason}`),
       });
     },
   };
@@ -552,11 +562,9 @@ try {
     return observed;
   };
 
-  // The iframe element exists before its srcdoc document is loaded; wait for both textareas.
-  await waitForPage(
-    `document.getElementById("a") !== null && document.getElementById("f").contentDocument?.getElementById("b") != null`,
-    "Test frames",
-  );
+  // The iframe element exists before its srcdoc document is loaded; attach the page's event
+  // counters once the same-origin frame has its textarea. The sandboxed frame is not awaited.
+  await waitForPage(`window.watchFrame()`, "Same-origin test frame");
 
   for (const frame of [
     "top",
@@ -756,6 +764,7 @@ try {
   const ignore = {
     failed() {},
     skipped() {},
+    focusFailed() {},
   };
   assert.equal(page.executeEditCommand("copy", ignore), true);
   // A closing WebView then ignores further commands and reports that they did not start.

@@ -15,10 +15,12 @@ type FakeHandler = {
 function fixture() {
   const disposed: FakeHandler[] = [];
   const abandoned: FakeHandler[] = [];
+  const reclaimed: FakeHandler[] = [];
   const reported: string[] = [];
   const calls = new EditCommandCalls<FakeHandler>({
     dispose: (handlers) => disposed.push(...handlers),
     abandon: (handlers) => abandoned.push(...handlers),
+    reclaim: (handlers) => reclaimed.push(...handlers),
   });
   const start = (command: string, effects: string[]): FakeHandler => {
     let created: FakeHandler | undefined;
@@ -45,6 +47,7 @@ function fixture() {
     calls,
     disposed,
     abandoned,
+    reclaimed,
     reported,
     start,
     settle,
@@ -145,15 +148,84 @@ test("a late invocation before cleanup still reports its result", () => {
   ]);
 });
 
-test("abandonment is bounded", () => {
+test("abandonment past the global limit is reported but never refused", () => {
   const f = fixture();
   const room = MAX_ABANDONED_COMPLETIONS - abandonedCompletionCount();
-  for (let index = 0; index < room; index++) {
+  for (let index = 0; index < room + 2; index++) {
     f.start("copy", []);
   }
-  expect(f.settle(EDIT_COMPLETION_GRACE_MS + 1)).toBe(true);
-  f.start("copy", []);
-  expect(() => f.settle(EDIT_COMPLETION_GRACE_MS + 1)).toThrow(
-    "Too many abandoned",
-  );
+  const overLimit: boolean[] = [];
+  expect(
+    f.calls.settle(EDIT_COMPLETION_GRACE_MS + 1, (_command, _total, over) =>
+      overLimit.push(over),
+    ),
+  ).toBe(true);
+  expect(overLimit.filter(Boolean)).toHaveLength(2);
+  expect(f.abandoned).toHaveLength(room + 2);
+});
+
+test("an abandoned handler is reclaimed once native has released it", () => {
+  const f = fixture();
+  const handler = f.start("cut", []);
+  f.settle(EDIT_COMPLETION_GRACE_MS + 1);
+  const held = abandonedCompletionCount();
+  f.calls.prune();
+  expect(f.reclaimed).not.toContain(handler);
+  handler.refs = 1;
+  f.calls.prune();
+  expect(f.reclaimed).toContain(handler);
+  expect(abandonedCompletionCount()).toBe(held - 1);
+  // A reclaimed handler is not released a second time.
+  f.calls.prune();
+  expect(f.reclaimed.filter((entry) => entry === handler)).toHaveLength(1);
+});
+
+test("the number of tracked calls is observable for the in-flight limit", () => {
+  const f = fixture();
+  const first = f.start("copy", []);
+  f.start("cut", []);
+  expect(f.calls.size).toBe(2);
+  first.refs = 1;
+  f.calls.prune();
+  expect(f.calls.size).toBe(1);
+});
+
+test("a refused start keeps its handler for a later release instead of disposing it", () => {
+  const f = fixture();
+  const orphan: FakeHandler = {
+    refs: 1,
+    invoke() {},
+  };
+  expect(() =>
+    f.calls.start(
+      "paste",
+      () => {
+        throw Object.assign(new Error("refused"), {
+          completion: orphan,
+        });
+      },
+      {
+        prune: false,
+      },
+    ),
+  ).toThrow("refused");
+  // Nothing is disposed inside the start, which may be a COM callback.
+  expect(f.disposed).toEqual([]);
+  expect(f.calls.handlers()).toEqual([
+    orphan,
+  ]);
+  f.calls.prune();
+  expect(f.disposed).toEqual([
+    orphan,
+  ]);
+});
+
+test("a refused start without a handler leaves nothing tracked", () => {
+  const f = fixture();
+  expect(() =>
+    f.calls.start("copy", () => {
+      throw new Error("refused");
+    }),
+  ).toThrow("refused");
+  expect(f.calls.size).toBe(0);
 });

@@ -1857,6 +1857,11 @@ try {
             }
             try {
               const started = view.native.executeEditCommand(role, {
+                focusFailed: (reason) =>
+                  log("menu-role-focus-failed", {
+                    role,
+                    reason,
+                  }),
                 failed: (reason) =>
                   log("menu-role-failed", {
                     role,

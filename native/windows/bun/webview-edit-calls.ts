@@ -2,8 +2,10 @@ import type { ComHandler } from "./com.ts";
 
 /** How long a closed view waits for WebView2 to release an in-flight completion handler. */
 export const EDIT_COMPLETION_GRACE_MS = 5_000;
-/** Bound on handlers kept alive after abandonment; reaching it is a host defect, not a state to absorb. */
+/** Abandoned handlers above this count are reported as over the limit; abandonment still proceeds. */
 export const MAX_ABANDONED_COMPLETIONS = 64;
+/** Editing calls one view may have in flight; further commands are skipped as busy. */
+export const MAX_IN_FLIGHT_EDIT_CALLS = 8;
 
 /** The COM handler surface the tracker needs; real handlers come from `handler()` in com.ts. */
 export type EditCompletion = Pick<ComHandler, "refs">;
@@ -14,15 +16,34 @@ export type EditCompletionRegistry<T extends EditCompletion> = {
   dispose(handlers: readonly T[]): void;
   /** Unregister handlers without releasing their trampolines. */
   abandon(handlers: readonly T[]): void;
+  /** Release previously abandoned handlers once native has dropped its reference. */
+  reclaim(handlers: readonly T[]): void;
 };
 
-// Abandoned handlers are never released: if WebView2 still holds one and invokes it later, the
-// trampoline and its closure must stay valid. Their callbacks are inert (see `isActive`).
-const abandoned: EditCompletion[] = [];
+type Abandoned = {
+  completion: EditCompletion;
+  reclaim(): void;
+};
 
-/** Number of handlers deliberately kept alive after abandonment (diagnostics and tests). */
+// Abandoned handlers stay alive: if WebView2 still holds one and invokes it later, the trampoline
+// and its closure must stay valid. Their callbacks are inert (see `isActive`). An entry is
+// reclaimed as soon as native has released it.
+const abandoned: Abandoned[] = [];
+
+/** Number of handlers currently kept alive after abandonment (diagnostics and tests). */
 export function abandonedCompletionCount(): number {
   return abandoned.length;
+}
+
+/** Release abandoned handlers that native has since dropped; never call inside a COM callback. */
+function reclaimAbandoned(): void {
+  for (let index = abandoned.length - 1; index >= 0; index--) {
+    const entry = abandoned[index];
+    if (entry && entry.completion.refs === 1) {
+      abandoned.splice(index, 1);
+      entry.reclaim();
+    }
+  }
 }
 
 type Call<T> = {
@@ -36,7 +57,7 @@ type Call<T> = {
  * Own the completion handlers of one view's in-flight editing commands.
  *
  * WebView2 holds a reference to a handler until it has invoked it or closed the controller, and
- * the documentation does not say which happens to a call still pending at close. The view
+ * which of the two happens to a call still pending at close is not specified. The view
  * therefore waits a bounded time for the release and then abandons what is left, so cleanup
  * always completes. A handler's callback must check `isActive()` and do nothing once it is false.
  */
@@ -45,10 +66,19 @@ export class EditCommandCalls<T extends EditCompletion> {
 
   constructor(private readonly registry: EditCompletionRegistry<T>) {}
 
+  /** Calls whose handler this view still owns, finished or not. */
+  get size(): number {
+    return this.calls.size;
+  }
+
   /**
    * Track a call. `begin` starts the native call and receives the `isActive` guard its callback
    * must consult; it returns the handler that native now references. A call started from inside
    * another call's completion passes `prune: false`.
+   *
+   * When `begin` fails after creating its handler, it may throw an error whose `completion`
+   * property is that handler. The handler is then kept, silenced, and released by a later
+   * `prune` or `release`, because disposing it here could happen inside a COM callback.
    */
   start(
     command: string,
@@ -64,17 +94,36 @@ export class EditCommandCalls<T extends EditCompletion> {
       this.prune();
     }
     let active = true;
-    this.calls.add({
-      completion: begin(() => active),
-      command,
-      silence() {
-        active = false;
-      },
-    });
+    const silence = () => {
+      active = false;
+    };
+    try {
+      this.calls.add({
+        completion: begin(() => active),
+        command,
+        silence,
+      });
+    } catch (error) {
+      silence();
+      const orphan = (
+        error as {
+          completion?: T;
+        }
+      ).completion;
+      if (orphan) {
+        this.calls.add({
+          completion: orphan,
+          command,
+          silence,
+        });
+      }
+      throw error;
+    }
   }
 
-  /** Dispose handlers that native has released, whether or not they ran. */
+  /** Dispose handlers that native has released, whether or not they ran, and reclaim abandoned ones. */
   prune(): void {
+    reclaimAbandoned();
     const released = [
       ...this.calls,
     ].filter((call) => call.completion.refs === 1);
@@ -91,12 +140,14 @@ export class EditCommandCalls<T extends EditCompletion> {
   /**
    * Whether cleanup may continue. While native holds a handler this waits up to the grace period
    * measured from `closedForMs`; after that the remaining handlers are abandoned and
-   * `abandonedCall` reports each one. Throws when abandonment would exceed MAX_ABANDONED_COMPLETIONS.
+   * `abandonedCall` reports each one with the global count and whether it exceeds
+   * MAX_ABANDONED_COMPLETIONS. Abandonment is never refused, so cleanup always completes.
    */
   settle(
     closedForMs: number,
-    abandonedCall: (command: string, total: number) => void,
+    abandonedCall: (command: string, total: number, overLimit: boolean) => void,
   ): boolean {
+    reclaimAbandoned();
     const outstanding = [
       ...this.calls,
     ].filter((call) => call.completion.refs > 1);
@@ -106,15 +157,23 @@ export class EditCommandCalls<T extends EditCompletion> {
     if (closedForMs <= EDIT_COMPLETION_GRACE_MS) {
       return false;
     }
-    if (abandoned.length + outstanding.length > MAX_ABANDONED_COMPLETIONS) {
-      throw new Error("Too many abandoned WebView editing completions.");
-    }
     this.registry.abandon(outstanding.map((call) => call.completion));
     for (const call of outstanding) {
       call.silence();
       this.calls.delete(call);
-      abandoned.push(call.completion);
-      abandonedCall(call.command, abandoned.length);
+      const { completion } = call;
+      abandoned.push({
+        completion,
+        reclaim: () =>
+          this.registry.reclaim([
+            completion,
+          ]),
+      });
+      abandonedCall(
+        call.command,
+        abandoned.length,
+        abandoned.length > MAX_ABANDONED_COMPLETIONS,
+      );
     }
     return true;
   }

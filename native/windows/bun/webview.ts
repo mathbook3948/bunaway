@@ -16,13 +16,20 @@ import {
   handler,
   method,
   query,
+  reclaimHandlers,
   release,
 } from "./com.ts";
 import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
-import { callDevToolsProtocolMethod } from "./webview-devtools.ts";
+import {
+  callDevToolsProtocolMethod,
+  DevToolsStartError,
+} from "./webview-devtools.ts";
 import { WebViewDownloads } from "./webview-downloads.ts";
-import { EditCommandCalls } from "./webview-edit-calls.ts";
+import {
+  EditCommandCalls,
+  MAX_IN_FLIGHT_EDIT_CALLS,
+} from "./webview-edit-calls.ts";
 import {
   type EditCommandReport,
   editCommandEvaluateParameters,
@@ -99,6 +106,7 @@ export class WebView {
   private readonly editCalls = new EditCommandCalls<ComHandler>({
     dispose: disposeHandlers,
     abandon: abandonHandlers,
+    reclaim: reclaimHandlers,
   });
   private creating = 0;
   private closing = false;
@@ -948,7 +956,8 @@ export class WebView {
    * Returns false, doing nothing, while the WebView is closing or not ready. Completion is
    * observed on the next pump; a refused focus move, a refused command and protocol failures
    * after the call started (for example a navigating page) are reported through `report`. A
-   * failure to start the call throws.
+   * failure to start the call throws. At most MAX_IN_FLIGHT_EDIT_CALLS commands run at once;
+   * further ones are reported as skipped (`busy`).
    */
   executeEditCommand(
     command: NativeMenuRole,
@@ -958,14 +967,21 @@ export class WebView {
       return false;
     }
     const webview = this.webview;
+    // Release finished calls first so only calls still pending count toward the limit.
+    this.editCalls.prune();
+    if (this.editCalls.size >= MAX_IN_FLIGHT_EDIT_CALLS) {
+      report.skipped("busy");
+      return true;
+    }
     // A closed popup normally returns focus to the page; restore it when the host did not.
-    // A minimized or hidden window can refuse; the command may still apply, so continue.
+    // A minimized or hidden window can refuse; the command may still apply, so continue and
+    // report the refusal separately from the command's own outcome.
     if (!this.hasInputFocus()) {
       try {
         this.moveFocusToContent();
       } catch (error) {
-        report.failed(
-          `MoveFocus: ${error instanceof Error ? error.message : String(error)}`,
+        report.focusFailed(
+          error instanceof Error ? error.message : String(error),
         );
       }
     }
@@ -1005,7 +1021,8 @@ export class WebView {
    * of a paste event. A first `Runtime.evaluate` locates the focused document with the same
    * frame rules as other roles; the insertion starts from its completion, only while the view
    * is live and open. Both calls are tracked, and the second one skips pruning because it
-   * starts inside a COM callback.
+   * starts inside a COM callback. Focus is checked before the text is inserted, so focus that
+   * moves to a cross-origin frame in between can still receive the text.
    */
   private pasteClipboardText(webview: Pointer, report: EditCommandReport) {
     const clipboard = readClipboardText();
@@ -1063,9 +1080,14 @@ export class WebView {
               },
             );
           } catch (error) {
-            // Starting inside a COM callback must not unwind into native code.
+            // Starting inside a COM callback must not unwind into native code. The refused
+            // call's handler stays tracked and is released by a later prune.
             report.failed(
-              error instanceof Error ? error.message : String(error),
+              error instanceof DevToolsStartError
+                ? `0x${(error.hresult >>> 0).toString(16)}`
+                : error instanceof Error
+                  ? error.message
+                  : String(error),
             );
           }
         },
@@ -1469,10 +1491,11 @@ export class WebView {
     if (
       !this.editCalls.settle(
         performance.now() - this.closedAt,
-        (editCommand, total) =>
+        (editCommand, total, overLimit) =>
           this.hooks.log("menu-role-completion-abandoned", {
             command: editCommand,
             abandoned: total,
+            overLimit,
           }),
       )
     ) {

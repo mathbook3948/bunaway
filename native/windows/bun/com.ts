@@ -323,6 +323,24 @@ export function abandonHandlers(abandoned: readonly ComHandler[]) {
 }
 
 /**
+ * Release handlers earlier passed to `abandonHandlers` once native has dropped its reference.
+ * They are no longer registered, so only the owner reference and callbacks remain to release.
+ */
+export function reclaimHandlers(reclaimed: readonly ComHandler[]) {
+  assert.equal(
+    callbackDepth,
+    0,
+    "Callback disposal while native stack is active",
+  );
+  assert.equal(invokeDepth, 0, "Invoke disposal while native stack is active");
+  for (const callback of reclaimed) {
+    assert.equal(callback.refs, 1, `${callback.name} outstanding COM refs`);
+    callback.dropOwner();
+    callback.dispose();
+  }
+}
+
+/**
  * Dispose process-wide callbacks and FFI bindings after shutdown.
  * Native references and active callbacks must have drained first.
  */

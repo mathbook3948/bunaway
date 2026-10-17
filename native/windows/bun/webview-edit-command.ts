@@ -24,6 +24,8 @@ export type EditCommandOutcome = {
 
 /** Where a finished editing command is reported; none of these may throw into the caller. */
 export type EditCommandReport = {
+  /** Keyboard focus could not be moved into the page; the command is still attempted. */
+  focusFailed(reason: string): void;
   /** The command could not run or the document refused it. */
   failed(reason: string): void;
   /** The command was deliberately not run, for example in a cross-origin frame. */

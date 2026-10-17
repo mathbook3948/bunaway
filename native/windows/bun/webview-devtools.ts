@@ -1,5 +1,5 @@
 import { dlopen, type Pointer, toArrayBuffer } from "bun:ffi";
-import { type ComHandler, disposeHandlers, handler, method } from "./com.ts";
+import { type ComHandler, handler, method } from "./com.ts";
 import { withWide } from "./win32-bindings.ts";
 
 // Slot of ICoreWebView2::CallDevToolsProtocolMethod in the pinned WebView2 SDK 1.0.4129.50.
@@ -47,7 +47,8 @@ function readBorrowedWide(address: Pointer | null): string | null {
  * The call works with AreDevToolsEnabled off, because that setting only gates the browser UI.
  * `done` runs once from the message pump on the creating STA, so the caller must keep pumping.
  * The returned handler stays owned by the caller until `done` has run; retire it afterwards
- * with `disposeHandlers`. A failure to start the call throws and leaves nothing to retire.
+ * with `disposeHandlers`. A failure to start the call throws `DevToolsStartError`, which carries
+ * the never-started handler for the caller to retire outside any COM callback.
  */
 export function callDevToolsProtocolMethod(
   webview: Pointer,
@@ -87,13 +88,24 @@ export function callDevToolsProtocolMethod(
     ),
   );
   if (result < 0) {
-    // Native never retained the handler, so its only reference is ours.
-    disposeHandlers([
-      completion,
-    ]);
-    throw new Error(
-      `CallDevToolsProtocolMethod ${protocolMethod}: 0x${(result >>> 0).toString(16)}`,
-    );
+    // Native never retained the handler, so its only reference is the owner's. It is handed
+    // back instead of disposed here, because this call may run inside another COM callback
+    // where disposal is not allowed.
+    throw new DevToolsStartError(protocolMethod, result, completion);
   }
   return completion;
+}
+
+/** A DevTools protocol call that native refused to start; `completion` is still owned by the caller. */
+export class DevToolsStartError extends Error {
+  constructor(
+    readonly protocolMethod: string,
+    readonly hresult: number,
+    readonly completion: ComHandler,
+  ) {
+    super(
+      `CallDevToolsProtocolMethod ${protocolMethod}: 0x${(hresult >>> 0).toString(16)}`,
+    );
+    this.name = "DevToolsStartError";
+  }
 }
