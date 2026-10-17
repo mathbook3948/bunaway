@@ -1,9 +1,13 @@
 # Bounded network plugin
 
 Register `network` to use `network.request`, `network.exchange` and `network.isOnline` on Windows and macOS.
-`network.isOnline` reports whether a non-loopback connection exists, like Electron's `net.isOnline()`; it does not
-detect captive portals or internet reachability. Windows also publishes `network.onlineChanged` when that value changes,
-found by comparing it every 2 seconds. Each operation has an independent permission. Applications own URL access rules in backend commands;
+Each operation has an independent permission.
+
+`network.isOnline` corresponds to Electron's `net.isOnline()` (whether an active connection exists). It is true when an
+operational interface holds an address that is neither loopback nor link-local; virtual adapters count, and captive
+portals and internet reachability are not checked. On Windows the plugin also publishes `network.onlineChanged` when
+that value changes, found by comparing it every 2 seconds. macOS does not publish the event.
+ Applications own URL access rules in backend commands;
 operation grants do not contain resource allowlists. Trusted backend code can use Bun fetch and WebSocket directly.
 See the [public contract](../../docs/site/src/content/docs/reference/plugins/network.mdx) for limits and access-rule examples.
 

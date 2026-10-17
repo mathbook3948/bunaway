@@ -671,7 +671,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] OS proxy, DNS, NTLM과 integrated authentication을 사용하는 네트워크 경로를 제공한다.
 - [ ] online 상태와 변경 이벤트, host와 proxy resolve를 제공한다.
   online 상태 조회 `network.isOnline`과 변경 이벤트 `network.onlineChanged`는 구현했다.
-  Electron의 `net.isOnline()`처럼 루프백이 아닌 활성 연결 여부만 보고 인터넷 도달은 판단하지 않는다.
+  Electron `net.isOnline()`에 대응해 루프백과 link-local이 아닌 주소를 가진 활성 인터페이스 유무만 보고 인터넷 도달은 판단하지 않는다.
   이벤트는 2초 주기 확인으로 Windows에서만 보낸다. host와 proxy resolve는 남았다.
 - [ ] 오프라인, latency와 bandwidth emulation을 제공한다.
 - [ ] preconnect, connection 정리와 network log를 제공한다.

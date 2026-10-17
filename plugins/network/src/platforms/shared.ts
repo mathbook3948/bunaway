@@ -8,6 +8,7 @@ import type {
 import { request } from "#network/platforms/http";
 import {
   hasActiveConnection,
+  type OnlineWatchHost,
   startIntervalPolling,
   watchOnline,
 } from "#network/platforms/online-state";
@@ -21,14 +22,20 @@ type ExchangeInput = z.output<typeof exchangeInputSchema>;
  * Own cancellable requests on the selected host thread. Hosts with system event services also
  * get `network.onlineChanged`; the watcher stops when the adapter is disposed.
  */
-export function initialize(environment?: NativeEnvironment) {
+export function initialize(
+  environment?: NativeEnvironment,
+  seams: Pick<OnlineWatchHost, "read" | "startPolling"> = {
+    read: hasActiveConnection,
+    startPolling: startIntervalPolling,
+  },
+) {
   const systemEvents = environment?.windows?.systemEvents;
   return {
     active: new Map<AbortController, Promise<unknown>>(),
     disposed: false,
     stopOnlineWatch: systemEvents
       ? watchOnline({
-          read: hasActiveConnection,
+          ...seams,
           publish: (online) =>
             systemEvents.publish(
               "network.onlineChanged",
@@ -37,8 +44,7 @@ export function initialize(environment?: NativeEnvironment) {
               },
               "network.isOnline",
             ),
-          startPolling: startIntervalPolling,
-          fail: () => console.error("Online state check failed."),
+          fail: (error) => console.error("Online state check failed.", error),
         })
       : undefined,
   };
@@ -52,7 +58,14 @@ export function runIsOnline(state: ReturnType<typeof initialize>): boolean {
       message: "Network adapter is disposed.",
     });
   }
-  return hasActiveConnection();
+  try {
+    return hasActiveConnection();
+  } catch {
+    throw new BunawayError({
+      code: "INTERNAL",
+      message: "Online state could not be read.",
+    });
+  }
 }
 
 /** Apply one limit, deadline and cleanup path to HTTP and WebSocket work. */
