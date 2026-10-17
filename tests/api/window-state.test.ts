@@ -138,6 +138,7 @@ function fixture() {
   };
   let failure: Error | undefined;
   let title = "Declared title";
+  let accessibleTitle: string | null = null;
   const native: NativeWindow = {
     getReadiness() {
       throw new Error("Readiness is not used in this state test.");
@@ -225,6 +226,11 @@ function fixture() {
       title = value;
     },
     getTitle: () => title,
+    setAccessibleTitle(value) {
+      apply("setAccessibleTitle");
+      accessibleTitle = value === "" ? null : value;
+    },
+    getAccessibleTitle: () => accessibleTitle,
     setResizable(resizable) {
       apply("setResizable");
       observed.isResizable = resizable;
@@ -308,6 +314,8 @@ function fixture() {
         | "setClosable"
         | "getTitle"
         | "setTitle"
+        | "setAccessibleTitle"
+        | "getAccessibleTitle"
         | "setResizable"
         | "setMovable",
       view = "main",
@@ -701,6 +709,108 @@ test("title operations preserve Unicode, enforce bounded input, individual permi
     }),
   ).rejects.toThrow("Title change failed");
   expect(await failed.invoke("getTitle")).toBe("Declared title");
+});
+
+test("accessible titles are separate from captions, clear with an empty string and report unsupported windows", async () => {
+  const f = fixture();
+  expect(await f.invoke("getAccessibleTitle")).toBeNull();
+  for (const title of [
+    "읽기용 제목 📝",
+    "x".repeat(1024),
+  ]) {
+    expect(
+      validateWindowCall({
+        operation: "windows.setAccessibleTitle",
+        payload: {
+          view: "main",
+          title,
+        },
+      }).payload,
+    ).toEqual({
+      view: "main",
+      title,
+    });
+    expect(
+      await f.invoke("setAccessibleTitle", "main", {
+        title,
+      }),
+    ).toBeNull();
+    expect(await f.invoke("getAccessibleTitle")).toBe(title);
+  }
+  // The caption is untouched by accessible title changes, and the reverse also holds.
+  expect(await f.invoke("getTitle")).toBe("Declared title");
+  await f.invoke("setTitle", "main", {
+    title: "Caption only",
+  });
+  expect(await f.invoke("getAccessibleTitle")).toBe("x".repeat(1024));
+  expect(
+    await f.invoke("setAccessibleTitle", "main", {
+      title: "",
+    }),
+  ).toBeNull();
+  expect(await f.invoke("getAccessibleTitle")).toBeNull();
+  expect(await f.invoke("getTitle")).toBe("Caption only");
+  for (const title of [
+    "bad\0title",
+    "x".repeat(1025),
+    "📝".repeat(513),
+    42,
+    null,
+  ]) {
+    expect(() =>
+      validateWindowCall({
+        operation: "windows.setAccessibleTitle",
+        payload: {
+          view: "main",
+          title,
+        },
+      }),
+    ).toThrow();
+  }
+  expect(validateWindowOutput("windows.getAccessibleTitle", "읽기용")).toBe(
+    "읽기용",
+  );
+  expect(validateWindowOutput("windows.getAccessibleTitle", null)).toBeNull();
+  expect(() =>
+    validateWindowOutput("windows.getAccessibleTitle", "x".repeat(1025)),
+  ).toThrow();
+  expect(validateWindowOutput("windows.setAccessibleTitle", null)).toBeNull();
+  f.permissions.permissions = [
+    "windows.getAccessibleTitle",
+  ];
+  await expect(
+    f.invoke("setAccessibleTitle", "main", {
+      title: "Denied",
+    }),
+  ).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  f.permissions.permissions = [
+    "windows.setAccessibleTitle",
+  ];
+  await expect(f.invoke("getAccessibleTitle")).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  for (const operation of [
+    "setAccessibleTitle",
+    "getAccessibleTitle",
+  ] as const) {
+    const unsupported = fixture();
+    delete unsupported.native[operation];
+    await expect(
+      unsupported.invoke(
+        operation,
+        "main",
+        operation === "setAccessibleTitle"
+          ? {
+              title: "Unsupported",
+            }
+          : {},
+      ),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED",
+    });
+  }
 });
 
 test("user movement controls validate booleans and keep per-operation grants and lifetime checks", async () => {
