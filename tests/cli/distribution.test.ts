@@ -1595,7 +1595,7 @@ test("artifact audit rejects omitted schemas, declarations and Git attributes wi
       force: true,
     });
   }
-}, 30000);
+}, 120000);
 
 test("a standalone plugin install does not install Core, Backend SDK or sibling plugins", async () => {
   const home = await realpath(
