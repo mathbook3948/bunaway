@@ -128,6 +128,7 @@ export class Tray {
       cursor: () => this.cursorPosition(),
       bounds: () => this.getBounds(),
       emit: (event) => notify?.(event),
+      fail: (error) => console.error("Tray hover tracking stopped:", error),
       startPolling: (poll, intervalMs) => {
         const timer = setInterval(poll, intervalMs);
         return () => clearInterval(timer);

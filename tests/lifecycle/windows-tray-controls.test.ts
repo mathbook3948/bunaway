@@ -288,7 +288,8 @@ test.skipIf(process.platform !== "win32")(
         button: "none",
         state: "enter",
       });
-      // The CI pointer is not over the icon, so the poll must end the hover.
+      // Assumes the runner's pointer is not over the tray icon (the CI desktop has no user input),
+      // so the poll must end the hover. Without bounds the hover also ends once synthetic moves stop.
       const deadline = Date.now() + LEAVE_WAIT_MS;
       while (
         !events.some((event) => event.state === "leave") &&

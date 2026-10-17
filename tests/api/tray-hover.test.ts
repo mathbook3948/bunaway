@@ -3,6 +3,7 @@ import type { NativeTrayEvent } from "@bunaway/plugin-api/native";
 import { trayEventSchema } from "#plugins/tray/src/contract";
 import {
   TRAY_LEAVE_POLL_MS,
+  TRAY_MOVE_FRESH_MS,
   TRAY_MOVE_INTERVAL_MS,
   TrayHoverTracker,
 } from "#plugins/tray/src/platforms/windows-tray-hover";
@@ -31,11 +32,19 @@ function harness() {
   let poll: (() => void) | undefined;
   let stopped = 0;
   const events: NativeTrayEvent[] = [];
+  const failures: unknown[] = [];
+  let emitFailure: Error | undefined;
   const tracker = new TrayHoverTracker({
     now: () => time,
     cursor: () => cursor,
     bounds: () => bounds,
-    emit: (event) => events.push(event),
+    emit: (event) => {
+      if (emitFailure) {
+        throw emitFailure;
+      }
+      events.push(event);
+    },
+    fail: (error) => failures.push(error),
     startPolling: (callback, intervalMs) => {
       expect(intervalMs).toBe(TRAY_LEAVE_POLL_MS);
       poll = callback;
@@ -48,6 +57,10 @@ function harness() {
   return {
     tracker,
     events,
+    failures,
+    failEmit: (error: Error | undefined) => {
+      emitFailure = error;
+    },
     states: () => events.map((event) => event.state),
     advance: (ms: number) => {
       time += ms;
@@ -113,10 +126,65 @@ test("hover enters once, throttles moves and leaves when the pointer exits the i
   expect(h.states().at(-1)).toBe("enter");
 });
 
-test("unreadable bounds or cursor end hover, and dispose stops without leave", () => {
+test("unreadable bounds keep hover only while mouse moves keep arriving", () => {
+  const h = harness();
+  h.setBounds(null);
+  h.tracker.mouseMoved();
+  // A pointer that keeps moving over an icon without bounds does not flap enter/leave.
+  for (let count = 0; count < 5; count++) {
+    h.advance(TRAY_LEAVE_POLL_MS - 10);
+    h.tracker.mouseMoved();
+    h.tick();
+  }
+  expect(h.states().filter((state) => state !== "move")).toEqual([
+    "enter",
+  ]);
+  // Moves stop: hover survives one poll period, then ends at the freshness limit.
+  h.advance(TRAY_MOVE_FRESH_MS - 1);
+  h.tick();
+  expect(h.states().at(-1)).not.toBe("leave");
+  h.advance(1);
+  h.tick();
+  expect(h.states().at(-1)).toBe("leave");
+  h.advance(1);
+  h.tracker.mouseMoved();
+  expect(h.states().at(-1)).toBe("enter");
+});
+
+test("a failing poll is reported, stops tracking and allows a fresh enter", () => {
+  const h = harness();
+  h.tracker.mouseMoved();
+  const failure = new Error("subscriber failed");
+  h.failEmit(failure);
+  h.setCursor({
+    x: 99,
+    y: 99,
+  });
+  expect(() => h.tick()).not.toThrow();
+  expect(h.failures).toEqual([
+    failure,
+  ]);
+  expect(h.polling()).toBe(false);
+  expect(h.states()).toEqual([
+    "enter",
+  ]);
+  h.failEmit(undefined);
+  h.setCursor({
+    x: 10,
+    y: 10,
+  });
+  h.tracker.mouseMoved();
+  expect(h.states()).toEqual([
+    "enter",
+    "enter",
+  ]);
+});
+
+test("unreadable cursor ends hover, and dispose stops without leave", () => {
   const unknownBounds = harness();
-  unknownBounds.tracker.mouseMoved();
   unknownBounds.setBounds(null);
+  unknownBounds.tracker.mouseMoved();
+  unknownBounds.advance(TRAY_MOVE_FRESH_MS);
   unknownBounds.tick();
   expect(unknownBounds.states()).toEqual([
     "enter",
