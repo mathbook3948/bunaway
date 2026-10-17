@@ -29,6 +29,9 @@ const WEB_ERROR_OPERATION_CANCELED = 14;
 // x64 GUITHREADINFO: cbSize, flags, then hwndActive@8 and hwndFocus@16, ending with rcCaret.
 const GUI_THREAD_INFO_SIZE = 72;
 const GUI_THREAD_INFO_FOCUS_OFFSET = 16;
+// ICoreWebView2Controller::MoveFocus and COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC.
+const WEBVIEW_CONTROLLER_MOVE_FOCUS_SLOT = 12;
+const MOVE_FOCUS_REASON_PROGRAMMATIC = 0;
 const streams = dlopen("shlwapi.dll", {
   SHCreateMemStream: {
     args: [
@@ -902,6 +905,18 @@ export class WebView {
         ])(address),
       ),
       "Navigate",
+    );
+  }
+
+  /** Move keyboard focus into the page, e.g. after a native popup closed; it does not activate the window. */
+  moveFocusToContent(): void {
+    this.requireWebView();
+    assert(this.controller);
+    hr(
+      method(this.controller, WEBVIEW_CONTROLLER_MOVE_FOCUS_SLOT, [
+        "i32",
+      ])(MOVE_FOCUS_REASON_PROGRAMMATIC),
+      "MoveFocus",
     );
   }
 
