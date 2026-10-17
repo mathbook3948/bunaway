@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { selectOverlayFrame } from "#native/windows/bun/overlay-icon";
+import { overlayIconImage } from "#native/windows/bun/overlay-icon";
 import {
   type OverlayIconSetting,
   TaskbarSettingController,
@@ -41,9 +41,9 @@ test("overlay frame selection prefers the tightest frame covering the icon size"
     32,
   ]).toString("base64");
   const widthOf = (frame: Buffer) => frame.readInt32LE(4);
-  expect(widthOf(selectOverlayFrame(ico, 16))).toBe(16);
-  expect(widthOf(selectOverlayFrame(ico, 20))).toBe(32);
-  expect(widthOf(selectOverlayFrame(ico, 64))).toBe(48);
+  expect(widthOf(overlayIconImage(ico, 16))).toBe(16);
+  expect(widthOf(overlayIconImage(ico, 20))).toBe(32);
+  expect(widthOf(overlayIconImage(ico, 64))).toBe(48);
 });
 
 test("overlay frame selection rejects non-canonical, truncated and out-of-range ICO data", () => {
@@ -54,6 +54,16 @@ test("overlay frame selection rejects non-canonical, truncated and out-of-range 
   wrongType.writeUInt16LE(2, 2);
   const noFrames = Buffer.from(valid);
   noFrames.writeUInt16LE(0, 4);
+  // The directory is valid but the only frame's DIB declares an unsupported bit depth.
+  const brokenFrame = Buffer.from(valid);
+  brokenFrame.writeUInt16LE(7, 22 + 14);
+  // A second frame breaks an otherwise valid ICO even though the first frame would be selected.
+  const brokenSecond = multiFrameIco([
+    16,
+    32,
+  ]);
+  const secondFrameStart = brokenSecond.readUInt32LE(6 + 16 + 12);
+  brokenSecond.writeUInt16LE(7, secondFrameStart + 14);
   for (const ico of [
     "",
     "not base64!",
@@ -62,15 +72,17 @@ test("overlay frame selection rejects non-canonical, truncated and out-of-range 
     outOfRange.toString("base64"),
     wrongType.toString("base64"),
     noFrames.toString("base64"),
+    brokenFrame.toString("base64"),
+    brokenSecond.toString("base64"),
     Buffer.alloc(65_537).toString("base64"),
   ]) {
-    expect(() => selectOverlayFrame(ico, 16)).toThrow(
+    expect(() => overlayIconImage(ico, 16)).toThrow(
       expect.objectContaining({
         code: "INVALID_ARGUMENT",
       }),
     );
   }
-  expect(selectOverlayFrame(valid.toString("base64"), 16)).toEqual(
+  expect(overlayIconImage(valid.toString("base64"), 16)).toEqual(
     valid.subarray(22),
   );
 });

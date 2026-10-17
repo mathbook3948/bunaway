@@ -16,6 +16,9 @@ const target = {
   view: "main",
 };
 const ico = trayIco().toString("base64");
+const brokenFrame = trayIco();
+brokenFrame.writeUInt16LE(7, 22 + 14);
+const brokenFrameIco = brokenFrame.toString("base64");
 
 test("overlay icon schema takes the tray ICO contract and a description with window title limits", () => {
   for (const payload of [
@@ -66,6 +69,12 @@ test("overlay icon schema takes the tray ICO contract and a description with win
     {
       ...target,
       ico: "",
+      description: "x",
+    },
+    {
+      // Valid directory with a DIB frame that declares an unsupported bit depth.
+      ...target,
+      ico: brokenFrameIco,
       description: "x",
     },
     {

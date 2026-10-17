@@ -25,7 +25,7 @@ import {
 import { AccessibleTitles } from "./accessible-title.ts";
 import { adjustSizingRect, systemTrackSize } from "./aspect-ratio.ts";
 import { monitorServices } from "./monitors.ts";
-import { selectOverlayFrame } from "./overlay-icon.ts";
+import { overlayIconImage } from "./overlay-icon.ts";
 import type { SessionMessageHandler } from "./session-end.ts";
 import { Taskbar } from "./taskbar.ts";
 import {
@@ -120,9 +120,6 @@ const SM_CXPADDEDBORDER = 92;
 const SM_CXMINTRACK = 34;
 const SM_CYMINTRACK = 35;
 const SM_CXMAXTRACK = 59;
-const SM_CXSMICON = 49;
-// CreateIconFromResourceEx accepts icon resource data of this format version.
-const ICON_RESOURCE_VERSION = 0x00030000;
 const SM_CYMAXTRACK = 60;
 const SW_HIDE = 0;
 const SW_SHOWNORMAL = 1;
@@ -139,6 +136,13 @@ const SWP_NOMOVE = 0x2;
 const SWP_NOACTIVATE = 0x10;
 const SWP_NOSIZE = 0x1;
 const SWP_NOZORDER = 0x4;
+// Taskbar overlay icon: GetSystemMetricsForDpi index of the small icon width, and the
+// CreateIconFromResourceEx arguments (fIcon = TRUE for an icon rather than a cursor, the resource
+// format version accepted for icon data, and no LR_* flags).
+const SM_CXSMICON = 49;
+const ICON_RESOURCE_IS_ICON = 1;
+const ICON_RESOURCE_VERSION = 0x00030000;
+const NO_ICON_FLAGS = 0;
 const WINDOWPLACEMENT_NORMAL_RECT_OFFSET = 28;
 const WINDOWPLACEMENT_FLAGS_OFFSET = 4;
 const WINDOWPLACEMENT_SHOW_CMD_OFFSET = 8;
@@ -2874,6 +2878,8 @@ export class Windows {
    * Call after all windows have been destroyed.
    */
   dispose() {
+    // Release before the live-window assertion so a failed destroy cannot leak the icon handles.
+    this.releaseOverlayIcons();
     assert.equal(this.windows.size, 0);
     this.taskbar.dispose();
     this.accessibleTitles.dispose();
@@ -2962,16 +2968,16 @@ export class Windows {
       SM_CXSMICON,
       this.getDpi(window),
     );
-    const image = selectOverlayFrame(setting.ico, size);
+    const image = overlayIconImage(setting.ico, size);
     const icon = withBuffer(image, (address) =>
       user.symbols.CreateIconFromResourceEx(
         address,
         image.length,
-        1,
+        ICON_RESOURCE_IS_ICON,
         ICON_RESOURCE_VERSION,
         size,
         size,
-        0,
+        NO_ICON_FLAGS,
       ),
     );
     if (!icon) {
@@ -2988,6 +2994,15 @@ export class Windows {
     }
     this.releaseOverlayIcon(window);
     this.overlayIcons.set(window, icon);
+  }
+
+  /** Backstop for icons whose window never reached its normal destroy path. Safe to repeat. */
+  private releaseOverlayIcons(): void {
+    for (const window of [
+      ...this.overlayIcons.keys(),
+    ]) {
+      this.releaseOverlayIcon(window);
+    }
   }
 
   private releaseOverlayIcon(window: bigint): void {

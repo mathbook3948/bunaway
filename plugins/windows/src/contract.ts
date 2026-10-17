@@ -10,6 +10,7 @@ import {
   MIN_WINDOW_ASPECT_RATIO,
   MIN_WINDOW_COORDINATE,
   MIN_WINDOW_DIMENSION,
+  parseNativeIco,
   type WindowAttentionMode,
 } from "@bunaway/plugin-api/native";
 import {
@@ -186,14 +187,13 @@ const windowTitle = nativeTitle.regex(new RegExp(WINDOW_TEXT_PATTERN, "u"));
 // An empty accessible title removes the annotation and restores the caption as the screen reader name.
 const accessibleTitle = windowTitle.or(z.literal(""));
 
-// Base64 ICO bytes bounded like the tray `setIcon` contract; the native side validates the image itself.
+// Base64 ICO, the same input as the tray `setIcon`. The shared ICO validation rejects a malformed
+// directory or frame as INVALID_ARGUMENT before any native resource exists.
 const icoBytes = z
   .string()
   .min(4)
   .max(Math.ceil(MAX_TRAY_ICO_BYTES / 3) * 4)
-  .regex(
-    /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\s\S])/,
-  );
+  .refine((value) => parseNativeIco(value) !== undefined, "Invalid ICO.");
 
 const viewTarget = z.strictObject({
   view: z.string().regex(new RegExp(WINDOW_VIEW_NAME_PATTERN, "u")),
