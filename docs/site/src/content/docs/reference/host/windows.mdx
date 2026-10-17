@@ -1315,7 +1315,7 @@ Windows의 `windows.setOverlayIcon({ view, windowId?, ico, description })`은 �
 오버레이 아이콘과 접근성 설명을 표시합니다. `null`을 반환하며 작업 권한이 필요하고 macOS는 `UNSUPPORTED`입니다.
 다중 창의 windowId와 권한 규칙은 다른 창 제어와 같습니다.
 
-- `ico`는 `tray.setIcon`과 같은 base64 ICO 바이트입니다(디코딩 후 64 KiB 이하). `null`이면 오버레이를 제거하고 `description`은 무시합니다.
+- `ico`는 `tray.setIcon`과 같은 base64 ICO 바이트입니다(디코딩 후 64 KiB 이하). `null`이면 오버레이를 제거합니다. 이때도 `description`은 필요하며(빈 문자열 가능) 형식을 검사하지만 사용하지 않습니다.
   ICO 전체(모든 프레임의 PNG 또는 비압축 DIB 형식과 크기)를 먼저 검증하며, 잘못된 ICO는 `INVALID_ARGUMENT`이고 기존 오버레이를 유지합니다.
   호스트는 호출 시점 창 DPI의 작은 아이콘 크기를 덮는 가장 작은 프레임(없으면 가장 큰 프레임)을 골라 그 크기로 만듭니다.
 - `description`은 스크린 리더가 읽는 설명이며 `windows.setTitle`과 같은 형식입니다. UTF-16 1024 단위 이하이고 NUL을 포함할 수 없습니다.

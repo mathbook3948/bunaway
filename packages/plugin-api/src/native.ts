@@ -310,11 +310,6 @@ export type NativeMonitorServices = {
 };
 
 /**
- * Native controls exposed to an installed window plugin.
- * The plugin rejects minimized/maximized transitions during fullscreen before invoking these controls.
- * Native failures throw; the UI host converts them to bounded public errors.
- */
-/**
  * Creates the HICON for a taskbar overlay at `sizePx` pixels. The host calls it each time it applies the
  * overlay (on the call and when Explorer recreates the taskbar button) with the window's current small
  * icon size, and takes ownership of the returned handle: it destroys the handle when the overlay is
@@ -323,6 +318,11 @@ export type NativeMonitorServices = {
  */
 export type NativeOverlayIconProvider = (sizePx: number) => bigint;
 
+/**
+ * Native controls exposed to an installed window plugin.
+ * The plugin rejects minimized/maximized transitions during fullscreen before invoking these controls.
+ * Native failures throw; the UI host converts them to bounded public errors.
+ */
 export type NativeWindow = {
   /** Largest overlap, or nearest display; minimized windows use their pre-minimize rectangle. */
   getMonitor?(): NativeMonitor;
