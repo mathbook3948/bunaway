@@ -1171,6 +1171,25 @@ if (!process.argv.includes("--child")) {
           );
           await windows.restore(thumbnailTarget);
           assert.equal(await windows.isMinimized(thumbnailTarget), false);
+          // Minimizing from maximized restores to a larger area, so no upper bound is checked then.
+          await windows.maximize(thumbnailTarget);
+          await windows.minimize(thumbnailTarget);
+          assert.equal(
+            await windows.setThumbnailClip({
+              ...thumbnailTarget,
+              region: {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 80,
+              },
+            }),
+            null,
+          );
+          await windows.restore(thumbnailTarget);
+          assert.equal(await windows.isMaximized(thumbnailTarget), true);
+          await windows.unmaximize(thumbnailTarget);
+          assert.equal(await windows.isMaximized(thumbnailTarget), false);
           await assert.rejects(
             windows.setThumbnailClip({
               ...thumbnailTarget,

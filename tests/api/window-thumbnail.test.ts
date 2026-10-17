@@ -231,7 +231,7 @@ function fixture() {
   };
 }
 
-test("thumbnail dispatch forwards regions, clears with null and normalizes empty tooltips", async () => {
+test("thumbnail dispatch forwards regions, clears with null and forwards tooltip clears unchanged", async () => {
   const f = fixture();
   expect(
     await f.invoke(clipOperation, {
@@ -261,7 +261,7 @@ test("thumbnail dispatch forwards regions, clears with null and normalizes empty
   }
   expect(f.toolTips).toEqual([
     "Report",
-    null,
+    "",
     null,
   ]);
 });

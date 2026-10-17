@@ -2890,34 +2890,35 @@ export class Windows {
       this.taskbar.setThumbnailClip(window, null);
       return;
     }
-    const dpi = this.getDpi(window);
-    const rect = physicalRect(region, dpi);
-    const client = this.thumbnailClientSize(window, dpi);
-    if (rect.right > client.width || rect.bottom > client.height) {
+    // Native callers bypass the plugin schema, so check the contract before converting.
+    const invalidInput = [
+      region.x,
+      region.y,
+      region.width,
+      region.height,
+    ].some((value) => !Number.isInteger(value));
+    const rect = invalidInput
+      ? null
+      : physicalRect(region, this.getDpi(window));
+    // A minimized HWND reports an empty client rectangle and its restored size (normal, maximized
+    // or fullscreen) is not reliably known, so only the lower bounds are checked and the shell
+    // decides the upper bound. Otherwise the region must lie within the current client area.
+    const client = user.symbols.IsIconic(window)
+      ? null
+      : this.clientSize(window);
+    if (
+      !rect ||
+      rect.left < 0 ||
+      rect.top < 0 ||
+      rect.right <= rect.left ||
+      rect.bottom <= rect.top ||
+      (client && (rect.right > client.width || rect.bottom > client.height))
+    ) {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
         message: "The thumbnail clip must lie within the window's client area.",
       });
     }
     this.taskbar.setThumbnailClip(window, rect);
-  }
-
-  /**
-   * Physical client size to validate a thumbnail clip against. A minimized HWND reports an empty
-   * client rectangle, yet its taskbar thumbnail is still shown, so use the restored normal area.
-   */
-  private thumbnailClientSize(window: bigint, dpi: number): ClientSize {
-    if (!user.symbols.IsIconic(window)) {
-      return this.clientSize(window);
-    }
-    const dips = this.clientSizeFromPlacement(
-      window,
-      this.getPlacement(window),
-      dpi,
-    );
-    return {
-      width: physicalPixels(dips.width, dpi),
-      height: physicalPixels(dips.height, dpi),
-    };
   }
 }

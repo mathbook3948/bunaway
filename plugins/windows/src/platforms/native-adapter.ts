@@ -756,7 +756,7 @@ export function createOperations(
             message: "Thumbnail tooltip is not implemented on this platform.",
           });
         }
-        window.setThumbnailToolTip(call.payload.toolTip || null);
+        window.setThumbnailToolTip(call.payload.toolTip);
         break;
       case "windows.setCloseConfirmation":
         window.setCloseConfirmation(call.payload.message);
