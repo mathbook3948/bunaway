@@ -14,6 +14,9 @@ const RECENT_POLL_INTERVAL_MS = 100;
 const RECENT_DIAGNOSTIC_FILE_COUNT = 20;
 // Below the opener's 5 second dispose wait for stuck helpers.
 const DISPOSE_BOUND_MS = 3000;
+const APARTMENT_SAMPLE_INTERVAL_MS = 100;
+const ADD_SAMPLE_WINDOW_MS = 3000;
+const CLEAR_SAMPLE_WINDOW_MS = 15_000;
 // clearRecentDocuments empties the whole user's Shell Recent Items, so a developer's
 // real list must not be touched. Machines opt in with BUNAWAY_OPENER_RECENT_MUTATE=1.
 // GitHub-hosted runners are disposable and count as opted in, because this change does
@@ -76,6 +79,51 @@ async function freshThreadApartmentResult(): Promise<number> {
   } finally {
     void worker.terminate();
     URL.revokeObjectURL(url);
+  }
+}
+
+/** Apartment probe results over time; an HRESULT >= 0 means the process has a live MTA. */
+type ApartmentSeries = {
+  startedAt: number;
+  /** [elapsed ms, HRESULT, optional label] */
+  samples: (
+    | [
+        number,
+        number,
+      ]
+    | [
+        number,
+        number,
+        string,
+      ]
+  )[];
+  /** Elapsed ms of the first probe without an apartment, if one was seen. */
+  goneAtMs?: number;
+};
+
+/** Probe a fresh thread every interval until the MTA is gone or the window ends. */
+async function sampleApartmentUntilGone(
+  windowMs: number,
+): Promise<ApartmentSeries> {
+  const series: ApartmentSeries = {
+    startedAt: performance.now(),
+    samples: [],
+  };
+  for (;;) {
+    const elapsed = Math.round(performance.now() - series.startedAt);
+    const result = await freshThreadApartmentResult();
+    series.samples.push([
+      elapsed,
+      result,
+    ]);
+    if (result < 0) {
+      series.goneAtMs = elapsed;
+      return series;
+    }
+    if (elapsed >= windowMs) {
+      return series;
+    }
+    await Bun.sleep(APARTMENT_SAMPLE_INTERVAL_MS);
   }
 }
 
@@ -196,6 +244,7 @@ test.skipIf(process.platform !== "win32")(
     const name = `최근 문서 ${token}.txt`;
     const target = join(root, name);
     await Bun.write(target, "recent document");
+    let clearSeries: ApartmentSeries | undefined;
     let adapter = createOperations({
       dataRoot: root,
       capabilities: [],
@@ -240,10 +289,12 @@ test.skipIf(process.platform !== "win32")(
             path: target,
           }),
         ).toBeNull();
+        const addSeries = await sampleApartmentUntilGone(ADD_SAMPLE_WINDOW_MS);
+        console.log(`RECENT_MTA_DIAG add ${JSON.stringify(addSeries)}`);
         expect(
-          await freshThreadApartmentResult(),
-          "add must not leave a COM apartment in the process",
-        ).toBeLessThan(0);
+          addSeries.goneAtMs,
+          `add must not leave a COM apartment in the process: ${JSON.stringify(addSeries)}`,
+        ).not.toBeUndefined();
         const disabledReason = await recentHistoryDisabledReason();
         if (disabledReason) {
           // The Shell ignores adds when history is off, so no shortcut can appear or disappear.
@@ -257,10 +308,15 @@ test.skipIf(process.platform !== "win32")(
         }
 
         expect(await call("opener.clearRecentDocuments", {})).toBeNull();
+        // Diagnostic: tell a persistent MTA from one that exists only while the Shell works.
+        clearSeries = await sampleApartmentUntilGone(CLEAR_SAMPLE_WINDOW_MS);
+        if (clearSeries.goneAtMs === undefined) {
+          console.log(`RECENT_MTA_DIAG clear ${JSON.stringify(clearSeries)}`);
+        }
         expect(
-          await freshThreadApartmentResult(),
-          "clear must not leave a COM apartment in the process",
-        ).toBeLessThan(0);
+          clearSeries.goneAtMs,
+          `clear must not leave a COM apartment in the process: ${JSON.stringify(clearSeries)}`,
+        ).not.toBeUndefined();
         if (!disabledReason && !(await waitForRecentShortcut(token, false))) {
           throw new Error(
             `The Recent shortcut for ${name} survived clearRecentDocuments.\n${await recentDiagnostics(token)}`,
@@ -283,8 +339,17 @@ test.skipIf(process.platform !== "win32")(
           code: "CANCELLED",
         }),
       );
+      const afterDispose = await freshThreadApartmentResult();
+      if (clearSeries) {
+        clearSeries.samples.push([
+          Math.round(performance.now() - clearSeries.startedAt),
+          afterDispose,
+          "afterDispose",
+        ]);
+        console.log(`RECENT_MTA_DIAG clear ${JSON.stringify(clearSeries)}`);
+      }
       expect(
-        await freshThreadApartmentResult(),
+        afterDispose,
         "dispose must balance the adapter's COM initialization",
       ).toBeLessThan(0);
 
@@ -310,5 +375,6 @@ test.skipIf(process.platform !== "win32")(
       });
     }
   },
-  60_000,
+  // The apartment samples can wait up to 18 seconds, besides shortcut polling.
+  90_000,
 );
