@@ -300,7 +300,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 사용자 정의 메뉴와 메뉴의 동적 교체, 제거를 지원한다. `menu.setTrayMenu`로 공유 메뉴 리소스를 연결한다.
 - [x] 왼쪽, 오른쪽, 가운데 버튼의 down/up, double-click과 context-menu 알림을 `tray.input` 및 창 없는 백엔드 `waitForEvent`로 전달한다.
 - [x] 처리 시 관측한 포인터 위치와 `tray.getBounds`의 shell 물리 bounds를 제공한다. 조회 실패는 null이다.
-- [ ] 트레이 mouse enter/leave/move를 제공한다.
+- [x] 트레이 mouse enter/leave/move를 클릭 계열 `tray.input`과 분리한 `tray.hover` 이벤트(`{ state, position }`)로 제공한다. hover 대기 함수는 없다. 첫 `WM_MOUSEMOVE`가 enter, 이후는 50ms 스로틀 move이며, leave는 100ms 타이머로 커서와 `Shell_NotifyIconGetRect`를 비교해 판단한다(최대 약 100ms 지연). 영역을 읽지 못하면 200ms 동안 move가 없을 때 leave이며 지연은 최대 약 300ms다.
 - [x] `tray.setClickBehavior`로 오른쪽 메뉴 표시와 왼쪽 창 복원 동작을 설정한다.
 - [x] `tray.focus`로 OS의 트레이 focus 요청 결과를 반환한다.
 - [ ] 트레이에서 지정 위치의 팝업 메뉴 열기와 닫기를 제공한다. 창 대상 `menu.showContextMenu`의 좌표 팝업은 구현됐다.

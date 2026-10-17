@@ -13,11 +13,16 @@ import { openTrayBindings } from "#tray/platforms/windows-bindings";
 import { withWide } from "#tray/platforms/windows-buffers";
 import { createTrayIcon } from "#tray/platforms/windows-icon";
 import { NativePopupMenu } from "#tray/platforms/windows-popup-menu";
+import {
+  type TrayHoverEvent,
+  TrayHoverTracker,
+} from "#tray/platforms/windows-tray-hover";
 
 const WM_CLOSE = 0x0010;
 
 const TRAY_CALLBACK_MESSAGE = 0x8001;
 const WM_NULL = 0x0000;
+const WM_MOUSEMOVE = 0x0200;
 const WM_LBUTTONDOWN = 0x0201;
 const WM_LBUTTONUP = 0x0202;
 const WM_LBUTTONDBLCLK = 0x0203;
@@ -104,6 +109,7 @@ export class Tray {
   private windowDestroyed = false;
   private shellClosed = false;
   private userClosed = false;
+  private readonly hover: TrayHoverTracker;
   /** Registers the icon and releases partial resources if setup fails. */
   constructor(
     private readonly windows: NativeTrayWindowHost,
@@ -111,6 +117,7 @@ export class Tray {
     receive: (action: "show" | "quit") => void,
     notify?: (event: NativeTrayEvent) => void,
     retain?: (owner: NativeTrayOwner) => void,
+    notifyHover?: (event: TrayHoverEvent) => void,
   ) {
     // Validate the whole startup value before acquiring this tray's native resources.
     if (/[\0\uD800-\uDFFF]/u.test(tooltip)) {
@@ -120,6 +127,19 @@ export class Tray {
       });
     }
     this.user = openTrayBindings();
+    this.hover = new TrayHoverTracker({
+      now: () => performance.now(),
+      cursor: () => this.cursorPosition(),
+      bounds: () => this.getBounds(),
+      emit: (event) => notifyHover?.(event),
+      fail: (error) => console.error("Tray hover tracking stopped:", error),
+      startPolling: (poll, intervalMs) => {
+        const timer = setInterval(poll, intervalMs);
+        // The leave poll must not keep the process alive by itself.
+        timer.unref();
+        return () => clearInterval(timer);
+      },
+    });
     try {
       this.shell = dlopen("shell32.dll", {
         Shell_NotifyIconW: {
@@ -166,18 +186,13 @@ export class Tray {
             receive("quit");
           } else if (message === TRAY_CALLBACK_MESSAGE) {
             const input = mouseNotifications[Number(lparam)];
-            if (input) {
-              const point = new Int32Array(2);
-              const available = this.user.symbols.GetCursorPos(ptr(point));
+            if (Number(lparam) === WM_MOUSEMOVE) {
+              this.hover.mouseMoved();
+            } else if (input) {
               notify?.({
                 id: "main",
                 ...input,
-                position: available
-                  ? {
-                      x: point[0] ?? 0,
-                      y: point[1] ?? 0,
-                    }
-                  : null,
+                position: this.cursorPosition(),
               });
             }
             if (
@@ -241,6 +256,17 @@ export class Tray {
       }
       throw error;
     }
+  }
+
+  /** Physical pointer position, or null when the OS refuses the query. */
+  private cursorPosition() {
+    const point = new Int32Array(2);
+    return this.user.symbols.GetCursorPos(ptr(point))
+      ? {
+          x: point[0] ?? 0,
+          y: point[1] ?? 0,
+        }
+      : null;
   }
 
   private add() {
@@ -403,6 +429,7 @@ export class Tray {
    */
   dispose() {
     this.disposed = true;
+    this.hover.dispose();
     const errors: unknown[] = [];
     try {
       if (this.added) {
