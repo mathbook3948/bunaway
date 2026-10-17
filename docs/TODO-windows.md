@@ -321,10 +321,10 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 메뉴바 visible과 auto-hide를 설정하고 조회한다.
 - [x] 지정 창과 물리 화면 좌표에 컨텍스트 메뉴를 표시하고 선택 또는 취소로 닫는다. AbortSignal 취소로 닫으며 별도 close 작업은 제공하지 않는다.
 - [x] 공유 메뉴 리소스에서 일반, separator, checkbox, radio와 submenu 항목을 제공한다.
-- [ ] 메뉴 icon 항목을 제공한다.
+- [x] 메뉴 icon 항목을 제공한다. `type: "item"`(role 포함)과 submenu의 선택 필드 `icon`(tray `setIcon`과 같은 base64 ICO, null이면 없음)이며 checkbox, radio, separator는 `INVALID_ARGUMENT`로 거부한다(Electron `MenuItem.icon`, Tauri `IconMenuItem`). `SM_CXSMICON` 크기의 32bpp premultiplied-alpha DIB section을 메뉴 인스턴스마다 만들어 `hbmpItem`에 설정하고 인스턴스 해제 때 DeleteObject한다. 잘못된 ICO는 `INVALID_ARGUMENT`, 비트맵 생성 실패는 `INTERNAL`.
 - [x] 메뉴 리소스 ID 조회, create, replace, remove와 목록 조회, 항목 insert와 remove를 제공한다. `insert`의 index 0과 배열 길이로 prepend와 append를 처리한다.
 - [x] 메뉴 리소스의 항목 label, enabled, visible와 checked를 실행 중 변경한다. 연결한 트레이의 다음 팝업과 창 메뉴바에 반영한다.
-- [ ] 메뉴 항목 icon을 실행 중 변경한다.
+- [x] 메뉴 항목 icon을 실행 중 변경한다. `updateItem.changes.icon`(ICO bytes | null)이며 다른 변경과 같이 연결된 트레이의 다음 팝업과 창 메뉴바에 반영한다.
 - [x] 트레이 메뉴 선택을 `menu.clicked`로 전달한다. 앱 창에 속하지 않아 `windowId`는 null이다.
 - [x] 창 메뉴바와 컨텍스트 팝업 선택을 `menu.clicked`로 전달하고 소유 windowId를 포함한다.
 - [ ] accelerator, 표시 문자열과 실제 등록 여부를 구분한다.

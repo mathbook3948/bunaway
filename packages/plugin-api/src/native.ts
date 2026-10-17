@@ -6,6 +6,11 @@ export type {
   NativeMenuServices,
   NativeMenuWindowHost,
 } from "./native-menu.ts";
+export type { NativeMenuIcoFrame } from "./native-menu-icon.ts";
+export {
+  parseNativeMenuIco,
+  selectNativeMenuIcoFrame,
+} from "./native-menu-icon.ts";
 export type { NativeShortcutServices } from "./native-shortcut.ts";
 export type {
   NativeTrayEvent,

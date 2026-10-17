@@ -440,6 +440,12 @@ export function updateItem(
   if (old.type === "submenu" && changes.checked !== undefined) {
     return invalid("Submenus do not support checked state.");
   }
+  if (
+    changes.icon !== undefined &&
+    (old.type === "checkbox" || old.type === "radio")
+  ) {
+    return invalid("Checkbox and radio items do not support icons.");
+  }
   Object.assign(old, changes);
   return state.commit(menuId, items);
 }

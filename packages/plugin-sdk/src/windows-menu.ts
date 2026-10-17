@@ -4,6 +4,10 @@ import type {
   NativeMenuItem,
   NativeMenuRole,
 } from "@bunaway/plugin-api/native";
+import {
+  createMenuIconBitmap,
+  releaseMenuIconBitmap,
+} from "./windows-menu-icon.ts";
 
 // Keep UTF-16 storage alive across synchronous native calls, including reentrant callbacks.
 const labels = new Set<Buffer>();
@@ -22,8 +26,11 @@ const MF_SEPARATOR = 0x800;
 const MF_GRAYED = 0x1;
 const MF_CHECKED = 0x8;
 const MIIM_FTYPE = 0x100;
+const MIIM_BITMAP = 0x80;
 const MFT_RADIOCHECK = 0x200;
 const MENUITEMINFO_SIZE = 80;
+/** Offset of `hbmpItem` in the Win64 MENUITEMINFOW. */
+const MENUITEMINFO_HBMPITEM_OFFSET = 72;
 
 /** Electron's Windows shortcut text for each role. */
 const ROLE_ACCELERATORS = {
@@ -96,6 +103,8 @@ export class NativePopupMenu {
   private nextCommand = 1;
   private disposed = false;
   private readonly handles = new Set<bigint>();
+  /** Item icon bitmaps are owned by this tree: DestroyMenu does not free them. */
+  private readonly bitmaps: bigint[] = [];
 
   constructor(
     items: readonly NativeMenuItem[],
@@ -104,9 +113,30 @@ export class NativePopupMenu {
     try {
       this.handle = this.build(items, menuBar);
     } catch (error) {
+      this.releaseBitmaps();
       this.native.close();
       throw error;
     }
+  }
+
+  private releaseBitmaps() {
+    for (const bitmap of this.bitmaps.splice(0)) {
+      releaseMenuIconBitmap(bitmap);
+    }
+  }
+
+  /** Attach an icon to the item at `position`. Windows keeps only the handle, so the tree owns the bitmap. */
+  private setIcon(menu: bigint, position: number, ico: string) {
+    const bitmap = createMenuIconBitmap(ico);
+    this.bitmaps.push(bitmap);
+    const info = Buffer.alloc(MENUITEMINFO_SIZE);
+    info.writeUInt32LE(MENUITEMINFO_SIZE, 0);
+    info.writeUInt32LE(MIIM_BITMAP, 4);
+    info.writeBigUInt64LE(bitmap, MENUITEMINFO_HBMPITEM_OFFSET);
+    assert(
+      this.native.symbols.SetMenuItemInfoW(menu, position, 1, ptr(info)),
+      "Menu icon presentation failed.",
+    );
   }
 
   private build(
@@ -130,6 +160,8 @@ export class NativePopupMenu {
           "Menu notification setup failed.",
         );
       }
+      // Visible items only: the position of an appended item is the count before it.
+      let position = 0;
       for (const item of items) {
         if (!item.visible) {
           continue;
@@ -139,6 +171,7 @@ export class NativePopupMenu {
             this.native.symbols.AppendMenuW(menu, MF_SEPARATOR, 0n, null),
             "Menu separator failed.",
           );
+          position++;
           continue;
         }
         let flags = item.enabled ? 0 : MF_GRAYED;
@@ -174,6 +207,10 @@ export class NativePopupMenu {
           this.native.symbols.DestroyMenu(command);
         }
         assert(appended, "Menu item creation failed.");
+        if ((item.type === "item" || item.type === "submenu") && item.icon) {
+          this.setIcon(menu, position, item.icon);
+        }
+        position++;
         if (item.type === "radio") {
           const info = Buffer.alloc(MENUITEMINFO_SIZE);
           info.writeUInt32LE(MENUITEMINFO_SIZE, 0);
@@ -235,6 +272,8 @@ export class NativePopupMenu {
       "Menu removal failed.",
     );
     this.disposed = true;
+    // The menu no longer references the bitmaps once destroyed.
+    this.releaseBitmaps();
     this.native.close();
   }
 }

@@ -66,10 +66,33 @@ checkbox와 radio의 `checked` 기본값은 `false`입니다. radio는 `group`�
 지정할 수 없습니다. 일반 item의 checked는 `false`여야 합니다. submenu는 `items` 배열을
 가집니다. 선택은 checked 상태를 자동 변경하지 않습니다.
 
+## 항목 icon
+
+`type: "item"`(role 항목 포함)과 `submenu`는 선택 필드 `icon`을 가질 수 있습니다. 값은 tray의
+`setIcon`과 같은 ICO 바이트의 base64 문자열(65,536 bytes 이하)이며 `null`이거나 생략하면 아이콘이 없습니다.
+`get` 결과에는 `icon: null`로 채워서 반환합니다. checkbox와 radio는 같은 열에 체크 표시를 그리므로,
+separator는 그릴 항목이 없으므로 `icon`을 받지 않고 `INVALID_ARGUMENT`로 거부합니다.
+
+```ts
+await menu.create({
+  menuId: "main-menu",
+  items: [{ id: "save", type: "item", label: "저장", icon: saveIcoBase64 }],
+});
+await menu.updateItem({ menuId: "main-menu", itemId: "save", changes: { icon: otherIcoBase64 } });
+await menu.updateItem({ menuId: "main-menu", itemId: "save", changes: { icon: null } });
+```
+
+Windows는 시스템 작은 아이콘 크기(`SM_CXSMICON`, 보통 16px)에 맞는 ICO 프레임을 골라 항목 앞에 그립니다.
+크기를 덮는 가장 작은 프레임을 우선하고 없으면 가장 큰 프레임을 줄여 씁니다. 알파 채널이 없는 아이콘은
+그려진 픽셀을 불투명으로 표시합니다. 형식이 틀리거나 Windows가 해석하지 못하는 ICO는 `INVALID_ARGUMENT`,
+비트맵 생성 실패는 `INTERNAL`입니다. 트레이 팝업, 창 메뉴바와 컨텍스트 팝업은 각자 네이티브 비트맵을 만들고
+메뉴 교체, 항목 제거와 연결 해제 때 함께 해제하므로 같은 icon을 여러 곳에 써도 수명이 겹치지 않습니다.
+
 `insert`의 index는 대상 배열의 0부터 길이까지입니다. 0은 prepend, 배열 길이는 append입니다.
 `parentId`를 생략하거나 `null`로 지정하면 최상위에 삽입하고, 지정하면 해당 submenu에 삽입합니다.
 `removeItem`은 submenu의 하위 항목도 제거합니다. `updateItem.changes`는 `label`, `enabled`,
-`visible`, `checked`를 받습니다. separator는 visible만, submenu는 checked를 제외한 변경을 받습니다.
+`visible`, `checked`, `icon`을 받습니다. separator는 visible만, submenu는 checked를 제외한 변경을 받고,
+checkbox와 radio는 icon 변경을 받지 않습니다.
 `role`은 바꿀 수 없으므로 유형, ID와 role을 바꾸려면 replace를 사용합니다. 변경 후 전체 트리를 검증하며 실패하면 이전 리소스와
 트레이 연결을 유지합니다.
 
@@ -206,6 +229,6 @@ role 항목이 있는 리소스의 `setTrayMenu`와, 트레이에 연결한 리�
 취소는 `CANCELLED`, 기한 초과는 `TIMEOUT`이며 완료한 동기 변경을 되돌리지 않습니다.
 네이티브 메뉴 생성 오류는 호스트 진단에 기록합니다.
 
-icon, accelerator 등록과 단축키 우선순위는 아직 제공하지 않습니다.
+accelerator 등록과 단축키 우선순위는 아직 제공하지 않습니다.
 편집 role 외의 역할과 `Ctrl+...` 단축키를 자동 실행하지 않습니다.
 라벨의 `&`는 문자 그대로 표시합니다. Windows의 기본 메뉴 탐색 키만 사용합니다.
