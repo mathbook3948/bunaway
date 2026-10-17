@@ -520,7 +520,13 @@ try {
   ]);
   assert.deepEqual(failures, []);
 
-  // A closing WebView ignores the command and reports that it did not start.
+  // Close with a command still in flight: cleanup must wait for WebView2 to release its
+  // completion handler instead of failing the outstanding-reference check.
+  assert.equal(
+    page.executeEditCommand("copy", () => {}),
+    true,
+  );
+  // A closing WebView then ignores further commands and reports that they did not start.
   page.requestClose();
   assert.equal(
     page.executeEditCommand("copy", () => {}),

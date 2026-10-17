@@ -1,4 +1,4 @@
-import { type Pointer, read, toArrayBuffer } from "bun:ffi";
+import { dlopen, type Pointer, toArrayBuffer } from "bun:ffi";
 import { type ComHandler, disposeHandlers, handler, method } from "./com.ts";
 import { withWide } from "./win32-bindings.ts";
 
@@ -6,7 +6,7 @@ import { withWide } from "./win32-bindings.ts";
 const CALL_DEVTOOLS_PROTOCOL_METHOD_SLOT = 36;
 // ICoreWebView2CallDevToolsProtocolMethodCompletedHandler.
 const COMPLETED_HANDLER_IID = "5c4889f0-5ef6-4c5a-952c-d8f1b92d0574";
-// Bounds the UTF-16 scan of a result string; Runtime.evaluate results stay far below this.
+// Longest result accepted; Runtime.evaluate and key-event replies stay far below this.
 const MAX_RESULT_CHARS = 1_048_576;
 
 /** Result of one DevTools protocol call: the HRESULT and the JSON the browser returned. */
@@ -15,16 +15,30 @@ export type DevToolsProtocolResult = {
   json: string;
 };
 
-/** Read the NUL-terminated UTF-16 result that WebView2 lends only for the Invoke call. */
-function readBorrowedWide(address: Pointer | null): string {
+// E_OUTOFMEMORY, reported when a result exceeds MAX_RESULT_CHARS instead of returning it truncated.
+const RESULT_TOO_LARGE_HRESULT = -2147024882;
+const text = dlopen("kernel32.dll", {
+  lstrlenW: {
+    args: [
+      "ptr",
+    ],
+    returns: "i32",
+  },
+});
+
+/**
+ * Read the NUL-terminated UTF-16 result that WebView2 lends only for the Invoke call.
+ * Returns null when it is longer than MAX_RESULT_CHARS.
+ */
+function readBorrowedWide(address: Pointer | null): string | null {
   if (!address) {
     return "";
   }
-  let bytes = 0;
-  while (bytes < 2 * MAX_RESULT_CHARS && read.u16(address, bytes)) {
-    bytes += 2;
+  const chars = text.symbols.lstrlenW(address);
+  if (chars > MAX_RESULT_CHARS) {
+    return null;
   }
-  return Buffer.from(toArrayBuffer(address, 0, bytes)).toString("utf16le");
+  return Buffer.from(toArrayBuffer(address, 0, chars * 2)).toString("utf16le");
 }
 
 /**
@@ -49,10 +63,18 @@ export function callDevToolsProtocolMethod(
       "ptr",
     ],
     (hresult, json) => {
-      done({
-        hresult: Number(hresult),
-        json: readBorrowedWide(json as Pointer | null),
-      });
+      const body = readBorrowedWide(json as Pointer | null);
+      done(
+        body === null
+          ? {
+              hresult: RESULT_TOO_LARGE_HRESULT,
+              json: "",
+            }
+          : {
+              hresult: Number(hresult),
+              json: body,
+            },
+      );
     },
   );
   const result = withWide(protocolMethod, (name) =>

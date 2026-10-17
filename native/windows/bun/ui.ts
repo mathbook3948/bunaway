@@ -1847,7 +1847,7 @@ try {
             if (!view || view.lifecycle.closed || stopping) {
               log("menu-role-skipped", {
                 role,
-                reason: "window-closed",
+                reason: stopping ? "host-stopping" : "window-closed",
               });
               return;
             }

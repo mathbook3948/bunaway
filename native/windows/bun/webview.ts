@@ -933,8 +933,9 @@ export class WebView {
    * keydown handler might suppress the command; this is unverified and needs an external check.
    *
    * Returns false, doing nothing, while the WebView is closing or not ready. Completion is
-   * observed on the next pump; protocol failures after the call started (for example a
-   * navigating page) are reported through `failed`. A failure to start the call throws.
+   * observed on the next pump; a refused focus move and protocol failures after the call
+   * started (for example a navigating page) are reported through `failed`. A failure to start
+   * the call throws.
    */
   executeEditCommand(
     command: NativeMenuRole,
@@ -944,9 +945,9 @@ export class WebView {
       return false;
     }
     const webview = this.webview;
-    // Completed calls hold only their owner reference and cannot be invoked again.
+    // Once native released a completion it holds only the owner reference, whether or not it ran.
     const finished = this.editCompletions.filter(
-      (completion) => completion.calls > 0 && completion.refs === 1,
+      (completion) => completion.refs === 1,
     );
     if (finished.length) {
       disposeHandlers(finished);
@@ -958,8 +959,15 @@ export class WebView {
       }
     }
     // A closed popup normally returns focus to the page; restore it when the host did not.
+    // A minimized or hidden window can refuse; the command may still apply, so continue.
     if (!this.hasInputFocus()) {
-      this.moveFocusToContent();
+      try {
+        this.moveFocusToContent();
+      } catch (error) {
+        failed(
+          `MoveFocus: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
     this.editCompletions.push(
       callDevToolsProtocolMethod(
@@ -1369,7 +1377,13 @@ export class WebView {
       this.checkShutdownDeadline();
       return false;
     }
-    if (this.completions.slice(0, 2).some((callback) => callback.refs > 1)) {
+    // WebView2 may still hold an in-flight editing-command completion; wait for its release.
+    if (
+      [
+        ...this.completions.slice(0, 2),
+        ...this.editCompletions,
+      ].some((callback) => callback.refs > 1)
+    ) {
       return false;
     }
     if (this.environment5 && this.browserToken !== undefined) {
