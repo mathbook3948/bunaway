@@ -399,23 +399,50 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
             }),
           ),
       ]) {
-        // Notifications are not replayed, so a stale earlier update cannot satisfy this wait,
-        // and the received sequence must differ from the one observed before waiting.
+        // A late WM_CLIPBOARDUPDATE from an earlier operation can still wake a waiter with the
+        // pre-existing sequence, so such a value is ignored and the wait restarts.
         const baseline = pump.symbols.GetClipboardSequenceNumber();
-        let payload: JsonValue | undefined;
-        const change = invoke(() => clipboard.waitForChange(null)).then(
-          (value) => {
-            payload = value;
-          },
-        );
-        // The waiter registers asynchronously in the UI Worker, so keep writing until
-        // one write lands after registration.
         const deadline = Date.now() + 4000;
-        while (payload === undefined && Date.now() < deadline) {
-          await write();
-          await Bun.sleep(50);
+        let payload: JsonValue | undefined;
+        while (payload === undefined) {
+          if (Date.now() >= deadline) {
+            throw new Error(
+              `No clipboard change notification with a sequence other than ${baseline} arrived within 4s.`,
+            );
+          }
+          const controller = new AbortController();
+          let outcome: JsonValue | undefined;
+          const wait = invoke(
+            () => clipboard.waitForChange(null),
+            controller,
+          ).then(
+            (value) => {
+              outcome = value;
+            },
+            () => {
+              // Cancellation after the deadline; reported below as a missing notification.
+            },
+          );
+          // The waiter registers asynchronously in the UI Worker, so keep writing until
+          // one write lands after registration.
+          while (outcome === undefined && Date.now() < deadline) {
+            await write();
+            await Bun.sleep(50);
+          }
+          // Cancel an unsatisfied wait so it never outlives the deadline.
+          controller.abort();
+          await wait;
+          if (
+            outcome !== undefined &&
+            (
+              outcome as {
+                sequence: number;
+              }
+            ).sequence !== baseline
+          ) {
+            payload = outcome;
+          }
         }
-        await change;
         expect(Object.keys(payload as object).sort()).toEqual([
           "changedAt",
           "sequence",

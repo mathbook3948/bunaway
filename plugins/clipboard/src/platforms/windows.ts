@@ -21,9 +21,7 @@ export class WindowsClipboard {
   private readonly pending = new Set<Promise<unknown>>();
   private disposal: Promise<void> | undefined;
 
-  constructor(
-    private readonly changes = new ClipboardChanges(undefined, () => {}),
-  ) {}
+  constructor(private readonly changes: ClipboardChanges) {}
 
   private run<T>(execute: () => T, requestSignal?: AbortSignal): Promise<T> {
     const task = this.withOpen(execute, requestSignal);
@@ -151,18 +149,22 @@ export class WindowsClipboard {
     this.disposal ??= (async () => {
       this.lifetime.abort();
       // Stop notifications first so no event is published while operations drain.
-      let listenerError: unknown;
+      const errors: unknown[] = [];
       try {
         this.changes.dispose();
       } catch (error) {
-        listenerError = error;
+        errors.push(error);
       }
       await Promise.allSettled([
         ...this.pending,
       ]);
-      this.native.dispose();
-      if (listenerError) {
-        throw listenerError;
+      try {
+        this.native.dispose();
+      } catch (error) {
+        errors.push(error);
+      }
+      if (errors.length) {
+        throw new AggregateError(errors, "Clipboard cleanup failed.");
       }
     })();
     return this.disposal;
