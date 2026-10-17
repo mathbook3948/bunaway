@@ -81,7 +81,8 @@ export type SystemTrackSize = {
 /**
  * Client-area range on one axis: the user's logical constraint converted by
  * DPI, intersected with the system track size minus the frame, so the ratio
- * agrees with what WM_GETMINMAXINFO would enforce afterwards.
+ * agrees with what WM_GETMINMAXINFO would enforce afterwards. When the two do
+ * not overlap, the system range is returned.
  */
 function clientRange(
   minimum: number | null,
@@ -91,19 +92,25 @@ function clientRange(
   systemMaximum: number,
   frame: number,
 ): Range {
-  return {
+  const system = {
+    low: Math.max(1, systemMinimum - frame),
+    high: Math.max(1, systemMaximum - frame),
+  };
+  const range = {
     low: Math.max(
-      1,
-      systemMinimum - frame,
+      system.low,
       minimum === null ? 1 : physicalPixels(minimum, dpi),
     ),
     high: Math.min(
-      systemMaximum - frame,
+      system.high,
       maximum === null
         ? Number.POSITIVE_INFINITY
         : physicalPixels(maximum, dpi),
     ),
   };
+  // Constraints that do not overlap the system range cannot be honored by
+  // Windows either, so the system range wins and the window stays inside it.
+  return range.low > range.high ? system : range;
 }
 
 /**

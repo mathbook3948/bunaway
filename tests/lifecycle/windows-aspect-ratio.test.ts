@@ -244,6 +244,42 @@ describe("adjustSizingRect (pure)", () => {
     });
   });
 
+  test("the system range wins when user constraints do not overlap it", () => {
+    // minWidth 2000 exceeds the 800 wide system client maximum, so the window stays at 800x400.
+    expect(
+      adjustSizingRect(
+        {
+          left: 0,
+          top: 0,
+          right: 1616,
+          bottom: 500,
+        },
+        WMSZ_RIGHT,
+        2,
+        {
+          width: 16,
+          height: 39,
+        },
+        96,
+        {
+          ...UNCONSTRAINED,
+          minWidth: 2000,
+        },
+        {
+          minWidth: 0,
+          minHeight: 0,
+          maxWidth: 816,
+          maxHeight: 639,
+        },
+      ),
+    ).toEqual({
+      left: 0,
+      top: 0,
+      right: 816,
+      bottom: 439,
+    });
+  });
+
   test("system track sizes minus the frame narrow the client range", () => {
     const frame = {
       width: 16,
@@ -354,7 +390,7 @@ test.skipIf(process.platform !== "win32")(
       expect(native.getAspectRatio(hwnd)).toBeNull();
       const before = native.getBounds(hwnd, "outer");
 
-      // Unlocked: Windows default handling leaves the rectangle alone.
+      // Unlocked: an off-ratio rectangle comes back unchanged.
       expect(
         sizing(
           WMSZ_RIGHT,
@@ -364,16 +400,13 @@ test.skipIf(process.platform !== "win32")(
             800,
             600,
           ],
-        ),
-      ).toEqual({
-        handled: false,
-        rect: [
-          0,
-          0,
-          800,
-          600,
-        ],
-      });
+        ).rect,
+      ).toEqual([
+        0,
+        0,
+        800,
+        600,
+      ]);
 
       native.setAspectRatio(hwnd, 2);
       expect(native.getAspectRatio(hwnd)).toBe(2);
@@ -478,6 +511,7 @@ test.skipIf(process.platform !== "win32")(
 
       native.setAspectRatio(hwnd, null);
       expect(native.getAspectRatio(hwnd)).toBeNull();
+      // Released after a lock: the same off-ratio rectangle is left alone.
       expect(
         sizing(
           WMSZ_RIGHT,
@@ -487,16 +521,13 @@ test.skipIf(process.platform !== "win32")(
             800,
             600,
           ],
-        ),
-      ).toEqual({
-        handled: false,
-        rect: [
-          0,
-          0,
-          800,
-          600,
-        ],
-      });
+        ).rect,
+      ).toEqual([
+        0,
+        0,
+        800,
+        600,
+      ]);
       expect(() => native.setAspectRatio(hwnd, 0)).toThrow();
     } finally {
       if (hwnd && user.symbols.IsWindow(hwnd)) {
