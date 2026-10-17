@@ -1,5 +1,6 @@
 import type { WindowSizeConstraints } from "@bunaway/plugin-api/native";
 import { physicalPixels } from "./window-size.ts";
+import { WS_CAPTION } from "./window-style.ts";
 
 /** WM_SIZING wParam values naming the edge or corner the user is dragging. */
 export const WMSZ_LEFT = 1;
@@ -77,6 +78,35 @@ export type SystemTrackSize = {
   maxWidth: number;
   maxHeight: number;
 };
+
+/**
+ * Build the system track size for a window style. Only a window with a full
+ * WS_CAPTION gets SM_CXMINTRACK/SM_CYMINTRACK as its minimum outer size; a
+ * captionless window (such as `titlebar: "custom"`) is limited by its frame
+ * alone, so its minimum is the empty-client frame size. This follows ReactOS
+ * co_WinPosGetMinMaxInfo and Wine WINPOS_GetMinMaxInfo; Windows itself was not
+ * verified.
+ *
+ * @param metrics system minimum and maximum track sizes for the window DPI.
+ * @param frame physical non-client size of the window's current style.
+ */
+export function systemTrackSize(
+  style: bigint,
+  metrics: SystemTrackSize,
+  frame: {
+    width: number;
+    height: number;
+  },
+): SystemTrackSize {
+  if ((style & WS_CAPTION) === WS_CAPTION) {
+    return metrics;
+  }
+  return {
+    ...metrics,
+    minWidth: frame.width,
+    minHeight: frame.height,
+  };
+}
 
 /**
  * Client-area range on one axis: the user's logical constraint converted by

@@ -23,7 +23,7 @@ import {
   APP_WINDOW_CLASS_PREFIX,
 } from "@bunaway/runtime-bun/windows-control";
 import { AccessibleTitles } from "./accessible-title.ts";
-import { adjustSizingRect } from "./aspect-ratio.ts";
+import { adjustSizingRect, systemTrackSize } from "./aspect-ratio.ts";
 import { monitorServices } from "./monitors.ts";
 import type { SessionMessageHandler } from "./session-end.ts";
 import { Taskbar } from "./taskbar.ts";
@@ -2185,12 +2185,16 @@ export class Windows {
       frame,
       dpi,
       this.getSizeConstraints(window),
-      {
-        minWidth: user.symbols.GetSystemMetricsForDpi(SM_CXMINTRACK, dpi),
-        minHeight: user.symbols.GetSystemMetricsForDpi(SM_CYMINTRACK, dpi),
-        maxWidth: user.symbols.GetSystemMetricsForDpi(SM_CXMAXTRACK, dpi),
-        maxHeight: user.symbols.GetSystemMetricsForDpi(SM_CYMAXTRACK, dpi),
-      },
+      systemTrackSize(
+        style,
+        {
+          minWidth: user.symbols.GetSystemMetricsForDpi(SM_CXMINTRACK, dpi),
+          minHeight: user.symbols.GetSystemMetricsForDpi(SM_CYMINTRACK, dpi),
+          maxWidth: user.symbols.GetSystemMetricsForDpi(SM_CXMAXTRACK, dpi),
+          maxHeight: user.symbols.GetSystemMetricsForDpi(SM_CYMAXTRACK, dpi),
+        },
+        frame,
+      ),
     );
     view.setInt32(0, adjusted.left, true);
     view.setInt32(4, adjusted.top, true);

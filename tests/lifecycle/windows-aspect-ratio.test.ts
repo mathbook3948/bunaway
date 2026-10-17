@@ -3,6 +3,7 @@ import {
   adjustSizingRect as adjustWithTrack,
   type SizingRect,
   type SystemTrackSize,
+  systemTrackSize,
   WMSZ_BOTTOM,
   WMSZ_BOTTOMLEFT,
   WMSZ_BOTTOMRIGHT,
@@ -242,6 +243,28 @@ describe("adjustSizingRect (pure)", () => {
       right: 1920,
       bottom: 1080,
     });
+  });
+
+  test("the system minimum track size applies only to windows with a caption", () => {
+    const metrics = {
+      minWidth: 136,
+      minHeight: 39,
+      maxWidth: 4000,
+      maxHeight: 3000,
+    };
+    const frame = {
+      width: 16,
+      height: 39,
+    };
+    expect(systemTrackSize(0xcf0000n, metrics, frame)).toEqual(metrics);
+    // titlebar "custom" removes WS_CAPTION but keeps the thick frame.
+    expect(systemTrackSize(0x0f0000n, metrics, frame)).toEqual({
+      ...metrics,
+      minWidth: 16,
+      minHeight: 39,
+    });
+    // WS_BORDER alone is not WS_CAPTION (WS_CAPTION = WS_BORDER | WS_DLGFRAME).
+    expect(systemTrackSize(0x800000n, metrics, frame).minWidth).toBe(16);
   });
 
   test("the minimum wins when user constraints do not overlap the system range", () => {
