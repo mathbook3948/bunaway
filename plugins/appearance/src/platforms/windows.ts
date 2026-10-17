@@ -6,7 +6,7 @@ export {
   booleanPreference,
   colorRef,
   isDarkColor,
-  relativeLuminance,
+  usesInvertedColors,
 } from "#appearance/platforms/windows-preferences";
 /** Own reads and subscriptions on the UI worker; direct query-only adapters remain supported. */
 export function initialize(environment: NativeEnvironment) {

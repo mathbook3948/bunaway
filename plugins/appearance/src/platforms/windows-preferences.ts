@@ -20,7 +20,10 @@ const COLOR_WINDOW = 5;
 const COLOR_WINDOWTEXT = 8;
 const COLOR_HIGHLIGHT = 13;
 const COLOR_HIGHLIGHTTEXT = 14;
-const DARK_WINDOW_LUMINANCE_LIMIT = 0.5;
+// Relative luminance whose contrast against black equals its contrast against
+// white: (L + 0.05) / 0.05 = 1.05 / (L + 0.05). Standard high contrast themes
+// use black or white windows, far from this limit.
+const DARK_LUMINANCE_LIMIT = Math.sqrt(1.05 * 0.05) - 0.05;
 const wide = (value: string) => Buffer.from(`${value}\0`, "utf16le");
 
 function failure(
@@ -172,7 +175,7 @@ export function initialize() {
         accentColor: `#${(accent.readUInt32LE() & 0xffffff).toString(16).padStart(6, "0")}`,
         highContrast,
         forcedColors: highContrast,
-        invertedColors: highContrast && isDarkColor(windowColor),
+        invertedColors: usesInvertedColors(highContrast, windowColor),
         reducedMotion: !setting(SPI_GETCLIENTAREAANIMATION),
         transparencyEnabled: booleanPreference(
           preference("EnableTransparency"),
@@ -229,7 +232,7 @@ function linearChannel(value: number): number {
 }
 
 /** WCAG relative luminance (0 black to 1 white) of a `#rrggbb` color. */
-export function relativeLuminance(color: string): number {
+function relativeLuminance(color: string): number {
   const rgb = Number.parseInt(color.slice(1), 16);
   return (
     0.2126 * linearChannel((rgb >>> 16) & 0xff) +
@@ -244,5 +247,16 @@ export function relativeLuminance(color: string): number {
  * nativeTheme.shouldUseInvertedColorScheme.
  */
 export function isDarkColor(color: string): boolean {
-  return relativeLuminance(color) < DARK_WINDOW_LUMINANCE_LIMIT;
+  return relativeLuminance(color) < DARK_LUMINANCE_LIMIT;
+}
+
+/**
+ * Electron's nativeTheme.shouldUseInvertedColorScheme: high contrast is on and
+ * its window color is dark (Chromium's dark high contrast scheme).
+ */
+export function usesInvertedColors(
+  highContrast: boolean,
+  windowColor: string,
+): boolean {
+  return highContrast && isDarkColor(windowColor);
 }

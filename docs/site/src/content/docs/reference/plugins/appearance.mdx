@@ -24,7 +24,7 @@ const preferences = await appearance.getPreferences();
 | appsTheme, systemTheme | HKCU Personalize의 AppsUseLightTheme와 SystemUsesLightTheme 선호. light, dark 또는 null |
 | accentColor | DWM colorization의 RGB 부분. #rrggbb |
 | highContrast, forcedColors | Windows 고대비 활성 플래그. OS의 강제 색 적용을 나타냄 |
-| invertedColors | 고대비가 켜져 있고 COLOR_WINDOW의 상대 휘도(sRGB 선형화, WCAG 가중치)가 0.5 미만이면 true. Electron의 `nativeTheme.shouldUseInvertedColorScheme`와 같은 의미 |
+| invertedColors | 고대비가 켜져 있고 COLOR_WINDOW의 상대 휘도(sRGB 선형화, WCAG 가중치)가 검정과 흰색 대비가 같은 휘도(약 0.179) 미만이면 true. Electron의 `nativeTheme.shouldUseInvertedColorScheme`(어두운 고대비 구성)에 대응 |
 | reducedMotion | Windows client-area animation 설정이 비활성인지 여부 |
 | transparencyEnabled | HKCU Personalize의 EnableTransparency 선호. boolean 또는 null |
 | screenReaderEnabled | Windows SPI_GETSCREENREADER 설정 플래그 |

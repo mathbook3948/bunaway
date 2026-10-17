@@ -174,8 +174,10 @@ Windows의 선택 power 플러그인은 AC와 배터리 상태, 호출 세션의
 
 Windows의 선택 appearance 플러그인은 저장된 테마와 transparency 선호, DWM accent,
 시스템 색과 고대비, reduced motion 및 screen reader 설정 플래그를 조회한다.
+고대비이고 창 색이 어두우면 invertedColors가 true이며, 화면 색 필터는 반영하지 않는다.
 macOS arm64는 AppKit UI 어댑터로 유효 앱 테마, accent와 sRGB 색,
-NSWorkspace의 Increase Contrast, Reduce Motion, Reduce Transparency와 VoiceOver 플래그를 조회한다.
+NSWorkspace의 Increase Contrast, Invert Colors(`accessibilityDisplayShouldInvertColors`),
+Reduce Motion, Reduce Transparency와 VoiceOver 플래그를 조회한다.
 별도 systemTheme은 null이며 forcedColors는 false다. Increase Contrast를 강제 색이나
 Accessibility 신뢰 권한을 보조 기술 사용으로 해석하지 않는다. 나머지 플랫폼은
 `UNSUPPORTED`이며 [appearance 계약](../site/src/content/docs/reference/plugins/appearance.mdx)을 따른다.

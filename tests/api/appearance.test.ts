@@ -11,7 +11,7 @@ import {
   booleanPreference,
   colorRef,
   isDarkColor,
-  relativeLuminance,
+  usesInvertedColors,
 } from "#plugins/appearance/src/platforms/windows";
 import { testAppInfo } from "../fixtures/app-info.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
@@ -83,17 +83,18 @@ test("appearance validates strict input and preserves unknown theme/transparency
   expect(booleanPreference(null)).toBeNull();
   expect(booleanPreference(2)).toBeNull();
   expect(colorRef(0x00ab3412)).toBe("#1234ab");
-  expect(relativeLuminance("#000000")).toBe(0);
-  expect(relativeLuminance("#ffffff")).toBeCloseTo(1, 10);
-  expect(relativeLuminance("#ff0000")).toBeCloseTo(0.2126, 4);
-  expect(relativeLuminance("#00ff00")).toBeCloseTo(0.7152, 4);
-  expect(relativeLuminance("#0000ff")).toBeCloseTo(0.0722, 4);
-  // sRGB mid-gray 0x80 is about 0.216 in linear light, below the 0.5 limit.
-  expect(relativeLuminance("#808080")).toBeCloseTo(0.2159, 3);
+  // The dark limit is the luminance with equal contrast against black and white
+  // (about 0.179), so sRGB gray 0x74 is dark and 0x76 is light.
   expect(isDarkColor("#000000")).toBe(true);
+  expect(isDarkColor("#0000ff")).toBe(true);
+  expect(isDarkColor("#747474")).toBe(true);
+  expect(isDarkColor("#767676")).toBe(false);
+  expect(isDarkColor("#808080")).toBe(false);
+  expect(isDarkColor("#00ff00")).toBe(false);
   expect(isDarkColor("#ffffff")).toBe(false);
-  expect(isDarkColor("#808080")).toBe(true);
-  expect(isDarkColor("#c0c0c0")).toBe(false);
+  expect(usesInvertedColors(true, "#000000")).toBe(true);
+  expect(usesInvertedColors(true, "#ffffff")).toBe(false);
+  expect(usesInvertedColors(false, "#000000")).toBe(false);
   expect(
     registry.allowed(
       {
