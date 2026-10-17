@@ -2,6 +2,11 @@ import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdirSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+  type RelaunchCommand,
+  relaunchCommandLine,
+  relaunchCommandLineTooLong,
+} from "./relaunch.ts";
 
 const INVALID_HANDLE_VALUE = 0xffffffffffffffffn;
 const GENERIC_READ = 0x80000000;
@@ -39,8 +44,6 @@ const CREATE_UNICODE_ENVIRONMENT = 0x0400;
 const CREATE_BREAKAWAY_FROM_JOB = 0x01000000;
 const STARTUPINFOW_BYTES = 104; // Win64
 const PROCESS_INFORMATION_BYTES = 24; // Win64
-/** CreateProcessW rejects command lines of 32767 characters or more. */
-const MAX_COMMAND_LINE_CHARS = 32767;
 /** Longest wait for a previous host to release the app lock after a relaunch. */
 const RELAUNCH_LOCK_WAIT_MS = 30000;
 const RELAUNCH_LOCK_POLL_MS = 50;
@@ -267,53 +270,6 @@ export async function containAppProcessAfterRelaunch(
   }
 }
 
-/** Everything `CreateProcessW` needs to start the relaunched host. */
-export type RelaunchCommand = {
-  /** Absolute path of the host executable; also the first command-line argument. */
-  executable: string;
-  /** Arguments after the executable, in order. */
-  args: readonly string[];
-  cwd: string;
-  env: Record<string, string | undefined>;
-};
-
-/** Quotes one argument so `CommandLineToArgvW` and the C runtime parse it back unchanged. */
-export function quoteWindowsArgument(arg: string): string {
-  if (arg !== "" && !/[\s"]/.test(arg)) {
-    return arg;
-  }
-  let quoted = '"';
-  let backslashes = 0;
-  for (const char of arg) {
-    if (char === "\\") {
-      backslashes++;
-      continue;
-    }
-    // Backslashes only need doubling when a quote follows them.
-    quoted +=
-      char === '"'
-        ? `${"\\".repeat(backslashes * 2 + 1)}"`
-        : `${"\\".repeat(backslashes)}${char}`;
-    backslashes = 0;
-  }
-  return `${quoted}${"\\".repeat(backslashes * 2)}"`;
-}
-
-/** The quoted command line `startOutsideAppJob` passes to `CreateProcessW`. */
-export function relaunchCommandLine(command: RelaunchCommand): string {
-  return [
-    command.executable,
-    ...command.args,
-  ]
-    .map(quoteWindowsArgument)
-    .join(" ");
-}
-
-/** True when `CreateProcessW` would reject the command line for its length. */
-export function relaunchCommandLineTooLong(line: string): boolean {
-  return line.length >= MAX_COMMAND_LINE_CHARS;
-}
-
 /** Builds a sorted UTF-16 environment block, which `CreateProcessW` expects. */
 function environmentBlock(env: RelaunchCommand["env"]): Buffer {
   const entries = Object.entries(env)
@@ -341,8 +297,11 @@ function environmentBlock(env: RelaunchCommand["env"]): Buffer {
  * The Job is made breakaway-capable only for this call. Throws when Windows refuses, for example
  * because an outer Job (a CI runner or launcher) forbids breakaway; the caller then reports the
  * failure and exits without a new process. Requires an active app Job.
+ *
+ * Returns the error when the process started but the Job's breakaway permission could not be
+ * withdrawn afterwards; the launch itself succeeded, so it is a diagnostic and not a failure.
  */
-export function startOutsideAppJob(command: RelaunchCommand): void {
+export function startOutsideAppJob(command: RelaunchCommand): unknown {
   assert(owned);
   const { api, handle } = owned;
   const line = relaunchCommandLine(command);
@@ -403,7 +362,12 @@ export function startOutsideAppJob(command: RelaunchCommand): void {
     }
     throw error;
   }
-  setFlags(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE);
+  try {
+    setFlags(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE);
+  } catch (restoreError) {
+    // The new process is already running, so this is not a launch failure: report it separately.
+    return restoreError;
+  }
 }
 
 /**

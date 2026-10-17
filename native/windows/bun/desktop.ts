@@ -518,9 +518,9 @@ export class DesktopLifecycle {
    * The exit code and relaunch request of the committing call apply only if it is the first.
    */
   commitShutdown(reason: ShutdownReason, request: ShutdownRequest = {}): void {
-    if (reason === "session-end") {
-      // The operating system is ending the session, even if a relaunch was committed first:
-      // a new host must not start during logoff or shutdown.
+    if (reason === "session-end" || reason === "interrupted") {
+      // The operating system or the user (Ctrl+C, SIGTERM) is ending the process, even if a
+      // relaunch was committed first: a new host must not start against that intent.
       this.relaunchRequested = undefined;
     }
     if (this.shutdownReason !== undefined) {

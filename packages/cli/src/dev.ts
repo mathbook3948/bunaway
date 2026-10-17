@@ -93,6 +93,8 @@ export async function devProject(
     },
     inspector,
     options.inspect,
+    undefined,
+    () => controller.change(),
   );
   const sources = new DevWatcher(
     {

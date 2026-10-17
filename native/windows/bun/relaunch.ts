@@ -1,5 +1,54 @@
 import { BunawayError } from "@bunaway/protocol";
-import type { RelaunchCommand } from "./job.ts";
+
+/** CreateProcessW rejects command lines of 32767 characters or more. */
+const MAX_COMMAND_LINE_CHARS = 32767;
+
+/** Everything `CreateProcessW` needs to start the relaunched host. */
+export type RelaunchCommand = {
+  /** Absolute path of the host executable; also the first command-line argument. */
+  executable: string;
+  /** Arguments after the executable, in order. */
+  args: readonly string[];
+  cwd: string;
+  env: Record<string, string | undefined>;
+};
+
+/** Quotes one argument so `CommandLineToArgvW` and the C runtime parse it back unchanged. */
+export function quoteWindowsArgument(arg: string): string {
+  if (arg !== "" && !/[\s"]/.test(arg)) {
+    return arg;
+  }
+  let quoted = '"';
+  let backslashes = 0;
+  for (const char of arg) {
+    if (char === "\\") {
+      backslashes++;
+      continue;
+    }
+    // Backslashes only need doubling when a quote follows them.
+    quoted +=
+      char === '"'
+        ? `${"\\".repeat(backslashes * 2 + 1)}"`
+        : `${"\\".repeat(backslashes)}${char}`;
+    backslashes = 0;
+  }
+  return `${quoted}${"\\".repeat(backslashes * 2)}"`;
+}
+
+/** The quoted command line `startOutsideAppJob` passes to `CreateProcessW`. */
+export function relaunchCommandLine(command: RelaunchCommand): string {
+  return [
+    command.executable,
+    ...command.args,
+  ]
+    .map(quoteWindowsArgument)
+    .join(" ");
+}
+
+/** True when `CreateProcessW` would reject the command line for its length. */
+export function relaunchCommandLineTooLong(line: string): boolean {
+  return line.length >= MAX_COMMAND_LINE_CHARS;
+}
 
 /** Marks a host started by `relaunch()`, so it waits for its predecessor to release the app lock. */
 export const RELAUNCH_ENVIRONMENT = "BUNAWAY_RELAUNCH";

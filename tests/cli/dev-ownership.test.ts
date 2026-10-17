@@ -39,7 +39,7 @@ const built: BuiltPackage = {
 };
 
 /** Lets tests explicitly complete process exits without timers or native resources. */
-function appProcess(calls: string[]) {
+function appProcess(calls: string[], reloadable = false) {
   const exit = Promise.withResolvers<number>();
   let exitCode: number | null = null;
   let relaunch: readonly string[] | undefined;
@@ -58,8 +58,15 @@ function appProcess(calls: string[]) {
       close() {
         calls.push("channel-close");
       },
-      async reload() {
-        throw new Error("Unexpected reload in lifecycle test.");
+      async reload(request) {
+        if (!reloadable) {
+          throw new Error("Unexpected reload in lifecycle test.");
+        }
+        return {
+          kind: "bunaway:reload-result",
+          id: request.id,
+          status: "reloaded",
+        };
       },
       get relaunch() {
         return relaunch;
@@ -685,4 +692,71 @@ test("a restart from the controller supersedes a relaunch still launching, leavi
   processes[2]?.exit(0);
   await closing;
   expect(stopped).toContain(processes[2]?.app.process);
+});
+
+test("a relaunch after a hot reload rebuilds through the controller with its arguments", async () => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", {
+    value: "win32",
+  });
+  try {
+    const processes = [
+      appProcess([], true),
+      appProcess([], true),
+    ];
+    const launchedWith: (readonly string[])[] = [];
+    let rebuilds = 0;
+    const owner: DevApp = new DevApp(
+      new AbortController().signal,
+      () => {},
+      undefined,
+      undefined,
+      {
+        async launch(_project, _built, _isCurrent, appArguments) {
+          launchedWith.push(appArguments);
+          return processes[launchedWith.length - 1]?.app;
+        },
+        async stop(app) {
+          await app.process.exited;
+        },
+        async bundleReload() {
+          return "digest";
+        },
+      },
+      // Stands in for the restart controller: stop, build, then start the new host.
+      async () => {
+        rebuilds += 1;
+        await owner.stop();
+        await owner.start(project, built, () => true);
+      },
+    );
+    await owner.start(project, built, () => true);
+    expect(await owner.reload(project, [], () => true)).toBe(true);
+    processes[0]?.requestRelaunch([
+      "--again",
+    ]);
+    processes[0]?.exit(0);
+    for (
+      let waited = 0;
+      !(launchedWith.length >= 2 && owner.running) && waited < 100;
+      waited++
+    ) {
+      await Bun.sleep(1);
+    }
+    // The last full build predates the reload, so the host came from a rebuild.
+    expect(rebuilds).toBe(1);
+    expect(launchedWith).toEqual([
+      [],
+      [
+        "--again",
+      ],
+    ]);
+    const closing = owner.stop();
+    processes[1]?.exit(0);
+    await closing;
+  } finally {
+    if (platform) {
+      Object.defineProperty(process, "platform", platform);
+    }
+  }
 });

@@ -3,12 +3,10 @@ import type { DesktopOptions } from "@bunaway/core";
 import { DesktopLifecycle } from "#native/windows/bun/desktop";
 import {
   quoteWindowsArgument,
-  relaunchCommandLine,
-  relaunchCommandLineTooLong,
-} from "#native/windows/bun/job";
-import {
   RELAUNCH_ENVIRONMENT,
   relaunchCommand,
+  relaunchCommandLine,
+  relaunchCommandLineTooLong,
 } from "#native/windows/bun/relaunch";
 
 function lifecycle(
@@ -338,6 +336,18 @@ test("relaunch records validated arguments and the first committed request wins"
     }),
   ).toBe(false);
   expect(ended.desktop.relaunch).toBeUndefined();
+
+  // Ctrl+C or SIGTERM after a relaunch was committed clears it, but keeps the committed code.
+  const interrupted = lifecycle();
+  expect(
+    await interrupted.desktop.context.relaunch({
+      exitCode: 4,
+    }),
+  ).toBe(true);
+  expect(interrupted.desktop.relaunch).toBeDefined();
+  interrupted.desktop.commitShutdown("interrupted");
+  expect(interrupted.desktop.relaunch).toBeUndefined();
+  expect(interrupted.desktop.exitCode).toBe(4);
 });
 
 test("a request overlapping a pending beforeQuit check joins only an identical one", async () => {

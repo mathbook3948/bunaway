@@ -32,6 +32,8 @@ export interface DevAppOperations {
     appArguments: readonly string[],
   ): Promise<RunningDevApp | undefined>;
   stop(app: RunningDevApp): Promise<void>;
+  /** Bundles changed app code for a hot reload and returns its digest; the default builds it. */
+  bundleReload?(project: Project, assets: string, id: string): Promise<string>;
 }
 
 const WINDOWS_CLEANUP_TIMEOUT_MS = 40000;
@@ -163,8 +165,12 @@ export class DevApp {
         built: BuiltPackage;
         settings: ReturnType<typeof launchSettings>;
         project: Project;
+        /** True once a hot reload succeeded, so the last full build no longer matches the code. */
+        reloaded: boolean;
       })
     | undefined;
+  /** Arguments of an app-requested relaunch that is waiting for the rebuilt host to start. */
+  private rebuildArguments: readonly string[] = [];
   private stopping: Promise<void> | undefined;
   /** Bumped by every restart-controller start or stop, to tell a stale relaunch from a current one. */
   private generation = 0;
@@ -187,6 +193,8 @@ export class DevApp {
         ),
       stop: stopDevApp,
     },
+    /** Queues a rebuild through the restart controller; its `start` then launches the new host. */
+    private readonly rebuild: (() => Promise<void>) | undefined = undefined,
   ) {}
 
   get running(): boolean {
@@ -203,7 +211,9 @@ export class DevApp {
     isCurrent: () => boolean,
   ): Promise<void> {
     this.generation += 1;
-    return this.launch(project, built, isCurrent, []);
+    const appArguments = this.rebuildArguments;
+    this.rebuildArguments = [];
+    return this.launch(project, built, isCurrent, appArguments);
   }
 
   /** Launches one host with `appArguments`, which apply to that host only. */
@@ -237,6 +247,7 @@ export class DevApp {
       built,
       settings: launchSettings(project),
       project,
+      reloaded: false,
     };
     if (this.signal.aborted || !isCurrent()) {
       await this.release();
@@ -260,10 +271,12 @@ export class DevApp {
   }
 
   /**
-   * Starts a fresh host from the build that was running, without rebuilding, so a source error
-   * cannot turn the app's relaunch into a failure. The arguments apply to that one host. A failure
-   * is reported and leaves the session running without an app, as after a failed build: the next
-   * source change starts one normally.
+   * Starts a fresh host that applies `appArguments` to that one host. Without a hot reload since
+   * the last full build, it starts from that build without rebuilding, so a source error cannot
+   * turn the app's relaunch into a failure. After a hot reload the last build holds the code from
+   * before it, so the host is rebuilt through the restart controller, which serializes it with
+   * source changes. A failure is reported and leaves the session running without an app, as after
+   * a failed build: the next source change starts one normally.
    */
   private async relaunch(
     previous: NonNullable<DevApp["active"]>,
@@ -276,6 +289,11 @@ export class DevApp {
     try {
       await this.release();
       if (!isCurrent()) {
+        return;
+      }
+      if (previous.reloaded && this.rebuild) {
+        this.rebuildArguments = appArguments;
+        await this.rebuild();
         return;
       }
       await this.launch(
@@ -345,7 +363,7 @@ export class DevApp {
       return false;
     }
     const id = crypto.randomUUID();
-    const sha256 = await bundleWindowsReload(
+    const sha256 = await (this.operations.bundleReload ?? bundleWindowsReload)(
       next,
       resolve(current.built.package, "assets"),
       id,
@@ -370,6 +388,7 @@ export class DevApp {
     if (result.status === "failed") {
       throw new Error(result.message ?? "App reload failed.");
     }
+    current.reloaded = true;
     return true;
   }
 }

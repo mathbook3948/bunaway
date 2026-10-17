@@ -227,16 +227,34 @@ export async function relaunchHost(
       await requestCliRelaunch(options.ipc ?? process, argv);
       return;
     }
-    startOutsideAppJob(relaunchCommand(options.host, argv));
+    const restoreFailure = startOutsideAppJob(
+      relaunchCommand(options.host, argv),
+    );
+    if (restoreFailure !== undefined) {
+      await logRelaunchDiagnostic(
+        options.dataRoot,
+        "relaunch-job-restore-failed",
+        restoreFailure,
+      );
+    }
   } catch (error) {
     console.error("Relaunch failed:", error);
-    const log = new DiagnosticLog(resolve(options.dataRoot, "logs/host.log"));
-    await log
-      .write("relaunch-failed", {
-        message: error instanceof Error ? error.message : String(error),
-      })
-      .catch(() => {});
+    await logRelaunchDiagnostic(options.dataRoot, "relaunch-failed", error);
   }
+}
+
+/** Records a relaunch problem in the host log; a log failure cannot change the exit. */
+async function logRelaunchDiagnostic(
+  dataRoot: string,
+  event: string,
+  error: unknown,
+): Promise<void> {
+  const log = new DiagnosticLog(resolve(dataRoot, "logs/host.log"));
+  await log
+    .write(event, {
+      message: error instanceof Error ? error.message : String(error),
+    })
+    .catch(() => {});
 }
 
 /**

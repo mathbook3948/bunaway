@@ -2,17 +2,14 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { createConnection, createServer, type Socket } from "node:net";
 import { win32 } from "node:path";
-import {
-  MAX_LAUNCH_ARGUMENT_BYTES,
-  MAX_LAUNCH_ARGUMENTS,
-} from "@bunaway/runtime-bun/worker-channel";
+import { MAX_LAUNCH_ARGUMENTS } from "@bunaway/runtime-bun/worker-channel";
 
 export type LaunchArguments = {
   argv: string[];
   cwd: string;
 };
-/** The pipe frame carries the arguments plus the working directory, so it keeps the same bound. */
-const MAX_BYTES = MAX_LAUNCH_ARGUMENT_BYTES;
+/** Bound of one pipe frame, which carries the arguments plus the working directory. */
+const MAX_BYTES = 64 * 1024;
 const MAX_PENDING = 32;
 
 /** Derives the per-app named pipe from the canonical data directory. */

@@ -35,13 +35,13 @@ import {
 } from "./desktop.ts";
 import { DevelopmentApp } from "./development-app.ts";
 import type { LaunchArguments, listenForInstances } from "./instance.ts";
+import { activeDescendants, containAppProcess } from "./job.ts";
 import {
-  activeDescendants,
-  containAppProcess,
+  type HostLaunch,
+  relaunchCommand,
   relaunchCommandLine,
   relaunchCommandLineTooLong,
-} from "./job.ts";
-import { type HostLaunch, relaunchCommand } from "./relaunch.ts";
+} from "./relaunch.ts";
 import { releaseSessionEndWait } from "./session-end.ts";
 import { readWebViewVersion } from "./webview-version.ts";
 
