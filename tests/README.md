@@ -784,7 +784,8 @@ Explorer와 compiled helper로 파일 및 HTTP/HTTPS URL 하나의 argv 보존�
 앱 종료 뒤 helper 생존을 확인한다. 두 검사와 기존 opener STA 검사는 `host:windows`에도 포함한다.
 `lifecycle/windows-opener-recent.test.ts`는 `opener.addRecentDocument`와 `opener.clearRecentDocuments`의
 입력 거부와 dispose를 항상 확인한다. 사용자의 셸 최근 항목 전체를 지우는 실제 add와 clear는
-`BUNAWAY_OPENER_RECENT_MUTATE=1` 또는 `GITHUB_ACTIONS`가 있을 때만 실행하고, 그렇지 않으면
+`BUNAWAY_OPENER_RECENT_MUTATE=1` 또는 GitHub 호스팅 러너(`RUNNER_ENVIRONMENT=github-hosted`)에서만
+실행하고(self-hosted 러너는 명시적으로 지정해야 한다), 그렇지 않으면
 경고를 남긴다. 최근 항목 기록이 정책으로 꺼진 러너에서는 바로가기 검사를 생략하며 add와 clear 결과가
 검증되지 않는다는 경고를 남긴다. 셸 호출은 전용 STA 스레드에서 실행하므로, 이 테스트는 add, clear,
 dispose 뒤 새 스레드의 `CoGetApartmentType`이 미초기화로 남는지 확인해 뒤이어 같은 프로세스에서

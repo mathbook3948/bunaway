@@ -12,12 +12,16 @@ const createOperations = createOperationsFactory(
 const RECENT_POLL_ATTEMPTS = 50;
 const RECENT_POLL_INTERVAL_MS = 100;
 const RECENT_DIAGNOSTIC_FILE_COUNT = 20;
+// Below the opener's 5 second dispose wait for stuck helpers.
+const DISPOSE_BOUND_MS = 3000;
 // clearRecentDocuments empties the whole user's Shell Recent Items, so a developer's
-// real list must not be touched. Runners opt in with BUNAWAY_OPENER_RECENT_MUTATE=1;
-// GitHub Actions is treated as opted in because ci.yml cannot set the variable.
+// real list must not be touched. Machines opt in with BUNAWAY_OPENER_RECENT_MUTATE=1.
+// GitHub-hosted runners are disposable and count as opted in, because this change does
+// not modify ci.yml and so cannot set the variable there. Self-hosted runners may be a
+// developer's machine and must opt in explicitly.
 const mutatesShellRecentItems =
   process.env.BUNAWAY_OPENER_RECENT_MUTATE === "1" ||
-  Boolean(process.env.GITHUB_ACTIONS);
+  process.env.RUNNER_ENVIRONMENT === "github-hosted";
 const RECENT_POLICY_VALUES = [
   [
     "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
@@ -268,7 +272,11 @@ test.skipIf(process.platform !== "win32")(
         );
       }
 
+      // Helpers that finished or were removed from tracking must not delay dispose;
+      // only a stuck helper makes it wait out its 5 second bound.
+      const disposeStarted = performance.now();
       await adapter.dispose();
+      expect(performance.now() - disposeStarted).toBeLessThan(DISPOSE_BOUND_MS);
       await adapter.dispose();
       await expect(call("opener.clearRecentDocuments", {})).rejects.toThrow(
         expect.objectContaining({

@@ -108,7 +108,8 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
   ): Promise<null> {
     return api.addRecentDocument(
       {
-        path: normalizeFilePath(path),
+        // Same spelling rule as openFile: a POSIX path reaches the macOS host, which reports UNSUPPORTED.
+        path: normalizeOpenerFilePath(path),
       },
       options,
     );

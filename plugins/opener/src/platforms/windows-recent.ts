@@ -147,19 +147,13 @@ function withCause(error: BunawayError, cause: unknown): BunawayError {
   return error;
 }
 
-type WaitOutcome = "done" | "timeout" | "aborted";
-
 /**
- * Wait on the calling STA thread until `done` is true, the timeout passes or `signal`
- * aborts, pumping its messages so the apartment stays responsive. The loop is
- * synchronous, so an abort is observed only once the signal's state has been updated;
- * an abort that depends on this thread's event loop is seen late or not at all.
+ * Wait on the calling STA thread until `done` is true or the timeout passes, pumping
+ * its messages so the apartment stays responsive. Returns whether `done` became true.
+ * The loop is synchronous: this thread's event loop does not run, so cancellation and
+ * shutdown packets are not handled until it returns.
  */
-function waitPumping(
-  done: () => boolean,
-  timeoutMs: number,
-  signal?: AbortSignal,
-): WaitOutcome {
+function waitPumping(done: () => boolean, timeoutMs: number): boolean {
   const user = dlopen("user32.dll", {
     MsgWaitForMultipleObjectsEx: {
       args: [
@@ -198,11 +192,8 @@ function waitPumping(
     const message = Buffer.alloc(MESSAGE_BYTES);
     const deadline = performance.now() + timeoutMs;
     while (!done()) {
-      if (signal?.aborted) {
-        return "aborted";
-      }
       if (performance.now() >= deadline) {
-        return "timeout";
+        return false;
       }
       user.symbols.MsgWaitForMultipleObjectsEx(
         0,
@@ -216,7 +207,7 @@ function waitPumping(
         user.symbols.DispatchMessageW(ptr(message));
       }
     }
-    return "done";
+    return true;
   } finally {
     user.close();
   }
@@ -237,9 +228,9 @@ export function createRecentDocuments() {
   /**
    * Run one Shell call on a helper and wait, pumping this thread's messages, only
    * until the call has returned.
-   * @throws CANCELLED when disposed or already aborted (no helper is created), or when
-   * the abort arrives while waiting; then the Shell call may already be in progress and
-   * the request may still be applied.
+   * The wait is synchronous, so `signal` is checked only before the helper is created;
+   * cancellation and shutdown take effect after the call returns or the deadline passes.
+   * @throws CANCELLED when disposed or already aborted (no helper is created).
    * @throws INTERNAL with a diagnostic cause when the helper cannot start or fails.
    * @throws TIMEOUT when the call did not return in time; the request may still be applied.
    */
@@ -294,25 +285,27 @@ export function createRecentDocuments() {
       state: new Int32Array(sharedState),
     };
     helpers.add(helper);
+    // A helper that dies before it can publish FINISHED (for example after terminate)
+    // would otherwise stay tracked and make dispose wait for it. Events are delivered
+    // only while the event loop runs, not during the synchronous waits, so this
+    // removal takes effect before the next request or before dispose starts.
+    worker.addEventListener("close", () => helpers.delete(helper));
     const phase = () => Atomics.load(helper.state, SLOT_PHASE);
-    const outcome = waitPumping(
+    const returned = waitPumping(
       () => phase() !== PHASE_STARTING,
       RECENT_REQUEST_TIMEOUT_MS,
-      signal,
     );
-    if (outcome !== "done") {
-      // Terminate may not interrupt a blocked native call, so the helper stays tracked.
+    if (!returned) {
+      // This call decides to stop the helper, so it is no longer tracked: a terminated
+      // thread never publishes FINISHED and dispose must not wait for it. Terminate may
+      // not interrupt a blocked native call, so the Shell request may still be applied.
+      helpers.delete(helper);
       void worker.terminate();
-      throw outcome === "aborted"
-        ? new BunawayError({
-            code: "CANCELLED",
-            message: "Recent Items request cancelled and may still be applied.",
-          })
-        : new BunawayError({
-            code: "TIMEOUT",
-            message:
-              "Windows Recent Items request timed out and may still be applied.",
-          });
+      throw new BunawayError({
+        code: "TIMEOUT",
+        message:
+          "Windows Recent Items request timed out and may still be applied.",
+      });
     }
     if (phase() === PHASE_FAILED) {
       throw withCause(

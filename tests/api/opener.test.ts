@@ -168,6 +168,10 @@ test("public file APIs use caller context and preserve OS failure codes", async 
         await opener.addRecentDocument(path.replaceAll("\\", "/")),
       ).toBeNull();
       expect(await opener.clearRecentDocuments()).toBeNull();
+      // A POSIX path must reach the host, where macOS reports UNSUPPORTED.
+      expect(
+        await opener.addRecentDocument('/private/tmp/한글 값,".txt'),
+      ).toBeNull();
       denied = true;
       await expect(opener.openFile(path)).rejects.toMatchObject({
         code: "PERMISSION_DENIED",
@@ -216,6 +220,7 @@ test("public file APIs use caller context and preserve OS failure codes", async 
     "opener.revealFile",
     "opener.addRecentDocument",
     "opener.clearRecentDocuments",
+    "opener.addRecentDocument",
     "opener.openFile",
     "opener.trashFile",
     "opener.addRecentDocument",
@@ -241,6 +246,9 @@ test("public file APIs use caller context and preserve OS failure codes", async 
       path,
     },
     {},
+    {
+      path: '/private/tmp/한글 값,".txt',
+    },
     {
       path,
     },
