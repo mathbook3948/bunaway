@@ -1,17 +1,43 @@
+import { dlopen, ptr } from "bun:ffi";
 import { BunawayError } from "@bunaway/plugin";
 
-const STATUS_PENDING = 0;
-const STATUS_DONE = 1;
-const STATUS_FAILED = 2;
-const STATUS_BYTES = 4;
+// Layout of the Int32 state shared with a helper thread.
+const SLOT_PHASE = 0;
+const SLOT_STAGE = 1;
+const SLOT_HRESULT = 2;
+const SLOT_FINISHED = 3;
+const STATE_SLOTS = 4;
+const STATE_BYTES = STATE_SLOTS * Int32Array.BYTES_PER_ELEMENT;
+const PHASE_STARTING = 0;
+/** SHAddToRecentDocs returned; the helper may still be settling. */
+const PHASE_REQUESTED = 1;
+const PHASE_FAILED = 2;
+const STAGE_LOAD = 1;
+const STAGE_INITIALIZE = 2;
+const STAGE_CALL = 3;
+const STAGE_SETTLE = 4;
+const STAGE_NAMES: Readonly<Record<number, string>> = {
+  [STAGE_LOAD]: "load",
+  [STAGE_INITIALIZE]: "initialize",
+  [STAGE_CALL]: "call",
+  [STAGE_SETTLE]: "settle",
+};
 /**
  * SHAddToRecentDocs has no completion signal, and the Shell finishes part of its
  * work (the Recent shortcut and jump list updates) after the call returns. The helper
  * thread keeps pumping messages for this long before it releases its apartment.
+ * Callers do not wait for it.
  */
 const RECENT_SETTLE_MS = 250;
-/** Upper bound for the helper thread, including startup, so a stuck Shell cannot block the I/O worker forever. */
-const RECENT_TIMEOUT_MS = 10_000;
+/** Upper bound for helper startup and the Shell call, so a stuck Shell cannot block the I/O thread forever. */
+const RECENT_REQUEST_TIMEOUT_MS = 10_000;
+/** Upper bound for dispose to wait for helpers that are still settling or stuck. */
+const RECENT_DISPOSE_TIMEOUT_MS = 5_000;
+const WAIT_POLL_MS = 5;
+const QS_ALLINPUT = 0x4ff;
+const MWMO_INPUTAVAILABLE = 0x4;
+const PM_REMOVE = 0x1;
+const MESSAGE_BYTES = 48;
 
 /**
  * Source of the helper thread. Calling SHAddToRecentDocs from the opener's own thread
@@ -24,19 +50,23 @@ const RECENT_TIMEOUT_MS = 10_000;
  * model the Shell expects, and exits afterwards. A Windows lifecycle test checks that
  * a fresh thread still sees no apartment after add and clear. The source is inline
  * because plugin bundles have a single entry point.
+ *
+ * The helper reports only through the shared state: the phase flips to REQUESTED when
+ * the Shell call returns, a failure records its stage and HRESULT, and FINISHED is set
+ * last, after CoUninitialize, whatever happened. It never throws to its owner.
  */
 const RECENT_THREAD_SOURCE = `
 import { dlopen, ptr } from "bun:ffi";
 import { workerData } from "node:worker_threads";
 const COINIT_APARTMENTTHREADED = 0x2;
 const SHARD_PATHW = 0x3;
-const QS_ALLINPUT = 0x4ff;
-const MWMO_INPUTAVAILABLE = 0x4;
-const PM_REMOVE = 0x1;
-const MESSAGE_BYTES = 48;
 const { signal, path, settleMs } = workerData;
-const status = new Int32Array(signal);
-let result = ${STATUS_FAILED};
+const state = new Int32Array(signal);
+const publish = (slot, value) => {
+  Atomics.store(state, slot, value);
+  Atomics.notify(state, slot);
+};
+let stage = ${STAGE_LOAD};
 try {
   const ole = dlopen("ole32.dll", {
     CoInitializeEx: { args: ["ptr", "u32"], returns: "i32" },
@@ -52,21 +82,29 @@ try {
     DispatchMessageW: { args: ["ptr"], returns: "i64" },
   });
   try {
-    if (ole.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED) >= 0) {
+    stage = ${STAGE_INITIALIZE};
+    const initialized = ole.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED);
+    if (initialized < 0) {
+      state[${SLOT_HRESULT}] = initialized;
+      state[${SLOT_STAGE}] = stage;
+      publish(${SLOT_PHASE}, ${PHASE_FAILED});
+    } else {
       try {
+        stage = ${STAGE_CALL};
         // Keep the UTF-16 buffer referenced until the call returns. A null path clears the list.
         const wide = path === null ? null : Buffer.from(path + "\\0", "utf16le");
         shell.symbols.SHAddToRecentDocs(SHARD_PATHW, wide ? ptr(wide) : null);
-        const message = Buffer.alloc(MESSAGE_BYTES);
+        publish(${SLOT_PHASE}, ${PHASE_REQUESTED});
+        stage = ${STAGE_SETTLE};
+        const message = Buffer.alloc(${MESSAGE_BYTES});
         const deadline = performance.now() + settleMs;
         for (let remaining = settleMs; remaining > 0; remaining = deadline - performance.now()) {
-          user.symbols.MsgWaitForMultipleObjectsEx(0, null, Math.ceil(remaining), QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-          while (user.symbols.PeekMessageW(ptr(message), null, 0, 0, PM_REMOVE)) {
+          user.symbols.MsgWaitForMultipleObjectsEx(0, null, Math.ceil(remaining), ${QS_ALLINPUT}, ${MWMO_INPUTAVAILABLE});
+          while (user.symbols.PeekMessageW(ptr(message), null, 0, 0, ${PM_REMOVE})) {
             user.symbols.TranslateMessage(ptr(message));
             user.symbols.DispatchMessageW(ptr(message));
           }
         }
-        result = ${STATUS_DONE};
       } finally {
         ole.symbols.CoUninitialize();
       }
@@ -76,28 +114,116 @@ try {
     shell.close();
     ole.close();
   }
+} catch {
+  state[${SLOT_STAGE}] = stage;
+  if (Atomics.load(state, ${SLOT_PHASE}) === ${PHASE_STARTING}) {
+    publish(${SLOT_PHASE}, ${PHASE_FAILED});
+  }
 } finally {
-  Atomics.store(status, 0, result);
-  Atomics.notify(status, 0);
+  publish(${SLOT_FINISHED}, 1);
 }
 `;
 
-function recentFailed(message: string): BunawayError {
-  return new BunawayError({
-    code: "INTERNAL",
-    message,
-  });
+/** One helper thread and the state it shares with its owner. */
+type Helper = {
+  worker: Worker;
+  state: Int32Array;
+  /** Message of an error event the worker raised outside its own reporting. */
+  workerError?: string;
+};
+
+function isFinished(helper: Helper): boolean {
+  return Atomics.load(helper.state, SLOT_FINISHED) === 1;
+}
+
+/** Create an error that keeps its trusted diagnostic cause out of the public message. */
+function withCause(error: BunawayError, cause: unknown): BunawayError {
+  error.cause = cause;
+  return error;
 }
 
 /**
- * Own the helper thread source for Shell Recent Items requests.
- * Each request runs on a short-lived STA thread; dispose releases the source URL.
+ * Wait on the calling STA thread until `done` is true or the timeout passes, pumping
+ * its messages so the apartment stays responsive. Returns whether `done` became true.
+ */
+function waitPumping(done: () => boolean, timeoutMs: number): boolean {
+  const user = dlopen("user32.dll", {
+    MsgWaitForMultipleObjectsEx: {
+      args: [
+        "u32",
+        "ptr",
+        "u32",
+        "u32",
+        "u32",
+      ],
+      returns: "u32",
+    },
+    PeekMessageW: {
+      args: [
+        "ptr",
+        "ptr",
+        "u32",
+        "u32",
+        "u32",
+      ],
+      returns: "i32",
+    },
+    TranslateMessage: {
+      args: [
+        "ptr",
+      ],
+      returns: "i32",
+    },
+    DispatchMessageW: {
+      args: [
+        "ptr",
+      ],
+      returns: "i64",
+    },
+  });
+  try {
+    const message = Buffer.alloc(MESSAGE_BYTES);
+    const deadline = performance.now() + timeoutMs;
+    while (!done()) {
+      if (performance.now() >= deadline) {
+        return false;
+      }
+      user.symbols.MsgWaitForMultipleObjectsEx(
+        0,
+        null,
+        WAIT_POLL_MS,
+        QS_ALLINPUT,
+        MWMO_INPUTAVAILABLE,
+      );
+      while (user.symbols.PeekMessageW(ptr(message), null, 0, 0, PM_REMOVE)) {
+        user.symbols.TranslateMessage(ptr(message));
+        user.symbols.DispatchMessageW(ptr(message));
+      }
+    }
+    return true;
+  } finally {
+    user.close();
+  }
+}
+
+/**
+ * Own the helper threads that call the Shell for Recent Items.
+ * A request returns once SHAddToRecentDocs has returned; the helper then settles and
+ * exits on its own while this object tracks it. Dispose waits for tracked helpers,
+ * terminates any that do not finish, and never throws for them.
  * Calls after disposal throw a `CANCELLED` error.
  */
 export function createRecentDocuments() {
   let disposed = false;
   let sourceUrl: string | undefined;
-  /** Block the calling I/O thread until the helper thread has released its apartment. */
+  const helpers = new Set<Helper>();
+
+  /**
+   * Run one Shell call on a helper and wait, pumping this thread's messages, only
+   * until the call has returned.
+   * @throws INTERNAL with a diagnostic cause when the helper cannot start or fails.
+   * @throws TIMEOUT when the call did not return in time; the request may still be applied.
+   */
   const request = (path: string | null): void => {
     if (disposed) {
       throw new BunawayError({
@@ -105,13 +231,17 @@ export function createRecentDocuments() {
         message: "Opener has been disposed.",
       });
     }
+    for (const helper of helpers) {
+      if (isFinished(helper)) {
+        helpers.delete(helper);
+      }
+    }
     sourceUrl ??= URL.createObjectURL(
       new Blob([
         RECENT_THREAD_SOURCE,
       ]),
     );
-    const signal = new SharedArrayBuffer(STATUS_BYTES);
-    const status = new Int32Array(signal);
+    const signal = new SharedArrayBuffer(STATE_BYTES);
     // Bun's WorkerOptions type omits workerData, which the helper reads from node:worker_threads.
     const options: WorkerOptions & {
       workerData: unknown;
@@ -125,14 +255,55 @@ export function createRecentDocuments() {
     let worker: Worker;
     try {
       worker = new Worker(sourceUrl, options);
-    } catch {
-      throw recentFailed("Opener could not start its Recent Items thread.");
+    } catch (error) {
+      throw withCause(
+        new BunawayError({
+          code: "INTERNAL",
+          message: "Opener could not start its Recent Items thread.",
+        }),
+        error,
+      );
     }
-    Atomics.wait(status, 0, STATUS_PENDING, RECENT_TIMEOUT_MS);
-    if (Atomics.load(status, 0) !== STATUS_DONE) {
-      // A timed-out or failed helper may still hold the Shell; stop its thread.
+    const helper: Helper = {
+      worker,
+      state: new Int32Array(signal),
+    };
+    helpers.add(helper);
+    // The helper reports through its state; this only keeps a stray error from becoming uncaught.
+    worker.addEventListener("error", (event) => {
+      event.preventDefault();
+      helper.workerError = event.message;
+    });
+    const phase = () => Atomics.load(helper.state, SLOT_PHASE);
+    const returned = waitPumping(
+      () => phase() !== PHASE_STARTING,
+      RECENT_REQUEST_TIMEOUT_MS,
+    );
+    if (!returned) {
+      // Terminate may not interrupt a blocked native call, so the helper stays tracked.
       void worker.terminate();
-      throw recentFailed("Windows could not update Recent Items.");
+      throw withCause(
+        new BunawayError({
+          code: "TIMEOUT",
+          message:
+            "Windows Recent Items request timed out and may still be applied.",
+        }),
+        helper.workerError,
+      );
+    }
+    if (phase() === PHASE_FAILED) {
+      throw withCause(
+        new BunawayError({
+          code: "INTERNAL",
+          message: "Windows could not update Recent Items.",
+        }),
+        {
+          stage:
+            STAGE_NAMES[Atomics.load(helper.state, SLOT_STAGE)] ?? "unknown",
+          hresult: Atomics.load(helper.state, SLOT_HRESULT) >>> 0,
+          workerError: helper.workerError,
+        },
+      );
     }
   };
   return {
@@ -144,13 +315,35 @@ export function createRecentDocuments() {
     clear(): void {
       request(null);
     },
+    /**
+     * Wait up to a bound for tracked helpers to finish settling, then terminate those
+     * still running. A terminated helper's Shell request may or may not have been applied.
+     */
     dispose(): void {
       if (disposed) {
         return;
       }
       disposed = true;
-      if (sourceUrl) {
-        URL.revokeObjectURL(sourceUrl);
+      try {
+        if (helpers.size > 0) {
+          waitPumping(
+            () =>
+              [
+                ...helpers,
+              ].every(isFinished),
+            RECENT_DISPOSE_TIMEOUT_MS,
+          );
+        }
+        for (const helper of helpers) {
+          if (!isFinished(helper)) {
+            void helper.worker.terminate();
+          }
+        }
+        helpers.clear();
+      } finally {
+        if (sourceUrl) {
+          URL.revokeObjectURL(sourceUrl);
+        }
       }
     },
   };

@@ -3,7 +3,6 @@ import { link, mkdir, realpath, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import createOperationsDefinition from "#plugins/opener/src/index";
 import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
-
 const createOperations = createOperationsFactory(
   createOperationsDefinition,
   "windows",

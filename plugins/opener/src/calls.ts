@@ -97,7 +97,11 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
       options,
     );
   }
-  /** Add an existing Windows file to the user's Shell Recent Items. Success is request acceptance. */
+
+  /**
+   * Add an existing Windows file to the user's Shell Recent Items. Success means the Shell
+   * call returned. A `TIMEOUT` error means the request may still have been applied.
+   */
   async function addRecentDocument(
     path: string,
     options?: NativeInvokeOptions,
@@ -119,6 +123,7 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
   ): Promise<null> {
     return api.clearRecentDocuments({}, options);
   }
+
   return {
     addRecentDocument,
     clearRecentDocuments,
