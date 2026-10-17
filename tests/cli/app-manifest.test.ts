@@ -580,6 +580,8 @@ test("generated process backend embeds app metadata as a build-time constant", a
       identifier: "dev.example.app",
       version: null,
       framework: "0.4.5",
+      isPackaged: true,
+      paths: null,
     };
     const build = await Bun.build({
       entrypoints: [
