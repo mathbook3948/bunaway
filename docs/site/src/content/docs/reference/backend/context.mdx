@@ -52,6 +52,10 @@ Windows는 `manifest.json` 파일 자체가 없어도 두 값이 `null`이지만
 | `paths.executable` | `<appId>.exe`의 실제 경로 | 버전이 고정된 `bun.exe`의 실제 경로 | 실행 파일의 실제 경로 |
 | `paths.resources` | 실행 파일이 있는 폴더 | 빌드 출력 디렉터리(`package`와 같음) | `Contents/Resources` |
 
+`resources`는 앱과 함께 배포된 디스크 파일이 놓이는 디렉터리입니다(Tauri `resource_dir`의 Windows 동작과 같습니다).
+Windows 패키지는 manifest와 웹 assets를 실행 파일에 임베드하므로 이 폴더에는 앱 assets가 없고 실행 파일, `WebView2Loader.dll`, `licenses` 같은 배포 파일만 있습니다.
+Electron의 `process.resourcesPath`와 달리 `app.asar`가 놓이는 위치가 아닙니다.
+
 macOS 개발 실행은 `--package`로 지정한 디렉터리를 `package`와 `resources`로 쓰고 `executable`은 Bun 실행 파일입니다.
 Android, iOS와 `runBunApp`은 파일 시스템 패키지를 노출하지 않으므로 `paths`가 `null`이고, 모바일은 번들된 앱이라 `isPackaged`가 `true`입니다.
 

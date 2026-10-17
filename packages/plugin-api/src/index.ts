@@ -53,13 +53,19 @@ export type AppInfo = {
    * contain the user name.
    */
   readonly paths: {
-    /** Package root that holds the app manifest and assets. */
+    /**
+     * Package root the host verified at startup. On disk it holds the executable and
+     * distributed files such as licenses; Windows packages embed the manifest and web assets in
+     * the executable, so they are not found here.
+     */
     readonly package: string;
     /** Real path of the process executable. In development this is the pinned Bun executable. */
     readonly executable: string;
     /**
-     * Bundled resources directory. Windows and development launches use the package root;
-     * macOS packaged apps use `Contents/Resources`.
+     * Directory of files shipped with the app on disk. Windows packages use the executable's
+     * folder, like Tauri's `resource_dir` there, and development launches use the package root;
+     * macOS packaged apps use `Contents/Resources`. Unlike Electron's `process.resourcesPath`
+     * it never holds an `app.asar`, and Windows web assets are embedded in the executable.
      */
     readonly resources: string;
   } | null;

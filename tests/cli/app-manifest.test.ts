@@ -651,6 +651,31 @@ test("toAppInfo rejects missing app metadata with a clear message", () => {
       webview: null,
     }),
   ).toThrow(
-    "Missing app metadata: the host must pass the app name, identifier and versions.",
+    "Missing app metadata: the host must pass the app name, identifier, versions, isPackaged and paths.",
   );
+  // Metadata generated before isPackaged and paths existed fails the same way.
+  const legacy = {
+    name: "App",
+    identifier: "dev.example",
+    version: null,
+    framework: null,
+  };
+  expect(() =>
+    toAppInfo(legacy as never, {
+      bun: "1.0.0",
+      webview: null,
+    }),
+  ).toThrow("Missing app metadata:");
+  expect(() =>
+    toAppInfo(
+      {
+        ...legacy,
+        isPackaged: true,
+      } as never,
+      {
+        bun: "1.0.0",
+        webview: null,
+      },
+    ),
+  ).toThrow("Missing app metadata:");
 });

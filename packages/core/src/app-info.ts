@@ -20,7 +20,7 @@ function requireText(field: string, value: unknown): string {
 }
 
 /** POSIX root, Windows drive root or UNC prefix; Core also runs where `node:path` is unavailable. */
-const ABSOLUTE_PATH = /^(?:\/|[A-Za-z]:[\\/]|\\\\)./;
+const ABSOLUTE_PATH = /^(?:\/|[A-Za-z]:[\\/]|\\\\.)/;
 
 /** Paths follow the OS limit, so only emptiness and absoluteness are checked. */
 function requireAbsolutePath(field: string, value: unknown): string {

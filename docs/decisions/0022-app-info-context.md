@@ -37,7 +37,7 @@ status: accepted
 | `isPackaged` | 컴파일된 앱 여부. Windows와 macOS는 호스트의 `isCompiledApp`(`manifest.json` 임베드 여부)와 같은 판별이며 `launch.mode`의 근거와 같다. 모바일은 항상 번들이므로 `true` |
 | `paths.package` | 호스트가 검증한 패키지 루트의 실제 경로. Windows 패키지 실행은 실행 파일 폴더, macOS 패키지 실행은 `Contents/Resources` |
 | `paths.executable` | `process.execPath`의 실제 경로. 개발 실행에서는 버전이 고정된 Bun 실행 파일 |
-| `paths.resources` | 패키지 루트와 같은 디렉터리. Windows는 실행 파일 폴더, macOS는 `Contents/Resources`, 개발 실행은 빌드 출력 디렉터리 |
+| `paths.resources` | 앱과 함께 배포된 디스크 파일이 놓이는 디렉터리이며 패키지 루트와 같은 경로. Windows는 실행 파일 폴더, macOS는 `Contents/Resources`, 개발 실행은 빌드 출력 디렉터리 |
 | `runtime.framework` | 빌드가 `framework.version`에 기록한 프레임워크 버전. 필드가 없으면 `null`. 빌드는 앱이나 프레임워크 `package.json`에 `version`이 없으면 해당 필드를 생략한다. |
 | `runtime.bun` | `Bun.version` |
 | `runtime.webview` | 아래 플랫폼별 규칙. 알 수 없으면 `null` |
@@ -62,6 +62,10 @@ status: accepted
 `isPackaged: boolean`과 `paths: { package, executable, resources } | null`을 `AppInfo`에 추가한다.
 Electron의 `app.isPackaged`와 `process.resourcesPath`, Tauri의 `resource_dir`에 대응한다. `mode` 문자열은 쓰지 않는다.
 
+- Windows 패키지는 manifest와 웹 assets를 실행 파일에 임베드하고 디스크 루트에는 실행 파일, `WebView2Loader.dll`, `licenses` 같은
+  배포 파일만 둔다. 따라서 `resources`는 "앱 assets 위치"가 아니라 "앱과 함께 배포된 디스크 파일의 위치"이며,
+  Windows 패키지에서 앱 웹 assets는 이 디렉터리에 없다. 이는 Tauri `resource_dir`의 Windows 동작(실행 파일 폴더)과 같다.
+  Electron의 `process.resourcesPath`는 `app.asar`가 놓이는 위치라는 점이 다르며, bunaway에는 asar가 없다.
 - Android, iOS와 `runBunApp`은 파일 시스템 패키지를 노출하지 않으므로 `paths`는 `null`이다.
 - WebView2Loader 경로나 `dataRoot` 같은 호스트 내부 경로는 넣지 않는다. 데이터 위치는 `plugin-path`가 제공한다.
 - 경로 길이에는 상한을 두지 않고 운영체제 한도를 따른다. Electron과 Tauri도 경로에 별도 상한을 두지 않는다.

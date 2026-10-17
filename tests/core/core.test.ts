@@ -708,6 +708,25 @@ test("app info carries packaged state and frozen app paths", async () => {
     },
   });
   await withoutPaths.stop();
+  // Filesystem roots are valid absolute paths.
+  for (const root of [
+    "/",
+    "C:\\",
+    "C:/",
+  ]) {
+    const rooted = await createCore(createApp(), {
+      ...services,
+      app: {
+        ...testAppInfo,
+        paths: {
+          package: root,
+          executable: root,
+          resources: root,
+        },
+      },
+    });
+    await rooted.stop();
+  }
 });
 
 test("createCore rejects invalid app paths and packaged state", async () => {

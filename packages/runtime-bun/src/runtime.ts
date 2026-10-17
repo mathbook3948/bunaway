@@ -60,7 +60,10 @@ function currentPlatform(): Platform {
 export async function runBunApp(
   app: AppDefinition,
   connection: {
-    /** App name, identifier and package versions exposed as `ctx.app`. */
+    /**
+     * App name, identifier, package versions, `isPackaged` and `paths` exposed as `ctx.app`.
+     * Process runtimes have no file system package, so builds pass `paths: null`.
+     */
     app: AppMetadata;
     input?: Readable;
     output?: Writable;
