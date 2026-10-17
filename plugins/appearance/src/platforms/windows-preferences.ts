@@ -21,6 +21,10 @@ const COLOR_WINDOW = 5;
 const COLOR_WINDOWTEXT = 8;
 const COLOR_HIGHLIGHT = 13;
 const COLOR_HIGHLIGHTTEXT = 14;
+// Relative luminance whose contrast against black equals its contrast against
+// white: (L + 0.05) / 0.05 = 1.05 / (L + 0.05). Standard high contrast themes
+// use black or white windows, far from this limit.
+const DARK_LUMINANCE_LIMIT = Math.sqrt(1.05 * 0.05) - 0.05;
 
 function failure(
   message: string,
@@ -153,19 +157,21 @@ export function initialize() {
         }
         return light ? "light" : "dark";
       }
+      const windowColor = colorRef(user.symbols.GetSysColor(COLOR_WINDOW));
       return {
         appsTheme: theme(appsLight),
         systemTheme: theme(systemLight),
         accentColor: `#${(accent.readUInt32LE() & 0xffffff).toString(16).padStart(6, "0")}`,
         highContrast,
         forcedColors: highContrast,
+        invertedColors: usesInvertedColors(highContrast, windowColor),
         reducedMotion: !setting(SPI_GETCLIENTAREAANIMATION),
         transparencyEnabled: booleanPreference(
           preference("EnableTransparency"),
         ),
         screenReaderEnabled: setting(SPI_GETSCREENREADER),
         colors: {
-          window: colorRef(user.symbols.GetSysColor(COLOR_WINDOW)),
+          window: windowColor,
           windowText: colorRef(user.symbols.GetSysColor(COLOR_WINDOWTEXT)),
           highlight: colorRef(user.symbols.GetSysColor(COLOR_HIGHLIGHT)),
           highlightText: colorRef(
@@ -206,4 +212,40 @@ export function colorRef(value: number): string {
   const green = (value >>> 8) & 0xff;
   const blue = (value >>> 16) & 0xff;
   return `#${((red << 16) | (green << 8) | blue).toString(16).padStart(6, "0")}`;
+}
+
+/** Convert one 8-bit sRGB channel to linear light. */
+function linearChannel(value: number): number {
+  const unit = value / 255;
+  return unit <= 0.04045 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4;
+}
+
+/** WCAG relative luminance (0 black to 1 white) of a `#rrggbb` color. */
+function relativeLuminance(color: string): number {
+  const rgb = Number.parseInt(color.slice(1), 16);
+  return (
+    0.2126 * linearChannel((rgb >>> 16) & 0xff) +
+    0.7152 * linearChannel((rgb >>> 8) & 0xff) +
+    0.0722 * linearChannel(rgb & 0xff)
+  );
+}
+
+/**
+ * Whether a high contrast window color is dark. Chromium reports its dark
+ * high-contrast scheme as inverted colors, which Electron exposes through
+ * nativeTheme.shouldUseInvertedColorScheme.
+ */
+export function isDarkColor(color: string): boolean {
+  return relativeLuminance(color) < DARK_LUMINANCE_LIMIT;
+}
+
+/**
+ * Electron's nativeTheme.shouldUseInvertedColorScheme: high contrast is on and
+ * its window color is dark (Chromium's dark high contrast scheme).
+ */
+export function usesInvertedColors(
+  highContrast: boolean,
+  windowColor: string,
+): boolean {
+  return highContrast && isDarkColor(windowColor);
 }

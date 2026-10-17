@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
 import { appearanceOperations } from "#plugins/appearance/src/operations";
+import {
+  colorRef,
+  usesInvertedColors,
+} from "#plugins/appearance/src/platforms/windows";
 import { nativeFactory } from "../fixtures/native-platform.ts";
 
 test.skipIf(process.platform !== "win32")(
@@ -55,6 +59,17 @@ test.skipIf(process.platform !== "win32")(
       ).not.toBe(0);
       expect(preferences.highContrast).toBe(Boolean(info.readUInt32LE(4) & 1));
       expect(preferences.forcedColors).toBe(preferences.highContrast);
+      // Without high contrast no dark high-contrast scheme applies, so a CI
+      // runner with default settings reports false.
+      expect(preferences.invertedColors).toBe(
+        usesInvertedColors(
+          preferences.highContrast,
+          colorRef(driver.symbols.GetSysColor(5)),
+        ),
+      );
+      if (!preferences.highContrast) {
+        expect(preferences.invertedColors).toBe(false);
+      }
       for (const [action, actual, inverted] of [
         [
           0x1042,

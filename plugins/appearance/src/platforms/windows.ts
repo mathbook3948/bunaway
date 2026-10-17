@@ -5,6 +5,8 @@ import { initialize as readPreferences } from "#appearance/platforms/windows-pre
 export {
   booleanPreference,
   colorRef,
+  isDarkColor,
+  usesInvertedColors,
 } from "#appearance/platforms/windows-preferences";
 /** Own reads and subscriptions on the UI worker; direct query-only adapters remain supported. */
 export function initialize(environment: NativeEnvironment) {

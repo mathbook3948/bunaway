@@ -547,7 +547,8 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 - [ ] system/light/dark 테마를 앱과 창에 지정하고 조회한다. 네이티브 프레임의 앱 기본값과 창 override는 구현했으며 WebView 콘텐츠 테마는 남아 있다.
 - [x] 테마, accent color와 시스템 색 변경을 알린다. appearance.changed는 고대비와 접근성 설정도 포함하며 동일 값은 생략한다.
 - [x] Windows 고대비와 OS forced colors 플래그, 시스템 색을 조회한다.
-- [ ] inverted colors 상태를 조회한다.
+- [x] inverted colors 상태를 조회한다.
+  `invertedColors`는 Electron `nativeTheme.shouldUseInvertedColorScheme`에 맞춰 고대비가 켜져 있고 COLOR_WINDOW가 어두울 때 true이며, macOS는 `accessibilityDisplayShouldInvertColors`를 읽는다. Windows 색 필터는 공개 조회 API가 없어 반영하지 않는다.
 - [x] Windows client-area animation 기준 reduced motion과 저장된 transparency 선호를 조회한다.
 - [x] Windows SPI_GETSCREENREADER 설정 플래그를 조회한다. 실제 접근성 트리 활성 여부와는 구분한다.
 - [ ] 스크린 리더와 접근성 트리 활성 상태, 변경 이벤트를 제공한다.
