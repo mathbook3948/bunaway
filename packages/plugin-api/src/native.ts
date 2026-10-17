@@ -1,5 +1,7 @@
 import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 
+export type { NativeIcoFrame } from "./native-ico.ts";
+export { parseNativeIco, selectNativeIcoFrame } from "./native-ico.ts";
 export type {
   NativeMenuItem,
   NativeMenuRole,

@@ -26,6 +26,8 @@ export type NativeMenuItem =
       visible: boolean;
       checked: boolean;
       group: string | null;
+      /** Base64 ICO shown before the label; null or omitted means no icon. */
+      icon?: string | null | undefined;
       /** A role item runs its editing command itself and is never reported as a selection. */
       role?: NativeMenuRole | undefined;
     }
@@ -45,6 +47,8 @@ export type NativeMenuItem =
       label: string;
       enabled: boolean;
       visible: boolean;
+      /** Base64 ICO shown before the label; null or omitted means no icon. */
+      icon?: string | null | undefined;
       items: NativeMenuItem[];
     };
 

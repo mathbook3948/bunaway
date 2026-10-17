@@ -1,6 +1,8 @@
-import type {
-  NativeMenuItem,
-  NativeMenuRole,
+import {
+  MAX_TRAY_ICO_BYTES,
+  type NativeMenuItem,
+  type NativeMenuRole,
+  parseNativeIco,
 } from "@bunaway/plugin-api/native";
 import { z } from "zod";
 export const MAX_MENU_RESOURCES = 32;
@@ -17,6 +19,15 @@ export const labelSchema = z
   .min(1)
   .max(512)
   .regex(/^[^\0\t\r\n\uD800-\uDFFF]*$(?![\s\S])/u);
+/**
+ * Base64 ICO, the same input as the tray `setIcon`. The directory is checked here so a malformed
+ * icon is rejected as INVALID_ARGUMENT before any native resource exists.
+ */
+export const iconSchema = z
+  .string()
+  .min(4)
+  .max(Math.ceil(MAX_TRAY_ICO_BYTES / 3) * 4)
+  .refine((value) => parseNativeIco(value) !== undefined, "Invalid ICO.");
 /** Editing roles and Electron's Windows default labels; accelerators are drawn by the native menu. */
 export const MENU_ROLE_LABELS = {
   undo: "Undo",
@@ -43,6 +54,10 @@ const action = {
   checked: z.boolean().default(false),
   group: idSchema.nullable().default(null),
 };
+/** Only plain items and submenus show an icon; checkbox and radio use that column for their mark. */
+const icon = {
+  icon: iconSchema.nullable().default(null),
+};
 // Bound the tree before recursive parsing so hostile input cannot exhaust the JS stack.
 type MenuItemInput =
   | {
@@ -60,6 +75,7 @@ type MenuItemInput =
       visible?: boolean | undefined;
       checked?: boolean | undefined;
       group?: string | null | undefined;
+      icon?: string | null | undefined;
     }
   | {
       id: string;
@@ -76,6 +92,7 @@ type MenuItemInput =
       label: string;
       enabled?: boolean | undefined;
       visible?: boolean | undefined;
+      icon?: string | null | undefined;
       items: MenuItemInput[];
     };
 const boundedTree = z
@@ -127,6 +144,7 @@ const itemSchema: z.ZodType<NativeMenuItem, MenuItemInput> = z.lazy(() =>
       }),
       z.strictObject({
         ...action,
+        ...icon,
         label: labelSchema.optional(),
         type: z.literal("item"),
         role: roleSchema.optional(),
@@ -143,6 +161,7 @@ const itemSchema: z.ZodType<NativeMenuItem, MenuItemInput> = z.lazy(() =>
         type: z.literal("submenu"),
         label: labelSchema,
         enabled: z.boolean().default(true),
+        ...icon,
         items: z.array(itemSchema),
       }),
     ])
@@ -255,6 +274,8 @@ export const updateItemSchema = itemTargetSchema.extend({
     enabled: z.boolean().optional(),
     visible: z.boolean().optional(),
     checked: z.boolean().optional(),
+    /** ICO to show, or null to remove the icon. */
+    icon: iconSchema.nullable().optional(),
   }),
 });
 /** Selection reports IDs; checkbox and radio state changes remain explicit app operations. */
