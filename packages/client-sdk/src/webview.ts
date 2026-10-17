@@ -8,7 +8,7 @@ import {
 // Android's host-owned adapter can carry text without a structured-value round trip.
 const textBridgeKey = Symbol.for("@bunaway/webview.text.v1");
 
-/** Checks the message-bridge shape hosts expose; shared by transport setup and environment detection. */
+/** Reports whether a value has the `WebViewBridge` methods; it does not prove the host owns the object. */
 export function isBridge(value: unknown): value is WebViewBridge {
   return (
     typeof value === "object" &&

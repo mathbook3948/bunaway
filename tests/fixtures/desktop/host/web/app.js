@@ -5,7 +5,8 @@ import {
 } from "@bunaway/client";
 import { matchesCapabilities } from "./capabilities.ts";
 
-// Sampled in the first script, before any await, to prove the host bridge precedes document scripts.
+// Sampled when this end-of-body script starts, before any await. This shows the bridge exists by
+// then, not that it precedes every earlier document script.
 const bunawayAtStart = isBunaway();
 const client = createClient({
   transport: createWebViewTransport(window.chrome.webview),
@@ -181,8 +182,8 @@ async function run() {
     ok: true,
   });
 
-  await test("isBunaway is true in the app WebView from the first script", async () => {
-    assert(bunawayAtStart, "isBunaway was false at document start");
+  await test("isBunaway is true in the app WebView", async () => {
+    assert(bunawayAtStart, "isBunaway was false when the page script started");
     assert(isBunaway(), "isBunaway was false after connect");
   });
 
