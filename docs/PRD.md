@@ -35,7 +35,7 @@ macOS 플러그인 어댑터는 후속 작업이다.
 - 프런트엔드는 등록된 명령과 이벤트만 사용한다. Bun, Node.js, 파일 시스템, 임의 네이티브 함수에 직접 접근하지 않는다.
 - 데스크톱과 모바일은 같은 명령, 이벤트, 권한 모델을 사용한다. 플랫폼별 기능 차이는 조회 가능한 지원 정보와 명시적 오류로 드러낸다.
 - 프로덕션 앱은 사용자 기기에 별도 Bun 설치를 요구하지 않는다. 런타임과 앱 자산을 설치 패키지에 포함한다.
-- Chromium 계열 렌더러는 데스크톱의 선택 기능으로 둔다. 기본 WebView 구현과 동일한 SDK 계약을 따른다.
+- Chromium 계열 렌더러는 데스크톱의 선택 기능으로 둔다. 기본 WebView 구현과 동일한 SDK 계약을 따른다. 앞으로 Chromium 렌더러는 Tauri의 wry처럼 `packages/` 아래 별도 패키지로 새로 만든다.
 
 ### 이번 제품에 포함하지 않는 것
 
@@ -243,7 +243,6 @@ CLI의 필수 흐름은 프로젝트 생성, 개발 실행, 설정, 권한 검�
 packages/   protocol/  client-sdk/  backend-sdk/  core/  runtime-bun/  cli/
 native/     host-api/  windows/  macos/  linux/  android/  ios/
 runtime/    bun-bundle/  patches/  build-manifests/
-renderers/  system-webview/  chromium/
 plugins/    log/  storage/
 templates/  vanilla/  react/  vue/  svelte/
 examples/   memo/  commands/  lifecycle/  permissions/
@@ -251,7 +250,7 @@ tests/      protocol/  core/  conformance/  security/  lifecycle/
 docs/       architecture/  api/  platform-support/  decisions/
 ```
 
-`chromium`은 첫 단계에서 인터페이스 자리만 정의한다. 플랫폼 빌드 코드가 `core`로 올라오지 않게 의존성을 검사하고 공통 계약 테스트는 각 네이티브 호스트 구현에 같은 입력, 기대 결과로 적용한다.
+WebView 구현은 Windows WebView2 `native/windows/bun/webview.ts`, macOS WKWebView `native/macos`, SDK 전송 어댑터 `packages/client-sdk/src/webview.ts`에 있다. 렌더러는 앱 명령의 의미를 알지 못하고 호스트의 렌더러 계약만 따른다. 플랫폼 빌드 코드가 `core`로 올라오지 않게 의존성을 검사하고 공통 계약 테스트는 각 네이티브 호스트 구현에 같은 입력, 기대 결과로 적용한다.
 
 ## 9 구현 단계와 완료 조건
 

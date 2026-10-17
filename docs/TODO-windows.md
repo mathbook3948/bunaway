@@ -977,7 +977,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 
 우선순위 P3. 소유자: 선택 렌더러와 기능 패키지. 출처: [E-view], [E-contents], [E-extensions], [E-texture], [E-ai].
 
-- [ ] CEF 등 선택 Chromium 렌더러를 동일한 SDK와 정책 계약에 연결한다.
+- [ ] CEF 등 선택 Chromium 렌더러를 동일한 SDK와 정책 계약에 연결한다. Tauri의 wry처럼 `packages/` 아래 별도 패키지로 새로 만든다.
 - [ ] renderer capability에 따라 미지원 기능을 명시하고 엔진 선택 방법을 제공한다.
 - [ ] offscreen rendering의 frame, dirty region과 frame rate를 제공한다.
 - [ ] painting 시작, 중단, 상태 조회와 invalidate를 제공한다.
