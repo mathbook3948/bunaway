@@ -1151,7 +1151,8 @@
           "focused",
           "minimized",
           "maximized",
-          "fullscreen"
+          "fullscreen",
+          "alwaysOnTop"
         ]
       }
     },

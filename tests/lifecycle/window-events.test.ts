@@ -45,6 +45,7 @@ const snapshot: WindowSnapshot = {
     minimized: false,
     maximized: false,
     fullscreen: false,
+    alwaysOnTop: false,
   },
   bounds: {
     x: -100,
@@ -340,6 +341,44 @@ test("window changes suppress duplicates and order display state before physical
     ),
   ).toEqual([
     "leaveFullscreen",
+  ]);
+  const topmost = {
+    ...snapshot,
+    state: {
+      ...snapshot.state,
+      alwaysOnTop: true,
+    },
+  };
+  expect(windowChanges(snapshot, topmost)).toEqual([
+    "enterAlwaysOnTop",
+  ]);
+  expect(windowChanges(topmost, snapshot)).toEqual([
+    "leaveAlwaysOnTop",
+  ]);
+  expect(windowChanges(topmost, topmost)).toEqual([]);
+  expect(
+    windowChanges(
+      {
+        ...snapshot,
+        state: {
+          ...snapshot.state,
+          fullscreen: true,
+        },
+      },
+      {
+        ...topmost,
+        bounds: {
+          ...snapshot.bounds,
+          x: 0,
+          width: 900,
+        },
+      },
+    ),
+  ).toEqual([
+    "leaveFullscreen",
+    "enterAlwaysOnTop",
+    "move",
+    "resize",
   ]);
   expect(
     windowChanges(snapshot, {

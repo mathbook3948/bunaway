@@ -55,6 +55,9 @@ export function windowChanges(
   if (before.fullscreen !== after.fullscreen) {
     changes.push(after.fullscreen ? "enterFullscreen" : "leaveFullscreen");
   }
+  if (before.alwaysOnTop !== after.alwaysOnTop) {
+    changes.push(after.alwaysOnTop ? "enterAlwaysOnTop" : "leaveAlwaysOnTop");
+  }
   if (
     previous.bounds.x !== current.bounds.x ||
     previous.bounds.y !== current.bounds.y

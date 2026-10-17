@@ -492,6 +492,7 @@ export class Windows {
             this.rememberNormalMonitor(window);
           }
           if (message === WM_WINDOWPOSCHANGED) {
+            // Z-order and topmost changes from any process arrive here.
             this.observeChanges(window);
           }
           if (message === WM_ACTIVATE && this.windows.has(window)) {
@@ -1353,6 +1354,7 @@ export class Windows {
         minimized: this.isMinimized(window),
         maximized: this.isMaximized(window),
         fullscreen: this.isFullscreen(window),
+        alwaysOnTop: this.isAlwaysOnTop(window),
       },
       bounds: this.getBounds(window, "outer"),
     };
@@ -1380,6 +1382,20 @@ export class Windows {
     }
     observation.snapshot = current;
     observation.receive(current, changes);
+    if (previous.state.alwaysOnTop !== current.state.alwaysOnTop) {
+      // Win32 can change topmost on related owner and owned windows in one
+      // Z-order operation, and those windows may not receive their own
+      // position message. Re-read them so their committed snapshots match.
+      // Unchanged snapshots are suppressed, and a nested pass only fans out
+      // again after a new topmost commit, so the recursion ends.
+      for (const other of [
+        ...this.observations.keys(),
+      ]) {
+        if (other !== window && user.symbols.IsWindow(other)) {
+          this.observeChanges(other);
+        }
+      }
+    }
   }
 
   /** Query using the same committed revision as events, including changes awaiting a native message. */

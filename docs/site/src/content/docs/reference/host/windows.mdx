@@ -54,6 +54,7 @@ CSS 영역은 이 창에서 허용된 문서에 적용되므로 신뢰하는 ori
 `setAlwaysOnTop({ view, windowId?, alwaysOnTop })`과 `isAlwaysOnTop({ view, windowId? })`은
 일반 창보다 위에 표시하는 상태를 변경하고 조회합니다. 권한은 `windows.setAlwaysOnTop`, `windows.isAlwaysOnTop`입니다. 활성화와 표시 상태, 크기는 바꾸지 않습니다.
 Windows의 owner 관계에 따라 관련 창의 Z 순서도 영향을 받을 수 있습니다.
+상태 변경은 `windows.changed`의 `enterAlwaysOnTop`, `leaveAlwaysOnTop`으로 전달합니다.
 
 `setSkipTaskbar({ view, windowId?, skipTaskbar })`과 `isSkipTaskbar({ view, windowId? })`은
 명시적인 tool-window 제외 상태를 변경하고 조회합니다. 권한은 `windows.setSkipTaskbar`, `windows.isSkipTaskbar`입니다. 제외하면 작업 표시줄과 Alt+Tab에
@@ -1064,9 +1065,9 @@ payload는 `{ windowId, viewId, revision, state, bounds, changes }`입니다.
 envelope의 `source`는 `"native"`, `target`은 수신 뷰 ID입니다.
 백엔드에서 같은 스키마의 이벤트를 발행할 때는 기존 `"backend"` 출처를 유지합니다.
 
-`state`는 `visible`, `focused`, `minimized`, `maximized`, `fullscreen`을 가집니다.
-각 값은 기존 `isVisible`, `isFocused`, `isMinimized`, `isMaximized`, `isFullscreen`과
-의미가 같습니다. `focused`는 WebView 내부 포커스를 포함한 OS 전경 창 여부입니다.
+`state`는 `visible`, `focused`, `minimized`, `maximized`, `fullscreen`, `alwaysOnTop`을 가집니다.
+각 값은 기존 `isVisible`, `isFocused`, `isMinimized`, `isMaximized`, `isFullscreen`,
+`isAlwaysOnTop`과 의미가 같습니다. `focused`는 WebView 내부 포커스를 포함한 OS 전경 창 여부입니다.
 normal 상태는 최소화, 최대화와 전체화면이 모두 `false`인 상태입니다.
 `bounds`는 기본 단위의 `getOuterBounds`와 같은 `{ x, y, width, height, dpi }`입니다.
 좌표와 크기는 프레임을 포함한 물리 화면 픽셀이고, 최소화 시에는 네이티브 iconic
@@ -1084,6 +1085,7 @@ bounds를 반환합니다. 논리 좌표가 필요하면 기존 변환 API를 �
 | `maximize` | 최대화 상태 진입 |
 | `restore` | 최소화에서 복원하거나 최대화에서 일반 상태로 복원 |
 | `enterFullscreen`, `leaveFullscreen` | 호스트 전체화면 상태 진입과 해제 |
+| `enterAlwaysOnTop`, `leaveAlwaysOnTop` | 항상 위 상태의 설정과 해제 |
 | `move` | outer bounds의 x 또는 y 변경 |
 | `resize` | outer bounds의 width, height 또는 DPI 변경 |
 | `moved` | 네이티브 사용자 이동/크기 조절 루프 종료. 시작보다 최종 outer x 또는 y 변경 |
@@ -1095,6 +1097,15 @@ API 호출과 사용자 조작은 같은 네이티브 관찰 경로를 사용합
 동일한 Win32 메시지가 반복되면 중복 이벤트가 없습니다. 전체화면 전환 중의
 스타일과 placement 중간 상태는 보류하고 전환이 끝난 snapshot을 발행합니다.
 명령 완료 응답과 이벤트 수신의 상대 순서는 보장하지 않습니다.
+
+`setAlwaysOnTop` 호출과 `SetWindowPos`의 Z 순서 변경(`HWND_TOPMOST`,
+`HWND_NOTOPMOST`)은 네이티브 창 위치 변경 알림(`WM_WINDOWPOSCHANGED`)으로
+관찰합니다. 다른 프로세스가 호출한 `SetWindowPos`도 같은 알림 경로로 들어옵니다.
+`SetWindowPos`를 거치지 않는 변경은 다음 창 위치 변경 알림이나 `getSnapshot`
+호출 때 반영합니다. 같은 값으로 호출하면 이벤트가 없습니다. 한 창의 항상 위 상태
+변경을 관찰하면 Windows가 함께 바꾼 owner나 owned 창의 view도 같은 시점에
+`enterAlwaysOnTop` 또는 `leaveAlwaysOnTop`을 받습니다. macOS는
+`windows.changed`를 제공하지 않으므로 이 이벤트도 Windows에서만 발행합니다.
 
 연속 move/resize는 관찰한 변경마다 FIFO로 전달합니다. Windows의 `WM_ENTERSIZEMOVE`와
 `WM_EXITSIZEMOVE` 사이를 사용자 조작 하나로 추적하며 종료 때 실제 시작/최종 geometry가

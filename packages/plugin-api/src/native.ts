@@ -561,6 +561,8 @@ export type WindowDisplayState = {
   minimized: boolean;
   maximized: boolean;
   fullscreen: boolean;
+  /** Same meaning as the `isAlwaysOnTop` query. */
+  alwaysOnTop: boolean;
 };
 /** Browser playback and mute are independent; playing can remain true while muted. */
 export type WebViewAudioState = {
@@ -598,6 +600,8 @@ export type WindowChange =
   | "restore"
   | "enterFullscreen"
   | "leaveFullscreen"
+  | "enterAlwaysOnTop"
+  | "leaveAlwaysOnTop"
   | "move"
   | "resize"
   | "moved"

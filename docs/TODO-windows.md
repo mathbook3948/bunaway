@@ -230,7 +230,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] will-move와 will-resize의 취소 가능 여부를 정의한다.
 - [x] minimize, maximize, unmaximize와 restore 전환을 제공한다.
 - [x] enterFullscreen과 leaveFullscreen 전환을 제공한다.
-- [ ] always-on-top 변경 이벤트를 제공한다.
+- [x] `windows.changed`로 enterAlwaysOnTop과 leaveAlwaysOnTop 전환을 제공한다. API 호출과 `SetWindowPos` topmost 변경을 같은 창 위치 알림으로 관찰하고 함께 바뀐 owner와 owned 창도 알리며 동일 값은 생략한다.
 - [x] `windows.closeRequested`와 `windows.respondClose`로 비동기 저장 후 닫기 승인 흐름을 제공한다. 창의 문서가 구독할 때만 사용자 닫기를 대기시키고 자동 기한은 두지 않는다. 대기 중 마지막 구독을 해제하면 요청을 취소하고 창을 유지한다. 실제 WebView2 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [x] DPI 변경을 resize 전환과 bounds의 `dpi`로 전달한다.
 - [x] theme 변경 이벤트를 제공한다. Windows는 `appearance.changed`로 테마, 고대비와 접근성 설정을 알리며 동일 값은 생략한다. 13절 테마 항목과 같다.
