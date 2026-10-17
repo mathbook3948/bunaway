@@ -6,6 +6,7 @@ import type { NativeMenuRole } from "@bunaway/plugin-api/native";
 import { BunawayError, type WireError } from "@bunaway/protocol";
 import type { WindowSpec } from "./channel.ts";
 import {
+  abandonHandlers,
   addRef,
   type ComHandler,
   disposeHandlers,
@@ -20,6 +21,7 @@ import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
 import { callDevToolsProtocolMethod } from "./webview-devtools.ts";
 import { WebViewDownloads } from "./webview-downloads.ts";
+import { EditCommandCalls } from "./webview-edit-calls.ts";
 import { enableCustomTitlebar } from "./webview-titlebar.ts";
 import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 
@@ -86,8 +88,11 @@ export class WebView {
     callback: ComHandler;
   }[] = [];
   private readonly completions: ComHandler[] = [];
-  /** Editing-command completions; finished ones are pruned on the next command. */
-  private readonly editCompletions: ComHandler[] = [];
+  /** In-flight editing-command completions; released ones are pruned on the next command. */
+  private readonly editCalls = new EditCommandCalls<ComHandler>({
+    dispose: disposeHandlers,
+    abandon: abandonHandlers,
+  });
   private creating = 0;
   private closing = false;
   private detached = false;
@@ -945,19 +950,6 @@ export class WebView {
       return false;
     }
     const webview = this.webview;
-    // Once native released a completion it holds only the owner reference, whether or not it ran.
-    const finished = this.editCompletions.filter(
-      (completion) => completion.refs === 1,
-    );
-    if (finished.length) {
-      disposeHandlers(finished);
-      for (const completion of finished) {
-        this.editCompletions.splice(
-          this.editCompletions.indexOf(completion),
-          1,
-        );
-      }
-    }
     // A closed popup normally returns focus to the page; restore it when the host did not.
     // A minimized or hidden window can refuse; the command may still apply, so continue.
     if (!this.hasInputFocus()) {
@@ -969,7 +961,7 @@ export class WebView {
         );
       }
     }
-    this.editCompletions.push(
+    this.editCalls.start(command, (isActive) =>
       callDevToolsProtocolMethod(
         webview,
         "Input.dispatchKeyEvent",
@@ -980,7 +972,8 @@ export class WebView {
           ],
         }),
         ({ hresult }) => {
-          if (hresult < 0) {
+          // A late completion after cleanup or abandonment must touch no view or host state.
+          if (isActive() && hresult < 0) {
             failed(`0x${(hresult >>> 0).toString(16)}`);
           }
         },
@@ -1377,12 +1370,20 @@ export class WebView {
       this.checkShutdownDeadline();
       return false;
     }
-    // WebView2 may still hold an in-flight editing-command completion; wait for its release.
+    if (this.completions.slice(0, 2).some((callback) => callback.refs > 1)) {
+      return false;
+    }
+    // WebView2 may keep an in-flight editing-command completion; wait a bounded time for its
+    // release, then abandon it so cleanup completes.
     if (
-      [
-        ...this.completions.slice(0, 2),
-        ...this.editCompletions,
-      ].some((callback) => callback.refs > 1)
+      !this.editCalls.settle(
+        performance.now() - this.closedAt,
+        (editCommand, total) =>
+          this.hooks.log("menu-role-completion-abandoned", {
+            command: editCommand,
+            abandoned: total,
+          }),
+      )
     ) {
       return false;
     }
@@ -1417,13 +1418,18 @@ export class WebView {
       this.checkShutdownDeadline();
       return false;
     }
+    // Settled editing completions hold only the owner reference, so they cannot be invoked
+    // again and stay out of the post-detach invocation check.
     const callbacks = [
       ...this.events.map(({ callback }) => callback),
       ...this.completions,
-      ...this.editCompletions,
     ];
+    const editHandlers = this.editCalls.handlers();
     assert(
-      callbacks.every((callback) => callback.refs === 1),
+      [
+        ...callbacks,
+        ...editHandlers,
+      ].every((callback) => callback.refs === 1),
       "Outstanding COM reference",
     );
     // Keep this view's trampolines alive through bounded STA pumping before reuse or disposal.
@@ -1451,11 +1457,10 @@ export class WebView {
     disposeHandlers([
       ...this.events.map(({ callback }) => callback),
       ...this.completions,
-      ...this.editCompletions,
     ]);
+    this.editCalls.release();
     this.events.length = 0;
     this.completions.length = 0;
-    this.editCompletions.length = 0;
     this.loader.close();
     this.finished = true;
     this.group.members.delete(this);
