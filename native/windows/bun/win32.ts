@@ -102,6 +102,10 @@ const PM_REMOVE = 1;
 const SM_CXSIZEFRAME = 32;
 const SM_CYSIZEFRAME = 33;
 const SM_CXPADDEDBORDER = 92;
+const SM_CXMINTRACK = 34;
+const SM_CYMINTRACK = 35;
+const SM_CXMAXTRACK = 59;
+const SM_CYMAXTRACK = 60;
 const SW_HIDE = 0;
 const SW_SHOWNORMAL = 1;
 const SW_SHOWNOACTIVATE = 4;
@@ -2181,6 +2185,12 @@ export class Windows {
       frame,
       dpi,
       this.getSizeConstraints(window),
+      {
+        minWidth: user.symbols.GetSystemMetricsForDpi(SM_CXMINTRACK, dpi),
+        minHeight: user.symbols.GetSystemMetricsForDpi(SM_CYMINTRACK, dpi),
+        maxWidth: user.symbols.GetSystemMetricsForDpi(SM_CXMAXTRACK, dpi),
+        maxHeight: user.symbols.GetSystemMetricsForDpi(SM_CYMAXTRACK, dpi),
+      },
     );
     view.setInt32(0, adjusted.left, true);
     view.setInt32(4, adjusted.top, true);

@@ -1405,6 +1405,30 @@ if (!process.argv.includes("--child")) {
               ...editor,
               movable: true,
             });
+            assert.equal(await windows.getAspectRatio(editor), null);
+            const beforeAspectRatio = await windows.getOuterBounds(editor);
+            await windows.setAspectRatio({
+              ...editor,
+              ratio: 16 / 9,
+            });
+            assert.equal(await windows.getAspectRatio(editor), 16 / 9);
+            // Setting the lock leaves the current size unchanged.
+            assert.deepEqual(
+              await windows.getOuterBounds(editor),
+              beforeAspectRatio,
+            );
+            await assert.rejects(
+              windows.setAspectRatio({
+                ...editor,
+                ratio: 0,
+              }),
+            );
+            assert.equal(await windows.getAspectRatio(editor), 16 / 9);
+            await windows.setAspectRatio({
+              ...editor,
+              ratio: null,
+            });
+            assert.equal(await windows.getAspectRatio(editor), null);
             // Verify the public API through the real core, UI worker and HWND.
             const content = await windows.getContentSize({
               view: "editor",
@@ -1868,6 +1892,23 @@ if (!process.argv.includes("--child")) {
             await assert.rejects(
               windows.isNormal({
                 view: "editor",
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
+            await assert.rejects(
+              windows.getAspectRatio({
+                view: "editor",
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
+            await assert.rejects(
+              windows.setAspectRatio({
+                view: "editor",
+                ratio: 1,
               }),
               {
                 code: "INVALID_ARGUMENT",

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
-  adjustSizingRect,
+  adjustSizingRect as adjustWithTrack,
+  type SizingRect,
+  type SystemTrackSize,
   WMSZ_BOTTOM,
   WMSZ_BOTTOMLEFT,
   WMSZ_BOTTOMRIGHT,
@@ -12,6 +14,8 @@ import {
 } from "#native/windows/bun/aspect-ratio";
 
 const WM_SIZING = 0x0214;
+const SM_CXMAXTRACK = 59;
+const SM_CYMAXTRACK = 60;
 const NO_FRAME = {
   width: 0,
   height: 0,
@@ -22,6 +26,29 @@ const UNCONSTRAINED = {
   maxWidth: null,
   maxHeight: null,
 };
+
+const OPEN_TRACK: SystemTrackSize = {
+  minWidth: 0,
+  minHeight: 0,
+  maxWidth: 100000,
+  maxHeight: 100000,
+};
+
+/** Applies the pure calculation with unrestricted system track sizes unless given. */
+function adjustSizingRect(
+  rect: SizingRect,
+  edge: number,
+  ratio: number,
+  frame: {
+    width: number;
+    height: number;
+  },
+  dpi: number,
+  constraints: Parameters<typeof adjustWithTrack>[5],
+  track = OPEN_TRACK,
+) {
+  return adjustWithTrack(rect, edge, ratio, frame, dpi, constraints, track);
+}
 
 describe("adjustSizingRect (pure)", () => {
   const rect = {
@@ -162,6 +189,119 @@ describe("adjustSizingRect (pure)", () => {
       bottom: 400,
     });
   });
+
+  test("a 16:9 lock stays inside maxHeight after integer rounding", () => {
+    const constraints = {
+      ...UNCONSTRAINED,
+      maxHeight: 1080,
+    };
+    for (const width of [
+      1900,
+      1919,
+      1920,
+      1921,
+      2400,
+    ]) {
+      const result = adjustSizingRect(
+        {
+          left: 0,
+          top: 0,
+          right: width,
+          bottom: 700,
+        },
+        WMSZ_RIGHT,
+        16 / 9,
+        NO_FRAME,
+        96,
+        constraints,
+      );
+      const height = result.bottom - result.top;
+      const clientWidth = result.right - result.left;
+      expect(height).toBeLessThanOrEqual(1080);
+      expect(clientWidth).toBeLessThanOrEqual(1920);
+      expect(Math.abs(clientWidth / height - 16 / 9)).toBeLessThan(0.01);
+    }
+    // An axis lead of 1921 rounds down to 1920x1080 instead of 1921x1081.
+    expect(
+      adjustSizingRect(
+        {
+          left: 0,
+          top: 0,
+          right: 1921,
+          bottom: 700,
+        },
+        WMSZ_RIGHT,
+        16 / 9,
+        NO_FRAME,
+        96,
+        constraints,
+      ),
+    ).toEqual({
+      left: 0,
+      top: 0,
+      right: 1920,
+      bottom: 1080,
+    });
+  });
+
+  test("system track sizes minus the frame narrow the client range", () => {
+    const frame = {
+      width: 16,
+      height: 39,
+    };
+    // Outer max 816x639 leaves a 800x600 client; width 1600 is pulled back to 800 and height 400.
+    expect(
+      adjustSizingRect(
+        {
+          left: 0,
+          top: 0,
+          right: 1616,
+          bottom: 500,
+        },
+        WMSZ_RIGHT,
+        2,
+        frame,
+        96,
+        UNCONSTRAINED,
+        {
+          minWidth: 0,
+          minHeight: 0,
+          maxWidth: 816,
+          maxHeight: 639,
+        },
+      ),
+    ).toEqual({
+      left: 0,
+      top: 0,
+      right: 816,
+      bottom: 439,
+    });
+    // System minimum outer height 239 means client height >= 200, so width is raised to 400.
+    expect(
+      adjustSizingRect(
+        {
+          left: 0,
+          top: 0,
+          right: 216,
+          bottom: 100,
+        },
+        WMSZ_RIGHT,
+        2,
+        frame,
+        96,
+        UNCONSTRAINED,
+        {
+          ...OPEN_TRACK,
+          minHeight: 239,
+        },
+      ),
+    ).toEqual({
+      left: 0,
+      top: 0,
+      right: 416,
+      bottom: 239,
+    });
+  });
 });
 
 test.skipIf(process.platform !== "win32")(
@@ -290,6 +430,51 @@ test.skipIf(process.platform !== "win32")(
       );
       expect(capped.width).toBe(Math.round((400 * dpi) / 96));
       expect(Math.abs(capped.width - capped.height * 2)).toBeLessThanOrEqual(1);
+
+      // An axis beyond the system maximum track size is pulled back so that
+      // WM_GETMINMAXINFO does not silently break the ratio afterwards.
+      native.setSizeConstraints(hwnd, {
+        minWidth: null,
+        minHeight: null,
+        maxWidth: null,
+        maxHeight: null,
+      });
+      const maxTrackWidth = user.symbols.GetSystemMetricsForDpi(
+        SM_CXMAXTRACK,
+        dpi,
+      );
+      const maxTrackHeight = user.symbols.GetSystemMetricsForDpi(
+        SM_CYMAXTRACK,
+        dpi,
+      );
+      const widthOverflow = clientOf(
+        sizing(WMSZ_RIGHT, [
+          0,
+          0,
+          maxTrackWidth + 5000,
+          500 + frame.height,
+        ]).rect,
+      );
+      expect(widthOverflow.width).toBeLessThanOrEqual(
+        maxTrackWidth - frame.width,
+      );
+      expect(
+        Math.abs(widthOverflow.width - widthOverflow.height * 2),
+      ).toBeLessThanOrEqual(1);
+      const heightOverflow = clientOf(
+        sizing(WMSZ_BOTTOM, [
+          0,
+          0,
+          500 + frame.width,
+          maxTrackHeight + 5000,
+        ]).rect,
+      );
+      expect(heightOverflow.height).toBeLessThanOrEqual(
+        maxTrackHeight - frame.height,
+      );
+      expect(
+        Math.abs(heightOverflow.width - heightOverflow.height * 2),
+      ).toBeLessThanOrEqual(1);
 
       native.setAspectRatio(hwnd, null);
       expect(native.getAspectRatio(hwnd)).toBeNull();

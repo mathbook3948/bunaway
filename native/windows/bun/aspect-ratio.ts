@@ -41,11 +41,14 @@ function fitAxes(
   primaryRange: Range,
   secondaryRange: Range,
 ) {
+  // Integer pixels only: round the real-valued interval inward so every
+  // primary size in it derives a secondary size inside its range.
   const feasible = {
-    low: Math.max(primaryRange.low, secondaryRange.low / secondaryPerPrimary),
-    high: Math.min(
-      primaryRange.high,
-      secondaryRange.high / secondaryPerPrimary,
+    low: Math.ceil(
+      Math.max(primaryRange.low, secondaryRange.low / secondaryPerPrimary),
+    ),
+    high: Math.floor(
+      Math.min(primaryRange.high, secondaryRange.high / secondaryPerPrimary),
     ),
   };
   if (feasible.low > feasible.high) {
@@ -60,21 +63,46 @@ function fitAxes(
   const fitted = Math.round(clampTo(primary, feasible));
   return {
     primary: fitted,
-    secondary: Math.round(fitted * secondaryPerPrimary),
+    // Rounding the derived axis must not leave its range.
+    secondary: Math.round(
+      clampTo(Math.round(fitted * secondaryPerPrimary), secondaryRange),
+    ),
   };
 }
 
+/** Outer window size limits of the system, in physical pixels (WM_GETMINMAXINFO track sizes). */
+export type SystemTrackSize = {
+  minWidth: number;
+  minHeight: number;
+  maxWidth: number;
+  maxHeight: number;
+};
+
+/**
+ * Client-area range on one axis: the user's logical constraint converted by
+ * DPI, intersected with the system track size minus the frame, so the ratio
+ * agrees with what WM_GETMINMAXINFO would enforce afterwards.
+ */
 function clientRange(
   minimum: number | null,
   maximum: number | null,
   dpi: number,
+  systemMinimum: number,
+  systemMaximum: number,
+  frame: number,
 ): Range {
   return {
-    low: minimum === null ? 1 : physicalPixels(minimum, dpi),
-    high:
+    low: Math.max(
+      1,
+      systemMinimum - frame,
+      minimum === null ? 1 : physicalPixels(minimum, dpi),
+    ),
+    high: Math.min(
+      systemMaximum - frame,
       maximum === null
         ? Number.POSITIVE_INFINITY
         : physicalPixels(maximum, dpi),
+    ),
   };
 }
 
@@ -87,7 +115,9 @@ function clientRange(
  * the drag stays fixed, and a side edge moves the bottom, a top or bottom edge
  * moves the right side. `frame` is the physical non-client size, the ratio and
  * `constraints` apply to the client area, and the constraints are logical (96
- * DPI) values converted with `dpi`.
+ * DPI) values converted with `dpi`. `track` is the system minimum and maximum
+ * outer size for the window's DPI; it narrows the constraints, and when the
+ * ranges cannot hold the ratio they win over it.
  */
 export function adjustSizingRect(
   rect: SizingRect,
@@ -99,6 +129,7 @@ export function adjustSizingRect(
   },
   dpi: number,
   constraints: WindowSizeConstraints,
+  track: SystemTrackSize,
 ): SizingRect {
   const clientWidth = Math.max(1, rect.right - rect.left - frame.width);
   const clientHeight = Math.max(1, rect.bottom - rect.top - frame.height);
@@ -106,11 +137,17 @@ export function adjustSizingRect(
     constraints.minWidth,
     constraints.maxWidth,
     dpi,
+    track.minWidth,
+    track.maxWidth,
+    frame.width,
   );
   const heightRange = clientRange(
     constraints.minHeight,
     constraints.maxHeight,
     dpi,
+    track.minHeight,
+    track.maxHeight,
+    frame.height,
   );
   const widthLeads =
     edge === WMSZ_LEFT ||
