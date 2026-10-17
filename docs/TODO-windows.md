@@ -505,7 +505,7 @@ MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이�
 - [x] `getFormats`와 `hasFormat`으로 지원하는 다섯 MIME 형식의 가용성을 조회한다. 임의 Windows 등록 형식의 열거는 포함하지 않는다.
 - [x] `readFormats`와 `writeFormats`로 한 번의 clipboard 열기 구간에서 여러 형식을 읽거나 교체한다. 준비 실패는 기존 내용을 보존하며 비우기 이후 부분 등록 실패는 되돌리지 않는다.
 - [x] Windows clipboard의 사용자 정의 binary 형식(`application/x-bunaway-binary/...`) 읽기와 쓰기를 제공한다. 형식당 256 KiB, 어댑터 수명마다 서로 다른 이름 64개까지다.
-- [ ] 클립보드 변경 이벤트의 지원을 결정한다.
+- [x] Windows clipboard의 변경 이벤트(`clipboard.changed`)와 `waitForChange`를 제공한다. `AddClipboardFormatListener`와 `WM_CLIPBOARDUPDATE`로 감지하며 payload는 내용 없이 `sequence`와 `changedAt`만 담는다. 같은 sequence의 연속 갱신은 합치고 자기 쓰기도 알린다. macOS는 지원하지 않는다([계약](../plugins/clipboard/README.md)).
 - [x] Windows `@bunaway/plugin-image`에서 PNG, JPEG와 BMP bytes, RGBA와 data URL로 앱 소유 이미지 리소스를 만든다.
 - [ ] 파일 경로에서 이미지 리소스를 읽는 API와 저장소 접근 정책을 연결한다.
 - [x] `image.getInfo`와 `image.getPixels`로 크기, 빈 이미지 여부와 RGBA 픽셀 데이터를 조회한다.

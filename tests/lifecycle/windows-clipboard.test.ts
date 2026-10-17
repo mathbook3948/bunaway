@@ -47,6 +47,10 @@ test.skipIf(
     // Clipboard ownership notifications are synchronous window messages. The
     // parent also owns a fixture window, so pump it while the UI Worker runs.
     const pump = dlopen("user32.dll", {
+      GetClipboardSequenceNumber: {
+        args: [],
+        returns: "u32",
+      },
       PeekMessageW: {
         args: [
           "ptr",
@@ -377,6 +381,84 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
       }
       await invoke(() => clipboard.clear(null));
       expect(await invoke(() => clipboard.readText(null))).toBeNull();
+      // WM_CLIPBOARDUPDATE: an external write and the plugin's own write both notify,
+      // and the payload carries no clipboard content.
+      for (const write of [
+        async () => {
+          await acquire();
+          try {
+            owner.write("external change");
+          } finally {
+            owner.close();
+          }
+        },
+        () =>
+          invoke(() =>
+            clipboard.writeText({
+              text: "own change",
+            }),
+          ),
+      ]) {
+        // A late WM_CLIPBOARDUPDATE from an earlier operation can still wake a waiter with the
+        // pre-existing sequence, so such a value is ignored and the wait restarts.
+        const baseline = pump.symbols.GetClipboardSequenceNumber();
+        const deadline = Date.now() + 4000;
+        let payload: JsonValue | undefined;
+        while (payload === undefined) {
+          if (Date.now() >= deadline) {
+            throw new Error(
+              `No clipboard change notification with a sequence other than ${baseline} arrived within 4s.`,
+            );
+          }
+          const controller = new AbortController();
+          let outcome: JsonValue | undefined;
+          const wait = invoke(
+            () => clipboard.waitForChange(null),
+            controller,
+          ).then(
+            (value) => {
+              outcome = value;
+            },
+            () => {
+              // Cancellation after the deadline; reported below as a missing notification.
+            },
+          );
+          // The waiter registers asynchronously in the UI Worker, so keep writing until
+          // one write lands after registration.
+          while (outcome === undefined && Date.now() < deadline) {
+            await write();
+            await Bun.sleep(50);
+          }
+          // Cancel an unsatisfied wait so it never outlives the deadline.
+          controller.abort();
+          await wait;
+          if (
+            outcome !== undefined &&
+            (
+              outcome as {
+                sequence: number;
+              }
+            ).sequence !== baseline
+          ) {
+            payload = outcome;
+          }
+        }
+        expect(Object.keys(payload as object).sort()).toEqual([
+          "changedAt",
+          "sequence",
+        ]);
+        expect(payload).toMatchObject({
+          sequence: expect.any(Number),
+          changedAt: expect.any(Number),
+        });
+        expect(
+          (
+            payload as {
+              sequence: number;
+            }
+          ).sequence,
+        ).not.toBe(baseline);
+      }
       const image = {
         width: 2,
         height: 1,
