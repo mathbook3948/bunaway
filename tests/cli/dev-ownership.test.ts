@@ -624,3 +624,65 @@ test("a failed relaunch is reported, keeps the session and does not leak its arg
   second.exit(0);
   await closing;
 });
+
+test("a restart from the controller supersedes a relaunch still launching, leaving one tracked host", async () => {
+  const processes = [
+    appProcess([]),
+    appProcess([]),
+    appProcess([]),
+  ];
+  const relaunchLaunch = Promise.withResolvers<void>();
+  const stopped: unknown[] = [];
+  let launches = 0;
+  const owner = new DevApp(
+    new AbortController().signal,
+    () => {},
+    undefined,
+    undefined,
+    {
+      async launch() {
+        launches += 1;
+        const index = launches - 1;
+        if (index === 1) {
+          // The relaunch's host is slow to start.
+          await relaunchLaunch.promise;
+        }
+        return processes[index]?.app;
+      },
+      async stop(app) {
+        stopped.push(app.process);
+        await app.process.exited;
+      },
+    },
+  );
+  await owner.start(project, built, () => true);
+  processes[0]?.requestRelaunch([
+    "--again",
+  ]);
+  processes[0]?.exit(0);
+  for (let waited = 0; launches < 2 && waited < 100; waited++) {
+    await Bun.sleep(1);
+  }
+  expect(launches).toBe(2);
+  // A source change restarts through the controller while the relaunch's launch is pending.
+  await owner.stop();
+  await owner.start(project, built, () => true);
+  expect(launches).toBe(3);
+  // The relaunch's host then appears: it is released instead of overwriting the tracked one.
+  relaunchLaunch.resolve();
+  processes[1]?.exit(0);
+  for (
+    let waited = 0;
+    !stopped.includes(processes[1]?.app.process) && waited < 100;
+    waited++
+  ) {
+    await Bun.sleep(1);
+  }
+  expect(stopped).toContain(processes[1]?.app.process);
+  expect(owner.running).toBe(true);
+  // Stopping the owner stops the tracked host, the third one.
+  const closing = owner.stop();
+  processes[2]?.exit(0);
+  await closing;
+  expect(stopped).toContain(processes[2]?.app.process);
+});

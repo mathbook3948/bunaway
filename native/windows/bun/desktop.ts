@@ -381,14 +381,16 @@ export class DesktopLifecycle {
         }
         const parsed = optionsObject(relaunchOptions);
         const argv = relaunchArguments(parsed.argv);
-        // Refuse before the shutdown commits: afterwards the caller can no longer be told.
-        checkRelaunch?.(argv);
-        return this.quit(
-          "api",
-          shutdownRequest(parsed, {
-            argv,
-          }),
-        );
+        const request = shutdownRequest(parsed, {
+          argv,
+        });
+        // A request that cannot join the running shutdown resolves false without being applied,
+        // so it must not fail on a command line that would never be used.
+        if (!this.conflictsWithShutdown(resolveRequest(request))) {
+          // Refuse before the shutdown commits: afterwards the caller can no longer be told.
+          checkRelaunch?.(argv);
+        }
+        return this.quit("api", request);
       },
     };
     this.context = Object.freeze(context);
@@ -659,7 +661,7 @@ export class DesktopLifecycle {
     // joins it whatever it asked for; an app `api` request joins only if it asks for the same
     // exit code and relaunch. Otherwise it is not applied and resolves false.
     const joins = (current: ResolvedRequest) =>
-      reason !== "api" || sameRequest(wanted, current);
+      reason !== "api" || (!this.forced && sameRequest(wanted, current));
     if (this.ending) {
       return Promise.resolve(joins(this.committedRequest()));
     }
@@ -696,6 +698,21 @@ export class DesktopLifecycle {
         this.pendingRequest = undefined;
       });
     return this.quitting;
+  }
+  /**
+   * True when an app request could not join the shutdown that is pending or committed. After
+   * `exit()` nothing joins, because the hooks the request relies on never run.
+   */
+  private conflictsWithShutdown(wanted: ResolvedRequest): boolean {
+    if (this.forced) {
+      return true;
+    }
+    const current = this.ending
+      ? this.committedRequest()
+      : this.quitting
+        ? this.pendingRequest
+        : undefined;
+    return current !== undefined && !sameRequest(wanted, current);
   }
   /** The request of the committed shutdown; a shutdown without one asked for the defaults. */
   private committedRequest(): ResolvedRequest {

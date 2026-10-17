@@ -211,16 +211,17 @@ const channel = new Channel(
             await core?.stop();
             sessions.clear();
           },
-          reportCleaned: async () => {
-            // The main thread owns the process exit, so it learns the code before cleanup ends.
-            await channel.send({
+          reportCleaned: () =>
+            channel.send({
+              kind: "cleaned",
+            }),
+          // The main thread owns the process exit. The code goes last, after onQuit, which may
+          // still change it through exit().
+          reportExitCode: () =>
+            channel.send({
               kind: "exit-code",
               exitCode: desktop?.exitCode ?? 0,
-            });
-            await channel.send({
-              kind: "cleaned",
-            });
-          },
+            }),
           nativeStopped: nativeStopped.promise,
         });
         await channel.drain();

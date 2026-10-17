@@ -94,7 +94,9 @@ export interface DesktopContext {
    * The first shutdown wins, whether its `beforeQuit` check is pending or it is already committed.
    * A request that overlaps it with the same exit code (0 when omitted) and the same relaunch
    * (none, or the same `argv`) shares its result. A different one is not applied and resolves
-   * `false`, and the first shutdown continues unchanged. Rejects with `INVALID_ARGUMENT` for an
+   * `false`, and the first shutdown continues unchanged. After `exit()` every app request resolves
+   * `false`, because the hooks it relies on no longer run. A cleanup that overruns the host's 40
+   * second limit is a host failure and exits with code 1. Rejects with `INVALID_ARGUMENT` for an
    * exit code outside 0 to 255.
    */
   quit(options?: QuitOptions): Promise<boolean>;

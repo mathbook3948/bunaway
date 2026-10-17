@@ -166,8 +166,8 @@ export class DevApp {
       })
     | undefined;
   private stopping: Promise<void> | undefined;
-  /** Arguments the next host receives; replaced by an app-requested relaunch. */
-  private appArguments: readonly string[] = [];
+  /** Bumped by every restart-controller start or stop, to tell a stale relaunch from a current one. */
+  private generation = 0;
 
   constructor(
     private readonly signal: AbortSignal,
@@ -193,11 +193,25 @@ export class DevApp {
     return this.active !== undefined;
   }
 
-  /** Starts only a current revision; cancellation of an in-flight launch reclaims its result. */
-  async start(
+  /**
+   * Starts only a current revision; cancellation of an in-flight launch reclaims its result.
+   * A start from the restart controller supersedes an app-requested relaunch still in flight.
+   */
+  start(
     project: Project,
     built: BuiltPackage,
     isCurrent: () => boolean,
+  ): Promise<void> {
+    this.generation += 1;
+    return this.launch(project, built, isCurrent, []);
+  }
+
+  /** Launches one host with `appArguments`, which apply to that host only. */
+  private async launch(
+    project: Project,
+    built: BuiltPackage,
+    isCurrent: () => boolean,
+    appArguments: readonly string[],
   ): Promise<void> {
     if (this.signal.aborted || !isCurrent()) {
       return;
@@ -206,13 +220,18 @@ export class DevApp {
       project,
       built,
       isCurrent,
-      this.appArguments,
+      appArguments,
     );
     if (!app) {
       return;
     }
-    // Relaunch arguments apply to this one host only, like a packaged app's relaunch.
-    this.appArguments = [];
+    if (this.active) {
+      // Two launches overlapped and the other one was tracked first. Release this host instead
+      // of overwriting the tracked one, which would leave a host nobody can stop.
+      app.connection?.close();
+      await this.operations.stop(app);
+      return;
+    }
     this.active = {
       ...app,
       built,
@@ -220,7 +239,7 @@ export class DevApp {
       project,
     };
     if (this.signal.aborted || !isCurrent()) {
-      await this.stop();
+      await this.release();
       return;
     }
     const current = this.active;
@@ -250,31 +269,36 @@ export class DevApp {
     previous: NonNullable<DevApp["active"]>,
     appArguments: readonly string[],
   ): Promise<void> {
-    this.appArguments = appArguments;
+    // A restart from the controller (a source change or shutdown) bumps the generation and wins.
+    const generation = this.generation;
+    const isCurrent = () =>
+      !this.signal.aborted && this.generation === generation;
     try {
-      await this.stop();
-      if (this.signal.aborted || this.active) {
-        // Another start already replaced the host; the request is stale.
-        this.appArguments = [];
+      await this.release();
+      if (!isCurrent()) {
         return;
       }
-      await this.start(
+      await this.launch(
         previous.project,
         previous.built,
-        () => !this.signal.aborted,
+        isCurrent,
+        appArguments,
       );
     } catch (error) {
       console.error(
         `Relaunch failed; fix the problem and save to restart: ${String(error)}`,
       );
-    } finally {
-      // A launch that did not happen must not leave the arguments for the next restart.
-      this.appArguments = [];
     }
   }
 
-  /** Detaches the old app before termination so its expected exit cannot end the dev session. */
+  /** Stops the app for the restart controller, superseding any relaunch in flight. */
   stop(): Promise<void> {
+    this.generation += 1;
+    return this.release();
+  }
+
+  /** Detaches the old app before termination so its expected exit cannot end the dev session. */
+  private release(): Promise<void> {
     if (this.stopping) {
       return this.stopping;
     }

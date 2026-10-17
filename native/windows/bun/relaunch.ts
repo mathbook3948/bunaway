@@ -1,3 +1,4 @@
+import { BunawayError } from "@bunaway/protocol";
 import type { RelaunchCommand } from "./job.ts";
 
 /** Marks a host started by `relaunch()`, so it waits for its predecessor to release the app lock. */
@@ -29,7 +30,10 @@ export function relaunchCommand(
   argv: readonly string[],
 ): RelaunchCommand {
   if (!host.compiled && host.script === undefined) {
-    throw new Error("Cannot relaunch: the host script is unknown");
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "Cannot relaunch: the host script is unknown.",
+    });
   }
   return {
     executable: host.execPath,

@@ -145,6 +145,8 @@ payload는 `{ windowId, viewId, phase }`이고 `phase`는 `created`, `ready`, `c
   모두 적용한다. 앱의 `quit`, `relaunch` 요청이 진행 중이거나 확정된 요청과 종료 코드(생략은 0)와
   재실행 여부, `argv`가 모두 같으면 그 결과(promise)를 공유한다. 다르면 적용하지 않고 `false`를 반환하며
   먼저 시작된 종료는 그대로 진행한다. 호출자는 `true`일 때만 자신의 요청이 적용됐다고 볼 수 있다.
+  `exit` 뒤에는 앱 훅이 실행되지 않으므로 같은 요청도 `false`를 반환한다. 정리가 40초를 넘기는 경우는
+  호스트 실패로 보고 코드 1로 끝낸다.
   트레이 Quit이나 마지막 창 닫기처럼 호스트가 낸 요청은 요청 내용이 없으므로 항상 진행 중인 종료에 합류한다.
   `exit`는 이 규칙에서 예외로 항상 기존 요청을 대체한다.
 - 재실행 인자 기본값은 최초 실행의 `OpenRequest.argv`(개발 스위치와 autostart 접두사 제외)다.
@@ -172,8 +174,8 @@ Job의 `BREAKAWAY_OK`는 이 호출 동안에만 켠다. 바깥 Job이 이탈을
 다음 소스 변경에서 정상 재시작한다.
 요청의 `argv`는 그 새 호스트에만 쓰고 이후 소스 변경 재시작에는 붙이지 않는다.
 확인이 오지 않으면 CLI는 일반 종료로 처리한다. 특수 종료 코드에는 의존하지 않는다.
-macOS는 `quit`의 코드와 `exit`를 같은 `DesktopLifecycle`로 지원하고 코드는 `exit-code` 패킷으로 메인
-스레드에 전달한다. 새 프로세스를 만들고 부모 종료를 기다리는 구현은 별도 작업이라 `relaunch`는
+macOS는 `quit`의 코드와 `exit`를 같은 `DesktopLifecycle`로 지원하고 코드는 `onQuit`까지 끝난 뒤 마지막에
+`exit-code` 패킷으로 메인 스레드에 전달한다. `onQuit` 안의 `exit`도 최종 코드에 반영된다. 새 프로세스를 만들고 부모 종료를 기다리는 구현은 별도 작업이라 `relaunch`는
 `UNSUPPORTED`로 거부한다.
 
 다른 프레임워크와의 비교. Electron의 `app.exit(code)`는 창을 닫지 않고 `before-quit`, `will-quit`,

@@ -180,7 +180,8 @@ test("exit skips beforeQuit, onWillQuit and onQuit but commits once with its cod
   expect(stops).toEqual([
     "stop",
   ]);
-  // Later quit requests never consult beforeQuit; only one matching the exit joins it.
+  // Later app requests never consult beforeQuit and are never applied, even with the same code:
+  // the hooks they rely on do not run after exit().
   expect(
     await desktop.context.quit({
       exitCode: 1,
@@ -190,7 +191,7 @@ test("exit skips beforeQuit, onWillQuit and onQuit but commits once with its cod
     await desktop.context.quit({
       exitCode: 9,
     }),
-  ).toBe(true);
+  ).toBe(false);
   expect(desktop.exitCode).toBe(9);
   expect(seen).toEqual([]);
 });
@@ -637,4 +638,51 @@ test("the relaunch command line limit counts the quoted executable, options and 
       ),
     ),
   ).toBe(true);
+});
+
+test("a relaunch that cannot join the running shutdown resolves false before the command line check", async () => {
+  const checked: unknown[] = [];
+  const check = (argv: readonly string[] | undefined) => {
+    checked.push(argv);
+    throw new Error("too long");
+  };
+  const { desktop } = lifecycle({}, true, check);
+  expect(
+    await desktop.context.quit({
+      exitCode: 3,
+    }),
+  ).toBe(true);
+  expect(
+    await desktop.context.relaunch({
+      exitCode: 4,
+    }),
+  ).toBe(false);
+  expect(checked).toEqual([]);
+
+  // After exit() nothing joins either, so the check is skipped as well.
+  const forced = lifecycle({}, true, check);
+  await forced.desktop.context.exit(2);
+  expect(await forced.desktop.context.relaunch()).toBe(false);
+  expect(checked).toEqual([]);
+});
+
+test("relaunchCommand reports an unknown host script as an unsupported relaunch", () => {
+  expect(() =>
+    relaunchCommand(
+      {
+        compiled: false,
+        execPath: "bun.exe",
+        execArgv: [],
+        script: undefined,
+        switches: [],
+        cwd: "C:\\app",
+        env: {},
+      },
+      [],
+    ),
+  ).toThrow(
+    expect.objectContaining({
+      code: "UNSUPPORTED",
+    }),
+  );
 });

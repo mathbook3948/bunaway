@@ -479,7 +479,8 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
         // The backend needs acceptance even while plugin parsing or execution is pending.
         void executeRequest(packet).catch(fail);
       } else if (packet.kind === "exit-code") {
-        // Sent before `cleaned`, so the code is known once teardown starts.
+        // Sent last, after onQuit; the backend drains its channel before the Worker exits, so the
+        // code is known when `exited` settles.
         exitCode = packet.exitCode;
       } else if (packet.kind === "cleaned") {
         cleaned = true;

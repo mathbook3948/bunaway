@@ -392,9 +392,18 @@ export function startOutsideAppJob(command: RelaunchCommand): void {
     }
     api.symbols.CloseHandle(information.readBigUInt64LE(0));
     api.symbols.CloseHandle(information.readBigUInt64LE(8));
-  } finally {
-    setFlags(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE);
+  } catch (error) {
+    try {
+      setFlags(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE);
+    } catch (restoreError) {
+      // A restore failure must not hide why the launch failed; it is kept as the cause instead.
+      if (error instanceof Error && error.cause === undefined) {
+        error.cause = restoreError;
+      }
+    }
+    throw error;
   }
+  setFlags(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE);
 }
 
 /**

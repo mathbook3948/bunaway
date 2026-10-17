@@ -472,7 +472,7 @@ const packetDefinitions = {
     ],
     "control",
   ),
-  /** The process exit code the backend chose for an orderly shutdown; sent before `cleaned`. */
+  /** The process exit code the backend chose for an orderly shutdown; sent last, after `onQuit`. */
   "exit-code": definePacket(
     {
       exitCode: processExitCode,
