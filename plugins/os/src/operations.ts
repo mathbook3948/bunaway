@@ -1,6 +1,11 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
-import { infoSchema, localeSchema, usageSchema } from "#os/contract";
+import {
+  beepInputSchema,
+  infoSchema,
+  localeSchema,
+  usageSchema,
+} from "#os/contract";
 import type { initialize } from "#os/platforms/windows";
 
 const operation = defineNativeOperation<ReturnType<typeof initialize>>();
@@ -20,5 +25,10 @@ export const osOperations = {
     input: z.null(),
     output: localeSchema,
     handler: (_input, { instance }) => instance.locale(),
+  }),
+  beep: operation({
+    input: beepInputSchema,
+    output: z.null(),
+    handler: (input, { instance }) => instance.beep(input.kind),
   }),
 };

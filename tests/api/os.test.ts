@@ -12,6 +12,7 @@ test("OS reads have independent permissions and strict null inputs", () => {
     "info",
     "usage",
     "locale",
+    "beep",
   ]);
   for (const operation of [
     "info",
