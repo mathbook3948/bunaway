@@ -12,11 +12,18 @@ export type NativeTraySnapshot = {
   showOnLeftClick: boolean;
   menuOnRightClick: boolean;
 };
-/** Classic shell notifications, with observed physical pointer coordinates when available. */
+/** Classic shell notifications plus derived hover states (button "none"), with observed physical pointer coordinates when available. */
 export type NativeTrayEvent = {
   id: "main";
   button: "left" | "right" | "middle" | "none";
-  state: "down" | "up" | "double-click" | "context-menu";
+  state:
+    | "down"
+    | "up"
+    | "double-click"
+    | "context-menu"
+    | "enter"
+    | "move"
+    | "leave";
   position: {
     x: number;
     y: number;

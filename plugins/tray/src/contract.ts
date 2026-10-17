@@ -47,6 +47,9 @@ export const trayEventSchema = z.strictObject({
     "up",
     "double-click",
     "context-menu",
+    "enter",
+    "move",
+    "leave",
   ]),
   position: positionSchema.nullable(),
 });
@@ -73,6 +76,9 @@ export const trayEvents = {
           "up",
           "double-click",
           "context-menu",
+          "enter",
+          "move",
+          "leave",
         ],
       },
       position: {

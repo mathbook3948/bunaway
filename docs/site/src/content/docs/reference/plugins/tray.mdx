@@ -56,11 +56,25 @@ BITMAPINFOHEADER와 uncompressed DIB 프레임을 받습니다. DIB는 1, 4, 8, 
 동작을 꺼도 입력 알림은 계속 전달합니다. Quit과 `beforeQuit`, 창 없는 실행 유지 조건을 바꾸지 않습니다.
 
 `tray.input`의 payload는 `{ id: "main", button, state, position }`입니다.
-button은 left, right, middle, none이며 state는 down, up, double-click, context-menu입니다.
+button은 left, right, middle, none이며 state는 down, up, double-click, context-menu, enter, move, leave입니다.
 keyboard에서도 발생할 수 있는 context-menu는 button none으로 구분합니다.
 position은 알림 처리 시 관측한 물리 포인터 좌표 `{ x, y }`이고 조회 실패는 null입니다.
 double-click은 두 번째 down 메시지를 나타내며 down과 up 알림이 함께 올 수 있습니다.
 연결한 뷰의 events에 tray.input을 허용하고 구독해야 화면에 전달합니다.
+
+### enter, move, leave
+
+포인터가 아이콘 위에 올라오면 `enter`, 머무는 동안 `move`, 벗어나면 `leave`를 전달합니다.
+세 상태의 button은 항상 none이고 position은 이벤트 시점의 포인터 좌표입니다.
+Windows shell은 mouse move 알림만 보내고 벗어남은 알리지 않으므로 다음 규칙으로 판단합니다.
+
+- 첫 mouse move 알림이 `enter`입니다. 이후 알림은 50ms 이상 간격일 때만 `move`로 전달하고 그 사이 알림은 버립니다.
+- hover 중에는 100ms마다 포인터 좌표를 `Shell_NotifyIconGetRect`의 아이콘 영역과 비교하고, 영역 밖이면 `leave`를 전달합니다.
+- 아이콘 영역이나 포인터 좌표를 얻지 못하면 확인할 수 없으므로 벗어난 것으로 처리합니다.
+
+한계: `leave`는 실제로 벗어난 시점보다 최대 약 100ms 늦습니다. 마지막 `move`는 보장하지 않으며
+50ms 안의 움직임은 합쳐서 전달하지 않고 버립니다. 아이콘이 숨은 알림 영역(overflow)에 있거나
+shell이 영역을 보고하지 않으면 `enter` 직후 `leave`가 올 수 있습니다. 플러그인을 종료하면 `leave` 없이 판단을 멈춥니다.
 
 창 없는 백엔드는 waitForEvent를 사용합니다. 현재 대기자에게만 다음 알림을 전달하고 이전 입력은
 재생하지 않습니다. 대기는 최대 16개이며 초과하면 BUSY입니다. 호출 취소, 컨텍스트 폐기와 앱 종료는
@@ -82,7 +96,7 @@ native shell 변경 실패는 INTERNAL이며 이전 tooltip과 이미지 설정�
 
 호스트가 custom HICON을 소유하고 교체와 종료 때 해제하며 앱 아이콘은 빌린 핸들로 유지합니다.
 플러그인 종료는 입력 구독과 대기자를 정리합니다. 여러 아이콘과 GUID, 초기 독립 이미지 옵션,
-생성/표시/숨김/제거 API와 제거 뒤 상주 정책, balloon과 enter/leave/move는 후속 작업입니다.
+생성/표시/숨김/제거 API와 제거 뒤 상주 정책, balloon은 후속 작업입니다.
 
 ## 이전 앱 정의에서 옮기기
 
