@@ -5,12 +5,14 @@ import type { z } from "zod";
 import type { blockerInputSchema } from "#power/contract";
 import { createPower } from "#power/platforms/windows-bindings";
 import { PowerBlockers } from "#power/platforms/windows-blockers";
+import { watchPowerLifecycle } from "#power/platforms/windows-lifecycle-events";
 import { watchPowerStatus } from "#power/platforms/windows-status-events";
 /** Own DLLs, power request handles and the status change subscription on the UI thread. */
 export class WindowsPower {
   private readonly native = createPower();
   private readonly blockers = new PowerBlockers(this.native);
   private releaseStatusEvents: (() => void) | undefined;
+  private releaseLifecycleEvents: (() => void) | undefined;
   private disposed = false;
 
   /** Status events are optional: hosts without system event services still answer queries. */
@@ -22,9 +24,15 @@ export class WindowsPower {
         () => this.native.status(),
         systemEvents,
       );
+      this.releaseLifecycleEvents = watchPowerLifecycle(systemEvents);
     } catch (error) {
       // Construction failed, so no caller can dispose the native resources.
       const failures: unknown[] = [];
+      try {
+        this.releaseStatusEvents?.();
+      } catch (cleanup) {
+        failures.push(cleanup);
+      }
       try {
         this.blockers.dispose();
       } catch (cleanup) {
@@ -107,6 +115,12 @@ export class WindowsPower {
     try {
       this.releaseStatusEvents?.();
       this.releaseStatusEvents = undefined;
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      this.releaseLifecycleEvents?.();
+      this.releaseLifecycleEvents = undefined;
     } catch (error) {
       errors.push(error);
     }
