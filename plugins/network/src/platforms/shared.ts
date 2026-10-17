@@ -1,3 +1,4 @@
+import type { NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
 import type {
@@ -5,18 +6,53 @@ import type {
   requestInputSchema,
 } from "#network/contract";
 import { request } from "#network/platforms/http";
+import {
+  hasActiveConnection,
+  startIntervalPolling,
+  watchOnline,
+} from "#network/platforms/online-state";
 import { exchange } from "#network/platforms/websocket";
 
 const MAX_ACTIVE_REQUESTS = 16;
 type RequestInput = z.output<typeof requestInputSchema>;
 type ExchangeInput = z.output<typeof exchangeInputSchema>;
 
-/** Own cancellable requests on the selected host thread. */
-export function initialize() {
+/**
+ * Own cancellable requests on the selected host thread. Hosts with system event services also
+ * get `network.onlineChanged`; the watcher stops when the adapter is disposed.
+ */
+export function initialize(environment?: NativeEnvironment) {
+  const systemEvents = environment?.windows?.systemEvents;
   return {
     active: new Map<AbortController, Promise<unknown>>(),
     disposed: false,
+    stopOnlineWatch: systemEvents
+      ? watchOnline({
+          read: hasActiveConnection,
+          publish: (online) =>
+            systemEvents.publish(
+              "network.onlineChanged",
+              {
+                online,
+              },
+              "network.isOnline",
+            ),
+          startPolling: startIntervalPolling,
+          fail: () => console.error("Online state check failed."),
+        })
+      : undefined,
   };
+}
+
+/** Current connection state; fails after disposal like the other operations. */
+export function runIsOnline(state: ReturnType<typeof initialize>): boolean {
+  if (state.disposed) {
+    throw new BunawayError({
+      code: "CANCELLED",
+      message: "Network adapter is disposed.",
+    });
+  }
+  return hasActiveConnection();
 }
 
 /** Apply one limit, deadline and cleanup path to HTTP and WebSocket work. */
@@ -108,6 +144,7 @@ export function runExchange(
 export async function dispose(state: ReturnType<typeof initialize>) {
   if (!state.disposed) {
     state.disposed = true;
+    state.stopOnlineWatch?.();
     for (const controller of state.active.keys()) {
       controller.abort(
         new BunawayError({

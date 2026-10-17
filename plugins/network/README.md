@@ -1,7 +1,9 @@
 # Bounded network plugin
 
-Register `network` to use `network.request` and `network.exchange` on Windows and macOS.
-Each operation has an independent permission. Applications own URL access rules in backend commands;
+Register `network` to use `network.request`, `network.exchange` and `network.isOnline` on Windows and macOS.
+`network.isOnline` reports whether a non-loopback connection exists, like Electron's `net.isOnline()`; it does not
+detect captive portals or internet reachability. Windows also publishes `network.onlineChanged` when that value changes,
+found by comparing it every 2 seconds. Each operation has an independent permission. Applications own URL access rules in backend commands;
 operation grants do not contain resource allowlists. Trusted backend code can use Bun fetch and WebSocket directly.
 See the [public contract](../../docs/site/src/content/docs/reference/plugins/network.mdx) for limits and access-rule examples.
 

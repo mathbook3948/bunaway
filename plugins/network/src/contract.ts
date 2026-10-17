@@ -177,6 +177,23 @@ export const exchangeResultSchema = z.strictObject({
     wasClean: z.boolean(),
   }),
 });
+/** `network.isOnline` result: whether a non-loopback network connection exists. */
+export const onlineSchema = z.boolean();
+/** Native events use the protocol's portable schema representation. */
+export const networkEvents = {
+  "network.onlineChanged": {
+    type: "object",
+    properties: {
+      online: {
+        type: "boolean",
+      },
+    },
+    required: [
+      "online",
+    ],
+    additionalProperties: false,
+  },
+} as const;
 /** HTTP request and response types inferred from the validated transport contract. */
 export type NetworkRequest = z.input<typeof requestInputSchema>;
 export type NetworkResponse = z.output<typeof responseSchema>;

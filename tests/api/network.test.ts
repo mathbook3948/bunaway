@@ -138,6 +138,7 @@ test("network operations require independent grants and expose no persistent soc
   expect(Object.keys(network)).toEqual([
     "request",
     "exchange",
+    "isOnline",
   ]);
   for (const name of [
     "request",
