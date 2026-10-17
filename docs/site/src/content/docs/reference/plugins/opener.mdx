@@ -78,6 +78,34 @@ await opener.trashFile("C:/Users/me/Documents/삭제할 파일.txt");
 
 부모 핸들을 유지해 부모 경로 교체를 막습니다. 파일은 이동을 위해 삭제 공유를 허용하고 삭제 직전 파일 ID, 경로와 링크를 다시 검사합니다. 마지막 검사 뒤 다른 프로세스가 파일 자체를 교체하는 경쟁까지 막지는 못합니다. 앱의 파일별 승인이 파일 ID에 원자적으로 적용된다고 가정하지 마세요. 휴지통 이동은 I/O Worker에서 실행하며 취소나 기한 초과로 이미 진행된 이동을 되돌리지 않습니다. 복원 API는 제공하지 않습니다.
 
+## 최근 문서
+
+Windows 셸의 최근 항목(Recent Items)에 파일을 추가하거나 목록을 지웁니다.
+
+- `opener.addRecentDocument(path: string, options?: NativeInvokeOptions): Promise<null>`은 기존 파일 하나를 사용자의 셸 최근 항목에 추가합니다. 입력은 `{ path: string }`이고 권한은 `opener.addRecentDocument`입니다.
+- `opener.clearRecentDocuments(options?: NativeInvokeOptions): Promise<null>`은 `SHAddToRecentDocs(NULL)`을 호출해 **사용자의 셸 최근 항목 전체**를 지웁니다. 이 앱이 추가한 항목뿐 아니라 다른 앱과 사용자가 만든 항목도 포함하며 앱 범위로 제한할 수 없습니다. 입력은 `{}`이고 권한은 `opener.clearRecentDocuments`입니다. 사용자 데이터를 지우므로 사용자의 명시적 동작에만 연결하세요.
+
+화면에서 직접 호출하려면 `plugin.opener.addRecentDocument`, `plugin.opener.clearRecentDocuments` 명령도 허용합니다.
+
+```ts
+await opener.addRecentDocument("C:/Users/me/Documents/보고서.txt");
+await opener.clearRecentDocuments();
+```
+
+추가는 다른 파일 작업과 같은 경로 검사와 핸들 고정을 거친 뒤 opener의 I/O STA에서 `SHAddToRecentDocs(SHARD_PATHW)`를 호출합니다. 핸들 고정은 호출이 반환될 때까지만 유지되며, 셸이 그 뒤에 파일을 읽는 시점의 교체까지 막지는 않습니다. 삭제는 `SHAddToRecentDocs(NULL)`을 호출합니다. 이 API는 결과를 반환하지 않으므로 성공은 요청을 전달했다는 뜻이며, 사용자의 최근 항목 기록 설정에 따라 항목이 표시되지 않을 수 있습니다. 이 기능이 보장하는 것은 셸 최근 항목에 대한 추가와 삭제 요청뿐입니다. 앱 전용 최근 문서나 점프 목록 연결은 보장하지 않으며, 점프 목록과의 연결은 AppUserModelID 설정이 제공된 뒤의 별도 작업입니다. 목록 조회는 지원하지 않습니다. Windows는 앱별 최근 목록을 읽는 공식 API를 제공하지 않고, Recent 폴더의 `.lnk`는 앱별로 구분되지 않기 때문입니다. macOS는 `UNSUPPORTED`입니다.
+
+Electron과 같이 호출 뒤 프로세스에 멀티스레드 COM 아파트(MTA)가 남을 수 있으며, opener는 그 상태에서도 정상 동작합니다. opener는 자신이 초기화한 STA만 종료 때 해제합니다.
+
+최근 문서 작업의 오류는 다음과 같습니다.
+
+| 오류 | 의미 |
+| --- | --- |
+| `INVALID_ARGUMENT` | 경로가 유효하지 않거나 파일이 없음(`details.reason`은 `FILE_NOT_FOUND`) |
+| `PERMISSION_DENIED` | 작업 권한 없음, 파일 접근 거부나 링크 거부 |
+| `CANCELLED` | 플러그인 종료(dispose) 뒤 호출, 또는 시작 전에 이미 중단된 호출 |
+
+호스트는 승인 전에 취소된 작업을 실행하지 않으며, 이미 중단된 호출은 셸을 부르기 전에 실패합니다. 셸 호출은 동기이며 중간에 중단할 수 없으므로 취소와 기한 초과는 이미 전달한 요청을 되돌리지 않습니다.
+
 ## 정책
 
 화면에서 직접 호출하려면 기존 뷰의 `commands`에 `plugin.opener.openUrl`을, `host.permissions`에 `opener.openUrl`을 추가합니다.
@@ -146,7 +174,7 @@ URL 페이지 로딩과 Finder의 실제 선택 완료는 기다리지 않습니
 자식으로 연결 앱을 실행하거나 셸 명령을 만들지 않습니다. 접수한 작업은 취소나 종료로
 되돌리지 않습니다.
 
-Host operation은 `opener.openUrl`, `opener.openFile`, `opener.revealFile`, `opener.trashFile`입니다. 입력은 URL 작업에서 `{ url: string }`, 파일 작업에서 `{ path: string }`이고 모두 `null`을 반환합니다.
+Host operation은 `opener.openUrl`, `opener.openFile`, `opener.revealFile`, `opener.trashFile`, `opener.addRecentDocument`, `opener.clearRecentDocuments`입니다. 입력은 URL 작업에서 `{ url: string }`, 파일 작업에서 `{ path: string }`, `opener.clearRecentDocuments`에서 `{}`이고 모두 `null`을 반환합니다.
 
 | 오류 | 의미 |
 | --- | --- |

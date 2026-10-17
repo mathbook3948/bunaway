@@ -48,6 +48,14 @@ I/O Worker는 기존 C++ 작업 큐의 동기 파일 작업을 이식해 사용�
 메시지 pump를 막지 않으며, 진행 중인 동기 OS 호출은 I/O Worker의 후속 작업과 정리를
 지연시킬 수 있다.
 
+`SHAddToRecentDocs` 뒤에는 프로세스에 암묵적 MTA가 남아 COM을 초기화하지 않은 다른
+스레드도 암묵적 MTA 구성원이 될 수 있다. 전용 STA 스레드로 격리해도 Windows CI에서 같은
+상태가 남아 실패했으므로 Electron과 같이 이 상태를 수용한다. 따라서 opener의 COM 불변식은
+"I/O 스레드가 COM을 명시적으로 초기화하지 않은 상태로 시작하고, 종료 때 자신의 초기화를
+균형 있게 해제한다"이며 `CoGetApartmentType`의 qualifier로 암묵적 MTA와 구분한다. I/O STA에는
+메시지 pump가 없으므로 이 호출은 셸의 비동기 마무리를 기다리지 않는다. 그래서 동작은
+Windows CI에서 Recent 폴더의 `.lnk` 생성과 삭제를 확인해 검증한다.
+
 ## 배치할 코드
 
 아래 경로에 구현했다. `boot.ts`는 실행 인자와 앱 import를, `config.ts`는 패키지 검증을, `job.ts`는 비정상 종료 자손 회수를 담당한다.

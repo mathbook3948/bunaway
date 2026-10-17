@@ -97,7 +97,37 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
       options,
     );
   }
+
+  /**
+   * Add an existing Windows file to the user's Shell Recent Items. Success means the Shell
+   * call returned; the Shell may leave a COM multithreaded apartment in the process.
+   */
+  async function addRecentDocument(
+    path: string,
+    options?: NativeInvokeOptions,
+  ): Promise<null> {
+    return api.addRecentDocument(
+      {
+        // Same spelling rule as openFile: a POSIX path reaches the macOS host, which reports UNSUPPORTED.
+        path: normalizeOpenerFilePath(path),
+      },
+      options,
+    );
+  }
+
+  /**
+   * Clear the user's entire Windows Shell Recent Items via `SHAddToRecentDocs(NULL)`,
+   * including entries added by other apps. Listing entries is not supported.
+   */
+  async function clearRecentDocuments(
+    options?: NativeInvokeOptions,
+  ): Promise<null> {
+    return api.clearRecentDocuments({}, options);
+  }
+
   return {
+    addRecentDocument,
+    clearRecentDocuments,
     trashFile,
     openUrl,
     openFile,

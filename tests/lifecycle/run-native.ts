@@ -153,6 +153,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-opener.test.ts",
           "tests/lifecycle/windows-opener-job.test.ts",
           "tests/lifecycle/windows-opener-selected-app.test.ts",
+          "tests/lifecycle/windows-opener-recent.test.ts",
           "tests/lifecycle/windows-notification.test.ts",
           "tests/lifecycle/windows-dialog.test.ts",
           "tests/lifecycle/windows-toast.test.ts",
