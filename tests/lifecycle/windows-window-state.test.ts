@@ -4,9 +4,10 @@ import assert from "node:assert/strict";
 test.skipIf(process.platform !== "win32")(
   "native window state restores maximize history, shows hidden windows and retains constraints and fullscreen placement",
   async () => {
-    const [{ Windows }, { user, withBuffer }] = await Promise.all([
+    const [{ Windows }, { user }, { withBuffer }] = await Promise.all([
       import("#native/windows/bun/win32"),
       import("#native/windows/bun/win32-bindings"),
+      import("@bunaway/plugin/win32"),
     ]);
     const windows = new Windows(() => {});
     let hwnd = 0n;

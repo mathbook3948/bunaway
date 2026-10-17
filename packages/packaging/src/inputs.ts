@@ -222,22 +222,31 @@ function validatePlistValue(node: XmlNode): void {
   if (tag === "string") {
     return;
   }
-  const value = text.trim();
-  const valid =
-    tag === "integer"
-      ? /^[+-]?(?:0[xX][0-9a-fA-F]+|[0-9]+)$/.test(value)
-      : tag === "real"
-        ? /^[+-]?(?:(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|inf(?:inity)?|nan)$/i.test(
-            value,
-          )
-        : tag === "date"
-          ? /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value) &&
-            Number.isFinite(Date.parse(value))
-          : /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-              text.replace(/\s/g, ""),
-            );
-  if (!valid) {
+  if (!isPlistScalar(tag, text)) {
     throw new Error(`Invalid plist ${tag} value.`);
+  }
+}
+
+/** Check a scalar plist value's text against its tag's lexical form. */
+function isPlistScalar(tag: string, text: string): boolean {
+  const value = text.trim();
+  switch (tag) {
+    case "integer":
+      return /^[+-]?(?:0[xX][0-9a-fA-F]+|[0-9]+)$/.test(value);
+    case "real":
+      return /^[+-]?(?:(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|inf(?:inity)?|nan)$/i.test(
+        value,
+      );
+    case "date":
+      return (
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value) &&
+        Number.isFinite(Date.parse(value))
+      );
+    default:
+      // data: base64 text, whitespace allowed between groups.
+      return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+        text.replace(/\s/g, ""),
+      );
   }
 }
 

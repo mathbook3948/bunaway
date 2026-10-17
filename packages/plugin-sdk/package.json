@@ -6,7 +6,8 @@
   "license": "UNLICENSED",
   "exports": {
     ".": "./src/index.ts",
-    "./windows-menu": "./src/windows-menu.ts"
+    "./windows-menu": "./src/windows-menu.ts",
+    "./win32": "./src/win32.ts"
   },
   "imports": {
     "#transport": {

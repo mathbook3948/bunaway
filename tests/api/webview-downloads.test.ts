@@ -120,22 +120,22 @@ function fixture() {
   const permissions = {
     permissions: names.map((name) => `windows.${name}`),
   };
+  const defaultPayloads: Partial<Record<(typeof names)[number], JsonValue>> = {
+    setDownloadRequestsEnabled: {
+      view: "main",
+      enabled: true,
+    },
+    getDownloads: {
+      view: "main",
+    },
+  };
   const invoke = (
     name: (typeof names)[number],
     source = "backend",
-    payload: JsonValue = name === "setDownloadRequestsEnabled"
-      ? {
-          view: "main",
-          enabled: true,
-        }
-      : name === "getDownloads"
-        ? {
-            view: "main",
-          }
-        : {
-            view: "main",
-            id,
-          },
+    payload: JsonValue = defaultPayloads[name] ?? {
+      view: "main",
+      id,
+    },
   ) => {
     if (!adapter.executeUI) {
       throw new Error("Missing UI adapter");

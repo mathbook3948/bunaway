@@ -103,7 +103,7 @@ UI 컴포넌트가 사라지면 `client.listen`이 반환한 `unlisten`으로 �
 | 명령 | 동작 |
 | --- | --- |
 | `mise run install` | lockfile을 변경하지 않고 의존성 설치 |
-| `mise run hooks:install` | Lefthook pre-commit 훅 설치 |
+| `mise run hooks:install` | Lefthook pre-commit, commit-msg 훅 설치 |
 | `mise run check:staged` | stage한 파일의 포맷과 린트 검사 |
 | `mise run check` | 포맷, 린트, TypeScript, 계약 테스트 검사 |
 | `mise run test` | 프로토콜, SDK, 코어, Host API 계약과 Bun 프로세스 IPC 테스트 |
@@ -122,7 +122,12 @@ UI 컴포넌트가 사라지면 `client.listen`이 반환한 `unlisten`으로 �
 
 코드 포맷은 루트 `biome.json`을 따른다. 들여쓰기는 공백 2칸, 줄 너비는 80이며
 JS/TS 객체와 배열은 여러 줄로 펼친다. JSX 속성도 여러 줄로 배치한다.
-조건문과 반복문에는 본문이 한 문장이어도 중괄호를 쓴다.
+조건문과 반복문에는 본문이 한 문장이어도 중괄호를 쓴다. 중첩 삼항 연산자와
+non-null 단언, 인지 복잡도 25를 넘는 함수는 린트가 거부하고 새 소스 파일 이름은
+kebab-case여야 한다. 복잡도 규칙의 예외 목록(`biome.json` overrides)은 기존 파일만
+담으며 줄어들기만 한다.
+문서와 소스 텍스트, 커밋 메시지에는 em dash와 middle dot을 쓰지 않으며
+`scripts/check-text-style.ts`가 테스트와 commit-msg 훅에서 검사한다.
 초기화, 검증, 실행, 정리처럼 역할이 바뀌는 지점에는 빈 줄을 한 줄 둔다.
 Biome은 이 빈 줄을 자동으로 추가하지 않으므로 작성과 리뷰 때 구분한다.
 수정한 코드는 `mise run format`을 실행한 뒤 `mise run check`로 검증한다.

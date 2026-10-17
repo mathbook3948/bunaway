@@ -1,7 +1,7 @@
 import type { ChannelId, PackageAdapter } from "./contract.ts";
 
 // Channel adapters register here. The CLI resolves adapters through this map
-// so adding a channel never edits shared entry-point code — a new adapter is a
+// so adding a channel never edits shared entry-point code; a new adapter is a
 // new file plus a registration call.
 const adapters = new Map<ChannelId, PackageAdapter>();
 

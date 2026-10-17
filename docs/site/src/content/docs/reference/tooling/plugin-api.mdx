@@ -182,7 +182,8 @@ Windows의 `WindowSpec.window.maximized`와 `fullscreen`은 초기 일반 영역
 선택적 `validateCreation(spec)`는 작업 영역과 DPI에 의존하는 입력을 슬롯 예약과
 기존 창 종료 전에 검증합니다. HWND나 프로필을 생성하지 않으며 실패는 생성 요청에 전달됩니다.
 `WindowSpec.window`는 `WindowPlacement`의 x/y, center, useContentSize와 preventOverflow를 포함합니다.
-`MIN_WINDOW_COORDINATE`, `MAX_WINDOW_COORDINATE`는 signed 32-bit 화면 좌표 범위입니다.
+`INT32_MIN`과 `INT32_MAX`는 네이티브 코드가 좌표, 크기와 식별자를 저장하는 signed 32-bit 정수 범위이며
+`MIN_WINDOW_COORDINATE`, `MAX_WINDOW_COORDINATE`는 같은 값을 화면 좌표 범위로 사용합니다.
 `hasValidWindowPlacement(value)`는 좌표 쌍, boolean 타입과 center 충돌을 검사하고 타입을 좁힙니다.
 크기 기준과 플랫폼 지원은 [초기 창 설정](/reference/configuration/#app)을 따릅니다.
 Windows와 macOS는 true를 제공합니다. 공통 어댑터는 비어 있지 않은 options를

@@ -331,6 +331,14 @@ function jsonKey(value: JsonValue): string {
     .join(",")}}`;
 }
 
+/** The JSON Schema type name of a value when the schema declares none. */
+function jsonTypeOf(value: JsonValue): string {
+  if (value === null) {
+    return "null";
+  }
+  return Array.isArray(value) ? "array" : typeof value;
+}
+
 /** Applies the supported schema keywords to an already checked JSON snapshot. */
 function matches(schema: Schema, value: JsonValue): boolean {
   if ("const" in schema && value !== schema.const) {
@@ -346,10 +354,7 @@ function matches(schema: Schema, value: JsonValue): boolean {
     return false;
   }
   // Keywords also apply without an explicit type (for example enum + maxLength).
-  switch (
-    schema.type ??
-    (value === null ? "null" : Array.isArray(value) ? "array" : typeof value)
-  ) {
+  switch (schema.type ?? jsonTypeOf(value)) {
     case "object": {
       if (value === null || typeof value !== "object" || Array.isArray(value)) {
         return false;

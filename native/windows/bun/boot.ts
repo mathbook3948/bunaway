@@ -1,4 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
+import { USER32, pick } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
@@ -287,15 +288,7 @@ export async function reportWindowsFailure(
     }
   }
   const user = dlopen("user32.dll", {
-    MessageBoxW: {
-      args: [
-        "u64",
-        "ptr",
-        "ptr",
-        "u32",
-      ],
-      returns: "i32",
-    },
+    ...pick(USER32, "MessageBoxW"),
   });
   const text = Buffer.from(`${detail}\0`, "utf16le");
   const caption = Buffer.from(`${title}\0`, "utf16le");

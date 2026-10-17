@@ -211,6 +211,45 @@ export async function bundleAssets(
   return JSON.parse(result) as string[];
 }
 
+/**
+ * Command-line arguments the built host is launched with. A compiled Windows host
+ * embeds its configuration and takes none; the Windows development host runs boot.js
+ * through Bun with DevTools; macOS hosts receive the package directory.
+ */
+function hostArguments(
+  windows: boolean,
+  development: boolean,
+  output: string,
+  devUrl: string | undefined,
+): string[] {
+  const devUrlArguments =
+    devUrl === undefined
+      ? []
+      : [
+          "--dev-url",
+          devUrl,
+        ];
+  if (!windows) {
+    return [
+      "--package",
+      resolve(output, "Contents/Resources"),
+      ...devUrlArguments,
+    ];
+  }
+  if (!development) {
+    return [];
+  }
+  return [
+    "--no-env-file",
+    "--no-install",
+    `--config=${resolve(output, "assets/bunfig.toml")}`,
+    `--tsconfig-override=${resolve(output, "assets/tsconfig.json")}`,
+    resolve(output, "assets/boot.js"),
+    "--devtools",
+    ...devUrlArguments,
+  ];
+}
+
 function xml(text: string): string {
   return text.replace(
     /[<>&"']/g,
@@ -456,6 +495,26 @@ async function assembleProject(
     // Record release pins, hashes for selected package files, and the host hash.
     // Absent versions are omitted so the runtime reports them as null.
     const versions = await readAppVersions(project.root, root);
+    // Windows development runs the Bun FFI host from boot.js; every other build ships a
+    // compiled host, identified by its executable on Windows and by its source elsewhere.
+    let hostManifest: Record<string, string>;
+    if (!windows) {
+      hostManifest = {
+        kind: "bun-compiled",
+        sourceSha256: await hash(executable),
+      };
+    } else if (options.development) {
+      hostManifest = {
+        kind: "bun-ffi",
+        sha256: await hash(resolve(assets, "boot.js")),
+      };
+    } else {
+      hostManifest = {
+        kind: "bun-compiled",
+        executable: executableName,
+        sha256: await hash(resolve(packageRoot, executableName)),
+      };
+    }
     await writeJson(resolve(packageRoot, "manifest.json"), {
       ...pin,
       assets: hashes,
@@ -475,21 +534,7 @@ async function assembleProject(
             },
       host: {
         target,
-        ...(windows
-          ? options.development
-            ? {
-                kind: "bun-ffi",
-                sha256: await hash(resolve(assets, "boot.js")),
-              }
-            : {
-                kind: "bun-compiled",
-                executable: executableName,
-                sha256: await hash(resolve(packageRoot, executableName)),
-              }
-          : {
-              kind: "bun-compiled",
-              sourceSha256: await hash(executable),
-            }),
+        ...hostManifest,
       },
     });
     if (!windows) {
@@ -585,38 +630,12 @@ ${server ? "<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking<
             options.development ? "runtime/bun.exe" : executableName,
           )
         : resolve(output, "Contents/MacOS/bunaway-host"),
-      arguments:
-        windows && !options.development
-          ? []
-          : windows
-            ? [
-                "--no-env-file",
-                "--no-install",
-                `--config=${resolve(output, "assets/bunfig.toml")}`,
-                `--tsconfig-override=${resolve(output, "assets/tsconfig.json")}`,
-                resolve(output, "assets/boot.js"),
-                ...(options.development
-                  ? [
-                      "--devtools",
-                    ]
-                  : []),
-                ...(server
-                  ? [
-                      "--dev-url",
-                      server.url,
-                    ]
-                  : []),
-              ]
-            : [
-                "--package",
-                resolve(output, "Contents/Resources"),
-                ...(server
-                  ? [
-                      "--dev-url",
-                      server.url,
-                    ]
-                  : []),
-              ],
+      arguments: hostArguments(
+        windows,
+        options.development === true,
+        output,
+        server?.url,
+      ),
     };
   } catch (error) {
     try {

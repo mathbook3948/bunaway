@@ -334,7 +334,7 @@ try {
       }
       // The reader view closed its own window after reporting: sibling views and
       // the backend keep running. Its pending invoke (leaving-1) settles after
-      // the revoke — the backend drops the reply for the dead session and the
+      // the revoke; the backend drops the reply for the dead session and the
       // host must never deliver anything to the revoked context again.
       await waitLog(
         (e) => e.event === "view-window-closed" && e.view === "reader",

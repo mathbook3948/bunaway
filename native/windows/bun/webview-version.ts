@@ -1,4 +1,5 @@
 import { dlopen, type Pointer, ptr } from "bun:ffi";
+import { OLE32, pick } from "@bunaway/plugin/win32";
 import { readWideString } from "./wide-string.ts";
 
 /** Longest WebView2 version string accepted, in bytes (128 UTF-16 units). */
@@ -16,12 +17,7 @@ const MAX_VERSION_BYTES = 256;
  */
 export function readWebViewVersion(loaderPath: string): string {
   const ole = dlopen("ole32.dll", {
-    CoTaskMemFree: {
-      args: [
-        "ptr",
-      ],
-      returns: "void",
-    },
+    ...pick(OLE32, "CoTaskMemFree"),
   });
   const out = new BigUint64Array(1);
   try {

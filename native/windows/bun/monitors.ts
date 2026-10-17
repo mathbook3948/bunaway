@@ -1,10 +1,11 @@
 import { JSCallback, ptr } from "bun:ffi";
+import { checkHresult, withWide } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import type {
   NativeMonitor,
   NativeMonitorServices,
 } from "@bunaway/plugin-api/native";
-import { display, hr, user, withWide } from "./win32-bindings.ts";
+import { display, user } from "./win32-bindings.ts";
 
 const MONITORINFOEXW_SIZE = 104;
 const DISPLAY_DEVICEW_SIZE = 840;
@@ -68,7 +69,7 @@ export function readMonitor(handle: bigint): NativeMonitor {
   const frequency = mode.readUInt32LE(184);
   const x = Buffer.alloc(4);
   const y = Buffer.alloc(4);
-  hr(
+  checkHresult(
     display.symbols.GetDpiForMonitor(handle, 0, ptr(x), ptr(y)),
     "GetDpiForMonitor",
   );

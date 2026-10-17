@@ -7,6 +7,7 @@ import {
   read,
   toArrayBuffer,
 } from "bun:ffi";
+import { OLE32, SHELL32, USER32, pick, wide } from "@bunaway/plugin/win32";
 import type { NativeDialogServices } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
 import {
@@ -159,33 +160,13 @@ export function createDialog(
   services: NativeDialogServices,
 ): DialogDriver {
   const ole = dlopen("ole32.dll", {
-    CoInitializeEx: {
-      args: [
-        "ptr",
-        "u32",
-      ],
-      returns: "i32",
-    },
-    CoUninitialize: {
-      args: [],
-      returns: "void",
-    },
-    CoCreateInstance: {
-      args: [
-        "ptr",
-        "ptr",
-        "u32",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    CoTaskMemFree: {
-      args: [
-        "ptr",
-      ],
-      returns: "void",
-    },
+    ...pick(
+      OLE32,
+      "CoInitializeEx",
+      "CoUninitialize",
+      "CoCreateInstance",
+      "CoTaskMemFree",
+    ),
   });
   let apartment = false;
   let dialog: Pointer | undefined;
@@ -195,41 +176,13 @@ export function createDialog(
   const user = (() => {
     try {
       return dlopen("user32.dll", {
-        SendMessageW: {
-          args: [
-            "u64",
-            "u32",
-            "u64",
-            "i64",
-          ],
-          returns: "i64",
-        },
-        SetTimer: {
-          args: [
-            "u64",
-            "u64",
-            "u32",
-            "ptr",
-          ],
-          returns: "u64",
-        },
-        KillTimer: {
-          args: [
-            "u64",
-            "u64",
-          ],
-          returns: "i32",
-        },
-        PeekMessageW: {
-          args: [
-            "ptr",
-            "u64",
-            "u32",
-            "u32",
-            "u32",
-          ],
-          returns: "i32",
-        },
+        ...pick(
+          USER32,
+          "SendMessageW",
+          "SetTimer",
+          "KillTimer",
+          "PeekMessageW",
+        ),
         PostQuitMessage: {
           args: [
             "i32",
@@ -284,7 +237,6 @@ export function createDialog(
     }
     return Number(output[0]) as Pointer;
   };
-  const wide = (value: string) => Buffer.from(`${value}\0`, "utf16le");
   const dispose = () => {
     if (disposed) {
       return;
@@ -394,15 +346,7 @@ export function createDialog(
     }
     if (input.defaultDirectory !== undefined) {
       const shell = dlopen("shell32.dll", {
-        SHCreateItemFromParsingName: {
-          args: [
-            "ptr",
-            "ptr",
-            "ptr",
-            "ptr",
-          ],
-          returns: "i32",
-        },
+        ...pick(SHELL32, "SHCreateItemFromParsingName"),
       });
       try {
         const path = wide(input.defaultDirectory);

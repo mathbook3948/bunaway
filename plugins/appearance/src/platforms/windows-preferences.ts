@@ -1,4 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
+import { ADVAPI32, pick, wide } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import type { AppearancePreferences } from "#appearance/contract";
 
@@ -20,7 +21,6 @@ const COLOR_WINDOW = 5;
 const COLOR_WINDOWTEXT = 8;
 const COLOR_HIGHLIGHT = 13;
 const COLOR_HIGHLIGHTTEXT = 14;
-const wide = (value: string) => Buffer.from(`${value}\0`, "utf16le");
 
 function failure(
   message: string,
@@ -35,18 +35,7 @@ function failure(
 /** Read user preferences without changing the registry, OS settings or renderer state. */
 export function initialize() {
   const registry = dlopen("advapi32.dll", {
-    RegGetValueW: {
-      args: [
-        "u64",
-        "ptr",
-        "ptr",
-        "u32",
-        "ptr",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(ADVAPI32, "RegGetValueW"),
   });
   const loadUser = () =>
     dlopen("user32.dll", {

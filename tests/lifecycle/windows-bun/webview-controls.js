@@ -3,12 +3,11 @@ import windows from "@bunaway/plugin-windows";
 
 const client = createClient();
 await client.ready;
-const view =
-  location.pathname === "/denied.html"
-    ? "denied"
-    : location.pathname === "/peer.html"
-      ? "peer"
-      : "main";
+const viewsByPath = {
+  "/denied.html": "denied",
+  "/peer.html": "peer",
+};
+const view = viewsByPath[location.pathname] ?? "main";
 if (view === "denied") {
   try {
     await windows.reloadWebView({

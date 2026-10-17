@@ -286,7 +286,16 @@
           "defineNativeOperation",
           "BunawayError",
           "NativeEventWaiters",
-          "defineNativeAdapter"
+          "defineNativeAdapter",
+          "base64Schema",
+          "canonicalBase64Bytes",
+          "base64CharactersFor",
+          "int32Schema",
+          "nonNegativeInt32Schema",
+          "attemptAll",
+          "attemptAllAsync",
+          "failWithCleanup",
+          "ResourceOwner"
         ]
       }
     },
@@ -295,6 +304,29 @@
       "source": "packages/plugin-sdk/src/windows-menu.ts",
       "pages": {
         "reference/tooling/native-plugins": ["NativePopupMenu"]
+      }
+    },
+    {
+      "name": "@bunaway/plugin/win32",
+      "source": "packages/plugin-sdk/src/win32.ts",
+      "pages": {
+        "reference/tooling/native-plugins": [
+          "wide",
+          "withBuffer",
+          "withWide",
+          "hresultText",
+          "checkHresult",
+          "pick",
+          "KERNEL32",
+          "USER32",
+          "USER32_MENUS",
+          "OLE32",
+          "SHELL32",
+          "COMBASE",
+          "ADVAPI32",
+          "COINIT_APARTMENTTHREADED",
+          "COINIT_MULTITHREADED"
+        ]
       }
     },
     {
@@ -337,7 +369,9 @@
           "MAX_DOWNLOAD_METADATA_BYTES",
           "MAX_DOWNLOAD_SNAPSHOT_BYTES",
           "isDownloadSnapshotWithinLimits",
-          "DOWNLOAD_APPROVAL_TIMEOUT_MS"
+          "DOWNLOAD_APPROVAL_TIMEOUT_MS",
+          "INT32_MIN",
+          "INT32_MAX"
         ],
         "reference/tooling/native-plugins": [
           "MAX_TRAY_ICO_BYTES",

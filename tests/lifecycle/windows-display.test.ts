@@ -182,10 +182,11 @@ const MSG_SIZE = 48;
 test.skipIf(process.platform !== "win32")(
   "taskbar attention requests reach the shell and report invalid FLASHWINFO",
   async () => {
-    const [{ Windows }, { user, kernel, withWide }, { dlopen, ptr }] =
+    const [{ Windows }, { user, kernel }, { withWide }, { dlopen, ptr }] =
       await Promise.all([
         import("#native/windows/bun/win32"),
         import("#native/windows/bun/win32-bindings"),
+        import("@bunaway/plugin/win32"),
         import("bun:ffi"),
       ]);
     const shell = dlopen("user32.dll", {

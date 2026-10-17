@@ -1,4 +1,10 @@
 import { dlopen, type Pointer, ptr } from "bun:ffi";
+import {
+  checkHresult,
+  hresultText,
+  wide,
+  withWide,
+} from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -34,7 +40,7 @@ import {
   interpretEditCommandResult,
 } from "./webview-edit-command.ts";
 import { enableCustomTitlebar } from "./webview-titlebar.ts";
-import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
+import { kernel, user } from "./win32-bindings.ts";
 
 const embedded = Bun.embeddedFiles.some(
   (file) => (file as File).name === "manifest.json",
@@ -85,6 +91,14 @@ type EnvironmentGroup = {
   drainer?: WebView;
 };
 const environments = new Map<string, EnvironmentGroup>();
+
+/** The failure text reported for an edit role whose DevTools call did not start. */
+function describeDevToolsFailure(error: unknown): string {
+  if (error instanceof DevToolsStartError) {
+    return hresultText(error.hresult);
+  }
+  return error instanceof Error ? error.message : String(error);
+}
 // Slots/IIDs are from the pinned WebView2 SDK 1.0.4129.50, Win64 COM ABI.
 /** Own one controller and its callbacks; profile peers share an environment and its final process drain. */
 export class WebView {
@@ -250,13 +264,13 @@ export class WebView {
           if (this.closing && (Number(result) < 0 || !created)) {
             return;
           }
-          hr(Number(result), "Controller completion");
+          checkHresult(Number(result), "Controller completion");
           assert(created);
           this.controller = created as Pointer;
           addRef(this.controller);
           this.webview = getObject(this.controller, 25);
           const pid = new Uint32Array(1);
-          hr(
+          checkHresult(
             method(this.webview, 37, [
               "ptr",
             ])(ptr(pid)),
@@ -280,7 +294,7 @@ export class WebView {
           }
           this.configure(assets);
           this.resize();
-          hr(
+          checkHresult(
             method(this.controller, 4, [
               "i32",
             ])(1),
@@ -365,7 +379,7 @@ export class WebView {
       const controller = this.completions[1];
       assert(browser && controller);
       const token = new BigInt64Array(1);
-      hr(
+      checkHresult(
         method(this.environment5, 12, [
           "ptr",
           "ptr",
@@ -386,7 +400,7 @@ export class WebView {
       if (result < 0) {
         this.creating--;
       }
-      hr(result, "CreateController");
+      checkHresult(result, "CreateController");
     } catch (error) {
       this.failure = error;
     }
@@ -409,7 +423,7 @@ export class WebView {
       },
     );
     const token = new BigInt64Array(1);
-    hr(
+    checkHresult(
       method(this.webview, slot, [
         "ptr",
         "ptr",
@@ -479,7 +493,7 @@ export class WebView {
           0,
         ],
       ] as const) {
-        hr(
+        checkHresult(
           method(settings, slot, [
             "i32",
           ])(value),
@@ -502,7 +516,7 @@ export class WebView {
             0,
           ], // IsGeneralAutofillEnabled
         ] as const) {
-          hr(
+          checkHresult(
             method(settings4, slot, [
               "i32",
             ])(value),
@@ -521,7 +535,7 @@ export class WebView {
         "a0d6df20-3b92-416d-aa0c-437a9c727857",
       );
       try {
-        hr(
+        checkHresult(
           withWide("app.bunaway.local", (host) =>
             withWide(resolve(assets, "web"), (folder) =>
               method(webview3, 71, [
@@ -546,7 +560,7 @@ export class WebView {
         "http://*/*",
         "https://*/*",
       ]) {
-        hr(
+        checkHresult(
           withWide(pattern, (address) =>
             filters
               ? method(filters, 123, [
@@ -570,7 +584,7 @@ export class WebView {
     const navigation = (args: Pointer, frame: boolean) => {
       const uri = getString(args, 3);
       if (!this.origins.includes(originOf(uri))) {
-        hr(
+        checkHresult(
           method(args, 8, [
             "i32",
           ])(1),
@@ -587,7 +601,7 @@ export class WebView {
       } else if (!frame) {
         this.loading = true;
         const id = new BigUint64Array(1);
-        hr(
+        checkHresult(
           method(args, 9, [
             "ptr",
           ])(ptr(id)),
@@ -609,7 +623,7 @@ export class WebView {
     );
     this.on(11, "3c067f9f-5388-4772-8b48-79f7ef1ab37c", (args) => {
       const newDocument = new Int32Array(1);
-      hr(
+      checkHresult(
         method(args, 3, [
           "ptr",
         ])(ptr(newDocument)),
@@ -621,7 +635,7 @@ export class WebView {
     });
     this.on(15, "d33a35bf-1c49-4f98-93ab-006e0533fe1c", (args) => {
       const id = new BigUint64Array(1);
-      hr(
+      checkHresult(
         method(args, 5, [
           "ptr",
         ])(ptr(id)),
@@ -634,7 +648,7 @@ export class WebView {
       const stopped = this.stoppedNavigationId === id[0];
       this.stoppedNavigationId = undefined;
       const success = new Int32Array(1);
-      hr(
+      checkHresult(
         method(args, 3, [
           "ptr",
         ])(ptr(success)),
@@ -647,7 +661,7 @@ export class WebView {
       let error: WireError | null = null;
       if (!success[0]) {
         const status = new Int32Array(1);
-        hr(
+        checkHresult(
           method(args, 4, [
             "ptr",
           ])(ptr(status)),
@@ -671,7 +685,7 @@ export class WebView {
       this.hooks.message(getString(args, 3), getString(args, 4)),
     );
     this.on(44, "d4c185fe-c81c-4989-97af-2d3fa7ab5651", (args) => {
-      hr(
+      checkHresult(
         method(args, 6, [
           "i32",
         ])(1),
@@ -680,7 +694,7 @@ export class WebView {
       this.hooks.log("new-window-blocked");
     });
     this.on(23, "15e1c6a3-c72a-4df3-91d7-d097fbec6bfd", (args) => {
-      hr(
+      checkHresult(
         method(args, 7, [
           "i32",
         ])(2),
@@ -688,7 +702,7 @@ export class WebView {
       );
       const args3 = query(args, "e61670bc-3dce-4177-86d2-c629ae3cb6ac");
       try {
-        hr(
+        checkHresult(
           method(args3, 12, [
             "i32",
           ])(0),
@@ -704,7 +718,7 @@ export class WebView {
     );
     this.on(25, "79e0aea4-990b-42d9-aa1d-0fcc2e5bc7f1", (args) => {
       const kind = new Int32Array(1);
-      hr(
+      checkHresult(
         method(args, 3, [
           "ptr",
         ])(ptr(kind)),
@@ -741,7 +755,7 @@ export class WebView {
           let range = "";
           try {
             const contains = new Int32Array(1);
-            hr(
+            checkHresult(
               withWide("Range", (name) =>
                 method(headers, 5, [
                   "ptr",
@@ -777,7 +791,7 @@ export class WebView {
         assert(stream, "Create asset stream");
       }
       try {
-        hr(
+        checkHresult(
           withWide(resource?.reason ?? "Forbidden", (reason) =>
             withWide(
               resource?.headers ?? "Content-Type: text/plain",
@@ -806,7 +820,7 @@ export class WebView {
       }
       const object = Number(response[0]) as Pointer;
       try {
-        hr(
+        checkHresult(
           method(args, 5, [
             "ptr",
           ])(object),
@@ -827,7 +841,7 @@ export class WebView {
   navigate() {
     const webview = this.webview;
     if (webview && !this.closing) {
-      hr(
+      checkHresult(
         withWide(this.spec.home, (address) =>
           method(webview, 5, [
             "ptr",
@@ -865,7 +879,7 @@ export class WebView {
       });
     }
     try {
-      hr(
+      checkHresult(
         method(printing, 114, [
           "i32",
         ])(kind === "browser" ? 0 : 1),
@@ -919,7 +933,7 @@ export class WebView {
       });
     }
     const webview = this.requireWebView();
-    hr(
+    checkHresult(
       withWide(url, (address) =>
         method(webview, 5, [
           "ptr",
@@ -933,7 +947,7 @@ export class WebView {
   moveFocusToContent(): void {
     this.requireWebView();
     assert(this.controller);
-    hr(
+    checkHresult(
       method(this.controller, WEBVIEW_CONTROLLER_MOVE_FOCUS_SLOT, [
         "i32",
       ])(MOVE_FOCUS_REASON_PROGRAMMATIC),
@@ -1081,7 +1095,7 @@ export class WebView {
                         return;
                       }
                       if (inserted < 0) {
-                        report.failed(`0x${(inserted >>> 0).toString(16)}`);
+                        report.failed(hresultText(inserted));
                       } else {
                         report.executed?.(verdict.result);
                       }
@@ -1094,13 +1108,7 @@ export class WebView {
             } catch (error) {
               // Starting inside a COM callback must not unwind into native code. The refused
               // call's handler stays tracked and is released by a later prune.
-              report.failed(
-                error instanceof DevToolsStartError
-                  ? `0x${(error.hresult >>> 0).toString(16)}`
-                  : error instanceof Error
-                    ? error.message
-                    : String(error),
-              );
+              report.failed(describeDevToolsFailure(error));
             }
           },
         ),
@@ -1152,7 +1160,7 @@ export class WebView {
 
   private historyAvailable(slot: 38 | 39): boolean {
     const value = new Int32Array(1);
-    hr(
+    checkHresult(
       method(this.requireWebView(), slot, [
         "ptr",
       ])(ptr(value)),
@@ -1163,7 +1171,7 @@ export class WebView {
 
   /** Reload revokes the old document when its NavigationStarting event is accepted. */
   reload() {
-    hr(method(this.requireWebView(), 31, [])(), "Reload");
+    checkHresult(method(this.requireWebView(), 31, [])(), "Reload");
   }
 
   /** Stop completes through the existing NavigationCompleted cancellation path. */
@@ -1173,7 +1181,7 @@ export class WebView {
     // WebView2 can report CONNECTION_ABORTED for Stop. Preserve explicit caller cancellation.
     this.stoppedNavigationId = this.loading ? this.navigationId : undefined;
     try {
-      hr(method(webview, 43, [])(), "Stop");
+      checkHresult(method(webview, 43, [])(), "Stop");
     } catch (error) {
       this.stoppedNavigationId = previous;
       throw error;
@@ -1184,7 +1192,7 @@ export class WebView {
     if (!this.historyAvailable(38)) {
       return false;
     }
-    hr(method(this.requireWebView(), 40, [])(), "GoBack");
+    checkHresult(method(this.requireWebView(), 40, [])(), "GoBack");
     return true;
   }
 
@@ -1192,7 +1200,7 @@ export class WebView {
     if (!this.historyAvailable(39)) {
       return false;
     }
-    hr(method(this.requireWebView(), 41, [])(), "GoForward");
+    checkHresult(method(this.requireWebView(), 41, [])(), "GoForward");
     return true;
   }
 
@@ -1200,7 +1208,7 @@ export class WebView {
     this.requireWebView();
     assert(this.controller);
     const value = new Float64Array(1);
-    hr(
+    checkHresult(
       method(this.controller, 7, [
         "ptr",
       ])(ptr(value)),
@@ -1219,7 +1227,7 @@ export class WebView {
     }
     this.requireWebView();
     assert(this.controller);
-    hr(
+    checkHresult(
       method(this.controller, 8, [
         "f64",
       ])(factor),
@@ -1236,7 +1244,7 @@ export class WebView {
         message: "DevTools are disabled by the host.",
       });
     }
-    hr(method(this.requireWebView(), 51, [])(), "OpenDevToolsWindow");
+    checkHresult(method(this.requireWebView(), 51, [])(), "OpenDevToolsWindow");
   }
 
   /** Acquire the audio extension only for an open, initialized controller. */
@@ -1262,13 +1270,13 @@ export class WebView {
     try {
       const muted = new Int32Array(1);
       const playing = new Int32Array(1);
-      hr(
+      checkHresult(
         method(audio, 83, [
           "ptr",
         ])(ptr(muted)),
         "get_IsMuted",
       );
-      hr(
+      checkHresult(
         method(audio, 87, [
           "ptr",
         ])(ptr(playing)),
@@ -1286,7 +1294,7 @@ export class WebView {
   setAudioMuted(muted: boolean) {
     const audio = this.audioInterface();
     try {
-      hr(
+      checkHresult(
         method(audio, 84, [
           "i32",
         ])(muted ? 1 : 0),
@@ -1302,7 +1310,7 @@ export class WebView {
   send(text: string) {
     const webview = this.webview;
     if (webview && !this.closing) {
-      hr(
+      checkHresult(
         withWide(text, (address) =>
           method(webview, 32, [
             "ptr",
@@ -1318,7 +1326,7 @@ export class WebView {
     }
     const rect = new Int32Array(4);
     assert(user.symbols.GetClientRect(this.hwnd, ptr(rect)));
-    hr(
+    checkHresult(
       method(this.controller, 6, [
         "ptr",
       ])(ptr(rect)),
@@ -1368,7 +1376,7 @@ export class WebView {
         const collection = getObject(env8, 18);
         try {
           const count = new Uint32Array(1);
-          hr(
+          checkHresult(
             method(collection, 3, [
               "ptr",
             ])(ptr(count)),
@@ -1377,7 +1385,7 @@ export class WebView {
           assert((count[0] ?? 0) <= 1024, "Unexpected WebView process count");
           for (let index = 0; index < (count[0] ?? 0); index++) {
             const out = new BigUint64Array(1);
-            hr(
+            checkHresult(
               method(collection, 4, [
                 "u32",
                 "ptr",
@@ -1389,13 +1397,13 @@ export class WebView {
             try {
               const pid = new Uint32Array(1);
               const kind = new Int32Array(1);
-              hr(
+              checkHresult(
                 method(processInfo, 3, [
                   "ptr",
                 ])(ptr(pid)),
                 "get process id",
               );
-              hr(
+              checkHresult(
                 method(processInfo, 4, [
                   "ptr",
                 ])(ptr(kind)),
@@ -1434,7 +1442,7 @@ export class WebView {
     }
     if (this.webview) {
       for (const { slot, token } of this.events) {
-        hr(
+        checkHresult(
           method(this.webview, slot, [
             "i64",
           ])(token),
@@ -1443,7 +1451,7 @@ export class WebView {
       }
     }
     if (this.controller) {
-      hr(method(this.controller, 24)(), "Close");
+      checkHresult(method(this.controller, 24)(), "Close");
     }
     if (this.webview) {
       release(this.webview);
@@ -1517,7 +1525,7 @@ export class WebView {
       return false;
     }
     if (this.environment5 && this.browserToken !== undefined) {
-      hr(
+      checkHresult(
         method(this.environment5, 13, [
           "i64",
         ])(this.browserToken),

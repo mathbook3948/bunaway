@@ -1,4 +1,5 @@
 import { type Pointer, ptr } from "bun:ffi";
+import { checkHresult } from "@bunaway/plugin/win32";
 import type { WebViewDownload } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
 import {
@@ -12,12 +13,11 @@ import {
   release,
 } from "./com.ts";
 import { type DownloadResource, Downloads } from "./downloads.ts";
-import { hr } from "./win32-bindings.ts";
 
 /** Read WebView2's INT64 byte counts without silently losing integer precision. */
 function bytes(object: Pointer, slot: 12 | 13): number | null {
   const value = new BigInt64Array(1);
-  hr(
+  checkHresult(
     method(object, slot, [
       "ptr",
     ])(ptr(value)),
@@ -31,7 +31,7 @@ function bytes(object: Pointer, slot: 12 | 13): number | null {
 
 function integer(object: Pointer, slot: 16 | 17 | 21): number {
   const value = new Int32Array(1);
-  hr(
+  checkHresult(
     method(object, slot, [
       "ptr",
     ])(ptr(value)),
@@ -59,7 +59,7 @@ function downloadState(value: number): WebViewDownload["state"] {
 /** Retain a start deferral until one decision, then own its operation through terminal cleanup. */
 function resource(args: Pointer): DownloadResource {
   // Reject first, including failures while acquiring the operation or its metadata.
-  hr(
+  checkHresult(
     method(args, 5, [
       "i32",
     ])(1),
@@ -85,7 +85,7 @@ function resource(args: Pointer): DownloadResource {
     pendingArgs = undefined;
     deferral = undefined;
     try {
-      hr(
+      checkHresult(
         method(currentArgs, 5, [
           "i32",
         ])(allow ? 0 : 1),
@@ -93,7 +93,10 @@ function resource(args: Pointer): DownloadResource {
       );
     } finally {
       try {
-        hr(method(currentDeferral, 3, [])(), "Complete download deferral");
+        checkHresult(
+          method(currentDeferral, 3, [])(),
+          "Complete download deferral",
+        );
       } finally {
         release(currentDeferral);
         release(currentArgs);
@@ -121,13 +124,13 @@ function resource(args: Pointer): DownloadResource {
     },
     decide,
     cancel: () => {
-      hr(method(operation, 18, [])(), "Cancel download");
+      checkHresult(method(operation, 18, [])(), "Cancel download");
     },
     pause: () => {
-      hr(method(operation, 19, [])(), "Pause download");
+      checkHresult(method(operation, 19, [])(), "Pause download");
     },
     resume: () => {
-      hr(method(operation, 20, [])(), "Resume download");
+      checkHresult(method(operation, 20, [])(), "Resume download");
     },
     dispose(browserGone = false) {
       if (disposed) {
@@ -183,7 +186,7 @@ export class WebViewDownloads {
       ],
       (_sender, args) => {
         if (this.detached || !this.active()) {
-          hr(
+          checkHresult(
             method(args as Pointer, 5, [
               "i32",
             ])(1),
@@ -203,7 +206,7 @@ export class WebViewDownloads {
     retain(this.callback);
     const token = new BigInt64Array(1);
     try {
-      hr(
+      checkHresult(
         method(this.webview4, 75, [
           "ptr",
           "ptr",
@@ -229,7 +232,7 @@ export class WebViewDownloads {
       // HRESULT_FROM_WIN32(ERROR_INVALID_STATE) is expected only after observed broker failure.
       const HRESULT_INVALID_STATE = -2147019873;
       if (!browserGone || result !== HRESULT_INVALID_STATE) {
-        hr(result, "remove_DownloadStarting");
+        checkHresult(result, "remove_DownloadStarting");
       }
       this.unsubscribed = true;
     }

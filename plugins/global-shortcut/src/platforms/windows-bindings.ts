@@ -1,4 +1,6 @@
 import { dlopen } from "bun:ffi";
+import { USER32, pick } from "@bunaway/plugin/win32";
+import { attemptAll } from "@bunaway/plugin";
 import type { NativeShortcutServices } from "@bunaway/plugin-api/native";
 import type { GlobalShortcut } from "#global-shortcut/contract";
 import type { ShortcutDriver } from "#global-shortcut/platforms/windows";
@@ -9,6 +11,8 @@ const RELEASE_TIMER_ID = 1n;
 /** GetAsyncKeyState sets the most significant bit while the key is physically down. */
 const KEY_DOWN_BIT = 0x8000;
 export const MOD_NOREPEAT = 0x4000;
+/** Virtual-key code of F1; function keys are numbered consecutively from it. */
+const VK_F1 = 0x70;
 export const MAX_HOTKEY_ID = 0xbfff;
 
 const modifierFlags = {
@@ -43,21 +47,27 @@ export function hotkeyCodes(shortcut: GlobalShortcut): {
     (flags, modifier) => flags | modifierFlags[modifier],
     0,
   );
-  const key =
-    shortcut.key.length === 1
-      ? shortcut.key.charCodeAt(0)
-      : shortcut.key.startsWith("F")
-        ? 0x70 + Number(shortcut.key.slice(1)) - 1
-        : namedKeys[shortcut.key as keyof typeof namedKeys];
   return {
     modifiers,
-    key,
+    key: virtualKeyCode(shortcut.key),
   };
+}
+
+/** Translate a validated key name to its Win32 virtual-key code. */
+function virtualKeyCode(key: string): number {
+  if (key.length === 1) {
+    return key.charCodeAt(0);
+  }
+  if (key.startsWith("F")) {
+    return VK_F1 + Number(key.slice(1)) - 1;
+  }
+  return namedKeys[key as keyof typeof namedKeys];
 }
 
 /** Owns native hotkey bindings and one lazily-created, invisible host message window. */
 export class Win32Shortcuts implements ShortcutDriver {
   private readonly native = dlopen("user32.dll", {
+    ...pick(USER32, "SetTimer", "KillTimer"),
     RegisterHotKey: {
       args: [
         "u64",
@@ -71,22 +81,6 @@ export class Win32Shortcuts implements ShortcutDriver {
       args: [
         "u64",
         "i32",
-      ],
-      returns: "i32",
-    },
-    SetTimer: {
-      args: [
-        "u64",
-        "u64",
-        "u32",
-        "ptr",
-      ],
-      returns: "u64",
-    },
-    KillTimer: {
-      args: [
-        "u64",
-        "u64",
       ],
       returns: "i32",
     },
@@ -186,33 +180,31 @@ export class Win32Shortcuts implements ShortcutDriver {
     this.disposed = true;
     this.receive = undefined;
     this.tick = undefined;
-    const errors: unknown[] = [];
+    const hwnd = this.hwnd;
     try {
-      this.stopPolling();
-      for (const id of this.ids) {
-        try {
-          if (!this.unregister(id)) {
-            errors.push(new Error("Global shortcut removal failed."));
-          }
-        } catch (error) {
-          errors.push(error);
-        }
-      }
+      attemptAll(
+        [
+          () => this.stopPolling(),
+          ...[
+            ...this.ids,
+          ].map((id) => () => {
+            if (!this.unregister(id)) {
+              throw new Error("Global shortcut removal failed.");
+            }
+          }),
+          () => {
+            // Destroying the owner releases remaining bindings even when explicit unregister failed.
+            if (hwnd) {
+              this.services.destroyWindow(hwnd);
+            }
+          },
+        ],
+        "Global shortcut cleanup failed.",
+      );
     } finally {
-      try {
-        // Destroying the owner releases remaining bindings even when explicit unregister failed.
-        if (this.hwnd) {
-          this.services.destroyWindow(this.hwnd);
-        }
-      } catch (error) {
-        errors.push(error);
-      }
       this.hwnd = undefined;
       this.ids.clear();
       this.native.close();
-    }
-    if (errors.length) {
-      throw new AggregateError(errors, "Global shortcut cleanup failed.");
     }
   }
 }

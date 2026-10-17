@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import type { NativeEnvironment } from "@bunaway/plugin";
+import { attemptAllAsync, type NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
 import type {
@@ -149,23 +149,18 @@ export class WindowsClipboard {
     this.disposal ??= (async () => {
       this.lifetime.abort();
       // Stop notifications first so no event is published while operations drain.
-      const errors: unknown[] = [];
-      try {
-        this.changes.dispose();
-      } catch (error) {
-        errors.push(error);
-      }
-      await Promise.allSettled([
-        ...this.pending,
-      ]);
-      try {
-        this.native.dispose();
-      } catch (error) {
-        errors.push(error);
-      }
-      if (errors.length) {
-        throw new AggregateError(errors, "Clipboard cleanup failed.");
-      }
+      await attemptAllAsync(
+        [
+          () => this.changes.dispose(),
+          async () => {
+            await Promise.allSettled([
+              ...this.pending,
+            ]);
+          },
+          () => this.native.dispose(),
+        ],
+        "Clipboard cleanup failed.",
+      );
     })();
     return this.disposal;
   }

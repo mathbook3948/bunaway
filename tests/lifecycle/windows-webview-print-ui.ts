@@ -10,11 +10,8 @@ import {
 } from "#native/windows/bun/com";
 import { WebView } from "#native/windows/bun/webview";
 import { Windows } from "#native/windows/bun/win32";
-import {
-  disposeWin32Bindings,
-  hr,
-  ole,
-} from "#native/windows/bun/win32-bindings";
+import { disposeWin32Bindings, ole } from "#native/windows/bun/win32-bindings";
+import { checkHresult } from "@bunaway/plugin/win32";
 
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
@@ -26,7 +23,7 @@ await writeFile(
   resolve(assets, "web/index.html"),
   "<!doctype html><title>Print UI regression</title><h1>Print preview only</h1>",
 );
-hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
+checkHresult(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
 const windows = new Windows(() => {});
 let hwnd = 0n;
 let webview: WebView | undefined;
