@@ -31,6 +31,12 @@ const WINDOW_TEXT_CHARS = 256;
 // Wait after moving the pointer so the browser sees a hover target before the click.
 const POINTER_SETTLE_MS = 150;
 const CLICK_ATTEMPTS = 3;
+// SetWindowPos Z-order handles (-1, -2) and flags.
+const HWND_TOPMOST = -1n;
+const HWND_NOTOPMOST = -2n;
+const SWP_NOSIZE = 0x0001;
+const SWP_NOMOVE = 0x0002;
+const SWP_NOACTIVATE = 0x0010;
 const CLICK_ACTIVATION_TIMEOUT_MS = 4_000;
 const SM_CXSCREEN = 0;
 const SM_CYSCREEN = 1;
@@ -265,6 +271,18 @@ if (!process.argv.includes("--child")) {
       ],
       returns: "i32",
     },
+    SetWindowPos: {
+      args: [
+        "u64",
+        "i64",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "u32",
+      ],
+      returns: "i32",
+    },
     SendInput: {
       args: [
         "u32",
@@ -418,6 +436,22 @@ if (!process.argv.includes("--child")) {
       screenY,
     ];
   };
+  /** Move a test window to the top of the Z-order, or back to normal, without activating it. */
+  const setTopmost = (hwnd: bigint, topmost: boolean) => {
+    const insertAfter = topmost ? HWND_TOPMOST : HWND_NOTOPMOST;
+    assert(
+      input.symbols.SetWindowPos(
+        hwnd,
+        insertAfter,
+        0,
+        0,
+        0,
+        0,
+        SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE,
+      ) !== 0,
+      `SetWindowPos failed for window ${hwnd}`,
+    );
+  };
   const isMainWebViewFocused = async () =>
     (await windows.getWebViewState(main)).focused;
   /**
@@ -450,6 +484,22 @@ if (!process.argv.includes("--child")) {
         `Observed: ${target.view} is focused but its WebView is not right after windows.focus`,
       );
     }
+    // Raise only the test window above other windows, such as the runner's console, so the
+    // click reaches it. Activation still comes from the click; the Z-order is restored after.
+    const hwnd = findWindow(target.view);
+    setTopmost(hwnd, true);
+    try {
+      await clickUntilActive(target);
+    } finally {
+      setTopmost(hwnd, false);
+    }
+    await waitFor(
+      async () => (await windows.getWebViewState(target)).focused,
+      `${target.view} WebView input focus after activation`,
+    );
+  };
+  /** Click the window center until it becomes the foreground window, within a bounded retry. */
+  const clickUntilActive = async (target: { view: string }) => {
     for (let attempt = 1; attempt <= CLICK_ATTEMPTS; attempt++) {
       const point = await clickClientCenter(target.view);
       const deadline = Date.now() + CLICK_ACTIVATION_TIMEOUT_MS;
@@ -469,10 +519,6 @@ if (!process.argv.includes("--child")) {
         `Click on ${target.view} never made it the foreground window`,
       );
     }
-    await waitFor(
-      async () => (await windows.getWebViewState(target)).focused,
-      `${target.view} WebView input focus after activation`,
-    );
   };
   const ready = async (path: string, count = 1) => {
     await waitFor(() => (arrivals.get(path) ?? 0) >= count);
