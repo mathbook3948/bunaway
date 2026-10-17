@@ -606,6 +606,10 @@ Windows의 [복귀 알림 순서](https://learn.microsoft.com/en-us/windows/win3
 폐기하는 기존 규칙과 문서 세대 검사도 유지한다. 이 서비스는 이벤트 재생을 제공하지
 않으며 각 플러그인이 조회 snapshot과 변경 비교를 소유한다.
 
+`systemEvents`는 UI 어댑터에만 제공되고 플러그인 플랫폼은 `thread`를 하나만 선언한다.
+그래서 power의 Windows 대상을 UI 스레드로 옮겨 `power.statusChanged`를 발행하며, 그 결과
+네이티브 모달이 UI 스레드를 점유하는 동안 power 조회와 blocker 호출은 대기한다.
+
 
 ## 함수 맵과 선택 트레이 구현
 

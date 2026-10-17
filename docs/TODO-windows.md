@@ -536,7 +536,7 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 - [ ] WebView 접근성 트리와 사용자 타이틀바의 키보드 탐색을 검증한다.
 - [ ] suspend, resume, 화면 잠금과 잠금 해제 이벤트를 제공한다.
 - [x] Windows AC와 배터리, 충전, 잔량, battery saver 및 수명 추정 상태를 조회한다.
-- [ ] AC와 배터리 상태 변경 이벤트를 제공한다.
+- [x] AC와 배터리 상태 변경 이벤트를 제공한다. power.statusChanged는 전원 상태 변경 알림과 resume에서 재조회하며 동일 값은 생략한다.
 - [x] Windows 호출 세션의 입력 idle 시간과 지정 기한의 active/idle 상태를 조회한다. 잠금 여부는 별도 작업이다.
 - [x] Windows 시스템 idle 절전과 화면 꺼짐 방지 요청을 시작, 조회하고 해제한다. 사용자 절전과 OS 전원 정책은 우회하지 않는다.
 - [x] blocker의 반복 요청을 독립 ID로 관리하고 앱 종료 시 native handle을 자동 정리한다.

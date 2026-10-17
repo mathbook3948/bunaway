@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { NativeWindowServices } from "@bunaway/plugin-api/native";
 import power from "../../plugins/power/src/index.ts";
 import { powerCleanup } from "./power-cleanup-ffi.ts";
 
@@ -123,6 +124,98 @@ for (const failures of [
         ],
   );
 }
+
+/** Create the adapter with only the system event service that the power plugin reads. */
+function createWithSystemEvents(
+  systemEvents: NonNullable<NativeWindowServices["systemEvents"]>,
+) {
+  const platform = power._definition.nativePlatforms.windows;
+  assert(platform);
+  return platform.create({
+    dataRoot: ".",
+    capabilities: [],
+    // Invariant: the power plugin reads only windows.systemEvents, so the other window services
+    // are omitted and this cast never exposes a missing member to the adapter.
+    windows: {
+      systemEvents,
+    } as unknown as NativeWindowServices,
+  });
+}
+function resetCleanup() {
+  powerCleanup.sequence = 0n;
+  powerCleanup.open.clear();
+  powerCleanup.closes.length = 0;
+  powerCleanup.libraries.length = 0;
+  powerCleanup.registeredCloseFailures = 0;
+  powerCleanup.rollbackCloseFailed = false;
+}
+
+// A failing subscription release must not skip blocker and native cleanup, and can be retried.
+resetCleanup();
+let unsubscribes = 0;
+let failUnsubscribe = true;
+const withEvents = createWithSystemEvents({
+  subscribe() {
+    return () => {
+      unsubscribes++;
+      if (failUnsubscribe) {
+        throw new Error("unsubscribe failed");
+      }
+    };
+  },
+  publish() {},
+});
+const owned = await withEvents.execute(
+  "power.startBlocker",
+  {
+    type: "system",
+    reason: "with events",
+  },
+  "backend",
+);
+assert.equal(powerCleanup.open.size, 1);
+await assert.rejects(
+  async () => await withEvents.dispose(),
+  (error: unknown) => {
+    assert(error instanceof AggregateError);
+    assert.equal(error.errors.length, 1);
+    assert.equal(error.errors[0].message, "unsubscribe failed");
+    return true;
+  },
+);
+assert.equal(unsubscribes, 1);
+assert.deepEqual(
+  [
+    ...powerCleanup.open,
+  ],
+  [],
+);
+assert.deepEqual(powerCleanup.libraries, [
+  "user32.dll",
+  "kernel32.dll",
+]);
+failUnsubscribe = false;
+await withEvents.dispose();
+await withEvents.dispose();
+assert.equal(unsubscribes, 2);
+assert.ok(owned);
+
+// A failed subscription during initialization releases the DLLs acquired for the adapter.
+resetCleanup();
+assert.throws(
+  () =>
+    createWithSystemEvents({
+      subscribe() {
+        throw new Error("subscribe failed");
+      },
+      publish() {},
+    }),
+  /subscribe failed/,
+);
+assert.deepEqual(powerCleanup.libraries, [
+  "user32.dll",
+  "kernel32.dll",
+]);
 console.log(
   "PASS combined power cleanup failures preserve handle and DLL ownership",
 );
