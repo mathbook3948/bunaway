@@ -5,6 +5,7 @@ import {
   normalizeApplicationPath,
   normalizeFilePath,
 } from "#opener/platforms/windows-path";
+import { createRecentDocuments } from "#opener/platforms/windows-recent";
 import { createShell } from "#opener/platforms/windows-shell";
 import {
   trashWindowsFile,
@@ -71,6 +72,7 @@ export function initialize() {
     apartment,
     shell,
     files,
+    recent: createRecentDocuments(),
     disposed: false,
   };
 }
@@ -120,14 +122,15 @@ export function trashFile(state: State, path: string): null {
 export function addRecentDocument(state: State, path: string): null {
   active(state);
   const selected = normalizeFilePath(path);
-  state.files.withFile(selected, () => state.shell.addRecentDocument(selected));
+  // The pin covers only the request; the Shell reads the file after it returns.
+  state.files.withFile(selected, () => state.recent.add(selected));
   return null;
 }
 
 /** Clear the user's entire Shell Recent Items list, not only entries this app added. */
 export function clearRecentDocuments(state: State): null {
   active(state);
-  state.shell.clearRecentDocuments();
+  state.recent.clear();
   return null;
 }
 
@@ -162,6 +165,7 @@ export function dispose(state: State): void {
   }
   state.disposed = true;
   try {
+    state.recent.dispose();
     state.files.dispose();
   } finally {
     try {

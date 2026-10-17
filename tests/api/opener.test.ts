@@ -175,6 +175,12 @@ test("public file APIs use caller context and preserve OS failure codes", async 
       await expect(opener.trashFile(path)).rejects.toMatchObject({
         code: "PERMISSION_DENIED",
       });
+      await expect(opener.addRecentDocument(path)).rejects.toMatchObject({
+        code: "PERMISSION_DENIED",
+      });
+      await expect(opener.clearRecentDocuments()).rejects.toMatchObject({
+        code: "PERMISSION_DENIED",
+      });
       await expect(
         opener.addRecentDocument("relative.txt"),
       ).rejects.toMatchObject({
@@ -212,6 +218,8 @@ test("public file APIs use caller context and preserve OS failure codes", async 
     "opener.clearRecentDocuments",
     "opener.openFile",
     "opener.trashFile",
+    "opener.addRecentDocument",
+    "opener.clearRecentDocuments",
   ]);
   expect(calls.map((call) => call.payload)).toEqual([
     {
@@ -239,6 +247,10 @@ test("public file APIs use caller context and preserve OS failure codes", async 
     {
       path,
     },
+    {
+      path,
+    },
+    {},
   ]);
 });
 test("opener preserves strict inputs and independently granted file operations", async () => {

@@ -126,32 +126,3 @@ test.skipIf(process.platform !== "win32")(
     }
   },
 );
-
-// SHAddToRecentDocs leaves Shell state in the calling process, most likely a Shell
-// worker thread holding a COM multithreaded apartment. That makes every other thread
-// an implicit MTA member, which breaks tests that expect an uninitialized COM thread
-// (windows-opener.test.ts runs later in the shared `bun test ./tests` process), so
-// the Recent Items checks run in a child process that exits afterwards.
-test.skipIf(process.platform !== "win32")(
-  "recent documents add a file to the Shell list, clear it and reject invalid targets",
-  async () => {
-    const child = Bun.spawn(
-      [
-        process.execPath,
-        "--no-env-file",
-        resolve(import.meta.dir, "../fixtures/windows-opener-recent.ts"),
-      ],
-      {
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    );
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
-  },
-  60_000,
-);

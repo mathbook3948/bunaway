@@ -15,7 +15,6 @@ const SWFO_NEEDDISPATCH = 1;
 const SVGIO_BACKGROUND = 0;
 const DISPATCH_METHOD = 1;
 const SW_SHOWNORMAL = 1;
-const SHARD_PATHW = 0x3;
 const HRESULT_ACCESS_DENIED = 0x80070005;
 const HRESULT_FILE_NOT_FOUND = 0x80070002;
 const HRESULT_PATH_NOT_FOUND = 0x80070003;
@@ -136,31 +135,6 @@ export function createShell() {
     }
   })();
   let disposed = false;
-  /** Call SHAddToRecentDocs with a path, or NULL to clear the user's Shell Recent Items. */
-  const requestRecentDocuments = (target: string | null): void => {
-    if (disposed) {
-      throw new BunawayError({
-        code: "CANCELLED",
-        message: "Opener has been disposed.",
-      });
-    }
-    const shell = dlopen("shell32.dll", {
-      SHAddToRecentDocs: {
-        args: [
-          "u32",
-          "ptr",
-        ],
-        returns: "void",
-      },
-    });
-    // Keep the UTF-16 buffer referenced until the call returns.
-    const path = target === null ? null : Buffer.from(`${target}\0`, "utf16le");
-    try {
-      shell.symbols.SHAddToRecentDocs(SHARD_PATHW, path ? ptr(path) : null);
-    } finally {
-      shell.close();
-    }
-  };
   return {
     /**
      * Ask Explorer to open a target; all COM work must remain on the creating STA.
@@ -449,20 +423,6 @@ export function createShell() {
         }
         shell.close();
       }
-    },
-    /**
-     * Add a validated file to the user's Shell Recent Items.
-     * SHAddToRecentDocs has no result, so success means the request was issued.
-     */
-    addRecentDocument(target: string): void {
-      requestRecentDocuments(target);
-    },
-    /**
-     * Clear the user's entire Shell Recent Items list with `SHAddToRecentDocs(NULL)`.
-     * Windows does not scope this to the calling app.
-     */
-    clearRecentDocuments(): void {
-      requestRecentDocuments(null);
     },
     /** Release the loaded COM libraries after no more launches can run. */
     dispose(): void {

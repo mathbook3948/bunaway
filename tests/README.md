@@ -782,6 +782,13 @@ DPI 변경과 전체화면 진입 및 종료 뒤의 마지막 8개 상태를 출
 실제 앱과 대상 파일 검사, 링크 거부와 핸들 정리를 확인한다. `windows-opener-job.test.ts`는
 Explorer와 compiled helper로 파일 및 HTTP/HTTPS URL 하나의 argv 보존과 Job 밖의 실행,
 앱 종료 뒤 helper 생존을 확인한다. 두 검사와 기존 opener STA 검사는 `host:windows`에도 포함한다.
+`lifecycle/windows-opener-recent.test.ts`는 `opener.addRecentDocument`와 `opener.clearRecentDocuments`의
+입력 거부와 dispose를 항상 확인한다. 사용자의 셸 최근 항목 전체를 지우는 실제 add와 clear는
+`BUNAWAY_OPENER_RECENT_MUTATE=1` 또는 `GITHUB_ACTIONS`가 있을 때만 실행하고, 그렇지 않으면
+경고를 남긴다. 최근 항목 기록이 정책으로 꺼진 러너에서는 바로가기 검사를 생략하며 add와 clear 결과가
+검증되지 않는다는 경고를 남긴다. 셸 호출은 전용 STA 스레드에서 실행하므로, 이 테스트는 add, clear,
+dispose 뒤 새 스레드의 `CoGetApartmentType`이 미초기화로 남는지 확인해 뒤이어 같은 프로세스에서
+실행되는 `windows-opener.test.ts`의 COM 전제를 보호한다.
 Linux의 계약 검사에서 건너뛴 Windows 테스트를 실제 실행 결과로 판단하지 않는다.
 
 `api/path.test.ts`는 Windows 문자열 경로 규칙과 명시적 base, per-drive 상대 경로 거부를 검사한다.
