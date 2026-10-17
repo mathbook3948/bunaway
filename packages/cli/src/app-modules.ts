@@ -1,4 +1,5 @@
 import { dirname, resolve } from "node:path";
+import type { AppMetadata } from "@bunaway/runtime-bun/app-metadata";
 import type { BunPlugin } from "bun";
 import type { InstalledPlugin } from "./plugins.ts";
 
@@ -27,6 +28,8 @@ export function pluginImportsSource(
 export function appModules(options: {
   appEntry?: string;
   processRuntime?: string;
+  /** App facts embedded in the generated process backend; required with `processRuntime`. */
+  appMetadata?: AppMetadata;
   plugins?: readonly InstalledPlugin[];
   platform?: "windows" | "macos";
   sdkSources?: ReadonlyMap<string, string>;
@@ -38,11 +41,21 @@ export function appModules(options: {
       resolveDir: string;
     }
   >();
+  if (options.processRuntime && !options.appMetadata) {
+    throw new Error("A process backend requires app metadata.");
+  }
+  if (options.appMetadata) {
+    // Build-time constant: the backend has no package manifest to read at run time.
+    modules.set("app-metadata.ts", {
+      contents: `export default ${JSON.stringify(options.appMetadata)};`,
+      resolveDir: process.cwd(),
+    });
+  }
   if (options.appEntry) {
     const entry = resolve(options.appEntry);
     modules.set(options.processRuntime ? "backend.ts" : "app.ts", {
       contents: options.processRuntime
-        ? `import app from ${JSON.stringify(entry)};\nimport { runBunApp } from ${JSON.stringify(options.processRuntime)};\nawait runBunApp(app);`
+        ? `import app from ${JSON.stringify(entry)};\nimport appMetadata from "bunaway-generated/app-metadata.ts";\nimport { runBunApp } from ${JSON.stringify(options.processRuntime)};\nawait runBunApp(app, { app: appMetadata });`
         : `export { default } from ${JSON.stringify(entry)};`,
       resolveDir: dirname(entry),
     });

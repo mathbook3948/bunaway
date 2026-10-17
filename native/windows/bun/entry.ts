@@ -16,6 +16,7 @@ import {
   PROTOCOL_VERSION,
   SDK_READY_FEATURE,
 } from "@bunaway/protocol";
+import { toAppInfo } from "@bunaway/runtime-bun/app-metadata";
 import { DiagnosticLog } from "@bunaway/runtime-bun/diagnostic-log";
 import { loadPluginCatalog } from "../../host-api/bun/plugin-catalog.ts";
 import { pluginRegistry } from "../../host-api/bun/plugins.ts";
@@ -36,6 +37,7 @@ import { DevelopmentApp } from "./development-app.ts";
 import type { LaunchArguments, listenForInstances } from "./instance.ts";
 import { activeDescendants, containAppProcess } from "./job.ts";
 import { releaseSessionEndWait } from "./session-end.ts";
+import { readWebViewVersion } from "./webview-version.ts";
 
 /**
  * Starts the Windows host and Workers, then creates the app Core.
@@ -502,7 +504,20 @@ export async function runWindowsApp(
     if (failure) {
       throw failure;
     }
+    // The WebView version is informational: failure is logged and exposed as null.
+    let webview: string | null = null;
+    try {
+      webview = readWebViewVersion(config.loader);
+    } catch (cause) {
+      await log.write("webview-version-unavailable", {
+        message: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
     booting = createCore(app, {
+      app: toAppInfo(config.appMetadata, {
+        bun: Bun.version,
+        webview,
+      }),
       policy: config.policy,
       hello: {
         kind: "hello",

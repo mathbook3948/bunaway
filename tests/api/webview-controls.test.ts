@@ -28,6 +28,7 @@ const state = {
   canGoBack: true,
   canGoForward: false,
   zoomFactor: 1.25,
+  focused: false,
 };
 
 /** Keep real authorization and instance dispatch, replacing only the native resource boundary. */
@@ -181,6 +182,31 @@ test("WebView operations use strict Zod contracts and individual registered perm
       zoomFactor: 0,
     }),
   ).toThrow();
+  const { focused: _omitted, ...withoutFocused } = state;
+  expect(() =>
+    validateWindowOutput("windows.getWebViewState", withoutFocused),
+  ).toThrow();
+  for (const focused of [
+    "true",
+    1,
+    null,
+  ]) {
+    expect(() =>
+      validateWindowOutput("windows.getWebViewState", {
+        ...state,
+        focused,
+      }),
+    ).toThrow();
+  }
+  expect(
+    validateWindowOutput("windows.getWebViewState", {
+      ...state,
+      focused: true,
+    }),
+  ).toEqual({
+    ...state,
+    focused: true,
+  });
   for (const factor of [
     0.25,
     1,

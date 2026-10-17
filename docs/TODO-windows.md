@@ -161,7 +161,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
   반올림, 정수 범위와 오류, 대상 창 권한과 닫힌 창의 동작은 창 API 계약을 따른다.
 - [x] 초기 x, y, center와 content-size 기준 옵션을 구현했다. ADR 0019의 필드별 병합과 예약 전 검증을 single/multiple 생성 및 재생성에 적용한다.
 - [x] `windows.center`로 실행 중 창을 현재 모니터의 작업 영역 중앙에 배치한다. 숨김과 최소화, 최대화 상태를 유지하며 최소화와 최대화 중에는 일반 복원 영역만 배치한다.
-- [ ] 지정 모니터의 작업 영역 중앙 배치를 공개 모니터 ID 계약과 연결한다.
+- [x] `windows.center`의 `monitorId`로 공개 모니터 ID가 가리키는 모니터의 작업 영역 중앙에 배치한다. 호출 시점에 ID를 해석하며 연결되지 않은 ID는 주 모니터로 대체하지 않고 거부한다. Windows Server 2022의 모니터 1개와 DPI 96에서 실제 HWND로 확인했다.
+- [ ] 실행 중 `windows.center`의 `monitorId` 배치를 최소화와 최대화 창을 포함해 다중 물리 모니터와 혼합 DPI에서 실행 검증한다. 합성 입력과 CI는 이 범위를 대신하지 않는다.
 - [x] 초기 창 위치와 크기를 작업 영역에 맞추는 preventOverflow를 구현했다. 최소 content 크기와 프레임을 유지할 수 없으면 예약 및 기존 창 종료 전에 거부한다.
 - [x] 초기 배치의 순수 계산과 오류 경계 검증을 완료했다. 음수 좌표, signed 32-bit 경계, DPI 96/120/144/192, content/outer, 제약 충돌과 선언 보존을 검사했다.
 - [x] 초기 배치의 실제 HWND 및 WebView2 집중 검증을 완료했다. Windows Server 2022의 모니터 1개와 DPI 96에서 초기 선언 및 single/multiple 생성과 재생성을 확인했다. multiple은 isolated 프로필이다.
@@ -230,7 +231,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] will-move와 will-resize의 취소 가능 여부를 정의한다.
 - [x] minimize, maximize, unmaximize와 restore 전환을 제공한다.
 - [x] enterFullscreen과 leaveFullscreen 전환을 제공한다.
-- [ ] always-on-top 변경 이벤트를 제공한다.
+- [x] `windows.changed`로 enterAlwaysOnTop과 leaveAlwaysOnTop 전환을 제공한다. API 호출과 `SetWindowPos` topmost 변경을 같은 창 위치 알림으로 관찰하고 함께 바뀐 owner와 owned 창도 알리며 동일 값은 생략한다.
 - [x] `windows.closeRequested`와 `windows.respondClose`로 비동기 저장 후 닫기 승인 흐름을 제공한다. 창의 문서가 구독할 때만 사용자 닫기를 대기시키고 자동 기한은 두지 않는다. 대기 중 마지막 구독을 해제하면 요청을 취소하고 창을 유지한다. 실제 WebView2 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [x] DPI 변경을 resize 전환과 bounds의 `dpi`로 전달한다.
 - [x] theme 변경 이벤트를 제공한다. Windows는 `appearance.changed`로 테마, 고대비와 접근성 설정을 알리며 동일 값은 생략한다. 13절 테마 항목과 같다.
@@ -264,7 +265,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 정상 종료와 강제 종료에서 관리하는 하위 프로세스를 정리한다.
 - [x] `desktop`의 `onReady`, `beforeQuit`, `onWillQuit`, `onQuit`, `onAllWindowsClosed` 훅과 `ShutdownReason`을 Windows에서 제공한다. `onWillQuit`과 `onQuit`은 각각 3초 기한을 둔다. 실제 실행 검증은 CI windows-native에서 수행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [ ] 종료 코드 지정, 강제 exit, relaunch와 인자 보존 API를 제공한다.
-- [ ] 앱 이름, 버전, 식별자, 프레임워크와 Bun, WebView 버전을 조회한다.
+- [x] 앱 이름, 버전, 식별자, 프레임워크와 Bun, WebView 버전을 조회한다. 백엔드 `ctx.app`으로 제공하며 [CommandContext](site/src/content/docs/reference/backend/context.mdx)와 [ADR 0022](decisions/0022-app-info-context.md)에 정리했다.
 - [ ] 앱 패키지 경로, 실행 파일, 리소스 경로와 packaged/dev 상태를 조회한다.
 - [ ] 일반 브라우저와 bunaway 앱 WebView 실행 여부를 구분하는 공개 기능을 제공한다. [T-core-live]의 `isTauri`에 대응하는 요구다.
   일반 브라우저, 앱 WebView, SSR에서의 반환값과 브리지 준비 전 동작을 정의하고 테스트한다.
@@ -582,7 +583,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [x] 기존 허용 origin 안의 URL 로드, 일반 reload와 stop을 제공한다. `navigateWebView`, `reloadWebView`, `stopWebView`는 기존 세션 폐기와 origin 검사를 유지한다.
 - [ ] 로컬 파일 로드와 cache를 무시한 reload를 제공한다.
 - [x] `getWebViewState`로 현재 URL, title과 최상위 loading 상태를 조회한다.
-- [ ] WebView의 destroyed와 focus 상태를 조회한다.
+- [x] `getWebViewState`의 `focused`로 WebView 포커스를, `isDestroyed`로 창과 같은 수명의 WebView destroyed 상태를 조회한다. 실제 포커스 전환은 CI Windows native integration에서 검증한다.
 - [ ] 탐색 전 허용와 거부, redirect와 popup 새 창 처리 훅을 제공한다.
 - [ ] 로드 시작, DOM ready, 완료와 실패 이벤트를 제공한다.
 - [ ] 문서, 프레임과 same-document 탐색 이벤트를 제공한다.

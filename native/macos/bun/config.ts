@@ -10,6 +10,11 @@ import {
   type RuntimeIdentity,
 } from "@bunaway/protocol";
 import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
+import {
+  type AppMetadata,
+  appName,
+  parsePackageVersions,
+} from "@bunaway/runtime-bun/app-metadata";
 import { verifyDevelopmentLaunch } from "@bunaway/runtime-bun/development";
 import {
   readWindowSpecs,
@@ -21,6 +26,8 @@ const WINDOWLESS_STARTUP_MESSAGE =
   "macOS requires at least one startup window; windowless desktop apps are only supported on Windows.";
 
 export type MacosConfig = {
+  /** Name, identifier and package versions that become `ctx.app`. */
+  appMetadata: AppMetadata;
   /** Trusted package identity and host-selected restart command, never supplied by an operation caller. */
   app?: import("@bunaway/plugin").NativeEnvironment["app"];
   runtime: RuntimeIdentity;
@@ -29,6 +36,12 @@ export type MacosConfig = {
   windows: WindowSpec[];
   assets: string;
   dataRoot: string;
+};
+
+/** Worker data for the backend: the verified config plus host measurements the Worker cannot take itself. */
+export type MacosBackendData = MacosConfig & {
+  /** System WebKit version read on the main thread, or `null` when unavailable. */
+  webview: string | null;
 };
 
 function object(value: unknown): Record<string, unknown> {
@@ -206,6 +219,11 @@ export async function verifyMacosPackage(
     (file) => (file as File).name === "manifest.json",
   );
   return {
+    appMetadata: {
+      name: appName(app.title, app.appId),
+      identifier: app.appId,
+      ...parsePackageVersions(metadata),
+    },
     app: {
       id: app.appId,
       launch: {

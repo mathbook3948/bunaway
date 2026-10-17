@@ -82,7 +82,7 @@ export class MacosWebview {
   readonly ready: Promise<void>;
 
   constructor(
-    private readonly config: Omit<MacosConfig, "windows"> & {
+    private readonly config: Omit<MacosConfig, "windows" | "appMetadata"> & {
       window: import("@bunaway/plugin-api/native").WindowSpec;
     },
     readonly hooks: {
@@ -541,6 +541,8 @@ export class MacosWebview {
           return this.webview;
         },
         viewPolicy.origins,
+        this.window,
+        () => this.application.isActive(),
       );
       this.diagnostics.record("created");
       this.ready = new Promise<void>((resolveReady, reject) => {

@@ -24,6 +24,7 @@ import {
   MAX_TEXT_LENGTH,
 } from "#plugins/clipboard/src/contract";
 import { createClipboard } from "#plugins/clipboard/src/platforms/windows-bindings";
+import { testAppInfo, testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 const PM_REMOVE = 1;
@@ -86,6 +87,7 @@ test.skipIf(
     };
     const contextId = "clipboard-native" as HostContext;
     const config: UIConfig = {
+      appMetadata: testAppMetadata,
       runtime: {
         id: "clipboard-native",
         generation: "1",
@@ -331,6 +333,7 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
           ) => run(),
         });
         return command.run(null, {
+          app: testAppInfo,
           signal: controller.signal,
           host,
           state: {

@@ -6,6 +6,7 @@ import { type HostContext, NativeRegistry } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
 import { validateNotificationInput } from "#plugins/notification/src/contract";
 import { notificationOperations } from "#plugins/notification/src/operations";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("notification", notificationOperations);
@@ -189,6 +190,7 @@ test("public helpers preserve caller context, cancellation and native failures",
     },
   });
   await command.run(null, {
+    app: testAppInfo,
     host,
     signal: controller.signal,
     state: {

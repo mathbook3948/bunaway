@@ -21,6 +21,7 @@ import {
   type RuntimeIdentity,
   serializeProcessFrame,
 } from "@bunaway/protocol";
+import { type AppMetadata, toAppInfo } from "./app-metadata.ts";
 import { LoopbackChannel } from "./loopback-channel.ts";
 import { readJsonLines } from "./process-ipc.ts";
 
@@ -59,16 +60,18 @@ function currentPlatform(): Platform {
 export async function runBunApp(
   app: AppDefinition,
   connection: {
-    input: Readable;
-    output: Writable;
-    platform: Platform;
-  } = {
-    input: process.stdin,
-    output: process.stdout,
-    platform: currentPlatform(),
+    /** App name, identifier and package versions exposed as `ctx.app`. */
+    app: AppMetadata;
+    input?: Readable;
+    output?: Writable;
+    platform?: Platform;
   },
 ): Promise<void> {
-  const { input, output, platform } = connection;
+  const {
+    input = process.stdin,
+    output = process.stdout,
+    platform = currentPlatform(),
+  } = connection;
   if (app.desktop !== undefined) {
     throw new BunawayError({
       code: "UNSUPPORTED",
@@ -192,6 +195,11 @@ export async function runBunApp(
         });
         // Keep reading responses while core setup runs plugin callbacks.
         booting = createCore(app, {
+          // These runtimes have no host-reported WebView engine version.
+          app: toAppInfo(connection.app, {
+            bun: Bun.version,
+            webview: null,
+          }),
           policy: frame.payload.policy,
           hello,
           platform,

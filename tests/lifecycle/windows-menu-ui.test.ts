@@ -9,6 +9,7 @@ import menu from "@bunaway/plugin-menu";
 import tray from "@bunaway/plugin-tray";
 import type { HostResponse, JsonValue } from "@bunaway/protocol";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 test.skipIf(process.platform !== "win32")(
@@ -62,6 +63,7 @@ const createOperations = plugin._definition.nativePlatforms.windows.create;
 export const pluginImports = {tray: {operations: async () => ({createOperations: tray._definition.nativePlatforms.windows.create})}, menu: { operations: async () => ({ createOperations }) } };`,
       );
       const config: UIConfig = {
+        appMetadata: testAppMetadata,
         runtime: {
           id: "menu-native",
           generation: crypto.randomUUID(),

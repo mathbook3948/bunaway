@@ -13,6 +13,7 @@ import {
   NativeRegistry,
 } from "@bunaway/protocol";
 import { Channel } from "#native/windows/bun/channel";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
 
 const WORKER_TIMEOUT_MS = 10000;
@@ -142,6 +143,7 @@ export const pluginImports = { power: { operations: async () => ({ createOperati
       }
       const controller = new AbortController();
       const context: CommandContext = {
+        app: testAppInfo,
         signal: controller.signal,
         host: bindHostAPI(
           contextId,

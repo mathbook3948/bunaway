@@ -1,6 +1,7 @@
 export { createCore } from "@bunaway/core";
 export type {
   AppDefinition,
+  AppInfo,
   CommandContext,
   CommandDefinition,
   CommandsOf,

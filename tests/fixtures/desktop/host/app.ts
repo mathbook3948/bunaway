@@ -119,6 +119,7 @@ const app: AppDefinition = {
       ...object(await host(c, "capabilities.get", null)),
       platform: process.platform,
     })),
+    "test.app": command(async (_p, c) => c.app),
     "test.log": command(async (p, c) =>
       host(c, "log.write", {
         level: "info",

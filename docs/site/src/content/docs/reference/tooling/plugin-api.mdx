@@ -18,6 +18,12 @@ const allowed = PLATFORMS.some((name) => name === platform);
 
 목록에 포함된 이름이 해당 플랫폼의 실행이나 모든 네이티브 기능 지원을 보장하지는 않습니다. 실행 환경별 기능 지원은 등록된 작업의 기능 지원 조회로 확인합니다.
 
+## 앱 정보
+
+`AppInfo`는 `ctx.app`의 타입이며 필드는 [CommandContext](/reference/backend/context/)에 있습니다.
+`APP_INFO_MAX_LENGTH`는 `AppInfo` 문자열 하나의 최대 길이인 1024 UTF-16 코드 유닛입니다.
+호스트가 넘기는 값은 Core가 시작할 때 이 한도로 검증합니다.
+
 ## 호출 컨텍스트
 
 `@bunaway/plugin-api/host`의 currentHost는 실행 중인 명령이나 setup의 Host API를 반환합니다. bindCommandHost와 bindPluginHost는 같은 호출 컨텍스트에 실행을 묶습니다. 명령이 끝나면 후속 호출을 거부하고 setup의 작업은 백엔드 수명을 따릅니다. Backend SDK와 플러그인 작성 SDK가 같은 컨텍스트를 공유합니다.
@@ -132,9 +138,9 @@ Windows의 선택적 `NativeWindow.destroy()`는 확인, 트레이 숨김과 종
 
 `NativeWindow.getSnapshot()`은 `WindowSnapshot`을 반환합니다. `windowId`, `viewId`,
 `revision`, `state`, `bounds`를 한 번에 관찰합니다. `WindowDisplayState`의
-`visible`, `focused`, `minimized`, `maximized`, `fullscreen`은 기존 상태 조회와
+`visible`, `focused`, `minimized`, `maximized`, `fullscreen`, `alwaysOnTop`은 기존 상태 조회와
 같은 의미이고 `WindowBounds`는 기존 물리 outer bounds와 같습니다.
-`WindowChange`는 표시, 포커스, 창 상태, 전체화면 및 geometry 변경 이름의 합집합입니다.
+`WindowChange`는 표시, 포커스, 창 상태, 전체화면, 항상 위 및 geometry 변경 이름의 합집합입니다.
 `moved`, `resized`는 Windows 네이티브 이동/크기 조절 루프 종료의 최종 geometry 알림입니다. 시작과 최종 값이 같으면 발행하지 않으며 중간 관찰 뒤 새 revision을 사용합니다.
 호스트가 창별 관찰을 소유하고 HWND 파괴 전에 해제합니다.
 
@@ -147,7 +153,7 @@ Windows의 선택적 `NativeWindow.destroy()`는 확인, 트레이 숨김과 종
 호스트는 버튼 재생성 때 마지막 성공 값을 다시 적용하고 HWND 파괴 때 폐기합니다.
 `NativeWindow.getBounds(area)`는 `"content"`, `"outer"`, `"normal"` 영역의 `WindowBounds`를 반환합니다. normal은 일반 상태 복원용 바깥 영역이며 작업 영역 좌표를 화면 좌표로 보정합니다. 전체화면 중에는 저장된 복원 크기를 현재 DPI와 제약으로 계산합니다.
 Windows의 `WindowSpec.window.maximized`와 `fullscreen`은 초기 일반 영역에 최대화, 전체화면을 순서대로 적용합니다. 숨김 생성을 유지하며 초기 전체화면의 해제는 현재 표시 상태를 유지합니다.
-선택적 `NativeWindow.center()`는 현재 모니터의 작업 영역에 outer 또는 normal 복원 영역을 중앙 배치합니다. Windows 구현은 표시, 활성화와 크기를 유지하며 전체화면을 거부합니다.
+선택적 `NativeWindow.center(monitorId?)`는 `monitorId`가 없으면 현재 모니터, 있으면 호출 시점에 해석한 공개 모니터 ID의 작업 영역에 outer 또는 normal 복원 영역을 중앙 배치합니다. 알 수 없는 ID는 `INVALID_ARGUMENT`이며 주 모니터로 대체하지 않습니다. 모니터 ID를 지원하지 않는 구현은 ID가 주어지면 `UNSUPPORTED`를 던집니다. Windows 구현은 표시, 활성화와 크기를 유지하며 전체화면을 거부합니다.
 `getDpi()`는 가장 최근 처리한 DPI 변경을 반영합니다. 조회는 표시 상태를 바꾸지 않으며 네이티브 조회 실패는 호출 경계에서 `INTERNAL`로 처리합니다. 호스트는 플러그인에 자원을 넘기기 전에 대상 권한과 창 수명을 확인합니다.
 
 `NativeWindow.setGeometry(area, geometry)`는 `"content" | "outer"` 영역에 물리 픽셀의

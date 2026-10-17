@@ -33,6 +33,7 @@ import {
   completedGeometryChanges,
   windowChanges,
 } from "#native/windows/bun/window-events";
+import { testAppInfo } from "../fixtures/app-info.ts";
 
 const snapshot: WindowSnapshot = {
   windowId: "window-original",
@@ -44,6 +45,7 @@ const snapshot: WindowSnapshot = {
     minimized: false,
     maximized: false,
     fullscreen: false,
+    alwaysOnTop: false,
   },
   bounds: {
     x: -100,
@@ -340,6 +342,44 @@ test("window changes suppress duplicates and order display state before physical
   ).toEqual([
     "leaveFullscreen",
   ]);
+  const topmost = {
+    ...snapshot,
+    state: {
+      ...snapshot.state,
+      alwaysOnTop: true,
+    },
+  };
+  expect(windowChanges(snapshot, topmost)).toEqual([
+    "enterAlwaysOnTop",
+  ]);
+  expect(windowChanges(topmost, snapshot)).toEqual([
+    "leaveAlwaysOnTop",
+  ]);
+  expect(windowChanges(topmost, topmost)).toEqual([]);
+  expect(
+    windowChanges(
+      {
+        ...snapshot,
+        state: {
+          ...snapshot.state,
+          fullscreen: true,
+        },
+      },
+      {
+        ...topmost,
+        bounds: {
+          ...snapshot.bounds,
+          x: 0,
+          width: 900,
+        },
+      },
+    ),
+  ).toEqual([
+    "leaveFullscreen",
+    "enterAlwaysOnTop",
+    "move",
+    "resize",
+  ]);
   expect(
     windowChanges(snapshot, {
       ...snapshot,
@@ -366,6 +406,7 @@ test("typed SDK native subscription validates, denies, releases and isolates rec
   const listeners = new Map<HostContext, (event: TransportEvent) => void>();
   const replies: ServerMessage[] = [];
   const core = await createCore(app, {
+    app: testAppInfo,
     hello,
     platform: "windows",
     backendContext: "backend" as HostContext,
@@ -650,6 +691,7 @@ test("native events terminate an overflowing subscription with BUSY and clear qu
   });
   const context = "ctx-slow" as HostContext;
   const core = await createCore(app, {
+    app: testAppInfo,
     hello,
     platform: "windows",
     backendContext: "backend" as HostContext,

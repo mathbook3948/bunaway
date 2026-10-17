@@ -17,6 +17,7 @@ import {
 import { z } from "zod";
 import { hostResponse } from "#native/host-api/bun/host-response";
 import { validatePacket } from "#native/windows/bun/channel";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import { contracts } from "../fixtures/host-plugins.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
@@ -600,6 +601,7 @@ test("plugin results exceeding the Web envelope return INTERNAL and keep the ses
 });
 function services(policy = empty): CoreServices {
   return {
+    app: testAppInfo,
     policy,
     platform: "windows",
     backendContext: "backend" as HostContext,

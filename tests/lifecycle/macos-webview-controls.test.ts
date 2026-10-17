@@ -12,6 +12,16 @@ function fixture() {
   let closed = false;
   let supportsZoom = true;
   let zoom = 1;
+  const WEBVIEW = 1n;
+  const WINDOW = 100n;
+  const focus = {
+    appActive: true,
+    keyWindow: true,
+    // Responder object, whether it is an NSView and whether it descends from the WebView.
+    responder: WEBVIEW as bigint | null,
+    isView: true,
+    descendant: false,
+  };
   const string = (value: string) => {
     const id = next++;
     strings.set(id, value);
@@ -46,6 +56,18 @@ function fixture() {
           return 2n;
         case "canGoBack":
           return 1n;
+        case "isKeyWindow":
+          return focus.keyWindow && object === WINDOW ? 1n : null;
+        case "firstResponder":
+          return focus.responder;
+        case "isKindOfClass:":
+          return focus.isView && strings.get(BigInt(args[0] ?? 0)) === "NSView"
+            ? 1n
+            : null;
+        case "isDescendantOf:":
+          return focus.descendant && BigInt(args[0] ?? 0) === WEBVIEW
+            ? 1n
+            : null;
         case "goBack":
           mutations.push(selector);
           return 2n;
@@ -58,26 +80,33 @@ function fixture() {
       }
     },
   };
-  const controls = new MacosWebviewControls(objc, () => {
-    if (closed) {
-      throw new BunawayError({
-        code: "CANCELLED",
-        message: "closed",
-      });
-    }
-    if (!ready) {
-      throw new BunawayError({
-        code: "BUSY",
-        message: "not ready",
-      });
-    }
-    return 1n;
-  }, [
-    "https://app.bunaway.local",
-    "http://127.0.0.1:8123",
-  ]);
+  const controls = new MacosWebviewControls(
+    objc,
+    () => {
+      if (closed) {
+        throw new BunawayError({
+          code: "CANCELLED",
+          message: "closed",
+        });
+      }
+      if (!ready) {
+        throw new BunawayError({
+          code: "BUSY",
+          message: "not ready",
+        });
+      }
+      return WEBVIEW;
+    },
+    [
+      "https://app.bunaway.local",
+      "http://127.0.0.1:8123",
+    ],
+    WINDOW,
+    () => focus.appActive,
+  );
   return {
     controls,
+    focus,
     mutations,
     close: () => {
       closed = true;
@@ -151,6 +180,7 @@ test("state and normalized zoom reflect native values, history absence does not 
     canGoBack: true,
     canGoForward: false,
     zoomFactor: 1,
+    focused: true,
   });
   expect(f.controls.setZoomFactor(1.234)).toBe(1.23);
   expect(f.controls.getState().zoomFactor).toBe(1.23);
@@ -217,5 +247,35 @@ test("closed and initializing owners reject native access; unavailable zoom and 
       code: "UNSUPPORTED",
     }),
   );
+  expect(f.mutations).toEqual([]);
+});
+
+test("focused requires an active app, the key window and a first responder inside the WebView", () => {
+  const f = fixture();
+  expect(f.controls.getState().focused).toBe(true);
+
+  f.focus.responder = 7n;
+  f.focus.descendant = true;
+  expect(f.controls.getState().focused).toBe(true);
+
+  f.focus.descendant = false;
+  expect(f.controls.getState().focused).toBe(false);
+
+  f.focus.responder = 1n;
+  f.focus.isView = false;
+  expect(f.controls.getState().focused).toBe(false);
+  f.focus.isView = true;
+
+  f.focus.responder = null;
+  expect(f.controls.getState().focused).toBe(false);
+  f.focus.responder = 1n;
+
+  f.focus.keyWindow = false;
+  expect(f.controls.getState().focused).toBe(false);
+  f.focus.keyWindow = true;
+
+  f.focus.appActive = false;
+  expect(f.controls.getState().focused).toBe(false);
+  // Reading focus never issues a mutating message.
   expect(f.mutations).toEqual([]);
 });
