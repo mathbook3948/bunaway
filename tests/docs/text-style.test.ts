@@ -4,6 +4,7 @@ import {
   checkFiles,
   findTextStyleViolations,
   isStyledTextPath,
+  storedCommitMessage,
   trackedTextPaths,
 } from "../../scripts/check-text-style.ts";
 
@@ -42,6 +43,28 @@ test("the text style checker covers documentation and source text but not quoted
   expect(isStyledTextPath("THIRD-PARTY-NOTICES.txt")).toBe(false);
   expect(isStyledTextPath("bun.lock")).toBe(false);
   expect(isStyledTextPath("assets/icon.png")).toBe(false);
+});
+
+test("the commit message check ignores Git comments and the verbose diff below the scissors line", () => {
+  const edited = [
+    "fix: tidy wording",
+    "",
+    "# Please enter the commit message for your changes.",
+    "# ------------------------ >8 ------------------------",
+    "# Do not modify or remove the line above.",
+    `+removed an em dash ${EM_DASH} from a comment`,
+    "",
+  ].join("\n");
+  expect(storedCommitMessage(edited)).toBe("fix: tidy wording\n\n");
+  expect(
+    findTextStyleViolations("message", storedCommitMessage(edited)),
+  ).toEqual([]);
+  expect(
+    storedCommitMessage(`subject\n; a comment\nbody ${MIDDLE_DOT}\n`, ";"),
+  ).toBe(`subject\nbody ${MIDDLE_DOT}\n`);
+  expect(
+    findTextStyleViolations("message", `subject\n\nbody ${EM_DASH} here\n`),
+  ).toHaveLength(1);
 });
 
 test("tracked documentation, source and commit-facing text contain no em dashes or middle dots", async () => {

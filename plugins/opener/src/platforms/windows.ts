@@ -1,5 +1,5 @@
 import { dlopen } from "bun:ffi";
-import { OLE32, pick } from "@bunaway/plugin/win32";
+import { COINIT_APARTMENTTHREADED, OLE32, pick } from "@bunaway/plugin/win32";
 import { ResourceOwner } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import { createFiles } from "#opener/platforms/windows-file";
@@ -14,8 +14,6 @@ import {
   validateTrashDrive,
 } from "#opener/platforms/windows-trash";
 import { normalizeUrl } from "#opener/url";
-
-const COINIT_APARTMENTTHREADED = 0x2;
 
 /**
  * Own one balanced COM initialization on the adapter's I/O thread. The process may

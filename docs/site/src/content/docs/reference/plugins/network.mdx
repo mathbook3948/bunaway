@@ -61,7 +61,8 @@ header는 64개, 합계 16 KiB까지입니다. Host, Content-Length, Connection,
 Upgrade, Proxy-Authorization, Proxy-Connection, Origin, Referer, Cookie, Accept-Encoding,
 Expect와 Sec- 접두사 header는 받지 않습니다. Authorization은 앱이 직접 지정할 수 있습니다.
 
-`bodyBase64`는 선택적인 base64 bytes이며 최대 64 KiB입니다. GET과 HEAD는 body를 받지
+`bodyBase64`는 선택적인 canonical base64 bytes이며 최대 64 KiB입니다. 표준 알파벳과
+필요한 `=` padding만 받고 padding이 남긴 bit가 0이 아니면 `INVALID_ARGUMENT`입니다. GET과 HEAD는 body를 받지
 않습니다. `maxResponseBytes`는 0부터 65536까지이며 기본값은 65536입니다.
 응답 body는 Bun이 압축을 해제한 후의 bytes를 셉니다. HEAD의 빈 body는 0 상한에서도
 성공합니다. `timeoutMs`는 1부터 30000까지이며 기본값은 30000입니다.

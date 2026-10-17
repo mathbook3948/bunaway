@@ -14,4 +14,4 @@ pre-commit:
 commit-msg:
   jobs:
     - name: text-style
-      run: mise exec -- bun scripts/check-text-style.ts {1}
+      run: mise exec -- bun scripts/check-text-style.ts --commit-message {1}

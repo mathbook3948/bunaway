@@ -1,4 +1,4 @@
-import { checkHresult } from "@bunaway/plugin/win32";
+import { checkHresult, COINIT_APARTMENTTHREADED } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
 import type { ShutdownReason } from "@bunaway/core";
@@ -1602,7 +1602,10 @@ function publishPluginSystemEvent(
 
 try {
   // Keep window and WebView COM work on this STA through cleanup.
-  checkHresult(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
+  checkHresult(
+    ole.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED),
+    "CoInitializeEx(STA)",
+  );
   initialized = true;
   windows = new Windows(
     () => signalClosing("interrupted"),

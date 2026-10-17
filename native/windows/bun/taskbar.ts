@@ -1,6 +1,5 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
-import { checkHresult, wide } from "@bunaway/plugin/win32";
-import { OLE32, pick } from "@bunaway/plugin/win32";
+import { checkHresult, OLE32, pick, wide } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { guid } from "./guid.ts";
 import type { TaskbarProgress } from "./taskbar-progress.ts";

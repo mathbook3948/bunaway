@@ -6,6 +6,7 @@
 export const WM_SIZE = 0x0005;
 export const WM_ACTIVATE = 0x0006;
 export const WA_INACTIVE = 0n;
+/** Host-private message in the WM_APP range; not a Windows SDK value. */
 export const WM_OBSERVE_WINDOW = 0x8003;
 export const WM_CLOSE = 0x0010;
 export const WM_QUIT = 0x0012;

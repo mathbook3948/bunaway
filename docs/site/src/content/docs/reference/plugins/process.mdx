@@ -45,7 +45,7 @@ async function makeReport(year: number) {
 | --- | --- |
 | `executablePath` | drive로 시작하는 절대 local Windows `.exe` 경로, 최대 1024자 |
 | `args` | argv 문자열 배열, 기본값 `[]`, 최대 128개와 인자당 4096자 |
-| `stdinBase64` | 선택적인 base64 bytes, 최대 64 KiB, 미지정이면 입력을 제공하지 않음 |
+| `stdinBase64` | 선택적인 canonical base64 bytes(표준 알파벳, 필요한 `=` padding, padding bit 0), 최대 64 KiB, 미지정이면 입력을 제공하지 않음 |
 | `maxOutputBytes` | stdout와 stderr의 합계 bytes 상한, 0부터 65536, 기본값 65536 |
 | `timeoutMs` | 전체 실행과 pipe 완료의 기한, 1부터 30000ms, 기본값 30000 |
 
