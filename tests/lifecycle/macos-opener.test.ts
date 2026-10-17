@@ -161,6 +161,18 @@ test("isolated macOS opener preserves validation, acceptance, ownership and unsu
       "UNSUPPORTED",
     ],
     [
+      "opener.addRecentDocument",
+      {
+        path,
+      },
+      "UNSUPPORTED",
+    ],
+    [
+      "opener.clearRecentDocuments",
+      {},
+      "UNSUPPORTED",
+    ],
+    [
       "opener.missing",
       {
         path,

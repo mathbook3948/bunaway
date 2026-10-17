@@ -136,6 +136,31 @@ export function createShell() {
     }
   })();
   let disposed = false;
+  /** Call SHAddToRecentDocs with a path, or NULL to clear the user's Shell Recent Items. */
+  const requestRecentDocuments = (target: string | null): void => {
+    if (disposed) {
+      throw new BunawayError({
+        code: "CANCELLED",
+        message: "Opener has been disposed.",
+      });
+    }
+    const shell = dlopen("shell32.dll", {
+      SHAddToRecentDocs: {
+        args: [
+          "u32",
+          "ptr",
+        ],
+        returns: "void",
+      },
+    });
+    // Keep the UTF-16 buffer referenced until the call returns.
+    const path = target === null ? null : Buffer.from(`${target}\0`, "utf16le");
+    try {
+      shell.symbols.SHAddToRecentDocs(SHARD_PATHW, path ? ptr(path) : null);
+    } finally {
+      shell.close();
+    }
+  };
   return {
     /**
      * Ask Explorer to open a target; all COM work must remain on the creating STA.
@@ -426,35 +451,18 @@ export function createShell() {
       }
     },
     /**
-     * Add a validated file to the app's Recent Documents list, or clear the list when
-     * no path is given. SHAddToRecentDocs has no result, so success means the request was issued.
+     * Add a validated file to the user's Shell Recent Items.
+     * SHAddToRecentDocs has no result, so success means the request was issued.
      */
-    recentDocuments(target?: string): void {
-      if (disposed) {
-        throw new BunawayError({
-          code: "CANCELLED",
-          message: "Opener has been disposed.",
-        });
-      }
-      const shell = dlopen("shell32.dll", {
-        SHAddToRecentDocs: {
-          args: [
-            "u32",
-            "ptr",
-          ],
-          returns: "void",
-        },
-      });
-      try {
-        shell.symbols.SHAddToRecentDocs(
-          SHARD_PATHW,
-          target === undefined
-            ? null
-            : ptr(Buffer.from(`${target}\0`, "utf16le")),
-        );
-      } finally {
-        shell.close();
-      }
+    addRecentDocument(target: string): void {
+      requestRecentDocuments(target);
+    },
+    /**
+     * Clear the user's entire Shell Recent Items list with `SHAddToRecentDocs(NULL)`.
+     * Windows does not scope this to the calling app.
+     */
+    clearRecentDocuments(): void {
+      requestRecentDocuments(null);
     },
     /** Release the loaded COM libraries after no more launches can run. */
     dispose(): void {

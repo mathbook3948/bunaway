@@ -97,7 +97,7 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
       options,
     );
   }
-  /** Add an existing Windows file to the app's Recent Documents. Success is request acceptance. */
+  /** Add an existing Windows file to the user's Shell Recent Items. Success is request acceptance. */
   async function addRecentDocument(
     path: string,
     options?: NativeInvokeOptions,
@@ -110,7 +110,10 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
     );
   }
 
-  /** Clear the app's Windows Recent Documents. Listing entries is not supported. */
+  /**
+   * Clear the user's entire Windows Shell Recent Items via `SHAddToRecentDocs(NULL)`,
+   * including entries added by other apps. Listing entries is not supported.
+   */
   async function clearRecentDocuments(
     options?: NativeInvokeOptions,
   ): Promise<null> {

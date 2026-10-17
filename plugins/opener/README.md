@@ -101,7 +101,7 @@ URL fragment 따옴표, 앱 Job 밖의 실행과 앱 종료 후 생존을 확인
 
 ## 최근 문서
 
-Windows에서 `opener.addRecentDocument(path)`는 기존 파일 하나를 앱의 최근 문서에 추가하고(`SHAddToRecentDocs(SHARD_PATHW)`), `opener.clearRecentDocuments()`는 앱의 최근 문서를 모두 지웁니다(`SHAddToRecentDocs(NULL)`). Host operation은 `opener.addRecentDocument`(입력 `{ path: string }`)와 `opener.clearRecentDocuments`(입력 `{}`)이며 권한 이름은 같고 결과는 `null`입니다. 추가는 다른 파일 작업과 같은 경로 검사와 핸들 고정을 적용합니다. 이 API는 결과를 반환하지 않으므로 성공은 요청 전달을 뜻합니다. 목록 조회는 공식 API가 없고 Recent 폴더의 `.lnk`가 앱별이 아니므로 지원하지 않습니다. macOS는 `UNSUPPORTED`입니다.
+Windows에서 `opener.addRecentDocument(path)`는 기존 파일 하나를 사용자의 셸 최근 항목에 추가하고(`SHAddToRecentDocs(SHARD_PATHW)`), `opener.clearRecentDocuments()`는 `SHAddToRecentDocs(NULL)`로 **사용자의 셸 최근 항목 전체**를 지웁니다. 다른 앱과 사용자가 만든 항목도 지워지며 앱 범위로 제한할 수 없으므로 `opener.clearRecentDocuments` 권한은 신중히 허용하세요. 점프 목록 연결은 보장하지 않으며 AppUserModelID 설정 이후의 작업입니다. Host operation은 `opener.addRecentDocument`(입력 `{ path: string }`)와 `opener.clearRecentDocuments`(입력 `{}`)이며 권한 이름은 같고 결과는 `null`입니다. 추가는 다른 파일 작업과 같은 경로 검사와 핸들 고정을 적용합니다. 이 API는 결과를 반환하지 않으므로 성공은 요청 전달을 뜻합니다. 목록 조회는 공식 API가 없고 Recent 폴더의 `.lnk`가 앱별이 아니므로 지원하지 않습니다. macOS는 `UNSUPPORTED`입니다.
 
 ## 휴지통
 

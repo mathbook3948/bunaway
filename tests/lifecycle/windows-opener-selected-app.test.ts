@@ -129,18 +129,25 @@ test.skipIf(process.platform !== "win32")(
 
 const RECENT_POLL_ATTEMPTS = 50;
 const RECENT_POLL_INTERVAL_MS = 100;
+// clearRecentDocuments empties the whole user's Shell Recent Items, so a developer's
+// real list must not be touched. Only disposable CI runners execute add and clear;
+// elsewhere the test covers just the side-effect-free validation and disposal paths.
+const mutatesShellRecentItems = Boolean(
+  process.env.CI || process.env.GITHUB_ACTIONS,
+);
 
 /** Poll the user's Recent folder, since the Shell writes the shortcut asynchronously. */
 async function waitForRecentShortcut(
   name: string,
   expected: boolean,
 ): Promise<boolean> {
-  const recent = join(
-    process.env.APPDATA ?? "",
-    "Microsoft",
-    "Windows",
-    "Recent",
-  );
+  const appData = process.env.APPDATA;
+  if (!appData) {
+    throw new Error(
+      "APPDATA is required to inspect the Windows Recent folder.",
+    );
+  }
+  const recent = join(appData, "Microsoft", "Windows", "Recent");
   for (let attempt = 0; attempt < RECENT_POLL_ATTEMPTS; attempt++) {
     const present = (await readdir(recent)).includes(`${name}.lnk`);
     if (present === expected) {
@@ -168,7 +175,7 @@ test.skipIf(process.platform !== "win32")(
       dataRoot: root,
       capabilities: [],
     });
-    const call = async (operation: string, payload: object) =>
+    const call = async (operation: string, payload: Record<string, string>) =>
       await adapter.execute(operation, payload, "backend");
     try {
       await expect(
@@ -198,15 +205,17 @@ test.skipIf(process.platform !== "win32")(
         );
       }
 
-      expect(
-        await call("opener.addRecentDocument", {
-          path: target,
-        }),
-      ).toBeNull();
-      expect(await waitForRecentShortcut(name, true)).toBe(true);
+      if (mutatesShellRecentItems) {
+        expect(
+          await call("opener.addRecentDocument", {
+            path: target,
+          }),
+        ).toBeNull();
+        expect(await waitForRecentShortcut(name, true)).toBe(true);
 
-      expect(await call("opener.clearRecentDocuments", {})).toBeNull();
-      expect(await waitForRecentShortcut(name, false)).toBe(true);
+        expect(await call("opener.clearRecentDocuments", {})).toBeNull();
+        expect(await waitForRecentShortcut(name, false)).toBe(true);
+      }
 
       await adapter.dispose();
       await adapter.dispose();
