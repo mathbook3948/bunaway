@@ -31,7 +31,8 @@ const DIB_BIT_COUNTS = [
   24,
   32,
 ];
-const PNG_SIGNATURE = Buffer.from([
+// A plain array: this module is also bundled into WebView code, where Buffer is not defined at load.
+const PNG_SIGNATURE = [
   137,
   80,
   78,
@@ -40,7 +41,7 @@ const PNG_SIGNATURE = Buffer.from([
   10,
   26,
   10,
-]);
+];
 const PNG_IHDR_BYTES = 13;
 const PNG_CHUNK_OVERHEAD_BYTES = 12;
 const PNG_MIN_BYTES = 33;
@@ -150,7 +151,7 @@ function frameBitCount(
 ): number | undefined {
   if (
     image.length >= PNG_MIN_BYTES &&
-    image.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)
+    PNG_SIGNATURE.every((byte, index) => image[index] === byte)
   ) {
     return validPng(image, width, height)
       ? directoryBitCount || DEFAULT_PNG_BIT_COUNT
