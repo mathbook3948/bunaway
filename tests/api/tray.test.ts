@@ -116,6 +116,72 @@ test("ICO decoding rejects invalid directories and decoded allocation before nat
   ).toThrow();
 });
 
+/** Concatenate the single-frame DIB ICOs of `trayIco` into one multi-frame ICO. */
+function multiFrameIco(frames: readonly Buffer[]): Buffer {
+  const directory = Buffer.alloc(6 + frames.length * 16);
+  directory.writeUInt16LE(1, 2);
+  directory.writeUInt16LE(frames.length, 4);
+  let offset = directory.length;
+  frames.forEach((ico, index) => {
+    const entry = 6 + index * 16;
+    ico.copy(directory, entry, 6, 22);
+    const image = ico.subarray(22);
+    directory.writeUInt32LE(image.length, entry + 8);
+    directory.writeUInt32LE(offset, entry + 12);
+    offset += image.length;
+  });
+  return Buffer.concat([
+    directory,
+    ...frames.map((ico) => ico.subarray(22)),
+  ]);
+}
+
+test("ICO decoding rejects a broken frame even when another frame is selected", () => {
+  const broken = trayIco(16);
+  broken.writeUInt32LE(12, 22);
+  const mixed = multiFrameIco([
+    trayIco(32),
+    broken,
+  ]);
+  expect(() => trayIconImage(mixed.toString("base64"))).toThrow(
+    expect.objectContaining({
+      code: "INVALID_ARGUMENT",
+      message: "Invalid tray ICO image.",
+    }),
+  );
+});
+
+test("ICO decoding takes the largest frame and prefers the higher bit depth at equal size", () => {
+  // A 24bpp 16x16 DIB with an empty colour plane and AND mask.
+  const low = Buffer.alloc(22 + 40 + 48 * 16 + 4 * 16);
+  trayIco(16).copy(low, 0, 0, 22);
+  low.writeUInt16LE(24, 12);
+  low.writeUInt32LE(low.length - 22, 14);
+  low.writeUInt32LE(40, 22);
+  low.writeInt32LE(16, 26);
+  low.writeInt32LE(32, 30);
+  low.writeUInt16LE(1, 34);
+  low.writeUInt16LE(24, 36);
+  const high = trayIco(16);
+  for (const order of [
+    [
+      low,
+      trayIco(8),
+      high,
+    ],
+    [
+      high,
+      trayIco(8),
+      low,
+    ],
+  ]) {
+    const image = trayIconImage(multiFrameIco(order).toString("base64"));
+    expect(image.readInt32LE(4)).toBe(16);
+    expect(image.readUInt16LE(14)).toBe(32);
+    expect(image).toEqual(high.subarray(22));
+  }
+});
+
 test("tray notifications and controls keep ownership in host services and cancel waits on disposal", async () => {
   const events: JsonValue[] = [];
   let receive: ((event: NativeTrayEvent) => void) | undefined;

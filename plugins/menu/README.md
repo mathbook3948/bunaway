@@ -18,9 +18,16 @@ role을 알려 준다. `WindowMenus`는 role 선택을 `menu.clicked` 없이 창
 document를 따라가며 키 이벤트는 만들지 않는다). paste는 `execCommand("paste")`가 거부되므로 호스트가
 클립보드의 CF_UNICODETEXT를 한 번 읽어 `Input.insertText`로 넣는다(`paste` 이벤트 대신 `beforeinput`).
 cross-origin iframe에 포커스가 있으면 실행하지 않는다.
+`type: "item"`(role 포함)과 submenu는 선택 필드 `icon`(tray `setIcon`과 같은 base64 ICO, null이면 없음)을
+가진다. 스키마가 ICO 디렉터리를 검사하고 checkbox, radio, separator의 icon은 거부한다. `NativePopupMenu`가
+`SM_CXSMICON` 크기의 32bpp premultiplied-alpha DIB section을 트리 인스턴스마다 만들어
+`MENUITEMINFOW.hbmpItem`(MIIM_BITMAP)에 설정하고, 트리를 해제할 때 DeleteObject로 함께 해제한다.
+`updateItem.changes.icon`은 다른 변경과 같이 트리를 다시 만들어 반영한다.
 트레이 메뉴는 role을 `INVALID_ARGUMENT`로 거부한다. 가속키 등록과 앱 전체 기본 메뉴는 지원하지 않는다.
 
 `tests/api/menu.test.ts`는 계약, 제한, 권한, 변경 실패 보존과 이전 선택 폐기를 검사한다.
+`api/menu-icon.test.ts`는 icon 스키마, 거부 규칙과 `updateItem` 변경을,
+`lifecycle/windows-menu-icon.test.ts`는 실제 HMENU의 `GetMenuItemInfoW` hbmpItem 설정, 교체, 제거와 해제를 검사한다.
 `tests/lifecycle/windows-menu.test.ts`는 실제 Win32 메뉴의 순서, 상태, Unicode와 자원 해제를 확인한다.
 `windows-menu-ui.test.ts`는 실제 UI Worker와 창 없는 트레이의 API 호출 및 숨긴 HWND 정리를 검사한다.
 `api/window-menu.test.ts`는 창 연결, 변경, 선택 이벤트와 팝업 취소 계약을 검사한다.
