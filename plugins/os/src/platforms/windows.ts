@@ -16,6 +16,14 @@ const LOCALE_SISO3166CTRYNAME = 0x5a;
 const MUI_LANGUAGE_NAME = 0x8;
 const MAX_LANGUAGE_BUFFER_CHARS = 128 * (LOCALE_NAME_MAX_LENGTH + 1) + 1;
 
+/** MessageBeep sound types; 0xFFFFFFFF selects the plain default beep. */
+const BEEP_SOUND_TYPES = {
+  default: 0xffffffff,
+  info: 0x40,
+  warning: 0x30,
+  error: 0x10,
+} as const;
+
 function failure(): never {
   throw new BunawayError({
     code: "INTERNAL",
@@ -73,6 +81,14 @@ export function initialize() {
         "ptr",
         "ptr",
         "ptr",
+      ],
+      returns: "i32",
+    },
+  });
+  const user32 = dlopen("user32.dll", {
+    MessageBeep: {
+      args: [
+        "u32",
       ],
       returns: "i32",
     },
@@ -214,6 +230,16 @@ export function initialize() {
         },
       };
     },
+    beep(kind: keyof typeof BEEP_SOUND_TYPES) {
+      assertActive();
+      if (!user32.symbols.MessageBeep(BEEP_SOUND_TYPES[kind])) {
+        throw new BunawayError({
+          code: "INTERNAL",
+          message: "Windows beep failed.",
+        });
+      }
+      return null;
+    },
     locale() {
       assertActive();
       return locale();
@@ -237,6 +263,7 @@ export function initialize() {
     dispose() {
       if (!disposed) {
         disposed = true;
+        user32.close();
         api.close();
       }
     },

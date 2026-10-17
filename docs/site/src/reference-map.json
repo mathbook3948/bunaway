@@ -1293,7 +1293,7 @@
   "operations": {
     "reference/plugins/network": ["network.request", "network.exchange"],
     "reference/plugins/process": ["process.run"],
-    "reference/plugins/os": ["os.info", "os.usage", "os.locale"],
+    "reference/plugins/os": ["os.info", "os.usage", "os.locale", "os.beep"],
     "reference/plugins/notification": [
       "notification.show",
       "notification.clear",

@@ -39,6 +39,19 @@ export const localeSchema = z.strictObject({
   preferredLanguages: z.array(z.string().min(1).max(85)).max(128),
   systemLanguage: z.string().max(85),
 });
+/** Windows system sound played by os.beep; defaults to the plain default beep. */
+export const beepInputSchema = z.strictObject({
+  kind: z
+    .enum([
+      "default",
+      "info",
+      "warning",
+      "error",
+    ])
+    .default("default"),
+});
+/** Input for os.beep with the sound kind resolved. */
+export type OSBeepInput = z.infer<typeof beepInputSchema>;
 /** OS and runtime snapshot returned by os.info. */
 export type OSInfo = z.infer<typeof infoSchema>;
 /** Windows user locale, ordered display languages and system UI language. */

@@ -13,4 +13,4 @@ export default defineNativePlugin({
   },
 });
 
-export type { OSInfo, OSLocale, OSUsage } from "#os/contract";
+export type { OSBeepInput, OSInfo, OSLocale, OSUsage } from "#os/contract";

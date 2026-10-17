@@ -15,6 +15,10 @@ These values describe configured language and region, not physical location.
 executes the generated Windows adapter against actual Kernel32 and compares runtime metadata with Bun.
 It is included in `mise run host:windows`; it does not change user language settings or validate translation hardware.
 
+`os.beep({ kind })` calls user32 `MessageBeep` with default, info, warning or error sound types and returns
+without waiting for playback. The emoji panel is unsupported: Windows has no official API and only Win+. key
+synthesis, which depends on the focused window.
+
 `os.usage` reports cumulative process CPU microseconds, memory bytes, logical CPU count and actual
 IsWow64Process2 machine values. Windows x64 CI does not validate ARM64 translation hardware.
 

@@ -1,6 +1,6 @@
 ---
 title: os
-description: Windows와 번들 Bun의 실행 정보, 사용자 locale과 표시 언어를 조회합니다.
+description: Windows와 번들 Bun의 실행 정보, 사용자 locale과 표시 언어를 조회하고 시스템 경고음을 재생합니다.
 sidebar: { order: 7 }
 ---
 
@@ -21,6 +21,7 @@ const locale = await os.locale(null);
 | `os.info` | `null` | `Promise<OSInfo>` | `os.info` |
 | `os.usage` | `null` | `Promise<OSUsage>` | `os.usage` |
 | `os.locale` | `null` | `Promise<OSLocale>` | `os.locale` |
+| `os.beep` | `OSBeepInput` | `Promise<null>` | `os.beep` |
 
 `OSInfo`는 `platform: "windows"`, OS의 `type`, `release`, `version`, 실행 중 프로세스의
 `architecture`, `hostname`과 `runtime: { name: "bun", version, pid }`를 반환합니다.
@@ -44,8 +45,19 @@ translation은 Windows `IsWow64Process2` 결과입니다. `active`는 WOW transl
 세 자리 숫자 문자열일 수 있으며 앞의 0을 보존합니다. 시스템 언어는 Windows의 기본 UI 언어이며 사용자 표시 언어와
 다를 수 있습니다. 언어 설정은 호출마다 읽고 결과를 캐시하지 않습니다.
 
-화면 직접 호출에는 뷰의 `commands`에 `plugin.os.info`, `plugin.os.usage` 또는 `plugin.os.locale`을,
-`host.permissions`에 같은 작업의 `os.info`, `os.usage` 또는 `os.locale`을 허용합니다. 백엔드 명령은
+`os.beep({ kind })`는 Windows `MessageBeep`로 사용자의 사운드 설정에 따른 시스템 소리를 재생합니다.
+`kind`는 `"default"`, `"info"`, `"warning"`, `"error"` 중 하나이며 생략하면 `"default"`입니다.
+`os.beep({})`처럼 빈 객체를 전달할 수 있고 다른 필드나 `null`은 `INVALID_ARGUMENT`입니다.
+재생을 요청하면 바로 `null`을 반환하며 재생 완료를 기다리지 않습니다. 사용자가 시스템 소리를
+끄거나 오디오 장치가 없으면 소리가 나지 않아도 성공할 수 있습니다. `MessageBeep` 호출 자체가 실패하면
+`INTERNAL`입니다. 주파수와 길이는 지정할 수 없습니다.
+
+이모지 패널을 여는 API는 제공하지 않습니다. Windows에는 이모지 패널을 여는 공식 API가 없고
+Win+. 키 입력을 합성하는 방법만 있어 현재 포커스를 가진 창에 의존하므로 지원하지 않습니다.
+macOS에서는 `os` 플러그인 전체가 `UNSUPPORTED`입니다.
+
+화면 직접 호출에는 뷰의 `commands`에 `plugin.os.info`, `plugin.os.usage`, `plugin.os.locale` 또는 `plugin.os.beep`을,
+`host.permissions`에 같은 작업의 `os.info`, `os.usage`, `os.locale` 또는 `os.beep`을 허용합니다. 백엔드 명령은
 호출한 뷰의 권한을 유지하며 setup 호출은 `backend.permissions`를 사용합니다.
 각 작업의 권한은 독립적입니다. hostname을 공개해도 되는 뷰만 `os.info`를 허용합니다.
 
