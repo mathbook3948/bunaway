@@ -25,6 +25,7 @@ import {
 } from "@bunaway/protocol";
 import { defaultClient } from "./default-client.ts";
 
+export { isBunaway } from "./environment.ts";
 export { createWebViewTransport, type WebViewBridge } from "./webview.ts";
 
 /** Controls cancellation and the absolute execution deadline for one command. */

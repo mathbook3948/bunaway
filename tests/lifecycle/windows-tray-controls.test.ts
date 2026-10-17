@@ -240,3 +240,108 @@ test.skipIf(process.platform !== "win32")(
     }
   },
 );
+
+const WM_MOUSEMOVE = 0x0200;
+const TRAY_CALLBACK_MESSAGE = 0x8001;
+const LEAVE_WAIT_MS = 1000;
+
+test.skipIf(process.platform !== "win32")(
+  "actual tray WM_MOUSEMOVE reports enter then leave once the pointer is off the icon, and dispose stops the timer",
+  async () => {
+    const { Windows } = await import("#native/windows/bun/win32");
+    const { Tray } = await import("#plugins/tray/src/platforms/windows-tray");
+    const windows = new Windows(() => {});
+    const user = dlopen("user32.dll", {
+      PostMessageW: {
+        args: [
+          "u64",
+          "u32",
+          "u64",
+          "i64",
+        ],
+        returns: "i32",
+      },
+      GetCursorPos: {
+        args: [
+          "ptr",
+        ],
+        returns: "i32",
+      },
+    });
+    const events: Parameters<
+      NonNullable<ConstructorParameters<typeof Tray>[5]>
+    >[0][] = [];
+    const tray = new Tray(
+      windows,
+      "hover",
+      () => {},
+      undefined,
+      undefined,
+      (event) => events.push(event),
+    );
+    const postMouseMove = () => {
+      expect(
+        user.symbols.PostMessageW(
+          tray.hwnd,
+          TRAY_CALLBACK_MESSAGE,
+          1n,
+          BigInt(WM_MOUSEMOVE),
+        ),
+      ).not.toBe(0);
+      windows.pump();
+    };
+    let disposed = false;
+    try {
+      // Precondition: leave is only observable when the real pointer starts outside the icon.
+      const point = new Int32Array(2);
+      expect(user.symbols.GetCursorPos(ptr(point))).not.toBe(0);
+      const bounds = tray.getBounds();
+      if (
+        bounds &&
+        (point[0] ?? 0) >= bounds.x &&
+        (point[0] ?? 0) < bounds.x + bounds.width &&
+        (point[1] ?? 0) >= bounds.y &&
+        (point[1] ?? 0) < bounds.y + bounds.height
+      ) {
+        throw new Error(
+          "Tray hover test precondition failed: the pointer is over the tray icon; move it away and rerun.",
+        );
+      }
+      postMouseMove();
+      expect(events[0]).toMatchObject({
+        state: "enter",
+      });
+      // With the pointer outside the icon, the poll must end the hover. Without bounds the hover
+      // also ends once synthetic moves stop.
+      const deadline = Date.now() + LEAVE_WAIT_MS;
+      while (
+        !events.some((event) => event.state === "leave") &&
+        Date.now() < deadline
+      ) {
+        await Bun.sleep(20);
+      }
+      expect(events.at(-1)?.state).toBe("leave");
+
+      events.length = 0;
+      postMouseMove();
+      expect(events.map((event) => event.state)).toEqual([
+        "enter",
+      ]);
+      tray.dispose();
+      disposed = true;
+      await Bun.sleep(300);
+      expect(events.map((event) => event.state)).toEqual([
+        "enter",
+      ]);
+    } finally {
+      try {
+        if (!disposed) {
+          tray.dispose();
+        }
+      } finally {
+        windows.dispose();
+        user.close();
+      }
+    }
+  },
+);

@@ -224,6 +224,43 @@ export const hasFormatSchema = z.strictObject({
   format: formatSchema,
 });
 export const nullableTextSchema = textSchema.nullable();
+/** Concurrent `waitForChange` calls accepted per adapter. */
+export const MAX_CHANGE_WAITERS = 16;
+const MAX_SEQUENCE = 0xffff_ffff;
+/**
+ * Content-free change notification. `sequence` is the Windows clipboard sequence number
+ * (an unsigned 32-bit counter that wraps) and `changedAt` is the observation time in Unix
+ * epoch milliseconds.
+ */
+export const changeSchema = z.strictObject({
+  sequence: z.number().int().min(0).max(MAX_SEQUENCE),
+  changedAt: z.number().int().min(0),
+});
+export type ClipboardChange = z.output<typeof changeSchema>;
+export const clipboardEvents = {
+  "clipboard.changed": {
+    payload: {
+      type: "object",
+      properties: {
+        sequence: {
+          type: "integer",
+          minimum: 0,
+          maximum: MAX_SEQUENCE,
+        },
+        changedAt: {
+          type: "integer",
+          minimum: 0,
+        },
+      },
+      required: [
+        "sequence",
+        "changedAt",
+      ],
+      additionalProperties: false,
+    },
+  },
+} as const;
+
 /** Validate a native call before checking UI permission or acquiring the clipboard. */
 export function validateClipboardInput(operation: string, input: JsonValue) {
   try {
@@ -242,6 +279,7 @@ export function validateClipboardInput(operation: string, input: JsonValue) {
       case "clipboard.getFormats":
       case "clipboard.readText":
       case "clipboard.clear":
+      case "clipboard.waitForChange":
         return z.null().parse(validateValue({}, input));
       default:
         throw new BunawayError({

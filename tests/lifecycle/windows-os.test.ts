@@ -54,6 +54,36 @@ test.skipIf(process.platform !== "win32")(
         locale.preferredLanguages.length,
       );
       assertWindowsRegionCode(locale.countryCode);
+      for (const kind of [
+        undefined,
+        "default",
+        "info",
+        "warning",
+        "error",
+      ]) {
+        expect(
+          await adapter.execute(
+            "os.beep",
+            kind === undefined
+              ? {}
+              : {
+                  kind,
+                },
+            "backend",
+          ),
+        ).toBeNull();
+      }
+      await expect(
+        adapter.execute(
+          "os.beep",
+          {
+            kind: "question",
+          },
+          "backend",
+        ),
+      ).rejects.toMatchObject({
+        code: "INVALID_ARGUMENT",
+      });
       await expect(
         adapter.execute("os.locale", {}, "backend"),
       ).rejects.toMatchObject({

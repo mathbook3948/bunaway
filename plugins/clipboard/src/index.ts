@@ -1,4 +1,5 @@
 import { defineNativePlugin } from "@bunaway/plugin";
+import { clipboardEvents } from "#clipboard/contract";
 import { macosOperations, windowsOperations } from "#clipboard/operations";
 import {
   dispose as disposeMacos,
@@ -11,6 +12,9 @@ import {
 } from "#clipboard/platforms/windows";
 /** Read, replace, discover or clear bounded platform clipboard formats. */
 export default defineNativePlugin({
+  events: {
+    "clipboard.changed": clipboardEvents["clipboard.changed"].payload,
+  },
   name: "clipboard",
   platforms: {
     macos: {

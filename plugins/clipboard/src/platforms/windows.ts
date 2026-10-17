@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import type { NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
 import type {
@@ -7,6 +8,8 @@ import type {
   writeFormatsSchema,
 } from "#clipboard/contract";
 import { createClipboard } from "#clipboard/platforms/windows-bindings";
+import { Win32ClipboardListener } from "#clipboard/platforms/windows-change-bindings";
+import { ClipboardChanges } from "#clipboard/platforms/windows-changes";
 
 const OPEN_TIMEOUT_MS = 250;
 const OPEN_RETRY_MS = 10;
@@ -17,6 +20,8 @@ export class WindowsClipboard {
   private readonly lifetime = new AbortController();
   private readonly pending = new Set<Promise<unknown>>();
   private disposal: Promise<void> | undefined;
+
+  constructor(private readonly changes: ClipboardChanges) {}
 
   private run<T>(execute: () => T, requestSignal?: AbortSignal): Promise<T> {
     const task = this.withOpen(execute, requestSignal);
@@ -131,6 +136,11 @@ export class WindowsClipboard {
     }, signal);
   }
 
+  /** Resolve with the next clipboard change, including writes made through this adapter. */
+  waitForChange(signal?: AbortSignal) {
+    return this.changes.wait(signal);
+  }
+
   busy(): boolean {
     return this.pending.size > 0;
   }
@@ -138,17 +148,53 @@ export class WindowsClipboard {
   dispose(): Promise<void> {
     this.disposal ??= (async () => {
       this.lifetime.abort();
+      // Stop notifications first so no event is published while operations drain.
+      const errors: unknown[] = [];
+      try {
+        this.changes.dispose();
+      } catch (error) {
+        errors.push(error);
+      }
       await Promise.allSettled([
         ...this.pending,
       ]);
-      this.native.dispose();
+      try {
+        this.native.dispose();
+      } catch (error) {
+        errors.push(error);
+      }
+      if (errors.length) {
+        throw new AggregateError(errors, "Clipboard cleanup failed.");
+      }
     })();
     return this.disposal;
   }
 }
 
-export function initialize(): WindowsClipboard {
-  return new WindowsClipboard();
+/**
+ * Start change listening when the host offers UI-thread window services. A listener that
+ * cannot start leaves the other operations usable and makes `waitForChange` fail.
+ */
+export function initialize(environment: NativeEnvironment): WindowsClipboard {
+  const services = environment.shortcuts;
+  let driver: Win32ClipboardListener | undefined;
+  let unavailableCause: unknown;
+  if (services) {
+    try {
+      driver = new Win32ClipboardListener(services);
+    } catch (error) {
+      // Documented degradation: no events, and waits report INTERNAL with this cause.
+      unavailableCause = error;
+    }
+  }
+  return new WindowsClipboard(
+    new ClipboardChanges(
+      driver,
+      (event, payload) => services?.emit(event, payload),
+      Date.now,
+      unavailableCause,
+    ),
+  );
 }
 
 export function dispose(instance: WindowsClipboard): Promise<void> {

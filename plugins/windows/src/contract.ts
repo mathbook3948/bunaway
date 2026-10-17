@@ -1,10 +1,12 @@
 import {
   isDownloadSnapshotWithinLimits,
   MAX_WEBVIEW_DOWNLOADS,
+  MAX_WINDOW_ASPECT_RATIO,
   MAX_WINDOW_COORDINATE,
   MAX_WINDOW_DIMENSION,
   MAX_WINDOW_INSTANCES,
   MAX_WINDOWS,
+  MIN_WINDOW_ASPECT_RATIO,
   MIN_WINDOW_COORDINATE,
   MIN_WINDOW_DIMENSION,
   type WindowAttentionMode,
@@ -202,6 +204,13 @@ const windowResult = {
   input: windowTarget,
   output: z.null(),
 };
+
+/** Content width / height; null means no lock. */
+const aspectRatio = z
+  .number()
+  .min(MIN_WINDOW_ASPECT_RATIO)
+  .max(MAX_WINDOW_ASPECT_RATIO)
+  .nullable();
 
 const windowStateResult = {
   input: windowTarget,
@@ -1051,6 +1060,16 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isMovable": windowStateResult,
+  "windows.setAspectRatio": {
+    input: windowTarget.extend({
+      ratio: aspectRatio,
+    }),
+    output: z.null(),
+  },
+  "windows.getAspectRatio": {
+    input: windowTarget,
+    output: aspectRatio,
+  },
   "windows.setSize": {
     input: z.strictObject({
       view: viewTarget.shape.view,

@@ -71,10 +71,15 @@ test.skipIf(process.platform !== "win32")(
       emit() {},
     };
     const events: JsonValue[] = [];
+    const sequence: string[] = [];
     const driver = new Win32Shortcuts(services);
     const adapter = createShortcutOperations(driver, (event, payload) => {
-      expect(event).toBe("globalShortcut.pressed");
-      events.push(payload);
+      sequence.push(event);
+      if (event === "globalShortcut.pressed") {
+        events.push(payload);
+      } else {
+        expect(event).toBe("globalShortcut.released");
+      }
     });
     const invoke = async (operation: string, input: JsonValue) => {
       if (!adapter.executeUI) {
@@ -186,6 +191,12 @@ test.skipIf(process.platform !== "win32")(
       expect(await waiting).toEqual({
         shortcut,
       });
+      // SendInput released the key right away; the WM_TIMER poll reports it on a later tick.
+      await pumpUntil(() => sequence.length === 2);
+      expect(sequence).toEqual([
+        "globalShortcut.pressed",
+        "globalShortcut.released",
+      ]);
       await invoke("setSuspended", {
         suspended: true,
       });

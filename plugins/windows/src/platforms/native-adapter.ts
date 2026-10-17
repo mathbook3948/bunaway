@@ -62,6 +62,13 @@ function unsupportedMovement() {
   });
 }
 
+function unsupportedAspectRatio() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window aspect ratio locking is not implemented on this platform.",
+  });
+}
+
 /** Create the UI-worker adapter; throws when window services are unavailable. */
 export function createOperations(
   environment: NativeEnvironment,
@@ -484,6 +491,17 @@ export function createOperations(
           throw unsupportedMovement();
         }
         return window.isResizable();
+      case "windows.setAspectRatio":
+        if (!window.setAspectRatio) {
+          throw unsupportedAspectRatio();
+        }
+        window.setAspectRatio(call.payload.ratio);
+        break;
+      case "windows.getAspectRatio":
+        if (!window.getAspectRatio) {
+          throw unsupportedAspectRatio();
+        }
+        return window.getAspectRatio();
       case "windows.setMovable":
         if (!window.setMovable) {
           throw unsupportedMovement();
