@@ -1149,7 +1149,13 @@
       "source": "packages/plugin-api/src/desktop.ts",
       "type": "DesktopContext",
       "pages": {
-        "reference/backend/app-definition": ["show", "hide", "quit", "exit", "relaunch"]
+        "reference/backend/app-definition": [
+          "show",
+          "hide",
+          "quit",
+          "exit",
+          "relaunch"
+        ]
       }
     },
     {
