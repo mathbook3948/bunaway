@@ -495,6 +495,12 @@ export type NativeWindow = {
   ): void;
   /** Set this window's taskbar thumbnail tooltip, or restore the default for `null` or an empty string. Throws BUSY like `setTaskbarProgress`. Windows only. */
   setThumbnailToolTip?(toolTip: string | null): void;
+  /**
+   * Set this window's taskbar overlay icon from base64 ICO bytes (the tray `setIcon` contract) with an accessibility
+   * description, or remove the overlay for `null`, which ignores `description`. Throws INVALID_ARGUMENT for an
+   * unusable ICO and BUSY like `setTaskbarProgress`. Windows only.
+   */
+  setOverlayIcon?(ico: string | null, description: string): void;
   /** Sets or clears the confirmation shown before a user closes the window. */
   setCloseConfirmation(message: string | null): void;
 };

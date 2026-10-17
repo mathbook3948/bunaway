@@ -758,6 +758,16 @@ export function createOperations(
         }
         window.setThumbnailToolTip(call.payload.toolTip);
         break;
+      case "windows.setOverlayIcon":
+        if (!window.setOverlayIcon) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message:
+              "Taskbar overlay icon is not implemented on this platform.",
+          });
+        }
+        window.setOverlayIcon(call.payload.ico, call.payload.description);
+        break;
       case "windows.setCloseConfirmation":
         window.setCloseConfirmation(call.payload.message);
         break;

@@ -1,5 +1,6 @@
 import {
   isDownloadSnapshotWithinLimits,
+  MAX_TRAY_ICO_BYTES,
   MAX_WEBVIEW_DOWNLOADS,
   MAX_WINDOW_ASPECT_RATIO,
   MAX_WINDOW_COORDINATE,
@@ -184,6 +185,15 @@ const nativeTitle = z
 const windowTitle = nativeTitle.regex(new RegExp(WINDOW_TEXT_PATTERN, "u"));
 // An empty accessible title removes the annotation and restores the caption as the screen reader name.
 const accessibleTitle = windowTitle.or(z.literal(""));
+
+// Base64 ICO bytes bounded like the tray `setIcon` contract; the native side validates the image itself.
+const icoBytes = z
+  .string()
+  .min(4)
+  .max(Math.ceil(MAX_TRAY_ICO_BYTES / 3) * 4)
+  .regex(
+    /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\s\S])/,
+  );
 
 const viewTarget = z.strictObject({
   view: z.string().regex(new RegExp(WINDOW_VIEW_NAME_PATTERN, "u")),
@@ -864,6 +874,14 @@ export const windowOperations = {
   "windows.setThumbnailToolTip": {
     input: windowTarget.extend({
       toolTip: accessibleTitle.nullable(),
+    }),
+    output: z.null(),
+  },
+  // A null ico removes the overlay and ignores description; otherwise description is the accessibility text.
+  "windows.setOverlayIcon": {
+    input: windowTarget.extend({
+      ico: icoBytes.nullable(),
+      description: accessibleTitle,
     }),
     output: z.null(),
   },

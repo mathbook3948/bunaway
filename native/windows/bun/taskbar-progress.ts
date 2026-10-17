@@ -10,6 +10,12 @@ export type ThumbnailClip = Parameters<
   NonNullable<NativeWindow["setThumbnailClip"]>
 >[0];
 
+/** Overlay ICO with its accessibility description, or null for no overlay. */
+export type OverlayIconSetting = {
+  ico: string;
+  description: string;
+} | null;
+
 /** Own one desired taskbar setting per HWND, separately from asynchronous Explorer button creation. */
 export class TaskbarSettingController<T> {
   private readonly ready = new Set<bigint>();

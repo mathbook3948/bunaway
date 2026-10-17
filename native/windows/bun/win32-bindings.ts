@@ -266,6 +266,18 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "u64",
   },
+  CreateIconFromResourceEx: {
+    args: [
+      "ptr",
+      "u32",
+      "i32",
+      "u32",
+      "i32",
+      "i32",
+      "u32",
+    ],
+    returns: "u64",
+  },
   DestroyIcon: {
     args: [
       "u64",

@@ -12,6 +12,7 @@ import { Windows } from "#native/windows/bun/win32";
 import { hr, ole, user } from "#native/windows/bun/win32-bindings";
 import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+import { trayIco } from "../fixtures/tray-icon.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 assert.equal(process.platform, "win32");
@@ -1253,6 +1254,41 @@ if (!process.argv.includes("--child")) {
               null,
             );
           }
+          // Set, replace (which releases the previous HICON) and remove the overlay through the real ITaskbarList3.
+          for (const [ico, description] of [
+            [
+              trayIco(16),
+              "3 unread",
+            ],
+            [
+              trayIco(32),
+              "",
+            ],
+            [
+              null,
+              "ignored",
+            ],
+          ] as const) {
+            assert.equal(
+              await windows.setOverlayIcon({
+                ...thumbnailTarget,
+                ico: ico?.toString("base64") ?? null,
+                description,
+              }),
+              null,
+            );
+          }
+          // A rejected image keeps the current overlay and reports an argument error, not a shell failure.
+          await assert.rejects(
+            windows.setOverlayIcon({
+              ...thumbnailTarget,
+              ico: Buffer.alloc(64).toString("base64"),
+              description: "bad",
+            }),
+            {
+              code: "INVALID_ARGUMENT",
+            },
+          );
           // First run covers sizing/fullscreen; later runs cover recreation and renderer recovery.
           if (++runs === 1) {
             assert.equal(

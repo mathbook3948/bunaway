@@ -25,15 +25,25 @@ import {
 import { AccessibleTitles } from "./accessible-title.ts";
 import { adjustSizingRect, systemTrackSize } from "./aspect-ratio.ts";
 import { monitorServices } from "./monitors.ts";
+import { selectOverlayFrame } from "./overlay-icon.ts";
 import type { SessionMessageHandler } from "./session-end.ts";
 import { Taskbar } from "./taskbar.ts";
 import {
+  type OverlayIconSetting,
   type TaskbarProgress,
   TaskbarProgressController,
   TaskbarSettingController,
   type ThumbnailClip,
 } from "./taskbar-progress.ts";
-import { display, hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
+import {
+  display,
+  hr,
+  kernel,
+  user,
+  wide,
+  withBuffer,
+  withWide,
+} from "./win32-bindings.ts";
 import { completedGeometryChanges, windowChanges } from "./window-events.ts";
 import {
   centerInWorkArea,
@@ -110,6 +120,9 @@ const SM_CXPADDEDBORDER = 92;
 const SM_CXMINTRACK = 34;
 const SM_CYMINTRACK = 35;
 const SM_CXMAXTRACK = 59;
+const SM_CXSMICON = 49;
+// CreateIconFromResourceEx accepts icon resource data of this format version.
+const ICON_RESOURCE_VERSION = 0x00030000;
 const SM_CYMAXTRACK = 60;
 const SW_HIDE = 0;
 const SW_SHOWNORMAL = 1;
@@ -197,6 +210,12 @@ export class Windows {
   private readonly thumbnailToolTip = new TaskbarSettingController<
     string | null
   >((window, toolTip) => this.taskbar.setThumbnailToolTip(window, toolTip));
+  // The HICON currently shown as each window's overlay; owned here and destroyed on replacement, removal or destroy.
+  private readonly overlayIcons = new Map<bigint, bigint>();
+  private readonly overlayIcon =
+    new TaskbarSettingController<OverlayIconSetting>((window, setting) =>
+      this.applyOverlayIcon(window, setting),
+    );
   private readonly taskbarButtonCreated = withWide(
     "TaskbarButtonCreated",
     (name) => user.symbols.RegisterWindowMessageW(name),
@@ -392,6 +411,10 @@ export class Windows {
               [
                 "thumbnail tooltip",
                 this.thumbnailToolTip,
+              ],
+              [
+                "overlay icon",
+                this.overlayIcon,
               ],
             ] as const) {
               try {
@@ -2807,6 +2830,8 @@ export class Windows {
     this.taskbarProgress.forget(window);
     this.thumbnailClip.forget(window);
     this.thumbnailToolTip.forget(window);
+    this.overlayIcon.forget(window);
+    this.releaseOverlayIcon(window);
     this.windows.delete(window);
     this.constraints.delete(window);
     this.dpiByWindow.delete(window);
@@ -2893,6 +2918,84 @@ export class Windows {
       });
     }
     this.thumbnailToolTip.set(window, toolTip || null);
+  }
+
+  /**
+   * Show the overlay icon with an accessibility description on the taskbar button, or remove it for null
+   * (the description is then ignored).
+   */
+  setOverlayIcon(
+    window: bigint,
+    ico: string | null,
+    description: string,
+  ): void {
+    assert(this.windows.has(window), "Taskbar target is not a live window");
+    if (ico === null) {
+      this.overlayIcon.set(window, null);
+      return;
+    }
+    // Native callers bypass the plugin schema; enforce the same limits as the thumbnail tooltip.
+    if (description.includes("\0") || description.length > 1024) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message:
+          "The overlay icon description cannot contain NUL or exceed 1024 UTF-16 code units.",
+      });
+    }
+    this.overlayIcon.set(window, {
+      ico,
+      description,
+    });
+  }
+
+  /**
+   * Build the new HICON at the small icon size for the window's DPI before touching the shell, so a rejected
+   * image keeps the current overlay. The previous HICON is destroyed only after the shell accepted the new one.
+   */
+  private applyOverlayIcon(window: bigint, setting: OverlayIconSetting): void {
+    if (!setting) {
+      this.taskbar.setOverlayIcon(window, 0n, "");
+      this.releaseOverlayIcon(window);
+      return;
+    }
+    const size = user.symbols.GetSystemMetricsForDpi(
+      SM_CXSMICON,
+      this.getDpi(window),
+    );
+    const image = selectOverlayFrame(setting.ico, size);
+    const icon = withBuffer(image, (address) =>
+      user.symbols.CreateIconFromResourceEx(
+        address,
+        image.length,
+        1,
+        ICON_RESOURCE_VERSION,
+        size,
+        size,
+        0,
+      ),
+    );
+    if (!icon) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Windows rejected the overlay ICO image.",
+      });
+    }
+    try {
+      this.taskbar.setOverlayIcon(window, icon, setting.description);
+    } catch (error) {
+      user.symbols.DestroyIcon(icon);
+      throw error;
+    }
+    this.releaseOverlayIcon(window);
+    this.overlayIcons.set(window, icon);
+  }
+
+  private releaseOverlayIcon(window: bigint): void {
+    const icon = this.overlayIcons.get(window);
+    if (icon) {
+      user.symbols.DestroyIcon(icon);
+      this.overlayIcons.delete(window);
+    }
   }
 
   private applyThumbnailClip(window: bigint, region: ThumbnailClip): void {

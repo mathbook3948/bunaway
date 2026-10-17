@@ -1184,6 +1184,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
           nativeWindows.setThumbnailClip(hwnd, region),
         setThumbnailToolTip: (toolTip) =>
           nativeWindows.setThumbnailToolTip(hwnd, toolTip),
+        setOverlayIcon: (ico, description) =>
+          nativeWindows.setOverlayIcon(hwnd, ico, description),
       };
     },
   };

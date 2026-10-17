@@ -25,6 +25,9 @@ export class Taskbar {
     | ((window: bigint, completed: bigint, total: bigint) => number)
     | undefined;
   private state: ((window: bigint, flag: number) => number) | undefined;
+  private overlay:
+    | ((window: bigint, icon: bigint, description: number) => number)
+    | undefined;
   private tooltip: ((window: bigint, text: number) => number) | undefined;
   private clip: ((window: bigint, rect: number) => number) | undefined;
 
@@ -83,6 +86,11 @@ export class Taskbar {
         "u32",
       ]);
       // ITaskbarList3 vtable: SetThumbnailTooltip follows SetOverlayIcon (18), then SetThumbnailClip.
+      this.overlay = this.bind(18, [
+        "u64",
+        "u64",
+        "ptr",
+      ]);
       this.tooltip = this.bind(19, [
         "u64",
         "ptr",
@@ -149,6 +157,20 @@ export class Taskbar {
     );
   }
 
+  /**
+   * Show `icon` (an HICON the caller keeps owning) over the taskbar button with an accessibility description,
+   * or remove the overlay for 0. The caller keeps `icon` alive while it is shown and destroys it afterwards.
+   */
+  setOverlayIcon(window: bigint, icon: bigint, description: string): void {
+    this.initialize();
+    assert(this.overlay);
+    const native = icon ? wide(description) : null;
+    hr(
+      this.overlay(window, icon, native ? ptr(native) : 0),
+      "ITaskbarList3.SetOverlayIcon",
+    );
+  }
+
   /** Release the interface and bindings before the UI STA is uninitialized. Safe to repeat. */
   dispose(): void {
     this.release?.();
@@ -156,6 +178,7 @@ export class Taskbar {
     this.object = null;
     this.value = undefined;
     this.state = undefined;
+    this.overlay = undefined;
     this.tooltip = undefined;
     this.clip = undefined;
     for (const binding of this.bindings.splice(0)) {

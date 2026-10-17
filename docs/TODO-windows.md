@@ -435,7 +435,15 @@ Windows의 비활성화 기록을 수정하지 않는다.
   ITaskbarList3 호출은 기존 `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
 - [ ] 실제 Windows 작업 표시줄에서 진행률, 상태 색상, 그룹 우선순위와 Explorer 재시작 후 표시를 확인한다.
   네이티브 호출 회귀와 합성 버튼 재생성 검사를 물리 화면의 표시 검증으로 간주하지 않는다.
-- [ ] overlay icon과 접근성 설명을 설정한다.
+- [x] overlay icon과 접근성 설명을 설정한다.
+  `windows.setOverlayIcon`은 창별로 `ico`(`tray.setIcon`과 같은 base64 ICO, `null`이면 제거)와
+  `description`(`setThumbnailToolTip`과 같은 문자열 규칙, `ico`가 `null`이면 무시)을 받으며 Electron의
+  `setOverlayIcon(overlay, description)`에 대응한다. ICO에서 창 DPI의 작은 아이콘 크기에 맞는 프레임으로
+  HICON을 만들어 `ITaskbarList3::SetOverlayIcon`에 넘기고 다음 설정, 제거, 창 파괴 때 `DestroyIcon`으로 해제한다.
+  작업 권한과 창 수명을 검사하고 버튼 생성 전에는 `BUSY`, 잘못된 ICO는 `INVALID_ARGUMENT`, 네이티브 실패는 `INTERNAL`,
+  macOS는 `UNSUPPORTED`다. 버튼 재생성 때 마지막 성공 값을 다시 적용하고 HWND 파괴 때 폐기한다.
+  계약 검증은 `window-overlay-icon.test.ts`, 프레임 선택과 수명은 `taskbar-overlay-icon.test.ts`이며 실제 ITaskbarList3 호출은
+  `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
 - [ ] thumbnail toolbar 버튼과 클릭 이벤트를 제공한다.
 - [x] thumbnail clip과 tooltip을 설정한다.
   `windows.setThumbnailClip`은 내용 영역 기준 96 DPI 논리 픽셀 region(`null`이면 해제)을,
