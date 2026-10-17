@@ -296,6 +296,10 @@ export function initialize() {
                   ),
                   // Increase Contrast adjusts AppKit drawing; macOS does not force a color palette.
                   forcedColors: false,
+                  invertedColors: boolean(
+                    workspace,
+                    "accessibilityDisplayShouldInvertColors",
+                  ),
                   reducedMotion: boolean(
                     workspace,
                     "accessibilityDisplayShouldReduceMotion",

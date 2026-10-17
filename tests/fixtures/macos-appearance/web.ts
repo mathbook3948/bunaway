@@ -58,6 +58,7 @@ function snapshot(value: unknown) {
   }
   for (const key of [
     "highContrast",
+    "invertedColors",
     "reducedMotion",
     "transparencyEnabled",
     "screenReaderEnabled",

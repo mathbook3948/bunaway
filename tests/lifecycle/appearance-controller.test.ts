@@ -15,6 +15,7 @@ function fixture() {
     accentColor: "#123456",
     highContrast: false,
     forcedColors: false,
+    invertedColors: false,
     reducedMotion: false,
     transparencyEnabled: true,
     screenReaderEnabled: false,
