@@ -6,7 +6,7 @@ import { withWide } from "./win32-bindings.ts";
 const CALL_DEVTOOLS_PROTOCOL_METHOD_SLOT = 36;
 // ICoreWebView2CallDevToolsProtocolMethodCompletedHandler.
 const COMPLETED_HANDLER_IID = "5c4889f0-5ef6-4c5a-952c-d8f1b92d0574";
-// Longest result accepted; Runtime.evaluate and key-event replies stay far below this.
+// Longest result accepted; Runtime.evaluate replies for the host's own scripts stay far below this.
 const MAX_RESULT_CHARS = 1_048_576;
 
 /** Result of one DevTools protocol call: the HRESULT and the JSON the browser returned. */

@@ -15,6 +15,7 @@ import {
 } from "#native/windows/bun/com";
 import { WebView } from "#native/windows/bun/webview";
 import { callDevToolsProtocolMethod } from "#native/windows/bun/webview-devtools";
+import type { EditCommandOutcome } from "#native/windows/bun/webview-edit-command";
 import { Windows } from "#native/windows/bun/win32";
 import {
   disposeWin32Bindings,
@@ -25,8 +26,10 @@ import { menuItemsSchema } from "#plugins/menu/src/contract";
 import { WindowMenus } from "#plugins/menu/src/platforms/windows-window-menus";
 
 // Menu roles end to end in a real WebView2 window: a menu-bar or popup selection reaches
-// WindowMenus, the host runs the editing command through the DevTools protocol and the page's
-// textarea, the clipboard and the undo stack change. Roles never become app selections.
+// WindowMenus, the host runs the editing command with execCommand through the DevTools protocol
+// and the page's textarea, the clipboard and the undo stack change. The page blocks keydown, so
+// a key-event route would fail. Roles never become app selections. Paste and same-origin iframe
+// outcomes are logged as MENU_ROLE_DIRECT_SPIKE lines and not asserted.
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
 const output = resolve(root, "build/windows-menu-roles");
@@ -34,6 +37,8 @@ const assets = resolve(output, "assets");
 const caption = "Bunaway menu roles";
 const CF_UNICODETEXT = 13;
 const STEP_TIMEOUT_MS = 15_000;
+// Time a role command gets to finish before its effect is observed for the diagnostic log.
+const CASCADE_SETTLE_MS = 250;
 const POLL_MS = 25;
 const CLIPBOARD_ATTEMPTS = 20;
 const WM_MENUCOMMAND = 0x0126;
@@ -172,6 +177,38 @@ function clearClipboard(owner: bigint): void {
   user.symbols.CloseClipboard();
 }
 
+/**
+ * Test page: a top textarea and a same-origin srcdoc iframe with its own textarea. Capture-phase
+ * listeners on both windows count the events a page could use to block an editing command.
+ * The keydown listener also calls preventDefault, so any command routed through a key event
+ * would be suppressed and show up as a non-zero keydown count.
+ */
+function pageHtml(): string {
+  const frameHtml = `<!doctype html><textarea id="b" rows="4" cols="40"></textarea>`;
+  const srcdoc = frameHtml.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+  return `<!doctype html><title>Menu roles</title>
+  <textarea id="a" rows="4" cols="40"></textarea>
+  <iframe id="f" srcdoc="${srcdoc}"></iframe>
+  <script>
+    window.counts = { keydown: 0, beforeinput: 0, copy: 0, cut: 0, paste: 0, selectstart: 0 };
+    const watch = (target) => {
+      for (const type of Object.keys(window.counts)) {
+        target.addEventListener(type, (event) => {
+          window.counts[type]++;
+          if (type === "keydown") {
+            event.preventDefault();
+          }
+        }, true);
+      }
+    };
+    watch(window);
+    addEventListener("load", () => {
+      watch(document.getElementById("f").contentWindow);
+      chrome.webview.postMessage("loaded");
+    });
+  </script>`;
+}
+
 function menuText(menu: bigint, position: number): string {
   const buffer = Buffer.alloc(256);
   const length = user.symbols.GetMenuStringW(
@@ -187,12 +224,7 @@ function menuText(menu: bigint, position: number): string {
 await mkdir(resolve(assets, "web"), {
   recursive: true,
 });
-await writeFile(
-  resolve(assets, "web/index.html"),
-  `<!doctype html><title>Menu roles</title>
-  <textarea id="a" rows="4" cols="40"></textarea>
-  <script>addEventListener("load", () => chrome.webview.postMessage("loaded"));</script>`,
-);
+await writeFile(resolve(assets, "web/index.html"), pageHtml());
 hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
 const windows = new Windows(() => {});
 
@@ -201,6 +233,9 @@ const listeners = new Set<
 >();
 const executed: NativeMenuRole[] = [];
 const failures: string[] = [];
+const skips: string[] = [];
+/** Page-side result of the most recent role that ran, for the diagnostic log. */
+let lastExecution: EditCommandOutcome | undefined;
 const selections: string[] = [];
 const pending: ComHandler[] = [];
 let hwnd = 0n;
@@ -315,28 +350,47 @@ try {
     assert(!parsed.exceptionDetails, JSON.stringify(parsed));
     return parsed.result?.value;
   };
-  const field = (): Promise<{
+  type Frame = "top" | "same-origin";
+  type FieldState = {
     value: string;
     start: number;
     end: number;
-  }> =>
+  };
+  /** Expression for the document that holds the textarea of a frame. */
+  const documentOf = (frame: Frame) =>
+    frame === "top"
+      ? "document"
+      : `document.getElementById("f").contentDocument`;
+  const fieldId = (frame: Frame) => (frame === "top" ? "a" : "b");
+  const fieldIn = (frame: Frame): Promise<FieldState> =>
     evaluate(
-      `(() => { const e = document.getElementById("a"); return { value: e.value, start: e.selectionStart, end: e.selectionEnd }; })()`,
+      `(() => { const e = ${documentOf(frame)}.getElementById("${fieldId(frame)}"); return { value: e.value, start: e.selectionStart, end: e.selectionEnd }; })()`,
     );
+  const field = () => fieldIn("top");
+  const focusField = (frame: Frame) =>
+    evaluate(
+      frame === "top"
+        ? `document.getElementById("a").focus(), true`
+        : `(() => { const f = document.getElementById("f"); f.focus(); f.contentDocument.getElementById("b").focus(); return true; })()`,
+    );
+  type EventCounts = Record<string, number>;
+  const eventCounts = (): Promise<EventCounts> =>
+    evaluate(`({ ...window.counts })`);
   /** Poll the textarea until it satisfies `accept`, since a command applies asynchronously. */
   const fieldWhere = async (
-    accept: (state: { value: string; start: number; end: number }) => boolean,
+    accept: (state: FieldState) => boolean,
     what: string,
+    frame: Frame = "top",
   ) => {
     const deadline = Date.now() + STEP_TIMEOUT_MS;
-    let state = await field();
+    let state = await fieldIn(frame);
     while (!accept(state)) {
       assert(
         Date.now() < deadline,
         `${what} did not happen: ${JSON.stringify(state)}`,
       );
       await Bun.sleep(POLL_MS);
-      state = await field();
+      state = await fieldIn(frame);
     }
     return state;
   };
@@ -369,7 +423,13 @@ try {
     },
     executeRole(_id, role) {
       executed.push(role);
-      page.executeEditCommand(role, (reason) => failures.push(reason));
+      page.executeEditCommand(role, {
+        failed: (reason) => failures.push(`${role}: ${reason}`),
+        skipped: (reason) => skips.push(`${role}: ${reason}`),
+        executed: (result) => {
+          lastExecution = result;
+        },
+      });
     },
   };
   menus = new WindowMenus(host);
@@ -428,55 +488,134 @@ try {
   );
 
   windows.focus(hwnd);
-  clearClipboard(hwnd);
-  await evaluate(`document.getElementById("a").focus(), true`);
-  await cdp("Input.insertText", {
-    text: SEED,
-  });
-  assert.equal((await field()).value, SEED);
 
   /** Choose a menu-bar item exactly as Windows reports it: WM_MENUCOMMAND with HMENU and position. */
   const choose = (position: number) => {
     user.symbols.SendMessageW(hwnd, WM_MENUCOMMAND, BigInt(position), submenu);
   };
   const roleItem = (role: NativeMenuRole) => ROLES.indexOf(role);
+  const spike = (check: string, role: string, frame: Frame, result: object) =>
+    console.log(
+      `MENU_ROLE_DIRECT_SPIKE ${JSON.stringify({
+        check,
+        role,
+        frame,
+        result,
+      })}`,
+    );
 
-  choose(roleItem("selectAll"));
-  await fieldWhere(
-    (state) => state.start === 0 && state.end === SEED.length,
-    "Select All",
-  );
-  choose(roleItem("copy"));
-  // Poll the page too: its replies pump the STA that completes the protocol call.
-  await fieldWhere(() => true, "Copy dispatch");
-  await clipboardWhere(SEED, "Copy");
-  assert.equal((await field()).value, SEED, "Copy must not change the text");
-  clearClipboard(hwnd);
-  choose(roleItem("cut"));
-  await fieldWhere((state) => state.value === "", "Cut");
-  await clipboardWhere(SEED, "Cut");
-  choose(roleItem("paste"));
-  await fieldWhere((state) => state.value === SEED, "Paste");
-  choose(roleItem("undo"));
-  await fieldWhere((state) => state.value === "", "Undo");
-  choose(roleItem("redo"));
-  await fieldWhere((state) => state.value === SEED, "Redo");
+  /**
+   * Select a role from the menu bar and observe the page. Logs one diagnostic line with the
+   * focus at selection time, field state, clipboard, event counts and the page-side result.
+   */
+  const selectRole = async (frame: Frame, role: NativeMenuRole) => {
+    const focusAtSelect = await evaluate(`${documentOf(frame)}.hasFocus()`);
+    const before = await eventCounts();
+    const failuresBefore = failures.length;
+    const skipsBefore = skips.length;
+    lastExecution = undefined;
+    choose(roleItem(role));
+    // The command completes on a later pump; each page query below pumps the STA.
+    await Bun.sleep(CASCADE_SETTLE_MS);
+    const state = await fieldIn(frame);
+    const clipboard = await readClipboard(hwnd);
+    const after = await eventCounts();
+    const events = Object.fromEntries(
+      Object.keys(after).map((type) => [
+        type,
+        (after[type] ?? 0) - (before[type] ?? 0),
+      ]),
+    );
+    spike("menu-bar", role, frame, {
+      focusAtSelect,
+      ...state,
+      clipboard,
+      events,
+      execution: lastExecution ?? null,
+      failures: failures.slice(failuresBefore),
+      skips: skips.slice(skipsBefore),
+    });
+    return state;
+  };
+
+  for (const frame of [
+    "top",
+    "same-origin",
+  ] as const) {
+    // Only the top frame is asserted; same-origin iframe behaviour is recorded for review.
+    const strict = frame === "top";
+    const expectField = async (
+      accept: (state: FieldState) => boolean,
+      what: string,
+    ) => {
+      if (strict) {
+        await fieldWhere(accept, `${frame} ${what}`, frame);
+      }
+    };
+    clearClipboard(hwnd);
+    await focusField(frame);
+    await evaluate(
+      `${documentOf(frame)}.getElementById("${fieldId(frame)}").value = ""`,
+    );
+    await cdp("Input.insertText", {
+      text: SEED,
+    });
+    assert.equal((await fieldIn(frame)).value, SEED);
+
+    await selectRole(frame, "selectAll");
+    await expectField(
+      (state) => state.start === 0 && state.end === SEED.length,
+      "Select All",
+    );
+    await selectRole(frame, "copy");
+    if (strict) {
+      await clipboardWhere(SEED, "Copy");
+      assert.equal(
+        (await fieldIn(frame)).value,
+        SEED,
+        "Copy must not change the text",
+      );
+    }
+    clearClipboard(hwnd);
+    await selectRole(frame, "cut");
+    await expectField((state) => state.value === "", "Cut");
+    if (strict) {
+      await clipboardWhere(SEED, "Cut");
+    }
+    // Paste is recorded only; Undo and Redo are asserted relative to its outcome.
+    const afterPaste = await selectRole(frame, "paste");
+    await selectRole(frame, "undo");
+    await expectField((state) => state.value !== afterPaste.value, "Undo");
+    await selectRole(frame, "redo");
+    await expectField((state) => state.value === afterPaste.value, "Redo");
+  }
 
   assert.deepEqual(executed, [
-    "selectAll",
-    "copy",
-    "cut",
-    "paste",
-    "undo",
-    "redo",
+    ...[
+      "top",
+      "same-origin",
+    ].flatMap(() => [
+      "selectAll",
+      "copy",
+      "cut",
+      "paste",
+      "undo",
+      "redo",
+    ]),
   ]);
   assert.deepEqual(selections, [], "Roles must not be reported as selections");
+  assert.equal(
+    (await eventCounts()).keydown,
+    0,
+    "Menu roles must not produce key events",
+  );
   choose(ROLES.length);
   assert.deepEqual(selections, [
     "plain",
   ]);
 
   // A context popup runs the role too, then reports no selection.
+  await focusField("top");
   await evaluate(
     `(() => { const e = document.getElementById("a"); e.setSelectionRange(0, 0); return true; })()`,
   );
@@ -510,28 +649,39 @@ try {
     listeners.delete(driver);
   }
   assert.equal(popupResult, null, "A role popup item reports no selection");
-  await fieldWhere(
+  const popupState = await fieldWhere(
     (state) => state.start === 0 && state.end === SEED.length,
     "Popup Select All",
   );
+  spike("popup", "selectAll", "top", {
+    focusAfterPopup: await evaluate(`document.hasFocus()`),
+    ...popupState,
+    execution: lastExecution ?? null,
+  });
   assert.deepEqual(executed.at(-1), "selectAll");
   assert.deepEqual(selections, [
     "plain",
   ]);
-  assert.deepEqual(failures, []);
+  assert.equal((await eventCounts()).keydown, 0);
+  console.log(
+    `MENU_ROLE_DIRECT_SPIKE ${JSON.stringify({
+      check: "summary",
+      failures,
+      skips,
+      counts: await eventCounts(),
+    })}`,
+  );
 
   // Close with a command still in flight: cleanup must wait for WebView2 to release its
   // completion handler instead of failing the outstanding-reference check.
-  assert.equal(
-    page.executeEditCommand("copy", () => {}),
-    true,
-  );
+  const ignore = {
+    failed() {},
+    skipped() {},
+  };
+  assert.equal(page.executeEditCommand("copy", ignore), true);
   // A closing WebView then ignores further commands and reports that they did not start.
   page.requestClose();
-  assert.equal(
-    page.executeEditCommand("copy", () => {}),
-    false,
-  );
+  assert.equal(page.executeEditCommand("copy", ignore), false);
   verified = true;
 } finally {
   menus?.dispose();

@@ -14,7 +14,8 @@
 편집 role(undo, redo, cut, copy, paste, selectAll)은 `type: "item"`에만 허용한다. 스키마가
 생략한 label을 기본 label로 채우고, `NativePopupMenu`가 role의 표시용 단축키 문구를 붙이며 선택 때
 role을 알려 준다. `WindowMenus`는 role 선택을 `menu.clicked` 없이 창 호스트의 `executeRole`로 넘기고,
-호스트가 해당 창 WebView에 DevTools 프로토콜의 `Input.dispatchKeyEvent` `commands`로 편집 명령을 실행한다.
+호스트가 해당 창 WebView에 DevTools 프로토콜의 `Runtime.evaluate`로 `document.execCommand`를 실행한다(포커스된
+document를 따라가며 키 이벤트는 만들지 않는다).
 트레이 메뉴는 role을 `INVALID_ARGUMENT`로 거부한다. 가속키 등록과 앱 전체 기본 메뉴는 지원하지 않는다.
 
 `tests/api/menu.test.ts`는 계약, 제한, 권한, 변경 실패 보존과 이전 선택 폐기를 검사한다.

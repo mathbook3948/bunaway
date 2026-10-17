@@ -22,6 +22,11 @@ import { webAsset } from "./web-assets.ts";
 import { callDevToolsProtocolMethod } from "./webview-devtools.ts";
 import { WebViewDownloads } from "./webview-downloads.ts";
 import { EditCommandCalls } from "./webview-edit-calls.ts";
+import {
+  type EditCommandReport,
+  editCommandEvaluateParameters,
+  interpretEditCommandResult,
+} from "./webview-edit-command.ts";
 import { enableCustomTitlebar } from "./webview-titlebar.ts";
 import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 
@@ -930,21 +935,21 @@ export class WebView {
   }
 
   /**
-   * Run an editing command on the page's focused element through the DevTools protocol.
+   * Run an editing command in the page's focused document through the DevTools protocol.
    *
-   * The command does not depend on the keyboard layout and never injects input into another
-   * application. The protocol call works with the DevTools UI disabled. Chromium may route
-   * `commands` through a synthetic keydown, so a page that calls `preventDefault()` in its
-   * keydown handler may suppress the command.
+   * The command runs as `document.execCommand` from a `Runtime.evaluate` call, so it does not
+   * depend on the keyboard layout, produces no key events and never injects input into another
+   * application. The call works with the DevTools UI disabled. Focus is followed from the top
+   * document into nested same-origin frames; a cross-origin frame is skipped.
    *
    * Returns false, doing nothing, while the WebView is closing or not ready. Completion is
-   * observed on the next pump; a refused focus move and protocol failures after the call
-   * started (for example a navigating page) are reported through `failed`. A failure to start
-   * the call throws.
+   * observed on the next pump; a refused focus move, a refused command and protocol failures
+   * after the call started (for example a navigating page) are reported through `report`. A
+   * failure to start the call throws.
    */
   executeEditCommand(
     command: NativeMenuRole,
-    failed: (reason: string) => void,
+    report: EditCommandReport,
   ): boolean {
     if (this.closing || !this.webview || !this.controller) {
       return false;
@@ -956,7 +961,7 @@ export class WebView {
       try {
         this.moveFocusToContent();
       } catch (error) {
-        failed(
+        report.failed(
           `MoveFocus: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
@@ -964,17 +969,20 @@ export class WebView {
     this.editCalls.start(command, (isActive) =>
       callDevToolsProtocolMethod(
         webview,
-        "Input.dispatchKeyEvent",
-        JSON.stringify({
-          type: "rawKeyDown",
-          commands: [
-            command,
-          ],
-        }),
-        ({ hresult }) => {
+        "Runtime.evaluate",
+        JSON.stringify(editCommandEvaluateParameters(command)),
+        ({ hresult, json }) => {
           // A late completion after cleanup or abandonment must touch no view or host state.
-          if (isActive() && hresult < 0) {
-            failed(`0x${(hresult >>> 0).toString(16)}`);
+          if (!isActive()) {
+            return;
+          }
+          const verdict = interpretEditCommandResult(hresult, json);
+          if (verdict.kind === "failed") {
+            report.failed(verdict.reason);
+          } else if (verdict.kind === "skipped") {
+            report.skipped(verdict.reason);
+          } else {
+            report.executed?.(verdict.result);
           }
         },
       ),

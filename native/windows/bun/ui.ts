@@ -1856,12 +1856,18 @@ try {
               return;
             }
             try {
-              const started = view.native.executeEditCommand(role, (reason) =>
-                log("menu-role-failed", {
-                  role,
-                  reason,
-                }),
-              );
+              const started = view.native.executeEditCommand(role, {
+                failed: (reason) =>
+                  log("menu-role-failed", {
+                    role,
+                    reason,
+                  }),
+                skipped: (reason) =>
+                  log("menu-role-skipped", {
+                    role,
+                    reason,
+                  }),
+              });
               if (!started) {
                 log("menu-role-skipped", {
                   role,
