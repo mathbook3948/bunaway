@@ -442,7 +442,8 @@ Windows의 비활성화 기록을 수정하지 않는다.
   HICON을 만들어 `ITaskbarList3::SetOverlayIcon`에 넘기고 다음 설정, 제거, 창 파괴 때 `DestroyIcon`으로 해제한다.
   작업 권한과 창 수명을 검사하고 버튼 생성 전에는 `BUSY`, 잘못된 ICO는 `INVALID_ARGUMENT`, 네이티브 실패는 `INTERNAL`,
   macOS는 `UNSUPPORTED`다. 버튼 재생성 때 마지막 성공 값을 다시 적용하고 HWND 파괴 때 폐기한다.
-  계약 검증은 `window-overlay-icon.test.ts`, 프레임 선택과 수명은 `taskbar-overlay-icon.test.ts`이며 실제 ITaskbarList3 호출은
+  ICO 검증과 HICON 생성은 windows 플러그인의 Windows 플랫폼 코드가 맡고 호스트는 아이콘 공급자를 받아 수명만 관리한다.
+  계약 검증은 `window-overlay-icon.test.ts`, ICO 거부와 수명은 `taskbar-overlay-icon.test.ts`이며 실제 ITaskbarList3 호출은
   `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
 - [ ] thumbnail toolbar 버튼과 클릭 이벤트를 제공한다.
 - [x] thumbnail clip과 tooltip을 설정한다.

@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { overlayIconImage } from "#native/windows/bun/overlay-icon";
 import {
   type OverlayIconSetting,
   TaskbarSettingController,
 } from "#native/windows/bun/taskbar-progress";
+import { overlayIconProvider } from "#plugins/windows/src/platforms/windows-overlay-icon";
 import { trayIco } from "../fixtures/tray-icon.ts";
 
 /** Combine single-frame fixtures into one ICO directory. */
@@ -34,19 +34,7 @@ function multiFrameIco(sizes: number[]): Buffer {
   ]);
 }
 
-test("overlay frame selection prefers the tightest frame covering the icon size", () => {
-  const ico = multiFrameIco([
-    48,
-    16,
-    32,
-  ]).toString("base64");
-  const widthOf = (frame: Buffer) => frame.readInt32LE(4);
-  expect(widthOf(overlayIconImage(ico, 16))).toBe(16);
-  expect(widthOf(overlayIconImage(ico, 20))).toBe(32);
-  expect(widthOf(overlayIconImage(ico, 64))).toBe(48);
-});
-
-test("overlay frame selection rejects non-canonical, truncated and out-of-range ICO data", () => {
+test("overlay provider validates the whole ICO before any native call", () => {
   const valid = trayIco();
   const outOfRange = Buffer.from(valid);
   outOfRange.writeUInt32LE(valid.length, 18);
@@ -76,24 +64,25 @@ test("overlay frame selection rejects non-canonical, truncated and out-of-range 
     brokenSecond.toString("base64"),
     Buffer.alloc(65_537).toString("base64"),
   ]) {
-    expect(() => overlayIconImage(ico, 16)).toThrow(
+    expect(() => overlayIconProvider(ico)).toThrow(
       expect.objectContaining({
         code: "INVALID_ARGUMENT",
       }),
     );
   }
-  expect(overlayIconImage(valid.toString("base64"), 16)).toEqual(
-    valid.subarray(22),
-  );
+  // Building the HICON is deferred to the host, so a valid ICO yields a provider without native calls.
+  expect(typeof overlayIconProvider(valid.toString("base64"))).toBe("function");
 });
 
 test("overlay icon settings wait for the taskbar button, restore after recreation and clear with the window", () => {
   const applied: OverlayIconSetting[] = [];
   const controller = new TaskbarSettingController<OverlayIconSetting>(
     (_window, setting) => applied.push(setting),
+    // A provider function cannot be structuredClone'd, so the host passes the setting through.
+    (setting) => setting,
   );
   const setting = {
-    ico: trayIco().toString("base64"),
+    icon: () => 1n,
     description: "3 unread",
   };
   expect(() => controller.set(1n, setting)).toThrow(

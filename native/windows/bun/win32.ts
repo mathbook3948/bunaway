@@ -7,6 +7,7 @@ import {
   isWindowAspectRatio,
   MAX_WINDOW_DIMENSION,
   MIN_WINDOW_DIMENSION,
+  type NativeOverlayIconProvider,
   type NativeWindow,
   type WindowAttentionMode,
   type WindowBounds,
@@ -25,7 +26,6 @@ import {
 import { AccessibleTitles } from "./accessible-title.ts";
 import { adjustSizingRect, systemTrackSize } from "./aspect-ratio.ts";
 import { monitorServices } from "./monitors.ts";
-import { overlayIconImage } from "./overlay-icon.ts";
 import type { SessionMessageHandler } from "./session-end.ts";
 import { Taskbar } from "./taskbar.ts";
 import {
@@ -35,15 +35,7 @@ import {
   TaskbarSettingController,
   type ThumbnailClip,
 } from "./taskbar-progress.ts";
-import {
-  display,
-  hr,
-  kernel,
-  user,
-  wide,
-  withBuffer,
-  withWide,
-} from "./win32-bindings.ts";
+import { display, hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 import { completedGeometryChanges, windowChanges } from "./window-events.ts";
 import {
   centerInWorkArea,
@@ -136,13 +128,8 @@ const SWP_NOMOVE = 0x2;
 const SWP_NOACTIVATE = 0x10;
 const SWP_NOSIZE = 0x1;
 const SWP_NOZORDER = 0x4;
-// Taskbar overlay icon: GetSystemMetricsForDpi index of the small icon width, and the
-// CreateIconFromResourceEx arguments (fIcon = TRUE for an icon rather than a cursor, the resource
-// format version accepted for icon data, and no LR_* flags).
+// GetSystemMetricsForDpi index of the small icon width, the taskbar overlay icon size.
 const SM_CXSMICON = 49;
-const ICON_RESOURCE_IS_ICON = 1;
-const ICON_RESOURCE_VERSION = 0x00030000;
-const NO_ICON_FLAGS = 0;
 const WINDOWPLACEMENT_NORMAL_RECT_OFFSET = 28;
 const WINDOWPLACEMENT_FLAGS_OFFSET = 4;
 const WINDOWPLACEMENT_SHOW_CMD_OFFSET = 8;
@@ -217,8 +204,10 @@ export class Windows {
   // The HICON currently shown as each window's overlay; owned here and destroyed on replacement, removal or destroy.
   private readonly overlayIcons = new Map<bigint, bigint>();
   private readonly overlayIcon =
-    new TaskbarSettingController<OverlayIconSetting>((window, setting) =>
-      this.applyOverlayIcon(window, setting),
+    new TaskbarSettingController<OverlayIconSetting>(
+      (window, setting) => this.applyOverlayIcon(window, setting),
+      // The provider is a function, which structuredClone rejects; the setting is never mutated.
+      (setting) => setting,
     );
   private readonly taskbarButtonCreated = withWide(
     "TaskbarButtonCreated",
@@ -2932,11 +2921,11 @@ export class Windows {
    */
   setOverlayIcon(
     window: bigint,
-    ico: string | null,
+    icon: NativeOverlayIconProvider | null,
     description: string,
   ): void {
     assert(this.windows.has(window), "Taskbar target is not a live window");
-    if (ico === null) {
+    if (icon === null) {
       this.overlayIcon.set(window, null);
       return;
     }
@@ -2949,7 +2938,7 @@ export class Windows {
       });
     }
     this.overlayIcon.set(window, {
-      ico,
+      icon,
       description,
     });
   }
@@ -2968,24 +2957,8 @@ export class Windows {
       SM_CXSMICON,
       this.getDpi(window),
     );
-    const image = overlayIconImage(setting.ico, size);
-    const icon = withBuffer(image, (address) =>
-      user.symbols.CreateIconFromResourceEx(
-        address,
-        image.length,
-        ICON_RESOURCE_IS_ICON,
-        ICON_RESOURCE_VERSION,
-        size,
-        size,
-        NO_ICON_FLAGS,
-      ),
-    );
-    if (!icon) {
-      throw new BunawayError({
-        code: "INVALID_ARGUMENT",
-        message: "Windows rejected the overlay ICO image.",
-      });
-    }
+    // The provider's HICON belongs to this class from here on, including when the shell call fails.
+    const icon = setting.icon(size);
     try {
       this.taskbar.setOverlayIcon(window, icon, setting.description);
     } catch (error) {

@@ -192,7 +192,7 @@ function fixture() {
   };
 }
 
-test("overlay icon dispatch forwards the ICO and description and removes with null", async () => {
+test("overlay icon dispatch forwards an icon provider and description and removes with null", async () => {
   const f = fixture();
   expect(
     await f.invoke(operation, {
@@ -206,16 +206,23 @@ test("overlay icon dispatch forwards the ICO and description and removes with nu
     ico: null,
     description: "ignored",
   });
-  expect(f.calls).toEqual([
+  // The plugin hands the host an icon provider instead of the ICO; null removes the overlay.
+  expect(
+    f.calls.map(([icon, description]) => [
+      typeof icon,
+      description,
+    ]),
+  ).toEqual([
     [
-      ico,
+      "function",
       "3 unread",
     ],
     [
-      null,
+      "object",
       "ignored",
     ],
   ]);
+  expect(f.calls[1]?.[0]).toBeNull();
 });
 
 test("overlay icon dispatch requires its own permission, a live target and platform support", async () => {

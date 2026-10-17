@@ -9,6 +9,7 @@ import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import { validateWindowCall, type WindowCall } from "#windows/contract";
 import { WindowOperations } from "#windows/platforms/coordinator";
 import { convertGeometry } from "#windows/platforms/window-geometry";
+import { overlayIconProvider } from "#windows/platforms/windows-overlay-icon";
 
 /** Flash mode applied when `windows.requestAttention` omits `mode`. */
 const DEFAULT_ATTENTION_MODE: WindowAttentionMode = "untilFocused";
@@ -766,7 +767,13 @@ export function createOperations(
               "Taskbar overlay icon is not implemented on this platform.",
           });
         }
-        window.setOverlayIcon(call.payload.ico, call.payload.description);
+        // The provider validates the ICO before any native call; null removes the overlay.
+        window.setOverlayIcon(
+          call.payload.ico === null
+            ? null
+            : overlayIconProvider(call.payload.ico),
+          call.payload.description,
+        );
         break;
       case "windows.setCloseConfirmation":
         window.setCloseConfirmation(call.payload.message);
