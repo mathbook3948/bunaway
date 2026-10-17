@@ -13,6 +13,7 @@ import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
 import {
   type AppMetadata,
   appName,
+  desktopAppPaths,
   parsePackageVersions,
 } from "@bunaway/runtime-bun/app-metadata";
 import { verifyDevelopmentLaunch } from "@bunaway/runtime-bun/development";
@@ -218,17 +219,21 @@ export async function verifyMacosPackage(
   const compiled = Bun.embeddedFiles.some(
     (file) => (file as File).name === "manifest.json",
   );
+  const executablePath = await realpath(process.execPath);
   return {
     appMetadata: {
       name: appName(app.title, app.appId),
       identifier: app.appId,
       ...parsePackageVersions(metadata),
+      isPackaged: compiled,
+      // A compiled app's root is Contents/Resources, so it is also the resources directory.
+      paths: desktopAppPaths(root, executablePath),
     },
     app: {
       id: app.appId,
       launch: {
         mode: compiled ? "packaged" : "development",
-        executablePath: await realpath(process.execPath),
+        executablePath,
         args: [
           ...(compiled
             ? []

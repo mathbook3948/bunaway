@@ -6,6 +6,7 @@ import {
   cp,
   mkdir,
   readFile,
+  realpath,
   rename,
   rm,
   writeFile,
@@ -91,6 +92,19 @@ await appendFile(
   resolve(project, "src-bunaway/app.ts"),
   `\nawait Bun.write(${JSON.stringify(launchMarker)}, "started");\n` +
     'const fixtureChild = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], { stdin: "ignore", stdout: "ignore", stderr: "ignore", env: { ...process.env, BUN_BE_BUN: "1" } }); console.log(JSON.stringify({ event: "fixture-child", pid: fixtureChild.pid }));\n',
+);
+// The save command records ctx.app so the parent can check the packaged app's paths.
+const appInfoMarker = resolve(home, "app-info.json");
+const messageModule = resolve(project, "src-bunaway/message/module.ts");
+const messageSource = await readFile(messageModule, "utf8");
+const savePublish = "await context.events.emit(";
+assert(messageSource.includes(savePublish));
+await writeFile(
+  messageModule,
+  messageSource.replace(
+    savePublish,
+    `await Bun.write(${JSON.stringify(appInfoMarker)}, JSON.stringify(context.app));\n      ${savePublish}`,
+  ),
 );
 // A user entry named boot.ts must coexist with the framework's bootstrap.
 await writeFile(
@@ -202,6 +216,14 @@ try {
     "App Job must reap descendants spawned during module import",
   );
   const config = projectConfig.app;
+  const appInfo = JSON.parse(await readFile(appInfoMarker, "utf8"));
+  const packagedRealRoot = await realpath(packageRoot);
+  assert.equal(appInfo.isPackaged, true);
+  assert.deepEqual(appInfo.paths, {
+    package: packagedRealRoot,
+    executable: await realpath(resolve(packageRoot, `${config.appId}.exe`)),
+    resources: packagedRealRoot,
+  });
   assert.equal(
     await readFile(
       resolve(

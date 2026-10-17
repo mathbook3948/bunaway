@@ -81,7 +81,17 @@ const eventSeconds = {
     },
   ],
 } as const;
-/** Native events use the protocol's portable schema representation. The payload equals `statusSchema`. */
+const emptyEvent = {
+  type: "object",
+  properties: {},
+  additionalProperties: false,
+} as const;
+/**
+ * Native events use the protocol's portable schema representation. The `power.statusChanged` payload
+ * equals `statusSchema`. The lifecycle events carry an empty object and correspond to Electron
+ * powerMonitor `suspend`, `resume`, `lock-screen` and `unlock-screen`. Lock events report WTS
+ * session lock of the calling process's session.
+ */
 export const powerEvents = {
   "power.statusChanged": {
     type: "object",
@@ -124,4 +134,8 @@ export const powerEvents = {
     ],
     additionalProperties: false,
   },
+  "power.suspended": emptyEvent,
+  "power.resumed": emptyEvent,
+  "power.sessionLocked": emptyEvent,
+  "power.sessionUnlocked": emptyEvent,
 } as const;

@@ -45,6 +45,30 @@ export type AppInfo = {
   readonly identifier: string;
   /** App version from the package manifest, or `null` when the package does not record one. */
   readonly version: string | null;
+  /** Whether the backend runs from a built, compiled app instead of a development launch. */
+  readonly isPackaged: boolean;
+  /**
+   * Absolute file system locations of the running app, or `null` on platforms that do not
+   * expose one (Android, iOS and process runtimes). Paths are not length-limited and can
+   * contain the user name.
+   */
+  readonly paths: {
+    /**
+     * Package root the host verified at startup. On disk it holds the executable and
+     * distributed files such as licenses; Windows packages embed the manifest and web assets in
+     * the executable, so they are not found here.
+     */
+    readonly package: string;
+    /** Real path of the process executable. In development this is the pinned Bun executable. */
+    readonly executable: string;
+    /**
+     * Directory of files shipped with the app on disk. Windows packages use the executable's
+     * folder, like Tauri's `resource_dir` there, and development launches use the package root;
+     * macOS packaged apps use `Contents/Resources`. Unlike Electron's `process.resourcesPath`
+     * it never holds an `app.asar`, and Windows web assets are embedded in the executable.
+     */
+    readonly resources: string;
+  } | null;
   readonly runtime: {
     /** Bunaway framework version from the package manifest, or `null` when not recorded. */
     readonly framework: string | null;

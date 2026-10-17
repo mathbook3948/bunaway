@@ -10,6 +10,68 @@ export function physicalPixels(logicalPixels: number, dpi: number) {
   return Math.round((logicalPixels * dpi) / DEFAULT_DPI);
 }
 
+/** Physical pixel edges of a client-area rectangle. */
+export type PixelRect = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
+/**
+ * Convert a logical rectangle by rounding its edges, not its size, so adjacent
+ * rectangles still share an edge at fractional scale factors.
+ */
+export function physicalRect(
+  region: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  },
+  dpi: number,
+): PixelRect {
+  return {
+    left: physicalPixels(region.x, dpi),
+    top: physicalPixels(region.y, dpi),
+    right: physicalPixels(region.x + region.width, dpi),
+    bottom: physicalPixels(region.y + region.height, dpi),
+  };
+}
+
+/**
+ * Cut a non-empty rectangle to a client area of the given physical size.
+ * Returns null when nothing remains, i.e. the rectangle starts at or beyond the right or bottom edge.
+ */
+export function clampPixelRect(
+  rect: PixelRect,
+  client: {
+    width: number;
+    height: number;
+  },
+): PixelRect | null {
+  if (rect.left >= client.width || rect.top >= client.height) {
+    return null;
+  }
+  return {
+    ...rect,
+    right: Math.min(rect.right, client.width),
+    bottom: Math.min(rect.bottom, client.height),
+  };
+}
+
+const INT32_MAX = 2147483647;
+
+/** Whether every edge fits the signed 32-bit RECT fields, so native packing cannot truncate it. */
+export function fitsInt32Rect(rect: PixelRect): boolean {
+  return [
+    rect.left,
+    rect.top,
+    rect.right,
+    rect.bottom,
+  ].every((edge) => Number.isInteger(edge) && Math.abs(edge) <= INT32_MAX);
+}
+
 /** Convert a physical pixel dimension back to 96-DPI logical pixels. */
 export function logicalPixels(physicalPixels: number, dpi: number) {
   return Math.round((physicalPixels * DEFAULT_DPI) / dpi);

@@ -57,7 +57,8 @@
           "readPackageVersions",
           "appName",
           "isAppInfoText",
-          "toAppInfo"
+          "toAppInfo",
+          "desktopAppPaths"
         ]
       }
     },
@@ -739,6 +740,8 @@
           "setGeometry",
           "setFullscreen",
           "setTaskbarProgress",
+          "setThumbnailClip",
+          "setThumbnailToolTip",
           "setCloseConfirmation",
           "getSnapshot",
           "getReadiness",
@@ -894,6 +897,8 @@
           "name",
           "identifier",
           "version",
+          "isPackaged",
+          "paths",
           "runtime"
         ]
       }
@@ -1362,7 +1367,9 @@
       "opener.revealFile",
       "opener.openFileWith",
       "opener.openUrlWith",
-      "opener.trashFile"
+      "opener.trashFile",
+      "opener.addRecentDocument",
+      "opener.clearRecentDocuments"
     ],
     "reference/plugins/path": [
       "path.getDirectory",
@@ -1497,6 +1504,8 @@
       "windows.center",
       "windows.setFullscreen",
       "windows.setTaskbarProgress",
+      "windows.setThumbnailClip",
+      "windows.setThumbnailToolTip",
       "windows.setCloseConfirmation",
       "windows.getSnapshot",
       "windows.getReadiness",

@@ -5,6 +5,7 @@ import {
   normalizeApplicationPath,
   normalizeFilePath,
 } from "#opener/platforms/windows-path";
+import { createRecentDocuments } from "#opener/platforms/windows-recent";
 import { createShell } from "#opener/platforms/windows-shell";
 import {
   trashWindowsFile,
@@ -14,7 +15,12 @@ import { normalizeUrl } from "#opener/url";
 
 const COINIT_APARTMENTTHREADED = 0x2;
 
-/** Own one balanced COM initialization on the adapter's I/O thread. */
+/**
+ * Own one balanced COM initialization on the adapter's I/O thread. The process may
+ * already hold a multithreaded apartment (for example after SHAddToRecentDocs), which
+ * makes threads without initialization implicit MTA members; an explicit STA
+ * initialization still succeeds there and is the only one released on dispose.
+ */
 function createApartment() {
   const ole = dlopen("ole32.dll", {
     CoInitializeEx: {
@@ -67,10 +73,27 @@ export function initialize() {
       throw error;
     }
   })();
+  const recent = (() => {
+    try {
+      return createRecentDocuments();
+    } catch (error) {
+      try {
+        files.dispose();
+      } finally {
+        try {
+          shell.dispose();
+        } finally {
+          apartment.dispose();
+        }
+      }
+      throw error;
+    }
+  })();
   return {
     apartment,
     shell,
     files,
+    recent,
     disposed: false,
   };
 }
@@ -116,6 +139,38 @@ export function trashFile(state: State, path: string): null {
   return null;
 }
 
+/** The call is synchronous and not interruptible, so cancellation is checked only before it starts. */
+function notCancelled(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new BunawayError({
+      code: "CANCELLED",
+      message: "Recent Items request cancelled.",
+    });
+  }
+}
+
+/** Add an existing file to the user's Shell Recent Items. */
+export function addRecentDocument(
+  state: State,
+  path: string,
+  signal?: AbortSignal,
+): null {
+  active(state);
+  notCancelled(signal);
+  const selected = normalizeFilePath(path);
+  // The pin lasts until SHAddToRecentDocs returns; the Shell reads the file after that.
+  state.files.withFile(selected, () => state.recent.request(selected));
+  return null;
+}
+
+/** Clear the user's entire Shell Recent Items list, not only entries this app added. */
+export function clearRecentDocuments(state: State, signal?: AbortSignal): null {
+  active(state);
+  notCancelled(signal);
+  state.recent.request(null);
+  return null;
+}
+
 export function openFileWith(
   state: State,
   path: string,
@@ -147,12 +202,16 @@ export function dispose(state: State): void {
   }
   state.disposed = true;
   try {
-    state.files.dispose();
+    state.recent.dispose();
   } finally {
     try {
-      state.shell.dispose();
+      state.files.dispose();
     } finally {
-      state.apartment.dispose();
+      try {
+        state.shell.dispose();
+      } finally {
+        state.apartment.dispose();
+      }
     }
   }
 }

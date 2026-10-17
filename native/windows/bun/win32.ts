@@ -30,6 +30,8 @@ import { Taskbar } from "./taskbar.ts";
 import {
   type TaskbarProgress,
   TaskbarProgressController,
+  TaskbarSettingController,
+  type ThumbnailClip,
 } from "./taskbar-progress.ts";
 import { display, hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
 import { completedGeometryChanges, windowChanges } from "./window-events.ts";
@@ -40,10 +42,13 @@ import {
   type WorkArea,
 } from "./window-placement.ts";
 import {
+  clampPixelRect,
   constrainedOuterSize,
   DEFAULT_DPI,
+  fitsInt32Rect,
   logicalPixels,
   physicalPixels,
+  physicalRect,
 } from "./window-size.ts";
 
 import {
@@ -184,6 +189,14 @@ export class Windows {
   private readonly taskbarProgress = new TaskbarProgressController(
     (window, progress) => this.taskbar.apply(window, progress),
   );
+  // Clip is kept in DIPs and converted at each application, so a button recreated after a DPI change
+  // gets the current scale.
+  private readonly thumbnailClip = new TaskbarSettingController<ThumbnailClip>(
+    (window, region) => this.applyThumbnailClip(window, region),
+  );
+  private readonly thumbnailToolTip = new TaskbarSettingController<
+    string | null
+  >((window, toolTip) => this.taskbar.setThumbnailToolTip(window, toolTip));
   private readonly taskbarButtonCreated = withWide(
     "TaskbarButtonCreated",
     (name) => user.symbols.RegisterWindowMessageW(name),
@@ -366,14 +379,30 @@ export class Windows {
             message === this.taskbarButtonCreated &&
             this.windows.has(window)
           ) {
-            try {
-              this.taskbarProgress.buttonCreated(window);
-            } catch (error) {
-              // Explorer recreation is asynchronous; retain the last accepted setting for a later retry.
-              console.error(
-                "Could not restore taskbar progress after button creation.",
-                error,
-              );
+            // Each setting restores independently, so one failure cannot skip the others.
+            for (const [name, controller] of [
+              [
+                "progress",
+                this.taskbarProgress,
+              ],
+              [
+                "thumbnail clip",
+                this.thumbnailClip,
+              ],
+              [
+                "thumbnail tooltip",
+                this.thumbnailToolTip,
+              ],
+            ] as const) {
+              try {
+                controller.buttonCreated(window);
+              } catch (error) {
+                // Explorer recreation is asynchronous; retain the last accepted setting for a later retry.
+                console.error(
+                  `Could not restore taskbar ${name} after button creation.`,
+                  error,
+                );
+              }
             }
             return 0n;
           }
@@ -2776,6 +2805,8 @@ export class Windows {
     }
     assert(user.symbols.DestroyWindow(window));
     this.taskbarProgress.forget(window);
+    this.thumbnailClip.forget(window);
+    this.thumbnailToolTip.forget(window);
     this.windows.delete(window);
     this.constraints.delete(window);
     this.dpiByWindow.delete(window);
@@ -2839,5 +2870,73 @@ export class Windows {
   setTaskbarProgress(window: bigint, progress: TaskbarProgress): void {
     assert(this.windows.has(window), "Taskbar target is not a live window");
     this.taskbarProgress.set(window, progress);
+  }
+
+  /**
+   * Clip the taskbar thumbnail to a client-area rectangle in 96 DPI logical pixels, or clear it for null.
+   * Parts beyond the client area are clamped away; a region left empty by that is rejected.
+   */
+  setThumbnailClip(window: bigint, region: ThumbnailClip): void {
+    assert(this.windows.has(window), "Taskbar target is not a live window");
+    this.thumbnailClip.set(window, region);
+  }
+
+  /** Set the taskbar thumbnail tooltip, or restore the window title for null or an empty string. */
+  setThumbnailToolTip(window: bigint, toolTip: string | null): void {
+    assert(this.windows.has(window), "Taskbar target is not a live window");
+    // Native callers bypass the plugin schema; enforce the same limits as window titles.
+    if (toolTip !== null && (toolTip.includes("\0") || toolTip.length > 1024)) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message:
+          "The thumbnail tooltip cannot contain NUL or exceed 1024 UTF-16 code units.",
+      });
+    }
+    this.thumbnailToolTip.set(window, toolTip || null);
+  }
+
+  private applyThumbnailClip(window: bigint, region: ThumbnailClip): void {
+    if (!region) {
+      this.taskbar.setThumbnailClip(window, null);
+      return;
+    }
+    // Native callers bypass the plugin schema, so check the contract before converting.
+    const invalidInput = [
+      region.x,
+      region.y,
+      region.width,
+      region.height,
+    ].some((value) => !Number.isInteger(value));
+    const rect = invalidInput
+      ? null
+      : physicalRect(region, this.getDpi(window));
+    if (
+      !rect ||
+      !fitsInt32Rect(rect) ||
+      rect.left < 0 ||
+      rect.top < 0 ||
+      rect.right <= rect.left ||
+      rect.bottom <= rect.top
+    ) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message:
+          "The thumbnail clip must be a non-empty region inside the client origin.",
+      });
+    }
+    // A minimized HWND reports an empty client rectangle. Its restored size is not the WINDOWPLACEMENT
+    // normal rectangle when it was minimized from maximized or fullscreen, so it is not reliably known:
+    // pass the region through unclipped. Otherwise clamp to the current client area, which also
+    // lets a rounded fractional-DPI edge reach the last pixel.
+    const clipped = this.isMinimized(window)
+      ? rect
+      : clampPixelRect(rect, this.clientSize(window));
+    if (!clipped) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "The thumbnail clip lies entirely outside the client area.",
+      });
+    }
+    this.taskbar.setThumbnailClip(window, clipped);
   }
 }

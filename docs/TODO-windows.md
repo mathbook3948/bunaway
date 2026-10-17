@@ -272,7 +272,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `desktop`의 `onReady`, `beforeQuit`, `onWillQuit`, `onQuit`, `onAllWindowsClosed` 훅과 `ShutdownReason`을 Windows에서 제공한다. `onWillQuit`과 `onQuit`은 각각 3초 기한을 둔다. 실제 실행 검증은 CI windows-native에서 수행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [x] 종료 코드 지정, 강제 exit, relaunch와 인자 보존 API를 제공한다. `DesktopContext`의 `quit({ exitCode })`, `exit()`, `relaunch()`이며 [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다. macOS는 `relaunch`만 `UNSUPPORTED`다. CI windows-native의 `windows-app-exit.ts`가 실제 프로세스로 종료 코드, `exit`의 훅 생략, relaunch 뒤 argv와 lock 획득을 확인한다(`boot.ts` 시작 단계는 시나리오가 같은 순서로 재현한다).
 - [x] 앱 이름, 버전, 식별자, 프레임워크와 Bun, WebView 버전을 조회한다. 백엔드 `ctx.app`으로 제공하며 [CommandContext](site/src/content/docs/reference/backend/context.mdx)와 [ADR 0022](decisions/0022-app-info-context.md)에 정리했다.
-- [ ] 앱 패키지 경로, 실행 파일, 리소스 경로와 packaged/dev 상태를 조회한다.
+- [x] 앱 패키지 경로, 실행 파일, 리소스 경로와 packaged/dev 상태를 조회한다. `ctx.app.isPackaged`와 `ctx.app.paths`로 제공하며 [CommandContext](site/src/content/docs/reference/backend/context.mdx)와 [ADR 0022](decisions/0022-app-info-context.md)에 정리했다.
 - [x] 일반 브라우저와 bunaway 앱 WebView 실행 여부를 구분하는 공개 기능을 제공한다. [T-core-live]의 `isTauri`에 대응하는 요구다.
   `@bunaway/client`의 동기 함수 `isBunaway()`가 호스트 브리지(`window.chrome.webview`) 유무로 판별하며, SSR과 일반 브라우저는 `false`, 앱 WebView는 `true`다.
   단위 테스트(`tests/api/is-bunaway.test.ts`)와 Windows host 회귀(`tests/fixtures/desktop/host/web/app.js`, 본문 끝 스크립트 시작 시점 샘플)로 검증한다. 문서 첫 스크립트부터 `true`라는 주입 시점은 Windows 실측이 아니라 호스트별 주입 방식(macOS와 iOS 문서 시작 사용자 스크립트, Android 문서 시작 스크립트, Windows WebView2 제공)을 근거로 한 서술이다.
@@ -419,7 +419,12 @@ Windows의 비활성화 기록을 수정하지 않는다.
   Windows 기본 앱 설정에서 선택 후 실제 파일과 링크 실행은 별도 수동 검증으로 남긴다.
 - [ ] URL의 연결 앱 이름과 실행 정보를 조회한다.
 - [ ] AppUserModelID와 toast activation 식별자를 설정하고 설치와 일치시킨다.
-- [ ] Recent Documents의 추가, 조회와 삭제를 제공한다.
+- [x] Recent Documents의 추가와 삭제를 제공한다. 조회는 지원하지 않는다.
+  `opener.addRecentDocument`는 기존 파일 검사와 핸들 고정 뒤 `SHAddToRecentDocs(SHARD_PATHW)`를,
+  `opener.clearRecentDocuments`는 `SHAddToRecentDocs(NULL)`을 호출해 사용자의 셸 최근 항목
+  전체를 지운다(다른 앱 항목 포함, 앱 범위 아님). 각각 작업 권한을 요구하며 성공은 요청
+  전달이다. 점프 목록 연결은 AppUserModelID 이후의 작업이다. 조회는 공식 API가 없고
+  Recent 폴더의 `.lnk`가 앱별로 구분되지 않아 제공하지 않는다.
 - [ ] Jump List와 사용자 task, category, 제거된 항목 조회를 제공한다.
 - [x] 작업 표시줄 progress와 상태를 설정한다.
   `windows.setTaskbarProgress`는 창별 `none`, `indeterminate`, `normal`, `paused`, `error`를
@@ -432,7 +437,13 @@ Windows의 비활성화 기록을 수정하지 않는다.
   네이티브 호출 회귀와 합성 버튼 재생성 검사를 물리 화면의 표시 검증으로 간주하지 않는다.
 - [ ] overlay icon과 접근성 설명을 설정한다.
 - [ ] thumbnail toolbar 버튼과 클릭 이벤트를 제공한다.
-- [ ] thumbnail clip과 tooltip을 설정한다.
+- [x] thumbnail clip과 tooltip을 설정한다.
+  `windows.setThumbnailClip`은 내용 영역 기준 96 DPI 논리 픽셀 region(`null`이면 해제)을,
+  `windows.setThumbnailToolTip`은 `setTitle`과 같은 형식의 문자열(`null` 또는 빈 문자열이면 해제)을 설정한다.
+  작업 권한과 창 수명을 검사하고 버튼 생성 전에는 `BUSY`, 내용 영역을 넘는 region은 잘라 적용하고 비면 `INVALID_ARGUMENT`,
+  macOS는 `UNSUPPORTED`다. 버튼 재생성 때 마지막 성공 값을 다시 적용하고 HWND 파괴 때 폐기한다.
+  계약 검증은 `window-thumbnail.test.ts`, 변환과 복원은 `taskbar-thumbnail.test.ts`이며 실제 ITaskbarList3 호출은
+  `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
 - [ ] 창별 앱 표시 이름, relaunch 명령과 아이콘을 설정한다.
 - [ ] Windows elevation과 de-elevation 실행 요구사항의 지원 범위를 결정한다.
 
@@ -545,7 +556,7 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
   초기 상태, OS 자동 감지와 명시 설정의 관계, 호출 가능 시점, 빈 목록과 잘못된 기능명을 정의한다.
   대상 WebView에서 설정 후 조회와 실제 접근성 트리를 검증하고 렌더러별 미지원 기능을 명시한다.
 - [ ] WebView 접근성 트리와 사용자 타이틀바의 키보드 탐색을 검증한다.
-- [ ] suspend, resume, 화면 잠금과 잠금 해제 이벤트를 제공한다.
+- [x] suspend, resume, 화면 잠금과 잠금 해제 이벤트를 제공한다. power.suspended, power.resumed, power.sessionLocked, power.sessionUnlocked는 빈 payload이며 잠금은 호출 프로세스 세션의 WTS 잠금이다. 권한은 power.statusChanged와 같다.
 - [x] Windows AC와 배터리, 충전, 잔량, battery saver 및 수명 추정 상태를 조회한다.
 - [x] AC와 배터리 상태 변경 이벤트를 제공한다. power.statusChanged는 전원 상태 변경 알림과 resume에서 재조회하며 동일 값은 생략한다.
 - [x] Windows 호출 세션의 입력 idle 시간과 지정 기한의 active/idle 상태를 조회한다. 잠금 여부는 별도 작업이다.

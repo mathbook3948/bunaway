@@ -740,6 +740,24 @@ export function createOperations(
         }
         window.setTaskbarProgress(call.payload);
         break;
+      case "windows.setThumbnailClip":
+        if (!window.setThumbnailClip) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "Thumbnail clip is not implemented on this platform.",
+          });
+        }
+        window.setThumbnailClip(call.payload.region);
+        break;
+      case "windows.setThumbnailToolTip":
+        if (!window.setThumbnailToolTip) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "Thumbnail tooltip is not implemented on this platform.",
+          });
+        }
+        window.setThumbnailToolTip(call.payload.toolTip);
+        break;
       case "windows.setCloseConfirmation":
         window.setCloseConfirmation(call.payload.message);
         break;

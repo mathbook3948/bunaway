@@ -64,11 +64,19 @@ const ole = dlopen("ole32.dll", {
   CoGetApartmentType: { args: ["ptr", "ptr"], returns: "i32" },
   CoUninitialize: { args: [], returns: "void" },
 });
-// No COM apartment is initialized yet, so a launch must fail without opening
-// a browser. Repeating the failure exercises native cleanup on the error path.
+// Without any apartment a launch must fail without opening a browser. If an earlier
+// test in the same process left an implicit MTA (SHAddToRecentDocs can), COM calls
+// succeed on this thread and a launch would really open a browser, so only the
+// explicit-initialization state is asserted below and this negative check is skipped.
+const probeApartment = new Uint32Array(1);
+const probeQualifier = new Uint32Array(1);
+const noApartment = ole.symbols.CoGetApartmentType(ptr(probeApartment), ptr(probeQualifier)) < 0;
+if (!noApartment) {
+  console.warn("Skipping the no-apartment launch failure check: apartment type " + probeApartment[0] + ", qualifier " + probeQualifier[0]);
+}
 const shell = createShell();
 try {
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < (noApartment ? 2 : 0); attempt++) {
     assert.throws(
       () => shell.open("https://example.com/"),
       (error) => error instanceof Error && "code" in error && error.code === "INTERNAL",
@@ -215,19 +223,26 @@ const ole = dlopen("ole32.dll", {
 const apartment = new Uint32Array(1);
 const qualifier = new Uint32Array(1);
 const apartmentType = () => ole.symbols.CoGetApartmentType(ptr(apartment), ptr(qualifier));
+// A thread that never initialized COM is either outside every apartment or, when the
+// process holds an MTA (SHAddToRecentDocs can leave one), an implicit MTA member
+// (APTTYPE_MTA with APTTYPEQUALIFIER_IMPLICIT_MTA). Neither is an explicit initialization.
+const APTTYPE_MTA = 1;
+const APTTYPEQUALIFIER_IMPLICIT_MTA = 1;
+const explicitlyInitialized = () =>
+  apartmentType() >= 0 && !(apartment[0] === APTTYPE_MTA && qualifier[0] === APTTYPEQUALIFIER_IMPLICIT_MTA);
 export const pluginImports = { opener: {
   operations: async () => {
     const { default: definition } = await import(${JSON.stringify(operationsModule)});
     const createOperations = definition._definition.nativePlatforms.windows.create;
     return { createOperations(environment) {
-      assert(apartmentType() < 0, "I/O worker must start without COM initialization");
+      assert(!explicitlyInitialized(), "I/O worker must start without explicit COM initialization");
       const adapter = createOperations(environment);
       assert.equal(apartmentType(), 0);
       assert([0, 3].includes(apartment[0]), "Opener must own an STA");
       return { ...adapter, async dispose() {
         await adapter.dispose();
         await adapter.dispose();
-        assert(apartmentType() < 0, "Disposal must balance the adapter's COM initialization");
+        assert(!explicitlyInitialized(), "Disposal must balance the adapter's own COM initialization");
         writeFileSync(${JSON.stringify(disposedPath)}, "STA");
         ole.close();
       }};
