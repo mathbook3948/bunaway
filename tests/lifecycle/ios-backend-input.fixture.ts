@@ -24,6 +24,14 @@ await plugin({
   setup(build) {
     build.onResolve(
       {
+        filter: /^bunaway-generated\/app-metadata\.ts$/,
+      },
+      () => ({
+        path: resolve(import.meta.dir, "../fixtures/app-info.ts"),
+      }),
+    );
+    build.onResolve(
+      {
         filter: /^\.\/app\.js$/,
       },
       () => ({

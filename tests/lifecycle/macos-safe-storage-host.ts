@@ -7,6 +7,7 @@ import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
 import { type InstalledPlugin, installedPlugins } from "#cli/plugins";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { fixturePlugin } from "../fixtures/macos-safe-storage/plugin.ts";
 import { keychainFixture } from "./fixtures/macos-keychain.ts";
 
@@ -90,6 +91,7 @@ try {
   };
   const app = {
     appId,
+    title: "Safe storage fixture",
     windows: [
       {
         view: "main",
@@ -175,6 +177,13 @@ try {
   await writeJson(resolve(directory, "manifest.json"), {
     bun: pin.bun,
     assets: inventory,
+    app: {
+      id: appId,
+      version: testAppMetadata.version,
+    },
+    framework: {
+      version: testAppMetadata.framework,
+    },
   });
 
   for (const mode of [

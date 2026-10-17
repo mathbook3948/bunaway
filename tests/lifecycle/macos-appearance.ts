@@ -46,6 +46,7 @@ try {
     ];
     const app = {
       appId: "tests.macos.appearance",
+      title: "Appearance",
       windows: views.map((view) => ({
         view,
         home: `https://app.bunaway.local/${view}.html${backendAllowed ? "" : "?backend-denied"}`,

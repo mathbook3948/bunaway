@@ -25,6 +25,7 @@ const PROTOCOL_PATH = resolve(
   import.meta.dir,
   "../../packages/protocol/src/index.ts",
 );
+const APP_INFO_PATH = resolve(import.meta.dir, "../fixtures/app-info.ts");
 const BACKEND_CONTEXT = "backend-test";
 const RUN_TIMEOUT_MS = 15_000;
 const STEP_TIMEOUT_MS = 5000;
@@ -47,6 +48,7 @@ type RunReport = {
 const RUNNER = `
 import { appendFileSync, readFileSync } from "node:fs";
 import { createCore } from ${JSON.stringify(CORE_PATH)};
+import { testAppInfo } from ${JSON.stringify(APP_INFO_PATH)};
 import { DesktopLifecycle } from ${JSON.stringify(DESKTOP_PATH)};
 import { PROTOCOL_VERSION, SDK_READY_FEATURE } from ${JSON.stringify(PROTOCOL_PATH)};
 
@@ -56,6 +58,7 @@ const calls = [];
 const readLog = () => readFileSync(logPath, "utf8").split("\\n").filter(Boolean);
 const app = (await import(${JSON.stringify(APP_PATH)})).default;
 const core = await createCore(app, {
+  app: testAppInfo,
   policy: {
     version: 1,
     backend: { permissions: ["driver.drive", "windows.list", "windows.listInstances", "windows.close", "windows.recreate"] },

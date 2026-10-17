@@ -14,6 +14,7 @@ import type {
 
 export type {
   AppDefinition,
+  AppInfo,
   CommandContext,
   CommandDefinition,
   CommandRegistry,
@@ -34,7 +35,7 @@ export type {
   StopHook,
 } from "@bunaway/plugin-api";
 
-import type { AppDefinition, Platform } from "@bunaway/plugin-api";
+import type { AppDefinition, AppInfo, Platform } from "@bunaway/plugin-api";
 
 /** Clock, timer, and cancellation primitives supplied by the host runtime. */
 export interface RuntimeServices {
@@ -50,6 +51,8 @@ export type CoreServices = {
   readonly policy: Policy;
   readonly hello: Hello;
   readonly platform: Platform;
+  /** App metadata resolved by the host; Core validates it once and exposes a frozen copy as `ctx.app`. */
+  readonly app: AppInfo;
   readonly backendContext: HostContext;
   readonly runtime: RuntimeServices;
   /** Reports unexpected command causes; views receive generic INTERNAL errors for them. */

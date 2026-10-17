@@ -15,10 +15,11 @@ import { loadPluginCatalog } from "../../host-api/bun/plugin-catalog.ts";
 import { operations, pluginRegistry } from "../../host-api/bun/plugins.ts";
 import { WILL_QUIT_DEADLINE_MS } from "../../windows/bun/desktop.ts";
 import { MacosApplication } from "./application.ts";
-import type { MacosConfig } from "./config.ts";
+import type { MacosBackendData, MacosConfig } from "./config.ts";
 import { DesktopRequests } from "./desktop-requests.ts";
 import { normalizeOpenUrls } from "./open-urls.ts";
 import { containMacosProcess } from "./process-group.ts";
+import { readWebKitVersion } from "./webkit-version.ts";
 import { MacosWindows } from "./windows.ts";
 
 const STARTUP_TIMEOUT_MS = 30_000;
@@ -364,8 +365,20 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
     if (failure) {
       throw failure;
     }
+    // The WebView version is informational: failure is logged and exposed as null.
+    let webview: string | null = null;
+    try {
+      webview = readWebKitVersion();
+    } catch (cause) {
+      diagnostic("webview-version-unavailable", {
+        message: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
     worker = new Worker(new URL("./backend.js", import.meta.url), {
-      workerData: config,
+      workerData: {
+        ...config,
+        webview,
+      } satisfies MacosBackendData,
       env: {
         HOME: config.dataRoot,
         TMPDIR: resolve(config.dataRoot, "temp"),

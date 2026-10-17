@@ -40,6 +40,12 @@ const backend = await Bun.build({
   plugins: [
     appModules({
       appEntry: resolve(fixture, "app.ts"),
+      appMetadata: {
+        name: "Bunaway Android fixture",
+        identifier: "dev.bunaway.android-fixture",
+        version: null,
+        framework: null,
+      },
       processRuntime: resolve(
         frameworkRoot,
         "packages/runtime-bun/src/index.ts",

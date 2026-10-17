@@ -37,6 +37,7 @@ const state = {
   canGoBack: true,
   canGoForward: false,
   zoomFactor: 5,
+  focused: false,
 };
 const emit = (message) => {
   for (const listener of messages) {

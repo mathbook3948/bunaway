@@ -15,6 +15,7 @@ import {
 } from "#native/host-api/bun/plugins";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
 import capabilitiesDefinition from "#plugins/capabilities/src/index";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { nativeFactory } from "../fixtures/native-platform.ts";
 
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
@@ -435,6 +436,7 @@ export const pluginImports = { 'sta-test': {
 `,
     );
     const config: UIConfig = {
+      appMetadata: testAppMetadata,
       runtime: {
         id: "sta-test",
         generation: "1",

@@ -419,8 +419,14 @@ export type NativeWindow = {
   setSize(width: number, height: number): void;
   /** Positions the outer top-left in physical pixels from the primary screen origin. */
   setPosition(x: number, y: number): void;
-  /** Centers outer/normal restoration bounds in the current monitor work area, preserving state. Windows only. */
-  center?(): void;
+  /**
+   * Centers outer/normal restoration bounds in a monitor work area, preserving state.
+   * Without `monitorId`, uses the monitor nearest the normal bounds. With one, resolves
+   * the public monitor ID against the monitors connected at call time; an unknown or
+   * removed ID is INVALID_ARGUMENT and never falls back to the primary or current monitor.
+   * Platforms without monitor IDs throw UNSUPPORTED when `monitorId` is given. Windows only.
+   */
+  center?(monitorId?: string): void;
   /**
    * Applies physical content or outer geometry without showing or activating the window.
    * While minimized/maximized, edits normal restoration bounds. Rejects fullscreen and
@@ -532,9 +538,19 @@ export type NativeDownloads = {
   forget(id: string): void;
 };
 
-/** Synchronous UI-thread controls; navigation retains the host's origin and session boundary. */
+/**
+ * Synchronous UI-thread controls; navigation retains the host's origin and session boundary.
+ *
+ * Each window owns exactly one WebView with the same lifetime, so a destroyed WebView is a
+ * closed window (`isDestroyed`) and state reads on it fail with INVALID_ARGUMENT.
+ */
 export type NativeWebView = {
-  /** Reads browser state without changing focus or starting navigation. */
+  /**
+   * Reads browser state without changing focus or starting navigation.
+   *
+   * `focused` is true only when the window is the OS foreground window and keyboard input focus
+   * is inside its WebView, so it implies the window is focused but not the reverse.
+   */
   getState(): {
     url: string;
     title: string;
@@ -542,6 +558,7 @@ export type NativeWebView = {
     canGoBack: boolean;
     canGoForward: boolean;
     zoomFactor: number;
+    focused: boolean;
   };
   /** Starts HTTP(S) navigation only to an origin already allowed for this view. */
   navigate(url: string): void;
@@ -565,6 +582,8 @@ export type WindowDisplayState = {
   minimized: boolean;
   maximized: boolean;
   fullscreen: boolean;
+  /** Same meaning as the `isAlwaysOnTop` query. */
+  alwaysOnTop: boolean;
 };
 /** Browser playback and mute are independent; playing can remain true while muted. */
 export type WebViewAudioState = {
@@ -602,6 +621,8 @@ export type WindowChange =
   | "restore"
   | "enterFullscreen"
   | "leaveFullscreen"
+  | "enterAlwaysOnTop"
+  | "leaveAlwaysOnTop"
   | "move"
   | "resize"
   | "moved"

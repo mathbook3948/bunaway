@@ -6,6 +6,7 @@ import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
 import { run } from "#cli/processes";
 import pin from "../../../runtime/build-manifests/darwin-aarch64.json";
+import { testAppMetadata } from "../../../tests/fixtures/app-info.ts";
 import { macosApp } from "../../../tests/fixtures/desktop/host/macos-app.ts";
 
 const root = resolve(import.meta.dir, "../../..");
@@ -104,6 +105,13 @@ export async function buildMacosFixture(): Promise<string> {
   await writeJson(resolve(output, "manifest.json"), {
     bun: pin.bun,
     assets: hashes,
+    app: {
+      id: String(Reflect.get(app, "appId")),
+      version: testAppMetadata.version,
+    },
+    framework: {
+      version: testAppMetadata.framework,
+    },
     host: {
       kind: "bun-compiled",
       target: "macos-arm64",

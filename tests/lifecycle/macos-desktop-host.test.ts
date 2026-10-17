@@ -11,7 +11,8 @@ import {
 } from "@bunaway/runtime-bun/worker-channel";
 import { appModules } from "#cli/app-modules";
 import { bundleMacosHost } from "#cli/assets";
-import type { MacosConfig } from "#native/macos/bun/config";
+import type { MacosBackendData, MacosConfig } from "#native/macos/bun/config";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 
 /**
  * The real main-thread host (entry.ts) and backend Worker run against a fake AppKit layer, so the
@@ -46,6 +47,7 @@ const OPEN_LINE = "onOpen:initial:0:string";
 
 function workerConfig(directory: string, events: string[] = []): MacosConfig {
   return {
+    appMetadata: testAppMetadata,
     runtime: {
       id: "test",
       generation: crypto.randomUUID(),
@@ -554,9 +556,12 @@ test("macOS backend drops native events after an approved quit committed the shu
       directory,
       app,
     );
-    const config = workerConfig(directory, [
-      "ping",
-    ]);
+    const config: MacosBackendData = {
+      ...workerConfig(directory, [
+        "ping",
+      ]),
+      webview: null,
+    };
     worker = new Worker(resolve(directory, "backend.js"), {
       workerData: config,
     });

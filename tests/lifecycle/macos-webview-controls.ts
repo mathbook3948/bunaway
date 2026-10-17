@@ -157,6 +157,7 @@ try {
     format: 1,
     app: {
       appId: "tests.macos.webview-controls",
+      title: "WebView controls",
       windows: specs,
     },
     policy: {

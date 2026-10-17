@@ -10,6 +10,7 @@ import {
   type RuntimeIdentity,
 } from "@bunaway/protocol";
 import type { Packet, UIConfig } from "#native/windows/bun/channel";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { writePluginFixture } from "../fixtures/native-worker.ts";
 
 // Isolated subprocess: exercise the real entry/channel with independently delayed Worker acks.
@@ -117,6 +118,7 @@ mock.module("@bunaway/core", () => ({
 }));
 
 const config: UIConfig = {
+  appMetadata: testAppMetadata,
   runtime: {
     id: "capacity-test",
     generation: "1",

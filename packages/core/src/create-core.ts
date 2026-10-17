@@ -19,12 +19,14 @@ import {
   validateValue,
   type WireError,
 } from "@bunaway/protocol";
+import { freezeAppInfo } from "./app-info.ts";
 import {
   type PreparedAppRegistry,
   prepareAppRegistry,
 } from "./app-registry.ts";
 import { bindHostAPI } from "./host-api.ts";
 import type {
+  AppInfo,
   CommandContext,
   CommandDefinition,
   Core,
@@ -439,6 +441,7 @@ class SessionImpl implements CoreSession {
    */
   private makeContext(signal: CancellationSignal): CommandContext {
     return {
+      app: this.core.app,
       signal,
       host: bindHostAPI(
         this.context,
@@ -685,6 +688,8 @@ class BunawayCore implements Core {
     readonly services: CoreServices,
     prepared: PreparedAppRegistry,
     readonly state: StateStore,
+    /** Validated frozen app metadata shared by every context. */
+    readonly app: AppInfo,
   ) {
     this.registry = prepared.registry;
     this.commands = prepared.commands;
@@ -803,6 +808,7 @@ class BunawayCore implements Core {
   makeBackendContext(): CommandContext {
     const signal = this.backendController.signal;
     return {
+      app: this.app,
       signal,
       host: bindHostAPI(
         this.services.backendContext,
@@ -900,6 +906,7 @@ export const createCore: CoreFactory = async (app, services) => {
     services,
     appRegistry,
     createStateStore(app.state),
+    freezeAppInfo(services.app),
   );
   try {
     // Setup follows dependency order; each returned stop hook is recorded for reverse teardown.

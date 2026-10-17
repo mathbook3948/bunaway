@@ -10,6 +10,7 @@ const commands: Record<string, CommandDefinition> = {};
 for (const name of [
   "echo",
   "ping",
+  "app",
   "count",
   "notAllowed",
   "hold",

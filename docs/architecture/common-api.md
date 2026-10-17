@@ -252,6 +252,9 @@ callHost는 signal 취소 시 같은 context, requestId의 `host-cancel`을 보�
 2. core/backend-sdk: `createCore`와 등록, 세션, 상태, 이벤트, 플러그인 실행, 명령 검증 구현.
 3. Windows 호스트: WebView2 경계, session-open/revoke, 정책, 파일, Host operations 구현.
 
+Core는 호스트가 `CoreServices.app`으로 넘긴 앱 메타데이터를 시작할 때 한 번 검증해 동결하고
+모든 명령과 플러그인 setup의 `ctx.app`으로 공유한다. 근거는 [ADR 0022](../decisions/0022-app-info-context.md)이다.
+
 runtime-bun의 `runBunApp`은 공통 CoreServices로 모듈을 연결한다. 저장, 로그, 기능 조회는
 개별 플러그인 패키지로 제공한다. Windows 호스트는 앱에 등록된 플러그인의 네이티브 어댑터를
 실행하며, 현재 macOS 호스트에는 이 어댑터가 없다.

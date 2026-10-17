@@ -17,6 +17,7 @@ import {
 import { readJsonLines } from "@bunaway/runtime-bun";
 import { bundleIosAssets } from "#cli/assets";
 import { validateProject } from "#cli/config";
+import { frameworkRoot } from "#cli/files";
 import {
   assertIosProject,
   isIosSimulatorId,
@@ -212,6 +213,13 @@ test("iOS bundled entry survives three backend Worker generations and preserves 
     const policy = JSON.parse(
       await readFile(resolve(root, "src-bunaway/policy.json"), "utf8"),
     );
+    // The bundler injects these from the app and framework package manifests.
+    const appVersion = JSON.parse(
+      await readFile(resolve(root, "package.json"), "utf8"),
+    ).version;
+    const frameworkVersion = JSON.parse(
+      await readFile(resolve(frameworkRoot, "package.json"), "utf8"),
+    ).version;
     for (let generation = 1; generation <= 3; generation++) {
       const runtime = {
         id: "ios-worker-test",
@@ -274,6 +282,10 @@ test("iOS bundled entry survives three backend Worker generations and preserves 
           "test.echo",
           "한글 😀",
         ],
+        [
+          "test.app",
+          null,
+        ],
       ] as const) {
         send({
           kind: "web",
@@ -293,6 +305,16 @@ test("iOS bundled entry survives three backend Worker generations and preserves 
             "test.count": 1,
             "test.files": "iOS backend 한글 😀\n",
             "test.echo": "한글 😀",
+            "test.app": {
+              name: "Bunaway iOS",
+              identifier: "dev.bunaway.ios.fixture",
+              version: appVersion,
+              runtime: {
+                framework: frameworkVersion,
+                bun: Bun.version,
+                webview: null,
+              },
+            },
           }[command],
         );
       }

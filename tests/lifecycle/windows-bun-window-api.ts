@@ -5,10 +5,12 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type CommandContext, defineApp } from "@bunaway/backend";
 import windows from "@bunaway/plugin-windows";
-import type { HostContext, Policy } from "@bunaway/protocol";
+import { BunawayError, type HostContext, type Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
+import { monitorServices } from "#native/windows/bun/monitors";
 import { Windows } from "#native/windows/bun/win32";
 import { hr, ole, user } from "#native/windows/bun/win32-bindings";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
@@ -621,6 +623,43 @@ if (!process.argv.includes("--child")) {
           assert.equal(user.symbols.GetForegroundWindow(), foreground);
           nativeWindows.center(hwnd);
           assert.deepEqual(nativeWindows.getBounds(hwnd, "normal"), expected);
+          // A public monitor ID selects that monitor's work area; the CI host has one monitor.
+          const monitorId = monitorServices
+            .list()
+            .find(
+              (candidate) =>
+                candidate.workArea.x === info.readInt32LE(20) &&
+                candidate.workArea.y === info.readInt32LE(24),
+            )?.id;
+          assert(monitorId);
+          const moveOffCenter = () => {
+            nativeWindows.setGeometry(hwnd, "outer", {
+              x: expected.x - 37,
+              y: expected.y - 23,
+            });
+            const moved = nativeWindows.getBounds(hwnd, "normal");
+            assert.notDeepEqual(moved, expected);
+            return moved;
+          };
+          // Start off-center so a fallback to the current monitor cannot pass unnoticed.
+          moveOffCenter();
+          nativeWindows.center(hwnd, monitorId);
+          assert.deepEqual(nativeWindows.getBounds(hwnd, "normal"), expected);
+          assert.equal(driver.symbols.IsWindowVisible(hwnd), Number(visible));
+          assert.equal(driver.symbols.IsIconic(hwnd), minimized);
+          assert.equal(driver.symbols.IsZoomed(hwnd), maximized);
+          // An unknown ID fails before any geometry change and never falls back.
+          const movedBeforeReject = moveOffCenter();
+          assert.throws(
+            () => nativeWindows.center(hwnd, "\\\\.\\DISPLAY999"),
+            (error: unknown) =>
+              error instanceof BunawayError &&
+              error.code === "INVALID_ARGUMENT",
+          );
+          assert.deepEqual(
+            nativeWindows.getBounds(hwnd, "normal"),
+            movedBeforeReject,
+          );
         } finally {
           nativeWindows.destroy(hwnd);
         }
@@ -1398,6 +1437,75 @@ if (!process.argv.includes("--child")) {
             assert.equal(user.symbols.GetForegroundWindow(), centerForeground);
             await windows.center(editor);
             assert.deepEqual(await windows.getOuterBounds(editor), centered);
+            // The centered window lies inside exactly one monitor work area.
+            const centerTarget = (await windows.getMonitors()).find(
+              (monitor) =>
+                centered.x >= monitor.workArea.x &&
+                centered.y >= monitor.workArea.y &&
+                centered.x + centered.width <=
+                  monitor.workArea.x + monitor.workArea.width &&
+                centered.y + centered.height <=
+                  monitor.workArea.y + monitor.workArea.height,
+            );
+            assert(centerTarget);
+            await windows.setPosition({
+              ...editor,
+              x: outer.x,
+              y: outer.y,
+            });
+            await windows.center({
+              ...editor,
+              monitorId: centerTarget.id,
+            });
+            assert.deepEqual(await windows.getOuterBounds(editor), centered);
+            assert.deepEqual(
+              {
+                x: centered.x,
+                y: centered.y,
+              },
+              {
+                x: Math.round(
+                  centerTarget.workArea.x +
+                    (centerTarget.workArea.width - centered.width) / 2,
+                ),
+                y: Math.round(
+                  centerTarget.workArea.y +
+                    (centerTarget.workArea.height - centered.height) / 2,
+                ),
+              },
+            );
+            assert.equal(await windows.isVisible(editor), false);
+            assert.equal(user.symbols.GetForegroundWindow(), centerForeground);
+            // Start off-center so a fallback to the current monitor cannot pass unnoticed.
+            await windows.setPosition({
+              ...editor,
+              x: outer.x,
+              y: outer.y,
+            });
+            const movedBeforeReject = await windows.getOuterBounds(editor);
+            assert.notDeepEqual(
+              {
+                x: movedBeforeReject.x,
+                y: movedBeforeReject.y,
+              },
+              {
+                x: centered.x,
+                y: centered.y,
+              },
+            );
+            await assert.rejects(
+              windows.center({
+                ...editor,
+                monitorId: "\\\\.\\DISPLAY999",
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
+            assert.deepEqual(
+              await windows.getOuterBounds(editor),
+              movedBeforeReject,
+            );
             await windows.setOuterBounds({
               ...editor,
               x: outer.x,
@@ -1863,6 +1971,7 @@ if (!process.argv.includes("--child")) {
     },
   });
   await runWindowsApp(app, {
+    appMetadata: testAppMetadata,
     runtime: {
       id: "windows-window-api",
       generation: crypto.randomUUID(),

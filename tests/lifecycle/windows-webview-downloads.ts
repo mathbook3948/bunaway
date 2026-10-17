@@ -10,6 +10,7 @@ import windows from "@bunaway/plugin-windows";
 import type { HostContext, Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { kernel } from "#native/windows/bun/win32-bindings";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
@@ -676,6 +677,7 @@ if (!process.argv.includes("--child")) {
   });
   try {
     await runWindowsApp(app, {
+      appMetadata: testAppMetadata,
       runtime: {
         id: "webview-downloads",
         generation: crypto.randomUUID(),

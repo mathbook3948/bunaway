@@ -7,6 +7,7 @@ import type { HostContext, Policy } from "@bunaway/protocol";
 import { closeWindowsApp } from "#cli/windows-dev-launch";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import pin from "../../runtime/build-manifests/windows-x64.json";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
 assert.equal(process.platform, "win32");
@@ -268,6 +269,7 @@ if (!process.argv.includes("--child")) {
     },
   } as const;
   await runWindowsApp(app, {
+    appMetadata: testAppMetadata,
     runtime: {
       id: "windows-safe-storage",
       generation: crypto.randomUUID(),

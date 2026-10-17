@@ -20,7 +20,7 @@ const directory = await mkdtemp(
   resolve(tmpdir(), "bunaway-webview-regressions-"),
 );
 const title = `Bunaway regression ${crypto.randomUUID()}`;
-const config: Omit<MacosConfig, "windows"> & {
+const config: Omit<MacosConfig, "windows" | "appMetadata"> & {
   window: import("@bunaway/plugin-api/native").WindowSpec;
 } = {
   runtime: {

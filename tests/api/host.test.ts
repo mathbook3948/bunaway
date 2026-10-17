@@ -23,6 +23,7 @@ import {
   parseMessage,
   type TransportEvent,
 } from "@bunaway/protocol";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import {
   allowedHost,
   bindHostAPI,
@@ -59,6 +60,7 @@ function context(
   controller = new AbortController(),
 ): CommandContext {
   return {
+    app: testAppInfo,
     host: bindHostAPI(name as HostContext, controller.signal, callHost),
     signal: controller.signal,
     state: {
@@ -306,6 +308,7 @@ test("concurrent module services preserve view policy after await and never use 
     call: HostCall;
   }[] = [];
   const services: CoreServices = {
+    app: testAppInfo,
     platform: "windows",
     backendContext: "backend" as HostContext,
     hello: {
@@ -770,6 +773,7 @@ test("defineApp preserves class getter contracts and original method receivers",
   }
   expect(plugin.commands["getter.write"]).toBe(raw);
   const services: CoreServices = {
+    app: testAppInfo,
     platform: "windows",
     backendContext: "backend" as HostContext,
     policy: {
@@ -876,6 +880,7 @@ test("plugin setup descendants keep their own backend until shutdown, including 
   });
   async function start(id: string) {
     const services: CoreServices = {
+      app: testAppInfo,
       policy: {
         version: 1,
         views: [],

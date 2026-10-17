@@ -33,6 +33,24 @@ export function centerInWorkArea(
   };
 }
 
+/**
+ * Find the work area of the connected monitor whose public ID matches exactly.
+ * An unknown ID is INVALID_ARGUMENT; there is deliberately no primary-monitor fallback.
+ */
+export function selectMonitorWorkArea(
+  monitors: readonly {
+    id: string;
+    workArea: WorkArea;
+  }[],
+  monitorId: string,
+): WorkArea {
+  const monitor = monitors.find((candidate) => candidate.id === monitorId);
+  if (!monitor) {
+    return invalidPlacement("Monitor is not connected.");
+  }
+  return monitor.workArea;
+}
+
 /** Resolve logical content constraints before physical outer fitting; does not own native resources. */
 export function initialWindowPlacement(
   options: WindowSpec["window"],
