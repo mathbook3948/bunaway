@@ -20,16 +20,17 @@ export class WindowsPower {
     systemEvents?: Pick<NativeSystemEvents, "subscribe" | "publish">,
   ) {
     try {
+      // Subscribe lifecycle first so one resume publishes power.resumed before power.statusChanged.
+      this.releaseLifecycleEvents = watchPowerLifecycle(systemEvents);
       this.releaseStatusEvents = watchPowerStatus(
         () => this.native.status(),
         systemEvents,
       );
-      this.releaseLifecycleEvents = watchPowerLifecycle(systemEvents);
     } catch (error) {
       // Construction failed, so no caller can dispose the native resources.
       const failures: unknown[] = [];
       try {
-        this.releaseStatusEvents?.();
+        this.releaseLifecycleEvents?.();
       } catch (cleanup) {
         failures.push(cleanup);
       }

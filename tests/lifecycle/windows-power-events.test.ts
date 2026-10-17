@@ -103,14 +103,23 @@ test.skipIf(process.platform !== "win32")(
         h.broadcast(window);
         h.broadcast(window, PBT_APMRESUMEAUTOMATIC);
         const after = JSON.stringify(reference.status());
-        for (const [event, payload, operation] of h.published) {
+        // The resume broadcast also publishes the payload-free lifecycle event, before any status event.
+        const statusEvents = h.published.filter(
+          ([event]) => event === "power.statusChanged",
+        );
+        for (const [event, payload, operation] of statusEvents) {
           expect(event).toBe("power.statusChanged");
           expect(operation).toBe("power.getStatus");
           expect(statusSchema.safeParse(payload).success).toBe(true);
         }
+        expect(h.published[0]).toEqual([
+          "power.resumed",
+          {},
+          "power.getStatus",
+        ]);
         // Without a genuine change between the surrounding reads, the broadcast must stay silent.
         if (before === after) {
-          expect(h.published).toEqual([]);
+          expect(statusEvents).toEqual([]);
         }
         expect(h.failures).toEqual([]);
       } finally {

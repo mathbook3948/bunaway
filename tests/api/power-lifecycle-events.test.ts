@@ -5,6 +5,7 @@ import type {
 } from "@bunaway/plugin-api/native";
 import { powerEvents } from "#plugins/power/src/contract";
 import { watchPowerLifecycle } from "#plugins/power/src/platforms/windows-lifecycle-events";
+import { watchPowerStatus } from "#plugins/power/src/platforms/windows-status-events";
 
 /** Fake system event service that records subscription options and published events. */
 function fakeSystemEvents() {
@@ -85,6 +86,42 @@ test("other signals are ignored and release stops publishing and is repeatable",
   fake.emit("sessionLocked");
   expect(fake.published).toEqual([]);
   expect(fake.unsubscribed()).toBe(1);
+});
+
+test("a resume publishes power.resumed before a changed power.statusChanged in subscription order", () => {
+  const callbacks: ((signal: NativeSystemSignal) => void)[] = [];
+  const published: string[] = [];
+  const systemEvents: Pick<NativeSystemEvents, "subscribe" | "publish"> = {
+    subscribe(callback) {
+      callbacks.push(callback);
+      return () => {};
+    },
+    publish: (event) => {
+      published.push(event);
+    },
+  };
+  let percent = 100;
+  const status = () =>
+    ({
+      source: "battery",
+      batteryPresent: true,
+      charging: false,
+      batteryPercent: percent,
+      batterySaver: false,
+      remainingSeconds: null,
+      fullLifeSeconds: null,
+    }) as const;
+  // Same order as the WindowsPower constructor.
+  watchPowerLifecycle(systemEvents);
+  watchPowerStatus(status, systemEvents);
+  percent = 90;
+  for (const callback of callbacks) {
+    callback("resume");
+  }
+  expect(published).toEqual([
+    "power.resumed",
+    "power.statusChanged",
+  ]);
 });
 
 test("lifecycle events are declared with empty strict payloads and no service yields no release", () => {
