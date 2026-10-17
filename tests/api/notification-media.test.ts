@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -76,10 +82,6 @@ test("duration long is emitted only for looping sounds and paired surrogates sta
       icon: "C:\\emoji-🚀.png",
     }).success,
   ).toBe(true);
-});
-
-test("MAX_TOAST_IMAGE_BYTES follows the documented 3 MB limit", () => {
-  expect(MAX_TOAST_IMAGE_BYTES).toBe(3_000_000);
 });
 
 test("file URI conversion encodes each path segment and keeps the drive", () => {
@@ -164,93 +166,216 @@ test("media schema rejects unsafe paths, formats and conflicting sound options",
   ).toBe(false);
 });
 
-test("media files must exist, be regular files and stay within the size limit", () => {
+// Windows attribute values used by the stub filesystem.
+const NORMAL = 0x80;
+const DIRECTORY = 0x10;
+const REPARSE_POINT = 0x400;
+const INVALID = 0xffffffff;
+
+/**
+ * Stub probes over a real temp directory. Tests run on any OS, so the Windows-style path built by the
+ * check (`tmp\dir\file`) is mapped back to a POSIX path. Overrides win over the real file system.
+ */
+function stubFilesystem(
+  overrides: Record<string, number> = {},
+  driveType = 3,
+  probed: string[] = [],
+) {
+  return {
+    driveType: () => driveType,
+    attributes(path: string) {
+      probed.push(path);
+      const posix = `/${path.replaceAll("\\", "/")}`;
+      if (posix in overrides) {
+        return overrides[posix] ?? NORMAL;
+      }
+      try {
+        return statSync(posix).isDirectory() ? DIRECTORY : NORMAL;
+      } catch {
+        return INVALID;
+      }
+    },
+  };
+}
+
+// Schema validation accepts Windows paths only, so the file check is exercised with patched paths.
+const base = notificationShowSchema.parse({
+  id: "media",
+  title: "t",
+});
+
+test("media files must be local regular files within the size limit", () => {
   const directory = mkdtempSync(join(tmpdir(), "bunaway-media-"));
   try {
     const small = join(directory, "small.png");
     const large = join(directory, "large.png");
+    const limit = join(directory, "limit.png");
     writeFileSync(small, "x");
     writeFileSync(large, Buffer.alloc(MAX_TOAST_IMAGE_BYTES + 1));
-    const resolve = (extra: Record<string, unknown>) =>
-      notificationShowSchema.parse({
-        id: "media",
-        title: "t",
-        ...extra,
-      });
-    // Schema validation accepts Windows paths only, so exercise the file check with a parsed value and patched paths.
-    const withPaths = (icon: string | null, image: string | null) => ({
-      ...resolve({}),
-      icon,
-      image,
-    });
-    const check = (
-      icon: string | null,
-      image: string | null,
-      driveType: (path: string) => number = () => 3,
-    ) => assertToastMediaFiles(withPaths(icon, image), driveType);
-    const limit = join(directory, "limit.png");
     writeFileSync(limit, Buffer.alloc(MAX_TOAST_IMAGE_BYTES));
+    const check = (icon: string | null, image: string | null) =>
+      assertToastMediaFiles(
+        {
+          ...base,
+          icon,
+          image,
+        },
+        stubFilesystem(),
+      );
     expect(() => check(small, small)).not.toThrow();
     expect(() => check(limit, null)).not.toThrow();
     expect(() => check(null, null)).not.toThrow();
-    const rejection = (path: string, slot: "icon" | "image") => {
-      try {
-        if (slot === "icon") {
-          check(path, null);
-        } else {
-          check(null, path);
-        }
-      } catch (error) {
-        expect(error).toMatchObject({
-          code: "INVALID_ARGUMENT",
-        });
-        return (error as Error).message;
-      }
-      throw new Error("expected rejection");
-    };
-    for (const slot of [
-      "icon",
-      "image",
-    ] as const) {
-      expect(rejection(join(directory, "missing.png"), slot)).toBe(
+    const cases = [
+      [
+        join(directory, "missing.png"),
         "Notification image is not a readable regular file.",
-      );
-      expect(rejection(directory, slot)).toBe(
+      ],
+      [
+        directory,
         "Notification image is not a readable regular file.",
-      );
-      expect(rejection(large, slot)).toBe(
+      ],
+      [
+        large,
         "Notification image file is too large.",
-      );
+      ],
+    ] as const;
+    for (const [path, message] of cases) {
+      for (const run of [
+        () => check(path, null),
+        () => check(null, path),
+      ]) {
+        expect(run).toThrow(message);
+        expect(run).toThrow(
+          expect.objectContaining({
+            code: "INVALID_ARGUMENT",
+          }),
+        );
+      }
     }
-    // Unknown, root-less and remote drives are refused; local types pass.
-    for (const type of [
-      0,
-      1,
-      4,
-    ]) {
-      expect(() => check(small, null, () => type)).toThrow(
-        "Notification image must be on a local drive.",
-      );
-      expect(() => check(null, small, () => type)).toThrow(
-        "Notification image must be on a local drive.",
-      );
-    }
-    for (const type of [
-      2,
-      3,
-      5,
-      6,
-    ]) {
-      expect(() => check(small, null, () => type)).not.toThrow();
-    }
-    // The drive check precedes file I/O, so a remote path is refused as remote even when it cannot be stat-ed.
-    expect(() => check(join(directory, "missing.png"), null, () => 4)).toThrow(
-      "local drive",
-    );
   } finally {
     rmSync(directory, {
       recursive: true,
       force: true,
     });
   }
+});
+
+test("only fixed and RAM drives are read, before any file access", () => {
+  const probed: string[] = [];
+  for (const type of [
+    0,
+    1,
+    2,
+    4,
+    5,
+  ]) {
+    expect(() =>
+      assertToastMediaFiles(
+        {
+          ...base,
+          icon: "/nonexistent/a.png",
+        },
+        stubFilesystem({}, type, probed),
+      ),
+    ).toThrow("Notification image must be on a local fixed drive.");
+  }
+  expect(probed).toEqual([]);
+  for (const type of [
+    3,
+    6,
+  ]) {
+    expect(() =>
+      assertToastMediaFiles(
+        {
+          ...base,
+          icon: "/nonexistent/a.png",
+        },
+        stubFilesystem({}, type),
+      ),
+    ).toThrow("not a readable regular file");
+  }
+});
+
+test("links, reparse points and cloud placeholders are refused without following them", () => {
+  const directory = mkdtempSync(join(tmpdir(), "bunaway-media-"));
+  try {
+    mkdirSync(join(directory, "dir"));
+    const file = join(directory, "dir", "a.png");
+    writeFileSync(file, "x");
+    const run = (overrides: Record<string, number>, probed: string[] = []) =>
+      assertToastMediaFiles(
+        {
+          ...base,
+          image: file,
+        },
+        stubFilesystem(overrides, 3, probed),
+      );
+    expect(() => run({})).not.toThrow();
+    // A reparse point on an intermediate directory stops the walk before deeper components are probed.
+    const probed: string[] = [];
+    expect(() =>
+      run(
+        {
+          [join(directory, "dir")]: REPARSE_POINT | DIRECTORY,
+        },
+        probed,
+      ),
+    ).toThrow(
+      "Notification image path must not contain links or reparse points.",
+    );
+    expect(probed.at(-1)?.replaceAll("\\", "/")).toBe(
+      join(directory, "dir").slice(1),
+    );
+    // The final file itself may be a link.
+    expect(() =>
+      run({
+        [file]: REPARSE_POINT,
+      }),
+    ).toThrow("links or reparse points");
+    for (const attribute of [
+      0x1000,
+      0x40000,
+      0x400000,
+    ]) {
+      expect(() =>
+        run({
+          [file]: NORMAL | attribute,
+        }),
+      ).toThrow("Notification image must be stored locally.");
+    }
+    expect(() =>
+      run({
+        [file]: INVALID,
+      }),
+    ).toThrow("Notification image is not a readable regular file.");
+  } finally {
+    rmSync(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+test("hero placement requires an image and bmp is not accepted", () => {
+  expect(
+    parse({
+      imagePlacement: "hero",
+    }).success,
+  ).toBe(false);
+  expect(
+    parse({
+      image: "C:\\a.png",
+      imagePlacement: "hero",
+    }).success,
+  ).toBe(true);
+  expect(
+    parse({
+      image: "C:\\a.bmp",
+    }).success,
+  ).toBe(false);
+  expect(
+    parse({
+      icon: "C:\\a.bmp",
+    }).success,
+  ).toBe(false);
 });

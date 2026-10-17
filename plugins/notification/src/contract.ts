@@ -76,7 +76,6 @@ export const TOAST_IMAGE_EXTENSIONS = [
   ".jpg",
   ".jpeg",
   ".gif",
-  ".bmp",
 ] as const;
 /**
  * Microsoft documents a 3 MB limit for toast images on a normal connection (3 MB, not 3 MiB), so reject larger
@@ -157,6 +156,12 @@ export const notificationShowSchema = notificationIdentitySchema
       .default("inline"),
     sound: z.enum(TOAST_SOUNDS).nullable().default(null),
     soundLoop: z.boolean().default(false),
+  })
+  .refine((input) => input.imagePlacement !== "hero" || input.image !== null, {
+    message: "imagePlacement hero requires image.",
+    path: [
+      "imagePlacement",
+    ],
   })
   .refine((input) => !(input.silent && input.sound !== null), {
     message: "silent and sound are mutually exclusive.",

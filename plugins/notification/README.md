@@ -48,10 +48,13 @@ true이면 popup 대신 알림 기록으로 전달한다. OS 설정에 따른 �
 `data`는 최대 2048자의 앱 문자열 또는 null이며 Windows activation 인수에 넣지 않는다.
 
 `icon`(appLogoOverride)과 `image`는 `C:\` 형식의 로컬 드라이브 절대 경로 또는 null이다. 상대 경로, UNC,
-URL, `..` 구간, 제어 문자는 거부한다. 확장자는 png, jpg, jpeg, gif, bmp만 허용하고 파일은 존재하는
+URL, `..` 구간, 제어 문자는 거부한다. 확장자는 png, jpg, jpeg, gif만 허용하고 파일은 존재하는
 일반 파일이며 3,000,000바이트 이하여야 한다. 드라이브 문자 뒤 `:`(NTFS ADS)와 짝 없는 surrogate도
-거부한다. 파일 접근 전에 `GetDriveTypeW`로 네트워크와 판별 불가 드라이브를 거부하지만 네트워크를 가리키는
-`subst` 드라이브는 가려내지 못한다. 인코딩한 file URI는 경로(260자)보다 길어질 수 있고 길이는 검사하지 않는다.
+거부한다. `imagePlacement: "hero"`는 `image`가 있어야 한다. 파일 접근 전에 `GetDriveTypeW`로 고정
+드라이브와 RAM 디스크만 허용하고, 경로 구성요소를 위에서부터 `GetFileAttributesW`로 확인해 reparse
+point(링크, 정션)를 따라가지 않고 거부하며 최종 파일의 offline과 recall 속성도 거부한다. 두 함수는
+플러그인 수명 kernel32 바인딩을 쓴다. 네트워크를 가리키는 `subst` 드라이브와 검사 뒤 경로 교체는 막지
+못한다. 인코딩한 file URI는 경로(260자)보다 길어질 수 있고 길이는 검사하지 않는다.
 `soundLoop`이면 `<toast duration="long">`을 출력한다. 검사는 show 직전에 하며 실패는 `INVALID_ARGUMENT`이다. 경로는
 세그먼트별로 percent-encode한 `file:///` URI로 바꾸고 XML escape한다. `imagePlacement`는 `inline`(기본)
 또는 `hero`이다. `sound`는 `Default`, `IM`, `Mail`, `Reminder`, `SMS`, `Looping.Alarm`~`Looping.Alarm10`,

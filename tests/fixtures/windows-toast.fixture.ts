@@ -18,6 +18,7 @@ import {
   createToastRuntime,
   guid,
 } from "#plugins/notification/src/platforms/toast-winrt";
+import { createNotifications } from "#plugins/notification/src/platforms/windows";
 import { createWindowsToastDriver } from "#plugins/notification/src/platforms/windows-toasts";
 import { createNotificationShortcut } from "./windows-notification-shortcut.ts";
 
@@ -291,7 +292,39 @@ if (workerData?.toastMarshalWorker) {
         soundLoop: true,
         suppressPopup: true,
       });
-      assertToastMediaFiles(media);
+      // The adapter's kernel32 probes must accept a temp-directory file and refuse a missing file and a directory.
+      const notifications = createNotifications(appId);
+      try {
+        assertToastMediaFiles(media, notifications.filesystem);
+        assert.throws(
+          () =>
+            assertToastMediaFiles(
+              {
+                ...media,
+                image: join(mediaDirectory, "missing.png"),
+              },
+              notifications.filesystem,
+            ),
+          {
+            code: "INVALID_ARGUMENT",
+          },
+        );
+        assert.throws(
+          () =>
+            assertToastMediaFiles(
+              {
+                ...media,
+                image: mediaDirectory,
+              },
+              notifications.filesystem,
+            ),
+          {
+            code: "INVALID_ARGUMENT",
+          },
+        );
+      } finally {
+        notifications.dispose();
+      }
       controller.show(media);
       const shown = await waitHistory((items) => items.length === 1);
       assert(shown[0]?.includes("appLogoOverride"));

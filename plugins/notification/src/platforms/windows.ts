@@ -13,7 +13,10 @@ import {
   drainToastCleanup,
 } from "#notification/platforms/toast-cleanup";
 import { createToastController } from "#notification/platforms/toast-controller";
-import { assertToastMediaFiles } from "#notification/platforms/toast-media";
+import {
+  assertToastMediaFiles,
+  type ToastFilesystem,
+} from "#notification/platforms/toast-media";
 import { createWindowsToastDriver } from "#notification/platforms/windows-toasts";
 
 const POINTER_BYTES = 8;
@@ -131,6 +134,18 @@ export function createNotifications(appUserModelId: string) {
           ],
           returns: "i32",
         },
+        GetDriveTypeW: {
+          args: [
+            "ptr",
+          ],
+          returns: "u32",
+        },
+        GetFileAttributesW: {
+          args: [
+            "ptr",
+          ],
+          returns: "u32",
+        },
       });
     } catch (error) {
       runtime.close();
@@ -155,7 +170,22 @@ export function createNotifications(appUserModelId: string) {
       runtime.symbols.RoUninitialize();
     }
   }
+  // The caller keeps the buffer referenced while the pointer is in use.
+  const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
   return {
+    /** Path probes for toast media, bound to the adapter's kernel32 handle and invalid after dispose. */
+    filesystem: {
+      driveType: (root: string) => {
+        active();
+        const text = wide(root);
+        return kernel.symbols.GetDriveTypeW(ptr(text));
+      },
+      attributes: (path: string) => {
+        active();
+        const text = wide(path);
+        return kernel.symbols.GetFileAttributesW(ptr(text));
+      },
+    } satisfies ToastFilesystem,
     /** Read the OS setting without creating shortcuts, registering activators or changing user preferences. */
     getStatus(): NotificationStatus {
       return withRuntime(() => {
@@ -384,7 +414,7 @@ export function initialize(environment: NativeEnvironment) {
     getStatus: status.getStatus,
     openSettings: status.openSettings,
     show: (input: ResolvedNotification) => {
-      assertToastMediaFiles(input);
+      assertToastMediaFiles(input, status.filesystem);
       return getToasts().show(input);
     },
     clear: (input: NotificationResult) => getToasts().clear(input),
