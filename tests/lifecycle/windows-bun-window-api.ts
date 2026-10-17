@@ -1422,6 +1422,9 @@ if (!process.argv.includes("--child")) {
                 ...editor,
                 ratio: 0,
               }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
             );
             assert.equal(await windows.getAspectRatio(editor), 16 / 9);
             await windows.setAspectRatio({

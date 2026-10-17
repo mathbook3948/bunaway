@@ -244,8 +244,9 @@ describe("adjustSizingRect (pure)", () => {
     });
   });
 
-  test("the system range wins when user constraints do not overlap it", () => {
-    // minWidth 2000 exceeds the 800 wide system client maximum, so the window stays at 800x400.
+  test("the minimum wins when user constraints do not overlap the system range", () => {
+    // minWidth 2000 exceeds the 800 wide system client maximum, so the width range collapses to 2000
+    // and the height stays inside its own range (600), relaxing the ratio.
     expect(
       adjustSizingRect(
         {
@@ -275,8 +276,8 @@ describe("adjustSizingRect (pure)", () => {
     ).toEqual({
       left: 0,
       top: 0,
-      right: 816,
-      bottom: 439,
+      right: 2016,
+      bottom: 639,
     });
   });
 
@@ -533,6 +534,8 @@ test.skipIf(process.platform !== "win32")(
       if (hwnd && user.symbols.IsWindow(hwnd)) {
         native.destroy(hwnd);
       }
+      native.dispose();
+      messages.close();
     }
   },
 );

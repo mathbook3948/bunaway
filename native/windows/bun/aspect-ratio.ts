@@ -82,7 +82,10 @@ export type SystemTrackSize = {
  * Client-area range on one axis: the user's logical constraint converted by
  * DPI, intersected with the system track size minus the frame, so the ratio
  * agrees with what WM_GETMINMAXINFO would enforce afterwards. When the two do
- * not overlap, the system range is returned.
+ * not overlap, the minimum wins and the range collapses to it. This mirrors
+ * applyMinMaxInfo (max of minimums, min of maximums) and the minimum-wins
+ * fix-up of ptMaxTrackSize in the user32 path, as read from ReactOS
+ * co_WinPosGetMinMaxInfo; the behavior of Windows itself was not verified.
  */
 function clientRange(
   minimum: number | null,
@@ -96,21 +99,25 @@ function clientRange(
     low: Math.max(1, systemMinimum - frame),
     high: Math.max(1, systemMaximum - frame),
   };
-  const range = {
-    low: Math.max(
-      system.low,
-      minimum === null ? 1 : physicalPixels(minimum, dpi),
-    ),
-    high: Math.min(
+  const low = Math.max(
+    system.low,
+    minimum === null ? 1 : physicalPixels(minimum, dpi),
+  );
+  // The minimum wins when the ranges do not overlap, as in applyMinMaxInfo
+  // followed by the user32 fix-up of ptMaxTrackSize to at least ptMinTrackSize.
+  const high = Math.max(
+    low,
+    Math.min(
       system.high,
       maximum === null
         ? Number.POSITIVE_INFINITY
         : physicalPixels(maximum, dpi),
     ),
+  );
+  return {
+    low,
+    high,
   };
-  // Constraints that do not overlap the system range cannot be honored by
-  // Windows either, so the system range wins and the window stays inside it.
-  return range.low > range.high ? system : range;
 }
 
 /**
