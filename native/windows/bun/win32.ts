@@ -8,6 +8,7 @@ import {
   isWindowAspectRatio,
   MAX_WINDOW_DIMENSION,
   MIN_WINDOW_DIMENSION,
+  type NativeOverlayIconProvider,
   type NativeWindow,
   type WindowAttentionMode,
   type WindowBounds,
@@ -29,6 +30,7 @@ import { monitorServices } from "./monitors.ts";
 import type { SessionMessageHandler } from "./session-end.ts";
 import { Taskbar } from "./taskbar.ts";
 import {
+  type OverlayIconSetting,
   type TaskbarProgress,
   TaskbarProgressController,
   TaskbarSettingController,
@@ -100,6 +102,7 @@ import {
   SM_CXMINTRACK,
   SM_CXPADDEDBORDER,
   SM_CXSIZEFRAME,
+  SM_CXSMICON,
   SM_CYMAXTRACK,
   SM_CYMINTRACK,
   SM_CYSIZEFRAME,
@@ -198,6 +201,14 @@ export class Windows {
   private readonly thumbnailToolTip = new TaskbarSettingController<
     string | null
   >((window, toolTip) => this.taskbar.setThumbnailToolTip(window, toolTip));
+  // The HICON currently shown as each window's overlay; owned here and destroyed on replacement, removal or destroy.
+  private readonly overlayIcons = new Map<bigint, bigint>();
+  private readonly overlayIcon =
+    new TaskbarSettingController<OverlayIconSetting>(
+      (window, setting) => this.applyOverlayIcon(window, setting),
+      // The provider is a function, which structuredClone rejects; the setting is never mutated.
+      (setting) => setting,
+    );
   private readonly taskbarButtonCreated = withWide(
     "TaskbarButtonCreated",
     (name) => user.symbols.RegisterWindowMessageW(name),
@@ -393,6 +404,10 @@ export class Windows {
               [
                 "thumbnail tooltip",
                 this.thumbnailToolTip,
+              ],
+              [
+                "overlay icon",
+                this.overlayIcon,
               ],
             ] as const) {
               try {
@@ -2808,6 +2823,8 @@ export class Windows {
     this.taskbarProgress.forget(window);
     this.thumbnailClip.forget(window);
     this.thumbnailToolTip.forget(window);
+    this.overlayIcon.forget(window);
+    this.releaseOverlayIcon(window);
     this.windows.delete(window);
     this.constraints.delete(window);
     this.dpiByWindow.delete(window);
@@ -2850,6 +2867,8 @@ export class Windows {
    * Call after all windows have been destroyed.
    */
   dispose() {
+    // Release before the live-window assertion so a failed destroy cannot leak the icon handles.
+    this.releaseOverlayIcons();
     assert.equal(this.windows.size, 0);
     this.taskbar.dispose();
     this.accessibleTitles.dispose();
@@ -2894,6 +2913,77 @@ export class Windows {
       });
     }
     this.thumbnailToolTip.set(window, toolTip || null);
+  }
+
+  /**
+   * Show the overlay icon with an accessibility description on the taskbar button, or remove it for null
+   * (the description is then ignored).
+   */
+  setOverlayIcon(
+    window: bigint,
+    icon: NativeOverlayIconProvider | null,
+    description: string,
+  ): void {
+    assert(this.windows.has(window), "Taskbar target is not a live window");
+    if (icon === null) {
+      this.overlayIcon.set(window, null);
+      return;
+    }
+    // Native callers bypass the plugin schema; enforce the same limits as the thumbnail tooltip.
+    if (description.includes("\0") || description.length > 1024) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message:
+          "The overlay icon description cannot contain NUL or exceed 1024 UTF-16 code units.",
+      });
+    }
+    this.overlayIcon.set(window, {
+      icon,
+      description,
+    });
+  }
+
+  /**
+   * Build the new HICON at the small icon size for the window's DPI before touching the shell, so a rejected
+   * image keeps the current overlay. The previous HICON is destroyed only after the shell accepted the new one.
+   */
+  private applyOverlayIcon(window: bigint, setting: OverlayIconSetting): void {
+    if (!setting) {
+      this.taskbar.setOverlayIcon(window, 0n, "");
+      this.releaseOverlayIcon(window);
+      return;
+    }
+    const size = user.symbols.GetSystemMetricsForDpi(
+      SM_CXSMICON,
+      this.getDpi(window),
+    );
+    // The provider's HICON belongs to this class from here on, including when the shell call fails.
+    const icon = setting.icon(size);
+    try {
+      this.taskbar.setOverlayIcon(window, icon, setting.description);
+    } catch (error) {
+      user.symbols.DestroyIcon(icon);
+      throw error;
+    }
+    this.releaseOverlayIcon(window);
+    this.overlayIcons.set(window, icon);
+  }
+
+  /** Backstop for icons whose window never reached its normal destroy path. Safe to repeat. */
+  private releaseOverlayIcons(): void {
+    for (const window of [
+      ...this.overlayIcons.keys(),
+    ]) {
+      this.releaseOverlayIcon(window);
+    }
+  }
+
+  private releaseOverlayIcon(window: bigint): void {
+    const icon = this.overlayIcons.get(window);
+    if (icon) {
+      user.symbols.DestroyIcon(icon);
+      this.overlayIcons.delete(window);
+    }
   }
 
   private applyThumbnailClip(window: bigint, region: ThumbnailClip): void {

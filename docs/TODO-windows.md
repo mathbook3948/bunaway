@@ -321,10 +321,10 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 메뉴바 visible과 auto-hide를 설정하고 조회한다.
 - [x] 지정 창과 물리 화면 좌표에 컨텍스트 메뉴를 표시하고 선택 또는 취소로 닫는다. AbortSignal 취소로 닫으며 별도 close 작업은 제공하지 않는다.
 - [x] 공유 메뉴 리소스에서 일반, separator, checkbox, radio와 submenu 항목을 제공한다.
-- [ ] 메뉴 icon 항목을 제공한다.
+- [x] 메뉴 icon 항목을 제공한다. `type: "item"`(role 포함)과 submenu의 선택 필드 `icon`(tray `setIcon`과 같은 base64 ICO, null이면 없음)이며 checkbox, radio, separator는 `INVALID_ARGUMENT`로 거부한다(Electron `MenuItem.icon`, Tauri `IconMenuItem`). `SM_CXSMICON` 크기의 32bpp premultiplied-alpha DIB section을 메뉴 인스턴스마다 만들어 `hbmpItem`에 설정하고 인스턴스 해제 때 DeleteObject한다. 잘못된 ICO는 `INVALID_ARGUMENT`, 비트맵 생성 실패는 `INTERNAL`.
 - [x] 메뉴 리소스 ID 조회, create, replace, remove와 목록 조회, 항목 insert와 remove를 제공한다. `insert`의 index 0과 배열 길이로 prepend와 append를 처리한다.
 - [x] 메뉴 리소스의 항목 label, enabled, visible와 checked를 실행 중 변경한다. 연결한 트레이의 다음 팝업과 창 메뉴바에 반영한다.
-- [ ] 메뉴 항목 icon을 실행 중 변경한다.
+- [x] 메뉴 항목 icon을 실행 중 변경한다. `updateItem.changes.icon`(ICO bytes | null)이며 다른 변경과 같이 연결된 트레이의 다음 팝업과 창 메뉴바에 반영한다.
 - [x] 트레이 메뉴 선택을 `menu.clicked`로 전달한다. 앱 창에 속하지 않아 `windowId`는 null이다.
 - [x] 창 메뉴바와 컨텍스트 팝업 선택을 `menu.clicked`로 전달하고 소유 windowId를 포함한다.
 - [ ] accelerator, 표시 문자열과 실제 등록 여부를 구분한다.
@@ -435,7 +435,16 @@ Windows의 비활성화 기록을 수정하지 않는다.
   ITaskbarList3 호출은 기존 `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
 - [ ] 실제 Windows 작업 표시줄에서 진행률, 상태 색상, 그룹 우선순위와 Explorer 재시작 후 표시를 확인한다.
   네이티브 호출 회귀와 합성 버튼 재생성 검사를 물리 화면의 표시 검증으로 간주하지 않는다.
-- [ ] overlay icon과 접근성 설명을 설정한다.
+- [x] overlay icon과 접근성 설명을 설정한다.
+  `windows.setOverlayIcon`은 창별로 `ico`(`tray.setIcon`과 같은 base64 ICO, `null`이면 제거)와
+  `description`(`setThumbnailToolTip`과 같은 문자열 규칙, `ico`가 `null`이면 무시)을 받으며 Electron의
+  `setOverlayIcon(overlay, description)`에 대응한다. ICO에서 창 DPI의 작은 아이콘 크기에 맞는 프레임으로
+  HICON을 만들어 `ITaskbarList3::SetOverlayIcon`에 넘기고 다음 설정, 제거, 창 파괴 때 `DestroyIcon`으로 해제한다.
+  작업 권한과 창 수명을 검사하고 버튼 생성 전에는 `BUSY`, 잘못된 ICO는 `INVALID_ARGUMENT`, 네이티브 실패는 `INTERNAL`,
+  macOS는 `UNSUPPORTED`다. 버튼 재생성 때 마지막 성공 값을 다시 적용하고 HWND 파괴 때 폐기한다.
+  ICO 검증과 HICON 생성은 windows 플러그인의 Windows 플랫폼 코드가 맡고 호스트는 아이콘 공급자를 받아 수명만 관리한다.
+  계약 검증은 `window-overlay-icon.test.ts`, ICO 거부와 수명은 `taskbar-overlay-icon.test.ts`이며 실제 ITaskbarList3 호출은
+  `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
 - [ ] thumbnail toolbar 버튼과 클릭 이벤트를 제공한다.
 - [x] thumbnail clip과 tooltip을 설정한다.
   `windows.setThumbnailClip`은 내용 영역 기준 96 DPI 논리 픽셀 region(`null`이면 해제)을,

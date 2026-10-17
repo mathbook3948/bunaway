@@ -1,5 +1,6 @@
 import {
   isDownloadSnapshotWithinLimits,
+  MAX_TRAY_ICO_BYTES,
   MAX_WEBVIEW_DOWNLOADS,
   MAX_WINDOW_ASPECT_RATIO,
   MAX_WINDOW_COORDINATE,
@@ -9,6 +10,7 @@ import {
   MIN_WINDOW_ASPECT_RATIO,
   MIN_WINDOW_COORDINATE,
   MIN_WINDOW_DIMENSION,
+  parseNativeIco,
   type WindowAttentionMode,
 } from "@bunaway/plugin-api/native";
 import {
@@ -184,6 +186,14 @@ const nativeTitle = z
 const windowTitle = nativeTitle.regex(new RegExp(WINDOW_TEXT_PATTERN, "u"));
 // An empty accessible title removes the annotation and restores the caption as the screen reader name.
 const accessibleTitle = windowTitle.or(z.literal(""));
+
+// Base64 ICO, the same input as the tray `setIcon`. The shared ICO validation rejects a malformed
+// directory or frame as INVALID_ARGUMENT before any native resource exists.
+const icoBytes = z
+  .string()
+  .min(4)
+  .max(Math.ceil(MAX_TRAY_ICO_BYTES / 3) * 4)
+  .refine((value) => parseNativeIco(value) !== undefined, "Invalid ICO.");
 
 const viewTarget = z.strictObject({
   view: z.string().regex(new RegExp(WINDOW_VIEW_NAME_PATTERN, "u")),
@@ -864,6 +874,14 @@ export const windowOperations = {
   "windows.setThumbnailToolTip": {
     input: windowTarget.extend({
       toolTip: accessibleTitle.nullable(),
+    }),
+    output: z.null(),
+  },
+  // A null ico removes the overlay and ignores description; otherwise description is the accessibility text.
+  "windows.setOverlayIcon": {
+    input: windowTarget.extend({
+      ico: icoBytes.nullable(),
+      description: accessibleTitle,
     }),
     output: z.null(),
   },
