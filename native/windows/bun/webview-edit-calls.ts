@@ -2,7 +2,10 @@ import type { ComHandler } from "./com.ts";
 
 /** How long a closed view waits for WebView2 to release an in-flight completion handler. */
 export const EDIT_COMPLETION_GRACE_MS = 5_000;
-/** Abandoned handlers above this count are reported as over the limit; abandonment still proceeds. */
+/**
+ * Abandoned handlers above this count make new editing calls skip as busy until native releases
+ * some; abandonment itself still proceeds so window cleanup always completes.
+ */
 export const MAX_ABANDONED_COMPLETIONS = 64;
 /** Editing calls one view may have in flight; further commands are skipped as busy. */
 export const MAX_IN_FLIGHT_EDIT_CALLS = 8;
@@ -69,6 +72,18 @@ export class EditCommandCalls<T extends EditCompletion> {
   /** Calls whose handler this view still owns, finished or not. */
   get size(): number {
     return this.calls.size;
+  }
+
+  /**
+   * Whether a new call should be skipped: this view has MAX_IN_FLIGHT_EDIT_CALLS calls tracked, or
+   * more than MAX_ABANDONED_COMPLETIONS abandoned handlers are still held process-wide. Judged on
+   * the current state, so call `prune` first (outside COM callbacks) to count released handlers out.
+   */
+  isBusy(): boolean {
+    return (
+      this.calls.size >= MAX_IN_FLIGHT_EDIT_CALLS ||
+      abandoned.length > MAX_ABANDONED_COMPLETIONS
+    );
   }
 
   /**

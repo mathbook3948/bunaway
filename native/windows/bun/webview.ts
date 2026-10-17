@@ -26,10 +26,7 @@ import {
   DevToolsStartError,
 } from "./webview-devtools.ts";
 import { WebViewDownloads } from "./webview-downloads.ts";
-import {
-  EditCommandCalls,
-  MAX_IN_FLIGHT_EDIT_CALLS,
-} from "./webview-edit-calls.ts";
+import { EditCommandCalls } from "./webview-edit-calls.ts";
 import {
   type EditCommandReport,
   editCommandEvaluateParameters,
@@ -956,8 +953,9 @@ export class WebView {
    * Returns false, doing nothing, while the WebView is closing or not ready. Completion is
    * observed on the next pump; a refused focus move, a refused command and protocol failures
    * after the call started (for example a navigating page) are reported through `report`. A
-   * failure to start the call throws. At most MAX_IN_FLIGHT_EDIT_CALLS commands run at once;
-   * further ones are reported as skipped (`busy`).
+   * failure to start the call throws. While this view tracks MAX_IN_FLIGHT_EDIT_CALLS calls, or
+   * more than MAX_ABANDONED_COMPLETIONS abandoned handlers are still held, a command starts no
+   * DevTools call and is reported as skipped (`busy`).
    */
   executeEditCommand(
     command: NativeMenuRole,
@@ -967,9 +965,10 @@ export class WebView {
       return false;
     }
     const webview = this.webview;
-    // Release finished calls first so only calls still pending count toward the limit.
+    // Release finished calls and reclaim abandoned handlers first, so only what is still pending
+    // counts toward the limits. This is the only prune of a command; the calls below skip it.
     this.editCalls.prune();
-    if (this.editCalls.size >= MAX_IN_FLIGHT_EDIT_CALLS) {
+    if (this.editCalls.isBusy()) {
       report.skipped("busy");
       return true;
     }
@@ -989,26 +988,31 @@ export class WebView {
       this.pasteClipboardText(webview, report);
       return true;
     }
-    this.editCalls.start(command, (isActive) =>
-      callDevToolsProtocolMethod(
-        webview,
-        "Runtime.evaluate",
-        JSON.stringify(editCommandEvaluateParameters(command)),
-        ({ hresult, json }) => {
-          // A late completion after cleanup or abandonment must touch no view or host state.
-          if (!isActive()) {
-            return;
-          }
-          const verdict = interpretEditCommandResult(hresult, json);
-          if (verdict.kind === "failed") {
-            report.failed(verdict.reason);
-          } else if (verdict.kind === "skipped") {
-            report.skipped(verdict.reason);
-          } else {
-            report.executed?.(verdict.result);
-          }
-        },
-      ),
+    this.editCalls.start(
+      command,
+      (isActive) =>
+        callDevToolsProtocolMethod(
+          webview,
+          "Runtime.evaluate",
+          JSON.stringify(editCommandEvaluateParameters(command)),
+          ({ hresult, json }) => {
+            // A late completion after cleanup or abandonment must touch no view or host state.
+            if (!isActive()) {
+              return;
+            }
+            const verdict = interpretEditCommandResult(hresult, json);
+            if (verdict.kind === "failed") {
+              report.failed(verdict.reason);
+            } else if (verdict.kind === "skipped") {
+              report.skipped(verdict.reason);
+            } else {
+              report.executed?.(verdict.result);
+            }
+          },
+        ),
+      {
+        prune: false,
+      },
     );
     return true;
   }
@@ -1020,8 +1024,9 @@ export class WebView {
    * once and inserts it with `Input.insertText`, which fires beforeinput (`insertText`) instead
    * of a paste event. A first `Runtime.evaluate` locates the focused document with the same
    * frame rules as other roles; the insertion starts from its completion, only while the view
-   * is live and open. Both calls are tracked, and the second one skips pruning because it
-   * starts inside a COM callback. Focus is checked before the text is inserted, so focus that
+   * is live and open and the limits of `executeEditCommand` still allow a call. Both calls are
+   * tracked, and neither prunes: the first follows the caller's prune and the second starts
+   * inside a COM callback. Focus is checked before the text is inserted, so focus that
    * moves to a cross-origin frame in between can still receive the text.
    */
   private pasteClipboardText(webview: Pointer, report: EditCommandReport) {
@@ -1036,62 +1041,72 @@ export class WebView {
       );
       return;
     }
-    this.editCalls.start("paste", (isActiveTarget) =>
-      callDevToolsProtocolMethod(
-        webview,
-        "Runtime.evaluate",
-        JSON.stringify(focusTargetEvaluateParameters()),
-        ({ hresult, json }) => {
-          if (!isActiveTarget() || this.closing) {
-            return;
-          }
-          const verdict = interpretEditCommandResult(hresult, json);
-          if (verdict.kind === "failed") {
-            report.failed(verdict.reason);
-            return;
-          }
-          if (verdict.kind === "skipped") {
-            report.skipped(verdict.reason);
-            return;
-          }
-          try {
-            this.editCalls.start(
-              "paste",
-              (isActiveInsert) =>
-                callDevToolsProtocolMethod(
-                  webview,
-                  "Input.insertText",
-                  JSON.stringify({
-                    text: clipboard.text,
-                  }),
-                  ({ hresult: inserted }) => {
-                    if (!isActiveInsert()) {
-                      return;
-                    }
-                    if (inserted < 0) {
-                      report.failed(`0x${(inserted >>> 0).toString(16)}`);
-                    } else {
-                      report.executed?.(verdict.result);
-                    }
-                  },
-                ),
-              {
-                prune: false,
-              },
-            );
-          } catch (error) {
-            // Starting inside a COM callback must not unwind into native code. The refused
-            // call's handler stays tracked and is released by a later prune.
-            report.failed(
-              error instanceof DevToolsStartError
-                ? `0x${(error.hresult >>> 0).toString(16)}`
-                : error instanceof Error
-                  ? error.message
-                  : String(error),
-            );
-          }
-        },
-      ),
+    this.editCalls.start(
+      "paste",
+      (isActiveTarget) =>
+        callDevToolsProtocolMethod(
+          webview,
+          "Runtime.evaluate",
+          JSON.stringify(focusTargetEvaluateParameters()),
+          ({ hresult, json }) => {
+            if (!isActiveTarget() || this.closing) {
+              return;
+            }
+            const verdict = interpretEditCommandResult(hresult, json);
+            if (verdict.kind === "failed") {
+              report.failed(verdict.reason);
+              return;
+            }
+            if (verdict.kind === "skipped") {
+              report.skipped(verdict.reason);
+              return;
+            }
+            // Other commands may have filled the limits since the first call started.
+            if (this.editCalls.isBusy()) {
+              report.skipped("busy");
+              return;
+            }
+            try {
+              this.editCalls.start(
+                "paste",
+                (isActiveInsert) =>
+                  callDevToolsProtocolMethod(
+                    webview,
+                    "Input.insertText",
+                    JSON.stringify({
+                      text: clipboard.text,
+                    }),
+                    ({ hresult: inserted }) => {
+                      if (!isActiveInsert()) {
+                        return;
+                      }
+                      if (inserted < 0) {
+                        report.failed(`0x${(inserted >>> 0).toString(16)}`);
+                      } else {
+                        report.executed?.(verdict.result);
+                      }
+                    },
+                  ),
+                {
+                  prune: false,
+                },
+              );
+            } catch (error) {
+              // Starting inside a COM callback must not unwind into native code. The refused
+              // call's handler stays tracked and is released by a later prune.
+              report.failed(
+                error instanceof DevToolsStartError
+                  ? `0x${(error.hresult >>> 0).toString(16)}`
+                  : error instanceof Error
+                    ? error.message
+                    : String(error),
+              );
+            }
+          },
+        ),
+      {
+        prune: false,
+      },
     );
   }
 

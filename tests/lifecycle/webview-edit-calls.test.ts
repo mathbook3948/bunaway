@@ -4,6 +4,7 @@ import {
   EDIT_COMPLETION_GRACE_MS,
   EditCommandCalls,
   MAX_ABANDONED_COMPLETIONS,
+  MAX_IN_FLIGHT_EDIT_CALLS,
 } from "#native/windows/bun/webview-edit-calls";
 
 /** Stand-in for a COM handler: `refs` is 2 while native holds it, 1 once released. */
@@ -148,20 +149,50 @@ test("a late invocation before cleanup still reports its result", () => {
   ]);
 });
 
-test("abandonment past the global limit is reported but never refused", () => {
+test("abandonment past the global limit completes cleanup, then new calls are busy until reclaim", () => {
   const f = fixture();
   const room = MAX_ABANDONED_COMPLETIONS - abandonedCompletionCount();
-  for (let index = 0; index < room + 2; index++) {
-    f.start("copy", []);
-  }
+  const handlers: FakeHandler[] = [];
   const overLimit: boolean[] = [];
-  expect(
+  const settleAll = () =>
     f.calls.settle(EDIT_COMPLETION_GRACE_MS + 1, (_command, _total, over) =>
       overLimit.push(over),
-    ),
-  ).toBe(true);
-  expect(overLimit.filter(Boolean)).toHaveLength(2);
+    );
+  for (let index = 0; index < room + 2; index++) {
+    handlers.push(f.start("copy", []));
+    // Settle in batches so the view stays under its own in-flight limit.
+    if (f.calls.size === MAX_IN_FLIGHT_EDIT_CALLS) {
+      expect(settleAll()).toBe(true);
+    }
+  }
+  expect(settleAll()).toBe(true);
+  expect(overLimit.at(-1)).toBe(true);
   expect(f.abandoned).toHaveLength(room + 2);
+  expect(abandonedCompletionCount()).toBeGreaterThan(MAX_ABANDONED_COMPLETIONS);
+  expect(f.calls.isBusy()).toBe(true);
+  // Native releasing handlers lets the next prune reclaim them and clears the busy state.
+  for (const handler of handlers) {
+    handler.refs = 1;
+  }
+  f.calls.prune();
+  expect(abandonedCompletionCount()).toBeLessThanOrEqual(
+    MAX_ABANDONED_COMPLETIONS,
+  );
+  expect(f.calls.isBusy()).toBe(false);
+});
+
+test("a view with the maximum number of tracked calls is busy until some are released", () => {
+  const f = fixture();
+  const handlers: FakeHandler[] = [];
+  for (let index = 0; index < MAX_IN_FLIGHT_EDIT_CALLS - 1; index++) {
+    handlers.push(f.start("copy", []));
+  }
+  expect(f.calls.isBusy()).toBe(false);
+  const last = f.start("copy", []);
+  expect(f.calls.isBusy()).toBe(true);
+  last.refs = 1;
+  f.calls.prune();
+  expect(f.calls.isBusy()).toBe(false);
 });
 
 test("an abandoned handler is reclaimed once native has released it", () => {

@@ -177,24 +177,24 @@ function clearClipboard(owner: bigint): void {
 }
 
 /**
- * Test page: a top textarea and a same-origin srcdoc iframe with its own textarea. Capture-phase
+ * Test page: a top textarea and a same-origin iframe with its own textarea. Capture-phase
  * listeners on both windows count the events a page could use to block an editing command.
  * The keydown listener also calls preventDefault, so any command routed through a key event
- * would be suppressed and show up as a non-zero keydown count.
+ * would be suppressed and show up as a non-zero keydown count. Frame documents are separate
+ * app assets because the host cancels frame navigation outside the app origins, which includes
+ * `about:srcdoc`.
  */
+function frameHtml(id: string): string {
+  return `<!doctype html><textarea id="${id}" rows="4" cols="40"></textarea>`;
+}
+
 function pageHtml(): string {
-  const attribute = (html: string) =>
-    html.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
-  const frameHtml = (id: string) =>
-    attribute(
-      `<!doctype html><textarea id="${id}" rows="4" cols="40"></textarea>`,
-    );
   // `f` shares the page origin; `x` is sandboxed without allow-same-origin, so its document is
   // cross-origin to the page and `contentDocument` is null.
   return `<!doctype html><title>Menu roles</title>
   <textarea id="a" rows="4" cols="40"></textarea>
-  <iframe id="f" srcdoc="${frameHtml("b")}"></iframe>
-  <iframe id="x" sandbox srcdoc="${frameHtml("c")}"></iframe>
+  <iframe id="f" src="frame-b.html"></iframe>
+  <iframe id="x" sandbox src="frame-c.html"></iframe>
   <script>
     window.counts = { keydown: 0, beforeinput: 0, copy: 0, cut: 0, paste: 0, selectstart: 0 };
     window.inputTypes = [];
@@ -212,7 +212,7 @@ function pageHtml(): string {
       }
     };
     watch(window);
-    // The srcdoc document replaces the initial about:blank window, so the listeners must attach
+    // The frame document replaces the initial about:blank window, so the listeners must attach
     // to the loaded one. The test calls this until it reports true; it never blocks the page.
     window.watchFrame = () => {
       if (window.frameWatched) {
@@ -247,6 +247,8 @@ await mkdir(resolve(assets, "web"), {
   recursive: true,
 });
 await writeFile(resolve(assets, "web/index.html"), pageHtml());
+await writeFile(resolve(assets, "web/frame-b.html"), frameHtml("b"));
+await writeFile(resolve(assets, "web/frame-c.html"), frameHtml("c"));
 hr(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
 const windows = new Windows(() => {});
 
@@ -562,7 +564,7 @@ try {
     return observed;
   };
 
-  // The iframe element exists before its srcdoc document is loaded; attach the page's event
+  // The iframe element exists before its document is loaded; attach the page's event
   // counters once the same-origin frame has its textarea. The sandboxed frame is not awaited.
   await waitForPage(`window.watchFrame()`, "Same-origin test frame");
 
