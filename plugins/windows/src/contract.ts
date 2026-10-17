@@ -180,6 +180,8 @@ const nativeTitle = z
     "Window titles cannot exceed 1024 UTF-16 code units.",
   );
 const windowTitle = nativeTitle.regex(new RegExp(WINDOW_TEXT_PATTERN, "u"));
+// An empty accessible title removes the annotation and restores the caption as the screen reader name.
+const accessibleTitle = windowTitle.or(z.literal(""));
 
 const viewTarget = z.strictObject({
   view: z.string().regex(new RegExp(WINDOW_VIEW_NAME_PATTERN, "u")),
@@ -1024,6 +1026,16 @@ export const windowOperations = {
   "windows.getTitle": {
     input: windowTarget,
     output: nativeTitle,
+  },
+  "windows.setAccessibleTitle": {
+    input: windowTarget.extend({
+      title: accessibleTitle,
+    }),
+    output: z.null(),
+  },
+  "windows.getAccessibleTitle": {
+    input: windowTarget,
+    output: windowTitle.nullable(),
   },
   "windows.setResizable": {
     input: windowTarget.extend({

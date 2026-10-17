@@ -462,6 +462,17 @@ export function createOperations(
           throw unsupportedTitle();
         }
         return window.getTitle();
+      case "windows.setAccessibleTitle":
+        if (!window.setAccessibleTitle) {
+          throw unsupportedTitle();
+        }
+        window.setAccessibleTitle(call.payload.title);
+        break;
+      case "windows.getAccessibleTitle":
+        if (!window.getAccessibleTitle) {
+          throw unsupportedTitle();
+        }
+        return window.getAccessibleTitle();
       case "windows.setResizable":
         if (!window.setResizable) {
           throw unsupportedMovement();
