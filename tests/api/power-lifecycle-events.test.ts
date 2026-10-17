@@ -9,13 +9,17 @@ import { watchPowerStatus } from "#plugins/power/src/platforms/windows-status-ev
 
 /** Fake system event service that records subscription options and published events. */
 function fakeSystemEvents() {
-  let receive: ((signal: NativeSystemSignal) => void) | undefined;
+  const receivers: ((signal: NativeSystemSignal) => void)[] = [];
+  let failSessions = false;
   const published: unknown[][] = [];
   const options: unknown[] = [];
   let unsubscribed = 0;
   const systemEvents: Pick<NativeSystemEvents, "subscribe" | "publish"> = {
     subscribe(callback, subscribeOptions) {
-      receive = callback;
+      if (failSessions && subscribeOptions?.sessionNotifications) {
+        throw new Error("RPC_S_INVALID_BINDING");
+      }
+      receivers.push(callback);
       options.push(subscribeOptions);
       return () => {
         unsubscribed++;
@@ -29,7 +33,14 @@ function fakeSystemEvents() {
     systemEvents,
     published,
     options,
-    emit: (signal: NativeSystemSignal) => receive?.(signal),
+    emit: (signal: NativeSystemSignal) => {
+      for (const receive of receivers) {
+        receive(signal);
+      }
+    },
+    failSessionRegistration: () => {
+      failSessions = true;
+    },
     unsubscribed: () => unsubscribed,
   };
 }
@@ -60,7 +71,9 @@ test("lifecycle signals map to empty power events under the status read grant", 
   for (const [event] of fake.published) {
     expect(Object.keys(powerEvents)).toContain(event as string);
   }
+  // Only the lock subscription opts in to session notifications.
   expect(fake.options).toEqual([
+    undefined,
     {
       sessionNotifications: true,
     },
@@ -85,10 +98,41 @@ test("other signals are ignored and release stops publishing and is repeatable",
   fake.emit("suspend");
   fake.emit("sessionLocked");
   expect(fake.published).toEqual([]);
+  expect(fake.unsubscribed()).toBe(2);
+});
+
+test("a failing session registration keeps suspend and resume events and logs the failure", () => {
+  const fake = fakeSystemEvents();
+  fake.failSessionRegistration();
+  const logged: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  let release: (() => void) | undefined;
+  try {
+    release = watchPowerLifecycle(fake.systemEvents);
+  } finally {
+    console.error = original;
+  }
+  expect(logged).toHaveLength(1);
+  for (const signal of [
+    "suspend",
+    "sessionLocked",
+    "resume",
+  ] as const) {
+    fake.emit(signal);
+  }
+  expect(fake.published.map(([event]) => event)).toEqual([
+    "power.suspended",
+    "power.resumed",
+  ]);
+  release?.();
   expect(fake.unsubscribed()).toBe(1);
 });
 
-test("a resume publishes power.resumed before a changed power.statusChanged in subscription order", () => {
+// Implementation detail, not a public promise: the system event service does not guarantee subscriber order.
+test("the adapter subscribes lifecycle before status so a resume reaches power.resumed first in this host", () => {
   const callbacks: ((signal: NativeSystemSignal) => void)[] = [];
   const published: string[] = [];
   const systemEvents: Pick<NativeSystemEvents, "subscribe" | "publish"> = {

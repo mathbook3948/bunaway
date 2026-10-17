@@ -20,7 +20,7 @@ export class WindowsPower {
     systemEvents?: Pick<NativeSystemEvents, "subscribe" | "publish">,
   ) {
     try {
-      // Subscribe lifecycle first so one resume publishes power.resumed before power.statusChanged.
+      // Lifecycle subscribes first, so hosts that call subscribers in order publish power.resumed first.
       this.releaseLifecycleEvents = watchPowerLifecycle(systemEvents);
       this.releaseStatusEvents = watchPowerStatus(
         () => this.native.status(),

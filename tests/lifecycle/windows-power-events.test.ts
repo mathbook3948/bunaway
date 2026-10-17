@@ -101,6 +101,7 @@ test.skipIf(process.platform !== "win32")(
         const window = h.hwnd;
         expect(h.windowExists(window)).toBe(true);
         h.broadcast(window);
+        const beforeResume = h.published.length;
         h.broadcast(window, PBT_APMRESUMEAUTOMATIC);
         const after = JSON.stringify(reference.status());
         // The resume broadcast also publishes the payload-free lifecycle event, before any status event.
@@ -112,7 +113,8 @@ test.skipIf(process.platform !== "win32")(
           expect(operation).toBe("power.getStatus");
           expect(statusSchema.safeParse(payload).success).toBe(true);
         }
-        expect(h.published[0]).toEqual([
+        // The first entry added by the resume broadcast is the lifecycle event, whatever the first broadcast did.
+        expect(h.published[beforeResume]).toEqual([
           "power.resumed",
           {},
           "power.getStatus",
