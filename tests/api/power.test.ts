@@ -401,12 +401,16 @@ test("power.statusChanged portable schema accepts exactly the payloads of status
   }
 });
 
-test("power.statusChanged is declared by the plugin and delivered only to routes holding the status read grant", async () => {
+test("power events are declared by the plugin and delivered only to routes holding the status read grant", async () => {
   const { publishSystemEvent } = await import(
     "#native/windows/bun/system-events"
   );
   expect(Object.keys(power._definition.events ?? {})).toEqual([
     "power.statusChanged",
+    "power.suspended",
+    "power.resumed",
+    "power.sessionLocked",
+    "power.sessionUnlocked",
   ]);
   const registry = new NativeRegistry([
     power._definition,
@@ -463,4 +467,33 @@ test("power.statusChanged is declared by the plugin and delivered only to routes
       status,
     ],
   ]);
+  // Lifecycle events carry an empty payload under the same read grant.
+  for (const event of [
+    "power.suspended",
+    "power.resumed",
+    "power.sessionLocked",
+    "power.sessionUnlocked",
+  ]) {
+    delivered.length = 0;
+    publishSystemEvent(
+      registry,
+      recipients,
+      event,
+      {},
+      "power.getStatus",
+      (target, name, payload) =>
+        delivered.push([
+          target,
+          name,
+          payload,
+        ]),
+    );
+    expect(delivered).toEqual([
+      [
+        recipients[0],
+        event,
+        {},
+      ],
+    ]);
+  }
 });

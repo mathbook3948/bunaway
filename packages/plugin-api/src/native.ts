@@ -479,6 +479,22 @@ export type NativeWindow = {
           value: number;
         },
   ): void;
+  /**
+   * Show only `region` of this window's client area in its taskbar thumbnail, or all of it for `null`.
+   * Units are 96 DPI logical pixels; parts beyond the client area are clamped away, and a region
+   * that is then empty throws INVALID_ARGUMENT. While minimized the client size is unknown, so the region is not clamped.
+   * Throws BUSY until its taskbar button exists. Windows only.
+   */
+  setThumbnailClip?(
+    region: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    } | null,
+  ): void;
+  /** Set this window's taskbar thumbnail tooltip, or restore the default for `null` or an empty string. Throws BUSY like `setTaskbarProgress`. Windows only. */
+  setThumbnailToolTip?(toolTip: string | null): void;
   /** Sets or clears the confirmation shown before a user closes the window. */
   setCloseConfirmation(message: string | null): void;
 };

@@ -99,6 +99,10 @@ Explorer와 compiled helper로 기존 기본 실행, 지정 앱의 파일과 URL
 URL fragment 따옴표, 앱 Job 밖의 실행과 앱 종료 후 생존을 확인합니다.
 `mise run host:windows`가 이 네이티브 검사를 실행합니다. Linux에서는 네이티브 검사를 건너뜁니다.
 
+## 최근 문서
+
+Windows에서 `opener.addRecentDocument(path)`는 기존 파일 하나를 사용자의 셸 최근 항목에 추가하고(`SHAddToRecentDocs(SHARD_PATHW)`), `opener.clearRecentDocuments()`는 `SHAddToRecentDocs(NULL)`로 **사용자의 셸 최근 항목 전체**를 지웁니다. 다른 앱과 사용자가 만든 항목도 지워지며 앱 범위로 제한할 수 없으므로 `opener.clearRecentDocuments` 권한은 신중히 허용하세요. 점프 목록 연결은 보장하지 않으며 AppUserModelID 설정 이후의 작업입니다. Host operation은 `opener.addRecentDocument`(입력 `{ path: string }`)와 `opener.clearRecentDocuments`(입력 `{}`)이며 권한 이름은 같고 결과는 `null`입니다. 추가는 다른 파일 작업과 같은 경로 검사와 핸들 고정을 적용하지만, 고정은 `SHAddToRecentDocs`가 반환될 때까지만 유지되고 셸이 이후에 파일을 읽을 때의 교체는 막지 못합니다. Electron과 같이 opener의 I/O STA에서 직접 호출하며(`windows-recent.ts`), 호출 뒤 프로세스에 MTA가 남을 수 있고 opener는 그 상태를 지원합니다. 전용 STA 스레드로 격리해도 셸이 MTA를 남겨서 그 방식은 쓰지 않습니다. 오류는 `INVALID_ARGUMENT`, `PERMISSION_DENIED`, dispose 뒤 호출과 시작 전에 이미 중단된 호출의 `CANCELLED`입니다. 호출은 동기이며 중단할 수 없어 취소와 기한 초과는 전달한 요청을 되돌리지 않습니다. 이 API는 결과를 반환하지 않으므로 성공은 요청 전달을 뜻합니다. 목록 조회는 공식 API가 없고 Recent 폴더의 `.lnk`가 앱별이 아니므로 지원하지 않습니다. macOS는 `UNSUPPORTED`입니다.
+
 ## 휴지통
 
 `opener.trashFile(path: string, options?: NativeInvokeOptions): Promise<null>`은 기존 파일을 Windows 휴지통으로 보냅니다. Host operation과 권한은 `opener.trashFile`, 입력은 `{ path: string }`입니다. 화면 직접 호출은 뷰의 `commands`에 `plugin.opener.trashFile`도 허용합니다. 성공한 `null`은 OS가 휴지통의 새 항목을 반환했다는 뜻입니다. 복원 API는 제공하지 않습니다.

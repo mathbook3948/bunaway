@@ -6,6 +6,7 @@ import { type HostContext, parsePolicy } from "@bunaway/protocol";
 import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
 import {
   appName,
+  desktopAppPaths,
   readPackageVersions,
 } from "@bunaway/runtime-bun/app-metadata";
 import {
@@ -94,6 +95,7 @@ export async function verifyWindowsPackage(
     "Invalid app id",
   );
   const policy = parsePolicy(JSON.stringify(manifest.policy));
+  const executablePath = await realpath(process.execPath);
   const specs = config.windows ?? [
     {
       view: config.view,
@@ -108,12 +110,14 @@ export async function verifyWindowsPackage(
       name: appName(config.title, config.appId),
       identifier: config.appId,
       ...(await readPackageVersions(root)),
+      isPackaged: isCompiledApp,
+      paths: desktopAppPaths(root, executablePath),
     },
     app: {
       id: config.appId,
       launch: {
         mode: isCompiledApp ? "packaged" : "development",
-        executablePath: await realpath(process.execPath),
+        executablePath,
         args: isCompiledApp
           ? []
           : [

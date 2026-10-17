@@ -67,7 +67,11 @@ async function harness() {
     windowExists: (window: bigint) => user.symbols.IsWindow(window) !== 0,
     /** Deliver one power broadcast to the notification window and run plugin callbacks. */
     broadcast(window: bigint, code = PBT_APMPOWERSTATUSCHANGE) {
-      driver.symbols.SendMessageW(window, WM_POWERBROADCAST, code, 0n);
+      this.send(window, WM_POWERBROADCAST, code);
+    },
+    /** Deliver any window message with a scalar wparam, then run plugin callbacks. */
+    send(window: bigint, message: number, wparam: bigint) {
+      driver.symbols.SendMessageW(window, message, wparam, 0n);
       windows.pump();
       service.flush();
     },
@@ -97,16 +101,32 @@ test.skipIf(process.platform !== "win32")(
         const window = h.hwnd;
         expect(h.windowExists(window)).toBe(true);
         h.broadcast(window);
+        const beforeResume = h.published.length;
         h.broadcast(window, PBT_APMRESUMEAUTOMATIC);
         const after = JSON.stringify(reference.status());
-        for (const [event, payload, operation] of h.published) {
+        // The resume broadcast also publishes the payload-free lifecycle event.
+        const statusEvents = h.published.filter(
+          ([event]) => event === "power.statusChanged",
+        );
+        for (const [event, payload, operation] of statusEvents) {
           expect(event).toBe("power.statusChanged");
           expect(operation).toBe("power.getStatus");
           expect(statusSchema.safeParse(payload).success).toBe(true);
         }
+        // Relative order against power.statusChanged is not a contract, so only count the event.
+        const resumed = h.published
+          .slice(beforeResume)
+          .filter(([event]) => event === "power.resumed");
+        expect(resumed).toEqual([
+          [
+            "power.resumed",
+            {},
+            "power.getStatus",
+          ],
+        ]);
         // Without a genuine change between the surrounding reads, the broadcast must stay silent.
         if (before === after) {
-          expect(h.published).toEqual([]);
+          expect(statusEvents).toEqual([]);
         }
         expect(h.failures).toEqual([]);
       } finally {
@@ -239,5 +259,87 @@ test.skipIf(process.platform !== "win32")(
     } finally {
       h.dispose();
     }
+  },
+);
+
+const WM_WTSSESSION_CHANGE = 0x02b1;
+const PBT_APMSUSPEND = 0x04n;
+const WTS_SESSION_LOCK = 7n;
+const WTS_SESSION_UNLOCK = 8n;
+const WTS_SESSION_LOGON = 5n;
+
+test.skipIf(process.platform !== "win32")(
+  "synthetic suspend, resume and WTS lock messages publish ordered empty lifecycle events until released while the window stays alive",
+  async () => {
+    const { watchPowerLifecycle } = await import(
+      "#plugins/power/src/platforms/windows-lifecycle-events"
+    );
+    const h = await harness();
+    try {
+      const release = watchPowerLifecycle(h.service);
+      // A second subscriber keeps the notification window alive after the lifecycle release.
+      const keepAlive = h.service.subscribe(() => {});
+      const window = h.hwnd;
+      h.broadcast(window, PBT_APMSUSPEND);
+      h.broadcast(window, PBT_APMRESUMEAUTOMATIC);
+      h.send(window, WM_WTSSESSION_CHANGE, WTS_SESSION_LOCK);
+      h.send(window, WM_WTSSESSION_CHANGE, WTS_SESSION_UNLOCK);
+      // A status broadcast and an unrelated WTS code are not lifecycle events.
+      h.broadcast(window);
+      h.send(window, WM_WTSSESSION_CHANGE, WTS_SESSION_LOGON);
+      expect(h.published).toEqual(
+        [
+          "power.suspended",
+          "power.resumed",
+          "power.sessionLocked",
+          "power.sessionUnlocked",
+        ].map((event) => [
+          event,
+          {},
+          "power.getStatus",
+        ]),
+      );
+      release?.();
+      release?.();
+      expect(h.windowExists(window)).toBe(true);
+      const publishedBefore = h.published.length;
+      h.broadcast(window, PBT_APMSUSPEND);
+      h.broadcast(window, PBT_APMRESUMEAUTOMATIC);
+      h.send(window, WM_WTSSESSION_CHANGE, WTS_SESSION_LOCK);
+      expect(h.published).toHaveLength(publishedBefore);
+      keepAlive();
+      expect(h.windowExists(window)).toBe(false);
+      expect(h.failures).toEqual([]);
+    } finally {
+      h.dispose();
+    }
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
+  "a failing status subscription rolls back the lifecycle subscriptions and releases native resources",
+  async () => {
+    const { WindowsPower } = await import(
+      "#plugins/power/src/platforms/windows"
+    );
+    let subscriptions = 0;
+    let released = 0;
+    const systemEvents = {
+      subscribe: () => {
+        // Lifecycle takes two subscriptions first, the status watcher is the third.
+        if (++subscriptions === 3) {
+          throw new Error("status subscription failed");
+        }
+        return () => {
+          released++;
+        };
+      },
+      publish: () => {},
+    };
+    expect(() => new WindowsPower(systemEvents)).toThrow(
+      "status subscription failed",
+    );
+    expect(subscriptions).toBe(3);
+    expect(released).toBe(2);
   },
 );

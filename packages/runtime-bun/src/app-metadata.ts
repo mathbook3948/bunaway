@@ -15,7 +15,28 @@ export type AppMetadata = {
   readonly version: string | null;
   /** Package manifest `framework.version`, or `null` when absent. */
   readonly framework: string | null;
+  /** Whether the host runs a compiled app; mobile and process backends are always bundled. */
+  readonly isPackaged: boolean;
+  /** App locations, or `null` for runtimes without a file system package. */
+  readonly paths: AppInfo["paths"];
 };
+
+/**
+ * Builds desktop `AppInfo.paths` from the verified package root and the real
+ * executable path. The root doubles as the resources directory: Windows keeps
+ * resources beside the executable, macOS packaged apps pass `Contents/Resources`
+ * as the root, and development launches use the build output directory.
+ */
+export function desktopAppPaths(
+  root: string,
+  executable: string,
+): NonNullable<AppInfo["paths"]> {
+  return {
+    package: root,
+    executable,
+    resources: root,
+  };
+}
 
 /**
  * Whether `value` is acceptable as an `AppInfo` string: non-empty and at most
@@ -117,15 +138,23 @@ export function toAppInfo(
   },
 ): AppInfo {
   // The type says present; JavaScript callers and stale hosts can still omit it.
-  if (!metadata || typeof metadata !== "object") {
+  // Metadata from before isPackaged and paths existed lacks both fields.
+  if (
+    !metadata ||
+    typeof metadata !== "object" ||
+    typeof metadata.isPackaged !== "boolean" ||
+    metadata.paths === undefined
+  ) {
     throw new Error(
-      "Missing app metadata: the host must pass the app name, identifier and versions.",
+      "Missing app metadata: the host must pass the app name, identifier, versions, isPackaged and paths.",
     );
   }
   return {
     name: metadata.name,
     identifier: metadata.identifier,
     version: metadata.version,
+    isPackaged: metadata.isPackaged,
+    paths: metadata.paths,
     runtime: {
       framework: metadata.framework,
       bun: runtime.bun,
