@@ -5,7 +5,8 @@ Bun workspaces에는 `docs/site`, `packages/*`, `plugins/*`와
 네이티브 코드, 번들된 Bun 배포물, 템플릿과 예제는 독립 영역이다.
 
 WebView 연결은 Windows WebView2가 `native/windows/bun/webview.ts`, macOS WKWebView가
-`native/macos`, SDK 전송 어댑터가 `packages/client-sdk/src/webview.ts`에 있다.
+`native/macos/bun/webview.ts`, SDK 전송 어댑터가 `packages/client-sdk/src/webview.ts`에 있다.
+기본 연결의 브리지 선택과 Transport 초기화는 `packages/client-sdk/src/default-client.ts`가 맡는다.
 렌더러는 앱 명령의 의미를 알지 못하고 호스트의 렌더러 계약만 따른다.
 
 선택 네이티브 기능은 [ADR 0013](../decisions/0013-optional-native-plugins.md)에 따라
