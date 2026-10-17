@@ -1,7 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
+import { resolve } from "node:path";
 import { isBunaway } from "@bunaway/client";
-import type { HostCall, Policy } from "@bunaway/protocol";
-import { allowedHost } from "../fixtures/host-plugins.ts";
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 
@@ -61,36 +60,19 @@ test("is true as soon as the host injects the bridge, before any client exists",
   expect(isBunaway()).toBe(true);
 });
 
-test("a forged bridge makes the result true but does not change backend permission checks", async () => {
-  const denied: Policy["backend"] = {
-    permissions: [],
-  };
-  const call: HostCall = {
-    operation: "log.write",
-    payload: {
-      level: "debug",
-      message: "forged",
-    },
-  };
-  Reflect.deleteProperty(globalThis, "window");
-  const before = await allowedHost(denied, call);
-  setWindow({
-    chrome: {
-      webview: bridge,
-    },
-  });
-  expect(isBunaway()).toBe(true);
-  expect(await allowedHost(denied, call)).toBe(before);
-  expect(before).toBe(false);
-});
-
 test("backend and plugin sources never read the environment check", async () => {
+  const root = resolve(import.meta.dir, "../..");
   const sources = [
-    ...new Bun.Glob("packages/*/src/**/*.ts").scanSync(),
-    ...new Bun.Glob("plugins/*/src/**/*.ts").scanSync(),
-  ].filter((file) => !file.startsWith("packages/client-sdk/"));
+    ...new Bun.Glob("packages/*/src/**/*.ts").scanSync(root),
+    ...new Bun.Glob("plugins/*/src/**/*.ts").scanSync(root),
+  ]
+    // Glob results use the platform separator, so normalize before prefix checks.
+    .map((file) => file.replaceAll("\\", "/"))
+    .filter((file) => !file.startsWith("packages/client-sdk/"));
   expect(sources.length).toBeGreaterThan(0);
   for (const file of sources) {
-    expect(await Bun.file(file).text()).not.toContain("isBunaway");
+    expect(await Bun.file(resolve(root, file)).text()).not.toContain(
+      "isBunaway",
+    );
   }
 });

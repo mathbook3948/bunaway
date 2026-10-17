@@ -269,7 +269,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 앱 패키지 경로, 실행 파일, 리소스 경로와 packaged/dev 상태를 조회한다.
 - [x] 일반 브라우저와 bunaway 앱 WebView 실행 여부를 구분하는 공개 기능을 제공한다. [T-core-live]의 `isTauri`에 대응하는 요구다.
   `@bunaway/client`의 동기 함수 `isBunaway()`가 호스트 브리지(`window.chrome.webview`) 유무로 판별하며, SSR과 일반 브라우저는 `false`, 앱 WebView는 문서 첫 스크립트에서도 `true`다.
-  단위 테스트(`tests/api/is-bunaway.test.ts`)와 Windows host 회귀(`tests/fixtures/desktop/host/web/app.js`)로 검증하며, 결과는 위조 가능하므로 권한 판단에 쓰지 않고 백엔드 검사가 이 값에 의존하지 않음을 테스트한다.
+  단위 테스트(`tests/api/is-bunaway.test.ts`)와 Windows host 회귀(`tests/fixtures/desktop/host/web/app.js`)로 검증하며, 결과는 위조 가능하므로 권한 판단에 쓰지 않는다고 문서화하고, backend와 plugin 소스가 `isBunaway`를 참조하지 않음을 소스 스캔 테스트로 확인한다.
 - [ ] 앱 전체 포커스와 활성 상태를 제공한다. 창 생성은 `windows.lifecycle`로 제공하며 앱 전체 포커스와 활성 상태가 남았다.
 - [ ] 단일 인스턴스의 추가 데이터 전달과 lock 상태 조회, 해제 필요성을 결정한다.
 - [ ] 앱 ready 전에 들어온 외부 활성화 요청과 종료 요청의 순서를 공개 계약으로 정한다.
