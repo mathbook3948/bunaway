@@ -49,8 +49,12 @@ test("thumbnail settings wait for the button, restore after recreation and keep 
     bigint,
     ThumbnailClip,
   ][] = [];
+  let failing = false;
   const controller = new TaskbarSettingController<ThumbnailClip>(
     (window, region) => {
+      if (failing) {
+        throw new Error("native failure");
+      }
       calls.push([
         window,
         region,
@@ -72,8 +76,17 @@ test("thumbnail settings wait for the button, restore after recreation and keep 
     1n,
     null,
   ]);
+  // A rejected request must not replace the setting restored after button recreation.
+  failing = true;
+  expect(() => controller.set(1n, region)).toThrow("native failure");
+  failing = false;
+  controller.buttonCreated(1n);
+  expect(calls.at(-1)).toEqual([
+    1n,
+    null,
+  ]);
   controller.forget(1n);
   expect(() => controller.set(1n, region)).toThrow("not ready");
   controller.buttonCreated(1n);
-  expect(calls).toHaveLength(3);
+  expect(calls).toHaveLength(4);
 });

@@ -2879,10 +2879,10 @@ export class Windows {
     this.thumbnailClip.set(window, region);
   }
 
-  /** Set the taskbar thumbnail tooltip, or restore the window title for null. */
+  /** Set the taskbar thumbnail tooltip, or restore the window title for null or an empty string. */
   setThumbnailToolTip(window: bigint, toolTip: string | null): void {
     assert(this.windows.has(window), "Taskbar target is not a live window");
-    this.thumbnailToolTip.set(window, toolTip);
+    this.thumbnailToolTip.set(window, toolTip || null);
   }
 
   private applyThumbnailClip(window: bigint, region: ThumbnailClip): void {
@@ -2890,8 +2890,9 @@ export class Windows {
       this.taskbar.setThumbnailClip(window, null);
       return;
     }
-    const rect = physicalRect(region, this.getDpi(window));
-    const client = this.clientSize(window);
+    const dpi = this.getDpi(window);
+    const rect = physicalRect(region, dpi);
+    const client = this.thumbnailClientSize(window, dpi);
     if (rect.right > client.width || rect.bottom > client.height) {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
@@ -2899,5 +2900,24 @@ export class Windows {
       });
     }
     this.taskbar.setThumbnailClip(window, rect);
+  }
+
+  /**
+   * Physical client size to validate a thumbnail clip against. A minimized HWND reports an empty
+   * client rectangle, yet its taskbar thumbnail is still shown, so use the restored normal area.
+   */
+  private thumbnailClientSize(window: bigint, dpi: number): ClientSize {
+    if (!user.symbols.IsIconic(window)) {
+      return this.clientSize(window);
+    }
+    const dips = this.clientSizeFromPlacement(
+      window,
+      this.getPlacement(window),
+      dpi,
+    );
+    return {
+      width: physicalPixels(dips.width, dpi),
+      height: physicalPixels(dips.height, dpi),
+    };
   }
 }

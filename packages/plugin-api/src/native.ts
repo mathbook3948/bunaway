@@ -491,7 +491,7 @@ export type NativeWindow = {
       height: number;
     } | null,
   ): void;
-  /** Set this window's taskbar thumbnail tooltip, or restore the default for `null`. Throws BUSY like `setTaskbarProgress`. Windows only. */
+  /** Set this window's taskbar thumbnail tooltip, or restore the default for `null` or an empty string. Throws BUSY like `setTaskbarProgress`. Windows only. */
   setThumbnailToolTip?(toolTip: string | null): void;
   /** Sets or clears the confirmation shown before a user closes the window. */
   setCloseConfirmation(message: string | null): void;

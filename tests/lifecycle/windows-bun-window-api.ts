@@ -1154,6 +1154,23 @@ if (!process.argv.includes("--child")) {
             }),
             null,
           );
+          // A minimized HWND has an empty client rectangle; the clip is validated against its restored area.
+          await windows.minimize(thumbnailTarget);
+          assert.equal(await windows.isMinimized(thumbnailTarget), true);
+          assert.equal(
+            await windows.setThumbnailClip({
+              ...thumbnailTarget,
+              region: {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 80,
+              },
+            }),
+            null,
+          );
+          await windows.restore(thumbnailTarget);
+          assert.equal(await windows.isMinimized(thumbnailTarget), false);
           await assert.rejects(
             windows.setThumbnailClip({
               ...thumbnailTarget,
