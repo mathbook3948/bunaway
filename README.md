@@ -123,7 +123,9 @@ UI 컴포넌트가 사라지면 `client.listen`이 반환한 `unlisten`으로 �
 코드 포맷은 루트 `biome.json`을 따른다. 들여쓰기는 공백 2칸, 줄 너비는 80이며
 JS/TS 객체와 배열은 여러 줄로 펼친다. JSX 속성도 여러 줄로 배치한다.
 조건문과 반복문에는 본문이 한 문장이어도 중괄호를 쓴다. 중첩 삼항 연산자와
-non-null 단언은 린트가 거부하고 새 소스 파일 이름은 kebab-case여야 한다.
+non-null 단언, 인지 복잡도 25를 넘는 함수는 린트가 거부하고 새 소스 파일 이름은
+kebab-case여야 한다. 복잡도 규칙의 예외 목록(`biome.json` overrides)은 기존 파일만
+담으며 줄어들기만 한다.
 문서와 소스 텍스트, 커밋 메시지에는 em dash와 middle dot을 쓰지 않으며
 `scripts/check-text-style.ts`가 테스트와 commit-msg 훅에서 검사한다.
 초기화, 검증, 실행, 정리처럼 역할이 바뀌는 지점에는 빈 줄을 한 줄 둔다.

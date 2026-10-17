@@ -44,6 +44,14 @@
             "filenameCases": ["kebab-case"]
           }
         }
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": {
+            "maxAllowedComplexity": 25
+          }
+        }
       }
     }
   },
@@ -62,6 +70,82 @@
         "rules": {
           "style": {
             "useFilenamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "docs/site/scripts/check-reference.mjs",
+        "native/host-api/bun/io-worker.ts",
+        "native/macos/bun/backend.ts",
+        "native/macos/bun/entry.ts",
+        "native/windows/bun/entry.ts",
+        "native/windows/bun/job.ts",
+        "native/windows/bun/system-events.ts",
+        "native/windows/bun/ui.ts",
+        "native/windows/bun/web-assets.ts",
+        "native/windows/bun/webview.ts",
+        "native/windows/bun/win32.ts",
+        "native/windows/bun/window-events.ts",
+        "packages/backend-sdk/src/cli.ts",
+        "packages/cli/scripts/pack.ts",
+        "packages/cli/src/assets.ts",
+        "packages/cli/src/build.ts",
+        "packages/cli/src/config.ts",
+        "packages/cli/src/distribution.ts",
+        "packages/cli/src/main.ts",
+        "packages/cli/src/plugin-imports.ts",
+        "packages/cli/src/plugin-platform.ts",
+        "packages/cli/src/plugins.ts",
+        "packages/packaging/src/channels/windows/inno.ts",
+        "packages/packaging/src/config.ts",
+        "packages/packaging/src/inputs.ts",
+        "packages/packaging/src/runner.ts",
+        "packages/plugin-sdk/src/index.ts",
+        "packages/plugin-sdk/src/windows-menu.ts",
+        "packages/protocol/src/validation.ts",
+        "packages/runtime-bun/src/runtime.ts",
+        "packages/runtime-bun/src/view-boundary.ts",
+        "packages/runtime-bun/src/window-config.ts",
+        "plugins/appearance/src/platforms/windows-controller.ts",
+        "plugins/clipboard/src/platforms/macos-tiff.ts",
+        "plugins/clipboard/src/platforms/windows-bindings.ts",
+        "plugins/clipboard/src/platforms/windows-codecs.ts",
+        "plugins/dialog/src/platforms/windows-bindings.ts",
+        "plugins/global-shortcut/src/platforms/windows.ts",
+        "plugins/menu/src/contract.ts",
+        "plugins/menu/src/platforms/windows-window-menus.ts",
+        "plugins/notification/src/platforms/windows.ts",
+        "plugins/opener/src/platforms/macos-file.ts",
+        "plugins/opener/src/platforms/windows-file.ts",
+        "plugins/opener/src/platforms/windows-shell.ts",
+        "plugins/process/src/platforms/windows-process-native.ts",
+        "plugins/tray/src/platforms/windows-icon-data.ts",
+        "plugins/windows/src/platforms/coordinator.ts",
+        "plugins/windows/src/platforms/native-adapter.ts",
+        "tests/api/window-geometry.test.ts",
+        "tests/cli/distribution.test.ts",
+        "tests/cli/managed-command.test.ts",
+        "tests/fixtures/macos-image.ts",
+        "tests/fixtures/macos-io/probe.ts",
+        "tests/fixtures/macos-startup-diagnostics.ts",
+        "tests/fixtures/notification-toast-ffi.ts",
+        "tests/lifecycle/windows-activation.test.ts",
+        "tests/lifecycle/windows-bun-storage.ts",
+        "tests/lifecycle/windows-clipboard.test.ts",
+        "tests/lifecycle/windows-desktop.ts",
+        "tests/lifecycle/windows-geometry.test.ts",
+        "tests/lifecycle/windows-size-constraints.test.ts",
+        "tests/lifecycle/windows-webview-downloads.ts",
+        "tests/lifecycle/windows-windowless.ts",
+        "tests/packaging/windows-associations.test.ts",
+        "tests/packaging/windows.test.ts"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off"
           }
         }
       }

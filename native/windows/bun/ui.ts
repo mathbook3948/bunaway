@@ -39,14 +39,14 @@ import { createSessionMessageHandler } from "./session-end.ts";
 import { createSessionNotifications } from "./session-notifications.ts";
 import { publishSystemEvent, SystemEvents } from "./system-events.ts";
 import { originOf, WebView } from "./webview.ts";
+import { Windows } from "./win32.ts";
+import { disposeWin32Bindings, kernel, ole } from "./win32-bindings.ts";
 import {
-  Windows,
   WM_CLOSE,
   WM_ENTERSIZEMOVE,
   WM_EXITSIZEMOVE,
   WM_SIZE,
-} from "./win32.ts";
-import { disposeWin32Bindings, kernel, ole } from "./win32-bindings.ts";
+} from "./win32-constants.ts";
 import { WindowLifecycle } from "./window-lifecycle.ts";
 import { WindowProfiles } from "./window-profiles.ts";
 import { WindowReadinessTracker } from "./window-readiness.ts";

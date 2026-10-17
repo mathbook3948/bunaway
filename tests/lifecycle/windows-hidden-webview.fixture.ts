@@ -4,7 +4,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { checkCallbacks, disposeCom } from "#native/windows/bun/com";
 import { WebView } from "#native/windows/bun/webview";
-import { Windows, WM_SIZE } from "#native/windows/bun/win32";
+import { Windows } from "#native/windows/bun/win32";
+import { WM_SIZE } from "#native/windows/bun/win32-constants";
 import {
   disposeWin32Bindings,
   kernel,

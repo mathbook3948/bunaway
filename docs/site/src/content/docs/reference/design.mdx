@@ -74,7 +74,10 @@ Biome은 논리 단위 사이의 빈 줄을 자동으로 추가하지 않으므�
 
 `mise run format`은 기존 코드에 포맷을 적용하고 `mise run format:check`는
 포맷만 검사합니다. `mise run lint`는 중괄호 규칙과 함께 중첩 삼항 연산자, non-null
-단언(`!`), 문자열 연결 대신 템플릿 사용, 새 소스 파일 이름의 kebab-case를 검사합니다.
+단언(`!`), 문자열 연결 대신 템플릿 사용, 새 소스 파일 이름의 kebab-case를 검사하고,
+함수 하나의 인지 복잡도가 25를 넘으면 거부합니다. 복잡도 규칙은 `biome.json`의 overrides에
+적힌 기존 파일에는 적용하지 않습니다. 이 목록은 줄어들기만 해야 하며, 해당 파일의 함수를
+나누었으면 목록에서 지웁니다.
 문서와 소스 텍스트, 커밋 메시지의 em dash(U+2014)와 middle dot(U+00B7)은
 `scripts/check-text-style.ts`가 거부하며 계약 테스트와 commit-msg 훅에서 실행합니다.
 공식 프런트엔드 템플릿의 `src`와 `public`은 기존 Biome 제외 설정을 유지합니다.
