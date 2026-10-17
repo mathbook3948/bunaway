@@ -341,6 +341,7 @@
         ],
         "reference/tooling/native-plugins": [
           "MAX_TRAY_ICO_BYTES",
+          "MAX_NATIVE_ICO_BYTES",
           "parseNativeIco",
           "selectNativeIcoFrame",
           "MAX_TRAY_TOOLTIP_UNITS",

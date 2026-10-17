@@ -1,4 +1,8 @@
-import { MAX_TRAY_ICO_BYTES } from "./native-tray.ts";
+/**
+ * Upper bound for a decoded ICO. It bounds image allocation before Windows sees the data, and
+ * every ICO consumer (tray, menu, taskbar) shares it. `MAX_TRAY_ICO_BYTES` keeps the same value.
+ */
+export const MAX_NATIVE_ICO_BYTES = 65_536;
 
 /**
  * One validated image from an ICO directory: a PNG or an uncompressed DIB without a file header,
@@ -45,19 +49,19 @@ const DEFAULT_PNG_BIT_COUNT = 32;
 /**
  * Decode a canonical base64 ICO and validate it without file I/O or native calls.
  *
- * The encoded and decoded sizes are bounded by `MAX_TRAY_ICO_BYTES`. Every directory entry must
+ * The encoded and decoded sizes are bounded by `MAX_NATIVE_ICO_BYTES`. Every directory entry must
  * stay inside the file, and every frame must be a complete PNG or a conventional uncompressed
  * DIB whose declared sizes match its bytes, which also bounds the decoded allocation.
  * Returns undefined for any violation so each caller can report its own error.
  */
 export function parseNativeIco(ico: string): NativeIcoFrame[] | undefined {
-  if (ico.length > Math.ceil(MAX_TRAY_ICO_BYTES / 3) * 4) {
+  if (ico.length > Math.ceil(MAX_NATIVE_ICO_BYTES / 3) * 4) {
     return undefined;
   }
   const bytes = Buffer.from(ico, "base64");
   if (
     bytes.length < ICO_HEADER_BYTES + ICO_ENTRY_BYTES ||
-    bytes.length > MAX_TRAY_ICO_BYTES ||
+    bytes.length > MAX_NATIVE_ICO_BYTES ||
     bytes.toString("base64") !== ico ||
     bytes.readUInt16LE(0) !== 0 ||
     bytes.readUInt16LE(2) !== 1
