@@ -5,7 +5,7 @@ import {
   normalizeApplicationPath,
   normalizeFilePath,
 } from "#opener/platforms/windows-path";
-import { requestRecentDocuments } from "#opener/platforms/windows-recent";
+import { createRecentDocuments } from "#opener/platforms/windows-recent";
 import { createShell } from "#opener/platforms/windows-shell";
 import {
   trashWindowsFile,
@@ -73,10 +73,27 @@ export function initialize() {
       throw error;
     }
   })();
+  const recent = (() => {
+    try {
+      return createRecentDocuments();
+    } catch (error) {
+      try {
+        files.dispose();
+      } finally {
+        try {
+          shell.dispose();
+        } finally {
+          apartment.dispose();
+        }
+      }
+      throw error;
+    }
+  })();
   return {
     apartment,
     shell,
     files,
+    recent,
     disposed: false,
   };
 }
@@ -142,7 +159,7 @@ export function addRecentDocument(
   notCancelled(signal);
   const selected = normalizeFilePath(path);
   // The pin lasts until SHAddToRecentDocs returns; the Shell reads the file after that.
-  state.files.withFile(selected, () => requestRecentDocuments(selected));
+  state.files.withFile(selected, () => state.recent.request(selected));
   return null;
 }
 
@@ -150,7 +167,7 @@ export function addRecentDocument(
 export function clearRecentDocuments(state: State, signal?: AbortSignal): null {
   active(state);
   notCancelled(signal);
-  requestRecentDocuments(null);
+  state.recent.request(null);
   return null;
 }
 
@@ -185,12 +202,16 @@ export function dispose(state: State): void {
   }
   state.disposed = true;
   try {
-    state.files.dispose();
+    state.recent.dispose();
   } finally {
     try {
-      state.shell.dispose();
+      state.files.dispose();
     } finally {
-      state.apartment.dispose();
+      try {
+        state.shell.dispose();
+      } finally {
+        state.apartment.dispose();
+      }
     }
   }
 }

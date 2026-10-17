@@ -71,6 +71,9 @@ const ole = dlopen("ole32.dll", {
 const probeApartment = new Uint32Array(1);
 const probeQualifier = new Uint32Array(1);
 const noApartment = ole.symbols.CoGetApartmentType(ptr(probeApartment), ptr(probeQualifier)) < 0;
+if (!noApartment) {
+  console.warn("Skipping the no-apartment launch failure check: apartment type " + probeApartment[0] + ", qualifier " + probeQualifier[0]);
+}
 const shell = createShell();
 try {
   for (let attempt = 0; attempt < (noApartment ? 2 : 0); attempt++) {

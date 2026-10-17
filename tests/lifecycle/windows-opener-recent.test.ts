@@ -225,10 +225,10 @@ async function waitForRecentShortcut(
 }
 
 // SHAddToRecentDocs runs on the opener's I/O STA, as in Electron, and the Shell may leave
-// a multithreaded apartment in the process afterwards. This test runs before
-// windows-opener.test.ts in the shared `bun test ./tests` process, so those tests also
-// cover that state. Here the opener must keep working in the same process, release only
-// its own COM initialization and initialize again after dispose.
+// a multithreaded apartment in the process afterwards. After add and clear, this test
+// verifies in the same process that existing opener operations still work, that dispose
+// releases only the adapter's own COM initialization and that a new adapter initializes
+// again. Test order across files is not relied on.
 test.skipIf(process.platform !== "win32")(
   "recent documents add and clear on the opener STA and the opener keeps working with any apartment the Shell leaves",
   async () => {
@@ -243,6 +243,16 @@ test.skipIf(process.platform !== "win32")(
     const name = `최근 문서 ${token}.txt`;
     const target = join(root, name);
     await Bun.write(target, "recent document");
+    // Taken before createOperations, which initializes the adapter's STA on this thread.
+    // S_OK (0) means the thread holds no COM initialization; S_FALSE (1) means another
+    // one is already active (for example from an earlier test), so the dispose check
+    // below then only shows that the thread returns to this same baseline.
+    const baselineInitialization = probeThreadInitialization();
+    if (baselineInitialization !== 0) {
+      console.warn(
+        `COM baseline on the test thread is ${baselineInitialization}, not S_OK: another initialization is active, so dispose is compared with that baseline.`,
+      );
+    }
     let adapter = createOperations({
       dataRoot: root,
       capabilities: [],
@@ -282,8 +292,6 @@ test.skipIf(process.platform !== "win32")(
         );
       }
     };
-    // S_OK (0) when this thread holds no COM initialization, S_FALSE (1) when one leaked.
-    const baselineInitialization = probeThreadInitialization();
     try {
       await expectExistingOperationsWork();
       await expect(
