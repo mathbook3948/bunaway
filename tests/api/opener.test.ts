@@ -251,6 +251,12 @@ test("opener preserves strict inputs and independently granted file operations",
     {
       name: "opener.openUrlWith",
     },
+    {
+      name: "opener.addRecentDocument",
+    },
+    {
+      name: "opener.clearRecentDocuments",
+    },
   ]);
   expect(Object.keys(operation)).toEqual([
     "name",

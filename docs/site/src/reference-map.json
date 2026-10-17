@@ -1329,7 +1329,9 @@
       "opener.revealFile",
       "opener.openFileWith",
       "opener.openUrlWith",
-      "opener.trashFile"
+      "opener.trashFile",
+      "opener.addRecentDocument",
+      "opener.clearRecentDocuments"
     ],
     "reference/plugins/path": [
       "path.getDirectory",

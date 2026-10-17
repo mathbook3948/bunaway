@@ -12,6 +12,9 @@ export const fileInput = z.strictObject({
     ),
 });
 
+/** Operations without parameters accept only an empty object. */
+export const emptyInput = z.strictObject({});
+
 export const MAX_URL_LENGTH = 8192;
 export const urlInput = z.strictObject({
   url: z
@@ -38,7 +41,10 @@ export function validateOpenerInput(operation: string, input: JsonValue) {
       case "opener.openFile":
       case "opener.revealFile":
       case "opener.trashFile":
+      case "opener.addRecentDocument":
         return fileInput.parse(validateValue({}, input));
+      case "opener.clearRecentDocuments":
+        return emptyInput.parse(validateValue({}, input));
       case "opener.openFileWith":
         return fileWithAppSchema.parse(validateValue({}, input));
       case "opener.openUrlWith":

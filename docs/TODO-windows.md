@@ -408,7 +408,11 @@ Windows의 비활성화 기록을 수정하지 않는다.
   Windows 기본 앱 설정에서 선택 후 실제 파일과 링크 실행은 별도 수동 검증으로 남긴다.
 - [ ] URL의 연결 앱 이름과 실행 정보를 조회한다.
 - [ ] AppUserModelID와 toast activation 식별자를 설정하고 설치와 일치시킨다.
-- [ ] Recent Documents의 추가, 조회와 삭제를 제공한다.
+- [x] Recent Documents의 추가와 삭제를 제공한다. 조회는 지원하지 않는다.
+  `opener.addRecentDocument`는 기존 파일 검사와 핸들 고정 뒤 `SHAddToRecentDocs(SHARD_PATHW)`를,
+  `opener.clearRecentDocuments`는 `SHAddToRecentDocs(NULL)`을 호출한다. 각각 작업 권한을
+  요구하며 성공은 요청 전달이다. 조회는 공식 API가 없고 Recent 폴더의 `.lnk`가 앱별로
+  구분되지 않아 제공하지 않는다.
 - [ ] Jump List와 사용자 task, category, 제거된 항목 조회를 제공한다.
 - [x] 작업 표시줄 progress와 상태를 설정한다.
   `windows.setTaskbarProgress`는 창별 `none`, `indeterminate`, `normal`, `paused`, `error`를

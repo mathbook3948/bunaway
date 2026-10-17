@@ -116,6 +116,21 @@ export function trashFile(state: State, path: string): null {
   return null;
 }
 
+/** Add an existing file to the app's Windows Recent Documents list. */
+export function addRecentDocument(state: State, path: string): null {
+  active(state);
+  const selected = normalizeFilePath(path);
+  state.files.withFile(selected, () => state.shell.recentDocuments(selected));
+  return null;
+}
+
+/** Remove every entry from the app's Windows Recent Documents list. */
+export function clearRecentDocuments(state: State): null {
+  active(state);
+  state.shell.recentDocuments();
+  return null;
+}
+
 export function openFileWith(
   state: State,
   path: string,

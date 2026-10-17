@@ -99,6 +99,10 @@ Explorer와 compiled helper로 기존 기본 실행, 지정 앱의 파일과 URL
 URL fragment 따옴표, 앱 Job 밖의 실행과 앱 종료 후 생존을 확인합니다.
 `mise run host:windows`가 이 네이티브 검사를 실행합니다. Linux에서는 네이티브 검사를 건너뜁니다.
 
+## 최근 문서
+
+Windows에서 `opener.addRecentDocument(path)`는 기존 파일 하나를 앱의 최근 문서에 추가하고(`SHAddToRecentDocs(SHARD_PATHW)`), `opener.clearRecentDocuments()`는 앱의 최근 문서를 모두 지웁니다(`SHAddToRecentDocs(NULL)`). Host operation은 `opener.addRecentDocument`(입력 `{ path: string }`)와 `opener.clearRecentDocuments`(입력 `{}`)이며 권한 이름은 같고 결과는 `null`입니다. 추가는 다른 파일 작업과 같은 경로 검사와 핸들 고정을 적용합니다. 이 API는 결과를 반환하지 않으므로 성공은 요청 전달을 뜻합니다. 목록 조회는 공식 API가 없고 Recent 폴더의 `.lnk`가 앱별이 아니므로 지원하지 않습니다. macOS는 `UNSUPPORTED`입니다.
+
 ## 휴지통
 
 `opener.trashFile(path: string, options?: NativeInvokeOptions): Promise<null>`은 기존 파일을 Windows 휴지통으로 보냅니다. Host operation과 권한은 `opener.trashFile`, 입력은 `{ path: string }`입니다. 화면 직접 호출은 뷰의 `commands`에 `plugin.opener.trashFile`도 허용합니다. 성공한 `null`은 OS가 휴지통의 새 항목을 반환했다는 뜻입니다. 복원 API는 제공하지 않습니다.

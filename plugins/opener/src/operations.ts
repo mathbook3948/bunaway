@@ -1,6 +1,7 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
+  emptyInput,
   fileInput,
   fileWithAppSchema,
   urlInput,
@@ -13,6 +14,8 @@ import {
   revealFile as revealMacosFile,
 } from "#opener/platforms/macos";
 import {
+  addRecentDocument as addWindowsRecentDocument,
+  clearRecentDocuments as clearWindowsRecentDocuments,
   type initialize as initializeWindows,
   openFile as openWindowsFile,
   openFileWith as openWindowsFileWith,
@@ -59,6 +62,17 @@ export const windowsOperations = {
     output: z.null(),
     handler: ({ url, app }, { instance }) =>
       openWindowsUrlWith(instance, url, app),
+  }),
+  addRecentDocument: windowsOperation({
+    input: fileInput,
+    output: z.null(),
+    handler: ({ path }, { instance }) =>
+      addWindowsRecentDocument(instance, path),
+  }),
+  clearRecentDocuments: windowsOperation({
+    input: emptyInput,
+    output: z.null(),
+    handler: (_input, { instance }) => clearWindowsRecentDocuments(instance),
   }),
 };
 export const macosOperations = {

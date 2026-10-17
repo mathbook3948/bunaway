@@ -97,7 +97,28 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
       options,
     );
   }
+  /** Add an existing Windows file to the app's Recent Documents. Success is request acceptance. */
+  async function addRecentDocument(
+    path: string,
+    options?: NativeInvokeOptions,
+  ): Promise<null> {
+    return api.addRecentDocument(
+      {
+        path: normalizeFilePath(path),
+      },
+      options,
+    );
+  }
+
+  /** Clear the app's Windows Recent Documents. Listing entries is not supported. */
+  async function clearRecentDocuments(
+    options?: NativeInvokeOptions,
+  ): Promise<null> {
+    return api.clearRecentDocuments({}, options);
+  }
   return {
+    addRecentDocument,
+    clearRecentDocuments,
     trashFile,
     openUrl,
     openFile,

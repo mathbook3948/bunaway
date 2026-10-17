@@ -15,6 +15,7 @@ const SWFO_NEEDDISPATCH = 1;
 const SVGIO_BACKGROUND = 0;
 const DISPATCH_METHOD = 1;
 const SW_SHOWNORMAL = 1;
+const SHARD_PATHW = 0x3;
 const HRESULT_ACCESS_DENIED = 0x80070005;
 const HRESULT_FILE_NOT_FOUND = 0x80070002;
 const HRESULT_PATH_NOT_FOUND = 0x80070003;
@@ -421,6 +422,37 @@ export function createShell() {
         if (item[0]) {
           ole.symbols.CoTaskMemFree(Number(item[0]) as Pointer);
         }
+        shell.close();
+      }
+    },
+    /**
+     * Add a validated file to the app's Recent Documents list, or clear the list when
+     * no path is given. SHAddToRecentDocs has no result, so success means the request was issued.
+     */
+    recentDocuments(target?: string): void {
+      if (disposed) {
+        throw new BunawayError({
+          code: "CANCELLED",
+          message: "Opener has been disposed.",
+        });
+      }
+      const shell = dlopen("shell32.dll", {
+        SHAddToRecentDocs: {
+          args: [
+            "u32",
+            "ptr",
+          ],
+          returns: "void",
+        },
+      });
+      try {
+        shell.symbols.SHAddToRecentDocs(
+          SHARD_PATHW,
+          target === undefined
+            ? null
+            : ptr(Buffer.from(`${target}\0`, "utf16le")),
+        );
+      } finally {
         shell.close();
       }
     },
