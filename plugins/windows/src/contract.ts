@@ -840,6 +840,33 @@ export const windowOperations = {
     ]),
     output: z.null(),
   },
+  // Region is client-area DIPs (96 DPI), matching setSize; null clears the clip.
+  "windows.setThumbnailClip": {
+    input: windowTarget.extend({
+      region: z
+        .strictObject({
+          x: z.int().min(0).max(MAX_WINDOW_COORDINATE),
+          y: z.int().min(0).max(MAX_WINDOW_COORDINATE),
+          width: z.int().positive().max(MAX_WINDOW_COORDINATE),
+          height: z.int().positive().max(MAX_WINDOW_COORDINATE),
+        })
+        .refine(
+          (rect) =>
+            rect.x + rect.width <= MAX_WINDOW_COORDINATE &&
+            rect.y + rect.height <= MAX_WINDOW_COORDINATE,
+          "The thumbnail clip edges cannot exceed the Win32 coordinate range.",
+        )
+        .nullable(),
+    }),
+    output: z.null(),
+  },
+  // null or an empty string restores the default thumbnail tooltip (the window title).
+  "windows.setThumbnailToolTip": {
+    input: windowTarget.extend({
+      toolTip: accessibleTitle.nullable(),
+    }),
+    output: z.null(),
+  },
   "windows.createInstance": {
     input: creationResult.input,
     output: windowIdentitySchema,

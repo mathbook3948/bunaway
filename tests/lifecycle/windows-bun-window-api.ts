@@ -1137,6 +1137,122 @@ if (!process.argv.includes("--child")) {
             }),
             null,
           );
+          // The button exists now, so thumbnail calls reach the real ITaskbarList3.
+          const thumbnailTarget = {
+            view: "main",
+            windowId: current.windowId,
+          };
+          assert.equal(
+            await windows.setThumbnailClip({
+              ...thumbnailTarget,
+              region: {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 80,
+              },
+            }),
+            null,
+          );
+          // A minimized HWND has an empty client rectangle and an unknown restored size, so only the
+          // lower bounds are checked while minimized; the upper bound is left to the shell.
+          await windows.minimize(thumbnailTarget);
+          assert.equal(await windows.isMinimized(thumbnailTarget), true);
+          assert.equal(
+            await windows.setThumbnailClip({
+              ...thumbnailTarget,
+              region: {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 80,
+              },
+            }),
+            null,
+          );
+          // Lower-bound violations stay rejected while minimized.
+          await assert.rejects(
+            windows.setThumbnailClip({
+              ...thumbnailTarget,
+              region: {
+                x: -1,
+                y: 0,
+                width: 100,
+                height: 80,
+              },
+            }),
+            {
+              code: "INVALID_ARGUMENT",
+            },
+          );
+          await windows.restore(thumbnailTarget);
+          assert.equal(await windows.isMinimized(thumbnailTarget), false);
+          // Minimizing from maximized restores to a larger area, so no upper bound is checked then.
+          await windows.maximize(thumbnailTarget);
+          await windows.minimize(thumbnailTarget);
+          assert.equal(
+            await windows.setThumbnailClip({
+              ...thumbnailTarget,
+              region: {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 80,
+              },
+            }),
+            null,
+          );
+          await windows.restore(thumbnailTarget);
+          assert.equal(await windows.isMaximized(thumbnailTarget), true);
+          await windows.unmaximize(thumbnailTarget);
+          assert.equal(await windows.isMaximized(thumbnailTarget), false);
+          // Beyond the client area the region is clamped; one starting outside it is empty and rejected.
+          assert.equal(
+            await windows.setThumbnailClip({
+              ...thumbnailTarget,
+              region: {
+                x: 0,
+                y: 0,
+                width: 100_000,
+                height: 80,
+              },
+            }),
+            null,
+          );
+          await assert.rejects(
+            windows.setThumbnailClip({
+              ...thumbnailTarget,
+              region: {
+                x: 100_000,
+                y: 0,
+                width: 100,
+                height: 80,
+              },
+            }),
+            {
+              code: "INVALID_ARGUMENT",
+            },
+          );
+          assert.equal(
+            await windows.setThumbnailClip({
+              ...thumbnailTarget,
+              region: null,
+            }),
+            null,
+          );
+          for (const toolTip of [
+            "Window preview",
+            "",
+            null,
+          ]) {
+            assert.equal(
+              await windows.setThumbnailToolTip({
+                ...thumbnailTarget,
+                toolTip,
+              }),
+              null,
+            );
+          }
           // First run covers sizing/fullscreen; later runs cover recreation and renderer recovery.
           if (++runs === 1) {
             assert.equal(

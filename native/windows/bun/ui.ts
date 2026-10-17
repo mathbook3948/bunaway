@@ -1180,6 +1180,10 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         },
         setTaskbarProgress: (progress) =>
           nativeWindows.setTaskbarProgress(hwnd, progress),
+        setThumbnailClip: (region) =>
+          nativeWindows.setThumbnailClip(hwnd, region),
+        setThumbnailToolTip: (toolTip) =>
+          nativeWindows.setThumbnailToolTip(hwnd, toolTip),
       };
     },
   };
