@@ -45,6 +45,24 @@ export type AppInfo = {
   readonly identifier: string;
   /** App version from the package manifest, or `null` when the package does not record one. */
   readonly version: string | null;
+  /** Whether the backend runs from a built, compiled app instead of a development launch. */
+  readonly isPackaged: boolean;
+  /**
+   * Absolute file system locations of the running app, or `null` on platforms that do not
+   * expose one (Android, iOS and process runtimes). Paths are not length-limited and can
+   * contain the user name.
+   */
+  readonly paths: {
+    /** Package root that holds the app manifest and assets. */
+    readonly package: string;
+    /** Real path of the process executable. In development this is the pinned Bun executable. */
+    readonly executable: string;
+    /**
+     * Bundled resources directory. Windows and development launches use the package root;
+     * macOS packaged apps use `Contents/Resources`.
+     */
+    readonly resources: string;
+  } | null;
   readonly runtime: {
     /** Bunaway framework version from the package manifest, or `null` when not recorded. */
     readonly framework: string | null;

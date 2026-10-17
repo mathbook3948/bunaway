@@ -278,6 +278,8 @@ export default defineApp({ modules: [], commands: {
             name: validated.app.title,
             identifier: validated.app.appId,
             version: appVersion,
+            isPackaged: true,
+            paths: null,
             runtime: {
               framework: frameworkVersion,
               bun: Bun.version,

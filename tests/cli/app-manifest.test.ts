@@ -17,6 +17,7 @@ import {
 } from "@bunaway/runtime-bun/app-manifest";
 import {
   appName,
+  desktopAppPaths,
   parsePackageVersions,
   readPackageVersions,
   toAppInfo,
@@ -616,6 +617,31 @@ test("generated process backend embeds app metadata as a build-time constant", a
       force: true,
     });
   }
+});
+
+test("desktop app paths use the package root as the resources directory and reach AppInfo", () => {
+  const paths = desktopAppPaths("/pkg/Resources", "/pkg/MacOS/app");
+  expect(paths).toEqual({
+    package: "/pkg/Resources",
+    executable: "/pkg/MacOS/app",
+    resources: "/pkg/Resources",
+  });
+  const info = toAppInfo(
+    {
+      name: "App",
+      identifier: "dev.example",
+      version: null,
+      framework: null,
+      isPackaged: false,
+      paths,
+    },
+    {
+      bun: "1.0.0",
+      webview: null,
+    },
+  );
+  expect(info.isPackaged).toBe(false);
+  expect(info.paths).toEqual(paths);
 });
 
 test("toAppInfo rejects missing app metadata with a clear message", () => {

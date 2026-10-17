@@ -7,6 +7,8 @@ export const testAppMetadata: AppMetadata = {
   identifier: "dev.bunaway.test",
   version: "1.2.3",
   framework: "0.4.5",
+  isPackaged: false,
+  paths: null,
 };
 
 /** Complete `ctx.app` value for tests that call `createCore` directly. */
@@ -14,6 +16,8 @@ export const testAppInfo: AppInfo = {
   name: testAppMetadata.name,
   identifier: testAppMetadata.identifier,
   version: testAppMetadata.version,
+  isPackaged: testAppMetadata.isPackaged,
+  paths: testAppMetadata.paths,
   runtime: {
     framework: testAppMetadata.framework,
     bun: Bun.version,

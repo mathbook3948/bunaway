@@ -309,6 +309,8 @@ test("iOS bundled entry survives three backend Worker generations and preserves 
               name: "Bunaway iOS",
               identifier: "dev.bunaway.ios.fixture",
               version: appVersion,
+              isPackaged: true,
+              paths: null,
               runtime: {
                 framework: frameworkVersion,
                 bun: Bun.version,

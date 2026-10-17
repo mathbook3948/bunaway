@@ -480,6 +480,8 @@ async function mobileAppMetadata(project: Project): Promise<AppMetadata> {
     name: appName(project.app.title, project.app.appId),
     identifier: project.app.appId,
     ...(await readAppVersions(project.root, project.frameworkRoot)),
+    isPackaged: true,
+    paths: null,
   };
 }
 

@@ -20,6 +20,7 @@ status: accepted
 2. `ctx.app`은 동결된 단일 객체이며 모든 명령과 플러그인 setup 컨텍스트가 공유한다. 권한이 필요 없다.
 3. 호스트가 `CoreServices.app`으로 값을 넘기고 Core는 시작할 때 한 번 검증해 복사본을 동결한다.
    필드는 비어 있지 않은 문자열이며 길이는 `APP_INFO_MAX_LENGTH`(1024 UTF-16 코드 유닛) 이하여야 한다.
+   단 `paths`의 세 경로는 길이 검사에서 제외하고 비어 있지 않은 절대 경로인지만 검사한다(아래 "앱 경로" 참고).
    한도는 단일 창 앱에서 `name`이 되는 창 제목의 기존 상한과 같아서, 이미 만든 패키지의 제목이 시작을 막지 않는다.
    `version`, `runtime.framework`, `runtime.webview`만 `null`을 허용한다. 위반하면 Core 시작이
    `INVALID_ARGUMENT`로 실패한다. 이는 호스트와 Core 사이의 내부 계약이다.
@@ -33,6 +34,10 @@ status: accepted
 | `name` | 앱 설정의 `title`. 매니페스트에 `title`이 없는 이전 패키지는 `appId`를 쓴다. |
 | `identifier` | 앱 설정의 `appId`. 런타임 앱 ID이며 패키징의 `bundle.identifier`가 아니다. |
 | `version` | 빌드가 패키지 `manifest.json`의 `app.version`에 기록한 앱 `package.json`의 버전. 필드가 없으면 `null`. Windows에서는 패키지 `manifest.json` 파일 자체가 없어도 `null` |
+| `isPackaged` | 컴파일된 앱 여부. Windows와 macOS는 호스트의 `isCompiledApp`(`manifest.json` 임베드 여부)와 같은 판별이며 `launch.mode`의 근거와 같다. 모바일은 항상 번들이므로 `true` |
+| `paths.package` | 호스트가 검증한 패키지 루트의 실제 경로. Windows 패키지 실행은 실행 파일 폴더, macOS 패키지 실행은 `Contents/Resources` |
+| `paths.executable` | `process.execPath`의 실제 경로. 개발 실행에서는 버전이 고정된 Bun 실행 파일 |
+| `paths.resources` | 패키지 루트와 같은 디렉터리. Windows는 실행 파일 폴더, macOS는 `Contents/Resources`, 개발 실행은 빌드 출력 디렉터리 |
 | `runtime.framework` | 빌드가 `framework.version`에 기록한 프레임워크 버전. 필드가 없으면 `null`. 빌드는 앱이나 프레임워크 `package.json`에 `version`이 없으면 해당 필드를 생략한다. |
 | `runtime.bun` | `Bun.version` |
 | `runtime.webview` | 아래 플랫폼별 규칙. 알 수 없으면 `null` |
@@ -51,6 +56,17 @@ status: accepted
 - 빌드는 같은 한도를 먼저 검사한다. `bunaway.json`의 `app.title`과 앱, 프레임워크 `package.json`의 `version`
   (있을 때)이 비어 있지 않은 문자열이 아니거나 한도를 넘으면 설정 로드나 빌드가 실패한다.
   모든 검사는 `@bunaway/runtime-bun/app-metadata`의 `isAppInfoText`를 쓴다.
+
+## 앱 경로
+
+`isPackaged: boolean`과 `paths: { package, executable, resources } | null`을 `AppInfo`에 추가한다.
+Electron의 `app.isPackaged`와 `process.resourcesPath`, Tauri의 `resource_dir`에 대응한다. `mode` 문자열은 쓰지 않는다.
+
+- Android, iOS와 `runBunApp`은 파일 시스템 패키지를 노출하지 않으므로 `paths`는 `null`이다.
+- WebView2Loader 경로나 `dataRoot` 같은 호스트 내부 경로는 넣지 않는다. 데이터 위치는 `plugin-path`가 제공한다.
+- 경로 길이에는 상한을 두지 않고 운영체제 한도를 따른다. Electron과 Tauri도 경로에 별도 상한을 두지 않는다.
+  1024 한도는 `name`이 창 제목이 되는 제약에서 나왔고 경로에는 해당하지 않으며, 깊은 설치 경로 때문에 앱 시작이 막히면 안 된다.
+- 경로에는 사용자 이름이 들어갈 수 있다. 앱이 로그나 UI로 내보낼 때 노출 여부를 정한다.
 
 ## WebView 버전
 
@@ -71,7 +87,8 @@ status: accepted
 
 ## 검증 범위
 
-계약 테스트는 필드 검증, 동결과 플러그인 setup 전달, 패키지 manifest 해석, 모바일 번들의 상수를 검사한다.
+계약 테스트는 필드 검증, 동결과 플러그인 setup 전달, 패키지 manifest 해석, 모바일 번들의 상수와 경로 검증(상대 경로 거부, 1024자 초과 허용)을 검사한다.
+Windows 패키지 실행의 `isPackaged`와 `paths`는 `tests/lifecycle/windows-bun-cli.ts`가 빌드한 실제 exe를 실행해 확인한다.
 Windows의 WebView2 버전 조회는 `tests/lifecycle/windows-webview-version.test.ts`가 실제 로더 호출로 검증하고,
 `mise run host:windows`의 호스트 fixture가 네 부분 버전 형식을 확인한다. macOS의 WebKit 조회는
 `mise run host:macos`의 호스트 fixture가 비어 있지 않은 문자열인지 확인한다.

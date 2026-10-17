@@ -56,7 +56,8 @@
           "readPackageVersions",
           "appName",
           "isAppInfoText",
-          "toAppInfo"
+          "toAppInfo",
+          "desktopAppPaths"
         ]
       }
     },
@@ -883,6 +884,8 @@
           "name",
           "identifier",
           "version",
+          "isPackaged",
+          "paths",
           "runtime"
         ]
       }

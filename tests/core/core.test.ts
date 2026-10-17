@@ -645,6 +645,140 @@ test("createCore rejects invalid app info from the host", async () => {
   await optional.stop();
 });
 
+test("app info carries packaged state and frozen app paths", async () => {
+  const clock = createClock();
+  const { services } = createServices(clock);
+  // Paths have no length limit, so a path beyond APP_INFO_MAX_LENGTH is accepted.
+  const longRoot = `C:\\${"a".repeat(APP_INFO_MAX_LENGTH + 1)}`;
+  const mutablePaths = {
+    package: longRoot,
+    executable: `${longRoot}\\app.exe`,
+    resources: longRoot,
+  };
+  const seen: AppInfo[] = [];
+  const core = await createCore(
+    createApp({
+      plugins: [
+        {
+          name: "app-paths",
+          version: "1",
+          setup(context) {
+            seen.push(context.app);
+          },
+        },
+      ],
+    }),
+    {
+      ...services,
+      app: {
+        ...testAppInfo,
+        isPackaged: true,
+        paths: mutablePaths,
+      },
+    },
+  );
+  await core.stop();
+  mutablePaths.package = "changed";
+  const [info] = seen;
+  expect(info?.isPackaged).toBe(true);
+  expect(info?.paths).toEqual({
+    package: longRoot,
+    executable: `${longRoot}\\app.exe`,
+    resources: longRoot,
+  });
+  expect(Object.isFrozen(info?.paths)).toBe(true);
+  // POSIX roots are accepted, and unsupported runtimes report null paths.
+  const posix = await createCore(createApp(), {
+    ...services,
+    app: {
+      ...testAppInfo,
+      paths: {
+        package: "/Applications/App.app/Contents/Resources",
+        executable: "/Applications/App.app/Contents/MacOS/app",
+        resources: "/Applications/App.app/Contents/Resources",
+      },
+    },
+  });
+  await posix.stop();
+  const withoutPaths = await createCore(createApp(), {
+    ...services,
+    app: {
+      ...testAppInfo,
+      paths: null,
+    },
+  });
+  await withoutPaths.stop();
+});
+
+test("createCore rejects invalid app paths and packaged state", async () => {
+  const clock = createClock();
+  const { services } = createServices(clock);
+  const valid = {
+    package: "C:\\app",
+    executable: "C:\\app\\app.exe",
+    resources: "C:\\app",
+  };
+  const invalid: unknown[] = [
+    {
+      ...testAppInfo,
+      isPackaged: undefined,
+    },
+    {
+      ...testAppInfo,
+      isPackaged: "true",
+    },
+    {
+      ...testAppInfo,
+      paths: undefined,
+    },
+    {
+      ...testAppInfo,
+      paths: {
+        ...valid,
+        package: "",
+      },
+    },
+    {
+      ...testAppInfo,
+      paths: {
+        ...valid,
+        executable: "app.exe",
+      },
+    },
+    {
+      ...testAppInfo,
+      paths: {
+        ...valid,
+        resources: "./resources",
+      },
+    },
+    {
+      ...testAppInfo,
+      paths: {
+        ...valid,
+        package: 1,
+      },
+    },
+    {
+      ...testAppInfo,
+      paths: {
+        package: valid.package,
+        executable: valid.executable,
+      },
+    },
+  ];
+  for (const app of invalid) {
+    await expect(
+      createCore(createApp(), {
+        ...services,
+        app: app as CoreServices["app"],
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+});
+
 test("policy blocks commands the view did not allow and unknown commands fail", async () => {
   const clock = createClock();
   const { services, sent } = createServices(clock);

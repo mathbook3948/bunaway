@@ -26,6 +26,8 @@ sidebar: { order: 3 }
 | `name` | `string` | 앱 설정의 `title`. 패키지 manifest에 `title`이 없으면 `appId` |
 | `identifier` | `string` | 앱 설정의 `appId` |
 | `version` | `string \| null` | 앱 package.json의 `version` |
+| `isPackaged` | `boolean` | 빌드된 컴파일 앱이면 `true`, 개발 실행이면 `false` |
+| `paths` | `{ package, executable, resources } \| null` | 앱의 파일 시스템 위치. 아래 표 참고 |
 | `runtime.framework` | `string \| null` | 빌드 시점의 bunaway 프레임워크 버전 |
 | `runtime.bun` | `string` | 백엔드를 실행하는 Bun의 `Bun.version` |
 | `runtime.webview` | `string \| null` | 플랫폼 WebView 엔진 버전 |
@@ -37,7 +39,22 @@ Android와 iOS는 빌드할 때 이름, 식별자, 버전, 프레임워크 버�
 
 `version`과 `runtime.framework`는 패키지 manifest에 `app.version`이나 `framework.version`이 없으면 `null`입니다(빌드는 앱이나 프레임워크 `package.json`에 버전이 없을 때 이 필드를 생략합니다).
 Windows는 `manifest.json` 파일 자체가 없어도 두 값이 `null`이지만, macOS는 `manifest.json`이 반드시 있어야 시작합니다.
-모든 문자열 필드는 비어 있지 않아야 하며 1024 UTF-16 코드 유닛 이하입니다. 빌드는 `title`과 `version`이 이 조건을 어기면 실패합니다.
+경로를 제외한 모든 문자열 필드는 비어 있지 않아야 하며 1024 UTF-16 코드 유닛 이하입니다. 빌드는 `title`과 `version`이 이 조건을 어기면 실패합니다.
+
+### isPackaged와 paths
+
+`paths`의 세 값은 모두 절대 경로입니다. 길이는 제한하지 않고 운영체제 한도를 따릅니다. 경로에는 사용자 이름이 들어갈 수 있으므로
+로그나 UI로 보낼 때 앱이 노출 여부를 정하세요.
+
+| 필드 | Windows 패키지 실행 | Windows 개발 실행 | macOS 패키지 실행 |
+| --- | --- | --- | --- |
+| `paths.package` | 실행 파일이 있는 폴더 | 빌드 출력 디렉터리 | `Contents/Resources` |
+| `paths.executable` | `<appId>.exe`의 실제 경로 | 버전이 고정된 `bun.exe`의 실제 경로 | 실행 파일의 실제 경로 |
+| `paths.resources` | 실행 파일이 있는 폴더 | 빌드 출력 디렉터리(`package`와 같음) | `Contents/Resources` |
+
+macOS 개발 실행은 `--package`로 지정한 디렉터리를 `package`와 `resources`로 쓰고 `executable`은 Bun 실행 파일입니다.
+Android, iOS와 `runBunApp`은 파일 시스템 패키지를 노출하지 않으므로 `paths`가 `null`이고, 모바일은 번들된 앱이라 `isPackaged`가 `true`입니다.
+
 `runtime.webview`는 플랫폼마다 다음과 같이 정해집니다.
 
 | 플랫폼 | `runtime.webview` |

@@ -334,6 +334,9 @@ if (!process.argv.includes("--child")) {
               name: testAppMetadata.name,
               identifier: testAppMetadata.identifier,
               version: testAppMetadata.version,
+              // Directly supplied config: the packaged case is checked by windows-bun-cli.ts.
+              isPackaged: false,
+              paths: null,
               runtime: {
                 framework: testAppMetadata.framework,
                 bun: Bun.version,
