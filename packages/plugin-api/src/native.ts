@@ -1,16 +1,13 @@
 import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 
+export type { NativeIcoFrame } from "./native-ico.ts";
+export { parseNativeIco, selectNativeIcoFrame } from "./native-ico.ts";
 export type {
   NativeMenuItem,
   NativeMenuRole,
   NativeMenuServices,
   NativeMenuWindowHost,
 } from "./native-menu.ts";
-export type { NativeMenuIcoFrame } from "./native-menu-icon.ts";
-export {
-  parseNativeMenuIco,
-  selectNativeMenuIcoFrame,
-} from "./native-menu-icon.ts";
 export type { NativeShortcutServices } from "./native-shortcut.ts";
 export type {
   NativeTrayEvent,

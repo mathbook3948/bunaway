@@ -2,7 +2,7 @@ import {
   MAX_TRAY_ICO_BYTES,
   type NativeMenuItem,
   type NativeMenuRole,
-  parseNativeMenuIco,
+  parseNativeIco,
 } from "@bunaway/plugin-api/native";
 import { z } from "zod";
 export const MAX_MENU_RESOURCES = 32;
@@ -27,7 +27,7 @@ export const iconSchema = z
   .string()
   .min(4)
   .max(Math.ceil(MAX_TRAY_ICO_BYTES / 3) * 4)
-  .refine((value) => parseNativeMenuIco(value) !== undefined, "Invalid ICO.");
+  .refine((value) => parseNativeIco(value) !== undefined, "Invalid ICO.");
 /** Editing roles and Electron's Windows default labels; accelerators are drawn by the native menu. */
 export const MENU_ROLE_LABELS = {
   undo: "Undo",

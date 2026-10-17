@@ -550,9 +550,11 @@ null은 트레이 메뉴 숨김이고 undefined는 tray 기본 Open/Quit 복원�
 get과 getBounds, setTooltip과 setIcon, setClickBehavior, focus와 subscribe를 제공합니다. 등록한 플러그인의 initialize가 트레이 구현을 생성합니다. NativeTrayInitialization은 검증한 tooltip과 빌린 NativeTrayWindowHost, 복원과 종료 콜백을 제공합니다. NativeTrayOwner의 dispose는 실패한 자원을 보존해 재시도할 수 있어야 합니다. 호스트는 콜백 정지와 창 정리, 재시도 순서를 소유합니다.
 입력은 기존 emit 경로 또는 NativeEventWaiters를 통해 전달합니다.
 
-`parseNativeMenuIco(ico)`는 base64 ICO의 디렉터리를 검사해 프레임 목록을 반환하고(잘못된 입력은 `undefined`),
-`selectNativeMenuIcoFrame(frames, size)`는 `size`를 덮는 가장 작은 프레임, 없으면 가장 큰 프레임을 고릅니다.
-메뉴 항목 icon이 계약 검증과 Windows 비트맵 변환에서 함께 사용합니다.
+`parseNativeIco(ico)`는 base64 ICO를 크기 상한, 디렉터리와 프레임 이미지(PNG chunk, DIB 헤더와 선언 크기, 잘림)까지
+검사해 `NativeIcoFrame`(`width`, `height`, `bitCount`, `data`) 목록을 반환하고, 잘못된 입력은 `undefined`입니다.
+`selectNativeIcoFrame(frames, size)`는 `size`를 덮는 가장 작은 프레임, 없으면 가장 큰 프레임을 고르며
+같은 크기에서는 비트 깊이가 높은 프레임을 우선합니다. `Infinity`는 항상 가장 큰 프레임을 고릅니다.
+둘 다 네이티브 호출이 없어 트레이 아이콘, 메뉴 항목 icon의 계약 검증과 Windows 변환이 함께 사용합니다.
 공유 트레이 제한은 MAX_TRAY_TOOLTIP_UNITS(UTF-16 127개), MAX_TRAY_ICO_BYTES(65,536 bytes), MAX_TRAY_WAITERS(16개)로 선언합니다.
 계약과 native 자원 소유자가 같은 제한을 사용합니다.
 

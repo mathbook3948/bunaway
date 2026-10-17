@@ -200,3 +200,82 @@ test.skipIf(process.platform !== "win32")(
     );
   },
 );
+
+/** Opaque-black left half and transparent right half in a 24bpp DIB, which has no alpha channel. */
+function maskedBlackIco(): Buffer {
+  const size = 16;
+  const colorRowBytes = Math.ceil((size * 24) / 32) * 4;
+  const maskRowBytes = 4;
+  const dib = Buffer.alloc(40 + colorRowBytes * size + maskRowBytes * size);
+  dib.writeUInt32LE(40, 0);
+  dib.writeInt32LE(size, 4);
+  dib.writeInt32LE(size * 2, 8);
+  dib.writeUInt16LE(1, 12);
+  dib.writeUInt16LE(24, 14);
+  const maskStart = 40 + colorRowBytes * size;
+  for (let row = 0; row < size; row++) {
+    // A set mask bit is transparent: the first byte covers the left eight pixels.
+    dib[maskStart + row * maskRowBytes + 1] = 0xff;
+  }
+  const header = Buffer.alloc(22);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(1, 4);
+  header[6] = size;
+  header[7] = size;
+  header.writeUInt16LE(1, 10);
+  header.writeUInt16LE(24, 12);
+  header.writeUInt32LE(dib.length, 14);
+  header.writeUInt32LE(22, 18);
+  return Buffer.concat([
+    header,
+    dib,
+  ]);
+}
+
+test.skipIf(process.platform !== "win32")(
+  "an icon without alpha keeps opaque black pixels and clears masked pixels",
+  async () => {
+    const { createMenuIconBitmap, releaseMenuIconBitmap } = await import(
+      "../../packages/plugin-sdk/src/windows-menu-icon.ts"
+    );
+    const native = user32();
+    const objects = gdi32();
+    const size = native.symbols.GetSystemMetrics(SM_CXSMICON);
+    const bitmap = createMenuIconBitmap(maskedBlackIco().toString("base64"));
+    try {
+      const info = Buffer.alloc(BITMAP_SIZE);
+      expect(objects.symbols.GetObjectW(bitmap, BITMAP_SIZE, ptr(info))).toBe(
+        BITMAP_SIZE,
+      );
+      const pixels = new Uint8Array(
+        toArrayBuffer(
+          Number(info.readBigUInt64LE(24)) as unknown as Pointer,
+          0,
+          size * size * 4,
+        ),
+      );
+      const middleRow = Math.floor(size / 2) * size * 4;
+      expect([
+        ...pixels.subarray(middleRow, middleRow + 4),
+      ]).toEqual([
+        0,
+        0,
+        0,
+        255,
+      ]);
+      const last = middleRow + (size - 1) * 4;
+      expect([
+        ...pixels.subarray(last, last + 4),
+      ]).toEqual([
+        0,
+        0,
+        0,
+        0,
+      ]);
+    } finally {
+      releaseMenuIconBitmap(bitmap);
+      native.close();
+      objects.close();
+    }
+  },
+);
