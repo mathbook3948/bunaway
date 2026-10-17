@@ -127,6 +127,8 @@ outer 좌표가 signed 32-bit 범위를 벗어나면 거부합니다. 이후 이
 macOS는 새 배치 필드를 명시하면 기본값이나 지연 창에서도 `UNSUPPORTED`입니다.
 실행 중 사용자 크기 조절과 이동 허용은 [창 API](/reference/host/windows/)의
 `setResizable`, `isResizable`, `setMovable`, `isMovable`로 제공합니다.
+사용자 크기 조절 중 내용 영역의 가로세로 비율을 고정하거나 해제하는 기능도 같은 창 API의
+`setAspectRatio`, `getAspectRatio`로 제공하며, 초기 창 선언에는 비율 필드가 없습니다.
 실행 중 중앙 배치는 같은 창 API의 `windows.center`로 제공하며, 현재 모니터 또는 `monitorId`로 지정한 모니터를 사용합니다.
 초기 창 선언에서 모니터를 지정하는 기능은 아직 지원하지 않습니다.
 Windows 창 선언은 0–128개이며 뷰 ID는 중복할 수 없고 정책에 해당 뷰와 home origin이 있어야 합니다.
