@@ -11,6 +11,7 @@ import type {
 import {
   AUTOSTART_ARGUMENT,
   AUTOSTART_HIDDEN_ARGUMENT,
+  BunawayError,
 } from "@bunaway/protocol";
 import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
 import type { LaunchArguments } from "./instance.ts";
@@ -135,6 +136,97 @@ export function openRequest(
 /** Longest wait for each of onWillQuit and onQuit before shutdown continues without it. */
 export const WILL_QUIT_DEADLINE_MS = 3000;
 
+/** Largest process exit code every supported platform can report. */
+export const MAX_EXIT_CODE = 255;
+
+/** Most relaunch arguments and their JSON size, matching the single-instance launch limits. */
+const MAX_RELAUNCH_ARGUMENTS = 256;
+const MAX_RELAUNCH_BYTES = 64 * 1024;
+
+/** App-requested relaunch: `argv` is undefined when the initial launch arguments are reused. */
+export type RelaunchRequest = {
+  readonly argv: readonly string[] | undefined;
+};
+
+/** What an approved shutdown asks of the host besides stopping. */
+export type ShutdownRequest = {
+  readonly exitCode?: number;
+  readonly relaunch?: RelaunchRequest;
+};
+
+function invalidArgument(message: string): BunawayError {
+  return new BunawayError({
+    code: "INVALID_ARGUMENT",
+    message,
+  });
+}
+
+/** Returns a valid exit code (0 when omitted) or throws `INVALID_ARGUMENT`. */
+export function validateExitCode(value: unknown): number {
+  if (value === undefined) {
+    return 0;
+  }
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > MAX_EXIT_CODE
+  ) {
+    throw invalidArgument(
+      `exitCode must be an integer from 0 to ${MAX_EXIT_CODE}`,
+    );
+  }
+  return value;
+}
+
+/** Checks that options for quit() or relaunch() are absent or a plain object. */
+function optionsObject(options: unknown): Record<string, unknown> {
+  if (options === undefined) {
+    return {};
+  }
+  if (!options || typeof options !== "object" || Array.isArray(options)) {
+    throw invalidArgument("options must be an object");
+  }
+  return options as Record<string, unknown>;
+}
+
+/** Builds the shutdown request, setting `exitCode` only when the caller gave one. */
+function shutdownRequest(
+  options: Record<string, unknown>,
+  relaunch?: RelaunchRequest,
+): ShutdownRequest {
+  return {
+    ...(options.exitCode === undefined
+      ? {}
+      : {
+          exitCode: validateExitCode(options.exitCode),
+        }),
+    ...(relaunch
+      ? {
+          relaunch,
+        }
+      : {}),
+  };
+}
+
+/** Copies and checks relaunch arguments with the same limits as forwarded launches. */
+function relaunchArguments(value: unknown): readonly string[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (
+    !Array.isArray(value) ||
+    value.length > MAX_RELAUNCH_ARGUMENTS ||
+    value.some((arg) => typeof arg !== "string" || arg.includes("\0")) ||
+    Buffer.byteLength(JSON.stringify(value)) > MAX_RELAUNCH_BYTES
+  ) {
+    throw invalidArgument("Invalid relaunch argv");
+  }
+  return Object.freeze([
+    ...value,
+  ]);
+}
+
 /** Most queued open requests, and most OS URL requests buffered before ready. */
 const MAX_PENDING_OPENS = 64;
 
@@ -157,10 +249,16 @@ export class DesktopLifecycle {
   private shutdownReason: ShutdownReason | undefined;
   private willQuitDone = false;
   private quitDone = false;
+  /** Exit code of the first committed shutdown; exit() replaces it once. */
+  private committedExitCode: number | undefined;
+  /** True after exit(): shutdown hooks are skipped and the code is final. */
+  private forced = false;
+  private relaunchRequested: RelaunchRequest | undefined;
   /**
    * @param stop Asks the host to begin shutdown after a quit is approved.
    * @param report Receives callback failures and hook timeouts without ending the app.
    * @param hookDeadlineMs Wait limit for onWillQuit and onQuit; a parameter so tests need no real wait.
+   * @param relaunchSupported False on a host that cannot restart itself; `relaunch()` then rejects `UNSUPPORTED`.
    */
   constructor(
     readonly options: DesktopOptions | undefined,
@@ -168,6 +266,7 @@ export class DesktopLifecycle {
     private readonly stop: () => void,
     private readonly report: (error: unknown) => void,
     private readonly hookDeadlineMs = WILL_QUIT_DEADLINE_MS,
+    relaunchSupported = true,
   ) {
     if (
       options !== undefined &&
@@ -224,7 +323,7 @@ export class DesktopLifecycle {
         throw new Error(`desktop.${name} must be a function`);
       }
     }
-    this.context = Object.freeze({
+    const context: DesktopContext = {
       show: () => (this.ending ? Promise.resolve() : control("show")),
       hide: () => {
         if (!options?.tray) {
@@ -232,8 +331,32 @@ export class DesktopLifecycle {
         }
         return this.ending ? Promise.resolve() : control("hide");
       },
-      quit: () => this.quit("api"),
-    });
+      quit: (quitOptions) => {
+        // Return the shared quit promise itself, so concurrent callers observe one decision.
+        try {
+          return this.quit("api", shutdownRequest(optionsObject(quitOptions)));
+        } catch (error) {
+          return Promise.reject(error);
+        }
+      },
+      exit: (exitCode) => this.exit(exitCode),
+      relaunch: async (relaunchOptions) => {
+        if (!relaunchSupported) {
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message: "relaunch is not supported on this platform.",
+          });
+        }
+        const parsed = optionsObject(relaunchOptions);
+        return this.quit(
+          "api",
+          shutdownRequest(parsed, {
+            argv: relaunchArguments(parsed.argv),
+          }),
+        );
+      },
+    };
+    this.context = Object.freeze(context);
   }
   /**
    * Queues the open callbacks, showing the app first for second instances: onOpen,
@@ -355,9 +478,43 @@ export class DesktopLifecycle {
    * Records the shutdown cause for onWillQuit and onQuit. The first cause wins,
    * so a signal during a pending quit check or a UI close report cannot be
    * reported twice. It also stops queued callbacks and later quit requests.
+   * The exit code and relaunch request of the committing call apply only if it is the first.
    */
-  commitShutdown(reason: ShutdownReason): void {
-    this.shutdownReason ??= reason;
+  commitShutdown(reason: ShutdownReason, request: ShutdownRequest = {}): void {
+    if (this.shutdownReason !== undefined) {
+      return;
+    }
+    this.shutdownReason = reason;
+    this.committedExitCode = request.exitCode;
+    this.relaunchRequested = request.relaunch;
+  }
+  /** Exit code the host reports once cleanup finishes. */
+  get exitCode(): number {
+    return this.committedExitCode ?? 0;
+  }
+  /** Relaunch the host performs after `onQuit`; undefined for an ordinary or forced exit. */
+  get relaunch(): RelaunchRequest | undefined {
+    return this.forced ? undefined : this.relaunchRequested;
+  }
+  /**
+   * Commits an immediate exit: the shutdown hooks are skipped, a pending quit check is moot and
+   * the code replaces one chosen by an earlier quit. Cleanup of Core and native resources
+   * continues. A repeated exit keeps the first forced code.
+   */
+  async exit(exitCode?: number): Promise<void> {
+    const code = validateExitCode(exitCode);
+    if (this.forced) {
+      return;
+    }
+    this.forced = true;
+    this.committedExitCode = code;
+    this.relaunchRequested = undefined;
+    const alreadyStopping = this.stopped;
+    this.shutdownReason ??= "api";
+    this.stopped = true;
+    if (!alreadyStopping) {
+      this.stop();
+    }
   }
   /**
    * Runs onWillQuit once for an orderly shutdown, before Core and windows stop.
@@ -365,7 +522,7 @@ export class DesktopLifecycle {
    */
   async willQuit(): Promise<void> {
     const reason = this.shutdownReason;
-    if (reason === undefined || this.willQuitDone) {
+    if (reason === undefined || this.willQuitDone || this.forced) {
       return;
     }
     this.willQuitDone = true;
@@ -374,7 +531,7 @@ export class DesktopLifecycle {
   /** Runs onQuit once after Core and the Workers stopped; skipped without a committed cause. */
   async quitCompleted(): Promise<void> {
     const reason = this.shutdownReason;
-    if (reason === undefined || this.quitDone) {
+    if (reason === undefined || this.quitDone || this.forced) {
       return;
     }
     this.quitDone = true;
@@ -455,7 +612,7 @@ export class DesktopLifecycle {
    * and returns true, so the host never reports a cancelled quit for it. A failure is
    * still reported.
    */
-  quit(reason: QuitReason): Promise<boolean> {
+  quit(reason: QuitReason, request: ShutdownRequest = {}): Promise<boolean> {
     if (this.ending) {
       return Promise.resolve(true);
     }
@@ -474,7 +631,7 @@ export class DesktopLifecycle {
           if (vetoed) {
             return false;
           }
-          this.commitShutdown(reason);
+          this.commitShutdown(reason, request);
           this.stopped = true;
           this.stop();
           return true;

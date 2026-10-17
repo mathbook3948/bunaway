@@ -3,15 +3,30 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import type { AppDefinition } from "@bunaway/core";
+import {
+  APP_RELAUNCH_EXIT_CODE,
+  type AppRelaunchRequest,
+} from "@bunaway/runtime-bun/development";
+import { DiagnosticLog } from "@bunaway/runtime-bun/diagnostic-log";
 import { isCompiledApp, localAppData, verifyWindowsPackage } from "./config.ts";
-import { runWindowsApp } from "./entry.ts";
+import { runWindowsApp, type WindowsAppResult } from "./entry.ts";
 import {
   forwardToInstance,
   instanceAddress,
   listenForInstances,
   parseLaunchArguments,
 } from "./instance.ts";
-import { AppAlreadyRunningError, containAppProcess } from "./job.ts";
+import {
+  AppAlreadyRunningError,
+  containAppProcess,
+  containAppProcessAfterRelaunch,
+  startOutsideAppJob,
+} from "./job.ts";
+import {
+  type HostLaunch,
+  RELAUNCH_ENVIRONMENT,
+  relaunchCommand,
+} from "./relaunch.ts";
 
 function object(value: unknown): Record<string, unknown> {
   assert(
@@ -49,9 +64,17 @@ if (import.meta.main) {
       argv: developmentUrl ? args.slice(2) : args,
       cwd: process.cwd(),
     });
+    // A relaunched host starts while its predecessor is still exiting, so it waits for the lock
+    // instead of forwarding to the predecessor's closing pipe. The marker is not inherited further.
+    const relaunched = process.env[RELAUNCH_ENVIRONMENT] === "1";
+    delete process.env[RELAUNCH_ENVIRONMENT];
     // Claim this data directory before importing app code.
     try {
-      containAppProcess(config.dataRoot);
+      if (relaunched) {
+        await containAppProcessAfterRelaunch(config.dataRoot);
+      } else {
+        containAppProcess(config.dataRoot);
+      }
     } catch (error) {
       if (!(error instanceof AppAlreadyRunningError)) {
         throw error;
@@ -60,6 +83,7 @@ if (import.meta.main) {
       process.exit(0);
     }
     const inbox = await listenForInstances(instanceAddress(config.dataRoot));
+    let result: WindowsAppResult;
     try {
       // Only the owner imports the app after IPC readiness. This literal also lets
       // bun build --compile include the application and its shared core chunk.
@@ -70,18 +94,91 @@ if (import.meta.main) {
         app.commands && app.events,
         "App must default-export an AppDefinition",
       );
-      await runWindowsApp(app as AppDefinition, config, launch, inbox);
+      result = await runWindowsApp(app as AppDefinition, config, launch, inbox);
     } finally {
       // runWindowsApp also closes on shutdown; early import failures need this path.
       await inbox.close().catch(() => {});
     }
-    process.exit(0);
+    // The app is fully stopped: start the replacement only now, so it never overlaps the old host.
+    let exitCode = result.exitCode;
+    if (result.relaunch) {
+      const cliManaged = devtools && process.send !== undefined;
+      if (cliManaged) {
+        exitCode = APP_RELAUNCH_EXIT_CODE;
+      }
+      await relaunchHost(result.relaunch.argv, {
+        dataRoot: config.dataRoot,
+        cliManaged,
+        host: {
+          compiled: isCompiledApp,
+          execPath: process.execPath,
+          execArgv: process.execArgv,
+          script: process.argv[1],
+          switches: [
+            ...(devtools
+              ? [
+                  "--devtools",
+                ]
+              : []),
+            ...(developmentUrl
+              ? [
+                  "--dev-url",
+                  developmentUrl,
+                ]
+              : []),
+          ],
+          cwd: launch.cwd,
+          env: process.env,
+        },
+      });
+    }
+    process.exit(exitCode);
   } catch (error) {
     console.error(error);
     if (isCompiledApp) {
       await reportWindowsFailure(error, dataRoot, title);
     }
     process.exit(1);
+  }
+}
+
+/**
+ * Starts the host again after an approved `relaunch()`.
+ * Under `bunaway dev` the CLI owns the host process, so it is asked to restart it through IPC.
+ * Otherwise a new process starts outside this app's Job. A refusal (for example an outer Job that
+ * forbids breakaway) cannot be reported to the caller anymore: it is logged and this process still
+ * exits with the requested code.
+ */
+export async function relaunchHost(
+  argv: readonly string[],
+  options: {
+    dataRoot: string;
+    cliManaged: boolean;
+    host: HostLaunch;
+  },
+): Promise<void> {
+  try {
+    if (options.cliManaged) {
+      await new Promise<void>((resolve, reject) =>
+        process.send?.(
+          {
+            kind: "bunaway:relaunch-app",
+            argv,
+          } satisfies AppRelaunchRequest,
+          (error: Error | null) => (error ? reject(error) : resolve()),
+        ),
+      );
+      return;
+    }
+    startOutsideAppJob(relaunchCommand(options.host, argv));
+  } catch (error) {
+    console.error("Relaunch failed:", error);
+    const log = new DiagnosticLog(resolve(options.dataRoot, "logs/host.log"));
+    await log
+      .write("relaunch-failed", {
+        message: error instanceof Error ? error.message : String(error),
+      })
+      .catch(() => {});
   }
 }
 

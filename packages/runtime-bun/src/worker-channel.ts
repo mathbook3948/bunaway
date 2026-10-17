@@ -129,6 +129,15 @@ function openUrlList(value: unknown): asserts value is string[] {
     throw new Error("Invalid open URL list");
   }
 }
+function processExitCode(value: unknown): asserts value is number {
+  if (
+    !Number.isInteger(value) ||
+    (value as number) < 0 ||
+    (value as number) > 255
+  ) {
+    throw new Error("Invalid process exit code");
+  }
+}
 function flag(value: unknown): asserts value is boolean {
   if (typeof value !== "boolean") {
     throw new Error("Invalid Worker flag");
@@ -452,6 +461,16 @@ const packetDefinitions = {
     {},
     [
       "ui",
+      "macos-main",
+    ],
+    "control",
+  ),
+  /** The process exit code the backend chose for an orderly shutdown; sent before `cleaned`. */
+  "exit-code": definePacket(
+    {
+      exitCode: processExitCode,
+    },
+    [
       "macos-main",
     ],
     "control",

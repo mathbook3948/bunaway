@@ -39,16 +39,26 @@ import { activeDescendants, containAppProcess } from "./job.ts";
 import { releaseSessionEndWait } from "./session-end.ts";
 import { readWebViewVersion } from "./webview-version.ts";
 
+/** How an orderly shutdown ended: the process exit code and an optional app-requested relaunch. */
+export type WindowsAppResult = {
+  readonly exitCode: number;
+  /** Arguments for the new process; present only after an approved `relaunch()`. */
+  readonly relaunch?: {
+    readonly argv: readonly string[];
+  };
+};
+
 /**
  * Starts the Windows host and Workers, then creates the app Core.
- * Shutdown drains both Workers and rethrows startup or host failures.
+ * Shutdown drains both Workers and rethrows startup or host failures; otherwise it resolves to
+ * the exit code and relaunch the caller must apply after this function has released the app.
  */
 export async function runWindowsApp(
   app: AppDefinition,
   config: UIConfig,
   launch?: LaunchArguments,
   inbox?: Awaited<ReturnType<typeof listenForInstances>>,
-): Promise<void> {
+): Promise<WindowsAppResult> {
   const development =
     config.devtools && process.send ? new DevelopmentApp(app) : undefined;
   app = development?.definition ?? app;
@@ -806,4 +816,16 @@ export async function runWindowsApp(
   if (failure) {
     throw failure;
   }
+  const relaunch = desktop.relaunch;
+  return {
+    exitCode: desktop.exitCode,
+    ...(relaunch
+      ? {
+          relaunch: {
+            // Without explicit arguments the new process repeats the initial launch.
+            argv: relaunch.argv ?? desktopLaunch(launch?.argv ?? []).argv,
+          },
+        }
+      : {}),
+  };
 }

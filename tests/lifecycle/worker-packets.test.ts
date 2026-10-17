@@ -202,6 +202,13 @@ const fixtures = {
     "ui",
     "macos-main",
   ),
+  "exit-code": fixture(
+    {
+      kind: "exit-code",
+      exitCode: 3,
+    },
+    "macos-main",
+  ),
   "session-open": fixture(
     {
       kind: "session-open",
@@ -1209,6 +1216,7 @@ const reservedPackets: {
       "quit-request",
       "quit-cancelled",
       "shutdown-committed",
+      "exit-code",
       "fatal",
     ] as const
   ).map((kind) => ({

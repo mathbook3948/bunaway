@@ -1,6 +1,7 @@
 import {
   type AppReloadRequest,
   type AppReloadResult,
+  readAppRelaunchRequest,
   readAppReloadResult,
 } from "@bunaway/runtime-bun/development";
 import type { Subprocess } from "bun";
@@ -11,6 +12,7 @@ const RELOAD_TIMEOUT_MS = 30000;
 export class WindowsAppReload {
   private readonly ready = Promise.withResolvers<void>();
   private child: Subprocess | undefined;
+  private relaunchArgv: readonly string[] | undefined;
   private pending:
     | {
         id: string;
@@ -29,8 +31,26 @@ export class WindowsAppReload {
     void child.exited.then(() => this.close());
   }
 
-  /** Route readiness and result messages; malformed results reject the pending request. */
+  /** Arguments of the relaunch the app asked for before exiting; undefined if it did not. */
+  get relaunch(): readonly string[] | undefined {
+    return this.relaunchArgv;
+  }
+
+  /** Route readiness, relaunch and result messages; malformed results reject the pending request. */
   receive(value: unknown): void {
+    if (
+      value &&
+      typeof value === "object" &&
+      "kind" in value &&
+      value.kind === "bunaway:relaunch-app"
+    ) {
+      try {
+        this.relaunchArgv = readAppRelaunchRequest(value).argv;
+      } catch (error) {
+        console.error(error);
+      }
+      return;
+    }
     if (
       value &&
       typeof value === "object" &&

@@ -79,6 +79,7 @@ if (target === "windows-x64") {
       await test("windows-bun.ts", scenario);
     }
     await test("windows-cli-arguments.ts");
+    await test("windows-app-exit.ts");
     await test("windows-bun-window-api.ts");
     await test("windows-webview-print-ui.ts");
     await test("windows-webview-downloads.ts");

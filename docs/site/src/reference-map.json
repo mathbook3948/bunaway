@@ -83,6 +83,8 @@
           "verifyDevelopmentToolsLaunch",
           "readAppReloadRequest",
           "readAppReloadResult",
+          "readAppRelaunchRequest",
+          "APP_RELAUNCH_EXIT_CODE",
           "MAX_APP_RELOAD_MESSAGE_CHARS"
         ]
       }
@@ -1147,7 +1149,7 @@
       "source": "packages/plugin-api/src/desktop.ts",
       "type": "DesktopContext",
       "pages": {
-        "reference/backend/app-definition": ["show", "hide", "quit"]
+        "reference/backend/app-definition": ["show", "hide", "quit", "exit", "relaunch"]
       }
     },
     {

@@ -211,10 +211,16 @@ const channel = new Channel(
             await core?.stop();
             sessions.clear();
           },
-          reportCleaned: () =>
-            channel.send({
+          reportCleaned: async () => {
+            // The main thread owns the process exit, so it learns the code before cleanup ends.
+            await channel.send({
+              kind: "exit-code",
+              exitCode: desktop?.exitCode ?? 0,
+            });
+            await channel.send({
               kind: "cleaned",
-            }),
+            });
+          },
           nativeStopped: nativeStopped.promise,
         });
         await channel.drain();
@@ -300,6 +306,9 @@ try {
       });
     },
     reportDesktopFailure,
+    undefined,
+    // The macOS host cannot start a replacement process of itself yet.
+    false,
   );
   if (reportedCause) {
     desktop.commitShutdown(reportedCause);

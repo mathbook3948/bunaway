@@ -123,6 +123,50 @@ payload는 `{ windowId, viewId, phase }`이고 `phase`는 `created`, `ready`, `c
 사용자 닫기 한 번에 `beforeQuit`와 닫기 요청이 함께 있으면 순서는 닫기 요청, 닫기 확인, 마지막 창이면
 `beforeQuit`, 닫기 완료다.
 
+## 종료 코드, `exit`, `relaunch`
+
+2026-10-17 변경: `DesktopContext`에 `quit(options?: { exitCode })`, `exit(exitCode?)`,
+`relaunch(options?: { argv, exitCode })`를 추가한다. 신뢰된 앱 콜백만 쓸 수 있고 웹 세션과
+명령 컨텍스트에는 노출하지 않는다.
+
+- 종료 코드는 0에서 255 사이의 정수다. 그 밖의 값은 `INVALID_ARGUMENT`로 거부하고 종료하지 않는다.
+  macOS와 Windows가 같은 범위를 보고할 수 있게 하려는 제한이다.
+- `quit({ exitCode })`는 기존 순서(`beforeQuit`, `onWillQuit`, Core와 StopHook, `onQuit`)를 그대로 따른다.
+  코드는 종료가 확정될 때 원인과 함께 기록하며 먼저 확정된 값이 이긴다. `beforeQuit`가 거부하면 지정한 코드도 버린다.
+  `ShutdownReason`은 `"api"`로 바뀌지 않는다. 호스트는 `onQuit`까지 끝난 뒤 이 코드로 프로세스를 끝낸다.
+  호스트 실패는 계속 코드 1이다.
+- `exit(exitCode)`는 취소할 수 없는 종료다. `beforeQuit`, 닫기 확인, `onWillQuit`, `onQuit`을 건너뛰고
+  대기 중인 `beforeQuit` 결과는 무시한다. Core, StopHook, Worker, Job 정리는 유지하며 기존 40초 백스톱이
+  시간을 제한한다. 이미 확정된 `quit`의 코드와 `relaunch`는 `exit`가 대체한다. 두 번째 `exit`는 무시한다.
+  UI는 기존 `shutdown-committed` 처리로 대기 중인 닫기 요청을 취소하므로 UI 스레드는 바뀌지 않는다.
+- `relaunch({ argv, exitCode })`는 한 번의 호출로 종료와 재실행을 함께 요청한다. `quit`과 같은 순서를 따르며
+  `beforeQuit`가 거부하면 `false`를 반환하고 재실행하지 않는다. 먼저 확정된 종료가 이기므로 이미 확정된
+  일반 종료나 세션 종료는 재실행으로 바뀌지 않는다. 호스트 실패와 세션 종료에서는 재실행하지 않는다.
+- 재실행 인자 기본값은 최초 실행의 `OpenRequest.argv`(개발 스위치와 autostart 접두사 제외)다.
+  `argv`를 주면 그것으로 대체하며 256개, JSON 64KiB, NUL 금지 제한은 단일 인스턴스 전달과 같다.
+  실행 파일 경로, 환경 변수, 작업 디렉터리는 재정의할 수 없다. 작업 디렉터리는 boot 시점 값을 유지한다.
+  호스트가 새 프로세스에 내부 표지 환경 변수 하나만 더한다.
+
+Windows 구현은 `runWindowsApp`이 `{ exitCode, relaunch? }`를 반환하게 하고 `boot.ts`가 적용한다.
+새 프로세스는 `onQuit`과 인스턴스 pipe 정리가 끝난 뒤에만 만든다. `host.lock`은 프로세스가 끝나야 풀리므로
+표지가 있는 새 호스트는 단일 인스턴스 검사 전에 잠금이 풀릴 때까지(최대 30초) 다시 시도하며,
+기한이 지나면 일반 두 번째 실행처럼 실행 중인 인스턴스로 인자를 전달한다.
+앱 Job은 닫힐 때 하위 프로세스를 함께 종료하므로 새 프로세스는 Job을 벗어나야 한다.
+`Bun.spawn`은 이 플래그를 줄 수 없어 `job.ts`가 `CreateProcessW`를 `CREATE_BREAKAWAY_FROM_JOB`으로 부른다.
+Job의 `BREAKAWAY_OK`는 이 호출 동안에만 켠다. 바깥 Job이 이탈을 거부하면 이 시점에는 종료가 확정되어
+호출자에게 알릴 수 없으므로 `relaunch-failed` 진단을 남기고 요청한 코드로 종료한다.
+`bunaway dev`에서는 호스트가 CLI에 IPC 메시지(`bunaway:relaunch-app`)를 보내고 개발 전용 종료 코드로
+끝나며, CLI가 기존 재시작 경로로 새 호스트를 띄워 개발 세션을 유지한다.
+macOS는 `quit`의 코드와 `exit`를 같은 `DesktopLifecycle`로 지원하고 코드는 `exit-code` 패킷으로 메인
+스레드에 전달한다. 새 프로세스를 만들고 부모 종료를 기다리는 구현은 별도 작업이라 `relaunch`는
+`UNSUPPORTED`로 거부한다.
+
+다른 프레임워크와의 비교. Electron의 `app.exit(code)`는 창을 닫지 않고 `before-quit`, `will-quit`,
+`quit`을 내지 않고 즉시 끝낸다. `exit`가 이 훅 생략을 따른다. Electron의 `app.relaunch()`는 예약만 하고
+`quit` 또는 `exit`를 따로 불러야 하므로 "재실행 예약" 상태가 남는다. 이 설계는 호출 한 번으로 종료와
+재실행을 함께 하는 형태를 택해 그 상태를 없앴다. Tauri의 `exit`와 `restart`가 종료 이벤트를 거치는지는 이
+문서 작성 시점에 공개 문서와 소스로 확인하지 못해 비교하지 않는다. 결정은 Tauri 동작에 의존하지 않는다.
+
 ## macOS
 
 2026-10-16 변경: macOS도 이 계약을 구현한다. 네 훅, 세션 종료, `windows.lifecycle`,

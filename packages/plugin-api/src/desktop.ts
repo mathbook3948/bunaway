@@ -52,6 +52,28 @@ export type ReopenEvent = {
   readonly hasVisibleWindows: boolean;
 };
 
+/** Options for {@link DesktopContext.quit}. */
+export type QuitOptions = {
+  /**
+   * Process exit code, an integer from 0 to 255 (default 0). It is used only if the quit is
+   * approved and no earlier shutdown cause already chose a code; a `beforeQuit` veto discards it.
+   * Any other value rejects with `INVALID_ARGUMENT`.
+   */
+  readonly exitCode?: number;
+};
+
+/** Options for {@link DesktopContext.relaunch}. */
+export type RelaunchOptions = QuitOptions & {
+  /**
+   * Arguments for the new process, after the executable. They replace the arguments of the
+   * initial launch (without the development switches and autostart prefix), which are the default.
+   * At most 256 strings without NUL, 64 KiB of JSON in total. The executable, environment and
+   * working directory cannot be changed: the new process starts in the directory the app had at
+   * boot.
+   */
+  readonly argv?: readonly string[];
+};
+
 /** Lifecycle controls exposed only to trusted app callbacks. */
 export interface DesktopContext {
   /**
@@ -61,8 +83,31 @@ export interface DesktopContext {
   show(): Promise<void>;
   /** Hides the app window; rejects when no tray is configured. */
   hide(): Promise<void>;
-  /** Requests shutdown and resolves to `false` if a quit hook vetoes it or fails. */
-  quit(): Promise<boolean>;
+  /**
+   * Requests shutdown and resolves to `false` if a quit hook vetoes it or fails. Runs `beforeQuit`,
+   * `onWillQuit`, Core and plugin stop hooks and `onQuit` in order. `true` means the shutdown is
+   * committed; when one was already committed, its exit code stays and `options.exitCode` is
+   * ignored. Rejects with `INVALID_ARGUMENT` for an exit code outside 0 to 255.
+   */
+  quit(options?: QuitOptions): Promise<boolean>;
+  /**
+   * Ends the app without asking: `beforeQuit`, the window close confirmation, `onWillQuit` and
+   * `onQuit` are skipped, like Electron's `app.exit`. Core, plugin stop hooks, Workers and child
+   * processes are still cleaned up within the host's shutdown limit. The exit code (default 0)
+   * replaces one chosen by an earlier quit. Resolves once the exit is committed, before cleanup
+   * finishes. Rejects with `INVALID_ARGUMENT` for an exit code outside 0 to 255.
+   */
+  exit(exitCode?: number): Promise<void>;
+  /**
+   * Quits like {@link DesktopContext.quit} and then starts a new process of the same app with
+   * `options.argv`. Resolves to `false` if a quit hook vetoes it or fails, and then nothing is
+   * relaunched. The new process starts after `onQuit` and waits for this one to exit before it
+   * takes the single-instance lock. A shutdown already committed by another cause wins, including
+   * a plain quit that does not relaunch. The relaunch is skipped when the operating system ends
+   * the session or the host fails. Windows only; macOS rejects with `UNSUPPORTED`. Under
+   * `bunaway dev` the CLI restarts the host.
+   */
+  relaunch(options?: RelaunchOptions): Promise<boolean>;
 }
 
 /** Optional window-close, tray, open-request, and quit behavior for the desktop app. */

@@ -93,6 +93,11 @@ export async function devProject(
     },
     inspector,
     options.inspect,
+    undefined,
+    // The app asked to relaunch: restart the host through the normal path, keeping the session.
+    () => {
+      void controller.change();
+    },
   );
   const sources = new DevWatcher(
     {

@@ -14,6 +14,44 @@ export type AppReloadResult = {
   status: "reloaded" | "restart" | "failed";
   message?: string;
 };
+/** Sent by a development host to the CLI that owns it, asking for a fresh host with `argv`. */
+export type AppRelaunchRequest = {
+  kind: "bunaway:relaunch-app";
+  argv: readonly string[];
+};
+
+/**
+ * Exit code a development host uses after sending an {@link AppRelaunchRequest}. It lies outside
+ * the 0 to 255 range apps can choose, so the CLI knows a request is in flight without a race
+ * between the IPC message and the process exit.
+ */
+export const APP_RELAUNCH_EXIT_CODE = 0x10000;
+
+/** Most arguments a relaunch request may carry, as for `DesktopContext.relaunch()`. */
+const MAX_APP_RELAUNCH_ARGUMENTS = 256;
+
+/** Validates a relaunch request received from the development host. */
+export function readAppRelaunchRequest(value: unknown): AppRelaunchRequest {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("kind" in value) ||
+    value.kind !== "bunaway:relaunch-app" ||
+    !("argv" in value) ||
+    !Array.isArray(value.argv) ||
+    value.argv.length > MAX_APP_RELAUNCH_ARGUMENTS ||
+    value.argv.some((arg) => typeof arg !== "string" || arg.includes("\0")) ||
+    Object.keys(value).length !== 2
+  ) {
+    throw new Error("Invalid app relaunch request.");
+  }
+  return {
+    kind: value.kind,
+    argv: [
+      ...value.argv,
+    ],
+  };
+}
 const RELOAD_ID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 /** Maximum diagnostic text accepted in a reload result. */
 export const MAX_APP_RELOAD_MESSAGE_CHARS = 4096;

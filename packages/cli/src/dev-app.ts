@@ -1,6 +1,9 @@
 import { resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import type { AppReloadResult } from "@bunaway/runtime-bun/development";
+import {
+  APP_RELAUNCH_EXIT_CODE,
+  type AppReloadResult,
+} from "@bunaway/runtime-bun/development";
 import type { Subprocess } from "bun";
 import { bundleWindowsReload } from "./assets.ts";
 import type { BuiltPackage } from "./build.ts";
@@ -16,7 +19,10 @@ import {
 /** The process and optional reload channel transferred by a successful app launch. */
 export interface RunningDevApp {
   process: Pick<Subprocess, "exited" | "exitCode" | "pid" | "kill">;
-  connection: Pick<WindowsAppReload, "reload" | "close"> | undefined;
+  connection:
+    | (Pick<WindowsAppReload, "reload" | "close"> &
+        Partial<Pick<WindowsAppReload, "relaunch">>)
+    | undefined;
 }
 
 /** Platform operations used by the app owner; a failed launch must release partial resources. */
@@ -25,12 +31,16 @@ export interface DevAppOperations {
     project: Project,
     built: BuiltPackage,
     isCurrent: () => boolean,
+    /** App arguments after the host switches; set by an app-requested relaunch. */
+    appArguments: readonly string[],
   ): Promise<RunningDevApp | undefined>;
   stop(app: RunningDevApp): Promise<void>;
 }
 
 const WINDOWS_CLEANUP_TIMEOUT_MS = 40000;
 const WINDOWS_CLEANUP_POLL_MS = 20;
+const RELAUNCH_MESSAGE_WAIT_MS = 2000;
+const RELAUNCH_MESSAGE_POLL_MS = 10;
 
 /** Stops the app after its reload channel closes, waiting for native cleanup on Windows. */
 async function stopDevApp(app: RunningDevApp): Promise<void> {
@@ -64,6 +74,7 @@ async function launchDevApp(
   inspector: string | undefined,
   inspectPort: number | undefined,
   isCurrent: () => boolean,
+  appArguments: readonly string[],
 ): Promise<RunningDevApp | undefined> {
   if (signal.aborted || !isCurrent()) {
     return;
@@ -112,6 +123,7 @@ async function launchDevApp(
             ]
           : []),
         ...built.arguments,
+        ...appArguments,
       ],
       {
         cwd: built.package,
@@ -158,17 +170,32 @@ export class DevApp {
       })
     | undefined;
   private stopping: Promise<void> | undefined;
+  /** Arguments the next host receives; replaced by an app-requested relaunch. */
+  private appArguments: readonly string[] = [];
 
+  /**
+   * @param relaunched Called after a host that asked for a relaunch exited; the caller starts a
+   *   fresh host through its normal restart path, so the development session continues.
+   */
   constructor(
     private readonly signal: AbortSignal,
     private readonly exited: (code: number) => void,
     inspector: string | undefined = undefined,
     inspectPort: number | undefined = undefined,
     private readonly operations: DevAppOperations = {
-      launch: (project, built, isCurrent) =>
-        launchDevApp(project, built, signal, inspector, inspectPort, isCurrent),
+      launch: (project, built, isCurrent, appArguments) =>
+        launchDevApp(
+          project,
+          built,
+          signal,
+          inspector,
+          inspectPort,
+          isCurrent,
+          appArguments,
+        ),
       stop: stopDevApp,
     },
+    private readonly relaunched: () => void = () => {},
   ) {}
 
   get running(): boolean {
@@ -184,7 +211,12 @@ export class DevApp {
     if (this.signal.aborted || !isCurrent()) {
       return;
     }
-    const app = await this.operations.launch(project, built, isCurrent);
+    const app = await this.operations.launch(
+      project,
+      built,
+      isCurrent,
+      this.appArguments,
+    );
     if (!app) {
       return;
     }
@@ -198,10 +230,31 @@ export class DevApp {
       return;
     }
     const current = this.active;
-    void app.process.exited.then((code) => {
-      if (this.active === current && !this.signal.aborted) {
-        this.exited(code);
+    void app.process.exited.then(async (code) => {
+      if (this.active !== current || this.signal.aborted) {
+        return;
       }
+      if (code === APP_RELAUNCH_EXIT_CODE) {
+        // The host wrote its relaunch request just before this exit; wait for the IPC message.
+        const deadline = Date.now() + RELAUNCH_MESSAGE_WAIT_MS;
+        while (
+          current.connection?.relaunch === undefined &&
+          Date.now() < deadline
+        ) {
+          await Bun.sleep(RELAUNCH_MESSAGE_POLL_MS);
+        }
+        if (this.active !== current || this.signal.aborted) {
+          return;
+        }
+      }
+      const relaunch = current.connection?.relaunch;
+      if (relaunch !== undefined) {
+        // The app asked to start again: keep the session and launch a fresh host.
+        this.appArguments = relaunch;
+        void this.stop().then(this.relaunched);
+        return;
+      }
+      this.exited(code);
     });
   }
 
