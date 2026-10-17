@@ -534,9 +534,19 @@ export type NativeDownloads = {
   forget(id: string): void;
 };
 
-/** Synchronous UI-thread controls; navigation retains the host's origin and session boundary. */
+/**
+ * Synchronous UI-thread controls; navigation retains the host's origin and session boundary.
+ *
+ * Each window owns exactly one WebView with the same lifetime, so a destroyed WebView is a
+ * closed window (`isDestroyed`) and state reads on it fail with INVALID_ARGUMENT.
+ */
 export type NativeWebView = {
-  /** Reads browser state without changing focus or starting navigation. */
+  /**
+   * Reads browser state without changing focus or starting navigation.
+   *
+   * `focused` is true only when the window is the OS foreground window and keyboard input focus
+   * is inside its WebView, so it implies the window is focused but not the reverse.
+   */
   getState(): {
     url: string;
     title: string;
@@ -544,6 +554,7 @@ export type NativeWebView = {
     canGoBack: boolean;
     canGoForward: boolean;
     zoomFactor: number;
+    focused: boolean;
   };
   /** Starts HTTP(S) navigation only to an origin already allowed for this view. */
   navigate(url: string): void;

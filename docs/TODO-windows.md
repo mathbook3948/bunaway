@@ -583,7 +583,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [x] 기존 허용 origin 안의 URL 로드, 일반 reload와 stop을 제공한다. `navigateWebView`, `reloadWebView`, `stopWebView`는 기존 세션 폐기와 origin 검사를 유지한다.
 - [ ] 로컬 파일 로드와 cache를 무시한 reload를 제공한다.
 - [x] `getWebViewState`로 현재 URL, title과 최상위 loading 상태를 조회한다.
-- [ ] WebView의 destroyed와 focus 상태를 조회한다.
+- [x] `getWebViewState`의 `focused`로 WebView 포커스를, `isDestroyed`로 창과 같은 수명의 WebView destroyed 상태를 조회한다. 실제 포커스 전환은 CI Windows native integration에서 검증한다.
 - [ ] 탐색 전 허용와 거부, redirect와 popup 새 창 처리 훅을 제공한다.
 - [ ] 로드 시작, DOM ready, 완료와 실패 이벤트를 제공한다.
 - [ ] 문서, 프레임과 same-document 탐색 이벤트를 제공한다.
