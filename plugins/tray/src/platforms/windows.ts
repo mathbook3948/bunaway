@@ -1,6 +1,7 @@
 import { type NativeEnvironment, NativeEventWaiters } from "@bunaway/plugin";
 import {
   MAX_TRAY_WAITERS,
+  type NativeTrayOwner,
   type NativeTrayServices,
 } from "@bunaway/plugin-api/native";
 import { BunawayError, validateValue } from "@bunaway/protocol";
@@ -20,20 +21,32 @@ function requireTray(
   return services;
 }
 
+/** Creates the tray owner; injectable so tests can observe wiring without a shell icon. */
+export type TrayFactory = (
+  ...args: ConstructorParameters<typeof Tray>
+) => NativeTrayOwner;
+
 /** The selected package creates native residency; the host retains cleanup ownership. */
 export function initialize(environment: NativeEnvironment) {
+  return initializeWith(environment, (...args) => new Tray(...args));
+}
+
+/** Wires tray input and hover delivery around the owner returned by `createTray`. */
+export function initializeWith(
+  environment: NativeEnvironment,
+  createTray: TrayFactory,
+) {
   const services = environment.tray;
   const hover = {
     open: true,
   };
-  services?.initialize?.(
-    ({ windows, tooltip, receive, notify, retain }) =>
-      new Tray(windows, tooltip, receive, notify, retain, (event) => {
-        // View-only event with no waiter. The host Tray outlives this plugin, so stop after dispose.
-        if (hover.open) {
-          services.emit("tray.hover", validateValue({}, event));
-        }
-      }),
+  services?.initialize?.(({ windows, tooltip, receive, notify, retain }) =>
+    createTray(windows, tooltip, receive, notify, retain, (event) => {
+      // View-only event with no waiter. The host Tray outlives this plugin, so stop after dispose.
+      if (hover.open) {
+        services.emit("tray.hover", validateValue({}, event));
+      }
+    }),
   );
   const notifications = new NativeEventWaiters<
     z.output<typeof trayEventSchema>
@@ -50,7 +63,7 @@ export function initialize(environment: NativeEnvironment) {
   };
 }
 
-type State = ReturnType<typeof initialize>;
+type State = ReturnType<typeof initializeWith>;
 
 export function get(state: State) {
   return requireTray(state.services).get();

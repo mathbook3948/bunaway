@@ -1,11 +1,8 @@
+import type { z } from "zod";
+import type { trayHoverEventSchema } from "#tray/contract";
+
 /** Hover notification published as `tray.hover`; separate from click-style `tray.input`. */
-export type TrayHoverEvent = {
-  state: "enter" | "move" | "leave";
-  position: {
-    x: number;
-    y: number;
-  } | null;
-};
+export type TrayHoverEvent = z.output<typeof trayHoverEventSchema>;
 
 /** Minimum spacing between `move` events while the pointer stays over the icon. */
 export const TRAY_MOVE_INTERVAL_MS = 50;
