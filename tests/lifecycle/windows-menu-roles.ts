@@ -256,6 +256,8 @@ const listeners = new Set<
   (message: number, wparam: bigint, lparam: bigint) => void
 >();
 const executed: NativeMenuRole[] = [];
+// Role outcomes reported by the WebView: completed, failed or skipped.
+let outcomes = 0;
 const failures: string[] = [];
 const skips: string[] = [];
 const focusFailures: string[] = [];
@@ -446,8 +448,17 @@ try {
     executeRole(_id, role) {
       executed.push(role);
       page.executeEditCommand(role, {
-        failed: (reason) => failures.push(`${role}: ${reason}`),
-        skipped: (reason) => skips.push(`${role}: ${reason}`),
+        executed: () => {
+          outcomes++;
+        },
+        failed: (reason) => {
+          outcomes++;
+          failures.push(`${role}: ${reason}`);
+        },
+        skipped: (reason) => {
+          outcomes++;
+          skips.push(`${role}: ${reason}`);
+        },
         focusFailed: (reason) => focusFailures.push(`${role}: ${reason}`),
       });
     },
@@ -535,8 +546,11 @@ try {
     const typesBefore: string[] = await evaluate(`[...window.inputTypes]`);
     const failuresBefore = failures.length;
     const skipsBefore = skips.length;
+    const outcomesBefore = outcomes;
     choose(roleItem(role));
-    // The command completes on a later pump; each page query below pumps the STA.
+    // The command completes on a later pump. Paste takes two DevTools calls, the second started
+    // from the first one's completion, so wait for the reported outcome before observing.
+    await pumpUntil(() => outcomes > outcomesBefore, `${role} outcome`);
     await Bun.sleep(CASCADE_SETTLE_MS);
     const state = await fieldIn(frame);
     const clipboard = await readClipboard(hwnd);
