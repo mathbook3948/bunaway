@@ -296,6 +296,8 @@ if (workerData?.toastMarshalWorker) {
       const shown = await waitHistory((items) => items.length === 1);
       assert(shown[0]?.includes("appLogoOverride"));
       assert(shown[0]?.includes("hero"));
+      assert(shown[0]?.includes('duration="long"'));
+      assert(shown[0]?.includes('loop="true"'));
       assert(shown[0]?.includes("pixel%20%C3%A9.png"));
       assert(shown[0]?.includes("ms-winsoundevent:Notification.Looping.Alarm"));
       controller.clear(media);

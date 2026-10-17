@@ -78,8 +78,11 @@ export const TOAST_IMAGE_EXTENSIONS = [
   ".gif",
   ".bmp",
 ] as const;
-/** Windows ignores toast images above 3 MiB, so reject them before the picture silently disappears. */
-export const MAX_TOAST_IMAGE_BYTES = 3 * 1024 * 1024;
+/**
+ * Microsoft documents a 3 MB limit for toast images on a normal connection (3 MB, not 3 MiB), so reject larger
+ * files before the picture silently disappears.
+ */
+export const MAX_TOAST_IMAGE_BYTES = 3_000_000;
 const MAX_TOAST_IMAGE_PATH_LENGTH = 260;
 /**
  * Windows system sounds addressable as `ms-winsoundevent:Notification.<name>`. Unpackaged apps cannot play
@@ -117,7 +120,10 @@ const imagePathSchema = z
   .max(MAX_TOAST_IMAGE_PATH_LENGTH)
   // Drive-absolute only: relative paths depend on the host cwd and UNC paths would reach network shares.
   .regex(/^[A-Za-z]:[\\/]/, "Path must be an absolute local drive path.")
-  .regex(/^[^"<>|*?\p{Cc}]*$/u, "Path contains invalid characters.")
+  // Lone surrogates (\p{Cs}) would make encodeURIComponent throw outside the error contract.
+  .regex(/^[^"<>|*?\p{Cc}\p{Cs}]*$/u, "Path contains invalid characters.")
+  // A colon after the drive designator would select an NTFS alternate data stream.
+  .refine((path) => !path.slice(2).includes(":"), "Path must not contain ':'.")
   .refine(
     (path) => !path.split(/[\\/]/).includes(".."),
     "Path must not contain '..'.",

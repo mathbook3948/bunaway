@@ -175,6 +175,7 @@ export function toastFileUri(path: string): string {
 
 /**
  * Build toast XML. Text and file URIs are escaped, and media paths are validated local files.
+ * A looping sound needs duration="long", otherwise Windows plays it once with the short toast.
  * Caller data is never treated as markup or an executable activation route.
  */
 export function toastXml(input: ResolvedNotification): string {
@@ -195,5 +196,5 @@ export function toastXml(input: ResolvedNotification): string {
   } else if (input.sound) {
     audio = `<audio src="ms-winsoundevent:Notification.${input.sound}"${input.soundLoop ? ' loop="true"' : ""}/>`;
   }
-  return `<toast><visual><binding template="ToastGeneric">${media}<text>${escapeXml(input.title)}</text><text>${escapeXml(input.body)}</text></binding></visual>${audio}</toast>`;
+  return `<toast${input.soundLoop ? ' duration="long"' : ""}><visual><binding template="ToastGeneric">${media}<text>${escapeXml(input.title)}</text><text>${escapeXml(input.body)}</text></binding></visual>${audio}</toast>`;
 }
