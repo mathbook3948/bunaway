@@ -82,7 +82,8 @@ export const TOAST_IMAGE_EXTENSIONS = [
  * files before the picture silently disappears.
  */
 export const MAX_TOAST_IMAGE_BYTES = 3_000_000;
-const MAX_TOAST_IMAGE_PATH_LENGTH = 260;
+// MAX_PATH is 260 including the terminating NUL.
+const MAX_TOAST_IMAGE_PATH_LENGTH = 259;
 /**
  * Windows system sounds addressable as `ms-winsoundevent:Notification.<name>`. Unpackaged apps cannot play
  * arbitrary files. Only the `Looping.*` names honor `soundLoop`.

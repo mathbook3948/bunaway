@@ -414,8 +414,10 @@ export function initialize(environment: NativeEnvironment) {
     getStatus: status.getStatus,
     openSettings: status.openSettings,
     show: (input: ResolvedNotification) => {
+      // Resolve the toast service first so an unsupported host fails with UNSUPPORTED before any file access.
+      const controller = getToasts();
       assertToastMediaFiles(input, status.filesystem);
-      return getToasts().show(input);
+      return controller.show(input);
     },
     clear: (input: NotificationResult) => getToasts().clear(input),
     async dispose() {

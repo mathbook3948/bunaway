@@ -54,7 +54,7 @@ URL, `..` 구간, 제어 문자는 거부한다. 확장자는 png, jpg, jpeg, gi
 드라이브와 RAM 디스크만 허용하고, 경로 구성요소를 위에서부터 `GetFileAttributesW`로 확인해 reparse
 point(링크, 정션)를 따라가지 않고 거부하며 최종 파일의 offline과 recall 속성도 거부한다. 두 함수는
 플러그인 수명 kernel32 바인딩을 쓴다. 네트워크를 가리키는 `subst` 드라이브와 검사 뒤 경로 교체는 막지
-못한다. 인코딩한 file URI는 경로(260자)보다 길어질 수 있고 길이는 검사하지 않는다.
+못한다. 인코딩한 file URI는 경로(최대 259자)보다 길어질 수 있고 길이는 검사하지 않는다.
 `soundLoop`이면 `<toast duration="long">`을 출력한다. 검사는 show 직전에 하며 실패는 `INVALID_ARGUMENT`이다. 경로는
 세그먼트별로 percent-encode한 `file:///` URI로 바꾸고 XML escape한다. `imagePlacement`는 `inline`(기본)
 또는 `hero`이다. `sound`는 `Default`, `IM`, `Mail`, `Reminder`, `SMS`, `Looping.Alarm`~`Looping.Alarm10`,

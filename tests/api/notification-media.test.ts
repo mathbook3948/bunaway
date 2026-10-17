@@ -1,13 +1,7 @@
 import { expect, test } from "bun:test";
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   MAX_TOAST_IMAGE_BYTES,
   notificationShowSchema,
@@ -107,7 +101,7 @@ test("media schema rejects unsafe paths, formats and conflicting sound options",
     "C:\\a<b>.png",
     "https://example.com/a.png",
     "file:///C:/a.png",
-    `C:\\${"a".repeat(260)}.png`,
+    `C:\\${"a".repeat(253)}.png`,
     "C:\\a.png:stream.png",
     "C:\\dir:ads\\a.png",
     "C:\\a\ud800.png",
@@ -126,6 +120,12 @@ test("media schema rejects unsafe paths, formats and conflicting sound options",
       bad,
     ).toBe(false);
   }
+  // 259 characters is the longest accepted path, because MAX_PATH counts the terminating NUL.
+  expect(
+    parse({
+      icon: `C:\\${"a".repeat(252)}.png`,
+    }).success,
+  ).toBe(true);
   expect(
     parse({
       sound: "C:\\a.wav",
@@ -172,28 +172,39 @@ const DIRECTORY = 0x10;
 const REPARSE_POINT = 0x400;
 const INVALID = 0xffffffff;
 
+/** Platform-neutral path key: separators, a leading root separator and case do not matter. */
+const pathKey = (path: string) =>
+  path
+    .replace(/^[\\/]+/, "")
+    .replaceAll("/", "\\")
+    .toLowerCase();
+
 /**
- * Stub probes over a real temp directory. Tests run on any OS, so the Windows-style path built by the
- * check (`tmp\dir\file`) is mapped back to a POSIX path. Overrides win over the real file system.
+ * Virtual attribute tree. Every ancestor of each listed path is a directory unless listed itself, and
+ * unlisted paths are INVALID. Keys are matched by pathKey, so the same test passes with POSIX temp paths
+ * on Linux and `C:\` paths on Windows, without translating the probed path back to a real one.
  */
 function stubFilesystem(
-  overrides: Record<string, number> = {},
+  entries: Record<string, number> = {},
   driveType = 3,
   probed: string[] = [],
 ) {
+  const tree = new Map<string, number>();
+  // Ancestors first so an explicitly listed directory keeps its own attributes.
+  for (const path of Object.keys(entries)) {
+    for (let parent = dirname(path); dirname(parent) !== parent; ) {
+      tree.set(pathKey(parent), DIRECTORY);
+      parent = dirname(parent);
+    }
+  }
+  for (const [path, attributes] of Object.entries(entries)) {
+    tree.set(pathKey(path), attributes);
+  }
   return {
     driveType: () => driveType,
     attributes(path: string) {
       probed.push(path);
-      const posix = `/${path.replaceAll("\\", "/")}`;
-      if (posix in overrides) {
-        return overrides[posix] ?? NORMAL;
-      }
-      try {
-        return statSync(posix).isDirectory() ? DIRECTORY : NORMAL;
-      } catch {
-        return INVALID;
-      }
+      return tree.get(pathKey(path)) ?? INVALID;
     },
   };
 }
@@ -220,7 +231,11 @@ test("media files must be local regular files within the size limit", () => {
           icon,
           image,
         },
-        stubFilesystem(),
+        stubFilesystem({
+          [small]: NORMAL,
+          [large]: NORMAL,
+          [limit]: NORMAL,
+        }),
       );
     expect(() => check(small, small)).not.toThrow();
     expect(() => check(limit, null)).not.toThrow();
@@ -300,15 +315,23 @@ test("links, reparse points and cloud placeholders are refused without following
   const directory = mkdtempSync(join(tmpdir(), "bunaway-media-"));
   try {
     mkdirSync(join(directory, "dir"));
-    const file = join(directory, "dir", "a.png");
+    const folder = join(directory, "dir");
+    const file = join(folder, "a.png");
     writeFileSync(file, "x");
-    const run = (overrides: Record<string, number>, probed: string[] = []) =>
+    const run = (entries: Record<string, number>, probed: string[] = []) =>
       assertToastMediaFiles(
         {
           ...base,
           image: file,
         },
-        stubFilesystem(overrides, 3, probed),
+        stubFilesystem(
+          {
+            [file]: NORMAL,
+            ...entries,
+          },
+          3,
+          probed,
+        ),
       );
     expect(() => run({})).not.toThrow();
     // A reparse point on an intermediate directory stops the walk before deeper components are probed.
@@ -316,16 +339,14 @@ test("links, reparse points and cloud placeholders are refused without following
     expect(() =>
       run(
         {
-          [join(directory, "dir")]: REPARSE_POINT | DIRECTORY,
+          [folder]: REPARSE_POINT | DIRECTORY,
         },
         probed,
       ),
     ).toThrow(
       "Notification image path must not contain links or reparse points.",
     );
-    expect(probed.at(-1)?.replaceAll("\\", "/")).toBe(
-      join(directory, "dir").slice(1),
-    );
+    expect(pathKey(probed.at(-1) ?? "")).toBe(pathKey(folder));
     // The final file itself may be a link.
     expect(() =>
       run({
