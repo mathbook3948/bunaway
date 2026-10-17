@@ -23,6 +23,7 @@ import {
   initialize,
   run,
 } from "#plugins/process/src/platforms/windows";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import { processExitProbe } from "../fixtures/process-exit-probe.ts";
 
 test.skipIf(process.platform !== "win32")(
@@ -328,6 +329,7 @@ test.skipIf(process.platform !== "win32")(
       ],
     };
     const services: CoreServices = {
+      app: testAppInfo,
       platform: "windows",
       backendContext: "backend" as HostContext,
       hello: {

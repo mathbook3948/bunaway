@@ -23,6 +23,7 @@ import {
   platformUrl,
   resourceRules,
 } from "#native/macos/bun/urls";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 test("macOS rejects declared focusability rather than ignoring an unsupported native flag", () => {
@@ -162,6 +163,7 @@ test("macOS rejects explicitly declared initial placement, including defaults on
 /** Minimal validated configuration shared by real Worker lifecycle tests. */
 function workerConfig(directory: string): MacosConfig {
   return {
+    appMetadata: testAppMetadata,
     runtime: {
       id: "test",
       generation: crypto.randomUUID(),
@@ -264,6 +266,26 @@ async function bundleTestHost(
             () => ({
               contents:
                 "export class MacosApplication { activate() {} appCleanedUp() {} close() {} }",
+              loader: "js",
+            }),
+          );
+          // WebKit's version needs Objective-C on the main thread, which this fixture lacks.
+          build.onResolve(
+            {
+              filter: /^\.\/webkit-version\.ts$/,
+            },
+            () => ({
+              path: "test-webkit-version",
+              namespace: "test-webkit-version",
+            }),
+          );
+          build.onLoad(
+            {
+              filter: /.*/,
+              namespace: "test-webkit-version",
+            },
+            () => ({
+              contents: "export function readWebKitVersion() { return null; }",
               loader: "js",
             }),
           );
@@ -516,7 +538,10 @@ test("macOS backend Worker uses core sessions and acknowledges shutdown before p
     const backend = new Worker(
       new URL(`file://${resolve(directory, "backend.js")}`),
       {
-        workerData: config,
+        workerData: {
+          ...config,
+          webview: null,
+        },
       },
     );
     worker = backend;
@@ -1124,7 +1149,10 @@ test("macOS shutdown during native registration acknowledges acceptance and skip
     const running = new Worker(
       new URL(`file://${resolve(directory, "backend.js")}`),
       {
-        workerData: config,
+        workerData: {
+          ...config,
+          webview: null,
+        },
       },
     );
     worker = running;
@@ -1201,7 +1229,10 @@ test("macOS shutdown cancels setup Host calls before waiting for plugin cleanup"
     const running = new Worker(
       new URL(`file://${resolve(directory, "backend.js")}`),
       {
-        workerData: config,
+        workerData: {
+          ...config,
+          webview: null,
+        },
       },
     );
     worker = running;

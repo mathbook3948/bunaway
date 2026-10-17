@@ -48,6 +48,19 @@
       }
     },
     {
+      "name": "@bunaway/runtime-bun/app-metadata",
+      "source": "packages/runtime-bun/src/app-metadata.ts",
+      "pages": {
+        "reference/tooling/core-and-runtime": [
+          "parsePackageVersions",
+          "readPackageVersions",
+          "appName",
+          "isAppInfoText",
+          "toAppInfo"
+        ]
+      }
+    },
+    {
       "name": "@bunaway/runtime-bun/app-manifest",
       "source": "packages/runtime-bun/src/app-manifest.ts",
       "pages": {
@@ -284,7 +297,7 @@
       "name": "@bunaway/plugin-api",
       "source": "packages/plugin-api/src/index.ts",
       "pages": {
-        "reference/tooling/plugin-api": ["PLATFORMS"]
+        "reference/tooling/plugin-api": ["PLATFORMS", "APP_INFO_MAX_LENGTH"]
       }
     },
     {
@@ -862,9 +875,27 @@
     },
     {
       "source": "packages/plugin-api/src/index.ts",
+      "type": "AppInfo",
+      "pages": {
+        "reference/backend/context": [
+          "name",
+          "identifier",
+          "version",
+          "runtime"
+        ]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/index.ts",
       "type": "CommandContext",
       "pages": {
-        "reference/backend/context": ["signal", "host", "state", "events"]
+        "reference/backend/context": [
+          "app",
+          "signal",
+          "host",
+          "state",
+          "events"
+        ]
       }
     },
     {
@@ -892,6 +923,7 @@
           "policy",
           "hello",
           "platform",
+          "app",
           "backendContext",
           "runtime",
           "validateMessage",

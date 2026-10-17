@@ -17,6 +17,7 @@ import {
   type WorkArea,
 } from "#native/windows/bun/window-placement";
 import { physicalPixels } from "#native/windows/bun/window-size";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
@@ -618,6 +619,7 @@ if (!process.argv.includes("--child")) {
   await runWindowsApp(
     app,
     {
+      appMetadata: testAppMetadata,
       runtime: {
         id: "initial-placement",
         generation: crypto.randomUUID(),

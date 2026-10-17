@@ -6,7 +6,9 @@ import {
   parsePackaging,
 } from "@bunaway/packaging";
 import { OUTPUT_TARGETS, outputPaths } from "@bunaway/packaging/paths";
+import { APP_INFO_MAX_LENGTH } from "@bunaway/plugin-api";
 import { NativeRegistry, type Policy, parsePolicy } from "@bunaway/protocol";
+import { isAppInfoText } from "@bunaway/runtime-bun/app-metadata";
 import {
   developmentPolicy,
   developmentUrl,
@@ -167,6 +169,17 @@ function string(value: unknown, path: string): string {
     throw new Error(`bunaway.json: ${path} must be a nonempty string.`);
   }
   return value;
+}
+
+/** App titles become `ctx.app.name`, so they share the `AppInfo` string rule. */
+function appTitle(value: unknown): string {
+  const title = string(value, "app.title");
+  if (!isAppInfoText(title)) {
+    throw new Error(
+      `bunaway.json: app.title must be at most ${APP_INFO_MAX_LENGTH} characters.`,
+    );
+  }
+  return title;
 }
 
 async function frontendPath(root: string, name: string): Promise<string> {
@@ -384,6 +397,8 @@ async function loadProject(
       "appId must match the native host's 1–64 character app ID grammar.",
     );
   }
+  // Checked before window declarations, whose own title rules would otherwise report first.
+  const title = appTitle(raw.title);
   if (
     raw.executableName !== undefined ||
     (process.platform === "win32" && process.arch === "x64")
@@ -510,7 +525,7 @@ async function loadProject(
     policy,
     app: {
       appId,
-      title: string(raw.title, "app.title"),
+      title,
       ...(raw.executableName !== undefined
         ? {
             executableName: raw.executableName as string,

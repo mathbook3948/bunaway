@@ -16,6 +16,7 @@ import {
 import { bindHostAPI } from "#core/host-api";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
 import { MAX_IMAGE_BYTES } from "#plugins/image/src/contract";
+import { testAppInfo, testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 
 test.skipIf(process.platform !== "win32")(
@@ -33,6 +34,7 @@ test.skipIf(process.platform !== "win32")(
     ]);
     const contextId = "image-native" as HostContext;
     const config: UIConfig = {
+      appMetadata: testAppMetadata,
       runtime: {
         id: "image-native",
         generation: "1",
@@ -236,6 +238,7 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
           ) => run(),
         });
         return command.run(null, {
+          app: testAppInfo,
           signal: controller.signal,
           host,
           state: {

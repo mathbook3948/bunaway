@@ -13,6 +13,7 @@ import {
 } from "@bunaway/protocol";
 import { bindHostAPI } from "#core/host-api";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
+import { testAppInfo } from "../fixtures/app-info.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const queries = [
@@ -66,6 +67,7 @@ test("window geometry helpers preserve context, shapes, DPI and default units", 
   const signal = new AbortController().signal;
   let calls = 0;
   const context: CommandContext = {
+    app: testAppInfo,
     signal,
     state: {
       get: () => undefined,

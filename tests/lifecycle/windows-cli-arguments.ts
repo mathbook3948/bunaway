@@ -11,6 +11,7 @@ import {
   instanceAddress,
   listenForInstances,
 } from "#native/windows/bun/instance";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
 /**
@@ -70,6 +71,7 @@ async function verifyOpenUrls(repoDir: string): Promise<void> {
           generation: crypto.randomUUID(),
         },
         backendContext: "open-urls-backend" as HostContext,
+        appMetadata: testAppMetadata,
         assets: root,
         dataRoot,
         loader: resolve(
@@ -273,6 +275,7 @@ if (!process.argv.includes("--child")) {
         },
       },
       {
+        appMetadata: testAppMetadata,
         runtime: {
           id: "cli-arguments-test",
           generation: crypto.randomUUID(),

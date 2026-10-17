@@ -9,6 +9,7 @@ import type { HostContext, Policy } from "@bunaway/protocol";
 import { closeWindowsApp } from "#cli/windows-dev-launch";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import pin from "../../runtime/build-manifests/windows-x64.json";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { contracts } from "../fixtures/host-plugins.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
@@ -319,6 +320,35 @@ if (!process.argv.includes("--child")) {
         name: "setup",
         version: "1",
         async setup(context) {
+          // The host resolves ctx.app before Core starts: the real loader reports the
+          // installed WebView2 version, and a missing loader leaves it null.
+          assert.deepEqual(
+            {
+              ...context.app,
+              runtime: {
+                ...context.app.runtime,
+                webview: null,
+              },
+            },
+            {
+              name: testAppMetadata.name,
+              identifier: testAppMetadata.identifier,
+              version: testAppMetadata.version,
+              runtime: {
+                framework: testAppMetadata.framework,
+                bun: Bun.version,
+                webview: null,
+              },
+            },
+          );
+          if (creationFailure) {
+            assert.equal(context.app.runtime.webview, null);
+          } else {
+            assert.match(
+              context.app.runtime.webview ?? "",
+              /^\d+\.\d+\.\d+\.\d+( .+)?$/,
+            );
+          }
           // The command gate below requires setup; stop records that shutdown ran cleanup.
           await context.host.call(contracts["log.write"], {
             level: "info",
@@ -400,6 +430,7 @@ if (!process.argv.includes("--child")) {
   };
   try {
     await runWindowsApp(app, {
+      appMetadata: testAppMetadata,
       runtime: {
         id: "core-gate",
         generation: crypto.randomUUID(),

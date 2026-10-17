@@ -14,6 +14,7 @@ import {
   validateValue,
 } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
@@ -501,6 +502,7 @@ if (!process.argv.includes("--child")) {
     },
   });
   await runWindowsApp(app, {
+    appMetadata: testAppMetadata,
     runtime: {
       id: "window-events",
       generation: crypto.randomUUID(),

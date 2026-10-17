@@ -3,8 +3,6 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { DevelopmentApp } from "#native/windows/bun/development-app";
-import { WindowsAppReload } from "#cli/windows-app-reload";
 import type { AppDefinition, CoreServices } from "@bunaway/core";
 import { createCore } from "@bunaway/core";
 import {
@@ -18,6 +16,9 @@ import {
   readAppReloadRequest,
   readAppReloadResult,
 } from "@bunaway/runtime-bun/development";
+import { WindowsAppReload } from "#cli/windows-app-reload";
+import { DevelopmentApp } from "#native/windows/bun/development-app";
+import { testAppInfo } from "../fixtures/app-info.ts";
 
 const hello: Hello = {
   kind: "hello",
@@ -78,6 +79,7 @@ test("app replacement keeps state, sessions, subscriptions and the code of an in
   const development = new DevelopmentApp(app(1, 1, wait));
   const messages: ServerMessage[] = [];
   const services: CoreServices = {
+    app: testAppInfo,
     hello,
     platform: "windows",
     backendContext: "backend-reload" as HostContext,

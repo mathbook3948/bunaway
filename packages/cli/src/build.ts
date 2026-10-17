@@ -14,10 +14,11 @@ import {
   acquireBuildOutputLock,
   ownedDirectory,
   PACKAGING_CHANNELS,
-  publishOwnedDirectory,
   PublishedDirectoryCleanupError,
+  publishOwnedDirectory,
 } from "@bunaway/packaging";
 import { outputPaths } from "@bunaway/packaging/paths";
+import { readAppVersions } from "./app-versions.ts";
 import {
   type Project,
   readProjectMetadata,
@@ -38,6 +39,9 @@ import { compileMacosApp } from "./macos-compile.ts";
 import { runManagedCommand } from "./managed-command.ts";
 import { run, runWorker } from "./processes.ts";
 import { compileWindowsApp } from "./windows-compile.ts";
+
+/** `CFBundleShortVersionString` for apps whose package.json declares no version. */
+const DEFAULT_BUNDLE_VERSION = "0.0.0";
 
 /** Native build targets supported by this CLI. */
 export type Target = "windows-x64" | "macos-arm64";
@@ -450,22 +454,25 @@ async function assembleProject(
       );
     }
     // Record release pins, hashes for selected package files, and the host hash.
-    const framework = (await json(resolve(root, "package.json"))) as {
-      version: string;
-    };
-    const appPackage = (await json(resolve(project.root, "package.json"))) as {
-      version: string;
-    };
+    // Absent versions are omitted so the runtime reports them as null.
+    const versions = await readAppVersions(project.root, root);
     await writeJson(resolve(packageRoot, "manifest.json"), {
       ...pin,
       assets: hashes,
       app: {
         id: project.app.appId,
-        version: appPackage.version,
+        ...(versions.version === null
+          ? {}
+          : {
+              version: versions.version,
+            }),
       },
-      framework: {
-        version: framework.version,
-      },
+      framework:
+        versions.framework === null
+          ? {}
+          : {
+              version: versions.framework,
+            },
       host: {
         target,
         ...(windows
@@ -495,7 +502,7 @@ async function assembleProject(
 <key>CFBundleIdentifier</key><string>${xml(project.app.appId)}</string>
 <key>CFBundleName</key><string>${xml(project.app.title)}</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>${xml(appPackage.version)}</string>
+<key>CFBundleShortVersionString</key><string>${xml(versions.version ?? DEFAULT_BUNDLE_VERSION)}</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>

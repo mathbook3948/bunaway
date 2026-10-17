@@ -583,6 +583,24 @@ async function run() {
       "SDK cancellation failed",
     );
   });
+  await test("app info comes from the packaged manifests and the host", async () => {
+    const r = await call("test.app");
+    // Name and identifier come from the app settings; versions from the fixture package manifest.
+    // Windows reports a four-part WebView2 version; macOS reports the WebKit bundle version.
+    const webview = r.kind === "result" ? r.payload.runtime.webview : null;
+    assert(
+      r.kind === "result" &&
+        r.payload.name === "bunaway host test" &&
+        r.payload.identifier === "tests.bunaway.host" &&
+        r.payload.version === "1.2.3" &&
+        r.payload.runtime.framework === "0.4.5" &&
+        /^\d+\.\d+\.\d+/.test(r.payload.runtime.bun) &&
+        (nativePlugins
+          ? /^\d+\.\d+\.\d+\.\d+( .+)?$/.test(webview ?? "")
+          : typeof webview === "string" && webview.length > 0),
+      `bad app info ${JSON.stringify(r)}`,
+    );
+  });
   if (nativePlugins) {
     await test("SDK Host API cancellation", async () => {
       const controller = new AbortController();

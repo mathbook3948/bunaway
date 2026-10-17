@@ -5,6 +5,7 @@ import { bundleWindowsHost } from "#cli/assets";
 import { files, hash, json, writeJson } from "#cli/files";
 import { compileWindowsApp } from "#cli/windows-compile";
 import pin from "../../../runtime/build-manifests/windows-x64.json";
+import { testAppMetadata } from "../../../tests/fixtures/app-info.ts";
 
 const root = resolve(import.meta.dir, "../../..");
 
@@ -132,6 +133,13 @@ export async function buildHostFixture(
       {
         ...pin,
         assets: hashes,
+        app: {
+          id: String(Reflect.get(app, "appId")),
+          version: testAppMetadata.version,
+        },
+        framework: {
+          version: testAppMetadata.framework,
+        },
         host: {
           target: "windows-x64",
           kind: "bun-compiled",

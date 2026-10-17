@@ -204,10 +204,12 @@ export interface PackageManifest {
   assets: Record<string, string>;
   app: {
     id: string;
-    version: string;
+    // Omitted when the app's package.json declares no version.
+    version?: string;
   };
   framework?: {
-    version: string;
+    // Omitted (the section is then empty) when the framework version is unknown.
+    version?: string;
   };
   host?: {
     target: string;

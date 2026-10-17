@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./app-manifest": "./src/app-manifest.ts",
+    "./app-metadata": "./src/app-metadata.ts",
     "./development": "./src/development.ts",
     "./window-config": "./src/window-config.ts",
     "./windows-control": "./src/windows-control.ts",

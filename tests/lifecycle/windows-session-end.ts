@@ -8,6 +8,7 @@ import windows from "@bunaway/plugin-windows";
 import type { HostContext } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { containAppProcess } from "#native/windows/bun/job";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 
 // Real Win32 gate for Windows session end. Each scenario runs the host in a fresh Job-owned
@@ -285,6 +286,7 @@ if (!process.argv.includes("--child")) {
       },
     },
     {
+      appMetadata: testAppMetadata,
       runtime: {
         id: "session-end-test",
         generation: crypto.randomUUID(),

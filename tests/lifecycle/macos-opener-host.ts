@@ -65,6 +65,7 @@ try {
     format: 1,
     app: {
       appId: "tests.macos.opener",
+      title: "Opener",
       windows,
     },
     policy: {

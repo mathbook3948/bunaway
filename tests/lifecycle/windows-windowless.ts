@@ -12,6 +12,7 @@ import windows, {
 import { type HostContext, NativeRegistry } from "@bunaway/protocol";
 import { closeWindowsApp } from "#cli/windows-dev-launch";
 import { runWindowsApp } from "#native/windows/bun/entry";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
@@ -681,6 +682,7 @@ if (!process.argv.includes("--child")) {
         },
       },
       {
+        appMetadata: testAppMetadata,
         runtime: {
           id: "windowless-test",
           generation: crypto.randomUUID(),

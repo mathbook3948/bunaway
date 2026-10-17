@@ -10,6 +10,7 @@ import menu from "@bunaway/plugin-menu";
 import tray from "@bunaway/plugin-tray";
 import type { HostResponse, JsonValue } from "@bunaway/protocol";
 import { Channel, type UIConfig } from "#native/windows/bun/channel";
+import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleUIPluginFixture } from "../fixtures/native-worker.ts";
 import { trayIco } from "../fixtures/tray-icon.ts";
 
@@ -85,6 +86,7 @@ export const pluginImports = { globalShortcut: { operations: async () => ({ crea
 } }) } ${extraFactories} };`,
       );
       const config: UIConfig = {
+        appMetadata: testAppMetadata,
         runtime: {
           id: "shortcut-native",
           generation: crypto.randomUUID(),

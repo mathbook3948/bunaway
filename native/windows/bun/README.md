@@ -40,6 +40,8 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 최대화한 창을 다른 모니터로 옮기거나 그곳에서 전체화면에 진입해도 원래 복원 위치의 오프셋을 사용한다.
 `ui.ts`는 `NativeWindow.getBounds`와 `getDpi`를 연결하고 창 플러그인이 공개 단위 변환과
 반올림, 입력 및 대상 창 권한을 검사한다.
+`webview-version.ts`는 시작 때 WebView2Loader로 설치된 런타임 버전을 한 번 조회해 `ctx.app.runtime.webview`에 전달하며,
+`wide-string.ts`는 이 조회에서 쓰는 NUL 종료 UTF-16 문자열 읽기를 제공한다. 조회 실패는 `webview-version-unavailable`로 기록하고 값을 `null`로 둔다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 
