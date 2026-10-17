@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import type { JsonValue } from "@bunaway/protocol";
 import {
   type GlobalShortcut,
@@ -11,33 +11,40 @@ import {
 import { hotkeyCodes } from "#plugins/global-shortcut/src/platforms/windows-bindings";
 import { HeldShortcuts } from "#plugins/global-shortcut/src/release-tracker";
 
+const shortcutA = shortcutSchema.parse({
+  key: "A",
+  modifiers: [
+    "Control",
+  ],
+});
+const shortcutB = shortcutSchema.parse({
+  key: "B",
+  modifiers: [
+    "Control",
+  ],
+});
+
 test("held shortcuts report only keys that are no longer down, once", () => {
   const held = new HeldShortcuts();
-  expect(held.press(1, 0x41)).toBe(false);
-  expect(held.press(2, 0x42)).toBe(false);
+  held.hold(1, shortcutA, 0x41);
+  held.hold(2, shortcutB, 0x42);
   expect(held.poll((key) => key === 0x42)).toEqual([
-    1,
+    shortcutA,
   ]);
   expect(held.size).toBe(1);
   expect(held.poll((key) => key === 0x42)).toEqual([]);
-  // A press seen again before any poll means a missed release.
-  expect(held.press(2, 0x42)).toBe(true);
-  expect(held.drop(2)).toBe(true);
-  expect(held.drop(2)).toBe(false);
-  held.press(3, 0x43);
-  held.press(4, 0x44);
-  expect(held.clear()).toEqual([
-    3,
-    4,
-  ]);
+  expect(held.drop(2)).toEqual(shortcutB);
+  expect(held.drop(2)).toBeUndefined();
   expect(held.size).toBe(0);
 });
 
-function fixture() {
+function fixture(options: { failPolling?: boolean } = {}) {
   const down = new Set<number>();
   const events: string[] = [];
   let receive: (id: number, keys: bigint) => void = () => {};
   let tick: (() => void) | undefined;
+  // Survives stopPolling and dispose to prove a late timer callback stays silent.
+  let capturedTick: (() => void) | undefined;
   let timerStarts = 0;
   const driver: ShortcutDriver = {
     listen(listener) {
@@ -47,10 +54,14 @@ function fixture() {
     unregister: () => true,
     isKeyDown: (key) => down.has(key),
     startPolling(callback) {
+      if (options.failPolling) {
+        throw new Error("SetTimer failed");
+      }
       if (!tick) {
         timerStarts++;
       }
       tick = callback;
+      capturedTick = callback;
     },
     stopPolling() {
       tick = undefined;
@@ -81,22 +92,11 @@ function fixture() {
     down,
     press,
     tick: () => tick?.(),
+    capturedTick: () => capturedTick?.(),
     timerRunning: () => tick !== undefined,
     timerStarts: () => timerStarts,
   };
 }
-const shortcutA = shortcutSchema.parse({
-  key: "A",
-  modifiers: [
-    "Control",
-  ],
-});
-const shortcutB = shortcutSchema.parse({
-  key: "B",
-  modifiers: [
-    "Control",
-  ],
-});
 
 test("released follows pressed after the key goes up and the poll stops", () => {
   const f = fixture();
@@ -130,6 +130,30 @@ test("a repeated press before any poll closes the earlier hold", () => {
     "pressed:A",
   ]);
   expect(f.timerStarts()).toBe(1);
+  f.down.clear();
+  f.tick();
+  expect(f.events.at(-1)).toBe("released:A");
+});
+
+test("a timer failure still delivers pressed and pairs it with an immediate released", () => {
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const f = fixture({
+      failPolling: true,
+    });
+    f.operations.register(shortcutA);
+    expect(() => f.press(1, shortcutA)).not.toThrow();
+    expect(f.events).toEqual([
+      "pressed:A",
+      "released:A",
+    ]);
+    expect(log).toHaveBeenCalledTimes(1);
+    // No hold was recorded, so unregistering cannot release a second time.
+    f.operations.unregister(shortcutA);
+    expect(f.events).toHaveLength(2);
+  } finally {
+    log.mockRestore();
+  }
 });
 
 test("unregister and suspend release held keys, dispose stays silent", () => {
@@ -157,6 +181,8 @@ test("unregister and suspend release held keys, dispose stays silent", () => {
   f.press(4, shortcutA);
   const before = f.events.length;
   f.operations.dispose();
-  f.tick();
+  // The key is up, so only the dispose guard keeps a late timer callback from releasing.
+  f.down.clear();
+  f.capturedTick();
   expect(f.events).toHaveLength(before);
 });

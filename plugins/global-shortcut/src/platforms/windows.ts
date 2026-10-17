@@ -61,19 +61,14 @@ export function initializeShortcutOperations(
   let disposed = false;
   // RegisterHotKey never reports the key-up, so a pressed shortcut is polled until its key is up.
   const held = new HeldShortcuts();
-  const emitShortcut = (event: string, entry: Registration) =>
-    emit(event, {
-      shortcut: structuredClone(entry.shortcut),
+  const emitReleased = (shortcut: GlobalShortcut) =>
+    emit("globalShortcut.released", {
+      shortcut: structuredClone(shortcut),
     });
   /** Emits `released` for ended holds and stops the poll timer once nothing is held. */
-  const publishReleased = (ids: number[]) => {
-    for (const id of ids) {
-      const entry = [
-        ...registrations.values(),
-      ].find((registration) => registration.id === id);
-      if (entry) {
-        emitShortcut("globalShortcut.released", entry);
-      }
+  const publishReleased = (shortcuts: GlobalShortcut[]) => {
+    for (const shortcut of shortcuts) {
+      emitReleased(shortcut);
     }
     if (held.size === 0) {
       driver.stopPolling();
@@ -105,14 +100,29 @@ export function initializeShortcutOperations(
     const payload = {
       shortcut: structuredClone(entry.shortcut),
     };
+    // This runs inside the window procedure, so a timer failure must not escape. Without a timer
+    // the key-up cannot be observed: report pressed, then released at once, and record no hold.
+    let polling = true;
+    try {
+      driver.startPolling(pollReleased);
+    } catch (cause) {
+      polling = false;
+      console.error("Global shortcut release polling could not start.", cause);
+    }
     // A second WM_HOTKEY for a tracked hold means the key went up and down between two polls.
     // Close the earlier hold first so every pressed has one released.
-    if (held.press(entry.id, codes.key)) {
-      emitShortcut("globalShortcut.released", entry);
+    const previous = held.drop(entry.id);
+    if (previous) {
+      emitReleased(previous);
     }
-    driver.startPolling(pollReleased);
+    if (polling) {
+      held.hold(entry.id, entry.shortcut, codes.key);
+    }
     presses.publish(payload);
     emit("globalShortcut.pressed", payload);
+    if (!polling) {
+      emitReleased(entry.shortcut);
+    }
   });
   const acquire = (entry: Registration) => {
     if (nextId > MAX_HOTKEY_ID) {
@@ -140,9 +150,10 @@ export function initializeShortcutOperations(
     }
     entry.active = false;
     // Unbinding or suspending while the key is down completes the pair without waiting for a poll.
-    if (held.drop(entry.id)) {
+    const dropped = held.drop(entry.id);
+    if (dropped) {
       publishReleased([
-        entry.id,
+        dropped,
       ]);
     }
   };

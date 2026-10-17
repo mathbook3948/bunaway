@@ -144,7 +144,7 @@ export class Win32Shortcuts implements ShortcutDriver {
   }
   /**
    * Starts one WM_TIMER on the hidden window. A busy UI thread delays ticks, so a release is
-   * reported late, never lost; the timer's resolution is about one system clock tick (15 ms).
+   * reported late, never lost; WM_TIMER follows the system timer resolution, so a 20 ms request fires about every 20 to 30 ms.
    */
   startPolling(tick: () => void) {
     this.tick = tick;

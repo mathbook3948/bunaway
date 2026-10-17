@@ -73,7 +73,7 @@ Windows 해제 자체가 실패하면 중지 상태를 먼저 유지하며 입�
 
 `globalShortcut.released`는 같은 payload를 가진 별도 이벤트입니다. `pressed`만 허용한 뷰는
 받지 않으므로 기존 앱은 바뀌지 않습니다. 단축키의 주 키(key)가 놓이면 발행하며, 수정자 키는
-보지 않습니다. RegisterHotKey는 키 해제를 알려 주지 않으므로 `pressed` 뒤에 약 20ms 주기의
+보지 않습니다. RegisterHotKey는 키 해제를 알려 주지 않으므로 `pressed` 뒤에 약 20~30ms(시스템 타이머 해상도에 따름) 주기의
 타이머로 주 키의 물리 상태(GetAsyncKeyState)를 확인합니다. 일반 키 입력을 감시하는 키보드 hook은
 설치하지 않습니다. 동작 범위는 다음과 같습니다.
 
@@ -84,6 +84,8 @@ Windows 해제 자체가 실패하면 중지 상태를 먼저 유지하며 입�
 - 잠금 화면이나 UAC 같은 보안 데스크톱으로 전환되면 키 상태를 읽을 수 없어 `released`가 발행될 수 있습니다.
 - 키를 누른 채 `unregister`, `unregisterAll`, `setSuspended(true)`를 호출하면 그 시점에 `released`를
   발행합니다. 앱 종료와 어댑터 dispose는 이벤트를 연결할 수 없으므로 `released`를 발행하지 않습니다.
+- 폴링 타이머를 시작하지 못하면 키 해제를 관찰할 수 없으므로 `pressed` 직후 `released`를 발행하고
+  진단 로그를 남깁니다. 입력 처리는 중단되지 않습니다.
 - `waitForPress`는 `pressed`만 전달합니다.
 
 창이 없는 앱의 백엔드는 `await globalShortcut.waitForPress(null)`로 다음 입력을 받습니다.
