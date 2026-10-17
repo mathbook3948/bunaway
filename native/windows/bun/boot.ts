@@ -68,6 +68,10 @@ if (import.meta.main) {
     // instead of forwarding to the predecessor's closing pipe. The marker is not inherited further.
     const relaunched = process.env[RELAUNCH_ENVIRONMENT] === "1";
     delete process.env[RELAUNCH_ENVIRONMENT];
+    // The relaunched host inherits the boot-time environment, not later changes by app code.
+    const bootEnvironment = {
+      ...process.env,
+    };
     // Claim this data directory before importing app code.
     try {
       if (relaunched) {
@@ -104,7 +108,7 @@ if (import.meta.main) {
           : []),
       ],
       cwd: launch.cwd,
-      env: process.env,
+      env: bootEnvironment,
     };
     let result: WindowsAppResult;
     try {

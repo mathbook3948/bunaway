@@ -760,3 +760,87 @@ test("a relaunch after a hot reload rebuilds through the controller with its arg
     }
   }
 });
+
+/**
+ * Relaunches a hot-reloaded app with `--again` while `pass` plays the controller's rebuild, then
+ * performs a later source-change restart. Returns the arguments of every launch.
+ */
+async function relaunchThenRestart(
+  pass: (owner: DevApp) => Promise<void>,
+): Promise<(readonly string[])[]> {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", {
+    value: "win32",
+  });
+  try {
+    const processes = [
+      appProcess([], true),
+      appProcess([], true),
+      appProcess([], true),
+    ];
+    const launchedWith: (readonly string[])[] = [];
+    const owner: DevApp = new DevApp(
+      new AbortController().signal,
+      () => {},
+      undefined,
+      undefined,
+      {
+        async launch(_project, _built, _isCurrent, appArguments) {
+          launchedWith.push(appArguments);
+          return processes[launchedWith.length - 1]?.app;
+        },
+        async stop(app) {
+          await app.process.exited;
+        },
+        async bundleReload() {
+          return "digest";
+        },
+      },
+      () => pass(owner),
+    );
+    await owner.start(project, built, () => true);
+    expect(await owner.reload(project, [], () => true)).toBe(true);
+    processes[0]?.requestRelaunch([
+      "--again",
+    ]);
+    processes[0]?.exit(0);
+    // Let the relaunch's rebuild pass run to its end.
+    await Bun.sleep(20);
+    // Hosts after the first exit as soon as they are stopped.
+    processes[1]?.exit(0);
+    processes[2]?.exit(0);
+    // A later source change restarts through the controller.
+    await owner.stop();
+    await owner.start(project, built, () => true);
+    await owner.stop();
+    return launchedWith;
+  } finally {
+    if (platform) {
+      Object.defineProperty(process, "platform", platform);
+    }
+  }
+}
+
+test("relaunch arguments do not reach a later restart after the rebuild fails or is replaced", async () => {
+  // The rebuild pass begins but its build fails, so no start happens.
+  expect(
+    await relaunchThenRestart(async (owner) => {
+      await owner.stop();
+    }),
+  ).toEqual([
+    [],
+    [],
+  ]);
+  // The rebuild pass is replaced by a newer revision, whose own start gets no arguments.
+  expect(
+    await relaunchThenRestart(async (owner) => {
+      await owner.stop();
+      await owner.stop();
+      await owner.start(project, built, () => true);
+    }),
+  ).toEqual([
+    [],
+    [],
+    [],
+  ]);
+});

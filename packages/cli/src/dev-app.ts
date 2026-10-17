@@ -169,8 +169,14 @@ export class DevApp {
         reloaded: boolean;
       })
     | undefined;
-  /** Arguments of an app-requested relaunch that is waiting for the rebuilt host to start. */
-  private rebuildArguments: readonly string[] = [];
+  /**
+   * Ownership of a relaunch's arguments: `relaunch` requests them, the first controller pass that
+   * begins afterwards (`stop`) claims them, and only that pass's `start` consumes them. A pass that
+   * ends without starting, a replaced pass or the end of the rebuild drops them, so they can never
+   * reach a later restart.
+   */
+  private requestedArguments: readonly string[] | undefined;
+  private passArguments: readonly string[] = [];
   private stopping: Promise<void> | undefined;
   /** Bumped by every restart-controller start or stop, to tell a stale relaunch from a current one. */
   private generation = 0;
@@ -211,8 +217,8 @@ export class DevApp {
     isCurrent: () => boolean,
   ): Promise<void> {
     this.generation += 1;
-    const appArguments = this.rebuildArguments;
-    this.rebuildArguments = [];
+    const appArguments = this.passArguments;
+    this.passArguments = [];
     return this.launch(project, built, isCurrent, appArguments);
   }
 
@@ -292,8 +298,14 @@ export class DevApp {
         return;
       }
       if (previous.reloaded && this.rebuild) {
-        this.rebuildArguments = appArguments;
-        await this.rebuild();
+        this.requestedArguments = appArguments;
+        try {
+          await this.rebuild();
+        } finally {
+          // Whatever the passes did (started, failed, replaced or skipped), nothing stays behind.
+          this.requestedArguments = undefined;
+          this.passArguments = [];
+        }
         return;
       }
       await this.launch(
@@ -312,6 +324,10 @@ export class DevApp {
   /** Stops the app for the restart controller, superseding any relaunch in flight. */
   stop(): Promise<void> {
     this.generation += 1;
+    // The controller calls this at the start of every pass: it claims a pending relaunch's
+    // arguments for this pass and drops those of an earlier pass that never started.
+    this.passArguments = this.requestedArguments ?? [];
+    this.requestedArguments = undefined;
     return this.release();
   }
 
