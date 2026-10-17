@@ -13,7 +13,7 @@ test("os.beep defaults to the default kind and rejects unknown input", () => {
     "info",
     "warning",
     "error",
-  ]) {
+  ] as const) {
     expect(
       input.parse({
         kind,

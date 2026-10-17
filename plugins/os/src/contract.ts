@@ -50,8 +50,8 @@ export const beepInputSchema = z.strictObject({
     ])
     .default("default"),
 });
-/** Input for os.beep with the sound kind resolved. */
-export type OSBeepInput = z.infer<typeof beepInputSchema>;
+/** Caller input for os.beep; `kind` may be omitted and then defaults to "default". */
+export type OSBeepInput = z.input<typeof beepInputSchema>;
 /** OS and runtime snapshot returned by os.info. */
 export type OSInfo = z.infer<typeof infoSchema>;
 /** Windows user locale, ordered display languages and system UI language. */

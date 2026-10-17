@@ -31,7 +31,7 @@ function failure(): never {
   });
 }
 
-/** Own locale DLL bindings on the host I/O worker and close them on host shutdown. */
+/** Own Kernel32 locale and user32 MessageBeep bindings on the host I/O worker and close them on host shutdown. */
 export function initialize() {
   const api = dlopen("kernel32.dll", {
     GetCurrentProcess: {

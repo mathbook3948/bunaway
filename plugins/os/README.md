@@ -1,6 +1,6 @@
 # OS metadata plugin
 
-`@bunaway/plugin-os` provides permission-mediated `os.info(null)`, `os.usage(null)` and `os.locale(null)` on Windows.
+`@bunaway/plugin-os` provides permission-mediated `os.info(null)`, `os.usage(null)`, `os.locale(null)` and `os.beep({ kind })` on Windows.
 Register `os` in the app definition. Each operation requires its own permission; registration grants none.
 Trusted backends can use Bun, `process` and `node:os` directly for runtime metadata.
 
