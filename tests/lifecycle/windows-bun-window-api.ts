@@ -1206,13 +1206,26 @@ if (!process.argv.includes("--child")) {
           assert.equal(await windows.isMaximized(thumbnailTarget), true);
           await windows.unmaximize(thumbnailTarget);
           assert.equal(await windows.isMaximized(thumbnailTarget), false);
-          await assert.rejects(
-            windows.setThumbnailClip({
+          // Beyond the client area the region is clamped; one starting outside it is empty and rejected.
+          assert.equal(
+            await windows.setThumbnailClip({
               ...thumbnailTarget,
               region: {
                 x: 0,
                 y: 0,
                 width: 100_000,
+                height: 80,
+              },
+            }),
+            null,
+          );
+          await assert.rejects(
+            windows.setThumbnailClip({
+              ...thumbnailTarget,
+              region: {
+                x: 100_000,
+                y: 0,
+                width: 100,
                 height: 80,
               },
             }),

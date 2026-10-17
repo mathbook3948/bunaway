@@ -3,7 +3,67 @@ import {
   TaskbarSettingController,
   type ThumbnailClip,
 } from "#native/windows/bun/taskbar-progress";
-import { fitsInt32Rect, physicalRect } from "#native/windows/bun/window-size";
+import {
+  clampPixelRect,
+  fitsInt32Rect,
+  physicalRect,
+} from "#native/windows/bun/window-size";
+
+test("thumbnail clip clamps to the physical client area and rejects empty results", () => {
+  // 667 logical pixels at 144 DPI round to 1001 physical pixels in a 1000 pixel wide client.
+  const full = physicalRect(
+    {
+      x: 0,
+      y: 0,
+      width: 667,
+      height: 400,
+    },
+    144,
+  );
+  expect(full.right).toBe(1001);
+  const client = {
+    width: 1000,
+    height: 600,
+  };
+  expect(clampPixelRect(full, client)).toEqual({
+    left: 0,
+    top: 0,
+    right: 1000,
+    bottom: 600,
+  });
+  expect(
+    clampPixelRect(
+      {
+        left: 10,
+        top: 20,
+        right: 50,
+        bottom: 60,
+      },
+      client,
+    ),
+  ).toEqual({
+    left: 10,
+    top: 20,
+    right: 50,
+    bottom: 60,
+  });
+  for (const rect of [
+    {
+      left: 1000,
+      top: 0,
+      right: 1100,
+      bottom: 10,
+    },
+    {
+      left: 0,
+      top: 600,
+      right: 10,
+      bottom: 700,
+    },
+  ]) {
+    expect(clampPixelRect(rect, client)).toBeNull();
+  }
+});
 
 test("thumbnail clip converts logical edges so adjacent regions share a physical edge", () => {
   expect(

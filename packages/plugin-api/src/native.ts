@@ -480,7 +480,8 @@ export type NativeWindow = {
   ): void;
   /**
    * Show only `region` of this window's client area in its taskbar thumbnail, or all of it for `null`.
-   * Units are 96 DPI logical pixels; a region outside the client area throws INVALID_ARGUMENT.
+   * Units are 96 DPI logical pixels; parts beyond the client area are clamped away, and a region
+   * that is then empty throws INVALID_ARGUMENT. While minimized the client size is unknown, so the region is not clamped.
    * Throws BUSY until its taskbar button exists. Windows only.
    */
   setThumbnailClip?(

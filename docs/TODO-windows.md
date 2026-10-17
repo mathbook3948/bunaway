@@ -435,7 +435,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] thumbnail clip과 tooltip을 설정한다.
   `windows.setThumbnailClip`은 내용 영역 기준 96 DPI 논리 픽셀 region(`null`이면 해제)을,
   `windows.setThumbnailToolTip`은 `setTitle`과 같은 형식의 문자열(`null` 또는 빈 문자열이면 해제)을 설정한다.
-  작업 권한과 창 수명을 검사하고 버튼 생성 전에는 `BUSY`, 내용 영역을 벗어난 region은 `INVALID_ARGUMENT`,
+  작업 권한과 창 수명을 검사하고 버튼 생성 전에는 `BUSY`, 내용 영역을 넘는 region은 잘라 적용하고 비면 `INVALID_ARGUMENT`,
   macOS는 `UNSUPPORTED`다. 버튼 재생성 때 마지막 성공 값을 다시 적용하고 HWND 파괴 때 폐기한다.
   계약 검증은 `window-thumbnail.test.ts`, 변환과 복원은 `taskbar-thumbnail.test.ts`이며 실제 ITaskbarList3 호출은
   `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.

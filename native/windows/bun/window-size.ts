@@ -39,6 +39,27 @@ export function physicalRect(
   };
 }
 
+/**
+ * Cut a non-empty rectangle to a client area of the given physical size.
+ * Returns null when nothing remains, i.e. the rectangle starts at or beyond the right or bottom edge.
+ */
+export function clampPixelRect(
+  rect: PixelRect,
+  client: {
+    width: number;
+    height: number;
+  },
+): PixelRect | null {
+  if (rect.left >= client.width || rect.top >= client.height) {
+    return null;
+  }
+  return {
+    ...rect,
+    right: Math.min(rect.right, client.width),
+    bottom: Math.min(rect.bottom, client.height),
+  };
+}
+
 const INT32_MAX = 2147483647;
 
 /** Whether every edge fits the signed 32-bit RECT fields, so native packing cannot truncate it. */

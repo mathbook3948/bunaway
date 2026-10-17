@@ -42,6 +42,7 @@ import {
   type WorkArea,
 } from "./window-placement.ts";
 import {
+  clampPixelRect,
   constrainedOuterSize,
   DEFAULT_DPI,
   fitsInt32Rect,
@@ -2873,7 +2874,7 @@ export class Windows {
 
   /**
    * Clip the taskbar thumbnail to a client-area rectangle in 96 DPI logical pixels, or clear it for null.
-   * Rejects, rather than clamps, a rectangle that leaves the client area, as the shell does.
+   * Parts beyond the client area are clamped away; a region left empty by that is rejected.
    */
   setThumbnailClip(window: bigint, region: ThumbnailClip): void {
     assert(this.windows.has(window), "Taskbar target is not a live window");
@@ -2909,25 +2910,33 @@ export class Windows {
     const rect = invalidInput
       ? null
       : physicalRect(region, this.getDpi(window));
-    // A minimized HWND reports an empty client rectangle. Its restored size is not the WINDOWPLACEMENT
-    // normal rectangle when it was minimized from maximized or fullscreen, so it is not reliably known:
-    // only the lower bounds and the int32 range are checked and the shell decides the upper bound.
-    // Otherwise the region must lie within the current client area.
-    const client = this.isMinimized(window) ? null : this.clientSize(window);
     if (
       !rect ||
       !fitsInt32Rect(rect) ||
       rect.left < 0 ||
       rect.top < 0 ||
       rect.right <= rect.left ||
-      rect.bottom <= rect.top ||
-      (client && (rect.right > client.width || rect.bottom > client.height))
+      rect.bottom <= rect.top
     ) {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
-        message: "The thumbnail clip must lie within the window's client area.",
+        message:
+          "The thumbnail clip must be a non-empty region inside the client origin.",
       });
     }
-    this.taskbar.setThumbnailClip(window, rect);
+    // A minimized HWND reports an empty client rectangle. Its restored size is not the WINDOWPLACEMENT
+    // normal rectangle when it was minimized from maximized or fullscreen, so it is not reliably known:
+    // pass the region through unclipped. Otherwise clamp to the current client area, which also
+    // lets a rounded fractional-DPI edge reach the last pixel.
+    const clipped = this.isMinimized(window)
+      ? rect
+      : clampPixelRect(rect, this.clientSize(window));
+    if (!clipped) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "The thumbnail clip lies entirely outside the client area.",
+      });
+    }
+    this.taskbar.setThumbnailClip(window, clipped);
   }
 }

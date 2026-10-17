@@ -156,7 +156,7 @@ Windows의 선택적 `NativeWindow.destroy()`는 확인, 트레이 숨김과 종
 반환하며 네이티브 실패는 UI 경계에서 `INTERNAL`로 변환합니다. 표시와 포커스를 변경하지 않습니다.
 호스트는 버튼 재생성 때 마지막 성공 값을 다시 적용하고 HWND 파괴 때 폐기합니다.
 선택적 `NativeWindow.setThumbnailClip(region)`은 작업 표시줄 썸네일에 내용 영역의 `{ x, y, width, height }`만 표시하고
-`null`이면 해제합니다. 단위는 96 DPI 논리 픽셀이며 내용 영역을 벗어나면 `INVALID_ARGUMENT`입니다.
+`null`이면 해제합니다. 단위는 96 DPI 논리 픽셀이며 내용 영역을 넘는 부분은 잘라내고, 잘라낸 결과가 비면 `INVALID_ARGUMENT`입니다. 최소화 중에는 내용 영역 크기를 알 수 없어 자르지 않습니다.
 선택적 `NativeWindow.setThumbnailToolTip(toolTip)`은 썸네일 툴팁을 설정하고 `null` 또는 빈 문자열이면 기본값으로 되돌립니다.
 둘 다 `setTaskbarProgress`처럼 바인딩이 없으면 `UNSUPPORTED`, 버튼 생성 전에는 `BUSY`이며 버튼 재생성 때 마지막 성공 값을 다시 적용합니다.
 `NativeWindow.getBounds(area)`는 `"content"`, `"outer"`, `"normal"` 영역의 `WindowBounds`를 반환합니다. normal은 일반 상태 복원용 바깥 영역이며 작업 영역 좌표를 화면 좌표로 보정합니다. 전체화면 중에는 저장된 복원 크기를 현재 DPI와 제약으로 계산합니다.
