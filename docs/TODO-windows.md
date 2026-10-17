@@ -208,7 +208,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 창 포커스 요청과 별개로 작업 표시줄을 점멸하는 attention API를 제공한다. `requestAttention`과 `cancelAttention`을 제공하며 Windows는 FlashWindowEx로 포커스 이동 없이 작업 표시줄 버튼을 점멸하고 untilFocused와 continuous 모드를 지원한다.
 - [ ] 지정 모니터에서 전체화면으로 전환하고 모니터 제거 시 복원한다.
 - [ ] Windows snapped와 tablet-mode 상태 조회의 지원을 결정한다.
-- [ ] 접근성용 창 제목을 일반 제목과 별도로 설정한다.
+- [x] 접근성용 창 제목을 일반 제목과 별도로 설정한다. `IAccPropServices.SetHwndPropStr`로 접근성 이름만 바꾸고 빈 문자열은 설정을 제거하며, Narrator 등 스크린 리더의 실제 낭독 확인은 수동 검증으로 따로 남긴다.
 - [ ] 신뢰된 네이티브 어댑터에 HWND와 native WebView 접근을 제공하는 범위를 정한다.
 - [ ] Windows message hook의 등록, 조회, 개별 해제와 전체 해제를 제공한다.
 
@@ -541,7 +541,7 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 - [ ] WebView 접근성 트리와 사용자 타이틀바의 키보드 탐색을 검증한다.
 - [ ] suspend, resume, 화면 잠금과 잠금 해제 이벤트를 제공한다.
 - [x] Windows AC와 배터리, 충전, 잔량, battery saver 및 수명 추정 상태를 조회한다.
-- [ ] AC와 배터리 상태 변경 이벤트를 제공한다.
+- [x] AC와 배터리 상태 변경 이벤트를 제공한다. power.statusChanged는 전원 상태 변경 알림과 resume에서 재조회하며 동일 값은 생략한다.
 - [x] Windows 호출 세션의 입력 idle 시간과 지정 기한의 active/idle 상태를 조회한다. 잠금 여부는 별도 작업이다.
 - [x] Windows 시스템 idle 절전과 화면 꺼짐 방지 요청을 시작, 조회하고 해제한다. 사용자 절전과 OS 전원 정책은 우회하지 않는다.
 - [x] blocker의 반복 요청을 독립 ID로 관리하고 앱 종료 시 native handle을 자동 정리한다.

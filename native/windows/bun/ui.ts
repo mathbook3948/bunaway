@@ -1134,6 +1134,9 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         isClosable: () => nativeWindows.isClosable(hwnd),
         setTitle: (title) => nativeWindows.setTitle(hwnd, title),
         getTitle: () => nativeWindows.getTitle(hwnd),
+        setAccessibleTitle: (title) =>
+          nativeWindows.setAccessibleTitle(hwnd, title),
+        getAccessibleTitle: () => nativeWindows.getAccessibleTitle(hwnd),
         setResizable: (resizable) =>
           nativeWindows.setResizable(hwnd, resizable),
         isResizable: () => nativeWindows.isResizable(hwnd),

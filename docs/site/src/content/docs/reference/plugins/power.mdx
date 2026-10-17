@@ -6,9 +6,12 @@ description: Windows 전원과 입력 idle 조회, 앱 수명의 절전 및 화�
 기본 export(`default`)를 `power`로 가져와 앱에 등록하고 호출합니다.
 
 `@bunaway/plugin-power`를 설치하고 `power`를 앱의 plugins에 등록합니다.
-Windows I/O 실행을 지원하며 다른 플랫폼은 `UNSUPPORTED`입니다.
+Windows의 UI 실행을 지원하며 다른 플랫폼은 `UNSUPPORTED`입니다.
 각 작업에는 `power.<작업명>` 권한이 필요합니다. 화면에서 직접 호출하면 해당
 `plugin.power.<작업명>` command도 허용합니다. 등록은 권한을 부여하지 않습니다.
+Windows에서 전원 작업은 UI 스레드에서 실행됩니다. 파일 선택이나 메시지 대화상자,
+팝업 메뉴 루프처럼 UI 스레드를 점유하는 네이티브 모달이 열려 있는 동안
+`getStatus`, `startBlocker`, `stopBlocker` 같은 호출은 모달이 끝날 때까지 대기합니다.
 
 ```ts
 import power from "@bunaway/plugin-power";
@@ -38,6 +41,34 @@ GetLastInputInfo와 GetTickCount의 DWORD tick 차이를 사용하므로 약 49.
 `power.getIdleState({ thresholdSeconds })`는 idle 시간이 지정한 정수 초 이상이면 idle,
 미만이면 active를 반환합니다. 기한 범위는 1–4294967초입니다.
 화면 잠금 여부와 절전 상태는 판정하지 않습니다.
+
+## 전원 상태 변경 구독
+
+`power.statusChanged`의 payload는 `power.getStatus()`와 같은 `PowerStatus`입니다.
+화면 정책의 events에 `power.statusChanged`, host.permissions에 `power.getStatus`를 모두
+허용해야 합니다. 구독한 현재 세션에만 전달합니다. 두 호출 사이의 변경을 놓치지 않도록
+먼저 구독한 뒤 `getStatus()`로 초기 값을 조회합니다.
+
+```ts
+const stop = await client.listen("power.statusChanged", ({ payload: status }) => {
+  console.log(status.source, status.batteryPercent, status.charging);
+}, { onError(error) { console.error(error); } });
+const initial = await power.getStatus();
+console.log(initial.source, initial.batteryPercent, initial.charging);
+// 컴포넌트 정리 때 호출합니다.
+await stop();
+```
+
+Windows가 전원 상태 변경을 알리거나 절전에서 복귀하면 GetSystemPowerStatus를 다시 읽고,
+직전에 알린 값과 다를 때만 이벤트를 보냅니다. 같은 값은 보내지 않습니다.
+Windows가 알리지 않는 변경은 감지를 보장하지 않으며, 예를 들어 남은 시간 추정값의
+작은 변화는 다음 알림이 올 때까지 반영되지 않을 수 있습니다.
+macOS에서는 이 이벤트를 발생시키지 않습니다.
+
+읽기 실패는 기존 값을 유지하고 호스트 진단에 기록합니다. 다음 알림에서 다시 시도합니다.
+구독 해제와 문서 이동 뒤에는 이전 세션으로 이벤트를 보내지 않습니다. 플러그인 종료 때
+네이티브 구독을 먼저 해제한 뒤 request handle과 DLL을 정리합니다.
+실제 AC 연결과 분리 같은 하드웨어 전환은 수동 검증 대상입니다.
 
 ## 절전과 화면 유지 요청
 
@@ -70,5 +101,5 @@ handle은 다음 정리 시도까지 보유합니다. 남은 handle이 있으면
 결과 수신 전에 취소되면 허용된 백엔드가 listBlockers로 등록 상태를 복구하거나 앱 종료의
 자동 정리로 해제합니다.
 
-배터리 변경, suspend/resume 및 잠금 이벤트와 실제 하드웨어의 절전/화면 timeout 검증은
+suspend/resume 및 잠금 이벤트와 실제 하드웨어의 절전/화면 timeout 검증은
 후속 작업입니다. [Windows PowerSetRequest 계약](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-powersetrequest)을 따릅니다.
