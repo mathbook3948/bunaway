@@ -23,9 +23,17 @@ function requireTray(
 /** The selected package creates native residency; the host retains cleanup ownership. */
 export function initialize(environment: NativeEnvironment) {
   const services = environment.tray;
+  const hover = {
+    open: true,
+  };
   services?.initialize?.(
     ({ windows, tooltip, receive, notify, retain }) =>
-      new Tray(windows, tooltip, receive, notify, retain),
+      new Tray(windows, tooltip, receive, notify, retain, (event) => {
+        // View-only event with no waiter. The host Tray outlives this plugin, so stop after dispose.
+        if (hover.open) {
+          services.emit("tray.hover", validateValue({}, event));
+        }
+      }),
   );
   const notifications = new NativeEventWaiters<
     z.output<typeof trayEventSchema>
@@ -36,6 +44,7 @@ export function initialize(environment: NativeEnvironment) {
   });
   return {
     services,
+    hover,
     notifications,
     unsubscribe,
   };
@@ -83,6 +92,7 @@ export function waitForEvent(state: State, signal?: AbortSignal) {
 }
 
 export function dispose(state: State): void {
+  state.hover.open = false;
   state.notifications.dispose();
   state.unsubscribe?.();
 }

@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import type { NativeTrayEvent } from "@bunaway/plugin-api/native";
-import { trayEventSchema } from "#plugins/tray/src/contract";
+import { trayHoverEventSchema } from "#plugins/tray/src/contract";
 import {
   TRAY_LEAVE_POLL_MS,
   TRAY_MOVE_FRESH_MS,
   TRAY_MOVE_INTERVAL_MS,
+  type TrayHoverEvent,
   TrayHoverTracker,
 } from "#plugins/tray/src/platforms/windows-tray-hover";
 
@@ -31,7 +31,7 @@ function harness() {
   };
   let poll: (() => void) | undefined;
   let stopped = 0;
-  const events: NativeTrayEvent[] = [];
+  const events: TrayHoverEvent[] = [];
   const failures: unknown[] = [];
   let emitFailure: Error | undefined;
   const tracker = new TrayHoverTracker({
@@ -111,7 +111,6 @@ test("hover enters once, throttles moves and leaves when the pointer exits the i
     "leave",
   ]);
   expect(h.events.at(-1)).toMatchObject({
-    button: "none",
     position: {
       x: 20,
       y: 10,
@@ -119,7 +118,7 @@ test("hover enters once, throttles moves and leaves when the pointer exits the i
   });
   expect(h.polling()).toBe(false);
   for (const event of h.events) {
-    expect(trayEventSchema.safeParse(event).success).toBe(true);
+    expect(trayHoverEventSchema.safeParse(event).success).toBe(true);
   }
   h.advance(1);
   h.tracker.mouseMoved();

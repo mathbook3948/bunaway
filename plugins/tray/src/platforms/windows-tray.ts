@@ -13,7 +13,10 @@ import { openTrayBindings } from "#tray/platforms/windows-bindings";
 import { withWide } from "#tray/platforms/windows-buffers";
 import { createTrayIcon } from "#tray/platforms/windows-icon";
 import { NativePopupMenu } from "#tray/platforms/windows-popup-menu";
-import { TrayHoverTracker } from "#tray/platforms/windows-tray-hover";
+import {
+  type TrayHoverEvent,
+  TrayHoverTracker,
+} from "#tray/platforms/windows-tray-hover";
 
 const WM_CLOSE = 0x0010;
 
@@ -114,6 +117,7 @@ export class Tray {
     receive: (action: "show" | "quit") => void,
     notify?: (event: NativeTrayEvent) => void,
     retain?: (owner: NativeTrayOwner) => void,
+    notifyHover?: (event: TrayHoverEvent) => void,
   ) {
     // Validate the whole startup value before acquiring this tray's native resources.
     if (/[\0\uD800-\uDFFF]/u.test(tooltip)) {
@@ -127,10 +131,12 @@ export class Tray {
       now: () => performance.now(),
       cursor: () => this.cursorPosition(),
       bounds: () => this.getBounds(),
-      emit: (event) => notify?.(event),
+      emit: (event) => notifyHover?.(event),
       fail: (error) => console.error("Tray hover tracking stopped:", error),
       startPolling: (poll, intervalMs) => {
         const timer = setInterval(poll, intervalMs);
+        // The leave poll must not keep the process alive by itself.
+        timer.unref();
         return () => clearInterval(timer);
       },
     });

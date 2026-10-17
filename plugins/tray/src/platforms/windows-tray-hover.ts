@@ -1,4 +1,11 @@
-import type { NativeTrayEvent } from "@bunaway/plugin-api/native";
+/** Hover notification published as `tray.hover`; separate from click-style `tray.input`. */
+export type TrayHoverEvent = {
+  state: "enter" | "move" | "leave";
+  position: {
+    x: number;
+    y: number;
+  } | null;
+};
 
 /** Minimum spacing between `move` events while the pointer stays over the icon. */
 export const TRAY_MOVE_INTERVAL_MS = 50;
@@ -24,7 +31,7 @@ export type TrayHoverHost = {
   now(): number;
   cursor(): Point | null;
   bounds(): Rect | null;
-  emit(event: NativeTrayEvent): void;
+  emit(event: TrayHoverEvent): void;
   /** Starts a repeating timer and returns its stop function. */
   startPolling(poll: () => void, intervalMs: number): () => void;
   /** Receives failures of the timer-driven check, which has no caller to propagate to. */
@@ -38,10 +45,14 @@ export type TrayHoverHost = {
  * inferred: while hovering, a timer compares the cursor with Shell_NotifyIconGetRect and ends
  * the hover once the cursor is outside. Leave is therefore delayed by up to TRAY_LEAVE_POLL_MS.
  * When the rectangle is unreadable (for example an icon in the overflow area), the pointer
- * cannot be located, so hover continues only while mouse-move callbacks keep arriving.
+ * cannot be located, so hover continues only while mouse-move callbacks keep arriving; leave
+ * then comes once no move was seen for TRAY_MOVE_FRESH_MS, at most about
+ * TRAY_MOVE_FRESH_MS + TRAY_LEAVE_POLL_MS (300ms) after the last move.
  *
- * Failure policy: the timer has no caller, so an exception from the cursor/bounds query or from
- * an event subscriber is reported to `fail` and hover tracking stops without a leave. The next
+ * Failure policy differs by path. enter and move run inside the window procedure, so an
+ * exception from `emit` propagates to the window procedure's caller like any other tray callback.
+ * leave runs from the timer, which has no caller: an exception from the cursor/bounds query or
+ * from `emit` is reported to `fail` and hover tracking stops without a leave. The next
  * mouse-move callback starts a new hover with enter.
  */
 export class TrayHoverTracker {
@@ -104,8 +115,6 @@ export class TrayHoverTracker {
 
   private publish(state: "enter" | "move" | "leave", position: Point | null) {
     this.host.emit({
-      id: "main",
-      button: "none",
       state,
       position,
     });

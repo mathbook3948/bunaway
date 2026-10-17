@@ -261,12 +261,22 @@ test.skipIf(process.platform !== "win32")(
         ],
         returns: "i32",
       },
+      GetCursorPos: {
+        args: [
+          "ptr",
+        ],
+        returns: "i32",
+      },
     });
-    const events: NativeTrayEvent[] = [];
+    const events: Parameters<
+      NonNullable<ConstructorParameters<typeof Tray>[5]>
+    >[0][] = [];
     const tray = new Tray(
       windows,
       "hover",
       () => {},
+      undefined,
+      undefined,
       (event) => events.push(event),
     );
     const postMouseMove = () => {
@@ -282,14 +292,27 @@ test.skipIf(process.platform !== "win32")(
     };
     let disposed = false;
     try {
+      // Precondition: leave is only observable when the real pointer starts outside the icon.
+      const point = new Int32Array(2);
+      expect(user.symbols.GetCursorPos(ptr(point))).not.toBe(0);
+      const bounds = tray.getBounds();
+      if (
+        bounds &&
+        (point[0] ?? 0) >= bounds.x &&
+        (point[0] ?? 0) < bounds.x + bounds.width &&
+        (point[1] ?? 0) >= bounds.y &&
+        (point[1] ?? 0) < bounds.y + bounds.height
+      ) {
+        throw new Error(
+          "Tray hover test precondition failed: the pointer is over the tray icon; move it away and rerun.",
+        );
+      }
       postMouseMove();
       expect(events[0]).toMatchObject({
-        id: "main",
-        button: "none",
         state: "enter",
       });
-      // Assumes the runner's pointer is not over the tray icon (the CI desktop has no user input),
-      // so the poll must end the hover. Without bounds the hover also ends once synthetic moves stop.
+      // With the pointer outside the icon, the poll must end the hover. Without bounds the hover
+      // also ends once synthetic moves stop.
       const deadline = Date.now() + LEAVE_WAIT_MS;
       while (
         !events.some((event) => event.state === "leave") &&
