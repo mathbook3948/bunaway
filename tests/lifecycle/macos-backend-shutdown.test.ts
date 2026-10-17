@@ -34,6 +34,9 @@ function harness(options: { orderly: boolean; hookDeadlineMs?: number }) {
       reportCleaned: async () => {
         steps.push("cleaned");
       },
+      reportExitCode: async () => {
+        steps.push("exit-code");
+      },
       nativeStopped: nativeStopped.promise,
     });
   };
@@ -58,11 +61,13 @@ test("an orderly shutdown runs onWillQuit before Core stops and onQuit after nat
   ]);
   nativeStopped.resolve();
   await finished;
+  // The exit code is reported last, so an exit() inside onQuit still decides it.
   expect(steps).toEqual([
     "onWillQuit:quit-command",
     "stopCore",
     "cleaned",
     "onQuit:quit-command",
+    "exit-code",
   ]);
 });
 
@@ -75,6 +80,35 @@ test("a host failure skips the app's hooks and does not wait for native teardown
   expect(steps).toEqual([
     "stopCore",
     "cleaned",
+    "exit-code",
+  ]);
+});
+
+test("an exit() inside onQuit decides the reported exit code", async () => {
+  const reported: number[] = [];
+  const desktop: DesktopLifecycle = new DesktopLifecycle(
+    {
+      onQuit: () => {
+        void desktop.context.exit(5);
+      },
+    },
+    async () => {},
+    () => {},
+    () => {},
+  );
+  desktop.commitShutdown("quit-command");
+  await runBackendShutdown({
+    desktop,
+    orderly: true,
+    stopCore: async () => {},
+    reportCleaned: async () => {},
+    reportExitCode: async () => {
+      reported.push(desktop.exitCode);
+    },
+    nativeStopped: Promise.resolve(),
+  });
+  expect(reported).toEqual([
+    5,
   ]);
 });
 

@@ -220,7 +220,40 @@ Windows는 이 훅을 호출하지 않습니다. Windows에서 앱을 다시 실
 | --- | --- |
 | `show(): Promise<void>` | 살아 있는 창을 모두 복원합니다. 열린 창이 없으면 첫 사전 선언 창을 생성합니다. 선언이 비어 있으면 아무 창도 만들지 않습니다 |
 | `hide(): Promise<void>` | 트레이가 있으면 살아 있는 창을 모두 숨깁니다. 없으면 오류로 실패합니다 |
-| `quit(): Promise<boolean>` | 종료 검사가 승인되면 `true`, 취소하거나 검사에 실패하면 `false` |
+| `quit(options?: { exitCode?: number }): Promise<boolean>` | 종료 검사가 승인되면 `true`, 취소하거나 검사에 실패하면 `false`. `exitCode`는 0에서 255 사이 정수이며 기본값은 0입니다 |
+| `exit(exitCode?: number): Promise<void>` | 종료 검사와 `onWillQuit`, `onQuit`을 건너뛰는 취소할 수 없는 종료를 확정하면 완료합니다 |
+| `relaunch(options?: { argv?: string[]; exitCode?: number }): Promise<boolean>` | `quit`과 같은 검사를 거쳐 종료한 뒤 새 프로세스를 시작합니다. 거부되면 `false`이며 재실행하지 않습니다 |
+
+#### 종료 코드, 강제 종료와 재실행
+
+`exitCode`가 0에서 255 사이의 정수가 아니면 `quit`, `exit`, `relaunch`는 종료하지 않고
+`INVALID_ARGUMENT`로 거부합니다. `quit`의 코드는 종료가 확정될 때 기록하며 `beforeQuit`가 거부하면 버립니다.
+이미 다른 원인으로 종료가 확정됐다면 먼저 확정된 코드가 유지됩니다. 호스트 실패의 코드는 항상 1입니다.
+정리가 40초 안에 끝나지 않는 시간 초과도 호스트 실패로 보고 코드 1로 끝냅니다.
+
+먼저 시작된 종료가 이깁니다. `beforeQuit` 검사가 진행 중이거나 종료가 확정된 뒤에 `quit`이나 `relaunch`를
+다시 호출하면, 종료 코드(생략하면 0)와 재실행 여부, `argv`가 모두 같을 때만 그 결과를 공유합니다.
+하나라도 다르면 적용하지 않고 `false`를 반환하며 먼저 시작된 종료는 그대로 진행합니다.
+`true`를 받은 호출만 자신의 요청이 적용됐다고 볼 수 있습니다. `exit`는 항상 기존 요청을 대체합니다.
+`exit` 뒤에는 훅이 실행되지 않으므로 `quit`과 `relaunch`는 같은 요청이어도 `false`를 반환합니다.
+
+`exit`는 `beforeQuit`, 닫기 확인, `onWillQuit`, `onQuit`을 호출하지 않습니다.
+코어와 플러그인 StopHook, Worker, 하위 프로세스 정리는 그대로 실행하며 정리가 끝나지 않으면
+호스트의 40초 제한 뒤 프로세스를 끝냅니다. 이미 확정된 `quit`의 코드와 `relaunch`는 `exit`가 대체합니다.
+저장하지 않은 작업을 잃을 수 있으므로 복구할 수 없는 상태에서만 씁니다.
+
+`relaunch`는 `onQuit`까지 끝난 뒤에 같은 앱의 새 프로세스를 시작합니다.
+새 프로세스는 이전 프로세스가 끝날 때까지 기다린 뒤 단일 인스턴스 잠금을 잡고, 초기 실행으로 `onOpen`을 받습니다.
+`argv`를 생략하면 최초 실행의 `OpenRequest.argv`를 다시 전달하고, 지정하면 그 배열로 대체합니다
+(256개 이하, NUL 없음, JSON 64KiB 이하). Windows에서는 실행 파일과 개발 옵션을 포함해 인용한
+명령줄이 32767자 미만이어야 하며, 그렇지 않으면 종료하기 전에 `INVALID_ARGUMENT`로 거부합니다.
+실행 파일, 환경 변수, 작업 디렉터리는 정할 수 없고
+작업 디렉터리는 시작 시점 값을 유지합니다.
+세션 종료, Ctrl+C와 SIGTERM, 호스트 실패에서는 재실행하지 않습니다. 이미 확정된 일반 종료가 있으면 그 종료가 이기며 재실행하지 않습니다.
+진행 중인 `relaunch()`에 트레이 Quit이나 마지막 창 닫기 같은 호스트 요청이 합류하면 재실행은 그대로 진행합니다.
+바깥 Job 때문에 새 프로세스를 만들 수 없으면 호스트 로그에 `relaunch-failed`를 남기고 요청한 코드로 종료합니다.
+`bunaway dev`에서는 CLI가 호스트를 다시 시작하고 개발 세션은 끝나지 않습니다.
+Windows에서만 지원하며 macOS는 `UNSUPPORTED`로 거부합니다. macOS의 `quit({ exitCode })`와 `exit`는 지원합니다.
 
 `show()`는 표시 요청의 접수를 기다립니다. 새 창의 문서와 SDK 준비까지 기다리지 않습니다.
 두 번째 실행을 받으면 같은 표시 요청을 접수한 뒤 `onOpen`을 호출합니다.
@@ -287,7 +320,7 @@ macOS에서 사용자 결정 없이 마지막 창이 사라지는 창 생성 실
 `INVALID_ARGUMENT`로 실패합니다. 앞서 명령이나 플러그인 `setup`이 시작한 작업은 종료가 확정된 시점부터
 (`onWillQuit` 실행 중 포함) `CANCELLED`로 실패합니다. 상태 저장과 앱 자원 정리처럼 앱 내부 작업만 합니다.
 `onReady`, `onOpen`, `onOpenUrls`, `onReopen`, `onAllWindowsClosed`, `beforeQuit`도 Host API 범위 밖에서 실행합니다. 호스트 API는 명령이나
-플러그인 `setup`(과 그 안에서 시작한 작업)에서 부르고, 훅에서는 인자로 받는 `DesktopContext`의 `show`, `hide`, `quit`만 사용합니다.
+플러그인 `setup`(과 그 안에서 시작한 작업)에서 부르고, 훅에서는 인자로 받는 `DesktopContext`의 `show`, `hide`, `quit`, `exit`, `relaunch`만 사용합니다.
 호스트 실패(시작 실패, UI Worker 중단)에서는 두 훅을 호출하지 않습니다.
 
 ### 세션 종료

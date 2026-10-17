@@ -2,11 +2,13 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { createConnection, createServer, type Socket } from "node:net";
 import { win32 } from "node:path";
+import { MAX_LAUNCH_ARGUMENTS } from "@bunaway/runtime-bun/worker-channel";
 
 export type LaunchArguments = {
   argv: string[];
   cwd: string;
 };
+/** Bound of one pipe frame, which carries the arguments plus the working directory. */
 const MAX_BYTES = 64 * 1024;
 const MAX_PENDING = 32;
 
@@ -30,7 +32,7 @@ export function parseLaunchArguments(value: unknown): LaunchArguments {
   if (
     Object.keys(input).length !== 2 ||
     !Array.isArray(input.argv) ||
-    input.argv.length > 256 ||
+    input.argv.length > MAX_LAUNCH_ARGUMENTS ||
     input.argv.some((arg) => typeof arg !== "string" || arg.includes("\0")) ||
     typeof input.cwd !== "string" ||
     !win32.isAbsolute(input.cwd) ||

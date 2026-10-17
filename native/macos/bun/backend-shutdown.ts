@@ -17,6 +17,11 @@ export type BackendShutdown = {
   reportCleaned(): Promise<void>;
   /** Settles once the main thread has torn down windows, adapters and the I/O Worker. */
   nativeStopped: Promise<void>;
+  /**
+   * Tells the main thread the final process exit code. It runs last, after `onQuit`, so an
+   * `exit()` called from `onQuit` still decides the code, as on Windows.
+   */
+  reportExitCode?(): Promise<void>;
 };
 
 /**
@@ -44,4 +49,5 @@ export async function runBackendShutdown(
     await shutdown.nativeStopped;
     await shutdown.desktop?.quitCompleted();
   }
+  await shutdown.reportExitCode?.();
 }

@@ -84,6 +84,8 @@
           "verifyDevelopmentToolsLaunch",
           "readAppReloadRequest",
           "readAppReloadResult",
+          "readAppRelaunchRequest",
+          "isAppRelaunchAck",
           "MAX_APP_RELOAD_MESSAGE_CHARS"
         ]
       }
@@ -462,6 +464,9 @@
           "MAX_WINDOWS",
           "MAX_OPEN_URLS",
           "MAX_OPEN_URLS_BYTES",
+          "MAX_PROCESS_EXIT_CODE",
+          "MAX_LAUNCH_ARGUMENTS",
+          "MAX_LAUNCH_ARGUMENT_BYTES",
           "validatePacket",
           "Channel"
         ]
@@ -1150,9 +1155,29 @@
     },
     {
       "source": "packages/plugin-api/src/desktop.ts",
+      "type": "QuitOptions",
+      "pages": {
+        "reference/backend/app-definition": ["exitCode"]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/desktop.ts",
+      "type": "RelaunchOptions",
+      "pages": {
+        "reference/backend/app-definition": ["argv", "exitCode"]
+      }
+    },
+    {
+      "source": "packages/plugin-api/src/desktop.ts",
       "type": "DesktopContext",
       "pages": {
-        "reference/backend/app-definition": ["show", "hide", "quit"]
+        "reference/backend/app-definition": [
+          "show",
+          "hide",
+          "quit",
+          "exit",
+          "relaunch"
+        ]
       }
     },
     {

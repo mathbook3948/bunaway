@@ -2,6 +2,11 @@ import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdirSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+  type RelaunchCommand,
+  relaunchCommandLine,
+  relaunchCommandLineTooLong,
+} from "./relaunch.ts";
 
 const INVALID_HANDLE_VALUE = 0xffffffffffffffffn;
 const GENERIC_READ = 0x80000000;
@@ -33,6 +38,15 @@ const MAX_PROCESS_ID_LIST_BYTES = 16 * 1024 * 1024;
 const DEFAULT_DESCENDANT_CLEANUP_TIMEOUT_MS = 5000;
 const PROCESS_EXIT_POLL_INTERVAL_MS = 10;
 const WAIT_OBJECT_0 = 0;
+
+const JOB_OBJECT_LIMIT_BREAKAWAY_OK = 0x0800;
+const CREATE_UNICODE_ENVIRONMENT = 0x0400;
+const CREATE_BREAKAWAY_FROM_JOB = 0x01000000;
+const STARTUPINFOW_BYTES = 104; // Win64
+const PROCESS_INFORMATION_BYTES = 24; // Win64
+/** Longest wait for a previous host to release the app lock after a relaunch. */
+const RELAUNCH_LOCK_WAIT_MS = 30000;
+const RELAUNCH_LOCK_POLL_MS = 50;
 
 /** Signals that another process already owns this app data directory. */
 export class AppAlreadyRunningError extends Error {
@@ -132,6 +146,21 @@ function openBindings() {
       ],
       returns: "i32",
     },
+    CreateProcessW: {
+      args: [
+        "ptr",
+        "ptr",
+        "ptr",
+        "ptr",
+        "i32",
+        "u32",
+        "ptr",
+        "ptr",
+        "ptr",
+        "ptr",
+      ],
+      returns: "i32",
+    },
   });
 }
 /**
@@ -214,6 +243,133 @@ export function containAppProcess(dataRoot: string) {
     throw error;
   }
 }
+/**
+ * Claims the app directory for a process that `relaunch()` started. The previous host may still be
+ * exiting and holds the lock until the OS tears it down, so a busy lock is retried until it
+ * frees. After the deadline the claim fails like an ordinary second start, which then forwards its
+ * arguments to the instance that owns the directory.
+ */
+export async function containAppProcessAfterRelaunch(
+  dataRoot: string,
+  timeoutMs = RELAUNCH_LOCK_WAIT_MS,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      containAppProcess(dataRoot);
+      return;
+    } catch (error) {
+      if (
+        !(error instanceof AppAlreadyRunningError) ||
+        Date.now() >= deadline
+      ) {
+        throw error;
+      }
+      await Bun.sleep(RELAUNCH_LOCK_POLL_MS);
+    }
+  }
+}
+
+/** Builds a sorted UTF-16 environment block, which `CreateProcessW` expects. */
+function environmentBlock(env: RelaunchCommand["env"]): Buffer {
+  const entries = Object.entries(env)
+    .filter(
+      (
+        entry,
+      ): entry is [
+        string,
+        string,
+      ] => entry[1] !== undefined,
+    )
+    .sort(([a], [b]) => {
+      const left = a.toUpperCase();
+      const right = b.toUpperCase();
+      return left < right ? -1 : left > right ? 1 : 0;
+    });
+  return Buffer.from(
+    `${entries.map(([name, value]) => `${name}=${value}\0`).join("")}\0`,
+    "utf16le",
+  );
+}
+
+/**
+ * Starts a process that is not part of this app's Job, so it survives this host's exit.
+ * The Job is made breakaway-capable only for this call. Throws when Windows refuses, for example
+ * because an outer Job (a CI runner or launcher) forbids breakaway; the caller then reports the
+ * failure and exits without a new process. Requires an active app Job.
+ *
+ * Returns the error when the process started but the Job's breakaway permission could not be
+ * withdrawn afterwards; the launch itself succeeded, so it is a diagnostic and not a failure.
+ */
+export function startOutsideAppJob(command: RelaunchCommand): unknown {
+  assert(owned);
+  const { api, handle } = owned;
+  const line = relaunchCommandLine(command);
+  if (relaunchCommandLineTooLong(line)) {
+    throw new Error("Relaunch command line is too long");
+  }
+  const setFlags = (flags: number) => {
+    const limits = Buffer.alloc(JOBOBJECT_EXTENDED_LIMIT_INFORMATION_BYTES);
+    limits.writeUInt32LE(flags, JOB_LIMIT_FLAGS_OFFSET);
+    assert(
+      api.symbols.SetInformationJobObject(
+        handle,
+        JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
+        ptr(limits),
+        limits.length,
+      ),
+      "App Job limits failed",
+    );
+  };
+  const application = Buffer.from(`${command.executable}\0`, "utf16le");
+  const commandLine = Buffer.from(`${line}\0`, "utf16le");
+  const cwd = Buffer.from(`${command.cwd}\0`, "utf16le");
+  const environment = environmentBlock(command.env);
+  const startup = Buffer.alloc(STARTUPINFOW_BYTES);
+  startup.writeUInt32LE(STARTUPINFOW_BYTES, 0);
+  const information = Buffer.alloc(PROCESS_INFORMATION_BYTES);
+  setFlags(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK);
+  try {
+    // Handles are not inherited: the new host must not share this host's pipes or the lock file.
+    if (
+      !api.symbols.CreateProcessW(
+        ptr(application),
+        ptr(commandLine),
+        null,
+        null,
+        0,
+        CREATE_BREAKAWAY_FROM_JOB | CREATE_UNICODE_ENVIRONMENT,
+        ptr(environment),
+        ptr(cwd),
+        ptr(startup),
+        ptr(information),
+      )
+    ) {
+      throw new Error(
+        `Relaunch CreateProcessW failed (Win32 ${api.symbols.GetLastError()})`,
+      );
+    }
+    api.symbols.CloseHandle(information.readBigUInt64LE(0));
+    api.symbols.CloseHandle(information.readBigUInt64LE(8));
+  } catch (error) {
+    try {
+      setFlags(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE);
+    } catch (restoreError) {
+      // A restore failure must not hide why the launch failed; it is kept as the cause instead.
+      if (error instanceof Error && error.cause === undefined) {
+        error.cause = restoreError;
+      }
+    }
+    throw error;
+  }
+  try {
+    setFlags(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE);
+  } catch (restoreError) {
+    // The new process is already running, so this is not a launch failure: report it separately.
+    return restoreError;
+  }
+}
+
 /**
  * Requires an active app Job.
  * Returns its live descendants, excluding this Bun host.

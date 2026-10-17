@@ -39,8 +39,11 @@ const FORCED_SHUTDOWN_DEADLINE_MS =
  */
 type MainShutdownCause = "interrupted" | "session-end" | "window-destroyed";
 
-/** Own UI, backend Worker, channels and shutdown deadlines for one Bun app process. */
-export async function runMacosApp(config: MacosConfig): Promise<void> {
+/**
+ * Own UI, backend Worker, channels and shutdown deadlines for one Bun app process.
+ * Resolves to the process exit code the app chose; failures reject instead.
+ */
+export async function runMacosApp(config: MacosConfig): Promise<number> {
   await mkdir(resolve(config.dataRoot, "logs"), {
     recursive: true,
   });
@@ -56,6 +59,7 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
   let stopping = false;
   let ready = false;
   let cleaned = false;
+  let exitCode = 0;
   let failure: unknown;
   let ui: MacosWindows | undefined;
   let application: MacosApplication | undefined;
@@ -474,6 +478,10 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
       } else if (packet.kind === "operation") {
         // The backend needs acceptance even while plugin parsing or execution is pending.
         void executeRequest(packet).catch(fail);
+      } else if (packet.kind === "exit-code") {
+        // Sent last, after onQuit; the backend drains its channel before the Worker exits, so the
+        // code is known when `exited` settles.
+        exitCode = packet.exitCode;
       } else if (packet.kind === "cleaned") {
         cleaned = true;
         backendCleaned.resolve();
@@ -755,4 +763,5 @@ export async function runMacosApp(config: MacosConfig): Promise<void> {
   if (failure) {
     throw failure;
   }
+  return exitCode;
 }

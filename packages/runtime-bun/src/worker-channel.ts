@@ -129,6 +129,22 @@ function openUrlList(value: unknown): asserts value is string[] {
     throw new Error("Invalid open URL list");
   }
 }
+/** Largest process exit code an app can choose, so macOS and Windows report the same range. */
+export const MAX_PROCESS_EXIT_CODE = 255;
+/** Most launch or relaunch arguments (as `MAX_OPEN_URLS`, ADR 0013's launch argument limit). */
+export const MAX_LAUNCH_ARGUMENTS = 256;
+/** Most JSON bytes of launch or relaunch arguments (64 KiB, ADR 0013). */
+export const MAX_LAUNCH_ARGUMENT_BYTES = 64 * 1024;
+function processExitCode(value: unknown): asserts value is number {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > MAX_PROCESS_EXIT_CODE
+  ) {
+    throw new Error("Invalid process exit code");
+  }
+}
 function flag(value: unknown): asserts value is boolean {
   if (typeof value !== "boolean") {
     throw new Error("Invalid Worker flag");
@@ -452,6 +468,16 @@ const packetDefinitions = {
     {},
     [
       "ui",
+      "macos-main",
+    ],
+    "control",
+  ),
+  /** The process exit code the backend chose for an orderly shutdown; sent last, after `onQuit`. */
+  "exit-code": definePacket(
+    {
+      exitCode: processExitCode,
+    },
+    [
       "macos-main",
     ],
     "control",

@@ -1,4 +1,8 @@
 import type { Policy } from "@bunaway/protocol";
+import {
+  MAX_LAUNCH_ARGUMENT_BYTES,
+  MAX_LAUNCH_ARGUMENTS,
+} from "./worker-channel.ts";
 
 /** Request to replace the app definition loaded by a development process. */
 export type AppReloadRequest = {
@@ -14,6 +18,54 @@ export type AppReloadResult = {
   status: "reloaded" | "restart" | "failed";
   message?: string;
 };
+/** Sent by a development host to the CLI that owns it, asking for a fresh host with `argv`. */
+export type AppRelaunchRequest = {
+  kind: "bunaway:relaunch-app";
+  argv: readonly string[];
+};
+
+/**
+ * Acknowledgement the CLI sends once it recorded an {@link AppRelaunchRequest}. The host exits
+ * only after it (or a short deadline), so the CLI has the request before it sees the exit.
+ */
+export type AppRelaunchAck = {
+  kind: "bunaway:relaunch-ack";
+};
+
+/** True for a well-formed {@link AppRelaunchAck}. */
+export function isAppRelaunchAck(value: unknown): value is AppRelaunchAck {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "kind" in value &&
+    value.kind === "bunaway:relaunch-ack" &&
+    Object.keys(value).length === 1
+  );
+}
+
+/** Validates a relaunch request received from the development host. */
+export function readAppRelaunchRequest(value: unknown): AppRelaunchRequest {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("kind" in value) ||
+    value.kind !== "bunaway:relaunch-app" ||
+    !("argv" in value) ||
+    !Array.isArray(value.argv) ||
+    value.argv.length > MAX_LAUNCH_ARGUMENTS ||
+    value.argv.some((arg) => typeof arg !== "string" || arg.includes("\0")) ||
+    Buffer.byteLength(JSON.stringify(value.argv)) > MAX_LAUNCH_ARGUMENT_BYTES ||
+    Object.keys(value).length !== 2
+  ) {
+    throw new Error("Invalid app relaunch request.");
+  }
+  return {
+    kind: value.kind,
+    argv: [
+      ...value.argv,
+    ],
+  };
+}
 const RELOAD_ID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 /** Maximum diagnostic text accepted in a reload result. */
 export const MAX_APP_RELOAD_MESSAGE_CHARS = 4096;

@@ -54,6 +54,7 @@ export const frameworkPaths = [
   "native/windows/bun/development-app.ts",
   "native/windows/bun/app-reload.ts",
   "native/windows/bun/job.ts",
+  "native/windows/bun/relaunch.ts",
   "native/windows/bun/instance.ts",
   "native/windows/bun/desktop.ts",
   "native/windows/bun/deps.json",

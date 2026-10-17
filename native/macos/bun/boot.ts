@@ -20,8 +20,7 @@ if (import.meta.main) {
       "Usage: bunaway [--package <dir> [--dev-url <url>]]",
     );
     const config = await verifyMacosPackage(args[1] ?? root, args[3]);
-    await runMacosApp(config);
-    process.exit(0);
+    process.exit(await runMacosApp(config));
   } catch (error) {
     console.error(error);
     process.exit(1);

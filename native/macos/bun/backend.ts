@@ -215,6 +215,13 @@ const channel = new Channel(
             channel.send({
               kind: "cleaned",
             }),
+          // The main thread owns the process exit. The code goes last, after onQuit, which may
+          // still change it through exit().
+          reportExitCode: () =>
+            channel.send({
+              kind: "exit-code",
+              exitCode: desktop?.exitCode ?? 0,
+            }),
           nativeStopped: nativeStopped.promise,
         });
         await channel.drain();
@@ -300,6 +307,9 @@ try {
       });
     },
     reportDesktopFailure,
+    undefined,
+    // The macOS host cannot start a replacement process of itself yet.
+    false,
   );
   if (reportedCause) {
     desktop.commitShutdown(reportedCause);

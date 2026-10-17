@@ -16,7 +16,10 @@ import {
 /** The process and optional reload channel transferred by a successful app launch. */
 export interface RunningDevApp {
   process: Pick<Subprocess, "exited" | "exitCode" | "pid" | "kill">;
-  connection: Pick<WindowsAppReload, "reload" | "close"> | undefined;
+  connection:
+    | (Pick<WindowsAppReload, "reload" | "close"> &
+        Partial<Pick<WindowsAppReload, "relaunch">>)
+    | undefined;
 }
 
 /** Platform operations used by the app owner; a failed launch must release partial resources. */
@@ -25,8 +28,12 @@ export interface DevAppOperations {
     project: Project,
     built: BuiltPackage,
     isCurrent: () => boolean,
+    /** App arguments after the host switches; set by an app-requested relaunch. */
+    appArguments: readonly string[],
   ): Promise<RunningDevApp | undefined>;
   stop(app: RunningDevApp): Promise<void>;
+  /** Bundles changed app code for a hot reload and returns its digest; the default builds it. */
+  bundleReload?(project: Project, assets: string, id: string): Promise<string>;
 }
 
 const WINDOWS_CLEANUP_TIMEOUT_MS = 40000;
@@ -64,6 +71,7 @@ async function launchDevApp(
   inspector: string | undefined,
   inspectPort: number | undefined,
   isCurrent: () => boolean,
+  appArguments: readonly string[],
 ): Promise<RunningDevApp | undefined> {
   if (signal.aborted || !isCurrent()) {
     return;
@@ -112,6 +120,7 @@ async function launchDevApp(
             ]
           : []),
         ...built.arguments,
+        ...appArguments,
       ],
       {
         cwd: built.package,
@@ -155,9 +164,22 @@ export class DevApp {
     | (RunningDevApp & {
         built: BuiltPackage;
         settings: ReturnType<typeof launchSettings>;
+        project: Project;
+        /** True once a hot reload succeeded, so the last full build no longer matches the code. */
+        reloaded: boolean;
       })
     | undefined;
+  /**
+   * Ownership of a relaunch's arguments: `relaunch` requests them, the first controller pass that
+   * begins afterwards (`stop`) claims them, and only that pass's `start` consumes them. A pass that
+   * ends without starting, a replaced pass or the end of the rebuild drops them, so they can never
+   * reach a later restart.
+   */
+  private requestedArguments: readonly string[] | undefined;
+  private passArguments: readonly string[] = [];
   private stopping: Promise<void> | undefined;
+  /** Bumped by every restart-controller start or stop, to tell a stale relaunch from a current one. */
+  private generation = 0;
 
   constructor(
     private readonly signal: AbortSignal,
@@ -165,48 +187,152 @@ export class DevApp {
     inspector: string | undefined = undefined,
     inspectPort: number | undefined = undefined,
     private readonly operations: DevAppOperations = {
-      launch: (project, built, isCurrent) =>
-        launchDevApp(project, built, signal, inspector, inspectPort, isCurrent),
+      launch: (project, built, isCurrent, appArguments) =>
+        launchDevApp(
+          project,
+          built,
+          signal,
+          inspector,
+          inspectPort,
+          isCurrent,
+          appArguments,
+        ),
       stop: stopDevApp,
     },
+    /** Queues a rebuild through the restart controller; its `start` then launches the new host. */
+    private readonly rebuild: (() => Promise<void>) | undefined = undefined,
   ) {}
 
   get running(): boolean {
     return this.active !== undefined;
   }
 
-  /** Starts only a current revision; cancellation of an in-flight launch reclaims its result. */
-  async start(
+  /**
+   * Starts only a current revision; cancellation of an in-flight launch reclaims its result.
+   * A start from the restart controller supersedes an app-requested relaunch still in flight.
+   */
+  start(
     project: Project,
     built: BuiltPackage,
     isCurrent: () => boolean,
   ): Promise<void> {
+    this.generation += 1;
+    const appArguments = this.passArguments;
+    this.passArguments = [];
+    return this.launch(project, built, isCurrent, appArguments);
+  }
+
+  /** Launches one host with `appArguments`, which apply to that host only. */
+  private async launch(
+    project: Project,
+    built: BuiltPackage,
+    isCurrent: () => boolean,
+    appArguments: readonly string[],
+  ): Promise<void> {
     if (this.signal.aborted || !isCurrent()) {
       return;
     }
-    const app = await this.operations.launch(project, built, isCurrent);
+    const app = await this.operations.launch(
+      project,
+      built,
+      isCurrent,
+      appArguments,
+    );
     if (!app) {
+      return;
+    }
+    if (this.active) {
+      // Two launches overlapped and the other one was tracked first. Release this host instead
+      // of overwriting the tracked one, which would leave a host nobody can stop.
+      app.connection?.close();
+      await this.operations.stop(app);
       return;
     }
     this.active = {
       ...app,
       built,
       settings: launchSettings(project),
+      project,
+      reloaded: false,
     };
     if (this.signal.aborted || !isCurrent()) {
-      await this.stop();
+      await this.release();
       return;
     }
     const current = this.active;
     void app.process.exited.then((code) => {
-      if (this.active === current && !this.signal.aborted) {
-        this.exited(code);
+      if (this.active !== current || this.signal.aborted) {
+        return;
       }
+      // The host exits only after the CLI acknowledged its relaunch request, so a request that
+      // was made is already recorded here, whatever the exit code is.
+      const relaunch = current.connection?.relaunch;
+      if (relaunch !== undefined) {
+        // The app asked to start again: keep the session and launch a fresh host.
+        void this.relaunch(current, relaunch);
+        return;
+      }
+      this.exited(code);
     });
   }
 
-  /** Detaches the old app before termination so its expected exit cannot end the dev session. */
+  /**
+   * Starts a fresh host that applies `appArguments` to that one host. Without a hot reload since
+   * the last full build, it starts from that build without rebuilding, so a source error cannot
+   * turn the app's relaunch into a failure. After a hot reload the last build holds the code from
+   * before it, so the host is rebuilt through the restart controller, which serializes it with
+   * source changes. A failure is reported and leaves the session running without an app, as after
+   * a failed build: the next source change starts one normally.
+   */
+  private async relaunch(
+    previous: NonNullable<DevApp["active"]>,
+    appArguments: readonly string[],
+  ): Promise<void> {
+    // A restart from the controller (a source change or shutdown) bumps the generation and wins.
+    const generation = this.generation;
+    const isCurrent = () =>
+      !this.signal.aborted && this.generation === generation;
+    try {
+      await this.release();
+      if (!isCurrent()) {
+        return;
+      }
+      if (previous.reloaded && this.rebuild) {
+        this.requestedArguments = appArguments;
+        try {
+          await this.rebuild();
+        } finally {
+          // Whatever the passes did (started, failed, replaced or skipped), nothing stays behind.
+          this.requestedArguments = undefined;
+          this.passArguments = [];
+        }
+        return;
+      }
+      await this.launch(
+        previous.project,
+        previous.built,
+        isCurrent,
+        appArguments,
+      );
+    } catch (error) {
+      console.error(
+        `Relaunch failed; fix the problem and save to restart: ${String(error)}`,
+      );
+    }
+  }
+
+  /** Stops the app for the restart controller, superseding any relaunch in flight. */
   stop(): Promise<void> {
+    this.generation += 1;
+    // The controller calls this at the start of every pass: it claims a pending relaunch's
+    // arguments for this pass and drops those of an earlier pass that never started.
+    this.passArguments = this.requestedArguments ?? [];
+    this.requestedArguments = undefined;
+    return this.release();
+  }
+
+  /** Detaches the old app before termination so its expected exit cannot end the dev session. */
+  private release(): Promise<void> {
     if (this.stopping) {
       return this.stopping;
     }
@@ -253,7 +379,7 @@ export class DevApp {
       return false;
     }
     const id = crypto.randomUUID();
-    const sha256 = await bundleWindowsReload(
+    const sha256 = await (this.operations.bundleReload ?? bundleWindowsReload)(
       next,
       resolve(current.built.package, "assets"),
       id,
@@ -278,6 +404,7 @@ export class DevApp {
     if (result.status === "failed") {
       throw new Error(result.message ?? "App reload failed.");
     }
+    current.reloaded = true;
     return true;
   }
 }
