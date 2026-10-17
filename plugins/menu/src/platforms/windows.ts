@@ -29,6 +29,15 @@ function invalid(message: string): never {
   });
 }
 
+/** Whether any item in the tree is a role item, at any depth. */
+function hasRole(items: readonly NativeMenuItem[]): boolean {
+  return items.some((item) =>
+    item.type === "submenu"
+      ? hasRole(item.items)
+      : item.type === "item" && item.role !== undefined,
+  );
+}
+
 function locate(
   items: NativeMenuItem[],
   itemId: string,
@@ -175,6 +184,10 @@ export function initializeMenuOperations(
   const requireMenu = (menuId: string) =>
     resources.get(menuId) ?? invalid("Menu resource does not exist.");
   const attach = (menuId: string | null, items: NativeMenuItem[] | null) => {
+    // The tray is not tied to an app window, so a role would type into whichever app has focus.
+    if (items && hasRole(items)) {
+      invalid("Tray menus do not support roles.");
+    }
     if (
       menuId !== null &&
       [

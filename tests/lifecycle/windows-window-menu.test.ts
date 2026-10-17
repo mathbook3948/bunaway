@@ -49,6 +49,7 @@ test.skipIf(process.platform !== "win32")(
       }>
     >();
     const handles = new Map<string, bigint>();
+    const roles: string[] = [];
     const host: NativeMenuWindowHost = {
       resolve(id) {
         const hwnd = handles.get(id);
@@ -73,6 +74,9 @@ test.skipIf(process.platform !== "win32")(
       changed(id) {
         windows.getSnapshot(host.resolve(id));
       },
+      executeRole(id, role) {
+        roles.push(`${id}:${role}`);
+      },
     };
     const menus = new WindowMenus(host);
     const items = menuItemsSchema.parse([
@@ -91,6 +95,11 @@ test.skipIf(process.platform !== "win32")(
             type: "item",
             label: "Disabled",
             enabled: false,
+          },
+          {
+            id: "copy",
+            type: "item",
+            role: "copy",
           },
         ],
       },
@@ -139,6 +148,11 @@ test.skipIf(process.platform !== "win32")(
       native.symbols.SendMessageW(first, 0x0126, 0n, submenu); // WM_MENUCOMMAND
       native.symbols.SendMessageW(first, 0x0126, 1n, submenu); // disabled leaf
       native.symbols.SendMessageW(second, 0x0126, 0n, submenu); // foreign HMENU
+      native.symbols.SendMessageW(first, 0x0126, 2n, submenu); // role leaf
+      // A role runs on its window and is not reported as an app selection.
+      expect(roles).toEqual([
+        "one:copy",
+      ]);
       expect(selections).toEqual([
         "one:open",
       ]);
@@ -280,6 +294,7 @@ test.skipIf(process.platform !== "win32")(
       resolve: () => hwnd,
       subscribe: () => () => {},
       changed() {},
+      executeRole() {},
       interrupt: () => () => {},
     });
     try {
@@ -373,6 +388,7 @@ for (const { trigger, message: triggerMessage, observesHandle } of [
           };
         },
         changed() {},
+        executeRole() {},
         interrupt: () => () => {},
       });
       try {

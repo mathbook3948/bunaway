@@ -2,6 +2,7 @@ import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 
 export type {
   NativeMenuItem,
+  NativeMenuRole,
   NativeMenuServices,
   NativeMenuWindowHost,
 } from "./native-menu.ts";

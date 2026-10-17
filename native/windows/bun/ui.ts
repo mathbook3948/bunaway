@@ -1842,6 +1842,30 @@ try {
           },
           interrupt: (signal, cancel) =>
             windowRequests.onModalInterrupt(signal, cancel),
+          executeRole(windowId, role) {
+            const view = viewById(windowId);
+            if (!view || view.lifecycle.closed || stopping) {
+              log("menu-role-skipped", {
+                role,
+                reason: "window-closed",
+              });
+              return;
+            }
+            try {
+              view.native.executeEditCommand(role, (reason) =>
+                log("menu-role-failed", {
+                  role,
+                  reason,
+                }),
+              );
+            } catch (error) {
+              // Menu selection is user input; a missing or closing WebView must not break the app.
+              log("menu-role-skipped", {
+                role,
+                reason: error instanceof Error ? error.message : String(error),
+              });
+            }
+          },
           changed(windowId) {
             const view = viewById(windowId);
             if (view && !view.lifecycle.closed) {

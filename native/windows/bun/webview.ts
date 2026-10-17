@@ -2,6 +2,7 @@ import { dlopen, type Pointer, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import type { NativeMenuRole } from "@bunaway/plugin-api/native";
 import { BunawayError, type WireError } from "@bunaway/protocol";
 import type { WindowSpec } from "./channel.ts";
 import {
@@ -17,6 +18,7 @@ import {
 } from "./com.ts";
 import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
+import { callDevToolsProtocolMethod } from "./webview-devtools.ts";
 import { WebViewDownloads } from "./webview-downloads.ts";
 import { enableCustomTitlebar } from "./webview-titlebar.ts";
 import { hr, kernel, user, wide, withWide } from "./win32-bindings.ts";
@@ -84,6 +86,8 @@ export class WebView {
     callback: ComHandler;
   }[] = [];
   private readonly completions: ComHandler[] = [];
+  /** Editing-command completions; finished ones are pruned on the next command. */
+  private readonly editCompletions: ComHandler[] = [];
   private creating = 0;
   private closing = false;
   private detached = false;
@@ -920,6 +924,55 @@ export class WebView {
     );
   }
 
+  /**
+   * Run an editing command on the page's focused element through the DevTools protocol.
+   *
+   * This is the same editor path as Electron's `webContents.copy()`: it does not depend on the
+   * keyboard layout and never injects input into another application. The protocol call works
+   * with the DevTools UI disabled. Completion is observed on the next pump; protocol failures
+   * (for example a navigating page) are reported through `failed` and never thrown.
+   */
+  executeEditCommand(
+    command: NativeMenuRole,
+    failed: (reason: string) => void,
+  ): void {
+    const webview = this.requireWebView();
+    // Completed calls hold only their owner reference and cannot be invoked again.
+    const finished = this.editCompletions.filter(
+      (completion) => completion.calls > 0 && completion.refs === 1,
+    );
+    if (finished.length) {
+      disposeHandlers(finished);
+      for (const completion of finished) {
+        this.editCompletions.splice(
+          this.editCompletions.indexOf(completion),
+          1,
+        );
+      }
+    }
+    // A closed popup normally returns focus to the page; restore it when the host did not.
+    if (!this.hasInputFocus()) {
+      this.moveFocusToContent();
+    }
+    this.editCompletions.push(
+      callDevToolsProtocolMethod(
+        webview,
+        "Input.dispatchKeyEvent",
+        JSON.stringify({
+          type: "rawKeyDown",
+          commands: [
+            command,
+          ],
+        }),
+        ({ hresult }) => {
+          if (hresult < 0) {
+            failed(`0x${(hresult >>> 0).toString(16)}`);
+          }
+        },
+      ),
+    );
+  }
+
   /** Read actual browser URL, title, history availability, controller zoom and input focus. */
   getState() {
     const webview = this.requireWebView();
@@ -1345,6 +1398,7 @@ export class WebView {
     const callbacks = [
       ...this.events.map(({ callback }) => callback),
       ...this.completions,
+      ...this.editCompletions,
     ];
     assert(
       callbacks.every((callback) => callback.refs === 1),
@@ -1375,9 +1429,11 @@ export class WebView {
     disposeHandlers([
       ...this.events.map(({ callback }) => callback),
       ...this.completions,
+      ...this.editCompletions,
     ]);
     this.events.length = 0;
     this.completions.length = 0;
+    this.editCompletions.length = 0;
     this.loader.close();
     this.finished = true;
     this.group.members.delete(this);

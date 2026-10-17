@@ -376,3 +376,40 @@ test("window operations retain independent permissions, strict input and cancell
   expect(f.attachments.size).toBe(0);
   await f.adapter.dispose();
 });
+
+test("role items attach to windows with resolved labels and a role selection reports nothing", async () => {
+  const f = fixture();
+  await f.invoke("create", {
+    menuId: "edit",
+    items: [
+      {
+        id: "paste",
+        type: "item",
+        role: "paste",
+      },
+    ],
+  });
+  await f.invoke("setWindowMenu", {
+    windowId: "one",
+    menuId: "edit",
+  });
+  expect(f.attachments.get("one")?.items).toMatchObject([
+    {
+      id: "paste",
+      role: "paste",
+      label: "Paste",
+    },
+  ]);
+  // The native owner runs a role itself: it neither calls `selected` nor returns an ID.
+  f.popup(() => null);
+  expect(
+    await f.invoke("showContextMenu", {
+      menuId: "edit",
+      windowId: "one",
+      x: 1,
+      y: 2,
+    }),
+  ).toBeNull();
+  expect(f.events).toEqual([]);
+  await f.adapter.dispose();
+});
