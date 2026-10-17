@@ -291,7 +291,11 @@
           "canonicalBase64Bytes",
           "base64CharactersFor",
           "int32Schema",
-          "nonNegativeInt32Schema"
+          "nonNegativeInt32Schema",
+          "attemptAll",
+          "attemptAllAsync",
+          "failWithCleanup",
+          "ResourceOwner"
         ]
       }
     },

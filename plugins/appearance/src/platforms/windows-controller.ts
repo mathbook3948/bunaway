@@ -2,6 +2,7 @@ import type {
   NativeAppearanceWindow,
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
+import { attemptAll } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import type {
   AppearancePreferences,
@@ -219,28 +220,23 @@ export function createAppearanceController(
     },
     dispose() {
       disposed = true;
-      const failures: unknown[] = [];
-      try {
-        releaseSignals?.();
-        releaseSignals = undefined;
-      } catch (error) {
-        failures.push(error);
-      }
-      try {
-        releaseWindows?.();
-        releaseWindows = undefined;
-      } catch (error) {
-        failures.push(error);
-      }
-      windows.clear();
-      try {
-        reader.dispose();
-      } catch (error) {
-        failures.push(error);
-      }
-      if (failures.length) {
-        throw new AggregateError(failures, "Appearance cleanup failed.");
-      }
+      attemptAll(
+        [
+          () => {
+            releaseSignals?.();
+            releaseSignals = undefined;
+          },
+          () => {
+            releaseWindows?.();
+            releaseWindows = undefined;
+          },
+          () => {
+            windows.clear();
+            reader.dispose();
+          },
+        ],
+        "Appearance cleanup failed.",
+      );
     },
   };
 }

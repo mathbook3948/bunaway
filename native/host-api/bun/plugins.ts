@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { attemptAllAsync } from "@bunaway/plugin";
 import {
   BunawayError,
   type JsonValue,
@@ -80,20 +81,10 @@ export function pluginRegistry(
 }
 
 /** Attempt every cleanup in order and report all failures together. */
-export async function disposeAll(
+export function disposeAll(
   actions: Iterable<() => void | Promise<void>>,
 ): Promise<void> {
-  const errors: unknown[] = [];
-  for (const action of actions) {
-    try {
-      await action();
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-  if (errors.length) {
-    throw new AggregateError(errors, "Native resource cleanup failed.");
-  }
+  return attemptAllAsync(actions, "Native resource cleanup failed.");
 }
 
 /** Initialize only registered adapters for this worker and own their full cleanup lifecycle. */

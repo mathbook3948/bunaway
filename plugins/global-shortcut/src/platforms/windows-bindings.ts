@@ -1,4 +1,5 @@
 import { dlopen } from "bun:ffi";
+import { attemptAll } from "@bunaway/plugin";
 import type { NativeShortcutServices } from "@bunaway/plugin-api/native";
 import type { GlobalShortcut } from "#global-shortcut/contract";
 import type { ShortcutDriver } from "#global-shortcut/platforms/windows";
@@ -193,33 +194,31 @@ export class Win32Shortcuts implements ShortcutDriver {
     this.disposed = true;
     this.receive = undefined;
     this.tick = undefined;
-    const errors: unknown[] = [];
+    const hwnd = this.hwnd;
     try {
-      this.stopPolling();
-      for (const id of this.ids) {
-        try {
-          if (!this.unregister(id)) {
-            errors.push(new Error("Global shortcut removal failed."));
-          }
-        } catch (error) {
-          errors.push(error);
-        }
-      }
+      attemptAll(
+        [
+          () => this.stopPolling(),
+          ...[
+            ...this.ids,
+          ].map((id) => () => {
+            if (!this.unregister(id)) {
+              throw new Error("Global shortcut removal failed.");
+            }
+          }),
+          () => {
+            // Destroying the owner releases remaining bindings even when explicit unregister failed.
+            if (hwnd) {
+              this.services.destroyWindow(hwnd);
+            }
+          },
+        ],
+        "Global shortcut cleanup failed.",
+      );
     } finally {
-      try {
-        // Destroying the owner releases remaining bindings even when explicit unregister failed.
-        if (this.hwnd) {
-          this.services.destroyWindow(this.hwnd);
-        }
-      } catch (error) {
-        errors.push(error);
-      }
       this.hwnd = undefined;
       this.ids.clear();
       this.native.close();
-    }
-    if (errors.length) {
-      throw new AggregateError(errors, "Global shortcut cleanup failed.");
     }
   }
 }

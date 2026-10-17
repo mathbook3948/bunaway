@@ -29,6 +29,12 @@ export { defineNativeAdapter } from "./native-handlers.ts";
 export type { NativeHandlerContext } from "./native-platform.ts";
 export type { NativePluginAdapter } from "./native-validation.ts";
 export {
+  attemptAll,
+  attemptAllAsync,
+  failWithCleanup,
+  ResourceOwner,
+} from "./cleanup.ts";
+export {
   base64CharactersFor,
   base64Schema,
   canonicalBase64Bytes,
