@@ -10,6 +10,9 @@ export type ChangeDriver = {
   dispose(): void;
 };
 
+/** GetClipboardSequenceNumber returns 0 when the window station denies clipboard access. */
+const UNKNOWN_SEQUENCE = 0;
+
 /**
  * Publishes content-free change notifications to the host event stream and to
  * `waitForChange` callers. A missing driver means the host offers no listener
@@ -26,13 +29,20 @@ export class ClipboardChanges {
     private readonly driver: ChangeDriver | undefined,
     private readonly emit: (event: string, payload: JsonValue) => void,
     private readonly now: () => number = Date.now,
+    /** Why `driver` is absent, kept as the trusted-diagnostic cause of failed waits. */
+    private readonly unavailableCause?: unknown,
   ) {
     driver?.listen((sequence) => this.receive(sequence));
   }
 
   private receive(sequence: number) {
     // Updates queued before dispatch share the latest sequence number; report that state once.
-    if (this.disposed || sequence === this.lastSequence) {
+    // Zero means Windows could not read the counter (no WINSTA_ACCESSCLIPBOARD), so identity is
+    // unknown and every update is reported.
+    if (
+      this.disposed ||
+      (sequence !== UNKNOWN_SEQUENCE && sequence === this.lastSequence)
+    ) {
       return;
     }
     this.lastSequence = sequence;
@@ -47,12 +57,13 @@ export class ClipboardChanges {
   /** Resolve with the next change; earlier changes are not replayed. */
   wait(signal?: AbortSignal): Promise<ClipboardChange> {
     if (!this.driver) {
-      return Promise.reject(
-        new BunawayError({
-          code: "INTERNAL",
-          message: "Clipboard change notification is unavailable.",
-        }),
-      );
+      const error = new BunawayError({
+        code: "INTERNAL",
+        message: "Clipboard change notification is unavailable.",
+      });
+      // The wire error stays generic; the original failure is only for local diagnostics.
+      error.cause = this.unavailableCause;
+      return Promise.reject(error);
     }
     return this.waiters.wait(signal);
   }

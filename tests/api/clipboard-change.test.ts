@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { defineNativePlugin } from "@bunaway/plugin";
 import clipboard from "@bunaway/plugin-clipboard";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import {
@@ -11,13 +12,15 @@ import {
   macosOperations,
   windowsOperations,
 } from "#plugins/clipboard/src/operations";
+import type { WindowsClipboard } from "#plugins/clipboard/src/platforms/windows";
 import {
   type ChangeDriver,
   ClipboardChanges,
 } from "#plugins/clipboard/src/platforms/windows-changes";
+import { nativeFactory } from "../fixtures/native-platform.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
-function fixture(attached = true) {
+function fixture(attached = true, unavailableCause?: unknown) {
   const events: [
     string,
     JsonValue,
@@ -41,6 +44,7 @@ function fixture(attached = true) {
         payload,
       ]),
     () => clock++,
+    unavailableCause,
   );
   return {
     changes,
@@ -50,7 +54,7 @@ function fixture(attached = true) {
   };
 }
 
-test("change contract has its own permission, a content-free payload and no macOS operation", async () => {
+test("change contract has a content-free payload, strict input and no macOS operation", async () => {
   expect(
     new NativeRegistry([
       clipboard._definition,
@@ -177,11 +181,91 @@ test("waits are bounded, cancellable and rejected on disposal; disposal is repea
   });
 });
 
-test("without a native listener waits fail instead of hanging", async () => {
-  const f = fixture(false);
+test("without a native listener waits fail with the startup failure as cause", async () => {
+  const cause = new Error("AddClipboardFormatListener failed");
+  const f = fixture(false, cause);
   await expect(f.changes.wait()).rejects.toMatchObject({
     code: "INTERNAL",
+    cause,
   });
   f.changes.dispose();
   expect(f.disposed()).toBe(0);
+});
+
+test("sequence 0 means unknown identity and is never merged", () => {
+  const f = fixture();
+  f.notify(0);
+  f.notify(0);
+  f.notify(5);
+  f.notify(5);
+  expect(f.events.map(([, payload]) => payload)).toEqual([
+    {
+      sequence: 0,
+      changedAt: 1000,
+    },
+    {
+      sequence: 0,
+      changedAt: 1001,
+    },
+    {
+      sequence: 5,
+      changedAt: 1002,
+    },
+  ]);
+});
+
+test("waitForChange is denied by other clipboard permissions and granted by its own", async () => {
+  const f = fixture();
+  // Only waitForChange is exercised; the cast stands in for the Win32-backed instance.
+  const adapter = nativeFactory(
+    defineNativePlugin({
+      name: "clipboard",
+      platforms: {
+        windows: {
+          thread: "ui",
+          initialize: () =>
+            ({
+              waitForChange: (signal?: AbortSignal) => f.changes.wait(signal),
+            }) as unknown as WindowsClipboard,
+          dispose: () => {},
+          operations: windowsOperations,
+        },
+      },
+    }),
+    "windows",
+  )({
+    dataRoot: ".",
+    capabilities: [],
+  });
+  const wait = (permissions: string[]) => {
+    if (!adapter.executeUI) {
+      throw new Error("Missing UI adapter");
+    }
+    return adapter.executeUI("clipboard.waitForChange", null, "backend", {
+      requestId: "test",
+      permissions: {
+        permissions,
+      },
+    });
+  };
+  await expect(
+    wait([
+      "clipboard.readText",
+      "clipboard.writeText",
+      "clipboard.clear",
+      "clipboard.readFormats",
+    ]),
+  ).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  const granted = wait([
+    "clipboard.waitForChange",
+  ]);
+  // Dispatch registers the waiter asynchronously; notifications are not replayed.
+  await Bun.sleep(20);
+  f.notify(7);
+  expect(await granted).toEqual({
+    sequence: 7,
+    changedAt: 1000,
+  });
 });

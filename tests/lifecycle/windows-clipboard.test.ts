@@ -47,6 +47,10 @@ test.skipIf(
     // Clipboard ownership notifications are synchronous window messages. The
     // parent also owns a fixture window, so pump it while the UI Worker runs.
     const pump = dlopen("user32.dll", {
+      GetClipboardSequenceNumber: {
+        args: [],
+        returns: "u32",
+      },
       PeekMessageW: {
         args: [
           "ptr",
@@ -395,11 +399,23 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
             }),
           ),
       ]) {
-        const change = invoke(() => clipboard.waitForChange(null));
-        // Let the UI Worker register the waiter before the clipboard changes.
-        await Bun.sleep(100);
-        await write();
-        const payload = await change;
+        // Notifications are not replayed, so a stale earlier update cannot satisfy this wait,
+        // and the received sequence must differ from the one observed before waiting.
+        const baseline = pump.symbols.GetClipboardSequenceNumber();
+        let payload: JsonValue | undefined;
+        const change = invoke(() => clipboard.waitForChange(null)).then(
+          (value) => {
+            payload = value;
+          },
+        );
+        // The waiter registers asynchronously in the UI Worker, so keep writing until
+        // one write lands after registration.
+        const deadline = Date.now() + 4000;
+        while (payload === undefined && Date.now() < deadline) {
+          await write();
+          await Bun.sleep(50);
+        }
+        await change;
         expect(Object.keys(payload as object).sort()).toEqual([
           "changedAt",
           "sequence",
@@ -408,6 +424,13 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
           sequence: expect.any(Number),
           changedAt: expect.any(Number),
         });
+        expect(
+          (
+            payload as {
+              sequence: number;
+            }
+          ).sequence,
+        ).not.toBe(baseline);
       }
       const image = {
         width: 2,

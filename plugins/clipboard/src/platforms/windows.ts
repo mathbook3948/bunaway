@@ -176,16 +176,21 @@ export class WindowsClipboard {
 export function initialize(environment: NativeEnvironment): WindowsClipboard {
   const services = environment.shortcuts;
   let driver: Win32ClipboardListener | undefined;
+  let unavailableCause: unknown;
   if (services) {
     try {
       driver = new Win32ClipboardListener(services);
-    } catch {
-      // Documented degradation: no events, and waits report INTERNAL.
+    } catch (error) {
+      // Documented degradation: no events, and waits report INTERNAL with this cause.
+      unavailableCause = error;
     }
   }
   return new WindowsClipboard(
-    new ClipboardChanges(driver, (event, payload) =>
-      services?.emit(event, payload),
+    new ClipboardChanges(
+      driver,
+      (event, payload) => services?.emit(event, payload),
+      Date.now,
+      unavailableCause,
     ),
   );
 }
