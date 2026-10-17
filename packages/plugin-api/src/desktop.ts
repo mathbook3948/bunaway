@@ -67,7 +67,10 @@ export type RelaunchOptions = QuitOptions & {
   /**
    * Arguments for the new process, after the executable. They replace the arguments of the
    * initial launch (without the development switches and autostart prefix), which are the default.
-   * At most 256 strings without NUL, 64 KiB of JSON in total. The executable, environment and
+   * At most 256 strings without NUL (no holes), 64 KiB of JSON in total. On Windows the quoted
+   * command line of the new process, with the executable and any development options, must also
+   * be shorter than 32767 characters. Anything else rejects with `INVALID_ARGUMENT` before the
+   * app quits. The executable, environment and
    * working directory cannot be changed: the new process starts in the directory the app had at
    * boot.
    */

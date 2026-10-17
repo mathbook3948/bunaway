@@ -35,7 +35,13 @@ import {
 } from "./desktop.ts";
 import { DevelopmentApp } from "./development-app.ts";
 import type { LaunchArguments, listenForInstances } from "./instance.ts";
-import { activeDescendants, containAppProcess } from "./job.ts";
+import {
+  activeDescendants,
+  containAppProcess,
+  relaunchCommandLine,
+  relaunchCommandLineTooLong,
+} from "./job.ts";
+import { type HostLaunch, relaunchCommand } from "./relaunch.ts";
 import { releaseSessionEndWait } from "./session-end.ts";
 import { readWebViewVersion } from "./webview-version.ts";
 
@@ -58,6 +64,7 @@ export async function runWindowsApp(
   config: UIConfig,
   launch?: LaunchArguments,
   inbox?: Awaited<ReturnType<typeof listenForInstances>>,
+  host?: HostLaunch,
 ): Promise<WindowsAppResult> {
   const development =
     config.devtools && process.send ? new DevelopmentApp(app) : undefined;
@@ -149,6 +156,24 @@ export async function runWindowsApp(
         })
         .catch(() => {});
     },
+    undefined,
+    true,
+    host
+      ? (argv) => {
+          // Check the command line the relaunch will really use, so an argument list that
+          // passes the public limits but cannot start a process is refused before the quit.
+          const command = relaunchCommand(
+            host,
+            argv ?? desktopLaunch(launch?.argv ?? []).argv,
+          );
+          if (relaunchCommandLineTooLong(relaunchCommandLine(command))) {
+            throw new BunawayError({
+              code: "INVALID_ARGUMENT",
+              message: "Relaunch command line is too long.",
+            });
+          }
+        }
+      : undefined,
   );
   const startHidden = desktopLaunch(launch?.argv ?? []).hidden;
   validateDesktopStartup(config.windows, app.desktop, startHidden);

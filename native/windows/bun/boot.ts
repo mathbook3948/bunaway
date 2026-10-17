@@ -83,6 +83,29 @@ if (import.meta.main) {
       process.exit(0);
     }
     const inbox = await listenForInstances(instanceAddress(config.dataRoot));
+    const cliManaged = devtools && process.send !== undefined;
+    // How this host starts again after `relaunch()`; the working directory is the boot-time one.
+    const host: HostLaunch = {
+      compiled: isCompiledApp,
+      execPath: process.execPath,
+      execArgv: process.execArgv,
+      script: process.argv[1],
+      switches: [
+        ...(devtools
+          ? [
+              "--devtools",
+            ]
+          : []),
+        ...(developmentUrl
+          ? [
+              "--dev-url",
+              developmentUrl,
+            ]
+          : []),
+      ],
+      cwd: launch.cwd,
+      env: process.env,
+    };
     let result: WindowsAppResult;
     try {
       // Only the owner imports the app after IPC readiness. This literal also lets
@@ -94,7 +117,14 @@ if (import.meta.main) {
         app.commands && app.events,
         "App must default-export an AppDefinition",
       );
-      result = await runWindowsApp(app as AppDefinition, config, launch, inbox);
+      result = await runWindowsApp(
+        app as AppDefinition,
+        config,
+        launch,
+        inbox,
+        // Under the CLI a relaunch is an IPC request, so only a direct start has a command line.
+        cliManaged ? undefined : host,
+      );
     } finally {
       // runWindowsApp also closes on shutdown; early import failures need this path.
       await inbox.close().catch(() => {});
@@ -103,28 +133,8 @@ if (import.meta.main) {
     if (result.relaunch) {
       await relaunchHost(result.relaunch.argv, {
         dataRoot: config.dataRoot,
-        cliManaged: devtools && process.send !== undefined,
-        host: {
-          compiled: isCompiledApp,
-          execPath: process.execPath,
-          execArgv: process.execArgv,
-          script: process.argv[1],
-          switches: [
-            ...(devtools
-              ? [
-                  "--devtools",
-                ]
-              : []),
-            ...(developmentUrl
-              ? [
-                  "--dev-url",
-                  developmentUrl,
-                ]
-              : []),
-          ],
-          cwd: launch.cwd,
-          env: process.env,
-        },
+        cliManaged,
+        host,
       });
     }
     process.exit(result.exitCode);

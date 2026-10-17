@@ -1,13 +1,21 @@
 import { expect, test } from "bun:test";
 import type { DesktopOptions } from "@bunaway/core";
 import { DesktopLifecycle } from "#native/windows/bun/desktop";
-import { quoteWindowsArgument } from "#native/windows/bun/job";
+import {
+  quoteWindowsArgument,
+  relaunchCommandLine,
+  relaunchCommandLineTooLong,
+} from "#native/windows/bun/job";
 import {
   RELAUNCH_ENVIRONMENT,
   relaunchCommand,
 } from "#native/windows/bun/relaunch";
 
-function lifecycle(options: DesktopOptions = {}, relaunchSupported = true) {
+function lifecycle(
+  options: DesktopOptions = {},
+  relaunchSupported = true,
+  checkRelaunch?: (argv: readonly string[] | undefined) => void,
+) {
   const stops: string[] = [];
   const reports: unknown[] = [];
   const desktop = new DesktopLifecycle(
@@ -21,6 +29,7 @@ function lifecycle(options: DesktopOptions = {}, relaunchSupported = true) {
     },
     undefined,
     relaunchSupported,
+    checkRelaunch,
   );
   return {
     desktop,
@@ -514,4 +523,118 @@ test("Windows argument quoting round-trips through the CommandLineToArgvW rules"
   expect(quoteWindowsArgument("C:\\dir\\file")).toBe("C:\\dir\\file");
   expect(quoteWindowsArgument("C:\\my dir\\")).toBe('"C:\\my dir\\\\"');
   expect(quoteWindowsArgument('a\\"b')).toBe('"a\\\\\\"b"');
+});
+
+test("a session end after a relaunch was committed cancels the relaunch", async () => {
+  const { desktop } = lifecycle();
+  expect(
+    await desktop.context.relaunch({
+      argv: [
+        "--again",
+      ],
+      exitCode: 4,
+    }),
+  ).toBe(true);
+  expect(desktop.relaunch).toEqual({
+    argv: [
+      "--again",
+    ],
+  });
+  // Logoff arrives while the relaunching shutdown is still cleaning up.
+  desktop.commitShutdown("session-end");
+  expect(desktop.relaunch).toBeUndefined();
+  // The committed exit code is unchanged: only the relaunch is dropped.
+  expect(desktop.exitCode).toBe(4);
+});
+
+test("relaunch refuses a sparse argv array", async () => {
+  const { desktop, stops } = lifecycle();
+  // biome-ignore lint/suspicious/noSparseArray: the hole is the case under test.
+  const sparse = [
+    ,
+    "a",
+  ] as unknown as string[];
+  await expect(
+    desktop.context.relaunch({
+      argv: sparse,
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(stops).toEqual([]);
+});
+
+test("relaunch asks the host to check the real command before anything is committed", async () => {
+  const checked: (readonly string[] | undefined)[] = [];
+  const { desktop, stops } = lifecycle({}, true, (argv) => {
+    checked.push(argv);
+    if (argv?.includes("long")) {
+      throw Object.assign(new Error("too long"), {
+        code: "INVALID_ARGUMENT",
+      });
+    }
+  });
+  await expect(
+    desktop.context.relaunch({
+      argv: [
+        "long",
+      ],
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(stops).toEqual([]);
+  expect(desktop.relaunch).toBeUndefined();
+  // Default arguments are checked too, as undefined.
+  expect(await desktop.context.relaunch()).toBe(true);
+  expect(checked).toEqual([
+    [
+      "long",
+    ],
+    undefined,
+  ]);
+});
+
+test("the relaunch command line limit counts the quoted executable, options and arguments", () => {
+  const host = {
+    compiled: false,
+    execPath: "C:\\Program Files\\bun.exe",
+    execArgv: [
+      "--inspect=127.0.0.1:6499/bunaway",
+    ],
+    script: "C:\\pkg\\boot.ts",
+    switches: [
+      "--devtools",
+    ],
+    cwd: "C:\\Work",
+    env: {},
+  };
+  const line = relaunchCommandLine(
+    relaunchCommand(host, [
+      "a b",
+    ]),
+  );
+  expect(line).toBe(
+    '"C:\\Program Files\\bun.exe" --inspect=127.0.0.1:6499/bunaway C:\\pkg\\boot.ts --devtools "a b"',
+  );
+  expect(relaunchCommandLineTooLong(line)).toBe(false);
+  // Arguments within the 64 KiB public limit can still exceed the process command line limit.
+  const long = relaunchCommandLine(
+    relaunchCommand(host, [
+      "x".repeat(12_000),
+      "y".repeat(12_000),
+      "z".repeat(12_000),
+    ]),
+  );
+  expect(relaunchCommandLineTooLong(long)).toBe(true);
+  // Quotes grow with escaping: 20,000 quote characters double to 40,000.
+  expect(
+    relaunchCommandLineTooLong(
+      relaunchCommandLine(
+        relaunchCommand(host, [
+          '"'.repeat(20_000),
+        ]),
+      ),
+    ),
+  ).toBe(true);
 });

@@ -162,16 +162,13 @@ export class DevApp {
     | (RunningDevApp & {
         built: BuiltPackage;
         settings: ReturnType<typeof launchSettings>;
+        project: Project;
       })
     | undefined;
   private stopping: Promise<void> | undefined;
   /** Arguments the next host receives; replaced by an app-requested relaunch. */
   private appArguments: readonly string[] = [];
 
-  /**
-   * @param relaunched Called after a host that asked for a relaunch exited; the caller starts a
-   *   fresh host through its normal restart path, so the development session continues.
-   */
   constructor(
     private readonly signal: AbortSignal,
     private readonly exited: (code: number) => void,
@@ -190,7 +187,6 @@ export class DevApp {
         ),
       stop: stopDevApp,
     },
-    private readonly relaunched: () => void = () => {},
   ) {}
 
   get running(): boolean {
@@ -221,6 +217,7 @@ export class DevApp {
       ...app,
       built,
       settings: launchSettings(project),
+      project,
     };
     if (this.signal.aborted || !isCurrent()) {
       await this.stop();
@@ -236,12 +233,44 @@ export class DevApp {
       const relaunch = current.connection?.relaunch;
       if (relaunch !== undefined) {
         // The app asked to start again: keep the session and launch a fresh host.
-        this.appArguments = relaunch;
-        void this.stop().then(this.relaunched);
+        void this.relaunch(current, relaunch);
         return;
       }
       this.exited(code);
     });
+  }
+
+  /**
+   * Starts a fresh host from the build that was running, without rebuilding, so a source error
+   * cannot turn the app's relaunch into a failure. The arguments apply to that one host. A failure
+   * is reported and leaves the session running without an app, as after a failed build: the next
+   * source change starts one normally.
+   */
+  private async relaunch(
+    previous: NonNullable<DevApp["active"]>,
+    appArguments: readonly string[],
+  ): Promise<void> {
+    this.appArguments = appArguments;
+    try {
+      await this.stop();
+      if (this.signal.aborted || this.active) {
+        // Another start already replaced the host; the request is stale.
+        this.appArguments = [];
+        return;
+      }
+      await this.start(
+        previous.project,
+        previous.built,
+        () => !this.signal.aborted,
+      );
+    } catch (error) {
+      console.error(
+        `Relaunch failed; fix the problem and save to restart: ${String(error)}`,
+      );
+    } finally {
+      // A launch that did not happen must not leave the arguments for the next restart.
+      this.appArguments = [];
+    }
   }
 
   /** Detaches the old app before termination so its expected exit cannot end the dev session. */

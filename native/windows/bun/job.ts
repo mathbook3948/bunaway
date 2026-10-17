@@ -299,6 +299,21 @@ export function quoteWindowsArgument(arg: string): string {
   return `${quoted}${"\\".repeat(backslashes * 2)}"`;
 }
 
+/** The quoted command line `startOutsideAppJob` passes to `CreateProcessW`. */
+export function relaunchCommandLine(command: RelaunchCommand): string {
+  return [
+    command.executable,
+    ...command.args,
+  ]
+    .map(quoteWindowsArgument)
+    .join(" ");
+}
+
+/** True when `CreateProcessW` would reject the command line for its length. */
+export function relaunchCommandLineTooLong(line: string): boolean {
+  return line.length >= MAX_COMMAND_LINE_CHARS;
+}
+
 /** Builds a sorted UTF-16 environment block, which `CreateProcessW` expects. */
 function environmentBlock(env: RelaunchCommand["env"]): Buffer {
   const entries = Object.entries(env)
@@ -330,13 +345,8 @@ function environmentBlock(env: RelaunchCommand["env"]): Buffer {
 export function startOutsideAppJob(command: RelaunchCommand): void {
   assert(owned);
   const { api, handle } = owned;
-  const line = [
-    command.executable,
-    ...command.args,
-  ]
-    .map(quoteWindowsArgument)
-    .join(" ");
-  if (line.length >= MAX_COMMAND_LINE_CHARS) {
+  const line = relaunchCommandLine(command);
+  if (relaunchCommandLineTooLong(line)) {
     throw new Error("Relaunch command line is too long");
   }
   const setFlags = (flags: number) => {

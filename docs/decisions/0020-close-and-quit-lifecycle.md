@@ -148,7 +148,12 @@ payload는 `{ windowId, viewId, phase }`이고 `phase`는 `created`, `ready`, `c
   트레이 Quit이나 마지막 창 닫기처럼 호스트가 낸 요청은 요청 내용이 없으므로 항상 진행 중인 종료에 합류한다.
   `exit`는 이 규칙에서 예외로 항상 기존 요청을 대체한다.
 - 재실행 인자 기본값은 최초 실행의 `OpenRequest.argv`(개발 스위치와 autostart 접두사 제외)다.
-  `argv`를 주면 그것으로 대체하며 256개, JSON 64KiB, NUL 금지 제한은 단일 인스턴스 전달과 같다.
+  `argv`를 주면 그것으로 대체한다. 문자열 256개 이하, NUL 금지(희소 배열 불가), JSON 64KiB 이하는
+  [ADR 0013](./0013-desktop-lifecycle.md)의 실행 인자와 같은 상수(`MAX_LAUNCH_ARGUMENTS`,
+  `MAX_LAUNCH_ARGUMENT_BYTES`)를 쓴다. 단일 인스턴스 pipe 프레임의 64KiB는 인자와 작업 디렉터리를
+  합친 상한이라 별개의 한도다. Windows에서는 실행 파일, 개발 모드의 Bun 옵션과 스크립트, 개발 스위치를
+  포함해 인용한 뒤의 명령줄이 `CreateProcessW`의 한도(32767자 미만)를 넘으면 `relaunch()`가
+  종료를 확정하기 전에 `INVALID_ARGUMENT`로 거부한다. `bunaway dev`에서는 CLI가 인자를 넘기므로 이 검사가 없다.
   실행 파일 경로, 환경 변수, 작업 디렉터리는 재정의할 수 없다. 작업 디렉터리는 boot 시점 값을 유지한다.
   호스트가 새 프로세스에 내부 표지 환경 변수 하나만 더한다.
 
@@ -162,7 +167,9 @@ Job의 `BREAKAWAY_OK`는 이 호출 동안에만 켠다. 바깥 Job이 이탈을
 호출자에게 알릴 수 없으므로 `relaunch-failed` 진단을 남기고 요청한 코드로 종료한다.
 `bunaway dev`에서는 호스트가 CLI에 IPC 메시지(`bunaway:relaunch-app`)를 보내고 CLI의 확인
 (`bunaway:relaunch-ack`)을 최대 2초 기다린 뒤 요청한 종료 코드로 끝난다. CLI는 요청을 받은 뒤의 종료를
-종료 코드와 관계없이 재실행으로 보고 기존 재시작 경로로 새 호스트를 띄워 개발 세션을 유지한다.
+종료 코드와 관계없이 재실행으로 보고, 마지막으로 성공한 빌드로 새 호스트를 다시 띄워(재빌드 없음)
+개발 세션을 유지한다. 새 호스트를 띄우지 못하면 오류를 출력하고 인자를 버리며, 앱 없이 세션이 이어져
+다음 소스 변경에서 정상 재시작한다.
 요청의 `argv`는 그 새 호스트에만 쓰고 이후 소스 변경 재시작에는 붙이지 않는다.
 확인이 오지 않으면 CLI는 일반 종료로 처리한다. 특수 종료 코드에는 의존하지 않는다.
 macOS는 `quit`의 코드와 `exit`를 같은 `DesktopLifecycle`로 지원하고 코드는 `exit-code` 패킷으로 메인

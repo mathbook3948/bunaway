@@ -490,7 +490,6 @@ test("an exit after a relaunch request restarts with its arguments once, whateve
   ];
   const launchedWith: (readonly string[])[] = [];
   const exits: number[] = [];
-  let relaunches = 0;
   const owner = new DevApp(
     new AbortController().signal,
     (code) => exits.push(code),
@@ -505,9 +504,6 @@ test("an exit after a relaunch request restarts with its arguments once, whateve
         await app.process.exited;
       },
     },
-    () => {
-      relaunches += 1;
-    },
   );
   await owner.start(project, built, () => true);
   processes[0]?.requestRelaunch([
@@ -516,12 +512,16 @@ test("an exit after a relaunch request restarts with its arguments once, whateve
   ]);
   // The requested exit code, even a failing one, does not end the session.
   processes[0]?.exit(5);
-  await Bun.sleep(0);
-  await Bun.sleep(0);
-  expect(relaunches).toBe(1);
+  // The owner restarts the last built package itself, with the requested arguments...
+  for (
+    let waited = 0;
+    !(launchedWith.length >= 2 && owner.running) && waited < 100;
+    waited++
+  ) {
+    await Bun.sleep(1);
+  }
   expect(exits).toEqual([]);
-  // The restart path starts the next host with the requested arguments...
-  await owner.start(project, built, () => true);
+  expect(owner.running).toBe(true);
   expect(launchedWith).toEqual([
     [],
     [
@@ -543,7 +543,7 @@ test("an exit after a relaunch request restarts with its arguments once, whateve
 test("an exit without a relaunch request reports the exit and does not restart", async () => {
   const process1 = appProcess([]);
   const exits: number[] = [];
-  let relaunches = 0;
+  let launches = 0;
   const owner = new DevApp(
     new AbortController().signal,
     (code) => exits.push(code),
@@ -551,14 +551,12 @@ test("an exit without a relaunch request reports the exit and does not restart",
     undefined,
     {
       async launch() {
+        launches += 1;
         return process1.app;
       },
       async stop(app) {
         await app.process.exited;
       },
-    },
-    () => {
-      relaunches += 1;
     },
   );
   await owner.start(project, built, () => true);
@@ -567,5 +565,62 @@ test("an exit without a relaunch request reports the exit and does not restart",
   expect(exits).toEqual([
     0,
   ]);
-  expect(relaunches).toBe(0);
+  expect(launches).toBe(1);
+});
+
+test("a failed relaunch is reported, keeps the session and does not leak its arguments into the next restart", async () => {
+  const first = appProcess([]);
+  const second = appProcess([]);
+  const launchedWith: (readonly string[])[] = [];
+  const exits: number[] = [];
+  const owner = new DevApp(
+    new AbortController().signal,
+    (code) => exits.push(code),
+    undefined,
+    undefined,
+    {
+      async launch(_project, _built, _isCurrent, appArguments) {
+        launchedWith.push(appArguments);
+        if (launchedWith.length === 2) {
+          throw new Error("spawn failed");
+        }
+        return launchedWith.length === 1 ? first.app : second.app;
+      },
+      async stop(app) {
+        await app.process.exited;
+      },
+    },
+  );
+  const errors: unknown[][] = [];
+  const consoleError = console.error;
+  console.error = (...args: unknown[]) => {
+    errors.push(args);
+  };
+  try {
+    await owner.start(project, built, () => true);
+    first.requestRelaunch([
+      "--again",
+    ]);
+    first.exit(0);
+    for (let waited = 0; errors.length === 0 && waited < 100; waited++) {
+      await Bun.sleep(1);
+    }
+  } finally {
+    console.error = consoleError;
+  }
+  expect(String(errors[0]?.[0])).toContain("Relaunch failed");
+  expect(exits).toEqual([]);
+  expect(owner.running).toBe(false);
+  // The next normal start does not receive the failed relaunch's arguments.
+  await owner.start(project, built, () => true);
+  expect(launchedWith).toEqual([
+    [],
+    [
+      "--again",
+    ],
+    [],
+  ]);
+  const closing = owner.stop();
+  second.exit(0);
+  await closing;
 });

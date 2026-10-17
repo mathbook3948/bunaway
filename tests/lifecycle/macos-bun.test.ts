@@ -1142,6 +1142,7 @@ test("macOS shutdown during native registration acknowledges acceptance and skip
       app,
     );
     const errors: unknown[] = [];
+    const exitCodes: number[] = [];
     let cleaned = false;
     let registrations = 0;
     // Hold registration's ack until shutdown has been accepted by the backend.
@@ -1172,6 +1173,9 @@ test("macOS shutdown during native registration acknowledges acceptance and skip
           });
         } else if (packet.kind === "cleaned") {
           cleaned = true;
+        } else if (packet.kind === "exit-code") {
+          // The backend reports the process exit code before `cleaned`; a plain shutdown is 0.
+          exitCodes.push(packet.exitCode);
         } else if (packet.kind !== "desktop-config") {
           // desktop-config is the backend's normal first packet and is not an error.
           errors.push(packet);
@@ -1180,6 +1184,9 @@ test("macOS shutdown during native registration acknowledges acceptance and skip
       (error) => errors.push(error),
     );
     expect(await stopped).toBe(0);
+    expect(exitCodes).toEqual([
+      0,
+    ]);
     expect(registrations).toBe(1);
     expect(cleaned).toBe(true);
     expect(errors).toEqual([]);
