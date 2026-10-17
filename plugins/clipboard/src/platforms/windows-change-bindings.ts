@@ -1,4 +1,5 @@
 import { dlopen } from "bun:ffi";
+import { attemptAll } from "@bunaway/plugin";
 import type { NativeShortcutServices } from "@bunaway/plugin-api/native";
 import type { ChangeDriver } from "#clipboard/platforms/windows-changes";
 
@@ -62,27 +63,27 @@ export class Win32ClipboardListener implements ChangeDriver {
     }
     this.disposed = true;
     this.receive = undefined;
-    const errors: unknown[] = [];
+    const hwnd = this.hwnd;
     try {
-      // A listener that was never added reports failure here; destroying the window still releases it.
-      if (this.hwnd) {
-        this.native.symbols.RemoveClipboardFormatListener(this.hwnd);
-      }
-    } catch (error) {
-      errors.push(error);
-    }
-    try {
-      if (this.hwnd) {
-        this.services.destroyWindow(this.hwnd);
-      }
-    } catch (error) {
-      errors.push(error);
+      attemptAll(
+        [
+          () => {
+            // A listener that was never added reports failure here; destroying the window still releases it.
+            if (hwnd) {
+              this.native.symbols.RemoveClipboardFormatListener(hwnd);
+            }
+          },
+          () => {
+            if (hwnd) {
+              this.services.destroyWindow(hwnd);
+            }
+          },
+        ],
+        "Clipboard listener cleanup failed.",
+      );
     } finally {
       this.hwnd = undefined;
       this.native.close();
-    }
-    if (errors.length) {
-      throw new AggregateError(errors, "Clipboard listener cleanup failed.");
     }
   }
 }

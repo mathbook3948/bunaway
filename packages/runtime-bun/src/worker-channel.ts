@@ -710,6 +710,24 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
 // A broadcast can have one active send per subscription in every window.
 // This is a bounded backlog policy, separate from unacknowledged data capacity.
 const SERVER_QUEUE_LIMIT = MAX_WINDOWS * API_LIMITS.maxSubscriptions;
+/** Control traffic that is neither per-window nor per-request shares one small backlog. */
+const CONTROL_LANE_LIMIT = 16;
+
+/** Most packets one lane may hold before the channel refuses more of them. */
+function laneLimit(lane: Lane): number {
+  switch (lane) {
+    case "revoke":
+    case "session-failure":
+      return MAX_WINDOWS;
+    case "data":
+    case "approval":
+    case "cancel":
+    case "native-event":
+      return API_LIMITS.maxPending;
+    default:
+      return CONTROL_LANE_LIMIT;
+  }
+}
 type QueuedData = {
   packet: Extract<
     Packet,
@@ -895,15 +913,7 @@ export class Channel {
       }
       validatePacket(packet, opposite);
       // A full request burst must still leave room for approvals, cancellation and shutdown.
-      const limit =
-        lane === "revoke" || lane === "session-failure"
-          ? MAX_WINDOWS
-          : lane === "data" ||
-              lane === "approval" ||
-              lane === "cancel" ||
-              lane === "native-event"
-            ? API_LIMITS.maxPending
-            : 16;
+      const limit = laneLimit(lane);
       if (
         packet.kind === "server" ||
         packet.kind === "host-result" ||

@@ -139,21 +139,20 @@ test("app log configuration and flush preserve typed Host payloads", async () =>
 
 test("Host helpers keep the existing typed operation inputs, outputs and explicit API", async () => {
   const calls: HostCall[] = [];
+  const results: Record<string, JsonValue> = {
+    "storage.readText": "saved",
+    "capabilities.get": [
+      {
+        name: "storage.readText",
+        support: "supported",
+      },
+    ],
+  };
   const ctx = context("main", async (_context, call) => {
     calls.push(call);
     return {
       kind: "result",
-      payload:
-        call.operation === "storage.readText"
-          ? "saved"
-          : call.operation === "capabilities.get"
-            ? [
-                {
-                  name: "storage.readText",
-                  support: "supported",
-                },
-              ]
-            : null,
+      payload: results[call.operation] ?? null,
     };
   });
   const definition = command({

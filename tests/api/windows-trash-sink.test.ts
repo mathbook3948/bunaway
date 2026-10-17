@@ -107,6 +107,15 @@ test("trash sink contains identity-check exceptions and preserves the public err
 });
 
 test("trash sink requires a successful per-item result and a Recycle Bin item", () => {
+  // Shell HRESULTs reported per item: E_ACCESSDENIED and ERROR_FILE_NOT_FOUND.
+  const postResults: Record<string, number> = {
+    denied: -2147024891,
+    missing: -2147024894,
+  };
+  const failureCodes: Record<string, string> = {
+    denied: "PERMISSION_DENIED",
+    missing: "INVALID_ARGUMENT",
+  };
   for (const scenario of [
     "recycled",
     "permanent",
@@ -119,12 +128,7 @@ test("trash sink requires a successful per-item result and a Recycle Bin item", 
     try {
       expect(preDelete(sink, 0x80)).toBe(0);
       if (scenario !== "no-post") {
-        const result =
-          scenario === "denied"
-            ? -2147024891
-            : scenario === "missing"
-              ? -2147024894
-              : 0;
+        const result = postResults[scenario] ?? 0;
         const callbackResult = postDelete(
           sink,
           result,
@@ -141,15 +145,9 @@ test("trash sink requires a successful per-item result and a Recycle Bin item", 
       if (scenario === "recycled") {
         expect(() => sink.complete(false)).not.toThrow();
       } else {
-        const code =
-          scenario === "denied"
-            ? "PERMISSION_DENIED"
-            : scenario === "missing"
-              ? "INVALID_ARGUMENT"
-              : "INTERNAL";
         expect(() => sink.complete(scenario === "aborted")).toThrow(
           expect.objectContaining({
-            code,
+            code: failureCodes[scenario] ?? "INTERNAL",
           }),
         );
       }

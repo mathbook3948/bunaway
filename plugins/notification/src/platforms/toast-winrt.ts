@@ -7,6 +7,7 @@ import {
   read,
   toArrayBuffer,
 } from "bun:ffi";
+import { COMBASE, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 
 const POINTER_BYTES = 8;
@@ -25,23 +26,32 @@ export function guid(value: string): Buffer {
   bytes.subarray(6, 8).reverse();
   return bytes;
 }
+/** HRESULTs reported when the toast activator or its registration is missing on this system. */
+const UNSUPPORTED_TOAST_HRESULTS = new Set([
+  0x80040154,
+  0x80040111,
+  0x80004002,
+  0x80070490,
+]);
+const E_ACCESSDENIED_HRESULT = 0x80070005;
+
+/** Map a failed toast HRESULT to the public error code. */
+function toastFailureCode(
+  hresult: number,
+): "PERMISSION_DENIED" | "UNSUPPORTED" | "INTERNAL" {
+  if (hresult === E_ACCESSDENIED_HRESULT) {
+    return "PERMISSION_DENIED";
+  }
+  return UNSUPPORTED_TOAST_HRESULTS.has(hresult) ? "UNSUPPORTED" : "INTERNAL";
+}
+
 export function checkToast(result: number, stage: string): void {
   if (result >= 0) {
     return;
   }
   const hresult = result >>> 0;
   throw new BunawayError({
-    code:
-      hresult === 0x80070005
-        ? "PERMISSION_DENIED"
-        : [
-              0x80040154,
-              0x80040111,
-              0x80004002,
-              0x80070490,
-            ].includes(hresult)
-          ? "UNSUPPORTED"
-          : "INTERNAL",
+    code: toastFailureCode(hresult),
     message: "Windows toast operation failed.",
     details: {
       stage,
@@ -53,41 +63,17 @@ export function checkToast(result: number, stage: string): void {
 /** One persistent STA reference, with scoped HSTRINGs and COM method bindings. No import-time DLL loads. */
 export function createToastRuntime() {
   const library = dlopen("combase.dll", {
-    RoInitialize: {
-      args: [
-        "u32",
-      ],
-      returns: "i32",
-    },
-    RoUninitialize: {
-      args: [],
-      returns: "void",
-    },
-    RoGetActivationFactory: {
-      args: [
-        "ptr",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(
+      COMBASE,
+      "RoInitialize",
+      "RoUninitialize",
+      "RoGetActivationFactory",
+      "WindowsCreateString",
+      "WindowsDeleteString",
+    ),
     RoActivateInstance: {
       args: [
         "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    WindowsCreateString: {
-      args: [
-        "ptr",
-        "u32",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    WindowsDeleteString: {
-      args: [
         "ptr",
       ],
       returns: "i32",

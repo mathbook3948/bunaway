@@ -2,6 +2,7 @@ import type {
   NativeMenuItem,
   NativeMenuRole,
 } from "@bunaway/plugin-api/native";
+import { int32Schema } from "@bunaway/plugin";
 import { z } from "zod";
 export const MAX_MENU_RESOURCES = 32;
 export const MAX_MENU_ITEMS = 256;
@@ -306,6 +307,6 @@ export const windowMenuSchema = windowTargetSchema.extend({
 /** Context-popup coordinates are physical screen pixels (including negative monitor origins). */
 export const contextMenuSchema = windowTargetSchema.extend({
   menuId: idSchema,
-  x: z.number().int().min(-2147483648).max(2147483647),
-  y: z.number().int().min(-2147483648).max(2147483647),
+  x: int32Schema,
+  y: int32Schema,
 });

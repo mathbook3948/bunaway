@@ -2,12 +2,12 @@ import {
   MAX_TRAY_ICO_BYTES,
   MAX_TRAY_TOOLTIP_UNITS,
 } from "@bunaway/plugin-api/native";
+import { int32Schema } from "@bunaway/plugin";
 import { z } from "zod";
 
-const coordinate = z.number().int().min(-2147483648).max(2147483647);
 export const positionSchema = z.strictObject({
-  x: coordinate,
-  y: coordinate,
+  x: int32Schema,
+  y: int32Schema,
 });
 export const tooltipSchema = z
   .string()

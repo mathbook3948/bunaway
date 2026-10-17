@@ -1,4 +1,5 @@
 import { dlopen, type Pointer, ptr } from "bun:ffi";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import type {
   NotificationResult,
@@ -47,13 +48,7 @@ const EVENTS = [
 /** Reject MSIX before choosing an explicit desktop AUMID. This never registers or changes app identity. */
 function requireUnpackaged() {
   const kernel = dlopen("kernel32.dll", {
-    GetCurrentPackageFullName: {
-      args: [
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(KERNEL32, "GetCurrentPackageFullName"),
   });
   try {
     const size = new Uint32Array(1);

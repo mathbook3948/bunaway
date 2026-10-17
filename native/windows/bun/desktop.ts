@@ -707,12 +707,15 @@ export class DesktopLifecycle {
     if (this.forced) {
       return true;
     }
-    const current = this.ending
-      ? this.committedRequest()
-      : this.quitting
-        ? this.pendingRequest
-        : undefined;
+    const current = this.activeRequest();
     return current !== undefined && !sameRequest(wanted, current);
+  }
+  /** The request the shutdown in progress follows, or undefined while no shutdown runs. */
+  private activeRequest(): ResolvedRequest | undefined {
+    if (this.ending) {
+      return this.committedRequest();
+    }
+    return this.quitting ? this.pendingRequest : undefined;
   }
   /** The request of the committed shutdown; a shutdown without one asked for the defaults. */
   private committedRequest(): ResolvedRequest {

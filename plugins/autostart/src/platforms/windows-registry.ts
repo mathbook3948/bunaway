@@ -1,4 +1,5 @@
 import { dlopen, type Pointer, ptr, read, toArrayBuffer } from "bun:ffi";
+import { ADVAPI32, KERNEL32, pick } from "@bunaway/plugin/win32";
 import { toUSVString } from "node:util";
 import { AUTOSTART_MUTEX_PREFIX, BunawayError } from "@bunaway/protocol";
 export const RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
@@ -45,6 +46,7 @@ function check(result: number): void {
  */
 export function createRegistry() {
   const registry = dlopen("advapi32.dll", {
+    ...pick(ADVAPI32, "RegGetValueW"),
     OpenProcessToken: {
       args: [
         "u64",
@@ -65,18 +67,6 @@ export function createRegistry() {
     },
     ConvertSidToStringSidW: {
       args: [
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    RegGetValueW: {
-      args: [
-        "u64",
-        "ptr",
-        "ptr",
-        "u32",
-        "ptr",
         "ptr",
         "ptr",
       ],
@@ -386,20 +376,15 @@ function loadShell() {
 }
 function loadKernel() {
   return dlopen("kernel32.dll", {
-    GetCurrentProcess: {
-      args: [],
-      returns: "u64",
-    },
-    GetLastError: {
-      args: [],
-      returns: "u32",
-    },
-    CloseHandle: {
-      args: [
-        "u64",
-      ],
-      returns: "i32",
-    },
+    ...pick(
+      KERNEL32,
+      "GetCurrentProcess",
+      "GetLastError",
+      "CloseHandle",
+      "WaitForSingleObject",
+      "LocalFree",
+      "GetCurrentPackageFullName",
+    ),
     CreateMutexExW: {
       args: [
         "ptr",
@@ -409,29 +394,9 @@ function loadKernel() {
       ],
       returns: "u64",
     },
-    WaitForSingleObject: {
-      args: [
-        "u64",
-        "u32",
-      ],
-      returns: "u32",
-    },
     ReleaseMutex: {
       args: [
         "u64",
-      ],
-      returns: "i32",
-    },
-    LocalFree: {
-      args: [
-        "ptr",
-      ],
-      returns: "ptr",
-    },
-    GetCurrentPackageFullName: {
-      args: [
-        "ptr",
-        "ptr",
       ],
       returns: "i32",
     },

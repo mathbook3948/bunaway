@@ -1,4 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
+import { ADVAPI32, pick, wide } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import type { AppearancePreferences } from "#appearance/contract";
 
@@ -24,7 +25,6 @@ const COLOR_HIGHLIGHTTEXT = 14;
 // white: (L + 0.05) / 0.05 = 1.05 / (L + 0.05). Standard high contrast themes
 // use black or white windows, far from this limit.
 const DARK_LUMINANCE_LIMIT = Math.sqrt(1.05 * 0.05) - 0.05;
-const wide = (value: string) => Buffer.from(`${value}\0`, "utf16le");
 
 function failure(
   message: string,
@@ -39,18 +39,7 @@ function failure(
 /** Read user preferences without changing the registry, OS settings or renderer state. */
 export function initialize() {
   const registry = dlopen("advapi32.dll", {
-    RegGetValueW: {
-      args: [
-        "u64",
-        "ptr",
-        "ptr",
-        "u32",
-        "ptr",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(ADVAPI32, "RegGetValueW"),
   });
   const loadUser = () =>
     dlopen("user32.dll", {

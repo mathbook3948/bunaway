@@ -77,6 +77,17 @@ export function packagingReportPath(
   return resolve(packagingOutputDir(root, target), `${channel}-report.json`);
 }
 
+/** Explain why the packaging lock could not be taken without leaking the lock path's cause chain. */
+function describeLockFailure(error: unknown, channel: ChannelId): string {
+  if (error instanceof TargetLockError) {
+    return error.message;
+  }
+  if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+    return `Packaging channel ${channel} is locked; another run may be active.`;
+  }
+  return `Cannot acquire package lock: ${error instanceof Error ? error.message : String(error)}`;
+}
+
 function inside(root: string, path: string): boolean {
   const rel = relative(root, path);
   return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
@@ -274,12 +285,7 @@ export async function runPackage(args: RunPackageArgs): Promise<PackageReport> {
       stage: "resolve",
       code: CODES.LOCK_FAILED,
       severity: "error",
-      message:
-        error instanceof TargetLockError
-          ? error.message
-          : (error as NodeJS.ErrnoException).code === "EEXIST"
-            ? `Packaging channel ${channel} is locked; another run may be active.`
-            : `Cannot acquire package lock: ${error instanceof Error ? error.message : String(error)}`,
+      message: describeLockFailure(error, channel),
       path: error instanceof TargetLockError ? error.path : lockPath,
     });
     return report;

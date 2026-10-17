@@ -8,9 +8,10 @@ import {
   type NativeTraySnapshot,
   type NativeTrayWindowHost,
 } from "@bunaway/plugin-api/native";
+import { failWithCleanup } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import { openTrayBindings } from "#tray/platforms/windows-bindings";
-import { withWide } from "#tray/platforms/windows-buffers";
+import { withWide } from "@bunaway/plugin/win32";
 import { createTrayIcon } from "#tray/platforms/windows-icon";
 import { NativePopupMenu } from "#tray/platforms/windows-popup-menu";
 import {
@@ -243,18 +244,11 @@ export class Tray {
       );
       this.add();
     } catch (error) {
-      try {
-        this.dispose();
-      } catch (cleanup) {
-        throw new AggregateError(
-          [
-            error,
-            cleanup,
-          ],
-          "Tray initialization cleanup failed.",
-        );
-      }
-      throw error;
+      failWithCleanup(
+        error,
+        () => this.dispose(),
+        "Tray initialization cleanup failed.",
+      );
     }
   }
 

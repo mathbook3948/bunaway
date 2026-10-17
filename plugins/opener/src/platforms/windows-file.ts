@@ -1,4 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/plugin";
 import { MAX_FILE_PATH_LENGTH } from "#opener/contract";
 
@@ -29,44 +30,14 @@ const UNC_PREFIX = "\\\\?\\UNC\\";
 /** Own file handles until the synchronous OS request has been submitted. */
 export function createFiles() {
   const api = dlopen("kernel32.dll", {
-    CreateFileW: {
-      args: [
-        "ptr",
-        "u32",
-        "u32",
-        "ptr",
-        "u32",
-        "u32",
-        "u64",
-      ],
-      returns: "u64",
-    },
-    GetFileInformationByHandle: {
-      args: [
-        "u64",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    GetFinalPathNameByHandleW: {
-      args: [
-        "u64",
-        "ptr",
-        "u32",
-        "u32",
-      ],
-      returns: "u32",
-    },
-    GetLastError: {
-      args: [],
-      returns: "u32",
-    },
-    CloseHandle: {
-      args: [
-        "u64",
-      ],
-      returns: "i32",
-    },
+    ...pick(
+      KERNEL32,
+      "CreateFileW",
+      "GetFileInformationByHandle",
+      "GetFinalPathNameByHandleW",
+      "GetLastError",
+      "CloseHandle",
+    ),
   });
   let disposed = false;
   const fail = (): never => {

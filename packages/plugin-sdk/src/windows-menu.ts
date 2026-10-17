@@ -1,21 +1,10 @@
-import { dlopen, type Pointer, ptr } from "bun:ffi";
+import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import type {
   NativeMenuItem,
   NativeMenuRole,
 } from "@bunaway/plugin-api/native";
-
-// Keep UTF-16 storage alive across synchronous native calls, including reentrant callbacks.
-const labels = new Set<Buffer>();
-function withWide(text: string, invoke: (label: Pointer) => number) {
-  const buffer = Buffer.from(`${text}\0`, "utf16le");
-  labels.add(buffer);
-  try {
-    return invoke(ptr(buffer));
-  } finally {
-    labels.delete(buffer);
-  }
-}
+import { withWide } from "./win32.ts";
 
 const MF_POPUP = 0x10;
 const MF_SEPARATOR = 0x800;

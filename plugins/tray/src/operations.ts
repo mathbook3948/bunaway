@@ -1,4 +1,4 @@
-import { defineNativeOperation } from "@bunaway/plugin";
+import { defineNativeOperation, nonNegativeInt32Schema } from "@bunaway/plugin";
 import { z } from "zod";
 import {
   icoSchema,
@@ -30,8 +30,8 @@ export const trayOperations = {
     input: z.null(),
     output: positionSchema
       .extend({
-        width: z.number().int().min(0).max(2147483647),
-        height: z.number().int().min(0).max(2147483647),
+        width: nonNegativeInt32Schema,
+        height: nonNegativeInt32Schema,
       })
       .nullable(),
     handler: (_input, { instance }) => getBounds(instance),

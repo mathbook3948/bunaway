@@ -1,3 +1,4 @@
+import { attemptAll } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import {
   MAX_POWER_BLOCKERS,
@@ -72,16 +73,11 @@ export class PowerBlockers {
   /** Prevent new starts and attempt every release. A failed disposal can be retried. */
   dispose(): void {
     this.disposing = true;
-    const errors: unknown[] = [];
-    for (const id of this.requests.keys()) {
-      try {
-        this.stop(id);
-      } catch (error) {
-        errors.push(error);
-      }
-    }
-    if (errors.length) {
-      throw new AggregateError(errors, "Power request cleanup failed.");
-    }
+    attemptAll(
+      [
+        ...this.requests.keys(),
+      ].map((id) => () => this.stop(id)),
+      "Power request cleanup failed.",
+    );
   }
 }

@@ -413,48 +413,51 @@ test("the shared window catalog limit includes deferred definitions and rejects 
 });
 
 test("window size constraints accept nullable axes and reject invalid or contradictory bounds", () => {
-  const constrained = [
-    {
-      ...specs[0]!,
-      window: {
-        ...specs[0]!.window,
-        minWidth: 480,
-        minHeight: null,
-        maxWidth: 1600,
-      },
+  const baseSpec = specs[0];
+  assert(baseSpec);
+  const constrainedSpec = {
+    ...baseSpec,
+    window: {
+      ...baseSpec.window,
+      minWidth: 480,
+      minHeight: null,
+      maxWidth: 1600,
     },
+  };
+  const constrained = [
+    constrainedSpec,
   ];
   expect(readWindowSpecs(constrained, policy)).toEqual(constrained);
 
   for (const window of [
     {
-      ...constrained[0]!.window,
+      ...constrainedSpec.window,
       minWidth: 199,
     },
     {
-      ...constrained[0]!.window,
+      ...constrainedSpec.window,
       maxHeight: 4097,
     },
     {
-      ...constrained[0]!.window,
+      ...constrainedSpec.window,
       minWidth: 480.5,
     },
     {
-      ...constrained[0]!.window,
+      ...constrainedSpec.window,
       minWidth: "480",
     },
     {
-      ...constrained[0]!.window,
+      ...constrainedSpec.window,
       minWidth: 500,
       maxWidth: 499,
     },
     {
-      ...constrained[0]!.window,
+      ...constrainedSpec.window,
       minHeight: 500,
       maxHeight: 499,
     },
     {
-      ...constrained[0]!.window,
+      ...constrainedSpec.window,
       extra: 1,
     },
   ]) {
@@ -462,7 +465,7 @@ test("window size constraints accept nullable axes and reject invalid or contrad
       readWindowSpecs(
         [
           {
-            ...constrained[0]!,
+            ...constrainedSpec,
             window,
           },
         ],

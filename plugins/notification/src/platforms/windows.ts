@@ -1,4 +1,5 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
+import { COMBASE, KERNEL32, pick, wide } from "@bunaway/plugin/win32";
 import type { NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import type {
@@ -91,55 +92,19 @@ export function createNotifications(appUserModelId: string) {
     });
   }
   const runtime = dlopen("combase.dll", {
-    RoInitialize: {
-      args: [
-        "u32",
-      ],
-      returns: "i32",
-    },
-    RoUninitialize: {
-      args: [],
-      returns: "void",
-    },
-    RoGetActivationFactory: {
-      args: [
-        "ptr",
-        "ptr",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    WindowsCreateString: {
-      args: [
-        "ptr",
-        "u32",
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    WindowsDeleteString: {
-      args: [
-        "ptr",
-      ],
-      returns: "i32",
-    },
+    ...pick(
+      COMBASE,
+      "RoInitialize",
+      "RoUninitialize",
+      "RoGetActivationFactory",
+      "WindowsCreateString",
+      "WindowsDeleteString",
+    ),
   });
   const kernel = (() => {
     try {
       return dlopen("kernel32.dll", {
-        GetCurrentPackageFullName: {
-          args: [
-            "ptr",
-            "ptr",
-          ],
-          returns: "i32",
-        },
-        GetDriveTypeW: {
-          args: [
-            "ptr",
-          ],
-          returns: "u32",
-        },
+        ...pick(KERNEL32, "GetCurrentPackageFullName", "GetDriveTypeW"),
         GetFileAttributesW: {
           args: [
             "ptr",
@@ -170,8 +135,6 @@ export function createNotifications(appUserModelId: string) {
       runtime.symbols.RoUninitialize();
     }
   }
-  // The caller keeps the buffer referenced while the pointer is in use.
-  const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
   return {
     /** Path probes for toast media, bound to the adapter's kernel32 handle and invalid after dispose. */
     filesystem: {

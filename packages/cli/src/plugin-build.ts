@@ -1,5 +1,6 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { PLATFORMS } from "@bunaway/plugin-api";
 import {
   ownedDirectory,
@@ -12,6 +13,26 @@ import { run, runWorker } from "./processes.ts";
 const PLATFORM_MODULE_FILTER = new RegExp(
   String.raw`(?:^|[\\/])platforms[\\/](${PLATFORMS.join("|")})\.ts$`,
 );
+
+/**
+ * Source of the virtual `@bunaway/plugin` module a plugin bundle imports instead of the
+ * installed SDK. It re-exports every value the plugin's SDK exports by name, because Bun
+ * 1.4.2 drops external star re-exports from virtual modules, and wraps defineNativePlugin
+ * so the package version is embedded in every registration.
+ */
+async function sdkModuleSource(root: string, version: string): Promise<string> {
+  const sdk: Record<string, unknown> = await import(
+    pathToFileURL(Bun.resolveSync("@bunaway/plugin", root)).href
+  );
+  const reexported = Object.keys(sdk).filter(
+    (name) => name !== "defineNativePlugin" && name !== "default",
+  );
+  return `export { ${reexported.join(", ")} } from "./bunaway-plugin-sdk-external";
+import { defineNativePlugin as define } from "./bunaway-plugin-sdk-external";
+export function defineNativePlugin(declaration, calls) {
+  return define(declaration, calls, ${JSON.stringify(version)});
+}`;
+}
 
 /**
  * Build src/index.ts into a browser-safe declaration and one native export per
@@ -35,6 +56,7 @@ export async function buildNativePlugin(directory = "."): Promise<string> {
     throw new Error("Native plugins require a package.json version.");
   }
   const version: string = Reflect.get(manifest, "version");
+  const sdkModule = await sdkModuleSource(root, version);
   await ownedDirectory(root, resolve(root, "dist"));
   const stage = await mkdtemp(resolve(root, ".plugin-build-"));
   try {
@@ -80,12 +102,7 @@ export async function buildNativePlugin(directory = "."): Promise<string> {
                   namespace: "bunaway-plugin-sdk",
                 },
                 () => ({
-                  // Bun 1.4.2 drops external star re-exports from virtual modules.
-                  contents: `export { BunawayError, NativeEventWaiters, defineNativeAdapter, defineNativeOperation } from "./bunaway-plugin-sdk-external";
-import { defineNativePlugin as define } from "./bunaway-plugin-sdk-external";
-export function defineNativePlugin(declaration, calls) {
-  return define(declaration, calls, ${JSON.stringify(version)});
-}`,
+                  contents: sdkModule,
                   loader: "js",
                 }),
               );

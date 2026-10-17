@@ -1,3 +1,4 @@
+import { base64Schema, canonicalBase64Bytes } from "@bunaway/plugin";
 import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
 import { z } from "zod";
 /** Maximum Unicode scalar values accepted in either direction. */
@@ -39,36 +40,14 @@ export const MAX_FORMAT_JSON_BYTES = 900_000;
 export const MAX_FILES = 64;
 export const MAX_PATH_LENGTH = 1024;
 
-const base64Pattern =
-  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\s\S])/;
-const alphabet =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-/** Unused bits in the last base64 sextet must be zero for a canonical encoding. */
-function canonicalBase64Length(value: string): number | null {
-  let padding = 0;
-  if (value.endsWith("==")) {
-    padding = 2;
-  } else if (value.endsWith("=")) {
-    padding = 1;
-  }
-  const last = alphabet.indexOf(value[value.length - padding - 1] ?? "");
-  if (padding !== 0 && (last & (padding === 2 ? 15 : 3)) !== 0) {
-    return null;
-  }
-  return (value.length / 4) * 3 - padding;
-}
 export const MAX_BINARY_BYTES = 262_144;
 export const MAX_BINARY_FORMATS = 64;
 export const MAX_BOOKMARK_LENGTH = 2048;
 /** Opaque bytes use canonical base64, including the empty string for zero bytes. */
-export const binarySchema = z
-  .string()
-  .max(Math.ceil(MAX_BINARY_BYTES / 3) * 4)
-  .regex(base64Pattern)
-  .refine((value) => {
-    const length = canonicalBase64Length(value);
-    return length !== null && length <= MAX_BINARY_BYTES;
-  }, "Binary data must be bounded canonical base64.");
+export const binarySchema = base64Schema(
+  MAX_BINARY_BYTES,
+  "Binary data must be bounded canonical base64.",
+);
 /** A Windows URL bookmark has no title and never opens the URL. */
 export const bookmarkSchema = z.strictObject({
   url: textSchema
@@ -103,15 +82,12 @@ export const imageSchema = z
   .strictObject({
     width: z.number().int().min(1).max(4096),
     height: z.number().int().min(1).max(4096),
-    rgba: z
-      .string()
-      .max(Math.ceil(MAX_IMAGE_BYTES / 3) * 4)
-      .regex(base64Pattern),
+    rgba: base64Schema(MAX_IMAGE_BYTES),
   })
   .refine((image) => {
     const bytes = image.width * image.height * 4;
     return (
-      bytes <= MAX_IMAGE_BYTES && canonicalBase64Length(image.rgba) === bytes
+      bytes <= MAX_IMAGE_BYTES && canonicalBase64Bytes(image.rgba) === bytes
     );
   }, "Image dimensions and canonical RGBA bytes must agree.");
 export type ClipboardImage = z.infer<typeof imageSchema>;
