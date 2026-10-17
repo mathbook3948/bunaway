@@ -66,13 +66,14 @@ export const windowsOperations = {
   addRecentDocument: windowsOperation({
     input: fileInput,
     output: z.null(),
-    handler: ({ path }, { instance }) =>
-      addWindowsRecentDocument(instance, path),
+    handler: ({ path }, { instance, signal }) =>
+      addWindowsRecentDocument(instance, path, signal),
   }),
   clearRecentDocuments: windowsOperation({
     input: emptyInput,
     output: z.null(),
-    handler: (_input, { instance }) => clearWindowsRecentDocuments(instance),
+    handler: (_input, { instance, signal }) =>
+      clearWindowsRecentDocuments(instance, signal),
   }),
 };
 export const macosOperations = {

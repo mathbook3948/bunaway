@@ -119,18 +119,22 @@ export function trashFile(state: State, path: string): null {
 }
 
 /** Add an existing file to the user's Shell Recent Items. */
-export function addRecentDocument(state: State, path: string): null {
+export function addRecentDocument(
+  state: State,
+  path: string,
+  signal?: AbortSignal,
+): null {
   active(state);
   const selected = normalizeFilePath(path);
-  // The pin covers only the request; the Shell reads the file after it returns.
-  state.files.withFile(selected, () => state.recent.add(selected));
+  // The pin lasts until SHAddToRecentDocs returns; the Shell reads the file after that.
+  state.files.withFile(selected, () => state.recent.add(selected, signal));
   return null;
 }
 
 /** Clear the user's entire Shell Recent Items list, not only entries this app added. */
-export function clearRecentDocuments(state: State): null {
+export function clearRecentDocuments(state: State, signal?: AbortSignal): null {
   active(state);
-  state.recent.clear();
+  state.recent.clear(signal);
   return null;
 }
 
