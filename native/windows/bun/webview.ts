@@ -930,7 +930,7 @@ export class WebView {
    * The command does not depend on the keyboard layout and never injects input into another
    * application. The protocol call works with the DevTools UI disabled. Chromium may route
    * `commands` through a synthetic keydown, so a page that calls `preventDefault()` in its
-   * keydown handler might suppress the command; this is unverified and needs an external check.
+   * keydown handler may suppress the command.
    *
    * Returns false, doing nothing, while the WebView is closing or not ready. Completion is
    * observed on the next pump; a refused focus move and protocol failures after the call
