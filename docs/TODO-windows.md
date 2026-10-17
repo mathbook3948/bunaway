@@ -272,7 +272,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `desktop`의 `onReady`, `beforeQuit`, `onWillQuit`, `onQuit`, `onAllWindowsClosed` 훅과 `ShutdownReason`을 Windows에서 제공한다. `onWillQuit`과 `onQuit`은 각각 3초 기한을 둔다. 실제 실행 검증은 CI windows-native에서 수행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [ ] 종료 코드 지정, 강제 exit, relaunch와 인자 보존 API를 제공한다.
 - [x] 앱 이름, 버전, 식별자, 프레임워크와 Bun, WebView 버전을 조회한다. 백엔드 `ctx.app`으로 제공하며 [CommandContext](site/src/content/docs/reference/backend/context.mdx)와 [ADR 0022](decisions/0022-app-info-context.md)에 정리했다.
-- [ ] 앱 패키지 경로, 실행 파일, 리소스 경로와 packaged/dev 상태를 조회한다.
+- [x] 앱 패키지 경로, 실행 파일, 리소스 경로와 packaged/dev 상태를 조회한다. `ctx.app.isPackaged`와 `ctx.app.paths`로 제공하며 [CommandContext](site/src/content/docs/reference/backend/context.mdx)와 [ADR 0022](decisions/0022-app-info-context.md)에 정리했다.
 - [x] 일반 브라우저와 bunaway 앱 WebView 실행 여부를 구분하는 공개 기능을 제공한다. [T-core-live]의 `isTauri`에 대응하는 요구다.
   `@bunaway/client`의 동기 함수 `isBunaway()`가 호스트 브리지(`window.chrome.webview`) 유무로 판별하며, SSR과 일반 브라우저는 `false`, 앱 WebView는 `true`다.
   단위 테스트(`tests/api/is-bunaway.test.ts`)와 Windows host 회귀(`tests/fixtures/desktop/host/web/app.js`, 본문 끝 스크립트 시작 시점 샘플)로 검증한다. 문서 첫 스크립트부터 `true`라는 주입 시점은 Windows 실측이 아니라 호스트별 주입 방식(macOS와 iOS 문서 시작 사용자 스크립트, Android 문서 시작 스크립트, Windows WebView2 제공)을 근거로 한 서술이다.

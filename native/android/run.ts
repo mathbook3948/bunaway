@@ -45,6 +45,8 @@ const backend = await Bun.build({
         identifier: "dev.bunaway.android-fixture",
         version: null,
         framework: null,
+        isPackaged: true,
+        paths: null,
       },
       processRuntime: resolve(
         frameworkRoot,

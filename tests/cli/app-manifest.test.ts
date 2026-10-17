@@ -17,6 +17,7 @@ import {
 } from "@bunaway/runtime-bun/app-manifest";
 import {
   appName,
+  desktopAppPaths,
   parsePackageVersions,
   readPackageVersions,
   toAppInfo,
@@ -579,6 +580,8 @@ test("generated process backend embeds app metadata as a build-time constant", a
       identifier: "dev.example.app",
       version: null,
       framework: "0.4.5",
+      isPackaged: true,
+      paths: null,
     };
     const build = await Bun.build({
       entrypoints: [
@@ -618,6 +621,31 @@ test("generated process backend embeds app metadata as a build-time constant", a
   }
 });
 
+test("desktop app paths use the package root as the resources directory and reach AppInfo", () => {
+  const paths = desktopAppPaths("/pkg/Resources", "/pkg/MacOS/app");
+  expect(paths).toEqual({
+    package: "/pkg/Resources",
+    executable: "/pkg/MacOS/app",
+    resources: "/pkg/Resources",
+  });
+  const info = toAppInfo(
+    {
+      name: "App",
+      identifier: "dev.example",
+      version: null,
+      framework: null,
+      isPackaged: false,
+      paths,
+    },
+    {
+      bun: "1.0.0",
+      webview: null,
+    },
+  );
+  expect(info.isPackaged).toBe(false);
+  expect(info.paths).toEqual(paths);
+});
+
 test("toAppInfo rejects missing app metadata with a clear message", () => {
   expect(() =>
     toAppInfo(undefined as never, {
@@ -625,6 +653,31 @@ test("toAppInfo rejects missing app metadata with a clear message", () => {
       webview: null,
     }),
   ).toThrow(
-    "Missing app metadata: the host must pass the app name, identifier and versions.",
+    "Missing app metadata: the host must pass the app name, identifier, versions, isPackaged and paths.",
   );
+  // Metadata generated before isPackaged and paths existed fails the same way.
+  const legacy = {
+    name: "App",
+    identifier: "dev.example",
+    version: null,
+    framework: null,
+  };
+  expect(() =>
+    toAppInfo(legacy as never, {
+      bun: "1.0.0",
+      webview: null,
+    }),
+  ).toThrow("Missing app metadata:");
+  expect(() =>
+    toAppInfo(
+      {
+        ...legacy,
+        isPackaged: true,
+      } as never,
+      {
+        bun: "1.0.0",
+        webview: null,
+      },
+    ),
+  ).toThrow("Missing app metadata:");
 });
