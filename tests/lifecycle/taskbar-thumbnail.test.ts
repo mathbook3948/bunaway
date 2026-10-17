@@ -3,7 +3,7 @@ import {
   TaskbarSettingController,
   type ThumbnailClip,
 } from "#native/windows/bun/taskbar-progress";
-import { physicalRect } from "#native/windows/bun/window-size";
+import { fitsInt32Rect, physicalRect } from "#native/windows/bun/window-size";
 
 test("thumbnail clip converts logical edges so adjacent regions share a physical edge", () => {
   expect(
@@ -42,6 +42,32 @@ test("thumbnail clip converts logical edges so adjacent regions share a physical
   );
   expect(left.right).toBe(right.left);
   expect(right.right).toBe(99);
+});
+
+test("thumbnail clip edges that overflow int32 after DPI scaling are detected", () => {
+  const scaled = physicalRect(
+    {
+      x: 0,
+      y: 0,
+      width: 2147483647,
+      height: 10,
+    },
+    144,
+  );
+  expect(fitsInt32Rect(scaled)).toBe(false);
+  expect(
+    fitsInt32Rect(
+      physicalRect(
+        {
+          x: 0,
+          y: 0,
+          width: 1000,
+          height: 10,
+        },
+        144,
+      ),
+    ),
+  ).toBe(true);
 });
 
 test("thumbnail settings wait for the button, restore after recreation and keep null clears", () => {

@@ -1154,7 +1154,8 @@ if (!process.argv.includes("--child")) {
             }),
             null,
           );
-          // A minimized HWND has an empty client rectangle; the clip is validated against its restored area.
+          // A minimized HWND has an empty client rectangle and an unknown restored size, so only the
+          // lower bounds are checked while minimized; the upper bound is left to the shell.
           await windows.minimize(thumbnailTarget);
           assert.equal(await windows.isMinimized(thumbnailTarget), true);
           assert.equal(
@@ -1168,6 +1169,21 @@ if (!process.argv.includes("--child")) {
               },
             }),
             null,
+          );
+          // Lower-bound violations stay rejected while minimized.
+          await assert.rejects(
+            windows.setThumbnailClip({
+              ...thumbnailTarget,
+              region: {
+                x: -1,
+                y: 0,
+                width: 100,
+                height: 80,
+              },
+            }),
+            {
+              code: "INVALID_ARGUMENT",
+            },
           );
           await windows.restore(thumbnailTarget);
           assert.equal(await windows.isMinimized(thumbnailTarget), false);

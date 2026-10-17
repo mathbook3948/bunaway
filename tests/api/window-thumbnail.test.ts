@@ -89,6 +89,24 @@ test("thumbnail clip schema requires a positive in-range integer region or null"
     {
       ...target,
       region: {
+        x: 2147483647,
+        y: 0,
+        width: 1,
+        height: 1,
+      },
+    },
+    {
+      ...target,
+      region: {
+        x: 0,
+        y: 1,
+        width: 1,
+        height: 2147483647,
+      },
+    },
+    {
+      ...target,
+      region: {
         x: 0,
         y: 0,
         width: 1,

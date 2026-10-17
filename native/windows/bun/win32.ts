@@ -44,6 +44,7 @@ import {
 import {
   constrainedOuterSize,
   DEFAULT_DPI,
+  fitsInt32Rect,
   logicalPixels,
   physicalPixels,
   physicalRect,
@@ -2882,6 +2883,14 @@ export class Windows {
   /** Set the taskbar thumbnail tooltip, or restore the window title for null or an empty string. */
   setThumbnailToolTip(window: bigint, toolTip: string | null): void {
     assert(this.windows.has(window), "Taskbar target is not a live window");
+    // Native callers bypass the plugin schema; enforce the same limits as window titles.
+    if (toolTip !== null && (toolTip.includes("\0") || toolTip.length > 1024)) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message:
+          "The thumbnail tooltip cannot contain NUL or exceed 1024 UTF-16 code units.",
+      });
+    }
     this.thumbnailToolTip.set(window, toolTip || null);
   }
 
@@ -2900,14 +2909,14 @@ export class Windows {
     const rect = invalidInput
       ? null
       : physicalRect(region, this.getDpi(window));
-    // A minimized HWND reports an empty client rectangle and its restored size (normal, maximized
-    // or fullscreen) is not reliably known, so only the lower bounds are checked and the shell
-    // decides the upper bound. Otherwise the region must lie within the current client area.
-    const client = user.symbols.IsIconic(window)
-      ? null
-      : this.clientSize(window);
+    // A minimized HWND reports an empty client rectangle. Its restored size is not the WINDOWPLACEMENT
+    // normal rectangle when it was minimized from maximized or fullscreen, so it is not reliably known:
+    // only the lower bounds and the int32 range are checked and the shell decides the upper bound.
+    // Otherwise the region must lie within the current client area.
+    const client = this.isMinimized(window) ? null : this.clientSize(window);
     if (
       !rect ||
+      !fitsInt32Rect(rect) ||
       rect.left < 0 ||
       rect.top < 0 ||
       rect.right <= rect.left ||

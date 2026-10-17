@@ -39,6 +39,18 @@ export function physicalRect(
   };
 }
 
+const INT32_MAX = 2147483647;
+
+/** Whether every edge fits the signed 32-bit RECT fields, so native packing cannot truncate it. */
+export function fitsInt32Rect(rect: PixelRect): boolean {
+  return [
+    rect.left,
+    rect.top,
+    rect.right,
+    rect.bottom,
+  ].every((edge) => Number.isInteger(edge) && Math.abs(edge) <= INT32_MAX);
+}
+
 /** Convert a physical pixel dimension back to 96-DPI logical pixels. */
 export function logicalPixels(physicalPixels: number, dpi: number) {
   return Math.round((physicalPixels * DEFAULT_DPI) / dpi);

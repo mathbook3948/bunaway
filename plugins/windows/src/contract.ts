@@ -850,6 +850,12 @@ export const windowOperations = {
           width: z.int().positive().max(MAX_WINDOW_COORDINATE),
           height: z.int().positive().max(MAX_WINDOW_COORDINATE),
         })
+        .refine(
+          (rect) =>
+            rect.x + rect.width <= MAX_WINDOW_COORDINATE &&
+            rect.y + rect.height <= MAX_WINDOW_COORDINATE,
+          "The thumbnail clip edges cannot exceed the Win32 coordinate range.",
+        )
         .nullable(),
     }),
     output: z.null(),

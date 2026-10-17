@@ -13,15 +13,22 @@ export type ThumbnailClip = Parameters<
 /** Own one desired taskbar setting per HWND, separately from asynchronous Explorer button creation. */
 export class TaskbarSettingController<T> {
   private readonly ready = new Set<bigint>();
-  private readonly settings = new Map<bigint, T>();
+  // Boxed because a valid setting may itself be null (cleared clip or tooltip).
+  private readonly settings = new Map<
+    bigint,
+    {
+      value: T;
+    }
+  >();
 
   constructor(private readonly apply: (window: bigint, setting: T) => void) {}
 
   /** Retry the last accepted setting when Explorer creates or recreates a taskbar button. */
   buttonCreated(window: bigint): void {
     this.ready.add(window);
-    if (this.settings.has(window)) {
-      this.apply(window, this.settings.get(window) as T);
+    const saved = this.settings.get(window);
+    if (saved) {
+      this.apply(window, saved.value);
     }
   }
 
@@ -35,7 +42,9 @@ export class TaskbarSettingController<T> {
       });
     }
     this.apply(window, setting);
-    this.settings.set(window, structuredClone(setting));
+    this.settings.set(window, {
+      value: structuredClone(setting),
+    });
   }
 
   /** Discard the HWND lifetime, including when Windows later reuses the handle value. */
