@@ -120,6 +120,30 @@ existing debt allows no unrelated rewrites.
 - Make the smallest coherent change addressing the underlying problem. Explain necessary exceptions
   locally without introducing general-purpose mechanisms.
 
+### Rules and what enforces them
+
+Every rule above is paired here with the check that fails when an agent skips it. A rule whose
+enforcement reads "review" relies on judgment: when a review catches it twice, move it up a level
+in the same change and update this table. Drop a row once the mistake cannot happen.
+
+| Rule | Enforced by |
+| --- | --- |
+| Lint and format, kebab-case filenames, no nested ternary, no non-null assertion, template literals | `mise run lint` (Biome, warnings fail), `mise run format:check` |
+| Functions stay under cognitive complexity 25; the exemption list never grows | Biome rule plus `tests/conformance/lint-config.test.ts` (length cap, existence, still violating) |
+| Unhandled promises are marked `void`; in-flight promise fields compare with `!== undefined` | Biome `noFloatingPromises`, `noMisusedPromises` |
+| WebView-reachable modules (plugin `src/*.ts`, protocol, plugin-api, client, plugin SDK neutral files) use no `Buffer`, `Bun`, `process` or `node:` module | Biome override in `biome.json` plus `tests/conformance/browser-boundary.test.ts` (bundles loaded with those globals undefined) |
+| Workspace tsconfigs extend the base and never restate strictness; the client SDK sees no Bun types | `tests/conformance/lint-config.test.ts` |
+| `framework.json` and root `devDependencies` match the `packages/*` and `plugins/*` workspaces | `tests/conformance/workspace.test.ts` |
+| A library symbol has one FFI signature across the repository; known conflicts only shrink | `tests/conformance/ffi-signatures.test.ts` |
+| New native host files are listed in `frameworkPaths`; listed entries exist | `tests/cli/framework-paths.test.ts` |
+| Public exports and plugin operations are documented | `docs/site/scripts/check-reference.mjs` through `mise run typecheck` |
+| Protocol schema exports match the generated native schemas | CI `protocol:generate` diff |
+| No em dash or middle dot in text or commit messages | `scripts/check-text-style.ts` in `bun test tests/docs` and the commit-msg hook |
+| Native changes run the OS checks in `tests/README.md` and report what did not run | Review, and the `windows-native` and `macos-native` CI jobs |
+| Shared FFI tables, `ResourceOwner` and `attemptAll`, `int32Schema` and `base64Schema` are used instead of local copies | Review; the FFI ratchet above blocks new conflicting copies only |
+| Deadlines, intervals and limits are named constants; events are compared as sets | Review |
+| Docs change in the same commit as code, and claim only what tests verified | Review |
+
 ### Documentation maintenance
 
 Update related documentation in the same change as code: affected guides and references in

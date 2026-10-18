@@ -29,7 +29,8 @@ repeatedly asked for exactly these fixes.
   `USER32`, `SHELL32`, `COMBASE`, `ADVAPI32`). Declare a signature locally only when the
   shared table lacks it, and add it there when a second plugin needs it.
 - Handles are `u64`, pointers `ptr`, BOOL results `i32`, HRESULTs `i32`. Do not mix
-  conventions inside one table.
+  conventions inside one table. `tests/conformance/ffi-signatures.test.ts` fails when a symbol
+  gains a second signature anywhere in the repository; its known-conflict list only shrinks.
 - Pass strings through `wide`, `withWide` or `withBuffer` so the buffer outlives the call.
 - Check HRESULTs with `checkHresult` or the plugin's own error mapping; never ignore a
   negative result.

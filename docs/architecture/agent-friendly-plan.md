@@ -1,0 +1,137 @@
+# 에이전트가 올바르게 일하는 코드베이스 계획
+
+이 문서는 에이전트가 반복하는 실수를 코드 구조, 정적 분석, 글, 사람 리뷰의 순서로 어디까지
+올려 막았고 무엇이 남았는지를 적는다. 숫자는 모두 2026-10-18의 `main`(2bebf8c)과 PR #247
+브랜치에서 직접 세거나 실행한 값이다. 원칙은 하나다: 에이전트는 보이는 코드를 베끼고 가장
+짧은 길을 가므로, 지름길이 곧 올바른 길이어야 한다.
+
+## 1. 근거 데이터
+
+### 리뷰가 반복해서 잡은 것
+
+리뷰 피드백은 GitHub 리뷰 스레드에 없다(0건). `(review N)` 커밋 메시지 25개와 PR #236의
+fix/test 커밋 130개 분류가 기록이다.
+
+| 주제 | `(review N)` 커밋 25개 중 | #236 분류 130개 중 |
+| --- | --- | --- |
+| 자원 해제와 정리 순서 | 9 | 28 |
+| 입력 상한과 검증 | 8 | 41 (상한 23, 검증 18) |
+| 테스트 견고성(기한, 순서, 범위) | 8 | 67 |
+| 검증 범위를 넘는 문서 서술 | 4 | 14 |
+| 독립 이벤트 사이의 순서 약속 | 3 | 포함 |
+
+PR당 리뷰 라운드는 최대 6회(opener), 5회(windows aspect ratio)였다.
+
+### 구조가 아니라 기억에 의존하던 것
+
+- 같은 blob diff의 커밋 3개(a39c467, bbdb219, 78b4ac1)가 병렬 브랜치 3개에서 각각
+  `tests/cli/distribution.test.ts`의 타임아웃을 30000에서 120000으로 올렸다. 테스트 기한
+  리터럴은 약 97곳, 16가지 값이고 `child.kill()` 타이머 37곳 중 34곳이 리터럴이다.
+- `frameworkPaths` 누락 수정 2건(fc193bf, 4da0c96)은 모두 대조 테스트가 생기기 전이었다.
+- `packages/plugin-api/src/native-ico.ts`의 `Buffer`가 WebView 번들에서 터졌고(6cdd031) 수정은
+  주석 한 줄이었다. 원인은 WebView에 들어가는 모듈이 `types: ["bun"]`으로 타입 검사되고
+  브라우저 번들 테스트가 Bun 프로세스 안에서 실행된 것이다.
+- FFI 심볼 테이블 83개, 심볼 273개, 선언 308개 중 같은 심볼이 두 번 이상 선언된 것이 28개,
+  시그니처가 서로 다른 것이 12개다(`CreateWindowExW`는 host가 `u64`, clipboard 플러그인이
+  `ptr`; `OpenClipboard`는 `u64 -> i32`와 `ptr -> bool`). `objc_msgSend`는 가변 인자라
+  제외했다.
+- 복잡도 예외 목록 65개 중 1개(`windows-icon-data.ts`)는 이미 규칙을 통과하고 있었다.
+- `storage`의 `readText`, `readBytes`, `writeText`, `appendText`, `writeBytes`, `appendBytes`가
+  Windows와 macOS 구현에 같은 코드로 있고, 4 MiB 상한이 두 이름으로 두 번 선언돼 있다.
+  disposed 가드는 SDK 래퍼 외에 3곳에 더 있다.
+- `native/windows/bun/ui.ts`(2230줄)는 모듈 수준 boolean 플래그 10개로 수명주기를 표현하고,
+  `win32.ts`(3033줄)는 메서드 111개짜리 클래스 하나다.
+
+## 2. 이미 올린 것 (PR #236, #247)
+
+| 실수 클래스 | 올린 단계 | 무엇이 실패하는가 |
+| --- | --- | --- |
+| 스타일 규칙 4개 | lint | Biome, 경고도 실패 |
+| 처리하지 않은 Promise, 조건식의 Promise | lint | `noFloatingPromises`, `noMisusedPromises` |
+| WebView 모듈의 `Buffer`, `Bun`, `process`, `node:` | lint + 테스트 | `biome.json` override, `browser-boundary.test.ts`(전역을 `undefined`로 치환해 로드, ICO 파서 호출) |
+| 복잡도 예외 목록의 drift | 테스트 | 길이 상한 64, 파일 존재, 여전히 위반 |
+| tsconfig strict 약화 | 테스트 | base 상속, strict 재선언 금지, client는 브라우저 타입만 |
+| workspace 목록 불일치 | 테스트 | `framework.json`, 루트 `devDependencies` 대조 |
+| FFI 시그니처 불일치 | 테스트(ratchet) | 새 충돌은 실패, 기존 12개는 줄어들기만 |
+| 배포 목록 누락 | 테스트 | `git ls-files` 기준 대조, `native/ios` 포함, 사라진 항목 거부 |
+| Linux에서 앱 동작 증명 불가 | 검증 스킬 | `verify-bunaway`: 패킹한 CLI로 프로젝트 생성, 프로세스 프로토콜로 백엔드 구동, SDK 채널로 명령과 이벤트, 증거 기록 |
+
+각 검사는 실제 과거 실수나 임시로 넣은 실수에서 실패하는 것을 확인했다. 경계 테스트는
+수정 전 ICO 모듈에서, ratchet은 이미 통과하던 예외 파일에서, FFI 검사는 `GetLastError`의
+반환형을 바꾼 임시 편집에서 실패했다.
+
+## 3. 남은 계획
+
+순서는 레버리지와 위험의 비율이다. 각 항목은 그 자체로 PR 하나이며, 먼저 검사를 넣고
+그 검사가 현재 코드에서 실패하는 것을 보인 뒤 코드를 옮긴다.
+
+### 3.1 테스트 기한과 폴링을 한 모듈로 (M)
+
+데이터: 리터럴 기한 약 130곳, 같은 수정이 세 번 반복됨.
+
+설계: `tests/fixtures/deadlines.ts` 하나가 기한을 소유한다.
+
+```ts
+export const DEADLINES = {
+  protocolStep: 10_000,
+  childExit: 5_000,
+  nativeFixture: 90_000,
+  packagedAudit: 120_000,
+} as const;
+export function deadline(name: keyof typeof DEADLINES): number; // BUNAWAY_TEST_TIME_SCALE 배율 적용
+export function waitFor<T>(probe: () => T | undefined, options: { deadlineMs: number; intervalMs?: number }): Promise<T>;
+```
+
+검사: `tests/conformance/test-deadlines.test.ts`가 `setTimeout(() => child.kill(), <리터럴>)`과
+`}, <리터럴>);` 형태의 테스트 타임아웃 리터럴 수를 baseline 이하로 묶는다(ratchet).
+느린 러너 대응은 배율 하나로 끝나므로 "headroom" 커밋 클래스가 사라진다.
+
+### 3.2 플랫폼 구현의 공유 인터페이스 (M, 플러그인별)
+
+데이터: storage facade 6개 중복, 상한 상수 2중 선언, disposed 가드 3중.
+
+설계(storage부터):
+
+```ts
+// plugins/storage/src/contract.ts
+export interface StorageBackend {
+  readFile(path: string, limitBytes: number, signal: AbortSignal): Promise<Uint8Array>;
+  writeFile(path: string, bytes: Uint8Array, mode: "replace" | "append", signal: AbortSignal): Promise<void>;
+}
+// plugins/storage/src/operations.ts: 인코딩 facade(readText, writeText, append*)를 한 번만 구현
+// platforms/windows.ts, macos.ts: `implements StorageBackend`, 상한은 contract의 MAX_STORAGE_BYTES만 참조
+```
+
+검사: `operations.ts`가 플랫폼 클래스를 type-import하지 않는지(지금은 `MacosStorage |
+WindowsStorage` 유니온) lint override로 막는다. 플랫폼별 `active()` 가드는 SDK 래퍼가 이미
+하므로 삭제한다. 같은 틀을 opener(경로 세그먼트 규칙 4중)와 clipboard에 적용한다.
+
+### 3.3 `ui.ts` 수명주기를 phase 유니온으로, `Windows` 클래스 분할 (L)
+
+데이터: 리뷰 주제 1위인 자원 정리 9건과 28건의 뿌리. 플래그 10개, 메서드 111개.
+
+설계: `type UiPhase = { kind: "starting" } | { kind: "running"; windows: ... } | { kind: "stopping"; reason: QuitReason } | { kind: "committed"; exitCode: number }`로
+바꾸고 전이 함수 하나가 모든 변경을 소유한다. `Windows`는 geometry, taskbar, icons
+협력자로 나눈다. 먼저 `tests/lifecycle/windows-ui-lifecycle.test.ts`(Linux에서 fake로 31개)가
+전이를 집합으로 단정하도록 보강한 뒤 옮긴다.
+
+### 3.4 FFI 핸들 브랜드 타입과 기존 충돌 12개 해소 (M)
+
+데이터: 핸들이 전부 `bigint`, 충돌 12개.
+
+설계: `type Hwnd = bigint & { readonly __brand: "HWND" }` 등을 `@bunaway/plugin/win32`에 두고
+clipboard 플러그인의 Win32 테이블을 공유 테이블로 옮긴다. 옮길 때마다 ratchet의
+`KNOWN_CONFLICTS`에서 이름을 지운다.
+
+### 3.5 플러그인 스캐폴드 (S)
+
+`bunaway plugin new <name>`이 `package.json`, tsconfig, `contract.ts`, `operations.ts`,
+`platforms/windows.ts`, `platforms/macos.ts`, 문서 페이지와 reference-map 항목을 만든다.
+"복사해서 만드는" 경로 자체를 바꾸므로 workspace 테스트가 잡는 누락이 처음부터 안 생긴다.
+
+## 4. 하지 않기로 한 것
+
+- `useExhaustiveSwitchCases`: 문자열 유니온에 `null`, `true`, `false`를 요구하는 오탐.
+- `useAwait`: 위반 200곳 이상이 대부분 콜백 시그니처라 비용 대비 효과가 낮다.
+- `core` 패키지에 WebView 경계 override: 브라우저 번들 입력에 없다.
+- AGENTS.md를 늘리는 것: 규칙은 검사와 짝지어 표로 두고, 검사가 없는 규칙만 남긴다.
