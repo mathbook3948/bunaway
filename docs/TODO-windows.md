@@ -319,7 +319,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 
 - [x] 창별 메뉴바를 연결, 교체, 조회하고 분리한다.
 - [ ] 앱 전체 기본 메뉴바를 자동으로 연결한다.
-- [ ] 메뉴바 visible과 auto-hide를 설정하고 조회한다.
+- [x] 메뉴바 visible을 설정하고 조회한다. `menu.setWindowMenuVisible({ windowId, visible })`와 `menu.getWindowMenuVisible({ windowId })`가 창별 값(기본 true)을 다룬다(Electron `setMenuBarVisibility`, `isMenuBarVisible`). 숨기면 `SetMenu(hwnd, NULL)`로 HMENU만 분리하고 트리와 연결은 유지하며, 다시 표시하면 같은 트리를 붙인다. 창 바깥 크기는 그대로이고 내용 영역이 메뉴바 높이만큼 커진다. 숨긴 상태의 연결과 교체도 숨김을 유지하고, 메뉴 없는 창의 값도 저장해 이후 연결에 적용한다. 닫힌 창은 조회할 수 없다. 계약은 `window-menu.test.ts`, 실제 HMENU 분리와 재연결과 내용 영역 크기는 `windows-window-menu.test.ts`가 검증한다.
+- [ ] 메뉴바 auto-hide(Alt 키로 임시 표시)를 설정하고 조회한다.
 - [x] 지정 창과 물리 화면 좌표에 컨텍스트 메뉴를 표시하고 선택 또는 취소로 닫는다. AbortSignal 취소로 닫으며 별도 close 작업은 제공하지 않는다.
 - [x] 공유 메뉴 리소스에서 일반, separator, checkbox, radio와 submenu 항목을 제공한다.
 - [x] 메뉴 icon 항목을 제공한다. `type: "item"`(role 포함)과 submenu의 선택 필드 `icon`(tray `setIcon`과 같은 base64 ICO, null이면 없음)이며 checkbox, radio, separator는 `INVALID_ARGUMENT`로 거부한다(Electron `MenuItem.icon`, Tauri `IconMenuItem`). `SM_CXSMICON` 크기의 32bpp premultiplied-alpha DIB section을 메뉴 인스턴스마다 만들어 `hbmpItem`에 설정하고 인스턴스 해제 때 DeleteObject한다. 잘못된 ICO는 `INVALID_ARGUMENT`, 비트맵 생성 실패는 `INTERNAL`.

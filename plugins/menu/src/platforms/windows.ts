@@ -251,6 +251,12 @@ export function initializeMenuOperations(
       driver().validate(windowId);
       return windowAttachments.get(windowId)?.menuId ?? null;
     },
+    setWindowVisible(windowId: string, visible: boolean) {
+      driver().setVisible(windowId, visible);
+    },
+    isWindowVisible(windowId: string) {
+      return driver().isVisible(windowId);
+    },
     detachResource(menuId: string) {
       cancelPopup(menuId);
       for (const [windowId, entry] of windowAttachments) {

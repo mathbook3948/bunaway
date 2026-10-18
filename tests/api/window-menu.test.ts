@@ -27,6 +27,7 @@ function fixture() {
     }
   >();
   const events: JsonValue[] = [];
+  const hidden = new Set<string>();
   let failAttachment = false;
   let popupAction: (signal: AbortSignal) => string | null = () => "a";
   const driver: WindowMenuDriver = {
@@ -52,6 +53,18 @@ function fixture() {
           closed,
         });
       }
+    },
+    setVisible(windowId, visible) {
+      driver.validate(windowId);
+      if (visible) {
+        hidden.delete(windowId);
+      } else {
+        hidden.add(windowId);
+      }
+    },
+    isVisible(windowId) {
+      driver.validate(windowId);
+      return !hidden.has(windowId);
     },
     popup(windowId, _items, _x, _y, signal) {
       driver.validate(windowId);
@@ -450,5 +463,72 @@ test("role items attach to windows with resolved labels and a role selection rep
     }),
   ).toBeNull();
   expect(f.events).toEqual([]);
+  await f.adapter.dispose();
+});
+
+test("window menu bar visibility defaults to visible, is per window and validates its target", async () => {
+  const f = fixture();
+  const read = (windowId: string) =>
+    f.invoke("getWindowMenuVisible", {
+      windowId,
+    });
+  expect(await read("one")).toBe(true);
+  expect(
+    await f.invoke("setWindowMenuVisible", {
+      windowId: "one",
+      visible: false,
+    }),
+  ).toBeNull();
+  expect(await read("one")).toBe(false);
+  expect(await read("two")).toBe(true);
+  await f.invoke("setWindowMenuVisible", {
+    windowId: "one",
+    visible: true,
+  });
+  expect(await read("one")).toBe(true);
+  for (const payload of [
+    {
+      windowId: "one",
+      visible: "no",
+    },
+    {
+      windowId: "one",
+    },
+    {
+      windowId: "one",
+      visible: true,
+      extra: 1,
+    },
+  ]) {
+    await expect(
+      f.invoke("setWindowMenuVisible", payload),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  f.alive.delete("one");
+  await expect(
+    f.invoke("setWindowMenuVisible", {
+      windowId: "one",
+      visible: false,
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  await expect(read("one")).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  await expect(
+    f.invoke(
+      "getWindowMenuVisible",
+      {
+        windowId: "two",
+      },
+      undefined,
+      [],
+    ),
+  ).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
   await f.adapter.dispose();
 });

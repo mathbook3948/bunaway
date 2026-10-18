@@ -1,10 +1,10 @@
+import { int32Schema } from "@bunaway/plugin";
 import {
   MAX_NATIVE_ICO_BYTES,
   type NativeMenuItem,
   type NativeMenuRole,
   parseNativeIco,
 } from "@bunaway/plugin-api/native";
-import { int32Schema } from "@bunaway/plugin";
 import { z } from "zod";
 export const MAX_MENU_RESOURCES = 32;
 export const MAX_MENU_ITEMS = 256;
@@ -324,6 +324,9 @@ export const windowTargetSchema = z.strictObject({
 });
 export const windowMenuSchema = windowTargetSchema.extend({
   menuId: idSchema.nullable(),
+});
+export const windowMenuVisibleSchema = windowTargetSchema.extend({
+  visible: z.boolean(),
 });
 /** Context-popup coordinates are physical screen pixels (including negative monitor origins). */
 export const contextMenuSchema = windowTargetSchema.extend({

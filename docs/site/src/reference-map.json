@@ -1645,6 +1645,8 @@
       "menu.getTrayMenu",
       "menu.setWindowMenu",
       "menu.getWindowMenu",
+      "menu.setWindowMenuVisible",
+      "menu.getWindowMenuVisible",
       "menu.showContextMenu",
       "menu.waitForClick"
     ],
