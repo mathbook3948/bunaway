@@ -17,6 +17,7 @@ import {
 import { MAX_STORAGE_FILE_BYTES, StorageFiles } from "#storage/platforms/files";
 import {
   directoryEntries,
+  fileSizeBytes,
   type ScannedDirectoryEntry,
   scanDirectoryEntries,
   scanRole,
@@ -398,7 +399,7 @@ function tallyEntries(
     const role = scanRole(entry);
     if (role === "file") {
       totals.files++;
-      totals.bytes += entry.endOfFile;
+      totals.bytes += fileSizeBytes(entry);
     } else if (role === "directory") {
       frame.pending.push(entry.name);
     } else if (role === "opaque-directory") {

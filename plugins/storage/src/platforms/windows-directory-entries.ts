@@ -76,9 +76,14 @@ function checkEntry(
   ) {
     throw new Error("Invalid native directory entry bounds.");
   }
-  if (buffer.readBigInt64LE(offset + ENTRY_END_OF_FILE_OFFSET) < 0n) {
+}
+
+/** The logical size a counted file adds to a directory size; a negative size is corrupt data. */
+export function fileSizeBytes(entry: ScannedDirectoryEntry): bigint {
+  if (entry.endOfFile < 0n) {
     throw new Error("Invalid native directory entry size.");
   }
+  return entry.endOfFile;
 }
 
 /** Decode one native FILE_ID_BOTH_DIR_INFO batch, checking offsets before reading names. */

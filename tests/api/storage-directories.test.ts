@@ -4,6 +4,7 @@ import { NativeRegistry, serializeHostResponse } from "@bunaway/protocol";
 import { MAX_DIRECTORY_ENTRIES } from "../../plugins/storage/src/contract.ts";
 import {
   directoryEntries,
+  fileSizeBytes,
   type ScannedDirectoryEntry,
   scanDirectoryEntries,
   scanRole,
@@ -313,6 +314,27 @@ test("directory size counts data files behind non-surrogate reparse tags and ski
   expect(scanRole(tagged("folder", 0x10, 0))).toBe("directory");
 });
 
+test("directory size rejects a negative file size while listings stay readable", () => {
+  const negative = record("negative.bin", 0, -1n);
+  // Listing does not use sizes, so the record still decodes for readDirectory.
+  expect(directoryEntries(negative)).toEqual([
+    {
+      name: "negative.bin",
+      kind: "file",
+    },
+  ]);
+  const [entry] = scanDirectoryEntries(negative) as [
+    ScannedDirectoryEntry,
+  ];
+  expect(() => fileSizeBytes(entry)).toThrow("Invalid native directory entry");
+  expect(
+    fileSizeBytes({
+      ...entry,
+      endOfFile: 5n,
+    }),
+  ).toBe(5n);
+});
+
 test("malformed native directory batches are rejected", () => {
   const truncated = record("long-name").subarray(0, 105);
   const beyondBuffer = record("name");
@@ -328,7 +350,6 @@ test("malformed native directory batches are rejected", () => {
     beyondBuffer,
     unaligned,
     oddName,
-    record("negative.bin", 0, -1n),
     record("x".repeat(256)),
   ]) {
     expect(() => directoryEntries(invalid)).toThrow();
