@@ -209,10 +209,12 @@ export function renderInnoScript(options: InnoOptions): string {
     }
   }
 
+  // runasoriginaluser starts the app with the user's own token. A perMachine Setup is elevated, and
+  // without the flag the launched app would inherit that administrator token.
   lines.push(
     "",
     "[Run]",
-    `Filename: "{app}\\${executable}"; WorkingDir: "{app}"; Description: "${issParameter(`Launch ${options.name}`)}"; Flags: postinstall nowait skipifsilent unchecked`,
+    `Filename: "{app}\\${executable}"; WorkingDir: "{app}"; Description: "${issParameter(`Launch ${options.name}`)}"; Flags: postinstall nowait skipifsilent unchecked runasoriginaluser`,
   );
 
   if (!options.preserveUserData) {
