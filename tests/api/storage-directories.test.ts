@@ -2,7 +2,10 @@ import { expect, test } from "bun:test";
 import storage from "@bunaway/plugin-storage";
 import { NativeRegistry, serializeHostResponse } from "@bunaway/protocol";
 import { MAX_DIRECTORY_ENTRIES } from "../../plugins/storage/src/contract.ts";
-import { directoryEntries } from "../../plugins/storage/src/platforms/windows-directory-entries.ts";
+import {
+  directoryEntries,
+  scanDirectoryEntries,
+} from "../../plugins/storage/src/platforms/windows-directory-entries.ts";
 import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
@@ -129,6 +132,7 @@ test("directory operations resolve recursive defaults, bound output and retain i
     "storage.readDirectory",
     "storage.createDirectory",
     "storage.remove",
+    "storage.directorySize",
   ]) {
     for (const target of registry.operations.keys()) {
       expect(
@@ -148,9 +152,87 @@ test("directory operations resolve recursive defaults, bound output and retain i
   }
 });
 
-function record(name: string, attributes = 0): Buffer {
+test("directorySize accepts only a path, returns bounded totals and is Windows-only", async () => {
+  expect(
+    (
+      await parsers.validateCall({
+        operation: "storage.directorySize",
+        payload: location,
+      })
+    ).payload,
+  ).toEqual(location);
+  for (const payload of [
+    {},
+    {
+      path: "",
+    },
+    {
+      path: "C:/a\nb",
+    },
+    {
+      ...location,
+      recursive: true,
+    },
+    {
+      ...location,
+      maxDepth: 1,
+    },
+  ]) {
+    await expect(
+      parsers.validateCall({
+        operation: "storage.directorySize",
+        payload,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  const totals = {
+    bytes: Number.MAX_SAFE_INTEGER,
+    files: 2,
+    directories: 1,
+  };
+  expect(await parsers.validateOutput("storage.directorySize", totals)).toEqual(
+    totals,
+  );
+  for (const output of [
+    {
+      ...totals,
+      bytes: Number.MAX_SAFE_INTEGER + 1,
+    },
+    {
+      ...totals,
+      files: -1,
+    },
+    {
+      ...totals,
+      directories: 1.5,
+    },
+    {
+      bytes: 0,
+      files: 0,
+    },
+    {
+      ...totals,
+      path: "C:/untrusted",
+    },
+  ]) {
+    await expect(
+      parsers.validateOutput("storage.directorySize", output),
+    ).rejects.toThrow();
+  }
+  expect(storage._definition.nativePlatforms.macos?.operations).not.toContain(
+    "directorySize",
+  );
+  expect(storage._definition.nativePlatforms.windows?.operations).toContain(
+    "directorySize",
+  );
+});
+
+function record(name: string, attributes = 0, endOfFile = 0n): Buffer {
   const bytes = Buffer.from(name, "utf16le");
   const record = Buffer.alloc(Math.ceil((104 + bytes.length) / 8) * 8);
+  record.writeBigInt64LE(endOfFile, 40);
   record.writeUInt32LE(attributes, 56);
   record.writeUInt32LE(bytes.length, 60);
   bytes.copy(record, 104);
@@ -180,6 +262,19 @@ test("native directory batches decode names and classify reparse points without 
     {
       name: "junction",
       kind: "link",
+    },
+  ]);
+  expect(
+    scanDirectoryEntries(
+      Buffer.concat([
+        record("big.bin", 0, 2n ** 40n + 7n),
+      ]),
+    ),
+  ).toEqual([
+    {
+      name: "big.bin",
+      kind: "file",
+      endOfFile: 2n ** 40n + 7n,
     },
   ]);
   const truncated = record("long-name").subarray(0, 105);

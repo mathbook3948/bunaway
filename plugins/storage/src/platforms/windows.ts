@@ -1,18 +1,25 @@
 import { dlopen, ptr } from "bun:ffi";
-import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { win32 } from "node:path";
 import { BunawayError } from "@bunaway/plugin";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import {
   MAX_DIRECTORY_ENTRIES,
+  MAX_DIRECTORY_SIZE_DEPTH,
+  MAX_DIRECTORY_SIZE_ENTRIES,
   type StorageDirectoryCreate,
   type StorageDirectoryEntry,
+  type StorageDirectorySize,
   type StorageLocation,
   type StorageMetadata,
   type StorageTransfer,
   type WindowsStorageInstance,
 } from "#storage/contract";
 import { MAX_STORAGE_FILE_BYTES, StorageFiles } from "#storage/platforms/files";
-import { directoryEntries } from "#storage/platforms/windows-directory-entries";
+import {
+  directoryEntries,
+  type ScannedDirectoryEntry,
+  scanDirectoryEntries,
+} from "#storage/platforms/windows-directory-entries";
 
 const MAX_STORAGE_PATH_SEGMENT_BYTES = 255;
 const MAX_IO_CHUNK_BYTES = 1 << 20;
@@ -307,6 +314,54 @@ function transferOptions(
     createParents: false,
   };
 }
+/** Cost bounds of one directorySize call; only tests pass values other than the contract defaults. */
+type DirectorySizeLimits = {
+  entries: number;
+  depth: number;
+};
+const DIRECTORY_SIZE_LIMITS: DirectorySizeLimits = {
+  entries: MAX_DIRECTORY_SIZE_ENTRIES,
+  depth: MAX_DIRECTORY_SIZE_DEPTH,
+};
+/** One open directory on the current walk path and the child directories still to visit. */
+type DirectoryScanFrame = {
+  handle: bigint;
+  path: string;
+  restart: boolean;
+  pending: string[];
+};
+/** Running totals of one scan; visited counts every listed child against the entry limit. */
+type DirectoryScanTotals = {
+  bytes: bigint;
+  files: number;
+  directories: number;
+  visited: number;
+};
+function directorySizeLimitExceeded(): BunawayError {
+  return new BunawayError({
+    code: "INVALID_ARGUMENT",
+    message: "Storage directory exceeds the size scan limit.",
+  });
+}
+/** Add files to the totals, queue plain child directories and skip links, all bounded by the entry limit. */
+function tallyEntries(
+  frame: DirectoryScanFrame,
+  entries: ScannedDirectoryEntry[],
+  totals: DirectoryScanTotals,
+  limits: DirectorySizeLimits,
+): void {
+  for (const entry of entries) {
+    if (++totals.visited > limits.entries) {
+      throw directorySizeLimitExceeded();
+    }
+    if (entry.kind === "file") {
+      totals.files++;
+      totals.bytes += entry.endOfFile;
+    } else if (entry.kind === "directory") {
+      frame.pending.push(entry.name);
+    }
+  }
+}
 export class WindowsStorage
   extends StorageFiles
   implements WindowsStorageInstance
@@ -466,6 +521,34 @@ export class WindowsStorage
       ({ handle, info }) => {
         this.requireDirectory(info);
         return this.listEntries(handle);
+      },
+    );
+    if (result === null) {
+      throw new Error("Storage directory was not opened.");
+    }
+    return result;
+  }
+
+  /**
+   * Total the logical file sizes below one checked directory. Links and other reparse points are
+   * neither followed nor counted, hardlinked files count once per name, and sizes come from the
+   * directory listing, so concurrent changes are not a snapshot. Any access or open failure below
+   * the root fails the whole operation instead of under-reporting.
+   */
+  directorySize(
+    input: StorageLocation,
+    signal?: AbortSignal,
+    limits: DirectorySizeLimits = DIRECTORY_SIZE_LIMITS,
+  ): StorageDirectorySize {
+    const result = this.withFile(
+      input.path,
+      {
+        ...METADATA_TARGET_OPTIONS,
+        allowMissing: false,
+      },
+      ({ handle, info, canonical }) => {
+        this.requireDirectory(info);
+        return this.sumDirectory(handle, canonical, signal, limits);
       },
     );
     if (result === null) {
@@ -929,26 +1012,9 @@ export class WindowsStorage
   private listEntries(handle: bigint): StorageDirectoryEntry[] {
     const buffer = Buffer.alloc(DIRECTORY_BUFFER_BYTES);
     const entries: StorageDirectoryEntry[] = [];
-    let informationClass = FILE_ID_BOTH_DIRECTORY_RESTART_INFO;
-    while (true) {
-      buffer.fill(0);
-      if (
-        !this.api.symbols.GetFileInformationByHandleEx(
-          handle,
-          informationClass,
-          ptr(buffer),
-          buffer.length,
-        )
-      ) {
-        const error = this.api.symbols.GetLastError();
-        if (error === ERROR_NO_MORE_FILES) {
-          return entries.sort((left, right) =>
-            left.name < right.name ? -1 : Number(left.name > right.name),
-          );
-        }
-        this.fail("Storage directory listing failed", error);
-      }
-      informationClass = FILE_ID_BOTH_DIRECTORY_INFO;
+    let restart = true;
+    while (this.readEntryBatch(handle, buffer, restart)) {
+      restart = false;
       const batch = directoryEntries(buffer);
       if (entries.length + batch.length > MAX_DIRECTORY_ENTRIES) {
         throw new BunawayError({
@@ -958,6 +1024,145 @@ export class WindowsStorage
       }
       entries.push(...batch);
     }
+    return entries.sort((left, right) =>
+      left.name < right.name ? -1 : Number(left.name > right.name),
+    );
+  }
+  /** Fill the buffer with the next native entry batch; false once the directory is exhausted. */
+  private readEntryBatch(
+    handle: bigint,
+    buffer: Buffer,
+    restart: boolean,
+  ): boolean {
+    buffer.fill(0);
+    if (
+      this.api.symbols.GetFileInformationByHandleEx(
+        handle,
+        restart
+          ? FILE_ID_BOTH_DIRECTORY_RESTART_INFO
+          : FILE_ID_BOTH_DIRECTORY_INFO,
+        ptr(buffer),
+        buffer.length,
+      )
+    ) {
+      return true;
+    }
+    const error = this.api.symbols.GetLastError();
+    if (error === ERROR_NO_MORE_FILES) {
+      return false;
+    }
+    this.fail("Storage directory listing failed", error);
+  }
+  /**
+   * Open one listed child directory beneath its pinned parent without following links.
+   * Returns null when the child vanished or is no longer a plain directory, so it adds nothing.
+   */
+  private openChildDirectory(parentPath: string, name: string) {
+    const path = `${parentPath}\\${name}`;
+    const handle = this.open(
+      path,
+      FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
+      FILE_SHARE_READ,
+      OPEN_EXISTING,
+      DIRECTORY_OPEN_FLAGS,
+      true,
+    );
+    if (!handle) {
+      return null;
+    }
+    try {
+      const attributes = this.info(handle).readUInt32LE(0);
+      if (
+        attributes & FILE_ATTRIBUTE_REPARSE_POINT ||
+        !(attributes & FILE_ATTRIBUTE_DIRECTORY)
+      ) {
+        this.close(handle);
+        return null;
+      }
+      if (this.canonical(handle) !== path) {
+        deny("Storage path must use its canonical spelling.");
+      }
+    } catch (error) {
+      this.close(handle);
+      throw error;
+    }
+    return {
+      handle,
+      path,
+    };
+  }
+  /** Recursively total the checked root without following links; the caller owns the root handle. */
+  private sumDirectory(
+    rootHandle: bigint,
+    rootPath: string,
+    signal: AbortSignal | undefined,
+    limits: DirectorySizeLimits,
+  ): StorageDirectorySize {
+    const buffer = Buffer.alloc(DIRECTORY_BUFFER_BYTES);
+    // Iterative depth-first walk. Every directory on the current path stays open,
+    // so no ancestor can be renamed or deleted while its descendants are read.
+    const path: DirectoryScanFrame[] = [
+      {
+        handle: rootHandle,
+        path: rootPath,
+        restart: true,
+        pending: [],
+      },
+    ];
+    const totals: DirectoryScanTotals = {
+      bytes: 0n,
+      files: 0,
+      directories: 0,
+      visited: 0,
+    };
+    try {
+      while (path.length) {
+        if (signal?.aborted) {
+          throw new BunawayError({
+            code: "CANCELLED",
+            message: "Storage directory size scan was cancelled.",
+          });
+        }
+        const frame = path[path.length - 1] as DirectoryScanFrame;
+        const childName = frame.pending.pop();
+        if (childName !== undefined) {
+          if (path.length > limits.depth) {
+            throw directorySizeLimitExceeded();
+          }
+          const child = this.openChildDirectory(frame.path, childName);
+          if (child) {
+            totals.directories++;
+            path.push({
+              ...child,
+              restart: true,
+              pending: [],
+            });
+          }
+        } else if (this.readEntryBatch(frame.handle, buffer, frame.restart)) {
+          frame.restart = false;
+          tallyEntries(frame, scanDirectoryEntries(buffer), totals, limits);
+        } else {
+          // Pop before closing so a failed close cannot be retried by the cleanup below.
+          path.pop();
+          if (path.length) {
+            this.close(frame.handle);
+          }
+        }
+      }
+    } finally {
+      // Failure and cancellation leave pinned directories behind; the root is released by the caller.
+      for (const frame of path.slice(1).reverse()) {
+        this.close(frame.handle);
+      }
+    }
+    if (totals.bytes > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new Error("Storage size cannot be represented safely.");
+    }
+    return {
+      bytes: Number(totals.bytes),
+      files: totals.files,
+      directories: totals.directories,
+    };
   }
   /** Strictly decode UTF-8 from a caller-owned handle, preserving BOM text. */
   readTextFromHandle(file: bigint, size: number): string {

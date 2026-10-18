@@ -29,6 +29,7 @@ export type {
   StorageBytesWrite,
   StorageDirectoryCreate,
   StorageDirectoryEntry,
+  StorageDirectorySize,
   StorageLocation,
   StorageMetadata,
   StorageTransfer,

@@ -1349,6 +1349,7 @@
         "reference/host/storage-directories": [
           "readDirectory",
           "createDirectory",
+          "directorySize",
           "remove"
         ]
       }
@@ -1414,6 +1415,7 @@
     "reference/host/storage-directories": [
       "storage.readDirectory",
       "storage.createDirectory",
+      "storage.directorySize",
       "storage.remove"
     ],
     "reference/host/log-write": ["log.write", "log.configure", "log.flush"],

@@ -8,12 +8,26 @@ const FILE_ATTRIBUTE_REPARSE_POINT = 0x400;
 const ENTRY_HEADER_BYTES = 104;
 const ENTRY_ATTRIBUTES_OFFSET = 56;
 const ENTRY_NAME_BYTES_OFFSET = 60;
+const ENTRY_END_OF_FILE_OFFSET = 40;
 const WCHAR_BYTES = 2;
 const ENTRY_ALIGNMENT_BYTES = 8;
 
-/** Decode one native FILE_ID_BOTH_DIR_INFO batch, checking offsets before reading names. */
+/** A listed child with its logical size (EndOfFile), meaningful for files only. */
+export type ScannedDirectoryEntry = StorageDirectoryEntry & {
+  endOfFile: bigint;
+};
+
+/** Decode one batch into public entries, dropping sizes. */
 export function directoryEntries(buffer: Buffer): StorageDirectoryEntry[] {
-  const entries: StorageDirectoryEntry[] = [];
+  return scanDirectoryEntries(buffer).map(({ name, kind }) => ({
+    name,
+    kind,
+  }));
+}
+
+/** Decode one native FILE_ID_BOTH_DIR_INFO batch, checking offsets before reading names. */
+export function scanDirectoryEntries(buffer: Buffer): ScannedDirectoryEntry[] {
+  const entries: ScannedDirectoryEntry[] = [];
   let offset = 0;
   while (true) {
     if (offset + ENTRY_HEADER_BYTES > buffer.length) {
@@ -51,6 +65,7 @@ export function directoryEntries(buffer: Buffer): StorageDirectoryEntry[] {
       entries.push({
         name,
         kind,
+        endOfFile: buffer.readBigInt64LE(offset + ENTRY_END_OF_FILE_OFFSET),
       });
     }
     if (!nextOffset) {
