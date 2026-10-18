@@ -510,7 +510,7 @@ export class WindowsStorage
   private close(handle: bigint) {
     this.check(this.api.symbols.CloseHandle(handle), "CloseHandle failed");
   }
-  /** Attempt every close even after a failure, then report the first failure. */
+  /** Attempt every close even after a failure, then report all failures together. */
   private closeAll(handles: bigint[]): void {
     attemptAll(
       handles.map((handle) => () => this.close(handle)),
