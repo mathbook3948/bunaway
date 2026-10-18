@@ -402,6 +402,10 @@ export type NativeWindow = {
   setMaximizable?(maximizable: boolean): void;
   /** Reads the normal window's native maximize-button setting. Windows only. */
   isMaximizable?(): boolean;
+  /** Allows or rejects entering fullscreen for this HWND; an active fullscreen stays and can always be exited. Native caption buttons are unaffected. Windows only. */
+  setFullscreenable?(fullscreenable: boolean): void;
+  /** Reads whether entering fullscreen is allowed for this HWND. Windows only. */
+  isFullscreenable?(): boolean;
   /** Changes user caption, system-menu and renderer closing. Backend/API closing remains available. Windows only. */
   setClosable?(closable: boolean): void;
   /** Reads the host's user-close setting for this HWND. Windows only. */

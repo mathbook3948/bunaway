@@ -1149,6 +1149,9 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         setMaximizable: (maximizable) =>
           nativeWindows.setMaximizable(hwnd, maximizable),
         isMaximizable: () => nativeWindows.isMaximizable(hwnd),
+        setFullscreenable: (fullscreenable) =>
+          nativeWindows.setFullscreenable(hwnd, fullscreenable),
+        isFullscreenable: () => nativeWindows.isFullscreenable(hwnd),
         setClosable: (closable) => nativeWindows.setClosable(hwnd, closable),
         isClosable: () => nativeWindows.isClosable(hwnd),
         setTitle: (title) => nativeWindows.setTitle(hwnd, title),

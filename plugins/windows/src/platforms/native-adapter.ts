@@ -28,6 +28,13 @@ function unsupportedFocusability() {
   });
 }
 
+function unsupportedFullscreenable() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Fullscreenable is not implemented on this platform.",
+  });
+}
+
 function unsupportedControls() {
   return new BunawayError({
     code: "UNSUPPORTED",
@@ -448,6 +455,17 @@ export function createOperations(
           throw unsupportedControls();
         }
         return window.isMaximizable();
+      case "windows.setFullscreenable":
+        if (!window.setFullscreenable) {
+          throw unsupportedFullscreenable();
+        }
+        window.setFullscreenable(call.payload.fullscreenable);
+        break;
+      case "windows.isFullscreenable":
+        if (!window.isFullscreenable) {
+          throw unsupportedFullscreenable();
+        }
+        return window.isFullscreenable();
       case "windows.setClosable":
         if (!window.setClosable) {
           throw unsupportedControls();
@@ -730,6 +748,14 @@ export function createOperations(
         window.center(call.payload.monitorId);
         break;
       case "windows.setFullscreen":
+        // Leaving is always allowed so a window changed to non-fullscreenable
+        // while fullscreen cannot become stuck. Entering is the guarded direction.
+        if (call.payload.fullscreen && window.isFullscreenable?.() === false) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "The window is not fullscreenable.",
+          });
+        }
         window.setFullscreen(call.payload.fullscreen);
         break;
       case "windows.setTaskbarProgress":

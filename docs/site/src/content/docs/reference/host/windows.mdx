@@ -519,6 +519,8 @@ await windows.close({ view: "dialog" });
 | `windows.isMinimizable` | `{ view, windowId? }` | `Promise<boolean>`. 일반 창의 사용자 최소화 허용 여부 |
 | `windows.setMaximizable` | `{ view, windowId?, maximizable: boolean }` | `Promise<null>`. 네이티브 최대화 버튼과 사용자 최대화 허용 변경 |
 | `windows.isMaximizable` | `{ view, windowId? }` | `Promise<boolean>`. 일반 창의 사용자 최대화 허용 여부 |
+| `windows.setFullscreenable` | `{ view, windowId?, fullscreenable: boolean }` | `Promise<null>`. 이후 전체화면 진입 허용 변경. 현재 전체화면은 유지하며 네이티브 버튼에는 영향 없음 |
+| `windows.isFullscreenable` | `{ view, windowId? }` | `Promise<boolean>`. 이 창 수명의 전체화면 진입 허용 여부 |
 | `windows.setClosable` | `{ view, windowId?, closable: boolean }` | `Promise<null>`. 네이티브 닫기 버튼과 사용자 닫기 허용 변경 |
 | `windows.isClosable` | `{ view, windowId? }` | `Promise<boolean>`. 이 창 수명의 사용자 닫기 설정 조회 |
 | `windows.setFocusable` | `{ view, windowId?, focusable: boolean }` | `Promise<null>`. 이후 활성화 허용 변경. 현재 포커스를 다른 창으로 옮기지는 않음 |
@@ -534,7 +536,7 @@ await windows.close({ view: "dialog" });
 | `windows.setAspectRatio` | `{ view, windowId?, ratio: number \| null }` | `Promise<null>`. 사용자 크기 조절 중 내용 영역의 너비/높이 비율을 고정. `null`은 고정 해제. 0.1–10의 유한한 수 |
 | `windows.getAspectRatio` | `{ view, windowId? }` | `Promise<number \| null>`. 고정한 비율. 고정하지 않았다면 `null` |
 | `windows.center` | `{ view, windowId?, monitorId? }` | `Promise<null>`. `monitorId`가 있으면 그 모니터, 없으면 현재 모니터의 작업 영역 중앙에 창 바깥 영역 배치. 최소화와 최대화 중에는 일반 복원 영역 배치 |
-| `windows.setFullscreen` | `{ view, windowId?, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원 |
+| `windows.setFullscreen` | `{ view, windowId?, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원. `setFullscreenable(false)` 상태에서 진입은 `INVALID_ARGUMENT` |
 | `windows.setCloseConfirmation` | `{ view, windowId?, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
 | `windows.close` | `{ view, windowId? }` | `Promise<boolean>`. 닫기 승인 시 `true`, 확인이나 앱 종료를 취소하거나 트레이로 숨기면 `false`. 정리 완료를 기다리지는 않음 |
 | `windows.respondClose` | `{ view, windowId?, requestId: number, allow: boolean }` | `Promise<null>`. 대기 중인 [닫기 요청](#닫기-요청)에 답함. 백엔드 또는 질문을 받은 창 자신의 문서만 호출할 수 있고 다른 호출자는 `PERMISSION_DENIED`. Windows와 macOS에서 지원 |
@@ -792,7 +794,15 @@ operation 권한을 따로 요구하며 닫힌 창은 `INVALID_ARGUMENT`입니�
 닫기 버튼에 반영합니다. 표시, 위치, 크기와 포커스를 유지하며 재생성하면 기본값으로 돌아갑니다.
 프로그램의 `minimize`, `maximize`, `close`, `recreate`와 trusted `destroy`는 계속 사용할 수 있고
 일반 close의 확인, 종료 취소와 부모 순서도 유지합니다. 렌더러 실패와 강제 호스트 정리는 이 설정으로 막지 않습니다.
-이 설정은 프로그램의 권한이나 창 종료 정책을 대체하지 않습니다. fullscreenable은 아직 제공하지 않습니다.
+이 설정은 프로그램의 권한이나 창 종료 정책을 대체하지 않습니다.
+
+`fullscreenable`의 기본값도 `true`이며 창 인스턴스별 상태입니다. 같은 선언의 다른 창과 재생성한 창에는 영향이 없고
+재생성하면 기본값으로 돌아갑니다. 권한과 닫힌 창 오류는 위 설정과 같습니다. `false`이면
+`setFullscreen({ fullscreen: true })`를 조용히 무시하지 않고 `INVALID_ARGUMENT`로 거부합니다.
+이미 전체화면인 창을 `false`로 바꿔도 전체화면은 유지되며 `setFullscreen({ fullscreen: false })`로는 언제든 나갈 수 있습니다.
+나간 뒤에는 `true`로 되돌릴 때까지 다시 들어갈 수 없습니다. 거부는 호스트의 네이티브 창 계층에서도 적용합니다.
+Windows에는 전체화면 전용 버튼이 없으므로 네이티브 버튼과 제스처, `maximizable`에는 영향이 없습니다.
+macOS는 `UNSUPPORTED`입니다.
 
 `setTitle`은 지정한 창 수명의 제목만 변경합니다. 선언, 다른 인스턴스와 앱 이름을 바꾸지 않으며
 재생성에서는 선언 또는 해당 생성의 `options.title`로 돌아갑니다. 표시, 크기와 포커스 상태를 유지합니다.

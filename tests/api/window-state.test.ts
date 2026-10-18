@@ -38,6 +38,7 @@ const stateQueries = [
   "isContentProtected",
   "isMinimizable",
   "isMaximizable",
+  "isFullscreenable",
   "isClosable",
   "isResizable",
   "isMovable",
@@ -121,6 +122,7 @@ function fixture() {
   const attentionModes: WindowAttentionMode[] = [];
   let closed = false;
   let fullscreen = false;
+  const fullscreenRequests: boolean[] = [];
   const observed = {
     isMinimized: false,
     isMaximized: false,
@@ -132,6 +134,7 @@ function fixture() {
     isContentProtected: false,
     isMinimizable: true,
     isMaximizable: true,
+    isFullscreenable: true,
     isClosable: true,
     isResizable: true,
     isMovable: true,
@@ -242,7 +245,15 @@ function fixture() {
     },
     isMovable: () => observed.isMovable,
     setGeometry() {},
-    setFullscreen() {},
+    setFullscreen(value) {
+      fullscreenRequests.push(value);
+      fullscreen = value;
+    },
+    setFullscreenable(value) {
+      apply("setFullscreenable");
+      observed.isFullscreenable = value;
+    },
+    isFullscreenable: () => observed.isFullscreenable,
     setCloseConfirmation() {},
   };
   function apply(action: string) {
@@ -311,6 +322,8 @@ function fixture() {
         | "cancelAttention"
         | "setMinimizable"
         | "setMaximizable"
+        | "setFullscreenable"
+        | "setFullscreen"
         | "setClosable"
         | "getTitle"
         | "setTitle"
@@ -327,6 +340,8 @@ function fixture() {
         mode?: string | number | null;
         minimizable?: boolean;
         maximizable?: boolean;
+        fullscreenable?: boolean;
+        fullscreen?: boolean;
         closable?: boolean;
         title?: string;
         resizable?: boolean;
@@ -347,6 +362,7 @@ function fixture() {
           },
         ),
       ),
+    fullscreenRequests,
     setClosed: () => {
       closed = true;
     },
@@ -464,6 +480,11 @@ test("caption controls validate booleans, retain independent operation grants an
       "maximizable",
     ],
     [
+      "setFullscreenable",
+      "isFullscreenable",
+      "fullscreenable",
+    ],
+    [
       "setClosable",
       "isClosable",
       "closable",
@@ -571,6 +592,69 @@ test("caption controls validate booleans, retain independent operation grants an
     expect(await controlled.invoke("minimize")).toBeNull();
     expect(await controlled.invoke("maximize")).toBeNull();
   }
+});
+
+test("fullscreenable rejects entering fullscreen, keeps the current fullscreen and always allows leaving", async () => {
+  const f = fixture();
+  // Fullscreenable by default, so entering is forwarded to the native window.
+  await f.invoke("setFullscreen", "main", {
+    fullscreen: true,
+  });
+  expect(f.fullscreenRequests).toEqual([
+    true,
+  ]);
+  await f.invoke("setFullscreen", "main", {
+    fullscreen: false,
+  });
+
+  await f.invoke("setFullscreenable", "main", {
+    fullscreenable: false,
+  });
+  await expect(
+    f.invoke("setFullscreen", "main", {
+      fullscreen: true,
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+    message: expect.stringContaining("fullscreenable"),
+  });
+  expect(f.fullscreenRequests).toEqual([
+    true,
+    false,
+  ]);
+
+  // Re-enabling allows entering again.
+  await f.invoke("setFullscreenable", "main", {
+    fullscreenable: true,
+  });
+  await f.invoke("setFullscreen", "main", {
+    fullscreen: true,
+  });
+  expect(await f.invoke("isFullscreen")).toBe(true);
+
+  // Changing the setting while fullscreen keeps the state and still allows leaving.
+  await f.invoke("setFullscreenable", "main", {
+    fullscreenable: false,
+  });
+  expect(await f.invoke("isFullscreen")).toBe(true);
+  expect(await f.invoke("isFullscreenable")).toBe(false);
+  await f.invoke("setFullscreen", "main", {
+    fullscreen: false,
+  });
+  expect(await f.invoke("isFullscreen")).toBe(false);
+  await expect(
+    f.invoke("setFullscreen", "main", {
+      fullscreen: true,
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(f.fullscreenRequests).toEqual([
+    true,
+    false,
+    true,
+    false,
+  ]);
 });
 
 test("title operations preserve Unicode, enforce bounded input, individual permissions and window lifetime", async () => {

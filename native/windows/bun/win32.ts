@@ -204,6 +204,8 @@ export class Windows {
   >();
   private readonly changingGeometry = new Set<bigint>();
   private readonly closeControls = new Map<bigint, boolean>();
+  /** Windows that may not enter fullscreen; absence means fullscreenable. */
+  private readonly nonFullscreenable = new Set<bigint>();
   private readonly interactiveGeometry = new Map<bigint, WindowBounds>();
   private readonly immovable = new Set<bigint>();
   /** Content width / height locked for user resizing; absent when unlocked. */
@@ -1153,6 +1155,21 @@ export class Windows {
   setMaximizable(window: bigint, maximizable: boolean): void {
     this.setCaptionButton(window, WS_MAXIMIZEBOX, maximizable);
   }
+  isFullscreenable(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return !this.nonFullscreenable.has(window);
+  }
+
+  /** Store whether fullscreen may be entered. A current fullscreen is kept and can still be exited. */
+  setFullscreenable(window: bigint, fullscreenable: boolean): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    if (fullscreenable) {
+      this.nonFullscreenable.delete(window);
+    } else {
+      this.nonFullscreenable.add(window);
+    }
+  }
+
   isClosable(window: bigint): boolean {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");
     return this.closeControls.get(window) ?? true;
@@ -2636,6 +2653,12 @@ export class Windows {
       return;
     }
     if (enabled) {
+      if (!this.isFullscreenable(window)) {
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "The window is not fullscreenable.",
+        });
+      }
       const placement = this.getPlacement(window);
       const style = user.symbols.GetWindowLongPtrW(window, GWL_STYLE);
       const dpi = this.getDpi(window);
@@ -2746,6 +2769,7 @@ export class Windows {
     this.observations.delete(window);
     this.changingGeometry.delete(window);
     this.closeControls.delete(window);
+    this.nonFullscreenable.delete(window);
     this.interactiveGeometry.delete(window);
     this.immovable.delete(window);
     this.aspectRatios.delete(window);
