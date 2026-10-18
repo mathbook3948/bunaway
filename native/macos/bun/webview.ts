@@ -10,7 +10,7 @@ import { macosOrigin, platformUrl, resourceRules } from "./urls.ts";
 import { MacosWebviewControls } from "./webview-controls.ts";
 import {
   MAX_LOAD_RETRIES,
-  stalledLoadAction,
+  StalledLoadClock,
   WebviewDiagnostics,
   webviewError,
 } from "./webview-diagnostics.ts";
@@ -83,10 +83,8 @@ export class MacosWebview {
   private navigationStarted = false;
   /** The current load request reached `didStartProvisionalNavigation`; reset by every load request. */
   private provisionalSeen = false;
-  /** Epoch ms at which the policy callback allowed the current load request; 0 until then. */
-  private policyAllowedAt = 0;
-  /** Reissues of the current load so far, plus one once the stall was reported; reset only by the reload after a WebContent crash. */
-  private loadRetries = 0;
+  /** Stall clock and retry budget of this view's load; the budget is reset only by the reload after a WebContent crash. */
+  private readonly loadClock = new StalledLoadClock();
   private provisionalNavigation: ObjcObject | null = null;
   /** Latest top-level document navigation; unlike provisionalNavigation it survives commit until completion. */
   private documentNavigation: ObjcObject | null = null;
@@ -353,10 +351,10 @@ export class MacosWebview {
               decision ?? null,
               allowed ? WK_NAVIGATION_ALLOW : WK_NAVIGATION_CANCEL,
             );
-            if (allowed && !this.policyAllowedAt) {
+            if (allowed) {
               // The stall clock starts only once the policy decision is out, so a slow decision
               // is never mistaken for WebKit not starting the navigation.
-              this.policyAllowedAt = Date.now();
+              this.loadClock.policyAllowed(Date.now());
             }
             this.diagnostics.record("action-policy-returned", {
               allowed,
@@ -506,7 +504,7 @@ export class MacosWebview {
             hooks.revoke("process-failed");
             if (!this.closed) {
               // A reload after a crash gets its own stall budget.
-              this.loadRetries = 0;
+              this.loadClock.resetBudget();
               this.loadHome();
             }
           },
@@ -706,7 +704,7 @@ export class MacosWebview {
     }
     this.diagnostics.record("load-requested");
     this.provisionalSeen = false;
-    this.policyAllowedAt = 0;
+    this.loadClock.requested();
     const o = this.objc;
     o.withAutoreleasePool(() => {
       const url = o.send(
@@ -751,22 +749,13 @@ export class MacosWebview {
    * a bounded number of times; the document and SDK deadlines are unchanged.
    */
   private retryStalledLoad(): void {
-    if (
-      this.closed ||
-      !this.navigationStarted ||
-      this.provisionalSeen ||
-      !this.policyAllowedAt
-    ) {
+    if (this.closed || !this.navigationStarted || this.provisionalSeen) {
       return;
     }
-    const action = stalledLoadAction(
-      Date.now() - this.policyAllowedAt,
-      this.loadRetries,
-    );
+    const action = this.loadClock.check(Date.now());
     if (action === "wait" || action === "none") {
       return;
     }
-    this.loadRetries++;
     if (action === "report") {
       this.diagnostics.record("load-stalled");
       this.hooks.log("webview-load-stalled", {
@@ -777,6 +766,8 @@ export class MacosWebview {
     this.diagnostics.record("load-retried", {
       progress: this.objc.double(this.webview, "estimatedProgress"),
     });
+    // The reissued load may never reach the policy callback, so `check` already restarted the
+    // stall clock and `requested` keeps it instead of waiting for a decision.
     this.loadHome();
   }
   /**

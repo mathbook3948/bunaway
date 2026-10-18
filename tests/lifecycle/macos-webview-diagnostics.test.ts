@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   MAX_LOAD_RETRIES,
   PROVISIONAL_STALL_MS,
+  StalledLoadClock,
   stalledLoadAction,
   WebviewDiagnostics,
   webviewError,
@@ -52,6 +53,69 @@ test("a stalled initial load is reissued a bounded number of times and reported 
     "none",
     "none",
   ]);
+});
+
+test("reissued loads without a policy callback keep retrying and end in one report", () => {
+  const clock = new StalledLoadClock();
+  clock.requested();
+  expect(clock.check(10_000)).toBe("wait");
+  clock.policyAllowed(10_000);
+  expect(clock.check(10_000 + PROVISIONAL_STALL_MS - 1)).toBe("wait");
+  const actions: string[] = [];
+  let now = 10_000;
+  // After the first reissue no policy callback arrives again: only the clock drives the rest.
+  for (let step = 0; step < MAX_LOAD_RETRIES + 2; step++) {
+    now += PROVISIONAL_STALL_MS;
+    actions.push(clock.check(now));
+    expect(clock.check(now + PROVISIONAL_STALL_MS - 1)).toBe(
+      actions.at(-1) === "retry" ? "wait" : "none",
+    );
+  }
+  expect(actions).toEqual([
+    "retry",
+    "retry",
+    "retry",
+    "report",
+    "none",
+  ]);
+});
+
+test("the request that follows a retry keeps the restarted clock, a new request clears it", () => {
+  const clock = new StalledLoadClock();
+  clock.requested();
+  clock.policyAllowed(0);
+  expect(clock.check(PROVISIONAL_STALL_MS)).toBe("retry");
+  clock.requested();
+  expect(clock.check(PROVISIONAL_STALL_MS * 2)).toBe("retry");
+  clock.requested();
+  expect(clock.check(PROVISIONAL_STALL_MS * 3)).toBe("retry");
+  expect(clock.check(PROVISIONAL_STALL_MS * 4)).toBe("report");
+  clock.resetBudget();
+  clock.requested();
+  expect(clock.check(PROVISIONAL_STALL_MS * 5)).toBe("wait");
+});
+
+test("a late policy decision does not move the clock of a reissued load", () => {
+  const clock = new StalledLoadClock();
+  clock.requested();
+  clock.policyAllowed(0);
+  expect(clock.check(PROVISIONAL_STALL_MS)).toBe("retry");
+  clock.policyAllowed(PROVISIONAL_STALL_MS + 2000);
+  expect(clock.check(PROVISIONAL_STALL_MS * 2)).toBe("retry");
+});
+
+test("a reload after a crash waits for its policy decision and gets a new budget", () => {
+  const clock = new StalledLoadClock();
+  clock.requested();
+  clock.policyAllowed(0);
+  for (let step = 1; step <= MAX_LOAD_RETRIES + 1; step++) {
+    clock.check(PROVISIONAL_STALL_MS * step);
+  }
+  clock.resetBudget();
+  clock.requested();
+  expect(clock.check(PROVISIONAL_STALL_MS * 10)).toBe("wait");
+  clock.policyAllowed(PROVISIONAL_STALL_MS * 10);
+  expect(clock.check(PROVISIONAL_STALL_MS * 11)).toBe("retry");
 });
 
 test("native error diagnostics preserve signed codes and redact unrecognized domains", () => {
