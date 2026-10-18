@@ -1,8 +1,12 @@
 import { dlopen } from "bun:ffi";
-import { COINIT_APARTMENTTHREADED, OLE32, pick } from "@bunaway/plugin/win32";
 import { ResourceOwner } from "@bunaway/plugin";
+import { COINIT_APARTMENTTHREADED, OLE32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import { createFiles } from "#opener/platforms/windows-file";
+import {
+  createUrlHandlerQuery,
+  type UrlHandler,
+} from "#opener/platforms/windows-handler";
 import {
   normalizeApplicationPath,
   normalizeFilePath,
@@ -52,11 +56,15 @@ export function initialize() {
   const recent = owner.acquire(createRecentDocuments, (resource) =>
     resource.dispose(),
   );
+  const handlers = owner.acquire(createUrlHandlerQuery, (resource) =>
+    resource.dispose(),
+  );
   return {
     owner,
     shell,
     files,
     recent,
+    handlers,
   };
 }
 
@@ -75,6 +83,21 @@ export function openUrl(state: State, url: string): null {
   active(state);
   state.shell.open(normalizeUrl(url));
   return null;
+}
+
+/**
+ * Look up the application registered for the URL scheme without starting it. The call is
+ * synchronous and not interruptible, so cancellation is checked only before it starts.
+ */
+export function getUrlHandler(
+  state: State,
+  url: string,
+  signal?: AbortSignal,
+): UrlHandler | null {
+  active(state);
+  notCancelled(signal);
+  const scheme = new URL(normalizeUrl(url)).protocol.slice(0, -1);
+  return state.handlers.query(scheme);
 }
 
 export function openFile(state: State, path: string): null {

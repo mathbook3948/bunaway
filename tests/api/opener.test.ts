@@ -292,6 +292,9 @@ test("opener preserves strict inputs and independently granted file operations",
     {
       name: "opener.clearRecentDocuments",
     },
+    {
+      name: "opener.getUrlHandler",
+    },
   ]);
   expect(Object.keys(operation)).toEqual([
     "name",

@@ -1,6 +1,7 @@
 import type { NativeInvokeOptions, NativePluginAPI } from "@bunaway/plugin";
 import type { windowsOperations } from "#opener/operations";
 import { normalizeMacosFilePath } from "#opener/platforms/macos-path";
+import type { UrlHandler } from "#opener/platforms/windows-handler";
 import {
   normalizeApplicationPath,
   normalizeFilePath,
@@ -24,6 +25,23 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
     options?: NativeInvokeOptions,
   ): Promise<null> {
     return api.openUrl(
+      {
+        url: normalizeUrl(url),
+      },
+      options,
+    );
+  }
+
+  /**
+   * Look up the application the OS associates with the URL scheme, without opening the URL
+   * or starting the app. Resolves null when no application handles the scheme. The result
+   * exposes the executable path, so it has its own permission. Windows only.
+   */
+  async function getUrlHandler(
+    url: string,
+    options?: NativeInvokeOptions,
+  ): Promise<UrlHandler | null> {
+    return api.getUrlHandler(
       {
         url: normalizeUrl(url),
       },
@@ -128,6 +146,7 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
   return {
     addRecentDocument,
     clearRecentDocuments,
+    getUrlHandler,
     trashFile,
     openUrl,
     openFile,

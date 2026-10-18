@@ -71,6 +71,16 @@ I/O 연결은 PR #164에 의존합니다. 플랫폼별 바인딩과 네이티브
 macOS 요청 실패는 아직 조사 중이며 네이티브 CI 통과 전에는 실행 검증 완료로 보지 않습니다.
 macOS 휴지통은 제공하지 않습니다. 커스텀 URL 스킴, 딥링크 등록과 설치 프로그램 변경은 이 패키지의 범위가 아닙니다.
 
+## URL 처리 앱 조회
+
+`getUrlHandler(url: string, options?: NativeInvokeOptions): Promise<{ name: string; path: string } | null>`은
+`openUrl`과 같은 URL 검증 뒤 scheme에 연결된 앱의 표시 이름과 실행 파일 경로를 반환하고, 연결이 없으면
+`null`입니다. 앱을 실행하거나 URL을 열지 않습니다. Host operation과 권한은 `opener.getUrlHandler`이며
+경로가 노출되므로 `opener.openUrl`과 별개입니다. 화면의 직접 호출에는 `plugin.opener.getUrlHandler`
+명령도 허용합니다. Windows는 `AssocQueryStringW(ASSOCF_IS_PROTOCOL)`로 조회하고 연결 없음
+(`ERROR_NO_ASSOCIATION`)만 `null`, 다른 실패와 제어 문자가 있는 문자열은 `INTERNAL`입니다. 아이콘은
+반환하지 않으며 macOS는 지원하지 않습니다.
+
 ## 지정 앱
 
 `openFileWith(path: string, app: string, options?: NativeInvokeOptions): Promise<null>`과

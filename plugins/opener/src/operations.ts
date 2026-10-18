@@ -4,6 +4,7 @@ import {
   emptyInput,
   fileInput,
   fileWithAppSchema,
+  urlHandlerSchema,
   urlInput,
   urlWithAppSchema,
 } from "#opener/contract";
@@ -16,6 +17,7 @@ import {
 import {
   addRecentDocument as addWindowsRecentDocument,
   clearRecentDocuments as clearWindowsRecentDocuments,
+  getUrlHandler as getWindowsUrlHandler,
   type initialize as initializeWindows,
   openFile as openWindowsFile,
   openFileWith as openWindowsFileWith,
@@ -74,6 +76,12 @@ export const windowsOperations = {
     output: z.null(),
     handler: (_input, { instance, signal }) =>
       clearWindowsRecentDocuments(instance, signal),
+  }),
+  getUrlHandler: windowsOperation({
+    input: urlInput,
+    output: urlHandlerSchema.nullable(),
+    handler: ({ url }, { instance, signal }) =>
+      getWindowsUrlHandler(instance, url, signal),
   }),
 };
 export const macosOperations = {
