@@ -40,7 +40,7 @@ async function sources(): Promise<string[]> {
       cwd: root,
     })) {
       if (!/(^|\/)(node_modules|dist|\.git)\//.test(file)) {
-        files.push(file);
+        files.push(file.replaceAll("\\", "/"));
       }
     }
   }
