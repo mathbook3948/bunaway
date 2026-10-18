@@ -1,7 +1,7 @@
 import type { NativeInvokeOptions, NativePluginAPI } from "@bunaway/plugin";
 import type { windowsOperations } from "#opener/operations";
 import { normalizeMacosFilePath } from "#opener/platforms/macos-path";
-import type { UrlHandler } from "#opener/platforms/windows-handler";
+import type { UrlHandler } from "#opener/platforms/windows-handler-query";
 import {
   normalizeApplicationPath,
   normalizeFilePath,

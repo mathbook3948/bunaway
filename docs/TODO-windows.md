@@ -420,11 +420,12 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] URL의 연결 앱 이름과 실행 정보를 조회한다.
   `opener.getUrlHandler(url)`은 `openUrl`과 같은 URL 검증 뒤 scheme 기준으로
   `AssocQueryStringW(ASSOCF_IS_PROTOCOL)`을 호출해 `{ name, path }`(표시 이름과 실행 파일 경로)를
-  반환하며 연결이 없으면 `null`이다. 앱을 실행하지 않고 URL도 열지 않는다. 파일 경로가
+  반환하며 처리 앱이 없으면 `null`이다. 앱을 실행하지 않고 URL도 열지 않는다. 파일 경로가
   노출되므로 `opener.openUrl`과 분리된 `opener.getUrlHandler` 권한을 요구한다. 아이콘은
-  반환하지 않으며 HTTP와 HTTPS scheme만 조회한다. 이름과 경로 중 하나라도 연결이 없거나 등록된 실행 파일이 없으면
-  `null`이다. macOS는 지원하지 않는다. Windows 실행은 `host:windows`의 opener lifecycle
-  회귀가 결과 구조와 연결 없음 `null`만 확인하며, 처리 앱의 종류는 환경별로 다르다.
+  반환하지 않으며 HTTP와 HTTPS scheme만 조회한다. 조회 실패, 빈 값, 상한 초과와 제어 문자는
+  Electron과 Chromium처럼 실패 코드를 구분하지 않고 모두 `null`이다. macOS는 지원하지 않는다.
+  Windows 실행은 `host:windows`의 opener lifecycle 회귀가 결과 구조와 연결 없음 `null`만
+  확인하며, 처리 앱의 종류는 환경별로 다르다. 오류 분류는 `api` 단위 테스트가 검증한다.
 - [ ] AppUserModelID와 toast activation 식별자를 설정하고 설치와 일치시킨다.
 - [x] Recent Documents의 추가와 삭제를 제공한다. 조회는 지원하지 않는다.
   `opener.addRecentDocument`는 기존 파일 검사와 핸들 고정 뒤 `SHAddToRecentDocs(SHARD_PATHW)`를,

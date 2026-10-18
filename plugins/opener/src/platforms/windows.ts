@@ -3,10 +3,8 @@ import { ResourceOwner } from "@bunaway/plugin";
 import { COINIT_APARTMENTTHREADED, OLE32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import { createFiles } from "#opener/platforms/windows-file";
-import {
-  createUrlHandlerQuery,
-  type UrlHandler,
-} from "#opener/platforms/windows-handler";
+import { createUrlHandlerQuery } from "#opener/platforms/windows-handler";
+import type { UrlHandler } from "#opener/platforms/windows-handler-query";
 import {
   normalizeApplicationPath,
   normalizeFilePath,

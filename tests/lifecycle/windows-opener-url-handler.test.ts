@@ -2,10 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdir, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import createOperationsDefinition from "#plugins/opener/src/index";
-import {
-  createUrlHandlerQuery,
-  MAX_HANDLER_TEXT_UNITS,
-} from "#plugins/opener/src/platforms/windows-handler";
+import { createUrlHandlerQuery } from "#plugins/opener/src/platforms/windows-handler";
+import { MAX_HANDLER_TEXT_UNITS } from "#plugins/opener/src/platforms/windows-handler-query";
 import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
 
 const createOperations = createOperationsFactory(

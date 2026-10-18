@@ -789,7 +789,8 @@ DPI 변경과 전체화면 진입 및 종료 뒤의 마지막 8개 상태를 출
 Explorer와 compiled helper로 파일 및 HTTP/HTTPS URL 하나의 argv 보존과 Job 밖의 실행,
 앱 종료 뒤 helper 생존을 확인한다. 두 검사와 기존 opener STA 검사는 `host:windows`에도 포함한다.
 `api/opener-url-handler.test.ts`는 `opener.getUrlHandler`의 strict Zod 입력, 독립 권한과 호출 컨텍스트를
-확인한다. Windows의 `lifecycle/windows-opener-url-handler.test.ts`는 https 조회가 `null` 또는
+확인한다. `api/opener-url-handler-query.test.ts`는 주입한 `AssocQueryStringW` 결과로 HRESULT 실패,
+빈 값, 상한 초과, 제어 문자와 크기 변경 재시도가 모두 `null`이 되는지 확인한다. Windows의 `lifecycle/windows-opener-url-handler.test.ts`는 https 조회가 `null` 또는
 `{ name, path }` 구조인지, 연결이 없는 scheme이 `null`인지, 잘못된 URL 거부와 dispose 뒤 호출 취소를
 `host:windows`에서 확인한다. 처리 앱의 종류는 러너마다 다르므로 값은 검증하지 않는다.
 `lifecycle/windows-opener-recent.test.ts`는 `opener.addRecentDocument`와 `opener.clearRecentDocuments`의
