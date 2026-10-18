@@ -132,5 +132,11 @@ CI 실행 [37574470840](https://github.com/mathbook3948/bunaway/actions/runs/375
 
 | 구간 | 실행 횟수 | 정지 횟수 | 실행 링크 |
 | --- | --- | --- | --- |
-| 수정 전 | 측정 중 | 측정 중 | 측정 중 |
-| 수정 후 | 측정 중 | 측정 중 | 측정 중 |
+| 수정 전 (1c3776cc) | 2 | 2 | [run 39129532113](https://github.com/mathbook3948/bunaway/actions/runs/39129532113) attempt 1(`index.html` 도착 45초 초과, `main` provisional:false)과 attempt 2(main 페이지 10초 초과, 5/10/15초 checkpoint 모두 provisional:false) |
+| 수정 후 (b71ea308, 호스트 소스는 3aea32d8과 동일) | 5 | 0 | [run 39131976667](https://github.com/mathbook3948/bunaway/actions/runs/39131976667) attempt 1 내지 4, [run 39130714384](https://github.com/mathbook3948/bunaway/actions/runs/39130714384)(3aea32d8)의 macOS 잡 |
+
+수정 전 2회는 같은 head를 같은 잡으로 연속 재실행한 결과이고 둘 다 정지했다. 이슈에 기록된 두 관찰까지 더하면 정지 4회다.
+수정은 초기 load 뒤 3초 안에 provisional 단계가 시작되지 않을 때 같은 요청을 다시 발행한다(뷰마다 최대 3번).
+수정 후 5회(두 head의 macOS 잡, 두 fixture 모두)는 연속 통과했다. 표본이 작아 정지 확률이 0이라고 결론짓지는 않으며,
+통과한 실행의 로그에는 `load-retried` 발생 여부를 따로 집계하지 않았다. 정지가 남아 있으면 `webview-load-stalled`와
+`load-retried` 기록, 5/10/15초 checkpoint로 WebKit 정지와 코드 회귀를 구분한다. 기한은 늘리지 않았다.
