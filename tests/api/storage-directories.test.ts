@@ -328,6 +328,7 @@ test("malformed native directory batches are rejected", () => {
     beyondBuffer,
     unaligned,
     oddName,
+    record("negative.bin", 0, -1n),
     record("x".repeat(256)),
   ]) {
     expect(() => directoryEntries(invalid)).toThrow();

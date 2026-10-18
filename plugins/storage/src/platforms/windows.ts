@@ -427,11 +427,20 @@ export class WindowsStorage
    * every handle gone (such as a test removing its tree) await it.
    */
   override dispose(): Promise<void> {
-    super.dispose();
-    if (this.bindingsClosed) {
+    try {
+      super.dispose();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    if (!this.activeScans) {
       return Promise.resolve();
     }
-    return new Promise((resolve) => this.drainWaiters.push(resolve));
+    return new Promise((resolve, reject) =>
+      this.drainWaiters.push({
+        resolve,
+        reject,
+      }),
+    );
   }
   protected release(): void {
     this.releaseRequested = true;
@@ -440,24 +449,42 @@ export class WindowsStorage
     }
   }
   /** Callers of dispose waiting for running scans to finish closing their handles. */
-  private readonly drainWaiters: (() => void)[] = [];
+  private readonly drainWaiters: {
+    resolve: () => void;
+    reject: (error: unknown) => void;
+  }[] = [];
+  /** Each binding is marked closed only after its close succeeded, so a failed release can be retried. */
+  private apiClosed = false;
   private closeBindings(): void {
-    if (this.bindingsClosed) {
-      return;
+    if (this.fileApi) {
+      this.fileApi.close();
+      this.fileApi = null;
     }
-    this.bindingsClosed = true;
-    this.fileApi?.close();
-    this.fileApi = null;
-    this.api.close();
+    if (!this.apiClosed) {
+      this.api.close();
+      this.apiClosed = true;
+    }
   }
-  private bindingsClosed = false;
+  /**
+   * Account for one finished scan. The last scan after disposal releases the bindings; a release
+   * failure goes to the dispose callers and never replaces the scan's own result.
+   */
   private finishScan(): void {
     this.activeScans--;
-    if (this.releaseRequested && !this.activeScans) {
+    if (!this.releaseRequested || this.activeScans) {
+      return;
+    }
+    const waiters = this.drainWaiters.splice(0);
+    try {
       this.closeBindings();
-      for (const resolve of this.drainWaiters.splice(0)) {
-        resolve();
+    } catch (error) {
+      for (const waiter of waiters) {
+        waiter.reject(error);
       }
+      return;
+    }
+    for (const waiter of waiters) {
+      waiter.resolve();
     }
   }
   private check(value: number | bigint, message: string): void {
@@ -643,10 +670,18 @@ export class WindowsStorage
    * The scan yields to the event loop periodically so cancellation and deadlines take effect while
    * it runs; every handle is closed on success, failure and cancellation.
    */
-  async directorySize(
+  directorySize(
     input: StorageLocation,
     signal?: AbortSignal,
-    limits: DirectorySizeLimits = DIRECTORY_SIZE_LIMITS,
+  ): Promise<StorageDirectorySize> {
+    return this.directorySizeWithin(input, signal, DIRECTORY_SIZE_LIMITS);
+  }
+
+  /** The scan behind directorySize with explicit cost bounds, so tests can use small ones. */
+  async directorySizeWithin(
+    input: StorageLocation,
+    signal: AbortSignal | undefined,
+    limits: DirectorySizeLimits,
   ): Promise<StorageDirectorySize> {
     this.requireOpen();
     this.activeScans++;

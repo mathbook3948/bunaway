@@ -56,6 +56,31 @@ export function directoryEntries(buffer: Buffer): StorageDirectoryEntry[] {
   }));
 }
 
+/** Reject records whose offsets, name length or size cannot be valid before any field is used. */
+function checkEntry(
+  buffer: Buffer,
+  offset: number,
+  nextOffset: number,
+  nameBytes: number,
+): void {
+  const recordEnd = nextOffset ? offset + nextOffset : buffer.length;
+  if (
+    recordEnd > buffer.length ||
+    (nextOffset &&
+      (nextOffset < ENTRY_HEADER_BYTES ||
+        nextOffset % ENTRY_ALIGNMENT_BYTES)) ||
+    nameBytes === 0 ||
+    nameBytes % WCHAR_BYTES ||
+    nameBytes > MAX_FILENAME_CHARACTERS * WCHAR_BYTES ||
+    offset + ENTRY_HEADER_BYTES + nameBytes > recordEnd
+  ) {
+    throw new Error("Invalid native directory entry bounds.");
+  }
+  if (buffer.readBigInt64LE(offset + ENTRY_END_OF_FILE_OFFSET) < 0n) {
+    throw new Error("Invalid native directory entry size.");
+  }
+}
+
 /** Decode one native FILE_ID_BOTH_DIR_INFO batch, checking offsets before reading names. */
 export function scanDirectoryEntries(buffer: Buffer): ScannedDirectoryEntry[] {
   const entries: ScannedDirectoryEntry[] = [];
@@ -66,19 +91,7 @@ export function scanDirectoryEntries(buffer: Buffer): ScannedDirectoryEntry[] {
     }
     const nextOffset = buffer.readUInt32LE(offset);
     const nameBytes = buffer.readUInt32LE(offset + ENTRY_NAME_BYTES_OFFSET);
-    const recordEnd = nextOffset ? offset + nextOffset : buffer.length;
-    if (
-      recordEnd > buffer.length ||
-      (nextOffset &&
-        (nextOffset < ENTRY_HEADER_BYTES ||
-          nextOffset % ENTRY_ALIGNMENT_BYTES)) ||
-      nameBytes === 0 ||
-      nameBytes % WCHAR_BYTES ||
-      nameBytes > MAX_FILENAME_CHARACTERS * WCHAR_BYTES ||
-      offset + ENTRY_HEADER_BYTES + nameBytes > recordEnd
-    ) {
-      throw new Error("Invalid native directory entry bounds.");
-    }
+    checkEntry(buffer, offset, nextOffset, nameBytes);
     const name = buffer
       .subarray(
         offset + ENTRY_HEADER_BYTES,

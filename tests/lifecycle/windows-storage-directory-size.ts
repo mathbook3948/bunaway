@@ -158,21 +158,21 @@ try {
 
   // Limits fail the whole operation; the injected values keep the fixture small.
   await expectRejected(
-    storage.directorySize(at("tree"), undefined, {
+    storage.directorySizeWithin(at("tree"), undefined, {
       entries: 4,
       depth: MAX_DIRECTORY_SIZE_DEPTH,
     }),
     "INVALID_ARGUMENT",
   );
   await expectRejected(
-    storage.directorySize(at("tree"), undefined, {
+    storage.directorySizeWithin(at("tree"), undefined, {
       entries: MAX_DIRECTORY_SIZE_ENTRIES,
       depth: 2,
     }),
     "INVALID_ARGUMENT",
   );
   assert.deepEqual(
-    await storage.directorySize(at("tree"), undefined, {
+    await storage.directorySizeWithin(at("tree"), undefined, {
       entries: 7,
       depth: 3,
     }),
