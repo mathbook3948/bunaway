@@ -4,4 +4,5 @@ export {
   runExchange,
   runIsOnline,
   runRequest,
+  runResolveHost,
 } from "#network/platforms/shared";

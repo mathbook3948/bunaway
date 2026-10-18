@@ -4,6 +4,7 @@ import type { z } from "zod";
 import type {
   exchangeInputSchema,
   requestInputSchema,
+  resolveHostInputSchema,
 } from "#network/contract";
 import { request } from "#network/platforms/http";
 import {
@@ -12,11 +13,13 @@ import {
   startIntervalPolling,
   watchOnline,
 } from "#network/platforms/online-state";
+import { resolveHost } from "#network/platforms/resolve-host";
 import { exchange } from "#network/platforms/websocket";
 
 const MAX_ACTIVE_REQUESTS = 16;
 type RequestInput = z.output<typeof requestInputSchema>;
 type ExchangeInput = z.output<typeof exchangeInputSchema>;
+type ResolveHostInput = z.output<typeof resolveHostInputSchema>;
 
 /**
  * Own cancellable requests on the selected host thread. Hosts with system event services also
@@ -150,6 +153,17 @@ export function runExchange(
 ) {
   return run(state, input.timeoutMs, signal, (activeSignal) =>
     exchange(input, activeSignal),
+  );
+}
+
+/** Resolve a host name with the system resolver under the shared request limit and deadline. */
+export function runResolveHost(
+  state: ReturnType<typeof initialize>,
+  input: ResolveHostInput,
+  signal?: AbortSignal,
+) {
+  return run(state, input.timeoutMs, signal, (activeSignal) =>
+    resolveHost(input.host, activeSignal),
   );
 }
 

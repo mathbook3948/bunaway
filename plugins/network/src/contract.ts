@@ -168,6 +168,44 @@ export const exchangeResultSchema = z.strictObject({
     wasClean: z.boolean(),
   }),
 });
+/** Longest DNS name and label in octets, RFC 1035. */
+const MAX_HOST_LENGTH = 253;
+const MAX_HOST_LABEL_LENGTH = 63;
+/** Upper bound on addresses returned for one name. Extra addresses are dropped in resolver order. */
+export const MAX_RESOLVED_ENDPOINTS = 64;
+const hostLabel = new RegExp(
+  `^[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,${MAX_HOST_LABEL_LENGTH - 2}}[A-Za-z0-9_])?$`,
+);
+/** `network.resolveHost` input: an ASCII host name or IPv4 literal, with no scheme, port or path. */
+export const resolveHostInputSchema = z.strictObject({
+  host: z
+    .string()
+    .min(1)
+    .max(MAX_HOST_LENGTH + 1)
+    .refine((value) => {
+      const name = value.endsWith(".") ? value.slice(0, -1) : value;
+      return (
+        name.length > 0 &&
+        name.length <= MAX_HOST_LENGTH &&
+        name.split(".").every((label) => hostLabel.test(label))
+      );
+    }, "Expected an ASCII host name; convert international names to punycode."),
+  timeoutMs,
+});
+/** Addresses in resolver order, shaped like Electron `net.resolveHost()`. */
+export const resolveHostResultSchema = z.strictObject({
+  endpoints: z
+    .array(
+      z.strictObject({
+        address: z.string().min(1).max(64),
+        family: z.enum([
+          "ipv4",
+          "ipv6",
+        ]),
+      }),
+    )
+    .max(MAX_RESOLVED_ENDPOINTS),
+});
 /** `network.isOnline` result: whether a non-loopback network connection exists. */
 export const onlineSchema = z.boolean();
 /** Native events use the protocol's portable schema representation. */
