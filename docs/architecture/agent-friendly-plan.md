@@ -56,6 +56,7 @@ PR당 리뷰 라운드는 최대 6회(opener), 5회(windows aspect ratio)였다.
 | 배포 목록 누락 | 테스트 | `git ls-files` 기준 대조, `native/ios` 포함, 사라진 항목 거부 |
 | 플랫폼마다 복제된 storage 인코딩 facade, 상한 2중 선언, disposed 가드 3중 | 구조 + 테스트(ratchet) | `StorageFiles` 베이스 클래스가 facade 6개, 4 MiB 상한, 가드를 한 번 소유하고 플랫폼은 `readFile`, `writeFile`, `release`만 구현. operations는 `StorageInstance` 인터페이스로 타입. `plugin-structure.test.ts`가 중립 모듈의 플랫폼 타입 import(10파일)를 기준값 이하로 묶는다 |
 | FFI 심볼을 플러그인마다 다른 핸들과 BOOL 규칙으로 재선언 | 구조 + 테스트(ratchet) | clipboard, 창, 전역 메모리, 이벤트 함수는 `@bunaway/plugin/win32`의 `USER32`, `KERNEL32`에, 로더와 Objective-C 런타임은 새 `@bunaway/plugin/darwin`의 `LIBSYSTEM`, `OBJC_RUNTIME`에 한 번 선언하고 호스트와 플러그인 9개 파일이 `pick`으로 가져온다. `Hwnd`, `Handle` 브랜드 타입을 생성 지점에 적용. `KNOWN_CONFLICTS`는 12개에서 0개로 줄었고 새 충돌은 즉시 실패 |
+| 플러그인을 복사해 만들다 `framework.json`, 루트 `package.json`, reference-map 중 하나를 빠뜨림 | 구조 + 테스트 | `bunaway plugin new <name>`(`createNativePlugin`)이 workspace 파일 8개와 문서 페이지를 만들고 매니페스트 3개에 등록한다. 생성물은 Biome 포맷, 타입 검사, 플러그인 빌드, `tests/conformance`, 문서 레퍼런스 검사를 그대로 통과한다. `tests/cli/plugin-new.test.ts`가 임시 저장소에서 생성, 빌드, 등록과 이름 거부를 확인한다 |
 | 테스트 기한 리터럴의 복제와 반복 수정 | 구조 + 테스트(ratchet) | `tests/fixtures/deadlines.ts`가 기한 7개를 소유하고 `BUNAWAY_TEST_TIME_SCALE`로 배율 적용. 테스트 타임아웃은 파일당 `setDefaultTimeout(deadline(...))` 하나. `test-deadlines.test.ts`가 파일별 리터럴 기한(213곳 127파일에서 114곳 83파일로)과 자체 폴러(29개에서 26개로)를 기준값 이하로 묶는다 |
 | Linux에서 앱 동작 증명 불가 | 검증 스킬 | `verify-bunaway`: 패킹한 CLI로 프로젝트 생성, 프로세스 프로토콜로 백엔드 구동, SDK 채널로 명령과 이벤트, 증거 기록 |
 
@@ -105,11 +106,11 @@ FFI 바인딩이 닫힌 뒤의 호출을 위해 베이스 클래스에 한 번 �
 타입 검사, clipboard의 가짜 FFI 테스트까지 확인했고 실제 호출은 `windows-native`,
 `macos-native` CI 작업이 검증한다.
 
-### 3.5 플러그인 스캐폴드 (S)
+### 3.5 플러그인 스캐폴드 (S): 2절로 옮김
 
-`bunaway plugin new <name>`이 `package.json`, tsconfig, `contract.ts`, `operations.ts`,
-`platforms/windows.ts`, `platforms/macos.ts`, 문서 페이지와 reference-map 항목을 만든다.
-"복사해서 만드는" 경로 자체를 바꾸므로 workspace 테스트가 잡는 누락이 처음부터 안 생긴다.
+스캐폴드는 `tests/api/<name>.test.ts`를 만들지 않는다. 계약 테스트는 작업 내용에 따라 달라서
+README에 파일 이름만 적어 둔다. 생성된 `operations.ts`는 3.2의 인스턴스 인터페이스 형태라
+`plugin-structure` ratchet 목록에 들어가지 않는다.
 
 ## 4. 하지 않기로 한 것
 

@@ -46,7 +46,8 @@ Linux에서는 Windows와 macOS 전용 테스트가 skip되므로 네이티브 �
 | 패키징 (`packages/packaging`) | `bun test tests/packaging` | Windows 설치기는 CI `Check (windows-2022)`, DMG는 `macos-native` |
 | Android, iOS (`native/android`, `native/ios`) | `bun test tests/lifecycle/android tests/lifecycle/ios tests/cli/android.test.ts tests/cli/ios.test.ts` | `mise run host:android`, `mise run host:ios -- <Simulator UUID>` |
 | 문서 (`docs/site`, 공개 API 추가) | `bun run docs:check`, `bun run docs:build`, `docs/site/src/reference-map.json` 갱신 | 없음 |
-| 새 workspace, `framework.json`, 루트 `package.json`, `biome.json`, workspace tsconfig | `bun test tests/conformance` | 없음 |
+| 새 플러그인 workspace | `bunaway plugin new <name>`으로 생성, `bun test tests/conformance tests/cli/plugin-new`, `bun run docs:check` | 없음 |
+| `framework.json`, 루트 `package.json`, `biome.json`, workspace tsconfig | `bun test tests/conformance` | 없음 |
 | 테스트 추가, 기한 변경 | `bun test tests/conformance/test-deadlines`, 바뀐 테스트 파일 | 해당 OS의 fixture는 그 OS에서 |
 | 모든 변경 | `bun test tests/docs` (텍스트 스타일), `mise run check` | 해당 없음 |
 

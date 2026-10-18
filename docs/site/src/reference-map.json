@@ -159,6 +159,7 @@
           "validateProject",
           "buildProject",
           "buildNativePlugin",
+          "createNativePlugin",
           "buildAndroidProject",
           "syncAndroidProject",
           "runAndroidProject",

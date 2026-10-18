@@ -9,6 +9,7 @@ import { parseDevArguments } from "./dev.ts";
 import {
   buildNativePlugin,
   buildProject,
+  createNativePlugin,
   createProject,
   devProject,
   doctor,
@@ -28,6 +29,7 @@ const help = `bunaway (vanilla / Vite / React / Vue / Svelte)
   package <channel> [dir] Package a build artifact for a channel [--build]
   doctor [directory]      Check project, runtime version and native tools
   plugin build [dir]     Build a native plugin package from src/index.ts
+  plugin new <name>      Scaffold and register a plugin workspace in this repository
   android sync [dir]     Create or refresh the editable Android Studio project
   android build [dir]    Sync and build an experimental Android debug APK on Windows
   android run [dir]      Build, install and start the APK [--serial <device>]
@@ -112,12 +114,24 @@ export async function main(args: string[]): Promise<number> {
     return 0;
   }
   if (command === "plugin") {
-    const [action, directory, ...extra] = rest;
-    if (action !== "build" || extra.length || directory?.startsWith("--")) {
-      throw new Error("Usage: bunaway plugin build [directory].");
+    const [action, argument, ...extra] = rest;
+    const usage =
+      "Usage: bunaway plugin build [directory] | plugin new <name>.";
+    if (extra.length || argument?.startsWith("--")) {
+      throw new Error(usage);
     }
-    console.log(`Built ${await buildNativePlugin(directory ?? ".")}`);
-    return 0;
+    if (action === "build") {
+      console.log(`Built ${await buildNativePlugin(argument ?? ".")}`);
+      return 0;
+    }
+    if (action === "new" && argument) {
+      const files = await createNativePlugin(argument);
+      console.log(
+        `Created ${files.length} files for plugins/${argument}\nNext: run bun install, then replace the ping operation and its page.`,
+      );
+      return 0;
+    }
+    throw new Error(usage);
   }
   if (command === "android") {
     const [action, ...options] = rest;
