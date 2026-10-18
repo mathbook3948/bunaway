@@ -36,6 +36,21 @@ test.skipIf(process.platform !== "win32")(
         ],
         returns: "u64",
       },
+      FindWindowExW: {
+        args: [
+          "u64",
+          "u64",
+          "ptr",
+          "ptr",
+        ],
+        returns: "u64",
+      },
+      IsWindowVisible: {
+        args: [
+          "u64",
+        ],
+        returns: "i32",
+      },
       GetWindowRect: {
         args: [
           "u64",
@@ -47,9 +62,18 @@ test.skipIf(process.platform !== "win32")(
     const popupClass = Buffer.from(`${POPUP_CLASS}\0`, "utf16le");
     /** Screen rectangle of the open native menu, or null when none is shown. */
     const openMenuRect = () => {
-      const hwnd = user.symbols.FindWindowW(ptr(popupClass), null);
-      if (!hwnd) {
-        return null;
+      // Other hidden windows share the menu class, so only a visible one is the open popup.
+      let hwnd = 0n;
+      for (;;) {
+        hwnd = BigInt(
+          user.symbols.FindWindowExW(0n, hwnd, ptr(popupClass), null),
+        );
+        if (!hwnd) {
+          return null;
+        }
+        if (user.symbols.IsWindowVisible(hwnd)) {
+          break;
+        }
       }
       const rect = new Int32Array(4);
       return user.symbols.GetWindowRect(hwnd, ptr(rect))
