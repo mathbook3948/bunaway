@@ -1363,3 +1363,16 @@ test("fileDialogOptions applies hidden-file and overwrite flags over the OS defa
   );
   expect(everything).toBe((0xffffffff & ~0x2) >>> 0);
 });
+
+test("the operation set has no synchronous or certificate trust variants", () => {
+  // Electron's showCertificateTrustDialog needs a certificate object this project never produces,
+  // and every dialog operation is asynchronous so the backend keeps running while a dialog is open.
+  expect(new Set(Object.keys(dialogOperations))).toEqual(
+    new Set([
+      "openFile",
+      "saveFile",
+      "selectFolder",
+      "showMessage",
+    ]),
+  );
+});
