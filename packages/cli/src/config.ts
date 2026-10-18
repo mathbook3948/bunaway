@@ -9,6 +9,7 @@ import { OUTPUT_TARGETS, outputPaths } from "@bunaway/packaging/paths";
 import { APP_INFO_MAX_LENGTH } from "@bunaway/plugin-api";
 import {
   isRecord,
+  isWindowsExecutableName,
   NativeRegistry,
   type Policy,
   parsePolicy,
@@ -412,13 +413,7 @@ async function loadProject(
       raw.executableName === undefined
         ? `${appId}.exe`
         : string(raw.executableName, "app.executableName");
-    if (
-      // biome-ignore lint/suspicious/noControlCharactersInRegex: Windows file-name restrictions.
-      !/^[^<>:"/\\|?*\x00-\x1f]{1,120}\.exe$/i.test(name) ||
-      /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(name) ||
-      /^unins\d+\.exe$/i.test(name) ||
-      /[. ]\.exe$/i.test(name)
-    ) {
+    if (!isWindowsExecutableName(name, 120) || /^unins\d+\.exe$/i.test(name)) {
       throw new Error(
         raw.executableName === undefined
           ? `Default Windows executable name ${name} is invalid; ` +

@@ -22,8 +22,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import * as windowsTools from "#packaging/channels/windows/common";
-import { verifySignatures } from "#packaging/channels/windows/sign";
 import {
   adapterFor,
   artifactPaths,
@@ -46,6 +44,8 @@ import {
   targetFor,
   verifyArtifact,
 } from "@bunaway/packaging";
+import * as windowsTools from "#packaging/channels/windows/common";
+import { verifySignatures } from "#packaging/channels/windows/sign";
 import { deadline } from "../fixtures/deadlines.ts";
 
 setDefaultTimeout(deadline("childStep"));
@@ -2062,6 +2062,41 @@ test("Windows compiled app hash rejects tampering before adapters run", async ()
   expect(report.ok).toBe(false);
   expect(report.diagnostics.map((d) => d.code)).toContain(CODES.INPUT_TAMPERED);
   expect(ran).toBe(false);
+});
+
+test("Windows host executable names that Windows cannot create are rejected", async () => {
+  const projectRoot = await mkdtemp(join(home, "bun-ffi-bootstrap-"));
+  const manifest = await makeArtifact(projectRoot);
+  const artifact = artifactPaths({
+    root: projectRoot,
+    target: "windows-x64",
+    appId: "app.test",
+  });
+  for (const executable of [
+    "CON.exe",
+    "nul.app.exe",
+    "COM¹.exe",
+    "app. .exe",
+  ]) {
+    const diagnostics = await verifyArtifact({
+      artifact,
+      manifest: {
+        ...manifest,
+        host: {
+          ...manifest.host,
+          executable,
+        },
+      },
+      channel: "win-direct",
+    });
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === CODES.INPUT_UNEXPECTED &&
+          diagnostic.message === "Windows requires a compiled Bun app.",
+      ),
+    ).toBe(true);
+  }
 });
 
 test("missing, partial, empty and non-file outputs fail before replacing previous artifacts", async () => {

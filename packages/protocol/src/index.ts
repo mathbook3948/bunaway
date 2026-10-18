@@ -21,7 +21,6 @@ export {
   AUTOSTART_MUTEX_PREFIX,
   AUTOSTART_MUTEX_WAIT_MS,
 } from "./autostart-launch.ts";
-
 export {
   API_LIMITS,
   type AsyncDispose,
@@ -73,6 +72,13 @@ export {
   type Schema,
   validate as validateValue,
 } from "./validation.ts";
+export {
+  isWindowsExecutableName,
+  isWindowsFileName,
+  isWindowsReservedDeviceName,
+  sanitizeWindowsFileName,
+  WINDOWS_MAX_FILE_NAME_LENGTH,
+} from "./windows-file-name.ts";
 
 /** Messages exchanged between a client and its host over the WebView protocol. */
 export type Message = Infer<typeof messageSchema>;
