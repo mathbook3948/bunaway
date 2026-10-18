@@ -19,7 +19,7 @@ const createOperations = createOperationsFactory(
   "windows",
 );
 
-type Details = Record<string, unknown>;
+type Details = Record<string, string | number>;
 
 async function withAdapter<T>(
   use: (

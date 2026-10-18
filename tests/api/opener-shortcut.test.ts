@@ -136,7 +136,7 @@ test("host inputs are strict", () => {
     },
     {
       ...WRITE,
-      details: undefined,
+      details: null,
     },
     {
       ...WRITE,
