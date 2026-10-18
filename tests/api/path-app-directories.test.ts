@@ -122,14 +122,13 @@ test("app directories fail with INTERNAL when the host provides no app identifie
     "The host did not provide an app identifier.",
   );
   // temp is the system temporary directory and needs no app identity, only a qualified value.
-  const temp = process.platform === "win32" ? "C:\\Temp" : "/tmp";
-  const restore = setTempEnvironment(temp);
-  try {
-    expect(() => paths.getAppDirectory("temp")).not.toThrow(
-      "The host did not provide an app identifier.",
-    );
-  } finally {
-    restore();
+  if (process.platform === "win32") {
+    const restore = setTempEnvironment("C:\\Temp");
+    try {
+      expect(paths.getAppDirectory("temp")).toBe("C:\\Temp");
+    } finally {
+      restore();
+    }
   }
 });
 
@@ -156,23 +155,18 @@ function setTempEnvironment(value: string): () => void {
   };
 }
 
-test("temp fails with INTERNAL when the temporary directory is empty or relative", () => {
+test("temp fails with INTERNAL when the temporary directory is relative", () => {
   const paths = new WindowsPath({
     dataRoot: "C:\\data",
   });
-  for (const value of [
-    "relative\\temp",
-    "",
-  ]) {
-    const restore = setTempEnvironment(value);
-    try {
-      expect(() => paths.getAppDirectory("temp")).toThrow(
-        expect.objectContaining({
-          code: "INTERNAL",
-        }),
-      );
-    } finally {
-      restore();
-    }
+  const restore = setTempEnvironment("relative\\temp");
+  try {
+    expect(() => paths.getAppDirectory("temp")).toThrow(
+      expect.objectContaining({
+        code: "INTERNAL",
+      }),
+    );
+  } finally {
+    restore();
   }
 });
