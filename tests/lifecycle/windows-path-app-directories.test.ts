@@ -12,7 +12,10 @@ function isInside(parent: string | undefined, child: string): boolean {
   }
   const relative = win32.relative(parent, child);
   return (
-    relative !== "" && !relative.startsWith("..") && !win32.isAbsolute(relative)
+    relative !== "" &&
+    relative !== ".." &&
+    !relative.startsWith("..\\") &&
+    !win32.isAbsolute(relative)
   );
 }
 

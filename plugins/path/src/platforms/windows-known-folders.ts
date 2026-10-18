@@ -5,6 +5,7 @@ import type { UserDirectory } from "#path/contract";
 
 const KF_FLAG_DONT_VERIFY = 0x4000;
 const MAX_PATH_WCHAR_BYTES = 32768 * 2;
+
 /** User directories plus the roaming AppData root used only to derive app directories. */
 export type KnownFolder = UserDirectory | "roamingAppData";
 
