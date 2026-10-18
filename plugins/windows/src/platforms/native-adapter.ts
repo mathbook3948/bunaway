@@ -28,6 +28,13 @@ function unsupportedFocusability() {
   });
 }
 
+function unsupportedFullscreenable() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Fullscreenable is not implemented on this platform.",
+  });
+}
+
 function unsupportedControls() {
   return new BunawayError({
     code: "UNSUPPORTED",
@@ -450,13 +457,13 @@ export function createOperations(
         return window.isMaximizable();
       case "windows.setFullscreenable":
         if (!window.setFullscreenable) {
-          throw unsupportedControls();
+          throw unsupportedFullscreenable();
         }
         window.setFullscreenable(call.payload.fullscreenable);
         break;
       case "windows.isFullscreenable":
         if (!window.isFullscreenable) {
-          throw unsupportedControls();
+          throw unsupportedFullscreenable();
         }
         return window.isFullscreenable();
       case "windows.setClosable":
