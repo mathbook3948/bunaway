@@ -257,11 +257,25 @@ test("resolveHost ignores a lookup failure after the caller left", async () => {
   await Bun.sleep(0);
 });
 
-test("resolveHost does not abort-reject after the lookup finished", async () => {
+test("resolveHost leaves no abort listener behind after the lookup finished", async () => {
   const controller = new AbortController();
+  let added = 0;
+  let removed = 0;
+  const add = controller.signal.addEventListener.bind(controller.signal);
+  const remove = controller.signal.removeEventListener.bind(controller.signal);
+  controller.signal.addEventListener = ((...args: Parameters<typeof add>) => {
+    added += 1;
+    add(...args);
+  }) as typeof add;
+  controller.signal.removeEventListener = ((
+    ...args: Parameters<typeof remove>
+  ) => {
+    removed += 1;
+    remove(...args);
+  }) as typeof remove;
   await resolveHost("done.example", controller.signal, async () => []);
-  controller.abort(new Error("late"));
-  await Bun.sleep(0);
+  expect(added).toBe(1);
+  expect(removed).toBe(1);
 });
 
 test("resolveHost propagates a resolver failure", async () => {
@@ -315,8 +329,29 @@ test("runResolveHost ends with TIMEOUT when the resolver is slow", async () => {
   await dispose(state);
 });
 
-test("runResolveHost shares the active request limit and frees the slot on abort", async () => {
+test("runResolveHost bounds running lookups even after their callers left", async () => {
   const state = initialize();
+  const finishers: (() => void)[] = [];
+  const slow = () =>
+    new Promise<
+      {
+        address: string;
+        family: number;
+      }[]
+    >((resolve) => {
+      finishers.push(() =>
+        resolve([
+          {
+            address: "1.2.3.4",
+            family: 4,
+          },
+        ]),
+      );
+    });
+  const input = {
+    host: "slow.example",
+    timeoutMs: deadline("childStep"),
+  };
   const controllers = Array.from(
     {
       length: 16,
@@ -324,36 +359,38 @@ test("runResolveHost shares the active request limit and frees the slot on abort
     () => new AbortController(),
   );
   const held = controllers.map((controller) =>
-    runResolveHost(
-      state,
-      {
-        host: "slow.example",
-        timeoutMs: deadline("childStep"),
-      },
-      controller.signal,
-      never,
-    ),
+    runResolveHost(state, input, controller.signal, slow),
   );
   await expect(
-    runResolveHost(
-      state,
-      {
-        host: "slow.example",
-        timeoutMs: deadline("childStep"),
-      },
-      undefined,
-      never,
-    ),
+    runResolveHost(state, input, undefined, slow),
   ).rejects.toMatchObject({
     code: "BUSY",
   });
-  const first = controllers[0];
-  first?.abort();
+  // Abort frees the request slot, but the started lookup still counts.
+  controllers[0]?.abort();
   await expect(held[0]).rejects.toMatchObject({
     code: "CANCELLED",
   });
-  for (const controller of controllers) {
-    controller.abort();
+  expect(state.active.size).toBe(15);
+  await expect(
+    runResolveHost(state, input, undefined, slow),
+  ).rejects.toMatchObject({
+    code: "BUSY",
+  });
+  // Once that lookup ends, a new call starts.
+  finishers[0]?.();
+  await Bun.sleep(0);
+  const next = runResolveHost(state, input, undefined, slow);
+  finishers[16]?.();
+  await expect(next).resolves.toMatchObject({
+    endpoints: [
+      {
+        address: "1.2.3.4",
+      },
+    ],
+  });
+  for (const finish of finishers) {
+    finish();
   }
   await Promise.allSettled(held);
   await dispose(state);

@@ -187,7 +187,8 @@ Electron `net.resolveHost()`의 `{ endpoints: [{ address, family }] }` 결과 �
   버립니다. `family`는 `"ipv4"` 또는 `"ipv6"`입니다.
 - 이름이 없거나 리졸버가 실패하면 `INTERNAL`입니다. 실패 원인은 구분해 알려주지 않습니다.
 - getaddrinfo는 중간에 멈출 수 없습니다. 취소나 기한 만료는 호출을 즉시 끝내고, 이미 시작한
-  조회는 백그라운드에서 끝납니다.
+  조회는 백그라운드에서 끝납니다. 그런 조회까지 포함해 동시에 진행 중인 조회가 16개이면
+  새 조회는 `BUSY`입니다.
 
 Electron의 `queryType`, `source`, `cacheUsage`, `secureDnsPolicy` 옵션은 제공하지 않습니다.
 Chromium의 자체 DNS 클라이언트와 DNS-over-HTTPS 설정은 사용하지 않고 항상 시스템 리졸버를 씁니다.

@@ -13,7 +13,11 @@ import {
   startIntervalPolling,
   watchOnline,
 } from "#network/platforms/online-state";
-import { type HostLookup, resolveHost } from "#network/platforms/resolve-host";
+import {
+  type HostLookup,
+  resolveHost,
+  systemLookup,
+} from "#network/platforms/resolve-host";
 import { exchange } from "#network/platforms/websocket";
 
 const MAX_ACTIVE_REQUESTS = 16;
@@ -35,6 +39,8 @@ export function initialize(
   const systemEvents = environment?.windows?.systemEvents;
   return {
     active: new Map<AbortController, Promise<unknown>>(),
+    /** Started host lookups, including ones whose caller already left; getaddrinfo cannot be interrupted. */
+    lookups: new Set<Promise<unknown>>(),
     disposed: false,
     stopOnlineWatch: systemEvents
       ? watchOnline({
@@ -156,16 +162,30 @@ export function runExchange(
   );
 }
 
-/** Resolve a host name with the system resolver under the shared request limit and deadline. */
+/** Resolve a host name with the system resolver under the shared request limit and deadline; at most 16 lookups run at once. */
 export function runResolveHost(
   state: ReturnType<typeof initialize>,
   input: ResolveHostInput,
   signal?: AbortSignal,
-  find?: HostLookup,
+  find: HostLookup = systemLookup,
 ) {
-  return run(state, input.timeoutMs, signal, (activeSignal) =>
-    resolveHost(input.host, activeSignal, find),
-  );
+  return run(state, input.timeoutMs, signal, async (activeSignal) => {
+    // A cancelled or timed-out call frees its request slot while its lookup keeps running, so the
+    // running lookups carry their own limit to keep slow resolvers from queueing without bound.
+    if (state.lookups.size >= MAX_ACTIVE_REQUESTS) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "Too many host lookups.",
+      });
+    }
+    return resolveHost(input.host, activeSignal, (host) => {
+      const lookup = find(host);
+      state.lookups.add(lookup);
+      const release = () => state.lookups.delete(lookup);
+      lookup.then(release, release);
+      return lookup;
+    });
+  });
 }
 
 /** Cancel and drain all in-flight work; repeated cleanup is safe. */

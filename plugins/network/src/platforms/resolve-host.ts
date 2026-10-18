@@ -13,7 +13,7 @@ export type HostLookup = (host: string) => Promise<
   }[]
 >;
 
-const systemLookup: HostLookup = (host) =>
+export const systemLookup: HostLookup = (host) =>
   lookup(host, {
     all: true,
   });
@@ -24,7 +24,8 @@ const systemLookup: HostLookup = (host) =>
  * `net.resolveHost()`. Addresses keep resolver order and repeats are removed.
  *
  * getaddrinfo cannot be interrupted. On abort the call rejects at once and the lookup finishes in
- * the background, so cancellation and the deadline do not wait for a slow resolver.
+ * the background, so cancellation and the deadline do not wait for a slow resolver. The caller
+ * bounds those background lookups (see `runResolveHost`).
  */
 export async function resolveHost(
   host: string,
