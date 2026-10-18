@@ -1,4 +1,5 @@
 import { dlopen, read, toArrayBuffer } from "bun:ffi";
+import { KERNEL32, pick, USER32 } from "@bunaway/plugin/win32";
 
 const CF_UNICODETEXT = 13;
 // Longest clipboard text inserted by the host; larger content is refused rather than truncated.
@@ -31,50 +32,20 @@ export type ClipboardTextResult =
  * cannot read past the block.
  */
 export function readClipboardText(): ClipboardTextResult {
-  const native = dlopen("user32.dll", {
-    OpenClipboard: {
-      args: [
-        "u64",
-      ],
-      returns: "i32",
-    },
-    CloseClipboard: {
-      args: [],
-      returns: "i32",
-    },
-    IsClipboardFormatAvailable: {
-      args: [
-        "u32",
-      ],
-      returns: "i32",
-    },
-    GetClipboardData: {
-      args: [
-        "u32",
-      ],
-      returns: "ptr",
-    },
-  });
-  const memory = dlopen("kernel32.dll", {
-    GlobalLock: {
-      args: [
-        "ptr",
-      ],
-      returns: "ptr",
-    },
-    GlobalUnlock: {
-      args: [
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    GlobalSize: {
-      args: [
-        "ptr",
-      ],
-      returns: "u64",
-    },
-  });
+  const native = dlopen(
+    "user32.dll",
+    pick(
+      USER32,
+      "OpenClipboard",
+      "CloseClipboard",
+      "IsClipboardFormatAvailable",
+      "GetClipboardData",
+    ),
+  );
+  const memory = dlopen(
+    "kernel32.dll",
+    pick(KERNEL32, "GlobalLock", "GlobalUnlock", "GlobalSize"),
+  );
   try {
     if (!native.symbols.OpenClipboard(0n)) {
       return {

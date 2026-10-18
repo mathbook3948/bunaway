@@ -8,22 +8,12 @@ export const kernel = dlopen("kernel32.dll", {
     "OpenProcess",
     "WaitForSingleObject",
     "CloseHandle",
+    "GetModuleHandleW",
+    "SetLastError",
   ),
-  GetModuleHandleW: {
-    args: [
-      "ptr",
-    ],
-    returns: "u64",
-  },
   GetCurrentThreadId: {
     args: [],
     returns: "u32",
-  },
-  SetLastError: {
-    args: [
-      "u32",
-    ],
-    returns: "void",
   },
 });
 export const ole = dlopen("ole32.dll", {
@@ -54,6 +44,8 @@ export const user = dlopen("user32.dll", {
     "MessageBoxW",
     "PeekMessageW",
     "PostMessageW",
+    "CreateWindowExW",
+    "DestroyWindow",
   ),
   EnumDisplayMonitors: {
     args: [
@@ -155,23 +147,6 @@ export const user = dlopen("user32.dll", {
       "u64",
     ],
     returns: "i32",
-  },
-  CreateWindowExW: {
-    args: [
-      "u32",
-      "ptr",
-      "ptr",
-      "u32",
-      "i32",
-      "i32",
-      "i32",
-      "i32",
-      "u64",
-      "u64",
-      "u64",
-      "ptr",
-    ],
-    returns: "u64",
   },
   DefWindowProcW: {
     args: [
@@ -355,12 +330,6 @@ export const user = dlopen("user32.dll", {
     args: [
       "u64",
       "ptr",
-    ],
-    returns: "i32",
-  },
-  DestroyWindow: {
-    args: [
-      "u64",
     ],
     returns: "i32",
   },

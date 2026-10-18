@@ -55,6 +55,7 @@ PR당 리뷰 라운드는 최대 6회(opener), 5회(windows aspect ratio)였다.
 | FFI 시그니처 불일치 | 테스트(ratchet) | 새 충돌은 실패, 기존 12개는 줄어들기만 |
 | 배포 목록 누락 | 테스트 | `git ls-files` 기준 대조, `native/ios` 포함, 사라진 항목 거부 |
 | 플랫폼마다 복제된 storage 인코딩 facade, 상한 2중 선언, disposed 가드 3중 | 구조 + 테스트(ratchet) | `StorageFiles` 베이스 클래스가 facade 6개, 4 MiB 상한, 가드를 한 번 소유하고 플랫폼은 `readFile`, `writeFile`, `release`만 구현. operations는 `StorageInstance` 인터페이스로 타입. `plugin-structure.test.ts`가 중립 모듈의 플랫폼 타입 import(10파일)를 기준값 이하로 묶는다 |
+| FFI 심볼을 플러그인마다 다른 핸들과 BOOL 규칙으로 재선언 | 구조 + 테스트(ratchet) | clipboard, 창, 전역 메모리, 이벤트 함수는 `@bunaway/plugin/win32`의 `USER32`, `KERNEL32`에, 로더와 Objective-C 런타임은 새 `@bunaway/plugin/darwin`의 `LIBSYSTEM`, `OBJC_RUNTIME`에 한 번 선언하고 호스트와 플러그인 9개 파일이 `pick`으로 가져온다. `Hwnd`, `Handle` 브랜드 타입을 생성 지점에 적용. `KNOWN_CONFLICTS`는 12개에서 0개로 줄었고 새 충돌은 즉시 실패 |
 | 테스트 기한 리터럴의 복제와 반복 수정 | 구조 + 테스트(ratchet) | `tests/fixtures/deadlines.ts`가 기한 7개를 소유하고 `BUNAWAY_TEST_TIME_SCALE`로 배율 적용. 테스트 타임아웃은 파일당 `setDefaultTimeout(deadline(...))` 하나. `test-deadlines.test.ts`가 파일별 리터럴 기한(213곳 127파일에서 114곳 83파일로)과 자체 폴러(29개에서 26개로)를 기준값 이하로 묶는다 |
 | Linux에서 앱 동작 증명 불가 | 검증 스킬 | `verify-bunaway`: 패킹한 CLI로 프로젝트 생성, 프로세스 프로토콜로 백엔드 구동, SDK 채널로 명령과 이벤트, 증거 기록 |
 
@@ -97,13 +98,12 @@ FFI 바인딩이 닫힌 뒤의 호출을 위해 베이스 클래스에 한 번 �
 협력자로 나눈다. 먼저 `tests/lifecycle/windows-ui-lifecycle.test.ts`(Linux에서 fake로 31개)가
 전이를 집합으로 단정하도록 보강한 뒤 옮긴다.
 
-### 3.4 FFI 핸들 브랜드 타입과 기존 충돌 12개 해소 (M)
+### 3.4 FFI 핸들 브랜드 타입과 기존 충돌 12개 해소 (M): 2절로 옮김
 
-데이터: 핸들이 전부 `bigint`, 충돌 12개.
-
-설계: `type Hwnd = bigint & { readonly __brand: "HWND" }` 등을 `@bunaway/plugin/win32`에 두고
-clipboard 플러그인의 Win32 테이블을 공유 테이블로 옮긴다. 옮길 때마다 ratchet의
-`KNOWN_CONFLICTS`에서 이름을 지운다.
+충돌 12개는 모두 공유 테이블로 해소했다. 남은 것은 호스트 `win32.ts`의 창 핸들에 `Hwnd`
+브랜드를 적용하는 일이며 3.3의 `Windows` 클래스 분할과 함께 한다. Linux에서는 Bun 빌드와
+타입 검사, clipboard의 가짜 FFI 테스트까지 확인했고 실제 호출은 `windows-native`,
+`macos-native` CI 작업이 검증한다.
 
 ### 3.5 플러그인 스캐폴드 (S)
 

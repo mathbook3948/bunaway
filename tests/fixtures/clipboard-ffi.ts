@@ -4,6 +4,7 @@ export { ptr, toArrayBuffer };
 
 // Process-local Win32 replacement. Real native allocations are represented by
 // retained Buffers so the production pointer copy and UTF-16 decoder still run.
+// Results follow the shared tables: BOOL is an i32 and window handles are u64.
 const initialData: Buffer = Buffer.from("old\0", "utf16le");
 export const state = {
   fail: "",
@@ -34,46 +35,48 @@ export function dlopen(name: string) {
   const symbols = {
     CreateWindowExW() {
       if (!succeeds("create")) {
-        return null;
+        return 0n;
       }
       state.windows++;
-      return 1;
+      return 1n;
     },
     DestroyWindow() {
       state.windows--;
-      return true;
-    },
-    GetModuleHandleW() {
       return 1;
     },
-    OpenClipboard(owner: number) {
+    GetModuleHandleW() {
+      return 1n;
+    },
+    OpenClipboard(owner: bigint) {
       if (!owner) {
         throw new Error("Missing owner");
       }
       if (state.occupied) {
-        return false;
+        return 0;
       }
       state.opened = true;
-      return true;
+      return 1;
     },
     CloseClipboard() {
       if (!succeeds("close")) {
-        return false;
+        return 0;
       }
       state.opened = false;
-      return true;
+      return 1;
     },
     EmptyClipboard() {
       if (!succeeds("empty")) {
-        return false;
+        return 0;
       }
       state.clears++;
       state.format = false;
       state.formats.clear();
-      return true;
+      return 1;
     },
     IsClipboardFormatAvailable(format: number) {
-      return format === 13 ? state.format : state.formats.has(format);
+      const available =
+        format === 13 ? state.format : state.formats.has(format);
+      return available ? 1 : 0;
     },
     GetClipboardData(format: number) {
       const bytes = format === 13 ? state.data : state.formats.get(format);
@@ -157,7 +160,7 @@ export function dlopen(name: string) {
     },
     GlobalUnlock() {
       state.locks--;
-      return false;
+      return 0;
     },
     SetLastError() {},
     GetLastError() {

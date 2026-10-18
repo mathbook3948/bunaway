@@ -1,9 +1,15 @@
 import { dlopen, linkSymbols, ptr } from "bun:ffi";
+import {
+  LIBSYSTEM,
+  LIBSYSTEM_PATH,
+  OBJC_PATH as OBJC,
+  OBJC_RUNTIME,
+  RTLD_LAZY,
+} from "@bunaway/plugin/darwin";
+import { pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 
-const OBJC = "/usr/lib/libobjc.A.dylib";
 const APPKIT = "/System/Library/Frameworks/AppKit.framework/AppKit";
-const RTLD_LAZY = 1;
 
 /** Synchronous NSWorkspace request acceptance, without launching a shell. */
 export type MacosWorkspace = {
@@ -15,44 +21,16 @@ export type MacosWorkspace = {
 
 /** Own only opener's bindings; no application delegate or host run loop is installed. */
 export function createWorkspace(): MacosWorkspace {
-  const system = dlopen("/usr/lib/libSystem.B.dylib", {
-    dlopen: {
-      args: [
-        "ptr",
-        "i32",
-      ],
-      returns: "ptr",
-    },
-    dlclose: {
-      args: [
-        "ptr",
-      ],
-      returns: "i32",
-    },
-    dlsym: {
-      args: [
-        "ptr",
-        "ptr",
-      ],
-      returns: "ptr",
-    },
-  });
+  const system = dlopen(
+    LIBSYSTEM_PATH,
+    pick(LIBSYSTEM, "dlopen", "dlclose", "dlsym"),
+  );
   const runtime = (() => {
     try {
-      return dlopen(OBJC, {
-        objc_getClass: {
-          args: [
-            "ptr",
-          ],
-          returns: "u64",
-        },
-        sel_registerName: {
-          args: [
-            "ptr",
-          ],
-          returns: "ptr",
-        },
-      });
+      return dlopen(
+        OBJC,
+        pick(OBJC_RUNTIME, "objc_getClass", "sel_registerName"),
+      );
     } catch (error) {
       system.close();
       throw error;
@@ -123,8 +101,9 @@ export function createWorkspace(): MacosWorkspace {
     runtime.symbols.sel_registerName(ptr(Buffer.from(`${name}\0`)));
   const object = (receiver: bigint, name: string, argument = 0n) =>
     messages.symbols.object(receiver, selector(name), argument);
+  // Classes are never tagged pointers; widen to the bigint the message sends take.
   const type = (name: string) =>
-    runtime.symbols.objc_getClass(ptr(Buffer.from(`${name}\0`)));
+    BigInt(runtime.symbols.objc_getClass(ptr(Buffer.from(`${name}\0`))) ?? 0);
   const string = (value: string) => {
     // Resolve metadata before borrowing bytes. Keep the backing buffer in this
     // frame through the consuming call, rather than passing a raw address to a

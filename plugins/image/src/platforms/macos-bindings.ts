@@ -1,4 +1,6 @@
 import { dlopen, type Pointer, ptr, read } from "bun:ffi";
+import { LIBSYSTEM, LIBSYSTEM_PATH } from "@bunaway/plugin/darwin";
+import { pick } from "@bunaway/plugin/win32";
 
 const CORE_FOUNDATION =
   "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
@@ -11,28 +13,10 @@ const ACCELERATE = "/System/Library/Frameworks/Accelerate.framework/Accelerate";
 export function openImageBindings() {
   const cleanup: (() => void)[] = [];
   try {
-    const system = dlopen("/usr/lib/libSystem.B.dylib", {
-      dlopen: {
-        args: [
-          "cstring",
-          "i32",
-        ],
-        returns: "ptr",
-      },
-      dlsym: {
-        args: [
-          "ptr",
-          "cstring",
-        ],
-        returns: "ptr",
-      },
-      dlclose: {
-        args: [
-          "ptr",
-        ],
-        returns: "i32",
-      },
-    } as const);
+    const system = dlopen(
+      LIBSYSTEM_PATH,
+      pick(LIBSYSTEM, "dlopen", "dlsym", "dlclose"),
+    );
     cleanup.push(() => system.close());
     function global(path: string, name: string): Pointer {
       const handle = system.symbols.dlopen(ptr(Buffer.from(`${path}\0`)), 1);

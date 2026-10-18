@@ -6,15 +6,20 @@ import {
   type Pointer,
   ptr,
 } from "bun:ffi";
+import {
+  LIBSYSTEM,
+  LIBSYSTEM_PATH as SYSTEM,
+  OBJC_PATH as OBJC,
+  OBJC_RUNTIME,
+  RTLD_DEFAULT,
+} from "@bunaway/plugin/darwin";
+import { pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import type { AppearancePreferences } from "#appearance/contract";
 
 const APPKIT = "/System/Library/Frameworks/AppKit.framework/AppKit";
-const OBJC = "/usr/lib/libobjc.A.dylib";
-const SYSTEM = "/usr/lib/libSystem.B.dylib";
 const AQUA = "NSAppearanceNameAqua";
 const DARK_AQUA = "NSAppearanceNameDarkAqua";
-const RTLD_DEFAULT = BigInt.asUintN(64, -2n);
 
 function failure(message: string): never {
   throw new BunawayError({
@@ -33,19 +38,7 @@ export function initialize() {
     close(): void;
   }[] = [];
   try {
-    const system = dlopen(SYSTEM, {
-      dlsym: {
-        args: [
-          "u64",
-          "cstring",
-        ],
-        returns: "ptr",
-      },
-      pthread_main_np: {
-        args: [],
-        returns: "i32",
-      },
-    } as const);
+    const system = dlopen(SYSTEM, pick(LIBSYSTEM, "dlsym", "pthread_main_np"));
     libraries.push(system);
     if (!system.symbols.pthread_main_np()) {
       failure("macOS appearance queries require the AppKit main thread.");
@@ -67,24 +60,13 @@ export function initialize() {
       failure("macOS appearance block runtime is unavailable.");
     }
     const runtime = dlopen(OBJC, {
+      ...pick(OBJC_RUNTIME, "objc_getClass", "sel_registerName"),
       objc_msgSend: {
         args: [
           "u64",
           "u64",
         ],
         returns: "u64",
-      },
-      objc_getClass: {
-        args: [
-          "cstring",
-        ],
-        returns: "ptr",
-      },
-      sel_registerName: {
-        args: [
-          "cstring",
-        ],
-        returns: "ptr",
       },
     } as const);
     libraries.push(runtime);

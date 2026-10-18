@@ -182,9 +182,10 @@ mock.module("bun:ffi", () => ({
   dlopen: (_name: string) => ({
     close() {},
     symbols: {
+      // The shared KERNEL32 table returns the event HANDLE as u64.
       CreateEventW: () => {
         waitHandles++;
-        return 123456;
+        return 123456n;
       },
       CloseHandle: () => {
         waitHandles--;

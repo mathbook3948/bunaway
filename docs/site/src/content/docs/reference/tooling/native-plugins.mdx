@@ -655,6 +655,39 @@ const handle = withWide(path, (name) =>
 16진수 표기를 담은 오류를 던집니다. `COINIT_APARTMENTTHREADED`와 `COINIT_MULTITHREADED`는
 `CoInitializeEx`에 전달하는 아파트먼트 모델입니다.
 
+`Hwnd`와 `Handle`은 `bigint`에 브랜드를 붙인 타입입니다. 창 핸들과 커널 객체 핸들을 만드는
+호출 한 곳에서 `as Hwnd`처럼 붙이면 다른 `u64` 값과 섞이지 않습니다. 시그니처 테이블은
+`bigint`를 반환하므로 브랜드는 생성 지점에서 한 번만 적용합니다.
+
+같은 심볼을 다른 시그니처로 두 번 선언하면 `tests/conformance/ffi-signatures.test.ts`가
+실패합니다. 플러그인에만 필요한 함수는 같은 객체에 직접 선언하고, 둘 이상의 모듈이 쓰는
+함수는 공유 테이블에 한 번 추가합니다.
+
+### macOS FFI 공유 바인딩
+
+macOS 플랫폼 구현은 `@bunaway/plugin/darwin`에서 동적 로더와 Objective-C 런타임의 시그니처를
+가져옵니다. `LIBSYSTEM`은 `dlopen`, `dlsym`, `dlclose`, `pthread_main_np`를, `OBJC_RUNTIME`은
+`objc_getClass`와 `sel_registerName`을 선언합니다. `objc_msgSend`는 가변 인자라 호출마다 필요한
+인자 모양으로 직접 선언합니다. 라이브러리 핸들과 `RTLD_DEFAULT`는 `u64`, C 문자열은
+`cstring`, 런타임 포인터는 `ptr`로 선언하며 네이티브 호스트와 같은 규칙입니다.
+
+```ts
+import { dlopen } from "bun:ffi";
+import { LIBSYSTEM, LIBSYSTEM_PATH, OBJC_PATH, OBJC_RUNTIME, RTLD_LAZY } from "@bunaway/plugin/darwin";
+import { pick } from "@bunaway/plugin/win32";
+
+const system = dlopen(LIBSYSTEM_PATH, pick(LIBSYSTEM, "dlopen", "dlsym", "dlclose"));
+const runtime = dlopen(OBJC_PATH, {
+  ...pick(OBJC_RUNTIME, "objc_getClass", "sel_registerName"),
+  objc_msgSend: { args: ["u64", "ptr"], returns: "u64" },
+});
+const appkit = system.symbols.dlopen(ptr(Buffer.from(`${APPKIT}\0`)), RTLD_LAZY);
+```
+
+`LIBSYSTEM_PATH`와 `OBJC_PATH`는 두 라이브러리의 경로, `RTLD_LAZY`는 `dlopen` 모드,
+`RTLD_DEFAULT`는 로드된 모든 이미지를 찾는 `dlsym` 핸들입니다. `pick`은 Windows 모듈과 같은
+함수를 씁니다.
+
 ### Windows 네이티브 메뉴 트리
 
 Windows UI 플러그인은 `@bunaway/plugin/windows-menu`의 `NativePopupMenu`를 사용해

@@ -9,6 +9,19 @@ import { type FFIFunction, type Pointer, ptr } from "bun:ffi";
  * `i32`, matching the conventions of the native host.
  */
 
+/**
+ * A window handle returned by `CreateWindowExW`. The brand keeps an HWND apart from the other
+ * `u64` handles a plugin holds; apply it once where the window is created.
+ */
+export type Hwnd = bigint & {
+  readonly __brand: "HWND";
+};
+
+/** A kernel object handle from `CreateEventW`, `CreateFileW` or `OpenProcess`, closed by `CloseHandle`. */
+export type Handle = bigint & {
+  readonly __brand: "HANDLE";
+};
+
 /** Build a NUL-terminated UTF-16LE buffer for Win32 W functions. */
 export const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
 
@@ -59,13 +72,22 @@ export function pick<
   return selected;
 }
 
-/** kernel32.dll: handles, files, processes and Job objects. */
+/** kernel32.dll: handles, events, files, processes, Job objects and global memory. */
 export const KERNEL32 = {
   CloseHandle: {
     args: [
       "u64",
     ],
     returns: "i32",
+  },
+  CreateEventW: {
+    args: [
+      "ptr",
+      "i32",
+      "i32",
+      "ptr",
+    ],
+    returns: "u64",
   },
   CreateFileW: {
     args: [
@@ -138,6 +160,43 @@ export const KERNEL32 = {
     args: [],
     returns: "u32",
   },
+  GetModuleHandleW: {
+    args: [
+      "ptr",
+    ],
+    returns: "u64",
+  },
+  GlobalAlloc: {
+    args: [
+      "u32",
+      "u64",
+    ],
+    returns: "ptr",
+  },
+  GlobalFree: {
+    args: [
+      "ptr",
+    ],
+    returns: "ptr",
+  },
+  GlobalLock: {
+    args: [
+      "ptr",
+    ],
+    returns: "ptr",
+  },
+  GlobalSize: {
+    args: [
+      "ptr",
+    ],
+    returns: "u64",
+  },
+  GlobalUnlock: {
+    args: [
+      "ptr",
+    ],
+    returns: "i32",
+  },
   LocalFree: {
     args: [
       "ptr",
@@ -181,6 +240,12 @@ export const KERNEL32 = {
     ],
     returns: "i32",
   },
+  SetLastError: {
+    args: [
+      "u32",
+    ],
+    returns: "void",
+  },
   WaitForSingleObject: {
     args: [
       "u64",
@@ -200,9 +265,36 @@ export const KERNEL32 = {
   },
 } as const satisfies Record<string, FFIFunction>;
 
-/** user32.dll: windows, messages, timers, icons and menus. */
+/** user32.dll: windows, messages, timers, icons, menus and the clipboard. */
 export const USER32 = {
+  CloseClipboard: {
+    args: [],
+    returns: "i32",
+  },
+  CreateWindowExW: {
+    args: [
+      "u32",
+      "ptr",
+      "ptr",
+      "u32",
+      "i32",
+      "i32",
+      "i32",
+      "i32",
+      "u64",
+      "u64",
+      "u64",
+      "ptr",
+    ],
+    returns: "u64",
+  },
   DestroyIcon: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
+  DestroyWindow: {
     args: [
       "u64",
     ],
@@ -214,9 +306,25 @@ export const USER32 = {
     ],
     returns: "i32",
   },
+  EmptyClipboard: {
+    args: [],
+    returns: "i32",
+  },
+  GetClipboardData: {
+    args: [
+      "u32",
+    ],
+    returns: "ptr",
+  },
   GetCursorPos: {
     args: [
       "ptr",
+    ],
+    returns: "i32",
+  },
+  IsClipboardFormatAvailable: {
+    args: [
+      "u32",
     ],
     returns: "i32",
   },
@@ -249,6 +357,12 @@ export const USER32 = {
     ],
     returns: "i32",
   },
+  OpenClipboard: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
   PeekMessageW: {
     args: [
       "ptr",
@@ -268,6 +382,12 @@ export const USER32 = {
     ],
     returns: "i32",
   },
+  RegisterClipboardFormatW: {
+    args: [
+      "ptr",
+    ],
+    returns: "u32",
+  },
   RegisterWindowMessageW: {
     args: [
       "ptr",
@@ -282,6 +402,13 @@ export const USER32 = {
       "i64",
     ],
     returns: "i64",
+  },
+  SetClipboardData: {
+    args: [
+      "u32",
+      "ptr",
+    ],
+    returns: "ptr",
   },
   SetForegroundWindow: {
     args: [
