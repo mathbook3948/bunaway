@@ -114,6 +114,9 @@ checkbox와 radio는 `icon: null`을 포함한 모든 icon 변경을 `INVALID_AR
 트레이 팝업에는 소유 앱 창이 없으므로 windowId는 null입니다.
 이벤트를 받으려는 뷰에서 `menu.clicked`를 허용하고 구독합니다. 이벤트를 영구 보관하지 않습니다.
 
+연결한 메뉴를 앱이 정한 화면 좌표에 표시하려면 [tray](/reference/plugins/tray/)의
+`tray.popUpContextMenu`를 사용합니다. 선택은 우클릭 팝업과 같이 이 payload로 전달합니다.
+
 창이 없는 앱의 백엔드는 `await menu.waitForClick(null)`로 다음 사용자 정의 메뉴 선택을 받습니다.
 현재 대기자에게만 전달하며 이전 선택은 재생하지 않습니다. 대기는 최대 16개이고 초과하면 BUSY입니다.
 호출 취소, 컨텍스트 폐기와 앱 종료는 대기를 CANCELLED로 끝냅니다. 완료한 대기 결과는 복사본입니다.

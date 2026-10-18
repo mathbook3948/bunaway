@@ -1639,6 +1639,7 @@
       "tray.setIcon",
       "tray.setClickBehavior",
       "tray.focus",
+      "tray.popUpContextMenu",
       "tray.waitForEvent"
     ],
     "reference/plugins/dialog": [

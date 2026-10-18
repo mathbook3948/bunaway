@@ -603,7 +603,8 @@ null은 트레이 메뉴 숨김이고 undefined는 tray 기본 Open/Quit 복원�
 대기 자체는 앱 실행 유지 조건을 바꾸지 않습니다. 창이 없는 앱의 백엔드는 플러그인의 wait 작업을 사용할 수 있습니다.
 
 `NativeEnvironment.tray`는 호스트가 설정한 단일 아이콘의 NativeTrayServices입니다.
-get과 getBounds, setTooltip과 setIcon, setClickBehavior, focus와 subscribe를 제공합니다. 등록한 플러그인의 initialize가 트레이 구현을 생성합니다. NativeTrayInitialization은 검증한 tooltip과 빌린 NativeTrayWindowHost, 복원과 종료 콜백을 제공합니다. NativeTrayOwner의 dispose는 실패한 자원을 보존해 재시도할 수 있어야 합니다. 호스트는 콜백 정지와 창 정리, 재시도 순서를 소유합니다.
+get과 getBounds, setTooltip과 setIcon, setClickBehavior, focus, popUpContextMenu와 subscribe를 제공합니다.
+popUpContextMenu는 연결된 메뉴를 표시하는 동안 네이티브 루프가 실행되므로, 호스트가 NativeTrayWindowHost의 선택 함수 interrupt로 호출 취소와 종료를 루프에 전달해야 합니다. 등록한 플러그인의 initialize가 트레이 구현을 생성합니다. NativeTrayInitialization은 검증한 tooltip과 빌린 NativeTrayWindowHost, 복원과 종료 콜백을 제공합니다. NativeTrayOwner의 dispose는 실패한 자원을 보존해 재시도할 수 있어야 합니다. 호스트는 콜백 정지와 창 정리, 재시도 순서를 소유합니다.
 입력은 기존 emit 경로 또는 NativeEventWaiters를 통해 전달합니다.
 
 `parseNativeIco(ico)`는 base64 ICO를 크기 상한, 디렉터리와 프레임 이미지(PNG chunk, DIB 헤더와 선언 크기, 잘림)까지

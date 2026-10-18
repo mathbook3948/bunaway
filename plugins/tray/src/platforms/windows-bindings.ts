@@ -1,5 +1,5 @@
 import { dlopen } from "bun:ffi";
-import { USER32, USER32_MENUS, pick } from "@bunaway/plugin/win32";
+import { pick, USER32, USER32_MENUS } from "@bunaway/plugin/win32";
 /** Bind only the notification icon and popup integration owned by this tray. */
 export function openTrayBindings() {
   return dlopen("user32.dll", {
@@ -10,7 +10,13 @@ export function openTrayBindings() {
       "GetCursorPos",
       "SetForegroundWindow",
       "PostMessageW",
+      "SetTimer",
+      "KillTimer",
     ),
     ...pick(USER32_MENUS, "TrackPopupMenuEx"),
+    EndMenu: {
+      args: [],
+      returns: "i32",
+    },
   });
 }

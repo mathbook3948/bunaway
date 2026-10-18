@@ -1,5 +1,7 @@
 import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
+import { failWithCleanup } from "@bunaway/plugin";
+import { withWide } from "@bunaway/plugin/win32";
 import {
   MAX_TRAY_TOOLTIP_UNITS,
   type NativeMenuItem,
@@ -8,10 +10,8 @@ import {
   type NativeTraySnapshot,
   type NativeTrayWindowHost,
 } from "@bunaway/plugin-api/native";
-import { failWithCleanup } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import { openTrayBindings } from "#tray/platforms/windows-bindings";
-import { withWide } from "@bunaway/plugin/win32";
 import { createTrayIcon } from "#tray/platforms/windows-icon";
 import { NativePopupMenu } from "#tray/platforms/windows-popup-menu";
 import {
@@ -23,6 +23,7 @@ const WM_CLOSE = 0x0010;
 
 const TRAY_CALLBACK_MESSAGE = 0x8001;
 const WM_NULL = 0x0000;
+const WM_TIMER = 0x0113;
 const WM_MOUSEMOVE = 0x0200;
 const WM_LBUTTONDOWN = 0x0201;
 const WM_LBUTTONUP = 0x0202;
@@ -44,6 +45,9 @@ const NIF_TIP = 0x4;
 const TPM_RIGHTBUTTON = 0x2;
 const TPM_RETURNCMD = 0x100;
 const TRAY_ICON_ID = 1;
+// A native menu loop only reaches the host's cancellation packets through window messages.
+const POPUP_TIMER_ID = 0xb171;
+const POPUP_POLL_INTERVAL_MS = 50;
 const TRAY_TOOLTIP_BYTES = MAX_TRAY_TOOLTIP_UNITS * 2;
 const NOTIFYICONIDENTIFIER_SIZE = 40;
 
@@ -110,6 +114,10 @@ export class Tray {
   private windowDestroyed = false;
   private shellClosed = false;
   private userClosed = false;
+  /** A native menu loop owns the UI thread; a second one must not nest inside it. */
+  private popupActive = false;
+  /** Set when a cancellation arrives, possibly before the loop has started tracking. */
+  private popupCancelled = false;
   private readonly hover: TrayHoverTracker;
   /** Registers the icon and releases partial resources if setup fails. */
   constructor(
@@ -175,7 +183,7 @@ export class Tray {
         tooltip,
         200,
         200,
-        (message, _wparam, lparam) => {
+        (message, wparam, lparam) => {
           if (this.disposed) {
             return;
           }
@@ -183,32 +191,12 @@ export class Tray {
             // Explorer restarts clear notification icons, so add this one back.
             this.added = false;
             this.add();
+          } else if (message === WM_TIMER) {
+            this.retryPopupCancel(wparam);
           } else if (message === WM_CLOSE) {
             receive("quit");
           } else if (message === TRAY_CALLBACK_MESSAGE) {
-            const input = mouseNotifications[Number(lparam)];
-            if (Number(lparam) === WM_MOUSEMOVE) {
-              this.hover.mouseMoved();
-            } else if (input) {
-              notify?.({
-                id: "main",
-                ...input,
-                position: this.cursorPosition(),
-              });
-            }
-            if (
-              this.showOnLeftClick &&
-              (Number(lparam) === WM_LBUTTONUP ||
-                Number(lparam) === WM_LBUTTONDBLCLK)
-            ) {
-              receive("show");
-            } else if (
-              this.menuOnRightClick &&
-              (Number(lparam) === WM_RBUTTONUP ||
-                Number(lparam) === WM_CONTEXTMENU)
-            ) {
-              this.menu(receive);
-            }
+            this.handleShellNotification(Number(lparam), receive, notify);
           }
         },
         false,
@@ -270,10 +258,100 @@ export class Tray {
     );
     this.added = true;
   }
+  /** Reports one shell mouse notification, then applies the click behavior defaults. */
+  private handleShellNotification(
+    notification: number,
+    receive: (action: "show" | "quit") => void,
+    notify: ((event: NativeTrayEvent) => void) | undefined,
+  ) {
+    const input = mouseNotifications[notification];
+    if (notification === WM_MOUSEMOVE) {
+      this.hover.mouseMoved();
+    } else if (input) {
+      notify?.({
+        id: "main",
+        ...input,
+        position: this.cursorPosition(),
+      });
+    }
+    if (
+      this.showOnLeftClick &&
+      (notification === WM_LBUTTONUP || notification === WM_LBUTTONDBLCLK)
+    ) {
+      receive("show");
+    } else if (
+      this.menuOnRightClick &&
+      (notification === WM_RBUTTONUP || notification === WM_CONTEXTMENU)
+    ) {
+      this.menu(receive);
+    }
+  }
+  /**
+   * EndMenu can run before TrackPopupMenuEx starts tracking, so the popup timer repeats it
+   * until Windows is inside its modal loop and the cancelled popup closes.
+   */
+  private retryPopupCancel(timerId: bigint) {
+    if (timerId === BigInt(POPUP_TIMER_ID) && this.popupCancelled) {
+      this.user.symbols.EndMenu();
+    }
+  }
+  /** Right-click popup at the pointer. A popup that is already open absorbs the click. */
   private menu(receive: (action: "show" | "quit") => void) {
-    if (this.customMenu === null) {
+    if (this.customMenu === null || this.popupActive) {
       return;
     }
+    this.track(null, receive);
+  }
+  /**
+   * Opens the attached menu at `position` (the pointer when null) and blocks until a choice,
+   * dismissal or `signal` abort. The choice reaches the attachment's callback, as with a
+   * right-click. Without an attached menu the host's Open/Quit menu is not a popup target.
+   */
+  popUpContextMenu(
+    position: {
+      x: number;
+      y: number;
+    } | null,
+    signal: AbortSignal,
+  ) {
+    if (this.disposed) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message: "The tray was released.",
+      });
+    }
+    if (!this.windows.interrupt) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message: "This host cannot interrupt a tray menu.",
+      });
+    }
+    if (!this.customMenu) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "No menu is attached to the tray.",
+      });
+    }
+    if (this.popupActive) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "A tray menu is already open.",
+      });
+    }
+    this.track(position, () => {}, signal);
+  }
+  /**
+   * Shows the popup and reports the choice. `signal` cancellation ends the native loop and
+   * throws CANCELLED without reporting a choice.
+   */
+  private track(
+    position: {
+      x: number;
+      y: number;
+    } | null,
+    receive: (action: "show" | "quit") => void,
+    signal?: AbortSignal,
+  ) {
     const selected = this.selected;
     const custom = this.customMenu !== undefined;
     const menu = new NativePopupMenu(
@@ -298,19 +376,57 @@ export class Tray {
         },
       ],
     );
+    const cancel = () => {
+      this.popupCancelled = true;
+      this.user.symbols.EndMenu();
+    };
+    let stopInterrupt: (() => void) | undefined;
+    let timerStarted = false;
+    this.popupActive = true;
+    this.popupCancelled = false;
     try {
-      const point = new Int32Array(2);
-      assert(this.user.symbols.GetCursorPos(ptr(point)));
-      this.user.symbols.SetForegroundWindow(this.hwnd);
-      const item = this.user.symbols.TrackPopupMenuEx(
-        menu.handle,
-        TPM_RETURNCMD | TPM_RIGHTBUTTON,
-        point[0] ?? 0,
-        point[1] ?? 0,
-        this.hwnd,
-        null,
-      );
-      this.user.symbols.PostMessageW(this.hwnd, WM_NULL, 0n, 0n);
+      const point = position ?? this.cursorPosition();
+      assert(point, "Tray popup position unavailable.");
+      if (signal) {
+        stopInterrupt = this.windows.interrupt?.(signal, cancel);
+        signal.addEventListener("abort", cancel, {
+          once: true,
+        });
+        timerStarted = !!this.user.symbols.SetTimer(
+          this.hwnd,
+          BigInt(POPUP_TIMER_ID),
+          POPUP_POLL_INTERVAL_MS,
+          null,
+        );
+        assert(timerStarted, "Tray popup cancellation timer failed.");
+        if (signal.aborted) {
+          this.popupCancelled = true;
+        }
+      }
+      let item = 0;
+      if (!this.popupCancelled) {
+        // The owner must be foreground, or the popup would not close on an outside click.
+        this.user.symbols.SetForegroundWindow(this.hwnd);
+        try {
+          item = this.user.symbols.TrackPopupMenuEx(
+            menu.handle,
+            TPM_RETURNCMD | TPM_RIGHTBUTTON,
+            point.x,
+            point.y,
+            this.hwnd,
+            null,
+          );
+        } finally {
+          // Lets the menu loop settle so the next click reaches the previous foreground app.
+          this.user.symbols.PostMessageW(this.hwnd, WM_NULL, 0n, 0n);
+        }
+      }
+      if (this.popupCancelled) {
+        throw new BunawayError({
+          code: "CANCELLED",
+          message: "Tray menu cancelled.",
+        });
+      }
       const itemId = menu.selected(item);
       if (custom && itemId !== null) {
         selected?.(itemId);
@@ -320,6 +436,13 @@ export class Tray {
         receive("quit");
       }
     } finally {
+      signal?.removeEventListener("abort", cancel);
+      stopInterrupt?.();
+      if (timerStarted) {
+        this.user.symbols.KillTimer(this.hwnd, BigInt(POPUP_TIMER_ID));
+      }
+      this.popupCancelled = false;
+      this.popupActive = false;
       menu.dispose();
     }
   }

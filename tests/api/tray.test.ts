@@ -219,6 +219,7 @@ test("tray notifications and controls keep ownership in host services and cancel
       };
     },
     focus: () => true,
+    popUpContextMenu: () => {},
     subscribe(listener) {
       receive = listener;
       return () => {

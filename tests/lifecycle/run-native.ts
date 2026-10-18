@@ -146,6 +146,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-window-menu.test.ts",
           "tests/lifecycle/windows-menu-ui.test.ts",
           "tests/lifecycle/windows-tray-controls.test.ts",
+          "tests/lifecycle/windows-tray-popup.test.ts",
           "tests/lifecycle/windows-tray-ui.test.ts",
           "tests/lifecycle/windows-bun-instance.test.ts",
           "tests/lifecycle/windows-monitors.test.ts",

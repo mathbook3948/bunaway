@@ -12,6 +12,7 @@ import {
   get,
   getBounds,
   type initialize,
+  popUpContextMenu,
   setClickBehavior,
   setIcon,
   setTooltip,
@@ -63,6 +64,14 @@ export const trayOperations = {
     input: z.null(),
     output: z.boolean(),
     handler: (_input, { instance }) => focus(instance),
+  }),
+  popUpContextMenu: operation({
+    input: z.strictObject({
+      position: positionSchema.optional(),
+    }),
+    output: z.null(),
+    handler: ({ position }, { instance, signal }) =>
+      popUpContextMenu(instance, position ?? null, signal),
   }),
   waitForEvent: operation({
     input: z.null(),

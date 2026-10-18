@@ -96,6 +96,7 @@ test("window operations use name grants and list all configured windows", async 
       showInactive() {},
       activate: () => true,
       focus: () => true,
+      popUpContextMenu: () => {},
       close: () => true,
       minimize() {},
       maximize() {},

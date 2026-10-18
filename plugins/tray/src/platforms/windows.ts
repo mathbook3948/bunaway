@@ -99,6 +99,23 @@ export function focus(state: State) {
   return requireTray(state.services).focus();
 }
 
+/** Blocks until the attached menu closes. The choice arrives as `menu.clicked`, not as a result. */
+export function popUpContextMenu(
+  state: State,
+  position: {
+    x: number;
+    y: number;
+  } | null,
+  signal?: AbortSignal,
+): null {
+  // Without a request signal only host shutdown can interrupt the native loop.
+  requireTray(state.services).popUpContextMenu(
+    position,
+    signal ?? new AbortController().signal,
+  );
+  return null;
+}
+
 export function waitForEvent(state: State, signal?: AbortSignal) {
   requireTray(state.services);
   return state.notifications.wait(signal);
