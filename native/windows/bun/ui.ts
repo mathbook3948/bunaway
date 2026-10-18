@@ -152,15 +152,15 @@ let windowsEmptyReported = false;
  * fails, and then once. A new (non-replacement) window still being created cannot re-arm the report
  * and one that fails creation stays invisible.
  * A windowless start, a pending recreation, and an app already committed to shutdown never report.
- * Runs on every pump turn so a window that becomes live again re-arms the next report.
+ * Runs on every pump turn so a window that becomes live again re-arms the next report; a window
+ * that becomes ready and closes within one turn re-arms through `armWindowsEmpty` at readiness.
  */
 function reportWindowsEmpty() {
   const anyLive = [
     ...views.values(),
   ].some((view) => (view.ready || view.replacing) && !view.lifecycle.closed);
   if (anyLive) {
-    windowsWereLive = true;
-    windowsEmptyReported = false;
+    armWindowsEmpty();
     return;
   }
   const resident = !!tray || config.desktop?.closeBehavior === "keep-alive";
@@ -178,6 +178,12 @@ function reportWindowsEmpty() {
   channel.notify({
     kind: "windows-empty",
   });
+}
+
+/** A window is live: the next transition to zero windows is reported again. */
+function armWindowsEmpty() {
+  windowsWereLive = true;
+  windowsEmptyReported = false;
 }
 function visibility(action: "show" | "hide") {
   if (closing()) {
@@ -1426,6 +1432,10 @@ function createWindow(
           // The controller exists now; a retired or replaced lifetime never announces itself.
           if (view.native === native && !view.lifecycle.closed) {
             publishLifecycle(view, "created");
+            // Readiness arrives in a microtask after the pump turn that created the window, and a
+            // close request can be served by the next turn, so the turn-based scan never sees the
+            // window live. Re-arm here so that a short-lived window still reports its transition.
+            armWindowsEmpty();
           }
           startViews();
         },
