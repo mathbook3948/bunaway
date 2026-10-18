@@ -12,6 +12,7 @@ import {
   type HostCall,
   type HostContext,
   type HostResponse,
+  isRecord,
   type JsonValue,
   MAX_MESSAGE_BYTES,
   type NativeRegistration,
@@ -53,10 +54,10 @@ type FieldValidator<T> = (
 ) => asserts value is T;
 
 function record(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error("Invalid Worker packet");
   }
-  return value as Record<string, unknown>;
+  return value;
 }
 function identifier(value: unknown): asserts value is string {
   if (typeof value !== "string" || !/^[A-Za-z0-9_.:-]{1,128}$/.test(value)) {

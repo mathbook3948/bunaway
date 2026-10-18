@@ -1,7 +1,7 @@
 import { dlopen } from "bun:ffi";
 import { ResourceOwner } from "@bunaway/plugin";
 import { COINIT_APARTMENTTHREADED, OLE32, pick } from "@bunaway/plugin/win32";
-import { BunawayError } from "@bunaway/protocol";
+import { BunawayError, isRecord } from "@bunaway/protocol";
 import type {
   ShortcutDetails,
   ShortcutLink,
@@ -194,12 +194,7 @@ function isMissingFile(error: unknown): boolean {
     return false;
   }
   const details = error.details;
-  return (
-    typeof details === "object" &&
-    details !== null &&
-    !Array.isArray(details) &&
-    details.reason === "FILE_NOT_FOUND"
-  );
+  return isRecord(details) && details.reason === "FILE_NOT_FOUND";
 }
 
 /**

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { isRecord } from "@bunaway/protocol";
 
 interface Report {
   page: string;
@@ -11,18 +12,18 @@ interface Report {
 }
 
 function isReport(value: unknown): value is Report {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return false;
   }
-  const report = value as Record<string, unknown>;
+  const report = value;
   return (
     typeof report.page === "string" &&
     Array.isArray(report.results) &&
     report.results.every((result) => {
-      if (!result || typeof result !== "object" || Array.isArray(result)) {
+      if (!isRecord(result)) {
         return false;
       }
-      const entry = result as Record<string, unknown>;
+      const entry = result;
       return (
         typeof entry.name === "string" &&
         typeof entry.ok === "boolean" &&

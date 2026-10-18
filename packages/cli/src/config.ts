@@ -7,7 +7,12 @@ import {
 } from "@bunaway/packaging";
 import { OUTPUT_TARGETS, outputPaths } from "@bunaway/packaging/paths";
 import { APP_INFO_MAX_LENGTH } from "@bunaway/plugin-api";
-import { NativeRegistry, type Policy, parsePolicy } from "@bunaway/protocol";
+import {
+  isRecord,
+  NativeRegistry,
+  type Policy,
+  parsePolicy,
+} from "@bunaway/protocol";
 import { isAppInfoText } from "@bunaway/runtime-bun/app-metadata";
 import {
   developmentPolicy,
@@ -145,10 +150,10 @@ export function runtimeSettings(
 }
 
 function record(value: unknown, path: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error(`bunaway.json: ${path} must be an object.`);
   }
-  return value as Record<string, unknown>;
+  return value;
 }
 
 function keys(

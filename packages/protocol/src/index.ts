@@ -64,6 +64,7 @@ export {
 } from "./schema.ts";
 export {
   type Infer,
+  isRecord,
   type JsonValue,
   MAX_JSON_DEPTH,
   MAX_MESSAGE_BYTES,

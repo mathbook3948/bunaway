@@ -12,6 +12,7 @@ import {
   AUTOSTART_ARGUMENT,
   AUTOSTART_HIDDEN_ARGUMENT,
   BunawayError,
+  isRecord,
 } from "@bunaway/protocol";
 import type { WindowSpec } from "@bunaway/runtime-bun/window-config";
 import {
@@ -209,10 +210,10 @@ function optionsObject(options: unknown): Record<string, unknown> {
   if (options === undefined) {
     return {};
   }
-  if (!options || typeof options !== "object" || Array.isArray(options)) {
+  if (!isRecord(options)) {
     throw invalidArgument("options must be an object");
   }
-  return options as Record<string, unknown>;
+  return options;
 }
 
 /** Builds the shutdown request, setting `exitCode` only when the caller gave one. */
@@ -300,10 +301,7 @@ export class DesktopLifecycle {
     relaunchSupported = true,
     checkRelaunch?: (argv: readonly string[] | undefined) => void,
   ) {
-    if (
-      options !== undefined &&
-      (!options || typeof options !== "object" || Array.isArray(options))
-    ) {
+    if (options !== undefined && !isRecord(options)) {
       throw new Error("desktop must be an options object");
     }
     if (options?.closeBehavior === "hide" && !options.tray) {

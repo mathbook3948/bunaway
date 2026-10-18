@@ -1,3 +1,4 @@
+import { isRecord } from "@bunaway/protocol";
 import {
   type ChannelConfig,
   type ChannelId,
@@ -138,10 +139,10 @@ function fail(message: string): never {
 }
 
 function record(value: unknown, what: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     fail(`bunaway.json.bundle: ${what} must be an object.`);
   }
-  return value as Record<string, unknown>;
+  return value;
 }
 
 function keys(

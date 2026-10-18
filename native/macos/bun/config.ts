@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import {
   BunawayError,
   type HostContext,
+  isRecord,
   NativeRegistry,
   type Policy,
   parsePolicy,
@@ -46,11 +47,8 @@ export type MacosBackendData = MacosConfig & {
 };
 
 function object(value: unknown): Record<string, unknown> {
-  assert(
-    value && typeof value === "object" && !Array.isArray(value),
-    "Invalid package metadata.",
-  );
-  return value as Record<string, unknown>;
+  assert(isRecord(value), "Invalid package metadata.");
+  return value;
 }
 
 /**

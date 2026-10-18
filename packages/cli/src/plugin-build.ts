@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PLATFORMS } from "@bunaway/plugin-api";
+import { isRecord } from "@bunaway/protocol";
 import {
   ownedDirectory,
   publishOwnedDirectory,
@@ -46,16 +47,10 @@ export async function buildNativePlugin(directory = "."): Promise<string> {
   const manifest: unknown = await Bun.file(
     resolve(root, "package.json"),
   ).json();
-  if (
-    !manifest ||
-    typeof manifest !== "object" ||
-    Array.isArray(manifest) ||
-    typeof Reflect.get(manifest, "version") !== "string" ||
-    !Reflect.get(manifest, "version")
-  ) {
+  const version = isRecord(manifest) ? manifest.version : undefined;
+  if (typeof version !== "string" || !version) {
     throw new Error("Native plugins require a package.json version.");
   }
-  const version: string = Reflect.get(manifest, "version");
   const sdkModule = await sdkModuleSource(root, version);
   await ownedDirectory(root, resolve(root, "dist"));
   const stage = await mkdtemp(resolve(root, ".plugin-build-"));

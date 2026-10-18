@@ -1,9 +1,10 @@
 import { dlopen, ptr } from "bun:ffi";
-import { USER32, pick } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import type { AppDefinition } from "@bunaway/core";
+import { pick, USER32 } from "@bunaway/plugin/win32";
+import { isRecord } from "@bunaway/protocol";
 import {
   type AppRelaunchRequest,
   isAppRelaunchAck,
@@ -30,11 +31,8 @@ import {
 } from "./relaunch.ts";
 
 function object(value: unknown): Record<string, unknown> {
-  assert(
-    value && typeof value === "object" && !Array.isArray(value),
-    "Invalid package configuration",
-  );
-  return value as Record<string, unknown>;
+  assert(isRecord(value), "Invalid package configuration");
+  return value;
 }
 if (import.meta.main) {
   let dataRoot: string | undefined;

@@ -2,7 +2,11 @@ import { mkdir, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PLATFORMS } from "@bunaway/plugin-api";
-import { type NativePluginContract, NativeRegistry } from "@bunaway/protocol";
+import {
+  isRecord,
+  type NativePluginContract,
+  NativeRegistry,
+} from "@bunaway/protocol";
 import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
 import {
   inside,
@@ -87,9 +91,7 @@ export async function readPluginDeclaration(
     declaration.nativePlatforms,
   )) {
     if (
-      !target ||
-      typeof target !== "object" ||
-      Array.isArray(target) ||
+      !isRecord(target) ||
       Object.hasOwn(target, "execution") ||
       !PLATFORMS.some((supported) => supported === platform) ||
       ![

@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
 import { lstat, stat, writeFile } from "node:fs/promises";
+import { isRecord } from "@bunaway/protocol";
 import { XMLParser } from "fast-xml-parser";
 import { must, run } from "../../tools.ts";
 
 export type Channel = "mac-direct" | "mac-store";
 
 export function record(value: unknown): Record<string, unknown> {
-  assert(
-    value && typeof value === "object" && !Array.isArray(value),
-    "Expected a property dictionary",
-  );
-  return value as Record<string, unknown>;
+  assert(isRecord(value), "Expected a property dictionary");
+  return value;
 }
 export function string(value: unknown, name: string): string {
   assert(typeof value === "string" && value.length > 0, `Missing ${name}`);

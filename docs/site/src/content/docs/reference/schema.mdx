@@ -3,7 +3,7 @@ title: Schema, JsonValue, 타입 추론
 description: 지원하는 스키마 키워드와 JSON 값 검증, TypeScript 타입 추론.
 ---
 
-`Schema`, `Infer`, `JsonValue`, `validateValue`는 `@bunaway/protocol`의 계약입니다.
+`Schema`, `Infer`, `JsonValue`, `validateValue`, `isRecord`는 `@bunaway/protocol`의 계약입니다.
 명령의 input/output과 이벤트 payload는 같은 스키마 키워드를 사용합니다.
 
 ## 지원 키워드
@@ -67,3 +67,15 @@ validateValue는 JSON 값과 스키마를 검증한 뒤 추론한 타입의 복�
 명령과 이벤트의 데이터 크기 제한은 [오류와 실행 제한](/reference/errors/)에서 확인하세요.
 
 [타입 연결 가이드](/guides/types-and-validation/)에서 CommandsOf, EventsOf 사용 예시를 확인하세요.
+
+## isRecord
+
+```ts
+import { isRecord } from "@bunaway/protocol";
+if (isRecord(value)) {
+  Reflect.get(value, "name");
+}
+```
+
+isRecord는 값이 null이 아니고 배열이 아닌 객체일 때 true를 반환하는 타입 가드입니다.
+JSON처럼 검증되지 않은 입력이 키로 조회할 수 있는 객체인지 확인하는 첫 단계에 씁니다. 필드별 검증은 하지 않습니다.

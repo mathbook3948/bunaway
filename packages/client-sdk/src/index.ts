@@ -10,6 +10,7 @@ import {
   errorSchema,
   type Hello,
   type HostOperationContract,
+  isRecord,
   type JsonValue,
   type Message,
   type NegotiatedProtocol,
@@ -370,14 +371,13 @@ class ClientSession<C extends CommandMap, E extends EventMap>
   }
 
   private subscriptionId(payload: JsonValue): string {
-    const subscriptionId =
-      typeof payload === "object" && payload !== null && !Array.isArray(payload)
-        ? (
-            payload as {
-              subscriptionId?: unknown;
-            }
-          ).subscriptionId
-        : undefined;
+    const subscriptionId = isRecord(payload)
+      ? (
+          payload as {
+            subscriptionId?: unknown;
+          }
+        ).subscriptionId
+      : undefined;
     if (typeof subscriptionId !== "string" || subscriptionId.length === 0) {
       // Without an ID, closing the session is the only way to release the
       // subscription that the peer may already have created.
