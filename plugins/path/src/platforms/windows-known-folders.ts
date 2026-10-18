@@ -1,12 +1,16 @@
 import { dlopen, type Pointer, ptr, read, toArrayBuffer } from "bun:ffi";
-import { OLE32, SHELL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/plugin";
+import { OLE32, pick, SHELL32 } from "@bunaway/plugin/win32";
 import type { UserDirectory } from "#path/contract";
 
 const KF_FLAG_DONT_VERIFY = 0x4000;
 const MAX_PATH_WCHAR_BYTES = 32768 * 2;
+
+/** User directories plus the roaming AppData root used only to derive app directories. */
+export type KnownFolder = UserDirectory | "roamingAppData";
+
 // Keep the SDK's readable GUID spelling; convert the first three fields at the ABI boundary.
-const directories: Record<UserDirectory, string> = {
+const directories: Record<KnownFolder, string> = {
   home: "5E6C858F-0E22-4760-9AFE-EA3317B67173",
   documents: "FDD39AD0-238F-46AF-ADB4-6C85480369C7",
   downloads: "374DE290-123F-4565-9164-39C4925E467B",
@@ -14,10 +18,11 @@ const directories: Record<UserDirectory, string> = {
   pictures: "33E28130-4E1E-4676-835A-98395C3BC3BB",
   music: "4BD8D571-6D19-48D3-BE97-422220080E43",
   videos: "18989B1D-99B5-455B-841C-AB7C74E4DDFC",
+  roamingAppData: "3EB685DB-65F9-4CF6-A03A-E3EF65729F3D",
 };
 
 /** Encode the Windows SDK's GUID into its mixed-endian native memory representation. */
-export function knownFolderId(directory: UserDirectory): Buffer {
+export function knownFolderId(directory: KnownFolder): Buffer {
   const id = Buffer.from(directories[directory].replaceAll("-", ""), "hex");
   id.writeUInt32LE(id.readUInt32BE(0), 0);
   id.writeUInt16LE(id.readUInt16BE(4), 4);
@@ -45,7 +50,7 @@ export class WindowsKnownFolders {
   }
 
   /** Return the configured path without verifying existence or creating directories. */
-  get(directory: UserDirectory): string {
+  get(directory: KnownFolder): string {
     if (this.disposed) {
       throw new BunawayError({
         code: "CANCELLED",

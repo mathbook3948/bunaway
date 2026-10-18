@@ -1430,6 +1430,7 @@
     ],
     "reference/plugins/path": [
       "path.getDirectory",
+      "path.getAppDirectory",
       "path.join",
       "path.resolve",
       "path.normalize",

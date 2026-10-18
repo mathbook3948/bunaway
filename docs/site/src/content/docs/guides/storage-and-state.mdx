@@ -39,6 +39,7 @@ await storage.writeText({
 ```
 
 이 경로 선택은 템플릿의 앱 코드에 있습니다. Windows에서는 사용자 로컬 앱 데이터 폴더 아래에 저장합니다.
+같은 위치는 `path.getAppDirectory({ directory: "appLocalData" })`로도 조회할 수 있습니다([Windows 경로](/reference/plugins/path/)).
 앱은 다른 폴더를 선택할 수 있으며 플러그인은 기본 저장 폴더를 지정하지 않습니다.
 화면에서 받은 값으로 경로를 정한다면 앱 명령에서 허용할 파일을 검사합니다.
 개발 중에는 저장 파일을 소스 변경 감시 대상 밖에 둡니다.

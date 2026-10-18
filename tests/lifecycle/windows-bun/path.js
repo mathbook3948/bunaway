@@ -30,6 +30,17 @@ try {
     }
     directories++;
   }
+  const logs = await path.getAppDirectory({
+    directory: "logs",
+  });
+  if (
+    !logs ||
+    !(await path.isAbsolute({
+      path: logs,
+    }))
+  ) {
+    throw new Error("Invalid logs directory.");
+  }
   const joined = await path.join({
     paths: [
       "C:/한글",
@@ -126,6 +137,7 @@ try {
   report = {
     pass: true,
     directories,
+    logs,
     lexical,
     denied,
   };

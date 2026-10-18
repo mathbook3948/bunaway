@@ -792,7 +792,12 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [x] Windows current-user Known Folder로 home, documents, downloads, desktop, pictures, music과 videos 경로를 조회한다.
   OS redirection을 따르며 폴더 생성과 파일 접근 권한을 부여하지 않는다.
   [경로 계약](./site/src/content/docs/reference/plugins/path.mdx)을 따른다.
-- [ ] appConfig, appData, appLocalData, cache, logs, temp와 resource 경로를 제공한다.
+- [x] appConfig, appData, appLocalData, cache, logs, temp와 resource 경로를 제공한다.
+  `path.getAppDirectory`가 호스트의 앱 식별자 기준으로 앱 전용 디렉터리 여섯 가지를 조회하며 폴더 생성과 파일 접근 권한은 없다.
+  로그와 local 디렉터리는 기존 dataRoot 구조에 맞추고 dataRoot 자체는 노출하지 않는다.
+  resource 경로는 `ctx.app.paths.resources`가 제공한다. 남은 범위는 없고,
+  Windows 외 플랫폼의 앱 디렉터리는 해당 플랫폼 플러그인 범위다.
+  [경로 계약](./site/src/content/docs/reference/plugins/path.mdx)을 따른다.
 - [x] Windows path join, resolve, normalize, basename, dirname, extname과 isAbsolute를 제공한다.
   resolve는 명시적인 fully qualified base를 요구하며 host cwd와 per-drive cwd를 사용하지 않는다.
 - [x] 문자열 경로 helper의 Windows drive, UNC, extended-length와 Unicode 동작을 정의한다.
