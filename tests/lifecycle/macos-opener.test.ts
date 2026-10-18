@@ -173,6 +173,13 @@ test("isolated macOS opener preserves validation, acceptance, ownership and unsu
       "UNSUPPORTED",
     ],
     [
+      "opener.getUrlHandler",
+      {
+        url: "https://example.com/",
+      },
+      "UNSUPPORTED",
+    ],
+    [
       "opener.missing",
       {
         path,

@@ -12,6 +12,7 @@ opener.openFile(path: string, options?: NativeInvokeOptions): Promise<null>
 opener.revealFile(path: string, options?: NativeInvokeOptions): Promise<null>
 opener.openFileWith(path: string, app: string, options?: NativeInvokeOptions): Promise<null>
 opener.openUrlWith(url: string, app: string, options?: NativeInvokeOptions): Promise<null>
+opener.getUrlHandler(url: string, options?: NativeInvokeOptions): Promise<{ name: string; path: string } | null>
 ```
 
 `@bunaway/plugin-opener`를 설치하고 앱의 `plugins`에 `opener`를 등록합니다. 세 함수는 Windows와 macOS 어댑터를 제공합니다. macOS 네이티브 실행 검증은 현재 진행 중입니다.
@@ -142,6 +143,21 @@ setup에서 호출할 때는 같은 작업 이름을 루트 `backend.permissions
 
 작업 권한은 유효한 파일 경로 전체에 적용하며 연결 앱의 동작을 격리하지 않습니다. 실행 파일과 셸 바로가기도 기본 동작으로 실행될 수 있으므로 앱 명령에서 신뢰하는 파일을 정합니다. 기본 연결 변경은 지원하지 않습니다.
 
+## URL 처리 앱 조회
+
+`opener.getUrlHandler(url)`은 URL의 scheme에 연결된 앱을 조회합니다. 입력은 `openUrl`과 같은 규칙의 HTTP 또는 HTTPS URL `{ url: string }`이고, 결과는 표시 이름 `name`과 실행 파일 경로 `path`를 담은 객체입니다. 처리 앱이 없으면 `null`입니다. 앱을 실행하거나 URL을 열지 않습니다.
+
+```ts
+const handler = await opener.getUrlHandler("https://example.com/");
+if (handler) {
+  console.log(handler.name, handler.path);
+}
+```
+
+Windows만 지원하며 macOS는 `UNSUPPORTED`입니다. Windows는 `AssocQueryStringW`에 `ASSOCF_IS_PROTOCOL`을 지정해 표시 이름과 실행 파일 경로를 조회합니다. 이름이나 경로 조회가 실패하거나, 빈 값이거나, 최대 32,768 UTF-16 코드 단위를 넘거나, 제어 문자를 포함하면 모두 `null`입니다. Electron과 Chromium처럼 실패 코드를 구분하지 않습니다. 오류는 입력이 잘못된 `INVALID_ARGUMENT`와 플러그인 종료 뒤 호출의 `CANCELLED`뿐입니다. 아이콘은 반환하지 않습니다. 호출은 I/O Worker에서 동기로 실행하므로 시작 전에 취소된 호출만 막고, 진행 중인 조회는 중단하지 않습니다.
+
+실행 파일 경로가 노출되므로 권한은 `opener.getUrlHandler`이며 `opener.openUrl`과 별개입니다. 화면 직접 호출에는 `plugin.opener.getUrlHandler` 명령도 허용합니다. 연결 앱은 사용자 설정에 따라 달라지므로 결과를 기본 브라우저 판별이나 보안 판단에 쓰지 마세요.
+
 ## 지정 앱으로 열기
 
 지정 앱 함수는 Windows 전용이며 macOS에서는 제공하지 않습니다. `opener.openFileWith(path, app)`과 `opener.openUrlWith(url, app)`은 지정한 Windows 실행 파일에 대상 하나를 전달합니다. `app`은 절대 `.exe` 경로여야 하며 위의 파일 경로, 실제 이름과 링크 검사 규칙을 따릅니다. 셸 명령, `.cmd`, `.bat`, `.lnk`, 별도 실행 인자는 받지 않습니다. 파일 대상은 `openFile`과 같은 검사를, URL은 `openUrl`과 같은 HTTP/HTTPS 검사를 받습니다.
@@ -174,7 +190,7 @@ URL 페이지 로딩과 Finder의 실제 선택 완료는 기다리지 않습니
 자식으로 연결 앱을 실행하거나 셸 명령을 만들지 않습니다. 접수한 작업은 취소나 종료로
 되돌리지 않습니다.
 
-Host operation은 `opener.openUrl`, `opener.openFile`, `opener.revealFile`, `opener.trashFile`, `opener.addRecentDocument`, `opener.clearRecentDocuments`입니다. 입력은 URL 작업에서 `{ url: string }`, 파일 작업에서 `{ path: string }`, `opener.clearRecentDocuments`에서 `{}`이고 모두 `null`을 반환합니다.
+Host operation은 `opener.openUrl`, `opener.openFile`, `opener.revealFile`, `opener.trashFile`, `opener.addRecentDocument`, `opener.clearRecentDocuments`, `opener.getUrlHandler`입니다. 입력은 URL 작업에서 `{ url: string }`, 파일 작업에서 `{ path: string }`, `opener.clearRecentDocuments`에서 `{}`입니다. `opener.getUrlHandler`는 `{ name, path }` 또는 `null`을, 나머지는 `null`을 반환합니다.
 
 | 오류 | 의미 |
 | --- | --- |

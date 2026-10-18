@@ -25,6 +25,16 @@ export const urlInput = z.strictObject({
     ),
 });
 
+/**
+ * Application registered for a URL scheme. `name` is the display name and `path` the
+ * executable path; both are non-empty Shell text without control characters.
+ */
+export const urlHandlerSchema = z.strictObject({
+  name: z.string().min(1),
+  path: z.string().min(1),
+});
+export type UrlHandler = z.infer<typeof urlHandlerSchema>;
+
 /** Selected application paths are validated again by each platform before native execution. */
 export const fileWithAppSchema = fileInput.extend({
   app: fileInput.shape.path,
@@ -37,6 +47,7 @@ export function validateOpenerInput(operation: string, input: JsonValue) {
   try {
     switch (operation) {
       case "opener.openUrl":
+      case "opener.getUrlHandler":
         return urlInput.parse(validateValue({}, input));
       case "opener.openFile":
       case "opener.revealFile":

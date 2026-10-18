@@ -1427,7 +1427,8 @@
       "opener.openUrlWith",
       "opener.trashFile",
       "opener.addRecentDocument",
-      "opener.clearRecentDocuments"
+      "opener.clearRecentDocuments",
+      "opener.getUrlHandler"
     ],
     "reference/plugins/path": [
       "path.getDirectory",
