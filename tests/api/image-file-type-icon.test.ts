@@ -1,16 +1,16 @@
 import { expect, test } from "bun:test";
 import image from "@bunaway/plugin-image";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
-import {
-  FILE_TYPE_ICON_PIXELS,
-  type FileTypeIconSource,
-  type ImageCodec,
-  type Pixels,
-} from "#plugins/image/src/contract";
+import { FILE_TYPE_ICON_PIXELS } from "#plugins/image/src/contract";
 import {
   imageOperations,
   validateImageInput,
 } from "#plugins/image/src/operations";
+import type {
+  FileTypeIconSource,
+  ImageCodec,
+  Pixels,
+} from "#plugins/image/src/platforms/codec";
 import { ImagePlatform } from "#plugins/image/src/platforms/image-platform";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
