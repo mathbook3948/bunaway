@@ -78,11 +78,14 @@ let view: MacosWebview | undefined;
 let failure: unknown;
 let pageReady = false;
 let received = 0;
+let documentCompletions = 0;
 let wasmResult: unknown;
 const events: string[] = [];
 const hooks = {
   activated() {},
-  documentComplete() {},
+  documentComplete() {
+    documentCompletions++;
+  },
   receive(_source: string, raw: string) {
     const message: unknown = JSON.parse(raw);
     if (message && typeof message === "object" && "ready" in message) {
@@ -305,6 +308,38 @@ fetch('add.wasm').then(async response => {
     assert(events.includes("permission-request-denied"));
   });
   console.log("PASS native size constraints and media permission denial");
+
+  // A cancelled load that carries no navigation (the cancellation of a request WebKit never
+  // started, as `stopLoading` before a reissue produces) must not complete the document.
+  const completionsBefore = documentCompletions;
+  o.withAutoreleasePool(() => {
+    const window = nativeWindow(o);
+    const webview = o.send(
+      o.send(o.send(window, "contentView"), "subviews"),
+      "objectAtIndex:",
+      0,
+    );
+    const delegate = o.send(webview, "navigationDelegate");
+    assert(delegate, "WebKit navigation delegate must be installed.");
+    const cancelled = o.send(
+      o.class("NSError"),
+      "errorWithDomain:code:userInfo:",
+      o.string("NSURLErrorDomain"),
+      -999,
+      null,
+    );
+    o.send(
+      delegate,
+      "webView:didFailProvisionalNavigation:withError:",
+      webview,
+      null,
+      cancelled,
+    );
+  });
+  assert.equal(documentCompletions, completionsBefore);
+  console.log(
+    "PASS a cancelled load without a navigation is not a document failure",
+  );
 
   const rss: number[] = [];
   for (let batch = 0; batch < 6; batch++) {

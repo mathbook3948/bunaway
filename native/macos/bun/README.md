@@ -113,6 +113,6 @@ provisional 상태와 estimatedProgress를 관찰한다. 기존 로그의 URL �
 
 WebKit이 `loadRequest:`를 수락하고 탐색 정책 콜백까지 반환한 뒤에도 `didStartProvisionalNavigation`을
 호출하지 않는 간헐적 정지가 CI에서 관찰됐다(`docs/architecture/macos-native-results.md`).
-탐색 정책이 load를 허용한 뒤 3초 안에 provisional 단계가 시작되지 않으면 호스트가 같은 요청을 다시 발행하며
-(`load-retried`), 다시 발행한 요청은 정책 콜백이 오지 않아도 발행 시점부터 3초(스캔 틱 단위로 확인)를 새로 재서 뷰마다 최대 3번까지 반복한다(WebContent 프로세스 종료 뒤의 reload는 새로 3번을 받는다). 그래도 시작되지 않으면(정책 허용 뒤 약 12초 이상) `webview-load-stalled`를 한 번 기록해
+탐색 정책이 load를 허용한 뒤 3초 안에 provisional 단계가 시작되지 않으면 호스트가 진행 중인 load를 `stopLoading`으로 취소한 뒤 같은 요청을 다시 발행하며
+(`load-stopped`, `load-retried`), 다시 발행한 요청은 정책 콜백이 오지 않아도 발행 시점부터 3초(스캔 틱 단위로 확인)를 새로 재서 뷰마다 최대 3번까지 반복한다(WebContent 프로세스 종료 뒤의 reload는 새로 3번을 받는다). 그래도 시작되지 않으면(정책 허용 뒤 약 12초 이상) `webview-load-stalled`를 한 번 기록해
 fixture 실패를 코드 회귀가 아닌 WebKit 정지로 구분할 수 있게 한다. 문서 기한과 SDK 기한은 늘리지 않는다.
