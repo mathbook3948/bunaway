@@ -62,9 +62,13 @@ repeatedly asked for exactly these fixes.
 
 ## 6. Distribution
 
-- A new file under `native/windows/bun`, `native/macos/bun` or `native/host-api/bun` is added to
-  `frameworkPaths` in `packages/cli/src/distribution.ts`, or the installed framework cannot
-  build apps. `tests/cli/framework-paths.test.ts` fails until it is listed.
+- A new file under `native/windows/bun`, `native/macos/bun`, `native/host-api/bun` or `native/ios`
+  is added to `frameworkPaths` in `packages/cli/src/distribution.ts`, or the installed framework
+  cannot build apps. `tests/cli/framework-paths.test.ts` fails until it is listed, and fails again
+  when a listed entry disappears.
+- Code that a WebView bundle can reach (plugin `src/*.ts`, the neutral SDK modules) uses no
+  `Buffer`, `Bun`, `process` or `node:` module; Bun-only implementation lives in `src/platforms/`.
+  The lint override and `tests/conformance/browser-boundary.test.ts` enforce it.
 - A new `@bunaway/plugin` export reaches built plugins automatically; a new SDK subpath
   export needs a `package.json` exports entry and a reference-map entry.
 
