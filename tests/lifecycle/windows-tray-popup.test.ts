@@ -56,6 +56,8 @@ test.skipIf(process.platform !== "win32")(
         ? {
             left: rect[0] ?? 0,
             top: rect[1] ?? 0,
+            right: rect[2] ?? 0,
+            bottom: rect[3] ?? 0,
           }
         : null;
     };
@@ -160,6 +162,13 @@ test.skipIf(process.platform !== "win32")(
       expect(observed.nested).toMatchObject({
         code: "BUSY",
       });
+      console.log(
+        "POPUP_RECT",
+        JSON.stringify({
+          rect: observed.rect,
+          at: POSITION,
+        }),
+      );
       expect(observed.rect).not.toBeNull();
       // The OS may shift a menu to fit the screen, so allow a small margin around the origin.
       expect(
