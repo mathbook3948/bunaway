@@ -4,9 +4,9 @@ import { NativeRegistry, serializeHostResponse } from "@bunaway/protocol";
 import { MAX_DIRECTORY_ENTRIES } from "../../plugins/storage/src/contract.ts";
 import {
   directoryEntries,
-  isSizedFile,
   type ScannedDirectoryEntry,
   scanDirectoryEntries,
+  scanRole,
 } from "../../plugins/storage/src/platforms/windows-directory-entries.ts";
 import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
@@ -295,19 +295,22 @@ test("directory size counts data files behind non-surrogate reparse tags and ski
     0x80000013,
     0x80000017,
   ]) {
-    expect(isSizedFile(tagged("data", reparseFile, tag))).toBe(true);
+    expect(scanRole(tagged("data", reparseFile, tag))).toBe("file");
   }
-  // Symlink, junction and mount point tags carry the name surrogate bit.
+  // Symlink, junction and mount point tags carry the name surrogate bit, for files and folders.
   for (const tag of [
     0xa000000c,
     0xa0000003,
   ]) {
-    expect(isSizedFile(tagged("link", reparseFile, tag))).toBe(false);
+    expect(scanRole(tagged("link", reparseFile, tag))).toBe("skip");
+    expect(scanRole(tagged("link-dir", reparseDirectory, tag))).toBe("skip");
   }
-  // Reparse point directories are never entered or counted.
-  expect(isSizedFile(tagged("dir", reparseDirectory, 0x9000001a))).toBe(false);
-  expect(isSizedFile(tagged("plain", 0, 0))).toBe(true);
-  expect(isSizedFile(tagged("folder", 0x10, 0))).toBe(false);
+  // A cloud folder cannot be entered safely, so the scan must fail instead of skipping it.
+  expect(scanRole(tagged("dir", reparseDirectory, 0x9000001a))).toBe(
+    "opaque-directory",
+  );
+  expect(scanRole(tagged("plain", 0, 0))).toBe("file");
+  expect(scanRole(tagged("folder", 0x10, 0))).toBe("directory");
 });
 
 test("malformed native directory batches are rejected", () => {

@@ -4,7 +4,8 @@
 exists/stat와 copyFile, readDirectory와 createDirectory의 열한 작업을 구현한다.
 공개 작업, 권한과 오류 계약은 유지한다.
 `storage.move`와 `storage.remove`는 source 객체 고정 보장을 충족할 수 없어
-macOS에서 `UNSUPPORTED`다.
+macOS에서 `UNSUPPORTED`다. `storage.directorySize`는 Windows 핸들 고정 순회만 구현하므로
+macOS에서도 `UNSUPPORTED`다.
 
 ## 호스트 통합
 

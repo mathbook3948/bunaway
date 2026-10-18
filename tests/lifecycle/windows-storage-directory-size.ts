@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { link, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { BunawayError } from "@bunaway/protocol";
@@ -184,6 +185,52 @@ try {
   running.abort();
   await expectRejected(scan, "CANCELLED");
 
+  // Disposal during the scan cancels it and still closes the handles with live bindings.
+  const disposable = new WindowsStorage();
+  const disposing = disposable.directorySize(at("wide"));
+  disposable.dispose();
+  await expectRejected(disposing, "CANCELLED");
+  await expectRejected(disposable.directorySize(at("wide")), "CANCELLED");
+
+  // An unreadable subdirectory fails the whole scan instead of under-counting.
+  await mkdir(`${root}/acl/open`, {
+    recursive: true,
+  });
+  await mkdir(`${root}/acl/locked`, {
+    recursive: true,
+  });
+  await writeFile(`${root}/acl/open/file.bin`, new Uint8Array(3));
+  const lockedPath = resolve(root, "acl/locked");
+  const everyone = "*S-1-1-0";
+  let denied = false;
+  try {
+    execFileSync("icacls", [
+      lockedPath,
+      "/deny",
+      `${everyone}:(RD)`,
+    ]);
+    denied = true;
+  } catch {
+    console.log("SKIP icacls cannot set a deny ACE on this runner.");
+  }
+  try {
+    if (denied) {
+      await expectRejected(
+        storage.directorySize(at("acl")),
+        "PERMISSION_DENIED",
+      );
+    }
+  } finally {
+    if (denied) {
+      // Always lift the ACE so the temporary tree can be removed.
+      execFileSync("icacls", [
+        lockedPath,
+        "/remove:d",
+        everyone,
+      ]);
+    }
+  }
+
   // A file, a missing directory and a missing parent are rejected, not totalled.
   await expectRejected(
     storage.directorySize(at("tree/a.bin")),
@@ -210,5 +257,5 @@ try {
   });
 }
 console.log(
-  "PASS Windows storage directorySize: totals, hardlinks, links, limits, cancellation during the scan, target errors and handle release",
+  "PASS Windows storage directorySize: totals, hardlinks, links, limits, cancellation and disposal during the scan, denied subdirectory, target errors and handle release",
 );

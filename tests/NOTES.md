@@ -884,10 +884,11 @@ CI의 windows-native 작업은 `mise run host:windows`를 통해 이 검사를 �
 macOS 미지원과 reparse tag별 크기 집계 규칙(이름 대리자 제외)을 확인한다.
 `windows-storage-directory-size.ts`는 실제 Win32 핸들로 빈 디렉터리, 중첩 합계, hardlink의
 이름별 합산, junction과 파일 symlink 미추적(만들 수 없는 러너에서는 건너뜀), 항목 및 깊이 상한,
-시작 전과 순회 중 취소, 파일 및 없는 경로 거부와 실패 뒤 임시 트리 삭제(핸들 해제)를 확인한다.
+시작 전과 순회 중 취소, 순회 중 어댑터 해제, deny ACE(icacls)를 건 하위 디렉터리의 `PERMISSION_DENIED`
+(icacls를 쓸 수 없는 러너에서는 건너뛰고 정리 때 ACE를 제거), 파일 및 없는 경로 거부와 실패 뒤 임시 트리 삭제(핸들 해제)를 확인한다.
 `windows-storage-metadata.ts`는 실제 I/O Worker에서 허용된 호출의 합계와 파일 경로 거부를 확인한다.
 확인하지 않는 범위: Worker 경로의 권한 거부(별도 뷰가 필요해 계약 테스트의 독립 권한으로만 확인),
-접근 거부와 순회 중 사라지는 하위 항목, 기한(deadline)의 호스트 경로, 클라우드 placeholder 같은
+순회 중 사라지거나 삭제 대기 중인 하위 항목, 비대리자 reparse 디렉터리의 `UNSUPPORTED`(tag 분류만 단위 검사), 기한(deadline)의 호스트 경로, 클라우드 placeholder 같은
 실제 비이름대리자 reparse 파일(tag 해석만 단위 검사), 10만 개 항목의 실제 순회 시간.
 
 `api/macos-directory-entries.test.ts`는 Darwin dirent의 UTF-8 이름, 관찰한 종류,

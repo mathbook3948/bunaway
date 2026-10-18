@@ -6,8 +6,9 @@
 `src/platforms/macos.ts`는 read/write text/bytes, append, exists/stat와 copyFile,
 readDirectory와 createDirectory를
 macOS I/O Worker에서 제공한다. PR #164의 공유 dispatch와 수명주기를 재사용한다.
-move와 remove는 검사한 source 객체의 고정을 보장할 수 없어 macOS에서 `UNSUPPORTED`로
-실패하며 macOS handler를 선언하지 않는다.
+move, remove와 directorySize는 macOS에서 `UNSUPPORTED`로 실패하며 macOS handler를 선언하지 않는다.
+move와 remove는 검사한 source 객체의 고정을 보장할 수 없고, directorySize는 Windows의
+핸들 고정 순회만 구현한다.
 
 경로 규칙, POSIX 경합의 한계, 네이티브 검증과 호스트 통합 의존성은
 [macOS 저장 어댑터](../../docs/architecture/macos-storage-adapter.md)에 기록한다.

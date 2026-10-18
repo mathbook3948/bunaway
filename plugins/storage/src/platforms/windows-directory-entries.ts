@@ -25,21 +25,27 @@ export type ScannedDirectoryEntry = StorageDirectoryEntry & {
   isDirectoryAttribute: boolean;
 };
 
+/** How a directory size scan treats one listed child. */
+export type ScanRole = "file" | "directory" | "skip" | "opaque-directory";
+
 /**
- * Whether a child contributes its EndOfFile to a directory size: plain files, and reparse point
- * files that are not name surrogates (cloud placeholders, deduplicated and compressed files),
- * which still hold data of that logical size. Symlinks, junctions and mount points are name
- * surrogates and are never counted. Reparse point directories are not entered or counted.
+ * Classify a child for a directory size scan. Plain files, and reparse point files that are not
+ * name surrogates (cloud placeholders, deduplicated and compressed files), count their logical
+ * size. Symlinks, junctions and mount points are name surrogates and are skipped. A reparse point
+ * directory that is not a name surrogate (a cloud folder) is opaque: it has content that the scan
+ * cannot enter without following the reparse point, so the caller must fail instead of skipping it.
  */
-export function isSizedFile(entry: ScannedDirectoryEntry): boolean {
+export function scanRole(entry: ScannedDirectoryEntry): ScanRole {
   if (entry.kind === "file") {
-    return true;
+    return "file";
   }
-  return (
-    entry.kind === "link" &&
-    !entry.isDirectoryAttribute &&
-    !(entry.reparseTag & REPARSE_TAG_NAME_SURROGATE)
-  );
+  if (entry.kind === "directory") {
+    return "directory";
+  }
+  if (entry.reparseTag & REPARSE_TAG_NAME_SURROGATE) {
+    return "skip";
+  }
+  return entry.isDirectoryAttribute ? "opaque-directory" : "file";
 }
 
 /** Decode one batch into public entries, dropping sizes. */

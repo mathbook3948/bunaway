@@ -783,7 +783,9 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   Windows의 `storage.directorySize({ path })`는 `{ bytes, files, directories }`를 반환한다.
   루트는 directories에 세지 않고, 크기는 일반 파일의 논리 크기(EndOfFile) 합이다. 하드링크는 이름마다 더한다.
   symlink, junction 같은 이름 대리자 reparse point는 목록 작업처럼 따라가지 않고 더하지 않는다.
-  클라우드 placeholder, 중복 제거와 WOF 같은 비대리자 reparse 파일은 논리 크기를 더한다.
+  클라우드 placeholder, 중복 제거와 WOF 같은 비대리자 reparse 파일은 논리 크기를 더하고,
+  클라우드 폴더 같은 비대리자 reparse 디렉터리를 만나면 과소 집계 대신 `UNSUPPORTED`로 실패한다.
+  삭제 대기 중인 하위 디렉터리는 사라진 항목처럼 건너뛴다.
   일부 하위 항목의 접근 거부와 열기 실패는 과소 집계 대신 작업 전체를 실패시킨다.
   탐색 중 사라진 항목은 건너뛰고 스냅샷 일관성은 보장하지 않는다.
   방문 항목 100,000개와 깊이 64를 넘으면 `INVALID_ARGUMENT`이고,
