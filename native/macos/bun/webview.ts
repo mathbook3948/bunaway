@@ -83,7 +83,9 @@ export class MacosWebview {
   private navigationStarted = false;
   /** The current load request reached `didStartProvisionalNavigation`; reset by every load request. */
   private provisionalSeen = false;
-  private lastLoadAt = 0;
+  /** Epoch ms at which the policy callback allowed the current load request; 0 until then. */
+  private policyAllowedAt = 0;
+  /** Reissues of the current load so far, plus one once the stall was reported; reset by an external load. */
   private loadRetries = 0;
   private provisionalNavigation: ObjcObject | null = null;
   /** Latest top-level document navigation; unlike provisionalNavigation it survives commit until completion. */
@@ -351,6 +353,11 @@ export class MacosWebview {
               decision ?? null,
               allowed ? WK_NAVIGATION_ALLOW : WK_NAVIGATION_CANCEL,
             );
+            if (allowed && !this.policyAllowedAt) {
+              // The stall clock starts only once the policy decision is out, so a slow decision
+              // is never mistaken for WebKit not starting the navigation.
+              this.policyAllowedAt = Date.now();
+            }
             this.diagnostics.record("action-policy-returned", {
               allowed,
             });
@@ -498,6 +505,8 @@ export class MacosWebview {
             });
             hooks.revoke("process-failed");
             if (!this.closed) {
+              // A reload after a crash gets its own stall budget.
+              this.loadRetries = 0;
               this.loadHome();
             }
           },
@@ -697,7 +706,7 @@ export class MacosWebview {
     }
     this.diagnostics.record("load-requested");
     this.provisionalSeen = false;
-    this.lastLoadAt = Date.now();
+    this.policyAllowedAt = 0;
     const o = this.objc;
     o.withAutoreleasePool(() => {
       const url = o.send(
@@ -742,11 +751,16 @@ export class MacosWebview {
    * a bounded number of times; the document and SDK deadlines are unchanged.
    */
   private retryStalledLoad(): void {
-    if (this.closed || !this.navigationStarted || this.provisionalSeen) {
+    if (
+      this.closed ||
+      !this.navigationStarted ||
+      this.provisionalSeen ||
+      !this.policyAllowedAt
+    ) {
       return;
     }
     const action = stalledLoadAction(
-      Date.now() - this.lastLoadAt,
+      Date.now() - this.policyAllowedAt,
       this.loadRetries,
     );
     if (action === "wait" || action === "none") {
@@ -765,7 +779,11 @@ export class MacosWebview {
     });
     this.loadHome();
   }
-  /** Observe a stalled initial bridge at 5, 10 and 15 seconds without changing its deadline. */
+  /**
+   * Called every window scan tick. Reissues a stalled load (see `retryStalledLoad`, so the retry
+   * interval is the stall threshold plus one tick), then observes a stalled initial bridge at
+   * 5, 10 and 15 seconds; the checkpoints never change a deadline.
+   */
   observeStartup(): void {
     this.retryStalledLoad();
     if (

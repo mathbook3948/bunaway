@@ -128,12 +128,11 @@ CI 실행 [37574470840](https://github.com/mathbook3948/bunaway/actions/runs/375
 `loading:true, provisional:false, progress:0.1`을 유지했다.
 
 재현율은 코드 변경이 없는 head(호스트 소스가 main과 같음)의 같은 잡을 `gh run rerun --job`으로 반복해 측정한다.
-아래 표는 측정이 끝나면 채운다.
 
 | 구간 | 실행 횟수 | 정지 횟수 | 실행 링크 |
 | --- | --- | --- | --- |
 | 수정 전 (1c3776cc) | 2 | 2 | [run 39129532113](https://github.com/mathbook3948/bunaway/actions/runs/39129532113) attempt 1(`index.html` 도착 45초 초과, `main` provisional:false)과 attempt 2(main 페이지 10초 초과, 5/10/15초 checkpoint 모두 provisional:false) |
-| 수정 후 (b71ea308, 호스트 소스는 3aea32d8과 동일) | 5 | 0 | [run 39131976667](https://github.com/mathbook3948/bunaway/actions/runs/39131976667) attempt 1 내지 4, [run 39130714384](https://github.com/mathbook3948/bunaway/actions/runs/39130714384)(3aea32d8)의 macOS 잡 |
+| 수정 후 (3aea32d8, b71ea308: 같은 재시도 로직) | 5 | 0 | [run 39131976667](https://github.com/mathbook3948/bunaway/actions/runs/39131976667) attempt 1 내지 4, [run 39130714384](https://github.com/mathbook3948/bunaway/actions/runs/39130714384)(3aea32d8)의 macOS 잡 |
 
 수정 전 2회는 같은 head를 같은 잡으로 연속 재실행한 결과이고 둘 다 정지했다. 이슈에 기록된 두 관찰까지 더하면 정지 4회다.
 수정은 초기 load 뒤 3초 안에 provisional 단계가 시작되지 않을 때 같은 요청을 다시 발행한다(뷰마다 최대 3번).
