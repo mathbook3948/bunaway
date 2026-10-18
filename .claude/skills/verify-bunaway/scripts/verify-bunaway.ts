@@ -634,6 +634,9 @@ async function web(projectDir: string, args: string[]): Promise<void> {
   reservation.stop(true);
   const url = `http://127.0.0.1:${port}/`;
   const [command, ...rest] = settings.dev.command;
+  if (!command) {
+    fail("dev.command in src-bunaway/bunaway.json is empty");
+  }
   const server = Bun.spawn(
     [
       command === "bun" ? process.execPath : command,

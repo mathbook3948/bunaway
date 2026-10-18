@@ -103,6 +103,17 @@ jobs:
       - name: Build the documentation site and search index
         if: runner.os == 'Linux'
         run: bun run docs:build
+      - name: Smoke-run the verification helper on a generated app
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          helper=.claude/skills/verify-bunaway/scripts/verify-bunaway.ts
+          run=build/verify-bunaway/ci
+          mise exec -- bun $helper pack $run/packages
+          mise exec -- bun $helper create $run/app --packages $run/packages --template vanilla
+          mise exec -- bun $helper doctor $run/app
+          mise exec -- bun $helper backend $run/app --evidence $run/evidence
+          mise exec -- bun $helper clean $run/app
       - name: Verify generated native schemas
         if: runner.os == 'Linux'
         run: |
