@@ -186,12 +186,23 @@ test.skipIf(process.platform !== "win32")(
         showOnLeftClick: false,
         menuOnRightClick: false,
       });
+      await invoke("setVisible", {
+        visible: false,
+      });
       expect(await invoke("get", null)).toMatchObject({
         id: "main",
         tooltip: "한글 😀",
         icon: "custom",
         showOnLeftClick: false,
         menuOnRightClick: false,
+        visible: false,
+      });
+      expect(await invoke("getBounds", null)).toBeNull();
+      await invoke("setVisible", {
+        visible: true,
+      });
+      expect(await invoke("get", null)).toMatchObject({
+        visible: true,
       });
       const notification = invoke("waitForEvent", null);
       // A subsequent round-trip ensures the native waiter is installed before synthetic input.

@@ -95,6 +95,11 @@ export function setClickBehavior(
   return null;
 }
 
+export function setVisible(state: State, visible: boolean): null {
+  requireTray(state.services).setVisible(visible);
+  return null;
+}
+
 export function focus(state: State) {
   return requireTray(state.services).focus();
 }

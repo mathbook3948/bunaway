@@ -1835,6 +1835,9 @@ try {
         setClickBehavior(showOnLeftClick, menuOnRightClick) {
           requireTray().setClickBehavior(showOnLeftClick, menuOnRightClick);
         },
+        setVisible(visible) {
+          requireTray().setVisible(visible);
+        },
         focus: () => requireTray().focus(),
         popUpContextMenu: (position, signal) =>
           requireTray().popUpContextMenu(position, signal),

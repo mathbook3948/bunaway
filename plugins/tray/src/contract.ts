@@ -1,8 +1,8 @@
+import { int32Schema } from "@bunaway/plugin";
 import {
   MAX_TRAY_ICO_BYTES,
   MAX_TRAY_TOOLTIP_UNITS,
 } from "@bunaway/plugin-api/native";
-import { int32Schema } from "@bunaway/plugin";
 import { z } from "zod";
 
 export const positionSchema = z.strictObject({
@@ -33,6 +33,7 @@ export const snapshotSchema = z.strictObject({
   ]),
   showOnLeftClick: z.boolean(),
   menuOnRightClick: z.boolean(),
+  visible: z.boolean(),
 });
 export const trayEventSchema = z.strictObject({
   id: z.literal("main"),

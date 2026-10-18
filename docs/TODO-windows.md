@@ -297,7 +297,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] Explorer 재시작 후 트레이 아이콘을 다시 등록한다.
 - [ ] 앱 선언에서 앱 아이콘과 별도로 트레이용 ICO, PNG 또는 이미지 리소스를 지정한다. 실행 중 `tray.setIcon` ICO bytes 적용은 구현됐다.
 - [x] `tray.setIcon`으로 ICO bytes를 적용하거나 앱 아이콘으로 복원하고 `tray.setTooltip`으로 tooltip을 실행 중 변경한다.
-- [ ] 트레이 생성, 조회, 표시, 숨김, 제거와 제거 여부 조회 API를 제공한다.
+- [ ] 트레이 생성, 조회, 표시, 숨김, 제거와 제거 여부 조회 API를 제공한다. 조회와 표시, 숨김은 `tray.get`의 `visible`과 `tray.setVisible`(`NIS_HIDDEN`)로 구현했다. 생성과 제거는 `desktop.tray` 선언이 소유하므로 남아 있다.
 - [ ] 여러 트레이 아이콘과 고유 ID, Windows GUID를 지원한다.
 - [x] 사용자 정의 메뉴와 메뉴의 동적 교체, 제거를 지원한다. `menu.setTrayMenu`로 공유 메뉴 리소스를 연결한다.
 - [x] 왼쪽, 오른쪽, 가운데 버튼의 down/up, double-click과 context-menu 알림을 `tray.input` 및 창 없는 백엔드 `waitForEvent`로 전달한다.

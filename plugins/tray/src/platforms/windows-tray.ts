@@ -42,6 +42,11 @@ const NIM_SETFOCUS = 3;
 const NIF_MESSAGE = 0x1;
 const NIF_ICON = 0x2;
 const NIF_TIP = 0x4;
+const NIF_STATE = 0x8;
+const NIS_HIDDEN = 0x1;
+// NOTIFYICONDATAW offsets after szTip (Win64).
+const DW_STATE_OFFSET = 296;
+const DW_STATE_MASK_OFFSET = 300;
 const TPM_RIGHTBUTTON = 0x2;
 const TPM_RETURNCMD = 0x100;
 const TRAY_ICON_ID = 1;
@@ -110,6 +115,7 @@ export class Tray {
   private showOnLeftClick = true;
   private menuOnRightClick = true;
   private tooltip = "";
+  private visible = true;
   private disposed = false;
   private windowDestroyed = false;
   private shellClosed = false;
@@ -212,7 +218,9 @@ export class Tray {
       this.data.writeUInt32LE(this.data.length, 0);
       this.data.writeBigUInt64LE(this.hwnd, 8);
       this.data.writeUInt32LE(TRAY_ICON_ID, 16);
-      this.data.writeUInt32LE(NIF_MESSAGE | NIF_ICON | NIF_TIP, 20);
+      this.data.writeUInt32LE(NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_STATE, 20);
+      // Only the hidden bit is ever claimed, so every NIM_MODIFY and Explorer re-add keeps it.
+      this.data.writeUInt32LE(NIS_HIDDEN, DW_STATE_MASK_OFFSET);
       this.data.writeUInt32LE(TRAY_CALLBACK_MESSAGE, 24);
       const icon = windows.icon;
       assert(icon, "Tray icon unavailable");
@@ -463,10 +471,14 @@ export class Tray {
       icon: this.customIcon === undefined ? "app" : "custom",
       showOnLeftClick: this.showOnLeftClick,
       menuOnRightClick: this.menuOnRightClick,
+      visible: this.visible,
     };
   }
-  /** Query physical shell coordinates. Overflow/unavailable shell bounds produce null. */
+  /** Query physical shell coordinates. A hidden icon, overflow or unavailable shell bounds produce null. */
   getBounds() {
+    if (!this.visible) {
+      return null;
+    }
     const identifier = Buffer.alloc(NOTIFYICONIDENTIFIER_SIZE);
     identifier.writeUInt32LE(NOTIFYICONIDENTIFIER_SIZE, 0);
     identifier.writeBigUInt64LE(this.hwnd, 8);
@@ -535,8 +547,28 @@ export class Tray {
     this.showOnLeftClick = showOnLeftClick;
     this.menuOnRightClick = menuOnRightClick;
   }
-  /** Ask the shell to focus this configured tray icon. OS refusal returns false. */
+  /**
+   * Hide or show the icon with NIS_HIDDEN. The registration, tooltip, icon and menu stay in place,
+   * so the icon returns as it was and the app keeps its configured residency. The state is committed
+   * only if the shell accepts it.
+   */
+  setVisible(visible: boolean) {
+    const previous = this.data.readUInt32LE(DW_STATE_OFFSET);
+    this.data.writeUInt32LE(visible ? 0 : NIS_HIDDEN, DW_STATE_OFFSET);
+    if (!this.shell.symbols.Shell_NotifyIconW(NIM_MODIFY, ptr(this.data))) {
+      this.data.writeUInt32LE(previous, DW_STATE_OFFSET);
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Tray visibility update failed.",
+      });
+    }
+    this.visible = visible;
+  }
+  /** Ask the shell to focus this configured tray icon. A hidden icon or OS refusal returns false. */
   focus(): boolean {
+    if (!this.visible) {
+      return false;
+    }
     return (
       this.shell.symbols.Shell_NotifyIconW(NIM_SETFOCUS, ptr(this.data)) !== 0
     );

@@ -13,6 +13,8 @@ export type NativeTraySnapshot = {
   icon: "app" | "custom";
   showOnLeftClick: boolean;
   menuOnRightClick: boolean;
+  /** False while the icon is hidden. The registration, tooltip, icon and menu are kept. */
+  visible: boolean;
 };
 /** Classic shell notifications, with observed physical pointer coordinates when available. */
 export type NativeTrayEvent = {
@@ -41,6 +43,8 @@ export type NativeTrayServices = {
   /** Base64 ICO data, or null to restore the host-owned app icon. No file paths are accepted. */
   setIcon(ico: string | null): void;
   setClickBehavior(showOnLeftClick: boolean, menuOnRightClick: boolean): void;
+  /** Hides or shows the registered icon without releasing it. Hidden bounds are null and focus is false. */
+  setVisible(visible: boolean): void;
   focus(): boolean;
   /**
    * Tracks the menu attached with `setTrayMenu` at a physical screen position (null for the
@@ -87,6 +91,7 @@ export type NativeTrayOwner = Pick<
   | "setTooltip"
   | "setIcon"
   | "setClickBehavior"
+  | "setVisible"
   | "focus"
   | "popUpContextMenu"
 > & {

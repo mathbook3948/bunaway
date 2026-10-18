@@ -16,6 +16,7 @@ import {
   setClickBehavior,
   setIcon,
   setTooltip,
+  setVisible,
   waitForEvent,
 } from "#tray/platforms/windows";
 
@@ -59,6 +60,13 @@ export const trayOperations = {
     output: z.null(),
     handler: ({ showOnLeftClick, menuOnRightClick }, { instance }) =>
       setClickBehavior(instance, showOnLeftClick, menuOnRightClick),
+  }),
+  setVisible: operation({
+    input: z.strictObject({
+      visible: z.boolean(),
+    }),
+    output: z.null(),
+    handler: ({ visible }, { instance }) => setVisible(instance, visible),
   }),
   focus: operation({
     input: z.null(),
