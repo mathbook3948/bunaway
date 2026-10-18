@@ -1064,6 +1064,13 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isMaximizable": windowStateResult,
+  "windows.setFullscreenable": {
+    input: windowTarget.extend({
+      fullscreenable: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isFullscreenable": windowStateResult,
   "windows.setClosable": {
     input: windowTarget.extend({
       closable: z.boolean(),

@@ -371,6 +371,50 @@ if (!process.argv.includes("--child")) {
       }
       assert.throws(() => nativeWindows.isClosable(hwnd));
     }
+    {
+      const hwnd = nativeWindows.create(
+        "Fullscreenable regression",
+        650,
+        450,
+        () => {},
+      );
+      try {
+        const original = nativeWindows.getBounds(hwnd, "outer");
+        assert.equal(nativeWindows.isFullscreenable(hwnd), true);
+        nativeWindows.setFullscreenable(hwnd, false);
+        assert.equal(nativeWindows.isFullscreenable(hwnd), false);
+        // The native layer rejects entering and leaves the window untouched.
+        assert.throws(
+          () => nativeWindows.setFullscreen(hwnd, true),
+          (error) =>
+            (
+              error as {
+                code?: string;
+              }
+            ).code === "INVALID_ARGUMENT",
+        );
+        assert.equal(nativeWindows.isFullscreen(hwnd), false);
+        assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+        // It is independent of the native maximize button.
+        assert.equal(nativeWindows.isMaximizable(hwnd), true);
+        nativeWindows.setFullscreenable(hwnd, true);
+        nativeWindows.setFullscreen(hwnd, true);
+        assert.equal(nativeWindows.isFullscreen(hwnd), true);
+        // Disabling while fullscreen keeps the state, and leaving stays allowed.
+        nativeWindows.setFullscreenable(hwnd, false);
+        assert.equal(nativeWindows.isFullscreen(hwnd), true);
+        nativeWindows.setFullscreen(hwnd, false);
+        assert.equal(nativeWindows.isFullscreen(hwnd), false);
+        assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+        assert.throws(() => nativeWindows.setFullscreen(hwnd, true));
+        nativeWindows.setFullscreenable(hwnd, true);
+        nativeWindows.setFullscreen(hwnd, true);
+        nativeWindows.setFullscreen(hwnd, false);
+      } finally {
+        nativeWindows.destroy(hwnd);
+      }
+      assert.throws(() => nativeWindows.isFullscreenable(hwnd));
+    }
     for (const maximized of [
       false,
       true,
@@ -1941,6 +1985,26 @@ if (!process.argv.includes("--child")) {
             });
             await assertContentSize(700, 550);
             assert.equal(await windows.isFullscreen(editor), false);
+            assert.equal(await windows.isFullscreenable(editor), true);
+            await windows.setFullscreenable({
+              ...editor,
+              fullscreenable: false,
+            });
+            assert.equal(await windows.isFullscreenable(editor), false);
+            await assert.rejects(
+              windows.setFullscreen({
+                ...editor,
+                fullscreen: true,
+              }),
+              (error) =>
+                (
+                  error as {
+                    code?: string;
+                  }
+                ).code === "INVALID_ARGUMENT",
+            );
+            assert.equal(await windows.isFullscreen(editor), false);
+            // The state resets on recreate, which the next run asserts.
             console.log(
               JSON.stringify({
                 event: "window-api-geometry",
@@ -1999,6 +2063,12 @@ if (!process.argv.includes("--child")) {
             );
             assert.equal(
               await windows.isClosable({
+                view: "editor",
+              }),
+              true,
+            );
+            assert.equal(
+              await windows.isFullscreenable({
                 view: "editor",
               }),
               true,

@@ -193,6 +193,9 @@ The CLI accepts an `app.windows` catalog with one unique policy view per window.
 제공한다. UI Worker의 실제 HWND를 사용하며 조회도 해당 operation 이름을 허용해야 한다.
 최소화 전 최대화 복원, 숨긴 창 표시와 전체화면 중 변경 거부는
 [공개 창 계약](../../../docs/site/src/content/docs/reference/host/windows.mdx)을 따른다.
+`setFullscreenable`/`isFullscreenable`은 HWND별로 전체화면 진입 허용(기본 true)을 저장하고 파괴 시 지운다.
+`win32.ts`의 `setFullscreen`이 진입을 `INVALID_ARGUMENT`로 거부하므로 어느 경로로 호출해도 우회되지 않는다.
+이미 전체화면인 창은 유지되며 해제는 항상 허용한다.
 `startup: false` defers creation until `windows.create`. Window calls execute on
 the UI STA through the explicitly installed and registered `@bunaway/plugin-windows`. Each operation checks its own name in the active caller's grants. The I/O Worker
 reports registered operations as capabilities. `windows.recreate` reserves the view
