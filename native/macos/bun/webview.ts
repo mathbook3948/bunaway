@@ -8,7 +8,12 @@ import type { MacosConfig } from "./config.ts";
 import { Objc, type ObjcObject } from "./objc.ts";
 import { macosOrigin, platformUrl, resourceRules } from "./urls.ts";
 import { MacosWebviewControls } from "./webview-controls.ts";
-import { WebviewDiagnostics, webviewError } from "./webview-diagnostics.ts";
+import {
+  MAX_LOAD_RETRIES,
+  stalledLoadAction,
+  WebviewDiagnostics,
+  webviewError,
+} from "./webview-diagnostics.ts";
 
 const NS_VIEW_WIDTH_SIZABLE = 2;
 const NS_VIEW_HEIGHT_SIZABLE = 16;
@@ -17,9 +22,6 @@ const WK_NAVIGATION_CANCEL = 0;
 const WK_NAVIGATION_ALLOW = 1;
 const WK_PERMISSION_DENY = 0;
 const NS_URL_ERROR_CANCELLED = -999;
-/** A load request that has not started its provisional navigation after this long is reissued. */
-const PROVISIONAL_STALL_MS = 3000;
-const MAX_LOAD_RETRIES = 3;
 /** NSWindowSharingNone: other processes cannot read the window's contents. */
 const NS_WINDOW_SHARING_NONE = 0;
 /** NSWindowSharingReadOnly: the AppKit default, readable by capture and sharing. */
@@ -740,25 +742,24 @@ export class MacosWebview {
    * a bounded number of times; the document and SDK deadlines are unchanged.
    */
   private retryStalledLoad(): void {
-    if (
-      this.closed ||
-      !this.navigationStarted ||
-      this.provisionalSeen ||
-      Date.now() - this.lastLoadAt < PROVISIONAL_STALL_MS
-    ) {
+    if (this.closed || !this.navigationStarted || this.provisionalSeen) {
       return;
     }
-    if (this.loadRetries >= MAX_LOAD_RETRIES) {
-      if (this.loadRetries === MAX_LOAD_RETRIES) {
-        this.loadRetries++;
-        this.diagnostics.record("load-stalled");
-        this.hooks.log("webview-load-stalled", {
-          retries: MAX_LOAD_RETRIES,
-        });
-      }
+    const action = stalledLoadAction(
+      Date.now() - this.lastLoadAt,
+      this.loadRetries,
+    );
+    if (action === "wait" || action === "none") {
       return;
     }
     this.loadRetries++;
+    if (action === "report") {
+      this.diagnostics.record("load-stalled");
+      this.hooks.log("webview-load-stalled", {
+        retries: MAX_LOAD_RETRIES,
+      });
+      return;
+    }
     this.diagnostics.record("load-retried", {
       progress: this.objc.double(this.webview, "estimatedProgress"),
     });

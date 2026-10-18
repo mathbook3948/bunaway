@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
 import {
+  MAX_LOAD_RETRIES,
+  PROVISIONAL_STALL_MS,
+  stalledLoadAction,
   WebviewDiagnostics,
   webviewError,
 } from "#native/macos/bun/webview-diagnostics";
@@ -28,6 +31,27 @@ test("WebView stage records stop at a fixed bound with an explicit limit marker"
     event: "webview-stage",
     stage: "limit",
   });
+});
+
+test("a stalled initial load is reissued a bounded number of times and reported once", () => {
+  expect(stalledLoadAction(PROVISIONAL_STALL_MS - 1, 0)).toBe("wait");
+  const actions: string[] = [];
+  let attempts = 0;
+  for (let step = 0; step < MAX_LOAD_RETRIES + 3; step++) {
+    const action = stalledLoadAction(PROVISIONAL_STALL_MS, attempts);
+    actions.push(action);
+    if (action === "retry" || action === "report") {
+      attempts++;
+    }
+  }
+  expect(actions).toEqual([
+    "retry",
+    "retry",
+    "retry",
+    "report",
+    "none",
+    "none",
+  ]);
 });
 
 test("native error diagnostics preserve signed codes and redact unrecognized domains", () => {
