@@ -29,6 +29,17 @@ export const preferencesSchema = z.strictObject({
 });
 export type AppearancePreferences = z.output<typeof preferencesSchema>;
 
+/**
+ * Windows only. `screenReaderEnabled` is the SPI_GETSCREENREADER setting flag.
+ * `assistiveTechnologyActive` is true while a UI Automation client (screen reader,
+ * magnifier and similar) is listening, as reported by `UiaClientsAreListening`.
+ */
+export const accessibilityStateSchema = z.strictObject({
+  screenReaderEnabled: z.boolean(),
+  assistiveTechnologyActive: z.boolean(),
+});
+export type AccessibilityState = z.output<typeof accessibilityStateSchema>;
+
 export const themePreferenceSchema = z.enum([
   "system",
   "light",

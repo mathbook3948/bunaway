@@ -1565,6 +1565,7 @@
       "windows.getCursorPosition"
     ],
     "reference/plugins/appearance": [
+      "appearance.getAccessibilityState",
       "appearance.getPreferences",
       "appearance.getTheme",
       "appearance.setTheme"

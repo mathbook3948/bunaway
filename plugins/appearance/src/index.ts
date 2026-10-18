@@ -36,10 +36,14 @@ export default defineNativePlugin(
     ...api,
     getPreferences: (options?: import("@bunaway/plugin").NativeInvokeOptions) =>
       api.getPreferences(null, options),
+    getAccessibilityState: (
+      options?: import("@bunaway/plugin").NativeInvokeOptions,
+    ) => api.getAccessibilityState(null, options),
   }),
 );
 
 export type {
+  AccessibilityState,
   AppearancePreferences,
   ThemePreference,
   ThemeState,

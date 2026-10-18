@@ -154,6 +154,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-power.test.ts",
           "tests/lifecycle/windows-power-ui.test.ts",
           "tests/lifecycle/windows-appearance.test.ts",
+          "tests/lifecycle/windows-appearance-accessibility.test.ts",
           "tests/lifecycle/windows-opener.test.ts",
           "tests/lifecycle/windows-opener-job.test.ts",
           "tests/lifecycle/windows-opener-selected-app.test.ts",

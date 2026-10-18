@@ -1,10 +1,11 @@
+import { attemptAll } from "@bunaway/plugin";
 import type {
   NativeAppearanceWindow,
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
-import { attemptAll } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import type {
+  AccessibilityState,
   AppearancePreferences,
   ThemePreference,
   ThemeState,
@@ -18,6 +19,8 @@ type WindowEntry = {
 };
 type Reader = {
   read(): AppearancePreferences;
+  /** Absent in query-only readers that cannot probe UI Automation. */
+  readAccessibilityState?(): AccessibilityState;
   dispose(): void;
 };
 /** Plugin lifetime owns the requested state, deduplicated OS snapshots and native subscriptions. */
@@ -161,6 +164,16 @@ export function createAppearanceController(
     read() {
       active();
       return reader.read();
+    },
+    getAccessibilityState() {
+      active();
+      if (!reader.readAccessibilityState) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message: "Accessibility state is unavailable.",
+        });
+      }
+      return reader.readAccessibilityState();
     },
     getTheme(windowId: string | null) {
       supported();
