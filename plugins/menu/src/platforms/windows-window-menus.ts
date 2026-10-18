@@ -1,6 +1,6 @@
 import { dlopen } from "bun:ffi";
-import { USER32, USER32_MENUS, pick } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
+import { pick, USER32, USER32_MENUS } from "@bunaway/plugin/win32";
 import { NativePopupMenu } from "@bunaway/plugin/windows-menu";
 import type {
   NativeMenuItem,
@@ -28,6 +28,8 @@ export type WindowMenuDriver = {
     selected: (id: string) => void,
     closed: () => void,
   ): void;
+  setVisible(windowId: string, visible: boolean): void;
+  isVisible(windowId: string): boolean;
   popup(
     windowId: string,
     items: readonly NativeMenuItem[],
@@ -64,13 +66,50 @@ export class WindowMenus implements WindowMenuDriver {
   });
   private readonly attachments = new Map<string, Attachment>();
   private readonly retired = new Set<NativePopupMenu>();
+  /** Windows whose menu bar is hidden; the attached tree is kept and only unlinked from the HWND. */
+  private readonly hidden = new Set<string>();
   private popupActive = false;
   private disposed = false;
 
   constructor(private readonly host: NativeMenuWindowHost) {}
 
   validate(windowId: string) {
-    this.host.resolve(windowId);
+    this.resolve(windowId);
+  }
+
+  /** A closed window can no longer be addressed, so its visibility flag is dropped. */
+  private resolve(windowId: string) {
+    try {
+      return this.host.resolve(windowId);
+    } catch (error) {
+      this.hidden.delete(windowId);
+      throw error;
+    }
+  }
+
+  setVisible(windowId: string, visible: boolean) {
+    const hwnd = this.resolve(windowId);
+    const attached = this.attachments.get(windowId);
+    if (attached) {
+      assert(
+        this.native.symbols.SetMenu(hwnd, visible ? attached.tree.handle : 0n),
+        "Window menu bar visibility change failed.",
+      );
+    }
+    if (visible) {
+      this.hidden.delete(windowId);
+    } else {
+      this.hidden.add(windowId);
+    }
+    if (attached) {
+      this.native.symbols.DrawMenuBar(hwnd);
+      this.host.changed(windowId);
+    }
+  }
+
+  isVisible(windowId: string) {
+    this.resolve(windowId);
+    return !this.hidden.has(windowId);
   }
 
   set(
@@ -79,7 +118,7 @@ export class WindowMenus implements WindowMenuDriver {
     selected: (id: string) => void,
     closed: () => void,
   ) {
-    const hwnd = this.host.resolve(windowId);
+    const hwnd = this.resolve(windowId);
     const previous = this.attachments.get(windowId);
     const tree = items === null ? null : new NativePopupMenu(items, true);
     let unsubscribe: (() => void) | undefined;
@@ -137,7 +176,10 @@ export class WindowMenus implements WindowMenuDriver {
         };
       }
       assert(
-        this.native.symbols.SetMenu(hwnd, tree?.handle ?? 0n),
+        this.native.symbols.SetMenu(
+          hwnd,
+          tree && !this.hidden.has(windowId) ? tree.handle : 0n,
+        ),
         "Window menu attachment failed.",
       );
     } catch (error) {
@@ -189,6 +231,7 @@ export class WindowMenus implements WindowMenuDriver {
       "Window menu detachment failed.",
     );
     this.attachments.delete(windowId);
+    this.hidden.delete(windowId);
     attached.unsubscribe();
     this.retire(attached.tree);
     this.native.symbols.DrawMenuBar(attached.hwnd);

@@ -46,6 +46,8 @@ await menu.setTrayMenu({ menuId: "tray-menu" });
 | `menu.getTrayMenu` | `null` | 연결한 메뉴 ID 또는 `null` |
 | `menu.setWindowMenu` | `{ windowId, menuId: string \| null }` | `null` |
 | `menu.getWindowMenu` | `{ windowId }` | 연결한 메뉴 ID 또는 `null` |
+| `menu.setWindowMenuVisible` | `{ windowId, visible: boolean }` | `null` |
+| `menu.getWindowMenuVisible` | `{ windowId }` | `boolean` |
 | `menu.showContextMenu` | `{ windowId, menuId, x, y }` | 선택한 항목 ID 또는 닫았을 때 `null` |
 | `menu.waitForClick` | `null` | 다음 `{ menuId, itemId, source, windowId }` |
 
@@ -128,6 +130,13 @@ checkbox와 radio는 `icon: null`을 포함한 모든 icon 변경을 `INVALID_AR
 `setWindowMenu`는 살아 있는 `windowId`에 메뉴바를 연결합니다. `menuId: null`이면
 분리합니다. `getWindowMenu`는 해당 창의 연결을 조회합니다. 창 메뉴에는 tray 플러그인이
 필요하지 않습니다. 뷰 ID나 HWND를 입력하지 않습니다.
+
+`setWindowMenuVisible`은 연결한 메뉴바를 숨기거나 다시 표시하고(Electron `setMenuBarVisibility`),
+`getWindowMenuVisible`은 현재 값을 돌려줍니다(`isMenuBarVisible`). 기본값은 `true`입니다. 숨겨도
+연결과 메뉴 리소스는 유지하며 창의 바깥 크기는 바뀌지 않고 메뉴바 높이만큼 내용 영역이 커집니다.
+숨긴 상태에서 연결한 메뉴나 교체한 메뉴도 표시하기 전까지 보이지 않습니다. 메뉴가 없는 창에도
+값을 저장하며 이후 연결한 메뉴에 적용합니다. 값은 창 수명에 묶여 창을 닫으면 사라집니다. Alt 키로
+임시 표시하는 auto-hide는 제공하지 않습니다.
 
 ```ts
 await menu.create({

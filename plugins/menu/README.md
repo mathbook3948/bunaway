@@ -9,7 +9,7 @@
 `@bunaway/plugin-api/native`에 둔다. 공통 Windows 전용 `@bunaway/plugin/windows-menu`의
 `NativePopupMenu`가 HMENU와 모든 하위 메뉴를 소유한다. 창 메뉴는 연결 해제나 창 종료 때,
 팝업은 표시 종료나 생성 실패 때 해제한다. checkbox와 radio 선택은 상태를 자동 변경하지 않는다.
-`setWindowMenu`는 창에 메뉴를 연결하고 `showContextMenu`는 화면 물리 좌표에 임시 팝업을 표시한다.
+`setWindowMenu`는 창에 메뉴를 연결하고 `setWindowMenuVisible`은 연결을 유지한 채 HWND에서 HMENU만 떼었다 붙여 메뉴바를 숨기고 표시하며,  `showContextMenu`는 화면 물리 좌표에 임시 팝업을 표시한다.
 리소스 하나는 트레이나 창 하나에만 연결할 수 있다. 팝업은 독립 복사본을 사용하며 요청 신호로 취소한다.
 편집 role(undo, redo, cut, copy, paste, selectAll)은 `type: "item"`에만 허용한다. 스키마가
 생략한 label을 기본 label로 채우고, `NativePopupMenu`가 role의 표시용 단축키 문구를 붙이며 선택 때

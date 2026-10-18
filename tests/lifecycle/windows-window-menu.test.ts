@@ -210,6 +210,25 @@ test.skipIf(process.platform !== "win32")(
         );
         expect(windows.getTitlebar(second)).toBe("custom");
       }
+      // Hiding unlinks only the HMENU: the tree stays alive, the outer size is kept
+      // and the content area grows by the menu bar height.
+      const outer = windows.getBounds(first, "outer");
+      const withBar = windows.getBounds(first, "content");
+      expect(menus.isVisible("one")).toBe(true);
+      menus.setVisible("one", false);
+      menus.setVisible("one", false);
+      expect(menus.isVisible("one")).toBe(false);
+      expect(native.symbols.GetMenu(first)).toBe(0n);
+      expect(native.symbols.IsMenu(firstMenu)).toBe(1);
+      expect(windows.getBounds(first, "outer")).toEqual(outer);
+      expect(windows.getBounds(first, "content").height).toBeGreaterThan(
+        withBar.height,
+      );
+      expect(menus.isVisible("two")).toBe(true);
+      expect(native.symbols.GetMenu(second)).toBe(secondMenu);
+      menus.setVisible("one", true);
+      expect(native.symbols.GetMenu(first)).toBe(firstMenu);
+      expect(windows.getBounds(first, "content")).toEqual(withBar);
       menus.set(
         "one",
         menuItemsSchema.parse([
@@ -228,7 +247,29 @@ test.skipIf(process.platform !== "win32")(
       expect(selections).toEqual([
         "one:open",
       ]);
-      const replacement = native.symbols.GetMenu(first);
+      let replacement = native.symbols.GetMenu(first);
+      // A menu attached or replaced while hidden stays hidden until shown again.
+      menus.setVisible("one", false);
+      expect(native.symbols.GetMenu(first)).toBe(0n);
+      expect(native.symbols.IsMenu(replacement)).toBe(1);
+      menus.set(
+        "one",
+        menuItemsSchema.parse([
+          {
+            id: "hidden",
+            type: "item",
+            label: "Hidden",
+          },
+        ]),
+        (item) => selections.push(item),
+        () => closed.push("one"),
+      );
+      expect(native.symbols.GetMenu(first)).toBe(0n);
+      expect(native.symbols.IsMenu(replacement)).toBe(0);
+      menus.setVisible("one", true);
+      replacement = native.symbols.GetMenu(first);
+      expect(replacement).not.toBe(0n);
+      expect(native.symbols.IsMenu(replacement)).toBe(1);
       for (const entry of [
         ...(listeners.get("one") ?? []),
       ]) {
