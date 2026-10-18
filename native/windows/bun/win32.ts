@@ -1067,7 +1067,7 @@ export class Windows {
   /**
    * Set whole-window opacity (0 transparent, 1 opaque) through a layered window, which also
    * covers the WebView child. The layered style is added only while the window is translucent
-   * and removed at full opacity, so an opaque window keeps its normal rendering path.
+   * and removed at full opacity unless the window ignores mouse input, so an opaque window keeps its normal rendering path.
    */
   setOpacity(window: bigint, opacity: number): void {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");
