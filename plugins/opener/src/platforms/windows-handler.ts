@@ -1,11 +1,11 @@
 import { dlopen, type FFIFunction } from "bun:ffi";
 import { wide, withBuffer } from "@bunaway/plugin/win32";
+import type { UrlHandler } from "#opener/contract";
 import { BunawayError } from "@bunaway/protocol";
 import {
   type AssociationCall,
   readAssociationString,
   resolveUrlHandler,
-  type UrlHandler,
 } from "#opener/platforms/windows-handler-query";
 
 const ASSOCF_IS_PROTOCOL = 0x1000;

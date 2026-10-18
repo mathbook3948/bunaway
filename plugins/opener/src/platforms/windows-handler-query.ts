@@ -1,3 +1,5 @@
+import type { UrlHandler } from "#opener/contract";
+
 /** Longest text accepted from the Shell, in UTF-16 code units including the NUL. */
 export const MAX_HANDLER_TEXT_UNITS = 32768;
 const HRESULT_MORE_DATA = 0x800700ea;
@@ -5,12 +7,6 @@ const HRESULT_POINTER = 0x80004003;
 const CHARACTER_BYTES = 2;
 // The size reported by a length query can change before the second call; one retry covers that.
 const MAX_QUERY_ATTEMPTS = 2;
-
-/** The application the Shell associates with a URL scheme. */
-export type UrlHandler = {
-  name: string;
-  path: string;
-};
 
 /**
  * One `AssocQueryStringW` call with an in-out size in UTF-16 units. A null `output` asks for

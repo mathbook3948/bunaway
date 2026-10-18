@@ -33,6 +33,7 @@ export const urlHandlerSchema = z.strictObject({
   name: z.string().min(1),
   path: z.string().min(1),
 });
+export type UrlHandler = z.infer<typeof urlHandlerSchema>;
 
 /** Selected application paths are validated again by each platform before native execution. */
 export const fileWithAppSchema = fileInput.extend({
