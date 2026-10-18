@@ -4,6 +4,7 @@ import type { z } from "zod";
 import type {
   exchangeInputSchema,
   requestInputSchema,
+  resolveHostInputSchema,
 } from "#network/contract";
 import { request } from "#network/platforms/http";
 import {
@@ -12,11 +13,17 @@ import {
   startIntervalPolling,
   watchOnline,
 } from "#network/platforms/online-state";
+import {
+  type HostLookup,
+  resolveHost,
+  systemLookup,
+} from "#network/platforms/resolve-host";
 import { exchange } from "#network/platforms/websocket";
 
 const MAX_ACTIVE_REQUESTS = 16;
 type RequestInput = z.output<typeof requestInputSchema>;
 type ExchangeInput = z.output<typeof exchangeInputSchema>;
+type ResolveHostInput = z.output<typeof resolveHostInputSchema>;
 
 /**
  * Own cancellable requests on the selected host thread. Hosts with system event services also
@@ -32,6 +39,8 @@ export function initialize(
   const systemEvents = environment?.windows?.systemEvents;
   return {
     active: new Map<AbortController, Promise<unknown>>(),
+    /** Started host lookups, including ones whose caller already left; getaddrinfo cannot be interrupted. */
+    lookups: new Set<Promise<unknown>>(),
     disposed: false,
     stopOnlineWatch: systemEvents
       ? watchOnline({
@@ -151,6 +160,32 @@ export function runExchange(
   return run(state, input.timeoutMs, signal, (activeSignal) =>
     exchange(input, activeSignal),
   );
+}
+
+/** Resolve a host name with the system resolver under the shared request limit and deadline; at most 16 lookups run at once. */
+export function runResolveHost(
+  state: ReturnType<typeof initialize>,
+  input: ResolveHostInput,
+  signal?: AbortSignal,
+  find: HostLookup = systemLookup,
+) {
+  return run(state, input.timeoutMs, signal, async (activeSignal) => {
+    // A cancelled or timed-out call frees its request slot while its lookup keeps running, so the
+    // running lookups carry their own limit to keep slow resolvers from queueing without bound.
+    if (state.lookups.size >= MAX_ACTIVE_REQUESTS) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "Too many host lookups.",
+      });
+    }
+    return resolveHost(input.host, activeSignal, (host) => {
+      const lookup = find(host);
+      state.lookups.add(lookup);
+      const release = () => state.lookups.delete(lookup);
+      lookup.then(release, release);
+      return lookup;
+    });
+  });
 }
 
 /** Cancel and drain all in-flight work; repeated cleanup is safe. */

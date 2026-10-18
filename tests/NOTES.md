@@ -1046,6 +1046,9 @@ text/binary 메시지, timeout과 SDK deadline, 취소 뒤 실제 TCP 정리와 
 진단 보존, 실행 전 실패와 이전 report 정리를 검사한다. 기존 assertion은 유지하고, 느린 macOS runner를
 고려해 단계별 대기(WKWebView report, HTTP abort cleanup)는 45초(기존 20초), host 프로세스 제한은
 120초(기존 30초)로 늘렸다. timeout 메시지와 진행 로그에는 단계, 경과 시간과 기한이 기록된다.
+`api/network-resolve-host.test.ts`는 `network.resolveHost`의 권한, 호스트 이름 검증, 주소 매핑과 제한, 취소와
+기한을 가짜 리졸버로 검사하고 `localhost`는 실제 리졸버로 조회한다.
+`lifecycle/windows-network-resolve-host.test.ts`는 생성 Windows와 macOS 어댑터로 `localhost`를 조회한다.
 `cli/network.test.ts`는 isolated tarball 설치의 두 OS native export에서 실제 HTTP를 실행하고
 browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS, 외부 proxy와 OS 인증은 검증하지 않는다.
 

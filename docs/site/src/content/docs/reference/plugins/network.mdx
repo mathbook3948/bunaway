@@ -11,7 +11,7 @@ sidebar: { order: 8 }
 
 ## 권한과 앱의 URL 규칙
 
-`network.request`와 `network.exchange`는 각각 독립 Host 권한입니다. 권한은 작업 호출을
+`network.request`, `network.exchange`, `network.isOnline`과 `network.resolveHost`는 각각 독립 Host 권한입니다. 권한은 작업 호출을
 허용하고 대상 URL은 앱 명령이 검사합니다. 이 API는 Bun 네트워크 요청이므로 브라우저의
 CORS 제한을 적용하지 않습니다. 승인한 Origin 목록은 앱이 작성하며 임의 Origin header는
 입력으로 받지 않습니다. 뷰의 명령과 Host 권한을 통해 호출 가능한 출처를 제한합니다.
@@ -162,9 +162,42 @@ Windows는 플러그인이 시작된 뒤 2초마다 상태를 다시 읽고 직�
 로그에 기록한 뒤 다음 주기에 다시 시도합니다.
 플러그인 종료 때 조회를 멈춥니다.
 
+## 호스트 이름 조회
+
+```ts
+const { endpoints } = await network.resolveHost({
+  host: "reports.example.com",
+  timeoutMs: 5000,
+});
+// [{ address: "203.0.113.10", family: "ipv4" }, { address: "2001:db8::10", family: "ipv6" }]
+```
+
+`network.resolveHost`는 호스트 이름의 IP 주소를 조회합니다. Windows와 macOS에서 제공하며
+Electron `net.resolveHost()`의 `{ endpoints: [{ address, family }] }` 결과 형태에 대응합니다.
+독립 Host 권한 `network.resolveHost`가 필요합니다.
+
+- 입력 `host`는 ASCII 호스트 이름이나 IPv4 주소입니다. 끝의 점은 허용하며 전체 253자, 레이블
+  63자까지입니다. IPv4 주소는 앞자리 0이 없는 십진수 4개(`127.0.0.1`)만 받으며 `127.1`, `0x7f.1`,
+  `2130706433` 같은 축약 표기와 마지막 레이블이 숫자인 이름은 거부합니다. 스킴, 포트, 경로, 사용자 정보와 IPv6 주소는 `INVALID_ARGUMENT`입니다.
+  국제화 도메인 이름은 punycode(`xn--`)로 바꿔 전달합니다.
+- `timeoutMs`는 1부터 30000까지이며 기본값은 30000입니다. 기한이 지나면 `TIMEOUT`입니다.
+- 조회는 운영체제 리졸버(getaddrinfo)를 사용하므로 hosts 파일, 검색 접미사와 시스템 DNS
+  설정을 따릅니다.
+- 결과는 리졸버가 돌려준 순서를 유지하고 중복 주소는 제거합니다. 최대 64개이며 넘으면 뒤쪽을
+  버립니다. `family`는 `"ipv4"` 또는 `"ipv6"`입니다.
+- 이름이 없거나 리졸버가 실패하면 `INTERNAL`입니다. 실패 원인은 구분해 알려주지 않습니다.
+- getaddrinfo는 중간에 멈출 수 없습니다. 취소나 기한 만료는 호출을 즉시 끝내고, 이미 시작한
+  조회는 백그라운드에서 끝납니다. 그런 조회까지 포함해 동시에 진행 중인 조회가 16개이면
+  새 조회는 `BUSY`입니다.
+
+Electron의 `queryType`, `source`, `cacheUsage`, `secureDnsPolicy` 옵션은 제공하지 않습니다.
+Chromium의 자체 DNS 클라이언트와 DNS-over-HTTPS 설정은 사용하지 않고 항상 시스템 리졸버를 씁니다.
+이 조회는 프록시를 거치지 않으므로 프록시 뒤 환경에서 `network.request`가 접속하는 주소와
+다를 수 있습니다. 프록시 경로 조회(`resolveProxy`)는 아직 없습니다.
+
 ## 취소, 정리와 오류
 
-한 어댑터에서 HTTP와 WebSocket 호출을 합쳐 최대 16개까지 실행합니다. 초과하면 `BUSY`입니다.
+한 어댑터에서 HTTP, WebSocket과 호스트 이름 조회를 합쳐 최대 16개까지 실행합니다. 초과하면 `BUSY`입니다.
 화면 함수의 마지막 인자는 `NativeInvokeOptions`입니다. `signal`과 `deadline`은
 [invoke](/reference/client/invoke/)를 따릅니다. 백엔드는 명령의 취소와 기한을 이어받습니다.
 취소, 컨텍스트 폐기나 앱 종료는 HTTP 읽기를 중단하고 WebSocket을 terminate합니다.

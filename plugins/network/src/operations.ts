@@ -5,6 +5,8 @@ import {
   exchangeResultSchema,
   onlineSchema,
   requestInputSchema,
+  resolveHostInputSchema,
+  resolveHostResultSchema,
   responseSchema,
 } from "#network/contract";
 import {
@@ -12,12 +14,14 @@ import {
   runExchange as runMacosExchange,
   runIsOnline as runMacosIsOnline,
   runRequest as runMacosRequest,
+  runResolveHost as runMacosResolveHost,
 } from "#network/platforms/macos";
 import {
   type initialize as initializeWindows,
   runExchange as runWindowsExchange,
   runIsOnline as runWindowsIsOnline,
   runRequest as runWindowsRequest,
+  runResolveHost as runWindowsResolveHost,
 } from "#network/platforms/windows";
 
 const macosOperation =
@@ -43,6 +47,12 @@ export const macosOperations = {
     output: onlineSchema,
     handler: (_input, { instance }) => runMacosIsOnline(instance),
   }),
+  resolveHost: macosOperation({
+    input: resolveHostInputSchema,
+    output: resolveHostResultSchema,
+    handler: (input, { instance, signal }) =>
+      runMacosResolveHost(instance, input, signal),
+  }),
 };
 export const windowsOperations = {
   request: windowsOperation({
@@ -61,5 +71,11 @@ export const windowsOperations = {
     input: z.null(),
     output: onlineSchema,
     handler: (_input, { instance }) => runWindowsIsOnline(instance),
+  }),
+  resolveHost: windowsOperation({
+    input: resolveHostInputSchema,
+    output: resolveHostResultSchema,
+    handler: (input, { instance, signal }) =>
+      runWindowsResolveHost(instance, input, signal),
   }),
 };

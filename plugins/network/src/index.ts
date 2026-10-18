@@ -12,7 +12,8 @@ import {
 /**
  * Bounded HTTP requests and WebSocket exchanges. Cancellation releases in-flight resources.
  * `network.isOnline` reports whether a non-loopback connection exists on Windows and macOS;
- * `network.onlineChanged` reports changes of that value on Windows.
+ * `network.onlineChanged` reports changes of that value on Windows. `network.resolveHost` returns
+ * the addresses the system resolver gives for a host name.
  */
 export default defineNativePlugin(
   {
