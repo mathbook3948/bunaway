@@ -422,7 +422,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
   `AssocQueryStringW(ASSOCF_IS_PROTOCOL)`을 호출해 `{ name, path }`(표시 이름과 실행 파일 경로)를
   반환하며 연결이 없으면 `null`이다. 앱을 실행하지 않고 URL도 열지 않는다. 파일 경로가
   노출되므로 `opener.openUrl`과 분리된 `opener.getUrlHandler` 권한을 요구한다. 아이콘은
-  반환하지 않으며 HTTP와 HTTPS scheme만 조회한다. 이름과 경로 중 하나라도 연결이 없으면
+  반환하지 않으며 HTTP와 HTTPS scheme만 조회한다. 이름과 경로 중 하나라도 연결이 없거나 등록된 실행 파일이 없으면
   `null`이다. macOS는 지원하지 않는다. Windows 실행은 `host:windows`의 opener lifecycle
   회귀가 결과 구조와 연결 없음 `null`만 확인하며, 처리 앱의 종류는 환경별로 다르다.
 - [ ] AppUserModelID와 toast activation 식별자를 설정하고 설치와 일치시킨다.

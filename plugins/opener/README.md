@@ -78,7 +78,7 @@ macOS 휴지통은 제공하지 않습니다. 커스텀 URL 스킴, 딥링크 �
 `null`입니다. 앱을 실행하거나 URL을 열지 않습니다. Host operation과 권한은 `opener.getUrlHandler`이며
 경로가 노출되므로 `opener.openUrl`과 별개입니다. 화면의 직접 호출에는 `plugin.opener.getUrlHandler`
 명령도 허용합니다. Windows는 `AssocQueryStringW(ASSOCF_IS_PROTOCOL)`로 조회하고 연결 없음
-(`ERROR_NO_ASSOCIATION`)만 `null`, 다른 실패와 제어 문자가 있는 문자열은 `INTERNAL`입니다. 아이콘은
+(`ERROR_NO_ASSOCIATION`)과 등록된 실행 파일이 없는 경우(`ERROR_FILE_NOT_FOUND`)만 `null`, 다른 실패와 제어 문자가 있는 문자열은 `INTERNAL`입니다. 아이콘은
 반환하지 않으며 macOS는 지원하지 않습니다.
 
 ## 지정 앱

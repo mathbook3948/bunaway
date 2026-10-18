@@ -154,7 +154,7 @@ if (handler) {
 }
 ```
 
-Windows만 지원하며 macOS는 `UNSUPPORTED`입니다. Windows는 `AssocQueryStringW`에 `ASSOCF_IS_PROTOCOL`을 지정해 표시 이름과 실행 파일 경로를 조회합니다. 이름과 경로 중 하나라도 연결이 없으면 `null`이고, 그 밖의 조회 실패는 `INTERNAL`입니다. 문자열은 최대 32,768 UTF-16 코드 단위이며 제어 문자가 있으면 `INTERNAL`입니다. 아이콘은 반환하지 않습니다. 호출은 I/O Worker에서 동기로 실행하므로 시작 전에 취소된 호출만 막고, 진행 중인 조회는 중단하지 않습니다.
+Windows만 지원하며 macOS는 `UNSUPPORTED`입니다. Windows는 `AssocQueryStringW`에 `ASSOCF_IS_PROTOCOL`을 지정해 표시 이름과 실행 파일 경로를 조회합니다. 이름과 경로 중 하나라도 연결이 없거나 등록된 실행 파일이 없으면 `null`이고, 그 밖의 조회 실패는 `INTERNAL`입니다. 문자열은 최대 32,768 UTF-16 코드 단위이며 제어 문자가 있으면 `INTERNAL`입니다. 아이콘은 반환하지 않습니다. 호출은 I/O Worker에서 동기로 실행하므로 시작 전에 취소된 호출만 막고, 진행 중인 조회는 중단하지 않습니다.
 
 실행 파일 경로가 노출되므로 권한은 `opener.getUrlHandler`이며 `opener.openUrl`과 별개입니다. 화면 직접 호출에는 `plugin.opener.getUrlHandler` 명령도 허용합니다. 연결 앱은 사용자 설정에 따라 달라지므로 결과를 기본 브라우저 판별이나 보안 판단에 쓰지 마세요.
 
