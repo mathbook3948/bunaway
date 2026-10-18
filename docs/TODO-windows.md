@@ -472,7 +472,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
   계약 검증은 `window-thumbnail.test.ts`, 변환과 복원은 `taskbar-thumbnail.test.ts`이며 실제 ITaskbarList3 호출은
   `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
 - [ ] 창별 앱 표시 이름, relaunch 명령과 아이콘을 설정한다.
-- [x] Windows elevation과 de-elevation 실행 요구사항의 지원 범위를 결정한다. 앱 실행 파일에 관리자 manifest를 넣지 않고 상승은 `perMachine` 설치 프로그램에만 둔다. 설치 뒤 앱 실행은 `runasoriginaluser`로 사용자 토큰을 쓴다. 앱 내부 상승 실행 API는 제공하지 않는다. [ADR 0023](./decisions/0023-windows-elevation.md)을 따른다. 계약은 `tests/packaging/windows.test.ts`가 검증한다.
+- [x] Windows elevation과 de-elevation 실행 요구사항의 지원 범위를 결정한다. 상승은 `perMachine` 설치 프로그램에만 둔다. 설치 뒤 앱 실행은 `runasoriginaluser`로 사용자 토큰을 쓴다. 앱 내부 상승 실행 API는 제공하지 않는다. [ADR 0023](./decisions/0023-windows-elevation.md)을 따른다. 생성한 설치 스크립트의 실행 항목은 `tests/packaging/windows.test.ts`가 확인한다.
 
 ## 10. 알림
 
