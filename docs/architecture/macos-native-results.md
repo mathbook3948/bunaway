@@ -119,3 +119,18 @@ CI 실행 [37574470840](https://github.com/mathbook3948/bunaway/actions/runs/375
 52개 검사를 통과했다. 네이티브 호스트 회귀는 공용 웹 fixture가 기능 목록을 4개로 고정한 탓에 실패했다.
 새 창 API의 `unsupported` 항목도 포함하도록 공용 검사를 갱신했다. 서명된 회귀 앱을 만들 때
 정의되지 않은 `SAMPLE` 변수를 참조하던 조건도 제거해 loopback 개발 서버 설정을 적용한다.
+
+## WKWebView 첫 탐색 정지 재현율 (#237)
+
+`macOS native integration (arm64)` 잡에서 같은 호스트의 다른 뷰는 로드되는데 특정 뷰의 첫 탐색이
+`didStartProvisionalNavigation`까지 가지 못하는 간헐적 정지가 관찰됐다. 호스트 로그는 `load-returned accepted:true`와
+`action-policy-returned allowed:true`까지 기록하고 `provisional` 단계가 없으며, startup checkpoint는
+`loading:true, provisional:false, progress:0.1`을 유지했다.
+
+재현율은 코드 변경이 없는 head(호스트 소스가 main과 같음)의 같은 잡을 `gh run rerun --job`으로 반복해 측정한다.
+아래 표는 측정이 끝나면 채운다.
+
+| 구간 | 실행 횟수 | 정지 횟수 | 실행 링크 |
+| --- | --- | --- | --- |
+| 수정 전 | 측정 중 | 측정 중 | 측정 중 |
+| 수정 후 | 측정 중 | 측정 중 | 측정 중 |
