@@ -897,7 +897,7 @@ macOS 미지원과 reparse tag별 크기 집계 규칙(이름 대리자 제외)�
 `removeRecursive`는 `api/storage-directories.test.ts`가 입력 거부, null 결과, 독립 권한과 macOS 미지원을 확인한다.
 `windows-storage-remove-recursive.ts`는 실제 Win32 핸들로 유니코드 중첩 트리와 빈 디렉터리 삭제 및 형제 유지,
 한 번의 목록 배치를 넘는 1500개 항목 삭제, 읽기 전용 파일과 디렉터리 삭제, 루트가 파일인 경우,
-hardlink의 이름만 삭제, junction, 디렉터리 junction과 파일 symlink 미추적(만들 수 없는 러너에서는 건너뜀),
+hardlink의 이름만 삭제와 읽기 전용 hardlink의 다른 이름 속성 유지, junction, 디렉터리 junction과 파일 symlink 미추적(만들 수 없는 러너에서는 건너뜀),
 링크 루트의 `PERMISSION_DENIED`, 깊이 64 허용과 65 거부, 시작 전과 순회 중 취소 뒤 재호출로 완료,
 순회 중 어댑터 해제, 없는 경로 거부와 임시 트리 삭제(핸들 해제)를 확인한다.
 확인하지 않는 범위: 삭제 중 사라지거나 교체되는 항목, 비대리자 reparse 디렉터리의 `UNSUPPORTED`,

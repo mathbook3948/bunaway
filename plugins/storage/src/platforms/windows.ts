@@ -68,6 +68,12 @@ const ERROR_FILE_EXISTS = 80;
 const ERROR_NOT_SAME_DEVICE = 17;
 const FILE_RENAME_INFORMATION = 10;
 const FILE_DISPOSITION_INFO = 4;
+const FILE_DISPOSITION_INFO_EX = 21;
+/** DELETE | POSIX_SEMANTICS | IGNORE_READONLY_ATTRIBUTE. */
+const FILE_DISPOSITION_FORCE_FLAGS = 0x13;
+const ERROR_INVALID_PARAMETER = 87;
+const ERROR_NOT_SUPPORTED = 50;
+const ERROR_INVALID_FUNCTION = 1;
 const FILE_BASIC_INFO = 0;
 const FILE_BASIC_INFO_BYTES = 40;
 const FILE_BASIC_ATTRIBUTES_OFFSET = 32;
@@ -786,6 +792,12 @@ export class WindowsStorage
         },
         ({ handle, info, canonical }) => {
           if (!(info.readUInt32LE(0) & FILE_ATTRIBUTE_DIRECTORY)) {
+            if (signal?.aborted) {
+              throw new BunawayError({
+                code: "CANCELLED",
+                message: "Storage directory removal was cancelled.",
+              });
+            }
             this.deleteForced(handle);
             return Promise.resolve(null);
           }
@@ -826,8 +838,46 @@ export class WindowsStorage
     }
   }
 
-  /** Clear the read-only attribute through the checked handle, then mark the object for deletion. */
+  /**
+   * Delete the checked object even when it is read-only. POSIX semantics remove the name at once
+   * instead of when the last handle closes, so scanners holding files open cannot make the parent
+   * look non-empty, and the read-only attribute is ignored rather than cleared, which would also
+   * change the other names of a hardlinked file. Filesystems without that support fall back to
+   * clearing the attribute through the handle.
+   */
   private deleteForced(handle: bigint): void {
+    const flags = new Uint32Array([
+      FILE_DISPOSITION_FORCE_FLAGS,
+    ]);
+    if (
+      this.api.symbols.SetFileInformationByHandle(
+        handle,
+        FILE_DISPOSITION_INFO_EX,
+        ptr(flags),
+        flags.byteLength,
+      )
+    ) {
+      return;
+    }
+    const error = this.api.symbols.GetLastError();
+    if (error === ERROR_DIR_NOT_EMPTY) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Storage directory is not empty.",
+      });
+    }
+    if (
+      error !== ERROR_INVALID_PARAMETER &&
+      error !== ERROR_NOT_SUPPORTED &&
+      error !== ERROR_INVALID_FUNCTION
+    ) {
+      this.fail("Storage removal failed", error);
+    }
+    this.deleteLegacy(handle);
+  }
+
+  /** Clear the read-only attribute through the checked handle, then mark the object for deletion. */
+  private deleteLegacy(handle: bigint): void {
     const attributes = this.info(handle).readUInt32LE(0);
     if (attributes & FILE_ATTRIBUTE_READONLY) {
       const basic = Buffer.alloc(FILE_BASIC_INFO_BYTES);
@@ -1529,7 +1579,7 @@ export class WindowsStorage
               "Storage directory contains a reparse point directory that cannot be removed.",
           });
         } else {
-          this.removeLeaf(frame.path, entry);
+          this.removeLeaf(frame.path, entry, buffers.path);
         }
       }
     } else {
@@ -1547,9 +1597,14 @@ export class WindowsStorage
    * follow reparse points. A child that vanished is skipped; one that became a real directory since
    * the listing is refused rather than deleted without its contents being walked.
    */
-  private removeLeaf(parentPath: string, entry: ScannedDirectoryEntry): void {
+  private removeLeaf(
+    parentPath: string,
+    entry: ScannedDirectoryEntry,
+    pathBuffer: Buffer,
+  ): void {
+    const path = `${parentPath}\\${entry.name}`;
     const handle = this.open(
-      `${parentPath}\\${entry.name}`,
+      path,
       DELETE | FILE_WRITE_ATTRIBUTES | FILE_READ_ATTRIBUTES,
       FILE_SHARE_ALL,
       OPEN_EXISTING,
@@ -1569,6 +1624,11 @@ export class WindowsStorage
           attributes & FILE_ATTRIBUTE_DIRECTORY &&
           !(attributes & FILE_ATTRIBUTE_REPARSE_POINT)
         ) {
+          deny("Storage tree changed during removal.");
+        }
+        // A reparse point swapped into an ancestor after the listing would redirect the open by
+        // name; the handle must still be the listed child of the pinned parent.
+        if (this.canonical(handle, pathBuffer) !== path) {
           deny("Storage tree changed during removal.");
         }
         this.deleteForced(handle);

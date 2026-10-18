@@ -797,7 +797,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [x] 파일 또는 디렉터리 트리를 재귀 삭제한다.
   Windows의 `storage.removeRecursive({ path })`는 `storage.remove`와 별도 권한이다. 현재 경로의 디렉터리 핸들을 모두 열어 둔 채
   후위 순서로 삭제하므로 상위 디렉터리 교체와 이름 재해석이 없다. 이름 대리자 reparse point(symlink, junction)는 따라가지 않고
-  링크만 삭제하며, hardlink는 만난 이름만 삭제한다. 읽기 전용 속성은 Node `fs.rm`과 Rust `remove_dir_all`처럼 해제하고 삭제한다.
+  링크만 삭제하며, hardlink는 만난 이름만 삭제한다. 읽기 전용 항목은 Node `fs.rm`과 Rust `remove_dir_all`처럼 삭제하며, POSIX 삭제 의미(속성 무시, 이름 즉시 제거)를 쓰고 미지원 파일 시스템은 속성을 해제하고 삭제한다.
   비대리자 reparse 디렉터리(클라우드 폴더)는 `UNSUPPORTED`, 루트 아래 깊이 64 초과는 `INVALID_ARGUMENT`이고 항목 수 상한은 없다.
   원자적이지 않아 취소와 실패 전에 삭제한 항목은 유지되며 같은 호출을 반복하면 이어서 삭제한다. macOS는 `UNSUPPORTED`이다.
   `windows-storage-remove-recursive.ts`가 CI windows-native에서 실제 Win32 핸들로 확인한다.

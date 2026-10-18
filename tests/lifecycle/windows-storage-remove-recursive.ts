@@ -52,7 +52,7 @@ async function expectRejected(
 async function tryLink(
   target: string,
   path: string,
-  type: "junction" | "file",
+  type: "junction" | "file" | "dir",
 ): Promise<boolean> {
   try {
     await symlink(`${root}/${target}`, `${root}/${path}`, type);
@@ -122,6 +122,16 @@ try {
   assert.equal(await present("hard"), false);
   assert.equal(await readFile(`${root}/shared/original.txt`, "utf8"), "shared");
 
+  // A read-only hardlink keeps the read-only attribute of its other names.
+  await mkdir(`${root}/ro-hard`);
+  await writeFile(`${root}/shared/protected.txt`, "protected");
+  await chmod(`${root}/shared/protected.txt`, 0o444);
+  await link(`${root}/shared/protected.txt`, `${root}/ro-hard/name.txt`);
+  await storage.removeRecursive(at("ro-hard"));
+  assert.equal(await present("ro-hard"), false);
+  assert.equal((await stat(`${root}/shared/protected.txt`)).mode & 0o200, 0);
+  await chmod(`${root}/shared/protected.txt`, 0o666);
+
   // Links are removed themselves and never followed.
   await mkdir(`${root}/outside/nested`, {
     recursive: true,
@@ -139,7 +149,7 @@ try {
   const directoryLink = await tryLink(
     "outside/nested",
     "linked/directory-link",
-    "junction",
+    "dir",
   );
   await storage.removeRecursive(at("linked"));
   assert.equal(await present("linked"), false);
