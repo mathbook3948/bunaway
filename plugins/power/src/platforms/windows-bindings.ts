@@ -7,8 +7,8 @@ import { PowerRequestHandles } from "#power/platforms/windows-request-handles";
 import {
   cpuSpeedLimit,
   idleSeconds,
-  PROCESSOR_POWER_INFORMATION_SIZE,
   powerStatus,
+  readProcessorPower,
 } from "#power/platforms/windows-status";
 
 /** CallNtPowerInformation level that returns one PROCESSOR_POWER_INFORMATION per logical processor. */
@@ -151,14 +151,14 @@ export function createPower() {
       if (count < 1 || count > MAX_LOGICAL_PROCESSORS) {
         failure("Windows logical processor count is out of range.");
       }
-      const size = count * PROCESSOR_POWER_INFORMATION_SIZE;
-      const data = Buffer.alloc(size);
-      const status = powrprof.symbols.CallNtPowerInformation(
-        PROCESSOR_INFORMATION_LEVEL,
-        null,
-        0,
-        ptr(data),
-        size,
+      const { status, data } = readProcessorPower(count, (buffer) =>
+        powrprof.symbols.CallNtPowerInformation(
+          PROCESSOR_INFORMATION_LEVEL,
+          null,
+          0,
+          ptr(buffer),
+          buffer.byteLength,
+        ),
       );
       if (status < 0) {
         failure(
@@ -171,7 +171,7 @@ export function createPower() {
         return cpuSpeedLimit(data);
       } catch {
         return failure(
-          "Windows processor power query returned no usable data.",
+          "Windows processor power query returned malformed data.",
         );
       }
     },

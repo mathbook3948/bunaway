@@ -1,4 +1,8 @@
-import type { PowerCpuSpeedLimit, PowerStatus } from "#power/contract";
+import {
+  MAX_LOGICAL_PROCESSORS,
+  type PowerCpuSpeedLimit,
+  type PowerStatus,
+} from "#power/contract";
 
 /** sizeof(PROCESSOR_POWER_INFORMATION): Number, MaxMhz, CurrentMhz, MhzLimit, MaxIdleState, CurrentIdleState. */
 export const PROCESSOR_POWER_INFORMATION_SIZE = 24;
@@ -41,10 +45,38 @@ export function powerStatus(data: Uint8Array): PowerStatus {
     fullLifeSeconds: seconds(8),
   };
 }
+const STATUS_BUFFER_TOO_SMALL = 0xc0000023;
+/**
+ * Query processor power information into a buffer sized for processorCount entries. When the
+ * call reports STATUS_BUFFER_TOO_SMALL the buffer is doubled (bounded by MAX_LOGICAL_PROCESSORS)
+ * and the call is made once more. Any other status, including a second too-small result, is
+ * returned for the caller to report.
+ */
+export function readProcessorPower(
+  processorCount: number,
+  call: (buffer: Buffer) => number,
+): {
+  status: number;
+  data: Buffer;
+} {
+  let data = Buffer.alloc(processorCount * PROCESSOR_POWER_INFORMATION_SIZE);
+  let status = call(data);
+  const grown = Math.min(processorCount * 2, MAX_LOGICAL_PROCESSORS);
+  if (status >>> 0 === STATUS_BUFFER_TOO_SMALL && grown > processorCount) {
+    data = Buffer.alloc(grown * PROCESSOR_POWER_INFORMATION_SIZE);
+    status = call(data);
+  }
+  return {
+    status,
+    data,
+  };
+}
 /**
  * Decode an array of PROCESSOR_POWER_INFORMATION into the lowest MhzLimit / MaxMhz percentage,
  * the same reduction Chromium uses for Electron getCPUSpeedLimit. Entries with MaxMhz 0 carry
- * no ratio and are skipped; without any usable entry there is nothing to report, so it throws.
+ * no ratio and are skipped. Without any usable entry (some virtualized hosts report MaxMhz 0
+ * everywhere) no limit is known, which is reported as 100, like Electron. A buffer that is empty
+ * or not a multiple of the entry size is malformed and throws.
  */
 export function cpuSpeedLimit(data: Uint8Array): PowerCpuSpeedLimit {
   if (
@@ -56,7 +88,7 @@ export function cpuSpeedLimit(data: Uint8Array): PowerCpuSpeedLimit {
     );
   }
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  let lowest: number | undefined;
+  let lowest = 100;
   for (
     let offset = 0;
     offset < data.byteLength;
@@ -68,10 +100,7 @@ export function cpuSpeedLimit(data: Uint8Array): PowerCpuSpeedLimit {
     }
     const limitMhz = view.getUint32(offset + 12, true);
     const percent = Math.min(100, Math.floor((limitMhz * 100) / maxMhz));
-    lowest = lowest === undefined ? percent : Math.min(lowest, percent);
-  }
-  if (lowest === undefined) {
-    throw new Error("No processor reported a nonzero MaxMhz.");
+    lowest = Math.min(lowest, percent);
   }
   return {
     speedLimitPercent: lowest,

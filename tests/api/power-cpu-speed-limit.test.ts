@@ -1,9 +1,15 @@
 import { expect, test } from "bun:test";
 import power from "@bunaway/plugin-power";
 import { NativeRegistry } from "@bunaway/protocol";
-import { cpuSpeedLimitSchema } from "#plugins/power/src/contract";
+import {
+  cpuSpeedLimitSchema,
+  MAX_LOGICAL_PROCESSORS,
+} from "#plugins/power/src/contract";
 import { powerOperations } from "#plugins/power/src/operations";
-import { cpuSpeedLimit } from "#plugins/power/src/platforms/windows-status";
+import {
+  cpuSpeedLimit,
+  readProcessorPower,
+} from "#plugins/power/src/platforms/windows-status";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("power", powerOperations);
@@ -88,18 +94,82 @@ test("cpu speed limit takes the lowest per-processor ratio, skips MaxMhz 0 and r
   ).toEqual({
     speedLimitPercent: 0,
   });
-  expect(() =>
+  // No entry with a computable ratio means no known limit.
+  expect(
     cpuSpeedLimit(
       processors([
         [
           0,
           0,
         ],
+        [
+          0,
+          0,
+        ],
       ]),
     ),
-  ).toThrow();
+  ).toEqual({
+    speedLimitPercent: 100,
+  });
   expect(() => cpuSpeedLimit(new Uint8Array(0))).toThrow();
   expect(() => cpuSpeedLimit(new Uint8Array(30))).toThrow();
+});
+
+test("processor power query doubles the buffer once on STATUS_BUFFER_TOO_SMALL and reports other failures", () => {
+  const TOO_SMALL = 0xc0000023 | 0;
+  const sizes: number[] = [];
+  const grown = readProcessorPower(4, (buffer) => {
+    sizes.push(buffer.byteLength);
+    return sizes.length === 1 ? TOO_SMALL : 0;
+  });
+  expect(sizes).toEqual([
+    96,
+    192,
+  ]);
+  expect(grown.status).toBe(0);
+  expect(grown.data.byteLength).toBe(192);
+
+  sizes.length = 0;
+  expect(
+    readProcessorPower(4, (buffer) => {
+      sizes.push(buffer.byteLength);
+      return TOO_SMALL;
+    }).status,
+  ).toBe(TOO_SMALL);
+  expect(sizes).toEqual([
+    96,
+    192,
+  ]);
+
+  sizes.length = 0;
+  expect(
+    readProcessorPower(4, (buffer) => {
+      sizes.push(buffer.byteLength);
+      return 0xc0000001 | 0;
+    }).status,
+  ).toBe(0xc0000001 | 0);
+  expect(sizes).toEqual([
+    96,
+  ]);
+
+  // The doubled size is capped, and no retry happens once the cap is already used.
+  sizes.length = 0;
+  readProcessorPower(3000, (buffer) => {
+    sizes.push(buffer.byteLength);
+    return TOO_SMALL;
+  });
+  expect(sizes).toEqual([
+    3000 * 24,
+    MAX_LOGICAL_PROCESSORS * 24,
+  ]);
+  sizes.length = 0;
+  readProcessorPower(MAX_LOGICAL_PROCESSORS, (buffer) => {
+    sizes.push(buffer.byteLength);
+    return TOO_SMALL;
+  });
+  expect(sizes).toEqual([
+    MAX_LOGICAL_PROCESSORS * 24,
+  ]);
 });
 
 test("power.getCpuSpeedLimit accepts only null, returns 0..100 integers and needs its own grant", async () => {

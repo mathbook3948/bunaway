@@ -47,9 +47,11 @@ GetLastInputInfo와 GetTickCount의 DWORD tick 차이를 사용하므로 약 49.
 `power.getCpuSpeedLimit()`은 Electron `powerMonitor.getCPUSpeedLimit()`에 대응하며
 `{ speedLimitPercent }`(0–100 정수)를 반환합니다. 100이면 제한이 없습니다.
 Windows `CallNtPowerInformation`의 `ProcessorInformation`이 돌려주는 논리 프로세서별
-`MhzLimit / MaxMhz` 비율(%) 중 가장 낮은 값이며, `MaxMhz`가 0인 프로세서는 건너뜁니다.
+`MhzLimit / MaxMhz` 비율(%) 중 가장 낮은 값이며, `MaxMhz`가 0인 프로세서는 건너뜁니다. 비율을 계산할 수 있는 프로세서가 없으면
+(일부 가상화 환경) 제한 정보가 없는 것으로 보고 100을 반환합니다.
 전원 계획, 발열과 절전 정책에 따라 호출할 때마다 달라질 수 있습니다.
-조회 실패와 사용할 수 있는 프로세서 정보가 없는 경우는 `INTERNAL`입니다.
+출력 버퍼가 작다고 보고되면 한 번 두 배로 늘려 다시 조회합니다.
+OS 조회 실패와 형식이 잘못된 결과는 `INTERNAL`입니다.
 입력은 `null`이며 `power.getCpuSpeedLimit` 권한이 따로 필요합니다.
 
 ```ts
