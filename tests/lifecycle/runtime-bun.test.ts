@@ -8,6 +8,7 @@ import {
   parseProcessFrame,
 } from "@bunaway/protocol";
 import { readJsonLines } from "@bunaway/runtime-bun";
+import { killAfter } from "../fixtures/deadlines.ts";
 
 test.each([
   "revoke",
@@ -32,7 +33,7 @@ test.each([
         stderr: "pipe",
       },
     );
-    const timeout = setTimeout(() => child.kill(), 5000);
+    const timeout = killAfter(child, "childStep");
     const errors = new Response(child.stderr).text();
     const output = readJsonLines(child.stdout)[Symbol.asyncIterator]();
     const next = async () => {
@@ -281,7 +282,7 @@ test("process event limits reject the entire broadcast and preserve sessions and
       stderr: "pipe",
     },
   );
-  const timeout = setTimeout(() => child.kill(), 5000);
+  const timeout = killAfter(child, "childStep");
   const errors = new Response(child.stderr).text();
   const output = readJsonLines(child.stdout)[Symbol.asyncIterator]();
   const next = async () => {
@@ -540,7 +541,7 @@ for (const [fixture, command, detail, stackFile] of [
         stderr: "pipe",
       },
     );
-    const timeout = setTimeout(() => child.kill(), 5000);
+    const timeout = killAfter(child, "childStep");
     const errors = new Response(child.stderr).text();
     const output = readJsonLines(child.stdout)[Symbol.asyncIterator]();
     const next = async () => {
@@ -681,7 +682,7 @@ for (const phase of [
         stderr: "pipe",
       },
     );
-    const timeout = setTimeout(() => child.kill(), 3000);
+    const timeout = killAfter(child, "childStep");
     try {
       const output = new Response(child.stdout).text();
       const errors = new Response(child.stderr).text();
@@ -787,7 +788,7 @@ test.each([
       stderr: "pipe",
     },
   );
-  const timeout = setTimeout(() => child.kill(), 3000);
+  const timeout = killAfter(child, "childStep");
   try {
     const output = new Response(child.stdout).text();
     const errors = new Response(child.stderr).text();
@@ -887,7 +888,7 @@ test.each([
         stderr: "pipe",
       },
     );
-    const timeout = setTimeout(() => child.kill(), 5000);
+    const timeout = killAfter(child, "childStep");
     const errors = new Response(child.stderr).text();
     const output = readJsonLines(child.stdout)[Symbol.asyncIterator]();
     const next = async () => {

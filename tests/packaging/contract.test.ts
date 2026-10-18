@@ -1,4 +1,11 @@
-import { afterAll, beforeAll, expect, spyOn, test } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  expect,
+  setDefaultTimeout,
+  spyOn,
+  test,
+} from "bun:test";
 import { createHash } from "node:crypto";
 import {
   chmod,
@@ -39,6 +46,9 @@ import {
   targetFor,
   verifyArtifact,
 } from "@bunaway/packaging";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("childStep"));
 
 let home: string;
 let root: string;
@@ -774,7 +784,7 @@ test("the package lock excludes another Bun process and is released afterwards",
     }),
   );
   expect(retry.ok).toBe(true);
-}, 10000);
+});
 
 test("an active channel does not block a different channel", async () => {
   const projectRoot = resolve(home, "independent-channel-locks");

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
 import {
   mkdir,
   mkdtemp,
@@ -21,6 +21,9 @@ import {
 } from "#cli/dev";
 import { hash, writeJson } from "#cli/files";
 import { createProject, storageRoundtripUI } from "./project.ts";
+import { deadline, killAfter } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("build"));
 
 let home: string;
 let project: string;
@@ -69,7 +72,7 @@ beforeAll(async () => {
   ]) {
     originals[name] = await Bun.file(resolve(project, name)).text();
   }
-}, 30000);
+}, deadline("toolchain"));
 
 afterAll(async () => {
   await rm(home, {
@@ -196,7 +199,7 @@ test("vanilla UI checks command and event contracts without bundling backend imp
     await Bun.write(path, original);
     await Bun.write(appPath, originals["src-bunaway/app.ts"] ?? "");
   }
-}, 30000);
+});
 
 test("vanilla UI displays a missing WebView bridge error and keeps saving disabled", async () => {
   const assets = resolve(home, "no-bridge-assets");
@@ -466,7 +469,7 @@ test("unified v1 configuration rejects malformed sections and old flat settings"
       await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
     }
   }
-}, 30000);
+});
 
 test("app.title accepts exactly the AppInfo limit and rejects longer or empty titles", async () => {
   const path = resolve(project, "src-bunaway/bunaway.json");
@@ -494,7 +497,7 @@ test("app.title accepts exactly the AppInfo limit and rejects longer or empty ti
   } finally {
     await Bun.write(path, originals["src-bunaway/bunaway.json"] ?? "");
   }
-}, 30000);
+});
 
 test.skipIf(process.platform !== "win32" || process.arch !== "x64")(
   "Windows validates the default executable name and accepts a valid override",
@@ -888,7 +891,7 @@ test("generated UI and backend bundle independently; source failures propagate",
       await Bun.write(resolve(project, name), originals[name] ?? "");
     }
   }
-}, 15000);
+});
 
 test("frontend bundles retain nested entry paths and emit imported CSS when there is no collision", async () => {
   const assets = resolve(home, "nested-assets");
@@ -1116,7 +1119,7 @@ test("Windows development artifacts enable DevTools only with their launch flag"
   } finally {
     await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
   }
-}, 60000);
+});
 
 test("package checks platforms and adapters before building and preserves outputs on failure", async () => {
   const child = Bun.spawn(
@@ -1133,7 +1136,7 @@ test("package checks platforms and adapters before building and preserves output
   const output = new Response(child.stdout).text();
   const errors = new Response(child.stderr).text();
   expect(await child.exited, `${await output}\n${await errors}`).toBe(0);
-}, 60000);
+});
 
 test.each([
   "SIGINT",
@@ -1195,9 +1198,9 @@ test.each([
     const output = new Response(child.stdout).text();
     const errors = new Response(child.stderr).text();
     try {
-      const deadline = Date.now() + 10000;
+      const limit = Date.now() + deadline("childStep");
       while (!(await Bun.file(ready).exists())) {
-        if (child.exitCode !== null || Date.now() >= deadline) {
+        if (child.exitCode !== null || Date.now() >= limit) {
           throw new Error("Web build did not start.");
         }
         await Bun.sleep(20);
@@ -1213,7 +1216,7 @@ test.each([
       } else {
         child.kill(signal);
       }
-      const timeout = setTimeout(() => child.kill(), 10000);
+      const timeout = killAfter(child, "childStep");
       try {
         expect(await child.exited).not.toBe(0);
       } finally {
@@ -1353,9 +1356,9 @@ test.skipIf(process.platform !== "win32" || process.arch !== "x64")(
     const childErrors = new Response(child.stderr).text();
     try {
       // Wait until both compiler and descendant are live before interrupting the build.
-      const deadline = Date.now() + 20000;
+      const limit = Date.now() + deadline("toolchain");
       while (!(await Bun.file(ready).exists())) {
-        if (child.exitCode !== null || Date.now() >= deadline) {
+        if (child.exitCode !== null || Date.now() >= limit) {
           throw new Error("Windows app compilation did not start.");
         }
         await Bun.sleep(20);
@@ -1365,7 +1368,7 @@ test.skipIf(process.platform !== "win32" || process.arch !== "x64")(
         await Bun.file(resolve(lockDirectory, "build.lock")).exists(),
       ).toBe(true);
       await Bun.write(interrupt, "SIGINT");
-      const timeout = setTimeout(() => child.kill(), 15000);
+      const timeout = killAfter(child, "toolchain");
       try {
         expect(await child.exited).not.toBe(0);
       } finally {
@@ -1437,7 +1440,7 @@ test("external development orchestrates UI updates, backend restarts and server 
   );
   const output = new Response(child.stdout).text();
   const errors = new Response(child.stderr).text();
-  const timer = setTimeout(() => child.kill(), 25000);
+  const timer = killAfter(child, "toolchain");
   try {
     const code = await child.exited;
     const stdout = await output;
@@ -1451,7 +1454,7 @@ test("external development orchestrates UI updates, backend restarts and server 
     }
     await child.exited;
   }
-}, 30000);
+});
 
 for (const failureMode of [
   "broken-start",
@@ -1474,7 +1477,7 @@ for (const failureMode of [
     );
     const output = new Response(child.stdout).text();
     const errors = new Response(child.stderr).text();
-    const timer = setTimeout(() => child.kill(), 25000);
+    const timer = killAfter(child, "toolchain");
     try {
       const code = await child.exited;
       const [stdout, stderr] = await Promise.all([
@@ -1504,7 +1507,7 @@ for (const failureMode of [
       }
       await child.exited;
     }
-  }, 30000);
+  });
 }
 
 /** Creates a manually released barrier for ordering asynchronous restart hooks. */
@@ -1680,4 +1683,4 @@ test("CLI bundles startup and deferred window specs without implicitly selecting
     await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
     await Bun.write(policyPath, originals["src-bunaway/policy.json"] ?? "");
   }
-}, 30000);
+});

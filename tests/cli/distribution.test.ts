@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, setDefaultTimeout, spyOn, test } from "bun:test";
 import {
   cp,
   mkdir,
@@ -29,6 +29,9 @@ import { buildWithSdk, sdkPlugin } from "#cli/sdk";
 import { packFramework } from "#cli-scripts/pack";
 import { DevelopmentApp } from "#native/windows/bun/development-app";
 import { createProject, packageDirectory } from "./project.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("packagedAudit"));
 
 test("installed CLI bundles private plugin imports and publishes types without source files", async () => {
   const home = await realpath(
@@ -184,7 +187,7 @@ built.read("wrong");`,
       force: true,
     });
   }
-}, 60000);
+});
 
 test("CommonJS plugin default and named exports retain their identity across app reloads", async () => {
   const home = await realpath(
@@ -267,7 +270,7 @@ export default { commands: { read: { input: { const: null }, output: {}, async r
       force: true,
     });
   }
-}, 60000);
+});
 
 test.each([
   "conditional-root",
@@ -604,7 +607,7 @@ console.log(metadata.name);
       force: true,
     });
   }
-}, 60000);
+});
 
 /** Runs a consumer-side Bun command and preserves both output streams on failure. */
 async function command(
@@ -686,7 +689,7 @@ test("generated apps discover installed plugins from every direct dependency sec
       force: true,
     });
   }
-}, 60000);
+});
 
 test("workspace and isolated installs resolve transitive SDKs from their declaring packages", async () => {
   const home = await realpath(
@@ -772,7 +775,7 @@ test("workspace and isolated installs resolve transitive SDKs from their declari
       force: true,
     });
   }
-}, 60000);
+});
 
 test("Windows host package imports share the installed app's error class", async () => {
   const home = await realpath(
@@ -826,7 +829,7 @@ console.log("SHARED_SDK_CLASS");`,
       force: true,
     });
   }
-}, 30000);
+});
 
 test("upgrading the complete installed release preserves app sources and changes bun.lock", async () => {
   const home = await realpath(
@@ -971,7 +974,7 @@ test("upgrading the complete installed release preserves app sources and changes
       force: true,
     });
   }
-}, 60000);
+});
 
 test("installed packages create a vendor-free app that relocates and reinstalls from bun.lock", async () => {
   const home = await realpath(
@@ -1159,7 +1162,7 @@ command({ input: { type: "string" }, output: { type: "string" }, handle: value =
       force: true,
     });
   }
-}, 60000);
+});
 
 test("asset workers accept policies larger than the Windows command-line limit", async () => {
   const home = await realpath(
@@ -1205,7 +1208,7 @@ test("asset workers accept policies larger than the Windows command-line limit",
       force: true,
     });
   }
-}, 30000);
+});
 
 test("framework validation rejects extra installed inputs but permits designated native caches", async () => {
   const home = await realpath(
@@ -1251,7 +1254,7 @@ test("framework validation rejects extra installed inputs but permits designated
       force: true,
     });
   }
-}, 30000);
+});
 
 test("framework validation rejects reserved SDK override selectors without an install", async () => {
   const home = await realpath(
@@ -1323,7 +1326,7 @@ test("framework validation rejects reserved SDK override selectors without an in
       force: true,
     });
   }
-}, 30000);
+});
 
 test("repeated API validation reads installed SDK versions despite resolver caches", async () => {
   const home = await realpath(
@@ -1357,7 +1360,7 @@ test("repeated API validation reads installed SDK versions despite resolver cach
       force: true,
     });
   }
-}, 30000);
+});
 
 test("validation and bundling reject SDK aliases from nested and transitive importers", async () => {
   const home = await realpath(
@@ -1430,7 +1433,7 @@ test("validation and bundling reject SDK aliases from nested and transitive impo
       force: true,
     });
   }
-}, 30000);
+});
 
 test("nested aliases to pinned SDK sources and unrelated local modules remain valid", async () => {
   const home = await realpath(
@@ -1473,7 +1476,7 @@ test("nested aliases to pinned SDK sources and unrelated local modules remain va
       force: true,
     });
   }
-}, 30000);
+});
 
 test("bundling does not reuse the calling process's stale SDK source cache", async () => {
   const home = await realpath(
@@ -1513,7 +1516,7 @@ test("bundling does not reuse the calling process's stale SDK source cache", asy
       force: true,
     });
   }
-}, 30000);
+});
 
 test("artifact audit rejects omitted schemas, declarations and Git attributes with a regenerated inventory", async () => {
   const home = await realpath(
@@ -1595,7 +1598,7 @@ test("artifact audit rejects omitted schemas, declarations and Git attributes wi
       force: true,
     });
   }
-}, 120000);
+});
 
 test("a standalone plugin install does not install Core, Backend SDK or sibling plugins", async () => {
   const home = await realpath(
@@ -1669,4 +1672,4 @@ test("a standalone plugin install does not install Core, Backend SDK or sibling 
       force: true,
     });
   }
-}, 60_000);
+});

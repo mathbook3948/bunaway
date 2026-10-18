@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -12,6 +12,9 @@ import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
 import { operations, pluginRegistry } from "#native/host-api/bun/plugins";
 import { createProject, packageDirectory } from "./project.ts";
 import { verifyWindowsOpenerFiles } from "./windows-opener-files.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("build"));
 
 /** Runs an install/build subprocess and reports its captured output on failure. */
 async function command(cwd: string, args: string[]): Promise<void> {
@@ -252,4 +255,4 @@ void opener.openUrlWith("https://example.com/", "C:/browser.exe");
       force: true,
     });
   }
-}, 60_000);
+});

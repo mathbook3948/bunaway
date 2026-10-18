@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import {
   cp,
   mkdtemp,
@@ -14,6 +14,9 @@ import { bundleAssets } from "#cli/build";
 import { validateProject } from "#cli/config";
 import { packageDirectory } from "./project.ts";
 import { verifyViteDevelopment } from "./vite.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("build"));
 
 test("memo example installs and bundles as a standalone CLI app with one view", async () => {
   const root = await realpath(
@@ -148,4 +151,4 @@ test("memo example installs and bundles as a standalone CLI app with one view", 
       force: true,
     });
   }
-}, 60000);
+});

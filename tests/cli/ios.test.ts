@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import {
   mkdir,
   mkdtemp,
@@ -26,6 +26,9 @@ import {
 import { main } from "#cli/main";
 
 import { iosFixture } from "./ios-fixture.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("toolchain"));
 
 test("iOS settings reject unsupported native permissions, multiple views and invalid CLI arguments", async () => {
   const simulator = "81965A44-6B4F-4071-8FA6-B22D38AE00B7";
@@ -104,7 +107,7 @@ test("iOS settings reject unsupported native permissions, multiple views and inv
       force: true,
     });
   }
-}, 30000);
+});
 
 test("iOS publication preserves Swift and Xcode edits and refuses unrelated projects or linked managed paths", async () => {
   const temporary = await mkdtemp(resolve(tmpdir(), "bunaway-ios-sync-"));
@@ -395,4 +398,4 @@ test("iOS bundled entry survives three backend Worker generations and preserves 
       force: true,
     });
   }
-}, 15000);
+});

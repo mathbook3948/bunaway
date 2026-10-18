@@ -9,6 +9,7 @@ import {
   validatePacket,
 } from "#native/windows/bun/channel";
 import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
+import { waitFor as poll } from "../fixtures/deadlines.ts";
 
 test.each([
   "legacy",
@@ -135,18 +136,13 @@ test.each([
         failure = error;
       },
     );
-    const waitFor = async (predicate: () => boolean) => {
-      const deadline = Date.now() + 5000;
-      while (!predicate()) {
-        if (failure) {
-          throw failure;
-        }
-        if (Date.now() > deadline) {
-          throw new Error("I/O parser test timed out");
-        }
-        await Bun.sleep(1);
-      }
-    };
+    const waitFor = (predicate: () => boolean) =>
+      poll(predicate, {
+        deadline: "inProcess",
+        what: "the async parser's output",
+        intervalMs: 1,
+        failed: () => failure,
+      });
     const operation = (id: string, payload: string) =>
       channel.send({
         kind: "operation",

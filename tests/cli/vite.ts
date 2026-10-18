@@ -3,6 +3,7 @@ import { readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Project } from "#cli/config";
 import { startDevServer } from "#cli/dev-server";
+import { deadline } from "../fixtures/deadlines.ts";
 
 /** Verifies a generated Vite app over HTTP/HMR and restores files and processes afterward. */
 export async function verifyViteDevelopment(
@@ -136,9 +137,9 @@ export async function verifyViteDevelopment(
     );
     /** Waits for an HMR message and includes the observed stream on timeout. */
     async function waitFor(check: () => boolean) {
-      const deadline = Date.now() + 5000;
+      const limit = Date.now() + deadline("childStep");
       while (!check()) {
-        if (Date.now() > deadline) {
+        if (Date.now() > limit) {
           throw new Error(
             `Timed out waiting for Vite HMR: ${JSON.stringify(messages)}`,
           );

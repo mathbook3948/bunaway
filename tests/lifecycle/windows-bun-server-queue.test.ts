@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { MessageChannel } from "node:worker_threads";
 import {
   Channel,
@@ -18,6 +18,9 @@ import {
   type WireError,
 } from "@bunaway/protocol";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
+import { deadline, waitFor } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("toolchain"));
 
 const route: Route = {
   viewId: "main",
@@ -97,15 +100,11 @@ function createChannels(
   };
 }
 
-async function waitFor(predicate: () => boolean) {
-  const deadline = Date.now() + 2000;
-  while (!predicate()) {
-    if (Date.now() >= deadline) {
-      throw new Error("Worker packet delivery timed out.");
-    }
-    await Bun.sleep(1);
-  }
-}
+const PACKET_DELIVERY = {
+  deadline: "inProcess",
+  what: "worker packet delivery",
+  intervalMs: 1,
+} as const;
 
 test("server backlog is bounded while Host results and failure controls retain capacity", async () => {
   const gate = deferred();
@@ -226,7 +225,7 @@ test("server backlog is bounded while Host results and failure controls retain c
     harness.close();
     await outcomes;
   }
-}, 15000);
+});
 
 test.each([
   "ui",
@@ -295,7 +294,10 @@ test.each([
       completion,
     ]);
     try {
-      await waitFor(() => received.length === API_LIMITS.maxPending);
+      await waitFor(
+        () => received.length === API_LIMITS.maxPending,
+        PACKET_DELIVERY,
+      );
       expect(received).toEqual(activePackets);
       expect(completed).toBe(false);
       expect(harness.sender.canSend()).toBe(false);
@@ -357,7 +359,10 @@ test("closing a channel rejects both active and queued server sends", async () =
   );
   const outcomes = Promise.allSettled(sends);
   try {
-    await waitFor(() => received.length === API_LIMITS.maxPending);
+    await waitFor(
+      () => received.length === API_LIMITS.maxPending,
+      PACKET_DELIVERY,
+    );
     harness.sender.close();
     const settled = await outcomes;
     expect(settled).toHaveLength(API_LIMITS.maxPending + 3);
@@ -413,7 +418,10 @@ test("discardServers releases queued context traffic without delivering it", asy
     surviving,
   ]);
   try {
-    await waitFor(() => received.length === API_LIMITS.maxPending);
+    await waitFor(
+      () => received.length === API_LIMITS.maxPending,
+      PACKET_DELIVERY,
+    );
     harness.sender.discardServers(discardedRoute.context);
     await Promise.all(discarded);
     expect(received).toHaveLength(API_LIMITS.maxPending);

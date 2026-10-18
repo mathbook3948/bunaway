@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, setDefaultTimeout, spyOn, test } from "bun:test";
 import { MessageChannel } from "node:worker_threads";
 import { createClient } from "@bunaway/client";
 import { type CoreSession, createCore } from "@bunaway/core";
@@ -11,6 +11,9 @@ import {
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 import { Channel, type Packet, type Route } from "#native/windows/bun/channel";
 import { testAppInfo } from "../fixtures/app-info.ts";
+import { deadline, killAfter } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("toolchain"));
 
 test("Host calls remain BUSY until both Workers acknowledge cancellations, then recover", async () => {
   const child = Bun.spawn(
@@ -27,7 +30,7 @@ test("Host calls remain BUSY until both Workers acknowledge cancellations, then 
   );
   const output = new Response(child.stdout).text();
   const errors = new Response(child.stderr).text();
-  const timeout = setTimeout(() => child.kill(), 10000);
+  const timeout = killAfter(child, "childStep");
   try {
     expect(await child.exited, await errors).toBe(0);
     expect(await output).toContain("PASS Host capacity recovers");
@@ -38,7 +41,7 @@ test("Host calls remain BUSY until both Workers acknowledge cancellations, then 
     }
     await child.exited;
   }
-}, 15000);
+});
 
 test("Windows boundary rejects canonical overflow before reserving IDs and deadlines win before a scan", async () => {
   const packets: Packet[] = [];

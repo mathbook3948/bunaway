@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -7,6 +7,9 @@ import { packageFilename } from "#cli/distribution";
 import { writeJson } from "#cli/files";
 import { installedPlugins } from "#cli/plugins";
 import { createProject, packageDirectory } from "./project.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("build"));
 
 test("isolated network package ships both async adapters and keeps Bun transport code out of browser bundles", async () => {
   const home = await realpath(
@@ -132,4 +135,4 @@ test("isolated network package ships both async adapters and keeps Bun transport
       force: true,
     });
   }
-}, 60_000);
+});

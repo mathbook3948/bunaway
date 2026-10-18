@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { frameworkRoot } from "#cli/files";
 import { runManagedCommand } from "#cli/managed-command";
+import { deadline } from "../fixtures/deadlines.ts";
 
 test.each([
   0,
@@ -19,7 +20,7 @@ test.each([
       throw new Error("No test port.");
     }
     const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), 10000);
+    const timer = setTimeout(() => abort.abort(), deadline("childStep"));
     const server = `Bun.serve({hostname:'127.0.0.1', port:${port}, fetch:()=>new Response('descendant')});`;
     // The root exits after this child binds, leaving cleanup responsible for the listener.
     const command = `

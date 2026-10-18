@@ -141,7 +141,8 @@ in the same change and update this table. Drop a row once the mistake cannot hap
 | No em dash or middle dot in text or commit messages | `scripts/check-text-style.ts` in `bun test tests/docs` and the commit-msg hook |
 | Native changes run the OS checks in `tests/README.md` and report what did not run | Review, and the `windows-native` and `macos-native` CI jobs |
 | Shared FFI tables, `ResourceOwner` and `attemptAll`, `int32Schema` and `base64Schema` are used instead of local copies | Review; the FFI ratchet above blocks new conflicting copies only |
-| Deadlines, intervals and limits are named constants; events are compared as sets | Review |
+| A test names its waits: `setDefaultTimeout(deadline("build"))` once per file, `killAfter(child, "childStep")` for child kill timers, `waitFor(probe, { deadline, what })` for polling, all from `tests/fixtures/deadlines.ts`; literal deadlines and hand-rolled pollers only shrink | `tests/conformance/test-deadlines.test.ts` (per-file ratchet); `BUNAWAY_TEST_TIME_SCALE` scales every deadline on a slow runner |
+| Limits are named constants; events are compared as sets | Review |
 | Docs change in the same commit as code, and claim only what tests verified | Review |
 
 ### Documentation maintenance

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -7,6 +7,9 @@ import { validateProject } from "#cli/config";
 import { createProject } from "#cli/create";
 import { packageDirectory } from "./project.ts";
 import { verifyViteDevelopment } from "./vite.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("build"));
 
 for (const template of [
   "react",
@@ -127,5 +130,5 @@ for (const template of [
         force: true,
       });
     }
-  }, 60000);
+  });
 }

@@ -1,5 +1,6 @@
 // Exercise CLI orchestration with real frontend processes and a small host process.
 // Native WebView behavior is covered separately by the platform integration runners.
+import { deadline } from "../fixtures/deadlines.ts";
 import { expect, mock } from "bun:test";
 import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -154,9 +155,9 @@ async function starts() {
 }
 /** Polls child-process state with a deadline so orchestration stalls cannot hang. */
 async function waitFor(phase: string, check: () => Promise<boolean>) {
-  const deadline = Date.now() + 10000;
+  const limit = Date.now() + deadline("childStep");
   while (!(await check())) {
-    if (finished || Date.now() > deadline) {
+    if (finished || Date.now() > limit) {
       throw new Error(
         `Development fixture ${failureMode ?? "normal"} stalled during ${phase}: ` +
           `buildAttempts=${buildAttempts}, buildFailed=${buildFailed}, ` +

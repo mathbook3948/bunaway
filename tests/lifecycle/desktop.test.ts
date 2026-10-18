@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { createConnection } from "node:net";
 import { defineApp } from "@bunaway/backend";
 import { defineCLI } from "@bunaway/backend/cli";
@@ -24,6 +24,9 @@ import {
   parseLaunchArguments,
 } from "#native/windows/bun/instance";
 import { testAppMetadata } from "../fixtures/app-info.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("childStep"));
 
 test("windowless startup requires a tray or explicit keep-alive, even with open and quit hooks", () => {
   const deferred: WindowSpec[] = [
@@ -1088,7 +1091,7 @@ test("instance deadlines end a slow request and a slow acknowledgement after fiv
       server.close((error) => (error ? reject(error) : resolve())),
     );
   }
-}, 10000);
+});
 
 test("lifecycle callbacks must be functions", () => {
   for (const name of [

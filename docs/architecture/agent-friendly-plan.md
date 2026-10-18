@@ -54,37 +54,29 @@ PR당 리뷰 라운드는 최대 6회(opener), 5회(windows aspect ratio)였다.
 | workspace 목록 불일치 | 테스트 | `framework.json`, 루트 `devDependencies` 대조 |
 | FFI 시그니처 불일치 | 테스트(ratchet) | 새 충돌은 실패, 기존 12개는 줄어들기만 |
 | 배포 목록 누락 | 테스트 | `git ls-files` 기준 대조, `native/ios` 포함, 사라진 항목 거부 |
+| 테스트 기한 리터럴의 복제와 반복 수정 | 구조 + 테스트(ratchet) | `tests/fixtures/deadlines.ts`가 기한 7개를 소유하고 `BUNAWAY_TEST_TIME_SCALE`로 배율 적용. 테스트 타임아웃은 파일당 `setDefaultTimeout(deadline(...))` 하나. `test-deadlines.test.ts`가 파일별 리터럴 기한(213곳 127파일에서 114곳 83파일로)과 자체 폴러(29개에서 26개로)를 기준값 이하로 묶는다 |
 | Linux에서 앱 동작 증명 불가 | 검증 스킬 | `verify-bunaway`: 패킹한 CLI로 프로젝트 생성, 프로세스 프로토콜로 백엔드 구동, SDK 채널로 명령과 이벤트, 증거 기록 |
 
 각 검사는 실제 과거 실수나 임시로 넣은 실수에서 실패하는 것을 확인했다. 경계 테스트는
 수정 전 ICO 모듈에서, ratchet은 이미 통과하던 예외 파일에서, FFI 검사는 `GetLastError`의
-반환형을 바꾼 임시 편집에서 실패했다.
+반환형을 바꾼 임시 편집에서, 기한 ratchet은 테스트에 더한 `setTimeout(..., 30000)` 한 줄과
+실제보다 큰 기준값에서 실패했다.
+
+남은 리터럴 114곳은 Windows와 macOS 전용 fixture, 자식 프로세스에 문자열로 넘기는 코드, API에
+입력으로 주는 기한이다. 각 OS에서 실행해 볼 수 있을 때 옮기고 기준값을 내린다. `test()`의 세
+번째 인자에 `deadline()`을 넣는 형태는 Biome가 본문 전체를 다시 들여써서 쓰지 않고, 파일마다
+`setDefaultTimeout` 하나로 대신한다.
 
 ## 3. 남은 계획
 
 순서는 레버리지와 위험의 비율이다. 각 항목은 그 자체로 PR 하나이며, 먼저 검사를 넣고
 그 검사가 현재 코드에서 실패하는 것을 보인 뒤 코드를 옮긴다.
 
-### 3.1 테스트 기한과 폴링을 한 모듈로 (M)
+### 3.1 테스트 기한과 폴링을 한 모듈로 (M): 2절로 옮김
 
-데이터: 리터럴 기한 약 130곳, 같은 수정이 세 번 반복됨.
-
-설계: `tests/fixtures/deadlines.ts` 하나가 기한을 소유한다.
-
-```ts
-export const DEADLINES = {
-  protocolStep: 10_000,
-  childExit: 5_000,
-  nativeFixture: 90_000,
-  packagedAudit: 120_000,
-} as const;
-export function deadline(name: keyof typeof DEADLINES): number; // BUNAWAY_TEST_TIME_SCALE 배율 적용
-export function waitFor<T>(probe: () => T | undefined, options: { deadlineMs: number; intervalMs?: number }): Promise<T>;
-```
-
-검사: `tests/conformance/test-deadlines.test.ts`가 `setTimeout(() => child.kill(), <리터럴>)`과
-`}, <리터럴>);` 형태의 테스트 타임아웃 리터럴 수를 baseline 이하로 묶는다(ratchet).
-느린 러너 대응은 배율 하나로 끝나므로 "headroom" 커밋 클래스가 사라진다.
+Linux에서 실행되는 테스트는 옮겼다. 남은 것은 OS 전용 fixture이며 그 OS에서 실행해 확인하며
+옮긴다. 자체 `waitFor` 정의 26개 중 `failed()`와 다른 간격이 필요한 것은 공유 `waitFor`의
+옵션으로 표현된다.
 
 ### 3.2 플랫폼 구현의 공유 인터페이스 (M, 플러그인별)
 

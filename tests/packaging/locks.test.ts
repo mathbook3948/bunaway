@@ -1,4 +1,11 @@
-import { afterAll, beforeAll, expect, spyOn, test } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  expect,
+  setDefaultTimeout,
+  spyOn,
+  test,
+} from "bun:test";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -6,6 +13,9 @@ import {
   acquireBuildOutputLock,
   acquirePackageInputLock,
 } from "@bunaway/packaging";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("childStep"));
 
 let home: string;
 beforeAll(async () => {
@@ -148,4 +158,4 @@ await release();`,
     child.kill();
     await child.exited;
   }
-}, 10000);
+});

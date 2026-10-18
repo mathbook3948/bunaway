@@ -7,6 +7,7 @@ import { Worker } from "node:worker_threads";
 import type { HostContext } from "@bunaway/protocol";
 import { Channel, type Packet } from "@bunaway/runtime-bun/worker-channel";
 import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
+import { waitFor as poll } from "../fixtures/deadlines.ts";
 
 const slots = {
   allocated: 0,
@@ -138,18 +139,13 @@ test.each([
           failure = error;
         },
       );
-      const waitFor = async (predicate: () => boolean) => {
-        const deadline = Date.now() + 5000;
-        while (!predicate()) {
-          if (failure) {
-            throw failure;
-          }
-          if (Date.now() >= deadline) {
-            throw new Error("I/O handoff fixture timed out.");
-          }
-          await Bun.sleep(1);
-        }
-      };
+      const waitFor = (predicate: () => boolean) =>
+        poll(predicate, {
+          deadline: "inProcess",
+          what: "the I/O handoff fixture's packets",
+          intervalMs: 1,
+          failed: () => failure,
+        });
       const seen = (kind: Packet["kind"], id?: string) =>
         packets.some(
           (packet) =>

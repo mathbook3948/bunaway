@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import {
   cp,
   mkdir,
@@ -27,6 +27,9 @@ import { frameworkRoot } from "#cli/files";
 import { main } from "#cli/main";
 import { run, runWorker } from "#cli/processes";
 import { createProject } from "./project.ts";
+import { deadline, killAfter } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("build"));
 
 const project = {
   app: {
@@ -172,7 +175,7 @@ export default defineApp({ modules: [], commands: {
         stderr: "pipe",
       },
     );
-    const timeout = setTimeout(() => child.kill(), 5000);
+    const timeout = killAfter(child, "childStep");
     const errors = new Response(child.stderr).text();
     const output = readJsonLines(child.stdout)[Symbol.asyncIterator]();
     const send = (body: Record<string, unknown>) =>
@@ -307,7 +310,7 @@ export default defineApp({ modules: [], commands: {
       force: true,
     });
   }
-}, 60000);
+});
 
 test("Android accepts the common app model and rejects unsupported native inputs before building", () => {
   expect(() => assertAndroidProject(project)).not.toThrow();

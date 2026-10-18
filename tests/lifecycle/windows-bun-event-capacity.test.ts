@@ -15,6 +15,7 @@ import {
 import { command } from "#backend/command";
 import { Channel, type Packet, type Route } from "#native/windows/bun/channel";
 import { testAppInfo } from "../fixtures/app-info.ts";
+import { waitFor } from "../fixtures/deadlines.ts";
 
 type ServerPacket = Extract<
   Packet,
@@ -35,14 +36,13 @@ const hello = {
   buildId: "event-capacity-test",
 };
 
-async function waitFor(condition: () => boolean): Promise<void> {
-  const deadline = Date.now() + 3000;
-  while (!condition()) {
-    if (Date.now() >= deadline) {
-      throw new Error("Event capacity test did not complete.");
-    }
-    await Bun.sleep(1);
-  }
+/** Packets travel between in-process ports; the shared deadline bounds each wait. */
+function delivery(what: string) {
+  return {
+    deadline: "inProcess",
+    what,
+    intervalMs: 1,
+  } as const;
 }
 
 /** Connect two views to a Core and optionally hold event acknowledgements. */
@@ -270,11 +270,13 @@ async function echoAfterEvents(harness: EventHarness): Promise<void> {
       payload: "host-still-live",
     },
   });
-  await waitFor(() =>
-    harness.servers.some(
-      ({ message }) =>
-        message.kind === "result" && message.id === "after-events",
-    ),
+  await waitFor(
+    () =>
+      harness.servers.some(
+        ({ message }) =>
+          message.kind === "result" && message.id === "after-events",
+      ),
+    delivery("the result after the held events"),
   );
   expect(
     harness.servers.find(
@@ -299,6 +301,7 @@ test("backend broadcasts reach every subscription across views beyond one channe
           harness.servers.filter(({ message }) => message.kind === "event")
             .length ===
           broadcast * subscriptions,
+        delivery("every subscriber to receive the broadcast"),
       );
       await harness.main.drain();
     }
@@ -355,6 +358,7 @@ test("slow event acknowledgements end overflowing subscriptions with BUSY and pr
       () =>
         harness.servers.filter(({ message }) => message.kind === "event")
           .length === API_LIMITS.maxPending,
+      delivery("the pending events to fill the backlog"),
     );
     expect(harness.main.canSend()).toBe(false);
     // Each subscription's first send is waiting for an ACK. Its own queue
@@ -391,6 +395,7 @@ test("slow event acknowledgements end overflowing subscriptions with BUSY and pr
         harness.servers.filter(
           ({ message }) => message.kind === "subscription-error",
         ).length === subscriptions,
+      delivery("every subscription to report its error"),
     );
     await harness.main.drain();
     for (const route of harness.routes) {

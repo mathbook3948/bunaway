@@ -1,6 +1,7 @@
 // Run the public Android pipeline with fixture tools in an isolated process.
 // Native Gradle/APK behavior stays covered by the emulator and artifact checks.
 
+import { waitFor } from "../fixtures/deadlines.ts";
 import { mock, spyOn } from "bun:test";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -170,11 +171,10 @@ const cancellation = (async () => {
   if (mode !== "cancel") {
     return;
   }
-  const deadline = Date.now() + 5000;
-  while (!(await Bun.file(resolve(root, "adb-ready")).exists())) {
-    assert(Date.now() < deadline, "ADB fixture did not start");
-    await Bun.sleep(10);
-  }
+  await waitFor(() => Bun.file(resolve(root, "adb-ready")).exists(), {
+    deadline: "childStep",
+    what: "the ADB fixture to start",
+  });
   process.emit("SIGINT", "SIGINT");
 })();
 const { runAndroidProject } = await import("#cli/android");

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -17,6 +17,9 @@ import { installedPackageRoot } from "#cli/files";
 import { assertAppDefinitionExport, buildWithSdk, sdkPlugin } from "#cli/sdk";
 import { testAppMetadata } from "../fixtures/app-info.ts";
 import { createProject } from "./project.ts";
+import { deadline, killAfter } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("toolchain"));
 
 /** Bundle the legacy process adapter only for its SDK contract test. */
 async function bundleProcessBackend(
@@ -99,7 +102,7 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
       },
     );
     child = processChild;
-    const timeout = setTimeout(() => processChild.kill(), 12000);
+    const timeout = killAfter(processChild, "childStep");
     const errors = new Response(processChild.stderr).text();
     const frames = readJsonLines(processChild.stdout)[Symbol.asyncIterator]();
     // Attach one runtime identity to every test-side frame sent to the backend.
@@ -324,4 +327,4 @@ test("external generated backend uses actual SDK command/storage/event; revoked 
       force: true,
     });
   }
-}, 30000);
+});

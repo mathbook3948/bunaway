@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -13,6 +13,9 @@ import {
   uiCleanupSlots,
   uiLifecycleSlots,
 } from "../fixtures/windows-ui-cleanup.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("toolchain"));
 
 test("clipboard resource failures and cancellable retries use isolated Win32 bindings", async () => {
   const root = resolve(
@@ -253,10 +256,10 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
       },
     );
     const waitFor = async (condition: () => boolean) => {
-      const deadline = Date.now() + 5000;
+      const limit = Date.now() + deadline("inProcess");
       while (!condition()) {
         expect(failure, errors).toBeUndefined();
-        if (Date.now() >= deadline) {
+        if (Date.now() >= limit) {
           throw new Error(`Clipboard UI validation timed out. ${errors}`);
         }
         await Bun.sleep(5);
@@ -321,4 +324,4 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
       force: true,
     });
   }
-}, 15000);
+});
