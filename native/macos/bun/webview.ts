@@ -507,6 +507,11 @@ export class MacosWebview {
             });
             hooks.revoke("process-failed");
             if (!this.closed) {
+              // The navigation that was running died with the process; a cancellation reported for
+              // it later (for example by the `stopLoading` before a reissue) must not fail the
+              // document of the reload.
+              this.documentNavigation = null;
+              this.provisionalNavigation = null;
               // A reload after a crash gets its own stall budget.
               this.loadClock.resetBudget();
               this.loadHome();

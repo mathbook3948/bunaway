@@ -311,6 +311,14 @@ fetch('add.wasm').then(async response => {
 
   // A cancelled load that carries no navigation (the cancellation of a request WebKit never
   // started, as `stopLoading` before a reissue produces) must not complete the document.
+  const state = view as unknown as
+    | {
+        documentNavigation: unknown;
+      }
+    | undefined;
+  assert(state, "WebView must exist.");
+  // The guard only matters once the page navigation finished (both sides are null).
+  await waitFor(() => state.documentNavigation === null);
   const completionsBefore = documentCompletions;
   o.withAutoreleasePool(() => {
     const window = nativeWindow(o);
@@ -325,7 +333,7 @@ fetch('add.wasm').then(async response => {
       o.class("NSError"),
       "errorWithDomain:code:userInfo:",
       o.string("NSURLErrorDomain"),
-      -999,
+      BigInt.asUintN(64, -999n),
       null,
     );
     o.send(
