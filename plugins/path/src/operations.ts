@@ -1,6 +1,7 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
+  appDirectorySchema,
   pathsSchema,
   pathTextSchema,
   qualifiedPathSchema,
@@ -17,6 +18,14 @@ export const pathOperations = {
     }),
     output: qualifiedPathSchema,
     handler: ({ directory }, { instance }) => instance.getDirectory(directory),
+  }),
+  getAppDirectory: operation({
+    input: z.strictObject({
+      directory: appDirectorySchema,
+    }),
+    output: qualifiedPathSchema,
+    handler: ({ directory }, { instance }) =>
+      instance.getAppDirectory(directory),
   }),
   join: operation({
     input: z.strictObject({

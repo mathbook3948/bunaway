@@ -1,7 +1,7 @@
 import { defineNativePlugin } from "@bunaway/plugin";
 import { pathOperations } from "#path/operations";
 import { dispose, initialize } from "#path/platforms/windows";
-/** Promise-based Windows lexical path helpers and current-user directory queries. */
+/** Promise-based Windows lexical path helpers and current-user and app-specific directory queries. */
 export default defineNativePlugin({
   name: "path",
   platforms: {
@@ -13,4 +13,4 @@ export default defineNativePlugin({
   },
 });
 
-export type { UserDirectory } from "#path/contract";
+export type { AppDirectory, UserDirectory } from "#path/contract";

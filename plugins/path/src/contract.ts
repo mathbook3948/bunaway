@@ -30,3 +30,19 @@ export const userDirectorySchema = z.enum([
 
 /** A supported current-user directory name. */
 export type UserDirectory = z.infer<typeof userDirectorySchema>;
+
+/**
+ * App-specific directories. Querying one neither creates it nor grants file access.
+ * App resources are not included: `ctx.app.paths.resources` provides them.
+ */
+export const appDirectorySchema = z.enum([
+  "appConfig",
+  "appData",
+  "appLocalData",
+  "cache",
+  "logs",
+  "temp",
+]);
+
+/** A supported app-specific directory name. */
+export type AppDirectory = z.infer<typeof appDirectorySchema>;
