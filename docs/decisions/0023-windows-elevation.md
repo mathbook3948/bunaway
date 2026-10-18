@@ -6,9 +6,8 @@ status: accepted
 
 ## 결정과 근거
 
-앱 실행 파일은 관리자 권한을 요구하는 manifest를 갖지 않는다. 앱은 실행한 사용자의 토큰(asInvoker)으로
-동작하고 실행 중 권한을 올리거나 낮추는 API는 제공하지 않는다. Electron과 Tauri도 앱 자체에 상승
-요청 API를 두지 않고, 설치 프로그램이 상승 여부를 정한다.
+프레임워크는 앱 실행 파일에 관리자 권한을 요구하는 manifest를 넣지 않는다. 앱은 실행한 사용자의 토큰으로
+동작하고 실행 중 권한을 올리거나 낮추는 API는 제공하지 않는다. 상승 여부는 설치 프로그램이 정한다.
 
 상승은 설치 프로그램에만 있다. `scope: "perUser"`(기본)는 `PrivilegesRequired=lowest`로 상승 없이
 설치하고, `scope: "perMachine"`만 `PrivilegesRequired=admin`으로 상승한다.
@@ -16,7 +15,6 @@ status: accepted
 상승한 설치 프로그램이 끝날 때 제공하는 "앱 실행" 항목은 `runasoriginaluser` 플래그로 설치를 시작한
 사용자의 토큰으로 앱을 시작한다. 이 플래그가 없으면 앱이 설치 프로그램의 관리자 토큰을 물려받아
 관리자 권한으로 실행되고, 이후 앱이 만드는 파일과 레지스트리 항목이 관리자 소유가 된다.
-electron-builder의 NSIS 설치 프로그램도 설치 뒤 실행을 사용자 토큰으로 낮춰 시작한다.
 
 ## 범위 밖
 

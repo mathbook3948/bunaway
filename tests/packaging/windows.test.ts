@@ -1216,7 +1216,7 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   expect(perUser).toContain("{autodesktop}\\Test App (com.example.app)");
   expect(perUser).toContain("PrivilegesRequired=lowest");
   expect(perUser).toMatch(
-    /\[Run\]\nFilename: [^\n]*Flags: postinstall [^\n]*runasoriginaluser/,
+    /\[Run\]\nFilename: [^\n]*Flags: [^;\n]*\bpostinstall\b[^;\n]*\brunasoriginaluser\b[^;\n]*\n/,
   );
   expect(perUser).toContain("UninstallLogMode=overwrite");
   expect(perUser).toContain("Current.Add('WebView2Loader.dll')");
@@ -1304,7 +1304,7 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   expect(perMachine).toContain("PrivilegesRequired=admin");
   // The elevated Setup must not hand its administrator token to the launched app.
   expect(perMachine).toMatch(
-    /\[Run\]\nFilename: [^\n]*Flags: postinstall [^\n]*runasoriginaluser/,
+    /\[Run\]\nFilename: [^\n]*Flags: [^;\n]*\bpostinstall\b[^;\n]*\brunasoriginaluser\b[^;\n]*\n/,
   );
   expect(perMachine).not.toContain("RegQueryStringValue(HKCU");
   expect(perMachine).toContain("ArchitecturesAllowed=x64compatible");
