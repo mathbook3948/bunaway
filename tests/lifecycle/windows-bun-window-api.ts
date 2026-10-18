@@ -118,6 +118,20 @@ if (!process.argv.includes("--child")) {
       ],
       returns: "i32",
     },
+    // POINT is passed by value as one 64-bit register: x in the low half, y in the high half.
+    WindowFromPoint: {
+      args: [
+        "i64",
+      ],
+      returns: "u64",
+    },
+    GetAncestor: {
+      args: [
+        "u64",
+        "u32",
+      ],
+      returns: "u64",
+    },
     IsWindowVisible: {
       args: [
         "u64",
@@ -450,6 +464,67 @@ if (!process.argv.includes("--child")) {
         nativeWindows.destroy(hwnd);
       }
       assert.throws(() => nativeWindows.getOpacity(hwnd));
+    }
+    {
+      const rootAt = (x: number, y: number) => {
+        const point = (BigInt(y) << 32n) | (BigInt(x) & 0xffff_ffffn);
+        const hit = driver.symbols.WindowFromPoint(BigInt.asIntN(64, point));
+        return hit === 0n ? 0n : driver.symbols.GetAncestor(hit, 2);
+      };
+      const under = nativeWindows.create(
+        "Click-through under",
+        500,
+        400,
+        () => {},
+      );
+      const over = nativeWindows.create(
+        "Click-through over",
+        500,
+        400,
+        () => {},
+      );
+      try {
+        nativeWindows.setPosition(under, 120, 120);
+        nativeWindows.setPosition(over, 120, 120);
+        nativeWindows.show(under, true);
+        nativeWindows.show(over, true);
+        const bounds = nativeWindows.getBounds(over, "outer");
+        const x = bounds.x + Math.floor(bounds.width / 2);
+        const y = bounds.y + Math.floor(bounds.height / 2);
+        assert.equal(nativeWindows.isIgnoreMouseEvents(over), false);
+        assert.equal(rootAt(x, y), over);
+        nativeWindows.setIgnoreMouseEvents(over, true);
+        assert.equal(nativeWindows.isIgnoreMouseEvents(over), true);
+        // The window stays visible and opaque but input reaches the window beneath.
+        assert.equal(nativeWindows.isVisible(over), true);
+        assert.equal(nativeWindows.getOpacity(over), 1);
+        assert.equal(rootAt(x, y), under);
+        // Opacity shares the layered style: full opacity keeps click-through, and
+        // releasing click-through keeps a translucent window layered.
+        nativeWindows.setOpacity(over, 0.5);
+        nativeWindows.setOpacity(over, 1);
+        assert.equal(nativeWindows.isIgnoreMouseEvents(over), true);
+        assert.equal(rootAt(x, y), under);
+        nativeWindows.setOpacity(over, 0.5);
+        nativeWindows.setIgnoreMouseEvents(over, false);
+        assert.ok(Math.abs(nativeWindows.getOpacity(over) - 0.5) <= 1 / 255);
+        assert.equal(rootAt(x, y), over);
+        nativeWindows.setOpacity(over, 1);
+        assert.equal(nativeWindows.getOpacity(over), 1);
+        // Repeating either state is a no-op, and a window that ignored the mouse is
+        // an ordinary opaque window again once both settings are cleared.
+        nativeWindows.setIgnoreMouseEvents(over, false);
+        nativeWindows.setIgnoreMouseEvents(over, true);
+        nativeWindows.setIgnoreMouseEvents(over, true);
+        nativeWindows.setIgnoreMouseEvents(over, false);
+        assert.equal(nativeWindows.isIgnoreMouseEvents(over), false);
+        assert.equal(rootAt(x, y), over);
+        assert.deepEqual(nativeWindows.getBounds(over, "outer"), bounds);
+      } finally {
+        nativeWindows.destroy(over);
+        nativeWindows.destroy(under);
+      }
+      assert.throws(() => nativeWindows.isIgnoreMouseEvents(over));
     }
     for (const maximized of [
       false,
@@ -2034,6 +2109,17 @@ if (!process.argv.includes("--child")) {
               opacity: 1,
             });
             assert.equal(await windows.getOpacity(editor), 1);
+            assert.equal(await windows.isIgnoreMouseEvents(editor), false);
+            await windows.setIgnoreMouseEvents({
+              ...editor,
+              ignore: true,
+            });
+            assert.equal(await windows.isIgnoreMouseEvents(editor), true);
+            await windows.setIgnoreMouseEvents({
+              ...editor,
+              ignore: false,
+            });
+            assert.equal(await windows.isIgnoreMouseEvents(editor), false);
             assert.equal(await windows.isFullscreenable(editor), true);
             await windows.setFullscreenable({
               ...editor,

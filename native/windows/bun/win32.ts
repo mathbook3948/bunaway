@@ -1,6 +1,6 @@
 import { dlopen, JSCallback, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
-import { checkHresult, wide, withWide } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
+import { checkHresult, wide, withWide } from "@bunaway/plugin/win32";
 import {
   clampWindowSize,
   hasValidWindowPlacement,
@@ -30,50 +30,26 @@ import { monitorServices } from "./monitors.ts";
 import type { SessionMessageHandler } from "./session-end.ts";
 import type { TaskbarProgress, ThumbnailClip } from "./taskbar-progress.ts";
 import { display, kernel, user } from "./win32-bindings.ts";
-import { completedGeometryChanges, windowChanges } from "./window-events.ts";
-import { WindowTaskbar } from "./window-taskbar.ts";
-import {
-  centerInWorkArea,
-  initialWindowPlacement,
-  selectMonitorWorkArea,
-  type WorkArea,
-} from "./window-placement.ts";
-import {
-  constrainedOuterSize,
-  DEFAULT_DPI,
-  logicalPixels,
-  physicalPixels,
-} from "./window-size.ts";
-
-import {
-  initialWindowStyles,
-  WS_CAPTION,
-  WS_EX_LAYERED,
-  WS_EX_NOACTIVATE,
-  WS_EX_TOOLWINDOW,
-  WS_EX_TOPMOST,
-  WS_OVERLAPPEDWINDOW,
-} from "./window-style.ts";
 import {
   COLOR_WINDOW,
   CW_USEDEFAULT,
   DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
-  FLASHWINFO_SIZE,
   FLASHW_STOP,
   FLASHW_TIMER,
   FLASHW_TIMERNOFG,
   FLASHW_TRAY,
-  GWLP_HWNDPARENT,
+  FLASHWINFO_SIZE,
+  GW_OWNER,
   GWL_EXSTYLE,
   GWL_STYLE,
-  GW_OWNER,
+  GWLP_HWNDPARENT,
   IDI_APPLICATION,
   IDYES,
   IMAGE_ICON,
   LR_LOADFROMFILE,
   LWA_ALPHA,
-  MAX_ALPHA,
   MA_NOACTIVATE,
+  MAX_ALPHA,
   MB_DEFBUTTON2,
   MB_ICONQUESTION,
   MB_YESNO,
@@ -81,9 +57,9 @@ import {
   MF_ENABLED,
   MF_GRAYED,
   MINMAXINFO_SIZE,
-  MONITORINFO_SIZE,
   MONITOR_DEFAULTTONEAREST,
   MONITOR_DEFAULTTOPRIMARY,
+  MONITORINFO_SIZE,
   PM_REMOVE,
   RECT_SIZE,
   SC_CLOSE,
@@ -99,11 +75,6 @@ import {
   SM_CYMAXTRACK,
   SM_CYMINTRACK,
   SM_CYSIZEFRAME,
-  SWP_FRAMECHANGED,
-  SWP_NOACTIVATE,
-  SWP_NOMOVE,
-  SWP_NOSIZE,
-  SWP_NOZORDER,
   SW_HIDE,
   SW_MINIMIZE,
   SW_RESTORE,
@@ -114,6 +85,11 @@ import {
   SW_SHOWNA,
   SW_SHOWNOACTIVATE,
   SW_SHOWNORMAL,
+  SWP_FRAMECHANGED,
+  SWP_NOACTIVATE,
+  SWP_NOMOVE,
+  SWP_NOSIZE,
+  SWP_NOZORDER,
   SYSTEM_COMMAND_MASK,
   WA_INACTIVE,
   WDA_EXCLUDEFROMCAPTURE,
@@ -145,6 +121,31 @@ import {
   WS_MINIMIZEBOX,
   WS_THICKFRAME,
 } from "./win32-constants.ts";
+import { completedGeometryChanges, windowChanges } from "./window-events.ts";
+import {
+  centerInWorkArea,
+  initialWindowPlacement,
+  selectMonitorWorkArea,
+  type WorkArea,
+} from "./window-placement.ts";
+import {
+  constrainedOuterSize,
+  DEFAULT_DPI,
+  logicalPixels,
+  physicalPixels,
+} from "./window-size.ts";
+
+import {
+  initialWindowStyles,
+  WS_CAPTION,
+  WS_EX_LAYERED,
+  WS_EX_NOACTIVATE,
+  WS_EX_TOOLWINDOW,
+  WS_EX_TOPMOST,
+  WS_EX_TRANSPARENT,
+  WS_OVERLAPPEDWINDOW,
+} from "./window-style.ts";
+import { WindowTaskbar } from "./window-taskbar.ts";
 
 /** Host policy for the message pump, placement retries and title storage. */
 const MAX_MESSAGES_PER_PUMP = 64;
@@ -1066,7 +1067,7 @@ export class Windows {
   /**
    * Set whole-window opacity (0 transparent, 1 opaque) through a layered window, which also
    * covers the WebView child. The layered style is added only while the window is translucent
-   * and removed at full opacity, so an opaque window keeps its normal rendering path.
+   * and removed at full opacity unless the window ignores mouse input, so an opaque window keeps its normal rendering path.
    */
   setOpacity(window: bigint, opacity: number): void {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");
@@ -1076,7 +1077,9 @@ export class Windows {
     );
     const alpha = Math.round(opacity * MAX_ALPHA);
     const { exStyle } = this.windowStyles(window);
-    if (alpha === MAX_ALPHA) {
+    // Click-through needs the layered style, so full opacity keeps it while the window
+    // ignores the mouse and only resets the alpha to opaque.
+    if (alpha === MAX_ALPHA && !(exStyle & WS_EX_TRANSPARENT)) {
       if (exStyle & WS_EX_LAYERED) {
         this.setStyle(window, exStyle & ~WS_EX_LAYERED, GWL_EXSTYLE);
       }
@@ -1094,6 +1097,55 @@ export class Windows {
       }
       assert(false, `SetLayeredWindowAttributes: ${error}`);
     }
+  }
+
+  /** Whether the window lets mouse input pass through to whatever is beneath it. */
+  isIgnoreMouseEvents(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return !!(this.windowStyles(window).exStyle & WS_EX_TRANSPARENT);
+  }
+
+  /**
+   * Make the whole window, WebView included, transparent to mouse hit testing. A window that
+   * is both layered and WS_EX_TRANSPARENT is skipped by the hit test, so clicks reach the
+   * window beneath. The layered style is shared with opacity: it is added with a fully
+   * opaque alpha (a layered window without attributes is not drawn) and only removed when
+   * the window is also fully opaque. Keyboard focus and activation are not changed.
+   */
+  setIgnoreMouseEvents(window: bigint, ignore: boolean): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    const { exStyle } = this.windowStyles(window);
+    if (!!(exStyle & WS_EX_TRANSPARENT) === ignore) {
+      return;
+    }
+    if (ignore) {
+      const wasLayered = !!(exStyle & WS_EX_LAYERED);
+      this.setStyle(
+        window,
+        exStyle | WS_EX_LAYERED | WS_EX_TRANSPARENT,
+        GWL_EXSTYLE,
+      );
+      if (
+        !wasLayered &&
+        !user.symbols.SetLayeredWindowAttributes(
+          window,
+          0,
+          MAX_ALPHA,
+          LWA_ALPHA,
+        )
+      ) {
+        const error = kernel.symbols.GetLastError();
+        this.setStyle(window, exStyle, GWL_EXSTYLE);
+        assert(false, `SetLayeredWindowAttributes: ${error}`);
+      }
+      return;
+    }
+    const restored = exStyle & ~WS_EX_TRANSPARENT;
+    this.setStyle(
+      window,
+      this.getOpacity(window) === 1 ? restored & ~WS_EX_LAYERED : restored,
+      GWL_EXSTYLE,
+    );
   }
 
   /**

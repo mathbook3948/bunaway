@@ -523,6 +523,8 @@ await windows.close({ view: "dialog" });
 | `windows.isFullscreenable` | `{ view, windowId? }` | `Promise<boolean>`. 이 창 수명의 전체화면 진입 허용 여부 |
 | `windows.setOpacity` | `{ view, windowId?, opacity: number }` | `Promise<null>`. 창 전체(WebView 포함)의 불투명도. `opacity`는 0(투명)–1(불투명)이며 범위를 벗어나면 `INVALID_ARGUMENT` |
 | `windows.getOpacity` | `{ view, windowId? }` | `Promise<number>`. OS에 저장된 현재 불투명도(0–1). 새 창은 `1` |
+| `windows.setIgnoreMouseEvents` | `{ view, windowId?, ignore: boolean }` | `Promise<null>`. `true`이면 WebView를 포함한 창 전체가 마우스 입력을 받지 않고 아래 창으로 통과 |
+| `windows.isIgnoreMouseEvents` | `{ view, windowId? }` | `Promise<boolean>`. 이 창이 마우스 입력을 무시하는지 조회. 새 창은 `false` |
 | `windows.setClosable` | `{ view, windowId?, closable: boolean }` | `Promise<null>`. 네이티브 닫기 버튼과 사용자 닫기 허용 변경 |
 | `windows.isClosable` | `{ view, windowId? }` | `Promise<boolean>`. 이 창 수명의 사용자 닫기 설정 조회 |
 | `windows.setFocusable` | `{ view, windowId?, focusable: boolean }` | `Promise<null>`. 이후 활성화 허용 변경. 현재 포커스를 다른 창으로 옮기지는 않음 |
@@ -809,7 +811,14 @@ macOS는 `UNSUPPORTED`입니다.
 `opacity`는 창 인스턴스별 상태이며 새 창과 재생성한 창은 `1`에서 시작합니다. 권한과 닫힌 창 오류는 위 설정과 같습니다.
 Windows는 layered window의 상수 alpha로 적용하므로 WebView를 포함한 창 전체가 함께 투명해지고,
 OS가 8비트 alpha(0–255)로 저장하기 때문에 조회 값은 설정한 값과 최대 `1/255`까지 다를 수 있습니다.
-`1`이 되면 layered 스타일을 제거해 일반 창과 같은 경로로 그립니다. 배경색과 투명 배경은 이 설정에 포함되지 않습니다. macOS는 `UNSUPPORTED`입니다.
+`1`이 되면(마우스 입력 통과 중이 아닐 때) layered 스타일을 제거해 일반 창과 같은 경로로 그립니다. 배경색과 투명 배경은 이 설정에 포함되지 않습니다. macOS는 `UNSUPPORTED`입니다.
+
+`setIgnoreMouseEvents`는 창 인스턴스별 상태이며 새 창과 재생성한 창은 `false`에서 시작합니다. 권한과 닫힌 창 오류는 위 설정과 같습니다.
+Windows는 `WS_EX_LAYERED`와 `WS_EX_TRANSPARENT`를 함께 설정하므로 클릭, 휠과 hover가 WebView와 창 테두리를 포함해 그 아래의 창으로 전달됩니다.
+창의 표시, 크기, 포커스와 활성 상태는 바꾸지 않으며 이미 포커스를 가진 창은 키보드 입력을 계속 받습니다.
+불투명도와 독립적으로 동작하며 layered 스타일은 click-through와 `1` 미만의 불투명도가 모두 없을 때만 제거합니다.
+Electron의 `forward` 옵션(통과 중 마우스 이동을 WebView에 전달)은 지원하지 않으며, 입력에 `ignore` 외의 필드가 있으면 `INVALID_ARGUMENT`입니다.
+사용자가 이 창을 마우스로 닫거나 옮길 수 없게 되므로 해제할 수단(단축키, 트레이 등)을 앱이 따로 두어야 합니다. macOS는 `UNSUPPORTED`입니다.
 
 `setTitle`은 지정한 창 수명의 제목만 변경합니다. 선언, 다른 인스턴스와 앱 이름을 바꾸지 않으며
 재생성에서는 선언 또는 해당 생성의 `options.title`로 돌아갑니다. 표시, 크기와 포커스 상태를 유지합니다.

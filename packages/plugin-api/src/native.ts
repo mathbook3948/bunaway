@@ -410,6 +410,10 @@ export type NativeWindow = {
   setOpacity?(opacity: number): void;
   /** Reads the live opacity from the OS, quantized to 8-bit alpha. Windows only. */
   getOpacity?(): number;
+  /** Lets mouse input pass through the whole window, including its WebView, to the window beneath. Windows only. */
+  setIgnoreMouseEvents?(ignore: boolean): void;
+  /** Reads whether this HWND currently ignores mouse input. Windows only. */
+  isIgnoreMouseEvents?(): boolean;
   /** Changes user caption, system-menu and renderer closing. Backend/API closing remains available. Windows only. */
   setClosable?(closable: boolean): void;
   /** Reads the host's user-close setting for this HWND. Windows only. */

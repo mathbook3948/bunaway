@@ -202,7 +202,9 @@ The CLI accepts an `app.windows` catalog with one unique policy view per window.
 `win32.ts`의 `setFullscreen`이 진입을 `INVALID_ARGUMENT`로 거부하므로 어느 경로로 호출해도 우회되지 않는다.
 이미 전체화면인 창은 유지되며 해제는 항상 허용한다.
 `setOpacity`/`getOpacity`는 별도 상태 없이 OS의 layered window alpha를 읽고 쓴다. 1 미만일 때만
-`WS_EX_LAYERED`를 켜고 `SetLayeredWindowAttributes(LWA_ALPHA)`로 적용하며 1이면 스타일을 제거한다.
+`WS_EX_LAYERED`를 켜고 `SetLayeredWindowAttributes(LWA_ALPHA)`로 적용하며 1이면 (click-through 중이 아닐 때) 스타일을 제거한다.
+`setIgnoreMouseEvents`/`isIgnoreMouseEvents`도 상태를 따로 두지 않고 `WS_EX_TRANSPARENT` 스타일을 읽고 쓴다. 켜면 `WS_EX_LAYERED`를
+함께 설정(알파 255)하고, 끄면 불투명도가 1일 때만 layered를 제거한다. `setOpacity(1)`도 click-through 중에는 layered를 유지한다.
 `startup: false` defers creation until `windows.create`. Window calls execute on
 the UI STA through the explicitly installed and registered `@bunaway/plugin-windows`. Each operation checks its own name in the active caller's grants. The I/O Worker
 reports registered operations as capabilities. `windows.recreate` reserves the view
