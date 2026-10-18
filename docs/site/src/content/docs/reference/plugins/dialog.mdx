@@ -149,3 +149,16 @@ user Cancel 명령, 동시 호출, 호스트 abort와 shutdown을 검사하도�
 메시지 대화상자는 Linux 계약 테스트로 입력 검증, ESC와 cancel 버튼 규칙, 결과 형식을 검사합니다.
 Windows 통합 테스트는 실제 TaskDialog의 버튼 클릭, 확인란, ESC와 abort를 검사하도록 구성했습니다.
 실제 사람의 키보드/마우스, 여러 모니터, overwrite 확인 UI와 실제 소유 창 파괴는 별도 수동 검증입니다.
+
+## 제공하지 않는 대화상자
+
+인증서 신뢰 확인 대화상자는 제공하지 않습니다. Electron의 `dialog.showCertificateTrustDialog`는 앱이
+인증서 검증 처리기에서 받은 인증서 객체를 입력으로 받습니다. 이 프로젝트에는 그 인증서를 넘겨줄 WebView
+인증서 오류 경로와 인증서 모델이 없고, dialog 플러그인이 임의의 인증서를 입력받는 계약도 없습니다.
+Tauri에는 대응 기능이 없습니다. 인증서 오류와 사용자 신뢰 판단은 WebView 보안 설정의 범위입니다.
+
+동기 대화상자(Electron의 `showMessageBoxSync`, `showOpenDialogSync`, `showSaveDialogSync`)도 제공하지
+않습니다. 모든 작업이 Promise로 결과를 돌려주며 대화상자가 떠 있는 동안에도 앱 백엔드 스레드는
+계속 실행합니다. 동기 변형은 백엔드 진행을 막으므로 추가하지 않습니다.
+제공하는 작업은 `openFile`, `selectFolder`, `saveFile`, `showMessage` 네 가지이며 계약 테스트가
+이 목록을 검사합니다.
