@@ -88,7 +88,6 @@
         "!packages/plugin-sdk/src/win32.ts",
         "!packages/plugin-sdk/src/windows-*.ts",
         "packages/protocol/src/**",
-        "packages/core/src/**",
         "plugins/*/src/*.ts"
       ],
       "linter": {

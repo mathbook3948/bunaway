@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 
 const repository = resolve(import.meta.dir, "../..");
@@ -7,6 +7,11 @@ const COMPLEXITY_RULE = "complexity/noExcessiveCognitiveComplexity";
 const COMPLEXITY_CATEGORY = `lint/${COMPLEXITY_RULE}`;
 /** One Biome run over every exempted file, including the daemon-less startup. */
 const LINT_TIMEOUT_MS = 60_000;
+/**
+ * How many files biome.json may exempt from the complexity rule. Lower it when an exemption is
+ * removed; it never goes up, so a new file cannot join the list.
+ */
+const MAX_COMPLEXITY_EXEMPTIONS = 64;
 
 type BiomeOverride = {
   includes: string[];
@@ -58,9 +63,11 @@ function complexityExemptions(config: BiomeConfig): string[] {
   return exempting[0]?.includes ?? [];
 }
 
-test("every complexity exemption names an existing file", async () => {
+test("the complexity exemptions never grow and every entry names an existing file", async () => {
+  const exemptions = complexityExemptions(await biomeConfig());
+  expect(exemptions.length).toBeLessThanOrEqual(MAX_COMPLEXITY_EXEMPTIONS);
   const missing: string[] = [];
-  for (const path of complexityExemptions(await biomeConfig())) {
+  for (const path of exemptions) {
     // A deleted or renamed file keeps matching nothing, so Biome never reports it.
     const exists = await stat(resolve(repository, path)).then(
       (info) => info.isFile(),
@@ -74,7 +81,7 @@ test("every complexity exemption names an existing file", async () => {
 });
 
 test(
-  "every complexity exemption still fails the rule, so the list only shrinks",
+  "every complexity exemption still fails the rule it is exempted from",
   async () => {
     const config = await biomeConfig();
     const exemptions = complexityExemptions(config);
@@ -82,7 +89,11 @@ test(
       config.linter.rules.complexity.noExcessiveCognitiveComplexity.options
         .maxAllowedComplexity;
     // An extending config appends an override, and a later override wins, so this turns the
-    // rule back on for exactly the exempted files without editing the repository config.
+    // rule back on for exactly the exempted files without editing the repository config. The
+    // config must sit inside the repository for its relative `extends` and the VCS root.
+    await mkdir(resolve(repository, "build"), {
+      recursive: true,
+    });
     const directory = await mkdtemp(
       resolve(repository, "build/lint-config-ratchet-"),
     );
@@ -130,6 +141,7 @@ test(
           cwd: repository,
           stdout: "pipe",
           stderr: "pipe",
+          timeout: LINT_TIMEOUT_MS,
         },
       );
       const report = JSON.parse(lint.stdout.toString()) as {
@@ -138,7 +150,10 @@ test(
       const violating = new Set(
         report.diagnostics
           .filter((diagnostic) => diagnostic.category === COMPLEXITY_CATEGORY)
-          .map((diagnostic) => diagnostic.location?.path),
+          // Biome reports native separators, so compare in the forward-slash form of biome.json.
+          .map((diagnostic) =>
+            diagnostic.location?.path?.replaceAll("\\", "/"),
+          ),
       );
       // A file that passes the rule no longer needs its exemption: remove it from biome.json.
       expect(exemptions.filter((path) => !violating.has(path))).toEqual([]);

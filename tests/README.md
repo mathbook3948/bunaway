@@ -72,9 +72,10 @@ Linux에서는 Windows와 macOS 전용 테스트가 skip되므로 네이티브 �
   `packages/cli/src/distribution.ts`의 `frameworkPaths`에도 적는다. `cli/framework-paths.test.ts`가
   하위 디렉터리까지 대조해 빠진 파일과 사라진 항목을 거부하므로 설치한 프레임워크의 앱 빌드가
   깨지기 전에 드러난다.
-- 플러그인의 `src/*.ts`와 `@bunaway/plugin-api`, `@bunaway/client`, `@bunaway/plugin`의 중립 모듈은
-  WebView 번들에 들어가므로 `Buffer`, `Bun`, `process`와 `node:` 모듈을 쓰지 않는다. `biome.json`의
-  override가 거부하고 `conformance/browser-boundary.test.ts`가 번들을 실제로 로드한다. Bun 전용
-  구현은 `src/platforms/`에 둔다.
+- 플러그인의 `src/*.ts`와 `@bunaway/protocol`, `@bunaway/plugin-api`, `@bunaway/client`,
+  `@bunaway/plugin`의 중립 모듈은 WebView 번들에 들어가므로 `Buffer`, `Bun`, `process`와 `node:`
+  모듈을 쓰지 않는다. `biome.json`의 override가 거부하고 `conformance/browser-boundary.test.ts`가
+  번들을 그 전역 없이 로드한다. 번들 테스트는 모듈 평가와 ICO 파서 호출만 검사하므로 함수 안의
+  전역 사용은 lint에 맡긴다. Bun 전용 구현은 `src/platforms/`에 둔다.
 - 변경이 검증한 범위만 문서에 적는다. 특정 fixture가 무엇을 어디까지 검사하는지의 기록은
   [NOTES.md](./NOTES.md)의 해당 절에 덧붙인다.

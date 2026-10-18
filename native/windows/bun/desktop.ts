@@ -665,7 +665,7 @@ export class DesktopLifecycle {
     if (this.ending) {
       return Promise.resolve(joins(this.committedRequest()));
     }
-    if (this.quitting && this.pendingRequest) {
+    if (this.quitting !== undefined && this.pendingRequest) {
       return joins(this.pendingRequest)
         ? this.quitting
         : Promise.resolve(false);

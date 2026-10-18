@@ -52,7 +52,7 @@ export class DevFrontend {
       this.signal.removeEventListener("abort", cancelStartup);
     }
     // A starter that finishes after cancellation must still transfer its resource for cleanup.
-    if (this.signal.aborted || this.closing) {
+    if (this.signal.aborted || this.closing !== undefined) {
       await current.stop();
       this.signal.throwIfAborted();
       return;

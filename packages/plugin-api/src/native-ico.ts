@@ -176,7 +176,10 @@ function dataView(bytes: Uint8Array): DataView {
   return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
 
-/** The ASCII text of `bytes[start, end)`, used for the four-byte PNG chunk types. */
+/**
+ * The text of `bytes[start, end)`, used for the four-byte PNG chunk types. Every byte maps to
+ * one code unit, so a chunk type with a high bit set never matches "IHDR" or "IEND".
+ */
 function ascii(bytes: Uint8Array, start: number, end: number): string {
   return String.fromCharCode(...bytes.subarray(start, end));
 }
