@@ -24,6 +24,15 @@ function normalizeOpenerFilePath(input: unknown): string {
     : normalizeFilePath(input);
 }
 
+/** A POSIX-style path reaches the macOS host, which reports UNSUPPORTED for shortcut operations. */
+function isPosixPath(input: unknown): input is string {
+  return (
+    typeof input === "string" &&
+    input.startsWith("/") &&
+    !input.startsWith("//")
+  );
+}
+
 /** Build public helpers around the plugin's typed operations. */
 export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
   /** Open an absolute HTTP or HTTPS URL. Success means the OS accepted the request. */
@@ -161,7 +170,7 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
   ): Promise<ShortcutLink> {
     return api.readShortcutLink(
       {
-        path: normalizeShortcutPath(path),
+        path: isPosixPath(path) ? path : normalizeShortcutPath(path),
       },
       options,
     );
@@ -180,11 +189,12 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
     operation: ShortcutOperation = "create",
     options?: NativeInvokeOptions,
   ): Promise<null> {
+    const posix = isPosixPath(path);
     return api.writeShortcutLink(
       {
-        path: normalizeShortcutPath(path),
+        path: posix ? path : normalizeShortcutPath(path),
         operation,
-        details: normalizeShortcutDetails(details, operation),
+        details: posix ? details : normalizeShortcutDetails(details, operation),
       },
       options,
     );

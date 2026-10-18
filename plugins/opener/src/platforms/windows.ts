@@ -139,7 +139,7 @@ function notCancelled(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     throw new BunawayError({
       code: "CANCELLED",
-      message: "Recent Items request cancelled.",
+      message: "Opener request cancelled.",
     });
   }
 }
