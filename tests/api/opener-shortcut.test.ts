@@ -84,14 +84,14 @@ test("text limits count UTF-16 code units and an empty cwd or icon clears the pr
     normalizeShortcutDetails(
       {
         target,
-        description: "x".repeat(1023),
+        description: "x".repeat(260),
       },
       "create",
     ),
   ).toBeDefined();
   for (const description of [
-    "x".repeat(1024),
-    "😀".repeat(512),
+    "x".repeat(261),
+    "😀".repeat(131),
   ]) {
     expect(() =>
       normalizeShortcutDetails(
@@ -154,7 +154,7 @@ test("shortcut properties reject relative paths, control characters and bad shap
     },
     {
       target: "C:\\a.exe",
-      description: "x".repeat(1025),
+      description: "x".repeat(261),
     },
     {
       target: "C:\\a.exe",

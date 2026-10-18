@@ -123,7 +123,7 @@ test.skipIf(process.platform !== "win32")(
       expect((await read(path)).iconIndex).toBe(5);
       expect((await read(path)).icon).toBe(created.icon);
 
-      const longest = "d".repeat(1023);
+      const longest = "d".repeat(260);
       await write(path, "update", {
         description: longest,
         cwd: "",

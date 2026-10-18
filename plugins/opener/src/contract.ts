@@ -36,8 +36,8 @@ export const urlHandlerSchema = z.strictObject({
 export type UrlHandler = z.infer<typeof urlHandlerSchema>;
 
 export const MAX_SHORTCUT_ARGUMENTS_LENGTH = 2048;
-// INFOTIPSIZE is 1024 UTF-16 code units including the NUL, the longest description the Shell keeps.
-export const MAX_SHORTCUT_DESCRIPTION_LENGTH = 1023;
+// IShellLinkW::SetDescription keeps at most 260 UTF-16 code units and silently drops the rest.
+export const MAX_SHORTCUT_DESCRIPTION_LENGTH = 260;
 export const SHORTCUT_OPERATIONS = [
   "create",
   "update",
