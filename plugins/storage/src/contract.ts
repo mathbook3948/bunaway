@@ -131,10 +131,14 @@ export interface StorageInstance {
   exists(input: StorageLocation): boolean;
   stat(input: StorageLocation): StorageMetadata | null;
 }
-/** Windows additionally moves and removes while holding the checked object's handle. */
+/** Windows additionally moves, removes and totals directories while holding the checked object's handle. */
 export interface WindowsStorageInstance extends StorageInstance {
   move(input: StorageTransfer): null;
   remove(input: StorageLocation): null;
+  directorySize(
+    input: StorageLocation,
+    signal?: AbortSignal,
+  ): Promise<StorageDirectorySize>;
 }
 
 /** Public storage interface chosen by the plugin author; native support may differ by platform. */
