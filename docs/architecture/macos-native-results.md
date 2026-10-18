@@ -133,10 +133,16 @@ CI 실행 [37574470840](https://github.com/mathbook3948/bunaway/actions/runs/375
 | --- | --- | --- | --- |
 | 수정 전 (1c3776cc) | 2 | 2 | [run 39129532113](https://github.com/mathbook3948/bunaway/actions/runs/39129532113) attempt 1(`index.html` 도착 45초 초과, `main` provisional:false)과 attempt 2(main 페이지 10초 초과, 5/10/15초 checkpoint 모두 provisional:false) |
 | 수정 후 (3aea32d8, b71ea308: 같은 재시도 로직) | 5 | 0 | [run 39131976667](https://github.com/mathbook3948/bunaway/actions/runs/39131976667) attempt 1 내지 4, [run 39130714384](https://github.com/mathbook3948/bunaway/actions/runs/39130714384)(3aea32d8)의 macOS 잡 |
+| 재발송 1회 뒤 정지 (7f5affda, `bot/tray-visible`) | 3 | 2 | [run 39170030807](https://github.com/mathbook3948/bunaway/actions/runs/39170030807) attempt 1과 2(`load-retried` 1회 뒤 provisional:false, `webview-load-stalled` 없음), attempt 3은 통과 |
 
 수정 전 2회는 같은 head를 같은 잡으로 연속 재실행한 결과이고 둘 다 정지했다. 이슈에 기록된 두 관찰까지 더하면 정지 4회다.
 수정은 탐색 정책이 load를 허용한 뒤 3초 안에 provisional 단계가 시작되지 않을 때 같은 요청을 다시 발행한다(뷰마다 최대 3번, WebContent 프로세스 종료 뒤의 reload는 새로 3번).
 정책 허용 시점부터 재는 최종 구현(bc29d087)은 [run 39134564547](https://github.com/mathbook3948/bunaway/actions/runs/39134564547)의 macOS 잡을 attempt 1 내지 4로 4회 실행해 모두 통과했다.
-재시도 도입 후 정지는 관찰되지 않았다. 합계 9회(세 head의 macOS 잡, 두 fixture 모두)는 연속 통과했다. 표본이 작아 정지 확률이 0이라고 결론짓지는 않으며,
-통과한 실행의 로그에는 `load-retried` 발생 여부를 따로 집계하지 않았다. 정지가 남아 있으면 `webview-load-stalled`와
+이 구현은 재발송한 load에 정책 콜백이 오지 않으면 정지 시계를 0으로 두어 재발송을 1번에서 멈췄다. 이후 CI에서
+같은 정지가 재발송 1회 뒤 다시 발생했고(`bot/tray-visible`의 [run 39170030807](https://github.com/mathbook3948/bunaway/actions/runs/39170030807)
+attempt 1(`macos-webview-controls`)과 attempt 2(`reopen-handler`), 같은 head의 attempt 3은 통과) `webview-load-stalled`도 기록되지 않았다.
+`load-retried` 뒤에도 `loadHome`이 정책 허용 시각을 지워 시계가 꺼졌기 때문이다. 재발송한 load는 발행 시점부터 시계를 새로 재도록 고쳐
+2, 3회차 재시도와 `webview-load-stalled` 기록까지 진행한다.
+앞의 표 합계 9회(세 head의 macOS 잡)는 연속 통과였지만, 표본이 작고 통과한 실행의 로그에는 `load-retried` 발생 여부를 따로 집계하지 않았다.
+정지가 남아 있으면 `webview-load-stalled`와
 `load-retried` 기록, 5/10/15초 checkpoint로 WebKit 정지와 코드 회귀를 구분한다. 기한은 늘리지 않았다.
