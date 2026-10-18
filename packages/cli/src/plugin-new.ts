@@ -329,7 +329,7 @@ function withReferenceEntries(text: string, spec: PluginSpec): string {
     .replace(operationsStart, `${operationsStart}${operations}`);
 }
 
-/** Validate the name and read every manifest before anything is written. */
+/** Validate the name, read every manifest and compute the reference-map edit before anything is written. */
 async function planPlugin(
   name: string,
   root: string,
@@ -355,7 +355,10 @@ async function planPlugin(
   if (typeof framework.version !== "string") {
     throw new Error("framework.json must carry the framework version.");
   }
-  if (name in plugins || (await exists(resolve(root, "plugins", name)))) {
+  if (
+    Object.hasOwn(plugins, name) ||
+    (await exists(resolve(root, "plugins", name)))
+  ) {
     throw new Error(`Plugin ${name} already exists.`);
   }
   const rootManifest = record(
@@ -366,19 +369,24 @@ async function planPlugin(
   if (!zodVersion) {
     throw new Error("package.json must pin zod in devDependencies.");
   }
-  const referenceMap = await Bun.file(resolve(root, REFERENCE_MAP)).text();
   const pages = await readdir(resolve(root, PLUGIN_PAGES));
   const id = camel(name);
+  const spec: PluginSpec = {
+    directory: name,
+    id,
+    pascal: `${id[0]?.toUpperCase() ?? ""}${id.slice(1)}`,
+    packageName: `@bunaway/plugin-${name}`,
+    sdkVersion: framework.version,
+    zodVersion,
+    sidebarOrder: pages.filter((page) => page.endsWith(".mdx")).length + 1,
+  };
+  // Computed here so an unexpected reference-map layout fails before any file is written.
+  const referenceMap = withReferenceEntries(
+    await Bun.file(resolve(root, REFERENCE_MAP)).text(),
+    spec,
+  );
   return {
-    spec: {
-      directory: name,
-      id,
-      pascal: `${id[0]?.toUpperCase() ?? ""}${id.slice(1)}`,
-      packageName: `@bunaway/plugin-${name}`,
-      sdkVersion: framework.version,
-      zodVersion,
-      sidebarOrder: pages.filter((page) => page.endsWith(".mdx")).length + 1,
-    },
+    spec,
     framework: framework as Record<string, unknown>,
     rootManifest,
     referenceMap,
@@ -390,8 +398,8 @@ async function planPlugin(
  * `framework.json`, the root `package.json`, the documentation reference map and a reference
  * page. The generated plugin builds, type checks and exposes one `ping` operation per platform
  * so the author replaces its body instead of copying another plugin. Nothing is written until
- * every manifest has been read and the name is free. Run `bun install` afterwards so the
- * lockfile learns the new workspace.
+ * every manifest has been read, the name is free and the reference-map edit is computed. Run
+ * `bun install` afterwards so the lockfile learns the new workspace.
  */
 export async function createNativePlugin(
   name: string,
@@ -430,9 +438,6 @@ export async function createNativePlugin(
   };
   await writeJson(resolve(root, "package.json"), rootManifest);
   written.push(resolve(root, "package.json"));
-  await write(
-    resolve(root, REFERENCE_MAP),
-    withReferenceEntries(referenceMap, spec),
-  );
+  await write(resolve(root, REFERENCE_MAP), referenceMap);
   return written;
 }

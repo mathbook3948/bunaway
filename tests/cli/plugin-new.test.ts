@@ -224,6 +224,50 @@ test("plugin new refuses invalid and taken names before writing anything", async
   }
 });
 
+test("plugin new fails on an unexpected reference-map layout before writing anything", async () => {
+  const root = await repository();
+  try {
+    // A second operations map is a layout the scaffold cannot edit without reformatting.
+    await Bun.write(
+      resolve(root, "docs/site/src/reference-map.json"),
+      REFERENCE_MAP.replace(
+        '"configuration": {}',
+        '"configuration": {},\n  "extra": { "operations": {\n  } }',
+      ),
+    );
+    await expect(
+      createNativePlugin("demo-widget", {
+        root,
+      }),
+    ).rejects.toThrow("unexpected layout");
+    const framework = await Bun.file(resolve(root, "framework.json")).json();
+    expect(Object.keys(framework.plugins)).toEqual([
+      "os",
+    ]);
+    const manifest = await Bun.file(resolve(root, "package.json")).json();
+    expect(Object.keys(manifest.devDependencies)).toEqual([
+      "@bunaway/plugin-os",
+      "zod",
+    ]);
+    expect(await Bun.file(resolve(root, "plugins/demo-widget")).exists()).toBe(
+      false,
+    );
+    expect(
+      await Bun.file(
+        resolve(
+          root,
+          "docs/site/src/content/docs/reference/plugins/demo-widget.mdx",
+        ),
+      ).exists(),
+    ).toBe(false);
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
 test("plugin new writes the longest allowed name in the formatter's layout", async () => {
   const root = await repository();
   try {

@@ -79,7 +79,7 @@ const stopping = () => phase.kind === "stopping";
 const shutdownCommitted = () => isShutdownCommitted(phase);
 /** Stopping or committed: no close request, quit request, lifecycle event or visibility change may start. */
 const closing = () => phase.kind !== "live";
-const quitPending = () => phase.kind === "live" && phase.quit === "pending";
+const quitPending = () => phase.quit === "pending";
 const startRequested = () => phase.start !== "booting";
 let initialized = false;
 let windows: Windows | undefined;
@@ -487,7 +487,9 @@ const channel = new Channel(
       move("quit-cancelled");
     } else if (packet.kind === "shutdown-committed") {
       // Idempotent: the main thread may repeat it, and a prior closing or session-end already set it.
+      // The main thread owns the quit from here on, so a pending request no longer skips the close confirmation.
       move("commit");
+      move("quit-cancelled");
       cancelCloseRequests();
     } else if (packet.kind === "shutdown") {
       move("stop");

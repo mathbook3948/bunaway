@@ -5,15 +5,21 @@
  * Start progress is monotonic: a `start` packet moves `booting` to `starting`, and the first
  * startup navigation moves `starting` to `running`. It is kept through shutdown because window
  * creation and the creation timeout log still ask whether the app had started.
+ *
+ * `quit` records a quit request the main thread has not answered. It survives a commit and a
+ * stop, because a close served after the app committed to shutdown still skips the close
+ * confirmation that the pending quit already covers; only `quit-cancelled` clears it.
  */
 export type StartState = "booting" | "starting" | "running";
 
+export type QuitState = "idle" | "pending";
+
 export type UiPhase =
-  /** Pumping normally; `quit` records a quit request the main thread has not answered. */
+  /** Pumping normally. */
   | {
       kind: "live";
       start: StartState;
-      quit: "idle" | "pending";
+      quit: QuitState;
     }
   /**
    * App shutdown is committed, whether this thread reported it (`closing`, `session-end`) or the
@@ -23,11 +29,13 @@ export type UiPhase =
   | {
       kind: "committed";
       start: StartState;
+      quit: QuitState;
     }
   /** Leaving the pump loop for cleanup, after a `shutdown` packet or a failure. */
   | {
       kind: "stopping";
       start: StartState;
+      quit: QuitState;
       committed: boolean;
     };
 
@@ -84,12 +92,10 @@ export function advance(phase: UiPhase, event: UiEvent): UiPhase {
         quit: "pending",
       };
     case "quit-cancelled":
-      return phase.kind === "live"
-        ? {
-            ...phase,
-            quit: "idle",
-          }
-        : phase;
+      return {
+        ...phase,
+        quit: "idle",
+      };
     case "commit":
       if (phase.kind === "stopping") {
         return {
@@ -100,11 +106,13 @@ export function advance(phase: UiPhase, event: UiEvent): UiPhase {
       return {
         kind: "committed",
         start: phase.start,
+        quit: phase.quit,
       };
     case "stop":
       return {
         kind: "stopping",
         start: phase.start,
+        quit: phase.quit,
         committed: isShutdownCommitted(phase),
       };
   }

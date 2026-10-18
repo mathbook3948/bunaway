@@ -328,8 +328,9 @@ export default defineNativePlugin({
 각 플랫폼 클래스가 그 인터페이스를 `implements`합니다. `src/*.ts`의 중립 모듈이 `platforms/`의
 타입을 import하는 것은 `tests/conformance/plugin-structure.test.ts`가 기존 목록 이상으로
 늘지 못하게 막습니다. 텍스트와 base64 인코딩처럼 플랫폼과 무관한 메서드는
-`platforms/files.ts`의 `StorageFiles` 베이스 클래스에 한 번만 있고, 플랫폼은 `readFile`,
-`writeFile`, `release` 세 가지만 구현합니다.
+`platforms/files.ts`의 `StorageFiles` 베이스 클래스에 한 번만 있고, 인코딩 facade가 쓰는
+`readFile`, `writeFile`, `release`는 플랫폼이 구현합니다. 디렉터리와 메타데이터 작업(`exists`,
+`stat`, `readDirectory`, `createDirectory`, `copyFile` 등)은 facade 밖이라 플랫폼이 그대로 가집니다.
 index.ts는 각 작업 목록과 플랫폼별 초기화, 정리를 연결합니다.
 지원 여부는 각 플랫폼 operations의 키로 판단합니다. macOS에는 move와 remove를
 선언하지 않아 해당 호출이 `UNSUPPORTED`로 실패합니다.
@@ -684,7 +685,7 @@ macOS 플랫폼 구현은 `@bunaway/plugin/darwin`에서 동적 로더와 Object
 `cstring`, 런타임 포인터는 `ptr`로 선언하며 네이티브 호스트와 같은 규칙입니다.
 
 ```ts
-import { dlopen } from "bun:ffi";
+import { dlopen, ptr } from "bun:ffi";
 import { LIBSYSTEM, LIBSYSTEM_PATH, OBJC_PATH, OBJC_RUNTIME, RTLD_LAZY } from "@bunaway/plugin/darwin";
 import { pick } from "@bunaway/plugin/win32";
 
