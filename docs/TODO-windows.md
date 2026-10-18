@@ -906,8 +906,10 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   시작한 Windows API의 중단 불가, 오류와 원본 보존을 정의한다.
   실제 Win32 및 WebView2 회귀를 CI에 포함하며 다른 사용자와 머신, roaming profile 및
   Windows 키 복구는 별도 실행 검증으로 남긴다.
-- [ ] 복호화 결과에 키 교체 등에 따른 재암호화 필요 여부를 제공한다. [E-safe-live]의 `shouldReEncrypt`를 참고한다.
-  재암호화와 원자적 저장 절차를 정의하고 이전 키 데이터, 교체 후 재조회, 저장 실패 시 원본 보존을 검증한다.
+- [x] 결정 완료: 복호화 결과에 재암호화 필요 여부(`shouldReEncrypt`)를 제공하지 않는다. [E-safe-live]의 Windows
+  `safeStorage`는 DPAPI provider 하나만 등록해 값이 항상 `false`이고 동기 `decryptString`에는 신호가 없다.
+  키가 바뀐 값은 신호 없이 영구 복호화 실패(`INTERNAL`)이며 `CRYPTPROTECT_VERIFY_PROTECTION` 확장은 쓰지 않는다.
+  `tests/api/safe-storage.test.ts`가 복호화 출력이 평문 값 그대로임을 고정한다.
 - [ ] 키 저장소가 잠기거나 일시적으로 이용 불가할 때 영구 복호화 실패와 구분하고 재시도 계약을 제공한다.
   대기 한도, 취소와 복구 후 재시도를 정의하고 일시 실패 및 복구, 종료 중 대기 해제,
   묵시적 평문 fallback이 없는지 검증한다. 플랫폼별 키 공급자 차이는 [E-safe-live]를 참고한다.
