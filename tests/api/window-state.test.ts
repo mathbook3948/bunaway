@@ -142,6 +142,7 @@ function fixture() {
   let failure: Error | undefined;
   let title = "Declared title";
   let opacity = 1;
+  let ignoreMouseEvents = false;
   let accessibleTitle: string | null = null;
   const native: NativeWindow = {
     getReadiness() {
@@ -235,6 +236,11 @@ function fixture() {
       opacity = value;
     },
     getOpacity: () => opacity,
+    setIgnoreMouseEvents(value) {
+      apply("setIgnoreMouseEvents");
+      ignoreMouseEvents = value;
+    },
+    isIgnoreMouseEvents: () => ignoreMouseEvents,
     setAccessibleTitle(value) {
       apply("setAccessibleTitle");
       accessibleTitle = value === "" ? null : value;
@@ -334,6 +340,8 @@ function fixture() {
         | "getTitle"
         | "setOpacity"
         | "getOpacity"
+        | "setIgnoreMouseEvents"
+        | "isIgnoreMouseEvents"
         | "setTitle"
         | "setAccessibleTitle"
         | "getAccessibleTitle"
@@ -353,6 +361,7 @@ function fixture() {
         closable?: boolean;
         title?: string;
         opacity?: number | string | null;
+        ignore?: boolean;
         resizable?: boolean;
         movable?: boolean;
       } = {},
@@ -1376,6 +1385,75 @@ test("macOS target does not declare the Windows-only opacity operations", () => 
     expect.arrayContaining([
       "setOpacity",
       "getOpacity",
+    ]),
+  );
+});
+
+test("ignoring mouse events takes only a boolean, round-trips and keeps its own permission grants", async () => {
+  const f = fixture();
+  expect(await f.invoke("isIgnoreMouseEvents")).toBe(false);
+  for (const ignore of [
+    true,
+    false,
+  ]) {
+    expect(
+      await f.invoke("setIgnoreMouseEvents", "main", {
+        ignore,
+      }),
+    ).toBeNull();
+    expect(await f.invoke("isIgnoreMouseEvents")).toBe(ignore);
+  }
+  for (const payload of [
+    {},
+    {
+      ignore: "true",
+    },
+    {
+      ignore: 1,
+    },
+    {
+      ignore: null,
+    },
+    {
+      ignore: true,
+      forward: true,
+    },
+  ]) {
+    expect(() =>
+      validateWindowCall({
+        operation: "windows.setIgnoreMouseEvents",
+        payload: {
+          view: "main",
+          ...payload,
+        },
+      }),
+    ).toThrow();
+  }
+  expect(validateWindowOutput("windows.isIgnoreMouseEvents", true)).toBe(true);
+  expect(() =>
+    validateWindowOutput("windows.isIgnoreMouseEvents", 1),
+  ).toThrow();
+  f.permissions.permissions = [];
+  await expect(f.invoke("isIgnoreMouseEvents")).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  f.permissions.permissions = windowPermissions();
+  f.setClosed();
+  await expect(f.invoke("isIgnoreMouseEvents")).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+});
+
+test("macOS target does not declare the Windows-only mouse-event operations", () => {
+  expect(windows._definition.nativePlatforms.macos?.operations).not.toEqual(
+    expect.arrayContaining([
+      "setIgnoreMouseEvents",
+    ]),
+  );
+  expect(windows._definition.nativePlatforms.windows?.operations).toEqual(
+    expect.arrayContaining([
+      "setIgnoreMouseEvents",
+      "isIgnoreMouseEvents",
     ]),
   );
 });

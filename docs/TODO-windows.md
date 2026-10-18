@@ -210,7 +210,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] roundedCorners와 corner-smoothing CSS를 지원하거나 렌더러별 차이를 명시한다.
 - [ ] Windows thickFrame과 noRedirectionBitmap 같은 생성 옵션의 필요성과 지원 범위를 결정한다.
 - [x] `window.contentProtection`, `setContentProtection`, `isContentProtected`를 제공한다. Windows는 `WDA_EXCLUDEFROMCAPTURE`를 쓰며 Windows 10 2004 이전은 이 값을 `WDA_MONITOR`처럼 처리하고, 호출이 거부되면 `WDA_MONITOR`로 다시 시도한다. macOS는 `sharingType`을 사용한다.
-- [ ] mouse click-through와 이동 이벤트 전달 여부를 제공한다.
+- [x] 창 mouse click-through를 설정하고 조회한다(`windows.setIgnoreMouseEvents`, `isIgnoreMouseEvents`). `WS_EX_LAYERED | WS_EX_TRANSPARENT`로 WebView를 포함한 창 전체의 마우스 입력을 아래 창으로 통과시키며 불투명도와 layered 스타일을 공유한다.
+- [ ] click-through 중 마우스 이동 이벤트를 WebView에 전달하는 `forward` 옵션의 지원 여부를 결정한다.
 - [ ] cursor icon, visible, position과 grab의 지원 범위를 제공한다.
 - [x] 창 포커스 요청과 별개로 작업 표시줄을 점멸하는 attention API를 제공한다. `requestAttention`과 `cancelAttention`을 제공하며 Windows는 FlashWindowEx로 포커스 이동 없이 작업 표시줄 버튼을 점멸하고 untilFocused와 continuous 모드를 지원한다.
 - [ ] 지정 모니터에서 전체화면으로 전환하고 모니터 제거 시 복원한다.

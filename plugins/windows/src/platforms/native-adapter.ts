@@ -42,6 +42,13 @@ function unsupportedOpacity() {
   });
 }
 
+function unsupportedMouseEvents() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Ignoring mouse events is not implemented on this platform.",
+  });
+}
+
 function unsupportedControls() {
   return new BunawayError({
     code: "UNSUPPORTED",
@@ -484,6 +491,17 @@ export function createOperations(
           throw unsupportedOpacity();
         }
         return window.getOpacity();
+      case "windows.setIgnoreMouseEvents":
+        if (!window.setIgnoreMouseEvents) {
+          throw unsupportedMouseEvents();
+        }
+        window.setIgnoreMouseEvents(call.payload.ignore);
+        break;
+      case "windows.isIgnoreMouseEvents":
+        if (!window.isIgnoreMouseEvents) {
+          throw unsupportedMouseEvents();
+        }
+        return window.isIgnoreMouseEvents();
       case "windows.setClosable":
         if (!window.setClosable) {
           throw unsupportedControls();

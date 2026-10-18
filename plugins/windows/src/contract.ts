@@ -1081,6 +1081,13 @@ export const windowOperations = {
     input: windowTarget,
     output: z.number().min(0).max(1),
   },
+  "windows.setIgnoreMouseEvents": {
+    input: windowTarget.extend({
+      ignore: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.isIgnoreMouseEvents": windowStateResult,
   "windows.setClosable": {
     input: windowTarget.extend({
       closable: z.boolean(),

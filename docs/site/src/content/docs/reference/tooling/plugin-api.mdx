@@ -66,7 +66,7 @@ splashscreen 최종 종료에는 false를 전달해 임시 프로필과 교체 �
 `NativeWindow`는 `show(visible)`, `focus()`, `close()`, `isFullscreen()`, `getSizeConstraints()`, `setSizeConstraints(constraints)`, `setSize(width, height)`, `setPosition(x, y)`, `setFullscreen(value)`, `setCloseConfirmation(message)`를 제공합니다.
 Windows의 선택적 `setFocusable`, `isFocusable`과 `WindowSpec.window.focusable`은 전경 활성화 허용을 제어합니다. 현재 실제 포커스와 별도이며 비활성 표시와 blur 후보 선택에도 적용합니다.
 
-Windows의 선택적 `setMinimizable`, `isMinimizable`, `setMaximizable`, `isMaximizable`, `setClosable`, `isClosable`은 네이티브 버튼과 사용자 동작을 제어합니다. 호스트의 API close와 장애 정리는 허용하며 Close 메뉴 자원과 사용자 닫기 설정은 HWND 수명에 종속됩니다. 선택적 `setOpacity`, `getOpacity`는 HWND 전체의 불투명도(0–1)를 layered window alpha로 설정하고 OS 값에서 조회합니다. 선택적 `setFullscreenable`, `isFullscreenable`은 전체화면 진입 허용만 HWND별로 저장하며 현재 전체화면에서 나가는 것은 항상 허용합니다.
+Windows의 선택적 `setMinimizable`, `isMinimizable`, `setMaximizable`, `isMaximizable`, `setClosable`, `isClosable`은 네이티브 버튼과 사용자 동작을 제어합니다. 호스트의 API close와 장애 정리는 허용하며 Close 메뉴 자원과 사용자 닫기 설정은 HWND 수명에 종속됩니다. 선택적 `setOpacity`, `getOpacity`는 HWND 전체의 불투명도(0–1)를 layered window alpha로 설정하고 OS 값에서 조회합니다. 선택적 `setIgnoreMouseEvents`, `isIgnoreMouseEvents`는 HWND 전체(WebView 포함)가 마우스 입력을 아래 창으로 통과시키는지 설정하고 OS 스타일에서 조회합니다. 선택적 `setFullscreenable`, `isFullscreenable`은 전체화면 진입 허용만 HWND별로 저장하며 현재 전체화면에서 나가는 것은 항상 허용합니다.
 
 Windows의 선택적 `setTitle(title)`과 `getTitle()`은 현재 HWND의 UTF-16 제목을 변경하고 조회합니다. 선언을 바꾸지 않으며 조회는 1024 코드 단위로 제한합니다. 네이티브 조회 오류와 길이 초과는 예외로 전달합니다.
 
