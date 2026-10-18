@@ -98,6 +98,31 @@ export type StorageDirectoryCreate = z.infer<
   typeof storageDirectoryCreateSchema
 >;
 
+/**
+ * What every platform adapter implements for the shared operations: the synchronous methods the
+ * handlers call, with inputs already validated and outputs in transport form. The operations are
+ * typed by this interface, never by a platform class, so a new platform implements the contract
+ * instead of matching another platform's shape by accident.
+ */
+export interface StorageInstance {
+  readText(input: StorageLocation): string;
+  writeText(input: StorageWrite): null;
+  readBytes(input: StorageLocation): string;
+  writeBytes(input: StorageBytesWrite): null;
+  appendText(input: StorageWrite): null;
+  appendBytes(input: StorageBytesWrite): null;
+  copyFile(input: StorageTransfer): null;
+  readDirectory(input: StorageLocation): StorageDirectoryEntry[];
+  createDirectory(input: StorageDirectoryCreate): null;
+  exists(input: StorageLocation): boolean;
+  stat(input: StorageLocation): StorageMetadata | null;
+}
+/** Windows additionally moves and removes while holding the checked object's handle. */
+export interface WindowsStorageInstance extends StorageInstance {
+  move(input: StorageTransfer): null;
+  remove(input: StorageLocation): null;
+}
+
 /** Public storage interface chosen by the plugin author; native support may differ by platform. */
 export interface Storage {
   readText(

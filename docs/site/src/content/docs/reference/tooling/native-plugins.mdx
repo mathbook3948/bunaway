@@ -323,7 +323,13 @@ export default defineNativePlugin({
 ```
 
 이 축약 예제는 readText만 지원합니다. 실제 storage는 operations.ts의 공통 작업 목록을
-두 플랫폼에서 사용하고 windows-operations.ts에서 move와 remove를 추가합니다.
+두 플랫폼에서 사용하고 windows-operations.ts에서 move와 remove를 추가합니다. 공통 목록은
+플랫폼 클래스가 아니라 contract.ts의 `StorageInstance` 인터페이스로 instance 타입을 정하고,
+각 플랫폼 클래스가 그 인터페이스를 `implements`합니다. `src/*.ts`의 중립 모듈이 `platforms/`의
+타입을 import하는 것은 `tests/conformance/plugin-structure.test.ts`가 기존 목록 이상으로
+늘지 못하게 막습니다. 텍스트와 base64 인코딩처럼 플랫폼과 무관한 메서드는
+`platforms/files.ts`의 `StorageFiles` 베이스 클래스에 한 번만 있고, 플랫폼은 `readFile`,
+`writeFile`, `release` 세 가지만 구현합니다.
 index.ts는 각 작업 목록과 플랫폼별 초기화, 정리를 연결합니다.
 지원 여부는 각 플랫폼 operations의 키로 판단합니다. macOS에는 move와 remove를
 선언하지 않아 해당 호출이 `UNSUPPORTED`로 실패합니다.

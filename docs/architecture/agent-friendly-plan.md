@@ -54,6 +54,7 @@ PR당 리뷰 라운드는 최대 6회(opener), 5회(windows aspect ratio)였다.
 | workspace 목록 불일치 | 테스트 | `framework.json`, 루트 `devDependencies` 대조 |
 | FFI 시그니처 불일치 | 테스트(ratchet) | 새 충돌은 실패, 기존 12개는 줄어들기만 |
 | 배포 목록 누락 | 테스트 | `git ls-files` 기준 대조, `native/ios` 포함, 사라진 항목 거부 |
+| 플랫폼마다 복제된 storage 인코딩 facade, 상한 2중 선언, disposed 가드 3중 | 구조 + 테스트(ratchet) | `StorageFiles` 베이스 클래스가 facade 6개, 4 MiB 상한, 가드를 한 번 소유하고 플랫폼은 `readFile`, `writeFile`, `release`만 구현. operations는 `StorageInstance` 인터페이스로 타입. `plugin-structure.test.ts`가 중립 모듈의 플랫폼 타입 import(10파일)를 기준값 이하로 묶는다 |
 | 테스트 기한 리터럴의 복제와 반복 수정 | 구조 + 테스트(ratchet) | `tests/fixtures/deadlines.ts`가 기한 7개를 소유하고 `BUNAWAY_TEST_TIME_SCALE`로 배율 적용. 테스트 타임아웃은 파일당 `setDefaultTimeout(deadline(...))` 하나. `test-deadlines.test.ts`가 파일별 리터럴 기한(213곳 127파일에서 114곳 83파일로)과 자체 폴러(29개에서 26개로)를 기준값 이하로 묶는다 |
 | Linux에서 앱 동작 증명 불가 | 검증 스킬 | `verify-bunaway`: 패킹한 CLI로 프로젝트 생성, 프로세스 프로토콜로 백엔드 구동, SDK 채널로 명령과 이벤트, 증거 기록 |
 
@@ -78,25 +79,14 @@ Linux에서 실행되는 테스트는 옮겼다. 남은 것은 OS 전용 fixture
 옮긴다. 자체 `waitFor` 정의 26개 중 `failed()`와 다른 간격이 필요한 것은 공유 `waitFor`의
 옵션으로 표현된다.
 
-### 3.2 플랫폼 구현의 공유 인터페이스 (M, 플러그인별)
+### 3.2 플랫폼 구현의 공유 인터페이스 (M, 플러그인별): storage는 2절로 옮김
 
-데이터: storage facade 6개 중복, 상한 상수 2중 선언, disposed 가드 3중.
-
-설계(storage부터):
-
-```ts
-// plugins/storage/src/contract.ts
-export interface StorageBackend {
-  readFile(path: string, limitBytes: number, signal: AbortSignal): Promise<Uint8Array>;
-  writeFile(path: string, bytes: Uint8Array, mode: "replace" | "append", signal: AbortSignal): Promise<void>;
-}
-// plugins/storage/src/operations.ts: 인코딩 facade(readText, writeText, append*)를 한 번만 구현
-// platforms/windows.ts, macos.ts: `implements StorageBackend`, 상한은 contract의 MAX_STORAGE_BYTES만 참조
-```
-
-검사: `operations.ts`가 플랫폼 클래스를 type-import하지 않는지(지금은 `MacosStorage |
-WindowsStorage` 유니온) lint override로 막는다. 플랫폼별 `active()` 가드는 SDK 래퍼가 이미
-하므로 삭제한다. 같은 틀을 opener(경로 세그먼트 규칙 4중)와 clipboard에 적용한다.
+storage는 끝났다. disposed 가드는 SDK 래퍼가 adapter 호출을 막지만 클래스를 직접 쓰는 테스트와
+FFI 바인딩이 닫힌 뒤의 호출을 위해 베이스 클래스에 한 번 남겼다. opener의 경로 규칙은 이미
+`windows-path.ts`, `macos-path.ts` 모듈에 있어 더 옮길 것이 없었다. 나머지 플러그인 10개의
+`operations.ts`는 ratchet 목록에 있고, 각각 contract의 인스턴스 인터페이스로 바꾸며 목록에서
+지운다. clipboard는 두 플랫폼의 메서드 시그니처(`signal` 유무)가 달라 인터페이스를 먼저
+맞춰야 한다.
 
 ### 3.3 `ui.ts` 수명주기를 phase 유니온으로, `Windows` 클래스 분할 (L)
 

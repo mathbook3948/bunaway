@@ -5,16 +5,15 @@ import {
   storageBytesWriteSchema,
   storageDirectoryCreateSchema,
   storageDirectoryEntriesSchema,
+  type StorageInstance,
   storageLocationSchema,
   storageMetadataSchema,
   storageTransferSchema,
   storageWriteSchema,
 } from "#storage/contract";
-import type { MacosStorage } from "#storage/platforms/macos";
-import type { WindowsStorage } from "#storage/platforms/windows";
 
-/** Complete operations shared by both storage implementations; imports allocate no native resources. */
-const operation = defineNativeOperation<MacosStorage | WindowsStorage>();
+/** Complete operations shared by every storage implementation; imports allocate no native resources. */
+const operation = defineNativeOperation<StorageInstance>();
 export const storageOperations = {
   readText: operation({
     input: storageLocationSchema,

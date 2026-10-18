@@ -3,11 +3,11 @@ import { z } from "zod";
 import {
   storageLocationSchema,
   storageTransferSchema,
+  type WindowsStorageInstance,
 } from "#storage/contract";
 import { storageOperations } from "#storage/operations";
-import type { WindowsStorage } from "#storage/platforms/windows";
 
-const operation = defineNativeOperation<WindowsStorage>();
+const operation = defineNativeOperation<WindowsStorageInstance>();
 /** Windows adds handle-preserving move and removal to the shared storage operations. */
 export const windowsOperations = {
   ...storageOperations,
