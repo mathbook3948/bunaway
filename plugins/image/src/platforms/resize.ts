@@ -1,5 +1,6 @@
 import { BunawayError } from "@bunaway/protocol";
-import { MAX_IMAGE_BYTES, type Pixels } from "#image/contract";
+import { MAX_IMAGE_BYTES } from "#image/contract";
+import type { Pixels } from "#image/platforms/codec";
 /** Require a nonempty source and a bounded positive output before allocating resize pixels. */
 export function assertResizeDimensions(
   source: Pixels,

@@ -1,7 +1,7 @@
 import { BunawayError, defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
-import type { AppLog } from "#log/app-log";
 import { logConfigurationSchema, logInputSchema } from "#log/contract";
+import type { AppLog } from "#log/platforms/app-log";
 
 const operation = defineNativeOperation<AppLog>();
 /** Shared file contract; the host supplies the instance and trusted caller source. */

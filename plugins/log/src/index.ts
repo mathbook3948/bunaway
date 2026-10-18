@@ -1,7 +1,7 @@
 import { defineNativePlugin, type NativeInvokeOptions } from "@bunaway/plugin";
-import type { AppLog } from "#log/app-log";
 import { createLog } from "#log/logger";
 import { macosOperations, windowsOperations } from "#log/operations";
+import type { AppLog } from "#log/platforms/app-log";
 import { initialize as initializeMacos } from "#log/platforms/macos";
 import { initialize as initializeWindows } from "#log/platforms/windows";
 

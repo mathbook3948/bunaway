@@ -18,7 +18,7 @@ export class DevFrontend {
   /** Releases the previous process tree before starting a replacement on the same port. */
   async sync(project: Project): Promise<void> {
     this.signal.throwIfAborted();
-    if (this.closing) {
+    if (this.closing !== undefined) {
       return;
     }
     const settings = project.dev ? JSON.stringify(project.dev) : undefined;

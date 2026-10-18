@@ -3,8 +3,8 @@ import {
   MAX_IMAGE_BYTES,
   MAX_POOL_BYTES,
   MAX_RESOURCES,
-  type Pixels,
 } from "#image/contract";
+import type { Pixels } from "#image/platforms/codec";
 
 type Resource = {
   pixels: Pixels;

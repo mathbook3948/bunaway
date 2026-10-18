@@ -9,9 +9,9 @@ const client = createClient<
 await client.ready;
 await client.listen(
   "test.reopen",
-  async () => {
+  () => {
     // A retained subscription and a successful call must use the same session.
-    await client.invoke("test.restored", null);
+    void client.invoke("test.restored", null);
   },
   {
     onError: (error) => {

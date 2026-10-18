@@ -68,6 +68,7 @@ if (role === "denied") {
       void (async () => {
         if (action === "set") {
           localStorage.setItem("instance-value", value);
+          // biome-ignore lint/suspicious/noDocumentCookie: the fixture checks that a plain cookie survives across windows of one session
           document.cookie = `instance-value=${value}; SameSite=Lax; path=/`;
         } else if (action === "navigate") {
           location.replace(`/${role}.html?next=${token}`);

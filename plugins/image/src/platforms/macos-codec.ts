@@ -5,8 +5,8 @@ import {
   type ImageMime,
   MAX_ENCODED_BYTES,
   MAX_IMAGE_BYTES,
-  type Pixels,
 } from "#image/contract";
+import type { Pixels } from "#image/platforms/codec";
 import { openImageBindings } from "#image/platforms/macos-bindings";
 import {
   assertResizeDimensions,

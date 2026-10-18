@@ -239,7 +239,7 @@ export class LoopbackChannel {
 
   /** Stops accepting connections and revokes all documents; the caller closes their Core sessions. */
   close(): Promise<void> {
-    if (this.stopped) {
+    if (this.stopped !== undefined) {
       return this.stopped;
     }
     this.closed = true;

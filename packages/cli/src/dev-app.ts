@@ -333,7 +333,7 @@ export class DevApp {
 
   /** Detaches the old app before termination so its expected exit cannot end the dev session. */
   private release(): Promise<void> {
-    if (this.stopping) {
+    if (this.stopping !== undefined) {
       return this.stopping;
     }
     const previous = this.active;

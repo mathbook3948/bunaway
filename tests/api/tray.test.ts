@@ -175,10 +175,11 @@ test("ICO decoding takes the largest frame and prefers the higher bit depth at e
       low,
     ],
   ]) {
-    const image = trayIconImage(multiFrameIco(order).toString("base64"));
+    const bytes = trayIconImage(multiFrameIco(order).toString("base64"));
+    const image = Buffer.from(bytes);
     expect(image.readInt32LE(4)).toBe(16);
     expect(image.readUInt16LE(14)).toBe(32);
-    expect(image).toEqual(high.subarray(22));
+    expect(bytes).toEqual(high.subarray(22));
   }
 });
 

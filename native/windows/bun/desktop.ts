@@ -473,7 +473,7 @@ export class DesktopLifecycle {
       return;
     }
     this.pendingReopen = event;
-    this.enqueue(async () => {
+    void this.enqueue(async () => {
       const latest = this.pendingReopen;
       this.pendingReopen = undefined;
       if (latest) {
@@ -489,7 +489,7 @@ export class DesktopLifecycle {
    * the initial launch arguments.
    */
   ready(initial?: LaunchArguments): void {
-    this.enqueue(async () => {
+    void this.enqueue(async () => {
       await this.options?.onReady?.(this.context);
     });
     if (initial) {
@@ -500,14 +500,14 @@ export class DesktopLifecycle {
     this.phase = "live";
     // The buffer is already bounded, so these bypass the pending limit and cannot throw.
     for (const urls of buffered) {
-      this.enqueue(async () => {
+      void this.enqueue(async () => {
         await this.options?.onOpenUrls?.(urls, this.context);
       });
     }
   }
   /** Queues onAllWindowsClosed after the UI reports the last live window closed. */
   windowsEmpty(): void {
-    this.enqueue(async () => {
+    void this.enqueue(async () => {
       await this.options?.onAllWindowsClosed?.(this.context);
     });
   }
@@ -715,7 +715,7 @@ export class DesktopLifecycle {
     if (this.ending) {
       return this.committedRequest();
     }
-    return this.quitting ? this.pendingRequest : undefined;
+    return this.quitting !== undefined ? this.pendingRequest : undefined;
   }
   /** The request of the committed shutdown; a shutdown without one asked for the defaults. */
   private committedRequest(): ResolvedRequest {

@@ -54,7 +54,7 @@ export function createNotificationShortcutCleanup({
     if (closed) {
       return Promise.resolve();
     }
-    if (pending) {
+    if (pending !== undefined) {
       return pending;
     }
     const cleanup = async () => {

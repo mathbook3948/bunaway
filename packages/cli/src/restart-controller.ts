@@ -106,7 +106,7 @@ export class RestartController<T> {
 
   /** Cancels pending work, waits for the active pass, and stops the current host. */
   close(): Promise<void> {
-    if (this.closing) {
+    if (this.closing !== undefined) {
       return this.closing;
     }
     this.stopped = true;

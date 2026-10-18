@@ -1022,16 +1022,16 @@ export function checkHostTypes() {
     logged,
     support,
   ];
-  storage.readText({
+  void storage.readText({
     // @ts-expect-error storage has no scope input
     scope: "home",
     path: "memo.txt",
   });
   // @ts-expect-error writes need text
-  storage.writeText(location);
+  void storage.writeText(location);
   // @ts-expect-error log details must be JSON
-  log.info("info", () => {});
-  log.write({
+  void log.info("info", () => {});
+  void log.write({
     // @ts-expect-error log levels are restricted
     level: "trace",
     message: "message",

@@ -13,8 +13,8 @@ import {
   type ImageMime,
   MAX_ENCODED_BYTES,
   MAX_IMAGE_BYTES,
-  type Pixels,
 } from "#image/contract";
+import type { Pixels } from "#image/platforms/codec";
 import {
   assertResizeDimensions,
   resizeNearestPixels,
