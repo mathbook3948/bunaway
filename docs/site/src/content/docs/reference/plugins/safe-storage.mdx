@@ -82,7 +82,14 @@ JavaScript 런타임이 관리하므로 메모리 전체의 비밀 제거를 보
 처리 전 취소와 폐기된 어댑터는 `CANCELLED`입니다. Windows 암복호화 실패와 손상된 blob,
 다른 사용자나 머신의 데이터, UTF-8 또는 결과 상한 위반은 `INTERNAL`입니다.
 이 오류만으로 손상과 일시적인 사용자 프로필 및 키 문제를 구분할 수 없습니다.
-자동 재시도, `shouldReEncrypt`, 범용 credential store와 vault는 제공하지 않습니다.
+자동 재시도, 범용 credential store와 vault는 제공하지 않습니다.
+
+복호화 결과에 `shouldReEncrypt` 같은 재암호화 신호는 없고 평문 값 그대로입니다. Electron의
+Windows `safeStorage`는 DPAPI provider 하나만 등록해(`browser_process_impl.cc`),
+`decryptStringAsync`가 반환하는 `shouldReEncrypt`가 항상 `false`이고 동기 `decryptString`에는 이
+신호가 없습니다. 키가 바뀐 값은 신호 없이 영구 실패하며 이 플러그인에서는 `INTERNAL`입니다.
+DPAPI의 `CRYPTPROTECT_VERIFY_PROTECTION` 검증은 Electron과 Chromium의 호출에 없어서 적용하지 않습니다.
+값을 옮기려면 앱이 복호화한 평문을 다시 암호화하고 원본을 교체하는 순서를 직접 관리합니다.
 
 macOS에서는 사용자가 시스템 UI를 취소하면 `CANCELLED`, 접근 거부나 필요한 시스템
 상호작용을 할 수 없으면 `PERMISSION_DENIED`입니다. Keychain 부재와 제공자 오류,

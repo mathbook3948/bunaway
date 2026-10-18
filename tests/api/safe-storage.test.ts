@@ -229,3 +229,38 @@ test("data protection measures supplementary Unicode at the UTF-16 boundary", as
     code: "INTERNAL",
   });
 });
+
+test("decryption results carry no re-encryption signal", async () => {
+  // Electron on Windows registers a single DPAPI provider, so its shouldReEncrypt is always false.
+  // The decrypt outputs stay plain values instead of a result and flag wrapper, and no separate
+  // operation reports the signal.
+  expect(new Set(Object.keys(safeStorageOperations))).toEqual(
+    new Set([
+      "isAvailable",
+      "encryptString",
+      "decryptString",
+      "encryptBytes",
+      "decryptBytes",
+    ]),
+  );
+  for (const [operation, plain] of [
+    [
+      "safe-storage.decryptString",
+      "text",
+    ],
+    [
+      "safe-storage.decryptBytes",
+      "AAAA",
+    ],
+  ] as const) {
+    expect(await parsers.validateOutput(operation, plain)).toBe(plain);
+    await expect(
+      parsers.validateOutput(operation, {
+        result: plain,
+        shouldReEncrypt: false,
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL",
+    });
+  }
+});
