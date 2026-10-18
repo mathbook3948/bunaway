@@ -78,6 +78,63 @@ test("create and replace need a target, update does not", () => {
   });
 });
 
+test("text limits count UTF-16 code units and an empty cwd or icon clears the property", () => {
+  const target = "C:\\a.exe";
+  expect(
+    normalizeShortcutDetails(
+      {
+        target,
+        description: "x".repeat(1023),
+      },
+      "create",
+    ),
+  ).toBeDefined();
+  for (const description of [
+    "x".repeat(1024),
+    "😀".repeat(512),
+  ]) {
+    expect(() =>
+      normalizeShortcutDetails(
+        {
+          target,
+          description,
+        },
+        "create",
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: "INVALID_ARGUMENT",
+      }),
+    );
+  }
+  expect(
+    normalizeShortcutDetails(
+      {
+        cwd: "",
+        icon: "",
+        args: "",
+      },
+      "update",
+    ),
+  ).toEqual({
+    cwd: "",
+    icon: "",
+    args: "",
+  });
+  expect(() =>
+    normalizeShortcutDetails(
+      {
+        target: "",
+      },
+      "update",
+    ),
+  ).toThrow(
+    expect.objectContaining({
+      code: "INVALID_ARGUMENT",
+    }),
+  );
+});
+
 test("shortcut properties reject relative paths, control characters and bad shapes", () => {
   for (const details of [
     {

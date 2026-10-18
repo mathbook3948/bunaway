@@ -62,7 +62,8 @@ export function normalizeShortcutDetails(
     "icon",
   ] as const) {
     const value = details[key];
-    if (value !== undefined) {
+    // An empty working directory or icon file clears the property; the target cannot be cleared.
+    if (value !== undefined && !(value === "" && key !== "target")) {
       normalized[key] = normalizeFilePath(value);
     }
   }

@@ -170,7 +170,7 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
   /**
    * Write a Windows shortcut file (`.lnk`), after Electron's `shell.writeShortcutLink`.
    * `create` (default) writes a new shortcut or overwrites an existing one, `replace`
-   * overwrites an existing shortcut, and `update` changes only the named properties of an
+   * overwrites an existing `.lnk` file, and `update` changes only the named properties of an
    * existing one. `create` and `replace` need `details.target`. Paths are absolute and the
    * parent directory must exist.
    */

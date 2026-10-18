@@ -203,8 +203,9 @@ function isMissingFile(error: unknown): boolean {
 }
 
 /**
- * Write a shortcut file. `create` writes a new link or overwrites an existing shortcut;
- * `update` and `replace` need an existing shortcut. Parent directories are never created.
+ * Write a shortcut file. `create` writes a new link or overwrites an existing file;
+ * `replace` overwrites an existing file without checking that it is a shortcut;
+ * `update` needs an existing shortcut. Parent directories are never created.
  */
 export function writeShortcutLink(
   state: State,

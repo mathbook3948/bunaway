@@ -123,6 +123,18 @@ test.skipIf(process.platform !== "win32")(
       expect((await read(path)).iconIndex).toBe(5);
       expect((await read(path)).icon).toBe(created.icon);
 
+      const longest = "d".repeat(1023);
+      await write(path, "update", {
+        description: longest,
+        cwd: "",
+        icon: "",
+      });
+      expect(await read(path)).toMatchObject({
+        description: longest,
+        cwd: "",
+        icon: "",
+      });
+
       const other = join(root, "other.exe");
       await write(path, "replace", {
         target: other,

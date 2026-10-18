@@ -68,13 +68,19 @@ class ShortcutObject {
   readonly #file: Pointer;
 
   constructor(create: (out: Pointer) => number) {
-    this.#link = this.#acquire((out) => create(out));
-    this.#file = this.#acquire((out) =>
-      this.#call(this.#link, COM_SLOT.queryInterface, [
-        "ptr",
-        "ptr",
-      ])(ptr(IID_PERSIST_FILE), out),
-    );
+    try {
+      this.#link = this.#acquire((out) => create(out));
+      this.#file = this.#acquire((out) =>
+        this.#call(this.#link, COM_SLOT.queryInterface, [
+          "ptr",
+          "ptr",
+        ])(ptr(IID_PERSIST_FILE), out),
+      );
+    } catch (error) {
+      // The caller never receives the object, so release what was acquired here.
+      this.release();
+      throw error;
+    }
   }
 
   #call(object: Pointer, slot: number, args: ("ptr" | "i32" | "u32")[]) {

@@ -36,8 +36,8 @@ export const urlHandlerSchema = z.strictObject({
 export type UrlHandler = z.infer<typeof urlHandlerSchema>;
 
 export const MAX_SHORTCUT_ARGUMENTS_LENGTH = 2048;
-// INFOTIPSIZE: the longest description the Shell keeps for a shortcut.
-export const MAX_SHORTCUT_DESCRIPTION_LENGTH = 1024;
+// INFOTIPSIZE is 1024 UTF-16 code units including the NUL, the longest description the Shell keeps.
+export const MAX_SHORTCUT_DESCRIPTION_LENGTH = 1023;
 export const SHORTCUT_OPERATIONS = [
   "create",
   "update",
@@ -49,8 +49,8 @@ const shortcutText = (limit: number) =>
   z
     .string()
     .refine(
-      (value) => Array.from(value).length <= limit,
-      "Text exceeds the Unicode character limit.",
+      (value) => value.length <= limit,
+      "Text exceeds the UTF-16 code unit limit.",
     )
     .refine(
       (value) => !/[\p{Cc}\p{Cs}]/u.test(value),
