@@ -235,6 +235,7 @@ if (target === "windows-x64") {
         "--no-env-file",
         "test",
         resolve(root, "tests/lifecycle/windows-image.test.ts"),
+        resolve(root, "tests/lifecycle/windows-image-file-icon.test.ts"),
       ],
       root,
     );

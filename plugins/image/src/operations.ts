@@ -6,6 +6,7 @@ import {
   cropSchema,
   dataURLSchema,
   exportSchema,
+  fileTypeIconSchema,
   infoSchema,
   referenceSchema,
   resizeSchema,
@@ -66,6 +67,12 @@ export const imageOperations = {
     input: cropSchema,
     output: resourceSchema,
     handler: (input, { instance, signal }) => instance.crop(input, signal),
+  }),
+  createFileTypeIcon: operation({
+    input: fileTypeIconSchema,
+    output: resourceSchema,
+    handler: (input, { instance, signal }) =>
+      instance.createFileTypeIcon(input, signal),
   }),
   resize: operation({
     input: resizeSchema,

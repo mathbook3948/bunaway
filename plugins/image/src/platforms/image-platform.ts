@@ -4,10 +4,11 @@ import {
   bytesSchema,
   type cropSchema,
   type exportSchema,
+  type fileTypeIconSchema,
   type resizeSchema,
   type rgbaSchema,
 } from "#image/contract";
-import type { ImageCodec } from "#image/platforms/codec";
+import type { FileTypeIconSource, ImageCodec } from "#image/platforms/codec";
 import { cropPixels } from "#image/platforms/crop";
 import { ImageResources } from "#image/platforms/resources";
 /** Own decoded image resources and one platform codec for a host adapter lifetime. */
@@ -15,7 +16,10 @@ export class ImagePlatform {
   private readonly resources = new ImageResources();
   private disposed = false;
 
-  constructor(private readonly codec: ImageCodec) {}
+  constructor(
+    private readonly codec: ImageCodec,
+    private readonly fileTypeIcons?: FileTypeIconSource,
+  ) {}
 
   private active(): void {
     if (this.disposed) {
@@ -56,6 +60,25 @@ export class ImagePlatform {
     });
     return this.resources.create(
       this.codec.decode(Buffer.from(bytes.data, "base64"), bytes.mime),
+      signal,
+    );
+  }
+
+  /** Create an icon for a file extension; platforms without a source report UNSUPPORTED. */
+  createFileTypeIcon(
+    input: z.output<typeof fileTypeIconSchema>,
+    signal?: AbortSignal,
+  ) {
+    this.active();
+    if (!this.fileTypeIcons) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message: "File type icons are not supported on this platform.",
+      });
+    }
+    this.resources.assertCapacity();
+    return this.resources.create(
+      this.fileTypeIcons.render(input.extension, input.size, signal),
       signal,
     );
   }
@@ -123,6 +146,7 @@ export class ImagePlatform {
     }
     this.disposed = true;
     this.resources.dispose();
+    this.fileTypeIcons?.dispose();
     this.codec.dispose();
   }
 }

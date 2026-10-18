@@ -1614,7 +1614,8 @@
       "image.exportDataURL",
       "image.dispose",
       "image.crop",
-      "image.resize"
+      "image.resize",
+      "image.createFileTypeIcon"
     ],
     "reference/plugins/global-shortcut": [
       "globalShortcut.register",

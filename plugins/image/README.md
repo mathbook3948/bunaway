@@ -17,8 +17,15 @@ try {
 ```
 
 공개 입력, 반환값, 권한과 오류는 [API 레퍼런스](../../docs/site/src/content/docs/reference/plugins/image.mdx)에 둔다.
-파일 경로 읽기와 저장소 scope 추가, scale representation 그룹과 파일 아이콘은
+파일 경로 읽기와 저장소 scope 추가, scale representation 그룹과 파일 기반 thumbnail은
 제공하지 않는다. 파일 bytes의 확보와 저장은 앱이 기존 저장소 계약에서 수행한다.
+
+`image.createFileTypeIcon`은 확장자와 크기(`small` 16, `normal` 32, `large` 48)만 받아 Windows 셸의
+연결 아이콘을 새 리소스로 만든다. `windows-file-icon.ts`가 `SHGetFileInfoW`(`SHGFI_USEFILEATTRIBUTES`
+| `SHGFI_SYSICONINDEX`)로 아이콘 인덱스를 얻고 `SHGetImageList`의 `IImageList::GetIcon`으로 HICON을
+받아 `GetIconInfo`와 `GetDIBits`(32bpp top-down)로 RGBA를 읽는다. 디스크를 열지 않으므로 저장소
+권한이 필요 없다. HICON, 비트맵 두 개, 화면 DC와 image list reference는 예외 경로에서도 해제하며
+알파가 모두 0이면 마스크 비트맵으로 투명도를 복원한다. macOS는 `UNSUPPORTED`이다.
 
 `image.crop`은 양수 크기의 in-bounds rectangle을 복사하고 `image.resize`는
 nearest 또는 linear filtering으로 새 리소스를 만든다. Nearest는 출력 픽셀 중심에
