@@ -1,5 +1,8 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { resolve } from "node:path";
+import { deadline } from "../fixtures/deadlines";
+
+setDefaultTimeout(deadline("build"));
 
 const repository = resolve(import.meta.dir, "../..");
 const SHARED_MODULE = "packages/plugin-sdk/src/schemas.ts";
@@ -32,9 +35,10 @@ async function sourceFiles(): Promise<string[]> {
   const files: string[] = [];
   for (const root of SOURCE_ROOTS) {
     const glob = new Bun.Glob(`${root}/**/*.ts`);
-    for await (const file of glob.scan({
+    for await (const scanned of glob.scan({
       cwd: repository,
     })) {
+      const file = scanned.replaceAll("\\", "/");
       if (file.includes("node_modules/") || file.endsWith(".d.ts")) {
         continue;
       }
