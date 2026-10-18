@@ -80,6 +80,21 @@ test("reissued loads without a policy callback keep retrying and end in one repo
   ]);
 });
 
+test("the request that follows a retry keeps the restarted clock, a new request clears it", () => {
+  const clock = new StalledLoadClock();
+  clock.requested();
+  clock.policyAllowed(0);
+  expect(clock.check(PROVISIONAL_STALL_MS)).toBe("retry");
+  clock.requested();
+  expect(clock.check(PROVISIONAL_STALL_MS * 2)).toBe("retry");
+  clock.requested();
+  expect(clock.check(PROVISIONAL_STALL_MS * 3)).toBe("retry");
+  expect(clock.check(PROVISIONAL_STALL_MS * 4)).toBe("report");
+  clock.resetBudget();
+  clock.requested();
+  expect(clock.check(PROVISIONAL_STALL_MS * 5)).toBe("wait");
+});
+
 test("a late policy decision does not move the clock of a reissued load", () => {
   const clock = new StalledLoadClock();
   clock.requested();

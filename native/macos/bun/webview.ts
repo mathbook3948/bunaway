@@ -698,16 +698,13 @@ export class MacosWebview {
       this.loadHome();
     }
   }
-  /** `reissue` keeps the stall clock that `retryStalledLoad` already restarted for this request. */
-  private loadHome(reissue = false): void {
+  private loadHome(): void {
     if (!this.loadStartedAt) {
       this.loadStartedAt = Date.now();
     }
     this.diagnostics.record("load-requested");
     this.provisionalSeen = false;
-    if (!reissue) {
-      this.loadClock.requested();
-    }
+    this.loadClock.requested();
     const o = this.objc;
     o.withAutoreleasePool(() => {
       const url = o.send(
@@ -769,9 +766,9 @@ export class MacosWebview {
     this.diagnostics.record("load-retried", {
       progress: this.objc.double(this.webview, "estimatedProgress"),
     });
-    // The reissued load may never reach the policy callback, so `check` restarted its stall clock
-    // instead of waiting for one.
-    this.loadHome(true);
+    // The reissued load may never reach the policy callback, so `check` already restarted the
+    // stall clock and `requested` keeps it instead of waiting for a decision.
+    this.loadHome();
   }
   /**
    * Called every window scan tick. Reissues a stalled load (see `retryStalledLoad`, so the retry

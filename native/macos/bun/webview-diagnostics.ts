@@ -68,14 +68,23 @@ export function stalledLoadAction(
  * Stall clock for one view's load requests. The clock starts when the navigation policy allows the
  * load (so a slow decision is never mistaken for a stalled navigation) and restarts at every
  * reissue: a reissued load may never reach the policy callback, so the next retry and the final
- * report must not depend on it. Each reissue interval is therefore `PROVISIONAL_STALL_MS`.
+ * report must not depend on it. `check` runs on scan ticks, so a reissue interval is `PROVISIONAL_STALL_MS`
+ * plus up to one tick.
  */
 export class StalledLoadClock {
   private allowedAt: number | undefined;
   private attempts = 0;
+  private reissued = false;
 
-  /** A new load request was sent; wait for its policy decision before measuring a stall. */
+  /**
+   * A load request was sent. A new request waits for its policy decision before a stall is
+   * measured; the request that follows a "retry" keeps the clock `check` restarted.
+   */
   requested(): void {
+    if (this.reissued) {
+      this.reissued = false;
+      return;
+    }
     this.allowedAt = undefined;
   }
 
@@ -89,11 +98,12 @@ export class StalledLoadClock {
   /** A reload after a WebContent crash gets a fresh retry budget. */
   resetBudget(): void {
     this.attempts = 0;
+    this.reissued = false;
   }
 
   /**
    * Decide what to do now for a load whose provisional navigation has not started. On "retry" the
-   * clock restarts from `now` and the caller reissues the request without calling `requested`.
+   * clock restarts from `now` and the `requested` call for the reissued load keeps it.
    */
   check(now: number): ReturnType<typeof stalledLoadAction> {
     if (this.allowedAt === undefined) {
@@ -105,6 +115,7 @@ export class StalledLoadClock {
     }
     if (action === "retry") {
       this.allowedAt = now;
+      this.reissued = true;
     }
     return action;
   }
