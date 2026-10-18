@@ -791,8 +791,8 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   방문 항목 100,000개와 깊이 64를 넘으면 `INVALID_ARGUMENT`이고,
   반복 방식으로 현재 경로의 디렉터리 핸들만 열어 두며 일정 단계마다 이벤트 루프에 양보해 시작 후에도 취소와 기한을 처리하고
   성공, 실패와 취소에서 핸들을 닫는다. macOS는 `UNSUPPORTED`이고 작업별 권한을 따로 허용한다.
-  Electron에는 디렉터리 크기 API가 없고 Tauri fs 플러그인도 파일 metadata size만 제공하므로
-  앱이 직접 재귀 순회하던 경로를 핸들 고정 방식으로 대체해 TOCTOU와 권한 우회를 줄인다.
+  Tauri fs의 [`size`][T-fs-live]는 파일 metadata 크기 조회이며, 디렉터리 재귀 크기 계산에서
+  핸들 고정과 링크 처리 계약은 이 구현이 정의한다.
   [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)을 따른다.
 - [x] Windows의 4 MiB 이하 일반 파일 복사와 같은 parent의 파일 및 디렉터리 rename를 제공한다.
   양쪽 parent와 source 핸들을 고정하고 기존 destination을 대체하지 않는다.

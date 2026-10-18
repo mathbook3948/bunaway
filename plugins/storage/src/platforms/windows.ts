@@ -294,6 +294,8 @@ type TargetOptions = {
   createParents: boolean;
   /** Create this target under pinned parents before its checked OPEN_EXISTING. */
   createDirectory?: boolean;
+  /** Sharing of the pinned parent directories; read-only sharing when omitted. */
+  parentShare?: number;
 };
 const METADATA_TARGET_OPTIONS: TargetOptions = {
   access: FILE_READ_ATTRIBUTES | FILE_READ_DATA,
@@ -678,7 +680,11 @@ export class WindowsStorage
     return this.directorySizeWithin(input, signal, DIRECTORY_SIZE_LIMITS);
   }
 
-  /** The scan behind directorySize with explicit cost bounds, so tests can use small ones. */
+  /**
+   * The scan behind directorySize with explicit cost bounds. It is public only so tests can lower
+   * the bounds; the operation map exposes directorySize, which always uses the contract limits,
+   * so applications cannot choose their own bounds.
+   */
   async directorySizeWithin(
     input: StorageLocation,
     signal: AbortSignal | undefined,
@@ -692,6 +698,8 @@ export class WindowsStorage
         {
           ...METADATA_TARGET_OPTIONS,
           allowMissing: false,
+          // The walk can be long, so other processes may still rename or move within the parents.
+          parentShare: FILE_SHARE_READ | FILE_SHARE_WRITE,
         },
         ({ handle, info, canonical }) => {
           this.requireDirectory(info);
@@ -832,12 +840,16 @@ export class WindowsStorage
     );
     return null;
   }
-  /** Pin and inspect every parent, including the volume, until the owned action finishes. */
+  /**
+   * Pin and inspect every parent, including the volume, until the owned action finishes.
+   * Parents are opened with parentShare, read sharing only by default; delete sharing is never granted.
+   */
   private withParent<T>(
     path: string,
     createParents: boolean,
     allowMissing: boolean,
     action: (parent: { target: string }) => T,
+    parentShare = FILE_SHARE_READ,
   ): T | null {
     this.requireOpen();
     const { volume, segments } = selectedPath(path);
@@ -861,7 +873,7 @@ export class WindowsStorage
           const parent = this.open(
             dir,
             FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
-            FILE_SHARE_READ,
+            parentShare,
             OPEN_EXISTING,
             DIRECTORY_OPEN_FLAGS,
             allowMissing,
@@ -956,6 +968,7 @@ export class WindowsStorage
           () => this.close(handle),
         );
       },
+      options.parentShare,
     );
   }
 
