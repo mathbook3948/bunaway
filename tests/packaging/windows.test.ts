@@ -1215,6 +1215,9 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   expect(perUser).toContain("DefaultGroupName=com.example.app");
   expect(perUser).toContain("{autodesktop}\\Test App (com.example.app)");
   expect(perUser).toContain("PrivilegesRequired=lowest");
+  expect(perUser).toMatch(
+    /^Filename: "\{app\}\\[^\n]*Description: "Launch [^\n]*Flags: [^;\n]*\bpostinstall\b[^;\n]*\brunasoriginaluser\b[^;\n]*$/m,
+  );
   expect(perUser).toContain("UninstallLogMode=overwrite");
   expect(perUser).toContain("Current.Add('WebView2Loader.dll')");
   expect(perUser).toContain("if CurStep <> ssPostInstall then Exit");
@@ -1299,6 +1302,10 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
   });
   expect(perMachine).toContain("DefaultDirName={autopf}\\com.example.app");
   expect(perMachine).toContain("PrivilegesRequired=admin");
+  // The elevated Setup must not hand its administrator token to the launched app.
+  expect(perMachine).toMatch(
+    /^Filename: "\{app\}\\[^\n]*Description: "Launch [^\n]*Flags: [^;\n]*\bpostinstall\b[^;\n]*\brunasoriginaluser\b[^;\n]*$/m,
+  );
   expect(perMachine).not.toContain("RegQueryStringValue(HKCU");
   expect(perMachine).toContain("ArchitecturesAllowed=x64compatible");
   expect(perMachine).not.toContain("[UninstallDelete]");
