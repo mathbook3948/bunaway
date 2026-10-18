@@ -62,6 +62,8 @@ Explorer가 다시 시작해도 숨김 상태를 유지합니다. 현재 값은 
 
 숨긴 아이콘에는 shell이 마우스 알림을 보내지 않으므로 `tray.input`과 `tray.hover`가 발생하지 않고, `getBounds`는 `null`,
 `focus`는 `false`입니다. 트레이를 제거하는 동작이 아니므로 앱의 실행 유지와 종료 규칙은 바뀌지 않습니다.
+숨기는 순간 포인터가 아이콘 위에 있었다면 bounds를 읽을 수 없어 `tray.hover`의 leave는 마우스 이동이 멈춘 뒤 기존 대체 규칙의 지연 뒤에 전달됩니다.
+연결한 메뉴는 숨긴 동안에도 `popUpContextMenu`로 표시할 수 있습니다.
 Windows 11은 사용자가 설정에서 아이콘을 숨길 수 있어, `visible: true`가 화면 표시를 보장하지는 않습니다.
 shell이 상태 변경을 거부하면 `INTERNAL`이며 이전 값을 유지합니다.
 
