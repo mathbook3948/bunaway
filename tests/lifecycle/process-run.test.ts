@@ -11,6 +11,7 @@ import {
 } from "#plugins/process/src/platforms/windows";
 import { runProcess } from "#plugins/process/src/platforms/windows-process";
 import { processExitProbe } from "../fixtures/process-exit-probe.ts";
+import { waitFor } from "../fixtures/deadlines.ts";
 
 const defaults = {
   executablePath: process.execPath,
@@ -186,11 +187,11 @@ test.skipIf(process.platform !== "win32")(
       const observed = pending.catch((error: unknown) => error);
       const probes: ReturnType<typeof processExitProbe>[] = [];
       try {
-        const deadline = Date.now() + 2000;
-        while (!(await Bun.file(pidFile).exists())) {
-          expect(Date.now()).toBeLessThan(deadline);
-          await Bun.sleep(2);
-        }
+        await waitFor(() => Bun.file(pidFile).exists(), {
+          deadline: "childStep",
+          what: "the process tree to write its pid file",
+          intervalMs: 2,
+        });
         const pids = JSON.parse(await readFile(pidFile, "utf8")) as number[];
         for (const pid of pids) {
           const probe = processExitProbe(pid);
@@ -287,11 +288,11 @@ test.skipIf(process.platform !== "win32")(
         },
         controller.signal,
       ).catch((error: unknown) => error);
-      const deadline = Date.now() + 2000;
-      while (!(await Bun.file(pidFile).exists())) {
-        expect(Date.now()).toBeLessThan(deadline);
-        await Bun.sleep(2);
-      }
+      await waitFor(() => Bun.file(pidFile).exists(), {
+        deadline: "childStep",
+        what: "the child to write its pid file",
+        intervalMs: 2,
+      });
       probe = processExitProbe(Number(await readFile(pidFile, "utf8")));
       expect(probe.exited()).toBe(false);
       controller.abort();
@@ -404,11 +405,11 @@ test("cancellation waits for direct-child death and closes blocked output pipes"
       controller.signal,
     );
     observed = pending.catch((error: unknown) => error);
-    const deadline = Date.now() + 2000;
-    while (!(await Bun.file(pidFile).exists())) {
-      expect(Date.now()).toBeLessThan(deadline);
-      await Bun.sleep(2);
-    }
+    await waitFor(() => Bun.file(pidFile).exists(), {
+      deadline: "childStep",
+      what: "the child to write its pid file",
+      intervalMs: 2,
+    });
     const pid = Number(await readFile(pidFile, "utf8"));
     const probe = processExitProbe(pid);
     try {

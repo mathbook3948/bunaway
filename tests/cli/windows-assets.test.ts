@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import {
   mkdir,
   mkdtemp,
@@ -15,6 +15,9 @@ import { pathToFileURL } from "node:url";
 import { bundleWindowsHost } from "#cli/assets";
 import { compiledAssetArguments } from "#cli/windows-compile";
 import { webAsset } from "#native/windows/bun/web-assets";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("toolchain"));
 
 test("compiled host preserves file imports from the app and both workers after staging is removed", async () => {
   const root = await realpath(
@@ -244,7 +247,7 @@ parentPort.close();
       retryDelay: 50,
     });
   }
-}, 30000);
+});
 
 test("embedded web responses preserve MIME, Unicode paths, HEAD and ranges without exposing host assets", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "bunaway-web-assets-"));

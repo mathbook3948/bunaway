@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import assert from "node:assert/strict";
 import { cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -7,6 +7,9 @@ import { PLATFORMS } from "@bunaway/plugin-api";
 import { frameworkRoot, writeJson } from "#cli/files";
 import { buildNativePlugin } from "#cli/plugin-build";
 import { readPluginDeclaration } from "#cli/plugins";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("toolchain"));
 
 test("browser replacements survive plugin builds and consumers installed without source", async () => {
   await mkdir(resolve(frameworkRoot, "build"), {
@@ -160,7 +163,7 @@ finally { await adapter.dispose(); }
       force: true,
     });
   }
-}, 30000);
+});
 
 test("conditional package imports follow the build target and import kind in src-free distributions", async () => {
   await mkdir(resolve(frameworkRoot, "build"), {
@@ -361,7 +364,7 @@ for (const [entry, target] of [["conditional-plugin", "BROWSER"], ["conditional-
       force: true,
     });
   }
-}, 30000);
+});
 
 test.each([
   ".ts",
@@ -764,4 +767,4 @@ export default plugin;
       force: true,
     });
   }
-}, 30000);
+});

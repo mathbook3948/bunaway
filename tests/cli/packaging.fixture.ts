@@ -6,6 +6,7 @@ import * as build from "#cli/build";
 import * as files from "#cli/files";
 import * as windowsCompile from "#cli/windows-compile";
 import { adapterFor, CODES, registerAdapter } from "@bunaway/packaging";
+import { deadline } from "../fixtures/deadlines.ts";
 
 // Store the bundled assets in a readable executable fixture so packaging tests can inspect them.
 mock.module(import.meta.resolve("#cli/windows-compile"), () => ({
@@ -405,9 +406,9 @@ const buildingWeb = buildProject(project, {
   native,
 });
 try {
-  const deadline = Date.now() + 5000;
+  const limit = Date.now() + deadline("childStep");
   while (!(await Bun.file(webStarted).exists())) {
-    if (Date.now() > deadline) {
+    if (Date.now() > limit) {
       throw new Error("Web build did not start.");
     }
     await Bun.sleep(10);

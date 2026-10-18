@@ -135,13 +135,17 @@ in the same change and update this table. Drop a row once the mistake cannot hap
 | Workspace tsconfigs extend the base and never restate strictness; the client SDK sees no Bun types | `tests/conformance/lint-config.test.ts` |
 | `framework.json` and root `devDependencies` match the `packages/*` and `plugins/*` workspaces | `tests/conformance/workspace.test.ts` |
 | A library symbol has one FFI signature across the repository; known conflicts only shrink | `tests/conformance/ffi-signatures.test.ts` |
+| The Windows UI thread changes its lifecycle only through `advance` in `native/windows/bun/ui-phase.ts` | `tests/lifecycle/windows-ui-phase.test.ts` (full transition table), `tests/lifecycle/windows-ui-lifecycle.test.ts` (31 scenarios on Linux fakes) |
+| A new plugin workspace starts from `bunaway plugin new <name>`, which registers it in `framework.json`, the root manifest, the reference map and a reference page | `tests/cli/plugin-new.test.ts`; `tests/conformance/workspace.test.ts` and `docs:check` fail on a hand-made copy that skips a manifest |
 | New native host files are listed in `frameworkPaths`; listed entries exist | `tests/cli/framework-paths.test.ts` |
 | Public exports and plugin operations are documented | `docs/site/scripts/check-reference.mjs` through `mise run typecheck` |
 | Protocol schema exports match the generated native schemas | CI `protocol:generate` diff |
 | No em dash or middle dot in text or commit messages | `scripts/check-text-style.ts` in `bun test tests/docs` and the commit-msg hook |
 | Native changes run the OS checks in `tests/README.md` and report what did not run | Review, and the `windows-native` and `macos-native` CI jobs |
-| Shared FFI tables, `ResourceOwner` and `attemptAll`, `int32Schema` and `base64Schema` are used instead of local copies | Review; the FFI ratchet above blocks new conflicting copies only |
-| Deadlines, intervals and limits are named constants; events are compared as sets | Review |
+| Shared FFI tables (`@bunaway/plugin/win32`, `@bunaway/plugin/darwin`), `ResourceOwner` and `attemptAll`, `int32Schema` and `base64Schema` are used instead of local copies | Review; the FFI ratchet above blocks new conflicting copies only |
+| A plugin's shared operations are typed by an instance interface in `contract.ts` that each platform class `implements`; platform-independent methods live in one base class (`plugins/storage/src/platforms/files.ts`) | `tests/conformance/plugin-structure.test.ts` (neutral modules importing platform types only shrink) |
+| A test names its waits: `setDefaultTimeout(deadline("build"))` once per file, `killAfter(child, "childStep")` for child kill timers, `waitFor(probe, { deadline, what })` for polling, all from `tests/fixtures/deadlines.ts`; literal deadlines and hand-rolled pollers only shrink | `tests/conformance/test-deadlines.test.ts` (per-file ratchet); `BUNAWAY_TEST_TIME_SCALE` scales every deadline on a slow runner |
+| Limits are named constants; events are compared as sets | Review |
 | Docs change in the same commit as code, and claim only what tests verified | Review |
 
 ### Documentation maintenance

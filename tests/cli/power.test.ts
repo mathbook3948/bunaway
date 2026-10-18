@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -11,6 +11,9 @@ import { installedPlugins, writePluginManifest } from "#cli/plugins";
 import { loadPluginCatalog } from "#native/host-api/bun/plugin-catalog";
 import { pluginRegistry } from "#native/host-api/bun/plugins";
 import { createProject, packageDirectory } from "./project.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("build"));
 
 test("isolated power package ships the UI adapter but keeps FFI out of the browser", async () => {
   const home = await realpath(
@@ -122,4 +125,4 @@ void power.getStatus();
       force: true,
     });
   }
-}, 60_000);
+});

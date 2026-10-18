@@ -7,8 +7,14 @@ import {
   ptr,
   read,
 } from "bun:ffi";
+import {
+  LIBSYSTEM,
+  LIBSYSTEM_PATH,
+  OBJC_PATH as OBJC,
+  OBJC_RUNTIME,
+} from "@bunaway/plugin/darwin";
+import { pick } from "@bunaway/plugin/win32";
 
-const OBJC = "/usr/lib/libobjc.A.dylib";
 const APPKIT = "/System/Library/Frameworks/AppKit.framework/AppKit";
 const WEBKIT = "/System/Library/Frameworks/WebKit.framework/WebKit";
 const BLOCK_IS_GLOBAL = 1 << 28;
@@ -27,18 +33,13 @@ function pointer(value: ObjcObject | null): ObjcObject | null {
 
 /** Objective-C runtime bindings. No project-owned native binary or compiler is required. */
 export class Objc {
-  private readonly frameworks = dlopen("/usr/lib/libSystem.B.dylib", {
-    dlopen: {
-      args: [
-        "cstring",
-        "i32",
-      ],
-      returns: "ptr",
-    },
-  } as const);
+  private readonly frameworks = dlopen(
+    LIBSYSTEM_PATH,
+    pick(LIBSYSTEM, "dlopen"),
+  );
   // System framework handles, delegate classes and callbacks live until process exit.
   private readonly systemHandle = this.frameworks.symbols.dlopen(
-    ptr(Buffer.from("/usr/lib/libSystem.B.dylib\0")),
+    ptr(Buffer.from(`${LIBSYSTEM_PATH}\0`)),
     1,
   );
   private readonly objcHandle = this.frameworks.symbols.dlopen(
@@ -54,18 +55,7 @@ export class Objc {
     1,
   );
   private readonly runtime = dlopen(OBJC, {
-    objc_getClass: {
-      args: [
-        "cstring",
-      ],
-      returns: "ptr",
-    },
-    sel_registerName: {
-      args: [
-        "cstring",
-      ],
-      returns: "ptr",
-    },
+    ...pick(OBJC_RUNTIME, "objc_getClass", "sel_registerName"),
     objc_allocateClassPair: {
       args: [
         "ptr",
@@ -97,21 +87,12 @@ export class Objc {
       returns: "ptr",
     },
   } as const);
-  private readonly system = dlopen("/usr/lib/libSystem.B.dylib", {
-    dlsym: {
-      args: [
-        "ptr",
-        "cstring",
-      ],
-      returns: "ptr",
-    },
-    pthread_main_np: {
-      args: [],
-      returns: "i32",
-    },
-  } as const);
+  private readonly system = dlopen(
+    LIBSYSTEM_PATH,
+    pick(LIBSYSTEM, "dlsym", "pthread_main_np"),
+  );
   private readonly messageAddress = this.system.symbols.dlsym(
-    this.objcHandle,
+    this.objcHandle ?? 0,
     ptr(Buffer.from("objc_msgSend\0")),
   );
   private readonly messages = linkSymbols({
@@ -408,7 +389,7 @@ export class Objc {
     descriptor.writeBigUInt64LE(BigInt(ptr(signature)), 16);
     const bytes = Buffer.alloc(32);
     const blockClass = this.system.symbols.dlsym(
-      this.systemHandle,
+      this.systemHandle ?? 0,
       ptr(this.cstring("_NSConcreteGlobalBlock")),
     );
     if (!blockClass) {

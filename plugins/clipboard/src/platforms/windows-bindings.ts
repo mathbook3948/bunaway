@@ -1,4 +1,5 @@
 import { dlopen, ptr, toArrayBuffer } from "bun:ffi";
+import { type Hwnd, KERNEL32, pick, USER32 } from "@bunaway/plugin/win32";
 import { BunawayError, validateValue } from "@bunaway/protocol";
 import {
   builtInFormatSchema,
@@ -43,121 +44,37 @@ function failed(): BunawayError {
  * interval. Successful writes transfer their HGLOBAL to Windows.
  */
 export function createClipboard() {
-  const user = dlopen("user32.dll", {
-    CreateWindowExW: {
-      args: [
-        "u32",
-        "ptr",
-        "ptr",
-        "u32",
-        "i32",
-        "i32",
-        "i32",
-        "i32",
-        "ptr",
-        "ptr",
-        "ptr",
-        "ptr",
-      ],
-      returns: "ptr",
-    },
-    DestroyWindow: {
-      args: [
-        "ptr",
-      ],
-      returns: "bool",
-    },
-    OpenClipboard: {
-      args: [
-        "ptr",
-      ],
-      returns: "bool",
-    },
-    CloseClipboard: {
-      args: [],
-      returns: "bool",
-    },
-    EmptyClipboard: {
-      args: [],
-      returns: "bool",
-    },
-    IsClipboardFormatAvailable: {
-      args: [
-        "u32",
-      ],
-      returns: "bool",
-    },
-    GetClipboardData: {
-      args: [
-        "u32",
-      ],
-      returns: "ptr",
-    },
-    SetClipboardData: {
-      args: [
-        "u32",
-        "ptr",
-      ],
-      returns: "ptr",
-    },
-    RegisterClipboardFormatW: {
-      args: [
-        "ptr",
-      ],
-      returns: "u32",
-    },
-  });
+  const user = dlopen(
+    "user32.dll",
+    pick(
+      USER32,
+      "CreateWindowExW",
+      "DestroyWindow",
+      "OpenClipboard",
+      "CloseClipboard",
+      "EmptyClipboard",
+      "IsClipboardFormatAvailable",
+      "GetClipboardData",
+      "SetClipboardData",
+      "RegisterClipboardFormatW",
+    ),
+  );
   const kernel = (() => {
     try {
-      return dlopen("kernel32.dll", {
-        GetModuleHandleW: {
-          args: [
-            "ptr",
-          ],
-          returns: "ptr",
-        },
-        GlobalAlloc: {
-          args: [
-            "u32",
-            "u64",
-          ],
-          returns: "ptr",
-        },
-        GlobalFree: {
-          args: [
-            "ptr",
-          ],
-          returns: "ptr",
-        },
-        GlobalLock: {
-          args: [
-            "ptr",
-          ],
-          returns: "ptr",
-        },
-        GlobalUnlock: {
-          args: [
-            "ptr",
-          ],
-          returns: "bool",
-        },
-        GlobalSize: {
-          args: [
-            "ptr",
-          ],
-          returns: "u64",
-        },
-        SetLastError: {
-          args: [
-            "u32",
-          ],
-          returns: "void",
-        },
-        GetLastError: {
-          args: [],
-          returns: "u32",
-        },
-      });
+      return dlopen(
+        "kernel32.dll",
+        pick(
+          KERNEL32,
+          "GetModuleHandleW",
+          "GlobalAlloc",
+          "GlobalFree",
+          "GlobalLock",
+          "GlobalUnlock",
+          "GlobalSize",
+          "SetLastError",
+          "GetLastError",
+        ),
+      );
     } catch (error) {
       user.close();
       throw error;
@@ -176,11 +93,11 @@ export function createClipboard() {
     0,
     0,
     0,
-    null,
-    null,
+    0n,
+    0n,
     memory.GetModuleHandleW(null),
     null,
-  );
+  ) as Hwnd;
   if (!owner) {
     kernel.close();
     user.close();
@@ -281,7 +198,7 @@ export function createClipboard() {
       if (opened) {
         throw failed();
       }
-      opened = api.OpenClipboard(owner);
+      opened = api.OpenClipboard(owner) !== 0;
       return opened;
     },
     close() {
@@ -405,8 +322,8 @@ export function createClipboard() {
     },
     hasFormat(format: ClipboardFormat): boolean {
       return (
-        api.IsClipboardFormatAvailable(nativeFormat(format)) ||
-        (format === "image/bmp" && api.IsClipboardFormatAvailable(CF_DIB))
+        api.IsClipboardFormatAvailable(nativeFormat(format)) !== 0 ||
+        (format === "image/bmp" && api.IsClipboardFormatAvailable(CF_DIB) !== 0)
       );
     },
     getFormats() {

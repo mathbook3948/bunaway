@@ -54,80 +54,67 @@ PR당 리뷰 라운드는 최대 6회(opener), 5회(windows aspect ratio)였다.
 | workspace 목록 불일치 | 테스트 | `framework.json`, 루트 `devDependencies` 대조 |
 | FFI 시그니처 불일치 | 테스트(ratchet) | 새 충돌은 실패, 기존 12개는 줄어들기만 |
 | 배포 목록 누락 | 테스트 | `git ls-files` 기준 대조, `native/ios` 포함, 사라진 항목 거부 |
+| 플랫폼마다 복제된 storage 인코딩 facade, 상한 2중 선언, disposed 가드 3중 | 구조 + 테스트(ratchet) | `StorageFiles` 베이스 클래스가 facade 6개, 4 MiB 상한, 가드를 한 번 소유하고 플랫폼은 facade가 쓰는 `readFile`, `writeFile`, `release`와 디렉터리, 메타데이터 작업만 구현. operations는 `StorageInstance` 인터페이스로 타입. `plugin-structure.test.ts`가 중립 모듈의 플랫폼 타입 import(10파일)를 기준값 이하로 묶는다 |
+| FFI 심볼을 플러그인마다 다른 핸들과 BOOL 규칙으로 재선언 | 구조 + 테스트(ratchet) | clipboard, 창, 전역 메모리, 이벤트 함수는 `@bunaway/plugin/win32`의 `USER32`, `KERNEL32`에, 로더와 Objective-C 런타임은 새 `@bunaway/plugin/darwin`의 `LIBSYSTEM`, `OBJC_RUNTIME`에 한 번 선언하고 호스트와 플러그인 9개 파일이 `pick`으로 가져온다. `Hwnd`, `Handle` 브랜드 타입을 생성 지점에 적용. `KNOWN_CONFLICTS`는 12개에서 0개로 줄었고 새 충돌은 즉시 실패 |
+| 플러그인을 복사해 만들다 `framework.json`, 루트 `package.json`, reference-map 중 하나를 빠뜨림 | 구조 + 테스트 | `bunaway plugin new <name>`(`createNativePlugin`)이 workspace 파일 8개와 문서 페이지를 만들고 매니페스트 3개에 등록한다. 생성물은 Biome 포맷, 타입 검사, 플러그인 빌드, `tests/conformance`, 문서 레퍼런스 검사를 그대로 통과한다. `tests/cli/plugin-new.test.ts`가 임시 저장소에서 생성, 빌드, 등록과 이름 거부를 확인한다 |
+| UI 스레드 수명주기 플래그 5개(`startRequested`, `startupNavigationStarted`, `quitPending`, `shutdownCommitted`, `stopping`)를 따로 세워 두고 조합을 머리로 추적 | 구조 + 테스트 | `ui-phase.ts`의 `UiPhase` 유니온(`live`, `committed`, `stopping`과 시작 진행도) 값 하나와 전이 함수 `advance`가 모든 변경을 소유하고 `ui.ts`는 술어로만 읽는다. `windows-ui-phase.test.ts`가 24개 phase x 6개 이벤트 전이표 전체를 집합으로 단정하고, 기존 lifecycle 시나리오 31개는 동작이 같음을 확인한다. `Windows` 클래스의 작업 표시줄 설정과 오버레이 HICON 소유는 `window-taskbar.ts`의 `WindowTaskbar`로 옮겼다 |
+| 테스트 기한 리터럴의 복제와 반복 수정 | 구조 + 테스트(ratchet) | `tests/fixtures/deadlines.ts`가 기한 7개를 소유하고 `BUNAWAY_TEST_TIME_SCALE`로 배율 적용. 테스트 타임아웃은 파일당 `setDefaultTimeout(deadline(...))` 하나. `test-deadlines.test.ts`가 파일별 리터럴 기한(213곳 127파일에서 114곳 83파일로)과 자체 폴러(29개에서 26개로)를 기준값 이하로 묶는다 |
 | Linux에서 앱 동작 증명 불가 | 검증 스킬 | `verify-bunaway`: 패킹한 CLI로 프로젝트 생성, 프로세스 프로토콜로 백엔드 구동, SDK 채널로 명령과 이벤트, 증거 기록 |
 
 각 검사는 실제 과거 실수나 임시로 넣은 실수에서 실패하는 것을 확인했다. 경계 테스트는
 수정 전 ICO 모듈에서, ratchet은 이미 통과하던 예외 파일에서, FFI 검사는 `GetLastError`의
-반환형을 바꾼 임시 편집에서 실패했다.
+반환형을 바꾼 임시 편집에서, 기한 ratchet은 테스트에 더한 `setTimeout(..., 30000)` 한 줄과
+실제보다 큰 기준값에서 실패했다.
+
+남은 리터럴 114곳은 Windows와 macOS 전용 fixture, 자식 프로세스에 문자열로 넘기는 코드, API에
+입력으로 주는 기한이다. 각 OS에서 실행해 볼 수 있을 때 옮기고 기준값을 내린다. `test()`의 세
+번째 인자에 `deadline()`을 넣는 형태는 Biome가 본문 전체를 다시 들여써서 쓰지 않고, 파일마다
+`setDefaultTimeout` 하나로 대신한다.
 
 ## 3. 남은 계획
 
 순서는 레버리지와 위험의 비율이다. 각 항목은 그 자체로 PR 하나이며, 먼저 검사를 넣고
 그 검사가 현재 코드에서 실패하는 것을 보인 뒤 코드를 옮긴다.
 
-### 3.1 테스트 기한과 폴링을 한 모듈로 (M)
+### 3.1 테스트 기한과 폴링을 한 모듈로 (M): 2절로 옮김
 
-데이터: 리터럴 기한 약 130곳, 같은 수정이 세 번 반복됨.
+Linux에서 실행되는 테스트는 옮겼다. 남은 것은 OS 전용 fixture이며 그 OS에서 실행해 확인하며
+옮긴다. 자체 `waitFor` 정의 26개 중 `failed()`와 다른 간격이 필요한 것은 공유 `waitFor`의
+옵션으로 표현된다.
 
-설계: `tests/fixtures/deadlines.ts` 하나가 기한을 소유한다.
+### 3.2 플랫폼 구현의 공유 인터페이스 (M, 플러그인별): storage는 2절로 옮김
 
-```ts
-export const DEADLINES = {
-  protocolStep: 10_000,
-  childExit: 5_000,
-  nativeFixture: 90_000,
-  packagedAudit: 120_000,
-} as const;
-export function deadline(name: keyof typeof DEADLINES): number; // BUNAWAY_TEST_TIME_SCALE 배율 적용
-export function waitFor<T>(probe: () => T | undefined, options: { deadlineMs: number; intervalMs?: number }): Promise<T>;
-```
+storage는 끝났다. disposed 가드는 SDK 래퍼가 adapter 호출을 막지만 클래스를 직접 쓰는 테스트와
+FFI 바인딩이 닫힌 뒤의 호출을 위해 베이스 클래스에 한 번 남겼다. opener의 경로 규칙은 이미
+`windows-path.ts`, `macos-path.ts` 모듈에 있어 더 옮길 것이 없었다. 나머지 플러그인 9개의
+파일 10개(`operations.ts`, log는 `index.ts`도)는 ratchet 목록에 있고, 각각 contract의 인스턴스 인터페이스로 바꾸며 목록에서
+지운다. clipboard는 두 플랫폼의 메서드 시그니처(`signal` 유무)가 달라 인터페이스를 먼저
+맞춰야 한다.
 
-검사: `tests/conformance/test-deadlines.test.ts`가 `setTimeout(() => child.kill(), <리터럴>)`과
-`}, <리터럴>);` 형태의 테스트 타임아웃 리터럴 수를 baseline 이하로 묶는다(ratchet).
-느린 러너 대응은 배율 하나로 끝나므로 "headroom" 커밋 클래스가 사라진다.
+### 3.3 `ui.ts` 수명주기를 phase 유니온으로, `Windows` 클래스 분할 (L): phase와 taskbar는 2절로 옮김
 
-### 3.2 플랫폼 구현의 공유 인터페이스 (M, 플러그인별)
+phase 유니온은 계획한 네 상태 대신 실제 플래그가 표현하던 것을 그대로 옮겼다. `live`,
+`committed`, `stopping`에 시작 진행도(`booting`, `starting`, `running`)와 대기 중인 quit을
+더한 24개 값이며, quit은 옛 플래그처럼 commit과 stop을 지나서도 유지된다. `failure`, `initialized`, `showRequested`, `modalShutdownRequested`는 phase가
+아니라 그대로 둔다. 전이표 테스트가 먼저 들어가고 lifecycle 시나리오 31개는 바꾸지 않았다.
 
-데이터: storage facade 6개 중복, 상한 상수 2중 선언, disposed 가드 3중.
+`Windows`에서는 taskbar 협력자만 분리했다. 남은 geometry(모니터 선택, placement, 전체화면,
+약 1500줄)와 icons는 Linux에서 실행할 수 없어 `windows-native` CI와 Windows 머신에서 확인할
+수 있을 때 같은 방식(협력자 하나, 호스트 인터페이스로 역의존)으로 옮긴다. 호스트 `win32.ts`의
+창 핸들 `Hwnd` 브랜드도 그때 함께 적용한다.
 
-설계(storage부터):
+### 3.4 FFI 핸들 브랜드 타입과 기존 충돌 12개 해소 (M): 2절로 옮김
 
-```ts
-// plugins/storage/src/contract.ts
-export interface StorageBackend {
-  readFile(path: string, limitBytes: number, signal: AbortSignal): Promise<Uint8Array>;
-  writeFile(path: string, bytes: Uint8Array, mode: "replace" | "append", signal: AbortSignal): Promise<void>;
-}
-// plugins/storage/src/operations.ts: 인코딩 facade(readText, writeText, append*)를 한 번만 구현
-// platforms/windows.ts, macos.ts: `implements StorageBackend`, 상한은 contract의 MAX_STORAGE_BYTES만 참조
-```
+충돌 12개는 모두 공유 테이블로 해소했다. 남은 것은 호스트 `win32.ts`의 창 핸들에 `Hwnd`
+브랜드를 적용하는 일이며 3.3의 남은 `Windows` geometry 분할과 함께 한다. Linux에서는 Bun 빌드와
+타입 검사, clipboard의 가짜 FFI 테스트까지 확인했고 실제 호출은 `windows-native`,
+`macos-native` CI 작업이 검증한다.
 
-검사: `operations.ts`가 플랫폼 클래스를 type-import하지 않는지(지금은 `MacosStorage |
-WindowsStorage` 유니온) lint override로 막는다. 플랫폼별 `active()` 가드는 SDK 래퍼가 이미
-하므로 삭제한다. 같은 틀을 opener(경로 세그먼트 규칙 4중)와 clipboard에 적용한다.
+### 3.5 플러그인 스캐폴드 (S): 2절로 옮김
 
-### 3.3 `ui.ts` 수명주기를 phase 유니온으로, `Windows` 클래스 분할 (L)
-
-데이터: 리뷰 주제 1위인 자원 정리 9건과 28건의 뿌리. 플래그 10개, 메서드 111개.
-
-설계: `type UiPhase = { kind: "starting" } | { kind: "running"; windows: ... } | { kind: "stopping"; reason: QuitReason } | { kind: "committed"; exitCode: number }`로
-바꾸고 전이 함수 하나가 모든 변경을 소유한다. `Windows`는 geometry, taskbar, icons
-협력자로 나눈다. 먼저 `tests/lifecycle/windows-ui-lifecycle.test.ts`(Linux에서 fake로 31개)가
-전이를 집합으로 단정하도록 보강한 뒤 옮긴다.
-
-### 3.4 FFI 핸들 브랜드 타입과 기존 충돌 12개 해소 (M)
-
-데이터: 핸들이 전부 `bigint`, 충돌 12개.
-
-설계: `type Hwnd = bigint & { readonly __brand: "HWND" }` 등을 `@bunaway/plugin/win32`에 두고
-clipboard 플러그인의 Win32 테이블을 공유 테이블로 옮긴다. 옮길 때마다 ratchet의
-`KNOWN_CONFLICTS`에서 이름을 지운다.
-
-### 3.5 플러그인 스캐폴드 (S)
-
-`bunaway plugin new <name>`이 `package.json`, tsconfig, `contract.ts`, `operations.ts`,
-`platforms/windows.ts`, `platforms/macos.ts`, 문서 페이지와 reference-map 항목을 만든다.
-"복사해서 만드는" 경로 자체를 바꾸므로 workspace 테스트가 잡는 누락이 처음부터 안 생긴다.
+스캐폴드는 `tests/api/<name>.test.ts`를 만들지 않는다. 계약 테스트는 작업 내용에 따라 달라서
+README에 파일 이름만 적어 둔다. 생성된 `operations.ts`는 3.2의 인스턴스 인터페이스 형태라
+`plugin-structure` ratchet 목록에 들어가지 않는다.
 
 ## 4. 하지 않기로 한 것
 

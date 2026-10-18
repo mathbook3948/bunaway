@@ -11,22 +11,11 @@ const FFI_SOURCE_GLOBS = [
 /**
  * Symbols that are declared with different signatures today. The list only shrinks: remove a name
  * once every declaration agrees (or imports the shared table), and never add one. A new symbol
- * declared two ways fails below with every location.
+ * declared two ways fails below with every location. The original twelve (clipboard, window and
+ * global memory functions on Windows; the loader and Objective-C runtime on macOS) now come from
+ * the shared tables.
  */
-const KNOWN_CONFLICTS = [
-  "CloseClipboard",
-  "CloseHandle",
-  "CreateWindowExW",
-  "DestroyWindow",
-  "GetModuleHandleW",
-  "GlobalUnlock",
-  "IsClipboardFormatAvailable",
-  "OpenClipboard",
-  "dlopen",
-  "dlsym",
-  "objc_getClass",
-  "sel_registerName",
-];
+const KNOWN_CONFLICTS: string[] = [];
 /** Variadic by design: every call site declares the argument shape it needs. */
 const VARIADIC_SYMBOLS = new Set([
   "objc_msgSend",
@@ -148,8 +137,8 @@ test("a library symbol keeps one FFI signature across the repository, and the kn
       ([name, list]) =>
         `${name}:\n${list.map((d) => `  ${d.file}:${d.line} ${d.shape}`).join("\n")}`,
     );
-  // Declare the symbol once in packages/plugin-sdk/src/win32.ts (or the host's shared table) and
-  // import it, instead of redeclaring it with another handle or BOOL convention.
+  // Declare the symbol once in packages/plugin-sdk/src/win32.ts or darwin.ts and pick it from
+  // there, instead of redeclaring it with another handle or BOOL convention.
   expect(unexpected).toEqual([]);
   const resolved = KNOWN_CONFLICTS.filter((name) => !conflicting.has(name));
   // A resolved conflict leaves the list so the ratchet keeps its new ground.

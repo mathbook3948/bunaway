@@ -12,5 +12,6 @@ export { doctor } from "./doctor.ts";
 export { buildIosProject, runIosProject, syncIosProject } from "./ios.ts";
 export { packageProject } from "./package.ts";
 export { buildNativePlugin } from "./plugin-build.ts";
+export { createNativePlugin } from "./plugin-new.ts";
 export type { Template } from "./templates.ts";
 export { templateNames } from "./templates.ts";

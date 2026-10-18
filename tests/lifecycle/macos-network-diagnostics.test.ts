@@ -1,8 +1,11 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { retainNetworkDiagnostics } from "./fixtures/macos-network-diagnostics.ts";
+import { deadline, waitFor } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("childStep"));
 
 test("missing network reports retain live-child pipes and host evidence before package cleanup", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "bunaway-network-diagnostics-"));
@@ -35,11 +38,10 @@ test("missing network reports retain live-child pipes and host evidence before p
     new Response(child.stderr).text(),
   ]);
   try {
-    const deadline = Date.now() + 2000;
-    while (!(await Bun.file(ready).exists())) {
-      expect(Date.now()).toBeLessThan(deadline);
-      await Bun.sleep(10);
-    }
+    await waitFor(() => Bun.file(ready).exists(), {
+      deadline: "childStep",
+      what: "the network child to write its ready file",
+    });
     expect(child.exitCode).toBeNull();
     const counters = {
       requests: {
@@ -99,7 +101,7 @@ test("missing network reports retain live-child pipes and host evidence before p
       force: true,
     });
   }
-}, 5000);
+});
 
 test("network diagnostics preserve pre-launch failures and discard stale reports", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "bunaway-network-diagnostics-"));

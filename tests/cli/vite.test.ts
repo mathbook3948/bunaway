@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import {
   mkdtemp,
   readdir,
@@ -16,6 +16,9 @@ import { main } from "#cli/main";
 import { templateNames } from "#cli/templates";
 import { packageDirectory } from "./project.ts";
 import { verifyViteDevelopment } from "./vite.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("build"));
 
 test("packed CLI creates independent templates and a Vite app with HMR and local assets", async () => {
   const root = await realpath(
@@ -284,7 +287,7 @@ test("packed CLI creates independent templates and a Vite app with HMR and local
       force: true,
     });
   }
-}, 60000);
+});
 
 test("create rejects invalid template options before writing a project", async () => {
   for (const args of [

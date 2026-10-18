@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, setDefaultTimeout, spyOn, test } from "bun:test";
 import { resolve } from "node:path";
 import type { Policy } from "@bunaway/protocol";
 import {
@@ -9,6 +9,9 @@ import { readDevSettings } from "#cli/config";
 import { DevFrontend } from "#cli/dev-frontend";
 import { startDevServer } from "#cli/dev-server";
 import { frameworkRoot } from "#cli/files";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("toolchain"));
 
 /** Gets an available loopback port for a child process fixture. */
 function availablePort(): number {
@@ -212,7 +215,7 @@ test("managed server waits for readiness and closes its process tree on stop", a
   }
   expect(await reachable(childPort)).toBe(false);
   await server.stop();
-}, 10000);
+});
 
 test("an existing listener is rejected rather than adopted as the application's server", async () => {
   const listener = Bun.serve({
@@ -262,7 +265,7 @@ test("server replacement can immediately reuse a port held by a descendant", asy
   } finally {
     await replacement.stop();
   }
-}, 15000);
+});
 
 test("early exit reports the exit code and terminates descendants", async () => {
   const childPort = availablePort();
@@ -274,7 +277,7 @@ test("early exit reports the exit code and terminates descendants", async () => 
     ),
   ).rejects.toThrow("exit 7");
   expect(await reachable(childPort)).toBe(false);
-}, 10000);
+});
 
 test("exit during an HTTP readiness probe preserves the command's exit code", async () => {
   const childPort = availablePort();
@@ -303,7 +306,7 @@ test("exit during an HTTP readiness probe preserves the command's exit code", as
     probe.mockRestore();
   }
   expect(await reachable(childPort)).toBe(false);
-}, 10000);
+});
 
 test.each([
   "timeout",
@@ -343,7 +346,7 @@ test("startup cancellation and cancellation after readiness both stop the server
   runningAbort.abort();
   await running.stop();
   expect(await running.exited).toBeNumber();
-}, 10000);
+});
 
 test("a ready frontend stays reachable during development shutdown until explicit server cleanup", async () => {
   const settings = config("ready");
@@ -377,4 +380,4 @@ test("a ready frontend stays reachable during development shutdown until explici
     await frontend.close();
   }
   expect(await reachable(Number(new URL(settings.url).port))).toBe(false);
-}, 10000);
+});

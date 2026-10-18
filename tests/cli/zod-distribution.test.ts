@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import {
   mkdir,
   mkdtemp,
@@ -14,6 +14,9 @@ import { pathToFileURL } from "node:url";
 import { installedPackageRoot } from "#cli/files";
 import { assertZodWorker } from "../fixtures/assert-zod-worker.ts";
 import { createProject } from "./project.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("packagedAudit"));
 
 async function run(project: string, args: string[]): Promise<void> {
   const child = Bun.spawn(
@@ -111,4 +114,4 @@ await bundleWindowsAssets(await validateProject(${JSON.stringify(project)}), ${J
       force: true,
     });
   }
-}, 120000);
+});

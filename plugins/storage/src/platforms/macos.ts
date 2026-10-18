@@ -12,15 +12,14 @@ import {
 import { attemptAll, BunawayError } from "@bunaway/plugin";
 import {
   MAX_DIRECTORY_ENTRIES,
-  MAX_STORAGE_BYTES,
-  type StorageBytesWrite,
   type StorageDirectoryCreate,
   type StorageDirectoryEntry,
   type StorageLocation,
+  type StorageInstance,
   type StorageMetadata,
   type StorageTransfer,
-  type StorageWrite,
 } from "#storage/contract";
+import { MAX_STORAGE_FILE_BYTES, StorageFiles } from "#storage/platforms/files";
 import {
   DARWIN_DIRENT_HEADER_BYTES,
   darwinDirectoryEntry,
@@ -30,7 +29,6 @@ import {
 const LIB_SYSTEM = "/usr/lib/libSystem.B.dylib";
 const MAX_PATH_BYTES = 1024;
 const MAX_NAME_BYTES = 255;
-const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_IO_CHUNK_BYTES = 1 << 20;
 const F_GETPATH = 50;
 const F_DUPFD_CLOEXEC = 67;
@@ -195,11 +193,11 @@ function metadata(info: BigIntStats): StorageMetadata {
  * POSIX keeps open objects alive but does not exclude other processes' renames
  * or writes. No cleanup unlinks a target by a potentially replaced name.
  */
-export class MacosStorage {
+export class MacosStorage extends StorageFiles implements StorageInstance {
   private readonly api: ReturnType<typeof createBindings>;
-  private disposed = false;
 
   constructor() {
+    super();
     if (process.platform !== "darwin") {
       throw new BunawayError({
         code: "UNSUPPORTED",
@@ -209,12 +207,8 @@ export class MacosStorage {
     this.api = createBindings();
   }
 
-  /** Release only this adapter's bindings; safe to repeat after success or failure. */
-  dispose(): void {
-    if (this.disposed) {
-      return;
-    }
-    this.disposed = true;
+  /** Release only this adapter's bindings. */
+  protected release(): void {
     this.api.close();
   }
 
@@ -423,52 +417,6 @@ export class MacosStorage {
     }
   }
 
-  private requireOpen(): void {
-    if (this.disposed) {
-      throw new BunawayError({
-        code: "CANCELLED",
-        message: "Storage adapter is disposed.",
-      });
-    }
-  }
-
-  /** Read bounded UTF-8 text from checked descriptors, preserving BOM text. */
-  readText(input: StorageLocation): string {
-    return new TextDecoder("utf-8", {
-      fatal: true,
-      ignoreBOM: true,
-    }).decode(this.readFile(input.path, MAX_FILE_BYTES));
-  }
-
-  /** Read bounded bytes as canonical base64. */
-  readBytes(input: StorageLocation): string {
-    return this.readFile(input.path, MAX_STORAGE_BYTES).toString("base64");
-  }
-
-  /** Replace text only after inspecting the opened object. */
-  writeText(input: StorageWrite): null {
-    return this.writeFile(input.path, Buffer.from(input.text), false);
-  }
-
-  /** Append text using O_APPEND and sync before reporting success. */
-  appendText(input: StorageWrite): null {
-    return this.writeFile(input.path, Buffer.from(input.text), true);
-  }
-
-  /** Replace bytes only after inspecting the opened object. */
-  writeBytes(input: StorageBytesWrite): null {
-    return this.writeFile(
-      input.path,
-      Buffer.from(input.bytes, "base64"),
-      false,
-    );
-  }
-
-  /** Append bytes using O_APPEND and sync before reporting success. */
-  appendBytes(input: StorageBytesWrite): null {
-    return this.writeFile(input.path, Buffer.from(input.bytes, "base64"), true);
-  }
-
   /** Only missing parents or targets produce false; other failures propagate. */
   exists(input: StorageLocation): boolean {
     return (
@@ -510,7 +458,7 @@ export class MacosStorage {
   }
 
   /** Keep checked descriptors alive until the bounded read completes. */
-  private readFile(path: string, maxBytes: number): Buffer {
+  protected readFile(path: string, maxBytes: number): Buffer {
     const result = this.withParent(path, false, false, (parent) =>
       this.withTarget(
         parent,
@@ -532,7 +480,7 @@ export class MacosStorage {
   }
 
   /** Check first, then write, truncate replacements and sync before releasing descriptors. */
-  private writeFile(path: string, bytes: Buffer, append: boolean): null {
+  protected writeFile(path: string, bytes: Buffer, append: boolean): null {
     // Never use O_TRUNC: validate the opened object before changing any bytes.
     const flags =
       constants.O_WRONLY |
@@ -696,7 +644,10 @@ export class MacosStorage {
         false,
         false,
         ({ fd, info }) => {
-          const bytes = this.readFileBytes(fd, safeSize(info, MAX_FILE_BYTES));
+          const bytes = this.readFileBytes(
+            fd,
+            safeSize(info, MAX_STORAGE_FILE_BYTES),
+          );
           this.withParent(input.to, false, false, (destination) =>
             this.withTarget(
               destination,

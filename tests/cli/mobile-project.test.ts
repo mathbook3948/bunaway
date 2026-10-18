@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { acquireBuildOutputLock } from "@bunaway/packaging";
 import { frameworkRoot } from "#cli/files";
 import { withMobileBuild } from "#cli/mobile-project";
+import { deadline } from "../fixtures/deadlines.ts";
 
 for (const target of [
   "android",
@@ -97,8 +98,8 @@ for (const target of [
           stderr: "pipe",
         },
       );
-      const deadline = Date.now() + 5000;
-      while (!(await Bun.file(ready).exists()) && Date.now() < deadline) {
+      const limit = Date.now() + deadline("childStep");
+      while (!(await Bun.file(ready).exists()) && Date.now() < limit) {
         await Bun.sleep(10);
       }
       const staging: unknown = JSON.parse(await readFile(ready, "utf8"));

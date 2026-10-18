@@ -24,7 +24,9 @@ DevTools 옵션은 영속 등록에 포함하지 않는다.
 `win32-bindings.ts`는 호스트가 여는 DLL 함수 바인딩을 제공한다. 공통 Win64 시그니처와
 FFI 버퍼 보조 함수는 `@bunaway/plugin/win32`에서 가져오고, `win32-constants.ts`는 창 메시지,
 시스템 명령, 표시 상태와 구조체 크기 같은 Win32 상수를 모아 둔다. `win32.ts`의 `Windows`는
-창 클래스, HWND, 아이콘, 전체 화면 상태와 메시지 처리를 소유한다.
+창 클래스, HWND, 아이콘, 전체 화면 상태와 메시지 처리를 소유한다. 창별 작업 표시줄 설정
+(진행률, 썸네일 클립과 툴팁, 오버레이 아이콘의 HICON 소유)은 `window-taskbar.ts`의
+`WindowTaskbar`가 소유하며 `Windows`는 창이 살아 있는지만 확인하고 위임한다.
 `taskbar-progress.ts`는 HWND별 작업 표시줄 버튼 준비와 마지막 성공 설정을 관리한다.
 등록한 `TaskbarButtonCreated` 메시지 이후에만 설정을 적용하며 버튼 재생성 때 복원한다.
 복원 실패는 진단으로 기록하며 이후 명시적 호출로 다시 적용할 수 있다.
@@ -46,6 +48,9 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 `wide-string.ts`는 이 조회에서 쓰는 NUL 종료 UTF-16 문자열 읽기를 제공한다. 조회 실패는 `webview-version-unavailable`로 기록하고 값을 `null`로 둔다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
+UI 스레드의 수명주기(시작 요청, 시작 탐색, 대기 중인 quit 요청, 종료 확정, 정지)는
+`ui-phase.ts`의 `UiPhase` 값 하나이며 `advance`만 바꾼다. 허용된 전이는
+`tests/lifecycle/windows-ui-phase.test.ts`가 표로 단정한다.
 
 인쇄 UI 작업은 `NativeWindow.showPrintUI`로 같은 UI 스레드의 ICoreWebView2_16
 ShowPrintUI를 호출한다. optional QueryInterface는 E_NOINTERFACE만 미지원으로 반환하며

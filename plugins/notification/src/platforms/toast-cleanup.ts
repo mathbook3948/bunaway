@@ -1,4 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import { checkToast } from "#notification/platforms/toast-winrt";
 
@@ -20,23 +21,10 @@ function* cleanupAttempts(
       throw error;
     }
   }
-  const kernel = dlopen("kernel32.dll", {
-    CreateEventW: {
-      args: [
-        "ptr",
-        "i32",
-        "i32",
-        "ptr",
-      ],
-      returns: "ptr",
-    },
-    CloseHandle: {
-      args: [
-        "ptr",
-      ],
-      returns: "i32",
-    },
-  });
+  const kernel = dlopen(
+    "kernel32.dll",
+    pick(KERNEL32, "CreateEventW", "CloseHandle"),
+  );
   const event = kernel.symbols.CreateEventW(null, 1, 0, null);
   if (!event) {
     kernel.close();
@@ -60,7 +48,7 @@ function* cleanupAttempts(
     });
     try {
       const handles = new BigUint64Array([
-        BigInt(event),
+        event,
       ]);
       const index = new Uint32Array(1);
       for (;;) {

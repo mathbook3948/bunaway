@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { bundleWindowsHost } from "#cli/assets";
 import { writeJson } from "#cli/files";
 import { compileWindowsApp } from "#cli/windows-compile";
+import { deadline, killAfter } from "../fixtures/deadlines.ts";
 
 test.skipIf(process.platform !== "win32")(
   "Compiled app embeds assets and icons, preserves argv, disables cwd config and reports startup failures",
@@ -105,7 +106,7 @@ test.skipIf(process.platform !== "win32")(
           returns: "i32",
         },
       );
-      const timer = setTimeout(() => child.kill(), 15000);
+      const timer = killAfter(child, "toolchain");
       try {
         while (child.exitCode === null) {
           user.symbols.EnumWindows(callback.ptr, 0n);
@@ -392,10 +393,10 @@ export default { commands: {}, events: {} };
         },
       );
       let duplicate: ReturnType<typeof Bun.spawn> | undefined;
-      const deadline = setTimeout(() => {
+      const timer = setTimeout(() => {
         owner.kill();
         duplicate?.kill();
-      }, 15000);
+      }, deadline("toolchain"));
       try {
         const reader = owner.stdout.getReader();
         expect(new TextDecoder().decode((await reader.read()).value)).toContain(
@@ -418,7 +419,7 @@ export default { commands: {}, events: {} };
         owner.stdin.end();
         expect(await owner.exited).toBe(0);
       } finally {
-        clearTimeout(deadline);
+        clearTimeout(timer);
         if (duplicate?.exitCode === null) {
           duplicate.kill();
         }

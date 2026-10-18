@@ -1,4 +1,11 @@
 import { dlopen, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
+import {
+  LIBSYSTEM,
+  LIBSYSTEM_PATH,
+  OBJC_PATH as OBJC,
+  OBJC_RUNTIME,
+} from "@bunaway/plugin/darwin";
+import { pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import {
   type ClipboardFormat,
@@ -14,7 +21,6 @@ import {
   MAX_TIFF_BYTES,
 } from "#clipboard/platforms/macos-tiff";
 
-const OBJC = "/usr/lib/libobjc.A.dylib";
 const APPKIT = "/System/Library/Frameworks/AppKit.framework/AppKit";
 const NS_UTF8_ENCODING = 4;
 const MAX_STRING_BYTES = MAX_TEXT_LENGTH * 4;
@@ -97,27 +103,11 @@ export function createPasteboard(name?: string): Pasteboard {
       } as const),
     );
     const system = own(
-      dlopen("/usr/lib/libSystem.B.dylib", {
-        pthread_main_np: {
-          args: [],
-          returns: "i32",
-        },
-      } as const),
+      dlopen(LIBSYSTEM_PATH, pick(LIBSYSTEM, "pthread_main_np")),
     );
     const runtime = own(
       dlopen(OBJC, {
-        objc_getClass: {
-          args: [
-            "cstring",
-          ],
-          returns: "u64",
-        },
-        sel_registerName: {
-          args: [
-            "cstring",
-          ],
-          returns: "u64",
-        },
+        ...pick(OBJC_RUNTIME, "objc_getClass", "sel_registerName"),
         objc_msgSend: {
           args: [
             "u64",
@@ -142,7 +132,7 @@ export function createPasteboard(name?: string): Pasteboard {
     }
     const cstring = (value: string) => ptr(Buffer.from(`${value}\0`));
     const classOf = (value: string) => {
-      const result = BigInt(runtime.symbols.objc_getClass(cstring(value)));
+      const result = BigInt(runtime.symbols.objc_getClass(cstring(value)) ?? 0);
       if (!result) {
         invalidPasteboardData();
       }
@@ -155,7 +145,9 @@ export function createPasteboard(name?: string): Pasteboard {
     ) => {
       let method = selectors.get(selector);
       if (!method) {
-        method = BigInt(runtime.symbols.sel_registerName(cstring(selector)));
+        method = BigInt(
+          runtime.symbols.sel_registerName(cstring(selector)) ?? 0,
+        );
         selectors.set(selector, method);
       }
       return BigInt(

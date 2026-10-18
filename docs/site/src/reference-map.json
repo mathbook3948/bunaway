@@ -159,6 +159,7 @@
           "validateProject",
           "buildProject",
           "buildNativePlugin",
+          "createNativePlugin",
           "buildAndroidProject",
           "syncAndroidProject",
           "runAndroidProject",
@@ -326,6 +327,20 @@
           "ADVAPI32",
           "COINIT_APARTMENTTHREADED",
           "COINIT_MULTITHREADED"
+        ]
+      }
+    },
+    {
+      "name": "@bunaway/plugin/darwin",
+      "source": "packages/plugin-sdk/src/darwin.ts",
+      "pages": {
+        "reference/tooling/native-plugins": [
+          "LIBSYSTEM",
+          "OBJC_RUNTIME",
+          "LIBSYSTEM_PATH",
+          "OBJC_PATH",
+          "RTLD_LAZY",
+          "RTLD_DEFAULT"
         ]
       }
     },

@@ -12,6 +12,7 @@ import {
   bundleIOPluginFixture,
   bundleUIPluginFixture,
 } from "../fixtures/native-worker.ts";
+import { waitFor as poll } from "../fixtures/deadlines.ts";
 
 for (const [workerKind, phase] of [
   [
@@ -179,18 +180,13 @@ for (const [workerKind, phase] of [
           failure = error;
         },
       );
-      const waitFor = async (predicate: () => boolean) => {
-        const deadline = Date.now() + 5000;
-        while (!predicate()) {
-          if (failure) {
-            throw failure;
-          }
-          if (Date.now() > deadline) {
-            throw new Error("I/O output test timed out");
-          }
-          await Bun.sleep(1);
-        }
-      };
+      const waitFor = (predicate: () => boolean) =>
+        poll(predicate, {
+          deadline: "inProcess",
+          what: "the cancellation fixture's output",
+          intervalMs: 1,
+          failed: () => failure,
+        });
       let executions = 0;
       const operation = async (requestId: string, payload: string) => {
         await channel.send({

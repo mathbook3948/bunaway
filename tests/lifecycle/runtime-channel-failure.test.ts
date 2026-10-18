@@ -7,6 +7,7 @@ import {
   parseProcessFrame,
 } from "@bunaway/protocol";
 import { readJsonLines } from "@bunaway/runtime-bun";
+import { deadline, killAfter } from "../fixtures/deadlines.ts";
 
 const origin = "https://app.bunaway.local";
 const hello = {
@@ -118,7 +119,7 @@ test.each([
         stderr: "pipe",
       },
     );
-    const timeout = setTimeout(() => child.kill(), 12000);
+    const timeout = killAfter(child, "childStep");
     const errors = new Response(child.stderr).text();
     const output = readJsonLines(child.stdout)[Symbol.asyncIterator]();
     const sockets: WebSocket[] = [];
@@ -236,11 +237,11 @@ test.each([
         ]),
       );
       const waitForStatus = async (expected: number[]) => {
-        const deadline = Date.now() + 5000;
+        const limit = Date.now() + deadline("childStep");
         let observed = await status(healthy);
         while (
           JSON.stringify(observed) !== JSON.stringify(expected) &&
-          Date.now() < deadline
+          Date.now() < limit
         ) {
           await Bun.sleep(10);
           observed = await status(healthy);

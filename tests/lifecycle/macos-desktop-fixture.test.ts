@@ -1,8 +1,11 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { desktopFixturePath } from "../fixtures/macos-desktop/fixture-config.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("toolchain"));
 
 /**
  * Contract test of the backend side of the real-AppKit fixture (tests/fixtures/macos-desktop/app.ts)
@@ -168,7 +171,7 @@ test("macOS fixture scenario starts after the first open and drives the window f
       title: "main",
     },
   });
-}, 20_000);
+});
 
 test("macOS fixture logs the code and details of a failed host call", async () => {
   const { log } = await runFixtureBackend("error");
@@ -182,4 +185,4 @@ test("macOS fixture logs the code and details of a failed host call", async () =
   );
   // One line, so the native test's line-based log stays parseable.
   expect(failure).not.toContain("\n");
-}, 20_000);
+});

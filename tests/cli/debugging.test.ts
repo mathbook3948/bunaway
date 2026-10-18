@@ -1,7 +1,10 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { devProject, parseDevArguments } from "#cli/dev";
 import { windowsInspectorArgument } from "#cli/windows-dev-launch";
 import { verifyDevelopmentToolsLaunch } from "@bunaway/runtime-bun/development";
+import { deadline, killAfter } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("toolchain"));
 
 test("DevTools require both a development artifact and an explicit launch flag", () => {
   expect(verifyDevelopmentToolsLaunch(undefined)).toBe(false);
@@ -151,7 +154,7 @@ test("Bun inspector accepts the CLI endpoint and permits a fresh connection afte
     );
     let socket: WebSocket | undefined;
     let errors: Promise<string> | undefined;
-    const timeout = setTimeout(() => child.kill(), 5000);
+    const timeout = killAfter(child, "childStep");
     try {
       const reader = child.stdout.getReader();
       expect(new TextDecoder().decode((await reader.read()).value)).toContain(
@@ -215,4 +218,4 @@ test("Bun inspector accepts the CLI endpoint and permits a fresh connection afte
       await errors;
     }
   }
-}, 15000);
+});

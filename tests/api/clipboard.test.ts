@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { resolve } from "node:path";
 import { bindCommandHost } from "@bunaway/plugin-api/host";
 import clipboard from "@bunaway/plugin-clipboard";
@@ -16,6 +16,9 @@ import {
 } from "#plugins/clipboard/src/operations";
 import { testAppInfo } from "../fixtures/app-info.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("toolchain"));
 
 const parsers = pluginParsers("clipboard", clipboardOperations);
 const registry = new NativeRegistry([
@@ -250,4 +253,4 @@ test("clipboard is independently discoverable as a Windows and macOS UI plugin",
   expect(source).not.toContain("AppKit.framework");
   expect(source).not.toContain("libobjc.A.dylib");
   expect(source).not.toContain("node:async_hooks");
-}, 20000);
+});

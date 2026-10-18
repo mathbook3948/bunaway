@@ -4,19 +4,17 @@ import { win32 } from "node:path";
 import { BunawayError } from "@bunaway/plugin";
 import {
   MAX_DIRECTORY_ENTRIES,
-  MAX_STORAGE_BYTES,
-  type StorageBytesWrite,
   type StorageDirectoryCreate,
   type StorageDirectoryEntry,
   type StorageLocation,
   type StorageMetadata,
   type StorageTransfer,
-  type StorageWrite,
+  type WindowsStorageInstance,
 } from "#storage/contract";
+import { MAX_STORAGE_FILE_BYTES, StorageFiles } from "#storage/platforms/files";
 import { directoryEntries } from "#storage/platforms/windows-directory-entries";
 
 const MAX_STORAGE_PATH_SEGMENT_BYTES = 255;
-const MAX_STORAGE_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_IO_CHUNK_BYTES = 1 << 20;
 const BY_HANDLE_FILE_INFORMATION_BYTES = 52;
 const FILE_CREATION_TIME_OFFSET = 4;
@@ -309,16 +307,14 @@ function transferOptions(
     createParents: false,
   };
 }
-export class WindowsStorage {
+export class WindowsStorage
+  extends StorageFiles
+  implements WindowsStorageInstance
+{
   private readonly api = createBindings();
-  private disposed = false;
   private fileApi: ReturnType<typeof createFileBindings> | null = null;
   /** Release this instance's bindings; other storage adapters retain their resources. */
-  dispose(): void {
-    if (this.disposed) {
-      return;
-    }
-    this.disposed = true;
+  protected release(): void {
     this.fileApi?.close();
     this.fileApi = null;
     this.api.close();
@@ -339,14 +335,6 @@ export class WindowsStorage {
       deny("Storage access denied.");
     }
     throw new Error(`${message} (${code})`);
-  }
-  private requireOpen(): void {
-    if (this.disposed) {
-      throw new BunawayError({
-        code: "CANCELLED",
-        message: "Storage adapter is disposed.",
-      });
-    }
   }
   private close(handle: bigint) {
     this.check(this.api.symbols.CloseHandle(handle), "CloseHandle failed");
@@ -453,43 +441,6 @@ export class WindowsStorage {
     }
     return text.subarray(0, length * WCHAR_BYTES).toString("utf16le");
   }
-  /** Read bounded UTF-8 text from a checked, pinned file. */
-  readText(input: StorageLocation): string {
-    return new TextDecoder("utf-8", {
-      fatal: true,
-      ignoreBOM: true,
-    }).decode(this.readFile(input.path, MAX_STORAGE_FILE_BYTES));
-  }
-
-  /** Read bounded file bytes as canonical base64. */
-  readBytes(input: StorageLocation): string {
-    return this.readFile(input.path, MAX_STORAGE_BYTES).toString("base64");
-  }
-
-  /** Replace text and truncate any previous tail after writing. */
-  writeText(input: StorageWrite): null {
-    return this.writeFile(input.path, Buffer.from(input.text), false);
-  }
-
-  /** Append UTF-8 text using an append-only native handle. */
-  appendText(input: StorageWrite): null {
-    return this.writeFile(input.path, Buffer.from(input.text), true);
-  }
-
-  /** Replace bytes and truncate any previous tail after writing. */
-  writeBytes(input: StorageBytesWrite): null {
-    return this.writeFile(
-      input.path,
-      Buffer.from(input.bytes, "base64"),
-      false,
-    );
-  }
-
-  /** Append bytes using an append-only native handle. */
-  appendBytes(input: StorageBytesWrite): null {
-    return this.writeFile(input.path, Buffer.from(input.bytes, "base64"), true);
-  }
-
   /** Missing targets return false; invalid paths and access failures still throw. */
   exists(input: StorageLocation): boolean {
     return (
@@ -587,7 +538,7 @@ export class WindowsStorage {
   }
 
   /** Open and bound the file before reading; all handles stay pinned until completion. */
-  private readFile(path: string, maxBytes: number): Buffer {
+  protected readFile(path: string, maxBytes: number): Buffer {
     const result = this.withFile(
       path,
       {
@@ -621,7 +572,7 @@ export class WindowsStorage {
   }
 
   /** Share checked-handle writes while preserving append and replacement semantics. */
-  private writeFile(path: string, bytes: Buffer, append: boolean): null {
+  protected writeFile(path: string, bytes: Buffer, append: boolean): null {
     this.withFile(
       path,
       {

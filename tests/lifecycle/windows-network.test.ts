@@ -4,6 +4,7 @@ import macosNetworkPlugin from "@bunaway/plugin-network/native/macos";
 import windowsNetworkPlugin from "@bunaway/plugin-network/native/windows";
 import type { JsonValue } from "@bunaway/protocol";
 import { windowsOperations as networkOperations } from "#plugins/network/src/operations";
+import { waitFor } from "../fixtures/deadlines.ts";
 
 const platforms = [
   [
@@ -43,14 +44,6 @@ function createAdapter(platform: (typeof platforms)[number][1]) {
     adapter,
     call,
   };
-}
-
-async function waitFor(condition: () => boolean) {
-  const deadline = Date.now() + 2000;
-  while (!condition()) {
-    assert(Date.now() < deadline, "Loopback request did not start.");
-    await Bun.sleep(2);
-  }
 }
 
 function server() {
@@ -230,7 +223,11 @@ test.each(platforms)(
         },
         cancelled.signal,
       );
-      await waitFor(() => local.waits() === 2);
+      await waitFor(() => local.waits() === 2, {
+        deadline: "inProcess",
+        what: "both loopback requests to wait",
+        intervalMs: 2,
+      });
       cancelled.abort();
       await expect(pending).rejects.toMatchObject({
         code: "CANCELLED",
@@ -359,13 +356,21 @@ test.each(platforms)(
         },
         cancel.signal,
       );
-      await waitFor(() => local.sockets() > priorSockets);
+      await waitFor(() => local.sockets() > priorSockets, {
+        deadline: "inProcess",
+        what: "the loopback socket to open",
+        intervalMs: 2,
+      });
       // Abort reasons are arbitrary values; a falsy reason must still settle and release the socket.
       cancel.abort(0);
       await expect(pending).rejects.toMatchObject({
         code: "CANCELLED",
       });
-      await waitFor(() => local.server.pendingWebSockets === 0);
+      await waitFor(() => local.server.pendingWebSockets === 0, {
+        deadline: "inProcess",
+        what: "the pending WebSocket to release",
+        intervalMs: 2,
+      });
       expect(local.server.pendingWebSockets).toBe(0);
     } finally {
       await adapter.dispose();
