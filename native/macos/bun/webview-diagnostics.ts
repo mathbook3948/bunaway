@@ -69,7 +69,8 @@ export function stalledLoadAction(
  * load (so a slow decision is never mistaken for a stalled navigation) and restarts at every
  * reissue: a reissued load may never reach the policy callback, so the next retry and the final
  * report must not depend on it. `check` runs on scan ticks, so a reissue interval is `PROVISIONAL_STALL_MS`
- * plus up to one tick.
+ * plus up to one tick. The slow-decision protection covers the first request only: a reissued load
+ * whose decision takes longer than the threshold is reissued again, within the same retry budget.
  */
 export class StalledLoadClock {
   private allowedAt: number | undefined;

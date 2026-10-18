@@ -143,6 +143,6 @@ CI 실행 [37574470840](https://github.com/mathbook3948/bunaway/actions/runs/375
 attempt 1(`macos-webview-controls`)과 attempt 2(`reopen-handler`), 같은 head의 attempt 3은 통과) `webview-load-stalled`도 기록되지 않았다.
 `load-retried` 뒤에도 `loadHome`이 정책 허용 시각을 지워 시계가 꺼졌기 때문이다. 재발송한 load는 발행 시점부터 시계를 새로 재도록 고쳐
 2, 3회차 재시도와 `webview-load-stalled` 기록까지 진행한다.
-재시도 도입 후 처음 두 행의 합계 9회(세 head의 macOS 잡)는 연속 통과였지만, 표본이 작고 통과한 실행의 로그에는 `load-retried` 발생 여부를 따로 집계하지 않았다.
+`수정 후` 행과 bc29d087 실행을 합한 9회(세 head의 macOS 잡)는 연속 통과였지만, 표본이 작고 통과한 실행의 로그에는 `load-retried` 발생 여부를 따로 집계하지 않았다.
 정지가 남아 있으면 `webview-load-stalled`와
 `load-retried` 기록, 5/10/15초 checkpoint로 WebKit 정지와 코드 회귀를 구분한다. 기한은 늘리지 않았다. `webview-load-stalled`는 정책 허용 뒤 3초 간격 재시도 3번 다음 확인에서 기록되므로 약 12초 이상 걸리고, 문서 기한이 그보다 짧은 fixture에서는 기록 전에 실패할 수 있다.
