@@ -85,7 +85,7 @@ export class MacosWebview {
   private provisionalSeen = false;
   /** Epoch ms at which the policy callback allowed the current load request; 0 until then. */
   private policyAllowedAt = 0;
-  /** Reissues of the current load so far, plus one once the stall was reported; reset by an external load. */
+  /** Reissues of the current load so far, plus one once the stall was reported; reset only by the reload after a WebContent crash. */
   private loadRetries = 0;
   private provisionalNavigation: ObjcObject | null = null;
   /** Latest top-level document navigation; unlike provisionalNavigation it survives commit until completion. */

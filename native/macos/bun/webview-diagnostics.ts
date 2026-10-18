@@ -1,7 +1,7 @@
 const MAX_STAGE_RECORDS = 64;
 /** A load request that has not started its provisional navigation after this long is reissued. */
 export const PROVISIONAL_STALL_MS = 3000;
-/** Reissues per load request; the document and SDK deadlines (30 s) still bound the total wait. */
+/** Reissues per view (a reload after a WebContent crash starts over); the document and SDK deadlines (30 s) still bound the total wait. */
 export const MAX_LOAD_RETRIES = 3;
 const ERROR_DOMAINS = [
   "WKErrorDomain",
