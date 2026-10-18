@@ -60,6 +60,7 @@ path.getAppDirectory({ directory: AppDirectory }): Promise<string>
 같은 위치를 가리키는 것과 같습니다. 로밍하지 않을 데이터는 `appLocalData`에 두세요.
 `temp`는 앱 전용 하위 폴더가 아니라 사용자 전체 임시 디렉터리이므로 파일 이름이 겹치지 않게 앱에서 하위 폴더를 만드세요.
 `temp`는 `TEMP` 환경 변수를 기준으로 하며 호스트 프로세스의 값을 따릅니다.
+값이 비어 있거나 상대 경로여서 fully qualified 경로가 아니면 `INTERNAL`로 실패합니다.
 
 ### 호스트 내부 경로와의 관계
 

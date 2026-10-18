@@ -1,7 +1,11 @@
 import { tmpdir } from "node:os";
 import { win32 } from "node:path";
 import { BunawayError, type NativeEnvironment } from "@bunaway/plugin";
-import type { AppDirectory, UserDirectory } from "#path/contract";
+import {
+  type AppDirectory,
+  qualifiedPathSchema,
+  type UserDirectory,
+} from "#path/contract";
 import {
   type KnownFolder,
   WindowsKnownFolders,
@@ -34,7 +38,15 @@ export class WindowsPath {
    */
   getAppDirectory(directory: AppDirectory): string {
     if (directory === "temp") {
-      return tmpdir();
+      // TEMP and TMP come from the host process and may be empty or relative.
+      const temp = tmpdir();
+      if (!qualifiedPathSchema.safeParse(temp).success) {
+        throw new BunawayError({
+          code: "INTERNAL",
+          message: "The temporary directory is not a fully qualified path.",
+        });
+      }
+      return temp;
     }
     const appId = this.environment.app?.id;
     if (!appId) {

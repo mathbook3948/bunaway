@@ -42,6 +42,7 @@ const assets = resolve(output, "assets");
 const reportPath = resolve(output, "report.json");
 const permissions = [
   "path.getDirectory",
+  "path.getAppDirectory",
   "path.join",
   "path.resolve",
   "path.normalize",
@@ -165,6 +166,8 @@ if (!process.argv.includes("--child")) {
         report.error ?? "Path browser test failed.",
       );
       assert.equal(report.directories, 7);
+      // The host passes its app id and dataRoot, so logs sits under the host-owned data root.
+      assert.equal(report.logs, resolve(dataRoot, "logs"));
       assert.equal(report.lexical, true);
       assert.equal(report.denied, true);
       console.log(
@@ -221,6 +224,14 @@ if (!process.argv.includes("--child")) {
   } as const;
   await runWindowsApp(app, {
     appMetadata: testAppMetadata,
+    app: {
+      id: "windows-path",
+      launch: {
+        mode: "development",
+        executablePath: process.execPath,
+        args: [],
+      },
+    },
     runtime: {
       id: "windows-path",
       generation: crypto.randomUUID(),

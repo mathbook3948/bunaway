@@ -91,7 +91,12 @@ test("local app directories sit under the host data root and logs match the log 
   expect(paths.getAppDirectory("cache")).toBe(`${dataRoot}\\cache`);
   expect(paths.getAppDirectory("appLocalData")).toBe(`${dataRoot}\\data`);
   for (const directory of appDirectorySchema.options) {
-    if (directory === "appConfig" || directory === "appData") {
+    // Roaming paths come from the OS and temp from the process environment, so neither is data-root based.
+    if (
+      directory === "appConfig" ||
+      directory === "appData" ||
+      directory === "temp"
+    ) {
       continue;
     }
     // The host-owned root, which holds WebView profiles and the instance lock, is never returned.
@@ -116,6 +121,58 @@ test("app directories fail with INTERNAL when the host provides no app identifie
   expect(() => paths.getAppDirectory("logs")).toThrow(
     "The host did not provide an app identifier.",
   );
-  // temp is the system temporary directory and needs no app identity.
-  expect(paths.getAppDirectory("temp")).toBeString();
+  // temp is the system temporary directory and needs no app identity, only a qualified value.
+  const temp = process.platform === "win32" ? "C:\\Temp" : "/tmp";
+  const restore = setTempEnvironment(temp);
+  try {
+    expect(() => paths.getAppDirectory("temp")).not.toThrow(
+      "The host did not provide an app identifier.",
+    );
+  } finally {
+    restore();
+  }
+});
+
+/** Point every variable os.tmpdir reads at one value and return a restore function. */
+function setTempEnvironment(value: string): () => void {
+  const names = [
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+  ];
+  const saved = names.map((name) => process.env[name]);
+  for (const name of names) {
+    process.env[name] = value;
+  }
+  return () => {
+    names.forEach((name, index) => {
+      const previous = saved[index];
+      if (previous === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = previous;
+      }
+    });
+  };
+}
+
+test("temp fails with INTERNAL when the temporary directory is empty or relative", () => {
+  const paths = new WindowsPath({
+    dataRoot: "C:\\data",
+  });
+  for (const value of [
+    "relative\\temp",
+    "",
+  ]) {
+    const restore = setTempEnvironment(value);
+    try {
+      expect(() => paths.getAppDirectory("temp")).toThrow(
+        expect.objectContaining({
+          code: "INTERNAL",
+        }),
+      );
+    } finally {
+      restore();
+    }
+  }
 });
