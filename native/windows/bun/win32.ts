@@ -1047,15 +1047,17 @@ export class Windows {
     }
     const alpha = Buffer.alloc(1);
     const flags = Buffer.alloc(4);
-    assert(
-      user.symbols.GetLayeredWindowAttributes(
+    // A layered window that never received attributes makes this call fail; it is opaque.
+    if (
+      !user.symbols.GetLayeredWindowAttributes(
         window,
         null,
         ptr(alpha),
         ptr(flags),
-      ),
-      `GetLayeredWindowAttributes: ${kernel.symbols.GetLastError()}`,
-    );
+      )
+    ) {
+      return 1;
+    }
     return flags.readUInt32LE(0) & LWA_ALPHA
       ? alpha.readUInt8(0) / MAX_ALPHA
       : 1;
@@ -1080,13 +1082,18 @@ export class Windows {
       }
       return;
     }
-    if (!(exStyle & WS_EX_LAYERED)) {
+    const wasLayered = !!(exStyle & WS_EX_LAYERED);
+    if (!wasLayered) {
       this.setStyle(window, exStyle | WS_EX_LAYERED, GWL_EXSTYLE);
     }
-    assert(
-      user.symbols.SetLayeredWindowAttributes(window, 0, alpha, LWA_ALPHA),
-      `SetLayeredWindowAttributes: ${kernel.symbols.GetLastError()}`,
-    );
+    if (!user.symbols.SetLayeredWindowAttributes(window, 0, alpha, LWA_ALPHA)) {
+      const error = kernel.symbols.GetLastError();
+      // A layered window without attributes is not drawn, so undo the style we added.
+      if (!wasLayered) {
+        this.setStyle(window, exStyle, GWL_EXSTYLE);
+      }
+      assert(false, `SetLayeredWindowAttributes: ${error}`);
+    }
   }
 
   /**

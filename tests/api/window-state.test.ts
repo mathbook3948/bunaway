@@ -1365,3 +1365,17 @@ test("opacity accepts only numbers from 0 to 1, round-trips and keeps its own pe
     code: "INVALID_ARGUMENT",
   });
 });
+
+test("macOS target does not declare the Windows-only opacity operations", () => {
+  expect(windows._definition.nativePlatforms.macos?.operations).not.toEqual(
+    expect.arrayContaining([
+      "setOpacity",
+    ]),
+  );
+  expect(windows._definition.nativePlatforms.windows?.operations).toEqual(
+    expect.arrayContaining([
+      "setOpacity",
+      "getOpacity",
+    ]),
+  );
+});
