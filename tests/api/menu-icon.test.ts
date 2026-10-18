@@ -31,6 +31,8 @@ function fixture() {
       set(_windowId, items) {
         driverCalls.push(items);
       },
+      setVisible() {},
+      isVisible: () => true,
       popup: () => null,
       dispose() {},
     }),
