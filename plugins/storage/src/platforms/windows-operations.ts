@@ -9,7 +9,7 @@ import {
 import { storageOperations } from "#storage/operations";
 
 const operation = defineNativeOperation<WindowsStorageInstance>();
-/** Windows adds handle-preserving move, removal and recursive size to the shared storage operations. */
+/** Windows adds handle-preserving move, removal, recursive removal and recursive size to the shared storage operations. */
 export const windowsOperations = {
   ...storageOperations,
   move: operation({
@@ -27,5 +27,12 @@ export const windowsOperations = {
     input: storageLocationSchema,
     output: z.null(),
     handler: (input, { instance }) => instance.remove(input),
+  }),
+  // A separate operation, so granting file removal never grants deleting whole trees.
+  removeRecursive: operation({
+    input: storageLocationSchema,
+    output: z.null(),
+    handler: (input, { instance, signal }) =>
+      instance.removeRecursive(input, signal),
   }),
 };

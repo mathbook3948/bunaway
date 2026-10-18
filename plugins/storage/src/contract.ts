@@ -131,10 +131,11 @@ export interface StorageInstance {
   exists(input: StorageLocation): boolean;
   stat(input: StorageLocation): StorageMetadata | null;
 }
-/** Windows additionally moves, removes and totals directories while holding the checked object's handle. */
+/** Windows additionally moves, removes (also whole trees) and totals directories while holding the checked object's handle. */
 export interface WindowsStorageInstance extends StorageInstance {
   move(input: StorageTransfer): null;
   remove(input: StorageLocation): null;
+  removeRecursive(input: StorageLocation, signal?: AbortSignal): Promise<null>;
   directorySize(
     input: StorageLocation,
     signal?: AbortSignal,
@@ -179,6 +180,10 @@ export interface Storage {
     options?: NativeInvokeOptions,
   ): Promise<null>;
   remove(input: StorageLocation, options?: NativeInvokeOptions): Promise<null>;
+  removeRecursive(
+    input: StorageLocation,
+    options?: NativeInvokeOptions,
+  ): Promise<null>;
   exists(
     input: StorageLocation,
     options?: NativeInvokeOptions,

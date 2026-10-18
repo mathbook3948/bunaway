@@ -1356,7 +1356,8 @@
           "readDirectory",
           "createDirectory",
           "directorySize",
-          "remove"
+          "remove",
+          "removeRecursive"
         ]
       }
     },
@@ -1425,7 +1426,8 @@
       "storage.readDirectory",
       "storage.createDirectory",
       "storage.directorySize",
-      "storage.remove"
+      "storage.remove",
+      "storage.removeRecursive"
     ],
     "reference/host/log-write": ["log.write", "log.configure", "log.flush"],
     "reference/host/capabilities-get": ["capabilities.get"],

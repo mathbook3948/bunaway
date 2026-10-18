@@ -805,7 +805,15 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [x] Windows의 직접 자식 목록, 선택적인 상위 디렉터리 생성과 파일 및 빈 디렉터리 삭제를 제공한다.
   검사한 핸들의 bounded enumeration과 삭제, 링크 미추적 및 거부, 작업별 권한을
   [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)에 정의한다.
-- [ ] 재귀 목록, 큰 목록 pagination과 재귀 삭제를 제공한다.
+- [ ] 재귀 목록과 큰 목록 pagination을 제공한다.
+- [x] 파일 또는 디렉터리 트리를 재귀 삭제한다.
+  Windows의 `storage.removeRecursive({ path })`는 `storage.remove`와 별도 권한이다. 현재 경로의 디렉터리 핸들을 모두 열어 둔 채
+  후위 순서로 삭제하므로 상위 디렉터리 교체와 이름 재해석이 없다. 이름 대리자 reparse point(symlink, junction)는 따라가지 않고
+  링크만 삭제하며, hardlink는 만난 이름만 삭제한다. 읽기 전용 항목은 Node `fs.rm`과 Rust `remove_dir_all`처럼 삭제하며, POSIX 삭제 의미(속성 무시, 이름 즉시 제거)를 쓰고 미지원 파일 시스템은 속성을 해제하고 삭제한다.
+  비대리자 reparse 디렉터리(클라우드 폴더)는 `UNSUPPORTED`, 루트 아래 깊이 64 초과는 `INVALID_ARGUMENT`이고 항목 수 상한은 없다.
+  원자적이지 않아 취소와 실패 전에 삭제한 항목은 유지되며 같은 호출을 반복하면 이어서 삭제한다. macOS는 `UNSUPPORTED`이다.
+  `windows-storage-remove-recursive.ts`가 CI windows-native에서 실제 Win32 핸들로 확인한다.
+  [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)을 따른다.
 - [x] 파일 크기 조회와 별도로 디렉터리 재귀 용량을 바이트 단위로 계산한다.
   Windows의 `storage.directorySize({ path })`는 `{ bytes, files, directories }`를 반환한다.
   루트는 directories에 세지 않고, 크기는 일반 파일의 논리 크기(EndOfFile) 합이다. 하드링크는 이름마다 더한다.
