@@ -42,6 +42,19 @@ export type NativeTrayServices = {
   setIcon(ico: string | null): void;
   setClickBehavior(showOnLeftClick: boolean, menuOnRightClick: boolean): void;
   focus(): boolean;
+  /**
+   * Tracks the menu attached with `setTrayMenu` at a physical screen position (null for the
+   * pointer) until a choice, dismissal or `signal` abort. A choice is delivered through the
+   * attachment's selection callback, not the return value. Throws INVALID_ARGUMENT without an
+   * attached menu, BUSY while a popup is open, and CANCELLED when `signal` aborts.
+   */
+  popUpContextMenu(
+    position: {
+      x: number;
+      y: number;
+    } | null,
+    signal: AbortSignal,
+  ): void;
   /** The adapter must release this subscription during disposal. */
   subscribe(receive: (event: NativeTrayEvent) => void): () => void;
   emit(event: string, payload: import("@bunaway/protocol").JsonValue): void;
@@ -58,12 +71,24 @@ export type NativeTrayWindowHost = {
     visible: false,
   ): bigint;
   destroy(hwnd: bigint): void;
+  /**
+   * Ends a native menu loop when the request owning `signal` is cancelled or the host shuts down.
+   * Returns the unsubscribe function. Hosts that cannot interrupt a menu loop omit it, and the
+   * tray then rejects `popUpContextMenu` with UNSUPPORTED.
+   */
+  interrupt?(signal: AbortSignal, cancel: () => void): () => void;
 };
 
 /** Resource retained by the host until native callback quiescence and retryable cleanup. */
 export type NativeTrayOwner = Pick<
   NativeTrayServices,
-  "get" | "getBounds" | "setTooltip" | "setIcon" | "setClickBehavior" | "focus"
+  | "get"
+  | "getBounds"
+  | "setTooltip"
+  | "setIcon"
+  | "setClickBehavior"
+  | "focus"
+  | "popUpContextMenu"
 > & {
   readonly hwnd: bigint;
   setMenu(

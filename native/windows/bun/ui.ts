@@ -1,7 +1,7 @@
-import { checkHresult, COINIT_APARTMENTTHREADED } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
 import type { ShutdownReason } from "@bunaway/core";
+import { COINIT_APARTMENTTHREADED, checkHresult } from "@bunaway/plugin/win32";
 import type {
   NativeTrayOwner,
   WindowReadiness,
@@ -1798,6 +1798,8 @@ try {
               create: (title, width, height, receive) =>
                 nativeWindows.create(title, width, height, receive, false),
               destroy: (hwnd) => nativeWindows.destroy(hwnd),
+              interrupt: (signal, cancel) =>
+                windowRequests.onModalInterrupt(signal, cancel),
             },
             tooltip: config.desktop.tray.tooltip,
             retain(owner) {
@@ -1829,6 +1831,8 @@ try {
           requireTray().setClickBehavior(showOnLeftClick, menuOnRightClick);
         },
         focus: () => requireTray().focus(),
+        popUpContextMenu: (position, signal) =>
+          requireTray().popUpContextMenu(position, signal),
         subscribe(receive) {
           trayListeners.add(receive);
           return () => {

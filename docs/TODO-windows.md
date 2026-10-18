@@ -304,7 +304,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 트레이 mouse enter/leave/move를 클릭 계열 `tray.input`과 분리한 `tray.hover` 이벤트(`{ state, position }`)로 제공한다. hover 대기 함수는 없다. 첫 `WM_MOUSEMOVE`가 enter, 이후는 50ms 스로틀 move이며, leave는 100ms 타이머로 커서와 `Shell_NotifyIconGetRect`를 비교해 판단한다(최대 약 100ms 지연). 영역을 읽지 못하면 200ms 동안 move가 없을 때 leave이며 지연은 최대 약 300ms다.
 - [x] `tray.setClickBehavior`로 오른쪽 메뉴 표시와 왼쪽 창 복원 동작을 설정한다.
 - [x] `tray.focus`로 OS의 트레이 focus 요청 결과를 반환한다.
-- [ ] 트레이에서 지정 위치의 팝업 메뉴 열기와 닫기를 제공한다. 창 대상 `menu.showContextMenu`의 좌표 팝업은 구현됐다.
+- [x] 트레이에서 지정 위치의 팝업 메뉴 열기와 닫기를 제공한다. `tray.popUpContextMenu({ position? })`가 `menu.setTrayMenu`로 연결한 메뉴를 물리 화면 좌표(생략하면 포인터)에 표시하고 선택은 `menu.clicked`(windowId null)로 전달한다(Electron `tray.popUpContextMenu`). 닫기는 호출의 AbortSignal 취소이며 `CANCELLED`로 끝난다. 별도 `closeContextMenu` 작업은 모달 루프 중 일반 요청을 처리할 수 없어 제공하지 않는다. 연결한 메뉴가 없으면 `INVALID_ARGUMENT`, 팝업 중 재호출은 `BUSY`이며 우클릭 팝업과 foreground 설정, WM_NULL 전송을 공유한다. 호출마다 다른 메뉴를 넘기는 `menu` 인자는 제공하지 않는다.
 - [ ] Windows balloon 표시, 제거와 show/click/closed 이벤트의 지원을 결정한다.
 - [ ] 트레이 자원 제거 뒤 숨긴 앱의 실행 유지와 종료 규칙을 정의한다.
 

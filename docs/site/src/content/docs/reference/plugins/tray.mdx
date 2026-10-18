@@ -29,6 +29,7 @@ const input = await tray.waitForEvent(null);
 | `tray.setIcon` | `{ ico: string \| null }` | `null` |
 | `tray.setClickBehavior` | `{ showOnLeftClick, menuOnRightClick }` | `null` |
 | `tray.focus` | `null` | OS가 요청을 수락하면 `true`, 거절하면 `false` |
+| `tray.popUpContextMenu` | `{ position?: { x, y } }` | 메뉴가 닫히면 `null` |
 | `tray.waitForEvent` | `null` | 다음 입력 payload |
 
 모든 결과는 Promise입니다. snapshot은 `{ id: "main", tooltip, icon, showOnLeftClick,
@@ -63,6 +64,37 @@ keyboard에서도 발생할 수 있는 context-menu는 button none으로 구분�
 position은 알림 처리 시 관측한 물리 포인터 좌표 `{ x, y }`이고 조회 실패는 null입니다.
 double-click은 두 번째 down 메시지를 나타내며 down과 up 알림이 함께 올 수 있습니다.
 연결한 뷰의 events에 tray.input을 허용하고 구독해야 화면에 전달합니다.
+
+## 지정 위치 팝업
+
+`tray.popUpContextMenu`는 `menu.setTrayMenu`로 연결한 메뉴를 앱이 정한 위치에 표시합니다
+(Electron `tray.popUpContextMenu`에 대응). 오른쪽 클릭 팝업과 같은 메뉴, 같은 선택 경로를 씁니다.
+
+```ts
+const popup = new AbortController();
+const shown = tray.popUpContextMenu({ position: { x: 320, y: 200 } }, { signal: popup.signal });
+// 다른 작업이나 이벤트에서 닫기
+popup.abort();
+await shown.catch(() => {});
+```
+
+- `position`은 화면 전체 기준의 물리 픽셀 좌표이며 `menu.showContextMenu`의 `x`, `y`와 같습니다.
+  음수 좌표도 허용하고, 생략하면 호출 시점의 포인터 위치를 씁니다. 화면 밖 좌표는 OS가 보정합니다.
+- 선택은 오른쪽 클릭 팝업과 같이 `menu.clicked`(`source: "tray"`, `windowId: null`)로 전달합니다.
+  이 함수의 결과는 선택한 항목을 담지 않으며, 선택하거나 Esc나 바깥 클릭으로 닫으면 `null`입니다.
+- 닫기는 호출의 AbortSignal 취소입니다. 별도 close 작업은 없습니다. 팝업을 기다리는 동안 같은
+  UI 스레드의 일반 작업은 네이티브 메뉴 루프가 끝날 때까지 대기하므로, 대기 중인 close 요청은
+  처리할 수 없기 때문입니다. 취소, 컨텍스트 폐기와 앱 종료는 팝업을 닫고 `CANCELLED`로 끝나며
+  `menu.clicked`를 보내지 않습니다.
+- 연결한 메뉴가 없으면 `INVALID_ARGUMENT`입니다. `setTrayMenu(null)`로 메뉴를 숨긴 상태와
+  호스트 기본 Open/Quit 메뉴를 쓰는 상태도 연결한 메뉴가 없는 경우입니다.
+  `setClickBehavior`의 `menuOnRightClick`은 이 호출에 영향을 주지 않습니다.
+- 팝업이 이미 열려 있으면 `BUSY`이며 중첩하지 않습니다. 팝업 중 오른쪽 클릭은 무시합니다.
+- 앱이 foreground가 아니어도 호출할 수 있으며, 트레이 메뉴는 role을 거부하므로 선택이 다른 앱에
+  입력으로 전달되지 않습니다. OS가 foreground 전환을 거절하면 바깥 클릭으로는 닫히지 않을 수 있으며,
+  이때도 Esc나 AbortSignal 취소로 닫습니다.
+
+## 입력 대기와 hover
 
 창 없는 백엔드는 waitForEvent를 사용합니다. 현재 대기자에게만 다음 알림을 전달하고 이전 입력은
 재생하지 않습니다. 대기는 최대 16개이며 초과하면 BUSY입니다. 호출 취소, 컨텍스트 폐기와 앱 종료는
@@ -108,7 +140,7 @@ Windows shell은 mouse move 알림만 보내고 벗어남은 알리지 않으므
 권한은 앱 전체의 설정된 트레이에 적용되므로 대상별 접근 규칙은 앱 명령에서 검사합니다.
 
 잘못된 입력과 지원하지 않는 ICO는 INVALID_ARGUMENT, 권한 없음은 PERMISSION_DENIED입니다.
-다른 플랫폼, 미등록 작업이나 설정된 트레이가 없는 앱의 변경 및 focus는 UNSUPPORTED입니다.
+다른 플랫폼, 미등록 작업이나 설정된 트레이가 없는 앱의 변경, focus 및 popUpContextMenu는 UNSUPPORTED입니다.
 native shell 변경 실패는 INTERNAL이며 이전 tooltip과 이미지 설정을 유지합니다.
 새 icon 적용 뒤 이전 HICON 정리에 실패해도 INTERNAL일 수 있습니다. 이 경우 새 icon 설정은
 이미 적용되어 있고 남은 이전 자원을 종료 정리에서 다시 해제합니다.

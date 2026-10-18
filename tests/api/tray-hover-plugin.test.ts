@@ -27,6 +27,7 @@ function harness() {
     setIcon: () => {},
     setClickBehavior: () => {},
     focus: () => true,
+    popUpContextMenu: () => {},
     setMenu: () => {},
     dispose: () => {},
   };
@@ -50,6 +51,7 @@ function harness() {
     setIcon: owner.setIcon,
     setClickBehavior: owner.setClickBehavior,
     focus: owner.focus,
+    popUpContextMenu: owner.popUpContextMenu,
     subscribe(receive) {
       listener = receive;
       return () => {
