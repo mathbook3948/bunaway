@@ -18,7 +18,8 @@ export default defineNativePlugin({
     macos: {
       initialize: createMacosStorage,
       dispose: disposeMacosStorage,
-      // Darwin rename/delete cannot preserve the checked object's identity.
+      // Darwin rename/delete cannot preserve the checked object's identity, and
+      // directorySize is implemented only as the Windows handle-pinned walk.
       operations: storageOperations,
     },
   },

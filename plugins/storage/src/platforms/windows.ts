@@ -102,8 +102,8 @@ export function createStorage(): WindowsStorage {
 }
 
 /** Release the bindings owned by one host instance. */
-export function disposeStorage(storage: WindowsStorage): void {
-  storage.dispose();
+export function disposeStorage(storage: WindowsStorage): Promise<void> {
+  return storage.dispose();
 }
 function wide(text: string): Buffer {
   return Buffer.from(`${text}\0`, "utf16le");
@@ -355,8 +355,8 @@ function yieldToEventLoop(): Promise<void> {
 /**
  * Run an action that may complete synchronously or asynchronously, then release its resources
  * exactly once. When the action fails, its error is rethrown after the release; if the release
- * fails too, both are reported together (the shared failWithCleanup policy), so a failing close
- * no longer hides the action's error code.
+ * fails too, the two errors are reported together as one INTERNAL error (the shared
+ * failWithCleanup policy).
  */
 function withRelease<T>(action: () => T, release: () => void): T {
   let result: T;
@@ -422,18 +422,43 @@ export class WindowsStorage
   private releaseRequested = false;
   /**
    * Release this instance's bindings; other storage adapters retain their resources.
-   * While a directory size scan is running, the release waits until the scan has closed its handles.
+   * While a directory size scan is running, the release waits until the scan has closed its
+   * handles. The returned promise settles once the bindings are closed, so callers that need
+   * every handle gone (such as a test removing its tree) await it.
    */
+  override dispose(): Promise<void> {
+    super.dispose();
+    if (this.bindingsClosed) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => this.drainWaiters.push(resolve));
+  }
   protected release(): void {
     this.releaseRequested = true;
     if (!this.activeScans) {
       this.closeBindings();
     }
   }
+  /** Callers of dispose waiting for running scans to finish closing their handles. */
+  private readonly drainWaiters: (() => void)[] = [];
   private closeBindings(): void {
+    if (this.bindingsClosed) {
+      return;
+    }
+    this.bindingsClosed = true;
     this.fileApi?.close();
     this.fileApi = null;
     this.api.close();
+  }
+  private bindingsClosed = false;
+  private finishScan(): void {
+    this.activeScans--;
+    if (this.releaseRequested && !this.activeScans) {
+      this.closeBindings();
+      for (const resolve of this.drainWaiters.splice(0)) {
+        resolve();
+      }
+    }
   }
   private check(value: number | bigint, message: string): void {
     if (!value) {
@@ -637,15 +662,13 @@ export class WindowsStorage
           return this.sumDirectory(handle, canonical, signal, limits);
         },
       );
+      // allowMissing is false, so a missing root throws; null cannot occur here.
       if (result === null) {
         throw new Error("Storage directory was not opened.");
       }
       return await result;
     } finally {
-      this.activeScans--;
-      if (this.releaseRequested && !this.activeScans) {
-        this.closeBindings();
-      }
+      this.finishScan();
     }
   }
 
