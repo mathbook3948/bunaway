@@ -1,10 +1,18 @@
 import { dlopen, ptr } from "bun:ffi";
+import { cpus } from "node:os";
 import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
-import type { PowerBlockerType } from "#power/contract";
+import { MAX_LOGICAL_PROCESSORS, type PowerBlockerType } from "#power/contract";
 import { PowerRequestHandles } from "#power/platforms/windows-request-handles";
-import { idleSeconds, powerStatus } from "#power/platforms/windows-status";
+import {
+  cpuSpeedLimit,
+  idleSeconds,
+  PROCESSOR_POWER_INFORMATION_SIZE,
+  powerStatus,
+} from "#power/platforms/windows-status";
 
+/** CallNtPowerInformation level that returns one PROCESSOR_POWER_INFORMATION per logical processor. */
+const PROCESSOR_INFORMATION_LEVEL = 11;
 const POWER_REQUEST_CONTEXT_SIMPLE_STRING = 1;
 const REASON_CONTEXT_SIZE = 32;
 const INVALID_HANDLE_VALUE = 0xffffffffffffffffn;
@@ -59,10 +67,31 @@ export function createPower() {
         returns: "i32",
       },
     });
+  const loadPowrprof = () =>
+    dlopen("powrprof.dll", {
+      CallNtPowerInformation: {
+        args: [
+          "i32",
+          "ptr",
+          "u32",
+          "ptr",
+          "u32",
+        ],
+        returns: "i32",
+      },
+    });
   let user: ReturnType<typeof loadUser>;
   try {
     user = loadUser();
   } catch (error) {
+    kernel.close();
+    throw error;
+  }
+  let powrprof: ReturnType<typeof loadPowrprof>;
+  try {
+    powrprof = loadPowrprof();
+  } catch (error) {
+    user.close();
     kernel.close();
     throw error;
   }
@@ -115,6 +144,37 @@ export function createPower() {
       }
       return powerStatus(data);
     },
+    cpuSpeedLimit() {
+      active();
+      // The output holds one entry per logical processor, so the buffer follows the processor count.
+      const count = cpus().length;
+      if (count < 1 || count > MAX_LOGICAL_PROCESSORS) {
+        failure("Windows logical processor count is out of range.");
+      }
+      const size = count * PROCESSOR_POWER_INFORMATION_SIZE;
+      const data = Buffer.alloc(size);
+      const status = powrprof.symbols.CallNtPowerInformation(
+        PROCESSOR_INFORMATION_LEVEL,
+        null,
+        0,
+        ptr(data),
+        size,
+      );
+      if (status < 0) {
+        failure(
+          "Windows processor power query failed (NTSTATUS 0x" +
+            (status >>> 0).toString(16) +
+            ").",
+        );
+      }
+      try {
+        return cpuSpeedLimit(data);
+      } catch {
+        return failure(
+          "Windows processor power query returned no usable data.",
+        );
+      }
+    },
     idle() {
       active();
       const info = Buffer.alloc(8);
@@ -130,6 +190,7 @@ export function createPower() {
       }
       requests.dispose();
       disposed = true;
+      powrprof.close();
       user.close();
       kernel.close();
     },

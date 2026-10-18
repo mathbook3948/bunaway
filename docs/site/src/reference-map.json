@@ -1571,6 +1571,7 @@
     ],
     "reference/plugins/power": [
       "power.getStatus",
+      "power.getCpuSpeedLimit",
       "power.getIdleTime",
       "power.getIdleState",
       "power.startBlocker",

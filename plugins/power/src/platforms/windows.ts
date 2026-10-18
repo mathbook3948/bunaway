@@ -73,6 +73,11 @@ export class WindowsPower {
     };
   }
 
+  getCpuSpeedLimit() {
+    this.active();
+    return this.native.cpuSpeedLimit();
+  }
+
   getIdleTime() {
     this.active();
     return this.native.idle();

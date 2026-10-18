@@ -19,6 +19,8 @@ export default defineNativePlugin(
   (api) => ({
     ...api,
     getStatus: (options?: NativeInvokeOptions) => api.getStatus(null, options),
+    getCpuSpeedLimit: (options?: NativeInvokeOptions) =>
+      api.getCpuSpeedLimit(null, options),
     getIdleTime: (options?: NativeInvokeOptions) =>
       api.getIdleTime(null, options),
     listBlockers: (options?: NativeInvokeOptions) =>
@@ -29,5 +31,6 @@ export default defineNativePlugin(
 export type {
   PowerBlocker,
   PowerBlockerType,
+  PowerCpuSpeedLimit,
   PowerStatus,
 } from "#power/contract";
