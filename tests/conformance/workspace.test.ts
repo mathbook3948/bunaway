@@ -16,7 +16,13 @@ type FrameworkRelease = {
 };
 
 async function manifest(path: string): Promise<PackageManifest> {
-  return (await Bun.file(resolve(repository, path)).json()) as PackageManifest;
+  const file = Bun.file(resolve(repository, path));
+  if (!(await file.exists())) {
+    throw new Error(
+      `${path} is missing: every workspace directory is a package`,
+    );
+  }
+  return (await file.json()) as PackageManifest;
 }
 
 async function workspaceDirectories(parent: string): Promise<string[]> {
@@ -40,20 +46,14 @@ async function workspaceNames(parent: string): Promise<Record<string, string>> {
   return names;
 }
 
-function sorted(record: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(record).sort(([a], [b]) => a.localeCompare(b)),
-  );
-}
-
 test("framework.json lists exactly the package and plugin workspaces", async () => {
   const release = (await Bun.file(
     resolve(repository, "framework.json"),
   ).json()) as FrameworkRelease;
   // A plugin missing here is silently skipped by the plugin build, the framework pack and
   // the documentation reference check.
-  expect(sorted(release.plugins)).toEqual(await workspaceNames("plugins"));
-  expect(sorted(release.packages)).toEqual(await workspaceNames("packages"));
+  expect(release.plugins).toEqual(await workspaceNames("plugins"));
+  expect(release.packages).toEqual(await workspaceNames("packages"));
 });
 
 test("the root manifest depends on every package and plugin workspace and nothing else", async () => {

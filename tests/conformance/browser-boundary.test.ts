@@ -20,7 +20,9 @@ const ABSENT_IN_WEBVIEW = {
 };
 /**
  * `define` rewrites bare identifiers only, so these spellings would still reach the Bun globals
- * in the child while failing in a WebView. The bundle text must not contain them.
+ * in the child. The text search is a heuristic: it also rejects guarded uses such as
+ * `typeof globalThis.Buffer`, and misses `self.Buffer` or `window.process`. The lint override
+ * on the neutral modules is the real guard; this catches what a bundled dependency brings in.
  */
 const GLOBAL_ESCAPES = [
   "globalThis.Buffer",
@@ -39,10 +41,16 @@ type FrameworkRelease = {
  */
 type BrowserPackage = {
   name: string;
+  /** The prebuilt file the entry resolves to, when a build step must have produced it. */
+  build?: string;
   probe?: string;
 };
 
-/** The client, the neutral entry of each plugin, and the shared ICO parser with a sample ICO. */
+/**
+ * The client, the shared ICO parser with a sample ICO, and each plugin's neutral entry. A plugin
+ * resolves to its `plugins:build` output, `plugins/<name>/dist/index.js`, which is where the
+ * platform modules are already replaced by stubs; a stale build is what gets checked.
+ */
 async function browserPackages(): Promise<BrowserPackage[]> {
   const release = (await Bun.file(
     resolve(repository, "framework.json"),
@@ -56,16 +64,20 @@ async function browserPackages(): Promise<BrowserPackage[]> {
       name: "@bunaway/plugin-api/native",
       probe: `if (!loaded.parseNativeIco(${JSON.stringify(ico)})) { throw new Error("parseNativeIco rejected a valid ICO"); }`,
     },
-    ...Object.values(release.plugins).map((name) => ({
+    ...Object.entries(release.plugins).map(([directory, name]) => ({
       name,
+      build: `plugins/${directory}/dist/index.js`,
     })),
   ];
 }
 
 /** Why the child failed: its first error line, or the signal when the deadline killed it. */
 function loadFailure(load: ReturnType<typeof Bun.spawnSync>): string {
+  if (load.exitedDueToTimeout) {
+    return `still evaluating after ${LOAD_TIMEOUT_MS} ms`;
+  }
   if (load.exitCode === null) {
-    return `killed by ${load.signalCode ?? "timeout"} after ${LOAD_TIMEOUT_MS} ms`;
+    return `killed by ${load.signalCode}`;
   }
   const lines = (load.stderr?.toString() ?? "").trim().split("\n");
   const error = Math.max(
@@ -76,7 +88,7 @@ function loadFailure(load: ReturnType<typeof Bun.spawnSync>): string {
 }
 
 test(
-  "every plugin, the client and the ICO parser work in a bundle without Buffer, Bun or process",
+  "every plugin and the client load, and the ICO parser runs, without Buffer, Bun or process",
   async () => {
     // Entries must resolve workspace packages, so they live under the repository, not tmpdir.
     await mkdir(resolve(repository, "build"), {
@@ -87,8 +99,18 @@ test(
     );
     const failures: string[] = [];
     try {
-      for (const { name, probe } of await browserPackages()) {
-        const base = resolve(directory, name.replaceAll("/", "-"));
+      for (const { name, build: prebuilt, probe } of await browserPackages()) {
+        if (
+          prebuilt &&
+          !(await Bun.file(resolve(repository, prebuilt)).exists())
+        ) {
+          failures.push(
+            `${name}: ${prebuilt} is missing; run bun run plugins:build`,
+          );
+          continue;
+        }
+        const basename = name.replaceAll("/", "-");
+        const base = resolve(directory, basename);
         await Bun.write(
           `${base}.ts`,
           `export * from ${JSON.stringify(name)};\n`,
@@ -116,7 +138,7 @@ test(
           [
             process.execPath,
             "-e",
-            `const loaded = await import(${JSON.stringify(`${base}.js`)}); ${probe ?? ""}`,
+            `const loaded = await import(${JSON.stringify(`./${basename}.js`)}); ${probe ?? ""}`,
           ],
           {
             cwd: directory,

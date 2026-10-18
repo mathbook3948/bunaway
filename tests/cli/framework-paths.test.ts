@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readdir, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { frameworkPaths } from "#cli/distribution";
 
@@ -19,28 +19,42 @@ const unshipped = new Set([
   "native/ios/.gitkeep",
 ]);
 
-/** Every file below `directory`, as repository-relative paths with forward slashes. */
-async function filesBelow(directory: string): Promise<string[]> {
-  const paths: string[] = [];
-  const entries = await readdir(resolve(repository, directory), {
-    withFileTypes: true,
-  });
-  for (const entry of entries) {
-    const path = `${directory}/${entry.name}`;
-    if (entry.isDirectory()) {
-      paths.push(...(await filesBelow(path)));
-    } else {
-      paths.push(path);
-    }
+/**
+ * Every source file below `directory` as Git sees it: tracked and untracked files, but not
+ * ignored build output such as `vendor/`, which a checkout never ships.
+ */
+function filesBelow(directory: string): string[] {
+  const listing = Bun.spawnSync(
+    [
+      "git",
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+      "--",
+      directory,
+    ],
+    {
+      cwd: repository,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  if (listing.exitCode !== 0) {
+    throw new Error(`git ls-files failed: ${listing.stderr.toString()}`);
   }
-  return paths;
+  return listing.stdout
+    .toString()
+    .split("\n")
+    .filter((path) => path.length > 0)
+    .map((path) => path.replaceAll("\\", "/"));
 }
 
 test("every native host source file is listed in the framework distribution or marked unshipped", async () => {
   const listed = new Set<string>(frameworkPaths);
   const missing: string[] = [];
   for (const directory of shippedDirectories) {
-    for (const path of await filesBelow(directory)) {
+    for (const path of filesBelow(directory)) {
       if (!listed.has(path) && !unshipped.has(path)) {
         missing.push(path);
       }

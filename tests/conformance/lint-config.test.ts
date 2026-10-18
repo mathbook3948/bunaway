@@ -91,6 +91,8 @@ test(
     // An extending config appends an override, and a later override wins, so this turns the
     // rule back on for exactly the exempted files without editing the repository config. The
     // config must sit inside the repository for its relative `extends` and the VCS root.
+    // `--only` alone also re-enables an "off" rule, but with whatever options the base config
+    // holds; the explicit override pins the limit the ratchet is meant to check.
     await mkdir(resolve(repository, "build"), {
       recursive: true,
     });
@@ -144,7 +146,14 @@ test(
           timeout: LINT_TIMEOUT_MS,
         },
       );
-      const report = JSON.parse(lint.stdout.toString()) as {
+      // Biome exits 1 when it reports diagnostics, so only an empty report means it failed.
+      const stdout = lint.stdout?.toString() ?? "";
+      if (lint.exitCode === null || stdout.length === 0) {
+        throw new Error(
+          `Biome did not report: exit ${lint.exitCode}, ${lint.stderr?.toString() ?? ""}`,
+        );
+      }
+      const report = JSON.parse(stdout) as {
         diagnostics: BiomeDiagnostic[];
       };
       const violating = new Set(
@@ -167,7 +176,10 @@ test(
   LINT_TIMEOUT_MS,
 );
 
-/** Settings tsconfig.base.json owns; a workspace tsconfig must not restate or weaken them. */
+/**
+ * Strictness and module settings tsconfig.base.json owns; a workspace tsconfig must not restate
+ * or weaken them. `lib` and `types` stay overridable for browser-only packages.
+ */
 const BASE_OWNED_OPTIONS = [
   "strict",
   "noUncheckedIndexedAccess",
@@ -206,13 +218,11 @@ test("every workspace tsconfig extends the base and leaves its strictness alone"
       resolve(repository, path),
     ).json()) as Tsconfig;
     const base = resolve(repository, path, "..", config.extends ?? "");
-    expect(`${path} extends ${base}`).toBe(
-      `${path} extends ${resolve(repository, "tsconfig.base.json")}`,
-    );
+    expect(base, path).toBe(resolve(repository, "tsconfig.base.json"));
     const restated = Object.keys(config.compilerOptions ?? {}).filter((key) =>
       BASE_OWNED_OPTIONS.includes(key),
     );
-    expect(`${path}: ${restated.join(", ")}`).toBe(`${path}: `);
+    expect(restated, path).toEqual([]);
   }
 });
 
