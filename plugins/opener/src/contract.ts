@@ -46,7 +46,6 @@ export function validateOpenerInput(operation: string, input: JsonValue) {
   try {
     switch (operation) {
       case "opener.openUrl":
-        return urlInput.parse(validateValue({}, input));
       case "opener.getUrlHandler":
         return urlInput.parse(validateValue({}, input));
       case "opener.openFile":

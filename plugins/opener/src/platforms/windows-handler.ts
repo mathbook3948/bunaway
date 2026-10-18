@@ -8,6 +8,8 @@ const ASSOCF_IS_PROTOCOL = 0x1000;
 const ASSOCSTR_EXECUTABLE = 2;
 const ASSOCSTR_FRIENDLYAPPNAME = 4;
 const HRESULT_NO_ASSOCIATION = 0x80070483;
+// A registered handler whose executable no longer exists reports file-not-found; both mean no usable handler.
+const HRESULT_FILE_NOT_FOUND = 0x80070002;
 const HRESULT_MORE_DATA = 0x800700ea;
 const HRESULT_POINTER = 0x80004003;
 const CHARACTER_BYTES = 2;
@@ -33,6 +35,10 @@ export type UrlHandler = {
   name: string;
   path: string;
 };
+
+function isNoHandler(code: number): boolean {
+  return code === HRESULT_NO_ASSOCIATION || code === HRESULT_FILE_NOT_FOUND;
+}
 
 function failed(reason: string): BunawayError {
   return new BunawayError({
@@ -100,7 +106,7 @@ export function createUrlHandlerQuery() {
     const association = wide(scheme);
     for (let attempt = 0; attempt < MAX_QUERY_ATTEMPTS; attempt++) {
       const sized = call(association, kind, null, 0);
-      if (sized.result >>> 0 === HRESULT_NO_ASSOCIATION) {
+      if (isNoHandler(sized.result >>> 0)) {
         return null;
       }
       if (
@@ -113,7 +119,7 @@ export function createUrlHandlerQuery() {
       const output = Buffer.alloc(sized.units * CHARACTER_BYTES);
       const read = call(association, kind, output, sized.units);
       const code = read.result >>> 0;
-      if (code === HRESULT_NO_ASSOCIATION) {
+      if (isNoHandler(code)) {
         return null;
       }
       if (code === HRESULT_MORE_DATA || code === HRESULT_POINTER) {

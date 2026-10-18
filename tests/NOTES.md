@@ -788,6 +788,10 @@ DPI 변경과 전체화면 진입 및 종료 뒤의 마지막 8개 상태를 출
 실제 앱과 대상 파일 검사, 링크 거부와 핸들 정리를 확인한다. `windows-opener-job.test.ts`는
 Explorer와 compiled helper로 파일 및 HTTP/HTTPS URL 하나의 argv 보존과 Job 밖의 실행,
 앱 종료 뒤 helper 생존을 확인한다. 두 검사와 기존 opener STA 검사는 `host:windows`에도 포함한다.
+`api/opener-url-handler.test.ts`는 `opener.getUrlHandler`의 strict Zod 입력, 독립 권한과 호출 컨텍스트를
+확인한다. Windows의 `lifecycle/windows-opener-url-handler.test.ts`는 https 조회가 `null` 또는
+`{ name, path }` 구조인지, 연결이 없는 scheme이 `null`인지, 잘못된 URL 거부와 dispose 뒤 호출 취소를
+`host:windows`에서 확인한다. 처리 앱의 종류는 러너마다 다르므로 값은 검증하지 않는다.
 `lifecycle/windows-opener-recent.test.ts`는 `opener.addRecentDocument`와 `opener.clearRecentDocuments`의
 입력 거부와 dispose를 항상 확인한다. 사용자의 셸 최근 항목 전체를 지우는 실제 add와 clear는
 `BUNAWAY_OPENER_RECENT_MUTATE=1` 또는 GitHub 호스팅 러너(`RUNNER_ENVIRONMENT=github-hosted`)에서만
