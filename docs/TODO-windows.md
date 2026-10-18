@@ -793,9 +793,21 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   검사한 핸들의 bounded enumeration과 삭제, 링크 미추적 및 거부, 작업별 권한을
   [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)에 정의한다.
 - [ ] 재귀 목록, 큰 목록 pagination과 재귀 삭제를 제공한다.
-- [ ] 파일 크기 조회와 별도로 디렉터리 재귀 용량을 바이트 단위로 계산한다. [T-fs-live]의 `size`를 참고한다.
-  링크 처리, 접근 거부와 탐색 중 변경의 오류 규칙, 큰 트리의 취소와 비용을 정의한다.
-  빈 디렉터리, 중첩 파일 합계, 링크, 부분 실패와 취소 시 자원 정리를 검증한다.
+- [x] 파일 크기 조회와 별도로 디렉터리 재귀 용량을 바이트 단위로 계산한다.
+  Windows의 `storage.directorySize({ path })`는 `{ bytes, files, directories }`를 반환한다.
+  루트는 directories에 세지 않고, 크기는 일반 파일의 논리 크기(EndOfFile) 합이다. 하드링크는 이름마다 더한다.
+  symlink, junction 같은 이름 대리자 reparse point는 목록 작업처럼 따라가지 않고 더하지 않는다.
+  클라우드 placeholder, 중복 제거와 WOF 같은 비대리자 reparse 파일은 논리 크기를 더하고,
+  클라우드 폴더 같은 비대리자 reparse 디렉터리를 만나면 과소 집계 대신 `UNSUPPORTED`로 실패한다.
+  삭제 대기 중인 하위 디렉터리는 사라진 항목처럼 건너뛴다.
+  일부 하위 항목의 접근 거부와 열기 실패는 과소 집계 대신 작업 전체를 실패시킨다.
+  탐색 중 사라진 항목은 건너뛰고 스냅샷 일관성은 보장하지 않는다.
+  방문 항목 100,000개와 깊이 64를 넘으면 `INVALID_ARGUMENT`이고,
+  반복 방식으로 현재 경로의 디렉터리 핸들만 열어 두며 일정 단계마다 이벤트 루프에 양보해 시작 후에도 취소와 기한을 처리하고
+  성공, 실패와 취소에서 핸들을 닫는다. macOS는 `UNSUPPORTED`이고 작업별 권한을 따로 허용한다.
+  Tauri fs의 [`size`][T-fs-live]는 파일 metadata 크기 조회이며, 디렉터리 재귀 크기 계산에서
+  핸들 고정과 링크 처리 계약은 이 구현이 정의한다.
+  [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)을 따른다.
 - [x] Windows의 4 MiB 이하 일반 파일 복사와 같은 parent의 파일 및 디렉터리 rename를 제공한다.
   양쪽 parent와 source 핸들을 고정하고 기존 destination을 대체하지 않는다.
   [전송 계약](./site/src/content/docs/reference/host/storage-transfers.mdx)을 따른다.

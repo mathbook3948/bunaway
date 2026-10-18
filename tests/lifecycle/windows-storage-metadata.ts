@@ -68,6 +68,7 @@ const policy: Policy = {
         "plugin.storage.readDirectory",
         "plugin.storage.createDirectory",
         "plugin.storage.remove",
+        "plugin.storage.directorySize",
         "plugin.storage.writeText",
         "test.report",
         "test.report-confirmed",
@@ -89,6 +90,7 @@ const policy: Policy = {
             "storage.readDirectory",
             "storage.createDirectory",
             "storage.remove",
+            "storage.directorySize",
           ],
         ],
       },
@@ -110,6 +112,7 @@ const policy: Policy = {
         "storage.readDirectory",
         "storage.createDirectory",
         "storage.remove",
+        "storage.directorySize",
       ],
     ],
   },
@@ -234,6 +237,13 @@ if (!process.argv.includes("--child")) {
       assert.equal(report.deniedWrite, true);
 
       assert.equal(report.directoryOperations, true);
+      // The Worker path returns the recursive totals and rejects a file as the root.
+      assert.deepEqual(report.directorySize, {
+        bytes: Buffer.byteLength(unicodeText),
+        files: 1,
+        directories: 0,
+      });
+      assert.equal(report.directorySizeFileCode, "INVALID_ARGUMENT");
       assert.equal(report.deniedTextWrite, true);
       assert.deepEqual(report.outside, [
         false,

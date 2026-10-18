@@ -29,8 +29,8 @@ const dataPath = (path: string) => `${resolve(root, "data")}/${path}`;
 const temporaryPath = (path: string) => `${resolve(root, "temp")}/${path}`;
 const storage = new WindowsStorage();
 const otherStorage = new WindowsStorage();
-otherStorage.dispose();
-otherStorage.dispose();
+await otherStorage.dispose();
+await otherStorage.dispose();
 assert.throws(
   () =>
     execute(otherStorage, "storage.exists", {
@@ -1399,7 +1399,7 @@ async function main(): Promise<void> {
   } finally {
     // Release the FFI bindings before deleting the fixture tree.
     api.close();
-    storage.dispose();
+    await storage.dispose();
     await rm(root, {
       recursive: true,
       force: true,

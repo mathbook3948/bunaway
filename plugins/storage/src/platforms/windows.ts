@@ -1,18 +1,27 @@
 import { dlopen, ptr } from "bun:ffi";
-import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { win32 } from "node:path";
-import { BunawayError } from "@bunaway/plugin";
+import { attemptAll, BunawayError, failWithCleanup } from "@bunaway/plugin";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import {
   MAX_DIRECTORY_ENTRIES,
+  MAX_DIRECTORY_SIZE_DEPTH,
+  MAX_DIRECTORY_SIZE_ENTRIES,
   type StorageDirectoryCreate,
   type StorageDirectoryEntry,
+  type StorageDirectorySize,
   type StorageLocation,
   type StorageMetadata,
   type StorageTransfer,
   type WindowsStorageInstance,
 } from "#storage/contract";
 import { MAX_STORAGE_FILE_BYTES, StorageFiles } from "#storage/platforms/files";
-import { directoryEntries } from "#storage/platforms/windows-directory-entries";
+import {
+  directoryEntries,
+  fileSizeBytes,
+  type ScannedDirectoryEntry,
+  scanDirectoryEntries,
+  scanRole,
+} from "#storage/platforms/windows-directory-entries";
 
 const MAX_STORAGE_PATH_SEGMENT_BYTES = 255;
 const MAX_IO_CHUNK_BYTES = 1 << 20;
@@ -32,6 +41,7 @@ const ERROR_PATH_NOT_FOUND = 3;
 const ERROR_ACCESS_DENIED = 5;
 const ERROR_ALREADY_EXISTS = 183;
 const ERROR_NO_MORE_FILES = 18;
+const STATUS_DELETE_PENDING = 0xc0000056;
 const ERROR_DIR_NOT_EMPTY = 145;
 const FILE_ID_BOTH_DIRECTORY_INFO = 10;
 const FILE_ID_BOTH_DIRECTORY_RESTART_INFO = 11;
@@ -93,8 +103,8 @@ export function createStorage(): WindowsStorage {
 }
 
 /** Release the bindings owned by one host instance. */
-export function disposeStorage(storage: WindowsStorage): void {
-  storage.dispose();
+export function disposeStorage(storage: WindowsStorage): Promise<void> {
+  return storage.dispose();
 }
 function wide(text: string): Buffer {
   return Buffer.from(`${text}\0`, "utf16le");
@@ -284,6 +294,8 @@ type TargetOptions = {
   createParents: boolean;
   /** Create this target under pinned parents before its checked OPEN_EXISTING. */
   createDirectory?: boolean;
+  /** Sharing of the pinned parent directories; read-only sharing when omitted. */
+  parentShare?: number;
 };
 const METADATA_TARGET_OPTIONS: TargetOptions = {
   access: FILE_READ_ATTRIBUTES | FILE_READ_DATA,
@@ -307,17 +319,176 @@ function transferOptions(
     createParents: false,
   };
 }
+/** Cost bounds of one directorySize call; only tests pass values other than the contract defaults. */
+type DirectorySizeLimits = {
+  entries: number;
+  depth: number;
+};
+const DIRECTORY_SIZE_LIMITS: DirectorySizeLimits = {
+  entries: MAX_DIRECTORY_SIZE_ENTRIES,
+  depth: MAX_DIRECTORY_SIZE_DEPTH,
+};
+/** One open directory on the current walk path and the child directories still to visit. */
+type DirectoryScanFrame = {
+  handle: bigint;
+  path: string;
+  restart: boolean;
+  pending: string[];
+};
+/** Running totals of one scan; visited counts every listed child against the entry limit. */
+type DirectoryScanTotals = {
+  bytes: bigint;
+  files: number;
+  directories: number;
+  visited: number;
+};
+function directorySizeLimitExceeded(): BunawayError {
+  return new BunawayError({
+    code: "INVALID_ARGUMENT",
+    message: "Storage directory exceeds the size scan limit.",
+  });
+}
+const STORAGE_CLEANUP_MESSAGE = "Storage operation failed and cleanup failed.";
+/** Walk steps (entry batches or directory opens) between event loop yields. */
+const DIRECTORY_SIZE_YIELD_STEPS = 32;
+/** Let queued host messages, such as cancellation, run before the scan continues. */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+/**
+ * Run an action that may complete synchronously or asynchronously, then release its resources
+ * exactly once. When the action fails, its error is rethrown after the release; if the release
+ * fails too, the two errors are reported together as one INTERNAL error (the shared
+ * failWithCleanup policy).
+ */
+function withRelease<T>(action: () => T, release: () => void): T {
+  let result: T;
+  try {
+    result = action();
+  } catch (error) {
+    return failWithCleanup(error, release, STORAGE_CLEANUP_MESSAGE);
+  }
+  if (result instanceof Promise) {
+    // T is the promise's own type, so the chained promise has the same shape.
+    return result.then(
+      (value) => {
+        release();
+        return value;
+      },
+      (error: unknown) =>
+        failWithCleanup(error, release, STORAGE_CLEANUP_MESSAGE),
+    ) as T;
+  }
+  release();
+  return result;
+}
+/**
+ * Add sized files to the totals, queue plain child directories and skip name surrogate links,
+ * all bounded by the entry limit. Reparse point files that are not name surrogates, such as cloud
+ * placeholders and deduplicated files, are data files with a logical size and are counted.
+ * A non-surrogate reparse point directory fails the scan rather than being under-counted.
+ */
+function tallyEntries(
+  frame: DirectoryScanFrame,
+  entries: ScannedDirectoryEntry[],
+  totals: DirectoryScanTotals,
+  limits: DirectorySizeLimits,
+): void {
+  for (const entry of entries) {
+    if (++totals.visited > limits.entries) {
+      throw directorySizeLimitExceeded();
+    }
+    const role = scanRole(entry);
+    if (role === "file") {
+      totals.files++;
+      totals.bytes += fileSizeBytes(entry);
+    } else if (role === "directory") {
+      frame.pending.push(entry.name);
+    } else if (role === "opaque-directory") {
+      // Cloud folders and similar directories hold data this scan cannot enter safely.
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message:
+          "Storage directory contains a reparse point directory that cannot be totalled.",
+      });
+    }
+  }
+}
 export class WindowsStorage
   extends StorageFiles
   implements WindowsStorageInstance
 {
   private readonly api = createBindings();
   private fileApi: ReturnType<typeof createFileBindings> | null = null;
-  /** Release this instance's bindings; other storage adapters retain their resources. */
+  /** Directory size scans still running; they need live bindings to close their handles. */
+  private activeScans = 0;
+  private releaseRequested = false;
+  /**
+   * Release this instance's bindings; other storage adapters retain their resources.
+   * While a directory size scan is running, the release waits until the scan has closed its
+   * handles. The returned promise settles once the bindings are closed, so callers that need
+   * every handle gone (such as a test removing its tree) await it.
+   */
+  override dispose(): Promise<void> {
+    try {
+      super.dispose();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    if (!this.activeScans) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) =>
+      this.drainWaiters.push({
+        resolve,
+        reject,
+      }),
+    );
+  }
   protected release(): void {
-    this.fileApi?.close();
-    this.fileApi = null;
-    this.api.close();
+    this.releaseRequested = true;
+    if (!this.activeScans) {
+      this.closeBindings();
+    }
+  }
+  /** Callers of dispose waiting for running scans to finish closing their handles. */
+  private readonly drainWaiters: {
+    resolve: () => void;
+    reject: (error: unknown) => void;
+  }[] = [];
+  /** Each binding is marked closed only after its close succeeded, so a failed release can be retried. */
+  private apiClosed = false;
+  private closeBindings(): void {
+    if (this.fileApi) {
+      this.fileApi.close();
+      this.fileApi = null;
+    }
+    if (!this.apiClosed) {
+      this.api.close();
+      this.apiClosed = true;
+    }
+  }
+  /**
+   * Account for one finished scan. The last scan after disposal releases the bindings; a release
+   * failure goes to the dispose callers and never replaces the scan's own result.
+   */
+  private finishScan(): void {
+    this.activeScans--;
+    if (!this.releaseRequested || this.activeScans) {
+      return;
+    }
+    const waiters = this.drainWaiters.splice(0);
+    try {
+      this.closeBindings();
+    } catch (error) {
+      for (const waiter of waiters) {
+        waiter.reject(error);
+      }
+      return;
+    }
+    for (const waiter of waiters) {
+      waiter.resolve();
+    }
   }
   private check(value: number | bigint, message: string): void {
     if (!value) {
@@ -339,6 +510,13 @@ export class WindowsStorage
   private close(handle: bigint) {
     this.check(this.api.symbols.CloseHandle(handle), "CloseHandle failed");
   }
+  /** Attempt every close even after a failure, then report all failures together. */
+  private closeAll(handles: bigint[]): void {
+    attemptAll(
+      handles.map((handle) => () => this.close(handle)),
+      "Storage handle cleanup failed.",
+    );
+  }
   /** Preserve synchronous CreateFileW access/sharing semantics while capturing failure as NTSTATUS. */
   private open(
     path: string,
@@ -347,6 +525,8 @@ export class WindowsStorage
     disposition: FileDisposition,
     flags: number,
     allowMissing = false,
+    /** Treat a target whose deletion is pending like a missing one when allowMissing is set. */
+    skipDeletePending = false,
   ): bigint {
     this.fileApi ??= createFileBindings();
     const api = this.fileApi;
@@ -399,6 +579,14 @@ export class WindowsStorage
       api.symbols.RtlFreeUnicodeString(name);
     }
     if (status < 0) {
+      // STATUS_DELETE_PENDING would otherwise surface as ERROR_ACCESS_DENIED.
+      if (
+        allowMissing &&
+        skipDeletePending &&
+        status >>> 0 === STATUS_DELETE_PENDING
+      ) {
+        return 0n;
+      }
       const code = api.symbols.RtlNtStatusToDosError(status >>> 0);
       if (code === ERROR_FILE_NOT_FOUND || code === ERROR_PATH_NOT_FOUND) {
         if (allowMissing) {
@@ -425,8 +613,11 @@ export class WindowsStorage
     );
     return info;
   }
-  private canonical(handle: bigint) {
-    const text = Buffer.alloc(FINAL_PATH_BUFFER_CHARS * WCHAR_BYTES);
+  /** Callers that check many handles may pass one reusable buffer; the result is a copy. */
+  private canonical(
+    handle: bigint,
+    text: Buffer = Buffer.alloc(FINAL_PATH_BUFFER_CHARS * WCHAR_BYTES),
+  ) {
     const length = this.api.symbols.GetFinalPathNameByHandleW(
       handle,
       ptr(text),
@@ -472,6 +663,57 @@ export class WindowsStorage
       throw new Error("Storage directory was not opened.");
     }
     return result;
+  }
+
+  /**
+   * Total the logical file sizes below one checked directory. Symlinks, junctions and reparse
+   * point directories are neither followed nor counted, hardlinked files count once per name, and
+   * sizes come from the directory listing, so concurrent changes are not a snapshot. Any access or
+   * open failure below the root fails the whole operation instead of under-reporting.
+   * The scan yields to the event loop periodically so cancellation and deadlines take effect while
+   * it runs; every handle is closed on success, failure and cancellation.
+   */
+  directorySize(
+    input: StorageLocation,
+    signal?: AbortSignal,
+  ): Promise<StorageDirectorySize> {
+    return this.directorySizeWithin(input, signal, DIRECTORY_SIZE_LIMITS);
+  }
+
+  /**
+   * The scan behind directorySize with explicit cost bounds. It is public only so tests can lower
+   * the bounds; the operation map exposes directorySize, which always uses the contract limits,
+   * so applications cannot choose their own bounds.
+   */
+  async directorySizeWithin(
+    input: StorageLocation,
+    signal: AbortSignal | undefined,
+    limits: DirectorySizeLimits,
+  ): Promise<StorageDirectorySize> {
+    this.requireOpen();
+    this.activeScans++;
+    try {
+      const result = this.withFile(
+        input.path,
+        {
+          ...METADATA_TARGET_OPTIONS,
+          allowMissing: false,
+          // The walk can be long, so other processes may still rename or move within the parents.
+          parentShare: FILE_SHARE_READ | FILE_SHARE_WRITE,
+        },
+        ({ handle, info, canonical }) => {
+          this.requireDirectory(info);
+          return this.sumDirectory(handle, canonical, signal, limits);
+        },
+      );
+      // allowMissing is false, so a missing root throws; null cannot occur here.
+      if (result === null) {
+        throw new Error("Storage directory was not opened.");
+      }
+      return await result;
+    } finally {
+      this.finishScan();
+    }
   }
 
   /** Create the selected directory, optionally preparing its parents under pinned handles. */
@@ -598,68 +840,76 @@ export class WindowsStorage
     );
     return null;
   }
-  /** Pin and inspect every parent, including the volume, until the owned action finishes. */
+  /**
+   * Pin and inspect every parent, including the volume, until the owned action finishes.
+   * Parents are opened with parentShare, read sharing only by default; delete sharing is never granted.
+   */
   private withParent<T>(
     path: string,
     createParents: boolean,
     allowMissing: boolean,
     action: (parent: { target: string }) => T,
+    parentShare = FILE_SHARE_READ,
   ): T | null {
     this.requireOpen();
     const { volume, segments } = selectedPath(path);
     const parents: bigint[] = [];
-    try {
-      let root = "";
-      let dir = volume;
-      // Attribute-only handles ignore sharing restrictions; directory data access pins parents.
-      for (let index = 0; index < segments.length; index++) {
-        if (index) {
-          dir += `\\${segments[index - 1]}`;
+    return withRelease(
+      () => {
+        let root = "";
+        let dir = volume;
+        // Attribute-only handles ignore sharing restrictions; directory data access pins parents.
+        for (let index = 0; index < segments.length; index++) {
+          if (index) {
+            dir += `\\${segments[index - 1]}`;
+            if (
+              createParents &&
+              !this.api.symbols.CreateDirectoryW(ptr(wide(dir)), null) &&
+              this.api.symbols.GetLastError() !== ERROR_ALREADY_EXISTS
+            ) {
+              this.fail("Storage directory creation failed");
+            }
+          }
+          const parent = this.open(
+            dir,
+            FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
+            parentShare,
+            OPEN_EXISTING,
+            DIRECTORY_OPEN_FLAGS,
+            allowMissing,
+          );
+          if (!parent) {
+            return null;
+          }
+          parents.push(parent);
+          const attributes = this.info(parent).readUInt32LE(0);
           if (
-            createParents &&
-            !this.api.symbols.CreateDirectoryW(ptr(wide(dir)), null) &&
-            this.api.symbols.GetLastError() !== ERROR_ALREADY_EXISTS
+            attributes & FILE_ATTRIBUTE_REPARSE_POINT ||
+            !(attributes & FILE_ATTRIBUTE_DIRECTORY)
           ) {
-            this.fail("Storage directory creation failed");
+            deny("Storage path is not a plain directory.");
+          }
+          const canonical = this.canonical(parent);
+          if (index === 0) {
+            root = canonical.replace(/\\$/, "");
+            dir = root;
+            // Bind the requested spelling to each pinned parent before creating the next child.
+          } else if (canonical !== dir) {
+            deny("Storage path must use its canonical spelling.");
           }
         }
-        const parent = this.open(
-          dir,
-          FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
-          FILE_SHARE_READ,
-          OPEN_EXISTING,
-          DIRECTORY_OPEN_FLAGS,
-          allowMissing,
-        );
-        if (!parent) {
-          return null;
-        }
-        parents.push(parent);
-        const attributes = this.info(parent).readUInt32LE(0);
-        if (
-          attributes & FILE_ATTRIBUTE_REPARSE_POINT ||
-          !(attributes & FILE_ATTRIBUTE_DIRECTORY)
-        ) {
-          deny("Storage path is not a plain directory.");
-        }
-        const canonical = this.canonical(parent);
-        if (index === 0) {
-          root = canonical.replace(/\\$/, "");
-          dir = root;
-          // Bind the requested spelling to each pinned parent before creating the next child.
-        } else if (canonical !== dir) {
-          deny("Storage path must use its canonical spelling.");
-        }
-      }
-      const target = `${root}\\${segments.join("\\")}`;
-      return action({
-        target,
-      });
-    } finally {
-      for (const parent of parents.reverse()) {
-        this.close(parent);
-      }
-    }
+        const target = `${root}\\${segments.join("\\")}`;
+        return action({
+          target,
+        });
+      },
+      () =>
+        this.closeAll(
+          [
+            ...parents,
+          ].reverse(),
+        ),
+    );
   }
 
   /** Open, pin and validate one target under pinned parents, then close it before releasing them. */
@@ -693,30 +943,32 @@ export class WindowsStorage
         if (!handle) {
           return null;
         }
-        try {
-          const info = this.info(handle);
-          const attributes = info.readUInt32LE(0);
-          const isDirectory = Boolean(attributes & FILE_ATTRIBUTE_DIRECTORY);
-          if (
-            attributes & FILE_ATTRIBUTE_REPARSE_POINT ||
-            (!options.allowDirectories && isDirectory) ||
-            (!isDirectory && info.readUInt32LE(40) > MAX_FILE_LINK_COUNT)
-          ) {
-            deny("Storage target is not a plain file or directory.");
-          }
-          const canonical = this.canonical(handle);
-          if (canonical !== target) {
-            deny("Storage path must use its canonical spelling.");
-          }
-          return action({
-            handle,
-            canonical,
-            info,
-          });
-        } finally {
-          this.close(handle);
-        }
+        return withRelease(
+          () => {
+            const info = this.info(handle);
+            const attributes = info.readUInt32LE(0);
+            const isDirectory = Boolean(attributes & FILE_ATTRIBUTE_DIRECTORY);
+            if (
+              attributes & FILE_ATTRIBUTE_REPARSE_POINT ||
+              (!options.allowDirectories && isDirectory) ||
+              (!isDirectory && info.readUInt32LE(40) > MAX_FILE_LINK_COUNT)
+            ) {
+              deny("Storage target is not a plain file or directory.");
+            }
+            const canonical = this.canonical(handle);
+            if (canonical !== target) {
+              deny("Storage path must use its canonical spelling.");
+            }
+            return action({
+              handle,
+              canonical,
+              info,
+            });
+          },
+          () => this.close(handle),
+        );
       },
+      options.parentShare,
     );
   }
 
@@ -929,26 +1181,9 @@ export class WindowsStorage
   private listEntries(handle: bigint): StorageDirectoryEntry[] {
     const buffer = Buffer.alloc(DIRECTORY_BUFFER_BYTES);
     const entries: StorageDirectoryEntry[] = [];
-    let informationClass = FILE_ID_BOTH_DIRECTORY_RESTART_INFO;
-    while (true) {
-      buffer.fill(0);
-      if (
-        !this.api.symbols.GetFileInformationByHandleEx(
-          handle,
-          informationClass,
-          ptr(buffer),
-          buffer.length,
-        )
-      ) {
-        const error = this.api.symbols.GetLastError();
-        if (error === ERROR_NO_MORE_FILES) {
-          return entries.sort((left, right) =>
-            left.name < right.name ? -1 : Number(left.name > right.name),
-          );
-        }
-        this.fail("Storage directory listing failed", error);
-      }
-      informationClass = FILE_ID_BOTH_DIRECTORY_INFO;
+    let restart = true;
+    while (this.readEntryBatch(handle, buffer, restart)) {
+      restart = false;
       const batch = directoryEntries(buffer);
       if (entries.length + batch.length > MAX_DIRECTORY_ENTRIES) {
         throw new BunawayError({
@@ -958,6 +1193,202 @@ export class WindowsStorage
       }
       entries.push(...batch);
     }
+    return entries.sort((left, right) =>
+      left.name < right.name ? -1 : Number(left.name > right.name),
+    );
+  }
+  /** Fill the buffer with the next native entry batch; false once the directory is exhausted. */
+  private readEntryBatch(
+    handle: bigint,
+    buffer: Buffer,
+    restart: boolean,
+  ): boolean {
+    buffer.fill(0);
+    if (
+      this.api.symbols.GetFileInformationByHandleEx(
+        handle,
+        restart
+          ? FILE_ID_BOTH_DIRECTORY_RESTART_INFO
+          : FILE_ID_BOTH_DIRECTORY_INFO,
+        ptr(buffer),
+        buffer.length,
+      )
+    ) {
+      return true;
+    }
+    const error = this.api.symbols.GetLastError();
+    if (error === ERROR_NO_MORE_FILES) {
+      return false;
+    }
+    this.fail("Storage directory listing failed", error);
+  }
+  /**
+   * Open one listed child directory beneath its pinned parent without following links.
+   * Returns null when the child vanished or is no longer a plain directory, so it adds nothing.
+   */
+  private openChildDirectory(
+    parentPath: string,
+    name: string,
+    pathBuffer: Buffer,
+  ) {
+    const path = `${parentPath}\\${name}`;
+    // Same sharing as the root target; delete sharing stays excluded so the path remains pinned.
+    const handle = this.open(
+      path,
+      FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
+      FILE_SHARE_READ | FILE_SHARE_WRITE,
+      OPEN_EXISTING,
+      DIRECTORY_OPEN_FLAGS,
+      true,
+      true,
+    );
+    if (!handle) {
+      return null;
+    }
+    let plainDirectory: boolean;
+    try {
+      const attributes = this.info(handle).readUInt32LE(0);
+      plainDirectory =
+        !(attributes & FILE_ATTRIBUTE_REPARSE_POINT) &&
+        Boolean(attributes & FILE_ATTRIBUTE_DIRECTORY);
+      if (plainDirectory && this.canonical(handle, pathBuffer) !== path) {
+        deny("Storage path must use its canonical spelling.");
+      }
+    } catch (error) {
+      // A kept handle is released by the scan; a failed check releases it here.
+      return failWithCleanup(
+        error,
+        () => this.close(handle),
+        STORAGE_CLEANUP_MESSAGE,
+      );
+    }
+    if (!plainDirectory) {
+      this.close(handle);
+      return null;
+    }
+    return {
+      handle,
+      path,
+    };
+  }
+  /** One walk step: open a queued child, read an entry batch, or finish the top directory. */
+  private scanStep(
+    path: DirectoryScanFrame[],
+    buffers: {
+      entries: Buffer;
+      path: Buffer;
+    },
+    totals: DirectoryScanTotals,
+    limits: DirectorySizeLimits,
+  ): void {
+    const frame = path[path.length - 1] as DirectoryScanFrame;
+    const childName = frame.pending.pop();
+    if (childName !== undefined) {
+      if (path.length > limits.depth) {
+        throw directorySizeLimitExceeded();
+      }
+      const child = this.openChildDirectory(
+        frame.path,
+        childName,
+        buffers.path,
+      );
+      if (child) {
+        totals.directories++;
+        path.push({
+          ...child,
+          restart: true,
+          pending: [],
+        });
+      }
+    } else if (
+      this.readEntryBatch(frame.handle, buffers.entries, frame.restart)
+    ) {
+      frame.restart = false;
+      tallyEntries(
+        frame,
+        scanDirectoryEntries(buffers.entries),
+        totals,
+        limits,
+      );
+    } else {
+      // Pop before closing so a failed close cannot be retried by the caller's cleanup.
+      path.pop();
+      if (path.length) {
+        this.close(frame.handle);
+      }
+    }
+  }
+  /**
+   * Walk until the root is finished. Yielding every few steps lets the I/O Worker process cancel
+   * and deadline messages, which are observed through the signal at the next step.
+   */
+  private async walkDirectories(
+    path: DirectoryScanFrame[],
+    signal: AbortSignal | undefined,
+    limits: DirectorySizeLimits,
+  ): Promise<DirectoryScanTotals> {
+    const buffers = {
+      entries: Buffer.alloc(DIRECTORY_BUFFER_BYTES),
+      path: Buffer.alloc(FINAL_PATH_BUFFER_CHARS * WCHAR_BYTES),
+    };
+    const totals: DirectoryScanTotals = {
+      bytes: 0n,
+      files: 0,
+      directories: 0,
+      visited: 0,
+    };
+    for (let steps = 1; path.length; steps++) {
+      if (steps % DIRECTORY_SIZE_YIELD_STEPS === 0) {
+        await yieldToEventLoop();
+        // Disposal during the yield stops the scan; the bindings stay open until it cleans up.
+        this.requireOpen();
+      }
+      if (signal?.aborted) {
+        throw new BunawayError({
+          code: "CANCELLED",
+          message: "Storage directory size scan was cancelled.",
+        });
+      }
+      this.scanStep(path, buffers, totals, limits);
+    }
+    return totals;
+  }
+  /** Recursively total the checked root without following links; the caller owns the root handle. */
+  private async sumDirectory(
+    rootHandle: bigint,
+    rootPath: string,
+    signal: AbortSignal | undefined,
+    limits: DirectorySizeLimits,
+  ): Promise<StorageDirectorySize> {
+    // Iterative depth-first walk. Every directory on the current path stays open,
+    // so no ancestor can be renamed or deleted while its descendants are read.
+    const path: DirectoryScanFrame[] = [
+      {
+        handle: rootHandle,
+        path: rootPath,
+        restart: true,
+        pending: [],
+      },
+    ];
+    const totals = await withRelease(
+      () => this.walkDirectories(path, signal, limits),
+      // Failure and cancellation leave child directories open; the caller releases the root.
+      () =>
+        this.closeAll(
+          path
+            .slice(1)
+            .reverse()
+            .map((frame) => frame.handle),
+        ),
+    );
+    if (totals.bytes > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new Error("Storage size cannot be represented safely.");
+    }
+    return {
+      bytes: Number(totals.bytes),
+      files: totals.files,
+      directories: totals.directories,
+    };
   }
   /** Strictly decode UTF-8 from a caller-owned handle, preserving BOM text. */
   readTextFromHandle(file: bigint, size: number): string {

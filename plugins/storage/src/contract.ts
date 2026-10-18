@@ -4,6 +4,12 @@ import { z } from "zod";
 /** A bounded listing fits the JSON transport even for maximally escaped Windows filenames. */
 export const MAX_DIRECTORY_ENTRIES = 256;
 export const MAX_FILENAME_CHARACTERS = 255;
+/**
+ * Cost bounds for storage.directorySize. Entries count every child seen below the root,
+ * including links and files. Depth counts directory levels below the root.
+ */
+export const MAX_DIRECTORY_SIZE_ENTRIES = 100_000;
+export const MAX_DIRECTORY_SIZE_DEPTH = 64;
 
 /** An observed child name and kind. This does not authorize or follow the child target. */
 export const directoryEntrySchema = z.strictObject({
@@ -80,9 +86,17 @@ export const storageDirectoryCreateSchema = z.strictObject({
   ...pathFields,
   recursive: z.boolean().default(false),
 });
+/** Recursive totals; the root itself is not counted in directories. */
+export const storageDirectorySizeSchema = z.strictObject({
+  bytes: z.int().min(0).max(Number.MAX_SAFE_INTEGER),
+  files: z.int().min(0).max(Number.MAX_SAFE_INTEGER),
+  directories: z.int().min(0).max(Number.MAX_SAFE_INTEGER),
+});
 export const storageDirectoryEntriesSchema = z
   .array(directoryEntrySchema)
   .max(MAX_DIRECTORY_ENTRIES);
+/** Logical byte, file and subdirectory totals returned by storage.directorySize. */
+export type StorageDirectorySize = z.infer<typeof storageDirectorySizeSchema>;
 /** Path accepted by read and metadata operations. */
 export type StorageLocation = z.infer<typeof storageLocationSchema>;
 /** Path and text accepted by text writes and appends. */
@@ -117,10 +131,14 @@ export interface StorageInstance {
   exists(input: StorageLocation): boolean;
   stat(input: StorageLocation): StorageMetadata | null;
 }
-/** Windows additionally moves and removes while holding the checked object's handle. */
+/** Windows additionally moves, removes and totals directories while holding the checked object's handle. */
 export interface WindowsStorageInstance extends StorageInstance {
   move(input: StorageTransfer): null;
   remove(input: StorageLocation): null;
+  directorySize(
+    input: StorageLocation,
+    signal?: AbortSignal,
+  ): Promise<StorageDirectorySize>;
 }
 
 /** Public storage interface chosen by the plugin author; native support may differ by platform. */
@@ -152,6 +170,10 @@ export interface Storage {
     input: StorageLocation,
     options?: NativeInvokeOptions,
   ): Promise<StorageDirectoryEntry[]>;
+  directorySize(
+    input: StorageLocation,
+    options?: NativeInvokeOptions,
+  ): Promise<StorageDirectorySize>;
   createDirectory(
     input: z.input<typeof storageDirectoryCreateSchema>,
     options?: NativeInvokeOptions,
