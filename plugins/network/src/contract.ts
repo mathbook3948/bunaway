@@ -176,6 +176,11 @@ export const MAX_RESOLVED_ENDPOINTS = 64;
 const hostLabel = new RegExp(
   `^[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,${MAX_HOST_LABEL_LENGTH - 2}}[A-Za-z0-9_])?$`,
 );
+const IPV4_OCTET = "(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)";
+/** Four decimal octets without leading zeros, so no resolver reads them as octal. */
+const dottedQuad = new RegExp(`^(?:${IPV4_OCTET}\\.){3}${IPV4_OCTET}$`);
+/** A last label of digits or 0x digits makes getaddrinfo read the whole name as an IPv4 number. */
+const numericLastLabel = /^(?:\d+|0[xX][0-9A-Fa-f]*)$/;
 /** `network.resolveHost` input: an ASCII host name or IPv4 literal, with no scheme, port or path. */
 export const resolveHostInputSchema = z.strictObject({
   host: z
@@ -184,12 +189,19 @@ export const resolveHostInputSchema = z.strictObject({
     .max(MAX_HOST_LENGTH + 1)
     .refine((value) => {
       const name = value.endsWith(".") ? value.slice(0, -1) : value;
+      const labels = name.split(".");
+      if (
+        name.length === 0 ||
+        name.length > MAX_HOST_LENGTH ||
+        !labels.every((label) => hostLabel.test(label))
+      ) {
+        return false;
+      }
+      // Shorthand such as "1", "0x7f.1" or "2130706433" is an address, not a name; accept only a strict IPv4 literal.
       return (
-        name.length > 0 &&
-        name.length <= MAX_HOST_LENGTH &&
-        name.split(".").every((label) => hostLabel.test(label))
+        !numericLastLabel.test(labels.at(-1) ?? "") || dottedQuad.test(name)
       );
-    }, "Expected an ASCII host name; convert international names to punycode."),
+    }, "Expected an ASCII host name or dotted IPv4 address; convert international names to punycode."),
   timeoutMs,
 });
 /** Addresses in resolver order, shaped like Electron `net.resolveHost()`. */

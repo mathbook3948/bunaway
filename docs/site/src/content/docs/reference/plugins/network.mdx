@@ -177,7 +177,8 @@ Electron `net.resolveHost()`의 `{ endpoints: [{ address, family }] }` 결과 �
 독립 Host 권한 `network.resolveHost`가 필요합니다.
 
 - 입력 `host`는 ASCII 호스트 이름이나 IPv4 주소입니다. 끝의 점은 허용하며 전체 253자, 레이블
-  63자까지입니다. 스킴, 포트, 경로, 사용자 정보와 IPv6 주소는 `INVALID_ARGUMENT`입니다.
+  63자까지입니다. IPv4 주소는 앞자리 0이 없는 십진수 4개(`127.0.0.1`)만 받으며 `127.1`, `0x7f.1`,
+  `2130706433` 같은 축약 표기와 마지막 레이블이 숫자인 이름은 거부합니다. 스킴, 포트, 경로, 사용자 정보와 IPv6 주소는 `INVALID_ARGUMENT`입니다.
   국제화 도메인 이름은 punycode(`xn--`)로 바꿔 전달합니다.
 - `timeoutMs`는 1부터 30000까지이며 기본값은 30000입니다. 기한이 지나면 `TIMEOUT`입니다.
 - 조회는 운영체제 리졸버(getaddrinfo)를 사용하므로 hosts 파일, 검색 접미사와 시스템 DNS

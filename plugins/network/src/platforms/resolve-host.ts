@@ -35,8 +35,6 @@ export async function resolveHost(
 }> {
   signal.throwIfAborted();
   const pending = find(host);
-  // The lookup keeps running after an abort; observe its failure so it is not reported unhandled.
-  pending.catch(() => undefined);
   let onAbort: (() => void) | undefined;
   const aborted = new Promise<never>((_resolve, reject) => {
     onAbort = () => reject(signal.reason);
@@ -51,7 +49,7 @@ export async function resolveHost(
       aborted,
     ]);
   } finally {
-    // A later abort must not reject `aborted` with nobody listening.
+    // Drop the listener so a finished call does not stay subscribed to a longer-lived signal.
     if (onAbort) {
       signal.removeEventListener("abort", onAbort);
     }

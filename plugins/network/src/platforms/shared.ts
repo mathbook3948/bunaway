@@ -13,7 +13,7 @@ import {
   startIntervalPolling,
   watchOnline,
 } from "#network/platforms/online-state";
-import { resolveHost } from "#network/platforms/resolve-host";
+import { type HostLookup, resolveHost } from "#network/platforms/resolve-host";
 import { exchange } from "#network/platforms/websocket";
 
 const MAX_ACTIVE_REQUESTS = 16;
@@ -161,9 +161,10 @@ export function runResolveHost(
   state: ReturnType<typeof initialize>,
   input: ResolveHostInput,
   signal?: AbortSignal,
+  find?: HostLookup,
 ) {
   return run(state, input.timeoutMs, signal, (activeSignal) =>
-    resolveHost(input.host, activeSignal),
+    resolveHost(input.host, activeSignal, find),
   );
 }
 

@@ -65,6 +65,8 @@ test("network.resolveHost accepts only plain ASCII host names", () => {
     "example.com.",
     "localhost",
     "127.0.0.1",
+    "255.255.255.255",
+    "1password.example",
     "xn--9t4b11yi5a.example",
     "_dmarc.example.com",
     "a".repeat(63),
@@ -84,6 +86,16 @@ test("network.resolveHost accepts only plain ASCII host names", () => {
     "example.com/path",
     "user@example.com",
     "[::1]",
+    "1",
+    "2130706433",
+    "0x7f.1",
+    "0x7f.0.0.1",
+    "017700000001",
+    "127.1",
+    "010.0.0.1",
+    "999.999.999.999",
+    "1.2.3.4.5",
+    "host.123",
     "예시.테스트",
     "exa mple.com",
     "example.com\n",
@@ -279,6 +291,87 @@ test("runResolveHost resolves loopback and stops after disposal", async () => {
       timeoutMs: deadline("childStep"),
     }),
   ).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
+});
+
+const never = () => new Promise<never>(() => undefined);
+
+test("runResolveHost ends with TIMEOUT when the resolver is slow", async () => {
+  const state = initialize();
+  await expect(
+    runResolveHost(
+      state,
+      {
+        host: "slow.example",
+        timeoutMs: 20,
+      },
+      undefined,
+      never,
+    ),
+  ).rejects.toMatchObject({
+    code: "TIMEOUT",
+  });
+  await dispose(state);
+});
+
+test("runResolveHost shares the active request limit and frees the slot on abort", async () => {
+  const state = initialize();
+  const controllers = Array.from(
+    {
+      length: 16,
+    },
+    () => new AbortController(),
+  );
+  const held = controllers.map((controller) =>
+    runResolveHost(
+      state,
+      {
+        host: "slow.example",
+        timeoutMs: deadline("childStep"),
+      },
+      controller.signal,
+      never,
+    ),
+  );
+  await expect(
+    runResolveHost(
+      state,
+      {
+        host: "slow.example",
+        timeoutMs: deadline("childStep"),
+      },
+      undefined,
+      never,
+    ),
+  ).rejects.toMatchObject({
+    code: "BUSY",
+  });
+  const first = controllers[0];
+  first?.abort();
+  await expect(held[0]).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
+  for (const controller of controllers) {
+    controller.abort();
+  }
+  await Promise.allSettled(held);
+  await dispose(state);
+});
+
+test("dispose cancels a resolution that is still pending", async () => {
+  const state = initialize();
+  const pending = runResolveHost(
+    state,
+    {
+      host: "slow.example",
+      timeoutMs: deadline("childStep"),
+    },
+    undefined,
+    never,
+  );
+  await dispose(state);
+  await expect(pending).rejects.toMatchObject({
     code: "CANCELLED",
   });
 });
