@@ -141,6 +141,7 @@ function fixture() {
   };
   let failure: Error | undefined;
   let title = "Declared title";
+  let opacity = 1;
   let accessibleTitle: string | null = null;
   const native: NativeWindow = {
     getReadiness() {
@@ -229,6 +230,11 @@ function fixture() {
       title = value;
     },
     getTitle: () => title,
+    setOpacity(value) {
+      apply("setOpacity");
+      opacity = value;
+    },
+    getOpacity: () => opacity,
     setAccessibleTitle(value) {
       apply("setAccessibleTitle");
       accessibleTitle = value === "" ? null : value;
@@ -326,6 +332,8 @@ function fixture() {
         | "setFullscreen"
         | "setClosable"
         | "getTitle"
+        | "setOpacity"
+        | "getOpacity"
         | "setTitle"
         | "setAccessibleTitle"
         | "getAccessibleTitle"
@@ -344,6 +352,7 @@ function fixture() {
         fullscreen?: boolean;
         closable?: boolean;
         title?: string;
+        opacity?: number | string | null;
         resizable?: boolean;
         movable?: boolean;
       } = {},
@@ -1291,4 +1300,82 @@ test("attention requests resolve the default mode, validate input and stay separ
   await expect(f.invoke("cancelAttention")).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
+});
+
+test("opacity accepts only numbers from 0 to 1, round-trips and keeps its own permission grants", async () => {
+  const f = fixture();
+  expect(await f.invoke("getOpacity")).toBe(1);
+  for (const opacity of [
+    0,
+    0.25,
+    1,
+  ]) {
+    expect(
+      await f.invoke("setOpacity", "main", {
+        opacity,
+      }),
+    ).toBeNull();
+    expect(await f.invoke("getOpacity")).toBe(opacity);
+  }
+  for (const payload of [
+    {},
+    {
+      opacity: -0.1,
+    },
+    {
+      opacity: 1.1,
+    },
+    {
+      opacity: "0.5",
+    },
+    {
+      opacity: null,
+    },
+    {
+      opacity: 0.5,
+      extra: true,
+    },
+  ]) {
+    expect(() =>
+      validateWindowCall({
+        operation: "windows.setOpacity",
+        payload: {
+          view: "main",
+          ...payload,
+        },
+      }),
+    ).toThrow();
+  }
+  expect(validateWindowOutput("windows.getOpacity", 0.5)).toBe(0.5);
+  for (const output of [
+    -0.1,
+    1.1,
+    "1",
+    null,
+  ]) {
+    expect(() => validateWindowOutput("windows.getOpacity", output)).toThrow();
+  }
+  f.permissions.permissions = [];
+  await expect(f.invoke("getOpacity")).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  f.permissions.permissions = windowPermissions();
+  f.setClosed();
+  await expect(f.invoke("getOpacity")).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+});
+
+test("macOS target does not declare the Windows-only opacity operations", () => {
+  expect(windows._definition.nativePlatforms.macos?.operations).not.toEqual(
+    expect.arrayContaining([
+      "setOpacity",
+    ]),
+  );
+  expect(windows._definition.nativePlatforms.windows?.operations).toEqual(
+    expect.arrayContaining([
+      "setOpacity",
+      "getOpacity",
+    ]),
+  );
 });

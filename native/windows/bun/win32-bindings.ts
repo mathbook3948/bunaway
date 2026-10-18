@@ -264,6 +264,24 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "i32",
   },
+  SetLayeredWindowAttributes: {
+    args: [
+      "u64",
+      "u32",
+      "u8",
+      "u32",
+    ],
+    returns: "i32",
+  },
+  GetLayeredWindowAttributes: {
+    args: [
+      "u64",
+      "ptr",
+      "ptr",
+      "ptr",
+    ],
+    returns: "i32",
+  },
   SetWindowPos: {
     args: [
       "u64",

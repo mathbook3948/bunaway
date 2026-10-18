@@ -406,6 +406,10 @@ export type NativeWindow = {
   setFullscreenable?(fullscreenable: boolean): void;
   /** Reads whether entering fullscreen is allowed for this HWND. Windows only. */
   isFullscreenable?(): boolean;
+  /** Sets whole-window opacity from 0 (transparent) to 1 (opaque) for this HWND, including its WebView. Windows only. */
+  setOpacity?(opacity: number): void;
+  /** Reads the live opacity from the OS, quantized to 8-bit alpha. Windows only. */
+  getOpacity?(): number;
   /** Changes user caption, system-menu and renderer closing. Backend/API closing remains available. Windows only. */
   setClosable?(closable: boolean): void;
   /** Reads the host's user-close setting for this HWND. Windows only. */

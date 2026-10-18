@@ -202,7 +202,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] alwaysOnBottom 및 창 Z 순서 이동의 지원 범위를 결정한다.
 - [x] `window.skipTaskbar`, `setSkipTaskbar`, `isSkipTaskbar`를 제공한다. 실행 중 변경은 숨겨진 일반 창에서만 허용하며 tool-window style로 작업 표시줄과 Alt+Tab에서 제외한다.
 - [ ] 키오스크 모드와 일반 전체화면의 차이를 정의한다.
-- [ ] 창 background color, 투명 배경과 opacity를 제공한다.
+- [x] 창 opacity를 설정하고 조회한다. layered window의 상수 alpha로 WebView를 포함한 창 전체에 적용하며 1이면 layered 스타일을 제거한다.
+- [ ] 창 background color와 투명 배경을 제공한다.
 - [ ] shadow의 설정과 조회를 제공한다.
 - [ ] Windows Mica, Acrylic와 배경 material, accent color를 제공한다.
 - [ ] 모서리와 창 shape의 지원을 결정한다. Electron shape는 실험 기능이다.

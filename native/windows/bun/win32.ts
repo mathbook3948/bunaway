@@ -48,6 +48,7 @@ import {
 import {
   initialWindowStyles,
   WS_CAPTION,
+  WS_EX_LAYERED,
   WS_EX_NOACTIVATE,
   WS_EX_TOOLWINDOW,
   WS_EX_TOPMOST,
@@ -70,6 +71,8 @@ import {
   IDYES,
   IMAGE_ICON,
   LR_LOADFROMFILE,
+  LWA_ALPHA,
+  MAX_ALPHA,
   MA_NOACTIVATE,
   MB_DEFBUTTON2,
   MB_ICONQUESTION,
@@ -1030,6 +1033,67 @@ export class Windows {
       user.symbols.SetWindowDisplayAffinity(window, WDA_MONITOR),
       `Content protection is unavailable: ${kernel.symbols.GetLastError()}`,
     );
+  }
+
+  /**
+   * Read the live constant window alpha as 0..1 from the OS. A window without the layered
+   * style or without an alpha attribute is fully opaque. The value is quantized to the
+   * 8-bit alpha the OS stores, so it can differ slightly from the value that was set.
+   */
+  getOpacity(window: bigint): number {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    if (!(this.windowStyles(window).exStyle & WS_EX_LAYERED)) {
+      return 1;
+    }
+    const alpha = Buffer.alloc(1);
+    const flags = Buffer.alloc(4);
+    // A layered window that never received attributes makes this call fail; it is opaque.
+    if (
+      !user.symbols.GetLayeredWindowAttributes(
+        window,
+        null,
+        ptr(alpha),
+        ptr(flags),
+      )
+    ) {
+      return 1;
+    }
+    return flags.readUInt32LE(0) & LWA_ALPHA
+      ? alpha.readUInt8(0) / MAX_ALPHA
+      : 1;
+  }
+
+  /**
+   * Set whole-window opacity (0 transparent, 1 opaque) through a layered window, which also
+   * covers the WebView child. The layered style is added only while the window is translucent
+   * and removed at full opacity, so an opaque window keeps its normal rendering path.
+   */
+  setOpacity(window: bigint, opacity: number): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    assert(
+      Number.isFinite(opacity) && opacity >= 0 && opacity <= 1,
+      "Opacity must be between 0 and 1.",
+    );
+    const alpha = Math.round(opacity * MAX_ALPHA);
+    const { exStyle } = this.windowStyles(window);
+    if (alpha === MAX_ALPHA) {
+      if (exStyle & WS_EX_LAYERED) {
+        this.setStyle(window, exStyle & ~WS_EX_LAYERED, GWL_EXSTYLE);
+      }
+      return;
+    }
+    const wasLayered = !!(exStyle & WS_EX_LAYERED);
+    if (!wasLayered) {
+      this.setStyle(window, exStyle | WS_EX_LAYERED, GWL_EXSTYLE);
+    }
+    if (!user.symbols.SetLayeredWindowAttributes(window, 0, alpha, LWA_ALPHA)) {
+      const error = kernel.symbols.GetLastError();
+      // A layered window without attributes is not drawn, so undo the style we added.
+      if (!wasLayered) {
+        this.setStyle(window, exStyle, GWL_EXSTYLE);
+      }
+      assert(false, `SetLayeredWindowAttributes: ${error}`);
+    }
   }
 
   /**

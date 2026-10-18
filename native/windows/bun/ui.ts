@@ -1152,6 +1152,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         setFullscreenable: (fullscreenable) =>
           nativeWindows.setFullscreenable(hwnd, fullscreenable),
         isFullscreenable: () => nativeWindows.isFullscreenable(hwnd),
+        setOpacity: (opacity) => nativeWindows.setOpacity(hwnd, opacity),
+        getOpacity: () => nativeWindows.getOpacity(hwnd),
         setClosable: (closable) => nativeWindows.setClosable(hwnd, closable),
         isClosable: () => nativeWindows.isClosable(hwnd),
         setTitle: (title) => nativeWindows.setTitle(hwnd, title),
