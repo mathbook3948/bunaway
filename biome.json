@@ -52,6 +52,10 @@
             "maxAllowedComplexity": 25
           }
         }
+      },
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error"
       }
     }
   },
@@ -70,6 +74,38 @@
         "rules": {
           "style": {
             "useFilenamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "packages/plugin-api/src/**",
+        "!packages/plugin-api/src/host.ts",
+        "packages/client-sdk/src/**",
+        "packages/plugin-sdk/src/**",
+        "!packages/plugin-sdk/src/bun.ts",
+        "!packages/plugin-sdk/src/win32.ts",
+        "!packages/plugin-sdk/src/windows-*.ts",
+        "packages/protocol/src/**",
+        "plugins/*/src/*.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Buffer": "Not defined in WebView bundles. Use Uint8Array, DataView, atob and btoa, or move the code under src/platforms/.",
+                  "Bun": "Not defined in WebView bundles. Move Bun-only code under src/platforms/ or behind the plugin SDK transport.",
+                  "process": "Not defined in WebView bundles. Platform choices belong in src/platforms/ or the plugin SDK."
+                }
+              }
+            }
+          },
+          "correctness": {
+            "noNodejsModules": "error"
           }
         }
       }
@@ -121,7 +157,6 @@
         "plugins/opener/src/platforms/windows-file.ts",
         "plugins/opener/src/platforms/windows-shell.ts",
         "plugins/process/src/platforms/windows-process-native.ts",
-        "plugins/tray/src/platforms/windows-icon-data.ts",
         "plugins/windows/src/platforms/coordinator.ts",
         "plugins/windows/src/platforms/native-adapter.ts",
         "tests/api/window-geometry.test.ts",

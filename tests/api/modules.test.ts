@@ -461,13 +461,13 @@ export function checkModuleTypes(
     setting,
   ];
   // @ts-expect-error local command names are not frontend command names
-  client.invoke("save", "hello");
+  void client.invoke("save", "hello");
   // @ts-expect-error composed commands retain input types
-  client.invoke("memo.save", 1);
+  void client.invoke("memo.save", 1);
   // @ts-expect-error composed commands retain output types
   const wrong: Promise<number> = client.invoke("memo.read", null);
   void wrong;
-  client.listen(
+  void client.listen(
     "memo.saved",
     (event) => {
       const text: string = event.payload;
@@ -478,7 +478,7 @@ export function checkModuleTypes(
     },
   );
   // @ts-expect-error unknown composed event
-  client.listen("memo.missing", () => {}, {
+  void client.listen("memo.missing", () => {}, {
     onError() {},
   });
   const base = defineModule("memo");
@@ -530,11 +530,11 @@ export function checkConditionalModuleTypes(
   >,
 ) {
   // @ts-expect-error memo.save is absent when settings was selected
-  client.invoke("memo.save", "hello");
+  void client.invoke("memo.save", "hello");
   // @ts-expect-error settings.save is absent when memo was selected
-  client.invoke("settings.save", 1);
+  void client.invoke("settings.save", 1);
   // @ts-expect-error memo.saved is absent when settings was selected
-  client.listen("memo.saved", () => {}, {
+  void client.listen("memo.saved", () => {}, {
     onError() {},
   });
   const dynamic: (typeof memo | typeof settings)[] = [];
@@ -551,7 +551,7 @@ export function checkMixedModuleTypes(
   const result: Promise<string> = client.invoke("memo.read", null);
   void result;
   // @ts-expect-error settings is optional but memo remains registered
-  client.invoke("settings.save", 1);
+  void client.invoke("settings.save", 1);
 }
 
 export function checkDynamicModuleTypes() {
@@ -676,9 +676,9 @@ export function checkPatternedNamespaceTypes(
   >,
 ) {
   // @ts-expect-error a namespace pattern does not guarantee any particular command
-  client.invoke("feature-999.save", "text");
+  void client.invoke("feature-999.save", "text");
   // @ts-expect-error a namespace pattern does not guarantee any particular event
-  client.listen("feature-999.saved", () => {}, {
+  void client.listen("feature-999.saved", () => {}, {
     onError() {},
   });
 }
@@ -690,9 +690,9 @@ export function checkPatternedLocalNameTypes(
   >,
 ) {
   // @ts-expect-error a local name pattern does not guarantee any particular command
-  client.invoke("memo.999", "text");
+  void client.invoke("memo.999", "text");
   // @ts-expect-error a local name pattern does not guarantee any particular event
-  client.listen("memo.999", () => {}, {
+  void client.listen("memo.999", () => {}, {
     onError() {},
   });
 }

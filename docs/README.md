@@ -20,6 +20,7 @@
 - [IPC와 정책 계약](./architecture/protocol.md)
 - [SDK, 코어, Host API 공통 계약](./architecture/common-api.md)
 - [선택 네이티브 플러그인의 공개 계약과 이관 구조](./architecture/plugins.md)
+- [에이전트가 올바르게 일하는 코드베이스 계획](./architecture/agent-friendly-plan.md)
 - [번들 Bun 실행 방식과 실험 범위](./architecture/runtime-feasibility.md)
 - [Windows B 실행 결과](./architecture/windows-probe-results.md)
 - [Windows C 호스트, SDK, 코어, 메모 실행 결과](./architecture/windows-host-results.md)

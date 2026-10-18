@@ -4,10 +4,10 @@ import {
   bytesSchema,
   type cropSchema,
   type exportSchema,
-  type ImageCodec,
   type resizeSchema,
   type rgbaSchema,
 } from "#image/contract";
+import type { ImageCodec } from "#image/platforms/codec";
 import { cropPixels } from "#image/platforms/crop";
 import { ImageResources } from "#image/platforms/resources";
 /** Own decoded image resources and one platform codec for a host adapter lifetime. */

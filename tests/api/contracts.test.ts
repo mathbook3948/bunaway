@@ -888,25 +888,25 @@ test("pending Host calls abort promptly and release their cancellation listener"
 export function checkImplicitObjectTypes(
   client: Client<CommandsOf<typeof implicitApp>>,
 ) {
-  client.invoke("implicit.object", {
+  void client.invoke("implicit.object", {
     id: "root",
     kind: "a",
   });
-  client.invoke("implicit.object", {
+  void client.invoke("implicit.object", {
     id: "root",
     kind: "b",
   });
-  client.invoke("implicit.mixed", null);
+  void client.invoke("implicit.mixed", null);
   // @ts-expect-error implicit outer required id cannot disappear
-  client.invoke("implicit.object", {
+  void client.invoke("implicit.object", {
     kind: "a",
   });
-  client.invoke("implicit.object", {
+  void client.invoke("implicit.object", {
     // @ts-expect-error implicit properties constrain the common id type
     id: 42,
     kind: "a",
   });
-  client.invoke("implicit.object", {
+  void client.invoke("implicit.object", {
     id: "root",
     // @ts-expect-error common fields do not widen branch discriminants
     kind: "c",
@@ -969,14 +969,14 @@ export function checkContainerSchemaTypes(
   void objectResult;
   void arrayResult;
   // @ts-expect-error an empty object schema does not accept a number
-  client.invoke("empty.object", 42);
+  void client.invoke("empty.object", 42);
   // @ts-expect-error an empty object schema does not accept an array
-  client.invoke("empty.object", []);
-  client.invoke("empty.object", {
+  void client.invoke("empty.object", []);
+  void client.invoke("empty.object", {
     // @ts-expect-error a closed empty object schema does not accept extra properties
     extra: true,
   });
-  client.invoke(
+  void client.invoke(
     "empty.array",
     [
       // @ts-expect-error nested empty objects do not accept numeric items
@@ -1067,7 +1067,7 @@ export function checkCombinedSchemaTypes(
       value: "text",
     },
   );
-  result.then((input) => {
+  void result.then((input) => {
     const base: string = input.base;
     void base;
     if (input.kind === "b") {
@@ -1076,23 +1076,23 @@ export function checkCombinedSchemaTypes(
     }
   });
   // @ts-expect-error anyOf does not remove the common required base
-  client.invoke("notes.combined", {
+  void client.invoke("notes.combined", {
     kind: "a",
     value: "text",
   });
   // @ts-expect-error branch a still requires a string value
-  client.invoke("notes.combined", {
+  void client.invoke("notes.combined", {
     base: "root",
     kind: "a",
     value: 42,
   });
-  client.invoke("notes.combined", {
+  void client.invoke("notes.combined", {
     // @ts-expect-error the shared base must be a string
     base: 42,
     kind: "b",
     value: 42,
   });
-  client.listen(
+  void client.listen(
     "notes.combinedChanged",
     (event) => {
       const base: string = event.payload.base;
@@ -1113,13 +1113,13 @@ export function checkOptionalObjectTypes(
   });
   void missing;
   void present;
-  client.invoke("notes.optional", {
+  void client.invoke("notes.optional", {
     // @ts-expect-error a present optional field must still be a string
     note: 42,
   });
   // @ts-expect-error the optional object is not nullable
-  client.invoke("notes.optional", null);
-  client.listen(
+  void client.invoke("notes.optional", null);
+  void client.listen(
     "notes.optionalChanged",
     (event) => {
       const note: string | undefined = event.payload.note;
@@ -1163,7 +1163,7 @@ export function checkClientTypes(
     },
   );
   void result;
-  client.listen(
+  void client.listen(
     "notes.changed",
     (event) => {
       const key: string = event.payload.key;
@@ -1177,10 +1177,10 @@ export function checkClientTypes(
     },
   );
   // @ts-expect-error unknown command
-  client.invoke("notes.delete", {
+  void client.invoke("notes.delete", {
     key: "welcome",
   });
-  client.invoke("notes.read", {
+  void client.invoke("notes.read", {
     // @ts-expect-error wrong input type
     key: 42,
   });
@@ -1190,11 +1190,11 @@ export function checkClientTypes(
   });
   void incorrect;
   // @ts-expect-error unknown event
-  client.listen("notes.missing", () => {}, {
+  void client.listen("notes.missing", () => {}, {
     onError() {},
   });
   // @ts-expect-error subscription failure must have an observer
-  client.listen("notes.changed", () => {});
+  void client.listen("notes.changed", () => {});
   const created = factory<CommandsOf<typeof app>, EventsOf<typeof app>>({
     transport,
     hello: {
@@ -1208,7 +1208,7 @@ export function checkClientTypes(
     },
   });
   // @ts-expect-error optional plugin commands require an explicit client command map
-  created.invoke("plugin.capabilities.get", null);
+  void created.invoke("plugin.capabilities.get", null);
   // @ts-expect-error capabilities belongs to the optional plugin facade
   created.capabilities();
 }
@@ -1220,12 +1220,12 @@ export function checkDefaultClientTypes() {
   });
   void result;
   // @ts-expect-error the default connection retains known command names
-  client.invoke("notes.missing", null);
-  client.invoke("notes.read", {
+  void client.invoke("notes.missing", null);
+  void client.invoke("notes.read", {
     // @ts-expect-error the default connection retains command input validation
     key: 42,
   });
-  client.listen(
+  void client.listen(
     "notes.changed",
     (event) => {
       const key: string = event.payload.key;
@@ -1239,7 +1239,7 @@ export function checkDefaultClientTypes() {
     key: "welcome",
   });
   void direct;
-  listen<string>(
+  void listen<string>(
     "notes.changed",
     (event) => {
       const payload: string = event.payload;
@@ -1250,9 +1250,9 @@ export function checkDefaultClientTypes() {
     },
   );
   // @ts-expect-error direct subscription failures still require an observer
-  listen("notes.changed", () => {});
+  void listen("notes.changed", () => {});
   // @ts-expect-error functions cannot be sent as command input
-  invoke("notes.read", () => {});
+  void invoke("notes.read", () => {});
 }
 
 export function checkCoreTypes(
@@ -1263,14 +1263,14 @@ export function checkCoreTypes(
   serverMessage: ServerMessage,
   runtime: RuntimeServices,
 ) {
-  factory(app, services).then((core) => {
+  void factory(app, services).then((core) => {
     core.openSession(contextId, "main").receive(clientMessage);
     core.stop();
   });
-  session.receive(clientMessage);
+  void session.receive(clientMessage);
   // @ts-expect-error server replies are not inbound client requests
-  session.receive(serverMessage);
-  services.callHost(
+  void session.receive(serverMessage);
+  void services.callHost(
     // @ts-expect-error callers may not substitute an unbranded Web-supplied context ID
     "from-web",
     {
@@ -1297,7 +1297,7 @@ export function checkCoreTypes(
   void plugin;
   const stop = runtime.schedule(() => {}, 100);
   stop();
-  services.callHost(
+  void services.callHost(
     contextId,
     {
       operation: "storage.writeText",
@@ -1316,9 +1316,9 @@ export function checkTransportTypes(transport: Transport) {
     }
   });
   off();
-  transport.close();
+  void transport.close();
   // @ts-expect-error transport carries serialized JSON, not authority-bearing objects
-  transport.send({
+  void transport.send({
     context: "backend",
   });
   const response: HostResponse = {

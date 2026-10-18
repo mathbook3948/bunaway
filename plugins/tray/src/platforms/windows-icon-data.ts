@@ -5,7 +5,7 @@ import {
 import { BunawayError } from "@bunaway/protocol";
 
 /** Decode a bounded canonical ICO and select its highest-resolution frame without file I/O. */
-export function trayIconImage(ico: string): Buffer {
+export function trayIconImage(ico: string): Uint8Array {
   const frame = selectNativeIcoFrame(
     parseNativeIco(ico) ?? [],
     Number.POSITIVE_INFINITY,

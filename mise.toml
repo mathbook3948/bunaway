@@ -13,7 +13,7 @@ run = "lefthook install"
 
 [tasks."check:staged"]
 description = "Check formatting and lint for staged files without changing them"
-run = "bunx --no-install biome check --staged --assist-enabled=false --no-errors-on-unmatched"
+run = "bunx --no-install biome check --staged --assist-enabled=false --no-errors-on-unmatched --error-on-warnings"
 
 [tasks.typecheck]
 depends = ["plugins:build"]
@@ -22,7 +22,7 @@ run = ["bun run --workspaces typecheck", "bunx --no-install tsc --project tests/
 
 [tasks.lint]
 description = "Lint source files without changing them"
-run = "bunx --no-install biome lint ."
+run = "bunx --no-install biome lint --error-on-warnings ."
 
 [tasks.format]
 description = "Format source files and project configuration"

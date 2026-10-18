@@ -29,7 +29,8 @@ repeatedly asked for exactly these fixes.
   `USER32`, `SHELL32`, `COMBASE`, `ADVAPI32`). Declare a signature locally only when the
   shared table lacks it, and add it there when a second plugin needs it.
 - Handles are `u64`, pointers `ptr`, BOOL results `i32`, HRESULTs `i32`. Do not mix
-  conventions inside one table.
+  conventions inside one table. `tests/conformance/ffi-signatures.test.ts` fails when a symbol
+  gains a second signature anywhere in the repository; its known-conflict list only shrinks.
 - Pass strings through `wide`, `withWide` or `withBuffer` so the buffer outlives the call.
 - Check HRESULTs with `checkHresult` or the plugin's own error mapping; never ignore a
   negative result.
@@ -62,9 +63,13 @@ repeatedly asked for exactly these fixes.
 
 ## 6. Distribution
 
-- A new file under `native/windows/bun`, `native/macos/bun` or `native/host-api/bun` is added to
-  `frameworkPaths` in `packages/cli/src/distribution.ts`, or the installed framework cannot
-  build apps. `tests/cli/framework-paths.test.ts` fails until it is listed.
+- A new file under `native/windows/bun`, `native/macos/bun`, `native/host-api/bun` or `native/ios`
+  is added to `frameworkPaths` in `packages/cli/src/distribution.ts`, or the installed framework
+  cannot build apps. `tests/cli/framework-paths.test.ts` fails until it is listed, and fails again
+  when a listed entry disappears.
+- Code that a WebView bundle can reach (plugin `src/*.ts`, the neutral SDK modules) uses no
+  `Buffer`, `Bun`, `process` or `node:` module; Bun-only implementation lives in `src/platforms/`.
+  The lint override and `tests/conformance/browser-boundary.test.ts` enforce it.
 - A new `@bunaway/plugin` export reaches built plugins automatically; a new SDK subpath
   export needs a `package.json` exports entry and a reference-map entry.
 

@@ -1,5 +1,6 @@
 import { BunawayError } from "@bunaway/protocol";
-import { MAX_IMAGE_BYTES, type Pixels } from "#image/contract";
+import { MAX_IMAGE_BYTES } from "#image/contract";
+import type { Pixels } from "#image/platforms/codec";
 /** Copy a positive in-bounds pixel rectangle, preserving row order, alpha and source ownership. */
 export function cropPixels(
   source: Pixels,

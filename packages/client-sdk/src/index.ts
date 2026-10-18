@@ -425,7 +425,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
       if (this.terminated || (subscription.released && !releaseRequested)) {
         return Promise.resolve();
       }
-      if (releasePromise) {
+      if (releasePromise !== undefined) {
         return releasePromise;
       }
       releaseRequested = true;

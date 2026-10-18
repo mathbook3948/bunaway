@@ -14,9 +14,12 @@ export type NativeIcoFrame = {
   /** Bits per pixel from the DIB header, or the directory value (32 when absent) for a PNG. */
   bitCount: number;
   /** Frame bytes borrowed from the decoded ICO. Copy them before DWORD-aligned native use. */
-  data: Buffer;
+  data: Uint8Array;
 };
 
+// This module is bundled into WebView code through the plugin contracts, so it only uses
+// standard globals: no Buffer, no Bun and no Node modules. The lint override in biome.json and
+// the browser boundary conformance test keep it that way.
 const ICO_HEADER_BYTES = 6;
 const ICO_ENTRY_BYTES = 16;
 const MAX_ICO_FRAMES = 32;
@@ -31,7 +34,6 @@ const DIB_BIT_COUNTS = [
   24,
   32,
 ];
-// A plain array: this module is also bundled into WebView code, where Buffer is not defined at load.
 const PNG_SIGNATURE = [
   137,
   80,
@@ -46,6 +48,7 @@ const PNG_IHDR_BYTES = 13;
 const PNG_CHUNK_OVERHEAD_BYTES = 12;
 const PNG_MIN_BYTES = 33;
 const DEFAULT_PNG_BIT_COUNT = 32;
+const LITTLE_ENDIAN = true;
 
 /**
  * Decode a canonical base64 ICO and validate it without file I/O or native calls.
@@ -59,17 +62,22 @@ export function parseNativeIco(ico: string): NativeIcoFrame[] | undefined {
   if (ico.length > Math.ceil(MAX_NATIVE_ICO_BYTES / 3) * 4) {
     return undefined;
   }
-  const bytes = Buffer.from(ico, "base64");
+  const bytes = decodeCanonicalBase64(ico);
   if (
+    !bytes ||
     bytes.length < ICO_HEADER_BYTES + ICO_ENTRY_BYTES ||
-    bytes.length > MAX_NATIVE_ICO_BYTES ||
-    bytes.toString("base64") !== ico ||
-    bytes.readUInt16LE(0) !== 0 ||
-    bytes.readUInt16LE(2) !== 1
+    bytes.length > MAX_NATIVE_ICO_BYTES
   ) {
     return undefined;
   }
-  const count = bytes.readUInt16LE(4);
+  const view = dataView(bytes);
+  if (
+    view.getUint16(0, LITTLE_ENDIAN) !== 0 ||
+    view.getUint16(2, LITTLE_ENDIAN) !== 1
+  ) {
+    return undefined;
+  }
+  const count = view.getUint16(4, LITTLE_ENDIAN);
   const directoryBytes = ICO_HEADER_BYTES + count * ICO_ENTRY_BYTES;
   if (count < 1 || count > MAX_ICO_FRAMES || bytes.length < directoryBytes) {
     return undefined;
@@ -77,12 +85,12 @@ export function parseNativeIco(ico: string): NativeIcoFrame[] | undefined {
   const frames: NativeIcoFrame[] = [];
   for (let index = 0; index < count; index++) {
     const entry = ICO_HEADER_BYTES + index * ICO_ENTRY_BYTES;
-    const width = bytes.readUInt8(entry) || ICO_LARGE_DIMENSION;
-    const height = bytes.readUInt8(entry + 1) || ICO_LARGE_DIMENSION;
-    const size = bytes.readUInt32LE(entry + 8);
-    const offset = bytes.readUInt32LE(entry + 12);
+    const width = view.getUint8(entry) || ICO_LARGE_DIMENSION;
+    const height = view.getUint8(entry + 1) || ICO_LARGE_DIMENSION;
+    const size = view.getUint32(entry + 8, LITTLE_ENDIAN);
+    const offset = view.getUint32(entry + 12, LITTLE_ENDIAN);
     if (
-      bytes.readUInt8(entry + 3) !== 0 ||
+      view.getUint8(entry + 3) !== 0 ||
       size === 0 ||
       offset < directoryBytes ||
       offset > bytes.length - size
@@ -94,7 +102,7 @@ export function parseNativeIco(ico: string): NativeIcoFrame[] | undefined {
       data,
       width,
       height,
-      bytes.readUInt16LE(entry + 6),
+      view.getUint16(entry + 6, LITTLE_ENDIAN),
     );
     if (bitCount === undefined) {
       return undefined;
@@ -142,9 +150,43 @@ export function selectNativeIcoFrame(
   return covering ?? largest;
 }
 
+/**
+ * Decode base64 that round-trips byte for byte. `atob` accepts whitespace and missing padding,
+ * so re-encoding and comparing rejects every non-canonical spelling of the same bytes.
+ */
+function decodeCanonicalBase64(encoded: string): Uint8Array | undefined {
+  let binary: string;
+  try {
+    binary = atob(encoded);
+  } catch {
+    return undefined;
+  }
+  if (btoa(binary) !== encoded) {
+    return undefined;
+  }
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+/** A view over exactly the bytes of `bytes`, which may be a subarray of a larger buffer. */
+function dataView(bytes: Uint8Array): DataView {
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+}
+
+/**
+ * The text of `bytes[start, end)`, used for the four-byte PNG chunk types. Every byte maps to
+ * one code unit, so a chunk type with a high bit set never matches "IHDR" or "IEND".
+ */
+function ascii(bytes: Uint8Array, start: number, end: number): string {
+  return String.fromCharCode(...bytes.subarray(start, end));
+}
+
 /** Validate one frame against its directory dimensions and return its bit depth. */
 function frameBitCount(
-  image: Buffer,
+  image: Uint8Array,
   width: number,
   height: number,
   directoryBitCount: number,
@@ -161,22 +203,23 @@ function frameBitCount(
 }
 
 /** Require a PNG whose IHDR matches the directory and whose chunks end exactly at IEND. */
-function validPng(image: Buffer, width: number, height: number): boolean {
+function validPng(image: Uint8Array, width: number, height: number): boolean {
+  const view = dataView(image);
   if (
-    image.readUInt32BE(8) !== PNG_IHDR_BYTES ||
-    image.toString("ascii", 12, 16) !== "IHDR" ||
-    image.readUInt32BE(16) !== width ||
-    image.readUInt32BE(20) !== height
+    view.getUint32(8) !== PNG_IHDR_BYTES ||
+    ascii(image, 12, 16) !== "IHDR" ||
+    view.getUint32(16) !== width ||
+    view.getUint32(20) !== height
   ) {
     return false;
   }
   let offset = PNG_SIGNATURE.length;
   while (offset <= image.length - PNG_CHUNK_OVERHEAD_BYTES) {
-    const length = image.readUInt32BE(offset);
+    const length = view.getUint32(offset);
     if (length > image.length - offset - PNG_CHUNK_OVERHEAD_BYTES) {
       return false;
     }
-    const type = image.toString("ascii", offset + 4, offset + 8);
+    const type = ascii(image, offset + 4, offset + 8);
     offset += length + PNG_CHUNK_OVERHEAD_BYTES;
     if (type === "IEND") {
       return length === 0 && offset === image.length;
@@ -191,31 +234,34 @@ function validPng(image: Buffer, width: number, height: number): boolean {
  * and mask.
  */
 function dibBitCount(
-  image: Buffer,
+  image: Uint8Array,
   width: number,
   height: number,
 ): number | undefined {
+  if (image.length < DIB_HEADER_BYTES) {
+    return undefined;
+  }
+  const view = dataView(image);
   if (
-    image.length < DIB_HEADER_BYTES ||
-    image.readUInt32LE(0) !== DIB_HEADER_BYTES ||
-    image.readInt32LE(4) !== width ||
-    image.readInt32LE(8) !== height * 2 ||
-    image.readUInt16LE(12) !== 1 ||
-    image.readUInt32LE(16) !== 0
+    view.getUint32(0, LITTLE_ENDIAN) !== DIB_HEADER_BYTES ||
+    view.getInt32(4, LITTLE_ENDIAN) !== width ||
+    view.getInt32(8, LITTLE_ENDIAN) !== height * 2 ||
+    view.getUint16(12, LITTLE_ENDIAN) !== 1 ||
+    view.getUint32(16, LITTLE_ENDIAN) !== 0
   ) {
     return undefined;
   }
-  const bits = image.readUInt16LE(14);
+  const bits = view.getUint16(14, LITTLE_ENDIAN);
   if (!DIB_BIT_COUNTS.includes(bits)) {
     return undefined;
   }
-  const declaredColors = image.readUInt32LE(32);
+  const declaredColors = view.getUint32(32, LITTLE_ENDIAN);
   const colors = bits <= 8 ? declaredColors || 2 ** bits : 0;
   if ((bits <= 8 && colors > 2 ** bits) || (bits > 8 && declaredColors !== 0)) {
     return undefined;
   }
   const colorBytes = Math.ceil((width * bits) / 32) * 4 * height;
-  const declaredBytes = image.readUInt32LE(20);
+  const declaredBytes = view.getUint32(20, LITTLE_ENDIAN);
   if (declaredBytes !== 0 && declaredBytes !== colorBytes) {
     return undefined;
   }

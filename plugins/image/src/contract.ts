@@ -1,7 +1,7 @@
 import {
   base64CharactersFor,
-  base64Schema as sharedBase64Schema,
   canonicalBase64Bytes,
+  base64Schema as sharedBase64Schema,
 } from "@bunaway/plugin";
 import { z } from "zod";
 export const MAX_IMAGE_BYTES = 524_288;
@@ -95,22 +95,3 @@ export const resizeSchema = transformSizeSchema.safeExtend({
   id: idSchema,
   interpolation: interpolationSchema.optional(),
 });
-
-export type Pixels = {
-  width: number;
-  height: number;
-  rgba: Buffer;
-};
-
-/** The two platform codecs expose the same bounded pixel operations. */
-export type ImageCodec = {
-  decode(bytes: Buffer, mime: ImageMime): Pixels;
-  encode(pixels: Pixels, mime: ImageMime): Buffer;
-  resize(
-    pixels: Pixels,
-    width: number,
-    height: number,
-    interpolation: ImageInterpolation,
-  ): Pixels;
-  dispose(): void;
-};
