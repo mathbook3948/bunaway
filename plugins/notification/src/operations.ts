@@ -2,6 +2,7 @@ import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
   notificationIdentitySchema,
+  notificationListSchema,
   notificationResultSchema,
   notificationShowSchema,
   statusSchema,
@@ -25,6 +26,11 @@ export const notificationOperations = {
     input: z.null(),
     output: z.null(),
     handler: (_input, { instance }) => instance.clearAll(),
+  }),
+  list: operation({
+    input: z.null(),
+    output: notificationListSchema,
+    handler: (_input, { instance }) => instance.list(),
   }),
   getStatus: operation({
     input: z.null(),

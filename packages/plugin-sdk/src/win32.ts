@@ -532,6 +532,13 @@ export const COMBASE = {
     ],
     returns: "i32",
   },
+  WindowsGetStringRawBuffer: {
+    args: [
+      "ptr",
+      "ptr",
+    ],
+    returns: "ptr",
+  },
 } as const satisfies Record<string, FFIFunction>;
 
 /** advapi32.dll: registry access. */

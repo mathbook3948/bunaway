@@ -1,10 +1,11 @@
 import { dlopen, type Pointer, ptr } from "bun:ffi";
 import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
-import type {
-  NotificationResult,
-  ResolvedNotification,
-  ToastEvent,
+import {
+  type NotificationResult,
+  notificationResultSchema,
+  type ResolvedNotification,
+  type ToastEvent,
 } from "#notification/contract";
 import {
   type ToastDriver,
@@ -22,6 +23,7 @@ const MANAGER = "Windows.UI.Notifications.ToastNotificationManager";
 const MANAGER_IID = "50ac103f-d235-4598-bbef-98fe4d1a3ad4";
 const HISTORY_MANAGER_IID = "7ab93c52-0e48-4750-ba9d-1a4113981847";
 const TOAST_FACTORY_IID = "04124b20-82c6-4229-b109-fd9ed4662b53";
+const HISTORY2_IID = "3bc3d253-2f31-4092-9129-8ad5abf067da";
 const TOAST2_IID = "9dfb9fd1-143a-490e-90bf-b9fba7132de7";
 const XML_IO_IID = "6cd0e74e-ee65-4489-9ebf-ca43e87ba637";
 const EVENTS = [
@@ -427,6 +429,100 @@ export function createWindowsToastDriver(appId: string): ToastDriver {
           ),
         ),
       );
+    },
+    list() {
+      ensureActive();
+      drainFailed();
+      // IToastNotificationHistory2: GetHistory(6), GetHistoryWithId(7). Scoped to this app's AppUserModelID.
+      const history2 = runtime.query(history, HISTORY2_IID);
+      try {
+        const items = runtime.string(appId, (app) =>
+          runtime.object(
+            (out) =>
+              runtime.method(
+                history2,
+                7,
+                [
+                  "ptr",
+                  "ptr",
+                ],
+                app,
+                out,
+              ),
+            "ToastHistory.GetHistoryWithId",
+          ),
+        );
+        try {
+          // IVectorView<ToastNotification>: get_Size(7), GetAt(6).
+          const size = new Uint32Array(1);
+          checkToast(
+            runtime.method(
+              items,
+              7,
+              [
+                "ptr",
+              ],
+              ptr(size),
+            ),
+            "ToastHistory.Size",
+          );
+          const result: NotificationResult[] = [];
+          for (let index = 0; index < (size[0] ?? 0); index++) {
+            const toast = runtime.object(
+              (out) =>
+                runtime.method(
+                  items,
+                  6,
+                  [
+                    "u32",
+                    "ptr",
+                  ],
+                  index,
+                  out,
+                ),
+              "ToastHistory.GetAt",
+            );
+            try {
+              const properties = runtime.query(toast, TOAST2_IID);
+              try {
+                // IToastNotification2: get_Tag(7), get_Group(9).
+                const text = (slot: number, stage: string) => {
+                  const out = new BigUint64Array(1);
+                  checkToast(
+                    runtime.method(
+                      properties,
+                      slot,
+                      [
+                        "ptr",
+                      ],
+                      ptr(out),
+                    ),
+                    stage,
+                  );
+                  return runtime.takeString(Number(out[0]) as Pointer);
+                };
+                const identity = notificationResultSchema.safeParse({
+                  id: text(7, "ToastNotification.Tag"),
+                  group: text(9, "ToastNotification.Group"),
+                });
+                // Items created by other code under the same app ID may lack a tag or use characters outside our contract.
+                if (identity.success) {
+                  result.push(identity.data);
+                }
+              } finally {
+                runtime.release(properties);
+              }
+            } finally {
+              runtime.release(toast);
+            }
+          }
+          return result;
+        } finally {
+          runtime.release(items);
+        }
+      } finally {
+        runtime.release(history2);
+      }
     },
     clearAll() {
       ensureActive();

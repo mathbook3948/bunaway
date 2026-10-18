@@ -45,6 +45,7 @@ export function validateNotificationInput(
   }
   if (
     operation !== "notification.clearAll" &&
+    operation !== "notification.list" &&
     operation !== "notification.getStatus" &&
     operation !== "notification.openSettings"
   ) {
@@ -181,6 +182,7 @@ export const notificationResultSchema = z.strictObject({
   id: identifierSchema,
   group: identifierSchema,
 });
+export const notificationListSchema = z.array(notificationResultSchema);
 export type NotificationIdentity = z.input<typeof notificationIdentitySchema>;
 export type NotificationOptions = z.input<typeof notificationShowSchema>;
 export type ResolvedNotification = z.output<typeof notificationShowSchema>;

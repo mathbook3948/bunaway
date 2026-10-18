@@ -29,6 +29,13 @@ let shown = 0,
   removed = 0,
   cleared = 0;
 const payloads: string[] = [];
+// History items returned by IToastNotificationHistory2.GetHistoryWithId as [tag, group].
+let historyItems: [
+  string,
+  string,
+][] = [];
+const listedIndex = new Map<number, number>();
+const rawBuffers: Buffer[] = [];
 const allocatedDelegates: ffi.Pointer[] = [];
 const writePointer = (out: ffi.Pointer, value: number) =>
   new DataView(ffi.toArrayBuffer(out, 0, 8)).setBigUint64(
@@ -93,6 +100,15 @@ mock.module("bun:ffi", () => ({
         return state.refs;
       }
       if (slot === 0) {
+        if (state.kind === "history") {
+          return output(1, "history2");
+        }
+        if (state.kind === "listed") {
+          const address = makeObject("listedProperties");
+          listedIndex.set(address, listedIndex.get(object) ?? -1);
+          writePointer(Number(args[1]) as ffi.Pointer, address);
+          return 0;
+        }
         return output(1, state.kind === "document" ? "xml" : "properties");
       }
       if (stage === "manager:7") {
@@ -107,6 +123,37 @@ mock.module("bun:ffi", () => ({
       }
       if (stage === "xml:6") {
         payloads.push(strings.get(Number(args[0])) ?? "");
+        return 0;
+      }
+      if (stage === "history2:7") {
+        assert.equal(strings.get(Number(args[0])), "test.app");
+        return output(1, "items");
+      }
+      if (stage === "items:7") {
+        new DataView(
+          ffi.toArrayBuffer(Number(args[0]) as ffi.Pointer, 0, 4),
+        ).setUint32(0, historyItems.length, true);
+        return 0;
+      }
+      if (stage === "items:6") {
+        const address = makeObject("listed");
+        listedIndex.set(address, Number(args[0]));
+        writePointer(Number(args[1]) as ffi.Pointer, address);
+        return 0;
+      }
+      if (stage === "listedProperties:7" || stage === "listedProperties:9") {
+        const owner = listedIndex.get(object);
+        assert(owner !== undefined);
+        const item = historyItems[owner];
+        assert(item);
+        const text = item[slot === 7 ? 0 : 1];
+        // An empty HSTRING is a null handle.
+        if (text === "") {
+          writePointer(Number(args[0]) as ffi.Pointer, 0);
+        } else {
+          strings.set(++stringId, text);
+          writePointer(Number(args[0]) as ffi.Pointer, stringId);
+        }
         return 0;
       }
       if (state.kind === "properties") {
@@ -236,6 +283,16 @@ mock.module("bun:ffi", () => ({
       WindowsDeleteString: (address: number) => {
         assert(strings.delete(address));
         return 0;
+      },
+      WindowsGetStringRawBuffer: (address: number, length: ffi.Pointer) => {
+        const buffer = Buffer.from(strings.get(address) ?? "", "utf16le");
+        rawBuffers.push(buffer);
+        new DataView(ffi.toArrayBuffer(length, 0, 4)).setUint32(
+          0,
+          buffer.length / 2,
+          true,
+        );
+        return ffi.ptr(buffer);
       },
       RoActivateInstance: (_name: number, output: ffi.Pointer) => {
         writePointer(output, makeObject("document"));
@@ -409,6 +466,53 @@ failStage = "history:12";
 assert.throws(() => driver.clearAll(), {
   code: "INTERNAL",
 });
+failStage = "";
+// list reads Tag/Group of every history item of the app ID and omits items outside the identity contract.
+assert.deepEqual(driver.list(), []);
+historyItems = [
+  [
+    "first",
+    "bunaway",
+  ],
+  [
+    "",
+    "bunaway",
+  ],
+  [
+    "bad tag!",
+    "bunaway",
+  ],
+  [
+    "한글",
+    "grp",
+  ],
+  [
+    "second",
+    "other",
+  ],
+];
+assert.deepEqual(driver.list(), [
+  {
+    id: "first",
+    group: "bunaway",
+  },
+  {
+    id: "second",
+    group: "other",
+  },
+]);
+for (const stage of [
+  "history2:7",
+  "items:7",
+  "items:6",
+  "listedProperties:7",
+  "listedProperties:9",
+]) {
+  failStage = stage;
+  assert.throws(() => driver.list(), {
+    code: "INTERNAL",
+  });
+}
 failStage = "";
 deferRelease = true;
 const { drainToastCleanup } = await import(

@@ -1396,6 +1396,7 @@
       "notification.show",
       "notification.clear",
       "notification.clearAll",
+      "notification.list",
       "notification.getStatus",
       "notification.openSettings"
     ],
