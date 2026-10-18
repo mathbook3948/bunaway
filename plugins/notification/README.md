@@ -3,7 +3,7 @@
 `@bunaway/plugin-notification`은 Windows의 알림 API 지원과 현재 앱의 OS 알림 설정을
 조회하고 Windows 알림 설정 페이지를 열며 실행 중 toast를 표시하는 선택 네이티브 플러그인이다.
 `defineNativePlugin`과 Zod 계약으로 `notification.getStatus`, `notification.openSettings`를
-`notification.show`, `notification.clear`, `notification.clearAll`을 선언하며 각 작업은 같은 이름의 독립 정책 권한을 요구한다.
+`notification.show`, `notification.clear`, `notification.clearAll`, `notification.list`를 선언하며 각 작업은 같은 이름의 독립 정책 권한을 요구한다.
 공개 helper는 `notification.getStatus()`와 `notification.openSettings()`이다.
 
 자세한 반환값, 권한, 오류와 사용 예는
@@ -81,6 +81,14 @@ Tauri 알림 플러그인의 `removeAllActive`와 같은 범위이며 Electron `
 없어 Tauri 기준으로 제공한다. ClearWithId는 `IToastNotificationHistory`의 12번 slot
 (IInspectable 다음 RemoveGroup, RemoveGroupWithId, RemoveGroupedTagWithId, RemoveGroupedTag,
 Remove, Clear, ClearWithId)이며 기존 clear가 쓰는 RemoveGroupedTagWithId는 8번 slot이다.
+`list()`는 입력 null로 호스트 앱 ID의 알림 기록(`IToastNotificationHistory2.GetHistoryWithId`,
+IInspectable 다음 GetHistory, GetHistoryWithId의 7번 slot)에 남은 항목의 `{ id, group }` 배열을
+반환한다. 각 항목의 Tag와 Group은 `IToastNotification2`(get_Tag 7번, get_Group 9번 slot)에서
+읽으며 이전 프로세스가 남긴 항목도 포함한다. 다른 앱의 알림은 조회하지 않는다. 태그가 없거나
+식별자 규칙(`[A-Za-z0-9._-]{1,16}`)을 벗어난 항목은 `clear`로 가리킬 수 없으므로 결과에서 뺀다.
+제목, 본문과 `data`는 반환하지 않는다. 빈 기록은 빈 배열이며 소유권과 이벤트에 영향이 없다.
+Tauri 알림 플러그인의 `active()`와 같은 범위이며 Electron `Notification`에는 대응 API가 없어
+Tauri 기준으로 제공한다.
 교체와 clear 이후 이전 객체에서 늦게 온 callback은 버린다. clear와 앱 종료는 별도
 합성 dismissed 이벤트를 만들지 않는다. timeout dismissed 뒤에도 같은 객체의 후속 callback을
 받기 위해 소유권을 유지한다. 동시에 최대 64개의 ID/group을 소유하며 clear로 반환한다.
@@ -133,6 +141,7 @@ activation은 후속 범위다.
 - `bun --no-env-file test tests/lifecycle/windows-toast.test.ts`: Windows에서 UUID 바로가기와
   소리/popup을 억제한 알림을 사용해 실제 Show, XML, 교체, 개별 제거와 종료 후 history를
   독립적인 WinRT projection으로 확인한다. 서로 다른 ID/group의 popup 억제 알림 3개를
-  `clearAll`로 제거해 history가 비는 것도 확인한다. 별도 STA/MTA fixture는 실제 COM marshaling,
+  `clearAll`로 제거해 history가 비는 것도 확인한다. 같은 항목을 `list`가 id/group으로
+  돌려주는지도 확인한다. 별도 STA/MTA fixture는 실제 COM marshaling,
   callback 실행 스레드와 지연 Release 정리를 확인한다. `host:windows`에도 포함한다.
   이 검사는 실제 사용자의 클릭이나 종료 상태 activation을 검증하지 않는다.

@@ -1,6 +1,6 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
-import { COMBASE, KERNEL32, pick, wide } from "@bunaway/plugin/win32";
 import type { NativeEnvironment } from "@bunaway/plugin";
+import { COMBASE, KERNEL32, pick, wide } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import type {
   NotificationResult,
@@ -384,6 +384,7 @@ export function initialize(environment: NativeEnvironment) {
     },
     clear: (input: NotificationResult) => getToasts().clear(input),
     clearAll: () => getToasts().clearAll(),
+    list: () => getToasts().list(),
     async dispose() {
       // The regular UI pump has stopped. Drain marshaled releases before unloading DLLs or our STA.
       if (toasts) {

@@ -367,7 +367,16 @@ if (workerData?.toastMarshalWorker) {
       3,
       "Distinct id/group pairs must create separate history items",
     );
+    // list returns the identities the OS history holds for this app, whichever process created them.
+    const key = (item: { id: string; group: string }) =>
+      `${item.group}/${item.id}`;
+    assert.deepEqual(controller.list().map(key).sort(), [
+      "bunaway-other/all-a",
+      "bunaway-test/all-a",
+      "bunaway-test/all-b",
+    ]);
     assert.equal(controller.clearAll(), null);
+    assert.deepEqual(controller.list(), []);
     assert.equal(
       (await waitHistory((items) => items.length === 0)).length,
       0,

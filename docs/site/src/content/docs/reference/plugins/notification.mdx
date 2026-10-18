@@ -85,6 +85,7 @@ OS에 해당 페이지나 처리 앱이 없거나 요청이 거부되면 오류�
 | `notification.show` | `NotificationOptions` | `notification.show` |
 | `notification.clear` | `NotificationIdentity` | `notification.clear` |
 | `notification.clearAll` | `null` | `notification.clearAll` |
+| `notification.list` | `null` | `notification.list` |
 | `notification.getStatus` | `null` | `notification.getStatus` |
 | `notification.openSettings` | `null` | `notification.openSettings` |
 
@@ -112,6 +113,7 @@ OS에 해당 페이지나 처리 앱이 없거나 요청이 거부되면 오류�
 notification.show(input: NotificationOptions, options?: NativeInvokeOptions): Promise<NotificationResult>
 notification.clear(input: NotificationIdentity, options?: NativeInvokeOptions): Promise<null>
 notification.clearAll(input: null, options?: NativeInvokeOptions): Promise<null>
+notification.list(input: null, options?: NativeInvokeOptions): Promise<NotificationResult[]>
 
 await notification.show({
   id: "export-done",
@@ -153,6 +155,13 @@ null을 반환합니다. 이번 실행이 소유한 알림을 숨긴 뒤 호스�
 보내지 않습니다. 실패하면 소유권을 유지하므로 다시 호출할 수 있습니다. Tauri의
 `removeAllActive`와 같은 범위입니다. Electron `Notification`에는 대응하는 API가 없어
 Tauri 기준으로 제공하며, `clearAll` 권한은 `clear`와 독립입니다.
+
+`notification.list`는 입력 `null`로 같은 앱의 알림 센터 기록에 남은 알림의 `{ id, group }`
+배열을 반환합니다. 이전 프로세스가 남긴 항목도 포함하며 다른 앱의 알림은 조회하지 않습니다.
+제목, 본문과 `data`는 반환하지 않습니다. 태그가 없거나 id/group 규칙을 벗어난 항목은
+`clear`로 가리킬 수 없으므로 결과에서 뺍니다. 기록이 비면 빈 배열이며 소유 중인 알림과
+이벤트에는 영향이 없습니다. Tauri의 `active()`와 같은 범위입니다. Electron `Notification`에는
+대응하는 API가 없어 Tauri 기준으로 제공하며, `list` 권한은 `show`, `clear`와 독립입니다.
 
 동시에 최대 64개의 ID/group을 소유합니다. dismissed 후에도 후속 callback을 받기 위해
 소유권을 유지하므로 끝난 항목은 clear하세요. 새 ID가 한도를 넘으면 `BUSY`이며 같은 ID
@@ -221,7 +230,7 @@ HRESULT는 unsigned 32비트 정수입니다. Show 자체가 실패하면 명령
 앱 정의로 `CommandsOf`, `EventsOf`를 지정한 클라이언트에서 이벤트를 구독하세요.
 뷰 정책의 `events`에 이벤트 이름을 허용하고 `host.permissions`에 `notification.show`도
 허용해야 합니다. 직접 작업 호출은 `commands`에 `plugin.notification.show` 또는
-`plugin.notification.clear` 또는 `plugin.notification.clearAll`과 해당 host 권한을 추가합니다. 구독 해제, 뷰 종료와 권한 거부
+`plugin.notification.clear`, `plugin.notification.clearAll` 또는 `plugin.notification.list`와 해당 host 권한을 추가합니다. 구독 해제, 뷰 종료와 권한 거부
 뒤에는 전달하지 않습니다. clear, 교체와 앱 종료 뒤 이전 객체의 callback은 버립니다.
 앱이 요청한 제거에 대해 별도의 합성 dismissed 이벤트는 보내지 않습니다.
 

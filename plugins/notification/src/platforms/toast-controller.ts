@@ -20,6 +20,8 @@ export type ToastDriver = {
   clear(identity: NotificationResult): void;
   /** Hide every toast owned by this driver and clear all history of the host app ID, including earlier processes. */
   clearAll(): void;
+  /** Identities of the host app ID's history items, including earlier processes. Items without a valid identity are omitted. */
+  list(): NotificationResult[];
   dispose(): void;
 };
 
@@ -131,6 +133,10 @@ export function createToastController(
       }
       settle(drain);
       return null;
+    },
+    list(): NotificationResult[] {
+      active();
+      return driver.list();
     },
     clearAll(): null {
       active();

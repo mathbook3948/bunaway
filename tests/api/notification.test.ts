@@ -21,11 +21,13 @@ test("notification status and Settings require separate permissions and null-onl
     "notification.show",
     "notification.clear",
     "notification.clearAll",
+    "notification.list",
     "notification.getStatus",
     "notification.openSettings",
   ]);
   for (const operation of [
     "notification.clearAll",
+    "notification.list",
     "notification.getStatus",
     "notification.openSettings",
   ]) {

@@ -70,6 +70,7 @@ export function createToastRuntime() {
       "RoGetActivationFactory",
       "WindowsCreateString",
       "WindowsDeleteString",
+      "WindowsGetStringRawBuffer",
     ),
     RoActivateInstance: {
       args: [
@@ -145,10 +146,31 @@ export function createToastRuntime() {
       library.symbols.WindowsDeleteString(address);
     }
   };
+  /** Copy and release an HSTRING returned by a COM getter. A null handle is the empty string. */
+  const takeString = (handle: Pointer | 0): string => {
+    if (!handle) {
+      return "";
+    }
+    try {
+      const length = new Uint32Array(1);
+      const buffer = library.symbols.WindowsGetStringRawBuffer(
+        handle,
+        ptr(length),
+      );
+      return buffer
+        ? Buffer.from(toArrayBuffer(buffer, 0, (length[0] ?? 0) * 2)).toString(
+            "utf16le",
+          )
+        : "";
+    } finally {
+      library.symbols.WindowsDeleteString(handle);
+    }
+  };
   return {
     method,
     object,
     string,
+    takeString,
     query: (value: Pointer, iid: string) =>
       object(
         (out) =>

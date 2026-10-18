@@ -9,6 +9,7 @@ import {
 import { publishSystemEvent } from "#native/windows/bun/system-events";
 import {
   MAX_ACTIVE_TOASTS,
+  type NotificationResult,
   notificationShowSchema,
   type ToastEvent,
 } from "#plugins/notification/src/contract";
@@ -43,6 +44,7 @@ function fixture() {
     failDetach = false,
     clearedAll = 0,
     disposals = 0;
+  let listed: NotificationResult[] = [];
   const driver: ToastDriver = {
     show(_input, receive) {
       if (failShow) {
@@ -63,6 +65,9 @@ function fixture() {
         throw new Error("clear failed");
       }
       cleared.push(`${identity.group}/${identity.id}`);
+    },
+    list() {
+      return listed;
     },
     clearAll() {
       if (failClear) {
@@ -86,6 +91,9 @@ function fixture() {
     events,
     cleared,
     detached,
+    setListed(items: NotificationResult[]) {
+      listed = items;
+    },
     failure(kind: "show" | "clear" | "detach", value: boolean) {
       if (kind === "show") {
         failShow = value;
@@ -455,6 +463,68 @@ test("clearAll takes only null, retires every owned toast, drops late callbacks 
   }
   expect(() => f.controller.show(input("overflow"))).toThrow(BunawayError);
   f.controller.dispose();
+});
+
+test("list takes only null, validates the output and reads the driver without touching ownership", async () => {
+  for (const payload of [
+    {},
+    {
+      id: "first",
+    },
+    "all",
+    false,
+  ] as JsonValue[]) {
+    await expect(
+      parsers.validateCall({
+        operation: "notification.list",
+        payload,
+      }),
+    ).rejects.toThrow();
+  }
+  await expect(
+    parsers.validateCall({
+      operation: "notification.list",
+      payload: null,
+    }),
+  ).resolves.toBeDefined();
+  await expect(
+    parsers.validateOutput("notification.list", {}),
+  ).rejects.toThrow();
+  await expect(
+    parsers.validateOutput("notification.list", [
+      {
+        id: "bad id",
+        group: "bunaway",
+      },
+    ]),
+  ).rejects.toThrow();
+  await expect(
+    parsers.validateOutput("notification.list", [
+      {
+        id: "a",
+        group: "bunaway",
+      },
+    ]),
+  ).resolves.toBeDefined();
+  const f = fixture();
+  f.controller.show(input());
+  f.setListed([
+    {
+      id: "left",
+      group: "bunaway",
+    },
+  ]);
+  expect(f.controller.list()).toEqual([
+    {
+      id: "left",
+      group: "bunaway",
+    },
+  ]);
+  // Listing neither retires the owned toast nor emits events.
+  expect(f.detached).toEqual([]);
+  expect(f.events).toEqual([]);
+  f.controller.dispose();
+  expect(() => f.controller.list()).toThrow(BunawayError);
 });
 
 test("clearAll failure keeps ownership so a retry succeeds and callbacks stay live until then", () => {
