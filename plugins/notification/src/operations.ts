@@ -21,6 +21,11 @@ export const notificationOperations = {
     output: z.null(),
     handler: (input, { instance }) => instance.clear(input),
   }),
+  clearAll: operation({
+    input: z.null(),
+    output: z.null(),
+    handler: (_input, { instance }) => instance.clearAll(),
+  }),
   getStatus: operation({
     input: z.null(),
     output: statusSchema,

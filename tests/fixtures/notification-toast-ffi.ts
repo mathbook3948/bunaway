@@ -26,7 +26,8 @@ let failStage = "",
   failRemove = false;
 let shown = 0,
   hidden = 0,
-  removed = 0;
+  removed = 0,
+  cleared = 0;
 const payloads: string[] = [];
 const allocatedDelegates: ffi.Pointer[] = [];
 const writePointer = (out: ffi.Pointer, value: number) =>
@@ -124,6 +125,11 @@ mock.module("bun:ffi", () => ({
       }
       if (stage === "notifier:7") {
         hidden++;
+        return 0;
+      }
+      if (stage === "history:12") {
+        assert.equal(strings.get(Number(args[0])), "test.app");
+        cleared++;
         return 0;
       }
       if (stage === "history:8") {
@@ -395,6 +401,15 @@ driver.clear({
 });
 assert.equal(hidden, 1);
 assert.equal(removed, 1);
+// clearAll hides every owned toast, then ClearWithId (history slot 12) clears the app ID's records.
+driver.clearAll();
+assert.equal(hidden, 2);
+assert.equal(cleared, 1);
+failStage = "history:12";
+assert.throws(() => driver.clearAll(), {
+  code: "INTERNAL",
+});
+failStage = "";
 deferRelease = true;
 const { drainToastCleanup } = await import(
   "../../plugins/notification/src/platforms/toast-cleanup.ts"

@@ -383,6 +383,7 @@ export function initialize(environment: NativeEnvironment) {
       return controller.show(input);
     },
     clear: (input: NotificationResult) => getToasts().clear(input),
+    clearAll: () => getToasts().clearAll(),
     async dispose() {
       // The regular UI pump has stopped. Drain marshaled releases before unloading DLLs or our STA.
       if (toasts) {

@@ -472,7 +472,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] 앱이 종료된 상태의 toast activation을 앱 시작과 `onOpen`에 연결한다.
 - [ ] timeout과 표시 우선순위의 플랫폼별 동작을 정의한다. silent는 Windows에서 구현했다.
 - [ ] Windows toast XML과 고급 알림 콘텐츠의 지원을 결정한다.
-- [ ] OS에 남은 알림 조회와 그룹, 전체 제거의 플랫폼별 지원을 결정한다. Windows 개별 ID/group 제거는 구현했다.
+- [ ] OS에 남은 알림 조회와 그룹, 전체 제거의 플랫폼별 지원을 결정한다. Windows 개별 ID/group 제거와 앱 전체 제거(`notification.clearAll`)는 구현했다. 조회와 group 단위 제거는 남아 있다.
 - [ ] 예약 알림과 pending 조회, 취소의 플랫폼별 지원을 제공한다.
 - [ ] 첨부 파일과 클릭 액션 종류를 등록한다.
 - [x] Windows 알림 설정 페이지로 이동하는 요청과 사용자에 의한 차단 상태를 제공한다.

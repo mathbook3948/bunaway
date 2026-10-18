@@ -18,6 +18,8 @@ export type ToastDriver = {
     receive: (event: ToastEvent) => void,
   ): ToastHandle;
   clear(identity: NotificationResult): void;
+  /** Hide every toast owned by this driver and clear all history of the host app ID, including earlier processes. */
+  clearAll(): void;
   dispose(): void;
 };
 
@@ -127,6 +129,20 @@ export function createToastController(
         retire(entry);
         entries.delete(id);
       }
+      settle(drain);
+      return null;
+    },
+    clearAll(): null {
+      active();
+      const settle = beginSettle();
+      settle(drain);
+      // A driver failure leaves every entry owned so the caller can retry.
+      driver.clearAll();
+      // Retiring discards late callbacks. Like clear, no synthetic dismissed event is published.
+      for (const entry of entries.values()) {
+        retire(entry);
+      }
+      entries.clear();
       settle(drain);
       return null;
     },

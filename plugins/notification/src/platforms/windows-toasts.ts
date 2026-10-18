@@ -428,6 +428,42 @@ export function createWindowsToastDriver(appId: string): ToastDriver {
         ),
       );
     },
+    clearAll() {
+      ensureActive();
+      drainFailed();
+      for (const owner of owned) {
+        if (owner.toast) {
+          checkToast(
+            runtime.method(
+              notifier,
+              7,
+              [
+                "ptr",
+              ],
+              owner.toast,
+            ),
+            "ToastNotifier.Hide",
+          );
+        }
+      }
+      // IToastNotificationHistory follows IInspectable: RemoveGroup(6), RemoveGroupWithId(7),
+      // RemoveGroupedTagWithId(8, used by clear), RemoveGroupedTag(9), Remove(10), Clear(11), ClearWithId(12).
+      // ClearWithId is scoped to this app's AppUserModelID, so it also removes records left by an earlier
+      // process and never touches another app's notifications.
+      runtime.string(appId, (app) =>
+        checkToast(
+          runtime.method(
+            history,
+            12,
+            [
+              "ptr",
+            ],
+            app,
+          ),
+          "ToastHistory.ClearWithId",
+        ),
+      );
+    },
     dispose() {
       if (disposed) {
         return;
