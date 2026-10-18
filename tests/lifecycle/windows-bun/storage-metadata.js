@@ -173,6 +173,14 @@ try {
     (await storage.readDirectory(createdDirectory)).length === 0,
     "Created directory was not empty",
   );
+  stage = "directory size";
+  const directorySize = await storage.directorySize(directory);
+  let directorySizeFileCode = "";
+  try {
+    await storage.directorySize(file);
+  } catch (error) {
+    directorySizeFileCode = error.code;
+  }
   stage = "empty directory removal";
   await storage.remove(createdDirectory);
   stage = "removed directory existence";
@@ -200,6 +208,8 @@ try {
     deniedWrite,
 
     directoryOperations: true,
+    directorySize,
+    directorySizeFileCode,
     deniedTextWrite,
     existsFile,
     existsDirectory,

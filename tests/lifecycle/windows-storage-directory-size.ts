@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { link, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { BunawayError } from "@bunaway/protocol";
 import {
@@ -20,8 +20,11 @@ const at = (path: string) => ({
   path: `${root}/${path}`,
 });
 
-function expectError(action: () => unknown, code: string): void {
-  assert.throws(
+async function expectRejected(
+  action: Promise<unknown>,
+  code: string,
+): Promise<void> {
+  await assert.rejects(
     action,
     (error) => error instanceof BunawayError && error.code === code,
   );
@@ -51,13 +54,13 @@ try {
   await mkdir(`${root}/empty`, {
     recursive: true,
   });
-  assert.deepEqual(storage.directorySize(at("empty")), {
+  assert.deepEqual(await storage.directorySize(at("empty")), {
     bytes: 0,
     files: 0,
     directories: 0,
   });
 
-  // Nested totals: the root is not a directory, hardlinks add per name, empty files add nothing.
+  // Nested totals: the root is not counted as a directory and empty files add no bytes.
   await mkdir(`${root}/tree/한글 폴더/deep/deeper`, {
     recursive: true,
   });
@@ -69,16 +72,28 @@ try {
     new Uint8Array(100),
   );
   const expectedBytes = 10 + Buffer.byteLength("공백 🙂") + 100;
-  assert.deepEqual(storage.directorySize(at("tree")), {
+  assert.deepEqual(await storage.directorySize(at("tree")), {
     bytes: expectedBytes,
     files: 4,
     directories: 3,
   });
   // A subdirectory is its own root.
-  assert.deepEqual(storage.directorySize(at("tree/한글 폴더/deep")), {
+  assert.deepEqual(await storage.directorySize(at("tree/한글 폴더/deep")), {
     bytes: 100,
     files: 2,
     directories: 1,
+  });
+
+  // Hardlinks add their size once per name.
+  await mkdir(`${root}/hard`, {
+    recursive: true,
+  });
+  await writeFile(`${root}/hard/original.bin`, new Uint8Array(30));
+  await link(`${root}/hard/original.bin`, `${root}/hard/second-name.bin`);
+  assert.deepEqual(await storage.directorySize(at("hard")), {
+    bytes: 60,
+    files: 2,
+    directories: 0,
   });
 
   // Links are neither followed nor counted, even when their target is large.
@@ -96,7 +111,7 @@ try {
     "linked/file-link.bin",
     "file",
   );
-  assert.deepEqual(storage.directorySize(at("linked")), {
+  assert.deepEqual(await storage.directorySize(at("linked")), {
     bytes: 5,
     files: 1,
     directories: 0,
@@ -104,24 +119,22 @@ try {
   console.log(`Link coverage: junction=${junction}, file symlink=${fileLink}.`);
 
   // Limits fail the whole operation; the injected values keep the fixture small.
-  expectError(
-    () =>
-      storage.directorySize(at("tree"), undefined, {
-        entries: 4,
-        depth: MAX_DIRECTORY_SIZE_DEPTH,
-      }),
+  await expectRejected(
+    storage.directorySize(at("tree"), undefined, {
+      entries: 4,
+      depth: MAX_DIRECTORY_SIZE_DEPTH,
+    }),
     "INVALID_ARGUMENT",
   );
-  expectError(
-    () =>
-      storage.directorySize(at("tree"), undefined, {
-        entries: MAX_DIRECTORY_SIZE_ENTRIES,
-        depth: 2,
-      }),
+  await expectRejected(
+    storage.directorySize(at("tree"), undefined, {
+      entries: MAX_DIRECTORY_SIZE_ENTRIES,
+      depth: 2,
+    }),
     "INVALID_ARGUMENT",
   );
   assert.deepEqual(
-    storage.directorySize(at("tree"), undefined, {
+    await storage.directorySize(at("tree"), undefined, {
       entries: 7,
       depth: 3,
     }),
@@ -142,35 +155,49 @@ try {
   await mkdir(`${root}/nest/${levels.join("/")}`, {
     recursive: true,
   });
-  expectError(() => storage.directorySize(at("nest")), "INVALID_ARGUMENT");
-  assert.deepEqual(storage.directorySize(at(`nest/${levels[0]}`)), {
+  await expectRejected(storage.directorySize(at("nest")), "INVALID_ARGUMENT");
+  assert.deepEqual(await storage.directorySize(at(`nest/${levels[0]}`)), {
     bytes: 0,
     files: 0,
     directories: MAX_DIRECTORY_SIZE_DEPTH,
   });
 
-  // Cancellation is checked before any entry is read.
+  // A signal that is already aborted stops the scan before any entry is read.
   const cancelled = new AbortController();
   cancelled.abort();
-  expectError(
-    () => storage.directorySize(at("tree"), cancelled.signal),
+  await expectRejected(
+    storage.directorySize(at("tree"), cancelled.signal),
     "CANCELLED",
   );
 
+  // Cancelling after the scan started: the first yield happens after 32 walk steps, and this
+  // tree needs more than that, so the abort lands while directories are open.
+  await mkdir(`${root}/wide`, {
+    recursive: true,
+  });
+  for (let index = 0; index < 40; index++) {
+    await mkdir(`${root}/wide/dir-${index}`);
+    await writeFile(`${root}/wide/dir-${index}/file.bin`, new Uint8Array(1));
+  }
+  const running = new AbortController();
+  const scan = storage.directorySize(at("wide"), running.signal);
+  running.abort();
+  await expectRejected(scan, "CANCELLED");
+
   // A file, a missing directory and a missing parent are rejected, not totalled.
-  expectError(
-    () => storage.directorySize(at("tree/a.bin")),
+  await expectRejected(
+    storage.directorySize(at("tree/a.bin")),
     "INVALID_ARGUMENT",
   );
-  expectError(() => storage.directorySize(at("absent")), "INVALID_ARGUMENT");
-  expectError(
-    () => storage.directorySize(at("absent/child")),
+  await expectRejected(storage.directorySize(at("absent")), "INVALID_ARGUMENT");
+  await expectRejected(
+    storage.directorySize(at("absent/child")),
     "INVALID_ARGUMENT",
   );
   if (junction) {
     // A link given as the root is rejected like every other storage target.
-    expectError(
-      () => storage.directorySize(at("linked/junction")),
+    await expectRejected(
+      storage.directorySize(at("linked/junction")),
       "PERMISSION_DENIED",
     );
   }
@@ -183,5 +210,5 @@ try {
   });
 }
 console.log(
-  "PASS Windows storage directorySize: totals, links, limits, cancellation, target errors and handle release",
+  "PASS Windows storage directorySize: totals, hardlinks, links, limits, cancellation during the scan, target errors and handle release",
 );

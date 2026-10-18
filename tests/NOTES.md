@@ -880,6 +880,16 @@ CI의 windows-native 작업은 `mise run host:windows`를 통해 이 검사를 �
 `windows-storage-metadata.ts`는 실제 WebView2와 I/O Worker에서 목록, 생성과 빈 폴더 삭제,
 독립적인 텍스트 쓰기 권한 거부를 검사하며 `mise run host:windows`에 포함한다.
 
+`directorySize`는 `api/storage-directories.test.ts`가 입력 거부, 결과 범위, 독립 권한,
+macOS 미지원과 reparse tag별 크기 집계 규칙(이름 대리자 제외)을 확인한다.
+`windows-storage-directory-size.ts`는 실제 Win32 핸들로 빈 디렉터리, 중첩 합계, hardlink의
+이름별 합산, junction과 파일 symlink 미추적(만들 수 없는 러너에서는 건너뜀), 항목 및 깊이 상한,
+시작 전과 순회 중 취소, 파일 및 없는 경로 거부와 실패 뒤 임시 트리 삭제(핸들 해제)를 확인한다.
+`windows-storage-metadata.ts`는 실제 I/O Worker에서 허용된 호출의 합계와 파일 경로 거부를 확인한다.
+확인하지 않는 범위: Worker 경로의 권한 거부(별도 뷰가 필요해 계약 테스트의 독립 권한으로만 확인),
+접근 거부와 순회 중 사라지는 하위 항목, 기한(deadline)의 호스트 경로, 클라우드 placeholder 같은
+실제 비이름대리자 reparse 파일(tag 해석만 단위 검사), 10만 개 항목의 실제 순회 시간.
+
 `api/macos-directory-entries.test.ts`는 Darwin dirent의 UTF-8 이름, 관찰한 종류,
 record 범위와 공개 이름 상한을 검사한다. `macos-storage-directories.ts`는 실제
 checked fd 기반 목록, UTF-16 정렬, 링크와 hardlink, 256개 경계, recursive 기본값과

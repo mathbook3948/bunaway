@@ -4,6 +4,8 @@ import { NativeRegistry, serializeHostResponse } from "@bunaway/protocol";
 import { MAX_DIRECTORY_ENTRIES } from "../../plugins/storage/src/contract.ts";
 import {
   directoryEntries,
+  isSizedFile,
+  type ScannedDirectoryEntry,
   scanDirectoryEntries,
 } from "../../plugins/storage/src/platforms/windows-directory-entries.ts";
 import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
@@ -264,19 +266,51 @@ test("native directory batches decode names and classify reparse points without 
       kind: "link",
     },
   ]);
-  expect(
-    scanDirectoryEntries(
-      Buffer.concat([
-        record("big.bin", 0, 2n ** 40n + 7n),
-      ]),
-    ),
-  ).toEqual([
-    {
-      name: "big.bin",
-      kind: "file",
-      endOfFile: 2n ** 40n + 7n,
-    },
-  ]);
+  const [big] = scanDirectoryEntries(
+    Buffer.concat([
+      record("big.bin", 0, 2n ** 40n + 7n),
+    ]),
+  );
+  expect(big).toEqual({
+    name: "big.bin",
+    kind: "file",
+    endOfFile: 2n ** 40n + 7n,
+    reparseTag: 0,
+    isDirectoryAttribute: false,
+  });
+});
+
+test("directory size counts data files behind non-surrogate reparse tags and skips name surrogates", () => {
+  const FILE_ATTRIBUTE_REPARSE_POINT = 0x400;
+  const tagged = (name: string, attributes: number, tag: number) => {
+    const entry = record(name, attributes);
+    entry.writeUInt32LE(tag, 64);
+    return scanDirectoryEntries(entry)[0] as ScannedDirectoryEntry;
+  };
+  const reparseFile = FILE_ATTRIBUTE_REPARSE_POINT;
+  const reparseDirectory = FILE_ATTRIBUTE_REPARSE_POINT | 0x10;
+  // Cloud placeholder, deduplicated and WOF-compressed files keep a logical size.
+  for (const tag of [
+    0x9000001a,
+    0x80000013,
+    0x80000017,
+  ]) {
+    expect(isSizedFile(tagged("data", reparseFile, tag))).toBe(true);
+  }
+  // Symlink, junction and mount point tags carry the name surrogate bit.
+  for (const tag of [
+    0xa000000c,
+    0xa0000003,
+  ]) {
+    expect(isSizedFile(tagged("link", reparseFile, tag))).toBe(false);
+  }
+  // Reparse point directories are never entered or counted.
+  expect(isSizedFile(tagged("dir", reparseDirectory, 0x9000001a))).toBe(false);
+  expect(isSizedFile(tagged("plain", 0, 0))).toBe(true);
+  expect(isSizedFile(tagged("folder", 0x10, 0))).toBe(false);
+});
+
+test("malformed native directory batches are rejected", () => {
   const truncated = record("long-name").subarray(0, 105);
   const beyondBuffer = record("name");
   beyondBuffer.writeUInt32LE(beyondBuffer.length + 8, 0);
