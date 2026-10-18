@@ -222,6 +222,7 @@ if (target === "windows-x64") {
       "windows-bun-storage.ts",
       "windows-storage-metadata.ts",
       "windows-storage-directory-size.ts",
+      "windows-storage-remove-recursive.ts",
       "windows-path.ts",
       "windows-safe-storage.ts",
       "windows-bun-cli.ts",

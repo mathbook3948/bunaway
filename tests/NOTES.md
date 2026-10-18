@@ -893,6 +893,15 @@ macOS 미지원과 reparse tag별 크기 집계 규칙(이름 대리자 제외)�
 디렉터리 건너뛰기(DELETE 공유 핸들에 delete disposition 유지, 만들 수 없으면 건너뜀), deny ACE(icacls)를 건 하위 디렉터리의 `PERMISSION_DENIED`
 (icacls를 쓸 수 없는 러너에서는 건너뛰고 정리 때 ACE를 제거), 파일 및 없는 경로 거부와 실패 뒤 임시 트리 삭제(핸들 해제)를 확인한다.
 `windows-storage-metadata.ts`는 실제 I/O Worker에서 허용된 호출의 합계와 파일 경로 거부를 확인한다.
+
+`removeRecursive`는 `api/storage-directories.test.ts`가 입력 거부, null 결과, 독립 권한과 macOS 미지원을 확인한다.
+`windows-storage-remove-recursive.ts`는 실제 Win32 핸들로 유니코드 중첩 트리와 빈 디렉터리 삭제 및 형제 유지,
+한 번의 목록 배치를 넘는 1500개 항목 삭제, 읽기 전용 파일과 디렉터리 삭제, 루트가 파일인 경우,
+hardlink의 이름만 삭제, junction, 디렉터리 junction과 파일 symlink 미추적(만들 수 없는 러너에서는 건너뜀),
+링크 루트의 `PERMISSION_DENIED`, 깊이 64 허용과 65 거부, 시작 전과 순회 중 취소 뒤 재호출로 완료,
+순회 중 어댑터 해제, 없는 경로 거부와 임시 트리 삭제(핸들 해제)를 확인한다.
+확인하지 않는 범위: 삭제 중 사라지거나 교체되는 항목, 비대리자 reparse 디렉터리의 `UNSUPPORTED`,
+다른 프로세스가 삭제 공유 없이 연 파일, ACL로 삭제를 막은 항목.
 확인하지 않는 범위: Worker 경로의 권한 거부(별도 뷰가 필요해 계약 테스트의 독립 권한으로만 확인),
 순회 중 사라지는 하위 항목, 비대리자 reparse 디렉터리의 `UNSUPPORTED`(tag 분류만 단위 검사), 기한(deadline)의 호스트 경로, 클라우드 placeholder 같은
 실제 비이름대리자 reparse 파일(tag 해석만 단위 검사), 10만 개 항목의 실제 순회 시간.

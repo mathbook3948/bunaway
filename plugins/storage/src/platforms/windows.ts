@@ -46,6 +46,7 @@ const ERROR_DIR_NOT_EMPTY = 145;
 const FILE_ID_BOTH_DIRECTORY_INFO = 10;
 const FILE_ID_BOTH_DIRECTORY_RESTART_INFO = 11;
 const DIRECTORY_BUFFER_BYTES = 64 * 1024;
+const FILE_ATTRIBUTE_READONLY = 0x1;
 const FILE_ATTRIBUTE_DIRECTORY = 0x10;
 const FILE_ATTRIBUTE_REPARSE_POINT = 0x400;
 const MAX_FILE_LINK_COUNT = 1;
@@ -53,6 +54,7 @@ const GENERIC_READ = 0x80000000;
 const GENERIC_WRITE = 0x40000000;
 const FILE_APPEND_DATA = 0x4;
 const FILE_READ_ATTRIBUTES = 0x80;
+const FILE_WRITE_ATTRIBUTES = 0x100;
 const FILE_READ_DATA = 0x1;
 const FILE_LIST_DIRECTORY = 0x1;
 const FILE_SHARE_READ = 0x1;
@@ -66,6 +68,9 @@ const ERROR_FILE_EXISTS = 80;
 const ERROR_NOT_SAME_DEVICE = 17;
 const FILE_RENAME_INFORMATION = 10;
 const FILE_DISPOSITION_INFO = 4;
+const FILE_BASIC_INFO = 0;
+const FILE_BASIC_INFO_BYTES = 40;
+const FILE_BASIC_ATTRIBUTES_OFFSET = 32;
 const FILE_RENAME_INFO_BYTES = 24;
 const FILE_RENAME_NAME_LENGTH_OFFSET = 16;
 const FILE_RENAME_NAME_OFFSET = 20;
@@ -744,30 +749,104 @@ export class WindowsStorage
         allowMissing: false,
       },
       ({ handle }) => {
-        const disposition = new Uint8Array([
-          1,
-        ]);
-        if (
-          !this.api.symbols.SetFileInformationByHandle(
-            handle,
-            FILE_DISPOSITION_INFO,
-            ptr(disposition),
-            disposition.byteLength,
-          )
-        ) {
-          const error = this.api.symbols.GetLastError();
-          if (error === ERROR_DIR_NOT_EMPTY) {
-            throw new BunawayError({
-              code: "INVALID_ARGUMENT",
-              message: "Storage directory is not empty.",
-            });
-          }
-          this.fail("Storage removal failed", error);
-        }
+        this.deleteHandle(handle);
         return null;
       },
     );
     return null;
+  }
+
+  /**
+   * Delete a checked file, or a directory with everything below it. Symlinks, junctions and other
+   * name surrogates inside the tree are removed themselves and never followed, and hardlinked files
+   * lose only the listed name. Read-only entries are removed like Node and Rust do. The walk keeps
+   * every directory on the current path open, so no ancestor can be renamed or replaced while its
+   * children are deleted. It yields to the event loop periodically so cancellation and deadlines
+   * take effect; entries deleted before a failure or cancellation stay deleted.
+   */
+  async removeRecursive(
+    input: StorageLocation,
+    signal?: AbortSignal,
+  ): Promise<null> {
+    this.requireOpen();
+    this.activeScans++;
+    try {
+      const result = this.withFile(
+        input.path,
+        {
+          ...METADATA_TARGET_OPTIONS,
+          access:
+            DELETE |
+            FILE_WRITE_ATTRIBUTES |
+            FILE_READ_ATTRIBUTES |
+            FILE_LIST_DIRECTORY,
+          allowMissing: false,
+          // The walk can be long, so other processes may still rename or move within the parents.
+          parentShare: FILE_SHARE_READ | FILE_SHARE_WRITE,
+        },
+        ({ handle, info, canonical }) => {
+          if (!(info.readUInt32LE(0) & FILE_ATTRIBUTE_DIRECTORY)) {
+            this.deleteForced(handle);
+            return Promise.resolve(null);
+          }
+          return this.removeTree(handle, canonical, signal);
+        },
+      );
+      // allowMissing is false, so a missing root throws; null cannot occur here.
+      if (result === null) {
+        throw new Error("Storage target was not opened.");
+      }
+      return await result;
+    } finally {
+      this.finishScan();
+    }
+  }
+
+  /** Mark the checked object for deletion; the object disappears when its last handle closes. */
+  private deleteHandle(handle: bigint): void {
+    const disposition = new Uint8Array([
+      1,
+    ]);
+    if (
+      !this.api.symbols.SetFileInformationByHandle(
+        handle,
+        FILE_DISPOSITION_INFO,
+        ptr(disposition),
+        disposition.byteLength,
+      )
+    ) {
+      const error = this.api.symbols.GetLastError();
+      if (error === ERROR_DIR_NOT_EMPTY) {
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "Storage directory is not empty.",
+        });
+      }
+      this.fail("Storage removal failed", error);
+    }
+  }
+
+  /** Clear the read-only attribute through the checked handle, then mark the object for deletion. */
+  private deleteForced(handle: bigint): void {
+    const attributes = this.info(handle).readUInt32LE(0);
+    if (attributes & FILE_ATTRIBUTE_READONLY) {
+      const basic = Buffer.alloc(FILE_BASIC_INFO_BYTES);
+      // Zero timestamps keep their values; a zero attribute set would also keep READONLY.
+      basic.writeUInt32LE(
+        attributes & ~FILE_ATTRIBUTE_READONLY || FILE_ATTRIBUTE_NORMAL,
+        FILE_BASIC_ATTRIBUTES_OFFSET,
+      );
+      this.check(
+        this.api.symbols.SetFileInformationByHandle(
+          handle,
+          FILE_BASIC_INFO,
+          ptr(basic),
+          basic.byteLength,
+        ),
+        "Storage attribute update failed",
+      );
+    }
+    this.deleteHandle(handle);
   }
 
   private requireDirectory(info: Buffer): void {
@@ -1230,12 +1309,13 @@ export class WindowsStorage
     parentPath: string,
     name: string,
     pathBuffer: Buffer,
+    access = FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
   ) {
     const path = `${parentPath}\\${name}`;
     // Same sharing as the root target; delete sharing stays excluded so the path remains pinned.
     const handle = this.open(
       path,
-      FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
+      access,
       FILE_SHARE_READ | FILE_SHARE_WRITE,
       OPEN_EXISTING,
       DIRECTORY_OPEN_FLAGS,
@@ -1327,31 +1407,174 @@ export class WindowsStorage
     signal: AbortSignal | undefined,
     limits: DirectorySizeLimits,
   ): Promise<DirectoryScanTotals> {
-    const buffers = {
-      entries: Buffer.alloc(DIRECTORY_BUFFER_BYTES),
-      path: Buffer.alloc(FINAL_PATH_BUFFER_CHARS * WCHAR_BYTES),
-    };
     const totals: DirectoryScanTotals = {
       bytes: 0n,
       files: 0,
       directories: 0,
       visited: 0,
     };
+    await this.walkSteps(
+      path,
+      signal,
+      "Storage directory size scan was cancelled.",
+      (buffers) => this.scanStep(path, buffers, totals, limits),
+    );
+    return totals;
+  }
+  /** Run walk steps until the path is empty, yielding to the event loop and honoring the signal. */
+  private async walkSteps(
+    path: DirectoryScanFrame[],
+    signal: AbortSignal | undefined,
+    cancelMessage: string,
+    step: (buffers: { entries: Buffer; path: Buffer }) => void,
+  ): Promise<void> {
+    const buffers = {
+      entries: Buffer.alloc(DIRECTORY_BUFFER_BYTES),
+      path: Buffer.alloc(FINAL_PATH_BUFFER_CHARS * WCHAR_BYTES),
+    };
     for (let steps = 1; path.length; steps++) {
       if (steps % DIRECTORY_SIZE_YIELD_STEPS === 0) {
         await yieldToEventLoop();
-        // Disposal during the yield stops the scan; the bindings stay open until it cleans up.
+        // Disposal during the yield stops the walk; the bindings stay open until it cleans up.
         this.requireOpen();
       }
       if (signal?.aborted) {
         throw new BunawayError({
           code: "CANCELLED",
-          message: "Storage directory size scan was cancelled.",
+          message: cancelMessage,
         });
       }
-      this.scanStep(path, buffers, totals, limits);
+      step(buffers);
     }
-    return totals;
+  }
+  /** Delete the checked root directory's contents depth first, then the directories themselves. */
+  private async removeTree(
+    rootHandle: bigint,
+    rootPath: string,
+    signal: AbortSignal | undefined,
+  ): Promise<null> {
+    const path: DirectoryScanFrame[] = [
+      {
+        handle: rootHandle,
+        path: rootPath,
+        restart: true,
+        pending: [],
+      },
+    ];
+    await withRelease(
+      () =>
+        this.walkSteps(
+          path,
+          signal,
+          "Storage directory removal was cancelled.",
+          (buffers) => this.removeStep(path, buffers),
+        ),
+      // Failure and cancellation leave child directories open; the caller releases the root.
+      () =>
+        this.closeAll(
+          path
+            .slice(1)
+            .reverse()
+            .map((frame) => frame.handle),
+        ),
+    );
+    return null;
+  }
+  /** One removal step: descend into a queued child, delete a batch of entries, or delete the top directory. */
+  private removeStep(
+    path: DirectoryScanFrame[],
+    buffers: {
+      entries: Buffer;
+      path: Buffer;
+    },
+  ): void {
+    const frame = path[path.length - 1] as DirectoryScanFrame;
+    const childName = frame.pending.pop();
+    if (childName !== undefined) {
+      if (path.length > MAX_DIRECTORY_SIZE_DEPTH) {
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "Storage directory exceeds the removal depth limit.",
+        });
+      }
+      const child = this.openChildDirectory(
+        frame.path,
+        childName,
+        buffers.path,
+        DELETE |
+          FILE_WRITE_ATTRIBUTES |
+          FILE_READ_ATTRIBUTES |
+          FILE_LIST_DIRECTORY,
+      );
+      if (child) {
+        path.push({
+          ...child,
+          restart: true,
+          pending: [],
+        });
+      }
+    } else if (
+      this.readEntryBatch(frame.handle, buffers.entries, frame.restart)
+    ) {
+      frame.restart = false;
+      for (const entry of scanDirectoryEntries(buffers.entries)) {
+        const role = scanRole(entry);
+        if (role === "directory") {
+          frame.pending.push(entry.name);
+        } else if (role === "opaque-directory") {
+          // Cloud folders and similar directories hold data this walk cannot enter safely.
+          throw new BunawayError({
+            code: "UNSUPPORTED",
+            message:
+              "Storage directory contains a reparse point directory that cannot be removed.",
+          });
+        } else {
+          this.removeLeaf(frame.path, entry);
+        }
+      }
+    } else {
+      // Everything below is gone, so the empty directory can go. Pop before closing so a failed
+      // close cannot be retried by the caller's cleanup.
+      this.deleteForced(frame.handle);
+      path.pop();
+      if (path.length) {
+        this.close(frame.handle);
+      }
+    }
+  }
+  /**
+   * Delete one listed non-directory child, or a name surrogate link, itself: the open does not
+   * follow reparse points. A child that vanished is skipped; one that became a real directory since
+   * the listing is refused rather than deleted without its contents being walked.
+   */
+  private removeLeaf(parentPath: string, entry: ScannedDirectoryEntry): void {
+    const handle = this.open(
+      `${parentPath}\\${entry.name}`,
+      DELETE | FILE_WRITE_ATTRIBUTES | FILE_READ_ATTRIBUTES,
+      FILE_SHARE_ALL,
+      OPEN_EXISTING,
+      entry.isDirectoryAttribute
+        ? DIRECTORY_OPEN_FLAGS
+        : FILE_FLAG_OPEN_REPARSE_POINT,
+      true,
+      true,
+    );
+    if (!handle) {
+      return;
+    }
+    withRelease(
+      () => {
+        const attributes = this.info(handle).readUInt32LE(0);
+        if (
+          attributes & FILE_ATTRIBUTE_DIRECTORY &&
+          !(attributes & FILE_ATTRIBUTE_REPARSE_POINT)
+        ) {
+          deny("Storage tree changed during removal.");
+        }
+        this.deleteForced(handle);
+      },
+      () => this.close(handle),
+    );
   }
   /** Recursively total the checked root without following links; the caller owns the root handle. */
   private async sumDirectory(

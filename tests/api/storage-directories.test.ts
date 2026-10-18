@@ -29,6 +29,7 @@ test("macOS supports directory reads and creation while checked-object removal r
     );
   }
   expect(targets.macos?.operations).not.toContain("remove");
+  expect(targets.macos?.operations).not.toContain("removeRecursive");
   expect(targets.macos?.operations).not.toContain("move");
   expect(targets.macos?.operations).toHaveLength(11);
   expect(targets.windows?.thread).toBe("worker");
@@ -135,6 +136,7 @@ test("directory operations resolve recursive defaults, bound output and retain i
     "storage.readDirectory",
     "storage.createDirectory",
     "storage.remove",
+    "storage.removeRecursive",
     "storage.directorySize",
   ]) {
     for (const target of registry.operations.keys()) {
@@ -229,6 +231,46 @@ test("directorySize accepts only a path, returns bounded totals and is Windows-o
   );
   expect(storage._definition.nativePlatforms.windows?.operations).toContain(
     "directorySize",
+  );
+});
+
+test("removeRecursive accepts only a path, returns null and needs its own permission on Windows", async () => {
+  expect(
+    (
+      await parsers.validateCall({
+        operation: "storage.removeRecursive",
+        payload: location,
+      })
+    ).payload,
+  ).toEqual(location);
+  for (const payload of [
+    {},
+    {
+      path: "C:/notes",
+      recursive: true,
+    },
+    {
+      path: "C:/a\nb",
+    },
+  ]) {
+    await expect(
+      parsers.validateCall({
+        operation: "storage.removeRecursive",
+        payload,
+      }),
+    ).rejects.toThrow();
+  }
+  expect(await parsers.validateOutput("storage.removeRecursive", null)).toBe(
+    null,
+  );
+  await expect(
+    parsers.validateOutput("storage.removeRecursive", {}),
+  ).rejects.toThrow();
+  expect(storage._definition.nativePlatforms.macos?.operations).not.toContain(
+    "removeRecursive",
+  );
+  expect(storage._definition.nativePlatforms.windows?.operations).toContain(
+    "removeRecursive",
   );
 });
 
