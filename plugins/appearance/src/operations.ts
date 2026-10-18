@@ -3,6 +3,7 @@ import { BunawayError } from "@bunaway/protocol";
 import { z } from "zod";
 import {
   type AppearanceInstance,
+  accessibilityStateSchema,
   preferencesSchema,
   themePreferenceSchema,
   themeStateSchema,
@@ -37,6 +38,15 @@ function backend(source: string) {
 }
 export const windowsAppearanceOperations = {
   ...appearanceOperations,
+  getAccessibilityState: windowsOperation({
+    input: z.null(),
+    output: accessibilityStateSchema,
+    handler: (_input, { instance, source }) => {
+      // Assistive technology use is sensitive, so views cannot read it directly.
+      backend(source);
+      return instance.getAccessibilityState();
+    },
+  }),
   getTheme: windowsOperation({
     input: target,
     output: themeStateSchema,

@@ -2,6 +2,10 @@ import { dlopen, ptr } from "bun:ffi";
 import { ADVAPI32, pick, wide } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import type { AppearancePreferences } from "#appearance/contract";
+import {
+  createAccessibilityStateReader,
+  loadUiaProbe,
+} from "#appearance/platforms/windows-accessibility";
 
 const HKEY_CURRENT_USER = 0xffffffff80000001n;
 const PERSONALIZE_KEY =
@@ -121,7 +125,12 @@ export function initialize() {
     }
     return value.readUInt32LE() !== 0;
   }
+  const accessibility = createAccessibilityStateReader({
+    screenReaderEnabled: () => setting(SPI_GETSCREENREADER),
+    loadProbe: loadUiaProbe,
+  });
   return {
+    readAccessibilityState: () => accessibility.read(),
     read(): AppearancePreferences {
       if (disposed) {
         throw new BunawayError({
@@ -185,6 +194,7 @@ export function initialize() {
         return;
       }
       disposed = true;
+      accessibility.dispose();
       dwm.close();
       user.close();
       registry.close();
