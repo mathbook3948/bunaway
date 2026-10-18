@@ -35,6 +35,13 @@ function unsupportedFullscreenable() {
   });
 }
 
+function unsupportedOpacity() {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Window opacity is not implemented on this platform.",
+  });
+}
+
 function unsupportedControls() {
   return new BunawayError({
     code: "UNSUPPORTED",
@@ -466,6 +473,17 @@ export function createOperations(
           throw unsupportedFullscreenable();
         }
         return window.isFullscreenable();
+      case "windows.setOpacity":
+        if (!window.setOpacity) {
+          throw unsupportedOpacity();
+        }
+        window.setOpacity(call.payload.opacity);
+        break;
+      case "windows.getOpacity":
+        if (!window.getOpacity) {
+          throw unsupportedOpacity();
+        }
+        return window.getOpacity();
       case "windows.setClosable":
         if (!window.setClosable) {
           throw unsupportedControls();

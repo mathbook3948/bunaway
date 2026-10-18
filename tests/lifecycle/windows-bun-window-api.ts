@@ -4,13 +4,13 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type CommandContext, defineApp } from "@bunaway/backend";
+import { checkHresult } from "@bunaway/plugin/win32";
 import windows from "@bunaway/plugin-windows";
 import { BunawayError, type HostContext, type Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { monitorServices } from "#native/windows/bun/monitors";
 import { Windows } from "#native/windows/bun/win32";
 import { ole, user } from "#native/windows/bun/win32-bindings";
-import { checkHresult } from "@bunaway/plugin/win32";
 import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { trayIco } from "../fixtures/tray-icon.ts";
@@ -414,6 +414,42 @@ if (!process.argv.includes("--child")) {
         nativeWindows.destroy(hwnd);
       }
       assert.throws(() => nativeWindows.isFullscreenable(hwnd));
+    }
+    {
+      const hwnd = nativeWindows.create(
+        "Opacity regression",
+        650,
+        450,
+        () => {},
+      );
+      try {
+        const original = nativeWindows.getBounds(hwnd, "outer");
+        assert.equal(nativeWindows.getOpacity(hwnd), 1);
+        // The OS stores 8-bit alpha, so a set value reads back within one step.
+        nativeWindows.setOpacity(hwnd, 0.5);
+        assert.ok(Math.abs(nativeWindows.getOpacity(hwnd) - 0.5) <= 1 / 255);
+        nativeWindows.setOpacity(hwnd, 0);
+        assert.equal(nativeWindows.getOpacity(hwnd), 0);
+        // Changing opacity leaves geometry and visibility alone, and works while shown.
+        nativeWindows.show(hwnd, false);
+        nativeWindows.setOpacity(hwnd, 0.25);
+        assert.ok(Math.abs(nativeWindows.getOpacity(hwnd) - 0.25) <= 1 / 255);
+        assert.equal(nativeWindows.isVisible(hwnd), true);
+        nativeWindows.setOpacity(hwnd, 1);
+        assert.equal(nativeWindows.getOpacity(hwnd), 1);
+        assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
+        for (const invalid of [
+          -0.1,
+          1.1,
+          Number.NaN,
+        ]) {
+          assert.throws(() => nativeWindows.setOpacity(hwnd, invalid));
+        }
+        assert.equal(nativeWindows.getOpacity(hwnd), 1);
+      } finally {
+        nativeWindows.destroy(hwnd);
+      }
+      assert.throws(() => nativeWindows.getOpacity(hwnd));
     }
     for (const maximized of [
       false,
@@ -1985,6 +2021,19 @@ if (!process.argv.includes("--child")) {
             });
             await assertContentSize(700, 550);
             assert.equal(await windows.isFullscreen(editor), false);
+            assert.equal(await windows.getOpacity(editor), 1);
+            await windows.setOpacity({
+              ...editor,
+              opacity: 0.5,
+            });
+            assert.ok(
+              Math.abs((await windows.getOpacity(editor)) - 0.5) <= 1 / 255,
+            );
+            await windows.setOpacity({
+              ...editor,
+              opacity: 1,
+            });
+            assert.equal(await windows.getOpacity(editor), 1);
             assert.equal(await windows.isFullscreenable(editor), true);
             await windows.setFullscreenable({
               ...editor,

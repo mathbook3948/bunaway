@@ -3,6 +3,7 @@ import type { WindowSpec } from "@bunaway/plugin-api/native";
 export const WS_OVERLAPPEDWINDOW = 0x00cf0000;
 export const WS_CAPTION = 0x00c00000n;
 export const WS_EX_TOOLWINDOW = 0x80n;
+export const WS_EX_LAYERED = 0x80000n;
 export const WS_EX_NOACTIVATE = 0x08000000n;
 export const WS_EX_TOPMOST = 0x8n;
 

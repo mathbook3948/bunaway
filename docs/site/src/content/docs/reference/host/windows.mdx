@@ -521,6 +521,8 @@ await windows.close({ view: "dialog" });
 | `windows.isMaximizable` | `{ view, windowId? }` | `Promise<boolean>`. 일반 창의 사용자 최대화 허용 여부 |
 | `windows.setFullscreenable` | `{ view, windowId?, fullscreenable: boolean }` | `Promise<null>`. 이후 전체화면 진입 허용 변경. 현재 전체화면은 유지하며 네이티브 버튼에는 영향 없음 |
 | `windows.isFullscreenable` | `{ view, windowId? }` | `Promise<boolean>`. 이 창 수명의 전체화면 진입 허용 여부 |
+| `windows.setOpacity` | `{ view, windowId?, opacity: number }` | `Promise<null>`. 창 전체(WebView 포함)의 불투명도. `opacity`는 0(투명)–1(불투명)이며 범위를 벗어나면 `INVALID_ARGUMENT` |
+| `windows.getOpacity` | `{ view, windowId? }` | `Promise<number>`. OS에 저장된 현재 불투명도(0–1). 새 창은 `1` |
 | `windows.setClosable` | `{ view, windowId?, closable: boolean }` | `Promise<null>`. 네이티브 닫기 버튼과 사용자 닫기 허용 변경 |
 | `windows.isClosable` | `{ view, windowId? }` | `Promise<boolean>`. 이 창 수명의 사용자 닫기 설정 조회 |
 | `windows.setFocusable` | `{ view, windowId?, focusable: boolean }` | `Promise<null>`. 이후 활성화 허용 변경. 현재 포커스를 다른 창으로 옮기지는 않음 |
@@ -803,6 +805,12 @@ operation 권한을 따로 요구하며 닫힌 창은 `INVALID_ARGUMENT`입니�
 나간 뒤에는 `true`로 되돌릴 때까지 다시 들어갈 수 없습니다. 거부는 호스트의 네이티브 창 계층에서도 적용합니다.
 Windows에는 전체화면 전용 버튼이 없으므로 네이티브 버튼과 제스처, `maximizable`에는 영향이 없습니다.
 macOS는 `UNSUPPORTED`입니다.
+
+`opacity`는 창 인스턴스별 상태이며 새 창과 재생성한 창은 `1`에서 시작합니다. 권한과 닫힌 창 오류는 위 설정과 같습니다.
+Windows는 layered window의 상수 alpha로 적용하므로 WebView를 포함한 창 전체가 함께 투명해지고,
+OS가 8비트 alpha(0–255)로 저장하기 때문에 조회 값은 설정한 값과 최대 `1/255`까지 다를 수 있습니다.
+`1`이 되면 layered 스타일을 제거해 일반 창과 같은 경로로 그립니다. 투명한 창도 마우스 입력을 받으며,
+클릭 통과는 별도 기능입니다. 배경색과 투명 배경은 이 설정에 포함되지 않습니다. macOS는 `UNSUPPORTED`입니다.
 
 `setTitle`은 지정한 창 수명의 제목만 변경합니다. 선언, 다른 인스턴스와 앱 이름을 바꾸지 않으며
 재생성에서는 선언 또는 해당 생성의 `options.title`로 돌아갑니다. 표시, 크기와 포커스 상태를 유지합니다.

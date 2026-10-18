@@ -97,6 +97,8 @@ const macosOperations = {
   showInactive: operation("showInactive"),
   setContentProtection: operation("setContentProtection"),
   isContentProtected: operation("isContentProtected"),
+  setOpacity: operation("setOpacity"),
+  getOpacity: operation("getOpacity"),
   respondClose: operation("respondClose"),
 };
 

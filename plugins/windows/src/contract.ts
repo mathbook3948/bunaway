@@ -1071,6 +1071,16 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isFullscreenable": windowStateResult,
+  "windows.setOpacity": {
+    input: windowTarget.extend({
+      opacity: z.number().min(0).max(1),
+    }),
+    output: z.null(),
+  },
+  "windows.getOpacity": {
+    input: windowTarget,
+    output: z.number().min(0).max(1),
+  },
   "windows.setClosable": {
     input: windowTarget.extend({
       closable: z.boolean(),

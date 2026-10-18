@@ -80,6 +80,9 @@ export const WPF_RESTORETOMAXIMIZED = 0x2;
 export const WDA_NONE = 0x0;
 export const WDA_MONITOR = 0x1;
 export const WDA_EXCLUDEFROMCAPTURE = 0x11;
+/** SetLayeredWindowAttributes flag: apply the constant alpha value. */
+export const LWA_ALPHA = 0x2;
+export const MAX_ALPHA = 255;
 export const WS_MINIMIZEBOX = 0x00020000n;
 export const WS_MAXIMIZEBOX = 0x00010000n;
 export const WS_THICKFRAME = 0x00040000n;
