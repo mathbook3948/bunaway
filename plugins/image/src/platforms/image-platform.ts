@@ -8,10 +8,7 @@ import {
   type resizeSchema,
   type rgbaSchema,
 } from "#image/contract";
-import type {
-  FileTypeIconSource,
-  ImageCodec,
-} from "#image/platforms/codec";
+import type { FileTypeIconSource, ImageCodec } from "#image/platforms/codec";
 import { cropPixels } from "#image/platforms/crop";
 import { ImageResources } from "#image/platforms/resources";
 /** Own decoded image resources and one platform codec for a host adapter lifetime. */
