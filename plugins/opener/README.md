@@ -71,6 +71,30 @@ I/O 연결은 PR #164에 의존합니다. 플랫폼별 바인딩과 네이티브
 macOS 요청 실패는 아직 조사 중이며 네이티브 CI 통과 전에는 실행 검증 완료로 보지 않습니다.
 macOS 휴지통은 제공하지 않습니다. 커스텀 URL 스킴, 딥링크 등록과 설치 프로그램 변경은 이 패키지의 범위가 아닙니다.
 
+## Windows 바로가기
+
+`opener.readShortcutLink(path, options?)`는 Windows 바로가기 파일(`.lnk`)의 속성을 읽고, `opener.writeShortcutLink(path, details, operation = "create", options?)`는 바로가기를 만들거나 바꿉니다. Electron `shell.readShortcutLink`, `shell.writeShortcutLink`에 대응하며 Windows만 지원합니다(macOS는 `UNSUPPORTED`).
+
+```ts
+await opener.writeShortcutLink("C:\\Users\\me\\Desktop\\App.lnk", {
+  target: "C:\\Program Files\\App\\app.exe",
+  cwd: "C:\\Program Files\\App",
+  args: "--start",
+  description: "App",
+  icon: "C:\\Program Files\\App\\app.ico",
+  iconIndex: 0,
+});
+const link = await opener.readShortcutLink("C:\\Users\\me\\Desktop\\App.lnk");
+```
+
+속성은 `target`, `cwd`, `args`, `description`, `icon`, `iconIndex`입니다. 읽기 결과는 항상 여섯 속성을 모두 담고, 설정하지 않은 문자열은 빈 문자열, `iconIndex`는 0입니다. `target`, `cwd`, `icon`은 존재하지 않아도 되는 절대 Windows 경로이며(환경 변수 문자열은 받지 않습니다), `args`는 2,048자, `description`은 1,024자 이하이고 제어 문자를 받지 않습니다. 읽기는 `GetPath(SLGP_RAWPATH)`로 저장된 경로를 그대로 반환하며 대상을 찾거나 실행하지 않습니다.
+
+`operation`은 Electron과 같습니다. `create`(기본)는 새 바로가기를 쓰거나 같은 경로의 기존 바로가기를 덮어쓰고, `replace`는 기존 바로가기를 덮어쓰며 파일이 없으면 실패합니다. 두 작업은 빈 바로가기에서 시작하므로 `target`이 필요합니다. `update`는 기존 바로가기를 읽어 입력에 있는 속성만 바꿉니다(`icon`과 `iconIndex` 중 하나만 주면 다른 하나는 유지). AppUserModelID와 toast activator는 지원하지 않습니다.
+
+경로는 `.lnk`로 끝나는 절대 경로여야 하고 부모 디렉터리는 만들지 않습니다. 파일 작업과 같은 검사를 적용합니다. 부모와 기존 파일을 핸들로 고정하고 reparse point, junction, 심볼릭 링크, 하드 링크, 8.3 별칭과 정규 철자가 아닌 경로를 `PERMISSION_DENIED`로 거부합니다. 새 파일을 만드는 `create`는 마지막 이름을 고정할 수 없어, 검사 뒤 그 이름에 링크가 생기는 경쟁은 막지 못합니다. 없는 파일과 부모는 `INVALID_ARGUMENT`와 `details.reason: "FILE_NOT_FOUND"`, 바로가기가 아닌 파일은 `INVALID_ARGUMENT`와 `details.reason: "NOT_A_SHORTCUT"`입니다(바로가기가 아닌 파일은 덮어쓰기 전에 `update`에서 거부하지만, `create`와 `replace`는 검사 없이 `.lnk` 파일을 덮어씁니다). Shell이 거부한 쓰기는 `INTERNAL`입니다. 호출은 COM 호출이 끝날 때까지 동기로 실행하므로 취소는 시작 전에만 적용합니다.
+
+권한은 `opener.readShortcutLink`와 `opener.writeShortcutLink`이며 서로, 그리고 `openFile` 계열 권한과 별개입니다. 입력은 각각 `{ path }`와 `{ path, operation, details }`이고 결과는 속성 객체와 `null`입니다. 쓰기는 사용자가 실행할 대상을 만드는 작업이므로 앱 명령에서 경로와 대상을 제한하세요. 화면 직접 호출에는 `plugin.opener.readShortcutLink`, `plugin.opener.writeShortcutLink` 명령도 허용합니다.
+
 ## URL 처리 앱 조회
 
 `getUrlHandler(url: string, options?: NativeInvokeOptions): Promise<{ name: string; path: string } | null>`은

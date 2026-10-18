@@ -403,7 +403,15 @@ Windows의 비활성화 기록을 수정하지 않는다.
   파일 자체 교체 경쟁은 남는다. Windows 네이티브 회귀는 `host:windows`에 포함한다.
   실제 Windows 실행 결과와 휴지통 비활성화, 용량 초과 및 경고 UI 수동 검증은 별도 확인이 필요하다.
 - [ ] 휴지통 비활성화, 용량 초과와 영구 삭제 경고 UI의 동작을 실제 Windows에서 검증한다.
-- [ ] Windows 바로가기 생성, 읽기와 변경을 제공한다.
+- [x] Windows 바로가기 생성, 읽기와 변경을 제공한다.
+  `opener.readShortcutLink(path)`와 `opener.writeShortcutLink(path, details, operation)`이
+  `IShellLinkW`와 `IPersistFile`로 `.lnk`의 `target`, `cwd`, `args`, `description`, `icon`,
+  `iconIndex`를 읽고 쓴다(Electron `shell.readShortcutLink`, `shell.writeShortcutLink`).
+  `create`는 새로 쓰거나 덮어쓰고, `replace`는 기존 바로가기를 덮어쓰며, `update`는 입력에 있는
+  속성만 바꾼다. 경로 검사와 핸들 고정은 다른 파일 작업과 같다. 읽기와 쓰기는 별도 권한
+  `opener.readShortcutLink`, `opener.writeShortcutLink`를 요구한다. AppUserModelID와 toast
+  activator는 AppUserModelID 항목에서 다룬다. Windows 실행은 `host:windows`의
+  `windows-opener-shortcut` 회귀가 속성 왕복, 부분 갱신, 오류와 junction 거부를 확인한다.
 - [x] OS beep와 이모지 패널의 지원을 결정한다.
   `os.beep`은 `MessageBeep`로 default(`MB_OK`, Windows Default Beep), info, warning, error 소리를 재생하며 독립 `os.beep` 권한을 쓴다.
   이모지 패널은 Windows에 공식 API가 없고 Win+. 키 합성만 가능하므로 지원하지 않는다.

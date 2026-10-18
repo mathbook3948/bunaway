@@ -1,5 +1,10 @@
 import { BunawayError } from "@bunaway/plugin";
-import { MAX_FILE_PATH_LENGTH } from "#opener/contract";
+import {
+  MAX_FILE_PATH_LENGTH,
+  type ShortcutDetails,
+  type ShortcutOperation,
+  shortcutDetailsSchema,
+} from "#opener/contract";
 
 const MAX_FILE_NAME_LENGTH = 255;
 /** A selected application is a native executable, not a shell command or shortcut. */
@@ -13,6 +18,57 @@ export function normalizeApplicationPath(input: unknown): string {
   }
   return path;
 }
+/** A shortcut file is a Windows `.lnk` file, so the Shell never treats another file as a link. */
+export function normalizeShortcutPath(input: unknown): string {
+  const path = normalizeFilePath(input);
+  if (!/\.lnk$/i.test(path)) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Expected an absolute Windows .lnk shortcut path.",
+    });
+  }
+  return path;
+}
+
+/**
+ * Validate shortcut properties without filesystem access. Targets, working directories
+ * and icon files are absolute paths that need not exist yet; `create` and `replace` start
+ * from an empty link and so need a target.
+ */
+export function normalizeShortcutDetails(
+  input: unknown,
+  operation: ShortcutOperation,
+): ShortcutDetails {
+  const parsed = shortcutDetailsSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Invalid shortcut properties.",
+    });
+  }
+  const details = parsed.data;
+  if (operation !== "update" && details.target === undefined) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "A shortcut target is required.",
+    });
+  }
+  const normalized: ShortcutDetails = {
+    ...details,
+  };
+  for (const key of [
+    "target",
+    "cwd",
+    "icon",
+  ] as const) {
+    const value = details[key];
+    if (value !== undefined) {
+      normalized[key] = normalizeFilePath(value);
+    }
+  }
+  return normalized;
+}
+
 /** Validate a fully qualified Windows file path without filesystem access. */
 export function normalizeFilePath(input: unknown): string {
   const invalid = () =>

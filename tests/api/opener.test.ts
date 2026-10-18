@@ -293,6 +293,12 @@ test("opener preserves strict inputs and independently granted file operations",
       name: "opener.clearRecentDocuments",
     },
     {
+      name: "opener.readShortcutLink",
+    },
+    {
+      name: "opener.writeShortcutLink",
+    },
+    {
       name: "opener.getUrlHandler",
     },
   ]);

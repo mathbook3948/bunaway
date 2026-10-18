@@ -1432,7 +1432,9 @@
       "opener.trashFile",
       "opener.addRecentDocument",
       "opener.clearRecentDocuments",
-      "opener.getUrlHandler"
+      "opener.getUrlHandler",
+      "opener.readShortcutLink",
+      "opener.writeShortcutLink"
     ],
     "reference/plugins/path": [
       "path.getDirectory",
