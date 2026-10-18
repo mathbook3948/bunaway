@@ -28,16 +28,10 @@ import { AccessibleTitles } from "./accessible-title.ts";
 import { adjustSizingRect, systemTrackSize } from "./aspect-ratio.ts";
 import { monitorServices } from "./monitors.ts";
 import type { SessionMessageHandler } from "./session-end.ts";
-import { Taskbar } from "./taskbar.ts";
-import {
-  type OverlayIconSetting,
-  type TaskbarProgress,
-  TaskbarProgressController,
-  TaskbarSettingController,
-  type ThumbnailClip,
-} from "./taskbar-progress.ts";
+import type { TaskbarProgress, ThumbnailClip } from "./taskbar-progress.ts";
 import { display, kernel, user } from "./win32-bindings.ts";
 import { completedGeometryChanges, windowChanges } from "./window-events.ts";
+import { WindowTaskbar } from "./window-taskbar.ts";
 import {
   centerInWorkArea,
   initialWindowPlacement,
@@ -45,13 +39,10 @@ import {
   type WorkArea,
 } from "./window-placement.ts";
 import {
-  clampPixelRect,
   constrainedOuterSize,
   DEFAULT_DPI,
-  fitsInt32Rect,
   logicalPixels,
   physicalPixels,
-  physicalRect,
 } from "./window-size.ts";
 
 import {
@@ -102,7 +93,6 @@ import {
   SM_CXMINTRACK,
   SM_CXPADDEDBORDER,
   SM_CXSIZEFRAME,
-  SM_CXSMICON,
   SM_CYMAXTRACK,
   SM_CYMINTRACK,
   SM_CYSIZEFRAME,
@@ -188,31 +178,12 @@ function callbackPointer(address: bigint): Pointer {
 
 // One class and one bounded pump per STA, shared by every view.
 export class Windows {
-  private readonly taskbar = new Taskbar();
+  private readonly taskbar = new WindowTaskbar({
+    dpi: (window) => this.getDpi(window),
+    isMinimized: (window) => this.isMinimized(window),
+    clientSize: (window) => this.clientSize(window),
+  });
   private readonly accessibleTitles = new AccessibleTitles();
-  private readonly taskbarProgress = new TaskbarProgressController(
-    (window, progress) => this.taskbar.apply(window, progress),
-  );
-  // Clip is kept in DIPs and converted at each application, so a button recreated after a DPI change
-  // gets the current scale.
-  private readonly thumbnailClip = new TaskbarSettingController<ThumbnailClip>(
-    (window, region) => this.applyThumbnailClip(window, region),
-  );
-  private readonly thumbnailToolTip = new TaskbarSettingController<
-    string | null
-  >((window, toolTip) => this.taskbar.setThumbnailToolTip(window, toolTip));
-  // The HICON currently shown as each window's overlay; owned here and destroyed on replacement, removal or destroy.
-  private readonly overlayIcons = new Map<bigint, bigint>();
-  private readonly overlayIcon =
-    new TaskbarSettingController<OverlayIconSetting>(
-      (window, setting) => this.applyOverlayIcon(window, setting),
-      // The provider is a function, which structuredClone rejects; the setting is never mutated.
-      (setting) => setting,
-    );
-  private readonly taskbarButtonCreated = withWide(
-    "TaskbarButtonCreated",
-    (name) => user.symbols.RegisterWindowMessageW(name),
-  );
   readonly thread = kernel.symbols.GetCurrentThreadId();
   private readonly instance = kernel.symbols.GetModuleHandleW(null);
   private readonly name = wide(
@@ -285,10 +256,6 @@ export class Windows {
     pollMessages?: () => void,
     private readonly sessionMessage?: SessionMessageHandler,
   ) {
-    assert(
-      this.taskbarButtonCreated,
-      "RegisterWindowMessageW(TaskbarButtonCreated) failed",
-    );
     if (appId) {
       const shell = dlopen("shell32.dll", {
         SetCurrentProcessExplicitAppUserModelID: {
@@ -388,38 +355,10 @@ export class Windows {
             return sessionResult;
           }
           if (
-            message === this.taskbarButtonCreated &&
+            message === this.taskbar.buttonCreatedMessage &&
             this.windows.has(window)
           ) {
-            // Each setting restores independently, so one failure cannot skip the others.
-            for (const [name, controller] of [
-              [
-                "progress",
-                this.taskbarProgress,
-              ],
-              [
-                "thumbnail clip",
-                this.thumbnailClip,
-              ],
-              [
-                "thumbnail tooltip",
-                this.thumbnailToolTip,
-              ],
-              [
-                "overlay icon",
-                this.overlayIcon,
-              ],
-            ] as const) {
-              try {
-                controller.buttonCreated(window);
-              } catch (error) {
-                // Explorer recreation is asynchronous; retain the last accepted setting for a later retry.
-                console.error(
-                  `Could not restore taskbar ${name} after button creation.`,
-                  error,
-                );
-              }
-            }
+            this.taskbar.restore(window);
             return 0n;
           }
           if (message === APP_SHUTDOWN_MESSAGE) {
@@ -2820,11 +2759,7 @@ export class Windows {
       );
     }
     assert(user.symbols.DestroyWindow(window));
-    this.taskbarProgress.forget(window);
-    this.thumbnailClip.forget(window);
-    this.thumbnailToolTip.forget(window);
-    this.overlayIcon.forget(window);
-    this.releaseOverlayIcon(window);
+    this.taskbar.forget(window);
     this.windows.delete(window);
     this.constraints.delete(window);
     this.dpiByWindow.delete(window);
@@ -2868,7 +2803,7 @@ export class Windows {
    */
   dispose() {
     // Release before the live-window assertion so a failed destroy cannot leak the icon handles.
-    this.releaseOverlayIcons();
+    this.taskbar.releaseIcons();
     assert.equal(this.windows.size, 0);
     this.taskbar.dispose();
     this.accessibleTitles.dispose();
@@ -2889,145 +2824,28 @@ export class Windows {
   /** Apply progress to a live HWND without changing visibility, activation or window state. */
   setTaskbarProgress(window: bigint, progress: TaskbarProgress): void {
     assert(this.windows.has(window), "Taskbar target is not a live window");
-    this.taskbarProgress.set(window, progress);
+    this.taskbar.setProgress(window, progress);
   }
 
-  /**
-   * Clip the taskbar thumbnail to a client-area rectangle in 96 DPI logical pixels, or clear it for null.
-   * Parts beyond the client area are clamped away; a region left empty by that is rejected.
-   */
+  /** Clip the taskbar thumbnail to a client-area region in logical pixels, or clear it for null. */
   setThumbnailClip(window: bigint, region: ThumbnailClip): void {
     assert(this.windows.has(window), "Taskbar target is not a live window");
-    this.thumbnailClip.set(window, region);
+    this.taskbar.setThumbnailClip(window, region);
   }
 
   /** Set the taskbar thumbnail tooltip, or restore the window title for null or an empty string. */
   setThumbnailToolTip(window: bigint, toolTip: string | null): void {
     assert(this.windows.has(window), "Taskbar target is not a live window");
-    // Native callers bypass the plugin schema; enforce the same limits as window titles.
-    if (toolTip !== null && (toolTip.includes("\0") || toolTip.length > 1024)) {
-      throw new BunawayError({
-        code: "INVALID_ARGUMENT",
-        message:
-          "The thumbnail tooltip cannot contain NUL or exceed 1024 UTF-16 code units.",
-      });
-    }
-    this.thumbnailToolTip.set(window, toolTip || null);
+    this.taskbar.setThumbnailToolTip(window, toolTip);
   }
 
-  /**
-   * Show the overlay icon with an accessibility description on the taskbar button, or remove it for null
-   * (the description is then ignored).
-   */
+  /** Show the overlay icon with an accessibility description on the taskbar button, or remove it for null. */
   setOverlayIcon(
     window: bigint,
     icon: NativeOverlayIconProvider | null,
     description: string,
   ): void {
     assert(this.windows.has(window), "Taskbar target is not a live window");
-    if (icon === null) {
-      this.overlayIcon.set(window, null);
-      return;
-    }
-    // Native callers bypass the plugin schema; enforce the same limits as the thumbnail tooltip.
-    if (description.includes("\0") || description.length > 1024) {
-      throw new BunawayError({
-        code: "INVALID_ARGUMENT",
-        message:
-          "The overlay icon description cannot contain NUL or exceed 1024 UTF-16 code units.",
-      });
-    }
-    this.overlayIcon.set(window, {
-      icon,
-      description,
-    });
-  }
-
-  /**
-   * Build the new HICON at the small icon size for the window's DPI before touching the shell, so a rejected
-   * image keeps the current overlay. The previous HICON is destroyed only after the shell accepted the new one.
-   */
-  private applyOverlayIcon(window: bigint, setting: OverlayIconSetting): void {
-    if (!setting) {
-      this.taskbar.setOverlayIcon(window, 0n, "");
-      this.releaseOverlayIcon(window);
-      return;
-    }
-    const size = user.symbols.GetSystemMetricsForDpi(
-      SM_CXSMICON,
-      this.getDpi(window),
-    );
-    // The provider's HICON belongs to this class from here on, including when the shell call fails.
-    const icon = setting.icon(size);
-    try {
-      this.taskbar.setOverlayIcon(window, icon, setting.description);
-    } catch (error) {
-      user.symbols.DestroyIcon(icon);
-      throw error;
-    }
-    this.releaseOverlayIcon(window);
-    this.overlayIcons.set(window, icon);
-  }
-
-  /** Backstop for icons whose window never reached its normal destroy path. Safe to repeat. */
-  private releaseOverlayIcons(): void {
-    for (const window of [
-      ...this.overlayIcons.keys(),
-    ]) {
-      this.releaseOverlayIcon(window);
-    }
-  }
-
-  private releaseOverlayIcon(window: bigint): void {
-    const icon = this.overlayIcons.get(window);
-    if (icon) {
-      user.symbols.DestroyIcon(icon);
-      this.overlayIcons.delete(window);
-    }
-  }
-
-  private applyThumbnailClip(window: bigint, region: ThumbnailClip): void {
-    if (!region) {
-      this.taskbar.setThumbnailClip(window, null);
-      return;
-    }
-    // Native callers bypass the plugin schema, so check the contract before converting.
-    const invalidInput = [
-      region.x,
-      region.y,
-      region.width,
-      region.height,
-    ].some((value) => !Number.isInteger(value));
-    const rect = invalidInput
-      ? null
-      : physicalRect(region, this.getDpi(window));
-    if (
-      !rect ||
-      !fitsInt32Rect(rect) ||
-      rect.left < 0 ||
-      rect.top < 0 ||
-      rect.right <= rect.left ||
-      rect.bottom <= rect.top
-    ) {
-      throw new BunawayError({
-        code: "INVALID_ARGUMENT",
-        message:
-          "The thumbnail clip must be a non-empty region inside the client origin.",
-      });
-    }
-    // A minimized HWND reports an empty client rectangle. Its restored size is not the WINDOWPLACEMENT
-    // normal rectangle when it was minimized from maximized or fullscreen, so it is not reliably known:
-    // pass the region through unclipped. Otherwise clamp to the current client area, which also
-    // lets a rounded fractional-DPI edge reach the last pixel.
-    const clipped = this.isMinimized(window)
-      ? rect
-      : clampPixelRect(rect, this.clientSize(window));
-    if (!clipped) {
-      throw new BunawayError({
-        code: "INVALID_ARGUMENT",
-        message: "The thumbnail clip lies entirely outside the client area.",
-      });
-    }
-    this.taskbar.setThumbnailClip(window, clipped);
+    this.taskbar.setOverlayIcon(window, icon, description);
   }
 }

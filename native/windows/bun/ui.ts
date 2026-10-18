@@ -38,6 +38,13 @@ import { monitorServices, windowMonitor } from "./monitors.ts";
 import { createSessionMessageHandler } from "./session-end.ts";
 import { createSessionNotifications } from "./session-notifications.ts";
 import { publishSystemEvent, SystemEvents } from "./system-events.ts";
+import {
+  advance,
+  INITIAL_UI_PHASE,
+  isShutdownCommitted,
+  type UiEvent,
+  type UiPhase,
+} from "./ui-phase.ts";
 import { originOf, WebView } from "./webview.ts";
 import { Windows } from "./win32.ts";
 import { disposeWin32Bindings, kernel, ole } from "./win32-bindings.ts";
@@ -63,15 +70,17 @@ const registry = pluginRegistry(config.plugins ?? [], packagedPlugins);
 registry.validatePolicy(config.policy);
 assert(parentPort);
 let failure: unknown;
-let stopping = false;
-let startupNavigationStarted = false;
-let startRequested = false;
-/**
- * True once app shutdown is committed, whether this thread reported it (`closing`, `session-end`)
- * or the main thread decided it alone (`shutdown-committed`). Gates every new close request,
- * quit request, lifecycle event and visibility change, because nothing may be emitted afterwards.
- */
-let shutdownCommitted = false;
+/** The thread's lifecycle as one value; `ui-phase.ts` lists every transition. */
+let phase: UiPhase = INITIAL_UI_PHASE;
+const move = (event: UiEvent) => {
+  phase = advance(phase, event);
+};
+const stopping = () => phase.kind === "stopping";
+const shutdownCommitted = () => isShutdownCommitted(phase);
+/** Stopping or committed: no close request, quit request, lifecycle event or visibility change may start. */
+const closing = () => phase.kind !== "live";
+const quitPending = () => phase.kind === "live" && phase.quit === "pending";
+const startRequested = () => phase.start !== "booting";
 let initialized = false;
 let windows: Windows | undefined;
 let systemEvents: SystemEvents | undefined;
@@ -109,16 +118,15 @@ let controlWindow: bigint | undefined;
 let monitorWindow: bigint | undefined;
 let monitorTracker: MonitorTracker | undefined;
 let showRequested = false;
-let quitPending = false;
 /**
  * Commit app shutdown once, bypassing user quit veto for explicit destruction or host interruption.
  * Only the first reason is delivered, because the main thread reports a single reason to the app.
  */
 function signalClosing(reason: ShutdownReason) {
-  if (shutdownCommitted) {
+  if (shutdownCommitted()) {
     return;
   }
-  shutdownCommitted = true;
+  move("commit");
   cancelCloseRequests();
   channel.notify({
     kind: "closing",
@@ -126,10 +134,10 @@ function signalClosing(reason: ShutdownReason) {
   });
 }
 function requestQuit(reason: "last-window" | "tray") {
-  if (stopping || shutdownCommitted || quitPending) {
+  if (closing() || quitPending()) {
     return;
   }
-  quitPending = true;
+  move("quit-request");
   channel.notify({
     kind: "quit-request",
     reason,
@@ -160,8 +168,8 @@ function reportWindowsEmpty() {
     !windowsWereLive ||
     windowsEmptyReported ||
     !resident ||
-    stopping ||
-    shutdownCommitted ||
+    stopping() ||
+    shutdownCommitted() ||
     replacements.size > 0
   ) {
     return;
@@ -172,7 +180,7 @@ function reportWindowsEmpty() {
   });
 }
 function visibility(action: "show" | "hide") {
-  if (stopping || shutdownCommitted) {
+  if (closing()) {
     return;
   }
   showRequested = action === "show";
@@ -193,7 +201,7 @@ function visibility(action: "show" | "hide") {
 
 /** Restore live views or create the first declaration after old views and API operations finish. */
 function showWindows() {
-  if (!showRequested || stopping || shutdownCommitted) {
+  if (!showRequested || closing()) {
     return;
   }
   assert(windows);
@@ -339,7 +347,7 @@ function cleanupView(view: ViewState) {
     if (
       view.downloadCleanupRetries &&
       !view.downloadCleanupRetries.canAttempt(
-        stopping || view.native.isBrowserUnavailable(),
+        stopping() || view.native.isBrowserUnavailable(),
       )
     ) {
       return;
@@ -451,7 +459,7 @@ function discardContext(context: HostContext) {
 }
 const fail = (error: unknown) => {
   failure ??= error;
-  stopping = true;
+  move("stop");
 };
 // Observers only record intent; normal packet dispatch and native cleanup remain deferred.
 const modalCancellationObservers = new Set<(packet: Packet) => void>();
@@ -462,8 +470,7 @@ const channel = new Channel(
   "ui",
   (packet: Packet) => {
     if (packet.kind === "start") {
-      assert(!startRequested && !stopping, "Invalid start");
-      startRequested = true;
+      move("start");
       startViews();
     } else if (packet.kind === "desktop-control") {
       if (packet.action === "hide") {
@@ -471,14 +478,13 @@ const channel = new Channel(
       }
       visibility(packet.action);
     } else if (packet.kind === "quit-cancelled") {
-      quitPending = false;
+      move("quit-cancelled");
     } else if (packet.kind === "shutdown-committed") {
       // Idempotent: the main thread may repeat it, and a prior closing or session-end already set it.
-      shutdownCommitted = true;
-      quitPending = false;
+      move("commit");
       cancelCloseRequests();
     } else if (packet.kind === "shutdown") {
-      stopping = true;
+      move("stop");
       cancelReplacements();
       windowRequests.cancelAll();
       approved.clear();
@@ -499,7 +505,7 @@ const channel = new Channel(
       }
     } else if (packet.kind === "operation") {
       assert(
-        !stopping &&
+        !stopping() &&
           !uiCalls.has(packet.requestId) &&
           uiCalls.size < API_LIMITS.maxPending,
         "Invalid UI queue request",
@@ -542,8 +548,8 @@ const channel = new Channel(
       try {
         const call = registry.validateCall(operation.call);
         allowed =
-          !stopping &&
-          !shutdownCommitted &&
+          !stopping() &&
+          !shutdownCommitted() &&
           (packet.kind !== "grant" || packet.allowed) &&
           !!permissions &&
           (packet.kind !== "grant" || queued?.source === source) &&
@@ -598,7 +604,7 @@ const channel = new Channel(
       const active = activeContext(packet.context);
       const context = approved.get(packet.requestId);
       approved.delete(packet.requestId);
-      if (!stopping && active && context === packet.context) {
+      if (!stopping() && active && context === packet.context) {
         channel.notify({
           ...packet,
           kind: "host-response",
@@ -653,7 +659,11 @@ async function executeWindowRequest(
         signal,
         beforeExecute() {
           // Closing commits locally before the main thread sends cancellation packets.
-          if (shutdownCommitted || stopping || !activeContext(queued.context)) {
+          if (
+            shutdownCommitted() ||
+            stopping() ||
+            !activeContext(queued.context)
+          ) {
             throw new BunawayError({
               code: "CANCELLED",
               message: "Host call was cancelled.",
@@ -669,7 +679,7 @@ async function executeWindowRequest(
     });
   }
   const active = windowRequests.finish(queued.requestId, signal);
-  if (stopping || !active || !activeContext(queued.context)) {
+  if (stopping() || !active || !activeContext(queued.context)) {
     return;
   }
   channel.notify({
@@ -704,16 +714,16 @@ function activeContext(context: HostContext) {
 /** Wait for startup views, then navigate each ready view once. */
 function startViews() {
   if (
-    !startRequested ||
-    stopping ||
-    (!startupNavigationStarted &&
+    phase.kind === "stopping" ||
+    phase.start === "booting" ||
+    (phase.start === "starting" &&
       [
         ...views.values(),
       ].some((view) => !view.ready && !view.lifecycle.closed))
   ) {
     return;
   }
-  startupNavigationStarted = true;
+  move("navigate");
   for (const view of views.values()) {
     if (view.ready && !view.lifecycle.closed && !view.navigationStarted) {
       view.navigationStarted = true;
@@ -737,9 +747,9 @@ function cancelCloseRequests() {
  */
 function appDecidesClose(view: ViewState): boolean {
   return (
-    !quitPending &&
-    !stopping &&
-    !shutdownCommitted &&
+    !quitPending() &&
+    !stopping() &&
+    !shutdownCommitted() &&
     registry.operations.has("windows.respondClose") &&
     registry.allowed(view.boundary.policy.host, {
       operation: "windows.respondClose",
@@ -849,7 +859,7 @@ async function closeWindow(
     let appApproved = false;
     if (mode === "close" && appDecidesClose(view)) {
       const decision = await askAppToDecideClose(view);
-      if (view.lifecycle.closed || stopping || shutdownCommitted) {
+      if (view.lifecycle.closed || closing()) {
         return true;
       }
       // A cancelled request counts as not approved: the document that was asked is gone.
@@ -863,7 +873,7 @@ async function closeWindow(
         child.view.lifecycle.closed ||
         !child.view.confirmation ||
         (child.view === view && appApproved) ||
-        (mode === "close" && quitPending)
+        (mode === "close" && quitPending())
       ) {
         continue;
       }
@@ -879,7 +889,7 @@ async function closeWindow(
       ) {
         return view.lifecycle.closed;
       }
-      if (stopping || shutdownCommitted || view.lifecycle.closed) {
+      if (closing() || view.lifecycle.closed) {
         return true;
       }
     }
@@ -890,7 +900,7 @@ async function closeWindow(
     if (
       mode === "close" &&
       config.desktop?.closeBehavior !== "keep-alive" &&
-      (quitPending ||
+      (quitPending() ||
         [
           ...views.values(),
         ].filter(
@@ -901,14 +911,14 @@ async function closeWindow(
     ) {
       requestQuit("last-window");
       while (
-        quitPending &&
+        quitPending() &&
         !view.lifecycle.closed &&
-        !stopping &&
-        !shutdownCommitted
+        !stopping() &&
+        !shutdownCommitted()
       ) {
         await Bun.sleep(5);
       }
-      return view.lifecycle.closed || stopping || shutdownCommitted;
+      return view.lifecycle.closed || closing();
     }
     if (mode === "recreate") {
       replacements.set(viewId, {
@@ -1020,7 +1030,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
     close: (viewId, replacing = true) =>
       closeWindow(viewId, replacing ? "recreate" : "handoff"),
     destroy: (viewId) => closeWindow(viewId, "force"),
-    stopping: () => stopping,
+    stopping: () => stopping(),
     cancelled: (id) => windowRequests.context(id) === undefined,
     now: () => Date.now(),
     tick: () => Bun.sleep(5),
@@ -1223,7 +1233,7 @@ function createWindow(
   const boundary = new ViewBoundary(policy, {
     origin: originOf,
     source: () => native.source(),
-    ready: () => startupNavigationStarted && !stopping && !shutdownCommitted,
+    ready: () => phase.kind === "live" && phase.start === "running",
     capacity: (count) =>
       channel.canSend(
         count,
@@ -1339,8 +1349,8 @@ function createWindow(
   });
   windows.observe(window, spec.view, (snapshot, changes) => {
     if (
-      stopping ||
-      shutdownCommitted ||
+      stopping() ||
+      shutdownCommitted() ||
       views.get(instanceKey)?.native !== native
     ) {
       return;
@@ -1370,8 +1380,8 @@ function createWindow(
           current &&
           current.native === native &&
           !current.lifecycle.closed &&
-          !stopping &&
-          !shutdownCommitted
+          !stopping() &&
+          !shutdownCommitted()
         ) {
           windows?.show(window, true);
         }
@@ -1444,7 +1454,7 @@ function createWindow(
   views.delete(instanceKey);
   views.set(instanceKey, {
     key: instanceKey,
-    startup: !startRequested,
+    startup: !startRequested(),
     lifecycle: new WindowLifecycle(),
     readiness,
     boundary,
@@ -1485,8 +1495,8 @@ function createWindow(
 /** Broadcast preparation to subscribed live sessions with getReadiness permission. */
 function publishReadiness(state: WindowReadiness): void {
   if (
-    stopping ||
-    shutdownCommitted ||
+    stopping() ||
+    shutdownCommitted() ||
     !registry.operations.has("windows.getReadiness")
   ) {
     return;
@@ -1519,8 +1529,8 @@ function publishReadiness(state: WindowReadiness): void {
  */
 function publishLifecycle(view: ViewState, phase: WindowLifecyclePhase): void {
   if (
-    stopping ||
-    shutdownCommitted ||
+    stopping() ||
+    shutdownCommitted() ||
     view.publishedLifecycle.has(phase) ||
     (phase !== "created" && !view.publishedLifecycle.has("created")) ||
     !registry.operations.has("windows.listInstances")
@@ -1567,7 +1577,7 @@ function sendNativeEvent(
     })
     .catch((error) => {
       onUndelivered?.();
-      if (stopping || shutdownCommitted || !boundary.matches(route)) {
+      if (closing() || !boundary.matches(route)) {
         return;
       }
       if (error instanceof BunawayError && error.code === "BUSY") {
@@ -1587,7 +1597,7 @@ function publishPluginSystemEvent(
   payload: import("@bunaway/protocol").JsonValue,
   requiredOperation: string,
 ): void {
-  if (stopping || shutdownCommitted) {
+  if (closing()) {
     return;
   }
   publishSystemEvent(
@@ -1619,7 +1629,7 @@ try {
         // The main thread owns shutdown from here: marking the UI as closing stops new close
         // confirmations and quit requests, and abandons waits for pending ones. A prior
         // signalClosing() reason wins on the main thread, which keeps the first reason.
-        shutdownCommitted = true;
+        move("commit");
         cancelCloseRequests();
         channel.notify({
           kind: "session-end",
@@ -1742,7 +1752,7 @@ try {
           };
         },
         poll: () => channel.poll(),
-        stopping: () => stopping || shutdownCommitted || modalShutdownRequested,
+        stopping: () => closing() || modalShutdownRequested,
       },
       shortcuts: {
         createWindow(receive) {
@@ -1754,7 +1764,7 @@ try {
           windows.destroy(hwnd);
         },
         emit(event, payload) {
-          if (stopping || shutdownCommitted) {
+          if (closing()) {
             return;
           }
           for (const view of views.values()) {
@@ -1814,7 +1824,7 @@ try {
           };
         },
         emit(event, payload) {
-          if (stopping || shutdownCommitted) {
+          if (closing()) {
             return;
           }
           for (const view of views.values()) {
@@ -1826,7 +1836,7 @@ try {
         windows: {
           resolve(windowId) {
             const view = viewById(windowId);
-            if (!view || view.lifecycle.closed || stopping) {
+            if (!view || view.lifecycle.closed || stopping()) {
               throw new BunawayError({
                 code: "INVALID_ARGUMENT",
                 message: "Window lifetime is unavailable.",
@@ -1854,10 +1864,10 @@ try {
             windowRequests.onModalInterrupt(signal, cancel),
           executeRole(windowId, role) {
             const view = viewById(windowId);
-            if (!view || view.lifecycle.closed || stopping) {
+            if (!view || view.lifecycle.closed || stopping()) {
               log("menu-role-skipped", {
                 role,
-                reason: stopping ? "host-stopping" : "window-closed",
+                reason: stopping() ? "host-stopping" : "window-closed",
               });
               return;
             }
@@ -1907,7 +1917,7 @@ try {
           },
         },
         setTrayMenu(items, selected) {
-          if (stopping && items === undefined && !tray) {
+          if (stopping() && items === undefined && !tray) {
             return;
           }
           if (!tray) {
@@ -1919,7 +1929,7 @@ try {
           tray.setMenu(items, selected);
         },
         emit(event, payload) {
-          if (stopping || shutdownCommitted) {
+          if (closing()) {
             return;
           }
           for (const view of views.values()) {
@@ -1933,7 +1943,7 @@ try {
     monitorTracker = new MonitorTracker(
       monitorServices.list,
       (change) => {
-        if (stopping || shutdownCommitted) {
+        if (closing()) {
           return;
         }
         for (const recipient of views.values()) {
@@ -2028,7 +2038,7 @@ try {
   await channel.send({
     kind: "ready",
   });
-  while (!stopping) {
+  while (!stopping()) {
     checkCallbacks();
     windows.pump();
     monitorTracker?.flush();
@@ -2071,7 +2081,7 @@ try {
           windowId: view.readiness?.snapshot().windowId,
           ...view.native.creationSnapshot(),
           ready: view.ready,
-          startRequested,
+          startRequested: startRequested(),
           startup: view.startup,
           lifecycle: view.lifecycle.phase,
           deadlineLateMs: Date.now() - view.deadline,
@@ -2103,7 +2113,7 @@ try {
       }
     }
     if (
-      !shutdownCommitted &&
+      !shutdownCommitted() &&
       !tray &&
       config.desktop?.closeBehavior !== "keep-alive" &&
       !adapters?.busy() &&
@@ -2140,7 +2150,7 @@ try {
           },
   });
 } finally {
-  stopping = true;
+  move("stop");
   cancelReplacements();
   windowRequests.cancelAll();
   uiCalls.clear();

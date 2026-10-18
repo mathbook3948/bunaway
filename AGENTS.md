@@ -135,6 +135,7 @@ in the same change and update this table. Drop a row once the mistake cannot hap
 | Workspace tsconfigs extend the base and never restate strictness; the client SDK sees no Bun types | `tests/conformance/lint-config.test.ts` |
 | `framework.json` and root `devDependencies` match the `packages/*` and `plugins/*` workspaces | `tests/conformance/workspace.test.ts` |
 | A library symbol has one FFI signature across the repository; known conflicts only shrink | `tests/conformance/ffi-signatures.test.ts` |
+| The Windows UI thread changes its lifecycle only through `advance` in `native/windows/bun/ui-phase.ts` | `tests/lifecycle/windows-ui-phase.test.ts` (full transition table), `tests/lifecycle/windows-ui-lifecycle.test.ts` (31 scenarios on Linux fakes) |
 | A new plugin workspace starts from `bunaway plugin new <name>`, which registers it in `framework.json`, the root manifest, the reference map and a reference page | `tests/cli/plugin-new.test.ts`; `tests/conformance/workspace.test.ts` and `docs:check` fail on a hand-made copy that skips a manifest |
 | New native host files are listed in `frameworkPaths`; listed entries exist | `tests/cli/framework-paths.test.ts` |
 | Public exports and plugin operations are documented | `docs/site/scripts/check-reference.mjs` through `mise run typecheck` |

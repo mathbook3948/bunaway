@@ -39,7 +39,7 @@ Linux에서는 Windows와 macOS 전용 테스트가 skip되므로 네이티브 �
 | 플러그인 계약 (`plugins/*/src/contract.ts`, `operations.ts`) | `bun test tests/api/<plugin>` 와 `tests/cli/plugins.test.ts`, `bun run plugins:build`, `bun test tests/conformance/browser-boundary tests/conformance/plugin-structure` | 없음 |
 | Windows 플러그인 구현 (`plugins/*/src/platforms/windows*.ts`) | `bun test tests/api/<plugin>`, `bun test tests/conformance/ffi-signatures`, Windows에서 `bun test tests/lifecycle/windows-<plugin>` | `mise run host:windows` |
 | macOS 플러그인 구현 (`plugins/*/src/platforms/macos*.ts`) | `bun test tests/api/<plugin>`, `bun test tests/conformance/ffi-signatures`, macOS에서 `bun test tests/lifecycle/macos-<plugin>` | `mise run host:macos` |
-| Windows 호스트 (`native/windows/bun`) | Windows에서 `bun test tests/lifecycle/windows-bun tests/lifecycle/windows-window tests/lifecycle/windows-ui` | `mise run host:windows`, CI의 geometry 3회 반복 실행 |
+| Windows 호스트 (`native/windows/bun`) | `bun test tests/lifecycle/windows-ui-phase tests/lifecycle/windows-ui-lifecycle tests/cli/framework-paths`(Linux), Windows에서 `bun test tests/lifecycle/windows-bun tests/lifecycle/windows-window tests/lifecycle/windows-ui` | `mise run host:windows`, CI의 geometry 3회 반복 실행 |
 | macOS 호스트 (`native/macos/bun`) | macOS에서 `bun test tests/lifecycle/macos-bun tests/lifecycle/macos-window tests/lifecycle/macos-desktop` | `mise run host:macos` |
 | 플러그인 SDK, 플러그인 빌드 (`packages/plugin-sdk`, `packages/cli/src/plugin-*`) | `bun test tests/api/native tests/api/plugin tests/cli/plugin-build.test.ts tests/cli/distribution.test.ts`, `bun run plugins:build` | 없음 |
 | CLI 빌드와 개발 서버 (`packages/cli`) | `bun test tests/cli` | 해당 OS에서 `bunaway dev`, `bunaway build` |
