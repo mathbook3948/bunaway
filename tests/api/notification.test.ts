@@ -20,10 +20,12 @@ test("notification status and Settings require separate permissions and null-onl
   ]).toEqual([
     "notification.show",
     "notification.clear",
+    "notification.clearAll",
     "notification.getStatus",
     "notification.openSettings",
   ]);
   for (const operation of [
+    "notification.clearAll",
     "notification.getStatus",
     "notification.openSettings",
   ]) {

@@ -44,6 +44,7 @@ export function validateNotificationInput(
     return;
   }
   if (
+    operation !== "notification.clearAll" &&
     operation !== "notification.getStatus" &&
     operation !== "notification.openSettings"
   ) {

@@ -341,6 +341,38 @@ if (workerData?.toastMarshalWorker) {
         force: true,
       });
     }
+    // clearAll must remove every item of the app across ids and groups.
+    for (const [id, group] of [
+      [
+        "all-a",
+        "bunaway-test",
+      ],
+      [
+        "all-b",
+        "bunaway-test",
+      ],
+      [
+        "all-a",
+        "bunaway-other",
+      ],
+    ] as const) {
+      controller.show({
+        ...first,
+        id,
+        group,
+      });
+    }
+    assert.equal(
+      (await waitHistory((items) => items.length === 3)).length,
+      3,
+      "Distinct id/group pairs must create separate history items",
+    );
+    assert.equal(controller.clearAll(), null);
+    assert.equal(
+      (await waitHistory((items) => items.length === 0)).length,
+      0,
+      "clearAll must remove every history item of the app",
+    );
     controller.show({
       ...first,
       id: "shutdown",

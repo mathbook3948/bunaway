@@ -41,6 +41,7 @@ function fixture() {
   let failShow = false,
     failClear = false,
     failDetach = false,
+    clearedAll = 0,
     disposals = 0;
   const driver: ToastDriver = {
     show(_input, receive) {
@@ -62,6 +63,12 @@ function fixture() {
         throw new Error("clear failed");
       }
       cleared.push(`${identity.group}/${identity.id}`);
+    },
+    clearAll() {
+      if (failClear) {
+        throw new Error("clear failed");
+      }
+      clearedAll++;
     },
     dispose() {
       disposals++;
@@ -89,6 +96,9 @@ function fixture() {
       if (kind === "detach") {
         failDetach = value;
       }
+    },
+    get clearedAll() {
+      return clearedAll;
     },
     get disposals() {
       return disposals;
@@ -402,6 +412,71 @@ test("bounded active ownership permits replacement and reclaims capacity after c
   f.controller.show(input("overflow"));
   f.controller.dispose();
   expect(f.detached).toHaveLength(MAX_ACTIVE_TOASTS + 2);
+});
+
+test("clearAll takes only null, retires every owned toast, drops late callbacks and frees capacity", async () => {
+  for (const payload of [
+    {},
+    {
+      id: "first",
+    },
+    "all",
+    false,
+  ] as JsonValue[]) {
+    await expect(
+      parsers.validateCall({
+        operation: "notification.clearAll",
+        payload,
+      }),
+    ).rejects.toThrow();
+  }
+  await expect(
+    parsers.validateOutput("notification.clearAll", {}),
+  ).rejects.toThrow();
+  const f = fixture();
+  for (let n = 0; n < MAX_ACTIVE_TOASTS; n++) {
+    f.controller.show(input(String(n)));
+  }
+  expect(() => f.controller.show(input("overflow"))).toThrow(BunawayError);
+  expect(f.controller.clearAll()).toBeNull();
+  expect(f.clearedAll).toBe(1);
+  // Late callbacks from every retired toast are discarded and no dismissed event is synthesized.
+  for (const callback of f.callbacks) {
+    callback({
+      kind: "dismissed",
+      reason: "userCanceled",
+    });
+  }
+  expect(f.events).toEqual([]);
+  expect(f.detached).toHaveLength(MAX_ACTIVE_TOASTS);
+  // The bound is released, so the full limit can be owned again.
+  for (let n = 0; n < MAX_ACTIVE_TOASTS; n++) {
+    f.controller.show(input(`n${n}`));
+  }
+  expect(() => f.controller.show(input("overflow"))).toThrow(BunawayError);
+  f.controller.dispose();
+});
+
+test("clearAll failure keeps ownership so a retry succeeds and callbacks stay live until then", () => {
+  const f = fixture();
+  f.controller.show(input());
+  f.failure("clear", true);
+  expect(() => f.controller.clearAll()).toThrow("clear failed");
+  f.callbacks[0]?.({
+    kind: "clicked",
+  });
+  expect(f.events).toHaveLength(1);
+  expect(f.detached).toEqual([]);
+  f.failure("clear", false);
+  expect(f.controller.clearAll()).toBeNull();
+  expect(f.detached).toEqual([
+    0,
+  ]);
+  f.callbacks[0]?.({
+    kind: "clicked",
+  });
+  expect(f.events).toHaveLength(1);
+  f.controller.dispose();
 });
 
 test("cleanup failures retain ownership for retry and stop callbacks before shutdown", () => {

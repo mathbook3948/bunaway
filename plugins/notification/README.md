@@ -3,7 +3,7 @@
 `@bunaway/plugin-notification`은 Windows의 알림 API 지원과 현재 앱의 OS 알림 설정을
 조회하고 Windows 알림 설정 페이지를 열며 실행 중 toast를 표시하는 선택 네이티브 플러그인이다.
 `defineNativePlugin`과 Zod 계약으로 `notification.getStatus`, `notification.openSettings`를
-`notification.show`, `notification.clear`를 선언하며 각 작업은 같은 이름의 독립 정책 권한을 요구한다.
+`notification.show`, `notification.clear`, `notification.clearAll`을 선언하며 각 작업은 같은 이름의 독립 정책 권한을 요구한다.
 공개 helper는 `notification.getStatus()`와 `notification.openSettings()`이다.
 
 자세한 반환값, 권한, 오류와 사용 예는
@@ -71,7 +71,16 @@ failed의 HRESULT는 unsigned 32비트 값이다. Show 자체의 동기 실패�
 백엔드 이벤트 구독이나 `onOpen` 라우팅은 추가하지 않는다.
 
 `clear({ id, group? })`는 같은 앱의 해당 popup과 기록만 제거하고 null을 반환한다.
-이전 프로세스가 남긴 같은 ID의 기록도 제거할 수 있다. 앱 전체 기록은 지우지 않는다.
+이전 프로세스가 남긴 같은 ID의 기록도 제거할 수 있다. 앱 전체 기록은 `clearAll`이 지운다.
+`clearAll()`은 입력 null로 같은 앱(호스트 앱 ID)의 popup과 알림 센터 기록을 모두 제거하고
+null을 반환한다. 이번 실행이 소유한 toast를 `ToastNotifier.Hide`로 숨긴 뒤
+`IToastNotificationHistory.ClearWithId(appId)`를 호출하므로 이전 프로세스가 남긴 기록도 제거하고
+다른 앱의 알림은 건드리지 않는다. 소유 중인 항목을 모두 폐기해 늦게 온 callback을 버리고
+소유 상한 64개를 비운다. 실패하면 소유권을 유지하므로 다시 호출할 수 있다.
+Tauri 알림 플러그인의 `removeAllActive`와 같은 범위이며 Electron `Notification`에는 대응 API가
+없어 Tauri 기준으로 제공한다. ClearWithId는 `IToastNotificationHistory`의 12번 slot
+(IInspectable 다음 RemoveGroup, RemoveGroupWithId, RemoveGroupedTagWithId, RemoveGroupedTag,
+Remove, Clear, ClearWithId)이며 기존 clear가 쓰는 RemoveGroupedTagWithId는 8번 slot이다.
 교체와 clear 이후 이전 객체에서 늦게 온 callback은 버린다. clear와 앱 종료는 별도
 합성 dismissed 이벤트를 만들지 않는다. timeout dismissed 뒤에도 같은 객체의 후속 callback을
 받기 위해 소유권을 유지한다. 동시에 최대 64개의 ID/group을 소유하며 clear로 반환한다.
@@ -123,6 +132,7 @@ activation은 후속 범위다.
   격리된 FFI fixture는 실제 JSCallback vtable을 호출하지만 Windows 실행 증거는 아니다.
 - `bun --no-env-file test tests/lifecycle/windows-toast.test.ts`: Windows에서 UUID 바로가기와
   소리/popup을 억제한 알림을 사용해 실제 Show, XML, 교체, 개별 제거와 종료 후 history를
-  독립적인 WinRT projection으로 확인한다. 별도 STA/MTA fixture는 실제 COM marshaling,
+  독립적인 WinRT projection으로 확인한다. 서로 다른 ID/group의 popup 억제 알림 3개를
+  `clearAll`로 제거해 history가 비는 것도 확인한다. 별도 STA/MTA fixture는 실제 COM marshaling,
   callback 실행 스레드와 지연 Release 정리를 확인한다. `host:windows`에도 포함한다.
   이 검사는 실제 사용자의 클릭이나 종료 상태 activation을 검증하지 않는다.
