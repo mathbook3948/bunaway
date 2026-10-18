@@ -4,6 +4,8 @@ import {
   emptyInput,
   fileInput,
   fileWithAppSchema,
+  shortcutLinkSchema,
+  shortcutWriteInput,
   urlHandlerSchema,
   urlInput,
   urlWithAppSchema,
@@ -23,8 +25,10 @@ import {
   openFileWith as openWindowsFileWith,
   openUrl as openWindowsUrl,
   openUrlWith as openWindowsUrlWith,
+  readShortcutLink as readWindowsShortcutLink,
   revealFile as revealWindowsFile,
   trashFile as trashWindowsFile,
+  writeShortcutLink as writeWindowsShortcutLink,
 } from "#opener/platforms/windows";
 
 const macosOperation =
@@ -76,6 +80,18 @@ export const windowsOperations = {
     output: z.null(),
     handler: (_input, { instance, signal }) =>
       clearWindowsRecentDocuments(instance, signal),
+  }),
+  readShortcutLink: windowsOperation({
+    input: fileInput,
+    output: shortcutLinkSchema,
+    handler: ({ path }, { instance, signal }) =>
+      readWindowsShortcutLink(instance, path, signal),
+  }),
+  writeShortcutLink: windowsOperation({
+    input: shortcutWriteInput,
+    output: z.null(),
+    handler: ({ path, details, operation }, { instance, signal }) =>
+      writeWindowsShortcutLink(instance, path, details, operation, signal),
   }),
   getUrlHandler: windowsOperation({
     input: urlInput,

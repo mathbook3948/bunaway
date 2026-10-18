@@ -2,15 +2,23 @@ import { dlopen } from "bun:ffi";
 import { ResourceOwner } from "@bunaway/plugin";
 import { COINIT_APARTMENTTHREADED, OLE32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
-import type { UrlHandler } from "#opener/contract";
+import type {
+  ShortcutDetails,
+  ShortcutLink,
+  ShortcutOperation,
+  UrlHandler,
+} from "#opener/contract";
 import { createFiles } from "#opener/platforms/windows-file";
 import { createUrlHandlerQuery } from "#opener/platforms/windows-handler";
 import {
   normalizeApplicationPath,
   normalizeFilePath,
+  normalizeShortcutDetails,
+  normalizeShortcutPath,
 } from "#opener/platforms/windows-path";
 import { createRecentDocuments } from "#opener/platforms/windows-recent";
 import { createShell } from "#opener/platforms/windows-shell";
+import { createShortcuts } from "#opener/platforms/windows-shortcut";
 import {
   trashWindowsFile,
   validateTrashDrive,
@@ -57,9 +65,13 @@ export function initialize() {
   const handlers = owner.acquire(createUrlHandlerQuery, (resource) =>
     resource.dispose(),
   );
+  const shortcuts = owner.acquire(createShortcuts, (resource) =>
+    resource.dispose(),
+  );
   return {
     owner,
     shell,
+    shortcuts,
     files,
     recent,
     handlers,
@@ -127,7 +139,7 @@ function notCancelled(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     throw new BunawayError({
       code: "CANCELLED",
-      message: "Recent Items request cancelled.",
+      message: "Opener request cancelled.",
     });
   }
 }
@@ -151,6 +163,76 @@ export function clearRecentDocuments(state: State, signal?: AbortSignal): null {
   active(state);
   notCancelled(signal);
   state.recent.request(null);
+  return null;
+}
+
+/** Read an existing shortcut file's properties without resolving or launching its target. */
+export function readShortcutLink(
+  state: State,
+  path: string,
+  signal?: AbortSignal,
+): ShortcutLink {
+  active(state);
+  notCancelled(signal);
+  const selected = normalizeShortcutPath(path);
+  let link: ShortcutLink | undefined;
+  state.files.withFile(selected, () => {
+    link = state.shortcuts.read(selected);
+  });
+  if (link === undefined) {
+    throw new BunawayError({
+      code: "INTERNAL",
+      message: "Windows could not process the shortcut.",
+    });
+  }
+  return link;
+}
+
+/** The file check reports a missing leaf or parent as `INVALID_ARGUMENT` with `FILE_NOT_FOUND`. */
+function isMissingFile(error: unknown): boolean {
+  if (!(error instanceof BunawayError)) {
+    return false;
+  }
+  const details = error.details;
+  return (
+    typeof details === "object" &&
+    details !== null &&
+    !Array.isArray(details) &&
+    details.reason === "FILE_NOT_FOUND"
+  );
+}
+
+/**
+ * Write a shortcut file. `create` writes a new link or overwrites an existing file;
+ * `replace` overwrites an existing file without checking that it is a shortcut;
+ * `update` needs an existing shortcut. Parent directories are never created.
+ */
+export function writeShortcutLink(
+  state: State,
+  path: string,
+  details: ShortcutDetails,
+  operation: ShortcutOperation,
+  signal?: AbortSignal,
+): null {
+  active(state);
+  notCancelled(signal);
+  const selected = normalizeShortcutPath(path);
+  const checked = normalizeShortcutDetails(details, operation);
+  const save = () => state.shortcuts.write(selected, checked, operation);
+  if (operation !== "create") {
+    state.files.withFile(selected, save);
+    return null;
+  }
+  try {
+    state.files.withFile(selected, () => {});
+  } catch (error) {
+    if (!isMissingFile(error)) {
+      throw error;
+    }
+    state.files.withParents(selected, save);
+    return null;
+  }
+  state.files.withFile(selected, save);
   return null;
 }
 

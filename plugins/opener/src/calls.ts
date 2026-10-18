@@ -1,10 +1,17 @@
 import type { NativeInvokeOptions, NativePluginAPI } from "@bunaway/plugin";
-import type { UrlHandler } from "#opener/contract";
+import type {
+  ShortcutDetails,
+  ShortcutLink,
+  ShortcutOperation,
+  UrlHandler,
+} from "#opener/contract";
 import type { windowsOperations } from "#opener/operations";
 import { normalizeMacosFilePath } from "#opener/platforms/macos-path";
 import {
   normalizeApplicationPath,
   normalizeFilePath,
+  normalizeShortcutDetails,
+  normalizeShortcutPath,
 } from "#opener/platforms/windows-path";
 import { normalizeUrl } from "#opener/url";
 
@@ -15,6 +22,15 @@ function normalizeOpenerFilePath(input: unknown): string {
     !input.startsWith("//")
     ? normalizeMacosFilePath(input)
     : normalizeFilePath(input);
+}
+
+/** A POSIX-style path reaches the macOS host, which reports UNSUPPORTED for shortcut operations. */
+function isPosixPath(input: unknown): input is string {
+  return (
+    typeof input === "string" &&
+    input.startsWith("/") &&
+    !input.startsWith("//")
+  );
 }
 
 /** Build public helpers around the plugin's typed operations. */
@@ -143,7 +159,50 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
     return api.clearRecentDocuments({}, options);
   }
 
+  /**
+   * Read a Windows shortcut file (`.lnk`) without resolving or starting its target. Unset
+   * text properties are empty strings and `iconIndex` is 0, as in Electron's
+   * `shell.readShortcutLink`.
+   */
+  async function readShortcutLink(
+    path: string,
+    options?: NativeInvokeOptions,
+  ): Promise<ShortcutLink> {
+    return api.readShortcutLink(
+      {
+        path: isPosixPath(path) ? path : normalizeShortcutPath(path),
+      },
+      options,
+    );
+  }
+
+  /**
+   * Write a Windows shortcut file (`.lnk`), after Electron's `shell.writeShortcutLink`.
+   * `create` (default) writes a new shortcut or overwrites an existing one, `replace`
+   * overwrites an existing `.lnk` file, and `update` changes only the named properties of an
+   * existing one. `create` and `replace` need `details.target`. Paths are absolute and the
+   * parent directory must exist.
+   */
+  async function writeShortcutLink(
+    path: string,
+    details: ShortcutDetails,
+    operation: ShortcutOperation = "create",
+    options?: NativeInvokeOptions,
+  ): Promise<null> {
+    const posix = isPosixPath(path);
+    return api.writeShortcutLink(
+      {
+        path: posix ? path : normalizeShortcutPath(path),
+        operation,
+        details: posix ? details : normalizeShortcutDetails(details, operation),
+      },
+      options,
+    );
+  }
+
   return {
+    readShortcutLink,
+    writeShortcutLink,
     addRecentDocument,
     clearRecentDocuments,
     getUrlHandler,

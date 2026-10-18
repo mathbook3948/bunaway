@@ -1,6 +1,6 @@
 import { dlopen, ptr } from "bun:ffi";
-import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/plugin";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { MAX_FILE_PATH_LENGTH } from "#opener/contract";
 
 const INVALID_HANDLE_VALUE = 0xffffffffffffffffn;
@@ -67,6 +67,7 @@ export function createFiles() {
     request: (verifyIdentity: () => void) => void,
     allowFileDelete = false,
     expectedIdentity?: Buffer,
+    pinLeaf = true,
   ): void => {
     if (disposed) {
       throw new BunawayError({
@@ -80,8 +81,9 @@ export function createFiles() {
     let identity: Buffer | undefined;
     try {
       // Data-access handles without FILE_SHARE_DELETE pin parents against replacement.
-      for (let count = firstParent; count <= parts.length; count++) {
-        const isFile = count === parts.length;
+      const last = pinLeaf ? parts.length : parts.length - 1;
+      for (let count = firstParent; count <= last; count++) {
+        const isFile = pinLeaf && count === parts.length;
         const target =
           count === 1 ? `${parts[0]}\\` : parts.slice(0, count).join("\\");
         const handle = api.symbols.CreateFileW(
@@ -184,6 +186,13 @@ export function createFiles() {
     /** Pin and validate each parent and file during a non-destructive Shell request. */
     withFile(path: string, request: () => void): void {
       withFile(path, request);
+    },
+    /**
+     * Pin and validate only the parent directories of a file that may not exist yet. The
+     * leaf is not checked, so a link created there after the check is not detected.
+     */
+    withParents(path: string, request: () => void): void {
+      withFile(path, request, false, undefined, false);
     },
     /**
      * Pin parents and validate a file while allowing the Shell to move it.
