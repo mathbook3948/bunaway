@@ -580,7 +580,7 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 - [x] Windows 호출 세션의 입력 idle 시간과 지정 기한의 active/idle 상태를 조회한다. 잠금 여부는 별도 작업이다.
 - [x] Windows 시스템 idle 절전과 화면 꺼짐 방지 요청을 시작, 조회하고 해제한다. 사용자 절전과 OS 전원 정책은 우회하지 않는다.
 - [x] blocker의 반복 요청을 독립 ID로 관리하고 앱 종료 시 native handle을 자동 정리한다.
-- [ ] CPU speed-limit, thermal-state와 종료 이벤트의 플랫폼별 지원을 정의한다.
+- [x] CPU speed-limit, thermal-state와 종료 이벤트의 플랫폼별 지원을 정의한다. `power.getCpuSpeedLimit`은 CallNtPowerInformation(ProcessorInformation)의 프로세서별 MhzLimit/MaxMhz 중 최솟값(0–100 정수)을 반환하며, MaxMhz 0 항목은 건너뛰고 계산할 항목이 없으면 100이다. `speed-limit-change` 이벤트는 제공하지 않고, thermal-state는 macOS 전용 개념이라 Windows 미지원이다. 종료 계열은 기존 suspend, resume, 세션 잠금 이벤트가 범위다.
 
 모니터 id는 현재 Windows 디스플레이 장치명이며 영구 하드웨어 식별자가 아니다.
 조회와 변경 구독 API는 [창 API](./site/src/content/docs/reference/host/windows.mdx#모니터와-커서)를 따른다.

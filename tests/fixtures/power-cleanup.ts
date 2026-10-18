@@ -84,6 +84,7 @@ for (const failures of [
     powerCleanup.libraries,
     failures === 1
       ? [
+          "powrprof.dll",
           "user32.dll",
           "kernel32.dll",
         ]
@@ -103,6 +104,7 @@ for (const failures of [
     [],
   );
   assert.deepEqual(powerCleanup.libraries, [
+    "powrprof.dll",
     "user32.dll",
     "kernel32.dll",
   ]);
@@ -196,6 +198,7 @@ assert.deepEqual(
   [],
 );
 assert.deepEqual(powerCleanup.libraries, [
+  "powrprof.dll",
   "user32.dll",
   "kernel32.dll",
 ]);
@@ -219,6 +222,7 @@ assert.throws(
   /subscribe failed/,
 );
 assert.deepEqual(powerCleanup.libraries, [
+  "powrprof.dll",
   "user32.dll",
   "kernel32.dll",
 ]);

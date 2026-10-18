@@ -4,6 +4,7 @@ import {
   blockerIdSchema,
   blockerInputSchema,
   blockerSchema,
+  cpuSpeedLimitSchema,
   idleThresholdSchema,
   idleTimeSchema,
   MAX_POWER_BLOCKERS,
@@ -18,6 +19,11 @@ export const powerOperations = {
     input: z.null(),
     output: statusSchema,
     handler: (_input, { instance }) => instance.getStatus(),
+  }),
+  getCpuSpeedLimit: operation({
+    input: z.null(),
+    output: cpuSpeedLimitSchema,
+    handler: (_input, { instance }) => instance.getCpuSpeedLimit(),
   }),
   getIdleTime: operation({
     input: z.null(),

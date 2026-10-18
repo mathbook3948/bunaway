@@ -1,5 +1,7 @@
 import { z } from "zod";
 export const MAX_POWER_BLOCKERS = 128;
+/** Upper bound for the PROCESSOR_POWER_INFORMATION buffer (24 bytes per logical processor). */
+export const MAX_LOGICAL_PROCESSORS = 4096;
 
 const nullableBoolean = z.union([
   z.boolean(),
@@ -37,6 +39,10 @@ export const statusSchema = z.strictObject({
   remainingSeconds: nullableSeconds,
   fullLifeSeconds: nullableSeconds,
 });
+/** Lowest per-processor MhzLimit / MaxMhz ratio in percent. 100 means no processor is throttled. */
+export const cpuSpeedLimitSchema = z.strictObject({
+  speedLimitPercent: z.int().min(0).max(100),
+});
 export const idleTimeSchema = z
   .int()
   .nonnegative()
@@ -56,6 +62,7 @@ export const blockerInputSchema = z.strictObject({
     .refine((value) => !value.includes("\0"), "Reason must not contain NUL."),
 });
 export type PowerStatus = z.output<typeof statusSchema>;
+export type PowerCpuSpeedLimit = z.output<typeof cpuSpeedLimitSchema>;
 export type PowerBlocker = z.output<typeof blockerSchema>;
 export type PowerBlockerType = PowerBlocker["type"];
 
