@@ -1,4 +1,8 @@
-import type { ImageInterpolation, ImageMime } from "#image/contract";
+import type {
+  FileTypeIconSize,
+  ImageInterpolation,
+  ImageMime,
+} from "#image/contract";
 
 // Pixel buffers are Node Buffers because the codecs hand them to native code and copy rows with
 // Buffer methods. The contract module stays free of Buffer so it can be bundled into WebView code.
@@ -18,5 +22,17 @@ export type ImageCodec = {
     height: number,
     interpolation: ImageInterpolation,
   ): Pixels;
+  dispose(): void;
+};
+
+/** Resolves the shell icon registered for a file extension without touching any file. */
+export type FileTypeIconSource = {
+  /** Throws INTERNAL on native failure or CANCELLED when aborted; the caller owns the returned detached pixels. */
+  render(
+    extension: string,
+    size: FileTypeIconSize,
+    signal?: AbortSignal,
+  ): Pixels;
+  /** Release native bindings; safe to repeat. */
   dispose(): void;
 };

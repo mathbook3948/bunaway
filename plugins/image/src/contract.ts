@@ -95,3 +95,25 @@ export const resizeSchema = transformSizeSchema.safeExtend({
   id: idSchema,
   interpolation: interpolationSchema.optional(),
 });
+/** Pixel edge length of each file type icon size, matching the shell small, large and extra-large icon lists. */
+export const FILE_TYPE_ICON_PIXELS = {
+  small: 16,
+  normal: 32,
+  large: 48,
+} as const;
+export type FileTypeIconSize = keyof typeof FILE_TYPE_ICON_PIXELS;
+/**
+ * A dot followed by 1 to 31 letters, digits, `_`, `-`, `+` or `~`. Path separators, NUL, whitespace,
+ * `:` and further dots are excluded, so the value can only be an extension and never a file path.
+ */
+export const fileExtensionSchema = z
+  .string()
+  .regex(/^\.[A-Za-z0-9_+~-]{1,31}$(?![\s\S])/);
+export const fileTypeIconSchema = z.strictObject({
+  extension: fileExtensionSchema,
+  size: z.enum([
+    "small",
+    "normal",
+    "large",
+  ]),
+});
