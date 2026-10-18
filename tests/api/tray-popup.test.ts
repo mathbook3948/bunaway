@@ -18,6 +18,7 @@ function services(
     setTooltip: () => {},
     setIcon: () => {},
     setClickBehavior: () => {},
+    setVisible: () => {},
     focus: () => true,
     popUpContextMenu,
     subscribe: () => () => {},

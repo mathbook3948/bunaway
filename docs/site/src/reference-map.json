@@ -1650,6 +1650,7 @@
       "tray.setTooltip",
       "tray.setIcon",
       "tray.setClickBehavior",
+      "tray.setVisible",
       "tray.focus",
       "tray.popUpContextMenu",
       "tray.waitForEvent"

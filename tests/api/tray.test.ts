@@ -193,6 +193,7 @@ test("tray notifications and controls keep ownership in host services and cancel
     icon: "app" as "app" | "custom",
     showOnLeftClick: true,
     menuOnRightClick: true,
+    visible: true,
   };
   const services: NativeTrayServices = {
     get: () => ({
@@ -216,6 +217,12 @@ test("tray notifications and controls keep ownership in host services and cancel
         ...state,
         showOnLeftClick,
         menuOnRightClick,
+      };
+    },
+    setVisible(visible) {
+      state = {
+        ...state,
+        visible,
       };
     },
     focus: () => true,
@@ -294,6 +301,33 @@ test("tray notifications and controls keep ownership in host services and cancel
   });
   await invoke("setIcon", {
     ico: null,
+  });
+  await expect(
+    invoke("setVisible", {
+      visible: "no",
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  await expect(
+    invoke("setVisible", {
+      visible: false,
+      extra: 1,
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  await invoke("setVisible", {
+    visible: false,
+  });
+  expect(await invoke("get", null)).toMatchObject({
+    visible: false,
+  });
+  await invoke("setVisible", {
+    visible: true,
+  });
+  expect(await invoke("get", null)).toMatchObject({
+    visible: true,
   });
   expect(await invoke("focus", null)).toBe(true);
   const waiting = invoke("waitForEvent", null);

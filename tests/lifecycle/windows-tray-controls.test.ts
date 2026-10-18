@@ -225,6 +225,35 @@ test.skipIf(process.platform !== "win32")(
         expect(bounds.height).toBeGreaterThan(0);
       }
       expect(typeof tray.focus()).toBe("boolean");
+      // A hidden icon keeps its registration: updates still reach the shell, and an Explorer
+      // restart re-adds it without making it visible again.
+      expect(tray.get().visible).toBe(true);
+      tray.setVisible(false);
+      expect(tray.get()).toMatchObject({
+        visible: false,
+        tooltip: "한글 😀 changed",
+        icon: "custom",
+      });
+      expect(tray.getBounds()).toBeNull();
+      expect(tray.focus()).toBe(false);
+      tray.setTooltip("hidden update");
+      tray.setIcon(null);
+      expect(shell.symbols.Shell_NotifyIconW(2, ptr(removed))).not.toBe(0);
+      expect(
+        native.symbols.PostMessageW(tray.hwnd, taskbarCreated, 0n, 0n),
+      ).not.toBe(0);
+      windows.pump();
+      expect(tray.get()).toMatchObject({
+        visible: false,
+        tooltip: "hidden update",
+        icon: "app",
+      });
+      tray.setVisible(false);
+      tray.setVisible(true);
+      expect(tray.get().visible).toBe(true);
+      tray.setTooltip("visible again");
+      expect(typeof tray.focus()).toBe("boolean");
+      tray.setVisible(false);
       tray.dispose();
       tray.dispose();
       expect(native.symbols.IsWindow(tray.hwnd)).toBe(0);

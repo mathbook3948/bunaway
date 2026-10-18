@@ -28,12 +28,13 @@ const input = await tray.waitForEvent(null);
 | `tray.setTooltip` | `{ tooltip: string }` | `null` |
 | `tray.setIcon` | `{ ico: string \| null }` | `null` |
 | `tray.setClickBehavior` | `{ showOnLeftClick, menuOnRightClick }` | `null` |
+| `tray.setVisible` | `{ visible: boolean }` | `null` |
 | `tray.focus` | `null` | OS가 요청을 수락하면 `true`, 거절하면 `false` |
 | `tray.popUpContextMenu` | `{ position?: { x, y } }` | 메뉴가 닫히면 `null` |
 | `tray.waitForEvent` | `null` | 다음 입력 payload |
 
 모든 결과는 Promise입니다. snapshot은 `{ id: "main", tooltip, icon, showOnLeftClick,
-menuOnRightClick }`입니다. icon은 앱 아이콘이면 `"app"`, 실행 중 지정한 ICO이면 `"custom"`입니다.
+menuOnRightClick, visible }`입니다. icon은 앱 아이콘이면 `"app"`, 실행 중 지정한 ICO이면 `"custom"`입니다.
 이미지 bytes나 내부 HWND를 반환하지 않습니다. snapshot은 OS 설정이나 작업 표시줄에 보이는지를
 판정하지 않으며 앱이 선택한 설정을 나타냅니다. shell의 bounds를 얻을 수 없으면 null입니다.
 
@@ -50,6 +51,19 @@ BITMAPINFOHEADER와 uncompressed DIB 프레임을 받습니다. DIB는 1, 4, 8, 
 깨진 ICO도 거부합니다. 가장 큰 해상도(너비와 높이 중 큰 값)의 프레임을 사용하고, 같은 크기의
 프레임이 여럿이면 비트 깊이가 높은 프레임을, 그래도 같으면 먼저 나온 프레임을 사용합니다.
 Windows가 지원하지 않는 이미지는 거부합니다. `ico: null`은 앱 아이콘으로 복원합니다. 바뀐 이미지는 Explorer 복구 재등록에도 유지합니다.
+
+## 표시와 숨김
+
+`tray.setVisible({ visible: false })`는 아이콘을 작업 표시줄 알림 영역에서 숨기고 `true`는 다시 표시합니다.
+Windows의 `NIS_HIDDEN` 상태를 사용하므로 아이콘 등록, tooltip, 아이콘 이미지와 메뉴 연결은 그대로 유지되고,
+같은 값을 다시 지정해도 오류가 아닙니다. 숨긴 동안에도 `setTooltip`과 `setIcon`은 적용되며 다시 표시하면 반영되어 있습니다.
+Explorer가 다시 시작해도 숨김 상태를 유지합니다. 현재 값은 snapshot의 `visible`로 읽으며, 앱이 마지막에 지정한 값입니다.
+시작 기본값은 `true`입니다.
+
+숨긴 아이콘에는 shell이 마우스 알림을 보내지 않으므로 `tray.input`과 `tray.hover`가 발생하지 않고, `getBounds`는 `null`,
+`focus`는 `false`입니다. 트레이를 제거하는 동작이 아니므로 앱의 실행 유지와 종료 규칙은 바뀌지 않습니다.
+Windows 11은 사용자가 설정에서 아이콘을 숨길 수 있어, `visible: true`가 화면 표시를 보장하지는 않습니다.
+shell이 상태 변경을 거부하면 `INTERNAL`이며 이전 값을 유지합니다.
 
 ## 클릭 동작과 입력
 

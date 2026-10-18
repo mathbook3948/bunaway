@@ -26,6 +26,7 @@ function harness() {
     setTooltip: () => {},
     setIcon: () => {},
     setClickBehavior: () => {},
+    setVisible: () => {},
     focus: () => true,
     popUpContextMenu: () => {},
     setMenu: () => {},
@@ -50,6 +51,7 @@ function harness() {
     setTooltip: owner.setTooltip,
     setIcon: owner.setIcon,
     setClickBehavior: owner.setClickBehavior,
+    setVisible: owner.setVisible,
     focus: owner.focus,
     popUpContextMenu: owner.popUpContextMenu,
     subscribe(receive) {
