@@ -20,6 +20,8 @@ type Stage =
   | "committed"
   | "finished"
   | "provisional-failed"
+  | "load-retried"
+  | "load-stalled"
   | "navigation-failed"
   | "asset-started"
   | "asset-finished"

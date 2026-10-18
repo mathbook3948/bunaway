@@ -17,6 +17,9 @@ const WK_NAVIGATION_CANCEL = 0;
 const WK_NAVIGATION_ALLOW = 1;
 const WK_PERMISSION_DENY = 0;
 const NS_URL_ERROR_CANCELLED = -999;
+/** A load request that has not started its provisional navigation after this long is reissued. */
+const PROVISIONAL_STALL_MS = 3000;
+const MAX_LOAD_RETRIES = 3;
 /** NSWindowSharingNone: other processes cannot read the window's contents. */
 const NS_WINDOW_SHARING_NONE = 0;
 /** NSWindowSharingReadOnly: the AppKit default, readable by capture and sharing. */
@@ -76,6 +79,10 @@ export class MacosWebview {
   private rulesReady = false;
   private coreReady = false;
   private navigationStarted = false;
+  /** The current load request reached `didStartProvisionalNavigation`; reset by every load request. */
+  private provisionalSeen = false;
+  private lastLoadAt = 0;
+  private loadRetries = 0;
   private provisionalNavigation: ObjcObject | null = null;
   /** Latest top-level document navigation; unlike provisionalNavigation it survives commit until completion. */
   private documentNavigation: ObjcObject | null = null;
@@ -394,6 +401,7 @@ export class MacosWebview {
           encoding: "v@:@@",
           call: (_self, _cmd, _view, navigation) => {
             if (!this.closed) {
+              this.provisionalSeen = true;
               this.diagnostics.record("provisional");
               this.provisionalNavigation = navigation ?? null;
               this.documentNavigation = navigation ?? null;
@@ -686,6 +694,8 @@ export class MacosWebview {
       this.loadStartedAt = Date.now();
     }
     this.diagnostics.record("load-requested");
+    this.provisionalSeen = false;
+    this.lastLoadAt = Date.now();
     const o = this.objc;
     o.withAutoreleasePool(() => {
       const url = o.send(
@@ -724,8 +734,39 @@ export class MacosWebview {
         code === WEBKIT_ERROR_FRAME_LOAD_INTERRUPTED)
     );
   }
+  /**
+   * WebKit can accept a load request and never start the provisional navigation (the policy
+   * callback returns, then nothing follows). Reissue the request, which restarts the navigation,
+   * a bounded number of times; the document and SDK deadlines are unchanged.
+   */
+  private retryStalledLoad(): void {
+    if (
+      this.closed ||
+      !this.navigationStarted ||
+      this.provisionalSeen ||
+      Date.now() - this.lastLoadAt < PROVISIONAL_STALL_MS
+    ) {
+      return;
+    }
+    if (this.loadRetries >= MAX_LOAD_RETRIES) {
+      if (this.loadRetries === MAX_LOAD_RETRIES) {
+        this.loadRetries++;
+        this.diagnostics.record("load-stalled");
+        this.hooks.log("webview-load-stalled", {
+          retries: MAX_LOAD_RETRIES,
+        });
+      }
+      return;
+    }
+    this.loadRetries++;
+    this.diagnostics.record("load-retried", {
+      progress: this.objc.double(this.webview, "estimatedProgress"),
+    });
+    this.loadHome();
+  }
   /** Observe a stalled initial bridge at 5, 10 and 15 seconds without changing its deadline. */
   observeStartup(): void {
+    this.retryStalledLoad();
     if (
       this.closed ||
       this.firstScriptMessage ||

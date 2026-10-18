@@ -108,5 +108,11 @@ I/O 기반 회귀 `tests/lifecycle/macos-io-host.ts`는 실제 compiled WKWebVie
 query, 본문, NSError userInfo나 localizedDescription을 새 기록에 넣지 않는다.
 SDK 메시지가 아직 도착하지 않으면 초기 load 요청부터 5, 10, 15초에 loading,
 provisional 상태와 estimatedProgress를 관찰한다. 기존 로그의 URL 필드는 별도이며
-이 진단이 기존 로그 전체의 비밀값 제거를 보장하지 않는다. 관찰은 탐색, 기한이나
-복구 정책을 바꾸지 않는다. 첫 응답의 JavaScript 완료만 관찰해 callback 보관을 제한한다.
+이 진단이 기존 로그 전체의 비밀값 제거를 보장하지 않는다. 체크포인트 관찰은 탐색, 기한이나
+복구 정책을 바꾸지 않는다.
+
+WebKit이 `loadRequest:`를 수락하고 탐색 정책 콜백까지 반환한 뒤에도 `didStartProvisionalNavigation`을
+호출하지 않는 간헐적 정지가 CI에서 관찰됐다(`docs/architecture/macos-native-results.md`).
+초기 load 뒤 3초 안에 provisional 단계가 시작되지 않으면 호스트가 같은 요청을 다시 발행하며
+(`load-retried`), 뷰마다 최대 3번까지 반복한다. 그래도 시작되지 않으면 `webview-load-stalled`를 한 번 기록해
+fixture 실패를 코드 회귀가 아닌 WebKit 정지로 구분할 수 있게 한다. 문서·SDK 기한은 늘리지 않는다. 첫 응답의 JavaScript 완료만 관찰해 callback 보관을 제한한다.
