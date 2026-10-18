@@ -41,9 +41,12 @@ The CLI includes locally modified Promise ownership code from Zod.
 The reviewed patch is patches/zod@4.6.5.patch, and the original MIT license
 is included in packages/cli/vendor/zod/LICENSE in the CLI artifact.
 
-The agent skills in .claude/skills/, except verify-bunaway and
-native-change-verification, are from the skills repository based on pstack,
-https://github.com/poteto/pstack, MIT License.
+The agent skills in .claude/skills/, except verify-bunaway,
+native-change-verification and humanizer, are from a skills repository based on
+pstack, https://github.com/poteto/pstack, MIT License.
+
+The humanizer skill in .claude/skills/humanizer/ is by DaleSeo, MIT License, as
+declared in its SKILL.md.
 
 MIT License
 

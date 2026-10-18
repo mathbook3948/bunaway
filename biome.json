@@ -18,7 +18,8 @@
       "!packages/cli/templates/vue/src",
       "!packages/cli/templates/vue/public",
       "!packages/cli/templates/svelte/src",
-      "!packages/cli/templates/svelte/public"
+      "!packages/cli/templates/svelte/public",
+      "!.claude/skills/rigor-mode/scripts"
     ]
   },
   "formatter": {
