@@ -431,7 +431,7 @@ if (!process.argv.includes("--child")) {
         nativeWindows.setOpacity(hwnd, 0);
         assert.equal(nativeWindows.getOpacity(hwnd), 0);
         // Changing opacity leaves geometry and visibility alone, and works while shown.
-        nativeWindows.show(hwnd, false);
+        nativeWindows.show(hwnd, true);
         nativeWindows.setOpacity(hwnd, 0.25);
         assert.ok(Math.abs(nativeWindows.getOpacity(hwnd) - 0.25) <= 1 / 255);
         assert.equal(nativeWindows.isVisible(hwnd), true);
