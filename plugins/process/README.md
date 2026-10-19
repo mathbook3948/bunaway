@@ -1,10 +1,14 @@
 # Foreground argv process plugin
 
-Register `processes` to use `processes.run` on Windows. Grant `process.run` independently.
+Register `processes` to use `processes.run` on Windows and macOS. Grant `process.run` independently.
 Applications validate the selected executable and all arguments in backend commands. Trusted backend
 code can use Bun.spawn directly. See the [public contract](../../docs/site/src/content/docs/reference/plugins/process.mdx).
 
-The plugin uses Win32 argv spawning without PATH lookup, shell strings, caller-selected env/cwd, detach,
+On macOS the plugin uses `Bun.spawn` with an absolute POSIX path; cancellation, timeout, output overflow
+and disposal send SIGKILL to the direct child only and wait for it and its pipes. Descendants are not
+terminated. The Windows implementation below is separate.
+
+The Windows plugin uses Win32 argv spawning without PATH lookup, shell strings, caller-selected env/cwd, detach,
 interactive handles or arbitrary PID termination. Captured binary stdout/stderr share a byte budget.
 Public cancellation or a call deadline can reject the caller's promise before cancellation delivery,
 process death or pipe cleanup completes. The adapter continues to own termination and both pipe

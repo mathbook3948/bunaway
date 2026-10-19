@@ -354,8 +354,8 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 - [ ] OS, CPU, locale, 언어, 메모리와 translation 상태를 조회한다.
 - [ ] URL scope를 적용한 HTTP, stream, 취소와 timeout을 제공한다.
 - [ ] 정책을 적용한 WebSocket 연결과 backpressure를 제공한다.
-- [ ] 실행 파일과 argv scope, stdin/stdout/stderr, exit와 signal 계약을 제공한다.
-- [ ] shell 문자열과 argv 실행, timeout 및 앱 종료 정리를 구분한다.
+- [x] 실행 파일과 argv scope, stdin/stdout/stderr, exit와 signal 계약을 제공한다.
+- [x] shell 문자열과 argv 실행, timeout 및 앱 종료 정리를 구분한다.
 - [ ] 번들 sidecar의 서명, helper 배치, 라이선스와 sandbox 실행을 검증한다.
 - [ ] utility process, 양방향 메시지와 독립 프로세스 오류를 제공한다.
 - [ ] CLI argument schema와 선택 localhost 자산 서버의 필요성을 결정한다.
