@@ -14,7 +14,6 @@ const SOURCE_ROOTS = [
 
 /** Production files that still need a type escape, with how many they use today. */
 const BASELINE: Readonly<Record<string, number>> = {
-  "native/host-api/bun/plugins.ts": 3,
   "native/ios/backend.ts": 2,
   "native/macos/bun/backend.ts": 1,
   "native/windows/bun/boot.ts": 1,
