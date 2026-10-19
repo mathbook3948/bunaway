@@ -135,6 +135,35 @@ async function run() {
     after.cancelled === before.cancelled + 1,
     "Backend cancellation did not arrive",
   );
+  // Streaming instantiation requires the packaged .wasm to be served as application/wasm.
+  const wasmResponse = await fetch("/add.wasm");
+  assert(
+    // The handler passes a charset, so compare the media type without parameters.
+    wasmResponse.headers.get("content-type")?.split(";")[0]?.trim() ===
+      "application/wasm",
+    `Wrong .wasm content type: ${wasmResponse.headers.get("content-type")}`,
+  );
+  const { instance } = await WebAssembly.instantiateStreaming(
+    fetch("/add.wasm"),
+  );
+  const add: unknown = instance.exports.add;
+  assert(
+    typeof add === "function" && add(2, 3) === 5,
+    "Streaming-instantiated .wasm did not run",
+  );
+  // The host CSP allows WebAssembly compilation only; string evaluation stays blocked.
+  for (const evaluate of [
+    () => Reflect.get(globalThis, "eval")("1"),
+    () => new Function("return 1")(),
+  ]) {
+    let blockedEval = false;
+    try {
+      evaluate();
+    } catch (error) {
+      blockedEval = error instanceof EvalError;
+    }
+    assert(blockedEval, "String evaluation was allowed by the host CSP");
+  }
   const blocked = await fetch("/%2e%2e/host.json");
   assert(!blocked.ok, "Framework assets exposed");
   const privateAsset = await fetch("/backend.js");
@@ -153,7 +182,7 @@ async function run() {
     after,
     events: values.length,
     checks:
-      "DOM storage, commands, large UTF-8 response, events, unsubscribe, permission, errors, cancellation, assets, subframe",
+      "DOM storage, commands, large UTF-8 response, events, unsubscribe, permission, errors, cancellation, assets, wasm, eval blocked, subframe",
   };
 }
 
