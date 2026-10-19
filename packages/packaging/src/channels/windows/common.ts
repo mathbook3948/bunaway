@@ -8,6 +8,12 @@ import { join } from "node:path";
 
 export { must, run, type ToolResult } from "../../tools.ts";
 
+/** Oldest Windows build the bundled Bun runs on (Windows 10 1809). */
+export const WINDOWS_MIN_BUILD = 17763;
+export const WINDOWS_MIN_VERSION = `10.0.${WINDOWS_MIN_BUILD}.0`;
+/** Each part of a Windows file or package version is a 16-bit value. */
+export const WINDOWS_VERSION_PART_MAX = 65535;
+
 /** Finds the newest installed Windows SDK x64 tool, if the SDK is available. */
 export async function findWindowsKitTool(
   tool: string,

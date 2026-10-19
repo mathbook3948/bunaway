@@ -1,10 +1,10 @@
 import type { AdapterStage, PackageAdapter } from "../../contract.ts";
+import { WINDOWS_MIN_VERSION, WINDOWS_VERSION_PART_MAX } from "./common.ts";
 
 // Pure manifest rendering remains available for schema-level tests. The
 // registered adapter below fails closed until packaged activation preserves
 // compiled app activation and data paths.
 
-const DEFAULT_MIN_VERSION = "10.0.17763.0";
 const UNVIRTUALIZED_MIN_VERSION = "10.0.18362.0";
 // Names defined by the foundation and UAP schemas; other capabilities retain
 // the restricted namespace used by this adapter.
@@ -75,7 +75,7 @@ function escapeXml(value: string): string {
  */
 export function renderAppxManifest(options: MsixOptions): string {
   if (
-    options.minVersion.localeCompare(DEFAULT_MIN_VERSION, undefined, {
+    options.minVersion.localeCompare(WINDOWS_MIN_VERSION, undefined, {
       numeric: true,
     }) < 0
   ) {
@@ -101,7 +101,9 @@ export function renderAppxManifest(options: MsixOptions): string {
   if (
     options.version.trim() !== options.version ||
     !/^[1-9]\d*\.\d+\.\d+\.0$/.test(options.version) ||
-    options.version.split(".").some((part) => Number(part) > 65535)
+    options.version
+      .split(".")
+      .some((part) => Number(part) > WINDOWS_VERSION_PART_MAX)
   ) {
     throw new Error(
       "win-store-msix requires a four-part version with major 1..65535 and release.build=0 (the fourth part is reserved for the Store).",

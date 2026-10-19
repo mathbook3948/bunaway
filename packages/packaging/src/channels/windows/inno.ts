@@ -8,7 +8,14 @@ import {
 } from "../../contract.ts";
 import { renderAssociationCode } from "./associations.ts";
 import { renderAutostartCode } from "./autostart.ts";
-import { findIscc, findWindowsKitTool, must } from "./common.ts";
+import {
+  findIscc,
+  findWindowsKitTool,
+  must,
+  WINDOWS_MIN_BUILD,
+  WINDOWS_MIN_VERSION,
+  WINDOWS_VERSION_PART_MAX,
+} from "./common.ts";
 import { innoIdentity } from "./inno-identity.ts";
 import { renderInstallationStateCode } from "./installation-state.ts";
 import { signingArgs } from "./sign.ts";
@@ -76,15 +83,15 @@ function validateInnoOptions(options: InnoOptions): number[] {
       "GUI executable name conflicts with the Inno uninstaller (uninsNNN.exe).",
     );
   }
-  const minVersion = options.minVersion ?? "10.0.17763.0";
+  const minVersion = options.minVersion ?? WINDOWS_MIN_VERSION;
   if (!/^\d+\.\d+(?:\.\d+)?(?:\.0)?$/.test(minVersion)) {
     throw new Error("Windows minVersion must be major.minor[.build[.0]].");
   }
   const parts = minVersion.split(".").map(Number);
   if (
-    parts.some((part) => part > 65535) ||
+    parts.some((part) => part > WINDOWS_VERSION_PART_MAX) ||
     (parts[0] ?? 0) < 10 ||
-    (parts[0] === 10 && parts[1] === 0 && (parts[2] ?? 0) < 17763)
+    (parts[0] === 10 && parts[1] === 0 && (parts[2] ?? 0) < WINDOWS_MIN_BUILD)
   ) {
     throw new Error(
       "Windows minVersion must be >= 10.0.17763.0 (bundled Bun requirement).",
