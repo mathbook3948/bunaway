@@ -151,6 +151,19 @@ async function run() {
     typeof add === "function" && add(2, 3) === 5,
     "Streaming-instantiated .wasm did not run",
   );
+  // The host CSP allows WebAssembly compilation only; string evaluation stays blocked.
+  for (const evaluate of [
+    () => Reflect.get(globalThis, "eval")("1"),
+    () => new Function("return 1")(),
+  ]) {
+    let blockedEval = false;
+    try {
+      evaluate();
+    } catch {
+      blockedEval = true;
+    }
+    assert(blockedEval, "String evaluation was allowed by the host CSP");
+  }
   const blocked = await fetch("/%2e%2e/host.json");
   assert(!blocked.ok, "Framework assets exposed");
   const privateAsset = await fetch("/backend.js");
@@ -169,7 +182,7 @@ async function run() {
     after,
     events: values.length,
     checks:
-      "DOM storage, commands, large UTF-8 response, events, unsubscribe, permission, errors, cancellation, assets, wasm, subframe",
+      "DOM storage, commands, large UTF-8 response, events, unsubscribe, permission, errors, cancellation, assets, wasm, eval blocked, subframe",
   };
 }
 

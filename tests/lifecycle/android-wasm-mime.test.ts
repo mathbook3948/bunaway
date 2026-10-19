@@ -42,12 +42,26 @@ test("the device suite packages a valid .wasm and instantiates it by streaming",
 
 test("the host CSP allows WebAssembly compilation but not eval", async () => {
   const source = await Bun.file(rendererPath).text();
-  // The directive may be split across concatenated string literals.
+  // Take only the literals of the argument that follows the header name; they are concatenated.
+  const argument = /"Content-Security-Policy",([\s\S]*?)\);/.exec(source)?.[1];
+  expect(argument).toBeDefined();
   const csp = [
-    ...source.matchAll(/"((?:default-src|[^"]*)[^"]*)"/g),
+    ...(argument ?? "").matchAll(/"([^"]*)"/g),
   ]
     .map((match) => match[1])
     .join("");
-  expect(csp).toMatch(/script-src 'self' 'wasm-unsafe-eval';/);
-  expect(csp).not.toContain("'unsafe-eval'");
+  expect(csp).toBe(
+    [
+      "default-src 'none'",
+      "script-src 'self' 'wasm-unsafe-eval'",
+      "style-src 'self'",
+      "img-src 'self'",
+      "font-src 'self'",
+      "connect-src 'self' ws://127.0.0.1:*",
+      "frame-src 'self'",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "form-action 'none'",
+    ].join("; "),
+  );
 });
