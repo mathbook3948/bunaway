@@ -39,8 +39,9 @@ async function sources(): Promise<string[]> {
     for await (const file of new Bun.Glob(pattern).scan({
       cwd: root,
     })) {
-      if (!/(^|\/)(node_modules|dist|\.git)\//.test(file)) {
-        files.push(file.replaceAll("\\", "/"));
+      const path = file.replaceAll("\\", "/");
+      if (!/(^|\/)(node_modules|dist|\.git)\//.test(path)) {
+        files.push(path);
       }
     }
   }
