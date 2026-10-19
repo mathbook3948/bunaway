@@ -177,8 +177,7 @@ Job의 `BREAKAWAY_OK`는 이 호출 동안에만 켠다. 바깥 Job이 이탈을
 요청의 `argv`는 그 새 호스트에만 쓰고 이후 소스 변경 재시작에는 붙이지 않는다.
 요청이 CLI에 도달하지 않으면 CLI는 일반 종료로 처리한다. 특수 종료 코드에는 의존하지 않는다.
 macOS는 `quit`의 코드와 `exit`를 같은 `DesktopLifecycle`로 지원하고 코드는 `onQuit`까지 끝난 뒤 마지막에
-`exit-code` 패킷으로 메인 스레드에 전달한다. `onQuit` 안의 `exit`도 최종 코드에 반영된다. 새 프로세스를 만들고 부모 종료를 기다리는 구현은 별도 작업이라 `relaunch`는
-`UNSUPPORTED`로 거부한다.
+`exit-code` 패킷으로 메인 스레드에 전달한다. `onQuit` 안의 `exit`도 최종 코드에 반영된다. `relaunch`의 macOS 구현은 [ADR 0021](./0021-macos-desktop-lifecycle.md)의 `relaunch()` 절을 따른다.
 
 다른 프레임워크와의 비교. Electron의 `app.exit(code)`는 창을 닫지 않고 `before-quit`, `will-quit`,
 `quit`을 내지 않고 즉시 끝낸다. `exit`가 이 훅 생략을 따른다. Electron의 `app.relaunch()`는 예약만 하고

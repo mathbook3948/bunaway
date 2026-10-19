@@ -6,6 +6,7 @@ import { BunawayError } from "@bunaway/protocol";
 import {
   checkRelaunchArguments,
   type MacosHostLaunch,
+  RelaunchIntent,
   relaunchCommand,
   startRelaunch,
 } from "#native/macos/bun/relaunch";
@@ -143,4 +144,20 @@ test("a replacement that cannot be created rejects instead of failing silently",
       env: {},
     }),
   ).rejects.toThrow();
+});
+
+test("a signal or session end cancels a relaunch whenever it arrives", () => {
+  const intent = new RelaunchIntent();
+  expect(intent.pending).toBe(false);
+  intent.request(true);
+  expect(intent.pending).toBe(true);
+  // The cancel can follow the backend's final packet or precede it.
+  intent.cancel();
+  expect(intent.pending).toBe(false);
+  intent.request(true);
+  expect(intent.pending).toBe(false);
+  const early = new RelaunchIntent();
+  early.cancel();
+  early.request(true);
+  expect(early.pending).toBe(false);
 });

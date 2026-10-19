@@ -66,6 +66,31 @@ export function relaunchCommand(
 }
 
 /**
+ * Whether the host should start a replacement once cleanup is done. The backend reports the app's
+ * request in its last packet, but a signal or session end that arrives at any time before the
+ * process ends cancels it for good, even when the backend never heard of that cause because the
+ * shutdown was already under way (as `DesktopLifecycle.commitShutdown` does on the backend side).
+ */
+export class RelaunchIntent {
+  private requested = false;
+  private cancelled = false;
+
+  /** Records the app's request from the backend's final packet; ignored once cancelled. */
+  request(requested: boolean): void {
+    this.requested = requested;
+  }
+
+  /** The operating system or the user is ending the process: never relaunch. Safe to repeat. */
+  cancel(): void {
+    this.cancelled = true;
+  }
+
+  get pending(): boolean {
+    return this.requested && !this.cancelled;
+  }
+}
+
+/**
  * macOS apps receive no launch arguments (`OpenRequest.argv` is always empty; the OS delivers files
  * and URLs as open requests), so a non-empty `argv` could never reach the app. It is refused
  * before the app quits instead of being dropped.
