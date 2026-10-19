@@ -174,6 +174,13 @@ test.skipIf(process.platform !== "win32")(
       }
       // Content geometry goes through the client rectangle while a menu bar is attached,
       // because the bar can wrap and change the frame height after the first resize.
+      // The client size is applied in logical pixels, so expect the rounded round trip.
+      const { logicalPixels, physicalPixels } = await import(
+        "#native/windows/bun/window-size"
+      );
+      const geometryDpi = windows.getDpi(first);
+      const applied = (physical: number) =>
+        physicalPixels(logicalPixels(physical, geometryDpi), geometryDpi);
       windows.setGeometry(first, "content", {
         x: 40,
         y: 60,
@@ -183,8 +190,8 @@ test.skipIf(process.platform !== "win32")(
       expect(windows.getBounds(first, "content")).toMatchObject({
         x: 40,
         y: 60,
-        width: 640,
-        height: 420,
+        width: applied(640),
+        height: applied(420),
       });
       windows.setGeometry(first, "content", {
         width: 600,
@@ -193,8 +200,8 @@ test.skipIf(process.platform !== "win32")(
       expect(windows.getBounds(first, "content")).toMatchObject({
         x: 40,
         y: 60,
-        width: 600,
-        height: 400,
+        width: applied(600),
+        height: applied(400),
       });
       windows.setGeometry(first, "content", {
         x: 10,
@@ -203,8 +210,8 @@ test.skipIf(process.platform !== "win32")(
       expect(windows.getBounds(first, "content")).toMatchObject({
         x: 10,
         y: 20,
-        width: 600,
-        height: 400,
+        width: applied(600),
+        height: applied(400),
       });
       const wrapped = menuItemsSchema.parse(
         Array.from(
