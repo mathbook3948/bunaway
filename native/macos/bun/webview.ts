@@ -455,7 +455,11 @@ export class MacosWebview {
               success: false,
               source: this.source(),
             });
-            if (!this.closed && navigation === this.documentNavigation) {
+            if (
+              !this.closed &&
+              navigation &&
+              navigation === this.documentNavigation
+            ) {
               this.documentNavigation = null;
               hooks.documentComplete({
                 code: this.isCancelledNavigation(error)
@@ -503,6 +507,11 @@ export class MacosWebview {
             });
             hooks.revoke("process-failed");
             if (!this.closed) {
+              // The navigation that was running died with the process; a cancellation reported for
+              // it later (for example by the `stopLoading` before a reissue) must not fail the
+              // document of the reload.
+              this.documentNavigation = null;
+              this.provisionalNavigation = null;
               // A reload after a crash gets its own stall budget.
               this.loadClock.resetBudget();
               this.loadHome();
@@ -745,8 +754,8 @@ export class MacosWebview {
   }
   /**
    * WebKit can accept a load request and never start the provisional navigation (the policy
-   * callback returns, then nothing follows). Reissue the request, which restarts the navigation,
-   * a bounded number of times; the document and SDK deadlines are unchanged.
+   * callback returns, then nothing follows). Cancel the pending load and reissue the request,
+   * which restarts the navigation, a bounded number of times; the document and SDK deadlines are unchanged.
    */
   private retryStalledLoad(): void {
     if (this.closed || !this.navigationStarted || this.provisionalSeen) {
@@ -766,6 +775,14 @@ export class MacosWebview {
     this.diagnostics.record("load-retried", {
       progress: this.objc.double(this.webview, "estimatedProgress"),
     });
+    // A load that WebKit accepted but never started can leave the view in a loading state that a
+    // second `loadRequest:` does not leave. Cancelling it first gives the reissue a clean start; the
+    // cancellation of a navigation that never began is not a document failure (see the fail
+    // callbacks, which only complete the navigation they saw start).
+    this.objc.withAutoreleasePool(() => {
+      this.objc.send(this.webview, "stopLoading");
+    });
+    this.diagnostics.record("load-stopped");
     // The reissued load may never reach the policy callback, so `check` already restarted the
     // stall clock and `requested` keeps it instead of waiting for a decision.
     this.loadHome();

@@ -134,6 +134,7 @@ CI 실행 [37574470840](https://github.com/mathbook3948/bunaway/actions/runs/375
 | 수정 전 (1c3776cc) | 2 | 2 | [run 39129532113](https://github.com/mathbook3948/bunaway/actions/runs/39129532113) attempt 1(`index.html` 도착 45초 초과, `main` provisional:false)과 attempt 2(main 페이지 10초 초과, 5/10/15초 checkpoint 모두 provisional:false) |
 | 수정 후 (3aea32d8, b71ea308: 같은 재시도 로직) | 5 | 0 | [run 39131976667](https://github.com/mathbook3948/bunaway/actions/runs/39131976667) attempt 1 내지 4, [run 39130714384](https://github.com/mathbook3948/bunaway/actions/runs/39130714384)(3aea32d8)의 macOS 잡 |
 | 재발송 1회 뒤 정지 (7f5affda, `bot/tray-visible`) | 3 | 2 | [run 39170030807](https://github.com/mathbook3948/bunaway/actions/runs/39170030807) attempt 1과 2(`load-retried` 1회 뒤 provisional:false, `webview-load-stalled` 없음), attempt 3은 통과 |
+| 재발송 전 `stopLoading` (564ec2a1) | 4 | 0 | [run 39177989225](https://github.com/mathbook3948/bunaway/actions/runs/39177989225) attempt 1 내지 4의 macOS native 잡(모두 통과) |
 
 수정 전 2회는 같은 head를 같은 잡으로 연속 재실행한 결과이고 둘 다 정지했다. 이슈에 기록된 두 관찰까지 더하면 정지 4회다.
 수정은 탐색 정책이 load를 허용한 뒤 3초 안에 provisional 단계가 시작되지 않을 때 같은 요청을 다시 발행한다(뷰마다 최대 3번, WebContent 프로세스 종료 뒤의 reload는 새로 3번).
@@ -146,3 +147,5 @@ attempt 1(`macos-webview-controls`)과 attempt 2(`reopen-handler`), 같은 head�
 `수정 후` 행과 bc29d087 실행을 합한 9회(세 head의 macOS 잡)는 연속 통과였지만, 표본이 작고 통과한 실행의 로그에는 `load-retried` 발생 여부를 따로 집계하지 않았다.
 정지가 남아 있으면 `webview-load-stalled`와
 `load-retried` 기록, 5/10/15초 checkpoint로 WebKit 정지와 코드 회귀를 구분한다. 기한은 늘리지 않았다. `webview-load-stalled`는 정책 허용 뒤 3초 간격 재시도 3번 다음 확인에서 기록되므로 약 12초 이상 걸리고, 문서 기한이 그보다 짧은 fixture에서는 기록 전에 실패할 수 있다.
+
+재발송 직전에 `stopLoading`으로 수락만 되고 시작되지 않은 load를 취소하고(`load-stopped` 기록) 같은 요청을 다시 발행한다. 시작되지 않은 요청의 취소가 navigation 없이 전달되는 경우에 대비해, 문서 navigation이 비어 있을 때 문서를 실패로 끝내지 않도록 navigation이 있고 현재 문서 navigation과 같을 때만 문서를 완료 처리한다. 위 4회는 정지 없이 통과했지만 표본이 작고, 통과한 실행의 로그에는 `load-stopped` 발생 여부를 따로 집계하지 않았다. 기한은 늘리지 않았다.
