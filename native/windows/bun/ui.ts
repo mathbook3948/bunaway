@@ -869,6 +869,188 @@ function askAppToDecideClose(view: ViewState): Promise<CloseDecision> {
   );
   return decision;
 }
+type CloseTarget = {
+  id: string;
+  viewId: string;
+  view: ViewState;
+};
+
+/** The window and its descendants in the order they close, each with its view. */
+function closeSubtree(windowId: string): CloseTarget[] {
+  return relations.closeOrder(windowId).map((id) => {
+    const entry = [
+      ...views,
+    ].find(([, child]) => child.readiness.snapshot().windowId === id);
+    assert(entry);
+    return {
+      id,
+      viewId: entry[0],
+      view: entry[1],
+    };
+  });
+}
+
+/** Retires every window of the subtree; descendants never get a replacement of their own. */
+function commitSubtreeClose(view: ViewState, subtree: CloseTarget[]) {
+  for (const child of subtree) {
+    if (child.view !== view) {
+      child.view.replacementCancelled = true;
+    }
+    commitClose(child.viewId, child.view);
+  }
+}
+
+/** Forced and destroy closes skip every confirmation and always report the window closed. */
+function forceClose(
+  view: ViewState,
+  subtree: CloseTarget[],
+  mode: "force" | "destroy",
+): true {
+  commitSubtreeClose(view, subtree);
+  // Internal failed/cancelled creation preserves residency; public last-window destroy ends the app.
+  if (
+    mode === "destroy" &&
+    [
+      ...views.values(),
+    ].every((candidate) => candidate.lifecycle.closed)
+  ) {
+    signalClosing("window-destroyed");
+  }
+  return true;
+}
+
+/** True when a user close of this top-level window only hides it to the tray. */
+function closesToTray(windowId: string): boolean {
+  return (
+    config.desktop?.closeBehavior === "hide" && !relations.getParent(windowId)
+  );
+}
+
+/**
+ * Asks the app to decide a user close. "gone" means the document or the app ended meanwhile,
+ * and a cancelled request counts as declined because the document that was asked is gone.
+ */
+async function appCloseApproval(
+  view: ViewState,
+): Promise<"allowed" | "declined" | "gone"> {
+  const decision = await askAppToDecideClose(view);
+  if (view.lifecycle.closed || closing()) {
+    return "gone";
+  }
+  return decision === "allow" ? "allowed" : "declined";
+}
+
+/**
+ * Shows each pending native close confirmation of the subtree. Returns the close result when a
+ * confirmation declines or shutdown ends the wait, and undefined when the close may go on.
+ */
+function confirmSubtreeClose(
+  view: ViewState,
+  subtree: CloseTarget[],
+  mode: "close" | "recreate" | "handoff",
+  appApproved: boolean,
+): boolean | undefined {
+  assert(windows);
+  for (const child of subtree) {
+    if (
+      child.view.lifecycle.closed ||
+      !child.view.confirmation ||
+      (child.view === view && appApproved) ||
+      (mode === "close" && quitPending())
+    ) {
+      continue;
+    }
+    log("window-close-confirmation", {
+      view: child.viewId,
+    });
+    if (
+      !windows.confirmClose(
+        child.view.native.hwnd,
+        windows.getTitle(child.view.native.hwnd),
+        child.view.confirmation,
+      )
+    ) {
+      return view.lifecycle.closed;
+    }
+    if (closing() || view.lifecycle.closed) {
+      return true;
+    }
+  }
+  return undefined;
+}
+
+/** True when closing this subtree leaves no other open window, or a quit is already pending. */
+function closesLastWindow(subtree: CloseTarget[]): boolean {
+  return (
+    config.desktop?.closeBehavior !== "keep-alive" &&
+    (quitPending() ||
+      [
+        ...views.values(),
+      ].filter(
+        (candidate) =>
+          !candidate.lifecycle.closed &&
+          !subtree.some((child) => child.view === candidate),
+      ).length === 0)
+  );
+}
+
+/** Requests the last-window quit and waits until it ends this view or is cancelled. */
+async function quitForLastWindow(view: ViewState): Promise<boolean> {
+  requestQuit("last-window");
+  while (
+    quitPending() &&
+    !view.lifecycle.closed &&
+    !stopping() &&
+    !shutdownCommitted()
+  ) {
+    await Bun.sleep(5);
+  }
+  return view.lifecycle.closed || closing();
+}
+
+/**
+ * Runs the non-forced checks in order: close to tray, the app's own decision, native
+ * confirmations, then the last-window quit. Returns the close result when one of them settles it
+ * and undefined when the windows may be retired.
+ */
+async function decideClose(
+  viewId: string,
+  view: ViewState,
+  subtree: CloseTarget[],
+  mode: "close" | "recreate" | "handoff",
+): Promise<boolean | undefined> {
+  assert(windows);
+  const windowId = view.readiness.snapshot().windowId;
+  if (mode === "close" && closesToTray(windowId)) {
+    assert(tray, "Close to tray requires a tray");
+    windows.show(view.native.hwnd, false);
+    log("view-window-hidden", {
+      view: viewId,
+    });
+    return false;
+  }
+  let appApproved = false;
+  if (mode === "close" && appDecidesClose(view)) {
+    const approval = await appCloseApproval(view);
+    if (approval !== "allowed") {
+      return approval === "gone";
+    }
+    appApproved = true;
+  }
+  const confirmed = confirmSubtreeClose(view, subtree, mode, appApproved);
+  if (confirmed !== undefined) {
+    return confirmed;
+  }
+  // Native confirmation pumps messages, so recheck shutdown before committing closure.
+  if (view.lifecycle.closed) {
+    return true;
+  }
+  if (mode === "close" && closesLastWindow(subtree)) {
+    return quitForLastWindow(view);
+  }
+  return undefined;
+}
+
 /**
  * Handle user close, window recreation, and forced shutdown requests.
  * Returns false if hidden or declined, including a cancelled final quit.
@@ -881,9 +1063,8 @@ async function closeWindow(
 ): Promise<boolean> {
   const view = views.get(viewId);
   assert(view);
-  const forced = mode === "force" || mode === "destroy";
   view.lifecycle.takeCloseRequest();
-  if (forced) {
+  if (mode === "force" || mode === "destroy") {
     cancelReplacement(viewId);
   }
   // A recreation may have retired this lifetime already; public destroy must still decide app shutdown.
@@ -892,121 +1073,23 @@ async function closeWindow(
   }
   assert(windows);
   const windowId = view.readiness.snapshot().windowId;
-  const order = relations.closeOrder(windowId);
-  const subtree = order.map((id) => {
-    const entry = [
-      ...views,
-    ].find(([, child]) => child.readiness.snapshot().windowId === id);
-    assert(entry);
-    return {
-      id,
-      viewId: entry[0],
-      view: entry[1],
-    };
-  });
-  if (!forced && subtree.some((child) => closingWindows.has(child.id))) {
+  const subtree = closeSubtree(windowId);
+  if (mode === "force" || mode === "destroy") {
+    return forceClose(view, subtree, mode);
+  }
+  if (subtree.some((child) => closingWindows.has(child.id))) {
     throw new BunawayError({
       code: "BUSY",
       message: "Window close is already pending.",
     });
   }
-  if (forced) {
-    for (const child of subtree) {
-      if (child.view !== view) {
-        child.view.replacementCancelled = true;
-      }
-      commitClose(child.viewId, child.view);
-    }
-    // Internal failed/cancelled creation preserves residency; public last-window destroy ends the app.
-    if (
-      mode === "destroy" &&
-      [
-        ...views.values(),
-      ].every((candidate) => candidate.lifecycle.closed)
-    ) {
-      signalClosing("window-destroyed");
-    }
-    return true;
-  }
   for (const child of subtree) {
     closingWindows.add(child.id);
   }
   try {
-    if (
-      mode === "close" &&
-      config.desktop?.closeBehavior === "hide" &&
-      !relations.getParent(windowId)
-    ) {
-      assert(tray, "Close to tray requires a tray");
-      windows.show(view.native.hwnd, false);
-      log("view-window-hidden", {
-        view: viewId,
-      });
-      return false;
-    }
-    let appApproved = false;
-    if (mode === "close" && appDecidesClose(view)) {
-      const decision = await askAppToDecideClose(view);
-      if (view.lifecycle.closed || closing()) {
-        return true;
-      }
-      // A cancelled request counts as not approved: the document that was asked is gone.
-      if (decision !== "allow") {
-        return false;
-      }
-      appApproved = true;
-    }
-    for (const child of subtree) {
-      if (
-        child.view.lifecycle.closed ||
-        !child.view.confirmation ||
-        (child.view === view && appApproved) ||
-        (mode === "close" && quitPending())
-      ) {
-        continue;
-      }
-      log("window-close-confirmation", {
-        view: child.viewId,
-      });
-      if (
-        !windows.confirmClose(
-          child.view.native.hwnd,
-          windows.getTitle(child.view.native.hwnd),
-          child.view.confirmation,
-        )
-      ) {
-        return view.lifecycle.closed;
-      }
-      if (closing() || view.lifecycle.closed) {
-        return true;
-      }
-    }
-    // Native confirmation pumps messages, so recheck shutdown before committing closure.
-    if (view.lifecycle.closed) {
-      return true;
-    }
-    if (
-      mode === "close" &&
-      config.desktop?.closeBehavior !== "keep-alive" &&
-      (quitPending() ||
-        [
-          ...views.values(),
-        ].filter(
-          (candidate) =>
-            !candidate.lifecycle.closed &&
-            !subtree.some((child) => child.view === candidate),
-        ).length === 0)
-    ) {
-      requestQuit("last-window");
-      while (
-        quitPending() &&
-        !view.lifecycle.closed &&
-        !stopping() &&
-        !shutdownCommitted()
-      ) {
-        await Bun.sleep(5);
-      }
-      return view.lifecycle.closed || closing();
+    const settled = await decideClose(viewId, view, subtree, mode);
+    if (settled !== undefined) {
+      return settled;
     }
     if (mode === "recreate") {
       replacements.set(viewId, {
@@ -1014,12 +1097,7 @@ async function closeWindow(
         modal: modalWindows.has(windowId),
       });
     }
-    for (const child of subtree) {
-      if (child.view !== view) {
-        child.view.replacementCancelled = true;
-      }
-      commitClose(child.viewId, child.view);
-    }
+    commitSubtreeClose(view, subtree);
     return true;
   } finally {
     for (const child of subtree) {
