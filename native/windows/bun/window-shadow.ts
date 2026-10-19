@@ -1,8 +1,13 @@
 import { dlopen, ptr } from "bun:ffi";
+import { checkHresult } from "@bunaway/plugin/win32";
 
+/** DwmGetWindowAttribute: whether DWM renders the non-client frame (BOOL, read only). */
 const DWMWA_NCRENDERING_ENABLED = 1;
+/** DwmSetWindowAttribute: who renders the non-client frame (DWMNCRENDERINGPOLICY, write only). */
 const DWMWA_NCRENDERING_POLICY = 2;
+/** Policy value: DWM renders the frame, and its shadow, according to the window style. */
 const DWMNCRP_USEWINDOWSTYLE = 0;
+/** Policy value: DWM stops rendering the non-client frame, which removes the shadow. */
 const DWMNCRP_DISABLED = 1;
 
 /**
@@ -31,16 +36,18 @@ export function readWindowShadow(window: bigint): boolean {
       ptr(value),
       value.length,
     );
-    if (result < 0) {
-      throw new Error(`DwmGetWindowAttribute: ${result >>> 0}`);
-    }
+    checkHresult(result, "DwmGetWindowAttribute");
     return value.readInt32LE(0) !== 0;
   } finally {
     library.close();
   }
 }
 
-/** Turn the DWM-drawn shadow off, or back to the window-style default. */
+/**
+ * Turn the DWM-drawn shadow off, or back to the window-style default. Fails with the
+ * HRESULT when DWM rejects the call, for example for a window that was destroyed. The
+ * library and the 4-byte buffer are released before returning.
+ */
 export function writeWindowShadow(window: bigint, shadow: boolean): void {
   const library = dlopen("dwmapi.dll", {
     DwmSetWindowAttribute: {
@@ -62,9 +69,7 @@ export function writeWindowShadow(window: bigint, shadow: boolean): void {
       ptr(value),
       value.length,
     );
-    if (result < 0) {
-      throw new Error(`DwmSetWindowAttribute: ${result >>> 0}`);
-    }
+    checkHresult(result, "DwmSetWindowAttribute");
   } finally {
     library.close();
   }
