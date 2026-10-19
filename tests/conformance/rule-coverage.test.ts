@@ -18,18 +18,90 @@ const TABLE_SECTIONS = [
 ];
 /** The body of a promise handler that discards the error: empty, or only a nothing value. */
 const DISCARDING_BODY = String.raw`(?:\{\s*\}|undefined|null|void\s+0)`;
+/** A function that discards its error: empty, or only a nothing value. */
+const DISCARDING_FUNCTION = [
+  // () => {}, (_) => {}, (e: unknown) => undefined, e => null, async () => {}
+  String.raw`(?:async\s*)?(?:\([^()]*\)|[\w$]+)\s*=>\s*${DISCARDING_BODY}`,
+  // function () {}, function (e) {}
+  String.raw`(?:async\s+)?function\s*\w*\s*\([^()]*\)\s*\{\s*\}`,
+].join("|");
 /** A handler that swallows an error with an empty body and no comment saying why. */
 const EMPTY_HANDLER = new RegExp(
   [
-    // .catch(() => {}), .catch((_) => {}), .catch((e: unknown) => undefined), .catch(e => null)
-    String.raw`\.catch\(\s*(?:async\s*)?(?:\([^()]*\)|[\w$]+)\s*=>\s*${DISCARDING_BODY}\s*\)`,
-    // .catch(function () {}), .catch(function (e) {})
-    String.raw`\.catch\(\s*(?:async\s+)?function\s*\w*\s*\([^()]*\)\s*\{\s*\}\s*\)`,
+    String.raw`\.catch\(\s*(?:${DISCARDING_FUNCTION})\s*\)`,
     // try { ... } catch {}, catch (e) {}
     String.raw`\bcatch\s*(?:\([^)]*\))?\s*\{\s*\}`,
   ].join("|"),
   "g",
 );
+const DISCARDING_ARGUMENT = new RegExp(`^(?:${DISCARDING_FUNCTION})$`);
+
+/**
+ * The index of the last character of the string, template literal or comment that starts at `i`,
+ * or `i` when none starts there. -1 when it never ends.
+ */
+function skipLiteral(text: string, i: number): number {
+  const ch = text[i];
+  if (ch === '"' || ch === "'" || ch === "`") {
+    let j = i + 1;
+    while (j < text.length && text[j] !== ch) {
+      j += text[j] === "\\" ? 2 : 1;
+    }
+    return j < text.length ? j : -1;
+  }
+  if (ch === "/" && text[i + 1] === "/") {
+    return text.indexOf("\n", i);
+  }
+  if (ch === "/" && text[i + 1] === "*") {
+    const end = text.indexOf("*/", i + 2);
+    return end < 0 ? -1 : end + 1;
+  }
+  return i;
+}
+
+/**
+ * The arguments of the call whose "(" is at `open`, split at top-level commas. Strings, template
+ * literals and comments are skipped so a bracket or comma inside them does not count.
+ */
+function callArguments(text: string, open: number): string[] {
+  const args: string[] = [];
+  let depth = 0;
+  let start = open + 1;
+  for (let i = open; i < text.length; i++) {
+    const skipped = skipLiteral(text, i);
+    if (skipped < 0) {
+      break;
+    }
+    i = skipped;
+    const ch = text[i];
+    if (ch === "(" || ch === "[" || ch === "{") {
+      depth++;
+    } else if (ch === ")" || ch === "]" || ch === "}") {
+      depth--;
+      if (depth === 0) {
+        args.push(text.slice(start, i));
+        break;
+      }
+    } else if (ch === "," && depth === 1) {
+      args.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  return args;
+}
+
+/** How many places discard an error with an empty handler. */
+function countEmptyHandlers(text: string): number {
+  let count = text.match(EMPTY_HANDLER)?.length ?? 0;
+  // .then(ok, () => {}): the second argument is the rejection handler.
+  for (const match of text.matchAll(/\.then\(/g)) {
+    const rejection = callArguments(text, match.index + match[0].length - 1)[1];
+    if (rejection !== undefined && DISCARDING_ARGUMENT.test(rejection.trim())) {
+      count++;
+    }
+  }
+  return count;
+}
 
 /**
  * Production files that still swallow an error with an empty handler, with how many. Each count
@@ -49,6 +121,7 @@ const EMPTY_HANDLERS: Record<string, number> = {
   "packages/cli/src/managed-command.ts": 1,
   "packages/cli/src/sdk.ts": 1,
   "packages/cli/src/windows-app-reload.ts": 1,
+  "packages/client-sdk/src/index.ts": 4,
   "packages/core/src/create-core.ts": 1,
   "packages/packaging/src/inputs.ts": 2,
   "packages/packaging/src/resolve.ts": 1,
@@ -108,7 +181,7 @@ test("production code does not swallow errors with an empty handler", async () =
   const found: Record<string, number> = {};
   for (const file of await productionSources()) {
     const text = await Bun.file(resolve(root, file)).text();
-    const count = text.match(EMPTY_HANDLER)?.length ?? 0;
+    const count = countEmptyHandlers(text);
     if (count > 0) {
       found[file] = count;
     }
@@ -134,7 +207,74 @@ test("the empty handler check flags every form that discards an error", () => {
     "try { run(); } catch (e) {\n}",
   ];
   for (const source of swallowing) {
-    expect(source.match(EMPTY_HANDLER)?.length).toBe(1);
+    expect(countEmptyHandlers(source)).toBe(1);
+  }
+});
+
+test("the empty handler check flags a then rejection handler that discards the error", () => {
+  const swallowing: [
+    string,
+    number,
+  ][] = [
+    [
+      "p.then(ok, () => {})",
+      1,
+    ],
+    [
+      "p.then(ok, (_) => {})",
+      1,
+    ],
+    [
+      "p.then(ok, (e) => {})",
+      1,
+    ],
+    [
+      "p.then(ok, (e: unknown) => {})",
+      1,
+    ],
+    [
+      "p.then(ok, e => {})",
+      1,
+    ],
+    [
+      "p.then(ok, async () => {})",
+      1,
+    ],
+    [
+      "p.then(ok, () => undefined)",
+      1,
+    ],
+    [
+      "p.then(ok, () => null)",
+      1,
+    ],
+    [
+      "p.then(ok, function () {})",
+      1,
+    ],
+    [
+      "p.then((v) => { use(v); }, () => {})",
+      1,
+    ],
+    [
+      "p.then((v) => use(v, 1), () => {})",
+      1,
+    ],
+    [
+      "p.then(\n  (v) => use(v),\n  () => {},\n)",
+      1,
+    ],
+    [
+      'p.then(() => say("a, b"), () => {})',
+      1,
+    ],
+    [
+      "p.then(ok, () => {}).then(next, () => {})",
+      2,
+    ],
+  ];
+  for (const [source, count] of swallowing) {
+    expect(countEmptyHandlers(source)).toBe(count);
   }
 });
 
@@ -152,11 +292,22 @@ test("the empty handler check leaves handlers that act on the error alone", () =
     "p.then(() => {})",
     "p.finally(() => {})",
     "p.then(() => {}, (e) => report(e))",
+    "p.then(ok)",
+    "p.then(() => {})",
+    "p.then(ok, handle)",
+    "p.then(ok, () => { /* the window is already gone */ })",
+    "p.then(ok, (e) => { log(e); })",
+    "p.then(ok, (e) => e)",
+    "p.then(ok, () => ({}))",
+    "p.then(() => {}, () => fallback)",
+    'p.then(a).on("x", () => {})',
+    "p.then(a); other(b, () => {})",
+    'p.then(() => say("x", () => {}))',
     "try { run(); } catch (e) { report(e); }",
     "try { run(); } catch { /* ignored: the file may not exist */ }",
     "const f = () => {};",
   ];
   for (const source of handled) {
-    expect(source.match(EMPTY_HANDLER)).toBeNull();
+    expect(countEmptyHandlers(source)).toBe(0);
   }
 });
