@@ -14,7 +14,7 @@ import {
   type StorageDirectorySize,
 } from "#storage/contract";
 
-/** Listed entries between event loop yields. */
+/** Walk steps (opened directories or listed entries) between event loop yields. */
 const YIELD_STEPS = 32;
 
 /** Cost bounds of one directory size scan. */
@@ -157,6 +157,13 @@ function yieldToEventLoop(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function cancelled(): BunawayError {
+  return new BunawayError({
+    code: "CANCELLED",
+    message: "Storage directory scan was cancelled.",
+  });
+}
+
 function limitExceeded(): BunawayError {
   return new BunawayError({
     code: "INVALID_ARGUMENT",
@@ -193,10 +200,7 @@ export async function sumDirectory(
   const checkpoint = async (): Promise<void> => {
     alive();
     if (signal?.aborted) {
-      throw new BunawayError({
-        code: "CANCELLED",
-        message: "Storage directory scan was cancelled.",
-      });
+      throw cancelled();
     }
     if (++steps % YIELD_STEPS === 0) {
       await yieldToEventLoop();
@@ -204,6 +208,7 @@ export async function sumDirectory(
   };
   await checkpoint();
   for (let frame = pending.pop(); frame; frame = pending.pop()) {
+    await checkpoint();
     const directory = openFrame(frame.path, frame.depth);
     if (!directory) {
       continue;
@@ -239,6 +244,11 @@ export async function sumDirectory(
     } finally {
       directory.closeSync();
     }
+  }
+  // A cancellation or disposal that arrived during the last step still ends the scan.
+  alive();
+  if (signal?.aborted) {
+    throw cancelled();
   }
   if (bytes > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error("Storage size cannot be represented safely.");
