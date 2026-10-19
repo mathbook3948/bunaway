@@ -58,6 +58,7 @@ async function capture(
 export async function runSpawnedProcess(
   input: RunInput,
   signal: AbortSignal,
+  env?: Record<string, string>,
 ): Promise<ProcessResult> {
   signal.throwIfAborted();
   const failure = new AbortController();
@@ -77,6 +78,12 @@ export async function runSpawnedProcess(
           : Buffer.from(input.stdinBase64, "base64"),
       stdout: "pipe",
       stderr: "pipe",
+      // Without an override the child inherits the current environment.
+      ...(env === undefined
+        ? {}
+        : {
+            env,
+          }),
       signal: executionSignal,
       killSignal: "SIGKILL",
     },

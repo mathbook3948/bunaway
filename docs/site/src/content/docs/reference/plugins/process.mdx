@@ -50,10 +50,11 @@ async function makeReport(year: number) {
 | `timeoutMs` | 전체 실행과 pipe 완료의 기한, 1부터 30000ms, 기본값 30000 |
 
 공통으로 PATH 조회, 상대 경로와 NUL을 거부합니다. Windows는 추가로 UNC share, device path, `.`/`..` 경로 구성 요소, alternate stream과
-batch 파일을 거부하고, macOS는 `.`/`..`/빈 경로 구성 요소와 제어 문자(C0, DEL, C1)를 거부합니다. 호출자가 env나 cwd를 바꾸는 입력은 없습니다. 자식은 backend의
-작업 디렉터리와 Bun이 읽은 dotenv 값을 포함한 backend 환경을 상속합니다.
+batch 파일을 거부하고, macOS는 `.`/`..`/빈 경로 구성 요소와 제어 문자(C0, DEL, C1)를 거부합니다. 호출자가 env나 cwd를 바꾸는 입력은 없습니다. Windows의 자식은 backend의
+작업 디렉터리와 Bun이 읽은 dotenv 값을 포함한 backend 환경을 상속합니다. macOS의 자식은 환경 변수로
+`PATH=/usr/bin:/bin`만 받으며, 앱을 실행한 셸이나 호스트 프로세스의 변수는 전달되지 않습니다.
 Windows에서 인자의 공백, 빈 문자열, Unicode, 따옴표와 backslash는
-표준 argv 인용 규칙을 따르고, macOS는 각 인자를 그대로 `execve`의 argv 항목으로 전달합니다. shell을 시작하거나 shell 문자열을 해석하지 않습니다.
+표준 argv 인용 규칙을 따르고, macOS는 각 인자를 별도의 argv 항목으로 전달합니다. shell을 시작하거나 shell 문자열을 해석하지 않습니다.
 `&`, `%PATH%`, `$()`는 인자의 문자로 전달합니다. 전체 인자는 Windows UTF-16 command-line
 상한, macOS는 실행 경로와 인자의 UTF-8 합계 256 KiB를 넘지 않도록 보수적으로 제한합니다. 지정한 프로그램 자체의 인자 해석은 앱이 검사합니다.
 

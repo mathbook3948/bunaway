@@ -277,3 +277,41 @@ test("a descendant holding the pipes open delays completion until the timeout", 
   // The call returns at the deadline once the pipes are closed, not when the descendant exits.
   expect(Date.now() - started).toBeLessThan(3_000);
 });
+
+test("the child receives only PATH, never the host environment", async () => {
+  const key = `BUNAWAY_PROCESS_HOST_SECRET_${crypto.randomUUID().replaceAll("-", "_")}`;
+  process.env[key] = "secret";
+  try {
+    const result = await run(
+      initialize(),
+      schema.parse({
+        executablePath: "/usr/bin/env",
+      }),
+    );
+    // macOS may add system variables such as __CF_USER_TEXT_ENCODING, so assert on what must differ.
+    const lines = Buffer.from(result.stdoutBase64, "base64")
+      .toString()
+      .split("\n");
+    expect(lines).toContain("PATH=/usr/bin:/bin");
+    expect(lines.filter((line) => line.includes(key))).toEqual([]);
+    expect(lines.filter((line) => line.startsWith("HOME="))).toEqual([]);
+  } finally {
+    delete process.env[key];
+  }
+});
+
+test("a child that keeps writing is killed when the output limit is exceeded", async () => {
+  const started = Date.now();
+  await expect(
+    run(
+      initialize(),
+      schema.parse({
+        executablePath: "/usr/bin/yes",
+        maxOutputBytes: 3,
+      }),
+    ),
+  ).rejects.toMatchObject({
+    code: "INTERNAL",
+  });
+  expect(Date.now() - started).toBeLessThan(10_000);
+});
