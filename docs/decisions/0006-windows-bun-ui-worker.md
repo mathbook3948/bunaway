@@ -43,7 +43,7 @@ I/O Worker는 기존 C++ 작업 큐의 동기 파일 작업을 이식해 사용�
 
 `opener`는 창이나 WebView 자원을 사용하지 않으므로 I/O Worker에서 자체 COM STA를
 초기화한다. 호스트의 현재 컨텍스트와 작업 권한 승인 뒤 경로 검사와 Explorer 요청을 같은
-스레드에서 실행한다. opener는 파일 핸들을 요청 제출까지 유지하지 않고, 경로를 링크까지 풀어 확인한 뒤 풀린 경로로 요청한다([ADR 0024](./0024-plugin-path-responsibility.md)). 어댑터 종료 시
+스레드에서 실행한다. opener는 파일 핸들을 요청 제출까지 유지하지 않고, 경로를 링크까지 풀어 확인한 뒤 열기와 지정 앱 실행에는 풀린 경로를 쓴다([ADR 0024](./0024-plugin-path-responsibility.md)). 어댑터 종료 시
 셸 참조와 DLL을 해제한 뒤 COM 초기화를 해제한다. 느린 UNC 공유나 셸 확장이 UI Worker의
 메시지 pump를 막지 않으며, 진행 중인 동기 OS 호출은 I/O Worker의 후속 작업과 정리를
 지연시킬 수 있다.

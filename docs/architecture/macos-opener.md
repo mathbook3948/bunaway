@@ -22,7 +22,7 @@ URL과 파일은 `openURL:`, Finder 선택은 `selectFile:inFileViewerRootedAtPa
 거부한다. 한글, 공백, 쉼표, 따옴표와 POSIX에서 유효한 역슬래시는 그대로 전달한다.
 
 `file-check.ts`는 `realpath`로 링크를 풀어 읽을 수 있는 일반 파일인지 확인하고 풀린 경로를
-돌려준다. 링크는 거부하지 않고 따라가며 NSWorkspace에는 풀린 경로를 전달한다. 디렉터리와 다른 파일
+돌려준다. 링크는 거부하지 않고 따라가며 열기에는 풀린 경로를 전달한다. Finder 선택은 요청한 경로를 그대로 쓴다. 디렉터리와 다른 파일
 종류는 `INVALID_ARGUMENT`으로 처리하고 FIFO와 장치 파일은 열기 전에 거부한다. 없는 파일은
 `INVALID_ARGUMENT`과 `details.reason: "FILE_NOT_FOUND"`, 접근 거부는 `PERMISSION_DENIED`다
 ([ADR 0024](../decisions/0024-plugin-path-responsibility.md)).

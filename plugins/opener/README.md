@@ -129,7 +129,7 @@ Explorer에 앱 경로와 단일 대상 인자를 별도로 전달하고 대상�
 
 `tests/api/opener-selected-app.test.ts`는 입력, 작업별 권한, 호출 컨텍스트와 오류를 검사합니다.
 Windows의 `tests/lifecycle/windows-opener-selected-app.test.ts`는 실제 파일과 앱 검사,
-링크로 가리킨 앱의 확장자 검사를 확인합니다. `windows-opener-job.test.ts`는 실제
+링크로 가리킨 앱의 확장자 검사를 확인합니다(파일 symlink를 만들 수 있는 러너에서만 실행). `windows-opener-job.test.ts`는 실제
 Explorer와 compiled helper로 기존 기본 실행, 지정 앱의 파일과 URL argv, Unicode와 공백,
 URL fragment 따옴표, 앱 Job 밖의 실행과 앱 종료 후 생존을 확인합니다.
 `mise run host:windows`가 이 네이티브 검사를 실행합니다. Linux에서는 네이티브 검사를 건너뜁니다.
@@ -149,7 +149,7 @@ Windows 셸은 경로로 작업하므로 경로를 확인한 뒤 이동 요청 �
 ## 오류
 
 - `INVALID_ARGUMENT`: URL이나 파일 경로가 유효하지 않거나 파일이 없습니다. 파일 소실은 `details.reason`이 `FILE_NOT_FOUND`입니다.
-- `PERMISSION_DENIED`: 작업 권한이 없거나 파일 접근이 거부되었거나 공유 잠금과 충돌했습니다.
+- `PERMISSION_DENIED`: 작업 권한이 없거나 파일 접근이 거부되었거나 공유 잠금과 충돌했거나 링크가 순환해 풀 수 없습니다.
 - `UNSUPPORTED`: 현재 플랫폼이나 실행 환경에 Windows 어댑터가 없습니다.
 - `INTERNAL`: 파일 검사, Explorer의 OS 요청 또는 Shell의 바로가기 쓰기에 실패했습니다.
 - `CANCELLED`, `TIMEOUT`: 호출이 취소되었거나 기한을 넘겼습니다.

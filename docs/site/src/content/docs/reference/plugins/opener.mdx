@@ -103,7 +103,7 @@ Electron과 같이 호출 뒤 프로세스에 멀티스레드 COM 아파트(MTA)
 | 오류 | 의미 |
 | --- | --- |
 | `INVALID_ARGUMENT` | 경로가 유효하지 않거나 파일이 없음(`details.reason`은 `FILE_NOT_FOUND`) |
-| `PERMISSION_DENIED` | 작업 권한 없음, 파일 접근 거부나 공유 잠금 충돌 |
+| `PERMISSION_DENIED` | 작업 권한 없음, 파일 접근 거부, 공유 잠금 충돌이나 풀 수 없는 링크 순환 |
 | `CANCELLED` | 플러그인 종료(dispose) 뒤 호출, 또는 시작 전에 이미 중단된 호출 |
 
 호스트는 승인 전에 취소된 작업을 실행하지 않으며, 이미 중단된 호출은 셸을 부르기 전에 실패합니다. 셸 호출은 동기이며 중간에 중단할 수 없으므로 취소와 기한 초과는 이미 전달한 요청을 되돌리지 않습니다.
@@ -185,7 +185,7 @@ const link = await opener.readShortcutLink("C:\\Users\\me\\Desktop\\App.lnk");
 
 ## 지정 앱으로 열기
 
-지정 앱 함수는 Windows 전용이며 macOS에서는 제공하지 않습니다. `opener.openFileWith(path, app)`과 `opener.openUrlWith(url, app)`은 지정한 Windows 실행 파일에 대상 하나를 전달합니다. `app`은 절대 `.exe` 경로여야 하며 위의 파일 경로, 실제 이름과 링크 검사 규칙을 따릅니다. 셸 명령, `.cmd`, `.bat`, `.lnk`, 별도 실행 인자는 받지 않습니다. 파일 대상은 `openFile`과 같은 검사를, URL은 `openUrl`과 같은 HTTP/HTTPS 검사를 받습니다.
+지정 앱 함수는 Windows 전용이며 macOS에서는 제공하지 않습니다. `opener.openFileWith(path, app)`과 `opener.openUrlWith(url, app)`은 지정한 Windows 실행 파일에 대상 하나를 전달합니다. `app`은 절대 `.exe` 경로여야 하며 위의 파일 경로 규칙을 따르고, 링크를 풀어 얻은 경로도 `.exe`로 끝나야 합니다. 셸 명령, `.cmd`, `.bat`, `.lnk`, 별도 실행 인자는 받지 않습니다. 파일 대상은 `openFile`과 같은 검사를, URL은 `openUrl`과 같은 HTTP/HTTPS 검사를 받습니다.
 
 ```ts
 import opener from "@bunaway/plugin-opener";
@@ -220,7 +220,7 @@ Host operation은 `opener.openUrl`, `opener.openFile`, `opener.revealFile`, `ope
 | 오류 | 의미 |
 | --- | --- |
 | `INVALID_ARGUMENT` | URL이나 파일 경로가 유효하지 않거나 디렉터리 입력, 파일 소실. 파일 소실은 `details.reason`이 `FILE_NOT_FOUND`, `update`와 읽기 대상이 바로가기가 아니면 `NOT_A_SHORTCUT` |
-| `PERMISSION_DENIED` | 작업 권한 없음, OS 파일 접근 거부, 공유 잠금 충돌 |
+| `PERMISSION_DENIED` | 작업 권한 없음, OS 파일 접근 거부, 공유 잠금 충돌이나 풀 수 없는 링크 순환 |
 | `UNSUPPORTED` | 현재 플랫폼이나 실행 환경에서 기능을 지원하지 않음 |
 | `INTERNAL` | 파일 검사 실패, Explorer 데스크톱 접근 실패, Shell의 바로가기 쓰기 거부 또는 다른 OS 요청 실패 |
 | `CANCELLED`, `TIMEOUT` | 호출이 취소되었거나 기한을 넘김 |

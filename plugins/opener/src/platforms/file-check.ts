@@ -44,7 +44,7 @@ function fileError(error: unknown): BunawayError {
       message: "Opener path is too long.",
     });
   }
-  // ELOOP: a link cycle cannot be resolved, which is reported as before for links that cannot be followed.
+  // ELOOP: a link cycle cannot be resolved, so the path is refused like other unreadable files.
   if (
     code === "EACCES" ||
     code === "EPERM" ||
@@ -67,8 +67,10 @@ function fileError(error: unknown): BunawayError {
  * Callers use the returned path for extension checks and for the OS request, so the name of a link
  * cannot stand in for its target. Which files an app may open is decided by the app command
  * (ADR 0024); this only reports a missing, unreadable or non-regular target with the opener's
- * error contract: `INVALID_ARGUMENT` (reason `FILE_NOT_FOUND` when absent, or not a regular file)
- * and `PERMISSION_DENIED`. A path swapped after this returns is not detected.
+ * error contract: `INVALID_ARGUMENT` with reason `FILE_NOT_FOUND` when absent, `INVALID_ARGUMENT`
+ * without a reason for a directory, a non-regular file or a too long path, `PERMISSION_DENIED` for
+ * access, sharing and link cycle failures, and `INTERNAL` for anything else. A path swapped after
+ * this returns is not detected.
  */
 export function resolveReadableFile(path: string): string {
   try {
