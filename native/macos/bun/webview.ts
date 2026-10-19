@@ -786,6 +786,61 @@ export class MacosWebview {
     return !!this.objc.send(this.window, "isVisible");
   }
   /**
+   * Miniaturize into the Dock. The Dock animation finishes after the call returns, so
+   * `isMinimized` can lag briefly. An already miniaturized window is left as it is.
+   */
+  minimize(): void {
+    const o = this.objc;
+    o.withAutoreleasePool(() => {
+      if (!o.send(this.window, "isMiniaturized")) {
+        o.send(this.window, "miniaturize:", null);
+      }
+    });
+  }
+  /**
+   * Zoom to the standard frame, the AppKit meaning of maximize (the window does not enter native
+   * fullscreen). A miniaturized window is restored first, and a window that is already zoomed stays.
+   */
+  maximize(): void {
+    this.setZoomed(true);
+  }
+  /** Leave the miniaturized and the zoomed state, ending at the user frame. */
+  unmaximize(): void {
+    this.setZoomed(false);
+  }
+  /** Undo a miniaturize if there is one, otherwise a zoom. */
+  restore(): void {
+    const o = this.objc;
+    o.withAutoreleasePool(() => {
+      if (o.send(this.window, "isMiniaturized")) {
+        o.send(this.window, "deminiaturize:", null);
+      } else if (o.send(this.window, "isZoomed")) {
+        o.send(this.window, "zoom:", null);
+      }
+    });
+  }
+  toggleMaximize(): void {
+    this.setZoomed(!this.isMaximized());
+  }
+  isMinimized(): boolean {
+    return !!this.objc.send(this.window, "isMiniaturized");
+  }
+  isMaximized(): boolean {
+    return !!this.objc.send(this.window, "isZoomed");
+  }
+  /** `zoom:` toggles, so it is sent only when the state differs from the requested one. */
+  private setZoomed(zoomed: boolean): void {
+    const o = this.objc;
+    o.withAutoreleasePool(() => {
+      if (o.send(this.window, "isMiniaturized")) {
+        o.send(this.window, "deminiaturize:", null);
+      }
+      if (!!o.send(this.window, "isZoomed") !== zoomed) {
+        o.send(this.window, "zoom:", null);
+      }
+    });
+  }
+  /**
    * Exclude the window from screenshots and screen sharing through NSWindow.sharingType.
    * On macOS 15 and later, ScreenCaptureKit based capture may ignore sharingType,
    * so protection is best effort there.

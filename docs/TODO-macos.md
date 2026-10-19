@@ -96,9 +96,9 @@
 우선순위 P1, 효과와 특수 창은 P2. 소유자: 호스트와 창 API.
 
 현재 네이티브 창의 기본 버튼과 사용자 조작은 공개 창 제어 API의 구현으로 세지 않는다.
-창 상태 변경과 크기, 위치, 전체화면 및 닫기 확인의 실행 중 macOS 호출은 `UNSUPPORTED`다.
+최소화, 최대화(zoom), 복원과 그 상태 조회는 지원한다. 크기, 위치, 전체화면 및 닫기 확인의 실행 중 macOS 호출은 `UNSUPPORTED`다.
 
-- [ ] minimize, maximize, unmaximize, restore와 toggleMaximize를 공통 계약에 맞춘다.
+- [x] minimize, maximize, unmaximize, restore와 toggleMaximize를 공통 계약에 맞춘다.
 - [x] `isVisible`과 `isFocused`로 실제 창의 표시 상태와 포커스 여부를 조회한다.
 - [ ] 최소화, 최대화와 전체화면 상태를 조회한다.
 - [ ] 초기 maximized/fullscreen 옵션과 실행 중 전체화면 전환을 제공한다.
