@@ -1,3 +1,4 @@
+import { int32Schema } from "@bunaway/plugin";
 import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
 import { z } from "zod";
 
@@ -67,7 +68,7 @@ export const shortcutDetailsSchema = z.strictObject({
   args: shortcutText(MAX_SHORTCUT_ARGUMENTS_LENGTH).optional(),
   description: shortcutText(MAX_SHORTCUT_DESCRIPTION_LENGTH).optional(),
   icon: fileInput.shape.path.optional(),
-  iconIndex: z.number().int().min(-0x80000000).max(0x7fffffff).optional(),
+  iconIndex: int32Schema.optional(),
 });
 export type ShortcutDetails = z.infer<typeof shortcutDetailsSchema>;
 
