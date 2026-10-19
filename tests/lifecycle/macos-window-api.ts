@@ -297,7 +297,7 @@ try {
           await windows.minimize({view:"reader"});
           await until(state(true, false), "minimize before maximize");
           await windows.maximize({view:"reader"});
-          await until(state(false, true), "maximize from minimized");
+          try {await until(state(false, true), "maximize from minimized");} catch (failure) {throw new Error(failure.message + " " + JSON.stringify({minimized: await windows.isMinimized({view:"reader"}), maximized: await windows.isMaximized({view:"reader"})}));}
           await windows.unmaximize({view:"reader"});
           await until(state(false, false), "unmaximize");
           await error(() => windows.setSize({view:"reader",width:400,height:400}), "UNSUPPORTED");
