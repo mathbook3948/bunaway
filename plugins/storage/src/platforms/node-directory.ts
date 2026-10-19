@@ -14,7 +14,7 @@ import {
   type StorageDirectorySize,
 } from "#storage/contract";
 
-/** Walk steps (opened directories or listed entries) between event loop yields. */
+/** Listed entries between event loop yields. */
 const YIELD_STEPS = 32;
 
 /** Cost bounds of one directory size scan. */
@@ -25,6 +25,14 @@ export type DirectorySizeLimits = {
 
 function isMissingEntry(error: unknown): boolean {
   return error instanceof Error && Reflect.get(error, "code") === "ENOENT";
+}
+
+/** An entry that vanished, or was replaced by a file, after it was listed. */
+function isGone(error: unknown): boolean {
+  return (
+    isMissingEntry(error) ||
+    (error instanceof Error && Reflect.get(error, "code") === "ENOTDIR")
+  );
 }
 
 /**
@@ -60,8 +68,12 @@ function listingInfo(
 ): BigIntStats | undefined | null {
   try {
     return entryInfo(parent, entry);
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (entry.isSymbolicLink() || entry.isDirectory() || entry.isFile()) {
+      return undefined;
+    }
+    // Without a listing type the failure is the real answer, such as a denied access.
+    throw error;
   }
 }
 
@@ -128,11 +140,16 @@ function openIfPresent(path: string): Dir | null {
   try {
     return opendirSync(path);
   } catch (error) {
-    if (isMissingEntry(error)) {
+    if (isGone(error)) {
       return null;
     }
     throw error;
   }
+}
+
+/** The root was checked by the caller, so only a descendant may have vanished. */
+function openFrame(path: string, depth: number): Dir | null {
+  return depth === 0 ? opendirSync(path) : openIfPresent(path);
 }
 
 /** Let queued host messages, such as cancellation, run before the scan continues. */
@@ -187,7 +204,7 @@ export async function sumDirectory(
   };
   await checkpoint();
   for (let frame = pending.pop(); frame; frame = pending.pop()) {
-    const directory = openIfPresent(frame.path);
+    const directory = openFrame(frame.path, frame.depth);
     if (!directory) {
       continue;
     }
