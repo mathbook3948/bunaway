@@ -789,50 +789,45 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 출처: [T-fs], [T-path], [T-store], [T-sql], [T-persisted-scope], [E-app].
 
 - [x] 앱이 지정한 절대 경로의 UTF-8 텍스트 읽기와 쓰기를 제공한다.
-- [x] 파일을 여는 경계에서 잘못된 경로, junction, hardlink와 대상 교체를 거부한다.
+- [x] 파일을 여는 경계에서 잘못된 경로 형식을 거부한다. 링크는 따라가며 위치 제한은 앱 명령이 맡는다([ADR 0024](./decisions/0024-plugin-path-responsibility.md)).
 - [x] Windows의 binary 읽기와 쓰기, UTF-8 텍스트와 바이트 append를 제공한다.
-  canonical base64와 256 KiB 바이트 상한, 작업별 권한과 기존 네이티브 경로 검사를 유지한다.
+  canonical base64와 256 KiB 바이트 상한, 작업별 권한과 경로 형식 검사를 유지한다.
   [바이너리 계약](./site/src/content/docs/reference/host/storage-bytes.mdx)을 따른다.
 - [ ] open/read/write/seek/close 파일 핸들과 대용량 stream I/O를 제공한다.
 - [x] 파일과 디렉터리 존재, stat과 metadata를 조회한다.
   `storage.exists`와 `storage.stat`은 앱이 지정한 절대 경로를 받는다.
-  작업마다 독립적으로 허용하고 네이티브 경로와 대상 핸들을 검사한다. 없는 대상은 각각 `false`와 `null`이며,
+  작업마다 독립적으로 허용하고 경로 형식을 검사한다. 링크는 따라간다. 없는 대상은 각각 `false`와 `null`이며,
   접근 거부는 없는 대상으로 숨기지 않는다. 종류, 파일 크기와 생성, 수정, 접근 시각을 제공한다.
   디렉터리 크기는 `null`이고 재귀 용량은 별도 작업이다.
   [exists 계약](./site/src/content/docs/reference/host/storage-exists.mdx)과
   [stat 계약](./site/src/content/docs/reference/host/storage-stat.mdx)을 따른다.
 - [ ] 파일과 디렉터리의 OS 권한 및 ACL 조회 범위와 공개 계약을 정의한다.
 - [x] Windows의 직접 자식 목록, 선택적인 상위 디렉터리 생성과 파일 및 빈 디렉터리 삭제를 제공한다.
-  검사한 핸들의 bounded enumeration과 삭제, 링크 미추적 및 거부, 작업별 권한을
+  256개 상한의 목록과 삭제, 링크를 `link`로 표시하는 목록, 작업별 권한을
   [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)에 정의한다.
 - [ ] 재귀 목록과 큰 목록 pagination을 제공한다.
 - [x] 파일 또는 디렉터리 트리를 재귀 삭제한다.
-  Windows의 `storage.removeRecursive({ path })`는 `storage.remove`와 별도 권한이다. 현재 경로의 디렉터리 핸들을 모두 열어 둔 채
-  후위 순서로 삭제하므로 상위 디렉터리 교체와 이름 재해석이 없다. 이름 대리자 reparse point(symlink, junction)는 따라가지 않고
-  링크만 삭제하며, hardlink는 만난 이름만 삭제한다. 읽기 전용 항목은 Node `fs.rm`과 Rust `remove_dir_all`처럼 삭제하며, POSIX 삭제 의미(속성 무시, 이름 즉시 제거)를 쓰고 미지원 파일 시스템은 속성을 해제하고 삭제한다.
-  비대리자 reparse 디렉터리(클라우드 폴더)는 `UNSUPPORTED`, 루트 아래 깊이 64 초과는 `INVALID_ARGUMENT`이고 항목 수 상한은 없다.
-  원자적이지 않아 취소와 실패 전에 삭제한 항목은 유지되며 같은 호출을 반복하면 이어서 삭제한다. macOS는 `UNSUPPORTED`이다.
-  `windows-storage-remove-recursive.ts`가 CI windows-native에서 실제 Win32 핸들로 확인한다.
+  Windows의 `storage.removeRecursive({ path })`는 `storage.remove`와 별도 권한이며 `fs.promises.rm({ recursive: true })`로 지운다.
+  트리 안의 symlink와 junction은 따라가지 않고 링크만 삭제하며, hardlink는 만난 이름만 삭제한다.
+  하나의 호출이라 시작한 뒤에는 취소할 수 없고, 항목 수와 깊이 상한도 없다. 원자적이지 않아 실패 전에 삭제한 항목은 유지되며
+  같은 호출을 반복하면 이어서 삭제한다. macOS는 `UNSUPPORTED`이다.
+  `windows-storage-remove-recursive.ts`가 CI windows-native에서 링크 비추적과 읽기 전용 항목 삭제를 확인한다.
   [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)을 따른다.
 - [x] 파일 크기 조회와 별도로 디렉터리 재귀 용량을 바이트 단위로 계산한다.
   Windows의 `storage.directorySize({ path })`는 `{ bytes, files, directories }`를 반환한다.
-  루트는 directories에 세지 않고, 크기는 일반 파일의 논리 크기(EndOfFile) 합이다. 하드링크는 이름마다 더한다.
-  symlink, junction 같은 이름 대리자 reparse point는 목록 작업처럼 따라가지 않고 더하지 않는다.
-  클라우드 placeholder, 중복 제거와 WOF 같은 비대리자 reparse 파일은 논리 크기를 더하고,
-  클라우드 폴더 같은 비대리자 reparse 디렉터리를 만나면 과소 집계 대신 `UNSUPPORTED`로 실패한다.
-  삭제 대기 중인 하위 디렉터리는 사라진 항목처럼 건너뛴다.
+  루트는 directories에 세지 않고, 크기는 일반 파일의 논리 크기 합이다. 하드링크는 이름마다 더한다.
+  symlink와 junction은 목록 작업처럼 따라가지 않고 더하지 않는다. 링크 판정은 목록과 `lstat` 중 하나라도 링크이면 링크이다.
   일부 하위 항목의 접근 거부와 열기 실패는 과소 집계 대신 작업 전체를 실패시킨다.
   탐색 중 사라진 항목은 건너뛰고 스냅샷 일관성은 보장하지 않는다.
   방문 항목 100,000개와 깊이 64를 넘으면 `INVALID_ARGUMENT`이고,
-  반복 방식으로 현재 경로의 디렉터리 핸들만 열어 두며 일정 단계마다 이벤트 루프에 양보해 시작 후에도 취소와 기한을 처리하고
-  성공, 실패와 취소에서 핸들을 닫는다. macOS는 `UNSUPPORTED`이고 작업별 권한을 따로 허용한다.
+  반복 방식으로 일정 단계마다 이벤트 루프에 양보해 시작 후에도 취소와 기한을 처리한다. macOS는 `UNSUPPORTED`이고 작업별 권한을 따로 허용한다.
   Tauri fs의 [`size`][T-fs-live]는 파일 metadata 크기 조회이며, 디렉터리 재귀 크기 계산에서
-  핸들 고정과 링크 처리 계약은 이 구현이 정의한다.
+  링크 처리 계약은 이 구현이 정의한다.
   [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)을 따른다.
-- [x] Windows의 4 MiB 이하 일반 파일 복사와 같은 parent의 파일 및 디렉터리 rename를 제공한다.
-  양쪽 parent와 source 핸들을 고정하고 기존 destination을 대체하지 않는다.
+- [x] Windows의 4 MiB 이하 일반 파일 복사와 같은 볼륨 안의 파일 및 디렉터리 이동을 제공한다.
+  복사는 대상을 배타적으로 만들고 이동은 `MoveFileExW`를 덮어쓰기 없이 호출하므로 기존 destination을 대체하지 않는다.
   [전송 계약](./site/src/content/docs/reference/host/storage-transfers.mdx)을 따른다.
-- [ ] 큰 파일과 디렉터리 재귀 copy, 다른 parent와 볼륨의 move, 덮어쓰기 및 truncate를 제공한다.
+- [ ] 큰 파일과 디렉터리 재귀 copy, 다른 볼륨의 move, 덮어쓰기 및 truncate를 제공한다.
 - [ ] 파일 watch와 recursive watch, 이벤트 구독 해제를 제공한다.
 - [ ] 원자적 저장, 충돌 처리와 대용량 stream I/O를 제공한다.
 - [ ] 파일 대화상자로 획득한 범위의 일시 허용과 영속화를 제공한다.
@@ -848,7 +843,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [x] Windows path join, resolve, normalize, basename, dirname, extname과 isAbsolute를 제공한다.
   resolve는 명시적인 fully qualified base를 요구하며 host cwd와 per-drive cwd를 사용하지 않는다.
 - [x] 문자열 경로 helper의 Windows drive, UNC, extended-length와 Unicode 동작을 정의한다.
-  파일 접근과 분리하며 storage의 링크, 별칭, extended-length 및 device 경로 거부는 유지한다.
+  파일 접근과 분리하며 storage의 extended-length 및 device 경로 거부는 유지한다.
 - [ ] key-value store의 load, get, set, delete, clear와 목록 조회를 제공한다.
 - [ ] store 변경 이벤트, save, reload와 autosave를 제공한다.
 - [ ] Store `defaults`와 저장된 값의 병합 우선순위, 중첩 객체 처리, 기본값 무시 옵션을 정의한다.

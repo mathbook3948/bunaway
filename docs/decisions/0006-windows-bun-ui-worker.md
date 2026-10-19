@@ -163,7 +163,7 @@ HRESULT로 변환한다. 마지막 COM 참조 해제와 콜백 반환을 확인�
 파일 경로 제한은 앱 명령이 맡고 플러그인은 경로 문법만 검사한 뒤 링크를 따라간다
 ([ADR 0024](./0024-plugin-path-responsibility.md)). 부모 디렉터리 핸들 고정, reparse point와 hard link
 거부, 최종 핸들 경로 검사 중 log와 notification에 있던 링크 검사(reparse point, 링크 수)는 이미 제거했다.
-opener에서도 제거했고, storage에는 이 검사가 아직 남아 있으며 storage 변경에서 제거한다. 로그, capabilities도 기존 정책과 지원 정보를 따른다. 탐색, frame 탐색, 외부 리소스, 새 창, 권한 요청은 UI에서
+opener와 storage의 Windows 구현에서도 제거했고, storage의 macOS 구현에는 이 검사가 아직 남아 있으며 macOS 변경에서 제거한다. 로그, capabilities도 기존 정책과 지원 정보를 따른다. 탐색, frame 탐색, 외부 리소스, 새 창, 권한 요청은 UI에서
 동기적으로 허용/거부하며 COM 콜백 안에서 다른 Worker의 답을 기다리지 않는다.
 
 ## 부팅, 종료

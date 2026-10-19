@@ -7,16 +7,20 @@
 readDirectory와 createDirectory를
 macOS I/O Worker에서 제공한다. PR #164의 공유 dispatch와 수명주기를 재사용한다.
 move, remove, removeRecursive와 directorySize는 macOS에서 `UNSUPPORTED`로 실패하며 macOS handler를 선언하지 않는다.
-move, remove와 removeRecursive는 검사한 source 객체의 고정을 보장할 수 없고, directorySize는 Windows의
-핸들 고정 순회만 구현한다.
+macOS 어댑터는 아직 이전 방식이다.
 
 경로 규칙, POSIX 경합의 한계, 네이티브 검증과 호스트 통합 의존성은
 [macOS 저장 어댑터](../../docs/architecture/macos-storage-adapter.md)에 기록한다.
 
 Windows와 macOS가 함께 지원하는 11개 작업은 `src/operations.ts`에서 입력, 출력 스키마와
 handler를 한 번 선언한다. `src/platforms/windows-operations.ts`는 이 목록에 move, remove,
-removeRecursive와 directorySize를 추가한다. directorySize와 removeRecursive는 `windows.ts`에서 열린
-디렉터리 핸들을 반복 방식으로 순회하며(removeRecursive는 후위 순서로 삭제) macOS에서는 `UNSUPPORTED`이다.
+removeRecursive와 directorySize를 추가한다.
+
+Windows는 `node:fs` 위의 공통 어댑터를 쓴다. `src/platforms/node-storage.ts`가 읽기와 쓰기, 복사, 목록, 생성, 삭제와
+용량 계산을 구현하고, `windows-path.ts`가 경로 형식(드라이브 또는 UNC 절대 경로, 파일 이름 규칙, 장치 접두사 거부)을 검사하며,
+`windows.ts`가 덮어쓰지 않는 이동(`MoveFileExW`)만 네이티브로 호출한다. 링크는 일반 경로처럼 따라가고
+어떤 위치를 허용할지는 앱 명령이 정한다([ADR 0024](../../docs/decisions/0024-plugin-path-responsibility.md)).
+removeRecursive와 directorySize는 트리 안의 링크를 따라가지 않으며 macOS에서는 `UNSUPPORTED`이다.
 `defineNativeOperation<Instance>()`으로 handler 입력, 인스턴스와 반환 타입을
 스키마 및 인스턴스 타입에서 추론한다.
 `src/index.ts`는 각 작업 맵을 해당 platforms의 operations에 연결하고 인스턴스 수명을 지정한다.

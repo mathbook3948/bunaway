@@ -78,7 +78,7 @@ initialize가 각 플랫폼 모듈의 WindowsStorage 또는 MacosStorage를 실�
 dispose가 해당 인스턴스의 네이티브 바인딩을 정리한다. 선언 import와 지원 조회는 자원을
 만들지 않는다. 네이티브 구현은 작업 이름으로 분기하지 않고 기능별 메서드와 공통
 핸들 검사 절차를 사용한다. 경로 문법 검사는 두며, 링크와 최종 핸들 검사는
-[ADR 0024](../decisions/0024-plugin-path-responsibility.md)에 따라 제거한다. log, notification과 opener의 링크 검사는 제거했고, storage의 링크와 핸들 검사는 이후 변경에서 제거한다.
+[ADR 0024](../decisions/0024-plugin-path-responsibility.md)에 따라 제거한다. log, notification, opener와 storage의 Windows 구현은 링크 검사를 제거했고, storage의 macOS 구현은 이후 변경에서 제거한다.
 
 initialize는 동기 반환만 허용한다. Promise나 thenable을 반환하면 어댑터 생성을 거부하고,
 늦게 완료한 인스턴스는 dispose로 회수한다. 잘못된 비동기 초기화와 회수 실패는 호스트 진단에 기록한다.
@@ -375,7 +375,7 @@ operation 권한을 다시 검사한다. 단순한 기능 등록에는 backend �
 플러그인은 앱 데이터나 임시 폴더를 자동으로 선택하거나 만들지 않는다.
 경로 제한은 앱 명령과 policy commands가 맡으며 앱 개발자의 책임이다
 ([ADR 0024](../decisions/0024-plugin-path-responsibility.md)). 플러그인은 경로 문법만 검사하고 링크를 따라간다.
-저장 plugin의 Windows와 macOS adapter가 하는 링크, 최종 경로와 핸들 검사는 이 결정에 따라 storage 변경에서 제거한다.
+저장 plugin의 Windows adapter는 `node:fs` 위의 공통 어댑터로 바꿔 링크, 최종 경로와 핸들 검사를 제거했고, macOS adapter는 이 결정에 따라 macOS 변경에서 제거한다.
 신뢰된 백엔드의 직접 Bun API 접근은 이 정책의 샌드박스 대상이 아니다.
 
 ## 화면 호출과 기능 조회

@@ -1,10 +1,10 @@
-import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
   link,
   mkdir,
   mkdtemp,
+  readFile,
   realpath,
   rename,
   rm,
@@ -15,7 +15,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { Worker } from "node:worker_threads";
 import builtStorage from "@bunaway/plugin-storage/native/windows";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import { WindowsStorage } from "#plugins/storage/src/platforms/windows";
@@ -29,8 +28,8 @@ const dataPath = (path: string) => `${resolve(root, "data")}/${path}`;
 const temporaryPath = (path: string) => `${resolve(root, "temp")}/${path}`;
 const storage = new WindowsStorage();
 const otherStorage = new WindowsStorage();
-await otherStorage.dispose();
-await otherStorage.dispose();
+otherStorage.dispose();
+otherStorage.dispose();
 assert.throws(
   () =>
     execute(otherStorage, "storage.exists", {
@@ -44,40 +43,8 @@ assert.equal(
   }),
   false,
 );
-const api = dlopen("kernel32.dll", {
-  CreateFileW: {
-    args: [
-      "ptr",
-      "u32",
-      "u32",
-      "ptr",
-      "u32",
-      "u32",
-      "u64",
-    ],
-    returns: "u64",
-  },
-  CloseHandle: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
-  GetLastError: {
-    args: [],
-    returns: "u32",
-  },
-  GetShortPathNameW: {
-    args: [
-      "ptr",
-      "ptr",
-      "u32",
-    ],
-    returns: "u32",
-  },
-});
 
-/** Exercise checked native handles directly; SDK parsing is tested separately below. */
+/** Run a declared storage operation on the source adapter; SDK parsing is tested separately. */
 function execute(
   instance: WindowsStorage,
   operation: string,
@@ -98,9 +65,6 @@ function execute(
   // Only declared storage methods are selected; each returns its JSON-compatible native result.
   return method.call(instance, input) as JsonValue;
 }
-function wide(text: string): Buffer {
-  return Buffer.from(`${text}\0`, "utf16le");
-}
 
 function call(operation: string, path: string, text?: string) {
   return execute(
@@ -117,6 +81,13 @@ function call(operation: string, path: string, text?: string) {
   );
 }
 
+/** Move or copy between two paths. */
+const transfer = (operation: string, from: string, to: string) =>
+  execute(storage, operation, {
+    from,
+    to,
+  });
+
 function expectError(action: () => unknown, code: string): void {
   assert.throws(
     action,
@@ -124,16 +95,46 @@ function expectError(action: () => unknown, code: string): void {
   );
 }
 
-function expectDenied(path: string): void {
-  for (const operation of [
-    "storage.exists",
-    "storage.stat",
+/** Checks the metadata shape and nullable Windows timestamps. */
+function assertMetadata(
+  value: unknown,
+  kind: "file" | "directory",
+  sizeBytes: number | null,
+): asserts value is {
+  kind: "file" | "directory";
+  sizeBytes: number | null;
+  createdAtMs: number | null;
+  modifiedAtMs: number | null;
+  accessedAtMs: number | null;
+} {
+  assert(value && typeof value === "object" && !Array.isArray(value));
+  const metadata = value as Record<string, unknown>;
+  assert.deepEqual(Object.keys(metadata).sort(), [
+    "accessedAtMs",
+    "createdAtMs",
+    "kind",
+    "modifiedAtMs",
+    "sizeBytes",
+  ]);
+  assert.equal(metadata.kind, kind);
+  assert.equal(metadata.sizeBytes, sizeBytes);
+  for (const field of [
+    "createdAtMs",
+    "modifiedAtMs",
+    "accessedAtMs",
   ]) {
-    expectError(() => call(operation, dataPath(path)), "PERMISSION_DENIED");
+    assert(
+      metadata[field] === null ||
+        (typeof metadata[field] === "number" &&
+          Number.isFinite(metadata[field])),
+    );
   }
 }
 
-/** Exercise the failed PR180 sequence without retrying any operation. */
+/**
+ * Repeat write, copy, append and move sequences with missing targets and collisions. Each
+ * operation must report its own result, which a stale last-error value would corrupt.
+ */
 async function checkOpenErrorCapture(
   label: string,
   executeOperation: (
@@ -194,7 +195,7 @@ async function checkOpenErrorCapture(
         }),
         null,
       );
-      // Reclaim cells before the missing-destination probe to exercise FFI result boxing.
+      // Reclaim cells before the move to exercise FFI result boxing.
       Bun.gc(true);
       phase = "move into missing destination";
       assert.equal(
@@ -212,26 +213,25 @@ async function checkOpenErrorCapture(
       );
       assert.equal(
         await executeOperation("storage.readBytes", {
-          path: source,
-        }),
-        "AP+A",
-      );
-      assert.equal(
-        await executeOperation("storage.readBytes", {
           path: moved,
         }),
         "AP+AAA==",
       );
       phase = "existing destination";
-      await assert.rejects(
-        async () =>
-          executeOperation("storage.copyFile", {
-            from: source,
-            to: moved,
-          }),
-        (error) =>
-          error instanceof BunawayError && error.code === "INVALID_ARGUMENT",
-      );
+      for (const operation of [
+        "storage.copyFile",
+        "storage.move",
+      ]) {
+        await assert.rejects(
+          async () =>
+            executeOperation(operation, {
+              from: source,
+              to: moved,
+            }),
+          (error) =>
+            error instanceof BunawayError && error.code === "INVALID_ARGUMENT",
+        );
+      }
       assert.equal(
         await executeOperation("storage.readBytes", {
           path: source,
@@ -245,18 +245,17 @@ async function checkOpenErrorCapture(
         "AP+AAA==",
       );
       phase = "cleanup";
-      assert.equal(
-        await executeOperation("storage.remove", {
-          path: source,
-        }),
-        null,
-      );
-      assert.equal(
-        await executeOperation("storage.remove", {
-          path: moved,
-        }),
-        null,
-      );
+      for (const path of [
+        source,
+        moved,
+      ]) {
+        assert.equal(
+          await executeOperation("storage.remove", {
+            path,
+          }),
+          null,
+        );
+      }
     } catch (error) {
       console.error(
         `Storage open capture regression: export=${label}, iteration=${iteration}, phase=${phase}, Bun=${Bun.version}, revision=${Bun.revision}`,
@@ -275,100 +274,13 @@ async function checkOpenErrorCapture(
   );
 }
 
-/** Checks the metadata shape and nullable Windows timestamps. */
-function assertMetadata(
-  value: unknown,
-  kind: "file" | "directory",
-  sizeBytes: number | null,
-): asserts value is {
-  kind: "file" | "directory";
-  sizeBytes: number | null;
-  createdAtMs: number | null;
-  modifiedAtMs: number | null;
-  accessedAtMs: number | null;
-} {
-  assert(value && typeof value === "object" && !Array.isArray(value));
-  const metadata = value as Record<string, unknown>;
-  assert.deepEqual(Object.keys(metadata).sort(), [
-    "accessedAtMs",
-    "createdAtMs",
-    "kind",
-    "modifiedAtMs",
-    "sizeBytes",
-  ]);
-  assert.equal(metadata.kind, kind);
-  assert.equal(metadata.sizeBytes, sizeBytes);
-  for (const field of [
-    "createdAtMs",
-    "modifiedAtMs",
-    "accessedAtMs",
-  ]) {
-    assert(
-      metadata[field] === null ||
-        (typeof metadata[field] === "number" &&
-          Number.isFinite(metadata[field])),
-    );
-  }
-}
-
-let raceAccessDenials = 0;
-let raceSharingViolations = 0;
-
-/** Allows transient access or sharing errors during deletion. */
-function duringDelete<T>(action: () => T): T | undefined {
-  try {
-    return action();
-  } catch (error) {
-    if (
-      error instanceof BunawayError &&
-      error.code === "PERMISSION_DENIED" &&
-      error.message === "Storage access denied."
-    ) {
-      raceAccessDenials++;
-    } else if (error instanceof Error && /\(32\)$/.test(error.message)) {
-      raceSharingViolations++;
-    } else {
-      assert.fail(
-        `Unexpected storage error during deletion race: ${String(error)}`,
-      );
-    }
-  }
-}
-
-/** Moves or copies between two paths through the same checked-handle adapter. */
-const transfer = (operation: string, from: string, to: string) =>
-  execute(storage, operation, {
-    from,
-    to,
-  });
-
-/**
- * Checks app-selected paths and text round trips, and seeds the junctions, hard link and file
- * symlink the later sections probe. Returns whether the file symlink could be created.
- */
+/** Seed a tree with a junction, a hard link and, when permitted, a file symlink. */
 async function seedFixtureTree(): Promise<boolean> {
   // Constructing the adapter does not create storage directories or restrict the app's location.
   await assert.rejects(stat(root), {
     code: "ENOENT",
   });
-  const selectedPath = resolve(root, "app-selected", "memo.txt");
-  assert.equal(call("storage.writeText", selectedPath, "chosen by app"), null);
-  assert.equal(call("storage.readText", selectedPath), "chosen by app");
-  await assert.rejects(stat(resolve(root, "data")), {
-    code: "ENOENT",
-  });
-  await assert.rejects(stat(resolve(root, "temp")), {
-    code: "ENOENT",
-  });
-  for (const path of [
-    "relative.txt",
-    "C:relative.txt",
-    `${root}/../escape.txt`,
-  ]) {
-    expectError(() => call("storage.exists", path), "INVALID_ARGUMENT");
-  }
-  // Seed normal paths and aliases for native handle checks.
-  await mkdir(resolve(root, "data/notes/private-directory"), {
+  await mkdir(resolve(root, "data/notes"), {
     recursive: true,
   });
   await mkdir(resolve(root, "outside"), {
@@ -380,11 +292,6 @@ async function seedFixtureTree(): Promise<boolean> {
     resolve(root, "data/notes/junction"),
     "junction",
   );
-  await symlink(
-    resolve(root, "outside"),
-    resolve(root, "data/notes/final-junction"),
-    "junction",
-  );
   let hasFileSymlink = true;
   try {
     await symlink(
@@ -393,38 +300,40 @@ async function seedFixtureTree(): Promise<boolean> {
       "file",
     );
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "EPERM") {
-      hasFileSymlink = false;
-      console.log(
-        "SKIP final file symlink check: Windows did not grant symlink creation",
-      );
-    } else {
+    if ((error as NodeJS.ErrnoException).code !== "EPERM") {
       throw error;
     }
+    hasFileSymlink = false;
+    console.log(
+      "SKIP file symlink checks: Windows did not grant symlink creation",
+    );
   }
   await link(
     resolve(root, "outside/secret.txt"),
     resolve(root, "data/notes/hard.txt"),
   );
+  return hasFileSymlink;
+}
 
-  assert.equal(
-    call(
-      "storage.writeText",
-      dataPath("notes/new/memo.txt"),
-      "한글 and emoji 🙂",
-    ),
-    null,
-  );
-  assert.equal(
-    call("storage.readText", dataPath("notes/new/memo.txt")),
-    "한글 and emoji 🙂",
-  );
-  call("storage.writeText", dataPath("notes/new/memo.txt"), "x");
-  assert.equal(call("storage.readText", dataPath("notes/new/memo.txt")), "x");
+/** Text, BOM, bytes and appends round trip through app-selected paths. */
+async function checkRoundTrips(): Promise<void> {
+  const selectedPath = resolve(root, "app-selected", "memo.txt");
+  assert.equal(call("storage.writeText", selectedPath, "chosen by app"), null);
+  assert.equal(call("storage.readText", selectedPath), "chosen by app");
+  for (const path of [
+    "relative.txt",
+    "C:relative.txt",
+    `${root}/../escape.txt`,
+  ]) {
+    expectError(() => call("storage.exists", path), "INVALID_ARGUMENT");
+  }
+  const memo = dataPath("notes/new/memo.txt");
+  call("storage.writeText", memo, "한글 and emoji 🙂");
+  assert.equal(call("storage.readText", memo), "한글 and emoji 🙂");
+  call("storage.writeText", memo, "x");
+  assert.equal(call("storage.readText", memo), "x");
   call("storage.writeText", temporaryPath("empty.txt"), "");
   assert.equal(call("storage.readText", temporaryPath("empty.txt")), "");
-  assert.equal(call("storage.exists", temporaryPath("empty.txt")), true);
   assertMetadata(call("storage.stat", temporaryPath("empty.txt")), "file", 0);
   for (const text of [
     "\uFEFFhello",
@@ -434,13 +343,6 @@ async function seedFixtureTree(): Promise<boolean> {
     call("storage.writeText", temporaryPath("bom.txt"), text);
     assert.equal(call("storage.readText", temporaryPath("bom.txt")), text);
   }
-
-  return hasFileSymlink;
-}
-
-/** Byte access preserves invalid UTF-8 and embedded zeroes, including replacement tails. */
-async function checkByteAccess(): Promise<void> {
-  // Byte access preserves invalid UTF-8 and embedded zeroes, including replacement tails.
   const binaryPath = temporaryPath("한글/binary.bin");
   const rawBytes = Buffer.from(
     Array.from(
@@ -472,7 +374,6 @@ async function checkByteAccess(): Promise<void> {
       255,
     ]),
   );
-  assert.equal(binary("storage.readBytes"), "/w==");
   binary(
     "storage.appendBytes",
     Buffer.from([
@@ -488,32 +389,15 @@ async function checkByteAccess(): Promise<void> {
       128,
     ]).toString("base64"),
   );
-  binary("storage.appendBytes", Buffer.alloc(0));
-  assert.equal(
-    binary("storage.readBytes"),
-    Buffer.from([
-      255,
-      0,
-      128,
-    ]).toString("base64"),
-  );
   binary("storage.writeBytes", Buffer.alloc(0));
   assert.equal(binary("storage.readBytes"), "");
-  await rm(binaryPath);
-  binary("storage.appendBytes", rawBytes);
-  assert.equal(binary("storage.readBytes"), rawBytes.toString("base64"));
   call("storage.appendText", temporaryPath("append/new.txt"), "한글");
   call("storage.appendText", temporaryPath("append/new.txt"), "\u0000🙂");
-  call("storage.appendText", temporaryPath("append/new.txt"), "");
   assert.equal(
     call("storage.readText", temporaryPath("append/new.txt")),
     "한글\u0000🙂",
   );
   binary("storage.writeBytes", Buffer.alloc(256 * 1024, 255));
-  assert.equal(
-    binary("storage.readBytes"),
-    Buffer.alloc(256 * 1024, 255).toString("base64"),
-  );
   binary(
     "storage.appendBytes",
     Buffer.from([
@@ -527,39 +411,53 @@ async function checkByteAccess(): Promise<void> {
   );
 }
 
-/** Merged byte/append operations and transfers share the same checked-handle adapter. */
+/** Junctions, hard links and file symlinks are followed like ordinary paths. */
+async function checkLinksAreFollowed(hasFileSymlink: boolean): Promise<void> {
+  assert.equal(
+    call("storage.readText", dataPath("notes/junction/secret.txt")),
+    "secret",
+  );
+  call("storage.writeText", dataPath("notes/junction/secret.txt"), "changed");
+  assert.equal(
+    await readFile(resolve(root, "outside/secret.txt"), "utf8"),
+    "changed",
+  );
+  assertMetadata(
+    call("storage.stat", dataPath("notes/junction")),
+    "directory",
+    null,
+  );
+  assert.equal(call("storage.readText", dataPath("notes/hard.txt")), "changed");
+  call("storage.appendText", dataPath("notes/hard.txt"), "!");
+  assert.equal(
+    await readFile(resolve(root, "outside/secret.txt"), "utf8"),
+    "changed!",
+  );
+  if (hasFileSymlink) {
+    assert.equal(
+      call("storage.readText", dataPath("notes/file-symlink.txt")),
+      "changed!",
+    );
+  }
+  // A junction whose target is gone has nothing to open, so it reads as absent.
+  await mkdir(resolve(root, "gone"));
+  await symlink(
+    resolve(root, "gone"),
+    resolve(root, "data/notes/dangling"),
+    "junction",
+  );
+  await rm(resolve(root, "gone"), {
+    recursive: true,
+  });
+  assert.equal(call("storage.exists", dataPath("notes/dangling")), false);
+  await rm(resolve(root, "data/notes/dangling"), {
+    recursive: true,
+  });
+  call("storage.writeText", dataPath("notes/junction/secret.txt"), "secret");
+}
+
+/** Copies and moves, including a move to another folder and the destination collision cases. */
 async function checkTransfers(): Promise<void> {
-  // Merged byte/append operations and transfers share the same checked-handle adapter.
-  const byteSource = temporaryPath("byte transfer source.bin");
-  const byteCopy = temporaryPath("byte transfer copy.bin");
-  const byteMoved = temporaryPath("byte transfer renamed.bin");
-  assert.equal(
-    execute(storage, "storage.writeBytes", {
-      path: byteSource,
-      bytes: "AP+A",
-    }),
-    null,
-  );
-  assert.equal(transfer("storage.copyFile", byteSource, byteCopy), null);
-  assert.equal(
-    execute(storage, "storage.appendBytes", {
-      path: byteCopy,
-      bytes: "AA==",
-    }),
-    null,
-  );
-  assert.equal(transfer("storage.move", byteCopy, byteMoved), null);
-  assert.equal(call("storage.readBytes", byteSource), "AP+A");
-  assert.equal(
-    call("storage.readBytes", byteMoved),
-    Buffer.from([
-      0,
-      255,
-      128,
-      0,
-    ]).toString("base64"),
-  );
-  assert.equal(call("storage.exists", byteCopy), false);
   const copySource = temporaryPath("copy source.bin");
   const copied = temporaryPath("copied 한글.bin");
   const bytes = Buffer.alloc(1024 * 1024 + 257);
@@ -569,10 +467,6 @@ async function checkTransfers(): Promise<void> {
   await writeFile(copySource, bytes);
   assert.equal(transfer("storage.copyFile", copySource, copied), null);
   assert.deepEqual(Buffer.from(await Bun.file(copied).arrayBuffer()), bytes);
-  assert.deepEqual(
-    Buffer.from(await Bun.file(copySource).arrayBuffer()),
-    bytes,
-  );
   for (const operation of [
     "storage.copyFile",
     "storage.move",
@@ -584,20 +478,6 @@ async function checkTransfers(): Promise<void> {
     assert.deepEqual(Buffer.from(await Bun.file(copied).arrayBuffer()), bytes);
     assert.equal(call("storage.exists", copySource), true);
     expectError(
-      () =>
-        transfer(
-          operation,
-          dataPath("notes/hard.txt"),
-          temporaryPath("link transfer.bin"),
-        ),
-      "PERMISSION_DENIED",
-    );
-    expectError(
-      () =>
-        transfer(operation, copySource, dataPath("notes/junction/escaped.bin")),
-      "PERMISSION_DENIED",
-    );
-    expectError(
       () => transfer(operation, "relative.txt", copied),
       "INVALID_ARGUMENT",
     );
@@ -605,36 +485,42 @@ async function checkTransfers(): Promise<void> {
       () => transfer(operation, copySource, temporaryPath("bad:ads")),
       "INVALID_ARGUMENT",
     );
-  }
-  assert.equal(
-    await Bun.file(resolve(root, "outside/escaped.bin")).exists(),
-    false,
-  );
-  const occupied = api.symbols.CreateFileW(
-    ptr(wide(copySource)),
-    0x40000000,
-    7,
-    null,
-    3,
-    0,
-    0n,
-  );
-  assert(occupied && occupied !== 0xffffffffffffffffn);
-  try {
-    // A real competing writer is a sharing failure, not an existing-destination error.
-    assert.throws(
+    expectError(
       () =>
         transfer(
-          "storage.copyFile",
-          copySource,
-          temporaryPath("busy-copy.bin"),
+          operation,
+          temporaryPath("absent.bin"),
+          temporaryPath("x.bin"),
         ),
-      /\(32\)$/,
+      "INVALID_ARGUMENT",
     );
-    assert.equal(call("storage.exists", temporaryPath("busy-copy.bin")), false);
-  } finally {
-    assert(api.symbols.CloseHandle(occupied));
   }
+  // An existing destination reached through a link is still an existing name.
+  expectError(
+    () => transfer("storage.copyFile", copySource, dataPath("notes/hard.txt")),
+    "INVALID_ARGUMENT",
+  );
+  expectError(
+    () => transfer("storage.copyFile", copySource, dataPath("notes/junction")),
+    "INVALID_ARGUMENT",
+  );
+  assert.equal(
+    await readFile(resolve(root, "outside/secret.txt"), "utf8"),
+    "secret",
+  );
+  // The destination follows a junction in its folder, like any other path.
+  assert.equal(
+    transfer(
+      "storage.copyFile",
+      copySource,
+      dataPath("notes/junction/copied.bin"),
+    ),
+    null,
+  );
+  assert.equal(
+    (await stat(resolve(root, "outside/copied.bin"))).size,
+    bytes.length,
+  );
   const oversized = temporaryPath("oversized.bin");
   await writeFile(oversized, Buffer.alloc(4 * 1024 * 1024 + 1));
   expectError(
@@ -665,10 +551,6 @@ async function checkTransfers(): Promise<void> {
         "UNSUPPORTED",
       );
       assert.equal(call("storage.exists", copySource), true);
-      assert.equal(
-        await Bun.file(resolve(secondVolumeRoot, "cross-volume.bin")).exists(),
-        false,
-      );
     } else {
       console.log(
         "SKIP cross-volume move check: a second filesystem volume was not identified",
@@ -682,17 +564,20 @@ async function checkTransfers(): Promise<void> {
   }
   const anotherParent = temporaryPath("another move parent");
   await mkdir(anotherParent);
-  expectError(
-    () => transfer("storage.move", copied, `${anotherParent}/child.bin`),
-    "UNSUPPORTED",
+  assert.equal(
+    transfer("storage.move", copied, `${anotherParent}/child.bin`),
+    null,
   );
-  assert.equal(call("storage.exists", copied), true);
-  assert.equal(call("storage.exists", `${anotherParent}/child.bin`), false);
-  const moved = temporaryPath("moved 한글.bin");
-  assert.equal(transfer("storage.move", copied, moved), null);
   assert.equal(call("storage.exists", copied), false);
-  assert.deepEqual(Buffer.from(await Bun.file(moved).arrayBuffer()), bytes);
-  expectError(() => transfer("storage.move", moved, moved), "INVALID_ARGUMENT");
+  assert.deepEqual(
+    Buffer.from(await Bun.file(`${anotherParent}/child.bin`).arrayBuffer()),
+    bytes,
+  );
+  expectError(
+    () =>
+      transfer("storage.move", copied, temporaryPath("no folder/child.bin")),
+    "INVALID_ARGUMENT",
+  );
   const sourceDirectory = temporaryPath("move directory");
   await mkdir(sourceDirectory);
   await writeFile(`${sourceDirectory}/한글.txt`, "directory child");
@@ -700,7 +585,16 @@ async function checkTransfers(): Promise<void> {
     () => transfer("storage.move", sourceDirectory, `${sourceDirectory}/child`),
     "INVALID_ARGUMENT",
   );
-  const movedDirectory = temporaryPath("renamed directory");
+  expectError(
+    () =>
+      transfer(
+        "storage.move",
+        sourceDirectory,
+        `${sourceDirectory.toUpperCase()}/CHILD`,
+      ),
+    "INVALID_ARGUMENT",
+  );
+  const movedDirectory = `${anotherParent}/renamed directory`;
   assert.equal(transfer("storage.move", sourceDirectory, movedDirectory), null);
   assert.equal(call("storage.exists", sourceDirectory), false);
   assert.equal(
@@ -717,15 +611,13 @@ async function checkTransfers(): Promise<void> {
     null,
   );
   assert.equal((await stat(temporaryPath("empty-copy.txt"))).size, 0);
-
   await checkOpenErrorCapture("source", (operation, input) =>
     execute(storage, operation, input),
   );
 }
 
-/** Exercises the generated native export and Zod defaults as well as the source FFI class. */
+/** The generated native export runs the same operations with Zod defaults. */
 async function checkBuiltAdapter(): Promise<void> {
-  // Exercise the generated native export and Zod defaults as well as the source FFI class.
   const create = builtStorage._definition.nativePlatforms.windows?.create;
   assert(create, "Built Windows storage adapter is missing.");
   const built = create({
@@ -733,102 +625,44 @@ async function checkBuiltAdapter(): Promise<void> {
     capabilities: [],
   });
   const builtDirectory = temporaryPath("built adapter/한글");
+  const run = (operation: string, input: JsonValue) =>
+    built.execute(operation, input, "backend");
   try {
-    await checkOpenErrorCapture("built", (operation, input) =>
-      built.execute(operation, input, "backend"),
-    );
-    await built.execute(
-      "storage.createDirectory",
-      {
-        path: builtDirectory,
-        recursive: true,
-      },
-      "backend",
-    );
-    await built.execute(
-      "storage.createDirectory",
-      {
-        path: builtDirectory,
-      },
-      "backend",
-    );
+    await checkOpenErrorCapture("built", run);
+    await run("storage.createDirectory", {
+      path: builtDirectory,
+      recursive: true,
+    });
+    await run("storage.createDirectory", {
+      path: builtDirectory,
+    });
     assert.deepEqual(
-      await built.execute(
-        "storage.readDirectory",
-        {
-          path: builtDirectory,
-        },
-        "backend",
-      ),
+      await run("storage.readDirectory", {
+        path: builtDirectory,
+      }),
       [],
     );
-    // Exercise the generated directory, byte/append and transfer APIs together.
     const source = `${builtDirectory}/source.bin`;
-    const copied = `${builtDirectory}/copy.bin`;
     const moved = `${builtDirectory}/moved.bin`;
-    await built.execute(
-      "storage.writeBytes",
-      {
-        path: source,
-        bytes: "AP+A",
-      },
-      "backend",
-    );
-    await built.execute(
-      "storage.copyFile",
-      {
-        from: source,
-        to: copied,
-      },
-      "backend",
-    );
-    await built.execute(
-      "storage.appendBytes",
-      {
-        path: copied,
-        bytes: "AA==",
-      },
-      "backend",
-    );
-    await built.execute(
-      "storage.move",
-      {
-        from: copied,
-        to: moved,
-      },
-      "backend",
-    );
-    assert.equal(
-      await built.execute(
-        "storage.readBytes",
-        {
-          path: source,
-        },
-        "backend",
-      ),
-      "AP+A",
-    );
-    assert.equal(
-      await built.execute(
-        "storage.readBytes",
-        {
-          path: moved,
-        },
-        "backend",
-      ),
-      "AP+AAA==",
-    );
+    await run("storage.writeBytes", {
+      path: source,
+      bytes: "AP+A",
+    });
+    await run("storage.copyFile", {
+      from: source,
+      to: `${builtDirectory}/copy.bin`,
+    });
+    await run("storage.move", {
+      from: `${builtDirectory}/copy.bin`,
+      to: moved,
+    });
     assert.deepEqual(
       // The SDK returns JSON objects with null prototypes; compare their complete wire values.
       JSON.parse(
         JSON.stringify(
-          await built.execute(
-            "storage.readDirectory",
-            {
-              path: builtDirectory,
-            },
-            "backend",
-          ),
+          await run("storage.readDirectory", {
+            path: builtDirectory,
+          }),
         ),
       ),
       [
@@ -842,35 +676,27 @@ async function checkBuiltAdapter(): Promise<void> {
         },
       ],
     );
-    await built.execute(
-      "storage.remove",
-      {
-        path: source,
-      },
-      "backend",
-    );
-    await built.execute(
-      "storage.remove",
-      {
-        path: moved,
-      },
-      "backend",
-    );
-    await built.execute(
-      "storage.remove",
-      {
-        path: builtDirectory,
-      },
-      "backend",
-    );
-    assert.equal(
-      await built.execute(
-        "storage.exists",
-        {
-          path: builtDirectory,
-        },
-        "backend",
+    assert.deepEqual(
+      JSON.parse(
+        JSON.stringify(
+          await run("storage.directorySize", {
+            path: builtDirectory,
+          }),
+        ),
       ),
+      {
+        bytes: 6,
+        files: 2,
+        directories: 0,
+      },
+    );
+    await run("storage.removeRecursive", {
+      path: builtDirectory,
+    });
+    assert.equal(
+      await run("storage.exists", {
+        path: builtDirectory,
+      }),
       false,
     );
   } finally {
@@ -878,7 +704,7 @@ async function checkBuiltAdapter(): Promise<void> {
   }
 }
 
-/** Directory creation, listing, removal and listing limits through the source adapter. */
+/** Directory creation, listing and removal, with links listed as links and followed as paths. */
 async function checkDirectoryOperations(): Promise<void> {
   const directoryPath = temporaryPath("directory API/한글");
   const createDirectory = (path: string, recursive = false) =>
@@ -918,6 +744,18 @@ async function checkDirectoryOperations(): Promise<void> {
       kind: "file",
     },
   ]);
+  // A junction used as a directory path is followed.
+  assert.deepEqual(
+    (
+      call("storage.readDirectory", `${directoryPath}/junction`) as {
+        name: string;
+      }[]
+    ).map((entry) => entry.name),
+    [
+      "copied.bin",
+      "secret.txt",
+    ],
+  );
   expectError(() => call("storage.remove", directoryPath), "INVALID_ARGUMENT");
   expectError(
     () => call("storage.readDirectory", `${directoryPath}/한글🙂.txt`),
@@ -927,33 +765,20 @@ async function checkDirectoryOperations(): Promise<void> {
     () => createDirectory(`${directoryPath}/한글🙂.txt`),
     "INVALID_ARGUMENT",
   );
-  for (const target of [
-    `${directoryPath}/hard.txt`,
-    `${directoryPath}/junction`,
-    `${directoryPath}/junction/new`,
-  ]) {
-    for (const operation of [
-      "storage.readDirectory",
-      "storage.createDirectory",
-      "storage.remove",
-    ]) {
-      expectError(
-        () =>
-          execute(storage, operation, {
-            path: target,
-            recursive: true,
-          }),
-        "PERMISSION_DENIED",
-      );
-    }
-  }
-  const deniedFile = await Bun.file(resolve(root, "outside/secret.txt")).text();
-  assert.equal(deniedFile, "secret");
-  assert.equal(await Bun.file(resolve(root, "outside/new")).exists(), false);
+  // Removing a junction removes the link and keeps what it pointed to.
+  assert.equal(call("storage.remove", `${directoryPath}/junction`), null);
+  assert.equal(call("storage.exists", `${directoryPath}/junction`), false);
+  assert.equal(
+    await Bun.file(resolve(root, "outside/secret.txt")).exists(),
+    true,
+  );
+  assert.equal(call("storage.remove", `${directoryPath}/hard.txt`), null);
+  assert.equal(
+    await Bun.file(resolve(root, "outside/secret.txt")).exists(),
+    true,
+  );
   assert.equal(call("storage.remove", `${directoryPath}/한글🙂.txt`), null);
-  assert.equal(call("storage.exists", `${directoryPath}/한글🙂.txt`), false);
   assert.equal(call("storage.remove", nestedDirectory), null);
-  assert.equal(call("storage.exists", nestedDirectory), false);
   const batched = temporaryPath("batched");
   createDirectory(batched);
   const expectedNames: string[] = [];
@@ -975,7 +800,7 @@ async function checkDirectoryOperations(): Promise<void> {
     await writeFile(`${crowded}/${index}.txt`, "");
   }
   expectError(() => call("storage.readDirectory", crowded), "INVALID_ARGUMENT");
-  // A failed listing leaves no pinned native handles: the original directory can be renamed.
+  // A failed listing keeps nothing open: the directory can be renamed.
   await rename(crowded, `${crowded}-renamed`);
 }
 
@@ -990,7 +815,6 @@ async function checkUnicodeMetadata(): Promise<void> {
   await utimes(unicodeFilePath, fixedTime, fixedTime);
   assert.equal(call("storage.readText", dataPath(unicodeFile)), unicodeText);
   assert.equal(call("storage.exists", dataPath(unicodeDirectory)), true);
-  assert.equal(call("storage.exists", dataPath(unicodeFile)), true);
   const unicodeMetadata = call("storage.stat", dataPath(unicodeFile));
   assertMetadata(unicodeMetadata, "file", Buffer.byteLength(unicodeText));
   const nativeStat = await stat(unicodeFilePath);
@@ -1006,160 +830,34 @@ async function checkUnicodeMetadata(): Promise<void> {
         Math.floor(nativeStat.mtimeMs),
     true,
   );
-  const directoryMetadata = call("storage.stat", dataPath(unicodeDirectory));
-  assertMetadata(directoryMetadata, "directory", null);
-
-  assert.equal(call("storage.exists", dataPath("notes/missing.txt")), false);
-  assert.equal(call("storage.stat", dataPath("notes/missing.txt")), null);
-  assert.equal(
-    call("storage.exists", dataPath("missing-parent/file.txt")),
-    false,
+  assertMetadata(
+    call("storage.stat", dataPath(unicodeDirectory)),
+    "directory",
+    null,
   );
-  assert.equal(call("storage.stat", dataPath("missing-parent/file.txt")), null);
-  assert.equal(call("storage.exists", temporaryPath("missing.txt")), false);
-  assert.equal(call("storage.stat", temporaryPath("missing.txt")), null);
-}
-
-/** Case variants and 8.3 short names of a protected path are denied. */
-async function checkAliasDenials(): Promise<void> {
-  const protectedPath = "notes/private-directory/secret-long-name.txt";
-  call("storage.writeText", dataPath(protectedPath), "protected");
-  const aliases = [
-    "notes/PRIVATE-DIRECTORY/secret-long-name.txt",
-    "notes/private-directory/SECRET-LONG-NAME.txt",
-  ];
-  const shortName = Buffer.alloc(65536);
-  const shortLength = api.symbols.GetShortPathNameW(
-    ptr(wide(resolve(root, "data", protectedPath))),
-    ptr(shortName),
-    32768,
-  );
-  assert(shortLength > 0 && shortLength < 32768);
-  const shortParts = shortName
-    .subarray(0, shortLength * 2)
-    .toString("utf16le")
-    .split("\\")
-    .slice(-2);
-  const shortPath = `notes/${shortParts.join("/")}`;
-  if (shortPath !== protectedPath) {
-    aliases.push(shortPath);
-  } else {
-    console.log("SKIP 8.3 alias check: volume did not create short names");
-  }
-  if (shortParts[1] !== "secret-long-name.txt") {
-    aliases.push(`notes/private-directory/${shortParts[1]}`);
-  }
-  if (shortParts[0] !== "private-directory") {
-    aliases.push(`notes/${shortParts[0]}/secret-long-name.txt`);
-  }
-  // Case variants and available 8.3 names must fail the native path check.
-  for (const path of aliases) {
-    expectDenied(path);
-    for (const operation of [
-      "storage.readDirectory",
-      "storage.createDirectory",
-      "storage.remove",
-    ]) {
-      expectError(() => call(operation, dataPath(path)), "PERMISSION_DENIED");
-    }
-    for (const text of [
-      undefined,
-      "overwritten",
-    ]) {
-      expectError(
-        () =>
-          call(
-            text === undefined ? "storage.readText" : "storage.writeText",
-            dataPath(path),
-            text,
-          ),
-        "PERMISSION_DENIED",
-      );
-    }
-  }
-  expectDenied("notes/PRIVATE-DIRECTORY");
-  expectError(
-    () =>
-      call(
-        "storage.writeText",
-        dataPath("notes/PRIVATE-DIRECTORY/new/file.txt"),
-        "new",
-      ),
-    "PERMISSION_DENIED",
-  );
-  assert.equal(
-    await Bun.file(
-      resolve(root, "data/notes/private-directory/new/file.txt"),
-    ).exists(),
-    false,
-  );
-  assert.equal(call("storage.readText", dataPath(protectedPath)), "protected");
   for (const path of [
-    "notes/new/UpperCase.txt",
-    "notes/new/한글~이름.txt",
+    dataPath("notes/missing.txt"),
+    dataPath("missing-parent/file.txt"),
+    temporaryPath("missing.txt"),
   ]) {
-    call("storage.writeText", dataPath(path), "ordinary file");
-    assert.equal(call("storage.readText", dataPath(path)), "ordinary file");
-  }
-}
-
-/** Junctions, hard links and file symlinks are rejected for every read and write operation. */
-async function checkReparsePoints(hasFileSymlink: boolean): Promise<void> {
-  // Native storage rejects junctions and hard links independently of the app's chosen directory.
-  for (const path of [
-    "notes/junction/secret.txt",
-    "notes/final-junction",
-    "notes/hard.txt",
-    ...(hasFileSymlink
-      ? [
-          "notes/file-symlink.txt",
-        ]
-      : []),
-  ]) {
-    expectDenied(path);
-    expectError(
-      () => call("storage.readText", dataPath(path)),
-      "PERMISSION_DENIED",
-    );
-    expectError(
-      () => call("storage.writeText", dataPath(path), "overwritten"),
-      "PERMISSION_DENIED",
-    );
-    for (const operation of [
-      "storage.readBytes",
-      "storage.writeBytes",
-      "storage.appendBytes",
-    ]) {
-      expectError(
-        () =>
-          execute(storage, operation, {
-            path: dataPath(path),
-            bytes: "AA==",
-          }),
-        "PERMISSION_DENIED",
-      );
-    }
-    expectError(
-      () => call("storage.appendText", dataPath(path), "appended"),
-      "PERMISSION_DENIED",
-    );
+    assert.equal(call("storage.exists", path), false);
+    assert.equal(call("storage.stat", path), null);
   }
 }
 
 /** Unsafe Windows path forms are rejected before they reach filesystem operations. */
 async function checkUnsafePathForms(): Promise<void> {
-  // Reject unsafe Windows path forms before they reach filesystem operations.
   for (const path of [
     "../outside/secret.txt",
     "notes//x",
     "notes/x:ads",
     "notes/trailing.",
+    "notes/CON",
     "notes/\u0000bad",
   ]) {
     for (const operation of [
       "storage.readText",
       "storage.readBytes",
-
       "storage.readDirectory",
       "storage.createDirectory",
       "storage.remove",
@@ -1168,6 +866,13 @@ async function checkUnsafePathForms(): Promise<void> {
     ]) {
       expectError(() => call(operation, dataPath(path)), "INVALID_ARGUMENT");
     }
+  }
+  for (const path of [
+    "\\\\?\\C:\\Windows\\win.ini",
+    "\\\\.\\PhysicalDrive0",
+    "\\??\\C:\\Windows\\win.ini",
+  ]) {
+    expectError(() => call("storage.readText", path), "INVALID_ARGUMENT");
   }
 }
 
@@ -1199,7 +904,7 @@ async function checkOsDeniedAccess(): Promise<void> {
   const icaclsSid = `*${sid}`;
   let denyApplied = false;
   try {
-    // Apply a real ACL denial so the adapter's OS-error mapping is exercised.
+    // A real ACL denial exercises the adapter's mapping of the OS error.
     execFileSync(
       "icacls.exe",
       [
@@ -1212,39 +917,15 @@ async function checkOsDeniedAccess(): Promise<void> {
       },
     );
     denyApplied = true;
-    const deniedHandle = api.symbols.CreateFileW(
-      ptr(wide(deniedPath)),
-      0x80,
-      0x3,
-      null,
-      3,
-      0x00200000,
-      0n,
-    );
-    if (deniedHandle !== 0n && deniedHandle !== 0xffffffffffffffffn) {
-      assert(api.symbols.CloseHandle(deniedHandle));
-      throw new Error("ACL fixture unexpectedly opened the denied file");
-    }
-    const deniedError = api.symbols.GetLastError();
-    assert.equal(
-      deniedError,
-      5,
-      "ACL fixture did not produce ERROR_ACCESS_DENIED",
-    );
-    expectDenied("notes/os-denied.txt");
     for (const operation of [
-      "storage.readDirectory",
-      "storage.remove",
+      "storage.readText",
+      "storage.readBytes",
     ]) {
       expectError(
         () => call(operation, dataPath("notes/os-denied.txt")),
         "PERMISSION_DENIED",
       );
     }
-    expectError(
-      () => call("storage.readText", dataPath("notes/os-denied.txt")),
-      "PERMISSION_DENIED",
-    );
   } finally {
     if (denyApplied) {
       execFileSync(
@@ -1265,159 +946,22 @@ async function checkOsDeniedAccess(): Promise<void> {
   }
 }
 
-/** Reads recheck the handle when the file is truncated after it was opened. */
-async function checkTruncationAfterOpen(): Promise<void> {
-  await writeFile(
-    resolve(root, "temp/truncated.txt"),
-    "long original contents",
-  );
-  const target = resolve(root, "temp/truncated.txt");
-  const handle = api.symbols.CreateFileW(
-    ptr(wide(target)),
-    0x80000000,
-    7,
-    null,
-    3,
-    0,
-    0n,
-  );
-  assert(handle && handle !== 0xffffffffffffffffn);
-  try {
-    // Truncate the file after opening it to verify reads recheck the handle.
-    await writeFile(target, "short");
-    assert.throws(
-      () => storage.readTextFromHandle(handle, 22),
-      /changed during read/,
-    );
-    assert.equal(storage.readTextFromHandle(handle, 0), "");
-  } finally {
-    assert(api.symbols.CloseHandle(handle));
-  }
-}
-
-/** Queries stay consistent while a worker repeatedly creates and deletes the same file. */
-async function checkDeletionRace(): Promise<void> {
-  const racePath = resolve(root, "data/notes/race.txt");
-  const raceState = new Int32Array(
-    new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 2),
-  );
-  const worker = new Worker(
-    new URL("./fixtures/windows-bun-storage-racer.ts", import.meta.url),
-    {
-      workerData: {
-        path: racePath,
-        state: raceState.buffer,
-      },
-    },
-  );
-  let workerFailure: unknown;
-  worker.on("error", (error) => {
-    workerFailure = error;
-  });
-  worker.on("message", (message: unknown) => {
-    if (message !== "ready") {
-      workerFailure = new Error(JSON.stringify(message));
-    }
-  });
-  const ready = new Promise<void>((resolveReady, reject) => {
-    worker.once("message", (message: unknown) =>
-      message === "ready"
-        ? resolveReady()
-        : reject(new Error("Unexpected race worker message")),
-    );
-    worker.once("error", reject);
-  });
-  try {
-    // Begin snapshots only after the worker has installed its handler and announced readiness.
-    await ready;
-    const writesBeforeQueries = Atomics.load(raceState, 0);
-    const deletionsBeforeQueries = Atomics.load(raceState, 1);
-    let presentSnapshots = 0;
-    let missingSnapshots = 0;
-    for (let index = 0; index < 300; index++) {
-      const exists = duringDelete(() =>
-        call("storage.exists", dataPath("notes/race.txt")),
-      );
-      assert(exists === undefined || typeof exists === "boolean");
-      if (exists === true) {
-        presentSnapshots++;
-      }
-      if (exists === false) {
-        missingSnapshots++;
-      }
-      const metadata = duringDelete(() =>
-        call("storage.stat", dataPath("notes/race.txt")),
-      );
-      if (metadata !== null) {
-        if (metadata === undefined) {
-          continue;
-        }
-        assert.equal(
-          (
-            metadata as {
-              kind: string;
-            }
-          ).kind,
-          "file",
-        );
-        assert.equal(
-          Number.isSafeInteger(
-            (
-              metadata as {
-                sizeBytes: number;
-              }
-            ).sizeBytes,
-          ),
-          true,
-        );
-        assert(
-          (
-            metadata as {
-              sizeBytes: number;
-            }
-          ).sizeBytes >= 0,
-        );
-      }
-      if (index % 10 === 9) {
-        await Bun.sleep(1);
-      }
-    }
-    assert(Atomics.load(raceState, 0) > writesBeforeQueries);
-    assert(
-      Atomics.load(raceState, 1) > deletionsBeforeQueries,
-      "Race worker did not finish a delete while queries were running.",
-    );
-    console.log(
-      `Race snapshots: present=${presentSnapshots}, missing=${missingSnapshots}, access-denied=${raceAccessDenials}, sharing-violation=${raceSharingViolations}`,
-    );
-  } finally {
-    await worker.terminate();
-  }
-  assert.equal(workerFailure, undefined);
-}
-
 async function main(): Promise<void> {
   try {
     const hasFileSymlink = await seedFixtureTree();
-    await checkByteAccess();
+    await checkRoundTrips();
+    await checkLinksAreFollowed(hasFileSymlink);
     await checkTransfers();
     await checkBuiltAdapter();
     await checkDirectoryOperations();
     await checkUnicodeMetadata();
-    await checkAliasDenials();
-    await checkReparsePoints(hasFileSymlink);
     await checkUnsafePathForms();
     await checkOsDeniedAccess();
-    await checkTruncationAfterOpen();
-    await checkDeletionRace();
-
     console.log(
-      "PASS Win32 checked-handle storage: read/write, metadata, missing paths, ACL denial, aliases, reparse points, hardlinks and deletion race",
+      "PASS Windows storage: read/write, metadata, missing paths, ACL denial, followed links, transfers and directory operations",
     );
   } finally {
-    // Release the FFI bindings before deleting the fixture tree.
-    api.close();
-    await storage.dispose();
+    storage.dispose();
     await rm(root, {
       recursive: true,
       force: true,

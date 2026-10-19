@@ -50,8 +50,9 @@ repeatedly asked for exactly these fixes.
   `MAX_*` or `MIN_*` constant next to the contract that owns it.
 - Clamp or reject before touching native code, and reject with `INVALID_ARGUMENT`;
   `UNSUPPORTED` comes first when the platform cannot do the operation at all.
-- Paths from the application are validated for the platform (length, reparse points,
-  reserved names, surrogates) before any handle is opened.
+- Paths from the application are validated for the platform (length, reserved names,
+  surrogates) before any handle is opened. Links are followed; which locations an
+  application may reach is decided by the application (ADR 0024).
 
 ## 5. Cancellation, ordering and concurrency
 

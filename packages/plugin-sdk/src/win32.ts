@@ -230,6 +230,14 @@ export const KERNEL32 = {
     ],
     returns: "ptr",
   },
+  MoveFileExW: {
+    args: [
+      "ptr",
+      "ptr",
+      "u32",
+    ],
+    returns: "i32",
+  },
   OpenProcess: {
     args: [
       "u32",

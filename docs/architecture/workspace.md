@@ -25,7 +25,7 @@ WebView 연결은 Windows WebView2가 `native/windows/bun/webview.ts`, macOS WKW
 | `packages/packaging` | `@bunaway/packaging` | bun | `@bunaway/protocol` |
 | `packages/cli` | `@bunaway/cli` | bun | `@bunaway/packaging`, `@bunaway/protocol`, `@bunaway/runtime-bun` |
 | `plugins/log` | `@bunaway/plugin-log` | browser, bun | `@bunaway/plugin` |
-| `plugins/storage` | `@bunaway/plugin-storage` | browser, bun | `@bunaway/plugin` |
+| `plugins/storage` | `@bunaway/plugin-storage` | browser, bun | `@bunaway/plugin`, `@bunaway/protocol` |
 | `plugins/capabilities` | `@bunaway/plugin-capabilities` | browser, bun | `@bunaway/plugin` |
 | `plugins/windows` | `@bunaway/plugin-windows` | browser, bun | `@bunaway/plugin`, `@bunaway/plugin-api`, `@bunaway/protocol` |
 

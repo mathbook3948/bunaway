@@ -25,9 +25,9 @@ storage.appendText({ path, text }): Promise<null>
 `appendText`는 문자열을 UTF-8로 인코딩하며 전체 요청의 1 MiB 상한을 따릅니다.
 
 `path`는 [텍스트 읽기](/reference/host/storage-read-text/)와 같은 앱 지정 절대 경로입니다.
-Windows drive와 UNC 경로를 허용하며 extended-length와 device 경로, 상대 경로, ADS,
-비정규 별칭과 링크를 거부합니다. Unicode와 공백을 허용합니다.
-상위 디렉터리와 대상의 네이티브 핸들을 검사하고 고정한 뒤 입출력합니다.
+Windows drive와 UNC 경로를 허용하며 extended-length와 device 경로, 상대 경로, ADS와
+Windows에서 쓸 수 없는 이름을 거부합니다. Unicode와 공백을 허용합니다.
+링크는 일반 경로처럼 따라가며 일반 파일이 아닌 대상은 `INVALID_ARGUMENT`입니다.
 
 ```ts
 import storage from "@bunaway/plugin-storage";
@@ -49,7 +49,7 @@ const encoded = await storage.readBytes({ path: "C:/notes/data.bin" }); // "AP+A
 읽기, 대체 쓰기, append와 텍스트 작업의 권한은 각각 독립적입니다.
 
 대체 쓰기는 기존 내용을 덮어쓰고 성공 후 남은 꼬리를 잘라냅니다.
-빈 바이트 대체는 파일을 비웁니다. append는 append-only 핸들로 파일 끝에 추가하며
+빈 바이트 대체는 파일을 비웁니다. append는 append 모드로 파일 끝에 추가하며
 기존 내용을 자르지 않습니다. 없는 파일과 상위 디렉터리는 만들고 빈 append도 없는 파일을 만듭니다.
 읽기 대상이 없으면 `INVALID_ARGUMENT`입니다.
 
@@ -59,7 +59,7 @@ append가 그 사이에 들어갈 수 있으므로 레코드 단위 순서와 �
 실패, 종료나 이미 시작한 작업의 취소는 부분 쓰기를 되돌리지 않습니다.
 완료 여부가 불명확한 append를 자동 재전송하면 내용이 중복될 수 있습니다.
 
-잘못된 입력은 `INVALID_ARGUMENT`, 권한이나 경로 및 OS 접근 거부는 `PERMISSION_DENIED`,
+잘못된 입력은 `INVALID_ARGUMENT`, 권한과 OS 접근 거부는 `PERMISSION_DENIED`,
 취소는 `CANCELLED`, 큰 읽기와 일반 I/O 실패는 `INTERNAL`입니다.
 파일 핸들 API, stream I/O, 대화상자 범위의 일시 허용과 영속화는 후속 작업입니다.
 
