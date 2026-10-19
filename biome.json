@@ -131,7 +131,6 @@
         "native/windows/bun/webview.ts",
         "native/windows/bun/window-events.ts",
         "packages/cli/scripts/pack.ts",
-        "packages/cli/src/plugin-imports.ts",
         "packages/packaging/src/channels/windows/inno.ts",
         "packages/packaging/src/config.ts",
         "packages/packaging/src/inputs.ts",
