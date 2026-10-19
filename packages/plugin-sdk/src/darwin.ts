@@ -50,6 +50,47 @@ export const LIBSYSTEM = {
   },
 } as const satisfies Record<string, FFIFunction>;
 
+/** The CoreFoundation framework. */
+export const COREFOUNDATION_PATH =
+  "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
+
+/**
+ * CoreFoundation: releasing objects and reading strings, numbers and dictionaries. A `Create` or
+ * `Copy` result is owned by the caller and released with `CFRelease`; a `Get` result is borrowed
+ * from its container.
+ */
+export const COREFOUNDATION = {
+  CFDictionaryGetValue: {
+    args: [
+      "ptr",
+      "ptr",
+    ],
+    returns: "ptr",
+  },
+  CFNumberGetValue: {
+    args: [
+      "ptr",
+      "i32",
+      "ptr",
+    ],
+    returns: "bool",
+  },
+  CFRelease: {
+    args: [
+      "ptr",
+    ],
+    returns: "void",
+  },
+  CFStringCreateWithCString: {
+    args: [
+      "ptr",
+      "cstring",
+      "u32",
+    ],
+    returns: "ptr",
+  },
+} as const satisfies Record<string, FFIFunction>;
+
 /**
  * libobjc.A.dylib: class and selector lookup. `objc_msgSend` is variadic and stays declared at
  * each call site with the argument shape that call needs.

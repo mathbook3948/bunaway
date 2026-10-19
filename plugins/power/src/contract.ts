@@ -43,15 +43,11 @@ export const statusSchema = z.strictObject({
 export const cpuSpeedLimitSchema = z.strictObject({
   speedLimitPercent: z.int().min(0).max(100),
 });
-export const idleTimeSchema = z
-  .int()
-  .nonnegative()
-  .max(Math.floor(0xffffffff / 1000));
+/** Longest idle time in whole seconds: the 32-bit millisecond tick range Windows reports. */
+export const MAX_IDLE_SECONDS = Math.floor(0xffffffff / 1000);
+export const idleTimeSchema = z.int().nonnegative().max(MAX_IDLE_SECONDS);
 export const idleThresholdSchema = z.strictObject({
-  thresholdSeconds: z
-    .int()
-    .min(1)
-    .max(Math.floor(0xffffffff / 1000)),
+  thresholdSeconds: z.int().min(1).max(MAX_IDLE_SECONDS),
 });
 export const blockerInputSchema = z.strictObject({
   type: blockerTypeSchema,
@@ -62,6 +58,12 @@ export const blockerInputSchema = z.strictObject({
     .refine((value) => !value.includes("\0"), "Reason must not contain NUL."),
 });
 export type PowerStatus = z.output<typeof statusSchema>;
+/** The read-only queries every platform adapter answers; macOS implements only these. */
+export interface PowerQueries {
+  getStatus(): PowerStatus;
+  getIdleTime(): number;
+  getIdleState(thresholdSeconds: number): "active" | "idle";
+}
 export type PowerCpuSpeedLimit = z.output<typeof cpuSpeedLimitSchema>;
 export type PowerBlocker = z.output<typeof blockerSchema>;
 export type PowerBlockerType = PowerBlocker["type"];

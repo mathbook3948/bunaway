@@ -705,6 +705,11 @@ const appkit = system.symbols.dlopen(ptr(Buffer.from(`${APPKIT}\0`)), RTLD_LAZY)
 `RTLD_DEFAULT`는 로드된 모든 이미지를 찾는 `dlsym` 핸들입니다. `pick`은 Windows 모듈과 같은
 함수를 씁니다.
 
+`COREFOUNDATION_PATH`는 CoreFoundation의 경로이고 `COREFOUNDATION`은 `CFRelease`,
+`CFStringCreateWithCString`, `CFDictionaryGetValue`, `CFNumberGetValue`의 시그니처입니다.
+`Create`와 `Copy` 함수가 돌려준 객체는 호출자가 `CFRelease`로 해제하고, `Get` 함수의 결과는
+컨테이너가 소유하므로 해제하지 않습니다.
+
 ### Windows 네이티브 메뉴 트리
 
 Windows UI 플러그인은 `@bunaway/plugin/windows-menu`의 `NativePopupMenu`를 사용해

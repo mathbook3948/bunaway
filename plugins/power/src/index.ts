@@ -1,17 +1,30 @@
 import { defineNativePlugin, type NativeInvokeOptions } from "@bunaway/plugin";
 import { powerEvents } from "#power/contract";
-import { powerOperations } from "#power/operations";
-import { dispose, initialize } from "#power/platforms/windows";
-/** Each operation needs its own grant. Repeated starts allocate independently stoppable requests. `power.statusChanged` reports AC and battery changes on the UI thread. `power.suspended`, `power.resumed`, `power.sessionLocked` and `power.sessionUnlocked` report system sleep, wake and WTS session lock. */
+import { macosPowerOperations, powerOperations } from "#power/operations";
+import {
+  dispose as disposeMacos,
+  initialize as initializeMacos,
+} from "#power/platforms/macos";
+import {
+  dispose as disposeWindows,
+  initialize as initializeWindows,
+} from "#power/platforms/windows";
+/** Windows implements every operation; macOS implements `getStatus`, `getIdleTime` and `getIdleState`. Each operation needs its own grant. Repeated starts allocate independently stoppable requests. `power.statusChanged` reports AC and battery changes on the UI thread. `power.suspended`, `power.resumed`, `power.sessionLocked` and `power.sessionUnlocked` report system sleep, wake and WTS session lock. */
 export default defineNativePlugin(
   {
     name: "power",
     events: powerEvents,
     platforms: {
+      macos: {
+        thread: "ui",
+        initialize: initializeMacos,
+        dispose: disposeMacos,
+        operations: macosPowerOperations,
+      },
       windows: {
         thread: "ui",
-        initialize,
-        dispose,
+        initialize: initializeWindows,
+        dispose: disposeWindows,
         operations: powerOperations,
       },
     },

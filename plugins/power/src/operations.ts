@@ -8,11 +8,35 @@ import {
   idleThresholdSchema,
   idleTimeSchema,
   MAX_POWER_BLOCKERS,
+  type PowerQueries,
   statusSchema,
 } from "#power/contract";
 import type { WindowsPower } from "#power/platforms/windows";
 
 const operation = defineNativeOperation<WindowsPower>();
+const macosOperation = defineNativeOperation<PowerQueries>();
+/** macOS answers the read-only queries only; the other operations are unsupported there. */
+export const macosPowerOperations = {
+  getStatus: macosOperation({
+    input: z.null(),
+    output: statusSchema,
+    handler: (_input, { instance }) => instance.getStatus(),
+  }),
+  getIdleTime: macosOperation({
+    input: z.null(),
+    output: idleTimeSchema,
+    handler: (_input, { instance }) => instance.getIdleTime(),
+  }),
+  getIdleState: macosOperation({
+    input: idleThresholdSchema,
+    output: z.enum([
+      "active",
+      "idle",
+    ]),
+    handler: ({ thresholdSeconds }, { instance }) =>
+      instance.getIdleState(thresholdSeconds),
+  }),
+};
 /** Windows power queries and independently owned sleep/display request handles. */
 export const powerOperations = {
   getStatus: operation({
