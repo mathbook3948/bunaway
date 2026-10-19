@@ -81,7 +81,7 @@ function freePort(): number {
 }
 
 /** Polls until the descendant answers on the port, so cancellation hits a running tree. */
-async function waitForDescendant(port: number): Promise<void> {
+async function descendantListening(port: number): Promise<void> {
   const deadline = Date.now() + 5000;
   while (true) {
     try {
@@ -147,7 +147,7 @@ async function runSigtermResistantAttempt(outcome: Outcome): Promise<void> {
   void result.catch(() => {});
   try {
     if (outcome === "cancel") {
-      await waitForDescendant(port);
+      await descendantListening(port);
       abort.abort(new Error("Command cancelled"));
     }
     await expectOutcome(result, outcome);

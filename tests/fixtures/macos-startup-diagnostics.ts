@@ -181,7 +181,7 @@ function observeStartup(
     );
   }
   /** Sleeps until the 5-second slot for this index, or until stop wakes it early. */
-  async function waitForTick(index: number) {
+  async function sleepUntilTick(index: number) {
     await new Promise<void>((resolve) => {
       wake = resolve;
       timer = setTimeout(
@@ -234,7 +234,7 @@ function observeStartup(
       });
       for (let index = 0; index < 4 && !stopped; index++) {
         if (index > 0) {
-          await waitForTick(index);
+          await sleepUntilTick(index);
           if (stopped) {
             break;
           }
