@@ -352,9 +352,11 @@ export abstract class NodeStorage
     if (!root.isDirectory()) {
       throw failure("INVALID_ARGUMENT", "Storage target is not a directory.");
     }
-    return fsCall(() =>
-      sumDirectory(path, limits, signal, () => this.requireOpen()),
-    );
+    try {
+      return await sumDirectory(path, limits, signal, () => this.requireOpen());
+    } catch (error) {
+      throw storageError(error);
+    }
   }
 
   /** Creating a directory that already exists succeeds; a file in the way is an error. */

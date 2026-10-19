@@ -711,7 +711,8 @@ test("copyFile creates a new file and never replaces an existing name", () => {
     ).toBe("INVALID_ARGUMENT");
     expect(readFileSync(at("target", "keep.txt"), "utf8")).toBe("keep");
   }
-  if (link(at("nowhere"), at("dangling"))) {
+  // Windows CREATE_NEW follows a dangling link and creates its target, so only POSIX refuses it.
+  if (process.platform !== "win32" && link(at("nowhere"), at("dangling"))) {
     expect(
       codeOf(() =>
         storage.copyFile({
