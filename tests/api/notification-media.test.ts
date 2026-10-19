@@ -311,7 +311,7 @@ test("only fixed and RAM drives are read, before any file access", () => {
   }
 });
 
-test("links are followed and cloud placeholders are refused", () => {
+test("a linked path is not rejected and cloud placeholders are refused", () => {
   const directory = mkdtempSync(join(tmpdir(), "bunaway-media-"));
   try {
     const file = join(directory, "a.png");
@@ -336,6 +336,7 @@ test("links are followed and cloud placeholders are refused", () => {
     expect(probed.map(pathKey)).toEqual([
       pathKey(file),
     ]);
+    // GetFileAttributesW reports a final link's own attributes, so this stands for a link without a cloud flag.
     expect(() => run(NORMAL | REPARSE_POINT)).not.toThrow();
     for (const attribute of [
       0x1000,

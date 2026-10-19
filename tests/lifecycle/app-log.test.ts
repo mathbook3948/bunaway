@@ -474,7 +474,6 @@ for (const [platform, plugin] of [
       symlinkSync(real, resolve(root, "logs"), "junction");
       await adapter.execute("log.write", record, "backend");
       expect(readFileSync(resolve(real, "app.log"), "utf8")).not.toBe("");
-      rmSync(resolve(root, "logs"));
     });
   });
 

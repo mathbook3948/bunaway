@@ -483,7 +483,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] Windows toast API 지원 여부와 앱, 사용자, 정책의 알림 차단 상태를 조회한다.
 - [ ] 필요한 OS 권한 요청의 플랫폼별 계약을 제공한다. Windows 데스크톱 경로에는 알림 동의 팝업이 없으며 설정 변경은 사용자에게 맡긴다.
 - [x] 제목과 본문의 text-only toast, silent와 popup 억제 옵션을 제공한다.
-- [x] 아이콘, 본문 이미지(inline/hero)와 시스템 소리를 제공한다. 이미지는 로컬 절대 경로, 확장자(png, jpg, jpeg, gif), 고정 드라이브, reparse point와 클라우드 파일 거부, 3,000,000바이트 검사 후 file URI로 전달하고, Windows 비패키지 앱은 임의 소리 파일을 재생할 수 없어 `ms-winsoundevent` 시스템 소리 이름과 loop만 지원한다. `silent`와 `sound`는 함께 줄 수 없다.
+- [x] 아이콘, 본문 이미지(inline/hero)와 시스템 소리를 제공한다. 이미지는 로컬 절대 경로, 확장자(png, jpg, jpeg, gif), 고정 드라이브, 디렉터리와 클라우드 파일 거부(링크는 따라감), 3,000,000바이트 검사 후 file URI로 전달하고, Windows 비패키지 앱은 임의 소리 파일을 재생할 수 없어 `ms-winsoundevent` 시스템 소리 이름과 loop만 지원한다. `silent`와 `sound`는 함께 줄 수 없다.
 - [x] 실행 중 native clicked, dismissed와 failed callback을 전달한다. Show 접수는 반환값으로 구분한다.
 - [ ] 실제 popup 표시 완료 이벤트와 사용자 클릭의 GUI 검증을 제공한다.
 - [x] 앱 범위 ID/group, 같은 ID 교체와 개별 clear를 제공한다. 종료 시 이번 실행의 알림을 정리한다.

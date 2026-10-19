@@ -77,7 +77,8 @@ handler 인자를 추론한다. 실행 시에는 선언한 작업 객체를 그�
 initialize가 각 플랫폼 모듈의 WindowsStorage 또는 MacosStorage를 실행 Worker마다 만들고,
 dispose가 해당 인스턴스의 네이티브 바인딩을 정리한다. 선언 import와 지원 조회는 자원을
 만들지 않는다. 네이티브 구현은 작업 이름으로 분기하지 않고 기능별 메서드와 공통
-핸들 검사 절차를 사용한다. 경로, 링크와 최종 핸들 검사는 유지한다.
+핸들 검사 절차를 사용한다. 경로 문법 검사는 두며, 링크와 최종 핸들 검사는
+[ADR 0024](../decisions/0024-plugin-path-responsibility.md)에 따라 제거한다. log와 notification은 제거했고 storage는 이후 변경에서 제거한다.
 
 initialize는 동기 반환만 허용한다. Promise나 thenable을 반환하면 어댑터 생성을 거부하고,
 늦게 완료한 인스턴스는 dispose로 회수한다. 잘못된 비동기 초기화와 회수 실패는 호스트 진단에 기록한다.
@@ -372,10 +373,9 @@ operation 권한을 다시 검사한다. 단순한 기능 등록에는 backend �
 직접 plugin 명령을 함께 허용하면 앱 명령의 검사를 거치지 않는다. 공통 scope와 matches 계약은 두지 않는다.
 저장 입력은 path이며 저장 위치와 접근 규칙은 앱이 정한다. 현재 Windows 구현에는 절대 경로를 전달한다.
 플러그인은 앱 데이터나 임시 폴더를 자동으로 선택하거나 만들지 않는다.
-파일 링크, 최종 경로와 핸들 검사는 저장 plugin의 실행 adapter에서 수행한다.
-Windows 저장 adapter는 각 상위 디렉터리의 고정된 핸들과 최종 파일의 정규 경로가
-요청한 철자와 정확히 일치하는지 확인한다. 다음 디렉터리를 만들거나 파일을 읽고 쓰기
-전에 검사하며 대소문자 별칭과 8.3 짧은 이름을 거부한다.
+경로 제한은 앱 명령과 policy commands가 맡으며 앱 개발자의 책임이다
+([ADR 0024](../decisions/0024-plugin-path-responsibility.md)). 플러그인은 경로 문법만 검사하고 링크를 따라간다.
+저장 plugin의 Windows와 macOS adapter가 하는 링크, 최종 경로와 핸들 검사는 이 결정에 따라 storage 변경에서 제거한다.
 신뢰된 백엔드의 직접 Bun API 접근은 이 정책의 샌드박스 대상이 아니다.
 
 ## 화면 호출과 기능 조회
@@ -566,7 +566,7 @@ CLI의 기존 `@bunaway/*` 고정 목록 검사는 manifest 기반 plugin 검사
   `requiredPermissions`를 추가해도 원래 setup과 명령의 메서드 receiver를 보존한다.
 - 뷰 둘과 앱 둘의 동시 호출에서 권한과 취소 신호가 섞이지 않는다. setup의 backend
   권한이 view 호출에 적용되지 않는다.
-- 작업별 권한, 앱 명령의 접근 검사, 잘못된 경로, 링크, 최종 핸들과 승인 후 취소를 검증한다.
+- 작업별 권한, 앱 명령의 접근 검사, 잘못된 경로와 승인 후 취소를 검증한다.
 - 종료, 초기화 실패에서 pending 호출과 자원을 회수한다. 로그 plugin이 없어도
   프레임워크 시작 실패와 명령 오류의 진단을 확인할 수 있다.
 - 같은 index.ts의 호출이 SDK의 browser와 bun 조건으로 구현과 타입을 각각 선택한다.

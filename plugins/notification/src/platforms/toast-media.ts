@@ -28,7 +28,7 @@ const REMOTE_CONTENT_ATTRIBUTES =
 export type ToastFilesystem = {
   /** GetDriveTypeW for a root such as `C:\`. */
   driveType(root: string): number;
-  /** GetFileAttributesW for the path; INVALID_FILE_ATTRIBUTES when unreadable. */
+  /** GetFileAttributesW for the path, which reports a final link's own attributes; INVALID_FILE_ATTRIBUTES when unreadable. */
   attributes(path: string): number;
 };
 
@@ -43,12 +43,14 @@ function invalidImage(message: string): never {
  * Check that the icon and image paths name regular, locally stored files on a fixed drive within the size limit.
  * The schema has already validated path shape and extension. Stages, each before the next can touch the target:
  * 1. The drive type is checked so a mapped network drive cannot block this thread on an SMB timeout.
- * 2. The file's attributes are read once. It must not be a directory, offline or recall-on-access,
- *    so reading it never downloads cloud content.
+ * 2. The path's attributes are read once. It must not be a directory, offline or recall-on-access,
+ *    so a cloud file named directly is not downloaded. A final link reports its own attributes, so the
+ *    target of a link is not checked this way.
  * 3. Only then is the file stat-ed for type and size.
- * Links are followed: which files an app may show is decided by the app command. Errors do not echo
- * the path. A `subst` drive reports its target's type, so one that points at a network share is not
- * detected, and a file changed after this check is not re-validated.
+ * Links are followed and not re-checked against the drive limit: which files an app may show is
+ * decided by the app command. Errors do not echo the path. A `subst` drive reports its target's type,
+ * so one that points at a network share is not detected, and a file changed after this check is not
+ * re-validated.
  */
 export function assertToastMediaFiles(
   input: ResolvedNotification,
