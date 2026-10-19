@@ -4,11 +4,11 @@ import {
   beepInputSchema,
   infoSchema,
   localeSchema,
+  type OSInstance,
   usageSchema,
 } from "#os/contract";
-import type { initialize } from "#os/platforms/windows";
 
-const operation = defineNativeOperation<ReturnType<typeof initialize>>();
+const operation = defineNativeOperation<OSInstance>();
 /** Read-only Windows metadata; no paths or environment variables are exposed. */
 export const osOperations = {
   info: operation({
