@@ -160,6 +160,49 @@ export function createAppearanceController(
       });
     }
   };
+  /**
+   * Change the app-wide preference and apply it to every window without its own override. When a
+   * window fails, the previous preference is restored and re-applied to the remaining windows.
+   */
+  const setAppPreference = (theme: ThemePreference | null) => {
+    if (theme === null) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "The app preference cannot be null.",
+      });
+    }
+    const previous = appPreference;
+    appPreference = theme;
+    try {
+      for (const entry of windows.values()) {
+        if (entry.override === null) {
+          apply(entry);
+        }
+      }
+    } catch (error) {
+      appPreference = previous;
+      const failures: unknown[] = [
+        error,
+      ];
+      for (const entry of windows.values()) {
+        if (entry.override === null && entry.supported) {
+          try {
+            apply(entry);
+          } catch (rollback) {
+            failures.push(rollback);
+          }
+        }
+      }
+      if (failures.length > 1) {
+        throw new AggregateError(
+          failures,
+          "Appearance change and rollback failed.",
+        );
+      }
+      throw error;
+    }
+    return state();
+  };
   return {
     read() {
       active();
@@ -182,43 +225,7 @@ export function createAppearanceController(
     setTheme(windowId: string | null, theme: ThemePreference | null) {
       supported();
       if (windowId === null) {
-        if (theme === null) {
-          throw new BunawayError({
-            code: "INVALID_ARGUMENT",
-            message: "The app preference cannot be null.",
-          });
-        }
-        const previous = appPreference;
-        appPreference = theme;
-        try {
-          for (const entry of windows.values()) {
-            if (entry.override === null) {
-              apply(entry);
-            }
-          }
-        } catch (error) {
-          appPreference = previous;
-          const failures: unknown[] = [
-            error,
-          ];
-          for (const entry of windows.values()) {
-            if (entry.override === null && entry.supported) {
-              try {
-                apply(entry);
-              } catch (rollback) {
-                failures.push(rollback);
-              }
-            }
-          }
-          if (failures.length > 1) {
-            throw new AggregateError(
-              failures,
-              "Appearance change and rollback failed.",
-            );
-          }
-          throw error;
-        }
-        return state();
+        return setAppPreference(theme);
       }
       const entry = requireWindow(windowId);
       const previous = entry.override;
