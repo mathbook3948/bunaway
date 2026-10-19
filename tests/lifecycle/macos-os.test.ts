@@ -52,6 +52,8 @@ test.skipIf(process.platform !== "darwin")(
       adapter.dispose();
     }
     expect(() => adapter.info()).toThrow("OS adapter is disposed.");
+    expect(() => adapter.usage()).toThrow("OS adapter is disposed.");
+    expect(() => adapter.locale()).toThrow("OS adapter is disposed.");
     expect(() => adapter.beep("default")).toThrow("OS adapter is disposed.");
     expect(() => adapter.dispose()).not.toThrow();
   },

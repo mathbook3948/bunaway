@@ -64,8 +64,8 @@ macOS에서는 CoreFoundation의 현재 locale과 선호 언어 목록을 읽습
 `INTERNAL`입니다. 주파수와 길이는 지정할 수 없습니다.
 
 macOS에서는 `kind`와 관계없이 System Settings에서 고른 경고음(`AudioServicesPlayAlertSound`)을 재생합니다.
-macOS에는 종류별 시스템 소리가 없으므로 `kind`는 검증만 하고 소리를 바꾸지 않습니다. 경고음 볼륨이
-0이어도 성공할 수 있습니다.
+macOS에는 종류별 시스템 소리가 없으므로 `kind`는 검증만 하고 소리를 바꾸지 않습니다. 재생 요청 뒤
+바로 `null`을 반환하며 소리가 났는지는 확인하지 않습니다.
 
 이모지 패널을 여는 API는 제공하지 않습니다. Windows에는 이모지 패널을 여는 공식 API가 없고
 Win+. 키 입력을 합성하는 방법만 있어 현재 포커스를 가진 창에 의존하므로 지원하지 않습니다.

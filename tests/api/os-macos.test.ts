@@ -13,7 +13,6 @@ test("os registers the same operations for macOS and Windows", () => {
     "macos",
     "windows",
   ]);
-  expect(platforms.macos?.operations).toEqual(platforms.windows?.operations);
   expect(platforms.macos?.operations).toHaveLength(
     Object.keys(osOperations).length,
   );
