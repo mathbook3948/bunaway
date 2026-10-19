@@ -153,6 +153,8 @@ test.skipIf(
         description: "Notes 한글",
         pixelsWide: 44,
         pixelsHigh: 22,
+        // 44 pixels drawn at 2x are 22 points wide.
+        widthPoints: 22,
       });
 
       // A header that passes validation but does not decode is rejected and the image stays.
@@ -185,6 +187,7 @@ test.skipIf(
         description: "",
         pixelsWide: 18,
         pixelsHigh: 18,
+        widthPoints: 18,
       });
 
       // The title and the image coexist, and null leaves only the title.

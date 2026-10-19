@@ -77,6 +77,8 @@ export type StatusItemReadBack = {
     description: string;
     pixelsWide: number;
     pixelsHigh: number;
+    /** Width of `NSImage.size` in points, which is what the menu bar draws. */
+    widthPoints: number;
   } | null;
   /** Null when no menu is attached. */
   menu:
@@ -221,6 +223,19 @@ export function createStatusItem(
             "f64",
           ],
           returns: "u64",
+        },
+      } as const),
+    );
+    // A fourth table to read back `size`. An NSSize of two doubles comes back in the first two
+    // floating-point registers on arm64 and x86_64, so a double return carries its width.
+    const widthReader = own(
+      dlopen(OBJC, {
+        objc_msgSend: {
+          args: [
+            "u64",
+            "u64",
+          ],
+          returns: "f64",
         },
       } as const),
     );
@@ -535,6 +550,10 @@ export function createStatusItem(
                   description: text(send(shown, "accessibilityDescription")),
                   pixelsWide: Number(send(representation, "pixelsWide")),
                   pixelsHigh: Number(send(representation, "pixelsHigh")),
+                  widthPoints: widthReader.symbols.objc_msgSend(
+                    shown,
+                    selector("size"),
+                  ),
                 }
               : null,
             menu: menu

@@ -135,6 +135,14 @@ test("macOS tray inputs are strict, bounded and reject unrepresentable text", as
       "tray.setImage",
       {
         image: {
+          png: Buffer.alloc(MAX_MACOS_TRAY_IMAGE_BYTES).toString("base64"),
+        },
+      },
+    ],
+    [
+      "tray.setImage",
+      {
+        image: {
           png: solidPng(2, 2).toString("base64"),
           template: true,
           scale: 2,
@@ -593,6 +601,18 @@ test("an image reaches AppKit in points with its template flag and is removed wi
     description: "Notes",
   });
   expect(shown?.data).toEqual(new Uint8Array(solidPng(44, 22)));
+
+  // An odd pixel count at 2x keeps the half point.
+  tray.setImage({
+    png: solidPng(45, 45).toString("base64"),
+    template: false,
+    scale: 2,
+    description: "",
+  });
+  expect(native.image()).toMatchObject({
+    widthPoints: 22.5,
+    heightPoints: 22.5,
+  });
 
   // The default is a 1x image that macOS does not tint.
   tray.setImage({
