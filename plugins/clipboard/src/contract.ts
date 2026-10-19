@@ -36,6 +36,7 @@ export const formatSchema = z.union([
 ]);
 export type ClipboardFormat = z.infer<typeof formatSchema>;
 export const MAX_IMAGE_BYTES = 524_288;
+export const MAX_IMAGE_DIMENSION = 4096;
 export const MAX_FORMAT_JSON_BYTES = 900_000;
 export const MAX_FILES = 64;
 export const MAX_PATH_LENGTH = 1024;
@@ -80,8 +81,8 @@ export const bookmarkSchema = z.strictObject({
 /** JSON carries tightly packed RGBA pixels as canonical base64, without a native resource ID. */
 export const imageSchema = z
   .strictObject({
-    width: z.number().int().min(1).max(4096),
-    height: z.number().int().min(1).max(4096),
+    width: z.number().int().min(1).max(MAX_IMAGE_DIMENSION),
+    height: z.number().int().min(1).max(MAX_IMAGE_DIMENSION),
     rgba: base64Schema(MAX_IMAGE_BYTES),
   })
   .refine((image) => {

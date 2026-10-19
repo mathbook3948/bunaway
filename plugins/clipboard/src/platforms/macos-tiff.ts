@@ -3,6 +3,7 @@ import {
   type ClipboardImage,
   imageSchema,
   MAX_IMAGE_BYTES,
+  MAX_IMAGE_DIMENSION,
 } from "#clipboard/contract";
 
 const TIFF_MAGIC = 42;
@@ -233,9 +234,9 @@ export function decodeTIFF(bytes: Buffer): ClipboardImage {
   const byteCount = scalar(279);
   if (
     width < 1 ||
-    width > 4096 ||
+    width > MAX_IMAGE_DIMENSION ||
     height < 1 ||
-    height > 4096 ||
+    height > MAX_IMAGE_DIMENSION ||
     width * height * 4 > MAX_IMAGE_BYTES ||
     (samples !== 3 && samples !== 4) ||
     bits?.length !== samples ||
