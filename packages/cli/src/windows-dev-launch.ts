@@ -7,11 +7,14 @@ import pin from "../../../runtime/build-manifests/windows-x64.json";
 import { json, projectPath, verifyHash } from "./files.ts";
 
 const WM_CANCELMODE = 0x001f;
+const MAX_TCP_PORT = 65535;
 
 /** Builds the loopback-only Bun inspector endpoint after validating its port. */
 export function windowsInspectorArgument(port: number): string {
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error("Inspector port must be an integer between 1 and 65535.");
+  if (!Number.isInteger(port) || port < 1 || port > MAX_TCP_PORT) {
+    throw new Error(
+      `Inspector port must be an integer between 1 and ${MAX_TCP_PORT}.`,
+    );
   }
   return `--inspect=127.0.0.1:${port}/bunaway`;
 }

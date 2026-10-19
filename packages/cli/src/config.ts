@@ -28,6 +28,9 @@ import { validateFramework } from "./distribution.ts";
 import { inside, json, projectPath } from "./files.ts";
 import type { InstalledPlugin } from "./plugins.ts";
 
+/** Wait for the development server when bunaway.json sets no dev.timeoutMs. */
+const DEFAULT_DEV_TIMEOUT_MS = 30_000;
+
 /** Frontend server command and URL used by the native app during development. */
 export interface DevServerConfig {
   command: string[];
@@ -64,7 +67,7 @@ export function readDevSettings(value: unknown): DevServerConfig | undefined {
     "dev",
   );
   const args = command(dev.command, "dev.command");
-  const timeoutMs = dev.timeoutMs ?? 30000;
+  const timeoutMs = dev.timeoutMs ?? DEFAULT_DEV_TIMEOUT_MS;
   if (
     typeof timeoutMs !== "number" ||
     !Number.isInteger(timeoutMs) ||

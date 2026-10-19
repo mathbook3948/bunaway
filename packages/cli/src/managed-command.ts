@@ -7,9 +7,12 @@ import { promisify } from "node:util";
 
 const inspectProcesses = promisify(execFile);
 
+/** Longest wait for a Unix process group to release its live members after the leader exits. */
+const PROCESS_GROUP_EXIT_TIMEOUT_MS = 5_000;
+
 /** Waits for a Unix process group to release all live members after its leader exits. */
 async function waitForProcessGroupExit(pid: number): Promise<void> {
-  const deadline = performance.now() + 5000;
+  const deadline = performance.now() + PROCESS_GROUP_EXIT_TIMEOUT_MS;
   while (true) {
     // Signal-zero probes include zombies and may report EPERM on macOS after
     // exit. Inspect live members instead; zombies have released their resources.
