@@ -133,7 +133,6 @@
         "packages/backend-sdk/src/cli.ts",
         "packages/cli/scripts/pack.ts",
         "packages/cli/src/assets.ts",
-        "packages/cli/src/build.ts",
         "packages/cli/src/config.ts",
         "packages/cli/src/distribution.ts",
         "packages/cli/src/main.ts",
