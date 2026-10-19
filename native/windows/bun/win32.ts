@@ -180,6 +180,37 @@ function callbackPointer(address: bigint): Pointer {
   return Number(address) as Pointer;
 }
 
+type GeometryRequest = Parameters<NativeWindow["setGeometry"]>[1];
+type Rectangle = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+function invalidGeometry(message: string): never {
+  throw new BunawayError({
+    code: "INVALID_ARGUMENT",
+    message,
+  });
+}
+
+/** All RECT edges and SetWindowPos components must fit signed Win32 LONGs. */
+function assertRectangleFits({ x, y, width, height }: Rectangle) {
+  for (const value of [
+    x,
+    y,
+    width,
+    height,
+    x + width,
+    y + height,
+  ]) {
+    if (!Number.isInteger(value) || (value | 0) !== value) {
+      invalidGeometry("Window geometry exceeds the supported integer range.");
+    }
+  }
+}
+
 // One class and one bounded pump per STA, shared by every view.
 export class Windows {
   private readonly taskbar = new WindowTaskbar({
@@ -2548,16 +2579,10 @@ export class Windows {
   setGeometry(
     window: bigint,
     area: "content" | "outer",
-    geometry: Parameters<NativeWindow["setGeometry"]>[1],
+    geometry: GeometryRequest,
   ) {
-    const invalid = (message: string): never => {
-      throw new BunawayError({
-        code: "INVALID_ARGUMENT",
-        message,
-      });
-    };
     if (this.isFullscreen(window)) {
-      invalid("Exit fullscreen before changing window geometry.");
+      invalidGeometry("Exit fullscreen before changing window geometry.");
     }
     const dpi = this.getDpi(window);
     const editsNormalBounds =
@@ -2567,167 +2592,269 @@ export class Windows {
       editsNormalBounds ? "normal" : "outer",
     );
     const { style, exStyle } = this.windowStyles(window);
+    const frame = this.normalWindowFrame(window, style, exStyle, dpi);
+    let { x, y, width, height } = current;
+    if ("width" in geometry) {
+      ({ width, height } = this.requestedOuterSize(
+        window,
+        area,
+        geometry,
+        frame,
+        dpi,
+      ));
+    }
+    if ("x" in geometry) {
+      ({ x, y } = this.requestedOrigin(
+        window,
+        area,
+        geometry,
+        frame,
+        current,
+        editsNormalBounds,
+      ));
+    }
+    assertRectangleFits({
+      x,
+      y,
+      width,
+      height,
+    });
+    const normal = editsNormalBounds
+      ? this.prepareNormalPlacement(window, exStyle, {
+          x,
+          y,
+          width,
+          height,
+        })
+      : undefined;
+    this.changingGeometry.add(window);
+    try {
+      if (normal) {
+        this.setPlacement(window, normal.placement);
+        this.normalMonitors.set(window, normal.monitor);
+      } else {
+        this.moveResizeWindow(
+          window,
+          area,
+          geometry,
+          {
+            x,
+            y,
+            width,
+            height,
+          },
+          dpi,
+        );
+      }
+    } finally {
+      this.changingGeometry.delete(window);
+      this.observeChanges(window);
+    }
+  }
+
+  /** Frame offsets and size of the window as it will look when restored to normal. */
+  private normalWindowFrame(
+    window: bigint,
+    style: bigint,
+    exStyle: bigint,
+    dpi: number,
+  ) {
     // Minimized/maximized frame offsets are not those of the future normal window.
-    const frame = new Int32Array(4);
+    const rect = new Int32Array(4);
     assert(
       user.symbols.AdjustWindowRectExForDpi(
-        ptr(frame),
+        ptr(rect),
         Number(style & ~WS_MAXIMIZE & ~WS_MINIMIZE),
         user.symbols.GetMenu(window) !== 0n ? 1 : 0,
         Number(exStyle),
         dpi,
       ),
     );
-    const frameWidth = (frame[2] ?? 0) - (frame[0] ?? 0);
-    const frameHeight = (frame[3] ?? 0) - (frame[1] ?? 0);
-    let { x, y, width, height } = current;
-    if ("width" in geometry) {
-      const outerWidth = geometry.width + (area === "content" ? frameWidth : 0);
-      const outerHeight =
-        geometry.height + (area === "content" ? frameHeight : 0);
-      const contentWidth = logicalPixels(outerWidth - frameWidth, dpi);
-      const contentHeight = logicalPixels(outerHeight - frameHeight, dpi);
-      if (
-        contentWidth < MIN_WINDOW_DIMENSION ||
-        contentWidth > MAX_WINDOW_DIMENSION ||
-        contentHeight < MIN_WINDOW_DIMENSION ||
-        contentHeight > MAX_WINDOW_DIMENSION
-      ) {
-        invalid(
-          "Requested content size must be 200..4096 logical pixels before constraints.",
-        );
-      }
-      ({ width, height } = constrainedOuterSize(
-        outerWidth,
-        outerHeight,
-        dpi,
-        {
-          width: frameWidth,
-          height: frameHeight,
-        },
-        this.getSizeConstraints(window),
-      ));
-    }
-    if ("x" in geometry) {
-      let offsetX = frame[0] ?? 0;
-      let offsetY = frame[1] ?? 0;
-      if (area === "content" && !editsNormalBounds) {
-        const content = this.getBounds(window, "content");
-        offsetX = current.x - content.x;
-        offsetY = current.y - content.y;
-      }
-      x = geometry.x + (area === "content" ? offsetX : 0);
-      y = geometry.y + (area === "content" ? offsetY : 0);
-    }
-    // All RECT edges and SetWindowPos components must fit signed Win32 LONGs.
-    const checkRectangle = (left: number, top: number) => {
-      for (const value of [
-        left,
-        top,
-        width,
-        height,
-        left + width,
-        top + height,
-      ]) {
-        if (!Number.isInteger(value) || (value | 0) !== value) {
-          invalid("Window geometry exceeds the supported integer range.");
-        }
-      }
+    return {
+      left: rect[0] ?? 0,
+      top: rect[1] ?? 0,
+      width: (rect[2] ?? 0) - (rect[0] ?? 0),
+      height: (rect[3] ?? 0) - (rect[1] ?? 0),
     };
-    checkRectangle(x, y);
-    let placement: Buffer | undefined;
-    let monitor:
-      | {
-          display: bigint;
-          screenRect: Buffer;
-        }
-      | undefined;
-    if (editsNormalBounds) {
-      placement = this.getPlacement(window);
-      const screenRect = new Int32Array([
-        x,
-        y,
-        x + width,
-        y + height,
-      ]);
-      const display = user.symbols.MonitorFromRect(
-        ptr(screenRect),
-        MONITOR_DEFAULTTONEAREST,
+  }
+
+  /**
+   * Outer size for a size request: reject content sizes outside the public range, then
+   * clamp to the window's current size constraints.
+   */
+  private requestedOuterSize(
+    window: bigint,
+    area: "content" | "outer",
+    geometry: ClientSize,
+    frame: ClientSize,
+    dpi: number,
+  ) {
+    const outerWidth = geometry.width + (area === "content" ? frame.width : 0);
+    const outerHeight =
+      geometry.height + (area === "content" ? frame.height : 0);
+    const contentWidth = logicalPixels(outerWidth - frame.width, dpi);
+    const contentHeight = logicalPixels(outerHeight - frame.height, dpi);
+    if (
+      contentWidth < MIN_WINDOW_DIMENSION ||
+      contentWidth > MAX_WINDOW_DIMENSION ||
+      contentHeight < MIN_WINDOW_DIMENSION ||
+      contentHeight > MAX_WINDOW_DIMENSION
+    ) {
+      invalidGeometry(
+        "Requested content size must be 200..4096 logical pixels before constraints.",
       );
-      const info = Buffer.alloc(MONITORINFO_SIZE);
-      info.writeUInt32LE(MONITORINFO_SIZE);
-      assert(display && user.symbols.GetMonitorInfoW(display, ptr(info)));
-      monitor = {
+    }
+    const { width, height } = constrainedOuterSize(
+      outerWidth,
+      outerHeight,
+      dpi,
+      {
+        width: frame.width,
+        height: frame.height,
+      },
+      this.getSizeConstraints(window),
+    );
+    return {
+      width,
+      height,
+    };
+  }
+
+  /** Outer origin for a position request, converting a content origin by the frame offset. */
+  private requestedOrigin(
+    window: bigint,
+    area: "content" | "outer",
+    geometry: {
+      x: number;
+      y: number;
+    },
+    frame: {
+      left: number;
+      top: number;
+    },
+    current: {
+      x: number;
+      y: number;
+    },
+    editsNormalBounds: boolean,
+  ) {
+    let offsetX = frame.left;
+    let offsetY = frame.top;
+    if (area === "content" && !editsNormalBounds) {
+      const content = this.getBounds(window, "content");
+      offsetX = current.x - content.x;
+      offsetY = current.y - content.y;
+    }
+    return {
+      x: geometry.x + (area === "content" ? offsetX : 0),
+      y: geometry.y + (area === "content" ? offsetY : 0),
+    };
+  }
+
+  /**
+   * Write the requested normal rectangle into the window placement and find the monitor
+   * it targets. The rectangle is validated again after the workspace conversion.
+   */
+  private prepareNormalPlacement(
+    window: bigint,
+    exStyle: bigint,
+    requested: Rectangle,
+  ) {
+    const placement = this.getPlacement(window);
+    const requestedRect = new Int32Array([
+      requested.x,
+      requested.y,
+      requested.x + requested.width,
+      requested.y + requested.height,
+    ]);
+    const display = user.symbols.MonitorFromRect(
+      ptr(requestedRect),
+      MONITOR_DEFAULTTONEAREST,
+    );
+    const info = Buffer.alloc(MONITORINFO_SIZE);
+    info.writeUInt32LE(MONITORINFO_SIZE);
+    assert(display && user.symbols.GetMonitorInfoW(display, ptr(info)));
+    let { x, y } = requested;
+    if (!(exStyle & WS_EX_TOOLWINDOW)) {
+      // Inverse of getNormalBounds: WINDOWPLACEMENT uses destination workspace coordinates.
+      x -= info.readInt32LE(20) - info.readInt32LE(4);
+      y -= info.readInt32LE(24) - info.readInt32LE(8);
+    }
+    assertRectangleFits({
+      ...requested,
+      x,
+      y,
+    });
+    const rect = placement.subarray(WINDOWPLACEMENT_NORMAL_RECT_OFFSET);
+    rect.writeInt32LE(x, 0);
+    rect.writeInt32LE(y, 4);
+    rect.writeInt32LE(x + requested.width, 8);
+    rect.writeInt32LE(y + requested.height, 12);
+    return {
+      placement,
+      monitor: {
         display,
         screenRect: info.subarray(4, 4 + RECT_SIZE),
-      };
-      if (!(exStyle & WS_EX_TOOLWINDOW)) {
-        // Inverse of getNormalBounds: WINDOWPLACEMENT uses destination workspace coordinates.
-        x -= info.readInt32LE(20) - info.readInt32LE(4);
-        y -= info.readInt32LE(24) - info.readInt32LE(8);
-      }
-      checkRectangle(x, y);
-      const rect = placement.subarray(WINDOWPLACEMENT_NORMAL_RECT_OFFSET);
-      rect.writeInt32LE(x, 0);
-      rect.writeInt32LE(y, 4);
-      rect.writeInt32LE(x + width, 8);
-      rect.writeInt32LE(y + height, 12);
+      },
+    };
+  }
+
+  /**
+   * Move and resize a window in its current show state. A content size request on a window
+   * with a menu bar is re-applied through the client rectangle, because the bar can wrap
+   * at the new width and change the frame height.
+   */
+  private moveResizeWindow(
+    window: bigint,
+    area: "content" | "outer",
+    geometry: GeometryRequest,
+    outer: Rectangle,
+    dpi: number,
+  ) {
+    assert(
+      user.symbols.SetWindowPos(
+        window,
+        0n,
+        outer.x,
+        outer.y,
+        outer.width,
+        outer.height,
+        SWP_NOZORDER |
+          SWP_NOACTIVATE |
+          ("x" in geometry ? 0 : SWP_NOMOVE) |
+          ("width" in geometry ? 0 : SWP_NOSIZE),
+      ),
+    );
+    if (
+      area !== "content" ||
+      !("width" in geometry) ||
+      !user.symbols.GetMenu(window)
+    ) {
+      return;
     }
-    this.changingGeometry.add(window);
-    try {
-      if (placement && monitor) {
-        this.setPlacement(window, placement);
-        this.normalMonitors.set(window, monitor);
-      } else {
-        assert(
-          user.symbols.SetWindowPos(
-            window,
-            0n,
-            x,
-            y,
-            width,
-            height,
-            SWP_NOZORDER |
-              SWP_NOACTIVATE |
-              ("x" in geometry ? 0 : SWP_NOMOVE) |
-              ("width" in geometry ? 0 : SWP_NOSIZE),
-          ),
-        );
-      }
-      if (
-        !placement &&
-        area === "content" &&
-        "width" in geometry &&
-        user.symbols.GetMenu(window)
-      ) {
-        this.setClientSize(
+    this.setClientSize(
+      window,
+      clampWindowSize(
+        logicalPixels(geometry.width, dpi),
+        logicalPixels(geometry.height, dpi),
+        this.getSizeConstraints(window),
+      ),
+      dpi,
+    );
+    if ("x" in geometry) {
+      const content = this.getBounds(window, "content");
+      const outerNow = this.getBounds(window, "outer");
+      assert(
+        user.symbols.SetWindowPos(
           window,
-          clampWindowSize(
-            logicalPixels(geometry.width, dpi),
-            logicalPixels(geometry.height, dpi),
-            this.getSizeConstraints(window),
-          ),
-          dpi,
-        );
-        if ("x" in geometry) {
-          const content = this.getBounds(window, "content");
-          const outer = this.getBounds(window, "outer");
-          assert(
-            user.symbols.SetWindowPos(
-              window,
-              0n,
-              outer.x + geometry.x - content.x,
-              outer.y + geometry.y - content.y,
-              0,
-              0,
-              SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
-            ),
-          );
-        }
-      }
-    } finally {
-      this.changingGeometry.delete(window);
-      this.observeChanges(window);
+          0n,
+          outerNow.x + geometry.x - content.x,
+          outerNow.y + geometry.y - content.y,
+          0,
+          0,
+          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+        ),
+      );
     }
   }
 
