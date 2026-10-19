@@ -845,11 +845,13 @@ export class MacosWebview {
   private setZoomed(zoomed: boolean): void {
     const o = this.objc;
     o.withAutoreleasePool(() => {
-      if (o.send(this.window, "isMiniaturized")) {
-        o.send(this.window, "deminiaturize:", null);
-      }
+      // The frame changes first: a zoom sent right after `deminiaturize:` can land during the
+      // Dock animation and be ignored, while the frame of a miniaturized window can be changed.
       if (!!o.send(this.window, "isZoomed") !== zoomed) {
         o.send(this.window, "zoom:", null);
+      }
+      if (o.send(this.window, "isMiniaturized")) {
+        o.send(this.window, "deminiaturize:", null);
       }
     });
   }
