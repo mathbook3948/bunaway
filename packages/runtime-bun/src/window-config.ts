@@ -173,15 +173,17 @@ function readViewId(view: unknown, seen: Set<string>): string {
   return view;
 }
 
+const MAX_TITLE_LENGTH = 1024;
+
 function readTitle(title: unknown): string {
   if (
     typeof title !== "string" ||
     !title ||
-    title.length > 1024 ||
+    title.length > MAX_TITLE_LENGTH ||
     title.includes("\0")
   ) {
     throw new Error(
-      "Window title must contain 1 to 1024 characters without NUL.",
+      `Window title must contain 1 to ${MAX_TITLE_LENGTH} characters without NUL.`,
     );
   }
   return title;
