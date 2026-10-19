@@ -151,9 +151,7 @@ type이 system이면 시스템 idle 절전 방지 요청을, display이면 화�
 같은 type과 reason을 반복해도 새 ID와 독립 native handle을 만듭니다.
 
 macOS에서 system은 `PreventUserIdleSystemSleep`, display는 `PreventUserIdleDisplaySleep`
-IOPMAssertion을 만듭니다. 둘 다 사용자 idle로 인한 절전만 막으며 덮개를 닫거나 전원 버튼,
-메뉴의 절전 같은 사용자의 명시적 절전은 막지 않습니다. 앱이 정상 종료하거나 플러그인을 정리하면
-남은 assertion을 모두 해제하고 프로세스가 비정상 종료해도 OS가 회수합니다.
+IOPMAssertion을 만듭니다. 플러그인 정리는 남은 assertion을 모두 해제합니다.
 
 `power.listBlockers()`는 이 앱 어댑터가 등록한 `{ id, type }` 배열을 반환합니다.
 `power.isBlockerActive({ id })`는 이 어댑터에 해당 요청이 등록돼 있는지 반환합니다.
@@ -163,8 +161,7 @@ ID는 UUID이며 native handle이 아닙니다. 조회와 stop 권한은 별도�
 
 블로커 조회는 앱의 등록 상태를 나타냅니다. OS가 실제로 절전을 막고 있는지 보장하지 않습니다.
 사용자가 선택한 절전과 전원 정책은 유지되며 Modern Standby의 배터리 정책으로 요청이
-종료될 수도 있습니다. OS가 요청 count를 종료해도 stop은 handle을 정리합니다. macOS는 해제가 실패하면 ID를 유지해
-다시 stop할 수 있고, assertion이 남아 있는 동안은 IOKit을 닫지 않습니다.
+종료될 수도 있습니다. Windows에서는 OS가 요청 count를 종료해도 stop이 handle을 정리합니다.
 앱 종료와 어댑터 dispose는 모든 handle 해제를 시도합니다. public ID가 있는 요청의 해제가
 실패해도 부분 활성화에서 남은 handle 정리를 함께 시도합니다. 실패를 모아 보고하고 실패한
 handle은 다음 정리 시도까지 보유합니다. 남은 handle이 있으면 DLL을 닫지 않습니다.
