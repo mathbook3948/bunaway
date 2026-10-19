@@ -3,6 +3,7 @@ import type { NativeDialogServices } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
 import type {
   DialogInput,
+  DialogInstance,
   DialogKind,
   DialogResult,
   MessageInput,
@@ -32,7 +33,7 @@ export type MessageDialogFactory = (
 ) => DialogDriver<MessageResult>;
 
 /** Own a picker lifetime; cancellation never becomes a successful user dismissal. */
-export class WindowsDialogs {
+export class WindowsDialogs implements DialogInstance {
   private disposed = false;
   private active = false;
   constructor(

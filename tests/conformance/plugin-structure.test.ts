@@ -11,7 +11,6 @@ const PLATFORM_TYPE_IMPORT = /^import type .* from "#[\w-]+\/platforms\//;
  */
 const KNOWN_PLATFORM_TYPE_IMPORTS: Record<string, number> = {
   "clipboard/src/operations.ts": 2,
-  "dialog/src/operations.ts": 1,
   "global-shortcut/src/operations.ts": 1,
   "image/src/operations.ts": 1,
   "log/src/index.ts": 1,
