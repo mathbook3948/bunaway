@@ -19,6 +19,32 @@ test("custom creation retains resize and system-command flags while standard def
   });
 });
 
+/**
+ * setSkipTaskbar requires a hidden normal window and reports a single BUSY error for any of
+ * four states. Asserting them together names the state that was wrong when a run fails.
+ */
+function expectHiddenNormalPlacement(
+  native: {
+    isVisible(window: bigint): boolean;
+    isMinimized(window: bigint): boolean;
+    isMaximized(window: bigint): boolean;
+    isFullscreen(window: bigint): boolean;
+  },
+  window: bigint,
+): void {
+  expect({
+    visible: native.isVisible(window),
+    minimized: native.isMinimized(window),
+    maximized: native.isMaximized(window),
+    fullscreen: native.isFullscreen(window),
+  }).toEqual({
+    visible: false,
+    minimized: false,
+    maximized: false,
+    fullscreen: false,
+  });
+}
+
 test.skipIf(process.platform !== "win32")(
   "real custom caption, native resize hit testing, display flags and fullscreen restoration",
   async () => {
@@ -73,6 +99,7 @@ test.skipIf(process.platform !== "win32")(
       expect(messages.symbols.SendMessageW(hwnd, 0x84, 0n, point)).toBe(10n); // HTLEFT
       const foreground = user.symbols.GetForegroundWindow();
       native.setAlwaysOnTop(hwnd, false);
+      expectHiddenNormalPlacement(native, hwnd);
       native.setSkipTaskbar(hwnd, false);
       expect(native.isAlwaysOnTop(hwnd)).toBe(false);
       expect(native.isSkipTaskbar(hwnd)).toBe(false);
@@ -112,6 +139,7 @@ test.skipIf(process.platform !== "win32")(
       );
       native.restore(hwnd);
       native.show(hwnd, false);
+      expectHiddenNormalPlacement(native, hwnd);
       native.setSkipTaskbar(hwnd, true);
       expect(native.isSkipTaskbar(hwnd)).toBe(true);
       native.showInactive(hwnd);
