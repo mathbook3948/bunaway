@@ -56,9 +56,9 @@ final class Renderer {
         headers.put("Cache-Control", "no-store");
         headers.put(
                 "Content-Security-Policy",
-                "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src"
-                    + " 'self'; connect-src 'self' ws://127.0.0.1:*; frame-src 'self'; object-src"
-                    + " 'none'; base-uri 'none'; form-action 'none'");
+                "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src"
+                    + " 'self'; font-src 'self'; connect-src 'self' ws://127.0.0.1:*; frame-src"
+                    + " 'self'; object-src 'none'; base-uri 'none'; form-action 'none'");
         HEADERS = Collections.unmodifiableMap(headers);
     }
 

@@ -39,3 +39,15 @@ test("the device suite packages a valid .wasm and instantiates it by streaming",
   expect(client).toContain("WebAssembly.instantiateStreaming");
   expect(client).toContain('"application/wasm"');
 });
+
+test("the host CSP allows WebAssembly compilation but not eval", async () => {
+  const source = await Bun.file(rendererPath).text();
+  // The directive may be split across concatenated string literals.
+  const csp = [
+    ...source.matchAll(/"((?:default-src|[^"]*)[^"]*)"/g),
+  ]
+    .map((match) => match[1])
+    .join("");
+  expect(csp).toMatch(/script-src 'self' 'wasm-unsafe-eval';/);
+  expect(csp).not.toContain("'unsafe-eval'");
+});
