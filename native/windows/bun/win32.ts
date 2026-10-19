@@ -385,183 +385,13 @@ export class Windows {
           assert.equal(kernel.symbols.GetCurrentThreadId(), this.thread);
           // DispatchMessage can remain in a native move/resize loop until the user releases the mouse.
           pollMessages?.();
-          // Session messages reach every top-level HWND of this thread (app, control, tray and
-          // notification windows share this procedure); one handler answers for all of them.
-          const sessionResult = this.sessionMessage?.(message, wparam, lparam);
-          if (sessionResult !== undefined) {
-            return sessionResult;
-          }
-          if (
-            message === this.taskbar.buttonCreatedMessage &&
-            this.windows.has(window)
-          ) {
-            this.taskbar.restore(window);
-            return 0n;
-          }
-          if (message === APP_SHUTDOWN_MESSAGE) {
-            shutdown();
-            return 0n;
-          }
-          if (message === WM_OBSERVE_WINDOW) {
-            this.observeChanges(window);
-            return 0n;
-          }
-          if (message === WM_GETMINMAXINFO) {
-            user.symbols.DefWindowProcW(window, message, wparam, lparam);
-            this.applyMinMaxInfo(window, lparam);
-            this.windows.get(window)?.(message, wparam, lparam);
-            return 0n;
-          }
-          if (
-            message === WM_SIZING &&
-            this.applySizingAspectRatio(window, wparam, lparam)
-          ) {
-            return 1n; // TRUE: the rectangle was modified.
-          }
-          if (message === WM_DPICHANGED) {
-            this.applyDpiChange(window, wparam, lparam);
-            this.windows.get(window)?.(message, wparam, lparam);
-            this.observeChanges(window);
-            return 0n;
-          }
-          if (message === WM_WINDOWPOSCHANGING) {
-            this.constrainMaximizedSize(window, lparam);
-          }
-          if (this.windows.has(window)) {
-            if (message === WM_CLOSE && !this.isClosable(window)) {
-              return 0n;
-            }
-            if (message === WM_SYSCOMMAND) {
-              const command = wparam & SYSTEM_COMMAND_MASK;
-              // CSS caption regions remain in the document during fullscreen. Do not let
-              // their native gestures desynchronize the HWND from the saved fullscreen state.
-              if (
-                this.isFullscreen(window) &&
-                this.getTitlebar(window) === "custom" &&
-                (command === SC_MOVE ||
-                  command === SC_SIZE ||
-                  command === SC_MINIMIZE ||
-                  command === SC_MAXIMIZE ||
-                  command === SC_RESTORE)
-              ) {
-                return 0n;
-              }
-              if (
-                (command === SC_MINIMIZE && !this.isMinimizable(window)) ||
-                (command === SC_MAXIMIZE && !this.isMaximizable(window)) ||
-                (command === BigInt(SC_CLOSE) && !this.isClosable(window))
-              ) {
-                return 0n;
-              }
-            }
-          }
-          if (
-            message === WM_MOUSEACTIVATE &&
-            this.windows.has(window) &&
-            !this.isFocusable(window)
-          ) {
-            return MA_NOACTIVATE;
-          }
-          if (
-            message === WM_SYSCOMMAND &&
-            this.windows.has(window) &&
-            !this.isFocusable(window)
-          ) {
-            const command = wparam & SYSTEM_COMMAND_MASK;
-            if (
-              command === SC_MINIMIZE ||
-              command === SC_MAXIMIZE ||
-              command === SC_RESTORE
-            ) {
-              // Default caption commands use activating ShowWindow modes even with NOACTIVATE.
-              // Keep native button restrictions and leave fullscreen state changes to its API.
-              if (!this.isFullscreen(window)) {
-                const { style } = this.windowStyles(window);
-                if (command === SC_MINIMIZE && style & WS_MINIMIZEBOX) {
-                  this.minimize(window);
-                }
-                if (command === SC_MAXIMIZE && style & WS_MAXIMIZEBOX) {
-                  this.maximize(window);
-                }
-                if (command === SC_RESTORE) {
-                  this.restore(window);
-                }
-              }
-              return 0n;
-            }
-          }
-          if (
-            message === WM_ENTERSIZEMOVE &&
-            this.observations.has(window) &&
-            !this.interactiveGeometry.has(window)
-          ) {
-            this.interactiveGeometry.set(
-              window,
-              this.getBounds(window, "outer"),
-            );
-          }
-
-          if (message === WM_SYSCOMMAND && this.windows.has(window)) {
-            // Caption dragging and keyboard/system-menu commands converge here.
-            const command = wparam & SYSTEM_COMMAND_MASK;
-            if (
-              (command === SC_MOVE && !this.isMovable(window)) ||
-              (command === SC_SIZE && !this.isResizable(window))
-            ) {
-              return 0n;
-            }
-          }
-          this.windows.get(window)?.(message, wparam, lparam);
-          if (message === WM_CLOSE) {
-            return 0n; // defer Close/DestroyWindow past callback
-          }
-          const result = user.symbols.DefWindowProcW(
+          return this.windowProcedure(
             window,
             message,
             wparam,
             lparam,
+            shutdown,
           );
-          if (message === WM_EXITSIZEMOVE) {
-            const start = this.interactiveGeometry.get(window);
-            this.interactiveGeometry.delete(window);
-            if (start) {
-              this.observeChanges(window, start);
-            }
-          }
-          if (message === WM_WINDOWPOSCHANGED && this.windows.has(window)) {
-            this.rememberNormalMonitor(window);
-          }
-          if (message === WM_WINDOWPOSCHANGED) {
-            // Z-order and topmost changes from any process arrive here.
-            this.observeChanges(window);
-          }
-          if (message === WM_ACTIVATE && this.windows.has(window)) {
-            // Record activation itself, including switches while WebView setup is pending.
-            // Blur and read-only queries never change activation history.
-            if ((wparam & 0xffffn) !== WA_INACTIVE) {
-              this.lastActiveWindow = window;
-            }
-          }
-          if (message === WM_ACTIVATE && this.observations.has(window)) {
-            // Foreground identity can change after this synchronous activation callback returns.
-            assert(
-              user.symbols.PostMessageW(window, WM_OBSERVE_WINDOW, 0n, 0n),
-            );
-          }
-          if (
-            message === WM_DISPLAYCHANGE &&
-            this.windows.has(window) &&
-            !this.fullscreen.has(window)
-          ) {
-            // Refresh even without a query while the previous monitor is disconnected.
-            this.readNormalMonitorInfo(
-              window,
-              this.getPlacement(window).subarray(
-                WINDOWPLACEMENT_NORMAL_RECT_OFFSET,
-              ),
-            );
-          }
-          return result;
         } catch (error) {
           this.failure ??= error;
           return 0n;
@@ -594,6 +424,234 @@ export class Windows {
       throw new Error(`RegisterClassExW: ${kernel.symbols.GetLastError()}`);
     }
     this.registered = true;
+  }
+
+  /**
+   * Window procedure shared by every top-level HWND of this thread. Stages run in a fixed order:
+   * session and host-owned messages, policy rejections, the registered window handler, then the
+   * default procedure and the bookkeeping that depends on its result.
+   */
+  private windowProcedure(
+    window: bigint,
+    message: number,
+    wparam: bigint,
+    lparam: bigint,
+    shutdown: () => void,
+  ): bigint {
+    // Session messages reach every top-level HWND of this thread (app, control, tray and
+    // notification windows share this procedure); one handler answers for all of them.
+    const sessionResult = this.sessionMessage?.(message, wparam, lparam);
+    if (sessionResult !== undefined) {
+      return sessionResult;
+    }
+    const hostResult = this.hostMessageResult(
+      window,
+      message,
+      wparam,
+      lparam,
+      shutdown,
+    );
+    if (hostResult !== undefined) {
+      return hostResult;
+    }
+    if (message === WM_WINDOWPOSCHANGING) {
+      this.constrainMaximizedSize(window, lparam);
+    }
+    const policyResult = this.windowPolicyResult(window, message, wparam);
+    if (policyResult !== undefined) {
+      return policyResult;
+    }
+    if (
+      message === WM_ENTERSIZEMOVE &&
+      this.observations.has(window) &&
+      !this.interactiveGeometry.has(window)
+    ) {
+      this.interactiveGeometry.set(window, this.getBounds(window, "outer"));
+    }
+    this.windows.get(window)?.(message, wparam, lparam);
+    if (message === WM_CLOSE) {
+      return 0n; // defer Close/DestroyWindow past callback
+    }
+    const result = user.symbols.DefWindowProcW(window, message, wparam, lparam);
+    this.afterDefaultProcedure(window, message, wparam);
+    return result;
+  }
+
+  /** Messages the host answers itself before any window policy or handler sees them; undefined falls through. */
+  private hostMessageResult(
+    window: bigint,
+    message: number,
+    wparam: bigint,
+    lparam: bigint,
+    shutdown: () => void,
+  ): bigint | undefined {
+    if (
+      message === this.taskbar.buttonCreatedMessage &&
+      this.windows.has(window)
+    ) {
+      this.taskbar.restore(window);
+      return 0n;
+    }
+    if (message === APP_SHUTDOWN_MESSAGE) {
+      shutdown();
+      return 0n;
+    }
+    if (message === WM_OBSERVE_WINDOW) {
+      this.observeChanges(window);
+      return 0n;
+    }
+    if (message === WM_GETMINMAXINFO) {
+      user.symbols.DefWindowProcW(window, message, wparam, lparam);
+      this.applyMinMaxInfo(window, lparam);
+      this.windows.get(window)?.(message, wparam, lparam);
+      return 0n;
+    }
+    if (
+      message === WM_SIZING &&
+      this.applySizingAspectRatio(window, wparam, lparam)
+    ) {
+      return 1n; // TRUE: the rectangle was modified.
+    }
+    if (message === WM_DPICHANGED) {
+      this.applyDpiChange(window, wparam, lparam);
+      this.windows.get(window)?.(message, wparam, lparam);
+      this.observeChanges(window);
+      return 0n;
+    }
+    return undefined;
+  }
+
+  /** Close, activation and system-command policy of registered windows; a result swallows the message. */
+  private windowPolicyResult(
+    window: bigint,
+    message: number,
+    wparam: bigint,
+  ): bigint | undefined {
+    if (!this.windows.has(window)) {
+      return undefined;
+    }
+    if (message === WM_CLOSE && !this.isClosable(window)) {
+      return 0n;
+    }
+    if (message === WM_MOUSEACTIVATE && !this.isFocusable(window)) {
+      return MA_NOACTIVATE;
+    }
+    if (message === WM_SYSCOMMAND) {
+      return this.systemCommandResult(window, wparam & SYSTEM_COMMAND_MASK);
+    }
+    return undefined;
+  }
+
+  /** Applies per-window restrictions to a system command; undefined lets the default procedure run it. */
+  private systemCommandResult(
+    window: bigint,
+    command: bigint,
+  ): bigint | undefined {
+    // CSS caption regions remain in the document during fullscreen. Do not let
+    // their native gestures desynchronize the HWND from the saved fullscreen state.
+    if (
+      this.isFullscreen(window) &&
+      this.getTitlebar(window) === "custom" &&
+      (command === SC_MOVE ||
+        command === SC_SIZE ||
+        command === SC_MINIMIZE ||
+        command === SC_MAXIMIZE ||
+        command === SC_RESTORE)
+    ) {
+      return 0n;
+    }
+    if (
+      (command === SC_MINIMIZE && !this.isMinimizable(window)) ||
+      (command === SC_MAXIMIZE && !this.isMaximizable(window)) ||
+      (command === BigInt(SC_CLOSE) && !this.isClosable(window))
+    ) {
+      return 0n;
+    }
+    if (
+      !this.isFocusable(window) &&
+      (command === SC_MINIMIZE ||
+        command === SC_MAXIMIZE ||
+        command === SC_RESTORE)
+    ) {
+      this.applyUnfocusableCaptionCommand(window, command);
+      return 0n;
+    }
+    // Caption dragging and keyboard/system-menu commands converge here.
+    if (
+      (command === SC_MOVE && !this.isMovable(window)) ||
+      (command === SC_SIZE && !this.isResizable(window))
+    ) {
+      return 0n;
+    }
+    return undefined;
+  }
+
+  /**
+   * Default caption commands use activating ShowWindow modes even with NOACTIVATE.
+   * Keep native button restrictions and leave fullscreen state changes to its API.
+   */
+  private applyUnfocusableCaptionCommand(window: bigint, command: bigint) {
+    if (this.isFullscreen(window)) {
+      return;
+    }
+    const { style } = this.windowStyles(window);
+    if (command === SC_MINIMIZE && style & WS_MINIMIZEBOX) {
+      this.minimize(window);
+    }
+    if (command === SC_MAXIMIZE && style & WS_MAXIMIZEBOX) {
+      this.maximize(window);
+    }
+    if (command === SC_RESTORE) {
+      this.restore(window);
+    }
+  }
+
+  /** Bookkeeping that depends on the state DefWindowProc has just applied. */
+  private afterDefaultProcedure(
+    window: bigint,
+    message: number,
+    wparam: bigint,
+  ) {
+    if (message === WM_EXITSIZEMOVE) {
+      const start = this.interactiveGeometry.get(window);
+      this.interactiveGeometry.delete(window);
+      if (start) {
+        this.observeChanges(window, start);
+      }
+    }
+    if (message === WM_WINDOWPOSCHANGED && this.windows.has(window)) {
+      this.rememberNormalMonitor(window);
+    }
+    if (message === WM_WINDOWPOSCHANGED) {
+      // Z-order and topmost changes from any process arrive here.
+      this.observeChanges(window);
+    }
+    if (message === WM_ACTIVATE) {
+      this.recordActivation(window, wparam);
+    }
+    if (
+      message === WM_DISPLAYCHANGE &&
+      this.windows.has(window) &&
+      !this.fullscreen.has(window)
+    ) {
+      // Refresh even without a query while the previous monitor is disconnected.
+      this.readNormalMonitorInfo(
+        window,
+        this.getPlacement(window).subarray(WINDOWPLACEMENT_NORMAL_RECT_OFFSET),
+      );
+    }
+  }
+
+  private recordActivation(window: bigint, wparam: bigint) {
+    if (this.windows.has(window) && (wparam & 0xffffn) !== WA_INACTIVE) {
+      // Record activation itself, including switches while WebView setup is pending.
+      // Blur and read-only queries never change activation history.
+      this.lastActiveWindow = window;
+    }
+    if (this.observations.has(window)) {
+      // Foreground identity can change after this synchronous activation callback returns.
+      assert(user.symbols.PostMessageW(window, WM_OBSERVE_WINDOW, 0n, 0n));
+    }
   }
 
   /** Query physical work-area bounds for a native monitor; shared with later runtime placement. */

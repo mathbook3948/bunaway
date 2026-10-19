@@ -129,7 +129,6 @@
         "native/windows/bun/ui.ts",
         "native/windows/bun/web-assets.ts",
         "native/windows/bun/webview.ts",
-        "native/windows/bun/win32.ts",
         "native/windows/bun/window-events.ts",
         "packages/backend-sdk/src/cli.ts",
         "packages/cli/scripts/pack.ts",
