@@ -137,7 +137,6 @@
         "plugins/opener/src/platforms/windows-file.ts",
         "plugins/opener/src/platforms/windows-shell.ts",
         "plugins/process/src/platforms/windows-process-native.ts",
-        "plugins/windows/src/platforms/coordinator.ts",
         "plugins/windows/src/platforms/native-adapter.ts",
         "tests/api/window-geometry.test.ts",
         "tests/cli/distribution.test.ts",
