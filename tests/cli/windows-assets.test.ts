@@ -7,6 +7,7 @@ import {
   realpath,
   rename,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -421,6 +422,151 @@ test("development Windows bundles map exceptions to the original TypeScript file
       expect(output).toContain(development ? `${entry}:3:` : "app.js:");
       expect(await stack).toContain(development ? `${entry}:3:` : "app.js:");
     }
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+test("development host build shares SDK and plugin entries with reloads and records the inventory", async () => {
+  const root = await realpath(
+    await mkdtemp(resolve(tmpdir(), "bunaway-shared-entries-")),
+  );
+  const host = resolve(import.meta.dir, "../../native/windows/bun");
+  const modules = resolve(root, "node_modules");
+  const plugin = resolve(modules, "example");
+  const project = resolve(root, "project");
+  const assets = resolve(root, "assets");
+  try {
+    await mkdir(resolve(modules, "@bunaway/cli"), {
+      recursive: true,
+    });
+    await writeFile(
+      resolve(modules, "@bunaway/cli/package.json"),
+      JSON.stringify({
+        name: "@bunaway/cli",
+        version: "0.0.0",
+      }),
+    );
+    // Link every workspace SDK package so the host sources resolve to the same files as the shared entries.
+    const workspace = resolve(import.meta.dir, "../../node_modules/@bunaway");
+    const packages: Record<string, string> = {
+      cli: "@bunaway/cli",
+    };
+    for (const name of await readdir(workspace)) {
+      if (name !== "cli") {
+        packages[name] = `@bunaway/${name}`;
+        await symlink(
+          await realpath(resolve(workspace, name)),
+          resolve(modules, "@bunaway", name),
+          "dir",
+        );
+      }
+    }
+    await writeFile(
+      resolve(modules, "@bunaway/cli/framework.json"),
+      JSON.stringify({
+        version: "0.0.0",
+        packages,
+      }),
+    );
+    await mkdir(plugin);
+    await writeFile(
+      resolve(plugin, "package.json"),
+      JSON.stringify({
+        name: "example",
+        version: "1.0.0",
+        exports: {
+          ".": "./index.js",
+          "./legacy": "./legacy.cjs",
+          "./esm-only": {
+            import: "./esm.js",
+          },
+          "./types": "./types.d.ts",
+          "./*": "./*",
+          ".hidden": "./index.js",
+        },
+      }),
+    );
+    await writeFile(resolve(plugin, "index.js"), "export const kind = 'esm';");
+    await writeFile(resolve(plugin, "esm.js"), "export const kind = 'only';");
+    await writeFile(
+      resolve(plugin, "legacy.cjs"),
+      "module.exports = { kind: 'cjs' };",
+    );
+    await writeFile(resolve(plugin, "types.d.ts"), "export {};");
+    await writeFile(
+      resolve(plugin, "operations.ts"),
+      "export function createOperations() { return { execute() {}, dispose() {} }; }",
+    );
+    await mkdir(project);
+    await writeFile(
+      resolve(project, "package.json"),
+      JSON.stringify({
+        name: "project",
+        version: "0.0.0",
+      }),
+    );
+    const entry = resolve(project, "app.ts");
+    await writeFile(
+      entry,
+      'import { kind } from "example"; import legacy from "example/legacy"; export default { kind, legacy };',
+    );
+    await mkdir(assets);
+    await writeFile(
+      resolve(assets, "manifest.json"),
+      JSON.stringify({
+        format: 1,
+        app: {},
+        policy: {},
+        plugins: [],
+        developmentSdk: {},
+      }),
+    );
+    const bundleAssets = () =>
+      bundleWindowsHost(host, assets, entry, project, true, [
+        {
+          name: "example",
+          version: "1.0.0",
+          packageName: "example",
+          root: plugin,
+          native: {
+            operations: [],
+          },
+          targets: {
+            windows: {
+              thread: "worker",
+              operations: resolve(plugin, "operations.ts"),
+            },
+          },
+        },
+      ]);
+    await bundleAssets();
+    const inventory = JSON.parse(
+      await readFile(resolve(assets, "manifest.json"), "utf8"),
+    ).developmentSdk;
+    expect(inventory["@bunaway/protocol"]).toMatch(/^sdk\d+\.js$/);
+    expect(inventory.example).toMatch(/^sdk\d+\.js$/);
+    expect(inventory["require:example"]).toBe(inventory.example);
+    expect(inventory["example/legacy"]).toMatch(/^sdk\d+\.cjs$/);
+    expect(inventory["require:example/legacy"]).toBe(
+      inventory["example/legacy"],
+    );
+    // An import-only export has no require entry; declarations, wildcards and non-subpath keys are never shared.
+    expect(inventory["example/esm-only"]).toMatch(/^sdk\d+\.js$/);
+    for (const name of [
+      "require:example/esm-only",
+      "example/types",
+      "example/*",
+      "example.hidden",
+    ]) {
+      expect(inventory).not.toHaveProperty(name);
+    }
+    const outputs = await readdir(assets);
+    expect(outputs).toContain(inventory.example);
+    expect(outputs).toContain(inventory["example/legacy"]);
   } finally {
     await rm(root, {
       recursive: true,
