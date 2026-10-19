@@ -119,14 +119,10 @@ const EMPTY_HANDLERS: Record<string, number> = {
   "native/windows/bun/entry.ts": 2,
   "packages/cli/src/dev-server.ts": 1,
   "packages/cli/src/managed-command.ts": 1,
-  "packages/cli/src/sdk.ts": 1,
-  "packages/cli/src/windows-app-reload.ts": 1,
   "packages/client-sdk/src/index.ts": 4,
   "packages/core/src/create-core.ts": 1,
   "packages/packaging/src/inputs.ts": 2,
-  "packages/packaging/src/resolve.ts": 1,
   "packages/packaging/src/runner.ts": 1,
-  "packages/runtime-bun/src/diagnostic-log.ts": 1,
   "packages/runtime-bun/src/runtime.ts": 3,
 };
 

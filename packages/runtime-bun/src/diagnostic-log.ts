@@ -43,7 +43,9 @@ export class DiagnosticLog {
         this.queued--;
       }
     });
-    this.writer = writer.catch(() => {});
+    this.writer = writer.catch(() => {
+      // The failed write rejects for its own caller; the chain only needs to keep running.
+    });
     return writer;
   }
 

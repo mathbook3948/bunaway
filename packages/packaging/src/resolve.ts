@@ -72,7 +72,11 @@ async function icon(
     );
   }
   const path = resolve(root, nameInProject);
-  const stat = await lstat(path).catch(() => undefined);
+  // A missing or unreadable icon is reported as "not a file" just below.
+  const stat = await lstat(path).catch(
+    // Reported below.
+    () => undefined,
+  );
   if (!stat?.isFile()) {
     fail(
       CODES.CONFIG_INVALID,
