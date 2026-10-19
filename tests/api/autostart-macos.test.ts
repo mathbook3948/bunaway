@@ -42,9 +42,7 @@ let state: AutostartState;
 // The adapter resolves POSIX paths and runs on macOS only; Windows temporary directories are not
 // absolute POSIX paths, so Linux and macOS cover it.
 const onWindows = process.platform === "win32";
-const test = Object.assign(onWindows ? bunTest.skip : bunTest, {
-  skipIf: bunTest.skipIf,
-});
+const test = onWindows ? bunTest.skip : bunTest;
 beforeEach(() => {
   if (onWindows) {
     return;
@@ -491,7 +489,7 @@ test("a file in place of the LaunchAgents folder is reported without creating an
 });
 
 // plutil ships with macOS; the matrix runs this file on macos-14 and skips it elsewhere.
-test.skipIf(process.platform !== "darwin")(
+bunTest.skipIf(process.platform !== "darwin")(
   "macOS plutil accepts the generated plist and reads the same arguments back",
   () => {
     const args = [
@@ -526,7 +524,7 @@ test.skipIf(process.platform !== "darwin")(
   },
 );
 
-test.skipIf(process.platform !== "darwin" || !process.env.CI)(
+bunTest.skipIf(process.platform !== "darwin" || !process.env.CI)(
   "macOS registers and removes a launch agent under the real user home",
   () => {
     const real = initialize({
