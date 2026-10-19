@@ -78,7 +78,8 @@ test.skipIf(
         {
           separator: true,
           title: "",
-          enabled: true,
+          // AppKit reports a separator item as not enabled.
+          enabled: false,
         },
         {
           separator: false,
