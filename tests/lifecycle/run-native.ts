@@ -296,6 +296,15 @@ if (target === "windows-x64") {
         inputs.bun,
         "--no-env-file",
         "test",
+        resolve(root, "tests/lifecycle/macos-os.test.ts"),
+      ],
+      root,
+    );
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
         resolve(root, "tests/lifecycle/macos-tray-native.test.ts"),
       ],
       root,

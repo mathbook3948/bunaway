@@ -1,6 +1,6 @@
 # OS metadata plugin
 
-`@bunaway/plugin-os` provides permission-mediated `os.info(null)`, `os.usage(null)`, `os.locale(null)` and `os.beep({ kind })` on Windows.
+`@bunaway/plugin-os` provides permission-mediated `os.info(null)`, `os.usage(null)`, `os.locale(null)` and `os.beep({ kind })` on Windows and macOS.
 Register `os` in the app definition. Each operation requires its own permission; registration grants none.
 Trusted backends can use Bun, `process` and `node:os` directly for runtime metadata.
 
@@ -10,6 +10,11 @@ The Windows adapter owns Kernel32 bindings until disposal. It reads current Wind
 [GetLocaleInfoEx](https://learn.microsoft.com/en-us/windows/win32/api/winnls/nf-winnls-getlocaleinfoex) and
 [GetSystemDefaultUILanguage](https://learn.microsoft.com/en-us/windows/win32/api/winnls/nf-winnls-getsystemdefaultuilanguage).
 These values describe configured language and region, not physical location.
+
+The macOS adapter reads the locale and preferred languages through CoreFoundation, Rosetta translation through
+`sysctl.proc_translated`, and plays the user's alert sound with AudioToolbox `AudioServicesPlayAlertSound`.
+It owns those library handles until disposal. `tests/api/os-macos.test.ts` checks the pure helpers and registration;
+`tests/lifecycle/macos-os.test.ts` runs the adapter against the real frameworks and is part of the macOS native run.
 
 `tests/api/os.test.ts` checks contracts and independent permissions. `tests/lifecycle/windows-os.test.ts`
 executes the generated Windows adapter against actual Kernel32 and compares runtime metadata with Bun.

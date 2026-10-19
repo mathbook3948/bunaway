@@ -351,7 +351,7 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 
 - [x] 플러그인 정리 후 같은 그룹의 하위 프로세스와 `unref()` 프로세스를 정리한다.
 - [x] 별도 그룹의 프로세스를 종료하지 않는다. 앱이 새 세션이나 그룹으로 분리한 자손은 관리 범위 밖이다.
-- [ ] OS, CPU, locale, 언어, 메모리와 translation 상태를 조회한다.
+- [x] OS, CPU, locale, 언어, 메모리와 translation 상태를 조회한다.
 - [ ] URL scope를 적용한 HTTP, stream, 취소와 timeout을 제공한다.
 - [ ] 정책을 적용한 WebSocket 연결과 backpressure를 제공한다.
 - [ ] 실행 파일과 argv scope, stdin/stdout/stderr, exit와 signal 계약을 제공한다.

@@ -1,12 +1,12 @@
 ---
 title: os
-description: Windows와 번들 Bun의 실행 정보, 사용자 locale과 표시 언어를 조회하고 시스템 경고음을 재생합니다.
+description: Windows, macOS와 번들 Bun의 실행 정보, 사용자 locale과 표시 언어를 조회하고 시스템 경고음을 재생합니다.
 sidebar: { order: 7 }
 ---
 
 기본 export(`default`)를 `os`로 가져와 앱에 등록하고 호출합니다.
 
-`@bunaway/plugin-os`를 설치하고 앱의 `plugins`에 `os`를 등록합니다. Windows에서 제공합니다.
+`@bunaway/plugin-os`를 설치하고 앱의 `plugins`에 `os`를 등록합니다. Windows와 macOS에서 제공합니다.
 화면과 백엔드는 같은 패키지의 `os`를 사용합니다.
 
 ```ts
@@ -23,7 +23,7 @@ const locale = await os.locale(null);
 | `os.locale` | `null` | `Promise<OSLocale>` | `os.locale` |
 | `os.beep` | `OSBeepInput` | `Promise<null>` | `os.beep` |
 
-`OSInfo`는 `platform: "windows"`, OS의 `type`, `release`, `version`, 실행 중 프로세스의
+`OSInfo`는 `platform: "windows"` 또는 `"macos"`, OS의 `type`, `release`, `version`, 실행 중 프로세스의
 `architecture`, `hostname`과 `runtime: { name: "bun", version, pid }`를 반환합니다.
 architecture는 하드웨어 종류나 translation 상태를 뜻하지 않습니다. PID는 같은 프로세스의
 호스트와 백엔드가 공유합니다. 경로, 환경 변수나 사용자 이름은 포함하지 않습니다.
@@ -38,12 +38,21 @@ translation은 Windows `IsWow64Process2` 결과입니다. `active`는 WOW transl
 `nativeMachine`은 호스트 machine 값입니다. 두 숫자는 Windows IMAGE_FILE_MACHINE 값이며
 프로세스 이름이나 임의 PID의 정보를 조회하지 않습니다. `os.usage`는 독립 권한입니다.
 
+macOS의 `translation`은 `sysctl.proc_translated`로 Rosetta 2 변환 여부를 읽습니다. 변환 중이면
+`active`가 `true`, `processMachine`이 x86_64(`0x8664`), `nativeMachine`이 ARM64(`0xaa64`)입니다.
+변환하지 않으면 `active`는 `false`, `processMachine`은 0이고 `nativeMachine`은 프로세스 architecture에
+해당하는 값(Apple silicon은 `0xaa64`, Intel은 `0x8664`)입니다.
+
 `OSLocale`은 Windows 사용자의 형식 설정인 `locale`, 해당 locale의 ISO 지역 코드인
 `countryCode`, 순서가 있는 사용자 표시 언어 목록 `preferredLanguages`와 시스템 기본 UI
 언어 `systemLanguage`를 반환합니다. 지역 코드가 없으면 `null`입니다. 현재 위치나 IP 기반
 국가를 조회하지 않습니다. 지역 코드는 `US` 같은 두 글자 값 외에 Caribbean의 `029` 같은
 세 자리 숫자 문자열일 수 있으며 앞의 0을 보존합니다. 시스템 언어는 Windows의 기본 UI 언어이며 사용자 표시 언어와
 다를 수 있습니다. 언어 설정은 호출마다 읽고 결과를 캐시하지 않습니다.
+
+macOS에서는 CoreFoundation의 현재 locale과 선호 언어 목록을 읽습니다. `locale`은 `ko-KR`처럼
+하이픈으로 잇는 태그이고, 지역 코드는 그 태그의 지역 부분입니다. macOS에는 선호 언어와 별개인
+시스템 UI 언어가 없어 `systemLanguage`는 `preferredLanguages`의 첫 항목입니다.
 
 `os.beep({ kind })`는 Windows `MessageBeep`로 사용자의 사운드 설정에 따른 시스템 소리를 재생합니다.
 `kind`는 `"default"`, `"info"`, `"warning"`, `"error"` 중 하나이며 생략하면 `"default"`입니다.
@@ -54,9 +63,12 @@ translation은 Windows `IsWow64Process2` 결과입니다. `active`는 WOW transl
 끄거나 오디오 장치가 없으면 소리가 나지 않아도 성공할 수 있습니다. `MessageBeep` 호출 자체가 실패하면
 `INTERNAL`입니다. 주파수와 길이는 지정할 수 없습니다.
 
+macOS에서는 `kind`와 관계없이 System Settings에서 고른 경고음(`AudioServicesPlayAlertSound`)을 재생합니다.
+macOS에는 종류별 시스템 소리가 없으므로 `kind`는 검증만 하고 소리를 바꾸지 않습니다. 재생 요청 뒤
+바로 `null`을 반환하며 소리가 났는지는 확인하지 않습니다.
+
 이모지 패널을 여는 API는 제공하지 않습니다. Windows에는 이모지 패널을 여는 공식 API가 없고
 Win+. 키 입력을 합성하는 방법만 있어 현재 포커스를 가진 창에 의존하므로 지원하지 않습니다.
-macOS에서는 `os` 플러그인 전체가 `UNSUPPORTED`입니다.
 
 화면 직접 호출에는 뷰의 `commands`에 `plugin.os.info`, `plugin.os.usage`, `plugin.os.locale` 또는 `plugin.os.beep`을,
 `host.permissions`에 같은 작업의 `os.info`, `os.usage`, `os.locale` 또는 `os.beep`을 허용합니다. 백엔드 명령은
