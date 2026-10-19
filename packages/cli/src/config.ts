@@ -322,67 +322,148 @@ export async function readProjectSettings(root: string): Promise<{
   };
 }
 
-/**
- * Resolve project settings, policy and framework packages. Callers can defer source-import checks;
- * metadata-only reads also skip required app and frontend file checks.
- */
-async function loadProject(
-  directory: string,
-  options: {
-    development?: boolean;
-    validateSources?: boolean;
-    validateFiles?: boolean;
-  } = {},
-): Promise<Project> {
-  const root = await realpath(resolve(directory));
-  const settings = await readProjectSettings(root);
-  const configDirectory = settings.directory;
-  const config = settings.build;
-  const server = options.development && settings.dev;
-  const validateFiles = options.validateFiles !== false;
-  const appName = string(config.app, "build.app");
-  if (isAbsolute(appName) || appName.split(/[\\/]/).includes("..")) {
-    throw new Error("build.app must be a project-relative file without '..'.");
-  }
-  const appEntry = validateFiles
-    ? await projectPath(root, appName)
-    : resolve(root, appName);
-  const frontendName = string(config.frontend, "build.frontend");
-  if (isAbsolute(frontendName) || frontendName.split(/[\\/]/).includes("..")) {
-    throw new Error(
-      "build.frontend must be a project-relative directory without '..'.",
-    );
-  }
-  const frontend = await frontendPath(root, frontendName);
-  if (server && validateFiles) {
-    await ownedDirectory(root, frontend);
-  }
+/** A project-relative path must not be absolute or climb out of the project. */
+function isOutsideProject(name: string): boolean {
+  return isAbsolute(name) || name.split(/[\\/]/).includes("..");
+}
+
+/** Check that the app entry is a file and, unless a dev server serves the UI, the frontend is a directory. */
+async function assertAppFiles(
+  appEntry: string,
+  frontend: string,
+  server: boolean,
+): Promise<void> {
   if (
-    validateFiles &&
-    (!(await lstat(appEntry)).isFile() ||
-      (!server && !(await lstat(frontend)).isDirectory()))
+    !(await lstat(appEntry)).isFile() ||
+    (!server && !(await lstat(frontend)).isDirectory())
   ) {
     throw new Error("app must be a file; frontend must be a directory.");
   }
-  const {
-    root: frameworkRoot,
-    backendDependencies,
-    frontendDependencies,
-    plugins,
-  } = await validateFramework(
-    root,
-    options.validateSources === false
-      ? []
-      : [
-          appEntry,
-          ...(server
-            ? []
-            : [
-                frontend,
-              ]),
-        ],
+}
+
+/** Windows builds (and any app that sets a name) need a valid, non-installer executable name. */
+function assertExecutableName(
+  raw: Record<string, unknown>,
+  appId: string,
+): void {
+  if (
+    raw.executableName === undefined &&
+    !(process.platform === "win32" && process.arch === "x64")
+  ) {
+    return;
+  }
+  const name =
+    raw.executableName === undefined
+      ? `${appId}.exe`
+      : string(raw.executableName, "app.executableName");
+  if (!isWindowsExecutableName(name, 120) || /^unins\d+\.exe$/i.test(name)) {
+    throw new Error(
+      raw.executableName === undefined
+        ? `Default Windows executable name ${name} is invalid; ` +
+            "set app.executableName to a valid .exe name."
+        : "app.executableName must be a Windows .exe file name without a path, reserved device name or uninsNNN.exe installer name.",
+    );
+  }
+}
+
+/** The icon must be a project-relative .ico file; the file itself is checked only when files are validated. */
+async function assertIcon(
+  raw: Record<string, unknown>,
+  root: string,
+  validateFiles: boolean,
+): Promise<void> {
+  if (raw.icon === undefined) {
+    return;
+  }
+  const name = string(raw.icon, "app.icon");
+  if (!name.toLowerCase().endsWith(".ico")) {
+    throw new Error("app.icon must be an .ico file.");
+  }
+  if (isOutsideProject(name)) {
+    throw new Error("app.icon must be project-relative without '..'.");
+  }
+  if (validateFiles && !(await lstat(await projectPath(root, name))).isFile()) {
+    throw new Error("app.icon must be a regular file.");
+  }
+}
+
+/** Read policy.json and reject HTTP origins and operations the installed plugins do not declare. */
+async function readAppPolicy(
+  configDirectory: string,
+  plugins: readonly InstalledPlugin[],
+): Promise<ReturnType<typeof parsePolicy>> {
+  const policy = parsePolicy(
+    await Bun.file(resolve(configDirectory, "policy.json")).text(),
   );
-  const raw = settings.app;
+  if (
+    policy.views.some((view) =>
+      view.origins.some((origin) => origin.startsWith("http:")),
+    )
+  ) {
+    throw new Error(
+      "HTTP origins are not allowed in policy.json; use dev.url for a development server.",
+    );
+  }
+  new NativeRegistry(plugins, {
+    mode: "catalog",
+  }).validatePolicy(policy);
+  return policy;
+}
+
+/** Normalize legacy single-window settings through the same validator as multi-window settings. */
+function readAppWindows(
+  raw: Record<string, unknown>,
+  multiple: boolean,
+  policy: ReturnType<typeof parsePolicy>,
+): ReturnType<typeof readWindowSpecs> {
+  const windows = readWindowSpecs(
+    multiple
+      ? raw.windows
+      : [
+          {
+            view: raw.view,
+            home: raw.home,
+            title: raw.title,
+            window: raw.window,
+          },
+        ],
+    policy,
+  );
+  if (
+    !multiple &&
+    (policy.views.length !== 1 || policy.views[0]?.id !== windows[0]?.view)
+  ) {
+    throw new Error(
+      "Single-window settings require one configured policy view.",
+    );
+  }
+  return windows;
+}
+
+/** Every window's home document must be a file inside the frontend directory. */
+async function assertHomeDocuments(
+  windows: ReturnType<typeof readWindowSpecs>,
+  frontend: string,
+): Promise<void> {
+  for (const spec of windows) {
+    const homePath = await projectPath(
+      frontend,
+      decodeURIComponent(new URL(spec.home).pathname).slice(1),
+    );
+    if (!(await lstat(homePath)).isFile()) {
+      throw new Error("Home document is not a file.");
+    }
+  }
+}
+
+/** Validate the app section of the settings and return the policy and windows derived from it. */
+async function readAppSection(
+  raw: Record<string, unknown>,
+  settingsDirectory: string,
+  plugins: readonly InstalledPlugin[],
+  root: string,
+  validateFiles: boolean,
+) {
   keys(
     raw,
     [
@@ -405,38 +486,8 @@ async function loadProject(
   }
   // Checked before window declarations, whose own title rules would otherwise report first.
   const title = appTitle(raw.title);
-  if (
-    raw.executableName !== undefined ||
-    (process.platform === "win32" && process.arch === "x64")
-  ) {
-    const name =
-      raw.executableName === undefined
-        ? `${appId}.exe`
-        : string(raw.executableName, "app.executableName");
-    if (!isWindowsExecutableName(name, 120) || /^unins\d+\.exe$/i.test(name)) {
-      throw new Error(
-        raw.executableName === undefined
-          ? `Default Windows executable name ${name} is invalid; ` +
-              "set app.executableName to a valid .exe name."
-          : "app.executableName must be a Windows .exe file name without a path, reserved device name or uninsNNN.exe installer name.",
-      );
-    }
-  }
-  if (raw.icon !== undefined) {
-    const name = string(raw.icon, "app.icon");
-    if (!name.toLowerCase().endsWith(".ico")) {
-      throw new Error("app.icon must be an .ico file.");
-    }
-    if (isAbsolute(name) || name.split(/[\\/]/).includes("..")) {
-      throw new Error("app.icon must be project-relative without '..'.");
-    }
-    if (
-      validateFiles &&
-      !(await lstat(await projectPath(root, name))).isFile()
-    ) {
-      throw new Error("app.icon must be a regular file.");
-    }
-  }
+  assertExecutableName(raw, appId);
+  await assertIcon(raw, root, validateFiles);
   const multiple = raw.windows !== undefined;
   if (
     multiple &&
@@ -450,53 +501,82 @@ async function loadProject(
       "Use app.windows or app.view/home/window, without mixing the two formats.",
     );
   }
-  const policy = parsePolicy(
-    await Bun.file(resolve(configDirectory, "policy.json")).text(),
-  );
-  if (
-    policy.views.some((view) =>
-      view.origins.some((origin) => origin.startsWith("http:")),
-    )
-  ) {
-    throw new Error(
-      "HTTP origins are not allowed in policy.json; use dev.url for a development server.",
-    );
-  }
-  new NativeRegistry(plugins, {
-    mode: "catalog",
-  }).validatePolicy(policy);
-  // Normalize legacy single-window settings through the same validator as multi-window settings.
-  const windows = readWindowSpecs(
-    multiple
-      ? raw.windows
-      : [
-          {
-            view: raw.view,
-            home: raw.home,
-            title: raw.title,
-            window: raw.window,
-          },
-        ],
+  const policy = await readAppPolicy(settingsDirectory, plugins);
+  const windows = readAppWindows(raw, multiple, policy);
+  return {
+    appId,
+    title,
+    multiple,
     policy,
-  );
-  if (
-    !multiple &&
-    (policy.views.length !== 1 || policy.views[0]?.id !== windows[0]?.view)
-  ) {
+    windows,
+  };
+}
+
+/**
+ * Resolve project settings, policy and framework packages. Callers can defer source-import checks;
+ * metadata-only reads also skip required app and frontend file checks.
+ */
+async function loadProject(
+  directory: string,
+  options: {
+    development?: boolean;
+    validateSources?: boolean;
+    validateFiles?: boolean;
+  } = {},
+): Promise<Project> {
+  const root = await realpath(resolve(directory));
+  const settings = await readProjectSettings(root);
+  const config = settings.build;
+  const server = options.development && settings.dev;
+  const validateFiles = options.validateFiles !== false;
+  const appName = string(config.app, "build.app");
+  if (isOutsideProject(appName)) {
+    throw new Error("build.app must be a project-relative file without '..'.");
+  }
+  const appEntry = validateFiles
+    ? await projectPath(root, appName)
+    : resolve(root, appName);
+  const frontendName = string(config.frontend, "build.frontend");
+  if (isOutsideProject(frontendName)) {
     throw new Error(
-      "Single-window settings require one configured policy view.",
+      "build.frontend must be a project-relative directory without '..'.",
     );
   }
+  const frontend = await frontendPath(root, frontendName);
+  if (server && validateFiles) {
+    await ownedDirectory(root, frontend);
+  }
+  if (validateFiles) {
+    await assertAppFiles(appEntry, frontend, !!server);
+  }
+  const {
+    root: frameworkRoot,
+    backendDependencies,
+    frontendDependencies,
+    plugins,
+  } = await validateFramework(
+    root,
+    options.validateSources === false
+      ? []
+      : [
+          appEntry,
+          ...(server
+            ? []
+            : [
+                frontend,
+              ]),
+        ],
+  );
+  const raw = settings.app;
+  const { appId, title, multiple, policy, windows } = await readAppSection(
+    raw,
+    settings.directory,
+    plugins,
+    root,
+    validateFiles,
+  );
   if (!server && validateFiles) {
-    for (const spec of windows) {
-      const homePath = await projectPath(
-        frontend,
-        decodeURIComponent(new URL(spec.home).pathname).slice(1),
-      );
-      if (!(await lstat(homePath)).isFile()) {
-        throw new Error("Home document is not a file.");
-      }
-    }
+    await assertHomeDocuments(windows, frontend);
   }
   const primary = windows.find((spec) => spec.startup !== false) ?? windows[0];
   return {
