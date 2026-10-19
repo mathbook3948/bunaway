@@ -23,7 +23,7 @@ type Row = {
   returnsBy?: Record<string, unknown>;
   result?: unknown;
   /** Message of the UNSUPPORTED error when the platform omits the control. */
-  unsupported?: string;
+  unsupported?: string | undefined;
 };
 
 const MESSAGES = {
@@ -102,7 +102,7 @@ function flag(
 const query = (
   name: string,
   returns: unknown,
-  unsupported?: string,
+  unsupported?: string | undefined,
   prefix: Call[] = [],
 ): Row => ({
   operation: `windows.${name}`,
@@ -120,7 +120,7 @@ const query = (
 
 const command = (
   name: string,
-  unsupported?: string,
+  unsupported?: string | undefined,
   method = name,
   prefix: Call[] = [],
 ): Row => ({
@@ -1300,7 +1300,7 @@ test("each window operation reaches its native control with the documented argum
         row.returnsBy ?? (row.returns === undefined ? {} : returnsFor(row)),
     });
     const result = await f.invoke(row.operation, row.payload);
-    expect({
+    expect<unknown>({
       operation: row.operation,
       payload: row.payload,
       calls: f.calls,
