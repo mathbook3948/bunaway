@@ -8,9 +8,14 @@ import type {
   ShortcutOperation,
   UrlHandler,
 } from "#opener/contract";
-import { createFiles } from "#opener/platforms/windows-file";
+import {
+  assertExistingFile,
+  assertParentDirectory,
+  resolveReadableFile,
+} from "#opener/platforms/file-check";
 import { createUrlHandlerQuery } from "#opener/platforms/windows-handler";
 import {
+  assertResolvedExtension,
   normalizeApplicationPath,
   normalizeFilePath,
   normalizeShortcutDetails,
@@ -58,7 +63,6 @@ export function initialize() {
   const owner = new ResourceOwner("Opener cleanup failed.");
   owner.acquire(createApartment, (apartment) => apartment.dispose());
   const shell = owner.acquire(createShell, (resource) => resource.dispose());
-  const files = owner.acquire(createFiles, (resource) => resource.dispose());
   const recent = owner.acquire(createRecentDocuments, (resource) =>
     resource.dispose(),
   );
@@ -72,7 +76,6 @@ export function initialize() {
     owner,
     shell,
     shortcuts,
-    files,
     recent,
     handlers,
   };
@@ -112,15 +115,16 @@ export function getUrlHandler(
 
 export function openFile(state: State, path: string): null {
   active(state);
-  const selected = normalizeFilePath(path);
-  state.files.withFile(selected, () => state.shell.open(selected));
+  // The resolved path is what the Shell is asked to open, so a link's name cannot stand in for its target.
+  state.shell.open(resolveReadableFile(normalizeFilePath(path)));
   return null;
 }
 
 export function revealFile(state: State, path: string): null {
   active(state);
   const selected = normalizeFilePath(path);
-  state.files.withFile(selected, () => state.shell.reveal(selected));
+  resolveReadableFile(selected);
+  state.shell.reveal(selected);
   return null;
 }
 
@@ -128,9 +132,8 @@ export function trashFile(state: State, path: string): null {
   active(state);
   const selected = normalizeFilePath(path);
   validateTrashDrive(selected);
-  state.files.withTrashFile(selected, (verifyIdentity) =>
-    trashWindowsFile(selected, verifyIdentity),
-  );
+  assertExistingFile(selected);
+  trashWindowsFile(selected);
   return null;
 }
 
@@ -153,8 +156,8 @@ export function addRecentDocument(
   active(state);
   notCancelled(signal);
   const selected = normalizeFilePath(path);
-  // The pin lasts until SHAddToRecentDocs returns; the Shell reads the file after that.
-  state.files.withFile(selected, () => state.recent.request(selected));
+  resolveReadableFile(selected);
+  state.recent.request(selected);
   return null;
 }
 
@@ -174,18 +177,15 @@ export function readShortcutLink(
 ): ShortcutLink {
   active(state);
   notCancelled(signal);
-  const selected = normalizeShortcutPath(path);
-  let link: ShortcutLink | undefined;
-  state.files.withFile(selected, () => {
-    link = state.shortcuts.read(selected);
-  });
-  if (link === undefined) {
-    throw new BunawayError({
-      code: "INTERNAL",
-      message: "Windows could not process the shortcut.",
-    });
-  }
-  return link;
+  const resolved = resolveShortcutFile(normalizeShortcutPath(path));
+  return state.shortcuts.read(resolved);
+}
+
+/** Resolve an existing shortcut file, requiring that its target still be a `.lnk` file. */
+function resolveShortcutFile(selected: string): string {
+  const resolved = resolveReadableFile(selected);
+  assertResolvedExtension(resolved, "lnk");
+  return resolved;
 }
 
 /** The file check reports a missing leaf or parent as `INVALID_ARGUMENT` with `FILE_NOT_FOUND`. */
@@ -213,22 +213,28 @@ export function writeShortcutLink(
   notCancelled(signal);
   const selected = normalizeShortcutPath(path);
   const checked = normalizeShortcutDetails(details, operation);
-  const save = () => state.shortcuts.write(selected, checked, operation);
   if (operation !== "create") {
-    state.files.withFile(selected, save);
+    state.shortcuts.write(resolveShortcutFile(selected), checked, operation);
     return null;
   }
   try {
-    state.files.withFile(selected, () => {});
+    state.shortcuts.write(resolveShortcutFile(selected), checked, operation);
   } catch (error) {
     if (!isMissingFile(error)) {
       throw error;
     }
-    state.files.withParents(selected, save);
-    return null;
+    // A new shortcut is written where it was asked for; its parent folder must already exist.
+    assertParentDirectory(selected);
+    state.shortcuts.write(selected, checked, operation);
   }
-  state.files.withFile(selected, save);
   return null;
+}
+
+/** Resolve a selected application, requiring that what runs is an `.exe` file whatever its link was named. */
+function resolveApplicationFile(application: string): string {
+  const resolved = resolveReadableFile(normalizeApplicationPath(application));
+  assertResolvedExtension(resolved, "exe");
+  return resolved;
 }
 
 export function openFileWith(
@@ -237,11 +243,8 @@ export function openFileWith(
   application: string,
 ): null {
   active(state);
-  const app = normalizeApplicationPath(application);
-  state.files.withFile(app, () => {
-    const selected = normalizeFilePath(path);
-    state.files.withFile(selected, () => state.shell.open(app, selected));
-  });
+  const app = resolveApplicationFile(application);
+  state.shell.open(app, resolveReadableFile(normalizeFilePath(path)));
   return null;
 }
 
@@ -251,8 +254,8 @@ export function openUrlWith(
   application: string,
 ): null {
   active(state);
-  const app = normalizeApplicationPath(application);
-  state.files.withFile(app, () => state.shell.open(app, normalizeUrl(url)));
+  const app = resolveApplicationFile(application);
+  state.shell.open(app, normalizeUrl(url));
   return null;
 }
 

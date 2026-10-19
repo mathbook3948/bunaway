@@ -45,9 +45,9 @@ await opener.trashFile("C:/Users/me/Documents/삭제할 파일.txt");
 
 작업 권한은 유효한 파일 경로 전체에 적용합니다. 파일별 접근 제한은 앱 명령에서 검사하고 화면에는 그 명령만 허용합니다.
 
-파일 경로는 `C:\folder\file.txt` 또는 `\\server\share\file.txt`와 같이 드라이브나 UNC 공유부터 지정한 절대 경로여야 합니다. 한글, Unicode와 파일명 중간의 공백, 쉼표를 보존합니다. 길이는 최대 259 UTF-16 코드 단위, 각 이름은 최대 255 단위이며 파일과 각 부모의 이름은 파일 시스템의 실제 표기와 일치해야 합니다. 상대 경로, 드라이브 상대 경로, `.`과 `..`, 중복 구분자, 제어 문자, 잘못된 Unicode, 예약 장치명, 끝의 공백이나 점, alternate data stream과 `\\?\`, `\\.\` 장치 경로는 거부합니다. 디렉터리는 입력으로 받지 않습니다.
+파일 경로는 `C:\folder\file.txt` 또는 `\\server\share\file.txt`와 같이 드라이브나 UNC 공유부터 지정한 절대 경로여야 합니다. 한글, Unicode와 파일명 중간의 공백, 쉼표를 보존합니다. 길이는 최대 259 UTF-16 코드 단위, 각 이름은 최대 255 단위입니다. 상대 경로, 드라이브 상대 경로, `.`과 `..`, 중복 구분자, 제어 문자, 잘못된 Unicode, 예약 장치명, 끝의 공백이나 점, alternate data stream과 `\\?\`, `\\.\` 장치 경로는 거부합니다. 디렉터리는 입력으로 받지 않습니다.
 
-권한 검사 뒤 파일과 부모 디렉터리를 확인합니다. 파일이 없으면 `INVALID_ARGUMENT`과 `details.reason: "FILE_NOT_FOUND"`, 읽기나 디렉터리 조회 접근이 거부되거나 공유 잠금과 충돌하면 `PERMISSION_DENIED`를 반환합니다. reparse point, junction, 심볼릭 링크, 하드 링크와 8.3 별칭도 거부합니다. OS 요청을 제출할 때까지 핸들을 유지해 경로 교체를 막으며 성공과 실패 모두에서 닫습니다. 기본 연결 앱의 동작, 실행 파일이나 셸 바로가기의 실행 대상을 격리하지 않으므로 앱 명령에서 신뢰하는 파일을 정해야 합니다.
+권한 검사 뒤 경로를 링크까지 풀어 실제 파일을 구하고 읽을 수 있는 일반 파일인지 확인합니다. 파일이 없으면 `INVALID_ARGUMENT`과 `details.reason: "FILE_NOT_FOUND"`, 디렉터리와 일반 파일이 아닌 대상은 `INVALID_ARGUMENT`, 읽기 접근이 거부되거나 공유 잠금과 충돌하면 `PERMISSION_DENIED`를 반환합니다. 링크는 거부하지 않고 따라가며, `openFile`과 확장자 검사는 링크의 이름이 아니라 풀린 경로를 씁니다([ADR 0024](../../docs/decisions/0024-plugin-path-responsibility.md)). 확인 뒤 OS 요청 전에 경로가 바뀌는 경쟁은 막지 않습니다. 기본 연결 앱의 동작, 실행 파일이나 셸 바로가기의 실행 대상을 격리하지 않으므로 앱 명령에서 신뢰하는 파일을 정해야 합니다.
 
 Windows 구현은 I/O Worker에서 자체 COM STA를 초기화하고 Explorer 데스크톱의 `Shell.Application`에 `ShellExecute`를 요청합니다. URL과 `open` 동작을 별도의 COM 인자로 전달하며 셸 명령 문자열을 만들지 않습니다. Explorer가 브라우저를 실행하므로 브라우저는 앱의 kill-on-close Job을 상속하지 않고, 앱 종료나 개발 재시작 뒤에도 유지됩니다. 성공은 Explorer가 실행 요청을 접수했다는 뜻이며 브라우저 표시나 페이지 로딩 완료를 보장하지 않습니다. 각 호출의 COM 참조와 문자열은 성공과 실패 모두에서 해제하며, 플러그인 종료 시 DLL 핸들을 닫고 자체 COM 초기화를 해제합니다. 반복 정리는 안전합니다.
 
@@ -60,9 +60,8 @@ Windows 구현은 I/O Worker에서 자체 COM STA를 초기화하고 Explorer �
 macOS 구현은 NSWorkspace로 파일과 URL을 열고 Finder 선택을 요청합니다. 파일은 절대
 POSIX 경로이며 기존 259 UTF-16 코드 단위 예산과 이름별 255 UTF-8 바이트 제한을
 따릅니다. 상대 경로, 중복 구분자, `.`과 `..`, 제어 문자와 잘못된 Unicode는 거부합니다.
-부모의 링크를 따라가지 않고 읽을 수 있는 일반 파일만 허용하며 심볼릭 링크와 하드 링크는
-거부합니다. macOS descriptor는 rename을 막지 않으므로 요청 직전 identity 확인 뒤에도
-NSWorkspace의 pathname 소비 시점에 경로 교체 경쟁이 남습니다.
+읽을 수 있는 일반 파일만 허용하고 링크는 따라갑니다. FIFO와 장치 파일은 열기 전에 거부합니다.
+확인과 NSWorkspace 요청 사이에 경로가 바뀌는 경쟁은 막지 않습니다.
 
 공개 기본 파일 helper는 POSIX와 Windows 표기를 받으며 해당 OS 어댑터가 최종 검증합니다.
 지정 `.exe` 앱은 Windows 전용이고 macOS 지원 목록에 포함하지 않습니다. macOS의 공통
@@ -91,7 +90,7 @@ const link = await opener.readShortcutLink("C:\\Users\\me\\Desktop\\App.lnk");
 
 `operation`은 Electron과 같습니다. `create`(기본)는 새 바로가기를 쓰거나 같은 경로의 기존 바로가기를 덮어쓰고, `replace`는 기존 바로가기를 덮어쓰며 파일이 없으면 실패합니다. 두 작업은 빈 바로가기에서 시작하므로 `target`이 필요합니다. `update`는 기존 바로가기를 읽어 입력에 있는 속성만 바꿉니다(`cwd`와 `icon`에 빈 문자열을 주면 해당 속성을 비웁니다. `iconIndex`는 바뀌지 않으므로 함께 0으로 지정하세요. `target`은 비울 수 없고, 읽기 결과를 그대로 다시 쓰면 원시 경로나 빈 `target`이 검증에서 거부될 수 있습니다)(`icon`과 `iconIndex` 중 하나만 주면 다른 하나는 유지). AppUserModelID와 toast activator는 지원하지 않습니다.
 
-경로는 `.lnk`로 끝나는 절대 경로여야 하고 부모 디렉터리는 만들지 않습니다. 파일 작업과 같은 검사를 적용합니다. 부모와 기존 파일을 핸들로 고정하고 reparse point, junction, 심볼릭 링크, 하드 링크, 8.3 별칭과 정규 철자가 아닌 경로를 `PERMISSION_DENIED`로 거부합니다. 새 파일을 만드는 `create`는 마지막 이름을 고정할 수 없어, 검사 뒤 그 이름에 링크가 생기는 경쟁은 막지 못합니다. 없는 파일과 부모는 `INVALID_ARGUMENT`와 `details.reason: "FILE_NOT_FOUND"`, 바로가기가 아닌 파일은 `INVALID_ARGUMENT`와 `details.reason: "NOT_A_SHORTCUT"`입니다(바로가기가 아닌 파일은 덮어쓰기 전에 `update`에서 거부하지만, `create`와 `replace`는 검사 없이 `.lnk` 파일을 덮어씁니다). Shell이 거부한 쓰기는 `INTERNAL`입니다. 호출은 COM 호출이 끝날 때까지 동기로 실행하므로 취소는 시작 전에만 적용합니다.
+경로는 `.lnk`로 끝나는 절대 경로여야 하고 부모 디렉터리는 만들지 않습니다. 기존 파일은 파일 작업과 같이 링크를 따라 풀고, 풀린 경로가 `.lnk`로 끝나지 않으면 `INVALID_ARGUMENT`입니다. 새 파일을 만드는 `create`는 부모 폴더가 있어야 하며 요청한 경로에 씁니다. 없는 파일과 부모는 `INVALID_ARGUMENT`와 `details.reason: "FILE_NOT_FOUND"`, 바로가기가 아닌 파일은 `INVALID_ARGUMENT`와 `details.reason: "NOT_A_SHORTCUT"`입니다(바로가기가 아닌 파일은 덮어쓰기 전에 `update`에서 거부하지만, `create`와 `replace`는 검사 없이 `.lnk` 파일을 덮어씁니다). Shell이 거부한 쓰기는 `INTERNAL`입니다. 호출은 COM 호출이 끝날 때까지 동기로 실행하므로 취소는 시작 전에만 적용합니다.
 
 권한은 `opener.readShortcutLink`와 `opener.writeShortcutLink`이며 서로, 그리고 `openFile` 계열 권한과 별개입니다. 입력은 각각 `{ path }`와 `{ path, operation, details }`이고 결과는 속성 객체와 `null`입니다. 쓰기는 사용자가 실행할 대상을 만드는 작업이므로 앱 명령에서 경로와 대상을 제한하세요. 화면 직접 호출에는 `plugin.opener.readShortcutLink`, `plugin.opener.writeShortcutLink` 명령도 허용합니다.
 
@@ -117,9 +116,9 @@ const link = await opener.readShortcutLink("C:\\Users\\me\\Desktop\\App.lnk");
 입력은 각각 `{ path, app }`, `{ url, app }`이고 출력은 `null`입니다.
 기존 `openFile`, `openUrl`과 `revealFile` 권한은 이 작업을 허용하지 않습니다.
 
-실행 파일은 존재해야 하며 기존 파일 작업의 절대 경로, 실제 이름과 링크 검사를 따릅니다.
+실행 파일은 존재해야 하며 기존 파일 작업의 절대 경로 검사를 따르고, 링크를 풀어 얻은 경로가 `.exe`로 끝나야 합니다.
 `.cmd`, `.bat`, `.lnk`, 셸 명령과 추가 실행 인자는 받지 않습니다. 파일 대상도 같은 검사를
-거치고 URL은 HTTP/HTTPS 규칙을 따릅니다. 앱과 파일 대상은 요청 접수까지 함께 고정합니다.
+거치고 URL은 HTTP/HTTPS 규칙을 따릅니다. 앱과 파일 대상은 풀린 경로로 요청합니다.
 Explorer에 앱 경로와 단일 대상 인자를 별도로 전달하고 대상은 Windows argv 규칙으로
 인코딩합니다. 연결 앱이나 기본 브라우저 설정은 변경하지 않습니다.
 
@@ -130,7 +129,7 @@ Explorer에 앱 경로와 단일 대상 인자를 별도로 전달하고 대상�
 
 `tests/api/opener-selected-app.test.ts`는 입력, 작업별 권한, 호출 컨텍스트와 오류를 검사합니다.
 Windows의 `tests/lifecycle/windows-opener-selected-app.test.ts`는 실제 파일과 앱 검사,
-하드 링크 거부, 실패 뒤 핸들 정리를 확인합니다. `windows-opener-job.test.ts`는 실제
+링크로 가리킨 앱의 확장자 검사를 확인합니다. `windows-opener-job.test.ts`는 실제
 Explorer와 compiled helper로 기존 기본 실행, 지정 앱의 파일과 URL argv, Unicode와 공백,
 URL fragment 따옴표, 앱 Job 밖의 실행과 앱 종료 후 생존을 확인합니다.
 `mise run host:windows`가 이 네이티브 검사를 실행합니다. Linux에서는 네이티브 검사를 건너뜁니다.
@@ -143,14 +142,14 @@ Windows에서 `opener.addRecentDocument(path)`는 기존 파일 하나를 사용
 
 `opener.trashFile(path: string, options?: NativeInvokeOptions): Promise<null>`은 기존 파일을 Windows 휴지통으로 보냅니다. Host operation과 권한은 `opener.trashFile`, 입력은 `{ path: string }`입니다. 화면 직접 호출은 뷰의 `commands`에 `plugin.opener.trashFile`도 허용합니다. 성공한 `null`은 OS가 휴지통의 새 항목을 반환했다는 뜻입니다. 복원 API는 제공하지 않습니다.
 
-기존 파일 경로, 링크, 별칭과 읽기 접근 검사를 적용하며 로컬 고정 드라이브만 지원합니다. UNC 공유와 이동식 드라이브는 `UNSUPPORTED`입니다. I/O STA의 `IFileOperation`으로 파일 하나만 처리하고 HTML 파일의 연결된 `_files` 폴더는 삭제하지 않습니다. `FOFX_RECYCLEONDELETE`로 휴지통 이동을 요청하고 삭제 직전 콜백에 휴지통 플래그가 없으면 거부합니다. 프레임워크는 이동 실패를 일반 삭제로 재시도하지 않습니다. OS 오류, 중단 또는 휴지통 항목을 확인할 수 없는 결과는 실패로 반환합니다. 시스템의 영구 삭제 경고도 유지하므로 OS 설정에 따라 대화 상자가 표시될 수 있습니다. 콜백의 플래그는 가능한 경우 휴지통으로 이동하라는 요청이며 모든 OS 내부 실패 경로의 결과를 사전에 증명하지 않습니다. 휴지통 비활성화, 용량 초과와 경고 UI 동작은 아직 검증하지 않았습니다. 휴지통 항목이 없는 사후 결과를 거부하는 것만으로 이미 발생한 삭제를 복구할 수는 없습니다.
+기존 파일 경로를 확인하되 링크는 풀지 않고 링크 자체를 휴지통으로 보내며, 로컬 고정 드라이브만 지원합니다. UNC 공유와 이동식 드라이브는 `UNSUPPORTED`입니다. I/O STA의 `IFileOperation`으로 파일 하나만 처리하고 HTML 파일의 연결된 `_files` 폴더는 삭제하지 않습니다. `FOFX_RECYCLEONDELETE`로 휴지통 이동을 요청하고 삭제 직전 콜백에 휴지통 플래그가 없으면 거부합니다. 프레임워크는 이동 실패를 일반 삭제로 재시도하지 않습니다. OS 오류, 중단 또는 휴지통 항목을 확인할 수 없는 결과는 실패로 반환합니다. 시스템의 영구 삭제 경고도 유지하므로 OS 설정에 따라 대화 상자가 표시될 수 있습니다. 콜백의 플래그는 가능한 경우 휴지통으로 이동하라는 요청이며 모든 OS 내부 실패 경로의 결과를 사전에 증명하지 않습니다. 휴지통 비활성화, 용량 초과와 경고 UI 동작은 아직 검증하지 않았습니다. 휴지통 항목이 없는 사후 결과를 거부하는 것만으로 이미 발생한 삭제를 복구할 수는 없습니다.
 
-부모 디렉터리 핸들은 경로 교체를 막도록 유지하지만, 파일 핸들은 휴지통 이동을 위해 삭제 공유를 허용합니다. 삭제 직전 콜백에서 파일 ID, 경로와 링크를 다시 검사합니다. Windows 셸은 경로로 작업하므로 마지막 검사 뒤 다른 프로세스가 파일 자체를 교체하는 경쟁까지 막지는 못합니다. 앱의 파일별 승인 검사는 이 API가 파일 ID에 원자적으로 적용된다고 가정하면 안 됩니다. 성공한 휴지통 이동도 취소나 기한 초과로 되돌리지 않습니다.
+Windows 셸은 경로로 작업하므로 경로를 확인한 뒤 이동 요청 전에 다른 프로세스가 파일을 교체하는 경쟁은 막지 않습니다. 앱의 파일별 승인 검사는 이 API가 파일에 원자적으로 적용된다고 가정하면 안 됩니다. 성공한 휴지통 이동도 취소나 기한 초과로 되돌리지 않습니다.
 
 ## 오류
 
 - `INVALID_ARGUMENT`: URL이나 파일 경로가 유효하지 않거나 파일이 없습니다. 파일 소실은 `details.reason`이 `FILE_NOT_FOUND`입니다.
-- `PERMISSION_DENIED`: 작업 권한이 없거나, 파일 접근, 링크 또는 경로 별칭 검사를 통과하지 못했습니다.
+- `PERMISSION_DENIED`: 작업 권한이 없거나 파일 접근이 거부되었거나 공유 잠금과 충돌했습니다.
 - `UNSUPPORTED`: 현재 플랫폼이나 실행 환경에 Windows 어댑터가 없습니다.
 - `INTERNAL`: 파일 검사, Explorer의 OS 요청 또는 Shell의 바로가기 쓰기에 실패했습니다.
 - `CANCELLED`, `TIMEOUT`: 호출이 취소되었거나 기한을 넘겼습니다.

@@ -7,8 +7,8 @@ import {
   read,
   toArrayBuffer,
 } from "bun:ffi";
-import { KERNEL32, OLE32, SHELL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/plugin";
+import { KERNEL32, OLE32, pick, SHELL32 } from "@bunaway/plugin/win32";
 
 const CLSCTX_INPROC_SERVER = 1;
 const DRIVE_FIXED = 3;
@@ -81,7 +81,7 @@ function checkResult(result: number): void {
 }
 
 /** Own a synchronous COM progress sink, requiring recycle flags and complete results. */
-export function createTrashProgressSink(verifyIdentity: () => void) {
+export function createTrashProgressSink() {
   const callbacks: JSCallback[] = [];
   let callbackFailure: unknown;
   let recycled = false;
@@ -224,7 +224,6 @@ export function createTrashProgressSink(verifyIdentity: () => void) {
               });
               return E_ABORT;
             }
-            verifyIdentity();
             return 0;
           },
         ),
@@ -348,10 +347,7 @@ export function validateTrashDrive(path: string): void {
  * Recycle a checked file on the opener's initialized I/O STA. Own and release every
  * interface, callback and binding within this synchronous operation, before COM teardown.
  */
-export function trashWindowsFile(
-  path: string,
-  verifyIdentity: () => void,
-): void {
+export function trashWindowsFile(path: string): void {
   const ole = dlopen("ole32.dll", {
     ...pick(OLE32, "CoCreateInstance"),
   });
@@ -396,7 +392,7 @@ export function trashWindowsFile(
   };
   const sink = (() => {
     try {
-      return createTrashProgressSink(verifyIdentity);
+      return createTrashProgressSink();
     } catch (error) {
       shell.close();
       ole.close();

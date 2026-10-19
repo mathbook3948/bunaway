@@ -21,6 +21,19 @@ export function normalizeApplicationPath(input: unknown): string {
   }
   return path;
 }
+/** The file a path resolves to keeps the extension its operation requires, whatever its link was named. */
+export function assertResolvedExtension(
+  path: string,
+  extension: "exe" | "lnk",
+): void {
+  if (!path.toLowerCase().endsWith(`.${extension}`)) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: `The path resolves to a file that is not a .${extension} file.`,
+    });
+  }
+}
+
 /** A shortcut file is a Windows `.lnk` file, so the Shell never treats another file as a link. */
 export function normalizeShortcutPath(input: unknown): string {
   const path = normalizeFilePath(input);

@@ -9,7 +9,7 @@ import { Channel } from "#native/windows/bun/channel";
 import { bundleIOPluginFixture } from "../fixtures/native-worker.ts";
 
 test.skipIf(process.platform !== "win32")(
-  "Windows opener owns an I/O STA and validates pinned files",
+  "Windows opener owns an I/O STA and resolves linked files",
   async () => {
     const root = resolve(
       import.meta.dir,
@@ -37,28 +37,24 @@ import { parentPort } from "node:worker_threads";
 import { createShell } from ${JSON.stringify(shellModule)};
 import definition from ${JSON.stringify(operationsModule)};
 const createOperations = definition._definition.nativePlatforms.windows.create;
-import { createFiles } from ${JSON.stringify(resolve("plugins/opener/src/platforms/windows-file.ts"))};
+import { resolveReadableFile } from ${JSON.stringify(resolve("plugins/opener/src/platforms/file-check.ts"))};
 import { writeFileSync, mkdirSync, linkSync, symlinkSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 const sample = ${JSON.stringify(resolve(root, "한글 공백, 😀.txt"))};
 writeFileSync(sample, "file content");
-const files = createFiles();
-try {
-  files.withFile(sample, () => {
-    assert.throws(() => unlinkSync(sample), "The file must remain pinned during request submission");
-  });
-  const hardlink = sample + ".link";
-  linkSync(sample, hardlink);
-  assert.throws(() => files.withFile(sample, () => assert.fail("Hardlink escaped checks")), (error) => error.code === "PERMISSION_DENIED");
-  unlinkSync(hardlink);
-  const directory = ${JSON.stringify(resolve(root, "folder"))};
-  const junction = ${JSON.stringify(resolve(root, "alias"))};
-  mkdirSync(directory);
-  writeFileSync(join(directory, "file.txt"), "linked file");
-  symlinkSync(directory, junction, "junction");
-  assert.throws(() => files.withFile(join(junction, "file.txt"), () => assert.fail("Junction escaped checks")), (error) => error.code === "PERMISSION_DENIED");
-  assert.throws(() => files.withFile(sample.replace(".txt", ".TXT"), () => assert.fail("Case alias escaped checks")), (error) => error.code === "PERMISSION_DENIED");
-} finally { files.dispose(); files.dispose(); }
+// Links are followed: the resolved path names the target, in the spelling the filesystem stores.
+assert.equal(resolveReadableFile(sample), sample);
+const hardlink = sample + ".link";
+linkSync(sample, hardlink);
+assert.equal(resolveReadableFile(hardlink), hardlink);
+unlinkSync(hardlink);
+const directory = ${JSON.stringify(resolve(root, "folder"))};
+const junction = ${JSON.stringify(resolve(root, "alias"))};
+mkdirSync(directory);
+writeFileSync(join(directory, "file.txt"), "linked file");
+symlinkSync(directory, junction, "junction");
+assert.equal(resolveReadableFile(join(junction, "file.txt")), join(directory, "file.txt"));
+assert.equal(resolveReadableFile(sample.replace(".txt", ".TXT")), sample);
 const ole = dlopen("ole32.dll", {
   CoInitializeEx: { args: ["ptr", "u32"], returns: "i32" },
   CoGetApartmentType: { args: ["ptr", "ptr"], returns: "i32" },

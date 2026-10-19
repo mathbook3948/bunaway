@@ -21,15 +21,14 @@ URL과 파일은 `openURL:`, Finder 선택은 `selectFile:inFileViewerRootedAtPa
 거부한다. 상대 경로, 빈 이름, 중복 구분자, `.`과 `..`, 제어 문자와 잘못된 Unicode를
 거부한다. 한글, 공백, 쉼표, 따옴표와 POSIX에서 유효한 역슬래시는 그대로 전달한다.
 
-`macos-file.ts`는 루트부터 `openat`과 `O_NOFOLLOW`로 부모 디렉터리를 따라가고 읽을 수
-있는 일반 파일만 허용한다. 심볼릭 링크와 하드 링크를 거부하고 디렉터리와 다른 파일
-종류는 `INVALID_ARGUMENT`으로 처리한다. 없는 파일은 `INVALID_ARGUMENT`과
-`details.reason: "FILE_NOT_FOUND"`, 접근 거부는 `PERMISSION_DENIED`다. 요청 직전에
-파일 identity를 다시 확인하고 모든 descriptor는 요청 종료 때 닫는다.
+`file-check.ts`는 `realpath`로 링크를 풀어 읽을 수 있는 일반 파일인지 확인하고 풀린 경로를
+돌려준다. 링크는 거부하지 않고 따라가며 NSWorkspace에는 풀린 경로를 전달한다. 디렉터리와 다른 파일
+종류는 `INVALID_ARGUMENT`으로 처리하고 FIFO와 장치 파일은 열기 전에 거부한다. 없는 파일은
+`INVALID_ARGUMENT`과 `details.reason: "FILE_NOT_FOUND"`, 접근 거부는 `PERMISSION_DENIED`다
+([ADR 0024](../decisions/0024-plugin-path-responsibility.md)).
 
-POSIX descriptor는 경로 이름의 rename이나 교체를 막지 않는다. NSWorkspace가 경로를
-다시 읽는 시점의 경쟁은 남아 있다. Windows의 삭제 공유를 금지한 핸들 고정과 같은 보장을
-하지 않는다. OS가 요청을 접수한 뒤 파일 소실이나 연결 앱 실패도 결과에 포함하지 않는다.
+확인과 NSWorkspace 요청 사이의 경로 교체는 막지 않는다. OS가 요청을 접수한 뒤 파일 소실이나
+연결 앱 실패도 결과에 포함하지 않는다.
 
 ## 호스트 기반 작업과 등록
 
@@ -50,8 +49,8 @@ POSIX descriptor는 경로 이름의 rename이나 교체를 막지 않는다. NS
 ## 검증 범위
 
 `tests/lifecycle/macos-opener.test.ts`는 POSIX 문법, 기존 작업별 권한, 선택 앱 미지원,
-요청 접수와 반복 정리를 검사한다. macOS에서는 실제 descriptor와 NSWorkspace 초기화,
-읽기 거부, 링크와 파일 소실도 검사한다. workspace 검사의 초기화는 라이브러리와 symbol
+요청 접수와 반복 정리를 검사한다. 경로 확인은 실제 파일로 읽기 거부, 링크 추종, FIFO 거부와
+파일 소실을 검사하고, macOS에서는 NSWorkspace 초기화도 검사한다. workspace 검사의 초기화는 라이브러리와 symbol
 로드를 뜻하며 실제 요청 접수는 다음 네이티브 fixture에서 검사한다. 다른 OS에서 건너뛴
 검사는 네이티브 결과가 아니다.
 

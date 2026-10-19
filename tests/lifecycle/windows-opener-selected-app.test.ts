@@ -1,15 +1,16 @@
 import { expect, test } from "bun:test";
-import { link, mkdir, realpath, rm } from "node:fs/promises";
+import { mkdir, realpath, rm, symlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import createOperationsDefinition from "#plugins/opener/src/index";
 import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
+
 const createOperations = createOperationsFactory(
   createOperationsDefinition,
   "windows",
 );
 
 test.skipIf(process.platform !== "win32")(
-  "selected-app opener validates both pinned files before dispatch and cleans up failures",
+  "selected-app opener validates both files before dispatch and judges a link by its target",
   async () => {
     const root = resolve(
       import.meta.dir,
@@ -89,19 +90,26 @@ test.skipIf(process.platform !== "win32")(
           }),
         );
       }
-      await link(app, linkedApp);
-      await expect(
-        call("opener.openUrlWith", {
-          app,
-          url: "https://example.com/",
-        }),
-      ).rejects.toThrow(
-        expect.objectContaining({
-          code: "PERMISSION_DENIED",
-        }),
+      // A link named like an executable is judged by the file it resolves to. Creating a file
+      // symlink needs a privilege that some runners lack, so the check is skipped there.
+      const linked = await symlink(target, linkedApp).then(
+        () => true,
+        () => false,
       );
-      await rm(linkedApp);
-      // Failed checks must release both application and target handles.
+      if (linked) {
+        await expect(
+          call("opener.openUrlWith", {
+            app: linkedApp,
+            url: "https://example.com/",
+          }),
+        ).rejects.toThrow(
+          expect.objectContaining({
+            code: "INVALID_ARGUMENT",
+          }),
+        );
+        await rm(linkedApp);
+      }
+      // Failed checks must leave both files free to be removed.
       await rm(app);
       await rm(target);
       await adapter.dispose();
