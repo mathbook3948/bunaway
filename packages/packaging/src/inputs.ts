@@ -565,16 +565,20 @@ export async function verifyArtifact(args: {
   const hostDigest = manifest.host?.packagedSha256 ?? manifest.host?.sha256;
   if (platform === "windows") {
     const host = manifest.host;
-    if (
-      host?.kind !== "bun-compiled" ||
-      typeof host.executable !== "string" ||
-      !isWindowsExecutableName(host.executable)
-    ) {
+    if (host?.kind !== "bun-compiled" || typeof host.executable !== "string") {
       diagnostics.push({
         stage,
         code: CODES.INPUT_UNEXPECTED,
         severity: "error",
         message: "Windows requires a compiled Bun app.",
+        path: manifestPath,
+      });
+    } else if (!isWindowsExecutableName(host.executable)) {
+      diagnostics.push({
+        stage,
+        code: CODES.INPUT_UNEXPECTED,
+        severity: "error",
+        message: `Windows cannot create an executable named "${host.executable}"; use a valid .exe file name.`,
         path: manifestPath,
       });
     } else {
