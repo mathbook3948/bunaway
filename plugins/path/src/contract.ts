@@ -17,7 +17,10 @@ export const qualifiedPathSchema = pathTextSchema
   .min(1)
   .regex(/^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/]+[\\/][^\\/]+(?:[\\/]|$))/);
 
-/** Current-user Windows known folders. Querying one neither creates it nor grants file access. */
+/** A POSIX absolute path; macOS results and resolve's base never depend on the working directory. */
+export const posixAbsolutePathSchema = pathTextSchema.min(1).regex(/^\//);
+
+/** Current-user standard folders (Windows known folders, macOS home subfolders). Querying one neither creates it nor grants file access. */
 export const userDirectorySchema = z.enum([
   "home",
   "documents",
@@ -46,3 +49,16 @@ export const appDirectorySchema = z.enum([
 
 /** A supported app-specific directory name. */
 export type AppDirectory = z.infer<typeof appDirectorySchema>;
+
+/** What every platform adapter implements; the operations call these synchronous methods. */
+export interface PathInstance {
+  getDirectory(directory: UserDirectory): string;
+  getAppDirectory(directory: AppDirectory): string;
+  join(paths: string[]): string;
+  resolve(base: string, paths: string[]): string;
+  normalize(path: string): string;
+  basename(path: string, suffix?: string): string;
+  dirname(path: string): string;
+  extname(path: string): string;
+  isAbsolute(path: string): boolean;
+}
