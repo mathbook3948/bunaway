@@ -1,5 +1,8 @@
 import { BunawayError } from "@bunaway/plugin";
-import { isWindowsFileName } from "@bunaway/protocol";
+import {
+  isWindowsFileName,
+  WINDOWS_MAX_FILE_NAME_LENGTH,
+} from "@bunaway/protocol";
 import {
   MAX_FILE_PATH_LENGTH,
   type ShortcutDetails,
@@ -7,7 +10,6 @@ import {
   shortcutDetailsSchema,
 } from "#opener/contract";
 
-const MAX_FILE_NAME_LENGTH = 255;
 /** A selected application is a native executable, not a shell command or shortcut. */
 export function normalizeApplicationPath(input: unknown): string {
   const path = normalizeFilePath(input);
@@ -96,7 +98,7 @@ export function normalizeFilePath(input: unknown): string {
   const names = drivePath ? parts.slice(1) : parts.slice(2);
   if (
     parts.length <= rootParts ||
-    names.some((part) => !isWindowsFileName(part, MAX_FILE_NAME_LENGTH))
+    names.some((part) => !isWindowsFileName(part, WINDOWS_MAX_FILE_NAME_LENGTH))
   ) {
     throw invalid();
   }
