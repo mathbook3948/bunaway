@@ -1,14 +1,38 @@
+import { attemptAll, failWithCleanup } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
-import type { PowerQueries } from "#power/contract";
+import type { z } from "zod";
+import { PowerBlockers } from "#power/blockers";
+import type { blockerInputSchema, MacosPowerInstance } from "#power/contract";
 import { createMacosPower } from "#power/platforms/macos-bindings";
+import {
+  createMacosAssertions,
+  type MacosAssertions,
+} from "#power/platforms/macos-blockers";
 
 /**
- * Read-only power queries on macOS: power source and battery status and the input idle time.
- * Events, power blockers and the CPU speed limit are not implemented and stay unsupported.
+ * Power queries and app-owned sleep requests on macOS: power source and battery status, the input
+ * idle time, and IOPMAssertion requests that keep the system or display awake. Events and the CPU
+ * speed limit are not implemented and stay unsupported.
  */
-export class MacosPower implements PowerQueries {
+export class MacosPower implements MacosPowerInstance {
   private readonly native = createMacosPower();
+  private readonly assertions: MacosAssertions;
+  private readonly blockers: PowerBlockers;
   private disposed = false;
+
+  constructor() {
+    try {
+      this.assertions = createMacosAssertions();
+    } catch (error) {
+      // No caller receives the adapter, so release the query bindings opened above here.
+      failWithCleanup(
+        error,
+        () => this.native.dispose(),
+        "Power adapter cleanup failed.",
+      );
+    }
+    this.blockers = new PowerBlockers(this.assertions);
+  }
 
   private active(): void {
     if (this.disposed) {
@@ -35,10 +59,40 @@ export class MacosPower implements PowerQueries {
       : ("active" as const);
   }
 
-  /** Safe to repeat: the native owner releases once and a failed release is reported to the caller. */
+  startBlocker(input: z.output<typeof blockerInputSchema>) {
+    this.active();
+    return this.blockers.start(input.type, input.reason);
+  }
+
+  listBlockers() {
+    this.active();
+    return this.blockers.list();
+  }
+
+  isBlockerActive(id: string) {
+    this.active();
+    return this.blockers.active(id);
+  }
+
+  stopBlocker(id: string) {
+    this.active();
+    return this.blockers.stop(id);
+  }
+
+  /**
+   * Release every assertion before the libraries that release them are closed. Each owner is
+   * attempted even when an earlier one fails, and a repeated call retries what remains.
+   */
   dispose(): void {
     this.disposed = true;
-    this.native.dispose();
+    attemptAll(
+      [
+        () => this.blockers.dispose(),
+        () => this.assertions.dispose(),
+        () => this.native.dispose(),
+      ],
+      "Power adapter cleanup failed.",
+    );
   }
 }
 

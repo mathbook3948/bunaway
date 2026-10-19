@@ -1,16 +1,13 @@
 import { expect, test } from "bun:test";
 import power from "@bunaway/plugin-power";
 import { NativeRegistry, validateValue } from "@bunaway/protocol";
+import { MAX_POWER_BLOCKERS, PowerBlockers } from "#plugins/power/src/blockers";
 import {
   type PowerStatus,
   powerEvents,
   statusSchema,
 } from "#plugins/power/src/contract";
 import { powerOperations } from "#plugins/power/src/operations";
-import {
-  MAX_POWER_BLOCKERS,
-  PowerBlockers,
-} from "#plugins/power/src/platforms/windows-blockers";
 import {
   idleSeconds,
   powerStatus,

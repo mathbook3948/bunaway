@@ -107,23 +107,88 @@ console.log(JSON.stringify({ code }));`);
 );
 
 test.skipIf(process.platform !== "darwin")(
-  "operations outside the macOS read-only scope are unsupported",
+  "macOS blockers create and release real power assertions that the system lists",
+  async () => {
+    const result = await runAdapter(
+      `
+const listed = (reason) => {
+  const out = Bun.spawnSync(["/usr/bin/pmset", "-g", "assertions"]).stdout.toString();
+  return out.includes(reason);
+};
+try {
+  const system = await call("startBlocker", { type: "system", reason: "bunaway-blocker-system" });
+  const display = await call("startBlocker", { type: "display", reason: "bunaway-blocker-display" });
+  const duplicate = await call("startBlocker", { type: "system", reason: "bunaway-blocker-system" });
+  const active = await call("listBlockers", null);
+  const whileActive = {
+    system: listed("bunaway-blocker-system"),
+    display: listed("bunaway-blocker-display"),
+    isActive: await call("isBlockerActive", { id: system.id }),
+  };
+  const stopped = await call("stopBlocker", { id: system.id });
+  const stoppedAgain = await call("stopBlocker", { id: system.id });
+  await call("stopBlocker", { id: duplicate.id });
+  const afterStop = {
+    system: listed("bunaway-blocker-system"),
+    display: listed("bunaway-blocker-display"),
+    isActive: await call("isBlockerActive", { id: system.id }),
+  };
+  console.log(JSON.stringify({ system, display, duplicate, active, whileActive, stopped, stoppedAgain, afterStop }));
+} finally {
+  await adapter.dispose();
+}`,
+    );
+    expect(result.system.type).toBe("system");
+    expect(result.display.type).toBe("display");
+    expect(result.duplicate.id).not.toBe(result.system.id);
+    expect(result.active).toHaveLength(3);
+    expect(result.whileActive).toEqual({
+      system: true,
+      display: true,
+      isActive: true,
+    });
+    expect(result.stopped).toBe(true);
+    expect(result.stoppedAgain).toBe(false);
+    expect(result.afterStop).toEqual({
+      system: false,
+      display: true,
+      isActive: false,
+    });
+  },
+);
+
+test.skipIf(process.platform !== "darwin")(
+  "disposing the macOS power adapter releases every open assertion",
+  async () => {
+    const result = await runAdapter(`
+const listed = () =>
+  Bun.spawnSync(["/usr/bin/pmset", "-g", "assertions"]).stdout.toString().includes("bunaway-blocker-dispose");
+await call("startBlocker", { type: "display", reason: "bunaway-blocker-dispose" });
+const before = listed();
+await adapter.dispose();
+const after = listed();
+const code = await call("startBlocker", { type: "system", reason: "x" }).then(() => "resolved", (error) => error.code);
+console.log(JSON.stringify({ before, after, code }));`);
+    expect(result).toEqual({
+      before: true,
+      after: false,
+      code: "CANCELLED",
+    });
+  },
+);
+
+test.skipIf(process.platform !== "darwin")(
+  "operations outside the macOS scope are unsupported",
   async () => {
     const result = await runAdapter(`
 try {
-  const codes = {};
-  for (const name of ["getCpuSpeedLimit", "listBlockers", "startBlocker"]) {
-    codes[name] = await call(name, name === "startBlocker" ? { type: "system", reason: "x" } : null)
-      .then(() => "resolved", (error) => error.code);
-  }
-  console.log(JSON.stringify(codes));
+  const code = await call("getCpuSpeedLimit", null).then(() => "resolved", (error) => error.code);
+  console.log(JSON.stringify({ code }));
 } finally {
   await adapter.dispose();
 }`);
     expect(result).toEqual({
-      getCpuSpeedLimit: "UNSUPPORTED",
-      listBlockers: "UNSUPPORTED",
-      startBlocker: "UNSUPPORTED",
+      code: "UNSUPPORTED",
     });
   },
 );

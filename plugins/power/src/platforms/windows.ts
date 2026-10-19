@@ -2,9 +2,9 @@ import { attemptAll, type NativeEnvironment } from "@bunaway/plugin";
 import type { NativeSystemEvents } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
+import { PowerBlockers } from "#power/blockers";
 import type { blockerInputSchema } from "#power/contract";
 import { createPower } from "#power/platforms/windows-bindings";
-import { PowerBlockers } from "#power/platforms/windows-blockers";
 import { watchPowerLifecycle } from "#power/platforms/windows-lifecycle-events";
 import { watchPowerStatus } from "#power/platforms/windows-status-events";
 /** Own DLLs, power request handles and the status change subscription on the UI thread. */
