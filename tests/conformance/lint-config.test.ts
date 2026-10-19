@@ -260,7 +260,8 @@ test("baseline reasons are specific, distinct and the placeholder count only shr
   const duplicated: string[] = [];
   for (const [path, entry] of Object.entries(baseline)) {
     const reason = entry.reason.trim();
-    if (reason === GENERIC_REASON) {
+    // Appending a character or changing case does not make the reason specific.
+    if (reason.toLowerCase().startsWith(GENERIC_REASON.toLowerCase())) {
       generic.push(path);
       continue;
     }
@@ -322,6 +323,8 @@ test("baseline entries are one line each, sorted by file path", async () => {
       ...paths,
     ].sort(),
   );
+  // JSON.parse keeps the last of two equal keys, which would hide the first entry.
+  expect(new Set(paths).size).toBe(paths.length);
 });
 
 /**
