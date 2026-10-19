@@ -49,9 +49,26 @@ const TICKS_AFTER_ALL_CLOSED = 3;
 /** Enough replacements to show that none of the replaced windows stays in `[NSApp windows]`. */
 const RECREATIONS = 3;
 const isSessionEnd = scenario.startsWith("session-end");
+/**
+ * Scenarios whose verification needs the driver's `main-tick-after-terminate` line. A session end
+ * with trivial hooks can finish cleanup and end the process within the driver's tick delay, so the
+ * stop hook holds cleanup back until the line is written.
+ */
+const holdsCleanupForMainTick =
+  scenario === "session-end" || scenario === "session-end-quit-reason";
+/**
+ * Longest the stop hook waits for that line. Core gives all plugin cleanup 2 s
+ * (`shutdownTimeoutMs`) and does not cancel a hook it gave up on, so a longer wait would only
+ * delay the other plugins' cleanup and bury the missing line behind a shutdown timeout.
+ */
+const MAIN_TICK_WAIT_MS = 1000;
 
-async function until(predicate: () => boolean, what: string) {
-  const deadline = Date.now() + STEP_TIMEOUT_MS;
+async function until(
+  predicate: () => boolean,
+  what: string,
+  timeoutMs = STEP_TIMEOUT_MS,
+) {
+  const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
     if (Date.now() > deadline) {
       throw new Error(`Timed out waiting for ${what}.`);
@@ -402,7 +419,16 @@ export default defineApp({
       name: "lifecycle-log",
       version: "1",
       setup() {
-        return () => log("stopHook");
+        return async () => {
+          log("stopHook");
+          if (holdsCleanupForMainTick) {
+            await until(
+              logged("main-tick-after-terminate"),
+              "main-tick-after-terminate",
+              MAIN_TICK_WAIT_MS,
+            );
+          }
+        };
       },
     },
     // After `driver` and `windows`: the script calls both from this setup scope, which the
