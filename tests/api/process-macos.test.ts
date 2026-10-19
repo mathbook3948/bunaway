@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import processes from "@bunaway/plugin-process";
+import nativeProcesses from "@bunaway/plugin-process/native/macos";
 import { BunawayError } from "@bunaway/protocol";
 import { macosProcessOperations } from "#plugins/process/src/operations";
 import { dispose, initialize, run } from "#plugins/process/src/platforms/macos";
@@ -337,5 +338,90 @@ posixTest(
       code: "INTERNAL",
     });
     expect(Date.now() - started).toBeLessThan(10_000);
+  },
+);
+
+test("the registered macOS adapter validates with the macOS schema and rejects Windows paths", async () => {
+  const definition = nativeProcesses._definition.nativePlatforms.macos;
+  expect(definition?.operations).toEqual([
+    "run",
+  ]);
+  const adapter = definition?.create({
+    dataRoot: ".",
+    capabilities: [],
+  });
+  try {
+    await expect(
+      adapter?.execute(
+        "process.run",
+        {
+          executablePath: "C:/tools/a.exe",
+        },
+        "backend",
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+    await expect(
+      adapter?.execute(
+        "process.run",
+        {
+          executablePath: SHELL,
+          args: [
+            "a\uD800",
+          ],
+        },
+        "backend",
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  } finally {
+    await adapter?.dispose();
+  }
+});
+
+posixTest(
+  "the registered macOS adapter runs a process and its disposal drains a running child",
+  async () => {
+    const adapter = nativeProcesses._definition.nativePlatforms.macos?.create({
+      dataRoot: ".",
+      capabilities: [],
+    });
+    const result = await adapter?.execute(
+      "process.run",
+      {
+        executablePath: SHELL,
+        args: [
+          "-c",
+          "printf ok",
+        ],
+      },
+      "backend",
+    );
+    expect(result).toMatchObject({
+      exitCode: 0,
+      signal: null,
+      stdoutBase64: Buffer.from("ok").toString("base64"),
+    });
+    const pending = adapter?.execute(
+      "process.run",
+      {
+        executablePath: SHELL,
+        args: [
+          "-c",
+          "exec sleep 30",
+        ],
+      },
+      "backend",
+    );
+    const settled = pending?.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await adapter?.dispose();
+    expect(await settled).toMatchObject({
+      code: "CANCELLED",
+    });
   },
 );

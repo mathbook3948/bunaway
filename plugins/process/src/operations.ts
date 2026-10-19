@@ -18,7 +18,7 @@ export const processOperations = {
     handler: (input, { instance, signal }) => run(instance, input, signal),
   }),
 };
-/** The same invocation on macOS; only the executable path rules differ. */
+/** The same operation, limits and result on macOS, with POSIX path and exec argument validation. */
 export const macosProcessOperations = {
   run: macosOperation({
     input: macosProcessInputSchema,

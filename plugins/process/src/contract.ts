@@ -12,6 +12,8 @@ const argument = z
     (value) => !value.includes("\0"),
     "NUL is not an argument character.",
   );
+/** A lone surrogate becomes U+FFFD when encoded for exec, so the child would see a different string. */
+const hasLoneSurrogate = (value: string) => /\p{Surrogate}/u.test(value);
 const windowsExecutablePath = z
   .string()
   .min(1)
@@ -44,7 +46,7 @@ const macosExecutablePath = z
     // Use an absolute POSIX path, never PATH lookup or a relative path; directories are rejected at spawn.
     // A lone surrogate would be replaced with U+FFFD when encoded, so the executed path would differ.
     return (
-      !/\p{Surrogate}/u.test(value) &&
+      !hasLoneSurrogate(value) &&
       value.startsWith("/") &&
       !Array.from(value).some((char) => {
         const code = char.charCodeAt(0);
@@ -82,11 +84,20 @@ export const processInputSchema = z
       input.args.reduce((length, arg) => length + 3 + arg.length * 2, 0);
     return units <= MAX_COMMAND_LINE_UNITS;
   }, "Arguments exceed the Windows command-line limit.");
-/** The macOS invocation differs only in executable path rules and the exec argument-size bound. */
+/** The macOS invocation validates paths and arguments against exec encoding and its argument-size bound. */
 export const macosProcessInputSchema = z
   .strictObject({
     executablePath: macosExecutablePath,
     ...inputFields,
+    args: z
+      .array(
+        argument.refine(
+          (value) => !hasLoneSurrogate(value),
+          "Unpaired surrogates cannot be encoded for exec.",
+        ),
+      )
+      .max(128)
+      .default([]),
   })
   .refine((input) => {
     // execve rejects argv plus environment above ARG_MAX (1 MiB); keep the argv share well below it.
