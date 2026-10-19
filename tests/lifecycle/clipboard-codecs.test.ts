@@ -97,6 +97,47 @@ test("DIBV5 preserves row order and straight RGBA alpha; 24-bit bottom-up DIB in
   );
 });
 
+test("BI_BITFIELDS with a 40-byte header stores the BGRA masks after the header and reads pixels after them", () => {
+  const bitfields = Buffer.alloc(40 + 12 + 4);
+  bitfields.writeUInt32LE(40, 0);
+  bitfields.writeInt32LE(1, 4);
+  bitfields.writeInt32LE(1, 8);
+  bitfields.writeUInt16LE(1, 12);
+  bitfields.writeUInt16LE(32, 14);
+  bitfields.writeUInt32LE(3, 16); // BI_BITFIELDS
+  bitfields.writeUInt32LE(0x00ff0000, 40);
+  bitfields.writeUInt32LE(0x0000ff00, 44);
+  bitfields.writeUInt32LE(0x000000ff, 48);
+  bitfields.set(
+    [
+      33,
+      22,
+      11,
+      99,
+    ],
+    52,
+  );
+  // This header form has no alpha mask, so the fourth byte stays opaque.
+  expect(decodeImage(bitfields)).toEqual({
+    width: 1,
+    height: 1,
+    rgba: Buffer.from([
+      11,
+      22,
+      33,
+      255,
+    ]).toString("base64"),
+  });
+  const wrongDepth = Buffer.from(bitfields);
+  wrongDepth.writeUInt16LE(24, 14);
+  expect(() => decodeImage(wrongDepth)).toThrow(invalid);
+  const missingMasks = Buffer.from(bitfields.subarray(0, 51));
+  expect(() => decodeImage(missingMasks)).toThrow(invalid);
+  const wrongMask = Buffer.from(bitfields);
+  wrongMask.writeUInt32LE(0xfe, 48);
+  expect(() => decodeImage(wrongMask)).toThrow(invalid);
+});
+
 test("DIB decoder rejects unsupported masks, compression, profiles, dimensions and truncated rows", () => {
   for (const mutate of [
     (bytes: Buffer) => bytes.writeUInt32LE(200, 0),
