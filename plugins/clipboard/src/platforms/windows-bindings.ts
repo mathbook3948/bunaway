@@ -117,6 +117,54 @@ export function createClipboard() {
       throw failed();
     }
   }
+  /** One prepared global block; `transferred` turns true once the clipboard owns the handle. */
+  type ClipboardAllocation = {
+    format: number;
+    handle: NonNullable<ReturnType<typeof memory.GlobalAlloc>>;
+    transferred: boolean;
+  };
+  /**
+   * Allocate a moveable global block holding the item's bytes and record it in `allocations`
+   * before locking, so a lock or copy failure still releases it.
+   */
+  function stageItem(item: ClipboardItem, allocations: ClipboardAllocation[]) {
+    const bytes = encodeItem(item);
+    const format = nativeFormat(item.format);
+    const handle = memory.GlobalAlloc(GMEM_MOVEABLE, bytes.byteLength);
+    if (!handle) {
+      throw failed();
+    }
+    allocations.push({
+      format,
+      handle,
+      transferred: false,
+    });
+    const address = memory.GlobalLock(handle);
+    if (!address) {
+      throw failed();
+    }
+    try {
+      new Uint8Array(toArrayBuffer(address, 0, bytes.byteLength)).set(bytes);
+    } finally {
+      unlock(handle);
+    }
+  }
+  /** Free every block the clipboard did not take over, collecting failures instead of stopping. */
+  function freeUntransferred(
+    allocations: ClipboardAllocation[],
+    failures: unknown[],
+  ) {
+    for (const allocation of allocations) {
+      if (allocation.transferred) {
+        continue;
+      }
+      try {
+        free(allocation.handle);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+  }
   const registered = new Map<string, number>();
   let binaryFormats = 0;
   function nativeFormat(format: ClipboardFormat): number {
@@ -343,36 +391,11 @@ export function createClipboard() {
     },
     /** Prepare every HGLOBAL before clearing; transfer each successfully installed handle once. */
     writeFormats(items: ClipboardItem[]) {
-      const allocations: {
-        format: number;
-        handle: NonNullable<ReturnType<typeof memory.GlobalAlloc>>;
-        transferred: boolean;
-      }[] = [];
+      const allocations: ClipboardAllocation[] = [];
       const failures: unknown[] = [];
       try {
         for (const item of items) {
-          const bytes = encodeItem(item);
-          const format = nativeFormat(item.format);
-          const handle = memory.GlobalAlloc(GMEM_MOVEABLE, bytes.byteLength);
-          if (!handle) {
-            throw failed();
-          }
-          allocations.push({
-            format,
-            handle,
-            transferred: false,
-          });
-          const address = memory.GlobalLock(handle);
-          if (!address) {
-            throw failed();
-          }
-          try {
-            new Uint8Array(toArrayBuffer(address, 0, bytes.byteLength)).set(
-              bytes,
-            );
-          } finally {
-            unlock(handle);
-          }
+          stageItem(item, allocations);
         }
         if (!api.EmptyClipboard()) {
           throw failed();
@@ -388,16 +411,7 @@ export function createClipboard() {
       }
       // A later registration failure leaves earlier formats installed. Windows
       // owns them; cleanup must still attempt every untransferred allocation.
-      for (const allocation of allocations) {
-        if (allocation.transferred) {
-          continue;
-        }
-        try {
-          free(allocation.handle);
-        } catch (error) {
-          failures.push(error);
-        }
-      }
+      freeUntransferred(allocations, failures);
       if (failures.length === 1) {
         throw failures[0];
       }

@@ -135,6 +135,30 @@ export function createNotifications(appUserModelId: string) {
       runtime.symbols.RoUninitialize();
     }
   }
+  /** Status reads need the unpackaged identity; a packaged app or a failed query is rejected. */
+  const assertUnpackagedIdentity = () => {
+    const packageSize = new Uint32Array(1);
+    const packageResult = kernel.symbols.GetCurrentPackageFullName(
+      ptr(packageSize),
+      null,
+    );
+    if (packageResult === 0 || packageResult === ERROR_INSUFFICIENT_BUFFER) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message:
+          "Notification status requires an unpackaged desktop app identity.",
+      });
+    }
+    if (packageResult !== APPMODEL_ERROR_NO_PACKAGE) {
+      throw new BunawayError({
+        code:
+          packageResult === ERROR_ACCESS_DENIED
+            ? "PERMISSION_DENIED"
+            : "INTERNAL",
+        message: "Windows could not query the app package identity.",
+      });
+    }
+  };
   return {
     /** Path probes for toast media, bound to the adapter's kernel32 handle and invalid after dispose. */
     filesystem: {
@@ -152,30 +176,7 @@ export function createNotifications(appUserModelId: string) {
     /** Read the OS setting without creating shortcuts, registering activators or changing user preferences. */
     getStatus(): NotificationStatus {
       return withRuntime(() => {
-        const packageSize = new Uint32Array(1);
-        const packageResult = kernel.symbols.GetCurrentPackageFullName(
-          ptr(packageSize),
-          null,
-        );
-        if (
-          packageResult === 0 ||
-          packageResult === ERROR_INSUFFICIENT_BUFFER
-        ) {
-          throw new BunawayError({
-            code: "UNSUPPORTED",
-            message:
-              "Notification status requires an unpackaged desktop app identity.",
-          });
-        }
-        if (packageResult !== APPMODEL_ERROR_NO_PACKAGE) {
-          throw new BunawayError({
-            code:
-              packageResult === ERROR_ACCESS_DENIED
-                ? "PERMISSION_DENIED"
-                : "INTERNAL",
-            message: "Windows could not query the app package identity.",
-          });
-        }
+        assertUnpackagedIdentity();
         const strings: Pointer[] = [];
         const bindings: ReturnType<typeof CFunction>[] = [];
         const objects: Pointer[] = [];

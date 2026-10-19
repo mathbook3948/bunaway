@@ -173,7 +173,8 @@ export function initializeShortcutOperations(
       );
     }
   };
-  const registerMany = (shortcuts: GlobalShortcut[]) => {
+  /** Reject a batch before any OS call when it cannot be registered as a whole. */
+  const assertBatchAdmissible = (shortcuts: GlobalShortcut[]) => {
     if (suspended) {
       return error("BUSY", "Global shortcut processing is suspended.");
     }
@@ -190,6 +191,9 @@ export function initializeShortcutOperations(
     ) {
       return error("BUSY", "Global shortcut registration limit reached.");
     }
+  };
+  const registerMany = (shortcuts: GlobalShortcut[]) => {
+    assertBatchAdmissible(shortcuts);
     const acquired: Registration[] = [];
     try {
       for (const shortcut of shortcuts) {

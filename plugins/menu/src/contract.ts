@@ -186,6 +186,40 @@ const itemSchema: z.ZodType<NativeMenuItem, MenuItemInput> = z.lazy(() =>
       };
     }),
 );
+type ActionableMenuItem = Exclude<
+  NativeMenuItem,
+  {
+    type: "submenu" | "separator";
+  }
+>;
+/**
+ * Checked state and radio group rules for one item that is neither a submenu nor a separator.
+ * `checkedGroups` holds the radio groups that already have a checked item among the same siblings.
+ */
+function checkActionableItem(
+  item: ActionableMenuItem,
+  checkedGroups: Set<string>,
+  context: z.RefinementCtx,
+): void {
+  if (
+    (item.type === "radio") !== (item.group !== null) ||
+    (item.type === "item" && item.checked)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "Invalid checked state or radio group.",
+    });
+  }
+  if (item.type === "radio" && item.checked && item.group !== null) {
+    if (checkedGroups.has(item.group)) {
+      context.addIssue({
+        code: "custom",
+        message: "Multiple checked items in radio group.",
+      });
+    }
+    checkedGroups.add(item.group);
+  }
+}
 /** Resolved tree shared by tray integration and future window menu consumers. */
 export const menuItemsSchema = boundedTree
   .pipe(z.array(itemSchema))
@@ -204,24 +238,7 @@ export const menuItemsSchema = boundedTree
         if (item.type === "submenu") {
           visit(item.items);
         } else if (item.type !== "separator") {
-          if (
-            (item.type === "radio") !== (item.group !== null) ||
-            (item.type === "item" && item.checked)
-          ) {
-            context.addIssue({
-              code: "custom",
-              message: "Invalid checked state or radio group.",
-            });
-          }
-          if (item.type === "radio" && item.checked && item.group !== null) {
-            if (checkedGroups.has(item.group)) {
-              context.addIssue({
-                code: "custom",
-                message: "Multiple checked items in radio group.",
-              });
-            }
-            checkedGroups.add(item.group);
-          }
+          checkActionableItem(item, checkedGroups, context);
         }
       }
     };
