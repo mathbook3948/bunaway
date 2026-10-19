@@ -31,6 +31,9 @@ export interface PackagingConfig {
   signing?: SigningConfig;
 }
 
+// Windows file version parts are 16-bit; release.build becomes one part.
+const RELEASE_BUILD_MAX = 65535;
+
 const TOP_LEVEL = [
   "name",
   "identifier",
@@ -284,7 +287,7 @@ function parseRelease(value: unknown): NonNullable<PackagingConfig["release"]> {
       typeof release.build !== "number" ||
       !Number.isInteger(release.build) ||
       release.build < 0 ||
-      release.build > 65535
+      release.build > RELEASE_BUILD_MAX
     ) {
       fail(
         "bunaway.json.bundle: release.build must be an integer between 0 and 65535.",
