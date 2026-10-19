@@ -102,6 +102,8 @@ const MAX_ARG_BYTES = 64 * 1024;
 const MAX_DEPTH = 8;
 const MAX_COMMANDS = 128;
 const MAX_OPTIONS = 64;
+const MAX_DESCRIPTION_UNITS = 1024;
+const MAX_NAME_UNITS = 128;
 const NAME = /^[a-z][a-z0-9-]{0,63}$(?![\s\S])/;
 const optionSchema = z.strictObject({
   type: z.enum([
@@ -113,7 +115,7 @@ const optionSchema = z.strictObject({
     .regex(/^[a-zA-Z]$(?![\s\S])/)
     .exactOptional(),
   multiple: z.boolean().exactOptional(),
-  description: z.string().max(1024).exactOptional(),
+  description: z.string().max(MAX_DESCRIPTION_UNITS).exactOptional(),
 });
 
 function isText(value: unknown, maxUnits: number): value is string {
@@ -191,7 +193,7 @@ function compileOption(
     !NAME.test(name) ||
     name === "help" ||
     !parsed.success ||
-    !isText(parsed.data.description ?? "", 1024)
+    !isText(parsed.data.description ?? "", MAX_DESCRIPTION_UNITS)
   ) {
     throw new TypeError("Invalid or reserved CLI option.");
   }
@@ -266,7 +268,7 @@ function compileGroup(
 
 /** Snapshot the command tree and reject cycles, conflicting aliases and malformed definitions. */
 function compile(definition: CLIDefinition) {
-  if (!isText(definition.name, 128) || !definition.name.length) {
+  if (!isText(definition.name, MAX_NAME_UNITS) || !definition.name.length) {
     throw new TypeError("Invalid CLI name.");
   }
   const ancestors = new Set<CLICommand | CLIGroup>();
@@ -284,7 +286,7 @@ function compile(definition: CLIDefinition) {
     ancestors.add(node);
     try {
       const description = node.description ?? "";
-      if (!isText(description, 1024)) {
+      if (!isText(description, MAX_DESCRIPTION_UNITS)) {
         throw new TypeError("Invalid CLI description.");
       }
       assertKnownFields(node, depth);
