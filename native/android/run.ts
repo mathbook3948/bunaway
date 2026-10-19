@@ -80,6 +80,7 @@ for (const output of frontend.outputs) {
 for (const name of [
   "index.html",
   "frame.html",
+  "add.wasm",
 ]) {
   await cp(resolve(fixture, "web", name), resolve(assets, "web", name));
 }

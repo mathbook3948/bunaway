@@ -15,7 +15,7 @@ x86_64 에뮬레이터에서 실행했다. Android용 공식 Bun 1.4.2는 experi
 | APK 실행 | 설치기가 추출한 libbun.so를 앱 자식으로 실행. 기기의 ps에서 PID와 부모 관계 확인 |
 | 공통 SDK와 Core | hello, 명령 응답과 상태 변경, 이벤트 및 구독 해제 |
 | 실패와 취소 | 정책 밖 명령 PERMISSION_DENIED, 예상 밖 예외 INTERNAL, UI 취소가 backend에 도착 |
-| 웹 자산 | backend.js와 host.json 접근 실패, 패키지 origin 밖 네트워크 차단 |
+| 웹 자산 | backend.js와 host.json 접근 실패, 패키지 origin 밖 네트워크 차단, .wasm이 application/wasm으로 제공되어 instantiateStreaming 성공 |
 | subframe | 같은 origin의 iframe이 호스트 전용 shutdown을 시도해도 main 문서와 Core 유지 |
 | 화면 회전 | 문서 재생성 뒤 같은 Bun PID에서 Core 카운터 2가 유지되고 다음 호출로 4가 됨 |
 | renderer 실패 뒤 회전 | 준비된 Core에서 잘못된 WebView 메시지로 실패를 만든 뒤 회전. 닫힌 Bun에 WebView를 붙이지 않고 오류 화면 유지 |

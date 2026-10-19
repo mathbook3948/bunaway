@@ -135,6 +135,20 @@ async function run() {
     after.cancelled === before.cancelled + 1,
     "Backend cancellation did not arrive",
   );
+  // Streaming instantiation requires the packaged .wasm to be served as application/wasm.
+  const wasmResponse = await fetch("/add.wasm");
+  assert(
+    wasmResponse.headers.get("content-type") === "application/wasm",
+    `Wrong .wasm content type: ${wasmResponse.headers.get("content-type")}`,
+  );
+  const { instance } = await WebAssembly.instantiateStreaming(
+    fetch("/add.wasm"),
+  );
+  const add: unknown = instance.exports.add;
+  assert(
+    typeof add === "function" && add(2, 3) === 5,
+    "Streaming-instantiated .wasm did not run",
+  );
   const blocked = await fetch("/%2e%2e/host.json");
   assert(!blocked.ok, "Framework assets exposed");
   const privateAsset = await fetch("/backend.js");
@@ -153,7 +167,7 @@ async function run() {
     after,
     events: values.length,
     checks:
-      "DOM storage, commands, large UTF-8 response, events, unsubscribe, permission, errors, cancellation, assets, subframe",
+      "DOM storage, commands, large UTF-8 response, events, unsubscribe, permission, errors, cancellation, assets, wasm, subframe",
   };
 }
 
