@@ -129,7 +129,7 @@ in the same change and update this table. Drop a row once the mistake cannot hap
 | Rule | Enforced by |
 | --- | --- |
 | Lint and format, kebab-case filenames, no nested ternary, no non-null assertion, template literals | `mise run lint` (Biome, warnings fail), `mise run format:check` |
-| Functions stay under cognitive complexity 25; exempt files never gain a function over the limit | Biome rule plus `tests/conformance/lint-config.test.ts` against `tests/conformance/complexity-baseline.json` (per-file count, reason, expiry date) |
+| Functions stay under cognitive complexity 25; exempt files never gain a function over the limit | Biome rule plus `tests/conformance/lint-config.test.ts` against `tests/conformance/complexity-baseline.json` (per-file count, reason, approver, expiry date; non-placeholder reasons distinct, at most 8 entries per expiry date, placeholder reasons only shrink, entries one line each and sorted by path) |
 | Unhandled promises are marked `void`; in-flight promise fields compare with `!== undefined` | Biome `noFloatingPromises`, `noMisusedPromises` |
 | WebView-reachable modules (plugin `src/*.ts`, protocol, plugin-api, client, plugin SDK neutral files) use no `Buffer`, `Bun`, `process` or `node:` module | Biome override in `biome.json` plus `tests/conformance/browser-boundary.test.ts` (bundles loaded with those globals undefined) |
 | Workspace tsconfigs extend the base and never restate strictness; the client SDK sees no Bun types | `tests/conformance/lint-config.test.ts` |

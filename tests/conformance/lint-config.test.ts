@@ -7,11 +7,22 @@ const COMPLEXITY_RULE = "complexity/noExcessiveCognitiveComplexity";
 const COMPLEXITY_CATEGORY = `lint/${COMPLEXITY_RULE}`;
 /** One Biome run over every exempted file, including the daemon-less startup. */
 const LINT_TIMEOUT_MS = 60_000;
+/** The placeholder reason every entry started with; it names no function and no cause. */
+const GENERIC_REASON =
+  "Has functions over the cognitive complexity limit that are not yet split; the count is capped";
+/** Entries still carrying the placeholder. Rewrite a reason to lower it; it never rises. */
+const GENERIC_REASON_LIMIT = 64;
+/** A specific reason names the function and why it stays; shorter text says too little. */
+const MIN_REASON_LENGTH = 40;
+/** Entries one expiry date may hold, so the baseline never fails all at once. */
+const MAX_ENTRIES_PER_EXPIRY = 8;
 type ComplexityBaseline = Record<
   string,
   {
     functions: number;
     reason: string;
+    /** Who accepted keeping these functions over the limit. */
+    approver: string;
     expires: string;
   }
 >;
@@ -189,6 +200,8 @@ test("every complexity exemption has a baseline entry with a reason and an unexp
       entry.functions < 1 ||
       typeof entry.reason !== "string" ||
       entry.reason.trim().length === 0 ||
+      typeof entry.approver !== "string" ||
+      entry.approver.trim().length === 0 ||
       typeof entry.expires !== "string" ||
       !/^\d{4}-\d{2}-\d{2}$/.test(entry.expires)
     ) {
@@ -238,6 +251,82 @@ test(
   },
   LINT_TIMEOUT_MS,
 );
+
+test("baseline reasons are specific, distinct and the placeholder count only shrinks", async () => {
+  const baseline = await complexityBaseline();
+  const generic: string[] = [];
+  const tooShort: string[] = [];
+  const seen = new Map<string, string>();
+  const duplicated: string[] = [];
+  for (const [path, entry] of Object.entries(baseline)) {
+    const reason = entry.reason.trim();
+    // Appending a character or changing case does not make the reason specific.
+    if (reason.toLowerCase().startsWith(GENERIC_REASON.toLowerCase())) {
+      generic.push(path);
+      continue;
+    }
+    if (reason.length < MIN_REASON_LENGTH) {
+      tooShort.push(path);
+    }
+    const first = seen.get(reason);
+    if (first === undefined) {
+      seen.set(reason, path);
+    } else {
+      duplicated.push(`${path} repeats the reason of ${first}`);
+    }
+  }
+  expect(tooShort).toEqual([]);
+  expect(duplicated).toEqual([]);
+  // Only an upper bound: changes that each remove a placeholder do not have to edit the same
+  // constant, so parallel changes merge cleanly. Lower GENERIC_REASON_LIMIT when convenient.
+  expect(generic.length).toBeLessThanOrEqual(GENERIC_REASON_LIMIT);
+});
+
+test("baseline expiry dates are spread over several days", async () => {
+  const baseline = await complexityBaseline();
+  const perDate = new Map<string, number>();
+  for (const entry of Object.values(baseline)) {
+    perDate.set(entry.expires, (perDate.get(entry.expires) ?? 0) + 1);
+  }
+  const crowded = [
+    ...perDate,
+  ]
+    .filter(([, count]) => count > MAX_ENTRIES_PER_EXPIRY)
+    .map(([date, count]) => `${date}: ${count} entries`);
+  expect(crowded).toEqual([]);
+});
+
+test("baseline entries are one line each, sorted by file path", async () => {
+  const text = await Bun.file(
+    resolve(import.meta.dir, "complexity-baseline.json"),
+  ).text();
+  const lines = text.trimEnd().split("\n");
+  expect(lines[0]).toBe("{");
+  expect(lines[lines.length - 1]).toBe("}");
+  const paths: string[] = [];
+  const malformed: string[] = [];
+  for (const line of lines.slice(1, -1)) {
+    const match = /^ {2}("[^"]+"): \{.*\},?$/.exec(line);
+    // Two entries on one line would hide the second key from every check below.
+    const keysOnLine =
+      match === null
+        ? 0
+        : Object.keys(JSON.parse(`{${line.trim().replace(/,$/, "")}}`)).length;
+    if (match === null || keysOnLine !== 1) {
+      malformed.push(line);
+    } else {
+      paths.push(JSON.parse(match[1] as string) as string);
+    }
+  }
+  expect(malformed).toEqual([]);
+  expect(paths).toEqual(
+    [
+      ...paths,
+    ].sort(),
+  );
+  // JSON.parse keeps the last of two equal keys, which would hide the first entry.
+  expect(new Set(paths).size).toBe(paths.length);
+});
 
 /**
  * Strictness and module settings tsconfig.base.json owns; a workspace tsconfig must not restate

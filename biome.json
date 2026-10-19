@@ -70,6 +70,12 @@
   },
   "overrides": [
     {
+      "includes": ["tests/conformance/complexity-baseline.json"],
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
       "includes": ["**/*.astro"],
       "linter": {
         "rules": {
