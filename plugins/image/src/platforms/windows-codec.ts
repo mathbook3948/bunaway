@@ -13,6 +13,7 @@ import {
   type ImageMime,
   MAX_ENCODED_BYTES,
   MAX_IMAGE_BYTES,
+  MAX_IMAGE_DIMENSION,
 } from "#image/contract";
 import type { Pixels } from "#image/platforms/codec";
 import {
@@ -425,9 +426,9 @@ export function createWIC() {
         const height = size[1] ?? 0;
         if (
           width < 1 ||
-          width > 4096 ||
+          width > MAX_IMAGE_DIMENSION ||
           height < 1 ||
-          height > 4096 ||
+          height > MAX_IMAGE_DIMENSION ||
           width * height * 4 > MAX_IMAGE_BYTES
         ) {
           throw new BunawayError({
