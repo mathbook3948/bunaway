@@ -439,7 +439,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
   확인하며, 처리 앱의 종류는 환경별로 다르다. 오류 분류는 `api` 단위 테스트가 검증한다.
 - [ ] AppUserModelID와 toast activation 식별자를 설정하고 설치와 일치시킨다.
 - [x] Recent Documents의 추가와 삭제를 제공한다. 조회는 지원하지 않는다.
-  `opener.addRecentDocument`는 기존 파일 검사와 핸들 고정 뒤 `SHAddToRecentDocs(SHARD_PATHW)`를,
+  `opener.addRecentDocument`는 기존 파일 확인 뒤 `SHAddToRecentDocs(SHARD_PATHW)`를,
   `opener.clearRecentDocuments`는 `SHAddToRecentDocs(NULL)`을 호출해 사용자의 셸 최근 항목
   전체를 지운다(다른 앱 항목 포함, 앱 범위 아님). 각각 작업 권한을 요구하며 성공은 요청
   전달이다. 점프 목록 연결은 AppUserModelID 이후의 작업이다. 조회는 공식 API가 없고

@@ -8,6 +8,6 @@ WebView에서 전달한 출처나 권한을 그대로 믿으면 앱 명령이 �
 
 이를 위해 세션과 컨텍스트의 발급, 폐기 및 네이티브 작업 직전의 권한 재검사가 필요하다. 뷰의 요청을 백엔드 자체 작업으로 승격하지 않으며, 정책에 따른 기능 허용과 OS 권한은 각각 확인한다. 앱 백엔드와 네이티브 플러그인은 신뢰 코드이므로 이 경계를 악성 백엔드의 샌드박스로 설명하지 않는다.
 
-현재 Windows 호스트는 실제 WebView의 출처, 최상위 문서와 활성 세션을 검사하고 컨텍스트를 발급, 폐기한다. runtime-bun은 이 컨텍스트로 코어 세션을 열고 Host API 호출에 유지하며, 호스트는 작업 직전 정책을 다시 검사한다. 파일별 접근 규칙은 앱 명령이 소유하며 파일을 여는 플러그인은 플랫폼 경로 문법을 검사하고 경로 제한은 앱 명령이 맡는다([ADR 0024](./0024-plugin-path-responsibility.md)). log와 notification은 링크를 따라가며, opener와 storage는 이 결정에 따라 각 플러그인 변경에서 링크와 핸들 검사를 제거한다. 다중 창/뷰의 위조, 권한 거부, 폐기와 파일 경계의 이전 검증 결과는 [Windows 검증 기록](../architecture/windows-host-results.md)에 있다. 뷰별 정책 분리는 [창/뷰 ADR](./0004-multi-window-per-view-policy.md)에 정리하고, 다른 플랫폼은 미검증이다.
+현재 Windows 호스트는 실제 WebView의 출처, 최상위 문서와 활성 세션을 검사하고 컨텍스트를 발급, 폐기한다. runtime-bun은 이 컨텍스트로 코어 세션을 열고 Host API 호출에 유지하며, 호스트는 작업 직전 정책을 다시 검사한다. 파일별 접근 규칙은 앱 명령이 소유하며 파일을 여는 플러그인은 플랫폼 경로 문법을 검사하고 경로 제한은 앱 명령이 맡는다([ADR 0024](./0024-plugin-path-responsibility.md)). log, notification과 opener는 링크를 따라가며, storage는 이 결정에 따라 storage 변경에서 링크와 핸들 검사를 제거한다. 다중 창/뷰의 위조, 권한 거부, 폐기와 파일 경계의 이전 검증 결과는 [Windows 검증 기록](../architecture/windows-host-results.md)에 있다. 뷰별 정책 분리는 [창/뷰 ADR](./0004-multi-window-per-view-policy.md)에 정리하고, 다른 플랫폼은 미검증이다.
 
 근거: [PRD의 권한 모델](../PRD.md), [Host API와 세션 계약](../architecture/common-api.md), [컨텍스트 바인딩](../../packages/runtime-bun/src/host-api.ts), [런타임 연결](../../packages/runtime-bun/src/runtime.ts), [코어 구현](../../packages/core/src/create-core.ts), [Windows 호스트](../../native/windows/bun/entry.ts).

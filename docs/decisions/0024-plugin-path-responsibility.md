@@ -51,4 +51,4 @@ status: accepted
 
 ## 영향
 
-[ADR 0002](./0002-host-owned-call-context.md), [ADR 0006](./0006-windows-bun-ui-worker.md), [ADR 0013(optional native plugins)](./0013-optional-native-plugins.md)이 파일 핸들 고정, 링크와 최종 핸들 검사를 플러그인이 맡는다고 적은 부분은 이 결정으로 대체한다. 이 문서들과 아키텍처 문서는 log와 notification의 링크 검사를 제거하는 변경에서 이 결정에 맞게 개정한다. opener와 storage에 대한 서술은 이 결정에 따라 각 플러그인 변경에서 방어를 제거한다고 적고, 그 플러그인의 레퍼런스는 코드를 바꾸는 같은 커밋에서 고친다. 그 전까지의 opener와 storage 동작은 각 레퍼런스가 설명하는 대로다.
+[ADR 0002](./0002-host-owned-call-context.md), [ADR 0006](./0006-windows-bun-ui-worker.md), [ADR 0013(optional native plugins)](./0013-optional-native-plugins.md)이 파일 핸들 고정, 링크와 최종 핸들 검사를 플러그인이 맡는다고 적은 부분은 이 결정으로 대체한다. 이 문서들과 아키텍처 문서는 log와 notification의 링크 검사를 제거하는 변경에서 이 결정에 맞게 개정했다. opener는 같은 방식으로 제거했고, storage에 대한 서술은 이 결정에 따라 storage 변경에서 방어를 제거한다고 적었다. storage 레퍼런스는 코드를 바꾸는 같은 커밋에서 고치며, 그 전까지의 storage 동작은 각 레퍼런스가 설명하는 대로다.
