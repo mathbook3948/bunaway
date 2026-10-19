@@ -131,7 +131,6 @@
         "native/windows/bun/webview.ts",
         "native/windows/bun/window-events.ts",
         "packages/cli/scripts/pack.ts",
-        "packages/cli/src/main.ts",
         "packages/cli/src/plugin-imports.ts",
         "packages/cli/src/plugin-platform.ts",
         "packages/cli/src/plugins.ts",
