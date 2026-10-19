@@ -11,6 +11,7 @@ import tray from "@bunaway/plugin-tray";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import createOperationsDefinition from "#plugins/tray/src/index";
 import { trayOperations } from "#plugins/tray/src/operations";
+import { macosTrayOperations } from "#plugins/tray/src/operations-macos";
 import { trayIconImage } from "#plugins/tray/src/platforms/windows-icon-data";
 import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
@@ -23,11 +24,23 @@ const createOperations = createOperationsFactory(
 
 test("tray inputs are strict, bounded and grant each operation independently", async () => {
   const parsers = pluginParsers("tray", trayOperations);
-  expect([
-    ...new NativeRegistry([
-      tray._definition,
-    ]).operations.keys(),
-  ]).toEqual(Object.keys(trayOperations).map((name) => `tray.${name}`));
+  // The registry holds the union of both platforms' operations; setTooltip is shared.
+  expect(
+    [
+      ...new NativeRegistry([
+        tray._definition,
+      ]).operations.keys(),
+    ].sort(),
+  ).toEqual(
+    [
+      ...new Set([
+        ...Object.keys(trayOperations),
+        ...Object.keys(macosTrayOperations),
+      ]),
+    ]
+      .map((name) => `tray.${name}`)
+      .sort(),
+  );
   for (const tooltip of [
     "",
     "한글 😀",
