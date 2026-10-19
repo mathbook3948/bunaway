@@ -23,7 +23,7 @@ const BASELINE: Readonly<Record<string, number>> = {
 };
 
 const ESCAPE =
-  /\bas (?:unknown|never|any)\b|@ts-(?:ignore|expect-error)|:\s*any\b|<any>/g;
+  /\bas (?:unknown|never|any)\b|@ts-(?:ignore|expect-error|nocheck)|[:,]\s*any\b|<any>/g;
 
 /** Counts type escapes on code lines; `@ts-` directives are comments, so they count anywhere. */
 function countEscapes(source: string): number {
@@ -46,7 +46,7 @@ function countEscapes(source: string): number {
 async function productionFiles(): Promise<string[]> {
   const files: string[] = [];
   for (const root of SOURCE_ROOTS) {
-    const glob = new Bun.Glob(`${root}/**/*.ts`);
+    const glob = new Bun.Glob(`${root}/**/*.{ts,tsx,mts,cts}`);
     for await (const scanned of glob.scan({
       cwd: repository,
     })) {
@@ -73,6 +73,8 @@ test("the counter recognises type escapes and ignores prose", () => {
     countEscapes("// @ts-expect-error generated\nimport x from 'y';"),
   ).toBe(1);
   expect(countEscapes("// cast it as unknown later\n * as never")).toBe(0);
+  expect(countEscapes("// @ts-nocheck")).toBe(1);
+  expect(countEscapes("const m: Map<string, any> = new Map();")).toBe(1);
   expect(countEscapes("const a = b as Known;")).toBe(0);
 });
 
