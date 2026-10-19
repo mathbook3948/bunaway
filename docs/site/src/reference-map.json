@@ -147,7 +147,12 @@
           "parsePolicy",
           "negotiateProtocol",
           "NativeRegistry",
-          "asNativePluginContract"
+          "asNativePluginContract",
+          "isWindowsFileName",
+          "isWindowsReservedDeviceName",
+          "isWindowsExecutableName",
+          "sanitizeWindowsFileName",
+          "WINDOWS_MAX_FILE_NAME_LENGTH"
         ]
       }
     },

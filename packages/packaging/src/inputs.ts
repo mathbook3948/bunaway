@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { access, lstat, readFile, realpath } from "node:fs/promises";
 import { basename, isAbsolute, relative, resolve, sep, win32 } from "node:path";
-import { isRecord } from "@bunaway/protocol";
+import { isRecord, isWindowsExecutableName } from "@bunaway/protocol";
 import { XMLParser } from "fast-xml-parser";
 import {
   type BuildArtifact,
@@ -568,8 +568,7 @@ export async function verifyArtifact(args: {
     if (
       host?.kind !== "bun-compiled" ||
       typeof host.executable !== "string" ||
-      // biome-ignore lint/suspicious/noControlCharactersInRegex: Windows file-name restrictions.
-      !/^[^<>:"/\\|?*\x00-\x1f]+\.exe$/i.test(host.executable)
+      !isWindowsExecutableName(host.executable)
     ) {
       diagnostics.push({
         stage,

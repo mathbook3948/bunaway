@@ -1,5 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { sanitizeWindowsFileName } from "@bunaway/protocol";
 import {
   type ChannelConfig,
   CODES,
@@ -62,10 +63,7 @@ function issParameter(value: string, constants = true): string {
 
 /** Replaces forbidden path characters and trims trailing dots and spaces. */
 export function installerDirectoryName(name: string): string {
-  return (
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: Windows forbids these characters in file names.
-    name.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/[. ]+$/, "") || "App"
-  );
+  return sanitizeWindowsFileName(name) || "App";
 }
 
 /**

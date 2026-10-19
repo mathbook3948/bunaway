@@ -1,4 +1,5 @@
 import { BunawayError } from "@bunaway/plugin";
+import { isWindowsFileName } from "@bunaway/protocol";
 import {
   MAX_FILE_PATH_LENGTH,
   type ShortcutDetails,
@@ -95,15 +96,7 @@ export function normalizeFilePath(input: unknown): string {
   const names = drivePath ? parts.slice(1) : parts.slice(2);
   if (
     parts.length <= rootParts ||
-    names.some(
-      (part) =>
-        !part ||
-        part.length > MAX_FILE_NAME_LENGTH ||
-        part === "." ||
-        part === ".." ||
-        /[ .]$/.test(part) ||
-        /^(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)/i.test(part),
-    )
+    names.some((part) => !isWindowsFileName(part, MAX_FILE_NAME_LENGTH))
   ) {
     throw invalid();
   }

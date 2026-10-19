@@ -2064,6 +2064,42 @@ test("Windows compiled app hash rejects tampering before adapters run", async ()
   expect(ran).toBe(false);
 });
 
+test("Windows host executable names that Windows cannot create are rejected", async () => {
+  const projectRoot = await mkdtemp(join(home, "bun-ffi-bootstrap-"));
+  const manifest = await makeArtifact(projectRoot);
+  const artifact = artifactPaths({
+    root: projectRoot,
+    target: "windows-x64",
+    appId: "app.test",
+  });
+  for (const executable of [
+    "CON.exe",
+    "nul.app.exe",
+    "COM¹.exe",
+    "app. .exe",
+  ]) {
+    const diagnostics = await verifyArtifact({
+      artifact,
+      manifest: {
+        ...manifest,
+        host: {
+          target: "windows-x64",
+          ...manifest.host,
+          executable,
+        },
+      },
+      channel: "win-direct",
+    });
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === CODES.INPUT_UNEXPECTED &&
+          diagnostic.message === "Windows requires a compiled Bun app.",
+      ),
+    ).toBe(true);
+  }
+});
+
 test("missing, partial, empty and non-file outputs fail before replacing previous artifacts", async () => {
   for (const mode of [
     "missing",
