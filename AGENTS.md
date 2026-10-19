@@ -146,6 +146,7 @@ in the same change and update this table. Drop a row once the mistake cannot hap
 | A number schema bounded to the signed 32-bit range uses `int32Schema`, not a hand-written `.min`/`.max` with a literal or `INT32_*` bound | `tests/conformance/int32-schema.test.ts` (no such bound in `packages`, `plugins` or `native` outside `packages/plugin-sdk/src/schemas.ts`) |
 | A plugin's shared operations are typed by an instance interface in `contract.ts` that each platform class `implements`; platform-independent methods live in one base class (`plugins/storage/src/platforms/files.ts`) | `tests/conformance/plugin-structure.test.ts` (neutral modules importing platform types only shrink) |
 | A test names its waits: `setDefaultTimeout(deadline("build"))` once per file, `killAfter(child, "childStep")` for child kill timers, `waitFor(probe, { deadline, what })` for polling, all from `tests/fixtures/deadlines.ts`; literal deadlines and hand-rolled pollers only shrink | `tests/conformance/test-deadlines.test.ts` (per-file ratchet); `BUNAWAY_TEST_TIME_SCALE` scales every deadline on a slow runner |
+| A non-null, non-array object check is `isRecord` from `@bunaway/protocol`, not a local helper or an inline `typeof` and `Array.isArray` test; remaining inline checks only shrink | `tests/conformance/shared-record-guard.test.ts` (per-file ratchet) |
 | Limits are named constants; events are compared as sets | Review |
 | Docs change in the same commit as code, and claim only what tests verified | Review |
 

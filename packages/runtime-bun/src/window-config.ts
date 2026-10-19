@@ -10,14 +10,15 @@ import {
   type WindowSpec,
 } from "@bunaway/plugin-api/native";
 import type { Policy } from "@bunaway/protocol";
+import { isRecord } from "@bunaway/protocol";
 
 export { MAX_WINDOWS, type WindowSpec } from "@bunaway/plugin-api/native";
 
 function object(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error("Expected a window configuration object.");
   }
-  return value as Record<string, unknown>;
+  return value;
 }
 
 /**

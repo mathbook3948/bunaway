@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { isRecord } from "@bunaway/protocol";
 import { writeJson } from "#cli/files";
 
 const inputs = resolve(process.argv[2] ?? "build/android-host");
@@ -204,9 +205,6 @@ type Report = {
   };
   error?: string;
 };
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 function isSnapshot(value: unknown): value is Report["before"] {
   return (
     isRecord(value) &&

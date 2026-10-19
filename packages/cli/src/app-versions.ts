@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { APP_INFO_MAX_LENGTH } from "@bunaway/plugin-api";
+import { isRecord } from "@bunaway/protocol";
 import {
   type AppMetadata,
   isAppInfoText,
@@ -10,7 +11,7 @@ import { json } from "./files.ts";
 async function packageVersion(directory: string): Promise<string | null> {
   const path = resolve(directory, "package.json");
   const manifest = await json(path);
-  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+  if (!isRecord(manifest)) {
     throw new Error(`${path} must contain a JSON object.`);
   }
   const version: unknown = Reflect.get(manifest, "version");

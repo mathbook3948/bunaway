@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
+  isRecord,
   type NativePluginContract,
   NativeRegistry,
   validateValue,
@@ -109,12 +110,7 @@ export function parseAppManifest(value: unknown): AppManifest {
   // Metadata must not consume the native contract's existing byte or depth budget.
   const pluginSchema = manifestSchema.properties.plugins.items;
   const plugins = value.plugins.map((plugin: unknown) => {
-    if (
-      !plugin ||
-      typeof plugin !== "object" ||
-      Array.isArray(plugin) ||
-      !("native" in plugin)
-    ) {
+    if (!isRecord(plugin) || !("native" in plugin)) {
       throw new Error("Invalid manifest plugin.");
     }
     const metadata = validateValue(pluginSchema, {

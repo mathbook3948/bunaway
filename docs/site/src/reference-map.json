@@ -111,7 +111,7 @@
       "name": "@bunaway/protocol",
       "source": "packages/protocol/src/index.ts",
       "pages": {
-        "reference/schema": ["validateValue"],
+        "reference/schema": ["isRecord", "validateValue"],
         "reference/errors": [
           "errorSchema",
           "MAX_JSON_DEPTH",

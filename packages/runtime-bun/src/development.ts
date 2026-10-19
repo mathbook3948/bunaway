@@ -1,4 +1,5 @@
 import type { Policy } from "@bunaway/protocol";
+import { isRecord } from "@bunaway/protocol";
 import {
   MAX_LAUNCH_ARGUMENT_BYTES,
   MAX_LAUNCH_ARGUMENTS,
@@ -205,9 +206,7 @@ export function verifyDevelopmentLaunch(
     return undefined;
   }
   if (
-    !marker ||
-    typeof marker !== "object" ||
-    Array.isArray(marker) ||
+    !isRecord(marker) ||
     Object.keys(marker).length !== 1 ||
     !("url" in marker) ||
     launchUrl === undefined ||

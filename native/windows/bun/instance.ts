@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { createConnection, createServer, type Socket } from "node:net";
 import { win32 } from "node:path";
+import { isRecord } from "@bunaway/protocol";
 import { MAX_LAUNCH_ARGUMENTS } from "@bunaway/runtime-bun/worker-channel";
 
 export type LaunchArguments = {
@@ -25,10 +26,10 @@ export function instanceAddress(dataRoot: string): string {
  * Throws for malformed or oversized launch data.
  */
 export function parseLaunchArguments(value: unknown): LaunchArguments {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error("Invalid launch arguments");
   }
-  const input = value as Record<string, unknown>;
+  const input = value;
   if (
     Object.keys(input).length !== 2 ||
     !Array.isArray(input.argv) ||

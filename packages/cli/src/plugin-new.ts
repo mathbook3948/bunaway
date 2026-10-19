@@ -1,5 +1,6 @@
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { isRecord } from "@bunaway/protocol";
 import { frameworkRoot, json, writeJson } from "./files.ts";
 
 /** Lower-case words joined by single hyphens, as every plugin directory is named. */
@@ -33,10 +34,10 @@ type PluginSpec = {
 };
 
 function record(value: unknown, what: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error(`${what} must be a JSON object.`);
   }
-  return value as Record<string, unknown>;
+  return value;
 }
 
 function camel(directory: string): string {

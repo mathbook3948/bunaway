@@ -1,12 +1,13 @@
+import { isRecord } from "@bunaway/protocol";
 import type { ChannelConfig } from "./contract.ts";
 
 type Associations = NonNullable<ChannelConfig["associations"]>;
 
 function object(value: unknown, allowed: string[]): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error("Expected an object.");
   }
-  const result = value as Record<string, unknown>;
+  const result = value;
   for (const key of Object.keys(result)) {
     if (!allowed.includes(key)) {
       throw new Error(`Unknown field ${key}.`);

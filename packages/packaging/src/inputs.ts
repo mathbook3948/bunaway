@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { access, lstat, readFile, realpath } from "node:fs/promises";
 import { basename, isAbsolute, relative, resolve, sep, win32 } from "node:path";
+import { isRecord } from "@bunaway/protocol";
 import { XMLParser } from "fast-xml-parser";
 import {
   type BuildArtifact,
@@ -92,10 +93,6 @@ async function inputPath(
 
 function isDigest(value: unknown): value is string {
   return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function isIdentity(value: unknown): value is string {

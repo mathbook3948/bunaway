@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { APP_INFO_MAX_LENGTH, type AppInfo } from "@bunaway/plugin-api";
+import { isRecord } from "@bunaway/protocol";
 
 /**
  * App facts known before the backend starts. Hosts add the runtime-dependent
@@ -67,7 +68,7 @@ function optionalVersion(
   if (value === undefined) {
     return null;
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error(`Invalid package manifest ${section}.`);
   }
   const version = Reflect.get(value, "version");
@@ -84,7 +85,7 @@ function optionalVersion(
 export function parsePackageVersions(
   value: unknown,
 ): Pick<AppMetadata, "version" | "framework"> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error("Invalid package manifest.");
   }
   return {

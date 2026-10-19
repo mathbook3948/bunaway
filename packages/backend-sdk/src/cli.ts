@@ -1,4 +1,5 @@
 import { parseArgs, toUSVString } from "node:util";
+import { isRecord } from "@bunaway/protocol";
 import { z } from "zod";
 
 /** One command-scoped flag parsed by Bun's node:util implementation. Defaults belong in the Zod schema. */
@@ -173,12 +174,7 @@ function compile(definition: CLIDefinition) {
           throw new TypeError("CLI commands require a Zod schema.");
         }
         const source = node.options ?? {};
-        if (
-          !source ||
-          typeof source !== "object" ||
-          Array.isArray(source) ||
-          Object.keys(source).length > MAX_OPTIONS
-        ) {
+        if (!isRecord(source) || Object.keys(source).length > MAX_OPTIONS) {
           throw new TypeError("Invalid CLI options.");
         }
         const aliases = new Set([

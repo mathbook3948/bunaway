@@ -2,15 +2,13 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { isRecord } from "@bunaway/protocol";
 import { frameworkRoot, json, verifyHash } from "./files.ts";
 import { run } from "./processes.ts";
 
 function record(value: unknown): Record<string, unknown> {
-  assert(
-    value && typeof value === "object" && !Array.isArray(value),
-    "Invalid dependency manifest",
-  );
-  return value as Record<string, unknown>;
+  assert(isRecord(value), "Invalid dependency manifest");
+  return value;
 }
 function string(value: unknown): string {
   assert(

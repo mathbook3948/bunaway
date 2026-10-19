@@ -1,3 +1,8 @@
+/** Whether `value` is a non-null, non-array object, the shape every untrusted JSON dictionary must have first. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** JSON data accepted by the protocol, with no JavaScript-only values. */
 export type JsonValue =
   | null
@@ -356,7 +361,7 @@ function matches(schema: Schema, value: JsonValue): boolean {
   // Keywords also apply without an explicit type (for example enum + maxLength).
   switch (schema.type ?? jsonTypeOf(value)) {
     case "object": {
-      if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      if (!isRecord(value)) {
         return false;
       }
       const properties = schema.properties ?? {};
