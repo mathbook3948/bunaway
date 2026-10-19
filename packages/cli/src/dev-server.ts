@@ -4,6 +4,15 @@ import type { DevServerConfig } from "./config.ts";
 import { frameworkRoot } from "./files.ts";
 import { startManagedProcess } from "./managed-command.ts";
 
+const HTTP_DEFAULT_PORT = 80;
+const HTTPS_DEFAULT_PORT = 443;
+const PORT_PROBE_TIMEOUT_MS = 500;
+const READINESS_REQUEST_TIMEOUT_MS = 1000;
+// Lets a server that fails right after answering report its exit before readiness is accepted,
+// so another process on the same port is not mistaken for the owned server.
+const READY_EXIT_RECHECK_MS = 50;
+const READINESS_RETRY_INTERVAL_MS = 100;
+
 /** A ready frontend server whose process tree remains owned until stopped. */
 export interface DevServer {
   exited: Promise<number>;
@@ -14,7 +23,10 @@ async function portInUse(url: URL): Promise<boolean> {
   return new Promise((done) => {
     const socket = createConnection({
       host: url.hostname,
-      port: Number(url.port || (url.protocol === "https:" ? 443 : 80)),
+      port: Number(
+        url.port ||
+          (url.protocol === "https:" ? HTTPS_DEFAULT_PORT : HTTP_DEFAULT_PORT),
+      ),
     });
     const finish = (used: boolean) => {
       socket.destroy();
@@ -22,7 +34,7 @@ async function portInUse(url: URL): Promise<boolean> {
     };
     socket.once("connect", () => finish(true));
     socket.once("error", () => finish(false));
-    socket.setTimeout(500, () => finish(false));
+    socket.setTimeout(PORT_PROBE_TIMEOUT_MS, () => finish(false));
   });
 }
 
@@ -79,7 +91,10 @@ export async function startDevServer(
           signal: AbortSignal.any([
             signal,
             AbortSignal.timeout(
-              Math.min(1000, Math.max(1, deadline - Date.now())),
+              Math.min(
+                READINESS_REQUEST_TIMEOUT_MS,
+                Math.max(1, deadline - Date.now()),
+              ),
             ),
           ]),
         });
@@ -87,7 +102,7 @@ export async function startDevServer(
         await response.body?.cancel();
         if (ready) {
           // Do not mask a startup failure with another process listening on the same port.
-          await delay(50, undefined, {
+          await delay(READY_EXIT_RECHECK_MS, undefined, {
             signal,
           });
           if (ownedProcess.exitCode !== undefined) {
@@ -109,7 +124,10 @@ export async function startDevServer(
         }
       }
       await delay(
-        Math.min(100, Math.max(1, deadline - Date.now())),
+        Math.min(
+          READINESS_RETRY_INTERVAL_MS,
+          Math.max(1, deadline - Date.now()),
+        ),
         undefined,
         {
           signal,
