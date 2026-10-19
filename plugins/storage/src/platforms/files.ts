@@ -17,9 +17,9 @@ export const MAX_STORAGE_FILE_BYTES = 4 * 1024 * 1024;
 export abstract class StorageFiles {
   private disposed = false;
 
-  /** Read up to `maxBytes` from the checked file at `path`; larger files are rejected. */
+  /** Read up to `maxBytes` from the file at `path`; larger files are rejected. */
   protected abstract readFile(path: string, maxBytes: number): Buffer;
-  /** Replace or append `bytes` at `path` after the platform's checks on the opened object. */
+  /** Replace or append `bytes` at `path`. */
   protected abstract writeFile(
     path: string,
     bytes: Buffer,
@@ -47,7 +47,7 @@ export abstract class StorageFiles {
     }
   }
 
-  /** Read bounded UTF-8 text from the checked file, preserving BOM text. */
+  /** Read bounded UTF-8 text from the file, preserving BOM text. */
   readText(input: StorageLocation): string {
     return new TextDecoder("utf-8", {
       fatal: true,
@@ -60,7 +60,7 @@ export abstract class StorageFiles {
     return this.readFile(input.path, MAX_STORAGE_BYTES).toString("base64");
   }
 
-  /** Replace text only after inspecting the opened object. */
+  /** Replace the file's text. */
   writeText(input: StorageWrite): null {
     return this.writeFile(input.path, Buffer.from(input.text), false);
   }
@@ -70,7 +70,7 @@ export abstract class StorageFiles {
     return this.writeFile(input.path, Buffer.from(input.text), true);
   }
 
-  /** Replace bytes only after inspecting the opened object. */
+  /** Replace the file's bytes. */
   writeBytes(input: StorageBytesWrite): null {
     return this.writeFile(
       input.path,

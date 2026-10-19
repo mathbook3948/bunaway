@@ -482,27 +482,6 @@ async function run() {
         `read failed ${JSON.stringify(r)}`,
       );
     });
-    await test("junction cannot bypass native link checks", async () => {
-      const r = await call("test.readEscape", {
-        path: "notes/internal-link/x.txt",
-      });
-      assert(
-        r.kind === "result" &&
-          r.payload.ok === false &&
-          r.payload.code === "PERMISSION_DENIED",
-        `expected junction denial ${JSON.stringify(r)}`,
-      );
-      const w = await call("test.writeNote", {
-        name: "internal-link/x",
-        text: "forbidden",
-      });
-      assert(
-        w.kind === "result" &&
-          w.payload.ok === false &&
-          w.payload.code === "PERMISSION_DENIED",
-        `expected junction write denial ${JSON.stringify(w)}`,
-      );
-    });
     await test("storage operation grant accepts another app-selected directory", async () => {
       const r = await call("test.readEscape", {
         path: "secrets/x.txt",
@@ -523,18 +502,6 @@ async function run() {
           r.payload.ok === false &&
           r.payload.code === "INVALID_ARGUMENT",
         `expected rejection ${JSON.stringify(r)}`,
-      );
-    });
-    await test("storage symlink denied", async () => {
-      // notes/link is a junction planted by the driver pointing to another directory.
-      const r = await call("test.readEscape", {
-        path: "notes/link/secret.txt",
-      });
-      assert(
-        r.kind === "result" &&
-          r.payload.ok === false &&
-          r.payload.code === "PERMISSION_DENIED",
-        `expected denial ${JSON.stringify(r)}`,
       );
     });
     await test("storage roundtrip at app-selected temporary path", async () => {

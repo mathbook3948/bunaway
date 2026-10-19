@@ -62,7 +62,7 @@ src 없이 dist만 설치해 공개 호출과 재내보낸 타입을 검사한�
 이전 execution 설정과 잘못된 thread 값의 거부도 검사한다.
 `lifecycle/plugin-async-parsing.test.ts`는 실제 I/O Worker에서 handler 실행 context 전달과
 입력 콜백의 권한 승인, 실행 재승인 및 취소된 파서의 늦은 완료를 검사한다.
-storage의 플랫폼별 작업 샘플은 기존 `windows-bun-storage.ts`의 실제 Win32 핸들 검사와
+storage의 플랫폼별 작업 샘플은 `windows-bun-storage.ts`의 실제 Windows 파일 시스템 검사와
 `windows-storage-metadata.ts`의 WebView, I/O Worker 호출을 함께 사용한다.
 macOS는 `macos-storage.ts`와 `macos-storage-directories.ts`에서 기존 descriptor 검사를
 유지하며 `macos-storage-host.ts`에서 실제 SDK와 I/O Worker 호출을 검증한다.
@@ -668,7 +668,7 @@ macOS에서는 참조된 하위 프로세스와 `unref()`된 하위 프로세스
 호스트 SIGKILL을 실제 프로세스로 검사한다. shell의 자식과 감시 프로세스까지 정리되고
 다른 프로세스 그룹은 유지되는지 확인한다. 다른 OS의 시작 회귀는 macOS 그룹 소유권만 대체한다.
 `windows-bun-storage.ts`는 임의 바이트, 빈 파일, 짧은 대체와 append, Unicode 텍스트 append,
-바이트 읽기 상한과 링크 거부를 실제 Win32 핸들로 검사한다.
+바이트 읽기 상한과 링크 추종을 실제 Windows 파일 시스템으로 검사한다.
 `windows-storage-metadata.ts`는 실제 WebView2에서 바이트 대체와 append, UTF-8 append 및
 독립적인 텍스트 대체 권한 거부를 I/O Worker와 함께 검사한다.
 이 검사들은 `mise run host:windows`에 포함하며 Linux 계약 검사와 구분한다.
@@ -858,12 +858,15 @@ Apple 공증 서비스와 도구 실패는 테스트 자식 프로세스의 PATH
 검증한다. Python이나 별도 셸 실행기는 필요 없다.
 
 `api/storage-transfers.test.ts`는 두 endpoint, 추가 옵션 거부와 독립적인 전송 권한을 검사한다.
-`windows-bun-storage.ts`는 실제 source 및 destination 핸들로 여러 chunk의 임의 바이트,
-빈 파일, 기존 대상 보존, 크기 상한, 링크와 경로 거부 및 같은 parent의 파일과 디렉터리 rename을 확인한다.
+`api/storage-files.test.ts`는 공통 어댑터를 임시 폴더에서 직접 실행해 복사(기존 파일, 디렉터리, 링크와
+대상 없는 링크 위에 만들지 않음, 크기 상한, 없는 parent)와 이동 규칙(기존 대상 보존, 자기 하위 거부)을 확인한다.
+이 파일은 Linux와 Windows의 테스트 실행에서 모두 돌고, 링크를 만들 수 없는 러너에서는 링크 부분만 건너뛴다.
+`windows-bun-storage.ts`는 실제 Windows 파일 시스템에서 여러 chunk의 임의 바이트,
+빈 파일, 기존 대상 보존, 크기 상한, 링크를 거친 대상과 같은 parent 및 다른 parent의 파일과 디렉터리 이동을 확인한다.
 소스와 빌드된 어댑터 각각에서 write/copy/append/move를 32회 수행하며 없는 대상의
 오류 분류, 기존 대상 충돌과 원본 보존도 확인한다. 각 move 전에 GC를 실행해
 FFI 반환값 할당이 네이티브 오류 상태에 영향을 주는 경로를 검사하며 작업을 재시도하지 않는다.
-다른 parent 이동은 source를 유지한 채 UNSUPPORTED로 거부하며, 다른 볼륨은 식별 가능한 경우에만 검사한다.
+다른 볼륨 이동은 `UNSUPPORTED`이며 식별 가능한 경우에만 검사한다.
 `windows-storage-metadata.ts`는 실제 WebView2와 I/O Worker에서 copy/move와 원본 및 복사본,
 일반 쓰기 권한 거부를 검사하며 `mise run host:windows`에 포함한다.
 
@@ -886,33 +889,33 @@ Win32와 WebView 콜백 경계는 제어 가능한 fixture로 대체하며 실�
 실행한 OS, Bun revision과 WebView2 버전은 `build/windows-multiple-windows-results.json`에 기록한다.
 CI의 windows-native 작업은 `mise run host:windows`를 통해 이 검사를 실행한다.
 
-`api/storage-directories.test.ts`는 생성의 기본값, 작업별 권한, 결과 전송 상한과
-네이티브 디렉터리 record의 경계 검사를 확인한다. `windows-bun-storage.ts`는 실제
-검사한 핸들로 여러 batch의 이름과 링크 종류, 재귀 생성, 파일 및 빈 디렉터리 삭제,
-큰 목록 실패와 자원 해제를 확인한다. 링크나 별칭 및 ACL 거부도 유지한다.
+`api/storage-directories.test.ts`는 생성의 기본값, 작업별 권한과 결과 전송 상한을 확인한다.
+`api/storage-files.test.ts`는 목록의 이름 정렬과 종류, 256개 상한, 생성의 멱등성과 파일이 막은 경우,
+삭제(링크 자체 삭제, 비어 있지 않은 디렉터리 거부)와 재귀 삭제(트리 안의 링크 미추적, 취소 시 무변경),
+용량 계산(이름별 합산, 링크 제외, 항목과 깊이 상한, 취소, 어댑터 해제)을 확인한다.
+`windows-bun-storage.ts`는 실제 Windows 파일 시스템에서 여러 batch의 이름과 junction이 `link`로 나오는 것,
+junction을 디렉터리 경로로 따라가는 것, 재귀 생성, 파일 및 빈 디렉터리 삭제, 큰 목록 실패, 링크 추종과 ACL 거부를 확인한다.
 `windows-storage-metadata.ts`는 실제 WebView2와 I/O Worker에서 목록, 생성과 빈 폴더 삭제,
 독립적인 텍스트 쓰기 권한 거부를 검사하며 `mise run host:windows`에 포함한다.
 
-`directorySize`는 `api/storage-directories.test.ts`가 입력 거부, 결과 범위, 독립 권한,
-macOS 미지원과 reparse tag별 크기 집계 규칙(이름 대리자 제외)을 확인한다.
-`windows-storage-directory-size.ts`는 실제 Win32 핸들로 빈 디렉터리, 중첩 합계, hardlink의
-이름별 합산, junction과 파일 symlink 미추적(만들 수 없는 러너에서는 건너뜀), 항목 및 깊이 상한,
-시작 전과 순회 중 취소, 순회 중 어댑터 해제(해제 Promise 완료 뒤 트리 삭제), 삭제 대기 중인 하위
-디렉터리 건너뛰기(DELETE 공유 핸들에 delete disposition 유지, 만들 수 없으면 건너뜀), deny ACE(icacls)를 건 하위 디렉터리의 `PERMISSION_DENIED`
-(icacls를 쓸 수 없는 러너에서는 건너뛰고 정리 때 ACE를 제거), 파일 및 없는 경로 거부와 실패 뒤 임시 트리 삭제(핸들 해제)를 확인한다.
+`windows-storage-directory-size.ts`는 실제 Windows 파일 시스템으로 빈 디렉터리, 중첩 합계, hardlink의
+이름별 합산, junction과 파일 symlink 미추적(만들 수 없는 러너에서는 건너뜀), 링크를 루트로 준 경우의 추종,
+항목 및 깊이 상한, 시작 전과 순회 중 취소, 순회 중 어댑터 해제, deny ACE(icacls)를 건 하위 디렉터리의
+`PERMISSION_DENIED`(icacls를 쓸 수 없는 러너에서는 건너뛰고 정리 때 ACE를 제거), 파일 및 없는 경로 거부를 확인한다.
 `windows-storage-metadata.ts`는 실제 I/O Worker에서 허용된 호출의 합계와 파일 경로 거부를 확인한다.
 
-`removeRecursive`는 `api/storage-directories.test.ts`가 입력 거부, null 결과, 독립 권한과 macOS 미지원을 확인한다.
-`windows-storage-remove-recursive.ts`는 실제 Win32 핸들로 유니코드 중첩 트리와 빈 디렉터리 삭제 및 형제 유지,
-한 번의 목록 배치를 넘는 1500개 항목 삭제, 읽기 전용 파일과 디렉터리 삭제, 루트가 파일인 경우,
-hardlink의 이름만 삭제와 읽기 전용 hardlink의 다른 이름 속성 유지, junction, 디렉터리 junction과 파일 symlink 미추적(만들 수 없는 러너에서는 건너뜀),
-링크 루트의 `PERMISSION_DENIED`, 깊이 64 허용과 65 거부, 시작 전과 순회 중 취소 뒤 재호출로 완료,
-순회 중 어댑터 해제, 없는 경로 거부와 임시 트리 삭제(핸들 해제)를 확인한다.
-확인하지 않는 범위: 삭제 중 사라지거나 교체되는 항목, 비대리자 reparse 디렉터리의 `UNSUPPORTED`,
-다른 프로세스가 삭제 공유 없이 연 파일, ACL로 삭제를 막은 항목.
-확인하지 않는 범위: Worker 경로의 권한 거부(별도 뷰가 필요해 계약 테스트의 독립 권한으로만 확인),
-순회 중 사라지는 하위 항목, 비대리자 reparse 디렉터리의 `UNSUPPORTED`(tag 분류만 단위 검사), 기한(deadline)의 호스트 경로, 클라우드 placeholder 같은
-실제 비이름대리자 reparse 파일(tag 해석만 단위 검사), 10만 개 항목의 실제 순회 시간.
+`windows-storage-remove-recursive.ts`는 실제 Windows 파일 시스템으로 유니코드 중첩 트리와 빈 디렉터리 삭제 및 형제 유지,
+1500개 항목 삭제, 읽기 전용 파일과 디렉터리 삭제, 루트가 파일인 경우,
+hardlink의 이름만 삭제와 읽기 전용 hardlink의 다른 이름 속성 유지를 확인한다. 트리 안의 junction, 디렉터리 symlink와
+파일 symlink(만들 수 없는 러너에서는 건너뜀)가 어댑터, `fs.promises.rm`, `rmSync` 모두에서 링크만 지워지고 대상은
+남는지, 링크를 루트로 줘도 같은지 확인한다. 시작 전 취소는 아무것도 지우지 않고, 시작한 삭제는 취소해도 끝까지 가며,
+해제한 어댑터와 없는 경로는 거부한다.
+확인하지 않는 범위: 삭제 중 사라지거나 교체되는 항목, 클라우드 폴더 같은 reparse point 디렉터리의 삭제,
+다른 프로세스가 삭제 공유 없이 연 파일, ACL로 삭제를 막은 항목, Worker 경로의 권한 거부(별도 뷰가 필요해
+계약 테스트의 독립 권한으로만 확인), 기한(deadline)의 호스트 경로, 10만 개 항목의 실제 순회 시간.
+
+`api/storage-windows-path.test.ts`는 Windows 경로 형식(드라이브와 UNC 허용, 상대 경로와 `.`과 `..`와 예약 이름과
+끝의 점과 금지 문자 거부, 장치와 NT 접두사 거부)을 Linux에서도 검사한다.
 
 `api/macos-directory-entries.test.ts`는 Darwin dirent의 UTF-8 이름, 관찰한 종류,
 record 범위와 공개 이름 상한을 검사한다. `macos-storage-directories.ts`는 실제

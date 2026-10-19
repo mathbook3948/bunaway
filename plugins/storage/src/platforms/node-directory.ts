@@ -1,0 +1,198 @@
+import {
+  type BigIntStats,
+  type Dirent,
+  lstatSync,
+  opendirSync,
+  readdirSync,
+} from "node:fs";
+import { join } from "node:path";
+import { BunawayError } from "@bunaway/plugin";
+import {
+  MAX_DIRECTORY_ENTRIES,
+  MAX_FILENAME_CHARACTERS,
+  type StorageDirectoryEntry,
+  type StorageDirectorySize,
+} from "#storage/contract";
+
+/** Walk steps (opened directories or listed entries) between event loop yields. */
+const YIELD_STEPS = 32;
+
+/** Cost bounds of one directory size scan. */
+export type DirectorySizeLimits = {
+  entries: number;
+  depth: number;
+};
+
+function isMissingEntry(error: unknown): boolean {
+  return error instanceof Error && Reflect.get(error, "code") === "ENOENT";
+}
+
+/**
+ * Whether an entry is a link. Either source may report it: a drive-letter junction is a link to
+ * both, but a mount point or a cloud folder can be reported as a link by the directory listing
+ * only, and following one would walk or delete data outside the directory.
+ */
+export function isLink(entry: Dirent, info: BigIntStats): boolean {
+  return entry.isSymbolicLink() || info.isSymbolicLink();
+}
+
+function entryInfo(parent: string, entry: Dirent): BigIntStats | null {
+  try {
+    return lstatSync(join(parent, entry.name), {
+      bigint: true,
+    });
+  } catch (error) {
+    // An entry removed after the listing is gone, not a failure of the scan.
+    if (isMissingEntry(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function entryKind(
+  entry: Dirent,
+  info: BigIntStats,
+): StorageDirectoryEntry["kind"] {
+  if (isLink(entry, info)) {
+    return "link";
+  }
+  if (info.isDirectory()) {
+    return "directory";
+  }
+  if (info.isFile()) {
+    return "file";
+  }
+  // The public schema has no honest kind for sockets, FIFOs and devices.
+  throw new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Storage directory entry kind is unsupported.",
+  });
+}
+
+/** List the names and kinds of a directory's children without following any link, sorted by name. */
+export function listDirectory(path: string): StorageDirectoryEntry[] {
+  const children = readdirSync(path, {
+    withFileTypes: true,
+  });
+  if (children.length > MAX_DIRECTORY_ENTRIES) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Storage directory exceeds the entry limit.",
+    });
+  }
+  const entries: StorageDirectoryEntry[] = [];
+  for (const child of children) {
+    if (child.name.length > MAX_FILENAME_CHARACTERS) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Storage directory name exceeds the entry limit.",
+      });
+    }
+    const info = entryInfo(path, child);
+    if (info) {
+      entries.push({
+        name: child.name,
+        kind: entryKind(child, info),
+      });
+    }
+  }
+  return entries.sort((left, right) =>
+    left.name < right.name ? -1 : Number(left.name > right.name),
+  );
+}
+
+/** Let queued host messages, such as cancellation, run before the scan continues. */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function limitExceeded(): BunawayError {
+  return new BunawayError({
+    code: "INVALID_ARGUMENT",
+    message: "Storage directory exceeds the size scan limit.",
+  });
+}
+
+/**
+ * Total the file sizes below a directory, depth first with an explicit stack. Files add their
+ * size per name, directories are entered, and links and special files are skipped. `alive`
+ * throws when the owner went away; the abort signal ends the scan with CANCELLED.
+ */
+export async function sumDirectory(
+  root: string,
+  limits: DirectorySizeLimits,
+  signal: AbortSignal | undefined,
+  alive: () => void,
+): Promise<StorageDirectorySize> {
+  let bytes = 0n;
+  let files = 0;
+  let directories = 0;
+  let visited = 0;
+  let steps = 0;
+  const pending: {
+    path: string;
+    depth: number;
+  }[] = [
+    {
+      path: root,
+      depth: 0,
+    },
+  ];
+  /** Yield now and then, and stop when the caller cancelled or the adapter was disposed. */
+  const checkpoint = async (): Promise<void> => {
+    alive();
+    if (signal?.aborted) {
+      throw new BunawayError({
+        code: "CANCELLED",
+        message: "Storage directory scan was cancelled.",
+      });
+    }
+    if (++steps % YIELD_STEPS === 0) {
+      await yieldToEventLoop();
+    }
+  };
+  await checkpoint();
+  for (let frame = pending.pop(); frame; frame = pending.pop()) {
+    const directory = opendirSync(frame.path);
+    try {
+      for (
+        let entry = directory.readSync();
+        entry;
+        entry = directory.readSync()
+      ) {
+        await checkpoint();
+        if (++visited > limits.entries) {
+          throw limitExceeded();
+        }
+        const info = entryInfo(frame.path, entry);
+        if (!info || isLink(entry, info)) {
+          continue;
+        }
+        if (info.isFile()) {
+          files++;
+          bytes += info.size;
+        } else if (info.isDirectory()) {
+          if (frame.depth + 1 > limits.depth) {
+            throw limitExceeded();
+          }
+          directories++;
+          pending.push({
+            path: join(frame.path, entry.name),
+            depth: frame.depth + 1,
+          });
+        }
+      }
+    } finally {
+      directory.closeSync();
+    }
+  }
+  if (bytes > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("Storage size cannot be represented safely.");
+  }
+  return {
+    bytes: Number(bytes),
+    files,
+    directories,
+  };
+}

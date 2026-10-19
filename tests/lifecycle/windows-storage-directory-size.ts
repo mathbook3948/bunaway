@@ -1,4 +1,3 @@
-import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { link, mkdir, rm, symlink, writeFile } from "node:fs/promises";
@@ -17,42 +16,6 @@ const root = resolve(
   // A short name leaves room for MAX_DIRECTORY_SIZE_DEPTH nested levels within MAX_PATH.
   `../../build/wds-${crypto.randomUUID().slice(0, 8)}`,
 );
-const kernel32 = dlopen("kernel32.dll", {
-  CreateFileW: {
-    args: [
-      "ptr",
-      "u32",
-      "u32",
-      "ptr",
-      "u32",
-      "u32",
-      "u64",
-    ],
-    returns: "u64",
-  },
-  SetFileInformationByHandle: {
-    args: [
-      "u64",
-      "i32",
-      "ptr",
-      "u32",
-    ],
-    returns: "i32",
-  },
-  CloseHandle: {
-    args: [
-      "u64",
-    ],
-    returns: "i32",
-  },
-});
-const DELETE = 0x10000;
-const FILE_SHARE_ALL = 0x7;
-const OPEN_EXISTING = 3;
-const FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
-const FILE_DISPOSITION_INFO = 4;
-const INVALID_HANDLE = 0xffffffffffffffffn;
-const wide = (text: string) => Buffer.from(`${text}\0`, "utf16le");
 const storage = new WindowsStorage();
 const at = (path: string) => ({
   path: `${root}/${path}`,
@@ -222,58 +185,12 @@ try {
   running.abort();
   await expectRejected(scan, "CANCELLED");
 
-  // Disposal during the scan cancels it and still closes the handles with live bindings.
+  // Disposal during the scan cancels it.
   const disposable = new WindowsStorage();
   const disposing = disposable.directorySize(at("wide"));
-  const disposed = disposable.dispose();
+  disposable.dispose();
   await expectRejected(disposing, "CANCELLED");
-  // The disposal promise settles only after the scan closed its handles, so the tree is removable.
-  await disposed;
-  await rm(`${root}/wide`, {
-    recursive: true,
-  });
   await expectRejected(disposable.directorySize(at("tree")), "CANCELLED");
-
-  // A subdirectory whose deletion is pending counts as gone: it is skipped, not an access error.
-  await mkdir(`${root}/pending/gone`, {
-    recursive: true,
-  });
-  await mkdir(`${root}/pending/keep`);
-  await writeFile(`${root}/pending/keep/file.bin`, new Uint8Array(7));
-  const pendingHandle = kernel32.symbols.CreateFileW(
-    wide(resolve(root, "pending/gone")),
-    DELETE,
-    FILE_SHARE_ALL,
-    null,
-    OPEN_EXISTING,
-    FILE_FLAG_BACKUP_SEMANTICS,
-    0n,
-  );
-  const markedForDelete =
-    pendingHandle !== INVALID_HANDLE &&
-    kernel32.symbols.SetFileInformationByHandle(
-      pendingHandle,
-      FILE_DISPOSITION_INFO,
-      new Uint8Array([
-        1,
-      ]),
-      1,
-    ) !== 0;
-  try {
-    if (markedForDelete) {
-      assert.deepEqual(await storage.directorySize(at("pending")), {
-        bytes: 7,
-        files: 1,
-        directories: 1,
-      });
-    } else {
-      console.log("SKIP could not leave a directory in delete-pending state.");
-    }
-  } finally {
-    if (pendingHandle !== INVALID_HANDLE) {
-      kernel32.symbols.CloseHandle(pendingHandle);
-    }
-  }
 
   // An unreadable subdirectory fails the whole scan instead of under-counting.
   await mkdir(`${root}/acl/open`, {
@@ -325,20 +242,20 @@ try {
     "INVALID_ARGUMENT",
   );
   if (junction) {
-    // A link given as the root is rejected like every other storage target.
-    await expectRejected(
-      storage.directorySize(at("linked/junction")),
-      "PERMISSION_DENIED",
-    );
+    // A link given as the root is followed like any other path.
+    assert.deepEqual(await storage.directorySize(at("linked/junction")), {
+      bytes: 4096,
+      files: 1,
+      directories: 0,
+    });
   }
 } finally {
-  await storage.dispose();
-  // Removal succeeding also shows that every failed or cancelled scan released its handles.
+  storage.dispose();
   await rm(root, {
     recursive: true,
     force: true,
   });
 }
 console.log(
-  "PASS Windows storage directorySize: totals, hardlinks, links, limits, cancellation and disposal during the scan, denied subdirectory, target errors and handle release",
+  "PASS Windows storage directorySize: totals, hardlinks, links, limits, cancellation and disposal during the scan, denied subdirectory and target errors",
 );

@@ -4,18 +4,18 @@
 // renderer-failure isolation, and process cleanup.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { cp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { validateValue } from "@bunaway/protocol";
+import { windowsLaunchEnvironment } from "#cli/windows-dev-launch";
 import { buildHostFixture } from "#native/windows/bun/package";
+import { validationCases } from "../protocol/validation-cases.ts";
+import { assertReport, readReport } from "./reports.ts";
 import {
   closeAllWindows,
   rendererPids,
   watch,
 } from "./windows-host-processes.ts";
-import { windowsLaunchEnvironment } from "#cli/windows-dev-launch";
-import { validateValue } from "@bunaway/protocol";
-import { validationCases } from "../protocol/validation-cases.ts";
-import { assertReport, readReport } from "./reports.ts";
 
 const original = resolve(
   process.argv[process.argv.indexOf("--package") + 1] ?? "",
@@ -42,7 +42,7 @@ const results: {
   durationMs: number;
 }[] = [];
 
-/** Recreates app-selected storage fixtures and targets used by native link checks. */
+/** Recreates the app-selected storage fixtures. */
 async function resetData() {
   // Retry folder cleanup if the OS has not released a runtime file lock yet.
   for (let attempt = 0; ; attempt++) {
@@ -70,31 +70,6 @@ async function resetData() {
     join(dataRoot, "data", "secrets", "x.txt"),
     "app-selected-secret",
   );
-  await symlink(
-    join(dataRoot, "data", "secrets"),
-    join(dataRoot, "data", "notes", "internal-link"),
-    "junction",
-  );
-  const outside = join(dataRoot, "outside");
-  await mkdir(outside, {
-    recursive: true,
-  });
-  await writeFile(join(outside, "secret.txt"), "junction-target-secret");
-  const mklink = Bun.spawn(
-    [
-      "cmd",
-      "/c",
-      "mklink",
-      "/J",
-      join(dataRoot, "data", "notes", "link"),
-      outside,
-    ],
-    {
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-  assert.equal(await mklink.exited, 0, "junction setup failed");
 }
 
 type LogEntry = {
@@ -496,10 +471,6 @@ try {
       assert.ok(
         appLogText.includes('"source":"view:main"'),
         "view label missing on view log entries",
-      );
-      assert.equal(
-        await readFile(join(dataRoot, "outside", "secret.txt"), "utf-8"),
-        "junction-target-secret",
       );
 
       // Closing the last windows must shut the shared backend down and drain

@@ -36,7 +36,7 @@ text에는 별도 글자 수 제한이 없지만 전체 요청은 UTF-8 기준 1
 `storage`를 등록하고 permissions에 `storage.writeText`를 지정합니다.
 UI에서 직접 호출하려면 commands에 `plugin.storage.writeText`도 허용합니다. 읽기 권한만 있으면 쓰기를 거부합니다.
 저장 위치와 파일별 접근 제한은 앱 명령에서 정하고 화면에는 그 명령만 허용합니다.
-Windows에서는 상위 디렉터리를 고정하기 위해 디렉터리 목록 접근 권한도 필요합니다. 이 운영체제 접근이 거부되면 `PERMISSION_DENIED`로 실패합니다.
+대상이 링크이면 링크가 가리키는 파일에 씁니다. 디렉터리나 FIFO처럼 일반 파일이 아닌 대상은 `INVALID_ARGUMENT`입니다.
 
 ## 반환과 이벤트
 
@@ -50,7 +50,7 @@ Windows에서는 상위 디렉터리를 고정하기 위해 디렉터리 목록 
 클라이언트가 `TIMEOUT`을 받거나 연결이 끊겼을 때도 파일은 이미 저장됐을 수 있습니다.
 파일을 다시 읽어 완료 여부를 확인한 뒤 필요하면 재시도를 안내합니다.
 
-잘못된 입력은 `INVALID_ARGUMENT`, 권한, 운영체제 접근과 경로 거부는 `PERMISSION_DENIED`,
+잘못된 입력은 `INVALID_ARGUMENT`, 권한과 운영체제 접근 거부는 `PERMISSION_DENIED`,
 취소는 `CANCELLED`, 일반 작업, 응답 실패는 `INTERNAL`일 수 있습니다.
 바이트 읽기와 쓰기, 텍스트 및 바이트 append는 [바이너리 저장과 append](/reference/host/storage-bytes/)에서 설명합니다.
 
