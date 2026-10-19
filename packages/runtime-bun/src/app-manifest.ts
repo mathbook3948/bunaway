@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
+  asNativePluginContract,
   isRecord,
   type NativePluginContract,
   NativeRegistry,
@@ -120,10 +121,9 @@ export function parseAppManifest(value: unknown): AppManifest {
     return {
       ...metadata,
       // NativeRegistry below validates this detached contract before it can be returned.
-      native: validateValue(
-        pluginSchema.properties.native,
-        plugin.native,
-      ) as unknown as NativePluginContract,
+      native: asNativePluginContract(
+        validateValue(pluginSchema.properties.native, plugin.native),
+      ),
     };
   });
   // NativeRegistry validates the nested native contracts, including schemas and duplicate names.

@@ -70,6 +70,8 @@ const message = parseMessage(text);
 `validateOutput`은 등록 이름과 JSON 제한을 검사하며 `validatePolicy`는 operation 이름을
 검사합니다. `allowed(source, call)`은 출처의 permissions에 작업 이름이 있는지 확인합니다.
 
+`asNativePluginContract(validated)`는 스키마 검증을 이미 통과한 값을 `NativePluginContract` 타입으로 지정합니다. 검증하지 않은 값에는 사용하지 않으며 런타임에서는 값을 그대로 반환합니다.
+
 공통 프로토콜은 작업 목록을 기본 등록하지 않습니다. 창 제어도 개별 플러그인의 NativePluginContract로 등록하고 검증합니다. 창 제어 계약과 앱에서 사용하는 API는 [windows 레퍼런스](/reference/host/windows/)에 있습니다.
 
 ```ts

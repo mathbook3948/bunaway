@@ -146,7 +146,8 @@
           "serializeHostResponse",
           "parsePolicy",
           "negotiateProtocol",
-          "NativeRegistry"
+          "NativeRegistry",
+          "asNativePluginContract"
         ]
       }
     },

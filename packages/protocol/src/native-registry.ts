@@ -19,6 +19,16 @@ export type NativeRegistryOptions = {
 };
 type HostPermissions = Infer<typeof policySchema>["backend"];
 
+/**
+ * Types a value that schema validation already accepted as a native contract. Validation
+ * returns the schema's inferred shape, which does not carry the operation contract types.
+ */
+export function asNativePluginContract(
+  validated: unknown,
+): NativePluginContract {
+  return validated as NativePluginContract;
+}
+
 function fail(message: string): never {
   throw new BunawayError({
     code: "INVALID_ARGUMENT",
@@ -57,34 +67,36 @@ export class NativeRegistry {
         fail("Invalid native plugin name.");
       }
       // Copy the contracts once: caller mutations cannot change registered operation names.
-      const native = validate(
-        {
-          type: "object",
-          properties: {
-            operations: {
-              type: "array",
-              maxItems: 256,
-              items: {
-                type: "object",
-                properties: {
-                  name: {
-                    type: "string",
+      const native = asNativePluginContract(
+        validate(
+          {
+            type: "object",
+            properties: {
+              operations: {
+                type: "array",
+                maxItems: 256,
+                items: {
+                  type: "object",
+                  properties: {
+                    name: {
+                      type: "string",
+                    },
                   },
+                  required: [
+                    "name",
+                  ],
+                  additionalProperties: false,
                 },
-                required: [
-                  "name",
-                ],
-                additionalProperties: false,
               },
             },
+            required: [
+              "operations",
+            ],
+            additionalProperties: false,
           },
-          required: [
-            "operations",
-          ],
-          additionalProperties: false,
-        },
-        plugin.native,
-      ) as unknown as NativePluginContract;
+          plugin.native,
+        ),
+      );
       for (const operation of native.operations) {
         if (
           !operation.name.startsWith(`${plugin.name}.`) ||
