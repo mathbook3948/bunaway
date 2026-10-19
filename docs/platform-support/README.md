@@ -171,7 +171,7 @@ macOS는 같은 플러그인으로 전원 상태(`getStatus`)와 입력 idle(`ge
 이벤트, power request와 CPU 속도 제한은 `UNSUPPORTED`다. 다른 플랫폼은 모두 `UNSUPPORTED`다.
 [power 계약](../site/src/content/docs/reference/plugins/power.mdx)을 따르며
 실제 상태 query, 상태 변경 이벤트 경로와 request handle 정리는 Windows native CI에 포함한다.
-macOS의 상태와 idle 조회는 macOS CI에서 새 프로세스로 실행해 계약과 반복 조회의 자원 정리를 확인하며
+macOS의 상태와 idle 조회는 `Check (macos-14)`의 전체 테스트에서 새 프로세스로 실행해 계약과 반복 조회의 자원 정리를 확인하며
 배터리가 없는 러너에서는 내장 배터리가 없는 응답만 검증한다.
 물리 배터리 전환, 화면 timeout, idle 절전과 Modern Standby 검증은 수동 작업이다.
 

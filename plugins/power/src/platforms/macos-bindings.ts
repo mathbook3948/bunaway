@@ -1,5 +1,5 @@
 import { dlopen, type Pointer, ptr } from "bun:ffi";
-import { ResourceOwner } from "@bunaway/plugin";
+import { failWithCleanup, ResourceOwner } from "@bunaway/plugin";
 import {
   COREFOUNDATION,
   COREFOUNDATION_PATH,
@@ -453,7 +453,17 @@ function readIdleSeconds(libs: Libraries): number {
  */
 export function createMacosPower() {
   const owner = new ResourceOwner("macOS power adapter cleanup failed.");
-  const libs = openLibraries(owner);
+  let libs: Libraries;
+  try {
+    libs = openLibraries(owner);
+  } catch (error) {
+    // No caller receives the adapter, so release the libraries opened before the failure here.
+    failWithCleanup(
+      error,
+      () => owner.dispose(),
+      "macOS power adapter cleanup failed.",
+    );
+  }
   return {
     status: () => readStatus(libs),
     idle: () => readIdleSeconds(libs),
