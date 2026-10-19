@@ -1,9 +1,11 @@
 import { BunawayError } from "@bunaway/protocol";
-import type {
-  DialogInput,
-  DialogKind,
-  DialogResult,
-  FileDialogInstance,
+import {
+  type DialogInput,
+  type DialogKind,
+  type DialogResult,
+  type FileDialogInstance,
+  MAX_DIALOG_PATHS,
+  MAX_DIALOG_RESULT_UNITS,
 } from "#dialog/contract";
 import {
   createFilePanelFactory,
@@ -55,6 +57,23 @@ export function panelSettings(
   };
 }
 
+/** Reject a selection the shared result schema cannot carry, with the same errors as Windows. */
+function checkResultLimits(paths: readonly string[]): void {
+  if (paths.length > MAX_DIALOG_PATHS) {
+    throw new BunawayError({
+      code: "INTERNAL",
+      message: "Selected path count exceeds the dialog limit.",
+    });
+  }
+  const units = paths.reduce((total, path) => total + path.length, 0);
+  if (units > MAX_DIALOG_RESULT_UNITS) {
+    throw new BunawayError({
+      code: "INTERNAL",
+      message: "Selected paths exceed the dialog result limit.",
+    });
+  }
+}
+
 /**
  * File and folder pickers on macOS, shown application-modal on the main thread. The modal loop
  * blocks this thread until the user answers, so a host cancellation or a closed owner window
@@ -88,6 +107,9 @@ export class MacosDialogs implements FileDialogInstance {
       try {
         const paths = panel.run();
         this.checkCancelled(signal);
+        if (paths !== null) {
+          checkResultLimits(paths);
+        }
         return paths === null
           ? {
               cancelled: true,

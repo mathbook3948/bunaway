@@ -317,3 +317,41 @@ test("a disposed adapter refuses new panels and releases the factory", () => {
     "factory-dispose",
   ]);
 });
+
+test("a selection beyond the shared result limits fails with an explanation", () => {
+  const tooMany = fakePanels(
+    Array.from(
+      {
+        length: 129,
+      },
+      (_, index) => `/tmp/${index}`,
+    ),
+  );
+  expect(() =>
+    new MacosDialogs(tooMany.factory).show(
+      "openFile",
+      {
+        multiple: true,
+      },
+      "backend",
+    ),
+  ).toThrow("Selected path count exceeds the dialog limit.");
+  const tooLong = fakePanels([
+    "a".repeat(100000),
+    "b".repeat(40000),
+  ]);
+  expect(() =>
+    new MacosDialogs(tooLong.factory).show(
+      "openFile",
+      {
+        multiple: true,
+      },
+      "backend",
+    ),
+  ).toThrow("Selected paths exceed the dialog result limit.");
+  expect(tooMany.events).toEqual([
+    "create",
+    "run",
+    "dispose",
+  ]);
+});
