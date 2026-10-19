@@ -9,7 +9,7 @@ import {
 } from "#os/contract";
 
 const operation = defineNativeOperation<OSInstance>();
-/** Read-only Windows metadata; no paths or environment variables are exposed. */
+/** Read-only OS metadata; no paths or environment variables are exposed. */
 export const osOperations = {
   info: operation({
     input: z.null(),

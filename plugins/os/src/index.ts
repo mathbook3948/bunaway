@@ -1,10 +1,19 @@
 import { defineNativePlugin } from "@bunaway/plugin";
 import { osOperations } from "#os/operations";
+import {
+  dispose as disposeMacos,
+  initialize as initializeMacos,
+} from "#os/platforms/macos";
 import { dispose, initialize } from "#os/platforms/windows";
 /** Read OS and bundled Bun metadata and play system sounds. Architecture describes the running process. */
 export default defineNativePlugin({
   name: "os",
   platforms: {
+    macos: {
+      initialize: initializeMacos,
+      dispose: disposeMacos,
+      operations: osOperations,
+    },
     windows: {
       initialize,
       dispose,

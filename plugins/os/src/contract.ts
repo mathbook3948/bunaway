@@ -1,9 +1,12 @@
 import { z } from "zod";
 
 const text = z.string().max(1024);
-/** Read-only Windows and bundled-runtime metadata; no paths or environment variables are exposed. */
+/** Read-only Windows or macOS and bundled-runtime metadata; no paths or environment variables are exposed. */
 export const infoSchema = z.strictObject({
-  platform: z.literal("windows"),
+  platform: z.enum([
+    "windows",
+    "macos",
+  ]),
   type: text,
   release: text,
   version: text,
@@ -29,7 +32,9 @@ export const usageSchema = z.strictObject({
   }),
   translation: z.strictObject({
     active: z.boolean(),
+    /** IMAGE_FILE_MACHINE value of the translated process; 0 when the process is not translated. */
     processMachine: z.number().int().min(0).max(65535),
+    /** IMAGE_FILE_MACHINE value of the host CPU; macOS reports AMD64 (0x8664) or ARM64 (0xAA64). */
     nativeMachine: z.number().int().min(0).max(65535),
   }),
 });
@@ -39,7 +44,7 @@ export const localeSchema = z.strictObject({
   preferredLanguages: z.array(z.string().min(1).max(85)).max(128),
   systemLanguage: z.string().max(85),
 });
-/** Windows system sound played by os.beep; defaults to the plain default beep. */
+/** System sound played by os.beep; defaults to the plain default beep. macOS has one alert sound and plays it for every kind. */
 export const beepInputSchema = z.strictObject({
   kind: z
     .enum([
@@ -54,10 +59,10 @@ export const beepInputSchema = z.strictObject({
 export type OSBeepInput = z.input<typeof beepInputSchema>;
 /** OS and runtime snapshot returned by os.info. */
 export type OSInfo = z.infer<typeof infoSchema>;
-/** Windows user locale, ordered display languages and system UI language. */
+/** User locale, ordered display languages and system UI language. */
 export type OSLocale = z.infer<typeof localeSchema>;
 
-/** Process CPU time, memory and Windows architecture translation snapshot. */
+/** Process CPU time, memory and architecture translation snapshot. */
 export type OSUsage = z.infer<typeof usageSchema>;
 /**
  * What the os operations call on the per-plugin instance. Operations are typed by this
