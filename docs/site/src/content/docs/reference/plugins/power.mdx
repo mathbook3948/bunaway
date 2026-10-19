@@ -164,7 +164,8 @@ ID는 UUID이며 native handle이 아닙니다. 조회와 stop 권한은 별도�
 종료될 수도 있습니다. Windows에서는 OS가 요청 count를 종료해도 stop이 handle을 정리합니다.
 앱 종료와 어댑터 dispose는 모든 handle 해제를 시도합니다. public ID가 있는 요청의 해제가
 실패해도 부분 활성화에서 남은 handle 정리를 함께 시도합니다. 실패를 모아 보고하고 실패한
-handle은 다음 정리 시도까지 보유합니다. 남은 handle이 있으면 DLL을 닫지 않습니다.
+handle은 다음 정리 시도까지 보유합니다. 남은 handle이 있으면 request를 해제하는 라이브러리(Windows는 DLL,
+macOS는 IOKit)를 닫지 않습니다.
 프로세스 종료에서는 OS가 남은 프로세스 자원을 회수합니다.
 
 권한 거부는 `PERMISSION_DENIED`, 잘못된 입력은 `INVALID_ARGUMENT`, OS 조회와 요청
