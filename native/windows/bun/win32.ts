@@ -128,13 +128,13 @@ import {
   selectMonitorWorkArea,
   type WorkArea,
 } from "./window-placement.ts";
+import { readWindowShadow, writeWindowShadow } from "./window-shadow.ts";
 import {
   constrainedOuterSize,
   DEFAULT_DPI,
   logicalPixels,
   physicalPixels,
 } from "./window-size.ts";
-
 import {
   initialWindowStyles,
   WS_CAPTION,
@@ -1186,6 +1186,35 @@ export class Windows {
       }
       assert(false, `SetLayeredWindowAttributes: ${error}`);
     }
+  }
+
+  /**
+   * Whether the window has its system shadow. A window with a native title bar always has
+   * one; a custom-titlebar window has one until the DWM non-client rendering is disabled.
+   */
+  hasShadow(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return this.getTitlebar(window) === "system" || readWindowShadow(window);
+  }
+
+  /**
+   * Show or hide the system shadow of a custom-titlebar window. A native title bar is drawn
+   * together with its shadow and cannot lose it, so hiding that shadow is rejected while
+   * asking for it is a no-op.
+   */
+  setHasShadow(window: bigint, shadow: boolean): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    if (this.getTitlebar(window) === "system") {
+      if (!shadow) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message:
+            "The shadow of a window with a native title bar cannot be removed.",
+        });
+      }
+      return;
+    }
+    writeWindowShadow(window, shadow);
   }
 
   /** Whether the window lets mouse input pass through to whatever is beneath it. */

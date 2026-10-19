@@ -69,6 +69,9 @@ const unsupportedFullscreenable = unsupportedError(
 const unsupportedOpacity = unsupportedError(
   "Window opacity is not implemented on this platform.",
 );
+const unsupportedShadow = unsupportedError(
+  "Window shadow control is not implemented on this platform.",
+);
 const unsupportedMouseEvents = unsupportedError(
   "Ignoring mouse events is not implemented on this platform.",
 );
@@ -549,6 +552,11 @@ function applyUserControls(scope: ActionScope, call: WindowCall): ActionResult {
       return null;
     case "windows.isFullscreenable":
       return supported(window.isFullscreenable, unsupportedFullscreenable)();
+    case "windows.setHasShadow":
+      supported(window.setHasShadow, unsupportedShadow)(call.payload.hasShadow);
+      return null;
+    case "windows.hasShadow":
+      return supported(window.hasShadow, unsupportedShadow)();
     case "windows.setIgnoreMouseEvents":
       supported(
         window.setIgnoreMouseEvents,

@@ -430,6 +430,56 @@ if (!process.argv.includes("--child")) {
       assert.throws(() => nativeWindows.isFullscreenable(hwnd));
     }
     {
+      const custom = nativeWindows.create(
+        "Shadow custom",
+        500,
+        400,
+        () => {},
+        true,
+        {
+          titlebar: "custom",
+        },
+      );
+      const system = nativeWindows.create("Shadow system", 500, 400, () => {});
+      try {
+        // A native title bar always has its shadow: asking for it is a no-op and removing
+        // it is rejected without changing anything.
+        assert.equal(nativeWindows.hasShadow(system), true);
+        nativeWindows.setHasShadow(system, true);
+        assert.throws(
+          () => nativeWindows.setHasShadow(system, false),
+          (error) =>
+            error instanceof BunawayError && error.code === "UNSUPPORTED",
+        );
+        assert.equal(nativeWindows.hasShadow(system), true);
+
+        nativeWindows.setPosition(custom, 300, 200);
+        nativeWindows.show(custom, true);
+        const bounds = nativeWindows.getBounds(custom, "outer");
+        const client = nativeWindows.getBounds(custom, "content");
+        assert.equal(nativeWindows.hasShadow(custom), true);
+        // The shadow is composed by DWM outside the GDI surface, so a screen capture cannot
+        // see it; the state read back from DWM is what this test can check. Geometry,
+        // visibility and opacity are not part of the shadow setting.
+        nativeWindows.setHasShadow(custom, false);
+        assert.equal(nativeWindows.hasShadow(custom), false);
+        assert.deepEqual(nativeWindows.getBounds(custom, "outer"), bounds);
+        assert.deepEqual(nativeWindows.getBounds(custom, "content"), client);
+        assert.equal(nativeWindows.isVisible(custom), true);
+        assert.equal(nativeWindows.getOpacity(custom), 1);
+        nativeWindows.setHasShadow(custom, false);
+        assert.equal(nativeWindows.hasShadow(custom), false);
+        nativeWindows.setHasShadow(custom, true);
+        assert.equal(nativeWindows.hasShadow(custom), true);
+        assert.deepEqual(nativeWindows.getBounds(custom, "outer"), bounds);
+      } finally {
+        nativeWindows.destroy(system);
+        nativeWindows.destroy(custom);
+      }
+      assert.throws(() => nativeWindows.hasShadow(custom));
+      assert.throws(() => nativeWindows.setHasShadow(custom, false));
+    }
+    {
       const hwnd = nativeWindows.create(
         "Opacity regression",
         650,

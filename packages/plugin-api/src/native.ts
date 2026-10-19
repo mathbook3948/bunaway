@@ -410,6 +410,10 @@ export type NativeWindow = {
   setOpacity?(opacity: number): void;
   /** Reads the live opacity from the OS, quantized to 8-bit alpha. Windows only. */
   getOpacity?(): number;
+  /** Shows or hides the system shadow of a window with a custom title bar. A native title bar keeps its shadow, so hiding it is rejected. Windows only. */
+  setHasShadow?(shadow: boolean): void;
+  /** Reads whether this HWND has its system shadow. Windows only. */
+  hasShadow?(): boolean;
   /** Lets mouse input pass through the whole window, including its WebView, to the window beneath. Windows only. */
   setIgnoreMouseEvents?(ignore: boolean): void;
   /** Reads whether this HWND currently ignores mouse input. Windows only. */

@@ -1081,6 +1081,13 @@ export const windowOperations = {
     input: windowTarget,
     output: z.number().min(0).max(1),
   },
+  "windows.setHasShadow": {
+    input: windowTarget.extend({
+      hasShadow: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.hasShadow": windowStateResult,
   "windows.setIgnoreMouseEvents": {
     input: windowTarget.extend({
       ignore: z.boolean(),
