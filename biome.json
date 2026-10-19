@@ -119,8 +119,6 @@
     },
     {
       "includes": [
-        "docs/site/scripts/check-reference.mjs",
-        "packages/cli/scripts/pack.ts",
         "packages/packaging/src/channels/windows/inno.ts",
         "packages/protocol/src/validation.ts",
         "packages/runtime-bun/src/runtime.ts",
@@ -129,24 +127,7 @@
         "plugins/opener/src/platforms/macos-file.ts",
         "plugins/opener/src/platforms/windows-file.ts",
         "plugins/opener/src/platforms/windows-shell.ts",
-        "plugins/process/src/platforms/windows-process-native.ts",
-        "tests/api/window-geometry.test.ts",
-        "tests/cli/distribution.test.ts",
-        "tests/cli/managed-command.test.ts",
-        "tests/fixtures/macos-image.ts",
-        "tests/fixtures/macos-io/probe.ts",
-        "tests/fixtures/macos-startup-diagnostics.ts",
-        "tests/fixtures/notification-toast-ffi.ts",
-        "tests/lifecycle/windows-activation.test.ts",
-        "tests/lifecycle/windows-bun-storage.ts",
-        "tests/lifecycle/windows-clipboard.test.ts",
-        "tests/lifecycle/windows-desktop.ts",
-        "tests/lifecycle/windows-geometry.test.ts",
-        "tests/lifecycle/windows-size-constraints.test.ts",
-        "tests/lifecycle/windows-webview-downloads.ts",
-        "tests/lifecycle/windows-windowless.ts",
-        "tests/packaging/windows-associations.test.ts",
-        "tests/packaging/windows.test.ts"
+        "plugins/process/src/platforms/windows-process-native.ts"
       ],
       "linter": {
         "rules": {

@@ -63,34 +63,66 @@ test.each([
   15000,
 );
 
-test.each([
-  0,
-  7,
-  "cancel",
-] as const)(
-  "command %s waits for SIGTERM-resistant descendants to release their port",
-  async (outcome) => {
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const listener = Bun.serve({
-        hostname: "127.0.0.1",
-        port: 0,
-        fetch: () => new Response(""),
-      });
-      const port = listener.port;
-      listener.stop(true);
-      if (!port) {
-        throw new Error("No test port.");
+type Outcome = 0 | 7 | "cancel";
+
+/** Reserves a free loopback port number by binding and releasing it. */
+function freePort(): number {
+  const listener = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response(""),
+  });
+  const port = listener.port;
+  listener.stop(true);
+  if (!port) {
+    throw new Error("No test port.");
+  }
+  return port;
+}
+
+/** Polls until the descendant answers on the port, so cancellation hits a running tree. */
+async function descendantListening(port: number): Promise<void> {
+  const deadline = Date.now() + 5000;
+  while (true) {
+    try {
+      if ((await fetch(`http://127.0.0.1:${port}/`)).ok) {
+        return;
       }
-      const abort = new AbortController();
-      const timer = setTimeout(
-        () => abort.abort(new Error("Test timed out")),
-        10000,
-      );
-      const server = `
+    } catch {}
+    if (Date.now() > deadline) {
+      throw new Error("Descendant did not start");
+    }
+    await Bun.sleep(10);
+  }
+}
+
+/** Expects the managed command to settle the way the outcome says: exit 0, exit 7 or cancelled. */
+async function expectOutcome(
+  result: Promise<unknown>,
+  outcome: Outcome,
+): Promise<void> {
+  if (outcome === "cancel") {
+    await expect(result).rejects.toThrow("Command cancelled");
+  } else if (outcome === 0) {
+    await result;
+  } else {
+    await expect(result).rejects.toThrow(`exit ${outcome}`);
+  }
+}
+
+/** Runs one command whose SIGTERM-resistant descendant must release its port before the command settles. */
+async function runSigtermResistantAttempt(outcome: Outcome): Promise<void> {
+  const port = freePort();
+  const abort = new AbortController();
+  const timer = setTimeout(
+    () => abort.abort(new Error("Test timed out")),
+    10000,
+  );
+  const server = `
         process.on('SIGTERM', () => {});
         Bun.serve({hostname:'127.0.0.1', port:${port}, fetch:()=>new Response('descendant')});
       `;
-      const command = `
+  const command = `
         Bun.spawn([process.execPath, '-e', ${JSON.stringify(server)}], {stdin:'ignore', stdout:'inherit', stderr:'inherit'});
         const deadline = Date.now() + 5000;
         while (true) {
@@ -100,54 +132,48 @@ test.each([
         }
         ${outcome === "cancel" ? "await Bun.sleep(600000);" : `process.exit(${outcome});`}
       `;
-      const result = runManagedCommand(
-        [
-          process.execPath,
-          "-e",
-          command,
-        ],
-        import.meta.dir,
-        {},
-        abort.signal,
-        frameworkRoot,
-      );
-      // Hold the rejection until fixture startup or cancellation observes it below.
-      void result.catch(() => {});
-      try {
-        if (outcome === "cancel") {
-          const deadline = Date.now() + 5000;
-          while (true) {
-            try {
-              if ((await fetch(`http://127.0.0.1:${port}/`)).ok) {
-                break;
-              }
-            } catch {}
-            if (Date.now() > deadline) {
-              throw new Error("Descendant did not start");
-            }
-            await Bun.sleep(10);
-          }
-          abort.abort(new Error("Command cancelled"));
-        }
-        if (outcome === "cancel") {
-          await expect(result).rejects.toThrow("Command cancelled");
-        } else if (outcome === 0) {
-          await result;
-        } else {
-          await expect(result).rejects.toThrow(`exit ${outcome}`);
-        }
-        // Rebind synchronously at return, before network I/O can hide an exit race.
-        const replacement = Bun.serve({
-          hostname: "127.0.0.1",
-          port,
-          fetch: () => new Response("replacement"),
-        });
-        replacement.stop(true);
-      } finally {
-        clearTimeout(timer);
-        abort.abort();
-        await result.catch(() => {});
-      }
+  const result = runManagedCommand(
+    [
+      process.execPath,
+      "-e",
+      command,
+    ],
+    import.meta.dir,
+    {},
+    abort.signal,
+    frameworkRoot,
+  );
+  // Hold the rejection until fixture startup or cancellation observes it below.
+  void result.catch(() => {});
+  try {
+    if (outcome === "cancel") {
+      await descendantListening(port);
+      abort.abort(new Error("Command cancelled"));
+    }
+    await expectOutcome(result, outcome);
+    // Rebind synchronously at return, before network I/O can hide an exit race.
+    const replacement = Bun.serve({
+      hostname: "127.0.0.1",
+      port,
+      fetch: () => new Response("replacement"),
+    });
+    replacement.stop(true);
+  } finally {
+    clearTimeout(timer);
+    abort.abort();
+    await result.catch(() => {});
+  }
+}
+
+test.each([
+  0,
+  7,
+  "cancel",
+] as const)(
+  "command %s waits for SIGTERM-resistant descendants to release their port",
+  async (outcome) => {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await runSigtermResistantAttempt(outcome);
     }
   },
   30000,

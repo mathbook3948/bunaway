@@ -334,6 +334,31 @@ test.skipIf(process.platform !== "win32")(
       );
     };
 
+    /** Destroys both windows and the native host, collecting every failure instead of stopping at the first. */
+    function destroyNativeWindows() {
+      const errors: unknown[] = [];
+      for (const hwnd of [
+        inputWindow,
+        window,
+      ]) {
+        if (hwnd && windows) {
+          try {
+            windows.destroy(hwnd);
+          } catch (error) {
+            errors.push(error);
+          }
+        }
+      }
+      if (windows) {
+        try {
+          windows.dispose();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      return errors;
+    }
+
     try {
       windows = new Windows(() => {});
       window = windows.create(
@@ -786,28 +811,7 @@ test.skipIf(process.platform !== "win32")(
       );
     }
 
-    const cleanupErrors: unknown[] = [];
-    if (inputWindow && windows) {
-      try {
-        windows.destroy(inputWindow);
-      } catch (error) {
-        cleanupErrors.push(error);
-      }
-    }
-    if (window && windows) {
-      try {
-        windows.destroy(window);
-      } catch (error) {
-        cleanupErrors.push(error);
-      }
-    }
-    if (windows) {
-      try {
-        windows.dispose();
-      } catch (error) {
-        cleanupErrors.push(error);
-      }
-    }
+    const cleanupErrors = destroyNativeWindows();
     messaging.close();
     if (failure && cleanupErrors.length) {
       throw new AggregateError([

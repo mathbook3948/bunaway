@@ -745,6 +745,151 @@ test.skipIf(!iscc)(
   60000,
 );
 
+/** Where a shortcut fixture lives and which links the installer must leave untouched. */
+type ShortcutFixture = {
+  mode: "other-target" | "unreadable";
+  fixture: string;
+  install: string;
+  menu: string;
+  desktop: string;
+  identifier: string;
+  name: string;
+  paths: string[];
+  targets: string[];
+  untouched: Map<string, Buffer<ArrayBuffer>>;
+};
+
+/** Compiles and runs one installer version; version 1 then replaces the links the installer must preserve. */
+async function installShortcutVersion(
+  state: ShortcutFixture,
+  version: number,
+): Promise<void> {
+  const { mode, fixture, install, menu, desktop, identifier, name } = state;
+  const staging = join(fixture, String(version));
+  await Bun.write(
+    join(staging, "app", version === 1 ? "Old.exe" : "New.exe"),
+    "fixture",
+  );
+  await mkdir(join(staging, "installer"));
+  let script = renderInnoScript({
+    name,
+    identifier,
+    executableName: version === 1 ? "Old.exe" : "New.exe",
+    version: `${version}.0.0`,
+    publisher: "Test",
+    scope: "perUser",
+    payloadDir: join(staging, "app"),
+    outputDir: join(staging, "installer"),
+    outputBaseName: "setup",
+    desktopShortcut: version === 1 || mode === "other-target",
+    startMenuShortcut: version === 1 || mode === "other-target",
+    webView2: "check",
+    appDataDir: join(fixture, "data"),
+    preserveUserData: true,
+    assetPaths: [],
+  })
+    .replaceAll("{group}", menu)
+    .replaceAll("{autodesktop}", desktop);
+  if (version === 1) {
+    // Older installers let Inno record unconditional shortcut deletion.
+    script = script
+      .replaceAll("; Flags: uninsneveruninstall", "")
+      .replace("UninstallLogMode=overwrite", "UninstallLogMode=append");
+  }
+  const setup = await compileInno(
+    {
+      input: input({}),
+      staging,
+      report() {},
+      addArtifact() {},
+    },
+    script,
+    staging,
+    "setup",
+  );
+  await must(setup, [
+    "/SP-",
+    ...silentInstall,
+    `/DIR=${install}`,
+    "/TASKS=desktopicon",
+  ]);
+  if (version === 1) {
+    await replaceConfiguredLinks(state);
+  } else {
+    for (const [path, bytes] of state.untouched) {
+      expect(await readFile(path)).toEqual(bytes);
+    }
+  }
+}
+
+/** Replaces each installed link with one that targets another executable, or with unreadable bytes. */
+async function replaceConfiguredLinks(state: ShortcutFixture): Promise<void> {
+  const { mode, paths, targets, untouched } = state;
+  for (let index = 0; index < paths.length; index++) {
+    const path = paths[index] as string;
+    if (mode === "unreadable") {
+      await Bun.write(path, "not a shortcut");
+    } else {
+      await shortcutScript(
+        path,
+        `$link.Path=${psLiteral(targets[index] as string)}; $link.Save(${psLiteral(path)})`,
+      );
+    }
+    untouched.set(path, await readFile(path));
+  }
+}
+
+/** An upgrade and an uninstall keep links that point elsewhere or cannot be read. */
+async function verifyShortcutValidation(
+  root: string,
+  mode: ShortcutFixture["mode"],
+): Promise<void> {
+  const fixture = join(root, mode),
+    install = join(fixture, "install"),
+    menu = join(fixture, "menu"),
+    desktop = join(fixture, "desktop");
+  const identifier = `app.test-${crypto.randomUUID()}`,
+    name = "App";
+  const state: ShortcutFixture = {
+    mode,
+    fixture,
+    install,
+    menu,
+    desktop,
+    identifier,
+    name,
+    paths: [
+      join(menu, `${name}.lnk`),
+      join(desktop, `${name} (${identifier}).lnk`),
+      join(menu, `${name} 제거.lnk`),
+    ],
+    targets: [
+      join(fixture, "other.exe"),
+      join(fixture, "other-install", "Old.exe"),
+      join(fixture, "other-install", "unins000.exe"),
+    ],
+    untouched: new Map<string, Buffer<ArrayBuffer>>(),
+  };
+  const uninstall = join(install, "unins000.exe");
+  for (const target of state.targets) {
+    await Bun.write(target, "other executable");
+  }
+  try {
+    for (const version of [
+      1,
+      2,
+    ]) {
+      await installShortcutVersion(state, version);
+    }
+    await removeFixtureInstallation(uninstall);
+    for (const [path, bytes] of state.untouched) {
+      expect(await readFile(path)).toEqual(bytes);
+    }
+  } finally {
+    await removeFixtureInstallation(uninstall);
+  }
+}
+
 test.skipIf(!iscc)(
   "Inno target validation survives legacy automatic shortcut deletion logs and unreadable configured links",
   async () => {
@@ -755,110 +900,8 @@ test.skipIf(!iscc)(
       for (const mode of [
         "other-target",
         "unreadable",
-      ]) {
-        const fixture = join(root, mode),
-          install = join(fixture, "install"),
-          menu = join(fixture, "menu"),
-          desktop = join(fixture, "desktop");
-        const identifier = `app.test-${crypto.randomUUID()}`,
-          name = "App";
-        const paths = [
-          join(menu, `${name}.lnk`),
-          join(desktop, `${name} (${identifier}).lnk`),
-          join(menu, `${name} 제거.lnk`),
-        ];
-        const targets = [
-          join(fixture, "other.exe"),
-          join(fixture, "other-install", "Old.exe"),
-          join(fixture, "other-install", "unins000.exe"),
-        ];
-        const uninstall = join(install, "unins000.exe");
-        const untouched = new Map<string, Buffer<ArrayBuffer>>();
-        for (const target of targets) {
-          await Bun.write(target, "other executable");
-        }
-        try {
-          for (const version of [
-            1,
-            2,
-          ]) {
-            const staging = join(fixture, String(version));
-            await Bun.write(
-              join(staging, "app", version === 1 ? "Old.exe" : "New.exe"),
-              "fixture",
-            );
-            await mkdir(join(staging, "installer"));
-            let script = renderInnoScript({
-              name,
-              identifier,
-              executableName: version === 1 ? "Old.exe" : "New.exe",
-              version: `${version}.0.0`,
-              publisher: "Test",
-              scope: "perUser",
-              payloadDir: join(staging, "app"),
-              outputDir: join(staging, "installer"),
-              outputBaseName: "setup",
-              desktopShortcut: version === 1 || mode === "other-target",
-              startMenuShortcut: version === 1 || mode === "other-target",
-              webView2: "check",
-              appDataDir: join(fixture, "data"),
-              preserveUserData: true,
-              assetPaths: [],
-            })
-              .replaceAll("{group}", menu)
-              .replaceAll("{autodesktop}", desktop);
-            if (version === 1) {
-              // Older installers let Inno record unconditional shortcut deletion.
-              script = script
-                .replaceAll("; Flags: uninsneveruninstall", "")
-                .replace(
-                  "UninstallLogMode=overwrite",
-                  "UninstallLogMode=append",
-                );
-            }
-            const setup = await compileInno(
-              {
-                input: input({}),
-                staging,
-                report() {},
-                addArtifact() {},
-              },
-              script,
-              staging,
-              "setup",
-            );
-            await must(setup, [
-              "/SP-",
-              ...silentInstall,
-              `/DIR=${install}`,
-              "/TASKS=desktopicon",
-            ]);
-            if (version === 1) {
-              for (let index = 0; index < paths.length; index++) {
-                const path = paths[index] as string;
-                if (mode === "unreadable") {
-                  await Bun.write(path, "not a shortcut");
-                } else {
-                  await shortcutScript(
-                    path,
-                    `$link.Path=${psLiteral(targets[index] as string)}; $link.Save(${psLiteral(path)})`,
-                  );
-                }
-                untouched.set(path, await readFile(path));
-              }
-            } else {
-              for (const [path, bytes] of untouched) {
-                expect(await readFile(path)).toEqual(bytes);
-              }
-            }
-          }
-          await removeFixtureInstallation(uninstall);
-          for (const [path, bytes] of untouched) {
-            expect(await readFile(path)).toEqual(bytes);
-          }
-        } finally {
-          await removeFixtureInstallation(uninstall);
-        }
+      ] as const) {
+        await verifyShortcutValidation(root, mode);
       }
     } finally {
       await rm(root, {

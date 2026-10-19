@@ -201,6 +201,153 @@ if (!process.argv.includes("--child")) {
   let stopped = false;
   const hookOrder: string[] = [];
   const decoder = new TextDecoder();
+  /** One JSON line the child app prints; only the fields the scenario reads are listed. */
+  type ChildEvent = {
+    event: string;
+    source?: string;
+    reason?: string;
+    launchReason?: string;
+    hwnd: string;
+    argv?: string[];
+    urls?: string[];
+    files?: string[];
+  };
+  const forwardFromChild = (argv: string[]) =>
+    forwardToInstance(instanceAddress(resolve(root, `data-${child.pid}`)), {
+      argv,
+      cwd: root,
+    });
+  /** Counts lifecycle events and tracks the window handles and quit reasons the scenario asserts on. */
+  const recordEvent = async (event: ChildEvent) => {
+    if (
+      lifecycleEvents.includes(event.event) &&
+      (event.event !== "opened" || event.source === "initial")
+    ) {
+      hookOrder.push(
+        event.reason ? `${event.event}:${event.reason}` : event.event,
+      );
+    }
+    if (event.event === "desktop-stopped") {
+      stopped = true;
+    }
+    if (event.event === "quitting") {
+      quitCount++;
+      if (devPending) {
+        // Force shutdown with beforeQuit pending to test the CLI override.
+        assert.equal(await closeWindowsApp(child.pid), 1);
+      }
+    }
+    if (event.event === "session-open") {
+      sessionCount++;
+    }
+    if (event.event === "tray-created") {
+      trayWindow = BigInt(event.hwnd);
+    }
+    if (event.event === "quitting" && event.reason === "tray") {
+      trayQuit = true;
+    }
+    if (event.event === "window-created") {
+      hwnd = BigInt(event.hwnd);
+    }
+  };
+  /** The first open: hidden startup stays hidden, ordinary startup is visible, then the window is closed. */
+  const onInitialOpen = async (event: ChildEvent) => {
+    assert(hwnd);
+    assert.equal(event.launchReason, autostart ? "autostart" : "manual");
+    assert.deepEqual(event.argv, []);
+    if (hiddenStart) {
+      hidden = true;
+      assert(trayWindow, "hidden startup must have a tray restore path");
+      assert.equal(
+        api.symbols.IsWindowVisible(hwnd),
+        0,
+        "initial SDK readiness must not display hidden startup windows",
+      );
+      // Another login-style launch must preserve the already-running app's visibility.
+      await forwardFromChild([
+        AUTOSTART_HIDDEN_ARGUMENT,
+        "memo://background/42",
+      ]);
+      return;
+    }
+    assert(
+      api.symbols.IsWindowVisible(hwnd),
+      "ordinary startup should retain declared visibility",
+    );
+    if (devShutdown && !devPending) {
+      assert.equal(
+        await closeWindowsApp(child.pid),
+        // keep-alive apps also own a control window with the app class.
+        trayWindow || closeLifecycle ? 2 : 1,
+      );
+      return;
+    }
+    if (trayLifecycle) {
+      api.symbols.ShowWindow(hwnd, 3);
+    }
+    assert(api.symbols.PostMessageW(hwnd, 0x10, 0n, 0n));
+  };
+  /** A second launch: hidden autostart forwarding keeps the window hidden, a manual one reopens it. */
+  const onSecondInstanceOpen = async (event: ChildEvent) => {
+    if (hiddenStart && event.launchReason === "autostart") {
+      assert.equal(
+        api.symbols.IsWindowVisible(hwnd),
+        0,
+        "hidden forwarding must not restore or replace the window",
+      );
+      assert.deepEqual(event.argv, [
+        "memo://background/42",
+      ]);
+      await forwardFromChild([
+        "한글 파일.txt",
+        "memo://open/42",
+      ]);
+      return;
+    }
+    assert.equal(event.launchReason, "manual");
+    reopened = true;
+    assert(api.symbols.IsWindowVisible(hwnd));
+    assert.deepEqual(event.urls, [
+      "memo://open/42",
+    ]);
+    if (trayLifecycle) {
+      assert(
+        hiddenStart ? !api.symbols.IsZoomed(hwnd) : api.symbols.IsZoomed(hwnd),
+        "restoring a hidden window must preserve its original maximization state",
+      );
+      assert.deepEqual(event.files, [
+        resolve(root, "한글 파일.txt"),
+      ]);
+      assert(trayWindow);
+      assert(api.symbols.PostMessageW(trayWindow, 0x10, 0n, 0n));
+    }
+  };
+  /** Drives the scenario from one child event: record it, then react to the ones that need a response. */
+  const handleEvent = async (event: ChildEvent) => {
+    await recordEvent(event);
+    if (event.event === "opened" && event.source === "initial") {
+      await onInitialOpen(event);
+    } else if (event.event === "view-window-hidden" && !hidden) {
+      hidden = true;
+      assert.equal(api.symbols.IsWindowVisible(hwnd), 0);
+      assert.equal(child.exitCode, null);
+      // Forward while hidden to verify that the same view reopens.
+      await forwardFromChild([
+        "한글 파일.txt",
+        "memo://open/42",
+      ]);
+    } else if (event.event === "quit-vetoed") {
+      vetoed = true;
+      assert(api.symbols.IsWindow(hwnd));
+      assert.equal(child.exitCode, null);
+      // Forward while vetoed to verify that the same host stays available.
+      await forwardFromChild([
+        "memo://open/42",
+      ]);
+    } else if (event.event === "opened" && event.source === "second-instance") {
+      await onSecondInstanceOpen(event);
+    }
+  };
   const stream = child.stdout.pipeTo(
     new WritableStream({
       async write(chunk) {
@@ -214,161 +361,7 @@ if (!process.argv.includes("--child")) {
           if (!line) {
             continue;
           }
-          const event = JSON.parse(line);
-          if (
-            lifecycleEvents.includes(event.event) &&
-            (event.event !== "opened" || event.source === "initial")
-          ) {
-            hookOrder.push(
-              event.reason ? `${event.event}:${event.reason}` : event.event,
-            );
-          }
-          if (event.event === "desktop-stopped") {
-            stopped = true;
-          }
-          if (event.event === "quitting") {
-            quitCount++;
-            if (devPending) {
-              // Force shutdown with beforeQuit pending to test the CLI override.
-              assert.equal(await closeWindowsApp(child.pid), 1);
-            }
-          }
-          if (event.event === "session-open") {
-            sessionCount++;
-          }
-          if (event.event === "tray-created") {
-            trayWindow = BigInt(event.hwnd);
-          }
-          if (event.event === "quitting" && event.reason === "tray") {
-            trayQuit = true;
-          }
-          if (event.event === "window-created") {
-            hwnd = BigInt(event.hwnd);
-          }
-          if (event.event === "opened" && event.source === "initial") {
-            assert(hwnd);
-            assert.equal(
-              event.launchReason,
-              autostart ? "autostart" : "manual",
-            );
-            assert.deepEqual(event.argv, []);
-            if (hiddenStart) {
-              hidden = true;
-              assert(
-                trayWindow,
-                "hidden startup must have a tray restore path",
-              );
-              assert.equal(
-                api.symbols.IsWindowVisible(hwnd),
-                0,
-                "initial SDK readiness must not display hidden startup windows",
-              );
-              // Another login-style launch must preserve the already-running app's visibility.
-              await forwardToInstance(
-                instanceAddress(resolve(root, `data-${child.pid}`)),
-                {
-                  argv: [
-                    AUTOSTART_HIDDEN_ARGUMENT,
-                    "memo://background/42",
-                  ],
-                  cwd: root,
-                },
-              );
-              continue;
-            }
-            assert(
-              api.symbols.IsWindowVisible(hwnd),
-              "ordinary startup should retain declared visibility",
-            );
-            if (devShutdown && !devPending) {
-              assert.equal(
-                await closeWindowsApp(child.pid),
-                // keep-alive apps also own a control window with the app class.
-                trayWindow || closeLifecycle ? 2 : 1,
-              );
-              continue;
-            }
-            if (trayLifecycle) {
-              api.symbols.ShowWindow(hwnd, 3);
-            }
-            assert(api.symbols.PostMessageW(hwnd, 0x10, 0n, 0n));
-          }
-          if (event.event === "view-window-hidden") {
-            if (hidden) {
-              continue;
-            }
-            hidden = true;
-            assert.equal(api.symbols.IsWindowVisible(hwnd), 0);
-            assert.equal(child.exitCode, null);
-            // Forward while hidden to verify that the same view reopens.
-            await forwardToInstance(
-              instanceAddress(resolve(root, `data-${child.pid}`)),
-              {
-                argv: [
-                  "한글 파일.txt",
-                  "memo://open/42",
-                ],
-                cwd: root,
-              },
-            );
-          }
-          if (event.event === "quit-vetoed") {
-            vetoed = true;
-            assert(api.symbols.IsWindow(hwnd));
-            assert.equal(child.exitCode, null);
-            // Forward while vetoed to verify that the same host stays available.
-            await forwardToInstance(
-              instanceAddress(resolve(root, `data-${child.pid}`)),
-              {
-                argv: [
-                  "memo://open/42",
-                ],
-                cwd: root,
-              },
-            );
-          }
-          if (event.event === "opened" && event.source === "second-instance") {
-            if (hiddenStart && event.launchReason === "autostart") {
-              assert.equal(
-                api.symbols.IsWindowVisible(hwnd),
-                0,
-                "hidden forwarding must not restore or replace the window",
-              );
-              assert.deepEqual(event.argv, [
-                "memo://background/42",
-              ]);
-              await forwardToInstance(
-                instanceAddress(resolve(root, `data-${child.pid}`)),
-                {
-                  argv: [
-                    "한글 파일.txt",
-                    "memo://open/42",
-                  ],
-                  cwd: root,
-                },
-              );
-              continue;
-            }
-            assert.equal(event.launchReason, "manual");
-            reopened = true;
-            assert(api.symbols.IsWindowVisible(hwnd));
-            assert.deepEqual(event.urls, [
-              "memo://open/42",
-            ]);
-            if (trayLifecycle) {
-              assert(
-                hiddenStart
-                  ? !api.symbols.IsZoomed(hwnd)
-                  : api.symbols.IsZoomed(hwnd),
-                "restoring a hidden window must preserve its original maximization state",
-              );
-              assert.deepEqual(event.files, [
-                resolve(root, "한글 파일.txt"),
-              ]);
-              assert(trayWindow);
-              assert(api.symbols.PostMessageW(trayWindow, 0x10, 0n, 0n));
-            }
-          }
+          await handleEvent(JSON.parse(line));
         }
       },
     }),

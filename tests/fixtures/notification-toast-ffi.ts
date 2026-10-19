@@ -75,6 +75,197 @@ function callback(
     native.close();
   }
 }
+/** One vtable call into a fake COM object: the receiver, its vtable slot and the raw arguments. */
+type ComCall = {
+  object: number;
+  state: {
+    kind: string;
+    refs: number;
+    events: Map<number, ffi.Pointer>;
+  };
+  slot: number;
+  /** `kind:slot`, the key most fake methods are matched on. */
+  stage: string;
+  args: (number | bigint)[];
+};
+/** A fake method group; it returns the HRESULT or count for a call it owns, otherwise undefined. */
+type ComHandler = (call: ComCall) => number | undefined;
+
+/** Writes a new fake object of the given kind to the out-pointer in `args[index]`. */
+const outputObject = ({ args }: ComCall, index: number, kind: string) => {
+  writePointer(Number(args[index]) as ffi.Pointer, makeObject(kind));
+  return 0;
+};
+const writeUint32 = (out: number | bigint, value: number) =>
+  new DataView(ffi.toArrayBuffer(Number(out) as ffi.Pointer, 0, 4)).setUint32(
+    0,
+    value,
+    true,
+  );
+/** IUnknown: slot 2 releases a reference and slot 0 queries the interface the fixture expects next. */
+const unknownMethods: ComHandler = (call) => {
+  const { object, state, slot, args } = call;
+  if (slot === 2) {
+    state.refs--;
+    return state.refs;
+  }
+  if (slot !== 0) {
+    return undefined;
+  }
+  if (state.kind === "history") {
+    return outputObject(call, 1, "history2");
+  }
+  if (state.kind === "listed") {
+    const address = makeObject("listedProperties");
+    listedIndex.set(address, listedIndex.get(object) ?? -1);
+    writePointer(Number(args[1]) as ffi.Pointer, address);
+    return 0;
+  }
+  return outputObject(
+    call,
+    1,
+    state.kind === "document" ? "xml" : "properties",
+  );
+};
+/** Activation-side objects: the manager, its history, the toast factory and the XML document. */
+const factoryMethods: ComHandler = (call) => {
+  const { stage, args } = call;
+  if (stage === "manager:7") {
+    assert.equal(strings.get(Number(args[0])), "test.app");
+    return outputObject(call, 1, "notifier");
+  }
+  if (stage === "manager2:6") {
+    return outputObject(call, 0, "history");
+  }
+  if (stage === "factory:6") {
+    return outputObject(call, 1, "toast");
+  }
+  if (stage === "xml:6") {
+    payloads.push(strings.get(Number(args[0])) ?? "");
+    return 0;
+  }
+  return undefined;
+};
+/** Toast history: item count, item lookup and the tag and group properties of a listed item. */
+const historyListMethods: ComHandler = (call) => {
+  const { object, slot, stage, args } = call;
+  if (stage === "history2:7") {
+    assert.equal(strings.get(Number(args[0])), "test.app");
+    return outputObject(call, 1, "items");
+  }
+  if (stage === "items:7") {
+    writeUint32(args[0] ?? 0, historyItems.length);
+    return 0;
+  }
+  if (stage === "items:6") {
+    const address = makeObject("listed");
+    listedIndex.set(address, Number(args[0]));
+    writePointer(Number(args[1]) as ffi.Pointer, address);
+    return 0;
+  }
+  if (stage === "listedProperties:7" || stage === "listedProperties:9") {
+    const owner = listedIndex.get(object);
+    assert(owner !== undefined);
+    const item = historyItems[owner];
+    assert(item);
+    const text = item[slot === 7 ? 0 : 1];
+    // An empty HSTRING is a null handle.
+    if (text === "") {
+      writePointer(Number(args[0]) as ffi.Pointer, 0);
+    } else {
+      strings.set(++stringId, text);
+      writePointer(Number(args[0]) as ffi.Pointer, stringId);
+    }
+    return 0;
+  }
+  return undefined;
+};
+/** Notifier and history actions the fixture counts, plus the property and argument objects. */
+const actionMethods: ComHandler = ({ state, slot, stage, args }) => {
+  if (state.kind === "properties") {
+    assert(
+      [
+        6,
+        8,
+        10,
+      ].includes(slot),
+    );
+    return 0;
+  }
+  if (stage === "notifier:6") {
+    shown++;
+    return 0;
+  }
+  if (stage === "notifier:7") {
+    hidden++;
+    return 0;
+  }
+  if (stage === "history:12") {
+    assert.equal(strings.get(Number(args[0])), "test.app");
+    cleared++;
+    return 0;
+  }
+  if (stage === "history:8") {
+    assert.equal(strings.get(Number(args[2])), "test.app");
+    removed++;
+    return 0;
+  }
+  if (state.kind === "argument" && slot === 6) {
+    new DataView(
+      ffi.toArrayBuffer(Number(args[0]) as ffi.Pointer, 0, 4),
+    ).setInt32(0, 2, true);
+    return 0;
+  }
+  return undefined;
+};
+/** Toast event registration: add slots keep the delegate, remove slots revoke it. */
+const toastEventMethods: ComHandler = ({ state, slot, args }) => {
+  if (state.kind !== "toast") {
+    return undefined;
+  }
+  if (
+    [
+      9,
+      11,
+      13,
+    ].includes(slot)
+  ) {
+    const delegate = Number(args[0]) as ffi.Pointer;
+    allocatedDelegates.push(delegate);
+    callback(delegate, 1, []);
+    state.events.set(slot + 1, delegate);
+    writePointer(Number(args[1]) as ffi.Pointer, slot);
+    return 0;
+  }
+  if (
+    [
+      10,
+      12,
+      14,
+    ].includes(slot)
+  ) {
+    if (failRemove) {
+      return -2147467259;
+    }
+    const delegate = state.events.get(slot);
+    assert(delegate);
+    if (deferRelease) {
+      delayedReleases.push(delegate);
+    } else {
+      callback(delegate, 2, []);
+    }
+    state.events.delete(slot);
+    return 0;
+  }
+  return undefined;
+};
+const comHandlers: ComHandler[] = [
+  unknownMethods,
+  factoryMethods,
+  historyListMethods,
+  actionMethods,
+  toastEventMethods,
+];
 mock.module("bun:ffi", () => ({
   ...ffi,
   read: {
@@ -91,139 +282,17 @@ mock.module("bun:ffi", () => ({
       if (stage === failStage) {
         return -2147467259;
       }
-      const output = (index: number, kind: string) => {
-        writePointer(Number(args[index]) as ffi.Pointer, makeObject(kind));
-        return 0;
+      const call: ComCall = {
+        object,
+        state,
+        slot,
+        stage,
+        args,
       };
-      if (slot === 2) {
-        state.refs--;
-        return state.refs;
-      }
-      if (slot === 0) {
-        if (state.kind === "history") {
-          return output(1, "history2");
-        }
-        if (state.kind === "listed") {
-          const address = makeObject("listedProperties");
-          listedIndex.set(address, listedIndex.get(object) ?? -1);
-          writePointer(Number(args[1]) as ffi.Pointer, address);
-          return 0;
-        }
-        return output(1, state.kind === "document" ? "xml" : "properties");
-      }
-      if (stage === "manager:7") {
-        assert.equal(strings.get(Number(args[0])), "test.app");
-        return output(1, "notifier");
-      }
-      if (stage === "manager2:6") {
-        return output(0, "history");
-      }
-      if (stage === "factory:6") {
-        return output(1, "toast");
-      }
-      if (stage === "xml:6") {
-        payloads.push(strings.get(Number(args[0])) ?? "");
-        return 0;
-      }
-      if (stage === "history2:7") {
-        assert.equal(strings.get(Number(args[0])), "test.app");
-        return output(1, "items");
-      }
-      if (stage === "items:7") {
-        new DataView(
-          ffi.toArrayBuffer(Number(args[0]) as ffi.Pointer, 0, 4),
-        ).setUint32(0, historyItems.length, true);
-        return 0;
-      }
-      if (stage === "items:6") {
-        const address = makeObject("listed");
-        listedIndex.set(address, Number(args[0]));
-        writePointer(Number(args[1]) as ffi.Pointer, address);
-        return 0;
-      }
-      if (stage === "listedProperties:7" || stage === "listedProperties:9") {
-        const owner = listedIndex.get(object);
-        assert(owner !== undefined);
-        const item = historyItems[owner];
-        assert(item);
-        const text = item[slot === 7 ? 0 : 1];
-        // An empty HSTRING is a null handle.
-        if (text === "") {
-          writePointer(Number(args[0]) as ffi.Pointer, 0);
-        } else {
-          strings.set(++stringId, text);
-          writePointer(Number(args[0]) as ffi.Pointer, stringId);
-        }
-        return 0;
-      }
-      if (state.kind === "properties") {
-        assert(
-          [
-            6,
-            8,
-            10,
-          ].includes(slot),
-        );
-        return 0;
-      }
-      if (stage === "notifier:6") {
-        shown++;
-        return 0;
-      }
-      if (stage === "notifier:7") {
-        hidden++;
-        return 0;
-      }
-      if (stage === "history:12") {
-        assert.equal(strings.get(Number(args[0])), "test.app");
-        cleared++;
-        return 0;
-      }
-      if (stage === "history:8") {
-        assert.equal(strings.get(Number(args[2])), "test.app");
-        removed++;
-        return 0;
-      }
-      if (state.kind === "argument" && slot === 6) {
-        new DataView(
-          ffi.toArrayBuffer(Number(args[0]) as ffi.Pointer, 0, 4),
-        ).setInt32(0, 2, true);
-        return 0;
-      }
-      if (state.kind === "toast") {
-        if (
-          [
-            9,
-            11,
-            13,
-          ].includes(slot)
-        ) {
-          const delegate = Number(args[0]) as ffi.Pointer;
-          allocatedDelegates.push(delegate);
-          callback(delegate, 1, []);
-          state.events.set(slot + 1, delegate);
-          writePointer(Number(args[1]) as ffi.Pointer, slot);
-          return 0;
-        }
-        if (
-          [
-            10,
-            12,
-            14,
-          ].includes(slot)
-        ) {
-          if (failRemove) {
-            return -2147467259;
-          }
-          const delegate = state.events.get(slot);
-          assert(delegate);
-          if (deferRelease) {
-            delayedReleases.push(delegate);
-          } else {
-            callback(delegate, 2, []);
-          }
-          state.events.delete(slot);
-          return 0;
+      for (const handle of comHandlers) {
+        const result = handle(call);
+        if (result !== undefined) {
+          return result;
         }
       }
       assert.fail(`Unexpected ABI method ${stage}`);

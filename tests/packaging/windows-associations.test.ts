@@ -764,6 +764,34 @@ async function createNativeAssociationFixture(compiler: string) {
         stderr: "pipe",
       },
     );
+    /** A deliberately failed uninstall exits non-zero, logs the reason and leaves the payload available. */
+    async function expectFailedUninstall(
+      code: number,
+      expected: NonNullable<typeof failure>,
+    ) {
+      expect(code).not.toBe(0);
+      const failureMessages = {
+        busy: "Another setup or uninstall is maintaining this application",
+        read: "Could not inspect app association",
+        "key-cleanup": "Could not remove app association key",
+        metadata: "Could not read installation identity",
+      };
+      expect(await Bun.file(logPath).text()).toContain(
+        failureMessages[expected],
+      );
+      if (expected === "busy") {
+        return; // The deliberately paused competing process still owns it.
+      }
+      // Failed uninstall must finish natively before the fixture changes ACLs
+      // or retries, while leaving the payload and uninstaller available.
+      for (let i = 0; i < 200; i++) {
+        if (await maintenanceAvailable(mutexes.maintenance)) {
+          return;
+        }
+        await Bun.sleep(50);
+      }
+      throw new Error("Failed uninstaller did not finish.");
+    }
     async function finish() {
       const [code, stdout, stderr] = await Promise.all([
         child.exited,
@@ -771,28 +799,8 @@ async function createNativeAssociationFixture(compiler: string) {
         new Response(child.stderr).text(),
       ]);
       if (failure) {
-        expect(code).not.toBe(0);
-        const failureMessages = {
-          busy: "Another setup or uninstall is maintaining this application",
-          read: "Could not inspect app association",
-          "key-cleanup": "Could not remove app association key",
-          metadata: "Could not read installation identity",
-        };
-        expect(await Bun.file(logPath).text()).toContain(
-          failureMessages[failure],
-        );
-        if (failure === "busy") {
-          return; // The deliberately paused competing process still owns it.
-        }
-        // Failed uninstall must finish natively before the fixture changes ACLs
-        // or retries, while leaving the payload and uninstaller available.
-        for (let i = 0; i < 200; i++) {
-          if (await maintenanceAvailable(mutexes.maintenance)) {
-            return;
-          }
-          await Bun.sleep(50);
-        }
-        throw new Error("Failed uninstaller did not finish.");
+        await expectFailedUninstall(code, failure);
+        return;
       }
       if (code !== 0) {
         throw new Error(`Uninstaller failed (${code}): ${stdout} ${stderr}`);

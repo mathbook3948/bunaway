@@ -28,8 +28,8 @@ import { files, installedPackageRoot, json, writeJson } from "#cli/files";
 import { buildWithSdk, sdkPlugin } from "#cli/sdk";
 import { packFramework } from "#cli-scripts/pack";
 import { DevelopmentApp } from "#native/windows/bun/development-app";
-import { createProject, packageDirectory } from "./project.ts";
 import { deadline } from "../fixtures/deadlines.ts";
+import { createProject, packageDirectory } from "./project.ts";
 
 setDefaultTimeout(deadline("packagedAudit"));
 
@@ -831,6 +831,98 @@ console.log("SHARED_SDK_CLASS");`,
   }
 });
 
+/** Rewrites the plugin bundle so it reports the synthetic next release version. */
+async function bumpPluginBundleVersion(stage: string): Promise<void> {
+  for (const file of await files(resolve(stage, "dist"))) {
+    if (file.endsWith(".js")) {
+      await writeFile(
+        file,
+        (await readFile(file, "utf8")).replaceAll(
+          'return define(declaration, calls, "0.0.0");',
+          'return define(declaration, calls, "0.0.1");',
+        ),
+      );
+    }
+  }
+}
+
+/** Bumps the CLI release descriptor, its package manifests and its artifact hash list. */
+async function bumpCliRelease(stage: string): Promise<void> {
+  const releasePath = resolve(stage, "framework.json");
+  await writeJson(releasePath, {
+    ...((await json(releasePath)) as object),
+    version: "0.0.1",
+    nativeHost: "0.0.1",
+  });
+  for (const directory of Object.keys(
+    (
+      (await json(releasePath)) as {
+        packages: object;
+      }
+    ).packages,
+  )) {
+    const path = resolve(stage, "packages", directory, "package.json");
+    await writeJson(path, {
+      ...((await json(path)) as object),
+      version: "0.0.1",
+    });
+  }
+  await rm(resolve(stage, "artifact.files.json"));
+  await writeJson(
+    resolve(stage, "artifact.files.json"),
+    await snapshotHashes(stage),
+  );
+}
+
+/** Copies an installed package, rewrites it as release 0.0.1 and packs it into the release directory. */
+async function packNextRelease(
+  project: string,
+  directory: string,
+  name: string,
+  info: {
+    plugins: Record<string, string>;
+  },
+  dependency: (name: string) => string,
+): Promise<void> {
+  const stage = resolve(directory, name.replace("@bunaway/", ""));
+  await cp(resolve(project, "node_modules", name), stage, {
+    recursive: true,
+  });
+  const manifestPath = resolve(stage, "package.json");
+  const manifest = (await json(manifestPath)) as {
+    version: string;
+    dependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
+  };
+  manifest.version = "0.0.1";
+  for (const dep of Object.keys(manifest.dependencies ?? {})) {
+    if (dep.startsWith("@bunaway/") && manifest.dependencies) {
+      manifest.dependencies[dep] = dependency(dep);
+    }
+  }
+  for (const dep of Object.keys(manifest.peerDependencies ?? {})) {
+    if (dep.startsWith("@bunaway/") && manifest.peerDependencies) {
+      manifest.peerDependencies[dep] = dependency(dep);
+    }
+  }
+  await writeJson(manifestPath, manifest);
+  if (Object.values(info.plugins).includes(name)) {
+    // This synthetic release changes the bundled package version as well as its manifest.
+    await bumpPluginBundleVersion(stage);
+  }
+  if (name === "@bunaway/cli") {
+    await bumpCliRelease(stage);
+  }
+  await command(stage, [
+    "pm",
+    "pack",
+    "--ignore-scripts",
+    "--filename",
+    resolve(directory, packageFilename(name, "0.0.1")),
+    "--quiet",
+  ]);
+}
+
 test("upgrading the complete installed release preserves app sources and changes bun.lock", async () => {
   const home = await realpath(
     await mkdtemp(resolve(tmpdir(), "bunaway-upgrade-")),
@@ -863,76 +955,7 @@ test("upgrading the complete installed release preserves app sources and changes
       `file:${resolve(directory, packageFilename(name, "0.0.1")).replaceAll("\\", "/")}`;
     // Synthesize a next release from installed packages without mutating repository versions.
     for (const name of packages) {
-      const stage = resolve(directory, name.replace("@bunaway/", ""));
-      await cp(resolve(project, "node_modules", name), stage, {
-        recursive: true,
-      });
-      const manifestPath = resolve(stage, "package.json");
-      const manifest = (await json(manifestPath)) as {
-        version: string;
-        dependencies?: Record<string, string>;
-        peerDependencies?: Record<string, string>;
-      };
-      manifest.version = "0.0.1";
-      for (const dep of Object.keys(manifest.dependencies ?? {})) {
-        if (dep.startsWith("@bunaway/") && manifest.dependencies) {
-          manifest.dependencies[dep] = dependency(dep);
-        }
-      }
-      for (const dep of Object.keys(manifest.peerDependencies ?? {})) {
-        if (dep.startsWith("@bunaway/") && manifest.peerDependencies) {
-          manifest.peerDependencies[dep] = dependency(dep);
-        }
-      }
-      await writeJson(manifestPath, manifest);
-      if (Object.values(info.plugins).includes(name)) {
-        // This synthetic release changes the bundled package version as well as its manifest.
-        for (const file of await files(resolve(stage, "dist"))) {
-          if (file.endsWith(".js")) {
-            await writeFile(
-              file,
-              (await readFile(file, "utf8")).replaceAll(
-                'return define(declaration, calls, "0.0.0");',
-                'return define(declaration, calls, "0.0.1");',
-              ),
-            );
-          }
-        }
-      }
-      if (name === "@bunaway/cli") {
-        const releasePath = resolve(stage, "framework.json");
-        await writeJson(releasePath, {
-          ...((await json(releasePath)) as object),
-          version: "0.0.1",
-          nativeHost: "0.0.1",
-        });
-        for (const directory of Object.keys(
-          (
-            (await json(releasePath)) as {
-              packages: object;
-            }
-          ).packages,
-        )) {
-          const path = resolve(stage, "packages", directory, "package.json");
-          await writeJson(path, {
-            ...((await json(path)) as object),
-            version: "0.0.1",
-          });
-        }
-        await rm(resolve(stage, "artifact.files.json"));
-        await writeJson(
-          resolve(stage, "artifact.files.json"),
-          await snapshotHashes(stage),
-        );
-      }
-      await command(stage, [
-        "pm",
-        "pack",
-        "--ignore-scripts",
-        "--filename",
-        resolve(directory, packageFilename(name, "0.0.1")),
-        "--quiet",
-      ]);
+      await packNextRelease(project, directory, name, info, dependency);
       for (const declarations of [
         pkg.dependencies,
         pkg.devDependencies,

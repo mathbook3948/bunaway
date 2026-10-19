@@ -114,6 +114,86 @@ export const probe = defineNativePlugin({
               signal: AbortSignal;
             }
           | undefined;
+        /** Reports whether the allocated image is still retained and whether its request was aborted. */
+        const resourceState = () => {
+          if (!allocation) {
+            throw new Error("Missing resource creation.");
+          }
+          let retained = true;
+          try {
+            resources.get(allocation.id);
+          } catch {
+            retained = false;
+          }
+          return {
+            retained,
+            aborted: allocation.signal.aborted,
+          };
+        };
+        /** Resolves only when the request is aborted, recording the abort for the host test. */
+        const waitForAbort = (
+          requestId: string,
+          signal: AbortSignal,
+          source: string,
+        ) => {
+          writeFileSync(resolve(temporary, `${requestId}-source`), source);
+          return new Promise<{
+            source: string;
+            thread: number;
+            main: boolean;
+          }>((resolveCall) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                if (existsSync(resolve(temporary, "io-disposing"))) {
+                  throw new Error(
+                    "Native abort arrived after adapter disposal.",
+                  );
+                }
+                writeFileSync(
+                  resolve(temporary, `${requestId}-aborted`),
+                  "aborted",
+                );
+                resolveCall({
+                  source,
+                  thread: threadId,
+                  main: isMainThread,
+                });
+              },
+              {
+                once: true,
+              },
+            );
+          });
+        };
+        /** Allocates an image tied to the request and blocks until the host releases it. */
+        const holdResource = (requestId: string, signal: AbortSignal) => {
+          const created = resources.create(
+            {
+              width: 1,
+              height: 1,
+              rgba: Buffer.from([
+                1,
+                2,
+                3,
+                255,
+              ]),
+            },
+            signal,
+          );
+          allocation = {
+            id: created.id,
+            signal,
+          };
+          writeFileSync(
+            resolve(temporary, `${requestId}-allocated`),
+            "allocated",
+          );
+          const pause = new Int32Array(new SharedArrayBuffer(4));
+          while (!existsSync(resolve(temporary, `${requestId}-release`))) {
+            Atomics.wait(pause, 0, 0, 25);
+          }
+        };
         return {
           execute() {
             throw new BunawayError({
@@ -132,19 +212,7 @@ export const probe = defineNativePlugin({
             context.signal.throwIfAborted();
             context.beforeExecute?.();
             if (operation === "probe.resourceState") {
-              if (!allocation) {
-                throw new Error("Missing resource creation.");
-              }
-              let retained = true;
-              try {
-                resources.get(allocation.id);
-              } catch {
-                retained = false;
-              }
-              return {
-                retained,
-                aborted: allocation.signal.aborted,
-              };
+              return resourceState();
             }
             if (operation === "probe.inspect") {
               return existsSync(
@@ -160,59 +228,10 @@ export const probe = defineNativePlugin({
               "started",
             );
             if (request.mode === "wait-abort") {
-              const signal = context.signal;
-              writeFileSync(resolve(temporary, `${request.id}-source`), source);
-              return new Promise((resolveCall) => {
-                signal.addEventListener(
-                  "abort",
-                  () => {
-                    if (existsSync(resolve(temporary, "io-disposing"))) {
-                      throw new Error(
-                        "Native abort arrived after adapter disposal.",
-                      );
-                    }
-                    writeFileSync(
-                      resolve(temporary, `${request.id}-aborted`),
-                      "aborted",
-                    );
-                    resolveCall({
-                      source,
-                      thread: threadId,
-                      main: isMainThread,
-                    });
-                  },
-                  {
-                    once: true,
-                  },
-                );
-              });
+              return waitForAbort(request.id, context.signal, source);
             }
             if (request.mode === "resource") {
-              const created = resources.create(
-                {
-                  width: 1,
-                  height: 1,
-                  rgba: Buffer.from([
-                    1,
-                    2,
-                    3,
-                    255,
-                  ]),
-                },
-                context.signal,
-              );
-              allocation = {
-                id: created.id,
-                signal: context.signal,
-              };
-              writeFileSync(
-                resolve(temporary, `${request.id}-allocated`),
-                "allocated",
-              );
-              const pause = new Int32Array(new SharedArrayBuffer(4));
-              while (!existsSync(resolve(temporary, `${request.id}-release`))) {
-                Atomics.wait(pause, 0, 0, 25);
-              }
+              holdResource(request.id, context.signal);
             }
             if (request.mode === "fail") {
               throw new BunawayError({
