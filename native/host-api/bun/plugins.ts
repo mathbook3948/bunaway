@@ -185,7 +185,7 @@ export async function operations(
     async prepare(operation: string, input: unknown, source: string) {
       const call = registry.validateCall({
         operation,
-        payload: input as never,
+        payload: validateValue({}, input),
       });
       const adapter = adapters.get(operation.split(".")[0] ?? "");
       if (!adapter || !supported.has(operation)) {
@@ -207,7 +207,7 @@ export async function operations(
       }
       const call = registry.validateCall({
         operation,
-        payload: input as never,
+        payload: validateValue({}, input),
       });
       if (!supported.has(operation)) {
         throw new BunawayError({
@@ -243,7 +243,7 @@ export async function operations(
     ) {
       const call = registry.validateCall({
         operation,
-        payload: input as never,
+        payload: validateValue({}, input),
       });
       const adapter = adapters.get(operation.split(".")[0] ?? "");
       if (!adapter || !supported.has(operation)) {
