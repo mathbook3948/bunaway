@@ -77,7 +77,7 @@ export class MacosPath implements PathInstance {
     const { dataRoot } = this.environment;
     switch (directory) {
       case "temp": {
-        // TMPDIR comes from the host process and may be empty or relative.
+        // The host sets TMPDIR; os.tmpdir falls back to /tmp when it is empty, and a relative value is rejected.
         const temp = tmpdir();
         if (!posixAbsolutePathSchema.safeParse(temp).success) {
           throw new BunawayError({
