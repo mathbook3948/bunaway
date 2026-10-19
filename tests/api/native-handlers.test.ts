@@ -265,3 +265,30 @@ test("mapped adapters clean earlier resources after later setup fails", async ()
     "first",
   ]);
 });
+test("an unregistered operation stays unsupported whatever its payload is", async () => {
+  const dispatcher = await operations([], ".", "worker", undefined, []);
+  const cyclic: Record<string, unknown> = {};
+  cyclic.self = cyclic;
+  for (const payload of [
+    cyclic,
+    undefined,
+    () => 1,
+  ]) {
+    await expect(
+      dispatcher.prepare("nope.op", payload, "backend"),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED",
+    });
+    await expect(
+      dispatcher.executeUI("nope.op", payload, "backend", {
+        requestId: "r",
+        permissions: {
+          permissions: [],
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED",
+    });
+  }
+  await dispatcher.dispose();
+});

@@ -181,12 +181,17 @@ export async function operations(
     }
     throw error;
   }
+  /** Looks the operation up first so an unregistered name stays UNSUPPORTED whatever the payload is. */
+  const validateCall = (operation: string, input: unknown) => {
+    registry.operation(operation);
+    return registry.validateCall({
+      operation,
+      payload: validateValue({}, input),
+    });
+  };
   const dispatcher: PluginOperations = {
     async prepare(operation: string, input: unknown, source: string) {
-      const call = registry.validateCall({
-        operation,
-        payload: validateValue({}, input),
-      });
+      const call = validateCall(operation, input);
       const adapter = adapters.get(operation.split(".")[0] ?? "");
       if (!adapter || !supported.has(operation)) {
         throw new BunawayError({
@@ -205,10 +210,7 @@ export async function operations(
       if (!adapter?.executeUI) {
         return dispatcher.prepare(operation, input, source);
       }
-      const call = registry.validateCall({
-        operation,
-        payload: validateValue({}, input),
-      });
+      const call = validateCall(operation, input);
       if (!supported.has(operation)) {
         throw new BunawayError({
           code: "UNSUPPORTED",
@@ -241,10 +243,7 @@ export async function operations(
         beforeExecute?(): void;
       },
     ) {
-      const call = registry.validateCall({
-        operation,
-        payload: validateValue({}, input),
-      });
+      const call = validateCall(operation, input);
       const adapter = adapters.get(operation.split(".")[0] ?? "");
       if (!adapter || !supported.has(operation)) {
         throw new BunawayError({
