@@ -22,6 +22,8 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
+import * as windowsTools from "#packaging/channels/windows/common";
+import { verifySignatures } from "#packaging/channels/windows/sign";
 import {
   adapterFor,
   artifactPaths,
@@ -44,8 +46,6 @@ import {
   targetFor,
   verifyArtifact,
 } from "@bunaway/packaging";
-import * as windowsTools from "#packaging/channels/windows/common";
-import { verifySignatures } from "#packaging/channels/windows/sign";
 import { deadline } from "../fixtures/deadlines.ts";
 
 setDefaultTimeout(deadline("childStep"));

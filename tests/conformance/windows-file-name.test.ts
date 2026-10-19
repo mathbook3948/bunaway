@@ -26,7 +26,7 @@ const ROOTS = [
 test("Windows file-name rules live in one module", async () => {
   const offenders: string[] = [];
   for (const root of ROOTS) {
-    for await (const file of new Bun.Glob("**/src/**/*.ts").scan({
+    for await (const file of new Bun.Glob("**/*.ts").scan({
       cwd: resolve(repository, root),
       absolute: true,
     })) {
