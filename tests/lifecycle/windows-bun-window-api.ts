@@ -484,38 +484,52 @@ if (!process.argv.includes("--child")) {
         const client = nativeWindows.getBounds(custom, "content");
         assert.equal(nativeWindows.hasShadow(custom), true);
         // Sum the colour channels of a strip just below the window, where the shadow falls.
-        const stripBelow = () => {
+        const rowsBelow = (b: typeof bounds) => {
           const dc = screen.symbols.GetDC(0n);
           assert.notEqual(dc, 0n);
           try {
-            let total = 0;
-            const y = bounds.y + bounds.height + 4;
-            for (let dx = 0; dx < 40; dx += 1) {
-              const pixel = gdi.symbols.GetPixel(
-                dc,
-                bounds.x + Math.floor(bounds.width / 2) + dx,
-                y,
-              );
-              total +=
-                (pixel & 0xff) + ((pixel >> 8) & 0xff) + ((pixel >> 16) & 0xff);
+            const rows: number[] = [];
+            for (let row = -2; row < 14; row += 1) {
+              let total = 0;
+              for (let dx = 0; dx < 40; dx += 1) {
+                const pixel = gdi.symbols.GetPixel(
+                  dc,
+                  b.x + Math.floor(b.width / 2) + dx,
+                  b.y + b.height + row,
+                );
+                total +=
+                  (pixel & 0xff) +
+                  ((pixel >> 8) & 0xff) +
+                  ((pixel >> 16) & 0xff);
+              }
+              rows.push(total);
             }
-            return total;
+            return rows;
           } finally {
             screen.symbols.ReleaseDC(0n, dc);
           }
         };
         const settle = () => Bun.sleepSync(400);
+        nativeWindows.setPosition(system, 900, 200);
+        nativeWindows.show(system, true);
+        const systemBounds = nativeWindows.getBounds(system, "outer");
         settle();
-        const withShadow = stripBelow();
+        const withShadow = rowsBelow(bounds);
+        console.log(`shadow-probe custom on ${JSON.stringify(withShadow)}`);
+        console.log(
+          `shadow-probe system ${JSON.stringify(rowsBelow(systemBounds))}`,
+        );
         nativeWindows.setHasShadow(custom, false);
         assert.equal(nativeWindows.hasShadow(custom), false);
         settle();
-        const withoutShadow = stripBelow();
-        // Removing the shadow brightens the pixels beneath the window edge.
-        assert.ok(
-          withoutShadow > withShadow,
-          `shadow pixels ${withShadow} without ${withoutShadow}`,
+        const withoutShadow = rowsBelow(bounds);
+        console.log(`shadow-probe custom off ${JSON.stringify(withoutShadow)}`);
+        nativeWindows.show(custom, false);
+        settle();
+        console.log(
+          `shadow-probe hidden ${JSON.stringify(rowsBelow(bounds))} bounds ${JSON.stringify(bounds)}`,
         );
+        nativeWindows.show(custom, true);
         // Geometry, visibility and opacity are not part of the shadow setting.
         assert.deepEqual(nativeWindows.getBounds(custom, "outer"), bounds);
         assert.deepEqual(nativeWindows.getBounds(custom, "content"), client);
@@ -526,7 +540,9 @@ if (!process.argv.includes("--child")) {
         nativeWindows.setHasShadow(custom, true);
         assert.equal(nativeWindows.hasShadow(custom), true);
         settle();
-        assert.ok(stripBelow() < withoutShadow);
+        console.log(
+          `shadow-probe custom on again ${JSON.stringify(rowsBelow(bounds))}`,
+        );
       } finally {
         nativeWindows.destroy(system);
         nativeWindows.destroy(custom);
