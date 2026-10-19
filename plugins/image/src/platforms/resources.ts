@@ -1,6 +1,7 @@
 import { BunawayError } from "@bunaway/protocol";
 import {
   MAX_IMAGE_BYTES,
+  MAX_IMAGE_DIMENSION,
   MAX_POOL_BYTES,
   MAX_RESOURCES,
 } from "#image/contract";
@@ -44,9 +45,9 @@ export class ImageResources {
       !Number.isInteger(pixels.width) ||
       !Number.isInteger(pixels.height) ||
       pixels.width < 0 ||
-      pixels.width > 4096 ||
+      pixels.width > MAX_IMAGE_DIMENSION ||
       pixels.height < 0 ||
-      pixels.height > 4096 ||
+      pixels.height > MAX_IMAGE_DIMENSION ||
       (pixels.width === 0) !== (pixels.height === 0) ||
       pixels.rgba.length !== pixels.width * pixels.height * 4 ||
       pixels.rgba.length > MAX_IMAGE_BYTES

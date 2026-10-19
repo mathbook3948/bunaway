@@ -5,6 +5,8 @@ import {
 } from "@bunaway/plugin";
 import { z } from "zod";
 export const MAX_IMAGE_BYTES = 524_288;
+/** Largest width or height of an image, also the largest crop origin coordinate. */
+export const MAX_IMAGE_DIMENSION = 4096;
 export const MAX_ENCODED_BYTES = 600_000;
 export const MAX_RESOURCES = 64;
 export const MAX_POOL_BYTES = 8_388_608;
@@ -14,8 +16,8 @@ function base64Schema(maxBytes: number) {
 }
 export const rgbaSchema = z
   .strictObject({
-    width: z.number().int().min(0).max(4096),
-    height: z.number().int().min(0).max(4096),
+    width: z.number().int().min(0).max(MAX_IMAGE_DIMENSION),
+    height: z.number().int().min(0).max(MAX_IMAGE_DIMENSION),
     rgba: base64Schema(MAX_IMAGE_BYTES),
   })
   .refine((value) => {
@@ -54,8 +56,8 @@ export const referenceSchema = z.strictObject({
 });
 export const infoSchema = z
   .strictObject({
-    width: z.number().int().min(0).max(4096),
-    height: z.number().int().min(0).max(4096),
+    width: z.number().int().min(0).max(MAX_IMAGE_DIMENSION),
+    height: z.number().int().min(0).max(MAX_IMAGE_DIMENSION),
     empty: z.boolean(),
   })
   .refine(
@@ -79,8 +81,8 @@ export const interpolationSchema = z.enum([
 export type ImageInterpolation = z.infer<typeof interpolationSchema>;
 const transformSizeSchema = z
   .strictObject({
-    width: z.number().int().min(1).max(4096),
-    height: z.number().int().min(1).max(4096),
+    width: z.number().int().min(1).max(MAX_IMAGE_DIMENSION),
+    height: z.number().int().min(1).max(MAX_IMAGE_DIMENSION),
   })
   .refine(
     (value) => value.width * value.height * 4 <= MAX_IMAGE_BYTES,
@@ -88,8 +90,8 @@ const transformSizeSchema = z
   );
 export const cropSchema = transformSizeSchema.safeExtend({
   id: idSchema,
-  x: z.number().int().min(0).max(4096),
-  y: z.number().int().min(0).max(4096),
+  x: z.number().int().min(0).max(MAX_IMAGE_DIMENSION),
+  y: z.number().int().min(0).max(MAX_IMAGE_DIMENSION),
 });
 export const resizeSchema = transformSizeSchema.safeExtend({
   id: idSchema,

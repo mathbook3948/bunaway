@@ -5,6 +5,7 @@ import {
   type ImageMime,
   MAX_ENCODED_BYTES,
   MAX_IMAGE_BYTES,
+  MAX_IMAGE_DIMENSION,
 } from "#image/contract";
 import type { Pixels } from "#image/platforms/codec";
 import { openImageBindings } from "#image/platforms/macos-bindings";
@@ -41,8 +42,8 @@ function assertDimensions(width: number, height: number): void {
     !Number.isInteger(height) ||
     width < 1 ||
     height < 1 ||
-    width > 4096 ||
-    height > 4096 ||
+    width > MAX_IMAGE_DIMENSION ||
+    height > MAX_IMAGE_DIMENSION ||
     width * height * 4 > MAX_IMAGE_BYTES
   ) {
     invalid("Image dimensions exceed the pixel limit.");

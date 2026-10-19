@@ -1,5 +1,5 @@
 import { BunawayError } from "@bunaway/protocol";
-import { MAX_IMAGE_BYTES } from "#image/contract";
+import { MAX_IMAGE_BYTES, MAX_IMAGE_DIMENSION } from "#image/contract";
 import type { Pixels } from "#image/platforms/codec";
 /** Require a nonempty source and a bounded positive output before allocating resize pixels. */
 export function assertResizeDimensions(
@@ -13,9 +13,9 @@ export function assertResizeDimensions(
     !Number.isInteger(width) ||
     !Number.isInteger(height) ||
     width < 1 ||
-    width > 4096 ||
+    width > MAX_IMAGE_DIMENSION ||
     height < 1 ||
-    height > 4096 ||
+    height > MAX_IMAGE_DIMENSION ||
     width * height * 4 > MAX_IMAGE_BYTES
   ) {
     throw new BunawayError({
