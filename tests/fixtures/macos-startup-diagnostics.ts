@@ -145,6 +145,88 @@ function observeStartup(
       };
     }
   }
+  /** Samples the host and up to three WebKit services, preferring the networking service. */
+  async function sampleProcesses(
+    processes: ReturnType<typeof startupProcesses>,
+  ) {
+    const candidates = [
+      processes.find((entry) => entry.role === "host"),
+      ...processes
+        .filter((entry) => entry.role !== "host")
+        .sort(
+          (left, right) =>
+            Number(right.role === "com.apple.WebKit.Networking") -
+            Number(left.role === "com.apple.WebKit.Networking"),
+        )
+        .slice(0, 3),
+    ].filter((entry) => entry !== undefined);
+    return await Promise.all(
+      candidates.map(async ({ pid, role }) => {
+        const result = await probe([
+          "/usr/bin/sample",
+          String(pid),
+          "1",
+          "10",
+          "-file",
+          "/dev/stdout",
+        ]);
+        return {
+          pid,
+          role,
+          exitCode: result.exitCode,
+          unavailable: result.unavailable,
+          frames: startupSample(result.output),
+        };
+      }),
+    );
+  }
+  /** Sleeps until the 5-second slot for this index, or until stop wakes it early. */
+  async function waitForTick(index: number) {
+    await new Promise<void>((resolve) => {
+      wake = resolve;
+      timer = setTimeout(
+        resolve,
+        Math.max(0, started + index * 5_000 - Date.now()),
+      );
+    });
+    wake = undefined;
+  }
+  /** Records the current-user process inventory and which earlier processes have disappeared. */
+  async function recordInventory() {
+    const inventory = await probe([
+      "/bin/ps",
+      "-U",
+      String(process.getuid?.()),
+      "-o",
+      "pid=,ppid=,state=,time=,comm=",
+    ]);
+    const processes = startupProcesses(inventory.output, child.pid);
+    const pids = processes.map(({ pid }) => pid);
+    records.push({
+      elapsedMs: Date.now() - started,
+      scope: "host and current-user WebKit services",
+      probeExit: inventory.exitCode,
+      unavailable: inventory.unavailable,
+      processes,
+      disappearedSincePrevious:
+        inventory.exitCode === 0
+          ? previous.filter((pid) => !pids.includes(pid))
+          : null,
+    });
+    if (inventory.exitCode === 0) {
+      previous = pids;
+    }
+    return processes;
+  }
+  // Existing checkpoints prove the UI pump ran; their timestamps and delegate/asset stages
+  // remain in host.log. The 10-second fallback also captures a host whose pump never ran.
+  async function hostLogShowsDelay() {
+    const hostLog = Bun.file(resolve(dataRoot, "logs/host.log"));
+    return (
+      (await hostLog.exists()) &&
+      startupDelayedSince(await hostLog.text(), started)
+    );
+  }
   const done = (async () => {
     try {
       await mkdir(directory, {
@@ -152,79 +234,16 @@ function observeStartup(
       });
       for (let index = 0; index < 4 && !stopped; index++) {
         if (index > 0) {
-          await new Promise<void>((resolve) => {
-            wake = resolve;
-            timer = setTimeout(
-              resolve,
-              Math.max(0, started + index * 5_000 - Date.now()),
-            );
-          });
-          wake = undefined;
+          await waitForTick(index);
           if (stopped) {
             break;
           }
         }
-        const inventory = await probe([
-          "/bin/ps",
-          "-U",
-          String(process.getuid?.()),
-          "-o",
-          "pid=,ppid=,state=,time=,comm=",
-        ]);
-        const processes = startupProcesses(inventory.output, child.pid);
-        const pids = processes.map(({ pid }) => pid);
-        records.push({
-          elapsedMs: Date.now() - started,
-          scope: "host and current-user WebKit services",
-          probeExit: inventory.exitCode,
-          unavailable: inventory.unavailable,
-          processes,
-          disappearedSincePrevious:
-            inventory.exitCode === 0
-              ? previous.filter((pid) => !pids.includes(pid))
-              : null,
-        });
-        if (inventory.exitCode === 0) {
-          previous = pids;
-        }
-        // Existing checkpoints prove the UI pump ran; their timestamps and delegate/asset stages
-        // remain in host.log. The 10-second fallback also captures a host whose pump never ran.
-        const hostLog = Bun.file(resolve(dataRoot, "logs/host.log"));
-        const stalled =
-          (await hostLog.exists()) &&
-          startupDelayedSince(await hostLog.text(), started);
+        const processes = await recordInventory();
+        const stalled = await hostLogShowsDelay();
         if (!sampled && (stalled || index === 2) && !stopped) {
           sampled = true;
-          const candidates = [
-            processes.find((entry) => entry.role === "host"),
-            ...processes
-              .filter((entry) => entry.role !== "host")
-              .sort(
-                (left, right) =>
-                  Number(right.role === "com.apple.WebKit.Networking") -
-                  Number(left.role === "com.apple.WebKit.Networking"),
-              )
-              .slice(0, 3),
-          ].filter((entry) => entry !== undefined);
-          const samples = await Promise.all(
-            candidates.map(async ({ pid, role }) => {
-              const result = await probe([
-                "/usr/bin/sample",
-                String(pid),
-                "1",
-                "10",
-                "-file",
-                "/dev/stdout",
-              ]);
-              return {
-                pid,
-                role,
-                exitCode: result.exitCode,
-                unavailable: result.unavailable,
-                frames: startupSample(result.output),
-              };
-            }),
-          );
+          const samples = await sampleProcesses(processes);
           records.push({
             elapsedMs: Date.now() - started,
             reason: stalled ? "startup-checkpoint" : "child-active-after-10s",

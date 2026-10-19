@@ -521,7 +521,7 @@ type GeometryHarness = ReturnType<typeof createGeometryHarness>;
 /** Rejects each window lifetime state: fullscreen and closed fail the call, cancelled and stopping cancel it. */
 async function expectLifetimeRejections(
   harness: GeometryHarness,
-  call: () => Promise<unknown>,
+  call: () => unknown,
 ): Promise<void> {
   const { state } = harness;
   for (const lifetime of [

@@ -130,24 +130,13 @@ const operationNames = [
   "resize",
 ].map((name) => `image.${name}`);
 
-/** Exercise a real native adapter, also reused by the compiled and isolated-install consumers. */
-export async function verifyMacosImage(
-  plugin: Parameters<typeof nativeFactory>[0],
+/** Call helpers bound to one adapter: execution, resource ids, encoded bytes and error codes. */
+function createImageCalls(
+  adapter: ReturnType<ReturnType<typeof nativeFactory>>,
+  grants: {
+    permissions: string[];
+  },
 ) {
-  // Every consumer uses the SDK factory with the same fixture host permission checks.
-  // Real WKWebView authorization is covered separately by macos-image-host.ts.
-  const create = nativeFactory(plugin, "macos");
-  const adapter = create({
-    dataRoot: "/unused-image-fixture",
-    capabilities: [],
-  });
-  const other = create({
-    dataRoot: "/unused-image-fixture",
-    capabilities: [],
-  });
-  const grants = {
-    permissions: operationNames,
-  };
   const call = async (
     name: string,
     input: JsonValue,
@@ -214,6 +203,87 @@ export async function verifyMacosImage(
       },
     );
   };
+  return {
+    call,
+    resource,
+    encoded,
+    error,
+  };
+}
+
+type ImageCalls = ReturnType<typeof createImageCalls>;
+
+/** An opaque pixel survives an encode and decode round trip: exactly for BMP, within a lossy tolerance for JPEG. */
+async function checkOpaqueRoundTrip(
+  { call, resource, encoded }: ImageCalls,
+  mime: string,
+): Promise<void> {
+  const opaquePixels = {
+    width: 1,
+    height: 1,
+    rgba: Buffer.from([
+      21,
+      81,
+      141,
+      255,
+    ]).toString("base64"),
+  };
+  const opaque = await resource("createRGBA", opaquePixels);
+  const decoded = await resource("createBytes", await encoded(opaque, mime));
+  const result = await call("getPixels", {
+    id: decoded,
+  });
+  assert(
+    result &&
+      typeof result === "object" &&
+      !Array.isArray(result) &&
+      typeof result.rgba === "string",
+  );
+  const channels = Buffer.from(result.rgba, "base64");
+  assert.equal(channels[3], 255);
+  if (mime === "image/bmp") {
+    assert.deepEqual(result, opaquePixels);
+  } else {
+    for (let channel = 0; channel < 3; channel++) {
+      assert(
+        Math.abs(
+          (channels[channel] ?? 0) -
+            ([
+              21,
+              81,
+              141,
+            ][channel] ?? 0),
+        ) < 8,
+      );
+    }
+  }
+  await call("dispose", {
+    id: opaque,
+  });
+  await call("dispose", {
+    id: decoded,
+  });
+}
+
+/** Exercise a real native adapter, also reused by the compiled and isolated-install consumers. */
+export async function verifyMacosImage(
+  plugin: Parameters<typeof nativeFactory>[0],
+) {
+  // Every consumer uses the SDK factory with the same fixture host permission checks.
+  // Real WKWebView authorization is covered separately by macos-image-host.ts.
+  const create = nativeFactory(plugin, "macos");
+  const adapter = create({
+    dataRoot: "/unused-image-fixture",
+    capabilities: [],
+  });
+  const other = create({
+    dataRoot: "/unused-image-fixture",
+    capabilities: [],
+  });
+  const grants = {
+    permissions: operationNames,
+  };
+  const { call, resource, encoded, error } = createImageCalls(adapter, grants);
   try {
     // Direct SDK execution is supported and validates schemas without a host context.
     const direct = await adapter.execute(
@@ -385,54 +455,15 @@ export async function verifyMacosImage(
       "image/bmp",
     ]) {
       await error(() => encoded(id, mime), "INVALID_ARGUMENT");
-      const opaquePixels = {
-        width: 1,
-        height: 1,
-        rgba: Buffer.from([
-          21,
-          81,
-          141,
-          255,
-        ]).toString("base64"),
-      };
-      const opaque = await resource("createRGBA", opaquePixels);
-      const decoded = await resource(
-        "createBytes",
-        await encoded(opaque, mime),
+      await checkOpaqueRoundTrip(
+        {
+          call,
+          resource,
+          encoded,
+          error,
+        },
+        mime,
       );
-      const result = await call("getPixels", {
-        id: decoded,
-      });
-      assert(
-        result &&
-          typeof result === "object" &&
-          !Array.isArray(result) &&
-          typeof result.rgba === "string",
-      );
-      const channels = Buffer.from(result.rgba, "base64");
-      assert.equal(channels[3], 255);
-      if (mime === "image/bmp") {
-        assert.deepEqual(result, opaquePixels);
-      } else {
-        for (let channel = 0; channel < 3; channel++) {
-          assert(
-            Math.abs(
-              (channels[channel] ?? 0) -
-                ([
-                  21,
-                  81,
-                  141,
-                ][channel] ?? 0),
-            ) < 8,
-          );
-        }
-      }
-      await call("dispose", {
-        id: opaque,
-      });
-      await call("dispose", {
-        id: decoded,
-      });
     }
     for (const input of [
       {
