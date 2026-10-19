@@ -138,7 +138,9 @@ async function run() {
   // Streaming instantiation requires the packaged .wasm to be served as application/wasm.
   const wasmResponse = await fetch("/add.wasm");
   assert(
-    wasmResponse.headers.get("content-type") === "application/wasm",
+    // The handler passes a charset, so compare the media type without parameters.
+    wasmResponse.headers.get("content-type")?.split(";")[0]?.trim() ===
+      "application/wasm",
     `Wrong .wasm content type: ${wasmResponse.headers.get("content-type")}`,
   );
   const { instance } = await WebAssembly.instantiateStreaming(
