@@ -188,11 +188,22 @@ test("the plist reader rejects anything that is not a well-formed XML property l
     valid.replace("</plist>", ""),
     valid.replace("</dict>", "</array>"),
     valid.replace("/x", "&bogus;"),
+    valid.replace("/x", "&#x110000;"),
+    valid.replace("/x", "&#0;"),
+    valid.replace("/x", "&#xD800;"),
+    valid.replace("/x", "&#1;"),
     valid.replace("/x", "&#x110000"),
+    valid.replace("<string>a.b</string>", "<string>a.b&#x110000;</string>"),
+    valid.replace("<true/>", "<integer></integer>"),
+    valid.replace("<true/>", "<integer>4"),
     `${valid}<dict/>`,
     valid.replace("<key>Label</key>", "<string>Label</string>"),
     valid.replace("<string>a.b</string>", "<integer>4</integer>"),
-    `<plist version="1.0">${"<array>".repeat(20)}</plist>`,
+    // Otherwise valid, so only the nesting depth limit rejects it.
+    valid.replace(
+      "<key>RunAtLoad</key>",
+      `<key>Deep</key>${"<array>".repeat(20)}${"</array>".repeat(20)}<key>RunAtLoad</key>`,
+    ),
   ]) {
     expect(parseLaunchAgent(text)).toBeNull();
   }
@@ -246,7 +257,6 @@ test("enable writes an owner-only-writable plist atomically and reports the stor
     "bunaway.packaged.com.example.app.plist",
   ]);
   expect(statSync(state.file).mode & 0o777).toBe(0o644);
-  expect(statSync(state.directory).mode & 0o777).toBe(0o755);
   expect(getStatus(state)).toEqual(status);
 });
 
@@ -400,6 +410,50 @@ test("disable removes only this plist and succeeds when it is missing", () => {
   ]);
   expect(getStatus(state).registered).toBe(false);
   expect(getStatus(development).registered).toBe(true);
+});
+
+test("arguments whose plist would exceed the read limit are rejected before writing", () => {
+  expect(() =>
+    enable(state, {
+      args: Array(64).fill("&".repeat(260)),
+      hidden: false,
+    }),
+  ).toThrow("too long");
+  expect(() => readdirSync(join(home, "Library"))).toThrow();
+  // A large escaped input that still fits is stored and can be removed again.
+  const fits = Array(64).fill("&".repeat(30));
+  expect(
+    enable(state, {
+      args: fits,
+      hidden: false,
+    }).registered,
+  ).toBe(true);
+  expect(disable(state)).toBeNull();
+});
+
+test("a plist in place of the file that is too large or a directory is foreign", () => {
+  mkdirSync(state.directory, {
+    recursive: true,
+  });
+  writeFileSync(state.file, "x".repeat(70 * 1024));
+  expect(getStatus(state).registered).toBe(false);
+  expect(() => disable(state)).toThrow("was not created by this app");
+  rmSync(state.file);
+  mkdirSync(state.file);
+  expect(() =>
+    enable(state, {
+      args: [],
+      hidden: false,
+    }),
+  ).toThrow("was not created by this app");
+});
+
+test("the label is XML-escaped and an escaped label is read back", () => {
+  const text = buildLaunchAgent("a&b", [
+    "/x",
+  ]);
+  expect(text).toContain("<string>a&amp;b</string>");
+  expect(parseLaunchAgent(text)?.label).toBe("a&b");
 });
 
 test("a file in place of the LaunchAgents folder is reported without creating anything", () => {

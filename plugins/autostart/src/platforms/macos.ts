@@ -25,7 +25,7 @@ import type {
   AutostartStatus,
   enableSchema,
 } from "#autostart/contract";
-import { registrationName } from "#autostart/platforms/launch";
+import { invalid, registrationName } from "#autostart/platforms/launch";
 import {
   buildLaunchAgent,
   displayCommand,
@@ -211,8 +211,9 @@ function writeAtomically(state: AutostartState, text: string): void {
     fchmodSync(fd, FILE_MODE);
     writeSync(fd, text);
     fsyncSync(fd);
-    closeSync(fd);
+    // A failed close still releases the descriptor, so it must not be closed again below.
     open = false;
+    closeSync(fd);
     renameSync(temp, state.file);
   } catch (error) {
     try {
@@ -245,6 +246,10 @@ export function enable(
     state.name,
     programArguments(state.app, input.args, input.hidden),
   );
+  // A larger file would be read back as foreign, and the app could no longer remove it.
+  if (Buffer.byteLength(text) > MAX_PLIST_BYTES) {
+    invalid("Autostart arguments are too long to store in a launch agent.");
+  }
   return guard("Writing the launch agent failed.", () => {
     const existing = inspect(state);
     if (existing.kind === "foreign") {

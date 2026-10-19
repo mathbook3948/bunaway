@@ -10,7 +10,7 @@ import {
   rejectDevelopmentHostOptions,
 } from "#autostart/platforms/launch";
 
-/** Largest plist this adapter reads; a managed plist holds a few short strings. */
+/** Largest plist this adapter writes or reads; `enable` rejects arguments that would exceed it. */
 export const MAX_PLIST_BYTES = 64 * 1024;
 /** Deepest nesting the reader follows; a managed plist nests three levels. */
 const MAX_PLIST_DEPTH = 8;
@@ -163,17 +163,33 @@ function tokenize(xml: string): Token[] | null {
   return tokens;
 }
 
+/** Whether XML 1.0 allows the code point in a document. */
+function isXmlChar(code: number): boolean {
+  return (
+    code === 0x9 ||
+    code === 0xa ||
+    code === 0xd ||
+    (code >= 0x20 && code <= 0xd7ff) ||
+    (code >= 0xe000 && code <= 0xfffd) ||
+    (code >= 0x10000 && code <= 0x10ffff)
+  );
+}
+
+/** Resolve entities; `null` for an unknown entity or a reference XML 1.0 forbids. */
 function decode(text: string): string | null {
   if (text.replace(ENTITY, "").includes("&")) {
     return null;
   }
-  return text.replace(ENTITY, (_match, hex, decimal, name) => {
+  let valid = true;
+  const result = text.replace(ENTITY, (_match, hex, decimal, name) => {
     if (name) {
       return ENTITIES[name] ?? "";
     }
     const code = Number.parseInt(hex ?? decimal, hex ? 16 : 10);
-    return code <= 0x10ffff ? String.fromCodePoint(code) : "";
+    valid &&= isXmlChar(code);
+    return valid ? String.fromCodePoint(code) : "";
   });
+  return valid ? result : null;
 }
 
 class Reader {
@@ -270,7 +286,8 @@ class Reader {
         return this.scalar(token.name);
       case "integer":
       case "real": {
-        const number = Number(this.scalar(token.name));
+        const text = this.scalar(token.name);
+        const number = text?.trim() ? Number(text) : Number.NaN;
         return Number.isFinite(number) ? number : null;
       }
       case "array":
