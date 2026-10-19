@@ -416,6 +416,8 @@ test("a failing content update leaves the window override unchanged", () => {
   f.service.attach("first", 1n);
   f.service.bindContent("first", () => {
     if (failing) {
+      // Only the first update fails; the resync after it succeeds.
+      failing = false;
       throw new BunawayError({
         code: "INTERNAL",
         message: "Profile failed.",
@@ -427,6 +429,9 @@ test("a failing content update leaves the window override unchanged", () => {
     "Profile failed.",
   );
   expect(f.controller.getTheme("first").override).toBeNull();
+  expect(f.controller.getTheme("first").effectiveTheme).toBe("light");
+  // The frame that already turned dark is put back to match the reported state.
+  expect(f.frames.get(1n)).toBe(false);
   f.service.detach("first");
   f.controller.dispose();
 });

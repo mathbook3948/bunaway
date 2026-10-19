@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { checkHresult } from "@bunaway/plugin/win32";
 import { AppearanceWindows } from "#native/windows/bun/appearance";
 import { checkCallbacks, disposeCom } from "#native/windows/bun/com";
 import { WebView } from "#native/windows/bun/webview";
@@ -8,7 +9,6 @@ import { Windows } from "#native/windows/bun/win32";
 import { disposeWin32Bindings, ole } from "#native/windows/bun/win32-bindings";
 import { createAppearanceController } from "#plugins/appearance/src/platforms/windows-controller";
 import { initialize } from "#plugins/appearance/src/platforms/windows-preferences";
-import { checkHresult } from "@bunaway/plugin/win32";
 import { waitFor } from "../fixtures/deadlines.ts";
 
 assert.equal(process.platform, "win32");
@@ -41,6 +41,7 @@ let webview: WebView | undefined;
 let documents = 0;
 let browserVersion = "";
 let verified = false;
+let skipped: string | undefined;
 const reports: {
   kind: string;
   dark: boolean;
@@ -122,7 +123,7 @@ try {
   await pump(() => documents >= 1 && reports.length >= 1, "first document");
   // Neither an old runtime nor high contrast (which keeps the OS colors) can show a pinned scheme.
   if (unsupportedEvents.length || system.highContrast) {
-    console.log("SKIP content color scheme: runtime or OS cannot pin it");
+    skipped = system.highContrast ? "high-contrast" : "old-runtime";
   } else {
     assert.deepEqual(reports[0], {
       kind: "load",
@@ -149,11 +150,15 @@ try {
     await choose("dark", true);
     await choose("light", false);
     // The profile keeps the value for the next document.
-    const loads = documents;
+    const isLoad = (report: { kind: string }) => report.kind === "load";
+    const loads = reports.filter(isLoad).length;
     webview.navigate();
-    await pump(() => documents > loads, "second document");
-    const loaded = reports.filter((report) => report.kind === "load");
-    assert.equal(loaded[loaded.length - 1]?.dark, false);
+    // The page's own report, not the host's completion signal, proves what the document saw.
+    await pump(
+      () => reports.filter(isLoad).length > loads,
+      "second document report",
+    );
+    assert.equal(reports.filter(isLoad).at(-1)?.dark, false);
     // `system` returns the content to the OS setting, which is what the runner reports.
     await choose("system", osDark);
     await choose("dark", true);
@@ -208,13 +213,16 @@ await writeFile(
   JSON.stringify(
     {
       pass: true,
+      contentVerified: skipped === undefined,
       browserVersion,
-      unsupportedRuntime: unsupportedEvents.length > 0,
+      skipped: skipped ?? null,
     },
     null,
     2,
   ),
 );
 console.log(
-  "PASS actual WebView2 prefers-color-scheme follows the appearance controller before and after creation, persists across navigation and ends with native cleanup",
+  skipped
+    ? `SKIP content color scheme not verified (${skipped}); frame and cleanup only`
+    : "PASS actual WebView2 prefers-color-scheme follows the appearance controller before and after creation, persists across navigation and ends with native cleanup",
 );

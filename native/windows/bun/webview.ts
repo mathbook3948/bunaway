@@ -1,13 +1,13 @@
 import { dlopen, type Pointer, ptr } from "bun:ffi";
+import assert from "node:assert/strict";
+import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   checkHresult,
   hresultText,
   wide,
   withWide,
 } from "@bunaway/plugin/win32";
-import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
-import { resolve } from "node:path";
 import type {
   NativeContentColorScheme,
   NativeMenuRole,
@@ -30,6 +30,7 @@ import {
 } from "./com.ts";
 import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
+import { setProfileColorScheme } from "./webview-color-scheme.ts";
 import {
   callDevToolsProtocolMethod,
   DevToolsStartError,
@@ -42,7 +43,6 @@ import {
   focusTargetEvaluateParameters,
   interpretEditCommandResult,
 } from "./webview-edit-command.ts";
-import { setProfileColorScheme } from "./webview-color-scheme.ts";
 import { enableCustomTitlebar } from "./webview-titlebar.ts";
 import { kernel, user } from "./win32-bindings.ts";
 
@@ -110,8 +110,9 @@ export class WebView {
   private controller: Pointer | undefined;
   private environment: Pointer | undefined;
   private environment5: Pointer | undefined;
-  /** Requested content scheme; applied once the controller exists and again on every change. */
-  private colorScheme: NativeContentColorScheme = "auto";
+  /** Requested content scheme, undefined until requested; applied once the controller exists. */
+  private colorScheme: NativeContentColorScheme | undefined;
+  private colorSchemeUnsupportedLogged = false;
   private browserToken: bigint | undefined;
   private readonly events: {
     slot: number;
@@ -1322,7 +1323,8 @@ export class WebView {
   }
   /** Apply a scheme requested before the controller existed; a failure must not abort creation. */
   private applyRequestedColorScheme(): void {
-    if (this.colorScheme === "auto") {
+    // An explicit auto still applies: the shared profile may have been pinned by another window.
+    if (this.colorScheme === undefined) {
       return;
     }
     try {
@@ -1334,10 +1336,14 @@ export class WebView {
     }
   }
   private applyColorScheme(): void {
-    if (!this.webview || this.closing) {
+    if (!this.webview || this.closing || this.colorScheme === undefined) {
       return;
     }
-    if (!setProfileColorScheme(this.webview, this.colorScheme)) {
+    if (
+      !setProfileColorScheme(this.webview, this.colorScheme) &&
+      !this.colorSchemeUnsupportedLogged
+    ) {
+      this.colorSchemeUnsupportedLogged = true;
       this.hooks.log("color-scheme-unsupported");
     }
   }

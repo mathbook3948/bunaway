@@ -242,6 +242,18 @@ export function createAppearanceController(
         apply(entry);
       } catch (error) {
         entry.override = previous;
+        // The frame may already have changed before the content failed; resync both to the old value.
+        try {
+          apply(entry);
+        } catch (rollback) {
+          throw new AggregateError(
+            [
+              error,
+              rollback,
+            ],
+            "Appearance change and rollback failed.",
+          );
+        }
         throw error;
       }
       return state(entry);
