@@ -491,7 +491,7 @@ await windows.close({ view: "dialog" });
 | `windows.isMinimized` | `{ view, windowId? }` | `Promise<boolean>`. 실제 네이티브 창의 최소화 여부 |
 | `windows.isMaximized` | `{ view, windowId? }` | `Promise<boolean>`. 실제 네이티브 창의 최대화 여부 |
 | `windows.isFullscreen` | `{ view, windowId? }` | `Promise<boolean>`. 호스트가 해당 네이티브 창에 적용한 전체화면 모드 여부 |
-| `windows.isVisible` | `{ view, windowId? }` | `Promise<boolean>`. 네이티브 표시 상태. 최소화한 창도 `true`일 수 있음 |
+| `windows.isVisible` | `{ view, windowId? }` | `Promise<boolean>`. 네이티브 표시 상태. 최소화한 창도 `true`일 수 있음. macOS는 `NSWindow.isVisible` 값을 그대로 반환하므로 최소화한 창은 `false`일 수 있음 |
 | `windows.isFocused` | `{ view, windowId? }` | `Promise<boolean>`. OS 전경 창인지 조회. 창 안의 WebView에 입력 포커스가 있어도 `true` |
 | `windows.isDestroyed` | `{ view, windowId? }` | `Promise<boolean>`. 선언된 뷰에 살아 있는 창이 없으면 `true` |
 | `windows.isNormal` | `{ view, windowId? }` | `Promise<boolean>`. 최소화, 최대화와 전체화면이 모두 아니면 `true` |
