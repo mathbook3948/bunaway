@@ -18,7 +18,6 @@ const LOCAL_GUARD = /\): value is Record<string, unknown>/g;
  * new check in a listed file, fails.
  */
 const LOCAL_CHECKS: Record<string, number> = {
-  "packages/plugin-sdk/src/index.ts": 2,
   "tests/api/menu.test.ts": 1,
   "tests/cli/distribution.test.ts": 3,
   "tests/core/core.test.ts": 1,
