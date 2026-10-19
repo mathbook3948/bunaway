@@ -43,6 +43,7 @@ test("the device suite packages a valid .wasm and instantiates it by streaming",
 test("the host CSP allows WebAssembly compilation but not eval", async () => {
   const source = await Bun.file(rendererPath).text();
   // Take only the literals of the argument that follows the header name; they are concatenated.
+  expect(source.split('"Content-Security-Policy"').length - 1).toBe(1);
   const argument = /"Content-Security-Policy",([\s\S]*?)\);/.exec(source)?.[1];
   expect(argument).toBeDefined();
   const csp = [

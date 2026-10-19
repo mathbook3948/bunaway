@@ -159,8 +159,8 @@ async function run() {
     let blockedEval = false;
     try {
       evaluate();
-    } catch {
-      blockedEval = true;
+    } catch (error) {
+      blockedEval = error instanceof EvalError;
     }
     assert(blockedEval, "String evaluation was allowed by the host CSP");
   }
