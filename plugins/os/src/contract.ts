@@ -59,3 +59,15 @@ export type OSLocale = z.infer<typeof localeSchema>;
 
 /** Process CPU time, memory and Windows architecture translation snapshot. */
 export type OSUsage = z.infer<typeof usageSchema>;
+/**
+ * What the os operations call on the per-plugin instance. Operations are typed by this
+ * interface, never by a platform module, so a new platform implements the contract instead of
+ * matching another platform's shape by accident.
+ */
+export interface OSInstance {
+  info(): OSInfo;
+  usage(): OSUsage;
+  locale(): OSLocale;
+  beep(kind: NonNullable<OSBeepInput["kind"]>): null;
+  dispose(): void;
+}

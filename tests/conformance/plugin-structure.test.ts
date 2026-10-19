@@ -17,7 +17,6 @@ const KNOWN_PLATFORM_TYPE_IMPORTS: Record<string, number> = {
   "log/src/index.ts": 1,
   "log/src/operations.ts": 1,
   "notification/src/operations.ts": 1,
-  "os/src/operations.ts": 1,
   "power/src/operations.ts": 1,
 };
 

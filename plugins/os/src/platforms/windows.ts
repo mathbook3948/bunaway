@@ -11,6 +11,7 @@ import {
   version,
 } from "node:os";
 import { BunawayError } from "@bunaway/protocol";
+import type { OSInstance } from "#os/contract";
 
 const LOCALE_NAME_MAX_LENGTH = 85;
 const LOCALE_SISO3166CTRYNAME = 0x5a;
@@ -44,7 +45,7 @@ function openUser32() {
 }
 
 /** Own Kernel32 locale and user32 MessageBeep bindings on the host I/O worker and close them on host shutdown. */
-export function initialize() {
+export function initialize(): OSInstance {
   const api = dlopen("kernel32.dll", {
     ...pick(KERNEL32, "GetCurrentProcess"),
     IsWow64Process2: {
@@ -279,6 +280,6 @@ export function initialize() {
   };
 }
 
-export function dispose(instance: ReturnType<typeof initialize>) {
+export function dispose(instance: OSInstance) {
   instance.dispose();
 }
