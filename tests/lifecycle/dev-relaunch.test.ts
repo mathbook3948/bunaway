@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { EventEmitter } from "node:events";
 import {
   isAppRelaunchAck,
@@ -135,7 +135,15 @@ test("the development host never waits longer than its deadline for an acknowled
   const broken = fakeIpc(() => {
     throw new Error("channel closed");
   });
-  await requestCliRelaunch(broken.ipc, [], 5000);
+  // The host logs the failure; capture it so the expected error does not appear in CI output.
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await requestCliRelaunch(broken.ipc, [], 5000);
+    expect(logged).toHaveBeenCalledTimes(1);
+    expect(logged.mock.calls[0]?.[0]).toBe("Relaunch request failed:");
+  } finally {
+    logged.mockRestore();
+  }
   expect(broken.channel.listenerCount("message")).toBe(0);
   await expect(
     requestCliRelaunch(
