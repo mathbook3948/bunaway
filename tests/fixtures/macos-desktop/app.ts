@@ -49,6 +49,13 @@ const TICKS_AFTER_ALL_CLOSED = 3;
 /** Enough replacements to show that none of the replaced windows stays in `[NSApp windows]`. */
 const RECREATIONS = 3;
 const isSessionEnd = scenario.startsWith("session-end");
+/**
+ * Scenarios whose verification needs the driver's `main-tick-after-terminate` line. A session end
+ * with trivial hooks can finish cleanup and end the process within the driver's tick delay, so the
+ * stop hook holds cleanup back until the line is written.
+ */
+const holdsCleanupForMainTick =
+  scenario === "session-end" || scenario === "session-end-quit-reason";
 
 async function until(predicate: () => boolean, what: string) {
   const deadline = Date.now() + STEP_TIMEOUT_MS;
@@ -402,7 +409,15 @@ export default defineApp({
       name: "lifecycle-log",
       version: "1",
       setup() {
-        return () => log("stopHook");
+        return async () => {
+          log("stopHook");
+          if (holdsCleanupForMainTick) {
+            await until(
+              logged("main-tick-after-terminate"),
+              "main-tick-after-terminate",
+            );
+          }
+        };
       },
     },
     // After `driver` and `windows`: the script calls both from this setup scope, which the
