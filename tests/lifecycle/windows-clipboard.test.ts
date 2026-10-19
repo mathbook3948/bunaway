@@ -365,46 +365,18 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
         }
         return result.reason;
       }
-      for (const text of [
-        "한글 😀\nsecond\r\nthird",
-        "",
-        "😀".repeat(MAX_TEXT_LENGTH),
-      ]) {
-        expect(
-          await invoke(() =>
-            clipboard.writeText({
-              text,
-            }),
-          ),
-        ).toBeNull();
-        expect(await invoke(() => clipboard.readText(null))).toBe(text);
-      }
-      await invoke(() => clipboard.clear(null));
-      expect(await invoke(() => clipboard.readText(null))).toBeNull();
-      // WM_CLIPBOARDUPDATE: an external write and the plugin's own write both notify,
-      // and the payload carries no clipboard content.
-      for (const write of [
-        async () => {
-          await acquire();
-          try {
-            owner.write("external change");
-          } finally {
-            owner.close();
-          }
-        },
-        () =>
-          invoke(() =>
-            clipboard.writeText({
-              text: "own change",
-            }),
-          ),
-      ]) {
-        // A late WM_CLIPBOARDUPDATE from an earlier operation can still wake a waiter with the
-        // pre-existing sequence, so such a value is ignored and the wait restarts.
-        const baseline = pump.symbols.GetClipboardSequenceNumber();
+      /**
+       * Waits for a change notification whose sequence differs from `baseline`, repeating `write`
+       * until one lands after the waiter registered. A late WM_CLIPBOARDUPDATE from an earlier
+       * operation can still wake a waiter with the pre-existing sequence, so such a value is
+       * ignored and the wait restarts.
+       */
+      const awaitChange = async (
+        write: () => unknown,
+        baseline: number,
+      ): Promise<JsonValue> => {
         const deadline = Date.now() + 4000;
-        let payload: JsonValue | undefined;
-        while (payload === undefined) {
+        while (true) {
           if (Date.now() >= deadline) {
             throw new Error(
               `No clipboard change notification with a sequence other than ${baseline} arrived within 4s.`,
@@ -440,9 +412,46 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
               }
             ).sequence !== baseline
           ) {
-            payload = outcome;
+            return outcome;
           }
         }
+      };
+      for (const text of [
+        "한글 😀\nsecond\r\nthird",
+        "",
+        "😀".repeat(MAX_TEXT_LENGTH),
+      ]) {
+        expect(
+          await invoke(() =>
+            clipboard.writeText({
+              text,
+            }),
+          ),
+        ).toBeNull();
+        expect(await invoke(() => clipboard.readText(null))).toBe(text);
+      }
+      await invoke(() => clipboard.clear(null));
+      expect(await invoke(() => clipboard.readText(null))).toBeNull();
+      // WM_CLIPBOARDUPDATE: an external write and the plugin's own write both notify,
+      // and the payload carries no clipboard content.
+      for (const write of [
+        async () => {
+          await acquire();
+          try {
+            owner.write("external change");
+          } finally {
+            owner.close();
+          }
+        },
+        () =>
+          invoke(() =>
+            clipboard.writeText({
+              text: "own change",
+            }),
+          ),
+      ]) {
+        const baseline = pump.symbols.GetClipboardSequenceNumber();
+        const payload = await awaitChange(write, baseline);
         expect(Object.keys(payload as object).sort()).toEqual([
           "changedAt",
           "sequence",
@@ -773,55 +782,59 @@ export const pluginImports = { clipboard: { operations: async () => ({ createOpe
           returns: "ptr",
         },
       });
+      /** Installs a bookmark the way another application does: a Windows-owned UniformResourceLocatorW allocation. */
+      const installExternalBookmark = async (url: string) => {
+        await acquire();
+        try {
+          const name = Buffer.from("UniformResourceLocatorW\0", "utf16le");
+          const format = user.symbols.RegisterClipboardFormatW(ptr(name));
+          expect(format).toBeGreaterThan(0);
+          const bytes = Buffer.from(`${url}\0`, "utf16le");
+          const handle = kernel.symbols.GlobalAlloc(
+            GMEM_MOVEABLE | GMEM_ZEROINIT,
+            bytes.byteLength,
+          );
+          expect(handle).not.toBeNull();
+          let transferred = false;
+          try {
+            const address = kernel.symbols.GlobalLock(handle);
+            expect(address).not.toBeNull();
+            try {
+              if (!address) {
+                throw new Error(
+                  "External bookmark allocation could not be locked.",
+                );
+              }
+              new Uint8Array(toArrayBuffer(address, 0, bytes.byteLength)).set(
+                bytes,
+              );
+            } finally {
+              kernel.symbols.SetLastError(0);
+              if (!kernel.symbols.GlobalUnlock(handle)) {
+                expect(kernel.symbols.GetLastError()).toBe(0);
+              }
+            }
+            owner.clear();
+            if (!user.symbols.SetClipboardData(format, handle)) {
+              throw new Error("External bookmark could not be installed.");
+            }
+            transferred = true;
+          } finally {
+            if (!transferred) {
+              expect(kernel.symbols.GlobalFree(handle)).toBeNull();
+            }
+          }
+        } finally {
+          owner.close();
+        }
+      };
       try {
         for (const url of [
           "HTTPS://example.com/Path?Name=Value#Anchor",
           "HTTP://example.com/Path",
           "hTtPs://EXAMPLE.com/한글😀?a=%2F",
         ]) {
-          await acquire();
-          try {
-            const name = Buffer.from("UniformResourceLocatorW\0", "utf16le");
-            const format = user.symbols.RegisterClipboardFormatW(ptr(name));
-            expect(format).toBeGreaterThan(0);
-            const bytes = Buffer.from(`${url}\0`, "utf16le");
-            const handle = kernel.symbols.GlobalAlloc(
-              GMEM_MOVEABLE | GMEM_ZEROINIT,
-              bytes.byteLength,
-            );
-            expect(handle).not.toBeNull();
-            let transferred = false;
-            try {
-              const address = kernel.symbols.GlobalLock(handle);
-              expect(address).not.toBeNull();
-              try {
-                if (!address) {
-                  throw new Error(
-                    "External bookmark allocation could not be locked.",
-                  );
-                }
-                new Uint8Array(toArrayBuffer(address, 0, bytes.byteLength)).set(
-                  bytes,
-                );
-              } finally {
-                kernel.symbols.SetLastError(0);
-                if (!kernel.symbols.GlobalUnlock(handle)) {
-                  expect(kernel.symbols.GetLastError()).toBe(0);
-                }
-              }
-              owner.clear();
-              if (!user.symbols.SetClipboardData(format, handle)) {
-                throw new Error("External bookmark could not be installed.");
-              }
-              transferred = true;
-            } finally {
-              if (!transferred) {
-                expect(kernel.symbols.GlobalFree(handle)).toBeNull();
-              }
-            }
-          } finally {
-            owner.close();
-          }
+          await installExternalBookmark(url);
           expect(
             await invoke(() =>
               clipboard.readFormats({

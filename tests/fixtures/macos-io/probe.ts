@@ -137,7 +137,11 @@ export const probe = defineNativePlugin({
           source: string,
         ) => {
           writeFileSync(resolve(temporary, `${requestId}-source`), source);
-          return new Promise((resolveCall) => {
+          return new Promise<{
+            source: string;
+            thread: number;
+            main: boolean;
+          }>((resolveCall) => {
             signal.addEventListener(
               "abort",
               () => {

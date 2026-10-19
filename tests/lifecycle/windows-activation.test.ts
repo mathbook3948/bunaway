@@ -1,5 +1,4 @@
 import { dlopen } from "bun:ffi";
-import { windowPermissions } from "../fixtures/window-permissions.ts";
 import { expect, test } from "bun:test";
 import type {
   NativeWindow,
@@ -8,6 +7,7 @@ import type {
   WindowSnapshot,
 } from "@bunaway/plugin-api/native";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
+import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const WM_ACTIVATE = 0x0006;
 const WM_SETFOCUS = 0x0007;
@@ -265,6 +265,87 @@ test.skipIf(process.platform !== "win32")(
           }),
         );
       }
+      /** Whether any event after `start` reports `change` for the view. */
+      const reported = (start: number, view: string, change: WindowChange) =>
+        events
+          .slice(start)
+          .some(
+            (event) =>
+              event.snapshot.viewId === view && event.changes.includes(change),
+          );
+      /** showInactive must reveal the target without moving the thread-active window or EDIT focus. */
+      const verifyShowInactive = async (state: string, hidden: boolean) => {
+        phase = `${state}:${hidden ? "hidden" : "visible"}:setup`;
+        if (hidden) {
+          native.show(second, false);
+        }
+        native.focus(first);
+        recordActivation({
+          after: "native.focus",
+        });
+        // Dispatch placement and foreground setup messages before setting the
+        // thread-active HWND and EDIT focus used as the preservation baseline.
+        native.pump();
+        recordActivation({
+          after: "setup pump",
+        });
+        driver.symbols.SetActiveWindow(first);
+        recordActivation({
+          after: "SetActiveWindow",
+        });
+        driver.symbols.SetFocus(input);
+        recordActivation({
+          after: "SetFocus",
+        });
+        expect(driver.symbols.GetActiveWindow()).toBe(first);
+        expect(driver.symbols.GetFocus()).toBe(input);
+        native.pump();
+        recordActivation({
+          after: "pump",
+        });
+        expect(driver.symbols.GetActiveWindow()).toBe(first);
+        expect(driver.symbols.GetFocus()).toBe(input);
+        const before = native.getSnapshot(second);
+        const activationsBefore = targetActivations;
+        const foregroundBefore = driver.symbols.GetForegroundWindow();
+        const start = events.length;
+        phase = `${state}:${hidden ? "hidden" : "visible"}:showInactive`;
+        expect(await invoke("windows.showInactive", "editor")).toBeNull();
+        checkEvents();
+        expect(driver.symbols.GetActiveWindow()).toBe(first);
+        expect(driver.symbols.GetFocus()).toBe(input);
+        expect(targetActivations).toBe(activationsBefore);
+        expect(native.isMinimized(second)).toBe(before.state.minimized);
+        expect(native.isMaximized(second)).toBe(before.state.maximized);
+        expect(native.isVisible(second)).toBe(true);
+        expect(native.isFocused(second)).toBe(false);
+        if (foregroundBefore === first) {
+          expect(driver.symbols.GetForegroundWindow()).toBe(first);
+        }
+        expect(reported(start, "editor", "shown")).toBe(hidden);
+        const duplicate = events.length;
+        await invoke("windows.showInactive", "editor");
+        checkEvents();
+        expect(events).toHaveLength(duplicate);
+      };
+      /** Blurring the activated window reports blur and focus events when Windows hands over focus. */
+      const verifyBlur = async () => {
+        const start = events.length;
+        const blurred = await invoke("windows.blur", "main");
+        checkEvents();
+        expect(blurred).toBe(!native.isFocused(first));
+        if (native.isFocused(second)) {
+          expect(reported(start, "main", "blur")).toBe(true);
+          expect(reported(start, "editor", "focus")).toBe(true);
+          console.log(
+            "Verified real foreground blur and activation between two Win32 windows.",
+          );
+        } else {
+          console.warn(
+            "Foreground blur not verified: Windows declined the successor activation.",
+          );
+        }
+      };
       for (const state of [
         "normal",
         "minimized",
@@ -283,66 +364,7 @@ test.skipIf(process.platform !== "win32")(
           false,
           true,
         ]) {
-          phase = `${state}:${hidden ? "hidden" : "visible"}:setup`;
-          if (hidden) {
-            native.show(second, false);
-          }
-          native.focus(first);
-          recordActivation({
-            after: "native.focus",
-          });
-          // Dispatch placement and foreground setup messages before setting the
-          // thread-active HWND and EDIT focus used as the preservation baseline.
-          native.pump();
-          recordActivation({
-            after: "setup pump",
-          });
-          driver.symbols.SetActiveWindow(first);
-          recordActivation({
-            after: "SetActiveWindow",
-          });
-          driver.symbols.SetFocus(input);
-          recordActivation({
-            after: "SetFocus",
-          });
-          expect(driver.symbols.GetActiveWindow()).toBe(first);
-          expect(driver.symbols.GetFocus()).toBe(input);
-          native.pump();
-          recordActivation({
-            after: "pump",
-          });
-          expect(driver.symbols.GetActiveWindow()).toBe(first);
-          expect(driver.symbols.GetFocus()).toBe(input);
-          const before = native.getSnapshot(second);
-          const activationsBefore = targetActivations;
-          const foregroundBefore = driver.symbols.GetForegroundWindow();
-          const start = events.length;
-          phase = `${state}:${hidden ? "hidden" : "visible"}:showInactive`;
-          expect(await invoke("windows.showInactive", "editor")).toBeNull();
-          checkEvents();
-          expect(driver.symbols.GetActiveWindow()).toBe(first);
-          expect(driver.symbols.GetFocus()).toBe(input);
-          expect(targetActivations).toBe(activationsBefore);
-          expect(native.isMinimized(second)).toBe(before.state.minimized);
-          expect(native.isMaximized(second)).toBe(before.state.maximized);
-          expect(native.isVisible(second)).toBe(true);
-          expect(native.isFocused(second)).toBe(false);
-          if (foregroundBefore === first) {
-            expect(driver.symbols.GetForegroundWindow()).toBe(first);
-          }
-          expect(
-            events
-              .slice(start)
-              .some(
-                (event) =>
-                  event.snapshot.viewId === "editor" &&
-                  event.changes.includes("shown"),
-              ),
-          ).toBe(hidden);
-          const duplicate = events.length;
-          await invoke("windows.showInactive", "editor");
-          checkEvents();
-          expect(events).toHaveLength(duplicate);
+          await verifyShowInactive(state, hidden);
         }
         if (state === "minimized-from-maximized") {
           native.restore(second);
@@ -362,37 +384,7 @@ test.skipIf(process.platform !== "win32")(
       expect(activated).toBe(native.isFocused(first));
       checkEvents();
       if (activated) {
-        const start = events.length;
-        const blurred = await invoke("windows.blur", "main");
-        checkEvents();
-        expect(blurred).toBe(!native.isFocused(first));
-        if (native.isFocused(second)) {
-          expect(
-            events
-              .slice(start)
-              .some(
-                (event) =>
-                  event.snapshot.viewId === "main" &&
-                  event.changes.includes("blur"),
-              ),
-          ).toBe(true);
-          expect(
-            events
-              .slice(start)
-              .some(
-                (event) =>
-                  event.snapshot.viewId === "editor" &&
-                  event.changes.includes("focus"),
-              ),
-          ).toBe(true);
-          console.log(
-            "Verified real foreground blur and activation between two Win32 windows.",
-          );
-        } else {
-          console.warn(
-            "Foreground blur not verified: Windows declined the successor activation.",
-          );
-        }
+        await verifyBlur();
       } else {
         console.warn(
           "Foreground transitions not verified: Windows declined activation. Thread-active and keyboard-focus preservation passed.",
