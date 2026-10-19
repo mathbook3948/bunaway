@@ -1,7 +1,7 @@
 import { dlopen, ptr } from "bun:ffi";
 import { win32 } from "node:path";
 import { attemptAll, BunawayError, failWithCleanup } from "@bunaway/plugin";
-import { KERNEL32, pick } from "@bunaway/plugin/win32";
+import { KERNEL32, pick, win32CallError } from "@bunaway/plugin/win32";
 import {
   MAX_DIRECTORY_ENTRIES,
   MAX_DIRECTORY_SIZE_DEPTH,
@@ -506,6 +506,17 @@ export class WindowsStorage
       this.fail(message);
     }
   }
+  /** An existing directory is not a failure; the pinned open that follows validates what exists. */
+  private createDirectoryW(path: string): void {
+    const name = wide(path);
+    const code = win32CallError(
+      () => this.api.symbols.CreateDirectoryW(ptr(name), null),
+      () => this.api.symbols.GetLastError(),
+    );
+    if (code && code !== ERROR_ALREADY_EXISTS) {
+      this.fail("Storage directory creation failed", code);
+    }
+  }
   private fail(message: string, code = this.api.symbols.GetLastError()): never {
     if (code === ERROR_FILE_EXISTS || code === ERROR_ALREADY_EXISTS) {
       throw new BunawayError({
@@ -991,12 +1002,8 @@ export class WindowsStorage
         for (let index = 0; index < segments.length; index++) {
           if (index) {
             dir += `\\${segments[index - 1]}`;
-            if (
-              createParents &&
-              !this.api.symbols.CreateDirectoryW(ptr(wide(dir)), null) &&
-              this.api.symbols.GetLastError() !== ERROR_ALREADY_EXISTS
-            ) {
-              this.fail("Storage directory creation failed");
+            if (createParents) {
+              this.createDirectoryW(dir);
             }
           }
           const parent = this.open(
@@ -1052,12 +1059,8 @@ export class WindowsStorage
       options.createParents,
       options.allowMissing,
       ({ target }) => {
-        if (
-          options.createDirectory &&
-          !this.api.symbols.CreateDirectoryW(ptr(wide(target)), null) &&
-          this.api.symbols.GetLastError() !== ERROR_ALREADY_EXISTS
-        ) {
-          this.fail("Storage directory creation failed");
+        if (options.createDirectory) {
+          this.createDirectoryW(target);
         }
         const handle = this.open(
           target,

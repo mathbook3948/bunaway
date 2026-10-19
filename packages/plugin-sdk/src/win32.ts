@@ -48,6 +48,33 @@ export function withWide<T extends number | bigint>(
   return withBuffer(wide(text), invoke);
 }
 
+/** Reported by `win32CallError` when a failed call left no readable error. */
+export const WIN32_ERROR_UNKNOWN = 0xffffffff;
+
+/**
+ * Run a Win32 call that returns a BOOL-style result and give the error it left behind.
+ * Returns 0 when the call succeeded. A failing call always leaves a nonzero last error, so a
+ * zero read means Bun's FFI layer overwrote it between the call and `GetLastError` (the first
+ * read can run a cold thunk that resets it). The call is then repeated once, which is only
+ * valid for idempotent calls, and the error read again.
+ */
+export function win32CallError(
+  call: () => number | bigint,
+  readError: () => number,
+): number {
+  if (call()) {
+    return 0;
+  }
+  let code = readError();
+  if (code === 0) {
+    if (call()) {
+      return 0;
+    }
+    code = readError();
+  }
+  return code === 0 ? WIN32_ERROR_UNKNOWN : code;
+}
+
 /** Format an HRESULT the way Windows tools print it, as unsigned hexadecimal. */
 export function hresultText(value: number): string {
   return `0x${(value >>> 0).toString(16)}`;
