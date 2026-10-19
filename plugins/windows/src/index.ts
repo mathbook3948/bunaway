@@ -104,6 +104,7 @@ const macosOperations = {
   toggleMaximize: operation("toggleMaximize"),
   isMinimized: operation("isMinimized"),
   isMaximized: operation("isMaximized"),
+  isFullscreen: operation("isFullscreen"),
   respondClose: operation("respondClose"),
 };
 

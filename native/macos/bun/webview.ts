@@ -27,6 +27,8 @@ const NS_URL_ERROR_CANCELLED = -999;
 const NS_WINDOW_SHARING_NONE = 0;
 /** NSWindowSharingReadOnly: the AppKit default, readable by capture and sharing. */
 const NS_WINDOW_SHARING_READ_ONLY = 1;
+/** NSWindowStyleMaskFullScreen: set while the window is in native fullscreen. */
+const NS_WINDOW_STYLE_MASK_FULL_SCREEN = 1 << 14;
 /** WebKitErrorFrameLoadInterruptedByPolicyChange. */
 const WEBKIT_ERROR_FRAME_LOAD_INTERRUPTED = 102;
 const NS_UNBOUNDED_CONTENT_SIZE = 3.4028234663852886e38;
@@ -827,6 +829,17 @@ export class MacosWebview {
   }
   isMaximized(): boolean {
     return !!this.objc.send(this.window, "isZoomed");
+  }
+  /**
+   * Read-only: the window may enter native fullscreen through the user, and the plugin rejects
+   * state changes while it is. Entering or leaving from the API stays unsupported.
+   */
+  isFullscreen(): boolean {
+    return (
+      (Number(this.objc.integer(this.window, "styleMask")) &
+        NS_WINDOW_STYLE_MASK_FULL_SCREEN) !==
+      0
+    );
   }
   /** `zoom:` toggles, so it is sent only when the state differs from the requested one. */
   private setZoomed(zoomed: boolean): void {

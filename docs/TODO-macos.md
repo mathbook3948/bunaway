@@ -100,7 +100,7 @@
 
 - [x] minimize, maximize, unmaximize, restore와 toggleMaximize를 공통 계약에 맞춘다.
 - [x] `isVisible`과 `isFocused`로 실제 창의 표시 상태와 포커스 여부를 조회한다.
-- [ ] 전체화면 상태를 조회한다. 최소화와 최대화 상태 조회는 위 항목에서 지원한다.
+- [x] 최소화, 최대화와 전체화면 상태를 조회한다. 전체화면 진입과 해제는 아래 항목이 남아 있다.
 - [ ] 초기 maximized/fullscreen 옵션과 실행 중 전체화면 전환을 제공한다.
 - [ ] native fullscreen과 simple fullscreen, 전환 완료와 복원 동작을 구분한다.
 - [ ] minimizable, maximizable, closable, fullscreenable과 focusable을 제공한다.

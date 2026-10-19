@@ -657,7 +657,7 @@ export class MacosWindows {
       toggleMaximize: () => native().toggleMaximize(),
       isMinimized: () => native().isMinimized(),
       isMaximized: () => native().isMaximized(),
-      isFullscreen: unsupported,
+      isFullscreen: () => native().isFullscreen(),
       getSizeConstraints: unsupported,
       setSizeConstraints: unsupported,
       setSize: unsupported,

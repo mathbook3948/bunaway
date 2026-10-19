@@ -119,6 +119,7 @@ try {
           "toggleMaximize",
           "isMinimized",
           "isMaximized",
+          "isFullscreen",
         ].map((name) => `plugin.windows.${name}`),
       ],
       events:
@@ -272,6 +273,7 @@ try {
           // State changes: Dock and zoom transitions finish after the call, so each state is polled.
           const state = (minimized, maximized) => async () => await windows.isMinimized({view:"reader"}) === minimized && await windows.isMaximized({view:"reader"}) === maximized;
           check(await windows.isMinimized({view:"reader"}) === false && await windows.isMaximized({view:"reader"}) === false, "state default");
+          check(await windows.isFullscreen({view:"reader"}) === false, "not fullscreen by default");
           await windows.maximize({view:"reader"});
           await until(state(false, true), "maximize");
           await windows.maximize({view:"reader"});
