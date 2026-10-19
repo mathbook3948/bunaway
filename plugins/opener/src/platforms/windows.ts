@@ -10,6 +10,7 @@ import type {
 } from "#opener/contract";
 import {
   assertExistingFile,
+  assertNameFree,
   assertParentDirectory,
   resolveReadableFile,
 } from "#opener/platforms/file-check";
@@ -223,7 +224,9 @@ export function writeShortcutLink(
     if (!isMissingFile(error)) {
       throw error;
     }
-    // A new shortcut is written where it was asked for; its parent folder must already exist.
+    // A new shortcut is written where it was asked for, so the name must be free (a dangling link is
+    // not) and its parent folder must already exist.
+    assertNameFree(selected);
     assertParentDirectory(selected);
     state.shortcuts.write(selected, checked, operation);
   }

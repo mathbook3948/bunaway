@@ -1,5 +1,6 @@
 import {
   closeSync,
+  constants,
   lstatSync,
   openSync,
   realpathSync,
@@ -37,7 +38,19 @@ function fileError(error: unknown): BunawayError {
       },
     });
   }
-  if (code === "EACCES" || code === "EPERM" || code === "EBUSY") {
+  if (code === "ENAMETOOLONG") {
+    return new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Opener path is too long.",
+    });
+  }
+  // ELOOP: a link cycle cannot be resolved, which is reported as before for links that cannot be followed.
+  if (
+    code === "EACCES" ||
+    code === "EPERM" ||
+    code === "EBUSY" ||
+    code === "ELOOP"
+  ) {
     return new BunawayError({
       code: "PERMISSION_DENIED",
       message: "Opener file access denied.",
@@ -67,7 +80,10 @@ export function resolveReadableFile(path: string): string {
         message: "Opener requires a regular file.",
       });
     }
-    closeSync(openSync(resolved, "r"));
+    // A path swapped for a FIFO after the check above would block a blocking open, so open without waiting.
+    closeSync(
+      openSync(resolved, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0)),
+    );
     return resolved;
   } catch (error) {
     throw fileError(error);
@@ -105,4 +121,20 @@ export function assertParentDirectory(path: string): void {
   } catch (error) {
     throw fileError(error);
   }
+}
+
+/** Confirm that nothing, including a dangling link, already has this name, so a new file is not written through a link. */
+export function assertNameFree(path: string): void {
+  try {
+    lstatSync(path);
+  } catch (error) {
+    if (error instanceof Error && Reflect.get(error, "code") === "ENOENT") {
+      return;
+    }
+    throw fileError(error);
+  }
+  throw new BunawayError({
+    code: "INVALID_ARGUMENT",
+    message: "Opener path names a link that does not resolve to a file.",
+  });
 }
