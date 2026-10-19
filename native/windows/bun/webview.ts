@@ -1353,6 +1353,86 @@ export class WebView {
     );
   }
   /**
+   * Record handles of the WebView2 browser and helper processes so teardown can wait for them.
+   * Does nothing before the environment exists; a failed query throws and aborts detaching.
+   */
+  private captureProcessHandles(): void {
+    if (!this.environment) {
+      return;
+    }
+    const env8 = query(
+      this.environment,
+      "d6eb91dd-c3d2-45e5-bd29-6dc2bc4de9cf",
+    );
+    try {
+      const collection = getObject(env8, 18);
+      try {
+        const count = new Uint32Array(1);
+        checkHresult(
+          method(collection, 3, [
+            "ptr",
+          ])(ptr(count)),
+          "get process count",
+        );
+        assert((count[0] ?? 0) <= 1024, "Unexpected WebView process count");
+        for (let index = 0; index < (count[0] ?? 0); index++) {
+          const out = new BigUint64Array(1);
+          checkHresult(
+            method(collection, 4, [
+              "u32",
+              "ptr",
+            ])(index, ptr(out)),
+            "Get process info",
+          );
+          const processInfo = Number(out[0]) as Pointer;
+          assert(processInfo);
+          try {
+            const pid = new Uint32Array(1);
+            const kind = new Int32Array(1);
+            checkHresult(
+              method(processInfo, 3, [
+                "ptr",
+              ])(ptr(pid)),
+              "get process id",
+            );
+            checkHresult(
+              method(processInfo, 4, [
+                "ptr",
+              ])(ptr(kind)),
+              "get process kind",
+            );
+            if (!pid[0] || this.processHandles.has(pid[0])) {
+              continue;
+            }
+            const handle = kernel.symbols.OpenProcess(0x100000, 0, pid[0]);
+            if (!handle) {
+              assert.equal(
+                kernel.symbols.GetLastError(),
+                87,
+                "Capture WebView process handle",
+              );
+              continue;
+            }
+            this.processHandles.set(pid[0], handle);
+            this.hooks.log("webview-process-captured", {
+              pid: pid[0],
+              kind: kind[0],
+            });
+            if (kind[0] === 0 && !this.browserHandle) {
+              this.browserHandle = handle;
+            }
+          } finally {
+            release(processInfo);
+          }
+        }
+      } finally {
+        release(collection);
+      }
+    } finally {
+      release(env8);
+    }
+  }
+  /**
    * Ignore events and detach the controller outside COM callbacks.
    * Returns false while async creation is pending; finish drains remaining resources later.
    */
@@ -1367,79 +1447,7 @@ export class WebView {
     this.closedAt = performance.now();
     this.downloads?.detach(this.isBrowserUnavailable());
     // Capture process handles before controller closure to track WebView2 children.
-    if (this.environment) {
-      const env8 = query(
-        this.environment,
-        "d6eb91dd-c3d2-45e5-bd29-6dc2bc4de9cf",
-      );
-      try {
-        const collection = getObject(env8, 18);
-        try {
-          const count = new Uint32Array(1);
-          checkHresult(
-            method(collection, 3, [
-              "ptr",
-            ])(ptr(count)),
-            "get process count",
-          );
-          assert((count[0] ?? 0) <= 1024, "Unexpected WebView process count");
-          for (let index = 0; index < (count[0] ?? 0); index++) {
-            const out = new BigUint64Array(1);
-            checkHresult(
-              method(collection, 4, [
-                "u32",
-                "ptr",
-              ])(index, ptr(out)),
-              "Get process info",
-            );
-            const processInfo = Number(out[0]) as Pointer;
-            assert(processInfo);
-            try {
-              const pid = new Uint32Array(1);
-              const kind = new Int32Array(1);
-              checkHresult(
-                method(processInfo, 3, [
-                  "ptr",
-                ])(ptr(pid)),
-                "get process id",
-              );
-              checkHresult(
-                method(processInfo, 4, [
-                  "ptr",
-                ])(ptr(kind)),
-                "get process kind",
-              );
-              if (!pid[0] || this.processHandles.has(pid[0])) {
-                continue;
-              }
-              const handle = kernel.symbols.OpenProcess(0x100000, 0, pid[0]);
-              if (!handle) {
-                assert.equal(
-                  kernel.symbols.GetLastError(),
-                  87,
-                  "Capture WebView process handle",
-                );
-                continue;
-              }
-              this.processHandles.set(pid[0], handle);
-              this.hooks.log("webview-process-captured", {
-                pid: pid[0],
-                kind: kind[0],
-              });
-              if (kind[0] === 0 && !this.browserHandle) {
-                this.browserHandle = handle;
-              }
-            } finally {
-              release(processInfo);
-            }
-          }
-        } finally {
-          release(collection);
-        }
-      } finally {
-        release(env8);
-      }
-    }
+    this.captureProcessHandles();
     if (this.webview) {
       for (const { slot, token } of this.events) {
         checkHresult(

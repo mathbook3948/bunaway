@@ -126,8 +126,6 @@
         "native/windows/bun/entry.ts",
         "native/windows/bun/job.ts",
         "native/windows/bun/system-events.ts",
-        "native/windows/bun/web-assets.ts",
-        "native/windows/bun/webview.ts",
         "native/windows/bun/window-events.ts",
         "packages/cli/scripts/pack.ts",
         "packages/packaging/src/channels/windows/inno.ts",
