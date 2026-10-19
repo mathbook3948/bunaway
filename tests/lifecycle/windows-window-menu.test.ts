@@ -172,6 +172,40 @@ test.skipIf(process.platform !== "win32")(
         expect(windows.getBounds(first, "content").width).toBe(content.width);
         expect(windows.getBounds(first, "content").height).toBe(content.height);
       }
+      // Content geometry goes through the client rectangle while a menu bar is attached,
+      // because the bar can wrap and change the frame height after the first resize.
+      windows.setGeometry(first, "content", {
+        x: 40,
+        y: 60,
+        width: 640,
+        height: 420,
+      });
+      expect(windows.getBounds(first, "content")).toMatchObject({
+        x: 40,
+        y: 60,
+        width: 640,
+        height: 420,
+      });
+      windows.setGeometry(first, "content", {
+        width: 600,
+        height: 400,
+      });
+      expect(windows.getBounds(first, "content")).toMatchObject({
+        x: 40,
+        y: 60,
+        width: 600,
+        height: 400,
+      });
+      windows.setGeometry(first, "content", {
+        x: 10,
+        y: 20,
+      });
+      expect(windows.getBounds(first, "content")).toMatchObject({
+        x: 10,
+        y: 20,
+        width: 600,
+        height: 400,
+      });
       const wrapped = menuItemsSchema.parse(
         Array.from(
           {
