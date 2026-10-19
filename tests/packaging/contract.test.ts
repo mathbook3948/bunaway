@@ -2083,6 +2083,7 @@ test("Windows host executable names that Windows cannot create are rejected", as
       manifest: {
         ...manifest,
         host: {
+          target: "windows-x64",
           ...manifest.host,
           executable,
         },
