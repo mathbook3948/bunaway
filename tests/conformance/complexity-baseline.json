@@ -1,322 +1,322 @@
 {
   "docs/site/scripts/check-reference.mjs": {
     "functions": 2,
-    "reason": "Reference checker script with many validation branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "native/host-api/bun/io-worker.ts": {
     "functions": 1,
-    "reason": "Native host entry: startup sequence with per-step error handling",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "native/macos/bun/backend.ts": {
     "functions": 1,
-    "reason": "Native host entry: startup sequence with per-step error handling",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "native/macos/bun/entry.ts": {
     "functions": 2,
-    "reason": "Native host entry: startup sequence with per-step error handling",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "native/windows/bun/entry.ts": {
     "functions": 2,
-    "reason": "Windows native host: sequential Win32 calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "native/windows/bun/job.ts": {
     "functions": 1,
-    "reason": "Windows native host: sequential Win32 calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "native/windows/bun/system-events.ts": {
     "functions": 1,
-    "reason": "Windows native host: sequential Win32 calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "native/windows/bun/ui.ts": {
     "functions": 3,
-    "reason": "Windows native host: sequential Win32 calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "native/windows/bun/web-assets.ts": {
     "functions": 1,
-    "reason": "Windows native host: sequential Win32 calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "native/windows/bun/webview.ts": {
     "functions": 1,
-    "reason": "Windows native host: sequential Win32 calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "native/windows/bun/win32.ts": {
     "functions": 2,
-    "reason": "Windows native host: sequential Win32 calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "native/windows/bun/window-events.ts": {
     "functions": 1,
-    "reason": "Windows native host: sequential Win32 calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/backend-sdk/src/cli.ts": {
     "functions": 2,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/cli/scripts/pack.ts": {
     "functions": 1,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/cli/src/assets.ts": {
     "functions": 1,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/cli/src/build.ts": {
     "functions": 1,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/cli/src/config.ts": {
     "functions": 1,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/cli/src/distribution.ts": {
     "functions": 1,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/cli/src/main.ts": {
     "functions": 1,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/cli/src/plugin-imports.ts": {
     "functions": 1,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/cli/src/plugin-platform.ts": {
     "functions": 1,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/cli/src/plugins.ts": {
     "functions": 1,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/packaging/src/channels/windows/inno.ts": {
     "functions": 1,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/packaging/src/config.ts": {
     "functions": 1,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/packaging/src/inputs.ts": {
     "functions": 1,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/packaging/src/runner.ts": {
     "functions": 2,
-    "reason": "CLI and packaging code: option parsing and file-format handling with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/plugin-sdk/src/index.ts": {
     "functions": 1,
-    "reason": "Validation and dispatch with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/plugin-sdk/src/windows-menu.ts": {
     "functions": 1,
-    "reason": "Validation and dispatch with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/protocol/src/validation.ts": {
     "functions": 1,
-    "reason": "Validation and dispatch with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/runtime-bun/src/runtime.ts": {
     "functions": 1,
-    "reason": "Validation and dispatch with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/runtime-bun/src/view-boundary.ts": {
     "functions": 2,
-    "reason": "Validation and dispatch with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "packages/runtime-bun/src/window-config.ts": {
     "functions": 1,
-    "reason": "Validation and dispatch with many branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/appearance/src/platforms/windows-controller.ts": {
     "functions": 1,
-    "reason": "Windows platform binding: sequential FFI calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/clipboard/src/platforms/macos-tiff.ts": {
     "functions": 1,
-    "reason": "macOS platform binding: sequential FFI calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/clipboard/src/platforms/windows-bindings.ts": {
     "functions": 1,
-    "reason": "Windows platform binding: sequential FFI calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/clipboard/src/platforms/windows-codecs.ts": {
     "functions": 1,
-    "reason": "Windows platform binding: sequential FFI calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/dialog/src/platforms/windows-bindings.ts": {
     "functions": 1,
-    "reason": "Windows platform binding: sequential FFI calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/global-shortcut/src/platforms/windows.ts": {
     "functions": 1,
-    "reason": "Windows platform binding: sequential FFI calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/menu/src/contract.ts": {
     "functions": 1,
-    "reason": "Contract validation with many option branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/menu/src/platforms/windows-window-menus.ts": {
     "functions": 1,
-    "reason": "Windows platform binding: sequential FFI calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/notification/src/platforms/windows.ts": {
     "functions": 1,
-    "reason": "Windows platform binding: sequential FFI calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/opener/src/platforms/macos-file.ts": {
     "functions": 1,
-    "reason": "macOS platform binding: sequential FFI calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/opener/src/platforms/windows-file.ts": {
     "functions": 1,
-    "reason": "Windows platform binding: sequential FFI calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/opener/src/platforms/windows-shell.ts": {
     "functions": 1,
-    "reason": "Windows platform binding: sequential FFI calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/process/src/platforms/windows-process-native.ts": {
     "functions": 1,
-    "reason": "Windows platform binding: sequential FFI calls with per-call error branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/windows/src/platforms/coordinator.ts": {
     "functions": 1,
-    "reason": "Contract validation with many option branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "plugins/windows/src/platforms/native-adapter.ts": {
     "functions": 2,
-    "reason": "Contract validation with many option branches",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/api/window-geometry.test.ts": {
     "functions": 1,
-    "reason": "Test with many table-driven branches that read best in one place",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/cli/distribution.test.ts": {
     "functions": 1,
-    "reason": "Test with many table-driven branches that read best in one place",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/cli/managed-command.test.ts": {
     "functions": 1,
-    "reason": "Test with many table-driven branches that read best in one place",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/fixtures/macos-image.ts": {
     "functions": 1,
-    "reason": "Windows and macOS lifecycle probe: one linear scenario whose steps and waits read in order; splitting it hides the sequence",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/fixtures/macos-io/probe.ts": {
     "functions": 1,
-    "reason": "Windows and macOS lifecycle probe: one linear scenario whose steps and waits read in order; splitting it hides the sequence",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/fixtures/macos-startup-diagnostics.ts": {
     "functions": 1,
-    "reason": "Windows and macOS lifecycle probe: one linear scenario whose steps and waits read in order; splitting it hides the sequence",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/fixtures/notification-toast-ffi.ts": {
     "functions": 1,
-    "reason": "Windows and macOS lifecycle probe: one linear scenario whose steps and waits read in order; splitting it hides the sequence",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/lifecycle/windows-activation.test.ts": {
     "functions": 1,
-    "reason": "Windows and macOS lifecycle probe: one linear scenario whose steps and waits read in order; splitting it hides the sequence",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/lifecycle/windows-bun-storage.ts": {
     "functions": 1,
-    "reason": "Windows and macOS lifecycle probe: one linear scenario whose steps and waits read in order; splitting it hides the sequence",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/lifecycle/windows-clipboard.test.ts": {
     "functions": 1,
-    "reason": "Windows and macOS lifecycle probe: one linear scenario whose steps and waits read in order; splitting it hides the sequence",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/lifecycle/windows-desktop.ts": {
     "functions": 1,
-    "reason": "Windows and macOS lifecycle probe: one linear scenario whose steps and waits read in order; splitting it hides the sequence",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/lifecycle/windows-geometry.test.ts": {
     "functions": 1,
-    "reason": "Windows and macOS lifecycle probe: one linear scenario whose steps and waits read in order; splitting it hides the sequence",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/lifecycle/windows-size-constraints.test.ts": {
     "functions": 1,
-    "reason": "Windows and macOS lifecycle probe: one linear scenario whose steps and waits read in order; splitting it hides the sequence",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/lifecycle/windows-webview-downloads.ts": {
     "functions": 1,
-    "reason": "Windows and macOS lifecycle probe: one linear scenario whose steps and waits read in order; splitting it hides the sequence",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/lifecycle/windows-windowless.ts": {
     "functions": 1,
-    "reason": "Windows and macOS lifecycle probe: one linear scenario whose steps and waits read in order; splitting it hides the sequence",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/packaging/windows-associations.test.ts": {
     "functions": 1,
-    "reason": "Test with many table-driven branches that read best in one place",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   },
   "tests/packaging/windows.test.ts": {
     "functions": 1,
-    "reason": "Test with many table-driven branches that read best in one place",
+    "reason": "Has functions over the cognitive complexity limit that are not yet split; the count is capped",
     "expires": "2027-03-31"
   }
 }

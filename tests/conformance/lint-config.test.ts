@@ -183,9 +183,13 @@ test("every complexity exemption has a baseline entry with a reason and an unexp
   const missing: string[] = [];
   for (const [path, entry] of Object.entries(baseline)) {
     if (
+      typeof entry !== "object" ||
+      entry === null ||
       !Number.isInteger(entry.functions) ||
       entry.functions < 1 ||
+      typeof entry.reason !== "string" ||
       entry.reason.trim().length === 0 ||
+      typeof entry.expires !== "string" ||
       !/^\d{4}-\d{2}-\d{2}$/.test(entry.expires)
     ) {
       invalid.push(path);
