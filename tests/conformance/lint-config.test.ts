@@ -7,11 +7,14 @@ const COMPLEXITY_RULE = "complexity/noExcessiveCognitiveComplexity";
 const COMPLEXITY_CATEGORY = `lint/${COMPLEXITY_RULE}`;
 /** One Biome run over every exempted file, including the daemon-less startup. */
 const LINT_TIMEOUT_MS = 60_000;
-/**
- * How many files biome.json may exempt from the complexity rule. Lower it when an exemption is
- * removed; it never goes up, so a new file cannot join the list.
- */
-const MAX_COMPLEXITY_EXEMPTIONS = 64;
+type ComplexityBaseline = Record<
+  string,
+  {
+    functions: number;
+    reason: string;
+    expires: string;
+  }
+>;
 
 type BiomeOverride = {
   includes: string[];
@@ -63,11 +66,136 @@ function complexityExemptions(config: BiomeConfig): string[] {
   return exempting[0]?.includes ?? [];
 }
 
-test("the complexity exemptions never grow and every entry names an existing file", async () => {
+async function complexityBaseline(): Promise<ComplexityBaseline> {
+  return (await Bun.file(
+    resolve(import.meta.dir, "complexity-baseline.json"),
+  ).json()) as ComplexityBaseline;
+}
+
+/** Functions over the limit per exempted file, from one Biome run with the rule turned back on. */
+async function violatingFunctions(
+  config: BiomeConfig,
+  exemptions: string[],
+): Promise<Map<string, number>> {
+  const limit =
+    config.linter.rules.complexity.noExcessiveCognitiveComplexity.options
+      .maxAllowedComplexity;
+  // An extending config appends an override, and a later override wins, so this turns the
+  // rule back on for exactly the exempted files without editing the repository config. The
+  // config must sit inside the repository for its relative `extends` and the VCS root.
+  // `--only` alone also re-enables an "off" rule, but with whatever options the base config
+  // holds; the explicit override pins the limit the ratchet is meant to check.
+  await mkdir(resolve(repository, "build"), {
+    recursive: true,
+  });
+  const directory = await mkdtemp(
+    resolve(repository, "build/lint-config-ratchet-"),
+  );
+  try {
+    await Bun.write(
+      resolve(directory, "biome.json"),
+      JSON.stringify({
+        root: false,
+        extends: [
+          `${relative(directory, repository).replaceAll("\\", "/")}/biome.json`,
+        ],
+        overrides: [
+          {
+            includes: exemptions,
+            linter: {
+              rules: {
+                complexity: {
+                  noExcessiveCognitiveComplexity: {
+                    level: "error",
+                    options: {
+                      maxAllowedComplexity: limit,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      }),
+    );
+    const lint = Bun.spawnSync(
+      [
+        process.execPath,
+        "x",
+        "--no-install",
+        "biome",
+        "lint",
+        `--config-path=${resolve(directory, "biome.json")}`,
+        `--only=${COMPLEXITY_RULE}`,
+        "--max-diagnostics=1000",
+        "--reporter=json",
+        ...exemptions,
+      ],
+      {
+        cwd: repository,
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: LINT_TIMEOUT_MS,
+      },
+    );
+    // Biome exits 1 when it reports diagnostics, so only an empty report means it failed.
+    const stdout = lint.stdout?.toString() ?? "";
+    if (lint.exitCode === null || stdout.length === 0) {
+      throw new Error(
+        `Biome did not report: exit ${lint.exitCode}, ${lint.stderr?.toString() ?? ""}`,
+      );
+    }
+    const report = JSON.parse(stdout) as {
+      diagnostics: BiomeDiagnostic[];
+    };
+    const counts = new Map<string, number>();
+    for (const diagnostic of report.diagnostics) {
+      if (diagnostic.category !== COMPLEXITY_CATEGORY) {
+        continue;
+      }
+      // Biome reports native separators, so compare in the forward-slash form of biome.json.
+      const path = diagnostic.location?.path?.replaceAll("\\", "/");
+      if (path !== undefined) {
+        counts.set(path, (counts.get(path) ?? 0) + 1);
+      }
+    }
+    return counts;
+  } finally {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+    });
+  }
+}
+
+test("every complexity exemption has a baseline entry with a reason and an unexpired date", async () => {
   const exemptions = complexityExemptions(await biomeConfig());
-  expect(exemptions.length).toBeLessThanOrEqual(MAX_COMPLEXITY_EXEMPTIONS);
+  const baseline = await complexityBaseline();
+  // A file exempted without an entry, or an entry without an exemption, is a silent change.
+  expect(Object.keys(baseline).sort()).toEqual(
+    [
+      ...exemptions,
+    ].sort(),
+  );
+  const today = new Date().toISOString().slice(0, 10);
+  const invalid: string[] = [];
+  const expired: string[] = [];
   const missing: string[] = [];
-  for (const path of exemptions) {
+  for (const [path, entry] of Object.entries(baseline)) {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      !Number.isInteger(entry.functions) ||
+      entry.functions < 1 ||
+      typeof entry.reason !== "string" ||
+      entry.reason.trim().length === 0 ||
+      typeof entry.expires !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(entry.expires)
+    ) {
+      invalid.push(path);
+    } else if (entry.expires < today) {
+      expired.push(path);
+    }
     // A deleted or renamed file keeps matching nothing, so Biome never reports it.
     const exists = await stat(resolve(repository, path)).then(
       (info) => info.isFile(),
@@ -77,101 +205,36 @@ test("the complexity exemptions never grow and every entry names an existing fil
       missing.push(path);
     }
   }
+  expect(invalid).toEqual([]);
   expect(missing).toEqual([]);
+  // An expired entry needs the functions split or a new, dated reason.
+  expect(expired).toEqual([]);
 });
 
 test(
-  "every complexity exemption still fails the rule it is exempted from",
+  "every exempted file has exactly the baseline number of functions over the complexity limit",
   async () => {
     const config = await biomeConfig();
-    const exemptions = complexityExemptions(config);
-    const limit =
-      config.linter.rules.complexity.noExcessiveCognitiveComplexity.options
-        .maxAllowedComplexity;
-    // An extending config appends an override, and a later override wins, so this turns the
-    // rule back on for exactly the exempted files without editing the repository config. The
-    // config must sit inside the repository for its relative `extends` and the VCS root.
-    // `--only` alone also re-enables an "off" rule, but with whatever options the base config
-    // holds; the explicit override pins the limit the ratchet is meant to check.
-    await mkdir(resolve(repository, "build"), {
-      recursive: true,
-    });
-    const directory = await mkdtemp(
-      resolve(repository, "build/lint-config-ratchet-"),
+    const baseline = await complexityBaseline();
+    const counts = await violatingFunctions(
+      config,
+      complexityExemptions(config),
     );
-    try {
-      await Bun.write(
-        resolve(directory, "biome.json"),
-        JSON.stringify({
-          root: false,
-          extends: [
-            `${relative(directory, repository).replaceAll("\\", "/")}/biome.json`,
-          ],
-          overrides: [
-            {
-              includes: exemptions,
-              linter: {
-                rules: {
-                  complexity: {
-                    noExcessiveCognitiveComplexity: {
-                      level: "error",
-                      options: {
-                        maxAllowedComplexity: limit,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          ],
-        }),
-      );
-      const lint = Bun.spawnSync(
-        [
-          process.execPath,
-          "x",
-          "--no-install",
-          "biome",
-          "lint",
-          `--config-path=${resolve(directory, "biome.json")}`,
-          `--only=${COMPLEXITY_RULE}`,
-          "--max-diagnostics=1000",
-          "--reporter=json",
-          ...exemptions,
-        ],
-        {
-          cwd: repository,
-          stdout: "pipe",
-          stderr: "pipe",
-          timeout: LINT_TIMEOUT_MS,
-        },
-      );
-      // Biome exits 1 when it reports diagnostics, so only an empty report means it failed.
-      const stdout = lint.stdout?.toString() ?? "";
-      if (lint.exitCode === null || stdout.length === 0) {
-        throw new Error(
-          `Biome did not report: exit ${lint.exitCode}, ${lint.stderr?.toString() ?? ""}`,
+    const drift: string[] = [];
+    for (const [path, entry] of Object.entries(baseline)) {
+      const actual = counts.get(path) ?? 0;
+      if (actual > entry.functions) {
+        drift.push(
+          `${path}: ${actual} over the limit, baseline ${entry.functions}`,
+        );
+      } else if (actual < entry.functions) {
+        // Lower the number, or drop the file from biome.json and the baseline at zero.
+        drift.push(
+          `${path}: ${actual} over the limit, lower the baseline from ${entry.functions}`,
         );
       }
-      const report = JSON.parse(stdout) as {
-        diagnostics: BiomeDiagnostic[];
-      };
-      const violating = new Set(
-        report.diagnostics
-          .filter((diagnostic) => diagnostic.category === COMPLEXITY_CATEGORY)
-          // Biome reports native separators, so compare in the forward-slash form of biome.json.
-          .map((diagnostic) =>
-            diagnostic.location?.path?.replaceAll("\\", "/"),
-          ),
-      );
-      // A file that passes the rule no longer needs its exemption: remove it from biome.json.
-      expect(exemptions.filter((path) => !violating.has(path))).toEqual([]);
-    } finally {
-      await rm(directory, {
-        recursive: true,
-        force: true,
-      });
     }
+    expect(drift).toEqual([]);
   },
   LINT_TIMEOUT_MS,
 );

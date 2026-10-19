@@ -49,7 +49,7 @@ PR당 리뷰 라운드는 최대 6회(opener), 5회(windows aspect ratio)였다.
 | 스타일 규칙 4개 | lint | Biome, 경고도 실패 |
 | 처리하지 않은 Promise, 조건식의 Promise | lint | `noFloatingPromises`, `noMisusedPromises` |
 | WebView 모듈의 `Buffer`, `Bun`, `process`, `node:` | lint + 테스트 | `biome.json` override, `browser-boundary.test.ts`(전역을 `undefined`로 치환해 로드, ICO 파서 호출) |
-| 복잡도 예외 목록의 drift | 테스트 | 길이 상한 64, 파일 존재, 여전히 위반 |
+| 복잡도 예외 목록의 drift | 테스트 | 파일별 기준 함수 수, 사유, 만료일(`complexity-baseline.json`), 파일 존재 |
 | tsconfig strict 약화 | 테스트 | base 상속, strict 재선언 금지, client는 브라우저 타입만 |
 | workspace 목록 불일치 | 테스트 | `framework.json`, 루트 `devDependencies` 대조 |
 | FFI 시그니처 불일치 | 테스트(ratchet) | 새 충돌은 실패, 기존 12개는 줄어들기만 |

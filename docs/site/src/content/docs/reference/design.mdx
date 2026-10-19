@@ -80,9 +80,12 @@ Biome은 논리 단위 사이의 빈 줄을 자동으로 추가하지 않으므�
 Promise는 `void`를 앞에 붙이고, 진행 중인 Promise를 보관하는 필드는 `!== undefined`로 비교합니다.
 Biome 경고는 CI와 pre-commit 훅에서 오류로 취급합니다.
 복잡도 규칙은 `biome.json`의 overrides에 적힌 기존 파일에는 적용하지 않습니다.
-`tests/conformance/lint-config.test.ts`가 목록의 길이 상한과 함께 목록의 파일이 존재하고 여전히
-규칙을 위반하는지 검사하므로, 해당 파일의 함수를 나누었으면 목록에서 지우고 테스트의 상한을
-낮춰야 하며 새 파일은 추가할 수 없습니다.
+`tests/conformance/complexity-baseline.json`은 예외 파일마다 기준 함수 수(한도를 넘는 함수의
+개수), 사유, 만료일을 적고, `tests/conformance/lint-config.test.ts`가 `biome.json`의 목록과 일치하는지,
+파일이 존재하는지, 만료일이 지나지 않았는지, 한도를 넘는 함수 수가 기준값과 정확히 같은지 검사합니다.
+함수를 나누어 수가 줄면 기준값을 낮추고(0이 되면 목록과 기준에서 파일을 지움), 기준을 넘는 함수를
+새로 만들거나 새 파일을 목록에 추가할 수 없습니다. 만료일은 현재 모든 항목이 같으므로 지나면 기준 파일 전체가 한꺼번에 실패합니다. 만료일이 지나면 함수를 나누거나 새 사유와
+만료일로 다시 결정해야 합니다.
 
 WebView 번들에 들어가는 모듈, 즉 플러그인의 `src/*.ts`와 `@bunaway/protocol`, `@bunaway/plugin-api`,
 `@bunaway/client`, `@bunaway/plugin`의 중립 모듈에서는 `Buffer`, `Bun`, `process`와 `node:` 모듈을
