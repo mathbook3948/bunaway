@@ -105,6 +105,7 @@ mise run host:android
 명령, 이벤트와 구독 해제, 오류와 정책 거부, 취소, 자산 경계와 subframe 거부를 검사한다.
 큰 한글 및 이모지 응답이 원문 그대로 도착하는지 검사한다.
 WebView의 localStorage와 sessionStorage에 값을 저장하고 읽은 뒤 제거하는지도 검사한다.
+패키징된 `.wasm`이 `application/wasm`으로 제공되어 `instantiateStreaming`으로 실행되는지, 문자열 eval이 거부되는지도 검사한다.
 화면 회전으로 문서 세션이 바뀌어도 Bun PID와 Core 상태가 유지되는지 확인하고,
 뒤로가기로 Activity를 닫은 뒤 Bun PID가 사라지는지 검사한다.
 백엔드의 파일 import를 APK에서 추출한 뒤 읽고, 번들에서 만든 자식과 손자 프로세스가

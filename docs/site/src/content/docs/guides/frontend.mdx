@@ -85,4 +85,6 @@ Vite 기반 템플릿은 개발 페이지에서만 CSS 갱신과 해당 loopback
 React 템플릿은 Fast Refresh에 필요한 인라인 스크립트도 개발 페이지에서만 허용합니다.
 프로덕션은 `script-src 'self'; style-src 'self'`를 유지하고 이미지는 로컬 파일로 출력합니다.
 production 정책에 HTTP 개발 origin을 추가하지 않습니다.
+WebAssembly를 쓰는 앱은 페이지 CSP의 `script-src`에도 `'wasm-unsafe-eval'`을 추가합니다. `'unsafe-eval'`은 추가하지 않습니다.
+Android 호스트의 응답 헤더 CSP는 이미 `'wasm-unsafe-eval'`을 허용하며, 헤더와 페이지 CSP는 함께 적용됩니다.
 배포한 앱의 UI와 백엔드는 호스트 브리지로 통신합니다.
