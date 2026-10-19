@@ -1,11 +1,2 @@
 {
-  "packages/packaging/src/channels/windows/inno.ts": {"functions":1,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-03-31"},
-  "packages/protocol/src/validation.ts": {"functions":1,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-02-28"},
-  "packages/runtime-bun/src/runtime.ts": {"functions":1,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-02-28"},
-  "packages/runtime-bun/src/view-boundary.ts": {"functions":2,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-01-31"},
-  "packages/runtime-bun/src/window-config.ts": {"functions":1,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-02-28"},
-  "plugins/opener/src/platforms/macos-file.ts": {"functions":1,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-05-31"},
-  "plugins/opener/src/platforms/windows-file.ts": {"functions":1,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-05-31"},
-  "plugins/opener/src/platforms/windows-shell.ts": {"functions":1,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-05-31"},
-  "plugins/process/src/platforms/windows-process-native.ts": {"functions":1,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-05-31"}
 }
