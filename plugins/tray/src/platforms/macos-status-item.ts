@@ -1,4 +1,5 @@
 import { CString, dlopen, JSCallback, type Pointer, ptr } from "bun:ffi";
+import { attemptAll } from "@bunaway/plugin";
 import {
   LIBSYSTEM,
   LIBSYSTEM_PATH,
@@ -73,8 +74,10 @@ function internal(message: string): never {
  * their tag. Objects returned by Objective-C stay unsigned 64-bit integers, including tagged
  * pointers. Each call, including creation, drains its own autorelease pool. `dispose` and a failed
  * creation detach and release the menu, remove the item, release the item and the target, and only
- * then close the callback, so AppKit cannot call a closed trampoline. The target class is registered once per binding and lives until process exit because
- * the Objective-C runtime cannot safely unregister a class that menus may still reference.
+ * then close the callback, so AppKit cannot call a closed trampoline. Each binding registers its
+ * own target class, which lives until process exit: the Objective-C runtime cannot safely
+ * unregister a class that menus may still reference, so repeated create and destroy accumulate
+ * classes. If registering the method fails, the unregistered class pair is disposed.
  */
 export function createStatusItem(
   onSelect: (tag: number) => void,
@@ -92,14 +95,18 @@ export function createStatusItem(
     resources.push(resource);
     return resource;
   };
-  const closeAll = () => {
-    for (const resource of resources.splice(0).reverse()) {
-      resource.close();
-    }
-  };
+  // A failing close must not leave the later resources open, so every one is attempted.
+  const closeAll = () =>
+    attemptAll(
+      resources
+        .splice(0)
+        .reverse()
+        .map((resource) => () => resource.close()),
+      "The menu bar item could not release every native resource.",
+    );
   try {
     // Bun requires a nonempty symbol table even when a framework is only loaded.
-    own(
+    const appkit = own(
       dlopen(APPKIT, {
         NSApplicationLoad: {
           args: [],
@@ -116,6 +123,10 @@ export function createStatusItem(
         message: "The menu bar item requires the macOS main thread.",
       });
     }
+    // The status bar needs the shared application object and its window server connection.
+    if (!appkit.symbols.NSApplicationLoad()) {
+      internal("AppKit could not initialize the application object.");
+    }
     const runtime = own(
       dlopen(OBJC, {
         ...pick(OBJC_RUNTIME, "objc_getClass", "sel_registerName"),
@@ -126,6 +137,12 @@ export function createStatusItem(
             "usize",
           ],
           returns: "ptr",
+        },
+        objc_disposeClassPair: {
+          args: [
+            "ptr",
+          ],
+          returns: "void",
         },
         objc_registerClassPair: {
           args: [
@@ -279,8 +296,10 @@ export function createStatusItem(
       `BunawayTrayTarget${crypto.randomUUID().replaceAll("-", "")}`,
       0,
     );
+    if (!targetClass) {
+      internal("Objective-C menu target allocation failed.");
+    }
     if (
-      !targetClass ||
       !runtime.symbols.class_addMethod(
         targetClass,
         Number(selector(SELECTED_SELECTOR)) as Pointer,
@@ -288,6 +307,8 @@ export function createStatusItem(
         SELECTED_ENCODING,
       )
     ) {
+      // The pair is not registered yet, so no instance can exist and it can be disposed.
+      runtime.symbols.objc_disposeClassPair(targetClass);
       internal("Objective-C menu target registration failed.");
     }
     runtime.symbols.objc_registerClassPair(targetClass);

@@ -23,7 +23,7 @@ shell 아이콘의 tooltip/ICO 변경과 반복 교체, synthetic mouse 메시�
 macOS 메뉴 막대 아이콘은 호스트 서비스 없이 이 플러그인이 AppKit(`NSStatusItem`)을 직접 호출해 만든다.
 `platforms/macos-status-item.ts`가 FFI 바인딩과 메뉴 선택용 Objective-C 대상 클래스를, `platforms/macos.ts`가
 아이콘의 존재 여부, 메뉴 id 매핑과 대기자를 소유한다. 모든 AppKit 호출은 메인 스레드에서 하며, 호출마다
-autorelease pool을 비우고, 해제는 메뉴 분리와 해제, 아이콘 제거와 해제, 대상 해제, 콜백 닫기 순서로 한 번만 하며, 생성 도중 실패해도 같은 순서로 그때까지 만든 것만 해제한다. `destroy`는 대기 중인 메뉴 선택 대기를 취소한다.
+autorelease pool을 비우고, 해제는 메뉴 분리와 해제, 아이콘 제거와 해제, 대상 해제, 콜백 닫기 순서로 한 번만 한다. 대상 클래스는 생성마다 하나씩 등록되어 프로세스 종료까지 남는다. `destroy`는 대기 중인 메뉴 선택 대기를 취소한다.
 `tests/api/tray-macos.test.ts`는 계약과 어댑터 규칙을 가짜 바인딩으로 확인하고,
 `tests/lifecycle/macos-tray-native.test.ts`는 `macos-native`에서 실제 AppKit 상태를 읽어 title, tooltip, 메뉴와
 선택 경로를 확인한다. 이미지, 클릭 이벤트, 숨김과 `desktop.tray` 연결은 후속 작업이다.

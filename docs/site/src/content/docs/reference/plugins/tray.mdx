@@ -206,7 +206,7 @@ await tray.destroy(null);
 - 메뉴가 있으면 아이콘을 누를 때 macOS가 메뉴를 엽니다(Electron과 Tauri의 기본 동작과 같습니다). 선택한 항목의 id는
   `waitForMenuClick`으로 받습니다. 현재 대기자에게만 전달하며 이전 선택은 재생하지 않고, 대기는 최대 16개이고
   초과하면 `BUSY`입니다. 구분선은 id가 없어 전달하지 않고, 비활성 항목은 AppKit이 선택하지 못하게 합니다.
-- `setMenu`가 실패하면 이전 메뉴를 그대로 유지합니다. 메뉴를 교체하면 이전 메뉴에서 열려 있던 선택은 새 목록의 id로 해석하지 않고 버립니다.
+- `setMenu`가 실패하면 이전 메뉴를 그대로 유지합니다. 현재 목록의 범위를 벗어난 선택은 무시합니다.
 - 아이콘이 이미 있을 때 `create`는 `BUSY`입니다. 아이콘이 없을 때 `setTitle`, `setTooltip`, `setMenu`,
   `waitForMenuClick`은 `UNSUPPORTED`입니다. `tray.destroy`와 플러그인 종료는 아이콘을 제거하고 대기 중인 `waitForMenuClick`을 `CANCELLED`로 끝냅니다.
 - `getBounds`, `setIcon`, `setClickBehavior`, `setVisible`, `focus`, `popUpContextMenu`, `tray.input`과 `tray.hover`는
