@@ -815,7 +815,7 @@ Windows는 layered window의 상수 alpha로 적용하므로 WebView를 포함�
 OS가 8비트 alpha(0–255)로 저장하기 때문에 조회 값은 설정한 값과 최대 `1/255`까지 다를 수 있습니다.
 `1`이 되면(마우스 입력 통과 중이 아닐 때) layered 스타일을 제거해 일반 창과 같은 경로로 그립니다. 배경색과 투명 배경은 이 설정에 포함되지 않습니다. macOS는 `UNSUPPORTED`입니다.
 
-`setHasShadow`는 `titlebar: "custom"` 창에서만 그림자를 끌 수 있으며 Windows는 DWM 비클라이언트 렌더링 정책으로 적용하고 같은 값으로 조회합니다. 네이티브 제목 표시줄은 시스템이 프레임과 함께 그림자를 그리므로 `hasShadow`는 항상 `true`입니다. 새 창과 재생성한 창은 `true`에서 시작합니다. macOS는 `UNSUPPORTED`입니다. 권한과 닫힌 창 오류는 위 설정과 같습니다.
+`setHasShadow`는 `titlebar: "custom"` 창에서만 그림자를 끌 수 있으며 Windows는 DWM 비클라이언트 렌더링 정책으로 적용하고 같은 값으로 조회합니다. 그림자를 끄면 DWM이 비클라이언트 프레임을 그리지 않으므로 창 가장자리 픽셀이 바뀝니다(그림자가 있을 때 투명하던 가장자리 두 줄이 다르게 그려지는 것을 Windows Server 2022에서 확인했습니다). 창의 위치, 크기와 클라이언트 영역은 그대로입니다. 네이티브 제목 표시줄은 시스템이 프레임과 함께 그림자를 그리므로 `hasShadow`는 항상 `true`입니다. 새 창과 재생성한 창은 `true`에서 시작합니다. macOS는 `UNSUPPORTED`입니다. 권한과 닫힌 창 오류는 위 설정과 같습니다.
 
 `setIgnoreMouseEvents`는 창 인스턴스별 상태이며 새 창과 재생성한 창은 `false`에서 시작합니다. 권한과 닫힌 창 오류는 위 설정과 같습니다.
 Windows는 `WS_EX_LAYERED`와 `WS_EX_TRANSPARENT`를 함께 설정하므로 클릭, 휠과 hover가 WebView와 창 테두리를 포함해 그 아래의 창으로 전달됩니다.
