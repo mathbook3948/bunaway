@@ -1,3 +1,5 @@
+import type { WebviewProbe } from "./webview-probe.ts";
+
 const MAX_STAGE_RECORDS = 64;
 /** A load request that has not started its provisional navigation after this long is reissued. */
 export const PROVISIONAL_STALL_MS = 3000;
@@ -37,7 +39,8 @@ type Stage =
   | "delivery-completed"
   | "process-terminated"
   | "closed"
-  | "startup-checkpoint";
+  | "startup-checkpoint"
+  | "probe";
 
 /** Copy only a known system domain and signed code; NSError userInfo is never inspected. */
 export function webviewError(domain: string, code: number | bigint) {
@@ -139,6 +142,11 @@ export class WebviewDiagnostics {
       progress?: number;
       errorDomain?: ReturnType<typeof webviewError>["errorDomain"];
       errorCode?: number | null;
+      /** The step of the stalled-load path that took the probe. */
+      reason?: string;
+      /** `loadRequest:` returned the same navigation object as the previous request. */
+      sameNavigation?: boolean;
+      probe?: WebviewProbe | undefined;
     } = {},
   ): void {
     if (this.count >= MAX_STAGE_RECORDS) {
@@ -151,9 +159,11 @@ export class WebviewDiagnostics {
       });
       return;
     }
+    const { probe, ...rest } = fields;
     this.log("webview-stage", {
       stage,
-      ...fields,
+      ...rest,
+      ...probe,
     });
   }
 }

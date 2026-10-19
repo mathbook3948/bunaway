@@ -14,6 +14,7 @@ import {
   WebviewDiagnostics,
   webviewError,
 } from "./webview-diagnostics.ts";
+import { nextViewIndex, probeWebview } from "./webview-probe.ts";
 
 const NS_VIEW_WIDTH_SIZABLE = 2;
 const NS_VIEW_HEIGHT_SIZABLE = 16;
@@ -71,8 +72,15 @@ export class MacosWebview {
   private readonly window: ObjcObject;
   private readonly webview: ObjcObject;
   private readonly controller: ObjcObject;
+  private readonly configuration: ObjcObject;
   private readonly retained: ObjcObject[] = [];
   private readonly diagnostics: WebviewDiagnostics;
+  /** Creation order and time of this view and the callbacks seen so far, read by `probe`. */
+  private readonly viewIndex = nextViewIndex();
+  private readonly createdAt = Date.now();
+  private policyCalls = 0;
+  private assetStarts = 0;
+  private lastNavigation: ObjcObject | null = null;
   private firstScriptMessage = false;
   private firstDelivery = false;
   private loadStartedAt = 0;
@@ -177,6 +185,7 @@ export class MacosWebview {
         this.setContentProtection(true);
       }
       const configuration = o.object("WKWebViewConfiguration");
+      this.configuration = configuration;
       this.controller = o.object("WKUserContentController");
       this.retained.push(configuration, this.controller);
       const scheme = o.delegate([
@@ -344,6 +353,7 @@ export class MacosWebview {
             } catch (error) {
               hooks.fail(error);
             }
+            this.policyCalls++;
             this.diagnostics.record("action-policy", {
               allowed,
             });
@@ -501,7 +511,15 @@ export class MacosWebview {
           arguments: 1,
           encoding: "v@:@",
           call: () => {
-            this.diagnostics.record("process-terminated");
+            // After close the window and view are released; only the record remains.
+            this.diagnostics.record(
+              "process-terminated",
+              this.closed
+                ? {}
+                : {
+                    probe: this.probe(),
+                  },
+            );
             hooks.log("webview-process-failed", {
               kind: 1,
             });
@@ -728,7 +746,13 @@ export class MacosWebview {
       );
       this.diagnostics.record("load-returned", {
         accepted: !!navigation,
+        sameNavigation:
+          !!navigation &&
+          !!this.lastNavigation &&
+          navigation === this.lastNavigation,
+        probe: this.probe(),
       });
+      this.lastNavigation = navigation;
     });
   }
   private errorDetails(error: ObjcObject | null) {
@@ -766,7 +790,9 @@ export class MacosWebview {
       return;
     }
     if (action === "report") {
-      this.diagnostics.record("load-stalled");
+      this.diagnostics.record("load-stalled", {
+        probe: this.probe(),
+      });
       this.hooks.log("webview-load-stalled", {
         retries: MAX_LOAD_RETRIES,
       });
@@ -774,6 +800,7 @@ export class MacosWebview {
     }
     this.diagnostics.record("load-retried", {
       progress: this.objc.double(this.webview, "estimatedProgress"),
+      probe: this.probe(),
     });
     // A load that WebKit accepted but never started can leave the view in a loading state that a
     // second `loadRequest:` does not leave. Cancelling it first gives the reissue a clean start; the
@@ -808,7 +835,28 @@ export class MacosWebview {
       loading: !!this.objc.send(this.webview, "isLoading"),
       provisional: !!this.provisionalNavigation,
       progress: this.objc.double(this.webview, "estimatedProgress"),
+      probe: this.probe(),
     });
+  }
+  /** Read-only snapshot of this view for the stalled-load log records; a failed read never affects the load. */
+  private probe() {
+    try {
+      return probeWebview({
+        o: this.objc,
+        webview: this.webview,
+        window: this.window,
+        configuration: this.configuration,
+        index: this.viewIndex,
+        createdAt: this.createdAt,
+        policyCalls: this.policyCalls,
+        assetStarts: this.assetStarts,
+      });
+    } catch (error) {
+      this.hooks.log("webview-probe-failed", {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
   }
   deliver(text: string): void {
     if (this.closed) {
@@ -839,6 +887,7 @@ export class MacosWebview {
     );
   }
   private serve(task: Pointer): void {
+    this.assetStarts++;
     this.diagnostics.record("asset-started");
     const o = this.objc;
     const url = o.send(o.send(task, "request"), "URL");

@@ -8,6 +8,45 @@ import {
   webviewError,
 } from "#native/macos/bun/webview-diagnostics";
 
+test("a probe is written flat into its stage record next to the stage fields", () => {
+  const records: object[] = [];
+  const diagnostics = new WebviewDiagnostics((event, fields) => {
+    records.push({
+      event,
+      ...fields,
+    });
+  });
+  diagnostics.record("load-retried", {
+    progress: 0.1,
+    probe: {
+      viewIndex: 1,
+      sinceViewMs: 3100,
+      sinceProcessMs: 5200,
+      contentPid: null,
+      pool: "a",
+      store: "b",
+      loading: true,
+      progress: 0.1,
+      hasUrl: false,
+      windowVisible: true,
+      windowOccluded: false,
+      viewHidden: false,
+      policyCalls: 1,
+      assetStarts: 0,
+    },
+  });
+  expect(records[0]).toMatchObject({
+    event: "webview-stage",
+    stage: "load-retried",
+    progress: 0.1,
+    viewIndex: 1,
+    contentPid: null,
+    loading: true,
+    policyCalls: 1,
+  });
+  expect(records[0]).not.toHaveProperty("probe");
+});
+
 test("WebView stage records stop at a fixed bound with an explicit limit marker", () => {
   const records: object[] = [];
   const diagnostics = new WebviewDiagnostics((event, fields) => {
