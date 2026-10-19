@@ -1,11 +1,13 @@
 ---
 title: dialog
-description: Windows 파일 열기, 폴더 선택, 저장 경로 선택과 메시지 대화상자를 사용합니다.
+description: Windows와 macOS의 파일 열기, 폴더 선택, 저장 경로 선택과 Windows의 메시지 대화상자를 사용합니다.
 sidebar: { order: 16 }
 ---
 
 `@bunaway/plugin-dialog`을 설치하고 기본 export `dialog`을 앱의 `plugins`에 등록합니다.
-Windows에서 파일과 폴더의 경로를 선택하고 메시지 대화상자로 사용자에게 선택을 받습니다. macOS와 다른 플랫폼은 `UNSUPPORTED`입니다.
+파일과 폴더의 경로를 선택하고 메시지 대화상자로 사용자에게 선택을 받습니다. Windows는 모든 작업을 지원합니다.
+macOS는 `dialog.openFile`, `dialog.selectFolder`, `dialog.saveFile`만 지원하고 `dialog.showMessage`는
+`UNSUPPORTED`입니다. 다른 플랫폼은 모두 `UNSUPPORTED`입니다. macOS 차이는 [macOS](#macos) 절에 모았습니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
@@ -136,6 +138,24 @@ const result = await dialog.selectFolder({}, { signal: controller.signal });
 네이티브 재진입으로 중첩 호출을 시도하면 `BUSY`입니다. 앱 백엔드 스레드는 계속 실행합니다.
 호출자의 Promise 거부 시점이 네이티브 자원 정리 완료 시점이라는 보장은 없습니다.
 
+## macOS
+
+macOS는 `NSOpenPanel`과 `NSSavePanel`을 메인 스레드에서 앱 모달로 표시합니다. 입력과 결과 형식은
+Windows와 같고 다음이 다릅니다.
+
+| 항목 | macOS 동작 |
+| --- | --- |
+| 소유 창 | sheet가 아닌 앱 모달 패널입니다. `ownerWindowId`는 받지만 패널을 그 창에 붙이지 않으며 소유 창 종료로 패널을 닫지 않습니다. |
+| 취소 | 패널이 열려 있는 동안 메인 스레드가 모달 루프에서 대기하므로 호출 abort, 기한 만료와 앱 종료는 열린 패널을 닫지 못합니다. 패널을 열기 전에 관측한 취소는 패널을 열지 않고, 패널이 떠 있는 동안 도착한 취소는 사용자의 선택 대신 `CANCELLED`로 끝납니다. |
+| 필터 | 패널에는 필터 목록이 없어서 모든 필터의 확장자를 합쳐 허용합니다. `*`가 하나라도 있으면 모든 파일을 허용합니다. 저장 패널은 확장자 없이 입력한 이름에 허용 목록의 첫 확장자를 붙입니다. |
+| `defaultExtension` | 확장자가 없는 `defaultFileName`에 붙입니다. 사용자가 입력한 이름에는 적용하지 않습니다. |
+| `confirmOverwrite` | 저장 패널은 기존 파일을 덮어쓸 때 항상 확인하므로 `false`를 지정해도 확인은 유지합니다. |
+| `title` | 창 제목과 패널 상단 메시지로 함께 설정합니다. 최신 macOS는 메시지 줄을 표시합니다. |
+| 새 폴더 | 폴더 선택과 저장 패널은 새 폴더 만들기를 허용하고 파일 열기 패널은 허용하지 않습니다. |
+
+반환값은 경로 문자열뿐입니다. security-scoped bookmark를 만들지 않으므로 앱이 샌드박스로 실행될 때
+선택한 위치에 대한 지속 접근은 보장하지 않습니다. 결과 순서는 AppKit이 반환한 순서입니다.
+
 ## 파일 접근과 검증 범위
 
 선택 결과는 경로 문자열입니다. storage 권한, 파일 핸들, 지속 접근 토큰이나 다른 앱의
@@ -149,6 +169,9 @@ user Cancel 명령, 동시 호출, 호스트 abort와 shutdown을 검사하도�
 메시지 대화상자는 Linux 계약 테스트로 입력 검증, ESC와 cancel 버튼 규칙, 결과 형식을 검사합니다.
 Windows 통합 테스트는 실제 TaskDialog의 버튼 클릭, 확인란, ESC와 abort를 검사하도록 구성했습니다.
 실제 사람의 키보드/마우스, 여러 모니터, overwrite 확인 UI와 실제 소유 창 파괴는 별도 수동 검증입니다.
+macOS는 Linux 계약 테스트로 입력을 패널 설정으로 바꾸는 규칙, 취소와 재진입을 검사하고, macOS CI에서
+실제 패널의 설정을 AppKit에서 다시 읽어 확인하며 열린 모달 패널을 예약한 취소로 닫습니다.
+파일 목록에서 항목을 선택하는 사용자 조작은 자동화하지 않았습니다.
 
 ## 제공하지 않는 대화상자
 

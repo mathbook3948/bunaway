@@ -130,7 +130,7 @@ function fixture(
   };
 }
 
-test("dialog is opt-in, declares independent grants and has no other platform adapter", () => {
+test("dialog is opt-in, declares independent grants and has only the Windows and macOS adapters", () => {
   const registry = new NativeRegistry([
     dialog._definition,
   ]);
@@ -145,6 +145,7 @@ test("dialog is opt-in, declares independent grants and has no other platform ad
     "dialog.showMessage",
   ]);
   expect(Object.keys(dialog._definition.nativePlatforms)).toEqual([
+    "macos",
     "windows",
   ]);
   expect(

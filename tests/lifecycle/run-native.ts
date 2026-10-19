@@ -321,6 +321,18 @@ if (target === "windows-x64") {
       ],
       root,
     );
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/macos-dialog-native.test.ts"),
+      ],
+      root,
+      {
+        BUNAWAY_DIALOG_NATIVE: "1",
+      },
+    );
     await test("macos-storage-host.ts");
     if (process.env.BUNAWAY_OPENER_ISOLATED === "1") {
       await run(
