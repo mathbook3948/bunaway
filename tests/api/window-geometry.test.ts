@@ -389,19 +389,22 @@ test("geometry schemas reject malformed shapes and out of range inputs and outpu
   ).toBe(2147483647);
 });
 
-test("geometry adapter selects the area, converts at current DPI, and enforces operation permission and lifetime", async () => {
-  let closed = false;
-  let dpi = 144;
-  let fullscreen = false;
-  let cancelled = false;
-  let stopping = false;
+/** Builds a one-window adapter whose native state the test changes through `state`. */
+function createGeometryHarness() {
+  const state = {
+    closed: false,
+    dpi: 144,
+    fullscreen: false,
+    cancelled: false,
+    stopping: false,
+    centerAvailable: true,
+  };
   const applied: {
     area: string;
     geometry: JsonValue;
   }[] = [];
   const areas: string[] = [];
   const centerRequests: (string | undefined)[] = [];
-  let centerAvailable = true;
   const services: NativeWindowServices = {
     specs: [
       {
@@ -415,16 +418,16 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
       },
     ],
     read: () => ({
-      closed,
-      cleaned: closed,
+      closed: state.closed,
+      cleaned: state.closed,
       ready: true,
       failure: null,
       deadline: Infinity,
     }),
     create() {},
     close: () => true,
-    stopping: () => stopping,
-    cancelled: () => cancelled,
+    stopping: () => state.stopping,
+    cancelled: () => state.cancelled,
     now: Date.now,
     tick: async () => {},
     window: () => ({
@@ -448,8 +451,8 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
       isMaximized: () => false,
       isVisible: () => true,
       isFocused: () => false,
-      isFullscreen: () => fullscreen,
-      getDpi: () => dpi,
+      isFullscreen: () => state.fullscreen,
+      getDpi: () => state.dpi,
       getBounds(area) {
         areas.push(area);
         return {
@@ -457,7 +460,7 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
           y: 30,
           width: 1200,
           height: 900,
-          dpi,
+          dpi: state.dpi,
         };
       },
       getSizeConstraints: () => ({
@@ -469,7 +472,7 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
       setSizeConstraints() {},
       setSize() {},
       setPosition() {},
-      ...(centerAvailable
+      ...(state.centerAvailable
         ? {
             center(monitorId?: string) {
               centerRequests.push(monitorId);
@@ -503,6 +506,49 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
       ],
     },
   };
+  return {
+    state,
+    applied,
+    areas,
+    centerRequests,
+    execute,
+    context,
+  };
+}
+
+type GeometryHarness = ReturnType<typeof createGeometryHarness>;
+
+/** Rejects each window lifetime state: fullscreen and closed fail the call, cancelled and stopping cancel it. */
+async function expectLifetimeRejections(
+  harness: GeometryHarness,
+  call: () => Promise<unknown>,
+): Promise<void> {
+  const { state } = harness;
+  for (const lifetime of [
+    "fullscreen",
+    "closed",
+    "cancelled",
+    "stopping",
+  ] as const) {
+    state.fullscreen = lifetime === "fullscreen";
+    state.closed = lifetime === "closed";
+    state.cancelled = lifetime === "cancelled";
+    state.stopping = lifetime === "stopping";
+    await expect(call()).rejects.toMatchObject({
+      code:
+        lifetime === "cancelled" || lifetime === "stopping"
+          ? "CANCELLED"
+          : "INVALID_ARGUMENT",
+    });
+  }
+  state.fullscreen = false;
+  state.closed = false;
+  state.cancelled = false;
+  state.stopping = false;
+}
+
+async function checkCenterOperation(harness: GeometryHarness): Promise<void> {
+  const { state, centerRequests, execute, context } = harness;
   expect(
     await execute(
       "windows.center",
@@ -531,33 +577,16 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
     undefined,
     "\\\\.\\DISPLAY2",
   ]);
-  for (const state of [
-    "fullscreen",
-    "closed",
-    "cancelled",
-    "stopping",
-  ] as const) {
-    fullscreen = state === "fullscreen";
-    closed = state === "closed";
-    cancelled = state === "cancelled";
-    stopping = state === "stopping";
-    await expect(
-      execute(
-        "windows.center",
-        {
-          view: "main",
-        },
-        "backend",
-        context,
-      ),
-    ).rejects.toMatchObject({
-      code:
-        state === "cancelled" || state === "stopping"
-          ? "CANCELLED"
-          : "INVALID_ARGUMENT",
-    });
-  }
-  fullscreen = closed = cancelled = stopping = false;
+  await expectLifetimeRejections(harness, () =>
+    execute(
+      "windows.center",
+      {
+        view: "main",
+      },
+      "backend",
+      context,
+    ),
+  );
   await expect(
     execute(
       "windows.center",
@@ -594,7 +623,7 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
     undefined,
     "\\\\.\\DISPLAY2",
   ]) {
-    centerAvailable = false;
+    state.centerAvailable = false;
     await expect(
       execute(
         "windows.center",
@@ -612,8 +641,12 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
     ).rejects.toMatchObject({
       code: "UNSUPPORTED",
     });
-    centerAvailable = true;
+    state.centerAvailable = true;
   }
+}
+
+async function checkGeometrySetters(harness: GeometryHarness): Promise<void> {
+  const { applied, execute, context } = harness;
   for (const { name, geometry } of setters) {
     const operation = `windows.${name}`;
     const payload = {
@@ -643,26 +676,9 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
       ),
     );
     const count = applied.length;
-    for (const state of [
-      "fullscreen",
-      "closed",
-      "cancelled",
-      "stopping",
-    ] as const) {
-      fullscreen = state === "fullscreen";
-      closed = state === "closed";
-      cancelled = state === "cancelled";
-      stopping = state === "stopping";
-      await expect(
-        execute(operation, payload, "backend", context),
-      ).rejects.toMatchObject({
-        code:
-          state === "cancelled" || state === "stopping"
-            ? "CANCELLED"
-            : "INVALID_ARGUMENT",
-      });
-    }
-    fullscreen = closed = cancelled = stopping = false;
+    await expectLifetimeRejections(harness, () =>
+      execute(operation, payload, "backend", context),
+    );
     await expect(
       execute(operation, payload, "backend", {
         ...context,
@@ -728,6 +744,10 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
     }
     expect(applied).toHaveLength(count);
   }
+}
+
+async function checkQueryOperations(harness: GeometryHarness): Promise<void> {
+  const { areas, execute, context } = harness;
   for (const query of queries) {
     const result = await execute(
       `windows.${query}`,
@@ -786,13 +806,17 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
     height: 900,
     dpi: 144,
   });
-  for (const targetDpi of [
+}
+
+async function checkUnitConversions(harness: GeometryHarness): Promise<void> {
+  const { state, execute, context } = harness;
+  for (const dpi of [
     96,
     120,
     144,
     192,
   ]) {
-    dpi = targetDpi;
+    state.dpi = dpi;
     expect(
       await execute(
         "windows.toPhysical",
@@ -854,6 +878,12 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
   ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
+}
+
+async function checkReadOperationDenials(
+  harness: GeometryHarness,
+): Promise<void> {
+  const { state, execute, context } = harness;
   for (const operation of [
     ...queries.map((query) => `windows.${query}`),
     "windows.toLogical",
@@ -893,14 +923,23 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
     ).rejects.toMatchObject({
       code: "INVALID_ARGUMENT",
     });
-    closed = true;
+    state.closed = true;
     await expect(
       execute(operation, payload, "backend", context),
     ).rejects.toMatchObject({
       code: "INVALID_ARGUMENT",
     });
-    closed = false;
+    state.closed = false;
   }
+}
+
+test("geometry adapter selects the area, converts at current DPI, and enforces operation permission and lifetime", async () => {
+  const harness = createGeometryHarness();
+  await checkCenterOperation(harness);
+  await checkGeometrySetters(harness);
+  await checkQueryOperations(harness);
+  await checkUnitConversions(harness);
+  await checkReadOperationDenials(harness);
 });
 
 test("centering accepts only authenticated window targets and null results", () => {

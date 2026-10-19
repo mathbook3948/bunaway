@@ -79,61 +79,82 @@ function packageExportEntries(exports) {
   );
 }
 
+/** Maps an entry name to its package.json export key, or undefined when it is not in the package. */
+function exportKeyFor(entryName, packageName) {
+  if (entryName === packageName) {
+    return ".";
+  }
+  if (entryName.startsWith(`${packageName}/`)) {
+    return `.${entryName.slice(packageName.length)}`;
+  }
+}
+
+/** Checks the compiled outputs an entry declares and records every export key it maps. */
+function buildOutputFailures(entry, info, exportKey, mappedExports) {
+  const failures = [];
+  for (const [key, target] of Object.entries(entry.buildOutputs ?? {})) {
+    if (info.exports.get(key) !== target) {
+      failures.push(
+        `${entry.name}: compiled output ${key} does not match package.json exports`,
+      );
+    }
+    if (key !== exportKey) {
+      if (mappedExports.has(key)) {
+        failures.push(`${entry.name}: duplicate package export mapping`);
+      }
+      mappedExports.add(key);
+    }
+  }
+  return failures;
+}
+
+/** Checks one reference-map entry against its package and records the export it maps. */
+function entryExportFailures(entry, packages, mapped) {
+  const sourceRoot = entry.source.split("/").slice(0, 2).join("/");
+  const info = packages.get(sourceRoot);
+  if (!info) {
+    return [
+      `${entry.name}: source is not in a package with exports`,
+    ];
+  }
+  if (!info.exports) {
+    return [];
+  }
+
+  const packageName = info.name;
+  const exportKey = exportKeyFor(entry.name, packageName);
+  const exportValue = exportKey && info.exports.get(exportKey);
+  if (exportValue === undefined) {
+    return [
+      `${entry.name}: missing package.json export mapping`,
+    ];
+  }
+
+  const failures = [];
+  const mappedExports = mapped.get(packageName) ?? new Set();
+  if (mappedExports.has(exportKey)) {
+    failures.push(`${entry.name}: duplicate package export mapping`);
+  }
+  mappedExports.add(exportKey);
+  mapped.set(packageName, mappedExports);
+
+  const sourceTarget = `.${entry.source.slice(sourceRoot.length)}`;
+  if (exportValue !== (entry.buildOutputs?.[exportKey] ?? sourceTarget)) {
+    failures.push(
+      `${entry.name}: source ${entry.source} is not a package.json export target`,
+    );
+  }
+  failures.push(...buildOutputFailures(entry, info, exportKey, mappedExports));
+  return failures;
+}
+
 /** Requires reference-map entries to match package exports and source targets. */
 function packageExportFailures(entries, packages) {
   const failures = [];
   const mapped = new Map();
 
   for (const entry of entries) {
-    const sourceRoot = entry.source.split("/").slice(0, 2).join("/");
-    const info = packages.get(sourceRoot);
-    if (!info) {
-      failures.push(`${entry.name}: source is not in a package with exports`);
-      continue;
-    }
-    if (!info.exports) {
-      continue;
-    }
-
-    const packageName = info.name;
-    let exportKey;
-    if (entry.name === packageName) {
-      exportKey = ".";
-    } else if (entry.name.startsWith(`${packageName}/`)) {
-      exportKey = `.${entry.name.slice(packageName.length)}`;
-    }
-    const exportValue = exportKey && info.exports.get(exportKey);
-    if (exportValue === undefined) {
-      failures.push(`${entry.name}: missing package.json export mapping`);
-      continue;
-    }
-
-    const mappedExports = mapped.get(packageName) ?? new Set();
-    if (mappedExports.has(exportKey)) {
-      failures.push(`${entry.name}: duplicate package export mapping`);
-    }
-    mappedExports.add(exportKey);
-    mapped.set(packageName, mappedExports);
-
-    const sourceTarget = `.${entry.source.slice(sourceRoot.length)}`;
-    if (exportValue !== (entry.buildOutputs?.[exportKey] ?? sourceTarget)) {
-      failures.push(
-        `${entry.name}: source ${entry.source} is not a package.json export target`,
-      );
-    }
-    for (const [key, target] of Object.entries(entry.buildOutputs ?? {})) {
-      if (info.exports.get(key) !== target) {
-        failures.push(
-          `${entry.name}: compiled output ${key} does not match package.json exports`,
-        );
-      }
-      if (key !== exportKey) {
-        if (mappedExports.has(key)) {
-          failures.push(`${entry.name}: duplicate package export mapping`);
-        }
-        mappedExports.add(key);
-      }
-    }
+    failures.push(...entryExportFailures(entry, packages, mapped));
   }
 
   for (const info of packages.values()) {
@@ -269,6 +290,52 @@ function source(path) {
   );
 }
 
+/** Collects the names an `export { ... }` or `export * from` declaration adds. */
+function exportDeclarationNames(node, path, visited) {
+  const names = new Set();
+  if (node.exportClause && ts.isNamedExports(node.exportClause)) {
+    for (const element of node.exportClause.elements) {
+      if (!element.isTypeOnly) {
+        names.add(element.name.text);
+      }
+    }
+  } else if (node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+    const module = node.moduleSpecifier.text;
+    if (module.startsWith(".")) {
+      for (const name of runtimeExports(
+        resolve(dirname(path), module),
+        visited,
+      )) {
+        // ES star exports omit the source module's default export.
+        if (name !== "default") {
+          names.add(name);
+        }
+      }
+    } else {
+      failures.push(`Unsupported star export: ${path} -> ${module}`);
+    }
+  }
+  return names;
+}
+
+/** Collects the names an exported variable, function or class statement declares. */
+function exportedStatementNames(node) {
+  const names = [];
+  if (ts.isVariableStatement(node)) {
+    for (const declaration of node.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name)) {
+        names.push(declaration.name.text);
+      }
+    }
+  } else if (
+    (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) &&
+    node.name
+  ) {
+    names.push(node.name.text);
+  }
+  return names;
+}
+
 // Follow relative re-exports, while excluding declarations that only exist as types.
 function runtimeExports(path, visited = new Set()) {
   if (visited.has(path)) {
@@ -280,47 +347,16 @@ function runtimeExports(path, visited = new Set()) {
     if (ts.isExportAssignment(node) && !node.isExportEquals) {
       names.add("default");
     } else if (ts.isExportDeclaration(node) && !node.isTypeOnly) {
-      if (node.exportClause && ts.isNamedExports(node.exportClause)) {
-        for (const element of node.exportClause.elements) {
-          if (!element.isTypeOnly) {
-            names.add(element.name.text);
-          }
-        }
-      } else if (
-        node.moduleSpecifier &&
-        ts.isStringLiteral(node.moduleSpecifier)
-      ) {
-        const module = node.moduleSpecifier.text;
-        if (module.startsWith(".")) {
-          for (const name of runtimeExports(
-            resolve(dirname(path), module),
-            visited,
-          )) {
-            // ES star exports omit the source module's default export.
-            if (name !== "default") {
-              names.add(name);
-            }
-          }
-        } else {
-          failures.push(`Unsupported star export: ${path} -> ${module}`);
-        }
+      for (const name of exportDeclarationNames(node, path, visited)) {
+        names.add(name);
       }
     } else if (
       node.modifiers?.some(
         (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
       )
     ) {
-      if (ts.isVariableStatement(node)) {
-        for (const declaration of node.declarationList.declarations) {
-          if (ts.isIdentifier(declaration.name)) {
-            names.add(declaration.name.text);
-          }
-        }
-      } else if (
-        (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) &&
-        node.name
-      ) {
-        names.add(node.name.text);
+      for (const name of exportedStatementNames(node)) {
+        names.add(name);
       }
     }
   }

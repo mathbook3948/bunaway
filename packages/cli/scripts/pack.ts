@@ -92,6 +92,134 @@ async function writeDeclarations(stage: string, info: Release): Promise<void> {
 }
 
 /**
+ * Pack one SDK package or plugin as an ordinary dependency tarball in the destination.
+ * Its temporary staging directory is removed even when packing fails.
+ */
+async function packSdkPackage(
+  directory: string,
+  name: string,
+  info: Release,
+  destination: string,
+  dependency: (name: string) => string,
+): Promise<void> {
+  const sdk = resolve(destination, `sdk-${crypto.randomUUID()}`);
+  await mkdir(sdk);
+  try {
+    const isPlugin = Object.values(info.plugins).includes(name);
+    const source = resolve(
+      frameworkRoot,
+      `${isPlugin ? "plugins" : "packages"}/${directory}`,
+    );
+    await cp(resolve(source, "src"), resolve(sdk, "src"), {
+      recursive: true,
+    });
+    if (isPlugin) {
+      await cp(await buildNativePlugin(source), resolve(sdk, "dist"), {
+        recursive: true,
+      });
+    }
+    const manifest = JSON.parse(
+      await readFile(resolve(source, "package.json"), "utf8"),
+    );
+    delete manifest.scripts;
+    delete manifest.devDependencies;
+    for (const field of [
+      "dependencies",
+      "peerDependencies",
+    ]) {
+      for (const dep of Object.keys(manifest[field] ?? {})) {
+        if (dep.startsWith("@bunaway/")) {
+          manifest[field][dep] = dependency(dep);
+        }
+      }
+    }
+    await writeJson(resolve(sdk, "package.json"), {
+      ...manifest,
+      files: [
+        "src",
+        ...(isPlugin
+          ? [
+              "dist",
+            ]
+          : []),
+        "LICENSE.txt",
+        "THIRD-PARTY-NOTICES.txt",
+      ],
+    });
+    await cp(
+      resolve(frameworkRoot, "FRAMEWORK-LICENSE.txt"),
+      resolve(sdk, "LICENSE.txt"),
+    );
+    await cp(
+      resolve(frameworkRoot, "THIRD-PARTY-NOTICES.txt"),
+      resolve(sdk, "THIRD-PARTY-NOTICES.txt"),
+    );
+    await run(
+      [
+        process.execPath,
+        "pm",
+        "pack",
+        "--ignore-scripts",
+        "--filename",
+        resolve(destination, packageFilename(name, info.version)),
+        "--quiet",
+      ],
+      sdk,
+    );
+  } finally {
+    await rm(sdk, {
+      recursive: true,
+      force: true,
+    });
+  }
+}
+
+/** The internal source graph in the CLI must use the same installed release. */
+async function pinStagedDependencies(
+  stage: string,
+  info: Release,
+  dependency: (name: string) => string,
+): Promise<void> {
+  for (const directory of Object.keys(info.packages)) {
+    const path = resolve(stage, `packages/${directory}/package.json`);
+    const manifest = JSON.parse(await readFile(path, "utf8"));
+    for (const dep of Object.keys(manifest.dependencies ?? {})) {
+      if (dep.startsWith("@bunaway/")) {
+        manifest.dependencies[dep] = dependency(dep);
+      }
+    }
+    await writeJson(path, manifest);
+  }
+}
+
+/** Bundle one CLI entry point into the staged artifact as an executable script. */
+async function bundleCliEntry(stage: string, entry: string): Promise<void> {
+  const built = await Bun.build({
+    entrypoints: [
+      resolve(frameworkRoot, `packages/cli/src/${entry}.ts`),
+    ],
+    target: "bun",
+    // esbuild locates its platform executable relative to its installed package.
+    external: [
+      "esbuild",
+    ],
+  });
+  if (!built.success || built.outputs.length !== 1) {
+    throw new Error(`CLI bundle failed: ${built.logs.join("\n")}`);
+  }
+  const output = resolve(stage, `packages/cli/dist/${entry}.js`);
+  await mkdir(dirname(output), {
+    recursive: true,
+  });
+  const artifact = built.outputs[0];
+  if (!artifact) {
+    throw new Error("Missing CLI bundle.");
+  }
+  await Bun.write(output, artifact);
+  await chmod(output, 0o755);
+}
+
+/**
  * Build and validate a versioned framework tarball in the destination directory.
  * Intermediate SDK packages and staging files are removed even when packaging fails.
  */
@@ -142,87 +270,9 @@ export async function packFramework(
       if (name === "@bunaway/cli") {
         continue;
       }
-      const sdk = resolve(destination, `sdk-${crypto.randomUUID()}`);
-      await mkdir(sdk);
-      try {
-        const source = resolve(
-          frameworkRoot,
-          `${Object.values(info.plugins).includes(name) ? "plugins" : "packages"}/${directory}`,
-        );
-        await cp(resolve(source, "src"), resolve(sdk, "src"), {
-          recursive: true,
-        });
-        if (Object.values(info.plugins).includes(name)) {
-          await cp(await buildNativePlugin(source), resolve(sdk, "dist"), {
-            recursive: true,
-          });
-        }
-        const manifest = JSON.parse(
-          await readFile(resolve(source, "package.json"), "utf8"),
-        );
-        delete manifest.scripts;
-        delete manifest.devDependencies;
-        for (const field of [
-          "dependencies",
-          "peerDependencies",
-        ]) {
-          for (const dep of Object.keys(manifest[field] ?? {})) {
-            if (dep.startsWith("@bunaway/")) {
-              manifest[field][dep] = dependency(dep);
-            }
-          }
-        }
-        await writeJson(resolve(sdk, "package.json"), {
-          ...manifest,
-          files: [
-            "src",
-            ...(Object.values(info.plugins).includes(name)
-              ? [
-                  "dist",
-                ]
-              : []),
-            "LICENSE.txt",
-            "THIRD-PARTY-NOTICES.txt",
-          ],
-        });
-        await cp(
-          resolve(frameworkRoot, "FRAMEWORK-LICENSE.txt"),
-          resolve(sdk, "LICENSE.txt"),
-        );
-        await cp(
-          resolve(frameworkRoot, "THIRD-PARTY-NOTICES.txt"),
-          resolve(sdk, "THIRD-PARTY-NOTICES.txt"),
-        );
-        await run(
-          [
-            process.execPath,
-            "pm",
-            "pack",
-            "--ignore-scripts",
-            "--filename",
-            resolve(destination, packageFilename(name, info.version)),
-            "--quiet",
-          ],
-          sdk,
-        );
-      } finally {
-        await rm(sdk, {
-          recursive: true,
-          force: true,
-        });
-      }
+      await packSdkPackage(directory, name, info, destination, dependency);
     }
-    // The internal source graph in the CLI must use the same installed release.
-    for (const directory of Object.keys(info.packages)) {
-      const path = resolve(stage, `packages/${directory}/package.json`);
-      const manifest = JSON.parse(await readFile(path, "utf8"));
-      for (const dep of Object.keys(manifest.dependencies ?? {})) {
-        if (dep.startsWith("@bunaway/")) {
-          manifest.dependencies[dep] = dependency(dep);
-        }
-      }
-      await writeJson(path, manifest);
-    }
+    await pinStagedDependencies(stage, info, dependency);
     await writeFile(
       resolve(stage, "README.md"),
       "# bunaway developer framework\n\nBun 1.4.2 required. Local artifact only; no public registry release.\nSee [installation, versions and upgrades](docs/framework-distribution.md).\nFramework license is undecided; see FRAMEWORK-LICENSE.txt.\n",
@@ -277,29 +327,7 @@ export async function packFramework(
       "distribution-main",
       "index",
     ]) {
-      const built = await Bun.build({
-        entrypoints: [
-          resolve(frameworkRoot, `packages/cli/src/${entry}.ts`),
-        ],
-        target: "bun",
-        // esbuild locates its platform executable relative to its installed package.
-        external: [
-          "esbuild",
-        ],
-      });
-      if (!built.success || built.outputs.length !== 1) {
-        throw new Error(`CLI bundle failed: ${built.logs.join("\n")}`);
-      }
-      const output = resolve(stage, `packages/cli/dist/${entry}.js`);
-      await mkdir(dirname(output), {
-        recursive: true,
-      });
-      const artifact = built.outputs[0];
-      if (!artifact) {
-        throw new Error("Missing CLI bundle.");
-      }
-      await Bun.write(output, artifact);
-      await chmod(output, 0o755);
+      await bundleCliEntry(stage, entry);
     }
     await writeDeclarations(stage, info);
     await writeJson(
