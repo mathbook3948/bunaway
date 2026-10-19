@@ -9,6 +9,7 @@ import {
   MAX_BOOKMARK_LENGTH,
   MAX_FILES,
   MAX_IMAGE_BYTES,
+  MAX_IMAGE_DIMENSION,
   MAX_PATH_LENGTH,
   MAX_TEXT_LENGTH,
   rtfSchema,
@@ -20,7 +21,7 @@ const BI_RGB = 0;
 const BI_BITFIELDS = 3;
 const LCS_SRGB = 0x73524742;
 export const MAX_NATIVE_FORMAT_BYTES = Math.max(
-  MAX_IMAGE_BYTES + DIB_HEADER_BYTES + 4096 * 4,
+  MAX_IMAGE_BYTES + DIB_HEADER_BYTES + MAX_IMAGE_DIMENSION * 4,
   MAX_FILES * (MAX_PATH_LENGTH + 1) * 2 + 22,
 );
 
@@ -75,9 +76,9 @@ function assertSupportedDibHeader(
     ].includes(header) ||
     header > bytes.length ||
     width < 1 ||
-    width > 4096 ||
+    width > MAX_IMAGE_DIMENSION ||
     height < 1 ||
-    height > 4096 ||
+    height > MAX_IMAGE_DIMENSION ||
     width * height * 4 > MAX_IMAGE_BYTES ||
     bytes.readUInt16LE(12) !== 1 ||
     ![
