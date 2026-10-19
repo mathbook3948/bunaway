@@ -9,7 +9,6 @@
   "native/windows/bun/ui.ts": {"functions":3,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2026-12-31"},
   "native/windows/bun/web-assets.ts": {"functions":1,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-03-31"},
   "native/windows/bun/webview.ts": {"functions":1,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-08-31"},
-  "native/windows/bun/win32.ts": {"functions":1,"reason":"The window procedure callback created in the Windows constructor still handles every window message (size limits, DPI, activation, close, system commands, display change) in one chain of branches","approver":"mathbook3948","expires":"2026-12-31"},
   "native/windows/bun/window-events.ts": {"functions":1,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-03-31"},
   "packages/backend-sdk/src/cli.ts": {"functions":2,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-02-28"},
   "packages/cli/scripts/pack.ts": {"functions":1,"reason":"Has functions over the cognitive complexity limit that are not yet split; the count is capped","approver":"mathbook3948","expires":"2027-05-31"},
