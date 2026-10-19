@@ -28,6 +28,7 @@ type Stage =
   | "provisional-failed"
   | "load-retried"
   | "load-stopped"
+  | "view-recreated"
   | "load-stalled"
   | "navigation-failed"
   | "asset-started"

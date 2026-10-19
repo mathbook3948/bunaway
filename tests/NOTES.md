@@ -679,6 +679,10 @@ macOS 전용 설정과 리소스 경계 페이지도 `fixtures/desktop/host/`에
 같은 실행기의 `macos-webview-regressions.ts`는 실제 AppKit 창의 초기 크기 보정,
 최소, 최대 제약과 제한 해제, WebKit UI delegate의 미디어 권한 거부를 확인한다.
 미디어 검사는 설치된 delegate와 네이티브 decision block을 사용하며 실제 장치를 열지 않는다.
+`macos-webview-recreate.ts`는 테스트 훅으로 첫 load를 정책 허용 뒤 멈춘 상태로 만들고 시계를 건너뛰어,
+재시도 3회 뒤 뷰가 한 번 교체되어 페이지가 호스트에 한 번만 도달하는지, 창에 뷰가 하나만 남고
+user script가 중복되지 않는지, 교체된 뷰의 delegate에 뒤늦게 호출해도 문서 완료와 세션 폐기와 로그가 변하지 않고
+정책 결정은 한 번 거부로 답하는지, 교체한 뷰도 멈추면 `webview-load-stalled`를 한 번만 보고하고 다시 교체하지 않는지 확인한다.
 `lifecycle/macos-desktop.ts`는 `run-native.ts`가 등록하는 실제 AppKit 실행기로 `quit-veto`,
 `last-window`, `keep-alive`, `close-lifecycle`, `session-end`, `session-end-quit-reason`, `session-end-reply`, `sigterm`
 시나리오에서 Quit 명령과 `beforeQuit` 취소, 수명주기 훅 순서, Dock 재활성화, 창 수명 이벤트와 닫기 요청,
