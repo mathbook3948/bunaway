@@ -148,6 +148,10 @@ in the same change and update this table. Drop a row once the mistake cannot hap
 | A plugin's shared operations are typed by an instance interface in `contract.ts` that each platform class `implements`; platform-independent methods live in one base class (`plugins/storage/src/platforms/files.ts`) | `tests/conformance/plugin-structure.test.ts` (neutral modules importing platform types only shrink) |
 | A test names its waits: `setDefaultTimeout(deadline("build"))` once per file, `killAfter(child, "childStep")` for child kill timers, `waitFor(probe, { deadline, what })` for polling, all from `tests/fixtures/deadlines.ts`; literal deadlines and hand-rolled pollers only shrink | `tests/conformance/test-deadlines.test.ts` (per-file ratchet); `BUNAWAY_TEST_TIME_SCALE` scales every deadline on a slow runner |
 | A non-null, non-array object check is `isRecord` from `@bunaway/protocol`, not a local helper or an inline `typeof` and `Array.isArray` test; remaining inline checks only shrink | `tests/conformance/shared-record-guard.test.ts` (per-file ratchet) |
+| Naming and readability: camelCase, PascalCase and UPPER_SNAKE_CASE names, units in names, named limits, simple conditions | Kebab-case filenames, no nested ternary and block statements by Biome through `mise run lint`; the rest is review |
+| Errors and resource lifetime: an error is recovered, contextualised, cleaned up or contained, never swallowed; every resource has an owner | `tests/conformance/rule-coverage.test.ts` (an empty `catch` or `.catch(() => {})` in production code only shrinks per file); unawaited promises by the Biome rules above; owners by review |
+| Efficiency: no repeated work or unbounded data on a real path; performance claims carry a measurement | Review |
+| Review and refactoring discipline: callers traced, contracts preserved, intentional behavior changes stated | Review |
 | Limits are named constants; events are compared as sets | Review |
 | Docs change in the same commit as code, and claim only what tests verified | Review |
 
