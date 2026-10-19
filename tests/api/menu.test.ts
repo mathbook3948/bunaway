@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { NativeEnvironment } from "@bunaway/plugin";
 import type { NativeMenuItem } from "@bunaway/plugin-api/native";
 import menu from "@bunaway/plugin-menu";
-import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
+import { isRecord, type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import {
   MAX_MENU_DEPTH,
   MAX_MENU_ITEMS,
@@ -272,7 +272,7 @@ test("menu operations use separate permissions and preserve resource snapshots",
       item("a"),
     ],
   });
-  if (result && typeof result === "object" && !Array.isArray(result)) {
+  if (isRecord(result)) {
     result.menuId = "mutated";
   }
   expect(await invoke("list", null)).toEqual([

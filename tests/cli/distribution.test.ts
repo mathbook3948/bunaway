@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { isRecord } from "@bunaway/protocol";
 import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
 import { bundleWindowsAssets, bundleWindowsReload } from "#cli/assets";
 import { bundleAssets } from "#cli/build";
@@ -204,7 +205,7 @@ test("CommonJS plugin default and named exports retain their identity across app
     );
     const manifestPath = resolve(pluginRoot, "package.json");
     const manifest = await json(manifestPath);
-    if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+    if (!isRecord(manifest)) {
       throw new Error("Invalid installed plugin fixture metadata.");
     }
     for (const extension of [
@@ -293,11 +294,7 @@ test.each([
       );
       const manifestPath = resolve(pluginRoot, "package.json");
       const manifest = await json(manifestPath);
-      if (
-        !manifest ||
-        typeof manifest !== "object" ||
-        Array.isArray(manifest)
-      ) {
+      if (!isRecord(manifest)) {
         throw new Error("Invalid installed plugin fixture metadata.");
       }
       if (mode === "setup") {
@@ -408,11 +405,7 @@ test.each([
       );
       const manifestPath = resolve(pluginRoot, "package.json");
       const manifest = await json(manifestPath);
-      if (
-        !manifest ||
-        typeof manifest !== "object" ||
-        Array.isArray(manifest)
-      ) {
+      if (!isRecord(manifest)) {
         throw new Error("Invalid installed plugin fixture metadata.");
       }
       await writeFile(

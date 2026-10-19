@@ -15,6 +15,7 @@ import {
   type Hello,
   type HostCall,
   type HostContext,
+  isRecord,
   type JsonValue,
   MAX_JSON_DEPTH,
   MAX_MESSAGE_BYTES,
@@ -1222,7 +1223,7 @@ test("state snapshots isolate reads and writes across sessions", async () => {
             return context.state.get("seeded") ?? null;
           }
           const value = context.state.get(key);
-          if (value && typeof value === "object" && !Array.isArray(value)) {
+          if (isRecord(value)) {
             (
               value as {
                 text: string;
