@@ -42,11 +42,14 @@ The reviewed patch is patches/zod@4.6.5.patch, and the original MIT license
 is included in packages/cli/vendor/zod/LICENSE in the CLI artifact.
 
 The agent skills in .claude/skills/, except verify-bunaway,
-native-change-verification and humanizer, are from a skills repository based on
-pstack, https://github.com/poteto/pstack, MIT License.
+native-change-verification, humanizer and style-guide, are from a skills
+repository based on pstack, https://github.com/poteto/pstack, MIT License.
 
-The humanizer skill in .claude/skills/humanizer/ is by DaleSeo, MIT License, as
-declared in its SKILL.md.
+The humanizer and style-guide skills in .claude/skills/humanizer/ and
+.claude/skills/style-guide/ are from https://github.com/DaleSeo/korean-skills
+(commit ae12ba27982ebeff03b46dc738365aaa34260d9a), MIT License,
+Copyright (c) 2026 Dale Seo. The license text is reproduced below the pstack
+license.
 
 MIT License
 
@@ -69,3 +72,26 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+MIT License
+
+Copyright (c) 2026 Dale Seo
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
