@@ -132,7 +132,6 @@
         "native/windows/bun/window-events.ts",
         "packages/cli/scripts/pack.ts",
         "packages/packaging/src/channels/windows/inno.ts",
-        "packages/packaging/src/runner.ts",
         "packages/plugin-sdk/src/index.ts",
         "packages/plugin-sdk/src/windows-menu.ts",
         "packages/protocol/src/validation.ts",
