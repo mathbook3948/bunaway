@@ -1,7 +1,8 @@
 # Native dialogs
 
 Optional `@bunaway/plugin-dialog` provides the file pickers `openFile`, `selectFolder` and `saveFile`
-and the message dialog `showMessage` on Windows.
+and the message dialog `showMessage` on Windows. macOS provides the three file pickers only; see
+[macOS](#macos).
 Register the default export and grant each operation independently. See the
 [public reference](../../docs/site/src/content/docs/reference/plugins/dialog.mdx) for inputs,
 owner authorization, cancellation, limits and examples. Choosing paths never grants storage access.
@@ -29,6 +30,22 @@ recent-item insertion and test-file creation. `fileDialogOptions` in
 defaults. `confirmOverwrite` on the other pickers fails schema validation. Windows has no option to
 disable the New Folder control, so none is offered. A path remains subject to later replacement or
 deletion.
+
+## macOS
+
+`src/platforms/macos.ts` maps the shared inputs to an `NSOpenPanel` or `NSSavePanel` through the pure
+`panelSettings` function, and `src/platforms/macos-bindings.ts` owns the AppKit calls. Panels run
+application-modal on the main thread, so the adapter needs the host's UI thread and refuses to create
+a panel elsewhere. Each call drains its own autorelease pool, retains the panel until `dispose`
+releases it, and closes library handles in reverse order. The modal loop blocks the thread, so a host
+abort is observed before the panel opens and, if already recorded, after it closes; it cannot dismiss
+an open panel. Owner windows are not attached or validated. Re-entry fails BUSY, and selections beyond
+the shared result limits fail INTERNAL as on Windows. Filters merge into one accepted extension set,
+and a save panel always asks before replacing a file. `showMessage` is unsupported.
+`tests/api/dialog-macos.test.ts` covers the mapping and lifecycle with a fake panel factory.
+`tests/lifecycle/macos-dialog-native.test.ts` reads real panels back from AppKit and closes a modal
+panel through a scheduled `cancel:`; it runs in the macOS native job. Choosing items in the panel
+by hand is not automated.
 
 ## Message dialog
 
