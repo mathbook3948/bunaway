@@ -425,6 +425,100 @@ export function createDialog(
         ole.symbols.CoTaskMemFree(address);
       }
     };
+    /**
+     * Read the selected paths from the finished dialog: one result for a save dialog, otherwise the
+     * result array, bounded by the path count and the total UTF-16 length.
+     */
+    const readResultPaths = (): string[] => {
+      const paths: string[] = [];
+      if (save) {
+        const item = outObject(
+          (output) =>
+            method(object, 20, [
+              "ptr",
+            ])(output),
+          "GetResult",
+        );
+        try {
+          paths.push(pathOf(item));
+        } finally {
+          release(item);
+        }
+      } else {
+        const items = outObject(
+          (output) =>
+            method(object, 27, [
+              "ptr",
+            ])(output),
+          "GetResults",
+        );
+        try {
+          const count = new Uint32Array(1);
+          check(
+            method(items, 7, [
+              "ptr",
+            ])(ptr(count)),
+            "GetCount",
+          );
+          if (!count[0] || count[0] > (input.multiple ? MAX_DIALOG_PATHS : 1)) {
+            throw new BunawayError({
+              code: "INTERNAL",
+              message: "Selected path count exceeds the dialog limit.",
+            });
+          }
+          let total = 0;
+          for (let index = 0; index < count[0]; index++) {
+            const item = outObject(
+              (output) =>
+                method(items, 8, [
+                  "u32",
+                  "ptr",
+                ])(index, output),
+              "GetItemAt",
+            );
+            try {
+              const path = pathOf(item);
+              total += path.length;
+              if (total > MAX_DIALOG_RESULT_UNITS) {
+                throw new BunawayError({
+                  code: "INTERNAL",
+                  message: "Selected paths exceed the dialog result limit.",
+                });
+              }
+              paths.push(path);
+            } finally {
+              release(item);
+            }
+          }
+        } finally {
+          release(items);
+        }
+      }
+      return paths;
+    };
+    /**
+     * Remove timer messages already queued for the private window. Returns the exit code of a
+     * WM_QUIT consumed on the way, which the caller must repost.
+     */
+    const drainTimerMessages = (hwnd: bigint): number | undefined => {
+      const message = Buffer.alloc(48); // MSG on Win64.
+      let quitCode: number | undefined;
+      while (
+        user.symbols.PeekMessageW(
+          ptr(message),
+          hwnd,
+          WM_TIMER,
+          WM_TIMER,
+          PM_REMOVE,
+        )
+      ) {
+        // PeekMessage retrieves WM_QUIT regardless of the requested filter.
+        if (message.readUInt32LE(8) === WM_QUIT) {
+          quitCode = message.readInt32LE(16);
+        }
+      }
+      return quitCode;
+    };
     return {
       show(owner, poll) {
         if (disposed) {
@@ -506,73 +600,7 @@ export function createDialog(
             return cancelled;
           }
           check(result, "Show");
-          const paths: string[] = [];
-          if (save) {
-            const item = outObject(
-              (output) =>
-                method(object, 20, [
-                  "ptr",
-                ])(output),
-              "GetResult",
-            );
-            try {
-              paths.push(pathOf(item));
-            } finally {
-              release(item);
-            }
-          } else {
-            const items = outObject(
-              (output) =>
-                method(object, 27, [
-                  "ptr",
-                ])(output),
-              "GetResults",
-            );
-            try {
-              const count = new Uint32Array(1);
-              check(
-                method(items, 7, [
-                  "ptr",
-                ])(ptr(count)),
-                "GetCount",
-              );
-              if (
-                !count[0] ||
-                count[0] > (input.multiple ? MAX_DIALOG_PATHS : 1)
-              ) {
-                throw new BunawayError({
-                  code: "INTERNAL",
-                  message: "Selected path count exceeds the dialog limit.",
-                });
-              }
-              let total = 0;
-              for (let index = 0; index < count[0]; index++) {
-                const item = outObject(
-                  (output) =>
-                    method(items, 8, [
-                      "u32",
-                      "ptr",
-                    ])(index, output),
-                  "GetItemAt",
-                );
-                try {
-                  const path = pathOf(item);
-                  total += path.length;
-                  if (total > MAX_DIALOG_RESULT_UNITS) {
-                    throw new BunawayError({
-                      code: "INTERNAL",
-                      message: "Selected paths exceed the dialog result limit.",
-                    });
-                  }
-                  paths.push(path);
-                } finally {
-                  release(item);
-                }
-              }
-            } finally {
-              release(items);
-            }
-          }
+          const paths = readResultPaths();
           return {
             cancelled: false,
             paths,
@@ -583,22 +611,7 @@ export function createDialog(
             user.symbols.KillTimer(hwnd, TIMER_ID);
           }
           // KillTimer leaves queued callback pointers. Drain this private HWND before releasing ours.
-          const message = Buffer.alloc(48); // MSG on Win64.
-          let quitCode: number | undefined;
-          while (
-            user.symbols.PeekMessageW(
-              ptr(message),
-              hwnd,
-              WM_TIMER,
-              WM_TIMER,
-              PM_REMOVE,
-            )
-          ) {
-            // PeekMessage retrieves WM_QUIT regardless of the requested filter.
-            if (message.readUInt32LE(8) === WM_QUIT) {
-              quitCode = message.readInt32LE(16);
-            }
-          }
+          const quitCode = drainTimerMessages(hwnd);
           try {
             services.destroyWindow(hwnd);
           } finally {
