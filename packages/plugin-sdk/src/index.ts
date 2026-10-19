@@ -1,5 +1,5 @@
 import { PLATFORMS } from "@bunaway/plugin-api";
-import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
+import { isRecord, type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import { z } from "zod";
 import type { NativeInvokeOptions } from "#transport";
 import {
@@ -19,6 +19,12 @@ export type {
 } from "@bunaway/protocol";
 export { BunawayError } from "@bunaway/protocol";
 export type { NativeInvokeOptions } from "#transport";
+export {
+  attemptAll,
+  attemptAllAsync,
+  failWithCleanup,
+  ResourceOwner,
+} from "./cleanup.ts";
 export { NativeEventWaiters } from "./native-event-waiters.ts";
 export type {
   NativeCallContext,
@@ -28,12 +34,6 @@ export type {
 export { defineNativeAdapter } from "./native-handlers.ts";
 export type { NativeHandlerContext } from "./native-platform.ts";
 export type { NativePluginAdapter } from "./native-validation.ts";
-export {
-  attemptAll,
-  attemptAllAsync,
-  failWithCleanup,
-  ResourceOwner,
-} from "./cleanup.ts";
 export {
   base64CharactersFor,
   base64Schema,
@@ -362,11 +362,11 @@ export function defineNativePlugin(
   const legacySchemas = legacyDefinitions && readSchemas(legacyDefinitions);
   const nativePlatforms = Object.fromEntries(
     Object.entries(platforms).map(([platform, target]) => {
+      // Checked as `unknown` so the guard does not narrow the typed declaration.
+      const declaration: unknown = target;
       if (
         !PLATFORMS.some((supported) => supported === platform) ||
-        !target ||
-        typeof target !== "object" ||
-        Array.isArray(target) ||
+        !isRecord(declaration) ||
         Object.hasOwn(target, "execution") ||
         (target.thread !== undefined &&
           target.thread !== "worker" &&
@@ -433,14 +433,11 @@ export function defineNativePlugin(
         schemas = readSchemas(target.operations);
         const handlers = new Map<string, NativeHandler>();
         for (const [name, operation] of Object.entries(target.operations)) {
-          if (
-            !operation ||
-            typeof operation !== "object" ||
-            Array.isArray(operation)
-          ) {
+          const declared: unknown = operation;
+          if (!isRecord(declared)) {
             throw new Error("Invalid native operation handler.");
           }
-          const handler: unknown = Reflect.get(operation, "handler");
+          const handler: unknown = Reflect.get(declared, "handler");
           if (typeof handler !== "function") {
             throw new Error("Invalid native operation handler.");
           }
