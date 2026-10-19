@@ -713,6 +713,8 @@ export function validatePacket(value: unknown, incoming: Side): Packet {
 const SERVER_QUEUE_LIMIT = MAX_WINDOWS * API_LIMITS.maxSubscriptions;
 /** Control traffic that is neither per-window nor per-request shares one small backlog. */
 const CONTROL_LANE_LIMIT = 16;
+/** Longest time drain waits for queued sends and acknowledgements to settle. */
+const DRAIN_TIMEOUT_MS = 10_000;
 
 /** Most packets one lane may hold before the channel refuses more of them. */
 function laneLimit(lane: Lane): number {
@@ -1058,9 +1060,9 @@ export class Channel {
     );
   }
 
-  /** Waits for all queued sends and acknowledgements, failing if they do not drain within ten seconds. */
+  /** Waits for all queued sends and acknowledgements, failing if they do not drain within DRAIN_TIMEOUT_MS. */
   async drain() {
-    const deadline = Date.now() + 10000;
+    const deadline = Date.now() + DRAIN_TIMEOUT_MS;
     while (this.pending.size || this.queuedData.size) {
       if (Date.now() > deadline) {
         throw new Error("Worker channel drain timed out");
