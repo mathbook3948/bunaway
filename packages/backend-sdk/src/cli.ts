@@ -127,6 +127,143 @@ function isText(value: unknown, maxUnits: number): value is string {
   );
 }
 
+type CompiledCommand = Extract<
+  CompiledNode,
+  {
+    kind: "command";
+  }
+>;
+type CommandInput = {
+  values: Record<string, string | boolean | (string | boolean)[] | undefined>;
+  positionals: string[];
+};
+
+/** Bound the argument count, each argument's size and encoding, and the serialized total. */
+function isValidArgv(argv: readonly string[]): boolean {
+  return !(
+    !Array.isArray(argv) ||
+    argv.length > MAX_ARGS ||
+    Array.from(argv).some(
+      (arg) =>
+        typeof arg !== "string" ||
+        arg.length > MAX_ARG_UNITS ||
+        arg.includes("\0") ||
+        toUSVString(arg) !== arg,
+    ) ||
+    Buffer.byteLength(JSON.stringify(argv)) > MAX_ARG_BYTES
+  );
+}
+
+/** Reject definition fields a node of this kind does not own. */
+function assertKnownFields(node: CLICommand | CLIGroup, depth: number) {
+  const allowed = [
+    "description",
+    ...(depth === 0
+      ? [
+          "name",
+        ]
+      : []),
+    ...("schema" in node
+      ? [
+          "schema",
+          "options",
+        ]
+      : [
+          "commands",
+        ]),
+  ];
+  if (Object.keys(node).some((key) => !allowed.includes(key))) {
+    throw new TypeError("Unknown CLI definition field.");
+  }
+}
+
+/** Validate one option and register its short alias, rejecting duplicates and reserved names. */
+function compileOption(
+  name: string,
+  value: unknown,
+  aliases: Set<string>,
+): readonly [
+  string,
+  CLIOption,
+] {
+  const parsed = optionSchema.safeParse(value);
+  if (
+    !NAME.test(name) ||
+    name === "help" ||
+    !parsed.success ||
+    !isText(parsed.data.description ?? "", 1024)
+  ) {
+    throw new TypeError("Invalid or reserved CLI option.");
+  }
+  if (parsed.data.short) {
+    if (aliases.has(parsed.data.short)) {
+      throw new TypeError("Duplicate or reserved CLI short option.");
+    }
+    aliases.add(parsed.data.short);
+  }
+  return [
+    name,
+    Object.freeze(parsed.data),
+  ];
+}
+
+function compileCommand(node: CLICommand, description: string): CompiledNode {
+  if (!(node.schema instanceof z.ZodType)) {
+    throw new TypeError("CLI commands require a Zod schema.");
+  }
+  const source = node.options ?? {};
+  if (!isRecord(source) || Object.keys(source).length > MAX_OPTIONS) {
+    throw new TypeError("Invalid CLI options.");
+  }
+  const aliases = new Set([
+    "h",
+  ]);
+  const options: Record<string, CLIOption> = Object.fromEntries(
+    Object.entries(source).map(([name, value]) =>
+      compileOption(name, value, aliases),
+    ),
+  );
+  return {
+    kind: "command",
+    description,
+    schema: node.schema,
+    options,
+  };
+}
+
+function compileGroup(
+  node: CLIGroup,
+  description: string,
+  visitChild: (child: CLICommand | CLIGroup) => CompiledNode,
+): CompiledNode {
+  if (
+    !node.commands ||
+    typeof node.commands !== "object" ||
+    Array.isArray(node.commands)
+  ) {
+    throw new TypeError("Invalid CLI subcommands.");
+  }
+  const commands = new Map(
+    Object.entries(node.commands).map(([name, child]) => {
+      if (!NAME.test(name)) {
+        throw new TypeError("Invalid CLI subcommand name.");
+      }
+      return [
+        name,
+        visitChild(child),
+      ] as const;
+    }),
+  );
+  if (!commands.size) {
+    throw new TypeError("CLI groups require a subcommand.");
+  }
+  return {
+    kind: "group",
+    description,
+    commands,
+  };
+}
+
 /** Snapshot the command tree and reject cycles, conflicting aliases and malformed definitions. */
 function compile(definition: CLIDefinition) {
   if (!isText(definition.name, 128) || !definition.name.length) {
@@ -150,92 +287,10 @@ function compile(definition: CLIDefinition) {
       if (!isText(description, 1024)) {
         throw new TypeError("Invalid CLI description.");
       }
-      const allowed = [
-        "description",
-        ...(depth === 0
-          ? [
-              "name",
-            ]
-          : []),
-        ...("schema" in node
-          ? [
-              "schema",
-              "options",
-            ]
-          : [
-              "commands",
-            ]),
-      ];
-      if (Object.keys(node).some((key) => !allowed.includes(key))) {
-        throw new TypeError("Unknown CLI definition field.");
-      }
-      if ("schema" in node) {
-        if (!(node.schema instanceof z.ZodType)) {
-          throw new TypeError("CLI commands require a Zod schema.");
-        }
-        const source = node.options ?? {};
-        if (!isRecord(source) || Object.keys(source).length > MAX_OPTIONS) {
-          throw new TypeError("Invalid CLI options.");
-        }
-        const aliases = new Set([
-          "h",
-        ]);
-        const options: Record<string, CLIOption> = Object.fromEntries(
-          Object.entries(source).map(([name, value]) => {
-            const parsed = optionSchema.safeParse(value);
-            if (
-              !NAME.test(name) ||
-              name === "help" ||
-              !parsed.success ||
-              !isText(parsed.data.description ?? "", 1024)
-            ) {
-              throw new TypeError("Invalid or reserved CLI option.");
-            }
-            if (parsed.data.short) {
-              if (aliases.has(parsed.data.short)) {
-                throw new TypeError("Duplicate or reserved CLI short option.");
-              }
-              aliases.add(parsed.data.short);
-            }
-            return [
-              name,
-              Object.freeze(parsed.data),
-            ];
-          }),
-        );
-        return {
-          kind: "command",
-          description,
-          schema: node.schema,
-          options,
-        };
-      }
-      if (
-        !node.commands ||
-        typeof node.commands !== "object" ||
-        Array.isArray(node.commands)
-      ) {
-        throw new TypeError("Invalid CLI subcommands.");
-      }
-      const commands = new Map(
-        Object.entries(node.commands).map(([name, child]) => {
-          if (!NAME.test(name)) {
-            throw new TypeError("Invalid CLI subcommand name.");
-          }
-          return [
-            name,
-            visit(child, depth + 1),
-          ] as const;
-        }),
-      );
-      if (!commands.size) {
-        throw new TypeError("CLI groups require a subcommand.");
-      }
-      return {
-        kind: "group",
-        description,
-        commands,
-      };
+      assertKnownFields(node, depth);
+      return "schema" in node
+        ? compileCommand(node, description)
+        : compileGroup(node, description, (child) => visit(child, depth + 1));
     } finally {
       ancestors.delete(node);
     }
@@ -244,6 +299,229 @@ function compile(definition: CLIDefinition) {
     name: definition.name,
     root: visit(definition, 0),
   };
+}
+
+type CompiledCLI = ReturnType<typeof compile>;
+
+function helpText(
+  cli: CompiledCLI,
+  node: CompiledNode,
+  path: readonly string[],
+) {
+  const lines = [
+    `Usage: ${[
+      cli.name,
+      ...path,
+    ].join(
+      " ",
+    )}${node.kind === "group" ? " <command>" : " [options] [arguments]"}`,
+  ];
+  if (node.description) {
+    lines.push("", node.description);
+  }
+  if (node.kind === "group") {
+    lines.push("", "Commands:");
+    for (const [name, child] of node.commands) {
+      lines.push(
+        `  ${name}${child.description ? `  ${child.description}` : ""}`,
+      );
+    }
+  } else {
+    lines.push("", "Options:");
+    for (const [name, option] of Object.entries(node.options)) {
+      const flag = `${option.short ? `-${option.short}, ` : ""}--${name}${option.type === "string" ? " <value>" : ""}${option.multiple ? " (repeatable)" : ""}`;
+      lines.push(
+        `  ${flag}${option.description ? `  ${option.description}` : ""}`,
+      );
+    }
+  }
+  lines.push("  -h, --help  Show help");
+  return lines.join("\n");
+}
+
+function failure(
+  cli: CompiledCLI,
+  node: CompiledNode,
+  path: string[],
+  reason: CLIError["error"]["reason"],
+  message: string,
+  issues: CLIError["error"]["issues"] = [],
+): CLIError {
+  return {
+    kind: "error",
+    command: path.join(" "),
+    help: helpText(cli, node, path),
+    error: {
+      code: "INVALID_ARGUMENT",
+      reason,
+      message,
+      issues,
+    },
+  };
+}
+
+function helpResult(
+  cli: CompiledCLI,
+  node: CompiledNode,
+  path: string[],
+): CLIResult {
+  return {
+    kind: "help",
+    command: path.join(" "),
+    help: helpText(cli, node, path),
+  };
+}
+
+/** Follow subcommand names to a command; a missing name or lone help flag yields help or an error. */
+function selectCommand(
+  cli: CompiledCLI,
+  args: string[],
+  path: string[],
+):
+  | {
+      node: CompiledCommand;
+    }
+  | {
+      result: CLIResult;
+    } {
+  let node = cli.root;
+  while (node.kind === "group") {
+    const name = args.shift();
+    if (
+      name === undefined ||
+      ((name === "--help" || name === "-h") && !args.length)
+    ) {
+      return {
+        result: helpResult(cli, node, path),
+      };
+    }
+    const child = node.commands.get(name);
+    if (!child) {
+      return {
+        result: failure(
+          cli,
+          node,
+          path,
+          "arguments",
+          "Unknown or missing CLI subcommand.",
+        ),
+      };
+    }
+    path.push(name);
+    node = child;
+  }
+  return {
+    node,
+  };
+}
+
+/** Let Bun parse flags and positionals under the command's options plus the help flag. */
+function parseFlags(
+  cli: CompiledCLI,
+  node: CompiledCommand,
+  args: string[],
+  path: string[],
+):
+  | {
+      input: CommandInput;
+    }
+  | {
+      result: CLIResult;
+    } {
+  try {
+    const { values, positionals } = parseArgs({
+      args,
+      strict: true,
+      allowPositionals: true,
+      options: {
+        ...node.options,
+        help: {
+          type: "boolean",
+          short: "h",
+        },
+      },
+    });
+    if (values.help) {
+      return {
+        result: helpResult(cli, node, path),
+      };
+    }
+    delete values.help;
+    return {
+      input: {
+        values,
+        positionals,
+      },
+    };
+  } catch (error) {
+    return {
+      result: failure(
+        cli,
+        node,
+        path,
+        "arguments",
+        error instanceof Error ? error.message : "CLI argument parsing failed.",
+      ),
+    };
+  }
+}
+
+async function parseCommandLine(
+  cli: CompiledCLI,
+  argv: readonly string[],
+): Promise<CLIResult> {
+  const path: string[] = [];
+  if (!isValidArgv(argv)) {
+    return failure(
+      cli,
+      cli.root,
+      path,
+      "arguments",
+      "CLI argv is malformed or exceeds the limit.",
+    );
+  }
+  // Copy before the first await so caller mutation cannot affect an in-flight schema.
+  const args = [
+    ...argv,
+  ];
+  const selected = selectCommand(cli, args, path);
+  if ("result" in selected) {
+    return selected.result;
+  }
+  const { node } = selected;
+  const flags = parseFlags(cli, node, args, path);
+  if ("result" in flags) {
+    return flags.result;
+  }
+  try {
+    const parsed = await node.schema.safeParseAsync(flags.input);
+    if (!parsed.success) {
+      return failure(
+        cli,
+        node,
+        path,
+        "schema",
+        "CLI arguments failed validation.",
+        parsed.error.issues.map((issue) => ({
+          path: issue.path.map(String),
+          message: issue.message,
+        })),
+      );
+    }
+    return {
+      kind: "match",
+      command: path.join(" "),
+      data: parsed.data,
+    };
+  } catch {
+    return failure(
+      cli,
+      node,
+      path,
+      "schema",
+      "CLI argument validation failed.",
+    );
+  }
 }
 
 /**
@@ -255,168 +533,8 @@ function compile(definition: CLIDefinition) {
  */
 export function defineCLI<const D extends CLIDefinition>(definition: D) {
   const compiled = compile(definition);
-  function help(node: CompiledNode, path: readonly string[]) {
-    const lines = [
-      `Usage: ${[
-        compiled.name,
-        ...path,
-      ].join(
-        " ",
-      )}${node.kind === "group" ? " <command>" : " [options] [arguments]"}`,
-    ];
-    if (node.description) {
-      lines.push("", node.description);
-    }
-    if (node.kind === "group") {
-      lines.push("", "Commands:");
-      for (const [name, child] of node.commands) {
-        lines.push(
-          `  ${name}${child.description ? `  ${child.description}` : ""}`,
-        );
-      }
-    } else {
-      lines.push("", "Options:");
-      for (const [name, option] of Object.entries(node.options)) {
-        const flag = `${option.short ? `-${option.short}, ` : ""}--${name}${option.type === "string" ? " <value>" : ""}${option.multiple ? " (repeatable)" : ""}`;
-        lines.push(
-          `  ${flag}${option.description ? `  ${option.description}` : ""}`,
-        );
-      }
-    }
-    lines.push("  -h, --help  Show help");
-    return lines.join("\n");
-  }
-  function failure(
-    node: CompiledNode,
-    path: string[],
-    reason: CLIError["error"]["reason"],
-    message: string,
-    issues: CLIError["error"]["issues"] = [],
-  ): CLIError {
-    return {
-      kind: "error",
-      command: path.join(" "),
-      help: help(node, path),
-      error: {
-        code: "INVALID_ARGUMENT",
-        reason,
-        message,
-        issues,
-      },
-    };
-  }
-  async function parse(argv: readonly string[]): Promise<CLIResult> {
-    const path: string[] = [];
-    let node = compiled.root;
-    if (
-      !Array.isArray(argv) ||
-      argv.length > MAX_ARGS ||
-      Array.from(argv).some(
-        (arg) =>
-          typeof arg !== "string" ||
-          arg.length > MAX_ARG_UNITS ||
-          arg.includes("\0") ||
-          toUSVString(arg) !== arg,
-      ) ||
-      Buffer.byteLength(JSON.stringify(argv)) > MAX_ARG_BYTES
-    ) {
-      return failure(
-        node,
-        path,
-        "arguments",
-        "CLI argv is malformed or exceeds the limit.",
-      );
-    }
-    // Copy before the first await so caller mutation cannot affect an in-flight schema.
-    const args = [
-      ...argv,
-    ];
-    while (node.kind === "group") {
-      const name = args.shift();
-      if (
-        name === undefined ||
-        ((name === "--help" || name === "-h") && !args.length)
-      ) {
-        return {
-          kind: "help",
-          command: path.join(" "),
-          help: help(node, path),
-        };
-      }
-      const child = node.commands.get(name);
-      if (!child) {
-        return failure(
-          node,
-          path,
-          "arguments",
-          "Unknown or missing CLI subcommand.",
-        );
-      }
-      path.push(name);
-      node = child;
-    }
-    let input: {
-      values: Record<
-        string,
-        string | boolean | (string | boolean)[] | undefined
-      >;
-      positionals: string[];
-    };
-    try {
-      const { values, positionals } = parseArgs({
-        args,
-        strict: true,
-        allowPositionals: true,
-        options: {
-          ...node.options,
-          help: {
-            type: "boolean",
-            short: "h",
-          },
-        },
-      });
-      if (values.help) {
-        return {
-          kind: "help",
-          command: path.join(" "),
-          help: help(node, path),
-        };
-      }
-      delete values.help;
-      input = {
-        values,
-        positionals,
-      };
-    } catch (error) {
-      return failure(
-        node,
-        path,
-        "arguments",
-        error instanceof Error ? error.message : "CLI argument parsing failed.",
-      );
-    }
-    try {
-      const parsed = await node.schema.safeParseAsync(input);
-      if (!parsed.success) {
-        return failure(
-          node,
-          path,
-          "schema",
-          "CLI arguments failed validation.",
-          parsed.error.issues.map((issue) => ({
-            path: issue.path.map(String),
-            message: issue.message,
-          })),
-        );
-      }
-      return {
-        kind: "match",
-        command: path.join(" "),
-        data: parsed.data,
-      };
-    } catch {
-      return failure(node, path, "schema", "CLI argument validation failed.");
-    }
+  function parse(argv: readonly string[]): Promise<CLIResult> {
+    return parseCommandLine(compiled, argv);
   }
   return {
     // The snapshotted runtime tree selects exactly the schema represented by D's command path.
@@ -435,7 +553,7 @@ export function defineCLI<const D extends CLIDefinition>(definition: D) {
         }
         node = child;
       }
-      return help(node, path);
+      return helpText(compiled, node, path);
     },
   };
 }
