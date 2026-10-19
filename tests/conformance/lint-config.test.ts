@@ -277,13 +277,9 @@ test("baseline reasons are specific, distinct and the placeholder count only shr
   }
   expect(tooShort).toEqual([]);
   expect(duplicated).toEqual([]);
-  // Replace a placeholder with the real cause and lower GENERIC_REASON_LIMIT.
+  // Only an upper bound: changes that each remove a placeholder do not have to edit the same
+  // constant, so parallel changes merge cleanly. Lower GENERIC_REASON_LIMIT when convenient.
   expect(generic.length).toBeLessThanOrEqual(GENERIC_REASON_LIMIT);
-  if (generic.length < GENERIC_REASON_LIMIT) {
-    throw new Error(
-      `${generic.length} placeholder reasons remain, lower GENERIC_REASON_LIMIT from ${GENERIC_REASON_LIMIT}`,
-    );
-  }
 });
 
 test("baseline expiry dates are spread over several days", async () => {
@@ -311,7 +307,12 @@ test("baseline entries are one line each, sorted by file path", async () => {
   const malformed: string[] = [];
   for (const line of lines.slice(1, -1)) {
     const match = /^ {2}("[^"]+"): \{.*\},?$/.exec(line);
-    if (match === null) {
+    // Two entries on one line would hide the second key from every check below.
+    const keysOnLine =
+      match === null
+        ? 0
+        : Object.keys(JSON.parse(`{${line.trim().replace(/,$/, "")}}`)).length;
+    if (match === null || keysOnLine !== 1) {
       malformed.push(line);
     } else {
       paths.push(JSON.parse(match[1] as string) as string);
