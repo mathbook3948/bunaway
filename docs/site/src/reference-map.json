@@ -1683,7 +1683,13 @@
       "tray.setVisible",
       "tray.focus",
       "tray.popUpContextMenu",
-      "tray.waitForEvent"
+      "tray.waitForEvent",
+      "tray.create",
+      "tray.destroy",
+      "tray.getStatusItem",
+      "tray.setTitle",
+      "tray.setMenu",
+      "tray.waitForMenuClick"
     ],
     "reference/plugins/dialog": [
       "dialog.openFile",

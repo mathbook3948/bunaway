@@ -291,6 +291,18 @@ if (target === "windows-x64") {
     await test("macos-clipboard-webview.ts", [], {
       BUNAWAY_CLIPBOARD_NATIVE: "1",
     });
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/macos-tray-native.test.ts"),
+      ],
+      root,
+      {
+        BUNAWAY_TRAY_NATIVE: "1",
+      },
+    );
     await test("macos-storage-host.ts");
     if (process.env.BUNAWAY_OPENER_ISOLATED === "1") {
       await run(

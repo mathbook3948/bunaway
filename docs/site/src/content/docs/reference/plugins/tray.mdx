@@ -1,13 +1,13 @@
 ---
 title: tray
-description: 기존 Windows 트레이 아이콘을 변경하고 입력을 받습니다.
+description: Windows 트레이 아이콘을 제어하고 macOS 메뉴 막대 아이콘을 만듭니다.
 sidebar: { order: 8 }
 ---
 
 기본 export(`default`)를 `tray`로 가져와 앱에 등록하고 호출합니다.
 
 `@bunaway/plugin-tray`를 설치하고 앱의 `plugins`에 `tray`를 등록합니다.
-Windows에서 제공합니다. 등록한 플러그인이 앱 정의의 `desktop.tray` 설정으로 아이콘을 만들고 `tray`로 제어합니다.
+Windows와 macOS에서 제공합니다. macOS는 아래 [macOS 메뉴 막대 아이콘](#macos-메뉴-막대-아이콘)을 따르고, 이 문단 이후의 설명은 따로 적지 않으면 Windows 기준입니다. Windows에서 등록한 플러그인이 앱 정의의 `desktop.tray` 설정으로 아이콘을 만들고 `tray`로 제어합니다.
 이 API는 트레이나 앱 창을 새로 만들거나 제거하지 않으며 기존 실행 유지와 종료 규칙을 따릅니다.
 
 ```ts
@@ -165,6 +165,53 @@ native shell 변경 실패는 INTERNAL이며 이전 tooltip과 이미지 설정�
 호스트가 custom HICON을 소유하고 교체와 종료 때 해제하며 앱 아이콘은 빌린 핸들로 유지합니다.
 플러그인 종료는 입력 구독과 대기자를 정리합니다. 여러 아이콘과 GUID, 초기 독립 이미지 옵션,
 생성/제거 API와 제거 뒤 상주 정책, balloon은 후속 작업입니다.
+
+## macOS 메뉴 막대 아이콘
+
+macOS에서는 앱이 `tray.create`로 메뉴 막대 아이콘 하나를 만들고 `tray.destroy`로 제거합니다
+(Electron `new Tray`와 `tray.destroy`, Tauri `TrayIconBuilder`에 대응). `desktop.tray` 설정은 macOS에서
+계속 지원하지 않으며, 이 아이콘은 앱의 실행 유지와 종료 규칙을 바꾸지 않습니다.
+
+```ts
+import tray from "@bunaway/plugin-tray";
+
+await tray.create({ title: "Notes", tooltip: "Notes" });
+await tray.setMenu({
+  items: [
+    { type: "item", id: "open", label: "Open" },
+    { type: "separator" },
+    { type: "item", id: "quit", label: "Quit" },
+  ],
+});
+const choice = await tray.waitForMenuClick(null); // { id: "open" }
+await tray.destroy(null);
+```
+
+| 함수 | 입력 | 결과 |
+| --- | --- | --- |
+| `tray.create` | `{ title?: string, tooltip?: string }` (기본값은 빈 문자열) | `{ id: "main", title, tooltip, hasMenu }` |
+| `tray.destroy` | `null` | `null` (이미 없으면 그대로 `null`) |
+| `tray.getStatusItem` | `null` | 같은 모양의 값 또는 아이콘이 없으면 `null` |
+| `tray.setTitle` | `{ title: string }` | `null` |
+| `tray.setTooltip` | `{ tooltip: string }` | `null` |
+| `tray.setMenu` | `{ items: MenuItem[] \| null }` | `null` |
+| `tray.waitForMenuClick` | `null` | 선택한 항목의 `{ id }` |
+
+- title은 메뉴 막대 단추의 글자로 최대 256 UTF-16 코드 단위입니다. 아이콘 이미지는 아직 지원하지 않아
+  title이 비어 있으면 아이콘이 보이지 않습니다. tooltip은 Windows와 같은 규칙(최대 127 단위)입니다.
+  둘 다 NUL과 잘못된 surrogate를 거부합니다.
+- 메뉴 항목은 `{ type: "item", id, label, enabled? }`(`enabled` 기본값 true)와 `{ type: "separator" }`의 평면 목록이며
+  최대 100개입니다. id는 1~128자이고 목록 안에서 유일해야 합니다. label은 1~256 단위입니다.
+  `items: null`과 빈 배열은 메뉴를 제거합니다(`hasMenu`는 `false`). 하위 메뉴, 체크, 단축키와 이미지는 지원하지 않습니다.
+- 메뉴가 있으면 아이콘을 누를 때 macOS가 메뉴를 엽니다(Electron과 Tauri의 기본 동작과 같습니다). 선택한 항목의 id는
+  `waitForMenuClick`으로 받습니다. 현재 대기자에게만 전달하며 이전 선택은 재생하지 않고, 대기는 최대 16개이고
+  초과하면 `BUSY`입니다. 구분선은 id가 없어 전달하지 않고, 비활성 항목은 AppKit이 선택하지 못하게 합니다.
+- `setMenu`가 실패하면 이전 메뉴를 그대로 유지합니다. 현재 목록의 범위를 벗어난 선택은 무시합니다.
+- 아이콘이 이미 있을 때 `create`는 `BUSY`입니다. 아이콘이 없을 때 `setTitle`, `setTooltip`, `setMenu`,
+  `waitForMenuClick`은 `UNSUPPORTED`입니다. `tray.destroy`와 플러그인 종료는 아이콘을 제거하고 대기 중인 `waitForMenuClick`을 `CANCELLED`로 끝냅니다.
+- `getBounds`, `setIcon`, `setClickBehavior`, `setVisible`, `focus`, `popUpContextMenu`, `tray.input`과 `tray.hover`는
+  macOS에서 아직 제공하지 않습니다. 이미지, 클릭과 double-click 이벤트, 숨김과 복원은 후속 작업입니다.
+- 각 함수는 같은 이름의 독립 Host 권한을 요구합니다. 잘못된 입력은 `INVALID_ARGUMENT`, 권한 없음은 `PERMISSION_DENIED`입니다.
 
 ## 이전 앱 정의에서 옮기기
 

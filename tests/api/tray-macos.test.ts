@@ -1,0 +1,463 @@
+import { expect, test } from "bun:test";
+import type { JsonValue } from "@bunaway/protocol";
+import {
+  MAX_MACOS_TRAY_ITEM_ID_LENGTH,
+  MAX_MACOS_TRAY_LABEL_UNITS,
+  MAX_MACOS_TRAY_MENU_ITEMS,
+  MAX_MACOS_TRAY_TITLE_UNITS,
+} from "#plugins/tray/src/contract";
+import { macosTrayOperations } from "#plugins/tray/src/operations-macos";
+import { MacosTray } from "#plugins/tray/src/platforms/macos";
+import type {
+  NativeMenuEntry,
+  StatusItemBinding,
+} from "#plugins/tray/src/platforms/macos-status-item";
+import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+
+/** A binding that does nothing; tests override the calls they observe. */
+const inertBinding: StatusItemBinding = {
+  setTitle: () => {},
+  setTooltip: () => {},
+  setMenu: () => {},
+  readBack: () => ({
+    title: "",
+    tooltip: "",
+    menu: null,
+  }),
+  activate: () => {},
+  dispose: () => {},
+};
+
+/** Records what the adapter asks AppKit to do, and lets a test choose an entry like a user would. */
+function fakeBinding() {
+  const log: string[] = [];
+  let select: (tag: number) => void = () => {};
+  let menu: readonly NativeMenuEntry[] | null = null;
+  const factory = (onSelect: (tag: number) => void): StatusItemBinding => {
+    select = onSelect;
+    log.push("create");
+    return {
+      ...inertBinding,
+      setTitle: (title) => void log.push(`title:${title}`),
+      setTooltip: (tooltip) => void log.push(`tooltip:${tooltip}`),
+      setMenu: (entries) => {
+        menu = entries;
+        log.push(`menu:${entries?.length ?? "none"}`);
+      },
+      dispose: () => void log.push("dispose"),
+    };
+  };
+  return {
+    factory,
+    log,
+    choose: (tag: number) => select(tag),
+    menu: () => menu,
+  };
+}
+
+test("macOS tray inputs are strict, bounded and reject unrepresentable text", async () => {
+  const parsers = pluginParsers("tray", macosTrayOperations);
+  const accepted: [
+    string,
+    JsonValue,
+  ][] = [
+    [
+      "tray.create",
+      {},
+    ],
+    [
+      "tray.create",
+      {
+        title: "한글 😀",
+        tooltip: "t",
+      },
+    ],
+    [
+      "tray.setTitle",
+      {
+        title: "x".repeat(MAX_MACOS_TRAY_TITLE_UNITS),
+      },
+    ],
+    [
+      "tray.setMenu",
+      {
+        items: [
+          {
+            type: "item",
+            id: "open",
+            label: "Open",
+          },
+          {
+            type: "separator",
+          },
+          {
+            type: "item",
+            id: "quit",
+            label: "Quit",
+            enabled: false,
+          },
+        ],
+      },
+    ],
+    [
+      "tray.setMenu",
+      {
+        items: null,
+      },
+    ],
+  ];
+  for (const [operation, payload] of accepted) {
+    await parsers.validateCall({
+      operation,
+      payload,
+    });
+  }
+  const item = (id: string, label = "L") => ({
+    type: "item",
+    id,
+    label,
+  });
+  const rejected: [
+    string,
+    JsonValue,
+  ][] = [
+    [
+      "tray.create",
+      {
+        title: "a",
+        extra: 1,
+      },
+    ],
+    [
+      "tray.setTitle",
+      {
+        title: "x".repeat(MAX_MACOS_TRAY_TITLE_UNITS + 1),
+      },
+    ],
+    [
+      "tray.setTitle",
+      {
+        title: "a\0b",
+      },
+    ],
+    [
+      "tray.setTitle",
+      {
+        title: "\ud800",
+      },
+    ],
+    [
+      "tray.setMenu",
+      {
+        items: [
+          item("a"),
+          item("a"),
+        ],
+      },
+    ],
+    [
+      "tray.setMenu",
+      {
+        items: [
+          item(""),
+        ],
+      },
+    ],
+    [
+      "tray.setMenu",
+      {
+        items: [
+          item("x".repeat(MAX_MACOS_TRAY_ITEM_ID_LENGTH + 1)),
+        ],
+      },
+    ],
+    [
+      "tray.setMenu",
+      {
+        items: [
+          item("a", ""),
+        ],
+      },
+    ],
+    [
+      "tray.setMenu",
+      {
+        items: [
+          item("a", "x".repeat(MAX_MACOS_TRAY_LABEL_UNITS + 1)),
+        ],
+      },
+    ],
+    [
+      "tray.setMenu",
+      {
+        items: [
+          item("a", "a\0b"),
+        ],
+      },
+    ],
+    [
+      "tray.setMenu",
+      {
+        items: Array.from(
+          {
+            length: MAX_MACOS_TRAY_MENU_ITEMS + 1,
+          },
+          (_, index) => item(`id${index}`),
+        ),
+      },
+    ],
+    [
+      "tray.setMenu",
+      {
+        items: [
+          {
+            type: "submenu",
+            id: "s",
+            label: "S",
+          },
+        ],
+      },
+    ],
+  ];
+  for (const [operation, payload] of rejected) {
+    await expect(
+      parsers.validateCall({
+        operation,
+        payload,
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+});
+
+test("the menu bar item exists only between create and destroy", () => {
+  const native = fakeBinding();
+  const tray = new MacosTray(native.factory);
+  expect(tray.get()).toBeNull();
+  for (const call of [
+    () => tray.setTitle("a"),
+    () => tray.setTooltip("a"),
+    () => tray.setMenu(null),
+    () => tray.waitForMenuClick(),
+  ]) {
+    expect(call).toThrow(
+      expect.objectContaining({
+        code: "UNSUPPORTED",
+      }),
+    );
+  }
+  expect(tray.create("Title", "Tip")).toEqual({
+    id: "main",
+    title: "Title",
+    tooltip: "Tip",
+    hasMenu: false,
+  });
+  expect(() => tray.create("again", "")).toThrow(
+    expect.objectContaining({
+      code: "BUSY",
+    }),
+  );
+  tray.setTitle("Next");
+  tray.setTooltip("Hint");
+  expect(tray.get()).toMatchObject({
+    title: "Next",
+    tooltip: "Hint",
+  });
+  expect(tray.destroy()).toBeNull();
+  expect(tray.destroy()).toBeNull();
+  expect(tray.get()).toBeNull();
+  expect(native.log).toEqual([
+    "create",
+    "title:Title",
+    "tooltip:Tip",
+    "title:Next",
+    "tooltip:Hint",
+    "dispose",
+  ]);
+  // A destroyed item can be created again.
+  expect(tray.create("", "").title).toBe("");
+});
+
+test("a failed initial setup releases the native item and leaves no tray behind", () => {
+  const log: string[] = [];
+  const tray = new MacosTray(() => ({
+    ...inertBinding,
+    setTitle: () => {
+      throw new Error("title failed");
+    },
+    dispose: () => void log.push("dispose"),
+  }));
+  expect(() => tray.create("a", "b")).toThrow("title failed");
+  expect(log).toEqual([
+    "dispose",
+  ]);
+  expect(tray.get()).toBeNull();
+});
+
+test("menu choices resolve waiters by item id and ignore separators and stale tags", async () => {
+  const native = fakeBinding();
+  const tray = new MacosTray(native.factory);
+  tray.create("", "");
+  tray.setMenu([
+    {
+      type: "item",
+      id: "open",
+      label: "Open",
+      enabled: true,
+    },
+    {
+      type: "separator",
+    },
+    {
+      type: "item",
+      id: "quit",
+      label: "Quit",
+      enabled: false,
+    },
+  ]);
+  expect(tray.get()?.hasMenu).toBe(true);
+  expect(native.menu()).toEqual([
+    {
+      kind: "item",
+      label: "Open",
+      enabled: true,
+      tag: 0,
+    },
+    {
+      kind: "separator",
+    },
+    {
+      kind: "item",
+      label: "Quit",
+      enabled: false,
+      tag: 2,
+    },
+  ]);
+  const first = tray.waitForMenuClick();
+  native.choose(1);
+  native.choose(9);
+  native.choose(2);
+  await expect(first).resolves.toEqual({
+    id: "quit",
+  });
+  // Replacing the menu renumbers tags, so a tag from the old menu maps to the new list.
+  tray.setMenu([
+    {
+      type: "item",
+      id: "only",
+      label: "Only",
+      enabled: true,
+    },
+  ]);
+  const second = tray.waitForMenuClick();
+  native.choose(2);
+  native.choose(0);
+  await expect(second).resolves.toEqual({
+    id: "only",
+  });
+  tray.setMenu(null);
+  expect(tray.get()?.hasMenu).toBe(false);
+  native.choose(0);
+});
+
+test("a failed menu replacement keeps the previous menu ids", () => {
+  let fail = false;
+  const tray = new MacosTray(() => ({
+    ...inertBinding,
+    setMenu: () => {
+      if (fail) {
+        throw new Error("menu failed");
+      }
+    },
+  }));
+  tray.create("", "");
+  tray.setMenu([
+    {
+      type: "item",
+      id: "a",
+      label: "A",
+      enabled: true,
+    },
+  ]);
+  fail = true;
+  expect(() => tray.setMenu(null)).toThrow("menu failed");
+  expect(tray.get()?.hasMenu).toBe(true);
+});
+
+test("disposal removes the item and cancels waiting callers", async () => {
+  const native = fakeBinding();
+  const tray = new MacosTray(native.factory);
+  tray.create("", "");
+  const waiting = tray.waitForMenuClick();
+  const outcome = waiting.then(
+    () => null,
+    (error: unknown) => error,
+  );
+  tray.dispose();
+  expect(await outcome).toMatchObject({
+    code: "CANCELLED",
+  });
+  expect(native.log.at(-1)).toBe("dispose");
+  expect(tray.get()).toBeNull();
+});
+
+test("a wait ends with CANCELLED when its signal aborts", async () => {
+  const tray = new MacosTray(fakeBinding().factory);
+  tray.create("", "");
+  const controller = new AbortController();
+  const waiting = tray.waitForMenuClick(controller.signal);
+  const outcome = waiting.then(
+    () => null,
+    (error: unknown) => error,
+  );
+  controller.abort();
+  expect(await outcome).toMatchObject({
+    code: "CANCELLED",
+  });
+});
+
+test("destroy cancels pending waits and a new item does not inherit them", async () => {
+  const native = fakeBinding();
+  const tray = new MacosTray(native.factory);
+  tray.create("", "");
+  tray.setMenu([
+    {
+      type: "item",
+      id: "a",
+      label: "A",
+      enabled: true,
+    },
+  ]);
+  const outcome = tray.waitForMenuClick().then(
+    () => null,
+    (error: unknown) => error,
+  );
+  tray.destroy();
+  expect(await outcome).toMatchObject({
+    code: "CANCELLED",
+  });
+  tray.create("", "");
+  tray.setMenu([
+    {
+      type: "item",
+      id: "b",
+      label: "B",
+      enabled: true,
+    },
+  ]);
+  const next = tray.waitForMenuClick();
+  native.choose(0);
+  expect(await next).toEqual({
+    id: "b",
+  });
+});
+
+test("an empty menu removes the menu", () => {
+  const native = fakeBinding();
+  const tray = new MacosTray(native.factory);
+  tray.create("", "");
+  tray.setMenu([]);
+  expect(tray.get()?.hasMenu).toBe(false);
+  expect(native.menu()).toBeNull();
+});
