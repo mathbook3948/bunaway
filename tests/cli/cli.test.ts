@@ -499,6 +499,56 @@ test("app.title accepts exactly the AppInfo limit and rejects longer or empty ti
   }
 });
 
+test("framework validation rejects SDK overrides, a missing required dependency and a mispinned SDK", async () => {
+  const path = resolve(project, "package.json");
+  const original = await Bun.file(path).text();
+  const pkg = JSON.parse(original);
+  try {
+    for (const [change, message] of [
+      [
+        {
+          overrides: {
+            "@bunaway/core": "1.0.0",
+          },
+        },
+        "Incompatible Bun/SDK dependency override",
+      ],
+      [
+        {
+          dependencies: Object.fromEntries(
+            Object.entries(pkg.dependencies).filter(
+              ([name]) => name !== "@bunaway/client",
+            ),
+          ),
+          devDependencies: Object.fromEntries(
+            Object.entries(pkg.devDependencies ?? {}).filter(
+              ([name]) => name !== "@bunaway/client",
+            ),
+          ),
+        },
+        "Missing framework dependency: @bunaway/client",
+      ],
+      [
+        {
+          dependencies: {
+            ...pkg.dependencies,
+            "@bunaway/backend": "9.9.9",
+          },
+        },
+        "Incompatible Bun/SDK dependency declaration: @bunaway/backend",
+      ],
+    ] as const) {
+      await writeJson(path, {
+        ...pkg,
+        ...change,
+      });
+      await expect(validateProject(project)).rejects.toThrow(message);
+    }
+  } finally {
+    await Bun.write(path, original);
+  }
+});
+
 test("project settings reject escaping paths, bad icons and executable names, and a home that is not a file", async () => {
   const path = resolve(project, "src-bunaway/bunaway.json");
   const valid = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
