@@ -11,7 +11,7 @@ const LINT_TIMEOUT_MS = 60_000;
 const GENERIC_REASON =
   "Has functions over the cognitive complexity limit that are not yet split; the count is capped";
 /** Entries still carrying the placeholder. Rewrite a reason to lower it; it never rises. */
-const GENERIC_REASON_LIMIT = 40;
+const GENERIC_REASON_LIMIT = 39;
 /** A specific reason names the function and why it stays; shorter text says too little. */
 const MIN_REASON_LENGTH = 40;
 /** Entries one expiry date may hold, so the baseline never fails all at once. */
