@@ -58,12 +58,21 @@ export const blockerInputSchema = z.strictObject({
     .refine((value) => !value.includes("\0"), "Reason must not contain NUL."),
 });
 export type PowerStatus = z.output<typeof statusSchema>;
-/** The read-only queries every platform adapter answers; macOS implements only these. */
+/** The read-only queries every platform adapter answers. */
 export interface PowerQueries {
   getStatus(): PowerStatus;
   getIdleTime(): number;
   getIdleState(thresholdSeconds: number): "active" | "idle";
 }
+/** App-owned sleep and display requests; Windows and macOS implement them beside the queries. */
+export interface PowerBlockerControls {
+  startBlocker(input: z.output<typeof blockerInputSchema>): PowerBlocker;
+  listBlockers(): PowerBlocker[];
+  isBlockerActive(id: string): boolean;
+  stopBlocker(id: string): boolean;
+}
+/** What the macOS adapter implements: the queries and the blocker requests. */
+export type MacosPowerInstance = PowerQueries & PowerBlockerControls;
 export type PowerCpuSpeedLimit = z.output<typeof cpuSpeedLimitSchema>;
 export type PowerBlocker = z.output<typeof blockerSchema>;
 export type PowerBlockerType = PowerBlocker["type"];

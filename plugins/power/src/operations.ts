@@ -8,14 +8,14 @@ import {
   idleThresholdSchema,
   idleTimeSchema,
   MAX_POWER_BLOCKERS,
-  type PowerQueries,
+  type MacosPowerInstance,
   statusSchema,
 } from "#power/contract";
 import type { WindowsPower } from "#power/platforms/windows";
 
 const operation = defineNativeOperation<WindowsPower>();
-const macosOperation = defineNativeOperation<PowerQueries>();
-/** macOS answers the read-only queries only; the other operations are unsupported there. */
+const macosOperation = defineNativeOperation<MacosPowerInstance>();
+/** macOS answers the queries and the blocker requests; the CPU speed limit is unsupported there. */
 export const macosPowerOperations = {
   getStatus: macosOperation({
     input: z.null(),
@@ -35,6 +35,26 @@ export const macosPowerOperations = {
     ]),
     handler: ({ thresholdSeconds }, { instance }) =>
       instance.getIdleState(thresholdSeconds),
+  }),
+  startBlocker: macosOperation({
+    input: blockerInputSchema,
+    output: blockerSchema,
+    handler: (input, { instance }) => instance.startBlocker(input),
+  }),
+  listBlockers: macosOperation({
+    input: z.null(),
+    output: z.array(blockerSchema).max(MAX_POWER_BLOCKERS),
+    handler: (_input, { instance }) => instance.listBlockers(),
+  }),
+  isBlockerActive: macosOperation({
+    input: blockerIdSchema,
+    output: z.boolean(),
+    handler: ({ id }, { instance }) => instance.isBlockerActive(id),
+  }),
+  stopBlocker: macosOperation({
+    input: blockerIdSchema,
+    output: z.boolean(),
+    handler: ({ id }, { instance }) => instance.stopBlocker(id),
   }),
 };
 /** Windows power queries and independently owned sleep/display request handles. */
