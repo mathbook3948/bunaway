@@ -826,8 +826,15 @@ test(
           windowId: child.windowId,
         }),
       ).toBe(true);
+      // The diagnostic travels by message, the counters by shared memory; wait for both.
       await ui.waitFor(
-        () => Atomics.load(ui.lifecycle, uiLifecycleSlots.finish) === 1,
+        () =>
+          Atomics.load(ui.lifecycle, uiLifecycleSlots.finish) === 1 &&
+          ui.packets.some(
+            (packet) =>
+              packet.kind === "diagnostic" &&
+              packet.event === "download-cleanup-recovered",
+          ),
       );
       // One failed attempt keeps the native references, the retry detaches and finishes once.
       expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.detach)).toBe(2);
