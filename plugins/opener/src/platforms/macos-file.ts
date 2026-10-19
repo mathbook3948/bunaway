@@ -45,6 +45,30 @@ function fail(error: unknown): never {
   });
 }
 
+/** Requires the opened descriptor to be an unlinked regular file still found at `path`. */
+function assertStableRegularFile(path: string, descriptor: number): void {
+  const file = fstatSync(descriptor);
+  if (!file.isFile()) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Opener requires a regular file.",
+    });
+  }
+  const current = lstatSync(path);
+  if (
+    file.nlink !== 1 ||
+    current.dev !== file.dev ||
+    current.ino !== file.ino ||
+    current.isSymbolicLink()
+  ) {
+    throw new BunawayError({
+      code: "PERMISSION_DENIED",
+      message:
+        "Opener paths must not contain links or change during validation.",
+    });
+  }
+}
+
 /**
  * Walk from the root with descriptor-relative, non-following opens. Descriptors
  * remain owned until dispatch returns, but POSIX does not prevent renames. The
@@ -67,6 +91,34 @@ export function createFiles(): MacosFiles {
     },
   });
   let disposed = false;
+  /** Opens each path component relative to its parent without following links; the caller closes `handles`. */
+  const openPath = (path: string, handles: number[]): number => {
+    let parent = openSync(
+      "/",
+      constants.O_RDONLY | constants.O_DIRECTORY | O_CLOEXEC,
+    );
+    handles.push(parent);
+    const names = path.slice(1).split("/");
+    for (const [index, name] of names.entries()) {
+      const leaf = index === names.length - 1;
+      const descriptor = api.symbols.openat(
+        parent,
+        ptr(Buffer.from(`${name}\0`)),
+        constants.O_RDONLY |
+          constants.O_NOFOLLOW |
+          O_CLOEXEC |
+          (leaf ? constants.O_NONBLOCK : constants.O_DIRECTORY),
+        0,
+      );
+      if (descriptor < 0) {
+        const address = api.symbols.__error();
+        fail(address ? read.i32(address, 0) : undefined);
+      }
+      handles.push(descriptor);
+      parent = descriptor;
+    }
+    return parent;
+  };
   return {
     withFile(path, request) {
       const handles: number[] = [];
@@ -77,50 +129,7 @@ export function createFiles(): MacosFiles {
         });
       }
       try {
-        let parent = openSync(
-          "/",
-          constants.O_RDONLY | constants.O_DIRECTORY | O_CLOEXEC,
-        );
-        handles.push(parent);
-        const names = path.slice(1).split("/");
-        for (const [index, name] of names.entries()) {
-          const leaf = index === names.length - 1;
-          const descriptor = api.symbols.openat(
-            parent,
-            ptr(Buffer.from(`${name}\0`)),
-            constants.O_RDONLY |
-              constants.O_NOFOLLOW |
-              O_CLOEXEC |
-              (leaf ? constants.O_NONBLOCK : constants.O_DIRECTORY),
-            0,
-          );
-          if (descriptor < 0) {
-            const address = api.symbols.__error();
-            fail(address ? read.i32(address, 0) : undefined);
-          }
-          handles.push(descriptor);
-          parent = descriptor;
-        }
-        const file = fstatSync(parent);
-        if (!file.isFile()) {
-          throw new BunawayError({
-            code: "INVALID_ARGUMENT",
-            message: "Opener requires a regular file.",
-          });
-        }
-        const current = lstatSync(path);
-        if (
-          file.nlink !== 1 ||
-          current.dev !== file.dev ||
-          current.ino !== file.ino ||
-          current.isSymbolicLink()
-        ) {
-          throw new BunawayError({
-            code: "PERMISSION_DENIED",
-            message:
-              "Opener paths must not contain links or change during validation.",
-          });
-        }
+        assertStableRegularFile(path, openPath(path, handles));
         request();
       } catch (error) {
         if (error instanceof BunawayError) {

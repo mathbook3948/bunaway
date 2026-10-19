@@ -192,7 +192,8 @@ export function createShell() {
         strings.push(address);
         return address;
       };
-      try {
+      /** Resolves Explorer's desktop Shell.Application object through the shell windows service. */
+      const resolveShellApplication = (): Pointer => {
         // Resolve the desktop's application object, rather than creating a new
         // Shell.Application in our process. Explorer must own the launched process
         // so it cannot inherit the app's kill-on-close Job or process mitigations.
@@ -253,7 +254,11 @@ export function createShell() {
             "ptr",
           ])(out),
         );
+        return shell;
+      };
 
+      /** Calls Shell.Application.ShellExecute through IDispatch::Invoke and maps its failure to a public error. */
+      const invokeShellExecute = (shell: Pointer): void => {
         // Invoke avoids passing VARIANT structs by value, which Bun FFI does not
         // support. Win64 VARIANTs occupy 24 bytes; IDispatch arguments are reversed.
         const name = Buffer.from("ShellExecute\0", "utf16le");
@@ -327,6 +332,9 @@ export function createShell() {
           );
         }
         checkResult(result);
+      };
+      try {
+        invokeShellExecute(resolveShellApplication());
       } finally {
         // EXCEPINFO's source, description and help-file strings belong to us,
         // including when Invoke returns DISP_E_EXCEPTION.
