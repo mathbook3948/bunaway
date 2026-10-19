@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { readdirSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   MAX_LOAD_RETRIES,
   PROVISIONAL_STALL_MS,
@@ -210,3 +212,42 @@ test.skipIf(process.platform !== "darwin" || process.arch !== "arm64")(
     });
   },
 );
+
+test("the stalled-load test hooks are reachable only from the constructor argument no production code passes", () => {
+  const directory = resolve(import.meta.dir, "../../native/macos/bun");
+  const users = readdirSync(directory)
+    .filter((name) => name.endsWith(".ts"))
+    .filter((name) =>
+      /stallLoad|WebviewTestHooks/.test(
+        readFileSync(resolve(directory, name), "utf8"),
+      ),
+    );
+  expect(users).toEqual([
+    "webview.ts",
+  ]);
+  const creator = readFileSync(resolve(directory, "windows.ts"), "utf8");
+  expect(creator).not.toMatch(/testHooks|stallLoad/);
+});
+
+test("a clock started without a policy decision still retries and reports", () => {
+  const clock = new StalledLoadClock();
+  clock.startNow(0);
+  // The load that follows keeps the start instead of waiting for a policy decision.
+  clock.requested();
+  expect(clock.check(PROVISIONAL_STALL_MS - 1)).toBe("wait");
+  const actions: string[] = [];
+  for (let step = 1; step <= MAX_LOAD_RETRIES + 2; step++) {
+    const action = clock.check(step * PROVISIONAL_STALL_MS);
+    actions.push(action);
+    if (action === "retry") {
+      clock.requested();
+    }
+  }
+  expect(actions).toEqual([
+    "retry",
+    "retry",
+    "retry",
+    "report",
+    "none",
+  ]);
+});

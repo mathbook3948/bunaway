@@ -62,6 +62,33 @@ const MIME: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
+/** The WKWebView of a window with the objects that belong to it alone, replaced as one unit. */
+interface NativeView {
+  webview: ObjcObject;
+  controller: ObjcObject;
+  configuration: ObjcObject;
+  /** Owned by this view (alloc/init); released when the view is replaced or the window closes. */
+  retained: ObjcObject[];
+}
+
+/**
+ * Test-only switches. `windows.ts` never passes them, so a production window always loads for real
+ * and reads the system clock.
+ */
+export interface WebviewTestHooks {
+  /** Accept the load of this view generation as WebKit would during a stall: policy allowed, nothing follows. */
+  stallLoad?(generation: number): boolean;
+  /** Clock of the stall check, so a test spans the retry intervals without waiting for them. */
+  now?(): number;
+}
+
+function required(value: ObjcObject | null): ObjcObject {
+  if (!value) {
+    throw new Error("AppKit object creation failed.");
+  }
+  return value;
+}
+
 // Registered Objective-C classes retain their IMPs for the entire process.
 // Keep the owning JSCallback and framework handles alive even after the window closes.
 const runtimeOwners: Objc[] = [];
@@ -70,14 +97,20 @@ const runtimeOwners: Objc[] = [];
 export class MacosWebview {
   private readonly objc = new Objc();
   private readonly window: ObjcObject;
-  private readonly webview: ObjcObject;
-  private readonly controller: ObjcObject;
-  private readonly configuration: ObjcObject;
+  /** The WKWebView in use; `recreateStalledView` replaces it once. */
+  private view: NativeView;
+  /** Counts the views built; a callback of an earlier view compares its own number with this one. */
+  private generation = 1;
+  /** Set once the single recreation was attempted, whatever its outcome. */
+  private recreated = false;
+  /** Window-level objects (window delegate, rule list), released by `close`. */
   private readonly retained: ObjcObject[] = [];
   private readonly diagnostics: WebviewDiagnostics;
-  /** Creation order and time of this view and the callbacks seen so far, read by `probe`. */
-  private readonly viewIndex = nextViewIndex();
-  private readonly createdAt = Date.now();
+  /** Compiled resource rules, added to every view's controller. */
+  private ruleList: ObjcObject | null = null;
+  /** Creation order and time of the current view and the callbacks it has seen, read by `probe`. */
+  private viewIndex = nextViewIndex();
+  private createdAt = Date.now();
   private policyCalls = 0;
   private assetStarts = 0;
   private lastNavigation: ObjcObject | null = null;
@@ -91,8 +124,8 @@ export class MacosWebview {
   private navigationStarted = false;
   /** The current load request reached `didStartProvisionalNavigation`; reset by every load request. */
   private provisionalSeen = false;
-  /** Stall clock and retry budget of this view's load; the budget is reset only by the reload after a WebContent crash. */
-  private readonly loadClock = new StalledLoadClock();
+  /** Stall clock and retry budget of this view's load; the budget is reset by the reload after a WebContent crash and by the replacement view. */
+  private loadClock = new StalledLoadClock();
   private provisionalNavigation: ObjcObject | null = null;
   /** Latest top-level document navigation; unlike provisionalNavigation it survives commit until completion. */
   private documentNavigation: ObjcObject | null = null;
@@ -115,16 +148,12 @@ export class MacosWebview {
       fail(error: unknown): void;
     },
     private readonly application: MacosApplication,
+    /** Deterministic stalls and a clock for tests; production code never passes it. */
+    private readonly testHooks?: WebviewTestHooks,
   ) {
     const o = this.objc;
     this.diagnostics = new WebviewDiagnostics(hooks.log);
     runtimeOwners.push(o);
-    const required = (value: ObjcObject | null) => {
-      if (!value) {
-        throw new Error("AppKit object creation failed.");
-      }
-      return value;
-    };
     // Construction runs outside the application's tick pools (startup windows, `windows.recreate`).
     // Without its own pool, objects AppKit and WebKit autorelease here, including retains on the
     // window, are never freed, so a closed window stays in `[NSApp windows]`. Everything that must
@@ -184,17 +213,114 @@ export class MacosWebview {
       if (size.contentProtection === true) {
         this.setContentProtection(true);
       }
+      this.view = this.buildView(initialSize, this.generation);
+      o.send(
+        o.send(this.window, "contentView"),
+        "addSubview:",
+        this.view.webview,
+      );
+
+      o.send(this.window, "center");
+      // Hidden creation never orders front, takes key status or activates the app.
+      if (config.window.visible !== false && !config.window.showWhenReady) {
+        this.present();
+      }
+      const viewPolicy = config.policy.views.find(
+        (view) => view.id === config.window.view,
+      );
+      if (!viewPolicy) {
+        throw new Error("Missing view policy.");
+      }
+      this.controls = new MacosWebviewControls(
+        o,
+        () => {
+          if (this.closed) {
+            throw new BunawayError({
+              code: "CANCELLED",
+              message: "WebView is closed.",
+            });
+          }
+          if (!this.rulesReady) {
+            throw new BunawayError({
+              code: "BUSY",
+              message: "WebView is not ready.",
+            });
+          }
+          return this.view.webview;
+        },
+        viewPolicy.origins,
+        this.window,
+        () => this.application.isActive(),
+      );
+      this.diagnostics.record("created");
+      this.ready = new Promise<void>((resolveReady, reject) => {
+        const completion = o.block(2, (_block, rules, error) => {
+          if (this.closed) {
+            reject(new Error("WebView closed during setup."));
+            return;
+          }
+          if (!rules || error) {
+            this.diagnostics.record("rules-failed", this.errorDetails(error));
+            reject(new Error("WebKit resource-rule compilation failed."));
+            return;
+          }
+          // The list is owned here so a replacement view gets the same rules.
+          o.send(rules, "retain");
+          this.retained.push(rules);
+          this.ruleList = rules;
+          o.send(this.view.controller, "addContentRuleList:", rules);
+          this.rulesReady = true;
+          this.diagnostics.record("rules-ready");
+          hooks.log("webview-ready");
+          this.navigateWhenReady();
+          resolveReady();
+        });
+        o.send(
+          o.send(o.class("WKContentRuleListStore"), "defaultStore"),
+          "compileContentRuleListForIdentifier:encodedContentRuleList:completionHandler:",
+          o.string(`bunaway-${config.runtime.id}-${config.window.view}`),
+          o.string(resourceRules(viewPolicy.origins)),
+          completion,
+        );
+      });
+    } catch (error) {
+      this.close();
+      throw error;
+    } finally {
+      o.send(pool, "drain");
+    }
+  }
+
+  /**
+   * Create a WKWebView with everything that belongs to it alone: configuration, user content
+   * controller, URL scheme handler, script message handler and navigation delegate. Every callback
+   * checks its generation first, so a view that was replaced can no longer touch this window's
+   * state; it only answers the decisions WebKit still waits for.
+   */
+  private buildView(
+    size: {
+      width: number;
+      height: number;
+    },
+    generation: number,
+  ): NativeView {
+    const o = this.objc;
+    const { hooks, config, application } = this;
+    const retained: ObjcObject[] = [];
+    const current = () => !this.closed && generation === this.generation;
+    // Owned from creation on, so a failure while the rest is wired releases it.
+    let created: ObjcObject | undefined;
+    try {
       const configuration = o.object("WKWebViewConfiguration");
-      this.configuration = configuration;
-      this.controller = o.object("WKUserContentController");
-      this.retained.push(configuration, this.controller);
+      const controller = o.object("WKUserContentController");
+      retained.push(configuration, controller);
       const scheme = o.delegate([
         {
           selector: "webView:startURLSchemeTask:",
           arguments: 2,
           encoding: "v@:@@",
           call: (_self, _cmd, _view, task) => {
-            if (task && !this.closed) {
+            if (task && current()) {
               this.serve(task);
             }
           },
@@ -203,10 +329,14 @@ export class MacosWebview {
           selector: "webView:stopURLSchemeTask:",
           arguments: 2,
           encoding: "v@:@@",
-          call: () => this.diagnostics.record("asset-stopped"),
+          call: () => {
+            if (current()) {
+              this.diagnostics.record("asset-stopped");
+            }
+          },
         },
       ]);
-      this.retained.push(scheme);
+      retained.push(scheme);
       o.send(
         configuration,
         "setURLSchemeHandler:forURLScheme:",
@@ -219,7 +349,7 @@ export class MacosWebview {
           arguments: 2,
           encoding: "v@:@@",
           call: (_self, _cmd, _controller, message) => {
-            if (this.closed || !message) {
+            if (!current() || !message) {
               return;
             }
             const frame = o.send(message, "frameInfo");
@@ -283,9 +413,9 @@ export class MacosWebview {
           },
         },
       ]);
-      this.retained.push(scriptHandler);
+      retained.push(scriptHandler);
       o.send(
-        this.controller,
+        controller,
         "addScriptMessageHandler:name:",
         scriptHandler,
         o.string("bunaway"),
@@ -299,19 +429,16 @@ export class MacosWebview {
           0,
         ),
       );
-      this.retained.push(script);
-      o.send(this.controller, "addUserScript:", script);
-      o.send(configuration, "setUserContentController:", this.controller);
+      retained.push(script);
+      o.send(controller, "addUserScript:", script);
+      o.send(configuration, "setUserContentController:", controller);
       o.send(
         configuration,
         "setWebsiteDataStore:",
         application.dataStore(config.window.view),
       );
-      this.webview = o.webview(
-        initialSize.width,
-        initialSize.height,
-        configuration,
-      );
+      const webview = o.webview(size.width, size.height, configuration);
+      created = webview;
       const cancelDownload = o.block(1, () => {});
       const navigation = o.delegate([
         {
@@ -319,6 +446,11 @@ export class MacosWebview {
           arguments: 3,
           encoding: "v@:@@@?",
           call: (_self, _cmd, _view, action, decision) => {
+            if (!current()) {
+              // A superseded view still gets an answer; WebKit requires its decision handler to run once.
+              o.decide(decision ?? null, WK_NAVIGATION_CANCEL);
+              return;
+            }
             let allowed = false;
             try {
               const target = o.text(
@@ -364,7 +496,7 @@ export class MacosWebview {
             if (allowed) {
               // The stall clock starts only once the policy decision is out, so a slow decision
               // is never mistaken for WebKit not starting the navigation.
-              this.loadClock.policyAllowed(Date.now());
+              this.loadClock.policyAllowed(this.stallClockNow());
             }
             this.diagnostics.record("action-policy-returned", {
               allowed,
@@ -377,6 +509,11 @@ export class MacosWebview {
           arguments: 3,
           encoding: "v@:@@@?",
           call: (_self, _cmd, _view, response, decision) => {
+            if (!current()) {
+              // A superseded view still gets an answer; WebKit requires its decision handler to run once.
+              o.decide(decision ?? null, WK_NAVIGATION_CANCEL);
+              return;
+            }
             let allowed = false;
             try {
               const target = o.text(
@@ -417,7 +554,7 @@ export class MacosWebview {
           arguments: 2,
           encoding: "v@:@@",
           call: (_self, _cmd, _view, navigation) => {
-            if (!this.closed) {
+            if (current()) {
               this.provisionalSeen = true;
               this.diagnostics.record("provisional");
               this.provisionalNavigation = navigation ?? null;
@@ -432,6 +569,9 @@ export class MacosWebview {
           arguments: 2,
           encoding: "v@:@@",
           call: (_self, _cmd, _view, navigation) => {
+            if (!current()) {
+              return;
+            }
             this.diagnostics.record("committed");
             if (navigation === this.provisionalNavigation) {
               this.provisionalNavigation = null;
@@ -452,6 +592,9 @@ export class MacosWebview {
             navigation: Pointer | null,
             error: Pointer | null,
           ) => {
+            if (!current()) {
+              return;
+            }
             this.diagnostics.record(
               selector === "webView:didFailProvisionalNavigation:withError:"
                 ? "provisional-failed"
@@ -495,6 +638,9 @@ export class MacosWebview {
           arguments: 2,
           encoding: "v@:@@",
           call: (_self, _cmd, _view, navigation) => {
+            if (!current()) {
+              return;
+            }
             this.diagnostics.record("finished");
             hooks.log("navigation-completed", {
               success: true,
@@ -511,6 +657,10 @@ export class MacosWebview {
           arguments: 1,
           encoding: "v@:@",
           call: () => {
+            // A superseded view's process ending says nothing about the view in use.
+            if (generation !== this.generation) {
+              return;
+            }
             // After close the window and view are released; only the record remains.
             this.diagnostics.record(
               "process-terminated",
@@ -547,87 +697,36 @@ export class MacosWebview {
           },
         },
       ]);
-      this.retained.push(navigation);
-      o.send(this.webview, "setNavigationDelegate:", navigation);
+      retained.push(navigation);
+      o.send(webview, "setNavigationDelegate:", navigation);
       // Media permissions belong to WKUIDelegate, even when one object owns both contracts.
-      o.send(this.webview, "setUIDelegate:", navigation);
+      o.send(webview, "setUIDelegate:", navigation);
       o.send(
-        this.webview,
+        webview,
         "setAutoresizingMask:",
         NS_VIEW_WIDTH_SIZABLE | NS_VIEW_HEIGHT_SIZABLE,
       );
-      o.send(o.send(this.window, "contentView"), "addSubview:", this.webview);
-      o.send(this.window, "center");
-      // Hidden creation never orders front, takes key status or activates the app.
-      if (config.window.visible !== false && !config.window.showWhenReady) {
-        this.present();
-      }
-      const viewPolicy = config.policy.views.find(
-        (view) => view.id === config.window.view,
-      );
-      if (!viewPolicy) {
-        throw new Error("Missing view policy.");
-      }
-      this.controls = new MacosWebviewControls(
-        o,
-        () => {
-          if (this.closed) {
-            throw new BunawayError({
-              code: "CANCELLED",
-              message: "WebView is closed.",
-            });
-          }
-          if (!this.rulesReady) {
-            throw new BunawayError({
-              code: "BUSY",
-              message: "WebView is not ready.",
-            });
-          }
-          return this.webview;
-        },
-        viewPolicy.origins,
-        this.window,
-        () => this.application.isActive(),
-      );
-      this.diagnostics.record("created");
-      this.ready = new Promise<void>((resolveReady, reject) => {
-        const completion = o.block(2, (_block, rules, error) => {
-          if (this.closed) {
-            reject(new Error("WebView closed during setup."));
-            return;
-          }
-          if (!rules || error) {
-            this.diagnostics.record("rules-failed", this.errorDetails(error));
-            reject(new Error("WebKit resource-rule compilation failed."));
-            return;
-          }
-          o.send(this.controller, "addContentRuleList:", rules);
-          this.rulesReady = true;
-          this.diagnostics.record("rules-ready");
-          hooks.log("webview-ready");
-          this.navigateWhenReady();
-          resolveReady();
-        });
-        o.send(
-          o.send(o.class("WKContentRuleListStore"), "defaultStore"),
-          "compileContentRuleListForIdentifier:encodedContentRuleList:completionHandler:",
-          o.string(`bunaway-${config.runtime.id}-${config.window.view}`),
-          o.string(resourceRules(viewPolicy.origins)),
-          completion,
-        );
-      });
+      return {
+        webview,
+        controller,
+        configuration,
+        retained,
+      };
     } catch (error) {
-      this.close();
+      if (created) {
+        o.send(created, "release");
+      }
+      for (const object of retained.reverse()) {
+        o.send(object, "release");
+      }
       throw error;
-    } finally {
-      o.send(pool, "drain");
     }
   }
 
   source(): string {
     const o = this.objc;
     return o.withAutoreleasePool(() =>
-      o.text(o.send(o.send(this.webview, "URL"), "absoluteString")),
+      o.text(o.send(o.send(this.view.webview, "URL"), "absoluteString")),
     );
   }
   start(): void {
@@ -739,11 +838,18 @@ export class MacosWebview {
         "URLWithString:",
         o.string(platformUrl(this.config.window.home)),
       );
-      const navigation = o.send(
-        this.webview,
-        "loadRequest:",
-        o.send(o.class("NSURLRequest"), "requestWithURL:", url),
-      );
+      // A test can stall this load the way WebKit does: the policy decision is out, nothing follows.
+      const stalled = this.testHooks?.stallLoad?.(this.generation) === true;
+      if (stalled) {
+        this.loadClock.policyAllowed(this.stallClockNow());
+      }
+      const navigation = stalled
+        ? null
+        : o.send(
+            this.view.webview,
+            "loadRequest:",
+            o.send(o.class("NSURLRequest"), "requestWithURL:", url),
+          );
       this.diagnostics.record("load-returned", {
         accepted: !!navigation,
         sameNavigation:
@@ -785,11 +891,14 @@ export class MacosWebview {
     if (this.closed || !this.navigationStarted || this.provisionalSeen) {
       return;
     }
-    const action = this.loadClock.check(Date.now());
+    const action = this.loadClock.check(this.stallClockNow());
     if (action === "wait" || action === "none") {
       return;
     }
     if (action === "report") {
+      if (!this.recreated && this.recreateStalledView()) {
+        return;
+      }
       this.diagnostics.record("load-stalled", {
         probe: this.probe(),
       });
@@ -799,7 +908,7 @@ export class MacosWebview {
       return;
     }
     this.diagnostics.record("load-retried", {
-      progress: this.objc.double(this.webview, "estimatedProgress"),
+      progress: this.objc.double(this.view.webview, "estimatedProgress"),
       probe: this.probe(),
     });
     // A load that WebKit accepted but never started can leave the view in a loading state that a
@@ -807,12 +916,114 @@ export class MacosWebview {
     // cancellation of a navigation that never began is not a document failure (see the fail
     // callbacks, which only complete the navigation they saw start).
     this.objc.withAutoreleasePool(() => {
-      this.objc.send(this.webview, "stopLoading");
+      this.objc.send(this.view.webview, "stopLoading");
     });
     this.diagnostics.record("load-stopped");
     // The reissued load may never reach the policy callback, so `check` already restarted the
     // stall clock and `requested` keeps it instead of waiting for a decision.
     this.loadHome();
+  }
+  private stallClockNow(): number {
+    return this.testHooks?.now?.() ?? Date.now();
+  }
+  /**
+   * Reissuing the load to a view whose WebContent never starts the navigation does not help, but a
+   * new WKWebView gets a new WebContent process. Before the stall is reported, replace the view once
+   * with one built the same way (see `buildView`), put it in the same place in the window and load
+   * the home page again with a fresh retry budget. Only the stalled view is replaced and only once:
+   * a replacement that stalls too is reported like any other stall, and the document and SDK
+   * deadlines are unchanged. Returns false, leaving the old view in place, when no replacement could
+   * be built.
+   */
+  private recreateStalledView(): boolean {
+    this.recreated = true;
+    const o = this.objc;
+    return o.withAutoreleasePool(() => {
+      const previous = this.view;
+      const generation = this.generation + 1;
+      const stalledProbe = this.probe();
+      let next: NativeView;
+      try {
+        next = this.buildView(this.viewSize(previous.webview), generation);
+      } catch (error) {
+        this.hooks.log("webview-recreate-failed", {
+          reason: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      }
+      // From here a callback of the previous view finds a newer generation and does nothing.
+      this.generation = generation;
+      const hadFocus =
+        o.send(this.window, "firstResponder") === previous.webview;
+      this.detachView(previous);
+      this.releaseView(previous);
+      this.view = next;
+      if (this.ruleList) {
+        o.send(next.controller, "addContentRuleList:", this.ruleList);
+      }
+      o.send(o.send(this.window, "contentView"), "addSubview:", next.webview);
+      if (hadFocus) {
+        o.send(this.window, "makeFirstResponder:", next.webview);
+      }
+      // The new view starts its own record: index, age, callback counts, navigation state, budget.
+      this.viewIndex = nextViewIndex();
+      this.createdAt = Date.now();
+      this.policyCalls = 0;
+      this.assetStarts = 0;
+      this.lastNavigation = null;
+      this.provisionalNavigation = null;
+      this.documentNavigation = null;
+      // The replacement may never reach the policy callback either, so its clock starts now.
+      this.loadClock = new StalledLoadClock();
+      this.loadClock.startNow(this.stallClockNow());
+      this.diagnostics.record("view-recreated", {
+        probe: stalledProbe,
+      });
+      this.loadHome();
+      return true;
+    });
+  }
+  /** Width and height of a view's frame; KVC boxes the NSRect so no struct return is needed. */
+  private viewSize(webview: ObjcObject): {
+    width: number;
+    height: number;
+  } {
+    const o = this.objc;
+    const bytes = Buffer.alloc(4 * 8);
+    o.send(
+      o.send(webview, "valueForKey:", o.string("frame")),
+      "getValue:size:",
+      ptr(bytes),
+      bytes.length,
+    );
+    return {
+      width: bytes.readDoubleLE(16),
+      height: bytes.readDoubleLE(24),
+    };
+  }
+  /**
+   * Detach a view from the window and WebKit: no callback reaches this object afterwards, and the
+   * handler name and scripts are free again. The objects it owns are released by `releaseView`.
+   */
+  private detachView(view: NativeView): void {
+    const o = this.objc;
+    o.send(
+      view.controller,
+      "removeScriptMessageHandlerForName:",
+      o.string("bunaway"),
+    );
+    o.send(view.controller, "removeAllUserScripts");
+    o.send(view.webview, "stopLoading");
+    o.send(view.webview, "setNavigationDelegate:", null);
+    o.send(view.webview, "setUIDelegate:", null);
+    o.send(view.webview, "removeFromSuperview");
+    o.send(view.webview, "release");
+  }
+  private releaseView(view: NativeView): void {
+    for (const object of view.retained.reverse()) {
+      this.objc.send(object, "release");
+    }
+    view.retained.length = 0;
   }
   /**
    * Called every window scan tick. Reissues a stalled load (see `retryStalledLoad`, so the retry
@@ -832,9 +1043,9 @@ export class MacosWebview {
     }
     this.startupCheckpoint++;
     this.diagnostics.record("startup-checkpoint", {
-      loading: !!this.objc.send(this.webview, "isLoading"),
+      loading: !!this.objc.send(this.view.webview, "isLoading"),
       provisional: !!this.provisionalNavigation,
-      progress: this.objc.double(this.webview, "estimatedProgress"),
+      progress: this.objc.double(this.view.webview, "estimatedProgress"),
       probe: this.probe(),
     });
   }
@@ -843,9 +1054,9 @@ export class MacosWebview {
     try {
       return probeWebview({
         o: this.objc,
-        webview: this.webview,
+        webview: this.view.webview,
         window: this.window,
-        configuration: this.configuration,
+        configuration: this.view.configuration,
         index: this.viewIndex,
         createdAt: this.createdAt,
         policyCalls: this.policyCalls,
@@ -879,7 +1090,7 @@ export class MacosWebview {
     // Worker messages arrive outside the native run-loop turn's autorelease pool.
     this.objc.withAutoreleasePool(() =>
       this.objc.send(
-        this.webview,
+        this.view.webview,
         "evaluateJavaScript:completionHandler:",
         this.objc.string(`__bunawayDeliver(${JSON.stringify(text)})`),
         completion,
@@ -969,25 +1180,17 @@ export class MacosWebview {
     this.closed = true;
     this.diagnostics.record("closed");
     const o = this.objc;
-    if (this.controller) {
-      o.send(
-        this.controller,
-        "removeScriptMessageHandlerForName:",
-        o.string("bunaway"),
-      );
-      o.send(this.controller, "removeAllUserScripts");
-    }
-    if (this.webview) {
-      o.send(this.webview, "stopLoading");
-      o.send(this.webview, "setNavigationDelegate:", null);
-      o.send(this.webview, "setUIDelegate:", null);
-      o.send(this.webview, "removeFromSuperview");
-      o.send(this.webview, "release");
+    // Absent when the first view could not be built.
+    if (this.view) {
+      this.detachView(this.view);
     }
     if (this.window) {
       o.send(this.window, "setDelegate:", null);
       o.send(this.window, "close");
       o.send(this.window, "release");
+    }
+    if (this.view) {
+      this.releaseView(this.view);
     }
     for (const object of this.retained.reverse()) {
       o.send(object, "release");

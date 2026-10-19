@@ -114,5 +114,11 @@ provisional 상태와 estimatedProgress를 관찰한다. 기존 로그의 URL �
 WebKit이 `loadRequest:`를 수락하고 탐색 정책 콜백까지 반환한 뒤에도 `didStartProvisionalNavigation`을
 호출하지 않는 간헐적 정지가 CI에서 관찰됐다(`docs/architecture/macos-native-results.md`).
 탐색 정책이 load를 허용한 뒤 3초 안에 provisional 단계가 시작되지 않으면 호스트가 진행 중인 load를 `stopLoading`으로 취소한 뒤 같은 요청을 다시 발행하며
-(`load-retried`에 이어 `load-stopped`를 기록), 다시 발행한 요청은 정책 콜백이 오지 않아도 발행 시점부터 3초(스캔 틱 단위로 확인)를 새로 재서 뷰마다 최대 3번까지 반복한다(WebContent 프로세스 종료 뒤의 reload는 새로 3번을 받는다). 그래도 시작되지 않으면(정책 허용 뒤 약 12초 이상) `webview-load-stalled`를 한 번 기록해
+(`load-retried`에 이어 `load-stopped`를 기록), 다시 발행한 요청은 정책 콜백이 오지 않아도 발행 시점부터 3초(스캔 틱 단위로 확인)를 새로 재서 뷰마다 최대 3번까지 반복한다(WebContent 프로세스 종료 뒤의 reload는 새로 3번을 받는다). 그래도 시작되지 않으면 정지한 뷰를 한 번 교체하고(아래), 교체한 뷰도 같은 3번을 지나 시작되지 않으면(정책 허용 뒤 약 24초 이상) `webview-load-stalled`를 한 번 기록해
 fixture 실패를 코드 회귀가 아닌 WebKit 정지로 구분할 수 있게 한다. 문서 기한과 SDK 기한은 늘리지 않는다.
+같은 뷰에 다시 발행해도 풀리지 않는 정지는 그 뷰의 WebContent 프로세스 상태이므로, `webview-load-stalled`를 기록하기 직전에
+정지한 뷰만 같은 구성(`WKWebViewConfiguration`, 스킴 핸들러, 스크립트 메시지 핸들러, navigation delegate, 리소스 규칙, 데이터 스토어)으로
+다시 만들어 창의 같은 자리에서 교체하고 새 뷰에서 재시도 횟수를 처음부터 센다(`view-recreated`를 기록하고 뷰 번호, 경과 시간, 콜백 횟수를 새 뷰 기준으로 갱신).
+새 뷰의 정지 시계는 정책 콜백을 기다리지 않고 교체 시점부터 재서, 새 뷰가 정책 단계 전에 멈춰도 보고된다. 교체는 창마다 한 번뿐이며 새 뷰도 멈추면 이전과 같이 `webview-load-stalled`로 보고한다. 교체된 뷰는 delegate와 핸들러를 먼저 떼고,
+이미 전달 중이던 이전 뷰의 콜백은 세대 번호가 달라 새 뷰의 탐색 상태, 문서 완료, 세션 폐기에 닿지 않으며 정책 결정만 거부로 답한다.
+`MacosWebview`의 선택 인자 `testHooks`(`stallLoad`, `now`)만 정지와 시계를 대신하며, `windows.ts`는 넘기지 않는다.
