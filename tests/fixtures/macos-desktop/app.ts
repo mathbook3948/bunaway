@@ -56,9 +56,19 @@ const isSessionEnd = scenario.startsWith("session-end");
  */
 const holdsCleanupForMainTick =
   scenario === "session-end" || scenario === "session-end-quit-reason";
+/**
+ * Longest the stop hook waits for that line. Core gives all plugin cleanup 2 s
+ * (`shutdownTimeoutMs`) and does not cancel a hook it gave up on, so a longer wait would only
+ * delay the other plugins' cleanup and bury the missing line behind a shutdown timeout.
+ */
+const MAIN_TICK_WAIT_MS = 1000;
 
-async function until(predicate: () => boolean, what: string) {
-  const deadline = Date.now() + STEP_TIMEOUT_MS;
+async function until(
+  predicate: () => boolean,
+  what: string,
+  timeoutMs = STEP_TIMEOUT_MS,
+) {
+  const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
     if (Date.now() > deadline) {
       throw new Error(`Timed out waiting for ${what}.`);
@@ -415,6 +425,7 @@ export default defineApp({
             await until(
               logged("main-tick-after-terminate"),
               "main-tick-after-terminate",
+              MAIN_TICK_WAIT_MS,
             );
           }
         };

@@ -688,6 +688,10 @@ user script가 중복되지 않는지, 교체된 뷰의 delegate에 뒤늦게 �
 시나리오에서 Quit 명령과 `beforeQuit` 취소, 수명주기 훅 순서, Dock 재활성화, 창 수명 이벤트와 닫기 요청,
 세션 종료를 검사한다. `session-end-reply`는 별도 프로세스(`fixtures/macos-desktop/quit-event-sender.ts`)가
 응답을 기다리며 quit Apple event를 보내, 응답이 앱 정리 뒤 `SESSION_END_WAIT_MS` 안에 오는지 확인한다.
+`session-end`와 `session-end-quit-reason`은 종료 요청 뒤에도 UI 스레드의 타이머가 도는지를 드라이버가 쓰는
+`main-tick-after-terminate` 줄로 확인한다. 훅이 가벼우면 정리와 프로세스 종료가 그 타이머보다 먼저 끝날 수 있어,
+픽스처 앱의 stop hook은 `stopHook`을 기록한 뒤 이 줄이 쓰일 때까지(최대 1초) 정리를 붙잡는다.
+따라서 이 두 시나리오에서 `stopHook` 줄은 정리 시작을 뜻하고, 정리 완료는 `onQuit`이 나타낸다.
 macos-native CI에서 실행하며 실제 로그아웃, 재시작, 시스템 종료와 사용자의 Dock 클릭,
 Cmd+Q 입력은 확인할 수 없어 알림, 자기 자신에게 보낸 Apple event와 `NSApp terminate:`로 대신한다.
 `macos-desktop-host.test.ts`, `macos-desktop-requests.test.ts`, `macos-open-urls.test.ts`,
