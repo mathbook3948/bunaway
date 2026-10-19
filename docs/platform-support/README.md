@@ -167,9 +167,12 @@ Windows 창 플러그인은 모니터 열거, 주 모니터와 대상 창의 모
 
 Windows의 선택 power 플러그인은 AC와 배터리 상태, 호출 세션의 입력 idle 및
 앱 수명의 system/display power request를 제공하고 AC와 배터리 상태 변경을 이벤트로 알린다.
-다른 플랫폼은 `UNSUPPORTED`다.
+macOS는 같은 플러그인으로 전원 상태(`getStatus`)와 입력 idle(`getIdleTime`, `getIdleState`)만 조회하며
+이벤트, power request와 CPU 속도 제한은 `UNSUPPORTED`다. 다른 플랫폼은 모두 `UNSUPPORTED`다.
 [power 계약](../site/src/content/docs/reference/plugins/power.mdx)을 따르며
 실제 상태 query, 상태 변경 이벤트 경로와 request handle 정리는 Windows native CI에 포함한다.
+macOS의 상태와 idle 조회는 `Check (macos-14)`의 전체 테스트에서 새 프로세스로 실행해 계약과 GC 압박 속 반복 조회의 유효한 결과를 확인하며
+배터리가 없는 러너에서는 내장 배터리가 없는 응답만 검증한다.
 물리 배터리 전환, 화면 timeout, idle 절전과 Modern Standby 검증은 수동 작업이다.
 
 Windows의 선택 appearance 플러그인은 저장된 테마와 transparency 선호, DWM accent,

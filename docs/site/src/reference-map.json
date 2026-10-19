@@ -348,7 +348,9 @@
           "LIBSYSTEM_PATH",
           "OBJC_PATH",
           "RTLD_LAZY",
-          "RTLD_DEFAULT"
+          "RTLD_DEFAULT",
+          "COREFOUNDATION",
+          "COREFOUNDATION_PATH"
         ]
       }
     },
