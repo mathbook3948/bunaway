@@ -143,6 +143,7 @@ function fixture() {
   let title = "Declared title";
   let opacity = 1;
   let ignoreMouseEvents = false;
+  let hasShadow = true;
   let accessibleTitle: string | null = null;
   const native: NativeWindow = {
     getReadiness() {
@@ -236,6 +237,11 @@ function fixture() {
       opacity = value;
     },
     getOpacity: () => opacity,
+    setHasShadow(value) {
+      apply("setHasShadow");
+      hasShadow = value;
+    },
+    hasShadow: () => hasShadow,
     setIgnoreMouseEvents(value) {
       apply("setIgnoreMouseEvents");
       ignoreMouseEvents = value;
@@ -340,6 +346,8 @@ function fixture() {
         | "getTitle"
         | "setOpacity"
         | "getOpacity"
+        | "setHasShadow"
+        | "hasShadow"
         | "setIgnoreMouseEvents"
         | "isIgnoreMouseEvents"
         | "setTitle"
@@ -362,6 +370,7 @@ function fixture() {
         title?: string;
         opacity?: number | string | null;
         ignore?: boolean;
+        hasShadow?: boolean;
         resizable?: boolean;
         movable?: boolean;
       } = {},
@@ -1385,6 +1394,73 @@ test("macOS target does not declare the Windows-only opacity operations", () => 
     expect.arrayContaining([
       "setOpacity",
       "getOpacity",
+    ]),
+  );
+});
+
+test("window shadow takes only a boolean, round-trips from the default and keeps its own permission grants", async () => {
+  const f = fixture();
+  expect(await f.invoke("hasShadow")).toBe(true);
+  for (const hasShadow of [
+    false,
+    true,
+  ]) {
+    expect(
+      await f.invoke("setHasShadow", "main", {
+        hasShadow,
+      }),
+    ).toBeNull();
+    expect(await f.invoke("hasShadow")).toBe(hasShadow);
+  }
+  for (const payload of [
+    {},
+    {
+      hasShadow: "false",
+    },
+    {
+      hasShadow: 0,
+    },
+    {
+      hasShadow: null,
+    },
+    {
+      hasShadow: true,
+      elevation: 1,
+    },
+  ]) {
+    expect(() =>
+      validateWindowCall({
+        operation: "windows.setHasShadow",
+        payload: {
+          view: "main",
+          ...payload,
+        },
+      }),
+    ).toThrow();
+  }
+  expect(validateWindowOutput("windows.hasShadow", true)).toBe(true);
+  expect(() => validateWindowOutput("windows.hasShadow", 1)).toThrow();
+  f.permissions.permissions = [];
+  await expect(f.invoke("hasShadow")).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  f.permissions.permissions = windowPermissions();
+  f.setClosed();
+  await expect(f.invoke("hasShadow")).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+});
+
+test("macOS target does not declare the Windows-only shadow operations", () => {
+  expect(windows._definition.nativePlatforms.macos?.operations).not.toEqual(
+    expect.arrayContaining([
+      "setHasShadow",
+    ]),
+  );
+  expect(windows._definition.nativePlatforms.windows?.operations).toEqual(
+    expect.arrayContaining([
+      "setHasShadow",
+      "hasShadow",
     ]),
   );
 });

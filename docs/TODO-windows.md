@@ -204,7 +204,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 키오스크 모드와 일반 전체화면의 차이를 정의한다.
 - [x] 창 opacity를 설정하고 조회한다. layered window의 상수 alpha로 WebView를 포함한 창 전체에 적용하며 1이면 layered 스타일을 제거한다.
 - [ ] 창 background color와 투명 배경을 제공한다.
-- [ ] shadow의 설정과 조회를 제공한다.
+- [x] shadow의 설정과 조회를 제공한다(`windows.setHasShadow`, `hasShadow`). `titlebar: "custom"` 창은 DWM 비클라이언트 렌더링 정책으로 끄고 같은 값으로 조회하며, 네이티브 제목 표시줄 창은 항상 shadow가 있어 `false` 설정을 `UNSUPPORTED`로 거부한다. macOS는 아직 없다.
 - [ ] Windows Mica, Acrylic와 배경 material, accent color를 제공한다.
 - [ ] 모서리와 창 shape의 지원을 결정한다. Electron shape는 실험 기능이다.
 - [ ] roundedCorners와 corner-smoothing CSS를 지원하거나 렌더러별 차이를 명시한다.

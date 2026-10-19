@@ -1312,6 +1312,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         isFullscreenable: () => nativeWindows.isFullscreenable(hwnd),
         setOpacity: (opacity) => nativeWindows.setOpacity(hwnd, opacity),
         getOpacity: () => nativeWindows.getOpacity(hwnd),
+        setHasShadow: (shadow) => nativeWindows.setHasShadow(hwnd, shadow),
+        hasShadow: () => nativeWindows.hasShadow(hwnd),
         setIgnoreMouseEvents: (ignore) =>
           nativeWindows.setIgnoreMouseEvents(hwnd, ignore),
         isIgnoreMouseEvents: () => nativeWindows.isIgnoreMouseEvents(hwnd),
