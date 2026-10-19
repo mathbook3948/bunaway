@@ -394,7 +394,7 @@ await files.writeJson(configPath, {
       process.execPath,
       "-e",
       `await Bun.write('web-started.txt', 'ready');
-       const deadline = Date.now() + 10000;
+       const deadline = Date.now() + ${deadline("childStep")};
        while (!await Bun.file('web-resume.txt').exists()) {
          if (Date.now() > deadline) throw new Error('Web build resume timed out');
          await Bun.sleep(10);

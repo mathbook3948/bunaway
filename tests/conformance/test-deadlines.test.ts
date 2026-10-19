@@ -27,7 +27,6 @@ const LITERAL_DEADLINES: Record<string, number> = {
   "api/default-client.test.ts": 1,
   "api/window-readiness.test.ts": 1,
   "cli/managed-command.test.ts": 3,
-  "cli/packaging.fixture.ts": 1,
   "cli/windows-opener-files.ts": 1,
   "fixtures/android/app.ts": 1,
   "fixtures/macos-opener-receiver-app.ts": 3,
