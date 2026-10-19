@@ -55,7 +55,7 @@ async function startUI(
     /** Withholds the controller completion of this creation until `parser.run` settles it. */
     holdCreationNumber?: number;
     holdProfileReuse?: boolean;
-    closeBehavior?: "keep-alive" | "quit";
+    closeBehavior?: "keep-alive" | "quit" | "hide";
     /**
      * Lets both views listen to `windows.lifecycle`; only `main` is also granted
      * `windows.listInstances`, which the event requires of its recipients.
@@ -1914,7 +1914,7 @@ function closeRequestEvents(packets: Packet[]) {
  */
 async function startCloseRequestUI(
   options: {
-    closeBehavior?: "keep-alive" | "quit";
+    closeBehavior?: "keep-alive" | "quit" | "hide";
     subscribe?: boolean;
     withholdListenResult?: boolean;
   } = {},
@@ -2370,6 +2370,71 @@ test(
       expect(await ui.exited).toBe(0);
       expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.close)).toBe(1);
       expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.destroy)).toBe(1);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "closeBehavior hide hides a user close to the tray without a confirmation or retirement",
+  async () => {
+    const { ui, windowId, settle, isDestroyed } = await startCloseRequestUI({
+      closeBehavior: "hide",
+      subscribe: false,
+    });
+    const identity = {
+      view: "main",
+      windowId,
+    };
+    try {
+      expect(await ui.call("windows.isVisible", identity)).toBe(true);
+      await ui.call("parser.run", "user-close");
+      await ui.waitFor(
+        async () => (await ui.call("windows.isVisible", identity)) === false,
+      );
+      await settle();
+      expect(await isDestroyed()).toBe(false);
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.confirmations)).toBe(
+        0,
+      );
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.close)).toBe(0);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "a close requested while the app still decides an earlier close is rejected as pending",
+  async () => {
+    const { ui, windowId, respond, settle, isDestroyed } =
+      await startCloseRequestUI();
+    try {
+      await ui.call("parser.run", "user-close");
+      await ui.waitFor(() => closeRequestEvents(ui.packets).length === 1);
+      const failure = await ui
+        .call("windows.close", {
+          view: "main",
+          windowId,
+        })
+        .catch((error: unknown) => error);
+      expect(String(failure)).toContain("Window close is already pending.");
+      await settle();
+      expect(await isDestroyed()).toBe(false);
+      // The original request is still answerable and the allowed close then completes.
+      await respond(1, true);
+      await ui.waitFor(isDestroyed);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
     } finally {
       await ui.close();
     }
