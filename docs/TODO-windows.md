@@ -898,8 +898,10 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   `process.run`의 제한된 binary stdin, stdout/stderr 캡처, PID와 완료 결과는 구현했다.
   장기 spawn handle과 interactive stdin, 출력 stream은 남아 있다.
 - [ ] process kill, timeout과 앱 종료 시 process tree 정리를 연결한다.
-  호출 취소, timeout과 어댑터 폐기는 직접 자식을 종료하고 pipe를 닫는다. 앱 종료의
-  descendant 정리는 기존 host Job Object를 따른다. 호출별 process tree 종료는 남아 있다.
+  호출 취소, timeout, 출력 초과와 어댑터 폐기는 호출별 Job Object로 자손까지 종료하고
+  pipe를 닫는다. 직접 자식이 정상 종료해도 남은 자손을 정리한다. 앱 종료의 descendant
+  정리는 기존 host Job Object를 따른다. 장기 spawn handle의 kill은 handle 자체가
+  없어 남아 있다.
 - [ ] 번들 sidecar의 플랫폼 선택, 실행 경로, 라이선스와 패키징을 제공한다.
 - [ ] 앱 restart와 exit를 desktop 수명주기에 연결한다.
 - [x] CLI argument와 subcommand schema, help, 오류와 match 결과를 제공한다.
