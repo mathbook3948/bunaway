@@ -3,12 +3,12 @@ import {
   constants,
   fstatSync,
   fsyncSync,
-  lstatSync,
   mkdirSync,
   openSync,
   renameSync,
   rmSync,
   type Stats,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
@@ -28,7 +28,7 @@ const LEVEL_ORDER = {
 
 function existing(path: string): Stats | undefined {
   try {
-    return lstatSync(path);
+    return statSync(path);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
@@ -39,8 +39,8 @@ function existing(path: string): Stats | undefined {
 
 function checkedFile(path: string): Stats | undefined {
   const info = existing(path);
-  if (info && (!info.isFile() || info.nlink !== 1)) {
-    throw new Error("App log target must be a regular file with one link.");
+  if (info && !info.isFile()) {
+    throw new Error("App log target must be a regular file.");
   }
   return info;
 }
@@ -66,7 +66,7 @@ export class AppLog {
     ]) {
       const info = existing(path);
       if (info && !info.isDirectory()) {
-        throw new Error("App log directory must be a directory without links.");
+        throw new Error("App log directory must be a directory.");
       }
     }
   }
@@ -177,14 +177,11 @@ export class AppLog {
     flags: number,
     run: (fd: number) => void,
   ): void {
-    // POSIX refuses final-component links at open. Windows also gets the lstat check above.
-    const noFollow =
-      process.platform === "win32" ? 0 : (constants.O_NOFOLLOW ?? 0);
-    const fd = openSync(path, flags | noFollow, 0o600);
+    const fd = openSync(path, flags, 0o600);
     try {
       const info = fstatSync(fd);
-      if (!info.isFile() || info.nlink !== 1) {
-        throw new Error("App log target must be a regular file with one link.");
+      if (!info.isFile()) {
+        throw new Error("App log target must be a regular file.");
       }
       run(fd);
     } finally {

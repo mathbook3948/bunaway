@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -311,14 +311,13 @@ test("only fixed and RAM drives are read, before any file access", () => {
   }
 });
 
-test("links, reparse points and cloud placeholders are refused without following them", () => {
+test("links are followed and cloud placeholders are refused", () => {
   const directory = mkdtempSync(join(tmpdir(), "bunaway-media-"));
   try {
-    mkdirSync(join(directory, "dir"));
-    const folder = join(directory, "dir");
-    const file = join(folder, "a.png");
+    const file = join(directory, "a.png");
     writeFileSync(file, "x");
-    const run = (entries: Record<string, number>, probed: string[] = []) =>
+    const probed: string[] = [];
+    const run = (attributes: number) =>
       assertToastMediaFiles(
         {
           ...base,
@@ -326,49 +325,30 @@ test("links, reparse points and cloud placeholders are refused without following
         },
         stubFilesystem(
           {
-            [file]: NORMAL,
-            ...entries,
+            [file]: attributes,
           },
           3,
           probed,
         ),
       );
-    expect(() => run({})).not.toThrow();
-    // A reparse point on an intermediate directory stops the walk before deeper components are probed.
-    const probed: string[] = [];
-    expect(() =>
-      run(
-        {
-          [folder]: REPARSE_POINT | DIRECTORY,
-        },
-        probed,
-      ),
-    ).toThrow(
-      "Notification image path must not contain links or reparse points.",
-    );
-    expect(pathKey(probed.at(-1) ?? "")).toBe(pathKey(folder));
-    // The final file itself may be a link.
-    expect(() =>
-      run({
-        [file]: REPARSE_POINT,
-      }),
-    ).toThrow("links or reparse points");
+    expect(() => run(NORMAL)).not.toThrow();
+    // Only the file itself is probed, once; a link on it or on a parent folder is not rejected.
+    expect(probed.map(pathKey)).toEqual([
+      pathKey(file),
+    ]);
+    expect(() => run(NORMAL | REPARSE_POINT)).not.toThrow();
     for (const attribute of [
       0x1000,
       0x40000,
       0x400000,
     ]) {
-      expect(() =>
-        run({
-          [file]: NORMAL | attribute,
-        }),
-      ).toThrow("Notification image must be stored locally.");
+      expect(() => run(NORMAL | attribute)).toThrow(
+        "Notification image must be stored locally.",
+      );
     }
-    expect(() =>
-      run({
-        [file]: INVALID,
-      }),
-    ).toThrow("Notification image is not a readable regular file.");
+    expect(() => run(INVALID)).toThrow(
+      "Notification image is not a readable regular file.",
+    );
   } finally {
     rmSync(directory, {
       recursive: true,

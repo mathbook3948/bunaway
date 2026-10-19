@@ -51,8 +51,8 @@ true이면 popup 대신 알림 기록으로 전달한다. OS 설정에 따른 �
 URL, `..` 구간, 제어 문자는 거부한다. 확장자는 png, jpg, jpeg, gif만 허용하고 파일은 존재하는
 일반 파일이며 3,000,000바이트 이하여야 한다. 드라이브 문자 뒤 `:`(NTFS ADS)와 짝 없는 surrogate도
 거부한다. `imagePlacement: "hero"`는 `image`가 있어야 한다. 파일 접근 전에 `GetDriveTypeW`로 고정
-드라이브와 RAM 디스크만 허용하고, 경로 구성요소를 위에서부터 `GetFileAttributesW`로 확인해 reparse
-point(링크, 정션)를 따라가지 않고 거부하며 최종 파일의 offline과 recall 속성도 거부한다. 두 함수는
+드라이브와 RAM 디스크만 허용하고, 파일을 `GetFileAttributesW`로 한 번 확인해 디렉터리와 offline,
+recall 속성을 거부한다. 링크는 따라가며 경로 제한은 앱 명령이 맡는다. 두 함수는
 플러그인 수명 kernel32 바인딩을 쓴다. 네트워크를 가리키는 `subst` 드라이브와 검사 뒤 경로 교체는 막지
 못한다. 인코딩한 file URI는 경로(최대 259자)보다 길어질 수 있고 길이는 검사하지 않는다.
 `soundLoop`이면 `<toast duration="long">`을 출력한다. 검사는 show 직전에 하며 실패는 `INVALID_ARGUMENT`이다. 경로는
