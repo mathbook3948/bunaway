@@ -206,6 +206,7 @@ const fixtures = {
     {
       kind: "exit-code",
       exitCode: 3,
+      relaunch: false,
     },
     "macos-main",
   ),

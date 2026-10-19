@@ -22,6 +22,7 @@ import {
 import { DesktopLifecycle } from "../../windows/bun/desktop.ts";
 import { runBackendShutdown } from "./backend-shutdown.ts";
 import type { MacosBackendData } from "./config.ts";
+import { checkRelaunchArguments } from "./relaunch.ts";
 
 const config: MacosBackendData = workerData;
 if (!parentPort) {
@@ -198,6 +199,7 @@ function beginBackendShutdown() {
         channel.send({
           kind: "exit-code",
           exitCode: desktop?.exitCode ?? 0,
+          relaunch: desktop?.relaunch !== undefined,
         }),
       nativeStopped: nativeStopped.promise,
     });
@@ -341,8 +343,8 @@ try {
     },
     reportDesktopFailure,
     undefined,
-    // The macOS host cannot start a replacement process of itself yet.
-    false,
+    true,
+    checkRelaunchArguments,
   );
   if (reportedCause) {
     desktop.commitShutdown(reportedCause);

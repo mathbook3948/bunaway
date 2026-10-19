@@ -115,8 +115,9 @@ export interface DesktopContext {
    * takes the single-instance lock. Overlap follows the rule of `quit`: a pending or committed
    * shutdown with a different exit code or without this relaunch wins, and this call resolves
    * `false` without relaunching. The relaunch is skipped when the operating system ends
-   * the session or the host fails. Windows only; macOS rejects with `UNSUPPORTED`. Under
-   * `bunaway dev` the CLI restarts the host.
+   * the session or the host fails. Under `bunaway dev` on Windows the CLI restarts the host. On
+   * macOS the app receives no launch arguments, so a non-empty `argv` rejects with
+   * `INVALID_ARGUMENT`; the new process starts the same executable and waits for this one to exit.
    */
   relaunch(options?: RelaunchOptions): Promise<boolean>;
 }

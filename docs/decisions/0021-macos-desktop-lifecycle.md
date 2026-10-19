@@ -217,6 +217,32 @@ macOS의 사용자 닫기는 타이틀바의 닫기 버튼, `performClose:`, 공
 WebView의 `window.close()`는 처리하지 않는다. 닫기 확인(`setCloseConfirmation`)과 `windows.destroy`가
 macOS에서 계속 `UNSUPPORTED`이므로 그에 관한 규칙은 적용되지 않는다.
 
+### `relaunch()`
+
+`DesktopContext.relaunch()`는 ADR 0020의 시그니처와 오류 규칙을 그대로 쓴다. 종료 순서는 `quit`과 같고
+원인 `"api"`로 `beforeQuit`, `onWillQuit`, 정지 훅, `onQuit`을 거친다. 세션 종료와 시그널(`interrupted`),
+호스트 실패, `exit()`에서는 재실행하지 않는다(`DesktopLifecycle`이 공유하는 규칙).
+
+- **시작 시점.** 백엔드가 마지막 패킷 `exit-code`에 `relaunch` 표시를 실어 보내면 메인 스레드가
+  하위 프로세스 정리와 프로세스 그룹 정리를 마친 뒤 `host-stopped` 기록 직전에 새 프로세스를 시작한다.
+  macOS에는 단일 인스턴스 잠금이 없어 잠금 대기로 선행 프로세스의 종료를 알 수 없다. 그래서 `/bin/sh`가
+  이전 pid가 사라질 때까지(최대 30초, 0.1초 간격) 기다린 뒤 `exec`으로 앱 실행 파일을 시작한다. 30초가 지나도
+  이전 프로세스가 남아 있으면 아무것도 시작하지 않고 끝난다.
+- **인자.** 실행 파일 경로와 인자는 호스트가 시작할 때의 `launch.executablePath`와 `launch.args`이고, 셸 문자열이
+  아니라 `exec "$@"`의 별도 인자로 전달해 인용 문제와 명령 주입이 없다. 작업 디렉터리와 환경 변수는 시작 시점
+  값을 유지한다. 번들 앱도 `open -n`이 아니라 번들 안의 실행 파일을 직접 시작해 파일, URL 열기 요청과 구분한다.
+- **argv.** macOS 앱은 실행 인자를 받지 않는다(`OpenRequest.argv`는 항상 `[]`). 앱이 볼 수 없는 인자를 조용히 버리지
+  않도록 비어 있지 않은 `argv`는 종료하기 전에 `INVALID_ARGUMENT`로 거부한다.
+- **프로세스 그룹.** 호스트는 자기 프로세스 그룹을 만들고, 정리와 죽음 감시 프로세스는 그 그룹만 신호한다. 새
+  프로세스는 `detached`로 새 세션을 만들어 그 그룹 밖에 있으므로 정리에 걸리지 않고, 호스트 스트림과 연결되지
+  않으며 호스트의 종료를 막지 않는다.
+- **개발 실행.** macOS에는 CLI가 호스트를 다시 시작하는 개발 경로가 없으므로 개발 실행도 같은 방식으로
+  직접 재실행한다.
+- **실패.** 새 프로세스를 만들 수 없으면 호스트 로그에 `relaunch-failed`를 남기고 요청한 종료 코드로 끝난다.
+
+선례: Electron `app.relaunch()`와 Tauri `process.relaunch`는 모두 같은 실행 파일을 다시 시작한다. 여기서는 이전
+프로세스의 종료를 기다린 뒤 시작해 두 호스트가 겹쳐 실행되지 않게 한다.
+
 ### 아직 지원하지 않는 것
 
 - 메뉴 막대 아이콘(`tray`)과 그에 의존하는 `closeBehavior: "hide"`, 창 없는 시작.
@@ -241,10 +267,13 @@ macOS에서 계속 `UNSUPPORTED`이므로 그에 관한 규칙은 적용되지 �
 
 Linux에서는 종료 원인 분류(`quit-reason`), 세션 종료 대기, 백엔드 종료 순서, 요청 보류, 패킷
 처리, 창 수명 규칙, OS 열기 요청의 검증과 보관, 한도와 `onOpenUrls`, `onReopen` 호출 순서를 단위와
-계약 테스트로 확인한다. 이 통과는 실제 AppKit 동작의 검증이 아니다.
+계약 테스트로 확인한다. 재실행 명령의 구성, 이전 pid가 사라질 때까지의 대기, 인자의 무해한 전달은 실제 `/bin/sh`로
+Linux에서 실행해 확인한다(`tests/lifecycle/macos-relaunch.test.ts`). 이 통과는 실제 AppKit 동작의 검증이 아니다.
 실제 AppKit 동작은 macos-native CI에서 `tests/lifecycle/macos-desktop.ts`의 시나리오로 실행한다.
 `tests/lifecycle/run-native.ts`가 이 실행기를 등록한다. 시나리오는 앱이 자기 자신에게 `GURL`,
-`odoc`, reopen Apple event를 보내 `onOpenUrls`와 `onReopen`을 확인한다.
+`odoc`, reopen Apple event를 보내 `onOpenUrls`와 `onReopen`을 확인한다. `relaunch` 시나리오는 첫 프로세스가
+`relaunch()`로 끝난 뒤 새 호스트 프로세스가 다른 pid로 시작하고, 시작 때 이전 pid가 이미 없으며, 두 번째 프로세스가
+정상 종료하는지 확인한다.
 
 CI에서 확인하지 못하는 항목이 있다. 실제 로그아웃, 재시작, 시스템 종료는 실행하지 않고
 같은 알림과 quit Apple event를 주입한다. 사용자의 Dock 클릭은 자기 자신에게 보낸 reopen Apple

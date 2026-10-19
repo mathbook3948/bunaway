@@ -473,10 +473,14 @@ const packetDefinitions = {
     ],
     "control",
   ),
-  /** The process exit code the backend chose for an orderly shutdown; sent last, after `onQuit`. */
+  /**
+   * The process exit code the backend chose for an orderly shutdown, and whether the app asked to be
+   * started again; sent last, after `onQuit`.
+   */
   "exit-code": definePacket(
     {
       exitCode: processExitCode,
+      relaunch: flag,
     },
     [
       "macos-main",

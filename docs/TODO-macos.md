@@ -155,7 +155,7 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 - [x] macOS 로그아웃, 재시작과 시스템 종료를 `"session-end"` 원인의 취소 불가 종료로 처리하고 정리 기한을 정한다. 전원 끄기 알림과 quit Apple event를 처리하고 4초까지 정리를 기다린다. 실제 로그아웃은 CI에서 확인하지 못한다.
 - [x] `windows.lifecycle`과 `windows.closeRequested` 이벤트, `windows.respondClose` 작업을 AppKit 창에 연결한다.
 - [ ] `desktop.tray`, `closeBehavior: "hide"`와 창 없는 시작을 지원한다. 06절의 메뉴 막대 아이콘이 선행 조건이며 지금은 `UNSUPPORTED`다.
-- [ ] exit, relaunch와 인자 보존, 앱 및 런타임 버전, 실행 경로와 packaged 상태를 조회한다.
+- [ ] exit, relaunch와 인자 보존, 앱 및 런타임 버전, 실행 경로와 packaged 상태를 조회한다. `exit`와 `relaunch`는 구현했다(macOS는 실행 인자를 받지 않으므로 비어 있지 않은 `argv`는 거부한다). 버전, 실행 경로, packaged 조회는 남아 있다.
 - [ ] 앱 WebView와 일반 브라우저 및 SSR 실행을 구분하는 공개 기능을 제공한다.
 - [ ] About 패널, 앱 이름과 데이터 경로 지정, 비정상 종료 이벤트를 제공한다.
 

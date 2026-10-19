@@ -116,6 +116,7 @@ export const frameworkPaths = [
     "host-operations.ts",
     "config.ts",
     "process-group.ts",
+    "relaunch.ts",
     "desktop-requests.ts",
     "open-urls.ts",
     "backend-shutdown.ts",

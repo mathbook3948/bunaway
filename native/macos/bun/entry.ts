@@ -19,6 +19,7 @@ import type { MacosBackendData, MacosConfig } from "./config.ts";
 import { DesktopRequests } from "./desktop-requests.ts";
 import { normalizeOpenUrls } from "./open-urls.ts";
 import { containMacosProcess } from "./process-group.ts";
+import { relaunchCommand, startRelaunch } from "./relaunch.ts";
 import { readWebKitVersion } from "./webkit-version.ts";
 import { MacosWindows } from "./windows.ts";
 
@@ -60,6 +61,38 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
   let ready = false;
   let cleaned = false;
   let exitCode = 0;
+  /** Set by the backend's last packet when the app asked to be started again. */
+  let relaunchRequested = false;
+  // The new process keeps the working directory and environment this host booted with.
+  const bootCwd = process.cwd();
+  const bootEnvironment = {
+    ...process.env,
+  };
+  /** Starts the process `relaunch()` asked for; a failure is only logged, the exit code stands. */
+  const startReplacement = async () => {
+    try {
+      const launch = config.app?.launch;
+      if (!launch) {
+        throw new Error("The host has no launch information.");
+      }
+      await startRelaunch(
+        relaunchCommand(
+          {
+            executablePath: launch.executablePath,
+            args: launch.args,
+            cwd: bootCwd,
+            env: bootEnvironment,
+          },
+          process.pid,
+        ),
+      );
+      diagnostic("relaunch-started");
+    } catch (error) {
+      diagnostic("relaunch-failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
   let failure: unknown;
   let ui: MacosWindows | undefined;
   let application: MacosApplication | undefined;
@@ -544,6 +577,7 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
         // Sent last, after onQuit; the backend drains its channel before the Worker exits, so the
         // code is known when `exited` settles.
         exitCode = packet.exitCode;
+        relaunchRequested = packet.relaunch;
         return;
       case "cleaned":
         cleaned = true;
@@ -811,6 +845,11 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
       });
       await group.close();
       activeProcesses = 0;
+      if (relaunchRequested && failure === undefined) {
+        // After the app, its descendants and the process group are gone. The new process waits
+        // for this one to exit, so it never sees the old host's resources.
+        await startReplacement();
+      }
     } catch (error) {
       failure ??= error;
     } finally {
