@@ -22,7 +22,7 @@ export const statusSchema = z.strictObject({
   ]),
   matchesCurrentLaunch: z.boolean(),
 });
-/** App launch registration inputs and observed Windows startup status. */
+/** App launch registration inputs; the stored result is described by `statusSchema`. */
 export const enableSchema = z.strictObject({
   hidden: z.boolean().default(false),
   args: z
@@ -36,7 +36,10 @@ export const enableSchema = z.strictObject({
     )
     .max(64),
 });
-/** Stored launch data and the independently observed Windows startup approval state. */
+/**
+ * Stored launch data and the independently observed startup approval state. Windows reports the
+ * user's Startup Apps choice; macOS has no public API for it, so `startupState` is `unknown`.
+ */
 export type AutostartStatus = z.infer<typeof statusSchema>;
 /** App arguments and optional hidden startup. Hidden startup requires desktop.tray. */
 export type AutostartOptions = {

@@ -4,7 +4,9 @@
 `src/contract.ts`는 작업 스키마와 타입, 네이티브 호출 검증을 소유하고 `src/calls.ts`는 편의 호출을 담당합니다.
 플랫폼 구현은 계약을 직접 읽으며 공개 진입점을 역으로 import하지 않습니다.
 
-Windows 사용자별 로그인 자동 실행을 제공하는 선택 네이티브 플러그인입니다.
+Windows와 macOS의 사용자별 로그인 자동 실행을 제공하는 선택 네이티브 플러그인입니다.
+Windows는 HKCU Run, macOS는 `~/Library/LaunchAgents`의 plist(`RunAtLoad`)에 등록하며
+macOS 어댑터는 `src/platforms/macos*.ts`에 있습니다.
 앱에 패키지를 설치하고 `autostart`을 등록합니다. 등록 변경에는
 `autostart.enable`, `autostart.disable`, 조회에는 `autostart.getStatus` 권한이 필요합니다.
 
@@ -36,6 +38,10 @@ HKCU Run에 REG_SZ를 쓰고 작업 관리자의 활성 상태는 별도로 읽�
 대기하지 않고 변경 없이 BUSY로 거부하며 설치 프로그램은 잠금마다 최대 5초 기다립니다. 이전 버전과 외부 도구는 참여하지 않습니다.
 
 ## 검증
+
+`tests/api/autostart-macos.test.ts`는 임시 홈 디렉터리에서 macOS 어댑터의 plist 작성, 반복 등록의
+쓰기 생략, 이 앱이 만들지 않은 plist의 보존, 해제와 XML 이스케이프를 검사합니다. 실제 로그인 때
+launchd가 앱을 실행하는지는 검증하지 않았습니다.
 
 ```powershell
 mise exec bun@1.4.2 --command "bun test tests/api/autostart.test.ts"

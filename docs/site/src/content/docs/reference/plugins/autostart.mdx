@@ -1,12 +1,13 @@
 ---
 title: autostart
-description: Windows 사용자 로그인 자동 실행을 등록, 조회하고 해제합니다.
+description: Windows와 macOS의 사용자 로그인 자동 실행을 등록, 조회하고 해제합니다.
 sidebar: { order: 6 }
 ---
 
 기본 export(`default`)를 `autostart`로 가져와 앱에 등록하고 호출합니다.
 
-`@bunaway/plugin-autostart`는 현재 사용자의 Windows 로그인 자동 실행을 제공합니다.
+`@bunaway/plugin-autostart`는 현재 사용자의 Windows와 macOS 로그인 자동 실행을 제공합니다.
+Windows는 사용자 Run 값, macOS는 `~/Library/LaunchAgents`의 LaunchAgent plist에 등록합니다.
 패키지를 설치하고 `autostart`를 등록해야 합니다. 설치와 등록만으로 자동 실행이
 켜지지 않습니다. 사용자가 동의한 설정 변경에서 `enableAutostart`를 호출하세요.
 
@@ -44,6 +45,10 @@ Windows에 저장하는 전체 명령줄은 **260 UTF-16 코드 단위**를 넘�
 NUL과 짝이 없는 UTF-16 surrogate는 거부합니다. `%PATH%`, `&` 등은 문자열이며
 환경 변수 확장이나 셸 실행을 하지 않습니다.
 
+macOS는 인자를 plist의 `ProgramArguments` 배열에 문자열 하나씩 저장하므로 전체 길이 제한과
+따옴표 이스케이프가 없습니다. 대신 plist(XML)로 그대로 저장할 수 없는 줄바꿈을 포함한
+제어 문자와 짝이 없는 surrogate는 `INVALID_ARGUMENT`로 거부합니다.
+
 ## 로그인 실행 구분과 숨김 시작
 
 등록 명령줄에는 프레임워크 인자 뒤에 예약 시작 인자를 하나 추가합니다. 일반 등록은
@@ -59,6 +64,9 @@ NUL과 짝이 없는 UTF-16 surrogate는 거부합니다. `%PATH%`, `&` 등은 �
 수동 실행도 같은 예약 인자를 전달할 수 있습니다. 권한 승인이나 신뢰된 출처 판단에
 사용하지 마세요. 기존 등록은 명시적으로 재등록하기 전까지 예약 인자가 없을 수 있습니다.
 `--login`과 같은 앱 고유 인자는 계속 그대로 전달합니다.
+
+macOS에는 아직 트레이 아이콘이 없어 호스트가 숨김 시작을 허용하지 않습니다.
+`hidden: true`는 항상 `INVALID_ARGUMENT`로 거부하며 plist를 변경하지 않습니다.
 
 숨김 등록에는 앱 정의의 `desktop.tray`가 필요합니다. 트레이가 없는 앱의
 `autostart.enableAutostart({ hidden: true })`는 `INVALID_ARGUMENT`로 거부하며 Run 값을 변경하지 않습니다.
@@ -110,6 +118,13 @@ export default defineApp({
 | `startupState` | `enabled`, `disabled`, `unknown` 중 하나. 등록 존재 여부와 별개 |
 | `matchesCurrentLaunch` | 저장 경로와 프레임워크 인자 접두어가 현재 호스트 실행과 일치하는지 여부. 앱 인자는 비교하지 않음 |
 
+macOS에서는 `registrationName`이 plist의 `Label`이자 파일 이름(`<Label>.plist`)입니다.
+`registered`는 `Label`이 일치하고 `RunAtLoad`가 `true`인 plist가 있는지 나타냅니다.
+`commandLine`은 `ProgramArguments`를 셸 인용으로 합친 표시용 문자열이며 실행에 사용하지 않습니다.
+`executablePath`와 `args`는 첫 항목이 절대 경로이고 제어 문자가 없을 때만 채웁니다.
+macOS에는 사용자가 시스템 설정의 로그인 항목에서 끈 상태를 읽는 공개 API가 없어
+`startupState`는 항상 `unknown`입니다. `enabled`나 `disabled`로 추정하지 마세요.
+
 조회는 등록을 고치거나 앱을 활성화하지 않습니다. Run 값이 남아 있어도 작업 관리자에서
 비활성화하면 `registered: true`, `startupState: "disabled"`일 수 있습니다.
 등록을 해제해도 Windows의 기존 비활성화 기록은 남을 수 있습니다.
@@ -137,6 +152,15 @@ PATH나 사용자 Bun 설치에 의존하지 않습니다. 개발 앱은 사용 
 저장하지 않으며 로그인 시 디스크의 빌드된 웹 자산을 사용합니다. 개발 실행 경로가
 길어 전체 명령줄 제한을 넘으면 등록할 수 없습니다. 짧은 개발 경로를 쓰거나 배포
 EXE로 검증하세요. 앱 인자의 첫 항목으로 개발용 `--devtools`, `--dev-url`을 전달할 수 없습니다.
+
+macOS의 plist는 `Label`, `ProgramArguments`, `RunAtLoad`(`true`)만 담습니다. 배포 앱은
+앱 번들 안 compiled 실행 파일의 절대 경로를 저장합니다. 개발 앱은 Windows와 같은
+Bun 실행 경로와 `boot.js` 인자를 저장합니다. 파일은 임시 파일에 쓴 뒤 `rename`으로 교체해
+`0644` 권한으로 만들고, 같은 내용으로 다시 등록하면 쓰기를 생략합니다. 등록해도
+`launchctl`로 즉시 적재하지 않으므로 현재 세션에서는 실행되지 않고 다음 로그인부터 실행됩니다.
+같은 이름의 plist가 있지만 이 앱이 만든 것이 아니면(`Label` 불일치, 읽을 수 없는 형식,
+심볼릭 링크 등) 등록과 해제 모두 `INTERNAL`로 거부하고 파일을 변경하지 않습니다.
+해제는 이 앱의 plist만 지우며 이미 실행 중인 프로세스를 종료하지 않습니다.
 
 로그인 실행의 작업 디렉터리는 Windows가 정하며 등록 API로 설정하지 않습니다.
 상대 파일 인자는 로그인 시 작업 디렉터리 기준이므로 재실행해야 하는 파일은 절대 경로로
@@ -184,7 +208,8 @@ setup에서는 루트 `backend.permissions`를 사용합니다. 실행 파일이
 - `PERMISSION_DENIED`: 정책 권한이나 사용자 레지스트리 접근 권한이 없습니다.
 - `UNSUPPORTED`: Windows 어댑터, 호스트 실행 정보가 없거나 MSIX 패키지로 실행 중입니다.
   MSIX는 manifest StartupTask와 별도의 사용자 동의 계약이 필요합니다.
-- `INTERNAL`: 레지스트리 조회, 갱신이나 명령줄 파싱에 실패했습니다.
+- `INTERNAL`: 레지스트리 조회, 갱신이나 명령줄 파싱에 실패했습니다. macOS에서는 plist 파일 접근에 실패했거나
+  같은 이름의 기존 plist를 이 앱이 만들지 않았습니다.
 - `CANCELLED`, `TIMEOUT`, `BUSY`: 기존 Host API의 취소, 기한과 대기열 제한입니다.
 
 어댑터 종료는 DLL과 열린 핸들을 정리하지만 영속 등록을 해제하지 않습니다.
@@ -192,4 +217,8 @@ setup에서는 루트 `backend.permissions`를 사용합니다. 실행 파일이
 않습니다. 설정 화면은 다시 조회해서 현재 상태를 확인하세요.
 
 현재 Windows x64의 개발 실행, 직접 배포와 Store 비패키지 실행을 지원합니다.
-MSIX, macOS, Linux와 모바일은 지원하지 않습니다.
+macOS는 사용자 LaunchAgent 등록, 조회와 해제를 지원합니다. SMAppService 로그인 항목은 서명된 앱
+번들과 macOS 13 이상이 필요해 사용하지 않습니다. 숨김 시작, 로그인 항목 활성 상태 조회,
+업데이트 뒤 등록 유지와 App Sandbox는 지원하지 않습니다. 임시 홈 디렉터리에서 plist를
+쓰고 읽는 동작은 테스트로 검증했지만 실제 로그인 때 launchd가 앱을 실행하는지는 검증하지 않았습니다.
+MSIX, Linux와 모바일은 지원하지 않습니다.

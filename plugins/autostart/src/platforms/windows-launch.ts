@@ -3,18 +3,17 @@ import { toUSVString } from "node:util";
 import {
   AUTOSTART_ARGUMENT,
   AUTOSTART_HIDDEN_ARGUMENT,
-  BunawayError,
 } from "@bunaway/protocol";
 import type { AppLaunch } from "#autostart/contract";
+import {
+  invalid,
+  registrationName,
+  rejectDevelopmentHostOptions,
+} from "#autostart/platforms/launch";
 /** Run's documented command-line limit, measured in Windows UTF-16 code units. */
 export const MAX_RUN_COMMAND_LENGTH = 260;
 
-function invalid(message: string): never {
-  throw new BunawayError({
-    code: "INVALID_ARGUMENT",
-    message,
-  });
-}
+export { registrationName };
 
 /** Reject NUL and broken UTF-16 before writing lossless Win32 strings. */
 function validateText(value: string): void {
@@ -27,15 +26,6 @@ function validateText(value: string): void {
 function quoteArgument(value: string): string {
   validateText(value);
   return `"${value.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/g, "$1$1")}"`;
-}
-
-/** The identity includes the launch mode so development cannot overwrite the installed app. */
-export function registrationName(app: AppLaunch): string {
-  if (!/^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/.test(app.id)) {
-    invalid("Invalid autostart app identifier.");
-  }
-  // A mode prefix, rather than a suffix, also separates IDs ending in .development.
-  return `bunaway.${app.launch.mode}.${app.id}`;
 }
 
 /** Build a bounded Run command from trusted host paths, never a caller-selected executable. */
@@ -52,15 +42,7 @@ export function commandLine(
   if (hidden && app.supportsHiddenStart !== true) {
     invalid("Hidden autostart requires desktop.tray in the app definition.");
   }
-  if (
-    app.launch.mode === "development" &&
-    [
-      "--devtools",
-      "--dev-url",
-    ].includes(args[0] ?? "")
-  ) {
-    invalid("Autostart cannot persist development host options.");
-  }
+  rejectDevelopmentHostOptions(app, args);
   const result = [
     `"${executable}"`,
     ...app.launch.args.map(quoteArgument),
