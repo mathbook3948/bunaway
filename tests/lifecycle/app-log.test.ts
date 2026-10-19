@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import {
-  linkSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -439,46 +439,55 @@ for (const [platform, plugin] of [
   });
 
   test.skipIf(process.platform === "win32")(
-    `${platform} app log refuses links and never deletes outside its fixed target`,
+    `${platform} app log follows a linked log file and removes only archive links`,
     async () => {
       await withLog(async ({ root, path, adapter }) => {
         const outside = resolve(root, "outside.log");
-        writeFileSync(outside, "preserved");
+        writeFileSync(outside, "kept\n");
         mkdirSync(resolve(root, "logs"));
         symlinkSync(outside, path);
-        await expect(
-          adapter.execute("log.write", record, "backend"),
-        ).rejects.toThrow();
-        await expect(
-          adapter.execute("log.flush", null, "backend"),
-        ).rejects.toThrow();
+        await adapter.execute("log.write", record, "backend");
+        expect(readFileSync(outside, "utf8")).toStartWith("kept\n");
+        expect(readFileSync(outside, "utf8").length).toBeGreaterThan(5);
         rmSync(path);
-        linkSync(outside, path);
-        await expect(
-          adapter.execute("log.write", record, "backend"),
-        ).rejects.toThrow();
-        rmSync(path);
-        symlinkSync(outside, `${path}.1`);
-        await expect(
-          adapter.execute(
-            "log.configure",
-            {
-              maxArchives: 0,
-            },
-            "backend",
-          ),
-        ).rejects.toThrow();
-        rmSync(`${path}.1`);
-        rmSync(resolve(root, "logs"), {
-          recursive: true,
-        });
-        symlinkSync(root, resolve(root, "logs"), "dir");
-        await expect(
-          adapter.execute("log.write", record, "backend"),
-        ).rejects.toThrow();
-        rmSync(resolve(root, "logs"));
-        expect(readFileSync(outside, "utf8")).toBe("preserved");
+        const target = resolve(root, "target.log");
+        writeFileSync(target, "preserved");
+        symlinkSync(target, `${path}.1`);
+        await adapter.execute(
+          "log.configure",
+          {
+            maxArchives: 0,
+          },
+          "backend",
+        );
+        expect(existsSync(`${path}.1`)).toBe(false);
+        expect(readFileSync(target, "utf8")).toBe("preserved");
       });
     },
   );
+
+  test(`${platform} app log writes through a linked log directory`, async () => {
+    await withLog(async ({ root, adapter }) => {
+      const real = resolve(root, "real-logs");
+      mkdirSync(real);
+      // A junction needs no privilege on Windows; POSIX creates a directory symlink.
+      symlinkSync(real, resolve(root, "logs"), "junction");
+      await adapter.execute("log.write", record, "backend");
+      expect(readFileSync(resolve(real, "app.log"), "utf8")).not.toBe("");
+    });
+  });
+
+  test(`${platform} app log refuses a directory in place of the log file`, async () => {
+    await withLog(async ({ path, adapter }) => {
+      mkdirSync(path, {
+        recursive: true,
+      });
+      await expect(
+        adapter.execute("log.write", record, "backend"),
+      ).rejects.toThrow();
+      rmSync(path, {
+        recursive: true,
+      });
+    });
+  });
 }

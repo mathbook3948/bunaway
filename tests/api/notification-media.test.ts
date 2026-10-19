@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import {
   MAX_TOAST_IMAGE_BYTES,
   notificationShowSchema,
@@ -168,7 +168,6 @@ test("media schema rejects unsafe paths, formats and conflicting sound options",
 
 // Windows attribute values used by the stub filesystem.
 const NORMAL = 0x80;
-const DIRECTORY = 0x10;
 const REPARSE_POINT = 0x400;
 const INVALID = 0xffffffff;
 
@@ -180,8 +179,7 @@ const pathKey = (path: string) =>
     .toLowerCase();
 
 /**
- * Virtual attribute tree. Every ancestor of each listed path is a directory unless listed itself, and
- * unlisted paths are INVALID. Keys are matched by pathKey, so the same test passes with POSIX temp paths
+ * Virtual attribute tree: only listed paths have attributes and unlisted paths are INVALID. Keys are matched by pathKey, so the same test passes with POSIX temp paths
  * on Linux and `C:\` paths on Windows, without translating the probed path back to a real one.
  */
 function stubFilesystem(
@@ -190,13 +188,6 @@ function stubFilesystem(
   probed: string[] = [],
 ) {
   const tree = new Map<string, number>();
-  // Ancestors first so an explicitly listed directory keeps its own attributes.
-  for (const path of Object.keys(entries)) {
-    for (let parent = dirname(path); dirname(parent) !== parent; ) {
-      tree.set(pathKey(parent), DIRECTORY);
-      parent = dirname(parent);
-    }
-  }
   for (const [path, attributes] of Object.entries(entries)) {
     tree.set(pathKey(path), attributes);
   }
@@ -311,14 +302,13 @@ test("only fixed and RAM drives are read, before any file access", () => {
   }
 });
 
-test("links, reparse points and cloud placeholders are refused without following them", () => {
+test("a linked path is not rejected and cloud placeholders are refused", () => {
   const directory = mkdtempSync(join(tmpdir(), "bunaway-media-"));
   try {
-    mkdirSync(join(directory, "dir"));
-    const folder = join(directory, "dir");
-    const file = join(folder, "a.png");
+    const file = join(directory, "a.png");
     writeFileSync(file, "x");
-    const run = (entries: Record<string, number>, probed: string[] = []) =>
+    const probed: string[] = [];
+    const run = (attributes: number) =>
       assertToastMediaFiles(
         {
           ...base,
@@ -326,49 +316,31 @@ test("links, reparse points and cloud placeholders are refused without following
         },
         stubFilesystem(
           {
-            [file]: NORMAL,
-            ...entries,
+            [file]: attributes,
           },
           3,
           probed,
         ),
       );
-    expect(() => run({})).not.toThrow();
-    // A reparse point on an intermediate directory stops the walk before deeper components are probed.
-    const probed: string[] = [];
-    expect(() =>
-      run(
-        {
-          [folder]: REPARSE_POINT | DIRECTORY,
-        },
-        probed,
-      ),
-    ).toThrow(
-      "Notification image path must not contain links or reparse points.",
-    );
-    expect(pathKey(probed.at(-1) ?? "")).toBe(pathKey(folder));
-    // The final file itself may be a link.
-    expect(() =>
-      run({
-        [file]: REPARSE_POINT,
-      }),
-    ).toThrow("links or reparse points");
+    expect(() => run(NORMAL)).not.toThrow();
+    // Only the file itself is probed, once; a link on it or on a parent folder is not rejected.
+    expect(probed.map(pathKey)).toEqual([
+      pathKey(file),
+    ]);
+    // GetFileAttributesW reports a final link's own attributes, so this stands for a link without a cloud flag.
+    expect(() => run(NORMAL | REPARSE_POINT)).not.toThrow();
     for (const attribute of [
       0x1000,
       0x40000,
       0x400000,
     ]) {
-      expect(() =>
-        run({
-          [file]: NORMAL | attribute,
-        }),
-      ).toThrow("Notification image must be stored locally.");
+      expect(() => run(NORMAL | attribute)).toThrow(
+        "Notification image must be stored locally.",
+      );
     }
-    expect(() =>
-      run({
-        [file]: INVALID,
-      }),
-    ).toThrow("Notification image is not a readable regular file.");
+    expect(() => run(INVALID)).toThrow(
+      "Notification image is not a readable regular file.",
+    );
   } finally {
     rmSync(directory, {
       recursive: true,

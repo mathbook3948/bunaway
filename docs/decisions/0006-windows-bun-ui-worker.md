@@ -25,7 +25,7 @@ Windows 전환 후에는 ADR [0001](./0001-bundled-bun-process.md)의 호스트�
 flowchart LR
   Web["WebView2 브라우저, 렌더러"] <--> UI["Bun UI Worker\nWin32 ,  COM ,  정책 ,  세션 발급"]
   UI <-->|"검증된 메시지 ,  수명 통지"| Main["Bun 메인 스레드\n앱 ,  createCore ,  비동기 작업"]
-  Main <-->|"Host operation ,  결과"| IO["Bun I/O Worker\n범위 제한 파일 핸들 ,  읽기/쓰기"]
+  Main <-->|"Host operation ,  결과"| IO["Bun I/O Worker\n파일 핸들 ,  읽기/쓰기"]
   IO <-->|"작업 시작 승인 (메인을 통해 전달)"| UI
 ```
 
@@ -42,8 +42,8 @@ Bun API 사용을 차단하는 샌드박스라고 주장하지 않는다.
 I/O Worker는 기존 C++ 작업 큐의 동기 파일 작업을 이식해 사용한다. Worker 풀, 범용 RPC 프레임워크, 별도 Rust/C++ 래퍼는 만들지 않는다.
 
 `opener`는 창이나 WebView 자원을 사용하지 않으므로 I/O Worker에서 자체 COM STA를
-초기화한다. 호스트의 현재 컨텍스트와 작업 권한 승인 뒤 파일 검사와 Explorer 요청을 같은
-스레드에서 실행하고, 검사한 파일과 부모 핸들을 요청 제출까지 유지한다. 어댑터 종료 시
+초기화한다. 호스트의 현재 컨텍스트와 작업 권한 승인 뒤 경로 검사와 Explorer 요청을 같은
+스레드에서 실행한다. 검사한 파일과 부모 핸들을 요청 제출까지 유지하는 방식은 [ADR 0024](./0024-plugin-path-responsibility.md)에 따라 opener 변경에서 제거한다. 어댑터 종료 시
 셸 참조와 DLL을 해제한 뒤 COM 초기화를 해제한다. 느린 UNC 공유나 셸 확장이 UI Worker의
 메시지 pump를 막지 않으며, 진행 중인 동기 OS 호출은 I/O Worker의 후속 작업과 정리를
 지연시킬 수 있다.
@@ -160,10 +160,10 @@ Bun에 제어를 돌려준다. COM 콜백의 HRESULT, 출력 포인터는 그 ST
 동기 COM 반환을 대체하지 않는다. 콜백/vtable/문자열 버퍼의 참조를 유지하며 예외는
 HRESULT로 변환한다. 마지막 COM 참조 해제와 콜백 반환을 확인하기 전에 코드를 해제하지 않는다.
 
-파일 범위는 `path.resolve` 검사 후 경로로 다시 여는 방식으로 대체하지 않는다.
-기존 `openScopedFile`의 부모 디렉터리 핸들 고정, reparse point, hard link 거부,
-최종 핸들 경로 검사, 검사한 핸들을 통한 I/O를 옮긴다. 로그, capabilities도 기존
-정책과 지원 정보를 따른다. 탐색, frame 탐색, 외부 리소스, 새 창, 권한 요청은 UI에서
+파일 경로 제한은 앱 명령이 맡고 플러그인은 경로 문법만 검사한 뒤 링크를 따라간다
+([ADR 0024](./0024-plugin-path-responsibility.md)). 부모 디렉터리 핸들 고정, reparse point와 hard link
+거부, 최종 핸들 경로 검사 중 log와 notification에 있던 링크 검사(reparse point, 링크 수)는 이미 제거했다.
+opener와 storage에는 이 검사가 아직 남아 있으며 각 플러그인 변경에서 제거한다. 로그, capabilities도 기존 정책과 지원 정보를 따른다. 탐색, frame 탐색, 외부 리소스, 새 창, 권한 요청은 UI에서
 동기적으로 허용/거부하며 COM 콜백 안에서 다른 Worker의 답을 기다리지 않는다.
 
 ## 부팅, 종료
@@ -209,7 +209,7 @@ UI Worker는 트레이 오류를 보존하면서 콜백 중지 확인과 어댑�
 | --- | --- | --- |
 | 1. 코어 연결 | 프로브에서 모듈 분리, 고정 로컬 문서에 실제 SDK, AppDefinition 연결 | 창 안의 invoke/listen/cancel, setup 중 Host API, 부팅 중 종료, 생성 실패 시 부분 자원 정리, 모달 중 백엔드 진행 |
 | 2. Web 경계 | 호스트 컨텍스트, 문서 세대, 탐색/자원 정책과 큐 제한 | 실제 iframe/위조 source 거부, 두 뷰의 같은 요청 ID 분리, 탐색 뒤 응답 폐기, 큐 포화, Worker 장애 |
-| 3. Host API | 범위 제한 저장, 로그, 지원 정보와 I/O Worker | 승인 전/후 취소, 폐기 경합, junction/symlink/hard link, 부모 교체 공격, setup/stop 중 정리 |
+| 3. Host API | 저장, 로그, 지원 정보와 I/O Worker | 승인 전/후 취소, 폐기 경합, setup/stop 중 정리 |
 | 4. 수명 회귀 | 기존 메모 앱과 다중 창 시나리오 | 개별 종료 뒤 나머지 창 동작, renderer 장애 격리, 모든 창, COM, 브라우저, Worker 정리 |
 | 5. 제품 진입점 | CLI 번들, 검증, 배포와 실행 문서 전환 | 외부 artifact 설치, 프로젝트 이동, 독립 빌드, 절대 경로 번들 Bun 실행, 환경 오염 거부, 배포 기동 검증 |
 
