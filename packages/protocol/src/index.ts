@@ -50,6 +50,7 @@ export {
   serializeHostCall,
 } from "./host-api.ts";
 export {
+  asNativePluginContract,
   type NativeRegistration,
   NativeRegistry,
   type NativeRegistryOptions,
