@@ -124,56 +124,7 @@ export class WindowMenus implements WindowMenuDriver {
     let unsubscribe: (() => void) | undefined;
     try {
       if (tree) {
-        let stopModal: (() => void) | undefined;
-        let modalCancelled = false;
-        const unlisten = this.host.subscribe(
-          windowId,
-          (message, position, handle) => {
-            if (this.attachments.get(windowId)?.tree !== tree) {
-              return;
-            }
-            if (message === WM_ENTERMENULOOP && position === 0n) {
-              stopModal?.();
-              modalCancelled = false;
-              stopModal = this.keepModalResponsive(hwnd, undefined, () => {
-                modalCancelled = true;
-                this.native.symbols.EndMenu();
-              });
-            } else if (message === WM_EXITMENULOOP && position === 0n) {
-              stopModal?.();
-              stopModal = undefined;
-              modalCancelled = false;
-            } else if (
-              message === WM_TIMER &&
-              position === BigInt(MENU_TIMER_ID) &&
-              modalCancelled
-            ) {
-              // EndMenu can run before tracking starts in WM_ENTERMENULOOP.
-              // The owned timer retries after Windows has entered its modal loop.
-              this.native.symbols.EndMenu();
-            } else if (message === WM_CLOSE && stopModal) {
-              this.native.symbols.EndMenu();
-            }
-            if (message !== WM_MENUCOMMAND) {
-              return;
-            }
-            const item = tree.selectedItemAt(handle, Number(position));
-            if (item?.role) {
-              // A role runs its editing command and is not an app-level selection.
-              this.host.executeRole(windowId, item.role);
-            } else if (item) {
-              selected(item.id);
-            }
-          },
-          () => {
-            this.detach(windowId);
-            closed();
-          },
-        );
-        unsubscribe = () => {
-          stopModal?.();
-          unlisten();
-        };
+        unsubscribe = this.listen(windowId, hwnd, tree, selected, closed);
       }
       assert(
         this.native.symbols.SetMenu(
@@ -205,6 +156,70 @@ export class WindowMenus implements WindowMenuDriver {
     }
     this.native.symbols.DrawMenuBar(hwnd);
     this.host.changed(windowId);
+  }
+
+  /**
+   * Subscribe to the window's menu messages for `tree`: keep the modal loop cancellable while it
+   * is open and route a chosen item to its role or to `selected`. The returned function stops the
+   * modal timer and the subscription; messages are ignored once another tree is attached.
+   */
+  private listen(
+    windowId: string,
+    hwnd: bigint,
+    tree: NativePopupMenu,
+    selected: (id: string) => void,
+    closed: () => void,
+  ): () => void {
+    let stopModal: (() => void) | undefined;
+    let modalCancelled = false;
+    const unlisten = this.host.subscribe(
+      windowId,
+      (message, position, handle) => {
+        if (this.attachments.get(windowId)?.tree !== tree) {
+          return;
+        }
+        if (message === WM_ENTERMENULOOP && position === 0n) {
+          stopModal?.();
+          modalCancelled = false;
+          stopModal = this.keepModalResponsive(hwnd, undefined, () => {
+            modalCancelled = true;
+            this.native.symbols.EndMenu();
+          });
+        } else if (message === WM_EXITMENULOOP && position === 0n) {
+          stopModal?.();
+          stopModal = undefined;
+          modalCancelled = false;
+        } else if (
+          message === WM_TIMER &&
+          position === BigInt(MENU_TIMER_ID) &&
+          modalCancelled
+        ) {
+          // EndMenu can run before tracking starts in WM_ENTERMENULOOP.
+          // The owned timer retries after Windows has entered its modal loop.
+          this.native.symbols.EndMenu();
+        } else if (message === WM_CLOSE && stopModal) {
+          this.native.symbols.EndMenu();
+        }
+        if (message !== WM_MENUCOMMAND) {
+          return;
+        }
+        const item = tree.selectedItemAt(handle, Number(position));
+        if (item?.role) {
+          // A role runs its editing command and is not an app-level selection.
+          this.host.executeRole(windowId, item.role);
+        } else if (item) {
+          selected(item.id);
+        }
+      },
+      () => {
+        this.detach(windowId);
+        closed();
+      },
+    );
+    return () => {
+      stopModal?.();
+      unlisten();
+    };
   }
 
   /** Once SetMenu commits, a failed old-tree release must not undo only the logical state. */
