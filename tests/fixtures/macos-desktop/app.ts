@@ -37,10 +37,11 @@ const POLL_MS = 10;
 /**
  * A first page load that WKWebView leaves stalled is reissued three times and then replaced by a
  * fresh view about 13 s after it started (native/macos/bun/webview-diagnostics.ts), and the
- * replacement still has to load. The wait must outlast that recovery, so it matches the 30 s
- * document deadline that bounds the whole load.
+ * replacement still has to load. A step wait must outlast that recovery, yet stay below the
+ * launch timeout of the whole process (LAUNCH_TIMEOUT_MS, 30 s in tests/lifecycle/macos-desktop.ts)
+ * so a stuck step reports its own label instead of the process being killed.
  */
-const STEP_TIMEOUT_MS = 30_000;
+const STEP_TIMEOUT_MS = 20_000;
 /** Pause that lets a vetoed or ignored request settle before the next stimulus. */
 const SETTLE_MS = 300;
 const TICK_MS = 50;
