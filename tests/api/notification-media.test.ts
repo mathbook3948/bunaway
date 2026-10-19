@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import {
   MAX_TOAST_IMAGE_BYTES,
   notificationShowSchema,
@@ -168,7 +168,6 @@ test("media schema rejects unsafe paths, formats and conflicting sound options",
 
 // Windows attribute values used by the stub filesystem.
 const NORMAL = 0x80;
-const DIRECTORY = 0x10;
 const REPARSE_POINT = 0x400;
 const INVALID = 0xffffffff;
 
@@ -180,8 +179,7 @@ const pathKey = (path: string) =>
     .toLowerCase();
 
 /**
- * Virtual attribute tree. Every ancestor of each listed path is a directory unless listed itself, and
- * unlisted paths are INVALID. Keys are matched by pathKey, so the same test passes with POSIX temp paths
+ * Virtual attribute tree: only listed paths have attributes and unlisted paths are INVALID. Keys are matched by pathKey, so the same test passes with POSIX temp paths
  * on Linux and `C:\` paths on Windows, without translating the probed path back to a real one.
  */
 function stubFilesystem(
@@ -190,13 +188,6 @@ function stubFilesystem(
   probed: string[] = [],
 ) {
   const tree = new Map<string, number>();
-  // Ancestors first so an explicitly listed directory keeps its own attributes.
-  for (const path of Object.keys(entries)) {
-    for (let parent = dirname(path); dirname(parent) !== parent; ) {
-      tree.set(pathKey(parent), DIRECTORY);
-      parent = dirname(parent);
-    }
-  }
   for (const [path, attributes] of Object.entries(entries)) {
     tree.set(pathKey(path), attributes);
   }
