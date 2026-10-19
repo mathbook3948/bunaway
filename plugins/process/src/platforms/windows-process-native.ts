@@ -353,24 +353,11 @@ export async function runWindowsProcess(
       throw new ProcessCleanupError();
     }
   };
-  try {
-    job = own(api.symbols.CreateJobObjectW(null, null));
-    const limits = Buffer.alloc(144); // JOBOBJECT_EXTENDED_LIMIT_INFORMATION, Win64
-    limits.writeUInt32LE(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, 16);
-    requireSuccess(
-      api.symbols.SetInformationJobObject(
-        job,
-        JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
-        ptr(limits),
-        limits.length,
-      ),
-    );
-    const stdout = createOutput();
-    const stderr = createOutput();
-    let stdin: bigint;
+  /** Opens stdin: NUL without input, otherwise a private overlapped pipe whose write end becomes `writer`. */
+  const openStdin = (): bigint => {
     if (input.stdinBase64 === undefined) {
       const name = Buffer.from("NUL\0", "utf16le");
-      stdin = own(
+      return own(
         api.symbols.CreateFileW(
           ptr(name),
           GENERIC_READ,
@@ -402,7 +389,7 @@ export async function runWindowsProcess(
           null,
         ),
       );
-      stdin = own(
+      const stdin = own(
         api.symbols.CreateFileW(
           ptr(name),
           GENERIC_READ,
@@ -420,7 +407,15 @@ export async function runWindowsProcess(
       ) {
         throw fail();
       }
+      return stdin;
     }
+  };
+  /** Restricts inheritance to the standard handles and places the child in the invocation Job. */
+  const buildAttributeList = (
+    stdin: bigint,
+    stdout: ReturnType<typeof createOutput>,
+    stderr: ReturnType<typeof createOutput>,
+  ): Buffer => {
     const size = Buffer.alloc(8);
     api.symbols.InitializeProcThreadAttributeList(null, 2, 0, ptr(size));
     if (api.symbols.GetLastError() !== ERROR_INSUFFICIENT_BUFFER) {
@@ -469,6 +464,15 @@ export async function runWindowsProcess(
         null,
       ),
     );
+    return list;
+  };
+  /** Creates the child inside the invocation Job and returns its pid, owning the process and thread handles. */
+  const startChild = (
+    list: Buffer,
+    stdin: bigint,
+    stdout: ReturnType<typeof createOutput>,
+    stderr: ReturnType<typeof createOutput>,
+  ): number => {
     const startup = Buffer.alloc(112); // STARTUPINFOEXW, Win64
     startup.writeUInt32LE(startup.length, 0);
     startup.writeUInt32LE(STARTF_USESTDHANDLES, 60);
@@ -517,6 +521,10 @@ export async function runWindowsProcess(
     close(stdin);
     close(stdout.write);
     close(stderr.write);
+    return pid;
+  };
+  /** Submits the stdin bytes with an overlapped write; the pipe closes at once if nothing is pending. */
+  const startInput = async () => {
     if (writer) {
       if (inputBytes.length) {
         overlapped.fill(0);
@@ -541,6 +549,13 @@ export async function runWindowsProcess(
         await stopInput();
       }
     }
+  };
+  /** Polls output pipes and the child until it exits and both pipes end, then returns the result. */
+  const collect = async (
+    pid: number,
+    stdout: ReturnType<typeof createOutput>,
+    stderr: ReturnType<typeof createOutput>,
+  ): Promise<ProcessResult> => {
     const budget = {
       bytes: 0,
     };
@@ -582,6 +597,26 @@ export async function runWindowsProcess(
       }
       await Bun.sleep(POLL_INTERVAL_MS);
     }
+  };
+  try {
+    job = own(api.symbols.CreateJobObjectW(null, null));
+    const limits = Buffer.alloc(144); // JOBOBJECT_EXTENDED_LIMIT_INFORMATION, Win64
+    limits.writeUInt32LE(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, 16);
+    requireSuccess(
+      api.symbols.SetInformationJobObject(
+        job,
+        JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+        ptr(limits),
+        limits.length,
+      ),
+    );
+    const stdout = createOutput();
+    const stderr = createOutput();
+    const stdin = openStdin();
+    const list = buildAttributeList(stdin, stdout, stderr);
+    const pid = startChild(list, stdin, stdout, stderr);
+    await startInput();
+    return await collect(pid, stdout, stderr);
   } finally {
     // A failed cleanup intentionally takes precedence over completion/cancellation.
     await release();
