@@ -71,9 +71,9 @@ function internal(message: string): never {
 /**
  * Creates one NSStatusItem as wide as its title and reports chosen menu entries to `onSelect` with
  * their tag. Objects returned by Objective-C stay unsigned 64-bit integers, including tagged
- * pointers. Each call drains its own autorelease pool. `dispose` removes the item, detaches and
- * releases the menu and target, and only then closes the callback, so AppKit cannot call a closed
- * trampoline. The target class is registered once per binding and lives until process exit because
+ * pointers. Each call, including creation, drains its own autorelease pool. `dispose` and a failed
+ * creation detach and release the menu, remove the item, release the item and the target, and only
+ * then close the callback, so AppKit cannot call a closed trampoline. The target class is registered once per binding and lives until process exit because
  * the Objective-C runtime cannot safely unregister a class that menus may still reference.
  */
 export function createStatusItem(
@@ -168,7 +168,14 @@ export function createStatusItem(
       } as const),
     );
     const selectors = new Map<string, bigint>();
-    const cstring = (value: string) => ptr(Buffer.from(`${value}\0`));
+    // `ptr` returns only an address, so the buffers stay referenced until the next pool drain
+    // and cannot be collected between building an argument and the native call that reads it.
+    const pinned: Buffer[] = [];
+    const cstring = (value: string) => {
+      const buffer = Buffer.from(`${value}\0`);
+      pinned.push(buffer);
+      return ptr(buffer);
+    };
     const selector = (name: string) => {
       let value = selectors.get(name);
       if (value === undefined) {
@@ -209,11 +216,24 @@ export function createStatusItem(
         return work();
       } finally {
         send(pool, "drain");
+        pinned.length = 0;
       }
     };
 
-    // The menu action target is a fresh NSObject subclass with one method that reports the tag.
+    // Everything created below is owned by one resource, registered before the first native
+    // object exists, so a failure at any step releases exactly what was created so far.
     let accepting = true;
+    let target = 0n;
+    let item = 0n;
+    let menu = 0n;
+    const releaseMenu = () => {
+      if (menu) {
+        send(item, "setMenu:", 0n);
+        send(menu, "release");
+        menu = 0n;
+      }
+    };
+    // The menu action target is a fresh NSObject subclass with one method that reports the tag.
     const callback = own(
       new JSCallback(
         (_self, _command, sender) => {
@@ -231,6 +251,29 @@ export function createStatusItem(
         } as const,
       ),
     );
+    // Registered after the callback, so closing runs in reverse: detach the menu, remove the item
+    // from the bar, release it and the target, and only then close the callback and the handles.
+    own({
+      close() {
+        accepting = false;
+        inPool(() => {
+          releaseMenu();
+          if (item) {
+            send(
+              send(classOf("NSStatusBar"), "systemStatusBar"),
+              "removeStatusItem:",
+              item,
+            );
+            send(item, "release");
+            item = 0n;
+          }
+          if (target) {
+            send(target, "release");
+            target = 0n;
+          }
+        });
+      },
+    });
     const targetClass = runtime.symbols.objc_allocateClassPair(
       Number(classOf("NSObject")) as Pointer,
       `BunawayTrayTarget${crypto.randomUUID().replaceAll("-", "")}`,
@@ -248,32 +291,28 @@ export function createStatusItem(
       internal("Objective-C menu target registration failed.");
     }
     runtime.symbols.objc_registerClassPair(targetClass);
-    const target = required(
-      send(send(BigInt(targetClass), "alloc"), "init"),
-      "Menu target",
-    );
-    const bar = send(classOf("NSStatusBar"), "systemStatusBar");
-    const item = required(
-      send(
-        lengthSender.symbols.objc_msgSend(
-          bar,
-          selector("statusItemWithLength:"),
-          NS_VARIABLE_STATUS_ITEM_LENGTH,
+    // The status bar hands out an autoreleased item, so the creation calls share one pool and the
+    // item is retained for as long as this binding owns it.
+    const button = inPool(() => {
+      target = required(
+        send(send(BigInt(targetClass), "alloc"), "init"),
+        "Menu target",
+      );
+      const bar = send(classOf("NSStatusBar"), "systemStatusBar");
+      item = required(
+        send(
+          lengthSender.symbols.objc_msgSend(
+            bar,
+            selector("statusItemWithLength:"),
+            NS_VARIABLE_STATUS_ITEM_LENGTH,
+          ),
+          "retain",
         ),
-        "retain",
-      ),
-      "Status item",
-    );
-    const button = required(send(item, "button"), "Status item button");
-    let menu = 0n;
+        "Status item",
+      );
+      return required(send(item, "button"), "Status item button");
+    });
     let disposed = false;
-    const releaseMenu = () => {
-      if (menu) {
-        send(item, "setMenu:", 0n);
-        send(menu, "release");
-        menu = 0n;
-      }
-    };
     const buildMenu = (entries: readonly NativeMenuEntry[]) => {
       const built = required(
         send(send(classOf("NSMenu"), "alloc"), "init"),
@@ -391,13 +430,6 @@ export function createStatusItem(
           return;
         }
         disposed = true;
-        accepting = false;
-        inPool(() => {
-          releaseMenu();
-          send(bar, "removeStatusItem:", item);
-          send(item, "release");
-          send(target, "release");
-        });
         closeAll();
       },
     };

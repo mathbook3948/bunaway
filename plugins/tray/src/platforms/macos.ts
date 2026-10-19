@@ -35,7 +35,7 @@ type Live = {
  */
 export class MacosTray implements MacosTrayInstance {
   private live: Live | undefined;
-  private readonly clicks = new NativeEventWaiters<MenuClick>(MAX_TRAY_WAITERS);
+  private clicks = new NativeEventWaiters<MenuClick>(MAX_TRAY_WAITERS);
 
   constructor(private readonly createBinding: StatusItemFactory) {}
 
@@ -97,6 +97,10 @@ export class MacosTray implements MacosTrayInstance {
     if (live) {
       // Forget the item first so a failing release cannot leave a half-owned state behind.
       this.live = undefined;
+      // Waits belong to the item that is going away, and a later item must not inherit them.
+      const ended = this.clicks;
+      this.clicks = new NativeEventWaiters<MenuClick>(MAX_TRAY_WAITERS);
+      ended.dispose();
       live.binding.dispose();
     }
     return null;
@@ -120,8 +124,10 @@ export class MacosTray implements MacosTrayInstance {
     return null;
   }
 
-  setMenu(items: readonly MacosMenuItem[] | null): null {
+  setMenu(menuItems: readonly MacosMenuItem[] | null): null {
     const live = this.requireLive();
+    // An empty list has nothing to show, so it removes the menu like null does.
+    const items = menuItems && menuItems.length > 0 ? menuItems : null;
     // Tags are positions in the new list; separators have no id and are never reported.
     const ids = items?.map((item) => (item.type === "item" ? item.id : null));
     const entries: NativeMenuEntry[] | null =
@@ -148,6 +154,7 @@ export class MacosTray implements MacosTrayInstance {
   }
 
   dispose(): void {
+    // Cancels waits even when no item exists; destroy covers the item's own waits.
     this.clicks.dispose();
     this.destroy();
   }

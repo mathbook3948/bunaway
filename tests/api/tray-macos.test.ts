@@ -416,3 +416,48 @@ test("a wait ends with CANCELLED when its signal aborts", async () => {
     code: "CANCELLED",
   });
 });
+
+test("destroy cancels pending waits and a new item does not inherit them", async () => {
+  const native = fakeBinding();
+  const tray = new MacosTray(native.factory);
+  tray.create("", "");
+  tray.setMenu([
+    {
+      type: "item",
+      id: "a",
+      label: "A",
+      enabled: true,
+    },
+  ]);
+  const outcome = tray.waitForMenuClick().then(
+    () => null,
+    (error: unknown) => error,
+  );
+  tray.destroy();
+  expect(await outcome).toMatchObject({
+    code: "CANCELLED",
+  });
+  tray.create("", "");
+  tray.setMenu([
+    {
+      type: "item",
+      id: "b",
+      label: "B",
+      enabled: true,
+    },
+  ]);
+  const next = tray.waitForMenuClick();
+  native.choose(0);
+  expect(await next).toEqual({
+    id: "b",
+  });
+});
+
+test("an empty menu removes the menu", () => {
+  const native = fakeBinding();
+  const tray = new MacosTray(native.factory);
+  tray.create("", "");
+  tray.setMenu([]);
+  expect(tray.get()?.hasMenu).toBe(false);
+  expect(native.menu()).toBeNull();
+});
