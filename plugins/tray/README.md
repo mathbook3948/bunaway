@@ -26,4 +26,7 @@ macOS 메뉴 막대 아이콘은 호스트 서비스 없이 이 플러그인이 
 autorelease pool을 비우고, 해제는 메뉴 분리와 해제, 아이콘 제거와 해제, 대상 해제, 콜백 닫기 순서로 한 번만 한다. 대상 클래스는 생성마다 하나씩 등록되어 프로세스 종료까지 남는다. `destroy`는 대기 중인 메뉴 선택 대기를 취소한다.
 `tests/api/tray-macos.test.ts`는 계약과 어댑터 규칙을 가짜 바인딩으로 확인하고,
 `tests/lifecycle/macos-tray-native.test.ts`는 `macos-native`에서 실제 AppKit 상태를 읽어 title, tooltip, 메뉴와
-선택 경로를 확인한다. 이미지, 클릭 이벤트, 숨김과 `desktop.tray` 연결은 후속 작업이다.
+선택 경로를 확인한다. 이미지는 PNG를 `NSImage`로 읽어 `NSStatusBarButton`에 설정하고(`setSize:`로 점 단위 크기,
+`setTemplate:`, `setAccessibilityDescription:`), 단추가 이미지를 유지하므로 읽어 온 참조는 설정 직후 해제한다.
+`platforms/macos-png.ts`가 PNG 머리글의 크기를 디코드 전에 검사한다. 메뉴 막대에 실제로 그려지는 모양과
+색은 확인하지 않고 AppKit이 보고하는 상태만 읽는다. pressed 이미지, 클릭 이벤트, 숨김과 `desktop.tray` 연결은 후속 작업이다.

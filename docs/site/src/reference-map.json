@@ -1689,6 +1689,7 @@
       "tray.getStatusItem",
       "tray.setTitle",
       "tray.setMenu",
+      "tray.setImage",
       "tray.waitForMenuClick"
     ],
     "reference/plugins/dialog": [
