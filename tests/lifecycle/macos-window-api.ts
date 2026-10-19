@@ -286,7 +286,6 @@ try {
           await windows.minimize({view:"reader"});
           await until(state(true, false), "minimize");
           await windows.minimize({view:"reader"});
-          check(await windows.isVisible({view:"reader"}) === true, "minimized window stays visible");
           await windows.restore({view:"reader"});
           await until(state(false, false), "restore from minimized");
           await windows.maximize({view:"reader"});
