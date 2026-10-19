@@ -30,7 +30,7 @@ test("Windows file-name rules live in one module", async () => {
       cwd: resolve(repository, root),
       absolute: true,
     })) {
-      const path = relative(repository, file);
+      const path = relative(repository, file).replaceAll("\\", "/");
       if (path === SHARED_MODULE || path.includes("node_modules")) {
         continue;
       }
