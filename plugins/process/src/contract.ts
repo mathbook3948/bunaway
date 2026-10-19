@@ -46,7 +46,8 @@ const macosExecutablePath = z
       value.startsWith("/") &&
       !Array.from(value).some((char) => {
         const code = char.charCodeAt(0);
-        return code < 0x20 || code === 0x7f;
+        // C0 controls, DEL and C1 controls.
+        return code < 0x20 || (code >= 0x7f && code <= 0x9f);
       }) &&
       !value
         .slice(1)

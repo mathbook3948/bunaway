@@ -57,6 +57,7 @@ test("macOS contract accepts absolute POSIX paths and rejects PATH lookup, relat
     "/tmp/tool\0",
     "/tmp/to\nol",
     "/tmp/to\x7fol",
+    "/tmp/to\u0085ol",
     "C:/tool.exe",
     "/".repeat(1) + "a".repeat(1024),
   ]) {
@@ -165,6 +166,7 @@ test("run reports the exit code and the terminating signal", async () => {
   expect((await runShell("exit 3")).exitCode).toBe(3);
   const killed = await runShell("kill -TERM $$");
   expect(killed.signal).toBe("SIGTERM");
+  expect(killed.exitCode).toBe(143);
 });
 
 test("output above maxOutputBytes fails and a missing executable is an internal error", async () => {
