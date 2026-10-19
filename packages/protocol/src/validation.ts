@@ -204,57 +204,47 @@ function jsonStringSize(value: string): number {
     : value.length + 2;
 }
 
-/** Copies untrusted values into bounded JSON data, rejecting cycles and accessors. */
-function snapshotJson(
-  value: unknown,
-  ancestors: Set<object>,
-  depth: number,
-  budget: {
-    remaining: number;
-    mode: "value" | "serialized";
-  },
-): JsonValue {
-  if (depth > MAX_JSON_DEPTH) {
-    invalid();
-  }
+type JsonBudget = {
+  remaining: number;
+  mode: "value" | "serialized";
+};
+
+/** Charges the serialized size of a string, boolean or null against the budget. */
+function chargeLiteral(
+  value: string | boolean | null,
+  budget: JsonBudget,
+): void {
   if (
-    value === null ||
-    typeof value === "boolean" ||
-    typeof value === "string"
+    typeof value === "string" &&
+    (value.length > budget.remaining || loneSurrogate.test(value))
   ) {
-    if (
-      typeof value === "string" &&
-      (value.length > budget.remaining || loneSurrogate.test(value))
-    ) {
-      invalid();
-    }
-    if (typeof value === "string") {
-      budget.remaining -= jsonStringSize(value);
-    } else {
-      budget.remaining -= value === false ? 5 : 4;
-    }
-    if (budget.remaining < 0) {
-      invalid();
-    }
-    return value;
-  }
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
-      invalid();
-    }
-    // Value validation charges the shortest possible number token to bound work
-    // without imposing a reserialized byte limit on already received JSON.
-    budget.remaining -=
-      budget.mode === "serialized" ? JSON.stringify(value).length : 1;
-    if (budget.remaining < 0) {
-      invalid();
-    }
-    return value;
-  }
-  if (typeof value !== "object" || ancestors.has(value)) {
     invalid();
   }
-  const array = Array.isArray(value);
+  if (typeof value === "string") {
+    budget.remaining -= jsonStringSize(value);
+  } else {
+    budget.remaining -= value === false ? 5 : 4;
+  }
+  if (budget.remaining < 0) {
+    invalid();
+  }
+}
+
+function chargeNumber(value: number, budget: JsonBudget): void {
+  if (!Number.isFinite(value)) {
+    invalid();
+  }
+  // Value validation charges the shortest possible number token to bound work
+  // without imposing a reserialized byte limit on already received JSON.
+  budget.remaining -=
+    budget.mode === "serialized" ? JSON.stringify(value).length : 1;
+  if (budget.remaining < 0) {
+    invalid();
+  }
+}
+
+/** Accepts only plain arrays and plain or null-prototype objects. */
+function assertPlainContainer(value: object, array: boolean): void {
   if (array && Object.getPrototypeOf(value) !== Array.prototype) {
     invalid();
   }
@@ -265,6 +255,68 @@ function snapshotJson(
   ) {
     invalid();
   }
+}
+
+/** Charges an object key, which also carries its colon, against the budget. */
+function chargeObjectKey(key: string, budget: JsonBudget): void {
+  if (key.length > budget.remaining || loneSurrogate.test(key)) {
+    invalid();
+  }
+  budget.remaining -= jsonStringSize(key) + 1;
+}
+
+/** Copies untrusted values into bounded JSON data, rejecting cycles and accessors. */
+function snapshotJson(
+  value: unknown,
+  ancestors: Set<object>,
+  depth: number,
+  budget: JsonBudget,
+): JsonValue {
+  if (depth > MAX_JSON_DEPTH) {
+    invalid();
+  }
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    typeof value === "string"
+  ) {
+    chargeLiteral(value, budget);
+    return value;
+  }
+  if (typeof value === "number") {
+    chargeNumber(value, budget);
+    return value;
+  }
+  if (typeof value !== "object" || ancestors.has(value)) {
+    invalid();
+  }
+  return snapshotContainer(value, ancestors, depth, budget);
+}
+
+/** Snapshots one own data property, rejecting accessors and non-enumerable properties. */
+function snapshotProperty(
+  owner: object,
+  key: string,
+  ancestors: Set<object>,
+  depth: number,
+  budget: JsonBudget,
+): JsonValue {
+  const property = Object.getOwnPropertyDescriptor(owner, key);
+  if (!property || !("value" in property) || !property.enumerable) {
+    invalid();
+  }
+  return snapshotJson(property.value, ancestors, depth + 1, budget);
+}
+
+/** Copies an array or object own property by own property, charging each against the budget. */
+function snapshotContainer(
+  value: object,
+  ancestors: Set<object>,
+  depth: number,
+  budget: JsonBudget,
+): JsonValue {
+  const array = Array.isArray(value);
+  assertPlainContainer(value, array);
   ancestors.add(value);
   const keys = Reflect.ownKeys(value);
   const length = array ? value.length : 0;
@@ -296,19 +348,12 @@ function snapshotJson(
     }
     first = false;
     if (!array) {
-      if (key.length > budget.remaining || loneSurrogate.test(key)) {
-        invalid();
-      }
-      budget.remaining -= jsonStringSize(key) + 1;
+      chargeObjectKey(key, budget);
     }
     if (budget.remaining < 0) {
       invalid();
     }
-    const property = Object.getOwnPropertyDescriptor(value, key);
-    if (!property || !("value" in property) || !property.enumerable) {
-      invalid();
-    }
-    const child = snapshotJson(property.value, ancestors, depth + 1, budget);
+    const child = snapshotProperty(value, key, ancestors, depth, budget);
     if (Array.isArray(copy)) {
       copy[Number(key)] = child;
     } else {
