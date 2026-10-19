@@ -175,3 +175,19 @@ Run 쓰기 조율 계약입니다. `Global\Bunaway.Autostart.` 접두어 뒤에 
 전체 Run 값 이름을 붙입니다. 설치 프로그램은 잠금마다 최대 5초 동안 기다리고
 런타임 I/O Worker는 기다리지 않고 BUSY로 거부합니다. 앱 권한이나 자동 실행
 동의의 근거로 사용하지 않습니다.
+
+## Windows 파일 이름 검사
+
+패키징 도구, CLI 설정, 설치 스크립트와 opener 플러그인이 같은 규칙을 쓰도록 구성 요소 하나를
+검사하는 함수를 공유합니다.
+
+- `isWindowsFileName(name, maxLength)`은 비어 있지 않고 `maxLength`(기본값
+  `WINDOWS_MAX_FILE_NAME_LENGTH`, 255 UTF-16 코드 단위) 이하인지, `.`과 `..`이 아닌지, 경로
+  구분자와 `< > : " | ? *` 및 제어 문자가 없는지, 점이나 공백으로 끝나지 않는지, `CON`, `PRN`,
+  `AUX`, `NUL`, `COM1`부터 `COM9`, `LPT1`부터 `LPT9`(위 첨자 숫자 포함) 같은 예약 장치 이름이
+  아닌지 확인합니다. 예약 이름은 확장자가 붙어도(`nul.txt`) 거부합니다.
+- `isWindowsReservedDeviceName(name)`은 예약 장치 이름 판정만 합니다.
+- `isWindowsExecutableName(name, maxStemLength)`은 `.exe`로 끝나고 확장자를 뺀 이름이 위 규칙을
+  통과하는지 확인합니다.
+- `sanitizeWindowsFileName(name)`은 금지 문자를 `_`로 바꾸고 끝의 점과 공백을 지웁니다.
+  결과가 비어 있을 수 있으므로 호출자가 대체 이름을 정합니다.
