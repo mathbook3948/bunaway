@@ -167,3 +167,25 @@ export type DialogInput = z.output<typeof openFileSchema> &
   z.output<typeof saveFileSchema>;
 export type DialogResult = z.output<typeof resultSchema>;
 export type DialogKind = "openFile" | "selectFolder" | "saveFile";
+/**
+ * What the dialog operations call on the per-plugin instance. Operations are typed by this
+ * interface, never by a platform class, so a new platform implements the contract instead of
+ * matching another platform's shape by accident.
+ */
+export interface DialogInstance {
+  show(
+    kind: DialogKind,
+    input: DialogInput,
+    source: string,
+    signal?: AbortSignal,
+    requestId?: string,
+  ): DialogResult;
+  showMessage(
+    input: MessageInput,
+    source: string,
+    signal?: AbortSignal,
+    requestId?: string,
+  ): MessageResult;
+  busy(): boolean;
+  dispose(): void;
+}

@@ -1,5 +1,6 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import {
+  type DialogInstance,
   messageResultSchema,
   messageSchema,
   openFileSchema,
@@ -7,9 +8,8 @@ import {
   saveFileSchema,
   selectFolderSchema,
 } from "#dialog/contract";
-import type { initialize } from "#dialog/platforms/windows";
 
-const operation = defineNativeOperation<ReturnType<typeof initialize>>();
+const operation = defineNativeOperation<DialogInstance>();
 /** Host-owned modal selection. Every operation needs its own policy grant. */
 export const dialogOperations = {
   openFile: operation({
