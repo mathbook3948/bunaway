@@ -189,3 +189,9 @@ export interface DialogInstance {
   busy(): boolean;
   dispose(): void;
 }
+
+/** The file and folder pickers; macOS implements these and leaves message dialogs unsupported. */
+export type FileDialogInstance = Pick<
+  DialogInstance,
+  "show" | "busy" | "dispose"
+>;
