@@ -8,7 +8,10 @@ import {
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import type { NativeMenuRole } from "@bunaway/plugin-api/native";
+import type {
+  NativeContentColorScheme,
+  NativeMenuRole,
+} from "@bunaway/plugin-api/native";
 import { BunawayError, type WireError } from "@bunaway/protocol";
 import type { WindowSpec } from "./channel.ts";
 import { readClipboardText } from "./clipboard-text.ts";
@@ -39,6 +42,7 @@ import {
   focusTargetEvaluateParameters,
   interpretEditCommandResult,
 } from "./webview-edit-command.ts";
+import { setProfileColorScheme } from "./webview-color-scheme.ts";
 import { enableCustomTitlebar } from "./webview-titlebar.ts";
 import { kernel, user } from "./win32-bindings.ts";
 
@@ -106,6 +110,8 @@ export class WebView {
   private controller: Pointer | undefined;
   private environment: Pointer | undefined;
   private environment5: Pointer | undefined;
+  /** Requested content scheme; applied once the controller exists and again on every change. */
+  private colorScheme: NativeContentColorScheme = "auto";
   private browserToken: bigint | undefined;
   private readonly events: {
     slot: number;
@@ -293,6 +299,7 @@ export class WebView {
             return;
           }
           this.configure(assets);
+          this.applyRequestedColorScheme();
           this.resize();
           checkHresult(
             method(this.controller, 4, [
@@ -1302,6 +1309,36 @@ export class WebView {
       );
     } finally {
       release(audio);
+    }
+  }
+  /**
+   * Remember the content color scheme and apply it as soon as a controller exists. A closing view
+   * keeps the request without touching the profile; a runtime without profile color schemes is
+   * logged and skipped so the window frame change still succeeds.
+   */
+  setColorScheme(scheme: NativeContentColorScheme): void {
+    this.colorScheme = scheme;
+    this.applyColorScheme();
+  }
+  /** Apply a scheme requested before the controller existed; a failure must not abort creation. */
+  private applyRequestedColorScheme(): void {
+    if (this.colorScheme === "auto") {
+      return;
+    }
+    try {
+      this.applyColorScheme();
+    } catch (error) {
+      this.hooks.log("color-scheme-failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  private applyColorScheme(): void {
+    if (!this.webview || this.closing) {
+      return;
+    }
+    if (!setProfileColorScheme(this.webview, this.colorScheme)) {
+      this.hooks.log("color-scheme-unsupported");
     }
   }
   source() {

@@ -287,6 +287,7 @@ test("frame theme contracts are additive, independently granted and Windows-only
             setDark() {
               changes++;
             },
+            setContentColorScheme() {},
           });
           return release;
         },

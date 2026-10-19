@@ -740,6 +740,7 @@ export type NativeSystemEvents = {
 export type {
   NativeAppearanceWindow,
   NativeAppearanceWindows,
+  NativeContentColorScheme,
 } from "./native-appearance.ts";
 
 /** UI-thread services used by installed native plugins. */

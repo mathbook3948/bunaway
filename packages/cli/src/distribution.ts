@@ -67,6 +67,7 @@ export const frameworkPaths = [
   "native/windows/bun/webview.ts",
   "native/windows/bun/webview-version.ts",
   "native/windows/bun/wide-string.ts",
+  "native/windows/bun/webview-color-scheme.ts",
   "native/windows/bun/webview-titlebar.ts",
   "native/windows/bun/clipboard-text.ts",
   "native/windows/bun/webview-devtools.ts",

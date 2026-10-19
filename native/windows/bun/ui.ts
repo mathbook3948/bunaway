@@ -1620,6 +1620,11 @@ function createWindow(
       config.devtools,
       profiles.path(spec, instanceKey),
     );
+    // Content joins the appearance lifetime after attach, so a theme chosen earlier is replayed.
+    const created = native;
+    appearanceWindows.bindContent(readiness.snapshot().windowId, (scheme) =>
+      created.setColorScheme(scheme),
+    );
   } catch (error) {
     readiness.terminate({
       code: "INTERNAL",

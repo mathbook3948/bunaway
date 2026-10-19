@@ -2,6 +2,7 @@ import { dlopen, ptr } from "bun:ffi";
 import type {
   NativeAppearanceWindow,
   NativeAppearanceWindows,
+  NativeContentColorScheme,
 } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
 
@@ -41,10 +42,18 @@ export function createFrameAppearance() {
   };
 }
 
+/** Applies a color scheme to one window's web content. */
+export type ContentColorSchemeSetter = (
+  scheme: NativeContentColorScheme,
+) => void;
+
 /** Bridge window lifetimes to one optional plugin owner, without modifying window style creation. */
 export class AppearanceWindows implements NativeAppearanceWindows {
   private readonly windows = new Map<string, bigint>();
   private readonly releases = new Map<string, () => void>();
+  /** Last scheme the plugin chose per window, kept for content that does not exist yet. */
+  private readonly schemes = new Map<string, NativeContentColorScheme>();
+  private readonly contents = new Map<string, ContentColorSchemeSetter>();
   private receive: ((window: NativeAppearanceWindow) => () => void) | undefined;
   private native: ReturnType<typeof createFrameAppearance> | undefined;
 
@@ -69,24 +78,49 @@ export class AppearanceWindows implements NativeAppearanceWindows {
       return;
     }
     const native = this.native;
+    const requireLive = () => {
+      if (this.windows.get(windowId) !== hwnd || this.native !== native) {
+        throw new BunawayError({
+          code: "CANCELLED",
+          message: "Appearance window lifetime ended.",
+        });
+      }
+    };
     const release = this.receive({
       windowId,
       setDark: (dark) => {
-        if (this.windows.get(windowId) !== hwnd || this.native !== native) {
-          throw new BunawayError({
-            code: "CANCELLED",
-            message: "Appearance window lifetime ended.",
-          });
-        }
+        requireLive();
         native.setDark(hwnd, dark);
+      },
+      setContentColorScheme: (scheme) => {
+        requireLive();
+        this.schemes.set(windowId, scheme);
+        this.contents.get(windowId)?.(scheme);
       },
     });
     this.releases.set(windowId, release);
   }
 
+  /**
+   * Connect a window's web content once it exists and replay the scheme chosen before that, which
+   * is how the first document already sees the app theme. The setter runs on the UI thread.
+   */
+  bindContent(windowId: string, setter: ContentColorSchemeSetter): void {
+    if (!this.windows.has(windowId)) {
+      return;
+    }
+    this.contents.set(windowId, setter);
+    const scheme = this.schemes.get(windowId);
+    if (scheme) {
+      setter(scheme);
+    }
+  }
+
   /** Retire capabilities before DestroyWindow; no late callback may address a recycled HWND. */
   detach(windowId: string): void {
     this.windows.delete(windowId);
+    this.schemes.delete(windowId);
+    this.contents.delete(windowId);
     this.releases.get(windowId)?.();
     this.releases.delete(windowId);
   }
@@ -113,6 +147,12 @@ export class AppearanceWindows implements NativeAppearanceWindows {
           errors.push(error);
         }
         try {
+          // The profile outlives the plugin, so hand the content back to the OS theme.
+          this.contents.get(id)?.("auto");
+        } catch (error) {
+          errors.push(error);
+        }
+        try {
           native.setDark(hwnd, false);
         } catch (error) {
           // Unsupported DWM attributes never changed the frame, so there is nothing to reset.
@@ -125,6 +165,7 @@ export class AppearanceWindows implements NativeAppearanceWindows {
         }
       }
       this.releases.clear();
+      this.schemes.clear();
       native.dispose();
       this.native = undefined;
       if (errors.length) {

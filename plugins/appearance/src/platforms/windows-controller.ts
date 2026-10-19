@@ -1,6 +1,7 @@
 import { attemptAll } from "@bunaway/plugin";
 import type {
   NativeAppearanceWindow,
+  NativeContentColorScheme,
   NativeWindowServices,
 } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
@@ -59,9 +60,16 @@ export function createAppearanceController(
       highContrast: preferences.highContrast,
     };
   };
+  /** `system` and high contrast leave the content on the OS setting, as a pinned scheme would hide it. */
+  const contentScheme = (
+    preference: ThemePreference,
+  ): NativeContentColorScheme =>
+    preference === "system" || preferences.highContrast ? "auto" : preference;
   const apply = (entry: WindowEntry) => {
-    const effectiveTheme = resolvedTheme(entry.override ?? appPreference);
+    const preference = entry.override ?? appPreference;
+    const effectiveTheme = resolvedTheme(preference);
     entry.native.setDark(effectiveTheme === "dark");
+    entry.native.setContentColorScheme(contentScheme(preference));
     // Failed native applications must not masquerade as the effective frame state.
     entry.effectiveTheme = effectiveTheme;
   };
