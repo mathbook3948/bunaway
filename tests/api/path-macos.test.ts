@@ -53,30 +53,37 @@ test("app directories keep dataRoot private and put cache under Library/Caches",
   expect(paths.getAppDirectory("cache")).toBe(
     `${home}/Library/Caches/bunaway/${appId}`,
   );
-  for (const directory of appDirectorySchema.options) {
+  // temp comes from os.tmpdir, which has its own test.
+  for (const directory of appDirectorySchema.options.filter(
+    (name) => name !== "temp",
+  )) {
     expect(paths.getAppDirectory(directory)).not.toBe(dataRoot);
   }
 });
 
-test("the temporary directory is the process one and must be absolute", () => {
-  const paths = new MacosPath({
-    app,
-    dataRoot,
-  });
-  const saved = process.env.TMPDIR;
-  try {
-    process.env.TMPDIR = `${dataRoot}/temp`;
-    expect(paths.getAppDirectory("temp")).toBe(`${dataRoot}/temp`);
-    process.env.TMPDIR = "relative/tmp";
-    expect(() => paths.getAppDirectory("temp")).toThrow("absolute");
-  } finally {
-    if (saved === undefined) {
-      delete process.env.TMPDIR;
-    } else {
-      process.env.TMPDIR = saved;
+// os.tmpdir ignores TMPDIR on Windows, where the macOS adapter never runs.
+test.skipIf(process.platform === "win32")(
+  "the temporary directory is the process one and must be absolute",
+  () => {
+    const paths = new MacosPath({
+      app,
+      dataRoot,
+    });
+    const saved = process.env.TMPDIR;
+    try {
+      process.env.TMPDIR = `${dataRoot}/temp`;
+      expect(paths.getAppDirectory("temp")).toBe(`${dataRoot}/temp`);
+      process.env.TMPDIR = "relative/tmp";
+      expect(() => paths.getAppDirectory("temp")).toThrow("absolute");
+    } finally {
+      if (saved === undefined) {
+        delete process.env.TMPDIR;
+      } else {
+        process.env.TMPDIR = saved;
+      }
     }
-  }
-});
+  },
+);
 
 test("a data root outside the host layout or a missing app identifier fails with INTERNAL", () => {
   expect(() =>

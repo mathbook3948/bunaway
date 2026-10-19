@@ -147,7 +147,7 @@ home은 호스트 데이터 루트(`~/Library/Application Support/bunaway/<appId
 | `AppDirectory` | macOS 경로 | 대응하는 Electron 용도 | 대응하는 Tauri 함수 |
 | --- | --- | --- | --- |
 | `appConfig`, `appData`, `appLocalData` | `~/Library/Application Support/bunaway/<appId>/data` | `userData` | `app_config_dir`, `app_data_dir`, `app_local_data_dir` |
-| `cache` | `~/Library/Caches/bunaway/<appId>` | `cache` 아래 앱 폴더 | `app_cache_dir` |
+| `cache` | `~/Library/Caches/bunaway/<appId>` | `~/Library/Caches`(`cache`, 앱 폴더는 앱이 직접 만듭니다) | `app_cache_dir` |
 | `logs` | `~/Library/Application Support/bunaway/<appId>/logs` | `~/Library/Logs/<앱 이름>` | `~/Library/Logs/<식별자>` |
 | `temp` | `~/Library/Application Support/bunaway/<appId>/temp` | `temp`(시스템 임시 디렉터리) | `temp_dir` |
 
@@ -155,7 +155,7 @@ home은 호스트 데이터 루트(`~/Library/Application Support/bunaway/<appId
 - `appConfig`, `appData`, `appLocalData`는 macOS에서 구분하지 않으며 Tauri의 세 함수가 같은 경로를 반환하는 것과 같습니다.
   Electron의 `userData`에는 Chromium 데이터가 섞이지만 이 경로는 앱 파일만 담습니다. 데이터 루트 자체(WebView 프로필과 잠금 파일)는 반환하지 않습니다.
 - `logs`는 [log 플러그인](/reference/host/log-write/)이 쓰는 폴더와 같습니다. Electron과 Tauri의 `~/Library/Logs` 위치와 다릅니다.
-- `temp`는 I/O Worker의 `TMPDIR`이며 호스트가 이 값을 앱 전용 `<dataRoot>/temp`로 정합니다. Electron의 `temp`는 시스템 임시 디렉터리라 값이 다릅니다. 상대 경로면 `INTERNAL`로 실패합니다.
+- `temp`는 I/O Worker의 `TMPDIR`이며 호스트가 이 값을 앱 전용 `<dataRoot>/temp`로 정합니다. Electron의 `temp`는 시스템 임시 디렉터리라 값이 다릅니다. `TMPDIR`이 비어 있으면 `/tmp`를 쓰고 상대 경로면 `INTERNAL`로 실패합니다.
 
 문자열 경로 처리는 `node:path.posix` 규칙을 따릅니다. `resolve`의 `base`는 `/`로 시작해야 하며 호스트 cwd를 조회하지 않습니다.
 Windows의 drive, UNC와 `C:relative` 설명은 macOS에 적용되지 않습니다. 길이와 문자 제한은 Windows와 같습니다.
