@@ -114,20 +114,114 @@ function requireDesktop(): DesktopLifecycle {
   }
   return desktop;
 }
-const channel = new Channel(
-  parentPort,
-  config.runtime,
-  "macos-backend",
-  async (packet: Packet) => {
-    if (packet.kind === "host-response") {
-      const pending = calls.get(packet.requestId);
-      if (pending && pending.context !== packet.context) {
-        throw new Error("Invalid host response context.");
-      }
-      takeCall(packet.requestId)?.resolve(packet.response);
-      return;
+/** The session of `route`'s context, only while the route still names its view and document. */
+function currentSession(route: Route) {
+  const session = sessions.get(route.context);
+  const current =
+    session?.route.viewId === route.viewId &&
+    session.route.documentGeneration === route.documentGeneration;
+  return current ? session : undefined;
+}
+function receiveHostResponse(
+  packet: Extract<
+    Packet,
+    {
+      kind: "host-response";
     }
-    if (packet.kind === "quit-request") {
+  >,
+) {
+  const pending = calls.get(packet.requestId);
+  if (pending && pending.context !== packet.context) {
+    throw new Error("Invalid host response context.");
+  }
+  takeCall(packet.requestId)?.resolve(packet.response);
+}
+function receiveOpenUrls(
+  packet: Extract<
+    Packet,
+    {
+      kind: "open-urls";
+    }
+  >,
+) {
+  if (stopping || shutdownCommitted) {
+    // Not a callback failure: the app already approved the quit. The count is enough for
+    // diagnostics, since URLs may hold secrets.
+    void channel
+      .send({
+        kind: "diagnostic",
+        event: "open-urls-dropped",
+        fields: {
+          reason: "ending",
+          count: packet.urls.length,
+        },
+      })
+      .catch(() => {});
+    return;
+  }
+  try {
+    requireDesktop().openUrls(packet.urls);
+  } catch (error) {
+    // A full or ending open queue loses only this request; the app keeps running.
+    reportDesktopFailure(error);
+  }
+}
+/** Begins backend shutdown once: abort pending host calls, then run cleanup in the background. */
+function beginBackendShutdown() {
+  if (stopping) {
+    return;
+  }
+  stopping = true;
+  // Setup may await a Host response that shutdown will no longer deliver.
+  for (const call of calls.values()) {
+    call.abort();
+  }
+  // Return immediately so the Channel can acknowledge shutdown while cleanup
+  // waits for setup and sends its own completion packet.
+  void (async () => {
+    await appLoaded.promise;
+    core ??= await booting?.catch(() => undefined);
+    await runBackendShutdown({
+      desktop,
+      orderly,
+      stopCore: async () => {
+        await core?.stop();
+        sessions.clear();
+      },
+      reportCleaned: () =>
+        channel.send({
+          kind: "cleaned",
+        }),
+      // The main thread owns the process exit. The code goes last, after onQuit, which may
+      // still change it through exit().
+      reportExitCode: () =>
+        channel.send({
+          kind: "exit-code",
+          exitCode: desktop?.exitCode ?? 0,
+        }),
+      nativeStopped: nativeStopped.promise,
+    });
+    await channel.drain();
+    channel.close();
+    parentPort?.close();
+  })().catch(fail);
+}
+async function revokeSession(route: Route) {
+  const session = sessions.get(route.context);
+  sessions.delete(route.context);
+  channel.discardServers(route.context);
+  await session?.session.close();
+}
+/**
+ * Packets handled even once shutdown began. Returns undefined for any other packet so the caller
+ * can apply the shutdown gate before routing it.
+ */
+function receiveAlways(packet: Packet): Promise<void> | undefined {
+  switch (packet.kind) {
+    case "host-response":
+      receiveHostResponse(packet);
+      return Promise.resolve();
+    case "quit-request":
       // Accept the request immediately so the main thread's shutdown can still be delivered
       // while the app is deciding in beforeQuit.
       void requireDesktop()
@@ -140,127 +234,61 @@ const channel = new Channel(
           }
         })
         .catch(fail);
-      return;
-    }
-    if (packet.kind === "closing") {
+      return Promise.resolve();
+    case "closing":
       // The main thread decided alone (signal, session end, vanished last window): the first cause wins.
       orderly = true;
       shutdownCommitted = true;
       reportedCause ??= packet.reason;
       desktop?.commitShutdown(packet.reason);
-      return;
-    }
-    if (packet.kind === "open-urls") {
-      if (stopping || shutdownCommitted) {
-        // Not a callback failure: the app already approved the quit. The count is enough for
-        // diagnostics, since URLs may hold secrets.
-        void channel
-          .send({
-            kind: "diagnostic",
-            event: "open-urls-dropped",
-            fields: {
-              reason: "ending",
-              count: packet.urls.length,
-            },
-          })
-          .catch(() => {});
-        return;
-      }
-      try {
-        requireDesktop().openUrls(packet.urls);
-      } catch (error) {
-        // A full or ending open queue loses only this request; the app keeps running.
-        reportDesktopFailure(error);
-      }
-      return;
-    }
-    if (packet.kind === "reopen") {
+      return Promise.resolve();
+    case "open-urls":
+      receiveOpenUrls(packet);
+      return Promise.resolve();
+    case "reopen":
       requireDesktop().reopen({
         hasVisibleWindows: packet.hasVisibleWindows,
       });
-      return;
-    }
-    if (packet.kind === "windows-empty") {
+      return Promise.resolve();
+    case "windows-empty":
       if (!stopping) {
         requireDesktop().windowsEmpty();
       }
-      return;
-    }
-    if (packet.kind === "native-stopped") {
+      return Promise.resolve();
+    case "native-stopped":
       nativeStopped.resolve();
-      return;
-    }
-    if (packet.kind === "shutdown") {
-      if (stopping) {
-        return;
-      }
-      stopping = true;
-      // Setup may await a Host response that shutdown will no longer deliver.
-      for (const call of calls.values()) {
-        call.abort();
-      }
-      // Return immediately so the Channel can acknowledge shutdown while cleanup
-      // waits for setup and sends its own completion packet.
-      void (async () => {
-        await appLoaded.promise;
-        core ??= await booting?.catch(() => undefined);
-        await runBackendShutdown({
-          desktop,
-          orderly,
-          stopCore: async () => {
-            await core?.stop();
-            sessions.clear();
-          },
-          reportCleaned: () =>
-            channel.send({
-              kind: "cleaned",
-            }),
-          // The main thread owns the process exit. The code goes last, after onQuit, which may
-          // still change it through exit().
-          reportExitCode: () =>
-            channel.send({
-              kind: "exit-code",
-              exitCode: desktop?.exitCode ?? 0,
-            }),
-          nativeStopped: nativeStopped.promise,
-        });
-        await channel.drain();
-        channel.close();
-        parentPort?.close();
-      })().catch(fail);
-      return;
-    }
-    if (packet.kind === "revoke") {
-      const session = sessions.get(packet.route.context);
-      sessions.delete(packet.route.context);
-      channel.discardServers(packet.route.context);
-      await session?.session.close();
-      return;
-    }
-    if (stopping) {
-      return;
-    }
-    if (packet.kind === "native-event") {
-      if (shutdownCommitted) {
-        return;
-      }
-      const session = sessions.get(packet.route.context);
+      return Promise.resolve();
+    case "shutdown":
+      beginBackendShutdown();
+      return Promise.resolve();
+    case "revoke":
+      return revokeSession(packet.route);
+    default:
+      return undefined;
+  }
+}
+async function receivePacket(packet: Packet) {
+  const always = receiveAlways(packet);
+  if (always !== undefined) {
+    await always;
+    return;
+  }
+  if (stopping) {
+    return;
+  }
+  switch (packet.kind) {
+    case "native-event": {
       // A stale route belongs to a revoked or navigated document and is dropped silently.
-      if (
-        !session ||
-        session.route.viewId !== packet.route.viewId ||
-        session.route.documentGeneration !== packet.route.documentGeneration
-      ) {
-        return;
+      if (!shutdownCommitted && currentSession(packet.route)) {
+        await core?.emitNative(
+          packet.route.context,
+          packet.event,
+          packet.payload,
+        );
       }
-      await core?.emitNative(
-        packet.route.context,
-        packet.event,
-        packet.payload,
-      );
       return;
     }
-    if (packet.kind === "session-open") {
+    case "session-open": {
       if (!core || sessions.has(packet.route.context)) {
         throw new Error("Invalid session-open.");
       }
@@ -268,20 +296,25 @@ const channel = new Channel(
         route: packet.route,
         session: core.openSession(packet.route.context, packet.route.viewId),
       });
-    } else if (packet.kind === "client") {
-      const session = sessions.get(packet.route.context);
-      if (
-        !session ||
-        session.route.documentGeneration !== packet.route.documentGeneration ||
-        session.route.viewId !== packet.route.viewId
-      ) {
+      return;
+    }
+    case "client": {
+      const session = currentSession(packet.route);
+      if (!session) {
         throw new Error("Invalid client route.");
       }
       await session.session.receive(packet.message);
-    } else {
-      throw new Error("Unexpected macOS backend packet.");
+      return;
     }
-  },
+    default:
+      throw new Error("Unexpected macOS backend packet.");
+  }
+}
+const channel = new Channel(
+  parentPort,
+  config.runtime,
+  "macos-backend",
+  receivePacket,
   fail,
 );
 

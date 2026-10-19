@@ -278,60 +278,7 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
       ioWorker,
       config.runtime,
       "main-io",
-      async (packet) => {
-        if (packet.kind === "ready") {
-          started.resolve();
-        } else if (
-          packet.kind === "authorize-input" ||
-          packet.kind === "prepare"
-        ) {
-          const call = ioCalls.get(packet.requestId);
-          const access = authority(packet.context);
-          const allowed =
-            !!call &&
-            call.packet.context === packet.context &&
-            !stopping &&
-            !call.signal.aborted &&
-            !!access &&
-            call.packet.source === access.source &&
-            !!registry &&
-            registry.allowed(
-              access.permissions,
-              registry.validateCall(call.packet.call),
-            );
-          await ioChannel?.send({
-            kind:
-              packet.kind === "authorize-input" ? "input-authorized" : "grant",
-            context: packet.context,
-            requestId: packet.requestId,
-            allowed,
-          });
-        } else if (packet.kind === "host-response") {
-          const call = ioCalls.get(packet.requestId);
-          if (!call) {
-            return;
-          }
-          if (call.packet.context !== packet.context) {
-            throw new Error("Invalid I/O response context.");
-          }
-          // The I/O Worker retains resource cancellation until this callback is
-          // acknowledged. Hand off to the backend before releasing main ownership.
-          if (!stopping && !call.signal.aborted && authority(packet.context)) {
-            await channel?.send(packet);
-          }
-          if (ioCalls.get(packet.requestId) === call) {
-            ioCalls.delete(packet.requestId);
-            requests.finish(packet.requestId, call.signal);
-          }
-        } else if (packet.kind === "cleaned") {
-          ioCleaned = true;
-          await stopDescendants();
-        } else if (packet.kind === "fatal") {
-          fail(new Error(packet.error.message));
-        } else {
-          throw new Error("Unexpected macOS I/O packet.");
-        }
-      },
+      (packet) => receiveIoPacket(packet, started),
       fail,
     );
     await started.promise;
@@ -401,24 +348,163 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
     worker,
     config.runtime,
     "macos-main",
-    async (packet) => {
-      if (packet.kind === "ready") {
-        if (stopping) {
-          return;
-        }
-        ready = true;
-        coreReady.resolve();
-        diagnostic("backend-ready", {
-          pid: process.pid,
-          bunVersion: Bun.version,
-        });
-        ui?.start();
-      } else if (packet.kind === "desktop-config") {
+    receiveUiPacket,
+    fail,
+  );
+  /** Authorization requests of the I/O Worker: grant only a live call the current authority allows. */
+  async function answerIoAuthorization(
+    packet: Extract<
+      Packet,
+      {
+        kind: "authorize-input" | "prepare";
+      }
+    >,
+  ) {
+    const call = ioCalls.get(packet.requestId);
+    const access = authority(packet.context);
+    const allowed =
+      !!call &&
+      call.packet.context === packet.context &&
+      !stopping &&
+      !call.signal.aborted &&
+      !!access &&
+      call.packet.source === access.source &&
+      !!registry &&
+      registry.allowed(
+        access.permissions,
+        registry.validateCall(call.packet.call),
+      );
+    await ioChannel?.send({
+      kind: packet.kind === "authorize-input" ? "input-authorized" : "grant",
+      context: packet.context,
+      requestId: packet.requestId,
+      allowed,
+    });
+  }
+  /** Hands an I/O result to the backend and releases main ownership of the call. */
+  async function receiveIoHostResponse(
+    packet: Extract<
+      Packet,
+      {
+        kind: "host-response";
+      }
+    >,
+  ) {
+    const call = ioCalls.get(packet.requestId);
+    if (!call) {
+      return;
+    }
+    if (call.packet.context !== packet.context) {
+      throw new Error("Invalid I/O response context.");
+    }
+    // The I/O Worker retains resource cancellation until this callback is
+    // acknowledged. Hand off to the backend before releasing main ownership.
+    if (!stopping && !call.signal.aborted && authority(packet.context)) {
+      await channel?.send(packet);
+    }
+    if (ioCalls.get(packet.requestId) === call) {
+      ioCalls.delete(packet.requestId);
+      requests.finish(packet.requestId, call.signal);
+    }
+  }
+  async function receiveIoPacket(
+    packet: Packet,
+    started: {
+      resolve(): void;
+    },
+  ) {
+    switch (packet.kind) {
+      case "ready":
+        started.resolve();
+        return;
+      case "authorize-input":
+      case "prepare":
+        await answerIoAuthorization(packet);
+        return;
+      case "host-response":
+        await receiveIoHostResponse(packet);
+        return;
+      case "cleaned":
+        ioCleaned = true;
+        await stopDescendants();
+        return;
+      case "fatal":
+        fail(new Error(packet.error.message));
+        return;
+      default:
+        throw new Error("Unexpected macOS I/O packet.");
+    }
+  }
+  /** The backend finished startup: the UI may start unless shutdown already began. */
+  function backendReady() {
+    if (stopping) {
+      return;
+    }
+    ready = true;
+    coreReady.resolve();
+    diagnostic("backend-ready", {
+      pid: process.pid,
+      bunVersion: Bun.version,
+    });
+    ui?.start();
+  }
+  /**
+   * Collects the native plugin batches and, after the final one, validates them and creates the
+   * UI adapters and the I/O Worker. Failures fail the host without rejecting, so the Channel still
+   * acknowledges the registration and the backend can observe shutdown and clean up.
+   */
+  async function registerNativePlugins(
+    packet: Extract<
+      Packet,
+      {
+        kind: "native-register";
+      }
+    >,
+  ) {
+    if (stopping) {
+      return;
+    }
+    try {
+      if (registry) {
+        throw new Error("Invalid native registration phase.");
+      }
+      pendingPlugins.push(...packet.plugins);
+      if (!packet.complete) {
+        return;
+      }
+      // Validate the aggregate limits and installed contracts only after the final batch.
+      const plugins = pendingPlugins.splice(0);
+      registry = pluginRegistry(plugins, catalog);
+      registry.validatePolicy(config.policy);
+      if (!ui) {
+        throw new Error("Missing window services.");
+      }
+      adapters = await operations(
+        plugins,
+        config.dataRoot,
+        "ui",
+        ui.services,
+        catalog,
+      );
+      if (!stopping) {
+        await startIO(plugins);
+      }
+    } catch (error) {
+      fail(error);
+    }
+  }
+  async function receiveUiPacket(packet: Packet) {
+    switch (packet.kind) {
+      case "ready":
+        backendReady();
+        return;
+      case "desktop-config":
         desktopRequests.configure({
           closeBehavior: packet.closeBehavior,
           reopenHandler: packet.reopenHandler,
         });
-      } else if (packet.kind === "desktop-control") {
+        return;
+      case "desktop-control":
         if (packet.action !== "show") {
           // The backend rejects hide itself because macOS has no tray to hide into.
           throw new Error("macOS has no tray to hide the app into.");
@@ -426,75 +512,52 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
         if (!stopping) {
           ui?.requestShow();
         }
-      } else if (packet.kind === "quit-cancelled") {
+        return;
+      case "quit-cancelled":
         desktopRequests.quitCancelled();
-      } else if (packet.kind === "shutdown-committed") {
+        return;
+      case "shutdown-committed":
         // The app approved a quit (beforeQuit, or an api quit): teardown follows without a cause.
         beginShutdown();
-      } else if (packet.kind === "diagnostic") {
+        return;
+      case "diagnostic":
         diagnostic(packet.event, packet.fields);
-      } else if (packet.kind === "server") {
+        return;
+      case "server":
         ui?.send(packet.route, packet.message);
-      } else if (packet.kind === "native-register") {
-        if (stopping) {
-          return;
-        }
-        // Fail without rejecting so the Channel still acknowledges registration;
-        // the backend awaits that ack before it can observe shutdown and clean up.
-        try {
-          if (registry) {
-            throw new Error("Invalid native registration phase.");
-          }
-          pendingPlugins.push(...packet.plugins);
-          if (!packet.complete) {
-            return;
-          }
-          // Validate the aggregate limits and installed contracts only after the final batch.
-          const plugins = pendingPlugins.splice(0);
-          registry = pluginRegistry(plugins, catalog);
-          registry.validatePolicy(config.policy);
-          if (!ui) {
-            throw new Error("Missing window services.");
-          }
-          adapters = await operations(
-            plugins,
-            config.dataRoot,
-            "ui",
-            ui.services,
-            catalog,
-          );
-          if (!stopping) {
-            await startIO(plugins);
-          }
-        } catch (error) {
-          fail(error);
-        }
-      } else if (packet.kind === "cancel") {
+        return;
+      case "native-register":
+        await registerNativePlugins(packet);
+        return;
+      case "cancel":
         if (requests.context(packet.requestId) === packet.context) {
           requests.cancel(packet.requestId);
           ioCalls.delete(packet.requestId);
           ioChannel?.notify(packet);
         }
-      } else if (packet.kind === "operation") {
+        return;
+      case "operation":
         // The backend needs acceptance even while plugin parsing or execution is pending.
         void executeRequest(packet).catch(fail);
-      } else if (packet.kind === "exit-code") {
+        return;
+      case "exit-code":
         // Sent last, after onQuit; the backend drains its channel before the Worker exits, so the
         // code is known when `exited` settles.
         exitCode = packet.exitCode;
-      } else if (packet.kind === "cleaned") {
+        return;
+      case "cleaned":
         cleaned = true;
         backendCleaned.resolve();
         stopIO();
         await stopDescendants();
-      } else if (packet.kind === "fatal") {
+        return;
+      case "fatal":
         fail(new Error(packet.error.message));
-      } else {
+        return;
+      default:
         throw new Error("Unexpected macOS UI packet.");
-      }
-    },
-    fail,
-  );
+    }
+  }
   /** Own result settlement separately from operation acceptance, including late parser failures. */
   async function executeRequest(
     packet: Extract<

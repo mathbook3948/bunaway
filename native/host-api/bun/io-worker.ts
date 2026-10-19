@@ -215,118 +215,190 @@ function deniedResponse(): HostResponse {
   };
 }
 
+/** Queue a new operation behind the ones already waiting; the limits are checked before it is stored. */
+function enqueueOperation(
+  packet: Extract<
+    Packet,
+    {
+      kind: "operation";
+    }
+  >,
+) {
+  assert(
+    !stopping &&
+      !queue.has(packet.requestId) &&
+      !responses.has(packet.requestId) &&
+      queue.size < API_LIMITS.maxPending,
+    "Invalid I/O queue request",
+  );
+  // Map insertion order keeps operations FIFO while the UI authorizes one at a time.
+  queue.set(packet.requestId, {
+    context: packet.context,
+    call: packet.call,
+    source: packet.source,
+    controller: new AbortController(),
+    state: {
+      phase: "input-authorization",
+    },
+  });
+  startNext();
+}
+
+/** The UI answered the input authorization of the active call: deny it or start parsing. */
+function acceptInputAuthorization(
+  packet: Extract<
+    Packet,
+    {
+      kind: "input-authorized";
+    }
+  >,
+) {
+  const call = queue.get(packet.requestId);
+  if (
+    !call ||
+    active !== packet.requestId ||
+    call.state.phase !== "input-authorization"
+  ) {
+    return;
+  }
+  assert(call.context === packet.context);
+  if (!packet.allowed) {
+    complete(packet.requestId, call, deniedResponse());
+    return;
+  }
+  call.state = {
+    phase: "parsing",
+  };
+  // Acknowledge permission promptly; cancellation stays live while the parser awaits.
+  void prepare(packet.requestId, call).catch((error) => {
+    throw error;
+  });
+}
+
+/** The UI answered the execution authorization of the active call: deny it or start executing. */
+function acceptExecutionGrant(
+  packet: Extract<
+    Packet,
+    {
+      kind: "grant";
+    }
+  >,
+) {
+  const call = queue.get(packet.requestId);
+  if (
+    !call ||
+    active !== packet.requestId ||
+    call.state.phase !== "execution-authorization"
+  ) {
+    return;
+  }
+  assert(call.context === packet.context);
+  if (!packet.allowed) {
+    complete(packet.requestId, call, deniedResponse());
+    return;
+  }
+  const execute = call.state.execute;
+  call.state = {
+    phase: "executing",
+  };
+  // Accept the grant without holding channel capacity for asynchronous output parsing.
+  void executeCall(packet.requestId, call, execute).catch((error) => {
+    throw error;
+  });
+}
+
+/** Abort one queued call or one response awaiting acceptance, then let the next call start. */
+function cancelRequest(
+  packet: Extract<
+    Packet,
+    {
+      kind: "cancel";
+    }
+  >,
+) {
+  const call = queue.get(packet.requestId) ?? responses.get(packet.requestId);
+  if (call && call.context !== packet.context) {
+    throw new Error("Invalid I/O cancellation context");
+  }
+  call?.controller.abort();
+  queue.delete(packet.requestId);
+  responses.delete(packet.requestId);
+  if (active === packet.requestId) {
+    active = undefined;
+  }
+  startNext();
+}
+
+/** Abort every queued call and pending response of a revoked context. */
+function cancelContext(
+  packet: Extract<
+    Packet,
+    {
+      kind: "cancel-context";
+    }
+  >,
+) {
+  for (const [id, call] of queue) {
+    if (call.context === packet.context) {
+      call.controller.abort();
+      queue.delete(id);
+      if (active === id) {
+        active = undefined;
+      }
+    }
+  }
+  for (const [id, call] of responses) {
+    if (call.context === packet.context) {
+      call.controller.abort();
+      responses.delete(id);
+    }
+  }
+  startNext();
+}
+
+/** Abort everything and schedule the final cleanup after the shutdown is acknowledged. */
+function beginShutdown() {
+  stopping = true;
+  for (const call of queue.values()) {
+    call.controller.abort();
+  }
+  for (const call of responses.values()) {
+    call.controller.abort();
+  }
+  queue.clear();
+  responses.clear();
+  active = undefined;
+  // Acknowledge shutdown acceptance before closing the port.
+  setTimeout(() => {
+    void finish().catch((error) => {
+      throw error;
+    });
+  }, 0);
+}
+
 /** Apply I/O requests and control messages from the main-thread coordinator. */
 function receive(packet: Packet) {
-  if (packet.kind === "operation") {
-    assert(
-      !stopping &&
-        !queue.has(packet.requestId) &&
-        !responses.has(packet.requestId) &&
-        queue.size < API_LIMITS.maxPending,
-      "Invalid I/O queue request",
-    );
-    // Map insertion order keeps operations FIFO while the UI authorizes one at a time.
-    queue.set(packet.requestId, {
-      context: packet.context,
-      call: packet.call,
-      source: packet.source,
-      controller: new AbortController(),
-      state: {
-        phase: "input-authorization",
-      },
-    });
-    startNext();
-  } else if (packet.kind === "input-authorized") {
-    const call = queue.get(packet.requestId);
-    if (
-      !call ||
-      active !== packet.requestId ||
-      call.state.phase !== "input-authorization"
-    ) {
+  switch (packet.kind) {
+    case "operation":
+      enqueueOperation(packet);
       return;
-    }
-    assert(call.context === packet.context);
-    if (!packet.allowed) {
-      complete(packet.requestId, call, deniedResponse());
+    case "input-authorized":
+      acceptInputAuthorization(packet);
       return;
-    }
-    call.state = {
-      phase: "parsing",
-    };
-    // Acknowledge permission promptly; cancellation stays live while the parser awaits.
-    void prepare(packet.requestId, call).catch((error) => {
-      throw error;
-    });
-  } else if (packet.kind === "grant") {
-    const call = queue.get(packet.requestId);
-    if (
-      !call ||
-      active !== packet.requestId ||
-      call.state.phase !== "execution-authorization"
-    ) {
+    case "grant":
+      acceptExecutionGrant(packet);
       return;
-    }
-    assert(call.context === packet.context);
-    if (!packet.allowed) {
-      complete(packet.requestId, call, deniedResponse());
+    case "cancel":
+      cancelRequest(packet);
       return;
-    }
-    const execute = call.state.execute;
-    call.state = {
-      phase: "executing",
-    };
-    // Accept the grant without holding channel capacity for asynchronous output parsing.
-    void executeCall(packet.requestId, call, execute).catch((error) => {
-      throw error;
-    });
-  } else if (packet.kind === "cancel") {
-    const call = queue.get(packet.requestId) ?? responses.get(packet.requestId);
-    if (call && call.context !== packet.context) {
-      throw new Error("Invalid I/O cancellation context");
-    }
-    call?.controller.abort();
-    queue.delete(packet.requestId);
-    responses.delete(packet.requestId);
-    if (active === packet.requestId) {
-      active = undefined;
-    }
-    startNext();
-  } else if (packet.kind === "cancel-context") {
-    for (const [id, call] of queue) {
-      if (call.context === packet.context) {
-        call.controller.abort();
-        queue.delete(id);
-        if (active === id) {
-          active = undefined;
-        }
-      }
-    }
-    for (const [id, call] of responses) {
-      if (call.context === packet.context) {
-        call.controller.abort();
-        responses.delete(id);
-      }
-    }
-    startNext();
-  } else if (packet.kind === "shutdown") {
-    stopping = true;
-    for (const call of queue.values()) {
-      call.controller.abort();
-    }
-    for (const call of responses.values()) {
-      call.controller.abort();
-    }
-    queue.clear();
-    responses.clear();
-    active = undefined;
-    // Acknowledge shutdown acceptance before closing the port.
-    setTimeout(() => {
-      void finish().catch((error) => {
-        throw error;
-      });
-    }, 0);
-  } else {
-    throw new Error("Unexpected I/O packet");
+    case "cancel-context":
+      cancelContext(packet);
+      return;
+    case "shutdown":
+      beginShutdown();
+      return;
+    default:
+      throw new Error("Unexpected I/O packet");
   }
 }
 /** Drain channel messages, dispose adapters, then release both worker ports. */
