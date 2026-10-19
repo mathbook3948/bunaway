@@ -34,7 +34,13 @@ const step = (name: string) => log(`step:${name}`);
 const lines = () => readFileSync(logPath, "utf8").trim().split("\n");
 
 const POLL_MS = 10;
-const STEP_TIMEOUT_MS = 10_000;
+/**
+ * A first page load that WKWebView leaves stalled is reissued three times and then replaced by a
+ * fresh view about 13 s after it started (native/macos/bun/webview-diagnostics.ts), and the
+ * replacement still has to load. The wait must outlast that recovery, so it matches the 30 s
+ * document deadline that bounds the whole load.
+ */
+const STEP_TIMEOUT_MS = 30_000;
 /** Pause that lets a vetoed or ignored request settle before the next stimulus. */
 const SETTLE_MS = 300;
 const TICK_MS = 50;
