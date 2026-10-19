@@ -3,6 +3,7 @@ import { win32 } from "node:path";
 import { BunawayError, type NativeEnvironment } from "@bunaway/plugin";
 import {
   type AppDirectory,
+  type PathInstance,
   qualifiedPathSchema,
   type UserDirectory,
 } from "#path/contract";
@@ -11,7 +12,7 @@ import {
   WindowsKnownFolders,
 } from "#path/platforms/windows-known-folders";
 /** Windows path semantics never inherit the I/O Worker's current working directory. */
-export class WindowsPath {
+export class WindowsPath implements PathInstance {
   private folders: WindowsKnownFolders | undefined;
 
   constructor(

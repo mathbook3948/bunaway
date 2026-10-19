@@ -2,14 +2,14 @@ import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
   appDirectorySchema,
+  type PathInstance,
   pathsSchema,
   pathTextSchema,
   qualifiedPathSchema,
   userDirectorySchema,
 } from "#path/contract";
-import type { WindowsPath } from "#path/platforms/windows";
 
-const operation = defineNativeOperation<WindowsPath>();
+const operation = defineNativeOperation<PathInstance>();
 /** Windows lexical path helpers and OS-selected user directories, not filesystem access. */
 export const pathOperations = {
   getDirectory: operation({

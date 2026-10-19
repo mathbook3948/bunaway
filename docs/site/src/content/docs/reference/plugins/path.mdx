@@ -1,14 +1,14 @@
 ---
-title: Windows 경로
-description: 현재 사용자의 Windows 표준 폴더를 조회하고 명시적인 기준 경로로 문자열 경로를 처리합니다.
+title: 경로
+description: 현재 사용자의 표준 폴더(Windows, macOS)를 조회하고 명시적인 기준 경로로 문자열 경로를 처리합니다.
 ---
 
 기본 export(`default`)를 `path`로 가져와 앱에 등록하고 호출합니다.
 
-`@bunaway/plugin-path`는 Windows 경로를 다루는 선택 플러그인입니다.
+`@bunaway/plugin-path`는 Windows와 macOS 경로를 다루는 선택 플러그인입니다.
 앱의 plugins에 `path`을 등록하고 아래 작업별 Host 권한을 허용합니다.
 화면에서 직접 호출하려면 같은 작업 이름 앞에 `plugin.`을 붙인 명령 권한도 필요합니다.
-다른 플랫폼에서는 `UNSUPPORTED`입니다.
+다른 플랫폼에서는 `UNSUPPORTED`입니다. macOS의 차이는 [macOS](#macos) 절에 모았습니다.
 
 ```ts
 import path from "@bunaway/plugin-path";
@@ -24,14 +24,14 @@ path.getDirectory({ directory: UserDirectory }): Promise<string>
 ```
 
 `UserDirectory`는 `home`, `documents`, `downloads`, `desktop`, `pictures`, `music`, `videos`입니다.
-`path.getDirectory` 권한으로 현재 사용자의 Windows Known Folder 경로를 조회합니다.
+`path.getDirectory` 권한으로 현재 사용자의 표준 폴더 경로를 조회합니다. Windows는 Known Folder를 씁니다.
 사용자 폴더의 OS 설정과 redirection을 따르며 home 뒤에 영문 폴더 이름을 붙여 추측하지 않습니다.
 `SHGetKnownFolderPath`에 현재 사용자와 `KF_FLAG_DONT_VERIFY`를 전달합니다.
 폴더의 존재를 확인하거나 만들지 않으므로 없는 폴더의 경로도 반환할 수 있습니다.
 관리자나 다른 사용자의 폴더, 임의 GUID, 다른 사용자 token을 입력받지 않습니다.
 [Microsoft Known Folder 계약](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath)을 따릅니다.
 
-성공은 fully qualified drive 또는 UNC 경로입니다. Windows 조회 실패는 `INTERNAL`입니다.
+Windows의 성공은 fully qualified drive 또는 UNC 경로입니다. Windows 조회 실패는 `INTERNAL`입니다.
 앱 전용 디렉터리는 아래 `path.getAppDirectory`로 조회합니다.
 현재 앱의 저장 위치를 선택하는 방법은 [저장소와 앱 상태](/guides/storage-and-state/)를 참고하세요.
 
@@ -69,7 +69,7 @@ path.getAppDirectory({ directory: AppDirectory }): Promise<string>
 - `logs`는 [log 플러그인](/reference/host/log-write/)이 쓰는 폴더와 같습니다. 이 폴더에는 log 플러그인의 `app.log` 외에
   호스트 진단 로그(`host.log`, `startup-error.log`)도 있습니다. 앱이 이 폴더를 읽을 수 있지만 호스트가 쓰는 파일이 섞여 있으며,
   `app.log`의 회전과 정리는 log 플러그인이 맡습니다.
-- `appLocalData`와 `cache`는 데이터 루트의 `data`, `cache` 하위 폴더입니다. 템플릿이 저장 경로로 쓰는 `data`와 같은 위치입니다.
+- Windows에서 `appLocalData`와 `cache`는 데이터 루트의 `data`, `cache` 하위 폴더입니다. 템플릿이 저장 경로로 쓰는 `data`와 같은 위치입니다.
 - 데이터 루트 자체와 `webview` 같은 호스트 전용 하위 경로는 반환하지 않습니다. 앱이 WebView 프로필과 잠금 파일을 건드리지 못하게 하기 위해서입니다.
   앱 파일에 `webview`, `host.lock` 이름을 쓰지 마세요.
 
@@ -81,6 +81,8 @@ Electron에서는 `userData` 하나가 이 모든 것을 담지만 bunaway는 �
 백엔드 명령 컨텍스트의 `ctx.app.paths.resources`를 사용하세요. [CommandContext](/reference/backend/context/)를 참고합니다.
 
 ## 문자열 경로 처리
+
+아래 설명은 Windows 기준입니다. macOS는 [macOS](#macos) 절을 보세요.
 
 | 함수와 권한 | 입력 | 반환 |
 | --- | --- | --- |
@@ -127,3 +129,33 @@ namespace 문자열을 처리할 수 있어도 storage의 extended-length 및 de
 모든 호출은 Promise를 반환하고 I/O Worker에서 실행합니다. 작업별 권한 부족은 `PERMISSION_DENIED`,
 처리 전 취소와 폐기된 어댑터는 `CANCELLED`입니다. 두 번째 인자의 signal과 deadline은
 [호출 취소와 기한](/reference/client/invoke/)을 따릅니다. 이미 시작한 동기 OS 조회는 중간에 중단하지 않습니다.
+
+## macOS
+
+macOS는 같은 작업 이름과 권한을 쓰며 결과는 `/`로 시작하는 절대 POSIX 경로입니다. 폴더를 만들거나 존재를 확인하지 않습니다.
+
+| `UserDirectory` | macOS 경로 |
+| --- | --- |
+| `home` | 현재 사용자의 home |
+| `documents`, `downloads`, `desktop`, `pictures`, `music` | home 아래 `Documents`, `Downloads`, `Desktop`, `Pictures`, `Music` |
+| `videos` | home 아래 `Movies` |
+
+Electron `app.getPath`와 Tauri의 사용자 폴더 API도 같은 위치입니다. App Sandbox 앱은 컨테이너의 home 기준 경로를 받습니다.
+home은 호스트 데이터 루트(`~/Library/Application Support/bunaway/<appId>`)의 고정 구조에서 얻습니다.
+호스트가 이 구조가 아닌 데이터 루트를 주면 `INTERNAL`로 실패합니다.
+
+| `AppDirectory` | macOS 경로 | 대응하는 Electron 용도 | 대응하는 Tauri 함수 |
+| --- | --- | --- | --- |
+| `appConfig`, `appData`, `appLocalData` | `~/Library/Application Support/bunaway/<appId>/data` | `userData` | `app_config_dir`, `app_data_dir`, `app_local_data_dir` |
+| `cache` | `~/Library/Caches/bunaway/<appId>` | `~/Library/Caches`(`cache`, 앱 폴더는 앱이 직접 만듭니다) | `app_cache_dir` |
+| `logs` | `~/Library/Application Support/bunaway/<appId>/logs` | `~/Library/Logs/<앱 이름>` | `~/Library/Logs/<식별자>` |
+| `temp` | `~/Library/Application Support/bunaway/<appId>/temp` | `temp`(시스템 임시 디렉터리) | `temp_dir` |
+
+- Electron과 Tauri의 경로는 `bunaway/` 단계와 `data` 하위 폴더 없이 앱 이름 또는 식별자 폴더를 바로 씁니다. 표의 Electron과 Tauri 열은 같은 용도를 가리킬 뿐 같은 경로가 아니므로, 다른 프레임워크로 만든 앱의 데이터를 이 경로에서 찾을 수 없습니다.
+- `appConfig`, `appData`, `appLocalData`는 macOS에서 구분하지 않으며 Tauri의 세 함수가 같은 경로를 반환하는 것과 같습니다.
+  Electron의 `userData`에는 Chromium 데이터가 섞이지만 이 경로는 앱 파일만 담습니다. 데이터 루트 자체(WebView 프로필과 잠금 파일)는 반환하지 않습니다.
+- `logs`는 [log 플러그인](/reference/host/log-write/)이 쓰는 폴더와 같습니다. Electron과 Tauri의 `~/Library/Logs` 위치와 다릅니다.
+- `temp`는 I/O Worker의 `TMPDIR`이며 호스트가 이 값을 앱 전용 `<dataRoot>/temp`로 정합니다. Electron의 `temp`는 시스템 임시 디렉터리라 값이 다릅니다. `TMPDIR`이 비어 있으면 `/tmp`를 쓰고 상대 경로면 `INTERNAL`로 실패합니다.
+
+문자열 경로 처리는 `node:path.posix` 규칙을 따릅니다. `resolve`의 `base`는 `/`로 시작해야 하며 호스트 cwd를 조회하지 않습니다.
+Windows의 drive, UNC와 `C:relative` 설명은 macOS에 적용되지 않습니다. 길이와 문자 제한은 Windows와 같습니다.

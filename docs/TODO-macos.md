@@ -337,7 +337,8 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 - [ ] copy/rename/move, watch, 원자적 저장과 대용량 stream을 제공한다.
 - [ ] 파일 metadata와 OS 권한, 디렉터리 재귀 용량의 오류 및 취소를 정의한다.
 - [ ] 파일 선택으로 얻은 범위와 security-scoped bookmark의 영속화 및 철회를 제공한다.
-- [ ] 사용자 디렉터리, appData/cache/logs/temp/resource 경로를 제공한다.
+- [x] 사용자 디렉터리와 appConfig/appData/appLocalData/cache/logs/temp 경로를 제공한다. `path.getDirectory`, `path.getAppDirectory`와 POSIX 문자열 경로 함수다. [경로 계약](./site/src/content/docs/reference/plugins/path.mdx#macos)을 따른다.
+- [ ] resource 경로를 macOS 번들 구조에 맞춰 제공한다. 지금은 `path` 플러그인 범위 밖이다.
 - [ ] Unicode 정규화, 대소문자 구분 파일 시스템과 sandbox container 경로를 검증한다.
 - [ ] key-value store의 load/save, 변경 이벤트와 autosave를 제공한다.
 - [ ] defaults 병합, reload, reset과 저장 실패 시 원본 보존을 정의한다.

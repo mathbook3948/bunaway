@@ -1,7 +1,9 @@
 import { defineNativePlugin } from "@bunaway/plugin";
+import { macosPathOperations } from "#path/macos-operations";
 import { pathOperations } from "#path/operations";
+import { initialize as initializeMacos } from "#path/platforms/macos";
 import { dispose, initialize } from "#path/platforms/windows";
-/** Promise-based Windows lexical path helpers and current-user and app-specific directory queries. */
+/** Promise-based lexical path helpers and current-user and app-specific directory queries. */
 export default defineNativePlugin({
   name: "path",
   platforms: {
@@ -9,6 +11,10 @@ export default defineNativePlugin({
       initialize,
       dispose,
       operations: pathOperations,
+    },
+    macos: {
+      initialize: initializeMacos,
+      operations: macosPathOperations,
     },
   },
 });
