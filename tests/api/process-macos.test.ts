@@ -6,6 +6,8 @@ import { dispose, initialize, run } from "#plugins/process/src/platforms/macos";
 
 const schema = macosProcessOperations.run.input;
 const SHELL = "/bin/sh";
+/** Tests that spawn real POSIX executables; the Windows CI job runs the contract tests only. */
+const posixTest = test.skipIf(process.platform === "win32");
 
 async function runShell(script: string, extra = {}) {
   return run(
@@ -58,6 +60,7 @@ test("macOS contract accepts absolute POSIX paths and rejects PATH lookup, relat
     "/tmp/to\nol",
     "/tmp/to\x7fol",
     "/tmp/to\u0085ol",
+    "/tmp/to\uD800ol",
     "C:/tool.exe",
     "/".repeat(1) + "a".repeat(1024),
   ]) {
@@ -129,71 +132,96 @@ test("the plugin registers the same run operation for macOS", () => {
   expect(macosProcessOperations.run.output).toBeDefined();
 });
 
-test("run returns exact argv, stdin and binary output without a shell", async () => {
-  const result = await run(
-    initialize(),
-    schema.parse({
-      executablePath: SHELL,
-      args: [
-        "-c",
-        'printf "%s|%s" "$0" "$1"; cat >&2',
-        "a & b",
-        "$HOME",
-      ],
-      stdinBase64: Buffer.from([
-        0,
-        255,
-        10,
-      ]).toString("base64"),
-    }),
-  );
-  expect(result.exitCode).toBe(0);
-  expect(result.signal).toBeNull();
-  expect(result.pid).toBeGreaterThan(0);
-  expect(Buffer.from(result.stdoutBase64, "base64").toString()).toBe(
-    "a & b|$HOME",
-  );
-  expect([
-    ...Buffer.from(result.stderrBase64, "base64"),
-  ]).toEqual([
-    0,
-    255,
-    10,
-  ]);
-});
+posixTest(
+  "run returns exact argv, stdin and binary output without a shell",
+  async () => {
+    const result = await run(
+      initialize(),
+      schema.parse({
+        executablePath: SHELL,
+        args: [
+          "-c",
+          'printf "%s|%s" "$0" "$1"; cat >&2',
+          "a & b",
+          "$HOME",
+        ],
+        stdinBase64: Buffer.from([
+          0,
+          255,
+          10,
+        ]).toString("base64"),
+      }),
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.signal).toBeNull();
+    expect(result.pid).toBeGreaterThan(0);
+    expect(Buffer.from(result.stdoutBase64, "base64").toString()).toBe(
+      "a & b|$HOME",
+    );
+    expect([
+      ...Buffer.from(result.stderrBase64, "base64"),
+    ]).toEqual([
+      0,
+      255,
+      10,
+    ]);
+  },
+);
 
-test("run reports the exit code and the terminating signal", async () => {
+posixTest("run reports the exit code and the terminating signal", async () => {
   expect((await runShell("exit 3")).exitCode).toBe(3);
   const killed = await runShell("kill -TERM $$");
   expect(killed.signal).toBe("SIGTERM");
   expect(killed.exitCode).toBe(143);
 });
 
-test("output above maxOutputBytes fails and a missing executable is an internal error", async () => {
-  await expect(
-    runShell('printf "abcdef"', {
-      maxOutputBytes: 3,
-    }),
-  ).rejects.toMatchObject({
-    code: "INTERNAL",
-  });
-  await expect(
-    run(
-      initialize(),
-      schema.parse({
-        executablePath: "/nonexistent/bunaway-tool",
+posixTest(
+  "output above maxOutputBytes fails and a missing executable is an internal error",
+  async () => {
+    await expect(
+      runShell('printf "abcdef"', {
+        maxOutputBytes: 3,
       }),
-    ),
-  ).rejects.toMatchObject({
-    code: "INTERNAL",
-  });
-});
+    ).rejects.toMatchObject({
+      code: "INTERNAL",
+    });
+    await expect(
+      run(
+        initialize(),
+        schema.parse({
+          executablePath: "/nonexistent/bunaway-tool",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "INTERNAL",
+    });
+  },
+);
 
-test("timeout and request cancellation kill the direct child and wait for it", async () => {
-  const state = initialize();
-  const started = Date.now();
-  await expect(
-    run(
+posixTest(
+  "timeout and request cancellation kill the direct child and wait for it",
+  async () => {
+    const state = initialize();
+    const started = Date.now();
+    await expect(
+      run(
+        state,
+        schema.parse({
+          executablePath: SHELL,
+          args: [
+            "-c",
+            "exec sleep 30",
+          ],
+          timeoutMs: 100,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "TIMEOUT",
+    });
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(state.active.size).toBe(0);
+    const controller = new AbortController();
+    const pending = run(
       state,
       schema.parse({
         executablePath: SHELL,
@@ -201,117 +229,113 @@ test("timeout and request cancellation kill the direct child and wait for it", a
           "-c",
           "exec sleep 30",
         ],
-        timeoutMs: 100,
       }),
-    ),
-  ).rejects.toMatchObject({
-    code: "TIMEOUT",
-  });
-  expect(Date.now() - started).toBeLessThan(10_000);
-  expect(state.active.size).toBe(0);
-  const controller = new AbortController();
-  const pending = run(
-    state,
-    schema.parse({
+      controller.signal,
+    );
+    setTimeout(() => controller.abort(), 50);
+    await expect(pending).rejects.toMatchObject({
+      code: "CANCELLED",
+    });
+    expect(state.active.size).toBe(0);
+  },
+);
+
+posixTest(
+  "the adapter limits concurrency and dispose drains active children",
+  async () => {
+    const state = initialize();
+    const input = schema.parse({
       executablePath: SHELL,
       args: [
         "-c",
         "exec sleep 30",
       ],
-    }),
-    controller.signal,
-  );
-  setTimeout(() => controller.abort(), 50);
-  await expect(pending).rejects.toMatchObject({
-    code: "CANCELLED",
-  });
-  expect(state.active.size).toBe(0);
-});
-
-test("the adapter limits concurrency and dispose drains active children", async () => {
-  const state = initialize();
-  const input = schema.parse({
-    executablePath: SHELL,
-    args: [
-      "-c",
-      "exec sleep 30",
-    ],
-  });
-  const pending = Array.from(
-    {
-      length: 8,
-    },
-    () => run(state, input),
-  );
-  const settled = pending.map((promise) =>
-    promise.then(
-      () => null,
-      (error: unknown) => error,
-    ),
-  );
-  await expect(run(state, input)).rejects.toMatchObject({
-    code: "BUSY",
-  });
-  await dispose(state);
-  for (const error of await Promise.all(settled)) {
-    expect(error).toBeInstanceOf(BunawayError);
-    expect(error).toMatchObject({
+    });
+    const pending = Array.from(
+      {
+        length: 8,
+      },
+      () => run(state, input),
+    );
+    const settled = pending.map((promise) =>
+      promise.then(
+        () => null,
+        (error: unknown) => error,
+      ),
+    );
+    await expect(run(state, input)).rejects.toMatchObject({
+      code: "BUSY",
+    });
+    await dispose(state);
+    for (const error of await Promise.all(settled)) {
+      expect(error).toBeInstanceOf(BunawayError);
+      expect(error).toMatchObject({
+        code: "CANCELLED",
+      });
+    }
+    expect(state.active.size).toBe(0);
+    await expect(run(state, input)).rejects.toMatchObject({
       code: "CANCELLED",
     });
-  }
-  expect(state.active.size).toBe(0);
-  await expect(run(state, input)).rejects.toMatchObject({
-    code: "CANCELLED",
-  });
-});
+  },
+);
 
-test("a descendant holding the pipes open delays completion until the timeout", async () => {
-  const started = Date.now();
-  await expect(
-    runShell("sleep 5 & exit 0", {
-      timeoutMs: 300,
-    }),
-  ).rejects.toMatchObject({
-    code: "TIMEOUT",
-  });
-  // The call returns at the deadline once the pipes are closed, not when the descendant exits.
-  expect(Date.now() - started).toBeLessThan(3_000);
-});
-
-test("the child receives only PATH, never the host environment", async () => {
-  const key = `BUNAWAY_PROCESS_HOST_SECRET_${crypto.randomUUID().replaceAll("-", "_")}`;
-  process.env[key] = "secret";
-  try {
-    const result = await run(
-      initialize(),
-      schema.parse({
-        executablePath: "/usr/bin/env",
+posixTest(
+  "a descendant holding the pipes open delays completion until the timeout",
+  async () => {
+    const started = Date.now();
+    await expect(
+      runShell("sleep 5 & exit 0", {
+        timeoutMs: 300,
       }),
-    );
-    // macOS may add system variables such as __CF_USER_TEXT_ENCODING, so assert on what must differ.
-    const lines = Buffer.from(result.stdoutBase64, "base64")
-      .toString()
-      .split("\n");
-    expect(lines).toContain("PATH=/usr/bin:/bin");
-    expect(lines.filter((line) => line.includes(key))).toEqual([]);
-    expect(lines.filter((line) => line.startsWith("HOME="))).toEqual([]);
-  } finally {
-    delete process.env[key];
-  }
-});
+    ).rejects.toMatchObject({
+      code: "TIMEOUT",
+    });
+    // The call returns at the deadline once the pipes are closed, not when the descendant exits.
+    expect(Date.now() - started).toBeLessThan(3_000);
+  },
+);
 
-test("a child that keeps writing is killed when the output limit is exceeded", async () => {
-  const started = Date.now();
-  await expect(
-    run(
-      initialize(),
-      schema.parse({
-        executablePath: "/usr/bin/yes",
-        maxOutputBytes: 3,
-      }),
-    ),
-  ).rejects.toMatchObject({
-    code: "INTERNAL",
-  });
-  expect(Date.now() - started).toBeLessThan(10_000);
-});
+posixTest(
+  "the child receives only PATH, never the host environment",
+  async () => {
+    const key = `BUNAWAY_PROCESS_HOST_SECRET_${crypto.randomUUID().replaceAll("-", "_")}`;
+    process.env[key] = "secret";
+    try {
+      const result = await run(
+        initialize(),
+        schema.parse({
+          executablePath: "/usr/bin/env",
+        }),
+      );
+      // macOS may add system variables such as __CF_USER_TEXT_ENCODING, so assert on what must differ.
+      const lines = Buffer.from(result.stdoutBase64, "base64")
+        .toString()
+        .split("\n");
+      expect(lines).toContain("PATH=/usr/bin:/bin");
+      expect(lines.filter((line) => line.includes(key))).toEqual([]);
+      expect(lines.filter((line) => line.startsWith("HOME="))).toEqual([]);
+    } finally {
+      delete process.env[key];
+    }
+  },
+);
+
+posixTest(
+  "a child that keeps writing is killed when the output limit is exceeded",
+  async () => {
+    const started = Date.now();
+    await expect(
+      run(
+        initialize(),
+        schema.parse({
+          executablePath: "/usr/bin/yes",
+          maxOutputBytes: 3,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "INTERNAL",
+    });
+    expect(Date.now() - started).toBeLessThan(10_000);
+  },
+);

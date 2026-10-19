@@ -42,7 +42,9 @@ const macosExecutablePath = z
   .max(1024)
   .refine((value) => {
     // Use an absolute POSIX path, never PATH lookup or a relative path; directories are rejected at spawn.
+    // A lone surrogate would be replaced with U+FFFD when encoded, so the executed path would differ.
     return (
+      !/\p{Surrogate}/u.test(value) &&
       value.startsWith("/") &&
       !Array.from(value).some((char) => {
         const code = char.charCodeAt(0);
