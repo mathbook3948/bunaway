@@ -23,7 +23,11 @@ export class WindowsAppReload {
     | undefined;
 
   constructor() {
-    void this.ready.promise.catch(() => {});
+    // Marks the rejection handled so an unused readiness failure is not an unhandled rejection;
+    // reload() awaits the same promise and reports the error to its caller.
+    void this.ready.promise.catch(() => {
+      // Observed by reload().
+    });
   }
 
   /** Attach the launched app process and close the connection when it exits. */

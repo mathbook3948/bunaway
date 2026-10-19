@@ -132,7 +132,9 @@ export async function sdkPlugin(
           return expected;
         }
       }
-    } catch {}
+    } catch {
+      // An unresolvable or unreadable SDK is reported as incompatible just below.
+    }
     throw new Error(
       `Incompatible SDK resolution: ${name} from ${parent}; run bun install to restore the matching installed SDK packages.`,
     );
