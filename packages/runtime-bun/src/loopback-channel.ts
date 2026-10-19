@@ -9,6 +9,11 @@ import {
 } from "@bunaway/protocol";
 import type { Server, ServerWebSocket } from "bun";
 
+/** RFC 6455 close codes a peer sends when it ends the connection on its own: normal, going away, no status. */
+const CLOSE_NORMAL = 1000;
+const CLOSE_GOING_AWAY = 1001;
+const CLOSE_NO_STATUS = 1005;
+
 type Lease = {
   context: HostContext;
   origin: string;
@@ -146,7 +151,9 @@ export class LoopbackChannel {
         close: (socket, code) =>
           this.disconnect(
             socket.data,
-            code !== 1000 && code !== 1001 && code !== 1005,
+            code !== CLOSE_NORMAL &&
+              code !== CLOSE_GOING_AWAY &&
+              code !== CLOSE_NO_STATUS,
           ),
       },
     });
