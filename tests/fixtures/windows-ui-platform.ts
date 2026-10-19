@@ -4,6 +4,7 @@ import type {
   NativeMonitorServices,
   WindowSpec,
 } from "@bunaway/plugin-api/native";
+import { DownloadCleanupError } from "../../native/windows/bun/downloads.ts";
 import type { SessionMessageHandler } from "../../native/windows/bun/session-end.ts";
 import {
   uiCleanupSlots,
@@ -368,7 +369,16 @@ export class WebView {
   }
   detach(): boolean {
     Atomics.add(lifecycle, uiLifecycleSlots.detach, 1);
+    if (Atomics.load(lifecycle, uiLifecycleSlots.detachFailures) > 0) {
+      Atomics.sub(lifecycle, uiLifecycleSlots.detachFailures, 1);
+      throw new DownloadCleanupError([
+        new Error("download cancel failed"),
+      ]);
+    }
     return true;
+  }
+  isBrowserUnavailable(): boolean {
+    return false;
   }
   finish(): boolean {
     Atomics.add(lifecycle, uiLifecycleSlots.finish, 1);

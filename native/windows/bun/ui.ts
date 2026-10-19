@@ -332,6 +332,86 @@ function hasPendingClose(view: ViewState): boolean {
     .some((id) => closingWindows.has(id));
 }
 /**
+ * Detach a closing view's native references and destroy its HWND.
+ * Returns false when cleanup resumes on a later pass: the controller is not detached yet, or a
+ * recoverable download cleanup failure keeps this closed owner's references while other views continue.
+ */
+function detachClosingView(view: ViewState, windowId: string): boolean {
+  if (
+    view.downloadCleanupRetries &&
+    !view.downloadCleanupRetries.canAttempt(
+      stopping() || view.native.isBrowserUnavailable(),
+    )
+  ) {
+    return false;
+  }
+  try {
+    if (!view.native.detach()) {
+      return false;
+    }
+  } catch (error) {
+    if (!(error instanceof DownloadCleanupError)) {
+      throw error;
+    }
+    const retries =
+      view.downloadCleanupRetries ??
+      new DownloadCleanupRetries(WINDOW_CLEANUP_TIMEOUT_MS);
+    view.downloadCleanupRetries = retries;
+    const phase = retries.failed();
+    if (phase) {
+      log(`download-cleanup-${phase}`, {
+        windowId,
+        attempts: retries.attempts,
+        message: String(error).slice(0, 1024),
+      });
+    }
+    // This closed owner's native references stay owned. Other views and their cleanup keep running.
+    // Exhausted retries remain quarantined until shutdown or observed broker exit.
+    return false;
+  }
+  if (view.downloadCleanupRetries) {
+    log("download-cleanup-recovered", {
+      windowId,
+      attempts: view.downloadCleanupRetries.attempts,
+    });
+    delete view.downloadCleanupRetries;
+  }
+  closeWindowMenus(windowId);
+  appearanceWindows.detach(windowId);
+  windows?.destroy(view.native.hwnd);
+  view.lifecycle.detached();
+  return true;
+}
+/**
+ * Release a finished view's window relations and publish its destruction.
+ * Returns false while input restoration retries within its deadline; past the deadline the restore
+ * error is rethrown.
+ */
+function releaseFinishedView(view: ViewState, windowId: string): boolean {
+  try {
+    relations.release(windowId);
+  } catch (error) {
+    if (!(error instanceof WindowInputRestoreError)) {
+      throw error;
+    }
+    if (view.inputRestoreDeadlineMs === undefined) {
+      view.inputRestoreDeadlineMs = Date.now() + WINDOW_CLEANUP_TIMEOUT_MS;
+      log("window-input-restore-retry", {
+        view: view.readiness.snapshot().viewId,
+        message: error.message,
+      });
+    }
+    if (Date.now() >= view.inputRestoreDeadlineMs) {
+      throw error;
+    }
+    return false;
+  }
+  modalWindows.delete(windowId);
+  view.lifecycle.released();
+  publishLifecycle(view, "destroyed");
+  return true;
+}
+/**
  * Defer detach while WebView creation is pending.
  * Destroy its HWND before finishing COM cleanup.
  */
@@ -349,50 +429,11 @@ function cleanupView(view: ViewState) {
   if (!relations.canRelease(windowId)) {
     return;
   }
-  if (view.lifecycle.phase === "closing") {
-    if (
-      view.downloadCleanupRetries &&
-      !view.downloadCleanupRetries.canAttempt(
-        stopping() || view.native.isBrowserUnavailable(),
-      )
-    ) {
-      return;
-    }
-    try {
-      if (!view.native.detach()) {
-        return;
-      }
-    } catch (error) {
-      if (!(error instanceof DownloadCleanupError)) {
-        throw error;
-      }
-      const retries =
-        view.downloadCleanupRetries ??
-        new DownloadCleanupRetries(WINDOW_CLEANUP_TIMEOUT_MS);
-      view.downloadCleanupRetries = retries;
-      const phase = retries.failed();
-      if (phase) {
-        log(`download-cleanup-${phase}`, {
-          windowId,
-          attempts: retries.attempts,
-          message: String(error).slice(0, 1024),
-        });
-      }
-      // This closed owner's native references stay owned. Other views and their cleanup keep running.
-      // Exhausted retries remain quarantined until shutdown or observed broker exit.
-      return;
-    }
-    if (view.downloadCleanupRetries) {
-      log("download-cleanup-recovered", {
-        windowId,
-        attempts: view.downloadCleanupRetries.attempts,
-      });
-      delete view.downloadCleanupRetries;
-    }
-    closeWindowMenus(windowId);
-    appearanceWindows.detach(windowId);
-    windows?.destroy(view.native.hwnd);
-    view.lifecycle.detached();
+  if (
+    view.lifecycle.phase === "closing" &&
+    !detachClosingView(view, windowId)
+  ) {
+    return;
   }
   if (view.lifecycle.phase === "detached") {
     if (!view.native.finish()) {
@@ -400,28 +441,11 @@ function cleanupView(view: ViewState) {
     }
     view.lifecycle.finished();
   }
-  if (view.lifecycle.phase === "finished") {
-    try {
-      relations.release(windowId);
-    } catch (error) {
-      if (!(error instanceof WindowInputRestoreError)) {
-        throw error;
-      }
-      if (view.inputRestoreDeadlineMs === undefined) {
-        view.inputRestoreDeadlineMs = Date.now() + WINDOW_CLEANUP_TIMEOUT_MS;
-        log("window-input-restore-retry", {
-          view: view.readiness.snapshot().viewId,
-          message: error.message,
-        });
-      }
-      if (Date.now() >= view.inputRestoreDeadlineMs) {
-        throw error;
-      }
-      return;
-    }
-    modalWindows.delete(windowId);
-    view.lifecycle.released();
-    publishLifecycle(view, "destroyed");
+  if (
+    view.lifecycle.phase === "finished" &&
+    !releaseFinishedView(view, windowId)
+  ) {
+    return;
   }
   view.lifecycle.settleProfile(replacements.has(view.key), () =>
     profiles.release(view.key, false),
@@ -470,158 +494,214 @@ const fail = (error: unknown) => {
 // Observers only record intent; normal packet dispatch and native cleanup remain deferred.
 const modalCancellationObservers = new Set<(packet: Packet) => void>();
 let modalShutdownRequested = false;
-const channel = new Channel(
-  parentPort,
-  config.runtime,
-  "ui",
-  (packet: Packet) => {
-    if (packet.kind === "start") {
+type PacketOf<Kind extends Packet["kind"]> = Extract<
+  Packet,
+  {
+    kind: Kind;
+  }
+>;
+/** Permissions and source label that bound what a context may ask the host to do. */
+function authorizationFor(context: HostContext) {
+  if (context === config.backendContext) {
+    return {
+      permissions: config.policy.backend,
+      source: "backend",
+    };
+  }
+  const view = viewByContext(context);
+  return {
+    permissions: view?.boundary.policy.host,
+    source: `view:${view?.boundary.policy.id ?? "invalid"}`,
+  };
+}
+/** An invalid call, a stopping host or a missing permission all deny the request. */
+function isOperationAllowed(
+  operationCall: PacketOf<"operation">["call"],
+  permissions: ReturnType<typeof authorizationFor>["permissions"],
+  granted: boolean,
+): boolean {
+  try {
+    const call = registry.validateCall(operationCall);
+    return (
+      !stopping() &&
+      !shutdownCommitted() &&
+      granted &&
+      !!permissions &&
+      registry.allowed(permissions, call)
+    );
+  } catch {
+    /* Invalid requests fail closed at the host boundary. */
+    return false;
+  }
+}
+function handleShutdown() {
+  move("stop");
+  cancelReplacements();
+  windowRequests.cancelAll();
+  approved.clear();
+  uiCalls.clear();
+  for (const [key, view] of views) {
+    commitClose(key, view, "shutdown");
+  }
+}
+function handleSessionFailure(packet: PacketOf<"session-failure">) {
+  discardContext(packet.route.context);
+  const view = viewByContext(packet.route.context);
+  if (view?.boundary.matches(packet.route)) {
+    view.boundary.fail(packet.route, packet.error);
+  }
+}
+function handleOperation(packet: PacketOf<"operation">) {
+  assert(
+    !stopping() &&
+      !uiCalls.has(packet.requestId) &&
+      uiCalls.size < API_LIMITS.maxPending,
+    "Invalid UI queue request",
+  );
+  uiCalls.set(packet.requestId, packet);
+  channel.notify({
+    kind: "prepare",
+    context: packet.context,
+    requestId: packet.requestId,
+    call: packet.call,
+  });
+}
+/** A queued call runs only when the grant matches the context and source that queued it. */
+function handleGrant(packet: PacketOf<"grant">) {
+  const queued = uiCalls.get(packet.requestId);
+  if (!queued) {
+    return;
+  }
+  assert(queued.context === packet.context);
+  uiCalls.delete(packet.requestId);
+  const { permissions, source } = authorizationFor(packet.context);
+  const allowed = isOperationAllowed(
+    queued.call,
+    permissions,
+    packet.allowed && queued.source === source,
+  );
+  if (!allowed) {
+    log("host-request-denied", {
+      operation: queued.call.operation,
+    });
+  }
+  // Acceptance releases channel capacity; the call owns its asynchronous completion.
+  void executeWindowRequest(queued, allowed, permissions).catch(fail);
+}
+function handleAuthorize(packet: PacketOf<"authorize" | "authorize-input">) {
+  const { permissions } = authorizationFor(packet.context);
+  const allowed = isOperationAllowed(packet.call, permissions, true);
+  if (!allowed) {
+    log("host-request-denied", {
+      operation: packet.call.operation,
+    });
+  }
+  // Input permission does not reserve a result slot; execution must be authorized again.
+  if (packet.kind === "authorize-input") {
+    channel.notify({
+      kind: "input-authorized",
+      context: packet.context,
+      requestId: packet.requestId,
+      allowed,
+    });
+    return;
+  }
+  if (allowed) {
+    assert(!approved.has(packet.requestId));
+    approved.set(packet.requestId, packet.context);
+  }
+  channel.notify({
+    kind: "authorized",
+    context: packet.context,
+    requestId: packet.requestId,
+    allowed,
+  });
+}
+function handleCancel(packet: PacketOf<"cancel">) {
+  if (approved.get(packet.requestId) === packet.context) {
+    approved.delete(packet.requestId);
+  }
+  if (uiCalls.get(packet.requestId)?.context === packet.context) {
+    uiCalls.delete(packet.requestId);
+  }
+  if (windowRequests.context(packet.requestId) === packet.context) {
+    windowRequests.cancel(packet.requestId);
+  }
+}
+function handleHostResult(packet: PacketOf<"host-result">) {
+  const active = activeContext(packet.context);
+  const context = approved.get(packet.requestId);
+  approved.delete(packet.requestId);
+  if (!stopping() && active && context === packet.context) {
+    channel.notify({
+      ...packet,
+      kind: "host-response",
+    });
+  }
+}
+/** Route one packet from the main thread to the handler that owns its kind. */
+function handleHostPacket(packet: Packet) {
+  switch (packet.kind) {
+    case "start":
       move("start");
       startViews();
-    } else if (packet.kind === "desktop-control") {
+      return;
+    case "desktop-control":
       if (packet.action === "hide") {
         assert(tray, "Hiding requires a tray");
       }
       visibility(packet.action);
-    } else if (packet.kind === "quit-cancelled") {
+      return;
+    case "quit-cancelled":
       move("quit-cancelled");
-    } else if (packet.kind === "shutdown-committed") {
+      return;
+    case "shutdown-committed":
       // Idempotent: the main thread may repeat it, and a prior closing or session-end already set it.
       // The main thread owns the quit from here on, so a pending request no longer skips the close confirmation.
       move("commit");
       move("quit-cancelled");
       cancelCloseRequests();
-    } else if (packet.kind === "shutdown") {
-      move("stop");
-      cancelReplacements();
-      windowRequests.cancelAll();
-      approved.clear();
-      uiCalls.clear();
-      for (const [key, view] of views) {
-        commitClose(key, view, "shutdown");
-      }
-    } else if (packet.kind === "server") {
+      return;
+    case "shutdown":
+      handleShutdown();
+      return;
+    case "server":
       viewByContext(packet.route.context)?.boundary.send(
         packet.route,
         packet.message,
       );
-    } else if (packet.kind === "session-failure") {
-      discardContext(packet.route.context);
-      const view = viewByContext(packet.route.context);
-      if (view?.boundary.matches(packet.route)) {
-        view.boundary.fail(packet.route, packet.error);
-      }
-    } else if (packet.kind === "operation") {
-      assert(
-        !stopping() &&
-          !uiCalls.has(packet.requestId) &&
-          uiCalls.size < API_LIMITS.maxPending,
-        "Invalid UI queue request",
-      );
-      uiCalls.set(packet.requestId, packet);
-      channel.notify({
-        kind: "prepare",
-        context: packet.context,
-        requestId: packet.requestId,
-        call: packet.call,
-      });
-    } else if (
-      packet.kind === "authorize-input" ||
-      packet.kind === "authorize" ||
-      packet.kind === "grant"
-    ) {
-      const queued =
-        packet.kind === "grant" ? uiCalls.get(packet.requestId) : undefined;
-      if (packet.kind === "grant") {
-        if (!queued) {
-          return;
-        }
-        assert(queued.context === packet.context);
-        uiCalls.delete(packet.requestId);
-      }
-      const operation = packet.kind === "grant" ? queued : packet;
-      assert(operation);
-      const view = [
-        ...views.values(),
-      ].find((view) => view.boundary.active(packet.context));
-      const permissions =
-        packet.context === config.backendContext
-          ? config.policy.backend
-          : view?.boundary.policy.host;
-      const source =
-        packet.context === config.backendContext
-          ? "backend"
-          : `view:${view?.boundary.policy.id ?? "invalid"}`;
-      let allowed = false;
-      try {
-        const call = registry.validateCall(operation.call);
-        allowed =
-          !stopping() &&
-          !shutdownCommitted() &&
-          (packet.kind !== "grant" || packet.allowed) &&
-          !!permissions &&
-          (packet.kind !== "grant" || queued?.source === source) &&
-          registry.allowed(permissions, call);
-      } catch {
-        /* Invalid requests fail closed at the host boundary. */
-      }
-      if (!allowed) {
-        log("host-request-denied", {
-          operation: operation.call.operation,
-        });
-      }
-      if (packet.kind === "grant") {
-        assert(queued);
-        // Acceptance releases channel capacity; the call owns its asynchronous completion.
-        void executeWindowRequest(queued, allowed, permissions).catch(fail);
-        return;
-      }
-      // Input permission does not reserve a result slot; execution must be authorized again.
-      if (packet.kind === "authorize-input") {
-        channel.notify({
-          kind: "input-authorized",
-          context: packet.context,
-          requestId: packet.requestId,
-          allowed,
-        });
-        return;
-      }
-      if (allowed) {
-        assert(!approved.has(packet.requestId));
-        approved.set(packet.requestId, packet.context);
-      }
-      channel.notify({
-        kind: "authorized",
-        context: packet.context,
-        requestId: packet.requestId,
-        allowed,
-      });
-    } else if (packet.kind === "cancel") {
-      if (approved.get(packet.requestId) === packet.context) {
-        approved.delete(packet.requestId);
-      }
-      if (uiCalls.get(packet.requestId)?.context === packet.context) {
-        uiCalls.delete(packet.requestId);
-      }
-      if (windowRequests.context(packet.requestId) === packet.context) {
-        windowRequests.cancel(packet.requestId);
-      }
-    } else if (packet.kind === "cancel-context") {
+      return;
+    case "session-failure":
+      handleSessionFailure(packet);
+      return;
+    case "operation":
+      handleOperation(packet);
+      return;
+    case "grant":
+      handleGrant(packet);
+      return;
+    case "authorize":
+    case "authorize-input":
+      handleAuthorize(packet);
+      return;
+    case "cancel":
+      handleCancel(packet);
+      return;
+    case "cancel-context":
       discardContext(packet.context);
-    } else if (packet.kind === "host-result") {
-      const active = activeContext(packet.context);
-      const context = approved.get(packet.requestId);
-      approved.delete(packet.requestId);
-      if (!stopping() && active && context === packet.context) {
-        channel.notify({
-          ...packet,
-          kind: "host-response",
-        });
-      }
-    } else {
+      return;
+    case "host-result":
+      handleHostResult(packet);
+      return;
+    default:
       throw new Error("Unexpected UI packet");
-    }
-  },
+  }
+}
+const channel = new Channel(
+  parentPort,
+  config.runtime,
+  "ui",
+  handleHostPacket,
   fail,
   composePolledObservers(
     (packet) => {
