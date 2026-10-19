@@ -5,13 +5,10 @@ import {
   readdir,
   readFile,
   rm,
-  symlink,
-  unlink,
   writeFile,
 } from "node:fs/promises";
 import { join, parse, resolve } from "node:path";
 import createOperationsDefinition from "#plugins/opener/src/index";
-import { createFiles } from "#plugins/opener/src/platforms/windows-file";
 import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
 
 const createOperations = createOperationsFactory(
@@ -65,7 +62,7 @@ async function recycledItem(path: string): Promise<
 }
 
 test.skipIf(process.platform !== "win32")(
-  "Windows trashFile recycles a checked file and preserves linked companions",
+  "Windows trashFile recycles one name of a file and preserves its other names and companions",
   async () => {
     const root = resolve("build", `windows-trash-${crypto.randomUUID()}`);
     await mkdir(root, {
@@ -99,21 +96,9 @@ test.skipIf(process.platform !== "win32")(
           code: "UNSUPPORTED",
         }),
       );
+      // Another name of the same file is not rejected; only the requested name is recycled.
       const hardlink = `${sample}.link`;
       await link(sample, hardlink);
-      await expect(call(sample)).rejects.toThrow(
-        expect.objectContaining({
-          code: "PERMISSION_DENIED",
-        }),
-      );
-      await unlink(hardlink);
-      const alias = join(root, "alias");
-      await symlink(companion, alias, "junction");
-      await expect(call(join(alias, "image.txt"))).rejects.toThrow(
-        expect.objectContaining({
-          code: "PERMISSION_DENIED",
-        }),
-      );
       expect(
         await adapter.execute(
           "opener.trashFile",
@@ -130,6 +115,7 @@ test.skipIf(process.platform !== "win32")(
         throw new Error("Test file has no Recycle Bin metadata.");
       }
       expect(await readFile(item.data, "utf8")).toBe("recycle content");
+      expect(await readFile(hardlink, "utf8")).toBe("recycle content");
       expect(await readFile(join(companion, "image.txt"), "utf8")).toBe(
         "companion must survive",
       );
@@ -164,46 +150,4 @@ test.skipIf(process.platform !== "win32")(
     }
   },
   15000,
-);
-
-test.skipIf(process.platform !== "win32")(
-  "Windows trash validation preserves parent pins and detects replaced leaf identity",
-  async () => {
-    const root = resolve("build", `windows-trash-race-${crypto.randomUUID()}`);
-    await mkdir(root, {
-      recursive: true,
-    });
-    const path = join(root, "file.txt");
-    const moved = join(root, "moved.txt");
-    await writeFile(path, "original");
-    const files = createFiles();
-    try {
-      // The leaf shares delete for Shell recycling, while its parent stays pinned.
-      files.withTrashFile(path, (verify) => {
-        expect(verify).toBeFunction();
-        verify();
-      });
-      // A synchronous rename is needed inside the same check-to-request boundary.
-      const { renameSync, writeFileSync } = await import("node:fs");
-      files.withTrashFile(path, (verify) => {
-        expect(() => renameSync(root, `${root}-renamed`)).toThrow();
-        renameSync(path, moved);
-        writeFileSync(path, "replacement");
-        expect(verify).toThrow(
-          expect.objectContaining({
-            code: "PERMISSION_DENIED",
-          }),
-        );
-      });
-      expect(await readFile(path, "utf8")).toBe("replacement");
-      expect(await readFile(moved, "utf8")).toBe("original");
-    } finally {
-      files.dispose();
-      files.dispose();
-      await rm(root, {
-        recursive: true,
-        force: true,
-      });
-    }
-  },
 );

@@ -1,6 +1,5 @@
 import { CFunction, type Pointer, read } from "bun:ffi";
 import { expect, test } from "bun:test";
-import { BunawayError } from "@bunaway/protocol";
 import { createTrashProgressSink } from "#plugins/opener/src/platforms/windows-trash";
 
 /** Call the real FFI callback ABI without asking the OS to delete any file. */
@@ -62,22 +61,17 @@ const postDelete = (
     ],
   );
 
-test("trash sink aborts callbacks without recycle flags before identity verification and rejects retries", () => {
+test("trash sink aborts callbacks without recycle flags and rejects retries", () => {
   for (const flags of [
     0,
     0x80,
   ]) {
-    let checks = 0;
-    const sink = createTrashProgressSink(() => {
-      checks++;
-    });
+    const sink = createTrashProgressSink();
     try {
       if (flags === 0x80) {
         expect(preDelete(sink, flags)).toBe(0);
-        expect(checks).toBe(1);
       }
       expect(preDelete(sink, 0)).toBeLessThan(0);
-      expect(checks).toBe(flags === 0x80 ? 1 : 0);
       expect(() => sink.complete(false)).toThrow(
         expect.objectContaining({
           code: "UNSUPPORTED",
@@ -87,22 +81,6 @@ test("trash sink aborts callbacks without recycle flags before identity verifica
       sink.dispose();
       sink.dispose();
     }
-  }
-});
-
-test("trash sink contains identity-check exceptions and preserves the public error", () => {
-  const error = new BunawayError({
-    code: "PERMISSION_DENIED",
-    message: "Identity changed.",
-  });
-  const sink = createTrashProgressSink(() => {
-    throw error;
-  });
-  try {
-    expect(preDelete(sink, 0x80)).toBeLessThan(0);
-    expect(() => sink.checkFailure()).toThrow(error);
-  } finally {
-    sink.dispose();
   }
 });
 
@@ -124,7 +102,7 @@ test("trash sink requires a successful per-item result and a Recycle Bin item", 
     "aborted",
     "no-post",
   ]) {
-    const sink = createTrashProgressSink(() => {});
+    const sink = createTrashProgressSink();
     try {
       expect(preDelete(sink, 0x80)).toBe(0);
       if (scenario !== "no-post") {

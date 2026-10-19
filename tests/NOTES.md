@@ -533,7 +533,7 @@ Windows 호스트 시나리오는 `lifecycle/windows-host.ts`에 두고 PID 조�
 프로세스 종료 감시는 `lifecycle/windows-host-processes.ts`에서 실행한다.
 
 `api/opener.test.ts`는 HTTP/HTTPS 계약과 파일 API, 절대 경로 입력과 작업별 권한을 확인한다.
-`lifecycle/macos-opener.test.ts`는 POSIX 경로와 파일 검사, 작업별 권한과 정리를 검사한다.
+`lifecycle/macos-opener.test.ts`는 POSIX 경로와 파일 확인, 작업별 권한과 정리를 검사한다.
 macOS arm64 CI에서는 `BUNAWAY_OPENER_ISOLATED=1`로 `macos-opener-native.test.ts`의
 실제 I/O Worker와 `macos-opener-host.ts`의 compiled WKWebView 호출을 각각 한 번 실행한다.
 고유 문서 타입을 선언한 앱을 등록하고 실제 파일 수신, loopback HTTP/HTTPS 및 Finder의
@@ -551,8 +551,8 @@ WebView2 세션과 UI Worker로 웹의 destroy 거부, 닫기 확인 거절, 모
 `windows-windowless.ts`의 destroy 시나리오는 keep-alive와 트레이 상주 앱에서도
 마지막 창의 trusted destroy가 닫기 확인과 beforeQuit를 우회하고 앱을 정리하는지 검사한다.
 
-`lifecycle/windows-opener.test.ts`는 실제 Windows I/O STA, 없는 파일과 디렉터리, 공유 잠금, junction,
-하드 링크, 대소문자 별칭 거부와 파일 핸들 정리를 검사한다. 실제 I/O Worker의 승인 거부와
+`lifecycle/windows-opener.test.ts`는 실제 Windows I/O STA, 없는 파일과 디렉터리와 공유 잠금의 거부, junction과
+대소문자 별칭이 풀린 경로로 따라가는지, 하드 링크가 자기 경로를 그대로 돌려주는지를 검사한다. 실제 I/O Worker의 승인 거부와
 대기 작업 취소, 자체 COM 초기화와 종료도 검사한다. `windows-opener-job.test.ts`는 Explorer가 실행한
 프로세스의 Job 분리와 앱 종료 후 생존을 확인한다. `cli/opener.test.ts`는 설치한 `.tgz`의 선언,
 카탈로그, 작업 권한과 브라우저 번들, UI Worker에서 어댑터를 초기화하지 않는지 검사한다. `BUNAWAY_OPENER_FILES_TEST=1`로 실행하면
@@ -789,7 +789,7 @@ DPI 변경과 전체화면 진입 및 종료 뒤의 마지막 8개 상태를 출
 
 `api/opener-selected-app.test.ts`는 지정 앱 opener의 strict Zod 입력, 독립 권한,
 호출 컨텍스트와 오류를 확인한다. Windows의 `lifecycle/windows-opener-selected-app.test.ts`는
-실제 앱과 대상 파일 검사, 링크 거부와 핸들 정리를 확인한다. `windows-opener-job.test.ts`는
+실제 앱과 대상 파일 검사, 링크로 가린 앱 확장자 거부를 확인한다(파일 symlink를 만들 수 있는 러너에서만 실행). `windows-opener-job.test.ts`는
 Explorer와 compiled helper로 파일 및 HTTP/HTTPS URL 하나의 argv 보존과 Job 밖의 실행,
 앱 종료 뒤 helper 생존을 확인한다. 두 검사와 기존 opener STA 검사는 `host:windows`에도 포함한다.
 `api/opener-url-handler.test.ts`는 `opener.getUrlHandler`의 strict Zod 입력, 독립 권한과 호출 컨텍스트를

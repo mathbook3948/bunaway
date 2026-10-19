@@ -211,7 +211,7 @@ test.skipIf(process.platform !== "win32")(
 );
 
 test.skipIf(process.platform !== "win32")(
-  "a junction in the parent path is refused for reads and writes",
+  "a junction in the parent path is followed for reads and writes",
   async () => {
     await withAdapter(async (root, write, read) => {
       const real = join(root, "real");
@@ -222,19 +222,17 @@ test.skipIf(process.platform !== "win32")(
       });
       const junction = join(root, "junction");
       await symlink(real, junction, "junction");
-      await expect(read(join(junction, "a.lnk"))).rejects.toThrow(
-        rejection("PERMISSION_DENIED"),
-      );
-      await expect(
-        write(join(junction, "b.lnk"), "create", {
-          target,
-        }),
-      ).rejects.toThrow(rejection("PERMISSION_DENIED"));
-      await expect(
-        write(join(junction, "a.lnk"), "update", {
-          description: "x",
-        }),
-      ).rejects.toThrow(rejection("PERMISSION_DENIED"));
+      expect(
+        String((await read(join(junction, "a.lnk"))).target).toLowerCase(),
+      ).toBe(target.toLowerCase());
+      await write(join(junction, "b.lnk"), "create", {
+        target,
+      });
+      expect(await Bun.file(join(real, "b.lnk")).exists()).toBe(true);
+      await write(join(junction, "a.lnk"), "update", {
+        description: "x",
+      });
+      expect((await read(join(real, "a.lnk"))).description).toBe("x");
     });
   },
 );

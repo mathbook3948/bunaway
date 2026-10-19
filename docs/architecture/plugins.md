@@ -78,7 +78,7 @@ initialize가 각 플랫폼 모듈의 WindowsStorage 또는 MacosStorage를 실�
 dispose가 해당 인스턴스의 네이티브 바인딩을 정리한다. 선언 import와 지원 조회는 자원을
 만들지 않는다. 네이티브 구현은 작업 이름으로 분기하지 않고 기능별 메서드와 공통
 핸들 검사 절차를 사용한다. 경로 문법 검사는 두며, 링크와 최종 핸들 검사는
-[ADR 0024](../decisions/0024-plugin-path-responsibility.md)에 따라 제거한다. log와 notification의 링크 검사는 제거했고, storage의 링크와 핸들 검사는 이후 변경에서 제거한다.
+[ADR 0024](../decisions/0024-plugin-path-responsibility.md)에 따라 제거한다. log, notification과 opener의 링크 검사는 제거했고, storage의 링크와 핸들 검사는 이후 변경에서 제거한다.
 
 initialize는 동기 반환만 허용한다. Promise나 thenable을 반환하면 어댑터 생성을 거부하고,
 늦게 완료한 인스턴스는 dispose로 회수한다. 잘못된 비동기 초기화와 회수 실패는 호스트 진단에 기록한다.

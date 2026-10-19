@@ -1,29 +1,22 @@
 import { BunawayError } from "@bunaway/protocol";
-import { createFiles, type MacosFiles } from "#opener/platforms/macos-file";
+import { resolveReadableFile } from "#opener/platforms/file-check";
 import { normalizeMacosFilePath } from "#opener/platforms/macos-path";
 import {
   createWorkspace,
   type MacosWorkspace,
 } from "#opener/platforms/macos-workspace";
 import { normalizeUrl } from "#opener/url";
-/** Own one workspace and checked-file provider, including disposal after use. */
-export function createState(workspace: MacosWorkspace, files: MacosFiles) {
+/** Own one workspace, including disposal after use. */
+export function createState(workspace: MacosWorkspace) {
   return {
     workspace,
-    files,
     disposed: false,
   };
 }
 
 /** Prepare synchronous NSWorkspace dispatch on its owning host execution thread. */
 export function initialize() {
-  const workspace = createWorkspace();
-  try {
-    return createState(workspace, createFiles());
-  } catch (error) {
-    workspace.dispose();
-    throw error;
-  }
+  return createState(createWorkspace());
 }
 
 type State = ReturnType<typeof initialize>;
@@ -45,15 +38,16 @@ export function openUrl(state: State, url: string): null {
 
 export function openFile(state: State, path: string): null {
   active(state);
-  const selected = normalizeMacosFilePath(path);
-  state.files.withFile(selected, () => state.workspace.openFile(selected));
+  // The resolved path is what NSWorkspace is asked to open, so a link's name cannot stand in for its target.
+  state.workspace.openFile(resolveReadableFile(normalizeMacosFilePath(path)));
   return null;
 }
 
 export function revealFile(state: State, path: string): null {
   active(state);
   const selected = normalizeMacosFilePath(path);
-  state.files.withFile(selected, () => state.workspace.revealFile(selected));
+  resolveReadableFile(selected);
+  state.workspace.revealFile(selected);
   return null;
 }
 
@@ -62,9 +56,5 @@ export function dispose(state: State): void {
     return;
   }
   state.disposed = true;
-  try {
-    state.files.dispose();
-  } finally {
-    state.workspace.dispose();
-  }
+  state.workspace.dispose();
 }

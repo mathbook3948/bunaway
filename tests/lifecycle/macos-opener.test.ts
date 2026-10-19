@@ -12,7 +12,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NativeRegistry } from "@bunaway/protocol";
 import opener from "../../plugins/opener/src/index.ts";
-import { createFiles } from "../../plugins/opener/src/platforms/macos-file.ts";
+import {
+  assertExistingFile,
+  assertNameFree,
+  resolveReadableFile,
+  stripDevicePrefix,
+} from "../../plugins/opener/src/platforms/file-check.ts";
 import { normalizeMacosFilePath } from "../../plugins/opener/src/platforms/macos-path.ts";
 import { createOpenerAdapter as createAdapter } from "../fixtures/injected-native-plugins.ts";
 import { nativeFactory } from "../fixtures/native-platform.ts";
@@ -50,10 +55,16 @@ test("macOS file syntax preserves POSIX names without changing Windows helpers",
   }
 });
 
-test("isolated macOS opener preserves validation, acceptance, ownership and unsupported selected apps", async () => {
-  const calls: string[] = [];
-  const adapter = createAdapter(
-    {
+test.skipIf(process.platform === "win32")(
+  "isolated macOS opener preserves validation, acceptance, ownership and unsupported selected apps",
+  async () => {
+    const calls: string[] = [];
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "bunaway-opener-")),
+    );
+    const path = join(root, "한글 값.txt");
+    await writeFile(path, "controlled fixture");
+    const adapter = createAdapter({
       openUrl: (url) => {
         calls.push(url);
       },
@@ -66,156 +77,139 @@ test("isolated macOS opener preserves validation, acceptance, ownership and unsu
       dispose: () => {
         calls.push("workspace:dispose");
       },
-    },
-    {
-      withFile(path, request) {
-        calls.push(`acquire:${path}`);
-        try {
-          request();
-        } finally {
-          calls.push(`release:${path}`);
-        }
-      },
-      dispose: () => {
-        calls.push("files:dispose");
-      },
-    },
-  );
-  const path = "/private/tmp/한글 값.txt";
-  for (const operation of [
-    "openFile",
-    "revealFile",
-  ]) {
+    });
+    for (const operation of [
+      "openFile",
+      "revealFile",
+    ]) {
+      expect(
+        await adapter.execute(
+          `opener.${operation}`,
+          {
+            path,
+          },
+          "backend",
+        ),
+      ).toBeNull();
+    }
     expect(
       await adapter.execute(
-        `opener.${operation}`,
+        "opener.openUrl",
         {
-          path,
+          url: "https://localhost/한글 값?q=a&b=c#fragment",
         },
         "backend",
       ),
     ).toBeNull();
-  }
-  expect(
-    await adapter.execute(
-      "opener.openUrl",
-      {
-        url: "https://localhost/한글 값?q=a&b=c#fragment",
-      },
-      "backend",
-    ),
-  ).toBeNull();
-  expect(calls).toEqual([
-    `acquire:${path}`,
-    `open:${path}`,
-    `release:${path}`,
-    `acquire:${path}`,
-    `reveal:${path}`,
-    `release:${path}`,
-    "https://localhost/%ED%95%9C%EA%B8%80%20%EA%B0%92?q=a&b=c#fragment",
-  ]);
-  for (const [operation, payload, code] of [
-    [
-      "opener.openFile",
-      {
-        path: "relative",
-      },
-      "INVALID_ARGUMENT",
-    ],
-    [
-      "opener.openFile",
-      {
-        path,
-        extra: true,
-      },
-      "INVALID_ARGUMENT",
-    ],
-    [
-      "opener.openUrl",
-      {
-        url: "file:///private/tmp/file",
-      },
-      "INVALID_ARGUMENT",
-    ],
-    [
-      "opener.openFileWith",
-      {
-        path,
-        app: "C:/app.exe",
-      },
-      "UNSUPPORTED",
-    ],
-    [
-      "opener.openUrlWith",
-      {
-        url: "http://localhost/",
-        app: "C:/app.exe",
-      },
-      "UNSUPPORTED",
-    ],
-    [
-      "opener.trashFile",
-      {
-        path,
-      },
-      "UNSUPPORTED",
-    ],
-    [
-      "opener.addRecentDocument",
-      {
-        path,
-      },
-      "UNSUPPORTED",
-    ],
-    [
-      "opener.clearRecentDocuments",
-      {},
-      "UNSUPPORTED",
-    ],
-    [
-      "opener.getUrlHandler",
-      {
-        url: "https://example.com/",
-      },
-      "UNSUPPORTED",
-    ],
-    [
-      "opener.missing",
-      {
-        path,
-      },
-      "UNSUPPORTED",
-    ],
-  ] as const) {
+    expect(calls).toEqual([
+      `open:${path}`,
+      `reveal:${path}`,
+      "https://localhost/%ED%95%9C%EA%B8%80%20%EA%B0%92?q=a&b=c#fragment",
+    ]);
+    for (const [operation, payload, code] of [
+      [
+        "opener.openFile",
+        {
+          path: "relative",
+        },
+        "INVALID_ARGUMENT",
+      ],
+      [
+        "opener.openFile",
+        {
+          path,
+          extra: true,
+        },
+        "INVALID_ARGUMENT",
+      ],
+      [
+        "opener.openUrl",
+        {
+          url: "file:///private/tmp/file",
+        },
+        "INVALID_ARGUMENT",
+      ],
+      [
+        "opener.openFileWith",
+        {
+          path,
+          app: "C:/app.exe",
+        },
+        "UNSUPPORTED",
+      ],
+      [
+        "opener.openUrlWith",
+        {
+          url: "http://localhost/",
+          app: "C:/app.exe",
+        },
+        "UNSUPPORTED",
+      ],
+      [
+        "opener.trashFile",
+        {
+          path,
+        },
+        "UNSUPPORTED",
+      ],
+      [
+        "opener.addRecentDocument",
+        {
+          path,
+        },
+        "UNSUPPORTED",
+      ],
+      [
+        "opener.clearRecentDocuments",
+        {},
+        "UNSUPPORTED",
+      ],
+      [
+        "opener.getUrlHandler",
+        {
+          url: "https://example.com/",
+        },
+        "UNSUPPORTED",
+      ],
+      [
+        "opener.missing",
+        {
+          path,
+        },
+        "UNSUPPORTED",
+      ],
+    ] as const) {
+      await expect(
+        adapter.execute(operation, payload, "backend"),
+      ).rejects.toThrow(
+        expect.objectContaining({
+          code,
+        }),
+      );
+    }
+    expect(calls).toHaveLength(3);
+    await adapter.dispose();
+    await adapter.dispose();
+    expect(calls.at(-1)).toBe("workspace:dispose");
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
     await expect(
-      adapter.execute(operation, payload, "backend"),
+      adapter.execute(
+        "opener.openUrl",
+        {
+          url: "http://localhost/",
+        },
+        "backend",
+      ),
     ).rejects.toThrow(
       expect.objectContaining({
-        code,
+        code: "CANCELLED",
       }),
     );
-  }
-  expect(calls).toHaveLength(7);
-  await adapter.dispose();
-  await adapter.dispose();
-  expect(calls.slice(-2)).toEqual([
-    "files:dispose",
-    "workspace:dispose",
-  ]);
-  await expect(
-    adapter.execute(
-      "opener.openUrl",
-      {
-        url: "http://localhost/",
-      },
-      "backend",
-    ),
-  ).rejects.toThrow(
-    expect.objectContaining({
-      code: "CANCELLED",
-    }),
-  );
-});
+  },
+);
 
 test("each macOS opener operation keeps its independent host permission", () => {
   const registry = new NativeRegistry([
@@ -270,111 +264,46 @@ test("each macOS opener operation keeps its independent host permission", () => 
   }
 });
 
-test("macOS resource cleanup still releases the workspace when file cleanup fails", async () => {
-  let cleaned = 0;
-  const adapter = createAdapter(
-    {
-      openUrl() {},
-      openFile() {},
-      revealFile() {},
-      dispose() {
-        cleaned++;
-      },
-    },
-    {
-      withFile(_path, request) {
-        request();
-      },
-      dispose() {
-        throw new Error("cleanup failed");
-      },
-    },
-  );
-  await expect(adapter.dispose()).rejects.toThrow("cleanup failed");
-  await adapter.dispose();
-  expect(cleaned).toBe(1);
-});
-
-test.skipIf(process.platform !== "darwin")(
-  "real macOS descriptor checks reject missing files, directories, links and unreadable files",
+test.skipIf(process.platform === "win32")(
+  "opener opens the resolved path of a link and reveals the link itself",
   async () => {
     const root = await realpath(
       await mkdtemp(join(tmpdir(), "bunaway-opener-")),
     );
-    const sample = join(root, "한글 값.txt");
-    const files = createFiles();
     try {
-      await writeFile(sample, "controlled fixture");
-      for (let i = 0; i < 20; i++) {
-        let accepted = false;
-        files.withFile(sample, () => {
-          accepted = true;
-        });
-        expect(accepted).toBe(true);
-        expect(() => files.withFile(`${sample}.missing`, () => {})).toThrow(
-          expect.objectContaining({
-            code: "INVALID_ARGUMENT",
-            details: {
-              reason: "FILE_NOT_FOUND",
-            },
-          }),
+      const target = join(root, "target.txt");
+      const alias = join(root, "alias.txt");
+      await writeFile(target, "controlled fixture");
+      await symlink(target, alias);
+      const calls: string[] = [];
+      const adapter = createAdapter({
+        openUrl() {},
+        openFile: (path) => {
+          calls.push(`open:${path}`);
+        },
+        revealFile: (path) => {
+          calls.push(`reveal:${path}`);
+        },
+        dispose() {},
+      });
+      for (const operation of [
+        "openFile",
+        "revealFile",
+      ]) {
+        await adapter.execute(
+          `opener.${operation}`,
+          {
+            path: alias,
+          },
+          "backend",
         );
       }
-      expect(() => files.withFile(root, () => {})).toThrow(
-        expect.objectContaining({
-          code: "INVALID_ARGUMENT",
-        }),
-      );
-      const alias = join(root, "alias");
-      await symlink(sample, alias);
-      expect(() => files.withFile(alias, () => {})).toThrow(
-        expect.objectContaining({
-          code: "PERMISSION_DENIED",
-        }),
-      );
-      const parentAlias = join(root, "parent");
-      await symlink(root, parentAlias);
-      expect(() =>
-        files.withFile(join(parentAlias, "한글 값.txt"), () => {}),
-      ).toThrow(
-        expect.objectContaining({
-          code: "PERMISSION_DENIED",
-        }),
-      );
-      const hard = join(root, "hard");
-      await link(sample, hard);
-      expect(() => files.withFile(sample, () => {})).toThrow(
-        expect.objectContaining({
-          code: "PERMISSION_DENIED",
-        }),
-      );
-      await rm(hard);
-      await chmod(sample, 0);
-      expect(() => files.withFile(sample, () => {})).toThrow(
-        expect.objectContaining({
-          code: "PERMISSION_DENIED",
-        }),
-      );
-      await chmod(sample, 0o600);
-      expect(() =>
-        files.withFile(sample, () => {
-          throw new Error("request failed");
-        }),
-      ).toThrow(
-        expect.objectContaining({
-          code: "INTERNAL",
-        }),
-      );
-      await rm(sample);
-      files.dispose();
-      files.dispose();
-      expect(() => files.withFile(sample, () => {})).toThrow(
-        expect.objectContaining({
-          code: "CANCELLED",
-        }),
-      );
+      expect(calls).toEqual([
+        `open:${target}`,
+        `reveal:${alias}`,
+      ]);
+      await adapter.dispose();
     } finally {
-      files.dispose();
       await rm(root, {
         recursive: true,
         force: true,
@@ -382,6 +311,104 @@ test.skipIf(process.platform !== "darwin")(
     }
   },
 );
+
+test.skipIf(process.platform === "win32")(
+  "path resolution reports missing, unreadable and special files and follows links",
+  async () => {
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "bunaway-opener-")),
+    );
+    const sample = join(root, "한글 값.txt");
+    try {
+      await writeFile(sample, "controlled fixture");
+      expect(resolveReadableFile(sample)).toBe(sample);
+      expect(() => resolveReadableFile(`${sample}.missing`)).toThrow(
+        expect.objectContaining({
+          code: "INVALID_ARGUMENT",
+          details: {
+            reason: "FILE_NOT_FOUND",
+          },
+        }),
+      );
+      expect(() => resolveReadableFile(root)).toThrow(
+        expect.objectContaining({
+          code: "INVALID_ARGUMENT",
+        }),
+      );
+      const alias = join(root, "alias");
+      await symlink(sample, alias);
+      // A link resolves to its target, so callers check and open the target's name.
+      expect(resolveReadableFile(alias)).toBe(sample);
+      const parentAlias = join(root, "parent");
+      await symlink(root, parentAlias);
+      expect(resolveReadableFile(join(parentAlias, "한글 값.txt"))).toBe(
+        sample,
+      );
+      const hard = join(root, "hard");
+      await link(sample, hard);
+      expect(resolveReadableFile(hard)).toBe(hard);
+      await rm(hard);
+      const fifo = join(root, "pipe");
+      expect(
+        Bun.spawnSync([
+          "mkfifo",
+          fifo,
+        ]).exitCode,
+      ).toBe(0);
+      // A FIFO is refused before it is opened, so this returns instead of blocking.
+      expect(() => resolveReadableFile(fifo)).toThrow(
+        expect.objectContaining({
+          code: "INVALID_ARGUMENT",
+        }),
+      );
+      if (process.getuid?.() !== 0) {
+        await chmod(sample, 0);
+        expect(() => resolveReadableFile(sample)).toThrow(
+          expect.objectContaining({
+            code: "PERMISSION_DENIED",
+          }),
+        );
+        await chmod(sample, 0o600);
+      }
+      // A new file is never written through a dangling link, which has a name but no target.
+      const dangling = join(root, "dangling");
+      await symlink(join(root, "nowhere"), dangling);
+      expect(() => assertNameFree(dangling)).toThrow(
+        expect.objectContaining({
+          code: "INVALID_ARGUMENT",
+        }),
+      );
+      assertNameFree(join(root, "free"));
+      // Recycling targets the link itself, so a link needs no readable target.
+      assertExistingFile(alias);
+      expect(() => assertExistingFile(root)).toThrow(
+        expect.objectContaining({
+          code: "INVALID_ARGUMENT",
+        }),
+      );
+      expect(() => assertExistingFile(`${sample}.missing`)).toThrow(
+        expect.objectContaining({
+          details: {
+            reason: "FILE_NOT_FOUND",
+          },
+        }),
+      );
+    } finally {
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);
+
+test("Win32 device and UNC prefixes of a resolved path are removed", () => {
+  expect(stripDevicePrefix("\\\\?\\C:\\dir\\a.txt")).toBe("C:\\dir\\a.txt");
+  expect(stripDevicePrefix("\\\\?\\UNC\\host\\share\\a.txt")).toBe(
+    "\\\\host\\share\\a.txt",
+  );
+  expect(stripDevicePrefix("/tmp/a.txt")).toBe("/tmp/a.txt");
+});
 
 test.skipIf(process.platform !== "darwin")(
   "real macOS workspace binding load, malformed requests and repeated disposal",
