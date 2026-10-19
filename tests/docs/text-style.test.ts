@@ -42,6 +42,11 @@ test("the text style checker covers documentation and source text but not quoted
   expect(isStyledTextPath("licenses/bun.txt")).toBe(false);
   expect(isStyledTextPath("THIRD-PARTY-NOTICES.txt")).toBe(false);
   expect(isStyledTextPath("bun.lock")).toBe(false);
+  expect(isStyledTextPath(".claude/skills/why/SKILL.md")).toBe(false);
+  expect(isStyledTextPath(".claude/skills/verify-bunaway/SKILL.md")).toBe(true);
+  expect(
+    isStyledTextPath(".claude/skills/native-change-verification/SKILL.md"),
+  ).toBe(true);
   expect(isStyledTextPath("assets/icon.png")).toBe(false);
 });
 

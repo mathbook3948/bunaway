@@ -24,9 +24,12 @@ const FORBIDDEN_CHARACTERS: ReadonlyMap<string, string> = new Map([
   ],
 ]);
 
-/** Tracked paths whose text is quoted third-party or binary-like content. */
+/**
+ * Tracked paths whose text is quoted third-party or binary-like content. The skills under
+ * `.claude/skills/` are third-party except the two project-owned ones, which stay checked.
+ */
 const EXCLUDED_PATH_PATTERN =
-  /^(licenses\/|THIRD-PARTY-NOTICES\.txt$|FRAMEWORK-LICENSE\.txt$|patches\/|bun\.lock$)/;
+  /^(licenses\/|THIRD-PARTY-NOTICES\.txt$|FRAMEWORK-LICENSE\.txt$|patches\/|bun\.lock$|\.claude\/skills\/(?!native-change-verification\/|verify-bunaway\/))/;
 const TEXT_EXTENSION_PATTERN =
   /\.(md|mdx|ts|tsx|mts|cts|js|mjs|cjs|jsx|json|toml|ya?ml|html|css|svelte|vue|txt|java|swift|m|mm|c|h|iss|ps1|cmd|bat|xml|plist)$/;
 

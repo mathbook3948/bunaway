@@ -20,7 +20,3 @@ runtime/bun-embed/vendor/
 runtime/bun-bundle/vendor/
 native/windows/bun/vendor/
 native/macos/vendor/
-# Personal skills installed from the skills repository; project skills stay tracked below.
-.claude/skills/*
-!.claude/skills/native-change-verification/
-!.claude/skills/verify-bunaway/
