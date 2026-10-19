@@ -2461,14 +2461,20 @@ test(
       expect(performance.now() - started).toBeGreaterThanOrEqual(
         SESSION_END_WAIT_MS - 100,
       );
-      expect(
-        ui.packets.some(
+      // The diagnostic travels as a channel message, so it can arrive after the UI thread has
+      // already reported the handler as done; wait for it instead of reading the list at once.
+      const waitFinished = () =>
+        ui.packets.find(
           (packet) =>
             packet.kind === "diagnostic" &&
-            packet.event === "session-end-wait-finished" &&
-            packet.fields.timedOut === true,
-        ),
-      ).toBe(true);
+            packet.event === "session-end-wait-finished",
+        );
+      await ui.waitFor(() => waitFinished() !== undefined);
+      expect(waitFinished()).toMatchObject({
+        fields: {
+          timedOut: true,
+        },
+      });
       await ui.channel.send({
         kind: "shutdown",
       });
