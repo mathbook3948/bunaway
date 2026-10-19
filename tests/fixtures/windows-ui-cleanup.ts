@@ -37,6 +37,8 @@ export const uiLifecycleSlots = {
   /** UTF-8 byte length of the JSON message stored in the shared web message buffer. */
   webLength: 18,
   webDone: 19,
+  /** Number of upcoming `detach` calls that fail with a recoverable download cleanup error. */
+  detachFailures: 20,
 };
 
 /** Renderer-side actions the fixture can replay into the production UI owner. */

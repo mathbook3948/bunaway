@@ -802,6 +802,56 @@ test(
   timeoutMs + 5_000,
 );
 
+test(
+  "a recoverable download cleanup failure defers detach, retries it and then completes the close once",
+  async () => {
+    const ui = await startUI();
+    try {
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "ready"),
+      );
+      await ui.channel.send({
+        kind: "start",
+      });
+      const child = validateWindowOutput(
+        "windows.createInstance",
+        await ui.call("windows.createInstance", {
+          view: "editor",
+        }),
+      );
+      Atomics.store(ui.lifecycle, uiLifecycleSlots.detachFailures, 1);
+      expect(
+        await ui.call("windows.close", {
+          view: child.viewId,
+          windowId: child.windowId,
+        }),
+      ).toBe(true);
+      await ui.waitFor(
+        () => Atomics.load(ui.lifecycle, uiLifecycleSlots.finish) === 1,
+      );
+      // One failed attempt keeps the native references, the retry detaches and finishes once.
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.detach)).toBe(2);
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.destroy)).toBe(1);
+      const events = ui.packets.flatMap((packet) =>
+        packet.kind === "diagnostic"
+          ? [
+              packet.event,
+            ]
+          : [],
+      );
+      expect(events).toContain("download-cleanup-retry");
+      expect(events).toContain("download-cleanup-recovered");
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
 test.each([
   "destroy",
   "shutdown",
