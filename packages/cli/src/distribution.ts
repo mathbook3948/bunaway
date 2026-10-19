@@ -321,29 +321,28 @@ export async function snapshotHashes(
   return hashes;
 }
 
-/** Validate framework versions and dependencies, and app imports when source paths are supplied. */
-export async function validateFramework(
-  project: string,
-  sources: readonly string[] = [],
-): Promise<
-  SourceDependencies & {
-    root: string;
-    plugins: InstalledPlugin[];
-  }
-> {
-  const pkg = (await json(
-    resolve(project, "package.json"),
-  )) as PackageDependencies & {
-    packageManager: string;
-    overrides?: unknown;
-    resolutions?: unknown;
-  };
-  if (hasSdkOverride(pkg.overrides) || hasSdkOverride(pkg.resolutions)) {
-    throw new Error(
-      "Incompatible Bun/SDK dependency override; install one matching framework release.",
-    );
-  }
-  const root = await installedPackageRoot(project, "@bunaway/cli");
+type ProjectPackage = PackageDependencies & {
+  packageManager: string;
+  overrides?: unknown;
+  resolutions?: unknown;
+};
+
+/** A package.json manifest of an installed framework package. */
+type InstalledManifest = PackageDependencies & {
+  name: string;
+  version: string;
+};
+
+type ImportReference = {
+  name: string;
+  parent: string;
+};
+
+/** The project's own CLI must be the active release and the project must pin the same Bun. */
+async function assertMatchingRelease(
+  pkg: ProjectPackage,
+  root: string,
+): Promise<Release> {
   const actual = await release(root);
   const active = await release();
   if (actual.version !== active.version) {
@@ -356,40 +355,58 @@ export async function validateFramework(
       "Incompatible Bun/SDK dependency declaration; use the pinned Bun version.",
     );
   }
-  // Check release integrity before resolving app imports against the installed artifact.
-  await checkArtifact(root);
-  // Collect package roots from app declarations and installed package manifests for import resolution.
-  const declarations = sdkDependencies(pkg);
-  const references: {
-    name: string;
-    parent: string;
-  }[] = [];
+  return actual;
+}
+
+/** Check one installed SDK package against the release and list the packages it imports. */
+function checkInstalledPackage(
+  name: string,
+  installed: string,
+  manifest: InstalledManifest,
+  actual: Release,
+): ImportReference[] {
+  if (manifest.name !== name || manifest.version !== actual.version) {
+    throw new Error(
+      `Incompatible SDK/CLI package: ${name}; expected ${actual.version}.`,
+    );
+  }
+  const references: ImportReference[] = [];
+  for (const [dependency, version] of sdkDependencies(manifest)) {
+    if (version !== actual.version && !version.endsWith(".tgz")) {
+      throw new Error(`Incompatible SDK dependency: ${dependency}.`);
+    }
+    if (dependency !== "@bunaway/cli") {
+      references.push({
+        name: dependency,
+        parent: installed,
+      });
+    }
+  }
+  return references;
+}
+
+/** Collect package roots from app declarations and installed package manifests for import resolution. */
+async function collectImportReferences(
+  project: string,
+  sources: readonly string[],
+  root: string,
+  actual: Release,
+  declarations: readonly (readonly [
+    string,
+    string,
+  ])[],
+): Promise<ImportReference[]> {
+  const references: ImportReference[] = [];
   for (const name of Object.values(packageNames)) {
     // The CLI declares all SDKs; transitive packages need not be hoisted into the app.
     const installed =
       name === "@bunaway/cli" ? root : await installedPackageRoot(root, name);
     const manifest = (await json(
       resolve(installed, "package.json"),
-    )) as PackageDependencies & {
-      name: string;
-      version: string;
-    };
-    if (manifest.name !== name || manifest.version !== actual.version) {
-      throw new Error(
-        `Incompatible SDK/CLI package: ${name}; expected ${actual.version}.`,
-      );
-    }
-    for (const [dependency, version] of sdkDependencies(manifest)) {
-      if (version !== actual.version && !version.endsWith(".tgz")) {
-        throw new Error(`Incompatible SDK dependency: ${dependency}.`);
-      }
-      if (dependency !== "@bunaway/cli") {
-        references.push({
-          name: dependency,
-          parent: installed,
-        });
-      }
-    }
+    )) as InstalledManifest;
+    references.push(
+      ...checkInstalledPackage(name, installed, manifest, actual),
+    );
     if (
       name !== "@bunaway/cli" &&
       declarations.some(([dependency]) => dependency === name)
@@ -405,6 +422,15 @@ export async function validateFramework(
       }
     }
   }
+  return references;
+}
+
+function assertRequiredDependencies(
+  declarations: readonly (readonly [
+    string,
+    string,
+  ])[],
+): void {
   for (const name of [
     "@bunaway/cli",
     "@bunaway/backend",
@@ -417,26 +443,48 @@ export async function validateFramework(
       );
     }
   }
-  const plugins = await installedPlugins(project, actual.version);
-  // Reject SDK and plugin declarations that are outside this release or pinned to another version.
+}
+
+/** An optional dependency that is not installed is skipped, any other lookup failure is reported. */
+async function isUninstalledOptional(
+  pkg: ProjectPackage,
+  project: string,
+  name: string,
+): Promise<boolean> {
+  if (!isOptionalDependency(pkg, name)) {
+    return false;
+  }
+  try {
+    await installedPackageRoot(project, name);
+    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return true;
+    }
+    throw error;
+  }
+}
+
+/** Reject SDK and plugin declarations that are outside this release or pinned to another version. */
+async function assertDeclaredDependencies(
+  pkg: ProjectPackage,
+  project: string,
+  declarations: readonly (readonly [
+    string,
+    string,
+  ])[],
+  plugins: readonly InstalledPlugin[],
+  actual: Release,
+): Promise<void> {
   for (const [name, specifier] of declarations) {
-    if (
-      !Object.values(packageNames).includes(name) &&
-      !plugins.some((plugin) => plugin.packageName === name) &&
-      isOptionalDependency(pkg, name)
-    ) {
-      try {
-        await installedPackageRoot(project, name);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-          continue;
-        }
-        throw error;
-      }
+    const known =
+      Object.values(packageNames).includes(name) ||
+      plugins.some((plugin) => plugin.packageName === name);
+    if (!known && (await isUninstalledOptional(pkg, project, name))) {
+      continue;
     }
     if (
-      (!Object.values(packageNames).includes(name) &&
-        !plugins.some((plugin) => plugin.packageName === name)) ||
+      !known ||
       (specifier !== actual.version && !specifier.endsWith(".tgz"))
     ) {
       throw new Error(
@@ -444,6 +492,39 @@ export async function validateFramework(
       );
     }
   }
+}
+
+/** Validate framework versions and dependencies, and app imports when source paths are supplied. */
+export async function validateFramework(
+  project: string,
+  sources: readonly string[] = [],
+): Promise<
+  SourceDependencies & {
+    root: string;
+    plugins: InstalledPlugin[];
+  }
+> {
+  const pkg = (await json(resolve(project, "package.json"))) as ProjectPackage;
+  if (hasSdkOverride(pkg.overrides) || hasSdkOverride(pkg.resolutions)) {
+    throw new Error(
+      "Incompatible Bun/SDK dependency override; install one matching framework release.",
+    );
+  }
+  const root = await installedPackageRoot(project, "@bunaway/cli");
+  const actual = await assertMatchingRelease(pkg, root);
+  // Check release integrity before resolving app imports against the installed artifact.
+  await checkArtifact(root);
+  const declarations = sdkDependencies(pkg);
+  const references = await collectImportReferences(
+    project,
+    sources,
+    root,
+    actual,
+    declarations,
+  );
+  assertRequiredDependencies(declarations);
+  const plugins = await installedPlugins(project, actual.version);
+  await assertDeclaredDependencies(pkg, project, declarations, plugins, actual);
   // Resolve imports in Bun's worker so the result reflects the app's installed package graph.
   const output = await runWorker(
     "sdk.ts",
