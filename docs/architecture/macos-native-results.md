@@ -146,7 +146,7 @@ attempt 1(`macos-webview-controls`)과 attempt 2(`reopen-handler`), 같은 head�
 2, 3회차 재시도와 `webview-load-stalled` 기록까지 진행한다.
 `수정 후` 행과 bc29d087 실행을 합한 9회(세 head의 macOS 잡)는 연속 통과였지만, 표본이 작고 통과한 실행의 로그에는 `load-retried` 발생 여부를 따로 집계하지 않았다.
 정지가 남아 있으면 `webview-load-stalled`와
-`load-retried` 기록, 5/10/15초 checkpoint로 WebKit 정지와 코드 회귀를 구분한다. 기한은 늘리지 않았다. `webview-load-stalled`는 정책 허용 뒤 3초 간격 재시도 3번 다음 확인에서 기록되므로 약 12초 이상 걸리고, 문서 기한이 그보다 짧은 fixture에서는 기록 전에 실패할 수 있다.
+`load-retried` 기록, 5/10/15초 checkpoint로 WebKit 정지와 코드 회귀를 구분한다. 기한은 늘리지 않았다. `webview-load-stalled`는 정책 허용 뒤 3초 간격 재시도 3번 다음 확인에서 기록되므로 약 12초 이상 걸리고(정지한 뷰를 한 번 교체한 뒤에는 교체한 뷰의 재시도 3번이 더해져 약 24초 이상), 문서 기한이 그보다 짧은 fixture에서는 기록 전에 실패할 수 있다.
 
 같은 뷰의 `stopLoading`과 재발송 3회가 모두 실패하면 `webview-load-stalled` 기록 직전에 정지한 뷰만 같은 구성의 새 `WKWebView`로 한 번 교체한다(`view-recreated` 기록). 정지 표본(run 39202813314)에서 정지한 뷰는 observer(viewIndex 2)였고, 같은 호스트의 다른 뷰는 정상 로드됐으며 재발송 3회가 `sameNavigation:false`로 모두 풀리지 않았기 때문에 WebContent를 새로 얻는 교체를 복구 경로로 삼았다. 새 뷰도 멈추면 기존처럼 `webview-load-stalled`로 보고하고 문서와 SDK 기한은 늘리지 않는다. 교체 경로는 `macos-webview-recreate.ts`가 정지 훅으로 결정적으로 검증하지만, 실제 WebKit 정지가 교체로 풀리는지는 CI 실패 표본이 다시 나와야 확인할 수 있다.
 

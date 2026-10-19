@@ -228,3 +228,26 @@ test("the stalled-load test hooks are reachable only from the constructor argume
   const creator = readFileSync(resolve(directory, "windows.ts"), "utf8");
   expect(creator).not.toMatch(/testHooks|stallLoad/);
 });
+
+test("a clock started without a policy decision still retries and reports", () => {
+  const clock = new StalledLoadClock();
+  clock.startNow(0);
+  // The load that follows keeps the start instead of waiting for a policy decision.
+  clock.requested();
+  expect(clock.check(PROVISIONAL_STALL_MS - 1)).toBe("wait");
+  const actions: string[] = [];
+  for (let step = 1; step <= MAX_LOAD_RETRIES + 2; step++) {
+    const action = clock.check(step * PROVISIONAL_STALL_MS);
+    actions.push(action);
+    if (action === "retry") {
+      clock.requested();
+    }
+  }
+  expect(actions).toEqual([
+    "retry",
+    "retry",
+    "retry",
+    "report",
+    "none",
+  ]);
+});

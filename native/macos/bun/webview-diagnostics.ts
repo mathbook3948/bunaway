@@ -100,6 +100,16 @@ export class StalledLoadClock {
     }
   }
 
+  /**
+   * Start the clock without a policy decision, for a view that replaces a stalled one: its load may
+   * stall before the policy callback, and the stall must still be reported. The `requested` call
+   * for the load that follows keeps this start.
+   */
+  startNow(now: number): void {
+    this.allowedAt = now;
+    this.reissued = true;
+  }
+
   /** A reload after a WebContent crash gets a fresh retry budget. */
   resetBudget(): void {
     this.attempts = 0;

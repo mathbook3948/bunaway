@@ -124,7 +124,7 @@ export class MacosWebview {
   private navigationStarted = false;
   /** The current load request reached `didStartProvisionalNavigation`; reset by every load request. */
   private provisionalSeen = false;
-  /** Stall clock and retry budget of this view's load; the budget is reset only by the reload after a WebContent crash. */
+  /** Stall clock and retry budget of this view's load; the budget is reset by the reload after a WebContent crash and by the replacement view. */
   private loadClock = new StalledLoadClock();
   private provisionalNavigation: ObjcObject | null = null;
   /** Latest top-level document navigation; unlike provisionalNavigation it survives commit until completion. */
@@ -308,6 +308,8 @@ export class MacosWebview {
     const { hooks, config, application } = this;
     const retained: ObjcObject[] = [];
     const current = () => !this.closed && generation === this.generation;
+    // Owned from creation on, so a failure while the rest is wired releases it.
+    let created: ObjcObject | undefined;
     try {
       const configuration = o.object("WKWebViewConfiguration");
       const controller = o.object("WKUserContentController");
@@ -436,6 +438,7 @@ export class MacosWebview {
         application.dataStore(config.window.view),
       );
       const webview = o.webview(size.width, size.height, configuration);
+      created = webview;
       const cancelDownload = o.block(1, () => {});
       const navigation = o.delegate([
         {
@@ -710,6 +713,9 @@ export class MacosWebview {
         retained,
       };
     } catch (error) {
+      if (created) {
+        o.send(created, "release");
+      }
       for (const object of retained.reverse()) {
         o.send(object, "release");
       }
@@ -967,7 +973,9 @@ export class MacosWebview {
       this.lastNavigation = null;
       this.provisionalNavigation = null;
       this.documentNavigation = null;
+      // The replacement may never reach the policy callback either, so its clock starts now.
       this.loadClock = new StalledLoadClock();
+      this.loadClock.startNow(this.stallClockNow());
       this.diagnostics.record("view-recreated", {
         probe: stalledProbe,
       });
