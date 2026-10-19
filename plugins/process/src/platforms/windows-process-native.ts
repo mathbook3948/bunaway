@@ -1,4 +1,5 @@
 import { ptr } from "bun:ffi";
+import { win32CallError } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
 import type { ProcessResult, processInputSchema } from "#process/contract";
@@ -118,8 +119,10 @@ export async function runWindowsProcess(
   const inputBytes = Buffer.from(input.stdinBase64 ?? "", "base64");
   const overlapped = Buffer.alloc(32); // OVERLAPPED, Win64
   const transferred = Buffer.alloc(4);
-  const fail = (operation = "Win32 process operation") => {
-    const nativeCode = api.symbols.GetLastError();
+  const fail = (
+    operation = "Win32 process operation",
+    nativeCode = api.symbols.GetLastError(),
+  ) => {
     const error = new BunawayError({
       code: "INTERNAL",
       message: "Process execution failed.",
@@ -193,11 +196,21 @@ export async function runWindowsProcess(
       return;
     }
     const available = Buffer.alloc(4);
-    if (
-      !api.symbols.PeekNamedPipe(pipe.read, null, 0, null, ptr(available), null)
-    ) {
-      if (api.symbols.GetLastError() !== ERROR_BROKEN_PIPE) {
-        throw fail();
+    const peekError = win32CallError(
+      () =>
+        api.symbols.PeekNamedPipe(
+          pipe.read,
+          null,
+          0,
+          null,
+          ptr(available),
+          null,
+        ),
+      () => api.symbols.GetLastError(),
+    );
+    if (peekError) {
+      if (peekError !== ERROR_BROKEN_PIPE) {
+        throw fail("Win32 process operation", peekError);
       }
       pipe.ended = true;
       return;

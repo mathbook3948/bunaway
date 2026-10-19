@@ -321,6 +321,8 @@
           "wide",
           "withBuffer",
           "withWide",
+          "WIN32_ERROR_UNKNOWN",
+          "win32CallError",
           "hresultText",
           "checkHresult",
           "pick",

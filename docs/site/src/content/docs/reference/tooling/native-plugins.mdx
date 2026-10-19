@@ -665,6 +665,9 @@ const handle = withWide(path, (name) =>
 
 `wide(text)`는 NUL로 끝나는 UTF-16LE 버퍼를 만들고 `withBuffer(buffer, invoke)`와
 `withWide(text, invoke)`는 동기 네이티브 호출이 돌아올 때까지 버퍼를 유지합니다.
+`win32CallError(call, readError)`는 BOOL 결과를 돌려주는 멱등 Win32 호출을 실행하고 성공이면 0, 실패면 호출이
+남긴 오류를 돌려줍니다. 실패한 호출은 0이 아닌 오류를 남기므로 오류가 0으로 읽히면 FFI 계층이 값을 덮어쓴 것으로 보고
+호출을 한 번 반복해 오류를 다시 읽습니다. 끝까지 읽지 못하면 `WIN32_ERROR_UNKNOWN`을 돌려줍니다.
 `checkHresult(value, operation)`은 음수 HRESULT에서 작업 이름과 `hresultText(value)`의
 16진수 표기를 담은 오류를 던집니다. `COINIT_APARTMENTTHREADED`와 `COINIT_MULTITHREADED`는
 `CoInitializeEx`에 전달하는 아파트먼트 모델입니다.
