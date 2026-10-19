@@ -1,3 +1,5 @@
+import type { WebviewProbe } from "./webview-probe.ts";
+
 const MAX_STAGE_RECORDS = 64;
 /** A load request that has not started its provisional navigation after this long is reissued. */
 export const PROVISIONAL_STALL_MS = 3000;
@@ -139,6 +141,9 @@ export class WebviewDiagnostics {
       progress?: number;
       errorDomain?: ReturnType<typeof webviewError>["errorDomain"];
       errorCode?: number | null;
+      /** `loadRequest:` returned the same object address as the previous request (an address can be reused after release). */
+      sameNavigation?: boolean;
+      probe?: WebviewProbe | undefined;
     } = {},
   ): void {
     if (this.count >= MAX_STAGE_RECORDS) {
@@ -151,9 +156,11 @@ export class WebviewDiagnostics {
       });
       return;
     }
+    const { probe, ...rest } = fields;
     this.log("webview-stage", {
       stage,
-      ...fields,
+      ...rest,
+      ...probe,
     });
   }
 }
