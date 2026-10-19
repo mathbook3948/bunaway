@@ -293,6 +293,73 @@ test("embedded web responses preserve MIME, Unicode paths, HEAD and ranges witho
   }
 });
 
+test("embedded web responses reject malformed requests and resolve every range form", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "bunaway-web-assets-"));
+  try {
+    await mkdir(resolve(root, "web/folder"), {
+      recursive: true,
+    });
+    await writeFile(resolve(root, "web/data.txt"), "0123456789");
+    const url = "https://app.bunaway.local/data.txt";
+    expect(webAsset(root, "not a url", "GET").status).toBe(400);
+    expect(
+      webAsset(root, "https://app.bunaway.local/%E0%A4%A", "GET").status,
+    ).toBe(400);
+    expect(
+      webAsset(root, "https://user:pw@app.bunaway.local/data.txt", "GET")
+        .status,
+    ).toBe(403);
+    expect(
+      webAsset(root, "https://app.bunaway.local/folder", "GET").status,
+    ).toBe(404);
+    expect(webAsset(root, "https://app.bunaway.local/a//b", "GET").status).toBe(
+      404,
+    );
+    expect(
+      webAsset(root, "https://app.bunaway.local/a%3Ab", "GET").status,
+    ).toBe(404);
+    const ok = webAsset(root, url, "GET");
+    expect(ok.status).toBe(200);
+    expect(ok.reason).toBe("OK");
+    expect(ok.headers).toContain("Accept-Ranges: bytes");
+    expect(ok.headers).toContain("X-Content-Type-Options: nosniff");
+    const open = webAsset(root, url, "GET", "bytes=7-");
+    expect(open.status).toBe(206);
+    expect(open.body.toString()).toBe("789");
+    expect(open.headers).toContain("Content-Range: bytes 7-9/10");
+    // An end past the file is clamped; a suffix longer than the file returns all of it.
+    expect(webAsset(root, url, "GET", "bytes=8-99").body.toString()).toBe("89");
+    expect(webAsset(root, url, "GET", "bytes=-99").body.toString()).toBe(
+      "0123456789",
+    );
+    expect(webAsset(root, url, "GET", "bytes=5-2").status).toBe(416);
+    expect(webAsset(root, url, "GET", "bytes=20-30").headers).toContain(
+      "Content-Range: bytes */10",
+    );
+    // Unsupported, multipart and empty ranges are ignored, and HEAD never slices.
+    for (const range of [
+      "bytes=0-1,3-4",
+      "items=0-1",
+      "bytes=-",
+    ]) {
+      const full = webAsset(root, url, "GET", range);
+      expect(full.status).toBe(200);
+      expect(full.body.length).toBe(10);
+    }
+    const head = webAsset(root, url, "HEAD", "bytes=2-4");
+    expect(head.status).toBe(200);
+    expect(head.headers).toContain("Content-Length: 10");
+    const allowed = webAsset(root, url, "DELETE");
+    expect(allowed.status).toBe(405);
+    expect(allowed.headers).toBe("Allow: GET, HEAD");
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
 test("Windows app entry names cannot collide with the host or break shared bundle imports", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "bunaway-windows-assets-"));
   const host = resolve(import.meta.dir, "../../native/windows/bun");
