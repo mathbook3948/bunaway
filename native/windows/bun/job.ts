@@ -1,8 +1,8 @@
 import { dlopen, ptr } from "bun:ffi";
-import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { mkdirSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import {
   type RelaunchCommand,
   relaunchCommandLine,
@@ -325,6 +325,103 @@ export function activeDescendants(): number {
   return Math.max(0, accounting.readUInt32LE(ACTIVE_PROCESS_COUNT_OFFSET) - 1); // exclude this Bun process
 }
 
+type JobBindings = ReturnType<typeof openBindings>;
+
+/** Reads the Job's process ids, growing the list buffer while Windows reports ERROR_MORE_DATA. */
+function queryJobProcessIds(api: JobBindings, handle: bigint): number[] {
+  let list = Buffer.alloc(
+    PROCESS_ID_LIST_HEADER_BYTES +
+      PROCESS_ID_BYTES * INITIAL_PROCESS_ID_CAPACITY,
+  ); // JOBOBJECT_BASIC_PROCESS_ID_LIST, Win64
+  while (
+    !api.symbols.QueryInformationJobObject(
+      handle,
+      JOB_OBJECT_BASIC_PROCESS_ID_LIST_CLASS,
+      ptr(list),
+      list.length,
+      null,
+    )
+  ) {
+    assert.equal(
+      api.symbols.GetLastError(),
+      ERROR_MORE_DATA,
+      "App Job process inventory failed",
+    );
+    assert(
+      list.length < MAX_PROCESS_ID_LIST_BYTES,
+      "App Job process inventory is too large",
+    );
+    list = Buffer.alloc(list.length * 2);
+  }
+  const count = list.readUInt32LE(PROCESS_ID_COUNT_OFFSET);
+  const pids: number[] = [];
+  for (let index = 0; index < count; index++) {
+    pids.push(
+      Number(
+        list.readBigUInt64LE(
+          PROCESS_ID_LIST_HEADER_BYTES + index * PROCESS_ID_BYTES,
+        ),
+      ),
+    );
+  }
+  return pids;
+}
+
+/** Waits for a process that is exiting by itself and already denied termination. */
+async function waitForSelfExit(
+  api: JobBindings,
+  processHandle: bigint,
+  pid: number,
+  deadline: number,
+): Promise<void> {
+  while (api.symbols.WaitForSingleObject(processHandle, 0) !== WAIT_OBJECT_0) {
+    assert(
+      Date.now() < deadline,
+      `Job descendant ${pid} did not finish exiting`,
+    );
+    await Bun.sleep(PROCESS_EXIT_POLL_INTERVAL_MS);
+  }
+}
+
+/** Terminates one Job member that is not signaled yet; the process may already have exited. */
+async function terminateJobMember(
+  api: JobBindings,
+  pid: number,
+  deadline: number,
+): Promise<void> {
+  const processHandle = api.symbols.OpenProcess(
+    PROCESS_TERMINATION_ACCESS,
+    0,
+    pid,
+  );
+  if (!processHandle) {
+    assert.equal(
+      api.symbols.GetLastError(),
+      ERROR_INVALID_PARAMETER,
+      `Cannot open Job descendant ${pid}`,
+    ); // already exited
+    return;
+  }
+  try {
+    if (api.symbols.WaitForSingleObject(processHandle, 0) === WAIT_OBJECT_0) {
+      return;
+    }
+    const terminated = api.symbols.TerminateProcess(processHandle, 1);
+    const terminationError = terminated ? 0 : api.symbols.GetLastError();
+    if (!terminated) {
+      // A self-exiting process can deny termination before its handle is signaled.
+      assert.equal(
+        terminationError,
+        ERROR_ACCESS_DENIED,
+        `Cannot terminate Job descendant ${pid} (Win32 ${terminationError})`,
+      );
+      await waitForSelfExit(api, processHandle, pid, deadline);
+    }
+  } finally {
+    api.symbols.CloseHandle(processHandle);
+  }
+}
+
 // The development-server worker remains alive until its Job descendants exit.
 // A worker exit notification alone does not establish that their ports are free.
 /**
@@ -339,80 +436,9 @@ export async function terminateAppDescendants(
   const deadline = Date.now() + timeoutMs;
   while (activeDescendants() > 0) {
     assert(Date.now() < deadline, "App Job descendant cleanup timed out");
-    let list = Buffer.alloc(
-      PROCESS_ID_LIST_HEADER_BYTES +
-        PROCESS_ID_BYTES * INITIAL_PROCESS_ID_CAPACITY,
-    ); // JOBOBJECT_BASIC_PROCESS_ID_LIST, Win64
-    while (
-      !api.symbols.QueryInformationJobObject(
-        handle,
-        JOB_OBJECT_BASIC_PROCESS_ID_LIST_CLASS,
-        ptr(list),
-        list.length,
-        null,
-      )
-    ) {
-      assert.equal(
-        api.symbols.GetLastError(),
-        ERROR_MORE_DATA,
-        "App Job process inventory failed",
-      );
-      assert(
-        list.length < MAX_PROCESS_ID_LIST_BYTES,
-        "App Job process inventory is too large",
-      );
-      list = Buffer.alloc(list.length * 2);
-    }
-    const count = list.readUInt32LE(PROCESS_ID_COUNT_OFFSET);
-    for (let index = 0; index < count; index++) {
-      const pid = Number(
-        list.readBigUInt64LE(
-          PROCESS_ID_LIST_HEADER_BYTES + index * PROCESS_ID_BYTES,
-        ),
-      );
-      if (pid === process.pid) {
-        continue;
-      }
-      const processHandle = api.symbols.OpenProcess(
-        PROCESS_TERMINATION_ACCESS,
-        0,
-        pid,
-      );
-      if (!processHandle) {
-        assert.equal(
-          api.symbols.GetLastError(),
-          ERROR_INVALID_PARAMETER,
-          `Cannot open Job descendant ${pid}`,
-        ); // already exited
-        continue;
-      }
-      try {
-        if (
-          api.symbols.WaitForSingleObject(processHandle, 0) !== WAIT_OBJECT_0
-        ) {
-          const terminated = api.symbols.TerminateProcess(processHandle, 1);
-          const terminationError = terminated ? 0 : api.symbols.GetLastError();
-          if (!terminated) {
-            // A self-exiting process can deny termination before its handle is signaled.
-            assert.equal(
-              terminationError,
-              ERROR_ACCESS_DENIED,
-              `Cannot terminate Job descendant ${pid} (Win32 ${terminationError})`,
-            );
-            while (
-              api.symbols.WaitForSingleObject(processHandle, 0) !==
-              WAIT_OBJECT_0
-            ) {
-              assert(
-                Date.now() < deadline,
-                `Job descendant ${pid} did not finish exiting`,
-              );
-              await Bun.sleep(PROCESS_EXIT_POLL_INTERVAL_MS);
-            }
-          }
-        }
-      } finally {
-        api.symbols.CloseHandle(processHandle);
+    for (const pid of queryJobProcessIds(api, handle)) {
+      if (pid !== process.pid) {
+        await terminateJobMember(api, pid, deadline);
       }
     }
     await Bun.sleep(PROCESS_EXIT_POLL_INTERVAL_MS);

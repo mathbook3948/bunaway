@@ -23,20 +23,29 @@ export function completedGeometryChanges(
   return changes;
 }
 
-/** Compare committed snapshots in a fixed order, suppressing unchanged native messages. */
-export function windowChanges(
-  previous: WindowSnapshot,
-  current: WindowSnapshot,
+type WindowState = WindowSnapshot["state"];
+
+/** Visibility and focus transitions, reported before any size-state change. */
+function visibilityChanges(
+  before: WindowState,
+  after: WindowState,
 ): WindowChange[] {
   const changes: WindowChange[] = [];
-  const before = previous.state;
-  const after = current.state;
   if (before.visible !== after.visible) {
     changes.push(after.visible ? "shown" : "hidden");
   }
   if (before.focused !== after.focused) {
     changes.push(after.focused ? "focus" : "blur");
   }
+  return changes;
+}
+
+/** Maximize, minimize and restore transitions in the order the host reports them. */
+function showStateChanges(
+  before: WindowState,
+  after: WindowState,
+): WindowChange[] {
+  const changes: WindowChange[] = [];
   if (before.maximized && !after.maximized) {
     changes.push("unmaximize");
   }
@@ -52,24 +61,52 @@ export function windowChanges(
   ) {
     changes.push("restore");
   }
+  return changes;
+}
+
+/** Fullscreen and always-on-top transitions. */
+function windowModeChanges(
+  before: WindowState,
+  after: WindowState,
+): WindowChange[] {
+  const changes: WindowChange[] = [];
   if (before.fullscreen !== after.fullscreen) {
     changes.push(after.fullscreen ? "enterFullscreen" : "leaveFullscreen");
   }
   if (before.alwaysOnTop !== after.alwaysOnTop) {
     changes.push(after.alwaysOnTop ? "enterAlwaysOnTop" : "leaveAlwaysOnTop");
   }
-  if (
-    previous.bounds.x !== current.bounds.x ||
-    previous.bounds.y !== current.bounds.y
-  ) {
+  return changes;
+}
+
+/** Position and size changes of the committed bounds. */
+function boundsChanges(
+  before: WindowBounds,
+  after: WindowBounds,
+): WindowChange[] {
+  const changes: WindowChange[] = [];
+  if (before.x !== after.x || before.y !== after.y) {
     changes.push("move");
   }
   if (
-    previous.bounds.width !== current.bounds.width ||
-    previous.bounds.height !== current.bounds.height ||
-    previous.bounds.dpi !== current.bounds.dpi
+    before.width !== after.width ||
+    before.height !== after.height ||
+    before.dpi !== after.dpi
   ) {
     changes.push("resize");
   }
   return changes;
+}
+
+/** Compare committed snapshots in a fixed order, suppressing unchanged native messages. */
+export function windowChanges(
+  previous: WindowSnapshot,
+  current: WindowSnapshot,
+): WindowChange[] {
+  return [
+    ...visibilityChanges(previous.state, current.state),
+    ...showStateChanges(previous.state, current.state),
+    ...windowModeChanges(previous.state, current.state),
+    ...boundsChanges(previous.bounds, current.bounds),
+  ];
 }

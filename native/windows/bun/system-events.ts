@@ -111,50 +111,7 @@ export class SystemEvents implements NativeSystemEvents {
       throw new Error("System event service is disposed.");
     }
     this.releaseWindow ??= this.hooks.open((message, wparam) => {
-      if (this.disposed) {
-        return;
-      }
-      let signal = signals.get(message);
-      if (message === WM_POWERBROADCAST) {
-        // WM_POWERBROADCAST, scalar event code only.
-        if (wparam === PBT_APMPOWERSTATUSCHANGE) {
-          signal = "powerStatusChanged";
-        } else if (wparam === PBT_APMSUSPEND) {
-          signal = "suspend";
-        } else if (wparam === PBT_APMRESUMEAUTOMATIC) {
-          // AUTOMATIC identifies the wake. RESUMESUSPEND only announces later user activity,
-          // so counting it as another resume would duplicate wakes across pump batches.
-          signal = "resume";
-        }
-      } else if (
-        message === WM_WTSSESSION_CHANGE &&
-        this.sessionSubscribers > 0
-      ) {
-        // WM_WTSSESSION_CHANGE
-        if (wparam === WTS_SESSION_LOCK) {
-          signal = "sessionLocked";
-        } else if (wparam === WTS_SESSION_UNLOCK) {
-          signal = "sessionUnlocked";
-        }
-      }
-      if (!signal) {
-        return;
-      }
-      if (lifecycleSignals.has(signal)) {
-        if (this.pending.at(-1) === signal) {
-          return;
-        }
-      } else {
-        if (this.invalidations.has(signal)) {
-          return;
-        }
-        this.invalidations.add(signal);
-      }
-      if (this.pending.length >= MAX_PENDING_SIGNALS) {
-        this.overflow = true;
-        return;
-      }
-      this.pending.push(signal);
+      this.receiveMessage(message, wparam);
     });
     const sessions = options.sessionNotifications === true;
     if (sessions && this.sessionSubscribers === 0) {
@@ -192,6 +149,64 @@ export class SystemEvents implements NativeSystemEvents {
         this.release();
       }
     };
+  }
+
+  /** Map a window message to a signal; only scalar event codes in `wparam` are inspected. */
+  private signalFor(message: number, wparam: bigint) {
+    const signal = signals.get(message);
+    if (message === WM_POWERBROADCAST) {
+      if (wparam === PBT_APMPOWERSTATUSCHANGE) {
+        return "powerStatusChanged";
+      }
+      if (wparam === PBT_APMSUSPEND) {
+        return "suspend";
+      }
+      if (wparam === PBT_APMRESUMEAUTOMATIC) {
+        // AUTOMATIC identifies the wake. RESUMESUSPEND only announces later user activity,
+        // so counting it as another resume would duplicate wakes across pump batches.
+        return "resume";
+      }
+      return signal;
+    }
+    if (message === WM_WTSSESSION_CHANGE && this.sessionSubscribers > 0) {
+      if (wparam === WTS_SESSION_LOCK) {
+        return "sessionLocked";
+      }
+      if (wparam === WTS_SESSION_UNLOCK) {
+        return "sessionUnlocked";
+      }
+    }
+    return signal;
+  }
+
+  /** Queue a signal for the next pump: lifecycle signals collapse repeats, the rest dedupe per batch. */
+  private enqueue(signal: NativeSystemSignal): void {
+    if (lifecycleSignals.has(signal)) {
+      if (this.pending.at(-1) === signal) {
+        return;
+      }
+    } else {
+      if (this.invalidations.has(signal)) {
+        return;
+      }
+      this.invalidations.add(signal);
+    }
+    if (this.pending.length >= MAX_PENDING_SIGNALS) {
+      this.overflow = true;
+      return;
+    }
+    this.pending.push(signal);
+  }
+
+  /** WndProc entry point: translate the message and queue it without running subscribers. */
+  private receiveMessage(message: number, wparam: bigint): void {
+    if (this.disposed) {
+      return;
+    }
+    const signal = this.signalFor(message, wparam);
+    if (signal) {
+      this.enqueue(signal);
+    }
   }
 
   publish(event: string, payload: JsonValue, requiredOperation: string): void {

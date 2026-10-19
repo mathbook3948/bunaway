@@ -120,13 +120,6 @@
     {
       "includes": [
         "docs/site/scripts/check-reference.mjs",
-        "native/host-api/bun/io-worker.ts",
-        "native/macos/bun/backend.ts",
-        "native/macos/bun/entry.ts",
-        "native/windows/bun/entry.ts",
-        "native/windows/bun/job.ts",
-        "native/windows/bun/system-events.ts",
-        "native/windows/bun/window-events.ts",
         "packages/cli/scripts/pack.ts",
         "packages/packaging/src/channels/windows/inno.ts",
         "packages/protocol/src/validation.ts",

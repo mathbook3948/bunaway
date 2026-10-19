@@ -177,53 +177,20 @@ export async function runWindowsApp(
   );
   const startHidden = desktopLaunch(launch?.argv ?? []).hidden;
   validateDesktopStartup(config.windows, app.desktop, startHidden);
-  config = {
-    ...config,
-    ...(config.app
-      ? {
-          app: {
-            ...config.app,
-            supportsHiddenStart: !!app.desktop?.tray,
-          },
-        }
-      : {}),
-    desktop: {
-      startHidden,
-      closeBehavior: app.desktop?.closeBehavior ?? "quit",
-      ...(app.desktop?.tray
-        ? {
-            tray: {
-              tooltip: app.desktop.tray.tooltip,
-            },
-          }
-        : {}),
-    },
-  };
-  const workerPath = new URL(
-    existsSync(resolve(import.meta.dir, "ui.ts")) ? "./ui.ts" : "./ui.js",
-    import.meta.url,
-  );
-  const worker = new Worker(workerPath, {
+  config = withDesktopStart(config, app.desktop, startHidden);
+  const worker = new Worker(workerModuleUrl("ui"), {
     workerData: config,
   });
-  const io = new Worker(
-    new URL(
-      existsSync(resolve(import.meta.dir, "host-operations.ts"))
-        ? "./host-operations.ts"
-        : "./host-operations.js",
-      import.meta.url,
-    ),
-    {
-      workerData: {
-        runtime: config.runtime,
-        app: config.app,
-        dataRoot: config.dataRoot,
-        assets: config.assets,
-        plugins,
-        policy: config.policy,
-      },
+  const io = new Worker(workerModuleUrl("host-operations"), {
+    workerData: {
+      runtime: config.runtime,
+      app: config.app,
+      dataRoot: config.dataRoot,
+      assets: config.assets,
+      plugins,
+      policy: config.policy,
     },
-  );
+  });
   let exitResolve: (value: number) => void = () => {};
   const exited = new Promise<number>((resolveExit) => {
     exitResolve = resolveExit;
@@ -356,145 +323,172 @@ export async function runWindowsApp(
       });
     }
   }
+  /** The session of `route`'s context, only while the route still names its view and document. */
+  function currentSession(route: Route) {
+    const session = sessions.get(route.context);
+    const current =
+      session?.route.viewId === route.viewId &&
+      session.route.documentGeneration === route.documentGeneration;
+    return current ? session : undefined;
+  }
+  /** The pending host call a packet answers, unless it was settled or belongs to another context. */
+  function callFor(packet: { requestId: string; context: HostContext }) {
+    const call = calls.get(packet.requestId);
+    return call?.context === packet.context ? call : undefined;
+  }
+  async function revokeSession(route: Route) {
+    const session = sessions.get(route.context);
+    sessions.delete(route.context);
+    channel.discardServers(route.context);
+    if (!failedSessions.delete(route.context)) {
+      cancelCalls(route.context);
+    }
+    await session?.session.close();
+  }
+  /**
+   * Packets handled even during shutdown. Returns undefined for any other packet so the caller
+   * can apply the shutdown gate before routing it.
+   */
+  function receiveLifecycle(packet: Packet): Promise<void> | undefined {
+    switch (packet.kind) {
+      case "diagnostic":
+        return log.write(packet.event, packet.fields);
+      case "ready":
+        readyResolve();
+        return Promise.resolve();
+      case "quit-request":
+        // Accept the request immediately so a signal can drain the UI channel
+        // while the app is still deciding whether to quit.
+        void desktop
+          .quit(packet.reason)
+          .then(async (allowed) => {
+            if (!allowed && !stopping) {
+              await channel.send({
+                kind: "quit-cancelled",
+              });
+            }
+          })
+          .catch(fail);
+        return Promise.resolve();
+      case "windows-empty":
+        if (!stopping) {
+          desktop.windowsEmpty();
+        }
+        return Promise.resolve();
+      case "session-end":
+        // Windows ends the session regardless of the app: commit before anything else so a pending
+        // beforeQuit result is ignored, then run the normal shutdown. The UI thread stays blocked
+        // in WM_ENDSESSION until settleSessionEnd(), which is immediate when cleanup already ended.
+        sessionEndRelease = packet.release;
+        desktop.commitShutdown("session-end");
+        stopping = true;
+        stopResolve();
+        if (appCleanupSettled) {
+          settleSessionEnd();
+        }
+        return Promise.resolve();
+      case "closing":
+        desktop.commitShutdown(packet.reason);
+        stopping = true;
+        stopResolve();
+        return Promise.resolve();
+      case "fatal":
+        fail(new Error(packet.error.message));
+        return Promise.resolve();
+      case "cleaned":
+        cleaned = true;
+        return Promise.resolve();
+      case "revoke":
+        return revokeSession(packet.route);
+      default:
+        return undefined;
+    }
+  }
   async function receive(packet: Packet) {
-    if (packet.kind === "diagnostic") {
-      await log.write(packet.event, packet.fields);
-      return;
-    }
-    if (packet.kind === "ready") {
-      readyResolve();
-      return;
-    }
-    if (packet.kind === "quit-request") {
-      // Accept the request immediately so a signal can drain the UI channel
-      // while the app is still deciding whether to quit.
-      void desktop
-        .quit(packet.reason)
-        .then(async (allowed) => {
-          if (!allowed && !stopping) {
-            await channel.send({
-              kind: "quit-cancelled",
-            });
-          }
-        })
-        .catch(fail);
-      return;
-    }
-    if (packet.kind === "windows-empty") {
-      if (!stopping) {
-        desktop.windowsEmpty();
-      }
-      return;
-    }
-    if (packet.kind === "session-end") {
-      // Windows ends the session regardless of the app: commit before anything else so a pending
-      // beforeQuit result is ignored, then run the normal shutdown. The UI thread stays blocked
-      // in WM_ENDSESSION until settleSessionEnd(), which is immediate when cleanup already ended.
-      sessionEndRelease = packet.release;
-      desktop.commitShutdown("session-end");
-      stopping = true;
-      stopResolve();
-      if (appCleanupSettled) {
-        settleSessionEnd();
-      }
-      return;
-    }
-    if (packet.kind === "closing") {
-      desktop.commitShutdown(packet.reason);
-      stopping = true;
-      stopResolve();
-      return;
-    }
-    if (packet.kind === "fatal") {
-      fail(new Error(packet.error.message));
-      return;
-    }
-    if (packet.kind === "cleaned") {
-      cleaned = true;
-      return;
-    }
-    if (packet.kind === "revoke") {
-      const session = sessions.get(packet.route.context);
-      sessions.delete(packet.route.context);
-      channel.discardServers(packet.route.context);
-      if (!failedSessions.delete(packet.route.context)) {
-        cancelCalls(packet.route.context);
-      }
-      await session?.session.close();
+    const lifecycle = receiveLifecycle(packet);
+    if (lifecycle !== undefined) {
+      await lifecycle;
       return;
     }
     if (stopping) {
       return;
     }
-    if (packet.kind === "native-event") {
-      const session = sessions.get(packet.route.context);
-      if (
-        !session ||
-        session.route.viewId !== packet.route.viewId ||
-        session.route.documentGeneration !== packet.route.documentGeneration
-      ) {
+    switch (packet.kind) {
+      case "native-event": {
+        if (currentSession(packet.route)) {
+          await core?.emitNative(
+            packet.route.context,
+            packet.event,
+            packet.payload,
+          );
+        }
         return;
       }
-      await core?.emitNative(
-        packet.route.context,
-        packet.event,
-        packet.payload,
-      );
-      return;
+      case "session-open": {
+        if (!core || sessions.has(packet.route.context)) {
+          throw new Error("Invalid session-open");
+        }
+        sessions.set(packet.route.context, {
+          route: packet.route,
+          session: core.openSession(packet.route.context, packet.route.viewId),
+        });
+        return;
+      }
+      case "client": {
+        const session = currentSession(packet.route);
+        if (!session) {
+          throw new Error("Invalid client route");
+        }
+        await session.session.receive(packet.message);
+        return;
+      }
+      default:
+        await receiveHostCallPacket(packet);
     }
-    if (packet.kind === "session-open") {
-      if (!core || sessions.has(packet.route.context)) {
-        throw new Error("Invalid session-open");
-      }
-      sessions.set(packet.route.context, {
-        route: packet.route,
-        session: core.openSession(packet.route.context, packet.route.viewId),
-      });
-    } else if (packet.kind === "client") {
-      const session = sessions.get(packet.route.context);
-      if (
-        !session ||
-        session.route.documentGeneration !== packet.route.documentGeneration ||
-        session.route.viewId !== packet.route.viewId
-      ) {
-        throw new Error("Invalid client route");
-      }
-      await session.session.receive(packet.message);
-    } else if (packet.kind === "prepare") {
-      const call = calls.get(packet.requestId);
-      if (!call || call.context !== packet.context || call.signal.aborted) {
+  }
+  /** Authorization and result packets of host calls; anything else is a protocol violation. */
+  async function receiveHostCallPacket(packet: Packet) {
+    switch (packet.kind) {
+      case "prepare": {
+        const call = callFor(packet);
+        if (!call || call.signal.aborted) {
+          return;
+        }
+        await channel.send({
+          kind: "grant",
+          context: packet.context,
+          requestId: packet.requestId,
+          allowed: true,
+        });
         return;
       }
-      await channel.send({
-        kind: "grant",
-        context: packet.context,
-        requestId: packet.requestId,
-        allowed: true,
-      });
-    } else if (packet.kind === "input-authorized") {
-      const call = calls.get(packet.requestId);
-      if (!call || call.context !== packet.context || call.signal.aborted) {
+      case "input-authorized": {
+        const call = callFor(packet);
+        if (!call || call.signal.aborted) {
+          return;
+        }
+        await ioChannel.send(packet);
         return;
       }
-      await ioChannel.send(packet);
-    } else if (packet.kind === "authorized") {
-      const call = calls.get(packet.requestId);
-      if (!call || call.context !== packet.context) {
+      case "authorized": {
+        const call = callFor(packet);
+        if (!call) {
+          return;
+        }
+        call.authorized = packet.allowed;
+        await ioChannel.send({
+          ...packet,
+          kind: "grant",
+        });
         return;
       }
-      call.authorized = packet.allowed;
-      await ioChannel.send({
-        ...packet,
-        kind: "grant",
-      });
-    } else if (packet.kind === "host-response") {
-      const call = calls.get(packet.requestId);
-      if (!call || call.context !== packet.context) {
+      case "host-response":
+        if (callFor(packet)) {
+          finishCall(packet.requestId, packet.response);
+        }
         return;
-      }
-      finishCall(packet.requestId, packet.response);
-    } else {
-      throw new Error("Unexpected main packet");
+      default:
+        throw new Error("Unexpected main packet");
     }
   }
   function finishCall(id: string, response: HostResponse) {
@@ -539,15 +533,7 @@ export async function runWindowsApp(
     if (failure) {
       throw failure;
     }
-    // The WebView version is informational: failure is logged and exposed as null.
-    let webview: string | null = null;
-    try {
-      webview = readWebViewVersion(config.loader);
-    } catch (cause) {
-      await log.write("webview-version-unavailable", {
-        message: cause instanceof Error ? cause.message : String(cause),
-      });
-    }
+    const webview = await webViewVersionOrNull(config.loader, log);
     booting = createCore(app, {
       app: toAppInfo(config.appMetadata, {
         bun: Bun.version,
@@ -841,6 +827,66 @@ export async function runWindowsApp(
   if (failure) {
     throw failure;
   }
+  return appResult(desktop, launch);
+}
+
+/** Adds the resolved desktop startup settings (and hidden-start support) to the UI Worker config. */
+function withDesktopStart(
+  config: UIConfig,
+  desktop: AppDefinition["desktop"],
+  startHidden: boolean,
+): UIConfig {
+  const tray = desktop?.tray
+    ? {
+        tray: {
+          tooltip: desktop.tray.tooltip,
+        },
+      }
+    : {};
+  return {
+    ...config,
+    ...(config.app
+      ? {
+          app: {
+            ...config.app,
+            supportsHiddenStart: !!desktop?.tray,
+          },
+        }
+      : {}),
+    desktop: {
+      startHidden,
+      closeBehavior: desktop?.closeBehavior ?? "quit",
+      ...tray,
+    },
+  };
+}
+
+/** Resolves a Worker entry next to this module: TypeScript in development, bundled JS when packaged. */
+function workerModuleUrl(name: "ui" | "host-operations"): URL {
+  const source = existsSync(resolve(import.meta.dir, `${name}.ts`));
+  return new URL(source ? `./${name}.ts` : `./${name}.js`, import.meta.url);
+}
+
+/** The WebView version is informational: failure is logged and exposed as null. */
+async function webViewVersionOrNull(
+  loader: UIConfig["loader"],
+  log: DiagnosticLog,
+): Promise<string | null> {
+  try {
+    return readWebViewVersion(loader);
+  } catch (cause) {
+    await log.write("webview-version-unavailable", {
+      message: cause instanceof Error ? cause.message : String(cause),
+    });
+    return null;
+  }
+}
+
+/** Exit code and, after an approved relaunch, the arguments of the new process. */
+function appResult(
+  desktop: DesktopLifecycle,
+  launch: LaunchArguments | undefined,
+): WindowsAppResult {
   const relaunch = desktop.relaunch;
   return {
     exitCode: desktop.exitCode,
