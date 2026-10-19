@@ -203,7 +203,7 @@ The CLI accepts an `app.windows` catalog with one unique policy view per window.
 이미 전체화면인 창은 유지되며 해제는 항상 허용한다.
 `setOpacity`/`getOpacity`는 별도 상태 없이 OS의 layered window alpha를 읽고 쓴다. 1 미만일 때만
 `WS_EX_LAYERED`를 켜고 `SetLayeredWindowAttributes(LWA_ALPHA)`로 적용하며 1이면 (click-through 중이 아닐 때) 스타일을 제거한다.
-`setHasShadow`/`hasShadow`는 `window-shadow.ts`가 `DwmSetWindowAttribute`/`DwmGetWindowAttribute`의 `DWMWA_NCRENDERING_POLICY`를 읽고 쓰며 상태를 따로 두지 않는다. dwmapi는 호출마다 열고 닫는다.
+`setHasShadow`/`hasShadow`는 `window-shadow.ts`가 `DwmSetWindowAttribute`로 `DWMWA_NCRENDERING_POLICY`를 쓰고 `DwmGetWindowAttribute`로 `DWMWA_NCRENDERING_ENABLED`를 읽으며(정책 속성은 쓰기 전용) 상태를 따로 두지 않는다. dwmapi는 호출마다 열고 닫는다.
 `titlebar: "custom"` 창만 `DWMNCRP_DISABLED`로 그림자를 끄고(`DWMNCRP_USEWINDOWSTYLE`로 복구), 네이티브 제목 표시줄 창은 `hasShadow`가 항상 true이며 `setHasShadow(false)`는 `UNSUPPORTED`다.
 `setIgnoreMouseEvents`/`isIgnoreMouseEvents`도 상태를 따로 두지 않고 `WS_EX_TRANSPARENT` 스타일을 읽고 쓴다. 켜면 `WS_EX_LAYERED`를
 함께 설정(알파 255)하고, 끄면 불투명도가 1일 때만 layered를 제거한다. `setOpacity(1)`도 click-through 중에는 layered를 유지한다.
