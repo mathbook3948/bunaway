@@ -389,3 +389,139 @@ test("definition and argv bounds reject reserved aliases, cycles, excessive data
     });
   }
 });
+
+test("malformed definitions are rejected with a message naming the broken part", () => {
+  const command = {
+    schema: z.object({}),
+  };
+  const reject = (definition: unknown, message: string) =>
+    expect(() => defineCLI(definition as never)).toThrow(message);
+  reject(
+    {
+      name: "",
+      ...command,
+    },
+    "Invalid CLI name.",
+  );
+  reject(
+    {
+      name: "x".repeat(129),
+      ...command,
+    },
+    "Invalid CLI name.",
+  );
+  reject(
+    {
+      name: "app",
+      description: "bad\u0000text",
+      ...command,
+    },
+    "Invalid CLI description.",
+  );
+  reject(
+    {
+      name: "app",
+      extra: 1,
+      ...command,
+    },
+    "Unknown CLI definition field.",
+  );
+  reject(
+    {
+      name: "app",
+      schema: {},
+    },
+    "CLI commands require a Zod schema.",
+  );
+  reject(
+    {
+      name: "app",
+      options: [],
+      ...command,
+    },
+    "Invalid CLI options.",
+  );
+  reject(
+    {
+      name: "app",
+      options: Object.fromEntries(
+        Array.from(
+          {
+            length: 65,
+          },
+          (_, index) => [
+            `o${index}`,
+            {
+              type: "boolean",
+            },
+          ],
+        ),
+      ),
+      ...command,
+    },
+    "Invalid CLI options.",
+  );
+  reject(
+    {
+      name: "app",
+      options: {
+        Bad: {
+          type: "boolean",
+        },
+      },
+      ...command,
+    },
+    "Invalid or reserved CLI option.",
+  );
+  reject(
+    {
+      name: "app",
+      options: {
+        a: {
+          type: "boolean",
+          short: "h",
+        },
+      },
+      ...command,
+    },
+    "Duplicate or reserved CLI short option.",
+  );
+  reject(
+    {
+      name: "app",
+      commands: [],
+    },
+    "Invalid CLI subcommands.",
+  );
+  reject(
+    {
+      name: "app",
+      commands: {
+        Bad: command,
+      },
+    },
+    "Invalid CLI subcommand name.",
+  );
+  reject(
+    {
+      name: "app",
+      commands: {},
+    },
+    "CLI groups require a subcommand.",
+  );
+  let deep: unknown = command;
+  for (let depth = 0; depth < 10; depth++) {
+    deep = {
+      commands: {
+        next: deep,
+      },
+    };
+  }
+  reject(
+    {
+      name: "app",
+      ...(deep as object),
+    },
+    "Invalid CLI command tree.",
+  );
+});

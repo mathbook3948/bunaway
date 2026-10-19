@@ -411,6 +411,302 @@ async function sha256(path: string): Promise<string> {
     .digest("hex");
 }
 
+const VERIFY_STAGE = "verify";
+
+function verifyError(code: Diagnostic["code"], message: string, path: string) {
+  return {
+    stage: VERIFY_STAGE,
+    code,
+    severity: "error",
+    message,
+    path,
+  } as const satisfies Diagnostic;
+}
+
+/** The input-error code, or the fallback for errors that are not artifact input errors. */
+function inputErrorCode(error: unknown, fallback: Diagnostic["code"]) {
+  return error instanceof ArtifactInputError ? error.code : fallback;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Run a tool and return its exit code and combined, trimmed output. */
+async function captureCommand(args: string[]): Promise<{
+  exit: number;
+  output: string;
+}> {
+  const child = Bun.spawn(args, {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exit, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  return {
+    exit,
+    output: (stdout + stderr).trim(),
+  };
+}
+
+/** Check one file against its recorded digest, and its execute permission where POSIX applies. */
+async function verifyFile(
+  diagnostics: Diagnostic[],
+  root: string,
+  path: string,
+  label: string,
+  expected?: string,
+  executable = false,
+): Promise<void> {
+  try {
+    const canonicalPath = await inputPath(root, path);
+    // Windows does not expose POSIX execute permissions.
+    if (executable && process.platform !== "win32") {
+      try {
+        await access(canonicalPath, constants.X_OK);
+      } catch {
+        throw new ArtifactInputError(
+          CODES.INPUT_TAMPERED,
+          "Build input is not executable.",
+        );
+      }
+    }
+    if (expected !== undefined && (await sha256(canonicalPath)) !== expected) {
+      diagnostics.push(
+        verifyError(CODES.INPUT_TAMPERED, `${label} hash mismatch.`, path),
+      );
+    }
+  } catch (error) {
+    diagnostics.push(
+      verifyError(
+        inputErrorCode(error, CODES.INPUT_MISSING),
+        `${label}: ${errorMessage(error)}`,
+        path,
+      ),
+    );
+  }
+}
+
+/** The macOS bundle's Info.plist must be valid and describe the build host. */
+async function verifyBundlePlist(
+  diagnostics: Diagnostic[],
+  artifact: BuildArtifact,
+  manifest: PackageManifest,
+): Promise<void> {
+  const plistPath = resolve(artifact.dir, "Contents/Info.plist");
+  try {
+    const canonicalPath = await inputPath(artifact.dir, plistPath);
+    const metadata = bundleMetadata(await readFile(canonicalPath, "utf8"));
+    if (process.platform === "darwin") {
+      const lint = await captureCommand([
+        "/usr/bin/plutil",
+        "-lint",
+        "--",
+        canonicalPath,
+      ]);
+      if (lint.exit !== 0) {
+        throw new Error(`Invalid Apple plist: ${lint.output}`);
+      }
+    }
+    for (const [key, expected] of [
+      [
+        "CFBundleExecutable",
+        basename(artifact.executable),
+      ],
+      [
+        "CFBundleIdentifier",
+        manifest.app.id,
+      ],
+      [
+        "CFBundlePackageType",
+        "APPL",
+      ],
+    ] as const) {
+      if (plistString(metadata.get(key), "string") !== expected) {
+        throw new Error(`Info.plist ${key} does not match the build artifact.`);
+      }
+    }
+    const bundleExecutable = await inputPath(
+      artifact.dir,
+      resolve(artifact.dir, "Contents/MacOS", basename(artifact.executable)),
+    );
+    if (
+      bundleExecutable !== (await inputPath(artifact.dir, artifact.executable))
+    ) {
+      throw new Error(
+        "Info.plist executable does not resolve to the build host.",
+      );
+    }
+  } catch (error) {
+    diagnostics.push(
+      verifyError(
+        inputErrorCode(error, CODES.INPUT_TAMPERED),
+        `Info.plist: ${errorMessage(error)}`,
+        plistPath,
+      ),
+    );
+  }
+}
+
+/** Windows packages carry a compiled Bun executable whose name and digests match the manifest. */
+async function verifyWindowsHost(
+  diagnostics: Diagnostic[],
+  artifact: BuildArtifact,
+  manifest: PackageManifest,
+  manifestPath: string,
+  hostDigest: string | undefined,
+): Promise<void> {
+  const host = manifest.host;
+  if (host?.kind !== "bun-compiled" || typeof host.executable !== "string") {
+    diagnostics.push(
+      verifyError(
+        CODES.INPUT_UNEXPECTED,
+        "Windows requires a compiled Bun app.",
+        manifestPath,
+      ),
+    );
+    return;
+  }
+  if (!isWindowsExecutableName(host.executable)) {
+    diagnostics.push(
+      verifyError(
+        CODES.INPUT_UNEXPECTED,
+        `Windows cannot create an executable named "${host.executable}"; use a valid .exe file name.`,
+        manifestPath,
+      ),
+    );
+    return;
+  }
+  const executable = resolve(artifact.packageDir, host.executable);
+  if (artifact.executable !== executable) {
+    diagnostics.push(
+      verifyError(
+        CODES.INPUT_UNEXPECTED,
+        "Windows executable does not match the build manifest.",
+        artifact.executable,
+      ),
+    );
+  }
+  if (
+    !isDigest(host.sha256) ||
+    (host.packagedSha256 !== undefined && !isDigest(host.packagedSha256))
+  ) {
+    diagnostics.push(
+      verifyError(
+        CODES.INPUT_MISSING,
+        "Windows build manifest has an invalid compiled executable hash.",
+        manifestPath,
+      ),
+    );
+  } else {
+    await verifyFile(
+      diagnostics,
+      artifact.packageDir,
+      executable,
+      "Compiled app",
+      hostDigest,
+    );
+  }
+}
+
+/** macOS packages carry a compiled, executable host; its final digest is only checkable on macOS. */
+async function verifyMacosHost(
+  diagnostics: Diagnostic[],
+  artifact: BuildArtifact,
+  manifest: PackageManifest,
+  manifestPath: string,
+  hostDigest: string | undefined,
+): Promise<void> {
+  if (!hostDigest && process.platform !== "darwin") {
+    diagnostics.push(
+      verifyError(
+        CODES.INPUT_MISSING,
+        "Build manifest has no final host executable hash; verify this signed bundle on macOS.",
+        artifact.executable,
+      ),
+    );
+  }
+  if (manifest.host?.kind !== "bun-compiled") {
+    diagnostics.push(
+      verifyError(
+        CODES.INPUT_UNEXPECTED,
+        "macOS requires a compiled Bun app.",
+        manifestPath,
+      ),
+    );
+  }
+  await verifyFile(
+    diagnostics,
+    artifact.dir,
+    artifact.executable,
+    "Host executable",
+    hostDigest,
+    true,
+  );
+}
+
+/** The macOS home document must be a web asset listed in the manifest. */
+async function verifyMacosHome(
+  diagnostics: Diagnostic[],
+  artifact: BuildArtifact,
+  manifest: PackageManifest,
+): Promise<void> {
+  let homePath = resolve(artifact.packageDir, "assets/app.json");
+  try {
+    const appPath = await inputPath(artifact.packageDir, homePath);
+    const app: unknown = JSON.parse(await readFile(appPath, "utf8"));
+    const asset = homeAsset(isRecord(app) ? app.home : undefined);
+    homePath = resolve(artifact.packageDir, asset);
+    const web = resolve(artifact.packageDir, "assets/web");
+    await inputPath(artifact.packageDir, web, true);
+    await inputPath(web, homePath);
+    if (!Object.hasOwn(manifest.assets, asset)) {
+      throw new ArtifactInputError(
+        CODES.INPUT_MISSING,
+        `Home document is missing from the manifest: ${asset}`,
+      );
+    }
+  } catch (error) {
+    diagnostics.push(
+      verifyError(
+        inputErrorCode(error, CODES.INPUT_MISSING),
+        errorMessage(error),
+        homePath,
+      ),
+    );
+  }
+}
+
+/** An unsigned-digest macOS bundle is verified through its code signature instead. */
+async function verifyMacosSignature(
+  diagnostics: Diagnostic[],
+  artifact: BuildArtifact,
+): Promise<void> {
+  try {
+    const verification = await captureCommand([
+      "/usr/bin/codesign",
+      "--verify",
+      "--deep",
+      "--strict",
+      artifact.dir,
+    ]);
+    if (verification.exit !== 0) {
+      throw new Error(`Invalid code signature: ${verification.output}`);
+    }
+  } catch (error) {
+    diagnostics.push(
+      verifyError(
+        CODES.INPUT_TAMPERED,
+        `macOS bundle integrity: ${errorMessage(error)}`,
+        artifact.dir,
+      ),
+    );
+  }
+}
+
 /**
  * Checks artifact paths, required inputs, metadata and recorded digests before
  * an adapter can stage files. Failures are returned as diagnostics, with
@@ -423,7 +719,6 @@ export async function verifyArtifact(args: {
 }): Promise<Diagnostic[]> {
   const { artifact, manifest, channel } = args;
   const diagnostics: Diagnostic[] = [];
-  const stage = "verify";
   const platform = platformOf(channel);
   const manifestPath = resolve(artifact.packageDir, "manifest.json");
   try {
@@ -431,298 +726,63 @@ export async function verifyArtifact(args: {
     await inputPath(artifact.packageDir, manifestPath);
     validateManifest(manifest);
   } catch (error) {
-    diagnostics.push({
-      stage,
-      code:
-        error instanceof ArtifactInputError ? error.code : CODES.INPUT_MISSING,
-      severity: "error",
-      message: error instanceof Error ? error.message : String(error),
-      path: manifestPath,
-    });
+    diagnostics.push(
+      verifyError(
+        inputErrorCode(error, CODES.INPUT_MISSING),
+        errorMessage(error),
+        manifestPath,
+      ),
+    );
     return diagnostics;
   }
-
-  async function verifyFile(
-    root: string,
-    path: string,
-    label: string,
-    expected?: string,
-    executable = false,
-  ) {
-    try {
-      const canonicalPath = await inputPath(root, path);
-      // Windows does not expose POSIX execute permissions.
-      if (executable && process.platform !== "win32") {
-        try {
-          await access(canonicalPath, constants.X_OK);
-        } catch {
-          throw new ArtifactInputError(
-            CODES.INPUT_TAMPERED,
-            "Build input is not executable.",
-          );
-        }
-      }
-      if (
-        expected !== undefined &&
-        (await sha256(canonicalPath)) !== expected
-      ) {
-        diagnostics.push({
-          stage,
-          code: CODES.INPUT_TAMPERED,
-          severity: "error",
-          message: `${label} hash mismatch.`,
-          path,
-        });
-      }
-    } catch (error) {
-      diagnostics.push({
-        stage,
-        code:
-          error instanceof ArtifactInputError
-            ? error.code
-            : CODES.INPUT_MISSING,
-        severity: "error",
-        message: `${label}: ${error instanceof Error ? error.message : String(error)}`,
-        path,
-      });
-    }
-  }
-
   if (platform === "macos") {
-    const plistPath = resolve(artifact.dir, "Contents/Info.plist");
-    try {
-      const canonicalPath = await inputPath(artifact.dir, plistPath);
-      const metadata = bundleMetadata(await readFile(canonicalPath, "utf8"));
-      if (process.platform === "darwin") {
-        const validation = Bun.spawn(
-          [
-            "/usr/bin/plutil",
-            "-lint",
-            "--",
-            canonicalPath,
-          ],
-          {
-            stdout: "pipe",
-            stderr: "pipe",
-          },
-        );
-        const [exit, stdout, stderr] = await Promise.all([
-          validation.exited,
-          new Response(validation.stdout).text(),
-          new Response(validation.stderr).text(),
-        ]);
-        if (exit !== 0) {
-          throw new Error(`Invalid Apple plist: ${(stdout + stderr).trim()}`);
-        }
-      }
-      for (const [key, expected] of [
-        [
-          "CFBundleExecutable",
-          basename(artifact.executable),
-        ],
-        [
-          "CFBundleIdentifier",
-          manifest.app.id,
-        ],
-        [
-          "CFBundlePackageType",
-          "APPL",
-        ],
-      ] as const) {
-        if (plistString(metadata.get(key), "string") !== expected) {
-          throw new Error(
-            `Info.plist ${key} does not match the build artifact.`,
-          );
-        }
-      }
-      const bundleExecutable = await inputPath(
-        artifact.dir,
-        resolve(artifact.dir, "Contents/MacOS", basename(artifact.executable)),
-      );
-      if (
-        bundleExecutable !==
-        (await inputPath(artifact.dir, artifact.executable))
-      ) {
-        throw new Error(
-          "Info.plist executable does not resolve to the build host.",
-        );
-      }
-    } catch (error) {
-      diagnostics.push({
-        stage,
-        code:
-          error instanceof ArtifactInputError
-            ? error.code
-            : CODES.INPUT_TAMPERED,
-        severity: "error",
-        message: `Info.plist: ${error instanceof Error ? error.message : String(error)}`,
-        path: plistPath,
-      });
-    }
+    await verifyBundlePlist(diagnostics, artifact, manifest);
   }
-
   // sourceSha256 predates macOS bundle signing and is provenance, not a final digest.
   const hostDigest = manifest.host?.packagedSha256 ?? manifest.host?.sha256;
   if (platform === "windows") {
-    const host = manifest.host;
-    if (host?.kind !== "bun-compiled" || typeof host.executable !== "string") {
-      diagnostics.push({
-        stage,
-        code: CODES.INPUT_UNEXPECTED,
-        severity: "error",
-        message: "Windows requires a compiled Bun app.",
-        path: manifestPath,
-      });
-    } else if (!isWindowsExecutableName(host.executable)) {
-      diagnostics.push({
-        stage,
-        code: CODES.INPUT_UNEXPECTED,
-        severity: "error",
-        message: `Windows cannot create an executable named "${host.executable}"; use a valid .exe file name.`,
-        path: manifestPath,
-      });
-    } else {
-      const executable = resolve(artifact.packageDir, host.executable);
-      if (artifact.executable !== executable) {
-        diagnostics.push({
-          stage,
-          code: CODES.INPUT_UNEXPECTED,
-          severity: "error",
-          message: "Windows executable does not match the build manifest.",
-          path: artifact.executable,
-        });
-      }
-      if (
-        !isDigest(host.sha256) ||
-        (host.packagedSha256 !== undefined && !isDigest(host.packagedSha256))
-      ) {
-        diagnostics.push({
-          stage,
-          code: CODES.INPUT_MISSING,
-          severity: "error",
-          message:
-            "Windows build manifest has an invalid compiled executable hash.",
-          path: manifestPath,
-        });
-      } else {
-        await verifyFile(
-          artifact.packageDir,
-          executable,
-          "Compiled app",
-          hostDigest,
-        );
-      }
-    }
-  }
-  if (!hostDigest && platform === "macos" && process.platform !== "darwin") {
-    diagnostics.push({
-      stage,
-      code: CODES.INPUT_MISSING,
-      severity: "error",
-      message:
-        "Build manifest has no final host executable hash; verify this signed bundle on macOS.",
-      path: artifact.executable,
-    });
+    await verifyWindowsHost(
+      diagnostics,
+      artifact,
+      manifest,
+      manifestPath,
+      hostDigest,
+    );
   }
   if (platform === "macos") {
-    if (manifest.host?.kind !== "bun-compiled") {
-      diagnostics.push({
-        stage,
-        code: CODES.INPUT_UNEXPECTED,
-        severity: "error",
-        message: "macOS requires a compiled Bun app.",
-        path: manifestPath,
-      });
-    }
-    await verifyFile(
-      artifact.dir,
-      artifact.executable,
-      "Host executable",
+    await verifyMacosHost(
+      diagnostics,
+      artifact,
+      manifest,
+      manifestPath,
       hostDigest,
-      true,
     );
   }
   for (const path of REQUIRED_ASSETS[platform]) {
     if (!Object.hasOwn(manifest.assets, path)) {
-      diagnostics.push({
-        stage,
-        code: CODES.INPUT_MISSING,
-        severity: "error",
-        message: `Required build input is missing from the manifest: ${path}`,
-        path: resolve(artifact.packageDir, path),
-      });
+      diagnostics.push(
+        verifyError(
+          CODES.INPUT_MISSING,
+          `Required build input is missing from the manifest: ${path}`,
+          resolve(artifact.packageDir, path),
+        ),
+      );
     }
   }
   if (platform === "macos") {
-    let homePath = resolve(artifact.packageDir, "assets/app.json");
-    try {
-      const appPath = await inputPath(artifact.packageDir, homePath);
-      const app: unknown = JSON.parse(await readFile(appPath, "utf8"));
-      const asset = homeAsset(isRecord(app) ? app.home : undefined);
-      homePath = resolve(artifact.packageDir, asset);
-      const web = resolve(artifact.packageDir, "assets/web");
-      await inputPath(artifact.packageDir, web, true);
-      await inputPath(web, homePath);
-      if (!Object.hasOwn(manifest.assets, asset)) {
-        throw new ArtifactInputError(
-          CODES.INPUT_MISSING,
-          `Home document is missing from the manifest: ${asset}`,
-        );
-      }
-    } catch (error) {
-      diagnostics.push({
-        stage,
-        code:
-          error instanceof ArtifactInputError
-            ? error.code
-            : CODES.INPUT_MISSING,
-        severity: "error",
-        message: error instanceof Error ? error.message : String(error),
-        path: homePath,
-      });
-    }
+    await verifyMacosHome(diagnostics, artifact, manifest);
   }
   for (const [relative, expected] of Object.entries(manifest.assets)) {
-    const path = resolve(artifact.packageDir, relative);
     await verifyFile(
+      diagnostics,
       artifact.packageDir,
-      path,
+      resolve(artifact.packageDir, relative),
       `Manifest asset ${relative}`,
       expected,
     );
   }
   if (platform === "macos" && !hostDigest && diagnostics.length === 0) {
-    try {
-      const validation = Bun.spawn(
-        [
-          "/usr/bin/codesign",
-          "--verify",
-          "--deep",
-          "--strict",
-          artifact.dir,
-        ],
-        {
-          stdout: "pipe",
-          stderr: "pipe",
-        },
-      );
-      const [exit, stdout, stderr] = await Promise.all([
-        validation.exited,
-        new Response(validation.stdout).text(),
-        new Response(validation.stderr).text(),
-      ]);
-      if (exit !== 0) {
-        throw new Error(`Invalid code signature: ${(stdout + stderr).trim()}`);
-      }
-    } catch (error) {
-      diagnostics.push({
-        stage,
-        code: CODES.INPUT_TAMPERED,
-        severity: "error",
-        message: `macOS bundle integrity: ${error instanceof Error ? error.message : String(error)}`,
-        path: artifact.dir,
-      });
-    }
+    await verifyMacosSignature(diagnostics, artifact);
   }
   return diagnostics;
 }

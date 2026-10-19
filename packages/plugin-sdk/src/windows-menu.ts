@@ -5,11 +5,11 @@ import type {
   NativeMenuRole,
 } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
+import { withWide } from "./win32.ts";
 import {
   createMenuIconBitmap,
   releaseMenuIconBitmap,
 } from "./windows-menu-icon.ts";
-import { withWide } from "./win32.ts";
 
 const MF_POPUP = 0x10;
 const MF_SEPARATOR = 0x800;
@@ -37,6 +37,14 @@ export type SelectedMenuItem = {
   id: string;
   role?: NativeMenuRole | undefined;
 };
+
+/** Every item kind that is appended with a label, that is, all but the separator. */
+type MenuEntry = Exclude<
+  NativeMenuItem,
+  {
+    type: "separator";
+  }
+>;
 
 /** A single native popup tree. Destroying its root releases all attached submenu handles. */
 export class NativePopupMenu {
@@ -141,6 +149,107 @@ export class NativePopupMenu {
     }
   }
 
+  /** Make the menu report selections by HMENU and position instead of command ID. */
+  private notifyByPosition(menu: bigint) {
+    // WM_MENUCOMMAND carries both HMENU and position, avoiding reused command IDs.
+    const info = Buffer.alloc(40); // MENUINFO, Win64
+    info.writeUInt32LE(40, 0);
+    info.writeUInt32LE(0x10, 4); // MIM_STYLE
+    info.writeUInt32LE(0x08000000, 8); // MNS_NOTIFYBYPOS
+    assert(
+      this.native.symbols.SetMenuInfo(menu, ptr(info)),
+      "Menu notification setup failed.",
+    );
+  }
+
+  /**
+   * Resolve the item's command and base flags. A submenu is built first and its handle is the
+   * command; a leaf registers a command ID only while it and every ancestor are enabled.
+   */
+  private entryCommand(item: MenuEntry, enabled: boolean) {
+    let flags = item.enabled ? 0 : MF_GRAYED;
+    let command: bigint;
+    if (item.type === "submenu") {
+      command = this.build(item.items, false, enabled && item.enabled);
+      flags |= MF_POPUP;
+    } else {
+      command = BigInt(this.nextCommand++);
+      if (enabled && item.enabled) {
+        this.commands.set(Number(command), {
+          id: item.id,
+          role: item.type === "item" ? item.role : undefined,
+        });
+      }
+      if (item.checked) {
+        flags |= MF_CHECKED;
+      }
+    }
+    return {
+      flags,
+      command,
+    };
+  }
+
+  /** Append the item's label; a submenu whose append fails is destroyed because no parent owns it yet. */
+  private appendLabel(
+    menu: bigint,
+    item: MenuEntry,
+    flags: number,
+    command: bigint,
+    menuBar: boolean,
+  ) {
+    // Labels are literal text. A role item in a popup or submenu shows its shortcut as
+    // display-only text after a tab; the page handles the real key itself. Top-level menu-bar
+    // items have no accelerator column, so the text would render as a stray label tail.
+    const accelerator =
+      !menuBar && item.type === "item" && item.role
+        ? `\t${ROLE_ACCELERATORS[item.role]}`
+        : "";
+    const appended = withWide(
+      `${item.label.replaceAll("&", "&&")}${accelerator}`,
+      (label) => this.native.symbols.AppendMenuW(menu, flags, command, label),
+    );
+    if (!appended && item.type === "submenu") {
+      this.native.symbols.DestroyMenu(command);
+    }
+    assert(appended, "Menu item creation failed.");
+  }
+
+  /** Show a radio item with a radio bullet instead of a check mark. */
+  private markRadio(menu: bigint, command: bigint) {
+    const info = Buffer.alloc(MENUITEMINFO_SIZE);
+    info.writeUInt32LE(MENUITEMINFO_SIZE, 0);
+    info.writeUInt32LE(MIIM_FTYPE, 4);
+    info.writeUInt32LE(MFT_RADIOCHECK, 8);
+    assert(
+      this.native.symbols.SetMenuItemInfoW(menu, Number(command), 0, ptr(info)),
+      "Menu radio presentation failed.",
+    );
+  }
+
+  /** Append one visible, non-separator item at `position` with its icon and radio presentation. */
+  private appendEntry(
+    menu: bigint,
+    item: MenuEntry,
+    position: number,
+    menuBar: boolean,
+    enabled: boolean,
+  ) {
+    const { flags, command } = this.entryCommand(item, enabled);
+    this.appendLabel(menu, item, flags, command, menuBar);
+    // Top-level menu-bar items have no image column, so they never get a bitmap.
+    if (
+      !menuBar &&
+      (item.type === "item" || item.type === "submenu") &&
+      item.icon
+    ) {
+      this.setIcon(menu, position, item.icon);
+    }
+    if (item.type === "radio") {
+      this.markRadio(menu, command);
+    }
+  }
+
   private build(
     items: readonly NativeMenuItem[],
     menuBar = false,
@@ -152,15 +261,7 @@ export class NativePopupMenu {
     assert(menu, "Menu creation failed.");
     try {
       if (this.menuBar) {
-        // WM_MENUCOMMAND carries both HMENU and position, avoiding reused command IDs.
-        const info = Buffer.alloc(40); // MENUINFO, Win64
-        info.writeUInt32LE(40, 0);
-        info.writeUInt32LE(0x10, 4); // MIM_STYLE
-        info.writeUInt32LE(0x08000000, 8); // MNS_NOTIFYBYPOS
-        assert(
-          this.native.symbols.SetMenuInfo(menu, ptr(info)),
-          "Menu notification setup failed.",
-        );
+        this.notifyByPosition(menu);
       }
       // Visible items only: the position of an appended item is the count before it.
       let position = 0;
@@ -173,66 +274,10 @@ export class NativePopupMenu {
             this.native.symbols.AppendMenuW(menu, MF_SEPARATOR, 0n, null),
             "Menu separator failed.",
           );
-          position++;
-          continue;
-        }
-        let flags = item.enabled ? 0 : MF_GRAYED;
-        let command: bigint;
-        if (item.type === "submenu") {
-          command = this.build(item.items, false, enabled && item.enabled);
-          flags |= MF_POPUP;
         } else {
-          command = BigInt(this.nextCommand++);
-          if (enabled && item.enabled) {
-            this.commands.set(Number(command), {
-              id: item.id,
-              role: item.type === "item" ? item.role : undefined,
-            });
-          }
-          if (item.checked) {
-            flags |= MF_CHECKED;
-          }
-        }
-        // Labels are literal text. A role item in a popup or submenu shows its shortcut as
-        // display-only text after a tab; the page handles the real key itself. Top-level menu-bar
-        // items have no accelerator column, so the text would render as a stray label tail.
-        const accelerator =
-          !menuBar && item.type === "item" && item.role
-            ? `\t${ROLE_ACCELERATORS[item.role]}`
-            : "";
-        const appended = withWide(
-          `${item.label.replaceAll("&", "&&")}${accelerator}`,
-          (label) =>
-            this.native.symbols.AppendMenuW(menu, flags, command, label),
-        );
-        if (!appended && item.type === "submenu") {
-          this.native.symbols.DestroyMenu(command);
-        }
-        assert(appended, "Menu item creation failed.");
-        // Top-level menu-bar items have no image column, so they never get a bitmap.
-        if (
-          !menuBar &&
-          (item.type === "item" || item.type === "submenu") &&
-          item.icon
-        ) {
-          this.setIcon(menu, position, item.icon);
+          this.appendEntry(menu, item, position, menuBar, enabled);
         }
         position++;
-        if (item.type === "radio") {
-          const info = Buffer.alloc(MENUITEMINFO_SIZE);
-          info.writeUInt32LE(MENUITEMINFO_SIZE, 0);
-          info.writeUInt32LE(MIIM_FTYPE, 4);
-          info.writeUInt32LE(MFT_RADIOCHECK, 8);
-          assert(
-            this.native.symbols.SetMenuItemInfoW(
-              menu,
-              Number(command),
-              0,
-              ptr(info),
-            ),
-            "Menu radio presentation failed.",
-          );
-        }
       }
       this.handles.add(menu);
       return menu;

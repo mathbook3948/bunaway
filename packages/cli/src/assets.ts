@@ -170,85 +170,116 @@ export async function bundleWindowsAssets(
   );
 }
 
-/**
- * Bundle the Windows bootstrap, app entry and host workers into the asset directory.
- * With project metadata, development builds retain shared SDK entries; return asset basenames.
- */
-export async function bundleWindowsHost(
-  source: string,
-  destination: string,
+type SdkPlugin = Awaited<ReturnType<typeof sdkPlugin>>;
+
+/** Plugins for the host build: the caller's list, else those installed in a project that has a package.json. */
+async function hostPlugins(
   appEntry: string,
-  project?: string,
-  development = false,
-  installed?: readonly InstalledPlugin[],
-): Promise<string[]> {
-  // Bundle all entries together so lazy adapters and their owning host share error and SDK classes.
+  project: string | undefined,
+  installed: readonly InstalledPlugin[] | undefined,
+): Promise<readonly InstalledPlugin[]> {
+  if (installed !== undefined) {
+    return installed;
+  }
   const pluginProject = project ?? dirname(appEntry);
-  const plugins =
-    installed ??
-    (project ||
+  return project ||
     (await Bun.file(resolve(pluginProject, "package.json")).exists())
-      ? await installedPlugins(pluginProject, (await release()).version)
-      : []);
-  const sdk = project ? await sdkPlugin(project, [], plugins) : undefined;
-  await writePluginManifest(destination, plugins);
-  const sharedEntries = new Map<string, string>();
-  if (development && sdk && project) {
-    const require = createRequire(resolve(project, "package.json"));
-    for (const entry of sdk.entries) {
-      sharedEntries.set(...entry);
-    }
-    for (const plugin of plugins) {
-      const manifest = await json(resolve(plugin.root, "package.json"));
-      const exports =
-        manifest && typeof manifest === "object" && "exports" in manifest
-          ? manifest.exports
-          : undefined;
-      const subpaths =
-        exports &&
-        typeof exports === "object" &&
-        Object.keys(exports).some((key) => key.startsWith("."))
-          ? Object.keys(exports)
-          : [
-              ".",
-            ];
-      for (const subpath of subpaths) {
-        if (
-          subpath !== "." &&
-          (!subpath.startsWith("./") || subpath.includes("*"))
-        ) {
-          continue;
-        }
-        const name =
-          subpath === "."
-            ? plugin.packageName
-            : plugin.packageName + subpath.slice(1);
-        for (const kind of [
-          "import",
-          "require",
-        ] as const) {
-          let source: string;
-          try {
-            source =
-              kind === "require"
-                ? require.resolve(name)
-                : Bun.resolveSync(name, project);
-          } catch {
-            // Disabled exports are not shared; actual imports still fail in the app build.
-            continue;
-          }
-          const entry = await realpath(source);
-          // Assets use Bun's loaders instead of the executable-module wrappers.
-          if (/\.[cm]?[jt]sx?$/.test(entry) && !/\.d\.[cm]?ts$/.test(entry)) {
-            sharedEntries.set(
-              kind === "require" ? `require:${name}` : name,
-              entry,
-            );
-          }
-        }
+    ? await installedPlugins(pluginProject, (await release()).version)
+    : [];
+}
+
+/** Subpaths a package exports; a package without subpath exports shares only its root. */
+function exportedSubpaths(manifest: unknown): string[] {
+  const exports =
+    manifest && typeof manifest === "object" && "exports" in manifest
+      ? manifest.exports
+      : undefined;
+  return exports &&
+    typeof exports === "object" &&
+    Object.keys(exports).some((key) => key.startsWith("."))
+    ? Object.keys(exports)
+    : [
+        ".",
+      ];
+}
+
+/** Wildcard and non-subpath export keys cannot be named as one shared entry. */
+function isSharedSubpath(subpath: string): boolean {
+  return (
+    subpath === "." || (subpath.startsWith("./") && !subpath.includes("*"))
+  );
+}
+
+/** Resolve one export for the import or require condition; disabled exports resolve to nothing. */
+function resolveSharedSource(
+  name: string,
+  kind: "import" | "require",
+  require: ReturnType<typeof createRequire>,
+  project: string,
+): string | undefined {
+  try {
+    return kind === "require"
+      ? require.resolve(name)
+      : Bun.resolveSync(name, project);
+  } catch {
+    // Disabled exports are not shared; actual imports still fail in the app build.
+    return undefined;
+  }
+}
+
+/** Assets use Bun's loaders instead of the executable-module wrappers. */
+function isBundledModule(entry: string): boolean {
+  return /\.[cm]?[jt]sx?$/.test(entry) && !/\.d\.[cm]?ts$/.test(entry);
+}
+
+/** Add the import and require entries of every shareable export of one plugin package. */
+async function addPluginEntries(
+  plugin: InstalledPlugin,
+  project: string,
+  require: ReturnType<typeof createRequire>,
+  sharedEntries: Map<string, string>,
+): Promise<void> {
+  const manifest = await json(resolve(plugin.root, "package.json"));
+  for (const subpath of exportedSubpaths(manifest).filter(isSharedSubpath)) {
+    const name =
+      subpath === "."
+        ? plugin.packageName
+        : plugin.packageName + subpath.slice(1);
+    for (const kind of [
+      "import",
+      "require",
+    ] as const) {
+      const source = resolveSharedSource(name, kind, require, project);
+      if (source === undefined) {
+        continue;
+      }
+      const entry = await realpath(source);
+      if (isBundledModule(entry)) {
+        sharedEntries.set(kind === "require" ? `require:${name}` : name, entry);
       }
     }
   }
+}
+
+/** Development builds share the SDK and plugin entries between the host and reloaded apps. */
+async function collectSharedEntries(
+  sdk: SdkPlugin,
+  project: string,
+  plugins: readonly InstalledPlugin[],
+): Promise<Map<string, string>> {
+  const sharedEntries = new Map<string, string>();
+  const require = createRequire(resolve(project, "package.json"));
+  for (const entry of sdk.entries) {
+    sharedEntries.set(...entry);
+  }
+  for (const plugin of plugins) {
+    await addPluginEntries(plugin, project, require, sharedEntries);
+  }
+  return sharedEntries;
+}
+
+/** Give each distinct shared source one generated entry name, whatever names import it. */
+function nameSharedEntries(sharedEntries: ReadonlyMap<string, string>) {
   const sdkNames = new Map<string, string>();
   const namesBySource = new Map<string, string>();
   for (const [name, source] of sharedEntries) {
@@ -264,7 +295,21 @@ export async function bundleWindowsHost(
       path,
     ]),
   );
-  const entries: BunPlugin = {
+  return {
+    sdkNames,
+    namesBySource,
+    sdkSources,
+  };
+}
+
+function windowsEntryPlugin(
+  source: string,
+  appEntry: string,
+  plugins: readonly InstalledPlugin[],
+  sdk: SdkPlugin | undefined,
+  sdkSources: ReadonlyMap<string, string>,
+): BunPlugin {
+  return {
     name: "windows-app-entry",
     setup(build) {
       sdk?.setup(build);
@@ -287,49 +332,119 @@ export async function bundleWindowsHost(
       );
     },
   };
-  const buildWindowsEntries = (
-    entrypoints: string[],
-    onMetadata?: (metadata: Bun.BuildMetafile | undefined) => void,
-  ) =>
-    buildWithSdk(
-      {
-        entrypoints,
-        target: "bun",
-        packages: "bundle",
-        splitting: true,
-        naming: "[name].[ext]",
-        sourcemap: development ? "inline" : "none",
-        metafile: onMetadata !== undefined,
-      },
-      entries,
-      onMetadata,
+}
+
+/** Record the inputs Bun reports as CommonJS, which need a raw entry instead of an ESM barrel. */
+function commonJsCollector(commonJsSources: Set<string>) {
+  return (metadata: Bun.BuildMetafile | undefined) => {
+    for (const [path, input] of Object.entries(metadata?.inputs ?? {})) {
+      if (input.format === "cjs") {
+        // Bun 1.4.2 prefixes cross-drive Windows inputs with ../ before the drive path.
+        const inputPath =
+          process.platform === "win32"
+            ? path.replace(/^(?:\.\.\/)+(?=[A-Za-z]:\/)/, "")
+            : path;
+        commonJsSources.add(resolve(inputPath));
+      }
+    }
+  };
+}
+
+/** Write each build output and return the basenames of the ones that are assets, not modules. */
+async function saveWindowsOutputs(
+  artifacts: Bun.BuildArtifact[],
+  destination: string,
+  development: boolean,
+): Promise<string[]> {
+  const bundledAssets = new Set<string>();
+  for (const output of artifacts) {
+    const name = basename(output.path);
+    await writeFile(
+      resolve(destination, name),
+      await bundleBytes(output, development),
     );
+    // File imports become path strings in JS, so the compile pass cannot
+    // discover these assets again. Track by artifact kind, not extension.
+    if (output.kind === "asset") {
+      bundledAssets.add(name);
+    }
+  }
+  return [
+    ...bundledAssets,
+  ].sort();
+}
+
+/** Record which generated entry serves each shared name so reloads can import them as externals. */
+async function writeSdkInventory(
+  destination: string,
+  sdkNames: ReadonlyMap<string, string>,
+  sharedEntries: ReadonlyMap<string, string>,
+  commonJsSources: ReadonlySet<string>,
+): Promise<void> {
+  const inventory: Record<string, string> = {};
+  for (const [name, entry] of sdkNames) {
+    const source = sharedEntries.get(name);
+    if (source && commonJsSources.has(source)) {
+      // A raw CJS entry exposes dynamic named exports that an ESM barrel cannot enumerate.
+      inventory[name] = `${entry}.cjs`;
+      await writeFile(
+        resolve(destination, `${entry}.cjs`),
+        commonJsSdkSource(entry),
+      );
+    } else {
+      inventory[name] = `${entry}.js`;
+    }
+  }
+  await writeJson(resolve(destination, "manifest.json"), {
+    ...(await readAppManifest(destination)),
+    developmentSdk: inventory,
+  });
+}
+
+/**
+ * Bundle the Windows bootstrap, app entry and host workers into the asset directory.
+ * With project metadata, development builds retain shared SDK entries; return asset basenames.
+ */
+export async function bundleWindowsHost(
+  source: string,
+  destination: string,
+  appEntry: string,
+  project?: string,
+  development = false,
+  installed?: readonly InstalledPlugin[],
+): Promise<string[]> {
+  // Bundle all entries together so lazy adapters and their owning host share error and SDK classes.
+  const plugins = await hostPlugins(appEntry, project, installed);
+  const sdk = project ? await sdkPlugin(project, [], plugins) : undefined;
+  await writePluginManifest(destination, plugins);
+  const sharedEntries =
+    development && sdk && project
+      ? await collectSharedEntries(sdk, project, plugins)
+      : new Map<string, string>();
+  const { sdkNames, namesBySource, sdkSources } =
+    nameSharedEntries(sharedEntries);
   const commonJsSources = new Set<string>();
-  const artifacts = await buildWindowsEntries(
-    [
-      resolve(source, "boot.ts"),
-      resolve(source, "ui.ts"),
-      resolve(source, "host-operations.ts"),
-      "bunaway-generated/plugin-imports.ts",
-      "bunaway-generated/app.ts",
-      ...[
-        ...namesBySource.values(),
-      ].map((name) => `bunaway-generated/${name}.ts`),
-    ],
-    sharedEntries.size
-      ? (metadata) => {
-          for (const [path, input] of Object.entries(metadata?.inputs ?? {})) {
-            if (input.format === "cjs") {
-              // Bun 1.4.2 prefixes cross-drive Windows inputs with ../ before the drive path.
-              const inputPath =
-                process.platform === "win32"
-                  ? path.replace(/^(?:\.\.\/)+(?=[A-Za-z]:\/)/, "")
-                  : path;
-              commonJsSources.add(resolve(inputPath));
-            }
-          }
-        }
-      : undefined,
+  const artifacts = await buildWithSdk(
+    {
+      entrypoints: [
+        resolve(source, "boot.ts"),
+        resolve(source, "ui.ts"),
+        resolve(source, "host-operations.ts"),
+        "bunaway-generated/plugin-imports.ts",
+        "bunaway-generated/app.ts",
+        ...[
+          ...namesBySource.values(),
+        ].map((name) => `bunaway-generated/${name}.ts`),
+      ],
+      target: "bun",
+      packages: "bundle",
+      splitting: true,
+      naming: "[name].[ext]",
+      sourcemap: development ? "inline" : "none",
+      metafile: sharedEntries.size > 0,
+    },
+    windowsEntryPlugin(source, appEntry, plugins, sdk, sdkSources),
+    sharedEntries.size ? commonJsCollector(commonJsSources) : undefined,
   );
   if (
     ![
@@ -341,45 +456,20 @@ export async function bundleWindowsHost(
   ) {
     throw new Error("Windows bootstrap bundle failed");
   }
-  const bundledAssets = new Set<string>();
-  const saveOutput = async (output: Bun.BuildArtifact) => {
-    const name = basename(output.path);
-    await writeFile(
-      resolve(destination, name),
-      await bundleBytes(output, development),
-    );
-    // File imports become path strings in JS, so the compile pass cannot
-    // discover these assets again. Track by artifact kind, not extension.
-    if (output.kind === "asset") {
-      bundledAssets.add(name);
-    }
-  };
-  for (const output of artifacts) {
-    await saveOutput(output);
-  }
+  const bundledAssets = await saveWindowsOutputs(
+    artifacts,
+    destination,
+    development,
+  );
   if (sharedEntries.size) {
-    const inventory: Record<string, string> = {};
-    for (const [name, entry] of sdkNames) {
-      const source = sharedEntries.get(name);
-      if (source && commonJsSources.has(source)) {
-        // A raw CJS entry exposes dynamic named exports that an ESM barrel cannot enumerate.
-        inventory[name] = `${entry}.cjs`;
-        await writeFile(
-          resolve(destination, `${entry}.cjs`),
-          commonJsSdkSource(entry),
-        );
-      } else {
-        inventory[name] = `${entry}.js`;
-      }
-    }
-    await writeJson(resolve(destination, "manifest.json"), {
-      ...(await readAppManifest(destination)),
-      developmentSdk: inventory,
-    });
+    await writeSdkInventory(
+      destination,
+      sdkNames,
+      sharedEntries,
+      commonJsSources,
+    );
   }
-  return [
-    ...bundledAssets,
-  ].sort();
+  return bundledAssets;
 }
 
 /**

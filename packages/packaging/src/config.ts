@@ -231,6 +231,370 @@ function signing(value: unknown, what: string): SigningConfig | undefined {
   return result;
 }
 
+function parsePublisher(
+  value: unknown,
+): NonNullable<PackagingConfig["publisher"]> {
+  const publisher = record(value, "publisher");
+  keys(
+    publisher,
+    [
+      "display",
+      "identity",
+    ],
+    "publisher",
+  );
+  const result: NonNullable<PackagingConfig["publisher"]> = {};
+  if (publisher.display !== undefined) {
+    result.display = nonempty(publisher.display, "publisher.display");
+  }
+  if (publisher.identity !== undefined) {
+    const identity = nonempty(publisher.identity, "publisher.identity");
+    if (!/^CN=.+/i.test(identity)) {
+      fail(
+        'bunaway.json.bundle: publisher.identity must be an X.500 subject like "CN=Example".',
+      );
+    }
+    result.identity = identity;
+  }
+  return result;
+}
+
+function parseRelease(value: unknown): NonNullable<PackagingConfig["release"]> {
+  const release = record(value, "release");
+  keys(
+    release,
+    [
+      "version",
+      "build",
+    ],
+    "release",
+  );
+  const result: NonNullable<PackagingConfig["release"]> = {};
+  if (release.version !== undefined) {
+    const version = nonempty(release.version, "release.version", 64);
+    if (!SEMVER_PATTERN.test(version)) {
+      fail(
+        "bunaway.json.bundle: release.version must be numeric semver x.y.z.",
+      );
+    }
+    result.version = version;
+  }
+  if (release.build !== undefined) {
+    if (
+      typeof release.build !== "number" ||
+      !Number.isInteger(release.build) ||
+      release.build < 0 ||
+      release.build > 65535
+    ) {
+      fail(
+        "bunaway.json.bundle: release.build must be an integer between 0 and 65535.",
+      );
+    }
+    result.build = release.build;
+  }
+  return result;
+}
+
+function parseIcons(value: unknown): NonNullable<PackagingConfig["icons"]> {
+  const icons = record(value, "icons");
+  keys(
+    icons,
+    [
+      "directory",
+      "windows",
+      "macos",
+    ],
+    "icons",
+  );
+  const result: NonNullable<PackagingConfig["icons"]> = {};
+  if (icons.directory !== undefined) {
+    const directory = nonempty(icons.directory, "icons.directory");
+    if (
+      /^(?:[A-Za-z]:[\\/]|[\\/])/.test(directory) ||
+      directory.split(/[\\/]/).includes("..")
+    ) {
+      fail(
+        "bunaway.json.bundle: icons.directory must be project-relative without '..'.",
+      );
+    }
+    result.directory = directory;
+  }
+  for (const [platform, allowed] of [
+    [
+      "windows",
+      WINDOWS_ICONS,
+    ],
+    [
+      "macos",
+      MACOS_ICONS,
+    ],
+  ] as const) {
+    if (icons[platform] === undefined) {
+      continue;
+    }
+    const group = record(icons[platform], `icons.${platform}`);
+    keys(
+      group,
+      [
+        ...allowed,
+      ],
+      `icons.${platform}`,
+    );
+    const entries: Record<string, string> = {};
+    for (const [name, icon] of Object.entries(group)) {
+      entries[name] = nonempty(icon, `icons.${platform}.${name}`);
+    }
+    result[platform] = entries;
+  }
+  return result;
+}
+
+/** One entry of `targets`; `seen` rejects a platform and architecture listed twice. */
+function parseTarget(
+  entry: unknown,
+  index: number,
+  seen: Set<string>,
+): ResolvedTarget {
+  const target = record(entry, `targets[${index}]`);
+  keys(
+    target,
+    [
+      "platform",
+      "arch",
+      "minVersion",
+    ],
+    `targets[${index}]`,
+  );
+  const platform = nonempty(target.platform, `targets[${index}].platform`, 16);
+  const arch = nonempty(target.arch, `targets[${index}].arch`, 16);
+  if (platform !== "windows" && platform !== "macos") {
+    fail(
+      `bunaway.json.bundle: targets[${index}].platform must be windows or macos.`,
+    );
+  }
+  if (arch !== "x64" && arch !== "arm64") {
+    fail(`bunaway.json.bundle: targets[${index}].arch must be x64 or arm64.`);
+  }
+  const id = `${platform}-${arch}`;
+  if (seen.has(id)) {
+    fail(`bunaway.json.bundle: duplicate target ${id}.`);
+  }
+  seen.add(id);
+  const result: ResolvedTarget = {
+    platform,
+    arch,
+  };
+  if (target.minVersion !== undefined) {
+    result.minVersion = nonempty(
+      target.minVersion,
+      `targets[${index}].minVersion`,
+      32,
+    );
+  }
+  return result;
+}
+
+function parseTargets(value: unknown): ResolvedTarget[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    fail("bunaway.json.bundle: targets must be a nonempty array.");
+  }
+  const seen = new Set<string>();
+  return value.map((entry, index) => parseTarget(entry, index, seen));
+}
+
+function readAssociations(
+  options: Record<string, unknown>,
+  channelPath: string,
+  channelConfig: ChannelConfig,
+): void {
+  if (options.associations === undefined) {
+    return;
+  }
+  try {
+    channelConfig.associations = parseAssociations(options.associations);
+  } catch (error) {
+    fail(
+      `bunaway.json.bundle: ${channelPath}.associations: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function readChannelSigning(
+  options: Record<string, unknown>,
+  channelPath: string,
+  channelConfig: ChannelConfig,
+): void {
+  if (options.signing === undefined) {
+    return;
+  }
+  const value = signing(options.signing, `${channelPath}.signing`);
+  if (value) {
+    channelConfig.signing = value;
+  }
+}
+
+function readWebView2(
+  channel: ChannelId,
+  options: Record<string, unknown>,
+  channelPath: string,
+  channelConfig: ChannelConfig,
+): void {
+  if (options.webView2 !== undefined) {
+    if (options.webView2 !== "check" && options.webView2 !== "bootstrap") {
+      fail(
+        `bunaway.json.bundle: ${channelPath}.webView2 must be "check" or "bootstrap".`,
+      );
+    }
+    channelConfig.webView2 = options.webView2;
+  }
+  if (
+    channel === "win-store-unpackaged" &&
+    channelConfig.webView2 === "bootstrap"
+  ) {
+    fail(
+      'bunaway.json.bundle: channels.win-store-unpackaged.webView2 must be "check"; the Store EXE/MSI requirements forbid installer-time downloads.',
+    );
+  }
+}
+
+/** Install scope and the shortcut, autostart and data flags that depend on it. */
+function readScopeAndFlags(
+  options: Record<string, unknown>,
+  channelPath: string,
+  channelConfig: ChannelConfig,
+): void {
+  if (options.scope !== undefined) {
+    if (options.scope !== "perUser" && options.scope !== "perMachine") {
+      fail(
+        `bunaway.json.bundle: ${channelPath}.scope must be perUser or perMachine.`,
+      );
+    }
+    channelConfig.scope = options.scope;
+  }
+  for (const flag of [
+    "desktopShortcut",
+    "startMenuShortcut",
+    "autostart",
+    "unvirtualizedData",
+  ] as const) {
+    const value = optionalBoolean(options[flag], `${channelPath}.${flag}`);
+    if (value !== undefined) {
+      channelConfig[flag] = value;
+    }
+  }
+  if (channelConfig.autostart && channelConfig.scope === "perMachine") {
+    fail(
+      `bunaway.json.bundle: ${channelPath}.autostart requires perUser scope.`,
+    );
+  }
+}
+
+function readUninstall(
+  options: Record<string, unknown>,
+  channelPath: string,
+  channelConfig: ChannelConfig,
+): void {
+  if (options.uninstall === undefined) {
+    return;
+  }
+  const uninstall = record(options.uninstall, `${channelPath}.uninstall`);
+  keys(
+    uninstall,
+    [
+      "preserveUserData",
+    ],
+    `${channelPath}.uninstall`,
+  );
+  const preserveUserData = optionalBoolean(
+    uninstall.preserveUserData,
+    `${channelPath}.uninstall.preserveUserData`,
+  );
+  if (channelConfig.scope === "perMachine" && preserveUserData === false) {
+    fail(
+      `bunaway.json.bundle: ${channelPath}.uninstall.preserveUserData=false requires scope=perUser; perMachine installs cannot safely target user data.`,
+    );
+  }
+  channelConfig.uninstall = {
+    ...(preserveUserData !== undefined
+      ? {
+          preserveUserData,
+        }
+      : {}),
+  };
+}
+
+function readPackageName(
+  options: Record<string, unknown>,
+  channelPath: string,
+  channelConfig: ChannelConfig,
+): void {
+  if (options.packageName === undefined) {
+    return;
+  }
+  const name = nonempty(options.packageName, `${channelPath}.packageName`, 50);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{2,49}$/.test(name)) {
+    fail(
+      `bunaway.json.bundle: ${channelPath}.packageName must be 3..50 characters, alphanumeric plus . _ -.`,
+    );
+  }
+  channelConfig.packageName = name;
+}
+
+/** One channel's options, validated against the keys the shared contract allows for it. */
+function parseChannel(channel: ChannelId, value: unknown): ChannelConfig {
+  const options = record(value, `channels.${channel}`);
+  keys(options, CHANNEL_KEYS[channel], `channels.${channel}`);
+  const channelConfig: ChannelConfig = {};
+  const channelPath = `channels.${channel}`;
+  readAssociations(options, channelPath, channelConfig);
+  readChannelSigning(options, channelPath, channelConfig);
+  readWebView2(channel, options, channelPath, channelConfig);
+  readScopeAndFlags(options, channelPath, channelConfig);
+  readUninstall(options, channelPath, channelConfig);
+  const capabilities = stringArray(
+    options.capabilities,
+    `${channelPath}.capabilities`,
+  );
+  if (capabilities !== undefined) {
+    channelConfig.capabilities = capabilities;
+  }
+  readPackageName(options, channelPath, channelConfig);
+  for (const key of [
+    "minVersion",
+    "maxVersionTested",
+    "bundleId",
+    "format",
+  ] as const) {
+    if (options[key] !== undefined) {
+      channelConfig[key] = nonempty(options[key], `${channelPath}.${key}`, 64);
+    }
+  }
+  const entitlements = stringArray(
+    options.entitlements,
+    `${channelPath}.entitlements`,
+  );
+  if (entitlements !== undefined) {
+    channelConfig.entitlements = entitlements;
+  }
+  return channelConfig;
+}
+
+function parseChannels(
+  value: unknown,
+): NonNullable<PackagingConfig["channels"]> {
+  const channels = record(value, "channels");
+  const result: NonNullable<PackagingConfig["channels"]> = {};
+  for (const [channel, options] of Object.entries(channels)) {
+    if (!isChannelId(channel)) {
+      fail(
+        `bunaway.json.bundle: unknown channel channels.${channel} (supported: ${PACKAGING_CHANNELS.join(", ")}).`,
+      );
+    }
+    result[channel] = parseChannel(channel, options);
+  }
+  return result;
+}
+
 /**
  * Parses the packaging section of `bunaway.json.bundle`, rejecting unknown
  * fields and invalid values before adapters consume it. Filesystem-backed
@@ -259,315 +623,23 @@ export function parsePackaging(text: string): PackagingConfig {
     config.identifier = identifier;
   }
   if (raw.publisher !== undefined) {
-    const publisher = record(raw.publisher, "publisher");
-    keys(
-      publisher,
-      [
-        "display",
-        "identity",
-      ],
-      "publisher",
-    );
-    config.publisher = {};
-    if (publisher.display !== undefined) {
-      config.publisher.display = nonempty(
-        publisher.display,
-        "publisher.display",
-      );
-    }
-    if (publisher.identity !== undefined) {
-      const identity = nonempty(publisher.identity, "publisher.identity");
-      if (!/^CN=.+/i.test(identity)) {
-        fail(
-          'bunaway.json.bundle: publisher.identity must be an X.500 subject like "CN=Example".',
-        );
-      }
-      config.publisher.identity = identity;
-    }
+    config.publisher = parsePublisher(raw.publisher);
   }
   if (raw.release !== undefined) {
-    const release = record(raw.release, "release");
-    keys(
-      release,
-      [
-        "version",
-        "build",
-      ],
-      "release",
-    );
-    config.release = {};
-    if (release.version !== undefined) {
-      const version = nonempty(release.version, "release.version", 64);
-      if (!SEMVER_PATTERN.test(version)) {
-        fail(
-          "bunaway.json.bundle: release.version must be numeric semver x.y.z.",
-        );
-      }
-      config.release.version = version;
-    }
-    if (release.build !== undefined) {
-      if (
-        typeof release.build !== "number" ||
-        !Number.isInteger(release.build) ||
-        release.build < 0 ||
-        release.build > 65535
-      ) {
-        fail(
-          "bunaway.json.bundle: release.build must be an integer between 0 and 65535.",
-        );
-      }
-      config.release.build = release.build;
-    }
+    config.release = parseRelease(raw.release);
   }
   if (raw.icons !== undefined) {
-    const icons = record(raw.icons, "icons");
-    keys(
-      icons,
-      [
-        "directory",
-        "windows",
-        "macos",
-      ],
-      "icons",
-    );
-    config.icons = {};
-    if (icons.directory !== undefined) {
-      const directory = nonempty(icons.directory, "icons.directory");
-      if (
-        /^(?:[A-Za-z]:[\\/]|[\\/])/.test(directory) ||
-        directory.split(/[\\/]/).includes("..")
-      ) {
-        fail(
-          "bunaway.json.bundle: icons.directory must be project-relative without '..'.",
-        );
-      }
-      config.icons.directory = directory;
-    }
-    for (const [platform, allowed] of [
-      [
-        "windows",
-        WINDOWS_ICONS,
-      ],
-      [
-        "macos",
-        MACOS_ICONS,
-      ],
-    ] as const) {
-      if (icons[platform] === undefined) {
-        continue;
-      }
-      const group = record(icons[platform], `icons.${platform}`);
-      keys(
-        group,
-        [
-          ...allowed,
-        ],
-        `icons.${platform}`,
-      );
-      const entries: Record<string, string> = {};
-      for (const [name, icon] of Object.entries(group)) {
-        entries[name] = nonempty(icon, `icons.${platform}.${name}`);
-      }
-      config.icons[platform] = entries;
-    }
+    config.icons = parseIcons(raw.icons);
   }
   if (raw.targets !== undefined) {
-    if (!Array.isArray(raw.targets) || raw.targets.length === 0) {
-      fail("bunaway.json.bundle: targets must be a nonempty array.");
-    }
-    const seen = new Set<string>();
-    config.targets = raw.targets.map((entry, index) => {
-      const target = record(entry, `targets[${index}]`);
-      keys(
-        target,
-        [
-          "platform",
-          "arch",
-          "minVersion",
-        ],
-        `targets[${index}]`,
-      );
-      const platform = nonempty(
-        target.platform,
-        `targets[${index}].platform`,
-        16,
-      );
-      const arch = nonempty(target.arch, `targets[${index}].arch`, 16);
-      if (platform !== "windows" && platform !== "macos") {
-        fail(
-          `bunaway.json.bundle: targets[${index}].platform must be windows or macos.`,
-        );
-      }
-      if (arch !== "x64" && arch !== "arm64") {
-        fail(
-          `bunaway.json.bundle: targets[${index}].arch must be x64 or arm64.`,
-        );
-      }
-      const id = `${platform}-${arch}`;
-      if (seen.has(id)) {
-        fail(`bunaway.json.bundle: duplicate target ${id}.`);
-      }
-      seen.add(id);
-      const result: ResolvedTarget = {
-        platform,
-        arch,
-      };
-      if (target.minVersion !== undefined) {
-        result.minVersion = nonempty(
-          target.minVersion,
-          `targets[${index}].minVersion`,
-          32,
-        );
-      }
-      return result;
-    });
+    config.targets = parseTargets(raw.targets);
   }
   const topSigning = signing(raw.signing, "signing");
   if (topSigning) {
     config.signing = topSigning;
   }
   if (raw.channels !== undefined) {
-    const channels = record(raw.channels, "channels");
-    config.channels = {};
-    for (const [channel, value] of Object.entries(channels)) {
-      if (!isChannelId(channel)) {
-        fail(
-          `bunaway.json.bundle: unknown channel channels.${channel} (supported: ${PACKAGING_CHANNELS.join(", ")}).`,
-        );
-      }
-      const options = record(value, `channels.${channel}`);
-      keys(options, CHANNEL_KEYS[channel], `channels.${channel}`);
-      const channelConfig: ChannelConfig = {};
-      const channelPath = `channels.${channel}`;
-
-      if (options.associations !== undefined) {
-        try {
-          channelConfig.associations = parseAssociations(options.associations);
-        } catch (error) {
-          fail(
-            `bunaway.json.bundle: ${channelPath}.associations: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      }
-
-      if (options.signing !== undefined) {
-        const value = signing(options.signing, `${channelPath}.signing`);
-        if (value) {
-          channelConfig.signing = value;
-        }
-      }
-      if (options.webView2 !== undefined) {
-        if (options.webView2 !== "check" && options.webView2 !== "bootstrap") {
-          fail(
-            `bunaway.json.bundle: ${channelPath}.webView2 must be "check" or "bootstrap".`,
-          );
-        }
-        channelConfig.webView2 = options.webView2;
-      }
-      if (
-        channel === "win-store-unpackaged" &&
-        channelConfig.webView2 === "bootstrap"
-      ) {
-        fail(
-          'bunaway.json.bundle: channels.win-store-unpackaged.webView2 must be "check"; the Store EXE/MSI requirements forbid installer-time downloads.',
-        );
-      }
-      if (options.scope !== undefined) {
-        if (options.scope !== "perUser" && options.scope !== "perMachine") {
-          fail(
-            `bunaway.json.bundle: ${channelPath}.scope must be perUser or perMachine.`,
-          );
-        }
-        channelConfig.scope = options.scope;
-      }
-      for (const flag of [
-        "desktopShortcut",
-        "startMenuShortcut",
-        "autostart",
-        "unvirtualizedData",
-      ] as const) {
-        const value = optionalBoolean(options[flag], `${channelPath}.${flag}`);
-        if (value !== undefined) {
-          channelConfig[flag] = value;
-        }
-      }
-      if (channelConfig.autostart && channelConfig.scope === "perMachine") {
-        fail(
-          `bunaway.json.bundle: ${channelPath}.autostart requires perUser scope.`,
-        );
-      }
-      if (options.uninstall !== undefined) {
-        const uninstall = record(options.uninstall, `${channelPath}.uninstall`);
-        keys(
-          uninstall,
-          [
-            "preserveUserData",
-          ],
-          `${channelPath}.uninstall`,
-        );
-        const preserveUserData = optionalBoolean(
-          uninstall.preserveUserData,
-          `${channelPath}.uninstall.preserveUserData`,
-        );
-        if (
-          channelConfig.scope === "perMachine" &&
-          preserveUserData === false
-        ) {
-          fail(
-            `bunaway.json.bundle: ${channelPath}.uninstall.preserveUserData=false requires scope=perUser; perMachine installs cannot safely target user data.`,
-          );
-        }
-        channelConfig.uninstall = {
-          ...(preserveUserData !== undefined
-            ? {
-                preserveUserData,
-              }
-            : {}),
-        };
-      }
-      const capabilities = stringArray(
-        options.capabilities,
-        `${channelPath}.capabilities`,
-      );
-      if (capabilities !== undefined) {
-        channelConfig.capabilities = capabilities;
-      }
-      if (options.packageName !== undefined) {
-        const name = nonempty(
-          options.packageName,
-          `${channelPath}.packageName`,
-          50,
-        );
-        if (!/^[A-Za-z0-9][A-Za-z0-9._-]{2,49}$/.test(name)) {
-          fail(
-            `bunaway.json.bundle: ${channelPath}.packageName must be 3..50 characters, alphanumeric plus . _ -.`,
-          );
-        }
-        channelConfig.packageName = name;
-      }
-      for (const key of [
-        "minVersion",
-        "maxVersionTested",
-        "bundleId",
-        "format",
-      ] as const) {
-        if (options[key] !== undefined) {
-          channelConfig[key] = nonempty(
-            options[key],
-            `${channelPath}.${key}`,
-            64,
-          );
-        }
-      }
-      const entitlements = stringArray(
-        options.entitlements,
-        `${channelPath}.entitlements`,
-      );
-      if (entitlements !== undefined) {
-        channelConfig.entitlements = entitlements;
-      }
-      config.channels[channel] = channelConfig;
-    }
+    config.channels = parseChannels(raw.channels);
   }
   return config;
 }

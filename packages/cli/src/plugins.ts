@@ -139,6 +139,107 @@ async function contained(root: string, value: unknown): Promise<string> {
   return path;
 }
 
+type PluginManifest = {
+  name: string;
+  version: string;
+  bunaway?: {
+    plugin?: string;
+  };
+  peerDependencies?: Record<string, string>;
+};
+
+/** Locate an installed dependency; an optional dependency that is not installed yields nothing. */
+async function findInstalledRoot(
+  project: string,
+  pkg: PackageDependencies,
+  packageName: string,
+): Promise<string | undefined> {
+  try {
+    return await installedPackageRoot(project, packageName);
+  } catch (error) {
+    if (
+      isOptionalDependency(pkg, packageName) &&
+      (error as NodeJS.ErrnoException).code === "ENOENT"
+    ) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+/** The plugin must be the package it claims to be and peer on this release's plugin SDK. */
+function assertPluginManifest(
+  manifest: PluginManifest,
+  packageName: string,
+  version: string,
+): void {
+  if (
+    manifest.name !== packageName ||
+    (packageName.startsWith("@bunaway/") && manifest.version !== version) ||
+    !(
+      manifest.peerDependencies?.["@bunaway/plugin"] === version ||
+      manifest.peerDependencies?.["@bunaway/plugin"]?.endsWith(".tgz")
+    )
+  ) {
+    throw new Error(`Incompatible native plugin package: ${packageName}.`);
+  }
+}
+
+/** Every framework peer the plugin declares must be installed at this release. */
+async function assertPluginPeers(
+  root: string,
+  manifest: PluginManifest,
+  packageName: string,
+  version: string,
+): Promise<void> {
+  for (const [name, peer] of Object.entries(manifest.peerDependencies ?? {})) {
+    if (!name.startsWith("@bunaway/")) {
+      continue;
+    }
+    const installed = (await json(
+      resolve(await installedPackageRoot(root, name), "package.json"),
+    )) as {
+      name: string;
+      version: string;
+    };
+    if (
+      installed.name !== name ||
+      installed.version !== version ||
+      !(peer === version || peer.endsWith(".tgz"))
+    ) {
+      throw new Error(
+        `Incompatible SDK/CLI package: ${name}; expected ${version} for plugin ${packageName}.`,
+      );
+    }
+  }
+}
+
+/** Resolve each platform's operations module inside the package and qualify its supported operations. */
+async function resolvePluginTargets(
+  root: string,
+  declaration: Awaited<ReturnType<typeof readPluginDeclaration>>,
+): Promise<InstalledPlugin["targets"]> {
+  const targets: InstalledPlugin["targets"] = {};
+  for (const [platform, target] of Object.entries(
+    declaration.nativePlatforms,
+  )) {
+    // Normalize Windows short names and linked paths before comparing with the canonical package root.
+    const nativeEntry = await realpath(target.module ?? "");
+    targets[platform] = {
+      thread: target.thread,
+      operations: await contained(root, relative(root, nativeEntry)),
+      ...(target.operations === undefined
+        ? {}
+        : {
+            supportedOperations: target.operations.map(
+              (operation) => `${declaration.name}.${operation}`,
+            ),
+          }),
+    };
+  }
+  return targets;
+}
+
 /**
  * Load and validate native plugins declared by the project dependencies.
  * Optional missing packages are skipped; incompatible installed packages fail.
@@ -157,61 +258,18 @@ export async function installedPlugins(
     ...pkg.optionalDependencies,
     ...pkg.peerDependencies,
   })) {
-    let root: string;
-    try {
-      root = await installedPackageRoot(project, packageName);
-    } catch (error) {
-      if (
-        isOptionalDependency(pkg, packageName) &&
-        (error as NodeJS.ErrnoException).code === "ENOENT"
-      ) {
-        continue;
-      }
-      throw error;
+    const root = await findInstalledRoot(project, pkg, packageName);
+    if (root === undefined) {
+      continue;
     }
-    const manifest = (await json(resolve(root, "package.json"))) as {
-      name: string;
-      version: string;
-      bunaway?: {
-        plugin?: string;
-      };
-      peerDependencies?: Record<string, string>;
-    };
+    const manifest = (await json(
+      resolve(root, "package.json"),
+    )) as PluginManifest;
     if (!manifest.bunaway?.plugin) {
       continue;
     }
-    if (
-      manifest.name !== packageName ||
-      (packageName.startsWith("@bunaway/") && manifest.version !== version) ||
-      !(
-        manifest.peerDependencies?.["@bunaway/plugin"] === version ||
-        manifest.peerDependencies?.["@bunaway/plugin"]?.endsWith(".tgz")
-      )
-    ) {
-      throw new Error(`Incompatible native plugin package: ${packageName}.`);
-    }
-    for (const [name, peer] of Object.entries(
-      manifest.peerDependencies ?? {},
-    )) {
-      if (!name.startsWith("@bunaway/")) {
-        continue;
-      }
-      const installed = (await json(
-        resolve(await installedPackageRoot(root, name), "package.json"),
-      )) as {
-        name: string;
-        version: string;
-      };
-      if (
-        installed.name !== name ||
-        installed.version !== version ||
-        !(peer === version || peer.endsWith(".tgz"))
-      ) {
-        throw new Error(
-          `Incompatible SDK/CLI package: ${name}; expected ${version} for plugin ${packageName}.`,
-        );
-      }
-    }
+    assertPluginManifest(manifest, packageName, version);
+    await assertPluginPeers(root, manifest, packageName, version);
     const entry = await contained(root, manifest.bunaway.plugin);
     const declaration = await readPluginDeclaration(
       entry,
@@ -223,32 +281,13 @@ export async function installedPlugins(
         "Plugin declaration does not match its installed manifest.",
       );
     }
-    const native = declaration.native;
-    const targets: InstalledPlugin["targets"] = {};
-    for (const [platform, target] of Object.entries(
-      declaration.nativePlatforms,
-    )) {
-      // Normalize Windows short names and linked paths before comparing with the canonical package root.
-      const nativeEntry = await realpath(target.module ?? "");
-      targets[platform] = {
-        thread: target.thread,
-        operations: await contained(root, relative(root, nativeEntry)),
-        ...(target.operations === undefined
-          ? {}
-          : {
-              supportedOperations: target.operations.map(
-                (operation) => `${declaration.name}.${operation}`,
-              ),
-            }),
-      };
-    }
     result.push({
       name: declaration.name,
       packageName,
       root,
       version: manifest.version,
-      native,
-      targets,
+      native: declaration.native,
+      targets: await resolvePluginTargets(root, declaration),
     });
   }
   new NativeRegistry(result, {

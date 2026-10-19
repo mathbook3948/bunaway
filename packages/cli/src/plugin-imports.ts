@@ -1,6 +1,77 @@
 import { dirname, isAbsolute, resolve } from "node:path";
-import { build } from "esbuild";
+import { build, type PluginBuild } from "esbuild";
 import { inside } from "./files.ts";
+
+type PackageImportKind =
+  | "import-statement"
+  | "dynamic-import"
+  | "require-call"
+  | "require-resolve";
+
+function isPackageImportKind(kind: string): kind is PackageImportKind {
+  return (
+    kind === "import-statement" ||
+    kind === "dynamic-import" ||
+    kind === "require-call" ||
+    kind === "require-resolve"
+  );
+}
+
+/**
+ * Decide whether Bun keeps resolving an import or it becomes an external package import.
+ * Local files and project-internal `#imports` stay with Bun; dependency targets are externalized.
+ */
+async function externalizePackageImport(
+  resolver: PluginBuild,
+  root: string,
+  {
+    path,
+    importer,
+    kind,
+  }: {
+    path: string;
+    importer: string;
+    kind: string;
+  },
+): Promise<
+  | {
+      path: string;
+      external: true;
+    }
+  | undefined
+> {
+  // Windows entrypoints start with a drive letter, not a slash.
+  if (isAbsolute(path)) {
+    return;
+  }
+  if (!isPackageImportKind(kind)) {
+    throw new Error(`Unsupported plugin package import kind: ${kind}`);
+  }
+  const resolved = await resolver.resolve(path, {
+    resolveDir: dirname(importer),
+    kind,
+  });
+  if (resolved.errors.length) {
+    throw new AggregateError(
+      resolved.errors.map((error) => new Error(error.text)),
+      `Could not resolve plugin import ${path} from ${importer}.`,
+    );
+  }
+  if (
+    !resolved.external &&
+    (!path.startsWith("#") || inside(resolve(root, "src"), resolved.path))
+  ) {
+    // Let Bun apply its complete local resolver, including browser
+    // remaps. Returning an absolute file would bypass that step.
+    return;
+  }
+  return {
+    // Preserve the selected package, not an alias that could select
+    // a different branch when the neutral output is inspected in Bun.
+    path: resolved.external ? resolved.path : path,
+    external: true,
+  };
+}
 
 /**
  * Run Bun's plugin bundle while esbuild identifies external package-import targets.
@@ -62,49 +133,7 @@ export async function buildPluginBundle(
                       {
                         filter: /^[^./]/,
                       },
-                      async ({ path, importer, kind }) => {
-                        // Windows entrypoints start with a drive letter, not a slash.
-                        if (isAbsolute(path)) {
-                          return;
-                        }
-                        if (
-                          kind !== "import-statement" &&
-                          kind !== "dynamic-import" &&
-                          kind !== "require-call" &&
-                          kind !== "require-resolve"
-                        ) {
-                          throw new Error(
-                            `Unsupported plugin package import kind: ${kind}`,
-                          );
-                        }
-                        const resolved = await resolver.resolve(path, {
-                          resolveDir: dirname(importer),
-                          kind,
-                        });
-                        if (resolved.errors.length) {
-                          throw new AggregateError(
-                            resolved.errors.map(
-                              (error) => new Error(error.text),
-                            ),
-                            `Could not resolve plugin import ${path} from ${importer}.`,
-                          );
-                        }
-                        if (
-                          !resolved.external &&
-                          (!path.startsWith("#") ||
-                            inside(resolve(root, "src"), resolved.path))
-                        ) {
-                          // Let Bun apply its complete local resolver, including browser
-                          // remaps. Returning an absolute file would bypass that step.
-                          return;
-                        }
-                        return {
-                          // Preserve the selected package, not an alias that could select
-                          // a different branch when the neutral output is inspected in Bun.
-                          path: resolved.external ? resolved.path : path,
-                          external: true,
-                        };
-                      },
+                      (args) => externalizePackageImport(resolver, root, args),
                     );
                   },
                 },
