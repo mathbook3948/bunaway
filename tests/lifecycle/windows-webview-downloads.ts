@@ -1,7 +1,11 @@
 import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import type { Socket } from "node:net";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -102,6 +106,51 @@ if (!process.argv.includes("--child")) {
   let exerciseTask: Promise<void> | undefined;
   const responses = new Set<Promise<void>>();
   const sockets = new Set<Socket>();
+  /** Streams the fixture body in 64 KiB steps, honoring Range, and stops when the client disconnects. */
+  const serveDownload = async (
+    url: URL,
+    request: IncomingMessage,
+    response: ServerResponse,
+  ) => {
+    const offset = Number(
+      request.headers.range?.match(/^bytes=(\d+)-$/)?.[1] ?? 0,
+    );
+    let position = offset;
+    let cancelled = false;
+    response.on("close", () => {
+      cancelled = true;
+    });
+    response.writeHead(offset ? 206 : 200, {
+      "Content-Type": "application/octet-stream",
+      "Content-Disposition": `attachment; filename="bunaway-download-${nonce}-${url.pathname.slice(1)}"`,
+      "Content-Length": String(content.length - offset),
+      "Accept-Ranges": "bytes",
+      ...(offset
+        ? {
+            "Content-Range": `bytes ${offset}-${content.length - 1}/${content.length}`,
+          }
+        : {}),
+    });
+    while (position < content.length && !cancelled) {
+      await Bun.sleep(50);
+      if (
+        [
+          "/crashing.bin",
+          "/cleanup-failure.bin",
+        ].includes(url.pathname) &&
+        position > 0
+      ) {
+        await crashBody;
+      }
+      if (cancelled) {
+        return;
+      }
+      const end = Math.min(position + 64 * 1024, content.length);
+      response.write(content.subarray(position, end));
+      position = end;
+    }
+    response.end();
+  };
   // Bun's streaming Response replaces Content-Length with chunked encoding. Use HTTP's
   // actual fixed-length framing so native total-byte and Range assertions test known metadata.
   const server = createServer((request, response) => {
@@ -125,44 +174,7 @@ if (!process.argv.includes("--child")) {
         return;
       }
       if (url.pathname.endsWith(".bin")) {
-        const offset = Number(
-          request.headers.range?.match(/^bytes=(\d+)-$/)?.[1] ?? 0,
-        );
-        let position = offset;
-        let cancelled = false;
-        response.on("close", () => {
-          cancelled = true;
-        });
-        response.writeHead(offset ? 206 : 200, {
-          "Content-Type": "application/octet-stream",
-          "Content-Disposition": `attachment; filename="bunaway-download-${nonce}-${url.pathname.slice(1)}"`,
-          "Content-Length": String(content.length - offset),
-          "Accept-Ranges": "bytes",
-          ...(offset
-            ? {
-                "Content-Range": `bytes ${offset}-${content.length - 1}/${content.length}`,
-              }
-            : {}),
-        });
-        while (position < content.length && !cancelled) {
-          await Bun.sleep(50);
-          if (
-            [
-              "/crashing.bin",
-              "/cleanup-failure.bin",
-            ].includes(url.pathname) &&
-            position > 0
-          ) {
-            await crashBody;
-          }
-          if (cancelled) {
-            return;
-          }
-          const end = Math.min(position + 64 * 1024, content.length);
-          response.write(content.subarray(position, end));
-          position = end;
-        }
-        response.end();
+        await serveDownload(url, request, response);
         return;
       }
       response.writeHead(200, {

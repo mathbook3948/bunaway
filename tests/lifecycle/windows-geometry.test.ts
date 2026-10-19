@@ -216,6 +216,55 @@ test.skipIf(process.platform !== "win32")(
       assert.equal(current.maximized, command === SW_MAXIMIZE, diagnostic);
       assert.equal(current.visible, visible, diagnostic);
     }
+    /** Print the native window state at failure time; diagnostics must never replace the original error. */
+    function reportGeometryFailure() {
+      try {
+        const client = new Int32Array(4);
+        const outer = new Int32Array(4);
+        const placement = Buffer.alloc(WINDOWPLACEMENT_SIZE);
+        placement.writeUInt32LE(WINDOWPLACEMENT_SIZE);
+        const clientAvailable = Boolean(
+          user.symbols.GetClientRect(hwnd, ptr(client)),
+        );
+        const outerAvailable = Boolean(
+          user.symbols.GetWindowRect(hwnd, ptr(outer)),
+        );
+        const placementAvailable = Boolean(
+          user.symbols.GetWindowPlacement(hwnd, ptr(placement)),
+        );
+        console.error(
+          "Windows geometry failure",
+          JSON.stringify({
+            stage,
+            showTransitions,
+            callbackFailure:
+              native.failure === undefined ? null : String(native.failure),
+            visible: native.isVisible(hwnd),
+            minimized: native.isMinimized(hwnd),
+            maximized: native.isMaximized(hwnd),
+            fullscreen: native.isFullscreen(hwnd),
+            style: user.symbols.GetWindowLongPtrW(hwnd, GWL_STYLE).toString(16),
+            exStyle: user.symbols
+              .GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+              .toString(16),
+            client: clientAvailable
+              ? [
+                  ...client,
+                ]
+              : null,
+            outer: outerAvailable
+              ? [
+                  ...outer,
+                ]
+              : null,
+            placement: placementAvailable ? placement.toString("hex") : null,
+            messages,
+          }),
+        );
+      } catch (diagnosticError) {
+        console.error("Windows geometry diagnostics failed", diagnosticError);
+      }
+    }
     try {
       hwnd = native.create(
         "Window geometry regression",
@@ -487,6 +536,70 @@ test.skipIf(process.platform !== "win32")(
         dpi: native.getDpi(hwnd),
       });
       await invoke("windows.setSizeConstraints");
+      /** Geometry setters on a minimized or maximized window change the restored bounds, not its show state. */
+      const verifyRestoredBoundsWhileCovered = async (
+        command: number,
+        visible: boolean,
+      ) => {
+        showTransitions.length = 0;
+        stage = `unmaximize-before-show-${command}-${visible}`;
+        nativePhase = "normal-before-geometry-state";
+        native.unmaximize(hwnd);
+        recordShowTransition();
+        verifyShowState("after-unmaximize", SW_SHOW, true);
+        stage = `raw-show-${command}-${visible}`;
+        nativePhase = "ShowWindow-before-geometry";
+        user.symbols.ShowWindow(hwnd, command);
+        recordShowTransition();
+        verifyShowState("immediately-after-ShowWindow", command, true);
+        stage = `set-visible-${command}-${visible}`;
+        nativePhase = visible ? "show-before-geometry" : "hide-before-geometry";
+        native.show(hwnd, visible);
+        recordShowTransition();
+        verifyShowState("immediately-after-show-or-hide", command, visible);
+        expect(native.isMinimized(hwnd)).toBe(command === SW_MINIMIZE);
+        expect(native.isMaximized(hwnd)).toBe(command === SW_MAXIMIZE);
+        const state = native.getSnapshot(hwnd).state;
+        const before = native.getBounds(hwnd, "outer");
+        await invoke("windows.setContentBounds", {
+          x: 100,
+          y: 110,
+          width: 680,
+          height: 490,
+          unit: "logical",
+        });
+        verifyShowState("after-setContentBounds", command, visible);
+        expect(native.getSnapshot(hwnd).state).toEqual(state);
+        expect(native.getBounds(hwnd, "outer")).toEqual(before);
+        const projected = native.getBounds(hwnd, "normal");
+        await invoke("windows.setContentPosition", {
+          x: 115,
+          y: 125,
+        });
+        await invoke("windows.setOuterSize", {
+          width: projected.width,
+          height: projected.height,
+        });
+        expect(native.getSnapshot(hwnd).state).toEqual(state);
+        await invoke("windows.setOuterBounds", {
+          x: 120,
+          y: 130,
+          width: projected.width + 10,
+          height: projected.height + 10,
+        });
+        const normal = native.getBounds(hwnd, "normal");
+        expect(normal).toEqual({
+          ...projected,
+          x: 120,
+          y: 130,
+          width: projected.width + 10,
+          height: projected.height + 10,
+        });
+        expect(native.getSnapshot(hwnd).state).toEqual(state);
+        native.unmaximize(hwnd);
+        expect(native.getBounds(hwnd, "outer")).toEqual(normal);
+        expect(events.at(-1)).toEqual(native.getSnapshot(hwnd));
+      };
       // Restored bounds change while the current iconic/zoomed snapshot stays current.
       for (const command of [
         SW_MINIMIZE,
@@ -496,66 +609,7 @@ test.skipIf(process.platform !== "win32")(
           true,
           false,
         ]) {
-          showTransitions.length = 0;
-          stage = `unmaximize-before-show-${command}-${visible}`;
-          nativePhase = "normal-before-geometry-state";
-          native.unmaximize(hwnd);
-          recordShowTransition();
-          verifyShowState("after-unmaximize", SW_SHOW, true);
-          stage = `raw-show-${command}-${visible}`;
-          nativePhase = "ShowWindow-before-geometry";
-          user.symbols.ShowWindow(hwnd, command);
-          recordShowTransition();
-          verifyShowState("immediately-after-ShowWindow", command, true);
-          stage = `set-visible-${command}-${visible}`;
-          nativePhase = visible
-            ? "show-before-geometry"
-            : "hide-before-geometry";
-          native.show(hwnd, visible);
-          recordShowTransition();
-          verifyShowState("immediately-after-show-or-hide", command, visible);
-          expect(native.isMinimized(hwnd)).toBe(command === SW_MINIMIZE);
-          expect(native.isMaximized(hwnd)).toBe(command === SW_MAXIMIZE);
-          const state = native.getSnapshot(hwnd).state;
-          const before = native.getBounds(hwnd, "outer");
-          await invoke("windows.setContentBounds", {
-            x: 100,
-            y: 110,
-            width: 680,
-            height: 490,
-            unit: "logical",
-          });
-          verifyShowState("after-setContentBounds", command, visible);
-          expect(native.getSnapshot(hwnd).state).toEqual(state);
-          expect(native.getBounds(hwnd, "outer")).toEqual(before);
-          const projected = native.getBounds(hwnd, "normal");
-          await invoke("windows.setContentPosition", {
-            x: 115,
-            y: 125,
-          });
-          await invoke("windows.setOuterSize", {
-            width: projected.width,
-            height: projected.height,
-          });
-          expect(native.getSnapshot(hwnd).state).toEqual(state);
-          await invoke("windows.setOuterBounds", {
-            x: 120,
-            y: 130,
-            width: projected.width + 10,
-            height: projected.height + 10,
-          });
-          const normal = native.getBounds(hwnd, "normal");
-          expect(normal).toEqual({
-            ...projected,
-            x: 120,
-            y: 130,
-            width: projected.width + 10,
-            height: projected.height + 10,
-          });
-          expect(native.getSnapshot(hwnd).state).toEqual(state);
-          native.unmaximize(hwnd);
-          expect(native.getBounds(hwnd, "outer")).toEqual(normal);
-          expect(events.at(-1)).toEqual(native.getSnapshot(hwnd));
+          await verifyRestoredBoundsWhileCovered(command, visible);
         }
       }
       native.maximize(hwnd);
@@ -781,6 +835,43 @@ test.skipIf(process.platform !== "win32")(
         previousPlacement = current;
       }
 
+      /** Entering and leaving fullscreen from a show state restores that state and the normal bounds. */
+      const verifyFullscreenCycle = async (
+        command: number,
+        visible: boolean,
+      ) => {
+        if (!visible) {
+          nativePhase = "before-hide-before-fullscreen";
+          verifyShowState(
+            "immediately-before-hide-before-fullscreen",
+            command,
+            true,
+          );
+          nativePhase = "hide-before-fullscreen";
+          user.symbols.ShowWindow(hwnd, SW_HIDE);
+          verifyShowState(
+            "immediately-after-hide-before-fullscreen",
+            command,
+            false,
+          );
+        }
+        verifyCurrent();
+        await verifyNormal("before-enter", command, visible);
+        verifyShowState("before-fullscreen-entry", command, visible);
+        nativePhase = "enter-fullscreen-cycle";
+        native.setFullscreen(hwnd, true);
+        recordShowState("after-fullscreen-entry", command, visible);
+        verifyCurrent();
+        await verifyNormal("fullscreen", command, visible);
+        nativePhase = "exit-fullscreen-cycle";
+        native.setFullscreen(hwnd, false);
+        // Check restoration before a subsequent hide can obscure its first failure.
+        verifyShowState("immediately-after-exit-fullscreen", command, visible);
+        verifyShowState("after-fullscreen-exit", command, visible);
+        verifyCurrent();
+        await verifyNormal("after-exit", command, visible);
+        expect(user.symbols.IsWindowVisible(hwnd)).toBe(Number(visible));
+      };
       for (const command of [
         SW_SHOW,
         SW_MINIMIZE,
@@ -798,41 +889,7 @@ test.skipIf(process.platform !== "win32")(
           true,
           false,
         ]) {
-          if (!visible) {
-            nativePhase = "before-hide-before-fullscreen";
-            verifyShowState(
-              "immediately-before-hide-before-fullscreen",
-              command,
-              true,
-            );
-            nativePhase = "hide-before-fullscreen";
-            user.symbols.ShowWindow(hwnd, SW_HIDE);
-            verifyShowState(
-              "immediately-after-hide-before-fullscreen",
-              command,
-              false,
-            );
-          }
-          verifyCurrent();
-          await verifyNormal("before-enter", command, visible);
-          verifyShowState("before-fullscreen-entry", command, visible);
-          nativePhase = "enter-fullscreen-cycle";
-          native.setFullscreen(hwnd, true);
-          recordShowState("after-fullscreen-entry", command, visible);
-          verifyCurrent();
-          await verifyNormal("fullscreen", command, visible);
-          nativePhase = "exit-fullscreen-cycle";
-          native.setFullscreen(hwnd, false);
-          // Check restoration before a subsequent hide can obscure its first failure.
-          verifyShowState(
-            "immediately-after-exit-fullscreen",
-            command,
-            visible,
-          );
-          verifyShowState("after-fullscreen-exit", command, visible);
-          verifyCurrent();
-          await verifyNormal("after-exit", command, visible);
-          expect(user.symbols.IsWindowVisible(hwnd)).toBe(Number(visible));
+          await verifyFullscreenCycle(command, visible);
         }
       }
 
@@ -942,11 +999,8 @@ test.skipIf(process.platform !== "win32")(
       });
 
       // Exercise real DPI message handling; this is synthetic DPI, not a physical monitor move.
-      for (const targetDpi of [
-        120,
-        144,
-        192,
-      ]) {
+      /** A DPI change message moves the window to the suggested rectangle and scales logical queries. */
+      const verifyDpiChange = async (targetDpi: number) => {
         const frame = new Int32Array([
           0,
           0,
@@ -1020,6 +1074,13 @@ test.skipIf(process.platform !== "win32")(
           dpi: targetDpi,
         });
         expect(events.at(-1)).toEqual(native.getSnapshot(hwnd));
+      };
+      for (const targetDpi of [
+        120,
+        144,
+        192,
+      ]) {
+        await verifyDpiChange(targetDpi);
       }
       closed = true;
       await expect(invoke("windows.getOuterBounds")).rejects.toMatchObject({
@@ -1027,54 +1088,7 @@ test.skipIf(process.platform !== "win32")(
       });
     } catch (error) {
       if (hwnd) {
-        try {
-          const client = new Int32Array(4);
-          const outer = new Int32Array(4);
-          const placement = Buffer.alloc(WINDOWPLACEMENT_SIZE);
-          placement.writeUInt32LE(WINDOWPLACEMENT_SIZE);
-          const clientAvailable = Boolean(
-            user.symbols.GetClientRect(hwnd, ptr(client)),
-          );
-          const outerAvailable = Boolean(
-            user.symbols.GetWindowRect(hwnd, ptr(outer)),
-          );
-          const placementAvailable = Boolean(
-            user.symbols.GetWindowPlacement(hwnd, ptr(placement)),
-          );
-          console.error(
-            "Windows geometry failure",
-            JSON.stringify({
-              stage,
-              showTransitions,
-              callbackFailure:
-                native.failure === undefined ? null : String(native.failure),
-              visible: native.isVisible(hwnd),
-              minimized: native.isMinimized(hwnd),
-              maximized: native.isMaximized(hwnd),
-              fullscreen: native.isFullscreen(hwnd),
-              style: user.symbols
-                .GetWindowLongPtrW(hwnd, GWL_STYLE)
-                .toString(16),
-              exStyle: user.symbols
-                .GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
-                .toString(16),
-              client: clientAvailable
-                ? [
-                    ...client,
-                  ]
-                : null,
-              outer: outerAvailable
-                ? [
-                    ...outer,
-                  ]
-                : null,
-              placement: placementAvailable ? placement.toString("hex") : null,
-              messages,
-            }),
-          );
-        } catch (diagnosticError) {
-          console.error("Windows geometry diagnostics failed", diagnosticError);
-        }
+        reportGeometryFailure();
       }
       throw error;
     } finally {

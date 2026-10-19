@@ -146,6 +146,96 @@ if (!process.argv.includes("--child")) {
     assert(api.symbols.PostMessageW(owner, message, 0n, lparam));
   let pending = "";
   const decoder = new TextDecoder();
+  /** One JSON line the child app prints; only the fields the scenario reads are listed. */
+  type ChildEvent = {
+    event: string;
+    pid: number;
+    hwnd: string;
+  };
+  /** The windowless app is ready: no app HWND exists yet, then each scenario drives its own shutdown path. */
+  const onWindowlessReady = async () => {
+    ready = true;
+    assert.equal(created, 0, "windowless startup created an app HWND");
+    assert(owner);
+    if (scenario === "dev-pending-tray") {
+      post(WM_CLOSE);
+    } else if (scenario.startsWith("dev-")) {
+      assert.equal(await closeWindowsApp(child.pid), 1);
+    } else if (scenario.startsWith("force-")) {
+      child.kill();
+    } else if (hasTray) {
+      post(TRAY_CALLBACK_MESSAGE, BigInt(WM_LBUTTONUP));
+      if (empty) {
+        await Bun.sleep(100);
+        assert.equal(created, 0);
+        post(WM_CLOSE);
+      }
+    }
+  };
+  /** Records the handles and counters the final assertions read. */
+  const recordEvent = (event: ChildEvent) => {
+    if (event.event === "owned-child") {
+      descendant = processApi.symbols.OpenProcess(SYNCHRONIZE, 0, event.pid);
+      assert(descendant);
+    }
+    if (
+      event.event === "tray-created" ||
+      event.event === "desktop-control-created"
+    ) {
+      owner = BigInt(event.hwnd);
+      handles.push(owner);
+      assert.equal(api.symbols.IsWindowVisible(owner), 0);
+    }
+    if (event.event === "window-created") {
+      created++;
+      handles.push(BigInt(event.hwnd));
+    }
+    if (event.event === "verified") {
+      verified = true;
+    }
+    if (event.event === "plugin-stopped") {
+      stopped = true;
+    }
+  };
+  /** Reacts to the child events that need a response: tray clicks, close requests and quit checks. */
+  const respondToEvent = async (event: ChildEvent) => {
+    if (event.event === "windowless-ready") {
+      await onWindowlessReady();
+    }
+    if (
+      event.event === "restore-requested" ||
+      event.event === "recreate-requested"
+    ) {
+      // Repeated clicks must coalesce while old WebView cleanup is pending.
+      for (let count = 0; count < 3; count++) {
+        post(TRAY_CALLBACK_MESSAGE, BigInt(WM_LBUTTONUP));
+      }
+    }
+    if (event.event === "tray-quit-requested") {
+      post(WM_CLOSE);
+    }
+    if (event.event === "native-close-requested") {
+      const hwnd = handles.at(-1);
+      assert(hwnd);
+      assert(api.symbols.PostMessageW(hwnd, WM_CLOSE, 0n, 0n));
+    }
+    if (event.event === "quit-check") {
+      quitChecks++;
+      if (scenario === "dev-pending-tray") {
+        assert.equal(await closeWindowsApp(child.pid), 1);
+      }
+    }
+    if (event.event === "quit-vetoed" && hasTray) {
+      await Bun.sleep(100);
+      assert.equal(child.exitCode, null);
+      assert(api.symbols.IsWindow(owner));
+      post(WM_CLOSE);
+    }
+  };
+  const handleEvent = async (event: ChildEvent) => {
+    recordEvent(event);
+    await respondToEvent(event);
+  };
   const stream = child.stdout.pipeTo(
     new WritableStream({
       async write(chunk) {
@@ -159,81 +249,7 @@ if (!process.argv.includes("--child")) {
           if (!line) {
             continue;
           }
-          const event = JSON.parse(line);
-          if (event.event === "owned-child") {
-            descendant = processApi.symbols.OpenProcess(
-              SYNCHRONIZE,
-              0,
-              event.pid,
-            );
-            assert(descendant);
-          }
-          if (
-            event.event === "tray-created" ||
-            event.event === "desktop-control-created"
-          ) {
-            owner = BigInt(event.hwnd);
-            handles.push(owner);
-            assert.equal(api.symbols.IsWindowVisible(owner), 0);
-          }
-          if (event.event === "window-created") {
-            created++;
-            handles.push(BigInt(event.hwnd));
-          }
-          if (event.event === "windowless-ready") {
-            ready = true;
-            assert.equal(created, 0, "windowless startup created an app HWND");
-            assert(owner);
-            if (scenario === "dev-pending-tray") {
-              post(WM_CLOSE);
-            } else if (scenario.startsWith("dev-")) {
-              assert.equal(await closeWindowsApp(child.pid), 1);
-            } else if (scenario.startsWith("force-")) {
-              child.kill();
-            } else if (hasTray) {
-              post(TRAY_CALLBACK_MESSAGE, BigInt(WM_LBUTTONUP));
-              if (empty) {
-                await Bun.sleep(100);
-                assert.equal(created, 0);
-                post(WM_CLOSE);
-              }
-            }
-          }
-          if (
-            event.event === "restore-requested" ||
-            event.event === "recreate-requested"
-          ) {
-            // Repeated clicks must coalesce while old WebView cleanup is pending.
-            for (let count = 0; count < 3; count++) {
-              post(TRAY_CALLBACK_MESSAGE, BigInt(WM_LBUTTONUP));
-            }
-          }
-          if (event.event === "tray-quit-requested") {
-            post(WM_CLOSE);
-          }
-          if (event.event === "native-close-requested") {
-            const hwnd = handles.at(-1);
-            assert(hwnd);
-            assert(api.symbols.PostMessageW(hwnd, WM_CLOSE, 0n, 0n));
-          }
-          if (event.event === "quit-check") {
-            quitChecks++;
-            if (scenario === "dev-pending-tray") {
-              assert.equal(await closeWindowsApp(child.pid), 1);
-            }
-          }
-          if (event.event === "quit-vetoed" && hasTray) {
-            await Bun.sleep(100);
-            assert.equal(child.exitCode, null);
-            assert(api.symbols.IsWindow(owner));
-            post(WM_CLOSE);
-          }
-          if (event.event === "verified") {
-            verified = true;
-          }
-          if (event.event === "plugin-stopped") {
-            stopped = true;
-          }
+          await handleEvent(JSON.parse(line));
         }
       },
     }),
