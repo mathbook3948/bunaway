@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, test as bunTest, expect } from "bun:test";
 import {
   mkdirSync,
   mkdtempSync,
@@ -39,11 +39,23 @@ const app: AppLaunch = {
 let home = "";
 let state: AutostartState;
 
+// The adapter resolves POSIX paths and runs on macOS only; Windows temporary directories are not
+// absolute POSIX paths, so Linux and macOS cover it.
+const onWindows = process.platform === "win32";
+const test = Object.assign(onWindows ? bunTest.skip : bunTest, {
+  skipIf: bunTest.skipIf,
+});
 beforeEach(() => {
+  if (onWindows) {
+    return;
+  }
   home = mkdtempSync(join(tmpdir(), "bunaway-autostart-"));
   state = createState(app, home);
 });
 afterEach(() => {
+  if (onWindows) {
+    return;
+  }
   rmSync(home, {
     recursive: true,
     force: true,
