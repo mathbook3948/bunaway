@@ -402,7 +402,12 @@ export abstract class NodeStorage
         if (errorCode(error) !== "EPERM" && errorCode(error) !== "EISDIR") {
           throw error;
         }
-        rmdirSync(path);
+        try {
+          rmdirSync(path);
+        } catch {
+          // The target is not a directory link, so the first error is the real one.
+          throw error;
+        }
       }
     });
     return null;
@@ -410,7 +415,8 @@ export abstract class NodeStorage
 
   /**
    * Remove a file, or a directory with everything below it. Links inside the tree are removed
-   * themselves and never followed. The removal is one file system call that cannot be
+   * themselves and never followed, as far as `lstat` reports them (a volume mount point may be
+   * reported as a directory and would be descended). The removal is one file system call that cannot be
    * interrupted, so cancellation only takes effect before it starts; entries deleted before a
    * failure stay deleted.
    */
@@ -470,7 +476,8 @@ export abstract class NodeStorage
 
   /**
    * Copy a bounded regular file to a new name. The destination is created exclusively, so an
-   * existing file, directory or link is never replaced. A failed copy can leave a partial
+   * existing file, directory or link to an existing target is never replaced. A link whose target
+   * is missing is refused on POSIX, while Windows follows it and creates the target. A failed copy can leave a partial
    * destination, which is not deleted by name because the name may belong to something else.
    */
   copyFile(input: StorageTransfer): null {

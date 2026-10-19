@@ -15,6 +15,8 @@ const ERROR_ACCESS_DENIED = 5;
 const ERROR_NOT_SAME_DEVICE = 17;
 const ERROR_FILE_EXISTS = 80;
 const ERROR_ALREADY_EXISTS = 183;
+const ERROR_INVALID_NAME = 123;
+const ERROR_FILENAME_EXCED_RANGE = 206;
 
 /** Initialize bindings only when the host activates this platform instance. */
 export function createStorage(): WindowsStorage {
@@ -49,6 +51,12 @@ function moveFailure(code: number): Error {
     return new BunawayError({
       code: "UNSUPPORTED",
       message: "Storage move requires the same filesystem volume.",
+    });
+  }
+  if (code === ERROR_INVALID_NAME || code === ERROR_FILENAME_EXCED_RANGE) {
+    return new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Storage path is not valid.",
     });
   }
   return new Error(`Storage move failed (${code})`);

@@ -87,7 +87,7 @@ const { bytes, files, directories } = await storage.directorySize({
 - 크기는 각 항목의 `lstat`에서 읽습니다. 다른 프로세스가 쓰는 중인 파일은 OS가 아직 갱신하지 않은 크기가 보일 수 있습니다.
 
 일부 하위 디렉터리를 열지 못하면 과소 집계를 막기 위해 작업 전체가 실패합니다. 운영체제의 접근 거부는
-`PERMISSION_DENIED`, 그 밖의 열기 실패는 `INTERNAL`입니다. 탐색 중 사라진 항목은 건너뜁니다.
+`PERMISSION_DENIED`, 그 밖의 열기 실패는 `INTERNAL`입니다. 탐색 중 사라진 항목과 하위 디렉터리는 건너뜁니다.
 탐색 중 다른 프로세스가 파일을 추가, 삭제하거나 크기를 바꿀 수 있으므로 결과는 스냅샷이 아니며
 이후 접근의 승인도 아닙니다.
 

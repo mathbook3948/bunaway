@@ -23,7 +23,8 @@ macOS move는 이름을 바꾸기 전에 `UNSUPPORTED`로 실패합니다. `stor
 
 `copyFile`은 일반 파일의 내용만 복사하며 상한은 4 MiB입니다.
 원본 크기를 확인한 뒤 대상 파일을 배타적으로 만들고(`O_EXCL`, Windows는 `CREATE_NEW`) 최대 1 MiB 단위로 바이트를 옮깁니다.
-기존 파일, 디렉터리와 링크(대상이 없는 링크 포함)는 덮어쓰지 않고 `INVALID_ARGUMENT`로 실패하며 그 뒤에 있는 파일도 바뀌지 않습니다.
+기존 파일, 디렉터리와 대상이 있는 링크는 덮어쓰지 않고 `INVALID_ARGUMENT`로 실패하며 그 뒤에 있는 파일도 바뀌지 않습니다.
+대상이 없는 링크는 POSIX에서는 `INVALID_ARGUMENT`로 거부하지만, Windows의 `CREATE_NEW`는 링크를 따라가 링크가 가리키는 위치에 새 파일을 만듭니다(기존 데이터는 덮어쓰지 않습니다).
 임의 바이트와 빈 파일을 보존합니다.
 
 원본 크기가 상한을 넘으면 `INVALID_ARGUMENT`로 실패하며 대상을 만들지 않습니다.

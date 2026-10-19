@@ -1,9 +1,9 @@
 import {
   type BigIntStats,
+  type Dir,
   type Dirent,
   lstatSync,
   opendirSync,
-  readdirSync,
 } from "node:fs";
 import { join } from "node:path";
 import { BunawayError } from "@bunaway/plugin";
@@ -50,17 +50,32 @@ function entryInfo(parent: string, entry: Dirent): BigIntStats | null {
   }
 }
 
+/**
+ * Stats for a listing. System files such as pagefile.sys can fail `lstat` with EBUSY while
+ * their listing type is still known, so any failure but a vanished entry falls back to it.
+ */
+function listingInfo(
+  parent: string,
+  entry: Dirent,
+): BigIntStats | undefined | null {
+  try {
+    return entryInfo(parent, entry);
+  } catch {
+    return undefined;
+  }
+}
+
 function entryKind(
   entry: Dirent,
-  info: BigIntStats,
+  info: BigIntStats | undefined,
 ): StorageDirectoryEntry["kind"] {
-  if (isLink(entry, info)) {
+  if (entry.isSymbolicLink() || info?.isSymbolicLink()) {
     return "link";
   }
-  if (info.isDirectory()) {
+  if (info ? info.isDirectory() : entry.isDirectory()) {
     return "directory";
   }
-  if (info.isFile()) {
+  if (info ? info.isFile() : entry.isFile()) {
     return "file";
   }
   // The public schema has no honest kind for sockets, FIFOs and devices.
@@ -72,34 +87,52 @@ function entryKind(
 
 /** List the names and kinds of a directory's children without following any link, sorted by name. */
 export function listDirectory(path: string): StorageDirectoryEntry[] {
-  const children = readdirSync(path, {
-    withFileTypes: true,
-  });
-  if (children.length > MAX_DIRECTORY_ENTRIES) {
-    throw new BunawayError({
-      code: "INVALID_ARGUMENT",
-      message: "Storage directory exceeds the entry limit.",
-    });
-  }
   const entries: StorageDirectoryEntry[] = [];
-  for (const child of children) {
-    if (child.name.length > MAX_FILENAME_CHARACTERS) {
-      throw new BunawayError({
-        code: "INVALID_ARGUMENT",
-        message: "Storage directory name exceeds the entry limit.",
-      });
+  const directory = opendirSync(path);
+  try {
+    for (
+      let child = directory.readSync();
+      child;
+      child = directory.readSync()
+    ) {
+      if (entries.length >= MAX_DIRECTORY_ENTRIES) {
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "Storage directory exceeds the entry limit.",
+        });
+      }
+      if (child.name.length > MAX_FILENAME_CHARACTERS) {
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "Storage directory name exceeds the entry limit.",
+        });
+      }
+      const info = listingInfo(path, child);
+      if (info !== null) {
+        entries.push({
+          name: child.name,
+          kind: entryKind(child, info),
+        });
+      }
     }
-    const info = entryInfo(path, child);
-    if (info) {
-      entries.push({
-        name: child.name,
-        kind: entryKind(child, info),
-      });
-    }
+  } finally {
+    directory.closeSync();
   }
   return entries.sort((left, right) =>
     left.name < right.name ? -1 : Number(left.name > right.name),
   );
+}
+
+/** Open a directory for the scan; one removed after it was listed is gone, not a failure. */
+function openIfPresent(path: string): Dir | null {
+  try {
+    return opendirSync(path);
+  } catch (error) {
+    if (isMissingEntry(error)) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 /** Let queued host messages, such as cancellation, run before the scan continues. */
@@ -154,7 +187,10 @@ export async function sumDirectory(
   };
   await checkpoint();
   for (let frame = pending.pop(); frame; frame = pending.pop()) {
-    const directory = opendirSync(frame.path);
+    const directory = openIfPresent(frame.path);
+    if (!directory) {
+      continue;
+    }
     try {
       for (
         let entry = directory.readSync();
