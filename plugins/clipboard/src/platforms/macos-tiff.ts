@@ -123,13 +123,14 @@ export function encodeTIFF(image: ClipboardImage): Buffer {
   return bytes;
 }
 
-/**
- * Decode bounded baseline TIFF without invoking an unbounded system image decoder.
- * Accept one RGB/RGBA strip with unsigned 8-bit interleaved samples,
- * top-left orientation and unassociated alpha. Compressed, profiled, tiled
- * and multi-page TIFF are rejected.
- */
-export function decodeTIFF(bytes: Buffer): ClipboardImage {
+/** Bounds-checked integer reads in the byte order the TIFF header declares. */
+type TiffReader = {
+  short(offset: number): number;
+  long(offset: number): number;
+};
+
+/** Validate the TIFF header (size, byte order, magic number) and return readers for its byte order. */
+function openTiff(bytes: Buffer): TiffReader {
   if (bytes.length < HEADER_BYTES || bytes.length > MAX_TIFF_BYTES) {
     invalidPasteboardData();
   }
@@ -137,25 +138,33 @@ export function decodeTIFF(bytes: Buffer): ClipboardImage {
   if (order !== "II" && order !== "MM") {
     invalidPasteboardData();
   }
-  const short = (offset: number) => {
-    if (offset < 0 || offset + 2 > bytes.length) {
-      invalidPasteboardData();
-    }
-    return order === "II"
-      ? bytes.readUInt16LE(offset)
-      : bytes.readUInt16BE(offset);
+  const reader: TiffReader = {
+    short(offset) {
+      if (offset < 0 || offset + 2 > bytes.length) {
+        invalidPasteboardData();
+      }
+      return order === "II"
+        ? bytes.readUInt16LE(offset)
+        : bytes.readUInt16BE(offset);
+    },
+    long(offset) {
+      if (offset < 0 || offset + 4 > bytes.length) {
+        invalidPasteboardData();
+      }
+      return order === "II"
+        ? bytes.readUInt32LE(offset)
+        : bytes.readUInt32BE(offset);
+    },
   };
-  const long = (offset: number) => {
-    if (offset < 0 || offset + 4 > bytes.length) {
-      invalidPasteboardData();
-    }
-    return order === "II"
-      ? bytes.readUInt32LE(offset)
-      : bytes.readUInt32BE(offset);
-  };
-  if (short(2) !== TIFF_MAGIC) {
+  if (reader.short(2) !== TIFF_MAGIC) {
     invalidPasteboardData();
   }
+  return reader;
+}
+
+/** Read the single image file directory into a tag to values map; each tag holds one to four values. */
+function readTiffTags(reader: TiffReader): Map<number, number[]> {
+  const { short, long } = reader;
   const directory = long(4);
   const count = short(directory);
   if (
@@ -192,6 +201,17 @@ export function decodeTIFF(bytes: Buffer): ClipboardImage {
       ),
     );
   }
+  return tags;
+}
+
+/**
+ * Decode bounded baseline TIFF without invoking an unbounded system image decoder.
+ * Accept one RGB/RGBA strip with unsigned 8-bit interleaved samples,
+ * top-left orientation and unassociated alpha. Compressed, profiled, tiled
+ * and multi-page TIFF are rejected.
+ */
+export function decodeTIFF(bytes: Buffer): ClipboardImage {
+  const tags = readTiffTags(openTiff(bytes));
   const scalar = (tag: number, fallback?: number): number => {
     const values = tags.get(tag);
     if (!values && fallback !== undefined) {

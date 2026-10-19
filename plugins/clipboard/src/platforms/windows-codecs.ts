@@ -58,17 +58,15 @@ export function encodeImage(image: ClipboardImage): Buffer {
   return result;
 }
 
-/** Decode bounded 24/32-bit BI_RGB or standard BGRA masks. V5 profiles and other encodings are rejected. */
-export function decodeImage(bytes: Buffer): ClipboardImage {
-  if (bytes.length < 40) {
-    invalidClipboardData();
-  }
-  const header = bytes.readUInt32LE(0);
-  const width = bytes.readInt32LE(4);
-  const signedHeight = bytes.readInt32LE(8);
-  const height = Math.abs(signedHeight);
-  const bits = bytes.readUInt16LE(14);
-  const compression = bytes.readUInt32LE(16);
+/** Reject DIB headers whose size, dimensions, plane count, depth or compression this transport cannot decode. */
+function assertSupportedDibHeader(
+  bytes: Buffer,
+  header: number,
+  width: number,
+  height: number,
+  bits: number,
+  compression: number,
+): void {
   if (
     ![
       40,
@@ -91,30 +89,50 @@ export function decodeImage(bytes: Buffer): ClipboardImage {
   ) {
     invalidClipboardData();
   }
-  let offset = header;
-  let alpha = false;
-  if (compression === BI_BITFIELDS) {
-    if (bits !== 32 || (header === 40 && bytes.length < 52)) {
-      invalidClipboardData();
-    }
-    const masks = 40;
-    if (
-      bytes.readUInt32LE(masks) !== 0x00ff0000 ||
-      bytes.readUInt32LE(masks + 4) !== 0x0000ff00 ||
-      bytes.readUInt32LE(masks + 8) !== 0x000000ff
-    ) {
-      invalidClipboardData();
-    }
-    if (header === 40) {
-      offset += 12;
-    } else {
-      const mask = bytes.readUInt32LE(52);
-      if (mask !== 0 && mask !== 0xff000000) {
-        invalidClipboardData();
-      }
-      alpha = mask !== 0;
-    }
+}
+
+/**
+ * Validate BI_BITFIELDS masks, which must be the standard BGRA layout. A 40-byte header stores the
+ * three color masks after the header (`extraOffset`); V4 and V5 headers embed them and may add an
+ * alpha mask.
+ */
+function readBitfields(
+  bytes: Buffer,
+  header: number,
+  bits: number,
+): {
+  extraOffset: number;
+  alpha: boolean;
+} {
+  if (bits !== 32 || (header === 40 && bytes.length < 52)) {
+    invalidClipboardData();
   }
+  const masks = 40;
+  if (
+    bytes.readUInt32LE(masks) !== 0x00ff0000 ||
+    bytes.readUInt32LE(masks + 4) !== 0x0000ff00 ||
+    bytes.readUInt32LE(masks + 8) !== 0x000000ff
+  ) {
+    invalidClipboardData();
+  }
+  if (header === 40) {
+    return {
+      extraOffset: 12,
+      alpha: false,
+    };
+  }
+  const mask = bytes.readUInt32LE(52);
+  if (mask !== 0 && mask !== 0xff000000) {
+    invalidClipboardData();
+  }
+  return {
+    extraOffset: 0,
+    alpha: mask !== 0,
+  };
+}
+
+/** Reject V4 and V5 headers that ask for color conversion or an embedded profile. */
+function assertNoColorTransform(bytes: Buffer, header: number): void {
   if (header >= 108) {
     const colorSpace = bytes.readUInt32LE(56);
     // Zero-filled calibrated headers are common legacy data. Nonzero endpoints
@@ -132,6 +150,28 @@ export function decodeImage(bytes: Buffer): ClipboardImage {
   ) {
     invalidClipboardData();
   }
+}
+
+/** Decode bounded 24/32-bit BI_RGB or standard BGRA masks. V5 profiles and other encodings are rejected. */
+export function decodeImage(bytes: Buffer): ClipboardImage {
+  if (bytes.length < 40) {
+    invalidClipboardData();
+  }
+  const header = bytes.readUInt32LE(0);
+  const width = bytes.readInt32LE(4);
+  const signedHeight = bytes.readInt32LE(8);
+  const height = Math.abs(signedHeight);
+  const bits = bytes.readUInt16LE(14);
+  const compression = bytes.readUInt32LE(16);
+  assertSupportedDibHeader(bytes, header, width, height, bits, compression);
+  let offset = header;
+  let alpha = false;
+  if (compression === BI_BITFIELDS) {
+    const bitfields = readBitfields(bytes, header, bits);
+    offset += bitfields.extraOffset;
+    alpha = bitfields.alpha;
+  }
+  assertNoColorTransform(bytes, header);
   const stride = Math.ceil((width * bits) / 32) * 4;
   if (offset + stride * height > bytes.length) {
     invalidClipboardData();
