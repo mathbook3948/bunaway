@@ -98,17 +98,19 @@ export function createUrlSchemeRegistration(
   /**
    * True when the key carries this app's owner value and its command is one this app wrote:
    * the stored `BunawayCommand` (left stale when the app moved, which the owner may still
-   * refresh or remove) or the current launch command (a refresh that stopped before it
-   * recorded the command). A command another program wrote since no longer matches, so that
-   * program's registration is not taken over or deleted.
+   * refresh or remove), the current launch command (a refresh that stopped before it
+   * recorded the command), or none yet (a first registration that stopped before the
+   * command was written, so the key holds nothing of another program). A command another
+   * program wrote since no longer matches, so that program's registration is not taken over
+   * or deleted.
    */
   function ownsKey(scheme: string, owner: string, command: string): boolean {
     const key = keyPath(scheme);
     const current = store.readString(commandPath(scheme), "");
     return (
       store.readString(key, OWNER_VALUE) === owner &&
-      current !== null &&
-      (current === command ||
+      (current === null ||
+        current === command ||
         current === store.readString(key, WRITTEN_COMMAND_VALUE))
     );
   }
@@ -148,8 +150,11 @@ export function createUrlSchemeRegistration(
             message: "The URL scheme is registered by another owner.",
           });
         }
+        // Complete only when the recorded command is current too, so an interrupted refresh
+        // is finished by the retry instead of being reported as done.
         if (
           ownsRegistration(scheme, owner, command) &&
+          store.readString(key, WRITTEN_COMMAND_VALUE) === command &&
           store.readString(key, URL_PROTOCOL_VALUE) !== null
         ) {
           return;

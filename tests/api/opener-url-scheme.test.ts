@@ -463,3 +463,55 @@ test("a failed rollback reports both the write failure and the cleanup failure",
     "Error: delete failed",
   ]);
 });
+
+test("an interrupted refresh is finished by the retry and the key stays removable after another move", () => {
+  const harness = fakeStore();
+  createUrlSchemeRegistration(APP, harness.store).register("myapp");
+  const moveTo = (executablePath: string) =>
+    createUrlSchemeRegistration(
+      {
+        ...APP,
+        launch: {
+          ...APP.launch,
+          executablePath,
+        },
+      },
+      harness.store,
+    );
+  const second = moveTo("D:\\Apps\\app.exe");
+  // Owner, default and command are written; recording the command fails.
+  harness.failAfter(3);
+  expect(() => second.register("myapp")).toThrow("write failed");
+  harness.failAfter(Number.POSITIVE_INFINITY);
+  second.register("myapp");
+  expect(
+    harness.keys.get("Software\\Classes\\myapp")?.get(WRITTEN_COMMAND_VALUE),
+  ).toBe('"D:\\Apps\\app.exe" "%1"');
+  expect(moveTo("E:\\Apps\\app.exe").unregister("myapp")).toBe(true);
+});
+
+test("a key with only this app's owner value is finished or removed by the app", () => {
+  const harness = fakeStore();
+  harness.keys.set(
+    "Software\\Classes\\myapp",
+    new Map([
+      [
+        OWNER_VALUE,
+        "packaged.com.example.app",
+      ],
+    ]),
+  );
+  const registration = createUrlSchemeRegistration(APP, harness.store);
+  expect(registration.unregister("myapp")).toBe(true);
+  harness.keys.set(
+    "Software\\Classes\\myapp",
+    new Map([
+      [
+        OWNER_VALUE,
+        "packaged.com.example.app",
+      ],
+    ]),
+  );
+  registration.register("myapp");
+  expect(registration.isRegistered("myapp")).toBe(true);
+});
