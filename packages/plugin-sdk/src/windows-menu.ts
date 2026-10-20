@@ -32,6 +32,19 @@ const ROLE_ACCELERATORS = {
   selectAll: "Ctrl+A",
 } as const satisfies Record<NativeMenuRole, string>;
 
+/** Display text for the item's shortcut: its own accelerator, else the role's default. */
+function acceleratorText(item: MenuEntry): string | undefined {
+  if (item.type === "submenu") {
+    return undefined;
+  }
+  if (item.accelerator) {
+    return item.accelerator;
+  }
+  return item.type === "item" && item.role
+    ? ROLE_ACCELERATORS[item.role]
+    : undefined;
+}
+
 /** A selectable leaf: its app ID and, for a role item, the editing command it stands for. */
 export type SelectedMenuItem = {
   id: string;
@@ -198,13 +211,11 @@ export class NativePopupMenu {
     command: bigint,
     menuBar: boolean,
   ) {
-    // Labels are literal text. A role item in a popup or submenu shows its shortcut as
-    // display-only text after a tab; the page handles the real key itself. Top-level menu-bar
-    // items have no accelerator column, so the text would render as a stray label tail.
-    const accelerator =
-      !menuBar && item.type === "item" && item.role
-        ? `\t${ROLE_ACCELERATORS[item.role]}`
-        : "";
+    // Labels are literal text. An item shows its shortcut as display-only text after a tab; the
+    // app or page handles the real key itself. Top-level menu-bar items have no accelerator
+    // column, so the text would render as a stray label tail.
+    const shortcut = menuBar ? undefined : acceleratorText(item);
+    const accelerator = shortcut === undefined ? "" : `\t${shortcut}`;
     const appended = withWide(
       `${item.label.replaceAll("&", "&&")}${accelerator}`,
       (label) => this.native.symbols.AppendMenuW(menu, flags, command, label),

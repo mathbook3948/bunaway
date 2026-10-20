@@ -20,6 +20,99 @@ export const labelSchema = z
   .min(1)
   .max(512)
   .regex(/^[^\0\t\r\n\uD800-\uDFFF]*$(?![\s\S])/u);
+const ACCELERATOR_MODIFIER_ORDER = [
+  "Ctrl",
+  "Alt",
+  "Shift",
+  "Win",
+] as const;
+/** Spellings accepted for a modifier; `CommandOrControl` is Ctrl because Windows has no Command key. */
+const ACCELERATOR_MODIFIER_ALIASES: Readonly<
+  Record<string, (typeof ACCELERATOR_MODIFIER_ORDER)[number]>
+> = {
+  ctrl: "Ctrl",
+  control: "Ctrl",
+  commandorcontrol: "Ctrl",
+  cmdorctrl: "Ctrl",
+  alt: "Alt",
+  shift: "Shift",
+  win: "Win",
+  super: "Win",
+};
+const ACCELERATOR_NAMED_KEYS = [
+  "Backspace",
+  "Tab",
+  "Enter",
+  "Escape",
+  "Space",
+  "PageUp",
+  "PageDown",
+  "End",
+  "Home",
+  "Left",
+  "Up",
+  "Right",
+  "Down",
+  "Insert",
+  "Delete",
+] as const;
+const ACCELERATOR_FUNCTION_KEY = /^F(?:[1-9]|1\d|2[0-4])$/i;
+const ACCELERATOR_PLAIN_KEY = /^[A-Za-z0-9]$/;
+export const MAX_ACCELERATOR_LENGTH = 64;
+/** Canonical spelling of a key part, or undefined when it names no supported key. */
+function canonicalAcceleratorKey(part: string): string | undefined {
+  if (ACCELERATOR_PLAIN_KEY.test(part) || ACCELERATOR_FUNCTION_KEY.test(part)) {
+    return part.toUpperCase();
+  }
+  return ACCELERATOR_NAMED_KEYS.find(
+    (name) => name.toLowerCase() === part.toLowerCase(),
+  );
+}
+/**
+ * Normalize `Ctrl+Shift+N` style text to modifiers in Ctrl, Alt, Shift, Win order followed by one
+ * key, or undefined when the text is not a supported combination. The result is display text only.
+ */
+export function normalizeAccelerator(text: string): string | undefined {
+  const parts = text.split("+");
+  const key = canonicalAcceleratorKey(parts.pop() ?? "");
+  if (key === undefined) {
+    return undefined;
+  }
+  const modifiers = new Set<string>();
+  for (const part of parts) {
+    const alias = part.toLowerCase();
+    // Own keys only: names such as `constructor` must not resolve through the prototype.
+    const modifier = Object.hasOwn(ACCELERATOR_MODIFIER_ALIASES, alias)
+      ? ACCELERATOR_MODIFIER_ALIASES[alias]
+      : undefined;
+    if (modifier === undefined || modifiers.has(modifier)) {
+      return undefined;
+    }
+    modifiers.add(modifier);
+  }
+  return [
+    ...ACCELERATOR_MODIFIER_ORDER.filter((modifier) => modifiers.has(modifier)),
+    key,
+  ].join("+");
+}
+/**
+ * Shortcut text drawn at the right edge of a menu item. It is not a registered shortcut: the app
+ * handles the key itself. Electron and Tauri also register the key; this framework only displays it.
+ */
+export const acceleratorSchema = z
+  .string()
+  .max(MAX_ACCELERATOR_LENGTH)
+  .transform((text, context) => {
+    const normalized = normalizeAccelerator(text);
+    if (normalized === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "Unsupported accelerator.",
+      });
+      return z.NEVER;
+    }
+    return normalized;
+  });
 /**
  * Base64 ICO, the same input as the tray `setIcon`. The directory is checked here so a malformed
  * icon is rejected as INVALID_ARGUMENT before any native resource exists.
@@ -54,6 +147,7 @@ const action = {
   enabled: z.boolean().default(true),
   checked: z.boolean().default(false),
   group: idSchema.nullable().default(null),
+  accelerator: acceleratorSchema.nullable().default(null),
 };
 /** Only plain items and submenus show an icon; checkbox and radio use that column for their mark. */
 const icon = {
@@ -77,6 +171,7 @@ type MenuItemInput =
       checked?: boolean | undefined;
       group?: string | null | undefined;
       icon?: string | null | undefined;
+      accelerator?: string | null | undefined;
     }
   | {
       id: string;
@@ -86,6 +181,7 @@ type MenuItemInput =
       visible?: boolean | undefined;
       checked?: boolean | undefined;
       group?: string | null | undefined;
+      accelerator?: string | null | undefined;
     }
   | {
       id: string;
@@ -294,6 +390,8 @@ export const updateItemSchema = itemTargetSchema.extend({
     checked: z.boolean().optional(),
     /** ICO to show, or null to remove the icon. */
     icon: iconSchema.nullable().optional(),
+    /** Display-only shortcut text, or null to remove it (a role item then shows its default). */
+    accelerator: acceleratorSchema.nullable().optional(),
   }),
 });
 /** Selection reports IDs; checkbox and radio state changes remain explicit app operations. */

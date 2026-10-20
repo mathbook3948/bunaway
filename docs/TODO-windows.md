@@ -330,7 +330,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 메뉴 항목 icon을 실행 중 변경한다. `updateItem.changes.icon`(ICO bytes | null)이며 다른 변경과 같이 연결된 트레이의 다음 팝업과 창 메뉴바에 반영한다.
 - [x] 트레이 메뉴 선택을 `menu.clicked`로 전달한다. 앱 창에 속하지 않아 `windowId`는 null이다.
 - [x] 창 메뉴바와 컨텍스트 팝업 선택을 `menu.clicked`로 전달하고 소유 windowId를 포함한다.
-- [ ] accelerator, 표시 문자열과 실제 등록 여부를 구분한다.
+- [x] accelerator, 표시 문자열과 실제 등록 여부를 구분한다. item, checkbox, radio의 선택 필드 `accelerator`(`Ctrl+Shift+N` 형식, `updateItem.changes`로 변경, null이면 없음)는 항목 오른쪽에 그리는 표시 문자열일 뿐이며 단축키를 등록하거나 실행하지 않는다(키 처리는 앱 책임). 등록과 WebView 키 입력 우선순위는 아래 단축키 항목에서 다룬다.
 - [x] Undo, Redo, Cut, Copy, Paste, Select All 등 기본 menu role을 제공한다. 6개 role을 `type: "item"`의 선택 필드로 두고, 선택하면 창 WebView의 포커스된 document에 CDP `Runtime.evaluate`와 `document.execCommand`로 실행한다(키 이벤트 없음, paste는 호스트가 읽은 클립보드 텍스트를 `Input.insertText`로 삽입, cross-origin iframe은 건너뜀)(`menu.clicked`와 click waiter 없음). label을 생략하면 Electron 기본 label과 단축키 표시를 쓰며 트레이 메뉴의 role은 `INVALID_ARGUMENT`로 거부한다.
 - [ ] About, Quit, 창 전환과 도움말 등 플랫폼 기본 메뉴 항목을 제공한다.
 - [ ] 메뉴 sublabel과 접근성 label의 플랫폼별 지원을 결정한다.

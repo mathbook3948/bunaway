@@ -28,6 +28,8 @@ export type NativeMenuItem =
       group: string | null;
       /** Base64 ICO shown before the label; null or omitted means no icon. */
       icon?: string | null | undefined;
+      /** Normalized display-only shortcut text; overrides the role's default. Null or omitted shows none. */
+      accelerator?: string | null | undefined;
       /** A role item runs its editing command itself and is never reported as a selection. */
       role?: NativeMenuRole | undefined;
     }
@@ -40,6 +42,8 @@ export type NativeMenuItem =
       checked: boolean;
       /** Radio groups are scoped to their immediate containing menu. */
       group: string | null;
+      /** Normalized display-only shortcut text; null or omitted shows none. */
+      accelerator?: string | null | undefined;
     }
   | {
       id: string;

@@ -452,6 +452,9 @@ export function updateItem(
   ) {
     return invalid("Checkbox and radio items do not support icons.");
   }
+  if (old.type === "submenu" && changes.accelerator !== undefined) {
+    return invalid("Submenus do not support accelerators.");
+  }
   Object.assign(old, changes);
   return state.commit(menuId, items);
 }

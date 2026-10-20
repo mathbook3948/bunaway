@@ -139,6 +139,7 @@ test("menu definitions resolve defaults and reject invalid trees before recursiv
     checked: false,
     group: null,
     icon: null,
+    accelerator: null,
   });
   for (const invalid of [
     [
@@ -206,7 +207,7 @@ test("menu definitions resolve defaults and reject invalid trees before recursiv
     [
       {
         ...item("a"),
-        accelerator: "Ctrl+A",
+        accelerator: "Ctrl+",
       },
     ],
     Array.from(
