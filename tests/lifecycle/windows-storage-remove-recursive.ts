@@ -13,6 +13,7 @@ import {
 import { resolve } from "node:path";
 import { BunawayError } from "@bunaway/protocol";
 import { WindowsStorage } from "#plugins/storage/src/platforms/windows";
+import { deadline } from "../fixtures/deadlines.ts";
 
 assert.equal(process.platform, "win32");
 
@@ -101,6 +102,7 @@ function diskpart(script: string): boolean {
       {
         stdout: "pipe",
         stderr: "pipe",
+        timeout: deadline("nativeFixture"),
       },
     );
     if (result.exitCode !== 0) {
@@ -300,12 +302,35 @@ try {
   } finally {
     // The disk file exists once creation started, so detach even when a later step failed.
     if (existsSync(disk)) {
-      diskpart(
-        [
-          `select vdisk file="${disk}"`,
-          "detach vdisk noerr",
-        ].join("\r\n"),
-      );
+      // Drop the mount points first; a mount folder left behind would point at a volume that is
+      // gone once the disk is detached. A folder that was never mounted just reports an error.
+      for (const folder of [
+        mountFolder,
+        verifyFolder,
+      ]) {
+        Bun.spawnSync(
+          [
+            "mountvol",
+            folder,
+            "/D",
+          ],
+          {
+            stdout: "ignore",
+            stderr: "ignore",
+            timeout: deadline("childStep"),
+          },
+        );
+      }
+      if (
+        !diskpart(
+          [
+            `select vdisk file="${disk}"`,
+            "detach vdisk",
+          ].join("\r\n"),
+        )
+      ) {
+        console.log(`The virtual disk ${disk} could not be detached.`);
+      }
     }
   }
 
