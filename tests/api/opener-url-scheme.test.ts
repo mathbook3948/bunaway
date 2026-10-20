@@ -464,7 +464,7 @@ test("a failed rollback reports both the write failure and the cleanup failure",
   ]);
 });
 
-test("an interrupted refresh is finished by the retry and the key stays removable after another move", () => {
+test("an interrupted refresh is finished by the retry, after which the key stays removable after another move", () => {
   const harness = fakeStore();
   createUrlSchemeRegistration(APP, harness.store).register("myapp");
   const moveTo = (executablePath: string) =>
