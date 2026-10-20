@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import {
   chmod,
   link,
@@ -82,6 +82,35 @@ async function expectOutsideIntact(name: string): Promise<void> {
     await readFile(`${root}/${name}/nested/inner.bin`, "utf8"),
     "inner",
   );
+}
+
+/** Run a diskpart script; false when the runner cannot create or mount virtual disks. */
+function diskpart(script: string): boolean {
+  const file = `${root}/diskpart-${crypto.randomUUID().slice(0, 8)}.txt`;
+  writeFileSync(file, script);
+  try {
+    const result = Bun.spawnSync(
+      [
+        "diskpart",
+        "/s",
+        file,
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    if (result.exitCode !== 0) {
+      console.log(
+        `SKIP diskpart failed: ${result.stdout.toString().slice(-400)}`,
+      );
+    }
+    return result.exitCode === 0;
+  } finally {
+    rmSync(file, {
+      force: true,
+    });
+  }
 }
 
 try {
@@ -218,6 +247,64 @@ try {
     }
   }
 
+  // A volume mount point inside the tree is removed itself; the files on the mounted volume stay,
+  // because the removal opens the mount folder as a reparse point instead of following it.
+  const disk = `${root}/mounted.vhd`.replaceAll("/", "\\");
+  const mountFolder = `${root}/mount-tree/volume`.replaceAll("/", "\\");
+  await mkdir(`${root}/mount-tree/volume`, {
+    recursive: true,
+  });
+  await writeFile(`${root}/mount-tree/own.bin`, "own");
+  let attached = false;
+  try {
+    attached = diskpart(
+      [
+        `create vdisk file="${disk}" maximum=64 type=expandable`,
+        `select vdisk file="${disk}"`,
+        "attach vdisk",
+        "create partition primary",
+        "format fs=ntfs quick label=bunaway",
+        `assign mount="${mountFolder}"`,
+      ].join("\r\n"),
+    );
+    if (attached) {
+      await writeFile(`${mountFolder}/on-volume.bin`, "volume data");
+      await mkdir(`${mountFolder}/nested`);
+      await writeFile(`${mountFolder}/nested/deep.bin`, "deep");
+      await storage.removeRecursive(at("mount-tree"));
+      assert.equal(await present("mount-tree"), false);
+      // Mount the volume again elsewhere to see that its files survived the removal.
+      const verify = `${root}/verify`;
+      await mkdir(verify);
+      assert.equal(
+        diskpart(
+          [
+            `select vdisk file="${disk}"`,
+            "select partition 1",
+            `assign mount="${verify.replaceAll("/", "\\")}"`,
+          ].join("\r\n"),
+        ),
+        true,
+      );
+      assert.equal(
+        await readFile(`${verify}/on-volume.bin`, "utf8"),
+        "volume data",
+      );
+      assert.equal(await readFile(`${verify}/nested/deep.bin`, "utf8"), "deep");
+    }
+  } finally {
+    if (attached) {
+      diskpart(
+        [
+          `select vdisk file="${disk}"`,
+          "select partition 1",
+          "remove all noerr",
+          "detach vdisk noerr",
+        ].join("\r\n"),
+      );
+    }
+  }
+
   // A signal that is already aborted deletes nothing; cancellation after the start has no effect.
   await mkdir(`${root}/wide`);
   await writeFile(`${root}/wide/file.bin`, new Uint8Array(1));
@@ -256,5 +343,5 @@ try {
   });
 }
 console.log(
-  "PASS Windows storage removeRecursive: nested and large trees, read-only entries, hardlinks, links inside and at the root through the adapter and both Node removal APIs, cancellation before the start and target errors",
+  "PASS Windows storage removeRecursive: nested and large trees, read-only entries, hardlinks, links inside and at the root through the adapter and both Node removal APIs, a volume mount point inside the tree, cancellation before the start and target errors",
 );

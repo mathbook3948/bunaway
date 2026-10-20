@@ -408,9 +408,10 @@ export abstract class NodeStorage
 
   /**
    * Remove a file, or a directory with everything below it. Links inside the tree are removed
-   * themselves and never followed, as far as `lstat` reports them (a volume mount point may be
-   * reported as a directory and would be descended). The removal is one file system call that cannot be
-   * interrupted, so cancellation only takes effect before it starts; entries deleted before a
+   * themselves and never followed. On Windows the removal opens each entry as a reparse point,
+   * so a symlink, a junction or a volume mount point loses only its own name, while a cloud
+   * sync folder is an ordinary folder and is removed with its contents. The removal is one file
+   * system call that cannot be interrupted, so cancellation only takes effect before it starts; entries deleted before a
    * failure stay deleted.
    */
   async removeRecursive(

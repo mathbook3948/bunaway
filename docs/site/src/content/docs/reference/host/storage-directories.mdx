@@ -114,7 +114,8 @@ Tauri `remove({ recursive: true })`처럼 비어 있지 않은 디렉터리를 �
 await storage.removeRecursive({ path: "C:/Users/me/AppData/Local/MyApp/cache" });
 ```
 
-- 구현은 Node `fs.promises.rm({ recursive: true })`입니다. 트리 안의 symlink와 junction은 따라가지 않고 링크 자체만 삭제하며, 링크가 가리키는 대상은 지우지 않습니다. 링크를 `path`로 직접 주어도 링크만 삭제합니다.
+- 구현은 Node `fs.promises.rm({ recursive: true })`입니다. 트리 안의 symlink, junction, Windows 볼륨 마운트 지점은 따라가지 않고 항목 자체만 삭제하며, 가리키는 대상은 지우지 않습니다. 링크를 `path`로 직접 주어도 링크만 삭제합니다.
+- OneDrive 같은 클라우드 동기화 폴더는 트리 안의 일반 폴더로 보고 내용까지 삭제합니다. `list`와 `directorySize`가 이런 폴더를 링크로 건너뛰는 것은 내용을 내려받지 않으려는 읽기 정책이며, 삭제 정책과 다릅니다.
 - hardlink는 순회에서 만난 이름만 삭제하고 같은 데이터의 다른 이름은 유지합니다.
 - 삭제는 하나의 파일 시스템 호출이라 중간에 취소할 수 없습니다. 취소와 기한은 삭제를 시작하기 전에만 반영하고, 시작한 삭제는 끝까지 실행합니다.
 - 항목 수와 깊이의 상한은 없습니다. 큰 트리는 같은 I/O Worker의 다른 호출을 기다리게 할 수 있습니다.
