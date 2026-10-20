@@ -729,6 +729,28 @@ test("copyFile creates a new file and never replaces an existing name", () => {
   }
 });
 
+test("copyFile refuses a missing source and a missing parent without creating anything", () => {
+  writeFileSync(at("present.bin"), "x");
+  expect(
+    codeOf(() =>
+      storage.copyFile({
+        from: at("missing"),
+        to: at("never.bin"),
+      }),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+  expect(
+    codeOf(() =>
+      storage.copyFile({
+        from: at("present.bin"),
+        to: at("no-parent", "copy.bin"),
+      }),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+  expect(existsSync(at("never.bin"))).toBe(false);
+  expect(existsSync(at("no-parent"))).toBe(false);
+});
+
 test("copyFile has no size bound and copies a source above the old 4 MiB limit", () => {
   const bytes = Buffer.alloc(5 * 1024 * 1024 + 1, 3);
   writeFileSync(at("big.bin"), bytes);

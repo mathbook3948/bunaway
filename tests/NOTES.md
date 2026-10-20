@@ -869,7 +869,7 @@ Apple 공증 서비스와 도구 실패는 테스트 자식 프로세스의 PATH
 
 `api/storage-transfers.test.ts`는 두 endpoint, 추가 옵션 거부와 독립적인 전송 권한을 검사한다.
 `api/storage-files.test.ts`는 공통 어댑터를 임시 폴더에서 직접 실행해 복사(기존 파일, 디렉터리, 링크와
-대상 없는 링크를 POSIX에서 거부(Windows는 링크를 따라 새 파일을 만들어 검사하지 않음), 크기 상한, 없는 parent)와 이동 규칙(기존 대상 보존, 자기 하위 거부)을 확인한다.
+대상 없는 링크를 POSIX에서 거부(Windows는 링크를 따라 새 파일을 만들어 검사하지 않음), 없는 원본과 없는 parent, 크기 상한 없음)와 이동 규칙(기존 대상 보존, 자기 하위 거부)을 확인한다.
 이 파일은 Linux와 Windows의 테스트 실행에서 모두 돌고, 링크를 만들 수 없는 러너에서는 링크 부분만 건너뛴다.
 `api/storage-files.test.ts`는 `readBytes`의 범위 읽기(중간, 파일 끝을 넘는 범위, 끝 이후, 기본값, 전체 읽기 상한을 넘는 파일의 범위),
 `readText`의 512 KiB 파일 상한과 JSON 인코딩 768 KiB 상한(NUL 반복), 4 MiB를 넘는 복사를 확인한다.
@@ -879,7 +879,7 @@ Apple 공증 서비스와 도구 실패는 테스트 자식 프로세스의 PATH
 오류 분류, 기존 대상 충돌과 원본 보존도 확인한다. 각 move 전에 GC를 실행해
 FFI 반환값 할당이 네이티브 오류 상태에 영향을 주는 경로를 검사하며 작업을 재시도하지 않는다.
 다른 볼륨 이동은 `UNSUPPORTED`이며 식별 가능한 경우에만 검사한다.
-같은 파일은 260자를 넘는 경로와 `\\localhost\C$\...` 경로의 범위 읽기를 시도해 결과를 `PROBE` 줄로 출력하지만 통과 조건으로 삼지 않는다.
+같은 파일은 260자를 넘는 경로와 `\\localhost\C$\...` 경로의 범위 읽기를 시도해 결과를 `PROBE` 줄로 출력하지만 통과 조건으로 삼지 않는다. GitHub Actions `windows-2022`에서는 409자 경로와 UNC 경로가 모두 성공했다. 러너의 긴 경로 설정은 확인하지 않았다.
 `windows-storage-metadata.ts`는 실제 WebView2와 I/O Worker에서 copy/move와 원본 및 복사본,
 일반 쓰기 권한 거부를 검사하며 `mise run host:windows`에 포함한다.
 

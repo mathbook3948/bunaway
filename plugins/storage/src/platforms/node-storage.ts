@@ -468,8 +468,7 @@ export abstract class NodeStorage
             offset + filled,
           );
           if (!count) {
-            // The file shrank after the size check; return what was there.
-            return bytes.subarray(0, filled);
+            throw new Error("Storage file changed during read.");
           }
           filled += count;
         }
