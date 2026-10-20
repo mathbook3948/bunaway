@@ -1,5 +1,5 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import { dialogOperations, macosDialogOperations } from "#dialog/operations";
+import { dialogOperations } from "#dialog/operations";
 import {
   busy as busyMacos,
   dispose as disposeMacos,
@@ -10,7 +10,7 @@ import {
   dispose as disposeWindows,
   initialize as initializeWindows,
 } from "#dialog/platforms/windows";
-/** Select filesystem paths and show message or confirmation dialogs, each behind its own grant. Windows implements every operation; macOS implements `openFile`, `selectFolder` and `saveFile`. */
+/** Select filesystem paths and show message or confirmation dialogs, each behind its own grant. Windows and macOS implement every operation. */
 export default defineNativePlugin({
   name: "dialog",
   platforms: {
@@ -19,7 +19,7 @@ export default defineNativePlugin({
       initialize: initializeMacos,
       dispose: disposeMacos,
       busy: busyMacos,
-      operations: macosDialogOperations,
+      operations: dialogOperations,
     },
     windows: {
       thread: "ui",

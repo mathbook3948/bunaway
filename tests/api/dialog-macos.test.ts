@@ -2,22 +2,28 @@ import { expect, test } from "bun:test";
 import dialog from "@bunaway/plugin-dialog";
 import { BunawayError } from "@bunaway/protocol";
 import {
-  dialogOperations,
-  macosDialogOperations,
-} from "#plugins/dialog/src/operations";
-import {
+  alertSettings,
   MacosDialogs,
   panelSettings,
 } from "#plugins/dialog/src/platforms/macos";
 import type {
+  AlertAnswer,
+  AlertSettings,
   FilePanel,
   FilePanelFactory,
   PanelSettings,
 } from "#plugins/dialog/src/platforms/macos-bindings";
 
 /** A panel factory that records the settings and answers `run` with a scripted result. */
-function fakePanels(answer: string[] | null | (() => string[] | null)) {
+function fakePanels(
+  answer: string[] | null | (() => string[] | null),
+  alertAnswer: AlertAnswer | (() => AlertAnswer) = {
+    button: 0,
+    checkboxChecked: false,
+  },
+) {
   const created: PanelSettings[] = [];
+  const alerts: AlertSettings[] = [];
   const events: string[] = [];
   const factory: FilePanelFactory = {
     create(settings) {
@@ -38,6 +44,25 @@ function fakePanels(answer: string[] | null | (() => string[] | null)) {
       };
       return panel;
     },
+    createAlert(settings) {
+      alerts.push(settings);
+      events.push("create");
+      return {
+        readBack: () => {
+          throw new Error("unused");
+        },
+        scheduleClick: () => undefined,
+        run: () => {
+          events.push("run");
+          return typeof alertAnswer === "function"
+            ? alertAnswer()
+            : alertAnswer;
+        },
+        dispose: () => {
+          events.push("dispose");
+        },
+      };
+    },
     dispose: () => {
       events.push("factory-dispose");
     },
@@ -45,33 +70,21 @@ function fakePanels(answer: string[] | null | (() => string[] | null)) {
   return {
     factory,
     created,
+    alerts,
     events,
   };
 }
 
-test("macOS registers the file pickers and shares their schemas with Windows", () => {
+test("macOS registers every dialog operation and shares the Windows schemas", () => {
   const macos = dialog._definition.nativePlatforms.macos;
+  const windows = dialog._definition.nativePlatforms.windows;
   expect(macos?.operations).toEqual([
     "openFile",
     "selectFolder",
     "saveFile",
-  ]);
-  expect(macos?.operations).not.toContain("showMessage");
-  for (const name of [
-    "openFile",
-    "selectFolder",
-    "saveFile",
-  ] as const) {
-    expect(macosDialogOperations[name].input).toBe(
-      dialogOperations[name].input,
-    );
-    expect(macosDialogOperations[name].output).toBe(
-      dialogOperations[name].output,
-    );
-  }
-  expect(dialog._definition.nativePlatforms.windows?.operations).toContain(
     "showMessage",
-  );
+  ]);
+  expect(macos?.operations).toEqual(windows?.operations);
 });
 
 test("an open panel chooses files and honors multiple selection and hidden files", () => {
@@ -354,4 +367,265 @@ test("a selection beyond the shared result limits fails with an explanation", ()
     "run",
     "dispose",
   ]);
+});
+
+test("a message maps to buttons, Return and Escape keys, style and checkbox", () => {
+  expect(
+    alertSettings({
+      message: "Delete?",
+    }),
+  ).toEqual({
+    message: "Delete?",
+    detail: null,
+    style: "informational",
+    buttons: [],
+    defaultButton: 0,
+    cancelButton: undefined,
+    checkbox: null,
+  });
+  expect(
+    alertSettings({
+      message: "Save changes?",
+      detail: "Unsaved work is lost.",
+      type: "warning",
+      buttons: [
+        "Save",
+        "Discard",
+        "Cancel",
+      ],
+      defaultButton: 0,
+      cancelButton: 2,
+      checkbox: {
+        label: "Do not ask again",
+      },
+    }),
+  ).toEqual({
+    message: "Save changes?",
+    detail: "Unsaved work is lost.",
+    style: "warning",
+    buttons: [
+      "Save",
+      "Discard",
+      "Cancel",
+    ],
+    defaultButton: 0,
+    cancelButton: 2,
+    checkbox: {
+      label: "Do not ask again",
+      checked: false,
+    },
+  });
+});
+
+test("message types choose the alert style", () => {
+  const styleOf = (type: "none" | "info" | "warning" | "error" | "question") =>
+    alertSettings({
+      message: "m",
+      type,
+    }).style;
+  expect(styleOf("none")).toBe("informational");
+  expect(styleOf("info")).toBe("informational");
+  expect(styleOf("question")).toBe("informational");
+  expect(styleOf("warning")).toBe("warning");
+  expect(styleOf("error")).toBe("critical");
+});
+
+test("the cancel button follows the shared rule and yields Return when it is the default", () => {
+  const cancelOf = (
+    buttons: string[],
+    cancelButton?: number,
+    defaultButton?: number,
+  ) =>
+    alertSettings({
+      message: "m",
+      buttons,
+      cancelButton,
+      defaultButton,
+    }).cancelButton;
+  // Several buttons without a cancel button leave Escape unbound.
+  expect(
+    cancelOf([
+      "a",
+      "b",
+    ]),
+  ).toBeUndefined();
+  expect(
+    cancelOf(
+      [
+        "a",
+        "b",
+      ],
+      1,
+    ),
+  ).toBe(1);
+  // A cancel button that is also the default keeps Return only.
+  expect(
+    cancelOf(
+      [
+        "a",
+        "b",
+      ],
+      1,
+      1,
+    ),
+  ).toBeUndefined();
+  expect(
+    cancelOf([
+      "a",
+    ]),
+  ).toBeUndefined();
+  expect(
+    alertSettings({
+      message: "m",
+      buttons: [
+        "a",
+        "b",
+      ],
+      defaultButton: 1,
+    }).defaultButton,
+  ).toBe(1);
+});
+
+test("a checked checkbox starts checked", () => {
+  expect(
+    alertSettings({
+      message: "m",
+      checkbox: {
+        label: "x",
+        checked: true,
+      },
+    }).checkbox,
+  ).toEqual({
+    label: "x",
+    checked: true,
+  });
+});
+
+test("showMessage returns the answer and releases the alert", () => {
+  const panels = fakePanels(null, {
+    button: 2,
+    checkboxChecked: true,
+  });
+  const dialogs = new MacosDialogs(panels.factory);
+  expect(
+    dialogs.showMessage(
+      {
+        message: "m",
+        buttons: [
+          "a",
+          "b",
+          "c",
+        ],
+      },
+      "backend",
+    ),
+  ).toEqual({
+    button: 2,
+    checkboxChecked: true,
+  });
+  expect(panels.alerts).toHaveLength(1);
+  expect(panels.created).toHaveLength(0);
+  expect(panels.events).toEqual([
+    "create",
+    "run",
+    "dispose",
+  ]);
+  expect(dialogs.busy()).toBe(false);
+});
+
+test("showMessage honors a recorded abort before and after the alert", () => {
+  const before = new AbortController();
+  before.abort();
+  const unopened = fakePanels(null);
+  expect(() =>
+    new MacosDialogs(unopened.factory).showMessage(
+      {
+        message: "m",
+      },
+      "backend",
+      before.signal,
+    ),
+  ).toThrow(
+    expect.objectContaining({
+      code: "CANCELLED",
+    }),
+  );
+  expect(unopened.events).toEqual([]);
+
+  const during = new AbortController();
+  const opened = fakePanels(null, () => {
+    during.abort();
+    return {
+      button: 0,
+      checkboxChecked: false,
+    };
+  });
+  const dialogs = new MacosDialogs(opened.factory);
+  expect(() =>
+    dialogs.showMessage(
+      {
+        message: "m",
+      },
+      "backend",
+      during.signal,
+    ),
+  ).toThrow(
+    expect.objectContaining({
+      code: "CANCELLED",
+    }),
+  );
+  expect(opened.events).toEqual([
+    "create",
+    "run",
+    "dispose",
+  ]);
+  expect(dialogs.busy()).toBe(false);
+});
+
+test("a message during a panel is BUSY and a failing alert releases the busy state", () => {
+  const holder: {
+    dialogs?: MacosDialogs;
+  } = {};
+  let nested: unknown;
+  const panels = fakePanels(
+    () => {
+      try {
+        holder.dialogs?.showMessage(
+          {
+            message: "m",
+          },
+          "backend",
+        );
+      } catch (error) {
+        nested = error;
+      }
+      return null;
+    },
+    () => {
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "boom",
+      });
+    },
+  );
+  const dialogs = new MacosDialogs(panels.factory);
+  holder.dialogs = dialogs;
+  dialogs.show("openFile", {}, "backend");
+  expect(nested).toMatchObject({
+    code: "BUSY",
+  });
+  expect(() =>
+    dialogs.showMessage(
+      {
+        message: "m",
+      },
+      "backend",
+    ),
+  ).toThrow("boom");
+  expect(panels.events.slice(-3)).toEqual([
+    "create",
+    "run",
+    "dispose",
+  ]);
+  expect(dialogs.busy()).toBe(false);
 });

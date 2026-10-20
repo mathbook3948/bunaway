@@ -218,9 +218,10 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 
 우선순위 P1. 소유자: 선택 대화상자 기능과 호스트 UI 경로.
 
-- [ ] message, confirm과 prompt, 버튼 및 취소 결과를 제공한다.
+- [x] message와 confirm, 버튼 및 취소 결과를 제공한다.
+- [ ] prompt 입력란을 제공한다.
 - [x] open/save panel의 파일, 폴더, 다중 선택과 유형 필터를 제공한다.
-- [ ] 부모 창의 sheet와 앱 모달, 부모 창 종료 및 요청 취소를 연결한다.
+- [ ] 부모 창의 sheet와 앱 모달, 부모 창 종료 및 요청 취소를 연결한다(message 대화상자도 같다).
 - [ ] 선택한 파일의 접근 범위와 security-scoped bookmark의 수명 및 해제를 정의한다.
 - [ ] 기본 위치, 파일명, 덮어쓰기 확인, 확장자 처리와 오류를 정의한다.
 
