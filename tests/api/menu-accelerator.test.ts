@@ -76,6 +76,10 @@ test("accelerator text with an unknown key, modifier or shape is rejected", () =
     "Ctrl+N\t",
     "Ctrl+\n",
     "Ctrl+Plus",
+    "constructor+N",
+    "__proto__+N",
+    "Ctrl+constructor+N",
+    "Ctrl+toString+N",
     `${"Ctrl+".repeat(MAX_ACCELERATOR_LENGTH)}N`,
   ]) {
     expect(normalizeAccelerator(text)).toBeUndefined();
@@ -175,7 +179,7 @@ test("submenu and separator reject an accelerator", () => {
   }
 });
 
-test("updateItem sets, replaces and clears the accelerator and rebuilds attached windows", () => {
+test("updateItem sets, replaces and clears the accelerator", () => {
   const f = fixture();
   create(
     f.state,
@@ -245,7 +249,8 @@ test("updateItem rejects an invalid accelerator and one on a submenu or separato
     "sub",
     "sep",
   ]) {
-    expect(() =>
+    let thrown: unknown;
+    try {
       updateItem(
         f.state,
         menuOperations.updateItem.input.parse({
@@ -255,7 +260,25 @@ test("updateItem rejects an invalid accelerator and one on a submenu or separato
             accelerator: "Ctrl+S",
           },
         }),
-      ),
-    ).toThrow();
+      );
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
   }
+  // The rejected updates leave the stored tree untouched.
+  expect(
+    get(f.state, {
+      menuId: "m",
+    })?.items,
+  ).toEqual([
+    expect.not.objectContaining({
+      accelerator: "Ctrl+S",
+    }),
+    expect.not.objectContaining({
+      accelerator: "Ctrl+S",
+    }),
+  ]);
 });

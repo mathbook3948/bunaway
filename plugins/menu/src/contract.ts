@@ -80,7 +80,11 @@ export function normalizeAccelerator(text: string): string | undefined {
   }
   const modifiers = new Set<string>();
   for (const part of parts) {
-    const modifier = ACCELERATOR_MODIFIER_ALIASES[part.toLowerCase()];
+    const alias = part.toLowerCase();
+    // Own keys only: names such as `constructor` must not resolve through the prototype.
+    const modifier = Object.hasOwn(ACCELERATOR_MODIFIER_ALIASES, alias)
+      ? ACCELERATOR_MODIFIER_ALIASES[alias]
+      : undefined;
     if (modifier === undefined || modifiers.has(modifier)) {
       return undefined;
     }

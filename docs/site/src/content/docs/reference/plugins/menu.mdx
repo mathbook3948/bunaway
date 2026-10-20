@@ -115,6 +115,8 @@ await menu.updateItem({ menuId: "main-menu", itemId: "save", changes: { accelera
 await menu.updateItem({ menuId: "main-menu", itemId: "save", changes: { accelerator: null } });
 ```
 
+## 항목 삽입, 제거와 변경
+
 `insert`의 index는 대상 배열의 0부터 길이까지입니다. 0은 prepend, 배열 길이는 append입니다.
 `parentId`를 생략하거나 `null`로 지정하면 최상위에 삽입하고, 지정하면 해당 submenu에 삽입합니다.
 `removeItem`은 submenu의 하위 항목도 제거합니다. `updateItem.changes`는 `label`, `enabled`,
