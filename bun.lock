@@ -30,6 +30,7 @@
         "@bunaway/plugin-power": "workspace:*",
         "@bunaway/plugin-process": "workspace:*",
         "@bunaway/plugin-safe-storage": "workspace:*",
+        "@bunaway/plugin-screen-capture": "workspace:*",
         "@bunaway/plugin-storage": "workspace:*",
         "@bunaway/plugin-store": "workspace:*",
         "@bunaway/plugin-tray": "workspace:*",
@@ -370,6 +371,20 @@
         "@bunaway/plugin": "0.0.0",
       },
     },
+    "plugins/screen-capture": {
+      "name": "@bunaway/plugin-screen-capture",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bunaway/protocol": "workspace:*",
+        "zod": "4.6.5",
+      },
+      "devDependencies": {
+        "@bunaway/plugin": "workspace:*",
+      },
+      "peerDependencies": {
+        "@bunaway/plugin": "0.0.0",
+      },
+    },
     "plugins/storage": {
       "name": "@bunaway/plugin-storage",
       "version": "0.0.0",
@@ -591,6 +606,8 @@
     "@bunaway/plugin-process": ["@bunaway/plugin-process@workspace:plugins/process"],
 
     "@bunaway/plugin-safe-storage": ["@bunaway/plugin-safe-storage@workspace:plugins/safe-storage"],
+
+    "@bunaway/plugin-screen-capture": ["@bunaway/plugin-screen-capture@workspace:plugins/screen-capture"],
 
     "@bunaway/plugin-storage": ["@bunaway/plugin-storage@workspace:plugins/storage"],
 

@@ -660,7 +660,7 @@ const handle = withWide(path, (name) =>
 );
 ```
 
-`KERNEL32`, `USER32`, `OLE32`, `SHELL32`, `COMBASE`, `ADVAPI32`는 각 DLL에서 여러
+`KERNEL32`, `USER32`, `GDI32`, `OLE32`, `SHELL32`, `COMBASE`, `ADVAPI32`는 각 DLL에서 여러
 플러그인이 함께 쓰는 함수의 시그니처입니다. 팝업 메뉴 함수는 `USER32_MENUS`에 따로 두어
 메뉴와 트레이 플러그인이 없는 호스트에 메뉴 구현이 포함되지 않게 합니다. 핸들은 `u64`, 포인터는 `ptr`, BOOL 결과는
 `i32`, HRESULT는 `i32`로 선언하며 네이티브 호스트와 같은 규칙입니다. `pick(table, ...names)`는

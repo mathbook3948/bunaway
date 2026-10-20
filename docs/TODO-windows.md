@@ -788,6 +788,8 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [ ] 페이지 이미지 capture와 지정 영역 capture를 제공한다.
 - [ ] 페이지를 HTML 또는 리소스를 포함한 형태로 저장한다.
 - [ ] 화면과 창 capture source 목록, 이름, thumbnail과 식별자를 제공한다.
+  `screen-capture` 플러그인이 모니터와 최상위 창의 목록, 이름, 불투명 식별자와 `captureSource`의 축소 PNG(thumbnail)를
+  제공한다. 실제 모니터와 다른 앱 창의 캡처, 혼합 DPI, 보호된 콘텐츠와 상승된 권한 창의 결과, 목록 안의 thumbnail은 남아 있다.
 - [ ] 사용자의 source 선택과 getDisplayMedia 흐름을 연결한다.
 - [ ] 화면 공유, 화면과 시스템 audio capture의 플랫폼별 지원을 정의한다.
 - [ ] frame별 PDF, 비디오 frame 이미지 복사와 저장의 지원을 결정한다.

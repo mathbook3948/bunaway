@@ -333,6 +333,7 @@
           "KERNEL32",
           "USER32",
           "USER32_MENUS",
+          "GDI32",
           "OLE32",
           "SHELL32",
           "COMBASE",
@@ -629,6 +630,17 @@
       },
       "pages": {
         "reference/plugins/store": ["default"]
+      }
+    },
+    {
+      "name": "@bunaway/plugin-screen-capture",
+      "source": "plugins/screen-capture/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/screen-capture": ["default"]
       }
     }
   ],
@@ -1425,6 +1437,10 @@
     "reference/cli/ios": ["ios"]
   },
   "operations": {
+    "reference/plugins/screen-capture": [
+      "screenCapture.listSources",
+      "screenCapture.captureSource"
+    ],
     "reference/plugins/store": [
       "store.load",
       "store.get",
