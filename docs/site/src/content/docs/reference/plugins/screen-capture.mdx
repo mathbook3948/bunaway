@@ -33,9 +33,10 @@ const thumbnail = await screenCapture.captureSource({
 `listSources({ types })`의 `types`는 `"screen"`과 `"window"` 중 하나 이상이며 같은 값을 두 번 쓸 수 없습니다.
 각 소스는 `{ id, kind, name, bounds, ownedByApp, minimized, monitorId? }`입니다.
 
-- `id`는 호출마다 무작위로 만든 불투명한 값입니다. `HWND`나 장치 이름이 아니며 다른 호출이나 다른 실행에서는
-  의미가 없습니다. 같은 소스가 다음 목록에도 있으면 같은 `id`를 유지하고, 목록에서 사라진 소스의 `id`는
-  무효가 됩니다. 창 핸들이 다른 창에 재사용되어도 프로세스와 스레드가 같지 않으면 같은 소스로 보지 않습니다.
+- `id`는 무작위로 만든 불투명한 값입니다. `HWND`나 장치 이름이 아니며 다른 실행에서는 의미가 없습니다.
+  같은 소스가 다음 목록에도 있으면 같은 `id`를 유지하고, 목록에서 사라진 소스의 `id`는 무효가 됩니다.
+  창 핸들이 다른 창에 재사용되어도 프로세스와 스레드가 같지 않으면 같은 소스로 보지 않습니다. 모니터는 장치
+  이름(`\\.\DISPLAYn`)으로 식별하므로, 분리한 뒤 같은 장치 이름을 받은 모니터는 같은 소스입니다.
 - `kind`가 `"screen"`이면 모니터이고 이름은 열거 순서에 따른 `Screen 1`, `Screen 2`입니다. `monitorId`는 호스트의
   모니터 API가 쓰는 장치 이름과 같아서 배율은 그쪽에서 확인합니다.
 - `kind`가 `"window"`이면 최상위 창이고 이름은 창 제목입니다. 보이는 창, 소유자가 없는 창, 도구 창이 아닌 창,
@@ -60,11 +61,11 @@ base64 PNG이고 `width`와 `height`는 물리 픽셀입니다. 이미지는 `ma
 
 | 상황 | 오류 | `details.reason` |
 | --- | --- | --- |
-| 모르는 `id`, 목록에서 사라진 소스, 닫힌 창, 분리된 모니터 | `INVALID_ARGUMENT` | `SOURCE_NOT_FOUND` |
+| 모르는 `id`, 목록에서 사라진 소스, 닫힌 창, 장치 이름이 사라진 모니터 | `INVALID_ARGUMENT` | `SOURCE_NOT_FOUND` |
 | 최소화되었거나 보이지 않거나 다른 가상 데스크톱에 있는 창 | `INVALID_ARGUMENT` | `SOURCE_UNAVAILABLE` |
 | 창이 `SetWindowDisplayAffinity`로 캡처 제외를 요청함 | `PERMISSION_DENIED` | `SOURCE_PROTECTED` |
 | 창이 응답하지 않음 | `BUSY` | `SOURCE_NOT_RESPONDING` |
-| 창 면적이 7680 x 4320을 넘거나 PNG가 640 KiB를 넘음 | `INVALID_ARGUMENT` | `CAPTURE_TOO_LARGE` |
+| 창 사각형(보이지 않는 크기 조절 테두리 포함)이 7808 x 4448 면적을 넘거나 PNG가 640 KiB를 넘음 | `INVALID_ARGUMENT` | `CAPTURE_TOO_LARGE` |
 | GDI 또는 `PrintWindow` 호출 실패 | `INTERNAL` | 없음 |
 
 프로토콜에 `NOT_FOUND` 코드가 없어서 사라진 소스는 `INVALID_ARGUMENT`와 `SOURCE_NOT_FOUND`로 구분합니다.
@@ -84,7 +85,7 @@ PNG가 640 KiB를 넘으면 작은 `maxWidth`와 `maxHeight`로 다시 호출합
 - 화면에서 직접 호출하려면 `commands`에 `plugin.screenCapture.listSources` 또는 `plugin.screenCapture.captureSource`를
   허용해야 합니다. 권장하지 않으며 외부 콘텐츠를 보여 주는 뷰에는 허용하지 않습니다.
 
-`SetWindowDisplayAffinity`로 캡처 제외를 요청한 창은 창 캡처를 거부하고, 화면 캡처에서는 Windows가 그 창을 제외합니다.
+`SetWindowDisplayAffinity`로 캡처 제외를 요청한 창은 창 캡처를 거부하고, 화면 캡처에서는 `WDA_EXCLUDEFROMCAPTURE` 창을 Windows가 제외합니다(`WDA_MONITOR` 창은 검게 나올 수 있고 이 동작은 확인하지 않았습니다).
 다른 앱이 건 보호 설정을 우회하지 않습니다.
 
 화면 함수의 마지막 인자는 `NativeInvokeOptions`입니다. `signal`과 `deadline`은

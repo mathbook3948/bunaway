@@ -11,8 +11,11 @@ export const DEFAULT_CAPTURE_EDGE_PIXELS = 150;
 export const MAX_CAPTURE_EDGE_PIXELS = 4096;
 /** Largest PNG one capture returns: 640 KiB keeps its base64 text inside the 1 MiB message limit. */
 export const MAX_CAPTURE_PNG_BYTES = 655_360;
-/** Largest window rectangle (8K) a capture allocates a device-independent bitmap for. */
-export const MAX_SOURCE_PIXELS = 7680 * 4320;
+/**
+ * Largest window rectangle a capture allocates a device-independent bitmap for: an 8K frame plus
+ * 128 pixels per axis for the invisible resize border that a maximized window extends past the screen.
+ */
+export const MAX_SOURCE_PIXELS = (7680 + 128) * (4320 + 128);
 
 export const sourceKindSchema = z.enum([
   "screen",

@@ -790,8 +790,8 @@ test("capture refuses windows that cannot be captured with a stable reason", () 
         windowRect: {
           x: 0,
           y: 0,
-          width: 7681,
-          height: 4320,
+          width: 8000,
+          height: 4500,
         },
         frameRect: null,
       },
@@ -1054,4 +1054,50 @@ test("the PNG encoder writes valid chunks and round-trips pixels", () => {
     "IDAT",
     "IEND",
   ]);
+});
+
+test("content drawn while the window turned on capture exclusion is not returned", () => {
+  const { world } = setup([
+    [
+      1n,
+      windowFacts(),
+    ],
+  ]);
+  const fake = fakeBindings(world);
+  const adapter = new WindowsScreenCapture(
+    {
+      ...fake.bindings,
+      printWindow(window, dc) {
+        const done = fake.bindings.printWindow(window, dc);
+        world.windows.set(
+          1n,
+          windowFacts({
+            displayAffinity: 0x11,
+          }),
+        );
+        return done;
+      },
+    },
+    APP_PID,
+  );
+  const [source] = adapter.listSources({
+    types: [
+      "window",
+    ],
+  });
+  const error = errorOf(() =>
+    adapter.captureSource({
+      id: source?.id as string,
+    }),
+  );
+  expect([
+    error.code,
+    error.details,
+  ]).toEqual([
+    "PERMISSION_DENIED",
+    {
+      reason: "SOURCE_PROTECTED",
+    },
+  ]);
+  expect(fake.alive.size).toBe(0);
 });

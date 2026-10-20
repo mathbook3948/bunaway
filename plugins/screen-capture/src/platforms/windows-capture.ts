@@ -147,6 +147,14 @@ function unavailable(): never {
   );
 }
 
+function protectedWindow(): never {
+  return fail(
+    "PERMISSION_DENIED",
+    "The window excludes itself from capture.",
+    REASON.protected,
+  );
+}
+
 function refKey(ref: SourceRef): string {
   return ref.kind === "window"
     ? `window:${ref.window}:${ref.pid}:${ref.tid}`
@@ -431,11 +439,7 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
       unavailable();
     }
     if (facts.displayAffinity !== 0) {
-      fail(
-        "PERMISSION_DENIED",
-        "The window excludes itself from capture.",
-        REASON.protected,
-      );
+      protectedWindow();
     }
     if (facts.hung) {
       fail("BUSY", "The window is not responding.", REASON.notResponding);
@@ -459,6 +463,10 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
       this.dibIn(owner, screen, memory, full);
       checked(this.native.printWindow(ref.window, memory), "PrintWindow");
       this.native.flush();
+      // The owner may have asked for exclusion while the window was drawn; do not return that content.
+      if (this.native.windowFacts(ref.window)?.displayAffinity !== 0) {
+        protectedWindow();
+      }
       checked(
         this.native.blit(target, size, memory, visible, false),
         "Window copy",
