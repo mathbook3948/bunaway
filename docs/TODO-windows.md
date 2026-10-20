@@ -805,6 +805,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [x] Windows의 binary 읽기와 쓰기, UTF-8 텍스트와 바이트 append를 제공한다.
   canonical base64와 256 KiB 바이트 상한, 작업별 권한과 경로 형식 검사를 유지한다.
   `offset`과 `length`를 주면 그 범위만 읽는다(호출당 256 KiB). readText는 파일 512 KiB와 JSON 768 KiB를 넘으면 `INVALID_ARGUMENT`다.
+  읽거나 복사하는 도중 파일이 줄어들면 짧은 결과 대신 실패하며 단위 테스트로 고정한다.
   [바이너리 계약](./site/src/content/docs/reference/host/storage-bytes.mdx)을 따른다.
 - [ ] open/read/write/seek/close 파일 핸들과 대용량 stream I/O를 제공한다.
 - [x] 파일과 디렉터리 존재, stat과 metadata를 조회한다.
