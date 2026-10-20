@@ -709,7 +709,8 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
   online 상태 조회 `network.isOnline`과 변경 이벤트 `network.onlineChanged`는 구현했다.
   Electron `net.isOnline()`에 대응해 루프백과 link-local이 아닌 주소를 가진 활성 인터페이스 유무만 보고 인터넷 도달은 판단하지 않는다.
   이벤트는 2초 주기 확인으로 Windows에서만 보낸다. host resolve `network.resolveHost`는 Electron `net.resolveHost()`에 대응해
-  시스템 리졸버(getaddrinfo)로 구현했다. 쿼리 유형, cache, secure DNS 옵션과 proxy resolve는 남았다.
+  시스템 리졸버(getaddrinfo)로 구현했다. proxy resolve `network.resolveProxy`는 Electron `session.resolveProxy()`에 대응해
+  WinHTTP로 사용자 인터넷 옵션(자동 감지, PAC, 수동 목록과 예외 목록)을 적용한 구조화 목록을 돌려준다. 쿼리 유형, cache와 secure DNS 옵션은 남았다.
 - [ ] 오프라인, latency와 bandwidth emulation을 제공한다.
 - [ ] preconnect, connection 정리와 network log를 제공한다.
 - [ ] 사용자 정의 앱 protocol의 등록, 해제와 등록 상태 조회를 제공한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).

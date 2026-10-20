@@ -1091,6 +1091,9 @@ text/binary 메시지, timeout과 SDK deadline, 취소 뒤 실제 TCP 정리와 
 `api/network-resolve-host.test.ts`는 `network.resolveHost`의 권한, 호스트 이름 검증, 주소 매핑과 제한, 취소와
 기한을 가짜 리졸버로 검사하고 `localhost`는 실제 리졸버로 조회한다.
 `lifecycle/windows-network-resolve-host.test.ts`는 생성 Windows와 macOS 어댑터로 `localhost`를 조회한다.
+`api/network-resolve-proxy.test.ts`는 `network.resolveProxy`의 권한, 입력과 결과 스키마, 프록시 목록과 예외 목록 해석,
+자격 증명 제거, 루프백 직접 연결, 자동 구성 단계의 순서와 기한, 취소와 정리를 가짜 WinHTTP로 검사한다.
+`lifecycle/windows-network-resolve-proxy.test.ts`는 생성 Windows 어댑터의 실제 WinHTTP 호출 형태와, 임시 PAC 파일을 쓰는 실제 WinHTTP 바인딩을 검사한다.
 `cli/network.test.ts`는 isolated tarball 설치의 두 OS native export에서 실제 HTTP를 실행하고
 browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS, 외부 proxy와 OS 인증은 검증하지 않는다.
 

@@ -7,6 +7,8 @@ import {
   requestInputSchema,
   resolveHostInputSchema,
   resolveHostResultSchema,
+  resolveProxyInputSchema,
+  resolveProxyResultSchema,
   responseSchema,
 } from "#network/contract";
 import {
@@ -15,6 +17,7 @@ import {
   runIsOnline as runMacosIsOnline,
   runRequest as runMacosRequest,
   runResolveHost as runMacosResolveHost,
+  runResolveProxy as runMacosResolveProxy,
 } from "#network/platforms/macos";
 import {
   type initialize as initializeWindows,
@@ -22,6 +25,7 @@ import {
   runIsOnline as runWindowsIsOnline,
   runRequest as runWindowsRequest,
   runResolveHost as runWindowsResolveHost,
+  runResolveProxy as runWindowsResolveProxy,
 } from "#network/platforms/windows";
 
 const macosOperation =
@@ -53,6 +57,11 @@ export const macosOperations = {
     handler: (input, { instance, signal }) =>
       runMacosResolveHost(instance, input, signal),
   }),
+  resolveProxy: macosOperation({
+    input: resolveProxyInputSchema,
+    output: resolveProxyResultSchema,
+    handler: () => runMacosResolveProxy(),
+  }),
 };
 export const windowsOperations = {
   request: windowsOperation({
@@ -77,5 +86,11 @@ export const windowsOperations = {
     output: resolveHostResultSchema,
     handler: (input, { instance, signal }) =>
       runWindowsResolveHost(instance, input, signal),
+  }),
+  resolveProxy: windowsOperation({
+    input: resolveProxyInputSchema,
+    output: resolveProxyResultSchema,
+    handler: (input, { instance, signal }) =>
+      runWindowsResolveProxy(instance, input, signal),
   }),
 };
