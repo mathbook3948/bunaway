@@ -141,11 +141,11 @@ function internal(message: string): never {
 const closeLibrary = (library: { close(): void }) => library.close();
 
 /**
- * Opens the AppKit panels. Objects returned by Objective-C stay unsigned 64-bit integers. Each
- * call drains its own autorelease pool and the panel is retained for as long as its binding owns
- * it, so `dispose` releases it exactly once. The panels are modal: `run` returns only after the
+ * Opens the AppKit panels and alerts. Objects returned by Objective-C stay unsigned 64-bit
+ * integers. Each call drains its own autorelease pool and a panel or alert is owned by its binding
+ * until its `dispose`, which releases it exactly once. Both are modal: `run` returns only after the
  * user answers, and host cancellation cannot interrupt it. Library handles are closed in reverse
- * order by `dispose`.
+ * order by the factory's `dispose`.
  */
 export function createFilePanelFactory(): FilePanelFactory {
   const owner = new ResourceOwner("macOS dialog adapter cleanup failed.");

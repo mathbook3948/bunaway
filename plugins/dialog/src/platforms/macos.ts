@@ -119,10 +119,10 @@ function checkResultLimits(paths: readonly string[]): void {
 }
 
 /**
- * File and folder pickers on macOS, shown application-modal on the main thread. The modal loop
- * blocks this thread until the user answers, so a host cancellation or a closed owner window
- * cannot dismiss an open panel; it is honored before the panel opens and, when it arrived during
- * the panel, replaces the user's answer with CANCELLED.
+ * File and folder pickers and message dialogs on macOS, shown application-modal on the main thread.
+ * The modal loop blocks this thread until the user answers, so a host cancellation or a closed owner
+ * window cannot dismiss an open panel or alert; it is honored before the dialog opens and, when it
+ * arrived during the dialog, replaces the user's answer with CANCELLED.
  */
 export class MacosDialogs implements DialogInstance {
   private disposed = false;
