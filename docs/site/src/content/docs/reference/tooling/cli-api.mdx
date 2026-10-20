@@ -13,6 +13,7 @@ sidebar: { order: 2 }
 | --- | --- |
 | `createProject(directory, options?)` | 생성한 프로젝트 경로 `Promise<string>` |
 | `validateProject(directory, options?)` | 해석한 `Promise<Project>` |
+| `contractListText(directory)` | 명령과 이벤트 계약 JSON 문자열 `Promise<string>` |
 | `doctor(directory)` | 환경 검사 성공 여부 `Promise<boolean>` |
 
 create는 `packageDirectory?: string`과 `template?: Template`를 받습니다. 기본 템플릿은 vanilla입니다.
@@ -36,6 +37,9 @@ CLI가 이어지는 번들에 재사용하며 앱의 활성화 목록은 `AppDef
 파일 경로는 해석된 경로입니다. 새 검증에서는 설치 플러그인을 다시 읽습니다.
 `buildCommand`는 설정의 `build.command` 실행 파일과 인자 배열입니다.
 구체적인 검증 기준은 [validate](/reference/cli/validate/)를 따릅니다.
+
+`contractListText`는 `validateProject`로 프로젝트를 검사한 뒤 앱 파일을 별도 Bun 프로세스에서 import해 `ContractList` 형식의 JSON 문자열을 반환합니다.
+출력 형식과 실패 조건은 [contract](/reference/cli/contract/)를 따릅니다.
 
 ## 네이티브 준비와 빌드
 

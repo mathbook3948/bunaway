@@ -1,0 +1,425 @@
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
+import type { Policy } from "@bunaway/protocol";
+import { buildContractList, readAppDefinition } from "#cli/contract-list";
+import { deadline } from "../fixtures/deadlines.ts";
+import { createProject } from "./project.ts";
+
+setDefaultTimeout(deadline("build"));
+
+let home: string;
+let project: string;
+let appSource: string;
+let policySource: string;
+
+/** Runs the CLI entry in a child process and returns what it wrote. */
+async function runContract(directory: string): Promise<{
+  code: number;
+  stdout: string;
+  stderr: string;
+}> {
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      resolve(import.meta.dir, "../../packages/cli/src/main.ts"),
+      "contract",
+      directory,
+    ],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const stdout = new Response(child.stdout).text();
+  const stderr = new Response(child.stderr).text();
+  return {
+    code: await child.exited,
+    stdout: await stdout,
+    stderr: await stderr,
+  };
+}
+
+beforeAll(async () => {
+  home = await realpath(await mkdtemp(resolve(tmpdir(), "bunaway-contract-")));
+  project = resolve(home, "app");
+  await createProject(project);
+  const install = Bun.spawn(
+    [
+      process.execPath,
+      "install",
+    ],
+    {
+      cwd: project,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const output = new Response(install.stdout).text();
+  const errors = new Response(install.stderr).text();
+  expect(await install.exited, `${await output}\n${await errors}`).toBe(0);
+  appSource = await Bun.file(resolve(project, "src-bunaway/app.ts")).text();
+  policySource = await Bun.file(
+    resolve(project, "src-bunaway/policy.json"),
+  ).text();
+}, deadline("toolchain"));
+
+afterAll(async () => {
+  await rm(home, {
+    recursive: true,
+    force: true,
+  });
+});
+
+test("contract lists the template's commands, events and view exposure", async () => {
+  const { code, stdout } = await runContract(project);
+  expect(code).toBe(0);
+  const list = JSON.parse(stdout);
+  expect(list.version).toBe(1);
+  // The template also registers the storage plugin, whose operations are plugin.* commands.
+  expect(
+    list.commands
+      .filter((entry: { owner: string }) => entry.owner === "app")
+      .map((entry: { name: string; owner: string; views: string[] }) => [
+        entry.name,
+        entry.owner,
+        entry.views,
+      ]),
+  ).toEqual([
+    [
+      "message.read",
+      "app",
+      [
+        "main",
+      ],
+    ],
+    [
+      "message.save",
+      "app",
+      [
+        "main",
+      ],
+    ],
+  ]);
+  expect(list.commands[1].input).toEqual({
+    type: "string",
+    maxLength: 10000,
+  });
+  expect(list.events.map((entry: { name: string }) => entry.name)).toEqual([
+    "message.saved",
+  ]);
+  expect(list.views).toEqual([
+    {
+      id: "main",
+      origins: [
+        "https://app.bunaway.local",
+      ],
+      commands: [
+        "message.read",
+        "message.save",
+      ],
+      events: [
+        "message.saved",
+      ],
+      hostPermissions: [
+        "storage.readText",
+        "storage.writeText",
+      ],
+    },
+  ]);
+  // Same project, same bytes.
+  expect((await runContract(project)).stdout).toBe(stdout);
+});
+
+test("output from the app's top-level code stays out of the document", async () => {
+  await Bun.write(
+    resolve(project, "src-bunaway/app.ts"),
+    `console.log("noise from app");\n${appSource}`,
+  );
+  try {
+    const { code, stdout, stderr } = await runContract(project);
+    expect(code).toBe(0);
+    expect(stdout.startsWith("{")).toBe(true);
+    expect(() => JSON.parse(stdout)).not.toThrow();
+    expect(stderr).toContain("noise from app");
+  } finally {
+    await Bun.write(resolve(project, "src-bunaway/app.ts"), appSource);
+  }
+});
+
+test("a policy name the app does not register fails with a nonzero exit", async () => {
+  await Bun.write(
+    resolve(project, "src-bunaway/policy.json"),
+    policySource.replace('"message.read"', '"message.read", "message.gone"'),
+  );
+  try {
+    const { code, stdout, stderr } = await runContract(project);
+    expect(code).toBe(1);
+    expect(stdout).toBe("");
+    expect(stderr).toContain('view "main" lists command "message.gone"');
+  } finally {
+    await Bun.write(resolve(project, "src-bunaway/policy.json"), policySource);
+  }
+});
+
+test("an app entry that fails to import fails with a nonzero exit and no document", async () => {
+  await Bun.write(
+    resolve(project, "src-bunaway/app.ts"),
+    `throw new Error("boom");\n${appSource}`,
+  );
+  try {
+    const { code, stdout, stderr } = await runContract(project);
+    expect(code).toBe(1);
+    expect(stdout).toBe("");
+    expect(stderr).toContain("Importing the app entry failed");
+  } finally {
+    await Bun.write(resolve(project, "src-bunaway/app.ts"), appSource);
+  }
+});
+
+test("an app entry that never finishes importing is stopped at the limit", async () => {
+  await Bun.write(
+    resolve(project, "src-bunaway/app.ts"),
+    `process.on("SIGTERM", () => {});\nawait new Promise(() => {});\n${appSource}`,
+  );
+  try {
+    await expect(
+      readAppDefinition(resolve(project, "src-bunaway/app.ts"), project, 500),
+    ).rejects.toThrow("took longer than 500 ms");
+  } finally {
+    await Bun.write(resolve(project, "src-bunaway/app.ts"), appSource);
+  }
+});
+
+test("handles the app leaves open do not keep the CLI waiting", async () => {
+  await Bun.write(
+    resolve(project, "src-bunaway/app.ts"),
+    `setInterval(() => {}, 1000);\n${appSource}`,
+  );
+  try {
+    const { code, stdout } = await runContract(project);
+    expect(code).toBe(0);
+    expect(JSON.parse(stdout).version).toBe(1);
+  } finally {
+    await Bun.write(resolve(project, "src-bunaway/app.ts"), appSource);
+  }
+});
+
+/** Runs the CLI against an app entry that replaces the template's, then restores it. */
+async function withAppSource(
+  source: string,
+  check: () => Promise<void>,
+): Promise<void> {
+  await Bun.write(resolve(project, "src-bunaway/app.ts"), source);
+  try {
+    await check();
+  } finally {
+    await Bun.write(resolve(project, "src-bunaway/app.ts"), appSource);
+  }
+}
+
+test("an app entry that is not a defineApp result is rejected", async () => {
+  await withAppSource("export default 1;\n", async () => {
+    const { code, stdout, stderr } = await runContract(project);
+    expect(code).toBe(1);
+    expect(stdout).toBe("");
+    expect(stderr).toContain("must default-export an app definition");
+  });
+});
+
+test("an app that ends the process itself fails without exposing the scratch path", async () => {
+  await withAppSource(`process.exit(0);\n${appSource}`, async () => {
+    const { code, stdout, stderr } = await runContract(project);
+    expect(code).toBe(1);
+    expect(stdout).toBe("");
+    expect(stderr).toContain("ended the process");
+    expect(stderr).not.toContain("bunaway-contract-");
+  });
+});
+
+test("a contract larger than a protocol message is still written", async () => {
+  const bigSchema =
+    '{ enum: Array.from({ length: 40000 }, () => "x".repeat(40)) }';
+  await withAppSource(
+    // Registers the template policy's names so the policy check passes.
+    `export default { commands: { "big.command": { input: ${bigSchema}, output: {} }, "message.read": { input: {}, output: {} }, "message.save": { input: {}, output: {} } }, events: { "message.saved": {} } };\n`,
+    async () => {
+      const { code, stdout, stderr } = await runContract(project);
+      expect(code, stderr).toBe(0);
+      expect(stdout.length).toBeGreaterThan(1024 * 1024);
+      expect(JSON.parse(stdout).commands[0].name).toBe("big.command");
+    },
+  );
+});
+
+test("plugin entries carry their owner and unexposed entries list no views", () => {
+  const policy: Policy = {
+    version: 1,
+    views: [
+      {
+        id: "z",
+        origins: [],
+        commands: [
+          "plug.ping",
+        ],
+        events: [],
+        host: {
+          permissions: [],
+        },
+      },
+      {
+        id: "a",
+        origins: [],
+        commands: [
+          "plug.ping",
+        ],
+        events: [],
+        host: {
+          permissions: [],
+        },
+      },
+    ],
+    backend: {
+      permissions: [],
+    },
+  };
+  const list = buildContractList(policy, {
+    commands: {
+      "app.hidden": {
+        input: {},
+        output: {},
+      },
+    },
+    events: {
+      "app.changed": {
+        type: "string",
+      },
+    },
+    plugins: [
+      {
+        name: "plug",
+        commands: {
+          "plug.ping": {
+            input: {
+              const: null,
+            },
+            output: {
+              const: null,
+            },
+          },
+        },
+        events: {},
+      },
+    ],
+  });
+  expect(
+    list.commands.map((entry) => [
+      entry.name,
+      entry.owner,
+    ]),
+  ).toEqual([
+    [
+      "app.hidden",
+      "app",
+    ],
+    [
+      "plug.ping",
+      "plugin:plug",
+    ],
+  ]);
+  expect(list.commands[0]?.views).toEqual([]);
+  expect(list.commands[1]?.views).toEqual([
+    "a",
+    "z",
+  ]);
+  expect(list.events[0]?.views).toEqual([]);
+  expect(list.views.map((view) => view.id)).toEqual([
+    "a",
+    "z",
+  ]);
+});
+
+test("a name registered by two owners is rejected like Core does", () => {
+  expect(() =>
+    buildContractList(
+      {
+        version: 1,
+        views: [],
+        backend: {
+          permissions: [],
+        },
+      },
+      {
+        commands: {
+          "dup.command": {
+            input: {},
+            output: {},
+          },
+        },
+        events: {},
+        plugins: [
+          {
+            name: "plug",
+            commands: {
+              "dup.command": {
+                input: {},
+                output: {},
+              },
+            },
+            events: {},
+          },
+        ],
+      },
+    ),
+  ).toThrow('"dup.command" is registered by both app and plugin:plug');
+});
+
+test("native operations are listed as plugin commands and the policy may name them", async () => {
+  await withAppSource(
+    `import { defineApp } from "@bunaway/backend";\nimport storage from "@bunaway/plugin-storage";\nexport default defineApp({ plugins: [storage], modules: [] });\n`,
+    async () => {
+      await Bun.write(
+        resolve(project, "src-bunaway/policy.json"),
+        policySource
+          .replace(
+            '"message.read", "message.save"',
+            '"plugin.storage.readText"',
+          )
+          .replace('"events": ["message.saved"]', '"events": []'),
+      );
+      try {
+        const { code, stdout, stderr } = await runContract(project);
+        expect(code, stderr).toBe(0);
+        const entry = JSON.parse(stdout).commands.find(
+          (command: { name: string }) =>
+            command.name === "plugin.storage.readText",
+        );
+        expect(entry.owner).toBe("plugin:storage");
+        expect(entry.views).toEqual([
+          "main",
+        ]);
+      } finally {
+        await Bun.write(
+          resolve(project, "src-bunaway/policy.json"),
+          policySource,
+        );
+      }
+    },
+  );
+});
+
+test("a command named __proto__ is kept in the list", async () => {
+  await withAppSource(
+    `export default { commands: { ["__proto__"]: { input: {}, output: {} }, "message.read": { input: {}, output: {} }, "message.save": { input: {}, output: {} } }, events: { "message.saved": {} } };\n`,
+    async () => {
+      const { code, stdout, stderr } = await runContract(project);
+      expect(code, stderr).toBe(0);
+      expect(
+        JSON.parse(stdout).commands.map(
+          (command: { name: string }) => command.name,
+        ),
+      ).toContain("__proto__");
+    },
+  );
+});

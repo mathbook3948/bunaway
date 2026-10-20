@@ -6,6 +6,8 @@ export {
 export { buildProject, currentTarget, prepareNative } from "./build.ts";
 export type { DevServerConfig, Project } from "./config.ts";
 export { validateProject } from "./config.ts";
+export type { ContractList } from "./contract-list.ts";
+export { contractListText } from "./contract-list.ts";
 export { createProject } from "./create.ts";
 export { devProject, RestartController } from "./dev.ts";
 export { doctor } from "./doctor.ts";

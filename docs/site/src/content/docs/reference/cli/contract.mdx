@@ -1,0 +1,63 @@
+---
+title: contract
+description: UI에 노출된 명령과 이벤트의 이름, 스키마, 뷰별 정책을 JSON으로 출력하기.
+sidebar: { order: 9 }
+---
+
+```sh
+bunaway contract [directory]
+```
+
+directory를 생략하면 현재 폴더를 사용합니다. 먼저 [validate](/reference/cli/validate/)와 같은 검사를 하므로 프로덕션 `build.frontend`의 웹 자산이 필요합니다. 그다음 앱 정의의 명령과 이벤트 스키마와 `policy.json`의 뷰별 노출 목록을 합친 JSON 한 개를 stdout에 출력합니다.
+파일은 쓰지 않으므로 저장하려면 `bunaway contract > contract.json`처럼 셸 리다이렉트를 사용하세요.
+보안 리뷰, CI 감사, 다른 언어 클라이언트 생성의 입력으로 씁니다.
+
+## 앱 코드 실행
+
+스키마를 얻으려고 별도의 Bun 프로세스에서 `build.app` 파일을 import합니다. 이 파일의 최상위 코드가 실행되지만 Core 생성이나 호스트 연결은 일어나지 않습니다.
+앱이 출력하는 내용은 stderr로 전달되어 JSON에 섞이지 않습니다. 이 프로세스는 부모의 환경 변수를 그대로 상속하며, 계약을 쓴 뒤 바로 종료하므로 앱이 최상위에서 연 서버나 타이머는 유지되지 않습니다. 앱이 별도로 실행한 자식 프로세스는 종료하지 않습니다.
+import에 30초 넘게 걸리면 프로세스를 강제 종료하고 실패합니다.
+validate는 앱을 실행하지 않으므로 앱 코드를 실행하지 않고 검사하려면 validate를 사용하세요.
+
+## 출력 형식
+
+```json
+{
+  "version": 1,
+  "commands": [
+    {
+      "name": "message.save",
+      "owner": "app",
+      "input": { "type": "string", "maxLength": 10000 },
+      "output": { "const": null },
+      "views": ["main"]
+    }
+  ],
+  "events": [
+    { "name": "message.saved", "owner": "app", "payload": { "type": "string", "maxLength": 10000 }, "views": ["main"] }
+  ],
+  "views": [
+    {
+      "id": "main",
+      "origins": ["https://app.bunaway.local"],
+      "commands": ["message.read", "message.save"],
+      "events": ["message.saved"],
+      "hostPermissions": ["storage.readText", "storage.writeText"]
+    }
+  ]
+}
+```
+
+- `version`은 출력 형식의 버전이며 현재 1입니다.
+- `commands`와 `events`는 앱과 플러그인이 등록한 전체 목록입니다. `owner`는 앱이 등록하면 `app`, 플러그인이 등록하면 `plugin:<플러그인 이름>`입니다.
+- `input`, `output`, `payload`는 Core가 검증에 쓰는 스키마를 JSON으로 직렬화한 값 그대로 담습니다. 스키마의 `const`, `enum` 같은 값도 그대로 나오므로 스키마에 비밀 값을 넣지 마세요.
+- `views`는 해당 이름을 정책에 나열한 뷰의 ID입니다. 빈 배열이면 어떤 UI에서도 호출하거나 구독할 수 없습니다.
+- 최상위 `views`는 정책의 뷰별 origin, 노출 목록과 host 권한 operation 이름입니다. backend 권한, 환경 변수, 경로 허용 목록 같은 설정 값은 포함하지 않습니다.
+- 모든 목록은 이름의 UTF-16 코드 단위 순서로 정렬하므로 같은 프로젝트는 같은 바이트를 출력합니다. 스키마 안의 키 순서는 JSON 직렬화를 따릅니다.
+
+앱과 플러그인이 같은 이름을 등록하면 실패합니다. 플러그인의 지원 플랫폼, 필요한 권한, 중복 플러그인 이름처럼 Core가 시작할 때 하는 검사는 하지 않으므로 현재 플랫폼에서 실제로 동작하는지는 알려 주지 않습니다.
+
+## 실패
+
+정책이 앱과 플러그인에 없는 명령이나 이벤트 이름을 나열하면 해당 뷰와 이름을 알리고 0이 아닌 종료 코드로 끝납니다.
+앱 파일이 import에 실패하거나 default export가 `commands`와 `events` 객체를 가진 앱 정의가 아닌 경우에도 같습니다. 이때 stdout에는 아무것도 출력하지 않습니다.
