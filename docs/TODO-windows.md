@@ -848,14 +848,20 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   resolve는 명시적인 fully qualified base를 요구하며 host cwd와 per-drive cwd를 사용하지 않는다.
 - [x] 문자열 경로 helper의 Windows drive, UNC, extended-length와 Unicode 동작을 정의한다.
   파일 접근과 분리하며 storage의 extended-length 및 device 경로 거부는 유지한다.
-- [ ] key-value store의 load, get, set, delete, clear와 목록 조회를 제공한다.
+- [x] key-value store의 load, get, set, delete, clear와 목록 조회를 제공한다.
+  이름 붙인 JSON 저장소를 앱 데이터 디렉터리의 고정 위치에 두며 경로는 받지 않는다.
+  [store 계약](./site/src/content/docs/reference/plugins/store.mdx)을 따른다.
 - [ ] store 변경 이벤트, save, reload와 autosave를 제공한다.
-- [ ] Store `defaults`와 저장된 값의 병합 우선순위, 중첩 객체 처리, 기본값 무시 옵션을 정의한다.
+  save, reload, autosave는 구현했다. 남은 범위는 화면으로 보내는 변경 이벤트이며,
+  I/O Worker 어댑터에 이벤트 서비스를 제공하는 호스트 변경이 먼저 필요하다.
+  지금은 변경 함수가 `changed`를 반환한다.
+- [x] Store `defaults`와 저장된 값의 병합 우선순위, 중첩 객체 처리, 기본값 무시 옵션을 정의한다.
   [T-store-live]의 `overrideDefaults`와 reload의 `ignoreDefaults`를 참고하고, 파일 없음,
   누락 키, 충돌 키와 중첩 객체를 load/reload하여 결과와 저장 시점을 검증한다.
-- [ ] Store를 기본값으로 되돌리는 reset-to-defaults를 제공한다. 모든 값을 지우는 `clear`,
+- [x] Store를 기본값으로 되돌리는 reset-to-defaults를 제공한다. 모든 값을 지우는 `clear`,
   디스크 값을 다시 읽는 `reload`와 구분한다. [T-store-live]의 `reset`을 참고한다.
-  기본값이 있는 경우와 없는 경우, 변경 이벤트, autosave 및 명시적 save 후 재실행 결과를 검증한다.
+  기본값이 있는 경우와 없는 경우, 명시적 save 후 재실행 결과를 검증한다.
+  변경 이벤트는 위 이벤트 항목에서 다룬다.
 - [ ] SQLite의 query, execute, transaction과 migration을 제공한다.
 - [ ] Tauri SQL의 다른 backend와 원격 DB 지원 필요성을 결정한다.
 - [x] Bun 파일, path와 SQLite API를 직접 사용하는 trusted backend 경로와 권한 중재 API를 구분해 문서화한다.
