@@ -1255,6 +1255,132 @@ test("a file that grows past the size limit when serialized is damaged and can b
   expect(lenient.length("s")).toBe(0);
 });
 
+test("load errors name the cause, and equal options in another order are the same options", () => {
+  const root = dataRoot();
+  mkdirSync(join(root, "data", "stores"), {
+    recursive: true,
+  });
+  const list = `[${Array.from(
+    {
+      length: 9000,
+    },
+    () => "1e20",
+  ).join(",")}]`;
+  writeFileSync(
+    storeFile(root, "grown"),
+    `{"a":${list},"b":${list},"c":${list}}`,
+  );
+  const message = (run: () => unknown): string => {
+    try {
+      run();
+    } catch (error) {
+      return (error as Error).message;
+    }
+    return "";
+  };
+  const instance = create(root);
+  expect(
+    message(() =>
+      instance.load({
+        name: "grown",
+        ...manual,
+      }),
+    ),
+  ).toContain("damaged");
+
+  const first = create(root);
+  first.load({
+    name: "healthy",
+    ...manual,
+  });
+  first.set("healthy", "k", "x".repeat(200_000));
+  first.set("healthy", "j", "y".repeat(200_000));
+  first.save("healthy");
+  first.close("healthy");
+  const defaults = {
+    pad: "z".repeat(150_000),
+  };
+  expect(
+    message(() =>
+      instance.load({
+        name: "healthy",
+        defaults,
+        ...manual,
+      }),
+    ),
+  ).toContain("defaults together");
+
+  instance.load({
+    name: "o",
+    defaults: {
+      a: 1,
+      b: {
+        c: 1,
+        d: 2,
+      },
+    },
+    ...manual,
+  });
+  expect(
+    instance.load({
+      name: "o",
+      defaults: {
+        b: {
+          d: 2,
+          c: 1,
+        },
+        a: 1,
+      },
+      ...manual,
+    }),
+  ).toEqual({
+    loaded: "new",
+  });
+  instance.load({
+    name: "p",
+    ...manual,
+  });
+  expect(
+    instance.load({
+      name: "p",
+      defaults: {},
+      ...manual,
+    }),
+  ).toEqual({
+    loaded: "new",
+  });
+});
+
+test("a damaged store opened with reset is replaced by autosave without a save call", async () => {
+  const root = dataRoot();
+  mkdirSync(join(root, "data", "stores"), {
+    recursive: true,
+  });
+  writeFileSync(storeFile(root, "s"), "{ nope");
+  const instance = create(root);
+  instance.load({
+    name: "s",
+    defaults: {
+      d: 1,
+    },
+    onInvalidFile: "reset",
+    autosave: 10,
+  });
+  await waitFor(
+    () =>
+      readFileSync(storeFile(root, "s"), "utf8") !== "{ nope"
+        ? true
+        : undefined,
+    {
+      deadline: "inProcess",
+      what: "autosave replacing the damaged file",
+    },
+  );
+  expect(readStored(root, "s")).toEqual({
+    d: 1,
+  });
+});
+
 test("nesting up to 57 levels is stored and 58 is refused", () => {
   const nested = (levels: number) =>
     JSON.parse(`${"[".repeat(levels)}${"]".repeat(levels)}`);

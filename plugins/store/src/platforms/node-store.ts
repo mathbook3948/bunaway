@@ -205,10 +205,28 @@ function checkValueSizes(data: Map<string, StoreValue>): void {
   }
 }
 
-function checkFileSize(data: Map<string, StoreValue>): void {
+/** The message tells the callers apart: a change, a damaged file, or defaults that overflow. */
+function checkFileSize(
+  data: Map<string, StoreValue>,
+  message = "The store would exceed its size limit.",
+): void {
   if (byteLength(serialize(data)) > MAX_STORE_FILE_BYTES) {
-    throw invalid("The store would exceed its size limit.", "file-too-large");
+    throw invalid(message, "file-too-large");
   }
+}
+
+/** JSON text with object keys sorted, so equal options compare equal in any key order. */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (isRecord(value)) {
+    const members = Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`);
+    return `{${members.join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
 }
 
 function invalidFile(message: string): BunawayError {
@@ -268,7 +286,10 @@ function mergeContents(
   if (data.size > MAX_STORE_KEYS) {
     throw invalid("The stored keys and defaults exceed the key limit.");
   }
-  checkFileSize(data);
+  checkFileSize(
+    data,
+    "The stored file and the defaults together exceed the size limit.",
+  );
   return {
     data,
     source: stored === undefined ? "new" : "file",
@@ -303,8 +324,9 @@ export class NodeStore implements StoreInstance {
     this.ensureActive();
     const autosave = input.autosave ?? DEFAULT_AUTOSAVE_DELAY_MS;
     const onInvalidFile = input.onInvalidFile ?? "error";
-    const optionsKey = JSON.stringify([
-      input.defaults ?? null,
+    // Omitted and empty defaults mean the same, as do defaults listed in another key order.
+    const optionsKey = canonicalJson([
+      input.defaults ?? {},
       autosave,
       onInvalidFile,
     ]);
@@ -557,7 +579,10 @@ export class NodeStore implements StoreInstance {
       const fileEntries = new Map(Object.entries(stored ?? {}));
       checkValueSizes(fileEntries);
       // Serialized, the file alone may exceed the limit (exponent-form numbers expand): damage.
-      checkFileSize(fileEntries);
+      checkFileSize(
+        fileEntries,
+        "The store file is damaged: it exceeds the size limit when serialized.",
+      );
     } catch (error) {
       // A file the store cannot hold is replaced by the next save when the caller chose to
       // start over. Access failures are never treated as damage, and neither is a merge that
