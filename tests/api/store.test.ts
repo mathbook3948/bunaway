@@ -871,9 +871,13 @@ test("a failed shutdown save of one store does not skip the others", () => {
 });
 
 /** Rename that fails with ENOENT while `state.failing` is set. */
-function switchableRename(state: { failing: boolean }): StoreFileOperations {
+function switchableRename(state: {
+  failing: boolean;
+  attempts: number;
+}): StoreFileOperations {
   return {
     rename(from, to) {
+      state.attempts++;
       if (state.failing) {
         throw Object.assign(new Error("gone"), {
           code: "ENOENT",
@@ -889,6 +893,7 @@ test("a failed close keeps the store open and a later close saves it", () => {
   const root = dataRoot();
   const state = {
     failing: true,
+    attempts: 0,
   };
   const instance = create(root, switchableRename(state));
   instance.load({
@@ -912,6 +917,7 @@ test("a failed autosave leaves the store dirty and the next change schedules ano
   const root = dataRoot();
   const state = {
     failing: true,
+    attempts: 0,
   };
   const instance = create(root, switchableRename(state));
   instance.load({
@@ -919,7 +925,10 @@ test("a failed autosave leaves the store dirty and the next change schedules ano
     autosave: 10,
   });
   instance.set("s", "k", 1);
-  await Bun.sleep(80);
+  await waitFor(() => (state.attempts > 0 ? true : undefined), {
+    deadline: "inProcess",
+    what: "first autosave attempt",
+  });
   expect(existsSync(storeFile(root, "s"))).toBe(false);
   state.failing = false;
   instance.set("s", "j", 2);
@@ -1049,8 +1058,8 @@ test("a value beyond the value limit is refused from a file or from defaults lik
 });
 
 test("a file the store may not read is reported as denied, not as damaged", () => {
-  // An administrator bypasses file permissions, so there is nothing to refuse.
-  if (process.getuid?.() === 0) {
+  // Windows has no mode bits to deny reads, and an administrator bypasses them elsewhere.
+  if (process.platform === "win32" || process.getuid?.() === 0) {
     return;
   }
   const root = dataRoot();
@@ -1097,6 +1106,51 @@ test("close after dispose is cancelled and integer-like keys come back first", (
     "1",
     "b",
   ]);
+});
+
+test("a file value the protocol could not carry is refused, or replaced with reset", () => {
+  const root = dataRoot();
+  mkdirSync(join(root, "data", "stores"), {
+    recursive: true,
+  });
+  const deep = `${"[".repeat(70)}${"]".repeat(70)}`;
+  const files = [
+    '{"k":"\\ud800"}',
+    `{"k":${deep}}`,
+    '{"\\udc00":1}',
+  ];
+  for (const [index, content] of files.entries()) {
+    const name = `carry${index}`;
+    writeFileSync(storeFile(root, name), content);
+    const strict = create(root);
+    expect(
+      errorCodeOf(() =>
+        strict.load({
+          name,
+          ...manual,
+        }),
+      ),
+    ).toBe("INVALID_ARGUMENT");
+    const lenient = create(root);
+    expect(
+      lenient.load({
+        name,
+        onInvalidFile: "reset",
+        ...manual,
+      }),
+    ).toEqual({
+      loaded: "reset",
+    });
+  }
+  const instance = create(root);
+  instance.load({
+    name: "live",
+    ...manual,
+  });
+  expect(errorCodeOf(() => instance.set("live", "k", JSON.parse(deep)))).toBe(
+    "INVALID_ARGUMENT",
+  );
+  expect(instance.has("live", "k")).toBe(false);
 });
 
 test("a reset that was saved is what a new instance loads", () => {

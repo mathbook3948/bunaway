@@ -13,7 +13,7 @@ import {
 import { resolve } from "node:path";
 import type { NativeEnvironment } from "@bunaway/plugin";
 import { attemptAll, failWithCleanup } from "@bunaway/plugin";
-import { BunawayError, isRecord } from "@bunaway/protocol";
+import { BunawayError, isRecord, MAX_JSON_DEPTH } from "@bunaway/protocol";
 import {
   DEFAULT_AUTOSAVE_DELAY_MS,
   MAX_OPEN_STORES,
@@ -51,6 +51,11 @@ const PERMISSION_CODES = new Set([
   "EACCES",
   "EBUSY",
 ]);
+/**
+ * Deepest nesting of a stored value. The protocol allows `MAX_JSON_DEPTH` levels in a whole
+ * message, and `entries` wraps each value in a pair inside a list, so values stay shallower.
+ */
+const MAX_STORE_VALUE_DEPTH = MAX_JSON_DEPTH - 8;
 const STORE_DIRECTORY_MODE = 0o700;
 const STORE_FILE_MODE = 0o600;
 const JSON_INDENT = 2;
@@ -120,7 +125,10 @@ function errorCode(error: unknown): string | undefined {
 
 /** Report a refused file access as a protocol error and leave other failures to the host. */
 function storeIoError(error: unknown): unknown {
-  const code = errorCode(error);
+  // A save that also failed to remove its temporary file reports both; the first is the cause.
+  const code = errorCode(
+    error instanceof AggregateError ? error.errors[0] : error,
+  );
   if (error instanceof BunawayError || code === undefined) {
     return error;
   }
@@ -144,11 +152,47 @@ function serialize(data: Map<string, StoreValue>): string {
   return JSON.stringify(Object.fromEntries(data), null, JSON_INDENT);
 }
 
-/** Each value must fit the per-value limit, wherever it came from. */
+/** With the `u` flag the class matches only an unpaired surrogate, which the protocol refuses. */
+const UNPAIRED_SURROGATE = /[\uD800-\uDFFF]/u;
+
+function isWellFormed(text: string): boolean {
+  return !UNPAIRED_SURROGATE.test(text);
+}
+
+/**
+ * Whether the protocol can carry `value` back to a caller: no unpaired surrogate in any string
+ * or key, and nesting within `MAX_STORE_VALUE_DEPTH`. A file edited outside the app can hold
+ * either, and one such value would make every `get` or `entries` response fail.
+ */
+function isCarriable(value: unknown, depth: number): boolean {
+  if (typeof value === "string") {
+    return isWellFormed(value);
+  }
+  if (typeof value !== "object" || value === null) {
+    return true;
+  }
+  if (depth > MAX_STORE_VALUE_DEPTH) {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.every((item) => isCarriable(item, depth + 1));
+  }
+  return Object.entries(value).every(
+    ([key, item]) => isWellFormed(key) && isCarriable(item, depth + 1),
+  );
+}
+
+/** Each value must fit the per-value limit and be carriable, wherever it came from. */
 function checkValueSizes(data: Map<string, StoreValue>): void {
-  for (const value of data.values()) {
+  for (const [key, value] of data) {
     if (byteLength(JSON.stringify(value)) > MAX_STORE_VALUE_BYTES) {
       throw invalid("A value exceeds its size limit.", "value-too-large");
+    }
+    if (!isWellFormed(key) || !isCarriable(value, 0)) {
+      throw invalid(
+        "A key or value cannot be returned to callers.",
+        "value-not-carriable",
+      );
     }
   }
 }
@@ -347,6 +391,11 @@ export class NodeStore implements StoreInstance {
     if (byteLength(text) > MAX_STORE_VALUE_BYTES) {
       throw invalid("The value exceeds its size limit.");
     }
+    if (!isCarriable(value, 0)) {
+      throw invalid(
+        "The value is nested too deeply to be returned to callers.",
+      );
+    }
     const previous = store.data.get(key);
     if (previous !== undefined && JSON.stringify(previous) === text) {
       return {
@@ -525,8 +574,8 @@ export class NodeStore implements StoreInstance {
       try {
         this.persist(store);
       } catch {
-        // The store stays dirty. The next change, save, close or shutdown tries again and
-        // reports the failure to a caller that can act on it.
+        // The store stays dirty. The next change schedules another write, and save, close or
+        // shutdown try again; only those report a failure to a caller that can act on it.
       }
     }, store.autosave);
     store.timer.unref();
