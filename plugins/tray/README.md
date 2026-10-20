@@ -12,9 +12,15 @@ file loading을 추가하지 않는다. 플러그인은 borrowed app icon과 own
 입력은 classic Shell_NotifyIcon mouse callback을 사용한다. NativeEventWaiters는 공통 SDK의
 기존 구현을 재사용한다. callback 구독과 대기는 플러그인이, icon과 HWND의 구현은 플러그인이, 정리 순서와 재시도는 호스트가 소유한다.
 
+balloon 알림은 `NIM_MODIFY`에 `NIF_INFO`를 실어 요청하되 아이콘 데이터의 복사본을 쓰므로 이후 tooltip과
+아이콘 갱신, Explorer 재등록이 같은 balloon을 다시 띄우지 않는다. 쉘의 `NIN_BALLOON*` 알림은 `tray.input`으로
+바꾸지 않고 `tray.balloon`으로만 전달한다. 플러그인은 호스트 서비스를 넓히지 않고 자신이 만든 트레이 소유자를
+직접 참조해 두 연산을 호출한다.
+
 계약과 ICO 형식은 `tests/api/tray.test.ts`로 확인한다. `windows-tray-controls.test.ts`는 실제
 shell 아이콘의 tooltip/ICO 변경과 반복 교체, synthetic mouse 메시지, icon 제거 뒤 TaskbarCreated
-알림의 재등록 및 자원 정리를 검사한다. `windows-tray-ui.test.ts`는 실제 UI Worker의 packaged SDK,
+알림의 재등록 및 자원 정리를 검사한다. `windows-tray-balloon.test.ts`는 실제 shell 아이콘에 balloon 요청을 보내고 `NIN_BALLOON*` 메시지를
+`tray.balloon`으로 바꾸는 규칙을 검사한다. `windows-tray-ui.test.ts`는 실제 UI Worker의 packaged SDK,
 창 없는 백엔드 대기와 종료 정리를 확인한다. 두 native 회귀는 `mise run host:windows`에 포함한다.
 이는 물리 마우스 입력, 실제 Explorer process 재시작이나 화면의 모든 이미지 모양을 확인했다는 뜻이 아니다.
 

@@ -6,7 +6,7 @@ import {
 } from "@bunaway/plugin-api/native";
 import { BunawayError, validateValue } from "@bunaway/protocol";
 import type { z } from "zod";
-import type { trayEventSchema } from "#tray/contract";
+import type { TrayBalloon, trayEventSchema } from "#tray/contract";
 import { Tray } from "#tray/platforms/windows-tray";
 
 function requireTray(
@@ -21,10 +21,32 @@ function requireTray(
   return services;
 }
 
+/** The host-retained owner plus the balloon controls this plugin reaches through its own factory. */
+export type BalloonTrayOwner = NativeTrayOwner &
+  Pick<Tray, "displayBalloon" | "removeBalloon">;
+
 /** Creates the tray owner; injectable so tests can observe wiring without a shell icon. */
 export type TrayFactory = (
   ...args: ConstructorParameters<typeof Tray>
-) => NativeTrayOwner;
+) => BalloonTrayOwner;
+
+type CreatedTray = {
+  tray: BalloonTrayOwner | undefined;
+};
+
+function requireBalloonTray(state: {
+  services: NativeTrayServices | undefined;
+  created: CreatedTray;
+}): BalloonTrayOwner {
+  requireTray(state.services);
+  if (!state.created.tray) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "The app has no configured tray.",
+    });
+  }
+  return state.created.tray;
+}
 
 /** The selected package creates native residency; the host retains cleanup ownership. */
 export function initialize(environment: NativeEnvironment) {
@@ -40,14 +62,32 @@ export function initializeWith(
   const hover = {
     open: true,
   };
-  services?.initialize?.(({ windows, tooltip, receive, notify, retain }) =>
-    createTray(windows, tooltip, receive, notify, retain, (event) => {
-      // View-only event with no waiter. The host Tray outlives this plugin, so stop after dispose.
-      if (hover.open) {
-        services.emit("tray.hover", validateValue({}, event));
-      }
-    }),
-  );
+  // The factory result is the only path to the balloon controls; the host services stay unchanged.
+  const created: CreatedTray = {
+    tray: undefined,
+  };
+  services?.initialize?.(({ windows, tooltip, receive, notify, retain }) => {
+    // Hover and balloon events are view-only with no waiter. The host Tray outlives this plugin,
+    // so stop after dispose.
+    created.tray = createTray(
+      windows,
+      tooltip,
+      receive,
+      notify,
+      retain,
+      (event) => {
+        if (hover.open) {
+          services.emit("tray.hover", validateValue({}, event));
+        }
+      },
+      (event) => {
+        if (hover.open) {
+          services.emit("tray.balloon", validateValue({}, event));
+        }
+      },
+    );
+    return created.tray;
+  });
   const notifications = new NativeEventWaiters<
     z.output<typeof trayEventSchema>
   >(MAX_TRAY_WAITERS);
@@ -57,6 +97,7 @@ export function initializeWith(
   });
   return {
     services,
+    created,
     hover,
     notifications,
     unsubscribe,
@@ -118,6 +159,18 @@ export function popUpContextMenu(
     position,
     signal ?? new AbortController().signal,
   );
+  return null;
+}
+
+/** Shows or replaces the icon's balloon. Success means the shell accepted it, not that it appeared. */
+export function displayBalloon(state: State, balloon: TrayBalloon): null {
+  requireBalloonTray(state).displayBalloon(balloon);
+  return null;
+}
+
+/** Withdraws the current balloon; a no-op when none is showing. */
+export function removeBalloon(state: State): null {
+  requireBalloonTray(state).removeBalloon();
   return null;
 }
 

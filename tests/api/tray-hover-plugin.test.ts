@@ -2,11 +2,14 @@ import { expect, test } from "bun:test";
 import type {
   NativeTrayEvent,
   NativeTrayInitialization,
-  NativeTrayOwner,
   NativeTrayServices,
 } from "@bunaway/plugin-api/native";
 import type { JsonValue } from "@bunaway/protocol";
-import { dispose, initializeWith } from "#plugins/tray/src/platforms/windows";
+import {
+  type BalloonTrayOwner,
+  dispose,
+  initializeWith,
+} from "#plugins/tray/src/platforms/windows";
 
 type HoverCallback = NonNullable<
   Parameters<Parameters<typeof initializeWith>[1]>[5]
@@ -19,7 +22,9 @@ function harness() {
   }[] = [];
   let listener: ((event: NativeTrayEvent) => void) | undefined;
   let hover: HoverCallback | undefined;
-  const owner: NativeTrayOwner = {
+  const owner: BalloonTrayOwner = {
+    displayBalloon: () => {},
+    removeBalloon: () => {},
     hwnd: 1n,
     get: () => null,
     getBounds: () => null,

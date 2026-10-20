@@ -11,6 +11,11 @@ import {
   type NativeTrayWindowHost,
 } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
+import {
+  MAX_TRAY_BALLOON_CONTENT_UNITS,
+  MAX_TRAY_BALLOON_TITLE_UNITS,
+  type TrayBalloon,
+} from "#tray/contract";
 import { openTrayBindings } from "#tray/platforms/windows-bindings";
 import { createTrayIcon } from "#tray/platforms/windows-icon";
 import { NativePopupMenu } from "#tray/platforms/windows-popup-menu";
@@ -43,10 +48,33 @@ const NIF_MESSAGE = 0x1;
 const NIF_ICON = 0x2;
 const NIF_TIP = 0x4;
 const NIF_STATE = 0x8;
+const NIF_INFO = 0x10;
 const NIS_HIDDEN = 0x1;
+const NIIF_INFO = 0x1;
+const NIIF_WARNING = 0x2;
+const NIIF_ERROR = 0x3;
+const NIIF_NOSOUND = 0x10;
+// Balloon notifications arrive in the callback message's lParam (WM_USER + 2 to 5).
+const NIN_BALLOONSHOW = 0x402;
+const NIN_BALLOONHIDE = 0x403;
+const NIN_BALLOONTIMEOUT = 0x404;
+const NIN_BALLOONUSERCLICK = 0x405;
 // NOTIFYICONDATAW offsets after szTip (Win64).
+const UFLAGS_OFFSET = 20;
 const DW_STATE_OFFSET = 296;
 const DW_STATE_MASK_OFFSET = 300;
+const SZ_INFO_OFFSET = 304;
+const SZ_INFO_TITLE_OFFSET = 820;
+const DW_INFO_FLAGS_OFFSET = 948;
+// Each buffer reserves one WCHAR for the terminating NUL.
+const BALLOON_CONTENT_BYTES = MAX_TRAY_BALLOON_CONTENT_UNITS * 2;
+const BALLOON_TITLE_BYTES = MAX_TRAY_BALLOON_TITLE_UNITS * 2;
+const balloonIconFlags: Readonly<Record<TrayBalloon["iconType"], number>> = {
+  none: 0,
+  info: NIIF_INFO,
+  warning: NIIF_WARNING,
+  error: NIIF_ERROR,
+};
 const TPM_RIGHTBUTTON = 0x2;
 const TPM_RETURNCMD = 0x100;
 const TRAY_ICON_ID = 1;
@@ -125,6 +153,8 @@ export class Tray {
   /** Set when a cancellation arrives, possibly before the loop has started tracking. */
   private popupCancelled = false;
   private readonly hover: TrayHoverTracker;
+  /** True between the shell's show and its close for one balloon, so `closed` is reported once. */
+  private balloonShown = false;
   /** Registers the icon and releases partial resources if setup fails. */
   constructor(
     private readonly windows: NativeTrayWindowHost,
@@ -133,6 +163,9 @@ export class Tray {
     notify?: (event: NativeTrayEvent) => void,
     retain?: (owner: NativeTrayOwner) => void,
     notifyHover?: (event: TrayHoverEvent) => void,
+    private readonly notifyBalloon?: (event: {
+      state: "show" | "click" | "closed";
+    }) => void,
   ) {
     // Validate the whole startup value before acquiring this tray's native resources.
     if (/[\0\uD800-\uDFFF]/u.test(tooltip)) {
@@ -194,8 +227,10 @@ export class Tray {
             return;
           }
           if (message === taskbarCreated) {
-            // Explorer restarts clear notification icons, so add this one back.
+            // Explorer restarts clear notification icons, so add this one back. The shell also
+            // drops any balloon that was pending, and a stale show must not suppress the next closed.
             this.added = false;
+            this.balloonShown = false;
             this.add();
           } else if (message === WM_TIMER) {
             this.retryPopupCancel(wparam);
@@ -273,6 +308,9 @@ export class Tray {
     notify: ((event: NativeTrayEvent) => void) | undefined,
   ) {
     const input = mouseNotifications[notification];
+    if (this.handleBalloonNotification(notification)) {
+      return;
+    }
     if (notification === WM_MOUSEMOVE) {
       this.hover.mouseMoved();
     } else if (input) {
@@ -292,6 +330,34 @@ export class Tray {
       (notification === WM_RBUTTONUP || notification === WM_CONTEXTMENU)
     ) {
       this.menu(receive);
+    }
+  }
+  /** Maps a shell balloon notification to `tray.balloon`; false when it is not one. */
+  private handleBalloonNotification(notification: number) {
+    switch (notification) {
+      case NIN_BALLOONSHOW:
+        this.balloonShown = true;
+        this.notifyBalloon?.({
+          state: "show",
+        });
+        return true;
+      case NIN_BALLOONUSERCLICK:
+        this.notifyBalloon?.({
+          state: "click",
+        });
+        return true;
+      case NIN_BALLOONHIDE:
+      case NIN_BALLOONTIMEOUT:
+        // Dismissal by the user, timeout, replacement and removal all end the same balloon.
+        if (this.balloonShown) {
+          this.balloonShown = false;
+          this.notifyBalloon?.({
+            state: "closed",
+          });
+        }
+        return true;
+      default:
+        return false;
     }
   }
   /**
@@ -564,6 +630,66 @@ export class Tray {
     }
     this.visible = visible;
   }
+  /**
+   * Asks the shell to show `balloon` from this icon, replacing one that is showing. The shell
+   * gives no result for suppressed balloons (focus assist, notifications off), so a returned call
+   * only means the request was accepted; `show` is the sign that it appeared. The balloon fields
+   * go into a copy of the icon data, so later icon updates and Explorer re-registration never
+   * repeat it.
+   */
+  displayBalloon(balloon: TrayBalloon) {
+    if (
+      balloon.title.length > MAX_TRAY_BALLOON_TITLE_UNITS ||
+      balloon.content.length > MAX_TRAY_BALLOON_CONTENT_UNITS ||
+      /[\0\uD800-\uDFFF]/u.test(balloon.title + balloon.content)
+    ) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Invalid tray balloon.",
+      });
+    }
+    const request = this.balloonRequest();
+    Buffer.from(balloon.content, "utf16le").copy(request, SZ_INFO_OFFSET);
+    Buffer.from(balloon.title, "utf16le").copy(request, SZ_INFO_TITLE_OFFSET);
+    request.writeUInt32LE(
+      balloonIconFlags[balloon.iconType] | (balloon.silent ? NIIF_NOSOUND : 0),
+      DW_INFO_FLAGS_OFFSET,
+    );
+    this.modifyBalloon(request, "Tray balloon request failed.");
+  }
+  /** Withdraws the balloon with an empty text; the shell then reports it as closed. */
+  removeBalloon() {
+    this.modifyBalloon(this.balloonRequest(), "Tray balloon removal failed.");
+  }
+  /** A copy of the icon data with NIF_INFO set and both balloon texts cleared. */
+  private balloonRequest() {
+    const request = Buffer.from(this.data);
+    request.writeUInt32LE(
+      this.data.readUInt32LE(UFLAGS_OFFSET) | NIF_INFO,
+      UFLAGS_OFFSET,
+    );
+    request.fill(0, SZ_INFO_OFFSET, SZ_INFO_OFFSET + BALLOON_CONTENT_BYTES + 2);
+    request.fill(
+      0,
+      SZ_INFO_TITLE_OFFSET,
+      SZ_INFO_TITLE_OFFSET + BALLOON_TITLE_BYTES + 2,
+    );
+    return request;
+  }
+  private modifyBalloon(request: Buffer, failure: string) {
+    if (this.disposed) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message: "The tray was released.",
+      });
+    }
+    if (!this.shell.symbols.Shell_NotifyIconW(NIM_MODIFY, ptr(request))) {
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: failure,
+      });
+    }
+  }
   /** Ask the shell to focus this configured tray icon. A hidden icon or OS refusal returns false. */
   focus(): boolean {
     if (!this.visible) {
@@ -578,6 +704,7 @@ export class Tray {
    */
   dispose() {
     this.disposed = true;
+    this.balloonShown = false;
     this.hover.dispose();
     const errors: unknown[] = [];
     try {

@@ -1,6 +1,7 @@
 import { defineNativeOperation, nonNegativeInt32Schema } from "@bunaway/plugin";
 import { z } from "zod";
 import {
+  balloonSchema,
   icoSchema,
   positionSchema,
   snapshotSchema,
@@ -8,11 +9,13 @@ import {
   trayEventSchema,
 } from "#tray/contract";
 import {
+  displayBalloon,
   focus,
   get,
   getBounds,
   type initialize,
   popUpContextMenu,
+  removeBalloon,
   setClickBehavior,
   setIcon,
   setTooltip,
@@ -80,6 +83,16 @@ export const trayOperations = {
     output: z.null(),
     handler: ({ position }, { instance, signal }) =>
       popUpContextMenu(instance, position ?? null, signal),
+  }),
+  displayBalloon: operation({
+    input: balloonSchema,
+    output: z.null(),
+    handler: (balloon, { instance }) => displayBalloon(instance, balloon),
+  }),
+  removeBalloon: operation({
+    input: z.null(),
+    output: z.null(),
+    handler: (_input, { instance }) => removeBalloon(instance),
   }),
   waitForEvent: operation({
     input: z.null(),
