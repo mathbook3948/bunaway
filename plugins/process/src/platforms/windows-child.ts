@@ -212,8 +212,12 @@ export class WindowsProcessChild implements SpawnedChild {
     if (this.activeWrite !== undefined) {
       await this.waitForWrite(this.activeWrite, signal);
     }
-    // With a write the kernel still owns, release closes the pipe after the tree ended.
-    if (this.writer && this.stuckWrite === undefined) {
+    // The pipe still carries a write the kernel owns, so stdin cannot be closed now; release
+    // closes it after the tree ended. Report that instead of claiming the child saw end of file.
+    if (this.stuckWrite !== undefined) {
+      throw new ProcessCleanupError();
+    }
+    if (this.writer) {
       this.closeHandle(this.writer);
       this.writer = 0n;
     }
@@ -579,7 +583,10 @@ export class WindowsProcessChild implements SpawnedChild {
     data: Buffer,
     signal: AbortSignal,
   ): Promise<WriteOutcome> {
-    if (!this.writer || this.stuckWrite !== undefined) {
+    if (this.stuckWrite !== undefined) {
+      throw new ProcessCleanupError();
+    }
+    if (!this.writer) {
       return "closed";
     }
     if (data.length === 0) {
@@ -736,6 +743,8 @@ export class WindowsProcessChild implements SpawnedChild {
     } catch {
       failed = true;
     }
+    // A write that never finished cancelling leaves kernel work behind the pipe being closed.
+    failed ||= this.stuckWrite !== undefined;
     if (this.activeWrite !== undefined) {
       const writes = await Promise.allSettled([
         this.activeWrite,
