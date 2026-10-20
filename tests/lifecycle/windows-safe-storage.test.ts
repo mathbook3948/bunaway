@@ -1,6 +1,8 @@
+import { dlopen, ptr } from "bun:ffi";
 import { expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { KERNEL32, pick, win32CallError } from "@bunaway/plugin/win32";
 import safeStorage from "@bunaway/plugin-safe-storage/native/windows";
 
 const environment = {
@@ -177,6 +179,78 @@ test.skipIf(process.platform !== "win32")(
         recursive: true,
         force: true,
       });
+    }
+  },
+);
+
+/** ERROR_INVALID_DATA, which DPAPI leaves for a blob it cannot parse. */
+const ERROR_INVALID_DATA = 13;
+const LAST_ERROR_SAMPLES = 200;
+
+test.skipIf(process.platform !== "win32")(
+  "a failed DPAPI call leaves a readable last error through the FFI layer",
+  () => {
+    const kernel = dlopen("kernel32.dll", pick(KERNEL32, "GetLastError"));
+    const crypt = dlopen("crypt32.dll", {
+      CryptUnprotectData: {
+        args: [
+          "ptr",
+          "ptr",
+          "ptr",
+          "ptr",
+          "ptr",
+          "u32",
+          "ptr",
+        ],
+        returns: "i32",
+      },
+    });
+    try {
+      const garbage = Buffer.alloc(32, 7);
+      const blob = Buffer.alloc(16);
+      blob.writeUInt32LE(garbage.length, 0);
+      blob.writeBigUInt64LE(BigInt(ptr(garbage)), 8);
+      const output = Buffer.alloc(16);
+      let calls = 0;
+      const codes = new Set<number>();
+      for (let sample = 0; sample < LAST_ERROR_SAMPLES; sample++) {
+        codes.add(
+          win32CallError(
+            () => {
+              calls++;
+              return crypt.symbols.CryptUnprotectData(
+                ptr(blob),
+                null,
+                null,
+                null,
+                null,
+                1,
+                ptr(output),
+              );
+            },
+            () => kernel.symbols.GetLastError(),
+          ),
+        );
+      }
+      // The call count shows how often the first last-error read was overwritten.
+      console.log(
+        "DPAPI last error samples:",
+        LAST_ERROR_SAMPLES,
+        "calls:",
+        calls,
+        "codes:",
+        [
+          ...codes,
+        ].join(","),
+      );
+      expect([
+        ...codes,
+      ]).toEqual([
+        ERROR_INVALID_DATA,
+      ]);
+    } finally {
+      crypt.close();
+      kernel.close();
     }
   },
 );

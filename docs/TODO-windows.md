@@ -928,9 +928,12 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   `safeStorage`는 DPAPI provider 하나만 등록해 값이 항상 `false`이고 동기 `decryptString`에는 신호가 없다.
   키가 바뀐 값은 신호 없이 영구 복호화 실패(`INTERNAL`)이며 `CRYPTPROTECT_VERIFY_PROTECTION` 확장은 쓰지 않는다.
   `tests/api/safe-storage.test.ts`가 복호화 출력이 평문 값 그대로임을 고정한다.
-- [ ] 키 저장소가 잠기거나 일시적으로 이용 불가할 때 영구 복호화 실패와 구분하고 재시도 계약을 제공한다.
-  대기 한도, 취소와 복구 후 재시도를 정의하고 일시 실패 및 복구, 종료 중 대기 해제,
-  묵시적 평문 fallback이 없는지 검증한다. 플랫폼별 키 공급자 차이는 [E-safe-live]를 참고한다.
+- [x] 키 저장소가 잠기거나 일시적으로 이용 불가할 때 영구 복호화 실패와 구분하고 재시도 계약을 제공한다.
+  DPAPI 호출이 서비스 불가 계열 Win32 오류(`ERROR_BUSY`, `ERROR_SERVICE_NOT_ACTIVE`,
+  `RPC_S_SERVER_UNAVAILABLE`, `RPC_S_SERVER_TOO_BUSY`)로 실패하면 `BUSY`, 그 밖의 실패는 `INTERNAL`이다.
+  재시도 계약은 같은 입력으로 다시 호출하는 것뿐이며 자동 재시도, 대기 한도 옵션과 평문 fallback은 없다.
+  `tests/api/safe-storage.test.ts`가 분류를, `tests/lifecycle/windows-safe-storage.test.ts`가 Bun FFI에서
+  `GetLastError`를 읽을 수 있음을 Windows CI에서 확인한다. 실제 키 서비스 중단은 재현하지 않는다.
 - [ ] OS credential store에 secret을 저장, 조회하고 삭제하는 기능의 지원을 결정한다.
 - [ ] Stronghold 방식의 vault, client, key와 record 관리 기능을 제공한다.
 - [ ] vault unlock, lock, save와 암호 변경을 제공한다.
