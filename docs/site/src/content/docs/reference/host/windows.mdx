@@ -551,6 +551,7 @@ await windows.close({ view: "dialog" });
 | `windows.startDragging` | `{ view, windowId? }` | `Promise<null>`. 누르고 있는 마우스 기본 버튼으로 시스템 창 이동을 시작 |
 | `windows.startResizeDragging` | `{ view, windowId?, direction }` | `Promise<null>`. 누르고 있는 마우스 기본 버튼으로 해당 테두리나 모서리에서 시스템 크기 조절을 시작. `direction`은 `"north"`, `"south"`, `"east"`, `"west"`, `"northEast"`, `"northWest"`, `"southEast"`, `"southWest"` |
 | `windows.center` | `{ view, windowId?, monitorId? }` | `Promise<null>`. `monitorId`가 있으면 그 모니터, 없으면 현재 모니터의 작업 영역 중앙에 창 바깥 영역 배치. 최소화와 최대화 중에는 일반 복원 영역 배치 |
+| `windows.moveToAnchor` | `{ view, windowId?, anchor, monitorId?, margin? }` | `Promise<null>`. `monitorId`가 있으면 그 모니터, 없으면 현재 모니터의 작업 영역에서 `anchor` 위치에 창 바깥 영역 배치. `anchor`는 `"top-left"`, `"top"`, `"top-right"`, `"left"`, `"center"`, `"right"`, `"bottom-left"`, `"bottom"`, `"bottom-right"`. `margin`은 작업 영역 가장자리에서 띄울 논리 픽셀로 0–8192의 정수(기본 0). 최소화와 최대화 중에는 일반 복원 영역 배치 |
 | `windows.setFullscreen` | `{ view, windowId?, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원. `setFullscreenable(false)` 상태에서 진입은 `INVALID_ARGUMENT` |
 | `windows.setCloseConfirmation` | `{ view, windowId?, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
 | `windows.close` | `{ view, windowId? }` | `Promise<boolean>`. 닫기 승인 시 `true`, 확인이나 앱 종료를 취소하거나 트레이로 숨기면 `false`. 정리 완료를 기다리지는 않음 |
@@ -903,6 +904,14 @@ DPI가 다른 모니터로 옮기면 Windows가 창 크기를 바꿀 수 있습�
 권한은 `windows.center` 하나입니다. 이 호출은 모니터 정보를 반환하지 않고, `windows.getMonitor`나
 전체화면처럼 창 기준의 모니터 선택도 해당 창 작업의 권한으로 동작하므로 모니터 조회 권한을 따로 요구하지 않습니다.
 macOS에서는 `center` 자체를 지원하지 않아 `monitorId` 유무와 관계없이 `UNSUPPORTED`입니다.
+`moveToAnchor`는 `center`와 같은 작업 영역과 모니터 선택, 상태 유지 규칙을 따르며 `anchor: "center"`는 `center`와 같은 위치를 만듭니다.
+가장자리 앵커는 창 바깥 영역의 해당 변을 작업 영역 가장자리에서 `margin`만큼 안쪽에 맞추고, `margin`은 모니터 DPI로 물리 픽셀로 바꿉니다.
+`top`, `bottom`, `left`, `right`는 나머지 축을 중앙에 두고, 그 축에는 `margin`을 적용하지 않습니다.
+창이 `margin`을 뺀 작업 영역보다 크면 그 축은 크기를 바꾸지 않고 `center`처럼 중앙에 둡니다.
+`monitorId` 오류와 DPI가 다른 모니터에서의 두 번째 배치도 `center`와 같고, 전체화면에서는 `INVALID_ARGUMENT`입니다.
+권한은 `windows.moveToAnchor` 하나이고 macOS에서는 `UNSUPPORTED`입니다. 트레이 아이콘 근처 배치는 트레이 좌표 계약이 필요해 제공하지 않습니다.
+Windows CI는 모니터 1개와 DPI 96의 실제 HWND에서 숨긴 창의 아홉 앵커와 `margin`, 알 수 없는 `monitorId` 거부를 검증합니다.
+최소화와 최대화 중 복원 영역 배치는 네이티브 호출 단위 시험으로 검증하고, 다중 물리 모니터와 혼합 DPI는 `center`와 마찬가지로 검증 범위 밖입니다.
 따라서 `setSize` 뒤에는 `getContentSize({ view, unit: "logical" })`, `setPosition` 뒤에는 `getOuterPosition({ view })`으로 결과를 확인합니다.
 제약에 따른 크기 보정과 운영체제의 배치 결과를 반환합니다.
 

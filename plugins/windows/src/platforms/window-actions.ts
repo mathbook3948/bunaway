@@ -8,8 +8,11 @@ import {
   type WindowSizeConstraints,
 } from "@bunaway/plugin-api/native";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
-import type { WindowCall } from "#windows/contract";
-import { convertGeometry } from "#windows/platforms/window-geometry";
+import type { WindowCall, WindowInput } from "#windows/contract";
+import {
+  anchorPosition,
+  convertGeometry,
+} from "#windows/platforms/window-geometry";
 import { overlayIconProvider } from "#windows/platforms/windows-overlay-icon";
 
 /** The schema has already matched the pattern; a value that still fails to normalize is rejected, never passed on. */
@@ -114,6 +117,9 @@ const unsupportedDragging = unsupportedError(
 );
 const unsupportedCentering = unsupportedError(
   "Window centering is not implemented on this platform.",
+);
+const unsupportedAnchoring = unsupportedError(
+  "Window anchoring is not implemented on this platform.",
 );
 const unsupportedTaskbarProgress = unsupportedError(
   "Taskbar progress is not implemented on this platform.",
@@ -684,6 +690,53 @@ function applyDisplayState(scope: ActionScope, call: WindowCall): ActionResult {
   }
 }
 
+/**
+ * Place the outer rectangle (the normal restoration rectangle while minimized or maximized) at an
+ * anchor of a monitor work area, so hidden, minimized and maximized state is preserved. Without
+ * `monitorId` the monitor is the one nearest the rectangle; an unknown ID is rejected instead of
+ * falling back to another monitor. A DPI change on the target monitor can resize the window, so the
+ * size is measured again and the window is placed once more.
+ */
+function moveToAnchor(
+  { window, services }: ActionScope,
+  payload: WindowInput<"windows.moveToAnchor">,
+): void {
+  const monitors = supported(services.monitors, unsupportedAnchoring);
+  const area =
+    window.isMinimized() || window.isMaximized() ? "normal" : "outer";
+  const { width, height } = window.getBounds(area);
+  const monitor =
+    payload.monitorId === undefined
+      ? monitors.nearestRect(window.getBounds(area))
+      : monitors.list().find(({ id }) => id === payload.monitorId);
+  if (!monitor) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Monitor is not connected.",
+    });
+  }
+  const margin = Math.round(((payload.margin ?? 0) * monitor.dpi) / 96);
+  window.setGeometry(
+    "outer",
+    anchorPosition(
+      monitor.workArea,
+      {
+        width,
+        height,
+      },
+      payload.anchor,
+      margin,
+    ),
+  );
+  const placed = window.getBounds(area);
+  if (placed.width !== width || placed.height !== height) {
+    window.setGeometry(
+      "outer",
+      anchorPosition(monitor.workArea, placed, payload.anchor, margin),
+    );
+  }
+}
+
 /** Position, size and DPI conversion. */
 function applyGeometry(scope: ActionScope, call: WindowCall): ActionResult {
   const { window } = scope;
@@ -717,6 +770,10 @@ function applyGeometry(scope: ActionScope, call: WindowCall): ActionResult {
     case "windows.center":
       rejectInFullscreen(window, "centering the window");
       supported(window.center, unsupportedCentering)(call.payload.monitorId);
+      return null;
+    case "windows.moveToAnchor":
+      rejectInFullscreen(window, "moving the window to an anchor");
+      moveToAnchor(scope, call.payload);
       return null;
     case "windows.setContentPosition":
     case "windows.setOuterSize":

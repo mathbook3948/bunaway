@@ -2165,6 +2165,119 @@ if (!process.argv.includes("--child")) {
               await windows.getOuterBounds(editor),
               movedBeforeReject,
             );
+            // Every anchor places the hidden window against its work-area edge, inset by margin.
+            const anchorMargin = Math.round((12 * centerTarget.dpi) / 96);
+            const anchorArea = centerTarget.workArea;
+            const anchorLeft = anchorArea.x + anchorMargin;
+            const anchorTop = anchorArea.y + anchorMargin;
+            const anchorRight =
+              anchorArea.x + anchorArea.width - centered.width - anchorMargin;
+            const anchorBottom =
+              anchorArea.y + anchorArea.height - centered.height - anchorMargin;
+            for (const [anchor, x, y] of [
+              [
+                "top-left",
+                anchorLeft,
+                anchorTop,
+              ],
+              [
+                "top",
+                centered.x,
+                anchorTop,
+              ],
+              [
+                "top-right",
+                anchorRight,
+                anchorTop,
+              ],
+              [
+                "left",
+                anchorLeft,
+                centered.y,
+              ],
+              [
+                "center",
+                centered.x,
+                centered.y,
+              ],
+              [
+                "right",
+                anchorRight,
+                centered.y,
+              ],
+              [
+                "bottom-left",
+                anchorLeft,
+                anchorBottom,
+              ],
+              [
+                "bottom",
+                centered.x,
+                anchorBottom,
+              ],
+              [
+                "bottom-right",
+                anchorRight,
+                anchorBottom,
+              ],
+            ] as const) {
+              await windows.setPosition({
+                ...editor,
+                x: outer.x,
+                y: outer.y,
+              });
+              assert.equal(
+                await windows.moveToAnchor({
+                  ...editor,
+                  anchor,
+                  monitorId: centerTarget.id,
+                  margin: 12,
+                }),
+                null,
+              );
+              assert.deepEqual(await windows.getOuterBounds(editor), {
+                ...centered,
+                x,
+                y,
+              });
+            }
+            assert.equal(await windows.isVisible(editor), false);
+            assert.equal(user.symbols.GetForegroundWindow(), centerForeground);
+            await windows.setPosition({
+              ...editor,
+              x: outer.x,
+              y: outer.y,
+            });
+            await windows.moveToAnchor({
+              ...editor,
+              anchor: "bottom-right",
+            });
+            assert.deepEqual(await windows.getOuterBounds(editor), {
+              ...centered,
+              x: anchorArea.x + anchorArea.width - centered.width,
+              y: anchorArea.y + anchorArea.height - centered.height,
+            });
+            await windows.setPosition({
+              ...editor,
+              x: outer.x,
+              y: outer.y,
+            });
+            const movedBeforeAnchorReject =
+              await windows.getOuterBounds(editor);
+            await assert.rejects(
+              windows.moveToAnchor({
+                ...editor,
+                anchor: "top-left",
+                monitorId: "\\\\.\\DISPLAY999",
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
+            assert.deepEqual(
+              await windows.getOuterBounds(editor),
+              movedBeforeAnchorReject,
+            );
             await windows.setOuterBounds({
               ...editor,
               x: outer.x,
