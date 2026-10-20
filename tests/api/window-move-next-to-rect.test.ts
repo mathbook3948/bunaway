@@ -150,7 +150,13 @@ function fixture(
           monitors: {
             list: () => monitors,
             primary: () => monitors[0],
-            nearestPoint: () => monitors[0],
+            nearestPoint: (point: { x: number }) => {
+              log.push([
+                "nearestPoint",
+                point.x,
+              ]);
+              return point.x >= OTHER_AREA.x ? monitors[1] : monitors[0];
+            },
             nearestRect: (rect: { x: number }) => {
               log.push([
                 "nearestRect",
@@ -635,4 +641,23 @@ test("an empty reference rectangle is accepted and resolves the monitor from its
     },
   ]);
   expect(f.log.some(([name]) => name === "nearestRect")).toBe(false);
+  const other = fixture();
+  await other.invoke({
+    rect: {
+      x: 2100,
+      y: 400,
+      width: 0,
+      height: 0,
+    },
+    placement: "below",
+    align: "start",
+    margin: 10,
+  });
+  expect(placed(other.log)).toEqual([
+    {
+      area: "outer",
+      x: 2100,
+      y: 420,
+    },
+  ]);
 });

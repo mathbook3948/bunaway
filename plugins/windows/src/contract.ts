@@ -42,7 +42,7 @@ export const WINDOW_ANCHORS = [
   "bottom-right",
 ] as const;
 export type WindowAnchor = (typeof WINDOW_ANCHORS)[number];
-/** Largest logical gap `windows.moveToAnchor` and `windows.moveNextToRect` accept between the window and the work-area edge. */
+/** Largest logical gap `windows.moveToAnchor` accepts to the work-area edge and `windows.moveNextToRect` accepts to the reference rectangle. */
 const MAX_ANCHOR_MARGIN = 8192;
 /** Sides of a reference rectangle where `windows.moveNextToRect` can put a window. */
 export const WINDOW_RECT_PLACEMENTS = [
