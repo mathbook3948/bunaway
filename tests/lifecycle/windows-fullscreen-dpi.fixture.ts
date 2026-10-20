@@ -117,6 +117,9 @@ function monitorInfo(handle: bigint) {
 }
 
 mock.module(import.meta.resolve("#native/windows/bun/win32-bindings"), () => ({
+  gdi: {
+    symbols: {},
+  },
   kernel: {
     symbols: {
       GetCurrentThreadId: () => 1,

@@ -2,6 +2,7 @@ import {
   clampWindowSize,
   hasValidWindowPlacement,
   hasValidWindowSizeConstraints,
+  normalizeWindowBackgroundColor,
   type WindowSpec,
 } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
@@ -24,6 +25,12 @@ export function mergeCreationOptions(
     ...spec.window,
     ...options?.window,
   };
+  const backgroundColor = normalizeWindowBackgroundColor(
+    window.backgroundColor,
+  );
+  if (backgroundColor !== undefined) {
+    window.backgroundColor = backgroundColor;
+  }
   const constraints = {
     minWidth: window.minWidth ?? null,
     minHeight: window.minHeight ?? null,

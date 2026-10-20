@@ -144,6 +144,7 @@ function fixture() {
   let opacity = 1;
   let ignoreMouseEvents = false;
   let hasShadow = true;
+  let backgroundColor: string | null = null;
   let accessibleTitle: string | null = null;
   const native: NativeWindow = {
     getReadiness() {
@@ -242,6 +243,11 @@ function fixture() {
       hasShadow = value;
     },
     hasShadow: () => hasShadow,
+    setBackgroundColor(value) {
+      apply("setBackgroundColor");
+      backgroundColor = value;
+    },
+    getBackgroundColor: () => backgroundColor,
     setIgnoreMouseEvents(value) {
       apply("setIgnoreMouseEvents");
       ignoreMouseEvents = value;
@@ -348,6 +354,8 @@ function fixture() {
         | "getOpacity"
         | "setHasShadow"
         | "hasShadow"
+        | "setBackgroundColor"
+        | "getBackgroundColor"
         | "setIgnoreMouseEvents"
         | "isIgnoreMouseEvents"
         | "setTitle"
@@ -371,6 +379,7 @@ function fixture() {
         opacity?: number | string | null;
         ignore?: boolean;
         hasShadow?: boolean;
+        color?: string | number | null;
         resizable?: boolean;
         movable?: boolean;
       } = {},
@@ -1449,6 +1458,93 @@ test("window shadow takes only a boolean, round-trips from the default and keeps
   await expect(f.invoke("hasShadow")).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
+});
+
+test("window background color normalizes valid colors, rejects alpha and other forms, and keeps its own permission grants", async () => {
+  const f = fixture();
+  expect(await f.invoke("getBackgroundColor")).toBeNull();
+  for (const [color, expected] of [
+    [
+      "#203040",
+      "#203040",
+    ],
+    [
+      "#ABC",
+      "#aabbcc",
+    ],
+    [
+      "#A0b0C0",
+      "#a0b0c0",
+    ],
+  ] as const) {
+    expect(
+      await f.invoke("setBackgroundColor", "main", {
+        color,
+      }),
+    ).toBeNull();
+    expect(await f.invoke("getBackgroundColor")).toBe(expected);
+  }
+  for (const color of [
+    "#11223344",
+    "#1234",
+    "112233",
+    "#12345g",
+    "red",
+    "rgb(1,2,3)",
+    " #112233",
+    "#112233\n",
+    "",
+    1,
+    null,
+  ]) {
+    expect(() =>
+      validateWindowCall({
+        operation: "windows.setBackgroundColor",
+        payload: {
+          view: "main",
+          color,
+        },
+      }),
+    ).toThrow();
+  }
+  expect(() =>
+    validateWindowCall({
+      operation: "windows.setBackgroundColor",
+      payload: {
+        view: "main",
+        color: "#112233",
+        alpha: 1,
+      },
+    }),
+  ).toThrow();
+  expect(validateWindowOutput("windows.getBackgroundColor", null)).toBeNull();
+  expect(validateWindowOutput("windows.getBackgroundColor", "#112233")).toBe(
+    "#112233",
+  );
+  expect(() => validateWindowOutput("windows.getBackgroundColor", 1)).toThrow();
+  f.permissions.permissions = [];
+  await expect(f.invoke("getBackgroundColor")).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  f.permissions.permissions = windowPermissions();
+  f.setClosed();
+  await expect(f.invoke("getBackgroundColor")).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+});
+
+test("macOS target does not declare the Windows-only background color operations", () => {
+  expect(windows._definition.nativePlatforms.macos?.operations).not.toEqual(
+    expect.arrayContaining([
+      "setBackgroundColor",
+    ]),
+  );
+  expect(windows._definition.nativePlatforms.windows?.operations).toEqual(
+    expect.arrayContaining([
+      "setBackgroundColor",
+      "getBackgroundColor",
+    ]),
+  );
 });
 
 test("macOS target does not declare the Windows-only shadow operations", () => {

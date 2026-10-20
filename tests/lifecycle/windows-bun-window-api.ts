@@ -480,6 +480,165 @@ if (!process.argv.includes("--child")) {
       assert.throws(() => nativeWindows.setHasShadow(custom, false));
     }
     {
+      const gdi = dlopen("gdi32.dll", {
+        CreateCompatibleDC: {
+          args: [
+            "u64",
+          ],
+          returns: "u64",
+        },
+        CreateCompatibleBitmap: {
+          args: [
+            "u64",
+            "i32",
+            "i32",
+          ],
+          returns: "u64",
+        },
+        SelectObject: {
+          args: [
+            "u64",
+            "u64",
+          ],
+          returns: "u64",
+        },
+        SetPixelV: {
+          args: [
+            "u64",
+            "i32",
+            "i32",
+            "u32",
+          ],
+          returns: "i32",
+        },
+        GetPixel: {
+          args: [
+            "u64",
+            "i32",
+            "i32",
+          ],
+          returns: "u32",
+        },
+        DeleteObject: {
+          args: [
+            "u64",
+          ],
+          returns: "i32",
+        },
+        DeleteDC: {
+          args: [
+            "u64",
+          ],
+          returns: "i32",
+        },
+      });
+      const messaging = dlopen("user32.dll", {
+        GetDC: {
+          args: [
+            "u64",
+          ],
+          returns: "u64",
+        },
+        ReleaseDC: {
+          args: [
+            "u64",
+            "u64",
+          ],
+          returns: "i32",
+        },
+        SendMessageW: {
+          args: [
+            "u64",
+            "u32",
+            "u64",
+            "i64",
+          ],
+          returns: "i64",
+        },
+      });
+      const WM_ERASEBKGND = 0x0014;
+      /** A COLORREF no window color in this test uses, so an erase that paints nothing stays visible. */
+      const SENTINEL = 0x123456;
+      /** Send WM_ERASEBKGND with a memory DC holding the sentinel and read back the COLORREF at the top-left pixel. */
+      const erasedPixel = (
+        hwnd: bigint,
+      ): {
+        handled: bigint;
+        pixel: number;
+      } => {
+        const screen = messaging.symbols.GetDC(0n);
+        const memory = gdi.symbols.CreateCompatibleDC(screen);
+        const bitmap = gdi.symbols.CreateCompatibleBitmap(screen, 500, 400);
+        const previous = gdi.symbols.SelectObject(memory, bitmap);
+        try {
+          gdi.symbols.SetPixelV(memory, 1, 1, SENTINEL);
+          const handled = messaging.symbols.SendMessageW(
+            hwnd,
+            WM_ERASEBKGND,
+            memory,
+            0n,
+          );
+          return {
+            handled,
+            pixel: gdi.symbols.GetPixel(memory, 1, 1),
+          };
+        } finally {
+          gdi.symbols.SelectObject(memory, previous);
+          gdi.symbols.DeleteObject(bitmap);
+          gdi.symbols.DeleteDC(memory);
+          messaging.symbols.ReleaseDC(0n, screen);
+        }
+      };
+      const painted = nativeWindows.create(
+        "Background painted",
+        500,
+        400,
+        () => {},
+        true,
+        {
+          backgroundColor: "#203040",
+        },
+      );
+      const plain = nativeWindows.create(
+        "Background plain",
+        500,
+        400,
+        () => {},
+      );
+      try {
+        assert.equal(nativeWindows.getBackgroundColor(painted), "#203040");
+        assert.equal(nativeWindows.getBackgroundColor(plain), null);
+        // COLORREF is 0x00BBGGRR.
+        assert.deepEqual(erasedPixel(painted), {
+          handled: 1n,
+          pixel: 0x403020,
+        });
+        nativeWindows.setBackgroundColor(painted, "#a1b2c3");
+        assert.equal(nativeWindows.getBackgroundColor(painted), "#a1b2c3");
+        assert.deepEqual(erasedPixel(painted), {
+          handled: 1n,
+          pixel: 0xc3b2a1,
+        });
+        // A window with no color keeps the class brush and its own erase result.
+        assert.equal(nativeWindows.getBackgroundColor(plain), null);
+        // The default procedure paints the class brush over the sentinel instead of leaving it.
+        const unpainted = erasedPixel(plain);
+        assert.notEqual(unpainted.pixel, SENTINEL);
+        assert.notEqual(unpainted.pixel, 0xc3b2a1);
+        assert.notEqual(unpainted.pixel, 0x403020);
+        nativeWindows.setBackgroundColor(plain, "#010203");
+        assert.equal(erasedPixel(plain).pixel, 0x030201);
+        assert.equal(nativeWindows.getBackgroundColor(painted), "#a1b2c3");
+      } finally {
+        nativeWindows.destroy(plain);
+        nativeWindows.destroy(painted);
+        gdi.close();
+        messaging.close();
+      }
+      assert.throws(() => nativeWindows.getBackgroundColor(painted));
+      assert.throws(() => nativeWindows.setBackgroundColor(painted, "#010203"));
+    }
+    {
       const hwnd = nativeWindows.create(
         "Opacity regression",
         650,
@@ -2159,6 +2318,43 @@ if (!process.argv.includes("--child")) {
               opacity: 1,
             });
             assert.equal(await windows.getOpacity(editor), 1);
+            // The declared color is live, a runtime change replaces it, and another window keeps its own.
+            assert.equal(await windows.getBackgroundColor(editor), "#112233");
+            assert.equal(
+              await windows.getBackgroundColor({
+                view: "main",
+              }),
+              null,
+            );
+            await windows.setBackgroundColor({
+              ...editor,
+              color: "#ABC",
+            });
+            assert.equal(await windows.getBackgroundColor(editor), "#aabbcc");
+            assert.equal(
+              await windows.getBackgroundColor({
+                view: "main",
+              }),
+              null,
+            );
+            await windows.setBackgroundColor({
+              ...editor,
+              color: "#203040",
+            });
+            assert.equal(await windows.getBackgroundColor(editor), "#203040");
+            await assert.rejects(
+              windows.setBackgroundColor({
+                ...editor,
+                color: "#20304080",
+              }),
+              (error: unknown) =>
+                (
+                  error as {
+                    code: string;
+                  }
+                ).code === "INVALID_ARGUMENT",
+            );
+            assert.equal(await windows.getBackgroundColor(editor), "#203040");
             assert.equal(await windows.isIgnoreMouseEvents(editor), false);
             await windows.setIgnoreMouseEvents({
               ...editor,
@@ -2228,6 +2424,13 @@ if (!process.argv.includes("--child")) {
             );
             await waitFor(() => holds === 2 && cancellations === 1);
           } else if (runs === 2) {
+            // Recreation starts from the declaration, not from the previous runtime color.
+            assert.equal(
+              await windows.getBackgroundColor({
+                view: "editor",
+              }),
+              "#112233",
+            );
             assert.equal(
               await windows.isFocusable({
                 view: "editor",
@@ -2446,6 +2649,7 @@ if (!process.argv.includes("--child")) {
               minHeight: 400,
               maxWidth: 800,
               maxHeight: 600,
+              backgroundColor: "#112233",
             }
           : {}),
       },

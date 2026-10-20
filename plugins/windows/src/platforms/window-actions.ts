@@ -2,6 +2,7 @@ import {
   hasValidWindowSizeConstraints,
   type NativeWindow,
   type NativeWindowServices,
+  normalizeWindowBackgroundColor,
   type WindowAttentionMode,
   type WindowIdentity,
   type WindowSizeConstraints,
@@ -10,6 +11,18 @@ import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import type { WindowCall } from "#windows/contract";
 import { convertGeometry } from "#windows/platforms/window-geometry";
 import { overlayIconProvider } from "#windows/platforms/windows-overlay-icon";
+
+/** The schema has already matched the pattern; a value that still fails to normalize is rejected, never passed on. */
+function requireBackgroundColor(color: string): string {
+  const normalized = normalizeWindowBackgroundColor(color);
+  if (normalized === undefined) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Window background color must be #RGB or #RRGGBB.",
+    });
+  }
+  return normalized;
+}
 
 /** Flash mode applied when `windows.requestAttention` omits `mode`. */
 const DEFAULT_ATTENTION_MODE: WindowAttentionMode = "untilFocused";
@@ -71,6 +84,9 @@ const unsupportedOpacity = unsupportedError(
 );
 const unsupportedShadow = unsupportedError(
   "Window shadow control is not implemented on this platform.",
+);
+const unsupportedBackgroundColor = unsupportedError(
+  "Window background color is not implemented on this platform.",
 );
 const unsupportedMouseEvents = unsupportedError(
   "Ignoring mouse events is not implemented on this platform.",
@@ -560,6 +576,14 @@ function applyUserControls(scope: ActionScope, call: WindowCall): ActionResult {
       return null;
     case "windows.hasShadow":
       return supported(window.hasShadow, unsupportedShadow)();
+    case "windows.setBackgroundColor":
+      supported(
+        window.setBackgroundColor,
+        unsupportedBackgroundColor,
+      )(requireBackgroundColor(call.payload.color));
+      return null;
+    case "windows.getBackgroundColor":
+      return supported(window.getBackgroundColor, unsupportedBackgroundColor)();
     case "windows.setIgnoreMouseEvents":
       supported(
         window.setIgnoreMouseEvents,

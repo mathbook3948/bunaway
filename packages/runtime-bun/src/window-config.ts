@@ -6,6 +6,7 @@ import {
   MAX_WINDOW_INSTANCES,
   MAX_WINDOWS,
   MIN_WINDOW_DIMENSION,
+  normalizeWindowBackgroundColor,
   type WindowSizeConstraints,
   type WindowSpec,
 } from "@bunaway/plugin-api/native";
@@ -51,6 +52,7 @@ const SIZE_FIELDS = [
   "alwaysOnTop",
   "skipTaskbar",
   "contentProtection",
+  "backgroundColor",
   "maximized",
   "fullscreen",
 ];
@@ -241,6 +243,7 @@ function readWindowSize(size: Record<string, unknown>): WindowSpec["window"] {
     throw new Error("Window focusable must be a boolean.");
   }
   const initialState = readInitialState(size);
+  const backgroundColor = readBackgroundColor(size.backgroundColor);
   for (const dimension of [
     size.width,
     size.height,
@@ -277,6 +280,7 @@ function readWindowSize(size: Record<string, unknown>): WindowSpec["window"] {
     }),
     ...initialState,
     ...definedEntries({
+      backgroundColor,
       titlebar,
       x: size.x,
       y: size.y,
@@ -293,6 +297,18 @@ function readWindowSize(size: Record<string, unknown>): WindowSpec["window"] {
       maxHeight,
     }),
   };
+}
+
+/** Normalizes an optional `#RGB` or `#RRGGBB` background color to `#rrggbb`. */
+function readBackgroundColor(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const color = normalizeWindowBackgroundColor(value);
+  if (color === undefined) {
+    throw new Error("Window backgroundColor must be #RGB or #RRGGBB.");
+  }
+  return color;
 }
 
 /** Collects the boolean initial-state options that are present, rejecting any other type. */

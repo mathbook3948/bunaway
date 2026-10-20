@@ -61,6 +61,7 @@ export function assertMacosWindowOptions(spec: WindowSpec): void {
       "titlebar",
       "alwaysOnTop",
       "skipTaskbar",
+      "backgroundColor",
     ].some((key) => Object.hasOwn(spec.window, key))
   ) {
     throw new BunawayError({

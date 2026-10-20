@@ -1312,6 +1312,12 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         isFullscreenable: () => nativeWindows.isFullscreenable(hwnd),
         setOpacity: (opacity) => nativeWindows.setOpacity(hwnd, opacity),
         getOpacity: () => nativeWindows.getOpacity(hwnd),
+        setBackgroundColor(color) {
+          // The WebView first, so a rejected color never reaches the window; a failure after the controller accepted it leaves the window color unchanged.
+          view.native.setBackgroundColor(color);
+          nativeWindows.setBackgroundColor(hwnd, color);
+        },
+        getBackgroundColor: () => nativeWindows.getBackgroundColor(hwnd),
         setHasShadow: (shadow) => nativeWindows.setHasShadow(hwnd, shadow),
         hasShadow: () => nativeWindows.hasShadow(hwnd),
         setIgnoreMouseEvents: (ignore) =>

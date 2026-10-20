@@ -5,6 +5,7 @@ import windows, {
 } from "@bunaway/plugin-windows";
 import { type JsonValue, NativeRegistry } from "@bunaway/protocol";
 import { windowDefinitions } from "../../plugins/windows/src/contract.ts";
+import { mergeCreationOptions } from "../../plugins/windows/src/platforms/creation-options.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("windows", windowDefinitions);
@@ -109,6 +110,11 @@ test.each([
       {
         title: "Editor",
         visible: false,
+      },
+      {
+        window: {
+          backgroundColor: "#ABC",
+        },
       },
       {
         window: {
@@ -229,6 +235,21 @@ test.each([
           fullscreen: null,
         },
       },
+      {
+        window: {
+          backgroundColor: "#11223344",
+        },
+      },
+      {
+        window: {
+          backgroundColor: "blue",
+        },
+      },
+      {
+        window: {
+          backgroundColor: null,
+        },
+      },
     ]) {
       extras.push({
         options,
@@ -256,3 +277,27 @@ test.each([
     }
   },
 );
+
+test("creation options override the declared background color and normalize it", () => {
+  const declared = {
+    view: "main",
+    title: "Main",
+    home: "https://app.bunaway.local/",
+    window: {
+      width: 800,
+      height: 600,
+      backgroundColor: "#203040",
+    },
+  };
+  expect(
+    mergeCreationOptions(declared, {
+      window: {
+        backgroundColor: "#ABC",
+      },
+    }).window.backgroundColor,
+  ).toBe("#aabbcc");
+  expect(mergeCreationOptions(declared, {}).window.backgroundColor).toBe(
+    "#203040",
+  );
+  expect(declared.window.backgroundColor).toBe("#203040");
+});

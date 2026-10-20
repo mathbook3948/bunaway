@@ -11,6 +11,7 @@ import {
   MIN_WINDOW_COORDINATE,
   MIN_WINDOW_DIMENSION,
   parseNativeIco,
+  WINDOW_BACKGROUND_COLOR_PATTERN,
   type WindowAttentionMode,
   type WindowResizeDirection,
 } from "@bunaway/plugin-api/native";
@@ -269,6 +270,9 @@ const sizeDimension = z.union([
   z.int().min(MIN_WINDOW_DIMENSION).max(MAX_WINDOW_DIMENSION),
 ]);
 
+/** Opaque `#RGB` or `#RRGGBB`; returned values are always lowercase `#rrggbb`. */
+const windowBackgroundColor = z.string().regex(WINDOW_BACKGROUND_COLOR_PATTERN);
+
 const creationDimension = z
   .int()
   .min(MIN_WINDOW_DIMENSION)
@@ -303,6 +307,7 @@ const creationResult = {
             alwaysOnTop: z.boolean().exactOptional(),
             skipTaskbar: z.boolean().exactOptional(),
             contentProtection: z.boolean().exactOptional(),
+            backgroundColor: windowBackgroundColor.exactOptional(),
             maximized: z.boolean().exactOptional(),
             fullscreen: z.boolean().exactOptional(),
           })
@@ -1101,6 +1106,16 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.hasShadow": windowStateResult,
+  "windows.setBackgroundColor": {
+    input: windowTarget.extend({
+      color: windowBackgroundColor,
+    }),
+    output: z.null(),
+  },
+  "windows.getBackgroundColor": {
+    input: windowTarget,
+    output: windowBackgroundColor.nullable(),
+  },
   "windows.setIgnoreMouseEvents": {
     input: windowTarget.extend({
       ignore: z.boolean(),
