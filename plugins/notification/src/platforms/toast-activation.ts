@@ -15,7 +15,7 @@ export const FIRST_METHOD_SLOT = 6;
 const MAP_HAS_KEY_SLOT = 8;
 export const PROPERTY_VALUE_GET_STRING_SLOT = 19;
 /** Windows.Foundation.PropertyType.String. */
-const PROPERTY_TYPE_STRING = 6;
+const PROPERTY_TYPE_STRING = 12;
 
 export type Runtime = ReturnType<typeof createToastRuntime>;
 

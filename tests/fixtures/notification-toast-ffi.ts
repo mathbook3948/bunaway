@@ -741,7 +741,7 @@ await activate(
   {
     arguments: "action:ok",
     input: {
-      type: 6,
+      type: 12,
       text: "hello 한글",
     },
   },
@@ -757,7 +757,7 @@ await activate(
   {
     arguments: "reply",
     input: {
-      type: 6,
+      type: 12,
       text: "",
     },
   },
@@ -807,7 +807,7 @@ for (const stage of [
     {
       arguments: "reply",
       input: {
-        type: 6,
+        type: 12,
         text: "x",
       },
     },
