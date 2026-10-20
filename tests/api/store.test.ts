@@ -990,6 +990,30 @@ test("reload follows the reset policy for a damaged file and reports it", () => 
   expect(errorCodeOf(() => strict.reload("t", false))).toBe("INVALID_ARGUMENT");
 });
 
+test("a failed reload keeps the memory contents, and a later save replaces the damaged file", () => {
+  const root = dataRoot();
+  const instance = create(root);
+  instance.load({
+    name: "t",
+    ...manual,
+  });
+  instance.set("t", "k", 1);
+  instance.save("t");
+  writeFileSync(storeFile(root, "t"), "{ nope");
+  instance.set("t", "k", 2);
+  expect(errorCodeOf(() => instance.reload("t", false))).toBe(
+    "INVALID_ARGUMENT",
+  );
+  expect(instance.get("t", "k")).toEqual({
+    found: true,
+    value: 2,
+  });
+  instance.save("t");
+  expect(readStored(root, "t")).toEqual({
+    k: 2,
+  });
+});
+
 test("defaults that push the file over a limit fail load and leave the file alone", () => {
   const root = dataRoot();
   const first = create(root);
@@ -1444,4 +1468,23 @@ test("a reset that was saved is what a new instance loads", () => {
   expect(Object.fromEntries(second.entries("s"))).toEqual({
     a: 1,
   });
+});
+
+test("a reset without defaults that was saved loads as an empty store", () => {
+  const root = dataRoot();
+  const first = create(root);
+  first.load({
+    name: "plain",
+    ...manual,
+  });
+  first.set("plain", "k", 1);
+  first.reset("plain");
+  first.save("plain");
+  first.dispose();
+  const second = create(root);
+  second.load({
+    name: "plain",
+    ...manual,
+  });
+  expect(second.length("plain")).toBe(0);
 });
