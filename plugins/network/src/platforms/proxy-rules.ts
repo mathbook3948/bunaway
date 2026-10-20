@@ -1,3 +1,4 @@
+import { BunawayError } from "@bunaway/protocol";
 import { MAX_HOST_LENGTH, MAX_PROXY_ENTRIES } from "#network/contract";
 
 type ProxyScheme = "http" | "https" | "socks4" | "socks5";
@@ -48,9 +49,8 @@ function proxyScheme(name: string, fallback: ProxyScheme): ProxyScheme {
 }
 
 /**
- * One proxy list token as a server, or null when it is not a usable `host[:port]`. Anything up to
- * the last `@` is user information and is dropped without being read, so credentials in a proxy
- * setting never reach the result. A missing port takes the scheme's default.
+ * One proxy list token as a server, or null when it is not a usable `host[:port]`. A missing port
+ * takes the scheme's default. `parseProxyList` has already refused lists with user information.
  */
 function parseServer(token: string, fallback: ProxyScheme): ProxyServer | null {
   let rest = token;
@@ -60,8 +60,6 @@ function parseServer(token: string, fallback: ProxyScheme): ProxyServer | null {
     scheme = proxyScheme(uri[1] ?? "", fallback);
     rest = uri[2] ?? "";
   }
-  // User information goes first: a password may contain "/", which must not hide the "@".
-  rest = rest.slice(rest.lastIndexOf("@") + 1);
   const slash = rest.indexOf("/");
   if (slash >= 0) {
     rest = rest.slice(0, slash);
@@ -92,62 +90,11 @@ export type ProxyRules = {
   all: ProxyServer[];
 };
 
-/** Whether a token opens an entry: it carries a `scheme=` rule or a `scheme://` proxy address. */
-function startsEntry(token: string): boolean {
-  return RULE_PREFIX.test(token) || PROXY_URI_PREFIX.test(token);
-}
-
-/**
- * Split a proxy list into entries. A password that contains ";" or a space splits its entry:
- * "alice:1 2 3@host" gives "alice:1", "2" and "3@host". Where the password ends cannot be told
- * from where the next entry starts, so a token with an "@" takes in the tokens before it, back to
- * the previous "@" token. A token without its own `scheme=` or `scheme://` joins them (starting at
- * the nearest earlier token that opens an entry, so that prefix is kept) and `parseServer` drops
- * all of that user information at once; a token with its own prefix replaces them. Proxies listed
- * in that stretch before the credentialed entry are lost with it: a list is never allowed to
- * return a user name or password fragment as a host.
- */
-function entryTokens(text: string): string[] {
-  const tokens: string[] = [];
-  let open = 0;
-  for (const token of text.split(SEPARATORS)) {
-    if (token === "") {
-      continue;
-    }
-    if (!token.includes("@")) {
-      tokens.push(token);
-      continue;
-    }
-    let start = open;
-    if (startsEntry(token)) {
-      // The token carries its own scheme: the stretch before it is dropped, not joined, so the
-      // scheme stays with this entry and the dropped tokens cannot be read as hosts.
-      tokens.splice(open);
-      tokens.push(token);
-      open = tokens.length;
-      continue;
-    }
-    for (let index = tokens.length - 1; index >= open; index -= 1) {
-      if (startsEntry(tokens[index] ?? "")) {
-        start = index;
-        break;
-      }
-    }
-    tokens.push(
-      [
-        ...tokens.splice(start),
-        token,
-      ].join(" "),
-    );
-    open = tokens.length;
-  }
-  return tokens;
-}
-
 /**
  * Parse the WinHTTP proxy list syntax: `host:port`, `http=host:port;https=host:port;socks=host:port`
  * and `scheme://host:port`, separated by semicolons or whitespace. `ftp=` entries serve no
- * http or https URL and are ignored, as are malformed tokens.
+ * http or https URL and are ignored, as are malformed tokens. A list that contains "@" (user
+ * information) fails with `INTERNAL` instead of being read.
  */
 export function parseProxyList(text: string): ProxyRules {
   const rules: ProxyRules = {
@@ -156,7 +103,19 @@ export function parseProxyList(text: string): ProxyRules {
     socks: [],
     all: [],
   };
-  for (const token of entryTokens(text)) {
+  if (text.includes("@")) {
+    // A password may itself contain ";", spaces, "/" or "@", so where user information ends and
+    // the next entry starts cannot be told. Reading such a list would risk returning part of the
+    // credentials as a host, so it is refused whole. Internet Options has no field for them.
+    throw new BunawayError({
+      code: "INTERNAL",
+      message: "Windows proxy setting contains user information.",
+    });
+  }
+  for (const token of text.split(SEPARATORS)) {
+    if (token === "") {
+      continue;
+    }
     const rule = RULE_PREFIX.exec(token);
     const name = rule?.[1]?.toLowerCase();
     // "ftp=" and any other scheme name serve no http or https URL.

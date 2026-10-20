@@ -270,74 +270,40 @@ test("a proxy list is split by the scheme each entry serves", () => {
   ]);
 });
 
-test("proxy credentials and malformed entries never reach the result", () => {
-  const rules = parseProxyList(
-    "user:secret@a.example:8080 http://admin:pw@b.example:3128/x :80 c.example:0 d.example:70000 e.example:notaport [::1]:3128",
-  );
-  expect(rules.all).toEqual([
-    proxy("a.example", 8080),
-    proxy("b.example", 3128),
-    proxy("[::1]", 3128),
-  ]);
-  expect(JSON.stringify(rules)).not.toMatch(/secret|admin|pw/);
+test("a proxy list with user information is refused whole", () => {
+  for (const list of [
+    "user:secret@a.example:8080",
+    "http://admin:pw@b.example:3128/x",
+    "alice:1234;5:6@proxy.example:8080",
+    "u:a@b;c@host.example:80",
+    "u:p@ss w@rd@host:80",
+    "first.example:80;bob@proxy.example:8080",
+    "https=a.example:80;http=bob:pw@b.example:81",
+  ]) {
+    expect(() => parseProxyList(list)).toThrowError(
+      expect.objectContaining({
+        code: "INTERNAL",
+      }),
+    );
+    expect(() =>
+      selectEntries(list, null, new URL("http://x.example/")),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "INTERNAL",
+      }),
+    );
+  }
 });
 
-test("a password with a separator or slash leaves no user name in the result", () => {
-  for (const list of [
-    "http://alice:12;34@proxy.example:8080",
-    "alice:12 34@proxy.example:8080",
-    "alice:9999/x@proxy.example:80",
-  ]) {
-    const servers = parseProxyList(list).all;
-    expect(servers.map((server) => server.host)).toEqual([
-      "proxy.example",
-    ]);
-  }
-  // More than one separator in the password, and a scheme prefix in front of the entry.
-  expect(
-    parseProxyList("alice:1 2 3@proxy.example:80").all.map(
-      (server) => server.host,
-    ),
-  ).toEqual([
-    "proxy.example",
+test("malformed entries are skipped and unknown schemes ignored", () => {
+  const rules = parseProxyList(
+    ":80 c.example:0 d.example:70000 e.example:notaport [::1]:3128 socks6=h.example:1080",
+  );
+  expect(rules.all).toEqual([
+    proxy("[::1]", 3128),
   ]);
-  expect(parseProxyList("a:b c d e@p.example:80").all).toEqual([
-    proxy("p.example", 80),
-  ]);
-  const scoped = parseProxyList("http=alice:pa ss@p.example:80");
-  expect(scoped.http).toEqual([
-    proxy("p.example", 80),
-  ]);
-  expect(scoped.all).toEqual([]);
-  // Where a password ends cannot be told from the next entry: proxies before a credentialed
-  // entry are dropped with it rather than risk returning a fragment of the credentials.
-  for (const list of [
-    "alice:1234;5:6@proxy.example:8080",
-    "first.example:80;bob:pw@proxy.example:8080",
-    "first.example:80;bob@proxy.example:8080",
-  ]) {
-    expect(parseProxyList(list).all.map((server) => server.host)).toEqual([
-      "proxy.example",
-    ]);
-  }
-  // An entry that opens with its own scheme keeps it; the tokens before it are dropped.
-  const mixed = parseProxyList("https=a.example:80;http=bob@b.example:81");
-  expect(mixed.https).toEqual([]);
-  expect(mixed.http).toEqual([
-    proxy("b.example", 81),
-  ]);
-  // A password fragment followed by a token that opens with a scheme is not read as a host.
-  for (const list of [
-    "alice:1234 y=z@proxy.example:80",
-    "bob:12 http://x@proxy.example:80",
-    "alice:1234;socks=s@proxy.example:80",
-  ]) {
-    expect(JSON.stringify(parseProxyList(list))).not.toMatch(/alice|bob/);
-  }
-  // Unknown scheme names and oversized hosts are skipped.
-  expect(
-    parseProxyList(`socks6=h.example:1080 ${"a".repeat(254)}:80`).all,
-  ).toEqual([]);
+  expect(rules.socks).toEqual([]);
+  expect(parseProxyList(`${"a".repeat(254)}:80`).all).toEqual([]);
 });
 
 test("the bypass list follows the WinHTTP token rules", () => {

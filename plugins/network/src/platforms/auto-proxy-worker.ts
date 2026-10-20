@@ -189,10 +189,15 @@ export function startWorker(source: string): {
       },
     ),
   );
-  return {
-    worker: new Worker(url),
-    release: () => URL.revokeObjectURL(url),
-  };
+  try {
+    return {
+      worker: new Worker(url),
+      release: () => URL.revokeObjectURL(url),
+    };
+  } catch (error) {
+    URL.revokeObjectURL(url);
+    throw error;
+  }
 }
 
 /**
@@ -266,6 +271,10 @@ export async function requestFromWorker(
     worker.onerror = fail;
     worker.onmessageerror = fail;
     worker.addEventListener("close", fail);
-    worker.postMessage(request);
+    try {
+      worker.postMessage(request);
+    } catch {
+      fail();
+    }
   });
 }
