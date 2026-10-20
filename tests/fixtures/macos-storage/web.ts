@@ -145,19 +145,13 @@ try {
       storage.createDirectory({
         path: `${root}/symlink`,
       }),
-      "PERMISSION_DENIED",
+      "INVALID_ARGUMENT",
     );
     await rejected(
       storage.remove({
-        path: `${root}/outside`,
+        path: `${root}/created-directories/parent`,
       }),
-      "UNSUPPORTED",
-    );
-    await rejected(
-      storage.remove({
-        path: directory,
-      }),
-      "UNSUPPORTED",
+      "INVALID_ARGUMENT",
     );
     check(
       (await storage.readText({
@@ -166,7 +160,7 @@ try {
         (await storage.exists({
           path: directory,
         })),
-      "Unsupported remove must preserve files and directories.",
+      "A refused remove must preserve files and directories.",
     );
     const text = `${root}/nested/한글 memo.txt`;
     await storage.writeText({
@@ -218,11 +212,11 @@ try {
       }),
       "INVALID_ARGUMENT",
     );
-    await rejected(
-      storage.readText({
+    check(
+      (await storage.readText({
         path: `${root}/symlink`,
-      }),
-      "PERMISSION_DENIED",
+      })) === "outside",
+      "A symlink is followed to its target.",
     );
     const binary = `${root}/binary.bin`;
     await storage.writeBytes({
@@ -262,13 +256,33 @@ try {
       })) === "AP+A",
       "No-overwrite copy.",
     );
+    await storage.move({
+      from: copied,
+      to: `${root}/moved.bin`,
+    });
+    check(
+      !(await storage.exists({
+        path: copied,
+      })) &&
+        (await storage.readBytes({
+          path: `${root}/moved.bin`,
+        })) === "AP+A",
+      "Move renames the file.",
+    );
+    await storage.copyFile({
+      from: `${root}/moved.bin`,
+      to: copied,
+    });
     await rejected(
       storage.move({
         from: copied,
         to: `${root}/moved.bin`,
       }),
-      "UNSUPPORTED",
+      "INVALID_ARGUMENT",
     );
+    await storage.remove({
+      path: `${root}/moved.bin`,
+    });
     check(
       (await storage.exists({
         path: copied,
@@ -276,7 +290,7 @@ try {
         !(await storage.exists({
           path: `${root}/moved.bin`,
         })),
-      "Unsupported move must not mutate names.",
+      "A refused move keeps both names, and remove deletes one file.",
     );
     await client.invoke("test.backendViaView", null);
     check(

@@ -77,8 +77,7 @@ const metadata = await storage.stat(
 
 ## macOS 메타데이터
 
-macOS도 POSIX 정규 절대 경로의 일반 파일과 디렉터리를 조회합니다.
-생성, 수정과 접근 시각을 UTC Unix epoch 밀리초로 반환합니다.
-실제로 없으면 null이며 OS 접근 거부와 symlink 및 여러 hardlink가 있는 파일은
-`PERMISSION_DENIED`입니다. 열린 객체를 조회하지만 다른 프로세스의 삭제나 쓰기를
-막지 않으므로 결과는 조회 시점의 관찰입니다.
+macOS도 POSIX 절대 경로의 일반 파일과 디렉터리를 조회합니다. symlink는 따라가며
+hardlink는 일반 파일입니다. 생성, 수정과 접근 시각을 UTC Unix epoch 밀리초로 반환합니다.
+실제로 없으면 null이고 OS 접근 거부는 `PERMISSION_DENIED`입니다.
+다른 프로세스의 삭제나 쓰기를 막지 않으므로 결과는 조회 시점의 관찰입니다.

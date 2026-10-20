@@ -3,12 +3,12 @@ import { type CommandContext, command } from "@bunaway/backend";
 import type { CoreServices } from "@bunaway/core";
 import storage, { type StorageMetadata } from "@bunaway/plugin-storage";
 import { NativeRegistry } from "@bunaway/protocol";
-import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
+import { storageOperations } from "../../plugins/storage/src/operations.ts";
 import { testAppInfo } from "../fixtures/app-info.ts";
 import { bindHostAPI } from "../fixtures/host-plugins.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
-const parsers = pluginParsers("storage", windowsOperations);
+const parsers = pluginParsers("storage", storageOperations);
 
 const location = {
   path: "notes/한글 memo.txt",

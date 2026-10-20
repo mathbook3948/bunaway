@@ -323,7 +323,7 @@ export default defineNativePlugin({
 ```
 
 이 축약 예제는 readText만 지원합니다. 실제 storage는 operations.ts의 공통 작업 목록을
-두 플랫폼에서 사용하고 windows-operations.ts에서 move와 remove를 추가합니다. 공통 목록은
+두 플랫폼에서 사용합니다. 공통 목록은
 플랫폼 클래스가 아니라 contract.ts의 `StorageInstance` 인터페이스로 instance 타입을 정하고,
 각 플랫폼 클래스가 그 인터페이스를 `implements`합니다. `src/*.ts`의 중립 모듈이 `platforms/`의
 타입을 import하는 것은 `tests/conformance/plugin-structure.test.ts`가 기존 목록 이상으로

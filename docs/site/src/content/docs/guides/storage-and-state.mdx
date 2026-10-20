@@ -71,10 +71,9 @@ Windows 구현은 링크(symlink, junction)와 하드 링크를 일반 경로처
 
 Windows와 macOS에서 `storage.readDirectory`로 직접 자식 이름을 읽고
 `storage.createDirectory`로 디렉터리를 만들 수 있습니다. recursive 기본값은 false이며
-작업별 권한을 각각 허용합니다. macOS에서는 symlink 별칭이 없는 정규 POSIX 절대 경로를
-사용합니다. `storage.remove`는 Windows에서만 지원합니다.
-`storage.directorySize`는 Windows에서 트리 안의 링크를 따라가지 않고 파일의 논리 크기를 더합니다.
-`storage.removeRecursive`는 Windows에서 트리 안의 링크를 따라가지 않고 디렉터리 트리를 삭제하며 `storage.remove`와 별도 권한입니다.
+작업별 권한을 각각 허용합니다. `storage.remove`로 파일이나 빈 디렉터리를 지웁니다.
+`storage.directorySize`는 트리 안의 링크를 따라가지 않고 파일의 논리 크기를 더합니다.
+`storage.removeRecursive`는 트리 안의 링크를 따라가지 않고 디렉터리 트리를 삭제하며 `storage.remove`와 별도 권한입니다.
 입력, 목록 상한, 용량 계산의 세부 규칙과 실패는
 [디렉터리 작업](/reference/host/storage-directories/)을 확인하세요.
 

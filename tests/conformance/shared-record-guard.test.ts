@@ -19,7 +19,7 @@ const LOCAL_GUARD = /\): value is Record<string, unknown>/g;
  */
 const LOCAL_CHECKS: Record<string, number> = {
   "tests/fixtures/macos-image.ts": 6,
-  "tests/lifecycle/macos-storage.ts": 3,
+  "tests/lifecycle/macos-storage.ts": 2,
   "tests/lifecycle/windows-app-reload.ts": 1,
   "tests/lifecycle/windows-bun-storage.ts": 1,
   "tests/lifecycle/windows-modal-events.fixture.ts": 1,

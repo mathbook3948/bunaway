@@ -2,31 +2,20 @@ import { expect, test } from "bun:test";
 import storage from "@bunaway/plugin-storage";
 import { NativeRegistry, serializeHostResponse } from "@bunaway/protocol";
 import { MAX_DIRECTORY_ENTRIES } from "../../plugins/storage/src/contract.ts";
-import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
+import { storageOperations } from "../../plugins/storage/src/operations.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
-const parsers = pluginParsers("storage", windowsOperations);
+const parsers = pluginParsers("storage", storageOperations);
 const location = {
   path: "C:/notes/한글",
 };
 
-test("macOS supports directory reads and creation while checked-object removal remains Windows-only", () => {
+test("both platforms declare the same operations on the worker thread", () => {
   const targets = storage._definition.nativePlatforms;
-  for (const operation of [
-    "storage.readDirectory",
-    "storage.createDirectory",
-  ]) {
-    expect(targets.macos?.thread).toBe("worker");
-    expect(targets.macos?.operations).toContain(
-      operation.slice("storage.".length),
-    );
-  }
-  expect(targets.macos?.operations).not.toContain("remove");
-  expect(targets.macos?.operations).not.toContain("removeRecursive");
-  expect(targets.macos?.operations).not.toContain("move");
-  expect(targets.macos?.operations).toHaveLength(11);
   expect(targets.windows?.thread).toBe("worker");
-  expect(targets.windows?.operations).toEqual(Object.keys(windowsOperations));
+  expect(targets.macos?.thread).toBe("worker");
+  expect(targets.windows?.operations).toEqual(Object.keys(storageOperations));
+  expect(targets.macos?.operations).toEqual(Object.keys(storageOperations));
 });
 
 test("directory operations resolve recursive defaults, bound output and retain independent permissions", async () => {
@@ -219,12 +208,6 @@ test("directorySize accepts only a path, returns bounded totals and is Windows-o
       parsers.validateOutput("storage.directorySize", output),
     ).rejects.toThrow();
   }
-  expect(storage._definition.nativePlatforms.macos?.operations).not.toContain(
-    "directorySize",
-  );
-  expect(storage._definition.nativePlatforms.windows?.operations).toContain(
-    "directorySize",
-  );
 });
 
 test("removeRecursive accepts only a path, returns null and needs its own permission on Windows", async () => {
@@ -259,10 +242,4 @@ test("removeRecursive accepts only a path, returns null and needs its own permis
   await expect(
     parsers.validateOutput("storage.removeRecursive", {}),
   ).rejects.toThrow();
-  expect(storage._definition.nativePlatforms.macos?.operations).not.toContain(
-    "removeRecursive",
-  );
-  expect(storage._definition.nativePlatforms.windows?.operations).toContain(
-    "removeRecursive",
-  );
 });

@@ -147,19 +147,13 @@ try {
   );
   const storage = installed.find((plugin) => plugin.name === "storage");
   assert.equal(storage?.targets.macos?.thread, "worker");
-  assert.equal(
-    (storage.targets.macos.supportedOperations ?? []).includes("storage.move"),
-    false,
-  );
-  assert.equal(
-    (storage.targets.macos.supportedOperations ?? []).includes(
-      "storage.remove",
-    ),
-    false,
-  );
   for (const operation of [
     "storage.readDirectory",
     "storage.createDirectory",
+    "storage.move",
+    "storage.remove",
+    "storage.removeRecursive",
+    "storage.directorySize",
   ]) {
     assert(
       (storage.targets.macos.supportedOperations ?? []).includes(operation),
@@ -303,7 +297,7 @@ try {
     reports,
   });
   console.log(
-    "PASS ad-hoc signed WKWebView -> host -> storage I/O, eleven operations, directory contracts, operation grants, view authority, unsupported move/remove, cleanup and restart",
+    "PASS ad-hoc signed WKWebView -> host -> storage I/O, move and remove, directory contracts, operation grants, view authority, cleanup and restart",
   );
 } catch (error) {
   if (launchDiagnostics) {

@@ -23,10 +23,10 @@ import {
   type StorageDirectoryCreate,
   type StorageDirectoryEntry,
   type StorageDirectorySize,
+  type StorageInstance,
   type StorageLocation,
   type StorageMetadata,
   type StorageTransfer,
-  type WindowsStorageInstance,
 } from "#storage/contract";
 import { MAX_STORAGE_FILE_BYTES, StorageFiles } from "#storage/platforms/files";
 import {
@@ -258,7 +258,7 @@ function ensureParentDirectory(path: string): void {
  */
 export abstract class NodeStorage
   extends StorageFiles
-  implements WindowsStorageInstance
+  implements StorageInstance
 {
   constructor(private readonly rules: PathRules) {
     super();

@@ -64,8 +64,8 @@ src 없이 dist만 설치해 공개 호출과 재내보낸 타입을 검사한�
 입력 콜백의 권한 승인, 실행 재승인 및 취소된 파서의 늦은 완료를 검사한다.
 storage의 플랫폼별 작업 샘플은 `windows-bun-storage.ts`의 실제 Windows 파일 시스템 검사와
 `windows-storage-metadata.ts`의 WebView, I/O Worker 호출을 함께 사용한다.
-macOS는 `macos-storage.ts`와 `macos-storage-directories.ts`에서 기존 descriptor 검사를
-유지하며 `macos-storage-host.ts`에서 실제 SDK와 I/O Worker 호출을 검증한다.
+macOS는 `macos-storage.ts`와 `macos-storage-directories.ts`에서 실제 파일 시스템 검사를 하며
+`macos-storage-host.ts`에서 실제 SDK와 I/O Worker 호출을 검증한다.
 
 `lifecycle/macos-safe-storage.test.ts`는 합성 Keychain으로 lazy 준비, 키 생성 경합,
 접근 실패 뒤 키 보존과 재시도, 작업별 키 지우기, 버전과 namespace 인증, 변조와 크기 상한을
@@ -920,13 +920,18 @@ hardlink의 이름만 삭제를 확인한다. 읽기 전용 hardlink를 지울 �
 `api/storage-windows-path.test.ts`는 Windows 경로 형식(드라이브와 UNC 허용, 상대 경로와 `.`과 `..`와 예약 이름과
 끝의 점과 금지 문자 거부, 장치와 NT 접두사 거부)을 Linux에서도 검사한다.
 
-`api/macos-directory-entries.test.ts`는 Darwin dirent의 UTF-8 이름, 관찰한 종류,
-record 범위와 공개 이름 상한을 검사한다. `macos-storage-directories.ts`는 실제
-checked fd 기반 목록, UTF-16 정렬, 링크와 hardlink, 256개 경계, recursive 기본값과
-생성 오류 및 미지원 remove의 무변경을 `macos-storage.ts`에서 확인한다.
-기존 native workflow가 source fixture를 compile하고 ad-hoc 서명한 뒤 실행한다.
+`api/storage-macos-path.test.ts`는 macOS 경로 문법(절대 경로와 `/tmp` 같은 별칭 허용, 상대 경로와 `.`과 `..`와 빈 요소와
+NUL과 줄바꿈과 짝 없는 서로게이트와 길이 초과 거부)을 Linux에서도 검사한다.
+`macos-storage.ts`는 실제 macOS 파일 시스템으로 텍스트와 바이트 왕복, symlink와 부모 링크와 hardlink의 추종,
+FIFO 거부, chmod 0 파일의 `PERMISSION_DENIED`, 4 MiB 복사, 기존 대상(파일, 링크, 대상 없는 링크, 디렉터리)을
+덮어쓰지 않는 복사와 이동, 디렉터리와 다른 폴더로의 이동, 자기 하위로의 이동 거부, 링크가 든 트리의 용량 계산과
+재귀 삭제(링크의 대상 유지), 재시작과 fd 정리를 확인한다.
+`macos-storage-directories.ts`는 목록의 UTF-16 정렬과 링크 및 hardlink 종류, 256개 경계, 생성 계약, 링크 추종,
+파일과 링크와 빈 디렉터리 삭제를 확인한다. 기존 native workflow가 source fixture를 compile하고 ad-hoc 서명한 뒤 실행한다.
 `macos-storage-host.ts`와 browser fixture는 실제 packaged WKWebView에서 디렉터리 목록과
-생성, 독립 권한, 미지원 remove와 재시작을 검증하며 `mise run host:macos`에 포함한다.
+생성, 이동과 삭제, 독립 권한과 재시작을 검증하며 `mise run host:macos`에 포함한다.
+확인하지 않는 범위: 다른 볼륨 이동(`EXDEV`)과 `RENAME_EXCL`을 지원하지 않는 파일 시스템(`ENOTSUP`),
+삭제 중 사라지거나 교체되는 항목, 접근 거부된 하위 디렉터리를 가진 트리의 용량 계산.
 Linux에서 Darwin fixture를 건너뛰는 결과는 실제 macOS 실행 근거가 아니다.
 
 `api/zod-promise.test.ts`는 ESM과 CommonJS의 실제 Worker에서 Zod의 형제 검사 실패,
