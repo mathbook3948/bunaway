@@ -2,9 +2,11 @@ import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
   beepInputSchema,
+  defaultPrinterSchema,
   infoSchema,
   localeSchema,
   type OSInstance,
+  printerListSchema,
   usageSchema,
 } from "#os/contract";
 
@@ -30,5 +32,15 @@ export const osOperations = {
     input: beepInputSchema,
     output: z.null(),
     handler: (input, { instance }) => instance.beep(input.kind),
+  }),
+  listPrinters: operation({
+    input: z.null(),
+    output: printerListSchema,
+    handler: (_input, { instance }) => instance.listPrinters(),
+  }),
+  getDefaultPrinter: operation({
+    input: z.null(),
+    output: defaultPrinterSchema,
+    handler: (_input, { instance }) => instance.getDefaultPrinter(),
   }),
 };

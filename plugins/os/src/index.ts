@@ -5,7 +5,11 @@ import {
   initialize as initializeMacos,
 } from "#os/platforms/macos";
 import { dispose, initialize } from "#os/platforms/windows";
-/** Read OS and bundled Bun metadata and play system sounds. Architecture describes the running process. */
+/**
+ * Read OS and bundled Bun metadata, play system sounds and list printers on Windows.
+ * Architecture describes the running process. Printer reads block on the Windows print spooler
+ * and cannot be cancelled once started.
+ */
 export default defineNativePlugin({
   name: "os",
   platforms: {
@@ -22,4 +26,10 @@ export default defineNativePlugin({
   },
 });
 
-export type { OSBeepInput, OSInfo, OSLocale, OSUsage } from "#os/contract";
+export type {
+  OSBeepInput,
+  OSInfo,
+  OSLocale,
+  OSPrinter,
+  OSUsage,
+} from "#os/contract";

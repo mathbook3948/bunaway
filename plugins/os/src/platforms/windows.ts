@@ -1,5 +1,4 @@
 import { dlopen, ptr } from "bun:ffi";
-import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import {
   arch,
   cpus,
@@ -10,8 +9,16 @@ import {
   type,
   version,
 } from "node:os";
+import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import type { OSInstance } from "#os/contract";
+import {
+  defaultPrinterName,
+  listPrinterNames,
+  openWinspool,
+  printerBindings,
+  samePrinter,
+} from "#os/platforms/windows-printers";
 
 const LOCALE_NAME_MAX_LENGTH = 85;
 const LOCALE_SISO3166CTRYNAME = 0x5a;
@@ -44,10 +51,10 @@ function openUser32() {
   });
 }
 
-/** Own Kernel32 locale and user32 MessageBeep bindings on the host I/O worker and close them on host shutdown. */
+/** Own Kernel32 locale, user32 MessageBeep and winspool printer bindings on the host I/O worker and close them on host shutdown. */
 export function initialize(): OSInstance {
   const api = dlopen("kernel32.dll", {
-    ...pick(KERNEL32, "GetCurrentProcess"),
+    ...pick(KERNEL32, "GetCurrentProcess", "GetLastError"),
     IsWow64Process2: {
       args: [
         "u64",
@@ -96,13 +103,22 @@ export function initialize(): OSInstance {
     },
   });
   let user32: ReturnType<typeof openUser32>;
+  let winspool: ReturnType<typeof openWinspool>;
   try {
     user32 = openUser32();
+    try {
+      winspool = openWinspool();
+    } catch (error) {
+      user32.close();
+      throw error;
+    }
   } catch (error) {
     // Do not leak the already opened Kernel32 handle when initialization fails.
     api.close();
     throw error;
   }
+  const printers = () =>
+    printerBindings(winspool, () => api.symbols.GetLastError());
   let disposed = false;
   const assertActive = () => {
     if (disposed) {
@@ -240,6 +256,20 @@ export function initialize(): OSInstance {
         },
       };
     },
+    listPrinters() {
+      assertActive();
+      const bindings = printers();
+      const names = listPrinterNames(bindings);
+      const current = defaultPrinterName(bindings);
+      return names.map((name) => ({
+        name,
+        isDefault: current !== null && samePrinter(name, current),
+      }));
+    },
+    getDefaultPrinter() {
+      assertActive();
+      return defaultPrinterName(printers());
+    },
     beep(kind: keyof typeof BEEP_SOUND_TYPES) {
       assertActive();
       if (!user32.symbols.MessageBeep(BEEP_SOUND_TYPES[kind])) {
@@ -273,6 +303,7 @@ export function initialize(): OSInstance {
     dispose() {
       if (!disposed) {
         disposed = true;
+        winspool.close();
         user32.close();
         api.close();
       }

@@ -1410,7 +1410,7 @@
       "network.resolveHost"
     ],
     "reference/plugins/process": ["process.run"],
-    "reference/plugins/os": ["os.info", "os.usage", "os.locale", "os.beep"],
+    "reference/plugins/os": ["os.info", "os.usage", "os.locale", "os.beep", "os.listPrinters", "os.getDefaultPrinter"],
     "reference/plugins/notification": [
       "notification.show",
       "notification.clear",

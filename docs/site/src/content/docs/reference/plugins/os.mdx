@@ -1,6 +1,6 @@
 ---
 title: os
-description: Windows, macOS와 번들 Bun의 실행 정보, 사용자 locale과 표시 언어를 조회하고 시스템 경고음을 재생합니다.
+description: Windows, macOS와 번들 Bun의 실행 정보, 사용자 locale과 표시 언어를 조회하고 시스템 경고음을 재생하고 Windows 프린터 목록을 조회합니다.
 sidebar: { order: 7 }
 ---
 
@@ -22,6 +22,8 @@ const locale = await os.locale(null);
 | `os.usage` | `null` | `Promise<OSUsage>` | `os.usage` |
 | `os.locale` | `null` | `Promise<OSLocale>` | `os.locale` |
 | `os.beep` | `OSBeepInput` | `Promise<null>` | `os.beep` |
+| `os.listPrinters` | `null` | `Promise<OSPrinter[]>` | `os.listPrinters` |
+| `os.getDefaultPrinter` | `null` | `Promise<string \| null>` | `os.getDefaultPrinter` |
 
 `OSInfo`는 `platform: "windows"` 또는 `"macos"`, OS의 `type`, `release`, `version`, 실행 중 프로세스의
 `architecture`, `hostname`과 `runtime: { name: "bun", version, pid }`를 반환합니다.
@@ -67,11 +69,23 @@ macOS에서는 `kind`와 관계없이 System Settings에서 고른 경고음(`Au
 macOS에는 종류별 시스템 소리가 없으므로 `kind`는 검증만 하고 소리를 바꾸지 않습니다. 재생 요청 뒤
 바로 `null`을 반환하며 소리가 났는지는 확인하지 않습니다.
 
+`os.listPrinters(null)`은 이 PC에 설치된 로컬 프린터와 연결한 네트워크 프린터를 `{ name, isDefault }` 배열로
+반환합니다. `name`은 Windows가 프린터를 식별하는 이름(연결 프린터는 `\\server\share` 형태)이고 `isDefault`는
+사용자의 기본 프린터와 이름이 같은 항목에만 `true`입니다. 이름은 대소문자를 구분하지 않고 비교합니다.
+순서는 Windows 열거 순서입니다. 프린터가 없으면 빈 배열입니다. 이름은 1~259자이고 목록은 최대 1024개입니다.
+더 많으면 일부만 돌려주지 않고 `INTERNAL`입니다. 서버 이름, 드라이버, 포트, 위치, 상태는 반환하지 않으며
+프린트 서버에 연결해 상세 정보를 읽지 않습니다. Windows `EnumPrintersW`(level 4)를 사용합니다.
+
+`os.getDefaultPrinter(null)`은 기본 프린터 이름이거나, 기본 프린터가 없으면 `null`입니다(Windows `GetDefaultPrinterW`).
+프린터 목록 조회가 실패하면(인쇄 스풀러 중지 등) 두 작업 모두 `INTERNAL`입니다.
+프린터 이름은 사용자 환경 정보이므로 `os.listPrinters`와 `os.getDefaultPrinter`는 각각 독립 권한입니다.
+macOS에서는 두 작업 모두 `UNSUPPORTED`입니다.
+
 이모지 패널을 여는 API는 제공하지 않습니다. Windows에는 이모지 패널을 여는 공식 API가 없고
 Win+. 키 입력을 합성하는 방법만 있어 현재 포커스를 가진 창에 의존하므로 지원하지 않습니다.
 
-화면 직접 호출에는 뷰의 `commands`에 `plugin.os.info`, `plugin.os.usage`, `plugin.os.locale` 또는 `plugin.os.beep`을,
-`host.permissions`에 같은 작업의 `os.info`, `os.usage`, `os.locale` 또는 `os.beep`을 허용합니다. 백엔드 명령은
+화면 직접 호출에는 뷰의 `commands`에 `plugin.os.info`, `plugin.os.usage`, `plugin.os.locale`, `plugin.os.beep`, `plugin.os.listPrinters` 또는 `plugin.os.getDefaultPrinter`를,
+`host.permissions`에 같은 작업의 `os.info`, `os.usage`, `os.locale`, `os.beep`, `os.listPrinters` 또는 `os.getDefaultPrinter`를 허용합니다. 백엔드 명령은
 호출한 뷰의 권한을 유지하며 setup 호출은 `backend.permissions`를 사용합니다.
 각 작업의 권한은 독립적입니다. hostname을 공개해도 되는 뷰만 `os.info`를 허용합니다.
 
