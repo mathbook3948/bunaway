@@ -68,7 +68,7 @@ await store.close({ name: "settings" });
 쓰고, 다른 옵션이면 `INVALID_ARGUMENT`입니다. `close`한 뒤에는 다시 `load`할 수 있습니다.
 
 UTF-8이 아니거나 JSON이 아니거나 최상위가 객체가 아니거나 크기 상한을 넘거나, 짝이 없는 surrogate 문자열,
-`1e400`처럼 유한하지 않은 수, 너무 깊은 중첩(값은 56단계까지)처럼 호출자에게 돌려줄 수 없는 키나 값이 있는
+`1e400`처럼 유한하지 않은 수, 너무 깊은 중첩(배열과 객체는 값 안에서 57단계까지)처럼 호출자에게 돌려줄 수 없는 키나 값이 있는
 파일은 손상으로 봅니다. 기본(`onInvalidFile: "error"`)에서는 `load`가 `INVALID_ARGUMENT`로 실패하고 파일은
 그대로 남습니다. `details.reason`은 원인에 따라 `"invalid-file"`(형식, 최상위, 원본 크기, 키 수와 키 길이),
 `"value-not-carriable"`, `"value-too-large"`, `"file-too-large"` 중 하나이며 `defaults`와 합친 키 수

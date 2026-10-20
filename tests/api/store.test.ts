@@ -1127,9 +1127,12 @@ test("a file value the protocol could not carry is refused, or replaced with res
     recursive: true,
   });
   const deep = `${"[".repeat(70)}${"]".repeat(70)}`;
+  // Deep enough to overflow the stack of a naive JSON.stringify, small enough for the size limit.
+  const veryDeep = `${"[".repeat(200_000)}${"]".repeat(200_000)}`;
   const files = [
     '{"k":"\\ud800"}',
     `{"k":${deep}}`,
+    `{"k":${veryDeep}}`,
     '{"\\udc00":1}',
     '{"k":1e400}',
   ];
@@ -1165,6 +1168,22 @@ test("a file value the protocol could not carry is refused, or replaced with res
     "INVALID_ARGUMENT",
   );
   expect(instance.has("live", "k")).toBe(false);
+});
+
+test("nesting up to 57 levels is stored and 58 is refused", () => {
+  const nested = (levels: number) =>
+    JSON.parse(`${"[".repeat(levels)}${"]".repeat(levels)}`);
+  const instance = create(dataRoot());
+  instance.load({
+    name: "s",
+    ...manual,
+  });
+  expect(instance.set("s", "ok", nested(57))).toEqual({
+    changed: true,
+  });
+  expect(errorCodeOf(() => instance.set("s", "deep", nested(58)))).toBe(
+    "INVALID_ARGUMENT",
+  );
 });
 
 test("a store path that is a directory fails even with reset", () => {

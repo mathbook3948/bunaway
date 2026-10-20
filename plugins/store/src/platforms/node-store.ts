@@ -189,14 +189,15 @@ function isCarriable(value: unknown, depth: number): boolean {
 /** Each value must fit the per-value limit and be carriable, wherever it came from. */
 function checkValueSizes(data: Map<string, StoreValue>): void {
   for (const [key, value] of data) {
-    if (byteLength(JSON.stringify(value)) > MAX_STORE_VALUE_BYTES) {
-      throw invalid("A value exceeds its size limit.", "value-too-large");
-    }
+    // Check nesting before serializing: stringifying a file's very deep value overflows the stack.
     if (!isWellFormed(key) || !isCarriable(value, 0)) {
       throw invalid(
         "A key or value cannot be returned to callers.",
         "value-not-carriable",
       );
+    }
+    if (byteLength(JSON.stringify(value)) > MAX_STORE_VALUE_BYTES) {
+      throw invalid("A value exceeds its size limit.", "value-too-large");
     }
   }
 }
@@ -392,14 +393,14 @@ export class NodeStore implements StoreInstance {
 
   set(name: string, key: string, value: StoreValue): StoreChange {
     const store = this.open(name);
-    const text = JSON.stringify(value);
-    if (byteLength(text) > MAX_STORE_VALUE_BYTES) {
-      throw invalid("The value exceeds its size limit.");
-    }
     if (!isCarriable(value, 0)) {
       throw invalid(
         "The value is nested too deeply to be returned to callers.",
       );
+    }
+    const text = JSON.stringify(value);
+    if (byteLength(text) > MAX_STORE_VALUE_BYTES) {
+      throw invalid("The value exceeds its size limit.");
     }
     const previous = store.data.get(key);
     if (previous !== undefined && JSON.stringify(previous) === text) {
