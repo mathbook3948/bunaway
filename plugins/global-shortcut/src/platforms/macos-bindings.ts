@@ -14,9 +14,13 @@ const EVENT_NOT_HANDLED = -9874;
 /** `eventHotKeyExistsErr`: another registration already owns this key combination. */
 export const EVENT_HOT_KEY_EXISTS = -9878;
 
-/** Four-character codes from CarbonEvents.h: `keyb`, `keyd` and `hkid`. */
+/**
+ * Four-character codes from CarbonEvents.h and AEDataModel.h: the keyboard event class `keyb`, the
+ * direct object parameter `----` (`keyDirectObject`) that carries a hot key's `EventHotKeyID`, and
+ * that parameter's type `hkid`.
+ */
 const EVENT_CLASS_KEYBOARD = 0x6b657962;
-const EVENT_PARAM_DIRECT_OBJECT = 0x6b657964;
+const EVENT_PARAM_DIRECT_OBJECT = 0x2d2d2d2d;
 const TYPE_EVENT_HOT_KEY_ID = 0x686b6964;
 const EVENT_HOT_KEY_PRESSED = 5;
 const EVENT_HOT_KEY_RELEASED = 6;

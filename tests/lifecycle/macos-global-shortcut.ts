@@ -31,9 +31,13 @@ const CORE_GRAPHICS =
   "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
 const APPLICATION_SERVICES =
   "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices";
-/** Four-character codes `keyb`, `keyd` and `hkid`, and the `BNWY` signature the plugin registers with. */
+/**
+ * Four-character codes `keyb`, `----` (the direct object parameter) and `hkid`, spelled out here on
+ * purpose instead of imported, and the `BNWY` signature the plugin registers with. The queued
+ * events must carry the parameter the way the OS does for the plugin handler to read them.
+ */
 const EVENT_CLASS_KEYBOARD = 0x6b657962;
-const EVENT_PARAM_DIRECT_OBJECT = 0x6b657964;
+const EVENT_PARAM_DIRECT_OBJECT = 0x2d2d2d2d;
 const TYPE_EVENT_HOT_KEY_ID = 0x686b6964;
 const HOT_KEY_SIGNATURE = 0x424e5759;
 const EVENT_HOT_KEY_PRESSED = 5;
