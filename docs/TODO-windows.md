@@ -1000,7 +1000,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [ ] MessagePort와 transferable resource에 해당하는 기능을 제공한다.
 - [ ] 백엔드에서 UI로 요청하고 결과를 받는 기능의 필요성을 결정한다.
 - [ ] native resource handle의 생성, 참조와 해제 계약을 제공한다.
-- [ ] UI에 노출할 명령과 이벤트의 타입, 계약과 정책 목록을 생성하는 도구를 제공한다.
+- [x] UI에 노출할 명령과 이벤트의 타입, 계약과 정책 목록을 생성하는 도구를 제공한다(`bunaway contract`).
 - [x] 브라우저 테스트용 transport를 제공한다(`createMockTransport`).
 - [ ] 앱 정의에서 mock 핸들러를 생성하는 mock API를 제공한다.
 - [ ] context bridge와 preload의 역할을 기존 SDK와 정책으로 대체하는 범위를 정한다.

@@ -5,6 +5,7 @@ import {
   runAndroidProject,
   syncAndroidProject,
 } from "./android.ts";
+import { contractListText } from "./contract-list.ts";
 import { parseDevArguments } from "./dev.ts";
 import {
   buildNativePlugin,
@@ -23,6 +24,8 @@ const help = `bunaway (vanilla / Vite / React / Vue / Svelte)
   create <new-directory>   Generate an independent project (then bun install)
                           [--template ${templateNames.join("|")}] [--package-dir <tarball-directory>]
   validate [directory]    Validate configuration and deny-by-default policy
+  contract [directory]    Print the commands, events and per-view exposure as JSON
+                          (imports the app entry, so its top-level code runs)
   dev [directory]         Watch sources; rebuild and restart the native host
                           [--inspect[=<port>]] Windows backend debugger (default 6499)
   build [directory]       Build frontend and app with pinned bundled Bun
@@ -262,6 +265,9 @@ async function projectCommand(
       console.log("Configuration and policy are valid.");
       return 0;
     }
+    case "contract":
+      process.stdout.write(await contractListText(directory ?? "."));
+      return 0;
     case "build":
       console.log(`Built ${(await buildProject(directory ?? ".")).output}`);
       return 0;

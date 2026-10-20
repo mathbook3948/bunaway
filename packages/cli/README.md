@@ -48,9 +48,9 @@ bun run build
 개발 도구 설치에는 Bun 패키지 레지스트리, 최초 네이티브 빌드에는 고정 런타임/헤더/SDK
 다운로드 접근이 필요하다. 앱 실행에는 네트워크나 Bun 설치가 필요 없다.
 
-명령은 `create <new-directory> [--template vanilla|vite|react|vue|svelte] [--package-dir <tarball-directory>]`와 `dev|validate|build|doctor [directory]`,
+명령은 `create <new-directory> [--template vanilla|vite|react|vue|svelte] [--package-dir <tarball-directory>]`와 `dev|validate|contract|build|doctor [directory]`,
 `package <channel> [directory] [--build]`다.
-옵션/알 수 없는 명령, 설정 필드는 오류로 종료한다. `validate`는 버전, 앱 ID, 소스 경로, 홈
+옵션/알 수 없는 명령, 설정 필드는 오류로 종료한다. `contract`는 앱 파일을 별도 Bun 프로세스에서 import해 명령과 이벤트 스키마와 뷰별 노출 목록을 JSON으로 stdout에 출력한다. `validate`는 버전, 앱 ID, 소스 경로, 홈
 자산, 단일 뷰/정확한 origin, 기존 정책 스키마를 검사한다. `package`는
 `bunaway.json.bundle`(패키징에 필요, 선언 시 dev/build에서도 형식 검사)을 읽어
 `bunaway build`의 채널 중립 산출물을 채널별 패키지로 조립한다. 산출물은

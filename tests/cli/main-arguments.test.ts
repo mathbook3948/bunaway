@@ -207,6 +207,21 @@ test("project commands reject extra arguments, flags and unknown commands", asyn
   );
   await rejects(
     [
+      "contract",
+      "one",
+      "two",
+    ],
+    "Unexpected argument. Use --help.",
+  );
+  await rejects(
+    [
+      "contract",
+      "--out",
+    ],
+    "Unexpected argument. Use --help.",
+  );
+  await rejects(
+    [
       "doctor",
       "--flag",
     ],

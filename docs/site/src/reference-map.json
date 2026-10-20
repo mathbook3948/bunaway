@@ -166,6 +166,7 @@
         "reference/tooling/cli-api": [
           "createProject",
           "validateProject",
+          "contractListText",
           "buildProject",
           "buildNativePlugin",
           "createNativePlugin",
@@ -1399,6 +1400,7 @@
     "reference/tooling/native-plugins": ["plugin"],
     "reference/cli/create": ["create"],
     "reference/cli/validate": ["validate"],
+    "reference/cli/contract": ["contract"],
     "reference/cli/doctor": ["doctor"],
     "reference/cli/dev": ["dev"],
     "reference/cli/build": ["build"],
