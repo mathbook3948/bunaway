@@ -19,6 +19,7 @@ import type { MacosBackendData, MacosConfig } from "./config.ts";
 import { DesktopRequests } from "./desktop-requests.ts";
 import { normalizeOpenUrls } from "./open-urls.ts";
 import { containMacosProcess } from "./process-group.ts";
+import { RelaunchIntent, relaunchCommand, startRelaunch } from "./relaunch.ts";
 import { readWebKitVersion } from "./webkit-version.ts";
 import { MacosWindows } from "./windows.ts";
 
@@ -60,6 +61,38 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
   let ready = false;
   let cleaned = false;
   let exitCode = 0;
+  /** The app's relaunch request from the backend's last packet, unless a signal or session end cancelled it. */
+  const relaunchIntent = new RelaunchIntent();
+  // The new process keeps the working directory and environment this host booted with.
+  const bootCwd = process.cwd();
+  const bootEnvironment = {
+    ...process.env,
+  };
+  /** Starts the process `relaunch()` asked for; a failure is only logged, the exit code stands. */
+  const startReplacement = async () => {
+    try {
+      const launch = config.app?.launch;
+      if (!launch) {
+        throw new Error("The host has no launch information.");
+      }
+      await startRelaunch(
+        relaunchCommand(
+          {
+            executablePath: launch.executablePath,
+            args: launch.args,
+            cwd: bootCwd,
+            env: bootEnvironment,
+          },
+          process.pid,
+        ),
+      );
+      diagnostic("relaunch-started");
+    } catch (error) {
+      diagnostic("relaunch-failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
   let failure: unknown;
   let ui: MacosWindows | undefined;
   let application: MacosApplication | undefined;
@@ -550,6 +583,7 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
         // Sent last, after onQuit; the backend drains its channel before the Worker exits, so the
         // code is known when `exited` settles.
         exitCode = packet.exitCode;
+        relaunchIntent.request(packet.relaunch);
         return;
       case "cleaned":
         cleaned = true;
@@ -668,7 +702,11 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
     () => fail(new Error("macOS startup timed out.")),
     STARTUP_TIMEOUT_MS,
   );
-  const onSignal = () => beginShutdown("interrupted");
+  const onSignal = () => {
+    // Also when the shutdown is already under way and the backend is not told.
+    relaunchIntent.cancel();
+    beginShutdown("interrupted");
+  };
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
   try {
@@ -689,7 +727,10 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
           void desktopRequests.requestQuit("quit-command");
         }),
       // A session end never waits for the app's options or decision.
-      sessionEnding: () => beginShutdown("session-end"),
+      sessionEnding: () => {
+        relaunchIntent.cancel();
+        beginShutdown("session-end");
+      },
       reopened: (hasVisibleWindows) =>
         desktopRequests.reopen(hasVisibleWindows),
       openUrlsRequested: (rawUrls, receivedCount) => {
@@ -817,6 +858,11 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
       });
       await group.close();
       activeProcesses = 0;
+      if (relaunchIntent.pending && failure === undefined) {
+        // After the app, its descendants and the process group are gone. The new process waits
+        // for this one to exit, so it never sees the old host's resources.
+        await startReplacement();
+      }
     } catch (error) {
       failure ??= error;
     } finally {

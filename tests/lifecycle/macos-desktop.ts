@@ -8,6 +8,7 @@ import { compileMacosApp } from "#cli/macos-compile";
 import { type InstalledPlugin, installedPlugins } from "#cli/plugins";
 import { SESSION_END_WAIT_MS } from "../../native/windows/bun/session-end.ts";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
+import { waitFor } from "../fixtures/deadlines.ts";
 import { driver } from "../fixtures/macos-desktop/driver.ts";
 import {
   type DesktopFixture,
@@ -16,7 +17,7 @@ import {
 } from "../fixtures/macos-desktop/fixture-config.ts";
 
 /**
- * Real AppKit gate for the macOS close and quit lifecycle (ADR 0020). One compiled app runs eleven
+ * Real AppKit gate for the macOS close and quit lifecycle (ADR 0020). One compiled app runs twelve
  * scenarios; a UI-thread driver plugin triggers the delegate and window paths the OS would (including
  * self-addressed reopen and quit Apple events), and the app's desktop hooks record what happened.
  *
@@ -66,6 +67,11 @@ type Scenario = {
   optionalTail?: string[];
   /** Whether the host log may lack `host-stopped`; a session end may exit before it. */
   hostStoppedOptional?: boolean;
+  /**
+   * Whether the app starts a second host process of itself (`relaunch()`). The scenario then
+   * continues until that process has ended too, and `hooks` cover both processes.
+   */
+  relaunches?: boolean;
   /** Whether a separate process sends the quit event and waits for the reply; the reply is then checked against cleanup. */
   waitsForQuitReply?: boolean;
   /** Further checks on the whole log. */
@@ -158,6 +164,53 @@ const SHUTDOWN_AFTER = (reason: string) => [
 /** A timer on the UI thread fired after the termination request, so the thread was not blocked. */
 function verifyMainThreadStayedAlive(lines: string[]) {
   at(lines, "main-tick-after-terminate");
+}
+
+/** Host process ids the fixture logged at each `onReady`, in start order. */
+function hostPids(lines: string[]): number[] {
+  return lines
+    .filter((line) => line.startsWith("hostPid:"))
+    .map((line) => Number(line.slice("hostPid:".length)));
+}
+
+/** True while a process with `pid` exists (signal 0 only checks). */
+function processExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/**
+ * Waits for the process that `relaunch()` started to start and end. It is not a child of the test,
+ * so its end is seen through its pid; a process that never ends is killed so it cannot leak.
+ */
+async function awaitRelaunchedHost(readLines: () => Promise<string[]>) {
+  const pidOfSecondHost = async () => hostPids(await readLines())[1];
+  try {
+    await waitFor(pidOfSecondHost, {
+      deadline: "nativeFixture",
+      what: "the relaunched host to start",
+    });
+    await waitFor(
+      async () => {
+        const pid = await pidOfSecondHost();
+        return pid !== undefined && !processExists(pid) ? true : undefined;
+      },
+      {
+        deadline: "nativeFixture",
+        what: "the relaunched host to end",
+      },
+    );
+  } catch (error) {
+    const pid = await pidOfSecondHost();
+    if (pid !== undefined && processExists(pid)) {
+      process.kill(pid, "SIGKILL");
+    }
+    throw error;
+  }
 }
 
 const scenarios: Scenario[] = [
@@ -347,6 +400,28 @@ const scenarios: Scenario[] = [
     // The quit event comes from another process, not the driver, so no driver tick mark exists;
     // the reply arriving after cleanup and within the wait budget shows the main thread kept running.
     waitsForQuitReply: true,
+  },
+  {
+    // h: relaunch() quits the first process and starts a second one, which quits for good.
+    name: "relaunch",
+    relaunches: true,
+    hooks: [
+      ...OPEN,
+      "beforeQuit:api",
+      ...SHUTDOWN_AFTER("api"),
+      ...OPEN,
+      "beforeQuit:api",
+      ...SHUTDOWN_AFTER("api"),
+    ],
+    verify(lines) {
+      at(lines, "relaunch:true");
+      at(lines, "quit:true");
+      const pids = hostPids(lines);
+      assert.equal(pids.length, 2, lines.join("\n"));
+      assert.notEqual(pids[0], pids[1]);
+      // The second host started only after the first one was gone.
+      at(lines, "previousAlive:false");
+    },
   },
   {
     // g: SIGTERM from the harness.
@@ -618,6 +693,9 @@ try {
     })();
     const exitCode = await launched.exited;
     const exitedAt = Date.now();
+    if (scenario.relaunches) {
+      await awaitRelaunchedHost(readLines);
+    }
     await watcher;
     await output;
     const stderr = await errors;
@@ -677,6 +755,18 @@ try {
       .split("\n")
       .filter(Boolean)
       .map((line) => JSON.parse(line));
+    if (scenario.relaunches) {
+      // The first host logged that it started the replacement, and both hosts stopped cleanly.
+      assert(
+        records.some((record) => record.event === "relaunch-started"),
+        scenario.name,
+      );
+      assert.equal(
+        records.filter((record) => record.event === "host-stopped").length,
+        2,
+        scenario.name,
+      );
+    }
     const stopped = records.at(-1);
     // AppKit may exit a session end before the host writes its final record.
     if (!scenario.hostStoppedOptional || stopped?.event === "host-stopped") {

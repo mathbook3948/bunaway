@@ -8,7 +8,7 @@ import {
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { defineApp } from "@bunaway/backend";
+import { type DesktopContext, defineApp } from "@bunaway/backend";
 import windows from "@bunaway/plugin-windows";
 import { BunawayError } from "@bunaway/protocol";
 import { driver } from "./driver.ts";
@@ -32,6 +32,16 @@ const log = (line: string) => appendFileSync(logPath, `${line}\n`);
 /** Marks the scenario step about to run, so a timed-out script shows how far it got. */
 const step = (name: string) => log(`step:${name}`);
 const lines = () => readFileSync(logPath, "utf8").trim().split("\n");
+
+/** True while a process with `pid` exists (signal 0 only checks). */
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
 
 const POLL_MS = 10;
 /**
@@ -183,6 +193,22 @@ const scripts: Record<string, () => Promise<void>> = {
     // The Dock's Quit item arrives as an Apple event without a quit reason.
     step("quit-event");
     await drive("quitEvent");
+  },
+  /**
+   * The first process relaunches itself; the process it starts runs this script again, sees the
+   * second `onReady`, and quits for good.
+   */
+  async relaunch() {
+    const relaunched = countOf("onReady") > 1;
+    step("wait-main-page");
+    await until(loggedTimes("page:main", relaunched ? 2 : 1), "the main page");
+    if (relaunched) {
+      step("quit-relaunched");
+      log(`quit:${await requireContext().quit()}`);
+      return;
+    }
+    step("relaunch");
+    log(`relaunch:${await requireContext().relaunch()}`);
   },
   async "last-window"() {
     step("wait-main-page");
@@ -404,6 +430,14 @@ const scripts: Record<string, () => Promise<void>> = {
 
 let vetoes = scenario === "quit-veto" ? 1 : 0;
 let opened = false;
+/** The `DesktopContext` of the first `onOpen`, for scripts that call `quit` or `relaunch`. */
+let desktopContext: DesktopContext | undefined;
+const requireContext = (): DesktopContext => {
+  if (!desktopContext) {
+    throw new Error("No desktop context before the first onOpen.");
+  }
+  return desktopContext;
+};
 /** Settles when the first `onOpen` ran; the runner plugin waits for it before it starts the script. */
 let signalFirstOpen: () => void = () => undefined;
 const firstOpen = new Promise<void>((resolve) => {
@@ -533,8 +567,22 @@ export default defineApp({
       : {}),
     onReady() {
       log("onReady");
+      // The relaunch scenario compares host processes: each start logs its pid and whether the
+      // previous start's process still exists. Backend Workers share the host's pid.
+      if (scenario !== "relaunch") {
+        return;
+      }
+      const previous = lines()
+        .filter((line) => line.startsWith("hostPid:"))
+        .map((line) => Number(line.slice("hostPid:".length)))
+        .at(-1);
+      log(`hostPid:${process.pid}`);
+      if (previous !== undefined) {
+        log(`previousAlive:${isProcessAlive(previous)}`);
+      }
     },
-    onOpen(request) {
+    onOpen(request, context) {
+      desktopContext ??= context;
       log(`onOpen:${request.source}`);
       log(`openArgs:${request.argv.length}`);
       log(`openCwd:${request.cwd.length > 0 ? "nonempty" : "empty"}`);

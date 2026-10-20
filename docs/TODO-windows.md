@@ -272,7 +272,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 개발 CLI 중단과 재시작은 사용자 종료 취소를 우회하고 자원을 정리한다.
 - [x] 정상 종료와 강제 종료에서 관리하는 하위 프로세스를 정리한다.
 - [x] `desktop`의 `onReady`, `beforeQuit`, `onWillQuit`, `onQuit`, `onAllWindowsClosed` 훅과 `ShutdownReason`을 Windows에서 제공한다. `onWillQuit`과 `onQuit`은 각각 3초 기한을 둔다. 실제 실행 검증은 CI windows-native에서 수행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
-- [x] 종료 코드 지정, 강제 exit, relaunch와 인자 보존 API를 제공한다. `DesktopContext`의 `quit({ exitCode })`, `exit()`, `relaunch()`이며 [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다. macOS는 `relaunch`만 `UNSUPPORTED`다. CI windows-native의 `windows-app-exit.ts`가 실제 프로세스로 종료 코드, `exit`의 훅 생략, relaunch 뒤 argv와 lock 획득을 확인한다(`boot.ts` 시작 단계는 시나리오가 같은 순서로 재현한다).
+- [x] 종료 코드 지정, 강제 exit, relaunch와 인자 보존 API를 제공한다. `DesktopContext`의 `quit({ exitCode })`, `exit()`, `relaunch()`이며 [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다. macOS도 같은 계약을 지원한다([ADR 0021](./decisions/0021-macos-desktop-lifecycle.md)). CI windows-native의 `windows-app-exit.ts`가 실제 프로세스로 종료 코드, `exit`의 훅 생략, relaunch 뒤 argv와 lock 획득을 확인한다(`boot.ts` 시작 단계는 시나리오가 같은 순서로 재현한다).
 - [x] 앱 이름, 버전, 식별자, 프레임워크와 Bun, WebView 버전을 조회한다. 백엔드 `ctx.app`으로 제공하며 [CommandContext](site/src/content/docs/reference/backend/context.mdx)와 [ADR 0022](decisions/0022-app-info-context.md)에 정리했다.
 - [x] 앱 패키지 경로, 실행 파일, 리소스 경로와 packaged/dev 상태를 조회한다. `ctx.app.isPackaged`와 `ctx.app.paths`로 제공하며 [CommandContext](site/src/content/docs/reference/backend/context.mdx)와 [ADR 0022](decisions/0022-app-info-context.md)에 정리했다.
 - [x] 일반 브라우저와 bunaway 앱 WebView 실행 여부를 구분하는 공개 기능을 제공한다. [T-core-live]의 `isTauri`에 대응하는 요구다.
