@@ -183,8 +183,8 @@ test.skipIf(process.platform !== "win32")(
   },
 );
 
-/** ERROR_INVALID_DATA, which DPAPI leaves for a blob it cannot parse. */
-const ERROR_INVALID_DATA = 13;
+/** ERROR_INVALID_PARAMETER, which DPAPI leaves for bytes that are not a protected-data blob. */
+const ERROR_INVALID_PARAMETER = 87;
 const LAST_ERROR_SAMPLES = 200;
 
 test.skipIf(process.platform !== "win32")(
@@ -246,7 +246,7 @@ test.skipIf(process.platform !== "win32")(
       expect([
         ...codes,
       ]).toEqual([
-        ERROR_INVALID_DATA,
+        ERROR_INVALID_PARAMETER,
       ]);
     } finally {
       crypt.close();
