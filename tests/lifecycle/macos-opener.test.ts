@@ -5,7 +5,6 @@ import {
   mkdtemp,
   realpath,
   rm,
-  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -347,24 +346,12 @@ test.skipIf(process.platform === "win32")(
       );
       const hard = join(root, "hard");
       await link(sample, hard);
-      // A file system may report any name of the same inode for a hard link (macOS does not
-      // keep the requested one), so the result must be one of the names and the same file.
-      const resolvedHard = resolveReadableFile(hard);
+      // Both names are the same inode, and the file system may report either one for a hard
+      // link, so the result must be one of the two names rather than always the requested one.
       expect([
         hard,
         sample,
-      ]).toContain(resolvedHard);
-      const [hardStat, resolvedStat] = await Promise.all([
-        stat(hard),
-        stat(resolvedHard),
-      ]);
-      expect([
-        resolvedStat.dev,
-        resolvedStat.ino,
-      ]).toEqual([
-        hardStat.dev,
-        hardStat.ino,
-      ]);
+      ]).toContain(resolveReadableFile(hard));
       await rm(hard);
       const fifo = join(root, "pipe");
       expect(
