@@ -106,6 +106,7 @@ import {
   WM_DISPLAYCHANGE,
   WM_DPICHANGED,
   WM_ENTERSIZEMOVE,
+  WM_ERASEBKGND,
   WM_EXITSIZEMOVE,
   WM_GETMINMAXINFO,
   WM_MOUSEACTIVATE,
@@ -122,6 +123,7 @@ import {
   WS_MINIMIZEBOX,
   WS_THICKFRAME,
 } from "./win32-constants.ts";
+import { WindowBackgrounds } from "./window-background.ts";
 import { dragRejected, resizeIsPinned } from "./window-drag.ts";
 import { beginSystemLoop, primaryButtonDown } from "./window-drag-input.ts";
 import { completedGeometryChanges, windowChanges } from "./window-events.ts";
@@ -246,6 +248,7 @@ export class Windows {
   private readonly nonFullscreenable = new Set<bigint>();
   private readonly interactiveGeometry = new Map<bigint, WindowBounds>();
   private readonly immovable = new Set<bigint>();
+  private readonly backgrounds = new WindowBackgrounds();
   /** Content width / height locked for user resizing; absent when unlocked. */
   private readonly aspectRatios = new Map<bigint, number>();
   private readonly initialOuterSizes = new Map<
@@ -514,6 +517,9 @@ export class Windows {
       this.applySizingAspectRatio(window, wparam, lparam)
     ) {
       return 1n; // TRUE: the rectangle was modified.
+    }
+    if (message === WM_ERASEBKGND && this.backgrounds.erase(window, wparam)) {
+      return 1n; // The client area is filled with the window's own color.
     }
     if (message === WM_DPICHANGED) {
       this.applyDpiChange(window, wparam, lparam);
@@ -815,6 +821,7 @@ export class Windows {
         | "alwaysOnTop"
         | "skipTaskbar"
         | "contentProtection"
+        | "backgroundColor"
       > = {},
   ) {
     const { style, exStyle } = initialWindowStyles(options);
@@ -856,6 +863,9 @@ export class Windows {
       // Protect before the window is first shown, so no frame is ever capturable.
       if (options.contentProtection) {
         this.setContentProtection(window, true);
+      }
+      if (options.backgroundColor !== undefined) {
+        this.backgrounds.set(window, options.backgroundColor);
       }
       if (options.titlebar === "custom") {
         // CreateWindowEx can add WS_CAPTION to an overlapped window. Remove it
@@ -1218,6 +1228,17 @@ export class Windows {
       return;
     }
     writeWindowShadow(window, shadow);
+  }
+
+  /** The color set through the declaration, creation option or setBackgroundColor; null when none was set. */
+  getBackgroundColor(window: bigint): string | null {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return this.backgrounds.get(window);
+  }
+
+  /** Set the window's own erase color. The WebView's matching color is applied by its owner. */
+  setBackgroundColor(window: bigint, color: string): void {
+    this.backgrounds.set(window, color);
   }
 
   /** Whether the window lets mouse input pass through to whatever is beneath it. */
@@ -3142,6 +3163,7 @@ export class Windows {
     this.interactiveGeometry.delete(window);
     this.immovable.delete(window);
     this.aspectRatios.delete(window);
+    this.backgrounds.forget(window);
     try {
       this.accessibleTitles.forget(window);
     } catch (error) {

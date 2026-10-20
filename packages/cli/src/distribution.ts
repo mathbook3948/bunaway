@@ -85,6 +85,7 @@ export const frameworkPaths = [
   "native/windows/bun/taskbar.ts",
   "native/windows/bun/taskbar-progress.ts",
   "native/windows/bun/win32.ts",
+  "native/windows/bun/window-background.ts",
   "native/windows/bun/window-drag.ts",
   "native/windows/bun/window-drag-input.ts",
   "native/windows/bun/window-shadow.ts",

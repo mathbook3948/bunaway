@@ -136,7 +136,7 @@ Windows의 `create`와 `recreate`는 `{ view, options? }`를 받습니다. optio
 옵션 없는 다음 재생성은 원래 선언으로 돌아갑니다. home, 프로필, startup과 임의 ID는 허용하지 않습니다.
 macOS는 `title`, `window`의 크기와 크기 제약, `contentProtection`, `visible`, `showWhenReady`만 받습니다.
 `window`의 `x`, `y`, `center`, `useContentSize`, `preventOverflow`, `titlebar`, `alwaysOnTop`,
-`skipTaskbar`, `focusable`, `maximized`, `fullscreen`을 지정하면 기존 창을 닫기 전에
+`skipTaskbar`, `backgroundColor`, `focusable`, `maximized`, `fullscreen`을 지정하면 기존 창을 닫기 전에
 `UNSUPPORTED`로 거부합니다. macOS에서 `createInstance`와 `recreateInstance`는 사용할 수 없습니다.
 
 `options.window`의 `x`, `y`, `center`, `useContentSize`, `preventOverflow`는
@@ -528,6 +528,8 @@ await windows.close({ view: "dialog" });
 | `windows.getOpacity` | `{ view, windowId? }` | `Promise<number>`. OS에 저장된 현재 불투명도(0–1). 새 창은 `1` |
 | `windows.setHasShadow` | `{ view, windowId?, hasShadow: boolean }` | `Promise<null>`. 창의 시스템 그림자를 켜거나 끔. 네이티브 제목 표시줄 창은 그림자를 끌 수 없어 `false`를 `UNSUPPORTED`로 거부하고 `true`는 변화 없이 성공 |
 | `windows.hasShadow` | `{ view, windowId? }` | `Promise<boolean>`. 창이 시스템 그림자를 가지는지 조회. 새 창은 `true` |
+| `windows.setBackgroundColor` | `{ view, windowId?, color: string }` | `Promise<null>`. 창과 WebView 문서의 불투명 배경색을 `#RGB` 또는 `#RRGGBB`로 설정. 알파가 있는 형식은 `INVALID_ARGUMENT` |
+| `windows.getBackgroundColor` | `{ view, windowId? }` | `Promise<string \| null>`. 선언, 생성 옵션 또는 `setBackgroundColor`로 정한 소문자 `#rrggbb`. 정하지 않았으면 `null` |
 | `windows.setIgnoreMouseEvents` | `{ view, windowId?, ignore: boolean }` | `Promise<null>`. `true`이면 WebView를 포함한 창 전체가 마우스 입력을 받지 않고 아래 창으로 통과 |
 | `windows.isIgnoreMouseEvents` | `{ view, windowId? }` | `Promise<boolean>`. 이 창이 마우스 입력을 무시하는지 조회. 새 창은 `false` |
 | `windows.setClosable` | `{ view, windowId?, closable: boolean }` | `Promise<null>`. 네이티브 닫기 버튼과 사용자 닫기 허용 변경 |
@@ -823,6 +825,8 @@ OS가 8비트 alpha(0–255)로 저장하기 때문에 조회 값은 설정한 �
 `1`이 되면(마우스 입력 통과 중이 아닐 때) layered 스타일을 제거해 일반 창과 같은 경로로 그립니다. 배경색과 투명 배경은 이 설정에 포함되지 않습니다. macOS는 `UNSUPPORTED`입니다.
 
 `setHasShadow`는 `titlebar: "custom"` 창에서만 그림자를 끌 수 있으며 Windows는 DWM 비클라이언트 렌더링 정책으로 적용하고 같은 값으로 조회합니다. 그림자를 끄면 DWM이 비클라이언트 프레임을 그리지 않습니다. 창의 위치, 크기와 클라이언트 영역은 그대로입니다. 네이티브 제목 표시줄은 시스템이 프레임과 함께 그림자를 그리므로 `hasShadow`는 항상 `true`입니다. 새 창과 재생성한 창은 `true`에서 시작합니다. macOS는 `UNSUPPORTED`입니다. 권한과 닫힌 창 오류는 위 설정과 같습니다.
+
+`backgroundColor`는 선언 및 생성별 문자열이며 `#RGB` 또는 `#RRGGBB`(대소문자 무관)만 받고 소문자 `#rrggbb`로 정규화합니다. `#RRGGBBAA`와 `#AARRGGBB`는 알파 위치가 CSS와 Electron에서 달라 받지 않으며 투명 배경은 지원하지 않습니다. Windows는 창의 배경 지우기(`WM_ERASEBKGND`)를 창별로 같은 색으로 채우고 WebView2의 `DefaultBackgroundColor`를 같은 값으로 맞춰 문서가 그려지기 전과 문서가 덮지 않는 영역에 이 색이 보입니다. 선언도 옵션도 없으면 시스템 창 색과 WebView2 기본 색을 유지하고 `getBackgroundColor`는 `null`입니다. 새 창과 재생성한 창은 이전 실행 중 값을 잇지 않고 선언과 생성 옵션으로 시작합니다. 색은 color scheme을 따라 바뀌지 않습니다. macOS는 `UNSUPPORTED`입니다. 권한과 닫힌 창 오류는 위 설정과 같습니다.
 
 `setIgnoreMouseEvents`는 창 인스턴스별 상태이며 새 창과 재생성한 창은 `false`에서 시작합니다. 권한과 닫힌 창 오류는 위 설정과 같습니다.
 Windows는 `WS_EX_LAYERED`와 `WS_EX_TRANSPARENT`를 함께 설정하므로 클릭, 휠과 hover가 WebView와 창 테두리를 포함해 그 아래의 창으로 전달됩니다.

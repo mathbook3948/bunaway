@@ -42,6 +42,8 @@ const MESSAGES = {
   opacity: "Window opacity is not implemented on this platform.",
   mouse: "Ignoring mouse events is not implemented on this platform.",
   shadow: "Window shadow control is not implemented on this platform.",
+  backgroundColor:
+    "Window background color is not implemented on this platform.",
   title: "Window title control is not implemented on this platform.",
   movement: "Window movement controls are not implemented on this platform.",
   aspect: "Window aspect ratio locking is not implemented on this platform.",
@@ -521,6 +523,23 @@ const rows: Row[] = [
   },
   query("getOpacity", 0.75, MESSAGES.opacity),
   ...flag("setHasShadow", "hasShadow", "hasShadow", MESSAGES.shadow),
+  {
+    operation: "windows.setBackgroundColor",
+    payload: {
+      color: "#ABC",
+    },
+    calls: [
+      [
+        "setBackgroundColor",
+        [
+          "#aabbcc",
+        ],
+      ],
+    ],
+    result: null,
+    unsupported: MESSAGES.backgroundColor,
+  },
+  query("getBackgroundColor", "#203040", MESSAGES.backgroundColor),
   ...flag(
     "setIgnoreMouseEvents",
     "isIgnoreMouseEvents",
@@ -1171,6 +1190,8 @@ function fixture(
     "getOpacity",
     "setHasShadow",
     "hasShadow",
+    "setBackgroundColor",
+    "getBackgroundColor",
     "setIgnoreMouseEvents",
     "isIgnoreMouseEvents",
     "setClosable",

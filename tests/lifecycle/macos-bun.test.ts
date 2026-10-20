@@ -2013,6 +2013,9 @@ test("macOS explicitly rejects window display declarations including default-val
     {
       skipTaskbar: false,
     },
+    {
+      backgroundColor: "#112233",
+    },
   ]) {
     expect(() =>
       readMacosWindowSpecs(

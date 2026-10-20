@@ -57,6 +57,9 @@ const GUI_THREAD_INFO_FOCUS_OFFSET = 16;
 // ICoreWebView2Controller::MoveFocus and COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC.
 const WEBVIEW_CONTROLLER_MOVE_FOCUS_SLOT = 12;
 const MOVE_FOCUS_REASON_PROGRAMMATIC = 0;
+// ICoreWebView2Controller2::put_DefaultBackgroundColor takes a COREWEBVIEW2_COLOR (A, R, G, B bytes).
+const WEBVIEW_CONTROLLER2_IID = "c979903e-d4ca-4228-92eb-47ee3fa96eab";
+const WEBVIEW_CONTROLLER2_PUT_DEFAULT_BACKGROUND_COLOR_SLOT = 27;
 const streams = dlopen("shlwapi.dll", {
   SHCreateMemStream: {
     args: [
@@ -113,6 +116,8 @@ export class WebView {
   /** Requested content scheme, undefined until requested; applied once the controller exists. */
   private colorScheme: NativeContentColorScheme | undefined;
   private colorSchemeUnsupportedLogged = false;
+  /** Requested opaque `#rrggbb` document background, applied as soon as a controller exists. */
+  private backgroundColor: string | undefined;
   private browserToken: bigint | undefined;
   private readonly events: {
     slot: number;
@@ -205,6 +210,7 @@ export class WebView {
     private readonly devtools = false,
     profilePath?: string,
   ) {
+    this.backgroundColor = spec.window.backgroundColor;
     const profile =
       profilePath ??
       resolve(
@@ -299,6 +305,7 @@ export class WebView {
           if (this.closing) {
             return;
           }
+          this.applyBackgroundColor();
           this.configure(assets);
           this.applyRequestedColorScheme();
           this.resize();
@@ -1333,6 +1340,43 @@ export class WebView {
       this.hooks.log("color-scheme-failed", {
         message: error instanceof Error ? error.message : String(error),
       });
+    }
+  }
+  /**
+   * Remember the opaque document background and apply it to the controller. A color requested
+   * before the controller exists is applied when it completes; a failed live change is thrown.
+   */
+  setBackgroundColor(color: string): void {
+    this.backgroundColor = color;
+    this.applyBackgroundColor();
+  }
+  private applyBackgroundColor(): void {
+    const color = this.backgroundColor;
+    if (!this.controller || this.closing || color === undefined) {
+      return;
+    }
+    const rgb = Number.parseInt(color.slice(1), 16);
+    // COREWEBVIEW2_COLOR is the bytes A, R, G, B in memory, so the little-endian u32 is B, G, R, A from the top.
+    const packed =
+      (0xff |
+        (((rgb >> 16) & 0xff) << 8) |
+        (((rgb >> 8) & 0xff) << 16) |
+        ((rgb & 0xff) << 24)) >>>
+      0;
+    const controller2 = query(this.controller, WEBVIEW_CONTROLLER2_IID);
+    try {
+      checkHresult(
+        method(
+          controller2,
+          WEBVIEW_CONTROLLER2_PUT_DEFAULT_BACKGROUND_COLOR_SLOT,
+          [
+            "u32",
+          ],
+        )(packed),
+        "put_DefaultBackgroundColor",
+      );
+    } finally {
+      release(controller2);
     }
   }
   private applyColorScheme(): void {

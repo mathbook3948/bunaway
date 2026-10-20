@@ -9,6 +9,7 @@ export const WA_INACTIVE = 0n;
 /** Host-private message in the WM_APP range; not a Windows SDK value. */
 export const WM_OBSERVE_WINDOW = 0x8003;
 export const WM_CLOSE = 0x0010;
+export const WM_ERASEBKGND = 0x0014;
 export const WM_QUIT = 0x0012;
 export const WM_GETMINMAXINFO = 0x0024;
 export const WM_SIZING = 0x0214;

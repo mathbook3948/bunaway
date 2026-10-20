@@ -1,5 +1,5 @@
 import { dlopen } from "bun:ffi";
-import { KERNEL32, OLE32, USER32, pick } from "@bunaway/plugin/win32";
+import { KERNEL32, OLE32, pick, USER32 } from "@bunaway/plugin/win32";
 
 export const kernel = dlopen("kernel32.dll", {
   ...pick(
@@ -28,6 +28,22 @@ export const display = dlopen("shcore.dll", {
       "ptr",
     ],
     returns: "i32",
+  },
+});
+
+export const gdi = dlopen("gdi32.dll", {
+  GetStockObject: {
+    args: [
+      "i32",
+    ],
+    returns: "u64",
+  },
+  SetDCBrushColor: {
+    args: [
+      "u64",
+      "u32",
+    ],
+    returns: "u32",
   },
 });
 
@@ -353,6 +369,22 @@ export const user = dlopen("user32.dll", {
     ],
     returns: "i32",
   },
+  FillRect: {
+    args: [
+      "u64",
+      "ptr",
+      "u64",
+    ],
+    returns: "i32",
+  },
+  InvalidateRect: {
+    args: [
+      "u64",
+      "ptr",
+      "i32",
+    ],
+    returns: "i32",
+  },
   GetClientRect: {
     args: [
       "u64",
@@ -387,6 +419,7 @@ export const user = dlopen("user32.dll", {
 /** Close native library handles after releasing the owning resources. */
 export function disposeWin32Bindings() {
   display.close();
+  gdi.close();
   user.close();
   ole.close();
   kernel.close();

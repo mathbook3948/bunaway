@@ -206,6 +206,8 @@ The CLI accepts an `app.windows` catalog with one unique policy view per window.
 `startDragging`/`startResizeDragging`은 `window-drag-input.ts`가 `ReleaseCapture` 뒤 `PostMessageW(WM_NCLBUTTONDOWN)`을 현재 커서 위치와 함께 보내 시스템 이동, 크기 조절 루프로 넘긴다(캡션은 `HTCAPTION`, 방향은 `HTLEFT`…`HTBOTTOMRIGHT`). 기본 버튼 상태는 `GetAsyncKeyState`로 읽고 마우스 버튼 바꿈(`SM_SWAPBUTTON`)이면 오른쪽 키를 본다. 상태 검사와 거부 메시지는 `window-drag.ts`의 순수 함수와 `win32.ts`가 맡고 최소화, 최대화, 전체화면, 이동 불가, 크기 조절 불가, 같은 최소 크기와 최대 크기로 고정된 축이면 `INVALID_ARGUMENT`로 거부한다. 루프는 OS가 소유하므로 취소 API는 없다.
 `setHasShadow`/`hasShadow`는 `window-shadow.ts`가 `DwmSetWindowAttribute`로 `DWMWA_NCRENDERING_POLICY`를 쓰고 `DwmGetWindowAttribute`로 `DWMWA_NCRENDERING_ENABLED`를 읽으며(정책 속성은 쓰기 전용) 상태를 따로 두지 않는다. dwmapi는 호출마다 열고 닫는다.
 `titlebar: "custom"` 창만 `DWMNCRP_DISABLED`로 그림자를 끄고(`DWMNCRP_USEWINDOWSTYLE`로 복구) 지오메트리는 그대로다. 그림자는 DWM이 GDI 화면 밖에서 합성해 화면 캡처로 보이지 않으므로 테스트는 DWM이 돌려주는 상태를 확인한다. 네이티브 제목 표시줄 창은 `hasShadow`가 항상 true이며 `setHasShadow(false)`는 `UNSUPPORTED`다.
+
+`backgroundColor`, `setBackgroundColor`/`getBackgroundColor`는 불투명 `#rrggbb`만 받는다. `window-background.ts`가 HWND별 색을 맵에 두고 `WM_ERASEBKGND`에서 `DC_BRUSH` stock 브러시를 `SetDCBrushColor`로 칠하므로 창 클래스 브러시는 그대로이고(`SetClassLongPtrW`는 클래스를 공유하는 모든 창에 영향) 해제할 GDI 객체가 없다. 맵 항목은 `destroy`에서 지운다. WebView2는 컨트롤러 완료 직후 `ICoreWebView2Controller2::put_DefaultBackgroundColor`(vtable 27)로 같은 색을 적용하고, 컨트롤러가 준비되기 전에 들어온 값은 보관했다가 그때 적용한다. 테스트는 메모리 DC로 보낸 `WM_ERASEBKGND`가 칠한 픽셀과 창별 격리를 확인하며, WebView2가 실제로 그린 픽셀은 확인하지 않는다.
 `setIgnoreMouseEvents`/`isIgnoreMouseEvents`도 상태를 따로 두지 않고 `WS_EX_TRANSPARENT` 스타일을 읽고 쓴다. 켜면 `WS_EX_LAYERED`를
 함께 설정(알파 255)하고, 끄면 불투명도가 1일 때만 layered를 제거한다. `setOpacity(1)`도 click-through 중에는 layered를 유지한다.
 `startup: false` defers creation until `windows.create`. Window calls execute on

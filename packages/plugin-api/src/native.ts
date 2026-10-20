@@ -122,6 +122,30 @@ export function isWindowAspectRatio(value: unknown): value is number | null {
   );
 }
 
+/** An opaque window background color: `#RGB` or `#RRGGBB`. Alpha forms are rejected because their byte order differs between CSS and Electron. */
+export const WINDOW_BACKGROUND_COLOR_PATTERN =
+  /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$(?![\s\S])/;
+
+/** Expands a valid background color to lowercase `#rrggbb`; undefined when the text is not one. */
+export function normalizeWindowBackgroundColor(
+  value: unknown,
+): string | undefined {
+  if (
+    typeof value !== "string" ||
+    !WINDOW_BACKGROUND_COLOR_PATTERN.test(value)
+  ) {
+    return undefined;
+  }
+  const digits = value.slice(1).toLowerCase();
+  return digits.length === 3
+    ? `#${[
+        ...digits,
+      ]
+        .map((digit) => digit + digit)
+        .join("")}`
+    : `#${digits}`;
+}
+
 /** Checks that a constraint is null or an integer within the supported dimension range. */
 export function isWindowSizeDimension(value: unknown): value is number | null {
   return (
@@ -204,6 +228,8 @@ export type WindowSpec = {
     skipTaskbar?: boolean;
     /** Exclude the window from screenshots and screen sharing, default false. Windows and macOS. */
     contentProtection?: boolean;
+    /** Opaque `#RGB` or `#RRGGBB` color shown behind and before the document; absent keeps the system color and the WebView default. Windows only. */
+    backgroundColor?: string;
     /** Start maximized, retaining the initial normal placement for restoration. Windows only. */
     maximized?: boolean;
     /** Start fullscreen. When combined with maximized, exit restores maximized state. Windows only. */
@@ -425,6 +451,10 @@ export type NativeWindow = {
   setHasShadow?(shadow: boolean): void;
   /** Reads whether this HWND has its system shadow. Windows only. */
   hasShadow?(): boolean;
+  /** Sets the opaque `#rrggbb` color of the window and its WebView for this HWND. Windows only. */
+  setBackgroundColor?(color: string): void;
+  /** Reads the color set by the declaration, creation option or setBackgroundColor; null when none was set. Windows only. */
+  getBackgroundColor?(): string | null;
   /** Lets mouse input pass through the whole window, including its WebView, to the window beneath. Windows only. */
   setIgnoreMouseEvents?(ignore: boolean): void;
   /** Reads whether this HWND currently ignores mouse input. Windows only. */
