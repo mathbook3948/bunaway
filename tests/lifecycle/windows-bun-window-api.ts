@@ -2235,11 +2235,16 @@ if (!process.argv.includes("--child")) {
                 }),
                 null,
               );
-              assert.deepEqual(await windows.getOuterBounds(editor), {
-                ...centered,
-                x,
-                y,
-              });
+              assert.deepEqual(
+                {
+                  ...(await windows.getOuterBounds(editor)),
+                },
+                {
+                  ...centered,
+                  x,
+                  y,
+                },
+              );
             }
             assert.equal(await windows.isVisible(editor), false);
             assert.equal(user.symbols.GetForegroundWindow(), centerForeground);
@@ -2252,11 +2257,16 @@ if (!process.argv.includes("--child")) {
               ...editor,
               anchor: "bottom-right",
             });
-            assert.deepEqual(await windows.getOuterBounds(editor), {
-              ...centered,
-              x: anchorArea.x + anchorArea.width - centered.width,
-              y: anchorArea.y + anchorArea.height - centered.height,
-            });
+            assert.deepEqual(
+              {
+                ...(await windows.getOuterBounds(editor)),
+              },
+              {
+                ...centered,
+                x: anchorArea.x + anchorArea.width - centered.width,
+                y: anchorArea.y + anchorArea.height - centered.height,
+              },
+            );
             await windows.setPosition({
               ...editor,
               x: outer.x,
