@@ -42,8 +42,9 @@ await globalShortcut.unregister(shortcut);
 목록과 boolean 결과도 Promise입니다. 키 조합은 `{ key, modifiers }`입니다.
 key는 대문자 A~Z, 0~9, F1~F24 중 F12를 제외한 키, Backspace, Tab, Enter,
 Escape, Space, PageUp, PageDown, End, Home, Left, Up, Right, Down, Insert, Delete입니다.
-문자 위치가 아닌 Windows virtual key를 지정합니다. F12는 Windows 디버거용 예약 키여서 거부합니다.
-modifiers는 Control, Alt, Shift, Super 중 하나 이상이며 중복을 거부합니다. Super는 Windows 키입니다.
+글자가 아닌 키의 물리적 위치(Windows는 virtual key, macOS는 ANSI virtual key code)를 지정합니다. F12는 플랫폼
+공통 규칙으로 거부합니다(Windows 디버거용 예약 키).
+modifiers는 Control, Alt, Shift, Super 중 하나 이상이며 중복을 거부합니다. Super는 Windows에서 Windows 키, macOS에서 Command입니다.
 결과는 Control, Alt, Shift, Super 순서로 정규화하고 입력 순서와 관계없이 같은 조합으로 조회합니다.
 키 이름의 대소문자나 Ctrl 같은 별칭, accelerator 문자열을 해석하지 않습니다.
 
@@ -93,7 +94,7 @@ Windows 해제 자체가 실패하면 중지 상태를 먼저 유지하며 입�
 
 `globalShortcut.pressed`의 payload는 `{ shortcut: { key, modifiers } }`입니다.
 받으려는 뷰의 events에 이 이름을 허용하고 구독해야 합니다. Windows는 반복 key-down을 MOD_NOREPEAT로
-억제하고, macOS는 Carbon이 반복 없이 누름 한 번을 알려 줍니다. 구독 전이나 연결이 없는 동안의 입력은 저장하지 않습니다.
+억제하고, macOS는 Carbon 문서상 누름과 뗌을 각각 알려 주며, 키를 누르고 있는 동안의 반복 동작은 자동 테스트로 확인하지 않았습니다. 구독 전이나 연결이 없는 동안의 입력은 저장하지 않습니다.
 
 `globalShortcut.released`는 같은 payload를 가진 별도 이벤트입니다. `pressed`만 허용한 뷰는
 받지 않으므로 기존 앱은 바뀌지 않습니다. 단축키의 주 키(key)가 놓이면 발행하며, 수정자 키는
