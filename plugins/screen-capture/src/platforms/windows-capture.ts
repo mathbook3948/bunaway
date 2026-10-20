@@ -464,19 +464,19 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
       const printed = this.native.printWindow(ref.window, memory);
       this.native.flush();
       // The window may have closed or asked for exclusion while it was drawn; do not return that
-      // content. The window is looked up before a failed draw is reported, because a window that
-      // is destroyed mid-draw makes the draw fail.
+      // content. The window state is checked before a failed draw is reported, because a window
+      // that is destroyed, hidden or protected mid-draw makes the draw fail.
       const after = this.native.windowFacts(ref.window);
       if (after === null || after.pid !== ref.pid || after.tid !== ref.tid) {
         fail("INVALID_ARGUMENT", "The window is gone.", REASON.notFound);
       }
-      checked(printed, "PrintWindow");
       if (after.displayAffinity !== 0) {
         protectedWindow();
       }
       if (!after.visible || after.minimized || after.cloaked) {
         unavailable();
       }
+      checked(printed, "PrintWindow");
       checked(
         this.native.blit(target, size, memory, visible, false),
         "Window copy",

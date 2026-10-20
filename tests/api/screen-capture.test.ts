@@ -1183,3 +1183,43 @@ test("a window closed while it was drawn is reported as not found", () => {
   ]);
   expect(fake.alive.size).toBe(0);
 });
+
+test("a draw that fails because the window was hidden is reported by the window state", () => {
+  const { world } = setup([
+    [
+      1n,
+      windowFacts(),
+    ],
+  ]);
+  const fake = fakeBindings(world);
+  const adapter = new WindowsScreenCapture(
+    {
+      ...fake.bindings,
+      printWindow(window, dc) {
+        fake.bindings.printWindow(window, dc);
+        world.windows.set(
+          1n,
+          windowFacts({
+            cloaked: true,
+          }),
+        );
+        return false;
+      },
+    },
+    APP_PID,
+  );
+  const [source] = adapter.listSources({
+    types: [
+      "window",
+    ],
+  });
+  const error = errorOf(() =>
+    adapter.captureSource({
+      id: source?.id as string,
+    }),
+  );
+  expect(error.details).toEqual({
+    reason: "SOURCE_UNAVAILABLE",
+  });
+  expect(fake.alive.size).toBe(0);
+});
