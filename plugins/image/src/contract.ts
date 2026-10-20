@@ -10,6 +10,10 @@ export const MAX_IMAGE_DIMENSION = 4096;
 export const MAX_ENCODED_BYTES = 600_000;
 export const MAX_RESOURCES = 64;
 export const MAX_POOL_BYTES = 8_388_608;
+/** Largest scale factor of a representation or a selection request. */
+export const MAX_SCALE_FACTOR = 4;
+/** Representations one resource can hold besides its base pixels (scale factor 1). */
+export const MAX_REPRESENTATIONS = 8;
 /** Canonical base64 with bounded decoded length, including unused padding bits. */
 function base64Schema(maxBytes: number) {
   return sharedBase64Schema(maxBytes, "Invalid canonical base64 data.");
@@ -54,6 +58,32 @@ export const idSchema = z.string().uuid();
 export const referenceSchema = z.strictObject({
   id: idSchema,
 });
+/** Finite scale factor greater than 0 and at most {@link MAX_SCALE_FACTOR}. */
+export const scaleFactorSchema = z.number().gt(0).max(MAX_SCALE_FACTOR);
+/** Reference with an optional requested scale factor; omitted means 1. */
+export const scaledReferenceSchema = z.strictObject({
+  id: idSchema,
+  scaleFactor: scaleFactorSchema.optional(),
+});
+export const addRepresentationSchema = z.strictObject({
+  id: idSchema,
+  scaleFactor: scaleFactorSchema.refine(
+    (value) => value !== 1,
+    "Scale factor 1 is the base image.",
+  ),
+  source: idSchema,
+});
+export const representationsSchema = z.strictObject({
+  representations: z
+    .array(
+      z.strictObject({
+        scaleFactor: scaleFactorSchema,
+        width: z.number().int().min(1).max(MAX_IMAGE_DIMENSION),
+        height: z.number().int().min(1).max(MAX_IMAGE_DIMENSION),
+      }),
+    )
+    .max(MAX_REPRESENTATIONS + 1),
+});
 export const infoSchema = z
   .strictObject({
     width: z.number().int().min(0).max(MAX_IMAGE_DIMENSION),
@@ -67,12 +97,17 @@ export const infoSchema = z
       value.empty === (value.width === 0),
     "Image metadata must match bounded dimensions and empty state.",
   );
+/** Info of the selected representation; `scaleFactor` is the one actually chosen and present only when requested. */
+export const selectedInfoSchema = infoSchema.safeExtend({
+  scaleFactor: scaleFactorSchema.optional(),
+});
 export const resourceSchema = infoSchema.safeExtend({
   id: idSchema,
 });
 export const exportSchema = z.strictObject({
   id: idSchema,
   format: mimeSchema,
+  scaleFactor: scaleFactorSchema.optional(),
 });
 export const interpolationSchema = z.enum([
   "nearest",

@@ -126,8 +126,38 @@ try {
 }
 ```
 
-동일 이미지 ID에 여러 scale-factor representation을 붙이거나 자동 선택하는 API는 아직
-제공하지 않습니다. Transform은 픽셀 크기가 고정된 독립 리소스를 반환합니다.
+Transform은 항상 소스의 기준 표현(scale factor 1)에 적용되고 representation이 없는 독립 리소스를 반환합니다.
+
+## Scale-factor representation
+
+| 함수 | 입력 | 결과 | 권한 |
+| --- | --- | --- | --- |
+| `image.addRepresentation` | `{ id, scaleFactor, source }` | `{ representations: [{ scaleFactor, width, height }] }` | `image.addRepresentation` |
+| `image.getRepresentations` | `{ id }` | `{ representations: [{ scaleFactor, width, height }] }` | `image.getRepresentations` |
+
+`id`의 픽셀은 scale factor 1인 기준 표현입니다. `addRepresentation`은 같은 앱이 가진 다른 리소스
+`source`의 픽셀을 `id`의 `scaleFactor` 표현으로 붙입니다. `scaleFactor`는 0보다 크고 4 이하인
+유한 수이며 1은 기준 표현이라 쓸 수 없습니다. 같은 `scaleFactor`는 교체합니다. 표현의 폭과 높이는
+기준 크기에 `scaleFactor`를 곱한 값의 내림 또는 올림이어야 하며 어긋나거나 빈 이미지가 끼면
+`INVALID_ARGUMENT`입니다. 리소스당 기준 외 표현은 8개까지이고 넘으면 `BUSY`입니다.
+표현의 픽셀은 소스와 같은 버퍼를 참조하지만 8 MiB 풀에는 따로 합산되며 초과하면 `BUSY`입니다.
+소스를 해제해도 이미 붙인 표현은 남고, `dispose`는 표현을 함께 해제합니다.
+`getRepresentations`는 기준을 포함해 `scaleFactor` 오름차순으로 돌려주며 빈 이미지는 빈 배열입니다.
+
+`getInfo`, `getPixels`, `exportBytes`, `exportDataURL`은 선택 입력 `scaleFactor`(0 초과 4 이하,
+생략하면 1)를 받아 표현을 고릅니다. 요청과 정확히 같은 표현이 있으면 그것, 없으면 요청보다 큰
+표현 중 가장 작은 것, 그것도 없으면 가장 큰 표현입니다. 픽셀은 다시 샘플링하지 않으며
+결과는 고른 표현의 픽셀 크기와 픽셀입니다. `getInfo`는 `scaleFactor`를 넘긴 경우 실제로 고른
+`scaleFactor`도 돌려줍니다. 생략하면 기존과 같은 `{ width, height, empty }`입니다.
+`crop`과 `resize`는 `scaleFactor`를 받지 않고 기준 표현에 적용합니다.
+
+```ts
+const logo1x = await image.createBytes({ mime: "image/png", data: png1x });
+const logo2x = await image.createBytes({ mime: "image/png", data: png2x });
+await image.addRepresentation({ id: logo1x.id, scaleFactor: 2, source: logo2x.id });
+await image.dispose({ id: logo2x.id });
+const info = await image.getInfo({ id: logo1x.id, scaleFactor: 1.5 }); // 2배 표현이 선택된다
+```
 
 ## 파일 형식 아이콘
 

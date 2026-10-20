@@ -560,7 +560,7 @@ MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이�
 - [x] `image.getInfo`와 `image.getPixels`로 크기, 빈 이미지 여부와 RGBA 픽셀 데이터를 조회한다.
 - [x] `image.exportBytes`와 `image.exportDataURL`로 PNG, JPEG, BMP와 data URL을 내보낸다. PNG는 alpha를 보존하고 JPEG와 BMP는 불투명 픽셀만 받는다.
 - [x] `image.crop`과 `image.resize`로 소스와 분리된 새 이미지 리소스를 만든다. Windows resize는 nearest와 alpha를 고려한 linear filtering을 제공한다.
-- [ ] 한 이미지 ID의 scale-factor별 representation 그룹과 선택 API를 제공한다.
+- [x] 한 이미지 ID의 scale-factor별 representation 그룹과 선택 API를 제공한다. `image.addRepresentation`, `image.getRepresentations`와 읽기 4개의 `scaleFactor` 선택(정확히 일치, 아니면 큰 쪽 중 가장 작은 것, 없으면 가장 큰 것). 플러그인 안의 픽셀 풀 관리라 codec은 바꾸지 않는다.
 - [x] `image.createFileTypeIcon`으로 확장자와 크기(16, 32, 48)만 받아 파일 형식 아이콘을 생성한다. `SHGFI_USEFILEATTRIBUTES`로 디스크에 접근하지 않으므로 저장소 권한이 필요 없고 실제 경로는 받지 않는다. macOS는 `UNSUPPORTED`이다.
 - [ ] 실제 파일 기반 이미지 thumbnail을 생성한다. 파일 경로 접근 정책(저장소 scope와 권한)이 먼저 정해져야 한다.
 - [x] 앱 소유 이미지 ID, `image.dispose`, 결과 전달 전 생성 취소와 앱 종료 정리를 제공한다. 작업별 권한과 64개, 8 MiB 상한을 적용한다.

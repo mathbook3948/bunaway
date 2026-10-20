@@ -2,16 +2,19 @@ import { defineNativeOperation } from "@bunaway/plugin";
 import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
 import { z } from "zod";
 import {
+  addRepresentationSchema,
   bytesSchema,
   cropSchema,
   dataURLSchema,
   exportSchema,
   fileTypeIconSchema,
-  infoSchema,
   referenceSchema,
+  representationsSchema,
   resizeSchema,
   resourceSchema,
   rgbaSchema,
+  scaledReferenceSchema,
+  selectedInfoSchema,
 } from "#image/contract";
 import type { ImagePlatform } from "#image/platforms/image-platform";
 
@@ -39,14 +42,26 @@ export const imageOperations = {
       instance.createDataURL(url, signal),
   }),
   getInfo: operation({
-    input: referenceSchema,
-    output: infoSchema,
-    handler: ({ id }, { instance }) => instance.getInfo(id),
+    input: scaledReferenceSchema,
+    output: selectedInfoSchema,
+    handler: ({ id, scaleFactor }, { instance }) =>
+      instance.getInfo(id, scaleFactor),
   }),
   getPixels: operation({
-    input: referenceSchema,
+    input: scaledReferenceSchema,
     output: rgbaSchema,
-    handler: ({ id }, { instance }) => instance.getPixels(id),
+    handler: ({ id, scaleFactor }, { instance }) =>
+      instance.getPixels(id, scaleFactor),
+  }),
+  addRepresentation: operation({
+    input: addRepresentationSchema,
+    output: representationsSchema,
+    handler: (input, { instance }) => instance.addRepresentation(input),
+  }),
+  getRepresentations: operation({
+    input: referenceSchema,
+    output: representationsSchema,
+    handler: ({ id }, { instance }) => instance.getRepresentations(id),
   }),
   exportBytes: operation({
     input: exportSchema,
