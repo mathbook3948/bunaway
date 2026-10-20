@@ -101,7 +101,7 @@ test("runResolveHost resolves localhost by family with the system resolver", asy
       queryType: "A",
       timeoutMs: deadline("childStep"),
     });
-    // A machine without usable IPv4 or IPv6 may answer with nothing; only the family is asserted.
+    expect(v4.endpoints.length).toBeGreaterThan(0);
     expect(v4.endpoints.every((entry) => entry.family === "ipv4")).toBe(true);
     const literal = await runResolveHost(state, {
       host: "127.0.0.1",
@@ -109,6 +109,15 @@ test("runResolveHost resolves localhost by family with the system resolver", asy
       timeoutMs: deadline("childStep"),
     });
     expect(literal.endpoints).toEqual([]);
+    // A machine without IPv6 has no AAAA answer for localhost, which the resolver reports as a failure.
+    const v6 = await runResolveHost(state, {
+      host: "localhost",
+      queryType: "AAAA",
+      timeoutMs: deadline("childStep"),
+    }).catch(() => ({
+      endpoints: [],
+    }));
+    expect(v6.endpoints.every((entry) => entry.family === "ipv6")).toBe(true);
   } finally {
     await dispose(state);
   }

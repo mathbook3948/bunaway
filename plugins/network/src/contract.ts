@@ -202,7 +202,11 @@ export const resolveHostInputSchema = z.strictObject({
         !numericLastLabel.test(labels.at(-1) ?? "") || dottedQuad.test(name)
       );
     }, "Expected an ASCII host name or dotted IPv4 address; convert international names to punycode."),
-  /** "A" keeps IPv4 addresses and "AAAA" keeps IPv6 addresses; omitted returns both. */
+  /**
+   * "A" resolves IPv4 addresses and "AAAA" IPv6 addresses, asking the resolver for that family; a
+   * name without such addresses fails like an unknown name, and an IPv4 literal asked for "AAAA"
+   * gives an empty list. Omitted returns both families.
+   */
   queryType: z
     .enum([
       "A",
