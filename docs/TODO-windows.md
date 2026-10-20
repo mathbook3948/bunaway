@@ -203,7 +203,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `window.skipTaskbar`, `setSkipTaskbar`, `isSkipTaskbar`를 제공한다. 실행 중 변경은 숨겨진 일반 창에서만 허용하며 tool-window style로 작업 표시줄과 Alt+Tab에서 제외한다.
 - [ ] 키오스크 모드와 일반 전체화면의 차이를 정의한다.
 - [x] 창 opacity를 설정하고 조회한다. layered window의 상수 alpha로 WebView를 포함한 창 전체에 적용하며 1이면 layered 스타일을 제거한다.
-- [ ] 창 background color와 투명 배경을 제공한다.
+- [x] 창 불투명 background color를 제공한다(`window.backgroundColor`, `setBackgroundColor`, `getBackgroundColor`). `#RGB`와 `#RRGGBB`만 받고 창별 `WM_ERASEBKGND`와 WebView2 `DefaultBackgroundColor`를 같은 색으로 맞춘다. macOS는 아직 없다.
+- [ ] 창 투명 배경을 제공한다. 알파 0은 DWM 합성과 layered 스타일(투명 창, 211행의 결정)과 함께 정해야 한다.
 - [x] shadow의 설정과 조회를 제공한다(`windows.setHasShadow`, `hasShadow`). `titlebar: "custom"` 창은 DWM 비클라이언트 렌더링 정책으로 끄고 같은 값으로 조회하며, 네이티브 제목 표시줄 창은 항상 shadow가 있어 `false` 설정을 `UNSUPPORTED`로 거부한다. macOS는 아직 없다.
 - [ ] Windows Mica, Acrylic와 배경 material, accent color를 제공한다.
 - [ ] 모서리와 창 shape의 지원을 결정한다. Electron shape는 실험 기능이다.
