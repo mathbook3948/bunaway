@@ -1033,7 +1033,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [ ] debugger protocol 연결, 명령 실행과 이벤트를 제공한다.
 - [ ] 개발 도구 확장 설치와 실행 범위를 제공한다.
 - [ ] startup, CPU, 메모리, GPU와 렌더러 지표를 조회한다.
-- [ ] GPU 정보, hardware acceleration 상태와 변경 옵션을 제공한다.
+- [ ] GPU 정보, hardware acceleration 상태와 변경 옵션을 제공한다. [`os.listGpus`](./site/src/content/docs/reference/plugins/os.mdx)가 DXGI 어댑터 목록(이름, 벤더 ID, 장치 ID, 전용 비디오 메모리, 소프트웨어 여부)을 제공한다. 렌더러 지표와 hardware acceleration 설정은 남아 있다.
 - [ ] tracing category 조회, 기록 시작와 중단과 buffer usage를 제공한다.
 - [ ] network log 시작, 종료와 결과 경로를 제공한다.
 - [ ] crash report, minidump와 최근 crash 조회를 제공한다.

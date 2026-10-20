@@ -40,6 +40,13 @@ function failure(message: string): never {
   });
 }
 
+function unsupportedGpus(): never {
+  throw new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Graphics adapter queries are not supported on macOS.",
+  });
+}
+
 function unsupportedPrinters(): never {
   throw new BunawayError({
     code: "UNSUPPORTED",
@@ -270,6 +277,10 @@ export function initialize(): OSInstance {
     getDefaultPrinter() {
       assertActive();
       return unsupportedPrinters();
+    },
+    listGpus() {
+      assertActive();
+      return unsupportedGpus();
     },
     beep() {
       assertActive();

@@ -76,6 +76,13 @@ test.skipIf(process.platform !== "win32")(
           defaultPrinter.toLowerCase(),
         );
       }
+      // A CI runner has no hardware GPU, but DXGI still lists its software renderer.
+      const gpus = osOperations.listGpus.output.parse(
+        await adapter.execute("os.listGpus", null, "backend"),
+      );
+      if (process.env.CI) {
+        expect(gpus.length).toBeGreaterThan(0);
+      }
       for (const kind of [
         undefined,
         "default",
