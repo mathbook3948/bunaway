@@ -180,12 +180,26 @@ test("an app entry that fails to import fails with a nonzero exit and no documen
 test("an app entry that never finishes importing is stopped at the limit", async () => {
   await Bun.write(
     resolve(project, "src-bunaway/app.ts"),
-    `await new Promise(() => {});\n${appSource}`,
+    `process.on("SIGTERM", () => {});\nawait new Promise(() => {});\n${appSource}`,
   );
   try {
     await expect(
       readAppDefinition(resolve(project, "src-bunaway/app.ts"), project, 500),
     ).rejects.toThrow("took longer than 500 ms");
+  } finally {
+    await Bun.write(resolve(project, "src-bunaway/app.ts"), appSource);
+  }
+});
+
+test("handles the app leaves open do not keep the CLI waiting", async () => {
+  await Bun.write(
+    resolve(project, "src-bunaway/app.ts"),
+    `setInterval(() => {}, 1000);\n${appSource}`,
+  );
+  try {
+    const { code, stdout } = await runContract(project);
+    expect(code).toBe(0);
+    expect(JSON.parse(stdout).version).toBe(1);
   } finally {
     await Bun.write(resolve(project, "src-bunaway/app.ts"), appSource);
   }

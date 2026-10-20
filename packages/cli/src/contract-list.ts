@@ -149,6 +149,8 @@ const commands = (registry) => Object.entries(registry ?? {}).map(([name, comman
 const events = (registry) => Object.entries(registry ?? {}).map(([name, payload]) => ({ name, payload }));
 const plugins = (app.plugins ?? []).map((plugin) => ({ name: plugin.name, commands: commands(plugin.commands), events: events(plugin.events) }));
 await Bun.write(output, JSON.stringify({ commands: commands(app.commands), events: events(app.events), plugins }));
+// Handles the app opened at top level (servers, timers) must not keep this process alive.
+process.exit(0);
 `;
 
 /** Orders names by UTF-16 code unit so the result does not depend on the locale. */
@@ -246,19 +248,22 @@ export async function readAppDefinition(
       },
     );
     let timedOut = false;
+    // SIGKILL because an app may ignore SIGTERM; waiting on it would hang the CLI.
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill();
+      child.kill("SIGKILL");
     }, timeoutMs);
-    const code = await child.exited;
-    clearTimeout(timer);
-    if (timedOut) {
-      throw new Error(
-        `Importing the app entry took longer than ${timeoutMs} ms.`,
-      );
-    }
-    if (code !== 0) {
-      throw new Error(`Importing the app entry failed (exit ${code}).`);
+    try {
+      const code = await child.exited;
+      if (code !== 0) {
+        throw new Error(
+          timedOut
+            ? `Importing the app entry took longer than ${timeoutMs} ms.`
+            : `Importing the app entry failed (exit ${code}).`,
+        );
+      }
+    } finally {
+      clearTimeout(timer);
     }
     return toDefinition(JSON.parse(await readFile(output, "utf8")));
   } finally {
@@ -292,6 +297,12 @@ function ownedEntries<T>(
   >();
   const add = (owner: Owner, entries: Readonly<Record<string, T>>) => {
     for (const [name, value] of Object.entries(entries)) {
+      const existing = owned.get(name);
+      if (existing) {
+        throw new Error(
+          `"${name}" is registered by both ${existing.owner} and ${owner}.`,
+        );
+      }
       owned.set(name, {
         owner,
         value,
