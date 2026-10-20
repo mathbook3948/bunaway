@@ -190,6 +190,13 @@ WebView2를 실행한다. URL과 제목, history, reload와 stop, 허용하지 �
 변경과 반복 설정, 문서 탐색 뒤 유지, 준비 전과 종료 후 거부 및 native 자원 정리를 확인한다.
 결과는 `build/windows-webview-audio-results.json`이다. 조용한 문서를 사용하며 재생 중인
 audio와 물리 장치 출력은 별도 수동 검증이다.
+`lifecycle/windows-webview-color-scheme.ts`는 `mise run host:windows`에서 실제 WebView2와 appearance
+컨트롤러로 창 생성 전에 고른 dark가 첫 문서에 보이는지, light와 dark 전환이 열린 문서의
+`prefers-color-scheme` 변경 이벤트로 전달되는지, 탐색 뒤 값이 유지되는지, system과 플러그인 종료가
+OS 설정으로 되돌리는지, 닫는 중 요청이 거부되지 않는지를 확인한다. 결과는
+`build/windows-webview-color-scheme-results.json`이다. 고대비 세션과 같은 프로필을 공유하는 두 창의
+동시 지정과, OS 앱 테마가 dark인 러너에서 플러그인 종료 시 복원(화면 값이 바뀌지 않음)은 포함하지 않는다.
+고대비 세션이나 오래된 런타임에서는 콘텐츠 검증을 건너뛰고 결과 JSON의 `skipped`에 사유를 남긴다.
 
 `api/window-taskbar.test.ts`는 작업 표시줄 진행률의 상태별 입력, 출력, SDK 호출 컨텍스트,
 독립 작업 권한, 취소, 닫힌 창과 미지원 플랫폼을 검사한다.

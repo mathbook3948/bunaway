@@ -346,3 +346,92 @@ test("old hosts preserve queries but report unsupported frame control", () => {
   );
   old.dispose();
 });
+
+test("content color scheme follows the theme, replays into late content and resets on disposal", () => {
+  const f = fixture();
+  const schemes: string[] = [];
+  f.service.attach("first", 1n);
+  // The theme chosen before the content exists reaches it as soon as it binds.
+  f.controller.setTheme("first", "dark");
+  f.service.bindContent("first", (scheme) => {
+    schemes.push(scheme);
+  });
+  expect(schemes).toEqual([
+    "dark",
+  ]);
+  f.controller.setTheme("first", "light");
+  f.controller.setTheme("first", "system");
+  f.controller.setTheme(null, "dark");
+  expect(schemes).toEqual([
+    "dark",
+    "light",
+    "auto",
+  ]);
+  f.controller.setTheme("first", null);
+  expect(schemes.at(-1)).toBe("dark");
+  // High contrast keeps the OS colors, so an explicit theme does not pin the content.
+  f.change({
+    highContrast: true,
+    forcedColors: true,
+  });
+  f.signal("settingChanged");
+  expect(schemes.at(-1)).toBe("auto");
+  f.controller.setTheme(null, "dark");
+  // Disposing the controller releases the subscription, which hands the content back to the OS.
+  f.controller.dispose();
+  expect(schemes.at(-1)).toBe("auto");
+});
+
+test("content color scheme ends with its window and an unbound window ignores it", () => {
+  const f = fixture();
+  const schemes: string[] = [];
+  f.service.attach("first", 1n);
+  f.service.bindContent("first", (scheme) => {
+    schemes.push(scheme);
+  });
+  f.service.attach("second", 2n);
+  f.controller.setTheme("second", "dark");
+  expect(schemes).toEqual([
+    "auto",
+  ]);
+  f.service.detach("first");
+  f.controller.setTheme(null, "light");
+  expect(schemes).toEqual([
+    "auto",
+  ]);
+  // Binding after detach cannot resurrect the lifetime.
+  f.service.bindContent("first", (scheme) => {
+    schemes.push(scheme);
+  });
+  f.controller.setTheme(null, "dark");
+  expect(schemes).toEqual([
+    "auto",
+  ]);
+  f.controller.dispose();
+});
+
+test("a failing content update leaves the window override unchanged", () => {
+  const f = fixture();
+  let failing = false;
+  f.service.attach("first", 1n);
+  f.service.bindContent("first", () => {
+    if (failing) {
+      // Only the first update fails; the resync after it succeeds.
+      failing = false;
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Profile failed.",
+      });
+    }
+  });
+  failing = true;
+  expect(() => f.controller.setTheme("first", "dark")).toThrow(
+    "Profile failed.",
+  );
+  expect(f.controller.getTheme("first").override).toBeNull();
+  expect(f.controller.getTheme("first").effectiveTheme).toBe("light");
+  // The frame that already turned dark is put back to match the reported state.
+  expect(f.frames.get(1n)).toBe(false);
+  f.service.detach("first");
+  f.controller.dispose();
+});
