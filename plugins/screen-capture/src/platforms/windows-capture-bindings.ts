@@ -336,13 +336,17 @@ export function captureBindings(libraries: CaptureLibraries): CaptureBindings {
       const exStyle = BigInt(
         user32.symbols.GetWindowLongPtrW(window, GWL_EXSTYLE),
       );
+      const visible = user32.symbols.IsWindowVisible(window) !== 0;
+      const hasOwner = user32.symbols.GetWindow(window, GW_OWNER) !== 0n;
+      const toolWindow = (exStyle & WS_EX_TOOLWINDOW) !== 0n;
       return {
-        title: title(window),
-        visible: user32.symbols.IsWindowVisible(window) !== 0,
+        // Only a window that can be listed needs its title; reading it sends a message to the owning thread.
+        title: visible && !hasOwner && !toolWindow ? title(window) : "",
+        visible,
         minimized: user32.symbols.IsIconic(window) !== 0,
         cloaked: isCloaked(window),
-        hasOwner: user32.symbols.GetWindow(window, GW_OWNER) !== 0n,
-        toolWindow: (exStyle & WS_EX_TOOLWINDOW) !== 0n,
+        hasOwner,
+        toolWindow,
         displayAffinity: displayAffinity(window),
         hung: user32.symbols.IsHungAppWindow(window) !== 0,
         pid: process[0] ?? 0,

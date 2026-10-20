@@ -88,6 +88,9 @@ PNG가 640 KiB를 넘으면 작은 `maxWidth`와 `maxHeight`로 다시 호출합
 `SetWindowDisplayAffinity`로 캡처 제외를 요청한 창은 창 캡처를 거부하고, 화면 캡처에서 보호된 창이 어떻게 나오는지는 확인하지 않았습니다.
 다른 앱이 건 보호 설정을 우회하지 않습니다.
 
+DPI를 인식하지 않는 창을 배율이 100%가 아닌 모니터에서 캡처한 결과는 확인하지 않았습니다. 이런 창은 `PrintWindow`가
+논리 크기로 그릴 수 있어 이미지의 일부만 채워질 수 있습니다.
+
 화면 함수의 마지막 인자는 `NativeInvokeOptions`입니다. `signal`과 `deadline`은
 [invoke](/reference/client/invoke/)의 규칙을 따르며, 이미 시작한 캡처는 중단하지 않습니다. 캡처는 호스트의 I/O
 Worker에서 한 번에 하나씩 실행합니다. 응답하지 않는 창은 검사 직후에 멈출 수도 있고, 그러면 `PrintWindow`가

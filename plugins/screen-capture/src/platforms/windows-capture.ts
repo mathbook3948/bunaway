@@ -474,6 +474,9 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
       if (after.displayAffinity !== 0) {
         protectedWindow();
       }
+      if (!after.visible || after.minimized || after.cloaked) {
+        unavailable();
+      }
       checked(
         this.native.blit(target, size, memory, visible, false),
         "Window copy",
