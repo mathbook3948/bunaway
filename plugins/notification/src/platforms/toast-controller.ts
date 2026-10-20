@@ -44,8 +44,12 @@ function resolveActivation(
       kind: "body",
     };
   }
-  const reply = input.reply ? (event.reply ?? "") : null;
-  if (reply !== null && reply.length > MAX_REPLY_LENGTH) {
+  // A driver that reports no text for a toast with a reply box violates the event contract: publish nothing.
+  const reply = input.reply ? event.reply : null;
+  if (
+    reply === undefined ||
+    (reply !== null && reply.length > MAX_REPLY_LENGTH)
+  ) {
     return undefined;
   }
   if (event.arguments === REPLY_ARGUMENT) {

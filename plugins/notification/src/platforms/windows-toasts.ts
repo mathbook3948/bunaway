@@ -58,9 +58,17 @@ function readToastEvent(
   kind: (typeof EVENTS)[number]["kind"],
   argument: Pointer,
   replyInputId: string | undefined,
+  interactive: boolean,
 ): ToastEvent | undefined {
   if (kind === "clicked") {
-    return readActivation(runtime, argument, replyInputId);
+    // A toast without buttons or reply box can only be activated by a body click, as before actions existed.
+    return interactive
+      ? readActivation(runtime, argument, replyInputId)
+      : {
+          kind: "activated",
+          arguments: "",
+          reply: undefined,
+        };
   }
   const output = new Int32Array(1);
   checkToast(
@@ -344,6 +352,7 @@ export function createWindowsToastDriver(appId: string): ToastDriver {
               event.kind,
               argument,
               input.reply ? REPLY_INPUT_ID : undefined,
+              input.actions.length > 0 || input.reply !== null,
             );
             if (!value) {
               return;

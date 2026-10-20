@@ -987,7 +987,7 @@ activation = {
   arguments: "",
   input: "absent",
 };
-const apiArgument = makeObject("argument");
+// A toast without buttons or reply box never reads the argument, so even a null one is a body click.
 callback(
   activated,
   3,
@@ -996,9 +996,8 @@ callback(
     "ptr",
   ],
   0,
-  apiArgument,
+  0,
 );
-dropReference(apiArgument);
 await Promise.resolve();
 assert.deepEqual(published, [
   "notification.clicked",

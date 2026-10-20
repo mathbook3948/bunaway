@@ -232,6 +232,7 @@ test("a declared button publishes actionInvoked with the typed reply when the to
   });
   await f.activate("action:ok", "typed text");
   await f.activate("reply", "line");
+  // No reply text from the driver is a contract violation, not an empty reply.
   await f.activate("reply");
   const base = {
     id: "example",
@@ -253,14 +254,6 @@ test("a declared button publishes actionInvoked with the typed reply when the to
         ...base,
         actionId: null,
         reply: "line",
-      },
-    },
-    {
-      event: "notification.actionInvoked",
-      payload: {
-        ...base,
-        actionId: null,
-        reply: "",
       },
     },
   ]);
