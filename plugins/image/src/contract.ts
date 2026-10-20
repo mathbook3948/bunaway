@@ -97,10 +97,15 @@ export const infoSchema = z
       value.empty === (value.width === 0),
     "Image metadata must match bounded dimensions and empty state.",
   );
-/** Info of the selected representation; `scaleFactor` is the one actually chosen and present only when requested. */
+/** Info of the representation chosen for a requested scale factor, with the factor actually chosen. */
 export const selectedInfoSchema = infoSchema.safeExtend({
-  scaleFactor: scaleFactorSchema.optional(),
+  scaleFactor: scaleFactorSchema,
 });
+/** `getInfo` answers with `scaleFactor` only when the request named one. */
+export const getInfoResultSchema = z.union([
+  infoSchema,
+  selectedInfoSchema,
+]);
 export const resourceSchema = infoSchema.safeExtend({
   id: idSchema,
 });

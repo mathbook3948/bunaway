@@ -8,13 +8,13 @@ import {
   dataURLSchema,
   exportSchema,
   fileTypeIconSchema,
+  getInfoResultSchema,
   referenceSchema,
   representationsSchema,
   resizeSchema,
   resourceSchema,
   rgbaSchema,
   scaledReferenceSchema,
-  selectedInfoSchema,
 } from "#image/contract";
 import type { ImagePlatform } from "#image/platforms/image-platform";
 
@@ -43,7 +43,7 @@ export const imageOperations = {
   }),
   getInfo: operation({
     input: scaledReferenceSchema,
-    output: selectedInfoSchema,
+    output: getInfoResultSchema,
     handler: ({ id, scaleFactor }, { instance }) =>
       instance.getInfo(id, scaleFactor),
   }),
