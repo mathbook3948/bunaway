@@ -37,7 +37,8 @@ description: 프런트엔드와 백엔드 API부터 설정, CLI, 패키징까지
 
 [로그인 자동 실행](/reference/plugins/autostart/)은 `@bunaway/plugin-autostart`의
 등록, 조회와 해제 API를 사용합니다. 사용자별 등록과 Windows 시작 앱 활성 상태를
-구분하며 관리자 범위와 MSIX는 지원하지 않습니다.
+구분하며 관리자 범위와 MSIX는 지원하지 않습니다. macOS는 사용자 LaunchAgent를 쓰며
+활성 상태는 항상 `unknown`입니다.
 
 | operation | 용도 |
 | --- | --- |

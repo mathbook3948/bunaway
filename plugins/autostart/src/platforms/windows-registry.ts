@@ -1,6 +1,6 @@
 import { dlopen, type Pointer, ptr, read, toArrayBuffer } from "bun:ffi";
-import { ADVAPI32, KERNEL32, pick } from "@bunaway/plugin/win32";
 import { toUSVString } from "node:util";
+import { ADVAPI32, KERNEL32, pick } from "@bunaway/plugin/win32";
 import { AUTOSTART_MUTEX_PREFIX, BunawayError } from "@bunaway/protocol";
 export const RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 export const APPROVAL_KEY =
