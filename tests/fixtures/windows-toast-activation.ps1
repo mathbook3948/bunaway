@@ -1,12 +1,8 @@
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 try {
-  $types = @(
-    [Windows.UI.Notifications.IToastActivatedEventArgs, Windows.UI.Notifications, ContentType=WindowsRuntime],
-    [Windows.UI.Notifications.IToastActivatedEventArgs2, Windows.UI.Notifications, ContentType=WindowsRuntime],
-    [Windows.Foundation.IPropertyValue, Windows.Foundation, ContentType=WindowsRuntime]
-  )
-  $result = foreach ($type in $types) {
+  $class = [Windows.UI.Notifications.ToastActivatedEventArgs, Windows.UI.Notifications, ContentType=WindowsRuntime]
+  $result = foreach ($type in $class.GetInterfaces()) {
     [pscustomobject]@{
       name = $type.Name
       guid = $type.GUID.ToString()

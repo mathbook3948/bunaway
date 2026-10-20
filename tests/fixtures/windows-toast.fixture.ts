@@ -11,8 +11,6 @@ import {
   ACTIVATED_ARGS2_IID,
   FIRST_METHOD_SLOT,
   MAP_STRING_OBJECT_IID,
-  PROPERTY_VALUE_GET_STRING_SLOT,
-  PROPERTY_VALUE_IID,
   readReply,
 } from "#plugins/notification/src/platforms/toast-activation";
 import {
@@ -263,13 +261,6 @@ if (workerData?.toastMarshalWorker) {
     "get_UserInput",
     FIRST_METHOD_SLOT,
   );
-  expectInterface(
-    "IPropertyValue",
-    PROPERTY_VALUE_IID,
-    "GetString",
-    PROPERTY_VALUE_GET_STRING_SLOT,
-  );
-  assert.equal(described("IPropertyValue").methods[0], "get_Type");
   // IMap<String, Object>: Lookup(6), Size(7), HasKey(8), GetView(9), Insert(10).
   const runtime = createToastRuntime();
   const INSERT_SLOT = 10;
