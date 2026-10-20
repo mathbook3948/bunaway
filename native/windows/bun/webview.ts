@@ -1343,18 +1343,24 @@ export class WebView {
     }
   }
   /**
-   * Remember the opaque document background and apply it to the controller. A color requested
-   * before the controller exists is applied when it completes; a failed live change is thrown.
+   * Apply an opaque document background. A color requested before the controller exists is kept
+   * and applied when it completes; a failed live change throws and keeps the previous color.
    */
   setBackgroundColor(color: string): void {
+    if (this.controller && !this.closing) {
+      this.putBackgroundColor(color);
+    }
     this.backgroundColor = color;
-    this.applyBackgroundColor();
   }
   private applyBackgroundColor(): void {
-    const color = this.backgroundColor;
-    if (!this.controller || this.closing || color === undefined) {
-      return;
+    if (this.backgroundColor !== undefined) {
+      this.putBackgroundColor(this.backgroundColor);
     }
+  }
+  /** Set the controller's default background and read it back, so a wrong byte order or slot fails loudly. */
+  private putBackgroundColor(color: string): void {
+    const controller = this.controller;
+    assert(controller);
     const rgb = Number.parseInt(color.slice(1), 16);
     // COREWEBVIEW2_COLOR is the bytes A, R, G, B in memory, so the little-endian u32 is B, G, R, A from the top.
     const packed =
@@ -1363,7 +1369,7 @@ export class WebView {
         (((rgb >> 8) & 0xff) << 16) |
         ((rgb & 0xff) << 24)) >>>
       0;
-    const controller2 = query(this.controller, WEBVIEW_CONTROLLER2_IID);
+    const controller2 = query(controller, WEBVIEW_CONTROLLER2_IID);
     try {
       checkHresult(
         method(
@@ -1374,6 +1380,22 @@ export class WebView {
           ],
         )(packed),
         "put_DefaultBackgroundColor",
+      );
+      const stored = new Uint32Array(1);
+      checkHresult(
+        method(
+          controller2,
+          WEBVIEW_CONTROLLER2_PUT_DEFAULT_BACKGROUND_COLOR_SLOT - 1,
+          [
+            "ptr",
+          ],
+        )(ptr(stored)),
+        "get_DefaultBackgroundColor",
+      );
+      assert.equal(
+        stored[0],
+        packed,
+        "WebView2 did not keep the requested background color.",
       );
     } finally {
       release(controller2);
