@@ -263,6 +263,7 @@ if (target === "windows-x64") {
     await test("macos-webview-regressions.ts");
     await test("macos-webview-recreate.ts");
     await test("macos-window-api.ts");
+    await test("macos-global-shortcut.ts");
     await test("macos-webview-controls.ts");
     await test("macos-io-host.ts");
     await test("macos-desktop.ts");

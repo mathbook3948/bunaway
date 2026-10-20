@@ -2,6 +2,7 @@ import { type NativeEnvironment, NativeEventWaiters } from "@bunaway/plugin";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import {
   type GlobalShortcut,
+  type GlobalShortcutInstance,
   MAX_GLOBAL_SHORTCUTS,
   MAX_SHORTCUT_WAITERS,
   shortcutId,
@@ -320,7 +321,9 @@ export function initializeShortcutOperations(
   };
 }
 
-export function initialize(environment: NativeEnvironment) {
+export function initialize(
+  environment: NativeEnvironment,
+): GlobalShortcutInstance {
   const services = environment.shortcuts;
   if (!services) {
     throw new BunawayError({
@@ -334,6 +337,6 @@ export function initialize(environment: NativeEnvironment) {
   );
 }
 
-export function dispose(instance: ReturnType<typeof initialize>): void {
+export function dispose(instance: GlobalShortcutInstance): void {
   instance.dispose();
 }

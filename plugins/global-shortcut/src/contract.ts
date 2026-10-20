@@ -156,3 +156,25 @@ export function shortcutId(shortcut: GlobalShortcut): string {
     shortcut.key,
   ].join("+");
 }
+
+/**
+ * What the operations call on a platform adapter. Each platform class implements it, so
+ * `operations.ts` stays free of platform imports. Registration fails with BUSY for an already
+ * owned combination or while suspended, and `dispose` removes every registration and is safe to
+ * repeat.
+ */
+export interface GlobalShortcutInstance {
+  register(shortcut: GlobalShortcut): null;
+  registerMany(shortcuts: GlobalShortcut[]): null;
+  isRegistered(shortcut: GlobalShortcut): boolean;
+  list(): GlobalShortcut[];
+  unregister(shortcut: GlobalShortcut): boolean;
+  unregisterAll(): null;
+  setSuspended(suspended: boolean): null;
+  isSuspended(): boolean;
+  /** Settles with the next press; rejects with CANCELLED on abort or BUSY when too many wait. */
+  waitForPress(signal?: AbortSignal): Promise<{
+    shortcut: GlobalShortcut;
+  }>;
+  dispose(): void;
+}

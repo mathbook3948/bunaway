@@ -1,13 +1,13 @@
 ---
 title: globalShortcut
-description: Windows 전역 단축키를 등록하고 일시중지합니다.
+description: Windows와 macOS 전역 단축키를 등록하고 일시중지합니다.
 sidebar: { order: 7 }
 ---
 
 기본 export(`default`)를 `globalShortcut`로 가져와 앱에 등록하고 호출합니다.
 
 `@bunaway/plugin-global-shortcut`를 설치하고 앱의 `plugins`에 `globalShortcut`을
-등록합니다. Windows에서 제공합니다. `globalShortcut`은 화면과 앱 백엔드가 함께 사용하는
+등록합니다. Windows와 macOS에서 제공합니다. `globalShortcut`은 화면과 앱 백엔드가 함께 사용하는
 호출 API이며 `GlobalShortcut`은 키 조합 타입입니다.
 
 ```ts
@@ -21,7 +21,7 @@ await globalShortcut.setSuspended({ suspended: false });
 await globalShortcut.unregister(shortcut);
 ```
 
-전역 단축키는 앱 창 포커스 밖에서도 Windows가 입력을 감지합니다. 창이 없는 상태에서
+전역 단축키는 앱 창 포커스 밖에서도 OS가 입력을 감지합니다. 창이 없는 상태에서
 계속 실행하려면 기존 `desktop.closeBehavior: "keep-alive"` 또는 트레이를 설정합니다.
 단축키 등록은 앱의 마지막 창 종료 정책을 바꾸지 않습니다.
 
@@ -42,8 +42,9 @@ await globalShortcut.unregister(shortcut);
 목록과 boolean 결과도 Promise입니다. 키 조합은 `{ key, modifiers }`입니다.
 key는 대문자 A~Z, 0~9, F1~F24 중 F12를 제외한 키, Backspace, Tab, Enter,
 Escape, Space, PageUp, PageDown, End, Home, Left, Up, Right, Down, Insert, Delete입니다.
-문자 위치가 아닌 Windows virtual key를 지정합니다. F12는 Windows 디버거용 예약 키여서 거부합니다.
-modifiers는 Control, Alt, Shift, Super 중 하나 이상이며 중복을 거부합니다. Super는 Windows 키입니다.
+글자가 아닌 키의 물리적 위치(Windows는 virtual key, macOS는 ANSI virtual key code)를 지정합니다. F12는 플랫폼
+공통 규칙으로 거부합니다(Windows 디버거용 예약 키).
+modifiers는 Control, Alt, Shift, Super 중 하나 이상이며 중복을 거부합니다. Super는 Windows에서 Windows 키, macOS에서 Command입니다.
 결과는 Control, Alt, Shift, Super 순서로 정규화하고 입력 순서와 관계없이 같은 조합으로 조회합니다.
 키 이름의 대소문자나 Ctrl 같은 별칭, accelerator 문자열을 해석하지 않습니다.
 
@@ -53,29 +54,54 @@ modifiers는 Control, Alt, Shift, Super 중 하나 이상이며 중복을 거부
 네이티브 rollback 자체가 실패하면 `INTERNAL`이며 실제로 남은 등록을 list에 유지합니다.
 앱은 조회 후 제거를 다시 시도할 수 있습니다. 다른 앱의 단축키는 조회하거나 해제하지 않습니다.
 
+## macOS
+
+macOS는 Carbon `RegisterEventHotKey`로 등록합니다. Carbon 문서상 손쉬운 사용(Accessibility)이나
+입력 모니터링 권한이 필요하지 않으므로 권한 거부 경로를 두지 않습니다. 모든 작업과 이벤트 계약은
+Windows와 같으며 차이는 다음과 같습니다.
+
+- `Super`는 Command, `Alt`는 Option, `Control`은 Control입니다.
+- key는 입력 소스가 표시하는 글자가 아니라 키보드의 물리적 위치(ANSI virtual key code)를 지정합니다.
+- Mac 키보드에 없는 `Insert`와 `F21`~`F24`는 등록할 때 `UNSUPPORTED`로 거부하며, 한 batch에 하나라도
+  있으면 아무것도 등록하지 않습니다.
+- 이 앱의 다른 등록이 이미 점유한 조합은 Carbon이 거부하며 `BUSY`입니다. 다른 앱이나 시스템이 점유한 조합도 같은 Carbon 오류(`eventHotKeyExistsErr`)를 `BUSY`로 돌려주지만, 이 경우는 자동 테스트로 확인하지 않았습니다.
+- Carbon이 키를 누를 때와 뗄 때를 각각 알려 주므로 `released`는 키 상태 폴링 없이 발행합니다.
+  키를 누른 채 `unregister`, `unregisterAll`, `setSuspended(true)`를 호출하면 그 시점에 `released`를
+  발행합니다. 앱 종료와 어댑터 dispose는 이벤트를 연결할 수 없으므로 `released`를 발행하지 않습니다.
+- 한 어댑터 수명에서 사용할 수 있는 등록 ID는 4,294,967,295개이며 초과하면 `BUSY`입니다.
+  각 등록 시도(실패한 시도 포함)와 재개 시도가 새 ID를 사용합니다.
+- 이벤트는 호스트의 이벤트 처리 루프가 UI 스레드에서 전달합니다. 구독 전이나 연결이 없는 동안의
+  입력은 저장하지 않습니다.
+
+자동 테스트는 호스트의 이벤트 처리 루프에 실제 Carbon 핫키를 등록하고, 이벤트 큐에 넣은 누름과 뗌 이벤트가
+플러그인에 전달되는 경로까지 확인합니다. 물리 키 입력이 OS에서 핫키로 해석되는 단계, OS가 만든 핫키
+이벤트에서 등록 ID를 읽는 단계(테스트는 같은 형식으로 직접 만든 이벤트를 씁니다), 키 위치 대응과
+접근성 권한 불필요 여부는 Carbon의 문서화된 동작을 따르며 호스티드 CI에서는 확인하지 못했습니다.
+
 ## 일시중지와 이벤트
 
 중지하면 OS 등록을 해제하지만 앱의 등록 목록과 `isRegistered` 결과는 유지합니다.
 중지 중에는 입력을 전달하지 않고 신규 등록은 `BUSY`로 거부합니다.
 개별 또는 전체 제거는 중지 중에도 가능합니다. 재개하면 남은 목록을 다시 OS에 등록합니다.
-중지한 동안 다른 앱이 조합을 등록하면 재개는 `BUSY`이고 전체 목록을 중지 상태로 유지합니다.
+중지한 동안 다른 앱이 조합을 등록하면(Windows에서 확인한 동작입니다) 재개는 `BUSY`이고 전체 목록을 중지 상태로 유지합니다.
 재개 중 이미 얻은 새 등록은 rollback합니다. 반복 중지와 재개는 현재 상태를 유지합니다.
 
 Windows 해제 자체가 실패하면 중지 상태를 먼저 유지하며 입력 전달을 차단하고 `INTERNAL`을
 반환합니다. 반복 중지나 재개에서 남은 해제를 다시 시도합니다. 목록은 실패한 자원의 소유권을
 유지합니다. 네이티브 메시지 ID를 재사용하지 않으므로 제거하거나 중지하기 전에 큐에 들어온
 입력을 새 등록에 전달하지 않습니다. 한 어댑터 수명에서 사용할 수 있는 OS ID는 49,151개이며
-초과하면 `BUSY`입니다. 각 성공 등록과 재개 시도가 새 ID를 사용합니다.
+초과하면 `BUSY`입니다. 각 등록 시도(실패한 시도 포함)와 재개 시도가 새 ID를 사용합니다.
 
 `globalShortcut.pressed`의 payload는 `{ shortcut: { key, modifiers } }`입니다.
-받으려는 뷰의 events에 이 이름을 허용하고 구독해야 합니다. 반복 key-down은 MOD_NOREPEAT로
-억제합니다. 구독 전이나 연결이 없는 동안의 입력은 저장하지 않습니다.
+받으려는 뷰의 events에 이 이름을 허용하고 구독해야 합니다. Windows는 반복 key-down을 MOD_NOREPEAT로
+억제하고, macOS는 Carbon 문서상 누름과 뗌을 각각 알려 주며, 키를 누르고 있는 동안의 반복 동작은 자동 테스트로 확인하지 않았습니다. 구독 전이나 연결이 없는 동안의 입력은 저장하지 않습니다.
 
 `globalShortcut.released`는 같은 payload를 가진 별도 이벤트입니다. `pressed`만 허용한 뷰는
 받지 않으므로 기존 앱은 바뀌지 않습니다. 단축키의 주 키(key)가 놓이면 발행하며, 수정자 키는
-보지 않습니다. RegisterHotKey는 키 해제를 알려 주지 않으므로 `pressed` 뒤에 약 20~30ms(시스템 타이머 해상도에 따름) 주기의
+보지 않습니다. 아래 폴링 설명은 Windows 동작이며 macOS는 Carbon이 해제를 직접 알려 줍니다(위 macOS 절).
+Windows의 RegisterHotKey는 키 해제를 알려 주지 않으므로 `pressed` 뒤에 약 20~30ms(시스템 타이머 해상도에 따름) 주기의
 타이머로 주 키의 물리 상태(GetAsyncKeyState)를 확인합니다. 일반 키 입력을 감시하는 키보드 hook은
-설치하지 않습니다. 동작 범위는 다음과 같습니다.
+설치하지 않습니다. Windows의 동작 범위는 다음과 같습니다.
 
 - 포커스와 관계없이 동작하지만 `released`는 최대 한 주기 정도 늦게 도착하며, UI 스레드가 바쁘면 더 늦어집니다.
   짧게 눌렀다 뗀 입력도 `pressed` 뒤에 `released`가 한 번 도착합니다.
@@ -103,6 +129,7 @@ CANCELLED로 끝냅니다. 백엔드에는 `globalShortcut.waitForPress` 권한�
 미등록 작업이나 다른 플랫폼은 `UNSUPPORTED`입니다. 요청 취소는 `CANCELLED`, 기한 초과는
 `TIMEOUT`입니다. 이미 완료한 동기 OS 등록은 호출 취소로 되돌리지 않습니다.
 
-UI 어댑터가 보이지 않는 메시지 HWND를 소유하고 종료 때 모든 단축키와 HWND를 해제합니다.
+Windows에서는 UI 어댑터가 보이지 않는 메시지 HWND를 소유하고 종료 때 모든 단축키와 HWND를 해제합니다.
+macOS에서는 UI 어댑터가 Carbon 이벤트 핸들러와 등록을 소유하고 종료 때 모두 해제합니다.
 OS 정리 실패도 호스트에 보고하며 나머지 정리를 시도합니다. 창별 메뉴 accelerator와 WebView
-입력의 우선순위, 키 해제 알림과 다른 플랫폼 지원은 후속 작업입니다.
+입력의 우선순위, Linux 지원은 후속 작업입니다.
