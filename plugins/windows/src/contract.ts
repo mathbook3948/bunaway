@@ -44,6 +44,21 @@ export const WINDOW_ANCHORS = [
 export type WindowAnchor = (typeof WINDOW_ANCHORS)[number];
 /** Largest logical gap `windows.moveToAnchor` accepts between the window and the work-area edge. */
 const MAX_ANCHOR_MARGIN = 8192;
+/** Sides of a reference rectangle where `windows.moveNextToRect` can put a window. */
+export const WINDOW_RECT_PLACEMENTS = [
+  "above",
+  "below",
+  "left",
+  "right",
+] as const;
+export type WindowRectPlacement = (typeof WINDOW_RECT_PLACEMENTS)[number];
+/** Alignment along the axis parallel to the chosen side of the reference rectangle. */
+export const WINDOW_RECT_ALIGNMENTS = [
+  "start",
+  "center",
+  "end",
+] as const;
+export type WindowRectAlignment = (typeof WINDOW_RECT_ALIGNMENTS)[number];
 
 const coordinate = z
   .int()
@@ -1334,6 +1349,15 @@ export const windowOperations = {
     input: windowTarget.extend({
       anchor: z.enum(WINDOW_ANCHORS),
       monitorId: monitorSchema.shape.id.exactOptional(),
+      margin: z.int().min(0).max(MAX_ANCHOR_MARGIN).exactOptional(),
+    }),
+    output: z.null(),
+  },
+  "windows.moveNextToRect": {
+    input: windowTarget.extend({
+      rect: monitorRectSchema,
+      placement: z.enum(WINDOW_RECT_PLACEMENTS),
+      align: z.enum(WINDOW_RECT_ALIGNMENTS).exactOptional(),
       margin: z.int().min(0).max(MAX_ANCHOR_MARGIN).exactOptional(),
     }),
     output: z.null(),

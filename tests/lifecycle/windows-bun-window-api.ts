@@ -18,6 +18,155 @@ import { trayIco } from "../fixtures/tray-icon.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 assert.equal(process.platform, "win32");
+/** Real HWND placement beside synthetic reference rectangles; the hidden window and the foreground window stay as they were. */
+async function verifyMoveNextToRect({
+  editor,
+  area,
+  outer,
+  centered,
+  foreground,
+}: {
+  editor: {
+    view: string;
+  };
+  area: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  outer: {
+    x: number;
+    y: number;
+  };
+  centered: {
+    width: number;
+    height: number;
+  };
+  foreground: unknown;
+}) {
+  const clampSpan = (value: number, start: number, span: number) =>
+    Math.min(Math.max(value, start), start + span);
+  const anchorRect = {
+    x: area.x + Math.floor(area.width / 2),
+    y: area.y + Math.floor(area.height / 2),
+    width: 32,
+    height: 32,
+  };
+  const edgeRect = {
+    x: area.x + area.width - 48,
+    y: area.y + area.height - 40,
+    width: 32,
+    height: 32,
+  };
+  const maxX = area.width - centered.width;
+  const maxY = area.height - centered.height;
+  for (const [rect, placement, align, margin, x, y] of [
+    [
+      anchorRect,
+      "right",
+      "start",
+      12,
+      anchorRect.x + anchorRect.width + 12,
+      anchorRect.y,
+    ],
+    [
+      anchorRect,
+      "left",
+      "end",
+      0,
+      anchorRect.x - centered.width,
+      anchorRect.y + anchorRect.height - centered.height,
+    ],
+    [
+      anchorRect,
+      "above",
+      "center",
+      12,
+      anchorRect.x + Math.round((anchorRect.width - centered.width) / 2),
+      anchorRect.y - 12 - centered.height,
+    ],
+    [
+      edgeRect,
+      "below",
+      "center",
+      0,
+      edgeRect.x + Math.round((edgeRect.width - centered.width) / 2),
+      edgeRect.y + edgeRect.height,
+    ],
+    [
+      edgeRect,
+      "right",
+      "end",
+      0,
+      edgeRect.x + edgeRect.width,
+      edgeRect.y + edgeRect.height - centered.height,
+    ],
+  ] as const) {
+    await windows.setPosition({
+      ...editor,
+      x: outer.x,
+      y: outer.y,
+    });
+    assert.equal(
+      await windows.moveNextToRect({
+        ...editor,
+        rect,
+        placement,
+        align,
+        margin,
+      }),
+      null,
+    );
+    assert.deepEqual(
+      {
+        ...(await windows.getOuterBounds(editor)),
+      },
+      {
+        ...centered,
+        x: clampSpan(x, area.x, maxX),
+        y: clampSpan(y, area.y, maxY),
+      },
+    );
+  }
+  await windows.setPosition({
+    ...editor,
+    x: outer.x,
+    y: outer.y,
+  });
+  await windows.moveNextToRect({
+    ...editor,
+    rect: anchorRect,
+    placement: "below",
+  });
+  assert.deepEqual(
+    {
+      ...(await windows.getOuterBounds(editor)),
+    },
+    {
+      ...centered,
+      x: clampSpan(
+        anchorRect.x + Math.round((anchorRect.width - centered.width) / 2),
+        area.x,
+        maxX,
+      ),
+      y: clampSpan(anchorRect.y + anchorRect.height, area.y, maxY),
+    },
+  );
+  await assert.rejects(
+    windows.moveNextToRect({
+      ...editor,
+      rect: {
+        ...anchorRect,
+        width: 0,
+      },
+      placement: "below",
+    }),
+  );
+  assert.equal(await windows.isVisible(editor), false);
+  assert.equal(user.symbols.GetForegroundWindow(), foreground);
+}
+
 const root = process.argv.includes("--repo")
   ? (process.argv[process.argv.indexOf("--repo") + 1] ?? "")
   : resolve(import.meta.dir, "../..");
@@ -2288,6 +2437,13 @@ if (!process.argv.includes("--child")) {
               await windows.getOuterBounds(editor),
               movedBeforeAnchorReject,
             );
+            await verifyMoveNextToRect({
+              editor,
+              area: anchorArea,
+              outer,
+              centered,
+              foreground: centerForeground,
+            });
             await windows.setOuterBounds({
               ...editor,
               x: outer.x,
