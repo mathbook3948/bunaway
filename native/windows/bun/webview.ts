@@ -1344,7 +1344,7 @@ export class WebView {
   }
   /**
    * Apply an opaque document background. A color requested before the controller exists is kept
-   * and applied when it completes; a failed live change throws and keeps the previous color.
+   * and applied when it completes. A failed `put` throws and keeps the previous color; if only the read-back fails, the controller may already hold the new color while the remembered color stays unchanged.
    */
   setBackgroundColor(color: string): void {
     if (this.controller && !this.closing) {
