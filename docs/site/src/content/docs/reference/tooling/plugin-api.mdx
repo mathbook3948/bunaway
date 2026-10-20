@@ -108,6 +108,8 @@ Windows의 선택적 `setResizable`, `isResizable`, `setMovable`, `isMovable`은
 
 Windows의 선택적 `setAspectRatio(ratio)`와 `getAspectRatio()`는 사용자 크기 조절 중 내용 영역의 너비/높이 비율을 고정하거나(`null`이면 해제) 조회합니다. 설정할 때 현재 크기는 바꾸지 않습니다. `MIN_WINDOW_ASPECT_RATIO`(0.1)와 `MAX_WINDOW_ASPECT_RATIO`(10)가 허용 범위이고 `isWindowAspectRatio(value)`가 `null` 또는 이 범위의 유한한 수인지 확인합니다. 구현하지 않은 호스트는 메서드를 생략하고 플러그인이 `UNSUPPORTED`로 응답합니다.
 
+Windows의 선택적 `startDragging()`과 `startResizeDragging(direction)`은 누르고 있는 마우스 기본 버튼을 시스템 이동, 크기 조절 루프로 넘깁니다. `direction`은 `WindowResizeDirection`(`north`, `south`, `east`, `west`, `northEast`, `northWest`, `southEast`, `southWest`)입니다. 버튼이 눌려 있지 않거나 창이 최소화, 최대화, 전체화면이거나 이동, 크기 조절이 막혀 있으면 `INVALID_ARGUMENT`를 던집니다. 구현하지 않은 호스트는 메서드를 생략하고 플러그인이 `UNSUPPORTED`로 응답합니다.
+
 선택적 `NativeWindow.audio`는 Windows의 `NativeWebViewAudio` 서비스입니다.
 `getState()`는 `WebViewAudioState`의 `muted`, `playing`을 반환하고 `setMuted(muted)`는
 controller의 음소거를 변경합니다. 문서 탐색은 음소거를 유지하고 controller 재생성은

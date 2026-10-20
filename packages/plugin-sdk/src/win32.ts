@@ -345,6 +345,12 @@ export const USER32 = {
     args: [],
     returns: "i32",
   },
+  GetAsyncKeyState: {
+    args: [
+      "i32",
+    ],
+    returns: "i16",
+  },
   GetClipboardData: {
     args: [
       "u32",
@@ -428,6 +434,10 @@ export const USER32 = {
       "ptr",
     ],
     returns: "u32",
+  },
+  ReleaseCapture: {
+    args: [],
+    returns: "i32",
   },
   SendMessageW: {
     args: [

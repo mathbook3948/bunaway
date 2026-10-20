@@ -196,7 +196,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 창 icon을 실행 중 변경하고 조회한다. 이미지 입력과 배포 리소스 계약을 정의한다.
 - [ ] decorations와 frame의 초기 설정, 변경과 조회를 제공한다. `titlebar: "custom"`과 CSS drag는 구현됐으며 전체 decorations/frame API는 남아 있다.
 - [x] Windows `titlebar: "custom"`과 WebView2 CSS `app-region: drag/no-drag`, 네이티브 resize 테두리를 제공한다. 전체 테두리 제거와 caption overlay는 미지원이며 물리 마우스 및 접근성 도구 검증은 별도다.
-- [ ] 프로그램에서 창 이동과 방향별 크기 조절을 시작한다. 사용자 CSS `app-region: drag` 이동은 구현됐으며 코드로 이동과 크기 조절을 시작하는 API는 남아 있다.
+- [x] 프로그램에서 창 이동과 방향별 크기 조절을 시작한다. 사용자 CSS `app-region: drag` 이동과 함께 `startDragging`, `startResizeDragging(direction)`으로 코드에서 이동과 크기 조절을 시작한다.
 - [ ] 네이티브 제목 표시줄 버튼을 유지하는 title-bar overlay를 제공한다.
 - [x] `window.alwaysOnTop`, `setAlwaysOnTop`, `isAlwaysOnTop`으로 활성화 없는 topmost 설정과 조회를 제공한다.
 - [ ] alwaysOnBottom 및 창 Z 순서 이동의 지원 범위를 결정한다.

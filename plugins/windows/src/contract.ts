@@ -12,6 +12,7 @@ import {
   MIN_WINDOW_DIMENSION,
   parseNativeIco,
   type WindowAttentionMode,
+  type WindowResizeDirection,
 } from "@bunaway/plugin-api/native";
 import {
   errorSchema,
@@ -209,6 +210,18 @@ const attentionMode = z.enum([
   "untilFocused",
   "continuous",
 ]) satisfies z.ZodType<WindowAttentionMode>;
+
+/** Must stay aligned with the plugin API's `WindowResizeDirection`. */
+const resizeDirection = z.enum([
+  "north",
+  "south",
+  "east",
+  "west",
+  "northEast",
+  "northWest",
+  "southEast",
+  "southWest",
+]) satisfies z.ZodType<WindowResizeDirection>;
 
 const windowResult = {
   input: windowTarget,
@@ -1145,6 +1158,13 @@ export const windowOperations = {
   "windows.getAspectRatio": {
     input: windowTarget,
     output: aspectRatio,
+  },
+  "windows.startDragging": windowResult,
+  "windows.startResizeDragging": {
+    input: windowTarget.extend({
+      direction: resizeDirection,
+    }),
+    output: z.null(),
   },
   "windows.setSize": {
     input: z.strictObject({

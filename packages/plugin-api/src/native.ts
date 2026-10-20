@@ -88,6 +88,17 @@ export function hasValidWindowPlacement<
  */
 export type WindowAttentionMode = "untilFocused" | "continuous";
 
+/** Edge or corner grabbed by `startResizeDragging`. */
+export type WindowResizeDirection =
+  | "north"
+  | "south"
+  | "east"
+  | "west"
+  | "northEast"
+  | "northWest"
+  | "southEast"
+  | "southWest";
+
 /** Optional inclusive lower and upper bounds for a window's width and height. */
 export type WindowSizeConstraints = {
   minWidth: number | null;
@@ -442,6 +453,17 @@ export type NativeWindow = {
   setAspectRatio?(ratio: number | null): void;
   /** Reads the locked content width / height ratio, or null when none is set. Windows only. */
   getAspectRatio?(): number | null;
+  /**
+   * Hands the held primary mouse button to the system move loop. Throws INVALID_ARGUMENT unless the button
+   * is down, for minimized, maximized or fullscreen windows, and when setMovable(false) applies. Windows only.
+   */
+  startDragging?(): void;
+  /**
+   * Hands the held primary mouse button to the system size loop from the given edge or corner. Throws
+   * INVALID_ARGUMENT unless the button is down, for minimized, maximized or fullscreen windows, and when
+   * the window is not resizable or its size limits pin every axis the direction changes. Windows only.
+   */
+  startResizeDragging?(direction: WindowResizeDirection): void;
   /**
    * Minimizes and displays the window, allowing Windows to activate another window.
    * On macOS the state operations below only change the miniaturized and zoomed state and
