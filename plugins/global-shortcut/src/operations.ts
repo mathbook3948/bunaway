@@ -1,13 +1,13 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
+  type GlobalShortcutInstance,
   MAX_GLOBAL_SHORTCUTS,
   shortcutSchema,
 } from "#global-shortcut/contract";
-import type { initialize } from "#global-shortcut/platforms/windows";
 
-const operation = defineNativeOperation<ReturnType<typeof initialize>>();
-/** App-owned Windows shortcuts and cancellable press waits. Each operation needs its own grant. */
+const operation = defineNativeOperation<GlobalShortcutInstance>();
+/** App-owned Windows and macOS shortcuts and cancellable press waits. Each operation needs its own grant. */
 export const globalShortcutOperations = {
   register: operation({
     input: shortcutSchema,

@@ -177,9 +177,11 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 - [ ] enabled, visible, checked, radio, icon과 accelerator를 제공한다.
 - [ ] About, Quit, Edit, Help, Window와 Services 역할을 네이티브 메뉴에 연결한다.
 - [ ] 메뉴 삽입, 변경, 삭제, 조회와 popup 위치 및 선택 결과를 제공한다.
-- [ ] 앱 및 창 단축키와 전역 단축키의 등록, 조회와 해제를 제공한다.
-- [ ] 등록 충돌, 사용자 단축키와 권한 거부, 종료 시 정리를 정의한다.
-- [ ] 모든 전역 단축키의 일시 중지와 재개를 제공한다.
+- [x] 전역 단축키의 등록, 조회와 해제를 제공한다.
+- [ ] 앱 및 창 단축키의 등록, 조회와 해제를 제공한다.
+- [x] 전역 단축키의 등록 충돌, 권한 요구(없음)와 종료 시 정리를 정의한다.
+- [ ] 사용자 단축키를 정의한다.
+- [x] 모든 전역 단축키의 일시 중지와 재개를 제공한다.
 - [ ] 메뉴 header, palette, badge와 사용자 지정 accelerator의 필요성 및 최소 OS를 결정한다.
 
 ## 08. 로그인 시 자동 실행
