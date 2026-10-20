@@ -44,10 +44,10 @@ const EXTENDED_PREFIX = "\\\\?\\";
 
 /**
  * The spelling used for file system calls: a path already checked by `normalizeWindowsPath`. A
- * drive path gets the extended-length prefix. Without it Windows refuses a directory path of 248
- * characters or more and a file path of 260 or more unless the process opted in to long paths. The
+ * drive path gets the extended-length prefix. Without it Windows refuses to create a directory at 248
+ * characters or more and to open a file at 260 or more unless the process opted in to long paths. The
  * prefix is added to every drive path, not only long ones, because a folder walk starts at a short
- * root and builds longer child paths from it. Node adds it to every absolute path too. The checked
+ * root and builds longer child paths from it. Node does the same for drive paths. The checked
  * path has no `.`, `..` or empty parts, so the prefix, which turns off the system's own
  * normalization, changes nothing else. A UNC path keeps its spelling: Bun's directory listing
  * fails on the `UNC` form of the prefix. The prefix stays inside the plugin: results and mapped
@@ -60,11 +60,4 @@ export function toFileSystemPath(path: string): string {
 /** Check an app-selected path and return the spelling used for file system calls. */
 export function normalizeForFileSystem(input: string): string {
   return toFileSystemPath(normalizeWindowsPath(input));
-}
-
-/** Undo `toFileSystemPath`, so paths compare by the spelling the app used. */
-export function fromFileSystemPath(path: string): string {
-  return path.startsWith(EXTENDED_PREFIX)
-    ? path.slice(EXTENDED_PREFIX.length)
-    : path;
 }

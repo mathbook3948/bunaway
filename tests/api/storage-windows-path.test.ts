@@ -1,9 +1,7 @@
 import { expect, test } from "bun:test";
 import {
-  fromFileSystemPath,
   normalizeForFileSystem,
   normalizeWindowsPath,
-  toFileSystemPath,
 } from "../../plugins/storage/src/platforms/windows-path.ts";
 
 test("Windows storage paths keep valid drive and UNC spellings, with forward slashes as backslashes", () => {
@@ -80,15 +78,6 @@ test("every checked drive path gets the extended-length prefix for file system c
   );
   const long = `C:\\${"a".repeat(100)}\\${"b".repeat(100)}\\${"c".repeat(100)}.txt`;
   expect(normalizeForFileSystem(long)).toBe(`\\\\?\\${long}`);
-});
-
-test("the prefix is removed again so paths compare by the app's spelling", () => {
-  for (const path of [
-    "C:\\data\\a.txt",
-    "\\\\server\\share\\dir\\a.txt",
-  ]) {
-    expect(fromFileSystemPath(toFileSystemPath(path))).toBe(path);
-  }
 });
 
 test("a long path is accepted in the app's own spelling and refused with the prefix", () => {

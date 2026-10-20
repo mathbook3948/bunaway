@@ -32,6 +32,18 @@ const file = `${directory}\\한글 long.txt`;
 assert(file.length > 400, "The test path must exceed MAX_PATH.");
 const text = "long path 🙂";
 
+// Record whether the runner allows long paths without the prefix, so a result can be read correctly.
+const longPaths = Bun.spawnSync([
+  "reg",
+  "query",
+  "HKLM\\SYSTEM\\CurrentControlSet\\Control\\FileSystem",
+  "/v",
+  "LongPathsEnabled",
+]);
+console.log(
+  `LongPathsEnabled: ${longPaths.stdout.toString().trim() || "unreadable"}`,
+);
+
 try {
   await mkdir(root, {
     recursive: true,

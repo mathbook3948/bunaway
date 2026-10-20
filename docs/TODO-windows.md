@@ -852,10 +852,11 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [x] key-value store의 load, get, set, delete, clear와 목록 조회를 제공한다.
   이름 붙인 JSON 저장소를 앱 데이터 디렉터리의 고정 위치에 두며 경로는 받지 않는다.
   [store 계약](./site/src/content/docs/reference/plugins/store.mdx)을 따른다.
-- [x] storage가 260자 이상인 Windows 절대 경로를 다룬다.
-  플러그인이 검사를 통과한 드라이브 경로에 파일 시스템 호출 직전에 `\\?\` 접두사를 붙이며(UNC 경로는 그대로 둔다)
-  Node가 절대 경로에 붙이는 방식과 같다. 앱 입력의 접두사 거부와 공개 계약은 그대로다.
-  `windows-storage-long-path.ts`가 CI windows-native에서 확인한다.
+- [x] storage가 260자 이상인 Windows 드라이브 경로를 다룬다.
+  플러그인이 검사를 통과한 드라이브 경로에 파일 시스템 호출 직전에 `\\?\` 접두사를 붙이며
+  드라이브 경로에 대해서는 Node와 같다. UNC 경로는 접두사 없이 그대로 두므로 긴 UNC 경로는 남은 범위다.
+  앱 입력의 접두사 거부와 공개 계약은 그대로다.
+  `windows-storage-long-path.ts`가 CI windows-native에서 긴 경로의 동작을 확인한다.
   [읽기 계약](./site/src/content/docs/reference/host/storage-read-text.mdx)을 따른다.
 - [ ] store 변경 이벤트, save, reload와 autosave를 제공한다.
   save, reload, autosave는 구현했다. 남은 범위는 화면으로 보내는 변경 이벤트이며,
