@@ -225,6 +225,40 @@ test.skipIf(windowsOnly)(
 );
 
 test.skipIf(windowsOnly)(
+  "closeStdin behind a blocked write stops waiting when its signal aborts, and disposal still ends the child",
+  async () => {
+    const instance = fresh();
+    const { handle } = await start(instance, SLEEP);
+    const blocked = write(
+      instance,
+      {
+        handle,
+        dataBase64: Buffer.alloc(64 * 1024, 1).toString("base64"),
+      },
+      SOURCE,
+    ).catch((error: unknown) => error);
+    await Bun.sleep(100);
+    const controller = new AbortController();
+    const closing = closeStdin(
+      instance,
+      {
+        handle,
+      },
+      SOURCE,
+      controller.signal,
+    ).catch((error: unknown) => error);
+    controller.abort(new Error("stop closing"));
+    expect(await closing).toMatchObject({
+      message: "stop closing",
+    });
+    await dispose(instance);
+    expect(await blocked).toMatchObject({
+      code: "CANCELLED",
+    });
+  },
+);
+
+test.skipIf(windowsOnly)(
   "killing a child with a pending write settles the write and keeps the exit readable",
   async () => {
     const instance = fresh();

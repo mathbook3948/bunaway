@@ -32,8 +32,11 @@ export interface SpawnedChild {
    * write; bytes accepted before the abort are not withdrawn.
    */
   write(bytes: Uint8Array, signal: AbortSignal): Promise<WriteOutcome>;
-  /** Close stdin so the child sees end of file; repeating it does nothing. */
-  closeStdin(): Promise<void>;
+  /**
+   * Close stdin so the child sees end of file; repeating it does nothing. A write in progress
+   * finishes first; aborting `signal` stops that wait without closing stdin.
+   */
+  closeStdin(signal?: AbortSignal): Promise<void>;
   /** Terminate the child and its descendants; repeating it, or calling it after exit, succeeds. */
   kill(): Promise<void>;
   /** Terminate whatever is left, wait for it, then free pipes and handles. */

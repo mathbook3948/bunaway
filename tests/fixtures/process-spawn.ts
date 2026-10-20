@@ -24,8 +24,12 @@ export const write = (
   signal?: AbortSignal,
 ) => instance.spawned.write(source, input, signal);
 
-export const closeStdin = (instance: Instance, input: Handle, source: string) =>
-  instance.spawned.closeStdin(source, input);
+export const closeStdin = (
+  instance: Instance,
+  input: Handle,
+  source: string,
+  signal?: AbortSignal,
+) => instance.spawned.closeStdin(source, input, signal);
 
 export const kill = (instance: Instance, input: Handle, source: string) =>
   instance.spawned.kill(source, input);

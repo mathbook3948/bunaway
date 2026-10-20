@@ -206,11 +206,9 @@ export class WindowsProcessChild implements SpawnedChild {
     });
   }
 
-  async closeStdin(): Promise<void> {
+  async closeStdin(signal?: AbortSignal): Promise<void> {
     if (this.activeWrite !== undefined) {
-      await Promise.allSettled([
-        this.activeWrite,
-      ]);
+      await this.waitForWrite(this.activeWrite, signal);
     }
     if (this.writer) {
       this.closeHandle(this.writer);
@@ -218,11 +216,40 @@ export class WindowsProcessChild implements SpawnedChild {
     }
   }
 
-  kill(): Promise<void> {
+  /** Wait for a write to settle, or throw the abort reason if `signal` fires first. */
+  private async waitForWrite(
+    write: Promise<WriteOutcome>,
+    signal?: AbortSignal,
+  ) {
+    signal?.throwIfAborted();
+    let onAbort: (() => void) | undefined;
+    const aborted = new Promise<"aborted">((resolve) => {
+      onAbort = () => resolve("aborted");
+      signal?.addEventListener("abort", onAbort, {
+        once: true,
+      });
+    });
+    try {
+      const outcome = await Promise.race([
+        Promise.allSettled([
+          write,
+        ]).then(() => "settled" as const),
+        aborted,
+      ]);
+      if (outcome === "aborted") {
+        throw signal?.reason;
+      }
+    } finally {
+      if (onAbort) {
+        signal?.removeEventListener("abort", onAbort);
+      }
+    }
+  }
+
+  async kill(): Promise<void> {
     if (this.child && this.released === undefined) {
       this.terminateJob();
     }
-    return Promise.resolve();
   }
 
   release(): Promise<void> {
@@ -630,7 +657,11 @@ export class WindowsProcessChild implements SpawnedChild {
     const cancellationFailed =
       !this.api.symbols.CancelIoEx(this.writer, ptr(this.overlapped)) &&
       this.api.symbols.GetLastError() !== ERROR_NOT_FOUND;
+    const deadline = Date.now() + CLEANUP_TIMEOUT_MS;
     while (!this.writeFinished()) {
+      if (Date.now() >= deadline) {
+        throw new ProcessCleanupError();
+      }
       await Bun.sleep(POLL_INTERVAL_MS);
     }
     if (cancellationFailed) {
@@ -690,6 +721,15 @@ export class WindowsProcessChild implements SpawnedChild {
   private async performRelease() {
     let failed = false;
     this.closing = true;
+    // End the tree before waiting on a write: the broken pipe releases a write that a child
+    // not reading stdin would otherwise hold up, even if cancelling it fails.
+    try {
+      if (this.child) {
+        this.terminateJob();
+      }
+    } catch {
+      failed = true;
+    }
     if (this.activeWrite !== undefined) {
       const writes = await Promise.allSettled([
         this.activeWrite,

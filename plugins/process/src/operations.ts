@@ -50,8 +50,8 @@ export const processOperations = {
   closeStdin: operation({
     input: handleInputSchema,
     output: emptyResultSchema,
-    handler: async (input, { instance, source }) => {
-      await instance.spawned.closeStdin(source, input);
+    handler: async (input, { instance, source, signal }) => {
+      await instance.spawned.closeStdin(source, input, signal);
       return {};
     },
   }),

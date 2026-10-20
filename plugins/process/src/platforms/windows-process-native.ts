@@ -20,7 +20,7 @@ async function feedInput(
 ) {
   try {
     await child.write(inputBytes, signal);
-    await child.closeStdin();
+    await child.closeStdin(signal);
   } catch (error) {
     failures.error = error;
   }

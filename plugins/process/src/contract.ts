@@ -209,8 +209,12 @@ export interface SpawnedProcesses {
   ): Promise<ReadResult>;
   /** Write all bytes, waiting while the pipe is full. Aborting `signal` cancels only this write. */
   write(source: string, input: WriteInput, signal?: AbortSignal): Promise<void>;
-  /** Close stdin after a write in progress; closing twice succeeds. */
-  closeStdin(source: string, input: HandleInput): Promise<void>;
+  /** Close stdin after a write in progress; closing twice succeeds. Aborting `signal` stops the wait. */
+  closeStdin(
+    source: string,
+    input: HandleInput,
+    signal?: AbortSignal,
+  ): Promise<void>;
   /** End the child and its descendants; repeating it succeeds and the exit stays readable. */
   kill(source: string, input: HandleInput): Promise<void>;
   /** End every child, cancel pending calls and refuse new work. */

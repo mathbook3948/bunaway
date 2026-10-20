@@ -20,7 +20,7 @@ import {
 } from "../fixtures/process-spawn.ts";
 
 // These tests drive the handle contract through Bun.spawn children. Job Object containment
-// and the Win32 pipes are exercised by tests/lifecycle/windows-process.test.ts on Windows.
+// and the Win32 pipes are exercised by tests/lifecycle/windows-process-spawn.test.ts on Windows.
 setDefaultTimeout(deadline("childStep"));
 
 const SOURCE = "view:main";
@@ -568,7 +568,7 @@ test("an unread pipe blocks the child instead of queueing output, and every byte
   expect(bytes).toBe(total);
 });
 
-test("each stream gets at most half of a read while both have data", async () => {
+test("each stream keeps half of a read while both have data, and the leftover alternates", async () => {
   const instance = fresh();
   const { handle } = await start(
     instance,
@@ -587,8 +587,26 @@ test("each stream gets at most half of a read while both have data", async () =>
   );
   const stdout = Buffer.from(chunk.stdoutBase64, "base64").length;
   const stderr = Buffer.from(chunk.stderrBase64, "base64").length;
-  expect(stdout + stderr).toBeLessThanOrEqual(100);
-  expect(stderr).toBeGreaterThan(0);
+  expect(stdout).toBe(50);
+  expect(stderr).toBe(50);
+  // With a one byte limit the lead alternates, so neither stream is starved.
+  const single = [];
+  for (let index = 0; index < 2; index += 1) {
+    const next = await read(
+      instance,
+      {
+        handle,
+        maxBytes: 1,
+        waitMs: 0,
+      },
+      SOURCE,
+    );
+    single.push(next.stdoutBase64 === "" ? "stderr" : "stdout");
+  }
+  expect(single.sort()).toEqual([
+    "stderr",
+    "stdout",
+  ]);
   await kill(
     instance,
     {
@@ -615,6 +633,11 @@ test(`at most ${MAX_SPAWNED_PROCESSES} children are alive per adapter, counted u
     },
     SOURCE,
   );
+  // The child ended but its exit is unread, so the slot is still taken.
+  await Bun.sleep(100);
+  await expect(start(instance, SLEEP)).rejects.toMatchObject({
+    code: "BUSY",
+  });
   await readToExit(instance, first ?? "");
   handles.shift();
   const replacement = await start(instance, SLEEP);

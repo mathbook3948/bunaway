@@ -31,6 +31,8 @@ interface Entry {
   exitedAt: number | undefined;
   /** Release has started; the handle no longer resolves for callers. */
   ending: boolean;
+  /** Which stream gets the leftover share of the next read that has data on both. */
+  stderrLeads: boolean;
 }
 
 /**
@@ -94,6 +96,7 @@ export class SpawnedProcessTable implements SpawnedProcesses {
       writing: false,
       exitedAt: undefined,
       ending: false,
+      stderrLeads: false,
     });
     this.startSweeper();
     return {
@@ -175,9 +178,13 @@ export class SpawnedProcessTable implements SpawnedProcesses {
     }
   }
 
-  /** Close stdin after any write in progress; closing twice succeeds. */
-  async closeStdin(source: string, { handle }: HandleInput): Promise<void> {
-    await this.find(source, handle).child.closeStdin();
+  /** Close stdin after any write in progress; closing twice succeeds. Aborting `signal` stops the wait. */
+  async closeStdin(
+    source: string,
+    { handle }: HandleInput,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.find(source, handle).child.closeStdin(this.stopSignal(signal));
   }
 
   /** End the child and its descendants; the exit is still reported by the next read. */
@@ -196,7 +203,17 @@ export class SpawnedProcessTable implements SpawnedProcesses {
       if (entry.ending || entry.reading) {
         continue;
       }
-      entry.exitedAt ??= entry.child.state().exit ? now : undefined;
+      try {
+        entry.exitedAt ??= entry.child.state().exit ? now : undefined;
+      } catch {
+        // A child whose state cannot be read can never report its exit; release it instead of
+        // letting it hold a slot and block the other handles' sweep.
+        expired.push([
+          handle,
+          entry,
+        ]);
+        continue;
+      }
       if (
         entry.exitedAt !== undefined &&
         now - entry.exitedAt >= EXITED_HANDLE_RETENTION_MS
@@ -206,6 +223,10 @@ export class SpawnedProcessTable implements SpawnedProcesses {
           entry,
         ]);
       }
+    }
+    // Releases run one after another; mark them all first so no call can pick up a handle that is about to go.
+    for (const [, entry] of expired) {
+      entry.ending = true;
     }
     await attemptAllAsync(
       expired.map(
@@ -292,17 +313,32 @@ export class SpawnedProcessTable implements SpawnedProcesses {
   }
 
   /**
-   * Move buffered output out of the child. Stdout and stderr each get at most half of the
-   * limit while both have data, so a chatty stream cannot starve the other.
+   * Move buffered output out of the child. While both streams have data each keeps half of the
+   * limit (rounded down) for itself and the leftover goes to whichever leads this read; the lead
+   * alternates, so a chatty stream cannot starve the other even when `maxBytes` is 1.
    */
   private takeOutput(entry: Entry, maxBytes: number): ReadResult {
     const state = entry.child.state();
     if (state.exit) {
       entry.exitedAt ??= this.now();
     }
-    const stderrShare = Math.min(state.stderrBytes, Math.floor(maxBytes / 2));
-    const stdoutCount = Math.min(state.stdoutBytes, maxBytes - stderrShare);
-    const stderrCount = Math.min(state.stderrBytes, maxBytes - stdoutCount);
+    const bothHaveData = state.stdoutBytes > 0 && state.stderrBytes > 0;
+    const leadCount = (own: number, other: number) =>
+      Math.min(own, maxBytes - Math.min(other, Math.floor(maxBytes / 2)));
+    const followCount = (own: number, lead: number) =>
+      Math.min(own, maxBytes - lead);
+    let stdoutCount: number;
+    let stderrCount: number;
+    if (entry.stderrLeads) {
+      stderrCount = leadCount(state.stderrBytes, state.stdoutBytes);
+      stdoutCount = followCount(state.stdoutBytes, stderrCount);
+    } else {
+      stdoutCount = leadCount(state.stdoutBytes, state.stderrBytes);
+      stderrCount = followCount(state.stderrBytes, stdoutCount);
+    }
+    if (bothHaveData) {
+      entry.stderrLeads = !entry.stderrLeads;
+    }
     const stdout = entry.child.take("stdout", stdoutCount);
     const stderr = entry.child.take("stderr", stderrCount);
     const drained =
