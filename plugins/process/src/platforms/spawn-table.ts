@@ -163,11 +163,15 @@ export class SpawnedProcessTable implements SpawnedProcesses {
     }
     entry.writing = true;
     try {
+      const stop = this.stopSignal(signal);
       const outcome: WriteOutcome = await entry.child.write(
         Buffer.from(dataBase64, "base64"),
-        this.stopSignal(signal),
+        stop,
       );
       if (outcome === "closed") {
+        // A cancelled or disposed call reports the cancellation, not the pipe it left behind:
+        // disposal ends the tree first, so the broken pipe can be seen before the abort.
+        stop.throwIfAborted();
         throw new BunawayError({
           code: "INVALID_ARGUMENT",
           message: "Process input is closed.",

@@ -676,7 +676,7 @@ export class WindowsProcessChild implements SpawnedChild {
         // The kernel may still read `data` and write the OVERLAPPED: keep both untouched and
         // refuse further writes until release closes the pipe. Closing a handle does not wait
         // for such a request, so both also move to a set that is never emptied; this leaks
-        // 64 KiB at most and only after a failed cancellation, instead of freeing memory the
+        // 64 KiB per affected handle and only after a failed cancellation, instead of freeing memory the
         // kernel can still touch.
         this.stuckWrite = data;
         abandonedWrites.add(data);

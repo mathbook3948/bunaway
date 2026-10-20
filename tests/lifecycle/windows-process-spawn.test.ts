@@ -252,10 +252,10 @@ test.skipIf(windowsOnly)(
       message: "stop closing",
     });
     await dispose(instance);
-    // Disposal ends the tree first, so the blocked write sees the broken pipe (a closed
-    // input) or, if cancellation wins that race, CANCELLED. Either way it settles.
+    // Disposal ends the tree first, so the pipe can break before the abort is seen; the write
+    // still reports the cancellation.
     expect(await blocked).toMatchObject({
-      code: expect.stringMatching(/^(CANCELLED|INVALID_ARGUMENT)$/),
+      code: "CANCELLED",
     });
   },
 );
