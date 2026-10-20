@@ -193,3 +193,35 @@ test.skipIf(!native)(
     }
   },
 );
+
+test.skipIf(!native)(
+  "a real modal alert returns the clicked button and the checkbox state",
+  () => {
+    if (!factory) {
+      throw new Error("The native panel factory is unavailable.");
+    }
+    const alert = factory.createAlert(
+      alertSettings({
+        message: "Pick",
+        buttons: [
+          "First",
+          "Second",
+          "Third",
+        ],
+        checkbox: {
+          label: "Remember",
+          checked: true,
+        },
+      }),
+    );
+    try {
+      alert.scheduleClick(2, 0.5);
+      expect(alert.run()).toEqual({
+        button: 2,
+        checkboxChecked: true,
+      });
+    } finally {
+      alert.dispose();
+    }
+  },
+);

@@ -16,7 +16,7 @@ const UNIFORM_TYPES =
 const ALERT_FIRST_BUTTON_RETURN = 1000n;
 /** `NSControlStateValueOn`. */
 const CONTROL_STATE_ON = 1n;
-const ALERT_STYLES: Record<AlertStyle, bigint> = {
+const ALERT_STYLE_CODES: Record<AlertStyle, bigint> = {
   warning: 0n,
   informational: 1n,
   critical: 2n,
@@ -113,6 +113,8 @@ export type AlertReadBack = {
 /** One configured NSAlert. Every call must run on the main thread. */
 export type MessageAlert = {
   readBack(): AlertReadBack;
+  /** Clicks the button at `index` once the modal loop has run for `seconds`, as the user would. */
+  scheduleClick(index: number, seconds: number): void;
   /** Blocks in the modal loop until the user clicks a button. */
   run(): AlertAnswer;
   /** Releases the alert. Safe to repeat. */
@@ -486,10 +488,17 @@ function keyEquivalentOf(index: number, settings: AlertSettings): string {
 }
 
 function createAlert(runtime: Runtime, settings: AlertSettings): MessageAlert {
-  const { send, string, textOf, inPool, classOf, required, flag } = objcSession(
-    runtime,
-    "message dialogs",
-  );
+  const {
+    send,
+    string,
+    textOf,
+    inPool,
+    array,
+    selector,
+    classOf,
+    required,
+    flag,
+  } = objcSession(runtime, "message dialogs");
   let alert = 0n;
   const release = () => {
     if (alert) {
@@ -511,7 +520,7 @@ function createAlert(runtime: Runtime, settings: AlertSettings): MessageAlert {
       if (settings.detail !== null) {
         send(alert, "setInformativeText:", string(settings.detail));
       }
-      send(alert, "setAlertStyle:", ALERT_STYLES[settings.style]);
+      send(alert, "setAlertStyle:", ALERT_STYLE_CODES[settings.style]);
       for (const [index, title] of settings.buttons.entries()) {
         const button = required(
           send(alert, "addButtonWithTitle:", string(title)),
@@ -546,13 +555,17 @@ function createAlert(runtime: Runtime, settings: AlertSettings): MessageAlert {
     readBack: () =>
       inPool(() => {
         const count = buttonCount;
-        const style = Object.entries(ALERT_STYLES).find(
-          ([, value]) => value === send(alert, "alertStyle"),
+        const code = send(alert, "alertStyle");
+        const style = (Object.keys(ALERT_STYLE_CODES) as AlertStyle[]).find(
+          (name) => ALERT_STYLE_CODES[name] === code,
         );
+        if (style === undefined) {
+          internal("The alert reported an unknown style.");
+        }
         return {
           message: textOf(send(alert, "messageText")),
           detail: textOf(send(alert, "informativeText")),
-          style: (style?.[0] ?? "informational") as AlertStyle,
+          style,
           buttons: Array.from(
             {
               length: count,
@@ -567,6 +580,19 @@ function createAlert(runtime: Runtime, settings: AlertSettings): MessageAlert {
           ),
           checkbox: settings.checkbox === null ? null : checkboxOf(),
         };
+      }),
+    scheduleClick: (index, seconds) =>
+      inPool(() => {
+        runtime.delayed.symbols.objc_msgSend(
+          buttonAt(index),
+          selector("performSelector:withObject:afterDelay:inModes:"),
+          selector("performClick:"),
+          0n,
+          seconds,
+          array([
+            string(COMMON_MODES),
+          ]),
+        );
       }),
     run: () =>
       inPool(() => {

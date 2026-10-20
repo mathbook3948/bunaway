@@ -51,6 +51,7 @@ function fakePanels(
         readBack: () => {
           throw new Error("unused");
         },
+        scheduleClick: () => undefined,
         run: () => {
           events.push("run");
           return typeof alertAnswer === "function"
