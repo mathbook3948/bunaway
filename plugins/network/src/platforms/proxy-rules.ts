@@ -94,6 +94,42 @@ export type ProxyRules = {
 };
 
 /**
+ * Split a proxy list into entries. A password that contains ";" or a space splits its entry:
+ * "alice:1 2 3@host" gives "alice:1", "2" and "3@host", where only the last token has an "@" with
+ * user information that holds no ":". Such a token joins every token since the previous
+ * "@" token, so the whole user information (and any `scheme=` prefix in front of it) stays in one
+ * entry and `parseServer` drops it together. Proxies listed in that stretch before the entry
+ * are lost with it: a list is never allowed to leak a user name or password fragment as a host.
+ */
+function entryTokens(text: string): string[] {
+  const tokens: string[] = [];
+  let open = 0;
+  for (const token of text.split(SEPARATORS)) {
+    if (token === "") {
+      continue;
+    }
+    const at = token.lastIndexOf("@");
+    if (at < 0) {
+      tokens.push(token);
+      continue;
+    }
+    const userInfo = token.slice(0, at).replace(PROXY_URI_PREFIX, "$2");
+    if (userInfo.includes(":")) {
+      tokens.push(token);
+    } else {
+      tokens.push(
+        [
+          ...tokens.splice(open),
+          token,
+        ].join(" "),
+      );
+    }
+    open = tokens.length;
+  }
+  return tokens;
+}
+
+/**
  * Parse the WinHTTP proxy list syntax: `host:port`, `http=host:port;https=host:port;socks=host:port`
  * and `scheme://host:port`, separated by semicolons or whitespace. `ftp=` entries serve no
  * http or https URL and are ignored, as are malformed tokens.
@@ -105,22 +141,7 @@ export function parseProxyList(text: string): ProxyRules {
     socks: [],
     all: [],
   };
-  let previous: ProxyServer[] | undefined;
-  for (const token of text.split(SEPARATORS)) {
-    if (token === "") {
-      continue;
-    }
-    // A password that contains ";" or a space splits the entry: "user:pa;ss@host" leaves the
-    // fragment "user:pa" before a token whose user information has no ":". Drop that fragment
-    // so the user name never appears as a host.
-    const at = token.lastIndexOf("@");
-    if (
-      at >= 0 &&
-      !token.slice(0, at).replace(PROXY_URI_PREFIX, "$2").includes(":")
-    ) {
-      previous?.pop();
-    }
-    previous = undefined;
+  for (const token of entryTokens(text)) {
     const rule = RULE_PREFIX.exec(token);
     const name = rule?.[1]?.toLowerCase();
     // "ftp=" and any other scheme name serve no http or https URL.
@@ -138,9 +159,7 @@ export function parseProxyList(text: string): ProxyRules {
     if (!server) {
       continue;
     }
-    const list = kind === undefined ? rules.all : rules[kind];
-    list.push(server);
-    previous = list;
+    (kind === undefined ? rules.all : rules[kind]).push(server);
   }
   return rules;
 }

@@ -14,9 +14,6 @@ import {
 
 const WINHTTP_ACCESS_TYPE_NAMED_PROXY = 3;
 const ERROR_FILE_NOT_FOUND = 2;
-const ERROR_INVALID_PARAMETER = 87;
-const ERROR_WINHTTP_INVALID_URL = 12005;
-const ERROR_WINHTTP_UNRECOGNIZED_SCHEME = 12006;
 /** `WINHTTP_CURRENT_USER_IE_PROXY_CONFIG` on x64: BOOL, padding, then three string pointers. */
 const IE_PROXY_CONFIG_BYTES = 32;
 /** Upper bound on a configuration string read from WinHTTP, in UTF-16 units. */
@@ -211,15 +208,6 @@ export function winHttpApi(
   };
 }
 
-/** Errors that mean the request itself was wrong, not that automatic configuration is unavailable. */
-function isRequestError(error: number): boolean {
-  return (
-    error === ERROR_INVALID_PARAMETER ||
-    error === ERROR_WINHTTP_INVALID_URL ||
-    error === ERROR_WINHTTP_UNRECOGNIZED_SCHEME
-  );
-}
-
 /** The URL as a proxy script sees it: no user information or fragment, and for https only the origin. */
 function scriptUrl(url: URL): string {
   return url.protocol === "https:"
@@ -293,10 +281,9 @@ export async function resolveProxy(
       remaining,
       signal,
     );
+    // A source that fails, such as an unreachable or malformed script address, falls through to
+    // the next one.
     if (typeof found === "number") {
-      if (isRequestError(found)) {
-        return failure("Windows proxy lookup rejected the URL.");
-      }
       continue;
     }
     if (found.accessType === WINHTTP_ACCESS_TYPE_NAMED_PROXY) {

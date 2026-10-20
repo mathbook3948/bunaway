@@ -29,7 +29,7 @@ import {
   initialize,
   runResolveProxy,
 } from "#plugins/network/src/platforms/windows";
-import { deadline } from "../fixtures/deadlines";
+import { deadline, waitFor } from "../fixtures/deadlines";
 
 setDefaultTimeout(deadline("build"));
 
@@ -290,6 +290,22 @@ test("a password with a separator or slash leaves no user name in the result", (
       "proxy.example",
     ]);
   }
+  // More than one separator in the password, and a scheme prefix in front of the entry.
+  expect(
+    parseProxyList("alice:1 2 3@proxy.example:80").all.map(
+      (server) => server.host,
+    ),
+  ).toEqual([
+    "proxy.example",
+  ]);
+  expect(parseProxyList("a:b c d e@p.example:80").all).toEqual([
+    proxy("p.example", 80),
+  ]);
+  const scoped = parseProxyList("http=alice:pa ss@p.example:80");
+  expect(scoped.http).toEqual([
+    proxy("p.example", 80),
+  ]);
+  expect(scoped.all).toEqual([]);
   // A complete user:password entry does not remove the proxy listed before it.
   expect(
     parseProxyList("first.example:80;bob:pw@second.example:81").all.map(
@@ -567,19 +583,18 @@ test("the script sees no credentials, fragment or https path", async () => {
   ]);
 });
 
-test("an error that blames the request fails instead of falling back", async () => {
+test("a source that fails with any error falls through to the manual list", async () => {
   const { api } = fakeApi(
     {
       autoDetect: true,
+      autoConfigUrl: "proxy.corp/pac",
       proxy: "manual.example:80",
     },
     () => ERROR_INVALID_URL,
   );
-  await expect(
-    resolveProxy(api, "http://example.com/", 1000, live),
-  ).rejects.toMatchObject({
-    code: "INTERNAL",
-  });
+  expect(await resolveProxy(api, "http://example.com/", 1000, live)).toEqual([
+    proxy("manual.example", 80),
+  ]);
 });
 
 test("the deadline is spent across automatic steps", async () => {
@@ -697,7 +712,7 @@ test("macOS declares the operation and reports it as unsupported", () => {
   );
 });
 
-/** A worker that answers with the request, or never when told to hang. */
+/** A worker that answers with the request, after an optional delay, never when told to hang. */
 const ECHO_WORKER = `
 self.onmessage = (event) => {
   if (event.data.hang) {
@@ -706,7 +721,10 @@ self.onmessage = (event) => {
   if (event.data.crash) {
     throw new Error("boom");
   }
-  postMessage({ echoed: event.data.value });
+  setTimeout(
+    () => postMessage({ echoed: event.data.value }),
+    event.data.delayMs ?? 0,
+  );
 };
 `;
 
@@ -738,34 +756,65 @@ test("a worker request returns the reply and frees its slot", async () => {
   ).resolves.toEqual({
     echoed: 7,
   });
-  await Bun.sleep(50);
   expect(workers.size).toBe(0);
 });
 
-test("aborting a worker request rejects at once and stops the worker", async () => {
+test("an aborted request rejects at once but keeps its slot until the worker replies", async () => {
   const workers = new Set<Worker>();
   const controller = new AbortController();
   const pending = request(
     {
-      hang: true,
+      value: 1,
+      delayMs: 300,
     },
     controller.signal,
     workers,
+    1,
   );
   expect(workers.size).toBe(1);
   controller.abort(new Error("stop"));
   await expect(pending).rejects.toThrow("stop");
-  await Bun.sleep(100);
-  expect(workers.size).toBe(0);
+  // The worker is still busy, so the limit still counts it.
+  expect(workers.size).toBe(1);
   await expect(
     request(
       {
-        value: 1,
+        value: 2,
+      },
+      live,
+      workers,
+      1,
+    ),
+  ).rejects.toMatchObject({
+    code: "BUSY",
+  });
+  await waitFor(() => workers.size === 0, {
+    deadline: "childStep",
+    what: "the aborted worker to reply and retire",
+  });
+  await expect(
+    request(
+      {
+        value: 3,
+      },
+      live,
+      workers,
+      1,
+    ),
+  ).resolves.toEqual({
+    echoed: 3,
+  });
+  await expect(
+    request(
+      {
+        value: 4,
       },
       AbortSignal.abort(),
       workers,
     ),
-  ).rejects.toBeDefined();
+  ).rejects.toMatchObject({
+    name: "AbortError",
+  });
   expect(workers.size).toBe(0);
 });
 
@@ -784,7 +833,7 @@ test("a crashing worker is an internal error", async () => {
   });
 });
 
-test("workers at the limit refuse new requests with BUSY", async () => {
+test("a hung worker holds its slot until the owner terminates it", async () => {
   const workers = new Set<Worker>();
   const controller = new AbortController();
   const first = request(
@@ -795,20 +844,12 @@ test("workers at the limit refuse new requests with BUSY", async () => {
     workers,
     1,
   );
-  await expect(
-    request(
-      {
-        value: 1,
-      },
-      live,
-      workers,
-      1,
-    ),
-  ).rejects.toMatchObject({
-    code: "BUSY",
-  });
   controller.abort(new Error("stop"));
   await expect(first).rejects.toThrow("stop");
+  expect(workers.size).toBe(1);
+  for (const worker of workers) {
+    await worker.terminate();
+  }
 });
 
 test("startWorker runs module source without a file", async () => {

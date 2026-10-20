@@ -45,7 +45,7 @@ export const AUTO_PROXY_SYMBOLS = {
   },
 } as const satisfies Record<string, FFIFunction>;
 
-/** Most automatic lookups that may hold a worker at once, counting ones whose caller already left. */
+/** Most automatic lookups that may hold a worker at once, counting ones whose caller already left but whose native call has not returned. */
 export const MAX_AUTO_PROXY_WORKERS = 4;
 
 /**
@@ -99,19 +99,13 @@ function takeString(address) {
   }
 }
 
-// A failing call leaves a nonzero last error; a zero read means the FFI layer overwrote it, so
-// the (idempotent) call is repeated once.
+// A failing call leaves a nonzero last error. A zero read means the FFI layer overwrote it; the
+// call is not repeated (it may have waited the whole time budget), the error is reported as unknown.
 function callError(call) {
   if (call()) {
     return 0;
   }
-  let code = kernel.symbols.GetLastError();
-  if (code === 0) {
-    if (call()) {
-      return 0;
-    }
-    code = kernel.symbols.GetLastError();
-  }
+  const code = kernel.symbols.GetLastError();
   return code === 0 ? ERROR_UNKNOWN : code;
 }
 
@@ -204,10 +198,12 @@ export function startWorker(source: string): {
 /**
  * Send one request to a fresh worker running `source` and wait for its one reply.
  *
- * The caller leaves at once on abort, a worker error or the reply. The worker is then terminated;
- * if it is still inside a native call it ends when that call returns, and it counts toward
- * `limit` until then. At `limit` the call is refused with `BUSY` so slow lookups cannot pile up.
- * Every worker is registered in `workers`, which the owner terminates on dispose.
+ * The caller leaves at once on abort, a worker error or the reply. An aborted worker is not
+ * terminated: it may be inside a native call, and stopping its thread there would skip the
+ * cleanup that follows the call. It keeps its slot in `workers` until it replies (the native call
+ * has returned and its handles are closed) or fails, and only then is terminated. At `limit` a
+ * request is refused with `BUSY`, so slow lookups cannot pile up. The owner terminates whatever
+ * remains on dispose.
  */
 export async function requestFromWorker(
   options: {
@@ -231,28 +227,25 @@ export async function requestFromWorker(
   workers.add(worker);
   return new Promise((resolve, reject) => {
     let settled = false;
-    const finish = (settle: () => void) => {
-      if (settled) {
-        return;
+    let done = false;
+    const settle = (action: () => void) => {
+      if (!settled) {
+        settled = true;
+        signal.removeEventListener("abort", onAbort);
+        action();
       }
-      settled = true;
-      signal.removeEventListener("abort", onAbort);
-      release();
-      // Termination completes when a running native call returns; only then is the slot free.
-      Promise.resolve(worker.terminate()).then(
-        () => workers.delete(worker),
-        () => workers.delete(worker),
-      );
-      settle();
     };
-    const onAbort = () => finish(() => reject(signal.reason));
-    signal.addEventListener("abort", onAbort, {
-      once: true,
-    });
-    worker.onmessage = (event: MessageEvent) =>
-      finish(() => resolve(event.data));
-    worker.onerror = () =>
-      finish(() =>
+    // The worker has no native call in flight any more: free its slot and thread.
+    const retire = () => {
+      if (!done) {
+        done = true;
+        release();
+        workers.delete(worker);
+        void worker.terminate();
+      }
+    };
+    const fail = () => {
+      settle(() =>
         reject(
           new BunawayError({
             code: "INTERNAL",
@@ -260,6 +253,19 @@ export async function requestFromWorker(
           }),
         ),
       );
+      retire();
+    };
+    const onAbort = () => settle(() => reject(signal.reason));
+    signal.addEventListener("abort", onAbort, {
+      once: true,
+    });
+    worker.onmessage = (event: MessageEvent) => {
+      settle(() => resolve(event.data));
+      retire();
+    };
+    worker.onerror = fail;
+    worker.onmessageerror = fail;
+    worker.addEventListener("close", fail);
     worker.postMessage(request);
   });
 }
