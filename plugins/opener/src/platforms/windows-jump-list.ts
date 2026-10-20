@@ -241,7 +241,8 @@ export function createJumpLists(app: NativeEnvironment["app"]) {
     const variant = Buffer.alloc(PROPVARIANT_BYTES);
     variant.writeUInt16LE(VT_LPWSTR, 0);
     variant.writeBigUInt64LE(BigInt(ptr(title)), PROPVARIANT_VALUE_OFFSET);
-    // `title` stays referenced until the property store has copied it.
+    // The variant holds only the address, so the scope keeps the text alive until it is released.
+    scope.pin(title);
     setProperty(scope, link, PKEY_TITLE, variant);
     return link;
   }

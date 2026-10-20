@@ -125,12 +125,13 @@ const link = await opener.readShortcutLink("C:\\Users\\me\\Desktop\\App.lnk");
 대응 API가 없습니다. `ICustomDestinationList`로 opener의 I/O STA에서 동기 실행하며 요청마다 COM 객체를 만들고 해제합니다
 (`windows-jump-list.ts`, 공유 COM 범위는 `windows-com.ts`). task는 항상 실행 중인 앱을 `args`와 함께 다시 시작하고
 프로그램은 호출자가 정할 수 없습니다. 인자는 Windows argv 규칙으로 인용하며 `%`와 제어 문자는 거부합니다. 제거된 항목 조회는
-`BeginList`가 돌려주는 목록을 읽고 `AbortList`로 목록을 바꾸지 않은 채 끝냅니다. 빌드 중 실패는 `AbortList`로 이전 목록을
-남깁니다. 권한은 작업 이름 세 개이며 각각 별개이고, 호스트가 앱 정보를 주지 않으면 `UNSUPPORTED`입니다. 오류는
+`BeginList`가 돌려주는 목록을 읽고 `AbortList`로 목록을 바꾸지 않은 채 끝냅니다. 빌드 중 실패는 `AbortList`로 만들던 목록을
+버립니다. 권한은 작업 이름 세 개이며 각각 별개이고, 호스트가 앱 정보를 주지 않으면 `setJumpList`와
+`getJumpListRemovedItems`가 `UNSUPPORTED`입니다(`deleteJumpList`는 동작). 오류는
 `INVALID_ARGUMENT`, `UNSUPPORTED`, `INTERNAL`, 종료 뒤 호출과 시작 전에 중단된 호출의 `CANCELLED`입니다. 상한은 category 20개,
 항목 100개, 제목과 설명과 category 이름 260 코드 단위, 인자 줄 2048 코드 단위입니다. 셸이 표시하는 항목 수는 사용자 설정에
-따라 더 적을 수 있습니다. Windows CI는 목록 설정, 재설정, 삭제와 거부된 입력을 셸이 저장한 파일로 확인하며, 작업 표시줄 표시와
-클릭, 사용자의 항목 삭제, 고정 항목은 자동 검증하지 않았습니다.
+따라 더 적을 수 있습니다. Windows CI는 목록 설정, 재설정, 삭제와 스키마가 거부한 입력이 셸에 닿지 않음을 셸이 저장한 파일로 확인하며, 작업 표시줄 표시와
+클릭, 사용자의 항목 삭제, 고정 항목, 빌드 중 셸 실패와 category 거부 경로는 자동 검증하지 않았습니다.
 
 ## 지정 앱
 

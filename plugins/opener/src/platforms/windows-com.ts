@@ -40,6 +40,7 @@ export type ComArgument = "ptr" | "i32" | "u32";
 export class ComScope {
   readonly #bindings: ReturnType<typeof CFunction>[] = [];
   readonly #releases: (() => void)[] = [];
+  readonly #pinned: Buffer[] = [];
   readonly #fail: () => BunawayError;
 
   constructor(fail: () => BunawayError) {
@@ -105,12 +106,24 @@ export class ComScope {
     );
   }
 
+  /**
+   * Keep a native buffer reachable until `release`. Use it when only the buffer's address is
+   * stored, for example inside a PROPVARIANT, where nothing else references the buffer.
+   */
+  pin(buffer: Buffer): void {
+    this.#pinned.push(buffer);
+  }
+
+  /** Release every interface in reverse order and close the bindings; repeated calls do nothing. */
   release(): void {
-    for (const release of this.#releases.reverse()) {
+    const releases = this.#releases.splice(0).reverse();
+    const bindings = this.#bindings.splice(0);
+    for (const release of releases) {
       release();
     }
-    for (const binding of this.#bindings) {
+    for (const binding of bindings) {
       binding.close();
     }
+    this.#pinned.length = 0;
   }
 }
