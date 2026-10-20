@@ -356,6 +356,9 @@ try {
       delivered = name;
       break;
     }
+    // Let a late delivery from this tap arrive now, so it cannot pass for the next tap's result.
+    await Bun.sleep(QUIET_MS);
+    emitted.length = 0;
   }
   console.log(
     `macos-global-shortcut: OS-level key input delivered through ${delivered ?? "no tap"}`,

@@ -241,6 +241,9 @@ export function createCarbonHotKeys(): HotKeyDriver {
     | ((event: "pressed" | "released", id: number) => void)
     | undefined;
   const hotKeyId = new Uint32Array(2);
+  // Set when Carbon refuses to remove the handler: it can still call the callback, so the callback
+  // must stay open rather than become a dangling function pointer.
+  let handlerStillInstalled = false;
   const handler = owner.acquire(
     () =>
       new JSCallback(
@@ -287,7 +290,11 @@ export function createCarbonHotKeys(): HotKeyDriver {
           returns: "i32",
         },
       ),
-    (callback) => callback.close(),
+    (callback) => {
+      if (!handlerStillInstalled) {
+        callback.close();
+      }
+    },
   );
   // Two EventTypeSpec entries of { eventClass, eventKind }.
   const specs = new Uint32Array([
@@ -315,7 +322,14 @@ export function createCarbonHotKeys(): HotKeyDriver {
   owner.acquire(
     () => handlerRef[0] ?? 0n,
     (ref) => {
-      carbon.symbols.RemoveEventHandler(ref);
+      const removed = carbon.symbols.RemoveEventHandler(ref);
+      if (removed !== NO_ERROR) {
+        handlerStillInstalled = true;
+        throw new BunawayError({
+          code: "INTERNAL",
+          message: `Carbon could not remove the hot key handler (${removed}).`,
+        });
+      }
     },
   );
   const refs = new Map<number, bigint>();
