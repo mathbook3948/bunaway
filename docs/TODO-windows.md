@@ -860,7 +860,8 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   누락 키, 충돌 키와 중첩 객체를 load/reload하여 결과와 저장 시점을 검증한다.
 - [x] Store를 기본값으로 되돌리는 reset-to-defaults를 제공한다. 모든 값을 지우는 `clear`,
   디스크 값을 다시 읽는 `reload`와 구분한다. [T-store-live]의 `reset`을 참고한다.
-  기본값이 있는 경우와 없는 경우, 변경 이벤트, autosave 및 명시적 save 후 재실행 결과를 검증한다.
+  기본값이 있는 경우와 없는 경우, autosave 및 명시적 save 후 재실행 결과를 검증한다.
+  변경 이벤트는 위 이벤트 항목에서 다룬다.
 - [ ] SQLite의 query, execute, transaction과 migration을 제공한다.
 - [ ] Tauri SQL의 다른 backend와 원격 DB 지원 필요성을 결정한다.
 - [x] Bun 파일, path와 SQLite API를 직접 사용하는 trusted backend 경로와 권한 중재 API를 구분해 문서화한다.

@@ -363,7 +363,7 @@ test("reload, reset and clear differ and report whether anything changed", () =>
   expect(instance.reload("s", false)).toEqual({
     changed: false,
   });
-  // ignoreDefaults keeps only what the file holds, and the file lacks b until saved.
+  // ignoreDefaults keeps only what the file holds, and the earlier save already wrote b.
   expect(instance.reload("s", true)).toEqual({
     changed: false,
   });
@@ -842,13 +842,11 @@ test("a leftover temporary file does not stop the next save", () => {
 
 test("a failed shutdown save of one store does not skip the others", () => {
   const root = dataRoot();
-  let failNext = true;
   const instance = create(root, {
     rename(from, to) {
-      if (failNext) {
-        failNext = false;
-        throw Object.assign(new Error("denied"), {
-          code: "EACCES",
+      if (to.endsWith("a.json")) {
+        throw Object.assign(new Error("gone"), {
+          code: "ENOENT",
         });
       }
       renameSyncFor(from, to);
@@ -865,12 +863,263 @@ test("a failed shutdown save of one store does not skip the others", () => {
   });
   instance.set("a", "k", 1);
   instance.set("b", "k", 2);
-  // EACCES is retried, so the first attempt of the first store fails once and then succeeds.
-  instance.dispose();
-  expect(readStored(root, "a")).toEqual({
-    k: 1,
-  });
+  expect(() => instance.dispose()).toThrow(AggregateError);
+  expect(existsSync(storeFile(root, "a"))).toBe(false);
   expect(readStored(root, "b")).toEqual({
     k: 2,
+  });
+});
+
+/** Rename that fails with ENOENT while `state.failing` is set. */
+function switchableRename(state: { failing: boolean }): StoreFileOperations {
+  return {
+    rename(from, to) {
+      if (state.failing) {
+        throw Object.assign(new Error("gone"), {
+          code: "ENOENT",
+        });
+      }
+      renameSyncFor(from, to);
+    },
+    sleep() {},
+  };
+}
+
+test("a failed close keeps the store open and a later close saves it", () => {
+  const root = dataRoot();
+  const state = {
+    failing: true,
+  };
+  const instance = create(root, switchableRename(state));
+  instance.load({
+    name: "s",
+    ...manual,
+  });
+  instance.set("s", "k", 1);
+  expect(errorCodeOf(() => instance.close("s"))).toBe("ENOENT");
+  expect(instance.get("s", "k")).toEqual({
+    found: true,
+    value: 1,
+  });
+  state.failing = false;
+  instance.close("s");
+  expect(readStored(root, "s")).toEqual({
+    k: 1,
+  });
+});
+
+test("a failed autosave leaves the store dirty and the next change schedules another write", async () => {
+  const root = dataRoot();
+  const state = {
+    failing: true,
+  };
+  const instance = create(root, switchableRename(state));
+  instance.load({
+    name: "s",
+    autosave: 10,
+  });
+  instance.set("s", "k", 1);
+  await Bun.sleep(80);
+  expect(existsSync(storeFile(root, "s"))).toBe(false);
+  state.failing = false;
+  instance.set("s", "j", 2);
+  await waitFor(() => (existsSync(storeFile(root, "s")) ? true : undefined), {
+    deadline: "inProcess",
+    what: "autosave retry",
+  });
+  expect(readStored(root, "s")).toEqual({
+    k: 1,
+    j: 2,
+  });
+});
+
+test("reload follows the reset policy for a damaged file and reports it", () => {
+  const root = dataRoot();
+  const instance = create(root);
+  const options = {
+    name: "s",
+    defaults: {
+      d: 1,
+    },
+    onInvalidFile: "reset",
+    ...manual,
+  } as const;
+  instance.load(options);
+  instance.set("s", "k", 1);
+  instance.save("s");
+  writeFileSync(storeFile(root, "s"), "{ nope");
+  expect(instance.reload("s", false)).toEqual({
+    changed: true,
+  });
+  expect(Object.fromEntries(instance.entries("s"))).toEqual({
+    d: 1,
+  });
+  expect(instance.load(options)).toEqual({
+    loaded: "reset",
+  });
+
+  const strict = create(root);
+  strict.load({
+    name: "t",
+    ...manual,
+  });
+  strict.save("t");
+  writeFileSync(storeFile(root, "t"), "{ nope");
+  expect(errorCodeOf(() => strict.reload("t", false))).toBe("INVALID_ARGUMENT");
+});
+
+test("defaults that push the file over a limit fail load, or start over with reset", () => {
+  const root = dataRoot();
+  const first = create(root);
+  first.load({
+    name: "s",
+    ...manual,
+  });
+  for (let index = 0; index < MAX_STORE_KEYS - 1; index++) {
+    first.set("s", `k${index}`, index);
+  }
+  first.save("s");
+  first.close("s");
+  const extra = Object.fromEntries(
+    Array.from(
+      {
+        length: 30,
+      },
+      (_, index) => [
+        `new${index}`,
+        index,
+      ],
+    ),
+  );
+  const second = create(root);
+  expect(
+    errorCodeOf(() =>
+      second.load({
+        name: "s",
+        defaults: extra,
+        ...manual,
+      }),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+  expect(
+    second.load({
+      name: "s",
+      defaults: extra,
+      onInvalidFile: "reset",
+      ...manual,
+    }),
+  ).toEqual({
+    loaded: "reset",
+  });
+  expect(second.length("s")).toBe(30);
+});
+
+test("a value beyond the value limit is refused from a file or from defaults like a set of it", () => {
+  const root = dataRoot();
+  mkdirSync(join(root, "data", "stores"), {
+    recursive: true,
+  });
+  const oversized = "x".repeat(MAX_STORE_VALUE_BYTES + 1);
+  writeFileSync(
+    storeFile(root, "s"),
+    JSON.stringify({
+      k: oversized,
+    }),
+  );
+  const instance = create(root);
+  expect(
+    errorCodeOf(() =>
+      instance.load({
+        name: "s",
+        ...manual,
+      }),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+  expect(
+    errorCodeOf(() =>
+      instance.load({
+        name: "d",
+        defaults: {
+          k: oversized,
+        },
+        ...manual,
+      }),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+});
+
+test("a file the store may not read is reported as denied, not as damaged", () => {
+  // An administrator bypasses file permissions, so there is nothing to refuse.
+  if (process.getuid?.() === 0) {
+    return;
+  }
+  const root = dataRoot();
+  mkdirSync(join(root, "data", "stores"), {
+    recursive: true,
+  });
+  writeFileSync(storeFile(root, "s"), "{}", {
+    mode: 0o000,
+  });
+  const instance = create(root);
+  expect(
+    errorCodeOf(() =>
+      instance.load({
+        name: "s",
+        onInvalidFile: "reset",
+        ...manual,
+      }),
+    ),
+  ).toBe("PERMISSION_DENIED");
+});
+
+test("close after dispose is cancelled and integer-like keys come back first", () => {
+  const root = dataRoot();
+  const instance = create(root);
+  instance.load({
+    name: "s",
+    ...manual,
+  });
+  instance.set("s", "b", 1);
+  instance.set("s", "1", 2);
+  expect(instance.keys("s")).toEqual([
+    "b",
+    "1",
+  ]);
+  instance.save("s");
+  instance.dispose();
+  expect(errorCodeOf(() => instance.close("s"))).toBe("CANCELLED");
+  const next = create(root);
+  next.load({
+    name: "s",
+    ...manual,
+  });
+  expect(next.keys("s")).toEqual([
+    "1",
+    "b",
+  ]);
+});
+
+test("a reset that was saved is what a new instance loads", () => {
+  const root = dataRoot();
+  const first = create(root);
+  first.load({
+    name: "s",
+    defaults: {
+      a: 1,
+    },
+    ...manual,
+  });
+  first.set("s", "a", 5);
+  first.set("s", "extra", true);
+  first.reset("s");
+  first.save("s");
+  first.dispose();
+  const second = create(root);
+  second.load({
+    name: "s",
+    ...manual,
+  });
+  expect(Object.fromEntries(second.entries("s"))).toEqual({
+    a: 1,
   });
 });

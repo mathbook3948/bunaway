@@ -129,15 +129,28 @@ function storeIoError(error: unknown): unknown {
   }
   const failure = new BunawayError({
     code: "PERMISSION_DENIED",
-    message: "The store file cannot be written.",
+    message: "The store file cannot be accessed.",
   });
   failure.cause = error;
   return failure;
 }
 
-/** Serialize the entries as one JSON object in insertion order. */
+/**
+ * Serialize the entries as one JSON object. Keys keep their insertion order except that
+ * integer-like keys ("1", "42") come first in ascending order, as in every JavaScript object, so
+ * a store read back from its file lists them that way.
+ */
 function serialize(data: Map<string, StoreValue>): string {
   return JSON.stringify(Object.fromEntries(data), null, JSON_INDENT);
+}
+
+/** Each value must fit the per-value limit, wherever it came from. */
+function checkValueSizes(data: Map<string, StoreValue>): void {
+  for (const value of data.values()) {
+    if (byteLength(JSON.stringify(value)) > MAX_STORE_VALUE_BYTES) {
+      throw invalid("A value exceeds its size limit.", "value-too-large");
+    }
+  }
 }
 
 function checkFileSize(data: Map<string, StoreValue>): void {
@@ -190,13 +203,34 @@ function readFile(path: string): StoreRecord | undefined {
   return parsed as StoreRecord;
 }
 
+/** The file over the defaults, per key, checked against every limit. */
+function mergeContents(
+  defaults: StoreRecord,
+  stored: StoreRecord | undefined,
+): Contents {
+  const data = new Map(Object.entries(defaults));
+  for (const [key, value] of Object.entries(stored ?? {})) {
+    data.set(key, value);
+  }
+  if (data.size > MAX_STORE_KEYS) {
+    throw invalid("The stored keys and defaults exceed the key limit.");
+  }
+  checkValueSizes(data);
+  checkFileSize(data);
+  return {
+    data,
+    source: stored === undefined ? "new" : "file",
+  };
+}
+
 /**
  * Named JSON key-value stores kept in memory and saved to `<dataRoot>/data/stores/<name>.json`.
  *
  * Callers pass a store name, never a path. Every operation runs synchronously on the plugin's
  * worker, which executes one operation at a time, so no operation interleaves with another or
  * with an autosave timer. Another process writing the same file is not coordinated: the last
- * writer wins, and a second instance of the same app is refused by the host lock.
+ * writer wins. Windows refuses a second instance of the same app, so only programs outside the
+ * app, or a second macOS instance, can do that.
  *
  * Each open store owns a debounce timer and, while saving, a temporary file. `dispose` stops the
  * timers and saves what is still unsaved; later calls fail with `CANCELLED`.
@@ -239,7 +273,9 @@ export class NodeStore implements StoreInstance {
     }
     const defaults = input.defaults;
     if (defaults !== undefined) {
-      checkFileSize(new Map(Object.entries(defaults)));
+      const defaultEntries = new Map(Object.entries(defaults));
+      checkValueSizes(defaultEntries);
+      checkFileSize(defaultEntries);
       if (Object.keys(defaults).length > MAX_STORE_KEYS) {
         throw invalid("The defaults exceed the key limit.");
       }
@@ -368,6 +404,7 @@ export class NodeStore implements StoreInstance {
     const contents = this.readContents(store, ignoreDefaults);
     this.cancelTimer(store);
     store.data = contents.data;
+    store.loaded = contents.source;
     store.dirty = false;
     if (contents.source === "reset") {
       this.markDirty(store);
@@ -385,11 +422,11 @@ export class NodeStore implements StoreInstance {
 
   /** Save unsaved changes, then forget the store; a failed save leaves it open for a retry. */
   close(name: string): null {
+    this.ensureActive();
     const store = this.stores.get(name);
     if (store === undefined) {
       return null;
     }
-    this.ensureActive();
     this.cancelTimer(store);
     if (store.dirty) {
       this.persist(store);
@@ -457,35 +494,24 @@ export class NodeStore implements StoreInstance {
   /** Contents for a fresh load or a reload: the file over the defaults, per key. */
   private readContents(store: OpenStore, ignoreDefaults: boolean): Contents {
     const defaults = ignoreDefaults ? {} : (store.defaults ?? {});
-    let stored: StoreRecord | undefined;
     try {
-      stored = readFile(store.path);
+      return mergeContents(defaults, readFile(store.path));
     } catch (error) {
-      const damaged =
+      // A file the store cannot hold (damaged, or beyond a limit once merged with the defaults)
+      // is replaced by the next save when the caller chose to start over. Access failures are
+      // never treated as damage.
+      if (
+        store.onInvalidFile === "reset" &&
         error instanceof BunawayError &&
-        isRecord(error.details) &&
-        error.details.reason === "invalid-file";
-      if (!damaged || store.onInvalidFile === "error") {
-        throw error;
+        error.code === "INVALID_ARGUMENT"
+      ) {
+        return {
+          data: new Map(Object.entries(defaults)),
+          source: "reset",
+        };
       }
-      // The caller chose to start over; the damaged file is replaced by the next save.
-      return {
-        data: new Map(Object.entries(defaults)),
-        source: "reset",
-      };
+      throw storeIoError(error);
     }
-    const data = new Map(Object.entries(defaults));
-    for (const [key, value] of Object.entries(stored ?? {})) {
-      data.set(key, value);
-    }
-    if (data.size > MAX_STORE_KEYS) {
-      throw invalid("The stored keys and defaults exceed the key limit.");
-    }
-    checkFileSize(data);
-    return {
-      data,
-      source: stored === undefined ? "new" : "file",
-    };
   }
 
   private markDirty(store: OpenStore): void {
