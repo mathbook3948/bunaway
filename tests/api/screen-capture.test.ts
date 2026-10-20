@@ -1114,9 +1114,10 @@ test("a window closed while it was drawn is reported as not found", () => {
     {
       ...fake.bindings,
       printWindow(window, dc) {
-        const done = fake.bindings.printWindow(window, dc);
+        fake.bindings.printWindow(window, dc);
         world.windows.delete(1n);
-        return done;
+        // Windows fails the draw of a window that is destroyed while it is drawn.
+        return false;
       },
     },
     APP_PID,

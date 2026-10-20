@@ -1,5 +1,5 @@
 import { dlopen, JSCallback, ptr } from "bun:ffi";
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import assert from "node:assert/strict";
 import { wide } from "@bunaway/plugin/win32";
 import screenCapture from "@bunaway/plugin-screen-capture/native/windows";
@@ -7,7 +7,10 @@ import {
   captureOutputSchema,
   sourceListSchema,
 } from "#plugins/screen-capture/src/contract";
+import { deadline } from "../fixtures/deadlines.ts";
 import { decodePng } from "../fixtures/png.ts";
+
+setDefaultTimeout(deadline("build"));
 
 const WS_POPUP = 0x80000000;
 const WS_VISIBLE = 0x10000000;
@@ -108,6 +111,28 @@ function openDriver() {
       ],
       returns: "i64",
     },
+    PeekMessageW: {
+      args: [
+        "ptr",
+        "u64",
+        "u32",
+        "u32",
+        "u32",
+      ],
+      returns: "i32",
+    },
+    TranslateMessage: {
+      args: [
+        "ptr",
+      ],
+      returns: "i32",
+    },
+    DispatchMessageW: {
+      args: [
+        "ptr",
+      ],
+      returns: "i64",
+    },
     GetGuiResources: {
       args: [
         "u64",
@@ -137,6 +162,23 @@ function openDriver() {
 }
 
 const WNDCLASSEXW_BYTES = 80;
+const PM_REMOVE = 1;
+const MESSAGE_BYTES = 48;
+
+/**
+ * Handle the messages queued for the test thread's windows. The test thread owns the windows and
+ * never runs a message loop, so without this Windows would treat them as hung after a few seconds
+ * and a capture would be refused as not responding.
+ */
+function pumpMessages(driver: ReturnType<typeof openDriver>): void {
+  const message = Buffer.alloc(MESSAGE_BYTES);
+  while (
+    driver.user32.symbols.PeekMessageW(ptr(message), 0n, 0, 0, PM_REMOVE)
+  ) {
+    driver.user32.symbols.TranslateMessage(ptr(message));
+    driver.user32.symbols.DispatchMessageW(ptr(message));
+  }
+}
 const COLORREF = FILL.red | (FILL.green << 8) | (FILL.blue << 16);
 
 /**
@@ -228,8 +270,9 @@ test.skipIf(process.platform !== "win32")(
       const title = `bunaway-screen-capture-${process.pid}`;
       const window = createColoredWindow(driver, windowClass.name, title);
       windows.push(window);
-      const list = async (types: string[]) =>
-        sourceListSchema.parse(
+      const list = async (types: string[]) => {
+        pumpMessages(driver);
+        return sourceListSchema.parse(
           await adapter.execute(
             "screenCapture.listSources",
             {
@@ -238,8 +281,10 @@ test.skipIf(process.platform !== "win32")(
             "backend",
           ),
         );
-      const capture = async (id: string, edge: number) =>
-        captureOutputSchema.parse(
+      };
+      const capture = async (id: string, edge: number) => {
+        pumpMessages(driver);
+        return captureOutputSchema.parse(
           await adapter.execute(
             "screenCapture.captureSource",
             {
@@ -250,6 +295,7 @@ test.skipIf(process.platform !== "win32")(
             "backend",
           ),
         );
+      };
 
       const sources = await list([
         "window",

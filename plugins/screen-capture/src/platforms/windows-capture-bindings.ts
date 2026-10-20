@@ -437,6 +437,9 @@ export function captureBindings(libraries: CaptureLibraries): CaptureBindings {
       );
       const address = Number(bits.readBigUInt64LE(0));
       if (bitmap === 0n || address === 0) {
+        if (bitmap !== 0n) {
+          gdi32.symbols.DeleteObject(bitmap);
+        }
         return null;
       }
       return {

@@ -461,13 +461,16 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
       // The window renders at full size into its own bitmap, then the visible part is copied scaled.
       const memory = this.memoryDc(owner, screen);
       this.dibIn(owner, screen, memory, full);
-      checked(this.native.printWindow(ref.window, memory), "PrintWindow");
+      const printed = this.native.printWindow(ref.window, memory);
       this.native.flush();
-      // The window may have closed or asked for exclusion while it was drawn; do not return that content.
+      // The window may have closed or asked for exclusion while it was drawn; do not return that
+      // content. The window is looked up before a failed draw is reported, because a window that
+      // is destroyed mid-draw makes the draw fail.
       const after = this.native.windowFacts(ref.window);
       if (after === null || after.pid !== ref.pid || after.tid !== ref.tid) {
         fail("INVALID_ARGUMENT", "The window is gone.", REASON.notFound);
       }
+      checked(printed, "PrintWindow");
       if (after.displayAffinity !== 0) {
         protectedWindow();
       }
