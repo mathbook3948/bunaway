@@ -137,6 +137,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/desktop.test.ts",
           "tests/lifecycle/windows-os.test.ts",
           "tests/lifecycle/windows-process.test.ts",
+          "tests/lifecycle/windows-process-spawn.test.ts",
           "tests/lifecycle/process-run.test.ts",
           "tests/lifecycle/windows-network.test.ts",
           "tests/lifecycle/windows-network-online.test.ts",

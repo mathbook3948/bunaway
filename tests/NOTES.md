@@ -1071,6 +1071,14 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 자식은 PID 파일 쓰기를 완료한 뒤 rename으로 준비를 알린다. 두 생존 검사는 파일 생성과 쓰기 사이의
 경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.
 
+`api/process-spawn.test.ts`는 `process.spawn` 계열의 연산 등록, 독립 권한, 입력 검증과 핸들 계약을
+Bun 자식으로 검사한다. stdin/stdout/stderr 왕복과 종료 상태, 종료 한 번 보고 뒤 해제, 다른 호출자의
+핸들 거부, 동시 read/write 거부, 대기 시간, 취소, 동시 핸들 상한, 읽지 않은 파이프의 배압, 종료 후
+보존 기한과 폐기를 포함한다. Win32 Job과 파이프는 실행하지 않는다.
+`lifecycle/windows-process-spawn.test.ts`는 Windows에서만 실제 `.exe` 자식으로 `kill`과 루트 종료가
+손자까지 끝내는지, 가득 찬 stdin 파이프의 write 취소, 대기 중인 write와 `kill`, 읽지 않은 출력의
+배압, 반복 spawn과 `kill` 뒤 핸들 수, 폐기 시 손자 종료를 확인하며 `host:windows`에 포함된다.
+
 `api/network.test.ts`는 URL, header, bytes 상한과 독립 작업 권한을 검사한다.
 `lifecycle/windows-network.test.ts`는 생성 Windows와 macOS 어댑터 및 실제 loopback HTTP/WebSocket 서버로
 redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한다. `host:windows`에 포함되며

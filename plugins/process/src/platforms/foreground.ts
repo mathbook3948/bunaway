@@ -1,6 +1,14 @@
+import { attemptAllAsync } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
-import type { ProcessResult, processInputSchema } from "#process/contract";
+import type {
+  ProcessInstance,
+  ProcessResult,
+  processInputSchema,
+  SpawnInput,
+} from "#process/contract";
+import type { SpawnedChild } from "#process/platforms/spawn-child";
+import { SpawnedProcessTable } from "#process/platforms/spawn-table";
 
 const MAX_ACTIVE_PROCESSES = 8;
 type ProcessInput = z.output<typeof processInputSchema>;
@@ -10,17 +18,24 @@ export type ProcessExecutor = (
   signal: AbortSignal,
 ) => Promise<ProcessResult>;
 
-/** Own foreground processes and their cancellation until the host has drained them. */
-export function initialize() {
+/** Start one long-running child for the spawned-process table. */
+export type ChildLauncher = (
+  input: SpawnInput,
+  signal: AbortSignal,
+) => Promise<SpawnedChild>;
+
+/** Own foreground processes and spawned children, with their cancellation, until the host has drained them. */
+export function initialize(launch: ChildLauncher): ProcessInstance {
   return {
     active: new Map<AbortController, Promise<ProcessResult>>(),
+    spawned: new SpawnedProcessTable(launch),
     disposed: false,
   };
 }
 
 /** Enforce the per-plugin process limit and translate cancellation outcomes. */
 export async function runForeground(
-  state: ReturnType<typeof initialize>,
+  state: ProcessInstance,
   payload: ProcessInput,
   execute: ProcessExecutor,
   isCleanupFailure: (error: unknown) => boolean,
@@ -88,7 +103,7 @@ export async function runForeground(
 }
 
 /** Abort owned processes and wait for their completion before releasing the state. */
-export async function dispose(state: ReturnType<typeof initialize>) {
+export async function dispose(state: ProcessInstance) {
   state.disposed = true;
   for (const controller of state.active.keys()) {
     controller.abort(
@@ -98,5 +113,13 @@ export async function dispose(state: ReturnType<typeof initialize>) {
       }),
     );
   }
-  await Promise.allSettled(state.active.values());
+  await attemptAllAsync(
+    [
+      async () => {
+        await Promise.allSettled(state.active.values());
+      },
+      () => state.spawned.dispose(),
+    ],
+    "Process adapter cleanup failed.",
+  );
 }

@@ -8,8 +8,20 @@ On macOS the plugin uses `Bun.spawn` with an absolute POSIX path; cancellation, 
 and disposal send SIGKILL to the direct child only and wait for it and its pipes. Descendants are not
 terminated. The Windows implementation below is separate.
 
-The Windows plugin uses Win32 argv spawning without PATH lookup, shell strings, caller-selected env/cwd, detach,
-interactive handles or arbitrary PID termination. Captured binary stdout/stderr share a byte budget.
+On Windows, `spawn` keeps a child behind an opaque handle (`read`, `write`, `closeStdin`, `kill`, each
+granted independently) with the same executable and argv rules as `run`. Output is pulled with `read`
+instead of delivered as events: the Windows host has no general plugin event service, and events reach
+every subscribed view. The 8 KiB output pipes are the backpressure, so an unread child blocks instead of
+queueing output in the adapter. A handle belongs to the source that created it, each child gets its own
+kill-on-close Job Object, at most four children live at once, an exited child nobody reads is released
+after 60 seconds, and disposal ends every child and its descendants. The handle table is in
+`spawn-table.ts`; `windows-child.ts` is the Win32 child shared with `run`, and `bun-child.ts` backs the
+same table with `Bun.spawn` so `tests/api/process-spawn.test.ts` can cover the handle contract on any
+platform. Job Object containment and the Win32 pipes are covered only by
+`tests/lifecycle/windows-process-spawn.test.ts` on Windows.
+
+The Windows plugin uses Win32 argv spawning without PATH lookup, shell strings, caller-selected env/cwd, detach
+or arbitrary PID termination. Captured binary stdout/stderr share a byte budget.
 Public cancellation or a call deadline can reject the caller's promise before cancellation delivery,
 process death or pipe cleanup completes. The adapter continues to own termination and both pipe
 readers; its internal execution task and disposal wait for the invocation's entire process tree to exit. Plugin timeout and output

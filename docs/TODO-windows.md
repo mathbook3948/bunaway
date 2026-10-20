@@ -892,14 +892,17 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   경로만 실행하며 PATH, batch 파일과 호출자 env/cwd 설정을 받지 않는다.
 - [x] shell 문자열 실행과 argv 실행을 구분한다.
   `process.run`은 Bun argv 실행만 제공하며 shell 문자열 API를 제공하지 않는다.
-- [ ] spawn, stdout/stderr, stdin, exit code와 signal을 제공한다.
+- [x] spawn, stdout/stderr, stdin, exit code와 signal을 제공한다.
   `process.run`의 제한된 binary stdin, stdout/stderr 캡처, PID와 완료 결과는 구현했다.
-  장기 spawn handle과 interactive stdin, 출력 stream은 남아 있다.
-- [ ] process kill, timeout과 앱 종료 시 process tree 정리를 연결한다.
+  장기 실행은 `process.spawn`이 핸들을 발급하고 `read`(출력과 종료 상태), `write`,
+  `closeStdin`, `kill`로 다룬다. 출력은 이벤트가 아니라 `read`로 당겨 읽는다. Windows 호스트에는
+  플러그인이 쓸 수 있는 일반 이벤트 서비스가 없고 이벤트는 구독한 모든 뷰에 전달되기 때문이다.
+  Windows 종료 상태에 signal은 없어 `signal`은 `null`이다.
+- [x] process kill, timeout과 앱 종료 시 process tree 정리를 연결한다.
   호출 취소, timeout, 출력 초과와 어댑터 폐기는 호출별 Job Object로 자손까지 종료하고
   pipe를 닫는다. 직접 자식이 정상 종료해도 남은 자손을 정리한다. 앱 종료의 descendant
-  정리는 기존 host Job Object를 따른다. 장기 spawn handle의 kill은 handle 자체가
-  없어 남아 있다.
+  정리는 기존 host Job Object를 따른다. 장기 spawn handle은 핸들별 Job Object를 가지며
+  `kill`, 루트 종료, 어댑터 폐기가 자손까지 종료한다.
 - [ ] 번들 sidecar의 플랫폼 선택, 실행 경로, 라이선스와 패키징을 제공한다.
 - [ ] 앱 restart와 exit를 desktop 수명주기에 연결한다.
 - [x] CLI argument와 subcommand schema, help, 오류와 match 결과를 제공한다.

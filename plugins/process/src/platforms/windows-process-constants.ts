@@ -1,0 +1,32 @@
+/** Win32 flags, error codes and timing shared by the foreground runner and the spawned-child driver. */
+export const INVALID_HANDLE_VALUE = 0xffffffffffffffffn;
+export const GENERIC_READ = 0x80000000;
+export const OPEN_EXISTING = 3;
+export const HANDLE_FLAG_INHERIT = 1;
+export const PIPE_ACCESS_OUTBOUND = 2;
+export const PIPE_REJECT_REMOTE_CLIENTS = 8;
+export const FILE_FLAG_FIRST_PIPE_INSTANCE = 0x00080000;
+export const FILE_FLAG_OVERLAPPED = 0x40000000;
+export const STARTF_USESTDHANDLES = 0x100;
+export const EXTENDED_STARTUPINFO_PRESENT = 0x00080000;
+export const CREATE_NO_WINDOW = 0x08000000;
+export const CREATE_UNICODE_ENVIRONMENT = 0x00000400;
+export const PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x20002n;
+export const PROC_THREAD_ATTRIBUTE_JOB_LIST = 0x2000dn;
+export const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9;
+export const JOB_OBJECT_BASIC_ACCOUNTING_INFORMATION = 1;
+export const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000;
+export const ERROR_BROKEN_PIPE = 109;
+export const ERROR_NO_DATA = 232;
+export const ERROR_PIPE_CONNECTED = 535;
+export const ERROR_IO_PENDING = 997;
+export const ERROR_IO_INCOMPLETE = 996;
+export const ERROR_OPERATION_ABORTED = 995;
+export const ERROR_NOT_FOUND = 1168;
+export const ERROR_INSUFFICIENT_BUFFER = 122;
+export const WAIT_OBJECT_0 = 0;
+export const WAIT_TIMEOUT = 258;
+export const POLL_INTERVAL_MS = 2;
+export const CLEANUP_TIMEOUT_MS = 5000;
+/** Capacity of each pipe; a reader that stalls blocks the child once this much is queued. */
+export const PIPE_BUFFER_BYTES = 8192;
