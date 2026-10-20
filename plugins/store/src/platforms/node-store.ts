@@ -149,7 +149,7 @@ function storeIoError(error: unknown): unknown {
  *
  * The text is compact on purpose, so a file is not refused only because of its indentation.
  * Numbers written in exponent form ("1e20") expand when serialized, and such a file can exceed
- * the limit after reading; it is then refused like any other value that is too large.
+ * the limit after reading; it is then treated as a damaged file.
  */
 function serialize(data: Map<string, StoreValue>): string {
   return JSON.stringify(Object.fromEntries(data));
@@ -554,7 +554,10 @@ export class NodeStore implements StoreInstance {
     let stored: StoreRecord | undefined;
     try {
       stored = readFile(store.path);
-      checkValueSizes(new Map(Object.entries(stored ?? {})));
+      const fileEntries = new Map(Object.entries(stored ?? {}));
+      checkValueSizes(fileEntries);
+      // Serialized, the file alone may exceed the limit (exponent-form numbers expand): damage.
+      checkFileSize(fileEntries);
     } catch (error) {
       // A file the store cannot hold is replaced by the next save when the caller chose to
       // start over. Access failures are never treated as damage, and neither is a merge that

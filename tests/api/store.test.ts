@@ -1219,6 +1219,42 @@ test("a compact file near the size limit loads as it is and saves within the lim
   );
 });
 
+test("a file that grows past the size limit when serialized is damaged and can be reset", () => {
+  const root = dataRoot();
+  mkdirSync(join(root, "data", "stores"), {
+    recursive: true,
+  });
+  // Each 1e20 is 4 bytes on disk and 21 once serialized.
+  const list = `[${Array.from(
+    {
+      length: 9000,
+    },
+    () => "1e20",
+  ).join(",")}]`;
+  writeFileSync(storeFile(root, "s"), `{"a":${list},"b":${list},"c":${list}}`);
+  expect(readFileSync(storeFile(root, "s")).length).toBeLessThan(512 * 1024);
+  const strict = create(root);
+  expect(
+    errorCodeOf(() =>
+      strict.load({
+        name: "s",
+        ...manual,
+      }),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+  const lenient = create(root);
+  expect(
+    lenient.load({
+      name: "s",
+      onInvalidFile: "reset",
+      ...manual,
+    }),
+  ).toEqual({
+    loaded: "reset",
+  });
+  expect(lenient.length("s")).toBe(0);
+});
+
 test("nesting up to 57 levels is stored and 58 is refused", () => {
   const nested = (levels: number) =>
     JSON.parse(`${"[".repeat(levels)}${"]".repeat(levels)}`);
