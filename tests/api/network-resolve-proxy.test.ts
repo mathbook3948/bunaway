@@ -275,6 +275,32 @@ test("proxy credentials and malformed entries never reach the result", () => {
   expect(JSON.stringify(rules)).not.toMatch(/secret|admin|pw/);
 });
 
+test("a password with a separator or slash leaves no user name in the result", () => {
+  for (const list of [
+    "http://alice:12;34@proxy.example:8080",
+    "alice:12 34@proxy.example:8080",
+    "alice:9999/x@proxy.example:80",
+  ]) {
+    const servers = parseProxyList(list).all;
+    expect(servers.map((server) => server.host)).toEqual([
+      "proxy.example",
+    ]);
+  }
+  // A complete user:password entry does not remove the proxy listed before it.
+  expect(
+    parseProxyList("first.example:80;bob:pw@second.example:81").all.map(
+      (server) => server.host,
+    ),
+  ).toEqual([
+    "first.example",
+    "second.example",
+  ]);
+  // Unknown scheme names and oversized hosts are skipped.
+  expect(
+    parseProxyList(`socks6=h.example:1080 ${"a".repeat(254)}:80`).all,
+  ).toEqual([]);
+});
+
 test("the bypass list follows the WinHTTP token rules", () => {
   const url = (text: string) => new URL(text);
   const bypass =
@@ -310,6 +336,7 @@ test("loopback and link-local hosts are never proxied", () => {
   for (const host of [
     "example.com",
     "128.0.0.1",
+    "127.foo.example",
     "[2001:db8::1]",
     "10.0.0.1",
   ]) {
@@ -317,16 +344,32 @@ test("loopback and link-local hosts are never proxied", () => {
   }
 });
 
-test("entries for a URL take its own scheme first, then shared entries, then SOCKS", () => {
+test("entries for a URL take its own scheme first, then shared entries; SOCKS only when neither exists", () => {
   const list = "socks=s.example:1080;a.example:80;http=h.example:3128";
   expect(selectEntries(list, null, new URL("http://x.example/"))).toEqual([
     proxy("h.example", 3128),
     proxy("a.example", 80),
-    proxy("s.example", 1080, "socks4"),
   ]);
   expect(selectEntries(list, null, new URL("https://x.example/"))).toEqual([
     proxy("a.example", 80),
+  ]);
+  expect(
+    selectEntries(
+      "http=h.example:3128;socks=s.example",
+      null,
+      new URL("https://x.example/"),
+    ),
+  ).toEqual([
     proxy("s.example", 1080, "socks4"),
+  ]);
+  expect(
+    selectEntries(
+      "http=h.example:3128;socks=s.example",
+      null,
+      new URL("http://x.example/"),
+    ),
+  ).toEqual([
+    proxy("h.example", 3128),
   ]);
   // Only an http rule exists: https goes direct.
   expect(

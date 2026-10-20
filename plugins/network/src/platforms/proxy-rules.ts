@@ -21,7 +21,8 @@ const DEFAULT_PORTS: Record<ProxyScheme, number> = {
   socks5: 1080,
 };
 /** A list entry may carry `scheme=` (the URL scheme it serves) and `scheme://` (how to talk to the proxy). */
-const RULE_PREFIX = /^(http|https|ftp|socks)=(.*)$/i;
+const RULE_PREFIX = /^([a-z][a-z0-9]*)=(.*)$/i;
+const MAX_HOST_CHARS = 253;
 const PROXY_URI_PREFIX = /^(http|https|socks|socks4|socks5):\/\/(.*)$/i;
 const HOST_PORT = /^(\[[0-9a-f:.]+\]|[^:\s[\]]+)(?::(\d{1,5}))?$/i;
 const SEPARATORS = /[;\s]+/;
@@ -60,18 +61,19 @@ function parseServer(token: string, fallback: ProxyScheme): ProxyServer | null {
     scheme = proxyScheme(uri[1] ?? "", fallback);
     rest = uri[2] ?? "";
   }
+  // User information goes first: a password may contain "/", which must not hide the "@".
+  rest = rest.slice(rest.lastIndexOf("@") + 1);
   const slash = rest.indexOf("/");
   if (slash >= 0) {
     rest = rest.slice(0, slash);
   }
-  rest = rest.slice(rest.lastIndexOf("@") + 1);
   const match = HOST_PORT.exec(rest);
   if (!match) {
     return null;
   }
   const port =
     match[2] === undefined ? DEFAULT_PORTS[scheme] : Number(match[2]);
-  if (port < 1 || port > 65535) {
+  if (port < 1 || port > 65535 || (match[1] ?? "").length > MAX_HOST_CHARS) {
     return null;
   }
   return {
@@ -103,13 +105,25 @@ export function parseProxyList(text: string): ProxyRules {
     socks: [],
     all: [],
   };
+  let previous: ProxyServer[] | undefined;
   for (const token of text.split(SEPARATORS)) {
     if (token === "") {
       continue;
     }
+    // A password that contains ";" or a space splits the entry: "user:pa;ss@host" leaves the
+    // fragment "user:pa" before a token whose user information has no ":". Drop that fragment
+    // so the user name never appears as a host.
+    const at = token.lastIndexOf("@");
+    if (
+      at >= 0 &&
+      !token.slice(0, at).replace(PROXY_URI_PREFIX, "$2").includes(":")
+    ) {
+      previous?.pop();
+    }
+    previous = undefined;
     const rule = RULE_PREFIX.exec(token);
     const kind = rule?.[1]?.toLowerCase();
-    if (kind === "ftp") {
+    if (rule && kind !== "http" && kind !== "https" && kind !== "socks") {
       continue;
     }
     const server = parseServer(
@@ -119,11 +133,9 @@ export function parseProxyList(text: string): ProxyRules {
     if (!server) {
       continue;
     }
-    if (kind === "http" || kind === "https" || kind === "socks") {
-      rules[kind].push(server);
-    } else {
-      rules.all.push(server);
-    }
+    const list = kind === undefined ? rules.all : rules[kind];
+    list.push(server);
+    previous = list;
   }
   return rules;
 }
@@ -136,13 +148,9 @@ export function isImplicitDirect(hostname: string): boolean {
   }
   if (host.startsWith("[")) {
     const address = host.slice(1, -1);
-    return (
-      address === "::1" ||
-      /^fe[89ab][0-9a-f]:/.test(address) ||
-      address.startsWith("::ffff:127.")
-    );
+    return address === "::1" || /^fe[89ab][0-9a-f]:/.test(address);
   }
-  return host.startsWith("127.") || host.startsWith("169.254.");
+  return /^(?:127(?:\.\d{1,3}){3}|169\.254(?:\.\d{1,3}){2})$/.test(host);
 }
 
 function escapePattern(text: string): string {
@@ -204,7 +212,7 @@ export function matchesBypass(bypass: string | null, url: URL): boolean {
 
 /**
  * Entries for a URL from a configured proxy list and bypass list. Servers named for the URL's
- * scheme come first, then those that serve every scheme, then SOCKS fallbacks. When none apply
+ * scheme come first, then those that serve every scheme; SOCKS entries apply only when neither exists. When none apply
  * or the bypass list matches, the request goes direct.
  */
 export function selectEntries(
@@ -218,11 +226,12 @@ export function selectEntries(
   const rules = parseProxyList(proxyList);
   const seen = new Set<string>();
   const servers: ProxyServer[] = [];
-  for (const server of [
+  const direct = [
     ...rules[requestScheme(url)],
     ...rules.all,
-    ...rules.socks,
-  ]) {
+  ];
+  // SOCKS entries serve a URL only when no entry names its scheme, as in WinINet and Chromium.
+  for (const server of direct.length > 0 ? direct : rules.socks) {
     const key = `${server.scheme}://${server.host}:${server.port}`;
     if (!seen.has(key)) {
       seen.add(key);
