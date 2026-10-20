@@ -346,7 +346,12 @@ test.skipIf(process.platform === "win32")(
       );
       const hard = join(root, "hard");
       await link(sample, hard);
-      expect(resolveReadableFile(hard)).toBe(hard);
+      // Both names are the same inode, and the file system may report either one for a hard
+      // link, so the result must be one of the two names rather than always the requested one.
+      expect([
+        hard,
+        sample,
+      ]).toContain(resolveReadableFile(hard));
       await rm(hard);
       const fifo = join(root, "pipe");
       expect(
