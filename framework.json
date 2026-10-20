@@ -43,6 +43,7 @@
     "menu": "@bunaway/plugin-menu",
     "tray": "@bunaway/plugin-tray",
     "dialog": "@bunaway/plugin-dialog",
-    "store": "@bunaway/plugin-store"
+    "store": "@bunaway/plugin-store",
+    "screen-capture": "@bunaway/plugin-screen-capture"
   }
 }

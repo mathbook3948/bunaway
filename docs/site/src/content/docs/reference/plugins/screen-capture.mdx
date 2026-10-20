@@ -1,0 +1,104 @@
+---
+title: screen-capture
+description: Windows 모니터와 최상위 창의 목록을 조회하고 선택한 하나의 현재 화면을 PNG로 캡처합니다.
+sidebar: { order: 19 }
+---
+
+기본 export(`default`)를 `screenCapture`로 가져와 앱에 등록하고 호출합니다.
+
+`@bunaway/plugin-screen-capture` 패키지를 설치하고 앱의 `plugins`에 `screenCapture`를 등록합니다. Windows에서만
+제공하며 macOS에서는 두 작업 모두 `UNSUPPORTED`입니다. Electron의 `desktopCapturer.getSources`가 주는 소스 목록과
+thumbnail에 해당합니다. 사용자가 소스를 고르는 화면, `getDisplayMedia` 연결, 화면 공유 스트림, 시스템 오디오는
+제공하지 않습니다.
+
+```ts
+import screenCapture from "@bunaway/plugin-screen-capture";
+
+const sources = await screenCapture.listSources({ types: ["screen", "window"] });
+const first = sources[0];
+const thumbnail = await screenCapture.captureSource({
+  id: first.id,
+  maxWidth: 320,
+  maxHeight: 200,
+});
+```
+
+| 함수 | 입력 | 결과 | 권한 |
+| --- | --- | --- | --- |
+| `screenCapture.listSources` | `ScreenCaptureListInput` | `Promise<ScreenCaptureSource[]>` | `screenCapture.listSources` |
+| `screenCapture.captureSource` | `ScreenCaptureInput` | `Promise<ScreenCaptureImage>` | `screenCapture.captureSource` |
+
+## 소스 목록
+
+`listSources({ types })`의 `types`는 `"screen"`과 `"window"` 중 하나 이상이며 같은 값을 두 번 쓸 수 없습니다.
+각 소스는 `{ id, kind, name, bounds, ownedByApp, minimized, monitorId? }`입니다.
+
+- `id`는 무작위로 만든 불투명한 값입니다. `HWND`나 장치 이름이 아니며 다른 실행에서는 의미가 없습니다.
+  같은 소스가 다음 목록에도 있으면 같은 `id`를 유지하고, 목록에서 사라진 소스의 `id`는 무효가 됩니다.
+  창 핸들이 다른 창에 재사용되어도 프로세스와 스레드가 같지 않으면 같은 소스로 보지 않습니다. 모니터는 장치
+  이름(`\\.\DISPLAYn`)으로 식별하므로, 분리한 뒤 같은 장치 이름을 받은 모니터는 같은 소스입니다.
+- `kind`가 `"screen"`이면 모니터이고 이름은 열거 순서에 따른 `Screen 1`, `Screen 2`입니다. `monitorId`는 호스트의
+  모니터 API가 쓰는 장치 이름과 같아서 배율은 그쪽에서 확인합니다.
+- `kind`가 `"window"`이면 최상위 창이고 이름은 창 제목입니다. 보이는 창, 소유자가 없는 창, 도구 창이 아닌 창,
+  제목이 있는 창, 다른 가상 데스크톱에 숨겨지지 않은 창, 바탕 화면 셸 창이 아닌 창만 나옵니다. 이 규칙은 이
+  플러그인의 규칙이며 Chromium의 규칙과 같은지는 확인하지 않았습니다. 최소화된 창도 포함하고 `minimized`가
+  `true`입니다.
+- `bounds`는 가상 화면 좌표의 물리 픽셀입니다. 창은 그림자를 뺀 보이는 프레임 기준입니다.
+- `ownedByApp`은 창이 이 앱 프로세스의 것이면 `true`입니다. 자기 앱 창도 목록에 들어갑니다. 모니터는 항상
+  `false`입니다.
+- 이름은 256자(UTF-16 코드 단위)까지이며 더 길면 오류 없이 잘립니다. 소스는 최대 256개이고 더 많으면 일부만
+  돌려주지 않고 `INTERNAL`입니다.
+
+목록에는 thumbnail이 없습니다. 메시지 하나가 1 MiB를 넘을 수 없고 창마다 그리기를 요청하면 응답 없는 창의 영향을
+받기 때문입니다. thumbnail은 소스마다 `captureSource`를 작은 크기로 호출해 얻습니다. 이 점이 Electron과 다릅니다.
+
+## 캡처
+
+`captureSource({ id, maxWidth?, maxHeight? })`는 `{ mime: "image/png", data, width, height }`를 돌려줍니다. `data`는
+base64 PNG이고 `width`와 `height`는 물리 픽셀입니다. 이미지는 `maxWidth`와 `maxHeight`(각 1~4096, 기본 150) 상자
+안에 가로세로 비율을 지키며 맞추고 원본보다 크게 만들지 않습니다. 화면은 GDI `BitBlt`와 `StretchBlt`로, 창은
+`PrintWindow`로 그린 뒤 보이는 프레임만 잘라 줄입니다. 마우스 커서는 포함하지 않습니다.
+
+| 상황 | 오류 | `details.reason` |
+| --- | --- | --- |
+| 모르는 `id`, 목록에서 사라진 소스, 닫힌 창, 장치 이름이 사라진 모니터 | `INVALID_ARGUMENT` | `SOURCE_NOT_FOUND` |
+| 최소화되었거나 보이지 않거나 다른 가상 데스크톱에 있는 창 | `INVALID_ARGUMENT` | `SOURCE_UNAVAILABLE` |
+| 창이 `SetWindowDisplayAffinity`로 캡처 제외를 요청했거나 그 설정을 읽지 못함 | `PERMISSION_DENIED` | `SOURCE_PROTECTED` |
+| 창이 응답하지 않음 | `BUSY` | `SOURCE_NOT_RESPONDING` |
+| 창 사각형(보이지 않는 크기 조절 테두리 포함)이 7808 x 4448 면적을 넘거나 PNG가 640 KiB를 넘음 | `INVALID_ARGUMENT` | `CAPTURE_TOO_LARGE` |
+| GDI 또는 `PrintWindow` 호출 실패 | `INTERNAL` | 없음 |
+
+프로토콜에 `NOT_FOUND` 코드가 없어서 사라진 소스는 `INVALID_ARGUMENT`와 `SOURCE_NOT_FOUND`로 구분합니다.
+PNG가 640 KiB를 넘으면 작은 `maxWidth`와 `maxHeight`로 다시 호출합니다. 캡처가 검은 이미지인지는 판정하지
+않으므로 결과가 실제로 검은 화면일 수 있습니다. 상승된 권한으로 실행 중인 창과 DRM으로 보호된 창의 결과는
+확인하지 않았습니다.
+
+## 권한과 개인정보
+
+화면 내용은 가장 민감한 데이터 중 하나이고 Windows는 캡처 중이라는 표시를 하지 않습니다. 두 작업은 서로 독립된
+권한이며 하나를 허용해도 다른 하나는 허용되지 않습니다. 신뢰된 백엔드에서만 호출하는 방식을 권장합니다.
+
+- 뷰의 `commands`에는 `plugin.screenCapture.*`를 넣지 않고, 대상과 시점을 검사하는 앱 명령 하나만 허용합니다.
+- 뷰에서 시작한 백엔드 명령은 그 뷰의 `host.permissions`를 사용하므로 캡처가 필요한 뷰에만
+  `screenCapture.listSources`와 `screenCapture.captureSource`를 허용합니다. setup에서 호출하면
+  `backend.permissions`를 사용합니다.
+- 화면에서 직접 호출하려면 `commands`에 `plugin.screenCapture.listSources` 또는 `plugin.screenCapture.captureSource`를
+  허용해야 합니다. 권장하지 않으며 외부 콘텐츠를 보여 주는 뷰에는 허용하지 않습니다.
+
+`SetWindowDisplayAffinity`로 캡처 제외를 요청한 창은 창 캡처를 거부하고, 화면 캡처에서 보호된 창이 어떻게 나오는지는 확인하지 않았습니다.
+다른 앱이 건 보호 설정을 우회하지 않습니다.
+
+테스트 프로세스가 직접 만든 창은 메시지를 처리하지 않을 때만 알려진 색으로 캡처되었고, 같은 창에 메시지를 처리하게 하자
+중앙 픽셀이 검게 나온 실행이 있었습니다. 원인은 확인하지 않았으며, 메시지 루프를 도는 실제 앱 창의 캡처 결과는
+수동 확인 항목입니다.
+
+DPI를 인식하지 않는 창을 배율이 100%가 아닌 모니터에서 캡처한 결과는 확인하지 않았습니다. 이런 창은 `PrintWindow`가
+논리 크기로 그릴 수 있어 이미지의 일부만 채워질 수 있습니다.
+
+화면 함수의 마지막 인자는 `NativeInvokeOptions`입니다. `signal`과 `deadline`은
+[invoke](/reference/client/invoke/)의 규칙을 따르며, 이미 시작한 캡처는 중단하지 않습니다. 캡처는 호스트의 I/O
+Worker에서 한 번에 하나씩 실행합니다. 응답하지 않는 창은 검사 직후에 멈출 수도 있고, 그러면 `PrintWindow`가
+돌아올 때까지 같은 Worker의 다음 작업이 늦어집니다.
+
+잘못된 입력은 `INVALID_ARGUMENT`, 권한 거부는 `PERMISSION_DENIED`, 등록하지 않은 플랫폼은 `UNSUPPORTED`,
+종료된 어댑터와 취소는 `CANCELLED`, 호출 기한 초과는 `TIMEOUT`입니다.

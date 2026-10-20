@@ -378,6 +378,12 @@ export const USER32 = {
     ],
     returns: "i32",
   },
+  GetDC: {
+    args: [
+      "u64",
+    ],
+    returns: "u64",
+  },
   IsClipboardFormatAvailable: {
     args: [
       "u32",
@@ -454,6 +460,13 @@ export const USER32 = {
     args: [],
     returns: "i32",
   },
+  ReleaseDC: {
+    args: [
+      "u64",
+      "u64",
+    ],
+    returns: "i32",
+  },
   SendMessageW: {
     args: [
       "u64",
@@ -502,6 +515,50 @@ export const USER32_MENUS = {
       "ptr",
     ],
     returns: "u32",
+  },
+} as const satisfies Record<string, FFIFunction>;
+
+/** gdi32.dll: device contexts, device-independent bitmaps and the objects selected into them. */
+export const GDI32 = {
+  CreateCompatibleDC: {
+    args: [
+      "u64",
+    ],
+    returns: "u64",
+  },
+  CreateDIBSection: {
+    args: [
+      "u64",
+      "ptr",
+      "u32",
+      "ptr",
+      "u64",
+      "u32",
+    ],
+    returns: "u64",
+  },
+  DeleteDC: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
+  DeleteObject: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
+  GdiFlush: {
+    args: [],
+    returns: "i32",
+  },
+  SelectObject: {
+    args: [
+      "u64",
+      "u64",
+    ],
+    returns: "u64",
   },
 } as const satisfies Record<string, FFIFunction>;
 

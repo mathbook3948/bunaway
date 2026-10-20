@@ -64,6 +64,16 @@ if (target === "windows-x64") {
       ],
       root,
     );
+    // Own process: the test shows windows and switches the thread's DPI awareness while capturing.
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/windows-screen-capture.test.ts"),
+      ],
+      root,
+    );
     await run(
       [
         inputs.bun,
