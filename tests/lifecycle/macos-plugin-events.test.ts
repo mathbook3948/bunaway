@@ -1,5 +1,8 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { resolve } from "node:path";
+import { deadline, killAfter } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("childStep"));
 
 /** Runs the fixture in its own process because it replaces the AppKit modules globally. */
 async function runFixture() {
@@ -12,14 +15,15 @@ async function runFixture() {
     {
       stdout: "pipe",
       stderr: "pipe",
-      timeout: 15000,
     },
   );
+  const timer = killAfter(child, "childStep");
   const [output, errors, code] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
     child.exited,
   ]);
+  clearTimeout(timer);
   expect(code, `${output}\n${errors}`).toBe(0);
   return JSON.parse(output);
 }

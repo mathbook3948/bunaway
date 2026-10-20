@@ -45,8 +45,9 @@ export {
 /** Plugin-originated native events delivered to the app's WebViews. */
 export type NativeEventServices = {
   /**
-   * Sends one event to every live view whose current document subscribed to it, using the
-   * existing per-view policy and subscription checks. Events are dropped once the host stops.
+   * Sends one event to every live view whose current document has subscribed to it, or has a
+   * subscription request still pending. Only the subscription is checked per emit; the policy was
+   * checked when the subscription was made. Events are dropped once the host stops.
    */
   emit(event: string, payload: JsonValue): void;
 };
@@ -68,7 +69,7 @@ export type NativeEnvironment = {
   windows?: import("@bunaway/plugin-api/native").NativeWindowServices;
   /** Optional global shortcut message-window and event services on the native UI thread. */
   shortcuts?: import("@bunaway/plugin-api/native").NativeShortcutServices;
-  /** Optional event delivery for UI-thread adapters whose host has no dedicated service. */
+  /** Optional event delivery on the macOS host; the Windows host uses its dedicated services. */
   events?: NativeEventServices;
   /** Optional UI-thread menu integration, absent on platforms without native menus. */
   menus?: import("@bunaway/plugin-api/native").NativeMenuServices;

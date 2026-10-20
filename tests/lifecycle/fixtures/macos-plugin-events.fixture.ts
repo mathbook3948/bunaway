@@ -216,16 +216,15 @@ await settle();
 open("a", true);
 open("b", false);
 
+// Delivery is synchronous up to the host hook, so no wait is needed to observe it.
 windows.emitPluginEvent(EVENT, {
   count: 1,
 });
-await settle();
 const whileRunning = delivered.splice(0);
 stopping = true;
 windows.emitPluginEvent(EVENT, {
   count: 2,
 });
-await settle();
 console.log(
   JSON.stringify({
     whileRunning,
