@@ -385,15 +385,19 @@ if (mode === "verify") {
     mkdirSync(`${root}/tree-outside`);
     writeFileSync(`${root}/tree-outside/keep`, Buffer.alloc(100));
     symlinkSync(`${root}/tree-outside`, `${tree}/out`);
-    assert.deepEqual(call("storage.directorySize", tree), {
+    assert.deepEqual(await call("storage.directorySize", tree), {
       bytes: 15,
       files: 2,
       directories: 1,
     });
-    assert.equal(call("storage.removeRecursive", tree), null);
+    assert.equal(await call("storage.removeRecursive", tree), null);
     assert.equal(existsSync(tree), false);
     assert.equal(existsSync(`${root}/tree-outside/keep`), true);
-    expectCode(() => call("storage.removeRecursive", tree), "INVALID_ARGUMENT");
+    await assert.rejects(
+      async () => call("storage.removeRecursive", tree),
+      (error) =>
+        error instanceof BunawayError && error.code === "INVALID_ARGUMENT",
+    );
     results.push(
       "recursive total and removal skip links and leave their targets",
     );
