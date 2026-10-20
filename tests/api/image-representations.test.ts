@@ -315,3 +315,38 @@ test("transforms use the base image of a source with representations", () => {
     },
   ]);
 });
+
+test("a product that is mathematically whole accepts only that size", () => {
+  const { platform, make } = setup();
+  const base = make(50, 50);
+  expect(() =>
+    platform.addRepresentation({
+      id: base,
+      scaleFactor: 1.1,
+      source: make(56, 56),
+    }),
+  ).toThrow(/size/);
+  expect(() =>
+    platform.addRepresentation({
+      id: base,
+      scaleFactor: 1.1,
+      source: make(55, 55),
+    }),
+  ).not.toThrow();
+  const other = make(45, 45);
+  expect(() =>
+    platform.addRepresentation({
+      id: other,
+      scaleFactor: 1.4,
+      source: make(62, 62),
+    }),
+  ).toThrow(/size/);
+  const third = make(25, 25);
+  expect(() =>
+    platform.addRepresentation({
+      id: third,
+      scaleFactor: 2.2,
+      source: make(56, 56),
+    }),
+  ).toThrow(/size/);
+});

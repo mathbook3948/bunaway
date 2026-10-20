@@ -6,7 +6,8 @@ export function matchesLogicalSize(
   scaled: number,
   scaleFactor: number,
 ): boolean {
-  const exact = base * scaleFactor;
+  // Rounding to micro-pixels keeps products such as 50 * 1.1 = 55.00000000000001 from widening the range.
+  const exact = Math.round(base * scaleFactor * 1e6) / 1e6;
   return scaled === Math.floor(exact) || scaled === Math.ceil(exact);
 }
 
