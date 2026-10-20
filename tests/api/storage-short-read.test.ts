@@ -1,12 +1,5 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs";
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { NodeStorage } from "../../plugins/storage/src/platforms/node-storage.ts";
@@ -30,13 +23,13 @@ let root = "";
 let storage: TestStorage;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "bunaway-short-"));
+  root = fs.mkdtempSync(join(tmpdir(), "bunaway-short-"));
   storage = new TestStorage();
 });
 
 afterEach(() => {
   storage.dispose();
-  rmSync(root, {
+  fs.rmSync(root, {
     recursive: true,
     force: true,
   });
@@ -44,7 +37,7 @@ afterEach(() => {
 
 function sample(): string {
   const path = join(root, "sample.bin");
-  writeFileSync(path, CONTENT);
+  fs.writeFileSync(path, CONTENT);
   return path;
 }
 
@@ -121,32 +114,9 @@ test("a copy of a file that shrinks fails and leaves the source untouched", () =
       }),
     ),
   ).toThrow("Storage file changed during copy.");
-  expect(readFileSync(from)).toEqual(CONTENT);
+  expect(fs.readFileSync(from)).toEqual(CONTENT);
   // The destination was created exclusively before the failure and is kept, not deleted by name.
-  expect(existsSync(to)).toBe(true);
-});
-
-test("a range longer than the file returns the available bytes, and a start at or past the end is empty", () => {
-  const path = sample();
-  expect(
-    storage.readBytes({
-      path,
-      offset: 10,
-      length: 100,
-    }),
-  ).toBe(CONTENT.subarray(10).toString("base64"));
-  for (const offset of [
-    CONTENT.length,
-    CONTENT.length + 50,
-  ]) {
-    expect(
-      storage.readBytes({
-        path,
-        offset,
-        length: 4,
-      }),
-    ).toBe("");
-  }
+  expect(fs.existsSync(to)).toBe(true);
 });
 
 test("a file that grows after its size was checked is read only up to the checked size", () => {

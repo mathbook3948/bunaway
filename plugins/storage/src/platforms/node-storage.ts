@@ -511,7 +511,8 @@ export abstract class NodeStorage
    * existing file, directory or link to an existing target is never replaced. A link whose target
    * is missing is refused on POSIX, while Windows follows it and creates the target. A failed copy can leave a partial
    * destination, which is not deleted by name because the name may belong to something else. A file
-   * that shrinks during the copy fails the same way instead of producing a shorter copy.
+   * that shrinks during the copy fails like a read does instead of producing a shorter copy, and the
+   * partially written destination stays.
    */
   copyFile(input: StorageTransfer): null {
     const from = this.selected(input.from);
