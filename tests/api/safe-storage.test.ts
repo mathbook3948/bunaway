@@ -281,8 +281,10 @@ test("a DPAPI failure is BUSY only for a temporarily unavailable key service", (
       expect(dpapiFailure(code, decrypt).code).toBe("BUSY");
     }
   }
-  // ERROR_INVALID_DATA (damaged blob), ERROR_ACCESS_DENIED, an unreadable error and a zero code.
+  // ERROR_INVALID_PARAMETER (damaged blob), ERROR_INVALID_DATA, ERROR_ACCESS_DENIED, an unreadable
+  // error and a zero code.
   for (const code of [
+    87,
     13,
     5,
     WIN32_ERROR_UNKNOWN,

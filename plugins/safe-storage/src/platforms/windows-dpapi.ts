@@ -11,7 +11,7 @@ const CRYPTPROTECT_UI_FORBIDDEN = 0x1;
 /**
  * Win32 errors that mean the key service is not ready or did not answer, so the same call can
  * succeed later: ERROR_BUSY, ERROR_SERVICE_NOT_ACTIVE, RPC_S_SERVER_UNAVAILABLE and
- * RPC_S_SERVER_TOO_BUSY. Every other error, including ERROR_INVALID_DATA for a damaged blob and
+ * RPC_S_SERVER_TOO_BUSY. Every other error, including ERROR_INVALID_PARAMETER for a damaged blob and
  * an unreadable error, stays a permanent failure so data is never reported as retryable by guess.
  */
 const ERROR_BUSY = 170;
