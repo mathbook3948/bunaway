@@ -36,7 +36,7 @@ A populated list and network-printer latency are not covered by CI.
 dedicated video memory and the software-renderer flag; driver versions and renderer metrics are not included.
 macOS rejects it with `UNSUPPORTED`. `tests/api/os-gpus.test.ts` covers the `DXGI_ADAPTER_DESC1` layout, limits and
 release of every COM object with fake bindings; `tests/lifecycle/windows-os.test.ts` runs the call against real DXGI,
-where CI must list at least the software renderer. Hardware GPU lists are not covered by CI.
+where CI checks that the list is valid and not empty. Hardware GPU lists are not covered by CI.
 
 `os.usage` reports cumulative process CPU microseconds, memory bytes, logical CPU count and actual
 IsWow64Process2 machine values. Windows x64 CI does not validate ARM64 translation hardware.
