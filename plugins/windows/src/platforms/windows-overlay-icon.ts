@@ -36,14 +36,18 @@ let createIconFromResource: ReturnType<typeof openCreateIcon> | undefined;
  * Validate a base64 ICO and return a provider that builds an owned HICON from it at a requested pixel
  * size. Validation happens here, before any native call, so a malformed ICO is INVALID_ARGUMENT and
  * leaves the current overlay untouched. Each provider call returns a new HICON whose owner must
- * `DestroyIcon` it; a frame Windows rejects throws INVALID_ARGUMENT.
+ * `DestroyIcon` it; a frame Windows rejects throws INVALID_ARGUMENT. The same provider serves the
+ * window icon (`windows.setIcon`); `subject` only names the target in the error messages.
  */
-export function overlayIconProvider(ico: string): NativeOverlayIconProvider {
+export function overlayIconProvider(
+  ico: string,
+  subject: "overlay" | "window" = "overlay",
+): NativeOverlayIconProvider {
   const frames = parseNativeIco(ico);
   if (!frames) {
     throw new BunawayError({
       code: "INVALID_ARGUMENT",
-      message: "Invalid overlay ICO image.",
+      message: `Invalid ${subject} ICO image.`,
     });
   }
   return (sizePx) => {
@@ -51,7 +55,7 @@ export function overlayIconProvider(ico: string): NativeOverlayIconProvider {
     if (!frame) {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
-        message: "Invalid overlay ICO image.",
+        message: `Invalid ${subject} ICO image.`,
       });
     }
     // RT_ICON bits must be DWORD-aligned, so copy the frame out of the ICO payload.
@@ -70,7 +74,7 @@ export function overlayIconProvider(ico: string): NativeOverlayIconProvider {
     if (!icon) {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
-        message: "Windows rejected the overlay ICO image.",
+        message: `Windows rejected the ${subject} ICO image.`,
       });
     }
     return icon;

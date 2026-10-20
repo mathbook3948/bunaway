@@ -62,6 +62,7 @@ export const user = dlopen("user32.dll", {
     "MessageBoxW",
     "PeekMessageW",
     "PostMessageW",
+    "SendMessageW",
     "CreateWindowExW",
     "DestroyWindow",
   ),

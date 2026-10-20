@@ -586,6 +586,14 @@ export type NativeWindow = {
   ): void;
   /** Set this window's taskbar thumbnail tooltip, or restore the default for `null` or an empty string. Throws BUSY like `setTaskbarProgress`. Windows only. */
   setThumbnailToolTip?(toolTip: string | null): void;
+  /** Whether an icon set through `setIcon` is applied to this window. Windows only. */
+  hasCustomIcon?(): boolean;
+  /**
+   * Set the icon shown in this window's title bar, Alt+Tab and taskbar button from `icon`, called once for the
+   * small and once for the big size, or return to the application icon for `null`. The host owns the handles
+   * `icon` returns (see `NativeOverlayIconProvider`) and a rejected image keeps the current icon. Windows only.
+   */
+  setIcon?(icon: NativeOverlayIconProvider | null): void;
   /**
    * Set this window's taskbar overlay icon from `icon` with an accessibility description, or remove the
    * overlay for `null`, which ignores `description`. The host owns the handles `icon` returns (see

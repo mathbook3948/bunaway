@@ -124,6 +124,9 @@ const unsupportedThumbnailClip = unsupportedError(
 const unsupportedThumbnailToolTip = unsupportedError(
   "Thumbnail tooltip is not implemented on this platform.",
 );
+const unsupportedWindowIcon = unsupportedError(
+  "Window icon is not implemented on this platform.",
+);
 const unsupportedOverlayIcon = unsupportedError(
   "Taskbar overlay icon is not implemented on this platform.",
 );
@@ -872,6 +875,19 @@ function applyTaskbar(scope: ActionScope, call: WindowCall): ActionResult {
         unsupportedThumbnailToolTip,
       )(call.payload.toolTip);
       return null;
+    case "windows.setIcon":
+      // The provider validates the ICO before any native call; null restores the application icon.
+      supported(
+        window.setIcon,
+        unsupportedWindowIcon,
+      )(
+        call.payload.ico === null
+          ? null
+          : overlayIconProvider(call.payload.ico, "window"),
+      );
+      return null;
+    case "windows.hasCustomIcon":
+      return supported(window.hasCustomIcon, unsupportedWindowIcon)();
     case "windows.setOverlayIcon":
       // The provider validates the ICO before any native call; null removes the overlay.
       supported(window.setOverlayIcon, unsupportedOverlayIcon)(
