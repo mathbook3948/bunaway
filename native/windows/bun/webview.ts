@@ -1357,7 +1357,11 @@ export class WebView {
       this.putBackgroundColor(this.backgroundColor);
     }
   }
-  /** Set the controller's default background and read it back, so a wrong byte order or slot fails loudly. */
+  /**
+   * Set the controller's default background and read it back, which catches a mismatched put/get slot.
+   * The controller returns the stored value unchanged, so the read-back cannot detect a wrong byte
+   * order; a misplaced alpha byte is rejected by put, which accepts only 0 or 255.
+   */
   private putBackgroundColor(color: string): void {
     const controller = this.controller;
     assert(controller);
