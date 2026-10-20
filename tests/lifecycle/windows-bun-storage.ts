@@ -18,7 +18,7 @@ import { resolve } from "node:path";
 import builtStorage from "@bunaway/plugin-storage/native/windows";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import { WindowsStorage } from "#plugins/storage/src/platforms/windows";
-import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
+import { storageOperations } from "../../plugins/storage/src/operations.ts";
 
 const root = resolve(
   import.meta.dir,
@@ -54,7 +54,7 @@ function execute(
   const method: unknown = Reflect.get(instance, name);
   if (
     !operation.startsWith("storage.") ||
-    !Object.hasOwn(windowsOperations, name) ||
+    !Object.hasOwn(storageOperations, name) ||
     typeof method !== "function"
   ) {
     throw new BunawayError({

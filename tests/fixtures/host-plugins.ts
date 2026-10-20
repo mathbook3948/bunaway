@@ -18,7 +18,7 @@ import {
 } from "@bunaway/protocol";
 import { capabilitiesOperations } from "../../plugins/capabilities/src/operations.ts";
 import { windowsOperations as logOperations } from "../../plugins/log/src/operations.ts";
-import { windowsOperations } from "../../plugins/storage/src/platforms/windows-operations.ts";
+import { storageOperations } from "../../plugins/storage/src/operations.ts";
 import { windowDefinitions } from "../../plugins/windows/src/contract.ts";
 import { pluginParsers } from "./plugin-parsers.ts";
 
@@ -37,7 +37,7 @@ export const registry = new NativeRegistry(plugins);
 const parsers = new Map([
   [
     "storage",
-    pluginParsers("storage", windowsOperations),
+    pluginParsers("storage", storageOperations),
   ],
   [
     "log",

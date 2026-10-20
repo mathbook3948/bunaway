@@ -332,7 +332,7 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 현재 `@bunaway/plugin-storage` macOS 어댑터의 검증이 아니다.
 
 - [ ] 앱이 지정한 경로의 UTF-8 읽기와 쓰기, exists/stat 어댑터를 제공한다.
-- [ ] 경로 순회, symlink, hardlink와 대상 교체를 막고 파일 핸들의 소유권을 정의한다.
+- [ ] 경로 형식을 검사하고 링크는 따라간다. 위치 제한은 앱 명령이 맡는다([ADR 0024](./decisions/0024-plugin-path-responsibility.md)).
 - [ ] binary/append/open 핸들, 디렉터리 목록과 생성 및 삭제를 제공한다.
 - [ ] copy/rename/move, watch, 원자적 저장과 대용량 stream을 제공한다.
 - [ ] 파일 metadata와 OS 권한, 디렉터리 재귀 용량의 오류 및 취소를 정의한다.

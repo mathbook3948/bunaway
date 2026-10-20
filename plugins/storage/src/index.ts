@@ -5,7 +5,6 @@ import {
   disposeStorage as disposeMacosStorage,
 } from "#storage/platforms/macos";
 import { createStorage, disposeStorage } from "#storage/platforms/windows";
-import { windowsOperations } from "#storage/platforms/windows-operations";
 /** Typed storage operations; the application chooses paths and access rules. */
 export default defineNativePlugin({
   name: "storage",
@@ -13,13 +12,11 @@ export default defineNativePlugin({
     windows: {
       initialize: createStorage,
       dispose: disposeStorage,
-      operations: windowsOperations,
+      operations: storageOperations,
     },
     macos: {
       initialize: createMacosStorage,
       dispose: disposeMacosStorage,
-      // Darwin rename/delete cannot preserve the checked object's identity, and
-      // directorySize and removeRecursive are not implemented for macOS yet.
       operations: storageOperations,
     },
   },

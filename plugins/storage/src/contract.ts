@@ -130,9 +130,6 @@ export interface StorageInstance {
   createDirectory(input: StorageDirectoryCreate): null;
   exists(input: StorageLocation): boolean;
   stat(input: StorageLocation): StorageMetadata | null;
-}
-/** Windows additionally moves, removes (also whole trees) and totals directories. */
-export interface WindowsStorageInstance extends StorageInstance {
   move(input: StorageTransfer): null;
   remove(input: StorageLocation): null;
   removeRecursive(input: StorageLocation, signal?: AbortSignal): Promise<null>;

@@ -13,7 +13,7 @@ import { BunawayError } from "@bunaway/plugin";
 import type { MacosStorage } from "../../plugins/storage/src/platforms/macos.ts";
 import { executeMacosStorage } from "../fixtures/macos-storage-operations.ts";
 
-/** Exercise real directory descriptors and creation contracts in the caller's owned temporary root. */
+/** Exercise real directories and creation contracts in the caller's owned temporary root. */
 export function verifyMacosDirectories(
   storage: MacosStorage,
   root: string,
@@ -109,48 +109,43 @@ export function verifyMacosDirectories(
   denied(() => create(`${root}/plain-file`), "INVALID_ARGUMENT");
   denied(() => list(`${root}/plain-file`), "INVALID_ARGUMENT");
   denied(() => list(`${root}/missing-list`), "INVALID_ARGUMENT");
-  denied(() => create(`${root}/plain-file/child`, true), "PERMISSION_DENIED");
+  denied(() => create(`${root}/plain-file/child`, true), "INVALID_ARGUMENT");
+  // Links are followed like any path: a link to a directory lists and extends it, a dangling one is absent.
   symlinkSync(directory, `${root}/directory-link`);
-  for (const path of [
-    `${root}/directory-link`,
-    `${directory}/dangling`,
-  ]) {
-    denied(() => list(path), "PERMISSION_DENIED");
-    denied(() => create(path), "PERMISSION_DENIED");
-  }
-  denied(
-    () => create(`${root}/directory-link/child`, true),
-    "PERMISSION_DENIED",
-  );
-  assert.equal(existsSync(`${directory}/child`), false);
+  assert(Array.isArray(list(`${root}/directory-link`)));
+  assert.equal(create(`${root}/directory-link`), null);
+  denied(() => list(`${directory}/dangling`), "INVALID_ARGUMENT");
+  denied(() => create(`${directory}/dangling`), "INVALID_ARGUMENT");
+  assert.equal(create(`${root}/directory-link/child`, true), null);
+  assert.equal(existsSync(`${directory}/child`), true);
   const privateDirectory = `${root}/private-directory`;
   create(privateDirectory);
   chmodSync(privateDirectory, 0);
   try {
     denied(() => list(privateDirectory), "PERMISSION_DENIED");
-    denied(() => create(privateDirectory), "PERMISSION_DENIED");
+    assert.equal(create(privateDirectory), null);
   } finally {
     chmodSync(privateDirectory, 0o700);
   }
-  for (const path of [
-    directory,
-    `${root}/plain-file`,
-    `${root}/missing-remove`,
-    `${directory}/dangling`,
-  ]) {
-    denied(
-      () =>
-        executeMacosStorage(storage, "storage.remove", {
-          path,
-        }),
-      "UNSUPPORTED",
-    );
-  }
+  const remove = (path: string) =>
+    executeMacosStorage(storage, "storage.remove", {
+      path,
+    });
+  denied(() => remove(directory), "INVALID_ARGUMENT");
+  denied(() => remove(`${root}/missing-remove`), "INVALID_ARGUMENT");
   assert.equal(existsSync(directory), true);
-  assert.equal(existsSync(`${root}/plain-file`), true);
+  // A file, a link (not its target) and an empty directory are removed.
+  assert.equal(remove(`${root}/plain-file`), null);
+  assert.equal(existsSync(`${root}/plain-file`), false);
+  assert.equal(remove(`${directory}/link`), null);
+  assert.equal(remove(`${directory}/dangling`), null);
+  assert.equal(remove(`${root}/directory-link`), null);
+  assert.equal(existsSync(directory), true);
+  assert.equal(remove(`${directory}/child`), null);
+  assert.equal(existsSync(`${directory}/child`), false);
   return [
-    "checked directory streams, UTF-16 ordering, observed links and hardlinks, direct children and exact 256-entry bound",
-    "default nonrecursive and recursive private directory creation, idempotence, missing parents, type, links and OS denials",
-    "unknown and special directory kinds fail closed; unsupported remove preserves existing objects",
+    "directory listing, UTF-16 ordering, observed links and hardlinks, direct children and exact 256-entry bound",
+    "default nonrecursive and recursive private directory creation, idempotence, missing parents, type, links and an unreadable directory",
+    "unknown and special directory kinds fail closed; links are followed, remove deletes files, links and empty directories only",
   ];
 }

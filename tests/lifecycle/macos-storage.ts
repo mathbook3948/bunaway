@@ -1,4 +1,3 @@
-import { dlopen, ptr, read } from "bun:ffi";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
@@ -10,7 +9,6 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
-  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -47,96 +45,10 @@ function expectCode(action: () => unknown, code: string): void {
   );
 }
 
-/** A real competing process replaces a parent or leaf with an outside symlink. */
-function runRacer(root: string, kind: string): void {
-  const slot = `${root}/slot`;
-  const parked = `${root}/parked`;
-  const outside = `${root}/outside`;
-  const candidate = kind === "parent" ? slot : `${slot}/target`;
-  const saved = kind === "parent" ? parked : `${slot}/parked`;
-  const destination = kind === "parent" ? outside : `${outside}/target`;
-  const swapper =
-    kind === "parent"
-      ? dlopen("/usr/lib/libSystem.B.dylib", {
-          renameatx_np: {
-            args: [
-              "i32",
-              "ptr",
-              "i32",
-              "ptr",
-              "u32",
-            ],
-            returns: "i32",
-          },
-          __error: {
-            args: [],
-            returns: "ptr",
-          },
-        })
-      : undefined;
-  const candidatePath = Buffer.from(`${candidate}\0`);
-  const savedPath = Buffer.from(`${saved}\0`);
-  const AT_FDCWD = -2;
-  const RENAME_SWAP = 2;
-  const swapParent = () => {
-    assert(swapper);
-    if (
-      swapper.symbols.renameatx_np(
-        AT_FDCWD,
-        ptr(candidatePath),
-        AT_FDCWD,
-        ptr(savedPath),
-        RENAME_SWAP,
-      ) < 0
-    ) {
-      const address = swapper.symbols.__error();
-      assert(address, "Racer errno is unavailable.");
-      throw new Error(
-        `Atomic parent replacement failed (${read.i32(address)}).`,
-      );
-    }
-  };
-  try {
-    if (swapper) {
-      symlinkSync(destination, saved);
-    }
-    writeFileSync(`${root}/ready.new`, "ready");
-    renameSync(`${root}/ready.new`, `${root}/ready`);
-    let swaps = 0;
-    while (!existsSync(`${root}/stop`)) {
-      if (kind === "leaf") {
-        // Atomic replacements avoid a missing-name window in which O_CREAT
-        // could create a fresh file and make the racer's symlink fail.
-        symlinkSync(destination, saved);
-        renameSync(saved, candidate);
-        writeFileSync(saved, "inside");
-        renameSync(saved, candidate);
-      } else {
-        // Exchange the directory with a prepared outside symlink atomically.
-        // No missing-name window lets recursive creation collide with the racer,
-        // and no cleanup needs to remove a concurrently created directory.
-        swapParent();
-        swapParent();
-      }
-      swaps++;
-    }
-    console.log(
-      JSON.stringify({
-        swaps,
-      }),
-    );
-  } finally {
-    swapper?.close();
-  }
-}
-
 if (process.platform !== "darwin") {
   throw new Error("This fixture requires real macOS.");
 }
-if (mode === "racer") {
-  assert(pathArgument);
-  runRacer(pathArgument, process.argv[4] ?? "parent");
-} else if (mode === "verify") {
+if (mode === "verify") {
   assert(pathArgument);
   const storage = new MacosStorage();
   try {
@@ -279,7 +191,7 @@ if (mode === "racer") {
     assert.equal(dirInfo.sizeBytes, null);
     expectCode(
       () => call("storage.readText", `${root}/한글 memo`),
-      "PERMISSION_DENIED",
+      "INVALID_ARGUMENT",
     );
     expectCode(
       () => call("storage.readText", `${root}/absent`),
@@ -303,48 +215,45 @@ if (mode === "racer") {
     ]) {
       expectCode(() => call("storage.exists", invalid), "INVALID_ARGUMENT");
     }
+    // Links are followed like any path, and a hardlink is an ordinary file.
+    call("storage.writeText", textPath, "linked");
     symlinkSync(textPath, `${root}/symlink`);
     symlinkSync(`${root}/missing`, `${root}/dangling`);
     symlinkSync(`${root}/한글 memo`, `${root}/parent-link`);
     linkSync(textPath, `${root}/hardlink`);
     for (const linked of [
       `${root}/symlink`,
-      `${root}/dangling`,
       `${root}/hardlink`,
-      textPath,
       `${root}/parent-link/current.txt`,
     ]) {
-      for (const operation of [
-        "storage.exists",
-        "storage.stat",
-        "storage.readText",
-        "storage.writeText",
-        "storage.appendText",
-      ]) {
-        expectCode(
-          () =>
-            call(
-              operation,
-              linked,
-              operation.includes("Text") ? "unchanged" : undefined,
-            ),
-          "PERMISSION_DENIED",
-        );
-      }
+      assert.equal(call("storage.exists", linked), true);
+      assert.equal(call("storage.readText", linked), "linked");
     }
-    assert.equal(readFileSync(textPath).length, 0);
+    call("storage.appendText", `${root}/symlink`, "+more");
+    assert.equal(readFileSync(textPath, "utf8"), "linked+more");
+    call("storage.writeText", `${root}/parent-link/current.txt`, "");
+    assert.equal(call("storage.exists", `${root}/dangling`), false);
+    expectCode(
+      () => call("storage.readText", `${root}/dangling`),
+      "INVALID_ARGUMENT",
+    );
     unlinkSync(`${root}/hardlink`);
     execFileSync("/usr/bin/mkfifo", [
       `${root}/fifo`,
     ]);
-    expectCode(() => call("storage.stat", `${root}/fifo`), "PERMISSION_DENIED");
+    // O_NONBLOCK ensures inspecting a FIFO does not wait for another process.
+    expectCode(() => call("storage.stat", `${root}/fifo`), "INVALID_ARGUMENT");
+    expectCode(
+      () => call("storage.readText", `${root}/fifo`),
+      "INVALID_ARGUMENT",
+    );
     for (const operation of [
       "storage.writeText",
       "storage.appendText",
     ]) {
       expectCode(
         () => call(operation, `${root}/fifo`, "blocked"),
-        "PERMISSION_DENIED",
+        "INVALID_ARGUMENT",
       );
     }
     for (const operation of [
@@ -353,12 +262,11 @@ if (mode === "racer") {
     ]) {
       expectCode(
         () => bytes(operation, `${root}/fifo`, arbitrary),
-        "PERMISSION_DENIED",
+        "INVALID_ARGUMENT",
       );
     }
-    // O_NONBLOCK ensures inspecting a FIFO does not wait for another process.
     results.push(
-      "path aliases, symlink parents and leaves, dangling links, hardlinks and FIFO rejection",
+      "path spelling checks, followed symlinks and parent links, dangling links, hardlinks and FIFO refusal",
     );
 
     const denied = `${root}/denied`;
@@ -366,8 +274,6 @@ if (mode === "racer") {
     chmodSync(denied, 0);
     try {
       for (const operation of [
-        "storage.exists",
-        "storage.stat",
         "storage.readText",
         "storage.writeText",
       ]) {
@@ -376,6 +282,8 @@ if (mode === "racer") {
           "PERMISSION_DENIED",
         );
       }
+      // Existence needs only the directory, not the file's own permission.
+      assert.equal(call("storage.exists", denied), true);
     } finally {
       chmodSync(denied, 0o600);
     }
@@ -413,9 +321,19 @@ if (mode === "racer") {
         () => transfer("storage.copyFile", source, target),
         "INVALID_ARGUMENT",
       );
-      expectCode(() => transfer("storage.move", source, target), "UNSUPPORTED");
+      // The refusal must come from the destination existing, with the source still in place.
+      assert.throws(
+        () => transfer("storage.move", source, target),
+        (error) =>
+          error instanceof BunawayError &&
+          error.code === "INVALID_ARGUMENT" &&
+          /already exists/u.test(error.message),
+      );
+      assert.equal(existsSync(source), true);
     }
     assert.deepEqual(readFileSync(copy), large);
+    assert.equal(readFileSync(textPath, "utf8"), "");
+    assert.equal(existsSync(`${root}/missing`), false);
     expectCode(
       () =>
         transfer("storage.copyFile", source, `${root}/missing-parent/target`),
@@ -427,111 +345,71 @@ if (mode === "racer") {
       null,
     );
     assert.equal(statSync(`${root}/empty-copy`).size, 0);
+    assert.equal(transfer("storage.move", copy, `${root}/moved`), null);
+    assert.deepEqual(readFileSync(`${root}/moved`), large);
+    assert.equal(existsSync(copy), false);
     expectCode(
-      () => transfer("storage.move", copy, `${root}/moved`),
-      "UNSUPPORTED",
+      () => transfer("storage.move", copy, `${root}/moved-again`),
+      "INVALID_ARGUMENT",
     );
-    assert.deepEqual(readFileSync(copy), large);
-    assert.equal(existsSync(`${root}/moved`), false);
+    // Moving a name onto itself is a refusal too, not a silent success.
+    expectCode(
+      () => transfer("storage.move", `${root}/moved`, `${root}/moved`),
+      "INVALID_ARGUMENT",
+    );
+    assert.equal(
+      transfer(
+        "storage.move",
+        `${root}/한글 memo`,
+        `${root}/renamed-directory`,
+      ),
+      null,
+    );
+    assert.equal(existsSync(`${root}/renamed-directory/current.txt`), true);
+    assert.equal(existsSync(`${root}/한글 memo`), false);
+    mkdirSync(`${root}/other-folder`);
+    assert.equal(
+      transfer("storage.move", `${root}/moved`, `${root}/other-folder/moved`),
+      null,
+    );
     expectCode(
       () =>
         transfer(
           "storage.move",
-          `${root}/한글 memo`,
-          `${root}/renamed-directory`,
+          `${root}/other-folder`,
+          `${root}/other-folder/inside`,
         ),
-      "UNSUPPORTED",
+      "INVALID_ARGUMENT",
     );
-    assert.equal(existsSync(`${root}/한글 memo/current.txt`), true);
-    assert.equal(existsSync(`${root}/renamed-directory`), false);
     results.push(
-      "bounded multi-chunk and empty copies, atomic no-replace and fail-closed move",
+      "bounded multi-chunk and empty copies, move that never replaces, directory and cross-folder moves",
     );
 
-    for (const kind of [
-      "parent",
-      "leaf",
-    ]) {
-      const raceRoot = `${root}/race-${kind}`;
-      mkdirSync(`${raceRoot}/slot`, {
-        recursive: true,
-      });
-      mkdirSync(`${raceRoot}/outside`);
-      writeFileSync(`${raceRoot}/slot/target`, "inside");
-      writeFileSync(`${raceRoot}/outside/target`, "outside");
-      writeFileSync(`${raceRoot}/outside/outside-only`, "outside");
-      const racer = Bun.spawn(command("racer", raceRoot, kind), {
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      try {
-        const deadline = performance.now() + 10_000;
-        while (!existsSync(`${raceRoot}/ready`)) {
-          assert(performance.now() < deadline, "Racer failed to become ready.");
-          await Bun.sleep(10);
-        }
-        for (let i = 0; i < 500; i++) {
-          try {
-            if (kind === "parent") {
-              if (i % 3 === 0) {
-                const entries = call(
-                  "storage.readDirectory",
-                  `${raceRoot}/slot`,
-                );
-                assert(Array.isArray(entries));
-                assert(
-                  !entries.some(
-                    (entry) =>
-                      entry &&
-                      typeof entry === "object" &&
-                      !Array.isArray(entry) &&
-                      entry.name === "outside-only",
-                  ),
-                );
-              } else if (i % 3 === 1) {
-                executeMacosStorage(storage, "storage.createDirectory", {
-                  path: `${raceRoot}/slot/generated`,
-                  recursive: true,
-                });
-              } else {
-                assert.equal(
-                  call("storage.readText", `${raceRoot}/slot/target`),
-                  "inside",
-                );
-              }
-            } else {
-              call("storage.writeText", `${raceRoot}/slot/target`, "inside");
-            }
-          } catch (error) {
-            assert(
-              error instanceof BunawayError &&
-                [
-                  "PERMISSION_DENIED",
-                  "INVALID_ARGUMENT",
-                ].includes(error.code),
-            );
-          }
-        }
-        writeFileSync(`${raceRoot}/stop`, "stop");
-        assert.equal(
-          await racer.exited,
-          0,
-          await new Response(racer.stderr).text(),
-        );
-        const report = JSON.parse(await new Response(racer.stdout).text());
-        assert(report.swaps > 0, "Racer did not replace any paths.");
-        assert.equal(
-          readFileSync(`${raceRoot}/outside/target`, "utf8"),
-          "outside",
-        );
-        assert.equal(existsSync(`${raceRoot}/outside/generated`), false);
-      } finally {
-        racer.kill();
-        await racer.exited;
-      }
-    }
+    // A tree with a link inside: removal and the total never follow the link.
+    const tree = `${root}/tree`;
+    mkdirSync(`${tree}/sub`, {
+      recursive: true,
+    });
+    writeFileSync(`${tree}/a.bin`, Buffer.alloc(10));
+    writeFileSync(`${tree}/sub/b.bin`, Buffer.alloc(5));
+    mkdirSync(`${root}/tree-outside`);
+    writeFileSync(`${root}/tree-outside/keep`, Buffer.alloc(100));
+    symlinkSync(`${root}/tree-outside`, `${tree}/out`);
+    assert.deepEqual(await call("storage.directorySize", tree), {
+      bytes: 15,
+      files: 2,
+      directories: 1,
+    });
+    assert.equal(await call("storage.removeRecursive", tree), null);
+    assert.equal(existsSync(tree), false);
+    assert.equal(existsSync(`${root}/tree-outside/keep`), true);
+    await assert.rejects(
+      async () => call("storage.removeRecursive", tree),
+      (error) =>
+        error instanceof BunawayError && error.code === "INVALID_ARGUMENT",
+    );
     results.push(
-      "real competing-process parent and leaf replacement never modifies symlink referents",
+      "recursive total and removal skip links and leave their targets",
     );
 
     call("storage.writeText", `${root}/restart.txt`, "restart 한글\0✓");
@@ -579,10 +457,10 @@ if (mode === "racer") {
         );
         expectCode(
           () =>
-            executeMacosStorage(final, "storage.stat", {
-              path: `${root}/symlink`,
+            executeMacosStorage(final, "storage.readText", {
+              path: `${root}/absent`,
             }),
-          "PERMISSION_DENIED",
+          "INVALID_ARGUMENT",
         );
       }
       assert(
@@ -593,7 +471,7 @@ if (mode === "racer") {
       final.dispose();
     }
     results.push(
-      "multiple adapters, repeated disposal, descriptor cleanup after success and denial",
+      "multiple adapters, repeated disposal, descriptor cleanup after success and a missing target",
     );
     mkdirSync(resolve("build"), {
       recursive: true,

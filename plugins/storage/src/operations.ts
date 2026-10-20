@@ -1,18 +1,19 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
+  type StorageInstance,
   storageBytesSchema,
   storageBytesWriteSchema,
   storageDirectoryCreateSchema,
   storageDirectoryEntriesSchema,
-  type StorageInstance,
+  storageDirectorySizeSchema,
   storageLocationSchema,
   storageMetadataSchema,
   storageTransferSchema,
   storageWriteSchema,
 } from "#storage/contract";
 
-/** Complete operations shared by every storage implementation; imports allocate no native resources. */
+/** Complete operations of every storage implementation; imports allocate no native resources. */
 const operation = defineNativeOperation<StorageInstance>();
 export const storageOperations = {
   readText: operation({
@@ -72,5 +73,28 @@ export const storageOperations = {
       z.null(),
     ]),
     handler: (input, { instance }) => instance.stat(input),
+  }),
+  move: operation({
+    input: storageTransferSchema,
+    output: z.null(),
+    handler: (input, { instance }) => instance.move(input),
+  }),
+  directorySize: operation({
+    input: storageLocationSchema,
+    output: storageDirectorySizeSchema,
+    handler: (input, { instance, signal }) =>
+      instance.directorySize(input, signal),
+  }),
+  remove: operation({
+    input: storageLocationSchema,
+    output: z.null(),
+    handler: (input, { instance }) => instance.remove(input),
+  }),
+  // A separate operation, so granting file removal never grants deleting whole trees.
+  removeRecursive: operation({
+    input: storageLocationSchema,
+    output: z.null(),
+    handler: (input, { instance, signal }) =>
+      instance.removeRecursive(input, signal),
   }),
 };

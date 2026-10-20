@@ -65,9 +65,9 @@ src 내부 파일과 tsconfig 별칭은 Bun이 해석하므로 로컬 browser �
 storage는 각 플랫폼의 operations에 입력과 출력 스키마, handler를 함께 선언한다.
 최상위 공통 작업 맵은 없으며 `src/index.ts`는 실행 위치, 인스턴스 수명과 작업 맵을 조립한다.
 두 플랫폼의 공통 작업은 자원을 만들지 않는 operations.ts에 한 번 선언한다.
-windows-operations.ts는 공통 목록에 Windows 전용 move와 remove를 추가한다.
+move, remove, removeRecursive와 directorySize도 같은 목록에 있다.
 OS 자원 구현은 기존 `src/platforms/<platform>.ts`에 있어 중립 출력과 다른 OS 출력에서 제외된다.
-지원 여부는 각 작업 맵의 키로 판단한다. macOS에는 move와 remove를 선언하지 않는다.
+지원 여부는 각 작업 맵의 키로 판단한다.
 공개 Storage 인터페이스와 재사용할 값 스키마는 플러그인 작성자가 정한다.
 SDK는 플랫폼별 스키마에서 호출 API를 추론하며 실제 검증에는 해당 플랫폼의 스키마만 사용한다. handler는
 검증된 입력과 호스트 실행 context를 받아 동기 값이나 Promise를 반환한다.
@@ -78,7 +78,7 @@ initialize가 각 플랫폼 모듈의 WindowsStorage 또는 MacosStorage를 실�
 dispose가 해당 인스턴스의 네이티브 바인딩을 정리한다. 선언 import와 지원 조회는 자원을
 만들지 않는다. 네이티브 구현은 작업 이름으로 분기하지 않고 기능별 메서드와 공통
 핸들 검사 절차를 사용한다. 경로 문법 검사는 두며, 링크와 최종 핸들 검사는
-[ADR 0024](../decisions/0024-plugin-path-responsibility.md)에 따라 제거한다. log, notification, opener와 storage의 Windows 구현은 링크 검사를 제거했고, storage의 macOS 구현은 이후 변경에서 제거한다.
+[ADR 0024](../decisions/0024-plugin-path-responsibility.md)에 따라 제거한다. log, notification, opener와 storage는 링크 검사를 제거했다.
 
 initialize는 동기 반환만 허용한다. Promise나 thenable을 반환하면 어댑터 생성을 거부하고,
 늦게 완료한 인스턴스는 dispose로 회수한다. 잘못된 비동기 초기화와 회수 실패는 호스트 진단에 기록한다.
@@ -375,7 +375,7 @@ operation 권한을 다시 검사한다. 단순한 기능 등록에는 backend �
 플러그인은 앱 데이터나 임시 폴더를 자동으로 선택하거나 만들지 않는다.
 경로 제한은 앱 명령과 policy commands가 맡으며 앱 개발자의 책임이다
 ([ADR 0024](../decisions/0024-plugin-path-responsibility.md)). 플러그인은 경로 문법만 검사하고 링크를 따라간다.
-저장 plugin의 Windows adapter는 `node:fs` 위의 공통 어댑터로 바꿔 링크, 최종 경로와 핸들 검사를 제거했고, macOS adapter는 이 결정에 따라 macOS 변경에서 제거한다.
+저장 plugin의 Windows와 macOS adapter는 `node:fs` 위의 공통 어댑터로 바꿔 링크, 최종 경로와 핸들 검사를 제거했다.
 신뢰된 백엔드의 직접 Bun API 접근은 이 정책의 샌드박스 대상이 아니다.
 
 ## 화면 호출과 기능 조회
