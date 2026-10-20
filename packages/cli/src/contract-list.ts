@@ -174,9 +174,19 @@ export async function readAppDefinition(
   timeoutMs = CONTRACT_IMPORT_TIMEOUT_MS,
 ): Promise<AppDefinition> {
   const scratch = await mkdtemp(resolve(tmpdir(), "bunaway-contract-"));
+  let child: ReturnType<typeof Bun.spawn> | undefined;
+  // An interrupted CLI must not leave the child running or the scratch directory behind.
+  const interrupted = (signal: NodeJS.Signals) => {
+    child?.kill("SIGKILL");
+    rmSync(scratch, {
+      recursive: true,
+      force: true,
+    });
+    process.exit(signal === "SIGINT" ? 130 : 143);
+  };
   try {
     const output = resolve(scratch, "definition.json");
-    const child = Bun.spawn(
+    const spawned = Bun.spawn(
       [
         process.execPath,
         "-e",
@@ -192,25 +202,17 @@ export async function readAppDefinition(
         stderr: "inherit",
       },
     );
-    // An interrupted CLI must not leave the child running or the scratch directory behind.
-    const interrupted = (signal: NodeJS.Signals) => {
-      child.kill("SIGKILL");
-      rmSync(scratch, {
-        recursive: true,
-        force: true,
-      });
-      process.exit(signal === "SIGINT" ? 130 : 143);
-    };
+    child = spawned;
     process.once("SIGINT", interrupted);
     process.once("SIGTERM", interrupted);
     let timedOut = false;
     // SIGKILL because an app may ignore SIGTERM; waiting on it would hang the CLI.
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
+      spawned.kill("SIGKILL");
     }, timeoutMs);
     try {
-      const code = await child.exited;
+      const code = await spawned.exited;
       if (code !== 0) {
         throw new Error(
           timedOut
@@ -220,8 +222,6 @@ export async function readAppDefinition(
       }
     } finally {
       clearTimeout(timer);
-      process.off("SIGINT", interrupted);
-      process.off("SIGTERM", interrupted);
     }
     // An app that exits the process itself finishes with code 0 before writing the result.
     if (!(await Bun.file(output).exists())) {
@@ -229,6 +229,8 @@ export async function readAppDefinition(
     }
     return toDefinition(JSON.parse(await readFile(output, "utf8")));
   } finally {
+    process.off("SIGINT", interrupted);
+    process.off("SIGTERM", interrupted);
     await rm(scratch, {
       recursive: true,
       force: true,
@@ -236,7 +238,7 @@ export async function readAppDefinition(
   }
 }
 
-/** Names each registered entry's owner and, like Core, rejects a name two owners register. */
+/** Names each registered entry's owner and rejects a name that two owners register. */
 function ownedEntries<T>(
   app: Readonly<Record<string, T>>,
   plugins: readonly {

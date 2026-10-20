@@ -408,3 +408,18 @@ test("native operations are listed as plugin commands and the policy may name th
     },
   );
 });
+
+test("a command named __proto__ is kept in the list", async () => {
+  await withAppSource(
+    `export default { commands: { ["__proto__"]: { input: {}, output: {} }, "message.read": { input: {}, output: {} }, "message.save": { input: {}, output: {} } }, events: { "message.saved": {} } };\n`,
+    async () => {
+      const { code, stdout, stderr } = await runContract(project);
+      expect(code, stderr).toBe(0);
+      expect(
+        JSON.parse(stdout).commands.map(
+          (command: { name: string }) => command.name,
+        ),
+      ).toContain("__proto__");
+    },
+  );
+});
