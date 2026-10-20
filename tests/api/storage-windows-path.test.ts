@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { normalizeWindowsPath } from "../../plugins/storage/src/platforms/windows-path.ts";
+import {
+  normalizeForFileSystem,
+  normalizeWindowsPath,
+} from "../../plugins/storage/src/platforms/windows-path.ts";
 
 test("Windows storage paths keep valid drive and UNC spellings, with forward slashes as backslashes", () => {
   expect(normalizeWindowsPath("C:\\Users\\me\\한글 값.txt")).toBe(
@@ -64,4 +67,27 @@ test("device namespace and NT object prefixes are refused", () => {
       }),
     );
   }
+});
+
+test("every checked drive path gets the extended-length prefix for file system calls and a UNC path keeps its spelling", () => {
+  expect(normalizeForFileSystem("c:/data/a.txt")).toBe(
+    "\\\\?\\c:\\data\\a.txt",
+  );
+  expect(normalizeForFileSystem("//server/share/a.txt")).toBe(
+    "\\\\server\\share\\a.txt",
+  );
+  const long = `C:\\${"a".repeat(100)}\\${"b".repeat(100)}\\${"c".repeat(100)}.txt`;
+  expect(normalizeForFileSystem(long)).toBe(`\\\\?\\${long}`);
+});
+
+test("a long path is accepted in the app's own spelling and refused with the prefix", () => {
+  const accepted = `C:/${"a".repeat(120)}/${"b".repeat(120)}/c.txt`;
+  expect(normalizeForFileSystem(accepted).startsWith("\\\\?\\C:\\")).toBe(true);
+  expect(() =>
+    normalizeForFileSystem(`\\\\?\\C:\\${"a".repeat(120)}\\${"b".repeat(120)}`),
+  ).toThrow(
+    expect.objectContaining({
+      code: "INVALID_ARGUMENT",
+    }),
+  );
 });

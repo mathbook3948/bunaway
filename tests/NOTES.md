@@ -919,6 +919,10 @@ junction을 디렉터리 경로로 따라가는 것, 재귀 생성, 파일 및 �
 `PERMISSION_DENIED`(icacls를 쓸 수 없는 러너에서는 건너뛰고 정리 때 ACE를 제거), 파일 및 없는 경로 거부를 확인한다.
 `windows-storage-metadata.ts`는 실제 I/O Worker에서 허용된 호출의 합계와 파일 경로 거부를 확인한다.
 
+`windows-storage-long-path.ts`는 실제 Windows 파일 시스템에서 400자를 넘는 경로에 쓰기(상위 폴더 생성 포함), 읽기, 존재와 stat,
+목록(접두사 없는 이름), directorySize, 복사, 덮어쓰지 않는 이동, 자기 하위로의 이동 거부, 삭제와 removeRecursive를 확인한다.
+`LongPathsEnabled`를 끈 환경은 러너 설정에 의존하므로 확인하지 않는다.
+
 `windows-storage-remove-recursive.ts`는 실제 Windows 파일 시스템으로 유니코드 중첩 트리와 빈 디렉터리 삭제 및 형제 유지,
 1500개 항목 삭제, 읽기 전용 파일과 디렉터리 삭제, 루트가 파일인 경우,
 hardlink의 이름만 삭제를 확인한다. 읽기 전용 hardlink를 지울 때 다른 이름의 속성이 바뀌는지는 확인하지 않는다. 트리 안의 junction, 디렉터리 symlink와
