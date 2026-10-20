@@ -1,7 +1,7 @@
 import { defineNativePlugin } from "@bunaway/plugin";
 import { appearanceEvents } from "#appearance/contract";
 import {
-  appearanceOperations,
+  macosAppearanceOperations,
   windowsAppearanceOperations,
 } from "#appearance/operations";
 import {
@@ -22,7 +22,7 @@ export default defineNativePlugin(
         thread: "ui",
         initialize: initializeMacos,
         dispose: disposeMacos,
-        operations: appearanceOperations,
+        operations: macosAppearanceOperations,
       },
       windows: {
         thread: "ui",

@@ -22,6 +22,7 @@ await run(
     "--no-env-file",
     "test",
     resolve(import.meta.dir, "macos-appearance.test.ts"),
+    resolve(import.meta.dir, "macos-appearance-theme.test.ts"),
   ],
   root,
 );

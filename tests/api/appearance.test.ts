@@ -235,9 +235,9 @@ test("frame theme contracts are additive, independently granted and Windows-only
   expect(appearance._definition.nativePlatforms.windows?.operations).toContain(
     "setTheme",
   );
-  expect(
-    appearance._definition.nativePlatforms.macos?.operations,
-  ).not.toContain("setTheme");
+  expect(appearance._definition.nativePlatforms.macos?.operations).toContain(
+    "setTheme",
+  );
   expect(
     registry.allowed(
       {

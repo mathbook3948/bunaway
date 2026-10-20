@@ -241,7 +241,7 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 - [ ] 화면 목록, 주 화면, 현재 화면과 점에 해당하는 화면을 조회한다.
 - [ ] 화면 크기, 작업 영역, backing scale과 좌표 변환을 제공한다.
 - [ ] 화면 연결 및 제거, 배율 변경과 창 이동 이벤트를 제공한다.
-- [ ] light/dark/system 설정, 실제 theme와 대비 및 동작 줄이기를 조회한다.
+- [ ] light/dark/system 설정, 실제 theme와 대비 및 동작 줄이기를 조회한다. (앱 전체 테마 지정과 조회 `appearance.setTheme/getTheme`와 대비와 동작 줄이기 조회는 완료, 창 단위 지정 남음)
 - [ ] 테마 및 접근성 설정 변경 이벤트와 WebView 반영을 제공한다.
 - [ ] 접근성 지원 상태, trust 조회와 사용자 승인 요청을 제공한다.
 - [ ] VoiceOver, 키보드 탐색, IME와 사용자 타이틀바 접근성을 검증한다.
