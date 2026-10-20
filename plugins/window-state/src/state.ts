@@ -13,14 +13,20 @@ import {
   type WindowStateRestoreResult,
   type WindowStateSaveInput,
 } from "#window-state/contract";
-import { fitToMonitors, type Rect } from "#window-state/placement";
+import {
+  fitToMonitors,
+  type Rect,
+  type WindowFrame,
+} from "#window-state/placement";
 
 /** The window and store operations this plugin consumes. */
 export type WindowStateDependencies = {
   windows: Pick<
     typeof windows,
+    | "getContentBounds"
     | "getMonitors"
     | "getNormalBounds"
+    | "getOuterBounds"
     | "getSnapshot"
     | "hide"
     | "maximize"
@@ -87,6 +93,7 @@ async function applyBounds(
       dpi: include.size ? saved.dpi : current.dpi,
     },
     await windows.getMonitors(),
+    await measureFrame(windows, window),
   );
   const place = () =>
     windows.setOuterBounds({
@@ -107,6 +114,29 @@ async function applyBounds(
   return fitted.adjusted;
 }
 
+/**
+ * The window size limits apply to the content area at the window's current DPI, so measure how
+ * much larger the outer rectangle is than the content.
+ */
+async function measureFrame(
+  windows: WindowsClient,
+  window: WindowTarget,
+): Promise<WindowFrame> {
+  const outer = await windows.getOuterBounds({
+    ...window,
+    unit: "physical",
+  });
+  const content = await windows.getContentBounds({
+    ...window,
+    unit: "physical",
+  });
+  return {
+    width: outer.width - content.width,
+    height: outer.height - content.height,
+    dpi: outer.dpi,
+  };
+}
+
 function sameRect(a: Rect, b: Rect): boolean {
   return (
     a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
@@ -120,15 +150,13 @@ async function applyMaximized(
   saved: SavedWindowState,
   current: DisplayState,
 ): Promise<boolean> {
-  if (saved.maximized) {
-    await windows.maximize(window);
-    return true;
+  if (saved.maximized === current.maximized) {
+    return false;
   }
-  if (current.maximized) {
-    await windows.unmaximize(window);
-    return true;
-  }
-  return false;
+  await (saved.maximized
+    ? windows.maximize(window)
+    : windows.unmaximize(window));
+  return true;
 }
 
 /** Save, restore and remove window states using the window and store operations. */
@@ -231,7 +259,7 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
       const adjusted =
         (include.position || include.size) &&
         (await applyBounds(windows, window, saved, include));
-      let changedShowState =
+      const changedShowState =
         include.maximized &&
         (await applyMaximized(windows, window, saved, state));
       if (wantFullscreen && (leavesFullscreen || !state.fullscreen)) {
@@ -239,12 +267,11 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
           ...window,
           fullscreen: true,
         });
-        changedShowState = true;
       }
       if (include.visible) {
         await (saved.visible ? windows.show(window) : windows.hide(window));
       } else if (changedShowState && !state.visible) {
-        // Maximizing or entering fullscreen shows a hidden window; keep it hidden as it was.
+        // Maximizing or restoring shows a hidden window; keep it hidden as it was.
         await windows.hide(window);
       }
       return {

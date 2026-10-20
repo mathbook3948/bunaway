@@ -191,10 +191,25 @@ function fixture(
   };
   const behavior = {
     resizedByDpiChange: false,
+    windowDpi: 96,
+    frame: {
+      width: 0,
+      height: 0,
+    },
   };
   const windows = {
     getMonitors: async () => monitors,
     getNormalBounds: async () => normal,
+    getOuterBounds: async () => ({
+      ...normal,
+      dpi: behavior.windowDpi,
+    }),
+    getContentBounds: async () => ({
+      ...normal,
+      width: normal.width - behavior.frame.width,
+      height: normal.height - behavior.frame.height,
+      dpi: behavior.windowDpi,
+    }),
     getSnapshot: async () => ({
       windowId: "main",
       viewId: "main",
@@ -340,14 +355,17 @@ test("restore applies bounds, then maximized, and leaves visibility alone by def
 });
 
 test("restore leaves fullscreen before changing geometry and re-enters it last", async () => {
-  const state = fixture({
+  const display = {
     maximized: true,
     fullscreen: true,
     visible: true,
-  });
+  };
+  const state = fixture(display);
   await state.api.save({
     view: "main",
   });
+  // The window is fullscreen again but no longer maximized when restore runs.
+  display.maximized = false;
   const result = await state.api.restore({
     view: "main",
     include: {
@@ -714,6 +732,62 @@ test("size limits are logical pixels converted at the monitor DPI", () => {
       ],
     ).bounds.width,
   ).toBe(400);
+});
+
+test("an already maximized window is not maximized again", async () => {
+  const { api, calls, records } = fixture({
+    maximized: true,
+    fullscreen: false,
+    visible: false,
+  });
+  records.set("main", {
+    ...plainRecord,
+    maximized: true,
+  });
+  await api.restore({
+    view: "main",
+  });
+  expect(calls).toEqual([
+    "bounds:10,20",
+  ]);
+});
+
+test("restored sizes respect the content size limits at the window DPI", async () => {
+  const { api, records, behavior, setNormal } = fixture({
+    maximized: false,
+    fullscreen: false,
+    visible: true,
+  });
+  behavior.windowDpi = 192;
+  behavior.frame = {
+    width: 16,
+    height: 39,
+  };
+  setNormal({
+    x: 0,
+    y: 0,
+    width: 900,
+    height: 700,
+    dpi: 192,
+  });
+  records.set("main", {
+    ...plainRecord,
+    width: 216,
+    height: 100,
+  });
+  await api.restore({
+    view: "main",
+  });
+  // 200 logical content pixels at DPI 192 plus the frame.
+  expect(
+    await api.save({
+      view: "main",
+    }),
+  ).toBeNull();
+  expect(records.get("main")).toMatchObject({
+    width: 416,
+    height: 439,
+  });
 });
 
 test("the plugin declares no native operation of its own", () => {

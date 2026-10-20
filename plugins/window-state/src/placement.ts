@@ -39,12 +39,27 @@ function overlap(
 }
 
 /**
- * Keep a physical size inside the window size limits, which are logical pixels converted at
- * the monitor's DPI, and inside the work area.
+ * What the window size limits mean for an outer size. The limits are logical pixels of the
+ * content area at the window's current DPI, so the outer limits add the frame.
  */
-function clampSize(value: number, available: number, dpi: number): number {
-  const minimum = Math.ceil((MIN_WINDOW_DIMENSION * dpi) / LOGICAL_DPI);
-  const maximum = Math.floor((MAX_WINDOW_DIMENSION * dpi) / LOGICAL_DPI);
+export type WindowFrame = {
+  /** Outer minus content size, in physical pixels. */
+  width: number;
+  height: number;
+  /** DPI of the window when the frame was measured. */
+  dpi: number;
+};
+
+/** Keep a physical outer size inside the window size limits and the work area. */
+function clampSize(
+  value: number,
+  available: number,
+  frame: number,
+  dpi: number,
+): number {
+  const minimum = Math.ceil((MIN_WINDOW_DIMENSION * dpi) / LOGICAL_DPI) + frame;
+  const maximum =
+    Math.floor((MAX_WINDOW_DIMENSION * dpi) / LOGICAL_DPI) + frame;
   const limit = Math.max(minimum, Math.min(maximum, available));
   return Math.min(Math.max(Math.round(value), minimum), limit);
 }
@@ -83,6 +98,10 @@ function visibleMonitor(
 export function fitToMonitors(
   saved: Bounds,
   monitors: readonly Monitor[],
+  frame: Partial<WindowFrame> & Pick<WindowFrame, "width" | "height"> = {
+    width: 0,
+    height: 0,
+  },
 ): FittedBounds {
   const original: Rect = {
     x: saved.x,
@@ -103,12 +122,14 @@ export function fitToMonitors(
   const width = clampSize(
     saved.width * scale,
     target.workArea.width,
-    target.dpi,
+    frame.width,
+    frame.dpi ?? target.dpi,
   );
   const height = clampSize(
     saved.height * scale,
     target.workArea.height,
-    target.dpi,
+    frame.height,
+    frame.dpi ?? target.dpi,
   );
   const area = target.workArea;
   const bounds: Rect = home

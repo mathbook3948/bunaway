@@ -39,13 +39,13 @@ await windowState.remove({ view: "main" });
 
 | 함수 | 필요한 권한 |
 | --- | --- |
-| `save` | `windows.getSnapshot`, `windows.getNormalBounds`, `store.load`, `store.set`, `store.save` |
-| `restore` | `store.load`, `store.get`, `windows.getSnapshot`, `windows.getNormalBounds`, `windows.getMonitors`, `windows.setOuterBounds`, `windows.maximize`, `windows.unmaximize`, `windows.setFullscreen`, `windows.show`, `windows.hide` |
+| `save` | `windows.getSnapshot`, `windows.getNormalBounds`, `store.load`, `store.set`, `store.save`, 최소화한 창은 `store.get`도 |
+| `restore` | `store.load`, `store.get`, `windows.getSnapshot`, `windows.getNormalBounds`, `windows.getOuterBounds`, `windows.getContentBounds`, `windows.getMonitors`, `windows.setOuterBounds`, `windows.maximize`, `windows.unmaximize`, `windows.setFullscreen`, `windows.show`, `windows.hide` |
 | `remove` | `store.load`, `store.delete`, `store.save` |
 
-`restore`는 필요한 작업만 호출합니다. 예를 들어 `include.visible`이 꺼져 있으면 `windows.show`와
-`windows.hide`는 호출하지 않고, 최대화 상태가 이미 같으면 `windows.maximize`와 `windows.unmaximize`도
-호출하지 않습니다. 저장 항목은
+`restore`는 필요한 작업만 호출합니다. 예를 들어 `include.visible`이 꺼져 있으면 `windows.show`를
+호출하지 않고, 최대화 상태가 이미 같으면 `windows.maximize`와 `windows.unmaximize`도 호출하지 않습니다.
+숨긴 창의 최대화 상태를 바꿀 때만 `windows.hide`를 호출합니다. 저장 항목은
 `store`의 `window-state` 저장소에 두며, `store` 권한은 모든 저장소 이름에 적용되므로 신뢰할 수 없는 뷰에는
 `store.*`를 허용하지 마세요. 저장 위치는 앱 데이터 디렉터리로 고정되어 있고 경로를 받지 않습니다.
 
@@ -93,8 +93,9 @@ await windowState.remove({ view: "main" });
 저장한 사각형이 지금 연결된 모니터의 작업 영역과 가로와 세로 모두 논리 48픽셀(해당 모니터 DPI 기준) 이상
 겹치면 위치를 유지합니다. 그렇지 않으면 주 모니터 작업 영역의 가운데로 옮기고 `adjusted`를 `true`로
 돌려줍니다. 저장했을 때와 모니터의 DPI가 다르면 두 DPI의 비율로 크기를 바꾸어 논리 크기를 유지하며, 크기는
-작업 영역과 `windows`의 크기 한도(논리 200에서 4096 픽셀을 해당 모니터 DPI로 환산한 물리 크기)를 넘지 않습니다. 모니터가 하나도 조회되지 않으면 저장한
-사각형을 그대로 적용합니다.
+작업 영역과 `windows`의 크기 한도를 넘지 않습니다. 이 한도는 콘텐츠 영역의 논리 200에서 4096 픽셀이며 창의
+현재 DPI로 환산하므로, `restore`는 창의 바깥 크기와 콘텐츠 크기의 차이(프레임)를 읽어 바깥 크기 한도에
+더합니다. 모니터가 하나도 조회되지 않으면 저장한 사각형을 그대로 적용합니다.
 
 ## 한계
 
@@ -103,8 +104,11 @@ await windowState.remove({ view: "main" });
 - 실제 모니터 분리와 재연결, 서로 다른 DPI의 모니터 사이 복원은 자동 시험으로 확인하지 않았습니다. Windows
   CI는 모니터 1개와 DPI 96이고, 사라진 모니터는 화면 밖 좌표를 직접 저장해 확인합니다. DPI 비율 계산과
   작업 영역 보정은 모니터 목록을 주입한 단위 시험으로 확인합니다.
-- 숨긴 창에서 최대화나 전체화면을 복원하면 그 창 동작이 창을 잠깐 표시하므로, `restore`는 `visible`이 꺼져
-  있을 때 창을 다시 숨깁니다. 깜빡임을 피하려면 `include`에서 `maximized`와 `fullscreen`을 끄고 창을 보인
-  뒤 복원하세요. 이 동작은 가짜 클라이언트 시험으로만 확인했습니다.
+- 숨긴 창의 최대화 상태를 바꾸면 `windows.maximize`와 `windows.unmaximize`가 창을 표시하므로, `restore`는
+  `visible`이 꺼져 있을 때 창을 다시 숨깁니다. 이때 `windows.hide` 권한이 필요하고 깜빡임이 생길 수
+  있습니다. 피하려면 `include`에서 `maximized`를 끄고 창을 보인 뒤 복원하세요. 전체화면 진입은 숨긴 창을
+  표시하지 않습니다. 이 동작은 가짜 클라이언트 시험으로만 확인했습니다.
+- 최소화한 창을 `save`하면 이전 기록을 읽으므로 `store.get` 권한도 필요하고, 그 사이 최대화를 해제했다면
+  오래된 `maximized` 값이 남을 수 있습니다.
 - DPI가 다른 모니터로 옮겨지는 창은 OS가 DPI 변경 시점에 크기를 다시 바꿀 수 있어, `restore`는 배치한 뒤
   일반 크기를 읽어 달라졌으면 한 번 더 배치합니다. 실제 혼합 DPI 환경에서는 확인하지 못했습니다.

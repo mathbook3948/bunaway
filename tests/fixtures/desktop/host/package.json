@@ -9,6 +9,8 @@
     "@bunaway/plugin-log": "workspace:*",
     "@bunaway/plugin-capabilities": "workspace:*",
     "@bunaway/plugin-windows": "workspace:*",
+    "@bunaway/plugin-store": "workspace:*",
+    "@bunaway/plugin-window-state": "workspace:*",
     "@bunaway/core": "workspace:*",
     "@bunaway/protocol": "workspace:*",
     "@bunaway/runtime-bun": "workspace:*",
