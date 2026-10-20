@@ -126,6 +126,17 @@ test("a command without a handler fails as unsupported", async () => {
   ).rejects.toMatchObject({
     code: "UNSUPPORTED",
   });
+  for (const inherited of [
+    "toString",
+    "constructor",
+    "hasOwnProperty",
+  ]) {
+    await expect(
+      client.invoke(inherited as "notes.read", null as never),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED",
+    });
+  }
   await client.close();
 });
 
@@ -182,8 +193,7 @@ test("cancelling an invoke aborts the handler signal and drops its result", asyn
   });
   const before = frames.length;
   release();
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   expect(frames).toHaveLength(before);
   await client.close();
 });

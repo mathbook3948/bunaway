@@ -82,8 +82,10 @@ class MockHost<C extends CommandMap, E extends EventMap>
 
   constructor(options: MockTransportOptions<C>) {
     this.handlers = options.handlers;
-    this.features = options.features ?? [
-      SDK_READY_FEATURE,
+    this.features = [
+      ...(options.features ?? [
+        SDK_READY_FEATURE,
+      ]),
     ];
     // Fail at construction on a hello the protocol rejects instead of stalling the handshake.
     serializeMessage(this.helloFrame());
@@ -243,16 +245,18 @@ class MockHost<C extends CommandMap, E extends EventMap>
       deadline?: number;
     },
   ): Promise<void> {
-    const handler = (
-      this.handlers as Record<
-        string,
-        | ((
-            input: JsonValue,
-            context: MockCommandContext,
-          ) => JsonValue | Promise<JsonValue>)
-        | undefined
-      >
-    )[command];
+    // Own keys only: "toString" or "constructor" must not resolve to Object.prototype members.
+    const handler = Object.hasOwn(this.handlers, command)
+      ? (
+          this.handlers as Record<
+            string,
+            (
+              input: JsonValue,
+              context: MockCommandContext,
+            ) => JsonValue | Promise<JsonValue>
+          >
+        )[command]
+      : undefined;
     if (handler === undefined) {
       this.replyError(id, {
         code: "UNSUPPORTED",
@@ -284,26 +288,16 @@ class MockHost<C extends CommandMap, E extends EventMap>
     }
   }
 
-  /** An error frame the protocol rejects (for example non-JSON details) is retried without details. */
+  /** Errors come from `toWireError` or fixed text, so they always satisfy the protocol schema. */
   private replyError(id: string, error: WireError): void {
-    const frame = (wire: WireError): Message => ({
-      kind: "error",
-      protocol: PROTOCOL_VERSION,
-      id,
-      error: wire,
-    });
-    let text: string;
-    try {
-      text = serializeMessage(frame(error));
-    } catch {
-      text = serializeMessage(
-        frame({
-          code: "INTERNAL",
-          message: "Invalid error response.",
-        }),
-      );
-    }
-    this.deliver(text);
+    this.deliver(
+      serializeMessage({
+        kind: "error",
+        protocol: PROTOCOL_VERSION,
+        id,
+        error,
+      }),
+    );
   }
 
   /** Serializes with the protocol's own checks; a result it rejects becomes an INTERNAL error. */
