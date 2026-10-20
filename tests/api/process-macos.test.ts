@@ -123,9 +123,15 @@ test("macOS argv bound counts UTF-8 bytes, not UTF-16 units", () => {
   ).toBe(true);
 });
 
-test("the plugin registers the same run operation for macOS", () => {
+test("the plugin registers the same run operation for macOS and no spawn handle operations", () => {
+  // The plugin API lists the union of platforms; macOS declares only `run`.
   expect(Object.keys(processes)).toEqual([
     "run",
+    "spawn",
+    "read",
+    "write",
+    "closeStdin",
+    "kill",
   ]);
   expect(Object.keys(macosProcessOperations)).toEqual([
     "run",

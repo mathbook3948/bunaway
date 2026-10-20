@@ -85,6 +85,11 @@ test("process contract allows local .exe argv but rejects shell strings, PATH, s
   }
   expect(Object.keys(processes)).toEqual([
     "run",
+    "spawn",
+    "read",
+    "write",
+    "closeStdin",
+    "kill",
   ]);
   const registry = new NativeRegistry([
     processes._definition,

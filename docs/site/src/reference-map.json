@@ -1414,7 +1414,14 @@
       "network.isOnline",
       "network.resolveHost"
     ],
-    "reference/plugins/process": ["process.run"],
+    "reference/plugins/process": [
+      "process.run",
+      "process.spawn",
+      "process.read",
+      "process.write",
+      "process.closeStdin",
+      "process.kill"
+    ],
     "reference/plugins/os": [
       "os.info",
       "os.usage",

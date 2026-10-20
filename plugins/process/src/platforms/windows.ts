@@ -1,15 +1,26 @@
 import type { z } from "zod";
-import type { ProcessResult, processInputSchema } from "#process/contract";
-import type { initialize } from "#process/platforms/foreground";
-import { runForeground } from "#process/platforms/foreground";
-import { runProcess } from "#process/platforms/windows-process";
+import type {
+  ProcessInstance,
+  ProcessResult,
+  processInputSchema,
+} from "#process/contract";
+import {
+  initialize as initializeForeground,
+  runForeground,
+} from "#process/platforms/foreground";
+import { launchProcess, runProcess } from "#process/platforms/windows-process";
 import { ProcessCleanupError } from "#process/platforms/windows-process-native";
 
-export { dispose, initialize } from "#process/platforms/foreground";
+export { dispose } from "#process/platforms/foreground";
+
+/** Own foreground invocations and spawned children; spawned children are Job-contained Win32 processes. */
+export function initialize(): ProcessInstance {
+  return initializeForeground(launchProcess);
+}
 
 /** Run one Windows invocation; native cleanup failures keep their own error. */
 export function run(
-  state: ReturnType<typeof initialize>,
+  state: ProcessInstance,
   payload: z.output<typeof processInputSchema>,
   requestSignal?: AbortSignal,
 ): Promise<ProcessResult> {
