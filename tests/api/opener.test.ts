@@ -293,6 +293,15 @@ test("opener preserves strict inputs and independently granted file operations",
       name: "opener.clearRecentDocuments",
     },
     {
+      name: "opener.setJumpList",
+    },
+    {
+      name: "opener.getJumpListRemovedItems",
+    },
+    {
+      name: "opener.deleteJumpList",
+    },
+    {
       name: "opener.readShortcutLink",
     },
     {

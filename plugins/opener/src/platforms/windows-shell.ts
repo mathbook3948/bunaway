@@ -1,6 +1,7 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
 import { BunawayError } from "@bunaway/plugin";
 import { OLE32, pick } from "@bunaway/plugin/win32";
+import { guid } from "#opener/platforms/windows-com";
 
 const POINTER_BYTES = 8;
 const VARIANT_BYTES = 24;
@@ -30,14 +31,6 @@ const COM_SLOT = {
   queryActiveView: 15,
   getItemObject: 15,
 } as const;
-
-function guid(value: string): Buffer {
-  const bytes = Buffer.from(value.replaceAll("-", ""), "hex");
-  bytes.subarray(0, 4).reverse();
-  bytes.subarray(4, 6).reverse();
-  bytes.subarray(6, 8).reverse();
-  return bytes;
-}
 
 const CLSID_SHELL_WINDOWS = guid("9ba05972-f6a8-11cf-a442-00a0c90a8f39");
 const IID_SHELL_WINDOWS = guid("85cb6900-4d95-11cf-960c-0080c7f4ee85");

@@ -96,6 +96,104 @@ export const shortcutLinkSchema = z.strictObject({
 });
 export type ShortcutLink = z.infer<typeof shortcutLinkSchema>;
 
+// The Shell shows only as many Jump List entries as the user's settings allow and drops the rest
+// without an error; these bounds only limit the size of one request.
+export const MAX_JUMP_LIST_CATEGORIES = 20;
+export const MAX_JUMP_LIST_ITEMS = 100;
+export const MAX_JUMP_LIST_ARGUMENTS = 64;
+export const MAX_JUMP_LIST_TITLE_LENGTH = 260;
+export const MAX_JUMP_LIST_CATEGORY_NAME_LENGTH = 260;
+
+/** One program argument; `%` is rejected because the Shell expands placeholders even inside quotes. */
+const jumpListArgument = shortcutText(MAX_SHORTCUT_ARGUMENTS_LENGTH).refine(
+  (value) => !value.includes("%"),
+  "Text contains a percent sign.",
+);
+const nonEmpty = (value: string) => value.length > 0;
+
+/** A task starts this app again with the given arguments; the program itself is never chosen by the caller. */
+export const jumpListTaskSchema = z.strictObject({
+  type: z.literal("task"),
+  title: shortcutText(MAX_JUMP_LIST_TITLE_LENGTH).refine(
+    nonEmpty,
+    "Text is empty.",
+  ),
+  args: z.array(jumpListArgument).max(MAX_JUMP_LIST_ARGUMENTS).optional(),
+  description: shortcutText(MAX_SHORTCUT_DESCRIPTION_LENGTH).optional(),
+  iconPath: fileInput.shape.path.optional(),
+  iconIndex: int32Schema.optional(),
+  cwd: fileInput.shape.path.optional(),
+});
+export type JumpListTask = z.infer<typeof jumpListTaskSchema>;
+const jumpListSeparatorSchema = z.strictObject({
+  type: z.literal("separator"),
+});
+export type JumpListSeparator = z.infer<typeof jumpListSeparatorSchema>;
+
+/** The Tasks section holds tasks and separators; a custom category holds tasks only. */
+const jumpListCategorySchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("tasks"),
+    items: z
+      .array(
+        z.union([
+          jumpListTaskSchema,
+          jumpListSeparatorSchema,
+        ]),
+      )
+      .min(1),
+  }),
+  z.strictObject({
+    type: z.literal("custom"),
+    name: shortcutText(MAX_JUMP_LIST_CATEGORY_NAME_LENGTH).refine(
+      nonEmpty,
+      "Text is empty.",
+    ),
+    items: z.array(jumpListTaskSchema).min(1),
+  }),
+]);
+export type JumpListCategory = z.infer<typeof jumpListCategorySchema>;
+
+export const jumpListInput = z.strictObject({
+  categories: z
+    .array(jumpListCategorySchema)
+    .min(1)
+    .max(MAX_JUMP_LIST_CATEGORIES)
+    .refine(
+      (categories) =>
+        categories.filter((category) => category.type === "tasks").length <= 1,
+      "Expected at most one tasks category.",
+    )
+    .refine(
+      (categories) =>
+        categories.reduce(
+          (total, category) => total + category.items.length,
+          0,
+        ) <= MAX_JUMP_LIST_ITEMS,
+      "Too many Jump List items.",
+    ),
+});
+export type JumpListInput = z.infer<typeof jumpListInput>;
+
+/** `customCategoryAccessDenied`: the Shell refused custom categories, for example when recent items are turned off. */
+export const jumpListResultSchema = z.enum([
+  "ok",
+  "customCategoryAccessDenied",
+]);
+export type JumpListResult = z.infer<typeof jumpListResultSchema>;
+
+/** A task the user removed from the list; unset text properties are empty strings. */
+export const removedJumpListTaskSchema = z.strictObject({
+  type: z.literal("task"),
+  title: z.string(),
+  args: z.array(z.string()),
+  description: z.string(),
+  iconPath: z.string(),
+  iconIndex: z.number().int(),
+  cwd: z.string(),
+});
+export type RemovedJumpListTask = z.infer<typeof removedJumpListTaskSchema>;
+
 /** Selected application paths are validated again by each platform before native execution. */
 export const fileWithAppSchema = fileInput.extend({
   app: fileInput.shape.path,
@@ -122,6 +220,10 @@ export function validateOpenerInput(operation: string, input: JsonValue) {
         return fileInput.parse(validateValue({}, input));
       case "opener.writeShortcutLink":
         return shortcutWriteInput.parse(validateValue({}, input));
+      case "opener.setJumpList":
+        return jumpListInput.parse(validateValue({}, input));
+      case "opener.getJumpListRemovedItems":
+      case "opener.deleteJumpList":
       case "opener.clearRecentDocuments":
         return emptyInput.parse(validateValue({}, input));
       case "opener.openFileWith":

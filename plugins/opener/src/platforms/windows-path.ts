@@ -4,6 +4,9 @@ import {
   WINDOWS_MAX_FILE_NAME_LENGTH,
 } from "@bunaway/protocol";
 import {
+  type JumpListInput,
+  type JumpListTask,
+  jumpListInput,
   MAX_FILE_PATH_LENGTH,
   type ShortcutDetails,
   type ShortcutOperation,
@@ -84,6 +87,48 @@ export function normalizeShortcutDetails(
     }
   }
   return normalized;
+}
+
+/**
+ * Validate a Jump List request without filesystem access. Task working directories and icon
+ * files are absolute Windows paths that need not exist, as for shortcuts.
+ */
+export function normalizeJumpList(input: unknown): JumpListInput {
+  const parsed = jumpListInput.safeParse(input);
+  if (!parsed.success) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Invalid Jump List.",
+    });
+  }
+  const normalizeTask = (task: JumpListTask): JumpListTask => ({
+    ...task,
+    ...(task.cwd === undefined
+      ? {}
+      : {
+          cwd: normalizeFilePath(task.cwd),
+        }),
+    ...(task.iconPath === undefined
+      ? {}
+      : {
+          iconPath: normalizeFilePath(task.iconPath),
+        }),
+  });
+  return {
+    categories: parsed.data.categories.map((category) =>
+      category.type === "custom"
+        ? {
+            ...category,
+            items: category.items.map(normalizeTask),
+          }
+        : {
+            ...category,
+            items: category.items.map((item) =>
+              item.type === "task" ? normalizeTask(item) : item,
+            ),
+          },
+    ),
+  };
 }
 
 /** Validate a fully qualified Windows file path without filesystem access. */
