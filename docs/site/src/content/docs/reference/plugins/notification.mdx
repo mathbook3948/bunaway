@@ -235,8 +235,8 @@ await notification.show({
 });
 ```
 
-`actions`의 버튼은 알림마다 선언하며 Electron `Notification`의 `actions`, `hasReply`,
-`replyPlaceholder`와 같은 모델입니다. 버튼은 문자열 id로 구분합니다. 버튼과 응답 전송 버튼을
+`actions`의 버튼은 Electron `Notification`처럼 알림마다 선언하고, Tauri처럼 문자열 id로
+구분합니다. Electron의 `action`과 `reply` 이벤트는 하나의 `actionInvoked`로 합쳤습니다. 버튼과 응답 전송 버튼을
 합쳐 최대 5개이고, 넘으면 `INVALID_ARGUMENT`입니다. `reply`를 지정하면 입력 상자와
 전송 버튼이 나타납니다. Windows toast의 입력 상자는 `hint-inputId`로 연결한 버튼과 함께 선언하므로 `buttonLabel`은
 필수이며 기본 문구는 없습니다. 지역화는 앱이 맡습니다. label, placeholder는 제목과
@@ -247,13 +247,17 @@ await notification.show({
 `actionId`는 누른 버튼의 id이고 응답 전송 버튼이면 null입니다. `reply`는 알림에 `reply`를
 지정했다면 사용자가 입력한 문자열(비어 있으면 빈 문자열)이며, 어느 버튼을 눌러도 함께 옵니다.
 지정하지 않았다면 null입니다. 응답은 사용자가 직접 입력한 신뢰할 수 없는 문자열이므로 앱이
-검증하세요. 응답은 최대 2048자(`data`와 같은 한도)이며 넘으면 잘라내지 않고 이벤트를
+검증하세요. 응답은 최대 2048 UTF-16 코드 단위(`data`와 같은 한도)이며 넘으면 잘라내지 않고 이벤트를
 보내지 않습니다. 이 알림에 선언하지 않은 버튼 id는 이벤트를 만들지 않습니다.
 같은 알림의 `actionInvoked`와 `dismissed` 사이의 순서는 보장하지 않습니다.
 
+입력 상자를 비워 둔 채 보내면 `reply`는 빈 문자열입니다. 응답 값을 읽을 수 없으면 이벤트를 보내지 않습니다.
+
 이벤트는 실행 중인 프로세스가 받은 Activated callback에서만 만듭니다. 앱이 종료된 뒤의
 버튼 클릭, 알림 센터에 남은 이전 프로세스 알림의 버튼은 이벤트가 없습니다. 권한은 새로 추가하지
-않고 `notification.show`와 이벤트 정책을 따릅니다.
+않고 `notification.show`와 이벤트 정책을 따릅니다. 자동 시험은 가짜 COM 객체와 Windows의
+인터페이스 메타데이터, 실제 ValueSet 읽기까지만 확인하며, 실제 버튼 클릭에서 Windows가 주는
+인수 문자열은 GUI 입력이 필요해 확인하지 않았습니다.
 
 ## 실행 중 이벤트와 activation 범위
 

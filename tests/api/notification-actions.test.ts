@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { JsonValue } from "@bunaway/protocol";
+import { z } from "zod";
 import {
   MAX_REPLY_LENGTH,
   MAX_TOAST_ACTIONS,
@@ -309,16 +310,52 @@ test("undeclared arguments and oversized replies publish nothing", async () => {
   expect(noReply.events).toEqual([]);
 });
 
-test("the actionInvoked event schema accepts reply and button identities", () => {
-  const schema = notificationEvents["notification.actionInvoked"];
-  expect(Object.keys(schema.properties).sort()).toEqual([
-    "actionId",
-    "data",
-    "group",
-    "id",
-    "reply",
-  ]);
-  expect([
-    ...schema.required,
-  ]).toContain("reply");
+test("published actionInvoked payloads satisfy the event schema, including its bounds", async () => {
+  const schema = z.fromJSONSchema(
+    JSON.parse(
+      JSON.stringify(notificationEvents["notification.actionInvoked"]),
+    ),
+  );
+  const f = controllerFor({
+    actions: [
+      action("ok"),
+    ],
+    reply: {
+      buttonLabel: "Send",
+    },
+  });
+  await f.activate("action:ok", "x".repeat(MAX_REPLY_LENGTH));
+  await f.activate("reply", "");
+  const noReply = controllerFor({
+    actions: [
+      action("ok"),
+    ],
+  });
+  await noReply.activate("action:ok");
+  const payloads = [
+    ...f.events,
+    ...noReply.events,
+  ].map((entry) => entry.payload);
+  expect(payloads).toHaveLength(3);
+  for (const payload of payloads) {
+    expect(schema.safeParse(payload).success).toBe(true);
+  }
+  expect(
+    schema.safeParse({
+      ...(payloads[0] as object),
+      reply: "x".repeat(MAX_REPLY_LENGTH + 1),
+    }).success,
+  ).toBe(false);
+  expect(
+    schema.safeParse({
+      ...(payloads[0] as object),
+      actionId: "bad id",
+    }).success,
+  ).toBe(false);
+  expect(
+    schema.safeParse({
+      ...(payloads[0] as object),
+      extra: 1,
+    }).success,
+  ).toBe(false);
 });

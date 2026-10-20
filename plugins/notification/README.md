@@ -67,8 +67,8 @@ recall 속성을 거부한다. 링크는 따라가고 링크 대상은 이 검�
 버튼과 전송 버튼을 합쳐 5개까지이고 `buttonLabel`에 기본값이 없다. 버튼의 activation 인수는
 `action:<id>`, 전송 버튼은 `reply`이며 `data`는 XML에 싣지 않는다. 버튼을 누르면
 `notification.actionInvoked`를 `{ id, group, actionId, reply, data }`로 전달한다. `actionId`는 전송
-버튼이면 null, `reply`는 입력 상자가 있으면 입력 문자열(없으면 빈 문자열), 없으면 null이다.
-2048자를 넘는 응답, 선언하지 않은 인수와 읽을 수 없는 인수는 이벤트를 만들지 않는다. 본문 클릭은
+버튼이면 null, `reply`는 입력 상자가 있으면 입력 문자열(비워 두면 빈 문자열), 없으면 null이다.
+2048 UTF-16 코드 단위를 넘는 응답, 문자열이 아닌 응답 값, 선언하지 않은 인수와 읽을 수 없는 인수는 이벤트를 만들지 않는다. 본문 클릭은
 `notification.clicked`이다. 인수는 Activated 이벤트 인자의 `IToastActivatedEventArgs`와
 `IToastActivatedEventArgs2.UserInput`(ValueSet)에서 callback 안에 복사하고 얻은 COM 객체와 HSTRING은
 모두 해제한다.

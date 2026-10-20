@@ -300,7 +300,7 @@ if (workerData?.toastMarshalWorker) {
       }
     };
     try {
-      assert.equal(readReply(runtime, set, "reply"), undefined);
+      assert.equal(readReply(runtime, set, "reply"), "");
       insert("reply", (out) =>
         runtime.string("안녕 hello", (text) =>
           runtime.method(
@@ -328,7 +328,9 @@ if (workerData?.toastMarshalWorker) {
           out,
         ),
       );
-      assert.equal(readReply(runtime, set, "reply"), undefined);
+      assert.throws(() => readReply(runtime, set, "reply"), {
+        code: "INTERNAL",
+      });
       console.log("activation interfaces and ValueSet reply reading passed");
     } finally {
       runtime.release(statics);

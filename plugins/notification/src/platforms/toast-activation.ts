@@ -1,4 +1,5 @@
 import { type Pointer, ptr } from "bun:ffi";
+import { BunawayError } from "@bunaway/protocol";
 import type { ToastEvent } from "#notification/contract";
 import {
   checkToast,
@@ -53,12 +54,15 @@ function outString(
   return runtime.takeString(Number(out[0]) as Pointer);
 }
 
-/** Text typed into the reply input, or undefined when the activation carries no usable value. */
+/**
+ * Text typed into the reply input. A missing key means nothing was typed and reads as the empty string.
+ * A value that is not a string throws, so the activation is dropped instead of reporting a guessed reply.
+ */
 export function readReply(
   runtime: Runtime,
   input: Pointer,
   id: string,
-): string | undefined {
+): string {
   return using(runtime, runtime.query(input, MAP_STRING_OBJECT_IID), (map) => {
     const present = new Uint8Array(1);
     runtime.string(id, (key) =>
@@ -77,7 +81,7 @@ export function readReply(
       ),
     );
     if (!present[0]) {
-      return undefined;
+      return "";
     }
     const value = runtime.string(id, (key) =>
       runtime.object(
@@ -111,7 +115,10 @@ export function readReply(
           "PropertyValue.Type",
         );
         if (type[0] !== PROPERTY_TYPE_STRING) {
-          return undefined;
+          throw new BunawayError({
+            code: "INTERNAL",
+            message: "Toast reply input is not a string.",
+          });
         }
         return outString(
           runtime,
@@ -151,8 +158,9 @@ export function readActivation(
       (args) =>
         outString(runtime, args, FIRST_METHOD_SLOT, "Activated.Arguments"),
     );
+    // A body click has no arguments and needs no reply, so a reply read cannot lose it.
     const reply =
-      replyInputId === undefined
+      replyInputId === undefined || activator === ""
         ? undefined
         : using(
             runtime,

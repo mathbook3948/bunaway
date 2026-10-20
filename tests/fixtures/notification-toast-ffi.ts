@@ -769,28 +769,45 @@ await activate(
     },
   ],
 );
-// A missing key or a value that is not a string is no reply text, never a guess.
-for (const input of [
-  "missing",
+// A missing key means nothing was typed; a value that is not a string drops the activation, never a guess.
+await activate(
   {
-    type: 3,
-    text: "",
+    arguments: "reply",
+    input: "missing",
   },
-] as const) {
-  await activate(
+  [
     {
+      kind: "activated",
       arguments: "reply",
-      input,
+      reply: "",
     },
-    [
-      {
-        kind: "activated",
-        arguments: "reply",
-        reply: undefined,
-      },
-    ],
-  );
-}
+  ],
+);
+await activate(
+  {
+    arguments: "reply",
+    input: {
+      type: 3,
+      text: "",
+    },
+  },
+  [],
+);
+// A body click never reads the reply, so a broken UserInput cannot lose it.
+await activate(
+  {
+    arguments: "",
+    input: "absent",
+  },
+  [
+    {
+      kind: "activated",
+      arguments: "",
+      reply: undefined,
+    },
+  ],
+  "activatedArgs2:6",
+);
 // Any failing COM step drops the activation and still releases every object and string.
 for (const stage of [
   "argument:0",
