@@ -54,6 +54,28 @@ test.skipIf(process.platform !== "win32")(
         locale.preferredLanguages.length,
       );
       assertWindowsRegionCode(locale.countryCode);
+      // CI runners may have no printer: an empty list and a null default are valid results.
+      const printers = osOperations.listPrinters.output.parse(
+        await adapter.execute("os.listPrinters", null, "backend"),
+      );
+      const defaultPrinter = osOperations.getDefaultPrinter.output.parse(
+        await adapter.execute("os.getDefaultPrinter", null, "backend"),
+      );
+      const marked = printers.filter((printer) => printer.isDefault);
+      expect(marked.length).toBeLessThanOrEqual(1);
+      // A default printer that is also listed must be the one entry marked as default.
+      if (
+        defaultPrinter !== null &&
+        printers.some(
+          (printer) =>
+            printer.name.toLowerCase() === defaultPrinter.toLowerCase(),
+        )
+      ) {
+        expect(marked.length).toBe(1);
+        expect(marked[0]?.name.toLowerCase()).toBe(
+          defaultPrinter.toLowerCase(),
+        );
+      }
       for (const kind of [
         undefined,
         "default",

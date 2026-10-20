@@ -1,6 +1,6 @@
 # OS metadata plugin
 
-`@bunaway/plugin-os` provides permission-mediated `os.info(null)`, `os.usage(null)`, `os.locale(null)` and `os.beep({ kind })` on Windows and macOS.
+`@bunaway/plugin-os` provides permission-mediated `os.info(null)`, `os.usage(null)`, `os.locale(null)` and `os.beep({ kind })` on Windows and macOS, and `os.listPrinters(null)` and `os.getDefaultPrinter(null)` on Windows.
 Register `os` in the app definition. Each operation requires its own permission; registration grants none.
 Trusted backends can use Bun, `process` and `node:os` directly for runtime metadata.
 
@@ -23,6 +23,13 @@ It is included in `mise run host:windows`; it does not change user language sett
 `os.beep({ kind })` calls user32 `MessageBeep` with default, info, warning or error sound types and returns
 without waiting for playback. The emoji panel is unsupported: Windows has no official API and only Win+. key
 synthesis, which depends on the focused window.
+
+`os.listPrinters` calls winspool `EnumPrintersW` at level 4 (name only, local and connected printers) and
+`os.getDefaultPrinter` calls `GetDefaultPrinterW`. The adapter sizes the buffer first, retries when the list grows
+in between, and checks every name pointer against the returned buffer before reading it. macOS rejects both with
+`UNSUPPORTED`. `tests/api/os-printers.test.ts` covers the parser with fake bindings; `tests/lifecycle/windows-os.test.ts`
+runs both calls against the real spooler, where an empty list and a `null` default are valid on a runner without printers.
+A populated list and network-printer latency are not covered by CI.
 
 `os.usage` reports cumulative process CPU microseconds, memory bytes, logical CPU count and actual
 IsWow64Process2 machine values. Windows x64 CI does not validate ARM64 translation hardware.

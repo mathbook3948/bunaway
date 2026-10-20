@@ -771,7 +771,9 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [x] `pauseDownload`, `resumeDownload`, `cancelDownload`와 `getDownloads`로 pause, resume, cancel과 재개 가능 여부를 제공한다.
 - [ ] 중단 다운로드의 metadata 저장과 재개를 제공한다.
 - [ ] 파일 업로드와 다운로드에 progress, 취소, timeout을 제공한다.
-- [ ] 프린터 목록과 기본 프린터를 조회한다.
+- [x] 프린터 목록과 기본 프린터를 조회한다.
+  [`os.listPrinters`와 `os.getDefaultPrinter`](./site/src/content/docs/reference/plugins/os.mdx)는
+  이름과 기본 여부만 반환하며 독립 권한이다.
 - [x] `showPrintUI`로 WebView2 browser 또는 system 인쇄 대화상자를 요청한다. 반환은 인쇄 완료가 아니며 사용자가 프린터와 제출을 선택한다.
 - [ ] silent print와 프로그램에서 지정하는 프린터 및 인쇄 옵션을 제공한다.
 - [ ] system 인쇄 대화상자의 실제 사용자 선택과 취소, 프린터의 실제 출력을 검증한다. CI의 browser UI 요청과 자원 정리는 물리 인쇄 검증이 아니다.

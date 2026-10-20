@@ -40,6 +40,13 @@ function failure(message: string): never {
   });
 }
 
+function unsupportedPrinters(): never {
+  throw new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Printer queries are not supported on macOS.",
+  });
+}
+
 /**
  * Own CoreFoundation, libSystem and AudioToolbox bindings on the host I/O worker and close them
  * on host shutdown. Every read copies values into JavaScript and releases the CoreFoundation
@@ -255,6 +262,14 @@ export function initialize(): OSInstance {
     locale() {
       assertActive();
       return locale();
+    },
+    listPrinters() {
+      assertActive();
+      return unsupportedPrinters();
+    },
+    getDefaultPrinter() {
+      assertActive();
+      return unsupportedPrinters();
     },
     beep() {
       assertActive();
