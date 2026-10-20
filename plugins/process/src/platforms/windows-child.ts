@@ -58,6 +58,9 @@ export interface WindowsChildOptions {
   stdin: "nul" | "pipe";
 }
 
+/** Buffers of writes whose cancellation did not finish; deliberately never released. */
+const abandonedWrites = new Set<Buffer>();
+
 interface OutputPipe {
   read: bigint;
   write: bigint;
@@ -671,8 +674,13 @@ export class WindowsProcessChild implements SpawnedChild {
     while (!this.writeFinished()) {
       if (Date.now() >= deadline) {
         // The kernel may still read `data` and write the OVERLAPPED: keep both untouched and
-        // refuse further writes until release closes the pipe.
+        // refuse further writes until release closes the pipe. Closing a handle does not wait
+        // for such a request, so both also move to a set that is never emptied; this leaks
+        // 64 KiB at most and only after a failed cancellation, instead of freeing memory the
+        // kernel can still touch.
         this.stuckWrite = data;
+        abandonedWrites.add(data);
+        abandonedWrites.add(this.overlapped);
         throw new ProcessCleanupError();
       }
       await Bun.sleep(POLL_INTERVAL_MS);

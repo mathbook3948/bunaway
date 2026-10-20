@@ -209,7 +209,11 @@ export interface SpawnedProcesses {
   ): Promise<ReadResult>;
   /** Write all bytes, waiting while the pipe is full. Aborting `signal` cancels only this write. */
   write(source: string, input: WriteInput, signal?: AbortSignal): Promise<void>;
-  /** Close stdin after a write in progress; closing twice succeeds. Aborting `signal` stops the wait. */
+  /**
+   * Close stdin after a write in progress; closing twice succeeds. Aborting `signal` stops the
+   * wait. Fails with INTERNAL, as does a later write, when a cancelled write could not be
+   * withdrawn from the pipe; the handle is then only good for `kill`.
+   */
   closeStdin(
     source: string,
     input: HandleInput,
