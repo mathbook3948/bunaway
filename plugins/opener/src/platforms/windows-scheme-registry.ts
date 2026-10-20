@@ -1,5 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
-import { failWithCleanup, ResourceOwner } from "@bunaway/plugin";
+import { attemptAll, failWithCleanup, ResourceOwner } from "@bunaway/plugin";
 import {
   ADVAPI32,
   KERNEL32,
@@ -155,13 +155,22 @@ export function createSchemeStore(): SchemeStore & {
         }
         return work();
       } finally {
-        try {
-          if (owned) {
-            kernel.symbols.ReleaseMutex(handle);
-          }
-        } finally {
-          kernel.symbols.CloseHandle(handle);
-        }
+        // Release and close both run; a failure of either is reported with the other.
+        attemptAll(
+          [
+            () => {
+              if (owned && !kernel.symbols.ReleaseMutex(handle)) {
+                throw registryError(kernel.symbols.GetLastError());
+              }
+            },
+            () => {
+              if (!kernel.symbols.CloseHandle(handle)) {
+                throw registryError(kernel.symbols.GetLastError());
+              }
+            },
+          ],
+          "URL scheme mutex cleanup failed.",
+        );
       }
     },
 

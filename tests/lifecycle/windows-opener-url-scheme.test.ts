@@ -188,7 +188,7 @@ test.skipIf(process.platform !== "win32")(
 );
 
 test.skipIf(process.platform !== "win32")(
-  "reserved and malformed schemes are rejected before the registry is touched",
+  "reserved and malformed schemes are rejected with INVALID_ARGUMENT",
   async () => {
     const adapter = createOperations({
       dataRoot: ".",

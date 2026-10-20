@@ -62,9 +62,10 @@ export function buildSchemeCommand(launch: AppLaunch["launch"]): string {
 /**
  * Per-user registration of this app as the handler of custom URL schemes under
  * `HKCU\Software\Classes\<scheme>`, in the shape Electron and Tauri write. A scheme key
- * belongs to this app only while its owner value and its command both equal the ones this
- * app writes; keys of other owners, including installer registrations, are never changed.
- * The user's default-app choice and HKLM are not touched.
+ * is this app's while its owner value names this app and run mode, so a registration whose
+ * command went stale after the app moved can still be refreshed or removed. Keys without
+ * that owner value are never changed. `isRegistered` is stricter: it also needs the current
+ * command. The user's default-app choice and HKLM are not touched.
  */
 export function createUrlSchemeRegistration(
   app: AppLaunch | undefined,
@@ -92,6 +93,11 @@ export function createUrlSchemeRegistration(
   const commandPath = (scheme: string) =>
     `${keyPath(scheme)}\\shell\\open\\command`;
 
+  /** True when the key carries this app's owner value, whatever command it holds. */
+  function ownsKey(scheme: string, owner: string): boolean {
+    return store.readString(keyPath(scheme), OWNER_VALUE) === owner;
+  }
+
   /** True when this app owns the key and its command still starts this app. */
   function ownsRegistration(
     scheme: string,
@@ -99,7 +105,7 @@ export function createUrlSchemeRegistration(
     command: string,
   ): boolean {
     return (
-      store.readString(keyPath(scheme), OWNER_VALUE) === owner &&
+      ownsKey(scheme, owner) &&
       store.readString(commandPath(scheme), "") === command
     );
   }
@@ -156,9 +162,9 @@ export function createUrlSchemeRegistration(
 
     /** Remove the scheme key when this app owns it. Returns whether a key was removed. */
     unregister(scheme: string): boolean {
-      const { owner, command } = identity();
+      const { owner } = identity();
       return store.withLock(scheme, () => {
-        if (!ownsRegistration(scheme, owner, command)) {
+        if (!ownsKey(scheme, owner)) {
           return false;
         }
         store.deleteTree(keyPath(scheme));

@@ -280,7 +280,6 @@ test("register refreshes the command after the app moved and unregister then rem
   );
   // The old command no longer matches, so the app does not count as registered yet.
   expect(moved.isRegistered("myapp")).toBe(false);
-  expect(moved.unregister("myapp")).toBe(false);
   moved.register("myapp");
   expect(moved.isRegistered("myapp")).toBe(true);
   expect(moved.unregister("myapp")).toBe(true);
@@ -340,7 +339,7 @@ test("a key owned by anyone else is neither replaced nor removed", () => {
   ).toBe('"C:\\Other\\other.exe" "%1"');
 });
 
-test("the owner value alone does not authorize removal when the command differs", () => {
+test("a stale command keeps the key removable by its owner but not registered", () => {
   const { store, keys } = fakeStore();
   createUrlSchemeRegistration(APP, store).register("myapp");
   keys
@@ -348,8 +347,8 @@ test("the owner value alone does not authorize removal when the command differs"
     ?.set("", '"C:\\Other\\other.exe" "%1"');
   const registration = createUrlSchemeRegistration(APP, store);
   expect(registration.isRegistered("myapp")).toBe(false);
-  expect(registration.unregister("myapp")).toBe(false);
-  expect(keys.has("Software\\Classes\\myapp")).toBe(true);
+  expect(registration.unregister("myapp")).toBe(true);
+  expect(keys.has("Software\\Classes\\myapp")).toBe(false);
 });
 
 test("a failed first registration removes the key it created and a retry succeeds", () => {
