@@ -1,4 +1,4 @@
-import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
+import { dlopen, type Pointer, ptr } from "bun:ffi";
 import { OLE32, pick, wide } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import type {
@@ -6,8 +6,8 @@ import type {
   ShortcutLink,
   ShortcutOperation,
 } from "#opener/contract";
+import { ComScope, guid, SHELL_LINK_SLOT } from "#opener/platforms/windows-com";
 
-const POINTER_BYTES = 8;
 const CLSCTX_INPROC_SERVER = 0x1;
 const STGM_READ = 0;
 const SLGP_RAWPATH = 0x4;
@@ -15,29 +15,11 @@ const SLGP_RAWPATH = 0x4;
 const TEXT_UNITS = 32768;
 const ICON_INDEX_BYTES = 4;
 const COM_SLOT = {
-  queryInterface: 0,
-  release: 2,
-  getPath: 3,
-  getDescription: 6,
-  setDescription: 7,
-  getWorkingDirectory: 8,
-  setWorkingDirectory: 9,
-  getArguments: 10,
-  setArguments: 11,
-  getIconLocation: 16,
-  setIconLocation: 17,
-  setPath: 20,
+  ...SHELL_LINK_SLOT,
+  // IPersistFile
   load: 5,
   save: 6,
 } as const;
-
-function guid(value: string): Buffer {
-  const bytes = Buffer.from(value.replaceAll("-", ""), "hex");
-  bytes.subarray(0, 4).reverse();
-  bytes.subarray(4, 6).reverse();
-  bytes.subarray(6, 8).reverse();
-  return bytes;
-}
 
 const CLSID_SHELL_LINK = guid("00021401-0000-0000-c000-000000000046");
 const IID_SHELL_LINK = guid("000214f9-0000-0000-c000-000000000046");
@@ -62,20 +44,14 @@ function notShortcut(): BunawayError {
 
 /** One shortcut object (`IShellLinkW` with its `IPersistFile`) owned for a single request. */
 class ShortcutObject {
-  readonly #bindings: ReturnType<typeof CFunction>[] = [];
-  readonly #releases: (() => void)[] = [];
+  readonly #com = new ComScope(shortcutFailed);
   readonly #link: Pointer;
   readonly #file: Pointer;
 
   constructor(create: (out: Pointer) => number) {
     try {
-      this.#link = this.#acquire((out) => create(out));
-      this.#file = this.#acquire((out) =>
-        this.#call(this.#link, COM_SLOT.queryInterface, [
-          "ptr",
-          "ptr",
-        ])(ptr(IID_PERSIST_FILE), out),
-      );
+      this.#link = this.#com.acquire(create);
+      this.#file = this.#com.queryInterface(this.#link, IID_PERSIST_FILE);
     } catch (error) {
       // The caller never receives the object, so release what was acquired here.
       this.release();
@@ -84,32 +60,7 @@ class ShortcutObject {
   }
 
   #call(object: Pointer, slot: number, args: ("ptr" | "i32" | "u32")[]) {
-    const address = read.ptr(read.ptr(object), slot * POINTER_BYTES);
-    if (!address) {
-      throw shortcutFailed();
-    }
-    const binding = CFunction({
-      ptr: address as Pointer,
-      args: [
-        "ptr",
-        ...args,
-      ],
-      returns: "i32",
-    });
-    this.#bindings.push(binding);
-    return (...values: (number | Pointer | null)[]) =>
-      Number(binding(object, ...values));
-  }
-
-  #acquire(invoke: (out: Pointer) => number): Pointer {
-    const output = new BigUint64Array(1);
-    if (invoke(ptr(output)) < 0 || !output[0]) {
-      throw shortcutFailed();
-    }
-    const object = Number(output[0]) as Pointer;
-    const release = this.#call(object, COM_SLOT.release, []);
-    this.#releases.push(() => release());
-    return object;
+    return this.#com.call(object, slot, args);
   }
 
   /** Load an existing shortcut file; any failure means the file is not a usable shortcut. */
@@ -222,12 +173,7 @@ class ShortcutObject {
   }
 
   release(): void {
-    for (const release of this.#releases.reverse()) {
-      release();
-    }
-    for (const binding of this.#bindings) {
-      binding.close();
-    }
+    this.#com.release();
   }
 }
 

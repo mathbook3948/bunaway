@@ -3,6 +3,9 @@ import { type NativeEnvironment, ResourceOwner } from "@bunaway/plugin";
 import { COINIT_APARTMENTTHREADED, OLE32, pick } from "@bunaway/plugin/win32";
 import { BunawayError, isRecord } from "@bunaway/protocol";
 import type {
+  JumpListInput,
+  JumpListResult,
+  RemovedJumpListTask,
   ShortcutDetails,
   ShortcutLink,
   ShortcutOperation,
@@ -15,10 +18,12 @@ import {
   resolveReadableFile,
 } from "#opener/platforms/file-check";
 import { createUrlHandlerQuery } from "#opener/platforms/windows-handler";
+import { createJumpLists } from "#opener/platforms/windows-jump-list";
 import {
   assertResolvedExtension,
   normalizeApplicationPath,
   normalizeFilePath,
+  normalizeJumpList,
   normalizeShortcutDetails,
   normalizeShortcutPath,
 } from "#opener/platforms/windows-path";
@@ -79,9 +84,15 @@ export function initialize(environment?: NativeEnvironment) {
   const schemeStore = owner.acquire(createSchemeStore, (resource) =>
     resource.dispose(),
   );
+  // Without a host app identity the Jump List operations report UNSUPPORTED.
+  const jumpLists = owner.acquire(
+    () => createJumpLists(environment?.app),
+    (resource) => resource.dispose(),
+  );
   return {
     owner,
     shell,
+    jumpLists,
     shortcuts,
     recent,
     handlers,
@@ -275,6 +286,39 @@ export function writeShortcutLink(
     assertParentDirectory(selected);
     state.shortcuts.write(selected, checked, operation);
   }
+  return null;
+}
+
+/**
+ * Replace this app's taskbar Jump List. Tasks always start this app, never a caller-chosen
+ * program. The call is synchronous and not interruptible, so cancellation is checked only
+ * before it starts.
+ */
+export function setJumpList(
+  state: State,
+  input: JumpListInput,
+  signal?: AbortSignal,
+): JumpListResult {
+  active(state);
+  notCancelled(signal);
+  return state.jumpLists.set(normalizeJumpList(input));
+}
+
+/** Entries the user removed from the list, so the app can leave them out of its next list. */
+export function getJumpListRemovedItems(
+  state: State,
+  signal?: AbortSignal,
+): RemovedJumpListTask[] {
+  active(state);
+  notCancelled(signal);
+  return state.jumpLists.removedItems();
+}
+
+/** Remove the Jump List this app set. */
+export function deleteJumpList(state: State, signal?: AbortSignal): null {
+  active(state);
+  notCancelled(signal);
+  state.jumpLists.clear();
   return null;
 }
 

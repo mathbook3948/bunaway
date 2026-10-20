@@ -16,6 +16,9 @@ opener.getUrlHandler(url: string, options?: NativeInvokeOptions): Promise<{ name
 opener.registerUrlScheme(scheme: string, options?: NativeInvokeOptions): Promise<null>
 opener.unregisterUrlScheme(scheme: string, options?: NativeInvokeOptions): Promise<boolean>
 opener.isUrlSchemeRegistered(scheme: string, options?: NativeInvokeOptions): Promise<boolean>
+opener.setJumpList(input: JumpListInput, options?: NativeInvokeOptions): Promise<"ok" | "customCategoryAccessDenied">
+opener.getJumpListRemovedItems(options?: NativeInvokeOptions): Promise<RemovedJumpListTask[]>
+opener.deleteJumpList(options?: NativeInvokeOptions): Promise<null>
 opener.readShortcutLink(path: string, options?: NativeInvokeOptions): Promise<ShortcutLink>
 opener.writeShortcutLink(path: string, details: ShortcutDetails, operation?: "create" | "update" | "replace", options?: NativeInvokeOptions): Promise<null>
 ```
@@ -186,6 +189,44 @@ await opener.unregisterUrlScheme("myapp"); // true, 등록이 없었다면 false
 
 Windows CI에서 실제 `HKCU`로 등록, 조회, 해제와 다른 소유자 키 보존을 검증합니다. 브라우저나 탐색기에서 링크를 눌러 앱이 실행되는 과정은 자동 검증하지 않았습니다.
 
+## 작업 표시줄 Jump List
+
+`opener.setJumpList(input, options?)`는 작업 표시줄 버튼의 오른쪽 클릭 메뉴(Jump List)에 앱의 task와 사용자 지정 category를 설정하고, `opener.getJumpListRemovedItems(options?)`는 사용자가 목록에서 지운 항목을 알려 주며, `opener.deleteJumpList(options?)`는 앱이 설정한 목록을 지웁니다. Electron `app.setJumpList`에 대응하며(Tauri에는 대응 API가 없습니다) Windows만 지원합니다(macOS는 `UNSUPPORTED`).
+
+```ts
+await opener.setJumpList({
+  categories: [
+    {
+      type: "tasks",
+      items: [
+        { type: "task", title: "새 창", args: ["--new-window"], description: "새 창을 엽니다" },
+        { type: "separator" },
+        { type: "task", title: "설정", args: ["--settings"], iconPath: "C:/Windows/System32/shell32.dll", iconIndex: 21 },
+      ],
+    },
+    {
+      type: "custom",
+      name: "최근 프로젝트",
+      items: [{ type: "task", title: "내 프로젝트", args: ["--open", "C:/work/project"] }],
+    },
+  ],
+});
+const removed = await opener.getJumpListRemovedItems();
+await opener.deleteJumpList();
+```
+
+- `tasks` category는 최대 하나이며 항목은 `task`와 `separator`입니다. `custom` category는 `name`과 `task`만 받습니다. 한 요청은 category 20개, 전체 항목 100개까지입니다.
+- `task`는 **항상 실행 중인 앱을 다시 시작합니다.** 실행할 프로그램은 호출자가 정할 수 없고, `args`(문자열 배열, 최대 64개)만 앱 실행 명령 뒤에 붙습니다. 인자는 Windows argv 규칙으로 인용하고, 인코딩한 전체 인자 줄은 2048 UTF-16 코드 단위까지입니다. `%`와 제어 문자는 셸이 `%1` 같은 자리 표시자를 따옴표 안에서도 확장하므로 거부합니다. 항목을 누르면 새 프로세스가 `args`와 함께 시작하므로, 앱은 시작 인자에서 이를 읽어 처리해야 합니다(단일 인스턴스 앱은 두 번째 실행의 인자 전달을 사용합니다). Electron이 임의 `program`을 받는 것과 달리 현재 앱으로 고정한 것은 목록을 통해 임의 프로그램이 사용자 이름으로 실행되지 않게 하려는 안전 선택입니다.
+- `title`은 필수이며 260 UTF-16 코드 단위까지입니다. `description`은 260, category `name`은 260 코드 단위까지입니다. `cwd`와 `iconPath`는 존재하지 않아도 되는 절대 Windows 경로이고, `iconIndex`는 32비트 정수입니다. `iconPath`가 없으면 앱의 아이콘을 씁니다.
+- 셸은 사용자 설정이 허용하는 만큼의 항목만 보여 주고 나머지는 오류 없이 자릅니다. 고정(pin)된 항목과 사용자가 "시작 및 작업 표시줄에 최근에 연 항목 표시"를 끈 상태에서는 표시가 달라질 수 있습니다. 목록은 호스트가 설정한 프로세스의 AppUserModelID에 붙습니다.
+- `setJumpList`는 기존 목록을 통째로 바꿉니다. 셸이 사용자 설정 때문에 custom category를 거부하면(`E_ACCESSDENIED`) 그 category만 건너뛰고 나머지를 반영한 뒤 `"customCategoryAccessDenied"`를 반환합니다. 그 밖의 셸 실패는 `INTERNAL`이며 이전 목록이 그대로 남습니다.
+- `getJumpListRemovedItems`는 사용자가 마지막 설정 이후 지운 항목 중 이 앱의 실행 명령으로 만든 task를 `{ type: "task", title, args, description, iconPath, iconIndex, cwd }`로 반환합니다. 설정하지 않은 문자열은 빈 문자열이고, 다른 실행 명령이나 파일 항목은 제외합니다. Windows는 사용자가 지운 항목을 다음 목록에 다시 넣지 않도록 안내하므로, 다음 `setJumpList` 전에 이 결과에 해당하는 항목을 빼세요. 이 호출은 목록을 바꾸지 않습니다.
+- `deleteJumpList`는 `ICustomDestinationList::DeleteList`로 이 프로세스의 사용자 지정 목록을 지웁니다. 목록이 이미 없을 때의 성공은 Windows CI로 검증합니다.
+
+권한은 `opener.setJumpList`, `opener.getJumpListRemovedItems`, `opener.deleteJumpList`이며 서로 별개입니다. 기본으로 부여되는 권한은 없고, 화면 직접 호출에는 `plugin.opener.setJumpList` 같은 같은 이름의 명령을 허용합니다. 호스트가 앱 정보를 주지 않는 환경에서는 `setJumpList`와 `getJumpListRemovedItems`가 `UNSUPPORTED`입니다. 호출은 opener의 I/O STA에서 동기로 실행하며 시작 전에 취소된 호출만 막습니다.
+
+Windows CI에서 실제 셸로 목록 설정, 같은 목록의 재설정, 삭제와 거부된 입력이 이전 목록을 바꾸지 않음을 검증하며, 셸이 저장한 파일에서 제목과 category 이름을 확인합니다. 작업 표시줄에서의 표시와 항목 클릭, 사용자가 항목을 지우는 동작, 고정 항목과 최근 항목 표시 설정에 따른 차이는 자동 검증하지 않았습니다.
+
 ## Windows 바로가기
 
 `opener.readShortcutLink(path, options?)`는 Windows 바로가기 파일(`.lnk`)의 속성을 읽고, `opener.writeShortcutLink(path, details, operation = "create", options?)`는 바로가기를 만들거나 바꿉니다. Electron `shell.readShortcutLink`, `shell.writeShortcutLink`에 대응하며 Windows만 지원합니다(macOS는 `UNSUPPORTED`).
@@ -242,7 +283,7 @@ URL 페이지 로딩과 Finder의 실제 선택 완료는 기다리지 않습니
 자식으로 연결 앱을 실행하거나 셸 명령을 만들지 않습니다. 접수한 작업은 취소나 종료로
 되돌리지 않습니다.
 
-Host operation은 `opener.openUrl`, `opener.openFile`, `opener.revealFile`, `opener.trashFile`, `opener.addRecentDocument`, `opener.clearRecentDocuments`, `opener.getUrlHandler`, `opener.registerUrlScheme`, `opener.unregisterUrlScheme`, `opener.isUrlSchemeRegistered`, `opener.readShortcutLink`, `opener.writeShortcutLink`입니다. 입력은 URL 작업에서 `{ url: string }`, URL scheme 작업에서 `{ scheme: string }`, 파일 작업에서 `{ path: string }`, `opener.clearRecentDocuments`에서 `{}`입니다. `opener.readShortcutLink`는 `{ path: string }`을, `opener.writeShortcutLink`는 `{ path, operation, details }`를 받습니다. `opener.getUrlHandler`는 `{ name, path }` 또는 `null`을, `opener.unregisterUrlScheme`와 `opener.isUrlSchemeRegistered`는 불리언을, `opener.readShortcutLink`는 바로가기 속성 객체를, 나머지는 `null`을 반환합니다.
+Host operation은 `opener.openUrl`, `opener.openFile`, `opener.revealFile`, `opener.trashFile`, `opener.addRecentDocument`, `opener.clearRecentDocuments`, `opener.getUrlHandler`, `opener.registerUrlScheme`, `opener.unregisterUrlScheme`, `opener.isUrlSchemeRegistered`, `opener.setJumpList`, `opener.getJumpListRemovedItems`, `opener.deleteJumpList`, `opener.readShortcutLink`, `opener.writeShortcutLink`입니다. `opener.setJumpList`는 `{ categories }`를 받아 `"ok"` 또는 `"customCategoryAccessDenied"`를, `opener.getJumpListRemovedItems`는 `{}`를 받아 task 배열을 반환하고, `opener.deleteJumpList`는 `{}`를 받아 `null`을 반환합니다. 입력은 URL 작업에서 `{ url: string }`, URL scheme 작업에서 `{ scheme: string }`, 파일 작업에서 `{ path: string }`, `opener.clearRecentDocuments`에서 `{}`입니다. `opener.readShortcutLink`는 `{ path: string }`을, `opener.writeShortcutLink`는 `{ path, operation, details }`를 받습니다. `opener.getUrlHandler`는 `{ name, path }` 또는 `null`을, `opener.unregisterUrlScheme`와 `opener.isUrlSchemeRegistered`는 불리언을, `opener.readShortcutLink`는 바로가기 속성 객체를, 나머지는 `null`을 반환합니다.
 
 | 오류 | 의미 |
 | --- | --- |

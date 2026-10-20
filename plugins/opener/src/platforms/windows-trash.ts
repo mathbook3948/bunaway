@@ -9,6 +9,7 @@ import {
 } from "bun:ffi";
 import { BunawayError } from "@bunaway/plugin";
 import { KERNEL32, OLE32, pick, SHELL32 } from "@bunaway/plugin/win32";
+import { guid } from "#opener/platforms/windows-com";
 
 const CLSCTX_INPROC_SERVER = 1;
 const DRIVE_FIXED = 3;
@@ -32,13 +33,6 @@ const SLOT = {
   aborted: 22,
 } as const;
 
-function guid(value: string): Buffer {
-  const bytes = Buffer.from(value.replaceAll("-", ""), "hex");
-  bytes.subarray(0, 4).reverse();
-  bytes.subarray(4, 6).reverse();
-  bytes.subarray(6, 8).reverse();
-  return bytes;
-}
 const CLSID_FILE_OPERATION = guid("3ad05575-8857-4850-9277-11b85bdb8e09");
 const IID_FILE_OPERATION = guid("947aab5f-0a5c-4c13-b4d6-4bf7836fc9f8");
 const IID_SHELL_ITEM = guid("43826d1e-e718-42ee-bc55-a1e261c37bfe");

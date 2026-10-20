@@ -1,5 +1,8 @@
 import type { NativeInvokeOptions, NativePluginAPI } from "@bunaway/plugin";
 import type {
+  JumpListInput,
+  JumpListResult,
+  RemovedJumpListTask,
   ShortcutDetails,
   ShortcutLink,
   ShortcutOperation,
@@ -10,6 +13,7 @@ import { normalizeMacosFilePath } from "#opener/platforms/macos-path";
 import {
   normalizeApplicationPath,
   normalizeFilePath,
+  normalizeJumpList,
   normalizeShortcutDetails,
   normalizeShortcutPath,
 } from "#opener/platforms/windows-path";
@@ -253,7 +257,40 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
     );
   }
 
+  /**
+   * Replace this app's taskbar Jump List, after Electron's `app.setJumpList`. Tasks start this
+   * app again with the given `args` (read them from the launch arguments); the program cannot
+   * be chosen. `separator` items are allowed only in the `tasks` category. Resolves
+   * `customCategoryAccessDenied` when the Shell refuses custom categories, for example when the
+   * user turned off recent items; the rest of the list is still set. Windows only.
+   */
+  async function setJumpList(
+    input: JumpListInput,
+    options?: NativeInvokeOptions,
+  ): Promise<JumpListResult> {
+    return api.setJumpList(normalizeJumpList(input), options);
+  }
+
+  /**
+   * Tasks the user removed from the Jump List since it was last set, so the next list can leave
+   * them out; the Shell does not accept a removed entry in a new list. Only entries written with
+   * this app's launch command are returned. Windows only.
+   */
+  async function getJumpListRemovedItems(
+    options?: NativeInvokeOptions,
+  ): Promise<RemovedJumpListTask[]> {
+    return api.getJumpListRemovedItems({}, options);
+  }
+
+  /** Remove the Jump List this app set; the Shell then shows its default list again. Windows only. */
+  async function deleteJumpList(options?: NativeInvokeOptions): Promise<null> {
+    return api.deleteJumpList({}, options);
+  }
+
   return {
+    setJumpList,
+    getJumpListRemovedItems,
+    deleteJumpList,
     readShortcutLink,
     writeShortcutLink,
     addRecentDocument,

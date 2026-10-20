@@ -4,6 +4,9 @@ import {
   emptyInput,
   fileInput,
   fileWithAppSchema,
+  jumpListInput,
+  jumpListResultSchema,
+  removedJumpListTaskSchema,
   shortcutLinkSchema,
   shortcutWriteInput,
   urlHandlerSchema,
@@ -20,6 +23,8 @@ import {
 import {
   addRecentDocument as addWindowsRecentDocument,
   clearRecentDocuments as clearWindowsRecentDocuments,
+  deleteJumpList as deleteWindowsJumpList,
+  getJumpListRemovedItems as getWindowsJumpListRemovedItems,
   getUrlHandler as getWindowsUrlHandler,
   type initialize as initializeWindows,
   isUrlSchemeRegistered as isWindowsUrlSchemeRegistered,
@@ -30,6 +35,7 @@ import {
   readShortcutLink as readWindowsShortcutLink,
   registerUrlScheme as registerWindowsUrlScheme,
   revealFile as revealWindowsFile,
+  setJumpList as setWindowsJumpList,
   trashFile as trashWindowsFile,
   unregisterUrlScheme as unregisterWindowsUrlScheme,
   writeShortcutLink as writeWindowsShortcutLink,
@@ -84,6 +90,24 @@ export const windowsOperations = {
     output: z.null(),
     handler: (_input, { instance, signal }) =>
       clearWindowsRecentDocuments(instance, signal),
+  }),
+  setJumpList: windowsOperation({
+    input: jumpListInput,
+    output: jumpListResultSchema,
+    handler: (input, { instance, signal }) =>
+      setWindowsJumpList(instance, input, signal),
+  }),
+  getJumpListRemovedItems: windowsOperation({
+    input: emptyInput,
+    output: z.array(removedJumpListTaskSchema),
+    handler: (_input, { instance, signal }) =>
+      getWindowsJumpListRemovedItems(instance, signal),
+  }),
+  deleteJumpList: windowsOperation({
+    input: emptyInput,
+    output: z.null(),
+    handler: (_input, { instance, signal }) =>
+      deleteWindowsJumpList(instance, signal),
   }),
   readShortcutLink: windowsOperation({
     input: fileInput,

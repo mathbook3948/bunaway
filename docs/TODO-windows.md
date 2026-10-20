@@ -444,7 +444,12 @@ Windows의 비활성화 기록을 수정하지 않는다.
   전체를 지운다(다른 앱 항목 포함, 앱 범위 아님). 각각 작업 권한을 요구하며 성공은 요청
   전달이다. 점프 목록 연결은 AppUserModelID 이후의 작업이다. 조회는 공식 API가 없고
   Recent 폴더의 `.lnk`가 앱별로 구분되지 않아 제공하지 않는다.
-- [ ] Jump List와 사용자 task, category, 제거된 항목 조회를 제공한다.
+- [x] Jump List와 사용자 task, category, 제거된 항목 조회를 제공한다.
+  `opener.setJumpList`는 `ICustomDestinationList`로 task(실행 중인 앱을 인자와 함께 다시 시작,
+  프로그램 고정), separator와 사용자 지정 category를 설정하고, `opener.getJumpListRemovedItems`는
+  사용자가 지운 task를, `opener.deleteJumpList`는 목록을 지운다. 작업 권한 세 개가 각각 별개다.
+  Windows CI는 셸이 저장한 파일로 설정, 재설정, 삭제를 확인하며 작업 표시줄 표시와 클릭은
+  자동 검증하지 않았다.
 - [x] 작업 표시줄 progress와 상태를 설정한다.
   `windows.setTaskbarProgress`는 창별 `none`, `indeterminate`, `normal`, `paused`, `error`를
   적용하며 determinate 상태에는 0~1의 진행률을 요구한다. 작업 권한과 창 수명을 검사하고

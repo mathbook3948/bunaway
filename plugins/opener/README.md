@@ -117,6 +117,21 @@ const link = await opener.readShortcutLink("C:\\Users\\me\\Desktop\\App.lnk");
 소유로 보며(앱이 이동해 낡은 명령은 갱신과 해제 가능), 다른 프로그램이 덮어쓴 키와 소유가 아닌 기존 이름(HKLM 등록과 시스템 ProgId 포함)은 덮거나 지우지 않습니다. 권한은 작업 이름 세 개이며 각각 별개입니다.
 링크로 받은 URL은 신뢰할 수 없는 입력이므로 앱이 검증해야 합니다. 자세한 규칙은 reference 문서를 참고하세요.
 
+## 작업 표시줄 Jump List
+
+`setJumpList(input, options?): Promise<"ok" | "customCategoryAccessDenied">`, `getJumpListRemovedItems(options?)`,
+`deleteJumpList(options?): Promise<null>`는 작업 표시줄 Jump List에 앱의 task와 사용자 지정 category를 설정하고, 사용자가
+지운 항목을 조회하고, 목록을 지웁니다(Windows만, macOS는 `UNSUPPORTED`). Electron `app.setJumpList`에 대응하며 Tauri에는
+대응 API가 없습니다. `ICustomDestinationList`로 opener의 I/O STA에서 동기 실행하며 요청마다 COM 객체를 만들고 해제합니다
+(`windows-jump-list.ts`, 공유 COM 범위는 `windows-com.ts`). task는 항상 실행 중인 앱을 `args`와 함께 다시 시작하고
+프로그램은 호출자가 정할 수 없습니다. 인자는 Windows argv 규칙으로 인용하며 `%`와 제어 문자는 거부합니다. 제거된 항목 조회는
+`BeginList`가 돌려주는 목록을 읽고 `AbortList`로 목록을 바꾸지 않은 채 끝냅니다. 빌드 중 실패는 `AbortList`로 이전 목록을
+남깁니다. 권한은 작업 이름 세 개이며 각각 별개이고, 호스트가 앱 정보를 주지 않으면 `UNSUPPORTED`입니다. 오류는
+`INVALID_ARGUMENT`, `UNSUPPORTED`, `INTERNAL`, 종료 뒤 호출과 시작 전에 중단된 호출의 `CANCELLED`입니다. 상한은 category 20개,
+항목 100개, 제목과 설명과 category 이름 260 코드 단위, 인자 줄 2048 코드 단위입니다. 셸이 표시하는 항목 수는 사용자 설정에
+따라 더 적을 수 있습니다. Windows CI는 목록 설정, 재설정, 삭제와 거부된 입력을 셸이 저장한 파일로 확인하며, 작업 표시줄 표시와
+클릭, 사용자의 항목 삭제, 고정 항목은 자동 검증하지 않았습니다.
+
 ## 지정 앱
 
 `openFileWith(path: string, app: string, options?: NativeInvokeOptions): Promise<null>`과

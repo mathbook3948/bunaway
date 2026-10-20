@@ -1479,6 +1479,9 @@
       "opener.registerUrlScheme",
       "opener.unregisterUrlScheme",
       "opener.isUrlSchemeRegistered",
+      "opener.setJumpList",
+      "opener.getJumpListRemovedItems",
+      "opener.deleteJumpList",
       "opener.readShortcutLink",
       "opener.writeShortcutLink"
     ],
