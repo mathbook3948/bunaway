@@ -11,58 +11,26 @@ const FAMILY_OF_QUERY_TYPE = {
 } as const;
 
 /** Resolver seam, so address mapping and cancellation run without real DNS. */
-export type HostLookup = (
-  host: string,
-  family?: 4 | 6,
-) => Promise<
+export type HostLookup = (host: string) => Promise<
   readonly {
     address: string;
     family: number;
   }[]
 >;
 
-type SystemResolve = (
-  host: string,
-  options: {
-    all: true;
-    family?: 4 | 6;
-  },
-) => ReturnType<HostLookup>;
-
-/**
- * With a family hint getaddrinfo fails (ENOTFOUND or ENODATA) for a name that exists but has no
- * address of that family. Ask again without the hint so that case is an empty result, as for an
- * IP literal, while a name that does not exist still fails.
- */
-export function familyLookup(resolve: SystemResolve): HostLookup {
-  return async (host, family) => {
-    if (family === undefined) {
-      return resolve(host, {
-        all: true,
-      });
-    }
-    try {
-      return await resolve(host, {
-        all: true,
-        family,
-      });
-    } catch {
-      return resolve(host, {
-        all: true,
-      });
-    }
-  };
-}
-
-export const systemLookup: HostLookup = familyLookup(lookup);
+export const systemLookup: HostLookup = (host) =>
+  lookup(host, {
+    all: true,
+  });
 
 /**
  * Resolve a name with the operating system resolver (getaddrinfo), which applies the hosts file,
  * search suffixes and the system DNS configuration like the host resolver behind Electron's
  * `net.resolveHost()`. Addresses keep resolver order and repeats are removed. `queryType` limits the
- * result to one address family like Electron's `queryType`. The resolver returns an IP literal as it
- * is whatever the family hint, so the family is also checked on the result: an IPv4 literal asked
- * for "AAAA" yields no endpoints.
+ * result to one address family like Electron's `queryType`. The lookup itself is unhinted: a hinted
+ * getaddrinfo fails for a name that has no address of that family, which cannot be told apart from
+ * a failing resolver. Filtering one answer makes a name without that family (or an IP literal of
+ * the other family) an empty result while resolver failures still fail.
  *
  * getaddrinfo cannot be interrupted. On abort the call rejects at once and the lookup finishes in
  * the background, so cancellation and the deadline do not wait for a slow resolver. The caller
@@ -78,7 +46,7 @@ export async function resolveHost(
 }> {
   signal.throwIfAborted();
   const wanted = queryType && FAMILY_OF_QUERY_TYPE[queryType];
-  const pending = find(host, wanted);
+  const pending = find(host);
   let onAbort: (() => void) | undefined;
   const aborted = new Promise<never>((_resolve, reject) => {
     onAbort = () => reject(signal.reason);

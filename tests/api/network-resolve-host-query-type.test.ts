@@ -1,9 +1,6 @@
 import { expect, setDefaultTimeout, test } from "bun:test";
 import { resolveHostInputSchema } from "#plugins/network/src/contract";
-import {
-  familyLookup,
-  resolveHost,
-} from "#plugins/network/src/platforms/resolve-host";
+import { resolveHost } from "#plugins/network/src/platforms/resolve-host";
 import {
   dispose,
   initialize,
@@ -13,7 +10,7 @@ import { deadline } from "../fixtures/deadlines";
 
 setDefaultTimeout(deadline("build"));
 
-test("resolveHost passes the family hint and keeps only the asked family", async () => {
+test("resolveHost keeps only the asked family and drops repeats", async () => {
   const mixed = [
     {
       address: "93.184.216.34",
@@ -28,11 +25,7 @@ test("resolveHost passes the family hint and keeps only the asked family", async
       family: 4,
     },
   ];
-  const seen: (4 | 6 | undefined)[] = [];
-  const find = async (_host: string, family?: 4 | 6) => {
-    seen.push(family);
-    return mixed;
-  };
+  const find = async () => mixed;
   const signal = new AbortController().signal;
   expect(await resolveHost("a.example", signal, find, "A")).toEqual({
     endpoints: [
@@ -53,11 +46,6 @@ test("resolveHost passes the family hint and keeps only the asked family", async
   expect((await resolveHost("a.example", signal, find)).endpoints).toHaveLength(
     2,
   );
-  expect(seen).toEqual([
-    4,
-    6,
-    undefined,
-  ]);
 });
 
 test("resolveHost returns no endpoints when the asked family has no address", async () => {
@@ -126,42 +114,39 @@ test("runResolveHost resolves localhost by family with the system resolver", asy
   }
 });
 
-test("familyLookup answers a name without that family with an empty result", async () => {
-  const calls: (4 | 6 | undefined)[] = [];
-  const find = familyLookup(async (host, options) => {
-    calls.push(options.family);
-    if (options.family === 6) {
-      throw Object.assign(new Error(`queryAaaa ENODATA ${host}`), {
-        code: "ENODATA",
-      });
-    }
-    return [
-      {
-        address: "93.184.216.34",
-        family: 4,
-      },
-    ];
-  });
+test("resolveHost answers a name without the asked family with an empty result", async () => {
+  const lookups: string[] = [];
   const result = await resolveHost(
     "ipv4-only.example",
     new AbortController().signal,
-    find,
+    async (host) => {
+      lookups.push(host);
+      return [
+        {
+          address: "93.184.216.34",
+          family: 4,
+        },
+      ];
+    },
     "AAAA",
   );
   expect(result).toEqual({
     endpoints: [],
   });
-  expect(calls).toEqual([
-    6,
-    undefined,
+  expect(lookups).toEqual([
+    "ipv4-only.example",
   ]);
 });
 
-test("familyLookup still fails for a name that does not exist", async () => {
-  const find = familyLookup(async () => {
-    throw new Error("ENOTFOUND");
-  });
+test("resolveHost still fails when the resolver fails for a queryType", async () => {
   await expect(
-    resolveHost("missing.example", new AbortController().signal, find, "AAAA"),
-  ).rejects.toThrow("ENOTFOUND");
+    resolveHost(
+      "flaky.example",
+      new AbortController().signal,
+      async () => {
+        throw new Error("EAI_AGAIN");
+      },
+      "AAAA",
+    ),
+  ).rejects.toThrow("EAI_AGAIN");
 });

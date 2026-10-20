@@ -13,7 +13,7 @@ that value changes, found by comparing it every 2 seconds. macOS does not publis
 `network.resolveHost` corresponds to Electron's `net.resolveHost()`. It returns `{ endpoints: [{ address, family }] }` from
 the system resolver (getaddrinfo), so the hosts file and system DNS settings apply. It takes an ASCII host name or IPv4
 address, keeps resolver order, removes repeats and returns at most 64 addresses. Cancellation and the deadline end the
-call at once while an already started lookup finishes in the background. `queryType` ("A" or "AAAA") keeps only IPv4 or IPv6 addresses; an IPv4 literal asked for "AAAA" gives an empty list. The `source`, cache and secure DNS options are not provided.
+call at once while an already started lookup finishes in the background. `queryType` ("A" or "AAAA") keeps only IPv4 or IPv6 addresses; a name or literal with no address of that family gives an empty list. The `source`, cache and secure DNS options are not provided.
 
 `network.resolveProxy` corresponds to Electron's `session.resolveProxy(url)` on Windows (macOS reports `UNSUPPORTED`). It
 returns `{ entries }`, a structured list of `{ kind: "direct" }` and `{ kind: "proxy", scheme, host, port }` instead of a
