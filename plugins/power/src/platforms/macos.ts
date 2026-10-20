@@ -1,4 +1,8 @@
-import { attemptAll, failWithCleanup } from "@bunaway/plugin";
+import {
+  attemptAll,
+  failWithCleanup,
+  type NativeEnvironment,
+} from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
 import { PowerBlockers } from "#power/blockers";
@@ -8,19 +12,22 @@ import {
   createMacosAssertions,
   type MacosAssertions,
 } from "#power/platforms/macos-blockers";
+import { watchMacosPowerLifecycle } from "#power/platforms/macos-lifecycle-events";
 
 /**
  * Power queries and app-owned sleep requests on macOS: power source and battery status, the input
- * idle time, and IOPMAssertion requests that keep the system or display awake. Events and the CPU
- * speed limit are not implemented and stay unsupported.
+ * idle time, IOPMAssertion requests that keep the system or display awake, and the sleep, wake,
+ * screen lock and screen unlock events. `power.statusChanged` and the CPU speed limit are not
+ * implemented and stay unsupported.
  */
 export class MacosPower implements MacosPowerInstance {
   private readonly native = createMacosPower();
   private readonly assertions: MacosAssertions;
   private readonly blockers: PowerBlockers;
+  private readonly releaseLifecycleEvents: (() => void) | undefined;
   private disposed = false;
 
-  constructor() {
+  constructor(events?: NativeEnvironment["events"]) {
     try {
       this.assertions = createMacosAssertions();
     } catch (error) {
@@ -32,6 +39,15 @@ export class MacosPower implements MacosPowerInstance {
       );
     }
     this.blockers = new PowerBlockers(this.assertions);
+    try {
+      this.releaseLifecycleEvents = watchMacosPowerLifecycle(events);
+    } catch (error) {
+      failWithCleanup(
+        error,
+        () => this.dispose(),
+        "Power adapter cleanup failed.",
+      );
+    }
   }
 
   private active(): void {
@@ -80,13 +96,15 @@ export class MacosPower implements MacosPowerInstance {
   }
 
   /**
-   * Release every assertion before the libraries that release them are closed. Each owner is
+   * Stop the event observers first so nothing is emitted while the rest is released, then release
+   * every assertion before the libraries that release them are closed. Each owner is
    * attempted even when an earlier one fails, and a repeated call retries what remains.
    */
   dispose(): void {
     this.disposed = true;
     attemptAll(
       [
+        () => this.releaseLifecycleEvents?.(),
         () => this.blockers.dispose(),
         () => this.assertions.dispose(),
         () => this.native.dispose(),
@@ -96,8 +114,8 @@ export class MacosPower implements MacosPowerInstance {
   }
 }
 
-export function initialize(): MacosPower {
-  return new MacosPower();
+export function initialize(environment: NativeEnvironment): MacosPower {
+  return new MacosPower(environment.events);
 }
 
 export function dispose(instance: MacosPower): void {

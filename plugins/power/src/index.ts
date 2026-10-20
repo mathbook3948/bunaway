@@ -9,7 +9,7 @@ import {
   dispose as disposeWindows,
   initialize as initializeWindows,
 } from "#power/platforms/windows";
-/** Windows implements every operation; macOS implements everything except `getCpuSpeedLimit`. Each operation needs its own grant. Repeated starts allocate independently stoppable requests. `power.statusChanged` reports AC and battery changes on the UI thread. `power.suspended`, `power.resumed`, `power.sessionLocked` and `power.sessionUnlocked` report system sleep, wake and WTS session lock. */
+/** Windows implements every operation; macOS implements everything except `getCpuSpeedLimit`. Each operation needs its own grant. Repeated starts allocate independently stoppable requests. `power.statusChanged` reports AC and battery changes on the Windows UI thread. `power.suspended`, `power.resumed`, `power.sessionLocked` and `power.sessionUnlocked` report system sleep, wake and screen lock: on Windows from power broadcasts and WTS session notifications, on macOS from NSWorkspace and distributed notifications. */
 export default defineNativePlugin(
   {
     name: "power",
