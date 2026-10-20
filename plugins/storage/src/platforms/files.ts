@@ -1,13 +1,13 @@
 import { BunawayError } from "@bunaway/plugin";
 import {
   MAX_STORAGE_BYTES,
+  MAX_STORAGE_TEXT_BYTES,
+  MAX_STORAGE_TEXT_JSON_BYTES,
+  type StorageBytesRead,
   type StorageBytesWrite,
   type StorageLocation,
   type StorageWrite,
 } from "#storage/contract";
-
-/** Text reads and copies are bounded so one request cannot pin a multi-megabyte buffer. */
-export const MAX_STORAGE_FILE_BYTES = 4 * 1024 * 1024;
 
 /**
  * The encoding half of a storage adapter, shared by every platform. A platform supplies the two
@@ -19,6 +19,12 @@ export abstract class StorageFiles {
 
   /** Read up to `maxBytes` from the file at `path`; larger files are rejected. */
   protected abstract readFile(path: string, maxBytes: number): Buffer;
+  /** Read up to `length` bytes starting at `offset`; fewer at the end of the file, none past it. */
+  protected abstract readRange(
+    path: string,
+    offset: number,
+    length: number,
+  ): Buffer;
   /** Replace or append `bytes` at `path`. */
   protected abstract writeFile(
     path: string,
@@ -47,17 +53,35 @@ export abstract class StorageFiles {
     }
   }
 
-  /** Read bounded UTF-8 text from the file, preserving BOM text. */
+  /**
+   * Read bounded UTF-8 text from the file, preserving BOM text. The reply travels as JSON in one
+   * message, so a text whose escaped form is too large is refused here instead of failing later
+   * in the transport.
+   */
   readText(input: StorageLocation): string {
-    return new TextDecoder("utf-8", {
+    const text = new TextDecoder("utf-8", {
       fatal: true,
       ignoreBOM: true,
-    }).decode(this.readFile(input.path, MAX_STORAGE_FILE_BYTES));
+    }).decode(this.readFile(input.path, MAX_STORAGE_TEXT_BYTES));
+    if (Buffer.byteLength(JSON.stringify(text)) > MAX_STORAGE_TEXT_JSON_BYTES) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Storage text is too large to return.",
+      });
+    }
+    return text;
   }
 
-  /** Read bounded bytes as canonical base64. */
-  readBytes(input: StorageLocation): string {
-    return this.readFile(input.path, MAX_STORAGE_BYTES).toString("base64");
+  /** Read bounded bytes as canonical base64: the whole file, or the requested range. */
+  readBytes(input: StorageBytesRead): string {
+    if (input.offset === undefined && input.length === undefined) {
+      return this.readFile(input.path, MAX_STORAGE_BYTES).toString("base64");
+    }
+    return this.readRange(
+      input.path,
+      input.offset ?? 0,
+      input.length ?? MAX_STORAGE_BYTES,
+    ).toString("base64");
   }
 
   /** Replace the file's text. */

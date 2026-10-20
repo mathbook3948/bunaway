@@ -29,13 +29,14 @@ OS 접근 거부는 `PERMISSION_DENIED`, 없는 대상은 `INVALID_ARGUMENT`다.
 ## 입출력과 전송
 
 텍스트는 UTF-8이며 읽기는 잘못된 인코딩을 거부하고 BOM을 보존한다.
-readText는 4 MiB, readBytes는 256 KiB를 넘으면 실패한다. 바이트 입력은 canonical base64 계약을 쓴다.
+readText는 파일 512 KiB와 JSON 인코딩 768 KiB, 파일 전체를 읽는 readBytes는 256 KiB를 넘으면 `INVALID_ARGUMENT`로 실패한다.
+`offset`이나 `length`를 주면 위치를 지정해 그 범위만 읽는다. 바이트 입력은 canonical base64 계약을 쓴다.
 write는 연 descriptor에 쓴 뒤 꼬리를 자르며 `O_TRUNC`로 열기 전에 내용을 지우지 않는다.
 append는 `O_APPEND`를 쓴다. 새 파일은 0600, 새 부모는 0700을 요청하고 OS umask가 적용된다.
 성공 전에 파일을 fsync한다. 열 때 `O_NONBLOCK`을 주어 FIFO의 무기한 대기를 막고, 일반 파일이 아닌 대상은
 `INVALID_ARGUMENT`로 거부한다.
 
-copyFile은 4 MiB 이하 원본을 먼저 읽고 대상을 `O_EXCL`로 만든다. 기존 파일, 디렉터리, 링크(대상이 없는 링크 포함)를
+copyFile은 대상을 `O_EXCL`로 만든 뒤 원본을 1 MiB씩 옮기며 크기 상한은 없다. 하나의 동기 작업이라 시작 뒤에는 취소할 수 없다. 기존 파일, 디렉터리, 링크(대상이 없는 링크 포함)를
 덮어쓰지 않으며 대상 부모는 이미 있어야 한다. 쓰기 실패 시 일부 대상이 남을 수 있고, 이름이 바뀌었을 수 있어
 이름으로 지우지 않는다. 원본의 동시 쓰기는 배제하지 않으므로 복사는 일관된 스냅샷이 아니다.
 
@@ -44,7 +45,7 @@ move는 `renamex_np(from, to, RENAME_EXCL)`를 호출한다. Node의 `rename`은
 파일 시스템(`ENOTSUP`)은 `UNSUPPORTED`다. 실패한 호출의 errno가 FFI 계층에서 0으로 읽히면 같은 호출을 한 번 더
 하고(실패한 이름 변경은 아무것도 바꾸지 않는다) 그래도 읽을 수 없으면 알 수 없는 오류로 실패한다.
 같은 경로로의 이동과, 문자열로 확인되는 자기 하위로의 이동은 호출 전에 `INVALID_ARGUMENT`로 거부한다.
-대소문자와 Unicode 정규화를 무시하는 볼륨에서 철자만 다른 하위 경로는 문자열 비교를 통과하지만, 커널이 거부한 오류가 
+대소문자와 Unicode 정규화를 무시하는 볼륨에서 철자만 다른 하위 경로는 문자열 비교를 통과하지만, 커널이 거부한 오류가
 `INVALID_ARGUMENT`가 될 것으로 본다(실행으로 확인하지 않았다).
 
 ## 디렉터리

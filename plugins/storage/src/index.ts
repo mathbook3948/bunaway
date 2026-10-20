@@ -24,6 +24,7 @@ export default defineNativePlugin({
 
 export type {
   Storage,
+  StorageBytesRead,
   StorageBytesWrite,
   StorageDirectoryCreate,
   StorageDirectoryEntry,

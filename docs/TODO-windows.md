@@ -792,6 +792,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [x] 파일을 여는 경계에서 잘못된 경로 형식을 거부한다. 링크는 따라가며 위치 제한은 앱 명령이 맡는다([ADR 0024](./decisions/0024-plugin-path-responsibility.md)).
 - [x] Windows의 binary 읽기와 쓰기, UTF-8 텍스트와 바이트 append를 제공한다.
   canonical base64와 256 KiB 바이트 상한, 작업별 권한과 경로 형식 검사를 유지한다.
+  `offset`과 `length`를 주면 그 범위만 읽는다(호출당 256 KiB). readText는 파일 512 KiB와 JSON 768 KiB를 넘으면 `INVALID_ARGUMENT`다.
   [바이너리 계약](./site/src/content/docs/reference/host/storage-bytes.mdx)을 따른다.
 - [ ] open/read/write/seek/close 파일 핸들과 대용량 stream I/O를 제공한다.
 - [x] 파일과 디렉터리 존재, stat과 metadata를 조회한다.
@@ -824,7 +825,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   Tauri fs의 [`size`][T-fs-live]는 파일 metadata 크기 조회이며, 디렉터리 재귀 크기 계산에서
   링크 처리 계약은 이 구현이 정의한다.
   [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)을 따른다.
-- [x] Windows의 4 MiB 이하 일반 파일 복사와 같은 볼륨 안의 파일 및 디렉터리 이동을 제공한다.
+- [x] Windows의 일반 파일 복사(크기 상한 없음)와 같은 볼륨 안의 파일 및 디렉터리 이동을 제공한다.
   복사는 대상을 배타적으로 만들고 이동은 `MoveFileExW`를 덮어쓰기 없이 호출하므로 기존 destination을 대체하지 않는다.
   [전송 계약](./site/src/content/docs/reference/host/storage-transfers.mdx)을 따른다.
 - [ ] 큰 파일과 디렉터리 재귀 copy, 다른 볼륨의 move, 덮어쓰기 및 truncate를 제공한다.

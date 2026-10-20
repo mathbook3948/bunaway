@@ -300,17 +300,14 @@ if (mode === "verify") {
     assert.equal(transfer("storage.copyFile", source, copy), null);
     assert.deepEqual(readFileSync(copy), large);
     assert.deepEqual(readFileSync(source), large);
-    writeFileSync(`${root}/too-large`, Buffer.alloc(large.length + 1));
-    expectCode(
-      () =>
-        transfer(
-          "storage.copyFile",
-          `${root}/too-large`,
-          `${root}/not-created`,
-        ),
-      "INVALID_ARGUMENT",
+    // Copies are no longer bounded; a source above the old 4 MiB limit is copied whole.
+    const larger = Buffer.alloc(large.length + 1, 9);
+    writeFileSync(`${root}/larger`, larger);
+    assert.equal(
+      transfer("storage.copyFile", `${root}/larger`, `${root}/larger-copy`),
+      null,
     );
-    assert.equal(existsSync(`${root}/not-created`), false);
+    assert.deepEqual(readFileSync(`${root}/larger-copy`), larger);
     for (const target of [
       copy,
       `${root}/symlink`,

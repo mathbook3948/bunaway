@@ -17,8 +17,8 @@ import { BunawayError } from "@bunaway/protocol";
 import {
   MAX_DIRECTORY_ENTRIES,
   MAX_STORAGE_BYTES,
+  MAX_STORAGE_TEXT_BYTES,
 } from "../../plugins/storage/src/contract.ts";
-import { MAX_STORAGE_FILE_BYTES } from "../../plugins/storage/src/platforms/files.ts";
 import {
   NodeStorage,
   storageError,
@@ -729,35 +729,121 @@ test("copyFile creates a new file and never replaces an existing name", () => {
   }
 });
 
-test("copyFile refuses sources above the bound before creating the destination", () => {
-  writeFileSync(at("big.bin"), Buffer.alloc(MAX_STORAGE_FILE_BYTES + 1));
-  expect(
-    codeOf(() =>
-      storage.copyFile({
-        from: at("big.bin"),
-        to: at("copy.bin"),
+test("copyFile has no size bound and copies a source above the old 4 MiB limit", () => {
+  const bytes = Buffer.alloc(5 * 1024 * 1024 + 1, 3);
+  writeFileSync(at("big.bin"), bytes);
+  storage.copyFile({
+    from: at("big.bin"),
+    to: at("copy.bin"),
+  });
+  expect(readFileSync(at("copy.bin")).equals(bytes)).toBe(true);
+});
+
+test("readBytes returns the requested range and nothing outside it", () => {
+  const path = at("range.bin");
+  const bytes = Buffer.from("0123456789");
+  writeFileSync(path, bytes);
+  const range = (input: { offset?: number; length?: number }) =>
+    Buffer.from(
+      storage.readBytes({
+        path,
+        ...input,
       }),
-    ),
-  ).toBe("INVALID_ARGUMENT");
+      "base64",
+    ).toString();
   expect(
-    storage.exists({
-      path: at("copy.bin"),
+    range({
+      offset: 2,
+      length: 3,
     }),
-  ).toBe(false);
+  ).toBe("234");
+  expect(
+    range({
+      offset: 8,
+      length: 5,
+    }),
+  ).toBe("89");
+  expect(
+    range({
+      offset: 10,
+      length: 1,
+    }),
+  ).toBe("");
+  expect(
+    range({
+      offset: 99,
+      length: 1,
+    }),
+  ).toBe("");
+  expect(
+    range({
+      offset: 4,
+    }),
+  ).toBe("456789");
+  expect(
+    range({
+      length: 4,
+    }),
+  ).toBe("0123");
+  expect(
+    range({
+      offset: 0,
+      length: 10,
+    }),
+  ).toBe("0123456789");
+});
+
+test("readBytes reads a range of a file above the whole-file bound", () => {
+  const path = at("huge-range.bin");
+  const bytes = Buffer.alloc(MAX_STORAGE_BYTES * 3, 1);
+  bytes.writeUInt8(9, MAX_STORAGE_BYTES * 2);
+  writeFileSync(path, bytes);
+  const part = Buffer.from(
+    storage.readBytes({
+      path,
+      offset: MAX_STORAGE_BYTES * 2,
+      length: 2,
+    }),
+    "base64",
+  );
+  expect([
+    ...part,
+  ]).toEqual([
+    9,
+    1,
+  ]);
+  expect(() =>
+    storage.readBytes({
+      path,
+    }),
+  ).toThrow(
+    expect.objectContaining({
+      code: "INVALID_ARGUMENT",
+    }),
+  );
+});
+
+test("readText refuses files and escaped text that cannot fit one reply", () => {
+  writeFileSync(at("fits.txt"), "a".repeat(MAX_STORAGE_TEXT_BYTES));
+  expect(
+    storage.readText({
+      path: at("fits.txt"),
+    }),
+  ).toHaveLength(MAX_STORAGE_TEXT_BYTES);
+  writeFileSync(at("long.txt"), "a".repeat(MAX_STORAGE_TEXT_BYTES + 1));
   expect(
     codeOf(() =>
-      storage.copyFile({
-        from: at("missing"),
-        to: at("copy.bin"),
+      storage.readText({
+        path: at("long.txt"),
       }),
     ),
   ).toBe("INVALID_ARGUMENT");
-  writeFileSync(at("small"), "x");
+  // NUL escapes to six bytes in JSON, so a file well under the byte limit can still be too large.
+  writeFileSync(at("escaped.txt"), "\0".repeat(200 * 1024));
   expect(
     codeOf(() =>
-      storage.copyFile({
-        from: at("small"),
-        to: at("no-parent", "copy"),
+      storage.readText({
+        path: at("escaped.txt"),
       }),
     ),
   ).toBe("INVALID_ARGUMENT");
