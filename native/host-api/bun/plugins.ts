@@ -97,7 +97,7 @@ export async function operations(
   app?: NativeEnvironment["app"],
   uiServices?: Pick<
     NativeEnvironment,
-    "shortcuts" | "menus" | "tray" | "dialogs"
+    "events" | "shortcuts" | "menus" | "tray" | "dialogs"
   >,
 ): Promise<PluginOperations> {
   const registry = pluginRegistry(plugins, catalog);
