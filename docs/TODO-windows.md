@@ -204,7 +204,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 키오스크 모드와 일반 전체화면의 차이를 정의한다.
 - [x] 창 opacity를 설정하고 조회한다. layered window의 상수 alpha로 WebView를 포함한 창 전체에 적용하며 1이면 layered 스타일을 제거한다.
 - [x] 창 불투명 background color를 제공한다(`window.backgroundColor`, `setBackgroundColor`, `getBackgroundColor`). `#RGB`와 `#RRGGBB`만 받고 창별 `WM_ERASEBKGND`와 WebView2 `DefaultBackgroundColor`를 같은 색으로 맞춘다. macOS는 아직 없다.
-- [ ] 창 투명 배경을 제공한다. 알파 0은 DWM 합성과 layered 스타일(투명 창, 211행의 결정)과 함께 정해야 한다.
+- [ ] 창 투명 배경을 제공한다. 알파 0은 DWM 합성과 layered 스타일(opacity, click-through가 쓰는 스타일 비트)과 함께 정해야 한다.
 - [x] shadow의 설정과 조회를 제공한다(`windows.setHasShadow`, `hasShadow`). `titlebar: "custom"` 창은 DWM 비클라이언트 렌더링 정책으로 끄고 같은 값으로 조회하며, 네이티브 제목 표시줄 창은 항상 shadow가 있어 `false` 설정을 `UNSUPPORTED`로 거부한다. macOS는 아직 없다.
 - [ ] Windows Mica, Acrylic와 배경 material, accent color를 제공한다.
 - [ ] 모서리와 창 shape의 지원을 결정한다. Electron shape는 실험 기능이다.
@@ -649,7 +649,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] title, favicon과 preferred-size 변경 이벤트를 제공한다.
 - [ ] renderer gone, unresponsive와 responsive 이벤트를 제공한다.
 - [ ] console 메시지, 스크립트 초기화 실패와 context-menu 이벤트를 제공한다.
-- [ ] WebView 배경색, 투명 배경과 scrollbar 옵션을 제공한다.
+- [ ] WebView 투명 배경과 scrollbar 옵션을 제공한다. 불투명 배경색은 `window.backgroundColor`가 창과 WebView2에 함께 적용한다.
 - [ ] 처음 숨긴 WebView의 paint, visibility와 ready-to-show 관계를 정의한다.
 - [ ] user agent, accept languages, proxy와 incognito 옵션을 제공한다.
 - [ ] 프로필 디렉터리와 데이터 저장소 선택, 조회와 삭제를 제공한다.
