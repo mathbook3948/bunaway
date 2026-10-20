@@ -553,7 +553,16 @@ test("invalid rectangles, sides, alignments and margins fail validation", async 
     {
       rect: {
         ...TARGET,
-        width: 0,
+        width: -1,
+      },
+      placement: "above",
+    },
+    {
+      rect: {
+        x: 2147483600,
+        y: 0,
+        width: 100,
+        height: 10,
       },
       placement: "above",
     },
@@ -577,7 +586,9 @@ test("invalid rectangles, sides, alignments and margins fail validation", async 
       extra: 1,
     },
   ]) {
-    await expect(f.invoke(payload)).rejects.toThrow();
+    await expect(f.invoke(payload)).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
   }
   expect(placed(f.log)).toEqual([]);
 });
@@ -602,4 +613,26 @@ test("the contract accepts every side and alignment and returns null", () => {
   }
   expect(validateWindowOutput("windows.moveNextToRect", null)).toBeNull();
   expect(() => validateWindowOutput("windows.moveNextToRect", true)).toThrow();
+});
+
+test("an empty reference rectangle is accepted and resolves the monitor from its point", async () => {
+  const f = fixture();
+  await f.invoke({
+    rect: {
+      x: 600,
+      y: 340,
+      width: 0,
+      height: 0,
+    },
+    placement: "below",
+    align: "start",
+  });
+  expect(placed(f.log)).toEqual([
+    {
+      area: "outer",
+      x: 600,
+      y: 340,
+    },
+  ]);
+  expect(f.log.some(([name]) => name === "nearestRect")).toBe(false);
 });

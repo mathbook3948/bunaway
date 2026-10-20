@@ -42,7 +42,7 @@ export const WINDOW_ANCHORS = [
   "bottom-right",
 ] as const;
 export type WindowAnchor = (typeof WINDOW_ANCHORS)[number];
-/** Largest logical gap `windows.moveToAnchor` accepts between the window and the work-area edge. */
+/** Largest logical gap `windows.moveToAnchor` and `windows.moveNextToRect` accept between the window and the work-area edge. */
 const MAX_ANCHOR_MARGIN = 8192;
 /** Sides of a reference rectangle where `windows.moveNextToRect` can put a window. */
 export const WINDOW_RECT_PLACEMENTS = [
@@ -73,6 +73,18 @@ export const monitorRectSchema = z
     ...monitorPointSchema.shape,
     width: z.int().positive().max(MAX_WINDOW_COORDINATE),
     height: z.int().positive().max(MAX_WINDOW_COORDINATE),
+  })
+  .refine(
+    (rect) =>
+      rect.x + rect.width <= MAX_WINDOW_COORDINATE &&
+      rect.y + rect.height <= MAX_WINDOW_COORDINATE,
+  );
+/** Reference rectangle in physical screen coordinates; unlike a monitor, it may be empty, as `tray.getBounds` can report. */
+const referenceRectSchema = z
+  .strictObject({
+    ...monitorPointSchema.shape,
+    width: z.int().min(0).max(MAX_WINDOW_COORDINATE),
+    height: z.int().min(0).max(MAX_WINDOW_COORDINATE),
   })
   .refine(
     (rect) =>
@@ -1355,7 +1367,7 @@ export const windowOperations = {
   },
   "windows.moveNextToRect": {
     input: windowTarget.extend({
-      rect: monitorRectSchema,
+      rect: referenceRectSchema,
       placement: z.enum(WINDOW_RECT_PLACEMENTS),
       align: z.enum(WINDOW_RECT_ALIGNMENTS).exactOptional(),
       margin: z.int().min(0).max(MAX_ANCHOR_MARGIN).exactOptional(),

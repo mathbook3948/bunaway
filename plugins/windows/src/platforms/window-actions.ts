@@ -758,7 +758,11 @@ function moveNextToRect(
   const { width, height } = window.getBounds(area);
   const { rect, placement } = payload;
   const align = payload.align ?? "center";
-  const monitor = monitors.nearestRect(rect);
+  // An empty rectangle, which the shell can report for a tray icon, has no area to intersect.
+  const monitor =
+    rect.width > 0 && rect.height > 0
+      ? monitors.nearestRect(rect)
+      : monitors.nearestPoint(rect);
   const margin = Math.round(((payload.margin ?? 0) * monitor.dpi) / 96);
   window.setGeometry(
     "outer",

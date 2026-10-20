@@ -158,7 +158,7 @@ async function verifyMoveNextToRect({
       ...editor,
       rect: {
         ...anchorRect,
-        width: 0,
+        width: -1,
       },
       placement: "below",
     }),
