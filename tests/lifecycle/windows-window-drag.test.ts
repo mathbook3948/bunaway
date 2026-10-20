@@ -95,6 +95,13 @@ test.skipIf(process.platform !== "win32")(
         import("#native/windows/bun/monitors"),
       ]);
     const input = dlopen("user32.dll", {
+      SetCursorPos: {
+        args: [
+          "i32",
+          "i32",
+        ],
+        returns: "i32",
+      },
       mouse_event: {
         args: [
           "u32",
@@ -110,8 +117,18 @@ test.skipIf(process.platform !== "win32")(
     const hwnds: bigint[] = [];
     let held = false;
     const press = () => {
+      // Keep the pointer off the test window so the system does not turn the press into its own caption message.
+      input.symbols.SetCursorPos(10, 10);
       input.symbols.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0n);
       held = true;
+      // The synthesized press reaches the asynchronous key state a moment later.
+      const deadline = Date.now() + 2000;
+      while (
+        !(user.symbols.GetAsyncKeyState(0x01) & 0x8000) &&
+        Date.now() < deadline
+      ) {
+        Bun.sleepSync(10);
+      }
     };
     const release = () => {
       if (held) {
