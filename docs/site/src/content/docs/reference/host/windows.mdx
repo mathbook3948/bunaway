@@ -490,7 +490,7 @@ await windows.close({ view: "dialog" });
 | `windows.toggleMaximize` | `{ view, windowId? }` | `Promise<null>`. 현재 최대화 상태이면 일반 크기, 아니면 최대화로 표시하고 활성화 요청 |
 | `windows.isMinimized` | `{ view, windowId? }` | `Promise<boolean>`. 실제 네이티브 창의 최소화 여부 |
 | `windows.isMaximized` | `{ view, windowId? }` | `Promise<boolean>`. 실제 네이티브 창의 최대화 여부 |
-| `windows.isFullscreen` | `{ view, windowId? }` | `Promise<boolean>`. 호스트가 해당 네이티브 창에 적용한 전체화면 모드 여부 |
+| `windows.isFullscreen` | `{ view, windowId? }` | `Promise<boolean>`. 네이티브 창의 전체화면 모드 여부. macOS는 사용자가 직접 진입한 전체화면도 `true`로 조회하며, 진입과 해제 작업은 `UNSUPPORTED` |
 | `windows.isVisible` | `{ view, windowId? }` | `Promise<boolean>`. 네이티브 표시 상태. 최소화한 창도 `true`일 수 있음. macOS는 `NSWindow.isVisible` 값을 그대로 반환하므로 최소화한 창은 `false`일 수 있음 |
 | `windows.isFocused` | `{ view, windowId? }` | `Promise<boolean>`. OS 전경 창인지 조회. 창 안의 WebView에 입력 포커스가 있어도 `true` |
 | `windows.isDestroyed` | `{ view, windowId? }` | `Promise<boolean>`. 선언된 뷰에 살아 있는 창이 없으면 `true` |

@@ -876,13 +876,21 @@ export class MacosWebview {
       if (this.closed) {
         return;
       }
-      this.objc.withAutoreleasePool(() => {
-        if (this.objc.send(this.window, "isMiniaturized") && attemptsLeft > 1) {
-          this.zoomWhenRestored(zoomed, attemptsLeft - 1);
-          return;
-        }
-        this.zoomTo(zoomed);
-      });
+      // The request already returned, so a failure here has no caller to report to.
+      try {
+        this.objc.withAutoreleasePool(() => {
+          if (
+            this.objc.send(this.window, "isMiniaturized") &&
+            attemptsLeft > 1
+          ) {
+            this.zoomWhenRestored(zoomed, attemptsLeft - 1);
+            return;
+          }
+          this.zoomTo(zoomed);
+        });
+      } catch (error) {
+        console.error("Deferred macOS window zoom failed.", error);
+      }
     }, ZOOM_AFTER_RESTORE_INTERVAL_MS);
   }
   /** A newer state change replaces a zoom that was still waiting for the Dock. */
