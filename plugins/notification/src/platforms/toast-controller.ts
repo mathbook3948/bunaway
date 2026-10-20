@@ -85,6 +85,8 @@ export type ToastDriver = {
     receive: (event: ToastEvent) => void,
   ): ToastHandle;
   clear(identity: NotificationResult): void;
+  /** Hide the owned toasts of one group and clear that group's history of the host app ID, including earlier processes. */
+  clearGroup(group: string): void;
   /** Hide every toast owned by this driver and clear all history of the host app ID, including earlier processes. */
   clearAll(): void;
   /** Identities of the host app ID's history items, including earlier processes. Items without a valid identity are omitted. */
@@ -214,6 +216,24 @@ export function createToastController(
     list(): NotificationResult[] {
       active();
       return driver.list();
+    },
+    clearGroup(group: string): null {
+      active();
+      const settle = beginSettle();
+      settle(drain);
+      // A driver failure leaves every entry owned so the caller can retry.
+      driver.clearGroup(group);
+      // Retiring discards late callbacks. Like clear, no synthetic dismissed event is published.
+      for (const [id, entry] of [
+        ...entries,
+      ]) {
+        if (entry.input.group === group) {
+          retire(entry);
+          entries.delete(id);
+        }
+      }
+      settle(drain);
+      return null;
     },
     clearAll(): null {
       active();

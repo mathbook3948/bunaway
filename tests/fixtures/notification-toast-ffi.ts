@@ -27,7 +27,8 @@ let failStage = "",
 let shown = 0,
   hidden = 0,
   removed = 0,
-  cleared = 0;
+  cleared = 0,
+  groupCleared = 0;
 const payloads: string[] = [];
 // History items returned by IToastNotificationHistory2.GetHistoryWithId as [tag, group].
 let historyItems: [
@@ -287,6 +288,11 @@ const actionMethods: ComHandler = ({ state, slot, stage, args }) => {
   if (stage === "history:12") {
     assert.equal(strings.get(Number(args[0])), "test.app");
     cleared++;
+    return 0;
+  }
+  if (stage === "history:7") {
+    assert.equal(strings.get(Number(args[1])), "test.app");
+    groupCleared++;
     return 0;
   }
   if (stage === "history:8") {
@@ -637,6 +643,24 @@ assert.equal(hidden, 2);
 assert.equal(cleared, 1);
 failStage = "history:12";
 assert.throws(() => driver.clearAll(), {
+  code: "INTERNAL",
+});
+failStage = "";
+// clearGroup hides only the owned toasts of that group, then RemoveGroupWithId (history slot 7) clears
+// the group's records of the app ID.
+const hiddenBeforeGroup = hidden;
+driver.clearGroup("other");
+assert.equal(hidden, hiddenBeforeGroup, "A different group keeps its toasts");
+assert.equal(groupCleared, 1);
+driver.clearGroup("bunaway");
+assert.equal(
+  hidden,
+  hiddenBeforeGroup + 1,
+  "The owned toast of the group is hidden",
+);
+assert.equal(groupCleared, 2);
+failStage = "history:7";
+assert.throws(() => driver.clearGroup("bunaway"), {
   code: "INTERNAL",
 });
 failStage = "";

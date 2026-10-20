@@ -3,7 +3,7 @@
 `@bunaway/plugin-notification`은 Windows의 알림 API 지원과 현재 앱의 OS 알림 설정을
 조회하고 Windows 알림 설정 페이지를 열며 실행 중 toast를 표시하는 선택 네이티브 플러그인이다.
 `defineNativePlugin`과 Zod 계약으로 `notification.getStatus`, `notification.openSettings`를
-`notification.show`, `notification.clear`, `notification.clearAll`, `notification.list`를 선언하며 각 작업은 같은 이름의 독립 정책 권한을 요구한다.
+`notification.show`, `notification.clear`, `notification.clearGroup`, `notification.clearAll`, `notification.list`를 선언하며 각 작업은 같은 이름의 독립 정책 권한을 요구한다.
 공개 helper는 `notification.getStatus()`와 `notification.openSettings()`이다.
 
 자세한 반환값, 권한, 오류와 사용 예는
@@ -82,7 +82,13 @@ failed의 HRESULT는 unsigned 32비트 값이다. Show 자체의 동기 실패�
 백엔드 이벤트 구독이나 `onOpen` 라우팅은 추가하지 않는다.
 
 `clear({ id, group? })`는 같은 앱의 해당 popup과 기록만 제거하고 null을 반환한다.
-이전 프로세스가 남긴 같은 ID의 기록도 제거할 수 있다. 앱 전체 기록은 `clearAll`이 지운다.
+이전 프로세스가 남긴 같은 ID의 기록도 제거할 수 있다. 같은 group 전체는 `clearGroup`, 앱 전체 기록은 `clearAll`이 지운다.
+`clearGroup({ group })`은 같은 앱의 해당 group에 속한 popup과 알림 센터 기록을 모두 제거하고 null을
+반환한다. `group`은 `id`와 같은 식별자 규칙을 따르며 기본값이 없어 생략할 수 없다. 이번 실행이 소유한
+해당 group의 toast를 `ToastNotifier.Hide`로 숨긴 뒤 `IToastNotificationHistory.RemoveGroupWithId(group, appId)`를
+호출하므로 이전 프로세스가 남긴 기록도 제거하고 다른 group과 다른 앱의 알림은 건드리지 않는다.
+없는 group은 오류 없이 성공한다. 해당 group의 소유 항목은 폐기해 늦게 온 callback을 버리고 소유 상한 64개에서
+빼며 dismissed 이벤트는 보내지 않는다. 실패하면 소유권을 유지하므로 다시 호출할 수 있다.
 `clearAll()`은 입력 null로 같은 앱(호스트 앱 ID)의 popup과 알림 센터 기록을 모두 제거하고
 null을 반환한다. 이번 실행이 소유한 toast를 `ToastNotifier.Hide`로 숨긴 뒤
 `IToastNotificationHistory.ClearWithId(appId)`를 호출하므로 이전 프로세스가 남긴 기록도 제거하고

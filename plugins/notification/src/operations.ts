@@ -1,6 +1,7 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
+  notificationGroupSchema,
   notificationIdentitySchema,
   notificationListSchema,
   notificationResultSchema,
@@ -21,6 +22,11 @@ export const notificationOperations = {
     input: notificationIdentitySchema,
     output: z.null(),
     handler: (input, { instance }) => instance.clear(input),
+  }),
+  clearGroup: operation({
+    input: notificationGroupSchema,
+    output: z.null(),
+    handler: (input, { instance }) => instance.clearGroup(input.group),
   }),
   clearAll: operation({
     input: z.null(),

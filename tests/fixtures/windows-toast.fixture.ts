@@ -556,6 +556,21 @@ if (workerData?.toastMarshalWorker) {
       "bunaway-test/all-a",
       "bunaway-test/all-b",
     ]);
+    // clearGroup removes only the records of that group; an unknown group succeeds without effect.
+    assert.equal(controller.clearGroup("bunaway-test"), null);
+    assert.deepEqual(controller.list().map(key), [
+      "bunaway-other/all-a",
+    ]);
+    assert.equal(
+      (await waitHistory((items) => items.length === 1)).length,
+      1,
+      "clearGroup must remove every history item of that group",
+    );
+    assert.equal(controller.clearGroup("bunaway-test"), null);
+    assert.equal(controller.clearGroup("bunaway-none"), null);
+    assert.deepEqual(controller.list().map(key), [
+      "bunaway-other/all-a",
+    ]);
     assert.equal(controller.clearAll(), null);
     assert.deepEqual(controller.list(), []);
     assert.equal(

@@ -84,6 +84,7 @@ OS에 해당 페이지나 처리 앱이 없거나 요청이 거부되면 오류�
 | --- | --- | --- |
 | `notification.show` | `NotificationOptions` | `notification.show` |
 | `notification.clear` | `NotificationIdentity` | `notification.clear` |
+| `notification.clearGroup` | `{ group }` | `notification.clearGroup` |
 | `notification.clearAll` | `null` | `notification.clearAll` |
 | `notification.list` | `null` | `notification.list` |
 | `notification.getStatus` | `null` | `notification.getStatus` |
@@ -112,6 +113,7 @@ OS에 해당 페이지나 처리 앱이 없거나 요청이 거부되면 오류�
 ```ts
 notification.show(input: NotificationOptions, options?: NativeInvokeOptions): Promise<NotificationResult>
 notification.clear(input: NotificationIdentity, options?: NativeInvokeOptions): Promise<null>
+notification.clearGroup(input: { group: string }, options?: NativeInvokeOptions): Promise<null>
 notification.clearAll(input: null, options?: NativeInvokeOptions): Promise<null>
 notification.list(input: null, options?: NativeInvokeOptions): Promise<NotificationResult[]>
 
@@ -149,6 +151,14 @@ await notification.clear({ id: "export-done" });
 앱 ID는 호스트가 정하며 호출자가 다른 앱의 알림을 선택할 수 없습니다.
 clear는 지정한 ID/group의 popup과 기록만 지웁니다. 같은 앱의 이전 프로세스가 남긴
 해당 기록도 지울 수 있습니다. 존재 여부와 무관하게 성공 결과는 null입니다.
+
+`notification.clearGroup`은 입력 `{ group }`으로 같은 앱의 해당 group에 속한 popup과 알림 센터 기록을
+모두 지우고 null을 반환합니다. `group`은 `id`와 같은 식별자 규칙을 따르며 생략할 수 없습니다. 이번
+실행이 소유한 해당 group의 알림을 숨긴 뒤 호스트 앱 ID 범위에서 그 group의 기록을 제거하므로 이전
+프로세스가 남긴 기록도 지우고, 다른 group과 다른 앱의 알림은 건드리지 않습니다. 없는 group도 오류 없이
+성공하며 소유 중이던 항목은 해제되어 늦게 온 callback은 버려집니다. 별도의 dismissed 이벤트는 보내지
+않습니다. Tauri `removeActive`는 ID 목록을 받고 Electron `Notification`에는 대응하는 API가 없어, group
+단위 제거는 Windows 알림 기록의 group 모델에 맞춘 확장이며 `clearGroup` 권한은 `clear`, `clearAll`과 독립입니다.
 
 `notification.clearAll`은 입력 `null`로 같은 앱의 popup과 알림 센터 기록을 모두 지우고
 null을 반환합니다. 이번 실행이 소유한 알림을 숨긴 뒤 호스트 앱 ID 범위의 기록 전체를 제거하므로
@@ -274,7 +284,7 @@ HRESULT는 unsigned 32비트 정수입니다. Show 자체가 실패하면 명령
 앱 정의로 `CommandsOf`, `EventsOf`를 지정한 클라이언트에서 이벤트를 구독하세요.
 뷰 정책의 `events`에 이벤트 이름을 허용하고 `host.permissions`에 `notification.show`도
 허용해야 합니다. 직접 작업 호출은 `commands`에 `plugin.notification.show` 또는
-`plugin.notification.clear`, `plugin.notification.clearAll` 또는 `plugin.notification.list`와 해당 host 권한을 추가합니다. 구독 해제, 뷰 종료와 권한 거부
+`plugin.notification.clear`, `plugin.notification.clearGroup`, `plugin.notification.clearAll` 또는 `plugin.notification.list`와 해당 host 권한을 추가합니다. 구독 해제, 뷰 종료와 권한 거부
 뒤에는 전달하지 않습니다. clear, 교체와 앱 종료 뒤 이전 객체의 callback은 버립니다.
 앱이 요청한 제거에 대해 별도의 합성 dismissed 이벤트는 보내지 않습니다.
 
