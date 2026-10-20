@@ -8,18 +8,29 @@ import {
 } from "bun:ffi";
 import {
   LIBSYSTEM,
-  LIBSYSTEM_PATH as SYSTEM,
   OBJC_PATH as OBJC,
   OBJC_RUNTIME,
   RTLD_DEFAULT,
+  LIBSYSTEM_PATH as SYSTEM,
 } from "@bunaway/plugin/darwin";
 import { pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
-import type { AppearancePreferences } from "#appearance/contract";
+import type {
+  AppearancePreferences,
+  ThemePreference,
+  ThemeState,
+} from "#appearance/contract";
 
 const APPKIT = "/System/Library/Frameworks/AppKit.framework/AppKit";
 const AQUA = "NSAppearanceNameAqua";
 const DARK_AQUA = "NSAppearanceNameDarkAqua";
+
+/** `system` clears the assignment so AppKit follows the OS; Electron `themeSource` and Tauri `set_theme` do the same. */
+const THEME_APPEARANCE: Record<ThemePreference, string | null> = {
+  system: null,
+  light: AQUA,
+  dark: DARK_AQUA,
+};
 
 function failure(message: string): never {
   throw new BunawayError({
@@ -206,25 +217,63 @@ export function initialize() {
       });
       return `#${components.join("")}`;
     };
+    // Cocoa objects returned by class factories are autoreleased; drain them per call.
+    const withPool = <T>(body: () => T): T => {
+      const allocated = required(
+        send(type("NSAutoreleasePool"), "alloc"),
+        "NSAutoreleasePool.alloc",
+      );
+      const pool = required(send(allocated, "init"), "NSAutoreleasePool.init");
+      try {
+        return body();
+      } finally {
+        send(pool, "drain");
+      }
+    };
+    /** Assign NSApp.appearance; null restores the OS-following default. */
+    const assignAppearance = (name: string | null): void => {
+      withPool(() => {
+        const application = required(
+          send(type("NSApplication"), "sharedApplication"),
+          "NSApplication.sharedApplication",
+        );
+        const appearance =
+          name === null
+            ? 0n
+            : required(
+                send(type("NSAppearance"), "appearanceNamed:", string(name)),
+                `NSAppearance.appearanceNamed: ${name}`,
+              );
+        send(application, "setAppearance:", appearance);
+      });
+    };
     let disposed = false;
-    return {
+    // Requested app preference; it is process state and never persisted.
+    let preference: ThemePreference = "system";
+    let changed = false;
+    const assertOpen = () => {
+      if (disposed) {
+        throw new BunawayError({
+          code: "CANCELLED",
+          message: "Appearance adapter is disposed.",
+        });
+      }
+    };
+    /** The effective theme is observed from NSApp.effectiveAppearance after the assignment. */
+    const themeState = (): ThemeState => {
+      const snapshot = api.read();
+      return {
+        preference,
+        override: null,
+        effectiveTheme: snapshot.appsTheme,
+        highContrast: snapshot.highContrast,
+      };
+    };
+    const api = {
       read(): AppearancePreferences {
-        if (disposed) {
-          throw new BunawayError({
-            code: "CANCELLED",
-            message: "Appearance adapter is disposed.",
-          });
-        }
+        assertOpen();
         reads++;
-        const allocated = required(
-          send(type("NSAutoreleasePool"), "alloc"),
-          "NSAutoreleasePool.alloc",
-        );
-        const pool = required(
-          send(allocated, "init"),
-          "NSAutoreleasePool.init",
-        );
-        try {
+        return withPool(() => {
           const application = required(
             send(type("NSApplication"), "sharedApplication"),
             "NSApplication.sharedApplication",
@@ -336,21 +385,38 @@ export function initialize() {
             descriptor.fill(0);
             callback.close();
           }
-        } finally {
-          send(pool, "drain");
-        }
+        });
+      },
+      getTheme(): ThemeState {
+        assertOpen();
+        return themeState();
+      },
+      setTheme(theme: ThemePreference): ThemeState {
+        assertOpen();
+        assignAppearance(THEME_APPEARANCE[theme]);
+        preference = theme;
+        changed = theme !== "system";
+        return themeState();
       },
       dispose() {
         if (disposed) {
           return;
         }
-        disposed = true;
-        selectors.clear();
-        for (const library of libraries.reverse()) {
-          library.close();
+        try {
+          // Hand the app back to the OS setting; only if this adapter changed it.
+          if (changed) {
+            assignAppearance(null);
+          }
+        } finally {
+          disposed = true;
+          selectors.clear();
+          for (const library of libraries.reverse()) {
+            library.close();
+          }
         }
       },
     };
+    return api;
   } catch (error) {
     for (const library of libraries.reverse()) {
       library.close();
