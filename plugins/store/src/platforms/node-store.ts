@@ -147,8 +147,9 @@ function storeIoError(error: unknown): unknown {
  * integer-like keys ("1", "42") come first in ascending order, as in every JavaScript object, so
  * a store read back from its file lists them that way.
  *
- * The text is compact on purpose: a file within the size limit never serializes larger than it
- * was read, so a valid file cannot fail the limit only because of how it was formatted.
+ * The text is compact on purpose, so a file is not refused only because of its indentation.
+ * Numbers written in exponent form ("1e20") expand when serialized, and such a file can exceed
+ * the limit after reading; it is then refused like any other value that is too large.
  */
 function serialize(data: Map<string, StoreValue>): string {
   return JSON.stringify(Object.fromEntries(data));
@@ -267,7 +268,6 @@ function mergeContents(
   if (data.size > MAX_STORE_KEYS) {
     throw invalid("The stored keys and defaults exceed the key limit.");
   }
-  checkValueSizes(data);
   checkFileSize(data);
   return {
     data,
@@ -551,12 +551,14 @@ export class NodeStore implements StoreInstance {
   /** Contents for a fresh load or a reload: the file over the defaults, per key. */
   private readContents(store: OpenStore, ignoreDefaults: boolean): Contents {
     const defaults = ignoreDefaults ? {} : (store.defaults ?? {});
+    let stored: StoreRecord | undefined;
     try {
-      return mergeContents(defaults, readFile(store.path));
+      stored = readFile(store.path);
+      checkValueSizes(new Map(Object.entries(stored ?? {})));
     } catch (error) {
-      // A file the store cannot hold (damaged, or beyond a limit once merged with the defaults)
-      // is replaced by the next save when the caller chose to start over. Access failures are
-      // never treated as damage.
+      // A file the store cannot hold is replaced by the next save when the caller chose to
+      // start over. Access failures are never treated as damage, and neither is a merge that
+      // overflows because of the defaults: that must not cost a healthy file its data.
       if (
         store.onInvalidFile === "reset" &&
         error instanceof BunawayError &&
@@ -569,6 +571,7 @@ export class NodeStore implements StoreInstance {
       }
       throw storeIoError(error);
     }
+    return mergeContents(defaults, stored);
   }
 
   private markDirty(store: OpenStore): void {

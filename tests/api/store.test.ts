@@ -990,7 +990,7 @@ test("reload follows the reset policy for a damaged file and reports it", () => 
   expect(errorCodeOf(() => strict.reload("t", false))).toBe("INVALID_ARGUMENT");
 });
 
-test("defaults that push the file over a limit fail load, or start over with reset", () => {
+test("defaults that push the file over a limit fail load and leave the file alone", () => {
   const root = dataRoot();
   const first = create(root);
   first.load({
@@ -1023,17 +1023,27 @@ test("defaults that push the file over a limit fail load, or start over with res
       }),
     ),
   ).toBe("INVALID_ARGUMENT");
+  // A healthy file is never replaced because of the defaults, even when reset is chosen.
   expect(
-    second.load({
+    errorCodeOf(() =>
+      second.load({
+        name: "s",
+        defaults: extra,
+        onInvalidFile: "reset",
+        autosave: 10,
+      }),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+  const third = create(root);
+  expect(
+    third.load({
       name: "s",
-      defaults: extra,
-      onInvalidFile: "reset",
       ...manual,
     }),
   ).toEqual({
-    loaded: "reset",
+    loaded: "file",
   });
-  expect(second.length("s")).toBe(30);
+  expect(third.length("s")).toBe(MAX_STORE_KEYS - 1);
 });
 
 test("a value beyond the value limit is refused from a file or from defaults like a set of it", () => {
