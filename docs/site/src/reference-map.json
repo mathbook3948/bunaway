@@ -1469,6 +1469,7 @@
     "reference/plugins/notification": [
       "notification.show",
       "notification.clear",
+      "notification.clearGroup",
       "notification.clearAll",
       "notification.list",
       "notification.getStatus",

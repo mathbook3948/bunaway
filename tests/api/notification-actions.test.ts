@@ -40,6 +40,7 @@ function controllerFor(extra: Record<string, unknown>) {
       };
     },
     clear() {},
+    clearGroup() {},
     clearAll() {},
     list: () => [],
     dispose() {},

@@ -20,6 +20,7 @@ test("notification status and Settings require separate permissions and null-onl
   ]).toEqual([
     "notification.show",
     "notification.clear",
+    "notification.clearGroup",
     "notification.clearAll",
     "notification.list",
     "notification.getStatus",

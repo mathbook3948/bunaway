@@ -43,6 +43,7 @@ function fixture() {
     failClear = false,
     failDetach = false,
     clearedAll = 0,
+    clearedGroups: string[] = [],
     disposals = 0;
   let listed: NotificationResult[] = [];
   const driver: ToastDriver = {
@@ -69,6 +70,12 @@ function fixture() {
     list() {
       return listed;
     },
+    clearGroup(group) {
+      if (failClear) {
+        throw new Error("clear failed");
+      }
+      clearedGroups.push(group);
+    },
     clearAll() {
       if (failClear) {
         throw new Error("clear failed");
@@ -90,6 +97,7 @@ function fixture() {
     callbacks,
     events,
     cleared,
+    clearedGroups,
     detached,
     setListed(items: NotificationResult[]) {
       listed = items;
@@ -473,6 +481,86 @@ test("clearAll takes only null, retires every owned toast, drops late callbacks 
   }
   expect(() => f.controller.show(input("overflow"))).toThrow(BunawayError);
   f.controller.dispose();
+});
+
+test("clearGroup takes only a group, retires that group's toasts, keeps other groups live and retries after failure", async () => {
+  for (const payload of [
+    null,
+    {},
+    {
+      id: "first",
+    },
+    {
+      group: "bad group",
+    },
+    {
+      group: "a",
+      id: "first",
+    },
+    "a",
+  ] as JsonValue[]) {
+    await expect(
+      parsers.validateCall({
+        operation: "notification.clearGroup",
+        payload,
+      }),
+    ).rejects.toThrow();
+  }
+  await expect(
+    parsers.validateCall({
+      operation: "notification.clearGroup",
+      payload: {
+        group: "chat-1",
+      },
+    }),
+  ).resolves.toBeDefined();
+  await expect(
+    parsers.validateOutput("notification.clearGroup", {}),
+  ).rejects.toThrow();
+  const f = fixture();
+  const inGroup = (id: string, group: string) =>
+    notificationShowSchema.parse({
+      id,
+      group,
+      title: "Hello",
+    });
+  f.controller.show(inGroup("a", "chat-1"));
+  f.controller.show(inGroup("b", "chat-1"));
+  f.controller.show(inGroup("a", "chat-2"));
+  f.failure("clear", true);
+  expect(() => f.controller.clearGroup("chat-1")).toThrow("clear failed");
+  f.callbacks[0]?.({
+    kind: "activated",
+    arguments: "",
+    reply: undefined,
+  });
+  expect(f.events).toHaveLength(1);
+  expect(f.detached).toEqual([]);
+  f.failure("clear", false);
+  expect(f.controller.clearGroup("chat-1")).toBeNull();
+  expect(f.clearedGroups).toEqual([
+    "chat-1",
+  ]);
+  expect(f.detached).toEqual([
+    0,
+    1,
+  ]);
+  // Late callbacks of the cleared group are dropped without a dismissed event; the other group stays live.
+  f.callbacks[1]?.({
+    kind: "dismissed",
+    reason: "userCanceled",
+  });
+  expect(f.events).toHaveLength(1);
+  f.callbacks[2]?.({
+    kind: "activated",
+    arguments: "",
+    reply: undefined,
+  });
+  expect(f.events).toHaveLength(2);
+  // An unknown group succeeds and an empty group frees capacity for its entries only.
+  expect(f.controller.clearGroup("none")).toBeNull();
+  f.controller.dispose();
+  expect(() => f.controller.clearGroup("chat-2")).toThrow(BunawayError);
 });
 
 test("list takes only null, validates the output and reads the driver without touching ownership", async () => {

@@ -30,11 +30,16 @@ export function validateNotificationInput(
   operation: string,
   input: JsonValue,
 ): void {
-  if (operation === "notification.show" || operation === "notification.clear") {
-    const schema =
-      operation === "notification.show"
-        ? notificationShowSchema
-        : notificationIdentitySchema;
+  if (
+    operation === "notification.show" ||
+    operation === "notification.clear" ||
+    operation === "notification.clearGroup"
+  ) {
+    const schema = {
+      "notification.show": notificationShowSchema,
+      "notification.clear": notificationIdentitySchema,
+      "notification.clearGroup": notificationGroupSchema,
+    }[operation];
     if (!schema.safeParse(input).success) {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
@@ -155,6 +160,10 @@ const toastReplySchema = z.strictObject({
 export const notificationIdentitySchema = z.strictObject({
   id: identifierSchema,
   group: identifierSchema.default("bunaway"),
+});
+/** Group-wide removal. The group is required so an omitted field cannot select the default group. */
+export const notificationGroupSchema = z.strictObject({
+  group: identifierSchema,
 });
 export const notificationShowSchema = notificationIdentitySchema
   .extend({

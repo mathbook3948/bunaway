@@ -551,6 +551,44 @@ export function createWindowsToastDriver(appId: string): ToastDriver {
         runtime.release(history2);
       }
     },
+    clearGroup(group) {
+      ensureActive();
+      drainFailed();
+      for (const owner of owned) {
+        if (owner.toast && owner.identity.group === group) {
+          checkToast(
+            runtime.method(
+              notifier,
+              7,
+              [
+                "ptr",
+              ],
+              owner.toast,
+            ),
+            "ToastNotifier.Hide",
+          );
+        }
+      }
+      // RemoveGroupWithId is scoped to this app's AppUserModelID, so it also removes records left by an
+      // earlier process and never touches another app's notifications.
+      runtime.string(group, (name) =>
+        runtime.string(appId, (app) =>
+          checkToast(
+            runtime.method(
+              history,
+              7,
+              [
+                "ptr",
+                "ptr",
+              ],
+              name,
+              app,
+            ),
+            "ToastHistory.RemoveGroupWithId",
+          ),
+        ),
+      );
+    },
     clearAll() {
       ensureActive();
       drainFailed();

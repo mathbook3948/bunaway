@@ -384,6 +384,7 @@ export function initialize(environment: NativeEnvironment) {
       return controller.show(input);
     },
     clear: (input: NotificationResult) => getToasts().clear(input),
+    clearGroup: (group: string) => getToasts().clearGroup(group),
     clearAll: () => getToasts().clearAll(),
     list: () => getToasts().list(),
     async dispose() {
