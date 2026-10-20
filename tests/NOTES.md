@@ -430,6 +430,10 @@ OS가 전경 전환 요청을 거부하면 해당 활성화 전환을 `UNTESTED`
 알 수 없는 ID의 `INVALID_ARGUMENT`와 주 모니터 대체 금지를 같은 파일에서 검사한다.
 DPI가 바뀐 크기에 대해서도 `centerInWorkArea`가 같은 작업 영역의 중앙 좌표를 계산하는지만 순수 계산으로 확인한다.
 네이티브 경로에서 크기 변경을 감지해 다시 중앙에 배치하는 판단은 실제 다중 모니터와 혼합 DPI 검증으로 남아 있다.
+`api/window-move-to-anchor.test.ts`는 `windows.moveToAnchor`의 아홉 앵커 좌표, `margin`의 모니터 DPI 환산, 작업 영역보다 큰 창의 중앙 대체,
+`monitorId` 해석과 거부, 최소화와 최대화 중 복원 영역 사용, 크기가 바뀐 뒤의 두 번째 배치를 가짜 창으로 검사한다.
+`lifecycle/windows-bun-window-api.ts`는 실제 HWND에서 숨긴 창의 아홉 앵커와 `margin`, `monitorId`를 생략한 배치, 알 수 없는 ID 거부와 위치 불변,
+숨김과 포그라운드 창 유지를 모니터 1개와 DPI 96에서 확인한다.
 single/multiple 계약 회귀는 병합 오류와 네이티브 배치 검증이 예약 및 기존 창 종료보다 먼저
 실행되고 호출별 옵션이 선언을 바꾸지 않는지 확인한다. macOS 선언의 미지원 오류도 검사한다.
 `lifecycle/windows-initial-placement.ts`는 실제 HWND와 WebView2에서 초기 선언, single과
