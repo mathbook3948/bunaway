@@ -109,44 +109,46 @@ test("runResolveHost resolves localhost by family with the system resolver", asy
       timeoutMs: deadline("childStep"),
     });
     expect(literal.endpoints).toEqual([]);
+    // A machine without IPv6 has no AAAA answer for localhost, which the resolver reports as a failure.
+    const v6 = await runResolveHost(state, {
+      host: "localhost",
+      queryType: "AAAA",
+      timeoutMs: deadline("childStep"),
+    }).catch(() => ({
+      endpoints: [],
+    }));
+    expect(v6.endpoints.every((entry) => entry.family === "ipv6")).toBe(true);
   } finally {
     await dispose(state);
   }
 });
 
-test("resolveHost answers a name without the asked family with an empty result", async () => {
-  const lookups: string[] = [];
-  const result = await resolveHost(
-    "ipv4-only.example",
-    new AbortController().signal,
-    async (host) => {
-      lookups.push(host);
-      return [
-        {
-          address: "93.184.216.34",
-          family: 4,
-        },
-      ];
-    },
-    "AAAA",
-  );
-  expect(result).toEqual({
-    endpoints: [],
-  });
-  expect(lookups).toEqual([
-    "ipv4-only.example",
+test("resolveHost asks the resolver for the family itself, once, and none without queryType", async () => {
+  const asked: (4 | 6 | undefined)[] = [];
+  const find = async (_host: string, family?: 4 | 6) => {
+    asked.push(family);
+    return [];
+  };
+  const signal = new AbortController().signal;
+  await resolveHost("a.example", signal, find, "A");
+  await resolveHost("a.example", signal, find, "AAAA");
+  await resolveHost("a.example", signal, find);
+  expect(asked).toEqual([
+    4,
+    6,
+    undefined,
   ]);
 });
 
-test("resolveHost still fails when the resolver fails for a queryType", async () => {
+test("resolveHost fails when the resolver has no address of the asked family", async () => {
   await expect(
     resolveHost(
-      "flaky.example",
+      "ipv4-only.example",
       new AbortController().signal,
       async () => {
-        throw new Error("EAI_AGAIN");
+        throw new Error("ENODATA");
       },
       "AAAA",
     ),
-  ).rejects.toThrow("EAI_AGAIN");
+  ).rejects.toThrow("ENODATA");
 });

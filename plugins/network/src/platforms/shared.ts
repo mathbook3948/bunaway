@@ -181,8 +181,8 @@ export function runResolveHost(
     return resolveHost(
       input.host,
       activeSignal,
-      (host) => {
-        const lookup = find(host);
+      (host, family) => {
+        const lookup = find(host, family);
         state.lookups.add(lookup);
         const release = () => state.lookups.delete(lookup);
         lookup.then(release, release);
