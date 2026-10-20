@@ -54,7 +54,7 @@ export type StatusItemBinding = {
    */
   setImage(image: NativeImage | null): void;
   /**
-   * Reads the title, tooltip and menu back from AppKit rather than from the adapter's copy, so the
+   * Reads the title, tooltip, image and menu back from AppKit rather than from the adapter's copy, so the
    * macOS native check can prove that what the adapter reports is what the menu bar item holds.
    */
   readBack(): StatusItemReadBack;
@@ -105,7 +105,10 @@ function internal(message: string): never {
  * then close the callback, so AppKit cannot call a closed trampoline. Each binding registers its
  * own target class, which lives until process exit: the Objective-C runtime cannot safely
  * unregister a class that menus may still reference, so repeated create and destroy accumulate
- * classes. If registering the method fails, the unregistered class pair is disposed.
+ * classes. If registering the method fails, the unregistered class pair is disposed. An image is
+ * decoded into an owned NSImage that the status button retains once it is set; the binding drops
+ * its own reference right after, so the button owns the image until it is replaced or the item is
+ * released.
  */
 export function createStatusItem(
   onSelect: (tag: number) => void,
@@ -456,6 +459,16 @@ export function createStatusItem(
         });
       }
       try {
+        // `initWithData:` accepts bytes whose pixels are not decoded yet, so ask for the bitmap
+        // itself: a PNG that AppKit cannot decode is refused here, before the button changes.
+        if (
+          !send(decoded, "CGImageForProposedRect:context:hints:", 0n, 0n, 0n)
+        ) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "The tray image could not be decoded as a PNG.",
+          });
+        }
         sizeSender.symbols.objc_msgSend(
           decoded,
           selector("setSize:"),
