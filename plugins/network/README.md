@@ -19,7 +19,7 @@ call at once while an already started lookup finishes in the background. Query t
 returns `{ entries }`, a structured list of `{ kind: "direct" }` and `{ kind: "proxy", scheme, host, port }` instead of a
 PAC string. It reads the current user's Internet Options through WinHTTP: loopback and link-local hosts go direct, then
 automatic detection, the configured script and the manual proxy list with its bypass list apply. Proxy credentials are
-never read or returned. Automatic detection and script lookups block inside WinHTTP, so they run in a worker thread:
+never returned. Automatic detection and script lookups block inside WinHTTP, so they run in a worker thread:
 cancellation and the deadline end the caller's wait at once, a lookup already inside WinHTTP holds one of four worker
 slots until the call returns (so its handles are closed), and `BUSY` is reported beyond that. It does not change how `network.request` connects.
 

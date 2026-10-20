@@ -100,11 +100,12 @@ function startsEntry(token: string): boolean {
 /**
  * Split a proxy list into entries. A password that contains ";" or a space splits its entry:
  * "alice:1 2 3@host" gives "alice:1", "2" and "3@host". Where the password ends cannot be told
- * from where the next entry starts, so a token with an "@" joins every token before it, back to
- * the nearest token that opens an entry (`scheme=` or `scheme://`, or the current token itself)
- * and not past the previous "@" token. `parseServer` then drops all of that user information at
- * once. Proxies listed in that stretch before the credentialed entry are lost with it: a list
- * is never allowed to return a user name or password fragment as a host.
+ * from where the next entry starts, so a token with an "@" takes in the tokens before it, back to
+ * the previous "@" token. A token without its own `scheme=` or `scheme://` joins them (starting at
+ * the nearest earlier token that opens an entry, so that prefix is kept) and `parseServer` drops
+ * all of that user information at once; a token with its own prefix replaces them. Proxies listed
+ * in that stretch before the credentialed entry are lost with it: a list is never allowed to
+ * return a user name or password fragment as a host.
  */
 function entryTokens(text: string): string[] {
   const tokens: string[] = [];
@@ -117,14 +118,19 @@ function entryTokens(text: string): string[] {
       tokens.push(token);
       continue;
     }
-    let start = tokens.length;
-    if (!startsEntry(token)) {
-      start = open;
-      for (let index = tokens.length - 1; index >= open; index -= 1) {
-        if (startsEntry(tokens[index] ?? "")) {
-          start = index;
-          break;
-        }
+    let start = open;
+    if (startsEntry(token)) {
+      // The token carries its own scheme: the stretch before it is dropped, not joined, so the
+      // scheme stays with this entry and the dropped tokens cannot be read as hosts.
+      tokens.splice(open);
+      tokens.push(token);
+      open = tokens.length;
+      continue;
+    }
+    for (let index = tokens.length - 1; index >= open; index -= 1) {
+      if (startsEntry(tokens[index] ?? "")) {
+        start = index;
+        break;
       }
     }
     tokens.push(
@@ -279,7 +285,9 @@ export function selectEntries(
   url: URL,
 ): ProxyEntry[] {
   if (!proxyList || matchesBypass(bypass, url)) {
-    return DIRECT;
+    return [
+      ...DIRECT,
+    ];
   }
   const rules = parseProxyList(proxyList);
   const seen = new Set<string>();
@@ -296,5 +304,9 @@ export function selectEntries(
       servers.push(server);
     }
   }
-  return servers.length === 0 ? DIRECT : servers.slice(0, MAX_PROXY_ENTRIES);
+  return servers.length === 0
+    ? [
+        ...DIRECT,
+      ]
+    : servers.slice(0, MAX_PROXY_ENTRIES);
 }

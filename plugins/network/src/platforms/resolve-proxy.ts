@@ -220,7 +220,7 @@ function scriptUrl(url: URL): string {
  * WinHTTP reads them, in the order Windows applies: loopback and link-local hosts go direct,
  * automatic detection, the configured script, then the manual proxy list with its bypass list.
  * A script that cannot be found or run falls through to the next source, like browsers do. Proxy
- * credentials are not read or returned, and the script lookup does not log on with the user's
+ * credentials are not returned, and the script lookup does not log on with the user's
  * credentials.
  *
  * The blocking WinHTTP calls run in a worker, so the host thread keeps serving other work while

@@ -231,7 +231,7 @@ export const resolveProxyInputSchema = z.strictObject({
 /**
  * Where the system sends a request for the URL, in the order to try. This is the structured form
  * of the PAC string Electron `session.resolveProxy()` returns (`"PROXY host:80; DIRECT"`), so an
- * app does not parse a string. Proxy credentials are never read or returned.
+ * app does not parse a string. Proxy credentials are never returned.
  */
 export const resolveProxyResultSchema = z.strictObject({
   entries: z

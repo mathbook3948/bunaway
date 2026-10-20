@@ -1,4 +1,5 @@
 import { expect, setDefaultTimeout, test } from "bun:test";
+import assert from "node:assert/strict";
 import network from "@bunaway/plugin-network";
 import { NativeRegistry } from "@bunaway/protocol";
 import {
@@ -319,14 +320,20 @@ test("a password with a separator or slash leaves no user name in the result", (
       "proxy.example",
     ]);
   }
-  // An entry that opens with its own scheme keeps it, and other schemes are left alone.
+  // An entry that opens with its own scheme keeps it; the tokens before it are dropped.
   const mixed = parseProxyList("https=a.example:80;http=bob@b.example:81");
-  expect(mixed.https).toEqual([
-    proxy("a.example", 80),
-  ]);
+  expect(mixed.https).toEqual([]);
   expect(mixed.http).toEqual([
     proxy("b.example", 81),
   ]);
+  // A password fragment followed by a token that opens with a scheme is not read as a host.
+  for (const list of [
+    "alice:1234 y=z@proxy.example:80",
+    "bob:12 http://x@proxy.example:80",
+    "alice:1234;socks=s@proxy.example:80",
+  ]) {
+    expect(JSON.stringify(parseProxyList(list))).not.toMatch(/alice|bob/);
+  }
   // Unknown scheme names and oversized hosts are skipped.
   expect(
     parseProxyList(`socks6=h.example:1080 ${"a".repeat(254)}:80`).all,
@@ -874,8 +881,17 @@ test("a hung worker holds its slot until the owner terminates it", async () => {
   await expect(first).rejects.toThrow("stop");
   expect(workers.size).toBe(1);
   for (const worker of workers) {
-    await worker.terminate();
+    const closed = new Promise<void>((resolve) => {
+      worker.addEventListener("close", () => resolve());
+    });
+    void worker.terminate();
+    await closed;
   }
+  // Termination retires the worker and frees its slot.
+  await waitFor(() => workers.size === 0, {
+    deadline: "childStep",
+    what: "the terminated worker to retire",
+  });
 });
 
 test("startWorker runs module source without a file", async () => {
@@ -908,8 +924,15 @@ test("dispose terminates workers that are still running", async () => {
   controller.abort(new Error("stop"));
   await expect(pending).rejects.toThrow("stop");
   expect(state.winhttp.workers.size).toBe(1);
+  const [worker] = state.winhttp.workers;
+  assert(worker);
+  const closed = new Promise<void>((resolve) => {
+    worker.addEventListener("close", () => resolve());
+  });
   await dispose(state);
   expect(state.winhttp.workers.size).toBe(0);
+  // The worker thread really ended, not only the bookkeeping.
+  await closed;
 });
 
 test("the deadline ends a lookup that never answers", async () => {
