@@ -7,7 +7,11 @@ import {
   withWide,
 } from "@bunaway/plugin/win32";
 import { NodeStorage } from "#storage/platforms/node-storage";
-import { normalizeWindowsPath } from "#storage/platforms/windows-path";
+import {
+  fromFileSystemPath,
+  normalizeWindowsPath,
+  toFileSystemPath,
+} from "#storage/platforms/windows-path";
 
 const ERROR_FILE_NOT_FOUND = 2;
 const ERROR_PATH_NOT_FOUND = 3;
@@ -75,10 +79,13 @@ export class WindowsStorage extends NodeStorage {
 
   constructor() {
     super({
-      normalize: normalizeWindowsPath,
-      // Windows compares names without regard to case.
+      normalize: (path) => toFileSystemPath(normalizeWindowsPath(path)),
+      // Windows compares names without regard to case. Only long paths carry the extended prefix,
+      // so it is removed before comparing.
       isBelow: (parent, child) =>
-        child.toUpperCase().startsWith(`${parent.toUpperCase()}\\`),
+        fromFileSystemPath(child)
+          .toUpperCase()
+          .startsWith(`${fromFileSystemPath(parent).toUpperCase()}\\`),
     });
   }
 
