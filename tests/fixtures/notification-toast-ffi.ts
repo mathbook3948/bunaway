@@ -24,7 +24,9 @@ const delayedReleases: ffi.Pointer[] = [];
 let waitHandles = 0;
 let failStage = "",
   failRemove = false;
-let shown = 0,
+let boxedTicks = 0n,
+  expirationSet = 0,
+  shown = 0,
   hidden = 0,
   removed = 0,
   cleared = 0,
@@ -225,6 +227,11 @@ const factoryMethods: ComHandler = (call) => {
   if (stage === "factory:6") {
     return outputObject(call, 1, "toast");
   }
+  // IPropertyValueStatics.CreateDateTime(21) boxes the expiration ticks passed by value.
+  if (stage === "factory:21") {
+    boxedTicks = BigInt(args[0] ?? 0);
+    return outputObject(call, 1, "boxed");
+  }
   if (stage === "xml:6") {
     payloads.push(strings.get(Number(args[0])) ?? "");
     return 0;
@@ -275,6 +282,12 @@ const actionMethods: ComHandler = ({ state, slot, stage, args }) => {
         10,
       ].includes(slot),
     );
+    return 0;
+  }
+  // IToastNotification.put_ExpirationTime(7) receives the boxed DateTime.
+  if (stage === "toast:7") {
+    assert.equal(objects.get(Number(args[0]))?.kind, "boxed");
+    expirationSet++;
     return 0;
   }
   if (stage === "notifier:6") {
@@ -616,6 +629,39 @@ for (const stage of [
   );
   assert.equal(strings.size, 0);
 }
+// expiresAfterSeconds boxes a DateTime and assigns it to the toast. Each failure releases both objects.
+const expiring = notificationShowSchema.parse({
+  id: "expiring",
+  title: "Expires",
+  expiresAfterSeconds: 90,
+});
+for (const stage of [
+  "factory:21",
+  "toast:7",
+]) {
+  failStage = stage;
+  assert.throws(
+    () => driver.show(expiring, () => {}),
+    {
+      code: "INTERNAL",
+    },
+    stage,
+  );
+  assert.equal(strings.size, 0);
+}
+failStage = "";
+assert.equal(expirationSet, 0);
+const ticksBefore = BigInt(Date.now());
+const expiringHandle = driver.show(expiring, () => {});
+const ticksAfter = BigInt(Date.now());
+const windowsEpochOffsetMs = 11_644_473_600_000n;
+assert.equal(expirationSet, 1);
+assert(
+  boxedTicks >= (ticksBefore + windowsEpochOffsetMs) * 10_000n + 900_000_000n &&
+    boxedTicks <= (ticksAfter + windowsEpochOffsetMs) * 10_000n + 900_000_000n,
+  "Expiration is now plus 90 seconds in 100 ns ticks since 1601",
+);
+expiringHandle.detach();
 failStage = "notifier:6";
 failRemove = true;
 assert.throws(() => driver.show(input, () => {}), AggregateError);
