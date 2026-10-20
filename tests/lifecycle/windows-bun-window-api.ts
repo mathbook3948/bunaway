@@ -897,14 +897,14 @@ if (!process.argv.includes("--child")) {
           returns: "u32",
         },
       });
-      const process = dlopen("kernel32.dll", {
+      const kernel = dlopen("kernel32.dll", {
         GetCurrentProcess: {
           args: [],
           returns: "u64",
         },
       });
       const userObjects = () =>
-        gui.symbols.GetGuiResources(process.symbols.GetCurrentProcess(), 1);
+        gui.symbols.GetGuiResources(kernel.symbols.GetCurrentProcess(), 1);
       const WM_GETICON = 0x7f;
       const ICON_SMALL = 0n;
       const ICON_BIG = 1n;
@@ -925,7 +925,10 @@ if (!process.argv.includes("--child")) {
             user.symbols.ShowWindow(hwnd, 2);
           }
           if (state === "no-taskbar") {
+            // skipTaskbar can only change while the window is hidden.
+            nativeWindows.show(hwnd, false);
             nativeWindows.setSkipTaskbar(hwnd, true);
+            nativeWindows.show(hwnd, true);
           }
           const initial = [
             iconOf(hwnd, ICON_SMALL),
@@ -947,6 +950,21 @@ if (!process.argv.includes("--child")) {
             }),
           );
           assert.equal(iconOf(hwnd, ICON_SMALL), small);
+          // A failure while building the big icon keeps both current icons and releases the small one.
+          let providerCalls = 0;
+          assert.throws(() =>
+            nativeWindows.setWindowIcon(hwnd, (sizePx) => {
+              if (++providerCalls === 2) {
+                throw new Error("rejected big icon");
+              }
+              return overlayIconProvider(
+                trayIco(16).toString("base64"),
+                "window",
+              )(sizePx);
+            }),
+          );
+          assert.equal(iconOf(hwnd, ICON_SMALL), small);
+          assert.equal(iconOf(hwnd, ICON_BIG), big);
           nativeWindows.setWindowIcon(
             hwnd,
             overlayIconProvider(trayIco(32).toString("base64"), "window"),
@@ -973,7 +991,7 @@ if (!process.argv.includes("--child")) {
           }
           nativeWindows.setWindowIcon(hwnd, null);
           assert(userObjects() <= before + 2, "Window icon leaked HICONs");
-          // An icon still set when the window is destroyed is released with it.
+          // An icon still set at destroy is released after DestroyWindow; destroy must not throw.
           nativeWindows.setWindowIcon(hwnd, provider);
         } finally {
           nativeWindows.destroy(hwnd);

@@ -3223,6 +3223,7 @@ export class Windows {
   dispose() {
     // Release before the live-window assertion so a failed destroy cannot leak the icon handles.
     this.taskbar.releaseIcons();
+    // Backstop for a window whose destroy failed: the assertion below then reports it.
     this.windowIcons.releaseAll();
     assert.equal(this.windows.size, 0);
     this.taskbar.dispose();

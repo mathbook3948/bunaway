@@ -36,7 +36,8 @@ let createIconFromResource: ReturnType<typeof openCreateIcon> | undefined;
  * Validate a base64 ICO and return a provider that builds an owned HICON from it at a requested pixel
  * size. Validation happens here, before any native call, so a malformed ICO is INVALID_ARGUMENT and
  * leaves the current overlay untouched. Each provider call returns a new HICON whose owner must
- * `DestroyIcon` it; a frame Windows rejects throws INVALID_ARGUMENT.
+ * `DestroyIcon` it; a frame Windows rejects throws INVALID_ARGUMENT. The same provider serves the
+ * window icon (`windows.setIcon`); `subject` only names the target in the error messages.
  */
 export function overlayIconProvider(
   ico: string,
