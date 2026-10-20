@@ -26,10 +26,14 @@ const APP = {
 function fakeStore() {
   const keys = new Map<string, Map<string, string>>();
   const calls: string[] = [];
+  /** Names that exist in the merged classes view but not under HKCU, such as HKLM entries. */
+  const machineClasses = new Set<string>();
   let failWriteAfter = Number.POSITIVE_INFINITY;
   let writes = 0;
   const store: SchemeStore = {
     withLock: (_scheme, work) => work(),
+    classExists: (name) =>
+      machineClasses.has(name) || keys.has(`Software\\Classes\\${name}`),
     keyExists: (path) =>
       [
         ...keys.keys(),
@@ -60,6 +64,7 @@ function fakeStore() {
     store,
     keys,
     calls,
+    machineClasses,
     failAfter(count: number) {
       writes = 0;
       failWriteAfter = count;
@@ -385,4 +390,47 @@ test("a failed refresh keeps the key the app already owned", () => {
   harness.failAfter(Number.POSITIVE_INFINITY);
   moved.register("myapp");
   expect(moved.isRegistered("myapp")).toBe(true);
+});
+
+test("a name that exists only in the machine or system classes is not taken over", () => {
+  const harness = fakeStore();
+  harness.machineClasses.add("exefile");
+  const registration = createUrlSchemeRegistration(APP, harness.store);
+  expect(() => registration.register("exefile")).toThrow(
+    expect.objectContaining({
+      code: "INVALID_ARGUMENT",
+    }),
+  );
+  expect(harness.keys.size).toBe(0);
+  expect(registration.isRegistered("exefile")).toBe(false);
+});
+
+test("Microsoft dotted names are reserved like the hyphenated families", () => {
+  expect(() => normalizeUrlScheme("Microsoft.PowerShellScript.1")).toThrow(
+    expect.objectContaining({
+      code: "INVALID_ARGUMENT",
+    }),
+  );
+});
+
+test("a failed rollback reports both the write failure and the cleanup failure", () => {
+  const harness = fakeStore();
+  const store: SchemeStore = {
+    ...harness.store,
+    deleteTree() {
+      throw new Error("delete failed");
+    },
+  };
+  harness.failAfter(1);
+  let caught: unknown;
+  try {
+    createUrlSchemeRegistration(APP, store).register("myapp");
+  } catch (error) {
+    caught = error;
+  }
+  expect(caught).toBeInstanceOf(AggregateError);
+  expect((caught as AggregateError).errors.map(String)).toEqual([
+    "Error: write failed",
+    "Error: delete failed",
+  ]);
 });

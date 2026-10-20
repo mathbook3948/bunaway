@@ -216,6 +216,32 @@ test.skipIf(process.platform !== "win32")(
 );
 
 test.skipIf(process.platform !== "win32")(
+  "a system ProgId that exists only in the machine classes is not shadowed",
+  async () => {
+    const adapter = createOperations({
+      dataRoot: ".",
+      capabilities: [],
+      app: APP,
+    });
+    try {
+      // exefile lives in HKLM\Software\Classes; a user key of that name would hijack .exe launches.
+      const hkcuBefore = (await reg("query", keyPath("exefile"))).code;
+      expect((await reg("query", "HKCR\\exefile")).code).toBe(0);
+      await expect(
+        run(adapter, "registerUrlScheme", "exefile"),
+      ).rejects.toThrow(
+        expect.objectContaining({
+          code: "INVALID_ARGUMENT",
+        }),
+      );
+      expect((await reg("query", keyPath("exefile"))).code).toBe(hkcuBefore);
+    } finally {
+      await adapter.dispose();
+    }
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
   "without a host app identity registration reports UNSUPPORTED",
   async () => {
     const adapter = createOperations({

@@ -1,4 +1,4 @@
-import type { NativeEnvironment } from "@bunaway/plugin";
+import { failWithCleanup, type NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import { quoteShellTarget } from "#opener/platforms/windows-shell";
 
@@ -16,6 +16,11 @@ export interface SchemeStore {
   /** Run `work` while no other opener in this session changes the scheme; contention is BUSY. */
   withLock<T>(scheme: string, work: () => T): T;
   keyExists(path: string): boolean;
+  /**
+   * True when the merged classes view (HKCR: user classes over machine classes) has a key
+   * with this name, which covers machine-wide registrations and system ProgIds.
+   */
+  classExists(name: string): boolean;
   readString(path: string, name: string): string | null;
   /** Create the key when missing and set one string value. */
   writeString(path: string, name: string, value: string): void;
@@ -102,7 +107,7 @@ export function createUrlSchemeRegistration(
   return {
     /**
      * Register the app for the scheme, or refresh its command after the app moved. An
-     * existing key owned by anything else is left alone and reported as INVALID_ARGUMENT.
+     * existing name owned by anything else, in HKCU or the merged classes view, is left alone and reported as INVALID_ARGUMENT.
      * `URL Protocol` is written last because the Shell ignores a key without it, so a
      * failure part way never leaves a runnable but half-written handler.
      */
@@ -111,7 +116,12 @@ export function createUrlSchemeRegistration(
       store.withLock(scheme, () => {
         const key = keyPath(scheme);
         const existed = store.keyExists(key);
-        if (existed && store.readString(key, OWNER_VALUE) !== owner) {
+        // A name present only in HKLM (or a system ProgId such as exefile) would be
+        // overridden for this user by a new HKCU key, so it counts as taken.
+        const taken = existed
+          ? store.readString(key, OWNER_VALUE) !== owner
+          : store.classExists(scheme);
+        if (taken) {
           throw new BunawayError({
             code: "INVALID_ARGUMENT",
             message: "The URL scheme is registered by another owner.",
@@ -131,7 +141,11 @@ export function createUrlSchemeRegistration(
         } catch (error) {
           // Remove only a key this call created; a refreshed key stays registered by the app.
           if (!existed) {
-            store.deleteTree(key);
+            failWithCleanup(
+              error,
+              () => store.deleteTree(key),
+              "URL scheme registration failed and could not be rolled back.",
+            );
           }
           throw error;
         }

@@ -1,5 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
-import { ResourceOwner } from "@bunaway/plugin";
+import { failWithCleanup, ResourceOwner } from "@bunaway/plugin";
 import {
   ADVAPI32,
   KERNEL32,
@@ -11,6 +11,7 @@ import {
 import { BunawayError } from "@bunaway/protocol";
 import type { SchemeStore } from "#opener/platforms/windows-url-scheme";
 
+const HKEY_CLASSES_ROOT = 0xffffffff80000000n;
 const HKEY_CURRENT_USER = 0xffffffff80000001n;
 const ERROR_SUCCESS = 0;
 const ERROR_FILE_NOT_FOUND = 2;
@@ -102,6 +103,26 @@ export function createSchemeStore(): SchemeStore & {
     }
   }
 
+  /** Probe a key under a predefined root, closing the handle it opens. */
+  function keyExistsUnder(root: bigint, path: string): boolean {
+    const handle = new BigUint64Array(1);
+    const result = withWide(path, (address) =>
+      advapi.symbols.RegOpenKeyExW(
+        root,
+        address,
+        0,
+        KEY_QUERY_VALUE | KEY_WOW64_64KEY,
+        ptr(handle),
+      ),
+    );
+    if (result === ERROR_FILE_NOT_FOUND || result === ERROR_PATH_NOT_FOUND) {
+      return false;
+    }
+    check(result);
+    check(advapi.symbols.RegCloseKey(handle[0] ?? 0n));
+    return true;
+  }
+
   return {
     withLock<T>(scheme: string, work: () => T): T {
       active();
@@ -146,22 +167,12 @@ export function createSchemeStore(): SchemeStore & {
 
     keyExists(path: string): boolean {
       active();
-      const handle = new BigUint64Array(1);
-      const result = withWide(path, (address) =>
-        advapi.symbols.RegOpenKeyExW(
-          HKEY_CURRENT_USER,
-          address,
-          0,
-          KEY_QUERY_VALUE | KEY_WOW64_64KEY,
-          ptr(handle),
-        ),
-      );
-      if (result === ERROR_FILE_NOT_FOUND || result === ERROR_PATH_NOT_FOUND) {
-        return false;
-      }
-      check(result);
-      check(advapi.symbols.RegCloseKey(handle[0] ?? 0n));
-      return true;
+      return keyExistsUnder(HKEY_CURRENT_USER, path);
+    },
+
+    classExists(name: string): boolean {
+      active();
+      return keyExistsUnder(HKEY_CLASSES_ROOT, name);
     },
 
     readString(path: string, name: string): string | null {
@@ -214,6 +225,7 @@ export function createSchemeStore(): SchemeStore & {
           null,
         ),
       );
+      const closeKey = () => check(advapi.symbols.RegCloseKey(handle[0] ?? 0n));
       try {
         check(
           advapi.symbols.RegSetValueExW(
@@ -225,9 +237,15 @@ export function createSchemeStore(): SchemeStore & {
             data.length,
           ),
         );
-      } finally {
-        check(advapi.symbols.RegCloseKey(handle[0] ?? 0n));
+      } catch (error) {
+        // Keep the write failure when closing the key fails as well.
+        failWithCleanup(
+          error,
+          closeKey,
+          "Registry write and key close failed.",
+        );
       }
+      closeKey();
     },
 
     deleteTree(path: string): void {

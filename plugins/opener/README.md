@@ -68,7 +68,7 @@ POSIX 경로이며 기존 259 UTF-16 코드 단위 예산과 이름별 255 UTF-8
 I/O 연결은 PR #164에 의존합니다. 플랫폼별 바인딩과 네이티브 검증 범위는
 [macOS opener 구현 기록](../../docs/architecture/macos-opener.md)을 참고하세요. 초기
 macOS 요청 실패는 아직 조사 중이며 네이티브 CI 통과 전에는 실행 검증 완료로 보지 않습니다.
-macOS 휴지통은 제공하지 않습니다. 커스텀 URL 스킴, 딥링크 등록과 설치 프로그램 변경은 이 패키지의 범위가 아닙니다.
+macOS 휴지통은 제공하지 않습니다. 설치 프로그램 변경은 이 패키지의 범위가 아닙니다. 커스텀 URL scheme의 런타임 등록은 아래 "URL scheme 등록"을 참고하세요.
 
 ## Windows 바로가기
 
@@ -114,7 +114,7 @@ const link = await opener.readShortcutLink("C:\\Users\\me\\Desktop\\App.lnk");
 `URL Protocol`과 `shell\open\command`(앱 실행 명령 + `"%1"`)를 쓰고 HKLM과 UserChoice는 건드리지 않습니다.
 대상은 호스트가 알려 주는 실행 중인 앱뿐이며 호출자가 경로나 인자를 줄 수 없습니다. `http`, `file`, `javascript`,
 `ms-*` 같은 예약 scheme은 `INVALID_ARGUMENT`입니다. 키의 `BunawayRegistration` 값과 명령이 모두 이 앱의 것일 때만
-소유로 보고, 설치 프로그램이나 다른 앱의 키는 덮거나 지우지 않습니다. 권한은 작업 이름 세 개이며 각각 별개입니다.
+소유로 보고, 이미 있는 이름(HKLM 등록과 시스템 ProgId 포함)은 덮지 않으며 다른 앱의 `HKCU` 키는 지우지 않습니다. 권한은 작업 이름 세 개이며 각각 별개입니다.
 링크로 받은 URL은 신뢰할 수 없는 입력이므로 앱이 검증해야 합니다. 자세한 규칙은 reference 문서를 참고하세요.
 
 ## 지정 앱

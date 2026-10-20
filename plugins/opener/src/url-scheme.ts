@@ -36,6 +36,7 @@ const RESERVED_SCHEMES: ReadonlySet<string> = new Set([
 const RESERVED_PREFIXES = [
   "ms-",
   "microsoft-",
+  "microsoft.",
 ];
 
 /** True when the scheme is well formed and not reserved; letter case is ignored. */
