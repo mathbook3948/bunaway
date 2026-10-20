@@ -62,6 +62,51 @@ export const trayHoverEventSchema = z.strictObject({
   ]),
   position: positionSchema.nullable(),
 });
+/** NOTIFYICONDATAW.szInfoTitle holds 64 WCHAR including the terminating NUL. */
+export const MAX_TRAY_BALLOON_TITLE_UNITS = 63;
+/** NOTIFYICONDATAW.szInfo holds 256 WCHAR including the terminating NUL. */
+export const MAX_TRAY_BALLOON_CONTENT_UNITS = 255;
+/** Native text of at most `maxUnits` UTF-16 units; zod's own `max` counts code points. */
+function balloonText(maxUnits: number, minUnits: number) {
+  return z
+    .string()
+    .min(minUnits)
+    .regex(NATIVE_TEXT_PATTERN)
+    .refine(
+      (value) => value.length <= maxUnits,
+      "Tray balloon text exceeds the UTF-16 limit.",
+    );
+}
+/**
+ * A balloon notification anchored to the tray icon. Lengths count UTF-16 units. `iconType` picks
+ * the stock icon beside the title. `silent` suppresses the notification sound.
+ */
+export const balloonSchema = z.strictObject({
+  title: balloonText(MAX_TRAY_BALLOON_TITLE_UNITS, 0),
+  content: balloonText(MAX_TRAY_BALLOON_CONTENT_UNITS, 1),
+  iconType: z
+    .enum([
+      "none",
+      "info",
+      "warning",
+      "error",
+    ])
+    .default("none"),
+  silent: z.boolean().default(false),
+});
+export type TrayBalloon = z.output<typeof balloonSchema>;
+/**
+ * Balloon lifecycle reported by the shell. `closed` maps the shell's timeout and hide notifications
+ * and is reported once per `show`, however many such notifications follow.
+ */
+export const trayBalloonEventSchema = z.strictObject({
+  state: z.enum([
+    "show",
+    "click",
+    "closed",
+  ]),
+});
+export type TrayBalloonEvent = z.output<typeof trayBalloonEventSchema>;
 export const trayEvents = {
   "tray.input": {
     type: "object",
@@ -157,6 +202,23 @@ export const trayEvents = {
     required: [
       "state",
       "position",
+    ],
+    additionalProperties: false,
+  },
+  "tray.balloon": {
+    type: "object",
+    properties: {
+      state: {
+        type: "string",
+        enum: [
+          "show",
+          "click",
+          "closed",
+        ],
+      },
+    },
+    required: [
+      "state",
     ],
     additionalProperties: false,
   },

@@ -1684,6 +1684,8 @@
       "tray.setVisible",
       "tray.focus",
       "tray.popUpContextMenu",
+      "tray.displayBalloon",
+      "tray.removeBalloon",
       "tray.waitForEvent",
       "tray.create",
       "tray.destroy",
