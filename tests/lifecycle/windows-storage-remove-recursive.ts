@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { rmSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import {
   chmod,
   link,
@@ -84,7 +84,10 @@ async function expectOutsideIntact(name: string): Promise<void> {
   );
 }
 
-/** Run a diskpart script; false when the runner cannot create or mount virtual disks. */
+/**
+ * Run a diskpart script. False when diskpart is missing, needs elevation or fails; the caller
+ * decides whether that skips the scenario or, on CI, fails the run.
+ */
 function diskpart(script: string): boolean {
   const file = `${root}/diskpart-${crypto.randomUUID().slice(0, 8)}.txt`;
   writeFileSync(file, script);
@@ -102,10 +105,14 @@ function diskpart(script: string): boolean {
     );
     if (result.exitCode !== 0) {
       console.log(
-        `SKIP diskpart failed: ${result.stdout.toString().slice(-400)}`,
+        `diskpart exited with ${result.exitCode}: ${result.stdout.toString().slice(-400)}`,
       );
     }
     return result.exitCode === 0;
+  } catch (error) {
+    // A missing executable or a refused elevation throws instead of returning an exit code.
+    console.log(`diskpart could not run: ${String(error)}`);
+    return false;
   } finally {
     rmSync(file, {
       force: true,
@@ -247,17 +254,20 @@ try {
     }
   }
 
-  // A volume mount point inside the tree is removed itself; the files on the mounted volume stay,
-  // because the removal opens the mount folder as a reparse point instead of following it.
+  // A volume mount point inside the tree is removed itself and the mounted volume keeps its files.
+  // The volume is also mounted outside the tree up front, so the survival check reads it through
+  // that second mount point and needs no further diskpart call.
   const disk = `${root}/mounted.vhd`.replaceAll("/", "\\");
   const mountFolder = `${root}/mount-tree/volume`.replaceAll("/", "\\");
+  const verifyFolder = `${root}/verify`.replaceAll("/", "\\");
   await mkdir(`${root}/mount-tree/volume`, {
     recursive: true,
   });
+  await mkdir(verifyFolder);
   await writeFile(`${root}/mount-tree/own.bin`, "own");
-  let attached = false;
+  let mountCovered = false;
   try {
-    attached = diskpart(
+    mountCovered = diskpart(
       [
         `create vdisk file="${disk}" maximum=64 type=expandable`,
         `select vdisk file="${disk}"`,
@@ -265,40 +275,34 @@ try {
         "create partition primary",
         "format fs=ntfs quick label=bunaway",
         `assign mount="${mountFolder}"`,
+        `assign mount="${verifyFolder}"`,
       ].join("\r\n"),
     );
-    if (attached) {
+    if (mountCovered) {
       await writeFile(`${mountFolder}/on-volume.bin`, "volume data");
       await mkdir(`${mountFolder}/nested`);
       await writeFile(`${mountFolder}/nested/deep.bin`, "deep");
       await storage.removeRecursive(at("mount-tree"));
       assert.equal(await present("mount-tree"), false);
-      // Mount the volume again elsewhere to see that its files survived the removal.
-      const verify = `${root}/verify`;
-      await mkdir(verify);
       assert.equal(
-        diskpart(
-          [
-            `select vdisk file="${disk}"`,
-            "select partition 1",
-            `assign mount="${verify.replaceAll("/", "\\")}"`,
-          ].join("\r\n"),
-        ),
-        true,
-      );
-      assert.equal(
-        await readFile(`${verify}/on-volume.bin`, "utf8"),
+        await readFile(`${verifyFolder}/on-volume.bin`, "utf8"),
         "volume data",
       );
-      assert.equal(await readFile(`${verify}/nested/deep.bin`, "utf8"), "deep");
+      assert.equal(
+        await readFile(`${verifyFolder}/nested/deep.bin`, "utf8"),
+        "deep",
+      );
+    } else if (process.env.CI) {
+      assert.fail("The CI runner must be able to mount a virtual disk.");
+    } else {
+      console.log("SKIP volume mount point: diskpart is not usable here.");
     }
   } finally {
-    if (attached) {
+    // The disk file exists once creation started, so detach even when a later step failed.
+    if (existsSync(disk)) {
       diskpart(
         [
           `select vdisk file="${disk}"`,
-          "select partition 1",
-          "remove all noerr",
           "detach vdisk noerr",
         ].join("\r\n"),
       );
@@ -343,5 +347,5 @@ try {
   });
 }
 console.log(
-  "PASS Windows storage removeRecursive: nested and large trees, read-only entries, hardlinks, links inside and at the root through the adapter and both Node removal APIs, a volume mount point inside the tree, cancellation before the start and target errors",
+  "PASS Windows storage removeRecursive: nested and large trees, read-only entries, hardlinks, links inside and at the root through the adapter and both Node removal APIs, a volume mount point inside the tree when diskpart is usable, cancellation before the start and target errors",
 );
