@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineApp } from "@bunaway/backend";
@@ -48,6 +48,10 @@ const policy: Policy = {
 };
 
 if (!process.argv.includes("--child")) {
+  // A report left by an earlier run must not satisfy this one.
+  await rm(reportPath, {
+    force: true,
+  });
   await mkdir(resolve(assets, "web"), {
     recursive: true,
   });
@@ -193,6 +197,12 @@ if (!process.argv.includes("--child")) {
       fullscreen: false,
     });
     await place(elsewhere);
+    // Restore starts from a fullscreen window: it must leave, place and enter again.
+    await windows.setFullscreen({
+      ...target,
+      fullscreen: true,
+    });
+    assert.equal((await state()).fullscreen, true);
     await windowState.restore({
       ...target,
       key: "fullscreen",

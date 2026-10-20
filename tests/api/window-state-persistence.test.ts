@@ -169,6 +169,7 @@ type Display = {
   maximized: boolean;
   fullscreen: boolean;
   visible: boolean;
+  minimized?: boolean;
 };
 
 /** In-memory window and store clients; `calls` records the order of window operations. */
@@ -188,6 +189,9 @@ function fixture(
     height: 600,
     dpi: 96,
   };
+  const behavior = {
+    resizedByDpiChange: false,
+  };
   const windows = {
     getMonitors: async () => monitors,
     getNormalBounds: async () => normal,
@@ -198,7 +202,7 @@ function fixture(
       state: {
         visible: display.visible,
         focused: true,
-        minimized: false,
+        minimized: display.minimized ?? false,
         maximized: display.maximized,
         fullscreen: display.fullscreen,
         alwaysOnTop: false,
@@ -211,8 +215,32 @@ function fixture(
     maximize: async () => void calls.push("maximize"),
     setFullscreen: async (input: { fullscreen: boolean }) =>
       void calls.push(`fullscreen:${input.fullscreen}`),
-    setOuterBounds: async (input: { x: number; y: number }) => {
+    setOuterBounds: async (input: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }) => {
       calls.push(`bounds:${input.x},${input.y}`);
+      if (behavior.resizedByDpiChange) {
+        // The OS resizes the window after the call when it crosses to another DPI.
+        behavior.resizedByDpiChange = false;
+        normal = {
+          ...normal,
+          x: input.x,
+          y: input.y,
+          width: input.width * 2,
+          height: input.height * 2,
+        };
+        return null;
+      }
+      normal = {
+        ...normal,
+        x: input.x,
+        y: input.y,
+        width: input.width,
+        height: input.height,
+      };
       return null;
     },
     show: async () => void calls.push("show"),
@@ -253,6 +281,7 @@ function fixture(
     calls,
     records,
     loads,
+    behavior,
     setNormal: (next: typeof normal) => {
       normal = next;
     },
@@ -557,6 +586,134 @@ test("inputs outside the contract are rejected before any call", async () => {
   await expect(api.remove({})).rejects.toThrow();
   expect(calls).toEqual([]);
   expect(loads).toEqual([]);
+});
+
+const plainRecord = {
+  version: 1,
+  x: 10,
+  y: 20,
+  width: 640,
+  height: 480,
+  dpi: 96,
+  maximized: false,
+  fullscreen: false,
+  visible: true,
+};
+
+test("restore places the window again when a DPI change resized it", async () => {
+  const { api, calls, records, behavior } = fixture({
+    maximized: false,
+    fullscreen: false,
+    visible: true,
+  });
+  records.set("main", plainRecord);
+  behavior.resizedByDpiChange = true;
+  await api.restore({
+    view: "main",
+  });
+  expect(calls).toEqual([
+    "bounds:10,20",
+    "bounds:10,20",
+  ]);
+});
+
+test("a hidden window stays hidden after maximize shows it", async () => {
+  const { api, calls, records } = fixture({
+    maximized: false,
+    fullscreen: false,
+    visible: false,
+  });
+  records.set("main", {
+    ...plainRecord,
+    maximized: true,
+  });
+  await api.restore({
+    view: "main",
+  });
+  expect(calls).toEqual([
+    "bounds:10,20",
+    "maximize",
+    "hide",
+  ]);
+});
+
+test("saving a minimized window keeps the maximized state saved before", async () => {
+  const display = {
+    maximized: false,
+    fullscreen: false,
+    visible: true,
+    minimized: true,
+  };
+  const earlier = fixture(display);
+  earlier.records.set("main", {
+    ...plainRecord,
+    maximized: true,
+  });
+  await earlier.api.save({
+    view: "main",
+  });
+  expect(earlier.records.get("main")).toMatchObject({
+    maximized: true,
+  });
+  const fresh = fixture(display);
+  await fresh.api.save({
+    view: "main",
+  });
+  expect(fresh.records.get("main")).toMatchObject({
+    maximized: false,
+  });
+});
+
+test("size limits are logical pixels converted at the monitor DPI", () => {
+  const dense = monitor({
+    id: "1",
+    primary: true,
+    dpi: 192,
+    scaleFactor: 2,
+    bounds: {
+      x: 0,
+      y: 0,
+      width: 5120,
+      height: 2880,
+    },
+    workArea: {
+      x: 0,
+      y: 0,
+      width: 5120,
+      height: 2840,
+    },
+  });
+  const wide = {
+    x: 0,
+    y: 0,
+    width: 4500,
+    height: 1500,
+    dpi: 192,
+  };
+  expect(
+    fitToMonitors(wide, [
+      dense,
+    ]),
+  ).toEqual({
+    bounds: {
+      x: 0,
+      y: 0,
+      width: 4500,
+      height: 1500,
+    },
+    adjusted: false,
+  });
+  expect(
+    fitToMonitors(
+      {
+        ...wide,
+        width: 300,
+      },
+      [
+        dense,
+      ],
+    ).bounds.width,
+  ).toBe(400);
 });
 
 test("the plugin declares no native operation of its own", () => {

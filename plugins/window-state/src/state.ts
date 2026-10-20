@@ -13,7 +13,7 @@ import {
   type WindowStateRestoreResult,
   type WindowStateSaveInput,
 } from "#window-state/contract";
-import { fitToMonitors } from "#window-state/placement";
+import { fitToMonitors, type Rect } from "#window-state/placement";
 
 /** The window and store operations this plugin consumes. */
 export type WindowStateDependencies = {
@@ -88,25 +88,47 @@ async function applyBounds(
     },
     await windows.getMonitors(),
   );
-  await windows.setOuterBounds({
+  const place = () =>
+    windows.setOuterBounds({
+      ...window,
+      unit: "physical",
+      ...fitted.bounds,
+    });
+  await place();
+  // A window that crosses to a monitor with another DPI is resized by the OS when the DPI
+  // change arrives, after the call returned. Once it sits on the target monitor, place it again.
+  const { dpi: _dpi, ...placed } = await windows.getNormalBounds({
     ...window,
     unit: "physical",
-    ...fitted.bounds,
   });
+  if (!sameRect(placed, fitted.bounds)) {
+    await place();
+  }
   return fitted.adjusted;
 }
 
+function sameRect(a: Rect, b: Rect): boolean {
+  return (
+    a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+  );
+}
+
+/** Returns whether a window operation ran, because maximizing or restoring can show a hidden window. */
 async function applyMaximized(
   windows: WindowsClient,
   window: WindowTarget,
   saved: SavedWindowState,
   current: DisplayState,
-): Promise<void> {
+): Promise<boolean> {
   if (saved.maximized) {
     await windows.maximize(window);
-  } else if (current.maximized) {
-    await windows.unmaximize(window);
+    return true;
   }
+  if (current.maximized) {
+    await windows.unmaximize(window);
+    return true;
+  }
+  return false;
 }
 
 /** Save, restore and remove window states using the window and store operations. */
@@ -143,6 +165,10 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
         ...window,
         unit: "physical",
       });
+      // A minimized window reports not maximized, so keep what an earlier save recorded.
+      const earlier = snapshot.state.minimized
+        ? await read(parsed.key ?? parsed.view)
+        : null;
       const state: SavedWindowState = {
         version: 1,
         x: normal.x,
@@ -150,7 +176,9 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
         width: normal.width,
         height: normal.height,
         dpi: normal.dpi,
-        maximized: snapshot.state.maximized,
+        maximized: snapshot.state.minimized
+          ? (earlier?.maximized ?? false)
+          : snapshot.state.maximized,
         fullscreen: snapshot.state.fullscreen,
         visible: snapshot.state.visible,
       };
@@ -203,17 +231,21 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
       const adjusted =
         (include.position || include.size) &&
         (await applyBounds(windows, window, saved, include));
-      if (include.maximized) {
-        await applyMaximized(windows, window, saved, state);
-      }
+      let changedShowState =
+        include.maximized &&
+        (await applyMaximized(windows, window, saved, state));
       if (wantFullscreen && (leavesFullscreen || !state.fullscreen)) {
         await windows.setFullscreen({
           ...window,
           fullscreen: true,
         });
+        changedShowState = true;
       }
       if (include.visible) {
         await (saved.visible ? windows.show(window) : windows.hide(window));
+      } else if (changedShowState && !state.visible) {
+        // Maximizing or entering fullscreen shows a hidden window; keep it hidden as it was.
+        await windows.hide(window);
       }
       return {
         restored: true,

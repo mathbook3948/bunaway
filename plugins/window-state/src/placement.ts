@@ -38,12 +38,15 @@ function overlap(
   };
 }
 
-function clampSize(value: number, available: number): number {
-  const limit = Math.max(
-    MIN_WINDOW_DIMENSION,
-    Math.min(MAX_WINDOW_DIMENSION, available),
-  );
-  return Math.min(Math.max(Math.round(value), MIN_WINDOW_DIMENSION), limit);
+/**
+ * Keep a physical size inside the window size limits, which are logical pixels converted at
+ * the monitor's DPI, and inside the work area.
+ */
+function clampSize(value: number, available: number, dpi: number): number {
+  const minimum = Math.ceil((MIN_WINDOW_DIMENSION * dpi) / LOGICAL_DPI);
+  const maximum = Math.floor((MAX_WINDOW_DIMENSION * dpi) / LOGICAL_DPI);
+  const limit = Math.max(minimum, Math.min(maximum, available));
+  return Math.min(Math.max(Math.round(value), minimum), limit);
 }
 
 /** The monitor whose work area holds the largest part of the rectangle, if enough of it shows. */
@@ -97,8 +100,16 @@ export function fitToMonitors(
     };
   }
   const scale = target.dpi / saved.dpi;
-  const width = clampSize(saved.width * scale, target.workArea.width);
-  const height = clampSize(saved.height * scale, target.workArea.height);
+  const width = clampSize(
+    saved.width * scale,
+    target.workArea.width,
+    target.dpi,
+  );
+  const height = clampSize(
+    saved.height * scale,
+    target.workArea.height,
+    target.dpi,
+  );
   const area = target.workArea;
   const bounds: Rect = home
     ? {
