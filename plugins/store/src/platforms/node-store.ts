@@ -168,6 +168,10 @@ function isCarriable(value: unknown, depth: number): boolean {
   if (typeof value === "string") {
     return isWellFormed(value);
   }
+  if (typeof value === "number") {
+    // A literal such as 1e400 parses to Infinity, which the protocol refuses.
+    return Number.isFinite(value);
+  }
   if (typeof value !== "object" || value === null) {
     return true;
   }
@@ -213,7 +217,8 @@ function readFile(path: string): StoreRecord | undefined {
   try {
     const info = statSync(path);
     if (!info.isFile()) {
-      throw invalidFile("it is not a regular file.");
+      // Not damage a reset could repair: a save cannot replace a directory either.
+      throw new Error("The store path is not a regular file.");
     }
     size = info.size;
   } catch (error) {

@@ -448,9 +448,13 @@ test("reload with ignoreDefaults drops default keys the file lacks", () => {
   });
 });
 
-test("setting an equal value, deleting a missing key and reloading unchanged data report no change", () => {
+test("setting an equal value or deleting a missing key reports no change and schedules no write", async () => {
   const root = dataRoot();
-  const instance = create(root);
+  const state = {
+    failing: false,
+    attempts: 0,
+  };
+  const instance = create(root, switchableRename(state));
   instance.load({
     name: "s",
     autosave: 10,
@@ -462,7 +466,7 @@ test("setting an equal value, deleting a missing key and reloading unchanged dat
     ],
   });
   instance.save("s");
-  const written = readFileSync(storeFile(root, "s"), "utf8");
+  const saved = state.attempts;
   expect(
     instance.set("s", "k", {
       a: [
@@ -476,10 +480,19 @@ test("setting an equal value, deleting a missing key and reloading unchanged dat
   expect(instance.delete("s", "missing")).toEqual({
     changed: false,
   });
+  expect(instance.reload("s", false)).toEqual({
+    changed: false,
+  });
+  // Longer than the debounce: a scheduled write would have replaced the file by now.
+  await Bun.sleep(100);
+  expect(state.attempts).toBe(saved);
   expect(instance.delete("s", "k")).toEqual({
     changed: true,
   });
-  expect(readFileSync(storeFile(root, "s"), "utf8")).toBe(written);
+  await waitFor(() => (state.attempts > saved ? true : undefined), {
+    deadline: "inProcess",
+    what: "autosave after a real change",
+  });
 });
 
 test("limits refuse a change and leave the contents as they were", () => {
@@ -1118,6 +1131,7 @@ test("a file value the protocol could not carry is refused, or replaced with res
     '{"k":"\\ud800"}',
     `{"k":${deep}}`,
     '{"\\udc00":1}',
+    '{"k":1e400}',
   ];
   for (const [index, content] of files.entries()) {
     const name = `carry${index}`;
@@ -1151,6 +1165,30 @@ test("a file value the protocol could not carry is refused, or replaced with res
     "INVALID_ARGUMENT",
   );
   expect(instance.has("live", "k")).toBe(false);
+});
+
+test("a store path that is a directory fails even with reset", () => {
+  const root = dataRoot();
+  mkdirSync(storeFile(root, "d"), {
+    recursive: true,
+  });
+  const instance = create(root);
+  expect(
+    errorCodeOf(() =>
+      instance.load({
+        name: "d",
+        onInvalidFile: "reset",
+        ...manual,
+      }),
+    ),
+  ).toBeUndefined();
+  expect(() =>
+    instance.load({
+      name: "d",
+      onInvalidFile: "reset",
+      ...manual,
+    }),
+  ).toThrow("not a regular file");
 });
 
 test("a reset that was saved is what a new instance loads", () => {
