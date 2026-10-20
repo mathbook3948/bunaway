@@ -27,7 +27,7 @@ class TestStorage extends NodeStorage {
 
 const CONTENT = Buffer.from("0123456789abcdef");
 let root = "";
-let storage = new TestStorage();
+let storage: TestStorage;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "bunaway-short-"));
@@ -150,25 +150,42 @@ test("a range longer than the file returns the available bytes, and a start at o
 });
 
 test("a file that grows after its size was checked is read only up to the checked size", () => {
-  const path = sample();
-  const original = fs.readSync;
-  let grown = false;
-  const spy = spyOn(fs, "readSync").mockImplementation(((
-    ...args: Parameters<typeof fs.readSync>
-  ) => {
-    if (!grown) {
-      grown = true;
-      fs.appendFileSync(path, "more bytes");
+  for (const [range, expected] of [
+    [
+      undefined,
+      CONTENT,
+    ],
+    [
+      {
+        offset: 4,
+        length: 100,
+      },
+      CONTENT.subarray(4),
+    ],
+  ] as const) {
+    const path = sample();
+    const original = fs.readSync;
+    let grown = false;
+    const spy = spyOn(fs, "readSync").mockImplementation(((
+      ...args: Parameters<typeof fs.readSync>
+    ) => {
+      if (!grown) {
+        grown = true;
+        fs.appendFileSync(path, "more bytes");
+      }
+      return original(...args);
+    }) as typeof fs.readSync);
+    try {
+      expect(
+        storage.readBytes({
+          path,
+          ...range,
+        }),
+      ).toBe(expected.toString("base64"));
+      // The file only grows if the spy sits on the read the storage code makes.
+      expect(grown).toBe(true);
+    } finally {
+      spy.mockRestore();
     }
-    return original(...args);
-  }) as typeof fs.readSync);
-  try {
-    expect(
-      storage.readBytes({
-        path,
-      }),
-    ).toBe(CONTENT.toString("base64"));
-  } finally {
-    spy.mockRestore();
   }
 });

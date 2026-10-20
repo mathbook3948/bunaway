@@ -451,10 +451,9 @@ export abstract class NodeStorage
 
   /**
    * Read a byte range of a regular file by position, so the bytes before `offset` are never read.
-   * `Bun.file().slice()` is not used: when the file shrinks during the read it returns fewer bytes
-   * without an error, it does not seek a descriptor, and a negative end needs the size first. A
-   * 0-byte read before the range is filled means the file shrank and fails; a file that grew is
-   * read only up to the size that was checked.
+   * A positioned `readSync` is used instead of `Bun.file().slice()` so that a 0-byte read before
+   * the range is filled is visible here: it means the file shrank and fails, rather than
+   * returning fewer bytes. A file that grew is read only up to the size that was checked.
    */
   protected readRange(path: string, offset: number, length: number): Buffer {
     return this.withFile(
