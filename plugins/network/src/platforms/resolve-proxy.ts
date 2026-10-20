@@ -131,7 +131,7 @@ function takeStrings(
 }
 
 /** The worker's reply as a result or a Win32 error code; anything else is a failed lookup. */
-function parseReply(reply: unknown): AutoProxyResult | number {
+export function parseReply(reply: unknown): AutoProxyResult | number {
   if (isRecord(reply)) {
     if (typeof reply.error === "number") {
       return reply.error;
@@ -224,8 +224,8 @@ function scriptUrl(url: URL): string {
  * credentials.
  *
  * The blocking WinHTTP calls run in a worker, so the host thread keeps serving other work while
- * a lookup waits. Aborting the signal (cancellation or the deadline) ends the wait at once and
- * the worker is terminated; the native call it may still be inside finishes on its own. Each
+ * a lookup waits. Aborting the signal (cancellation or the deadline) ends the wait at once; the
+ * worker is left to finish the native call it may be inside and retires itself afterwards. Each
  * automatic step gets the time left of the deadline. Settings that need no script are answered
  * from the settings read alone, without a worker.
  */

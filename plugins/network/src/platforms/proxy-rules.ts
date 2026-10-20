@@ -1,4 +1,4 @@
-import { MAX_PROXY_ENTRIES } from "#network/contract";
+import { MAX_HOST_LENGTH, MAX_PROXY_ENTRIES } from "#network/contract";
 
 type ProxyScheme = "http" | "https" | "socks4" | "socks5";
 type ProxyServer = {
@@ -22,7 +22,6 @@ const DEFAULT_PORTS: Record<ProxyScheme, number> = {
 };
 /** A list entry may carry `scheme=` (the URL scheme it serves) and `scheme://` (how to talk to the proxy). */
 const RULE_PREFIX = /^([a-z][a-z0-9]*)=(.*)$/i;
-const MAX_HOST_CHARS = 253;
 const PROXY_URI_PREFIX = /^(http|https|socks|socks4|socks5):\/\/(.*)$/i;
 const HOST_PORT = /^(\[[0-9a-f:.]+\]|[^:\s[\]]+)(?::(\d{1,5}))?$/i;
 const SEPARATORS = /[;\s]+/;
@@ -73,7 +72,7 @@ function parseServer(token: string, fallback: ProxyScheme): ProxyServer | null {
   }
   const port =
     match[2] === undefined ? DEFAULT_PORTS[scheme] : Number(match[2]);
-  if (port < 1 || port > 65535 || (match[1] ?? "").length > MAX_HOST_CHARS) {
+  if (port < 1 || port > 65535 || (match[1] ?? "").length > MAX_HOST_LENGTH) {
     return null;
   }
   return {
@@ -93,13 +92,19 @@ export type ProxyRules = {
   all: ProxyServer[];
 };
 
+/** Whether a token opens an entry: it carries a `scheme=` rule or a `scheme://` proxy address. */
+function startsEntry(token: string): boolean {
+  return RULE_PREFIX.test(token) || PROXY_URI_PREFIX.test(token);
+}
+
 /**
  * Split a proxy list into entries. A password that contains ";" or a space splits its entry:
- * "alice:1 2 3@host" gives "alice:1", "2" and "3@host", where only the last token has an "@" with
- * user information that holds no ":". Such a token joins every token since the previous
- * "@" token, so the whole user information (and any `scheme=` prefix in front of it) stays in one
- * entry and `parseServer` drops it together. Proxies listed in that stretch before the entry
- * are lost with it: a list is never allowed to leak a user name or password fragment as a host.
+ * "alice:1 2 3@host" gives "alice:1", "2" and "3@host". Where the password ends cannot be told
+ * from where the next entry starts, so a token with an "@" joins every token before it, back to
+ * the nearest token that opens an entry (`scheme=` or `scheme://`, or the current token itself)
+ * and not past the previous "@" token. `parseServer` then drops all of that user information at
+ * once. Proxies listed in that stretch before the credentialed entry are lost with it: a list
+ * is never allowed to return a user name or password fragment as a host.
  */
 function entryTokens(text: string): string[] {
   const tokens: string[] = [];
@@ -108,22 +113,26 @@ function entryTokens(text: string): string[] {
     if (token === "") {
       continue;
     }
-    const at = token.lastIndexOf("@");
-    if (at < 0) {
+    if (!token.includes("@")) {
       tokens.push(token);
       continue;
     }
-    const userInfo = token.slice(0, at).replace(PROXY_URI_PREFIX, "$2");
-    if (userInfo.includes(":")) {
-      tokens.push(token);
-    } else {
-      tokens.push(
-        [
-          ...tokens.splice(open),
-          token,
-        ].join(" "),
-      );
+    let start = tokens.length;
+    if (!startsEntry(token)) {
+      start = open;
+      for (let index = tokens.length - 1; index >= open; index -= 1) {
+        if (startsEntry(tokens[index] ?? "")) {
+          start = index;
+          break;
+        }
+      }
     }
+    tokens.push(
+      [
+        ...tokens.splice(start),
+        token,
+      ].join(" "),
+    );
     open = tokens.length;
   }
   return tokens;
@@ -177,8 +186,36 @@ export function isImplicitDirect(hostname: string): boolean {
   return /^(?:127(?:\.\d{1,3}){3}|169\.254(?:\.\d{1,3}){2})$/.test(host);
 }
 
-function escapePattern(text: string): string {
-  return text.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * Whether `text` matches `pattern`, where `*` stands for any run of characters. Linear in the
+ * pattern and text with at most one backtrack point (the last `*`), so a hostile pattern cannot
+ * stall the thread the way a nested-quantifier regular expression can.
+ */
+function wildcardMatch(pattern: string, text: string): boolean {
+  let p = 0;
+  let t = 0;
+  let star = -1;
+  let resume = 0;
+  while (t < text.length) {
+    if (pattern[p] === "*") {
+      star = p;
+      resume = t;
+      p += 1;
+    } else if (p < pattern.length && pattern[p] === text[t]) {
+      p += 1;
+      t += 1;
+    } else if (star >= 0) {
+      p = star + 1;
+      resume += 1;
+      t = resume;
+    } else {
+      return false;
+    }
+  }
+  while (pattern[p] === "*") {
+    p += 1;
+  }
+  return p === pattern.length;
 }
 
 type BypassMatcher = (
@@ -207,13 +244,10 @@ function bypassMatcher(token: string): BypassMatcher {
     onlyPort = Number(suffix[2]);
     pattern = head;
   }
-  const hostPattern = new RegExp(
-    `^${pattern.split("*").map(escapePattern).join(".*")}$`,
-  );
   return (scheme, host, port) =>
     (onlyScheme === undefined || onlyScheme === scheme) &&
     (onlyPort === undefined || onlyPort === port) &&
-    hostPattern.test(host);
+    wildcardMatch(pattern, host);
 }
 
 function requestScheme(url: URL): RequestScheme {
@@ -250,12 +284,12 @@ export function selectEntries(
   const rules = parseProxyList(proxyList);
   const seen = new Set<string>();
   const servers: ProxyServer[] = [];
-  const direct = [
+  const forScheme = [
     ...rules[requestScheme(url)],
     ...rules.all,
   ];
   // SOCKS entries serve a URL only when no entry names its scheme, as in WinINet and Chromium.
-  for (const server of direct.length > 0 ? direct : rules.socks) {
+  for (const server of forScheme.length > 0 ? forScheme : rules.socks) {
     const key = `${server.scheme}://${server.host}:${server.port}`;
     if (!seen.has(key)) {
       seen.add(key);

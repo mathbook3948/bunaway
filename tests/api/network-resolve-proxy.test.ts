@@ -8,6 +8,7 @@ import {
 } from "#plugins/network/src/contract";
 import { macosOperations } from "#plugins/network/src/operations";
 import {
+  AUTO_PROXY_WORKER_SOURCE,
   requestFromWorker,
   startWorker,
 } from "#plugins/network/src/platforms/auto-proxy-worker";
@@ -21,6 +22,7 @@ import {
   type AutoProxyResult,
   type AutoProxySource,
   type IeProxyConfig,
+  parseReply,
   resolveProxy,
   type WinHttpApi,
 } from "#plugins/network/src/platforms/resolve-proxy";
@@ -306,14 +308,24 @@ test("a password with a separator or slash leaves no user name in the result", (
     proxy("p.example", 80),
   ]);
   expect(scoped.all).toEqual([]);
-  // A complete user:password entry does not remove the proxy listed before it.
-  expect(
-    parseProxyList("first.example:80;bob:pw@second.example:81").all.map(
-      (server) => server.host,
-    ),
-  ).toEqual([
-    "first.example",
-    "second.example",
+  // Where a password ends cannot be told from the next entry: proxies before a credentialed
+  // entry are dropped with it rather than risk returning a fragment of the credentials.
+  for (const list of [
+    "alice:1234;5:6@proxy.example:8080",
+    "first.example:80;bob:pw@proxy.example:8080",
+    "first.example:80;bob@proxy.example:8080",
+  ]) {
+    expect(parseProxyList(list).all.map((server) => server.host)).toEqual([
+      "proxy.example",
+    ]);
+  }
+  // An entry that opens with its own scheme keeps it, and other schemes are left alone.
+  const mixed = parseProxyList("https=a.example:80;http=bob@b.example:81");
+  expect(mixed.https).toEqual([
+    proxy("a.example", 80),
+  ]);
+  expect(mixed.http).toEqual([
+    proxy("b.example", 81),
   ]);
   // Unknown scheme names and oversized hosts are skipped.
   expect(
@@ -339,6 +351,16 @@ test("the bypass list follows the WinHTTP token rules", () => {
   expect(matchesBypass("", url("http://intranet/"))).toBe(false);
   // "." is a literal, not a wildcard.
   expect(matchesBypass("a.example", url("http://axexample/"))).toBe(false);
+});
+
+test("a wildcard-heavy bypass token matches in linear time", () => {
+  const host = new URL(`http://${"a".repeat(60)}/`);
+  const started = performance.now();
+  expect(matchesBypass("*a*a*a*a*a*a*a*a*a*a*a*b", host)).toBe(false);
+  expect(matchesBypass("*a*a*a*a*a*a*a*a*a*a*a*a", host)).toBe(true);
+  expect(matchesBypass("a*a", new URL("http://aa/"))).toBe(true);
+  expect(matchesBypass("a*a", new URL("http://a/"))).toBe(false);
+  expect(performance.now() - started).toBeLessThan(1000);
 });
 
 test("loopback and link-local hosts are never proxied", () => {
@@ -831,6 +853,10 @@ test("a crashing worker is an internal error", async () => {
   ).rejects.toMatchObject({
     code: "INTERNAL",
   });
+  await waitFor(() => workers.size === 0, {
+    deadline: "childStep",
+    what: "the crashed worker to retire",
+  });
 });
 
 test("a hung worker holds its slot until the owner terminates it", async () => {
@@ -865,4 +891,118 @@ test("startWorker runs module source without a file", async () => {
   });
   release();
   await worker.terminate();
+});
+
+test("dispose terminates workers that are still running", async () => {
+  const state = initialize();
+  const controller = new AbortController();
+  const pending = requestFromWorker({
+    source: ECHO_WORKER,
+    request: {
+      hang: true,
+    },
+    signal: controller.signal,
+    workers: state.winhttp.workers,
+    limit: 2,
+  });
+  controller.abort(new Error("stop"));
+  await expect(pending).rejects.toThrow("stop");
+  expect(state.winhttp.workers.size).toBe(1);
+  await dispose(state);
+  expect(state.winhttp.workers.size).toBe(0);
+});
+
+test("the deadline ends a lookup that never answers", async () => {
+  const state = initialize();
+  const stuck: WinHttpApi = {
+    ieProxyConfig: () => ({
+      autoDetect: true,
+      autoConfigUrl: null,
+      proxy: null,
+      bypass: null,
+    }),
+    autoProxyForUrl: (_url, _source, _timeoutMs, signal) =>
+      new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
+      }),
+  };
+  const input = resolveProxyInputSchema.parse({
+    url: "https://example.com/",
+    timeoutMs: 50,
+  });
+  await expect(
+    runResolveProxy(state, input, undefined, () => stuck),
+  ).rejects.toMatchObject({
+    code: "TIMEOUT",
+  });
+  expect(state.active.size).toBe(0);
+  await dispose(state);
+});
+
+test("a worker reply is a result, an error code or a failed lookup", () => {
+  expect(
+    parseReply({
+      error: 12180,
+    }),
+  ).toBe(12180);
+  expect(
+    parseReply({
+      found: {
+        accessType: 3,
+        proxy: "p:80",
+        bypass: null,
+      },
+    }),
+  ).toEqual({
+    accessType: 3,
+    proxy: "p:80",
+    bypass: null,
+  });
+  for (const reply of [
+    {
+      fail: "Windows proxy lookup could not start.",
+    },
+    {
+      found: {
+        accessType: "3",
+        proxy: null,
+        bypass: null,
+      },
+    },
+    {
+      found: {
+        accessType: 3,
+        proxy: 5,
+        bypass: null,
+      },
+    },
+    {
+      found: {
+        accessType: 3,
+        proxy: null,
+      },
+    },
+    {
+      found: null,
+    },
+    "text",
+    null,
+  ]) {
+    expect(() => parseReply(reply)).toThrowError(
+      expect.objectContaining({
+        code: "INTERNAL",
+      }),
+    );
+  }
+});
+
+test("the worker module source is valid JavaScript", () => {
+  const transpiler = new Bun.Transpiler({
+    loader: "js",
+  });
+  expect(() =>
+    transpiler.transformSync(AUTO_PROXY_WORKER_SOURCE),
+  ).not.toThrow();
 });

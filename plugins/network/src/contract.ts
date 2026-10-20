@@ -169,7 +169,7 @@ export const exchangeResultSchema = z.strictObject({
   }),
 });
 /** Longest DNS name and label in octets, RFC 1035. */
-const MAX_HOST_LENGTH = 253;
+export const MAX_HOST_LENGTH = 253;
 const MAX_HOST_LABEL_LENGTH = 63;
 /** Upper bound on addresses returned for one name. Extra addresses are dropped in resolver order. */
 export const MAX_RESOLVED_ENDPOINTS = 64;
