@@ -390,17 +390,20 @@ export function createStatusItem(
           if (!accepting) {
             return;
           }
-          const event = send(
-            send(classOf("NSApplication"), "sharedApplication"),
-            "currentEvent",
-          );
-          if (!event) {
-            return;
-          }
-          for (const click of clicksFor(
-            send(event, "type"),
-            Number(send(event, "clickCount")),
-          )) {
+          // Read the event inside a pool so the lookup buffers are released; report after it drains.
+          const clicks = inPool(() => {
+            const event = send(
+              send(classOf("NSApplication"), "sharedApplication"),
+              "currentEvent",
+            );
+            return event
+              ? clicksFor(
+                  send(event, "type"),
+                  Number(send(event, "clickCount")),
+                )
+              : [];
+          });
+          for (const click of clicks) {
             onClick(click);
           }
         },
