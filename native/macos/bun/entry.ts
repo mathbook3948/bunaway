@@ -485,6 +485,12 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
         "ui",
         ui.services,
         catalog,
+        undefined,
+        {
+          events: {
+            emit: (event, payload) => ui?.emitPluginEvent(event, payload),
+          },
+        },
       );
       if (!stopping) {
         await startIO(plugins);

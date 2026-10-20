@@ -603,6 +603,20 @@ export class MacosWindows {
       });
   }
 
+  /**
+   * Delivers one plugin event to every live view that subscribed to it. Delivery uses the same
+   * ordered lane as window events; a view without a subscription is skipped and nothing is
+   * delivered once shutdown has begun.
+   */
+  emitPluginEvent(event: string, payload: JsonValue): void {
+    if (this.hooks.stopping()) {
+      return;
+    }
+    for (const view of this.views.values()) {
+      this.sendNativeEvent(view.boundary, event, payload);
+    }
+  }
+
   private identity(view: View): WindowIdentity {
     return {
       windowId: view.windowId,

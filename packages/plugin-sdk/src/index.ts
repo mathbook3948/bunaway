@@ -42,6 +42,16 @@ export {
   nonNegativeInt32Schema,
 } from "./schemas.ts";
 
+/** Plugin-originated native events delivered to the app's WebViews. */
+export type NativeEventServices = {
+  /**
+   * Sends one event to every live view whose current document has subscribed to it, or has a
+   * subscription request still pending. Only the subscription is checked per emit; the policy was
+   * checked when the subscription was made. Events are dropped once the host stops.
+   */
+  emit(event: string, payload: JsonValue): void;
+};
+
 /** Host-selected values available when a native adapter is created. */
 export type NativeEnvironment = {
   /** Trusted app identity and restart command. Callers cannot select another executable. */
@@ -59,6 +69,8 @@ export type NativeEnvironment = {
   windows?: import("@bunaway/plugin-api/native").NativeWindowServices;
   /** Optional global shortcut message-window and event services on the native UI thread. */
   shortcuts?: import("@bunaway/plugin-api/native").NativeShortcutServices;
+  /** Optional event delivery on the macOS host; the Windows host uses its dedicated services. */
+  events?: NativeEventServices;
   /** Optional UI-thread menu integration, absent on platforms without native menus. */
   menus?: import("@bunaway/plugin-api/native").NativeMenuServices;
   /** Optional UI-thread controls for the app's existing configured tray icon. */
