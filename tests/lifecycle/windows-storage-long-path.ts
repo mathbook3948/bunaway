@@ -97,7 +97,7 @@ try {
     assert.equal(error.message, "Storage target not found.");
   }
 
-  // The same tree through the administrative share of this machine takes the UNC form of the prefix.
+  // The same tree through the administrative share of this machine; a UNC path keeps its spelling.
   // Writing directly under a share root checks the parent folder handling of that form.
   const unc = `\\\\localhost\\${root.replace(":", "$")}`;
   if (existsSync(`\\\\localhost\\${root[0]}$\\`)) {
@@ -133,12 +133,9 @@ try {
       );
       console.log("SKIP share root is not writable on this runner.");
     } finally {
-      rmSync(
-        `\\\\?\\UNC\\localhost\\${root[0]}$\\${shareRootFile.split("\\").pop()}`,
-        {
-          force: true,
-        },
-      );
+      rmSync(shareRootFile, {
+        force: true,
+      });
     }
   } else {
     console.log(

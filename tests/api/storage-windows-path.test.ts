@@ -71,12 +71,12 @@ test("device namespace and NT object prefixes are refused", () => {
   }
 });
 
-test("every checked path gets the extended-length prefix for file system calls, UNC in its own form", () => {
+test("every checked drive path gets the extended-length prefix for file system calls and a UNC path keeps its spelling", () => {
   expect(normalizeForFileSystem("c:/data/a.txt")).toBe(
     "\\\\?\\c:\\data\\a.txt",
   );
   expect(normalizeForFileSystem("//server/share/a.txt")).toBe(
-    "\\\\?\\UNC\\server\\share\\a.txt",
+    "\\\\server\\share\\a.txt",
   );
   const long = `C:\\${"a".repeat(100)}\\${"b".repeat(100)}\\${"c".repeat(100)}.txt`;
   expect(normalizeForFileSystem(long)).toBe(`\\\\?\\${long}`);
