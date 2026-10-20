@@ -69,7 +69,9 @@ function fileError(error: unknown): BunawayError {
  * (ADR 0024); this only reports a missing, unreadable or non-regular target with the opener's
  * error contract: `INVALID_ARGUMENT` with reason `FILE_NOT_FOUND` when absent, `INVALID_ARGUMENT`
  * without a reason for a directory, a non-regular file or a too long path, `PERMISSION_DENIED` for
- * access, sharing and link cycle failures, and `INTERNAL` for anything else. A path swapped after
+ * access, sharing and link cycle failures, and `INTERNAL` for anything else. A hard link is not a
+ * link to follow: the result may be any name of the same file, so compare files by device and inode
+ * rather than by name. A path swapped after
  * this returns is not detected.
  */
 export function resolveReadableFile(path: string): string {
