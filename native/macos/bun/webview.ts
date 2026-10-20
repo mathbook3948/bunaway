@@ -797,10 +797,13 @@ export class MacosWebview {
    * `isMinimized` can lag briefly. An already miniaturized window is left as it is.
    */
   minimize(): void {
+    // A pending zoom means the window is leaving the Dock, where `isMiniaturized` is still true
+    // but the request to minimize it again must be honored.
+    const restoring = this.zoomAfterRestore !== undefined;
     this.cancelZoomAfterRestore();
     const o = this.objc;
     o.withAutoreleasePool(() => {
-      if (!o.send(this.window, "isMiniaturized")) {
+      if (restoring || !o.send(this.window, "isMiniaturized")) {
         o.send(this.window, "miniaturize:", null);
       }
     });
