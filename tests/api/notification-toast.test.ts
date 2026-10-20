@@ -312,7 +312,9 @@ test("replacement suppresses retired callbacks and retains the previous generati
   };
   f.controller.show(first);
   f.callbacks[0]?.({
-    kind: "clicked",
+    kind: "activated",
+    arguments: "",
+    reply: undefined,
   });
   f.failure("show", true);
   expect(() =>
@@ -322,7 +324,9 @@ test("replacement suppresses retired callbacks and retains the previous generati
     }),
   ).toThrow("show failed");
   f.callbacks[0]?.({
-    kind: "clicked",
+    kind: "activated",
+    arguments: "",
+    reply: undefined,
   });
   f.failure("show", false);
   f.controller.show({
@@ -330,10 +334,14 @@ test("replacement suppresses retired callbacks and retains the previous generati
     data: "second",
   });
   f.callbacks[0]?.({
-    kind: "clicked",
+    kind: "activated",
+    arguments: "",
+    reply: undefined,
   });
   f.callbacks[1]?.({
-    kind: "clicked",
+    kind: "activated",
+    arguments: "",
+    reply: undefined,
   });
   f.callbacks[1]?.({
     kind: "dismissed",
@@ -390,7 +398,9 @@ test("replacement suppresses retired callbacks and retains the previous generati
   ]);
   f.controller.clear(first);
   f.callbacks[1]?.({
-    kind: "clicked",
+    kind: "activated",
+    arguments: "",
+    reply: undefined,
   });
   expect(f.events).toHaveLength(5);
   f.controller.clear({
@@ -533,7 +543,9 @@ test("clearAll failure keeps ownership so a retry succeeds and callbacks stay li
   f.failure("clear", true);
   expect(() => f.controller.clearAll()).toThrow("clear failed");
   f.callbacks[0]?.({
-    kind: "clicked",
+    kind: "activated",
+    arguments: "",
+    reply: undefined,
   });
   expect(f.events).toHaveLength(1);
   expect(f.detached).toEqual([]);
@@ -543,7 +555,9 @@ test("clearAll failure keeps ownership so a retry succeeds and callbacks stay li
     0,
   ]);
   f.callbacks[0]?.({
-    kind: "clicked",
+    kind: "activated",
+    arguments: "",
+    reply: undefined,
   });
   expect(f.events).toHaveLength(1);
   f.controller.dispose();
@@ -562,7 +576,9 @@ test("cleanup failures retain ownership for retry and stop callbacks before shut
   f.failure("clear", true);
   expect(() => f.controller.dispose()).toThrow("Toast cleanup failed");
   f.callbacks[1]?.({
-    kind: "clicked",
+    kind: "activated",
+    arguments: "",
+    reply: undefined,
   });
   expect(f.events).toEqual([]);
   expect(f.disposals).toBe(0);

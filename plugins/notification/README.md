@@ -62,6 +62,17 @@ recall 속성을 거부한다. 링크는 따라가고 링크 대상은 이 검�
 비패키지 앱은 임의 소리 파일을 재생할 수 없다. `soundLoop`는 `Looping.*` 소리에만 허용한다.
 `silent: true`와 `sound`는 함께 줄 수 없고 `INVALID_ARGUMENT`이다.
 
+`actions`(`{ id, label }` 최대 5개, id 중복 불가, label 1~64자)와 `reply`(`{ placeholder?, buttonLabel }`)를
+지정하면 toast에 버튼과 텍스트 입력 상자를 추가한다. 응답 입력 상자는 `hint-inputId`로 연결한 전송 버튼과 함께 선언하므로
+버튼과 전송 버튼을 합쳐 5개까지이고 `buttonLabel`에 기본값이 없다. 버튼의 activation 인수는
+`action:<id>`, 전송 버튼은 `reply`이며 `data`는 XML에 싣지 않는다. 버튼을 누르면
+`notification.actionInvoked`를 `{ id, group, actionId, reply, data }`로 전달한다. `actionId`는 전송
+버튼이면 null, `reply`는 입력 상자가 있으면 입력 문자열(비워 두면 빈 문자열), 없으면 null이다.
+2048 UTF-16 코드 단위를 넘는 응답, 문자열이 아닌 응답 값, 선언하지 않은 인수와 읽을 수 없는 인수는 이벤트를 만들지 않는다. 본문 클릭은
+`notification.clicked`이다. 인수는 Activated 이벤트 인자의 `IToastActivatedEventArgs`와
+`IToastActivatedEventArgs2.UserInput`(ValueSet)에서 callback 안에 복사하고 얻은 COM 객체와 HSTRING은
+모두 해제한다.
+
 `notification.clicked`는 `{ id, group, data }`, `notification.dismissed`는
 `{ id, group, reason }`, `notification.failed`는 `{ id, group, hresult }`를 전달한다.
 이벤트는 실제 native callback에서 만들며 show 성공만으로 clicked나 표시 이벤트를 만들지 않는다.
@@ -100,11 +111,11 @@ Tauri 기준으로 제공한다.
 시작 메뉴 바로가기와 process AppUserModelID가 일치하는 unpackaged Windows x64를
 대상으로 한다. MSIX는 패키지 식별자 연동 전까지 `UNSUPPORTED`이다. 플러그인은 바로가기,
 COM activator, URL handler를 자동 등록하지 않으며 기존 설치 선택을 보존한다.
-실행 중인 프로세스가 받은 Activated callback만 clicked로 전달한다. 종료 상태에서 앱을
+실행 중인 프로세스가 받은 Activated callback만 clicked 또는 actionInvoked로 전달한다. 종료 상태에서 앱을
 시작하거나 `onOpen`으로 전달하지 않는다. 알림 센터에서 나중에 클릭하거나 비정상 종료 후
 남은 알림의 activation은 보장하지 않는다. 강제 종료는 정리를 실행할 수 없으며 앱은
-다음 실행에서 알고 있는 ID/group을 clear할 수 있다. 액션 버튼, 이미지, 예약과 영속
-activation은 후속 범위다.
+다음 실행에서 알고 있는 ID/group을 clear할 수 있다. 이미지, 예약과 영속
+activation은 후속 범위다. 종료 후 버튼 클릭과 이전 프로세스 알림의 버튼도 이벤트가 없다.
 
 기준 API: [CreateToastNotifier](https://learn.microsoft.com/en-us/uwp/api/windows.ui.notifications.toastnotificationmanager.createtoastnotifier),
 [Setting](https://learn.microsoft.com/en-us/uwp/api/windows.ui.notifications.toastnotifier.setting),
@@ -144,4 +155,9 @@ activation은 후속 범위다.
   `clearAll`로 제거해 history가 비는 것도 확인한다. 같은 항목을 `list`가 id/group으로
   돌려주는지도 확인한다. 별도 STA/MTA fixture는 실제 COM marshaling,
   callback 실행 스레드와 지연 Release 정리를 확인한다. `host:windows`에도 포함한다.
-  이 검사는 실제 사용자의 클릭이나 종료 상태 activation을 검증하지 않는다.
+  이 검사는 실제 사용자의 클릭이나 종료 상태 activation을 검증하지 않는다. 버튼과 응답 상자가
+  있는 toast를 Windows가 접수하고 history에 보존하는지, Activated 인자 파서가 의존하는 인터페이스
+  id와 메서드 순서가 Windows 메타데이터와 같은지, 실제 ValueSet에서 응답 문자열을 읽고 문자열이 아닌
+  값과 없는 키를 구분하는지는 확인한다. 실제 버튼 클릭에서 인자 객체를 읽는 경로는 GUI 입력이
+  필요해 자동 검증하지 않으며, `tests/api/notification-toast.test.ts`의 가짜 COM 객체와
+  `tests/api/notification-actions.test.ts`의 계약 시험으로 해석과 자원 해제를 검사한다.

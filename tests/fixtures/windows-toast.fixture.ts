@@ -7,6 +7,13 @@ import { fileURLToPath } from "node:url";
 import { parentPort, Worker, workerData } from "node:worker_threads";
 import { notificationShowSchema } from "#plugins/notification/src/contract";
 import {
+  ACTIVATED_ARGS_IID,
+  ACTIVATED_ARGS2_IID,
+  FIRST_METHOD_SLOT,
+  MAP_STRING_OBJECT_IID,
+  readReply,
+} from "#plugins/notification/src/platforms/toast-activation";
+import {
   createToastSettler,
   drainToastCleanup,
 } from "#plugins/notification/src/platforms/toast-cleanup";
@@ -187,6 +194,152 @@ if (workerData?.toastMarshalWorker) {
     kernel.close();
     runtime.dispose();
   }
+} else if (process.argv[2] === "activation") {
+  // Activated arguments cannot be produced without a user click, so check each interface the parser
+  // depends on against Windows itself: the metadata ids and method order, then a real ValueSet.
+  const probe = Bun.spawn(
+    [
+      "powershell.exe",
+      "-NoProfile",
+      "-File",
+      fileURLToPath(new URL("./windows-toast-activation.ps1", import.meta.url)),
+    ],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 60000,
+    },
+  );
+  const [probeOut, probeErr, probeCode] = await Promise.all([
+    new Response(probe.stdout).text(),
+    new Response(probe.stderr).text(),
+    probe.exited,
+  ]);
+  assert.equal(probeCode, 0, probeErr);
+  const metadata = new Map<
+    string,
+    {
+      guid: string;
+      methods: string[];
+    }
+  >(
+    (
+      JSON.parse(probeOut) as {
+        name: string;
+        guid: string;
+        methods: string[];
+      }[]
+    ).map((entry) => [
+      entry.name,
+      entry,
+    ]),
+  );
+  const described = (name: string) => {
+    const entry = metadata.get(name);
+    assert(entry, `${name} metadata`);
+    return entry;
+  };
+  const expectInterface = (
+    name: string,
+    iid: string,
+    method: string,
+    slot: number,
+  ) => {
+    const entry = described(name);
+    assert.equal(entry.guid.toLowerCase(), iid, `${name} IID`);
+    assert.equal(FIRST_METHOD_SLOT + entry.methods.indexOf(method), slot);
+  };
+  expectInterface(
+    "IToastActivatedEventArgs",
+    ACTIVATED_ARGS_IID,
+    "get_Arguments",
+    FIRST_METHOD_SLOT,
+  );
+  expectInterface(
+    "IToastActivatedEventArgs2",
+    ACTIVATED_ARGS2_IID,
+    "get_UserInput",
+    FIRST_METHOD_SLOT,
+  );
+  // IMap<String, Object>: Lookup(6), Size(7), HasKey(8), GetView(9), Insert(10).
+  const runtime = createToastRuntime();
+  const INSERT_SLOT = 10;
+  const PROPERTY_VALUE_STATICS_IID = "629bdbc8-d932-4ff4-96b9-8d96c5c1e858";
+  const CREATE_INT32_SLOT = 10;
+  const CREATE_STRING_SLOT = 18;
+  try {
+    const set = runtime.activate("Windows.Foundation.Collections.ValueSet");
+    const map = runtime.query(set, MAP_STRING_OBJECT_IID);
+    const statics = runtime.factory(
+      "Windows.Foundation.PropertyValue",
+      PROPERTY_VALUE_STATICS_IID,
+    );
+    const replaced = new Uint8Array(1);
+    const insert = (key: string, create: (out: Pointer) => number) => {
+      const value = runtime.object(create, "PropertyValue.Create");
+      try {
+        runtime.string(key, (name) =>
+          checkToast(
+            runtime.method(
+              map,
+              INSERT_SLOT,
+              [
+                "ptr",
+                "ptr",
+                "ptr",
+              ],
+              name,
+              value,
+              ptr(replaced),
+            ),
+            "ValueSet.Insert",
+          ),
+        );
+      } finally {
+        runtime.release(value);
+      }
+    };
+    try {
+      assert.equal(readReply(runtime, set, "reply"), "");
+      insert("reply", (out) =>
+        runtime.string("안녕 hello", (text) =>
+          runtime.method(
+            statics,
+            CREATE_STRING_SLOT,
+            [
+              "ptr",
+              "ptr",
+            ],
+            text,
+            out,
+          ),
+        ),
+      );
+      assert.equal(readReply(runtime, set, "reply"), "안녕 hello");
+      insert("reply", (out) =>
+        runtime.method(
+          statics,
+          CREATE_INT32_SLOT,
+          [
+            "i32",
+            "ptr",
+          ],
+          7,
+          out,
+        ),
+      );
+      assert.throws(() => readReply(runtime, set, "reply"), {
+        code: "INTERNAL",
+      });
+      console.log("activation interfaces and ValueSet reply reading passed");
+    } finally {
+      runtime.release(statics);
+      runtime.release(map);
+      runtime.release(set);
+    }
+  } finally {
+    runtime.dispose();
+  }
 } else {
   const appId = `test.${crypto.randomUUID()}`;
   const removeShortcut = await createNotificationShortcut(appId);
@@ -341,6 +494,34 @@ if (workerData?.toastMarshalWorker) {
         force: true,
       });
     }
+    // Buttons and the reply box must be accepted by Windows and survive in the stored toast.
+    const interactive = notificationShowSchema.parse({
+      id: "actions",
+      group: "bunaway-test",
+      title: "actions fixture",
+      suppressPopup: true,
+      silent: true,
+      actions: [
+        {
+          id: "ok",
+          label: 'OK "quoted" & <more>',
+        },
+      ],
+      reply: {
+        placeholder: "Type here",
+        buttonLabel: "Send",
+      },
+    });
+    controller.show(interactive);
+    const withActions = await waitHistory((items) => items.length === 1);
+    assert(withActions[0]?.includes('id="reply"'));
+    assert(withActions[0]?.includes('hint-inputId="reply"'));
+    assert(withActions[0]?.includes('arguments="reply"'));
+    assert(withActions[0]?.includes('arguments="action:ok"'));
+    assert(withActions[0]?.includes("Type here"));
+    assert(withActions[0]?.includes("&lt;more&gt;"));
+    controller.clear(interactive);
+    await waitHistory((items) => items.length === 0);
     // clearAll must remove every item of the app across ids and groups.
     for (const [id, group] of [
       [
