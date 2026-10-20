@@ -55,9 +55,9 @@ modifiers는 Control, Alt, Shift, Super 중 하나 이상이며 중복을 거부
 
 ## macOS
 
-macOS는 Carbon `RegisterEventHotKey`로 등록하므로 손쉬운 사용(Accessibility)이나 입력 모니터링
-권한이 필요하지 않은 Carbon API를 쓰므로 권한 거부로 실패하는 경로를 두지 않습니다. 모든 작업과 이벤트 계약은 Windows와 같으며
-차이는 다음과 같습니다.
+macOS는 Carbon `RegisterEventHotKey`로 등록합니다. Carbon 문서상 손쉬운 사용(Accessibility)이나
+입력 모니터링 권한이 필요하지 않으므로 권한 거부 경로를 두지 않습니다. 모든 작업과 이벤트 계약은
+Windows와 같으며 차이는 다음과 같습니다.
 
 - `Super`는 Command, `Alt`는 Option, `Control`은 Control입니다.
 - key는 입력 소스가 표시하는 글자가 아니라 키보드의 물리적 위치(ANSI virtual key code)를 지정합니다.

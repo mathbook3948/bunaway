@@ -19,7 +19,7 @@ import {
   isMacosKey,
 } from "#global-shortcut/platforms/macos-bindings";
 
-/** Largest identifier a Carbon hot key can carry, one past the last 32-bit value. */
+/** Largest identifier a Carbon hot key can carry: the last unsigned 32-bit value. */
 const MAX_HOT_KEY_ID = 0xffffffff;
 
 type Registration = {
@@ -41,8 +41,8 @@ function error(code: ErrorCode, message: string): never {
 }
 
 /**
- * App-owned global shortcuts on macOS through Carbon `RegisterEventHotKey`. This needs no
- * Accessibility or Input Monitoring permission, so there is no permission-denied outcome, and a
+ * App-owned global shortcuts on macOS through Carbon `RegisterEventHotKey`. Carbon documents
+ * no Accessibility or Input Monitoring requirement, so there is no permission-denied outcome, and a
  * combination another registration already owns is refused as BUSY like on Windows. Carbon reports
  * both the press and the release, so no key-state polling is needed. `Super` is Command and
  * `Alt` is Option. Keys follow physical positions on the keyboard.

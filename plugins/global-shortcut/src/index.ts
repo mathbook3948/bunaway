@@ -12,7 +12,7 @@ import {
 /**
  * Register, inspect, remove and suspend app-owned global shortcuts on Windows and macOS. On macOS
  * `Super` is Command and `Alt` is Option, `Insert` and `F21` to `F24` are rejected as unsupported,
- * and no Accessibility permission is needed.
+ * and Carbon documents no Accessibility permission requirement.
  */
 export default defineNativePlugin({
   events: {
