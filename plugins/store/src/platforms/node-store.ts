@@ -147,8 +147,8 @@ function storeIoError(error: unknown): unknown {
  * integer-like keys ("1", "42") come first in ascending order, as in every JavaScript object, so
  * a store read back from its file lists them that way.
  *
- * The text is compact on purpose, so a file is not refused only because of its indentation.
- * Numbers written in exponent form ("1e20") expand when serialized, and such a file can exceed
+ * The text is compact on purpose, so a file the store wrote is never refused for its indentation.
+ * A hand-indented file over the limit on disk is refused before parsing. Numbers written in exponent form ("1e20") expand when serialized, and such a file can exceed
  * the limit after reading; it is then treated as a damaged file.
  */
 function serialize(data: Map<string, StoreValue>): string {
