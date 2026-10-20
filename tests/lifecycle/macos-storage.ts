@@ -321,10 +321,15 @@ if (mode === "verify") {
         () => transfer("storage.copyFile", source, target),
         "INVALID_ARGUMENT",
       );
-      expectCode(
+      // The refusal must come from the destination existing, with the source still in place.
+      assert.throws(
         () => transfer("storage.move", source, target),
-        "INVALID_ARGUMENT",
+        (error) =>
+          error instanceof BunawayError &&
+          error.code === "INVALID_ARGUMENT" &&
+          /already exists/u.test(error.message),
       );
+      assert.equal(existsSync(source), true);
     }
     assert.deepEqual(readFileSync(copy), large);
     assert.equal(readFileSync(textPath, "utf8"), "");
@@ -345,6 +350,11 @@ if (mode === "verify") {
     assert.equal(existsSync(copy), false);
     expectCode(
       () => transfer("storage.move", copy, `${root}/moved-again`),
+      "INVALID_ARGUMENT",
+    );
+    // Moving a name onto itself is a refusal too, not a silent success.
+    expectCode(
+      () => transfer("storage.move", `${root}/moved`, `${root}/moved`),
       "INVALID_ARGUMENT",
     );
     assert.equal(
@@ -461,7 +471,7 @@ if (mode === "verify") {
       final.dispose();
     }
     results.push(
-      "multiple adapters, repeated disposal, descriptor cleanup after success and denial",
+      "multiple adapters, repeated disposal, descriptor cleanup after success and a missing target",
     );
     mkdirSync(resolve("build"), {
       recursive: true,

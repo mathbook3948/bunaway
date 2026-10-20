@@ -43,7 +43,9 @@ move는 `renamex_np(from, to, RENAME_EXCL)`를 호출한다. Node의 `rename`은
 기존 대상은 `EEXIST`로 실패해 `INVALID_ARGUMENT`가 되고, 다른 볼륨(`EXDEV`)과 `RENAME_EXCL`을 지원하지 않는
 파일 시스템(`ENOTSUP`)은 `UNSUPPORTED`다. 실패한 호출의 errno가 FFI 계층에서 0으로 읽히면 같은 호출을 한 번 더
 하고(실패한 이름 변경은 아무것도 바꾸지 않는다) 그래도 읽을 수 없으면 알 수 없는 오류로 실패한다.
-디렉터리를 자기 하위로 옮기는 호출은 문자열 비교로 `INVALID_ARGUMENT`가 된다.
+같은 경로로의 이동과, 문자열로 확인되는 자기 하위로의 이동은 호출 전에 `INVALID_ARGUMENT`로 거부한다.
+대소문자와 Unicode 정규화를 무시하는 볼륨에서 철자만 다른 하위 경로는 문자열 비교를 통과하지만, 커널이 거부한 오류가 
+`INVALID_ARGUMENT`가 될 것으로 본다(실행으로 확인하지 않았다).
 
 ## 디렉터리
 
@@ -63,7 +65,7 @@ directorySize는 `opendirSync` 순회로 파일의 논리 크기를 더하고 �
 - 앱이 경로를 검사한 뒤 쓰기 전에 다른 프로세스가 이름이 가리키는 대상을 바꿀 수 있다.
 - 다른 프로세스의 동시 쓰기나 새 hardlink 생성을 막는 OS 공유 잠금은 없다.
 
-두 위험은 앱 명령이 경로를 정하는 단계에서 다룬다([경로 제한은 앱 명령에서 합니다](../site/src/content/docs/concepts/views-and-policy.mdx)).
+앞의 두 위험은 앱 명령이 경로를 정하는 단계에서 다룬다([경로 제한은 앱 명령에서 합니다](../site/src/content/docs/concepts/views-and-policy.mdx)).
 
 ## 실제 네이티브 검증
 

@@ -1,8 +1,7 @@
 import { dlopen, read } from "bun:ffi";
-import { BunawayError } from "@bunaway/plugin";
 import { LIBSYSTEM_PATH } from "@bunaway/plugin/darwin";
 import { normalizeMacosPath } from "#storage/platforms/macos-path";
-import { NodeStorage } from "#storage/platforms/node-storage";
+import { failure, NodeStorage } from "#storage/platforms/node-storage";
 
 /** `renamex_np` flag: fail with EEXIST instead of replacing the destination. */
 const RENAME_EXCL = 0x4;
@@ -14,6 +13,7 @@ const EXDEV = 18;
 const ENOTDIR = 20;
 const EINVAL = 22;
 const ENAMETOOLONG = 63;
+const ELOOP = 62;
 const ENOTSUP = 45;
 /** Reported when a failed call left no readable errno. */
 const UNKNOWN_ERRNO = -1;
@@ -45,16 +45,6 @@ function createBindings() {
   });
 }
 
-function failure(
-  code: ConstructorParameters<typeof BunawayError>[0]["code"],
-  message: string,
-): BunawayError {
-  return new BunawayError({
-    code,
-    message,
-  });
-}
-
 /** The public error for a failed rename, or a plain error that keeps the raw errno. */
 function moveFailure(errno: number): Error {
   switch (errno) {
@@ -68,6 +58,7 @@ function moveFailure(errno: number): Error {
       return failure("INVALID_ARGUMENT", "Storage move is not valid.");
     case EACCES:
     case EPERM:
+    case ELOOP:
       return failure("PERMISSION_DENIED", "Storage access denied.");
     case EXDEV:
     case ENOTSUP:
@@ -130,6 +121,10 @@ export class MacosStorage extends NodeStorage {
 
   /** Move within one volume; a cross-volume move fails rather than copying. */
   protected moveWithoutReplace(from: string, to: string): void {
+    // The kernel may treat renaming a name onto itself as a no-op success, so refuse it here.
+    if (from === to) {
+      throw failure("INVALID_ARGUMENT", "Storage destination already exists.");
+    }
     const errno = this.renameError(from, to);
     if (errno !== 0) {
       throw moveFailure(errno);

@@ -13,7 +13,7 @@ import { BunawayError } from "@bunaway/plugin";
 import type { MacosStorage } from "../../plugins/storage/src/platforms/macos.ts";
 import { executeMacosStorage } from "../fixtures/macos-storage-operations.ts";
 
-/** Exercise real directory descriptors and creation contracts in the caller's owned temporary root. */
+/** Exercise real directories and creation contracts in the caller's owned temporary root. */
 export function verifyMacosDirectories(
   storage: MacosStorage,
   root: string,
@@ -144,8 +144,8 @@ export function verifyMacosDirectories(
   assert.equal(remove(`${directory}/child`), null);
   assert.equal(existsSync(`${directory}/child`), false);
   return [
-    "checked directory streams, UTF-16 ordering, observed links and hardlinks, direct children and exact 256-entry bound",
-    "default nonrecursive and recursive private directory creation, idempotence, missing parents, type, links and OS denials",
+    "directory listing, UTF-16 ordering, observed links and hardlinks, direct children and exact 256-entry bound",
+    "default nonrecursive and recursive private directory creation, idempotence, missing parents, type, links and an unreadable directory",
     "unknown and special directory kinds fail closed; links are followed, remove deletes files, links and empty directories only",
   ];
 }

@@ -67,7 +67,7 @@ export function isMissing(error: unknown): boolean {
   return code === "ENOENT" || code === "ENOTDIR";
 }
 
-function failure(
+export function failure(
   code: ConstructorParameters<typeof BunawayError>[0]["code"],
   message: string,
 ): BunawayError {
