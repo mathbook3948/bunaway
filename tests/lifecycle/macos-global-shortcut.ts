@@ -52,6 +52,21 @@ const EVENT_TAPS = {
 const FLAGS = 0x40000 | 0x80000 | 0x20000;
 /** kVK_F18: a key with no default binding, so the test cannot trigger anything else. */
 const KEY_CODE_F18 = 79;
+/** kVK_Control, kVK_Option and kVK_Shift with the CGEventFlags each one sets. */
+const MODIFIER_KEYS = [
+  [
+    59,
+    0x40000,
+  ],
+  [
+    58,
+    0x80000,
+  ],
+  [
+    56,
+    0x20000,
+  ],
+] as const;
 /** How long a quiet period proves that nothing more is coming. */
 const QUIET_MS = 500;
 
@@ -196,19 +211,54 @@ function queueHotKeyEvent(kind: number, id: number): void {
   }
 }
 
-/** Posts one key transition with the shortcut's modifiers held. */
-function postKey(tap: number, down: boolean): void {
+/** Posts one key transition with `flags` as the modifier state it carries. */
+function postKey(
+  tap: number,
+  keyCode: number,
+  down: boolean,
+  flags: number,
+): void {
   const event = graphics.symbols.CGEventCreateKeyboardEvent(
     null,
-    KEY_CODE_F18,
+    keyCode,
     down,
   );
   assert(event, "CGEventCreateKeyboardEvent returned no event.");
   try {
-    graphics.symbols.CGEventSetFlags(event, BigInt(FLAGS));
+    graphics.symbols.CGEventSetFlags(event, BigInt(flags));
     graphics.symbols.CGEventPost(tap, event);
   } finally {
     core.symbols.CFRelease(event);
+  }
+}
+
+/**
+ * Types the shortcut the way a keyboard does: each modifier goes down first so the window server
+ * tracks the modifier state, then the key, then everything is released in reverse order.
+ */
+function postShortcut(tap: number, down: boolean): void {
+  // `flagsAfter[i]` is the modifier state once the first i + 1 modifiers are down.
+  const flagsAfter = MODIFIER_KEYS.map((_key, index) =>
+    MODIFIER_KEYS.slice(0, index + 1).reduce(
+      (mask, [, flag]) => mask | flag,
+      0,
+    ),
+  );
+  if (down) {
+    MODIFIER_KEYS.forEach(([keyCode], index) => {
+      postKey(tap, keyCode, true, flagsAfter[index] ?? 0);
+    });
+    postKey(tap, KEY_CODE_F18, true, FLAGS);
+    return;
+  }
+  postKey(tap, KEY_CODE_F18, false, FLAGS);
+  for (let index = MODIFIER_KEYS.length - 1; index >= 0; index--) {
+    postKey(
+      tap,
+      MODIFIER_KEYS[index]?.[0] ?? 0,
+      false,
+      flagsAfter[index - 1] ?? 0,
+    );
   }
 }
 
@@ -281,7 +331,7 @@ try {
   );
   let delivered: string | undefined;
   for (const [name, tap] of Object.entries(EVENT_TAPS)) {
-    postKey(tap, true);
+    postShortcut(tap, true);
     const sawPress = await waitFor(
       () => names().includes("globalShortcut.pressed"),
       {
@@ -290,7 +340,7 @@ try {
         failed: () => failure,
       },
     ).catch(() => false);
-    postKey(tap, false);
+    postShortcut(tap, false);
     if (sawPress) {
       await reported("globalShortcut.released", "childStep");
       delivered = name;
