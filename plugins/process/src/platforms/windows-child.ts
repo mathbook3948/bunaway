@@ -139,6 +139,8 @@ export class WindowsProcessChild implements SpawnedChild {
     | undefined;
   private exit: ChildExit | undefined;
   private closing = false;
+  /** A cancelled write the kernel had not finished; pinned so its buffer outlives the call. */
+  private stuckWrite: Buffer | undefined;
   private activeWrite: Promise<WriteOutcome> | undefined;
   private released: Promise<void> | undefined;
 
@@ -210,7 +212,8 @@ export class WindowsProcessChild implements SpawnedChild {
     if (this.activeWrite !== undefined) {
       await this.waitForWrite(this.activeWrite, signal);
     }
-    if (this.writer) {
+    // With a write the kernel still owns, release closes the pipe after the tree ended.
+    if (this.writer && this.stuckWrite === undefined) {
       this.closeHandle(this.writer);
       this.writer = 0n;
     }
@@ -576,7 +579,7 @@ export class WindowsProcessChild implements SpawnedChild {
     data: Buffer,
     signal: AbortSignal,
   ): Promise<WriteOutcome> {
-    if (!this.writer) {
+    if (!this.writer || this.stuckWrite !== undefined) {
       return "closed";
     }
     if (data.length === 0) {
@@ -640,7 +643,7 @@ export class WindowsProcessChild implements SpawnedChild {
         throw this.fail("WriteFile", error);
       }
       if (signal.aborted || this.closing) {
-        await this.cancelWrite();
+        await this.cancelWrite(data);
         throw signal.aborted
           ? signal.reason
           : new BunawayError({
@@ -653,13 +656,16 @@ export class WindowsProcessChild implements SpawnedChild {
   }
 
   /** CancelIoEx only requests cancellation; the buffer stays valid until the write completes. */
-  private async cancelWrite() {
+  private async cancelWrite(data: Buffer) {
     const cancellationFailed =
       !this.api.symbols.CancelIoEx(this.writer, ptr(this.overlapped)) &&
       this.api.symbols.GetLastError() !== ERROR_NOT_FOUND;
     const deadline = Date.now() + CLEANUP_TIMEOUT_MS;
     while (!this.writeFinished()) {
       if (Date.now() >= deadline) {
+        // The kernel may still read `data` and write the OVERLAPPED: keep both untouched and
+        // refuse further writes until release closes the pipe.
+        this.stuckWrite = data;
         throw new ProcessCleanupError();
       }
       await Bun.sleep(POLL_INTERVAL_MS);
@@ -734,7 +740,7 @@ export class WindowsProcessChild implements SpawnedChild {
       const writes = await Promise.allSettled([
         this.activeWrite,
       ]);
-      failed = writes.some(
+      failed ||= writes.some(
         (write) =>
           write.status === "rejected" &&
           write.reason instanceof ProcessCleanupError,
