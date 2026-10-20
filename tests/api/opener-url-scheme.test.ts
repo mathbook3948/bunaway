@@ -482,8 +482,11 @@ test("an interrupted refresh is finished by the retry and the key stays removabl
   // Owner, default and command are written; recording the command fails.
   harness.failAfter(3);
   expect(() => second.register("myapp")).toThrow("write failed");
+  // The command is already current, but the registration is not complete.
+  expect(second.isRegistered("myapp")).toBe(false);
   harness.failAfter(Number.POSITIVE_INFINITY);
   second.register("myapp");
+  expect(second.isRegistered("myapp")).toBe(true);
   expect(
     harness.keys.get("Software\\Classes\\myapp")?.get(WRITTEN_COMMAND_VALUE),
   ).toBe('"D:\\Apps\\app.exe" "%1"');

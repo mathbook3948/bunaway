@@ -115,15 +115,18 @@ export function createUrlSchemeRegistration(
     );
   }
 
-  /** True when this app owns the key and its command still starts this app. */
-  function ownsRegistration(
-    scheme: string,
-    owner: string,
-    command: string,
-  ): boolean {
+  /**
+   * True when the registration is complete for this launch command: owned, the command and
+   * the recorded command both current, and `URL Protocol` present. Anything less is an
+   * interrupted or stale registration that a `register` call finishes.
+   */
+  function isComplete(scheme: string, owner: string, command: string): boolean {
+    const key = keyPath(scheme);
     return (
       ownsKey(scheme, owner, command) &&
-      store.readString(commandPath(scheme), "") === command
+      store.readString(commandPath(scheme), "") === command &&
+      store.readString(key, WRITTEN_COMMAND_VALUE) === command &&
+      store.readString(key, URL_PROTOCOL_VALUE) !== null
     );
   }
 
@@ -150,13 +153,7 @@ export function createUrlSchemeRegistration(
             message: "The URL scheme is registered by another owner.",
           });
         }
-        // Complete only when the recorded command is current too, so an interrupted refresh
-        // is finished by the retry instead of being reported as done.
-        if (
-          ownsRegistration(scheme, owner, command) &&
-          store.readString(key, WRITTEN_COMMAND_VALUE) === command &&
-          store.readString(key, URL_PROTOCOL_VALUE) !== null
-        ) {
+        if (isComplete(scheme, owner, command)) {
           return;
         }
         try {
@@ -197,10 +194,7 @@ export function createUrlSchemeRegistration(
     /** True when the registry holds this app's complete registration for the scheme. */
     isRegistered(scheme: string): boolean {
       const { owner, command } = identity();
-      return (
-        ownsRegistration(scheme, owner, command) &&
-        store.readString(keyPath(scheme), URL_PROTOCOL_VALUE) !== null
-      );
+      return isComplete(scheme, owner, command);
     },
   };
 }
