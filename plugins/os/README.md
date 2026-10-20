@@ -1,6 +1,6 @@
 # OS metadata plugin
 
-`@bunaway/plugin-os` provides permission-mediated `os.info(null)`, `os.usage(null)`, `os.locale(null)` and `os.beep({ kind })` on Windows and macOS, and `os.listPrinters(null)` and `os.getDefaultPrinter(null)` on Windows.
+`@bunaway/plugin-os` provides permission-mediated `os.info(null)`, `os.usage(null)`, `os.locale(null)` and `os.beep({ kind })` on Windows and macOS, and `os.listPrinters(null)`, `os.getDefaultPrinter(null)` and `os.listGpus(null)` on Windows.
 Register `os` in the app definition. Each operation requires its own permission; registration grants none.
 Trusted backends can use Bun, `process` and `node:os` directly for runtime metadata.
 
@@ -30,6 +30,13 @@ in between, and checks every name pointer against the returned buffer before rea
 `UNSUPPORTED`. `tests/api/os-printers.test.ts` covers the parser with fake bindings; `tests/lifecycle/windows-os.test.ts`
 runs both calls against the real spooler, where an empty list and a `null` default are valid on a runner without printers.
 A populated list and network-printer latency are not covered by CI.
+
+`os.listGpus` creates a DXGI factory per call (`CreateDXGIFactory1`), reads each adapter with `EnumAdapters1` and
+`GetDesc1` and releases the adapters and the factory before returning. It reports name, PCI vendor and device ID,
+dedicated video memory and the software-renderer flag; driver versions and renderer metrics are not included.
+macOS rejects it with `UNSUPPORTED`. `tests/api/os-gpus.test.ts` covers the `DXGI_ADAPTER_DESC1` layout, limits and
+release of every COM object with fake bindings; `tests/lifecycle/windows-os.test.ts` runs the call against real DXGI,
+where CI checks that the list is valid and not empty. Hardware GPU lists are not covered by CI.
 
 `os.usage` reports cumulative process CPU microseconds, memory bytes, logical CPU count and actual
 IsWow64Process2 machine values. Windows x64 CI does not validate ARM64 translation hardware.

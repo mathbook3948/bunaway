@@ -12,6 +12,7 @@ import {
 import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import type { OSInstance } from "#os/contract";
+import { gpuBindings, listGpus, openDxgi } from "#os/platforms/windows-gpus";
 import {
   defaultPrinterName,
   listPrinterNames,
@@ -51,7 +52,7 @@ function openUser32() {
   });
 }
 
-/** Own Kernel32 locale, user32 MessageBeep and winspool printer bindings on the host I/O worker and close them on host shutdown. */
+/** Own Kernel32 locale, user32 MessageBeep, winspool printer and dxgi adapter bindings on the host I/O worker and close them on host shutdown. */
 export function initialize(): OSInstance {
   const api = dlopen("kernel32.dll", {
     ...pick(KERNEL32, "GetCurrentProcess", "GetLastError"),
@@ -104,10 +105,17 @@ export function initialize(): OSInstance {
   });
   let user32: ReturnType<typeof openUser32>;
   let winspool: ReturnType<typeof openWinspool>;
+  let dxgi: ReturnType<typeof openDxgi>;
   try {
     user32 = openUser32();
     try {
       winspool = openWinspool();
+      try {
+        dxgi = openDxgi();
+      } catch (error) {
+        winspool.close();
+        throw error;
+      }
     } catch (error) {
       user32.close();
       throw error;
@@ -270,6 +278,10 @@ export function initialize(): OSInstance {
       assertActive();
       return defaultPrinterName(printers());
     },
+    listGpus() {
+      assertActive();
+      return listGpus(gpuBindings(dxgi));
+    },
     beep(kind: keyof typeof BEEP_SOUND_TYPES) {
       assertActive();
       if (!user32.symbols.MessageBeep(BEEP_SOUND_TYPES[kind])) {
@@ -303,6 +315,7 @@ export function initialize(): OSInstance {
     dispose() {
       if (!disposed) {
         disposed = true;
+        dxgi.close();
         winspool.close();
         user32.close();
         api.close();

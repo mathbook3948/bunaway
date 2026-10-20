@@ -1,6 +1,6 @@
 ---
 title: os
-description: Windows, macOS와 번들 Bun의 실행 정보, 사용자 locale과 표시 언어를 조회하고 시스템 경고음을 재생하고 Windows 프린터 목록을 조회합니다.
+description: Windows, macOS와 번들 Bun의 실행 정보, 사용자 locale과 표시 언어를 조회하고 시스템 경고음을 재생하고 Windows 프린터 목록과 그래픽 어댑터 목록을 조회합니다.
 sidebar: { order: 7 }
 ---
 
@@ -24,6 +24,7 @@ const locale = await os.locale(null);
 | `os.beep` | `OSBeepInput` | `Promise<null>` | `os.beep` |
 | `os.listPrinters` | `null` | `Promise<OSPrinter[]>` | `os.listPrinters` |
 | `os.getDefaultPrinter` | `null` | `Promise<string \| null>` | `os.getDefaultPrinter` |
+| `os.listGpus` | `null` | `Promise<OSGpu[]>` | `os.listGpus` |
 
 `OSInfo`는 `platform: "windows"` 또는 `"macos"`, OS의 `type`, `release`, `version`, 실행 중 프로세스의
 `architecture`, `hostname`과 `runtime: { name: "bun", version, pid }`를 반환합니다.
@@ -82,11 +83,21 @@ macOS에는 종류별 시스템 소리가 없으므로 `kind`는 검증만 하�
 프린터 이름은 사용자 환경 정보이므로 `os.listPrinters`와 `os.getDefaultPrinter`는 각각 독립 권한입니다.
 macOS에서는 두 작업 모두 `UNSUPPORTED`입니다.
 
+`os.listGpus(null)`은 Windows DXGI(`CreateDXGIFactory1`, `IDXGIFactory1::EnumAdapters1`, `IDXGIAdapter1::GetDesc1`)가 열거하는
+그래픽 어댑터를 `{ name, vendorId, deviceId, dedicatedVideoMemoryBytes, software }` 배열로 반환합니다.
+`name`은 어댑터 설명 문자열(최대 127자), `vendorId`와 `deviceId`는 DXGI가 보고하는 PCI ID(NVIDIA는 `0x10de`),
+`dedicatedVideoMemoryBytes`는 어댑터 전용 비디오 메모리 바이트(시스템 메모리를 공유하는 어댑터는 0),
+`software`는 Microsoft Basic Render Driver 같은 소프트웨어 렌더러이면 `true`입니다. 순서는 DXGI 열거 순서이며
+호출마다 새로 읽고 캐시하지 않습니다. 어댑터가 없으면 빈 배열입니다. 조회가 실패하거나 어댑터가 16개를 넘으면
+일부만 돌려주지 않고 `INTERNAL`입니다. GPU가 없는 환경에서는 소프트웨어 어댑터만 나올 수 있습니다.
+드라이버 버전, 렌더러 지표와 hardware acceleration 설정은 반환하거나 바꾸지 않습니다. 하드웨어 식별 정보는
+fingerprinting에 쓸 수 있으므로 `os.listGpus`는 독립 권한이며 필요한 뷰만 허용합니다. macOS에서는 `UNSUPPORTED`입니다.
+
 이모지 패널을 여는 API는 제공하지 않습니다. Windows에는 이모지 패널을 여는 공식 API가 없고
 Win+. 키 입력을 합성하는 방법만 있어 현재 포커스를 가진 창에 의존하므로 지원하지 않습니다.
 
-화면 직접 호출에는 뷰의 `commands`에 `plugin.os.info`, `plugin.os.usage`, `plugin.os.locale`, `plugin.os.beep`, `plugin.os.listPrinters` 또는 `plugin.os.getDefaultPrinter`를,
-`host.permissions`에 같은 작업의 `os.info`, `os.usage`, `os.locale`, `os.beep`, `os.listPrinters` 또는 `os.getDefaultPrinter`를 허용합니다. 백엔드 명령은
+화면 직접 호출에는 뷰의 `commands`에 `plugin.os.info`, `plugin.os.usage`, `plugin.os.locale`, `plugin.os.beep`, `plugin.os.listPrinters`, `plugin.os.getDefaultPrinter` 또는 `plugin.os.listGpus`를,
+`host.permissions`에 같은 작업의 `os.info`, `os.usage`, `os.locale`, `os.beep`, `os.listPrinters`, `os.getDefaultPrinter` 또는 `os.listGpus`를 허용합니다. 백엔드 명령은
 호출한 뷰의 권한을 유지하며 setup 호출은 `backend.permissions`를 사용합니다.
 각 작업의 권한은 독립적입니다. hostname을 공개해도 되는 뷰만 `os.info`를 허용합니다.
 

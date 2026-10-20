@@ -1461,7 +1461,8 @@
       "os.locale",
       "os.beep",
       "os.listPrinters",
-      "os.getDefaultPrinter"
+      "os.getDefaultPrinter",
+      "os.listGpus"
     ],
     "reference/plugins/notification": [
       "notification.show",

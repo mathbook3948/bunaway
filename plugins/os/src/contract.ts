@@ -57,6 +57,21 @@ export const printerSchema = z.strictObject({
 export const printerListSchema = z.array(printerSchema).max(MAX_PRINTERS);
 /** The default printer's name, or null when no default is set. */
 export const defaultPrinterSchema = printerName.nullable();
+/** Most adapters one os.listGpus call returns; a larger list is an error, not a shortened one. */
+export const MAX_GPUS = 16;
+/** Longest adapter name: DXGI_ADAPTER_DESC1.Description holds 128 WCHARs including the terminating NUL. */
+export const MAX_GPU_NAME_CHARS = 127;
+/** One graphics adapter. `vendorId` and `deviceId` are the PCI IDs DXGI reports (for example 0x10de for NVIDIA). */
+export const gpuSchema = z.strictObject({
+  name: z.string().max(MAX_GPU_NAME_CHARS),
+  vendorId: z.number().int().min(0).max(0xffffffff),
+  deviceId: z.number().int().min(0).max(0xffffffff),
+  /** Video memory reserved for the adapter alone; 0 for adapters that use shared system memory. */
+  dedicatedVideoMemoryBytes: z.number().int().nonnegative(),
+  /** True for a software renderer such as the Microsoft Basic Render Driver. */
+  software: z.boolean(),
+});
+export const gpuListSchema = z.array(gpuSchema).max(MAX_GPUS);
 /** System sound played by os.beep; defaults to the plain default beep. macOS has one alert sound and plays it for every kind. */
 export const beepInputSchema = z.strictObject({
   kind: z
@@ -78,6 +93,9 @@ export type OSLocale = z.infer<typeof localeSchema>;
 /** Installed printer as listed by os.listPrinters. */
 export type OSPrinter = z.infer<typeof printerSchema>;
 
+/** Graphics adapter as listed by os.listGpus. */
+export type OSGpu = z.infer<typeof gpuSchema>;
+
 /** Process CPU time, memory and architecture translation snapshot. */
 export type OSUsage = z.infer<typeof usageSchema>;
 /**
@@ -92,5 +110,6 @@ export interface OSInstance {
   beep(kind: NonNullable<OSBeepInput["kind"]>): null;
   listPrinters(): OSPrinter[];
   getDefaultPrinter(): string | null;
+  listGpus(): OSGpu[];
   dispose(): void;
 }

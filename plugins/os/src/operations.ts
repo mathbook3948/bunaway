@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   beepInputSchema,
   defaultPrinterSchema,
+  gpuListSchema,
   infoSchema,
   localeSchema,
   type OSInstance,
@@ -42,5 +43,10 @@ export const osOperations = {
     input: z.null(),
     output: defaultPrinterSchema,
     handler: (_input, { instance }) => instance.getDefaultPrinter(),
+  }),
+  listGpus: operation({
+    input: z.null(),
+    output: gpuListSchema,
+    handler: (_input, { instance }) => instance.listGpus(),
   }),
 };
