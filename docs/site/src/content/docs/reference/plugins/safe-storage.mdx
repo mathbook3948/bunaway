@@ -34,6 +34,8 @@ safeStorage.decryptBytes({ ciphertext }): Promise<string>
 
 모든 호출은 Promise를 반환하며 I/O Worker에서 실행합니다. 최초 호출에서 OS 바인딩을 엽니다.
 Windows의 `isAvailable`은 비밀이 아닌 작은 값의 DPAPI 왕복을 검사합니다.
+일시 실패를 포함해 왕복이 실패하면 오류 대신 `false`를 반환하므로, 앱은 `false`만 보고
+평문 저장으로 넘어가지 말고 암호화 호출의 `BUSY`와 `INTERNAL`로 판단합니다.
 macOS에서는 시스템 UI와 키 생성을 하지 않고 기본 file-based Keychain의 잠금 해제,
 읽기와 쓰기 상태만 조회합니다. 저장된 키의 접근 승인을 검사하는 작업은 아닙니다.
 조회가 실패하면 `false`를 반환합니다. 이 결과는 후속 작업의 성공을 보장하거나 권한을

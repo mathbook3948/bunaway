@@ -14,11 +14,15 @@ const CRYPTPROTECT_UI_FORBIDDEN = 0x1;
  * RPC_S_SERVER_TOO_BUSY. Every other error, including ERROR_INVALID_DATA for a damaged blob and
  * an unreadable error, stays a permanent failure so data is never reported as retryable by guess.
  */
+const ERROR_BUSY = 170;
+const ERROR_SERVICE_NOT_ACTIVE = 1062;
+const RPC_S_SERVER_UNAVAILABLE = 1722;
+const RPC_S_SERVER_TOO_BUSY = 1723;
 const TRANSIENT_DPAPI_ERRORS: ReadonlySet<number> = new Set([
-  170,
-  1062,
-  1722,
-  1723,
+  ERROR_BUSY,
+  ERROR_SERVICE_NOT_ACTIVE,
+  RPC_S_SERVER_UNAVAILABLE,
+  RPC_S_SERVER_TOO_BUSY,
 ]);
 
 /** Map the Win32 error of a failed DPAPI call to `BUSY` (retry later) or `INTERNAL` (permanent). */

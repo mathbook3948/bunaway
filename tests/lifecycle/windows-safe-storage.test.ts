@@ -211,14 +211,12 @@ test.skipIf(process.platform !== "win32")(
       blob.writeUInt32LE(garbage.length, 0);
       blob.writeBigUInt64LE(BigInt(ptr(garbage)), 8);
       const output = Buffer.alloc(16);
-      let calls = 0;
       const codes = new Set<number>();
       for (let sample = 0; sample < LAST_ERROR_SAMPLES; sample++) {
         codes.add(
           win32CallError(
-            () => {
-              calls++;
-              return crypt.symbols.CryptUnprotectData(
+            () =>
+              crypt.symbols.CryptUnprotectData(
                 ptr(blob),
                 null,
                 null,
@@ -226,23 +224,11 @@ test.skipIf(process.platform !== "win32")(
                 null,
                 1,
                 ptr(output),
-              );
-            },
+              ),
             () => kernel.symbols.GetLastError(),
           ),
         );
       }
-      // The call count shows how often the first last-error read was overwritten.
-      console.log(
-        "DPAPI last error samples:",
-        LAST_ERROR_SAMPLES,
-        "calls:",
-        calls,
-        "codes:",
-        [
-          ...codes,
-        ].join(","),
-      );
       expect([
         ...codes,
       ]).toEqual([
