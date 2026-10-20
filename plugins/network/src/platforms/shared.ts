@@ -178,13 +178,18 @@ export function runResolveHost(
         message: "Too many host lookups.",
       });
     }
-    return resolveHost(input.host, activeSignal, (host) => {
-      const lookup = find(host);
-      state.lookups.add(lookup);
-      const release = () => state.lookups.delete(lookup);
-      lookup.then(release, release);
-      return lookup;
-    });
+    return resolveHost(
+      input.host,
+      activeSignal,
+      (host) => {
+        const lookup = find(host);
+        state.lookups.add(lookup);
+        const release = () => state.lookups.delete(lookup);
+        lookup.then(release, release);
+        return lookup;
+      },
+      input.queryType,
+    );
   });
 }
 
