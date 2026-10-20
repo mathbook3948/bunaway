@@ -9,8 +9,11 @@ import { pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import {
   type ClipboardFormat,
-  type ClipboardItem,
+  MAX_FILES,
+  MAX_PATH_LENGTH,
   MAX_TEXT_LENGTH,
+  type MacosClipboardItem,
+  posixFilesSchema,
   rtfSchema,
   textSchema,
 } from "#clipboard/contract";
@@ -24,24 +27,29 @@ import {
 const APPKIT = "/System/Library/Frameworks/AppKit.framework/AppKit";
 const NS_UTF8_ENCODING = 4;
 const MAX_STRING_BYTES = MAX_TEXT_LENGTH * 4;
+const FILE_URL_TYPE = "public.file-url";
+// A path of MAX_PATH_LENGTH code units grows to at most 9 bytes each when percent-encoded.
+const MAX_FILE_URL_BYTES = MAX_PATH_LENGTH * 9 + 16;
+const FILE_LIST = "application/x-bunaway-file-list";
 const nativeTypes = {
   "text/plain": "public.utf8-plain-text",
   "text/html": "public.html",
   "text/rtf": "public.rtf",
   "image/bmp": "public.tiff",
+  [FILE_LIST]: FILE_URL_TYPE,
 } as const;
 type SupportedFormat = keyof typeof nativeTypes;
 
 export type Pasteboard = {
   read(format: ClipboardFormat):
-    | ClipboardItem
+    | MacosClipboardItem
     | {
         format: ClipboardFormat;
         data: null;
       };
   readMany(formats: ClipboardFormat[]): ReturnType<Pasteboard["read"]>[];
   has(format: ClipboardFormat): boolean;
-  write(items: ClipboardItem[]): void;
+  write(items: MacosClipboardItem[]): void;
   clear(): void;
   dispose(): void;
 };
@@ -54,12 +62,45 @@ export function supportedFormat(
     format === "text/plain" ||
     format === "text/html" ||
     format === "text/rtf" ||
-    format === "image/bmp"
+    format === "image/bmp" ||
+    format === FILE_LIST
   );
 }
 
-function supportedItem(item: ClipboardItem): item is Extract<
-  ClipboardItem,
+/** Percent-encode every path segment so the URL round-trips without normalization. */
+export function fileUrl(path: string): string {
+  return `file://${path.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+/**
+ * Local path of a `file:` URL, or null for URLs that do not name a local path: remote hosts and
+ * file reference URLs (`/.file/id=`). Malformed URLs are invalid pasteboard data.
+ */
+export function filePath(url: string): string | null {
+  // Both `file:///path` and the single-slash `file:/path` form name a local path.
+  const match = /^file:(?:\/\/([^/?#]*))?(\/[^?#]*)$/iu.exec(url);
+  if (!match) {
+    return /^file:/iu.test(url) ? invalidPasteboardData() : null;
+  }
+  const host = (match[1] ?? "").toLowerCase();
+  if (host !== "" && host !== "localhost") {
+    return null;
+  }
+  let path: string;
+  try {
+    path = decodeURIComponent(match[2] ?? "");
+  } catch {
+    return invalidPasteboardData();
+  }
+  if (path.startsWith("/.file/")) {
+    return null;
+  }
+  // Finder ends directory URLs with a slash that is not part of the path.
+  return path.length > 1 ? path.replace(/\/+$/u, "") || "/" : path;
+}
+
+function supportedItem(item: MacosClipboardItem): item is Extract<
+  MacosClipboardItem,
   {
     format: SupportedFormat;
   }
@@ -230,6 +271,46 @@ export function createPasteboard(name?: string): Pasteboard {
         new Uint8Array(toArrayBuffer(Number(address) as Pointer, 0, length)),
       );
     };
+    const readFiles = (board: bigint): string[] | null => {
+      const items = send(board, "pasteboardItems");
+      if (!items) {
+        return null;
+      }
+      const count = Number(send(items, "count"));
+      if (count > MAX_FILES) {
+        return invalidPasteboardData();
+      }
+      const type = string(FILE_URL_TYPE);
+      const paths: string[] = [];
+      for (let index = 0; index < count; index += 1) {
+        const native = send(
+          send(items, "objectAtIndex:", index),
+          "dataForType:",
+          type,
+        );
+        if (!native) {
+          continue;
+        }
+        let url: string;
+        try {
+          url = new TextDecoder("utf-8", {
+            fatal: true,
+            ignoreBOM: true,
+          }).decode(readBytes(native, MAX_FILE_URL_BYTES));
+        } catch {
+          return invalidPasteboardData();
+        }
+        const path = filePath(url);
+        if (path !== null) {
+          paths.push(path);
+        }
+      }
+      if (paths.length === 0) {
+        return null;
+      }
+      const parsed = posixFilesSchema.safeParse(paths);
+      return parsed.success ? parsed.data : invalidPasteboardData();
+    };
     const pasteboard: Pasteboard = {
       readMany(requested) {
         // NSPasteboard has no reader lock. Reject a snapshot changed by another process.
@@ -250,6 +331,7 @@ export function createPasteboard(name?: string): Pasteboard {
           return false;
         }
         return transaction((board) => {
+          // Only the first pasteboard item's types are listed; a reference-only file URL still reads as null.
           const types = send(board, "types");
           return (
             (send(types, "containsObject:", string(nativeTypes[format])) &
@@ -266,6 +348,12 @@ export function createPasteboard(name?: string): Pasteboard {
           };
         }
         return transaction((board): ReturnType<Pasteboard["read"]> => {
+          if (format === FILE_LIST) {
+            return {
+              format,
+              data: readFiles(board),
+            };
+          }
           const native = send(
             board,
             "dataForType:",
@@ -311,43 +399,71 @@ export function createPasteboard(name?: string): Pasteboard {
           });
         }
         transaction((board) => {
-          // Prepare and populate one item before clearing the desktop pasteboard.
-          const item = requireObject(send(classOf("NSPasteboardItem"), "new"));
+          // Prepare and populate every item before clearing the desktop pasteboard.
+          // The first item carries the single-valued formats and the first file;
+          // each further file gets its own item, as Finder does.
+          const created: bigint[] = [];
+          const prepare = () => {
+            const item = requireObject(
+              send(classOf("NSPasteboardItem"), "new"),
+            );
+            created.push(item);
+            return item;
+          };
+          const populate = (item: bigint, bytes: Buffer, type: string) => {
+            if (
+              !(
+                send(item, "setData:forType:", data(bytes), string(type)) &
+                0xffn
+              )
+            ) {
+              invalidPasteboardData();
+            }
+          };
           try {
+            const first = prepare();
             for (const entry of items) {
-              if (!supportedItem(entry)) {
-                throw new BunawayError({
-                  code: "UNSUPPORTED",
-                  message: "This clipboard format is unsupported on macOS.",
+              if (entry.format === FILE_LIST) {
+                entry.data.forEach((path, index) => {
+                  populate(
+                    index === 0 ? first : prepare(),
+                    Buffer.from(fileUrl(path), "utf8"),
+                    FILE_URL_TYPE,
+                  );
                 });
-              }
-              const bytes =
-                entry.format === "image/bmp"
-                  ? encodeTIFF(entry.data)
-                  : Buffer.from(entry.data, "utf8");
-              if (
-                !(
-                  send(
-                    item,
-                    "setData:forType:",
-                    data(bytes),
-                    string(nativeTypes[entry.format]),
-                  ) & 0xffn
-                )
-              ) {
-                invalidPasteboardData();
+              } else if (entry.format === "image/bmp") {
+                populate(
+                  first,
+                  encodeTIFF(entry.data),
+                  nativeTypes[entry.format],
+                );
+              } else if (supportedItem(entry)) {
+                populate(
+                  first,
+                  Buffer.from(entry.data, "utf8"),
+                  nativeTypes[entry.format],
+                );
               }
             }
             const array = requireObject(
-              send(classOf("NSArray"), "arrayWithObject:", item),
+              send(
+                classOf("NSMutableArray"),
+                "arrayWithCapacity:",
+                created.length,
+              ),
             );
+            for (const item of created) {
+              send(array, "addObject:", item);
+            }
             send(board, "clearContents");
             // The OS owns copied representations. A failed commit is not rolled back.
             if (!(send(board, "writeObjects:", array) & 0xffn)) {
               invalidPasteboardData();
             }
           } finally {
-            send(item, "release");
+            for (const item of created) {
+              send(item, "release");
+            }
           }
         });
       },

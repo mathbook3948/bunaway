@@ -4,7 +4,7 @@
 `src/contract.ts`는 공통 스키마와 타입, 텍스트 제한과 네이티브 호출 검증을 소유한다.
 플랫폼 구현은 계약을 직접 읽으며 공개 진입점을 역으로 import하지 않는다.
 
-Windows와 macOS의 텍스트, HTML, RTF와 RGBA 이미지 클립보드를 제공하는 선택 패키지다. 파일 목록, URL bookmark와 사용자 정의 binary 형식은 Windows에서만 제공한다. 설치 후 `clipboard`를 앱의 `plugins`에 등록하고 호출 출처에 작업별 권한을 허용한다. 화면과 백엔드 모두 같은 `clipboard`를 사용한다.
+Windows와 macOS의 텍스트, HTML, RTF, 파일 목록과 RGBA 이미지 클립보드를 제공하는 선택 패키지다. URL bookmark와 사용자 정의 binary 형식은 Windows에서만 제공한다. 설치 후 `clipboard`를 앱의 `plugins`에 등록하고 호출 출처에 작업별 권한을 허용한다. 화면과 백엔드 모두 같은 `clipboard`를 사용한다.
 
 ```ts
 import clipboard from "@bunaway/plugin-clipboard";
@@ -49,9 +49,9 @@ macOS 바인딩은 `src/platforms/macos-pasteboard.ts`, bounded TIFF codec은 `s
 지정해야 하며 signed, floating-point와 다른 해석은 거부한다.
 작업마다 autorelease pool을 해제하고 `NSData`는 길이 검사 뒤 복사한다.
 Objective-C 객체는 tagged pointer까지 보존하는 64-bit 정수로 전달한다. 쓰기는 모든
-형식을 하나의 `NSPasteboardItem`에 준비한 다음 교체하며 종료는 바인딩을 닫는다.
-일반 클립보드의 내용은 앱 종료 뒤에도 남는다. TIFF 지원 범위와 파일 목록 거부는
-API 레퍼런스의 macOS 형식과 제한을 따른다.
+형식을 `NSPasteboardItem`에 준비한 다음 교체하며 종료는 바인딩을 닫는다. 파일 목록은 파일마다
+항목 하나(`public.file-url`)를 만들고 다른 형식은 첫 항목에 둔다. 일반 클립보드의 내용은 앱 종료
+뒤에도 남는다. TIFF 지원 범위와 파일 목록 규칙은 API 레퍼런스의 macOS 형식과 제한을 따른다.
 
 ```sh
 BUNAWAY_CLIPBOARD_NATIVE=1 mise exec -- bun --no-env-file test tests/lifecycle/macos-clipboard-native.test.ts
