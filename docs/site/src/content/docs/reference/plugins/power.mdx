@@ -133,7 +133,7 @@ macOS에서는 `NSWorkspaceWillSleepNotification`과 `NSWorkspaceDidWakeNotifica
 resume이 되고, 로그인 창이 보내는 분산 알림 `com.apple.screenIsLocked`와
 `com.apple.screenIsUnlocked`가 잠금과 해제가 됩니다. Electron의 macOS 구현과 같은 알림이지만
 잠금 알림 이름은 Apple이 문서화한 API가 아니므로 OS 버전별 동작은 보장하지 않습니다.
-macOS에서는 알림을 받은 순서대로 보내며 합치지 않습니다.
+macOS 알림 사이의 전달 순서와 합쳐짐 여부는 보장하지 않습니다.
 다음 이벤트 전달 전에 같은 신호가 연속으로 쌓이면 하나로 합치고, 서로 다른 신호는 받은 순서대로 보냅니다.
 resume 때 `power.resumed`와 `power.statusChanged`가 함께 나갈 수 있으며 두 이벤트의 상대 순서는 보장하지 않습니다.
 `power.suspended`는 절전 전에 앱이 작업을 끝낼 수 있음을 보장하지 않으며 복귀 뒤에 도착할 수 있습니다.
