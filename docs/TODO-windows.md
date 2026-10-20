@@ -998,7 +998,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [ ] 백엔드에서 UI로 요청하고 결과를 받는 기능의 필요성을 결정한다.
 - [ ] native resource handle의 생성, 참조와 해제 계약을 제공한다.
 - [ ] UI에 노출할 명령과 이벤트의 타입, 계약과 정책 목록을 생성하는 도구를 제공한다.
-- [ ] 브라우저 테스트용 transport와 mock API를 제공한다.
+- [x] 브라우저 테스트용 transport와 mock API를 제공한다.
 - [ ] context bridge와 preload의 역할을 기존 SDK와 정책으로 대체하는 범위를 정한다.
 - [ ] 동기 IPC와 프런트엔드의 임의 Node/Bun 접근은 PRD와 충돌하므로 도입 여부를 별도 ADR에서 결정한다.
 

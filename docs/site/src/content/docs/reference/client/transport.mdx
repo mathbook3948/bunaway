@@ -67,3 +67,38 @@ hello로 연결 준비가 끝나면 10초의 준비 기한이 지나도 연결�
 
 send는 명령의 실행 결과를 반환하지 않습니다. 앱 명령의 결과는 client.invoke로 받습니다.
 전송을 직접 구현할 때의 메시지 형식은 [프로토콜 레퍼런스](/reference/protocol/)를 참고하세요.
+
+## createMockTransport
+
+호스트 없이 브라우저나 단위 테스트에서 실제 `createClient` 세션을 실행하는 메모리 전송입니다.
+명령 핸들러 맵을 받아 hello에 응답하고, `invoke`를 핸들러로 처리하며, `listen`과 `unlisten`을 받아 `emit`한 이벤트를 구독자에게 전달합니다.
+
+```ts
+import { createClient, createMockTransport } from "@bunaway/client";
+import type { CommandsOf, EventsOf } from "@bunaway/backend";
+
+const transport = createMockTransport<CommandsOf<typeof app>, EventsOf<typeof app>>({
+  handlers: {
+    "notes.read": (input) => `body:${input.key}`,
+  },
+});
+const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>({
+  transport,
+  hello: { kind: "hello", protocol: { major: 1, minor: 0 }, features: ["sdk-ready"], buildId: "preview" },
+});
+transport.emit("notes.changed", { key: "a" });
+```
+
+| 항목 | 동작 |
+| --- | --- |
+| `handlers` | 명령 이름별 `(input, { signal, deadline }) => output`. 이름과 입출력 타입은 `CommandsOf`로 컴파일 시점에 확인 |
+| 핸들러 없는 명령 | `UNSUPPORTED` 오류 |
+| 핸들러가 던진 `BunawayError` | 같은 code, message, details로 전달 |
+| 핸들러가 던진 그 밖의 예외 | `INTERNAL` 오류. 예외 내용은 전달하지 않음 |
+| JSON이 아니거나 크기 한도를 넘는 결과 | `INTERNAL` 오류 |
+| 요청 취소, `close()` | 실행 중인 핸들러의 `signal`이 abort되고 늦은 결과는 버림 |
+| `emit(event, payload)` | 해당 이벤트의 활성 구독마다 구독별 순번을 붙여 전달. 구독이 없으면 무시 |
+| `features` 옵션 | 호스트 hello의 기능 목록. 기본은 `sdk-ready` |
+
+프로토콜 프레임의 형식과 크기만 검사합니다. 앱 정의의 입력과 출력 스키마 검증, 권한, 뷰 정책은 적용하지 않으므로 실제 호스트와 같은 거부 결과는 실제 WebView에서 확인합니다.
+`deadline`은 핸들러에 전달만 하고 mock이 강제하지 않으며, 클라이언트의 기한 처리는 그대로 동작합니다.

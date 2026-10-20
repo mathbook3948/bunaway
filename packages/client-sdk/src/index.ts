@@ -27,6 +27,13 @@ import {
 import { defaultClient } from "./default-client.ts";
 
 export { isBunaway } from "./environment.ts";
+export {
+  createMockTransport,
+  type MockCommandContext,
+  type MockHandlers,
+  type MockTransport,
+  type MockTransportOptions,
+} from "./mock-transport.ts";
 export { createWebViewTransport, type WebViewBridge } from "./webview.ts";
 
 /** Controls cancellation and the absolute execution deadline for one command. */
