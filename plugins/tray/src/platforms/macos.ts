@@ -1,6 +1,6 @@
-import { NativeEventWaiters } from "@bunaway/plugin";
+import { type NativeEnvironment, NativeEventWaiters } from "@bunaway/plugin";
 import { MAX_TRAY_WAITERS } from "@bunaway/plugin-api/native";
-import { BunawayError } from "@bunaway/protocol";
+import { BunawayError, validateValue } from "@bunaway/protocol";
 import type { z } from "zod";
 import type {
   MacosImage,
@@ -8,19 +8,24 @@ import type {
   MacosStatusItem,
   MacosTrayInstance,
   macosMenuClickSchema,
+  trayEventSchema,
 } from "#tray/contract";
 import { readPngSize } from "#tray/platforms/macos-png";
 import {
   createStatusItem,
   type NativeMenuEntry,
   type StatusItemBinding,
+  type StatusItemClick,
 } from "#tray/platforms/macos-status-item";
 
 type MenuClick = z.output<typeof macosMenuClickSchema>;
 /** Creates the AppKit binding; injectable so tests can observe wiring without a menu bar. */
 export type StatusItemFactory = (
   onSelect: (tag: number) => void,
+  onClick: (click: StatusItemClick) => void,
 ) => StatusItemBinding;
+/** Delivers one `tray.input` payload to the app's views. */
+export type InputEmitter = (event: z.output<typeof trayEventSchema>) => void;
 
 /** The item that exists between `create` and `destroy`, with the state `get` reports. */
 type Live = {
@@ -40,7 +45,10 @@ export class MacosTray implements MacosTrayInstance {
   private live: Live | undefined;
   private clicks = new NativeEventWaiters<MenuClick>(MAX_TRAY_WAITERS);
 
-  constructor(private readonly createBinding: StatusItemFactory) {}
+  constructor(
+    private readonly createBinding: StatusItemFactory,
+    private readonly emitInput: InputEmitter = () => {},
+  ) {}
 
   private requireLive(): Live {
     if (!this.live) {
@@ -72,6 +80,21 @@ export class MacosTray implements MacosTrayInstance {
     }
   }
 
+  /**
+   * Runs on the main thread when the icon is clicked. With a menu attached AppKit opens the menu
+   * instead of sending the action, so this only reports clicks on an icon without a menu; the
+   * pointer position is not read, so it is null.
+   */
+  private clicked(click: StatusItemClick): void {
+    if (this.live && this.live.menuIds === null) {
+      this.emitInput({
+        id: "main",
+        ...click,
+        position: null,
+      });
+    }
+  }
+
   create(title: string, tooltip: string): MacosStatusItem {
     if (this.live) {
       throw new BunawayError({
@@ -79,7 +102,10 @@ export class MacosTray implements MacosTrayInstance {
         message: "The menu bar item already exists.",
       });
     }
-    const binding = this.createBinding((tag) => this.selected(tag));
+    const binding = this.createBinding(
+      (tag) => this.selected(tag),
+      (click) => this.clicked(click),
+    );
     try {
       binding.setTitle(title);
       binding.setTooltip(tooltip);
@@ -186,8 +212,11 @@ export class MacosTray implements MacosTrayInstance {
   }
 }
 
-export function initialize(): MacosTray {
-  return new MacosTray(createStatusItem);
+export function initialize(environment: NativeEnvironment): MacosTray {
+  const events = environment.events;
+  return new MacosTray(createStatusItem, (event) =>
+    events?.emit("tray.input", validateValue({}, event)),
+  );
 }
 
 export function dispose(instance: MacosTray): void {

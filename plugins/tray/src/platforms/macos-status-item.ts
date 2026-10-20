@@ -15,6 +15,58 @@ const NS_VARIABLE_STATUS_ITEM_LENGTH = -1;
 /** Selector sent to the menu target; `v@:@` is void return, self, selector and sender. */
 const SELECTED_SELECTOR = "bunawayTrayMenuItemSelected:";
 const SELECTED_ENCODING = "v@:@";
+/** Selector the status button sends to the same target when the icon itself is clicked. */
+const CLICKED_SELECTOR = "bunawayTrayButtonClicked:";
+/** NSEventTypeLeftMouseUp and NSEventTypeRightMouseUp, the events the button acts on. */
+const NS_EVENT_LEFT_MOUSE_UP = 2n;
+const NS_EVENT_RIGHT_MOUSE_UP = 4n;
+/** NSEventMask bits (1 << type) for left and right mouse up, passed to `sendActionOn:`. */
+const CLICK_EVENT_MASK =
+  (1n << NS_EVENT_LEFT_MOUSE_UP) | (1n << NS_EVENT_RIGHT_MOUSE_UP);
+
+/** One icon click as reported to the adapter; the pointer position is not read. */
+export type StatusItemClick = {
+  button: "left" | "right";
+  state: "up" | "double-click";
+};
+
+/**
+ * Maps the mouse-up that triggered the button action to the clicks it stands for. Every mouse up
+ * is an `up`; the second left click of a sequence is also a `double-click`, as Electron's `click`
+ * and `double-click` and Tauri's `Click` and `DoubleClick` fire together. Other event types
+ * (for example a programmatic `performClick:`) are not user clicks and map to nothing.
+ */
+export function clicksFor(
+  eventType: bigint,
+  clickCount: number,
+): StatusItemClick[] {
+  if (eventType === NS_EVENT_RIGHT_MOUSE_UP) {
+    return [
+      {
+        button: "right",
+        state: "up",
+      },
+    ];
+  }
+  if (eventType !== NS_EVENT_LEFT_MOUSE_UP) {
+    return [];
+  }
+  const up: StatusItemClick = {
+    button: "left",
+    state: "up",
+  };
+  return clickCount === 2
+    ? [
+        up,
+        {
+          button: "left",
+          state: "double-click",
+        },
+      ]
+    : [
+        up,
+      ];
+}
 
 /** One menu entry handed to AppKit; `tag` is reported back when the entry is chosen. */
 export type NativeMenuEntry =
@@ -80,6 +132,8 @@ export type StatusItemReadBack = {
     /** Width of `NSImage.size` in points, which is what the menu bar draws. */
     widthPoints: number;
   } | null;
+  /** True when the button's target and action point at this binding's click method. */
+  clickWired: boolean;
   /** Null when no menu is attached. */
   menu:
     | {
@@ -99,7 +153,9 @@ function internal(message: string): never {
 
 /**
  * Creates one NSStatusItem as wide as its title and reports chosen menu entries to `onSelect` with
- * their tag. Objects returned by Objective-C stay unsigned 64-bit integers, including tagged
+ * their tag and mouse-up clicks on the icon to `onClick`. The button acts on left and right mouse
+ * up; while a menu is attached AppKit opens it instead of sending the action. `dispose` clears the
+ * button's target and action before the target is released. Objects returned by Objective-C stay unsigned 64-bit integers, including tagged
  * pointers. Each call, including creation, drains its own autorelease pool. `dispose` and a failed
  * creation detach and release the menu, remove the item, release the item and the target, and only
  * then close the callback, so AppKit cannot call a closed trampoline. Each binding registers its
@@ -112,6 +168,7 @@ function internal(message: string): never {
  */
 export function createStatusItem(
   onSelect: (tag: number) => void,
+  onClick: (click: StatusItemClick) => void,
 ): StatusItemBinding {
   const resources: {
     close(): void;
@@ -326,7 +383,38 @@ export function createStatusItem(
         } as const,
       ),
     );
-    // Registered after the callback, so closing runs in reverse: detach the menu, remove the item
+    // The button action reads the event that caused it; AppKit delivers it on the main thread.
+    const clickCallback = own(
+      new JSCallback(
+        () => {
+          if (!accepting) {
+            return;
+          }
+          const event = send(
+            send(classOf("NSApplication"), "sharedApplication"),
+            "currentEvent",
+          );
+          if (!event) {
+            return;
+          }
+          for (const click of clicksFor(
+            send(event, "type"),
+            Number(send(event, "clickCount")),
+          )) {
+            onClick(click);
+          }
+        },
+        {
+          args: [
+            "ptr",
+            "ptr",
+            "ptr",
+          ],
+          returns: "void",
+        } as const,
+      ),
+    );
+    // Registered after the callbacks, so closing runs in reverse: detach the menu, remove the item
     // from the bar, release it and the target, and only then close the callback and the handles.
     own({
       close() {
@@ -334,6 +422,10 @@ export function createStatusItem(
         inPool(() => {
           releaseMenu();
           if (item) {
+            // The button must stop referencing the target before the target and callbacks go.
+            const owned = send(item, "button");
+            send(owned, "setTarget:", 0n);
+            send(owned, "setAction:", 0n);
             send(
               send(classOf("NSStatusBar"), "systemStatusBar"),
               "removeStatusItem:",
@@ -369,6 +461,17 @@ export function createStatusItem(
       runtime.symbols.objc_disposeClassPair(targetClass);
       internal("Objective-C menu target registration failed.");
     }
+    if (
+      !runtime.symbols.class_addMethod(
+        targetClass,
+        Number(selector(CLICKED_SELECTOR)) as Pointer,
+        clickCallback.ptr,
+        SELECTED_ENCODING,
+      )
+    ) {
+      runtime.symbols.objc_disposeClassPair(targetClass);
+      internal("Objective-C click target registration failed.");
+    }
     runtime.symbols.objc_registerClassPair(targetClass);
     // The status bar hands out an autoreleased item, so the creation calls share one pool and the
     // item is retained for as long as this binding owns it.
@@ -389,7 +492,11 @@ export function createStatusItem(
         ),
         "Status item",
       );
-      return required(send(item, "button"), "Status item button");
+      const created = required(send(item, "button"), "Status item button");
+      send(created, "setTarget:", target);
+      send(created, "setAction:", selector(CLICKED_SELECTOR));
+      send(created, "sendActionOn:", CLICK_EVENT_MASK);
+      return created;
     });
     let disposed = false;
     const buildMenu = (entries: readonly NativeMenuEntry[]) => {
@@ -569,6 +676,9 @@ export function createStatusItem(
                   ),
                 }
               : null,
+            clickWired:
+              send(button, "target") === target &&
+              send(button, "action") === selector(CLICKED_SELECTOR),
             menu: menu
               ? Array.from(
                   {

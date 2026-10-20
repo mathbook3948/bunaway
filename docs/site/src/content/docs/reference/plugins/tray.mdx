@@ -219,8 +219,16 @@ await tray.destroy(null);
 - `setMenu`가 실패하면 이전 메뉴를 그대로 유지합니다. 현재 목록의 범위를 벗어난 선택은 무시합니다.
 - 아이콘이 이미 있을 때 `create`는 `BUSY`입니다. 아이콘이 없을 때 `setTitle`, `setTooltip`, `setMenu`,
   `setImage`, `waitForMenuClick`은 `UNSUPPORTED`입니다. `tray.destroy`와 플러그인 종료는 아이콘을 제거하고 대기 중인 `waitForMenuClick`을 `CANCELLED`로 끝냅니다.
-- `getBounds`, `setIcon`, `setClickBehavior`, `setVisible`, `focus`, `popUpContextMenu`, `tray.input`과 `tray.hover`는
-  macOS에서 아직 제공하지 않습니다. 클릭과 double-click 이벤트, 숨김과 복원은 후속 작업입니다.
+- 메뉴가 없는 아이콘을 왼쪽이나 오른쪽 버튼으로 누르고 뗄 때 `tray.input`을 보냅니다. payload는 Windows와 같은
+  `{ id: "main", button, state, position }`이며 button은 `left`나 `right`, state는 `up`입니다. 같은 왼쪽 클릭 열의
+  두 번째 클릭에는 `up`에 이어 `double-click`을 한 번 더 보냅니다(Electron의 `click`과 `double-click`, Tauri의
+  `Click`과 `DoubleClick`이 함께 발생하는 것과 같습니다). 포인터 위치는 읽지 않아 `position`은 항상 `null`입니다.
+  메뉴가 붙어 있는 동안에는 macOS가 메뉴를 열고 클릭 동작을 보내지 않으므로 이벤트도 없습니다. 연결한 뷰의
+  events에 `tray.input`을 허용하고 구독해야 화면에 전달하며, 구독 전의 클릭은 다시 보내지 않고 `waitForEvent`는
+  macOS에서 제공하지 않습니다. Linux 단위 테스트는 이벤트 변환과 메뉴 유무 조건을 확인하고, `macos-native`는 아이콘 단추의
+  target과 action 연결 상태를 AppKit에서 읽어 확인합니다. 실제 마우스 클릭은 자동 확인하지 않았습니다.
+- `getBounds`, `setIcon`, `setClickBehavior`, `setVisible`, `focus`, `popUpContextMenu`와 `tray.hover`는
+  macOS에서 아직 제공하지 않습니다. drop과 drag, 숨김과 복원은 후속 작업입니다.
 - 각 함수는 같은 이름의 독립 Host 권한을 요구합니다. 잘못된 입력은 `INVALID_ARGUMENT`, 권한 없음은 `PERMISSION_DENIED`입니다.
 
 ## 이전 앱 정의에서 옮기기

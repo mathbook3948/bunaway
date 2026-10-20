@@ -9,8 +9,8 @@ import { headerOnlyPng, solidPng } from "../fixtures/tray-png.ts";
 /** Creates real AppKit status items and keeps the latest binding so the test can read AppKit back. */
 function realTray() {
   const bindings: StatusItemBinding[] = [];
-  const tray = new MacosTray((onSelect) => {
-    const binding = createStatusItem(onSelect);
+  const tray = new MacosTray((onSelect, onClick) => {
+    const binding = createStatusItem(onSelect, onClick);
     bindings.push(binding);
     return binding;
   });
@@ -44,6 +44,7 @@ test.skipIf(
         title: "Bunaway 한글 😀",
         tooltip: "Tooltip 한글",
         image: null,
+        clickWired: true,
         menu: null,
       });
 
