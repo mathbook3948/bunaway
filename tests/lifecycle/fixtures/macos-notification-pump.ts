@@ -62,7 +62,13 @@ const coreFoundation = dlopen(
   },
 );
 
-const cstring = (value: string) => ptr(Buffer.from(`${value}\0`));
+// Buffers stay referenced for the life of the process, so a native call never reads freed memory.
+const pinned: Buffer[] = [];
+const cstring = (value: string) => {
+  const buffer = Buffer.from(`${value}\0`);
+  pinned.push(buffer);
+  return ptr(buffer);
+};
 const selector = (name: string) => objc.symbols.sel_registerName(cstring(name));
 const send = (object: bigint, name: string, a = 0n, b = 0n) =>
   objc.symbols.objc_msgSend(object, selector(name), a, b);
