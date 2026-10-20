@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { BunawayError } from "@bunaway/plugin";
 import { KERNEL32, pick, withWide } from "@bunaway/plugin/win32";
 import { WindowsStorage } from "#plugins/storage/src/platforms/windows";
-import { killAfter } from "../fixtures/deadlines.ts";
+import { deadline, killAfter, waitFor } from "../fixtures/deadlines.ts";
 
 assert.equal(process.platform, "win32");
 
@@ -15,7 +15,7 @@ const COPIERS = 6;
 const ROUNDS = 5;
 const SOURCE_BYTES = 16 * 1024 * 1024;
 // Children start Bun and bind kernel32 first, so the shared start time leaves room for the slowest.
-const START_DELAY_MS = 5000;
+const START_DELAY_NAME = "childExit";
 const REMOVE_RETRIES = 10;
 const REMOVE_RETRY_DELAY_MS = 200;
 
@@ -147,11 +147,12 @@ async function race(round: number): Promise<number> {
       return path;
     },
   );
-  const startAtMs = Date.now() + START_DELAY_MS;
+  const startAtMs = Date.now() + deadline(START_DELAY_NAME);
   const children = sources.map((source) => {
     const child = Bun.spawn(
       [
         process.execPath,
+        "--no-env-file",
         import.meta.path,
         CHILD_MODE,
         source,
@@ -209,8 +210,8 @@ async function race(round: number): Promise<number> {
       ],
       JSON.stringify(outcomes),
     );
-    // This loser tried before the winner finished, so it met a name that was still being written.
-    if (outcome.beforeMs < winner.afterMs) {
+    // This loser was refused before the winner finished, so it met a name that was still in use.
+    if (outcome.afterMs < winner.afterMs) {
       overlapping++;
     }
   }
@@ -325,11 +326,31 @@ try {
   } finally {
     releaseHandle(holder);
   }
-  // Once the last handle closes the name is free again.
-  storage.copyFile({
-    from: source,
-    to: pending,
-  });
+  // Once the last handle closes the name is free again. A scanner can hold the file briefly, so
+  // the copy is retried until it stops being refused.
+  await waitFor(
+    () => {
+      try {
+        storage.copyFile({
+          from: source,
+          to: pending,
+        });
+        return true;
+      } catch (error) {
+        if (
+          error instanceof BunawayError &&
+          error.code === "PERMISSION_DENIED"
+        ) {
+          return false;
+        }
+        throw error;
+      }
+    },
+    {
+      deadline: "childExit",
+      what: "the delete-pending name to be released",
+    },
+  );
   assert.equal(await readFile(pending, "utf8"), "pending");
 
   assert.equal(
