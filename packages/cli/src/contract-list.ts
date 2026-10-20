@@ -1,3 +1,4 @@
+import { rmSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -69,11 +70,13 @@ const EXTRACT_SCRIPT = `
 const [entry, output] = process.argv.slice(1);
 const { default: app } = await import(entry);
 if (typeof app !== "object" || app === null || typeof app.commands !== "object" || typeof app.events !== "object") {
-  throw new Error("The app entry must default-export a defineApp result.");
+  throw new Error("The app entry must default-export an app definition with commands and events.");
 }
 const commands = (registry) => Object.entries(registry ?? {}).map(([name, command]) => ({ name, input: command.input, output: command.output }));
 const events = (registry) => Object.entries(registry ?? {}).map(([name, payload]) => ({ name, payload }));
-const plugins = (app.plugins ?? []).map((plugin) => ({ name: plugin.name, commands: commands(plugin.commands), events: events(plugin.events) }));
+// Core registers every native operation as a plugin.<operation> command with open schemas.
+const operations = (plugin) => (plugin.native?.operations ?? []).map((operation) => ({ name: "plugin." + operation.name, input: {}, output: {} }));
+const plugins = (app.plugins ?? []).map((plugin) => ({ name: plugin.name, commands: [...commands(plugin.commands), ...operations(plugin)], events: events(plugin.events) }));
 await Bun.write(output, JSON.stringify({ commands: commands(app.commands), events: events(app.events), plugins }));
 // Handles the app opened at top level (servers, timers) must not keep this process alive.
 process.exit(0);
@@ -122,22 +125,28 @@ function expectList(value: unknown, field: string): unknown[] {
  * carried as written.
  */
 function toRegistrations(value: Record<string, unknown>): Registrations {
-  const commands: Record<string, Registrations["commands"][string]> = {};
-  for (const item of expectList(value.commands, "commands")) {
-    const entry = expectRecord(item, "command");
-    commands[expectString(entry.name, "command name")] = {
-      input: expectRecord(entry.input, "command input"),
-      output: expectRecord(entry.output, "command output"),
-    };
-  }
-  const events: Record<string, Schema> = {};
-  for (const item of expectList(value.events, "events")) {
-    const entry = expectRecord(item, "event");
-    events[expectString(entry.name, "event name")] = expectRecord(
-      entry.payload,
-      "event payload",
-    );
-  }
+  // fromEntries defines own properties, so a name such as "__proto__" is kept like any other.
+  const commands = Object.fromEntries(
+    expectList(value.commands, "commands").map((item) => {
+      const entry = expectRecord(item, "command");
+      return [
+        expectString(entry.name, "command name"),
+        {
+          input: expectRecord(entry.input, "command input"),
+          output: expectRecord(entry.output, "command output"),
+        },
+      ];
+    }),
+  );
+  const events = Object.fromEntries(
+    expectList(value.events, "events").map((item) => {
+      const entry = expectRecord(item, "event");
+      return [
+        expectString(entry.name, "event name"),
+        expectRecord(entry.payload, "event payload"),
+      ];
+    }),
+  );
   return {
     commands,
     events,
@@ -183,6 +192,17 @@ export async function readAppDefinition(
         stderr: "inherit",
       },
     );
+    // An interrupted CLI must not leave the child running or the scratch directory behind.
+    const interrupted = (signal: NodeJS.Signals) => {
+      child.kill("SIGKILL");
+      rmSync(scratch, {
+        recursive: true,
+        force: true,
+      });
+      process.exit(signal === "SIGINT" ? 130 : 143);
+    };
+    process.once("SIGINT", interrupted);
+    process.once("SIGTERM", interrupted);
     let timedOut = false;
     // SIGKILL because an app may ignore SIGTERM; waiting on it would hang the CLI.
     const timer = setTimeout(() => {
@@ -200,6 +220,8 @@ export async function readAppDefinition(
       }
     } finally {
       clearTimeout(timer);
+      process.off("SIGINT", interrupted);
+      process.off("SIGTERM", interrupted);
     }
     // An app that exits the process itself finishes with code 0 before writing the result.
     if (!(await Bun.file(output).exists())) {
@@ -214,7 +236,7 @@ export async function readAppDefinition(
   }
 }
 
-/** Names each registered entry's owner; defineApp already rejects a name two owners register. */
+/** Names each registered entry's owner and, like Core, rejects a name two owners register. */
 function ownedEntries<T>(
   app: Readonly<Record<string, T>>,
   plugins: readonly {
@@ -237,6 +259,12 @@ function ownedEntries<T>(
   >();
   const add = (owner: Owner, entries: Readonly<Record<string, T>>) => {
     for (const [name, value] of Object.entries(entries)) {
+      const existing = owned.get(name);
+      if (existing) {
+        throw new Error(
+          `"${name}" is registered by both ${existing.owner} and ${owner}.`,
+        );
+      }
       owned.set(name, {
         owner,
         value,

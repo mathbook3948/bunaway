@@ -43,7 +43,7 @@ Vite 앱의 `build.frontend`는 생성물인 `web-dist`를 가리킨다. CLI가 
 7. 모든 생성 앱의 `dev`, `build`, `package`, `validate`, `doctor`는 앱 CLI를 실행한다.
    Vite 기반 앱은 웹 도구용 `dev:web`, `build:web`, `preview`를 제공하고
    `dev.command`, `build.command`로 연결한다. 메모 예제도 같은 형식을 사용한다.
-8. `dev`, `doctor`, `validate`는 웹 프로덕션 빌드 명령을 실행하지 않는다.
+8. `dev`, `doctor`, `validate`, `contract`는 웹 프로덕션 빌드 명령을 실행하지 않는다.
    `validate`는 준비된 프로덕션 자산을 검사하며 파일을 생성하지 않는다.
 
 ## 기존 결정과 마이그레이션

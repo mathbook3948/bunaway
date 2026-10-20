@@ -77,14 +77,15 @@ test("contract lists the template's commands, events and view exposure", async (
   expect(code).toBe(0);
   const list = JSON.parse(stdout);
   expect(list.version).toBe(1);
+  // The template also registers the storage plugin, whose operations are plugin.* commands.
   expect(
-    list.commands.map(
-      (entry: { name: string; owner: string; views: string[] }) => [
+    list.commands
+      .filter((entry: { owner: string }) => entry.owner === "app")
+      .map((entry: { name: string; owner: string; views: string[] }) => [
         entry.name,
         entry.owner,
         entry.views,
-      ],
-    ),
+      ]),
   ).toEqual([
     [
       "message.read",
@@ -223,7 +224,7 @@ test("an app entry that is not a defineApp result is rejected", async () => {
     const { code, stdout, stderr } = await runContract(project);
     expect(code).toBe(1);
     expect(stdout).toBe("");
-    expect(stderr).toContain("must default-export a defineApp result");
+    expect(stderr).toContain("must default-export an app definition");
   });
 });
 
@@ -337,4 +338,73 @@ test("plugin entries carry their owner and unexposed entries list no views", () 
     "a",
     "z",
   ]);
+});
+
+test("a name registered by two owners is rejected like Core does", () => {
+  expect(() =>
+    buildContractList(
+      {
+        version: 1,
+        views: [],
+        backend: {
+          permissions: [],
+        },
+      },
+      {
+        commands: {
+          "dup.command": {
+            input: {},
+            output: {},
+          },
+        },
+        events: {},
+        plugins: [
+          {
+            name: "plug",
+            commands: {
+              "dup.command": {
+                input: {},
+                output: {},
+              },
+            },
+            events: {},
+          },
+        ],
+      },
+    ),
+  ).toThrow('"dup.command" is registered by both app and plugin:plug');
+});
+
+test("native operations are listed as plugin commands and the policy may name them", async () => {
+  await withAppSource(
+    `import { defineApp } from "@bunaway/backend";\nimport storage from "@bunaway/plugin-storage";\nexport default defineApp({ plugins: [storage], modules: [] });\n`,
+    async () => {
+      await Bun.write(
+        resolve(project, "src-bunaway/policy.json"),
+        policySource
+          .replace(
+            '"message.read", "message.save"',
+            '"plugin.storage.readText"',
+          )
+          .replace('"events": ["message.saved"]', '"events": []'),
+      );
+      try {
+        const { code, stdout, stderr } = await runContract(project);
+        expect(code, stderr).toBe(0);
+        const entry = JSON.parse(stdout).commands.find(
+          (command: { name: string }) =>
+            command.name === "plugin.storage.readText",
+        );
+        expect(entry.owner).toBe("plugin:storage");
+        expect(entry.views).toEqual([
+          "main",
+        ]);
+      } finally {
+        await Bun.write(
+          resolve(project, "src-bunaway/policy.json"),
+          policySource,
+        );
+      }
+    },
+  );
 });
