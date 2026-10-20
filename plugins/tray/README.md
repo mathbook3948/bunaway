@@ -21,7 +21,7 @@ balloon 알림은 `NIM_MODIFY`에 `NIF_INFO`를 실어 요청하되 아이콘 �
 shell 아이콘의 tooltip/ICO 변경과 반복 교체, synthetic mouse 메시지, icon 제거 뒤 TaskbarCreated
 알림의 재등록 및 자원 정리를 검사한다. `windows-tray-balloon.test.ts`는 실제 shell 아이콘에 balloon 요청을 보내고 `NIN_BALLOON*` 메시지를
 `tray.balloon`으로 바꾸는 규칙을 검사한다. `windows-tray-ui.test.ts`는 실제 UI Worker의 packaged SDK,
-창 없는 백엔드 대기와 종료 정리를 확인한다. 두 native 회귀는 `mise run host:windows`에 포함한다.
+창 없는 백엔드 대기와 종료 정리를 확인한다. 이 native 회귀는 `mise run host:windows`에 포함한다.
 이는 물리 마우스 입력, 실제 Explorer process 재시작이나 화면의 모든 이미지 모양을 확인했다는 뜻이 아니다.
 
 ## macOS
