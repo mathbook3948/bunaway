@@ -9,6 +9,7 @@ import {
   createUrlSchemeRegistration,
   MAX_SCHEME_COMMAND_UNITS,
   OWNER_VALUE,
+  WRITTEN_COMMAND_VALUE,
   type SchemeStore,
 } from "#plugins/opener/src/platforms/windows-url-scheme";
 import { normalizeUrlScheme } from "#plugins/opener/src/url-scheme";
@@ -247,6 +248,10 @@ test("register writes the owner, the command and the protocol marker, then reads
         "URL:myapp",
       ],
       [
+        WRITTEN_COMMAND_VALUE,
+        '"C:\\Program Files\\App\\app.exe" "%1"',
+      ],
+      [
         "URL Protocol",
         "",
       ],
@@ -339,16 +344,40 @@ test("a key owned by anyone else is neither replaced nor removed", () => {
   ).toBe('"C:\\Other\\other.exe" "%1"');
 });
 
-test("a stale command keeps the key removable by its owner but not registered", () => {
+test("a stale command stays removable by its owner, a command rewritten by another program does not", () => {
   const { store, keys } = fakeStore();
-  createUrlSchemeRegistration(APP, store).register("myapp");
+  const registration = createUrlSchemeRegistration(APP, store);
+  registration.register("myapp");
+  const moved = createUrlSchemeRegistration(
+    {
+      ...APP,
+      launch: {
+        ...APP.launch,
+        executablePath: "D:\\Apps\\app.exe",
+      },
+    },
+    store,
+  );
+  // The app moved: the stored command is stale but still the one this plugin wrote.
+  expect(moved.isRegistered("myapp")).toBe(false);
+  expect(moved.unregister("myapp")).toBe(true);
+  expect(keys.has("Software\\Classes\\myapp")).toBe(false);
+
+  registration.register("myapp");
   keys
     .get("Software\\Classes\\myapp\\shell\\open\\command")
     ?.set("", '"C:\\Other\\other.exe" "%1"');
-  const registration = createUrlSchemeRegistration(APP, store);
+  // Another program took the key over and left the owner value behind.
   expect(registration.isRegistered("myapp")).toBe(false);
-  expect(registration.unregister("myapp")).toBe(true);
-  expect(keys.has("Software\\Classes\\myapp")).toBe(false);
+  expect(() => registration.register("myapp")).toThrow(
+    expect.objectContaining({
+      code: "INVALID_ARGUMENT",
+    }),
+  );
+  expect(registration.unregister("myapp")).toBe(false);
+  expect(
+    keys.get("Software\\Classes\\myapp\\shell\\open\\command")?.get(""),
+  ).toBe('"C:\\Other\\other.exe" "%1"');
 });
 
 test("a failed first registration removes the key it created and a retry succeeds", () => {
@@ -359,6 +388,7 @@ test("a failed first registration removes the key it created and a retry succeed
     1,
     2,
     3,
+    4,
   ]) {
     harness.failAfter(failAt);
     expect(() => registration.register("myapp")).toThrow("write failed");
@@ -383,7 +413,7 @@ test("a failed refresh keeps the key the app already owned", () => {
     },
     harness.store,
   );
-  harness.failAfter(2);
+  harness.failAfter(3);
   expect(() => moved.register("myapp")).toThrow("write failed");
   expect(harness.keys.has("Software\\Classes\\myapp")).toBe(true);
   harness.failAfter(Number.POSITIVE_INFINITY);

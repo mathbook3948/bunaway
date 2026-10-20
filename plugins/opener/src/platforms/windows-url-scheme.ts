@@ -6,6 +6,8 @@ import { quoteShellTarget } from "#opener/platforms/windows-shell";
 export const MAX_SCHEME_COMMAND_UNITS = 2048;
 /** Value on the scheme key that marks a registration made by this plugin for one app. */
 export const OWNER_VALUE = "BunawayRegistration";
+/** Value on the scheme key holding the command this plugin wrote, to detect a later takeover. */
+export const WRITTEN_COMMAND_VALUE = "BunawayCommand";
 const URL_PROTOCOL_VALUE = "URL Protocol";
 
 /**
@@ -62,10 +64,10 @@ export function buildSchemeCommand(launch: AppLaunch["launch"]): string {
 /**
  * Per-user registration of this app as the handler of custom URL schemes under
  * `HKCU\Software\Classes\<scheme>`, in the shape Electron and Tauri write. A scheme key
- * is this app's while its owner value names this app and run mode, so a registration whose
- * command went stale after the app moved can still be refreshed or removed. Keys without
- * that owner value are never changed. `isRegistered` is stricter: it also needs the current
- * command. The user's default-app choice and HKLM are not touched.
+ * is this app's while its owner value names this app and run mode and its command is still
+ * the one this plugin wrote, so a registration left stale by a moved app can be refreshed or
+ * removed but a key another program rewrote since is never changed. `isRegistered` is
+ * stricter: it also needs the current launch command. The user's default-app choice and HKLM are not touched.
  */
 export function createUrlSchemeRegistration(
   app: AppLaunch | undefined,
@@ -93,9 +95,22 @@ export function createUrlSchemeRegistration(
   const commandPath = (scheme: string) =>
     `${keyPath(scheme)}\\shell\\open\\command`;
 
-  /** True when the key carries this app's owner value, whatever command it holds. */
-  function ownsKey(scheme: string, owner: string): boolean {
-    return store.readString(keyPath(scheme), OWNER_VALUE) === owner;
+  /**
+   * True when the key carries this app's owner value and its command is one this app wrote:
+   * the stored `BunawayCommand` (left stale when the app moved, which the owner may still
+   * refresh or remove) or the current launch command (a refresh that stopped before it
+   * recorded the command). A command another program wrote since no longer matches, so that
+   * program's registration is not taken over or deleted.
+   */
+  function ownsKey(scheme: string, owner: string, command: string): boolean {
+    const key = keyPath(scheme);
+    const current = store.readString(commandPath(scheme), "");
+    return (
+      store.readString(key, OWNER_VALUE) === owner &&
+      current !== null &&
+      (current === command ||
+        current === store.readString(key, WRITTEN_COMMAND_VALUE))
+    );
   }
 
   /** True when this app owns the key and its command still starts this app. */
@@ -105,7 +120,7 @@ export function createUrlSchemeRegistration(
     command: string,
   ): boolean {
     return (
-      ownsKey(scheme, owner) &&
+      ownsKey(scheme, owner, command) &&
       store.readString(commandPath(scheme), "") === command
     );
   }
@@ -125,7 +140,7 @@ export function createUrlSchemeRegistration(
         // A name present only in HKLM (or a system ProgId such as exefile) would be
         // overridden for this user by a new HKCU key, so it counts as taken.
         const taken = existed
-          ? store.readString(key, OWNER_VALUE) !== owner
+          ? !ownsKey(scheme, owner, command)
           : store.classExists(scheme);
         if (taken) {
           throw new BunawayError({
@@ -143,6 +158,7 @@ export function createUrlSchemeRegistration(
           store.writeString(key, OWNER_VALUE, owner);
           store.writeString(key, "", `URL:${scheme}`);
           store.writeString(commandPath(scheme), "", command);
+          store.writeString(key, WRITTEN_COMMAND_VALUE, command);
           store.writeString(key, URL_PROTOCOL_VALUE, "");
         } catch (error) {
           // Remove only a key this call created; a refreshed key stays registered by the app.
@@ -162,9 +178,9 @@ export function createUrlSchemeRegistration(
 
     /** Remove the scheme key when this app owns it. Returns whether a key was removed. */
     unregister(scheme: string): boolean {
-      const { owner } = identity();
+      const { owner, command } = identity();
       return store.withLock(scheme, () => {
-        if (!ownsKey(scheme, owner)) {
+        if (!ownsKey(scheme, owner, command)) {
           return false;
         }
         store.deleteTree(keyPath(scheme));

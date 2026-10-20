@@ -113,8 +113,8 @@ const link = await opener.readShortcutLink("C:\\Users\\me\\Desktop\\App.lnk");
 처리 앱으로 등록, 해제하고 조회합니다(Windows만, macOS는 `UNSUPPORTED`). `HKCU\Software\Classes\<scheme>`에
 `URL Protocol`과 `shell\open\command`(앱 실행 명령 + `"%1"`)를 쓰고 HKLM과 UserChoice는 건드리지 않습니다.
 대상은 호스트가 알려 주는 실행 중인 앱뿐이며 호출자가 경로나 인자를 줄 수 없습니다. `http`, `file`, `javascript`,
-`ms-*` 같은 예약 scheme은 `INVALID_ARGUMENT`입니다. 키의 `BunawayRegistration` 값이 이 앱의 것일 때만
-소유로 보고(저장된 명령이 낡았어도 갱신과 해제는 가능), 소유가 아닌 기존 이름(HKLM 등록과 시스템 ProgId 포함)은 덮지 않으며 다른 앱의 `HKCU` 키는 지우지 않습니다. 권한은 작업 이름 세 개이며 각각 별개입니다.
+`ms-*` 같은 예약 scheme은 `INVALID_ARGUMENT`입니다. 키의 `BunawayRegistration` 값이 이 앱의 것이고 명령이 이 플러그인이 쓴 그대로일 때만
+소유로 보며(앱이 이동해 낡은 명령은 갱신과 해제 가능), 다른 프로그램이 덮어쓴 키와 소유가 아닌 기존 이름(HKLM 등록과 시스템 ProgId 포함)은 덮거나 지우지 않습니다. 권한은 작업 이름 세 개이며 각각 별개입니다.
 링크로 받은 URL은 신뢰할 수 없는 입력이므로 앱이 검증해야 합니다. 자세한 규칙은 reference 문서를 참고하세요.
 
 ## 지정 앱
