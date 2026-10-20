@@ -163,7 +163,7 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 
 우선순위 P1. 소유자: 선택 기능, 앱 실행 유지와 종료는 호스트.
 
-- [x] 메뉴 막대 아이콘의 생성과 해제, tooltip, title과 메뉴를 제공한다. `tray.create`와 `tray.destroy`, `setTitle`, `setTooltip`, 평면 메뉴 `setMenu`와 `waitForMenuClick`을 제공하고 `macos-native`에서 AppKit 상태와 메뉴 선택을 확인한다. 이미지, 클릭 이벤트, 숨김과 `desktop.tray` 연결은 아래 항목에 남아 있다.
+- [x] 메뉴 막대 아이콘의 생성과 해제, tooltip, title과 메뉴를 제공한다. `tray.create`와 `tray.destroy`, `setTitle`, `setTooltip`, 평면 메뉴 `setMenu`와 `waitForMenuClick`을 제공하고 `macos-native`에서 AppKit 상태와 메뉴 선택을 확인한다. 이미지, 숨김과 `desktop.tray` 연결은 아래 항목에 남아 있다.
 - [ ] 일반, template와 pressed 이미지, Retina 표현과 접근성 이름을 제공한다. `tray.setImage`로 PNG 이미지, template 여부, 화소 밀도(1x, 2x)와 접근성 이름을 설정하고 `macos-native`에서 AppKit 상태를 확인한다. pressed 이미지와 다중 해상도 표현은 남아 있다.
 - [ ] click, double-click, 우클릭, drop/drag와 아이콘 bounds를 제공한다. 메뉴가 없는 아이콘의 click, double-click과 우클릭은 `tray.input`으로 구현했고(`position`은 null) drop/drag와 아이콘 bounds는 남아 있다.
 - [ ] 숨김과 복원, 마지막 창 닫기 후 실행 유지와 Quit의 종료 승인을 연결한다.
