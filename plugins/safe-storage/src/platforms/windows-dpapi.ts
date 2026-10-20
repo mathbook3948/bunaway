@@ -1,6 +1,6 @@
 import { dlopen, type Pointer, ptr, toArrayBuffer } from "bun:ffi";
-import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/plugin";
+import { KERNEL32, pick, win32CallError } from "@bunaway/plugin/win32";
 import { safeStorageLimits } from "#safe-storage/contract";
 
 // Windows x64 DATA_BLOB: DWORD length, four bytes of padding, then an eight-byte pointer.
@@ -8,9 +8,42 @@ const DATA_BLOB_BYTES = 16;
 const DATA_BLOB_POINTER_OFFSET = 8;
 const CRYPTPROTECT_UI_FORBIDDEN = 0x1;
 
+/**
+ * Win32 errors that mean the key service is not ready or did not answer, so the same call can
+ * succeed later: ERROR_BUSY, ERROR_SERVICE_NOT_ACTIVE, RPC_S_SERVER_UNAVAILABLE and
+ * RPC_S_SERVER_TOO_BUSY. Every other error, including ERROR_INVALID_PARAMETER for a damaged blob and
+ * an unreadable error, stays a permanent failure so data is never reported as retryable by guess.
+ */
+const ERROR_BUSY = 170;
+const ERROR_SERVICE_NOT_ACTIVE = 1062;
+const RPC_S_SERVER_UNAVAILABLE = 1722;
+const RPC_S_SERVER_TOO_BUSY = 1723;
+const TRANSIENT_DPAPI_ERRORS: ReadonlySet<number> = new Set([
+  ERROR_BUSY,
+  ERROR_SERVICE_NOT_ACTIVE,
+  RPC_S_SERVER_UNAVAILABLE,
+  RPC_S_SERVER_TOO_BUSY,
+]);
+
+/** Map the Win32 error of a failed DPAPI call to `BUSY` (retry later) or `INTERNAL` (permanent). */
+export function dpapiFailure(code: number, decrypt: boolean): BunawayError {
+  if (TRANSIENT_DPAPI_ERRORS.has(code)) {
+    return new BunawayError({
+      code: "BUSY",
+      message: "Windows data protection is temporarily unavailable.",
+    });
+  }
+  return new BunawayError({
+    code: "INTERNAL",
+    message: decrypt
+      ? "Windows could not decrypt the protected data."
+      : "Windows could not protect the data.",
+  });
+}
+
 function createBindings() {
   const kernel = dlopen("kernel32.dll", {
-    ...pick(KERNEL32, "LocalFree"),
+    ...pick(KERNEL32, "LocalFree", "GetLastError"),
   });
   try {
     const crypt = dlopen("crypt32.dll", {
@@ -96,22 +129,23 @@ export class WindowsDataProtection {
       const invoke = decrypt
         ? this.api.crypt.symbols.CryptUnprotectData
         : this.api.crypt.symbols.CryptProtectData;
-      const succeeded = invoke(
-        ptr(source),
-        null,
-        null,
-        null,
-        null,
-        CRYPTPROTECT_UI_FORBIDDEN,
-        ptr(destination),
+      // Both calls read the input blob and leave it unchanged, so a repeat is safe when the first
+      // last-error read is overwritten by the FFI layer.
+      const failure = win32CallError(
+        () =>
+          invoke(
+            ptr(source),
+            null,
+            null,
+            null,
+            null,
+            CRYPTPROTECT_UI_FORBIDDEN,
+            ptr(destination),
+          ),
+        () => this.api.kernel.symbols.GetLastError(),
       );
-      if (!succeeded) {
-        throw new BunawayError({
-          code: "INTERNAL",
-          message: decrypt
-            ? "Windows could not decrypt the protected data."
-            : "Windows could not protect the data.",
-        });
+      if (failure) {
+        throw dpapiFailure(failure, decrypt);
       }
       const size = destination.readUInt32LE(0);
       // Only DPAPI writes this pointer. A native allocation must fit the public output bound.

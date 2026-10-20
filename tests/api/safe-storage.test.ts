@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
+import { WIN32_ERROR_UNKNOWN } from "@bunaway/plugin/win32";
 import safeStorage from "@bunaway/plugin-safe-storage";
 import { NativeRegistry, serializeHostResponse } from "@bunaway/protocol";
 import { safeStorageLimits } from "../../plugins/safe-storage/src/contract.ts";
 import { safeStorageOperations } from "../../plugins/safe-storage/src/operations.ts";
+import { dpapiFailure } from "../../plugins/safe-storage/src/platforms/windows-dpapi.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
 const parsers = pluginParsers("safe-storage", safeStorageOperations);
@@ -262,5 +264,33 @@ test("decryption results carry no re-encryption signal", async () => {
     ).rejects.toMatchObject({
       code: "INTERNAL",
     });
+  }
+});
+
+test("a DPAPI failure is BUSY only for a temporarily unavailable key service", () => {
+  for (const code of [
+    170,
+    1062,
+    1722,
+    1723,
+  ]) {
+    for (const decrypt of [
+      false,
+      true,
+    ]) {
+      expect(dpapiFailure(code, decrypt).code).toBe("BUSY");
+    }
+  }
+  // ERROR_INVALID_PARAMETER (damaged blob), ERROR_INVALID_DATA, ERROR_ACCESS_DENIED, an unreadable
+  // error and a zero code.
+  for (const code of [
+    87,
+    13,
+    5,
+    WIN32_ERROR_UNKNOWN,
+    0,
+  ]) {
+    expect(dpapiFailure(code, true).code).toBe("INTERNAL");
+    expect(dpapiFailure(code, false).code).toBe("INTERNAL");
   }
 });

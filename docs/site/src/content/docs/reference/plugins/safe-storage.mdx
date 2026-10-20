@@ -34,6 +34,8 @@ safeStorage.decryptBytes({ ciphertext }): Promise<string>
 
 모든 호출은 Promise를 반환하며 I/O Worker에서 실행합니다. 최초 호출에서 OS 바인딩을 엽니다.
 Windows의 `isAvailable`은 비밀이 아닌 작은 값의 DPAPI 왕복을 검사합니다.
+일시 실패를 포함해 왕복이 실패하면 오류 대신 `false`를 반환하므로, 앱은 `false`만 보고
+평문 저장으로 넘어가지 말고 암호화 호출의 `BUSY`와 `INTERNAL`로 판단합니다.
 macOS에서는 시스템 UI와 키 생성을 하지 않고 기본 file-based Keychain의 잠금 해제,
 읽기와 쓰기 상태만 조회합니다. 저장된 키의 접근 승인을 검사하는 작업은 아닙니다.
 조회가 실패하면 `false`를 반환합니다. 이 결과는 후속 작업의 성공을 보장하거나 권한을
@@ -81,7 +83,10 @@ JavaScript 런타임이 관리하므로 메모리 전체의 비밀 제거를 보
 잘못된 입력과 크기 상한은 `INVALID_ARGUMENT`, 정책 거부는 `PERMISSION_DENIED`,
 처리 전 취소와 폐기된 어댑터는 `CANCELLED`입니다. Windows 암복호화 실패와 손상된 blob,
 다른 사용자나 머신의 데이터, UTF-8 또는 결과 상한 위반은 `INTERNAL`입니다.
-이 오류만으로 손상과 일시적인 사용자 프로필 및 키 문제를 구분할 수 없습니다.
+DPAPI가 키 서비스를 일시적으로 쓸 수 없다는 Win32 오류(`ERROR_BUSY`, `ERROR_SERVICE_NOT_ACTIVE`,
+`RPC_S_SERVER_UNAVAILABLE`, `RPC_S_SERVER_TOO_BUSY`)로 실패하면 `BUSY`입니다. 이 경우 평문으로
+대체하지 않고 입력도 바꾸지 않으므로 잠시 뒤 같은 입력으로 다시 호출할 수 있습니다.
+오류를 읽을 수 없거나 위 목록에 없으면 `INTERNAL`로 보고합니다.
 자동 재시도, 범용 credential store와 vault는 제공하지 않습니다.
 
 복호화 결과에 `shouldReEncrypt` 같은 재암호화 신호는 없고 평문 값 그대로입니다. Electron의
@@ -106,7 +111,7 @@ macOS에서는 사용자가 시스템 UI를 취소하면 `CANCELLED`, 접근 거
 중단하지만 이미 시작한 호출의 성공이나 새 키 생성은 취소하지 않습니다. 정상 종료에서는
 호출이 돌아온 뒤 자원을 해제하며, 호스트의 종료 기한 초과는 강제 종료 실패로 보고합니다.
 실패한 복호화에서도 원본 암호문은 바꾸지 않으며
-자동 재시도나 재암호화를 수행하지 않습니다.
+자동 재시도나 재암호화를 수행하지 않습니다. 실제 키 서비스 중단은 재현하지 않아 `BUSY` 분류는 오류 코드 단위로만 검증합니다.
 
 ## macOS Keychain과 실행 파일 identity
 
