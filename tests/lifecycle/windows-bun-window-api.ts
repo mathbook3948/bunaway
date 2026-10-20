@@ -502,6 +502,15 @@ if (!process.argv.includes("--child")) {
           ],
           returns: "u64",
         },
+        SetPixelV: {
+          args: [
+            "u64",
+            "i32",
+            "i32",
+            "u32",
+          ],
+          returns: "i32",
+        },
         GetPixel: {
           args: [
             "u64",
@@ -548,7 +557,9 @@ if (!process.argv.includes("--child")) {
         },
       });
       const WM_ERASEBKGND = 0x0014;
-      /** Send WM_ERASEBKGND with a memory DC and read back the COLORREF it painted at the top-left pixel. */
+      /** A COLORREF no window color in this test uses, so an erase that paints nothing stays visible. */
+      const SENTINEL = 0x123456;
+      /** Send WM_ERASEBKGND with a memory DC holding the sentinel and read back the COLORREF at the top-left pixel. */
       const erasedPixel = (
         hwnd: bigint,
       ): {
@@ -560,7 +571,7 @@ if (!process.argv.includes("--child")) {
         const bitmap = gdi.symbols.CreateCompatibleBitmap(screen, 500, 400);
         const previous = gdi.symbols.SelectObject(memory, bitmap);
         try {
-          // The sentinel proves an unhandled erase leaves the surface alone for the default procedure.
+          gdi.symbols.SetPixelV(memory, 1, 1, SENTINEL);
           const handled = messaging.symbols.SendMessageW(
             hwnd,
             WM_ERASEBKGND,
@@ -610,8 +621,11 @@ if (!process.argv.includes("--child")) {
         });
         // A window with no color keeps the class brush and its own erase result.
         assert.equal(nativeWindows.getBackgroundColor(plain), null);
-        assert.notEqual(erasedPixel(plain).pixel, 0xc3b2a1);
-        assert.notEqual(erasedPixel(plain).pixel, 0x403020);
+        // The default procedure paints the class brush over the sentinel instead of leaving it.
+        const unpainted = erasedPixel(plain);
+        assert.notEqual(unpainted.pixel, SENTINEL);
+        assert.notEqual(unpainted.pixel, 0xc3b2a1);
+        assert.notEqual(unpainted.pixel, 0x403020);
         nativeWindows.setBackgroundColor(plain, "#010203");
         assert.equal(erasedPixel(plain).pixel, 0x030201);
         assert.equal(nativeWindows.getBackgroundColor(painted), "#a1b2c3");
