@@ -296,7 +296,7 @@ export function captureBindings(libraries: CaptureLibraries): CaptureBindings {
     },
     listWindows() {
       const windows: bigint[] = [];
-      // A JavaScript error must not unwind through the Win32 callback, so stop the walk instead.
+      // The callback only appends a handle, so no JavaScript error can unwind through the Win32 frame.
       const callback = new JSCallback(
         (window: bigint) => {
           windows.push(window);

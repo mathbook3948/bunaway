@@ -1101,3 +1101,44 @@ test("content drawn while the window turned on capture exclusion is not returned
   ]);
   expect(fake.alive.size).toBe(0);
 });
+
+test("a window closed while it was drawn is reported as not found", () => {
+  const { world } = setup([
+    [
+      1n,
+      windowFacts(),
+    ],
+  ]);
+  const fake = fakeBindings(world);
+  const adapter = new WindowsScreenCapture(
+    {
+      ...fake.bindings,
+      printWindow(window, dc) {
+        const done = fake.bindings.printWindow(window, dc);
+        world.windows.delete(1n);
+        return done;
+      },
+    },
+    APP_PID,
+  );
+  const [source] = adapter.listSources({
+    types: [
+      "window",
+    ],
+  });
+  const error = errorOf(() =>
+    adapter.captureSource({
+      id: source?.id as string,
+    }),
+  );
+  expect([
+    error.code,
+    error.details,
+  ]).toEqual([
+    "INVALID_ARGUMENT",
+    {
+      reason: "SOURCE_NOT_FOUND",
+    },
+  ]);
+  expect(fake.alive.size).toBe(0);
+});

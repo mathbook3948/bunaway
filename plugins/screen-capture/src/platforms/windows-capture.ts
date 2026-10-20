@@ -463,8 +463,12 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
       this.dibIn(owner, screen, memory, full);
       checked(this.native.printWindow(ref.window, memory), "PrintWindow");
       this.native.flush();
-      // The owner may have asked for exclusion while the window was drawn; do not return that content.
-      if (this.native.windowFacts(ref.window)?.displayAffinity !== 0) {
+      // The window may have closed or asked for exclusion while it was drawn; do not return that content.
+      const after = this.native.windowFacts(ref.window);
+      if (after === null || after.pid !== ref.pid || after.tid !== ref.tid) {
+        fail("INVALID_ARGUMENT", "The window is gone.", REASON.notFound);
+      }
+      if (after.displayAffinity !== 0) {
         protectedWindow();
       }
       checked(

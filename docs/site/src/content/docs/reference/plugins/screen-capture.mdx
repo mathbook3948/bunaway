@@ -85,7 +85,7 @@ PNG가 640 KiB를 넘으면 작은 `maxWidth`와 `maxHeight`로 다시 호출합
 - 화면에서 직접 호출하려면 `commands`에 `plugin.screenCapture.listSources` 또는 `plugin.screenCapture.captureSource`를
   허용해야 합니다. 권장하지 않으며 외부 콘텐츠를 보여 주는 뷰에는 허용하지 않습니다.
 
-`SetWindowDisplayAffinity`로 캡처 제외를 요청한 창은 창 캡처를 거부하고, 화면 캡처에서는 `WDA_EXCLUDEFROMCAPTURE` 창을 Windows가 제외합니다(`WDA_MONITOR` 창은 검게 나올 수 있고 이 동작은 확인하지 않았습니다).
+`SetWindowDisplayAffinity`로 캡처 제외를 요청한 창은 창 캡처를 거부하고, 화면 캡처에서 보호된 창이 어떻게 나오는지는 확인하지 않았습니다.
 다른 앱이 건 보호 설정을 우회하지 않습니다.
 
 화면 함수의 마지막 인자는 `NativeInvokeOptions`입니다. `signal`과 `deadline`은
