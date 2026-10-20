@@ -58,7 +58,8 @@
     "@bunaway/plugin-tray": "workspace:*",
     "@bunaway/plugin-dialog": "workspace:*",
     "@bunaway/plugin-store": "workspace:*",
-    "@bunaway/plugin-screen-capture": "workspace:*"
+    "@bunaway/plugin-screen-capture": "workspace:*",
+    "@bunaway/plugin-window-state": "workspace:*"
   },
   "imports": {
     "#cli/*": "./packages/cli/src/*.ts",

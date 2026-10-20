@@ -1,0 +1,105 @@
+---
+title: window-state
+description: 창의 위치, 크기, 최대화, 전체화면, 표시 상태를 저장하고 다음 실행에서 복원합니다. 저장했던 모니터가 없으면 보이는 작업 영역으로 옮깁니다.
+sidebar: { order: 19 }
+---
+
+기본 export(`default`)를 `windowState`로 가져와 앱에 등록하고 호출합니다.
+
+`@bunaway/plugin-window-state` 패키지를 설치하고 앱의 `plugins`에 `windowState`를 등록합니다. 이 플러그인은
+자체 네이티브 작업이 없습니다. 모든 호출이 `windows`와 `store` 플러그인의 작업을 거치므로 두 플러그인도
+함께 설치하고 등록해야 하며, Windows에서 동작합니다. 화면과 백엔드는 같은 패키지의 `windowState`를 사용합니다.
+
+```ts
+import windowState from "@bunaway/plugin-window-state";
+import windows from "@bunaway/plugin-windows";
+
+// 창을 보이기 전에 복원하고, 닫기 요청을 받으면 저장한 뒤 닫습니다.
+await windowState.restore({ view: "main" });
+await windows.show({ view: "main" });
+
+await windowState.save({ view: "main" });
+await windowState.remove({ view: "main" });
+```
+
+| 함수 | 입력 | 결과 |
+| --- | --- | --- |
+| `windowState.save` | `{ view, windowId?, key? }` | `Promise<null>` |
+| `windowState.restore` | `{ view, windowId?, key?, include? }` | `Promise<{ restored, adjusted }>` |
+| `windowState.remove` | `{ view?, key? }` | `Promise<{ removed }>` |
+
+`view`와 `windowId`는 `windows` 작업의 창 지정과 같습니다. `key`는 저장 항목의 이름이며 생략하면 `view`를
+씁니다. 한 뷰에 창이 여러 개일 때 `key`로 창마다 따로 저장합니다. `key`는 영문자, 숫자, `_`, `.`, `:`, `-`로
+이루어진 1자 이상 128자 이하입니다. `remove`는 `view`나 `key` 중 하나가 필요합니다.
+
+## 권한
+
+`windowState`에는 자체 권한이 없습니다. 호출하는 쪽(뷰 또는 백엔드)에 아래 작업의 권한이 있어야 하며, 없으면
+해당 작업의 `PERMISSION_DENIED`로 실패합니다.
+
+| 함수 | 필요한 권한 |
+| --- | --- |
+| `save` | `windows.getSnapshot`, `windows.getNormalBounds`, `store.load`, `store.set`, `store.save` |
+| `restore` | `store.load`, `store.get`, `windows.getSnapshot`, `windows.getNormalBounds`, `windows.getMonitors`, `windows.setOuterBounds`, `windows.maximize`, `windows.unmaximize`, `windows.setFullscreen`, `windows.show`, `windows.hide` |
+| `remove` | `store.load`, `store.delete`, `store.save` |
+
+`restore`는 필요한 작업만 호출합니다. 예를 들어 `include.visible`이 꺼져 있으면 `windows.show`와
+`windows.hide`는 호출하지 않고, 최대화 상태가 이미 같으면 `windows.maximize`와 `windows.unmaximize`도
+호출하지 않습니다. 저장 항목은
+`store`의 `window-state` 저장소에 두며, `store` 권한은 모든 저장소 이름에 적용되므로 신뢰할 수 없는 뷰에는
+`store.*`를 허용하지 마세요. 저장 위치는 앱 데이터 디렉터리로 고정되어 있고 경로를 받지 않습니다.
+
+## 저장하는 값
+
+`save`는 항상 같은 값을 저장합니다. 최대화나 전체화면 상태에서도 일반 상태의 위치와 크기(`getNormalBounds`)를
+저장하므로, 복원한 뒤 최대화나 전체화면을 해제하면 저장 당시의 일반 크기로 돌아갑니다.
+
+| 값 | 내용 |
+| --- | --- |
+| 위치와 크기 | 일반 상태의 바깥 사각형, 물리 픽셀 |
+| `dpi` | 저장할 때 창의 DPI |
+| `maximized`, `fullscreen` | 저장할 때의 최대화, 전체화면 여부 |
+| `visible` | 저장할 때 창이 보였는지 여부 |
+
+최소화 상태와 창 테두리 설정은 저장하지 않습니다. `save`는 호출한 시점의 값을 저장하며, 닫기 요청이나 앱
+종료 시 자동으로 저장하지 않으므로 앱이 `windows.closeRequested`를 처리하는 곳에서 `save`를 호출하세요.
+트레이 메뉴의 종료처럼 닫기 요청을 거치지 않는 종료에서는 마지막 상태가 저장되지 않을 수 있습니다.
+
+## 복원
+
+`restore`는 저장된 항목이 없거나 형식이 올바르지 않으면 창을 건드리지 않고
+`{ restored: false, adjusted: false }`를 돌려줍니다. 저장소 파일이 손상되어 읽을 수 없으면 `store`의
+`onInvalidFile: "reset"`에 따라 빈 저장소로 초기화합니다.
+
+`include`로 복원할 항목을 고릅니다. 고르지 않은 항목은 창의 현재 값을 유지합니다.
+
+| 항목 | 기본값 | 동작 |
+| --- | --- | --- |
+| `position` | `true` | 저장한 위치로 옮깁니다. |
+| `size` | `true` | 저장한 크기로 바꿉니다. |
+| `maximized` | `true` | 저장했을 때 최대화였다면 최대화하고, 아니었다면 최대화를 해제합니다. |
+| `fullscreen` | `true` | 저장했을 때 전체화면이었다면 전체화면으로 들어갑니다. |
+| `visible` | `false` | 저장했을 때 보였다면 `windows.show`, 아니었다면 `windows.hide`를 호출합니다. |
+
+순서는 전체화면 해제, 위치와 크기, 최대화, 전체화면 진입, 표시입니다. 전체화면에서는 크기와 위치를 바꿀 수
+없으므로 먼저 해제한 뒤 마지막에 다시 들어갑니다. 최대화 중인 창에 위치와 크기를 적용하면 최대화를 해제할 때
+돌아갈 사각형이 바뀝니다. `visible`이 꺼져 있으면 표시 상태는 건드리지 않으므로, 숨겨 둔 창은 복원한 뒤
+앱이 `windows.show`로 보입니다.
+
+### 사라진 모니터
+
+저장한 사각형이 지금 연결된 모니터의 작업 영역과 가로와 세로 모두 논리 48픽셀(해당 모니터 DPI 기준) 이상
+겹치면 위치를 유지합니다. 그렇지 않으면 주 모니터 작업 영역의 가운데로 옮기고 `adjusted`를 `true`로
+돌려줍니다. 저장했을 때와 모니터의 DPI가 다르면 두 DPI의 비율로 크기를 바꾸어 논리 크기를 유지하며, 크기는
+작업 영역과 `windows`의 크기 한도(200에서 4096 픽셀)를 넘지 않습니다. 모니터가 하나도 조회되지 않으면 저장한
+사각형을 그대로 적용합니다.
+
+## 한계
+
+- 저장 값은 물리 픽셀입니다. 모니터 구성이 바뀌어도 모니터 식별자는 저장하지 않으므로, 같은 좌표에 다른
+  모니터가 있으면 그 좌표에 놓습니다.
+- 실제 모니터 분리와 재연결, 서로 다른 DPI의 모니터 사이 복원은 자동 시험으로 확인하지 않았습니다. Windows
+  CI는 모니터 1개와 DPI 96이고, 사라진 모니터는 화면 밖 좌표를 직접 저장해 확인합니다. DPI 비율 계산과
+  작업 영역 보정은 모니터 목록을 주입한 단위 시험으로 확인합니다.
+- 숨긴 창에서 최대화나 전체화면을 복원했을 때 창이 표시되는지는 시험으로 확인하지 않았습니다. 이 경우
+  `include`에서 `maximized`와 `fullscreen`을 끄고 창을 보인 뒤 다시 복원하세요.

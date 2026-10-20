@@ -1,0 +1,42 @@
+{
+  "name": "@bunaway/plugin-window-state",
+  "version": "0.0.0",
+  "type": "module",
+  "bunaway": {
+    "plugin": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./native/*": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/native/*.js"
+    }
+  },
+  "scripts": {
+    "build": "bunaway plugin build",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@bunaway/plugin-api": "workspace:*",
+    "@bunaway/plugin-store": "workspace:*",
+    "@bunaway/plugin-windows": "workspace:*",
+    "@bunaway/protocol": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "peerDependencies": {
+    "@bunaway/plugin": "0.0.0"
+  },
+  "devDependencies": {
+    "@bunaway/plugin": "workspace:*"
+  },
+  "imports": {
+    "#window-state/*": {
+      "bunaway-source": "./src/*.ts",
+      "types": "./dist/types/*.d.ts",
+      "default": "./src/*.ts"
+    }
+  }
+}

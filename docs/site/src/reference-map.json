@@ -642,6 +642,17 @@
       "pages": {
         "reference/plugins/screen-capture": ["default"]
       }
+    },
+    {
+      "name": "@bunaway/plugin-window-state",
+      "source": "plugins/window-state/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/window-state": ["default"]
+      }
     }
   ],
   "members": [
