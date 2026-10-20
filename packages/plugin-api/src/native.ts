@@ -442,7 +442,11 @@ export type NativeWindow = {
   setAspectRatio?(ratio: number | null): void;
   /** Reads the locked content width / height ratio, or null when none is set. Windows only. */
   getAspectRatio?(): number | null;
-  /** Minimizes and displays the window, allowing Windows to activate another window. */
+  /**
+   * Minimizes and displays the window, allowing Windows to activate another window.
+   * On macOS the state operations below only change the miniaturized and zoomed state and
+   * request no activation; maximize means zoom, not fullscreen.
+   */
   minimize(): void;
   /** Maximizes and displays the window, requesting activation. */
   maximize(): void;

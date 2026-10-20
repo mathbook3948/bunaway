@@ -548,7 +548,7 @@ await windows.close({ view: "dialog" });
 | `windows.close` | `{ view, windowId? }` | `Promise<boolean>`. 닫기 승인 시 `true`, 확인이나 앱 종료를 취소하거나 트레이로 숨기면 `false`. 정리 완료를 기다리지는 않음 |
 | `windows.respondClose` | `{ view, windowId?, requestId: number, allow: boolean }` | `Promise<null>`. 대기 중인 [닫기 요청](#닫기-요청)에 답함. 백엔드 또는 질문을 받은 창 자신의 문서만 호출할 수 있고 다른 호출자는 `PERMISSION_DENIED`. Windows와 macOS에서 지원 |
 
-macOS는 최대화를 AppKit zoom(`zoom:`, 표준 프레임)으로, 최대화 여부를 `isZoomed`로 처리하며 전체화면에 들어가지 않습니다. 최소화는 `miniaturize:`이고 `isMinimized`는 `isMiniaturized`입니다. 이미 요청한 상태이면 오류 없이 성공합니다. Dock과 zoom 전환은 호출이 반환된 뒤 끝나므로 직후 조회는 이전 상태일 수 있습니다. `maximize`와 `unmaximize`는 최소화한 창을 먼저 되돌립니다. `restore`는 최소화한 창이면 최소화를 풀고, 아니면 zoom을 해제합니다. macOS는 위 표와 달리 창을 표시하거나 앱을 활성화하지 않고 상태만 바꾸며, 숨긴 창은 숨긴 채로 남습니다. 전체화면 중에는 상태 변경이 `INVALID_ARGUMENT`이고 macOS는 전체화면 해제 작업이 `UNSUPPORTED`이므로, 사용자가 직접 전체화면을 나와야 합니다.
+macOS는 최대화를 AppKit zoom(`zoom:`, 표준 프레임)으로, 최대화 여부를 `isZoomed`로 처리하며 전체화면에 들어가지 않습니다. 최소화는 `miniaturize:`이고 `isMinimized`는 `isMiniaturized`입니다. 이미 요청한 상태이면 오류 없이 성공합니다. Dock과 zoom 전환은 호출이 반환된 뒤 끝나므로 직후 조회는 이전 상태일 수 있습니다. `maximize`와 `unmaximize`는 최소화한 창을 먼저 되돌립니다. `restore`는 최소화한 창이면 최소화를 풀고, 아니면 zoom을 해제합니다. macOS는 위 표와 달리 앱을 활성화하지 않고 창의 최소화와 zoom 상태만 바꿉니다. 숨긴 창에 보냈을 때의 표시 여부는 정의하지 않습니다. 전체화면 중에는 상태 변경이 `INVALID_ARGUMENT`이고 macOS는 전체화면 해제 작업이 `UNSUPPORTED`이므로, 사용자가 직접 전체화면을 나와야 합니다.
 
 크기 제약과 `setSize`의 너비, 높이는 96 DPI 기준 논리 픽셀입니다. Windows가 현재 창의 DPI에 맞춰 실제 픽셀 크기로 변환합니다. 사용자 크기 조절, 최대화와 복원에도 제약을 적용합니다. 제약보다 작은 초기 크기와 `setSize` 값은 최소 크기로, 큰 값은 최대 크기로 보정합니다. 최소값이 최대값보다 크거나 값이 정수가 아니거나 200–4096 범위를 벗어나면 `INVALID_ARGUMENT`이며 기존 제약은 바뀌지 않습니다.
 `setMinSize`와 `setMaxSize`는 지정한 쌍을 각각 교체하고 반대쪽 제약은 유지합니다. `setSizeConstraints`는 네 축 제약 전체를 교체하므로 전달하지 않은 축은 해제됩니다. 한 축에만 제약을 둘 수 있습니다.
