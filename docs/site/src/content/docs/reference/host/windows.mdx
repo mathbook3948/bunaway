@@ -542,6 +542,8 @@ await windows.close({ view: "dialog" });
 | `windows.isMovable` | `{ view, windowId? }` | `Promise<boolean>`. 사용자 이동 허용 여부 |
 | `windows.setAspectRatio` | `{ view, windowId?, ratio: number \| null }` | `Promise<null>`. 사용자 크기 조절 중 내용 영역의 너비/높이 비율을 고정. `null`은 고정 해제. 0.1–10의 유한한 수 |
 | `windows.getAspectRatio` | `{ view, windowId? }` | `Promise<number \| null>`. 고정한 비율. 고정하지 않았다면 `null` |
+| `windows.startDragging` | `{ view, windowId? }` | `Promise<null>`. 누르고 있는 마우스 기본 버튼으로 시스템 창 이동을 시작 |
+| `windows.startResizeDragging` | `{ view, windowId?, direction }` | `Promise<null>`. 누르고 있는 마우스 기본 버튼으로 해당 테두리나 모서리에서 시스템 크기 조절을 시작. `direction`은 `"north"`, `"south"`, `"east"`, `"west"`, `"northEast"`, `"northWest"`, `"southEast"`, `"southWest"` |
 | `windows.center` | `{ view, windowId?, monitorId? }` | `Promise<null>`. `monitorId`가 있으면 그 모니터, 없으면 현재 모니터의 작업 영역 중앙에 창 바깥 영역 배치. 최소화와 최대화 중에는 일반 복원 영역 배치 |
 | `windows.setFullscreen` | `{ view, windowId?, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원. `setFullscreenable(false)` 상태에서 진입은 `INVALID_ARGUMENT` |
 | `windows.setCloseConfirmation` | `{ view, windowId?, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
@@ -868,6 +870,16 @@ OS 호출이 실패하면 오류가 전달되고 이전 값이 유지됩니다. 
 비율은 사용자 크기 조절에만 적용합니다. 최대화, 전체화면, 스냅과 `setSize` 같은 프로그램의 크기 변경은
 비율을 강제하지 않습니다. `setAspectRatio`와 `getAspectRatio`는 operation 권한을 각각 요구하며
 macOS에서는 `UNSUPPORTED`입니다.
+`startDragging`과 `startResizeDragging`은 `titlebar: "custom"` 창의 CSS `app-region: drag`로 정할 수 없는
+요소(전체 화면 캔버스, 가장자리 핸들)에서 이동과 크기 조절을 시작할 때 씁니다. 페이지의 `pointerdown`에서
+백엔드로 요청을 보내면 호스트는 이미 시작된 사용자의 마우스 입력을 창 테두리를 누른 것과 같이 시스템에 넘기며,
+이후 루프는 OS가 소유하고 버튼을 놓으면 끝납니다. 호출이 늦어 버튼이 이미 떼어졌다면 루프가 시작되지 않도록
+`INVALID_ARGUMENT`로 거부하며(마우스 버튼 바꿈 설정을 반영), 최소화, 최대화, 전체화면 창도 같습니다.
+`startDragging`은 `movable: false`이면, `startResizeDragging`은 `resizable: false`이거나 방향이 바꾸는 축이 모두
+최소와 최대가 같은 크기 제약이면 `INVALID_ARGUMENT`입니다. 호출 창 자신만 대상이며 취소 API는 없습니다.
+두 operation은 각각의 권한을 요구하고 macOS에서는 `UNSUPPORTED`입니다.
+Windows CI는 합성한 마우스 버튼으로 이동과 크기 조절 시작 요청이 시스템에 전달되는 지점, 방향별 값, 커서 좌표, 상태별 거부를 검증하고,
+이후 OS가 실행하는 이동과 크기 조절 루프 자체는 검증하지 않습니다.
 `center`는 `monitorId`를 생략하면 현재 창에 가장 가까운 모니터의 작업 영역을 사용하며 작업 표시줄 영역을 제외합니다.
 `monitorId`는 모니터 조회 결과의 `id`입니다. 호출하는 시점에 연결된 모니터 목록에서 찾으며,
 연결되지 않았거나 분리된 ID는 `INVALID_ARGUMENT`입니다. 이때 주 모니터나 현재 모니터로 대체하지 않고

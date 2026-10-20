@@ -15,6 +15,7 @@ import {
   type WindowChange,
   type WindowIdentity,
   type WindowPlacement,
+  type WindowResizeDirection,
   type WindowSizeConstraints,
   type WindowSnapshot,
   type WindowSpec,
@@ -121,6 +122,8 @@ import {
   WS_MINIMIZEBOX,
   WS_THICKFRAME,
 } from "./win32-constants.ts";
+import { dragRejected, resizeIsPinned } from "./window-drag.ts";
+import { beginSystemLoop, primaryButtonDown } from "./window-drag-input.ts";
 import { completedGeometryChanges, windowChanges } from "./window-events.ts";
 import {
   centerInWorkArea,
@@ -1583,6 +1586,42 @@ export class Windows {
       this.immovable.delete(window);
     } else {
       this.immovable.add(window);
+    }
+  }
+
+  /** Start the system move loop for the held left button. Honors setMovable like the caption does. */
+  startDragging(window: bigint): void {
+    this.requireDragStart(window);
+    if (!this.isMovable(window)) {
+      throw dragRejected("The window is not movable.");
+    }
+    beginSystemLoop(window, null);
+  }
+
+  /** Start the system size loop from an edge or corner for the held left button. */
+  startResizeDragging(window: bigint, direction: WindowResizeDirection): void {
+    this.requireDragStart(window);
+    if (!this.isResizable(window)) {
+      throw dragRejected("The window is not resizable.");
+    }
+    if (resizeIsPinned(direction, this.getSizeConstraints(window))) {
+      throw dragRejected("The size limits leave nothing to resize.");
+    }
+    beginSystemLoop(window, direction);
+  }
+
+  /** The system loops track a pressed button and only a normal window can be moved or sized by it. */
+  private requireDragStart(window: bigint): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    if (
+      this.isMinimized(window) ||
+      this.isMaximized(window) ||
+      this.isFullscreen(window)
+    ) {
+      throw dragRejected("Restore the window before starting a drag.");
+    }
+    if (!primaryButtonDown()) {
+      throw dragRejected("The primary mouse button is not pressed.");
     }
   }
 

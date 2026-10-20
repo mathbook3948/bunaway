@@ -93,6 +93,9 @@ const unsupportedMovement = unsupportedError(
 const unsupportedAspectRatio = unsupportedError(
   "Window aspect ratio locking is not implemented on this platform.",
 );
+const unsupportedDragging = unsupportedError(
+  "Starting a window move or resize is not implemented on this platform.",
+);
 const unsupportedCentering = unsupportedError(
   "Window centering is not implemented on this platform.",
 );
@@ -586,6 +589,15 @@ function applyUserControls(scope: ActionScope, call: WindowCall): ActionResult {
       return null;
     case "windows.getAspectRatio":
       return supported(window.getAspectRatio, unsupportedAspectRatio)();
+    case "windows.startDragging":
+      supported(window.startDragging, unsupportedDragging)();
+      return null;
+    case "windows.startResizeDragging":
+      supported(
+        window.startResizeDragging,
+        unsupportedDragging,
+      )(call.payload.direction);
+      return null;
     default:
       return UNHANDLED;
   }

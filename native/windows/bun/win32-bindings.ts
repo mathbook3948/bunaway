@@ -40,6 +40,8 @@ export const user = dlopen("user32.dll", {
     "LoadIconW",
     "DestroyIcon",
     "GetCursorPos",
+    "GetAsyncKeyState",
+    "ReleaseCapture",
     "SetForegroundWindow",
     "MessageBoxW",
     "PeekMessageW",

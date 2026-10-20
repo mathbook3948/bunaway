@@ -45,6 +45,8 @@ const MESSAGES = {
   title: "Window title control is not implemented on this platform.",
   movement: "Window movement controls are not implemented on this platform.",
   aspect: "Window aspect ratio locking is not implemented on this platform.",
+  dragging:
+    "Starting a window move or resize is not implemented on this platform.",
   center: "Window centering is not implemented on this platform.",
   progress: "Taskbar progress is not implemented on this platform.",
   clip: "Thumbnail clip is not implemented on this platform.",
@@ -578,6 +580,33 @@ const rows: Row[] = [
     unsupported: MESSAGES.aspect,
   },
   query("getAspectRatio", 1.5, MESSAGES.aspect),
+  {
+    operation: "windows.startDragging",
+    calls: [
+      [
+        "startDragging",
+        [],
+      ],
+    ],
+    result: null,
+    unsupported: MESSAGES.dragging,
+  },
+  {
+    operation: "windows.startResizeDragging",
+    payload: {
+      direction: "northEast",
+    },
+    calls: [
+      [
+        "startResizeDragging",
+        [
+          "northEast",
+        ],
+      ],
+    ],
+    result: null,
+    unsupported: MESSAGES.dragging,
+  },
   ...[
     "minimize",
     "maximize",
@@ -1156,6 +1185,8 @@ function fixture(
     "isMovable",
     "setAspectRatio",
     "getAspectRatio",
+    "startDragging",
+    "startResizeDragging",
     "center",
     "setTaskbarProgress",
     "setThumbnailClip",

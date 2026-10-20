@@ -1327,6 +1327,9 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         setResizable: (resizable) =>
           nativeWindows.setResizable(hwnd, resizable),
         isResizable: () => nativeWindows.isResizable(hwnd),
+        startDragging: () => nativeWindows.startDragging(hwnd),
+        startResizeDragging: (direction) =>
+          nativeWindows.startResizeDragging(hwnd, direction),
         setMovable: (movable) => nativeWindows.setMovable(hwnd, movable),
         isMovable: () => nativeWindows.isMovable(hwnd),
         setAspectRatio: (ratio) => nativeWindows.setAspectRatio(hwnd, ratio),
