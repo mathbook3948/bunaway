@@ -180,7 +180,10 @@ function withDescriptor<T>(fd: number, action: () => T): T {
   return result;
 }
 
-/** Read exactly `size` bytes from the current position. */
+/**
+ * Read exactly `size` bytes from the current position. A read that returns 0 bytes before `size`
+ * means the file shrank after its size was checked, so it fails instead of returning fewer bytes.
+ */
 function readBytes(fd: number, size: number): Buffer {
   const bytes = Buffer.alloc(size);
   let offset = 0;
@@ -446,7 +449,13 @@ export abstract class NodeStorage
     );
   }
 
-  /** Read a byte range of a regular file by position, so the bytes before `offset` are never read. */
+  /**
+   * Read a byte range of a regular file by position, so the bytes before `offset` are never read.
+   * `Bun.file().slice()` is not used: when the file shrinks during the read it returns fewer bytes
+   * without an error, it does not seek a descriptor, and a negative end needs the size first. A
+   * 0-byte read before the range is filled means the file shrank and fails; a file that grew is
+   * read only up to the size that was checked.
+   */
   protected readRange(path: string, offset: number, length: number): Buffer {
     return this.withFile(
       this.selected(path),
@@ -502,7 +511,8 @@ export abstract class NodeStorage
    * Copy a regular file of any size to a new name, one chunk at a time. The destination is created exclusively, so an
    * existing file, directory or link to an existing target is never replaced. A link whose target
    * is missing is refused on POSIX, while Windows follows it and creates the target. A failed copy can leave a partial
-   * destination, which is not deleted by name because the name may belong to something else.
+   * destination, which is not deleted by name because the name may belong to something else. A file
+   * that shrinks during the copy fails the same way instead of producing a shorter copy.
    */
   copyFile(input: StorageTransfer): null {
     const from = this.selected(input.from);
