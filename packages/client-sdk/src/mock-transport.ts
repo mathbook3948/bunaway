@@ -43,7 +43,7 @@ export type MockTransportOptions<C extends CommandMap> = {
 /** A `Transport` backed by in-memory handlers, plus a way to push events to subscribers. */
 export interface MockTransport<E extends EventMap = EventMap>
   extends Transport {
-  /** Delivers an event to every active subscription for `event`; no-op when none exist. */
+  /** Delivers an event to every active subscription for `event`; no-op when none exist. Throws if the payload is not valid protocol JSON. */
   emit<K extends keyof E & string>(event: K, payload: E[K]): void;
 }
 
@@ -85,6 +85,8 @@ class MockHost<C extends CommandMap, E extends EventMap>
     this.features = options.features ?? [
       SDK_READY_FEATURE,
     ];
+    // Fail at construction on a hello the protocol rejects instead of stalling the handshake.
+    serializeMessage(this.helloFrame());
   }
 
   send(text: string): Promise<void> {
@@ -146,18 +148,19 @@ class MockHost<C extends CommandMap, E extends EventMap>
       if (subscription.event !== event) {
         continue;
       }
-      const sequence = subscription.sequence;
-      subscription.sequence += 1;
-      this.reply({
+      // Serialize first: a payload the protocol rejects throws here and consumes no sequence number.
+      const text = serializeMessage({
         kind: "event",
         protocol: PROTOCOL_VERSION,
         subscriptionId,
         source: MOCK_HOST,
         target: MOCK_HOST,
         event,
-        sequence,
+        sequence: subscription.sequence,
         payload,
       });
+      subscription.sequence += 1;
+      this.deliver(text);
     }
   }
 
@@ -182,11 +185,15 @@ class MockHost<C extends CommandMap, E extends EventMap>
       case "listen": {
         const subscriptionId = `mock-subscription-${this.nextSubscription}`;
         this.nextSubscription += 1;
-        this.subscriptions.set(subscriptionId, {
-          event: message.event,
-          sequence: 1,
-        });
-        queueMicrotask(() =>
+        // Register with the result so no event can name an ID the client has not received.
+        queueMicrotask(() => {
+          if (this.closed) {
+            return;
+          }
+          this.subscriptions.set(subscriptionId, {
+            event: message.event,
+            sequence: 1,
+          });
           this.reply({
             kind: "result",
             protocol: PROTOCOL_VERSION,
@@ -194,8 +201,8 @@ class MockHost<C extends CommandMap, E extends EventMap>
             payload: {
               subscriptionId,
             },
-          }),
-        );
+          });
+        });
         return;
       }
       case "unlisten":
@@ -215,14 +222,17 @@ class MockHost<C extends CommandMap, E extends EventMap>
     }
   }
 
-  private replyHello(): void {
-    const hello: Hello = {
+  private helloFrame(): Hello {
+    return {
       kind: "hello",
       protocol: PROTOCOL_VERSION,
       features: this.features,
       buildId: "bunaway-mock-host",
     };
-    this.reply(hello);
+  }
+
+  private replyHello(): void {
+    this.reply(this.helloFrame());
   }
 
   private async invoke(
@@ -274,20 +284,30 @@ class MockHost<C extends CommandMap, E extends EventMap>
     }
   }
 
+  /** An error frame the protocol rejects (for example non-JSON details) is retried without details. */
   private replyError(id: string, error: WireError): void {
-    this.reply({
+    const frame = (wire: WireError): Message => ({
       kind: "error",
       protocol: PROTOCOL_VERSION,
       id,
-      error,
+      error: wire,
     });
+    let text: string;
+    try {
+      text = serializeMessage(frame(error));
+    } catch {
+      text = serializeMessage(
+        frame({
+          code: "INTERNAL",
+          message: "Invalid error response.",
+        }),
+      );
+    }
+    this.deliver(text);
   }
 
-  /** Serializes with the protocol's own checks; a frame it rejects becomes an INTERNAL error. */
+  /** Serializes with the protocol's own checks; a result it rejects becomes an INTERNAL error. */
   private reply(message: Message): void {
-    if (this.closed) {
-      return;
-    }
     let text: string;
     try {
       text = serializeMessage(message);
@@ -298,6 +318,13 @@ class MockHost<C extends CommandMap, E extends EventMap>
           message: "Invalid command response.",
         });
       }
+      return;
+    }
+    this.deliver(text);
+  }
+
+  private deliver(text: string): void {
+    if (this.closed) {
       return;
     }
     for (const listener of [

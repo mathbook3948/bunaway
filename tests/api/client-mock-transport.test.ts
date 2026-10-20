@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import {
   type Client,
   createClient,
@@ -13,6 +13,9 @@ import {
   SDK_READY_FEATURE,
   type TransportEvent,
 } from "@bunaway/protocol";
+import { deadline, waitFor } from "../fixtures/deadlines";
+
+setDefaultTimeout(deadline("inProcess"));
 
 type Commands = {
   "notes.read": {
@@ -142,31 +145,101 @@ test("a non-JSON handler result becomes an internal error", async () => {
 });
 
 test("cancelling an invoke aborts the handler signal and drops its result", async () => {
+  let started = false;
   let aborted = false;
   let release: () => void = () => {};
-  const { client } = connect({
+  const { client, transport } = connect({
     "notes.slow": (_input, context) =>
       new Promise<string>((resolve) => {
+        started = true;
         context.signal.addEventListener("abort", () => {
           aborted = true;
         });
         release = () => resolve("late");
       }),
   });
+  const frames: string[] = [];
+  transport.subscribe((event) => {
+    if (event.kind === "message") {
+      frames.push(event.text);
+    }
+  });
   const controller = new AbortController();
   const pending = client.invoke("notes.slow", null, {
     signal: controller.signal,
   });
-  await Bun.sleep(5);
+  await waitFor(() => started, {
+    deadline: "inProcess",
+    what: "the handler to start",
+  });
   controller.abort();
   await expect(pending).rejects.toMatchObject({
     code: "CANCELLED",
   });
-  await Bun.sleep(5);
-  expect(aborted).toBe(true);
+  await waitFor(() => aborted, {
+    deadline: "inProcess",
+    what: "the handler signal to abort",
+  });
+  const before = frames.length;
   release();
-  await Bun.sleep(5);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(frames).toHaveLength(before);
   await client.close();
+});
+
+test("an emit payload the protocol rejects throws and keeps event numbering", async () => {
+  const { client, transport } = connect({});
+  const received: number[] = [];
+  await client.listen(
+    "notes.changed",
+    (event) => received.push(event.sequence),
+    {
+      onError: () => {},
+    },
+  );
+  expect(() =>
+    transport.emit("notes.changed", {
+      key: undefined,
+    } as never),
+  ).toThrow();
+  transport.emit("notes.changed", {
+    key: "ok",
+  });
+  expect(received).toEqual([
+    1,
+  ]);
+  await client.close();
+});
+
+test("an error whose details are not JSON still answers the call", async () => {
+  const { client } = connect({
+    "notes.fail": () => {
+      throw new BunawayError({
+        code: "PERMISSION_DENIED",
+        message: "m",
+        details: {
+          fn: () => {},
+        } as never,
+      });
+    },
+  });
+  await expect(client.invoke("notes.fail", null)).rejects.toMatchObject({
+    code: "INTERNAL",
+    message: "Command failed.",
+  });
+  await client.close();
+});
+
+test("a hello the protocol rejects fails at construction", () => {
+  expect(() =>
+    createMockTransport({
+      handlers: {},
+      features: [
+        "not valid!",
+      ],
+    }),
+  ).toThrow();
 });
 
 test("emit delivers ordered events to subscribers until they release", async () => {
@@ -241,17 +314,22 @@ test("closing ends the transport: sends fail, late subscribers see closed, emit 
 });
 
 test("closing aborts running handlers and rejects pending calls", async () => {
+  let started = false;
   let aborted = false;
   const { client, transport } = connect({
     "notes.slow": (_input, context) =>
       new Promise<string>(() => {
+        started = true;
         context.signal.addEventListener("abort", () => {
           aborted = true;
         });
       }),
   });
   const pending = client.invoke("notes.slow", null);
-  await Bun.sleep(5);
+  await waitFor(() => started, {
+    deadline: "inProcess",
+    what: "the handler to start",
+  });
   await transport.close();
   await expect(pending).rejects.toBeInstanceOf(BunawayError);
   expect(aborted).toBe(true);

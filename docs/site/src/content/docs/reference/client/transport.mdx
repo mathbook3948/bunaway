@@ -97,7 +97,8 @@ transport.emit("notes.changed", { key: "a" });
 | 핸들러가 던진 그 밖의 예외 | `INTERNAL` 오류. 예외 내용은 전달하지 않음 |
 | JSON이 아니거나 크기 한도를 넘는 결과 | `INTERNAL` 오류 |
 | 요청 취소, `close()` | 실행 중인 핸들러의 `signal`이 abort되고 늦은 결과는 버림 |
-| `emit(event, payload)` | 해당 이벤트의 활성 구독마다 구독별 순번을 붙여 전달. 구독이 없으면 무시 |
+| `emit(event, payload)` | 해당 이벤트의 활성 구독마다 구독별 순번을 붙여 전달. 구독이 없으면 무시. JSON이 아니거나 크기 한도를 넘는 payload는 호출자에게 예외를 던지고 순번을 소비하지 않음 |
+| 잘못된 `features` 옵션 | `createMockTransport` 호출에서 예외 |
 | `features` 옵션 | 호스트 hello의 기능 목록. 기본은 `sdk-ready` |
 
 프로토콜 프레임의 형식과 크기만 검사합니다. 앱 정의의 입력과 출력 스키마 검증, 권한, 뷰 정책은 적용하지 않으므로 실제 호스트와 같은 거부 결과는 실제 WebView에서 확인합니다.
