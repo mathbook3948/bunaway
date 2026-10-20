@@ -1,6 +1,9 @@
 import { expect, setDefaultTimeout, test } from "bun:test";
 import { resolveHostInputSchema } from "#plugins/network/src/contract";
-import { resolveHost } from "#plugins/network/src/platforms/resolve-host";
+import {
+  familyLookup,
+  resolveHost,
+} from "#plugins/network/src/platforms/resolve-host";
 import {
   dispose,
   initialize,
@@ -104,18 +107,61 @@ test("network.resolveHost accepts only A and AAAA as queryType", () => {
 
 test("runResolveHost resolves localhost by family with the system resolver", async () => {
   const state = initialize();
-  const v4 = await runResolveHost(state, {
-    host: "localhost",
-    queryType: "A",
-    timeoutMs: deadline("childStep"),
+  try {
+    const v4 = await runResolveHost(state, {
+      host: "localhost",
+      queryType: "A",
+      timeoutMs: deadline("childStep"),
+    });
+    expect(v4.endpoints.length).toBeGreaterThan(0);
+    expect(v4.endpoints.every((entry) => entry.family === "ipv4")).toBe(true);
+    const literal = await runResolveHost(state, {
+      host: "127.0.0.1",
+      queryType: "AAAA",
+      timeoutMs: deadline("childStep"),
+    });
+    expect(literal.endpoints).toEqual([]);
+  } finally {
+    await dispose(state);
+  }
+});
+
+test("familyLookup answers a name without that family with an empty result", async () => {
+  const calls: (4 | 6 | undefined)[] = [];
+  const find = familyLookup(async (host, options) => {
+    calls.push(options.family);
+    if (options.family === 6) {
+      throw Object.assign(new Error(`queryAaaa ENODATA ${host}`), {
+        code: "ENODATA",
+      });
+    }
+    return [
+      {
+        address: "93.184.216.34",
+        family: 4,
+      },
+    ];
   });
-  expect(v4.endpoints.length).toBeGreaterThan(0);
-  expect(v4.endpoints.every((entry) => entry.family === "ipv4")).toBe(true);
-  const literal = await runResolveHost(state, {
-    host: "127.0.0.1",
-    queryType: "AAAA",
-    timeoutMs: deadline("childStep"),
+  const result = await resolveHost(
+    "ipv4-only.example",
+    new AbortController().signal,
+    find,
+    "AAAA",
+  );
+  expect(result).toEqual({
+    endpoints: [],
   });
-  expect(literal.endpoints).toEqual([]);
-  await dispose(state);
+  expect(calls).toEqual([
+    6,
+    undefined,
+  ]);
+});
+
+test("familyLookup still fails for a name that does not exist", async () => {
+  const find = familyLookup(async () => {
+    throw new Error("ENOTFOUND");
+  });
+  await expect(
+    resolveHost("missing.example", new AbortController().signal, find, "AAAA"),
+  ).rejects.toThrow("ENOTFOUND");
 });

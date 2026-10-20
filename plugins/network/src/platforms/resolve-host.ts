@@ -21,15 +21,40 @@ export type HostLookup = (
   }[]
 >;
 
-export const systemLookup: HostLookup = (host, family) =>
-  lookup(host, {
-    all: true,
-    ...(family === undefined
-      ? {}
-      : {
-          family,
-        }),
-  });
+type SystemResolve = (
+  host: string,
+  options: {
+    all: true;
+    family?: 4 | 6;
+  },
+) => ReturnType<HostLookup>;
+
+/**
+ * With a family hint getaddrinfo fails (ENOTFOUND or ENODATA) for a name that exists but has no
+ * address of that family. Ask again without the hint so that case is an empty result, as for an
+ * IP literal, while a name that does not exist still fails.
+ */
+export function familyLookup(resolve: SystemResolve): HostLookup {
+  return async (host, family) => {
+    if (family === undefined) {
+      return resolve(host, {
+        all: true,
+      });
+    }
+    try {
+      return await resolve(host, {
+        all: true,
+        family,
+      });
+    } catch {
+      return resolve(host, {
+        all: true,
+      });
+    }
+  };
+}
+
+export const systemLookup: HostLookup = familyLookup(lookup);
 
 /**
  * Resolve a name with the operating system resolver (getaddrinfo), which applies the hosts file,
