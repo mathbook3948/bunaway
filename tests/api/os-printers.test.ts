@@ -375,6 +375,70 @@ test("defaultPrinterName returns the name, null without a default, and fails on 
   );
 });
 
+test("listPrinterNames repeats a call whose last error was lost and rejects impossible counts", () => {
+  let lostError = true;
+  const lossy: PrinterBindings = {
+    enumPrinters(_flags, buffer, needed, returned) {
+      if (buffer === null) {
+        needed[0] = enumerationImage(
+          [
+            "A",
+          ],
+          0n,
+        ).length;
+        return 0;
+      }
+      needed[0] = buffer.length;
+      returned[0] = 1;
+      enumerationImage(
+        [
+          "A",
+        ],
+        BigInt(ptr(buffer)),
+      ).copy(buffer);
+      return 1;
+    },
+    getDefaultPrinter: () => 0,
+    lastError: () => {
+      const error = lostError ? 0 : ERROR_INSUFFICIENT_BUFFER;
+      lostError = false;
+      return error;
+    },
+  };
+  expect(listPrinterNames(lossy)).toEqual([
+    "A",
+  ]);
+  for (const [count, bytes] of [
+    [
+      MAX_PRINTERS + 1,
+      1 << 20,
+    ],
+    [
+      2,
+      ENTRY_BYTES,
+    ],
+  ] as const) {
+    const lying: PrinterBindings = {
+      ...lossy,
+      enumPrinters(_flags, buffer, needed, returned) {
+        if (buffer === null) {
+          needed[0] = 1 << 20;
+          return 0;
+        }
+        needed[0] = bytes;
+        returned[0] = count;
+        return 1;
+      },
+      lastError: () => ERROR_INSUFFICIENT_BUFFER,
+    };
+    expect(() => listPrinterNames(lying)).toThrow(
+      expect.objectContaining({
+        code: "INTERNAL",
+      }),
+    );
+  }
+});
+
 test("printer names compare case-insensitively", () => {
   expect(samePrinter("Office Laser", "OFFICE laser")).toBe(true);
   expect(samePrinter("Office Laser", "Office Laser 2")).toBe(false);

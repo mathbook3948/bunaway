@@ -263,8 +263,14 @@ export function initialize(): OSInstance {
       assertActive();
       return locale();
     },
-    listPrinters: unsupportedPrinters,
-    getDefaultPrinter: unsupportedPrinters,
+    listPrinters() {
+      assertActive();
+      return unsupportedPrinters();
+    },
+    getDefaultPrinter() {
+      assertActive();
+      return unsupportedPrinters();
+    },
     beep() {
       assertActive();
       audio.symbols.AudioServicesPlayAlertSound(USER_PREFERRED_ALERT);

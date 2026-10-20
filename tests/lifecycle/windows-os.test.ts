@@ -63,9 +63,19 @@ test.skipIf(process.platform !== "win32")(
       );
       const marked = printers.filter((printer) => printer.isDefault);
       expect(marked.length).toBeLessThanOrEqual(1);
-      expect(marked[0]?.name.toLowerCase()).toBe(
-        marked.length === 0 ? undefined : defaultPrinter?.toLowerCase(),
-      );
+      // A default printer that is also listed must be the one entry marked as default.
+      if (
+        defaultPrinter !== null &&
+        printers.some(
+          (printer) =>
+            printer.name.toLowerCase() === defaultPrinter.toLowerCase(),
+        )
+      ) {
+        expect(marked.length).toBe(1);
+        expect(marked[0]?.name.toLowerCase()).toBe(
+          defaultPrinter.toLowerCase(),
+        );
+      }
       for (const kind of [
         undefined,
         "default",

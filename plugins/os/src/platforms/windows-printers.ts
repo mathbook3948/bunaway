@@ -10,8 +10,8 @@ const PRINTER_INFO_LEVEL_4 = 4;
 const PRINTER_INFO_4_BYTES = 24;
 const ERROR_FILE_NOT_FOUND = 2;
 const ERROR_INSUFFICIENT_BUFFER = 122;
-/** The size query plus retries when the printer list grew between the size query and the read. */
-const MAX_ENUM_ATTEMPTS = 3;
+/** The size query plus up to three reads, each retried with a larger buffer when the list grew in between. */
+const MAX_ENUM_ATTEMPTS = 4;
 /** Bytes of one name with its terminating NUL at the longest allowed length. */
 const MAX_NAME_BYTES = (MAX_PRINTER_NAME_CHARS + 1) * 2;
 /** Upper bound for the enumeration buffer: every allowed entry with a maximum-length name. */

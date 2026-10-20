@@ -77,7 +77,8 @@ macOS에는 종류별 시스템 소리가 없으므로 `kind`는 검증만 하�
 프린트 서버에 연결해 상세 정보를 읽지 않습니다. Windows `EnumPrintersW`(level 4)를 사용합니다.
 
 `os.getDefaultPrinter(null)`은 기본 프린터 이름이거나, 기본 프린터가 없으면 `null`입니다(Windows `GetDefaultPrinterW`).
-프린터 목록 조회가 실패하면(인쇄 스풀러 중지 등) 두 작업 모두 `INTERNAL`입니다.
+`os.getDefaultPrinter`는 기본 프린터 조회가 실패하면 `INTERNAL`입니다. `os.listPrinters`는 열거와 기본 프린터 조회가
+둘 다 성공해야 하며, 어느 쪽이 실패해도(인쇄 스풀러 중지, 이름이 259자를 넘는 프린터 등) 목록 전체가 `INTERNAL`입니다.
 프린터 이름은 사용자 환경 정보이므로 `os.listPrinters`와 `os.getDefaultPrinter`는 각각 독립 권한입니다.
 macOS에서는 두 작업 모두 `UNSUPPORTED`입니다.
 
