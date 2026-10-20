@@ -923,6 +923,14 @@ junction을 디렉터리 경로로 따라가는 것, 재귀 생성, 파일 및 �
 목록(접두사 없는 이름), directorySize, 복사, 덮어쓰지 않는 이동, 자기 하위로의 이동 거부, 삭제와 removeRecursive를 확인한다.
 `LongPathsEnabled`를 끈 환경은 러너 설정에 의존하므로 확인하지 않는다.
 
+`windows-storage-create-new.ts`는 실제 Windows 로컬 파일 시스템에서 별도 프로세스 6개가 같은 시각에 같은 대상으로
+`copyFile`(16 MiB 원본)을 호출하는 경합을 5회 반복한다. 모든 자식이 시작 시각 전에 준비됐고 매 회 패자 중 하나 이상이 승자의
+복사가 끝나기 전에 거절됐는지(순차 실행이 아님)를 확인하며, 정확히 하나만 성공하고 나머지는
+`INVALID_ARGUMENT`("Storage destination already exists.")로 실패하는지, 대상 파일이 성공한 원본과 바이트 단위로 같은지(여러 복사본이
+섞이지 않음)를 확인한다. `FILE_FLAG_DELETE_ON_CLOSE`로 삭제를 요청했지만 같은 프로세스의 핸들이 열려 있는 삭제 대기(delete-pending)
+이름으로 복사하면 `PERMISSION_DENIED`이고, 마지막 핸들을 닫은 뒤에는 같은 이름으로 복사된다는 것도 확인한다.
+네트워크 파일 시스템, 볼륨 종류(NTFS와 ReFS), POSIX 방식 삭제, 다른 프로세스가 연 핸들로 인한 삭제 대기는 확인하지 않는다.
+
 `windows-storage-remove-recursive.ts`는 실제 Windows 파일 시스템으로 유니코드 중첩 트리와 빈 디렉터리 삭제 및 형제 유지,
 1500개 항목 삭제, 읽기 전용 파일과 디렉터리 삭제, 루트가 파일인 경우,
 hardlink의 이름만 삭제를 확인한다. 읽기 전용 hardlink를 지울 때 다른 이름의 속성이 바뀌는지는 확인하지 않는다. 트리 안의 junction, 디렉터리 symlink와
