@@ -1,0 +1,114 @@
+---
+title: store
+description: 이름 붙인 JSON key-value 저장소를 앱 데이터 디렉터리에 두고 값을 읽고 쓰며 defaults, reset, reload와 autosave를 제공합니다.
+sidebar: { order: 18 }
+---
+
+기본 export(`default`)를 `store`로 가져와 앱에 등록하고 호출합니다.
+
+`@bunaway/plugin-store` 패키지를 설치하고 앱의 `plugins`에 `store`를 등록합니다. Windows와
+macOS에서 제공합니다. 화면과 백엔드는 같은 패키지의 `store`를 사용합니다. 앱 설정처럼 작은 JSON 값을
+보관하는 용도입니다. 비밀 값은 `safe-storage`로 암호화하고, 큰 데이터나 사용자가 고른 경로의 파일은
+`storage`를 사용합니다.
+
+```ts
+import store from "@bunaway/plugin-store";
+
+await store.load({ name: "settings", defaults: { theme: "light" } });
+await store.set({ name: "settings", key: "theme", value: "dark" });
+const { found, value } = await store.get({ name: "settings", key: "theme" });
+await store.close({ name: "settings" });
+```
+
+| 함수 | 입력 | 결과 | 권한 |
+| --- | --- | --- | --- |
+| `store.load` | `{ name, defaults?, autosave?, onInvalidFile? }` | `Promise<{ loaded: "file" \| "new" \| "reset" }>` | `store.load` |
+| `store.get` | `{ name, key }` | `Promise<{ found, value? }>` | `store.get` |
+| `store.has` | `{ name, key }` | `Promise<boolean>` | `store.has` |
+| `store.keys` | `{ name }` | `Promise<string[]>` | `store.keys` |
+| `store.entries` | `{ name }` | `Promise<[string, StoreValue][]>` | `store.entries` |
+| `store.length` | `{ name }` | `Promise<number>` | `store.length` |
+| `store.set` | `{ name, key, value }` | `Promise<{ changed }>` | `store.set` |
+| `store.delete` | `{ name, key }` | `Promise<{ changed }>` | `store.delete` |
+| `store.clear` | `{ name }` | `Promise<{ changed }>` | `store.clear` |
+| `store.reset` | `{ name }` | `Promise<{ changed }>` | `store.reset` |
+| `store.reload` | `{ name, ignoreDefaults? }` | `Promise<{ changed }>` | `store.reload` |
+| `store.save` | `{ name }` | `Promise<null>` | `store.save` |
+| `store.close` | `{ name }` | `Promise<null>` | `store.close` |
+
+권한은 작업마다 따로이며 플러그인을 등록하는 것만으로는 아무 권한도 생기지 않습니다. 허용은 모든 저장소
+이름에 적용됩니다. 저장소 이름을 제한하려면 뷰에 `store.*`를 직접 허용하지 말고 이름을 고정한 앱 명령을
+통해 호출하세요.
+
+## 저장 위치와 이름
+
+호출자는 경로가 아니라 저장소 이름만 넘깁니다. 이름은 소문자, 숫자, `-`, `_`로 이루어진 1자 이상 64자
+이하이며 첫 글자는 소문자나 숫자입니다. `<이름>.json`이 Windows 파일 이름 규칙을 통과해야 하므로 `con`,
+`nul`, `com1` 같은 장치 이름은 모든 플랫폼에서 거부합니다. 파일은 `<앱 데이터 루트>/data/stores/<이름>.json`
+에 저장되며 `path.getAppDirectory`의 `appLocalData` 아래 `stores` 폴더와 같은 위치입니다. 다른 위치는 지정할
+수 없습니다. Electron의 userData와 Tauri의 앱 데이터 디렉터리 안에 저장하는 방식과 같지만, Windows에서
+로밍 위치가 아닌 로컬 위치를 쓰므로 설정이 다른 PC로 동기화되지 않습니다.
+
+## 값과 상한
+
+값은 JSON으로 직렬화할 수 있는 값(`null`, 불리언, 숫자, 문자열, 배열, 객체)입니다. 저장된 `null`과 없는 키는
+`get`의 `found`로 구분합니다. 키는 1자 이상 256 UTF-16 단위 이하입니다. 한 값은 256 KiB, 한 저장소는
+1024개 키와 512 KiB(직렬화한 파일 크기), 동시에 열어 둘 수 있는 저장소는 16개까지입니다. 상한을 넘는
+`set`은 `INVALID_ARGUMENT`로 거부하며 저장소 내용은 바뀌지 않습니다. 열린 저장소가 16개이면 `load`는 `BUSY`로
+실패합니다. 키 순서는 삽입 순서이고 `keys`와 `entries`가 그 순서로 돌려줍니다.
+
+## load, defaults와 손상된 파일
+
+`load`는 저장소를 열어 파일을 메모리로 읽습니다. 파일이 없으면 `loaded`가 `"new"`이고 파일은 첫 저장 때
+만들어집니다. `defaults`는 키 단위로 병합합니다. 파일의 값이 우선하고 파일에 없는 키만 defaults로
+채웁니다. 중첩 객체는 병합하지 않고 파일 값으로 통째로 교체됩니다. `load`는 파일을 쓰지 않으며 defaults로
+채운 키는 다음 저장 때 파일에 기록됩니다. 같은 이름을 같은 옵션으로 다시 `load`하면 현재 상태를 그대로
+쓰고, 다른 옵션이면 `INVALID_ARGUMENT`입니다. `close`한 뒤에는 다시 `load`할 수 있습니다.
+
+UTF-8이 아니거나 JSON이 아니거나 최상위가 객체가 아니거나 크기 상한을 넘는 파일은 손상으로 봅니다.
+기본(`onInvalidFile: "error"`)에서는 `load`가 `INVALID_ARGUMENT`(`details.reason`은 `"invalid-file"`)로
+실패하고 파일은 그대로 남습니다. 저장소가 열리지 않으므로 autosave가 손상된 파일을 덮어쓰지 않습니다.
+`onInvalidFile: "reset"`이면 defaults(없으면 빈 저장소)로 시작하고 `loaded`가 `"reset"`이며, 손상된 파일은
+다음 저장 때 교체됩니다. 백업 파일은 만들지 않습니다.
+
+## 변경 결과와 reset, reload, clear
+
+`set`, `delete`, `clear`, `reset`, `reload`는 내용이 바뀌었는지를 `changed`로 돌려줍니다. 같은 값을 다시
+`set`하거나 없는 키를 `delete`하면 `changed`는 `false`이고 저장 대상이 되지 않습니다. 앱 명령은 이 값을 보고
+자신의 이벤트를 `ctx.events.emit`으로 보낼 수 있습니다. 저장소가 직접 보내는 변경 이벤트는 아직 없습니다.
+
+- `clear`는 항상 모든 키를 지웁니다.
+- `reset`은 `load`에 준 defaults의 복사본으로 되돌립니다. defaults가 없으면 비웁니다.
+- `reload`는 파일을 다시 읽고 저장하지 않은 변경을 버립니다. `ignoreDefaults: true`이면 defaults를
+  병합하지 않고 파일 내용만 남깁니다. 손상된 파일은 `load`와 같은 `onInvalidFile` 규칙을 따릅니다.
+
+세 작업 모두 파일은 저장할 때 바뀝니다.
+
+## 저장
+
+`autosave`는 마지막 변경 뒤 몇 밀리초 안에 쓸지 정하는 debounce 시간(0 이상 10000 이하)이며 기본값은 100입니다.
+`false`이면 `save`, `close`, 앱 종료 때만 씁니다. 변경이 이어지면 timer가 다시 시작됩니다. `save`는 변경이
+없어도 즉시 파일을 쓰므로 새 저장소의 파일을 만들 때도 씁니다. `close`는 저장하지 않은 변경을 쓴 뒤
+저장소를 닫으며 저장에 실패하면 열어 둔 채로 오류를 돌려줍니다. 앱이 종료될 때 저장하지 않은 저장소를
+모두 저장합니다. 강제 종료나 충돌에서는 마지막 debounce 시간 안의 변경을 잃을 수 있습니다.
+
+파일은 같은 폴더의 임시 파일(`<이름>.json.tmp`)에 쓰고 flush한 뒤 이름을 바꿔 교체하므로 중간에 멈춰도
+이전 파일이나 새 파일 중 하나가 남습니다. 백신이나 인덱서가 대상 파일을 잡고 있어 이름 바꾸기가
+`EPERM`, `EACCES`, `EBUSY`로 실패하면 10, 20, 40, 80, 160 ms 간격으로 다시 시도하고(합계 310 ms), 그래도
+실패하면 임시 파일을 지우고 `PERMISSION_DENIED`로 실패합니다. autosave가 실패하면 저장소는 변경된 상태로
+남고 다음 변경, `save`, `close`나 앱 종료 때 다시 시도합니다.
+
+한 백엔드 프로세스가 저장소를 소유하며 작업은 한 번에 하나씩 실행됩니다. 같은 앱 데이터 디렉터리를 쓰는 두
+번째 인스턴스는 호스트 잠금이 막습니다. 앱 밖의 프로그램이 파일을 바꾸면 나중에 저장한 쪽이 이깁니다.
+`reload`로 바뀐 파일을 다시 읽을 수 있습니다.
+
+## 오류
+
+| 코드 | 경우 |
+| --- | --- |
+| `INVALID_ARGUMENT` | 형식 위반, 상한 초과, 손상된 파일, `load`하지 않은 저장소, 같은 이름을 다른 옵션으로 다시 `load` |
+| `BUSY` | 열린 저장소가 16개 |
+| `PERMISSION_DENIED` | 파일 접근 거부, 이름 바꾸기 재시도 실패 |
+| `CANCELLED` | 앱 종료 정리가 시작된 뒤의 호출 |
+
+그 밖의 입출력 실패는 내부 오류로 보고됩니다. `close`는 열려 있지 않은 저장소에도 성공합니다.

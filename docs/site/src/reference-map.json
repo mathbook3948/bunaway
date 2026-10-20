@@ -617,6 +617,17 @@
       "pages": {
         "reference/plugins/dialog": ["default"]
       }
+    },
+    {
+      "name": "@bunaway/plugin-store",
+      "source": "plugins/store/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/store": ["default"]
+      }
     }
   ],
   "members": [
@@ -1410,6 +1421,21 @@
     "reference/cli/ios": ["ios"]
   },
   "operations": {
+    "reference/plugins/store": [
+      "store.load",
+      "store.get",
+      "store.has",
+      "store.keys",
+      "store.entries",
+      "store.length",
+      "store.set",
+      "store.delete",
+      "store.clear",
+      "store.reset",
+      "store.reload",
+      "store.save",
+      "store.close"
+    ],
     "reference/plugins/network": [
       "network.request",
       "network.exchange",
