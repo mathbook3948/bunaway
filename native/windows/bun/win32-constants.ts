@@ -52,6 +52,12 @@ export const PM_REMOVE = 1;
 export const SM_CXSIZEFRAME = 32;
 // GetSystemMetricsForDpi index of the small icon width, the taskbar overlay icon size.
 export const SM_CXSMICON = 49;
+// GetSystemMetricsForDpi index of the big icon width, the Alt+Tab and taskbar icon size.
+export const SM_CXICON = 11;
+// WM_SETICON message and its wParam values for the small and big icon.
+export const WM_SETICON = 0x80;
+export const ICON_SMALL = 0;
+export const ICON_BIG = 1;
 export const SM_CYSIZEFRAME = 33;
 export const SM_CXPADDEDBORDER = 92;
 export const SM_CXMINTRACK = 34;

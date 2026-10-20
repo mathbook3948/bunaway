@@ -217,6 +217,8 @@ until the old WebView and processes finish, then creates a fresh boundary and
 WebView using the same profile. This also postpones last-window shutdown.
 Retired views release their COM handlers before a replacement is created.
 
+창 아이콘(`setIcon`, `hasCustomIcon`)은 `window-icon.ts`의 `WindowIconSet`이 HWND별 HICON 두 개(`SM_CXSMICON`, `SM_CXICON` 크기)를 소유하고 UI 스레드에서 `WM_SETICON`의 `ICON_SMALL`, `ICON_BIG`으로 지정한다. 두 HICON을 모두 만든 뒤에 창을 바꾸므로 거부된 이미지는 기존 아이콘을 유지하고, 이전 HICON은 새 아이콘을 지정한 뒤에 `DestroyIcon`한다. `null`은 두 값을 `0`으로 지정해 창 클래스 아이콘으로 되돌리고 만든 HICON을 해제하며, 창 파괴(`DestroyWindow` 뒤)와 호스트 종료(`dispose`)에서도 남은 HICON을 해제한다. 아이콘 크기는 설정 시점 DPI로 정하고 DPI 변경 때 다시 만들지 않는다. 테스트는 실제 HWND의 `WM_GETICON` 핸들 변화와 반복 호출 뒤 USER 개체 수를 확인하며 화면에 그려진 아이콘은 확인하지 않는다.
+
 Show, hide, focus, client size, screen position and monitor fullscreen use Win32.
 `Windows.setGeometry`는 content/outer 위치와 크기를 물리 픽셀로 적용한다.
 일반 상태에서는 `SetWindowPos`, 최소화나 최대화 중에는 일반 복원 영역의

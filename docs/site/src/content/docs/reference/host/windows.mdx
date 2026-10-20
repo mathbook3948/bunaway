@@ -528,6 +528,8 @@ await windows.close({ view: "dialog" });
 | `windows.getOpacity` | `{ view, windowId? }` | `Promise<number>`. OS에 저장된 현재 불투명도(0–1). 새 창은 `1` |
 | `windows.setHasShadow` | `{ view, windowId?, hasShadow: boolean }` | `Promise<null>`. 창의 시스템 그림자를 켜거나 끔. 네이티브 제목 표시줄 창은 그림자를 끌 수 없어 `false`를 `UNSUPPORTED`로 거부하고 `true`는 변화 없이 성공 |
 | `windows.hasShadow` | `{ view, windowId? }` | `Promise<boolean>`. 창이 시스템 그림자를 가지는지 조회. 새 창은 `true` |
+| `windows.setIcon` | `{ view, windowId?, ico: string \| null }` | `Promise<null>`. Windows에서 제목 표시줄, Alt+Tab, 작업 표시줄의 창 아이콘을 base64 ICO로 바꾸고 `null`이면 앱 기본 아이콘으로 되돌립니다. 자세한 규칙은 [창 아이콘](#창-아이콘) |
+| `windows.hasCustomIcon` | `{ view, windowId? }` | `Promise<boolean>`. `setIcon`으로 지정한 아이콘이 적용 중인지 조회합니다 |
 | `windows.setBackgroundColor` | `{ view, windowId?, color: string }` | `Promise<null>`. 창과 WebView 문서의 불투명 배경색을 `#RGB` 또는 `#RRGGBB`로 설정. 알파가 있는 형식은 `INVALID_ARGUMENT` |
 | `windows.getBackgroundColor` | `{ view, windowId? }` | `Promise<string \| null>`. 선언, 생성 옵션 또는 `setBackgroundColor`로 정한 소문자 `#rrggbb`. 정하지 않았으면 `null` |
 | `windows.setIgnoreMouseEvents` | `{ view, windowId?, ignore: boolean }` | `Promise<null>`. `true`이면 WebView를 포함한 창 전체가 마우스 입력을 받지 않고 아래 창으로 통과 |
@@ -1359,6 +1361,30 @@ Explorer가 버튼을 다시 만들면 마지막 성공 설정을 다시 적용�
 창 크기나 DPI가 바뀌어도 clip을 자동으로 다시 계산하지 않으므로 필요하면 다시 호출하세요.
 [ITaskbarList3::SetThumbnailClip](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-setthumbnailclip)과
 [SetThumbnailTooltip](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-setthumbnailtooltip)의 요청 처리가 끝나면 성공이며, 실제 썸네일 표시는 Windows가 결정합니다.
+
+## 창 아이콘
+
+Windows의 `windows.setIcon({ view, windowId?, ico })`는 창의 제목 표시줄, Alt+Tab, 작업 표시줄 버튼 아이콘을 실행 중에 바꿉니다.
+`null`을 반환하며 창마다 독립 권한이 필요하고 macOS는 `UNSUPPORTED`입니다. `windows.hasCustomIcon({ view, windowId? })`는 `setIcon`으로 지정한 아이콘이 적용 중인지 `boolean`으로 돌려줍니다.
+Electron과 Tauri에는 현재 아이콘을 읽는 API가 없어, 이미지를 돌려주지 않고 적용 여부만 제공합니다.
+
+- `ico`는 `windows.setOverlayIcon`과 같은 base64 ICO 바이트입니다(디코딩 후 64 KiB 이하). PNG나 파일 경로는 받지 않으며, 파일 읽기는 앱이 정한 경로 정책에 따라 앱이 맡습니다.
+  ICO 전체를 먼저 검증하며 잘못된 ICO는 `INVALID_ARGUMENT`이고 기존 아이콘을 유지합니다.
+  호스트는 호출 시점 창 DPI의 작은 아이콘(`SM_CXSMICON`)과 큰 아이콘(`SM_CXICON`) 크기를 덮는 가장 작은 프레임(없으면 가장 큰 프레임)을 각각 골라 `WM_SETICON`의 `ICON_SMALL`, `ICON_BIG`으로 지정합니다.
+- `null`이면 두 아이콘을 `0`으로 지정해 창 클래스(EXE 리소스)의 앱 기본 아이콘으로 되돌리며, 이미 기본이면 아무 일도 하지 않습니다.
+
+```ts
+await windows.setIcon({ view: "main", ico: connectedIcoBase64 });
+const custom = await windows.hasCustomIcon({ view: "main" }); // true
+await windows.setIcon({ view: "main", ico: null });
+```
+
+숨긴 창, 최소화한 창, 작업 표시줄에 표시하지 않는 창에도 같은 방식으로 지정하며 오류 없이 값을 유지합니다.
+호스트가 만든 아이콘은 다음 설정, 되돌리기, 창 파괴, 호스트 종료 때 해제합니다. 창을 재생성하면 새 창은 앱 기본 아이콘으로 시작하므로 필요하면 다시 호출하세요.
+아이콘 크기는 설정하는 시점의 DPI로 정하며, 창이 다른 DPI의 모니터로 옮겨져도 자동으로 다시 만들지 않습니다.
+선언 시점의 초기 아이콘과 설치 리소스는 이 API의 범위가 아닙니다.
+테스트는 실제 HWND에서 `WM_GETICON`으로 받은 두 크기의 핸들이 지정, 교체, 되돌리기에 따라 바뀌는지와 반복 호출 뒤 USER 개체가 늘지 않는지 확인합니다.
+제목 표시줄, Alt+Tab, 작업 표시줄에 새 아이콘이 그려지는 화면은 자동 검증에 포함되지 않습니다.
 
 ## 작업 표시줄 오버레이 아이콘
 

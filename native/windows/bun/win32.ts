@@ -127,6 +127,7 @@ import { WindowBackgrounds } from "./window-background.ts";
 import { dragRejected, resizeIsPinned } from "./window-drag.ts";
 import { beginSystemLoop, primaryButtonDown } from "./window-drag-input.ts";
 import { completedGeometryChanges, windowChanges } from "./window-events.ts";
+import { WindowIconSet } from "./window-icon.ts";
 import {
   centerInWorkArea,
   initialWindowPlacement,
@@ -249,6 +250,7 @@ export class Windows {
   private readonly interactiveGeometry = new Map<bigint, WindowBounds>();
   private readonly immovable = new Set<bigint>();
   private readonly backgrounds = new WindowBackgrounds();
+  private readonly windowIcons = new WindowIconSet();
   /** Content width / height locked for user resizing; absent when unlocked. */
   private readonly aspectRatios = new Map<bigint, number>();
   private readonly initialOuterSizes = new Map<
@@ -3175,6 +3177,8 @@ export class Windows {
     }
     assert(user.symbols.DestroyWindow(window));
     this.taskbar.forget(window);
+    // The HICONs outlive the HWND that borrowed them, so they are destroyed only after DestroyWindow.
+    this.windowIcons.forget(window);
     this.windows.delete(window);
     this.constraints.delete(window);
     this.dpiByWindow.delete(window);
@@ -3219,6 +3223,7 @@ export class Windows {
   dispose() {
     // Release before the live-window assertion so a failed destroy cannot leak the icon handles.
     this.taskbar.releaseIcons();
+    this.windowIcons.releaseAll();
     assert.equal(this.windows.size, 0);
     this.taskbar.dispose();
     this.accessibleTitles.dispose();
@@ -3252,6 +3257,22 @@ export class Windows {
   setThumbnailToolTip(window: bigint, toolTip: string | null): void {
     assert(this.windows.has(window), "Taskbar target is not a live window");
     this.taskbar.setThumbnailToolTip(window, toolTip);
+  }
+
+  /** The icon set through setWindowIcon is applied to the window. */
+  hasWindowIcon(window: bigint): boolean {
+    assert(this.windows.has(window), "Window is not live.");
+    return this.windowIcons.has(window);
+  }
+
+  /** Show the icon in the title bar, Alt+Tab and the taskbar, or return to the class icon for null. */
+  setWindowIcon(window: bigint, icon: NativeOverlayIconProvider | null): void {
+    assert(this.windows.has(window), "Window is not live.");
+    if (icon === null) {
+      this.windowIcons.clear(window);
+      return;
+    }
+    this.windowIcons.set(window, icon, this.getDpi(window));
   }
 
   /** Show the overlay icon with an accessibility description on the taskbar button, or remove it for null. */

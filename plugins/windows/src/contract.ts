@@ -903,6 +903,14 @@ export const windowOperations = {
     }),
     output: z.null(),
   },
+  // A null ico returns the window to the application icon from the EXE resource.
+  "windows.setIcon": {
+    input: windowTarget.extend({
+      ico: icoBytes.nullable(),
+    }),
+    output: z.null(),
+  },
+  "windows.hasCustomIcon": windowStateResult,
   "windows.createInstance": {
     input: creationResult.input,
     output: windowIdentitySchema,

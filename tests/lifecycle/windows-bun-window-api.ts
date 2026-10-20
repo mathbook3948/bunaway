@@ -11,6 +11,7 @@ import { runWindowsApp } from "#native/windows/bun/entry";
 import { monitorServices } from "#native/windows/bun/monitors";
 import { Windows } from "#native/windows/bun/win32";
 import { ole, user } from "#native/windows/bun/win32-bindings";
+import { overlayIconProvider } from "#plugins/windows/src/platforms/windows-overlay-icon";
 import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { trayIco } from "../fixtures/tray-icon.ts";
@@ -882,6 +883,102 @@ if (!process.argv.includes("--child")) {
           nativeWindows.destroy(hwnd);
         }
         assert.throws(() => nativeWindows.isMovable(hwnd));
+      }
+    }
+    // Window icons: WM_SETICON through the real HWND for the small and big sizes in every visibility and
+    // placement state, and no leaked USER objects over repeated replacement and clearing.
+    {
+      const gui = dlopen("user32.dll", {
+        GetGuiResources: {
+          args: [
+            "u64",
+            "u32",
+          ],
+          returns: "u32",
+        },
+      });
+      const process = dlopen("kernel32.dll", {
+        GetCurrentProcess: {
+          args: [],
+          returns: "u64",
+        },
+      });
+      const userObjects = () =>
+        gui.symbols.GetGuiResources(process.symbols.GetCurrentProcess(), 1);
+      const WM_GETICON = 0x7f;
+      const ICON_SMALL = 0n;
+      const ICON_BIG = 1n;
+      const iconOf = (hwnd: bigint, size: bigint) =>
+        driver.symbols.SendMessageW(hwnd, WM_GETICON, size, 0n);
+      for (const state of [
+        "shown",
+        "hidden",
+        "minimized",
+        "no-taskbar",
+      ]) {
+        const hwnd = nativeWindows.create("Window icon", 400, 300, () => {});
+        try {
+          if (state === "hidden") {
+            nativeWindows.show(hwnd, false);
+          }
+          if (state === "minimized") {
+            user.symbols.ShowWindow(hwnd, 2);
+          }
+          if (state === "no-taskbar") {
+            nativeWindows.setSkipTaskbar(hwnd, true);
+          }
+          const initial = [
+            iconOf(hwnd, ICON_SMALL),
+            iconOf(hwnd, ICON_BIG),
+          ];
+          assert.equal(nativeWindows.hasWindowIcon(hwnd), false);
+          nativeWindows.setWindowIcon(
+            hwnd,
+            overlayIconProvider(trayIco(16).toString("base64"), "window"),
+          );
+          assert.equal(nativeWindows.hasWindowIcon(hwnd), true);
+          const small = iconOf(hwnd, ICON_SMALL);
+          const big = iconOf(hwnd, ICON_BIG);
+          assert(small && big && small !== initial[0] && big !== initial[1]);
+          // A rejected image keeps the current icon.
+          assert.throws(() =>
+            nativeWindows.setWindowIcon(hwnd, () => {
+              throw new Error("rejected");
+            }),
+          );
+          assert.equal(iconOf(hwnd, ICON_SMALL), small);
+          nativeWindows.setWindowIcon(
+            hwnd,
+            overlayIconProvider(trayIco(32).toString("base64"), "window"),
+          );
+          assert.notEqual(iconOf(hwnd, ICON_SMALL), small);
+          // Back to the class icon, and clearing twice is harmless.
+          nativeWindows.setWindowIcon(hwnd, null);
+          nativeWindows.setWindowIcon(hwnd, null);
+          assert.equal(nativeWindows.hasWindowIcon(hwnd), false);
+          assert.deepEqual(
+            [
+              iconOf(hwnd, ICON_SMALL),
+              iconOf(hwnd, ICON_BIG),
+            ],
+            initial,
+          );
+          const provider = overlayIconProvider(
+            trayIco(16).toString("base64"),
+            "window",
+          );
+          const before = userObjects();
+          for (let index = 0; index < 100; index++) {
+            nativeWindows.setWindowIcon(hwnd, provider);
+          }
+          nativeWindows.setWindowIcon(hwnd, null);
+          assert(userObjects() <= before + 2, "Window icon leaked HICONs");
+          // An icon still set when the window is destroyed is released with it.
+          nativeWindows.setWindowIcon(hwnd, provider);
+        } finally {
+          nativeWindows.destroy(hwnd);
+        }
+        assert.throws(() => nativeWindows.hasWindowIcon(hwnd));
       }
     }
     // Check fullscreen restoration across visibility and show states.

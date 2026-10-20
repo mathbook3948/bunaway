@@ -38,12 +38,15 @@ let createIconFromResource: ReturnType<typeof openCreateIcon> | undefined;
  * leaves the current overlay untouched. Each provider call returns a new HICON whose owner must
  * `DestroyIcon` it; a frame Windows rejects throws INVALID_ARGUMENT.
  */
-export function overlayIconProvider(ico: string): NativeOverlayIconProvider {
+export function overlayIconProvider(
+  ico: string,
+  subject: "overlay" | "window" = "overlay",
+): NativeOverlayIconProvider {
   const frames = parseNativeIco(ico);
   if (!frames) {
     throw new BunawayError({
       code: "INVALID_ARGUMENT",
-      message: "Invalid overlay ICO image.",
+      message: `Invalid ${subject} ICO image.`,
     });
   }
   return (sizePx) => {
@@ -51,7 +54,7 @@ export function overlayIconProvider(ico: string): NativeOverlayIconProvider {
     if (!frame) {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
-        message: "Invalid overlay ICO image.",
+        message: `Invalid ${subject} ICO image.`,
       });
     }
     // RT_ICON bits must be DWORD-aligned, so copy the frame out of the ICO payload.
@@ -70,7 +73,7 @@ export function overlayIconProvider(ico: string): NativeOverlayIconProvider {
     if (!icon) {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
-        message: "Windows rejected the overlay ICO image.",
+        message: `Windows rejected the ${subject} ICO image.`,
       });
     }
     return icon;

@@ -54,6 +54,7 @@ const MESSAGES = {
   clip: "Thumbnail clip is not implemented on this platform.",
   tooltip: "Thumbnail tooltip is not implemented on this platform.",
   overlay: "Taskbar overlay icon is not implemented on this platform.",
+  icon: "Window icon is not implemented on this platform.",
 } as const;
 
 const DOWNLOAD_ID = crypto.randomUUID();
@@ -822,6 +823,23 @@ const rows: Row[] = [
     unsupported: MESSAGES.tooltip,
   },
   {
+    operation: "windows.setIcon",
+    payload: {
+      ico: null,
+    },
+    calls: [
+      [
+        "setIcon",
+        [
+          null,
+        ],
+      ],
+    ],
+    result: null,
+    unsupported: MESSAGES.icon,
+  },
+  query("hasCustomIcon", true, MESSAGES.icon),
+  {
     operation: "windows.setOverlayIcon",
     payload: {
       ico: null,
@@ -1213,6 +1231,8 @@ function fixture(
     "setThumbnailClip",
     "setThumbnailToolTip",
     "setOverlayIcon",
+    "setIcon",
+    "hasCustomIcon",
   ];
   const groups = {
     downloads: [
