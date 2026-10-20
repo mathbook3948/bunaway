@@ -239,6 +239,10 @@ test.skipIf(process.platform !== "win32")(
       expect(takePosted(hwnd)?.wparam).toBe(2n);
 
       release();
+      await waitFor(() => !(user.symbols.GetAsyncKeyState(0x01) & 0x8000), {
+        deadline: "inProcess",
+        what: "the synthesized left button release to appear in the key state",
+      });
       rejects(() => native.startDragging(hwnd), "not pressed");
     } finally {
       release();
