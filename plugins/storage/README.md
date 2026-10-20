@@ -20,6 +20,9 @@ Windows와 macOS는 `node:fs` 위의 공통 어댑터를 쓴다. `src/platforms/
 CI windows-native에서 400자를 넘는 경로의 쓰기, 읽기, 목록, 복사, 이동, 삭제가 동작하는지 확인하며
 러너의 `LongPathsEnabled` 값을 로그에 남긴다. 이 설정이 꺼진 환경과의 비교는 하지 않았다.
 removeRecursive와 directorySize는 트리 안의 링크를 따라가지 않는다.
+`copyFile`은 대상을 `CREATE_NEW`로 만든다. `windows-storage-create-new.ts`가 CI windows-native에서 같은 대상으로의
+동시 복사는 하나만 성공하고 나머지는 `INVALID_ARGUMENT`이며, 삭제 대기 중인 이름은 `PERMISSION_DENIED`임을 확인한다.
+네트워크 파일 시스템의 보장은 서버에 달려 있어 확인하지 않는다.
 `defineNativeOperation<Instance>()`으로 handler 입력, 인스턴스와 반환 타입을
 스키마 및 인스턴스 타입에서 추론한다.
 `src/index.ts`는 각 작업 맵을 해당 platforms의 operations에 연결하고 인스턴스 수명을 지정한다.

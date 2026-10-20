@@ -836,6 +836,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)을 따른다.
 - [x] Windows의 일반 파일 복사(크기 상한 없음)와 같은 볼륨 안의 파일 및 디렉터리 이동을 제공한다.
   복사는 대상을 배타적으로 만들고 이동은 `MoveFileExW`를 덮어쓰기 없이 호출하므로 기존 destination을 대체하지 않는다.
+  `windows-storage-create-new.ts`가 CI windows-native에서 같은 대상으로의 동시 복사는 하나만 성공함을 확인한다.
   [전송 계약](./site/src/content/docs/reference/host/storage-transfers.mdx)을 따른다.
 - [ ] 디렉터리 재귀 copy, 다른 볼륨의 move, 덮어쓰기 및 truncate를 제공한다.
 - [ ] 파일 watch와 recursive watch, 이벤트 구독 해제를 제공한다.
