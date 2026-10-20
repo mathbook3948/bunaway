@@ -56,7 +56,7 @@ modifiers는 Control, Alt, Shift, Super 중 하나 이상이며 중복을 거부
 ## macOS
 
 macOS는 Carbon `RegisterEventHotKey`로 등록하므로 손쉬운 사용(Accessibility)이나 입력 모니터링
-권한이 필요하지 않고, 권한 거부로 실패하는 경로가 없습니다. 모든 작업과 이벤트 계약은 Windows와 같으며
+권한이 필요하지 않은 Carbon API를 쓰므로 권한 거부로 실패하는 경로를 두지 않습니다. 모든 작업과 이벤트 계약은 Windows와 같으며
 차이는 다음과 같습니다.
 
 - `Super`는 Command, `Alt`는 Option, `Control`은 Control입니다.
@@ -68,7 +68,7 @@ macOS는 Carbon `RegisterEventHotKey`로 등록하므로 손쉬운 사용(Access
   키를 누른 채 `unregister`, `unregisterAll`, `setSuspended(true)`를 호출하면 그 시점에 `released`를
   발행합니다. 앱 종료와 어댑터 dispose는 이벤트를 연결할 수 없으므로 `released`를 발행하지 않습니다.
 - 한 어댑터 수명에서 사용할 수 있는 등록 ID는 4,294,967,295개이며 초과하면 `BUSY`입니다.
-  각 성공 등록과 재개 시도가 새 ID를 사용합니다.
+  각 등록 시도(실패한 시도 포함)와 재개 시도가 새 ID를 사용합니다.
 - 이벤트는 호스트의 이벤트 처리 루프가 UI 스레드에서 전달합니다. 구독 전이나 연결이 없는 동안의
   입력은 저장하지 않습니다.
 
@@ -88,7 +88,7 @@ Windows 해제 자체가 실패하면 중지 상태를 먼저 유지하며 입�
 반환합니다. 반복 중지나 재개에서 남은 해제를 다시 시도합니다. 목록은 실패한 자원의 소유권을
 유지합니다. 네이티브 메시지 ID를 재사용하지 않으므로 제거하거나 중지하기 전에 큐에 들어온
 입력을 새 등록에 전달하지 않습니다. 한 어댑터 수명에서 사용할 수 있는 OS ID는 49,151개이며
-초과하면 `BUSY`입니다. 각 성공 등록과 재개 시도가 새 ID를 사용합니다.
+초과하면 `BUSY`입니다. 각 등록 시도(실패한 시도 포함)와 재개 시도가 새 ID를 사용합니다.
 
 `globalShortcut.pressed`의 payload는 `{ shortcut: { key, modifiers } }`입니다.
 받으려는 뷰의 events에 이 이름을 허용하고 구독해야 합니다. 반복 key-down은 MOD_NOREPEAT로

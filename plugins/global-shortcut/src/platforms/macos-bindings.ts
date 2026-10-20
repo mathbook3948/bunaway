@@ -1,5 +1,5 @@
 import { dlopen, JSCallback, ptr } from "bun:ffi";
-import { ResourceOwner } from "@bunaway/plugin";
+import { failWithCleanup, ResourceOwner } from "@bunaway/plugin";
 import { LIBSYSTEM, LIBSYSTEM_PATH } from "@bunaway/plugin/darwin";
 import { pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
@@ -354,13 +354,19 @@ export function createCarbonHotKeys(): HotKeyDriver {
       const failed = [
         ...refs.keys(),
       ].filter((id) => !unregister(id));
-      owner.dispose();
-      if (failed.length > 0) {
-        throw new BunawayError({
+      if (failed.length === 0) {
+        owner.dispose();
+        return;
+      }
+      // Report the refused removals even when closing the handler and libraries fails too.
+      failWithCleanup(
+        new BunawayError({
           code: "INTERNAL",
           message: "Some Carbon hot keys could not be unregistered.",
-        });
-      }
+        }),
+        () => owner.dispose(),
+        "Global shortcut disposal was incomplete.",
+      );
     },
   };
 }

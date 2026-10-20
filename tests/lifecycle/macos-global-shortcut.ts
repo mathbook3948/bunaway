@@ -339,7 +339,13 @@ try {
         what: "the OS to deliver the hot key",
         failed: () => failure,
       },
-    ).catch(() => false);
+    ).catch(() => {
+      // A host pump failure is a test failure; only a missing event means the runner dropped the input.
+      if (failure) {
+        throw failure;
+      }
+      return false;
+    });
     postShortcut(tap, false);
     if (sawPress) {
       await reported("globalShortcut.released", "childStep");
