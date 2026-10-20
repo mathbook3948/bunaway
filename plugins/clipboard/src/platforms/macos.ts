@@ -4,8 +4,8 @@ import {
   type ClipboardFormat,
   fitsFormatBudget,
   imageSchema,
+  type macosWriteFormatsSchema,
   nullableTextSchema,
-  type writeFormatsSchema,
 } from "#clipboard/contract";
 import {
   createPasteboard,
@@ -17,6 +17,7 @@ const formats = [
   "text/plain",
   "text/html",
   "text/rtf",
+  "application/x-bunaway-file-list",
   "image/bmp",
 ] as const;
 
@@ -98,7 +99,7 @@ export class MacosClipboard {
     return result;
   }
 
-  writeFormats(items: z.output<typeof writeFormatsSchema>["items"]): null {
+  writeFormats(items: z.output<typeof macosWriteFormatsSchema>["items"]): null {
     this.active();
     this.native.write(items);
     return null;

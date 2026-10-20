@@ -5,6 +5,8 @@ import {
   changeSchema,
   hasFormatSchema,
   imageSchema,
+  macosReadResultSchema,
+  macosWriteFormatsSchema,
   nullableTextSchema,
   readFormatsSchema,
   readResultSchema,
@@ -57,11 +59,11 @@ export const macosOperations = {
   }),
   readFormats: macosOperation({
     input: readFormatsSchema,
-    output: readResultSchema,
+    output: macosReadResultSchema,
     handler: ({ formats }, { instance }) => instance.readFormats(formats),
   }),
   writeFormats: macosOperation({
-    input: writeFormatsSchema,
+    input: macosWriteFormatsSchema,
     output: z.null(),
     handler: ({ items }, { instance }) => instance.writeFormats(items),
   }),

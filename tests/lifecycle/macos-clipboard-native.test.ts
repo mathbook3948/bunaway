@@ -151,6 +151,7 @@ test.skipIf(
         }),
       );
       expect(observer.read("text/plain").data).toBe("fallback 한글 😀");
+      // A Windows path is rejected by the macOS contract before the board changes.
       await expect(
         invoke("clipboard.writeFormats", {
           items: [
@@ -164,7 +165,7 @@ test.skipIf(
         }),
       ).rejects.toThrow(
         expect.objectContaining({
-          code: "UNSUPPORTED",
+          code: "INVALID_ARGUMENT",
         }),
       );
       expect(observer.read("text/plain").data).toBe("fallback 한글 😀");
@@ -185,6 +186,107 @@ test.skipIf(
           data: null,
         },
       ]);
+      // Several files become one pasteboard item each, with the text kept on the first.
+      const files = [
+        "/tmp/bunaway clipboard/한글 😀 #1.txt",
+        "/tmp/bunaway clipboard/100%.txt",
+        "/tmp/../tmp/dir",
+      ];
+      const fileItems: ClipboardItem[] = [
+        {
+          format: "text/plain",
+          data: "with files",
+        },
+        {
+          format: "application/x-bunaway-file-list",
+          data: files,
+        },
+      ];
+      await invoke("clipboard.writeFormats", {
+        items: fileItems,
+      });
+      expect(await invoke("clipboard.getFormats", null)).toEqual([
+        "text/plain",
+        "application/x-bunaway-file-list",
+      ]);
+      expect(
+        await invoke("clipboard.readFormats", {
+          formats: fileItems.map((item) => item.format),
+        }),
+      ).toEqual(fileItems);
+      expect(observer.read("application/x-bunaway-file-list").data).toEqual(
+        files,
+      );
+      // AppKit independently reads each written URL back as a file path.
+      objc.withAutoreleasePool(() => {
+        const board = objc.send(
+          objc.class("NSPasteboard"),
+          "pasteboardWithName:",
+          objc.string(name),
+        );
+        const urls = objc.send(
+          board,
+          "readObjectsForClasses:options:",
+          objc.send(
+            objc.class("NSArray"),
+            "arrayWithObject:",
+            objc.class("NSURL"),
+          ),
+          null,
+        );
+        expect(Number(objc.send(urls, "count"))).toBe(files.length);
+        expect(
+          objc.text(objc.send(objc.send(urls, "objectAtIndex:", 0), "path")),
+        ).toBe(files[0] ?? "");
+      });
+      // Finder-style directory URLs, file reference URLs and remote hosts.
+      installExternal(
+        "public.file-url",
+        Buffer.from("file://localhost/Users/me/My%20Dir/"),
+      );
+      expect(
+        await invoke("clipboard.readFormats", {
+          formats: [
+            "application/x-bunaway-file-list",
+          ],
+        }),
+      ).toEqual([
+        {
+          format: "application/x-bunaway-file-list",
+          data: [
+            "/Users/me/My Dir",
+          ],
+        },
+      ]);
+      for (const url of [
+        "file:///.file/id=6571367.9114570",
+        "file://server/share/file",
+      ]) {
+        installExternal("public.file-url", Buffer.from(url));
+        expect(
+          await invoke("clipboard.readFormats", {
+            formats: [
+              "application/x-bunaway-file-list",
+            ],
+          }),
+        ).toEqual([
+          {
+            format: "application/x-bunaway-file-list",
+            data: null,
+          },
+        ]);
+      }
+      installExternal("public.file-url", Buffer.from("file:///bad%ZZ"));
+      await expect(
+        invoke("clipboard.readFormats", {
+          formats: [
+            "application/x-bunaway-file-list",
+          ],
+        }),
+      ).rejects.toThrow();
+      await invoke("clipboard.writeText", {
+        text: "fallback 한글 😀",
+      });
       for (const item of [
         {
           format: "application/x-bunaway-bookmark",

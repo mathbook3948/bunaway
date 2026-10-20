@@ -6,7 +6,7 @@ sidebar: { order: 6 }
 
 기본 export(`default`)를 `clipboard`로 가져와 앱에 등록하고 호출합니다.
 
-`@bunaway/plugin-clipboard`를 설치하고 앱의 `plugins`에 `clipboard`를 등록합니다. Windows와 macOS 어댑터를 제공합니다. 파일 목록, URL bookmark와 사용자 정의 binary 형식은 Windows에서만 제공합니다.
+`@bunaway/plugin-clipboard`를 설치하고 앱의 `plugins`에 `clipboard`를 등록합니다. Windows와 macOS 어댑터를 제공합니다. URL bookmark와 사용자 정의 binary 형식은 Windows에서만 제공합니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
@@ -64,13 +64,13 @@ Windows 쓰기에는 sRGB `CF_DIBV5`와 명시적인 BGRA/alpha mask를 사용�
 
 `format`은 다음 기본 형식 또는 아래의 사용자 정의 binary 식별자입니다. 각 `data`는 해당 형식의 값이며 잘못된 조합과 모르는 형식은 거부합니다.
 
-| `format` | `data` | Windows 형식 |
+| `format` | `data` | Windows 형식 (macOS 형식) |
 | --- | --- | --- |
 | `text/plain` | Unicode 문자열 | `CF_UNICODETEXT` |
 | `text/html` | HTML fragment 문자열 | 등록 이름 `HTML Format` |
 | `text/rtf` | `{\rtf1` 등으로 시작하는 ASCII RTF 문자열 | 등록 이름 `Rich Text Format` |
-| `application/x-bunaway-file-list` | 절대 Windows 경로의 문자열 배열 | wide `CF_HDROP` |
-| `image/bmp` | `{ width, height, rgba }` 이미지 값 | `CF_DIBV5` 또는 `CF_DIB` |
+| `application/x-bunaway-file-list` | 절대 경로의 문자열 배열. Windows는 Windows 경로, macOS는 POSIX 경로 | wide `CF_HDROP` (`public.file-url`) |
+| `image/bmp` | `{ width, height, rgba }` 이미지 값 | `CF_DIBV5` 또는 `CF_DIB` (`public.tiff`) |
 | `application/x-bunaway-bookmark` | `{ url: string }` | 등록 이름 `UniformResourceLocatorW` |
 | `application/x-bunaway-binary/<name>` | canonical base64 문자열 | 식별자와 같은 등록 이름 |
 
@@ -90,7 +90,7 @@ const items = await clipboard.readFormats({ formats: ["text/plain", "text/html"]
 
 HTML은 전체 문서가 아닌 fragment를 받습니다. CF_HTML의 fragment byte offset과 UTF-8을 검사하지만 HTML을 정제하거나 실행하지 않습니다. 표시할 때의 처리 방식은 앱이 결정합니다. RTF도 markup을 해석하지 않으며 Unicode 문자는 `\u` 등의 RTF escape로 전달합니다. HTML과 RTF의 문자열 상한과 Unicode 검사는 일반 텍스트와 같습니다. ASCII 제한은 RTF에만 적용합니다.
 
-파일 목록은 최대 64개이며 각 경로는 읽기와 쓰기 모두 UTF-16 code unit 1,024개까지입니다. 이모지 등 보조 평면 문자는 두 단위로 셉니다. `C:\folder\file.txt` 또는 `\\server\share\file.txt` 형식의 절대 경로만 받으며 NUL, control character, wildcard와 device 경로는 거부합니다. 경로를 읽거나 복사해도 실제 파일을 열거나 존재 여부를 확인하지 않습니다. 파일 접근 권한은 기존 저장소 정책으로 별도로 허용해야 합니다.
+파일 목록은 최대 64개이며 각 경로는 읽기와 쓰기 모두 UTF-16 code unit 1,024개까지입니다. 이모지 등 보조 평면 문자는 두 단위로 셉니다. Windows는 `C:\folder\file.txt` 또는 `\\server\share\file.txt` 형식의 절대 경로만 받으며 NUL, control character, wildcard와 device 경로는 거부합니다. 경로를 읽거나 복사해도 실제 파일을 열거나 존재 여부를 확인하지 않습니다. 파일 접근 권한은 기존 저장소 정책으로 별도로 허용해야 합니다.
 
 ## Windows URL bookmark와 사용자 정의 binary 형식
 
@@ -151,7 +151,7 @@ Windows에서 다른 프로그램이 클립보드를 점유하면 10ms 간격으
 
 ## macOS 형식과 제한
 
-macOS는 텍스트, HTML, RTF와 RGBA 이미지 작업을 UI 메인 스레드에서 실행합니다.
+macOS는 텍스트, HTML, RTF, 파일 목록과 RGBA 이미지 작업을 UI 메인 스레드에서 실행합니다.
 HTML과 ASCII RTF는 각각 `public.html`과 `public.rtf`를 사용합니다. HTML은
 CF_HTML header가 없는 UTF-8 markup이며 정제하거나 실행하지 않습니다.
 기존 `image/bmp` 작업의 `data`는 같은 RGBA JSON 값이고 실제 클립보드 형식은
@@ -163,11 +163,22 @@ pixel layout은 `INTERNAL`입니다. 외부 TIFF는 528,384바이트까지이며
 있으면 RGB는 3개, RGBA는 4개의 값이 모두 `1`이어야 합니다. signed, floating-point,
 undefined sample과 잘못된 개수는 `INTERNAL`입니다. 다른 앱에서 만든 모든 TIFF의 지원을 뜻하지 않습니다.
 
-파일 목록의 Windows 경로 스키마는 그대로 유지합니다. macOS에서 파일 목록, bookmark 또는 사용자 정의 binary 형식을 포함한
-쓰기는 기존 내용을 지우기 전에 `UNSUPPORTED`로 실패합니다. 발견 목록에는 포함하지
-않고 `hasFormat`은 `false`, `readFormats`의 해당 결과는 `null`입니다.
+macOS의 파일 목록은 `/`로 시작하는 절대 POSIX 경로의 배열입니다. 개수와 길이 한도는 Windows와 같고
+NUL과 control character는 거부하며 `file://` URL이나 Windows 경로는 `INVALID_ARGUMENT`입니다.
+경로는 정규화하거나 존재를 확인하지 않습니다. 쓰기는 파일마다 `public.file-url`을 가진
+`NSPasteboardItem` 하나를 만들고, 같은 호출의 다른 형식은 첫 항목에 함께 둡니다. 읽기는
+모든 항목의 `public.file-url`에서 로컬 `file:` URL만 경로로 바꿉니다. 디렉터리 URL의 끝 `/`는
+경로에서 제외합니다. 원격 host의 URL과 파일 참조 URL(`/.file/id=`)은 건너뛰고, 남은 경로가 없으면
+`null`입니다. 형식이 잘못된 URL, 64개를 넘는 파일, 한도를 넘거나 control character가 있는 경로는
+`INTERNAL`입니다. `getFormats`와 `hasFormat`은 첫 항목에 `public.file-url`이 있는지로 판단하므로,
+참조 URL만 있는 클립보드는 `true`이지만 읽으면 `null`일 수 있습니다. 파일 목록을 복사하거나 읽어도
+파일 접근 권한은 늘지 않습니다.
 
-macOS 쓰기는 모든 형식을 하나의 `NSPasteboardItem`에 준비한 뒤 기존 내용을
+macOS에서 bookmark 또는 사용자 정의 binary 형식을 포함한 쓰기는 기존 내용을 지우기 전에
+`UNSUPPORTED`로 실패합니다. 발견 목록에는 포함하지 않고 `hasFormat`은 `false`,
+`readFormats`의 해당 결과는 `null`입니다.
+
+macOS 쓰기는 모든 형식을 `NSPasteboardItem`에 준비한 뒤 기존 내용을
 교체합니다. 준비 실패는 기존 내용을 보존하고 교체 실패는 `INTERNAL`이며 롤백하지
 않습니다. 동기 OS 호출이 시작한 뒤의 취소는 완료한 변경을 되돌리지 않습니다.
 읽은 데이터는 복사해서 반환하고 native 포인터를 보관하지 않습니다. 다중 형식 읽기 중 다른 프로그램이 내용을 바꾸면 `BUSY`로 실패하며 서로 다른 시점의 데이터를 섞어 반환하지 않습니다.

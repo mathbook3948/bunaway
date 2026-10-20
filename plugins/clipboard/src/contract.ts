@@ -115,6 +115,26 @@ export const filesSchema = z
   )
   .min(1)
   .max(MAX_FILES);
+/** macOS file lists contain absolute POSIX paths; `file://` URLs are not accepted as input. */
+export const posixFilesSchema = z
+  .array(
+    textSchema
+      .refine(
+        (path) => path.length <= MAX_PATH_LENGTH,
+        "Paths cannot exceed the UTF-16 code unit limit.",
+      )
+      .regex(/^\//u)
+      .refine(
+        (path) =>
+          Array.from(path).every(
+            (character) =>
+              character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127,
+          ),
+        "Paths cannot contain control characters.",
+      ),
+  )
+  .min(1)
+  .max(MAX_FILES);
 // Windows RTF is an ANSI byte stream. Unicode is represented by RTF escapes.
 export const rtfSchema = textSchema
   .refine(
@@ -123,40 +143,47 @@ export const rtfSchema = textSchema
     "RTF must use ASCII bytes and Unicode escapes.",
   )
   .regex(/^\{\\rtf[1-9]/);
-const builtInItemSchema = z.discriminatedUnion("format", [
-  z.strictObject({
-    format: z.literal("text/plain"),
-    data: textSchema,
-  }),
-  z.strictObject({
-    format: z.literal("text/html"),
-    data: textSchema,
-  }),
-  z.strictObject({
-    format: z.literal("text/rtf"),
-    data: rtfSchema,
-  }),
-  z.strictObject({
-    format: z.literal("application/x-bunaway-file-list"),
-    data: filesSchema,
-  }),
-  z.strictObject({
-    format: z.literal("image/bmp"),
-    data: imageSchema,
-  }),
-  z.strictObject({
-    format: z.literal("application/x-bunaway-bookmark"),
-    data: bookmarkSchema,
-  }),
-]);
-export const itemSchema = z.union([
-  builtInItemSchema,
-  z.strictObject({
-    format: binaryFormatSchema,
-    data: binarySchema,
-  }),
-]);
+const createItemSchema = (
+  files: typeof filesSchema | typeof posixFilesSchema,
+) => {
+  const builtInItemSchema = z.discriminatedUnion("format", [
+    z.strictObject({
+      format: z.literal("text/plain"),
+      data: textSchema,
+    }),
+    z.strictObject({
+      format: z.literal("text/html"),
+      data: textSchema,
+    }),
+    z.strictObject({
+      format: z.literal("text/rtf"),
+      data: rtfSchema,
+    }),
+    z.strictObject({
+      format: z.literal("application/x-bunaway-file-list"),
+      data: files,
+    }),
+    z.strictObject({
+      format: z.literal("image/bmp"),
+      data: imageSchema,
+    }),
+    z.strictObject({
+      format: z.literal("application/x-bunaway-bookmark"),
+      data: bookmarkSchema,
+    }),
+  ]);
+  return z.union([
+    builtInItemSchema,
+    z.strictObject({
+      format: binaryFormatSchema,
+      data: binarySchema,
+    }),
+  ]);
+};
+export const itemSchema = createItemSchema(filesSchema);
+export const macosItemSchema = createItemSchema(posixFilesSchema);
 export type ClipboardItem = z.infer<typeof itemSchema>;
+export type MacosClipboardItem = z.infer<typeof macosItemSchema>;
 
 /** Leave room for the protocol envelope even when paths or text require JSON escaping. */
 export function fitsFormatBudget(value: unknown): boolean {
@@ -165,17 +192,21 @@ export function fitsFormatBudget(value: unknown): boolean {
     MAX_FORMAT_JSON_BYTES
   );
 }
-export const writeFormatsSchema = z
-  .strictObject({
-    items: z.array(itemSchema).min(1).max(5),
-  })
-  .refine(
-    (input) =>
-      new Set(input.items.map((item) => item.format)).size ===
-      input.items.length,
-    "Formats must be unique.",
-  )
-  .refine(fitsFormatBudget, "Clipboard data exceeds the transport budget.");
+const createWriteFormatsSchema = (item: typeof itemSchema) =>
+  z
+    .strictObject({
+      items: z.array(item).min(1).max(5),
+    })
+    .refine(
+      (input) =>
+        new Set(input.items.map((entry) => entry.format)).size ===
+        input.items.length,
+      "Formats must be unique.",
+    )
+    .refine(fitsFormatBudget, "Clipboard data exceeds the transport budget.");
+export const writeFormatsSchema = createWriteFormatsSchema(itemSchema);
+export const macosWriteFormatsSchema =
+  createWriteFormatsSchema(macosItemSchema);
 export const readFormatsSchema = z
   .strictObject({
     formats: z.array(formatSchema).min(1).max(5),
@@ -184,18 +215,21 @@ export const readFormatsSchema = z
     (input) => new Set(input.formats).size === input.formats.length,
     "Formats must be unique.",
   );
-export const readResultSchema = z
-  .array(
-    z.union([
-      itemSchema,
-      z.strictObject({
-        format: formatSchema,
-        data: z.null(),
-      }),
-    ]),
-  )
-  .max(5)
-  .refine(fitsFormatBudget, "Clipboard data exceeds the transport budget.");
+const createReadResultSchema = (item: typeof itemSchema) =>
+  z
+    .array(
+      z.union([
+        item,
+        z.strictObject({
+          format: formatSchema,
+          data: z.null(),
+        }),
+      ]),
+    )
+    .max(5)
+    .refine(fitsFormatBudget, "Clipboard data exceeds the transport budget.");
+export const readResultSchema = createReadResultSchema(itemSchema);
+export const macosReadResultSchema = createReadResultSchema(macosItemSchema);
 
 export const hasFormatSchema = z.strictObject({
   format: formatSchema,

@@ -228,7 +228,7 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 
 우선순위 P1, 확장은 P2. 소유자: 선택 기능.
 
-- [ ] 텍스트, HTML, 이미지와 파일 목록의 읽기, 쓰기 및 비우기를 제공한다.
+- [x] 텍스트, HTML, 이미지와 파일 목록의 읽기, 쓰기 및 비우기를 제공한다. 파일 목록은 `public.file-url` 항목으로 읽고 쓰며 [macOS 형식과 제한](./site/src/content/docs/reference/plugins/clipboard.mdx#macos-형식과-제한)을 따른다.
 - [ ] pasteboard 유형 조회, 사용자 지정 형식과 변경 감지의 지원 범위를 정한다.
 - [ ] 이미지 파일과 bytes의 로드, 크기 조회, resize와 PNG 내보내기를 제공한다.
 - [ ] Retina 이미지, template 이미지와 네이티브 이미지 자원의 해제를 정의한다.
