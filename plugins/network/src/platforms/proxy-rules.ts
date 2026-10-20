@@ -24,7 +24,8 @@ const DEFAULT_PORTS: Record<ProxyScheme, number> = {
 /** A list entry may carry `scheme=` (the URL scheme it serves) and `scheme://` (how to talk to the proxy). */
 const RULE_PREFIX = /^([a-z][a-z0-9]*)=(.*)$/i;
 const PROXY_URI_PREFIX = /^(http|https|socks|socks4|socks5):\/\/(.*)$/i;
-const HOST_PORT = /^(\[[0-9a-f:.]+\]|[^:\s[\]]+)(?::(\d{1,5}))?$/i;
+/** A host name (letters, digits, "_", "-", ".") or a bracketed IPv6 literal, then an optional port. */
+const HOST_PORT = /^(\[[0-9a-f:.]+\]|[a-z0-9_][a-z0-9_.-]*)(?::(\d{1,5}))?$/i;
 const SEPARATORS = /[;\s]+/;
 const DIRECT: ProxyEntry[] = [
   {

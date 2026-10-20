@@ -217,8 +217,8 @@ function scriptUrl(url: URL): string {
 
 /**
  * The route the system would use for `urlText`, from the current user's Internet Options as
- * WinHTTP reads them, in the order Windows applies: loopback and link-local hosts go direct,
- * automatic detection, the configured script, then the manual proxy list with its bypass list.
+ * WinHTTP reads them: loopback and link-local hosts go direct (as in Chromium; the `<-loopback>`
+ * bypass token that lifts this is not supported), then automatic detection, the configured script, then the manual proxy list with its bypass list.
  * A script that cannot be found or run falls through to the next source, like browsers do. Proxy
  * credentials are not returned, and the script lookup does not log on with the user's
  * credentials.

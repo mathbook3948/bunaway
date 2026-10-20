@@ -303,6 +303,13 @@ test("malformed entries are skipped and unknown schemes ignored", () => {
     proxy("[::1]", 3128),
   ]);
   expect(rules.socks).toEqual([]);
+  // Tokens that are not host names never become a host.
+  expect(
+    parseProxyList('proxy,corp"x:8080 <local> a%41b \x01host ok.example:81')
+      .all,
+  ).toEqual([
+    proxy("ok.example", 81),
+  ]);
   expect(parseProxyList(`${"a".repeat(254)}:80`).all).toEqual([]);
 });
 
@@ -640,7 +647,9 @@ test("a cancelled call asks WinHTTP nothing", async () => {
   controller.abort();
   await expect(
     resolveProxy(api, "http://example.com/", 1000, controller.signal),
-  ).rejects.toBeDefined();
+  ).rejects.toMatchObject({
+    name: "AbortError",
+  });
   expect(lookups).toEqual([]);
 });
 
