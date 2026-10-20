@@ -364,6 +364,50 @@ export const pluginImports = { image: { operations: async () => ({ createOperati
         height: 4,
         rgba: nearestBytes.toString("base64"),
       });
+      await invoke(() =>
+        image.addRepresentation({
+          id: source.id,
+          scaleFactor: 2,
+          source: nearest.id,
+        }),
+      );
+      expect(
+        await invoke(() =>
+          image.getInfo({
+            id: source.id,
+            scaleFactor: 1.5,
+          }),
+        ),
+      ).toEqual({
+        width: 4,
+        height: 4,
+        empty: false,
+        scaleFactor: 2,
+      });
+      const scaledPng = await invoke(() =>
+        image.exportBytes({
+          id: source.id,
+          format: "image/png",
+          scaleFactor: 2,
+        }),
+      );
+      const scaledBack = await invoke(() => image.createBytes(scaledPng));
+      expect(
+        await invoke(() =>
+          image.getPixels({
+            id: scaledBack.id,
+          }),
+        ),
+      ).toEqual({
+        width: 4,
+        height: 4,
+        rgba: nearestBytes.toString("base64"),
+      });
+      await invoke(() =>
+        image.dispose({
+          id: scaledBack.id,
+        }),
+      );
       const sampled = await invoke(() =>
         image.resize({
           id: source.id,

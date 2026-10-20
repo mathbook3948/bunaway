@@ -350,3 +350,16 @@ test("a product that is mathematically whole accepts only that size", () => {
     }),
   ).toThrow(/size/);
 });
+
+test("an image cannot be attached as its own representation", () => {
+  const { platform, make } = setup();
+  const id = make(3, 3);
+  expect(() =>
+    platform.addRepresentation({
+      id,
+      scaleFactor: 1.2,
+      source: id,
+    }),
+  ).toThrow(/size/);
+  expect(platform.getRepresentations(id).representations).toHaveLength(1);
+});

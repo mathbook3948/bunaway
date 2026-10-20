@@ -99,6 +99,7 @@ export class ImageResources {
     const pixels = this.resource(source).pixels;
     const base = resource.pixels;
     if (
+      id === source ||
       base.width === 0 ||
       pixels.width === 0 ||
       !matchesLogicalSize(base.width, pixels.width, scaleFactor) ||
