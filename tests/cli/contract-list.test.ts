@@ -205,6 +205,53 @@ test("handles the app leaves open do not keep the CLI waiting", async () => {
   }
 });
 
+/** Runs the CLI against an app entry that replaces the template's, then restores it. */
+async function withAppSource(
+  source: string,
+  check: () => Promise<void>,
+): Promise<void> {
+  await Bun.write(resolve(project, "src-bunaway/app.ts"), source);
+  try {
+    await check();
+  } finally {
+    await Bun.write(resolve(project, "src-bunaway/app.ts"), appSource);
+  }
+}
+
+test("an app entry that is not a defineApp result is rejected", async () => {
+  await withAppSource("export default 1;\n", async () => {
+    const { code, stdout, stderr } = await runContract(project);
+    expect(code).toBe(1);
+    expect(stdout).toBe("");
+    expect(stderr).toContain("must default-export a defineApp result");
+  });
+});
+
+test("an app that ends the process itself fails without exposing the scratch path", async () => {
+  await withAppSource(`process.exit(0);\n${appSource}`, async () => {
+    const { code, stdout, stderr } = await runContract(project);
+    expect(code).toBe(1);
+    expect(stdout).toBe("");
+    expect(stderr).toContain("ended the process");
+    expect(stderr).not.toContain("bunaway-contract-");
+  });
+});
+
+test("a contract larger than a protocol message is still written", async () => {
+  const bigSchema =
+    '{ enum: Array.from({ length: 40000 }, () => "x".repeat(40)) }';
+  await withAppSource(
+    // Registers the template policy's names so the policy check passes.
+    `export default { commands: { "big.command": { input: ${bigSchema}, output: {} }, "message.read": { input: {}, output: {} }, "message.save": { input: {}, output: {} } }, events: { "message.saved": {} } };\n`,
+    async () => {
+      const { code, stdout, stderr } = await runContract(project);
+      expect(code, stderr).toBe(0);
+      expect(stdout.length).toBeGreaterThan(1024 * 1024);
+      expect(JSON.parse(stdout).commands[0].name).toBe("big.command");
+    },
+  );
+});
+
 test("plugin entries carry their owner and unexposed entries list no views", () => {
   const policy: Policy = {
     version: 1,

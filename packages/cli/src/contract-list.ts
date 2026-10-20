@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { type Policy, type Schema, validateValue } from "@bunaway/protocol";
+import { isRecord, type Policy, type Schema } from "@bunaway/protocol";
 import { validateProject } from "./config.ts";
 
 /** Version of the JSON document written by `bunaway contract`. */
@@ -60,80 +60,6 @@ export type ContractList = {
   }[];
 };
 
-// Any object is a valid schema for the purpose of carrying it through; the app's own
-// definitions already validated their schemas when they were registered.
-const anySchema = {} as const;
-const registrationsSchema = {
-  type: "object",
-  properties: {
-    commands: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          name: {
-            type: "string",
-          },
-          input: anySchema,
-          output: anySchema,
-        },
-        required: [
-          "name",
-          "input",
-          "output",
-        ],
-      },
-    },
-    events: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          name: {
-            type: "string",
-          },
-          payload: anySchema,
-        },
-        required: [
-          "name",
-          "payload",
-        ],
-      },
-    },
-  },
-  required: [
-    "commands",
-    "events",
-  ],
-} as const satisfies Schema;
-const extractedSchema = {
-  type: "object",
-  properties: {
-    ...registrationsSchema.properties,
-    plugins: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          name: {
-            type: "string",
-          },
-          ...registrationsSchema.properties,
-        },
-        required: [
-          "name",
-          "commands",
-          "events",
-        ],
-      },
-    },
-  },
-  required: [
-    ...registrationsSchema.required,
-    "plugins",
-  ],
-} as const satisfies Schema;
-
 /**
  * Runs in a child Bun process. Importing the app module executes its top-level code, so the
  * result goes to a file: anything the app prints stays out of the document. Schemas are plain
@@ -167,58 +93,68 @@ function sorted(values: readonly string[]): string[] {
   ].sort(compareNames);
 }
 
-/** Turns the child's list form into name-keyed registrations after checking its shape. */
-function toDefinition(value: unknown): AppDefinition {
-  // The child process output is untrusted input: check its shape before using any field.
-  const checked = validateValue(extractedSchema, value) as {
-    commands: {
-      name: string;
-      input: Schema;
-      output: Schema;
-    }[];
-    events: {
-      name: string;
-      payload: Schema;
-    }[];
-    plugins: {
-      name: string;
-      commands: {
-        name: string;
-        input: Schema;
-        output: Schema;
-      }[];
-      events: {
-        name: string;
-        payload: Schema;
-      }[];
-    }[];
-  };
-  const registrations = (source: typeof checked): Registrations => ({
-    commands: Object.fromEntries(
-      source.commands.map(({ name, input, output }) => [
-        name,
-        {
-          input,
-          output,
-        },
-      ]),
-    ),
-    events: Object.fromEntries(
-      source.events.map(({ name, payload }) => [
-        name,
-        payload,
-      ]),
-    ),
-  });
+/** Narrows a value read from the child's file to a record, naming the field in the error. */
+function expectRecord(value: unknown, field: string): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new Error(`The app definition has an invalid ${field}.`);
+  }
+  return value;
+}
+
+function expectString(value: unknown, field: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`The app definition has an invalid ${field}.`);
+  }
+  return value;
+}
+
+function expectList(value: unknown, field: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`The app definition has an invalid ${field}.`);
+  }
+  return value;
+}
+
+/**
+ * Reads the child's list form into name-keyed registrations. The file is the child's own output
+ * and is not a wire message, so only its structure is checked, with no size or depth limit.
+ * Schema bodies are the values the app registered, which its definition validated, so they are
+ * carried as written.
+ */
+function toRegistrations(value: Record<string, unknown>): Registrations {
+  const commands: Record<string, Registrations["commands"][string]> = {};
+  for (const item of expectList(value.commands, "commands")) {
+    const entry = expectRecord(item, "command");
+    commands[expectString(entry.name, "command name")] = {
+      input: expectRecord(entry.input, "command input"),
+      output: expectRecord(entry.output, "command output"),
+    };
+  }
+  const events: Record<string, Schema> = {};
+  for (const item of expectList(value.events, "events")) {
+    const entry = expectRecord(item, "event");
+    events[expectString(entry.name, "event name")] = expectRecord(
+      entry.payload,
+      "event payload",
+    );
+  }
   return {
-    ...registrations(checked),
-    plugins: checked.plugins.map((plugin) => ({
-      name: plugin.name,
-      ...registrations({
-        ...plugin,
-        plugins: [],
-      }),
-    })),
+    commands,
+    events,
+  };
+}
+
+function toDefinition(value: unknown): AppDefinition {
+  const root = expectRecord(value, "root");
+  return {
+    ...toRegistrations(root),
+    plugins: expectList(root.plugins, "plugins").map((item) => {
+      const plugin = expectRecord(item, "plugin");
+      return {
+        name: expectString(plugin.name, "plugin name"),
+        ...toRegistrations(plugin),
+      };
+    }),
   };
 }
 
@@ -265,6 +201,10 @@ export async function readAppDefinition(
     } finally {
       clearTimeout(timer);
     }
+    // An app that exits the process itself finishes with code 0 before writing the result.
+    if (!(await Bun.file(output).exists())) {
+      throw new Error("The app entry ended the process before it was read.");
+    }
     return toDefinition(JSON.parse(await readFile(output, "utf8")));
   } finally {
     await rm(scratch, {
@@ -274,7 +214,7 @@ export async function readAppDefinition(
   }
 }
 
-/** Names each registered entry's owner and rejects a name registered under two owners. */
+/** Names each registered entry's owner; defineApp already rejects a name two owners register. */
 function ownedEntries<T>(
   app: Readonly<Record<string, T>>,
   plugins: readonly {
@@ -297,12 +237,6 @@ function ownedEntries<T>(
   >();
   const add = (owner: Owner, entries: Readonly<Record<string, T>>) => {
     for (const [name, value] of Object.entries(entries)) {
-      const existing = owned.get(name);
-      if (existing) {
-        throw new Error(
-          `"${name}" is registered by both ${existing.owner} and ${owner}.`,
-        );
-      }
       owned.set(name, {
         owner,
         value,
