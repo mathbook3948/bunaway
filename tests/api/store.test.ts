@@ -1170,6 +1170,45 @@ test("a file value the protocol could not carry is refused, or replaced with res
   expect(instance.has("live", "k")).toBe(false);
 });
 
+test("a compact file near the size limit loads as it is and saves within the limit", () => {
+  const root = dataRoot();
+  mkdirSync(join(root, "data", "stores"), {
+    recursive: true,
+  });
+  const list = Array.from(
+    {
+      length: 100_000,
+    },
+    (_, index) => index % 10,
+  );
+  const text = JSON.stringify({
+    list,
+  });
+  expect(text.length).toBeGreaterThan(190_000);
+  writeFileSync(
+    storeFile(root, "s"),
+    JSON.stringify({
+      a: list,
+      b: list,
+      c: list.slice(0, 50_000),
+    }),
+  );
+  const instance = create(root);
+  expect(
+    instance.load({
+      name: "s",
+      onInvalidFile: "reset",
+      ...manual,
+    }),
+  ).toEqual({
+    loaded: "file",
+  });
+  instance.save("s");
+  expect(readFileSync(storeFile(root, "s")).length).toBeLessThanOrEqual(
+    512 * 1024,
+  );
+});
+
 test("nesting up to 57 levels is stored and 58 is refused", () => {
   const nested = (levels: number) =>
     JSON.parse(`${"[".repeat(levels)}${"]".repeat(levels)}`);

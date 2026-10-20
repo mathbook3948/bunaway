@@ -70,9 +70,9 @@ await store.close({ name: "settings" });
 UTF-8이 아니거나 JSON이 아니거나 최상위가 객체가 아니거나 크기 상한을 넘거나, 짝이 없는 surrogate 문자열,
 `1e400`처럼 유한하지 않은 수, 너무 깊은 중첩(배열과 객체는 값 안에서 57단계까지)처럼 호출자에게 돌려줄 수 없는 키나 값이 있는
 파일은 손상으로 봅니다. 기본(`onInvalidFile: "error"`)에서는 `load`가 `INVALID_ARGUMENT`로 실패하고 파일은
-그대로 남습니다. `details.reason`은 원인에 따라 `"invalid-file"`(형식, 최상위, 원본 크기, 키 수와 키 길이),
-`"value-not-carriable"`, `"value-too-large"`, `"file-too-large"` 중 하나이며 `defaults`와 합친 키 수
-초과에는 없습니다. 저장 경로가 파일이 아니라 디렉터리이면 손상으로 보지 않고 내부 오류로 실패합니다. 저장소가 열리지 않으므로 autosave가 손상된 파일을 덮어쓰지 않습니다.
+그대로 남습니다. 저장소가 열리지 않으므로 autosave가 손상된 파일을 덮어쓰지 않습니다. 저장 경로가 파일이
+아니라 디렉터리이면 손상으로 보지 않고 내부 오류로 실패합니다. 호출자는 오류 코드와 메시지로 원인을
+구분하며, 오류의 `details`는 호스트 응답에 실리지 않습니다. 저장 파일은 공백 없는 JSON으로 기록합니다.
 파일은 정상이어도 `defaults`와 합친 결과가 키 수, 값 크기, 파일 크기 상한을 넘으면 같은
 `INVALID_ARGUMENT`로 실패합니다. `onInvalidFile: "reset"`이면 이 두 경우 모두 defaults(없으면 빈 저장소)로
 시작하고 `loaded`가 `"reset"`이며, 기존 파일은 다음 저장 때 교체됩니다. autosave가 켜져 있으면 이 저장은

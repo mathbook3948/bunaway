@@ -58,7 +58,6 @@ const PERMISSION_CODES = new Set([
 const MAX_STORE_VALUE_DEPTH = MAX_JSON_DEPTH - 8;
 const STORE_DIRECTORY_MODE = 0o700;
 const STORE_FILE_MODE = 0o600;
-const JSON_INDENT = 2;
 
 /** File operations the store depends on; tests replace them to rehearse rename failures. */
 export interface StoreFileOperations {
@@ -147,9 +146,12 @@ function storeIoError(error: unknown): unknown {
  * Serialize the entries as one JSON object. Keys keep their insertion order except that
  * integer-like keys ("1", "42") come first in ascending order, as in every JavaScript object, so
  * a store read back from its file lists them that way.
+ *
+ * The text is compact on purpose: a file within the size limit never serializes larger than it
+ * was read, so a valid file cannot fail the limit only because of how it was formatted.
  */
 function serialize(data: Map<string, StoreValue>): string {
-  return JSON.stringify(Object.fromEntries(data), null, JSON_INDENT);
+  return JSON.stringify(Object.fromEntries(data));
 }
 
 /** With the `u` flag the class matches only an unpaired surrogate, which the protocol refuses. */
