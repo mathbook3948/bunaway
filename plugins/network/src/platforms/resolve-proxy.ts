@@ -1,33 +1,26 @@
 import { dlopen, type Pointer, ptr, read, toArrayBuffer } from "bun:ffi";
-import { KERNEL32, pick, wide, win32CallError } from "@bunaway/plugin/win32";
-import { BunawayError } from "@bunaway/protocol";
+import { KERNEL32, pick, win32CallError } from "@bunaway/plugin/win32";
+import { BunawayError, isRecord } from "@bunaway/protocol";
+import {
+  AUTO_PROXY_WORKER_SOURCE,
+  MAX_AUTO_PROXY_WORKERS,
+  requestFromWorker,
+} from "#network/platforms/auto-proxy-worker";
 import {
   isImplicitDirect,
   type ProxyEntry,
   selectEntries,
 } from "#network/platforms/proxy-rules";
 
-const WINHTTP_ACCESS_TYPE_NO_PROXY = 1;
 const WINHTTP_ACCESS_TYPE_NAMED_PROXY = 3;
-const WINHTTP_AUTOPROXY_AUTO_DETECT = 0x1;
-const WINHTTP_AUTOPROXY_CONFIG_URL = 0x2;
-/** Find the script address with DHCP, then DNS (`wpad`). */
-const WINHTTP_AUTO_DETECT_TYPE_DHCP = 0x1;
-const WINHTTP_AUTO_DETECT_TYPE_DNS_A = 0x2;
 const ERROR_FILE_NOT_FOUND = 2;
 const ERROR_INVALID_PARAMETER = 87;
 const ERROR_WINHTTP_INVALID_URL = 12005;
 const ERROR_WINHTTP_UNRECOGNIZED_SCHEME = 12006;
 /** `WINHTTP_CURRENT_USER_IE_PROXY_CONFIG` on x64: BOOL, padding, then three string pointers. */
 const IE_PROXY_CONFIG_BYTES = 32;
-/** `WINHTTP_AUTOPROXY_OPTIONS` on x64. */
-const AUTOPROXY_OPTIONS_BYTES = 32;
-/** `WINHTTP_PROXY_INFO` on x64: access type, padding, then two string pointers. */
-const PROXY_INFO_BYTES = 24;
 /** Upper bound on a configuration string read from WinHTTP, in UTF-16 units. */
 const MAX_CONFIG_CHARS = 32768;
-/** Longest wait for the script download and the name lookups that WinHTTP makes for one call. */
-const MAX_AUTO_PROXY_STEP_MS = 5000;
 
 /** The system proxy settings of the current user, as WinHTTP reads them from Internet Options. */
 export type IeProxyConfig = {
@@ -60,7 +53,8 @@ export interface WinHttpApi {
     url: string,
     source: AutoProxySource,
     timeoutMs: number,
-  ): AutoProxyResult | number;
+    signal: AbortSignal,
+  ): Promise<AutoProxyResult | number>;
 }
 
 function failure(message: string): never {
@@ -70,7 +64,7 @@ function failure(message: string): never {
   });
 }
 
-/** Open winhttp.dll with the shared kernel32 memory calls; the caller closes both. */
+/** Open winhttp.dll for the settings read, with the shared kernel32 memory calls; the caller closes both. */
 export function openWinHttp() {
   const kernel = dlopen("kernel32.dll", {
     ...pick(KERNEL32, "GetLastError", "GlobalFree"),
@@ -80,41 +74,6 @@ export function openWinHttp() {
       WinHttpGetIEProxyConfigForCurrentUser: {
         args: [
           "ptr",
-        ],
-        returns: "i32",
-      },
-      WinHttpOpen: {
-        args: [
-          "ptr",
-          "u32",
-          "ptr",
-          "ptr",
-          "u32",
-        ],
-        returns: "u64",
-      },
-      WinHttpSetTimeouts: {
-        args: [
-          "u64",
-          "i32",
-          "i32",
-          "i32",
-          "i32",
-        ],
-        returns: "i32",
-      },
-      WinHttpGetProxyForUrl: {
-        args: [
-          "u64",
-          "ptr",
-          "ptr",
-          "ptr",
-        ],
-        returns: "i32",
-      },
-      WinHttpCloseHandle: {
-        args: [
-          "u64",
         ],
         returns: "i32",
       },
@@ -174,9 +133,33 @@ function takeStrings(
   return strings;
 }
 
-/** Adapt the loaded WinHTTP symbols to the narrow interface above. */
+/** The worker's reply as a result or a Win32 error code; anything else is a failed lookup. */
+function parseReply(reply: unknown): AutoProxyResult | number {
+  if (isRecord(reply)) {
+    if (typeof reply.error === "number") {
+      return reply.error;
+    }
+    const found = reply.found;
+    if (
+      isRecord(found) &&
+      typeof found.accessType === "number" &&
+      (found.proxy === null || typeof found.proxy === "string") &&
+      (found.bypass === null || typeof found.bypass === "string")
+    ) {
+      return {
+        accessType: found.accessType,
+        proxy: found.proxy,
+        bypass: found.bypass,
+      };
+    }
+  }
+  return failure("Windows proxy lookup failed.");
+}
+
+/** Adapt the loaded WinHTTP symbols and the lookup workers to the narrow interface above. */
 export function winHttpApi(
   libraries: ReturnType<typeof openWinHttp>,
+  workers: Set<Worker>,
 ): WinHttpApi {
   const { winhttp, kernel } = libraries;
   const lastError = () => kernel.symbols.GetLastError();
@@ -210,62 +193,20 @@ export function winHttpApi(
         bypass,
       };
     },
-    autoProxyForUrl(url, source, timeoutMs) {
-      const session = winhttp.symbols.WinHttpOpen(
-        null,
-        WINHTTP_ACCESS_TYPE_NO_PROXY,
-        null,
-        null,
-        0,
-      );
-      if (session === 0n) {
-        return failure("Windows proxy lookup could not start.");
-      }
-      const options = Buffer.alloc(AUTOPROXY_OPTIONS_BYTES);
-      const script = source.kind === "script" ? wide(source.url) : null;
-      if (script) {
-        options.writeUInt32LE(WINHTTP_AUTOPROXY_CONFIG_URL, 0);
-        options.writeBigUInt64LE(BigInt(ptr(script)), 8);
-      } else {
-        options.writeUInt32LE(WINHTTP_AUTOPROXY_AUTO_DETECT, 0);
-        options.writeUInt32LE(
-          WINHTTP_AUTO_DETECT_TYPE_DHCP | WINHTTP_AUTO_DETECT_TYPE_DNS_A,
-          4,
-        );
-      }
-      // fAutoLogonIfChallenged stays FALSE (offset 28): no logon credentials are offered to the script host.
-      const info = Buffer.alloc(PROXY_INFO_BYTES);
-      const target = wide(url);
-      try {
-        const step = Math.min(timeoutMs, MAX_AUTO_PROXY_STEP_MS);
-        winhttp.symbols.WinHttpSetTimeouts(session, step, step, step, step);
-        const error = win32CallError(
-          () =>
-            winhttp.symbols.WinHttpGetProxyForUrl(
-              session,
-              ptr(target),
-              ptr(options),
-              ptr(info),
-            ),
-          lastError,
-        );
-        const [proxy = null, bypass = null] = takeStrings(
-          libraries,
-          [
-            8,
-            16,
-          ].map((offset) => info.readBigUInt64LE(offset)),
-        );
-        return error === 0
-          ? {
-              accessType: info.readUInt32LE(0),
-              proxy,
-              bypass,
-            }
-          : error;
-      } finally {
-        winhttp.symbols.WinHttpCloseHandle(session);
-      }
+    async autoProxyForUrl(url, source, timeoutMs, signal) {
+      // The blocking WinHTTP calls run in a worker; see `AUTO_PROXY_SYMBOLS`.
+      const reply = await requestFromWorker({
+        source: AUTO_PROXY_WORKER_SOURCE,
+        request: {
+          url,
+          source,
+          timeoutMs,
+        },
+        signal,
+        workers,
+        limit: MAX_AUTO_PROXY_WORKERS,
+      });
+      return parseReply(reply);
     },
   };
 }
@@ -294,17 +235,19 @@ function scriptUrl(url: URL): string {
  * credentials are not read or returned, and the script lookup does not log on with the user's
  * credentials.
  *
- * WinHTTP answers synchronously and cannot be cancelled, so cancellation and the deadline are
- * checked between steps; each automatic step is bounded by the time left of the deadline (at most
- * `MAX_AUTO_PROXY_STEP_MS`). Settings that need no script are answered without a WinHTTP session.
+ * The blocking WinHTTP calls run in a worker, so the host thread keeps serving other work while
+ * a lookup waits. Aborting the signal (cancellation or the deadline) ends the wait at once and
+ * the worker is terminated; the native call it may still be inside finishes on its own. Each
+ * automatic step gets the time left of the deadline. Settings that need no script are answered
+ * from the settings read alone, without a worker.
  */
-export function resolveProxy(
+export async function resolveProxy(
   api: WinHttpApi,
   urlText: string,
   timeoutMs: number,
   signal: AbortSignal,
   now: () => number = Date.now,
-): ProxyEntry[] {
+): Promise<ProxyEntry[]> {
   const url = new URL(urlText);
   const startedAt = now();
   signal.throwIfAborted();
@@ -337,7 +280,6 @@ export function resolveProxy(
   }
   for (const source of sources) {
     signal.throwIfAborted();
-    // The native call cannot be interrupted, so the deadline is spent across the steps instead.
     const remaining = timeoutMs - (now() - startedAt);
     if (remaining <= 0) {
       throw new BunawayError({
@@ -345,7 +287,12 @@ export function resolveProxy(
         message: "Network request timed out.",
       });
     }
-    const found = api.autoProxyForUrl(scriptUrl(url), source, remaining);
+    const found = await api.autoProxyForUrl(
+      scriptUrl(url),
+      source,
+      remaining,
+      signal,
+    );
     if (typeof found === "number") {
       if (isRequestError(found)) {
         return failure("Windows proxy lookup rejected the URL.");

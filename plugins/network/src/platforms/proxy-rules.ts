@@ -122,10 +122,15 @@ export function parseProxyList(text: string): ProxyRules {
     }
     previous = undefined;
     const rule = RULE_PREFIX.exec(token);
-    const kind = rule?.[1]?.toLowerCase();
-    if (rule && kind !== "http" && kind !== "https" && kind !== "socks") {
+    const name = rule?.[1]?.toLowerCase();
+    // "ftp=" and any other scheme name serve no http or https URL.
+    if (rule && name !== "http" && name !== "https" && name !== "socks") {
       continue;
     }
+    const kind: "http" | "https" | "socks" | undefined =
+      name === "http" || name === "https" || name === "socks"
+        ? name
+        : undefined;
     const server = parseServer(
       rule ? (rule[2] ?? "") : token,
       kind === "socks" ? "socks4" : "http",

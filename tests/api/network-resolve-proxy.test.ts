@@ -8,6 +8,10 @@ import {
 } from "#plugins/network/src/contract";
 import { macosOperations } from "#plugins/network/src/operations";
 import {
+  requestFromWorker,
+  startWorker,
+} from "#plugins/network/src/platforms/auto-proxy-worker";
+import {
   isImplicitDirect,
   matchesBypass,
   parseProxyList,
@@ -77,7 +81,7 @@ function fakeApi(
         bypass: null,
         ...config,
       },
-    autoProxyForUrl(url, source, timeoutMs) {
+    async autoProxyForUrl(url, source, timeoutMs) {
       lookups.push({
         url,
         source,
@@ -408,7 +412,7 @@ test("entries for a URL take its own scheme first, then shared entries; SOCKS on
   );
 });
 
-test("no settings or no proxy configured resolves direct without a WinHTTP session", () => {
+test("no settings or no proxy configured resolves direct without a WinHTTP session", async () => {
   for (const config of [
     null,
     {},
@@ -417,34 +421,38 @@ test("no settings or no proxy configured resolves direct without a WinHTTP sessi
     },
   ]) {
     const { api, lookups } = fakeApi(config);
-    expect(resolveProxy(api, "https://example.com/", 1000, live)).toEqual([
-      direct(),
-    ]);
+    expect(await resolveProxy(api, "https://example.com/", 1000, live)).toEqual(
+      [
+        direct(),
+      ],
+    );
     expect(lookups).toEqual([]);
   }
 });
 
-test("a manual proxy list applies with its bypass list", () => {
+test("a manual proxy list applies with its bypass list", async () => {
   const { api, lookups } = fakeApi({
     proxy: "http=web.example:3128;https=secure.example:3129",
     bypass: "<local>;*.corp.example",
   });
-  expect(resolveProxy(api, "http://example.com/", 1000, live)).toEqual([
+  expect(await resolveProxy(api, "http://example.com/", 1000, live)).toEqual([
     proxy("web.example", 3128),
   ]);
-  expect(resolveProxy(api, "https://example.com/", 1000, live)).toEqual([
+  expect(await resolveProxy(api, "https://example.com/", 1000, live)).toEqual([
     proxy("secure.example", 3129),
   ]);
-  expect(resolveProxy(api, "https://host.corp.example/", 1000, live)).toEqual([
+  expect(
+    await resolveProxy(api, "https://host.corp.example/", 1000, live),
+  ).toEqual([
     direct(),
   ]);
-  expect(resolveProxy(api, "http://intranet/", 1000, live)).toEqual([
+  expect(await resolveProxy(api, "http://intranet/", 1000, live)).toEqual([
     direct(),
   ]);
   expect(lookups).toEqual([]);
 });
 
-test("loopback URLs go direct even when a proxy and a script are configured", () => {
+test("loopback URLs go direct even when a proxy and a script are configured", async () => {
   const { api, lookups } = fakeApi({
     autoDetect: true,
     autoConfigUrl: "http://pac.example/proxy.pac",
@@ -455,14 +463,14 @@ test("loopback URLs go direct even when a proxy and a script are configured", ()
     "https://127.0.0.1/",
     "http://[::1]/",
   ]) {
-    expect(resolveProxy(api, url, 1000, live)).toEqual([
+    expect(await resolveProxy(api, url, 1000, live)).toEqual([
       direct(),
     ]);
   }
   expect(lookups).toEqual([]);
 });
 
-test("automatic detection that names a proxy wins over the manual list", () => {
+test("automatic detection that names a proxy wins over the manual list", async () => {
   const { api, lookups } = fakeApi(
     {
       autoDetect: true,
@@ -474,7 +482,9 @@ test("automatic detection that names a proxy wins over the manual list", () => {
       bypass: null,
     }),
   );
-  expect(resolveProxy(api, "http://example.com/a?b=1", 1000, live)).toEqual([
+  expect(
+    await resolveProxy(api, "http://example.com/a?b=1", 1000, live),
+  ).toEqual([
     proxy("pac.example", 8080),
   ]);
   expect(lookups).toEqual([
@@ -488,7 +498,7 @@ test("automatic detection that names a proxy wins over the manual list", () => {
   ]);
 });
 
-test("a script that selects no proxy resolves direct", () => {
+test("a script that selects no proxy resolves direct", async () => {
   const { api } = fakeApi(
     {
       autoConfigUrl: "http://pac.example/proxy.pac",
@@ -500,12 +510,12 @@ test("a script that selects no proxy resolves direct", () => {
       bypass: null,
     }),
   );
-  expect(resolveProxy(api, "http://example.com/", 1000, live)).toEqual([
+  expect(await resolveProxy(api, "http://example.com/", 1000, live)).toEqual([
     direct(),
   ]);
 });
 
-test("a failed detection falls through to the script, then to the manual list", () => {
+test("a failed detection falls through to the script, then to the manual list", async () => {
   const { api, lookups } = fakeApi(
     {
       autoDetect: true,
@@ -517,7 +527,7 @@ test("a failed detection falls through to the script, then to the manual list", 
         ? ERROR_AUTODETECTION_FAILED
         : ERROR_UNABLE_TO_DOWNLOAD_SCRIPT,
   );
-  expect(resolveProxy(api, "http://example.com/", 1000, live)).toEqual([
+  expect(await resolveProxy(api, "http://example.com/", 1000, live)).toEqual([
     proxy("manual.example", 80),
   ]);
   expect(lookups.map((lookup) => lookup.source)).toEqual([
@@ -533,29 +543,31 @@ test("a failed detection falls through to the script, then to the manual list", 
   const bare = fakeApi({
     autoDetect: true,
   });
-  expect(resolveProxy(bare.api, "http://example.com/", 1000, live)).toEqual([
+  expect(
+    await resolveProxy(bare.api, "http://example.com/", 1000, live),
+  ).toEqual([
     direct(),
   ]);
 });
 
-test("the script sees no credentials, fragment or https path", () => {
+test("the script sees no credentials, fragment or https path", async () => {
   const { api, lookups } = fakeApi({
     autoDetect: true,
   });
-  resolveProxy(
+  await resolveProxy(
     api,
     "https://example.com:8443/private/path?token=abc",
     1000,
     live,
   );
-  resolveProxy(api, "http://example.com/path?q=1", 1000, live);
+  await resolveProxy(api, "http://example.com/path?q=1", 1000, live);
   expect(lookups.map((lookup) => lookup.url)).toEqual([
     "https://example.com:8443/",
     "http://example.com/path?q=1",
   ]);
 });
 
-test("an error that blames the request fails instead of falling back", () => {
+test("an error that blames the request fails instead of falling back", async () => {
   const { api } = fakeApi(
     {
       autoDetect: true,
@@ -563,16 +575,14 @@ test("an error that blames the request fails instead of falling back", () => {
     },
     () => ERROR_INVALID_URL,
   );
-  expect(() =>
+  await expect(
     resolveProxy(api, "http://example.com/", 1000, live),
-  ).toThrowError(
-    expect.objectContaining({
-      code: "INTERNAL",
-    }),
-  );
+  ).rejects.toMatchObject({
+    code: "INTERNAL",
+  });
 });
 
-test("the deadline is spent across automatic steps", () => {
+test("the deadline is spent across automatic steps", async () => {
   let clock = 0;
   const { api, lookups } = fakeApi(
     {
@@ -585,7 +595,7 @@ test("the deadline is spent across automatic steps", () => {
     },
   );
   expect(
-    resolveProxy(api, "http://example.com/", 1000, live, () => clock),
+    await resolveProxy(api, "http://example.com/", 1000, live, () => clock),
   ).toEqual([
     direct(),
   ]);
@@ -604,25 +614,23 @@ test("the deadline is spent across automatic steps", () => {
       return ERROR_AUTODETECTION_FAILED;
     },
   );
-  expect(() =>
+  await expect(
     resolveProxy(slow.api, "http://example.com/", 1000, live, () => clock),
-  ).toThrowError(
-    expect.objectContaining({
-      code: "TIMEOUT",
-    }),
-  );
+  ).rejects.toMatchObject({
+    code: "TIMEOUT",
+  });
   expect(slow.lookups).toHaveLength(1);
 });
 
-test("a cancelled call asks WinHTTP nothing", () => {
+test("a cancelled call asks WinHTTP nothing", async () => {
   const { api, lookups } = fakeApi({
     autoDetect: true,
   });
   const controller = new AbortController();
   controller.abort();
-  expect(() =>
+  await expect(
     resolveProxy(api, "http://example.com/", 1000, controller.signal),
-  ).toThrow();
+  ).rejects.toBeDefined();
   expect(lookups).toEqual([]);
 });
 
@@ -687,4 +695,133 @@ test("macOS declares the operation and reports it as unsupported", () => {
       code: "UNSUPPORTED",
     }),
   );
+});
+
+/** A worker that answers with the request, or never when told to hang. */
+const ECHO_WORKER = `
+self.onmessage = (event) => {
+  if (event.data.hang) {
+    return;
+  }
+  if (event.data.crash) {
+    throw new Error("boom");
+  }
+  postMessage({ echoed: event.data.value });
+};
+`;
+
+function request(
+  message: unknown,
+  signal: AbortSignal,
+  workers: Set<Worker>,
+  limit = 2,
+) {
+  return requestFromWorker({
+    source: ECHO_WORKER,
+    request: message,
+    signal,
+    workers,
+    limit,
+  });
+}
+
+test("a worker request returns the reply and frees its slot", async () => {
+  const workers = new Set<Worker>();
+  await expect(
+    request(
+      {
+        value: 7,
+      },
+      live,
+      workers,
+    ),
+  ).resolves.toEqual({
+    echoed: 7,
+  });
+  await Bun.sleep(50);
+  expect(workers.size).toBe(0);
+});
+
+test("aborting a worker request rejects at once and stops the worker", async () => {
+  const workers = new Set<Worker>();
+  const controller = new AbortController();
+  const pending = request(
+    {
+      hang: true,
+    },
+    controller.signal,
+    workers,
+  );
+  expect(workers.size).toBe(1);
+  controller.abort(new Error("stop"));
+  await expect(pending).rejects.toThrow("stop");
+  await Bun.sleep(100);
+  expect(workers.size).toBe(0);
+  await expect(
+    request(
+      {
+        value: 1,
+      },
+      AbortSignal.abort(),
+      workers,
+    ),
+  ).rejects.toBeDefined();
+  expect(workers.size).toBe(0);
+});
+
+test("a crashing worker is an internal error", async () => {
+  const workers = new Set<Worker>();
+  await expect(
+    request(
+      {
+        crash: true,
+      },
+      live,
+      workers,
+    ),
+  ).rejects.toMatchObject({
+    code: "INTERNAL",
+  });
+});
+
+test("workers at the limit refuse new requests with BUSY", async () => {
+  const workers = new Set<Worker>();
+  const controller = new AbortController();
+  const first = request(
+    {
+      hang: true,
+    },
+    controller.signal,
+    workers,
+    1,
+  );
+  await expect(
+    request(
+      {
+        value: 1,
+      },
+      live,
+      workers,
+      1,
+    ),
+  ).rejects.toMatchObject({
+    code: "BUSY",
+  });
+  controller.abort(new Error("stop"));
+  await expect(first).rejects.toThrow("stop");
+});
+
+test("startWorker runs module source without a file", async () => {
+  const { worker, release } = startWorker(ECHO_WORKER);
+  const reply = new Promise((resolve) => {
+    worker.onmessage = (event) => resolve(event.data);
+  });
+  worker.postMessage({
+    value: "inline",
+  });
+  await expect(reply).resolves.toEqual({
+    echoed: "inline",
+  });
+  release();
+  await worker.terminate();
 });

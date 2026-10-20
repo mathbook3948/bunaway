@@ -10,7 +10,7 @@ import {
   openWinHttp,
   winHttpApi,
 } from "#plugins/network/src/platforms/resolve-proxy";
-import { deadline } from "../fixtures/deadlines.ts";
+import { deadline, waitFor } from "../fixtures/deadlines.ts";
 
 setDefaultTimeout(deadline("build"));
 
@@ -119,11 +119,13 @@ test("generated Windows network adapter resolves proxy routes through WinHTTP", 
   });
 });
 
-test("WinHTTP bindings read the user's settings and run a proxy script", () => {
+test("WinHTTP bindings read the user's settings and run a proxy script in a worker", async () => {
   const libraries = openWinHttp();
+  const workers = new Set<Worker>();
   const folder = mkdtempSync(join(tmpdir(), "bunaway-pac-"));
+  const live = new AbortController().signal;
   try {
-    const api = winHttpApi(libraries);
+    const api = winHttpApi(libraries, workers);
     // Whatever the runner has configured, reading it must succeed and free what WinHTTP allocated.
     const config = api.ieProxyConfig();
     for (let repeat = 0; repeat < 3; repeat += 1) {
@@ -135,28 +137,53 @@ test("WinHTTP bindings read the user's settings and run a proxy script", () => {
       kind: "script",
       url: pathToFileURL(script).href,
     } as const;
+    // The host thread keeps running timers while the worker is inside WinHTTP.
+    let ticks = 0;
+    const timer = setInterval(() => {
+      ticks += 1;
+    }, 1);
+    try {
+      expect(
+        await api.autoProxyForUrl("http://web.example/", source, 10_000, live),
+      ).toMatchObject({
+        accessType: WINHTTP_ACCESS_TYPE_NAMED_PROXY,
+        proxy: "proxy.example:8080",
+      });
+    } finally {
+      clearInterval(timer);
+    }
+    expect(ticks).toBeGreaterThan(0);
     expect(
-      api.autoProxyForUrl("http://web.example/", source, 10_000),
-    ).toMatchObject({
-      accessType: WINHTTP_ACCESS_TYPE_NAMED_PROXY,
-      proxy: "proxy.example:8080",
-    });
-    expect(
-      api.autoProxyForUrl("http://direct.example/", source, 10_000),
+      await api.autoProxyForUrl("http://direct.example/", source, 10_000, live),
     ).toMatchObject({
       accessType: WINHTTP_ACCESS_TYPE_NO_PROXY,
     });
     // A script that does not exist is a Win32 error code, not an exception.
     expect(
-      typeof api.autoProxyForUrl(
+      typeof (await api.autoProxyForUrl(
         "http://web.example/",
         {
           kind: "script",
           url: pathToFileURL(join(folder, "missing.pac")).href,
         },
         10_000,
-      ),
+        live,
+      )),
     ).toBe("number");
+    // An aborted lookup rejects at once and releases its worker slot.
+    const aborted = new AbortController();
+    const pending = api.autoProxyForUrl(
+      "http://web.example/",
+      source,
+      10_000,
+      aborted.signal,
+    );
+    aborted.abort(new Error("stop"));
+    await expect(pending).rejects.toThrow("stop");
+    await waitFor(() => workers.size === 0, {
+      deadline: "childStep",
+      what: "lookup workers to finish",
+    });
   } finally {
     libraries.winhttp.close();
     libraries.kernel.close();

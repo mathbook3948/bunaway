@@ -23,9 +23,11 @@ export {
 type ResolveProxyInput = z.output<typeof resolveProxyInputSchema>;
 type SharedState = ReturnType<typeof initializeShared>;
 type WindowsState = SharedState & {
-  /** WinHTTP libraries, opened by the first proxy lookup and closed on dispose. */
+  /** WinHTTP libraries for the settings read, opened by the first proxy lookup and closed on dispose. */
   winhttp: {
     libraries: ReturnType<typeof openWinHttp> | undefined;
+    /** Workers running automatic lookups, including ones whose caller already left. */
+    workers: Set<Worker>;
   };
 };
 
@@ -37,13 +39,14 @@ export function initialize(
   return Object.assign(initializeShared(environment, seams), {
     winhttp: {
       libraries: undefined,
+      workers: new Set<Worker>(),
     },
   });
 }
 
 function systemWinHttp(state: WindowsState): WinHttpApi {
   state.winhttp.libraries ??= openWinHttp();
-  return winHttpApi(state.winhttp.libraries);
+  return winHttpApi(state.winhttp.libraries, state.winhttp.workers);
 }
 
 /** Look up the system proxy route for a URL under the shared request limit; at most 16 requests run at once. */
@@ -54,13 +57,23 @@ export function runResolveProxy(
   api: () => WinHttpApi = () => systemWinHttp(state),
 ) {
   return run(state, input.timeoutMs, signal, async (activeSignal) => ({
-    entries: resolveProxy(api(), input.url, input.timeoutMs, activeSignal),
+    entries: await resolveProxy(
+      api(),
+      input.url,
+      input.timeoutMs,
+      activeSignal,
+    ),
   }));
 }
 
-/** Cancel in-flight work, then release the WinHTTP libraries; repeated cleanup is safe. */
+/** Cancel in-flight work, then stop lookup workers and release the WinHTTP libraries; repeated cleanup is safe. */
 export async function dispose(state: WindowsState) {
   await disposeShared(state);
+  // Not awaited: a worker inside a native call ends only when that call returns.
+  for (const worker of state.winhttp.workers) {
+    void worker.terminate();
+  }
+  state.winhttp.workers.clear();
   const libraries = state.winhttp.libraries;
   state.winhttp.libraries = undefined;
   if (libraries) {
