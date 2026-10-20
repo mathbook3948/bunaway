@@ -345,6 +345,29 @@ test("closing aborts running handlers and rejects pending calls", async () => {
   expect(aborted).toBe(true);
 });
 
+test("an abort listener that throws does not stop close", async () => {
+  let started = false;
+  const { client, transport } = connect({
+    "notes.slow": (_input, context) =>
+      new Promise<string>(() => {
+        started = true;
+        context.signal.addEventListener("abort", () => {
+          throw new Error("listener failure");
+        });
+      }),
+  });
+  const events: string[] = [];
+  transport.subscribe((event) => events.push(event.kind));
+  const pending = client.invoke("notes.slow", null);
+  await waitFor(() => started, {
+    deadline: "inProcess",
+    what: "the handler to start",
+  });
+  await transport.close();
+  expect(events).toContain("closed");
+  await expect(pending).rejects.toBeInstanceOf(BunawayError);
+});
+
 test("the mock host rejects malformed frames from the client", async () => {
   const transport = createMockTransport({
     handlers: {},

@@ -1,6 +1,6 @@
 ---
-title: WebViewTransport와 Transport
-description: 브리지 연결과 사용자 정의 전송의 send, subscribe, close 계약.
+title: WebViewTransport, Transport와 createMockTransport
+description: 브리지 연결, 사용자 정의 전송의 send, subscribe, close 계약과 호스트 없는 mock 전송.
 sidebar: { order: 6 }
 ---
 
@@ -86,7 +86,12 @@ const client = createClient<CommandsOf<typeof app>, EventsOf<typeof app>>({
   transport,
   hello: { kind: "hello", protocol: { major: 1, minor: 0 }, features: ["sdk-ready"], buildId: "preview" },
 });
+const dispose = await client.listen("notes.changed", (event) => console.log(event.payload.key), {
+  onError: console.error,
+});
 transport.emit("notes.changed", { key: "a" });
+await dispose();
+await client.close();
 ```
 
 | 항목 | 동작 |
@@ -102,4 +107,5 @@ transport.emit("notes.changed", { key: "a" });
 | `features` 옵션 | 호스트 hello의 기능 목록. 기본은 `sdk-ready` |
 
 프로토콜 프레임의 형식과 크기만 검사합니다. 앱 정의의 입력과 출력 스키마 검증, 권한, 뷰 정책은 적용하지 않으므로 실제 호스트와 같은 거부 결과는 실제 WebView에서 확인합니다.
+알 수 없는 구독의 `unlisten`, 중복 요청 ID, hello 이전 요청처럼 실제 호스트가 거부하는 프레임 순서 위반도 mock은 관대하게 처리합니다.
 `deadline`은 핸들러에 전달만 하고 mock이 강제하지 않으며, 클라이언트의 기한 처리는 그대로 동작합니다.

@@ -169,7 +169,7 @@ class MockHost<C extends CommandMap, E extends EventMap>
   private receive(message: Message): void {
     switch (message.kind) {
       case "hello":
-        // Answer after send resolves, as a host does, so the client has its disposer by then.
+        // Answer on a later microtask, not inside send, so the reply never re-enters the sender.
         queueMicrotask(() => this.replyHello());
         return;
       case "invoke":
@@ -350,7 +350,12 @@ function createRun(): Run {
       for (const listener of [
         ...abortListeners,
       ]) {
-        listener();
+        // Like AbortSignal, a throwing listener must not stop the others or the caller.
+        try {
+          listener();
+        } catch {
+          // The handler owns its listener's failures.
+        }
       }
     },
     signal: {
