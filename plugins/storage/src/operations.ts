@@ -2,6 +2,7 @@ import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
   type StorageInstance,
+  storageBytesReadSchema,
   storageBytesSchema,
   storageBytesWriteSchema,
   storageDirectoryCreateSchema,
@@ -27,7 +28,7 @@ export const storageOperations = {
     handler: (input, { instance }) => instance.writeText(input),
   }),
   readBytes: operation({
-    input: storageLocationSchema,
+    input: storageBytesReadSchema,
     output: storageBytesSchema,
     handler: (input, { instance }) => instance.readBytes(input),
   }),

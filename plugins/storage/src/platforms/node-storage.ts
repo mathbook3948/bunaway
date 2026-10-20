@@ -28,7 +28,7 @@ import {
   type StorageMetadata,
   type StorageTransfer,
 } from "#storage/contract";
-import { MAX_STORAGE_FILE_BYTES, StorageFiles } from "#storage/platforms/files";
+import { StorageFiles } from "#storage/platforms/files";
 import {
   type DirectorySizeLimits,
   listDirectory,
@@ -162,16 +162,6 @@ function metadata(info: BigIntStats): StorageMetadata {
     sizeBytes: Number(info.size),
     ...times,
   };
-}
-
-function boundedSize(info: BigIntStats, limit: number): number {
-  if (info.size > BigInt(limit)) {
-    throw failure(
-      "INVALID_ARGUMENT",
-      "Storage file exceeds the bounded I/O limit.",
-    );
-  }
-  return Number(info.size);
 }
 
 /** Close a descriptor after the action; a close failure never hides the action's own error. */
@@ -446,9 +436,43 @@ export abstract class NodeStorage
       constants.O_RDONLY,
       (fd, info) => {
         if (info.size > BigInt(maxBytes)) {
-          throw new Error("Storage file too large");
+          throw failure(
+            "INVALID_ARGUMENT",
+            "Storage file exceeds the read limit.",
+          );
         }
         return readBytes(fd, Number(info.size));
+      },
+    );
+  }
+
+  /** Read a byte range of a regular file by position, so the bytes before `offset` are never read. */
+  protected readRange(path: string, offset: number, length: number): Buffer {
+    return this.withFile(
+      this.selected(path),
+      constants.O_RDONLY,
+      (fd, info) => {
+        if (BigInt(offset) >= info.size) {
+          return Buffer.alloc(0);
+        }
+        const bytes = Buffer.alloc(
+          Math.min(length, Number(info.size - BigInt(offset))),
+        );
+        let filled = 0;
+        while (filled < bytes.length) {
+          const count = readSync(
+            fd,
+            bytes,
+            filled,
+            bytes.length - filled,
+            offset + filled,
+          );
+          if (!count) {
+            throw new Error("Storage file changed during read.");
+          }
+          filled += count;
+        }
+        return bytes;
       },
     );
   }
@@ -475,7 +499,7 @@ export abstract class NodeStorage
   }
 
   /**
-   * Copy a bounded regular file to a new name. The destination is created exclusively, so an
+   * Copy a regular file of any size to a new name, one chunk at a time. The destination is created exclusively, so an
    * existing file, directory or link to an existing target is never replaced. A link whose target
    * is missing is refused on POSIX, while Windows follows it and creates the target. A failed copy can leave a partial
    * destination, which is not deleted by name because the name may belong to something else.
@@ -484,7 +508,7 @@ export abstract class NodeStorage
     const from = this.selected(input.from);
     const to = this.selected(input.to);
     this.withFile(from, constants.O_RDONLY, (source, info) => {
-      const size = boundedSize(info, MAX_STORAGE_FILE_BYTES);
+      const size = Number(info.size);
       const destination = openSync(
         to,
         constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | NONBLOCK,

@@ -5,7 +5,7 @@ sidebar: { order: 5 }
 ---
 
 ```ts
-storage.readBytes({ path }): Promise<string>
+storage.readBytes({ path, offset?, length? }): Promise<string>
 storage.writeBytes({ path, bytes }): Promise<null>
 storage.appendBytes({ path, bytes }): Promise<null>
 storage.appendText({ path, text }): Promise<null>
@@ -19,9 +19,9 @@ storage.appendText({ path, text }): Promise<null>
 
 `bytes`와 `readBytes` 결과는 표준 알파벳과 필요한 `=` padding을 사용한 canonical base64 문자열입니다.
 빈 바이트는 `""`입니다. 공백, URL-safe 알파벳, 생략한 padding과 0이 아닌 padding bits는 거부합니다.
-바이트 입력과 파일 전체 읽기의 상한은 각각 256 KiB입니다. base64와 경로, 메시지 envelope를
-포함한 JSON 전송이 1 MiB 상한 안에 들어가도록 정한 값입니다. append 뒤 파일이 이 상한보다
-크면 `readBytes`가 실패합니다. 바이트 작업은 UTF-8로 디코딩하지 않으므로 0과 임의의 바이트를 보존합니다.
+바이트 입력과 한 번의 읽기 결과의 상한은 각각 256 KiB입니다. base64와 경로, 메시지 envelope를
+포함한 JSON 전송이 1 MiB 상한 안에 들어가도록 정한 값입니다. `offset`과 `length` 없이 파일 전체를 읽을 때
+파일이 이 상한보다 크면 `INVALID_ARGUMENT`로 실패하며, 큰 파일은 아래의 범위 읽기로 나눠 읽습니다. 바이트 작업은 UTF-8로 디코딩하지 않으므로 0과 임의의 바이트를 보존합니다.
 `appendText`는 문자열을 UTF-8로 인코딩하며 전체 요청의 1 MiB 상한을 따릅니다.
 
 `path`는 [텍스트 읽기](/reference/host/storage-read-text/)와 같은 앱 지정 절대 경로입니다.
@@ -29,12 +29,21 @@ Windows drive와 UNC 경로를 허용하며 extended-length와 device 경로, �
 Windows에서 쓸 수 없는 이름을 거부합니다. Unicode와 공백을 허용합니다.
 링크는 일반 경로처럼 따라가며 일반 파일이 아닌 대상은 `INVALID_ARGUMENT`입니다.
 
+## 범위 읽기
+
+`offset`(바이트 위치, 0 이상의 정수)과 `length`(1 이상 256 KiB 이하의 정수) 중 하나라도 주면 파일 전체 대신
+그 범위만 읽습니다. `offset`의 기본값은 0이고 `length`의 기본값은 256 KiB입니다. 범위가 파일 끝을 넘으면
+있는 만큼만 돌려주고, `offset`이 파일 끝 이후이면 `""`를 돌려줍니다. 범위 읽기는 `offset` 앞의 바이트를 읽지 않으므로
+파일 크기에 상한이 없습니다. 읽는 동안 파일이 줄어들면 파일 전체 읽기와 같이 `INTERNAL`로 실패합니다. 호출마다 파일을 새로 열기 때문에
+호출 사이에 파일이 바뀌면 조각들이 서로 맞지 않을 수 있습니다.
+
 ```ts
 import storage from "@bunaway/plugin-storage";
 
 await storage.writeBytes({ path: "C:/notes/data.bin", bytes: "AP8=" });
 await storage.appendBytes({ path: "C:/notes/data.bin", bytes: "gA==" });
 const encoded = await storage.readBytes({ path: "C:/notes/data.bin" }); // "AP+A"
+const tail = await storage.readBytes({ path: "C:/notes/data.bin", offset: 2, length: 1 }); // "gA=="
 ```
 
 백엔드에서 바이트 배열을 변환할 때는 `Buffer.from(bytes).toString("base64")`와

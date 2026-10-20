@@ -88,6 +88,73 @@ const transfer = (operation: string, from: string, to: string) =>
     to,
   });
 
+/**
+ * Record whether a range read opens a path past 260 characters and a UNC admin share path. The
+ * outcome is printed rather than asserted so the reference can state what the runner showed.
+ */
+async function probeLongAndUncRangeReads(): Promise<void> {
+  const nested = Array.from(
+    {
+      length: 6,
+    },
+    () => "d".repeat(50),
+  ).join("/");
+  const longDirectory = temporaryPath(`long/${nested}`);
+  const longFile = `${longDirectory}/range.bin`;
+  const data = Buffer.from("0123456789");
+  const probes: [
+    string,
+    () => unknown,
+  ][] = [
+    [
+      "long path",
+      () => {
+        execute(storage, "storage.createDirectory", {
+          path: longDirectory,
+          recursive: true,
+        });
+        execute(storage, "storage.writeBytes", {
+          path: longFile,
+          bytes: data.toString("base64"),
+        });
+        return execute(storage, "storage.readBytes", {
+          path: longFile,
+          offset: 2,
+          length: 3,
+        });
+      },
+    ],
+    [
+      "UNC admin share",
+      () => {
+        const local = temporaryPath("unc-range.bin");
+        execute(storage, "storage.writeBytes", {
+          path: local,
+          bytes: data.toString("base64"),
+        });
+        const unc = `\\\\localhost\\${local.slice(0, 1)}$\\${local.slice(3).replaceAll("/", "\\")}`;
+        return execute(storage, "storage.readBytes", {
+          path: unc,
+          offset: 2,
+          length: 3,
+        });
+      },
+    ],
+  ];
+  for (const [label, run] of probes) {
+    try {
+      const result = run();
+      console.log(
+        `PROBE ${label}: range read ${result === Buffer.from("234").toString("base64") ? "ok" : `returned ${String(result)}`} (path characters: ${label === "long path" ? longFile.length : "n/a"})`,
+      );
+    } catch (error) {
+      console.log(
+        `PROBE ${label}: failed (${error instanceof BunawayError ? error.code : "unknown"}) ${String(error)}`,
+      );
+    }
+  }
+}
+
 function expectError(action: () => unknown, code: string): void {
   assert.throws(
     action,
@@ -404,7 +471,7 @@ async function checkRoundTrips(): Promise<void> {
       1,
     ]),
   );
-  assert.throws(() => binary("storage.readBytes"), /too large/);
+  expectError(() => binary("storage.readBytes"), "INVALID_ARGUMENT");
   expectError(
     () => call("storage.readBytes", temporaryPath("missing.bin")),
     "INVALID_ARGUMENT",
@@ -521,21 +588,16 @@ async function checkTransfers(): Promise<void> {
     (await stat(resolve(root, "outside/copied.bin"))).size,
     bytes.length,
   );
-  const oversized = temporaryPath("oversized.bin");
-  await writeFile(oversized, Buffer.alloc(4 * 1024 * 1024 + 1));
-  expectError(
-    () =>
-      transfer(
-        "storage.copyFile",
-        oversized,
-        temporaryPath("oversized-copy.bin"),
-      ),
-    "INVALID_ARGUMENT",
-  );
+  // Copies are no longer bounded; a source above the old 4 MiB limit is copied whole.
+  const large = temporaryPath("large.bin");
+  const largeBytes = Buffer.alloc(5 * 1024 * 1024 + 1, 7);
+  await writeFile(large, largeBytes);
   assert.equal(
-    call("storage.exists", temporaryPath("oversized-copy.bin")),
-    false,
+    transfer("storage.copyFile", large, temporaryPath("large-copy.bin")),
+    null,
   );
+  assert.deepEqual(await readFile(temporaryPath("large-copy.bin")), largeBytes);
+  await probeLongAndUncRangeReads();
   const secondVolumeRoot = await realpath(
     await mkdtemp(resolve(tmpdir(), "bunaway-move-volume-")),
   );

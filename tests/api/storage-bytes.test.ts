@@ -171,3 +171,60 @@ test("byte and append grants are independent from each other and text replacemen
     }
   }
 });
+
+test("readBytes accepts an optional offset and length within the transfer bound", async () => {
+  for (const payload of [
+    {
+      path,
+      offset: 0,
+    },
+    {
+      path,
+      length: 1,
+    },
+    {
+      path,
+      offset: 4096,
+      length: MAX_STORAGE_BYTES,
+    },
+  ]) {
+    expect(
+      await parsers.validateCall({
+        operation: "storage.readBytes",
+        payload,
+      }),
+    ).toEqual({
+      operation: "storage.readBytes",
+      payload,
+    });
+  }
+  for (const payload of [
+    {
+      path,
+      offset: -1,
+    },
+    {
+      path,
+      offset: 1.5,
+    },
+    {
+      path,
+      length: 0,
+    },
+    {
+      path,
+      length: MAX_STORAGE_BYTES + 1,
+    },
+    {
+      path,
+      length: "4",
+    },
+  ]) {
+    await expect(
+      parsers.validateCall({
+        operation: "storage.readBytes",
+        payload,
+      }),
+    ).rejects.toThrow();
+  }
+});

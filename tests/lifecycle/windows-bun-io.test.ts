@@ -354,8 +354,9 @@ test.skipIf(process.platform !== "win32")(
             payload: text,
           });
         } else {
+          // The adapter refuses a reply that cannot fit one message before the transport does.
           expect(response?.kind === "error" && response.error.code).toBe(
-            "INTERNAL",
+            "INVALID_ARGUMENT",
           );
         }
       }

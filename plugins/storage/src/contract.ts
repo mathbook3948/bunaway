@@ -24,6 +24,13 @@ export type StorageDirectoryEntry = z.infer<typeof directoryEntrySchema>;
 
 /** Binary operations leave room for base64, path and envelope in a 1 MiB message. */
 export const MAX_STORAGE_BYTES = 256 * 1024;
+/** The largest file readText decodes; the decoded text must also fit the JSON limit below. */
+export const MAX_STORAGE_TEXT_BYTES = 512 * 1024;
+/**
+ * The largest JSON encoding of a readText result. Escaping can grow control characters sixfold,
+ * so the encoded size is checked on top of the file size to keep the reply under the 1 MiB message.
+ */
+export const MAX_STORAGE_TEXT_JSON_BYTES = 768 * 1024;
 /** Canonical padded base64, including empty bytes, with a decoded size bound. */
 export const storageBytesSchema = base64Schema(MAX_STORAGE_BYTES);
 
@@ -70,6 +77,15 @@ export const storageMetadataSchema = z.union([
 ]);
 /** Shared value schemas, independent of platform resource ownership. */
 export const storageLocationSchema = z.strictObject(pathFields);
+/**
+ * Whole-file read when `offset` and `length` are both absent; otherwise up to `length` bytes
+ * (at most MAX_STORAGE_BYTES) from `offset`, fewer at the end of the file and none past it.
+ */
+export const storageBytesReadSchema = z.strictObject({
+  ...pathFields,
+  offset: z.int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  length: z.int().min(1).max(MAX_STORAGE_BYTES).optional(),
+});
 export const storageWriteSchema = z.strictObject({
   ...pathFields,
   text: z.string(),
@@ -99,6 +115,8 @@ export const storageDirectoryEntriesSchema = z
 export type StorageDirectorySize = z.infer<typeof storageDirectorySizeSchema>;
 /** Path accepted by read and metadata operations. */
 export type StorageLocation = z.infer<typeof storageLocationSchema>;
+/** Path and optional byte range accepted by readBytes. */
+export type StorageBytesRead = z.infer<typeof storageBytesReadSchema>;
 /** Path and text accepted by text writes and appends. */
 export type StorageWrite = z.infer<typeof storageWriteSchema>;
 /** File or directory metadata returned by storage.stat. */
@@ -121,7 +139,7 @@ export type StorageDirectoryCreate = z.infer<
 export interface StorageInstance {
   readText(input: StorageLocation): string;
   writeText(input: StorageWrite): null;
-  readBytes(input: StorageLocation): string;
+  readBytes(input: StorageBytesRead): string;
   writeBytes(input: StorageBytesWrite): null;
   appendText(input: StorageWrite): null;
   appendBytes(input: StorageBytesWrite): null;
@@ -147,7 +165,7 @@ export interface Storage {
   ): Promise<string>;
   writeText(input: StorageWrite, options?: NativeInvokeOptions): Promise<null>;
   readBytes(
-    input: StorageLocation,
+    input: StorageBytesRead,
     options?: NativeInvokeOptions,
   ): Promise<string>;
   writeBytes(
