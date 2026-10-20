@@ -91,60 +91,67 @@ async function relaunchInto(
   return marker;
 }
 
-test("the replacement starts only after the previous process is gone, with arguments unparsed", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "bunaway-relaunch-"));
-  try {
-    const previous = Bun.spawn(
-      [
-        "/bin/sleep",
-        "30",
-      ],
-      {
-        stdout: "ignore",
-        stderr: "ignore",
-      },
-    );
-    const hostile = [
-      "a b",
-      "$(touch injected)",
-      "; touch injected",
-      "'quoted'",
-      "",
-    ];
-    const marker = await relaunchInto(directory, previous, hostile);
-    // The previous process is alive, so the replacement must still be waiting.
-    await Bun.sleep(400);
-    expect(await Bun.file(marker).exists()).toBe(false);
-    previous.kill();
-    await previous.exited;
-    await waitFor(() => Bun.file(marker).exists(), {
-      deadline: "childStep",
-      what: "the replacement to start after the previous process exited",
-    });
-    // One argument per line, exactly as given; nothing was run by the shell.
-    expect((await readFile(marker, "utf8")).split("\n")).toEqual([
-      ...hostile,
-      "",
-    ]);
-    expect(await Bun.file(join(directory, "injected")).exists()).toBe(false);
-  } finally {
-    await rm(directory, {
-      recursive: true,
-      force: true,
-    });
-  }
-});
+// The wait wrapper is POSIX `sh`, which exists on macOS and Linux but not on Windows runners.
+test.skipIf(process.platform === "win32")(
+  "the replacement starts only after the previous process is gone, with arguments unparsed",
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "bunaway-relaunch-"));
+    try {
+      const previous = Bun.spawn(
+        [
+          "/bin/sleep",
+          "30",
+        ],
+        {
+          stdout: "ignore",
+          stderr: "ignore",
+        },
+      );
+      const hostile = [
+        "a b",
+        "$(touch injected)",
+        "; touch injected",
+        "'quoted'",
+        "",
+      ];
+      const marker = await relaunchInto(directory, previous, hostile);
+      // The previous process is alive, so the replacement must still be waiting.
+      await Bun.sleep(400);
+      expect(await Bun.file(marker).exists()).toBe(false);
+      previous.kill();
+      await previous.exited;
+      await waitFor(() => Bun.file(marker).exists(), {
+        deadline: "childStep",
+        what: "the replacement to start after the previous process exited",
+      });
+      // One argument per line, exactly as given; nothing was run by the shell.
+      expect((await readFile(marker, "utf8")).split("\n")).toEqual([
+        ...hostile,
+        "",
+      ]);
+      expect(await Bun.file(join(directory, "injected")).exists()).toBe(false);
+    } finally {
+      await rm(directory, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);
 
-test("a replacement that cannot be created rejects instead of failing silently", async () => {
-  await expect(
-    startRelaunch({
-      executable: "/nonexistent/bunaway-relaunch",
-      args: [],
-      cwd: tmpdir(),
-      env: {},
-    }),
-  ).rejects.toThrow();
-});
+test.skipIf(process.platform === "win32")(
+  "a replacement that cannot be created rejects instead of failing silently",
+  async () => {
+    await expect(
+      startRelaunch({
+        executable: "/nonexistent/bunaway-relaunch",
+        args: [],
+        cwd: tmpdir(),
+        env: {},
+      }),
+    ).rejects.toThrow();
+  },
+);
 
 test("a signal or session end cancels a relaunch whenever it arrives", () => {
   const intent = new RelaunchIntent();
