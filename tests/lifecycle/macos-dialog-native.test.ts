@@ -174,7 +174,7 @@ test.skipIf(!native)(
 );
 
 test.skipIf(!native)(
-  "a real alert without buttons keeps one system OK button",
+  "a real alert without buttons leaves the OK button to AppKit",
   () => {
     if (!factory) {
       throw new Error("The native panel factory is unavailable.");
@@ -186,7 +186,7 @@ test.skipIf(!native)(
     );
     try {
       const state = alert.readBack();
-      expect(state.buttons).toHaveLength(1);
+      expect(state.buttons).toEqual([]);
       expect(state.checkbox).toBeNull();
     } finally {
       alert.dispose();

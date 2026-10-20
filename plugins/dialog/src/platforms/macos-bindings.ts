@@ -554,8 +554,11 @@ function createAlert(runtime: Runtime, settings: AlertSettings): MessageAlert {
   return {
     readBack: () =>
       inPool(() => {
-        const count = buttonCount;
+        // AppKit adds its own OK button only when the alert is shown, so an alert configured
+        // without buttons reports none here.
+        const count = Number(send(send(alert, "buttons"), "count"));
         const code = send(alert, "alertStyle");
+        // The keys of the style table are exactly the AlertStyle names.
         const style = (Object.keys(ALERT_STYLE_CODES) as AlertStyle[]).find(
           (name) => ALERT_STYLE_CODES[name] === code,
         );
