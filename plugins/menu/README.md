@@ -23,11 +23,16 @@ cross-origin iframe에 포커스가 있으면 실행하지 않는다.
 `SM_CXSMICON` 크기의 32bpp premultiplied-alpha DIB section을 트리 인스턴스마다 만들어
 `MENUITEMINFOW.hbmpItem`(MIIM_BITMAP)에 설정하고, 트리를 해제할 때 DeleteObject로 함께 해제한다.
 `updateItem.changes.icon`은 다른 변경과 같이 트리를 다시 만들어 반영한다.
+item(role 포함), checkbox, radio는 선택 필드 `accelerator`(`Ctrl+Shift+N` 형식, 정규화해 보관, null이면 없음)를
+가진다. `NativePopupMenu`가 탭 문자 뒤에 붙여 그리는 표시 문자열일 뿐 단축키를 등록하지 않으며(Electron과 Tauri는
+등록도 한다), 지정하면 role의 기본 문구를 대체한다. submenu와 separator는 거부하고 `updateItem.changes.accelerator`로 바꾼다.
 트레이 메뉴는 role을 `INVALID_ARGUMENT`로 거부한다. 가속키 등록과 앱 전체 기본 메뉴는 지원하지 않는다.
 
 `tests/api/menu.test.ts`는 계약, 제한, 권한, 변경 실패 보존과 이전 선택 폐기를 검사한다.
 `api/menu-icon.test.ts`는 icon 스키마, 거부 규칙과 `updateItem` 변경을,
 `lifecycle/windows-menu-icon.test.ts`는 실제 HMENU의 `GetMenuItemInfoW` hbmpItem 설정, 교체, 제거와 해제를 검사한다.
+`api/menu-accelerator.test.ts`는 형식 정규화, 거부 규칙과 `updateItem` 변경을,
+`lifecycle/windows-menu-accelerator.test.ts`는 실제 HMENU의 `GetMenuStringW` 표시 문자열을 검사한다.
 `tests/lifecycle/windows-menu.test.ts`는 실제 Win32 메뉴의 순서, 상태, Unicode와 자원 해제를 확인한다.
 `windows-menu-ui.test.ts`는 실제 UI Worker와 창 없는 트레이의 API 호출 및 숨긴 HWND 정리를 검사한다.
 `api/window-menu.test.ts`는 창 연결, 변경, 선택 이벤트와 팝업 취소 계약을 검사한다.
