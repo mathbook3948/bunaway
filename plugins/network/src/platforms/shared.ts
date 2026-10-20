@@ -78,7 +78,7 @@ export function runIsOnline(state: ReturnType<typeof initialize>): boolean {
 }
 
 /** Apply one limit, deadline and cleanup path to HTTP and WebSocket work. */
-async function run<T>(
+export async function run<T>(
   state: ReturnType<typeof initialize>,
   timeoutMs: number,
   requestSignal: AbortSignal | undefined,

@@ -11,7 +11,7 @@ sidebar: { order: 8 }
 
 ## 권한과 앱의 URL 규칙
 
-`network.request`, `network.exchange`, `network.isOnline`과 `network.resolveHost`는 각각 독립 Host 권한입니다. 권한은 작업 호출을
+`network.request`, `network.exchange`, `network.isOnline`, `network.resolveHost`와 `network.resolveProxy`는 각각 독립 Host 권한입니다. 권한은 작업 호출을
 허용하고 대상 URL은 앱 명령이 검사합니다. 이 API는 Bun 네트워크 요청이므로 브라우저의
 CORS 제한을 적용하지 않습니다. 승인한 Origin 목록은 앱이 작성하며 임의 Origin header는
 입력으로 받지 않습니다. 뷰의 명령과 Host 권한을 통해 호출 가능한 출처를 제한합니다.
@@ -193,7 +193,53 @@ Electron `net.resolveHost()`의 `{ endpoints: [{ address, family }] }` 결과 �
 Electron의 `queryType`, `source`, `cacheUsage`, `secureDnsPolicy` 옵션은 제공하지 않습니다.
 Chromium의 자체 DNS 클라이언트와 DNS-over-HTTPS 설정은 사용하지 않고 항상 시스템 리졸버를 씁니다.
 이 조회는 프록시를 거치지 않으므로 프록시 뒤 환경에서 `network.request`가 접속하는 주소와
-다를 수 있습니다. 프록시 경로 조회(`resolveProxy`)는 아직 없습니다.
+다를 수 있습니다. 프록시 경로는 아래 `network.resolveProxy`로 조회합니다.
+
+## 프록시 경로 조회
+
+```ts
+const { entries } = await network.resolveProxy({
+  url: "https://reports.example.com/daily",
+});
+// [{ kind: "proxy", scheme: "http", host: "proxy.corp.example", port: 8080 }, { kind: "direct" }]
+```
+
+`network.resolveProxy`는 URL이 시스템 설정에서 어떤 경로를 쓰는지 조회합니다. Windows에서만 제공하며
+macOS에서는 `UNSUPPORTED`입니다. Electron `session.resolveProxy(url)`에 대응하지만
+`"PROXY host:80; DIRECT"` 같은 PAC 문자열 대신 파싱할 필요 없는 구조화 목록을 돌려줍니다.
+독립 Host 권한 `network.resolveProxy`가 필요합니다.
+
+- 입력 `url`은 사용자 정보와 fragment가 없는 `http:` 또는 `https:` 절대 URL입니다. `timeoutMs`는 1부터
+  30000까지이며 기본값은 30000입니다.
+- 결과 `entries`는 시도할 순서대로 1개 이상 16개 이하입니다. 항목은 `{ kind: "direct" }`이거나
+  `{ kind: "proxy", scheme, host, port }`이며 IPv6 `host`는 `[::1]`처럼 대괄호를 포함하고 `scheme`은 `"http"`, `"https"`, `"socks4"`, `"socks5"`입니다.
+- 현재 사용자의 인터넷 옵션을 WinHTTP로 읽어 다음 순서로 적용합니다. 루프백(`localhost`, `*.localhost`, `127.*`, `::1`)과
+  링크 로컬 주소는 Chromium처럼 항상 직접 연결이며, 예외 목록의 `<-loopback>` 토큰으로 이를 풀 수는 없습니다. 그다음 설정에 따라 자동 감지(WPAD), 자동 구성 스크립트(PAC),
+  수동 프록시 목록과 예외 목록 순입니다. 자동 구성을 찾지 못하거나 실행하지 못하면 다음 방법으로 넘어가며,
+  모두 해당하지 않으면 직접 연결입니다.
+- 수동 목록은 `host:port`, `http=host:port;https=host:port;socks=host:port`와 `scheme://host:port` 형식을
+  읽습니다. URL 스킴에 맞는 항목, 모든 스킴용 항목 순으로 나열하고, 둘 다 없을 때만 `socks=` 항목을 씁니다. `ftp=` 같은 다른 스킴 항목은 무시합니다.
+  예외 목록은 `<local>`, `*` 와일드카드, `scheme://`와 `:port` 조건을 지원합니다.
+- 프록시 자격 증명은 반환하지 않습니다. 수동 프록시 목록에 `user:password@host:port`처럼 `@`가 있으면 비밀번호의
+  끝과 다음 항목의 시작을 구분할 수 없으므로 목록을 해석하지 않고 `INTERNAL`로 실패합니다. 자동 구성
+  스크립트를 가져올 때도 로그온 자격 증명을 보내지 않습니다. 스크립트에는 사용자 정보와 fragment를 뺀 URL을
+  넘기고 `https:` URL은 경로와 쿼리 없이 출처만 넘깁니다.
+- 자동 감지와 스크립트 조회는 WinHTTP 동기 호출이 끝날 때까지 기다리므로 별도 Worker에서 실행합니다.
+  플러그인 실행 스레드는 그동안 다른 요청을 계속 처리합니다. 취소와 기한은 호출자의 대기를 즉시 끝냅니다.
+  WinHTTP 안에 있는 호출은 중간에 멈추지 않고 끝나야 핸들을 정리하므로, 그 Worker는 호출이 끝날 때까지
+  한 칸을 차지하고 그런 Worker를 포함해 동시에 4개를 넘으면 새 조회는 `BUSY`입니다. 주소 탐색이 끝나지 않는 환경에서는
+  어댑터를 정리하기 전까지 이 칸이 돌아오지 않을 수 있습니다. 자동 구성 단계마다
+  남은 기한을 WinHTTP 대기 시간(연결, 이름 조회, 전송, 수신 단계로 나눔)에 주지만 주소 탐색 단계는 이 시간으로
+  제한되지 않아 Worker가 기한보다 오래 남을 수 있습니다. 자동 구성 주소가 잘못되었거나 스크립트를 가져오지
+  못하는 등 WinHTTP가 오류 코드로 실패하면 다음 방법으로 넘어갑니다. Worker를 시작하지 못하거나 응답이 깨졌거나
+  설정 문자열이 너무 길거나 WinHTTP 세션을 열지 못하거나 타임아웃을 설정하지 못하면 `INTERNAL`입니다. 어댑터를 정리할 때 WinHTTP 안에
+  있는 Worker는 호출이 끝나기를 기다리지 않고 종료하므로, 그 호출의 세션 핸들과 WinHTTP 문자열은 프로세스가 끝날 때까지 남을 수 있습니다. 수동 프록시만 쓰거나 설정이 없으면 Worker를 만들지 않고
+  바로 답합니다.
+- 설정을 읽지 못해도 `INTERNAL`입니다. 실패 원인은 구분해 알려주지 않습니다.
+- 이 조회는 `network.request`가 쓰는 Bun 설정을 바꾸지 않고, 요청이 실제로 그 경로를 따른다고 보장하지도
+  않습니다. 시스템 설정을 진단하거나 표시하는 용도입니다.
+- 자동 구성 스크립트가 `"PROXY a:80; DIRECT"`처럼 직접 연결을 대체 경로로 두어도 WinHTTP는 그 대체 경로를
+  알려주지 않으므로 결과에 포함되지 않습니다.
 
 ## 취소, 정리와 오류
 

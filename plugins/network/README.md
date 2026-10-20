@@ -1,6 +1,6 @@
 # Bounded network plugin
 
-Register `network` to use `network.request`, `network.exchange`, `network.isOnline` and `network.resolveHost` on Windows and macOS.
+Register `network` to use `network.request`, `network.exchange`, `network.isOnline` and `network.resolveHost` on Windows and macOS, and `network.resolveProxy` on Windows.
 Each operation has an independent permission. Applications own URL access rules in backend commands;
 operation grants do not contain resource allowlists. Trusted backend code can use Bun fetch and WebSocket directly.
 See the [public contract](../../docs/site/src/content/docs/reference/plugins/network.mdx) for limits and access-rule examples.
@@ -13,8 +13,15 @@ that value changes, found by comparing it every 2 seconds. macOS does not publis
 `network.resolveHost` corresponds to Electron's `net.resolveHost()`. It returns `{ endpoints: [{ address, family }] }` from
 the system resolver (getaddrinfo), so the hosts file and system DNS settings apply. It takes an ASCII host name or IPv4
 address, keeps resolver order, removes repeats and returns at most 64 addresses. Cancellation and the deadline end the
-call at once while an already started lookup finishes in the background. Query type, cache and secure DNS options and
-proxy resolution are not provided.
+call at once while an already started lookup finishes in the background. Query type, cache and secure DNS options are not provided.
+
+`network.resolveProxy` corresponds to Electron's `session.resolveProxy(url)` on Windows (macOS reports `UNSUPPORTED`). It
+returns `{ entries }`, a structured list of `{ kind: "direct" }` and `{ kind: "proxy", scheme, host, port }` instead of a
+PAC string. It reads the current user's Internet Options through WinHTTP: loopback and link-local hosts go direct, then
+automatic detection, the configured script and the manual proxy list with its bypass list apply. Proxy credentials are
+never returned. Automatic detection and script lookups block inside WinHTTP, so they run in a worker thread:
+cancellation and the deadline end the caller's wait at once, a lookup already inside WinHTTP holds one of four worker
+slots until the call returns (so its handles are closed), and `BUSY` is reported beyond that. It does not change how `network.request` connects.
 
 HTTP uses Bun fetch with manual redirects, omitted browser credentials and bounded decompressed response reads.
 WebSocket exchanges own one connection through close, error, timeout or cancellation. They send bounded text and

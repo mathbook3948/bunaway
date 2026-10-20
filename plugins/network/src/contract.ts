@@ -169,7 +169,7 @@ export const exchangeResultSchema = z.strictObject({
   }),
 });
 /** Longest DNS name and label in octets, RFC 1035. */
-const MAX_HOST_LENGTH = 253;
+export const MAX_HOST_LENGTH = 253;
 const MAX_HOST_LABEL_LENGTH = 63;
 /** Upper bound on addresses returned for one name. Extra addresses are dropped in resolver order. */
 export const MAX_RESOLVED_ENDPOINTS = 64;
@@ -217,6 +217,44 @@ export const resolveHostResultSchema = z.strictObject({
       }),
     )
     .max(MAX_RESOLVED_ENDPOINTS),
+});
+/** Upper bound on proxies returned for one URL. Extra entries are dropped in configured order. */
+export const MAX_PROXY_ENTRIES = 16;
+/** `network.resolveProxy` input: the http or https URL whose system proxy route is asked for. */
+export const resolveProxyInputSchema = z.strictObject({
+  url: urlFor([
+    "http:",
+    "https:",
+  ]),
+  timeoutMs,
+});
+/**
+ * Where the system sends a request for the URL, in the order to try. This is the structured form
+ * of the PAC string Electron `session.resolveProxy()` returns (`"PROXY host:80; DIRECT"`), so an
+ * app does not parse a string. Proxy credentials are never returned.
+ */
+export const resolveProxyResultSchema = z.strictObject({
+  entries: z
+    .array(
+      z.discriminatedUnion("kind", [
+        z.strictObject({
+          kind: z.literal("direct"),
+        }),
+        z.strictObject({
+          kind: z.literal("proxy"),
+          scheme: z.enum([
+            "http",
+            "https",
+            "socks4",
+            "socks5",
+          ]),
+          host: z.string().min(1).max(MAX_HOST_LENGTH),
+          port: z.number().int().min(1).max(65535),
+        }),
+      ]),
+    )
+    .min(1)
+    .max(MAX_PROXY_ENTRIES),
 });
 /** `network.isOnline` result: whether a non-loopback network connection exists. */
 export const onlineSchema = z.boolean();

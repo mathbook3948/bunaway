@@ -140,6 +140,7 @@ test("network operations require independent grants and expose no persistent soc
     "exchange",
     "isOnline",
     "resolveHost",
+    "resolveProxy",
   ]);
   for (const name of [
     "request",
