@@ -113,7 +113,11 @@ export type AlertReadBack = {
 /** One configured NSAlert. Every call must run on the main thread. */
 export type MessageAlert = {
   readBack(): AlertReadBack;
-  /** Clicks the button at `index` once the modal loop has run for `seconds`, as the user would. */
+  /**
+   * Clicks the button at `index` once the modal loop has run for `seconds`, as the user would.
+   * The alert must have been configured with that button: AppKit adds its default OK button only
+   * when the alert is shown, so an alert without buttons cannot be clicked this way.
+   */
   scheduleClick(index: number, seconds: number): void;
   /** Blocks in the modal loop until the user clicks a button. */
   run(): AlertAnswer;
