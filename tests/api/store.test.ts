@@ -1488,3 +1488,12 @@ test("a reset without defaults that was saved loads as an empty store", () => {
   });
   expect(second.length("plain")).toBe(0);
 });
+
+test("the browser bundle of the package carries no node module import", () => {
+  const bundle = readFileSync(
+    join(import.meta.dir, "../../plugins/store/dist/index.js"),
+    "utf8",
+  );
+  expect(bundle).not.toMatch(/from\s+["']node:/);
+  expect(bundle).not.toContain("renameSync");
+});

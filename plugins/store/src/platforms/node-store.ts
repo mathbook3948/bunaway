@@ -205,7 +205,7 @@ function checkValueSizes(data: Map<string, StoreValue>): void {
   }
 }
 
-/** The message tells the callers apart: a change, a damaged file, or defaults that overflow. */
+/** Reject a store whose serialized file would exceed the limit; the message only aids diagnosis. */
 function checkFileSize(
   data: Map<string, StoreValue>,
   message = "The store would exceed its size limit.",
