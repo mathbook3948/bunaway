@@ -63,6 +63,12 @@ export function validateNotificationInput(
 }
 
 export const MAX_ACTIVE_TOASTS = 64;
+/** Windows shows at most five buttons on a toast, and the reply submit button counts as one. */
+export const MAX_TOAST_ACTIONS = 5;
+export const MAX_ACTION_LABEL_LENGTH = 64;
+export const MAX_REPLY_PLACEHOLDER_LENGTH = 128;
+/** Same bound as `data`, so a reply fits any payload an app already accepts from a toast. */
+export const MAX_REPLY_LENGTH = 2048;
 const identifierSchema = z.string().regex(/^[A-Za-z0-9._-]{1,16}(?![\s\S])/);
 const xmlText = (maximum: number) =>
   z
@@ -137,6 +143,14 @@ const imagePathSchema = z
       ),
     `Image must be one of ${TOAST_IMAGE_EXTENSIONS.join(", ")}.`,
   );
+const toastActionSchema = z.strictObject({
+  id: identifierSchema,
+  label: xmlText(MAX_ACTION_LABEL_LENGTH).min(1),
+});
+const toastReplySchema = z.strictObject({
+  placeholder: xmlText(MAX_REPLY_PLACEHOLDER_LENGTH).default(""),
+  buttonLabel: xmlText(MAX_ACTION_LABEL_LENGTH).min(1),
+});
 /** Stable tag/group in the host-selected app's namespace. Neither field selects another app. */
 export const notificationIdentitySchema = z.strictObject({
   id: identifierSchema,
@@ -159,7 +173,30 @@ export const notificationShowSchema = notificationIdentitySchema
       .default("inline"),
     sound: z.enum(TOAST_SOUNDS).nullable().default(null),
     soundLoop: z.boolean().default(false),
+    actions: z.array(toastActionSchema).default([]),
+    reply: toastReplySchema.nullable().default(null),
   })
+  .refine(
+    (input) =>
+      new Set(input.actions.map((action) => action.id)).size ===
+      input.actions.length,
+    {
+      message: "actions must have unique ids.",
+      path: [
+        "actions",
+      ],
+    },
+  )
+  .refine(
+    (input) =>
+      input.actions.length + (input.reply ? 1 : 0) <= MAX_TOAST_ACTIONS,
+    {
+      message: `A toast shows at most ${MAX_TOAST_ACTIONS} buttons, including the reply button.`,
+      path: [
+        "actions",
+      ],
+    },
+  )
   .refine((input) => input.imagePlacement !== "hero" || input.image !== null, {
     message: "imagePlacement hero requires image.",
     path: [
@@ -189,7 +226,10 @@ export type ResolvedNotification = z.output<typeof notificationShowSchema>;
 export type NotificationResult = z.output<typeof notificationResultSchema>;
 export type ToastEvent =
   | {
-      kind: "clicked";
+      /** Raw activation: the activator arguments and, when the toast has a reply input, the typed text. */
+      kind: "activated";
+      arguments: string;
+      reply: string | undefined;
     }
   | {
       kind: "dismissed";
@@ -230,6 +270,53 @@ export const notificationEvents = {
     required: [
       "id",
       "group",
+      "data",
+    ],
+    additionalProperties: false,
+  },
+  "notification.actionInvoked": {
+    type: "object",
+    properties: {
+      ...identityProperties,
+      actionId: {
+        anyOf: [
+          {
+            type: "string",
+            pattern: "^[A-Za-z0-9._-]{1,16}(?![\\s\\S])",
+          },
+          {
+            const: null,
+          },
+        ],
+      },
+      reply: {
+        anyOf: [
+          {
+            type: "string",
+            maxLength: MAX_REPLY_LENGTH,
+          },
+          {
+            const: null,
+          },
+        ],
+      },
+      data: {
+        anyOf: [
+          {
+            type: "string",
+            maxLength: 2048,
+          },
+          {
+            const: null,
+          },
+        ],
+      },
+    },
+    required: [
+      "id",
+      "group",
+      "actionId",
+      "reply",
       "data",
     ],
     additionalProperties: false,

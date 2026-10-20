@@ -37,6 +37,37 @@ let historyItems: [
 const listedIndex = new Map<number, number>();
 const rawBuffers: Buffer[] = [];
 const allocatedDelegates: ffi.Pointer[] = [];
+/** What the fake Activated argument reports; `input` describes the ValueSet entry for the reply box. */
+let activation: {
+  arguments: string;
+  input:
+    | "absent"
+    | "missing"
+    | {
+        type: number;
+        text: string;
+      };
+} = {
+  arguments: "",
+  input: "absent",
+};
+/** Interface ids the fake activation objects answer to, filled once the GUID helper is imported. */
+const interfaceKinds = new Map<string, string>();
+/** Release the test's own reference to an object it created, like the final argument release below. */
+const dropReference = (address: number) => {
+  const object = objects.get(address);
+  assert(object);
+  object.refs--;
+};
+const writeString = (out: ffi.Pointer, text: string) => {
+  // An empty HSTRING is a null handle.
+  if (text === "") {
+    writePointer(out, 0);
+    return;
+  }
+  strings.set(++stringId, text);
+  writePointer(out, stringId);
+};
 const writePointer = (out: ffi.Pointer, value: number) =>
   new DataView(ffi.toArrayBuffer(out, 0, 8)).setBigUint64(
     0,
@@ -102,6 +133,52 @@ const writeUint32 = (out: number | bigint, value: number) =>
     value,
     true,
   );
+/** Objects reached while reading an Activated argument; each answers QueryInterface by interface id. */
+const activationKinds = new Set([
+  "argument",
+  "activatedArgs",
+  "activatedArgs2",
+  "userInput",
+  "map",
+  "boxed",
+  "propertyValue",
+]);
+/** IToastActivatedEventArgs(2), ValueSet as IMap and the boxed IPropertyValue of a reply. */
+const activationMethods: ComHandler = (call) => {
+  const { state, stage, args } = call;
+  const out = Number(args[0]) as ffi.Pointer;
+  if (!activationKinds.has(state.kind)) {
+    return undefined;
+  }
+  if (stage === "activatedArgs:6") {
+    writeString(out, activation.arguments);
+    return 0;
+  }
+  if (stage === "activatedArgs2:6") {
+    return outputObject(call, 0, "userInput");
+  }
+  if (stage === "map:8") {
+    new DataView(
+      ffi.toArrayBuffer(Number(args[1]) as ffi.Pointer, 0, 1),
+    ).setUint8(0, activation.input === "missing" ? 0 : 1);
+    assert.equal(strings.get(Number(args[0])), "reply");
+    return 0;
+  }
+  if (stage === "map:6") {
+    assert.equal(strings.get(Number(args[0])), "reply");
+    return outputObject(call, 1, "boxed");
+  }
+  const value = activation.input;
+  if (typeof value === "object" && stage === "propertyValue:6") {
+    new DataView(ffi.toArrayBuffer(out, 0, 4)).setInt32(0, value.type, true);
+    return 0;
+  }
+  if (typeof value === "object" && stage === "propertyValue:19") {
+    writeString(out, value.text);
+    return 0;
+  }
+  return undefined;
+};
 /** IUnknown: slot 2 releases a reference and slot 0 queries the interface the fixture expects next. */
 const unknownMethods: ComHandler = (call) => {
   const { object, state, slot, args } = call;
@@ -114,6 +191,13 @@ const unknownMethods: ComHandler = (call) => {
   }
   if (state.kind === "history") {
     return outputObject(call, 1, "history2");
+  }
+  if (activationKinds.has(state.kind)) {
+    const iid = Buffer.from(
+      ffi.toArrayBuffer(Number(args[0]) as ffi.Pointer, 0, 16),
+    ).toString("hex");
+    const kind = interfaceKinds.get(iid);
+    return kind ? outputObject(call, 1, kind) : -2147467262;
   }
   if (state.kind === "listed") {
     const address = makeObject("listedProperties");
@@ -263,6 +347,7 @@ const comHandlers: ComHandler[] = [
   unknownMethods,
   factoryMethods,
   historyListMethods,
+  activationMethods,
   actionMethods,
   toastEventMethods,
 ];
@@ -392,6 +477,23 @@ const { notificationShowSchema } = await import(
 const { guid } = await import(
   "../../plugins/notification/src/platforms/toast-winrt.ts"
 );
+const guidBytes = guid;
+interfaceKinds.set(
+  guidBytes("e3bf92f3-c197-436f-8265-0625824f8dac").toString("hex"),
+  "activatedArgs",
+);
+interfaceKinds.set(
+  guidBytes("ab7da512-cc61-568e-81be-304ac31038fa").toString("hex"),
+  "activatedArgs2",
+);
+interfaceKinds.set(
+  guidBytes("1b0d3570-0877-5ec2-8a2c-3b9539506aca").toString("hex"),
+  "map",
+);
+interfaceKinds.set(
+  guidBytes("4bd682dd-7554-40e9-9a9b-82654ede7e62").toString("hex"),
+  "propertyValue",
+);
 const input = notificationShowSchema.parse({
   id: "fixture",
   title: "<&🚀",
@@ -449,7 +551,9 @@ for (const [removeSlot, delegate] of latest.events) {
 await Promise.resolve();
 assert.deepEqual(events, [
   {
-    kind: "clicked",
+    kind: "activated",
+    arguments: "",
+    reply: undefined,
   },
   {
     kind: "dismissed",
@@ -583,11 +687,142 @@ for (const stage of [
   });
 }
 failStage = "";
+// Activation: the activator arguments and the typed reply are copied from the borrowed argument.
+const replyInput = notificationShowSchema.parse({
+  id: "reply",
+  title: "reply",
+  actions: [
+    {
+      id: "ok",
+      label: "OK",
+    },
+  ],
+  reply: {
+    buttonLabel: "Send",
+  },
+});
+const activations: unknown[] = [];
+const replyHandle = driver.show(replyInput, (event) => activations.push(event));
+const replyToast = [
+  ...objects.values(),
+]
+  .reverse()
+  .find((value) => value.kind === "toast");
+assert(replyToast);
+const activate = async (
+  next: typeof activation,
+  expected: unknown[],
+  stage = "",
+) => {
+  activation = next;
+  failStage = stage;
+  const replyArgument = makeObject("argument");
+  const delegate = replyToast.events.get(12);
+  assert(delegate);
+  assert.equal(
+    callback(
+      delegate,
+      3,
+      [
+        "ptr",
+        "ptr",
+      ],
+      0,
+      replyArgument,
+    ),
+    0,
+  );
+  failStage = "";
+  dropReference(replyArgument);
+  await Promise.resolve();
+  assert.deepEqual(activations.splice(0), expected, JSON.stringify(next));
+};
+await activate(
+  {
+    arguments: "action:ok",
+    input: {
+      type: 6,
+      text: "hello 한글",
+    },
+  },
+  [
+    {
+      kind: "activated",
+      arguments: "action:ok",
+      reply: "hello 한글",
+    },
+  ],
+);
+await activate(
+  {
+    arguments: "reply",
+    input: {
+      type: 6,
+      text: "",
+    },
+  },
+  [
+    {
+      kind: "activated",
+      arguments: "reply",
+      reply: "",
+    },
+  ],
+);
+// A missing key or a value that is not a string is no reply text, never a guess.
+for (const input of [
+  "missing",
+  {
+    type: 3,
+    text: "",
+  },
+] as const) {
+  await activate(
+    {
+      arguments: "reply",
+      input,
+    },
+    [
+      {
+        kind: "activated",
+        arguments: "reply",
+        reply: undefined,
+      },
+    ],
+  );
+}
+// Any failing COM step drops the activation and still releases every object and string.
+for (const stage of [
+  "argument:0",
+  "activatedArgs:6",
+  "activatedArgs2:6",
+  "userInput:0",
+  "map:8",
+  "map:6",
+  "boxed:0",
+  "propertyValue:6",
+  "propertyValue:19",
+]) {
+  await activate(
+    {
+      arguments: "reply",
+      input: {
+        type: 6,
+        text: "x",
+      },
+    },
+    [],
+    stage,
+  );
+}
 deferRelease = true;
 const { drainToastCleanup } = await import(
   "../../plugins/notification/src/platforms/toast-cleanup.ts"
 );
-await drainToastCleanup(() => second.detach());
+await drainToastCleanup(() => {
+  second.detach();
+  replyHandle.detach();
+});
 assert.equal(waitHandles, 0);
 assert.equal(delayedReleases.length, 0);
 driver.dispose();
@@ -730,6 +965,12 @@ const apiToast = [
 assert(apiToast);
 const activated = apiToast.events.get(12);
 assert(activated);
+// A body click carries no activator arguments.
+activation = {
+  arguments: "",
+  input: "absent",
+};
+const apiArgument = makeObject("argument");
 callback(
   activated,
   3,
@@ -738,8 +979,9 @@ callback(
     "ptr",
   ],
   0,
-  0,
+  apiArgument,
 );
+dropReference(apiArgument);
 await Promise.resolve();
 assert.deepEqual(published, [
   "notification.clicked",

@@ -2,10 +2,73 @@ import { attemptAll } from "@bunaway/plugin";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import {
   MAX_ACTIVE_TOASTS,
+  MAX_REPLY_LENGTH,
   type NotificationResult,
   type ResolvedNotification,
   type ToastEvent,
 } from "#notification/contract";
+
+/** Input id of the reply text box in the toast XML. */
+export const REPLY_INPUT_ID = "reply";
+/** Activator arguments of the reply submit button. Regular buttons use ACTION_ARGUMENT_PREFIX plus their id. */
+export const REPLY_ARGUMENT = "reply";
+/** Identifier ids never contain ':', so this prefix cannot collide with REPLY_ARGUMENT. */
+export const ACTION_ARGUMENT_PREFIX = "action:";
+
+type Activation =
+  | {
+      kind: "body";
+    }
+  | {
+      kind: "action";
+      actionId: string | null;
+      reply: string | null;
+    };
+
+/**
+ * Map raw activator arguments to a public activation. Only arguments this toast declared are accepted:
+ * the toast carries no launch string, so an empty argument is a body click. Unknown arguments and replies
+ * over the limit yield no event, because truncating would change what the user typed.
+ */
+function resolveActivation(
+  input: ResolvedNotification,
+  event: Extract<
+    ToastEvent,
+    {
+      kind: "activated";
+    }
+  >,
+): Activation | undefined {
+  if (event.arguments === "") {
+    return {
+      kind: "body",
+    };
+  }
+  const reply = input.reply ? (event.reply ?? "") : null;
+  if (reply !== null && reply.length > MAX_REPLY_LENGTH) {
+    return undefined;
+  }
+  if (event.arguments === REPLY_ARGUMENT) {
+    return input.reply
+      ? {
+          kind: "action",
+          actionId: null,
+          reply,
+        }
+      : undefined;
+  }
+  if (event.arguments.startsWith(ACTION_ARGUMENT_PREFIX)) {
+    const actionId = event.arguments.slice(ACTION_ARGUMENT_PREFIX.length);
+    return input.actions.some((action) => action.id === actionId)
+      ? {
+          kind: "action",
+          actionId,
+          reply,
+        }
+      : undefined;
+  }
+  return undefined;
+}
 
 /** Native resources for one toast. detach must be safe to retry after partial cleanup. */
 export type ToastHandle = {
@@ -89,11 +152,21 @@ export function createToastController(
         if (stopping || !entry.active || entries.get(id) !== entry) {
           return;
         }
-        if (event.kind === "clicked") {
-          publish("notification.clicked", {
-            ...identity,
-            data: entry.input.data,
-          });
+        if (event.kind === "activated") {
+          const activation = resolveActivation(entry.input, event);
+          if (activation?.kind === "body") {
+            publish("notification.clicked", {
+              ...identity,
+              data: entry.input.data,
+            });
+          } else if (activation) {
+            publish("notification.actionInvoked", {
+              ...identity,
+              actionId: activation.actionId,
+              reply: activation.reply,
+              data: entry.input.data,
+            });
+          }
         } else if (event.kind === "dismissed") {
           publish("notification.dismissed", {
             ...identity,
@@ -191,6 +264,25 @@ export function toastFileUri(path: string): string {
   return `file:///${drive}/${segments.map(encodeURIComponent).join("/")}`;
 }
 
+/** Reply text box and buttons. Windows renders the input only when a button references it with hint-inputId. */
+function actionsXml(input: ResolvedNotification): string {
+  const button = (label: string, argument: string, inputId = "") =>
+    `<action content="${escapeXml(label)}" arguments="${escapeXml(argument)}" activationType="foreground"${inputId}/>`;
+  const reply = input.reply
+    ? `<input id="${REPLY_INPUT_ID}" type="text" placeHolderContent="${escapeXml(input.reply.placeholder)}"/>${button(
+        input.reply.buttonLabel,
+        REPLY_ARGUMENT,
+        ` hint-inputId="${REPLY_INPUT_ID}"`,
+      )}`
+    : "";
+  const buttons = input.actions
+    .map((action) =>
+      button(action.label, `${ACTION_ARGUMENT_PREFIX}${action.id}`),
+    )
+    .join("");
+  return reply || buttons ? `<actions>${reply}${buttons}</actions>` : "";
+}
+
 /**
  * Build toast XML. Text and file URIs are escaped, and media paths are validated local files.
  * A looping sound needs duration="long", otherwise Windows plays it once with the short toast.
@@ -214,5 +306,5 @@ export function toastXml(input: ResolvedNotification): string {
   } else if (input.sound) {
     audio = `<audio src="ms-winsoundevent:Notification.${input.sound}"${input.soundLoop ? ' loop="true"' : ""}/>`;
   }
-  return `<toast${input.soundLoop ? ' duration="long"' : ""}><visual><binding template="ToastGeneric">${media}<text>${escapeXml(input.title)}</text><text>${escapeXml(input.body)}</text></binding></visual>${audio}</toast>`;
+  return `<toast${input.soundLoop ? ' duration="long"' : ""}><visual><binding template="ToastGeneric">${media}<text>${escapeXml(input.title)}</text><text>${escapeXml(input.body)}</text></binding></visual>${actionsXml(input)}${audio}</toast>`;
 }

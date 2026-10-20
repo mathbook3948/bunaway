@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 for (const mode of [
   "marshal",
   "delivery",
+  "activation",
 ]) {
   test.skipIf(process.platform !== "win32")(
     `Windows toast ${mode} uses real COM and controlled fixture resources`,

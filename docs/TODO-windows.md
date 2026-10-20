@@ -487,7 +487,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] 실행 중 native clicked, dismissed와 failed callback을 전달한다. Show 접수는 반환값으로 구분한다.
 - [ ] 실제 popup 표시 완료 이벤트와 사용자 클릭의 GUI 검증을 제공한다.
 - [x] 앱 범위 ID/group, 같은 ID 교체와 개별 clear를 제공한다. 종료 시 이번 실행의 알림을 정리한다.
-- [ ] 액션 버튼과 인라인 응답 입력을 제공한다.
+- [x] 액션 버튼과 인라인 응답 입력을 제공한다. `actions`와 `reply`는 알림별로 선언하고 `notification.actionInvoked`로 전달한다. 실행 중 프로세스의 Activated만 지원한다.
 - [ ] 앱이 종료된 상태의 toast activation을 앱 시작과 `onOpen`에 연결한다.
 - [ ] timeout과 표시 우선순위의 플랫폼별 동작을 정의한다. silent는 Windows에서 구현했다.
 - [ ] Windows toast XML과 고급 알림 콘텐츠의 지원을 결정한다.

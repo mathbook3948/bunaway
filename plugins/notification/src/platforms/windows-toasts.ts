@@ -7,7 +7,9 @@ import {
   type ResolvedNotification,
   type ToastEvent,
 } from "#notification/contract";
+import { readActivation } from "#notification/platforms/toast-activation";
 import {
+  REPLY_INPUT_ID,
   type ToastDriver,
   type ToastHandle,
   toastXml,
@@ -46,6 +48,48 @@ const EVENTS = [
     iid: "95e3e803-c969-5e3a-9753-ea2ad22a9a33",
   },
 ] as const;
+
+/**
+ * Copy an event out of its native argument while the callback is on the stack. The argument is borrowed.
+ * An Activated argument that cannot be read yields no event instead of a body click.
+ */
+function readToastEvent(
+  runtime: ReturnType<typeof createToastRuntime>,
+  kind: (typeof EVENTS)[number]["kind"],
+  argument: Pointer,
+  replyInputId: string | undefined,
+): ToastEvent | undefined {
+  if (kind === "clicked") {
+    return readActivation(runtime, argument, replyInputId);
+  }
+  const output = new Int32Array(1);
+  checkToast(
+    runtime.method(
+      argument,
+      6,
+      [
+        "ptr",
+      ],
+      ptr(output),
+    ),
+    "ToastEvent.Value",
+  );
+  if (kind === "failed") {
+    return {
+      kind: "failed",
+      hresult: (output[0] ?? 0) >>> 0,
+    };
+  }
+  const reasons = [
+    "userCanceled",
+    "applicationHidden",
+    "timedOut",
+  ] as const;
+  return {
+    kind: "dismissed",
+    reason: reasons[output[0] ?? -1] ?? "unknown",
+  };
+}
 
 /** Reject MSIX before choosing an explicit desktop AUMID. This never registers or changes app identity. */
 function requireUnpackaged() {
@@ -295,40 +339,14 @@ export function createWindowsToastDriver(appId: string): ToastDriver {
             if (!attached) {
               return;
             }
-            let value: ToastEvent;
-            if (event.kind === "clicked") {
-              value = {
-                kind: "clicked",
-              };
-            } else {
-              const output = new Int32Array(1);
-              checkToast(
-                runtime.method(
-                  argument,
-                  6,
-                  [
-                    "ptr",
-                  ],
-                  ptr(output),
-                ),
-                "ToastEvent.Value",
-              );
-              if (event.kind === "failed") {
-                value = {
-                  kind: "failed",
-                  hresult: (output[0] ?? 0) >>> 0,
-                };
-              } else {
-                const reasons = [
-                  "userCanceled",
-                  "applicationHidden",
-                  "timedOut",
-                ] as const;
-                value = {
-                  kind: "dismissed",
-                  reason: reasons[output[0] ?? -1] ?? "unknown",
-                };
-              }
+            const value = readToastEvent(
+              runtime,
+              event.kind,
+              argument,
+              input.reply ? REPLY_INPUT_ID : undefined,
+            );
+            if (!value) {
+              return;
             }
             // Copy the value while arguments are alive, then leave the native callback stack before publishing.
             queueMicrotask(() => {
