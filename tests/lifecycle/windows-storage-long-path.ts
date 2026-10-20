@@ -88,6 +88,15 @@ try {
     /into itself/,
   );
 
+  // An error for a missing long path is the public one and does not show the extended prefix.
+  try {
+    storage.readText(at(`${directory}\\missing.txt`));
+    assert.fail("Reading a missing file must fail.");
+  } catch (error) {
+    assert(error instanceof Error);
+    assert.equal(error.message, "Storage target not found.");
+  }
+
   storage.remove(at(moved));
   assert.equal(storage.exists(at(moved)), false);
   await storage.removeRecursive(at(`${root}\\${top}`));

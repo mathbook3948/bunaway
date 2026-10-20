@@ -9,8 +9,7 @@ import {
 import { NodeStorage } from "#storage/platforms/node-storage";
 import {
   fromFileSystemPath,
-  normalizeWindowsPath,
-  toFileSystemPath,
+  normalizeForFileSystem,
 } from "#storage/platforms/windows-path";
 
 const ERROR_FILE_NOT_FOUND = 2;
@@ -79,9 +78,9 @@ export class WindowsStorage extends NodeStorage {
 
   constructor() {
     super({
-      normalize: (path) => toFileSystemPath(normalizeWindowsPath(path)),
-      // Windows compares names without regard to case. Only long paths carry the extended prefix,
-      // so it is removed before comparing.
+      normalize: normalizeForFileSystem,
+      // Windows compares names without regard to case. Every path carries the extended
+      // prefix, which is removed before comparing.
       isBelow: (parent, child) =>
         fromFileSystemPath(child)
           .toUpperCase()
