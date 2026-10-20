@@ -1,4 +1,5 @@
 import { expect, setDefaultTimeout, test } from "bun:test";
+import { resolve } from "node:path";
 import { statusSchema } from "#plugins/power/src/contract";
 import {
   type DeadlineName,
@@ -9,7 +10,11 @@ import {
 setDefaultTimeout(deadline("nativeFixture"));
 
 /** Run the packaged macOS power adapter in a fresh process and return what it printed. */
-async function runAdapter(script: string, limit: DeadlineName = "childStep") {
+async function runAdapter(
+  script: string,
+  limit: DeadlineName = "childStep",
+  withEvents = false,
+) {
   const entry = Bun.resolveSync(
     "@bunaway/plugin-power/native/macos",
     import.meta.dir,
@@ -20,7 +25,9 @@ async function runAdapter(script: string, limit: DeadlineName = "childStep") {
       "--no-env-file",
       "-e",
       `const { default: power } = await import(${JSON.stringify(entry)});
-const adapter = power._definition.nativePlatforms.macos.create({dataRoot:".",capabilities:[]});
+const emitted = [];
+const events = ${withEvents ? "{ emit: (event, payload) => emitted.push([event, payload]) }" : "undefined"};
+const adapter = power._definition.nativePlatforms.macos.create({dataRoot:".",capabilities:[],events});
 const call = (name, input) => adapter.execute("power." + name, input, "backend");
 ${script}`,
     ],
@@ -189,6 +196,60 @@ try {
 }`);
     expect(result).toEqual({
       code: "UNSUPPORTED",
+    });
+  },
+);
+
+const PUMP = resolve(import.meta.dir, "fixtures/macos-notification-pump.ts");
+
+test.skipIf(process.platform !== "darwin")(
+  "macOS sleep, wake, lock and unlock notifications become payload-free power events until dispose",
+  async () => {
+    const result = await runAdapter(
+      `
+const { post, pumpTurns, pumpUntil } = await import(${JSON.stringify(PUMP)});
+const deliver = async (center, name, count) => {
+  post(center, name);
+  await pumpUntil(() => emitted.length >= count, name);
+};
+try {
+  await deliver("workspace", "NSWorkspaceWillSleepNotification", 1);
+  await deliver("workspace", "NSWorkspaceDidWakeNotification", 2);
+  await deliver("distributed", "com.apple.screenIsLocked", 3);
+  await deliver("distributed", "com.apple.screenIsUnlocked", 4);
+  const whileWatching = emitted.splice(0);
+  await adapter.dispose();
+  await adapter.dispose();
+  post("workspace", "NSWorkspaceWillSleepNotification");
+  post("distributed", "com.apple.screenIsLocked");
+  pumpTurns(25);
+  console.log(JSON.stringify({ whileWatching, afterDispose: emitted }));
+} finally {
+  await adapter.dispose();
+}`,
+      "nativeFixture",
+      true,
+    );
+    expect(result).toEqual({
+      whileWatching: [
+        [
+          "power.suspended",
+          {},
+        ],
+        [
+          "power.resumed",
+          {},
+        ],
+        [
+          "power.sessionLocked",
+          {},
+        ],
+        [
+          "power.sessionUnlocked",
+          {},
+        ],
+      ],
+      afterDispose: [],
     });
   },
 );

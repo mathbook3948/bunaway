@@ -246,7 +246,8 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 - [ ] 접근성 지원 상태, trust 조회와 사용자 승인 요청을 제공한다.
 - [ ] VoiceOver, 키보드 탐색, IME와 사용자 타이틀바 접근성을 검증한다.
 - [x] 전원과 배터리 상태(`power.getStatus`)와 입력 idle(`power.getIdleTime`, `power.getIdleState`)을 조회한다.
-- [ ] suspend/resume, 잠금 및 전원과 배터리 상태 변경 이벤트를 제공한다.
+- [x] suspend/resume과 잠금 이벤트를 제공한다.
+- [ ] 전원과 배터리 상태 변경 이벤트를 제공한다.
 - [x] 화면 및 시스템 절전 방지의 시작, 해제와 종료 정리를 제공한다.
 
 ## 14. WebView 생성, 배치와 기본 제어

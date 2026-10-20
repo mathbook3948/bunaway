@@ -1,6 +1,6 @@
 ---
 title: power
-description: Windows와 macOS의 전원과 입력 idle 조회, 앱 수명의 절전 및 화면 유지 요청, Windows의 절전과 화면 잠금 이벤트.
+description: Windows와 macOS의 전원과 입력 idle 조회, 앱 수명의 절전 및 화면 유지 요청, 절전과 화면 잠금 이벤트.
 ---
 
 기본 export(`default`)를 `power`로 가져와 앱에 등록하고 호출합니다.
@@ -8,7 +8,8 @@ description: Windows와 macOS의 전원과 입력 idle 조회, 앱 수명의 절
 `@bunaway/plugin-power`를 설치하고 `power`를 앱의 plugins에 등록합니다.
 Windows는 모든 작업을 지원합니다. macOS는 `getStatus`, `getIdleTime`, `getIdleState`와
 `startBlocker`, `listBlockers`, `isBlockerActive`, `stopBlocker`를 지원하고
-`getCpuSpeedLimit`와 이벤트는 `UNSUPPORTED`입니다. 다른 플랫폼은 모두 `UNSUPPORTED`입니다.
+`power.suspended`, `power.resumed`, `power.sessionLocked`, `power.sessionUnlocked` 이벤트를 제공합니다.
+`getCpuSpeedLimit`와 `power.statusChanged`는 `UNSUPPORTED`입니다. 다른 플랫폼은 모두 `UNSUPPORTED`입니다.
 각 작업에는 `power.<작업명>` 권한이 필요합니다. 화면에서 직접 호출하면 해당
 `plugin.power.<작업명>` command도 허용합니다. 등록은 권한을 부여하지 않습니다.
 Windows에서 전원 작업은 UI 스레드에서 실행됩니다. 파일 선택이나 메시지 대화상자,
@@ -128,6 +129,11 @@ await stop();
 suspend와 resume은 Windows 전원 브로드캐스트(`PBT_APMSUSPEND`, `PBT_APMRESUMEAUTOMATIC`)를
 따릅니다. 잠금과 해제는 WTS 세션 알림(`WTS_SESSION_LOCK`, `WTS_SESSION_UNLOCK`)이며,
 앱을 실행한 프로세스의 세션 잠금만 알립니다. 다른 세션의 잠금은 알리지 않습니다.
+macOS에서는 `NSWorkspaceWillSleepNotification`과 `NSWorkspaceDidWakeNotification`이 suspend와
+resume이 되고, 로그인 창이 보내는 분산 알림 `com.apple.screenIsLocked`와
+`com.apple.screenIsUnlocked`가 잠금과 해제가 됩니다. Electron의 macOS 구현과 같은 알림이지만
+잠금 알림 이름은 Apple이 문서화한 API가 아니므로 OS 버전별 동작은 보장하지 않습니다.
+macOS에서는 알림을 받은 순서대로 보내며 합치지 않습니다.
 다음 이벤트 전달 전에 같은 신호가 연속으로 쌓이면 하나로 합치고, 서로 다른 신호는 받은 순서대로 보냅니다.
 resume 때 `power.resumed`와 `power.statusChanged`가 함께 나갈 수 있으며 두 이벤트의 상대 순서는 보장하지 않습니다.
 `power.suspended`는 절전 전에 앱이 작업을 끝낼 수 있음을 보장하지 않으며 복귀 뒤에 도착할 수 있습니다.
@@ -136,7 +142,6 @@ resume 때 `power.resumed`와 `power.statusChanged`가 함께 나갈 수 있으�
 `power.sessionLocked`와 `power.sessionUnlocked`는 발생하지 않습니다. 조회, blocker와
 `power.suspended`, `power.resumed`는 계속 동작합니다.
 구독 전의 상태는 replay하지 않으며 현재 잠금 여부를 조회하는 API는 없습니다.
-macOS에서는 이 이벤트를 발생시키지 않습니다.
 구독 해제와 플러그인 종료 뒤에는 이벤트를 보내지 않습니다.
 
 ## 절전과 화면 유지 요청
@@ -175,6 +180,8 @@ macOS는 IOKit)를 닫지 않습니다.
 결과 수신 전에 취소되면 허용된 백엔드가 listBlockers로 등록 상태를 복구하거나 앱 종료의
 자동 정리로 해제합니다.
 
-실제 하드웨어의 절전/화면 timeout 검증은 후속 작업입니다. macOS는 macOS CI에서 `pmset -g assertions`에
+실제 하드웨어의 절전/화면 timeout 검증은 후속 작업입니다. macOS의 절전과 잠금 이벤트는 macOS CI에서
+같은 알림을 프로세스 안에서 보내 이벤트가 발행되고 정리 뒤 멈추는지 확인하며, 실제 절전과 화면 잠금
+전환은 검증하지 않았습니다. macOS는 macOS CI에서 `pmset -g assertions`에
 assertion이 나타나고 stop과 정리 뒤 사라지는지 확인합니다.
 [Windows PowerSetRequest 계약](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-powersetrequest)을 따릅니다.

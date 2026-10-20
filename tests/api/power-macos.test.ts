@@ -4,6 +4,7 @@ import {
   macosPowerOperations,
   powerOperations,
 } from "#plugins/power/src/operations";
+import { watchMacosPowerLifecycle } from "#plugins/power/src/platforms/macos-lifecycle-events";
 
 test("macOS implements the queries and blockers, and shares their schemas with Windows", () => {
   const macos = power._definition.nativePlatforms.macos;
@@ -51,4 +52,8 @@ test("macOS implements the queries and blockers, and shares their schemas with W
   expect(macosPowerOperations.listBlockers.input.safeParse(null).success).toBe(
     true,
   );
+});
+
+test("macOS lifecycle events are not observed when the host has no event service", () => {
+  expect(watchMacosPowerLifecycle(undefined)).toBeUndefined();
 });
