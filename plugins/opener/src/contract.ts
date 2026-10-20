@@ -1,6 +1,7 @@
 import { int32Schema } from "@bunaway/plugin";
 import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
 import { z } from "zod";
+import { isRegistrableUrlScheme } from "#opener/url-scheme";
 
 // Explorer's file operations use ordinary Win32 paths, not extended device paths.
 export const MAX_FILE_PATH_LENGTH = 259;
@@ -24,6 +25,13 @@ export const urlInput = z.strictObject({
       (value) => Array.from(value).length <= MAX_URL_LENGTH,
       "Text exceeds the Unicode character limit.",
     ),
+});
+
+/** A URL scheme to register, in any letter case; platforms use its lowercase form. */
+export const urlSchemeInput = z.strictObject({
+  scheme: z
+    .string()
+    .refine(isRegistrableUrlScheme, "Expected an unreserved URL scheme."),
 });
 
 /**
@@ -102,6 +110,10 @@ export function validateOpenerInput(operation: string, input: JsonValue) {
       case "opener.openUrl":
       case "opener.getUrlHandler":
         return urlInput.parse(validateValue({}, input));
+      case "opener.registerUrlScheme":
+      case "opener.unregisterUrlScheme":
+      case "opener.isUrlSchemeRegistered":
+        return urlSchemeInput.parse(validateValue({}, input));
       case "opener.openFile":
       case "opener.readShortcutLink":
       case "opener.revealFile":

@@ -301,6 +301,15 @@ test("opener preserves strict inputs and independently granted file operations",
     {
       name: "opener.getUrlHandler",
     },
+    {
+      name: "opener.registerUrlScheme",
+    },
+    {
+      name: "opener.unregisterUrlScheme",
+    },
+    {
+      name: "opener.isUrlSchemeRegistered",
+    },
   ]);
   expect(Object.keys(operation)).toEqual([
     "name",

@@ -68,7 +68,7 @@ POSIX 경로이며 기존 259 UTF-16 코드 단위 예산과 이름별 255 UTF-8
 I/O 연결은 PR #164에 의존합니다. 플랫폼별 바인딩과 네이티브 검증 범위는
 [macOS opener 구현 기록](../../docs/architecture/macos-opener.md)을 참고하세요. 초기
 macOS 요청 실패는 아직 조사 중이며 네이티브 CI 통과 전에는 실행 검증 완료로 보지 않습니다.
-macOS 휴지통은 제공하지 않습니다. 커스텀 URL 스킴, 딥링크 등록과 설치 프로그램 변경은 이 패키지의 범위가 아닙니다.
+macOS 휴지통은 제공하지 않습니다. 설치 프로그램 변경은 이 패키지의 범위가 아닙니다. 커스텀 URL scheme의 런타임 등록은 아래 "URL scheme 등록"을 참고하세요.
 
 ## Windows 바로가기
 
@@ -105,6 +105,17 @@ const link = await opener.readShortcutLink("C:\\Users\\me\\Desktop\\App.lnk");
 모두 `null`입니다. Electron과 Chromium처럼 실패 코드를 구분하지 않으며, 크기가 조회와 읽기 사이에 바뀌면 한 번
 다시 시도합니다. 오류는 입력 검증의 `INVALID_ARGUMENT`와 종료 뒤 호출의 `CANCELLED`뿐입니다. 아이콘은
 반환하지 않으며 macOS는 지원하지 않습니다.
+
+## URL scheme 등록
+
+`registerUrlScheme(scheme: string, options?): Promise<null>`, `unregisterUrlScheme(scheme, options?): Promise<boolean>`,
+`isUrlSchemeRegistered(scheme, options?): Promise<boolean>`는 실행 중인 앱을 현재 사용자의 사용자 지정 URL scheme
+처리 앱으로 등록, 해제하고 조회합니다(Windows만, macOS는 `UNSUPPORTED`). `HKCU\Software\Classes\<scheme>`에
+`URL Protocol`과 `shell\open\command`(앱 실행 명령 + `"%1"`)를 쓰고 HKLM과 UserChoice는 건드리지 않습니다.
+대상은 호스트가 알려 주는 실행 중인 앱뿐이며 호출자가 경로나 인자를 줄 수 없습니다. `http`, `file`, `javascript`,
+`ms-*` 같은 예약 scheme은 `INVALID_ARGUMENT`입니다. 키의 `BunawayRegistration` 값이 이 앱의 것이고 명령이 이 플러그인이 쓴 그대로일 때만
+소유로 보며(앱이 이동해 낡은 명령은 갱신과 해제 가능), 다른 프로그램이 덮어쓴 키와 소유가 아닌 기존 이름(HKLM 등록과 시스템 ProgId 포함)은 덮거나 지우지 않습니다. 권한은 작업 이름 세 개이며 각각 별개입니다.
+링크로 받은 URL은 신뢰할 수 없는 입력이므로 앱이 검증해야 합니다. 자세한 규칙은 reference 문서를 참고하세요.
 
 ## 지정 앱
 

@@ -107,6 +107,21 @@ export const KERNEL32 = {
     ],
     returns: "i32",
   },
+  CreateMutexExW: {
+    args: [
+      "ptr",
+      "ptr",
+      "u32",
+      "u32",
+    ],
+    returns: "u64",
+  },
+  ReleaseMutex: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
   CreateEventW: {
     args: [
       "ptr",
@@ -523,6 +538,15 @@ export const OLE32 = {
 
 /** shell32.dll: known folders and shell items. */
 export const SHELL32 = {
+  SHChangeNotify: {
+    args: [
+      "i32",
+      "u32",
+      "ptr",
+      "ptr",
+    ],
+    returns: "void",
+  },
   SHCreateItemFromParsingName: {
     args: [
       "ptr",
@@ -588,6 +612,54 @@ export const COMBASE = {
 
 /** advapi32.dll: registry access. */
 export const ADVAPI32 = {
+  RegCreateKeyExW: {
+    args: [
+      "u64",
+      "ptr",
+      "u32",
+      "ptr",
+      "u32",
+      "u32",
+      "ptr",
+      "ptr",
+      "ptr",
+    ],
+    returns: "i32",
+  },
+  RegOpenKeyExW: {
+    args: [
+      "u64",
+      "ptr",
+      "u32",
+      "u32",
+      "ptr",
+    ],
+    returns: "i32",
+  },
+  RegSetValueExW: {
+    args: [
+      "u64",
+      "ptr",
+      "u32",
+      "u32",
+      "ptr",
+      "u32",
+    ],
+    returns: "i32",
+  },
+  RegDeleteTreeW: {
+    args: [
+      "u64",
+      "ptr",
+    ],
+    returns: "i32",
+  },
+  RegCloseKey: {
+    args: [
+      "u64",
+    ],
+    returns: "i32",
+  },
   RegGetValueW: {
     args: [
       "u64",

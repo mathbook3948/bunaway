@@ -14,6 +14,7 @@ import {
   normalizeShortcutPath,
 } from "#opener/platforms/windows-path";
 import { normalizeUrl } from "#opener/url";
+import { normalizeUrlScheme } from "#opener/url-scheme";
 
 /** Accept either path spelling; the host adapter enforces its own platform. */
 function normalizeOpenerFilePath(input: unknown): string {
@@ -60,6 +61,58 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
     return api.getUrlHandler(
       {
         url: normalizeUrl(url),
+      },
+      options,
+    );
+  }
+
+  /**
+   * Register this app as the current user's handler of a custom URL scheme such as
+   * `myapp`, so links open the app with the URL as its last argument. Only the running
+   * app can be registered. A scheme registered by something else is not replaced and
+   * rejects with INVALID_ARGUMENT, as do reserved schemes such as `http` and `ms-settings`.
+   * Windows only.
+   */
+  async function registerUrlScheme(
+    scheme: string,
+    options?: NativeInvokeOptions,
+  ): Promise<null> {
+    return api.registerUrlScheme(
+      {
+        scheme: normalizeUrlScheme(scheme),
+      },
+      options,
+    );
+  }
+
+  /**
+   * Remove this app's registration for the scheme. Resolves true when it was removed and
+   * false when the app has none, including a scheme owned by someone else. Windows only.
+   */
+  async function unregisterUrlScheme(
+    scheme: string,
+    options?: NativeInvokeOptions,
+  ): Promise<boolean> {
+    return api.unregisterUrlScheme(
+      {
+        scheme: normalizeUrlScheme(scheme),
+      },
+      options,
+    );
+  }
+
+  /**
+   * Whether this app holds a complete registration for the scheme. This reads the app's own
+   * registry entry; the user may still have chosen another app for the scheme, which
+   * `getUrlHandler` reports. Windows only.
+   */
+  async function isUrlSchemeRegistered(
+    scheme: string,
+    options?: NativeInvokeOptions,
+  ): Promise<boolean> {
+    return api.isUrlSchemeRegistered(
+      {
+        scheme: normalizeUrlScheme(scheme),
       },
       options,
     );
@@ -206,6 +259,9 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
     addRecentDocument,
     clearRecentDocuments,
     getUrlHandler,
+    registerUrlScheme,
+    unregisterUrlScheme,
+    isUrlSchemeRegistered,
     trashFile,
     openUrl,
     openFile,

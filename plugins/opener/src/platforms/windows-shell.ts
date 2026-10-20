@@ -1,6 +1,6 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
-import { OLE32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/plugin";
+import { OLE32, pick } from "@bunaway/plugin/win32";
 
 const POINTER_BYTES = 8;
 const VARIANT_BYTES = 24;
@@ -49,7 +49,7 @@ const IID_FOLDER_VIEW = guid("e7a1af80-4d96-11cf-960c-0080c7f4ee85");
 const IID_NULL = Buffer.alloc(16);
 
 /** Encode one already validated target using Windows backslash-before-quote rules. */
-function quoteShellTarget(target: string): string {
+export function quoteShellTarget(target: string): string {
   return `"${target.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/g, "$1$1")}"`;
 }
 
