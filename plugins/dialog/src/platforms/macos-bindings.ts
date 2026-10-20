@@ -12,6 +12,17 @@ import { BunawayError } from "@bunaway/protocol";
 const APPKIT = "/System/Library/Frameworks/AppKit.framework/AppKit";
 const UNIFORM_TYPES =
   "/System/Library/Frameworks/UniformTypeIdentifiers.framework/UniformTypeIdentifiers";
+/** `NSAlertFirstButtonReturn`: the modal response of the first button; later ones follow. */
+const ALERT_FIRST_BUTTON_RETURN = 1000n;
+/** `NSControlStateValueOn`. */
+const CONTROL_STATE_ON = 1n;
+const ALERT_STYLES: Record<AlertStyle, bigint> = {
+  warning: 0n,
+  informational: 1n,
+  critical: 2n,
+};
+const RETURN_KEY = "\r";
+const ESCAPE_KEY = "\u001b";
 /** `NSModalResponseOK`: the user confirmed the panel. */
 const MODAL_RESPONSE_OK = 1n;
 /** Run loop mode set every modal panel loop services, so a scheduled cancel fires inside it. */
@@ -59,8 +70,58 @@ export type FilePanel = {
   dispose(): void;
 };
 
+/** NSAlertStyle: `informational` also stands in for the types that have no icon of their own. */
+export type AlertStyle = "informational" | "warning" | "critical";
+
+/** What an alert is configured with, already reduced from the message input by the adapter. */
+export type AlertSettings = {
+  message: string;
+  detail: string | null;
+  style: AlertStyle;
+  /** Empty keeps the one OK button AppKit adds on its own, localized by the system. */
+  buttons: readonly string[];
+  /** Index of the button that Return activates. */
+  defaultButton: number;
+  /** Index of the button that Escape activates; undefined leaves Escape unbound. */
+  cancelButton: number | undefined;
+  checkbox: {
+    label: string;
+    checked: boolean;
+  } | null;
+};
+
+/** What the user answered: the clicked button's index and the checkbox state afterwards. */
+export type AlertAnswer = {
+  button: number;
+  checkboxChecked: boolean;
+};
+
+/** AppKit state read back from a configured alert. */
+export type AlertReadBack = {
+  message: string;
+  detail: string;
+  style: AlertStyle;
+  buttons: string[];
+  /** Key equivalent of each button, in button order. */
+  keyEquivalents: string[];
+  checkbox: {
+    label: string;
+    checked: boolean;
+  } | null;
+};
+
+/** One configured NSAlert. Every call must run on the main thread. */
+export type MessageAlert = {
+  readBack(): AlertReadBack;
+  /** Blocks in the modal loop until the user clicks a button. */
+  run(): AlertAnswer;
+  /** Releases the alert. Safe to repeat. */
+  dispose(): void;
+};
+
 export type FilePanelFactory = {
   create(settings: PanelSettings): FilePanel;
+  createAlert(settings: AlertSettings): MessageAlert;
   dispose(): void;
 };
 
@@ -95,6 +156,7 @@ export function createFilePanelFactory(): FilePanelFactory {
   }
   return {
     create: (settings) => createPanel(runtime, settings),
+    createAlert: (settings) => createAlert(runtime, settings),
     dispose: () => owner.dispose(),
   };
 }
@@ -169,11 +231,12 @@ function openRuntime(owner: ResourceOwner) {
 
 type Runtime = ReturnType<typeof openRuntime>;
 
-function createPanel(runtime: Runtime, settings: PanelSettings): FilePanel {
+/** The Objective-C calls both dialog kinds share, bound to one binding's argument buffers. */
+function objcSession(runtime: Runtime, what: string) {
   if (!runtime.system.symbols.pthread_main_np()) {
     throw new BunawayError({
       code: "UNSUPPORTED",
-      message: "The file panels require the macOS main thread.",
+      message: `The ${what} require the macOS main thread.`,
     });
   }
   if (!runtime.appkit.symbols.NSApplicationLoad()) {
@@ -276,6 +339,37 @@ function createPanel(runtime: Runtime, settings: PanelSettings): FilePanel {
     }
     return extensions;
   };
+  return {
+    send,
+    string,
+    textOf,
+    inPool,
+    array,
+    classOf,
+    selector,
+    required,
+    flag,
+    fileUrl,
+    contentTypes,
+    extensionsOf,
+  };
+}
+
+function createPanel(runtime: Runtime, settings: PanelSettings): FilePanel {
+  const {
+    send,
+    string,
+    textOf,
+    inPool,
+    array,
+    classOf,
+    selector,
+    required,
+    flag,
+    fileUrl,
+    contentTypes,
+    extensionsOf,
+  } = objcSession(runtime, "file panels");
 
   let panel = 0n;
   const release = () => {
@@ -378,6 +472,114 @@ function createPanel(runtime: Runtime, settings: PanelSettings): FilePanel {
           );
         }
         return paths;
+      }),
+    dispose: release,
+  };
+}
+
+/** The key a button answers to: Return for the default, Escape for the cancel button, else none. */
+function keyEquivalentOf(index: number, settings: AlertSettings): string {
+  if (index === settings.defaultButton) {
+    return RETURN_KEY;
+  }
+  return index === settings.cancelButton ? ESCAPE_KEY : "";
+}
+
+function createAlert(runtime: Runtime, settings: AlertSettings): MessageAlert {
+  const { send, string, textOf, inPool, classOf, required, flag } = objcSession(
+    runtime,
+    "message dialogs",
+  );
+  let alert = 0n;
+  const release = () => {
+    if (alert) {
+      inPool(() => send(alert, "release"));
+      alert = 0n;
+    }
+  };
+  const buttonCount = Math.max(1, settings.buttons.length);
+  const buttonAt = (index: number) =>
+    send(send(alert, "buttons"), "objectAtIndex:", BigInt(index));
+  try {
+    inPool(() => {
+      // `alloc` returns an owned object, so `dispose` releases it exactly once.
+      alert = required(
+        send(send(classOf("NSAlert"), "alloc"), "init"),
+        "NSAlert",
+      );
+      send(alert, "setMessageText:", string(settings.message));
+      if (settings.detail !== null) {
+        send(alert, "setInformativeText:", string(settings.detail));
+      }
+      send(alert, "setAlertStyle:", ALERT_STYLES[settings.style]);
+      for (const [index, title] of settings.buttons.entries()) {
+        const button = required(
+          send(alert, "addButtonWithTitle:", string(title)),
+          "NSButton",
+        );
+        // Only Return and Escape are bound, so AppKit's own choice of default is replaced.
+        send(
+          button,
+          "setKeyEquivalent:",
+          string(keyEquivalentOf(index, settings)),
+        );
+      }
+      if (settings.checkbox !== null) {
+        send(alert, "setShowsSuppressionButton:", flag(true));
+        const box = required(send(alert, "suppressionButton"), "NSButton");
+        send(box, "setTitle:", string(settings.checkbox.label));
+        send(box, "setState:", flag(settings.checkbox.checked));
+      }
+    });
+  } catch (error) {
+    release();
+    throw error;
+  }
+  const checkboxOf = () => {
+    const box = send(alert, "suppressionButton");
+    return {
+      label: textOf(send(box, "title")),
+      checked: send(box, "state") === CONTROL_STATE_ON,
+    };
+  };
+  return {
+    readBack: () =>
+      inPool(() => {
+        const count = buttonCount;
+        const style = Object.entries(ALERT_STYLES).find(
+          ([, value]) => value === send(alert, "alertStyle"),
+        );
+        return {
+          message: textOf(send(alert, "messageText")),
+          detail: textOf(send(alert, "informativeText")),
+          style: (style?.[0] ?? "informational") as AlertStyle,
+          buttons: Array.from(
+            {
+              length: count,
+            },
+            (_, index) => textOf(send(buttonAt(index), "title")),
+          ),
+          keyEquivalents: Array.from(
+            {
+              length: count,
+            },
+            (_, index) => textOf(send(buttonAt(index), "keyEquivalent")),
+          ),
+          checkbox: settings.checkbox === null ? null : checkboxOf(),
+        };
+      }),
+    run: () =>
+      inPool(() => {
+        const button = Number(
+          send(alert, "runModal") - ALERT_FIRST_BUTTON_RETURN,
+        );
+        if (button < 0 || button >= buttonCount) {
+          internal("The alert returned an unexpected response.");
+        }
+        return {
+          button,
+          checkboxChecked: settings.checkbox !== null && checkboxOf().checked,
+        };
       }),
     dispose: release,
   };

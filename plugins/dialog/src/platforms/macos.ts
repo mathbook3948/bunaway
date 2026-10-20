@@ -1,13 +1,18 @@
 import { BunawayError } from "@bunaway/protocol";
 import {
   type DialogInput,
+  type DialogInstance,
   type DialogKind,
   type DialogResult,
-  type FileDialogInstance,
   MAX_DIALOG_PATHS,
   MAX_DIALOG_RESULT_UNITS,
+  type MessageInput,
+  type MessageResult,
+  resolveCancelButton,
 } from "#dialog/contract";
 import {
+  type AlertSettings,
+  type AlertStyle,
   createFilePanelFactory,
   type FilePanelFactory,
   type PanelSettings,
@@ -57,6 +62,45 @@ export function panelSettings(
   };
 }
 
+const ALERT_STYLES: Record<NonNullable<MessageInput["type"]>, AlertStyle> = {
+  none: "informational",
+  info: "informational",
+  question: "informational",
+  warning: "warning",
+  error: "critical",
+};
+
+/**
+ * Reduce the shared message input to what an NSAlert is configured with.
+ *
+ * Buttons keep their order, the first added being the rightmost. Return activates `defaultButton`
+ * (0 when omitted) and Escape the resolved cancel button, as in Electron's `showMessageBox`. One
+ * button cannot carry both keys, so when they are the same button Return wins and Escape stays
+ * unbound. `none`, `info` and `question` share the informational style, since AppKit has no icon of
+ * its own for them.
+ */
+export function alertSettings(input: MessageInput): AlertSettings {
+  const cancelButton = resolveCancelButton(
+    input.buttons?.length ?? 1,
+    input.cancelButton,
+  );
+  const defaultButton = input.defaultButton ?? 0;
+  return {
+    message: input.message,
+    detail: input.detail ?? null,
+    style: ALERT_STYLES[input.type ?? "none"],
+    buttons: input.buttons ?? [],
+    defaultButton,
+    cancelButton: cancelButton === defaultButton ? undefined : cancelButton,
+    checkbox: input.checkbox
+      ? {
+          label: input.checkbox.label,
+          checked: input.checkbox.checked === true,
+        }
+      : null,
+  };
+}
+
 /** Reject a selection the shared result schema cannot carry, with the same errors as Windows. */
 function checkResultLimits(paths: readonly string[]): void {
   if (paths.length > MAX_DIALOG_PATHS) {
@@ -80,7 +124,7 @@ function checkResultLimits(paths: readonly string[]): void {
  * cannot dismiss an open panel; it is honored before the panel opens and, when it arrived during
  * the panel, replaces the user's answer with CANCELLED.
  */
-export class MacosDialogs implements FileDialogInstance {
+export class MacosDialogs implements DialogInstance {
   private disposed = false;
   private active = false;
 
@@ -94,15 +138,7 @@ export class MacosDialogs implements FileDialogInstance {
     _source: string,
     signal?: AbortSignal,
   ): DialogResult {
-    this.checkCancelled(signal);
-    if (this.active) {
-      throw new BunawayError({
-        code: "BUSY",
-        message: "A dialog is already open.",
-      });
-    }
-    this.active = true;
-    try {
+    return this.exclusive(signal, () => {
       const panel = this.panels.create(panelSettings(kind, input));
       try {
         const paths = panel.run();
@@ -121,6 +157,38 @@ export class MacosDialogs implements FileDialogInstance {
       } finally {
         panel.dispose();
       }
+    });
+  }
+
+  showMessage(
+    input: MessageInput,
+    _source: string,
+    signal?: AbortSignal,
+  ): MessageResult {
+    return this.exclusive(signal, () => {
+      const alert = this.panels.createAlert(alertSettings(input));
+      try {
+        const answer = alert.run();
+        this.checkCancelled(signal);
+        return answer;
+      } finally {
+        alert.dispose();
+      }
+    });
+  }
+
+  /** One dialog at a time: a second call fails BUSY, and a recorded cancellation wins before it opens. */
+  private exclusive<T>(signal: AbortSignal | undefined, work: () => T): T {
+    this.checkCancelled(signal);
+    if (this.active) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "A dialog is already open.",
+      });
+    }
+    this.active = true;
+    try {
+      return work();
     } finally {
       this.active = false;
     }
