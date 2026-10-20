@@ -53,13 +53,13 @@ test("Windows storage paths refuse relative, dotted, empty and unnamable parts",
 
 test("device namespace and NT object prefixes are refused", () => {
   for (const path of [
-    "\\?\\C:\\a.txt",
-    "\\?\\UNC\\server\\share\\a.txt",
+    "\\\\?\\C:\\a.txt",
+    "\\\\?\\UNC\\server\\share\\a.txt",
     "\\\\.\\PhysicalDrive0",
     "\\\\.\\C:\\a.txt",
     "\\??\\C:\\a.txt",
     "\\??\\UNC\\server\\share\\a.txt",
-    "\\??\\C:\\a.txt",
+    "\\\\??\\C:\\a.txt",
     "//?/C:/a.txt",
     "//./C:/a.txt",
   ]) {

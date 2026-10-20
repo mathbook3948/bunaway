@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { mkdir, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { WindowsStorage } from "#plugins/storage/src/platforms/windows";
@@ -78,7 +78,7 @@ try {
   assert.equal(storage.exists(at(copy)), false);
   assert.equal(storage.readText(at(moved)), text);
 
-  // A folder cannot move into itself when only the child path is long enough to be prefixed.
+  // A folder cannot move into itself, compared by the app's spelling without the prefix.
   assert.throws(
     () =>
       storage.move({
@@ -95,6 +95,55 @@ try {
   } catch (error) {
     assert(error instanceof Error);
     assert.equal(error.message, "Storage target not found.");
+  }
+
+  // The same tree through the administrative share of this machine takes the UNC form of the prefix.
+  // Writing directly under a share root checks the parent folder handling of that form.
+  const unc = `\\\\localhost\\${root.replace(":", "$")}`;
+  if (existsSync(`\\\\localhost\\${root[0]}$\\`)) {
+    const uncFile = `${unc}\\${top}\\unc-direct.txt`;
+    storage.writeText({
+      path: uncFile,
+      text,
+    });
+    assert.equal(storage.readText(at(uncFile)), text);
+    assert.deepEqual(
+      storage
+        .readDirectory(at(`${unc}\\${top}`))
+        .map((entry) => entry.name)
+        .sort(),
+      [
+        "unc-direct.txt",
+        deep.split("\\")[1],
+      ].sort(),
+    );
+    storage.remove(at(uncFile));
+    const shareRootFile = `\\\\localhost\\${root[0]}$\\wlp-share-root-${crypto.randomUUID().slice(0, 8)}.txt`;
+    try {
+      storage.writeText({
+        path: shareRootFile,
+        text,
+      });
+      assert.equal(storage.readText(at(shareRootFile)), text);
+    } catch (error) {
+      // The runner may not let this account write to the root of the drive.
+      assert(
+        error instanceof Error && error.message === "Storage access denied.",
+        String(error),
+      );
+      console.log("SKIP share root is not writable on this runner.");
+    } finally {
+      rmSync(
+        `\\\\?\\UNC\\localhost\\${root[0]}$\\${shareRootFile.split("\\").pop()}`,
+        {
+          force: true,
+        },
+      );
+    }
+  } else {
+    console.log(
+      "SKIP the administrative share is not available on this runner.",
+    );
   }
 
   storage.remove(at(moved));
