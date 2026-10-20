@@ -97,6 +97,14 @@ const macosOperations = {
   showInactive: operation("showInactive"),
   setContentProtection: operation("setContentProtection"),
   isContentProtected: operation("isContentProtected"),
+  minimize: operation("minimize"),
+  maximize: operation("maximize"),
+  unmaximize: operation("unmaximize"),
+  restore: operation("restore"),
+  toggleMaximize: operation("toggleMaximize"),
+  isMinimized: operation("isMinimized"),
+  isMaximized: operation("isMaximized"),
+  isFullscreen: operation("isFullscreen"),
   respondClose: operation("respondClose"),
 };
 
@@ -126,7 +134,7 @@ export default defineNativePlugin(
         initialize: createMacosOperations,
         dispose,
         busy,
-        // macOS supplies basic window and WebView services, identity lookup, readiness, inactive show, content protection,
+        // macOS supplies basic window and WebView services, identity lookup, readiness, inactive show, content protection, minimize, maximize (zoom) and their state queries,
         // `windows.lifecycle` and the `windows.closeRequested` flow answered by `windows.respondClose`;
         // geometry remains unsupported.
         operations: macosOperations,

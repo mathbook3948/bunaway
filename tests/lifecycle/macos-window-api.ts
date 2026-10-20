@@ -112,6 +112,14 @@ try {
           "isDestroyed",
           "setContentProtection",
           "isContentProtected",
+          "minimize",
+          "maximize",
+          "unmaximize",
+          "restore",
+          "toggleMaximize",
+          "isMinimized",
+          "isMaximized",
+          "isFullscreen",
         ].map((name) => `plugin.windows.${name}`),
       ],
       events:
@@ -262,6 +270,36 @@ try {
           await windows.showInactive({view:"lazy", windowId: automatic.windowId});
           check(await windows.isVisible({view:"lazy"}) === true, "showInactive by live windowId");
           check(await windows.close({view:"lazy"}) === true, "close automatic lazy");
+          // State changes: Dock and zoom transitions finish after the call, so each state is polled.
+          const state = (minimized, maximized) => async () => await windows.isMinimized({view:"reader"}) === minimized && await windows.isMaximized({view:"reader"}) === maximized;
+          check(await windows.isMinimized({view:"reader"}) === false && await windows.isMaximized({view:"reader"}) === false, "state default");
+          check(await windows.isFullscreen({view:"reader"}) === false, "not fullscreen by default");
+          await windows.maximize({view:"reader"});
+          await until(state(false, true), "maximize");
+          await windows.maximize({view:"reader"});
+          check(await windows.isMaximized({view:"reader"}) === true, "maximize is idempotent");
+          await windows.unmaximize({view:"reader"});
+          await until(state(false, false), "unmaximize");
+          await windows.unmaximize({view:"reader"});
+          await windows.toggleMaximize({view:"reader"});
+          await until(state(false, true), "toggleMaximize on");
+          await windows.toggleMaximize({view:"reader"});
+          await until(state(false, false), "toggleMaximize off");
+          await windows.minimize({view:"reader"});
+          await until(state(true, false), "minimize");
+          await windows.minimize({view:"reader"});
+          await windows.restore({view:"reader"});
+          await until(state(false, false), "restore from minimized");
+          await windows.maximize({view:"reader"});
+          await until(state(false, true), "maximize before restore");
+          await windows.restore({view:"reader"});
+          await until(state(false, false), "restore from maximized");
+          await windows.minimize({view:"reader"});
+          await until(state(true, false), "minimize before maximize");
+          await windows.maximize({view:"reader"});
+          try {await until(state(false, true), "maximize from minimized");} catch (failure) {throw new Error(failure.message + " " + JSON.stringify({minimized: await windows.isMinimized({view:"reader"}), maximized: await windows.isMaximized({view:"reader"})}));}
+          await windows.unmaximize({view:"reader"});
+          await until(state(false, false), "unmaximize");
           await error(() => windows.setSize({view:"reader",width:400,height:400}), "UNSUPPORTED");
           await error(() => windows.getOuterBounds({view:"reader"}), "UNSUPPORTED");
           await error(() => windows.toLogical({view:"reader",value:{width:400,height:400}}), "UNSUPPORTED");

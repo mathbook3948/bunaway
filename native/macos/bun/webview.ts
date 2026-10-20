@@ -27,6 +27,11 @@ const NS_URL_ERROR_CANCELLED = -999;
 const NS_WINDOW_SHARING_NONE = 0;
 /** NSWindowSharingReadOnly: the AppKit default, readable by capture and sharing. */
 const NS_WINDOW_SHARING_READ_ONLY = 1;
+/** NSWindowStyleMaskFullScreen: set while the window is in native fullscreen. */
+const NS_WINDOW_STYLE_MASK_FULL_SCREEN = 1 << 14;
+/** AppKit ignores `zoom:` for a window that is still leaving the Dock, so the zoom is retried. */
+const ZOOM_AFTER_RESTORE_INTERVAL_MS = 20;
+const ZOOM_AFTER_RESTORE_MAX_ATTEMPTS = 50;
 /** WebKitErrorFrameLoadInterruptedByPolicyChange. */
 const WEBKIT_ERROR_FRAME_LOAD_INTERRUPTED = 102;
 const NS_UNBOUNDED_CONTENT_SIZE = 3.4028234663852886e38;
@@ -119,6 +124,8 @@ export class MacosWebview {
   private loadStartedAt = 0;
   private startupCheckpoint = 0;
   private closed = false;
+  /** Pending zoom that waits for a window to leave the Dock; at most one, owned by this view. */
+  private zoomAfterRestore: ReturnType<typeof setTimeout> | undefined;
   private rulesReady = false;
   private coreReady = false;
   private navigationStarted = false;
@@ -786,6 +793,115 @@ export class MacosWebview {
     return !!this.objc.send(this.window, "isVisible");
   }
   /**
+   * Miniaturize into the Dock. The Dock animation finishes after the call returns, so
+   * `isMinimized` can lag briefly. An already miniaturized window is left as it is.
+   */
+  minimize(): void {
+    // A pending zoom means the window is leaving the Dock, where `isMiniaturized` is still true
+    // but the request to minimize it again must be honored.
+    const restoring = this.zoomAfterRestore !== undefined;
+    this.cancelZoomAfterRestore();
+    const o = this.objc;
+    o.withAutoreleasePool(() => {
+      if (restoring || !o.send(this.window, "isMiniaturized")) {
+        o.send(this.window, "miniaturize:", null);
+      }
+    });
+  }
+  /**
+   * Zoom to the standard frame, the AppKit meaning of maximize (the window does not enter native
+   * fullscreen). A miniaturized window is restored first, and a window that is already zoomed stays.
+   */
+  maximize(): void {
+    this.setZoomed(true);
+  }
+  /** Leave the miniaturized and the zoomed state, ending at the user frame. */
+  unmaximize(): void {
+    this.setZoomed(false);
+  }
+  /** Undo a miniaturize if there is one, otherwise a zoom. */
+  restore(): void {
+    this.cancelZoomAfterRestore();
+    const o = this.objc;
+    o.withAutoreleasePool(() => {
+      if (o.send(this.window, "isMiniaturized")) {
+        o.send(this.window, "deminiaturize:", null);
+      } else if (o.send(this.window, "isZoomed")) {
+        o.send(this.window, "zoom:", null);
+      }
+    });
+  }
+  toggleMaximize(): void {
+    this.setZoomed(!this.isMaximized());
+  }
+  isMinimized(): boolean {
+    return !!this.objc.send(this.window, "isMiniaturized");
+  }
+  isMaximized(): boolean {
+    return !!this.objc.send(this.window, "isZoomed");
+  }
+  /**
+   * Read-only: the window may enter native fullscreen through the user, and the plugin rejects
+   * state changes while it is. Entering or leaving from the API stays unsupported.
+   */
+  isFullscreen(): boolean {
+    return (
+      (Number(this.objc.integer(this.window, "styleMask")) &
+        NS_WINDOW_STYLE_MASK_FULL_SCREEN) !==
+      0
+    );
+  }
+  /**
+   * `zoom:` toggles, so it is sent only when the state differs from the requested one. A
+   * miniaturized window is restored first and the zoom waits until it has left the Dock, because
+   * AppKit ignores a `zoom:` sent before that (the window ended up restored but not zoomed).
+   */
+  private setZoomed(zoomed: boolean): void {
+    this.cancelZoomAfterRestore();
+    const o = this.objc;
+    o.withAutoreleasePool(() => {
+      if (o.send(this.window, "isMiniaturized")) {
+        o.send(this.window, "deminiaturize:", null);
+        this.zoomWhenRestored(zoomed, ZOOM_AFTER_RESTORE_MAX_ATTEMPTS);
+        return;
+      }
+      this.zoomTo(zoomed);
+    });
+  }
+  private zoomTo(zoomed: boolean): void {
+    if (!!this.objc.send(this.window, "isZoomed") !== zoomed) {
+      this.objc.send(this.window, "zoom:", null);
+    }
+  }
+  private zoomWhenRestored(zoomed: boolean, attemptsLeft: number): void {
+    this.zoomAfterRestore = setTimeout(() => {
+      this.zoomAfterRestore = undefined;
+      if (this.closed) {
+        return;
+      }
+      // The request already returned, so a failure here has no caller to report to.
+      try {
+        this.objc.withAutoreleasePool(() => {
+          if (
+            this.objc.send(this.window, "isMiniaturized") &&
+            attemptsLeft > 1
+          ) {
+            this.zoomWhenRestored(zoomed, attemptsLeft - 1);
+            return;
+          }
+          this.zoomTo(zoomed);
+        });
+      } catch (error) {
+        console.error("Deferred macOS window zoom failed.", error);
+      }
+    }, ZOOM_AFTER_RESTORE_INTERVAL_MS);
+  }
+  /** A newer state change replaces a zoom that was still waiting for the Dock. */
+  private cancelZoomAfterRestore(): void {
+    clearTimeout(this.zoomAfterRestore);
+    this.zoomAfterRestore = undefined;
+  }
+  /**
    * Exclude the window from screenshots and screen sharing through NSWindow.sharingType.
    * On macOS 15 and later, ScreenCaptureKit based capture may ignore sharingType,
    * so protection is best effort there.
@@ -1178,6 +1294,7 @@ export class MacosWebview {
       return;
     }
     this.closed = true;
+    this.cancelZoomAfterRestore();
     this.diagnostics.record("closed");
     const o = this.objc;
     // Absent when the first view could not be built.
