@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import type { JsonValue } from "@bunaway/protocol";
 import {
+  MAX_MACOS_TRAY_IMAGE_BYTES,
+  MAX_MACOS_TRAY_IMAGE_SIDE_PIXELS,
   MAX_MACOS_TRAY_ITEM_ID_LENGTH,
   MAX_MACOS_TRAY_LABEL_UNITS,
   MAX_MACOS_TRAY_MENU_ITEMS,
@@ -9,19 +11,23 @@ import {
 import { macosTrayOperations } from "#plugins/tray/src/operations-macos";
 import { MacosTray } from "#plugins/tray/src/platforms/macos";
 import type {
+  NativeImage,
   NativeMenuEntry,
   StatusItemBinding,
 } from "#plugins/tray/src/platforms/macos-status-item";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
+import { headerOnlyPng, solidPng } from "../fixtures/tray-png.ts";
 
 /** A binding that does nothing; tests override the calls they observe. */
 const inertBinding: StatusItemBinding = {
   setTitle: () => {},
   setTooltip: () => {},
   setMenu: () => {},
+  setImage: () => {},
   readBack: () => ({
     title: "",
     tooltip: "",
+    image: null,
     menu: null,
   }),
   activate: () => {},
@@ -33,6 +39,7 @@ function fakeBinding() {
   const log: string[] = [];
   let select: (tag: number) => void = () => {};
   let menu: readonly NativeMenuEntry[] | null = null;
+  let image: NativeImage | null = null;
   const factory = (onSelect: (tag: number) => void): StatusItemBinding => {
     select = onSelect;
     log.push("create");
@@ -44,11 +51,16 @@ function fakeBinding() {
         menu = entries;
         log.push(`menu:${entries?.length ?? "none"}`);
       },
+      setImage: (next) => {
+        image = next;
+        log.push(`image:${next ? "set" : "none"}`);
+      },
       dispose: () => void log.push("dispose"),
     };
   };
   return {
     factory,
+    image: () => image,
     log,
     choose: (tag: number) => select(tag),
     menu: () => menu,
@@ -105,6 +117,39 @@ test("macOS tray inputs are strict, bounded and reject unrepresentable text", as
         items: null,
       },
     ],
+    [
+      "tray.setImage",
+      {
+        image: null,
+      },
+    ],
+    [
+      "tray.setImage",
+      {
+        image: {
+          png: solidPng(2, 2).toString("base64"),
+        },
+      },
+    ],
+    [
+      "tray.setImage",
+      {
+        image: {
+          png: Buffer.alloc(MAX_MACOS_TRAY_IMAGE_BYTES).toString("base64"),
+        },
+      },
+    ],
+    [
+      "tray.setImage",
+      {
+        image: {
+          png: solidPng(2, 2).toString("base64"),
+          template: true,
+          scale: 2,
+          description: "Notes",
+        },
+      },
+    ],
   ];
   for (const [operation, payload] of accepted) {
     await parsers.validateCall({
@@ -117,10 +162,81 @@ test("macOS tray inputs are strict, bounded and reject unrepresentable text", as
     id,
     label,
   });
+  const png = solidPng(2, 2).toString("base64");
   const rejected: [
     string,
     JsonValue,
   ][] = [
+    [
+      "tray.setImage",
+      {},
+    ],
+    [
+      "tray.setImage",
+      {
+        image: {},
+      },
+    ],
+    [
+      "tray.setImage",
+      {
+        image: {
+          png: "not base64!",
+        },
+      },
+    ],
+    [
+      "tray.setImage",
+      {
+        image: {
+          png: "",
+        },
+      },
+    ],
+    [
+      "tray.setImage",
+      {
+        image: {
+          png: Buffer.alloc(MAX_MACOS_TRAY_IMAGE_BYTES + 1).toString("base64"),
+        },
+      },
+    ],
+    [
+      "tray.setImage",
+      {
+        image: {
+          png,
+          scale: 3,
+        },
+      },
+    ],
+    [
+      "tray.setImage",
+      {
+        image: {
+          png,
+          template: "yes",
+        },
+      },
+    ],
+    [
+      "tray.setImage",
+      {
+        image: {
+          png,
+          description: "a\0b",
+        },
+      },
+    ],
+    [
+      "tray.setImage",
+      {
+        image: {
+          png,
+          extra: 1,
+        },
+      },
+    ],
     [
       "tray.create",
       {
@@ -239,6 +355,7 @@ test("the menu bar item exists only between create and destroy", () => {
     () => tray.setTitle("a"),
     () => tray.setTooltip("a"),
     () => tray.setMenu(null),
+    () => tray.setImage(null),
     () => tray.waitForMenuClick(),
   ]) {
     expect(call).toThrow(
@@ -252,6 +369,7 @@ test("the menu bar item exists only between create and destroy", () => {
     title: "Title",
     tooltip: "Tip",
     hasMenu: false,
+    hasImage: false,
   });
   expect(() => tray.create("again", "")).toThrow(
     expect.objectContaining({
@@ -460,4 +578,127 @@ test("an empty menu removes the menu", () => {
   tray.setMenu([]);
   expect(tray.get()?.hasMenu).toBe(false);
   expect(native.menu()).toBeNull();
+});
+
+test("an image reaches AppKit in points with its template flag and is removed with null", () => {
+  const native = fakeBinding();
+  const tray = new MacosTray(native.factory);
+  tray.create("", "");
+  expect(tray.get()?.hasImage).toBe(false);
+
+  tray.setImage({
+    png: solidPng(44, 22).toString("base64"),
+    template: true,
+    scale: 2,
+    description: "Notes",
+  });
+  expect(tray.get()?.hasImage).toBe(true);
+  const shown = native.image();
+  expect(shown).toMatchObject({
+    widthPoints: 22,
+    heightPoints: 11,
+    template: true,
+    description: "Notes",
+  });
+  expect(shown?.data).toEqual(new Uint8Array(solidPng(44, 22)));
+
+  // An odd pixel count at 2x keeps the half point.
+  tray.setImage({
+    png: solidPng(45, 45).toString("base64"),
+    template: false,
+    scale: 2,
+    description: "",
+  });
+  expect(native.image()).toMatchObject({
+    widthPoints: 22.5,
+    heightPoints: 22.5,
+  });
+
+  // The default is a 1x image that macOS does not tint.
+  tray.setImage({
+    png: solidPng(18, 18).toString("base64"),
+    template: false,
+    scale: 1,
+    description: "",
+  });
+  expect(native.image()).toMatchObject({
+    widthPoints: 18,
+    heightPoints: 18,
+    template: false,
+  });
+
+  tray.setImage(null);
+  expect(native.image()).toBeNull();
+  expect(tray.get()?.hasImage).toBe(false);
+});
+
+test("an image that is not a PNG or exceeds the side bound is rejected before AppKit", () => {
+  const native = fakeBinding();
+  const tray = new MacosTray(native.factory);
+  tray.create("", "");
+  const image = (bytes: Buffer) => ({
+    png: bytes.toString("base64"),
+    template: false,
+    scale: 1 as const,
+    description: "",
+  });
+  const invalid = expect.objectContaining({
+    code: "INVALID_ARGUMENT",
+  });
+  for (const bytes of [
+    Buffer.from("not a png at all, just text of some length"),
+    solidPng(2, 2).subarray(0, 12),
+    headerOnlyPng(MAX_MACOS_TRAY_IMAGE_SIDE_PIXELS + 1, 16),
+    headerOnlyPng(16, MAX_MACOS_TRAY_IMAGE_SIDE_PIXELS + 1),
+    headerOnlyPng(0, 16),
+  ]) {
+    expect(() => tray.setImage(image(bytes))).toThrow(invalid);
+  }
+  expect(() =>
+    tray.setImage(image(headerOnlyPng(MAX_MACOS_TRAY_IMAGE_SIDE_PIXELS, 1))),
+  ).not.toThrow();
+  // Only the accepted call reached the binding.
+  expect(native.log.filter((entry) => entry.startsWith("image:"))).toEqual([
+    "image:set",
+  ]);
+});
+
+test("a failed image replacement keeps the previous image state", () => {
+  let fail = false;
+  const binding: StatusItemBinding = {
+    ...inertBinding,
+    setImage: () => {
+      if (fail) {
+        throw new Error("decode failed");
+      }
+    },
+  };
+  const tray = new MacosTray(() => binding);
+  tray.create("", "");
+  const image = {
+    png: solidPng(2, 2).toString("base64"),
+    template: false,
+    scale: 1 as const,
+    description: "",
+  };
+  tray.setImage(image);
+  fail = true;
+  expect(() => tray.setImage(image)).toThrow("decode failed");
+  expect(tray.get()?.hasImage).toBe(true);
+  expect(() => tray.setImage(null)).toThrow("decode failed");
+  expect(tray.get()?.hasImage).toBe(true);
+});
+
+test("destroy forgets the image so a new item starts without one", () => {
+  const native = fakeBinding();
+  const tray = new MacosTray(native.factory);
+  tray.create("", "");
+  tray.setImage({
+    png: solidPng(2, 2).toString("base64"),
+    template: false,
+    scale: 1,
+    description: "",
+  });
+  tray.destroy();
+  expect(tray.create("", "").hasImage).toBe(false);
 });

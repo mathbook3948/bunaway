@@ -28,6 +28,20 @@ export type NativeMenuEntry =
       tag: number;
     };
 
+/** NSImageLeft: the image sits before the title, and alone when the title is empty. */
+const NS_IMAGE_LEFT = 2n;
+/** NSImageNoImage: the button shows only its title. */
+const NS_NO_IMAGE = 0n;
+
+/** PNG bytes for the button with the size AppKit should draw them at, in points. */
+export type NativeImage = {
+  data: Uint8Array;
+  widthPoints: number;
+  heightPoints: number;
+  template: boolean;
+  description: string;
+};
+
 /** The status item as AppKit sees it. Every call must run on the main thread. */
 export type StatusItemBinding = {
   setTitle(title: string): void;
@@ -35,7 +49,12 @@ export type StatusItemBinding = {
   /** Replaces the attached menu; null removes it. */
   setMenu(entries: readonly NativeMenuEntry[] | null): void;
   /**
-   * Reads the title, tooltip and menu back from AppKit rather than from the adapter's copy, so the
+   * Replaces the button image; null removes it. Throws INVALID_ARGUMENT when AppKit cannot decode
+   * the bytes, and keeps the previous image in that case.
+   */
+  setImage(image: NativeImage | null): void;
+  /**
+   * Reads the title, tooltip, image and menu back from AppKit rather than from the adapter's copy, so the
    * macOS native check can prove that what the adapter reports is what the menu bar item holds.
    */
   readBack(): StatusItemReadBack;
@@ -52,6 +71,15 @@ export type StatusItemBinding = {
 export type StatusItemReadBack = {
   title: string;
   tooltip: string;
+  /** Null when the button has no image. Pixels come from the decoded bitmap, not from the request. */
+  image: {
+    template: boolean;
+    description: string;
+    pixelsWide: number;
+    pixelsHigh: number;
+    /** Width of `NSImage.size` in points, which is what the menu bar draws. */
+    widthPoints: number;
+  } | null;
   /** Null when no menu is attached. */
   menu:
     | {
@@ -77,7 +105,10 @@ function internal(message: string): never {
  * then close the callback, so AppKit cannot call a closed trampoline. Each binding registers its
  * own target class, which lives until process exit: the Objective-C runtime cannot safely
  * unregister a class that menus may still reference, so repeated create and destroy accumulate
- * classes. If registering the method fails, the unregistered class pair is disposed.
+ * classes. If registering the method fails, the unregistered class pair is disposed. An image is
+ * decoded into an owned NSImage that the status button retains once it is set; the binding drops
+ * its own reference right after, so the button owns the image until it is replaced or the item is
+ * released.
  */
 export function createStatusItem(
   onSelect: (tag: number) => void,
@@ -181,6 +212,33 @@ export function createStatusItem(
             "f64",
           ],
           returns: "u64",
+        },
+      } as const),
+    );
+    // A third table for `setSize:`, whose NSSize argument travels as two doubles.
+    const sizeSender = own(
+      dlopen(OBJC, {
+        objc_msgSend: {
+          args: [
+            "u64",
+            "u64",
+            "f64",
+            "f64",
+          ],
+          returns: "u64",
+        },
+      } as const),
+    );
+    // A fourth table to read back `size`. An NSSize of two doubles comes back in the first two
+    // floating-point registers on arm64 and x86_64, so a double return carries its width.
+    const widthReader = own(
+      dlopen(OBJC, {
+        objc_msgSend: {
+          args: [
+            "u64",
+            "u64",
+          ],
+          returns: "f64",
         },
       } as const),
     );
@@ -376,6 +434,61 @@ export function createStatusItem(
         throw error;
       }
     };
+    // Returns an owned NSImage (+1) that the caller releases once the button holds it.
+    const decodeImage = (image: NativeImage) => {
+      const bytes = Buffer.from(image.data);
+      pinned.push(bytes);
+      const data = required(
+        send(
+          classOf("NSData"),
+          "dataWithBytes:length:",
+          BigInt(ptr(bytes)),
+          bytes.length,
+        ),
+        "NSData",
+      );
+      const decoded = send(
+        send(classOf("NSImage"), "alloc"),
+        "initWithData:",
+        data,
+      );
+      if (!decoded) {
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "The tray image could not be decoded as a PNG.",
+        });
+      }
+      try {
+        // `initWithData:` accepts bytes whose pixels are not decoded yet, so ask for the bitmap
+        // itself: a PNG that AppKit cannot decode is refused here, before the button changes.
+        if (
+          !send(decoded, "CGImageForProposedRect:context:hints:", 0n, 0n, 0n)
+        ) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "The tray image could not be decoded as a PNG.",
+          });
+        }
+        sizeSender.symbols.objc_msgSend(
+          decoded,
+          selector("setSize:"),
+          image.widthPoints,
+          image.heightPoints,
+        );
+        send(decoded, "setTemplate:", image.template ? 1n : 0n);
+        if (image.description) {
+          send(
+            decoded,
+            "setAccessibilityDescription:",
+            string(image.description),
+          );
+        }
+        return decoded;
+      } catch (error) {
+        send(decoded, "release");
+        throw error;
+      }
+    };
     const active = () => {
       if (disposed) {
         throw new BunawayError({
@@ -405,6 +518,26 @@ export function createStatusItem(
           }
         });
       },
+      setImage(image) {
+        active();
+        inPool(() => {
+          // Decode first so a failed replacement keeps the previous image.
+          const next = image ? decodeImage(image) : 0n;
+          try {
+            send(button, "setImage:", next);
+            send(
+              button,
+              "setImagePosition:",
+              next ? NS_IMAGE_LEFT : NS_NO_IMAGE,
+            );
+          } finally {
+            // The button retains what it displays; drop the reference decoding created.
+            if (next) {
+              send(next, "release");
+            }
+          }
+        });
+      },
       readBack() {
         active();
         return inPool(() => {
@@ -417,9 +550,25 @@ export function createStatusItem(
           // BOOL is one byte; the upper register bits are unspecified.
           const flag = (object: bigint, name: string) =>
             (send(object, name) & 0xffn) !== 0n;
+          const shown = send(button, "image");
+          const representation = shown
+            ? send(send(shown, "representations"), "firstObject")
+            : 0n;
           return {
             title: text(send(button, "title")),
             tooltip: text(send(button, "toolTip")),
+            image: shown
+              ? {
+                  template: flag(shown, "isTemplate"),
+                  description: text(send(shown, "accessibilityDescription")),
+                  pixelsWide: Number(send(representation, "pixelsWide")),
+                  pixelsHigh: Number(send(representation, "pixelsHigh")),
+                  widthPoints: widthReader.symbols.objc_msgSend(
+                    shown,
+                    selector("size"),
+                  ),
+                }
+              : null,
             menu: menu
               ? Array.from(
                   {

@@ -189,17 +189,27 @@ await tray.destroy(null);
 
 | 함수 | 입력 | 결과 |
 | --- | --- | --- |
-| `tray.create` | `{ title?: string, tooltip?: string }` (기본값은 빈 문자열) | `{ id: "main", title, tooltip, hasMenu }` |
+| `tray.create` | `{ title?: string, tooltip?: string }` (기본값은 빈 문자열) | `{ id: "main", title, tooltip, hasMenu, hasImage }` |
 | `tray.destroy` | `null` | `null` (이미 없으면 그대로 `null`) |
 | `tray.getStatusItem` | `null` | 같은 모양의 값 또는 아이콘이 없으면 `null` |
 | `tray.setTitle` | `{ title: string }` | `null` |
 | `tray.setTooltip` | `{ tooltip: string }` | `null` |
 | `tray.setMenu` | `{ items: MenuItem[] \| null }` | `null` |
+| `tray.setImage` | `{ image: { png, template?, scale?, description? } \| null }` | `null` |
 | `tray.waitForMenuClick` | `null` | 선택한 항목의 `{ id }` |
 
-- title은 메뉴 막대 단추의 글자로 최대 256 UTF-16 코드 단위입니다. 아이콘 이미지는 아직 지원하지 않아
+- title은 메뉴 막대 단추의 글자로 최대 256 UTF-16 코드 단위입니다. 이미지를 설정하지 않았고
   title이 비어 있으면 아이콘이 보이지 않습니다. tooltip은 Windows와 같은 규칙(최대 127 단위)입니다.
   둘 다 NUL과 잘못된 surrogate를 거부합니다.
+- `tray.setImage`는 메뉴 막대 단추의 이미지를 바꿉니다(Electron `Tray.setImage`와 `nativeImage.setTemplateImage`, Tauri
+  `TrayIcon.setIcon`과 `setIconAsTemplate`에 대응). `png`는 PNG 파일의 base64이며 최대 256 KiB, 한 변 1~512 픽셀입니다.
+  `scale`은 PNG를 그린 화소 밀도로 1 또는 2(기본 1)이고, 2이면 44 x 44 픽셀 이미지를 22 x 22 포인트로 보여 줍니다.
+  `template`(기본 `false`)이 `true`이면 macOS가 알파 채널만 써서 라이트/다크 메뉴 막대와 강조 상태에 맞게 색을 입힙니다.
+  `description`은 VoiceOver가 읽는 접근성 이름이고 title과 같은 글자 규칙(최대 256 단위, NUL과 잘못된 surrogate 거부)입니다.
+  이미지와 title을 함께 두면 이미지가 title 앞에 놓입니다. `image: null`은 이미지를 제거하고 title만 남깁니다.
+  PNG가 아니거나 크기가 범위를 벗어나거나 AppKit이 이미지를 만들지 못하면 `INVALID_ARGUMENT`이고, 이때 이전 이미지를 유지합니다.
+  크기는 `scale`로 나눈 점 단위로 그대로 설정하므로 메뉴 막대 높이(보통 18~22포인트)에 맞추는 일은 앱이 합니다.
+  pressed 이미지와 한 아이콘에 여러 해상도를 함께 싣는 방식은 지원하지 않습니다.
 - 메뉴 항목은 `{ type: "item", id, label, enabled? }`(`enabled` 기본값 true)와 `{ type: "separator" }`의 평면 목록이며
   최대 100개입니다. id는 1~128자이고 목록 안에서 유일해야 합니다. label은 1~256 단위입니다.
   `items: null`과 빈 배열은 메뉴를 제거합니다(`hasMenu`는 `false`). 하위 메뉴, 체크, 단축키와 이미지는 지원하지 않습니다.
@@ -208,9 +218,9 @@ await tray.destroy(null);
   초과하면 `BUSY`입니다. 구분선은 id가 없어 전달하지 않고, 비활성 항목은 AppKit이 선택하지 못하게 합니다.
 - `setMenu`가 실패하면 이전 메뉴를 그대로 유지합니다. 현재 목록의 범위를 벗어난 선택은 무시합니다.
 - 아이콘이 이미 있을 때 `create`는 `BUSY`입니다. 아이콘이 없을 때 `setTitle`, `setTooltip`, `setMenu`,
-  `waitForMenuClick`은 `UNSUPPORTED`입니다. `tray.destroy`와 플러그인 종료는 아이콘을 제거하고 대기 중인 `waitForMenuClick`을 `CANCELLED`로 끝냅니다.
+  `setImage`, `waitForMenuClick`은 `UNSUPPORTED`입니다. `tray.destroy`와 플러그인 종료는 아이콘을 제거하고 대기 중인 `waitForMenuClick`을 `CANCELLED`로 끝냅니다.
 - `getBounds`, `setIcon`, `setClickBehavior`, `setVisible`, `focus`, `popUpContextMenu`, `tray.input`과 `tray.hover`는
-  macOS에서 아직 제공하지 않습니다. 이미지, 클릭과 double-click 이벤트, 숨김과 복원은 후속 작업입니다.
+  macOS에서 아직 제공하지 않습니다. 클릭과 double-click 이벤트, 숨김과 복원은 후속 작업입니다.
 - 각 함수는 같은 이름의 독립 Host 권한을 요구합니다. 잘못된 입력은 `INVALID_ARGUMENT`, 권한 없음은 `PERMISSION_DENIED`입니다.
 
 ## 이전 앱 정의에서 옮기기

@@ -1,4 +1,4 @@
-import { int32Schema } from "@bunaway/plugin";
+import { base64Schema, int32Schema } from "@bunaway/plugin";
 import {
   MAX_TRAY_ICO_BYTES,
   MAX_TRAY_TOOLTIP_UNITS,
@@ -167,10 +167,31 @@ export const MAX_MACOS_TRAY_TITLE_UNITS = 256;
 export const MAX_MACOS_TRAY_LABEL_UNITS = 256;
 export const MAX_MACOS_TRAY_ITEM_ID_LENGTH = 128;
 export const MAX_MACOS_TRAY_MENU_ITEMS = 100;
+/** Menu bar images are 18 to 22 points tall; the byte bound keeps decoding cheap. */
+export const MAX_MACOS_TRAY_IMAGE_BYTES = 256 * 1024;
+/** Longest PNG side in pixels, 22 points at 2x with room to spare. */
+export const MAX_MACOS_TRAY_IMAGE_SIDE_PIXELS = 512;
 export const macosTitleSchema = z
   .string()
   .max(MAX_MACOS_TRAY_TITLE_UNITS)
   .regex(NATIVE_TEXT_PATTERN);
+/**
+ * A PNG for the menu bar button. `scale` is the pixel density the PNG was drawn for, so a 2x image
+ * of 44 by 44 pixels shows at 22 by 22 points. `template` lets macOS tint the image for the light
+ * and dark menu bar and for highlighting, using only its alpha channel. `description` is the
+ * accessibility name VoiceOver reads for the image.
+ */
+export const macosImageSchema = z.strictObject({
+  png: base64Schema(MAX_MACOS_TRAY_IMAGE_BYTES).min(4),
+  template: z.boolean().default(false),
+  scale: z
+    .union([
+      z.literal(1),
+      z.literal(2),
+    ])
+    .default(1),
+  description: macosTitleSchema.default(""),
+});
 const macosMenuItemSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("item"),
@@ -205,11 +226,13 @@ export const macosStatusItemSchema = z.strictObject({
   title: macosTitleSchema,
   tooltip: tooltipSchema,
   hasMenu: z.boolean(),
+  hasImage: z.boolean(),
 });
 export const macosMenuClickSchema = z.strictObject({
   id: z.string(),
 });
 export type MacosMenuItem = z.output<typeof macosMenuItemSchema>;
+export type MacosImage = z.output<typeof macosImageSchema>;
 export type MacosStatusItem = z.output<typeof macosStatusItemSchema>;
 /** Operations of the macOS menu bar item, implemented by the platform adapter. */
 export type MacosTrayInstance = {
@@ -219,6 +242,7 @@ export type MacosTrayInstance = {
   setTitle(title: string): null;
   setTooltip(tooltip: string): null;
   setMenu(items: readonly MacosMenuItem[] | null): null;
+  setImage(image: MacosImage | null): null;
   waitForMenuClick(
     signal?: AbortSignal,
   ): Promise<z.output<typeof macosMenuClickSchema>>;

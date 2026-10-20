@@ -2,6 +2,7 @@ import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
   type MacosTrayInstance,
+  macosImageSchema,
   macosMenuClickSchema,
   macosMenuSchema,
   macosStatusItemSchema,
@@ -51,6 +52,13 @@ export const macosTrayOperations = {
     }),
     output: z.null(),
     handler: ({ items }, { instance }) => instance.setMenu(items),
+  }),
+  setImage: operation({
+    input: z.strictObject({
+      image: macosImageSchema.nullable(),
+    }),
+    output: z.null(),
+    handler: ({ image }, { instance }) => instance.setImage(image),
   }),
   waitForMenuClick: operation({
     input: z.null(),

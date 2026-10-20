@@ -3,11 +3,13 @@ import { MAX_TRAY_WAITERS } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
 import type {
+  MacosImage,
   MacosMenuItem,
   MacosStatusItem,
   MacosTrayInstance,
   macosMenuClickSchema,
 } from "#tray/contract";
+import { readPngSize } from "#tray/platforms/macos-png";
 import {
   createStatusItem,
   type NativeMenuEntry,
@@ -27,6 +29,7 @@ type Live = {
   tooltip: string;
   /** Item ids by native tag, for the menu currently attached. Null when no menu is attached. */
   menuIds: readonly (string | null)[] | null;
+  hasImage: boolean;
 };
 
 /**
@@ -55,6 +58,7 @@ export class MacosTray implements MacosTrayInstance {
       title: live.title,
       tooltip: live.tooltip,
       hasMenu: live.menuIds !== null,
+      hasImage: live.hasImage,
     };
   }
 
@@ -88,6 +92,7 @@ export class MacosTray implements MacosTrayInstance {
       title,
       tooltip,
       menuIds: null,
+      hasImage: false,
     };
     return this.snapshot(this.live);
   }
@@ -145,6 +150,27 @@ export class MacosTray implements MacosTrayInstance {
       ) ?? null;
     live.binding.setMenu(entries);
     live.menuIds = ids ?? null;
+    return null;
+  }
+
+  setImage(image: MacosImage | null): null {
+    const live = this.requireLive();
+    if (image === null) {
+      live.binding.setImage(null);
+      live.hasImage = false;
+      return null;
+    }
+    // The contract bounds the encoded size; the header gives the pixel size before AppKit decodes.
+    const data = Buffer.from(image.png, "base64");
+    const { width, height } = readPngSize(data);
+    live.binding.setImage({
+      data,
+      widthPoints: width / image.scale,
+      heightPoints: height / image.scale,
+      template: image.template,
+      description: image.description,
+    });
+    live.hasImage = true;
     return null;
   }
 

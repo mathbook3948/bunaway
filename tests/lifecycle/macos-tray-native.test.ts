@@ -4,6 +4,7 @@ import {
   createStatusItem,
   type StatusItemBinding,
 } from "#plugins/tray/src/platforms/macos-status-item";
+import { headerOnlyPng, solidPng } from "../fixtures/tray-png.ts";
 
 /** Creates real AppKit status items and keeps the latest binding so the test can read AppKit back. */
 function realTray() {
@@ -37,10 +38,12 @@ test.skipIf(
         title: "Bunaway 한글 😀",
         tooltip: "Tooltip 한글",
         hasMenu: false,
+        hasImage: false,
       });
       expect(binding().readBack()).toEqual({
         title: "Bunaway 한글 😀",
         tooltip: "Tooltip 한글",
+        image: null,
         menu: null,
       });
 
@@ -124,5 +127,96 @@ test.skipIf(
       tray.dispose();
     }
     expect(tray.get()).toBeNull();
+  },
+);
+
+test.skipIf(
+  process.platform !== "darwin" || process.env.BUNAWAY_TRAY_NATIVE !== "1",
+)(
+  "real NSStatusItem image, template flag, accessibility name, failed decode and removal",
+  () => {
+    const { tray, binding } = realTray();
+    try {
+      tray.create("", "");
+      expect(binding().readBack().image).toBeNull();
+
+      // A 2x image is decoded from its bytes and keeps its pixel size and flags.
+      tray.setImage({
+        png: solidPng(44, 22).toString("base64"),
+        template: true,
+        scale: 2,
+        description: "Notes 한글",
+      });
+      expect(tray.get()?.hasImage).toBe(true);
+      expect(binding().readBack().image).toEqual({
+        template: true,
+        description: "Notes 한글",
+        pixelsWide: 44,
+        pixelsHigh: 22,
+        // 44 pixels drawn at 2x are 22 points wide.
+        widthPoints: 22,
+      });
+
+      // A header that passes validation but does not decode is rejected and the image stays.
+      expect(() =>
+        tray.setImage({
+          png: headerOnlyPng(16, 16).toString("base64"),
+          template: false,
+          scale: 1,
+          description: "",
+        }),
+      ).toThrow(
+        expect.objectContaining({
+          code: "INVALID_ARGUMENT",
+        }),
+      );
+      expect(binding().readBack().image).toMatchObject({
+        pixelsWide: 44,
+        template: true,
+      });
+
+      // A replacement without the flag and name shows the new bitmap.
+      tray.setImage({
+        png: solidPng(18, 18).toString("base64"),
+        template: false,
+        scale: 1,
+        description: "",
+      });
+      expect(binding().readBack().image).toEqual({
+        template: false,
+        description: "",
+        pixelsWide: 18,
+        pixelsHigh: 18,
+        widthPoints: 18,
+      });
+
+      // The title and the image coexist, and null leaves only the title.
+      tray.setTitle("Title");
+      expect(binding().readBack()).toMatchObject({
+        title: "Title",
+        image: {
+          pixelsWide: 18,
+        },
+      });
+      tray.setImage(null);
+      expect(binding().readBack()).toMatchObject({
+        title: "Title",
+        image: null,
+      });
+      expect(tray.get()?.hasImage).toBe(false);
+
+      // Destroying with an image set releases it, and a fresh item has none.
+      tray.setImage({
+        png: solidPng(18, 18).toString("base64"),
+        template: true,
+        scale: 1,
+        description: "",
+      });
+      tray.destroy();
+      tray.create("", "");
+      expect(binding().readBack().image).toBeNull();
+    } finally {
+      tray.dispose();
+    }
   },
 );
