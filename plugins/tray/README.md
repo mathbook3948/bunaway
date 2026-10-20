@@ -29,4 +29,6 @@ autorelease pool을 비우고, 해제는 메뉴 분리와 해제, 아이콘 제�
 선택 경로를 확인한다. 이미지는 PNG를 `NSImage`로 읽어 `NSStatusBarButton`에 설정하고(`setSize:`로 점 단위 크기,
 `setTemplate:`, `setAccessibilityDescription:`), 단추가 이미지를 유지하므로 읽어 온 참조는 설정 직후 해제한다.
 `platforms/macos-png.ts`가 PNG 머리글의 크기를 디코드 전에 검사한다. 메뉴 막대에 실제로 그려지는 모양과
-색은 확인하지 않고 AppKit이 보고하는 상태(화소 크기, 점 단위 너비, template, 접근성 이름)만 읽는다. pressed 이미지, 클릭 이벤트, 숨김과 `desktop.tray` 연결은 후속 작업이다.
+색은 확인하지 않고 AppKit이 보고하는 상태(화소 크기, 점 단위 너비, template, 접근성 이름)만 읽는다. pressed 이미지, 숨김과 `desktop.tray` 연결은 후속 작업이다.
+
+메뉴가 없는 아이콘의 왼쪽과 오른쪽 클릭과 double-click은 `NSStatusBarButton`의 target과 action(left와 right mouse up에서 동작)으로 받아 `tray.input`(`position`은 null)으로 보낸다. 같은 target 클래스에 메서드를 하나 더 두고, 해제할 때 단추의 target과 action을 먼저 비운 뒤 target과 콜백을 닫는다. 메뉴가 붙어 있는 동안에는 어댑터가 이벤트를 보내지 않는다(Linux 테스트로 확인). AppKit이 메뉴를 열면서 action을 보내지 않는 동작, 해제 순서와 실제 클릭은 `macos-native`에서도 확인하지 않고 아이콘이 만들어진 직후의 연결 상태만 읽는다.

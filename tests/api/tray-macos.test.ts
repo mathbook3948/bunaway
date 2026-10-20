@@ -10,10 +10,12 @@ import {
 } from "#plugins/tray/src/contract";
 import { macosTrayOperations } from "#plugins/tray/src/operations-macos";
 import { MacosTray } from "#plugins/tray/src/platforms/macos";
-import type {
-  NativeImage,
-  NativeMenuEntry,
-  StatusItemBinding,
+import {
+  clicksFor,
+  type NativeImage,
+  type NativeMenuEntry,
+  type StatusItemBinding,
+  type StatusItemClick,
 } from "#plugins/tray/src/platforms/macos-status-item";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 import { headerOnlyPng, solidPng } from "../fixtures/tray-png.ts";
@@ -28,6 +30,7 @@ const inertBinding: StatusItemBinding = {
     title: "",
     tooltip: "",
     image: null,
+    clickWired: true,
     menu: null,
   }),
   activate: () => {},
@@ -38,10 +41,15 @@ const inertBinding: StatusItemBinding = {
 function fakeBinding() {
   const log: string[] = [];
   let select: (tag: number) => void = () => {};
+  let click: (click: StatusItemClick) => void = () => {};
   let menu: readonly NativeMenuEntry[] | null = null;
   let image: NativeImage | null = null;
-  const factory = (onSelect: (tag: number) => void): StatusItemBinding => {
+  const factory = (
+    onSelect: (tag: number) => void,
+    onClick: (click: StatusItemClick) => void,
+  ): StatusItemBinding => {
     select = onSelect;
+    click = onClick;
     log.push("create");
     return {
       ...inertBinding,
@@ -63,6 +71,7 @@ function fakeBinding() {
     image: () => image,
     log,
     choose: (tag: number) => select(tag),
+    click: (value: StatusItemClick) => click(value),
     menu: () => menu,
   };
 }
@@ -701,4 +710,96 @@ test("destroy forgets the image so a new item starts without one", () => {
   });
   tray.destroy();
   expect(tray.create("", "").hasImage).toBe(false);
+});
+
+test("icon clicks without a menu become tray.input with a null position", () => {
+  const native = fakeBinding();
+  const sent: unknown[] = [];
+  const tray = new MacosTray(native.factory, (event) => void sent.push(event));
+  tray.create("", "");
+  native.click({
+    button: "left",
+    state: "up",
+  });
+  native.click({
+    button: "left",
+    state: "double-click",
+  });
+  native.click({
+    button: "right",
+    state: "up",
+  });
+  expect(sent).toEqual([
+    {
+      id: "main",
+      button: "left",
+      state: "up",
+      position: null,
+    },
+    {
+      id: "main",
+      button: "left",
+      state: "double-click",
+      position: null,
+    },
+    {
+      id: "main",
+      button: "right",
+      state: "up",
+      position: null,
+    },
+  ]);
+});
+
+test("clicks are not reported while a menu is attached or after destroy", () => {
+  const native = fakeBinding();
+  const sent: unknown[] = [];
+  const tray = new MacosTray(native.factory, (event) => void sent.push(event));
+  const click = {
+    button: "left",
+    state: "up",
+  } as const;
+  tray.create("", "");
+  tray.setMenu([
+    {
+      type: "item",
+      id: "a",
+      label: "L",
+      enabled: true,
+    },
+  ]);
+  native.click(click);
+  expect(sent).toHaveLength(0);
+  tray.setMenu(null);
+  native.click(click);
+  expect(sent).toHaveLength(1);
+  tray.destroy();
+  native.click(click);
+  expect(sent).toHaveLength(1);
+});
+
+test("a mouse up maps to up, plus double-click on the second left click", () => {
+  const left = {
+    button: "left",
+    state: "up",
+  } as const;
+  expect(clicksFor(2n, 1)).toEqual([
+    left,
+  ]);
+  expect(clicksFor(2n, 2)).toEqual([
+    left,
+    {
+      button: "left",
+      state: "double-click",
+    },
+  ]);
+  expect(clicksFor(4n, 1)).toEqual([
+    {
+      button: "right",
+      state: "up",
+    },
+  ]);
+  // Not a mouse up (a programmatic click or another event): no user click.
+  expect(clicksFor(1n, 1)).toEqual([]);
+  expect(clicksFor(0n, 0)).toEqual([]);
 });
