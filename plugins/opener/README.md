@@ -106,6 +106,17 @@ const link = await opener.readShortcutLink("C:\\Users\\me\\Desktop\\App.lnk");
 다시 시도합니다. 오류는 입력 검증의 `INVALID_ARGUMENT`와 종료 뒤 호출의 `CANCELLED`뿐입니다. 아이콘은
 반환하지 않으며 macOS는 지원하지 않습니다.
 
+## URL scheme 등록
+
+`registerUrlScheme(scheme: string, options?): Promise<null>`, `unregisterUrlScheme(scheme, options?): Promise<boolean>`,
+`isUrlSchemeRegistered(scheme, options?): Promise<boolean>`는 실행 중인 앱을 현재 사용자의 사용자 지정 URL scheme
+처리 앱으로 등록, 해제하고 조회합니다(Windows만, macOS는 `UNSUPPORTED`). `HKCU\Software\Classes\<scheme>`에
+`URL Protocol`과 `shell\open\command`(앱 실행 명령 + `"%1"`)를 쓰고 HKLM과 UserChoice는 건드리지 않습니다.
+대상은 호스트가 알려 주는 실행 중인 앱뿐이며 호출자가 경로나 인자를 줄 수 없습니다. `http`, `file`, `javascript`,
+`ms-*` 같은 예약 scheme은 `INVALID_ARGUMENT`입니다. 키의 `BunawayRegistration` 값과 명령이 모두 이 앱의 것일 때만
+소유로 보고, 설치 프로그램이나 다른 앱의 키는 덮거나 지우지 않습니다. 권한은 작업 이름 세 개이며 각각 별개입니다.
+링크로 받은 URL은 신뢰할 수 없는 입력이므로 앱이 검증해야 합니다. 자세한 규칙은 reference 문서를 참고하세요.
+
 ## 지정 앱
 
 `openFileWith(path: string, app: string, options?: NativeInvokeOptions): Promise<null>`과

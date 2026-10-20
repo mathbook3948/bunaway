@@ -1,5 +1,5 @@
 import { dlopen } from "bun:ffi";
-import { ResourceOwner } from "@bunaway/plugin";
+import { type NativeEnvironment, ResourceOwner } from "@bunaway/plugin";
 import { COINIT_APARTMENTTHREADED, OLE32, pick } from "@bunaway/plugin/win32";
 import { BunawayError, isRecord } from "@bunaway/protocol";
 import type {
@@ -23,13 +23,16 @@ import {
   normalizeShortcutPath,
 } from "#opener/platforms/windows-path";
 import { createRecentDocuments } from "#opener/platforms/windows-recent";
+import { createSchemeStore } from "#opener/platforms/windows-scheme-registry";
 import { createShell } from "#opener/platforms/windows-shell";
 import { createShortcuts } from "#opener/platforms/windows-shortcut";
 import {
   trashWindowsFile,
   validateTrashDrive,
 } from "#opener/platforms/windows-trash";
+import { createUrlSchemeRegistration } from "#opener/platforms/windows-url-scheme";
 import { normalizeUrl } from "#opener/url";
+import { normalizeUrlScheme } from "#opener/url-scheme";
 
 /**
  * Own one balanced COM initialization on the adapter's I/O thread. The process may
@@ -60,7 +63,7 @@ function createApartment() {
  * Prepare the STA and retain each resource until all shell references are released.
  * The owner releases them in reverse order, on a failed later step as well as on dispose.
  */
-export function initialize() {
+export function initialize(environment?: NativeEnvironment) {
   const owner = new ResourceOwner("Opener cleanup failed.");
   owner.acquire(createApartment, (apartment) => apartment.dispose());
   const shell = owner.acquire(createShell, (resource) => resource.dispose());
@@ -73,12 +76,17 @@ export function initialize() {
   const shortcuts = owner.acquire(createShortcuts, (resource) =>
     resource.dispose(),
   );
+  const schemeStore = owner.acquire(createSchemeStore, (resource) =>
+    resource.dispose(),
+  );
   return {
     owner,
     shell,
     shortcuts,
     recent,
     handlers,
+    // Without a host app identity the registration operations report UNSUPPORTED.
+    urlSchemes: createUrlSchemeRegistration(environment?.app, schemeStore),
   };
 }
 
@@ -112,6 +120,43 @@ export function getUrlHandler(
   notCancelled(signal);
   const scheme = new URL(normalizeUrl(url)).protocol.slice(0, -1);
   return state.handlers.query(scheme);
+}
+
+/**
+ * Register this app as the current user's handler of a custom URL scheme. The executable is
+ * the running app, never a caller path. Synchronous registry work, so cancellation is
+ * checked only before it starts.
+ */
+export function registerUrlScheme(
+  state: State,
+  scheme: string,
+  signal?: AbortSignal,
+): null {
+  active(state);
+  notCancelled(signal);
+  return state.urlSchemes.register(normalizeUrlScheme(scheme));
+}
+
+/** Remove a registration this app made. Resolves false when there is none of its own. */
+export function unregisterUrlScheme(
+  state: State,
+  scheme: string,
+  signal?: AbortSignal,
+): boolean {
+  active(state);
+  notCancelled(signal);
+  return state.urlSchemes.unregister(normalizeUrlScheme(scheme));
+}
+
+/** Whether the registry holds this app's registration for the scheme. */
+export function isUrlSchemeRegistered(
+  state: State,
+  scheme: string,
+  signal?: AbortSignal,
+): boolean {
+  active(state);
+  notCancelled(signal);
+  return state.urlSchemes.isRegistered(normalizeUrlScheme(scheme));
 }
 
 export function openFile(state: State, path: string): null {

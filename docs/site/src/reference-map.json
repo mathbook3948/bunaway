@@ -1464,6 +1464,9 @@
       "opener.addRecentDocument",
       "opener.clearRecentDocuments",
       "opener.getUrlHandler",
+      "opener.registerUrlScheme",
+      "opener.unregisterUrlScheme",
+      "opener.isUrlSchemeRegistered",
       "opener.readShortcutLink",
       "opener.writeShortcutLink"
     ],

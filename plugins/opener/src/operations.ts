@@ -8,6 +8,7 @@ import {
   shortcutWriteInput,
   urlHandlerSchema,
   urlInput,
+  urlSchemeInput,
   urlWithAppSchema,
 } from "#opener/contract";
 import {
@@ -21,13 +22,16 @@ import {
   clearRecentDocuments as clearWindowsRecentDocuments,
   getUrlHandler as getWindowsUrlHandler,
   type initialize as initializeWindows,
+  isUrlSchemeRegistered as isWindowsUrlSchemeRegistered,
   openFile as openWindowsFile,
   openFileWith as openWindowsFileWith,
   openUrl as openWindowsUrl,
   openUrlWith as openWindowsUrlWith,
   readShortcutLink as readWindowsShortcutLink,
+  registerUrlScheme as registerWindowsUrlScheme,
   revealFile as revealWindowsFile,
   trashFile as trashWindowsFile,
+  unregisterUrlScheme as unregisterWindowsUrlScheme,
   writeShortcutLink as writeWindowsShortcutLink,
 } from "#opener/platforms/windows";
 
@@ -98,6 +102,24 @@ export const windowsOperations = {
     output: urlHandlerSchema.nullable(),
     handler: ({ url }, { instance, signal }) =>
       getWindowsUrlHandler(instance, url, signal),
+  }),
+  registerUrlScheme: windowsOperation({
+    input: urlSchemeInput,
+    output: z.null(),
+    handler: ({ scheme }, { instance, signal }) =>
+      registerWindowsUrlScheme(instance, scheme, signal),
+  }),
+  unregisterUrlScheme: windowsOperation({
+    input: urlSchemeInput,
+    output: z.boolean(),
+    handler: ({ scheme }, { instance, signal }) =>
+      unregisterWindowsUrlScheme(instance, scheme, signal),
+  }),
+  isUrlSchemeRegistered: windowsOperation({
+    input: urlSchemeInput,
+    output: z.boolean(),
+    handler: ({ scheme }, { instance, signal }) =>
+      isWindowsUrlSchemeRegistered(instance, scheme, signal),
   }),
 };
 export const macosOperations = {

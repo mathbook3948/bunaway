@@ -1,0 +1,388 @@
+import { expect, test } from "bun:test";
+import { validateOpenerInput } from "#plugins/opener/src/contract";
+import {
+  macosOperations,
+  windowsOperations,
+} from "#plugins/opener/src/operations";
+import {
+  buildSchemeCommand,
+  createUrlSchemeRegistration,
+  MAX_SCHEME_COMMAND_UNITS,
+  OWNER_VALUE,
+  type SchemeStore,
+} from "#plugins/opener/src/platforms/windows-url-scheme";
+import { normalizeUrlScheme } from "#plugins/opener/src/url-scheme";
+
+const APP = {
+  id: "com.example.app",
+  launch: {
+    mode: "packaged" as const,
+    executablePath: "C:\\Program Files\\App\\app.exe",
+    args: [] as string[],
+  },
+};
+
+/** In-memory classes hive: key path to its values; `""` is the default value. */
+function fakeStore() {
+  const keys = new Map<string, Map<string, string>>();
+  const calls: string[] = [];
+  let failWriteAfter = Number.POSITIVE_INFINITY;
+  let writes = 0;
+  const store: SchemeStore = {
+    withLock: (_scheme, work) => work(),
+    keyExists: (path) =>
+      [
+        ...keys.keys(),
+      ].some((key) => key === path || key.startsWith(`${path}\\`)),
+    readString: (path, name) => keys.get(path)?.get(name) ?? null,
+    writeString(path, name, value) {
+      if (writes++ >= failWriteAfter) {
+        throw new Error("write failed");
+      }
+      const values = keys.get(path) ?? new Map<string, string>();
+      values.set(name, value);
+      keys.set(path, values);
+    },
+    deleteTree(path) {
+      for (const key of [
+        ...keys.keys(),
+      ]) {
+        if (key === path || key.startsWith(`${path}\\`)) {
+          keys.delete(key);
+        }
+      }
+    },
+    notifyAssociationsChanged: () => {
+      calls.push("notify");
+    },
+  };
+  return {
+    store,
+    keys,
+    calls,
+    failAfter(count: number) {
+      writes = 0;
+      failWriteAfter = count;
+    },
+  };
+}
+
+test("scheme input is lowercased and reserved or malformed schemes are rejected", () => {
+  expect(normalizeUrlScheme("MyApp")).toBe("myapp");
+  expect(normalizeUrlScheme("my-app+v2.x")).toBe("my-app+v2.x");
+  for (const scheme of [
+    "",
+    "a",
+    "1app",
+    "my app",
+    "my_app",
+    "x".repeat(33),
+    "http",
+    "HTTPS",
+    "file",
+    "javascript",
+    "mailto",
+    "ms-settings",
+    "Microsoft-Edge",
+    "search-ms",
+    "shell",
+    5,
+    null,
+  ]) {
+    expect(() => normalizeUrlScheme(scheme)).toThrow(
+      expect.objectContaining({
+        code: "INVALID_ARGUMENT",
+      }),
+    );
+    expect(() =>
+      validateOpenerInput("opener.registerUrlScheme", {
+        scheme,
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        code: "INVALID_ARGUMENT",
+      }),
+    );
+  }
+});
+
+test("the three operations share one strict scheme input and typed results", () => {
+  for (const operation of [
+    "opener.registerUrlScheme",
+    "opener.unregisterUrlScheme",
+    "opener.isUrlSchemeRegistered",
+  ]) {
+    expect(
+      validateOpenerInput(operation, {
+        scheme: "myapp",
+      }),
+    ).toEqual({
+      scheme: "myapp",
+    });
+    for (const input of [
+      {},
+      {
+        scheme: "myapp",
+        path: "C:\\other.exe",
+      },
+      {
+        scheme: "myapp",
+        args: [],
+      },
+    ]) {
+      expect(() => validateOpenerInput(operation, input)).toThrow(
+        expect.objectContaining({
+          code: "INVALID_ARGUMENT",
+        }),
+      );
+    }
+  }
+  expect(windowsOperations.registerUrlScheme.output.parse(null)).toBeNull();
+  expect(windowsOperations.unregisterUrlScheme.output.parse(true)).toBe(true);
+  expect(windowsOperations.isUrlSchemeRegistered.output.parse(false)).toBe(
+    false,
+  );
+  expect(() =>
+    windowsOperations.registerUrlScheme.output.parse(true),
+  ).toThrow();
+});
+
+test("the operations are Windows only", () => {
+  expect(Object.keys(windowsOperations)).toEqual(
+    expect.arrayContaining([
+      "registerUrlScheme",
+      "unregisterUrlScheme",
+      "isUrlSchemeRegistered",
+    ]),
+  );
+  expect(Object.keys(macosOperations)).not.toContain("registerUrlScheme");
+  expect(Object.keys(macosOperations)).not.toContain("unregisterUrlScheme");
+  expect(Object.keys(macosOperations)).not.toContain("isUrlSchemeRegistered");
+});
+
+test("the command quotes the app launch parts and ends with the URL placeholder", () => {
+  expect(buildSchemeCommand(APP.launch)).toBe(
+    '"C:\\Program Files\\App\\app.exe" "%1"',
+  );
+  expect(
+    buildSchemeCommand({
+      mode: "development",
+      executablePath: "C:\\bun\\bun.exe",
+      args: [
+        "run",
+        "C:\\my app\\main.ts",
+      ],
+    }),
+  ).toBe('"C:\\bun\\bun.exe" "run" "C:\\my app\\main.ts" "%1"');
+});
+
+test("a launch command with placeholders, control characters or excess length is refused", () => {
+  for (const launch of [
+    {
+      ...APP.launch,
+      executablePath: "C:\\100%\\app.exe",
+    },
+    {
+      ...APP.launch,
+      args: [
+        "--x=%1",
+      ],
+    },
+    {
+      ...APP.launch,
+      args: [
+        "a\nb",
+      ],
+    },
+    {
+      ...APP.launch,
+      args: [
+        "x".repeat(MAX_SCHEME_COMMAND_UNITS),
+      ],
+    },
+  ]) {
+    expect(() => buildSchemeCommand(launch)).toThrow(
+      expect.objectContaining({
+        code: "UNSUPPORTED",
+      }),
+    );
+  }
+});
+
+test("without a host app identity all three operations report UNSUPPORTED", () => {
+  const { store } = fakeStore();
+  const registration = createUrlSchemeRegistration(undefined, store);
+  for (const call of [
+    () => registration.register("myapp"),
+    () => registration.unregister("myapp"),
+    () => registration.isRegistered("myapp"),
+  ]) {
+    expect(call).toThrow(
+      expect.objectContaining({
+        code: "UNSUPPORTED",
+      }),
+    );
+  }
+});
+
+test("register writes the owner, the command and the protocol marker, then reads back", () => {
+  const { store, keys, calls } = fakeStore();
+  const registration = createUrlSchemeRegistration(APP, store);
+  expect(registration.isRegistered("myapp")).toBe(false);
+  expect(registration.register("myapp")).toBeNull();
+  expect(registration.isRegistered("myapp")).toBe(true);
+  expect(keys.get("Software\\Classes\\myapp")).toEqual(
+    new Map([
+      [
+        OWNER_VALUE,
+        "packaged.com.example.app",
+      ],
+      [
+        "",
+        "URL:myapp",
+      ],
+      [
+        "URL Protocol",
+        "",
+      ],
+    ]),
+  );
+  expect(
+    keys.get("Software\\Classes\\myapp\\shell\\open\\command")?.get(""),
+  ).toBe('"C:\\Program Files\\App\\app.exe" "%1"');
+  expect(calls).toEqual([
+    "notify",
+  ]);
+  // A repeat with the same command changes nothing, not even the Shell notification.
+  registration.register("myapp");
+  expect(calls).toEqual([
+    "notify",
+  ]);
+});
+
+test("register refreshes the command after the app moved and unregister then removes it", () => {
+  const { store, keys } = fakeStore();
+  createUrlSchemeRegistration(APP, store).register("myapp");
+  const moved = createUrlSchemeRegistration(
+    {
+      ...APP,
+      launch: {
+        ...APP.launch,
+        executablePath: "D:\\Apps\\app.exe",
+      },
+    },
+    store,
+  );
+  // The old command no longer matches, so the app does not count as registered yet.
+  expect(moved.isRegistered("myapp")).toBe(false);
+  expect(moved.unregister("myapp")).toBe(false);
+  moved.register("myapp");
+  expect(moved.isRegistered("myapp")).toBe(true);
+  expect(moved.unregister("myapp")).toBe(true);
+  expect(keys.size).toBe(0);
+  expect(moved.unregister("myapp")).toBe(false);
+});
+
+test("a key owned by anyone else is neither replaced nor removed", () => {
+  const { store, keys } = fakeStore();
+  const installed = new Map([
+    [
+      "",
+      "URL:myapp",
+    ],
+    [
+      "URL Protocol",
+      "",
+    ],
+  ]);
+  keys.set("Software\\Classes\\myapp", installed);
+  keys.set(
+    "Software\\Classes\\myapp\\shell\\open\\command",
+    new Map([
+      [
+        "",
+        '"C:\\Other\\other.exe" "%1"',
+      ],
+    ]),
+  );
+  const registration = createUrlSchemeRegistration(APP, store);
+  expect(() => registration.register("myapp")).toThrow(
+    expect.objectContaining({
+      code: "INVALID_ARGUMENT",
+    }),
+  );
+  expect(registration.isRegistered("myapp")).toBe(false);
+  expect(registration.unregister("myapp")).toBe(false);
+  // The packaged and development runs of one app id are different owners.
+  const development = createUrlSchemeRegistration(
+    {
+      ...APP,
+      launch: {
+        ...APP.launch,
+        mode: "development",
+      },
+    },
+    store,
+  );
+  expect(() => development.register("myapp")).toThrow(
+    expect.objectContaining({
+      code: "INVALID_ARGUMENT",
+    }),
+  );
+  expect(keys.get("Software\\Classes\\myapp")).toBe(installed);
+  expect(
+    keys.get("Software\\Classes\\myapp\\shell\\open\\command")?.get(""),
+  ).toBe('"C:\\Other\\other.exe" "%1"');
+});
+
+test("the owner value alone does not authorize removal when the command differs", () => {
+  const { store, keys } = fakeStore();
+  createUrlSchemeRegistration(APP, store).register("myapp");
+  keys
+    .get("Software\\Classes\\myapp\\shell\\open\\command")
+    ?.set("", '"C:\\Other\\other.exe" "%1"');
+  const registration = createUrlSchemeRegistration(APP, store);
+  expect(registration.isRegistered("myapp")).toBe(false);
+  expect(registration.unregister("myapp")).toBe(false);
+  expect(keys.has("Software\\Classes\\myapp")).toBe(true);
+});
+
+test("a failed first registration removes the key it created and a retry succeeds", () => {
+  const harness = fakeStore();
+  const registration = createUrlSchemeRegistration(APP, harness.store);
+  for (const failAt of [
+    0,
+    1,
+    2,
+    3,
+  ]) {
+    harness.failAfter(failAt);
+    expect(() => registration.register("myapp")).toThrow("write failed");
+    expect(harness.keys.size).toBe(0);
+    expect(registration.isRegistered("myapp")).toBe(false);
+  }
+  harness.failAfter(Number.POSITIVE_INFINITY);
+  registration.register("myapp");
+  expect(registration.isRegistered("myapp")).toBe(true);
+});
+
+test("a failed refresh keeps the key the app already owned", () => {
+  const harness = fakeStore();
+  createUrlSchemeRegistration(APP, harness.store).register("myapp");
+  const moved = createUrlSchemeRegistration(
+    {
+      ...APP,
+      launch: {
+        ...APP.launch,
+        executablePath: "D:\\Apps\\app.exe",
+      },
+    },
+    harness.store,
+  );
+  harness.failAfter(2);
+  expect(() => moved.register("myapp")).toThrow("write failed");
+  expect(harness.keys.has("Software\\Classes\\myapp")).toBe(true);
+  harness.failAfter(Number.POSITIVE_INFINITY);
+  moved.register("myapp");
+  expect(moved.isRegistered("myapp")).toBe(true);
+});
