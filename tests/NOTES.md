@@ -1090,6 +1090,11 @@ browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS,
 포함하며 사용자 설정별 휴지통 비활성화, 용량 초과와 경고 UI는 수동 검증 항목이다.
 
 `api/global-shortcut.test.ts`는 전역 단축키 권한, 등록 rollback, 중지와 재개 및 이전 메시지 폐기를 검사한다.
+`api/global-shortcut-macos.test.ts`는 가짜 Carbon 드라이버로 macOS 어댑터의 키 표, 등록 충돌과 rollback,
+press와 release 짝, 중지와 재개 때 ID 교체, dispose를 검사한다.
+`lifecycle/macos-global-shortcut.ts`는 macOS native 잡에서 실제 Carbon 핫키를 호스트 이벤트 루프 위에 등록해
+중복 등록 거부와, 이벤트 큐에 넣은 누름과 뗌 이벤트의 전달, 중지와 제거 뒤의 무시를 확인한다.
+실제 키 입력(CGEventPost)도 시도해 탭별 결과를 로그로 남기지만 호스티드 러너에서는 전달되지 않아 검증 범위가 아니다.
 `lifecycle/windows-global-shortcut.test.ts`는 실제 RegisterHotKey와 경쟁 HWND, SendInput, 중지와 정리를 확인한다.
 `windows-global-shortcut-ui.test.ts`는 단축키 단독 실행과 menu, tray 동시 실행을 실제 UI
 Worker에서 검사한다. 메뉴, 사용자 정의 아이콘, 단축키와 입력 대기가 함께 살아 있는 상태에서

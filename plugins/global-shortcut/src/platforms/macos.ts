@@ -1,4 +1,8 @@
-import { type NativeEnvironment, NativeEventWaiters } from "@bunaway/plugin";
+import {
+  failWithCleanup,
+  type NativeEnvironment,
+  NativeEventWaiters,
+} from "@bunaway/plugin";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import {
   type GlobalShortcut,
@@ -279,8 +283,13 @@ export class MacosGlobalShortcut implements GlobalShortcutInstance {
         acquired.push(entry);
       }
     } catch (cause) {
-      this.releaseAll(acquired);
-      throw cause;
+      // Report the registration failure even when the rollback fails too. The shortcuts stay
+      // suspended, and the next resume finishes unbinding before it registers again.
+      failWithCleanup(
+        cause,
+        () => this.releaseAll(acquired),
+        "Global shortcut resume failed and its rollback was incomplete.",
+      );
     }
     this.suspended = false;
     return null;

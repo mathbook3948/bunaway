@@ -320,8 +320,12 @@ export function createCarbonHotKeys(): HotKeyDriver {
     if (ref === undefined) {
       return false;
     }
+    if (carbon.symbols.UnregisterEventHotKey(ref) !== NO_ERROR) {
+      // Keep the reference so the caller can retry the removal.
+      return false;
+    }
     refs.delete(id);
-    return carbon.symbols.UnregisterEventHotKey(ref) === NO_ERROR;
+    return true;
   };
   return {
     listen(next) {

@@ -341,3 +341,37 @@ test("dispose removes the native side once, cancels waiters and ignores later ev
   deliver("pressed", id);
   expect(events).toEqual([]);
 });
+
+test("a resume that fails and cannot roll back reports both failures and stays suspended", () => {
+  const { adapter, occupied, failedRemoval } = fixture();
+  adapter.registerMany([
+    shortcut("K"),
+    shortcut("L"),
+  ]);
+  adapter.setSuspended(true);
+  occupied.add("L");
+  // The suspended registrations got ids 1 and 2, so the resume registers K as id 3.
+  failedRemoval.add(3);
+  let thrown: unknown;
+  try {
+    adapter.setSuspended(false);
+  } catch (error) {
+    thrown = error;
+  }
+  expect(thrown).toBeInstanceOf(AggregateError);
+  expect(
+    (thrown as AggregateError).errors.map(
+      (item: { code?: string }) => item.code,
+    ),
+  ).toEqual([
+    "BUSY",
+    "INTERNAL",
+  ]);
+  expect(adapter.isSuspended()).toBe(true);
+  // Once the removal works again, the next resume unbinds first and then reports the real conflict.
+  failedRemoval.clear();
+  expect(errorCode(() => adapter.setSuspended(false))).toBe("BUSY");
+  occupied.clear();
+  expect(adapter.setSuspended(false)).toBeNull();
+  expect(adapter.isSuspended()).toBe(false);
+});
