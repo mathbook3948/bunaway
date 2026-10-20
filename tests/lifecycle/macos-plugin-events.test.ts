@@ -18,21 +18,34 @@ async function runFixture() {
     },
   );
   const timer = killAfter(child, "childStep");
-  const [output, errors, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  clearTimeout(timer);
+  let output: string;
+  let errors: string;
+  let code: number;
+  try {
+    [output, errors, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
   expect(code, `${output}\n${errors}`).toBe(0);
   return JSON.parse(output);
 }
 
-test("a macOS plugin event reaches only the views that subscribed and stops at shutdown", async () => {
+test("a macOS plugin event reaches subscribed and subscribing views only and stops at shutdown", async () => {
   const result = await runFixture();
+  // View a confirmed its subscription, b still awaits the answer, c never asked.
   expect(result.whileRunning).toEqual([
     {
       to: "a",
+      payload: {
+        count: 1,
+      },
+    },
+    {
+      to: "b",
       payload: {
         count: 1,
       },

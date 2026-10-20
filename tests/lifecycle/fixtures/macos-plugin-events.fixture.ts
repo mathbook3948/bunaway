@@ -91,6 +91,7 @@ const config = {
   windows: [
     windowSpec("a"),
     windowSpec("b"),
+    windowSpec("c"),
   ],
   policy: {
     version: 1,
@@ -100,6 +101,7 @@ const config = {
     views: [
       policyView("a"),
       policyView("b"),
+      policyView("c"),
     ],
   },
 } as never;
@@ -165,8 +167,11 @@ const nativeHooks = (
   }
 ).nativeHooks;
 
-/** Opens the view's document session and, when asked, confirms one subscription to the event. */
-function open(view: string, subscribe: boolean): Route {
+/** `confirmed` answers the listen request, `pending` leaves it unanswered, `none` sends none. */
+type Subscription = "confirmed" | "pending" | "none";
+
+/** Opens the view's document session and subscribes to the event as asked. */
+function open(view: string, subscription: Subscription): Route {
   const hooks = nativeHooks[view];
   assert(hooks);
   hooks.receive(
@@ -188,7 +193,7 @@ function open(view: string, subscribe: boolean): Route {
     features: [],
     buildId: "fixture",
   });
-  if (subscribe) {
+  if (subscription !== "none") {
     hooks.receive(
       HOME,
       JSON.stringify({
@@ -198,14 +203,16 @@ function open(view: string, subscribe: boolean): Route {
         event: EVENT,
       }),
     );
-    windows.send(opened.route, {
-      kind: "result",
-      protocol,
-      id: `${view}-listen`,
-      payload: {
-        subscriptionId: `${view}-subscription`,
-      },
-    });
+    if (subscription === "confirmed") {
+      windows.send(opened.route, {
+        kind: "result",
+        protocol,
+        id: `${view}-listen`,
+        payload: {
+          subscriptionId: `${view}-subscription`,
+        },
+      });
+    }
   }
   return opened.route;
 }
@@ -213,8 +220,9 @@ function open(view: string, subscribe: boolean): Route {
 const settle = () => Bun.sleep(10);
 
 await settle();
-open("a", true);
-open("b", false);
+open("a", "confirmed");
+open("b", "pending");
+open("c", "none");
 
 // Delivery is synchronous up to the host hook, so no wait is needed to observe it.
 windows.emitPluginEvent(EVENT, {
