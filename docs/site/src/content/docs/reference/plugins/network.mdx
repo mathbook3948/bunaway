@@ -190,7 +190,16 @@ Electron `net.resolveHost()`의 `{ endpoints: [{ address, family }] }` 결과 �
   조회는 백그라운드에서 끝납니다. 그런 조회까지 포함해 동시에 진행 중인 조회가 16개이면
   새 조회는 `BUSY`입니다.
 
-Electron의 `queryType`, `source`, `cacheUsage`, `secureDnsPolicy` 옵션은 제공하지 않습니다.
+`queryType`을 `"A"`로 주면 IPv4 주소만, `"AAAA"`로 주면 IPv6 주소만 돌려줍니다. 생략하면 두
+종류를 리졸버 순서대로 모두 돌려줍니다. 그 종류의 주소가 없거나 IPv4 주소(`127.0.0.1`)에
+`"AAAA"`를 주면 오류가 아니라 빈 `endpoints`입니다. 그 외 값은 `INVALID_ARGUMENT`입니다.
+
+```ts
+await network.resolveHost({ host: "reports.example.com", queryType: "AAAA" });
+// { endpoints: [{ address: "2001:db8::10", family: "ipv6" }] }
+```
+
+Electron의 `source`, `cacheUsage`, `secureDnsPolicy` 옵션은 제공하지 않습니다.
 Chromium의 자체 DNS 클라이언트와 DNS-over-HTTPS 설정은 사용하지 않고 항상 시스템 리졸버를 씁니다.
 이 조회는 프록시를 거치지 않으므로 프록시 뒤 환경에서 `network.request`가 접속하는 주소와
 다를 수 있습니다. 프록시 경로는 아래 `network.resolveProxy`로 조회합니다.

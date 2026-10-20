@@ -5,23 +5,39 @@ type Endpoint = {
   address: string;
   family: "ipv4" | "ipv6";
 };
+const FAMILY_OF_QUERY_TYPE = {
+  A: 4,
+  AAAA: 6,
+} as const;
+
 /** Resolver seam, so address mapping and cancellation run without real DNS. */
-export type HostLookup = (host: string) => Promise<
+export type HostLookup = (
+  host: string,
+  family?: 4 | 6,
+) => Promise<
   readonly {
     address: string;
     family: number;
   }[]
 >;
 
-export const systemLookup: HostLookup = (host) =>
+export const systemLookup: HostLookup = (host, family) =>
   lookup(host, {
     all: true,
+    ...(family === undefined
+      ? {}
+      : {
+          family,
+        }),
   });
 
 /**
  * Resolve a name with the operating system resolver (getaddrinfo), which applies the hosts file,
  * search suffixes and the system DNS configuration like the host resolver behind Electron's
- * `net.resolveHost()`. Addresses keep resolver order and repeats are removed.
+ * `net.resolveHost()`. Addresses keep resolver order and repeats are removed. `queryType` limits the
+ * result to one address family like Electron's `queryType`. The resolver returns an IP literal as it
+ * is whatever the family hint, so the family is also checked on the result: an IPv4 literal asked
+ * for "AAAA" yields no endpoints.
  *
  * getaddrinfo cannot be interrupted. On abort the call rejects at once and the lookup finishes in
  * the background, so cancellation and the deadline do not wait for a slow resolver. The caller
@@ -31,11 +47,13 @@ export async function resolveHost(
   host: string,
   signal: AbortSignal,
   find: HostLookup = systemLookup,
+  queryType?: "A" | "AAAA",
 ): Promise<{
   endpoints: Endpoint[];
 }> {
   signal.throwIfAborted();
-  const pending = find(host);
+  const wanted = queryType && FAMILY_OF_QUERY_TYPE[queryType];
+  const pending = find(host, wanted);
   let onAbort: (() => void) | undefined;
   const aborted = new Promise<never>((_resolve, reject) => {
     onAbort = () => reject(signal.reason);
@@ -58,11 +76,15 @@ export async function resolveHost(
   const seen = new Set<string>();
   const endpoints: Endpoint[] = [];
   for (const { address, family } of addresses) {
+    const found = family === 6 ? 6 : 4;
+    if (wanted !== undefined && found !== wanted) {
+      continue;
+    }
     if (!seen.has(address)) {
       seen.add(address);
       endpoints.push({
         address,
-        family: family === 6 ? "ipv6" : "ipv4",
+        family: found === 6 ? "ipv6" : "ipv4",
       });
     }
   }

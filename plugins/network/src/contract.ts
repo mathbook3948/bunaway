@@ -202,6 +202,13 @@ export const resolveHostInputSchema = z.strictObject({
         !numericLastLabel.test(labels.at(-1) ?? "") || dottedQuad.test(name)
       );
     }, "Expected an ASCII host name or dotted IPv4 address; convert international names to punycode."),
+  /** "A" keeps IPv4 addresses and "AAAA" keeps IPv6 addresses; omitted returns both. */
+  queryType: z
+    .enum([
+      "A",
+      "AAAA",
+    ])
+    .optional(),
   timeoutMs,
 });
 /** Addresses in resolver order, shaped like Electron `net.resolveHost()`. */
