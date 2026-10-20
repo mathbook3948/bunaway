@@ -40,14 +40,18 @@ releases it, and closes library handles in reverse order. The modal loop blocks 
 abort is observed before the panel opens and, if already recorded, after it closes; it cannot dismiss
 an open panel. Owner windows are not attached or validated. Re-entry fails BUSY, and selections beyond
 the shared result limits fail INTERNAL as on Windows. Filters merge into one accepted extension set,
-and a save panel always asks before replacing a file. `showMessage` is an application-modal `NSAlert` built by `alertSettings`.
-Return and Escape map to the default and cancel buttons through key equivalents. One button holds
-only one key, so Return wins when both are the same button and Escape is left unbound. `title` is
-ignored because an alert has no title bar.
-`tests/api/dialog-macos.test.ts` covers the mapping and lifecycle with a fake panel factory.
-`tests/lifecycle/macos-dialog-native.test.ts` reads real panels back from AppKit and closes a modal
-panel through a scheduled `cancel:`; it runs in the macOS native job. Choosing items in the panel
-by hand is not automated.
+and a save panel always asks before replacing a file.
+
+`showMessage` is an application-modal `NSAlert` built by `alertSettings`. Return and Escape map to
+the default and cancel buttons through key equivalents. One button holds only one key, so Return wins
+when both are the same button and Escape is left unbound. `title` is ignored because an alert has no
+title bar.
+
+`tests/api/dialog-macos.test.ts` covers the mapping and lifecycle of panels and alerts with a fake
+factory. `tests/lifecycle/macos-dialog-native.test.ts` reads real panels and alerts back from AppKit,
+closes a modal panel through a scheduled `cancel:` and answers a modal alert through a scheduled
+`performClick:`; it runs in the macOS native job. Choosing items in a panel by hand and pressing keys
+in an alert are not automated.
 
 ## Message dialog
 

@@ -1,8 +1,8 @@
 import { dlopen, JSCallback, ptr } from "bun:ffi";
+import { USER32, pick, wide } from "@bunaway/plugin/win32";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pick, USER32, wide } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import {
   type MessageInput,
