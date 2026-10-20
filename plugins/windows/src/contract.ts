@@ -29,6 +29,22 @@ import {
 } from "@bunaway/protocol";
 import { z } from "zod";
 
+/** Placements for `windows.moveToAnchor` within a monitor work area. */
+export const WINDOW_ANCHORS = [
+  "top-left",
+  "top",
+  "top-right",
+  "left",
+  "center",
+  "right",
+  "bottom-left",
+  "bottom",
+  "bottom-right",
+] as const;
+export type WindowAnchor = (typeof WINDOW_ANCHORS)[number];
+/** Largest logical gap `windows.moveToAnchor` accepts between the window and the work-area edge. */
+const MAX_ANCHOR_MARGIN = 8192;
+
 const coordinate = z
   .int()
   .min(MIN_WINDOW_COORDINATE)
@@ -1311,6 +1327,14 @@ export const windowOperations = {
   "windows.center": {
     input: windowTarget.extend({
       monitorId: monitorSchema.shape.id.exactOptional(),
+    }),
+    output: z.null(),
+  },
+  "windows.moveToAnchor": {
+    input: windowTarget.extend({
+      anchor: z.enum(WINDOW_ANCHORS),
+      monitorId: monitorSchema.shape.id.exactOptional(),
+      margin: z.int().min(0).max(MAX_ANCHOR_MARGIN).exactOptional(),
     }),
     output: z.null(),
   },
