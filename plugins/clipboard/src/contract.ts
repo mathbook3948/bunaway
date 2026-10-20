@@ -124,6 +124,11 @@ export const posixFilesSchema = z
         "Paths cannot exceed the UTF-16 code unit limit.",
       )
       .regex(/^\//u)
+      // A trailing slash is URL syntax for a directory, not part of the path, so it cannot round-trip.
+      .refine(
+        (path) => path === "/" || !path.endsWith("/"),
+        "Paths cannot end with a slash.",
+      )
       .refine(
         (path) =>
           Array.from(path).every(

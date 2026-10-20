@@ -34,6 +34,12 @@ test("the macOS file-list contract accepts absolute POSIX paths only", () => {
       "relative/path",
     ],
     [
+      "/tmp/dir/",
+    ],
+    [
+      "//",
+    ],
+    [
       "C:\\memo.txt",
     ],
     [
@@ -102,6 +108,7 @@ test("only local file URLs name a path", () => {
   expect(filePath("file:///Users/me/dir/")).toBe("/Users/me/dir");
   expect(filePath("FILE://LocalHost/Users/me")).toBe("/Users/me");
   expect(filePath("file:///")).toBe("/");
+  expect(filePath("file:/Users/me/a%20b")).toBe("/Users/me/a b");
   // Remote hosts, file reference URLs and other schemes are not local paths.
   expect(filePath("file://server/share/file")).toBeNull();
   expect(filePath("file:///.file/id=6571367.9114570")).toBeNull();

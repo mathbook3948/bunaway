@@ -9,6 +9,7 @@ import { pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import {
   type ClipboardFormat,
+  MAX_FILES,
   MAX_PATH_LENGTH,
   MAX_TEXT_LENGTH,
   type MacosClipboardItem,
@@ -76,7 +77,8 @@ export function fileUrl(path: string): string {
  * file reference URLs (`/.file/id=`). Malformed URLs are invalid pasteboard data.
  */
 export function filePath(url: string): string | null {
-  const match = /^file:\/\/([^/?#]*)(\/[^?#]*)$/iu.exec(url);
+  // Both `file:///path` and the single-slash `file:/path` form name a local path.
+  const match = /^file:(?:\/\/([^/?#]*))?(\/[^?#]*)$/iu.exec(url);
   if (!match) {
     return /^file:/iu.test(url) ? invalidPasteboardData() : null;
   }
@@ -275,6 +277,9 @@ export function createPasteboard(name?: string): Pasteboard {
         return null;
       }
       const count = Number(send(items, "count"));
+      if (count > MAX_FILES) {
+        return invalidPasteboardData();
+      }
       const type = string(FILE_URL_TYPE);
       const paths: string[] = [];
       for (let index = 0; index < count; index += 1) {
