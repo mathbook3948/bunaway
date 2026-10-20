@@ -96,8 +96,8 @@ export const balloonSchema = z.strictObject({
 });
 export type TrayBalloon = z.output<typeof balloonSchema>;
 /**
- * Balloon lifecycle reported by the shell. `closed` covers timeout, dismissal and removal, so one
- * shown balloon yields at most one `closed`.
+ * Balloon lifecycle reported by the shell. `closed` maps the shell's timeout and hide notifications
+ * and is reported once per `show`, however many such notifications follow.
  */
 export const trayBalloonEventSchema = z.strictObject({
   state: z.enum([
@@ -106,6 +106,7 @@ export const trayBalloonEventSchema = z.strictObject({
     "closed",
   ]),
 });
+export type TrayBalloonEvent = z.output<typeof trayBalloonEventSchema>;
 export const trayEvents = {
   "tray.input": {
     type: "object",

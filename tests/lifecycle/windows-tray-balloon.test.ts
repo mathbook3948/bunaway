@@ -28,15 +28,20 @@ test.skipIf(process.platform !== "win32")(
     const actions: string[] = [];
     const inputs: NativeTrayEvent[] = [];
     const balloons: string[] = [];
-    const tray = new Tray(
-      windows,
-      "balloon",
-      (action) => actions.push(action),
-      (event) => inputs.push(event),
-      undefined,
-      undefined,
-      (event) => balloons.push(event.state),
-    );
+    const open = () =>
+      new Tray(
+        windows,
+        "balloon",
+        (action) => actions.push(action),
+        (event) => inputs.push(event),
+        undefined,
+        undefined,
+        (event) => balloons.push(event.state),
+      );
+    // Real requests run on their own tray: the shell may answer them with genuine notifications
+    // at any time, which must not mix with the synthetic sequence checked below.
+    const requests = open();
+    const tray = open();
     const post = (notification: number) => {
       expect(
         user.symbols.PostMessageW(
@@ -49,15 +54,16 @@ test.skipIf(process.platform !== "win32")(
       windows.pump();
     };
     let disposed = false;
+    let requestsDisposed = false;
     try {
       // The shell accepts the largest title and content, with and without optional fields.
-      tray.displayBalloon({
+      requests.displayBalloon({
         title: "t".repeat(63),
         content: "c".repeat(255),
         iconType: "warning",
         silent: true,
       });
-      tray.displayBalloon({
+      requests.displayBalloon({
         title: "",
         content: "😀".repeat(127),
         iconType: "none",
@@ -82,15 +88,17 @@ test.skipIf(process.platform !== "win32")(
         },
       ]) {
         expect(() =>
-          tray.displayBalloon({
+          requests.displayBalloon({
             ...balloon,
             iconType: "info",
             silent: false,
           }),
         ).toThrow("Invalid tray balloon.");
       }
-      tray.removeBalloon();
-      // Whatever the shell does with the requests above, only the posted messages are counted.
+      requests.removeBalloon();
+      // Release the requesting icon (and any balloon it still shows) before the exact sequence.
+      requests.dispose();
+      requestsDisposed = true;
       balloons.length = 0;
 
       post(NIN_BALLOONSHOW);
@@ -121,12 +129,18 @@ test.skipIf(process.platform !== "win32")(
       expect(() => tray.removeBalloon()).toThrow("The tray was released.");
     } finally {
       try {
-        if (!disposed) {
-          tray.dispose();
+        if (!requestsDisposed) {
+          requests.dispose();
         }
       } finally {
-        windows.dispose();
-        user.close();
+        try {
+          if (!disposed) {
+            tray.dispose();
+          }
+        } finally {
+          windows.dispose();
+          user.close();
+        }
       }
     }
   },

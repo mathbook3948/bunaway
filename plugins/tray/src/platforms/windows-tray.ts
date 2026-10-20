@@ -15,6 +15,7 @@ import {
   MAX_TRAY_BALLOON_CONTENT_UNITS,
   MAX_TRAY_BALLOON_TITLE_UNITS,
   type TrayBalloon,
+  type TrayBalloonEvent,
 } from "#tray/contract";
 import { openTrayBindings } from "#tray/platforms/windows-bindings";
 import { createTrayIcon } from "#tray/platforms/windows-icon";
@@ -163,9 +164,7 @@ export class Tray {
     notify?: (event: NativeTrayEvent) => void,
     retain?: (owner: NativeTrayOwner) => void,
     notifyHover?: (event: TrayHoverEvent) => void,
-    private readonly notifyBalloon?: (event: {
-      state: "show" | "click" | "closed";
-    }) => void,
+    private readonly notifyBalloon?: (event: TrayBalloonEvent) => void,
   ) {
     // Validate the whole startup value before acquiring this tray's native resources.
     if (/[\0\uD800-\uDFFF]/u.test(tooltip)) {
