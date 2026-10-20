@@ -4,6 +4,7 @@ import {
   resizeIsPinned,
   screenPointParam,
 } from "#native/windows/bun/window-drag";
+import { waitFor } from "../fixtures/deadlines.ts";
 
 const OPEN: WindowSizeConstraints = {
   minWidth: null,
@@ -116,19 +117,16 @@ test.skipIf(process.platform !== "win32")(
     const native = new Windows(() => {});
     const hwnds: bigint[] = [];
     let held = false;
-    const press = () => {
+    const press = async () => {
       // Keep the pointer off the test window so the system does not turn the press into its own caption message.
       input.symbols.SetCursorPos(10, 10);
       input.symbols.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0n);
       held = true;
       // The synthesized press reaches the asynchronous key state a moment later.
-      const deadline = Date.now() + 2000;
-      while (
-        !(user.symbols.GetAsyncKeyState(0x01) & 0x8000) &&
-        Date.now() < deadline
-      ) {
-        Bun.sleepSync(10);
-      }
+      await waitFor(() => !!(user.symbols.GetAsyncKeyState(0x01) & 0x8000), {
+        deadline: "inProcess",
+        what: "the synthesized left button to appear in the key state",
+      });
     };
     const release = () => {
       if (held) {
@@ -185,7 +183,7 @@ test.skipIf(process.platform !== "win32")(
       rejects(() => native.startResizeDragging(hwnd, "east"), "not pressed");
       expect(takePosted(hwnd)).toBeNull();
 
-      press();
+      await press();
       const cursor = monitorServices.cursor();
       const expectedPoint = screenPointParam(cursor.x, cursor.y);
       native.startDragging(hwnd);
