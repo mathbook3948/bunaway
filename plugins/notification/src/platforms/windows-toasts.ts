@@ -29,6 +29,7 @@ const HISTORY2_IID = "3bc3d253-2f31-4092-9129-8ad5abf067da";
 const TOAST2_IID = "9dfb9fd1-143a-490e-90bf-b9fba7132de7";
 const XML_IO_IID = "6cd0e74e-ee65-4489-9ebf-ca43e87ba637";
 const PROPERTY_VALUE_STATICS_IID = "629bdbc8-d932-4ff4-96b9-8d96c5c1e858";
+const REFERENCE_DATE_TIME_IID = "5541d8a7-497c-5aa4-86fc-7713adbf2a2c";
 // IToastNotification: put_ExpirationTime(7). IPropertyValueStatics: CreateDateTime(21).
 const PUT_EXPIRATION_TIME_SLOT = 7;
 const CREATE_DATE_TIME_SLOT = 21;
@@ -283,17 +284,23 @@ export function createWindowsToastDriver(appId: string): ToastDriver {
         "PropertyValue.CreateDateTime",
       );
       try {
-        checkToast(
-          runtime.method(
-            toast,
-            PUT_EXPIRATION_TIME_SLOT,
-            [
-              "ptr",
-            ],
-            boxed,
-          ),
-          "ToastNotification.ExpirationTime",
-        );
+        // CreateDateTime returns IInspectable; the setter takes the IReference<DateTime> interface.
+        const reference = runtime.query(boxed, REFERENCE_DATE_TIME_IID);
+        try {
+          checkToast(
+            runtime.method(
+              toast,
+              PUT_EXPIRATION_TIME_SLOT,
+              [
+                "ptr",
+              ],
+              reference,
+            ),
+            "ToastNotification.ExpirationTime",
+          );
+        } finally {
+          runtime.release(reference);
+        }
       } finally {
         runtime.release(boxed);
       }

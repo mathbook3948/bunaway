@@ -544,9 +544,14 @@ if (workerData?.toastMarshalWorker) {
     );
     controller.show({
       ...expiring,
+      title: "unexpiring fixture",
       expiresAfterSeconds: null,
     });
-    await waitHistory((items) => items.length === 1);
+    // The new title proves the stored toast is the replacement before its ExpirationTime is read.
+    await waitHistory(
+      (items) =>
+        items.length === 1 && Boolean(items[0]?.includes("unexpiring fixture")),
+    );
     assert.deepEqual(await history(15000, true), [
       "",
     ]);

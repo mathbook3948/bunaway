@@ -15,6 +15,8 @@ const objects = new Map<
   }
 >();
 const strings = new Map<number, string>();
+// 5541d8a7-497c-5aa4-86fc-7713adbf2a2c (IReference<DateTime>) in COM GUID byte order.
+const REFERENCE_DATE_TIME_HEX = "a7d841557c49a45a86fc7713adbf2a2c";
 let stringId = 10000,
   initialized = 0,
   uninitialized = 0,
@@ -202,6 +204,14 @@ const unknownMethods: ComHandler = (call) => {
     const kind = interfaceKinds.get(iid);
     return kind ? outputObject(call, 1, kind) : -2147467262;
   }
+  if (state.kind === "dateTimeBox") {
+    // The setter needs IReference<DateTime>, so the boxed IInspectable must be queried for exactly that interface.
+    const iid = Buffer.from(
+      ffi.toArrayBuffer(Number(args[0]) as ffi.Pointer, 0, 16),
+    ).toString("hex");
+    assert.equal(iid, REFERENCE_DATE_TIME_HEX);
+    return outputObject(call, 1, "referenceDateTime");
+  }
   if (state.kind === "listed") {
     const address = makeObject("listedProperties");
     listedIndex.set(address, listedIndex.get(object) ?? -1);
@@ -230,7 +240,7 @@ const factoryMethods: ComHandler = (call) => {
   // IPropertyValueStatics.CreateDateTime(21) boxes the expiration ticks passed by value.
   if (stage === "factory:21") {
     boxedTicks = BigInt(args[0] ?? 0);
-    return outputObject(call, 1, "boxed");
+    return outputObject(call, 1, "dateTimeBox");
   }
   if (stage === "xml:6") {
     payloads.push(strings.get(Number(args[0])) ?? "");
@@ -286,7 +296,7 @@ const actionMethods: ComHandler = ({ state, slot, stage, args }) => {
   }
   // IToastNotification.put_ExpirationTime(7) receives the boxed DateTime.
   if (stage === "toast:7") {
-    assert.equal(objects.get(Number(args[0]))?.kind, "boxed");
+    assert.equal(objects.get(Number(args[0]))?.kind, "referenceDateTime");
     expirationSet++;
     return 0;
   }

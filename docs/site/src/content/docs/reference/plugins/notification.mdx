@@ -239,7 +239,7 @@ Windows 소리 설정이나 집중 지원이 소리를 막을 수 있습니다.
 때까지 남게 합니다. 이 시나리오는 버튼이 있어야 하므로 `actions`나 `reply`가 없으면 시스템 닫기
 버튼을 자동으로 넣고, 있으면 그 버튼을 그대로 씁니다. 자동으로 넣는 닫기 버튼은 `actions`의 5개
 한도에 포함되지 않습니다. `suppressPopup: true`이면 popup이 없으므로 `timeoutType`은 효과가
-없고 오류도 아닙니다. 사용자가 popup을 닫아도 알림 센터의 항목은 남습니다.
+없고 오류도 아닙니다.
 
 `expiresAfterSeconds`는 Electron과 Tauri에 없는 확장으로 `ToastNotification.ExpirationTime`을
 현재 시각에 지정한 초를 더한 값으로 설정합니다. 알림 센터는 그 시각이 지나면 항목을 제거합니다.

@@ -67,7 +67,7 @@ recall 속성을 거부한다. 링크는 따라가고 링크 대상은 이 검�
 하므로 `actions`와 `reply`가 없으면 `<action content="" arguments="dismiss" activationType="system"/>`
 닫기 버튼을 넣고, 있으면 그 버튼을 쓴다. `suppressPopup`이면 효과가 없다.
 `expiresAfterSeconds`(1~604800의 정수 또는 null)는 `IToastNotification.put_ExpirationTime`(slot 7)에
-`PropertyValue.CreateDateTime`(IPropertyValueStatics slot 21)로 만든 `IReference<DateTime>`을 넘겨
+`PropertyValue.CreateDateTime`(IPropertyValueStatics slot 21)로 만든 값을 `IReference<DateTime>`으로 QueryInterface해 넘겨
 알림 센터에서 그 시간 뒤에 항목을 제거한다. DateTime은 1601-01-01 UTC 기준 100 ns tick이다. DateTime 값과
 팩토리 참조는 호출 직후 해제한다. Windows CI는 시나리오 XML과 보관된 알림의 `ExpirationTime`을
 확인하며, 실제 popup 유지와 만료 시점의 제거는 확인하지 않았다.
