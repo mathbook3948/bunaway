@@ -267,6 +267,83 @@ export const resolveProxyResultSchema = z.strictObject({
     .min(1)
     .max(MAX_PROXY_ENTRIES),
 });
+/** Largest body one download writes. */
+export const MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024 * 1024;
+/** Whole-download deadline: the default, and the longest a caller may ask for. */
+export const DEFAULT_DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
+export const MAX_DOWNLOAD_TIMEOUT_MS = 60 * 60_000;
+/** Longest time without progress before a download fails with a timeout. It starts with the call and restarts at the response headers and at every body or copy chunk, so the target check, the connection and the wait for headers share one limit. */
+export const DEFAULT_DOWNLOAD_IDLE_TIMEOUT_MS = 30_000;
+export const MAX_DOWNLOAD_IDLE_TIMEOUT_MS = 5 * 60_000;
+/** Downloads in flight at once, counted apart from the 16 bounded requests. */
+export const MAX_ACTIVE_DOWNLOADS = 4;
+export const MAX_DOWNLOAD_PATH_LENGTH = 4096;
+/** Lower case, because file names differ only in case on NTFS and APFS and the id names the temporary file. */
+const downloadId = z
+  .uuid()
+  .refine(
+    (value) => value === value.toLowerCase(),
+    "Expected a lower case UUID.",
+  );
+/**
+ * `network.download` input. The app checks `path` against its own rules before the call; the plugin
+ * only requires an absolute path whose parent folder exists. `downloadId` is chosen by the caller
+ * so `network.downloadStatus` and `network.cancelDownload` can name the transfer while it runs.
+ */
+export const downloadInputSchema = z.strictObject({
+  downloadId,
+  url: urlFor([
+    "http:",
+    "https:",
+  ]),
+  path: z.string().min(1).max(MAX_DOWNLOAD_PATH_LENGTH),
+  headers: requestHeaders
+    .refine(
+      (values) =>
+        values.every(
+          ([name]) =>
+            ![
+              "range",
+              "if-range",
+            ].includes(name.toLowerCase()),
+        ),
+      "A partial body cannot be saved as a whole file.",
+    )
+    .default([]),
+  maxBytes: z.number().int().min(1).max(MAX_DOWNLOAD_BYTES),
+  timeoutMs: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_DOWNLOAD_TIMEOUT_MS)
+    .default(DEFAULT_DOWNLOAD_TIMEOUT_MS),
+  idleTimeoutMs: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_DOWNLOAD_IDLE_TIMEOUT_MS)
+    .default(DEFAULT_DOWNLOAD_IDLE_TIMEOUT_MS),
+  overwrite: z.boolean().default(false),
+});
+/**
+ * A 200 body is written to `path` and `saved` is true. Any other status, redirects included, is
+ * returned like `network.request` does and creates no file.
+ */
+export const downloadResultSchema = z.strictObject({
+  status: z.number().int().min(100).max(599),
+  headers,
+  saved: z.boolean(),
+  bytesWritten: z.number().int().min(0).max(MAX_DOWNLOAD_BYTES),
+});
+export const downloadIdInputSchema = z.strictObject({
+  downloadId,
+});
+/** Progress of a running download; `totalBytes` is null when the response has no length. */
+export const downloadStatusSchema = z.strictObject({
+  receivedBytes: z.number().int().min(0).max(MAX_DOWNLOAD_BYTES),
+  totalBytes: z.number().int().min(0).max(MAX_DOWNLOAD_BYTES).nullable(),
+});
+export const emptyResultSchema = z.strictObject({});
 /** `network.isOnline` result: whether a non-loopback network connection exists. */
 export const onlineSchema = z.boolean();
 /** Native events use the protocol's portable schema representation. */

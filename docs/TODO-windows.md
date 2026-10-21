@@ -913,7 +913,9 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   선택 `network.request`는 제한된 header와 base64 body를 제공하고 redirect를 따라가지 않는다.
   proxy는 Bun의 신뢰된 실행 환경 설정만 사용하며 OS 인증과 WebView cookie 공유는 제공하지 않는다.
 - [ ] HTTP stream, timeout, 취소와 progress를 제공한다. [#81](https://github.com/mathbook3948/bunaway/issues/81).
-  `network.request`의 제한된 응답, timeout과 호출 취소는 구현했다. 공개 stream과 progress는 남아 있다.
+  `network.request`의 제한된 응답, timeout과 호출 취소에 더해 `network.download`가 응답 본문을 앱이 검사한
+  파일로 저장하고 `network.downloadStatus`로 진행률을, `network.cancelDownload`로 취소를 제공한다.
+  요청 본문 stream과 화면에 직접 전달하는 응답 stream은 남아 있다.
 - [ ] WebSocket 연결, 메시지, close, 상태와 backpressure를 공개 계약으로 제공한다. [#81](https://github.com/mathbook3948/bunaway/issues/81).
   `network.exchange`는 호출 하나에 종속된 제한된 text 송신과 text/binary 수신, close와 send buffer
   상한을 제공한다. 장기 연결 handle, 독립 send/receive와 상태 이벤트의 세션 소유권은 남아 있다.

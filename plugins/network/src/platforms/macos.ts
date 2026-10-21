@@ -3,6 +3,9 @@ import { BunawayError } from "@bunaway/protocol";
 export {
   dispose,
   initialize,
+  runCancelDownload,
+  runDownload,
+  runDownloadStatus,
   runExchange,
   runIsOnline,
   runRequest,
