@@ -49,10 +49,10 @@ function fail(
   });
 }
 
-/** A line break or tab is ordinary text; every other control character is rejected. */
+/** A line break or tab is ordinary text; every other control character (C0, DEL, C1) is rejected. */
 function hasControlCharacter(text: string): boolean {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: this is the check itself.
-  return /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(text);
+  return /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(text);
 }
 
 /** Stop reading a body that is not needed. */
@@ -242,6 +242,14 @@ function exposedDownloadUrl(value: unknown, development: boolean): string {
       "Update download URL must be https without credentials.",
     );
   }
+  // Normalization can lengthen the address (percent-encoding), so the limit applies to what is returned.
+  if (parsed.href.length > MAX_URL_LENGTH) {
+    throw fail(
+      "INTERNAL",
+      "invalidManifest",
+      "Update download URL is missing or too long.",
+    );
+  }
   return parsed.href;
 }
 
@@ -264,16 +272,41 @@ function exposedNotes(value: unknown): string | null {
 }
 
 const RFC3339 =
-  /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$/;
+  /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:[Zz]|[+-](\d{2}):(\d{2}))$/;
+
+/** Whether the calendar date exists, since `Date` would roll 02-31 over to March. */
+function isCalendarDate(year: number, month: number, day: number): boolean {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+/** Range-check every field: `Date` accepts 24:00 and rolls a nonexistent day over. */
+function isValidTimestamp(match: RegExpExecArray): boolean {
+  const field = (index: number) => Number(match[index] ?? 0);
+  return (
+    isCalendarDate(field(1), field(2), field(3)) &&
+    field(4) <= 23 &&
+    field(5) <= 59 &&
+    field(6) <= 59 &&
+    field(7) <= 23 &&
+    field(8) <= 59
+  );
+}
 
 function exposedDate(value: unknown): string | null {
   if (value === undefined || value === null) {
     return null;
   }
+  const match =
+    typeof value === "string" && value.length <= MAX_DATE_LENGTH
+      ? RFC3339.exec(value)
+      : null;
   const parsed =
-    typeof value === "string" &&
-    value.length <= MAX_DATE_LENGTH &&
-    RFC3339.test(value)
+    typeof value === "string" && match && isValidTimestamp(match)
       ? new Date(value)
       : undefined;
   if (!parsed || Number.isNaN(parsed.getTime())) {

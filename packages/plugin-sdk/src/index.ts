@@ -64,7 +64,7 @@ export type NativeEnvironment = {
     version?: string | null;
     /**
      * Validated `bunaway.json` `plugins` clauses keyed by plugin name. The host checks only their
-     * shape (JSON object, size limit, installed plugin name); each plugin validates its own clause.
+     * shape (JSON object, size limit; the CLI also rejects names of plugins that are not installed); each plugin validates its own clause.
      */
     pluginSettings?: Readonly<Record<string, JsonValue>>;
     /** Validated desktop tray permits hidden startup; absence does not grant support. */

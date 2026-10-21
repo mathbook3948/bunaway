@@ -23,6 +23,9 @@ export const MAX_VERSION_LENGTH = 256;
 export const MAX_DATE_LENGTH = 64;
 /** Channel names are short lower-case words so they stay a single URL path or query value. */
 export const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
+export const MAX_CHANNEL_LENGTH = 32;
+/** Longest target or architecture word (`windows`, `darwin`, `x86_64`, `aarch64`) with headroom. */
+export const MAX_TARGET_LENGTH = 8;
 export const DEFAULT_CHANNEL = "stable";
 
 /** The `plugins.updater` clause of bunaway.json. The app fixes it; callers cannot choose an endpoint. */

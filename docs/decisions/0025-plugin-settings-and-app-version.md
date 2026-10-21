@@ -22,8 +22,9 @@ status: accepted
    ```json
    { "plugins": { "updater": { "endpoint": "https://example.com/{{target}}/{{arch}}/{{current_version}}" } } }
    ```
-3. 검증은 두 단계다. 코어(CLI 빌드와 호스트 시작)는 모양만 검사한다: 객체의 객체, 설치되지 않은 플러그인 이름 거부,
-   직렬화한 JSON 합계 `PLUGIN_SETTINGS_MAX_BYTES`(16 KiB) 이하. 내용은 해당 플러그인이 어댑터를 만들 때
+3. 검증은 두 단계다. 코어는 모양만 검사한다: 객체의 객체, 직렬화한 JSON 합계 `PLUGIN_SETTINGS_MAX_BYTES`(16 KiB) 이하.
+   설치되지 않은 플러그인 이름 거부는 설치 목록을 아는 CLI 빌드만 한다(호스트가 읽는 manifest에는 설치 목록이 없고,
+   설치되지 않은 이름의 절은 어떤 어댑터도 읽지 않는다). 내용은 해당 플러그인이 어댑터를 만들 때
    검증하며 잘못되면 어댑터 생성이 실패한다. 코어는 플러그인 설정의 의미를 알지 못하므로 플러그인이 늘어도
    코어가 커지지 않는다. 검사 함수는 `@bunaway/runtime-bun/app-metadata`의 `parsePluginSettings` 하나를 CLI와 호스트가 같이 쓴다.
 4. 호스트는 검증한 절을 `NativeEnvironment.app.pluginSettings`(플러그인 이름을 키로 하는 읽기 전용 객체)로 전달한다.

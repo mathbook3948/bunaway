@@ -70,7 +70,7 @@ test("plugin settings are limited to a total serialized size", () => {
   ).toThrow("at most");
 });
 
-test("bunaway.json accepts a plugins section and hands it to the host manifest", async () => {
+test("bunaway.json accepts a plugins section and runtimeSettings forwards it as app.pluginSettings", async () => {
   const root = await mkdtemp(resolve(tmpdir(), "bunaway-plugin-settings-"));
   try {
     await mkdir(resolve(root, "src-bunaway"));

@@ -310,6 +310,10 @@ test("invalid settings fail when the adapter is created", () => {
     {
       endpoint: "updates.example.com/path",
     },
+    {
+      // Longest values would push the address past the length limit at check time.
+      endpoint: `https://updates.example.com/${"{{current_version}}".repeat(20)}`,
+    },
   ]) {
     expect(() =>
       createUpdater("windows", "x64", environment(settings)),
@@ -398,7 +402,7 @@ test("a redirect to another https host is allowed", async () => {
   expect(requests.at(-1)).toBe("https://cdn.example.net/m.json");
 });
 
-test("the manifest body is limited after decompression", async () => {
+test("the manifest body is limited by streamed size", async () => {
   const padded = (size: number) =>
     JSON.stringify({
       version: "1.0.0",
@@ -428,6 +432,83 @@ test("the manifest body is limited after decompression", async () => {
   expect(error.details).toEqual({
     reason: "tooLarge",
   });
+});
+
+/** A real loopback server, which a development launch may use over http. */
+function localUpdater(
+  handler: (request: Request) => Response,
+  timeoutMs?: number,
+) {
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: handler,
+  });
+  const instance = createUpdater(
+    "windows",
+    "x64",
+    environment(
+      {
+        endpoint: `http://127.0.0.1:${server.port}/{{target}}`,
+      },
+      "1.0.0",
+      "development",
+    ),
+    timeoutMs === undefined
+      ? {}
+      : {
+          timeoutMs,
+        },
+  );
+  return {
+    instance,
+    stop: () => server.stop(true),
+  };
+}
+
+test("the limit applies to the body after it is decompressed", async () => {
+  const body = JSON.stringify({
+    version: "1.0.0",
+    pad: "x".repeat(MAX_MANIFEST_BYTES * 4),
+  });
+  const compressed = Bun.gzipSync(body);
+  // The compressed form is far below the limit; only the decompressed size exceeds it.
+  expect(compressed.byteLength).toBeLessThan(MAX_MANIFEST_BYTES);
+  const { instance, stop } = localUpdater(
+    () =>
+      new Response(compressed, {
+        headers: {
+          "content-encoding": "gzip",
+          "content-type": "application/json",
+        },
+      }),
+  );
+  try {
+    expect((await failure(instance.check())).details).toEqual({
+      reason: "tooLarge",
+    });
+  } finally {
+    await stop();
+  }
+});
+
+test("a server that stalls while sending the body times out", async () => {
+  const { instance, stop } = localUpdater(
+    () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"version":'));
+          },
+        }),
+      ),
+    200,
+  );
+  try {
+    expect((await failure(instance.check())).code).toBe("TIMEOUT");
+  } finally {
+    await stop();
+  }
 });
 
 test("a stalled server times out and a cancelled call is CANCELLED", async () => {
@@ -556,6 +637,59 @@ test("malformed manifests are INTERNAL with a reason and never echo the response
         }),
       "invalidManifest",
     ],
+    ...[
+      "2024-02-31T00:00:00Z",
+      "2023-02-29T00:00:00Z",
+      "2024-13-01T00:00:00Z",
+      "2024-01-01T24:00:00Z",
+      "2024-01-01T00:60:00Z",
+      "2024-01-01T00:00:60Z",
+      "2024-01-01T00:00:00+24:00",
+    ].map(
+      (
+        pub_date,
+      ): [
+        Handler,
+        string,
+      ] => [
+        () =>
+          json({
+            version: "2.0.0",
+            url: "https://example.com/a",
+            pub_date,
+          }),
+        "invalidManifest",
+      ],
+    ),
+    [
+      // Percent-encoding lengthens the address past the limit that the raw text met.
+      () =>
+        json({
+          version: "2.0.0",
+          url: `https://example.com/${"é".repeat(2000)}`,
+        }),
+      "invalidManifest",
+    ],
+    ...[
+      "a\u009bb",
+      "a\u0085b",
+      "a\u007fb",
+    ].map(
+      (
+        notes,
+      ): [
+        Handler,
+        string,
+      ] => [
+        () =>
+          json({
+            version: "2.0.0",
+            url: "https://example.com/a",
+            notes,
+          }),
+        "invalidManifest",
+      ],
+    ),
   ];
   for (const [handler, reason] of cases) {
     const error = await failure(updater(handler).instance.check());
@@ -565,6 +699,32 @@ test("malformed manifests are INTERNAL with a reason and never echo the response
     });
     expect(error.message).not.toContain("secret-body");
     expect(error.message).not.toContain("updates.example.com");
+  }
+});
+
+test("existing dates and offsets are normalized to UTC", async () => {
+  for (const [pub_date, expected] of [
+    [
+      "2024-02-29T23:30:00-02:00",
+      "2024-03-01T01:30:00.000Z",
+    ],
+    [
+      "2024-12-31T23:59:59.5Z",
+      "2024-12-31T23:59:59.500Z",
+    ],
+    [
+      "2024-01-01t00:00:00z",
+      "2024-01-01T00:00:00.000Z",
+    ],
+  ] as const) {
+    const { instance } = updater(() =>
+      json({
+        version: "2.0.0",
+        url: "https://example.com/a",
+        pub_date,
+      }),
+    );
+    expect((await instance.check()).publishedAt).toBe(expected);
   }
 });
 
@@ -610,7 +770,7 @@ test("error statuses and connection failures are classified without the URL", as
   expect(network.message).not.toContain("ECONNREFUSED");
 });
 
-test("the registered plugin exposes one permission-gated operation and reads the host environment", async () => {
+test("the registered plugin exposes one operation with a null input and reads the host environment", async () => {
   const registry = new NativeRegistry([
     updaterPlugin._definition,
   ]);
@@ -619,19 +779,26 @@ test("the registered plugin exposes one permission-gated operation and reads the
   ]).toEqual([
     "updater.check",
   ]);
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(null, {
+        status: 204,
+      }),
+  });
   const adapter = updaterPlugin._definition.nativePlatforms.windows?.create(
-    environment({
-      endpoint: ENDPOINT,
-    }),
+    environment(
+      {
+        endpoint: `http://127.0.0.1:${server.port}/`,
+      },
+      "1.0.0",
+      "development",
+    ),
   );
   if (!adapter) {
     throw new Error("Missing Windows adapter.");
   }
-  const original = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(null, {
-      status: 204,
-    })) as unknown as typeof fetch;
   try {
     expect(await adapter.execute("updater.check", null, "backend")).toEqual({
       updateAvailable: false,
@@ -641,6 +808,7 @@ test("the registered plugin exposes one permission-gated operation and reads the
       publishedAt: null,
       downloadUrl: null,
     });
+    // The caller cannot pick an address: any input other than null is refused.
     await expect(
       adapter.execute(
         "updater.check",
@@ -651,7 +819,7 @@ test("the registered plugin exposes one permission-gated operation and reads the
       ),
     ).rejects.toThrow();
   } finally {
-    globalThis.fetch = original;
     await adapter.dispose();
+    await server.stop(true);
   }
 });
