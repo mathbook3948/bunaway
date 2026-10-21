@@ -6,6 +6,7 @@ import {
   pick,
   wide,
   win32CallError,
+  withBuffer,
 } from "@bunaway/plugin/win32";
 import { safeStorageLimits } from "#safe-storage/contract";
 
@@ -25,15 +26,16 @@ const MAX_APP_ID_BYTES = 1024;
 const ERROR_ACCESS_DENIED = 5;
 const ERROR_BUSY = 170;
 const ERROR_NOT_FOUND = 1168;
-const ERROR_NO_SUCH_LOGON_SESSION = 1312;
 const ERROR_SERVICE_NOT_ACTIVE = 1062;
 const RPC_S_SERVER_UNAVAILABLE = 1722;
 const RPC_S_SERVER_TOO_BUSY = 1723;
-/** Errors where the same call can succeed later; every other error stays permanent. */
+/**
+ * Errors where the same call can succeed later; every other error stays permanent. That includes
+ * ERROR_NO_SUCH_LOGON_SESSION, which means this logon session has no credential set at all.
+ */
 const TRANSIENT_CREDENTIAL_ERRORS: ReadonlySet<number> = new Set([
   ERROR_BUSY,
   ERROR_SERVICE_NOT_ACTIVE,
-  ERROR_NO_SUCH_LOGON_SESSION,
   RPC_S_SERVER_UNAVAILABLE,
   RPC_S_SERVER_TOO_BUSY,
 ]);
@@ -150,13 +152,20 @@ export class WindowsCredentialStore {
         });
       }
       credential.writeUInt32LE(CRED_TYPE_GENERIC, TYPE_OFFSET);
-      credential.writeBigUInt64LE(BigInt(ptr(target)), TARGET_NAME_OFFSET);
       credential.writeUInt32LE(blob.length, BLOB_SIZE_OFFSET);
       credential.writeBigUInt64LE(BigInt(ptr(blob)), BLOB_POINTER_OFFSET);
       credential.writeUInt32LE(CRED_PERSIST_LOCAL_MACHINE, PERSIST_OFFSET);
       // CredWriteW replaces the same target, so repeating it after a lost error is safe.
       const failure = win32CallError(
-        () => this.api.advapi.symbols.CredWriteW(ptr(credential), 0),
+        () =>
+          // The target buffer stays referenced until the synchronous call returns.
+          withBuffer(target, (targetAddress) => {
+            credential.writeBigUInt64LE(
+              BigInt(targetAddress),
+              TARGET_NAME_OFFSET,
+            );
+            return this.api.advapi.symbols.CredWriteW(ptr(credential), 0);
+          }),
         this.lastError,
       );
       if (failure) {

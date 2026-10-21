@@ -38,22 +38,23 @@ const LONE_SURROGATE =
   /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 
 /**
- * Secret keys are ASCII and exclude ":" so the plugin-owned target name `prefix:appId:key`
- * has exactly one reading; the key is the part after the last colon.
+ * Secret keys are lowercase ASCII because Credential Manager compares target names without
+ * regard to case, so "Token" and "token" would be one entry. They exclude ":" so the
+ * plugin-owned target name `prefix:appId:key` has exactly one reading; the key is the part
+ * after the last colon.
  */
 export const secretKeySchema = z
   .string()
   .min(1)
   .max(MAX_SECRET_KEY_CHARACTERS)
-  .regex(/^[A-Za-z0-9._-]+$/);
+  .regex(/^[a-z0-9._-]+$/);
 export const secretValueSchema = z
   .string()
   .min(1)
   .max(MAX_SECRET_CHARACTERS)
   .refine(
-    (value) =>
-      value.length <= MAX_SECRET_CHARACTERS && !LONE_SURROGATE.test(value),
-    "Secret must be well-formed UTF-16 within the credential size limit.",
+    (value) => !LONE_SURROGATE.test(value),
+    "Secret must be well-formed UTF-16.",
   );
 export const secretKeyInputSchema = z.strictObject({
   key: secretKeySchema,

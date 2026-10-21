@@ -65,9 +65,9 @@ exact head; successful static bundling does not prove native execution.
 `setSecret`, `getSecret` and `deleteSecret` keep a user secret in Windows Credential Manager
 (`CredWriteW`, `CredReadW`, `CredDeleteW`) as a `CRED_TYPE_GENERIC` entry with
 `CRED_PERSIST_LOCAL_MACHINE`. The plugin builds the target `bunaway.safe-storage:<app.id>:<key>`;
-keys are 1 to 128 characters of `A-Za-z0-9._-`, so the last colon separates app id from key.
+keys are 1 to 128 characters of `a-z0-9._-` (lowercase, because target names are case-insensitive), so the last colon separates app id from key.
 Values are non-empty UTF-16LE text up to `CRED_MAX_CREDENTIAL_BLOB_SIZE` (2,560 bytes). A missing key
-reads as `null` and deletes as `false`. The native blob and every copy are zeroed and released with
-`CredFree`. The namespace is not an OS principal: other processes of the same user can read the entry.
+reads as `null` and deletes as `false`. The implementation zeroes the native blob and every copy and releases it with
+`CredFree`; no test checks that cleanup. The namespace is not an OS principal: other processes of the same user can read the entry.
 Without a host `app.id` these operations fail with `INVALID_ARGUMENT`. macOS does not offer them.
 `tests/lifecycle/windows-safe-storage.test.ts` exercises the real store on Windows CI.

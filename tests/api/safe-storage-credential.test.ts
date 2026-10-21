@@ -3,7 +3,10 @@ import { WIN32_ERROR_UNKNOWN } from "@bunaway/plugin/win32";
 import safeStorage from "@bunaway/plugin-safe-storage";
 import macosSafeStorage from "@bunaway/plugin-safe-storage/native/macos";
 import { NativeRegistry } from "@bunaway/protocol";
-import { safeStorageLimits } from "../../plugins/safe-storage/src/contract.ts";
+import {
+  safeStorageLimits,
+  secretKeySchema,
+} from "../../plugins/safe-storage/src/contract.ts";
 import {
   safeStorageOperations,
   windowsSafeStorageOperations,
@@ -28,31 +31,37 @@ test("credential operations exist on Windows only and each needs its own grant",
   const registry = new NativeRegistry([
     safeStorage._definition,
   ]);
-  for (const name of [
+  const credentialOperations = [
     "safe-storage.setSecret",
     "safe-storage.getSecret",
     "safe-storage.deleteSecret",
-  ]) {
+  ];
+  for (const name of credentialOperations) {
     expect(registry.operations.has(name)).toBe(true);
-    expect(
-      registry.allowed(
-        {
-          permissions: [
-            "safe-storage.encryptString",
-          ],
-        },
-        {
-          operation: name,
-          payload: null,
-        },
-      ),
-    ).toBe(false);
+    for (const allowed of [
+      "safe-storage.encryptString",
+      ...credentialOperations,
+    ]) {
+      expect(
+        registry.allowed(
+          {
+            permissions: [
+              allowed,
+            ],
+          },
+          {
+            operation: name,
+            payload: null,
+          },
+        ),
+      ).toBe(name === allowed);
+    }
   }
 });
 
 test("secret keys and values are bounded before reaching the native adapter", async () => {
   const valid = {
-    key: "a.B_c-1",
+    key: "a.b_c-1",
     value: "토큰🙂",
   };
   expect(
@@ -79,6 +88,10 @@ test("secret keys and values are bounded before reaching the native adapter", as
   for (const payload of [
     {
       key: "",
+      value: "v",
+    },
+    {
+      key: "Token",
       value: "v",
     },
     {
@@ -144,10 +157,12 @@ test("target names are namespaced by app id and unambiguous", () => {
   expect(credentialTargetName("com.example.app", "token")).toBe(
     "bunaway.safe-storage:com.example.app:token",
   );
-  // Keys cannot contain ":", so an app id with a colon cannot collide with another app's key.
-  expect(credentialTargetName("a:b", "c")).not.toBe(
-    credentialTargetName("a", "b-c"),
-  );
+  // A key cannot contain ":" (checked in the contract test), so the last colon splits the name
+  // and an app id with a colon cannot collide with another app's key.
+  expect(credentialTargetName("a:b", "c")).toBe("bunaway.safe-storage:a:b:c");
+  expect(secretKeySchema.safeParse("b:c").success).toBe(false);
+  // Credential Manager ignores case, so keys differing only by case are rejected up front.
+  expect(secretKeySchema.safeParse("Token").success).toBe(false);
   expect(
     credentialTargetName("a", "c").startsWith("bunaway.safe-storage:"),
   ).toBe(true);
@@ -186,7 +201,6 @@ test("credential failures are classified without echoing key or value", () => {
   for (const code of [
     170,
     1062,
-    1312,
     1722,
     1723,
   ]) {
@@ -196,6 +210,7 @@ test("credential failures are classified without echoing key or value", () => {
   for (const code of [
     87,
     1168,
+    1312,
     WIN32_ERROR_UNKNOWN,
   ]) {
     expect(credentialFailure(code).code).toBe("INTERNAL");
