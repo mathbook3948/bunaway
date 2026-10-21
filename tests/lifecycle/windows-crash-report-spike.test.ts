@@ -91,6 +91,13 @@ async function text(command: string[]): Promise<string> {
 
 test.skipIf(process.platform !== "win32")("spike crash modes", async () => {
   console.log(
+    `SPIKE start ${await text([
+      "sc",
+      "start",
+      "WerSvc",
+    ])}`,
+  );
+  console.log(
     `SPIKE wersvc ${await text([
       "sc",
       "query",
@@ -116,7 +123,7 @@ test.skipIf(process.platform !== "win32")("spike crash modes", async () => {
   const child = resolve(import.meta.dir, "../fixtures/crash-report-child.ts");
   for (const mode of [
     "failfast",
-    "rtl-failfast",
+    "int29",
     "access-violation",
   ]) {
     const root = join(
