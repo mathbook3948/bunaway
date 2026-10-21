@@ -142,7 +142,7 @@ test.skipIf(process.platform !== "win32")("spike crash modes", async () => {
       new Response(process_.stderr).text(),
       process_.exited,
     ]);
-    await Bun.sleep(20_000);
+    await Bun.sleep(25_000);
     const folder = join(root, "crash-dumps");
     console.log(
       `SPIKE ${mode}: exit 0x${(code >>> 0).toString(16)} stdout ${JSON.stringify(out.slice(0, 200))} stderr ${JSON.stringify(err.slice(0, 600))} files ${JSON.stringify(existsSync(folder) ? readdirSync(folder) : "no folder")}`,
