@@ -68,8 +68,10 @@ export class WindowTaskbar {
     readonly NativeThumbnailButton[]
   >(
     (window, buttons) => this.applyThumbnailToolbar(window, buttons),
-    // The icon providers are functions, which structuredClone rejects; the list is never mutated.
-    (buttons) => buttons,
+    // The icon providers are functions, which structuredClone rejects; a shallow copy isolates the saved list.
+    (buttons) => [
+      ...buttons,
+    ],
   );
   /** The message Explorer posts to each window when it (re)creates the taskbar button. */
   readonly buttonCreatedMessage = withWide("TaskbarButtonCreated", (name) =>

@@ -1486,7 +1486,7 @@ client.listen("windows.thumbnailToolbarClicked", ({ payload }) => {
 호스트가 만든 아이콘은 다음 설정이나 창 파괴 때 해제하며, 아이콘 크기는 설정하거나 다시 적용하는 시점의 DPI로 정합니다.
 
 CI는 실제 `ITaskbarList3`에 개수를 바꿔 가며 연속 호출해도 오류가 없는 것, 입력 검증과 오류 코드, 잘못된 ICO를 거절해도 기존 버튼이 유지되는 것, 최상위 HWND에 합성한 `WM_COMMAND`가 등록한 버튼 id로만 바뀌는 것을 확인합니다. 호스트가 추가와 갱신 중 어느 호출을 고르는지와 아이콘 핸들 해제는 CI에서 관찰하지 않습니다. 사람이 작업 표시줄 썸네일에서 직접 누르는 동작, Explorer를 실제로 재시작한 뒤의 재적용과 썸네일에 그려지는 모양은 자동 검증에 포함되지 않습니다.
-[ITaskbarList3::ThumbBarAddButtons](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-thumbbaraddbuttons)의 요청 처리가 끝나면 성공이며, 실제 표시는 Windows가 결정합니다.
+처음 적용할 때는 [ITaskbarList3::ThumbBarAddButtons](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-thumbbaraddbuttons), 이후는 [ThumbBarUpdateButtons](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-thumbbarupdatebuttons)를 부르며, 요청 처리가 끝나면 성공이고 실제 표시는 Windows가 결정합니다. 버튼을 한 번도 표시한 적 없는 창에 빈 목록을 주면 셸을 호출하지 않고 성공합니다.
 
 ## 오류
 
