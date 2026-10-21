@@ -1,6 +1,7 @@
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
 import {
+  type addRepresentationSchema,
   bytesSchema,
   type cropSchema,
   type exportSchema,
@@ -83,14 +84,41 @@ export class ImagePlatform {
     );
   }
 
-  getInfo(id: string) {
+  getInfo(id: string, scaleFactor?: number) {
     this.active();
-    return this.resources.info(id);
+    const { scaleFactor: chosen, ...info } = this.resources.selectedInfo(
+      id,
+      scaleFactor,
+    );
+    return scaleFactor === undefined
+      ? info
+      : {
+          ...info,
+          scaleFactor: chosen,
+        };
   }
 
-  getPixels(id: string) {
+  addRepresentation(input: z.output<typeof addRepresentationSchema>) {
     this.active();
-    const pixels = this.resources.get(id);
+    return {
+      representations: this.resources.addRepresentation(
+        input.id,
+        input.scaleFactor,
+        input.source,
+      ),
+    };
+  }
+
+  getRepresentations(id: string) {
+    this.active();
+    return {
+      representations: this.resources.representations(id),
+    };
+  }
+
+  getPixels(id: string, scaleFactor?: number) {
+    this.active();
+    const { pixels } = this.resources.select(id, scaleFactor);
     return {
       width: pixels.width,
       height: pixels.height,
@@ -103,7 +131,10 @@ export class ImagePlatform {
     return {
       mime: input.format,
       data: this.codec
-        .encode(this.resources.get(input.id), input.format)
+        .encode(
+          this.resources.select(input.id, input.scaleFactor).pixels,
+          input.format,
+        )
         .toString("base64"),
     };
   }

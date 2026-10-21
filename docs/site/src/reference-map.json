@@ -1743,6 +1743,8 @@
       "image.exportBytes",
       "image.exportDataURL",
       "image.dispose",
+      "image.addRepresentation",
+      "image.getRepresentations",
       "image.crop",
       "image.resize",
       "image.createFileTypeIcon"

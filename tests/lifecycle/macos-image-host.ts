@@ -92,6 +92,12 @@ export default defineApp({ modules: [], plugins: [image, windows, {
       const solid = await image.createRGBA({ width: 1, height: 1, rgba: "/wAAgA==" });
       const linear = await image.resize({ id: solid.id, width: 2, height: 2 });
       assert.deepEqual({ ...await image.getInfo({ id: linear.id }) }, { width: 2, height: 2, empty: false });
+      await image.addRepresentation({ id: solid.id, scaleFactor: 2, source: linear.id });
+      assert.deepEqual({ ...await image.getInfo({ id: solid.id, scaleFactor: 1.5 }) }, { width: 2, height: 2, empty: false, scaleFactor: 2 });
+      const scaledPng = await image.exportBytes({ id: solid.id, format: "image/png", scaleFactor: 2 });
+      const scaledBack = await image.createBytes(scaledPng);
+      assert.deepEqual({ ...await image.getInfo({ id: scaledBack.id }) }, { width: 2, height: 2, empty: false });
+      await image.dispose({ id: scaledBack.id });
       const opaque = await image.createRGBA({ width: 1, height: 1, rgba: "FVGN/w==" });
       for (const format of ["image/jpeg", "image/bmp"]) {
         const bytes = await image.exportBytes({ id: opaque.id, format });
@@ -128,6 +134,8 @@ export default defineApp({ modules: [], plugins: [image, windows, {
     "exportBytes",
     "exportDataURL",
     "dispose",
+    "addRepresentation",
+    "getRepresentations",
     "crop",
     "resize",
   ];

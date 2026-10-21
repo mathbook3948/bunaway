@@ -17,7 +17,7 @@ try {
 ```
 
 공개 입력, 반환값, 권한과 오류는 [API 레퍼런스](../../docs/site/src/content/docs/reference/plugins/image.mdx)에 둔다.
-파일 경로 읽기와 저장소 scope 추가, scale representation 그룹과 파일 기반 thumbnail은
+파일 경로 읽기와 저장소 scope 추가, 파일 기반 thumbnail은
 제공하지 않는다. 파일 bytes의 확보와 저장은 앱이 기존 저장소 계약에서 수행한다.
 
 `image.createFileTypeIcon`은 확장자와 크기(`small` 16, `normal` 32, `large` 48)만 받아 Windows 셸의

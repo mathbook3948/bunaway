@@ -126,6 +126,8 @@ const operationNames = [
   "exportBytes",
   "exportDataURL",
   "dispose",
+  "addRepresentation",
+  "getRepresentations",
   "crop",
   "resize",
 ].map((name) => `image.${name}`);
