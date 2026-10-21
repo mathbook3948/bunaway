@@ -48,6 +48,12 @@ export type WindowFrame = {
   height: number;
   /** DPI of the window when the frame was measured. */
   dpi: number;
+  /**
+   * The frame is an upper estimate, not a measurement. It raises the minimum so the native check
+   * cannot reject a size, but is left out of the maximum, which an overestimate would push past
+   * the native limit.
+   */
+  estimated?: boolean;
 };
 
 /** Keep a physical outer size inside the window size limits and the work area. */
@@ -56,10 +62,12 @@ function clampSize(
   available: number,
   frame: number,
   dpi: number,
+  estimated: boolean,
 ): number {
   const minimum = Math.ceil((MIN_WINDOW_DIMENSION * dpi) / LOGICAL_DPI) + frame;
   const maximum =
-    Math.floor((MAX_WINDOW_DIMENSION * dpi) / LOGICAL_DPI) + frame;
+    Math.floor((MAX_WINDOW_DIMENSION * dpi) / LOGICAL_DPI) +
+    (estimated ? 0 : frame);
   const limit = Math.max(minimum, Math.min(maximum, available));
   return Math.min(Math.max(Math.round(value), minimum), limit);
 }
@@ -124,12 +132,14 @@ export function fitToMonitors(
     target.workArea.width,
     frame.width,
     frame.dpi ?? target.dpi,
+    frame.estimated === true,
   );
   const height = clampSize(
     saved.height * scale,
     target.workArea.height,
     frame.height,
     frame.dpi ?? target.dpi,
+    frame.estimated === true,
   );
   const area = target.workArea;
   const bounds: Rect = home

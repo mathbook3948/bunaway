@@ -131,8 +131,9 @@ function place(windows: WindowsClient, window: WindowTarget, bounds: Rect) {
 /**
  * The window size limits apply to the content area at the window's current DPI, so measure how
  * much larger the outer rectangle is than the content. A minimized window reports the size of
- * its icon, so its frame cannot be measured and a generous allowance stands in for it: a size
- * slightly above the limit is accepted, one the native check would reject is not sent.
+ * its icon, so its frame cannot be measured and a generous allowance stands in for it. The
+ * allowance raises the minimum, so a size the native check would reject is not sent, and a
+ * small saved size grows to the raised minimum. It is not added to the maximum.
  */
 async function measureFrame(
   windows: WindowsClient,
@@ -151,6 +152,7 @@ async function measureFrame(
       width: allowance,
       height: allowance,
       dpi,
+      estimated: true,
     };
   }
   const outer = await windows.getOuterBounds({

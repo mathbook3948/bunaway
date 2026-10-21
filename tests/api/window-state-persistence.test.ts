@@ -113,6 +113,60 @@ test("a rectangle on a monitor that is gone is centered on the primary work area
   ).toBe(false);
 });
 
+test("an estimated frame raises the minimum but not the maximum", () => {
+  const wide = monitor({
+    id: "1",
+    primary: true,
+    workArea: {
+      x: 0,
+      y: 0,
+      width: 8000,
+      height: 4500,
+    },
+  });
+  const request = {
+    x: 0,
+    y: 0,
+    width: 6000,
+    height: 100,
+    dpi: 96,
+  };
+  const estimate = {
+    width: 64,
+    height: 64,
+    dpi: 96,
+  };
+  // 200 plus the allowance at the minimum, the plain 4096 limit at the maximum.
+  expect(
+    fitToMonitors(
+      request,
+      [
+        wide,
+      ],
+      {
+        ...estimate,
+        estimated: true,
+      },
+    ).bounds,
+  ).toMatchObject({
+    width: 4096,
+    height: 264,
+  });
+  // A measured frame is added to both limits.
+  expect(
+    fitToMonitors(
+      request,
+      [
+        wide,
+      ],
+      estimate,
+    ).bounds,
+  ).toMatchObject({
+    width: 4160,
+    height: 264,
+  });
+});
+
 test("a sliver of the rectangle on screen does not count as visible", () => {
   const sliver = {
     ...saved,
