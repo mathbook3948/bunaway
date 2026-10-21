@@ -1,6 +1,6 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
-import { checkHresult, OLE32, pick, wide } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
+import { checkHresult, OLE32, pick, wide } from "@bunaway/plugin/win32";
 import { guid } from "./guid.ts";
 import type { TaskbarProgress } from "./taskbar-progress.ts";
 import type { PixelRect } from "./window-size.ts";
@@ -14,6 +14,25 @@ const flags = {
   error: 4,
   paused: 8,
 } as const;
+
+// THUMBBUTTON (x64): dwMask u32 @0, iId u32 @4, iBitmap u32 @8, hIcon @16, szTip[260] WCHAR @24, dwFlags u32 @544.
+const THUMB_BUTTON_SIZE = 552;
+const THUMB_BUTTON_ICON_OFFSET = 16;
+const THUMB_BUTTON_TIP_OFFSET = 24;
+const THUMB_BUTTON_FLAGS_OFFSET = 544;
+/** `szTip` holds 260 UTF-16 code units including the terminator. */
+const THUMB_BUTTON_TIP_UNITS = 260;
+const THB_ICON = 0x2;
+const THB_TOOLTIP = 0x4;
+const THB_FLAGS = 0x8;
+
+/** One THUMBBUTTON slot; an absent `icon` leaves the slot with flags only (hidden, unused). */
+export type ThumbnailButtonSlot = {
+  id: number;
+  icon?: bigint;
+  tooltip: string;
+  flags: number;
+};
 
 /** Lazily own ITaskbarList3 and its FFI bindings on the UI STA, without WebView COM cache ownership. */
 export class Taskbar {
@@ -30,6 +49,12 @@ export class Taskbar {
     | undefined;
   private tooltip: ((window: bigint, text: number) => number) | undefined;
   private clip: ((window: bigint, rect: number) => number) | undefined;
+  private addButtons:
+    | ((window: bigint, count: number, buttons: number) => number)
+    | undefined;
+  private updateButtons:
+    | ((window: bigint, count: number, buttons: number) => number)
+    | undefined;
 
   private bind(
     slot: number,
@@ -84,6 +109,18 @@ export class Taskbar {
       this.state = this.bind(10, [
         "u64",
         "u32",
+      ]);
+      // ITaskbarList3 vtable: ThumbBarAddButtons (15) and ThumbBarUpdateButtons (16) precede
+      // ThumbBarSetImageList (17) and SetOverlayIcon.
+      this.addButtons = this.bind(15, [
+        "u64",
+        "u32",
+        "ptr",
+      ]);
+      this.updateButtons = this.bind(16, [
+        "u64",
+        "u32",
+        "ptr",
       ]);
       // ITaskbarList3 vtable: SetThumbnailTooltip follows SetOverlayIcon (18), then SetThumbnailClip.
       this.overlay = this.bind(18, [
@@ -171,6 +208,49 @@ export class Taskbar {
     );
   }
 
+  /**
+   * Show `slots` as the window's thumbnail toolbar. Windows accepts ThumbBarAddButtons once per taskbar
+   * button, so `add` selects it for the first call and ThumbBarUpdateButtons afterwards. The caller keeps
+   * every icon HICON alive while it is shown and destroys it afterwards.
+   */
+  setThumbnailButtons(
+    window: bigint,
+    slots: readonly ThumbnailButtonSlot[],
+    add: boolean,
+  ): void {
+    this.initialize();
+    assert(this.addButtons && this.updateButtons);
+    const native = Buffer.alloc(THUMB_BUTTON_SIZE * slots.length);
+    slots.forEach((slot, index) => {
+      const base = index * THUMB_BUTTON_SIZE;
+      let mask = THB_FLAGS;
+      if (slot.icon) {
+        mask |= THB_ICON | THB_TOOLTIP;
+        native.writeBigUInt64LE(slot.icon, base + THUMB_BUTTON_ICON_OFFSET);
+        const tip = Buffer.from(slot.tooltip, "utf16le");
+        assert(
+          tip.length < THUMB_BUTTON_TIP_UNITS * 2,
+          "Thumbnail button tooltip is too long",
+        );
+        tip.copy(native, base + THUMB_BUTTON_TIP_OFFSET);
+      }
+      native.writeUInt32LE(mask, base);
+      native.writeUInt32LE(slot.id, base + 4);
+      native.writeUInt32LE(slot.flags, base + THUMB_BUTTON_FLAGS_OFFSET);
+    });
+    // The buffer lives through the synchronous call; the shell copies the buttons.
+    checkHresult(
+      (add ? this.addButtons : this.updateButtons)(
+        window,
+        slots.length,
+        ptr(native),
+      ),
+      add
+        ? "ITaskbarList3.ThumbBarAddButtons"
+        : "ITaskbarList3.ThumbBarUpdateButtons",
+    );
+  }
+
   /** Release the interface and bindings before the UI STA is uninitialized. Safe to repeat. */
   dispose(): void {
     this.release?.();
@@ -181,6 +261,8 @@ export class Taskbar {
     this.overlay = undefined;
     this.tooltip = undefined;
     this.clip = undefined;
+    this.addButtons = undefined;
+    this.updateButtons = undefined;
     for (const binding of this.bindings.splice(0)) {
       binding.close();
     }

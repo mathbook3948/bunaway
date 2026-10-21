@@ -1370,3 +1370,7 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 게시되지 않는 것을 확인한다. Windows native 실행기에 포함한다. 최상위 창이 아닌 창을 가리키는 메뉴 메시지는 합성 시험을 두지 않았다.
 실제 마우스 확장 버튼과 미디어 키가 WebView2 위에서 최상위 창까지 올라오는지, 사용자 정의 제목 표시줄의
 오른쪽 클릭이 도착하는지는 합성 메시지로 확인할 수 없어 별도 GUI 확인이 필요하다.
+
+`api/window-thumbnail-toolbar.test.ts`는 썸네일 툴바 입력 스키마(개수, id, 툴팁 길이, 플래그, 잘못된 ICO), 클릭 이벤트 스키마, 어댑터 전달과 macOS의 `UNSUPPORTED`, 호스트의 재검증, 7칸 구성과 `WM_COMMAND` 칸 번호의 id 변환(비활성, 숨김, 미등록, 알림 코드 불일치 제외)을 확인한다.
+`lifecycle/windows-bun-window-api.ts`는 실제 `ITaskbarList3`로 개수를 바꾸는 연속 호출(0, 3, 1, 7, 0개)이 오류 없이 끝나는 것과 잘못된 ICO, 중복 id 거절을 확인하고(어느 vtable 슬롯을 불렀는지는 관찰하지 않는다), `lifecycle/windows-window-input-events.ts`는 최상위 HWND에 합성한 `THBN_CLICKED` `WM_COMMAND`가 등록한 버튼 id로만 전달되는지(비활성, 숨김, 미등록, 범위 밖, 메뉴 명령, 툴바를 줄이거나 비운 뒤의 이전 칸 제외)와 잘못된 ICO를 거절한 뒤에도 기존 칸이 같은 id로 눌리는 것을 확인한다.
+사람이 작업 표시줄 썸네일에서 누르는 동작, Explorer 실제 재시작 뒤 재적용, 썸네일에 그려지는 모양은 자동 검증하지 않는다.

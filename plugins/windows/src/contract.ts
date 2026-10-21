@@ -10,6 +10,7 @@ import {
   MIN_WINDOW_ASPECT_RATIO,
   MIN_WINDOW_COORDINATE,
   MIN_WINDOW_DIMENSION,
+  NATIVE_THUMBNAIL_BUTTON_LIMIT,
   parseNativeIco,
   WINDOW_BACKGROUND_COLOR_PATTERN,
   type WindowAttentionMode,
@@ -239,6 +240,39 @@ const icoBytes = z
   .min(4)
   .max(Math.ceil(MAX_TRAY_ICO_BYTES / 3) * 4)
   .refine((value) => parseNativeIco(value) !== undefined, "Invalid ICO.");
+
+/** App-chosen name of a thumbnail toolbar button; reported back unchanged when the button is pressed. */
+const THUMBNAIL_BUTTON_ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$";
+/** `THUMBBUTTON.szTip` holds 260 UTF-16 code units including the terminator. */
+const MAX_THUMBNAIL_BUTTON_TOOLTIP = 259;
+
+const thumbnailButtonFlags = [
+  "enabled",
+  "disabled",
+  "dismissonclick",
+  "nobackground",
+  "hidden",
+  "noninteractive",
+] as const;
+
+const thumbnailButton = z.strictObject({
+  id: z.string().regex(new RegExp(THUMBNAIL_BUTTON_ID_PATTERN, "u")),
+  ico: icoBytes,
+  tooltip: z
+    .string()
+    .max(MAX_THUMBNAIL_BUTTON_TOOLTIP)
+    .refine((value) => !value.includes("\0"), "The tooltip cannot contain NUL.")
+    .default(""),
+  flags: z
+    .array(z.enum(thumbnailButtonFlags))
+    .max(thumbnailButtonFlags.length)
+    .refine((flags) => new Set(flags).size === flags.length, "Duplicate flag.")
+    .refine(
+      (flags) => !(flags.includes("enabled") && flags.includes("disabled")),
+      "A button cannot be both enabled and disabled.",
+    )
+    .default([]),
+});
 
 const viewTarget = z.strictObject({
   view: z.string().regex(new RegExp(WINDOW_VIEW_NAME_PATTERN, "u")),
@@ -762,6 +796,24 @@ export const windowAppCommandSchema = {
   ],
   additionalProperties: false,
 } as const;
+/** A thumbnail toolbar button the user pressed; `buttonId` is an id the app set with `windows.setThumbnailToolbar` (Windows only). */
+export const windowThumbnailToolbarClickedSchema = {
+  type: "object",
+  properties: {
+    windowId: eventIdentity,
+    viewId: eventIdentity,
+    buttonId: {
+      type: "string",
+      pattern: THUMBNAIL_BUTTON_ID_PATTERN,
+    },
+  },
+  required: [
+    "windowId",
+    "viewId",
+    "buttonId",
+  ],
+  additionalProperties: false,
+} as const;
 /** A right click on the title bar or system menu icon, in physical screen pixels (Windows only). */
 export const windowSystemContextMenuSchema = {
   type: "object",
@@ -791,6 +843,7 @@ export const windowSystemContextMenuSchema = {
 export const windowEvents = {
   "windows.appCommand": windowAppCommandSchema,
   "windows.systemContextMenu": windowSystemContextMenuSchema,
+  "windows.thumbnailToolbarClicked": windowThumbnailToolbarClickedSchema,
   "windows.closeRequested": windowCloseRequestedSchema,
   "windows.monitorsChanged": monitorChangeSchema,
   "windows.readiness": windowReadinessSchema,
@@ -1044,6 +1097,20 @@ export const windowOperations = {
     input: windowTarget.extend({
       ico: icoBytes.nullable(),
       description: accessibleTitle,
+    }),
+    output: z.null(),
+  },
+  // Replaces the whole toolbar: buttons keep their order, ids are unique and an empty list hides every button.
+  "windows.setThumbnailToolbar": {
+    input: windowTarget.extend({
+      buttons: z
+        .array(thumbnailButton)
+        .max(NATIVE_THUMBNAIL_BUTTON_LIMIT)
+        .refine(
+          (buttons) =>
+            new Set(buttons.map((button) => button.id)).size === buttons.length,
+          "Thumbnail button ids must be unique.",
+        ),
     }),
     output: z.null(),
   },

@@ -59,6 +59,7 @@ import {
   contextMenuPoint,
   isSystemMenuArea,
   WM_APPCOMMAND,
+  WM_COMMAND,
   WM_CONTEXTMENU,
 } from "./window-input-events.ts";
 import { WindowLifecycle } from "./window-lifecycle.ts";
@@ -1391,6 +1392,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         setIcon: (icon) => nativeWindows.setWindowIcon(hwnd, icon),
         setOverlayIcon: (icon, description) =>
           nativeWindows.setOverlayIcon(hwnd, icon, description),
+        setThumbnailToolbar: (buttons) =>
+          nativeWindows.setThumbnailToolbar(hwnd, buttons),
       };
     },
   };
@@ -1520,7 +1523,11 @@ function createWindow(
       if (isMonitorChangeMessage(message)) {
         monitorTracker?.invalidate();
       }
-      if (message === WM_APPCOMMAND || message === WM_CONTEXTMENU) {
+      if (
+        message === WM_APPCOMMAND ||
+        message === WM_CONTEXTMENU ||
+        message === WM_COMMAND
+      ) {
         publishWindowInput(message, wparam, lparam);
       }
       if (message === WM_CLOSE) {
@@ -1574,6 +1581,18 @@ function createWindow(
     lparam: bigint,
   ) {
     const { windowId, viewId } = readiness.snapshot();
+    if (message === WM_COMMAND) {
+      // Only a press on a visible, enabled thumbnail button the app registered becomes an event.
+      const buttonId = windows?.thumbnailToolbarButton(window, wparam);
+      if (buttonId !== undefined) {
+        sendNativeEvent(boundary, "windows.thumbnailToolbarClicked", {
+          windowId,
+          viewId,
+          buttonId,
+        });
+      }
+      return;
+    }
     if (message === WM_APPCOMMAND) {
       const command = appCommandName(lparam);
       if (command) {

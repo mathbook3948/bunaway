@@ -165,6 +165,9 @@ Windows의 선택적 `NativeWindow.destroy()`는 확인, 트레이 숨김과 종
 선택적 `NativeWindow.setOverlayIcon(icon, description)`은 아이콘 공급자 `(sizePx) => HICON`과 접근성 설명으로 작업 표시줄 오버레이 아이콘을 설정하고, `icon`이 `null`이면 제거하며 `description`을 무시합니다.
 호스트는 설정할 때와 버튼 재생성으로 다시 적용할 때 그 시점 창 DPI의 작은 아이콘 크기로 공급자를 호출하고, 반환된 HICON의 소유권을 받아 다음 설정, 제거, HWND 파괴, 셸 거부 때 해제합니다.
 공급자가 던진 오류(예: `INVALID_ARGUMENT`)는 그대로 전달하며 기존 오버레이를 유지합니다. 나머지 오류와 재적용, 폐기는 위 설정과 같습니다.
+선택적 `NativeWindow.setThumbnailToolbar(buttons)`는 작업 표시줄 썸네일 아래 툴바를 `buttons` 순서대로 바꾸며(최대 `NATIVE_THUMBNAIL_BUTTON_LIMIT`개, 빈 목록이면 모든 버튼을 숨김) 각 버튼은 `{ id, icon, tooltip, flags }`입니다.
+`icon`은 오버레이와 같은 아이콘 공급자이고, 호스트는 버튼마다 한 번씩 호출해 반환된 HICON을 소유하며 툴바가 성공적으로 바뀐 뒤, 또는 HWND 파괴 때 해제합니다. 공급자가 던진 오류는 그대로 전달하고 기존 툴바를 유지합니다.
+버튼을 누르면 호스트가 `windows.thumbnailToolbarClicked`로 그 버튼의 `id`만 알리므로 어댑터에 클릭 콜백은 없습니다. 버튼 생성 전 `BUSY`, 버튼 재생성 때의 재적용은 `setTaskbarProgress`와 같습니다.
 `windows` 플러그인이 base64 ICO를 공용 ICO 검증으로 네이티브 호출 전에 검사하고 공급자를 만듭니다.
 `NativeWindow.getBounds(area)`는 `"content"`, `"outer"`, `"normal"` 영역의 `WindowBounds`를 반환합니다. normal은 일반 상태 복원용 바깥 영역이며 작업 영역 좌표를 화면 좌표로 보정합니다. 전체화면 중에는 저장된 복원 크기를 현재 DPI와 제약으로 계산합니다.
 Windows의 `WindowSpec.window.maximized`와 `fullscreen`은 초기 일반 영역에 최대화, 전체화면을 순서대로 적용합니다. 숨김 생성을 유지하며 초기 전체화면의 해제는 현재 표시 상태를 유지합니다.

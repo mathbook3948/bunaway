@@ -1,5 +1,6 @@
 import { HTCAPTION } from "./window-drag.ts";
 
+export const WM_COMMAND = 0x0111;
 export const WM_APPCOMMAND = 0x0319;
 export const WM_CONTEXTMENU = 0x007b;
 export const WM_NCHITTEST = 0x0084;

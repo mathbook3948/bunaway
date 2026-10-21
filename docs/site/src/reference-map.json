@@ -411,6 +411,7 @@
         "reference/tooling/native-plugins": [
           "MAX_TRAY_ICO_BYTES",
           "MAX_NATIVE_ICO_BYTES",
+          "NATIVE_THUMBNAIL_BUTTON_LIMIT",
           "parseNativeIco",
           "selectNativeIcoFrame",
           "MAX_TRAY_TOOLTIP_UNITS",
@@ -872,6 +873,7 @@
           "setThumbnailClip",
           "setThumbnailToolTip",
           "setOverlayIcon",
+          "setThumbnailToolbar",
           "setIcon",
           "hasCustomIcon",
           "setCloseConfirmation",
@@ -1725,6 +1727,7 @@
       "windows.setThumbnailClip",
       "windows.setThumbnailToolTip",
       "windows.setOverlayIcon",
+      "windows.setThumbnailToolbar",
       "windows.setIcon",
       "windows.hasCustomIcon",
       "windows.setCloseConfirmation",

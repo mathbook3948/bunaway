@@ -54,6 +54,7 @@ const MESSAGES = {
   clip: "Thumbnail clip is not implemented on this platform.",
   tooltip: "Thumbnail tooltip is not implemented on this platform.",
   overlay: "Taskbar overlay icon is not implemented on this platform.",
+  toolbar: "Taskbar thumbnail toolbar is not implemented on this platform.",
   icon: "Window icon is not implemented on this platform.",
 } as const;
 
@@ -858,6 +859,22 @@ const rows: Row[] = [
     unsupported: MESSAGES.overlay,
   },
   {
+    operation: "windows.setThumbnailToolbar",
+    payload: {
+      buttons: [],
+    },
+    calls: [
+      [
+        "setThumbnailToolbar",
+        [
+          [],
+        ],
+      ],
+    ],
+    result: null,
+    unsupported: MESSAGES.toolbar,
+  },
+  {
     operation: "windows.setCloseConfirmation",
     payload: {
       message: "Sure?",
@@ -1231,6 +1248,7 @@ function fixture(
     "setThumbnailClip",
     "setThumbnailToolTip",
     "setOverlayIcon",
+    "setThumbnailToolbar",
     "setIcon",
     "hasCustomIcon",
   ];

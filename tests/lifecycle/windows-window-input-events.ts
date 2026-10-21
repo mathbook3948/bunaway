@@ -10,6 +10,7 @@ import { runWindowsApp } from "#native/windows/bun/entry";
 import { testAppMetadata } from "../fixtures/app-info.ts";
 import { killAfter, waitFor } from "../fixtures/deadlines.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
+import { trayIco } from "../fixtures/tray-icon.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 assert.equal(process.platform, "win32");
@@ -41,6 +42,7 @@ const policy: Policy = {
       events: [
         "windows.appCommand",
         "windows.systemContextMenu",
+        "windows.thumbnailToolbarClicked",
       ],
       host: {
         permissions: [
@@ -65,6 +67,8 @@ const HTCAPTION = 2;
 const CANCEL_ATTEMPTS = 5;
 const CANCEL_INTERVAL_MS = 50;
 const WM_APPCOMMAND = 0x0319;
+const WM_COMMAND = 0x0111;
+const THBN_CLICKED = 0x1800;
 const FAPPCOMMAND_MOUSE = 0x8000;
 
 if (!process.argv.includes("--child")) {
@@ -116,7 +120,7 @@ if (!process.argv.includes("--child")) {
     const report = JSON.parse(await readFile(reportPath, "utf8"));
     assert.equal(report.pass, true);
     console.log(
-      "PASS WebView2 window input events: app commands, title bar context menu, ignored codes and areas",
+      "PASS WebView2 window input events: app commands, title bar context menu, thumbnail toolbar presses, ignored codes and areas",
     );
   } finally {
     clearTimeout(timeout);
@@ -303,6 +307,171 @@ if (!process.argv.includes("--child")) {
             for (let attempt = 0; attempt < CANCEL_ATTEMPTS; attempt++) {
               driver.symbols.SendMessageW(hwnd, WM_CANCELMODE, 0n, 0n);
               await Bun.sleep(CANCEL_INTERVAL_MS);
+            }
+
+            // Thumbnail toolbar presses arrive as WM_COMMAND with THBN_CLICKED; the host maps the slot
+            // to the app's button id and drops everything it did not register or that is not pressable.
+            const toolbarIco = trayIco().toString("base64");
+            await waitFor(
+              async () => {
+                try {
+                  await windows.setThumbnailToolbar({
+                    ...target,
+                    buttons: [
+                      {
+                        id: "play",
+                        ico: toolbarIco,
+                        tooltip: "Play",
+                      },
+                      {
+                        id: "off",
+                        ico: toolbarIco,
+                        flags: [
+                          "disabled",
+                        ],
+                      },
+                      {
+                        id: "gone",
+                        ico: toolbarIco,
+                        flags: [
+                          "hidden",
+                        ],
+                      },
+                      {
+                        id: "next",
+                        ico: toolbarIco,
+                        flags: [
+                          "dismissonclick",
+                        ],
+                      },
+                    ],
+                  });
+                  return true;
+                } catch (error) {
+                  // Explorer creates the taskbar button asynchronously.
+                  if (
+                    error instanceof Error &&
+                    "code" in error &&
+                    error.code === "BUSY"
+                  ) {
+                    return false;
+                  }
+                  throw error;
+                }
+              },
+              {
+                deadline: "childStep",
+                what: "the taskbar button for the thumbnail toolbar",
+              },
+            );
+            const press = (slot: number, notification = THBN_CLICKED) =>
+              driver.symbols.PostMessageW(
+                hwnd,
+                WM_COMMAND,
+                BigInt((notification << 16) | slot),
+                0n,
+              );
+            const pressed = () =>
+              records
+                .filter(
+                  (record) =>
+                    record.event === "windows.thumbnailToolbarClicked",
+                )
+                .map((record) => record.payload.buttonId);
+            // Disabled, hidden and unregistered slots, a menu command and an out-of-range slot first.
+            press(1);
+            press(2);
+            press(4);
+            press(0xffff);
+            press(0, 0);
+            press(0);
+            press(3);
+            await waitFor(() => pressed().length >= 2, {
+              deadline: "childStep",
+              what: "the thumbnail toolbar click events",
+            });
+            assert.deepEqual(pressed(), [
+              "play",
+              "next",
+            ]);
+            // A rejected image keeps the current toolbar, so its slots still press the same ids.
+            await assert.rejects(
+              windows.setThumbnailToolbar({
+                ...target,
+                buttons: [
+                  {
+                    id: "bad",
+                    ico: Buffer.alloc(64).toString("base64"),
+                  },
+                ],
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
+            press(0);
+            await waitFor(() => pressed().length >= 3, {
+              deadline: "childStep",
+              what: "the press after a rejected toolbar",
+            });
+            assert.deepEqual(pressed(), [
+              "play",
+              "next",
+              "play",
+            ]);
+            // A shorter toolbar hides the remaining slots, so their old presses are ignored. The app
+            // command that follows proves the earlier message was handled without publishing.
+            await windows.setThumbnailToolbar({
+              ...target,
+              buttons: [
+                {
+                  id: "solo",
+                  ico: toolbarIco,
+                },
+              ],
+            });
+            press(3);
+            press(0);
+            appCommand(2, 0);
+            await waitFor(
+              () =>
+                records.some(
+                  (record) =>
+                    record.event === "windows.appCommand" &&
+                    record.payload.command === "browser-forward",
+                ),
+              {
+                deadline: "childStep",
+                what: "the app command after the toolbar change",
+              },
+            );
+            assert.deepEqual(pressed(), [
+              "play",
+              "next",
+              "play",
+              "solo",
+            ]);
+            await windows.setThumbnailToolbar({
+              ...target,
+              buttons: [],
+            });
+            press(0);
+            appCommand(3, 0);
+            await waitFor(
+              () =>
+                records.some(
+                  (record) =>
+                    record.event === "windows.appCommand" &&
+                    record.payload.command === "browser-refresh",
+                ),
+              {
+                deadline: "childStep",
+                what: "the app command after the toolbar was emptied",
+              },
+            );
+            assert.equal(pressed().length, 4);
+            for (const record of records) {
+              assert.equal(record.payload.windowId, snapshot.windowId);
             }
           } finally {
             driver.close();

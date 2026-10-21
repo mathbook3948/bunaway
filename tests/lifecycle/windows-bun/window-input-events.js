@@ -6,6 +6,7 @@ let recording = Promise.resolve();
 for (const event of [
   "windows.appCommand",
   "windows.systemContextMenu",
+  "windows.thumbnailToolbarClicked",
 ]) {
   await client.listen(
     event,

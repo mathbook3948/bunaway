@@ -1,6 +1,9 @@
-import { withWide } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
-import type { NativeOverlayIconProvider } from "@bunaway/plugin-api/native";
+import { withWide } from "@bunaway/plugin/win32";
+import type {
+  NativeOverlayIconProvider,
+  NativeThumbnailButton,
+} from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
 import { Taskbar } from "./taskbar.ts";
 import {
@@ -10,6 +13,12 @@ import {
   TaskbarSettingController,
   type ThumbnailClip,
 } from "./taskbar-progress.ts";
+import {
+  pressedThumbnailButton,
+  type ThumbnailToolbar,
+  thumbnailSlots,
+  thumbnailToolbarOf,
+} from "./thumbnail-toolbar.ts";
 import { user } from "./win32-bindings.ts";
 import { SM_CXSMICON } from "./win32-constants.ts";
 import { clampPixelRect, fitsInt32Rect, physicalRect } from "./window-size.ts";
@@ -25,8 +34,8 @@ export type TaskbarWindowHost = {
 };
 
 /**
- * The per-window taskbar settings of one window class: progress, thumbnail clip and tooltip, and
- * the overlay icon whose HICON this object owns. Settings are retained so an Explorer restart
+ * The per-window taskbar settings of one window class: progress, thumbnail clip and tooltip, the
+ * thumbnail toolbar and the overlay icon, whose HICONs this object owns. Settings are retained so an Explorer restart
  * (`TaskbarButtonCreated`) can restore them.
  */
 export class WindowTaskbar {
@@ -50,6 +59,20 @@ export class WindowTaskbar {
       // The provider is a function, which structuredClone rejects; the setting is never mutated.
       (setting) => setting,
     );
+  // The toolbar buttons currently shown per window, and the HICONs they use. Windows accepts
+  // ThumbBarAddButtons once per taskbar button, so `toolbarAdded` selects Add or Update.
+  private readonly toolbars = new Map<bigint, ThumbnailToolbar>();
+  private readonly toolbarIcons = new Map<bigint, bigint[]>();
+  private readonly toolbarAdded = new Set<bigint>();
+  private readonly thumbnailToolbar = new TaskbarSettingController<
+    readonly NativeThumbnailButton[]
+  >(
+    (window, buttons) => this.applyThumbnailToolbar(window, buttons),
+    // The icon providers are functions, which structuredClone rejects; a shallow copy isolates the saved list.
+    (buttons) => [
+      ...buttons,
+    ],
+  );
   /** The message Explorer posts to each window when it (re)creates the taskbar button. */
   readonly buttonCreatedMessage = withWide("TaskbarButtonCreated", (name) =>
     user.symbols.RegisterWindowMessageW(name),
@@ -64,6 +87,8 @@ export class WindowTaskbar {
 
   /** Re-apply every retained setting after Explorer created the button; one failure cannot skip the others. */
   restore(window: bigint): void {
+    // A recreated taskbar button has no toolbar yet, so the next application must Add rather than Update.
+    this.toolbarAdded.delete(window);
     for (const [name, controller] of [
       [
         "progress",
@@ -80,6 +105,10 @@ export class WindowTaskbar {
       [
         "overlay icon",
         this.overlayIcon,
+      ],
+      [
+        "thumbnail toolbar",
+        this.thumbnailToolbar,
       ],
     ] as const) {
       try {
@@ -147,13 +176,33 @@ export class WindowTaskbar {
     });
   }
 
-  /** Drop every retained setting and the overlay HICON of a window that is being destroyed. */
+  /**
+   * Replace the thumbnail toolbar with `buttons`, or hide every button for an empty list. Buttons keep
+   * their order; the shell reports a press as the slot index, which `pressedButton` maps back to the id.
+   */
+  setThumbnailToolbar(
+    window: bigint,
+    buttons: readonly NativeThumbnailButton[],
+  ): void {
+    thumbnailToolbarOf(buttons);
+    this.thumbnailToolbar.set(window, buttons);
+  }
+
+  /** The app's id of the button a WM_COMMAND wParam presses, or undefined when it presses none that is usable. */
+  pressedButton(window: bigint, wparam: bigint): string | undefined {
+    return pressedThumbnailButton(this.toolbars.get(window), wparam);
+  }
+
+  /** Drop every retained setting and the HICONs of a window that is being destroyed. */
   forget(window: bigint): void {
     this.progress.forget(window);
     this.thumbnailClip.forget(window);
     this.thumbnailToolTip.forget(window);
     this.overlayIcon.forget(window);
     this.releaseOverlayIcon(window);
+    this.thumbnailToolbar.forget(window);
+    this.releaseToolbar(window);
+    this.toolbarAdded.delete(window);
   }
 
   /** Backstop for icons whose window never reached its normal destroy path. Safe to repeat. */
@@ -162,6 +211,11 @@ export class WindowTaskbar {
       ...this.overlayIcons.keys(),
     ]) {
       this.releaseOverlayIcon(window);
+    }
+    for (const window of [
+      ...this.toolbarIcons.keys(),
+    ]) {
+      this.releaseToolbar(window);
     }
   }
 
@@ -195,6 +249,55 @@ export class WindowTaskbar {
     }
     this.releaseOverlayIcon(window);
     this.overlayIcons.set(window, icon);
+  }
+
+  /**
+   * Build every HICON at the small icon size for the window's DPI before touching the shell, so a rejected
+   * image keeps the current toolbar. The previous HICONs are destroyed only after the shell accepted the new ones.
+   */
+  private applyThumbnailToolbar(
+    window: bigint,
+    buttons: readonly NativeThumbnailButton[],
+  ): void {
+    const toolbar = thumbnailToolbarOf(buttons);
+    if (buttons.length === 0 && !this.toolbarAdded.has(window)) {
+      // Nothing was ever shown, so there is nothing to hide.
+      this.toolbars.set(window, toolbar);
+      return;
+    }
+    const size = user.symbols.GetSystemMetricsForDpi(
+      SM_CXSMICON,
+      this.host.dpi(window),
+    );
+    const icons: bigint[] = [];
+    try {
+      for (const button of buttons) {
+        // Each provider HICON belongs to this class from here on, including when a later step fails.
+        icons.push(button.icon(size));
+      }
+      this.taskbar.setThumbnailButtons(
+        window,
+        thumbnailSlots(toolbar, buttons, icons),
+        !this.toolbarAdded.has(window),
+      );
+    } catch (error) {
+      for (const icon of icons) {
+        user.symbols.DestroyIcon(icon);
+      }
+      throw error;
+    }
+    this.toolbarAdded.add(window);
+    this.releaseToolbar(window);
+    this.toolbarIcons.set(window, icons);
+    this.toolbars.set(window, toolbar);
+  }
+
+  private releaseToolbar(window: bigint): void {
+    for (const icon of this.toolbarIcons.get(window) ?? []) {
+      user.symbols.DestroyIcon(icon);
+    }
+    this.toolbarIcons.delete(window);
+    this.toolbars.delete(window);
   }
 
   private releaseOverlayIcon(window: bigint): void {

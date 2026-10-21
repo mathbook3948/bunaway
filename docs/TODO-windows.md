@@ -474,7 +474,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
   ICO 검증과 HICON 생성은 windows 플러그인의 Windows 플랫폼 코드가 맡고 호스트는 아이콘 공급자를 받아 수명만 관리한다.
   계약 검증은 `window-overlay-icon.test.ts`, ICO 거부와 수명은 `taskbar-overlay-icon.test.ts`이며 실제 ITaskbarList3 호출은
   `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
-- [ ] thumbnail toolbar 버튼과 클릭 이벤트를 제공한다.
+- [x] thumbnail toolbar 버튼과 클릭 이벤트를 제공한다.
 - [x] thumbnail clip과 tooltip을 설정한다.
   `windows.setThumbnailClip`은 내용 영역 기준 96 DPI 논리 픽셀 region(`null`이면 해제)을,
   `windows.setThumbnailToolTip`은 `setTitle`과 같은 형식의 문자열(`null` 또는 빈 문자열이면 해제)을 설정한다.
