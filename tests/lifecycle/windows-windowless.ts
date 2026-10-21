@@ -388,7 +388,10 @@ if (!process.argv.includes("--child")) {
     emit("tray-hidden-idle");
     const hiddenTicks = ticks;
     await Bun.sleep(300);
-    assert(ticks > hiddenTicks, "backend must continue with the icon hidden");
+    assert(
+      ticks > hiddenTicks,
+      "the process must keep running with the icon hidden",
+    );
     assert.equal(attempts, 0, "hiding the icon must not start a quit");
     assert.equal(sessions, 1, "hiding the icon must not create a window");
     // Opening the app again runs show() on the backend; a real second launch while the icon is hidden is not exercised (windows-desktop.ts covers the hand-off for a visible icon).

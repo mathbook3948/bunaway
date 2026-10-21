@@ -310,7 +310,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `tray.focus`로 OS의 트레이 focus 요청 결과를 반환한다.
 - [x] 트레이에서 지정 위치의 팝업 메뉴 열기와 닫기를 제공한다. `tray.popUpContextMenu({ position? })`가 `menu.setTrayMenu`로 연결한 메뉴를 물리 화면 좌표(생략하면 포인터)에 표시하고 선택은 `menu.clicked`(windowId null)로 전달한다(Electron `tray.popUpContextMenu`). 닫기는 호출의 AbortSignal 취소이며 `CANCELLED`로 끝난다. 별도 `closeContextMenu` 작업은 모달 루프 중 일반 요청을 처리할 수 없어 제공하지 않는다. 연결한 메뉴가 없으면 `INVALID_ARGUMENT`, 팝업 중 재호출은 `BUSY`이며 우클릭 팝업과 foreground 설정, WM_NULL 전송을 공유한다. 호출마다 다른 메뉴를 넘기는 `menu` 인자는 제공하지 않는다.
 - [x] Windows balloon 표시와 제거, show/click/closed 이벤트를 제공한다. `tray.displayBalloon({ title, content, iconType?, silent? })`(제목 63, 본문 255 UTF-16 단위, 큰 아이콘과 사용자 지정 아이콘 제외)와 `tray.removeBalloon`, `tray.balloon`(`{ state: "show" | "click" | "closed" }`)이며 Electron의 displayBalloon에 대응한다(옵션 이름 `silent`, 빈 제목 허용, 기본 아이콘 `none`이 다르다). 성공은 shell의 요청 수락이고 실제 표시는 `show`로만 알 수 있다.
-- [x] 트레이 자원 제거 뒤 숨긴 앱의 실행 유지와 종료 규칙을 정의한다.
+- [x] 트레이 아이콘을 숨긴 앱의 실행 유지와 종료 규칙을 정의한다. 아이콘 숨김은 앱 수명을 바꾸지 않는다.
+- [ ] 트레이 자원 제거 뒤 앱의 실행 유지와 종료 규칙을 정의한다. 제거 API가 생기면 함께 정한다.
 
 실행 중 제어의 입력과 소유권은 [tray API](./site/src/content/docs/reference/plugins/tray.mdx)를 따른다.
 실제 shell 회귀의 합성 입력과 재등록 알림은 물리 마우스와 Explorer process 재시작 검증을 대신하지 않는다.
