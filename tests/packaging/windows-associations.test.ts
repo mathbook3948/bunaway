@@ -224,6 +224,7 @@ const script = (
   executableName: string,
   declarations?: ChannelConfig["associations"],
   payloadListPath?: string,
+  shortcuts = false,
 ) =>
   renderInnoScript({
     name: "연결 App {문서}",
@@ -235,8 +236,8 @@ const script = (
     outputDir,
     outputBaseName: "setup",
     executableName,
-    desktopShortcut: false,
-    startMenuShortcut: false,
+    desktopShortcut: shortcuts,
+    startMenuShortcut: shortcuts,
     webView2: "check",
     appDataDir: "{localappdata}\\bunaway\\association-test",
     preserveUserData: true,
@@ -425,6 +426,8 @@ interface NativeInstallerRequest {
   destination?: string;
   // Extra payload files (Windows relative paths) written to the payload and listed for relocation cleanup.
   payloadFiles?: string[];
+  // Also create the start menu, uninstall and desktop links.
+  shortcuts?: boolean;
   setupGate?: NativeGate;
   uninstallGate?: NativeGate;
   legacySetup?: boolean;
@@ -638,6 +641,7 @@ async function createNativeAssociationFixture(compiler: string) {
       executable,
       config,
       request.payloadFiles ? payloadList : undefined,
+      request.shortcuts,
     );
     if (request.legacySetup) {
       // Model a previous installer which did not participate in coordination.
@@ -907,6 +911,7 @@ async function createNativeAssociationFixture(compiler: string) {
     });
   }
   return {
+    identifier,
     root,
     extension,
     scheme,
@@ -2998,6 +3003,78 @@ test.skipIf(!iscc)(
         await query(previousDataKey, "Inno Setup CodeFile: PendingUninstaller"),
       ).toBe("");
     } finally {
+      await removeInstallRecord(fixture);
+      await cleanup();
+    }
+  },
+  deadline("packagedAudit"),
+);
+
+test.skipIf(!iscc)(
+  "native relocation points the app, uninstall and desktop links at the new installation",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      identifier,
+      root,
+      declarations,
+      startInstall,
+      powershell,
+      quote,
+      cleanup,
+    } = fixture;
+    const moved = join(root, "moved");
+    const startMenuGroup = `Join-Path $env:APPDATA ${quote(`Microsoft\\Windows\\Start Menu\\Programs\\${identifier}`)}`;
+    const desktop = "[Environment]::GetFolderPath('Desktop')";
+    // WScript.Shell reads ANSI targets, so this test installs an ASCII executable name.
+    const targets = (dir: string, filter: string) =>
+      powershell(
+        `$s=New-Object -ComObject WScript.Shell; Get-ChildItem -LiteralPath ${dir} -Filter ${quote(filter)} | ForEach-Object { $s.CreateShortcut($_.FullName).TargetPath }`,
+      );
+    try {
+      for (const [version, destination] of [
+        [
+          "links-first",
+          undefined,
+        ],
+        [
+          "links-second",
+          moved,
+        ],
+      ] as const) {
+        await (
+          await startInstall({
+            version,
+            executable: "App.exe",
+            config: declarations,
+            tasks: "desktopicon",
+            shortcuts: true,
+            payloadFiles: relocationPayload,
+            ...(destination
+              ? {
+                  destination,
+                }
+              : {}),
+          })
+        ).finish();
+      }
+      const menu = (await targets(`(${startMenuGroup})`, "*.lnk"))
+        .split(/\r?\n/)
+        .sort();
+      expect(menu).toEqual([
+        join(moved, "App.exe"),
+        join(moved, "unins000.exe"),
+      ]);
+      expect(await targets(`(${desktop})`, `*${identifier}*.lnk`)).toBe(
+        join(moved, "App.exe"),
+      );
+    } finally {
+      await powershell(
+        `Remove-Item -LiteralPath (${startMenuGroup}) -Recurse -Force -ErrorAction SilentlyContinue; Get-ChildItem -LiteralPath (${desktop}) -Filter ${quote(`*${identifier}*.lnk`)} | Remove-Item -Force`,
+      );
       await removeInstallRecord(fixture);
       await cleanup();
     }
