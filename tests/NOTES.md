@@ -758,6 +758,8 @@ reach onOpenUrls after onReady and the initial onOpen"가 fake AppKit에서 첫 
 지연 생성과 첫 창의 트레이 생성, 숨김과 최소화 및 최대화 복원, 마지막 창 닫기 뒤
 백엔드 유지와 새 세션, 트레이 Quit 취소와 재시도를 확인한다. 트레이 입력은 실제
 소유 HWND에 콜백 메시지를 게시하며 물리 마우스 클릭 검증과 구분한다.
+`tray-hidden`은 아이콘을 숨긴 채 마지막 창을 닫아도 트레이 HWND와 백엔드가 유지되고 종료 확인이 없으며,
+`show()`가 새 창을 만들고 숨긴 아이콘은 그대로이며 다시 표시한 값이 기록되는지 확인한다. Explorer가 그리는 숨김 상태는 읽지 않는다.
 창 없는 상주 앱과 트레이 앱의 CLI 중단, 대기 중인 beforeQuit 우회와 StopHook 정리도 검사한다.
 강제 종료에서는 StopHook을 보장하지 않으며 실제 Job 자식 프로세스와 HWND 종료를 확인한다.
 실행 결과는 `build/windows-windowless/<scenario>-report.json`에 기록한다.

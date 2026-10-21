@@ -24,10 +24,17 @@ const scenario = process.argv[2] ?? "resident";
 const assets = resolve(output, "assets");
 const dataRoot = resolve(output, `${scenario}-${process.pid}`);
 const hasTray = scenario.includes("tray");
+// A tray app that hides its icon while no window is open must keep running and stay recoverable.
+const hiddenTray = scenario === "tray-hidden";
 const nonfocusable = scenario.startsWith("nonfocusable-");
 const empty = scenario.endsWith("empty");
 const registry = new NativeRegistry([
   windows._definition,
+  ...(hiddenTray
+    ? [
+        tray._definition,
+      ]
+    : []),
 ]);
 const emit = (event: string, fields: Record<string, unknown> = {}) =>
   console.log(
@@ -211,6 +218,13 @@ if (!process.argv.includes("--child")) {
         post(TRAY_CALLBACK_MESSAGE, BigInt(WM_LBUTTONUP));
       }
     }
+    if (event.event === "tray-hidden-idle") {
+      assert(
+        api.symbols.IsWindow(owner),
+        "hidden icon must keep the tray window",
+      );
+      assert.equal(child.exitCode, null);
+    }
     if (event.event === "tray-quit-requested") {
       post(WM_CLOSE);
     }
@@ -352,6 +366,67 @@ if (!process.argv.includes("--child")) {
     );
   };
   const ready = () => waitFor(() => sessions > 0);
+  const callTray = async (
+    operation: "tray.get" | "tray.setVisible",
+    payload: null | {
+      visible: boolean;
+    },
+  ) => {
+    assert(backend);
+    return backend.host.call(registry.operation(operation), payload);
+  };
+  /**
+   * The icon was hidden before the last window closed: the app keeps running and show() restores a window.
+   * The snapshot `visible` is the value the app last set, so the shell's NIS_HIDDEN state is not read
+   * here; the scenario checks the app lifetime, not what Explorer draws.
+   */
+  async function exerciseHiddenTray(desktop: DesktopContext, windowId: string) {
+    const hidden = (await callTray("tray.get", null)) as {
+      visible: boolean;
+    };
+    assert.equal(hidden.visible, false);
+    emit("tray-hidden-idle");
+    const hiddenTicks = ticks;
+    await Bun.sleep(300);
+    assert(
+      ticks > hiddenTicks,
+      "the process must keep running with the icon hidden",
+    );
+    assert.equal(attempts, 0, "hiding the icon must not start a quit");
+    assert.equal(sessions, 1, "hiding the icon must not create a window");
+    // Opening the app again runs show() on the backend; a real second launch while the icon is hidden is not exercised (windows-desktop.ts covers the hand-off for a visible icon).
+    await desktop.show();
+    await waitFor(() => sessions === 2);
+    assert.notEqual(
+      (
+        await call("windows.getSnapshot", {
+          view: "main",
+        })
+      ).windowId,
+      windowId,
+    );
+    assert.equal(
+      (
+        (await callTray("tray.get", null)) as {
+          visible: boolean;
+        }
+      ).visible,
+      false,
+      "restoring a window must not show the icon again",
+    );
+    await callTray("tray.setVisible", {
+      visible: true,
+    });
+    assert.equal(
+      (
+        (await callTray("tray.get", null)) as {
+          visible: boolean;
+        }
+      ).visible,
+      true,
+      "showing the icon again must be recorded",
+    );
+  }
   /** Exercise deferred creation, last close and restoration through real backend Host calls. */
   async function exercise(desktop: DesktopContext) {
     assert(backend);
@@ -588,6 +663,11 @@ if (!process.argv.includes("--child")) {
         "inactive restoration must preserve the session",
       );
     }
+    if (hiddenTray) {
+      await callTray("tray.setVisible", {
+        visible: false,
+      });
+    }
     emit("native-close-requested");
     await waitFor(() =>
       call("windows.isDestroyed", {
@@ -597,7 +677,9 @@ if (!process.argv.includes("--child")) {
     assert.equal(attempts, 0, "keep-alive last close must not call beforeQuit");
     await Bun.sleep(100);
     const closedTicks = ticks;
-    if (hasTray) {
+    if (hiddenTray) {
+      await exerciseHiddenTray(desktop, original.windowId);
+    } else if (hasTray) {
       emit("recreate-requested");
     } else {
       await desktop.show();
@@ -715,6 +797,12 @@ if (!process.argv.includes("--child")) {
           backend: {
             permissions: [
               ...windowPermissions(),
+              ...(hiddenTray
+                ? [
+                    "tray.get",
+                    "tray.setVisible",
+                  ]
+                : []),
             ],
           },
           views: [
