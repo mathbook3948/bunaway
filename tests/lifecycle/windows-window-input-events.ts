@@ -43,7 +43,9 @@ const policy: Policy = {
         "windows.systemContextMenu",
       ],
       host: {
-        permissions: [],
+        permissions: [
+          ...windowPermissions(),
+        ],
       },
     },
   ],

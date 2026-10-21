@@ -47,21 +47,19 @@ import {
 } from "./ui-phase.ts";
 import { originOf, WebView } from "./webview.ts";
 import { Windows } from "./win32.ts";
-import { disposeWin32Bindings, kernel, ole, user } from "./win32-bindings.ts";
+import { disposeWin32Bindings, kernel, ole } from "./win32-bindings.ts";
 import {
   WM_CLOSE,
   WM_ENTERSIZEMOVE,
   WM_EXITSIZEMOVE,
   WM_SIZE,
 } from "./win32-constants.ts";
-import { screenPointParam } from "./window-drag.ts";
 import {
   appCommandName,
   contextMenuPoint,
   isSystemMenuArea,
   WM_APPCOMMAND,
   WM_CONTEXTMENU,
-  WM_NCHITTEST,
 } from "./window-input-events.ts";
 import { WindowLifecycle } from "./window-lifecycle.ts";
 import { WindowProfiles } from "./window-profiles.ts";
@@ -1593,13 +1591,8 @@ function createWindow(
       return;
     }
     // DefWindowProc answers the hit test directly; sending the message would re-enter this procedure.
-    const hit = user.symbols.DefWindowProcW(
-      window,
-      WM_NCHITTEST,
-      0n,
-      screenPointParam(point.x, point.y),
-    );
-    if (isSystemMenuArea(Number(BigInt.asIntN(32, BigInt(hit))))) {
+    assert(windows);
+    if (isSystemMenuArea(windows.hitTest(window, point.x, point.y))) {
       sendNativeEvent(boundary, "windows.systemContextMenu", {
         windowId,
         viewId,

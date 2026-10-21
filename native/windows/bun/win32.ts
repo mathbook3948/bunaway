@@ -124,10 +124,15 @@ import {
   WS_THICKFRAME,
 } from "./win32-constants.ts";
 import { WindowBackgrounds } from "./window-background.ts";
-import { dragRejected, resizeIsPinned } from "./window-drag.ts";
+import {
+  dragRejected,
+  resizeIsPinned,
+  screenPointParam,
+} from "./window-drag.ts";
 import { beginSystemLoop, primaryButtonDown } from "./window-drag-input.ts";
 import { completedGeometryChanges, windowChanges } from "./window-events.ts";
 import { WindowIconSet } from "./window-icon.ts";
+import { WM_NCHITTEST } from "./window-input-events.ts";
 import {
   centerInWorkArea,
   initialWindowPlacement,
@@ -1428,6 +1433,26 @@ export class Windows {
     } else {
       this.nonFullscreenable.add(window);
     }
+  }
+
+  /**
+   * Hit-test code (HT*) for a screen point. DefWindowProc answers directly, so the window
+   * procedure is not re-entered the way a sent WM_NCHITTEST would.
+   */
+  hitTest(window: bigint, x: number, y: number): number {
+    return Number(
+      BigInt.asIntN(
+        32,
+        BigInt(
+          user.symbols.DefWindowProcW(
+            window,
+            WM_NCHITTEST,
+            0n,
+            screenPointParam(x, y),
+          ),
+        ),
+      ),
+    );
   }
 
   isClosable(window: bigint): boolean {
