@@ -3035,17 +3035,12 @@ test.skipIf(!iscc)(
         `$s=New-Object -ComObject WScript.Shell; Get-ChildItem -LiteralPath ${dir} -Filter ${quote(filter)} | ForEach-Object { $s.CreateShortcut($_.FullName).TargetPath }`,
       );
     try {
-      for (const [version, destination] of [
-        [
-          "links-first",
-          undefined,
-        ],
-        [
-          "links-second",
-          moved,
-        ],
-      ] as const) {
-        await (
+      const details = (dir: string, filter: string) =>
+        powershell(
+          `$s=New-Object -ComObject WScript.Shell; Get-ChildItem -LiteralPath ${dir} -Filter ${quote(filter)} | ForEach-Object { $l=$s.CreateShortcut($_.FullName); $l.TargetPath + '|' + $l.Arguments + '|' + $l.WorkingDirectory + '|' + $l.IconLocation }`,
+        );
+      const install = async (version: string, destination?: string) =>
+        (
           await startInstall({
             version,
             executable: "App.exe",
@@ -3060,17 +3055,30 @@ test.skipIf(!iscc)(
               : {}),
           })
         ).finish();
-      }
-      const menu = (await targets(`(${startMenuGroup})`, "*.lnk"))
+      await install("links-first");
+      // A user argument proves the links are updated in place, not recreated.
+      await powershell(
+        `$s=New-Object -ComObject WScript.Shell; foreach ($dir in (${startMenuGroup}), (${desktop})) { Get-ChildItem -LiteralPath $dir -Filter '*.lnk' | ForEach-Object { $l=$s.CreateShortcut($_.FullName); if ($l.TargetPath -like '*\\App.exe') { $l.Arguments='--user'; $l.Save() } } }`,
+      );
+      const movedExecutable = join(moved, "App.exe");
+      expect(await targets(`(${desktop})`, `*${identifier}*.lnk`)).not.toBe(
+        movedExecutable,
+      );
+      await install("links-second", moved);
+      const appLink = `${movedExecutable}|--user|${moved}|${movedExecutable},0`;
+      expect(await details(`(${desktop})`, `*${identifier}*.lnk`)).toBe(
+        appLink,
+      );
+      const menu = (await details(`(${startMenuGroup})`, "*.lnk"))
         .split(/\r?\n/)
         .sort();
-      expect(menu).toEqual([
-        join(moved, "App.exe"),
-        join(moved, "unins000.exe"),
-      ]);
-      expect(await targets(`(${desktop})`, `*${identifier}*.lnk`)).toBe(
-        join(moved, "App.exe"),
-      );
+      expect(menu).toContain(appLink);
+      expect(
+        menu.filter((line) =>
+          line.startsWith(`${join(moved, "unins000.exe")}|`),
+        ),
+      ).toHaveLength(1);
+      expect(menu).toHaveLength(2);
     } finally {
       await powershell(
         `Remove-Item -LiteralPath (${startMenuGroup}) -Recurse -Force -ErrorAction SilentlyContinue; Get-ChildItem -LiteralPath (${desktop}) -Filter ${quote(`*${identifier}*.lnk`)} | Remove-Item -Force`,

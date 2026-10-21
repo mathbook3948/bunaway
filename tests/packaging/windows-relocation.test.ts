@@ -173,3 +173,9 @@ test("a shortcut that exists but cannot be read counts as a failed update, and o
   const safe = routine(script, "IsSafeRelocationSource");
   expect(safe).toContain("GetRelocationDriveType(Copy(Dir, 1, 3)) <> 3");
 });
+
+test("a link whose start folder is the old install folder gets the new folder", () => {
+  const update = routine(renderInnoScript(base), "UpdateShortcut");
+  expect(update).toContain("WorkingDirectory := Link.WorkingDirectory;");
+  expect(update).toContain("Link.WorkingDirectory := ExpandConstant('{app}');");
+});

@@ -666,7 +666,7 @@ begin
 end;
 
 procedure UpdateShortcut(const Filename: String);
-var Link: Variant; Target, Arguments, IconPath: String; IconIndex: Integer;
+var Link: Variant; Target, Arguments, IconPath, WorkingDirectory: String; IconIndex: Integer;
     IconObject: IUnknown; IconLink: IShellLinkW; IconFile: IPersistFile;
 begin
   if (PreviousExecutableName = '') or (PreviousInstallDir = '') or
@@ -676,6 +676,7 @@ begin
   if CompareText(Target, AddBackslash(PreviousInstallDir) + PreviousExecutableName) <> 0 then Exit;
   try
     Arguments := Link.Arguments;
+    WorkingDirectory := Link.WorkingDirectory;
     IconObject := CreateComObject(StringToGuid('{00021401-0000-0000-C000-000000000046}'));
     IconFile := IPersistFile(IconObject);
     OleCheck(IconFile.Load(Filename, 0));
@@ -692,6 +693,10 @@ begin
     Link.SetIconLocation(ExpandConstant('{app}') + '\' + '${executableLiteral}', IconIndex);
   Link.Path := ExpandConstant('{app}') + '\' + '${executableLiteral}';
   Link.Arguments := Arguments;
+  // The default start folder is the old install folder, which is removed after a move.
+  // A start folder the user chose elsewhere is kept.
+  if CompareText(AddBackslash(WorkingDirectory), AddBackslash(PreviousInstallDir)) = 0 then
+    Link.WorkingDirectory := ExpandConstant('{app}');
   Link.Save(Filename);
 end;
 
