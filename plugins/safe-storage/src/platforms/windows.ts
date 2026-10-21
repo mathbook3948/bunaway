@@ -1,10 +1,24 @@
-import { BunawayError } from "@bunaway/plugin";
-import { safeStorageLimits } from "#safe-storage/contract";
+import {
+  attemptAll,
+  BunawayError,
+  type NativeEnvironment,
+} from "@bunaway/plugin";
+import {
+  safeStorageLimits,
+  type WindowsSafeStorageInstance,
+} from "#safe-storage/contract";
+import {
+  assertCredentialAppId,
+  WindowsCredentialStore,
+} from "#safe-storage/platforms/windows-credential";
 import { WindowsDataProtection } from "#safe-storage/platforms/windows-dpapi";
 /** Lazily bind DPAPI so an unavailable provider can still be queried safely. */
-export class WindowsSafeStorage {
+export class WindowsSafeStorage implements WindowsSafeStorageInstance {
   private native: WindowsDataProtection | undefined;
+  private credentials: WindowsCredentialStore | undefined;
   private disposed = false;
+
+  constructor(private readonly appId?: string) {}
 
   private active(): void {
     if (this.disposed) {
@@ -19,6 +33,27 @@ export class WindowsSafeStorage {
     this.active();
     this.native ??= new WindowsDataProtection();
     return this.native;
+  }
+
+  private store(): WindowsCredentialStore {
+    this.active();
+    // Credential Manager is shared by the whole user session, so the namespace needs a host app id.
+    this.credentials ??= new WindowsCredentialStore(
+      assertCredentialAppId(this.appId),
+    );
+    return this.credentials;
+  }
+
+  setSecret(key: string, value: string): void {
+    this.store().set(key, value);
+  }
+
+  getSecret(key: string): string | null {
+    return this.store().get(key);
+  }
+
+  deleteSecret(key: string): boolean {
+    return this.store().delete(key);
   }
 
   isAvailable(): boolean {
@@ -89,13 +124,21 @@ export class WindowsSafeStorage {
       return;
     }
     this.disposed = true;
-    this.native?.dispose();
+    const { native, credentials } = this;
     this.native = undefined;
+    this.credentials = undefined;
+    attemptAll(
+      [
+        () => native?.dispose(),
+        () => credentials?.dispose(),
+      ],
+      "Safe storage bindings did not close cleanly.",
+    );
   }
 }
 
-export function initialize(): WindowsSafeStorage {
-  return new WindowsSafeStorage();
+export function initialize(environment: NativeEnvironment): WindowsSafeStorage {
+  return new WindowsSafeStorage(environment.app?.id);
 }
 
 export function dispose(instance: WindowsSafeStorage): void {
