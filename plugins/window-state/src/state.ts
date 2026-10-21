@@ -1,6 +1,7 @@
 import type store from "@bunaway/plugin-store";
 import type windows from "@bunaway/plugin-windows";
 import {
+  LOGICAL_DPI,
   removeInputSchema,
   restoreInputSchema,
   type SavedWindowState,
@@ -43,6 +44,9 @@ type WindowTarget = {
   windowId?: string;
 };
 type DisplayState = Awaited<ReturnType<WindowsClient["getSnapshot"]>>["state"];
+
+/** Logical pixels added to the size limits of a minimized window, whose frame cannot be read. */
+const MINIMIZED_FRAME_LOGICAL_PIXELS = 64;
 
 const DEFAULT_INCLUDE = {
   position: true,
@@ -127,23 +131,26 @@ function place(windows: WindowsClient, window: WindowTarget, bounds: Rect) {
 /**
  * The window size limits apply to the content area at the window's current DPI, so measure how
  * much larger the outer rectangle is than the content. A minimized window reports the size of
- * its icon, so it gets no frame and only the content limits.
+ * its icon, so its frame cannot be measured and a generous allowance stands in for it: a size
+ * slightly above the limit is accepted, one the native check would reject is not sent.
  */
 async function measureFrame(
   windows: WindowsClient,
   window: WindowTarget,
   minimized: boolean,
-): Promise<
-  | WindowFrame
-  | {
-      width: 0;
-      height: 0;
-    }
-> {
+): Promise<WindowFrame> {
   if (minimized) {
+    const { dpi } = await windows.getNormalBounds({
+      ...window,
+      unit: "physical",
+    });
+    const allowance = Math.ceil(
+      (MINIMIZED_FRAME_LOGICAL_PIXELS * dpi) / LOGICAL_DPI,
+    );
     return {
-      width: 0,
-      height: 0,
+      width: allowance,
+      height: allowance,
+      dpi,
     };
   }
   const outer = await windows.getOuterBounds({
@@ -217,7 +224,8 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
         ...window,
         unit: "physical",
       });
-      // A minimized window reports not maximized, so keep what an earlier save recorded.
+      // A window minimized from maximized may report not maximized, so a minimized window also
+      // keeps what an earlier save recorded.
       const earlier = snapshot.state.minimized
         ? await read(parsed.key ?? parsed.view)
         : null;
@@ -228,9 +236,7 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
         width: normal.width,
         height: normal.height,
         dpi: normal.dpi,
-        maximized: snapshot.state.minimized
-          ? (earlier?.maximized ?? false)
-          : snapshot.state.maximized,
+        maximized: snapshot.state.maximized || (earlier?.maximized ?? false),
         fullscreen: snapshot.state.fullscreen,
         visible: snapshot.state.visible,
       };

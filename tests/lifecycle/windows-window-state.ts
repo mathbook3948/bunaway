@@ -183,6 +183,55 @@ if (!process.argv.includes("--child")) {
     await windows.unmaximize(target);
     assert.deepEqual(await normal(), saved);
 
+    // A window minimized from maximized is saved as maximized, and restoring a tiny size into a
+    // minimized window stays inside the native size limits instead of throwing.
+    await place(saved);
+    await windows.maximize(target);
+    await windows.minimize(target);
+    await windowState.save({
+      ...target,
+      key: "minimized",
+    });
+    const minimizedRecord = await store.get({
+      name: "window-state",
+      key: "minimized",
+    });
+    assert.equal(
+      (
+        minimizedRecord.value as {
+          maximized: boolean;
+        }
+      ).maximized,
+      true,
+    );
+    await store.set({
+      name: "window-state",
+      key: "tiny",
+      value: {
+        version: 1,
+        x: saved.x,
+        y: saved.y,
+        width: 100,
+        height: 100,
+        dpi: 96,
+        maximized: false,
+        fullscreen: false,
+        visible: true,
+      },
+    });
+    assert.equal((await state()).minimized, true);
+    await windowState.restore({
+      ...target,
+      key: "tiny",
+      include: {
+        position: false,
+        maximized: false,
+        fullscreen: false,
+      },
+    });
+    await windows.restore(target);
+    await reset();
+
     // Fullscreen: restore leaves it, places the window and enters it again.
     await place(saved);
     await windows.setFullscreen({

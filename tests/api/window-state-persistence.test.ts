@@ -645,6 +645,14 @@ test("restore places the window again when a DPI change resized it", async () =>
     "bounds:10,20",
     "bounds:10,20",
   ]);
+  // The first placement was doubled by the fake DPI change; the second one is the saved size.
+  await api.save({
+    view: "main",
+  });
+  expect(records.get("main")).toMatchObject({
+    width: 640,
+    height: 480,
+  });
 });
 
 test("a window that lands on a lower DPI is fitted again with that DPI's limits", async () => {
@@ -686,7 +694,7 @@ test("a window that lands on a lower DPI is fitted again with that DPI's limits"
   });
 });
 
-test("a minimized window is restored without measuring a frame", async () => {
+test("a minimized window gets a frame allowance instead of a measured frame", async () => {
   const { api, records, behavior, setNormal } = fixture({
     maximized: false,
     fullscreen: false,
@@ -707,7 +715,7 @@ test("a minimized window is restored without measuring a frame", async () => {
   });
   records.set("main", {
     ...plainRecord,
-    width: 260,
+    width: 100,
     height: 240,
   });
   expect(
@@ -716,7 +724,15 @@ test("a minimized window is restored without measuring a frame", async () => {
     }),
   ).toEqual({
     restored: true,
-    adjusted: false,
+    adjusted: true,
+  });
+  await api.save({
+    view: "main",
+  });
+  // 200 logical content pixels plus the 64 pixel allowance; the measured 160 is not used.
+  expect(records.get("main")).toMatchObject({
+    width: 264,
+    height: 264,
   });
 });
 
@@ -837,41 +853,18 @@ test("an already maximized window is not maximized again", async () => {
   ]);
 });
 
-test("restored sizes respect the content size limits at the window DPI", async () => {
-  const { api, records, behavior, setNormal } = fixture({
-    maximized: false,
+test("saving a minimized window that reports maximized keeps maximized", async () => {
+  const { api, records } = fixture({
+    maximized: true,
     fullscreen: false,
     visible: true,
+    minimized: true,
   });
-  behavior.windowDpi = 192;
-  behavior.frame = {
-    width: 16,
-    height: 39,
-  };
-  setNormal({
-    x: 0,
-    y: 0,
-    width: 900,
-    height: 700,
-    dpi: 192,
-  });
-  records.set("main", {
-    ...plainRecord,
-    width: 216,
-    height: 100,
-  });
-  await api.restore({
+  await api.save({
     view: "main",
   });
-  // 200 logical content pixels at DPI 192 plus the frame.
-  expect(
-    await api.save({
-      view: "main",
-    }),
-  ).toBeNull();
   expect(records.get("main")).toMatchObject({
-    width: 416,
-    height: 439,
+    maximized: true,
   });
 });
 
