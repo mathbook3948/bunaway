@@ -276,8 +276,14 @@ export function registerToastActivator(
         }
         // The values are copied, so the callback can leave the native stack before publishing.
         queueMicrotask(() => {
-          if (!disposed) {
+          if (disposed) {
+            return;
+          }
+          try {
             receive(call);
+          } catch (error) {
+            // Runs outside the native call, so nothing above can observe the failure.
+            console.error("Toast activation was not delivered", error);
           }
         });
         return S_OK;

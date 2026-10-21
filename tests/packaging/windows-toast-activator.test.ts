@@ -263,33 +263,46 @@ test.skipIf(!iscc)(
       expect(current).toContain(property);
       const previous = current.replace(property, "");
       expect(await install(await build(previous, "previous"))).toBe(0);
-      const [name] = await shortcutNames();
-      expect(name).toBeDefined();
-      const link = join(group, name ?? "");
-      expect(
-        Buffer.from(await Bun.file(link).arrayBuffer()).includes(guid(clsid)),
-      ).toBe(false);
-      const edit = await run([
-        "powershell.exe",
-        "-NoProfile",
-        "-Command",
-        `$s=(New-Object -ComObject WScript.Shell).CreateShortcut('${link.replace(/'/g, "''")}');$s.Arguments='--custom-flag';$s.Save()`,
-      ]);
+      // The group holds the app link and the uninstall link; only the app link takes part.
+      const name = `${options.name}.lnk`;
+      const names = await shortcutNames();
+      expect(names).toContain(name);
+      expect(names).toHaveLength(2);
+      const link = join(group, name);
+      const hasClass = async () =>
+        Buffer.from(await Bun.file(link).arrayBuffer()).includes(guid(clsid));
+      expect(await hasClass()).toBe(false);
+      const quoted = link.replace(/'/g, "''");
+      const shortcut = "(New-Object -ComObject WScript.Shell)";
+      const powershell = (script: string) =>
+        run([
+          "powershell.exe",
+          "-NoProfile",
+          "-Command",
+          script,
+        ]);
+      const edit = await powershell(
+        `$s=${shortcut}.CreateShortcut('${quoted}');$s.Arguments='--custom-flag';$s.Save()`,
+      );
       expect(edit.code, edit.stderr).toBe(0);
       expect(await install(await build(current, "current"))).toBe(0);
-      expect(await shortcutNames()).toEqual([
-        name ?? "",
-      ]);
-      expect(
-        Buffer.from(await Bun.file(link).arrayBuffer()).includes(guid(clsid)),
-      ).toBe(true);
-      const read = await run([
-        "powershell.exe",
-        "-NoProfile",
-        "-Command",
-        `(New-Object -ComObject WScript.Shell).CreateShortcut('${link.replace(/'/g, "''")}').Arguments`,
-      ]);
+      expect((await shortcutNames()).sort()).toEqual(names.sort());
+      expect(await hasClass()).toBe(true);
+      const read = await powershell(
+        `${shortcut}.CreateShortcut('${quoted}').Arguments`,
+      );
       expect(read.stdout.trim()).toBe("--custom-flag");
+      // A link that already has the class is left as the user saved it.
+      const describe = await powershell(
+        `$s=${shortcut}.CreateShortcut('${quoted}');$s.Description='kept';$s.Save()`,
+      );
+      expect(describe.code, describe.stderr).toBe(0);
+      expect(await install(await build(current, "again"))).toBe(0);
+      expect(await hasClass()).toBe(true);
+      const description = await powershell(
+        `${shortcut}.CreateShortcut('${quoted}').Description`,
+      );
+      expect(description.stdout.trim()).toBe("kept");
     } finally {
       await run([
         join(destination, "unins000.exe"),

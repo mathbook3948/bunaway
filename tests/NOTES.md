@@ -234,7 +234,7 @@ slot과 인자 순서, 교체 순서, 4096개 한도, HRESULT 실패 때 COM 참
 `lifecycle/windows-notification-activator.test.ts`는 Windows에서 부모가 class object를 등록하고 별도
 프로세스가 COM으로 `Activate`를 호출해 정상 호출과 잘못된 호출(`E_INVALIDARG`), 해제 뒤 연결 실패를
 확인하며 `LocalServer32`의 기록과 갱신도 본다. `packaging/windows-toast-activator.test.ts`는 컴파일한
-설치 프로그램으로 바로가기의 CLSID 기록과 perUser 제거 때 키 삭제를 확인한다. 대화형 데스크톱에서 실제
+설치 프로그램으로 바로가기의 CLSID 기록, CLSID 없는 링크의 업데이트(CLSID 추가와 `Arguments` 유지, CLSID가 있는 링크는 그대로)와 perUser 제거 때 키 삭제를 확인한다. 대화형 데스크톱에서 실제
 알림을 클릭해 꺼진 앱이 시작되는 것은 자동으로 확인하지 않는다.
 
 `notification-shortcut-cleanup.test.ts`는 바로가기 정리의 일시적인 EBUSY만 최대 10회,

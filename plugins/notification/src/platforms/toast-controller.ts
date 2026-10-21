@@ -295,7 +295,7 @@ export function createToastController(
       return driver.list();
     },
     /**
-     * Schedules are owned by the OS: they are not tracked in `entries`, publish no events and survive
+     * Schedules are owned by the OS: they are not tracked in `entries`, publish no toast object events (a click arrives through the activator) and survive
      * `dispose`, so the app can be closed before the delivery time.
      */
     schedule(input: ResolvedScheduledNotification): NotificationResult {

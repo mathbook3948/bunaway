@@ -207,7 +207,7 @@ Windows는 시작 메뉴 바로가기의 `System.AppUserModel.ToastActivatorCLSI
   class object를 등록하고 별도 프로세스가 `CoCreateInstance`로 연결해 `Activate`를 호출한다. 정상 호출 2건,
   너무 긴 인수와 입력 2개 호출의 `E_INVALIDARG`, 해제 뒤 `REGDB_E_CLASSNOTREG`, `LocalServer32` 기록과 갱신을
   확인한다. `tests/packaging/windows-toast-activator.test.ts`는 Inno 스크립트의 바로가기 속성과 제거 코드를
-  검사하고 Windows에서는 컴파일한 설치 프로그램으로 바로가기에 CLSID가 기록되는 것과 perUser 제거가 키를
+  검사하고 Windows에서는 컴파일한 설치 프로그램으로 바로가기에 CLSID가 기록되는 것, CLSID 없는 링크의 업데이트와 perUser 제거가 키를
   지우는 것을 확인한다.
 
 사용자가 Windows 설정에서 앱/전체 알림을 끄거나 정책으로 차단하는 시나리오, 실제

@@ -317,8 +317,8 @@ function runAndDeleteSections(context: InnoContext): string[] {
 }
 
 /**
- * A GUID as the 16 bytes a shortcut file stores (Windows field order), written as Pascal `#nn`
- * characters so Setup can search the link's bytes for it.
+ * A GUID as the 16 bytes a shortcut file stores (Windows field order), as a comma separated
+ * list of decimal values that the generated Pascal compares byte by byte.
  */
 function guidFileBytes(guid: string): string {
   const hex = guid.replaceAll("-", "");
@@ -334,7 +334,7 @@ function guidFileBytes(guid: string): string {
     ...bytes.slice(6, 8).reverse(),
     ...bytes.slice(8),
   ];
-  return ordered.map((byte) => `#${byte}`).join("");
+  return ordered.join(", ");
 }
 
 /** Pascal [Code] support: COM types, install state, association and autostart code, WebView2 detection. */
@@ -649,9 +649,21 @@ end;
           "    MenuLinkRecreated: Boolean;",
           "",
           "function ShortcutHasToastActivator(const Filename: String): Boolean;",
-          "var Content: AnsiString;",
+          "var Content: AnsiString; Needle: array[0..15] of Integer; I, J: Integer; Found: Boolean;",
           "begin",
-          `  Result := LoadStringFromFile(Filename, Content) and (Pos(${toastClsidBytes}, Content) > 0);`,
+          "  Result := False;",
+          `  ${toastClsidBytes
+            .split(", ")
+            .map((byte, index) => `Needle[${index}] := ${byte};`)
+            .join(" ")}`,
+          "  if not LoadStringFromFile(Filename, Content) then Exit;",
+          // Compare raw bytes: a string search would convert through the ANSI code page and miss GUID bytes above 0x7F.
+          "  for I := 1 to Length(Content) - 15 do begin",
+          "    Found := True;",
+          "    for J := 0 to 15 do",
+          "      if Ord(Content[I + J]) <> Needle[J] then begin Found := False; Break; end;",
+          "    if Found then begin Result := True; Exit; end;",
+          "  end;",
           "end;",
           "",
           "procedure PrepareMenuLinkForToastActivator;",
