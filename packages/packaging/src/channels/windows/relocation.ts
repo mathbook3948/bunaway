@@ -168,7 +168,14 @@ begin
   if GetRelocationDriveType(Copy(Dir, 1, 3)) <> 3 then Exit;
   if IsNestedDirectory(Dir, ExpandConstant('{app}')) or
      IsNestedDirectory(ExpandConstant('{app}'), Dir) then Exit;
-  if IsProtectedRelocationDirectory(Dir) then Exit;${
+  // A shell folder that cannot be resolved (service account, unreachable redirected folder)
+  // counts as protected: keeping the old folder is the safe outcome.
+  try
+    if IsProtectedRelocationDirectory(Dir) then Exit;
+  except
+    Log('Kept the previous installation folder, a system folder could not be resolved: ' + GetExceptionMessage);
+    Exit;
+  end;${
     perMachine
       ? `
   if not IsNestedDirectory(ExpandConstant('{commonpf}'), Dir) then Exit;`
@@ -270,7 +277,7 @@ var Payload: TStringList;
 begin
   if not IsRelocation then Exit;
   if RelocationShortcutFailed then
-    RaiseException('Could not update a shortcut to the new executable. Repair or delete the unreadable shortcut and run the installer again to finish removing the previous installation.');
+    RaiseException('Could not update a shortcut to the new executable (see the setup log for its path). Repair or delete that shortcut and run the installer again to finish removing the previous installation.');
   Payload := nil;
   try${
     options.hasPayloadList
