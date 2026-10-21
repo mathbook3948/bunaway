@@ -439,6 +439,10 @@ export type NativeWindow = {
   setAlwaysOnTop?(alwaysOnTop: boolean): void;
   /** Read live topmost style. Windows only. */
   isAlwaysOnTop?(): boolean;
+  /** Move once to the top of the window's Z-order band without activation or focus change. A topmost window stays among topmost windows. Windows only. */
+  moveTop?(): void;
+  /** Move once below the other normal windows without activation. BUSY while alwaysOnTop is set, and Windows raises the window again when it is activated. Windows only. */
+  moveToBottom?(): void;
   /** Change taskbar/Alt+Tab exclusion on a hidden, normal window. BUSY otherwise. Windows only. */
   setSkipTaskbar?(skipTaskbar: boolean): void;
   /** Read explicit tool-window exclusion; owned windows may also be absent from the taskbar. Windows only. */

@@ -1062,6 +1062,41 @@ export class Windows {
     );
   }
 
+  /** Move once to the top of the window's Z-order band without activation, visibility or geometry changes.
+   * A topmost window stays in the topmost band; a normal window stays below it.
+   */
+  moveTop(window: bigint): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    this.placeInZOrder(window, 0n);
+  }
+
+  /** Move once below every other normal window. HWND_BOTTOM would strip WS_EX_TOPMOST, so refuse that case. */
+  moveToBottom(window: bigint): void {
+    if (this.isAlwaysOnTop(window)) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "Disable alwaysOnTop before moving the window to the bottom.",
+      });
+    }
+    this.placeInZOrder(window, 1n);
+  }
+
+  /** Insert-after handles: HWND_TOP is 0 and HWND_BOTTOM is 1. */
+  private placeInZOrder(window: bigint, insertAfter: bigint): void {
+    const SWP_NOOWNERZORDER = 0x200;
+    assert(
+      user.symbols.SetWindowPos(
+        window,
+        insertAfter,
+        0,
+        0,
+        0,
+        0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER,
+      ),
+    );
+  }
+
   isSkipTaskbar(window: bigint): boolean {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");
     return !!(this.windowStyles(window).exStyle & WS_EX_TOOLWINDOW);

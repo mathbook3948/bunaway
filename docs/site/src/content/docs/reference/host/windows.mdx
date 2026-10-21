@@ -57,6 +57,13 @@ CSS 영역은 이 창에서 허용된 문서에 적용되므로 신뢰하는 ori
 Windows의 owner 관계에 따라 관련 창의 Z 순서도 영향을 받을 수 있습니다.
 상태 변경은 `windows.changed`의 `enterAlwaysOnTop`, `leaveAlwaysOnTop`으로 전달합니다.
 
+`moveTop({ view, windowId? })`는 창을 포커스와 활성화를 바꾸지 않고 자신이 속한 Z 순서 그룹의 맨 위로 한 번 옮깁니다.
+`alwaysOnTop` 창은 항상 위 그룹 안에서만 올라가고, 일반 창은 항상 위 창보다 위로 올라가지 않습니다.
+`moveToBottom({ view, windowId? })`는 같은 방식으로 다른 일반 창의 맨 아래로 한 번 옮깁니다. `alwaysOnTop`이 켜진 창은
+항상 위 상태가 풀리므로 BUSY로 거부합니다. 두 연산 모두 표시 상태와 위치, 크기를 바꾸지 않으며 숨겨졌거나 최소화된 창은 표시하지 않고 순서만 바꿉니다.
+권한은 `windows.moveTop`, `windows.moveToBottom`입니다. `moveToBottom`은 고정이 아닙니다. 사용자가 창을 활성화하면 Windows가 창을 다시 올립니다.
+Tauri의 지속형 `setAlwaysOnBottom`에 해당하는 상태는 Windows에 OS 지원이 없어 제공하지 않습니다.
+
 `setSkipTaskbar({ view, windowId?, skipTaskbar })`과 `isSkipTaskbar({ view, windowId? })`은
 명시적인 tool-window 제외 상태를 변경하고 조회합니다. 권한은 `windows.setSkipTaskbar`, `windows.isSkipTaskbar`입니다. 제외하면 작업 표시줄과 Alt+Tab에
 나타나지 않습니다. owned 또는 focusable:false 창은 이 값이 false여도 작업 표시줄에 없을 수 있습니다.

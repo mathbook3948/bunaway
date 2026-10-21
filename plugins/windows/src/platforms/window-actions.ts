@@ -499,6 +499,12 @@ function applyAppearance(scope: ActionScope, call: WindowCall): ActionResult {
       return null;
     case "windows.isAlwaysOnTop":
       return supported(window.isAlwaysOnTop, unsupportedDisplay)();
+    case "windows.moveTop":
+      supported(window.moveTop, unsupportedDisplay)();
+      return null;
+    case "windows.moveToBottom":
+      supported(window.moveToBottom, unsupportedDisplay)();
+      return null;
     case "windows.setSkipTaskbar":
       supported(
         window.setSkipTaskbar,

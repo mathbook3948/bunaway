@@ -461,6 +461,8 @@ const rows: Row[] = [
   ...flag("setFocusable", "isFocusable", "focusable", MESSAGES.focusability),
   query("getTitlebar", "custom", MESSAGES.display),
   ...flag("setAlwaysOnTop", "isAlwaysOnTop", "alwaysOnTop", MESSAGES.display),
+  command("moveTop", MESSAGES.display),
+  command("moveToBottom", MESSAGES.display),
   ...flag("setSkipTaskbar", "isSkipTaskbar", "skipTaskbar", MESSAGES.display),
   ...flag(
     "setContentProtection",
@@ -1209,6 +1211,8 @@ function fixture(
     "getTitlebar",
     "setAlwaysOnTop",
     "isAlwaysOnTop",
+    "moveTop",
+    "moveToBottom",
     "setSkipTaskbar",
     "isSkipTaskbar",
     "setContentProtection",
