@@ -165,6 +165,13 @@ test.skipIf(process.platform === "win32")(
         "UNSUPPORTED",
       ],
       [
+        "opener.getFileIcon",
+        {
+          extension: ".txt",
+        },
+        "UNSUPPORTED",
+      ],
+      [
         "opener.getUrlHandler",
         {
           url: "https://example.com/",

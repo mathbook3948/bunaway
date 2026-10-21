@@ -1556,6 +1556,7 @@
       "opener.addRecentDocument",
       "opener.clearRecentDocuments",
       "opener.getUrlHandler",
+      "opener.getFileIcon",
       "opener.registerUrlScheme",
       "opener.unregisterUrlScheme",
       "opener.isUrlSchemeRegistered",

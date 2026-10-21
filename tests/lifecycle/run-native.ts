@@ -188,6 +188,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-opener-selected-app.test.ts",
           "tests/lifecycle/windows-opener-recent.test.ts",
           "tests/lifecycle/windows-opener-url-handler.test.ts",
+          "tests/lifecycle/windows-opener-file-icon.test.ts",
           "tests/lifecycle/windows-opener-url-scheme.test.ts",
           "tests/lifecycle/windows-opener-shortcut.test.ts",
           "tests/lifecycle/windows-opener-jump-list.test.ts",

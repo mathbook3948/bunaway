@@ -384,6 +384,13 @@ export const USER32 = {
     ],
     returns: "u64",
   },
+  GetIconInfo: {
+    args: [
+      "u64",
+      "ptr",
+    ],
+    returns: "i32",
+  },
   IsClipboardFormatAvailable: {
     args: [
       "u32",
@@ -553,6 +560,26 @@ export const GDI32 = {
     args: [],
     returns: "i32",
   },
+  GetDIBits: {
+    args: [
+      "u64",
+      "u64",
+      "u32",
+      "u32",
+      "ptr",
+      "ptr",
+      "u32",
+    ],
+    returns: "i32",
+  },
+  GetObjectW: {
+    args: [
+      "u64",
+      "i32",
+      "ptr",
+    ],
+    returns: "i32",
+  },
   SelectObject: {
     args: [
       "u64",
@@ -608,6 +635,24 @@ export const SHELL32 = {
     args: [
       "ptr",
       "ptr",
+      "ptr",
+      "ptr",
+    ],
+    returns: "i32",
+  },
+  SHGetFileInfoW: {
+    args: [
+      "ptr",
+      "u32",
+      "ptr",
+      "u32",
+      "u32",
+    ],
+    returns: "u64",
+  },
+  SHGetImageList: {
+    args: [
+      "i32",
       "ptr",
       "ptr",
     ],

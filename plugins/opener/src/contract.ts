@@ -1,4 +1,4 @@
-import { int32Schema } from "@bunaway/plugin";
+import { base64Schema, int32Schema } from "@bunaway/plugin";
 import { BunawayError, type JsonValue, validateValue } from "@bunaway/protocol";
 import { z } from "zod";
 import { isRegistrableUrlScheme } from "#opener/url-scheme";
@@ -194,6 +194,55 @@ export const removedJumpListTaskSchema = z.strictObject({
 });
 export type RemovedJumpListTask = z.infer<typeof removedJumpListTaskSchema>;
 
+export const FILE_ICON_SIZES = [
+  "small",
+  "normal",
+  "large",
+] as const;
+export type FileIconSize = (typeof FILE_ICON_SIZES)[number];
+export const DEFAULT_FILE_ICON_SIZE: FileIconSize = "normal";
+export const MAX_FILE_ICON_EXTENSION_LENGTH = 31;
+// Shell icon lists top out at 256 pixels at any display scale.
+export const MAX_FILE_ICON_EDGE_PIXELS = 256;
+// An uncompressed 256 by 256 RGBA PNG is about 256 KiB; the limit leaves room for incompressible data.
+export const MAX_FILE_ICON_PNG_BYTES = 512 * 1024;
+const fileIconSize = z.enum(FILE_ICON_SIZES);
+
+/**
+ * A file extension such as `.txt`: a dot and at most 31 letters, digits, `_`, `-`, `+` or `~`.
+ * Anything that could name a path, a stream or another file is rejected.
+ */
+export const fileIconExtension = z
+  .string()
+  .regex(
+    new RegExp(`^\\.[A-Za-z0-9_+~-]{1,${MAX_FILE_ICON_EXTENSION_LENGTH}}$`),
+    "Expected a file extension such as .txt.",
+  );
+
+/**
+ * The icon of an existing file (`path`) or the icon registered for an extension, without a file.
+ * `size` is `small` (16), `normal` (32, the default) or `large` (48) pixels at 100% scale.
+ */
+export const fileIconInput = z.union([
+  fileInput.extend({
+    size: fileIconSize.optional(),
+  }),
+  z.strictObject({
+    extension: fileIconExtension,
+    size: fileIconSize.optional(),
+  }),
+]);
+export type FileIconInput = z.infer<typeof fileIconInput>;
+
+/** A shell icon as a PNG with alpha. `width` and `height` are the actual pixels, larger when the display is scaled. */
+export const fileIconSchema = z.strictObject({
+  mime: z.literal("image/png"),
+  data: base64Schema(MAX_FILE_ICON_PNG_BYTES),
+  width: z.number().int().min(1).max(MAX_FILE_ICON_EDGE_PIXELS),
+  height: z.number().int().min(1).max(MAX_FILE_ICON_EDGE_PIXELS),
+});
+export type FileIcon = z.infer<typeof fileIconSchema>;
+
 /** Selected application paths are validated again by each platform before native execution. */
 export const fileWithAppSchema = fileInput.extend({
   app: fileInput.shape.path,
@@ -218,6 +267,8 @@ export function validateOpenerInput(operation: string, input: JsonValue) {
       case "opener.trashFile":
       case "opener.addRecentDocument":
         return fileInput.parse(validateValue({}, input));
+      case "opener.getFileIcon":
+        return fileIconInput.parse(validateValue({}, input));
       case "opener.writeShortcutLink":
         return shortcutWriteInput.parse(validateValue({}, input));
       case "opener.setJumpList":

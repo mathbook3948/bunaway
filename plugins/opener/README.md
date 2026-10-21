@@ -106,6 +106,19 @@ const link = await opener.readShortcutLink("C:\\Users\\me\\Desktop\\App.lnk");
 다시 시도합니다. 오류는 입력 검증의 `INVALID_ARGUMENT`와 종료 뒤 호출의 `CANCELLED`뿐입니다. 아이콘은
 반환하지 않으며 macOS는 지원하지 않습니다.
 
+## 파일 아이콘 조회
+
+`getFileIcon(target: { path: string } | { extension: string }, size?: "small" | "normal" | "large", options?): Promise<{ mime: "image/png"; data: string; width: number; height: number }>`는
+탐색기와 같은 셸 아이콘을 알파 채널이 있는 PNG(base64)로 반환합니다(Electron `app.getFileIcon`에 대응). `path`는
+`openFile`과 같은 확인을 거친 존재하는 파일의 아이콘을, `extension`(`.txt`, 영문자, 숫자, `_`, `-`, `+`, `~` 1~31자)은 파일 없이
+셸에 등록된 연결 아이콘을 `SHGFI_USEFILEATTRIBUTES`로 조회합니다. `size`는 `small`(16), `normal`(32, 기본값),
+`large`(48)이며 화면 배율이 높으면 더 큰 이미지가 반환되므로 `width`, `height`를 사용하세요. 셸 이미지 목록
+(`SHGetFileInfoW`로 얻은 아이콘 인덱스와 `SHGetImageList`)에서 `HICON`을 얻어 `GetDIBits`로 읽고, 알파 채널이 없는
+아이콘은 AND 마스크로 투명도를 복원합니다. `HICON`, 비트맵, DC, 이미지 목록은 성공과 실패 모두에서 요청이 끝날 때
+해제합니다. 썸네일은 만들지 않습니다. Host operation과 권한은 `opener.getFileIcon`이며 다른 파일 권한과 별개입니다.
+호출은 I/O STA에서 동기로 실행하므로 취소는 시작 전에만 확인합니다. 오류는 `INVALID_ARGUMENT`, `PERMISSION_DENIED`,
+`INTERNAL`, `CANCELLED`이고 macOS는 `UNSUPPORTED`입니다.
+
 ## URL scheme 등록
 
 `registerUrlScheme(scheme: string, options?): Promise<null>`, `unregisterUrlScheme(scheme, options?): Promise<boolean>`,

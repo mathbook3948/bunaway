@@ -289,6 +289,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 환경변수와 실행 인자의 설정, 개발 옵션과 배포 옵션의 적용 범위를 정의한다.
 - [ ] command-line switch와 argument의 추가, 조회, 존재 확인과 제거에 대응하는 설정 API를 제공한다.
 - [ ] 앱 이름과 데이터 경로의 사용자 지정, 기본 file icon과 bundle type 조회를 제공한다.
+  file icon 조회는 `opener.getFileIcon({ path } | { extension }, size?)`로 구현했다. 셸 이미지 목록에서
+  얻은 아이콘을 알파가 있는 PNG로 반환하며 썸네일은 만들지 않는다. 나머지 항목은 남아 있다.
 
 ## 06. 트레이
 

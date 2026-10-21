@@ -1,5 +1,7 @@
 import type { NativeInvokeOptions, NativePluginAPI } from "@bunaway/plugin";
 import type {
+  FileIcon,
+  FileIconSize,
   JumpListInput,
   JumpListResult,
   RemovedJumpListTask,
@@ -8,10 +10,12 @@ import type {
   ShortcutOperation,
   UrlHandler,
 } from "#opener/contract";
+import { DEFAULT_FILE_ICON_SIZE } from "#opener/contract";
 import type { windowsOperations } from "#opener/operations";
 import { normalizeMacosFilePath } from "#opener/platforms/macos-path";
 import {
   normalizeApplicationPath,
+  normalizeFileIconExtension,
   normalizeFilePath,
   normalizeJumpList,
   normalizeShortcutDetails,
@@ -234,6 +238,45 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
   }
 
   /**
+   * Get the icon the Shell shows for an existing file, or for an extension such as `.txt` without a
+   * file, after Electron's `app.getFileIcon`. `size` is `small` (16), `normal` (32, the default) or
+   * `large` (48) pixels at 100% scale; the PNG is larger when the display is scaled, so read its
+   * `width` and `height`. A file path reads the file's own icon (an executable's, for example) and
+   * must name an existing file; an extension never touches the file system. Thumbnails are not
+   * produced. Windows only.
+   */
+  async function getFileIcon(
+    target:
+      | {
+          path: string;
+        }
+      | {
+          extension: string;
+        },
+    size: FileIconSize = DEFAULT_FILE_ICON_SIZE,
+    options?: NativeInvokeOptions,
+  ): Promise<FileIcon> {
+    if ("extension" in target) {
+      return api.getFileIcon(
+        {
+          extension: normalizeFileIconExtension(target.extension),
+          size,
+        },
+        options,
+      );
+    }
+    return api.getFileIcon(
+      {
+        path: isPosixPath(target.path)
+          ? target.path
+          : normalizeFilePath(target.path),
+        size,
+      },
+      options,
+    );
+  }
+
+  /**
    * Write a Windows shortcut file (`.lnk`), after Electron's `shell.writeShortcutLink`.
    * `create` (default) writes a new shortcut or overwrites an existing one, `replace`
    * overwrites an existing `.lnk` file, and `update` changes only the named properties of an
@@ -291,6 +334,7 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
     setJumpList,
     getJumpListRemovedItems,
     deleteJumpList,
+    getFileIcon,
     readShortcutLink,
     writeShortcutLink,
     addRecentDocument,

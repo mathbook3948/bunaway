@@ -2,6 +2,8 @@ import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
   emptyInput,
+  fileIconInput,
+  fileIconSchema,
   fileInput,
   fileWithAppSchema,
   jumpListInput,
@@ -24,6 +26,7 @@ import {
   addRecentDocument as addWindowsRecentDocument,
   clearRecentDocuments as clearWindowsRecentDocuments,
   deleteJumpList as deleteWindowsJumpList,
+  getFileIcon as getWindowsFileIcon,
   getJumpListRemovedItems as getWindowsJumpListRemovedItems,
   getUrlHandler as getWindowsUrlHandler,
   type initialize as initializeWindows,
@@ -120,6 +123,12 @@ export const windowsOperations = {
     output: z.null(),
     handler: ({ path, details, operation }, { instance, signal }) =>
       writeWindowsShortcutLink(instance, path, details, operation, signal),
+  }),
+  getFileIcon: windowsOperation({
+    input: fileIconInput,
+    output: fileIconSchema,
+    handler: (input, { instance, signal }) =>
+      getWindowsFileIcon(instance, input, signal),
   }),
   getUrlHandler: windowsOperation({
     input: urlInput,
