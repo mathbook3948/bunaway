@@ -331,6 +331,16 @@ test("invalid settings fail when the adapter is created", () => {
       endpoint: "https://updates.example.com/a b",
     },
     {
+      // Mixed slashes and backslashes are skipped by the URL parser before the host.
+      endpoint: "https://\\/{{channel}}/m",
+    },
+    {
+      endpoint: "https:/\\{{current_version}}/m",
+    },
+    {
+      endpoint: "https://\\{{target}}",
+    },
+    {
       // Longest values would push the address past the length limit at check time.
       endpoint: `https://updates.example.com/${"{{current_version}}".repeat(20)}`,
     },

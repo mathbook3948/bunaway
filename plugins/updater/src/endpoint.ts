@@ -93,14 +93,25 @@ export function validateEndpointTemplate(
       "updater endpoint must be https without credentials (http only for loopback in development).",
     );
   }
-  // Reject when the adapter is created a template that could exceed the length limit once the longest values are
-  // substituted, so a check call never fails on the settings. `+` is the worst case: it becomes %2B.
-  expandEndpoint(template, {
+  // A value must never change where the request goes. Rather than predicting every URL parser
+  // quirk (extra slashes, backslashes, stripped control characters), check the property itself:
+  // the origin is the same for short and for the longest values.
+  const longest = expandEndpoint(template, {
     target: "x".repeat(MAX_TARGET_LENGTH),
     arch: "x".repeat(MAX_TARGET_LENGTH),
     channel: "x".repeat(MAX_CHANNEL_LENGTH),
+    // `+` is the worst case for length: it becomes %2B.
     current_version: "+".repeat(MAX_VERSION_LENGTH),
   });
+  const shortest = expandEndpoint(template, {
+    target: "a",
+    arch: "a",
+    channel: "a",
+    current_version: "0",
+  });
+  if (longest.origin !== shortest.origin || longest.origin !== url.origin) {
+    throw invalid("updater endpoint placeholders must not change the host.");
+  }
 }
 
 /** Substitute the values into a template that passed `validateEndpointTemplate`. */
