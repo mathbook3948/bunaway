@@ -13,7 +13,8 @@
  *   WebView2 load, the SDK channel and one completed command, so it is the time until the app can
  *   do useful work, not the time until a window appears.
  * - `idleWorkingSetBytes`: the sum of `WorkingSetSize` over the launcher and every descendant
- *   (backend, WebView2 processes), sampled `idleMs` after `startupMs` with no input. Pages shared
+ *   (backend, WebView2 processes), sampled `idleMs` after `startupMs`. The only traffic then is the probe's
+ *   `message.read` poll every 100 ms, waiting for its release. Pages shared
  *   between WebView2 processes are counted once per process, so this is an upper bound on the
  *   tree's physical memory.
  * - `commandMedianMs` and `commandMaxMs`: round trips of the template's `message.read` command
@@ -40,6 +41,9 @@ const COMMAND_WARMUP_ROUND_TRIPS = 20;
 const COMMAND_ROUND_TRIPS = 200;
 const READY_TIMEOUT_MS = 60_000;
 const RESULT_TIMEOUT_MS = 60_000;
+const PROCESS_TABLE_TIMEOUT_MS = 30_000;
+/** `taskkill` exit code when the process is already gone. */
+const TASKKILL_PROCESS_NOT_FOUND = 128;
 const POLL_INTERVAL_MS = 5;
 const PROBE_POLL_INTERVAL_MS = 100;
 
@@ -89,8 +93,8 @@ export interface RunOptions {
 
 /**
  * Source appended to the template's `src/main.ts`. After its first command succeeds it waits for
- * the driver to release it, so command traffic never overlaps the memory sample, then times
- * round trips and stores them as JSON for the driver.
+ * the driver to release it by polling `message.read` every 100 ms, so the timed round trips never
+ * overlap the memory sample. It then times round trips and stores them as JSON for the driver.
  */
 export function baselineProbeSource(): string {
   return `
@@ -363,6 +367,9 @@ async function readWindowsProcessTable(): Promise<ProcessRow[]> {
     {
       stdout: "pipe",
       stderr: "pipe",
+      // A hung query must fail the run so the measured app is still stopped.
+      timeout: PROCESS_TABLE_TIMEOUT_MS,
+      killSignal: "SIGKILL",
     },
   );
   const [output, errors, code] = await Promise.all([
@@ -396,13 +403,21 @@ function windowsDriver(executable: string, markerPath: string): RunDriver {
         pid: child.pid,
         kill() {
           // The launcher owns Bun and WebView2 children; stop the whole tree.
-          Bun.spawnSync([
+          const result = Bun.spawnSync([
             "taskkill",
             "/PID",
             String(child.pid),
             "/T",
             "/F",
           ]);
+          if (
+            result.exitCode !== 0 &&
+            result.exitCode !== TASKKILL_PROCESS_NOT_FOUND
+          ) {
+            throw new Error(
+              `taskkill failed (${result.exitCode}): ${result.stderr.toString()}`,
+            );
+          }
         },
       };
     },
@@ -501,11 +516,19 @@ if (import.meta.main) {
   if (!values.package || !values["app-id"]) {
     throw new Error("Pass --package <directory> and --app-id <appId>.");
   }
+  const runs = Number(values.runs);
+  const idleMs = Number(values["idle-ms"]);
+  if (!Number.isInteger(runs) || runs < 1) {
+    throw new Error("--runs must be a positive integer.");
+  }
+  if (!Number.isFinite(idleMs) || idleMs < 0) {
+    throw new Error("--idle-ms must be a non-negative number.");
+  }
   const report = await measureBaseline({
     packageRoot: resolve(values.package),
     appId: values["app-id"],
-    runs: Number(values.runs),
-    idleMs: Number(values["idle-ms"]),
+    runs,
+    idleMs,
   });
   const text = `${JSON.stringify(report, null, 2)}\n`;
   if (values.out) {
