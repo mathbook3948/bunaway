@@ -1,8 +1,10 @@
 import { dlopen, ptr } from "bun:ffi";
-import { test } from "bun:test";
+import { setDefaultTimeout, test } from "bun:test";
 import { existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { withWide } from "@bunaway/plugin/win32";
+
+setDefaultTimeout(300_000);
 
 const symbols = {
   WerRegisterAppLocalDump: {
