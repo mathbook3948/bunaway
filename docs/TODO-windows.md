@@ -1024,7 +1024,9 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
   `updater.check`가 SemVer 2.0.0으로 비교해 버전, notes, 게시 시각과 다운로드 주소를 돌려준다.
   다운로드, 서명 검증과 설치는 아래 항목에 남는다.
 - [ ] 다운로드 progress, 취소, timeout과 실패 재시도를 제공한다.
+  `updater.download`가 취소, 30분 제한과 1 GiB 상한을 제공한다. 진행률 이벤트와 내장 재시도는 남는다.
 - [ ] 업데이트 서명과 해시를 검증한다.
+  `updater.download`가 매니페스트의 SHA-256과 크기를 대조한다. 서명 검증은 남는다.
 - [ ] 설치, 종료 승인과 relaunch를 연결한다.
 - [ ] downgrade, partial failure와 rollback의 지원 범위를 결정한다.
 - [ ] Store 업데이트와 자체 updater의 사용 조건을 구분한다.

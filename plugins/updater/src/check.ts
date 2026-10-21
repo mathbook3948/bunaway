@@ -3,17 +3,17 @@ import {
   MAX_DATE_LENGTH,
   MAX_MANIFEST_BYTES,
   MAX_NOTES_LENGTH,
-  MAX_REDIRECTS,
   MAX_URL_LENGTH,
   UPDATER_CHECK_TIMEOUT_MS,
   type UpdaterCheckResult,
-  type UpdaterFailureReason,
+  type UpdateTarget,
 } from "#updater/contract";
 import {
   type EndpointValues,
   expandEndpoint,
   isAllowedUrl,
 } from "#updater/endpoint";
+import { discardBody, fail, fetchFollowingRedirects } from "#updater/request";
 import { compareSemVer, parseSemVer } from "#updater/semver";
 
 /** Everything a check needs; the adapter fills it from the host environment. */
@@ -33,42 +33,10 @@ export type CheckOptions = {
   timeoutMs?: number;
 };
 
-function fail(
-  code: "UNSUPPORTED" | "INTERNAL",
-  reason: UpdaterFailureReason,
-  message: string,
-  extra: Record<string, number> = {},
-): BunawayError {
-  return new BunawayError({
-    code,
-    message,
-    details: {
-      reason,
-      ...extra,
-    },
-  });
-}
-
 /** A line break or tab is ordinary text; every other control character (C0, DEL, C1) is rejected. */
 function hasControlCharacter(text: string): boolean {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: this is the check itself.
   return /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(text);
-}
-
-/** Stop reading a body that is not needed. */
-async function discardBody(
-  body:
-    | {
-        cancel(): Promise<void>;
-      }
-    | null
-    | undefined,
-): Promise<void> {
-  try {
-    await body?.cancel();
-  } catch {
-    // The body is discarded; a stream that already failed has nothing left to release.
-  }
 }
 
 /** Read at most `MAX_MANIFEST_BYTES` of the (already decompressed) body. */
@@ -120,77 +88,6 @@ async function readBody(
       "invalidJson",
       "Update manifest is not valid UTF-8.",
     );
-  }
-}
-
-/** Follow up to `MAX_REDIRECTS` redirects by hand so every hop is checked against the URL rules. */
-async function fetchManifest(
-  start: URL,
-  options: CheckOptions,
-  signal: AbortSignal,
-): Promise<Response> {
-  let url = start;
-  for (let redirects = 0; ; redirects++) {
-    let response: Response;
-    try {
-      response = await options.fetch(url, {
-        method: "GET",
-        headers: {
-          accept: "application/json",
-        },
-        redirect: "manual",
-        credentials: "omit",
-        signal,
-      });
-    } catch (error) {
-      if (signal.aborted) {
-        throw error;
-      }
-      throw fail("INTERNAL", "network", "Update server could not be reached.");
-    }
-    if (response.status < 300 || response.status >= 400) {
-      return response;
-    }
-    await discardBody(response.body);
-    const location = response.headers.get("location");
-    if (!location || response.status === 304) {
-      throw fail(
-        "INTERNAL",
-        "httpStatus",
-        "Update server answered without a usable redirect.",
-        {
-          status: response.status,
-        },
-      );
-    }
-    if (redirects >= MAX_REDIRECTS) {
-      throw fail(
-        "INTERNAL",
-        "redirectLimit",
-        "Update server redirected too often.",
-      );
-    }
-    let next: URL;
-    try {
-      next = new URL(location, url);
-    } catch {
-      throw fail(
-        "INTERNAL",
-        "redirectScheme",
-        "Update server redirected to an invalid URL.",
-      );
-    }
-    if (
-      !isAllowedUrl(next, options.development) ||
-      (url.protocol === "https:" && next.protocol !== "https:")
-    ) {
-      throw fail(
-        "INTERNAL",
-        "redirectScheme",
-        "Update server redirected to a disallowed URL.",
-      );
-    }
-    url = next;
   }
 }
 
@@ -329,13 +226,38 @@ function exposedDate(value: unknown): string | null {
   return parsed.toISOString();
 }
 
-/**
- * Ask the app's fixed endpoint whether a newer version exists. Nothing is downloaded or installed,
- * and the manifest signature is neither read nor checked here.
- */
+/** The public result of a check; nothing is downloaded or installed. */
 export async function checkForUpdate(
   options: CheckOptions,
 ): Promise<UpdaterCheckResult> {
+  return (await checkForUpdateTarget(options)).result;
+}
+
+/** Read the package integrity fields next to the download URL: the platform entry, else the top level. */
+function integrityFields(
+  manifest: Record<string, unknown>,
+  key: string,
+): {
+  sha256: unknown;
+  size: unknown;
+} {
+  const platforms = manifest.platforms;
+  const entry = isRecord(platforms) ? platforms[key] : undefined;
+  const source = isRecord(entry) ? entry : manifest;
+  return {
+    sha256: source.sha256,
+    size: source.size,
+  };
+}
+
+/**
+ * Ask the app's fixed endpoint whether a newer version exists, and keep what a later download needs.
+ * The manifest signature is neither read nor checked here.
+ */
+export async function checkForUpdateTarget(options: CheckOptions): Promise<{
+  result: UpdaterCheckResult;
+  target: UpdateTarget | null;
+}> {
   if (options.appVersion === null) {
     throw fail(
       "UNSUPPORTED",
@@ -381,7 +303,14 @@ export async function checkForUpdate(
       : []),
   ]);
   try {
-    const response = await fetchManifest(start, options, signal);
+    const response = await fetchFollowingRedirects(
+      start,
+      {
+        ...options,
+        accept: "application/json",
+      },
+      signal,
+    );
     const none: UpdaterCheckResult = {
       updateAvailable: false,
       currentVersion: options.appVersion,
@@ -390,9 +319,13 @@ export async function checkForUpdate(
       publishedAt: null,
       downloadUrl: null,
     };
+    const nothing = {
+      result: none,
+      target: null,
+    };
     if (response.status === 204) {
       await discardBody(response.body);
-      return none;
+      return nothing;
     }
     if (response.status !== 200) {
       await discardBody(response.body);
@@ -433,7 +366,7 @@ export async function checkForUpdate(
       );
     }
     if (compareSemVer(remote, current) <= 0) {
-      return none;
+      return nothing;
     }
     const key = `${options.target}-${options.arch}`;
     const url = downloadUrl(manifest, key);
@@ -444,13 +377,21 @@ export async function checkForUpdate(
         "Update manifest has no entry for this platform.",
       );
     }
+    const exposedUrl = exposedDownloadUrl(url, options.development);
     return {
-      updateAvailable: true,
-      currentVersion: options.appVersion,
-      version: versionText,
-      notes: exposedNotes(manifest.notes),
-      publishedAt: exposedDate(manifest.pub_date),
-      downloadUrl: exposedDownloadUrl(url, options.development),
+      result: {
+        updateAvailable: true,
+        currentVersion: options.appVersion,
+        version: versionText,
+        notes: exposedNotes(manifest.notes),
+        publishedAt: exposedDate(manifest.pub_date),
+        downloadUrl: exposedUrl,
+      },
+      target: {
+        version: versionText,
+        url: exposedUrl,
+        ...integrityFields(manifest, key),
+      },
     };
   } catch (error) {
     if (timedOut) {

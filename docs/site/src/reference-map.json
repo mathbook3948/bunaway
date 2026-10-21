@@ -1469,7 +1469,7 @@
     "reference/cli/ios": ["ios"]
   },
   "operations": {
-    "reference/plugins/updater": ["updater.check"],
+    "reference/plugins/updater": ["updater.check", "updater.download"],
     "reference/plugins/screen-capture": [
       "screenCapture.listSources",
       "screenCapture.captureSource"
