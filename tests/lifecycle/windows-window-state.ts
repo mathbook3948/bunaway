@@ -178,7 +178,11 @@ if (!process.argv.includes("--child")) {
       ...target,
       key: "maximized",
     });
-    assert.equal((await state()).maximized, true);
+    assert.equal(
+      (await state()).maximized,
+      true,
+      "maximized after restoring a maximized record",
+    );
     assert.deepEqual(await normal(), saved);
     await windows.unmaximize(target);
     assert.deepEqual(await normal(), saved);
@@ -203,6 +207,7 @@ if (!process.argv.includes("--child")) {
         }
       ).maximized,
       true,
+      `maximized saved from a window minimized from maximized: ${JSON.stringify(await state())}`,
     );
     await store.set({
       name: "window-state",
@@ -219,7 +224,7 @@ if (!process.argv.includes("--child")) {
         visible: true,
       },
     });
-    assert.equal((await state()).minimized, true);
+    assert.equal((await state()).minimized, true, "window is minimized");
     await windowState.restore({
       ...target,
       key: "tiny",
@@ -252,12 +257,20 @@ if (!process.argv.includes("--child")) {
       ...target,
       fullscreen: true,
     });
-    assert.equal((await state()).fullscreen, true);
+    assert.equal(
+      (await state()).fullscreen,
+      true,
+      "fullscreen before restoring",
+    );
     await windowState.restore({
       ...target,
       key: "fullscreen",
     });
-    assert.equal((await state()).fullscreen, true);
+    assert.equal(
+      (await state()).fullscreen,
+      true,
+      "fullscreen after restoring a fullscreen record",
+    );
     await windows.setFullscreen({
       ...target,
       fullscreen: false,
