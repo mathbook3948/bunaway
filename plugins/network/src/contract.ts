@@ -272,7 +272,7 @@ export const MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024 * 1024;
 /** Whole-download deadline: the default, and the longest a caller may ask for. */
 export const DEFAULT_DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
 export const MAX_DOWNLOAD_TIMEOUT_MS = 60 * 60_000;
-/** Longest time without progress (target check, connection, response headers, a body chunk or a copy chunk) before a download fails with a timeout. */
+/** Longest time without progress before a download fails with a timeout. It starts with the call and restarts at the response headers and at every body or copy chunk, so the target check, the connection and the wait for headers share one limit. */
 export const DEFAULT_DOWNLOAD_IDLE_TIMEOUT_MS = 30_000;
 export const MAX_DOWNLOAD_IDLE_TIMEOUT_MS = 5 * 60_000;
 /** Downloads in flight at once, counted apart from the 16 bounded requests. */
