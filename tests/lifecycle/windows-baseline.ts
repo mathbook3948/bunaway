@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   baselineProbeSource,
@@ -40,35 +40,30 @@ async function command(project: string, args: string[]): Promise<void> {
   assert.equal(code, 0, `${out}\n${err}`);
 }
 
-try {
-  await mkdir(home, {
-    recursive: true,
-  });
-  const project = await createProject(resolve(home, "app"));
-  await command(project, [
-    "install",
-  ]);
-  await seedWindowsBuildCaches(project, root);
-  await appendFile(resolve(project, "src/main.ts"), baselineProbeSource());
-  await command(project, [
-    "run",
-    "build",
-  ]);
-  const settings = JSON.parse(
-    await readFile(resolve(project, "src-bunaway/bunaway.json"), "utf8"),
-  );
-  const measured = await measureBaseline({
-    packageRoot: resolve(project, "dist/windows-x64"),
-    appId: settings.app.appId,
-    runs: 5,
-    idleMs: 5_000,
-  });
-  await writeFile(report, `${JSON.stringify(measured, null, 2)}\n`);
-  console.log(JSON.stringify(measured.summary, null, 2));
-  console.log("PASS: Windows baseline measurements recorded");
-} finally {
-  await rm(home, {
-    recursive: true,
-    force: true,
-  });
-}
+// The directory stays after the run like the other build fixtures: the stopped app can still hold
+// handles on its files for a moment, and `build/` is scratch space.
+await mkdir(home, {
+  recursive: true,
+});
+const project = await createProject(resolve(home, "app"));
+await command(project, [
+  "install",
+]);
+await seedWindowsBuildCaches(project, root);
+await appendFile(resolve(project, "src/main.ts"), baselineProbeSource());
+await command(project, [
+  "run",
+  "build",
+]);
+const settings = JSON.parse(
+  await readFile(resolve(project, "src-bunaway/bunaway.json"), "utf8"),
+);
+const measured = await measureBaseline({
+  packageRoot: resolve(project, "dist/windows-x64"),
+  appId: settings.app.appId,
+  runs: 5,
+  idleMs: 5_000,
+});
+await writeFile(report, `${JSON.stringify(measured, null, 2)}\n`);
+console.log(JSON.stringify(measured.summary, null, 2));
+console.log("PASS: Windows baseline measurements recorded");
