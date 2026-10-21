@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import assert from "node:assert/strict";
 import {
   mkdirSync,
   mkdtempSync,
@@ -215,6 +216,7 @@ test("remove deletes by id only and reports an unknown id", () => {
     world.write("a.dmp", dumpBytes(0), 20);
     world.write("b.dmp", dumpBytes(0), 10);
     const [newest, oldest] = world.adapter.list();
+    assert(newest && oldest);
     expect(
       world.adapter.remove({
         id: "0".repeat(32),
@@ -224,13 +226,13 @@ test("remove deletes by id only and reports an unknown id", () => {
     });
     expect(
       world.adapter.remove({
-        id: newest?.id ?? "",
+        id: newest.id,
       }),
     ).toEqual({
       removed: true,
     });
-    expect(world.adapter.list()).toEqual([
-      oldest,
+    expect(world.adapter.list().map((dump) => dump.id)).toEqual([
+      oldest.id,
     ]);
     expect(
       removeInputSchema.safeParse({

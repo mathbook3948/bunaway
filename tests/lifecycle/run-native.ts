@@ -80,6 +80,15 @@ if (target === "windows-x64") {
         inputs.bun,
         "--no-env-file",
         "test",
+        resolve(root, "tests/lifecycle/windows-crash-report-spike.test.ts"),
+      ],
+      root,
+    );
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
         resolve(root, "tests/lifecycle/windows-crash-report.test.ts"),
       ],
       root,
