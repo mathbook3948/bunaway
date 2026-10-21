@@ -391,7 +391,7 @@ if (!process.argv.includes("--child")) {
     assert(ticks > hiddenTicks, "backend must continue with the icon hidden");
     assert.equal(attempts, 0, "hiding the icon must not start a quit");
     assert.equal(sessions, 1, "hiding the icon must not create a window");
-    // Opening the app again runs show() on the backend; the second-process hand-off is covered by windows-desktop.ts.
+    // Opening the app again runs show() on the backend; a real second launch while the icon is hidden is not exercised (windows-desktop.ts covers the hand-off for a visible icon).
     await desktop.show();
     await waitFor(() => sessions === 2);
     assert.notEqual(
