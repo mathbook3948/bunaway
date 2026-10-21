@@ -58,6 +58,10 @@ const noInput = {
 } as const;
 const WM_CONTEXTMENU = 0x007b;
 const WM_CANCELMODE = 0x001f;
+const WM_NCHITTEST = 0x0084;
+const HTCAPTION = 2;
+const CANCEL_ATTEMPTS = 5;
+const CANCEL_INTERVAL_MS = 50;
 const WM_APPCOMMAND = 0x0319;
 const FAPPCOMMAND_MOUSE = 0x8000;
 
@@ -203,29 +207,35 @@ if (!process.argv.includes("--child")) {
             const height = rect.readInt32LE(12) - top;
             const point = (x: number, y: number) =>
               BigInt.asIntN(64, BigInt(((y & 0xffff) << 16) | (x & 0xffff)));
+            // Everything is posted so the window sees one ordered queue: an ignored message is
+            // always handled before the sentinel that follows it.
             const appCommand = (code: number, device = FAPPCOMMAND_MOUSE) =>
-              driver.symbols.SendMessageW(
+              driver.symbols.PostMessageW(
                 hwnd,
                 WM_APPCOMMAND,
                 hwnd,
                 BigInt((device | code) * 0x10000),
               );
-            // Context menu messages are posted: the default handling of a title bar click opens the
-            // system menu, whose modal loop would otherwise hold the sender. WM_CANCELMODE closes it.
-            const contextMenu = async (lparam: bigint, wparam = hwnd) => {
+            const contextMenu = (lparam: bigint, wparam = hwnd) =>
               driver.symbols.PostMessageW(hwnd, WM_CONTEXTMENU, wparam, lparam);
-              await Bun.sleep(100);
-              driver.symbols.SendMessageW(hwnd, WM_CANCELMODE, 0n, 0n);
-            };
             const centerX = left + Math.floor(width / 2);
+            const y = top + 16;
+            // The published point must be a title bar hit for this window's frame and theme.
+            const hit = driver.symbols.SendMessageW(
+              hwnd,
+              WM_NCHITTEST,
+              0n,
+              point(centerX, y),
+            );
+            assert.equal(BigInt.asIntN(32, hit), BigInt(HTCAPTION));
 
             // Ignored input first: unknown codes, the client area, keyboard invocation and a
-            // pointer over a child window. Event order guarantees these came before the sentinel.
+            // pointer over a child window.
             appCommand(43);
             appCommand(0xfff);
-            await contextMenu(point(centerX, top + Math.floor(height / 2)));
-            await contextMenu(-1n);
-            await contextMenu(point(centerX, top + 16), hwnd + 1n);
+            contextMenu(point(centerX, top + Math.floor(height / 2)));
+            contextMenu(-1n);
+            contextMenu(point(centerX, y), hwnd + 1n);
 
             appCommand(1);
             appCommand(14, 0);
@@ -256,8 +266,9 @@ if (!process.argv.includes("--child")) {
               "Client, keyboard or child-window menus must not publish",
             );
 
-            const y = top + 16;
-            await contextMenu(point(centerX, y));
+            // The default handling of a title bar click opens the system menu and its modal loop;
+            // WM_CANCELMODE closes it once the event has arrived.
+            contextMenu(point(centerX, y));
             await waitFor(
               () =>
                 records.some(
@@ -279,6 +290,11 @@ if (!process.argv.includes("--child")) {
             });
             for (const record of records) {
               assert.equal(record.payload.windowId, snapshot.windowId);
+            }
+            // The menu may open just after the event left the window procedure, so cancel a few times.
+            for (let attempt = 0; attempt < CANCEL_ATTEMPTS; attempt++) {
+              driver.symbols.SendMessageW(hwnd, WM_CANCELMODE, 0n, 0n);
+              await Bun.sleep(CANCEL_INTERVAL_MS);
             }
           } finally {
             driver.close();

@@ -1548,13 +1548,33 @@ function createWindow(
   });
   /** Input notifications leave the default handling intact and reach only this window's own views. */
   function publishWindowInput(message: number, wparam: bigint, lparam: bigint) {
+    // A view is registered only after creation finishes, so input pumped during creation, and
+    // input for a closing view, never reaches the bindings below before they are initialized.
+    const owner = views.get(instanceKey);
     if (
       stopping() ||
       shutdownCommitted() ||
-      views.get(instanceKey)?.native !== native
+      !owner ||
+      owner.native !== native ||
+      owner.lifecycle.closed
     ) {
       return;
     }
+    try {
+      publishWindowInputEvent(message, wparam, lparam);
+    } catch (error) {
+      // The notification is best effort; a failure here must not skip DefWindowProc handling.
+      log("window-input-event-failed", {
+        view: spec.view,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  function publishWindowInputEvent(
+    message: number,
+    wparam: bigint,
+    lparam: bigint,
+  ) {
     const { windowId, viewId } = readiness.snapshot();
     if (message === WM_APPCOMMAND) {
       const command = appCommandName(lparam);
@@ -1572,7 +1592,8 @@ function createWindow(
     if (!point || wparam !== window) {
       return;
     }
-    const hit = user.symbols.SendMessageW(
+    // DefWindowProc answers the hit test directly; sending the message would re-enter this procedure.
+    const hit = user.symbols.DefWindowProcW(
       window,
       WM_NCHITTEST,
       0n,

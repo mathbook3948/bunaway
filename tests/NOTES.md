@@ -1350,6 +1350,6 @@ Windows native 실행기에 포함하고, 결과 파일은 `windows-native-diagn
 도달 가능성, 부호 있는 화면 좌표와 키보드 호출(-1) 처리, 시스템 메뉴 영역 판별 및 두 이벤트의 스키마를 확인한다.
 `lifecycle/windows-window-input-events.ts`는 실제 WebView2 문서가 구독한 상태에서 최상위 HWND에 합성한
 WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코드, 클라이언트 영역, 키보드 호출과
-자식 창 기준 메뉴가 게시되지 않는 것을 확인한다. Windows native 실행기에 포함한다.
+wparam이 최상위 창이 아닌 합성 메뉴 메시지가 게시되지 않는 것을 확인한다(실제 WebView2 자식 창이 올리는 메시지는 아니다). Windows native 실행기에 포함한다.
 실제 마우스 확장 버튼과 미디어 키가 WebView2 위에서 최상위 창까지 올라오는지, 사용자 정의 제목 표시줄의
 오른쪽 클릭이 도착하는지는 합성 메시지로 확인할 수 없어 별도 GUI 확인이 필요하다.
