@@ -7,6 +7,7 @@ import {
   DEFAULT_CAPTURE_EDGE_PIXELS,
   listSourcesInputSchema,
   MAX_CAPTURE_PNG_BYTES,
+  MAX_LISTED_THUMBNAIL_PNG_BYTES,
   MAX_SOURCE_NAME_CHARS,
   MAX_SOURCES,
   type ScreenCaptureListInput,
@@ -1222,4 +1223,389 @@ test("a draw that fails because the window was hidden is reported by the window 
     reason: "SOURCE_UNAVAILABLE",
   });
   expect(fake.alive.size).toBe(0);
+});
+
+const box = {
+  width: 192,
+  height: 192,
+};
+
+test("thumbnailSize is optional, bounded and strict", () => {
+  const types = [
+    "screen",
+  ];
+  expect(
+    listSourcesInputSchema.safeParse({
+      types,
+      thumbnailSize: {
+        width: 1,
+        height: 4096,
+      },
+    }).success,
+  ).toBe(true);
+  for (const thumbnailSize of [
+    {},
+    {
+      width: 100,
+    },
+    {
+      width: 0,
+      height: 10,
+    },
+    {
+      width: 10,
+      height: 4097,
+    },
+    {
+      width: 1.5,
+      height: 10,
+    },
+    {
+      width: 10,
+      height: 10,
+      extra: 1,
+    },
+    null,
+  ]) {
+    expect(
+      listSourcesInputSchema.safeParse({
+        types,
+        thumbnailSize,
+      }).success,
+    ).toBe(false);
+  }
+});
+
+test("a listing without thumbnailSize carries no thumbnails and captures nothing", () => {
+  const { adapter, world } = setup(
+    [
+      [
+        1n,
+        windowFacts(),
+      ],
+    ],
+    [
+      primary,
+    ],
+  );
+  const listed = adapter.listSources({
+    types: [
+      "screen",
+      "window",
+    ],
+  });
+  expect(listed).toHaveLength(2);
+  expect(listed.every((source) => !("thumbnail" in source))).toBe(true);
+  expect(world.log).not.toContain("GetDC");
+});
+
+test("a listing with thumbnailSize returns a fitted PNG per source and frees every GDI object", () => {
+  const { adapter, world, alive } = setup(
+    [
+      [
+        1n,
+        windowFacts(),
+      ],
+    ],
+    [
+      primary,
+    ],
+  );
+  const listed = adapter.listSources({
+    types: [
+      "screen",
+      "window",
+    ],
+    thumbnailSize: box,
+  });
+  expect(sourceListSchema.safeParse(listed).success).toBe(true);
+  expect(
+    listed.map((source) => [
+      source.kind,
+      source.thumbnail?.width,
+      source.thumbnail?.height,
+    ]),
+  ).toEqual([
+    [
+      "screen",
+      192,
+      108,
+    ],
+    [
+      "window",
+      192,
+      145,
+    ],
+  ]);
+  const decoded = decodePng(
+    Buffer.from(listed[0]?.thumbnail?.data as string, "base64"),
+  );
+  expect([
+    decoded.width,
+    decoded.height,
+  ]).toEqual([
+    192,
+    108,
+  ]);
+  // The ids of a thumbnail listing capture through captureSource as well.
+  expect(
+    adapter.captureSource({
+      id: listed[1]?.id as string,
+    }).mime,
+  ).toBe("image/png");
+  // One DPI scope for the whole listing, one more for the separate capture.
+  expect(world.log.filter((entry) => entry === "setDpi")).toHaveLength(2);
+  expect(alive.size).toBe(0);
+});
+
+test("a source that cannot be captured stays in the listing without a thumbnail", () => {
+  const { adapter, world, alive } = setup([
+    [
+      1n,
+      windowFacts({
+        title: "Minimized",
+        minimized: true,
+      }),
+    ],
+    [
+      2n,
+      windowFacts({
+        title: "Protected",
+        displayAffinity: 0x11,
+      }),
+    ],
+    [
+      3n,
+      windowFacts({
+        title: "Hung",
+        hung: true,
+      }),
+    ],
+    [
+      4n,
+      windowFacts({
+        title: "Huge",
+        windowRect: {
+          x: 0,
+          y: 0,
+          width: 20000,
+          height: 20000,
+        },
+      }),
+    ],
+    [
+      5n,
+      windowFacts({
+        title: "Fine",
+      }),
+    ],
+  ]);
+  const listed = adapter.listSources({
+    types: [
+      "window",
+    ],
+    thumbnailSize: box,
+  });
+  expect(
+    listed.map((source) => [
+      source.name,
+      source.thumbnail !== undefined,
+    ]),
+  ).toEqual([
+    [
+      "Minimized",
+      false,
+    ],
+    [
+      "Protected",
+      false,
+    ],
+    [
+      "Hung",
+      false,
+    ],
+    [
+      "Huge",
+      false,
+    ],
+    [
+      "Fine",
+      true,
+    ],
+  ]);
+  expect(alive.size).toBe(0);
+  expect(world.log.at(-1)).toBe("restoreDpi");
+});
+
+test("a failed native step drops that thumbnail only and leaks no GDI object", () => {
+  const { adapter, world, alive } = setup([
+    [
+      1n,
+      windowFacts({
+        title: "First",
+      }),
+    ],
+    [
+      2n,
+      windowFacts({
+        title: "Second",
+      }),
+    ],
+  ]);
+  world.failOn = "PrintWindow";
+  const listed = adapter.listSources({
+    types: [
+      "window",
+    ],
+    thumbnailSize: box,
+  });
+  expect(listed.map((source) => source.thumbnail !== undefined)).toEqual([
+    false,
+    true,
+  ]);
+  expect(alive.size).toBe(0);
+});
+
+test("a GDI release failure fails the whole thumbnail listing and restores DPI awareness", () => {
+  const { adapter, world } = setup(
+    [],
+    [
+      primary,
+    ],
+  );
+  world.failOn = "ReleaseDC";
+  expect(() =>
+    adapter.listSources({
+      types: [
+        "screen",
+      ],
+      thumbnailSize: box,
+    }),
+  ).toThrow(AggregateError);
+  expect(world.log.at(-1)).toBe("restoreDpi");
+});
+
+test("thumbnails stop at the byte budget instead of growing the response", () => {
+  const monitors = [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+  ].map(
+    (n): MonitorFacts => ({
+      ...primary,
+      deviceName: `DISPLAY${n}`,
+    }),
+  );
+  const { adapter, world, alive } = setup([], monitors);
+  world.noise = true;
+  const listed = adapter.listSources({
+    types: [
+      "screen",
+    ],
+    thumbnailSize: {
+      width: 200,
+      height: 200,
+    },
+  });
+  const present = listed.filter((source) => source.thumbnail !== undefined);
+  expect(present.length).toBeGreaterThan(0);
+  expect(present.length).toBeLessThan(monitors.length);
+  // Sources after the first one that did not fit get nothing, even if they would be smaller.
+  expect(listed.map((source) => source.thumbnail !== undefined)).toEqual(
+    listed.map((_, at) => at < present.length),
+  );
+  const bytes = present.reduce(
+    (sum, source) =>
+      sum + Buffer.from(source.thumbnail?.data as string, "base64").length,
+    0,
+  );
+  expect(bytes).toBeLessThanOrEqual(MAX_LISTED_THUMBNAIL_PNG_BYTES);
+  expect(world.log.filter((entry) => entry === "BlitScreen")).toHaveLength(
+    present.length + 1,
+  );
+  expect(alive.size).toBe(0);
+});
+
+test("an aborted thumbnail listing stops before the next capture and restores DPI awareness", () => {
+  const { adapter, world, alive } = setup(
+    [],
+    [
+      primary,
+    ],
+  );
+  const controller = new AbortController();
+  controller.abort();
+  expect(() =>
+    adapter.listSources(
+      {
+        types: [
+          "screen",
+        ],
+        thumbnailSize: box,
+      },
+      controller.signal,
+    ),
+  ).toThrow();
+  expect(world.log).not.toContain("GetDC");
+  expect(world.log.at(-1)).toBe("restoreDpi");
+  expect(alive.size).toBe(0);
+});
+
+test("a listing with thumbnails also requires the capture permission", () => {
+  const { adapter } = setup(
+    [],
+    [
+      primary,
+    ],
+  );
+  const call = (granted: string[], thumbnails: boolean) =>
+    screenCaptureOperations.listSources.handler(
+      listSourcesInputSchema.parse({
+        types: [
+          "screen",
+        ],
+        ...(thumbnails
+          ? {
+              thumbnailSize: box,
+            }
+          : {}),
+      }),
+      {
+        instance: adapter,
+        source: "test",
+        permissions: {
+          permissions: granted,
+        } as never,
+      },
+    );
+  expect(
+    errorOf(() =>
+      call(
+        [
+          "screenCapture.listSources",
+        ],
+        true,
+      ),
+    ).code,
+  ).toBe("PERMISSION_DENIED");
+  expect(
+    call(
+      [
+        "screenCapture.listSources",
+      ],
+      false,
+    ),
+  ).toHaveLength(1);
+  expect(
+    call(
+      [
+        "screenCapture.listSources",
+        "screenCapture.captureSource",
+      ],
+      true,
+    )[0]?.thumbnail,
+  ).toBeDefined();
 });

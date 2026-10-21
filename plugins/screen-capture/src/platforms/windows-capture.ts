@@ -3,6 +3,7 @@ import { BunawayError } from "@bunaway/protocol";
 import {
   DEFAULT_CAPTURE_EDGE_PIXELS,
   MAX_CAPTURE_PNG_BYTES,
+  MAX_LISTED_THUMBNAIL_PNG_BYTES,
   MAX_SOURCE_NAME_CHARS,
   MAX_SOURCE_PIXELS,
   MAX_SOURCES,
@@ -215,7 +216,10 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
     private readonly releaseNative: () => void = () => undefined,
   ) {}
 
-  listSources(input: ScreenCaptureListInput): ScreenCaptureSource[] {
+  listSources(
+    input: ScreenCaptureListInput,
+    signal?: AbortSignal,
+  ): ScreenCaptureSource[] {
     this.assertActive();
     return this.inDpiScope(() => {
       const listed: ScreenCaptureSource[] = [];
@@ -230,7 +234,10 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
         fail("INTERNAL", "Too many capture sources.");
       }
       this.replaceListed(input, placed);
-      return listed;
+      if (input.thumbnailSize === undefined) {
+        return listed;
+      }
+      return this.withThumbnails(listed, placed, input.thumbnailSize, signal);
     });
   }
 
@@ -246,11 +253,18 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
     }
     const maxWidth = input.maxWidth ?? DEFAULT_CAPTURE_EDGE_PIXELS;
     const maxHeight = input.maxHeight ?? DEFAULT_CAPTURE_EDGE_PIXELS;
-    const { pixels, size } = this.inDpiScope(() =>
+    const { png, size } = this.inDpiScope(() =>
+      this.capturePng(ref, maxWidth, maxHeight),
+    );
+    return toImage(png, size);
+  }
+
+  /** Draw one source and encode it; the caller holds the DPI scope. A PNG over the limit is an error. */
+  private capturePng(ref: SourceRef, maxWidth: number, maxHeight: number) {
+    const { pixels, size } =
       ref.kind === "window"
         ? this.captureWindow(ref, maxWidth, maxHeight)
-        : this.captureScreen(ref, maxWidth, maxHeight),
-    );
+        : this.captureScreen(ref, maxWidth, maxHeight);
     const png = encodePng(pixels, size.width, size.height);
     if (png.length > MAX_CAPTURE_PNG_BYTES) {
       fail(
@@ -260,11 +274,63 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
       );
     }
     return {
-      mime: "image/png",
-      data: png.toString("base64"),
-      width: size.width,
-      height: size.height,
+      png,
+      size,
     };
+  }
+
+  /**
+   * Attach a thumbnail to every listed source, in list order, inside the caller's DPI scope.
+   * A source that cannot be captured now (minimized, protected, closed, not responding, too large)
+   * stays in the list without one, because one bad window must not fail the whole listing. Thumbnails
+   * stop once the next one would exceed the byte budget, so the response stays under the message limit.
+   * A failure to release GDI objects is not per-source and fails the listing.
+   */
+  private withThumbnails(
+    listed: ScreenCaptureSource[],
+    placed: Placed[],
+    box: Size,
+    signal: AbortSignal | undefined,
+  ): ScreenCaptureSource[] {
+    let remainingBytes = MAX_LISTED_THUMBNAIL_PNG_BYTES;
+    const refs = new Map(
+      placed.map(({ id, ref }) => [
+        id,
+        ref,
+      ]),
+    );
+    return listed.map((source) => {
+      signal?.throwIfAborted();
+      const ref = refs.get(source.id);
+      if (ref === undefined || remainingBytes <= 0) {
+        return source;
+      }
+      const captured = this.tryCapturePng(ref, box);
+      if (captured === null) {
+        return source;
+      }
+      if (captured.png.length > remainingBytes) {
+        remainingBytes = 0;
+        return source;
+      }
+      remainingBytes -= captured.png.length;
+      return {
+        ...source,
+        thumbnail: toImage(captured.png, captured.size),
+      };
+    });
+  }
+
+  /** Capture one source for a listing; null when this source alone cannot be captured. */
+  private tryCapturePng(ref: SourceRef, box: Size) {
+    try {
+      return this.capturePng(ref, box.width, box.height);
+    } catch (error) {
+      if (error instanceof AggregateError) {
+        throw error;
+      }
+      return null;
+    }
   }
 
   /** Refuse later calls, forget every source id and release the native libraries; repeating does nothing. */
@@ -569,6 +635,15 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
     );
     return dib;
   }
+}
+
+function toImage(png: Buffer, size: Size): ScreenCaptureImage {
+  return {
+    mime: "image/png",
+    data: png.toString("base64"),
+    width: size.width,
+    height: size.height,
+  };
 }
 
 /** Whether a window belongs in the list: an ordinary visible, titled, top-level window. */
