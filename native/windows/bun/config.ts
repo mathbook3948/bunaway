@@ -1,13 +1,14 @@
 import { dlopen, type Pointer, ptr } from "bun:ffi";
-import { OLE32, SHELL32, pick } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
+import { OLE32, pick, SHELL32 } from "@bunaway/plugin/win32";
 import { type HostContext, parsePolicy } from "@bunaway/protocol";
 import { readAppManifest } from "@bunaway/runtime-bun/app-manifest";
 import {
   appName,
   desktopAppPaths,
+  parsePluginSettings,
   readPackageVersions,
 } from "@bunaway/runtime-bun/app-metadata";
 import {
@@ -93,16 +94,23 @@ export async function verifyWindowsPackage(
     },
   ];
   const windows = readWindowSpecs(specs, policy, devUrl);
+  const versions = await readPackageVersions(root);
   return {
     appMetadata: {
       name: appName(config.title, config.appId),
       identifier: config.appId,
-      ...(await readPackageVersions(root)),
+      ...versions,
       isPackaged: isCompiledApp,
       paths: desktopAppPaths(root, executablePath),
     },
     app: {
       id: config.appId,
+      version: versions.version,
+      ...(config.pluginSettings === undefined
+        ? {}
+        : {
+            pluginSettings: parsePluginSettings(config.pluginSettings),
+          }),
       launch: {
         mode: isCompiledApp ? "packaged" : "development",
         executablePath,

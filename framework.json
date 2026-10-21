@@ -45,6 +45,7 @@
     "dialog": "@bunaway/plugin-dialog",
     "store": "@bunaway/plugin-store",
     "screen-capture": "@bunaway/plugin-screen-capture",
-    "window-state": "@bunaway/plugin-window-state"
+    "window-state": "@bunaway/plugin-window-state",
+    "updater": "@bunaway/plugin-updater"
   }
 }

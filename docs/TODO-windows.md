@@ -1006,8 +1006,13 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [ ] 서명된 compiled EXE 앱의 설치, 덮어쓰기 업데이트와 제거를 검증한다.
 - [ ] WebView2 없는 PC의 설치, offline 배포와 최소 runtime 버전을 처리한다.
 - [ ] MSIX 활성화와 안전한 런타임 시작 경로를 구현하고 검증한다.
-- [ ] 업데이트 endpoint, channel, target와 architecture를 지정한다.
-- [ ] 현재 버전과 최신 버전 비교, release notes와 업데이트 유무를 조회한다.
+- [x] 업데이트 endpoint, channel, target와 architecture를 지정한다.
+  앱이 `bunaway.json`의 `plugins.updater`에 endpoint 템플릿과 channel을 고정하고 target과 architecture는
+  호스트에서 정한다. 호출자는 주소를 고를 수 없다.
+  [ADR 0025](decisions/0025-plugin-settings-and-app-version.md)와 [updater](site/src/content/docs/reference/plugins/updater.mdx)를 따른다.
+- [x] 현재 버전과 최신 버전 비교, release notes와 업데이트 유무를 조회한다.
+  `updater.check`가 SemVer 2.0.0으로 비교해 버전, notes, 게시 시각과 다운로드 주소를 돌려준다.
+  다운로드, 서명 검증과 설치는 아래 항목에 남는다.
 - [ ] 다운로드 progress, 취소, timeout과 실패 재시도를 제공한다.
 - [ ] 업데이트 서명과 해시를 검증한다.
 - [ ] 설치, 종료 승인과 relaunch를 연결한다.

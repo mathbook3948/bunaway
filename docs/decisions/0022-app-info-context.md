@@ -24,8 +24,9 @@ status: accepted
    한도는 단일 창 앱에서 `name`이 되는 창 제목의 기존 상한과 같아서, 이미 만든 패키지의 제목이 시작을 막지 않는다.
    `version`, `runtime.framework`, `runtime.webview`만 `null`을 허용한다. 위반하면 Core 시작이
    `INVALID_ARGUMENT`로 실패한다. 이는 호스트와 Core 사이의 내부 계약이다.
-4. `NativeEnvironment`는 바꾸지 않는다. 플러그인은 setup 컨텍스트의 `ctx.app`으로 값을 받으며
-   WebView2Loader 경로 같은 호스트 내부 값은 플러그인에 노출하지 않는다.
+4. `NativeEnvironment`는 앱 정보를 위해 바꾸지 않는다. 플러그인은 setup 컨텍스트의 `ctx.app`으로 값을 받으며
+   WebView2Loader 경로 같은 호스트 내부 값은 플러그인에 노출하지 않는다. 단 `NativeEnvironment.app.version`은
+   [ADR 0025](./0025-plugin-settings-and-app-version.md)로 개정해 추가했다(같은 출처의 값을 네이티브 어댑터가 읽는다).
 
 ## 필드의 출처
 

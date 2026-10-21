@@ -34,6 +34,7 @@
         "@bunaway/plugin-storage": "workspace:*",
         "@bunaway/plugin-store": "workspace:*",
         "@bunaway/plugin-tray": "workspace:*",
+        "@bunaway/plugin-updater": "workspace:*",
         "@bunaway/plugin-window-state": "workspace:*",
         "@bunaway/plugin-windows": "workspace:*",
         "@bunaway/protocol": "workspace:*",
@@ -429,6 +430,20 @@
         "@bunaway/plugin": "0.0.0",
       },
     },
+    "plugins/updater": {
+      "name": "@bunaway/plugin-updater",
+      "version": "0.0.0",
+      "dependencies": {
+        "@bunaway/protocol": "workspace:*",
+        "zod": "4.6.5",
+      },
+      "devDependencies": {
+        "@bunaway/plugin": "workspace:*",
+      },
+      "peerDependencies": {
+        "@bunaway/plugin": "0.0.0",
+      },
+    },
     "plugins/window-state": {
       "name": "@bunaway/plugin-window-state",
       "version": "0.0.0",
@@ -632,6 +647,8 @@
     "@bunaway/plugin-store": ["@bunaway/plugin-store@workspace:plugins/store"],
 
     "@bunaway/plugin-tray": ["@bunaway/plugin-tray@workspace:plugins/tray"],
+
+    "@bunaway/plugin-updater": ["@bunaway/plugin-updater@workspace:plugins/updater"],
 
     "@bunaway/plugin-window-state": ["@bunaway/plugin-window-state@workspace:plugins/window-state"],
 

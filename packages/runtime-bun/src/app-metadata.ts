@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { APP_INFO_MAX_LENGTH, type AppInfo } from "@bunaway/plugin-api";
-import { isRecord } from "@bunaway/protocol";
+import { isRecord, type JsonValue } from "@bunaway/protocol";
 
 /**
  * App facts known before the backend starts. Hosts add the runtime-dependent
@@ -162,4 +162,37 @@ export function toAppInfo(
       webview: runtime.webview,
     },
   };
+}
+
+/** Upper bound for all `plugins` clauses of `bunaway.json` together, as serialized JSON. */
+export const PLUGIN_SETTINGS_MAX_BYTES = 16 * 1024;
+
+/**
+ * Checks the `bunaway.json` `plugins` section: an object of plugin name to JSON object, within
+ * `PLUGIN_SETTINGS_MAX_BYTES`. Only the shape is checked here; each plugin validates its own
+ * clause when its adapter starts. Shared by the CLI (build time) and the hosts (startup);
+ * `installed` limits the names to plugins that the app actually installs.
+ */
+export function parsePluginSettings(
+  value: unknown,
+  installed?: ReadonlySet<string>,
+): Record<string, JsonValue> {
+  if (!isRecord(value)) {
+    throw new Error("plugins must be an object of plugin settings.");
+  }
+  for (const [name, clause] of Object.entries(value)) {
+    if (installed && !installed.has(name)) {
+      throw new Error(`plugins.${name}: no installed plugin has this name.`);
+    }
+    if (!isRecord(clause)) {
+      throw new Error(`plugins.${name} must be an object.`);
+    }
+  }
+  const bytes = new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  if (bytes > PLUGIN_SETTINGS_MAX_BYTES) {
+    throw new Error(
+      `plugins must be at most ${PLUGIN_SETTINGS_MAX_BYTES} bytes as JSON.`,
+    );
+  }
+  return value as Record<string, JsonValue>;
 }

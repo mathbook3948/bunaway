@@ -29,11 +29,12 @@ keep-alive의 존재 여부는 Windows 호스트가 시작할 때 검사합니�
 `Project.app.windows: []`에서는 단일 창 호환 필드 `view`, `home`, `window`가 없습니다.
 
 Project에는 `root`, `frameworkRoot`, `appEntry`, `frontend`, `app`, `policy`,
-선택적 `bundle`, `dev`, `buildCommand`, `backendDependencies`, `frontendDependencies`, `nativePlugins`가 있습니다.
+선택적 `bundle`, `dev`, `buildCommand`, `backendDependencies`, `frontendDependencies`, `nativePlugins`, `pluginSettings`가 있습니다.
 `backendDependencies`는 검증한 앱 정의가 import한 프로젝트 내부 파일의 프로젝트 상대 경로 목록입니다.
 `frontendDependencies`는 로컬 UI 번들의 프로젝트 내부 입력 파일 목록입니다. 외부 UI 서버를 사용하는 개발 검증에서는 빈 목록이며, 로컬 UI와 백엔드가 공유하는 파일은 전체 재시작 대상으로 처리합니다.
 `nativePlugins`는 검증 중 읽은 설치 플러그인의 계약과 플랫폼 구현 목록입니다.
 CLI가 이어지는 번들에 재사용하며 앱의 활성화 목록은 `AppDefinition.plugins`로 정합니다.
+`pluginSettings`는 `bunaway.json`의 `plugins` 절을 모양만 검사해 그대로 호스트 설정에 전달하는 값입니다.
 파일 경로는 해석된 경로입니다. 새 검증에서는 설치 플러그인을 다시 읽습니다.
 `buildCommand`는 설정의 `build.command` 실행 파일과 인자 배열입니다.
 구체적인 검증 기준은 [validate](/reference/cli/validate/)를 따릅니다.
