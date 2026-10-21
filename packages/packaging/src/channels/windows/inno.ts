@@ -679,7 +679,11 @@ begin
     IconPath := StringOfChar(#0, 32768);
     OleCheck(IconLink.GetIconLocation(IconPath, Length(IconPath), IconIndex));
     StringChangeEx(IconPath, #0, '', True);
-  except Log('Could not inspect shortcut properties: ' + Filename); Exit; end;
+  except
+    Log('Could not inspect shortcut properties: ' + Filename);
+    RelocationShortcutFailed := True;
+    Exit;
+  end;
   if CompareText(IconPath, Target) = 0 then
     Link.SetIconLocation(ExpandConstant('{app}') + '\' + '${executableLiteral}', IconIndex);
   Link.Path := ExpandConstant('{app}') + '\' + '${executableLiteral}';
@@ -777,7 +781,11 @@ end;
     "  RemovePendingAssociationOwner;",
     "  RemoveAssociations(AssociationExecutable);",
     "  RemovePreviousExecutable(PendingAssociationExecutableName, PendingAssociationInstallDir);",
-    "  RemoveRelocatedInstallation(PendingAssociationExecutableName, PendingAssociationInstallDir, nil);",
+    "  try",
+    "    RemoveRelocatedInstallation(PendingAssociationExecutableName, PendingAssociationInstallDir, nil);",
+    "  except",
+    "    Log('Left the previous installation in place: ' + GetExceptionMessage);",
+    "  end;",
     ...[
       menuLink,
       desktopLink,
@@ -912,6 +920,7 @@ function installStepsSection(context: InnoContext): string[] {
     "    if (PostInstallError = '') and PendingAssociationDataSaved then begin",
     "      ValidateInstallationSnapshot;",
     "      ClearPendingAssociationOwner;",
+    "      ClearRelocationPendingUninstaller;",
     "    end;",
     "  except",
     "    if PostInstallError <> '' then PostInstallError := PostInstallError + #13#10;",
@@ -1010,6 +1019,7 @@ function installStepsSection(context: InnoContext): string[] {
           "    RegisterAutostartData(PreviousDataKey);",
         ]
       : []),
+    "    SaveRelocationPendingUninstaller(PreviousDataKey);",
     "    PendingAssociationDataSaved := True;",
     `    InstallationSnapshot.ExecutableName := '${executableLiteral}';`,
     "    InstallationSnapshot.InstallDir := ExpandConstant('{app}');",

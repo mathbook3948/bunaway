@@ -94,7 +94,8 @@ test("the old folder is trusted only when plain, local, unrelated to the new fol
   expect(safe).not.toContain("{commonpf}");
   const uninstaller = routine(script, "RelocationUninstallerPath");
   expect(uninstaller).toContain("IsSameDirectory(RelocationAppPath, Dir)");
-  expect(uninstaller).toContain("IsUninstallerFileName");
+  expect(uninstaller).toContain("IsUninstallerIn(Path, Dir)");
+  expect(routine(script, "IsUninstallerIn")).toContain("IsUninstallerFileName");
 });
 
 test("a per-machine installation is removed only below Program Files", () => {
@@ -117,4 +118,50 @@ test("without a payload list only the executable and uninstaller of the old fold
   expect(routine(script, "RemoveRelocatedInstallationWithPayload")).toContain(
     "Payload := nil;",
   );
+});
+
+test("a folder reached through another path is detected by a probe before anything is removed", () => {
+  const script = renderInnoScript(base);
+  const remove = routine(script, "RemoveRelocatedInstallation");
+  const probe = remove.indexOf("IsNewFolderOnDisk(Dir)");
+  expect(probe).toBeGreaterThan(0);
+  expect(probe).toBeLessThan(remove.indexOf("DeleteRelocationFile("));
+  // An unwritable probe counts as the same folder, so the safe outcome is to keep the files.
+  expect(routine(script, "IsNewFolderOnDisk")).toContain("Result := True;");
+});
+
+test("a shortcut that could not be updated keeps the old folder and fails the run for a retry", () => {
+  const script = renderInnoScript(base);
+  const remove = routine(script, "RemoveRelocatedInstallationWithPayload");
+  expect(remove.indexOf("RelocationShortcutFailed")).toBeLessThan(
+    remove.indexOf("RemoveRelocatedInstallation("),
+  );
+  expect(remove).toContain("RaiseException(");
+});
+
+test("the old uninstaller path survives a failed attempt and is cleared with the pending predecessor", () => {
+  const script = renderInnoScript(base);
+  const register = routine(script, "RegisterPreviousData");
+  expect(register).toContain(
+    "SaveRelocationPendingUninstaller(PreviousDataKey)",
+  );
+  const steps = routine(script, "CurStepChanged");
+  expect(steps.indexOf("ClearPendingAssociationOwner")).toBeLessThan(
+    steps.indexOf("ClearRelocationPendingUninstaller"),
+  );
+});
+
+test("user known folders are never removed as an old installation folder", () => {
+  const protectedFolders = routine(
+    renderInnoScript(base),
+    "IsProtectedRelocationDirectory",
+  );
+  for (const folder of [
+    "{userdesktop}",
+    "{userdocs}",
+    "{userappdata}",
+    "{commonappdata}",
+  ]) {
+    expect(protectedFolders).toContain(folder);
+  }
 });

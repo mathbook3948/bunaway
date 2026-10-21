@@ -22,19 +22,24 @@ export function renderRelocationCode(options: {
     declarations: `
 var RelocationAppPath: String;
     RelocationUninstallString: String;
+    RelocationPendingUninstaller: String;
     RelocationRecordLoaded: Boolean;
+    RelocationShortcutFailed: Boolean;
 `,
     procedures: String.raw`
-// The previous Inno record is read before Setup rewrites it. Both values must agree with
-// the CodeFile install directory this app wrote before the old folder is trusted.
-function ReadRelocationRecord(var AppPath, UninstallString: String): Boolean;
+// The previous Inno record is read before Setup rewrites it. The old folder and its payload are
+// trusted from this app's own CodeFile record (or the pending predecessor it wrote). The Inno
+// values only authorize deleting the old uninstaller, and then only when they name that same folder.
+function ReadRelocationRecord(var AppPath, UninstallString, PendingUninstaller: String): Boolean;
 begin
   Result := False;
   AppPath := '';
   UninstallString := '';
+  PendingUninstaller := '';
   try
     QueryAssociationValue(AssociationPreviousDataKey, 'Inno Setup: App Path', AppPath);
     QueryAssociationValue(AssociationPreviousDataKey, 'UninstallString', UninstallString);
+    QueryAssociationValue(AssociationPreviousDataKey, 'Inno Setup CodeFile: PendingUninstaller', PendingUninstaller);
     Result := True;
   except
     Log('Could not read the previous installation record: ' + GetExceptionMessage);
@@ -43,15 +48,16 @@ end;
 
 procedure CaptureRelocationRecord;
 begin
-  RelocationRecordLoaded := ReadRelocationRecord(RelocationAppPath, RelocationUninstallString);
+  RelocationRecordLoaded := ReadRelocationRecord(RelocationAppPath, RelocationUninstallString, RelocationPendingUninstaller);
 end;
 
 procedure ValidateRelocationRecord;
-var AppPath, UninstallString: String;
+var AppPath, UninstallString, PendingUninstaller: String;
 begin
   if not RelocationRecordLoaded then Exit;
-  if not ReadRelocationRecord(AppPath, UninstallString) or
-     (AppPath <> RelocationAppPath) or (UninstallString <> RelocationUninstallString) then
+  if not ReadRelocationRecord(AppPath, UninstallString, PendingUninstaller) or
+     (AppPath <> RelocationAppPath) or (UninstallString <> RelocationUninstallString) or
+     (PendingUninstaller <> RelocationPendingUninstaller) then
     RaiseException('Installation state changed while this setup was open. Close it and start again.');
 end;
 
@@ -79,17 +85,41 @@ begin
     (Pos(Name[8], '0123456789') > 0);
 end;
 
-// The uninstaller is trusted only when the previous Inno record, not just this app's own
-// record, names it inside the same folder.
+function IsUninstallerIn(const Path, Dir: String): Boolean;
+begin
+  Result := (Path <> '') and IsSameDirectory(ExtractFilePath(Path), Dir) and
+    IsUninstallerFileName(ExtractFileName(Path));
+end;
+
+// The uninstaller is trusted only when the previous Inno record names it inside the folder
+// that record installed to, or when an earlier attempt of this relocation saved that same path
+// (a failed attempt leaves Inno's own record pointing at the new folder).
 function RelocationUninstallerPath(const Dir: String): String;
 var Path: String;
 begin
   Result := '';
-  if (RelocationAppPath = '') or not IsSameDirectory(RelocationAppPath, Dir) then Exit;
   Path := RemoveQuotes(RelocationUninstallString);
-  if not IsSameDirectory(ExtractFilePath(Path), Dir) or
-     not IsUninstallerFileName(ExtractFileName(Path)) then Exit;
-  Result := Path;
+  if (RelocationAppPath <> '') and IsSameDirectory(RelocationAppPath, Dir) and IsUninstallerIn(Path, Dir) then
+    Result := Path
+  else if IsUninstallerIn(RelocationPendingUninstaller, Dir) then
+    Result := RelocationPendingUninstaller;
+end;
+
+// Keeps the old uninstaller known until the cleanup finishes; the value is cleared with the
+// pending predecessor.
+procedure SaveRelocationPendingUninstaller(PreviousDataKey: Integer);
+var Path: String;
+begin
+  Path := '';
+  if IsRelocation then Path := RelocationUninstallerPath(PreviousInstallDir);
+  if (Path = '') and (PendingAssociationExecutableName <> '') then Path := RelocationPendingUninstaller;
+  if not SetPreviousData(PreviousDataKey, 'PendingUninstaller', Path) then
+    RaiseException('Could not persist the previous uninstaller.');
+end;
+
+procedure ClearRelocationPendingUninstaller;
+begin
+  WriteAssociationValue(AssociationPreviousDataKey, 'Inno Setup CodeFile: PendingUninstaller', '');
 end;
 
 function IsProtectedRelocationDirectory(const Dir: String): Boolean;
@@ -97,6 +127,12 @@ var Profile: String;
 begin
   Profile := GetEnv('USERPROFILE');
   Result := IsSameDirectory(Dir, ExtractFileDrive(Dir)) or
+    IsSameDirectory(Dir, ExpandConstant('{userdesktop}')) or
+    IsSameDirectory(Dir, ExpandConstant('{commondesktop}')) or
+    IsSameDirectory(Dir, ExpandConstant('{userdocs}')) or
+    IsSameDirectory(Dir, ExpandConstant('{commondocs}')) or
+    IsSameDirectory(Dir, ExpandConstant('{userappdata}')) or
+    IsSameDirectory(Dir, ExpandConstant('{commonappdata}')) or
     IsSameDirectory(Dir, ExpandConstant('{autopf}')) or
     IsSameDirectory(Dir, ExpandConstant('{commonpf}')) or
     IsSameDirectory(Dir, ExpandConstant('{commonpf32}')) or
@@ -104,7 +140,9 @@ begin
     IsSameDirectory(Dir, ExpandConstant('{localappdata}') + '\Programs') or
     IsSameDirectory(Dir, ExpandConstant('{win}')) or
     IsSameDirectory(Dir, ExpandConstant('{sys}')) or
-    ((Profile <> '') and IsSameDirectory(Dir, Profile));
+    ((Profile <> '') and (IsSameDirectory(Dir, Profile) or
+      IsSameDirectory(Dir, Profile + '\Downloads') or
+      IsSameDirectory(Dir, ExtractFileDir(Profile))));
 end;
 
 // A folder is removed only when it is a local, unrelated-to-the-new-folder directory
@@ -148,6 +186,23 @@ begin
   Result := (Relative <> '') and (Relative[1] <> '\') and (Pos(':', Relative) = 0) and (Pos('..', Relative) = 0);
 end;
 
+// Strings cannot tell that a junction, a subst drive or a different letter case names the new
+// folder. Write a probe into the new folder and look for it in the old one: if it shows up, both
+// paths are one folder and nothing may be removed. When the probe cannot be written, assume so.
+function IsNewFolderOnDisk(const Dir: String): Boolean;
+var ProbeName, Probe: String;
+begin
+  Result := True;
+  ProbeName := '.relocation-' + ExtractFileName(ExpandConstant('{tmp}'));
+  Probe := ExpandConstant('{app}') + '\' + ProbeName;
+  if not SaveStringToFile(Probe, 'probe', False) then Exit;
+  try
+    Result := FileExists(Dir + '\' + ProbeName);
+  finally
+    DeleteFile(Probe);
+  end;
+end;
+
 // Files first, then parent folders deepest first. RemoveDir fails on a non-empty folder,
 // which keeps anything the user added.
 procedure RemoveRelocationPayload(const Dir: String; Payload: TStringList; var Failed: Integer);
@@ -183,6 +238,10 @@ begin
     Log('Kept the previous installation folder: ' + Dir);
     Exit;
   end;
+  if IsNewFolderOnDisk(Dir) then begin
+    Log('Kept the previous installation folder, it is the new installation folder: ' + Dir);
+    Exit;
+  end;
   Failed := 0;
   Uninstaller := RelocationUninstallerPath(Dir);
   if Uninstaller <> '' then begin
@@ -200,6 +259,8 @@ procedure RemoveRelocatedInstallationWithPayload;
 var Payload: TStringList;
 begin
   if not IsRelocation then Exit;
+  if RelocationShortcutFailed then
+    RaiseException('Could not update a shortcut to the new executable. Run the installer again to finish removing the previous installation.');
   Payload := nil;
   try${
     options.hasPayloadList
@@ -229,7 +290,10 @@ begin
   try
     Link.Path := ExpandConstant('{uninstallexe}');
     Link.Save(Filename);
-  except Log('Could not update uninstall shortcut: ' + Filename); end;
+  except
+    Log('Could not update uninstall shortcut: ' + Filename);
+    RelocationShortcutFailed := True;
+  end;
 end;
 `
     : ""

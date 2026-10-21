@@ -2866,3 +2866,62 @@ test.skipIf(!iscc)(
   },
   deadline("packagedAudit"),
 );
+
+test.skipIf(!iscc)(
+  "native relocation to a link of the old folder removes nothing",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      root,
+      installDir,
+      declarations,
+      startInstall,
+      powershell,
+      quote,
+      cleanup,
+    } = fixture;
+    const link = join(root, "link");
+    try {
+      await (
+        await startInstall({
+          version: "link-first",
+          executable: "앱.exe",
+          config: declarations,
+          tasks: "",
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      await powershell(
+        `New-Item -ItemType Junction -Path ${quote(link)} -Target ${quote(installDir)} | Out-Null`,
+      );
+      await (
+        await startInstall({
+          version: "link-second",
+          executable: "앱.exe",
+          config: declarations,
+          tasks: "",
+          destination: link,
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      // Both paths are one folder: the files the second install just wrote must remain.
+      expect(await Bun.file(join(installDir, "앱.exe")).exists()).toBe(true);
+      expect(await Bun.file(join(installDir, "unins000.exe")).exists()).toBe(
+        true,
+      );
+      expect(
+        await Bun.file(join(installDir, "data", "config.json")).exists(),
+      ).toBe(true);
+    } finally {
+      await powershell(
+        `if (Test-Path ${quote(link)}) { (Get-Item ${quote(link)}).Delete() }`,
+      );
+      await removeInstallRecord(fixture);
+      await cleanup();
+    }
+  },
+  deadline("packagedAudit"),
+);
