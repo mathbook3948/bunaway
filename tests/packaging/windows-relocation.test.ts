@@ -165,3 +165,11 @@ test("user known folders are never removed as an old installation folder", () =>
     expect(protectedFolders).toContain(folder);
   }
 });
+
+test("a shortcut that exists but cannot be read counts as a failed update, and only fixed drives are cleaned", () => {
+  const script = renderInnoScript(base);
+  const read = routine(script, "ReadShortcut");
+  expect(read).toContain("RelocationShortcutFailed := True;");
+  const safe = routine(script, "IsSafeRelocationSource");
+  expect(safe).toContain("GetRelocationDriveType(Copy(Dir, 1, 3)) <> 3");
+});

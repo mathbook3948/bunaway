@@ -2925,3 +2925,82 @@ test.skipIf(!iscc)(
   },
   deadline("packagedAudit"),
 );
+
+test.skipIf(!iscc)(
+  "native relocation that fails before cleanup keeps the old uninstaller path and removes it on retry",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      root,
+      installDir,
+      declarations,
+      previousDataKey,
+      startInstall,
+      restoreRegistrationFault,
+      query,
+      cleanup,
+    } = fixture;
+    const moved = join(root, "moved");
+    const config = {
+      files: declarations.files,
+    };
+    const oldUninstaller = join(installDir, "unins000.exe");
+    try {
+      await (
+        await startInstall({
+          version: "pending-first",
+          executable: "앱.exe",
+          config,
+          tasks: "fileassociations",
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      // The registration fails after the new files are installed, before any cleanup.
+      try {
+        await (
+          await startInstall({
+            version: "pending-second",
+            executable: "앱.exe",
+            config,
+            tasks: "fileassociations",
+            destination: moved,
+            failure: "write",
+            fault: "icon",
+            payloadFiles: relocationPayload,
+          })
+        ).finish();
+      } finally {
+        await restoreRegistrationFault("pending-second", "icon");
+      }
+      expect(await Bun.file(join(installDir, "앱.exe")).exists()).toBe(true);
+      expect(await Bun.file(oldUninstaller).exists()).toBe(true);
+      // Inno's own record already names the new folder; only the saved path remembers the old one.
+      expect(await query(previousDataKey, "Inno Setup: App Path")).toBe(moved);
+      expect(
+        await query(previousDataKey, "Inno Setup CodeFile: PendingUninstaller"),
+      ).toBe(oldUninstaller);
+      await (
+        await startInstall({
+          version: "pending-third",
+          executable: "앱.exe",
+          config,
+          tasks: "fileassociations",
+          destination: moved,
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      expect(await Bun.file(oldUninstaller).exists()).toBe(false);
+      expect(await Bun.file(join(installDir, "앱.exe")).exists()).toBe(false);
+      expect(
+        await query(previousDataKey, "Inno Setup CodeFile: PendingUninstaller"),
+      ).toBe("");
+    } finally {
+      await removeInstallRecord(fixture);
+      await cleanup();
+    }
+  },
+  deadline("packagedAudit"),
+);

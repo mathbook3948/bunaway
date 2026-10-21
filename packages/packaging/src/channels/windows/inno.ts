@@ -651,7 +651,11 @@ begin
     Link := Item.GetLink;
     Target := Link.Path;
     Result := True;
-  except Log('Could not inspect shortcut: ' + Filename); end;
+  except
+    Log('Could not inspect shortcut: ' + Filename);
+    // A link that exists but cannot be read may still point at the old folder.
+    RelocationShortcutFailed := True;
+  end;
 end;
 
 function ShouldCreateShortcut(const Filename: String): Boolean;

@@ -27,6 +27,9 @@ var RelocationAppPath: String;
     RelocationShortcutFailed: Boolean;
 `,
     procedures: String.raw`
+function GetRelocationDriveType(RootPath: String): LongWord;
+  external 'GetDriveTypeW@kernel32.dll stdcall';
+
 // The previous Inno record is read before Setup rewrites it. The old folder and its payload are
 // trusted from this app's own CodeFile record (or the pending predecessor it wrote). The Inno
 // values only authorize deleting the old uninstaller, and then only when they name that same folder.
@@ -157,6 +160,8 @@ function IsSafeRelocationSource(const Dir: String): Boolean;
 begin
   Result := False;
   if (Length(Dir) < 4) or (Dir[2] <> ':') or (Dir[3] <> '\') then Exit;
+  // DRIVE_FIXED: a network, removable or optical drive is never cleaned up.
+  if GetRelocationDriveType(Copy(Dir, 1, 3)) <> 3 then Exit;
   if IsNestedDirectory(Dir, ExpandConstant('{app}')) or
      IsNestedDirectory(ExpandConstant('{app}'), Dir) then Exit;
   if IsProtectedRelocationDirectory(Dir) then Exit;${
