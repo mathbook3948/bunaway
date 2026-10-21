@@ -244,7 +244,7 @@ begin
   end;
 end;
 
-// Payload may be nil (uninstall cannot unpack the list); the executable is always removed.
+// Payload is nil when the build has no payload list; the executable is always removed.
 procedure RemoveRelocatedInstallation(const ExecutableName, Dir: String; Payload: TStringList);
 var Failed: Integer; Uninstaller: String;
 begin
