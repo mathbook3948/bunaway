@@ -223,7 +223,7 @@ export function createToastController(
         if (event.kind === "activated") {
           if (entry.activatedBy === "activator") {
             // The duplicate of a click the activator already published: consumed, so the next click counts.
-            entry.activatedBy = undefined;
+            delete entry.activatedBy;
             return;
           }
           const activation = resolveActivation(entry.input, event);
@@ -273,7 +273,7 @@ export function createToastController(
       }
       if (entry.activatedBy === "toast") {
         // The duplicate of a click the object route already published: consumed, so the next click counts.
-        entry.activatedBy = undefined;
+        delete entry.activatedBy;
         return true;
       }
       const activation = resolveTarget(entry.input, parsed.target, typed);
