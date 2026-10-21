@@ -90,6 +90,16 @@ const server = Bun.serve({
         status: 404,
       });
     }
+    if (path === "/partial") {
+      return new Response("fragment", {
+        status: 206,
+      });
+    }
+    if (path === "/empty") {
+      return new Response(null, {
+        status: 204,
+      });
+    }
     if (path === "/redirect") {
       return new Response(null, {
         status: 302,
@@ -224,6 +234,14 @@ test("a status other than 200 or a redirect is returned and creates no file", as
       "/redirect",
       302,
     ],
+    [
+      "/partial",
+      206,
+    ],
+    [
+      "/empty",
+      204,
+    ],
   ] as const) {
     const request = input(`status-${status}.txt`, path);
     const result = await runDownload(state, SOURCE, request);
@@ -275,7 +293,7 @@ test("a missing destination folder fails before any request", async () => {
 test("a temporary file that cannot be created ends the connection instead of leaving it open", async () => {
   const state = initialize();
   const request = input("occupied.bin", "/endless");
-  const part = `${request.path}.${request.downloadId.slice(0, 8)}.part`;
+  const part = `${request.path}.${request.downloadId.slice(-8)}.part`;
   writeFileSync(part, "leftover");
   endlessCancelled = false;
   expect(await codeOf(runDownload(state, SOURCE, request))).toBe("INTERNAL");

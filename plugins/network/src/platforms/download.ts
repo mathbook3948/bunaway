@@ -24,7 +24,7 @@ const TRANSIENT_FILE_ERRORS = new Set([
   "EPERM",
   "EACCES",
 ]);
-/** Hex digits of the download id that make the temporary name unique. */
+/** Hex digits at the end of the download id that make the temporary name unique; the end is random in UUID versions 4 and 7. */
 const PART_SUFFIX_LENGTH = 8;
 /** Longest final name of a file on NTFS and common POSIX systems, which the temporary name must fit too. */
 const MAX_FILE_NAME_LENGTH = 255;
@@ -132,7 +132,8 @@ async function checkTarget(path: string, overwrite: boolean) {
   }
 }
 
-async function removePart(path: string) {
+/** Delete a file this download created, trying again while it is held; a file that stays is named in the log. */
+async function removeCreated(path: string, what: string) {
   for (let attempt = 1; attempt <= FILE_STEP_ATTEMPTS; attempt++) {
     try {
       await unlink(path);
@@ -142,7 +143,7 @@ async function removePart(path: string) {
         return;
       }
       if (attempt === FILE_STEP_ATTEMPTS) {
-        console.error("Temporary download file could not be removed.", error);
+        console.error(`The ${what} could not be removed: ${path}`, error);
         return;
       }
       await Bun.sleep(FILE_STEP_RETRY_MS);
@@ -181,9 +182,9 @@ async function retryTransient<T>(step: () => Promise<T>): Promise<T> {
 
 /**
  * Copy `part` into a target that this call creates exclusively, for file systems without hard
- * links. Only a target created here is ever removed again, so a file that another process put at
- * the path is neither overwritten nor deleted, and a copy that fails, is cancelled or cannot be
- * closed leaves no partial target. The copy is not atomic: until it ends the target holds a prefix.
+ * links. The target is created with an exclusive open, so a file that already exists at the path is
+ * neither overwritten nor deleted. A copy that fails, is cancelled or cannot be closed removes the
+ * target again by name; if that removal stays blocked the partial file is left and named in the log. The copy is not atomic: until it ends the target holds a prefix.
  */
 async function copyExclusive(
   part: string,
@@ -235,7 +236,7 @@ async function copyExclusive(
     };
   }
   if (failure) {
-    await removePart(path);
+    await removeCreated(path, "partial download target");
     throw failure.cause;
   }
 }
@@ -389,7 +390,7 @@ export async function download(
     }
     entry.totalBytes = length;
   }
-  const part = `${input.path}.${input.downloadId.slice(0, PART_SUFFIX_LENGTH)}.part`;
+  const part = `${input.path}.${input.downloadId.slice(-PART_SUFFIX_LENGTH)}.part`;
   // "wx" fails on a leftover of the same name, which this download then leaves alone.
   const file = await open(part, "wx");
   let gone = false;
@@ -407,7 +408,7 @@ export async function download(
     // After a rename the name is free again and may belong to another download, so only a hard
     // link, a copy or a failure leaves a file here to remove.
     if (!gone) {
-      await removePart(part);
+      await removeCreated(part, "temporary download file");
     }
   }
   return {
