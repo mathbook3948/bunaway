@@ -270,6 +270,24 @@ test.skipIf(process.platform !== "win32")(
       expect(own.bounds.height).toBeGreaterThan(0);
 
       // The full-size capture has the listed size and the color painted into the window.
+      const image = await capture(own.id, 4096);
+      expect([
+        image.width,
+        image.height,
+      ]).toEqual([
+        own.bounds.width,
+        own.bounds.height,
+      ]);
+      const decoded = decodePng(Buffer.from(image.data, "base64"));
+      const center =
+        (Math.floor(decoded.height / 2) * decoded.width +
+          Math.floor(decoded.width / 2)) *
+        3;
+      console.log(
+        `PROBE first capture rgb=${[
+          ...decoded.rgb.subarray(center, center + 3),
+        ].join(",")}`,
+      );
       {
         const u = dlopen("user32.dll", {
           GetDC: {
@@ -427,19 +445,6 @@ test.skipIf(process.platform !== "win32")(
           `PROBE expected=${hex(FILL.red | (FILL.green << 8) | (FILL.blue << 16))} hung=${u.symbols.IsHungAppWindow(window)} ${lines.join(" | ")}`,
         );
       }
-      const image = await capture(own.id, 4096);
-      expect([
-        image.width,
-        image.height,
-      ]).toEqual([
-        own.bounds.width,
-        own.bounds.height,
-      ]);
-      const decoded = decodePng(Buffer.from(image.data, "base64"));
-      const center =
-        (Math.floor(decoded.height / 2) * decoded.width +
-          Math.floor(decoded.width / 2)) *
-        3;
       expect([
         ...decoded.rgb.subarray(center, center + 3),
       ]).toEqual([
