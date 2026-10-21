@@ -9,7 +9,12 @@ import crashReport from "@bunaway/plugin-crash-report/native/windows";
  *   access-violation: a native write to address 0, which Bun's own crash handling sees first.
  */
 const [dataRoot, mode] = process.argv.slice(2);
-assert(dataRoot && (mode === "failfast" || mode === "access-violation"));
+assert(
+  dataRoot &&
+    (mode === "failfast" ||
+      mode === "rtl-failfast" ||
+      mode === "access-violation"),
+);
 
 const platform = crashReport._definition.nativePlatforms.windows;
 assert(platform);
@@ -38,7 +43,17 @@ const kernel32 = dlopen("kernel32.dll", {
     returns: "void",
   },
 });
-if (mode === "failfast") {
+if (mode === "rtl-failfast") {
+  const ntdll = dlopen("ntdll.dll", {
+    RtlFailFast: {
+      args: [
+        "u32",
+      ],
+      returns: "void",
+    },
+  });
+  ntdll.symbols.RtlFailFast(5);
+} else if (mode === "failfast") {
   kernel32.symbols.RaiseFailFastException(null, null, 0);
 } else {
   kernel32.symbols.RtlMoveMemory(0n, ptr(Buffer.alloc(8)), 8n);
