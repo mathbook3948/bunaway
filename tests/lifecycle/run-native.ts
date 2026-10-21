@@ -74,6 +74,16 @@ if (target === "windows-x64") {
       ],
       root,
     );
+    // Own process: the test ends child processes with a crash and waits for Windows Error Reporting.
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/windows-crash-report.test.ts"),
+      ],
+      root,
+    );
     await run(
       [
         inputs.bun,
