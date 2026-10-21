@@ -92,6 +92,8 @@ test.skipIf(process.platform !== "win32")(
           "process.stdin.resume()",
         ],
         {
+          // A visible console window would take focus from the input tests that run after this one.
+          windowsHide: true,
           stdio: [
             "pipe",
             "ignore",
