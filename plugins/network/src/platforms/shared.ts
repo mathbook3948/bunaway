@@ -289,6 +289,8 @@ export async function runDownload(
       if (error instanceof BunawayError) {
         throw error;
       }
+      // The cause stays in the log; the caller only learns that the download failed.
+      console.error("Download failed.", error);
       throw new BunawayError({
         code: "INTERNAL",
         message: "Download failed.",
@@ -296,6 +298,8 @@ export async function runDownload(
     } finally {
       clearTimeout(deadline);
       clearTimeout(idle);
+      // Ends the connection of a download that stopped before its body was read to the end.
+      controller.abort();
       state.downloads.delete(input.downloadId);
     }
   })();

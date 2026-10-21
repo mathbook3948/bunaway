@@ -291,7 +291,19 @@ export const downloadInputSchema = z.strictObject({
     "https:",
   ]),
   path: z.string().min(1).max(MAX_DOWNLOAD_PATH_LENGTH),
-  headers: requestHeaders.default([]),
+  headers: requestHeaders
+    .refine(
+      (values) =>
+        values.every(
+          ([name]) =>
+            ![
+              "range",
+              "if-range",
+            ].includes(name.toLowerCase()),
+        ),
+      "A partial body cannot be saved as a whole file.",
+    )
+    .default([]),
   maxBytes: z.number().int().min(1).max(MAX_DOWNLOAD_BYTES),
   timeoutMs: z
     .number()

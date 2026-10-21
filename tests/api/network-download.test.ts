@@ -6,6 +6,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -36,6 +37,8 @@ const SHORT_IDLE_MS = 300;
 const encoder = new TextEncoder();
 let folder: string;
 let releases: Array<() => void> = [];
+/** Set when the client ended the connection of the endless body. */
+let endlessCancelled = false;
 /**
  * A raw HTTP/1.1 answer, so the response announces a length: the first five of eleven bytes arrive
  * at once and the rest only after the test calls a release function.
@@ -105,8 +108,18 @@ const server = Bun.serve({
           pull(controller) {
             controller.enqueue(new Uint8Array(1024));
           },
+          cancel() {
+            endlessCancelled = true;
+          },
         }),
       );
+    }
+    if (path === "/gzip") {
+      return new Response(Bun.gzipSync("compressed body"), {
+        headers: {
+          "content-encoding": "gzip",
+        },
+      });
     }
     return new Response("not found", {
       status: 404,
@@ -250,6 +263,57 @@ test("a missing destination folder fails before any request", async () => {
   expect(await codeOf(runDownload(state, SOURCE, request))).toBe(
     "INVALID_ARGUMENT",
   );
+  await dispose(state);
+});
+
+test("a temporary file that cannot be created ends the connection instead of leaving it open", async () => {
+  const state = initialize();
+  const request = input("occupied.bin", "/endless");
+  const part = `${request.path}.${request.downloadId.slice(0, 8)}.part`;
+  writeFileSync(part, "leftover");
+  endlessCancelled = false;
+  expect(await codeOf(runDownload(state, SOURCE, request))).toBe("INTERNAL");
+  await waitFor(() => endlessCancelled || undefined, {
+    deadline: "inProcess",
+    what: "the server to see the connection end",
+  });
+  // The leftover is not this download's file and stays.
+  expect(readFileSync(part, "utf8")).toBe("leftover");
+  rmSync(part);
+  await dispose(state);
+});
+
+test("an encoded body, a Range header, an over-long name and a dangling link are refused", async () => {
+  const state = initialize();
+  const encoded = input("encoded.bin", "/gzip");
+  expect(await codeOf(runDownload(state, SOURCE, encoded))).toBe("INTERNAL");
+  expect(existsSync(encoded.path)).toBe(false);
+  expect(
+    downloadInputSchema.safeParse({
+      downloadId: crypto.randomUUID(),
+      url: url("/small"),
+      path: join(folder, "ranged.bin"),
+      maxBytes: 10,
+      headers: [
+        [
+          "Range",
+          "bytes=0-4",
+        ],
+      ],
+    }).success,
+  ).toBe(false);
+  const tooLong = input(`${"n".repeat(250)}.bin`, "/small");
+  expect(await codeOf(runDownload(state, SOURCE, tooLong))).toBe(
+    "INVALID_ARGUMENT",
+  );
+  if (process.platform !== "win32") {
+    symlinkSync(join(folder, "nowhere"), join(folder, "dangling.bin"));
+    const dangling = input("dangling.bin", "/small");
+    expect(await codeOf(runDownload(state, SOURCE, dangling))).toBe(
+      "INVALID_ARGUMENT",
+    );
+  }
+  expect(leftovers()).toEqual([]);
   await dispose(state);
 });
 

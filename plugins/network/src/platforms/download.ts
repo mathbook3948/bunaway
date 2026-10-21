@@ -1,12 +1,15 @@
 import {
+  constants,
+  copyFile,
   type FileHandle,
   link,
+  lstat,
   open,
   rename,
   stat,
   unlink,
 } from "node:fs/promises";
-import { dirname, isAbsolute } from "node:path";
+import { basename, dirname, isAbsolute } from "node:path";
 import { BunawayError, isWindowsFileName } from "@bunaway/protocol";
 import type { z } from "zod";
 import type { downloadInputSchema } from "#network/contract";
@@ -14,19 +17,21 @@ import { responseHeaders } from "#network/platforms/http";
 
 type DownloadInput = z.output<typeof downloadInputSchema>;
 
-/** Attempts to delete a temporary file that a scanner or indexer may hold open for a moment. */
-const PART_DELETE_ATTEMPTS = 3;
-const PART_DELETE_RETRY_MS = 50;
+/** Attempts (the first included) to delete or place a file that a scanner or indexer may hold open for a moment. */
+const FILE_STEP_ATTEMPTS = 3;
+const FILE_STEP_RETRY_MS = 50;
+/** Error codes that a scanner holding the file can cause, so the step is tried again. */
+const TRANSIENT_FILE_ERRORS = new Set([
+  "EBUSY",
+  "EPERM",
+  "EACCES",
+]);
 /** Hex digits of the download id that make the temporary name unique. */
 const PART_SUFFIX_LENGTH = 8;
-/** Error codes of a file system without hard links, where the final step falls back to rename. */
-const LINK_UNSUPPORTED = new Set([
-  "EPERM",
-  "ENOTSUP",
-  "ENOSYS",
-  "EXDEV",
-  "EINVAL",
-]);
+/** Longest final name of a file on NTFS and common POSIX systems, which the temporary name must fit too. */
+const MAX_FILE_NAME_LENGTH = 255;
+/** Length of the `.` + id prefix + `.part` that is appended to the final name. */
+const PART_NAME_OVERHEAD = PART_SUFFIX_LENGTH + ".part".length + 2;
 
 /** A download that has started, addressed by the caller's id and owned by the `source` that began it. */
 export type DownloadEntry = {
@@ -88,9 +93,14 @@ export function checkDestination(
   }
 }
 
-async function existingKind(path: string) {
+/**
+ * What occupies a path, or undefined when nothing does. The target itself is read without following
+ * a final link, so a dangling link counts as present and `overwrite` replaces the link, not what it names.
+ */
+async function existingKind(path: string, followLink = true) {
   try {
-    return (await stat(path)).isDirectory() ? "directory" : "file";
+    const info = await (followLink ? stat(path) : lstat(path));
+    return info.isDirectory() ? "directory" : "file";
   } catch (error) {
     if (errorCode(error) === "ENOENT" || errorCode(error) === "ENOTDIR") {
       return undefined;
@@ -108,14 +118,17 @@ async function checkTarget(path: string, overwrite: boolean) {
   if ((await existingKind(dirname(path))) !== "directory") {
     throw invalid("The destination folder does not exist.");
   }
-  const kind = await existingKind(path);
+  if (basename(path).length + PART_NAME_OVERHEAD > MAX_FILE_NAME_LENGTH) {
+    throw invalid("The file name is too long.");
+  }
+  const kind = await existingKind(path, false);
   if (kind === "directory" || (kind === "file" && !overwrite)) {
     throw invalid("The destination already exists.");
   }
 }
 
 async function removePart(path: string) {
-  for (let attempt = 1; attempt <= PART_DELETE_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= FILE_STEP_ATTEMPTS; attempt++) {
     try {
       await unlink(path);
       return;
@@ -123,36 +136,84 @@ async function removePart(path: string) {
       if (errorCode(error) === "ENOENT") {
         return;
       }
-      if (attempt === PART_DELETE_ATTEMPTS) {
+      if (attempt === FILE_STEP_ATTEMPTS) {
         console.error("Temporary download file could not be removed.", error);
         return;
       }
-      await Bun.sleep(PART_DELETE_RETRY_MS);
+      await Bun.sleep(FILE_STEP_RETRY_MS);
     }
   }
 }
 
-/** Move the finished temporary file into place; without `overwrite` an existing target is never replaced. */
-async function commit(part: string, path: string, overwrite: boolean) {
+/**
+ * Place the finished temporary file once. Without `overwrite` the target is never replaced: a hard
+ * link fails when the target exists, and where links are unavailable an exclusive copy takes over, so
+ * no step can overwrite a file that appeared meanwhile. Returns whether the temporary name is gone.
+ */
+async function placeOnce(part: string, path: string, overwrite: boolean) {
   if (overwrite) {
     await rename(part, path);
-    return;
+    return true;
   }
   try {
-    // link fails when the target exists, so the check and the placement are one step.
     await link(part, path);
   } catch (error) {
-    const code = errorCode(error);
-    if (code === "EEXIST") {
+    if (errorCode(error) === "EEXIST") {
       throw invalid("The destination already exists.");
     }
-    if (code === undefined || !LINK_UNSUPPORTED.has(code)) {
-      throw error;
+    try {
+      await copyFile(part, path, constants.COPYFILE_EXCL);
+    } catch (copyError) {
+      if (errorCode(copyError) === "EEXIST") {
+        throw invalid("The destination already exists.");
+      }
+      // A failed copy may have left a partial target, which this download created and removes.
+      await unlink(path).catch((cleanup: unknown) => {
+        if (errorCode(cleanup) !== "ENOENT") {
+          console.error(
+            "Partial download target could not be removed.",
+            cleanup,
+          );
+        }
+      });
+      throw copyError;
     }
-    if ((await existingKind(path)) !== undefined) {
-      throw invalid("The destination already exists.");
+  }
+  return false;
+}
+
+/** Place the file, trying again while a scanner or indexer holds it; returns whether the temporary name is gone. */
+async function commit(part: string, path: string, overwrite: boolean) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await placeOnce(part, path, overwrite);
+    } catch (error) {
+      const code = errorCode(error);
+      if (
+        attempt >= FILE_STEP_ATTEMPTS ||
+        code === undefined ||
+        !TRANSIENT_FILE_ERRORS.has(code)
+      ) {
+        throw error;
+      }
+      await Bun.sleep(FILE_STEP_RETRY_MS);
     }
-    await rename(part, path);
+  }
+}
+
+/** Write every byte of a chunk; a handle may accept fewer bytes than offered, and none means the disk refused. */
+async function writeAll(file: FileHandle, chunk: Uint8Array) {
+  let offset = 0;
+  while (offset < chunk.byteLength) {
+    const { bytesWritten } = await file.write(
+      chunk,
+      offset,
+      chunk.byteLength - offset,
+    );
+    if (bytesWritten === 0) {
+      throw new Error("The file accepted no bytes.");
+    }
+    offset += bytesWritten;
   }
 }
 
@@ -181,7 +242,7 @@ async function writeBody(
             message: "Response body exceeds the limit.",
           });
         }
-        await file.write(result.value);
+        await writeAll(file, result.value);
         entry.receivedBytes += result.value.byteLength;
         touch();
       }
@@ -214,7 +275,7 @@ export async function download(
   signal.throwIfAborted();
   const response = await fetch(input.url, {
     method: "GET",
-    // The body is stored as sent, so the announced length is the size the file will have.
+    // Stored as sent, so the announced length is the size the file will have.
     headers: [
       ...input.headers,
       [
@@ -237,6 +298,15 @@ export async function download(
       bytesWritten: 0,
     };
   }
+  // fetch decodes a compressed body, which would make sizes and progress describe different bytes.
+  const encoding = response.headers.get("content-encoding");
+  if (encoding !== null && encoding.trim().toLowerCase() !== "identity") {
+    await response.body?.cancel();
+    throw new BunawayError({
+      code: "INTERNAL",
+      message: "Response body is encoded.",
+    });
+  }
   const length = Number(response.headers.get("content-length") ?? Number.NaN);
   if (Number.isSafeInteger(length) && length >= 0) {
     if (length > input.maxBytes) {
@@ -251,13 +321,23 @@ export async function download(
   const part = `${input.path}.${input.downloadId.slice(0, PART_SUFFIX_LENGTH)}.part`;
   // "wx" fails on a leftover of the same name, which this download then leaves alone.
   const file = await open(part, "wx");
+  let gone = false;
   try {
     await writeBody(response, input, file, signal, entry, touch);
     signal.throwIfAborted();
-    await commit(part, input.path, input.overwrite);
+    if (entry.totalBytes !== null && entry.receivedBytes !== entry.totalBytes) {
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Response body is shorter than announced.",
+      });
+    }
+    gone = await commit(part, input.path, input.overwrite);
   } finally {
-    // After a rename the name is gone already; after a hard link or a failure it is removed here.
-    await removePart(part);
+    // After a rename the name is free again and may belong to another download, so only a hard
+    // link, a copy or a failure leaves a file here to remove.
+    if (!gone) {
+      await removePart(part);
+    }
   }
   return {
     status: response.status,
