@@ -246,7 +246,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] theme 변경 이벤트를 제공한다. Windows는 `appearance.changed`로 테마, 고대비와 접근성 설정을 알리며 동일 값은 생략한다. 13절 테마 항목과 같다.
 - [x] Windows 로그오프와 시스템 종료의 WM_QUERYENDSESSION은 항상 허용하고 WM_ENDSESSION은 `"session-end"` 원인의 취소 불가 종료로 처리한다. UI 스레드는 최대 4초 동안 `onWillQuit`과 플러그인 StopHook을 기다리며 차단 API는 제공하지 않는다. 실제 HWND 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [ ] 선택적으로 ShutdownBlockReasonCreate 기반의 종료 지연 API를 제공한다. 차단 사유 문자열, 해제 규칙, 차단 중 메시지 처리와 `onQuit` 보장 범위를 먼저 정한다.
-- [ ] app-command와 system-context-menu 이벤트를 제공한다.
+- [x] app-command와 system-context-menu 이벤트를 `windows.appCommand`와 `windows.systemContextMenu`로 알림 전용으로 제공한다. 최상위 HWND에 도착한 메시지만 해석하며 기본 처리는 그대로 두고 취소는 제공하지 않는다. 합성 메시지 검증은 CI windows-native에서 실행하고, WebView2 위의 실제 마우스 확장 버튼과 미디어 키 도착은 GUI 확인이 남아 있다.
 - [x] 창 이벤트 구독 해제, 탐색과 재생성 후 새 구독, 종료 시 정리를 보장한다.
 - [x] `getSnapshot`으로 windowId, revision, 상태와 bounds를 조회하고 구독 후 현재 상태를 복구한다.
 - [x] 크기, 위치, 최대화, 전체화면과 표시 상태의 저장 항목을 선택한다. `windowState.restore`의 `include`로 복원할 항목을 고른다.

@@ -161,6 +161,7 @@ export {
   parseWindowCall,
   validateWindowCall,
   validateWindowOutput,
+  windowAppCommands,
   windowEvents,
   windowOperations,
   windowReadinessSchema,

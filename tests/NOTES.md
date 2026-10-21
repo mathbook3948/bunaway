@@ -1345,3 +1345,11 @@ Windows native 실행기에 포함하며 결과는 `build/windows-webview-titleb
 빌드해 5회 실행하고 시작 시간, 유휴 working set, 패키지 크기, 명령 왕복 지연을
 `build/windows-baseline-results.json`에 기록합니다. 값은 기록만 하며 통과 기준으로 쓰지 않습니다.
 Windows native 실행기에 포함하고, 결과 파일은 `windows-native-diagnostics` 아티팩트에 올라갑니다.
+
+`api/window-input-events.test.ts`는 WM_APPCOMMAND의 명령 코드와 장치 비트 분리, 게시하지 않는 코드, 이름 목록의
+도달 가능성, 부호 있는 화면 좌표와 키보드 호출(-1) 처리, 시스템 메뉴 영역 판별 및 두 이벤트의 스키마를 확인한다.
+`lifecycle/windows-window-input-events.ts`는 실제 WebView2 문서가 구독한 상태에서 최상위 HWND에 합성한
+WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코드, 클라이언트 영역, 키보드 호출과
+게시되지 않는 것을 확인한다. Windows native 실행기에 포함한다. 최상위 창이 아닌 창을 가리키는 메뉴 메시지는 합성 시험을 두지 않았다.
+실제 마우스 확장 버튼과 미디어 키가 WebView2 위에서 최상위 창까지 올라오는지, 사용자 정의 제목 표시줄의
+오른쪽 클릭이 도착하는지는 합성 메시지로 확인할 수 없어 별도 GUI 확인이 필요하다.

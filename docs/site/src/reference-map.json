@@ -507,7 +507,8 @@
           "monitorSchema",
           "monitorSnapshotSchema",
           "monitorChangeSchema",
-          "windowEvents"
+          "windowEvents",
+          "windowAppCommands"
         ],
         "reference/tooling/native-plugins": [
           "isWindowOperation",

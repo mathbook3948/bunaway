@@ -54,6 +54,13 @@ import {
   WM_EXITSIZEMOVE,
   WM_SIZE,
 } from "./win32-constants.ts";
+import {
+  appCommandName,
+  contextMenuPoint,
+  isSystemMenuArea,
+  WM_APPCOMMAND,
+  WM_CONTEXTMENU,
+} from "./window-input-events.ts";
 import { WindowLifecycle } from "./window-lifecycle.ts";
 import { WindowProfiles } from "./window-profiles.ts";
 import { WindowReadinessTracker } from "./window-readiness.ts";
@@ -1513,6 +1520,9 @@ function createWindow(
       if (isMonitorChangeMessage(message)) {
         monitorTracker?.invalidate();
       }
+      if (message === WM_APPCOMMAND || message === WM_CONTEXTMENU) {
+        publishWindowInput(message, wparam, lparam);
+      }
       if (message === WM_CLOSE) {
         close();
       } else if (message === WM_SIZE) {
@@ -1534,6 +1544,62 @@ function createWindow(
     view: spec.view,
     hwnd: window.toString(),
   });
+  /** Input notifications leave the default handling intact and reach only this window's own views. */
+  function publishWindowInput(message: number, wparam: bigint, lparam: bigint) {
+    // A view is registered only after creation finishes, so input pumped during creation, and
+    // input for a closing view, never reaches the bindings below before they are initialized.
+    const owner = views.get(instanceKey);
+    if (
+      stopping() ||
+      shutdownCommitted() ||
+      !owner ||
+      owner.native !== native ||
+      owner.lifecycle.closed
+    ) {
+      return;
+    }
+    try {
+      publishWindowInputEvent(message, wparam, lparam);
+    } catch (error) {
+      // The notification is best effort; a failure here must not skip DefWindowProc handling.
+      log("window-input-event-failed", {
+        view: spec.view,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  function publishWindowInputEvent(
+    message: number,
+    wparam: bigint,
+    lparam: bigint,
+  ) {
+    const { windowId, viewId } = readiness.snapshot();
+    if (message === WM_APPCOMMAND) {
+      const command = appCommandName(lparam);
+      if (command) {
+        sendNativeEvent(boundary, "windows.appCommand", {
+          windowId,
+          viewId,
+          command,
+        });
+      }
+      return;
+    }
+    const point = contextMenuPoint(lparam);
+    // wparam names the window under the pointer; only the frame's own title area qualifies.
+    if (!point || wparam !== window) {
+      return;
+    }
+    // DefWindowProc answers the hit test directly; sending the message would re-enter this procedure.
+    assert(windows);
+    if (isSystemMenuArea(windows.hitTest(window, point.x, point.y))) {
+      sendNativeEvent(boundary, "windows.systemContextMenu", {
+        windowId,
+        viewId,
+        ...point,
+      });
+    }
+  }
   windows.observe(window, spec.view, (snapshot, changes) => {
     if (
       stopping() ||
