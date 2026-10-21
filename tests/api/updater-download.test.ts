@@ -408,8 +408,9 @@ test("dispose cancels a running download and waits until its partial file is gon
   const running = failure(instance.download());
   await received.promise;
   await instance.dispose();
-  expect((await running).code).toBe("CANCELLED");
+  // dispose returns only after the running download has cleaned up.
   expect(updateFiles()).toEqual([]);
+  expect((await running).code).toBe("CANCELLED");
   expect((await failure(instance.download())).code).toBe("CANCELLED");
 });
 
@@ -503,11 +504,15 @@ test("cancelling while an existing package is verified stops with CANCELLED", as
   const { instance } = setup({}, undefined, {
     ...files,
     async reuse(sha256, size, signal) {
+      // The stored file has the declared size, so the real digest calculation runs with an aborted signal.
       controller.abort();
-      signal.throwIfAborted();
       return files.reuse(sha256, size, signal);
     },
   });
+  mkdirSync(updatesDirectory(), {
+    recursive: true,
+  });
+  writeFileSync(join(updatesDirectory(), `${SHA256}.package`), BYTES);
   await instance.check();
   expect((await failure(instance.download(controller.signal))).code).toBe(
     "CANCELLED",
@@ -535,4 +540,16 @@ test("a package of the declared size with another digest is fetched again", asyn
   expect(await instance.download()).toEqual(first);
   expect(packageRequests()).toHaveLength(2);
   expect(new Uint8Array(readFileSync(first.path))).toEqual(BYTES);
+});
+
+test("a folder that cannot be created fails with a storage reason and a path-free message", async () => {
+  mkdirSync(join(root, "data"), {
+    recursive: true,
+  });
+  writeFileSync(join(root, "data", "updates"), "not a folder");
+  const { instance } = setup();
+  await instance.check();
+  const error = await failure(instance.download());
+  expect(reasonOf(error)).toBe("storage");
+  expect(error.message).not.toContain(root);
 });

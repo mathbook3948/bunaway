@@ -161,6 +161,8 @@ export async function downloadPackage(
       await pruneQuietly(options.files, sha256);
       return result(existing);
     }
+    // Created before the response is requested, so a folder that cannot be made never leaves a body open.
+    sink = await options.files.create(sha256);
     const response = await fetchFollowingRedirects(
       new URL(options.target.url),
       {
@@ -189,7 +191,6 @@ export async function downloadPackage(
         "Update package length differs from the manifest.",
       );
     }
-    sink = await options.files.create(sha256);
     await writeBody(response, sink, size, signal);
     if ((await sink.finish()) !== sha256) {
       throw fail(
@@ -198,6 +199,7 @@ export async function downloadPackage(
         "Update package does not match the manifest sha256.",
       );
     }
+    signal.throwIfAborted();
     const path = await sink.publish();
     sink = undefined;
     await pruneQuietly(options.files, sha256);
