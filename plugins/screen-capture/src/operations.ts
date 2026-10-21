@@ -13,7 +13,7 @@ export const screenCaptureOperations = {
   listSources: operation({
     input: listSourcesInputSchema,
     output: sourceListSchema,
-    handler(input, { instance, permissions, signal }) {
+    handler(input, { instance, permissions }) {
       // Thumbnails are captures, so a listing that asks for them needs the capture permission too.
       // `permissions` is absent only on direct adapter calls, which carry no host authority to check.
       if (
@@ -26,7 +26,7 @@ export const screenCaptureOperations = {
           message: "Plugin permission denied.",
         });
       }
-      return instance.listSources(input, signal);
+      return instance.listSources(input);
     },
   }),
   captureSource: operation({

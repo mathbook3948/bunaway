@@ -62,17 +62,19 @@ const withThumbnails = await screenCapture.listSources({
 원본보다 크게 만들지 않습니다. `thumbnailSize`를 생략하면 응답에 `thumbnail`이 없고 캡처도 하지 않습니다. Electron의
 `desktopCapturer.getSources({ thumbnailSize })`와 달리 기본 크기(150 x 150)로 thumbnail을 만들지 않고, 요청한 경우에만 만듭니다.
 
-- 캡처할 수 없는 소스(최소화됨, 캡처 제외를 요청한 창, 응답하지 않는 창, 너무 큰 창, 방금 닫힌 창)는 목록에 남고
+- 캡처할 수 없는 소스(최소화됨, 캡처 제외를 요청한 창, 응답하지 않는 창, 너무 큰 창, 방금 닫힌 창, 실패한 GDI 호출)는 목록에 남고
   `thumbnail`만 없습니다. 한 창 때문에 목록 전체가 실패하지 않습니다. 이유를 알아야 하면 그 소스로 `captureSource`를
   호출합니다.
 - 메시지 하나가 1 MiB를 넘을 수 없어서 한 응답의 thumbnail PNG는 모두 합쳐 384 KiB까지입니다. 합계를 넘는 소스부터는
-  이후 소스 모두 `thumbnail`이 없습니다. 창이 많은 데스크톱에서는 더 작은 `thumbnailSize`를 쓰거나 빠진 소스에
+  이후 소스 모두 `thumbnail`이 없습니다. 하나의 PNG가 `captureSource`의 상한(640 KiB)을 넘는 경우도 같습니다. GDI 자원 해제
+  실패처럼 소스 하나의 문제가 아닌 오류는 목록 전체를 실패시킵니다. 창이 많은 데스크톱에서는 더 작은 `thumbnailSize`를 쓰거나 빠진 소스에
   `captureSource`를 호출합니다. 소스 수 상한(256)은 그대로입니다.
 - thumbnail을 요청하면 `screenCapture.listSources`와 `screenCapture.captureSource` 권한이 모두 필요합니다. 하나만 있으면
   `PERMISSION_DENIED`입니다. `thumbnailSize`가 없는 호출은 `screenCapture.listSources`만 필요합니다.
-- 소스마다 캡처가 한 번씩 순서대로 실행되므로 `thumbnailSize`가 있는 호출은 느립니다. 요청을 취소하면 다음 소스의
-  캡처를 시작하지 않고 끝나며(이미 시작한 캡처는 중단하지 않습니다), 이때는 부분 결과를 돌려주지 않습니다. 응답하지
-  않는 창은 캡처 전에 검사하지만 검사 직후에 멈추면 `PrintWindow`가 돌아올 때까지 호출이 늦어집니다.
+- 소스마다 캡처가 한 번씩 순서대로 실행되므로 `thumbnailSize`가 있는 호출은 느립니다. 시작한 목록 호출은 `captureSource`와
+  같이 중단할 수 없습니다. 취소나 기한 초과가 되어도 모든 소스를 캡처할 때까지 호스트의 I/O Worker가 점유되고 같은
+  Worker의 다음 작업이 기다립니다. 응답하지 않는 창은 캡처 전에 검사하지만 검사 직후에 멈추면 `PrintWindow`가 돌아올
+  때까지 호출이 늦어집니다.
 - 이 흐름은 Linux에서 가짜 바인딩으로 검증한 것과 Windows CI에서 이 테스트 프로세스의 창, 보호된 창, 최소화된 창,
   모니터로 확인한 것까지입니다. 실제 여러 모니터, 혼합 DPI, 상승된 권한으로 실행 중인 창의 thumbnail은 확인하지 않았습니다.
 
@@ -107,7 +109,8 @@ PNG가 640 KiB를 넘으면 작은 `maxWidth`와 `maxHeight`로 다시 호출합
   `screenCapture.listSources`와 `screenCapture.captureSource`를 허용합니다. 목록에 thumbnail을 요청하는 뷰도 두 권한이 모두 필요합니다. setup에서 호출하면
   `backend.permissions`를 사용합니다.
 - 화면에서 직접 호출하려면 `commands`에 `plugin.screenCapture.listSources` 또는 `plugin.screenCapture.captureSource`를
-  허용해야 합니다. 권장하지 않으며 외부 콘텐츠를 보여 주는 뷰에는 허용하지 않습니다.
+  허용해야 합니다. `commands`에 `listSources`만 허용해도 뷰의 `host.permissions`에 `captureSource`가 있으면 `thumbnailSize`로
+  화면 이미지를 받을 수 있으니, `captureSource` 직접 호출을 막으려면 `listSources` 직접 호출도 함께 막습니다. 권장하지 않으며 외부 콘텐츠를 보여 주는 뷰에는 허용하지 않습니다.
 
 `SetWindowDisplayAffinity`로 캡처 제외를 요청한 창은 창 캡처를 거부하고, 화면 캡처에서 보호된 창이 어떻게 나오는지는 확인하지 않았습니다.
 다른 앱이 건 보호 설정을 우회하지 않습니다.

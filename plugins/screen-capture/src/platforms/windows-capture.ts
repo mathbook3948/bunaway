@@ -185,9 +185,12 @@ export function fitSize(
   };
 }
 
+/** A native call of a capture reported failure; a listing drops that source's thumbnail instead of failing. */
+class NativeStepError extends Error {}
+
 function checked(done: boolean, what: string): void {
   if (!done) {
-    throw new Error(`${what} failed.`);
+    throw new NativeStepError(`${what} failed.`);
   }
 }
 
@@ -216,10 +219,7 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
     private readonly releaseNative: () => void = () => undefined,
   ) {}
 
-  listSources(
-    input: ScreenCaptureListInput,
-    signal?: AbortSignal,
-  ): ScreenCaptureSource[] {
+  listSources(input: ScreenCaptureListInput): ScreenCaptureSource[] {
     this.assertActive();
     return this.inDpiScope(() => {
       const listed: ScreenCaptureSource[] = [];
@@ -237,7 +237,7 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
       if (input.thumbnailSize === undefined) {
         return listed;
       }
-      return this.withThumbnails(listed, placed, input.thumbnailSize, signal);
+      return this.withThumbnails(listed, placed, input.thumbnailSize);
     });
   }
 
@@ -256,16 +256,6 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
     const { png, size } = this.inDpiScope(() =>
       this.capturePng(ref, maxWidth, maxHeight),
     );
-    return toImage(png, size);
-  }
-
-  /** Draw one source and encode it; the caller holds the DPI scope. A PNG over the limit is an error. */
-  private capturePng(ref: SourceRef, maxWidth: number, maxHeight: number) {
-    const { pixels, size } =
-      ref.kind === "window"
-        ? this.captureWindow(ref, maxWidth, maxHeight)
-        : this.captureScreen(ref, maxWidth, maxHeight);
-    const png = encodePng(pixels, size.width, size.height);
     if (png.length > MAX_CAPTURE_PNG_BYTES) {
       fail(
         "INVALID_ARGUMENT",
@@ -273,24 +263,34 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
         REASON.tooLarge,
       );
     }
+    return toImage(png, size);
+  }
+
+  /** Draw one source and encode it; the caller holds the DPI scope and checks the PNG size. */
+  private capturePng(ref: SourceRef, maxWidth: number, maxHeight: number) {
+    const { pixels, size } =
+      ref.kind === "window"
+        ? this.captureWindow(ref, maxWidth, maxHeight)
+        : this.captureScreen(ref, maxWidth, maxHeight);
     return {
-      png,
+      png: encodePng(pixels, size.width, size.height),
       size,
     };
   }
 
   /**
    * Attach a thumbnail to every listed source, in list order, inside the caller's DPI scope.
-   * A source that cannot be captured now (minimized, protected, closed, not responding, too large)
-   * stays in the list without one, because one bad window must not fail the whole listing. Thumbnails
-   * stop once the next one would exceed the byte budget, so the response stays under the message limit.
-   * A failure to release GDI objects is not per-source and fails the listing.
+   * A source that cannot be captured now (minimized, protected, closed, not responding, window too
+   * large, a failed native call) stays in the list without one, because one bad window must not fail
+   * the whole listing. Thumbnails stop at the first PNG that does not fit the remaining byte budget
+   * (including one over the single-capture limit), so the response stays under the message limit.
+   * A failure to release GDI objects is not per-source and fails the listing. Like a capture, the
+   * listing cannot be cancelled once it runs, because the worker thread does not poll cancellation.
    */
   private withThumbnails(
     listed: ScreenCaptureSource[],
     placed: Placed[],
     box: Size,
-    signal: AbortSignal | undefined,
   ): ScreenCaptureSource[] {
     let remainingBytes = MAX_LISTED_THUMBNAIL_PNG_BYTES;
     const refs = new Map(
@@ -300,7 +300,6 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
       ]),
     );
     return listed.map((source) => {
-      signal?.throwIfAborted();
       const ref = refs.get(source.id);
       if (ref === undefined || remainingBytes <= 0) {
         return source;
@@ -326,10 +325,12 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
     try {
       return this.capturePng(ref, box.width, box.height);
     } catch (error) {
-      if (error instanceof AggregateError) {
-        throw error;
+      // Only the source's own state and native call failures are expected; a release failure
+      // (AggregateError) or a programming error is not about this source and must surface.
+      if (error instanceof BunawayError || error instanceof NativeStepError) {
+        return null;
       }
-      return null;
+      throw error;
     }
   }
 
@@ -586,7 +587,7 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
 
   private nonZero(handle: bigint, what: string): bigint {
     if (handle === 0n) {
-      throw new Error(`${what} failed.`);
+      throw new NativeStepError(`${what} failed.`);
     }
     return handle;
   }
@@ -617,7 +618,7 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
           area.height,
         );
         if (created === null || created.bitmap === 0n) {
-          throw new Error("CreateDIBSection failed.");
+          throw new NativeStepError("CreateDIBSection failed.");
         }
         return created;
       },

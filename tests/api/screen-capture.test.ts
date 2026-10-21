@@ -134,7 +134,13 @@ function fakeBindings(world: FakeWorld) {
       return world.failOn === "SelectObject" ? 0n : previous;
     },
     deleteObject: (object) => drop("DeleteObject", object),
-    flush: () => world.log.push("GdiFlush"),
+    flush() {
+      world.log.push("GdiFlush");
+      if (world.failOn === "thrown") {
+        delete world.failOn;
+        throw new TypeError("Unexpected defect.");
+      }
+    },
     printWindow: () => step("PrintWindow"),
     blit(target, targetSize, _source, _sourceRect, fromScreen) {
       if (!step(fromScreen ? "BlitScreen" : "BlitWindow")) {
@@ -1529,29 +1535,57 @@ test("thumbnails stop at the byte budget instead of growing the response", () =>
   expect(alive.size).toBe(0);
 });
 
-test("an aborted thumbnail listing stops before the next capture and restores DPI awareness", () => {
+test("a thumbnail over the single capture limit closes the budget like any other that does not fit", () => {
   const { adapter, world, alive } = setup(
+    [
+      [
+        1n,
+        windowFacts(),
+      ],
+    ],
+    [
+      primary,
+      {
+        ...primary,
+        deviceName: "DISPLAY2",
+      },
+    ],
+  );
+  world.noise = true;
+  const listed = adapter.listSources({
+    types: [
+      "screen",
+      "window",
+    ],
+    thumbnailSize: {
+      width: 1024,
+      height: 1024,
+    },
+  });
+  expect(listed).toHaveLength(3);
+  expect(listed.every((source) => source.thumbnail === undefined)).toBe(true);
+  // Only the first source was drawn; the budget closed, so the rest were not even attempted.
+  expect(world.log.filter((entry) => entry === "GetDC")).toHaveLength(1);
+  expect(alive.size).toBe(0);
+});
+
+test("a programming error while drawing one source fails the listing instead of dropping its thumbnail", () => {
+  const { adapter, world } = setup(
     [],
     [
       primary,
     ],
   );
-  const controller = new AbortController();
-  controller.abort();
+  world.failOn = "thrown";
   expect(() =>
-    adapter.listSources(
-      {
-        types: [
-          "screen",
-        ],
-        thumbnailSize: box,
-      },
-      controller.signal,
-    ),
-  ).toThrow();
-  expect(world.log).not.toContain("GetDC");
+    adapter.listSources({
+      types: [
+        "screen",
+      ],
+      thumbnailSize: box,
+    }),
+  ).toThrow(TypeError);
   expect(world.log.at(-1)).toBe("restoreDpi");
-  expect(alive.size).toBe(0);
 });
 
 test("a listing with thumbnails also requires the capture permission", () => {

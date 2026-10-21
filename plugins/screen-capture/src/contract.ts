@@ -97,10 +97,6 @@ export type ScreenCaptureInput = z.infer<typeof captureInputSchema>;
 
 /** What every platform adapter provides; operations are typed by this interface, not by a platform module. */
 export interface ScreenCaptureInstance {
-  /** `signal` stops a thumbnail listing between two sources; a capture already started is not interrupted. */
-  listSources(
-    input: ScreenCaptureListInput,
-    signal?: AbortSignal,
-  ): ScreenCaptureSource[];
+  listSources(input: ScreenCaptureListInput): ScreenCaptureSource[];
   captureSource(input: ScreenCaptureInput): ScreenCaptureImage;
 }
