@@ -197,6 +197,11 @@ if (!process.argv.includes("--child")) {
       key: "minimized",
     });
     await windows.minimize(target);
+    assert.equal(
+      (await state()).maximized,
+      false,
+      "a window minimized from maximized reports not maximized",
+    );
     await windowState.save({
       ...target,
       key: "minimized",
@@ -230,16 +235,27 @@ if (!process.argv.includes("--child")) {
       },
     });
     assert.equal((await state()).minimized, true, "window is minimized");
-    await windowState.restore({
-      ...target,
-      key: "tiny",
-      include: {
-        position: false,
-        maximized: false,
-        fullscreen: false,
+    assert.deepEqual(
+      await windowState.restore({
+        ...target,
+        key: "tiny",
+        include: {
+          position: false,
+          maximized: false,
+          fullscreen: false,
+        },
+      }),
+      {
+        restored: true,
+        adjusted: true,
       },
-    });
+    );
     await windows.restore(target);
+    const grown = await normal();
+    assert(
+      grown.width > 100 && grown.height > 100,
+      `a minimized window is held to the raised minimum, got ${grown.width}x${grown.height}`,
+    );
     await reset();
 
     // Fullscreen: restore leaves it, places the window and enters it again.
