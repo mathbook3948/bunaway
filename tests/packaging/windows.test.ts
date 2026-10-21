@@ -1292,7 +1292,7 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
     "SetPreviousData(PreviousDataKey, 'InstallDir', ExpandConstant('{app}'))",
   );
   expect(perUser).toContain(
-    "CompareText(AddBackslash(PreviousInstallDir), AddBackslash(ExpandConstant('{app}'))) <> 0",
+    "CompareText(AddBackslash(InstallDir), AddBackslash(ExpandConstant('{app}'))) <> 0",
   );
   expect(perUser).toContain(
     "if CompareText(Path, ExpandConstant('{uninstallexe}')) = 0 then Exit;",
@@ -1321,7 +1321,7 @@ test("Inno script encodes scope, WebView2 mode, shortcuts and uninstall data pol
     "procedure RegisterExtraCloseApplicationsResources;",
   );
   expect(perUser).toContain(
-    "RegisterExtraCloseApplicationsResource(True, ExpandConstant('{app}') + '\\' + PreviousExecutableName)",
+    "RegisterExtraCloseApplicationsResource(True, AddBackslash(PreviousInstallDir) + PreviousExecutableName)",
   );
   expect(perUser).toContain("FILE_ATTRIBUTE_REPARSE_POINT");
   expect(perUser).not.toContain("BunawayLauncher");

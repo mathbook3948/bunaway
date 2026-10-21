@@ -21,6 +21,7 @@ import {
 } from "./common.ts";
 import { innoIdentity } from "./inno-identity.ts";
 import { renderInstallationStateCode } from "./installation-state.ts";
+import { RELOCATION_PAYLOAD_LIST, renderRelocationCode } from "./relocation.ts";
 import { signingArgs } from "./sign.ts";
 
 // Inno Setup installer generation shared by win-direct and
@@ -58,6 +59,9 @@ export interface InnoOptions {
   appDataDir: string;
   preserveUserData: boolean;
   assetPaths: string[];
+  // Absolute path to a text file listing every payload file (relative, one per line, UTF-8
+  // with BOM). Setup unpacks it to remove the files of a previous installation in another folder.
+  payloadListPath?: string;
   executableName?: string;
   signed?: boolean;
   minVersion?: string;
@@ -146,6 +150,11 @@ function createInnoContext(options: InnoOptions, parts: number[]) {
     ? `{localappdata}\\Programs\\${identifier}`
     : `{autopf}\\${identifier}`;
   const installationState = renderInstallationStateCode(options.identifier);
+  const relocation = renderRelocationCode({
+    scope: options.scope,
+    startMenuShortcut: options.startMenuShortcut,
+    hasPayloadList: options.payloadListPath !== undefined,
+  });
   return {
     options,
     perUser,
@@ -161,6 +170,7 @@ function createInnoContext(options: InnoOptions, parts: number[]) {
     uninstallLink,
     desktopLink,
     installationState,
+    relocation,
     shortcutCheck,
     defaultDir,
   };
@@ -226,6 +236,11 @@ function filesSection(context: InnoContext): string[] {
   lines.push(
     `Source: "${issParameter(options.payloadDir, false)}\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs`,
   );
+  if (options.payloadListPath) {
+    lines.push(
+      `Source: "${issParameter(options.payloadListPath, false)}"; DestDir: "{tmp}"; DestName: "${RELOCATION_PAYLOAD_LIST}"; Flags: dontcopy`,
+    );
+  }
   if (options.bootstrapperPath) {
     lines.push(
       `Source: "${issParameter(options.bootstrapperPath, false)}"; DestDir: "{tmp}"; DestName: "MicrosoftEdgeWebview2Setup.exe"; Flags: dontcopy`,
@@ -391,6 +406,7 @@ type
   end;
 `,
     installationState.declarations,
+    context.relocation.declarations,
     "var PreviousExecutableName: String;",
     "    PreviousInstallDir: String;",
     "    PendingAssociationExecutableName: String;",
@@ -573,25 +589,34 @@ function cleanupSection(context: InnoContext): string[] {
   lines.push(
     "// Retained payloads are not in the overwritten uninstall log. Both retry and",
     "// uninstall may remove only a safe predecessor in this unchanged, plain directory.",
-    "procedure RemovePreviousExecutable(const ExecutableName, InstallDir: String);",
-    "var Path, Directory, Drive: String; Entry: TFindRec;",
+    "// Every component up to the drive must be an existing plain directory, so a",
+    "// redirected parent is not followed.",
+    "function IsPlainDirectoryChain(const Directory: String): Boolean;",
+    "var Current, Drive: String; Entry: TFindRec;",
     "begin",
-    "  if not IsSafeExecutableName(ExecutableName) or (InstallDir = '') or",
-    "     (CompareText(AddBackslash(InstallDir), AddBackslash(ExpandConstant('{app}'))) <> 0) or",
-    `     (CompareText(ExecutableName, '${executableLiteral}') = 0) then Exit;`,
-    "  Directory := ExpandConstant('{app}');",
-    "  Drive := ExtractFileDrive(Directory);",
+    "  Result := False;",
+    "  Current := Directory;",
+    "  Drive := ExtractFileDrive(Current);",
     "  if Drive = '' then Exit;",
-    "  // Check every directory component so a redirected parent is not followed.",
-    "  while CompareText(AddBackslash(Directory), AddBackslash(Drive)) <> 0 do begin",
-    "    if not FindFirst(Directory, Entry) then Exit;",
+    "  while CompareText(AddBackslash(Current), AddBackslash(Drive)) <> 0 do begin",
+    "    if not FindFirst(Current, Entry) then Exit;",
     "    try",
     "      if ((Entry.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0) or",
     "         ((Entry.Attributes and FILE_ATTRIBUTE_REPARSE_POINT) <> 0) then Exit;",
     "    finally FindClose(Entry); end;",
-    "    Directory := ExtractFileDir(Directory);",
-    "    if Directory = '' then Exit;",
+    "    Current := ExtractFileDir(Current);",
+    "    if Current = '' then Exit;",
     "  end;",
+    "  Result := True;",
+    "end;",
+    "",
+    "procedure RemovePreviousExecutable(const ExecutableName, InstallDir: String);",
+    "var Path: String; Entry: TFindRec;",
+    "begin",
+    "  if not IsSafeExecutableName(ExecutableName) or (InstallDir = '') or",
+    "     (CompareText(AddBackslash(InstallDir), AddBackslash(ExpandConstant('{app}'))) <> 0) or",
+    `     (CompareText(ExecutableName, '${executableLiteral}') = 0) then Exit;`,
+    "  if not IsPlainDirectoryChain(ExpandConstant('{app}')) then Exit;",
     "  Path := ExpandConstant('{app}') + '\\' + ExecutableName;",
     "  if CompareText(Path, ExpandConstant('{uninstallexe}')) = 0 then Exit;",
     "  if not FindFirst(Path, Entry) then Exit;",
@@ -640,11 +665,11 @@ procedure UpdateShortcut(const Filename: String);
 var Link: Variant; Target, Arguments, IconPath: String; IconIndex: Integer;
     IconObject: IUnknown; IconLink: IShellLinkW; IconFile: IPersistFile;
 begin
-  if (PreviousExecutableName = '') or
-     (CompareText(PreviousExecutableName, '${executableLiteral}') = 0) or
-     (CompareText(AddBackslash(PreviousInstallDir), AddBackslash(ExpandConstant('{app}'))) <> 0) then Exit;
+  if (PreviousExecutableName = '') or (PreviousInstallDir = '') or
+     ((CompareText(PreviousExecutableName, '${executableLiteral}') = 0) and
+      (CompareText(AddBackslash(PreviousInstallDir), AddBackslash(ExpandConstant('{app}'))) = 0)) then Exit;
   if not ReadShortcut(Filename, Link, Target) then Exit;
-  if CompareText(Target, ExpandConstant('{app}') + '\' + PreviousExecutableName) <> 0 then Exit;
+  if CompareText(Target, AddBackslash(PreviousInstallDir) + PreviousExecutableName) <> 0 then Exit;
   try
     Arguments := Link.Arguments;
     IconObject := CreateComObject(StringToGuid('{00021401-0000-0000-C000-000000000046}'));
@@ -736,6 +761,7 @@ end;
           "",
         ]
       : []),
+    context.relocation.procedures,
     "procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);",
     "begin",
     "  if CurUninstallStep <> usUninstall then Exit;",
@@ -751,6 +777,7 @@ end;
     "  RemovePendingAssociationOwner;",
     "  RemoveAssociations(AssociationExecutable);",
     "  RemovePreviousExecutable(PendingAssociationExecutableName, PendingAssociationInstallDir);",
+    "  RemoveRelocatedInstallation(PendingAssociationExecutableName, PendingAssociationInstallDir, nil);",
     ...[
       menuLink,
       desktopLink,
@@ -795,8 +822,7 @@ end;
     "procedure CompleteInstallation;",
     "var Current: TStringList;",
     "begin",
-    "  if (PreviousExecutableName = '') or (PreviousInstallDir = '') or",
-    "     (CompareText(AddBackslash(PreviousInstallDir), AddBackslash(ExpandConstant('{app}'))) <> 0) then",
+    "  if (PreviousExecutableName = '') or (PreviousInstallDir = '') then",
     "    PreviousExecutableName := '';",
     "  Current := TStringList.Create;",
     "  try",
@@ -819,7 +845,16 @@ end;
       (path) =>
         `    UpdateShortcut(ExpandConstant('${path.replace(/'/g, "''")}'));`,
     ),
-    "    if PostInstallError = '' then RemovePreviousExecutable(PreviousExecutableName, PreviousInstallDir);",
+    ...(options.startMenuShortcut
+      ? [
+          `    UpdateUninstallShortcut(ExpandConstant('${uninstallLink.replace(/'/g, "''")}'));`,
+        ]
+      : []),
+    "    // Remove the predecessor last: every registration above already names the new executable.",
+    "    if PostInstallError = '' then begin",
+    "      RemovePreviousExecutable(PreviousExecutableName, PreviousInstallDir);",
+    "      RemoveRelocatedInstallationWithPayload;",
+    "    end;",
     "  finally",
     "    Current.Free;",
     "  end;",
@@ -841,6 +876,7 @@ function installStepsSection(context: InnoContext): string[] {
     "  if CurStep = ssInstall then begin",
     "    // This is the last guard before Inno mutates payload and uninstall metadata.",
     "    ValidateInstallationSnapshot;",
+    "    ValidateRelocationRecord;",
     ...(options.startMenuShortcut
       ? [
           // Runs before Inno creates the links, so a link without the activator class is recreated.
@@ -892,10 +928,10 @@ function installStepsSection(context: InnoContext): string[] {
     "procedure RegisterExtraCloseApplicationsResources;",
     "begin",
     "  if (PreviousExecutableName <> '') and (PreviousInstallDir <> '') and",
-    `     (CompareText(PreviousExecutableName, '${executableLiteral}') <> 0) and`,
-    "     (CompareText(AddBackslash(PreviousInstallDir), AddBackslash(ExpandConstant('{app}'))) = 0) and",
-    "     FileExists(ExpandConstant('{app}') + '\\' + PreviousExecutableName) then",
-    "    if not RegisterExtraCloseApplicationsResource(True, ExpandConstant('{app}') + '\\' + PreviousExecutableName) then",
+    `     not ((CompareText(PreviousExecutableName, '${executableLiteral}') = 0) and`,
+    "          (CompareText(AddBackslash(PreviousInstallDir), AddBackslash(ExpandConstant('{app}'))) = 0)) and",
+    "     FileExists(AddBackslash(PreviousInstallDir) + PreviousExecutableName) then",
+    "    if not RegisterExtraCloseApplicationsResource(True, AddBackslash(PreviousInstallDir) + PreviousExecutableName) then",
     "      RaiseException('Could not check the previous app executable for running applications.');",
     "end;",
     "",
@@ -904,6 +940,7 @@ function installStepsSection(context: InnoContext): string[] {
     "  Result := AcquireInstallationMaintenance;",
     "  if not Result then Exit;",
     "  CaptureInstallationSnapshot;",
+    "  CaptureRelocationRecord;",
     "  PreviousExecutableName := InstallationSnapshot.ExecutableName;",
     "  if not IsSafeExecutableName(PreviousExecutableName) then",
     "    PreviousExecutableName := '';",
@@ -914,11 +951,11 @@ function installStepsSection(context: InnoContext): string[] {
           "  LoadAutostartOwners;",
         ]
       : []),
-    "  // A failed upgrade already recorded the new EXE. Reuse its trusted pending",
-    "  // predecessor for the existing close-resource, shortcut and EXE cleanup policy.",
+    "  // A failed upgrade or relocation already recorded the new EXE. Reuse its trusted pending",
+    "  // predecessor, in this or another folder, for the close-resource, shortcut and EXE cleanup policy.",
+    "  // PrepareToInstall rejects a target other than the recorded one while a predecessor is pending.",
     "  if (PendingAssociationExecutableName <> '') and (PendingAssociationInstallDir <> '') and",
-    `     (CompareText(PreviousExecutableName, '${executableLiteral}') = 0) and`,
-    "     (CompareText(AddBackslash(PreviousInstallDir), AddBackslash(PendingAssociationInstallDir)) = 0) then begin",
+    `     (CompareText(PreviousExecutableName, '${executableLiteral}') = 0) then begin`,
     "    PreviousExecutableName := PendingAssociationExecutableName;",
     "    PreviousInstallDir := PendingAssociationInstallDir;",
     "  end;",
