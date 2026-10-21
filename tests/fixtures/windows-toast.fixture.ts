@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parentPort, Worker, workerData } from "node:worker_threads";
-import { notificationShowSchema } from "#plugins/notification/src/contract";
+import {
+  notificationScheduleSchema,
+  notificationShowSchema,
+} from "#plugins/notification/src/contract";
 import {
   ACTIVATED_ARGS_IID,
   ACTIVATED_ARGS2_IID,
@@ -27,11 +30,16 @@ import {
 } from "#plugins/notification/src/platforms/toast-winrt";
 import { createNotifications } from "#plugins/notification/src/platforms/windows";
 import { createWindowsToastDriver } from "#plugins/notification/src/platforms/windows-toasts";
+import { waitFor } from "./deadlines.ts";
 import { createNotificationShortcut } from "./windows-notification-shortcut.ts";
 
 assert.equal(process.platform, "win32");
 const PIXEL_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+/** Far enough ahead that a scheduled toast stays pending for the whole fixture. */
+const FAR_DELIVERY_MS = 30 * 60 * 1000;
+/** Close enough that Windows delivers the scheduled toast while the fixture waits. */
+const NEAR_DELIVERY_MS = 8000;
 const CLICK_IID = "ab54de2d-97d9-5528-b6ad-105afe156530";
 if (workerData?.toastMarshalWorker) {
   assert(parentPort);
@@ -646,6 +654,127 @@ if (workerData?.toastMarshalWorker) {
       0,
       "clearAll must remove every history item of the app",
     );
+    // Scheduling: the OS holds the toast until its delivery time, replaces one with the same identity,
+    // lists it with the stored time and drops it on cancel.
+    const scheduledToast = (id: string, group: string, deliverAt: number) =>
+      notificationScheduleSchema.parse({
+        id,
+        group,
+        title: "scheduled fixture",
+        silent: true,
+        suppressPopup: true,
+        deliverAt,
+      });
+    const listedSchedule = () =>
+      controller?.listScheduled().sort((a, b) => key(a).localeCompare(key(b)));
+    const later = Date.now() + FAR_DELIVERY_MS;
+    assert.deepEqual(controller.listScheduled(), []);
+    controller.schedule(scheduledToast("sched-a", "bunaway-test", later));
+    controller.schedule(
+      scheduledToast("sched-a", "bunaway-other", later + 1000),
+    );
+    assert.deepEqual(listedSchedule(), [
+      {
+        id: "sched-a",
+        group: "bunaway-other",
+        deliverAt: later + 1000,
+      },
+      {
+        id: "sched-a",
+        group: "bunaway-test",
+        deliverAt: later,
+      },
+    ]);
+    controller.schedule(
+      scheduledToast("sched-a", "bunaway-test", later + 2000),
+    );
+    assert.deepEqual(
+      listedSchedule()?.map((item) => `${key(item)}@${item.deliverAt - later}`),
+      [
+        "bunaway-other/sched-a@1000",
+        "bunaway-test/sched-a@2000",
+      ],
+      "The same id and group must replace the scheduled toast",
+    );
+    assert.equal(
+      controller.cancelScheduled({
+        id: "sched-a",
+        group: "bunaway-test",
+      }),
+      null,
+    );
+    assert.deepEqual(listedSchedule()?.map(key), [
+      "bunaway-other/sched-a",
+    ]);
+    // Cancelling something that is not scheduled succeeds without effect.
+    assert.equal(
+      controller.cancelScheduled({
+        id: "sched-a",
+        group: "bunaway-test",
+      }),
+      null,
+    );
+    assert.equal(
+      controller.cancelScheduled({
+        id: "sched-a",
+        group: "bunaway-other",
+      }),
+      null,
+    );
+    assert.deepEqual(controller.listScheduled(), []);
+    assert.throws(
+      () =>
+        controller?.schedule(
+          scheduledToast("sched-late", "bunaway-test", Date.now() - 1000),
+        ),
+      {
+        code: "INVALID_ARGUMENT",
+      },
+    );
+    // A due toast leaves the schedule and arrives in the notification history under its identity.
+    controller.schedule(
+      scheduledToast(
+        "sched-due",
+        "bunaway-test",
+        Date.now() + NEAR_DELIVERY_MS,
+      ),
+    );
+    await waitFor(
+      () =>
+        controller
+          ?.list()
+          .some((item) => key(item) === "bunaway-test/sched-due") || undefined,
+      {
+        deadline: "nativeFixture",
+        what: "the scheduled toast to be delivered",
+        intervalMs: 500,
+      },
+    );
+    assert.deepEqual(controller.listScheduled(), []);
+    controller.clear({
+      id: "sched-due",
+      group: "bunaway-test",
+    });
+    // A schedule outlives the controller that made it: Windows owns it until delivery or cancel.
+    controller.schedule(scheduledToast("sched-keep", "bunaway-test", later));
+    await drainToastCleanup(() => controller?.dispose());
+    controller = createToastController(
+      createWindowsToastDriver(appId),
+      () => {},
+      createToastSettler,
+    );
+    assert.deepEqual(controller.listScheduled(), [
+      {
+        id: "sched-keep",
+        group: "bunaway-test",
+        deliverAt: later,
+      },
+    ]);
+    controller.cancelScheduled({
+      id: "sched-keep",
+      group: "bunaway-test",
+    });
+    assert.deepEqual(controller.listScheduled(), []);
     controller.show({
       ...first,
       id: "shutdown",
@@ -657,7 +786,7 @@ if (workerData?.toastMarshalWorker) {
       "Disposal must remove session toasts",
     );
     console.log(
-      "native Show, escaped XML, replacement, clear and shutdown history passed",
+      "native Show, escaped XML, replacement, clear, scheduled delivery and shutdown history passed",
     );
   } finally {
     try {

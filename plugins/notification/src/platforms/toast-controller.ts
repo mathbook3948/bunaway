@@ -5,8 +5,13 @@ import {
   MAX_REPLY_LENGTH,
   type NotificationResult,
   type ResolvedNotification,
+  type ResolvedScheduledNotification,
+  type ScheduledNotification,
   type ToastEvent,
 } from "#notification/contract";
+
+/** The fields that shape toast XML, shared by `show` and `schedule`. */
+type ToastContent = Omit<ResolvedNotification, "expiresAfterSeconds">;
 
 /** Input id of the reply text box in the toast XML. */
 export const REPLY_INPUT_ID = "reply";
@@ -91,6 +96,12 @@ export type ToastDriver = {
   clearAll(): void;
   /** Identities of the host app ID's history items, including earlier processes. Items without a valid identity are omitted. */
   list(): NotificationResult[];
+  /** Hand the toast to the OS schedule, replacing one with the same identity. The OS shows it after this process exits. */
+  schedule(input: ResolvedScheduledNotification): void;
+  /** Not yet delivered scheduled toasts of the host app ID, including earlier processes. */
+  listScheduled(): ScheduledNotification[];
+  /** Remove the scheduled toast with this identity. A missing schedule is not an error. */
+  cancelScheduled(identity: NotificationResult): void;
   dispose(): void;
 };
 
@@ -217,6 +228,33 @@ export function createToastController(
       active();
       return driver.list();
     },
+    /**
+     * Schedules are owned by the OS: they are not tracked in `entries`, publish no events and survive
+     * `dispose`, so the app can be closed before the delivery time.
+     */
+    schedule(input: ResolvedScheduledNotification): NotificationResult {
+      active();
+      if (input.deliverAt <= Date.now()) {
+        throw new BunawayError({
+          code: "INVALID_ARGUMENT",
+          message: "deliverAt must be in the future.",
+        });
+      }
+      driver.schedule(input);
+      return {
+        id: input.id,
+        group: input.group,
+      };
+    },
+    listScheduled(): ScheduledNotification[] {
+      active();
+      return driver.listScheduled();
+    },
+    cancelScheduled(identity: NotificationResult): null {
+      active();
+      driver.cancelScheduled(identity);
+      return null;
+    },
     clearGroup(group: string): null {
       active();
       const settle = beginSettle();
@@ -289,7 +327,7 @@ export function toastFileUri(path: string): string {
 }
 
 /** Reply text box and buttons. Windows renders the input only when a button references it with hint-inputId. */
-function actionsXml(input: ResolvedNotification): string {
+function actionsXml(input: ToastContent): string {
   const button = (label: string, argument: string, inputId = "") =>
     `<action content="${escapeXml(label)}" arguments="${escapeXml(argument)}" activationType="foreground"${inputId}/>`;
   const reply = input.reply
@@ -320,7 +358,7 @@ function actionsXml(input: ResolvedNotification): string {
  * timeoutType "never" maps to scenario="reminder", which keeps the popup until the user dismisses it.
  * Caller data is never treated as markup or an executable activation route.
  */
-export function toastXml(input: ResolvedNotification): string {
+export function toastXml(input: ToastContent): string {
   const image = (path: string, placement: string) =>
     `<image ${placement}src="${escapeXml(toastFileUri(path))}"/>`;
   const media = [

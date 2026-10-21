@@ -5,7 +5,9 @@ import {
   notificationIdentitySchema,
   notificationListSchema,
   notificationResultSchema,
+  notificationScheduleSchema,
   notificationShowSchema,
+  scheduledNotificationListSchema,
   statusSchema,
 } from "#notification/contract";
 import type { initialize } from "#notification/platforms/windows";
@@ -17,6 +19,21 @@ export const notificationOperations = {
     input: notificationShowSchema,
     output: notificationResultSchema,
     handler: (input, { instance }) => instance.show(input),
+  }),
+  schedule: operation({
+    input: notificationScheduleSchema,
+    output: notificationResultSchema,
+    handler: (input, { instance }) => instance.schedule(input),
+  }),
+  listScheduled: operation({
+    input: z.null(),
+    output: scheduledNotificationListSchema,
+    handler: (_input, { instance }) => instance.listScheduled(),
+  }),
+  cancelScheduled: operation({
+    input: notificationIdentitySchema,
+    output: z.null(),
+    handler: (input, { instance }) => instance.cancelScheduled(input),
   }),
   clear: operation({
     input: notificationIdentitySchema,

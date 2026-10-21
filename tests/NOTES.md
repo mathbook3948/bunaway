@@ -222,6 +222,12 @@ getter와 FFI 값을 비교하며 고유 tag/group의 임시 알림은 finally�
 기본 CI는 실제 설정 페이지 표시나 사용자 차단 상태 변경, toast 표시를 검증하지 않는다.
 [notification README](../plugins/notification/README.md)의 실행 명령과 남은 검증 범위를 따른다.
 
+`api/notification-scheduled.test.ts`는 예약 입력 계약, 독립 권한, 과거 시각 거부와 OS 소유 예약의
+조회, 취소, 종료 후 유지를 가짜 driver로 검사하고 `fixtures/notification-scheduled-ffi.ts`가 실제 vtable
+slot과 인자 순서, 교체 순서, 4096개 한도, HRESULT 실패 때 COM 참조와 HSTRING 정리를 가짜 COM으로 검사한다.
+`windows-toast.fixture.ts`의 예약 단계는 실제 WinRT로 예약, 교체, 조회, 취소와 약 8초 뒤의 표시 시각
+도착을 확인하며 앱 프로세스가 종료된 상태의 표시는 확인하지 않는다.
+
 `notification-shortcut-cleanup.test.ts`는 바로가기 정리의 일시적인 EBUSY만 최대 10회,
 100ms 간격으로 재시도하는지 검사한다. 실패한 삭제는 정리 완료로 표시하지 않고 shell DLL을
 유지하며 다음 정리에서 복구할 수 있다. 영구 잠금의 기한과 다른 오류의 즉시 전파를 검사한다.

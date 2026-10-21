@@ -7,6 +7,7 @@ import type {
   NotificationSetting,
   NotificationStatus,
   ResolvedNotification,
+  ResolvedScheduledNotification,
 } from "#notification/contract";
 
 import {
@@ -383,6 +384,14 @@ export function initialize(environment: NativeEnvironment) {
       assertToastMediaFiles(input, status.filesystem);
       return controller.show(input);
     },
+    schedule: (input: ResolvedScheduledNotification) => {
+      const controller = getToasts();
+      assertToastMediaFiles(input, status.filesystem);
+      return controller.schedule(input);
+    },
+    listScheduled: () => getToasts().listScheduled(),
+    cancelScheduled: (input: NotificationResult) =>
+      getToasts().cancelScheduled(input),
     clear: (input: NotificationResult) => getToasts().clear(input),
     clearGroup: (group: string) => getToasts().clearGroup(group),
     clearAll: () => getToasts().clearAll(),

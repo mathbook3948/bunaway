@@ -1495,6 +1495,9 @@
     ],
     "reference/plugins/notification": [
       "notification.show",
+      "notification.schedule",
+      "notification.listScheduled",
+      "notification.cancelScheduled",
       "notification.clear",
       "notification.clearGroup",
       "notification.clearAll",

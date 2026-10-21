@@ -500,7 +500,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [ ] 표시 우선순위(alarm, incoming call 시나리오와 알림 센터 우선 순위)의 플랫폼별 동작을 정의한다.
 - [ ] Windows toast XML과 고급 알림 콘텐츠의 지원을 결정한다.
 - [x] OS에 남은 알림 조회와 그룹, 전체 제거의 플랫폼별 지원을 결정한다. Windows 개별 ID/group 제거, 앱 전체 제거(`notification.clearAll`)와 남은 알림 조회(`notification.list`)는 구현했다. group 단위 제거(`notification.clearGroup`)도 구현했다.
-- [ ] 예약 알림과 pending 조회, 취소의 플랫폼별 지원을 제공한다.
+- [x] 예약 알림과 pending 조회, 취소의 플랫폼별 지원을 제공한다. Windows 단발 예약(`notification.schedule`), 조회(`notification.listScheduled`)와 취소(`notification.cancelScheduled`)는 구현했다. 반복 예약은 제공하지 않는다.
 - [ ] 첨부 파일과 클릭 액션 종류를 등록한다.
 - [x] Windows 알림 설정 페이지로 이동하는 요청과 사용자에 의한 차단 상태를 제공한다.
 

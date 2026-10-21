@@ -32,12 +32,16 @@ export function validateNotificationInput(
 ): void {
   if (
     operation === "notification.show" ||
+    operation === "notification.schedule" ||
     operation === "notification.clear" ||
+    operation === "notification.cancelScheduled" ||
     operation === "notification.clearGroup"
   ) {
     const schema = {
       "notification.show": notificationShowSchema,
+      "notification.schedule": notificationScheduleSchema,
       "notification.clear": notificationIdentitySchema,
+      "notification.cancelScheduled": notificationIdentitySchema,
       "notification.clearGroup": notificationGroupSchema,
     }[operation];
     if (!schema.safeParse(input).success) {
@@ -51,6 +55,7 @@ export function validateNotificationInput(
   if (
     operation !== "notification.clearAll" &&
     operation !== "notification.list" &&
+    operation !== "notification.listScheduled" &&
     operation !== "notification.getStatus" &&
     operation !== "notification.openSettings"
   ) {
@@ -68,6 +73,10 @@ export function validateNotificationInput(
 }
 
 export const MAX_ACTIVE_TOASTS = 64;
+/** Windows keeps at most 4096 scheduled toasts per app; the adapter checks before asking the OS. */
+export const MAX_SCHEDULED_TOASTS = 4096;
+/** 9999-12-31T23:59:59.999Z: the latest instant that stays inside the signed 64-bit Windows tick count. */
+export const MAX_DELIVER_AT_MS = 253_402_300_799_999;
 /** Windows shows at most five buttons on a toast, and the reply submit button counts as one. */
 export const MAX_TOAST_ACTIONS = 5;
 export const MAX_ACTION_LABEL_LENGTH = 64;
@@ -167,28 +176,82 @@ export const notificationIdentitySchema = z.strictObject({
 export const notificationGroupSchema = z.strictObject({
   group: identifierSchema,
 });
-export const notificationShowSchema = notificationIdentitySchema
-  .extend({
-    title: xmlText(256).min(1),
-    body: xmlText(2048).default(""),
-    data: z.string().max(2048).nullable().default(null),
-    silent: z.boolean().default(false),
-    suppressPopup: z.boolean().default(false),
-    icon: imagePathSchema.nullable().default(null),
-    image: imagePathSchema.nullable().default(null),
-    imagePlacement: z
-      .enum([
-        "inline",
-        "hero",
-      ])
-      .default("inline"),
-    sound: z.enum(TOAST_SOUNDS).nullable().default(null),
-    timeoutType: z
-      .enum([
-        "default",
-        "never",
-      ])
-      .default("default"),
+const toastContentSchema = notificationIdentitySchema.extend({
+  title: xmlText(256).min(1),
+  body: xmlText(2048).default(""),
+  data: z.string().max(2048).nullable().default(null),
+  silent: z.boolean().default(false),
+  suppressPopup: z.boolean().default(false),
+  icon: imagePathSchema.nullable().default(null),
+  image: imagePathSchema.nullable().default(null),
+  imagePlacement: z
+    .enum([
+      "inline",
+      "hero",
+    ])
+    .default("inline"),
+  sound: z.enum(TOAST_SOUNDS).nullable().default(null),
+  timeoutType: z
+    .enum([
+      "default",
+      "never",
+    ])
+    .default("default"),
+  soundLoop: z.boolean().default(false),
+  actions: z.array(toastActionSchema).default([]),
+  reply: toastReplySchema.nullable().default(null),
+});
+/** Cross-field rules shared by `show` and `schedule`, which render the same toast XML. */
+function withToastContentRules<T extends typeof toastContentSchema>(schema: T) {
+  return schema
+    .refine(
+      (input) =>
+        new Set(input.actions.map((action) => action.id)).size ===
+        input.actions.length,
+      {
+        message: "actions must have unique ids.",
+        path: [
+          "actions",
+        ],
+      },
+    )
+    .refine(
+      (input) =>
+        input.actions.length + (input.reply ? 1 : 0) <= MAX_TOAST_ACTIONS,
+      {
+        message: `A toast shows at most ${MAX_TOAST_ACTIONS} buttons, including the reply button.`,
+        path: [
+          "actions",
+        ],
+      },
+    )
+    .refine(
+      (input) => input.imagePlacement !== "hero" || input.image !== null,
+      {
+        message: "imagePlacement hero requires image.",
+        path: [
+          "imagePlacement",
+        ],
+      },
+    )
+    .refine((input) => !(input.silent && input.sound !== null), {
+      message: "silent and sound are mutually exclusive.",
+      path: [
+        "sound",
+      ],
+    })
+    .refine(
+      (input) => !input.soundLoop || input.sound?.startsWith("Looping."),
+      {
+        message: "soundLoop requires a Looping.* sound.",
+        path: [
+          "soundLoop",
+        ],
+      },
+    );
+}
+export const notificationShowSchema = withToastContentRules(
+  toastContentSchema.extend({
     expiresAfterSeconds: z
       .number()
       .int()
@@ -196,57 +259,38 @@ export const notificationShowSchema = notificationIdentitySchema
       .max(MAX_EXPIRES_AFTER_SECONDS)
       .nullable()
       .default(null),
-    soundLoop: z.boolean().default(false),
-    actions: z.array(toastActionSchema).default([]),
-    reply: toastReplySchema.nullable().default(null),
-  })
-  .refine(
-    (input) =>
-      new Set(input.actions.map((action) => action.id)).size ===
-      input.actions.length,
-    {
-      message: "actions must have unique ids.",
-      path: [
-        "actions",
-      ],
-    },
-  )
-  .refine(
-    (input) =>
-      input.actions.length + (input.reply ? 1 : 0) <= MAX_TOAST_ACTIONS,
-    {
-      message: `A toast shows at most ${MAX_TOAST_ACTIONS} buttons, including the reply button.`,
-      path: [
-        "actions",
-      ],
-    },
-  )
-  .refine((input) => input.imagePlacement !== "hero" || input.image !== null, {
-    message: "imagePlacement hero requires image.",
-    path: [
-      "imagePlacement",
-    ],
-  })
-  .refine((input) => !(input.silent && input.sound !== null), {
-    message: "silent and sound are mutually exclusive.",
-    path: [
-      "sound",
-    ],
-  })
-  .refine((input) => !input.soundLoop || input.sound?.startsWith("Looping."), {
-    message: "soundLoop requires a Looping.* sound.",
-    path: [
-      "soundLoop",
-    ],
-  });
+  }),
+);
+/**
+ * Same content as `show` plus the delivery instant. `expiresAfterSeconds` is absent because a scheduled
+ * toast has no expiration property: Windows only lets the app set one on the toast it shows.
+ */
+export const notificationScheduleSchema = withToastContentRules(
+  toastContentSchema.extend({
+    deliverAt: z.number().int().min(1).max(MAX_DELIVER_AT_MS),
+  }),
+);
 export const notificationResultSchema = z.strictObject({
   id: identifierSchema,
   group: identifierSchema,
 });
 export const notificationListSchema = z.array(notificationResultSchema);
+export const scheduledNotificationSchema = notificationResultSchema.extend({
+  deliverAt: z.number().int(),
+});
+export const scheduledNotificationListSchema = z.array(
+  scheduledNotificationSchema,
+);
 export type NotificationIdentity = z.input<typeof notificationIdentitySchema>;
 export type NotificationOptions = z.input<typeof notificationShowSchema>;
 export type ResolvedNotification = z.output<typeof notificationShowSchema>;
+export type ScheduleOptions = z.input<typeof notificationScheduleSchema>;
+export type ResolvedScheduledNotification = z.output<
+  typeof notificationScheduleSchema
+>;
+export type ScheduledNotification = z.output<
+  typeof scheduledNotificationSchema
+>;
 export type NotificationResult = z.output<typeof notificationResultSchema>;
 export type ToastEvent =
   | {
