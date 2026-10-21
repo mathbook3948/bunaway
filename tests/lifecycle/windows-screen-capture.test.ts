@@ -27,6 +27,7 @@ const FILL = {
 };
 const WARM_UP_CAPTURES = 2;
 const LEAK_CHECK_CAPTURES = 20;
+const COMPOSITION_RETRIES = 5;
 
 /** The few user32 and gdi32 calls the test needs to own a window of a known color. */
 function openDriver() {
@@ -133,9 +134,16 @@ function openDriver() {
       returns: "i32",
     },
   });
+  const dwmapi = dlopen("dwmapi.dll", {
+    DwmFlush: {
+      args: [],
+      returns: "i32",
+    },
+  });
   return {
     user32,
     gdi32,
+    dwmapi,
   };
 }
 
@@ -270,187 +278,50 @@ test.skipIf(process.platform !== "win32")(
       expect(own.bounds.height).toBeGreaterThan(0);
 
       // The full-size capture has the listed size and the color painted into the window.
-      const image = await capture(own.id, 4096);
+      // The window shows its color only once the compositor has taken the painted content, so wait
+      // for composition passes before the first capture; a window of the test thread is not
+      // composed in step with its painting. A capture that still reads black is retried a few
+      // times and reported with its attempts, so a compositor that never delivers is not hidden.
+      const readCenter = (shot: { data: string }) => {
+        const pixels = decodePng(Buffer.from(shot.data, "base64"));
+        const at =
+          (Math.floor(pixels.height / 2) * pixels.width +
+            Math.floor(pixels.width / 2)) *
+          3;
+        return [
+          ...pixels.rgb.subarray(at, at + 3),
+        ];
+      };
+      const expectedColor = [
+        FILL.red,
+        FILL.green,
+        FILL.blue,
+      ];
+      driver.dwmapi.symbols.DwmFlush();
+      let image = await capture(own.id, 4096);
+      const attempts: number[][] = [];
+      for (
+        let retry = 0;
+        retry < COMPOSITION_RETRIES &&
+        readCenter(image).join() !== expectedColor.join();
+        retry += 1
+      ) {
+        attempts.push(readCenter(image));
+        driver.dwmapi.symbols.DwmFlush();
+        image = await capture(own.id, 4096);
+      }
+      if (attempts.length > 0) {
+        console.warn(
+          `window capture read ${JSON.stringify(attempts)} before the painted color`,
+        );
+      }
+      expect(readCenter(image)).toEqual(expectedColor);
       expect([
         image.width,
         image.height,
       ]).toEqual([
         own.bounds.width,
         own.bounds.height,
-      ]);
-      const decoded = decodePng(Buffer.from(image.data, "base64"));
-      const center =
-        (Math.floor(decoded.height / 2) * decoded.width +
-          Math.floor(decoded.width / 2)) *
-        3;
-      console.log(
-        `PROBE first capture rgb=${[
-          ...decoded.rgb.subarray(center, center + 3),
-        ].join(",")}`,
-      );
-      {
-        const u = dlopen("user32.dll", {
-          GetDC: {
-            args: [
-              "u64",
-            ],
-            returns: "u64",
-          },
-          ReleaseDC: {
-            args: [
-              "u64",
-              "u64",
-            ],
-            returns: "i32",
-          },
-          PrintWindow: {
-            args: [
-              "u64",
-              "u64",
-              "u32",
-            ],
-            returns: "i32",
-          },
-          IsHungAppWindow: {
-            args: [
-              "u64",
-            ],
-            returns: "i32",
-          },
-          GetSystemMetrics: {
-            args: [
-              "i32",
-            ],
-            returns: "i32",
-          },
-        });
-        const g = dlopen("gdi32.dll", {
-          GetPixel: {
-            args: [
-              "u64",
-              "i32",
-              "i32",
-            ],
-            returns: "u32",
-          },
-          CreateCompatibleDC: {
-            args: [
-              "u64",
-            ],
-            returns: "u64",
-          },
-          CreateCompatibleBitmap: {
-            args: [
-              "u64",
-              "i32",
-              "i32",
-            ],
-            returns: "u64",
-          },
-          SelectObject: {
-            args: [
-              "u64",
-              "u64",
-            ],
-            returns: "u64",
-          },
-          DeleteObject: {
-            args: [
-              "u64",
-            ],
-            returns: "i32",
-          },
-          DeleteDC: {
-            args: [
-              "u64",
-            ],
-            returns: "i32",
-          },
-          BitBlt: {
-            args: [
-              "u64",
-              "i32",
-              "i32",
-              "i32",
-              "i32",
-              "u64",
-              "i32",
-              "i32",
-              "u32",
-            ],
-            returns: "i32",
-          },
-        });
-        const hex = (v: number) => v.toString(16).padStart(6, "0");
-        const screenDc = u.symbols.GetDC(0n);
-        const winDc = u.symbols.GetDC(window);
-        const lines: string[] = [];
-        lines.push(
-          `screen ${u.symbols.GetSystemMetrics(0)}x${u.symbols.GetSystemMetrics(1)} sessionname=${process.env.SESSIONNAME}`,
-        );
-        lines.push(
-          `GetPixel(windowDC)=${hex(g.symbols.GetPixel(winDc, 100, 100))}`,
-        );
-        lines.push(
-          `GetPixel(screenDC)=${hex(g.symbols.GetPixel(screenDc, 300, 300))}`,
-        );
-        for (const flag of [
-          0,
-          1,
-          2,
-          3,
-        ]) {
-          const mem = g.symbols.CreateCompatibleDC(screenDc);
-          const bmp = g.symbols.CreateCompatibleBitmap(
-            screenDc,
-            WINDOW_WIDTH,
-            WINDOW_HEIGHT,
-          );
-          const old = g.symbols.SelectObject(mem, bmp);
-          const ok = u.symbols.PrintWindow(window, mem, flag);
-          lines.push(
-            `PrintWindow flag=${flag} ok=${ok} pixel=${hex(g.symbols.GetPixel(mem, 100, 100))}`,
-          );
-          g.symbols.SelectObject(mem, old);
-          g.symbols.DeleteObject(bmp);
-          g.symbols.DeleteDC(mem);
-        }
-        const mem2 = g.symbols.CreateCompatibleDC(screenDc);
-        const bmp2 = g.symbols.CreateCompatibleBitmap(
-          screenDc,
-          WINDOW_WIDTH,
-          WINDOW_HEIGHT,
-        );
-        const old2 = g.symbols.SelectObject(mem2, bmp2);
-        g.symbols.BitBlt(
-          mem2,
-          0,
-          0,
-          WINDOW_WIDTH,
-          WINDOW_HEIGHT,
-          screenDc,
-          200,
-          200,
-          0x40cc0020,
-        );
-        lines.push(
-          `BitBlt(screen) pixel=${hex(g.symbols.GetPixel(mem2, 100, 100))}`,
-        );
-        g.symbols.SelectObject(mem2, old2);
-        g.symbols.DeleteObject(bmp2);
-        g.symbols.DeleteDC(mem2);
-        u.symbols.ReleaseDC(window, winDc);
-        u.symbols.ReleaseDC(0n, screenDc);
-        console.log(
-          `PROBE expected=${hex(FILL.red | (FILL.green << 8) | (FILL.blue << 16))} hung=${u.symbols.IsHungAppWindow(window)} ${lines.join(" | ")}`,
-        );
-      }
-      expect([
-        ...decoded.rgb.subarray(center, center + 3),
-      ]).toEqual([
-        FILL.red,
-        FILL.green,
-        FILL.blue,
       ]);
 
       // A thumbnail keeps the aspect ratio inside the requested box.
@@ -554,6 +425,7 @@ test.skipIf(process.platform !== "win32")(
       windowClass.release();
       driver.user32.close();
       driver.gdi32.close();
+      driver.dwmapi.close();
       await adapter.dispose();
       await adapter.dispose();
     }
