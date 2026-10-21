@@ -6,15 +6,16 @@ sidebar: { order: 6 }
 
 ```ts
 storage.readDirectory({ path }): Promise<StorageDirectoryEntry[]>
+storage.readDirectoryPage({ path, after?: string, limit?: number }): Promise<StorageDirectoryPage>
 storage.createDirectory({ path, recursive?: boolean }): Promise<null>
 storage.directorySize({ path }): Promise<StorageDirectorySize>
 storage.remove({ path }): Promise<null>
 storage.removeRecursive({ path }): Promise<null>
 ```
 
-`@bunaway/plugin-storage`의 작업입니다. 다섯 작업 모두 Windows와 macOS에서 제공합니다.
+`@bunaway/plugin-storage`의 작업입니다. 여섯 작업 모두 Windows와 macOS에서 제공합니다.
 `storage`를 등록하고
-`storage.readDirectory`, `storage.createDirectory`, `storage.directorySize`, `storage.remove`, `storage.removeRecursive` 권한을 각각 허용합니다.
+`storage.readDirectory`, `storage.readDirectoryPage`, `storage.createDirectory`, `storage.directorySize`, `storage.remove`, `storage.removeRecursive` 권한을 각각 허용합니다.
 파일 삭제 권한은 트리 삭제를 허용하지 않습니다.
 직접 화면 호출에는 해당 이름 앞에 `plugin.`을 붙인 명령 권한도 필요합니다.
 다른 저장 작업이나 디렉터리 작업의 권한은 서로 허용하지 않습니다.
@@ -42,7 +43,35 @@ FIFO, 장치, socket과 알려지지 않은 종류는 공개 결과로 표현할
 
 디렉터리를 탐색하는 동안 다른 프로세스가 자식을 추가하거나 바꿀 수 있습니다.
 목록은 원자적 스냅샷이나 이후 접근의 승인을 보장하지 않습니다.
-재귀 목록과 큰 목록의 pagination은 후속 작업입니다.
+재귀 목록은 후속 작업입니다. 256개를 넘는 디렉터리는 아래 `readDirectoryPage`로 읽습니다.
+
+## 큰 디렉터리의 페이지 단위 목록
+
+`StorageDirectoryPage`는 `{ entries: StorageDirectoryEntry[], next: string | null }`입니다.
+`readDirectoryPage`는 이름이 `after`보다 뒤인 자식 중 앞의 `limit`개를 같은 순서와 같은 항목 규칙으로 반환합니다.
+`after`를 생략하면 처음부터 읽고, `limit`의 기본값과 상한은 256입니다.
+`next`가 문자열이면 그 값을 다음 호출의 `after`로 넘기고, `null`이면 목록의 끝입니다.
+`after`는 존재하는 이름일 필요가 없으며, 이름의 UTF-16 순서로 비교합니다.
+
+```ts
+import storage from "@bunaway/plugin-storage";
+
+let after: string | undefined;
+do {
+  const page = await storage.readDirectoryPage({ path: "C:/notes/한글", after });
+  for (const entry of page.entries) {
+    // entry.name, entry.kind
+  }
+  after = page.next ?? undefined;
+} while (after !== undefined);
+```
+
+- 서버에 상태를 두지 않으므로 호출 사이에 자식이 추가되거나 지워져도 같은 이름이 두 번 나오거나 건너뛰지 않습니다. 단 커서 이름 이하로 새로 생긴 이름은 이미 지나간 페이지의 몫이라 나오지 않습니다.
+- 호출마다 디렉터리를 처음부터 읽으므로 비용은 호출당 디렉터리 크기에 비례합니다. 메모리는 페이지 크기에 비례하는 후보만 둡니다.
+- 페이지에 든 자식만 `lstat`합니다. 스캔 뒤 사라진 자식은 그 페이지에서 빠져 `entries`가 `limit`보다 적을 수 있으며, 이 경우에도 `next`는 이어서 읽을 위치를 가리킵니다.
+- 255 UTF-16 code unit을 넘는 이름이 페이지에 있거나 FIFO, 장치, socket이 있으면 `readDirectory`와 같이 실패합니다. 그 이름이 다른 페이지에 있으면 이 호출은 영향을 받지 않습니다.
+- 한 번의 동기 읽기라서 시작한 뒤에는 취소할 수 없습니다.
+- `readDirectory`의 허용은 `readDirectoryPage`를 허용하지 않으며 그 반대도 같습니다.
 
 ## 디렉터리 생성
 

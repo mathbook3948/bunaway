@@ -4,6 +4,8 @@ import { z } from "zod";
 /** A bounded listing fits the JSON transport even for maximally escaped Windows filenames. */
 export const MAX_DIRECTORY_ENTRIES = 256;
 export const MAX_FILENAME_CHARACTERS = 255;
+/** Entries per readDirectoryPage reply when `limit` is absent; the reply bound is MAX_DIRECTORY_ENTRIES. */
+export const DEFAULT_DIRECTORY_PAGE_ENTRIES = MAX_DIRECTORY_ENTRIES;
 /**
  * Cost bounds for storage.directorySize. Entries count every child seen below the root,
  * including links and files. Depth counts directory levels below the root.
@@ -111,8 +113,31 @@ export const storageDirectorySizeSchema = z.strictObject({
 export const storageDirectoryEntriesSchema = z
   .array(directoryEntrySchema)
   .max(MAX_DIRECTORY_ENTRIES);
+/**
+ * One page of a name ordered listing. `after` is the last name of the previous page (the `next`
+ * it returned); the page holds the first `limit` names that sort after it in UTF-16 code unit order.
+ */
+export const storageDirectoryPageReadSchema = z.strictObject({
+  ...pathFields,
+  after: z.string().min(1).max(MAX_FILENAME_CHARACTERS).optional(),
+  limit: z.int().min(1).max(MAX_DIRECTORY_ENTRIES).optional(),
+});
+/** `next` is the `after` of the following page, or null when this page reaches the end. */
+export const storageDirectoryPageSchema = z.strictObject({
+  entries: storageDirectoryEntriesSchema,
+  next: z.union([
+    z.string().min(1).max(MAX_FILENAME_CHARACTERS),
+    z.null(),
+  ]),
+});
 /** Logical byte, file and subdirectory totals returned by storage.directorySize. */
 export type StorageDirectorySize = z.infer<typeof storageDirectorySizeSchema>;
+/** Path and optional cursor and page size accepted by readDirectoryPage. */
+export type StorageDirectoryPageRead = z.infer<
+  typeof storageDirectoryPageReadSchema
+>;
+/** One page of directory entries returned by storage.readDirectoryPage. */
+export type StorageDirectoryPage = z.infer<typeof storageDirectoryPageSchema>;
 /** Path accepted by read and metadata operations. */
 export type StorageLocation = z.infer<typeof storageLocationSchema>;
 /** Path and optional byte range accepted by readBytes. */
@@ -145,6 +170,7 @@ export interface StorageInstance {
   appendBytes(input: StorageBytesWrite): null;
   copyFile(input: StorageTransfer): null;
   readDirectory(input: StorageLocation): StorageDirectoryEntry[];
+  readDirectoryPage(input: StorageDirectoryPageRead): StorageDirectoryPage;
   createDirectory(input: StorageDirectoryCreate): null;
   exists(input: StorageLocation): boolean;
   stat(input: StorageLocation): StorageMetadata | null;
@@ -186,6 +212,10 @@ export interface Storage {
     input: StorageLocation,
     options?: NativeInvokeOptions,
   ): Promise<StorageDirectoryEntry[]>;
+  readDirectoryPage(
+    input: StorageDirectoryPageRead,
+    options?: NativeInvokeOptions,
+  ): Promise<StorageDirectoryPage>;
   directorySize(
     input: StorageLocation,
     options?: NativeInvokeOptions,

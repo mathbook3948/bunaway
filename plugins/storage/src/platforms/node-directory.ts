@@ -11,6 +11,7 @@ import {
   MAX_DIRECTORY_ENTRIES,
   MAX_FILENAME_CHARACTERS,
   type StorageDirectoryEntry,
+  type StorageDirectoryPage,
   type StorageDirectorySize,
 } from "#storage/contract";
 
@@ -97,6 +98,31 @@ function entryKind(
   });
 }
 
+function compareNames(left: string, right: string): number {
+  return left < right ? -1 : Number(left > right);
+}
+
+/** The listed entry for a child, or null when it vanished after the listing. */
+function describeChild(
+  parent: string,
+  child: Dirent,
+): StorageDirectoryEntry | null {
+  if (child.name.length > MAX_FILENAME_CHARACTERS) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Storage directory name exceeds the entry limit.",
+    });
+  }
+  const info = listingInfo(parent, child);
+  if (info === null) {
+    return null;
+  }
+  return {
+    name: child.name,
+    kind: entryKind(child, info),
+  };
+}
+
 /** List the names and kinds of a directory's children without following any link, sorted by name. */
 export function listDirectory(path: string): StorageDirectoryEntry[] {
   const entries: StorageDirectoryEntry[] = [];
@@ -113,26 +139,65 @@ export function listDirectory(path: string): StorageDirectoryEntry[] {
           message: "Storage directory exceeds the entry limit.",
         });
       }
-      if (child.name.length > MAX_FILENAME_CHARACTERS) {
-        throw new BunawayError({
-          code: "INVALID_ARGUMENT",
-          message: "Storage directory name exceeds the entry limit.",
-        });
-      }
-      const info = listingInfo(path, child);
-      if (info !== null) {
-        entries.push({
-          name: child.name,
-          kind: entryKind(child, info),
-        });
+      const entry = describeChild(path, child);
+      if (entry) {
+        entries.push(entry);
       }
     }
   } finally {
     directory.closeSync();
   }
-  return entries.sort((left, right) =>
-    left.name < right.name ? -1 : Number(left.name > right.name),
-  );
+  return entries.sort((left, right) => compareNames(left.name, right.name));
+}
+
+/**
+ * List the first `limit` children whose names sort after `after`, in the order and with the entry
+ * rules of listDirectory. The scan keeps at most 2 * limit + 1 candidate children, so memory stays
+ * bounded for huge directories, and only the children of the returned page are statted. `next` is
+ * the last name of the page when more names follow it, otherwise null. A child that vanishes
+ * after the scan is left out of its page, so a page can hold fewer than `limit` entries.
+ */
+export function listDirectoryPage(
+  path: string,
+  after: string | undefined,
+  limit: number,
+): StorageDirectoryPage {
+  let candidates: Dirent[] = [];
+  const keepFirst = (count: number): void => {
+    candidates.sort((left, right) => compareNames(left.name, right.name));
+    candidates = candidates.slice(0, count);
+  };
+  const directory = opendirSync(path);
+  try {
+    for (
+      let child = directory.readSync();
+      child;
+      child = directory.readSync()
+    ) {
+      if (after !== undefined && child.name <= after) {
+        continue;
+      }
+      candidates.push(child);
+      if (candidates.length > 2 * limit) {
+        keepFirst(limit + 1);
+      }
+    }
+  } finally {
+    directory.closeSync();
+  }
+  keepFirst(limit + 1);
+  const page = candidates.slice(0, limit);
+  const entries: StorageDirectoryEntry[] = [];
+  for (const child of page) {
+    const entry = describeChild(path, child);
+    if (entry) {
+      entries.push(entry);
+    }
+  }
+  return {
+    entries,
+    next: candidates.length > limit ? (page.at(-1)?.name ?? null) : null,
+  };
 }
 
 /** Open a directory for the scan; one removed after it was listed is gone, not a failure. */
