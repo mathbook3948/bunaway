@@ -189,7 +189,15 @@ function fixture(
     height: 600,
     dpi: 96,
   };
-  const behavior = {
+  const behavior: {
+    resizedByDpiChange: boolean;
+    landsAtDpi?: number;
+    windowDpi: number;
+    frame: {
+      width: number;
+      height: number;
+    };
+  } = {
     resizedByDpiChange: false,
     windowDpi: 96,
     frame: {
@@ -240,12 +248,16 @@ function fixture(
       if (behavior.resizedByDpiChange) {
         // The OS resizes the window after the call when it crosses to another DPI.
         behavior.resizedByDpiChange = false;
+        const ratio = behavior.landsAtDpi
+          ? behavior.landsAtDpi / behavior.windowDpi
+          : 2;
+        behavior.windowDpi = behavior.landsAtDpi ?? behavior.windowDpi;
         normal = {
           ...normal,
           x: input.x,
           y: input.y,
-          width: input.width * 2,
-          height: input.height * 2,
+          width: Math.round(input.width * ratio),
+          height: Math.round(input.height * ratio),
         };
         return null;
       }
@@ -331,7 +343,7 @@ test("save keeps the normal bounds with the maximized, fullscreen and visible st
   });
 });
 
-test("restore applies bounds, then maximized, and leaves visibility alone by default", async () => {
+test("restore applies the saved bounds and leaves visibility alone by default", async () => {
   const { api, calls } = fixture({
     maximized: false,
     fullscreen: false,
@@ -633,6 +645,79 @@ test("restore places the window again when a DPI change resized it", async () =>
     "bounds:10,20",
     "bounds:10,20",
   ]);
+});
+
+test("a window that lands on a lower DPI is fitted again with that DPI's limits", async () => {
+  const { api, records, behavior, setNormal } = fixture({
+    maximized: false,
+    fullscreen: false,
+    visible: true,
+  });
+  // Created on a 192 DPI monitor, restored onto the 96 DPI monitor the record names.
+  behavior.windowDpi = 192;
+  behavior.landsAtDpi = 96;
+  behavior.frame = {
+    width: 16,
+    height: 39,
+  };
+  setNormal({
+    x: 0,
+    y: 0,
+    width: 900,
+    height: 700,
+    dpi: 192,
+  });
+  records.set("main", {
+    ...plainRecord,
+    width: 316,
+    height: 300,
+  });
+  behavior.resizedByDpiChange = true;
+  await api.restore({
+    view: "main",
+  });
+  await api.save({
+    view: "main",
+  });
+  // The first placement is held to the 192 DPI minimum, the second keeps the saved size.
+  expect(records.get("main")).toMatchObject({
+    width: 316,
+    height: 300,
+  });
+});
+
+test("a minimized window is restored without measuring a frame", async () => {
+  const { api, records, behavior, setNormal } = fixture({
+    maximized: false,
+    fullscreen: false,
+    visible: true,
+    minimized: true,
+  });
+  // The icon rectangle would suggest a frame of 160 by 28.
+  behavior.frame = {
+    width: 160,
+    height: 28,
+  };
+  setNormal({
+    x: 0,
+    y: 0,
+    width: 900,
+    height: 700,
+    dpi: 96,
+  });
+  records.set("main", {
+    ...plainRecord,
+    width: 260,
+    height: 240,
+  });
+  expect(
+    await api.restore({
+      view: "main",
+    }),
+  ).toEqual({
+    restored: true,
+    adjusted: false,
+  });
 });
 
 test("a hidden window stays hidden after maximize shows it", async () => {

@@ -436,7 +436,6 @@
         "@bunaway/plugin-api": "workspace:*",
         "@bunaway/plugin-store": "workspace:*",
         "@bunaway/plugin-windows": "workspace:*",
-        "@bunaway/protocol": "workspace:*",
         "zod": "4.6.5",
       },
       "devDependencies": {

@@ -75,6 +75,7 @@ async function applyBounds(
   window: WindowTarget,
   saved: SavedWindowState,
   include: Required<WindowStateInclude>,
+  minimized: boolean,
 ): Promise<boolean> {
   const current =
     include.position && include.size
@@ -83,45 +84,68 @@ async function applyBounds(
           ...window,
           unit: "physical",
         });
-  const fitted = fitToMonitors(
-    {
-      x: include.position ? saved.x : current.x,
-      y: include.position ? saved.y : current.y,
-      width: include.size ? saved.width : current.width,
-      height: include.size ? saved.height : current.height,
-      // The size is converted by the ratio of DPI values, so it must name the DPI it was read at.
-      dpi: include.size ? saved.dpi : current.dpi,
-    },
-    await windows.getMonitors(),
-    await measureFrame(windows, window),
-  );
-  const place = () =>
-    windows.setOuterBounds({
-      ...window,
-      unit: "physical",
-      ...fitted.bounds,
-    });
-  await place();
+  const requested = {
+    x: include.position ? saved.x : current.x,
+    y: include.position ? saved.y : current.y,
+    width: include.size ? saved.width : current.width,
+    height: include.size ? saved.height : current.height,
+    // The size is converted by the ratio of DPI values, so it must name the DPI it was read at.
+    dpi: include.size ? saved.dpi : current.dpi,
+  };
+  const monitors = await windows.getMonitors();
+  const fit = async () =>
+    fitToMonitors(
+      requested,
+      monitors,
+      await measureFrame(windows, window, minimized),
+    );
+  const fitted = await fit();
+  await place(windows, window, fitted.bounds);
   // A window that crosses to a monitor with another DPI is resized by the OS when the DPI
-  // change arrives, after the call returned. Once it sits on the target monitor, place it again.
+  // change arrives, after the call returned. Once it sits on the target monitor, fit it again
+  // with the frame and size limits of the new DPI and place it a second time.
   const { dpi: _dpi, ...placed } = await windows.getNormalBounds({
     ...window,
     unit: "physical",
   });
-  if (!sameRect(placed, fitted.bounds)) {
-    await place();
+  if (sameRect(placed, fitted.bounds)) {
+    return fitted.adjusted;
   }
-  return fitted.adjusted;
+  const refitted = await fit();
+  await place(windows, window, refitted.bounds);
+  return refitted.adjusted;
+}
+
+function place(windows: WindowsClient, window: WindowTarget, bounds: Rect) {
+  return windows.setOuterBounds({
+    ...window,
+    unit: "physical",
+    ...bounds,
+  });
 }
 
 /**
  * The window size limits apply to the content area at the window's current DPI, so measure how
- * much larger the outer rectangle is than the content.
+ * much larger the outer rectangle is than the content. A minimized window reports the size of
+ * its icon, so it gets no frame and only the content limits.
  */
 async function measureFrame(
   windows: WindowsClient,
   window: WindowTarget,
-): Promise<WindowFrame> {
+  minimized: boolean,
+): Promise<
+  | WindowFrame
+  | {
+      width: 0;
+      height: 0;
+    }
+> {
+  if (minimized) {
+    return {
+      width: 0,
+      height: 0,
+    };
+  }
   const outer = await windows.getOuterBounds({
     ...window,
     unit: "physical",
@@ -258,7 +282,7 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
       }
       const adjusted =
         (include.position || include.size) &&
-        (await applyBounds(windows, window, saved, include));
+        (await applyBounds(windows, window, saved, include, state.minimized));
       const changedShowState =
         include.maximized &&
         (await applyMaximized(windows, window, saved, state));

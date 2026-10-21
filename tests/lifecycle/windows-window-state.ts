@@ -40,8 +40,9 @@ const policy: Policy = {
         "test.run",
       ],
       events: [],
+      // Backend calls made for a command run with the permissions of the view that invoked it.
       host: {
-        permissions: [],
+        permissions: grants,
       },
     },
   ],
