@@ -12,6 +12,7 @@ import type { WindowCall, WindowInput } from "#windows/contract";
 import {
   anchorPosition,
   convertGeometry,
+  rectPlacementPosition,
 } from "#windows/platforms/window-geometry";
 import { overlayIconProvider } from "#windows/platforms/windows-overlay-icon";
 
@@ -120,6 +121,9 @@ const unsupportedCentering = unsupportedError(
 );
 const unsupportedAnchoring = unsupportedError(
   "Window anchoring is not implemented on this platform.",
+);
+const unsupportedRectPlacement = unsupportedError(
+  "Placing a window next to a rectangle is not implemented on this platform.",
 );
 const unsupportedTaskbarProgress = unsupportedError(
   "Taskbar progress is not implemented on this platform.",
@@ -737,6 +741,59 @@ function moveToAnchor(
   }
 }
 
+/**
+ * Place the outer rectangle (the normal restoration rectangle while minimized or maximized) beside
+ * a reference rectangle in physical screen coordinates, inside the work area of the monitor
+ * nearest that rectangle. The window keeps its hidden, minimized and maximized state. A DPI change
+ * on the target monitor can resize the window, so the size is measured again and the window is
+ * placed once more.
+ */
+function moveNextToRect(
+  { window, services }: ActionScope,
+  payload: WindowInput<"windows.moveNextToRect">,
+): void {
+  const monitors = supported(services.monitors, unsupportedRectPlacement);
+  const area =
+    window.isMinimized() || window.isMaximized() ? "normal" : "outer";
+  const { width, height } = window.getBounds(area);
+  const { rect, placement } = payload;
+  const align = payload.align ?? "center";
+  // An empty rectangle, which the shell can report for a tray icon, has no area to intersect.
+  const monitor =
+    rect.width > 0 && rect.height > 0
+      ? monitors.nearestRect(rect)
+      : monitors.nearestPoint(rect);
+  const margin = Math.round(((payload.margin ?? 0) * monitor.dpi) / 96);
+  window.setGeometry(
+    "outer",
+    rectPlacementPosition(
+      monitor.workArea,
+      {
+        width,
+        height,
+      },
+      rect,
+      placement,
+      align,
+      margin,
+    ),
+  );
+  const placed = window.getBounds(area);
+  if (placed.width !== width || placed.height !== height) {
+    window.setGeometry(
+      "outer",
+      rectPlacementPosition(
+        monitor.workArea,
+        placed,
+        rect,
+        placement,
+        align,
+        margin,
+      ),
+    );
+  }
+}
+
 /** Position, size and DPI conversion. */
 function applyGeometry(scope: ActionScope, call: WindowCall): ActionResult {
   const { window } = scope;
@@ -774,6 +831,10 @@ function applyGeometry(scope: ActionScope, call: WindowCall): ActionResult {
     case "windows.moveToAnchor":
       rejectInFullscreen(window, "moving the window to an anchor");
       moveToAnchor(scope, call.payload);
+      return null;
+    case "windows.moveNextToRect":
+      rejectInFullscreen(window, "moving the window next to a rectangle");
+      moveNextToRect(scope, call.payload);
       return null;
     case "windows.setContentPosition":
     case "windows.setOuterSize":

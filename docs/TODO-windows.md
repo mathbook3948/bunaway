@@ -253,7 +253,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] 앱 재실행 시 창 상태를 복원하고 상태를 삭제하는 API를 제공한다.
 - [ ] 저장했던 모니터가 사라진 경우 보이는 작업 영역으로 창을 복원한다.
 - [x] `windows.moveToAnchor`로 모니터 작업 영역의 모서리, 가장자리, 중앙에 창을 배치한다. `monitorId`와 `margin`을 지원한다. Windows Server 2022의 모니터 1개와 DPI 96에서 실제 HWND로 확인한다.
-- [ ] 트레이 아이콘 근처로 창을 배치한다. 트레이 아이콘 좌표 계약이 필요하다.
+- [x] `windows.moveNextToRect`로 `tray.getBounds` 같은 물리 화면 사각형의 위, 아래, 왼쪽, 오른쪽에 창을 놓고 작업 영역 안으로 보정한다. 좌표 계약은 기존 `tray.getBounds`를 앱이 넘긴다. Windows Server 2022의 모니터 1개와 DPI 96에서 합성 사각형으로 실제 HWND에서 확인하며 작업 표시줄 위치별 실제 트레이 확인은 하지 않는다.
 
 창 이벤트는 대상 창의 정책 뷰에 기존 typed `listen`으로 전달한다. `windows.changed`
 구독에는 이벤트 권한이, `getSnapshot`에는 windows.getSnapshot 작업 권한이 필요하다.

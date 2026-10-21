@@ -4,6 +4,8 @@ import {
   MIN_WINDOW_COORDINATE,
   type WindowAnchor,
   type WindowInput,
+  type WindowRectAlignment,
+  type WindowRectPlacement,
 } from "#windows/contract";
 
 const LOGICAL_DPI = 96;
@@ -156,5 +158,69 @@ export function anchorPosition(
   return {
     x: anchorAxis(area.x, area.width, size.width, column, margin),
     y: anchorAxis(area.y, area.height, size.height, row, margin),
+  };
+}
+
+/** Keep an outer span inside a work-area span; a window larger than the span is centered like `windows.center`. */
+function clampAxis(
+  start: number,
+  span: number,
+  size: number,
+  position: number,
+): number {
+  if (size > span) {
+    return Math.round(start + (span - size) / 2);
+  }
+  return Math.min(Math.max(position, start), start + span - size);
+}
+
+/** Position along the axis parallel to the reference side of `target`. */
+function alignAxis(
+  start: number,
+  span: number,
+  size: number,
+  align: WindowRectAlignment,
+): number {
+  if (align === "start") {
+    return start;
+  }
+  return align === "end"
+    ? start + span - size
+    : Math.round(start + (span - size) / 2);
+}
+
+/**
+ * Physical outer top-left that puts a window of `size` on the `placement` side of `target`,
+ * `margin` physical pixels away and aligned along that side, then clamps it into `area`. The side
+ * is never flipped: with too little room the window slides along the work area instead.
+ */
+export function rectPlacementPosition(
+  area: Rect,
+  size: {
+    width: number;
+    height: number;
+  },
+  target: Rect,
+  placement: WindowRectPlacement,
+  align: WindowRectAlignment,
+  margin: number,
+): {
+  x: number;
+  y: number;
+} {
+  let x = alignAxis(target.x, target.width, size.width, align);
+  let y = alignAxis(target.y, target.height, size.height, align);
+  if (placement === "above") {
+    y = target.y - margin - size.height;
+  } else if (placement === "below") {
+    y = target.y + target.height + margin;
+  } else if (placement === "left") {
+    x = target.x - margin - size.width;
+  } else {
+    x = target.x + target.width + margin;
+  }
+  return {
+    x: clampAxis(area.x, area.width, size.width, x),
+    y: clampAxis(area.y, area.height, size.height, y),
   };
 }

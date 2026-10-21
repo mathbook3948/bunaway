@@ -434,6 +434,10 @@ DPI가 바뀐 크기에 대해서도 `centerInWorkArea`가 같은 작업 영역�
 `monitorId` 해석과 거부, 최소화와 최대화 중 복원 영역 사용, 크기가 바뀐 뒤의 두 번째 배치를 가짜 창으로 검사한다.
 `lifecycle/windows-bun-window-api.ts`는 실제 HWND에서 숨긴 창의 아홉 앵커와 `margin`, `monitorId`를 생략한 배치, 알 수 없는 ID 거부와 위치 불변,
 숨김과 포그라운드 창 유지를 모니터 1개와 DPI 96에서 확인한다.
+`api/window-move-next-to-rect.test.ts`는 `windows.moveNextToRect`의 네 방향과 세 정렬 좌표, `margin`, 작업 영역 보정과 뒤집지 않는 동작,
+작업 영역보다 큰 창의 중앙 대체, 가장 가까운 모니터 선택과 DPI 환산, 최소화와 최대화 중 복원 영역 사용, 크기가 바뀐 뒤의 두 번째 배치,
+잘못된 사각형과 열거값 거부를 가짜 창으로 검사한다. `lifecycle/windows-bun-window-api.ts`는 실제 HWND에서 합성 사각형 기준 배치와 잘못된 사각형 거부,
+숨김과 포그라운드 창 유지를 모니터 1개와 DPI 96에서 확인하고 실제 트레이 위치는 확인하지 않는다.
 single/multiple 계약 회귀는 병합 오류와 네이티브 배치 검증이 예약 및 기존 창 종료보다 먼저
 실행되고 호출별 옵션이 선언을 바꾸지 않는지 확인한다. macOS 선언의 미지원 오류도 검사한다.
 `lifecycle/windows-initial-placement.ts`는 실제 HWND와 WebView2에서 초기 선언, single과

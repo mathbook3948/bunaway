@@ -1680,6 +1680,7 @@
       "windows.setPosition",
       "windows.center",
       "windows.moveToAnchor",
+      "windows.moveNextToRect",
       "windows.setFullscreen",
       "windows.setTaskbarProgress",
       "windows.setThumbnailClip",
