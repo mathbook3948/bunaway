@@ -7,7 +7,7 @@ import {
   captureOutputSchema,
   sourceListSchema,
 } from "#plugins/screen-capture/src/contract";
-import { deadline } from "../fixtures/deadlines.ts";
+import { deadline, waitFor } from "../fixtures/deadlines.ts";
 import { decodePng } from "../fixtures/png.ts";
 
 setDefaultTimeout(deadline("build"));
@@ -27,7 +27,23 @@ const FILL = {
 };
 const WARM_UP_CAPTURES = 2;
 const LEAK_CHECK_CAPTURES = 20;
-const COMPOSITION_RETRIES = 5;
+const expectedColor = [
+  FILL.red,
+  FILL.green,
+  FILL.blue,
+];
+
+/** The color at the center of a captured PNG. */
+function centerColor(shot: { data: string }): number[] {
+  const pixels = decodePng(Buffer.from(shot.data, "base64"));
+  const at =
+    (Math.floor(pixels.height / 2) * pixels.width +
+      Math.floor(pixels.width / 2)) *
+    3;
+  return [
+    ...pixels.rgb.subarray(at, at + 3),
+  ];
+}
 
 /** The few user32 and gdi32 calls the test needs to own a window of a known color. */
 function openDriver() {
@@ -278,44 +294,36 @@ test.skipIf(process.platform !== "win32")(
       expect(own.bounds.height).toBeGreaterThan(0);
 
       // The full-size capture has the listed size and the color painted into the window.
-      // The window shows its color only once the compositor has taken the painted content, so wait
-      // for composition passes before the first capture; a window of the test thread is not
-      // composed in step with its painting. A capture that still reads black is retried a few
-      // times and reported with its attempts, so a compositor that never delivers is not hidden.
-      const readCenter = (shot: { data: string }) => {
-        const pixels = decodePng(Buffer.from(shot.data, "base64"));
-        const at =
-          (Math.floor(pixels.height / 2) * pixels.width +
-            Math.floor(pixels.width / 2)) *
-          3;
-        return [
-          ...pixels.rgb.subarray(at, at + 3),
-        ];
-      };
-      const expectedColor = [
-        FILL.red,
-        FILL.green,
-        FILL.blue,
-      ];
+      // The window shows its color only once the compositor has taken the painted content, and a
+      // window of the test thread is not composed in step with its painting. Wait for a
+      // composition pass first. A capture that reads black is taken again after another pass until
+      // the wait limit; any other color fails at once, and earlier black readings are reported.
       driver.dwmapi.symbols.DwmFlush();
-      let image = await capture(own.id, 4096);
-      const attempts: number[][] = [];
-      for (
-        let retry = 0;
-        retry < COMPOSITION_RETRIES &&
-        readCenter(image).join() !== expectedColor.join();
-        retry += 1
-      ) {
-        attempts.push(readCenter(image));
-        driver.dwmapi.symbols.DwmFlush();
-        image = await capture(own.id, 4096);
-      }
-      if (attempts.length > 0) {
+      let blackReads = 0;
+      const image = await waitFor(
+        async () => {
+          const shot = await capture(own.id, 4096);
+          const color = centerColor(shot);
+          if (color.join() === expectedColor.join()) {
+            return shot;
+          }
+          if (color.some((channel) => channel !== 0)) {
+            throw new Error(`The window capture read ${color.join(",")}.`);
+          }
+          blackReads += 1;
+          driver.dwmapi.symbols.DwmFlush();
+          return false;
+        },
+        {
+          deadline: "inProcess",
+          what: "the painted color in the window capture",
+        },
+      );
+      if (blackReads > 0) {
         console.warn(
-          `window capture read ${JSON.stringify(attempts)} before the painted color`,
+          `window capture read black ${blackReads} time(s) before the painted color`,
         );
       }
-      expect(readCenter(image)).toEqual(expectedColor);
       expect([
         image.width,
         image.height,
