@@ -1374,3 +1374,11 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 `api/window-thumbnail-toolbar.test.ts`는 썸네일 툴바 입력 스키마(개수, id, 툴팁 길이, 플래그, 잘못된 ICO), 클릭 이벤트 스키마, 어댑터 전달과 macOS의 `UNSUPPORTED`, 호스트의 재검증, 7칸 구성과 `WM_COMMAND` 칸 번호의 id 변환(비활성, 숨김, 미등록, 알림 코드 불일치 제외)을 확인한다.
 `lifecycle/windows-bun-window-api.ts`는 실제 `ITaskbarList3`로 개수를 바꾸는 연속 호출(0, 3, 1, 7, 0개)이 오류 없이 끝나는 것과 잘못된 ICO, 중복 id 거절을 확인하고(어느 vtable 슬롯을 불렀는지는 관찰하지 않는다), `lifecycle/windows-window-input-events.ts`는 최상위 HWND에 합성한 `THBN_CLICKED` `WM_COMMAND`가 등록한 버튼 id로만 전달되는지(비활성, 숨김, 미등록, 범위 밖, 메뉴 명령, 툴바를 줄이거나 비운 뒤의 이전 칸 제외)와 잘못된 ICO를 거절한 뒤에도 기존 칸이 같은 id로 눌리는 것을 확인한다.
 사람이 작업 표시줄 썸네일에서 누르는 동작, Explorer 실제 재시작 뒤 재적용, 썸네일에 그려지는 모양은 자동 검증하지 않는다.
+
+`lifecycle/windows-templates.ts`는 패키징한 CLI로 UI 템플릿(vanilla, vite, react, vue, svelte)을 하나씩
+생성하고, 템플릿이 설정한 웹 빌드, 검증 도구의 doctor와 호스트 프로토콜 백엔드 실행, 웹 개발 서버 응답
+(vanilla는 개발 서버가 없어 제외)을 차례로 확인합니다. 웹 빌드가 실패하면 그 템플릿의 나머지 단계는 건너뜁니다.
+개발 서버는 이 파일이 직접 띄우고 프로세스 트리째 종료하며, 프로젝트 삭제 실패도 단계로 기록합니다.
+한 단계가 실패해도 나머지 템플릿을 계속 돌리고 마지막에 실패 단계를 모아 실패하며, 단계별 결과는
+`build/windows-templates-results.json`에 기록합니다. 네이티브 창과 WebView2 실행, HMR 편집 반영, 설치 파일
+생성은 확인하지 않습니다. Windows native 실행기에 포함합니다.

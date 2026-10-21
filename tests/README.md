@@ -43,6 +43,7 @@ Linux에서는 Windows와 macOS 전용 테스트가 skip되므로 네이티브 �
 | macOS 호스트 (`native/macos/bun`) | macOS에서 `bun test tests/lifecycle/macos-bun tests/lifecycle/macos-window tests/lifecycle/macos-desktop` | `mise run host:macos` |
 | 플러그인 SDK, 플러그인 빌드 (`packages/plugin-sdk`, `packages/cli/src/plugin-*`) | `bun test tests/api/native tests/api/plugin tests/cli/plugin-build.test.ts tests/cli/distribution.test.ts`, `bun run plugins:build` | 없음 |
 | CLI 빌드와 개발 서버 (`packages/cli`) | `bun test tests/cli` | 해당 OS에서 `bunaway dev`, `bunaway build` |
+| 앱 템플릿 (`packages/cli/templates`) | `bun test tests/cli/template.test.ts tests/cli/framework-templates.test.ts` | Windows에서 `tests/lifecycle/windows-templates.ts`(`windows-native` 잡) |
 | 패키징 (`packages/packaging`) | `bun test tests/packaging` | Windows 설치기는 CI `Check (windows-2022)`, DMG는 `macos-native` |
 | Android, iOS (`native/android`, `native/ios`) | `bun test tests/lifecycle/android tests/lifecycle/ios tests/cli/android.test.ts tests/cli/ios.test.ts` | `mise run host:android`, `mise run host:ios -- <Simulator UUID>` |
 | 문서 (`docs/site`, 공개 API 추가) | `bun run docs:check`, `bun run docs:build`, `docs/site/src/reference-map.json` 갱신 | 없음 |
