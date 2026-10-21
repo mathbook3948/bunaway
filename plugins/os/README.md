@@ -43,7 +43,7 @@ own process. Windows runs the host and the backend in one Bun process, so that p
 A descendant is `webview2` when it, or an ancestor below the app, runs from `msedgewebview2.exe`, and `other`
 otherwise. The image name only classifies; no path, command line or other process memory is read. Metrics come from
 `GetProcessTimes` and `K32GetProcessMemoryInfo` on a `PROCESS_QUERY_LIMITED_INFORMATION` handle that is closed before
-the call returns; a process that cannot be opened keeps its entry with `metrics: null`. A child that was created
+the call returns; a process that cannot be opened, or ends while it is queried, keeps its entry with `metrics: null`. A child that was created
 before its listed parent is a reused process ID and is left out. More than 256 processes is an error.
 macOS rejects it with `UNSUPPORTED`. `tests/api/os-app-processes.test.ts` covers the structure layouts, tree walk,
 classification and limits with fake bindings; `tests/lifecycle/windows-os.test.ts` lists the real tree, including a

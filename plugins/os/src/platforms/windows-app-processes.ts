@@ -106,13 +106,13 @@ export function openAppProcessApi() {
 }
 
 /** Run `use` on an owned handle and close it exactly once; a failed close is an error unless `use` already failed. */
-function withHandle<T>(
-  api: ReturnType<typeof openAppProcessApi>,
+export function withHandle<T>(
+  closeHandle: (handle: bigint) => number,
   handle: bigint,
   use: (handle: bigint) => T,
 ): T {
   const close = () => {
-    if (!api.symbols.CloseHandle(handle)) {
+    if (!closeHandle(handle)) {
       failure("Windows process handle could not be closed.");
     }
   };
@@ -149,28 +149,51 @@ export function parseProcessEntry(entry: Buffer): ProcessEntry {
   };
 }
 
+/** The snapshot cursor calls `readSnapshotEntries` walks; each fills the given `PROCESSENTRY32W` buffer. */
+export interface SnapshotCursor {
+  first(entry: Buffer): boolean;
+  next(entry: Buffer): boolean;
+  lastError(): number;
+}
+
+/**
+ * Read every entry of one snapshot. The walk ends when `Process32NextW` returns FALSE; the only
+ * documented reason is ERROR_NO_MORE_FILES. A FALSE result can read back as error 0 because Bun's
+ * FFI layer may overwrite the last error between the call and `GetLastError`, and the call cannot
+ * be repeated (the cursor has advanced), so 0 counts as the end too and any other code fails.
+ * More than `MAX_SNAPSHOT_ENTRIES` entries is an error instead of a shortened list.
+ */
+export function readSnapshotEntries(cursor: SnapshotCursor): ProcessEntry[] {
+  const entries: ProcessEntry[] = [];
+  const buffer = Buffer.alloc(PROCESSENTRY32W_BYTES);
+  buffer.writeUInt32LE(PROCESSENTRY32W_BYTES, 0);
+  let ok = cursor.first(buffer);
+  while (ok) {
+    if (entries.length >= MAX_SNAPSHOT_ENTRIES) {
+      failure("Windows process list is too long.");
+    }
+    entries.push(parseProcessEntry(buffer));
+    ok = cursor.next(buffer);
+  }
+  const code = cursor.lastError();
+  if (code !== 0 && code !== ERROR_NO_MORE_FILES) {
+    failure("Windows process snapshot failed.");
+  }
+  return entries;
+}
+
 function snapshot(api: ReturnType<typeof openAppProcessApi>): ProcessEntry[] {
   const handle = api.symbols.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
   if (handle === INVALID_HANDLE_VALUE || handle === 0n) {
     failure("Windows process snapshot failed.");
   }
-  return withHandle(api, handle, (snap) => {
-    const entries: ProcessEntry[] = [];
-    const buffer = Buffer.alloc(PROCESSENTRY32W_BYTES);
-    buffer.writeUInt32LE(PROCESSENTRY32W_BYTES, 0);
-    let ok = api.symbols.Process32FirstW(snap, ptr(buffer));
-    while (ok) {
-      if (entries.length >= MAX_SNAPSHOT_ENTRIES) {
-        failure("Windows process list is too long.");
-      }
-      entries.push(parseProcessEntry(buffer));
-      ok = api.symbols.Process32NextW(snap, ptr(buffer));
-    }
-    if (api.symbols.GetLastError() !== ERROR_NO_MORE_FILES) {
-      failure("Windows process snapshot failed.");
-    }
-    return entries;
-  });
+  return withHandle(api.symbols.CloseHandle, handle, (snap) =>
+    readSnapshotEntries({
+      first: (entry) => api.symbols.Process32FirstW(snap, ptr(entry)) !== 0,
+      next: (entry) => api.symbols.Process32NextW(snap, ptr(entry)) !== 0,
+      lastError: () => api.symbols.GetLastError(),
+    }),
+  );
 }
 
 function metrics(
@@ -186,7 +209,9 @@ function metrics(
     // Protected and already ended processes cannot be opened; their metrics are unknown, not an error.
     return null;
   }
-  return withHandle(api, handle, (target) => {
+  // A process that ends between OpenProcess and the queries makes them fail; that is the same
+  // unknown-metrics case, not a failure of the whole list.
+  return withHandle(api.symbols.CloseHandle, handle, (target) => {
     // Creation, exit, kernel and user FILETIMEs, one after another.
     const times = new BigUint64Array(4);
     if (
@@ -198,7 +223,7 @@ function metrics(
         ptr(times, 24),
       )
     ) {
-      failure("Windows process times query failed.");
+      return null;
     }
     const counters = Buffer.alloc(PROCESS_MEMORY_COUNTERS_BYTES);
     counters.writeUInt32LE(PROCESS_MEMORY_COUNTERS_BYTES, 0);
@@ -209,7 +234,7 @@ function metrics(
         PROCESS_MEMORY_COUNTERS_BYTES,
       )
     ) {
-      failure("Windows process memory query failed.");
+      return null;
     }
     const workingSet = counters.readBigUInt64LE(COUNTERS_WORKING_SET_OFFSET);
     const kernel = (times[2] ?? 0n) / FILETIME_UNITS_PER_MICROSECOND;

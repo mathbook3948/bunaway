@@ -19,6 +19,8 @@ import {
   type ProcessEntry,
   type ProcessMetrics,
   parseProcessEntry,
+  readSnapshotEntries,
+  withHandle,
 } from "#plugins/os/src/platforms/windows-app-processes";
 
 const APP = 100;
@@ -282,4 +284,78 @@ test("listAppProcesses takes null, returns a validated shape and has its own per
     ]),
   ).toBe(false);
   expect(grant([])).toBe(false);
+});
+
+/** A snapshot cursor over `count` entries that reports `endError` once the entries run out. */
+function cursor(count: number, endError: number) {
+  let index = 0;
+  const write = (target: Buffer) => {
+    if (index >= count) {
+      return false;
+    }
+    index += 1;
+    target.writeUInt32LE(index, ENTRY_PID_OFFSET);
+    target.write("a.exe\0", ENTRY_IMAGE_OFFSET, "utf16le");
+    return true;
+  };
+  return {
+    first: write,
+    next: write,
+    lastError: () => endError,
+  };
+}
+
+test("the snapshot walk ends on ERROR_NO_MORE_FILES or a lost error and fails on any other code", () => {
+  expect(readSnapshotEntries(cursor(3, 18)).map((item) => item.pid)).toEqual([
+    1,
+    2,
+    3,
+  ]);
+  // Bun's FFI layer can overwrite the last error, which then reads as 0.
+  expect(readSnapshotEntries(cursor(3, 0)).length).toBe(3);
+  expect(readSnapshotEntries(cursor(0, 18))).toEqual([]);
+  internal(() => readSnapshotEntries(cursor(3, 5)));
+  internal(() => readSnapshotEntries(cursor(0, 24)));
+});
+
+test("a snapshot with more entries than the limit is an error", () => {
+  expect(readSnapshotEntries(cursor(MAX_SNAPSHOT_ENTRIES, 18)).length).toBe(
+    MAX_SNAPSHOT_ENTRIES,
+  );
+  internal(() => readSnapshotEntries(cursor(MAX_SNAPSHOT_ENTRIES + 1, 18)));
+});
+
+test("withHandle closes the handle once on success and on failure and reports a failed close", () => {
+  const closed: bigint[] = [];
+  const close = (handle: bigint) => {
+    closed.push(handle);
+    return 1;
+  };
+  expect(withHandle(close, 7n, (handle) => handle + 1n)).toBe(8n);
+  expect(() =>
+    withHandle(close, 9n, () => {
+      throw new Error("use failed");
+    }),
+  ).toThrow("use failed");
+  expect(closed).toEqual([
+    7n,
+    9n,
+  ]);
+  internal(() =>
+    withHandle(
+      () => 0,
+      5n,
+      () => null,
+    ),
+  );
+  // A failed use and a failed close are reported together, so neither is lost.
+  expect(() =>
+    withHandle(
+      () => 0,
+      5n,
+      () => {
+        throw new Error("use failed");
+      },
+    ),
+  ).toThrow(AggregateError);
 });
