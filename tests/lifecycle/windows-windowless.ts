@@ -30,7 +30,7 @@ const nonfocusable = scenario.startsWith("nonfocusable-");
 const empty = scenario.endsWith("empty");
 const registry = new NativeRegistry([
   windows._definition,
-  ...(hasTray
+  ...(hiddenTray
     ? [
         tray._definition,
       ]
@@ -218,6 +218,13 @@ if (!process.argv.includes("--child")) {
         post(TRAY_CALLBACK_MESSAGE, BigInt(WM_LBUTTONUP));
       }
     }
+    if (event.event === "tray-hidden-idle") {
+      assert(
+        api.symbols.IsWindow(owner),
+        "hidden icon must keep the tray window",
+      );
+      assert.equal(child.exitCode, null);
+    }
     if (event.event === "tray-quit-requested") {
       post(WM_CLOSE);
     }
@@ -368,21 +375,23 @@ if (!process.argv.includes("--child")) {
     assert(backend);
     return backend.host.call(registry.operation(operation), payload);
   };
-  /** The icon is hidden and the last window is gone: the app keeps running and a second launch restores a window. */
+  /**
+   * The icon was hidden before the last window closed: the app keeps running and show() restores a window.
+   * The snapshot `visible` is the value the app last set, so the shell's NIS_HIDDEN state is not read here;
+   * the hidden state itself is covered by windows-tray-controls.test.ts.
+   */
   async function exerciseHiddenTray(desktop: DesktopContext, windowId: string) {
-    await callTray("tray.setVisible", {
-      visible: false,
-    });
     const hidden = (await callTray("tray.get", null)) as {
       visible: boolean;
     };
     assert.equal(hidden.visible, false);
+    emit("tray-hidden-idle");
     const hiddenTicks = ticks;
     await Bun.sleep(300);
     assert(ticks > hiddenTicks, "backend must continue with the icon hidden");
     assert.equal(attempts, 0, "hiding the icon must not start a quit");
     assert.equal(sessions, 1, "hiding the icon must not create a window");
-    // A second launch calls show(), which creates the window while the icon stays hidden.
+    // Opening the app again runs show() on the backend; the second-process hand-off is covered by windows-desktop.ts.
     await desktop.show();
     await waitFor(() => sessions === 2);
     assert.notEqual(
@@ -642,6 +651,11 @@ if (!process.argv.includes("--child")) {
         "inactive restoration must preserve the session",
       );
     }
+    if (hiddenTray) {
+      await callTray("tray.setVisible", {
+        visible: false,
+      });
+    }
     emit("native-close-requested");
     await waitFor(() =>
       call("windows.isDestroyed", {
@@ -771,7 +785,7 @@ if (!process.argv.includes("--child")) {
           backend: {
             permissions: [
               ...windowPermissions(),
-              ...(hasTray
+              ...(hiddenTray
                 ? [
                     "tray.get",
                     "tray.setVisible",
