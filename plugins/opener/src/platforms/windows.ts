@@ -2,14 +2,17 @@ import { dlopen } from "bun:ffi";
 import { type NativeEnvironment, ResourceOwner } from "@bunaway/plugin";
 import { COINIT_APARTMENTTHREADED, OLE32, pick } from "@bunaway/plugin/win32";
 import { BunawayError, isRecord } from "@bunaway/protocol";
-import type {
-  JumpListInput,
-  JumpListResult,
-  RemovedJumpListTask,
-  ShortcutDetails,
-  ShortcutLink,
-  ShortcutOperation,
-  UrlHandler,
+import {
+  DEFAULT_FILE_ICON_SIZE,
+  type FileIcon,
+  type FileIconInput,
+  type JumpListInput,
+  type JumpListResult,
+  type RemovedJumpListTask,
+  type ShortcutDetails,
+  type ShortcutLink,
+  type ShortcutOperation,
+  type UrlHandler,
 } from "#opener/contract";
 import {
   assertExistingFile,
@@ -17,6 +20,8 @@ import {
   assertParentDirectory,
   resolveReadableFile,
 } from "#opener/platforms/file-check";
+import { encodeRgbaPng } from "#opener/platforms/rgba-png";
+import { createFileIcons } from "#opener/platforms/windows-file-icon";
 import { createUrlHandlerQuery } from "#opener/platforms/windows-handler";
 import { createJumpLists } from "#opener/platforms/windows-jump-list";
 import {
@@ -78,6 +83,9 @@ export function initialize(environment?: NativeEnvironment) {
   const handlers = owner.acquire(createUrlHandlerQuery, (resource) =>
     resource.dispose(),
   );
+  const fileIcons = owner.acquire(createFileIcons, (resource) =>
+    resource.dispose(),
+  );
   const shortcuts = owner.acquire(createShortcuts, (resource) =>
     resource.dispose(),
   );
@@ -96,6 +104,7 @@ export function initialize(environment?: NativeEnvironment) {
     shortcuts,
     recent,
     handlers,
+    fileIcons,
     // Without a host app identity the registration operations report UNSUPPORTED.
     urlSchemes: createUrlSchemeRegistration(environment?.app, schemeStore),
   };
@@ -131,6 +140,41 @@ export function getUrlHandler(
   notCancelled(signal);
   const scheme = new URL(normalizeUrl(url)).protocol.slice(0, -1);
   return state.handlers.query(scheme);
+}
+
+/**
+ * Rasterize the Shell icon of an existing file or of an extension as a PNG. A path is resolved
+ * through links to a readable file first, as `openFile` does, so a link's name cannot stand in
+ * for its target; an extension never touches the file system. The Shell call is synchronous and
+ * not interruptible, so cancellation is checked only before it starts. Thumbnails are never
+ * requested.
+ */
+export function getFileIcon(
+  state: State,
+  input: FileIconInput,
+  signal?: AbortSignal,
+): FileIcon {
+  active(state);
+  notCancelled(signal);
+  const size = input.size ?? DEFAULT_FILE_ICON_SIZE;
+  const pixels = state.fileIcons.render(
+    "path" in input
+      ? {
+          path: resolveReadableFile(normalizeFilePath(input.path)),
+        }
+      : {
+          extension: input.extension,
+        },
+    size,
+  );
+  return {
+    mime: "image/png",
+    data: encodeRgbaPng(pixels.rgba, pixels.width, pixels.height).toString(
+      "base64",
+    ),
+    width: pixels.width,
+    height: pixels.height,
+  };
 }
 
 /**

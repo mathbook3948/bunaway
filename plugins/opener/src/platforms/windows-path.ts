@@ -4,6 +4,7 @@ import {
   WINDOWS_MAX_FILE_NAME_LENGTH,
 } from "@bunaway/protocol";
 import {
+  fileIconExtension,
   type JumpListInput,
   type JumpListTask,
   jumpListInput,
@@ -161,4 +162,16 @@ export function normalizeFilePath(input: unknown): string {
     throw invalid();
   }
   return drivePath ? `${path.charAt(0).toUpperCase()}${path.slice(1)}` : path;
+}
+
+/** An extension for a file icon lookup, checked like the host input so a bad value fails before the call. */
+export function normalizeFileIconExtension(input: unknown): string {
+  const parsed = fileIconExtension.safeParse(input);
+  if (!parsed.success) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Expected a file extension such as .txt.",
+    });
+  }
+  return parsed.data;
 }

@@ -835,6 +835,11 @@ Explorer와 compiled helper로 파일 및 HTTP/HTTPS URL 하나의 argv 보존�
 빈 값, 상한 초과, 제어 문자와 크기 변경 재시도가 모두 `null`이 되는지 확인한다. Windows의 `lifecycle/windows-opener-url-handler.test.ts`는 https 조회가 `null` 또는
 `{ name, path }` 구조인지, 연결이 없는 scheme이 `null`인지, 잘못된 URL 거부와 dispose 뒤 호출 취소를
 `host:windows`에서 확인한다. 처리 앱의 종류는 러너마다 다르므로 값은 검증하지 않는다.
+`api/opener-file-icon.test.ts`는 `opener.getFileIcon`의 strict 입력(경로 또는 확장자 하나, 크기 열거값, 확장자 문자 규칙),
+PNG 출력 상한, RGBA PNG 인코더의 행 배치, BGRA에서 RGBA로의 변환과 AND 마스크 투명도 복원, 경로와 확장자를 함께 준 호출의 클라이언트 거부, 독립 권한을 확인한다. Windows의 `lifecycle/windows-opener-file-icon.test.ts`는
+`host:windows`에서 확장자와 실제 파일(텍스트 파일, 실행 파일)의 셸 아이콘이 RGBA PNG로 반환되고 보이는 픽셀이 있는지,
+`small`부터 `large`까지 해상도가 줄지 않는지, 없는 파일과 디렉터리 거부, 종료 뒤 호출의 `CANCELLED`를 확인한다.
+아이콘의 실제 모양은 검증하지 않으며 육안 확인은 수동 검증이다.
 `lifecycle/windows-opener-recent.test.ts`는 `opener.addRecentDocument`와 `opener.clearRecentDocuments`의
 입력 거부와 dispose를 항상 확인한다. 사용자의 셸 최근 항목 전체를 지우는 실제 add와 clear는
 `BUNAWAY_OPENER_RECENT_MUTATE=1` 또는 GitHub 호스팅 러너(`RUNNER_ENVIRONMENT=github-hosted`)에서만

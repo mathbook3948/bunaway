@@ -308,6 +308,9 @@ test("opener preserves strict inputs and independently granted file operations",
       name: "opener.writeShortcutLink",
     },
     {
+      name: "opener.getFileIcon",
+    },
+    {
       name: "opener.getUrlHandler",
     },
     {
