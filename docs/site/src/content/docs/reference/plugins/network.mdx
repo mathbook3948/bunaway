@@ -218,20 +218,35 @@ const saved = network.download({
   path: "C:\\Users\\me\\Downloads\\data.bin",
   maxBytes: 512 * 1024 * 1024,
 });
-// 진행률은 download 호출이 호스트에 도착한 뒤에만 읽을 수 있습니다. 그 전에는 INVALID_ARGUMENT이므로 다시 시도합니다.
-const progress = await network.downloadStatus({ downloadId }).catch(() => null);
-const { status, saved: written, bytesWritten } = await saved;
+let outcome;
+saved.then(
+  (value) => { outcome = { value }; },
+  (error) => { outcome = { error }; },
+);
+while (!outcome) {
+  // download 호출이 호스트에 도착하기 전에는 INVALID_ARGUMENT이므로 다음 조회에서 다시 시도합니다.
+  const progress = await network.downloadStatus({ downloadId }).catch((error) => {
+    if (error.code !== "INVALID_ARGUMENT") throw error;
+    return null;
+  });
+  if (progress) console.log(progress.receivedBytes, progress.totalBytes);
+  await new Promise((resolve) => setTimeout(resolve, 250));
+}
+if ("error" in outcome) throw outcome.error;
+const { status, saved: written, bytesWritten } = outcome.value;
 ```
 
 `network.cancelDownload`는 이미 시작된 다운로드만 멈춥니다. 호출이 도착하기 전에 보낸 취소는 아무 일도 하지 않으므로(없는 ID도 성공입니다),
 처음부터 취소할 수 있어야 하면 `network.download` 호출의 `signal`을 씁니다. 실행 중인 다운로드를 취소하면 기다리던
-`network.download`가 `CANCELLED`로 끝나므로 결과를 꺼내는 대신 그 오류를 처리합니다.
+`network.download`가 `CANCELLED`로 끝나고, 그 응답이 `network.cancelDownload`의 응답보다 먼저 도착할 수 있으므로 취소를 보내기 전에
+오류 처리를 붙여 둡니다.
 
 ```ts
-await network.cancelDownload({ downloadId });
-await saved.catch((error) => {
+const cancelled = saved.catch((error) => {
   if (error.code !== "CANCELLED") throw error;
 });
+await network.cancelDownload({ downloadId });
+await cancelled;
 ```
 
 `network.download`는 `network.request`의 64 KiB 본문 한도 없이 응답 본문을 메모리에 모으지 않고 앱이 정한 파일로
