@@ -299,6 +299,8 @@ test.skipIf(process.platform !== "win32")(
       // composition pass first. A capture that reads black is taken again after another pass until
       // the wait limit; any other color fails at once, and earlier black readings are reported.
       driver.dwmapi.symbols.DwmFlush();
+      // The tolerance for black reads is deliberate and limited to the compositor catching up
+      // within the wait limit; a capture that stays black fails with the number of reads.
       let blackReads = 0;
       const image = await waitFor(
         async () => {
@@ -308,7 +310,9 @@ test.skipIf(process.platform !== "win32")(
             return shot;
           }
           if (color.some((channel) => channel !== 0)) {
-            throw new Error(`The window capture read ${color.join(",")}.`);
+            throw new Error(
+              `The window capture read ${color.join(",")} instead of ${expectedColor.join(",")}.`,
+            );
           }
           blackReads += 1;
           driver.dwmapi.symbols.DwmFlush();
@@ -318,7 +322,14 @@ test.skipIf(process.platform !== "win32")(
           deadline: "inProcess",
           what: "the painted color in the window capture",
         },
-      );
+      ).catch((error: unknown) => {
+        throw new Error(
+          `${error instanceof Error ? error.message : String(error)} (black reads before: ${blackReads})`,
+          {
+            cause: error,
+          },
+        );
+      });
       if (blackReads > 0) {
         console.warn(
           `window capture read black ${blackReads} time(s) before the painted color`,
