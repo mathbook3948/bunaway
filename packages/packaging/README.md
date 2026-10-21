@@ -59,6 +59,11 @@ Inno Setup 스크립트를 생성, 컴파일한다. 앱 바로가기와 설치 �
   이전 EXE의 이름이 바뀌면 해당 링크가 작동하지 않을 수 있다.
   정해진 경로에 같은 EXE를 가리키는 복사본을 놓으면 원본과 구분하지 않고 삭제할 수 있다.
   바로가기 경로를 별도로 기록하거나 파일 ID로 추적하지 않으며 AppUserModelID로 관리 대상을 인계하지 않는다.
+  시작 메뉴 앱 링크에는 `AppUserModelID`와 함께 `AppUserModelToastActivatorCLSID`를 기록한다. 값은 앱 ID에서
+  계산한 UUID(`@bunaway/protocol`의 `toastActivatorClsid`)이며 notification 플러그인이 같은 값으로 실행 중
+  `HKCU\Software\Classes\CLSID\{...}\LocalServer32`를 쓰고 클래스를 등록하므로, 앱이 꺼진 동안 알림을 클릭하면
+  Windows가 앱을 시작한다. 바탕화면 링크에는 기록하지 않는다. perUser 제거는 그 `HKCU` 키를 지우고
+  perMachine 제거는 다른 사용자의 hive를 지울 수 없어 남긴다.
   모든 생성 링크에 `uninsneveruninstall`을 적용하고 `UninstallLogMode=overwrite`를 유지해
   Inno 자동 삭제와 이전 버전의 제거 기록이 대상 검증을 우회하지 않게 한다.
   `win-direct`와 `win-store-unpackaged`는 각 설치에서 실행 파일명을 Inno 이전 설치 데이터에 기록한다.

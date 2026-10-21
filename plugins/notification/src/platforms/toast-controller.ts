@@ -9,16 +9,18 @@ import {
   type ScheduledNotification,
   type ToastEvent,
 } from "#notification/contract";
+import {
+  type ActivationTarget,
+  activationArguments,
+  type ParsedActivation,
+  parseActivationArguments,
+} from "#notification/platforms/toast-activation-args";
 
 /** The fields that shape toast XML, shared by `show` and `schedule`. */
 type ToastContent = Omit<ResolvedNotification, "expiresAfterSeconds">;
 
 /** Input id of the reply text box in the toast XML. */
 export const REPLY_INPUT_ID = "reply";
-/** Activator arguments of the reply submit button. Regular buttons use ACTION_ARGUMENT_PREFIX plus their id. */
-export const REPLY_ARGUMENT = "reply";
-/** Identifier ids never contain ':', so this prefix cannot collide with REPLY_ARGUMENT. */
-export const ACTION_ARGUMENT_PREFIX = "action:";
 
 type Activation =
   | {
@@ -31,9 +33,51 @@ type Activation =
     };
 
 /**
- * Map raw activator arguments to a public activation. Only arguments this toast declared are accepted:
- * the toast carries no launch string, so an empty argument is a body click. Unknown arguments and replies
- * over the limit yield no event, because truncating would change what the user typed.
+ * Map a parsed click on a live toast to a public activation. Only buttons this toast declared are
+ * accepted. `reply` is the text the driver read for the reply input, or undefined when it reported none.
+ * An undeclared button and a reply over the limit yield no event, because truncating would change what
+ * the user typed.
+ */
+function resolveTarget(
+  input: ResolvedNotification,
+  target: ActivationTarget,
+  typed: string | undefined,
+): Activation | undefined {
+  if (target.kind === "body") {
+    return {
+      kind: "body",
+    };
+  }
+  // A driver that reports no text for a toast with a reply box violates the event contract: publish nothing.
+  const reply = input.reply ? typed : null;
+  if (
+    reply === undefined ||
+    (reply !== null && reply.length > MAX_REPLY_LENGTH)
+  ) {
+    return undefined;
+  }
+  if (target.kind === "reply") {
+    return input.reply
+      ? {
+          kind: "action",
+          actionId: null,
+          reply,
+        }
+      : undefined;
+  }
+  return input.actions.some((action) => action.id === target.actionId)
+    ? {
+        kind: "action",
+        actionId: target.actionId,
+        reply,
+      }
+    : undefined;
+}
+
+/**
+ * Map the Activated arguments of a toast this process showed. An empty argument is the body click of a
+ * toast without buttons, which has no launch string to read. Otherwise the arguments must be the ones
+ * this toast was built with: another identity or an unknown format yields no event.
  */
 function resolveActivation(
   input: ResolvedNotification,
@@ -49,34 +93,11 @@ function resolveActivation(
       kind: "body",
     };
   }
-  // A driver that reports no text for a toast with a reply box violates the event contract: publish nothing.
-  const reply = input.reply ? event.reply : null;
-  if (
-    reply === undefined ||
-    (reply !== null && reply.length > MAX_REPLY_LENGTH)
-  ) {
+  const parsed = parseActivationArguments(event.arguments);
+  if (!parsed || parsed.id !== input.id || parsed.group !== input.group) {
     return undefined;
   }
-  if (event.arguments === REPLY_ARGUMENT) {
-    return input.reply
-      ? {
-          kind: "action",
-          actionId: null,
-          reply,
-        }
-      : undefined;
-  }
-  if (event.arguments.startsWith(ACTION_ARGUMENT_PREFIX)) {
-    const actionId = event.arguments.slice(ACTION_ARGUMENT_PREFIX.length);
-    return input.actions.some((action) => action.id === actionId)
-      ? {
-          kind: "action",
-          actionId,
-          reply,
-        }
-      : undefined;
-  }
-  return undefined;
+  return resolveTarget(input, parsed.target, event.reply);
 }
 
 /** Native resources for one toast. detach must be safe to retry after partial cleanup. */
@@ -117,6 +138,13 @@ export function createToastController(
     input: ResolvedNotification;
     handle?: ToastHandle;
     active: boolean;
+    /**
+     * Route that delivered the first click. Windows reports a click to the toast object and, once an
+     * activator is registered, possibly also to the activator. The activator route ignores a toast the
+     * object route already delivered and the object route ignores one the activator delivered, so one
+     * click publishes once. Repeated clicks through the object route are all published.
+     */
+    activatedBy?: "toast" | "activator";
   };
   const entries = new Map<string, Entry>();
   const retired = new Set<ToastHandle>();
@@ -135,6 +163,28 @@ export function createToastController(
     for (const handle of retired) {
       handle.detach();
       retired.delete(handle);
+    }
+  };
+  const publishActivation = (
+    input: ResolvedNotification,
+    activation: Activation,
+  ) => {
+    const identity = {
+      id: input.id,
+      group: input.group,
+    };
+    if (activation.kind === "body") {
+      publish("notification.clicked", {
+        ...identity,
+        data: input.data,
+      });
+    } else {
+      publish("notification.actionInvoked", {
+        ...identity,
+        actionId: activation.actionId,
+        reply: activation.reply,
+        data: input.data,
+      });
     }
   };
   const retire = (entry: Entry) => {
@@ -170,19 +220,13 @@ export function createToastController(
           return;
         }
         if (event.kind === "activated") {
+          if (entry.activatedBy === "activator") {
+            return;
+          }
           const activation = resolveActivation(entry.input, event);
-          if (activation?.kind === "body") {
-            publish("notification.clicked", {
-              ...identity,
-              data: entry.input.data,
-            });
-          } else if (activation) {
-            publish("notification.actionInvoked", {
-              ...identity,
-              actionId: activation.actionId,
-              reply: activation.reply,
-              data: entry.input.data,
-            });
+          if (activation) {
+            entry.activatedBy = "toast";
+            publishActivation(entry.input, activation);
           }
         } else if (event.kind === "dismissed") {
           publish("notification.dismissed", {
@@ -208,6 +252,28 @@ export function createToastController(
         /* Retained in retired until the next explicit operation. */
       }
       return identity;
+    },
+    /**
+     * Deliver a click reported by the activator to the toast of this run that owns its identity, so it
+     * carries that toast's `data` and is checked against the buttons it declared.
+     * Returns false when this run has no such toast: the caller then handles it as a click on a
+     * notification of an earlier run. A toast the object route already delivered, or one this run
+     * rejects as undeclared, is consumed without an event.
+     */
+    activateFromActivator(parsed: ParsedActivation, typed: string): boolean {
+      const entry = entries.get(key(parsed));
+      if (!entry) {
+        return false;
+      }
+      if (stopping || entry.activatedBy === "toast") {
+        return true;
+      }
+      const activation = resolveTarget(entry.input, parsed.target, typed);
+      if (activation) {
+        entry.activatedBy = "activator";
+        publishActivation(entry.input, activation);
+      }
+      return true;
     },
     clear(identity: NotificationResult): null {
       active();
@@ -333,13 +399,21 @@ function actionsXml(input: ToastContent): string {
   const reply = input.reply
     ? `<input id="${REPLY_INPUT_ID}" type="text" placeHolderContent="${escapeXml(input.reply.placeholder)}"/>${button(
         input.reply.buttonLabel,
-        REPLY_ARGUMENT,
+        activationArguments(input, {
+          kind: "reply",
+        }),
         ` hint-inputId="${REPLY_INPUT_ID}"`,
       )}`
     : "";
   const buttons = input.actions
     .map((action) =>
-      button(action.label, `${ACTION_ARGUMENT_PREFIX}${action.id}`),
+      button(
+        action.label,
+        activationArguments(input, {
+          kind: "action",
+          actionId: action.id,
+        }),
+      ),
     )
     .join("");
   // A reminder toast stays only while it has a button, so a toast without one gets the system dismiss
@@ -376,6 +450,12 @@ export function toastXml(input: ToastContent): string {
   } else if (input.sound) {
     audio = `<audio src="ms-winsoundevent:Notification.${input.sound}"${input.soundLoop ? ' loop="true"' : ""}/>`;
   }
-  const attributes = `${input.timeoutType === "never" ? ' scenario="reminder"' : ""}${input.soundLoop ? ' duration="long"' : ""}`;
+  // The launch string is what Windows hands back for a body click, including after this process exited.
+  const launch = escapeXml(
+    activationArguments(input, {
+      kind: "body",
+    }),
+  );
+  const attributes = ` launch="${launch}"${input.timeoutType === "never" ? ' scenario="reminder"' : ""}${input.soundLoop ? ' duration="long"' : ""}`;
   return `<toast${attributes}><visual><binding template="ToastGeneric">${media}<text>${escapeXml(input.title)}</text><text>${escapeXml(input.body)}</text></binding></visual>${actionsXml(input)}${audio}</toast>`;
 }

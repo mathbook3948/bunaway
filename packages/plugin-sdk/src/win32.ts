@@ -581,6 +581,22 @@ export const OLE32 = {
     ],
     returns: "i32",
   },
+  CoRegisterClassObject: {
+    args: [
+      "ptr",
+      "ptr",
+      "u32",
+      "u32",
+      "ptr",
+    ],
+    returns: "i32",
+  },
+  CoRevokeClassObject: {
+    args: [
+      "u32",
+    ],
+    returns: "i32",
+  },
   CoTaskMemFree: {
     args: [
       "ptr",

@@ -55,10 +55,15 @@ function controllerFor(extra: Record<string, unknown>) {
     }),
   );
   controller.show(show(extra));
+  // A short target such as "action:ok" is completed with the identity the toast was built with;
+  // an empty argument or a complete string is passed through unchanged.
   const activate = async (args: string, reply?: string) => {
     callbacks[0]?.({
       kind: "activated",
-      arguments: args,
+      arguments:
+        args === "" || args.startsWith("bunaway1;")
+          ? args
+          : `bunaway1;bunaway;example;${args}`,
       reply,
     });
     await Promise.resolve();
@@ -195,15 +200,15 @@ test("toast XML declares the buttons and reply box with escaped attributes and n
     }),
   );
   expect(xml).toBe(
-    '<toast><visual><binding template="ToastGeneric"><text>Hello</text><text></text></binding></visual>' +
+    '<toast launch="bunaway1;bunaway;example;"><visual><binding template="ToastGeneric"><text>Hello</text><text></text></binding></visual>' +
       '<actions><input id="reply" type="text" placeHolderContent="Type &apos;&lt;here&gt;&apos;"/>' +
-      '<action content="Send" arguments="reply" activationType="foreground" hint-inputId="reply"/>' +
-      '<action content="&quot;Yes&quot; &amp; &lt;more&gt;" arguments="action:yes" activationType="foreground"/>' +
-      '<action content="no" arguments="action:no" activationType="foreground"/></actions>' +
+      '<action content="Send" arguments="bunaway1;bunaway;example;reply" activationType="foreground" hint-inputId="reply"/>' +
+      '<action content="&quot;Yes&quot; &amp; &lt;more&gt;" arguments="bunaway1;bunaway;example;action:yes" activationType="foreground"/>' +
+      '<action content="no" arguments="bunaway1;bunaway;example;action:no" activationType="foreground"/></actions>' +
       '<audio silent="true"/></toast>',
   );
+  // The arguments carry the identity only; caller data never becomes an activation route.
   expect(xml).not.toContain("payload");
-  expect(xml).not.toContain("launch");
 });
 
 test("a body click keeps publishing notification.clicked", async () => {

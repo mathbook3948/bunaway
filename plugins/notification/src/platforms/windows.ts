@@ -1,7 +1,7 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
-import type { NativeEnvironment } from "@bunaway/plugin";
+import { attemptAllAsync, type NativeEnvironment } from "@bunaway/plugin";
 import { COMBASE, KERNEL32, pick, wide } from "@bunaway/plugin/win32";
-import { BunawayError } from "@bunaway/protocol";
+import { BunawayError, toastActivatorClsid } from "@bunaway/protocol";
 import type {
   NotificationResult,
   NotificationSetting,
@@ -10,10 +10,17 @@ import type {
   ResolvedScheduledNotification,
 } from "#notification/contract";
 
+import { createActivationInbox } from "#notification/platforms/toast-activation-inbox";
+import { writeToastActivatorServer } from "#notification/platforms/toast-activator-registry";
 import {
   createToastSettler,
   drainToastCleanup,
 } from "#notification/platforms/toast-cleanup";
+import {
+  type ActivatorCall,
+  registerToastActivator,
+  type ToastActivatorServer,
+} from "#notification/platforms/toast-com-activator";
 import { createToastController } from "#notification/platforms/toast-controller";
 import {
   assertToastMediaFiles,
@@ -349,6 +356,35 @@ export function createNotifications(appUserModelId: string) {
   };
 }
 
+/**
+ * Register the toast activator for an installed app, so a click on a notification reaches the app
+ * whether or not it was running. A development run and a host without the event service keep the
+ * clicks on toasts of the running process only. A registration failure is contained: notifications still
+ * work, clicks reach live toasts, and the failure is logged for the developer. Windows then starts
+ * the app for a click only if an earlier run registered the class.
+ */
+function startToastActivator(
+  environment: NativeEnvironment,
+  receive: (call: ActivatorCall) => void,
+): ToastActivatorServer | undefined {
+  const launch = environment.app?.launch;
+  if (
+    !environment.app ||
+    launch?.mode !== "packaged" ||
+    !environment.windows?.systemEvents
+  ) {
+    return undefined;
+  }
+  try {
+    const clsid = toastActivatorClsid(environment.app.id);
+    writeToastActivatorServer(clsid, launch.executablePath);
+    return registerToastActivator(clsid, receive);
+  } catch (error) {
+    console.error("Toast activator registration failed.", error);
+    return undefined;
+  }
+}
+
 /** Resolve the trusted app identity before binding Windows notification APIs. */
 export function initialize(environment: NativeEnvironment) {
   const app = environment.app;
@@ -375,9 +411,21 @@ export function initialize(environment: NativeEnvironment) {
     );
     return toasts;
   };
+  const inbox = createActivationInbox({
+    appUserModelId: app.id,
+    publish: (event, payload) =>
+      environment.windows?.systemEvents?.publish(
+        event,
+        payload,
+        "notification.show",
+      ),
+    live: () => toasts,
+  });
+  const activator = startToastActivator(environment, inbox.receive);
   return {
     getStatus: status.getStatus,
     openSettings: status.openSettings,
+    takeActivations: () => inbox.take(),
     show: (input: ResolvedNotification) => {
       // Resolve the toast service first so an unsupported host fails with UNSUPPORTED before any file access.
       const controller = getToasts();
@@ -397,11 +445,21 @@ export function initialize(environment: NativeEnvironment) {
     clearAll: () => getToasts().clearAll(),
     list: () => getToasts().list(),
     async dispose() {
-      // The regular UI pump has stopped. Drain marshaled releases before unloading DLLs or our STA.
-      if (toasts) {
-        await drainToastCleanup(() => toasts?.dispose());
-      }
-      status.dispose();
+      // Every step runs even when an earlier one fails, so a failed revoke cannot leak the toasts or DLLs.
+      await attemptAllAsync(
+        [
+          // No click may reach the app once its toasts are being torn down.
+          () => activator?.dispose(),
+          // The regular UI pump has stopped. Drain marshaled releases before unloading DLLs or our STA.
+          async () => {
+            if (toasts) {
+              await drainToastCleanup(() => toasts?.dispose());
+            }
+          },
+          () => status.dispose(),
+        ],
+        "Notification cleanup failed.",
+      );
     },
   };
 }

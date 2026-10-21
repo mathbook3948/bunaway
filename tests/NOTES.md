@@ -228,6 +228,15 @@ slot과 인자 순서, 교체 순서, 4096개 한도, HRESULT 실패 때 COM 참
 `windows-toast.fixture.ts`의 예약 단계는 실제 WinRT로 예약, 교체, 조회, 취소와 약 8초 뒤의 표시 시각
 도착을 확인하며 앱 프로세스가 종료된 상태의 표시는 확인하지 않는다.
 
+`api/notification-cold-activation.test.ts`는 앱이 꺼진 뒤의 클릭을 받는 toast activator의 Linux 계약 시험이다.
+활성화 인수 형식의 허용과 거부, 다른 앱 ID 거부, 첫 `takeActivations` 전 보관과 16건 한도, 이번 실행 toast의
+`data`와 선언 버튼 검사, toast 객체와 activator 두 경로의 중복 제거를 가짜 controller로 확인한다.
+`lifecycle/windows-notification-activator.test.ts`는 Windows에서 부모가 class object를 등록하고 별도
+프로세스가 COM으로 `Activate`를 호출해 정상 호출과 잘못된 호출(`E_INVALIDARG`), 해제 뒤 연결 실패를
+확인하며 `LocalServer32`의 기록과 갱신도 본다. `packaging/windows-toast-activator.test.ts`는 컴파일한
+설치 프로그램으로 바로가기의 CLSID 기록과 perUser 제거 때 키 삭제를 확인한다. 대화형 데스크톱에서 실제
+알림을 클릭해 꺼진 앱이 시작되는 것은 자동으로 확인하지 않는다.
+
 `notification-shortcut-cleanup.test.ts`는 바로가기 정리의 일시적인 EBUSY만 최대 10회,
 100ms 간격으로 재시도하는지 검사한다. 실패한 삭제는 정리 완료로 표시하지 않고 shell DLL을
 유지하며 다음 정리에서 복구할 수 있다. 영구 잠금의 기한과 다른 오류의 즉시 전파를 검사한다.

@@ -75,14 +75,15 @@ CI에서 그 값이 약 3일 뒤로 읽혔다.
 
 `actions`(`{ id, label }` 최대 5개, id 중복 불가, label 1~64자)와 `reply`(`{ placeholder?, buttonLabel }`)를
 지정하면 toast에 버튼과 텍스트 입력 상자를 추가한다. 응답 입력 상자는 `hint-inputId`로 연결한 전송 버튼과 함께 선언하므로
-버튼과 전송 버튼을 합쳐 5개까지이고 `buttonLabel`에 기본값이 없다. 버튼의 activation 인수는
-`action:<id>`, 전송 버튼은 `reply`이며 `data`는 XML에 싣지 않는다. 버튼을 누르면
+버튼과 전송 버튼을 합쳐 5개까지이고 `buttonLabel`에 기본값이 없다. 본문의 `launch`와 버튼의 activation 인수는
+`bunaway1;<group>;<id>;<대상>`이고 대상은 본문이면 빈 값, 버튼이면 `action:<id>`, 전송 버튼이면 `reply`이며
+`data`는 XML에 싣지 않는다. 버튼을 누르면
 `notification.actionInvoked`를 `{ id, group, actionId, reply, data }`로 전달한다. `actionId`는 전송
 버튼이면 null, `reply`는 입력 상자가 있으면 입력 문자열(비워 두면 빈 문자열), 없으면 null이다.
 2048 UTF-16 코드 단위를 넘는 응답, 문자열이 아닌 응답 값, 선언하지 않은 인수와 읽을 수 없는 인수는 이벤트를 만들지 않는다. 본문 클릭은
 `notification.clicked`이다. 인수는 Activated 이벤트 인자의 `IToastActivatedEventArgs`와
 `IToastActivatedEventArgs2.UserInput`(ValueSet)에서 callback 안에 복사하고 얻은 COM 객체와 HSTRING은
-모두 해제한다.
+모두 해제한다. 다른 toast의 인수(id나 group이 다른 값)와 알 수 없는 형식은 이벤트를 만들지 않는다.
 
 `notification.clicked`는 `{ id, group, data }`, `notification.dismissed`는
 `{ id, group, reason }`, `notification.failed`는 `{ id, group, hresult }`를 전달한다.
@@ -136,13 +137,39 @@ SuppressPopup을 `IScheduledToastNotification2`(6, 8, 10번 slot)로 지정한 �
 null을 반환하며 없어도 성공한다. Tauri의 `schedule`, `pending`, `cancel` 범위이고 반복 예약은 제공하지 않는다.
 
 시작 메뉴 바로가기와 process AppUserModelID가 일치하는 unpackaged Windows x64를
-대상으로 한다. MSIX는 패키지 식별자 연동 전까지 `UNSUPPORTED`이다. 플러그인은 바로가기,
-COM activator, URL handler를 자동 등록하지 않으며 기존 설치 선택을 보존한다.
-실행 중인 프로세스가 받은 Activated callback만 clicked 또는 actionInvoked로 전달한다. 종료 상태에서 앱을
-시작하거나 `onOpen`으로 전달하지 않는다. 알림 센터에서 나중에 클릭하거나 비정상 종료 후
-남은 알림의 activation은 보장하지 않는다. 강제 종료는 정리를 실행할 수 없으며 앱은
-다음 실행에서 알고 있는 ID/group을 clear할 수 있다. 이미지, 예약과 영속
-activation은 후속 범위다. 종료 후 버튼 클릭과 이전 프로세스 알림의 버튼도 이벤트가 없다.
+대상으로 한다. MSIX는 패키지 식별자 연동 전까지 `UNSUPPORTED`이다. 강제 종료는 정리를 실행할 수 없으며
+앱은 다음 실행에서 알고 있는 ID/group을 clear할 수 있다.
+
+### 앱이 꺼진 뒤의 클릭
+
+`launch.mode`가 `packaged`인 앱은 시작할 때 toast activator(`INotificationActivationCallback`)를 등록한다.
+`takeActivations()`는 입력 null로 앱이 구독하기 전에 도착한 클릭을 오래된 순서로 반환하고 비운다.
+Windows는 시작 메뉴 바로가기의 `System.AppUserModel.ToastActivatorCLSID`가 가리키는 클래스를
+`HKCU\Software\Classes\CLSID\{clsid}\LocalServer32`에서 찾아 꺼진 앱을 시작하고, 새 프로세스의
+`CoRegisterClassObject`가 끝나면 `Activate`를 호출한다. 시작 메뉴 바로가기 쪽 CLSID는 설치 프로그램
+(`packages/packaging`의 Inno 스크립트)이 쓰고, 런타임은 같은 CLSID(`@bunaway/protocol`의 `toastActivatorClsid`,
+앱 ID에서 계산한 UUID 버전 5)로 `LocalServer32`에 따옴표를 친 실행 파일 경로를 매 시작마다 쓰고 클래스 객체를
+등록한다. 사용자 hive만 쓰므로 관리자 권한이 필요 없다. 키는 종료할 때 지우지 않는다. perUser 제거는 키를
+지우고, perMachine 제거는 다른 사용자의 hive를 지울 수 없어 남는다.
+
+- COM 객체는 `createToastDelegate`와 같은 JSCallback vtable이다. `IMarshal`과 `IAgileObject`는 거절해
+  호출이 등록한 STA의 메시지 펌프로 marshal되게 한다. `Activate`는 문자열을 복사한 뒤 microtask로 넘기고
+  JS 예외를 COM으로 올리지 않는다. 폐기 뒤에도 Windows가 객체를 붙들고 있으면 callback을 닫지 않고
+  프로세스 종료까지 둔다.
+- 활성화 인수는 `bunaway1;<group>;<id>;<대상>`이며 대상은 빈 값(본문, toast의 `launch`), `reply`,
+  `action:<id>` 중 하나다. 식별자에 `;`와 `:`가 없으므로 고정 정규식 하나로 검사하며 128자 초과,
+  다른 버전과 알 수 없는 대상, 다른 AppUserModelID, 입력 항목 2개 이상, 2048 UTF-16 코드 단위를 넘는
+  답장은 `E_INVALIDARG`로 거절하거나 이벤트 없이 버린다. 같은 사용자의 로컬 프로세스는 이 형식을 만들 수
+  있으므로 서명 토큰은 두지 않는다. 같은 AppUserModelID로 띄운 toast는 앱이 만든 것과 구별되지 않아
+  토큰이 막는 것이 없다.
+- 이번 실행이 표시한 toast의 클릭은 그 항목의 `data`와 선언한 버튼 검사를 쓴다. 그 밖의 클릭은 `data: null`로
+  첫 `takeActivations` 전까지 최대 16건 보관하고(가장 오래된 것부터 버림) 이후에는 이벤트로 바로 낸다.
+  항목마다 먼저 전달한 경로(toast 객체의 Activated 또는 activator) 하나만 이벤트로 만들어 중복을 막는다.
+  toast 객체 경로의 반복 클릭은 그대로 전달한다.
+- 호스트(`native/windows/bun`), `onOpen`, `NativeEnvironment`, 권한 모델은 바꾸지 않는다. 등록 실패는
+  `console.error`로 남기고 알림 표시와 실행 중 클릭은 계속 동작한다.
+- 예약 알림에는 toast 객체 callback이 없어도 activator 경로로 클릭이 전달된다. 개발 실행과 CLSID가 없는
+  바로가기는 실행 중인 프로세스가 표시한 알림만 받는다.
 
 기준 API: [CreateToastNotifier](https://learn.microsoft.com/en-us/uwp/api/windows.ui.notifications.toastnotificationmanager.createtoastnotifier),
 [Setting](https://learn.microsoft.com/en-us/uwp/api/windows.ui.notifications.toastnotifier.setting),
@@ -168,9 +195,22 @@ activation은 후속 범위다. 종료 후 버튼 클릭과 이전 프로세스 
   확인한다. 기본 CI는 이 표시 작업을 실행하지 않으며 페이지 렌더링이나 사용자 설정
   변경을 확인하지 않는다.
 
+- `bun test tests/api/notification-cold-activation.test.ts`: 활성화 인수 형식의 왕복과 거부(길이, 버전,
+  대상, 개행, 식별자), 다른 AppUserModelID 거부, 첫 `takeActivations` 전 보관과 16건 한도, 이후 이벤트 전환,
+  이번 실행 toast의 `data`와 선언 버튼 검사, 두 경로 중복 제거를 가짜 controller 위에서 검사한다.
+  `tests/api/toast-activator-clsid.test.ts`는 UUID 버전 5 계산을 플랫폼 SHA-1과 비교한다.
+- `bun --no-env-file test tests/lifecycle/windows-notification-activator.test.ts`: Windows에서 부모가 실제
+  class object를 등록하고 별도 프로세스가 `CoCreateInstance`로 연결해 `Activate`를 호출한다. 정상 호출 2건,
+  너무 긴 인수와 입력 2개 호출의 `E_INVALIDARG`, 해제 뒤 `REGDB_E_CLASSNOTREG`, `LocalServer32` 기록과 갱신을
+  확인한다. `tests/packaging/windows-toast-activator.test.ts`는 Inno 스크립트의 바로가기 속성과 제거 코드를
+  검사하고 Windows에서는 컴파일한 설치 프로그램으로 바로가기에 CLSID가 기록되는 것과 perUser 제거가 키를
+  지우는 것을 확인한다.
+
 사용자가 Windows 설정에서 앱/전체 알림을 끄거나 정책으로 차단하는 시나리오, 실제
-설정 페이지 표시와 집중 지원, MSIX, 실제 popup 화면과 사용자의 클릭/종료 activation은 수동 검증 또는
-후속 구현 범위다. 기본 CI 통과로 이 항목을 완료했다고 판단하지 않는다.
+설정 페이지 표시와 집중 지원, MSIX, 실제 popup 화면과 사용자의 클릭은 수동 검증 또는
+후속 구현 범위다. 대화형 데스크톱에서 알림을 클릭해 꺼진 앱이 시작되는 것, 답장 입력, 예약 알림 클릭,
+activator 등록 뒤에도 toast 객체 callback이 계속 오는지는 자동 검증하지 않는다.
+기본 CI 통과로 이 항목을 완료했다고 판단하지 않는다.
 
 
 - `bun test tests/api/notification-toast.test.ts`: 입력/출력, 작업별 권한과 이벤트 수신 권한,

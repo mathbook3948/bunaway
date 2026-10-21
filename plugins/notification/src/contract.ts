@@ -56,6 +56,7 @@ export function validateNotificationInput(
     operation !== "notification.clearAll" &&
     operation !== "notification.list" &&
     operation !== "notification.listScheduled" &&
+    operation !== "notification.takeActivations" &&
     operation !== "notification.getStatus" &&
     operation !== "notification.openSettings"
   ) {
@@ -85,7 +86,11 @@ export const MAX_REPLY_PLACEHOLDER_LENGTH = 128;
 export const MAX_REPLY_LENGTH = 2048;
 /** Seven days: long enough for a reminder, and well inside the Windows DateTime range. */
 export const MAX_EXPIRES_AFTER_SECONDS = 7 * 24 * 60 * 60;
-const identifierSchema = z.string().regex(/^[A-Za-z0-9._-]{1,16}(?![\s\S])/);
+/** Characters and length of a notification id, group or action id. It never contains `;` or `:`. */
+export const IDENTIFIER_SOURCE = "[A-Za-z0-9._-]{1,16}";
+const identifierSchema = z
+  .string()
+  .regex(new RegExp(`^${IDENTIFIER_SOURCE}(?![\\s\\S])`));
 const xmlText = (maximum: number) =>
   z
     .string()
@@ -274,6 +279,28 @@ export const notificationResultSchema = z.strictObject({
   id: identifierSchema,
   group: identifierSchema,
 });
+/**
+ * Most activations kept for the app before its first `takeActivations` call. The oldest is dropped
+ * first, so a burst of clicks while the app starts cannot grow memory without bound.
+ */
+export const MAX_PENDING_ACTIVATIONS = 16;
+/**
+ * A click that reached the app while it was not running (or from an earlier run). The toast's `data`
+ * is not part of the activation arguments, so it is always null; look the notification up by id and group.
+ */
+export const takenActivationSchema = z.strictObject({
+  kind: z.enum([
+    "clicked",
+    "actionInvoked",
+  ]),
+  id: identifierSchema,
+  group: identifierSchema,
+  actionId: identifierSchema.nullable(),
+  reply: z.string().max(MAX_REPLY_LENGTH).nullable(),
+  data: z.null(),
+});
+export const takenActivationListSchema = z.array(takenActivationSchema);
+export type TakenActivation = z.output<typeof takenActivationSchema>;
 export const notificationListSchema = z.array(notificationResultSchema);
 export const scheduledNotificationSchema = notificationResultSchema.extend({
   deliverAt: z.number().int(),
@@ -317,7 +344,10 @@ const identityProperties = {
     pattern: "^[A-Za-z0-9._-]{1,16}(?![\\s\\S])",
   },
 } as const;
-/** Events describe native callbacks, never inferred display success or cold-start activation. */
+/**
+ * Events describe native callbacks, never inferred display success. A click that arrives while the app
+ * is not subscribed yet (for example the click that started it) is kept for `takeActivations`.
+ */
 export const notificationEvents = {
   "notification.clicked": {
     type: "object",

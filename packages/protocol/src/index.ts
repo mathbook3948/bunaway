@@ -21,7 +21,6 @@ export {
   AUTOSTART_MUTEX_PREFIX,
   AUTOSTART_MUTEX_WAIT_MS,
 } from "./autostart-launch.ts";
-
 export {
   API_LIMITS,
   type AsyncDispose,
@@ -63,6 +62,7 @@ export {
   policySchema,
   processSchema,
 } from "./schema.ts";
+export { toastActivatorClsid } from "./toast-activator-clsid.ts";
 export {
   type Infer,
   isRecord,

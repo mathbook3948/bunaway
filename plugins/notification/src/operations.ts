@@ -9,6 +9,7 @@ import {
   notificationShowSchema,
   scheduledNotificationListSchema,
   statusSchema,
+  takenActivationListSchema,
 } from "#notification/contract";
 import type { initialize } from "#notification/platforms/windows";
 
@@ -29,6 +30,11 @@ export const notificationOperations = {
     input: z.null(),
     output: scheduledNotificationListSchema,
     handler: (_input, { instance }) => instance.listScheduled(),
+  }),
+  takeActivations: operation({
+    input: z.null(),
+    output: takenActivationListSchema,
+    handler: (_input, { instance }) => instance.takeActivations(),
   }),
   cancelScheduled: operation({
     input: notificationIdentitySchema,

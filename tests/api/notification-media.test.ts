@@ -30,7 +30,7 @@ test("toast XML places icon, inline or hero image and system sound with escaped 
     soundLoop: true,
   });
   expect(toastXml(value)).toBe(
-    '<toast duration="long"><visual><binding template="ToastGeneric"><image placement="appLogoOverride" src="file:///C:/Users/a%20b/icon%261.png"/><image placement="hero" src="file:///D:/pics/%ED%95%9C%EA%B8%80&apos;.jpg"/><text>t</text><text></text></binding></visual><audio src="ms-winsoundevent:Notification.Looping.Call3" loop="true"/></toast>',
+    '<toast launch="bunaway1;bunaway;media;" duration="long"><visual><binding template="ToastGeneric"><image placement="appLogoOverride" src="file:///C:/Users/a%20b/icon%261.png"/><image placement="hero" src="file:///D:/pics/%ED%95%9C%EA%B8%80&apos;.jpg"/><text>t</text><text></text></binding></visual><audio src="ms-winsoundevent:Notification.Looping.Call3" loop="true"/></toast>',
   );
   const inline = notificationShowSchema.parse({
     id: "media",
@@ -53,18 +53,22 @@ test("duration long is emitted only for looping sounds and paired surrogates sta
         ...extra,
       }),
     );
-  expect(xml({})).toStartWith("<toast><visual>");
+  expect(xml({})).toStartWith(
+    '<toast launch="bunaway1;bunaway;media;"><visual>',
+  );
   expect(
     xml({
       sound: "Mail",
     }),
-  ).toStartWith("<toast><visual>");
+  ).toStartWith('<toast launch="bunaway1;bunaway;media;"><visual>');
   expect(
     xml({
       sound: "Looping.Alarm",
       soundLoop: true,
     }),
-  ).toStartWith('<toast duration="long"><visual>');
+  ).toStartWith(
+    '<toast launch="bunaway1;bunaway;media;" duration="long"><visual>',
+  );
   expect(
     xml({
       sound: "Looping.Alarm",

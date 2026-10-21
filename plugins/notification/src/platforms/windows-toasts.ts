@@ -134,7 +134,8 @@ function requireUnpackaged() {
 
 /**
  * Own the app notifier, toast objects, event tokens and STA through explicit clear/disposal.
- * The UI host supplies the message pump. No COM activator, shortcut or protocol handler is installed.
+ * The UI host supplies the message pump. This driver installs no shortcut, protocol handler or
+ * activator; the activator for clicks after the app exited is registered separately (toast-com-activator.ts).
  */
 export function createWindowsToastDriver(appId: string): ToastDriver {
   requireUnpackaged();

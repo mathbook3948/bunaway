@@ -1,6 +1,9 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { sanitizeWindowsFileName } from "@bunaway/protocol";
+import {
+  sanitizeWindowsFileName,
+  toastActivatorClsid,
+} from "@bunaway/protocol";
 import {
   type ChannelConfig,
   CODES,
@@ -124,6 +127,9 @@ function createInnoContext(options: InnoOptions, parts: number[]) {
     "''",
   );
   const appId = issParameter(options.appId ?? options.identifier);
+  // The notification plugin derives the same class identifier from the application identifier and
+  // registers it at run time, so a click on a toast can start the installed app.
+  const toastClsid = toastActivatorClsid(options.appId ?? options.identifier);
   const menuLink = `{group}\\${directoryName}.lnk`;
   const uninstallLink = `{group}\\${directoryName} 제거.lnk`;
   const desktopLink = `{autodesktop}\\${directoryName} (${identifier}).lnk`;
@@ -143,6 +149,7 @@ function createInnoContext(options: InnoOptions, parts: number[]) {
     executable,
     executableLiteral,
     appId,
+    toastClsid,
     menuLink,
     uninstallLink,
     desktopLink,
@@ -258,6 +265,7 @@ function iconsSection(context: InnoContext): string[] {
     identifier,
     executable,
     appId,
+    toastClsid,
     menuLink,
     uninstallLink,
     desktopLink,
@@ -267,8 +275,10 @@ function iconsSection(context: InnoContext): string[] {
   if (options.startMenuShortcut || options.desktopShortcut) {
     lines.push("", "[Icons]");
     if (options.startMenuShortcut) {
+      // Windows starts the app for a toast click only through a Start menu shortcut that names the
+      // activator class. `{{` is Inno's escape for a literal brace.
       lines.push(
-        `Name: "{group}\\${directoryName}"; Filename: "{app}\\${executable}"; WorkingDir: "{app}"; IconFilename: "{app}\\${executable}"; AppUserModelID: "${appId}"${shortcutCheck(menuLink)}`,
+        `Name: "{group}\\${directoryName}"; Filename: "{app}\\${executable}"; WorkingDir: "{app}"; IconFilename: "{app}\\${executable}"; AppUserModelID: "${appId}"; AppUserModelToastActivatorCLSID: "{{${toastClsid}}"${shortcutCheck(menuLink)}`,
       );
       lines.push(
         `Name: "{group}\\${directoryName} 제거"; Filename: "{uninstallexe}"${shortcutCheck(uninstallLink)}`,
@@ -502,6 +512,7 @@ function cleanupSection(context: InnoContext): string[] {
     options,
     perUser,
     executableLiteral,
+    toastClsid,
     menuLink,
     uninstallLink,
     desktopLink,
@@ -607,6 +618,16 @@ begin
   if not DeleteFile(Filename) then Log('Could not remove shortcut: ' + Filename);
 end;
 `,
+    ...(perUser
+      ? [
+          "procedure RemoveToastActivatorRegistration(const Key: String);",
+          "begin",
+          "  if RegKeyExists(HKCU64, Key) and not RegDeleteKeyIncludingSubkeys(HKCU64, Key) then",
+          "    Log('Could not remove toast activator registration: ' + Key);",
+          "end;",
+          "",
+        ]
+      : []),
     "procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);",
     "begin",
     "  if CurUninstallStep <> usUninstall then Exit;",
@@ -614,6 +635,9 @@ end;
     ...(perUser
       ? [
           "  UninstallAutostart;",
+          // The app writes this key when it starts, so Setup has no record of it. A perMachine
+          // uninstall cannot reach other users' hives; their key then points at the removed program.
+          `  RemoveToastActivatorRegistration('Software\\Classes\\CLSID\\{${toastClsid}}');`,
         ]
       : []),
     "  RemovePendingAssociationOwner;",
