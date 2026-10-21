@@ -3030,57 +3030,53 @@ test.skipIf(!iscc)(
     const moved = join(root, "moved");
     const startMenuGroup = `Join-Path $env:APPDATA ${quote(`Microsoft\\Windows\\Start Menu\\Programs\\${identifier}`)}`;
     const desktop = "[Environment]::GetFolderPath('Desktop')";
-    // WScript.Shell reads ANSI targets, so this test uses an ASCII executable name and ASCII folders.
-    const targets = (dir: string, filter: string) =>
+    // Shell.Application keeps Unicode link names, which the scripting host converts to ANSI.
+    const shellLinks = (dir: string, filter: string, edit = "") =>
       powershell(
-        `$s=New-Object -ComObject WScript.Shell; Get-ChildItem -LiteralPath ${dir} -Filter ${quote(filter)} | ForEach-Object { $s.CreateShortcut($_.FullName).TargetPath }`,
+        `$sh=New-Object -ComObject Shell.Application; $folder=$sh.Namespace((${dir})); foreach ($item in $folder.Items()) { if ($item.IsLink -and $item.Name -like ${quote(filter)}) { $l=$item.GetLink; ${edit} $l.Path + '|' + $l.Arguments + '|' + $l.WorkingDirectory } }`,
       );
+    const userEdit = (workingDirectory: string) =>
+      `if ($l.Path -like '*\\App.exe') { $l.Arguments='--user'; ${workingDirectory} $l.Save() }`;
+    const install = async (version: string, destination: string) =>
+      (
+        await startInstall({
+          version,
+          executable: "App.exe",
+          config: declarations,
+          tasks: "desktopicon",
+          shortcuts: true,
+          payloadFiles: relocationPayload,
+          destination,
+        })
+      ).finish();
     try {
-      const details = (dir: string, filter: string) =>
-        powershell(
-          `$s=New-Object -ComObject WScript.Shell; Get-ChildItem -LiteralPath ${dir} -Filter ${quote(filter)} | ForEach-Object { $l=$s.CreateShortcut($_.FullName); $l.TargetPath + '|' + $l.Arguments + '|' + $l.WorkingDirectory + '|' + $l.IconLocation }`,
-        );
-      const install = async (version: string, destination?: string) =>
-        (
-          await startInstall({
-            version,
-            executable: "App.exe",
-            config: declarations,
-            tasks: "desktopicon",
-            shortcuts: true,
-            payloadFiles: relocationPayload,
-            ...(destination
-              ? {
-                  destination,
-                }
-              : {}),
-          })
-        ).finish();
       await install("links-first", first);
-      // A user argument proves the links are updated in place, not recreated.
-      await powershell(
-        `$s=New-Object -ComObject WScript.Shell; foreach ($dir in (${startMenuGroup}), (${desktop})) { Get-ChildItem -LiteralPath $dir -Filter '*.lnk' | ForEach-Object { $l=$s.CreateShortcut($_.FullName); if ($l.TargetPath -like '*\\App.exe') { $l.Arguments='--user'; if ($dir -ne (${startMenuGroup})) { $l.WorkingDirectory=${quote(root)} }; $l.Save() } } }`,
+      // A user argument proves the links are updated in place, not recreated. The desktop link
+      // also gets a start folder the user chose.
+      await shellLinks(startMenuGroup, "*", userEdit(""));
+      await shellLinks(
+        desktop,
+        `*${identifier}*`,
+        userEdit(`$l.WorkingDirectory=${quote(root)};`),
       );
-      const movedExecutable = join(moved, "App.exe");
-      expect(await targets(`(${desktop})`, `*${identifier}*.lnk`)).not.toBe(
-        movedExecutable,
-      );
+      const before = await shellLinks(desktop, `*${identifier}*`);
+      expect(before).toBe(`${join(first, "App.exe")}|--user|${root}`);
       await install("links-second", moved);
-      const appLink = `${movedExecutable}|--user|${moved}|${movedExecutable},0`;
+      const movedExecutable = join(moved, "App.exe");
       // A start folder the user chose is kept; the default one follows the move.
-      expect(await details(`(${desktop})`, `*${identifier}*.lnk`)).toBe(
-        `${movedExecutable}|--user|${root}|${movedExecutable},0`,
+      expect(await shellLinks(desktop, `*${identifier}*`)).toBe(
+        `${movedExecutable}|--user|${root}`,
       );
-      const menu = (await details(`(${startMenuGroup})`, "*.lnk"))
+      const menu = (await shellLinks(startMenuGroup, "*"))
         .split(/\r?\n/)
         .sort();
-      expect(menu).toContain(appLink);
+      expect(menu).toHaveLength(2);
+      expect(menu).toContain(`${movedExecutable}|--user|${moved}`);
       expect(
         menu.filter((line) =>
           line.startsWith(`${join(moved, "unins000.exe")}|`),
         ),
       ).toHaveLength(1);
-      expect(menu).toHaveLength(2);
     } finally {
       await powershell(
         `Remove-Item -LiteralPath (${startMenuGroup}) -Recurse -Force -ErrorAction SilentlyContinue; Get-ChildItem -LiteralPath (${desktop}) -Filter ${quote(`*${identifier}*.lnk`)} | Remove-Item -Force`,

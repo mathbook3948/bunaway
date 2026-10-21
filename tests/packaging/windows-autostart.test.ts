@@ -294,8 +294,8 @@ test.skipIf(!iscc)(
       expect((await f.install(movedDir, f.id, false, "")).code).toBe(0);
       expect(await registryValue(runKey, name)).toBe(app(movedDir, args, true));
       expect(await startupState()).toBe(disabled);
-      // Payload relocation does not claim authority to delete the old directory.
-      expect(await Bun.file(join(firstDir, "App.exe")).exists()).toBe(true);
+      // Moving to another folder removes the previous executable once the new Run value is written.
+      expect(await Bun.file(join(firstDir, "App.exe")).exists()).toBe(false);
       expect((await f.install(movedDir, nextId, false, "")).code).toBe(0);
       expect(await registryValue(runKey, name)).toBe("");
       expect(await registryValue(runKey, nextName)).toBe("");

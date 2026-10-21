@@ -790,11 +790,6 @@ end;
     "  RemovePendingAssociationOwner;",
     "  RemoveAssociations(AssociationExecutable);",
     "  RemovePreviousExecutable(PendingAssociationExecutableName, PendingAssociationInstallDir);",
-    "  try",
-    "    RemoveRelocatedInstallation(PendingAssociationExecutableName, PendingAssociationInstallDir, nil);",
-    "  except",
-    "    Log('Left the previous installation in place: ' + GetExceptionMessage);",
-    "  end;",
     ...[
       menuLink,
       desktopLink,
