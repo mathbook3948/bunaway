@@ -78,13 +78,13 @@ export function checkToast(result: number, stage: string): void {
 
 /**
  * Like `checkToast` for scheduling calls, where E_INVALIDARG means the delivery time was not acceptable
- * (for example it passed between the caller's check and the OS call), which is the caller's input error.
+ * (for example it passed between the caller's check and the OS call), an input error of the caller.
  */
 export function checkSchedule(result: number, stage: string): void {
   if (result >>> 0 === E_INVALIDARG_HRESULT) {
     throw new BunawayError({
       code: "INVALID_ARGUMENT",
-      message: "Windows rejected the notification delivery time.",
+      message: "Windows rejected the scheduled notification.",
       details: {
         stage,
         hresult: result >>> 0,

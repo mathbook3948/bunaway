@@ -387,7 +387,7 @@ assert.deepEqual(
 );
 assertBalanced("cancel");
 
-// A full schedule rejects a new identity with BUSY and still replaces an existing one.
+// A full schedule rejects new identities and replacements alike with BUSY, because a replacement adds first.
 schedule = [];
 for (let index = 0; index < MAX_SCHEDULED; index++) {
   schedule.push(record(`n${index}`, "bunaway", BigInt(index + 1)));
@@ -395,7 +395,9 @@ for (let index = 0; index < MAX_SCHEDULED; index++) {
 assert.throws(() => driver.schedule(request("extra")), {
   code: "BUSY",
 });
-driver.schedule(request("n7", {}, deliverAt));
+assert.throws(() => driver.schedule(request("n7", {}, deliverAt)), {
+  code: "BUSY",
+});
 assert.equal(schedule.length, MAX_SCHEDULED);
 assertBalanced("limit");
 schedule = [];

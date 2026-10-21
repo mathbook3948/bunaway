@@ -75,7 +75,7 @@ export function validateNotificationInput(
 export const MAX_ACTIVE_TOASTS = 64;
 /** Windows keeps at most 4096 scheduled toasts per app; the adapter checks before asking the OS. */
 export const MAX_SCHEDULED_TOASTS = 4096;
-/** 9999-12-31T23:59:59.999Z: the latest instant that stays inside the signed 64-bit Windows tick count. */
+/** 9999-12-31T23:59:59.999Z, the latest instant of the common calendar range; its tick count fits a signed 64-bit DateTime. */
 export const MAX_DELIVER_AT_MS = 253_402_300_799_999;
 /** Windows shows at most five buttons on a toast, and the reply submit button counts as one. */
 export const MAX_TOAST_ACTIONS = 5;

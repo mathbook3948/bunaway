@@ -130,8 +130,8 @@ Tauri 기준으로 제공한다.
 `IScheduledToastNotificationFactory.CreateScheduledToastNotification`(6번 slot)으로 만들어 Tag, Group,
 SuppressPopup을 `IScheduledToastNotification2`(6, 8, 10번 slot)로 지정한 뒤 `ToastNotifier.AddToSchedule`(9번 slot)에
 넘긴다. 예약은 Windows가 소유하므로 이벤트 delegate를 붙이지 않고 앱 종료로 취소되지 않는다. 같은 id와 group은
-새 예약을 접수한 뒤 `RemoveFromSchedule`(10번 slot)로 이전 예약을 지워 교체하고, 앱당 4096개를 넘는 새 id/group은
-`BUSY`이다. `listScheduled()`는 `GetScheduledToastNotifications`(11번 slot)에서 읽은 `{ id, group, deliverAt }`
+새 예약을 접수한 뒤 `RemoveFromSchedule`(10번 slot)로 이전 예약을 지워 교체하고, 앱당 4096개가 찬 상태의 예약은
+교체도 `BUSY`이다. `listScheduled()`는 `GetScheduledToastNotifications`(11번 slot)에서 읽은 `{ id, group, deliverAt }`
 배열이며 id/group 규칙을 벗어난 항목은 뺀다. `cancelScheduled({ id, group? })`는 일치하는 예약을 모두 지우고
 null을 반환하며 없어도 성공한다. Tauri의 `schedule`, `pending`, `cancel` 범위이고 반복 예약은 제공하지 않는다.
 

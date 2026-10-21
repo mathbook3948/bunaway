@@ -269,7 +269,8 @@ export function createScheduledToasts(runtime: Runtime, notifier: Pointer) {
     schedule(input: ResolvedScheduledNotification): void {
       withSchedule((items) => {
         const previous = items.filter((item) => identityMatches(item, input));
-        if (previous.length === 0 && items.length >= MAX_SCHEDULED_TOASTS) {
+        // A replacement adds before it removes, so a full schedule is rejected for replacements too.
+        if (items.length >= MAX_SCHEDULED_TOASTS) {
           throw new BunawayError({
             code: "BUSY",
             message:
