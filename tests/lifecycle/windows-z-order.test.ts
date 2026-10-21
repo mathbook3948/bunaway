@@ -48,6 +48,7 @@ test.skipIf(process.platform !== "win32")(
       const first = open("Z order first");
       const second = open("Z order second");
       const third = open("Z order third");
+      const foreground = user.symbols.GetForegroundWindow();
       const boundsBefore = windows.getBounds(third, "outer");
 
       windows.moveToBottom(third);
@@ -65,7 +66,7 @@ test.skipIf(process.platform !== "win32")(
       expect(isAbove(first, third)).toBe(true);
       expect(isAbove(first, second)).toBe(true);
 
-      expect(created).not.toContain(user.symbols.GetForegroundWindow());
+      expect(user.symbols.GetForegroundWindow()).toBe(foreground);
       expect(windows.getBounds(third, "outer")).toEqual(boundsBefore);
       expect(windows.isVisible(third)).toBe(true);
       expect(windows.isAlwaysOnTop(third)).toBe(false);
@@ -84,15 +85,18 @@ test.skipIf(process.platform !== "win32")(
       // Minimized windows are reordered without being restored.
       windows.minimize(first);
       windows.moveTop(first);
+      expect(isAbove(first, third)).toBe(true);
       windows.moveToBottom(first);
+      expect(isAbove(third, first)).toBe(true);
       expect(windows.isMinimized(first)).toBe(true);
 
       // Hidden windows are reordered without being shown.
       windows.show(third, false);
       windows.moveTop(third);
+      expect(isAbove(third, second)).toBe(true);
       windows.moveToBottom(third);
+      expect(isAbove(second, third)).toBe(true);
       expect(windows.isVisible(third)).toBe(false);
-      expect(created).not.toContain(user.symbols.GetForegroundWindow());
     } finally {
       for (const hwnd of created) {
         windows.destroy(hwnd);
