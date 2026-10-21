@@ -285,12 +285,17 @@ if (!process.argv.includes("--child")) {
             const menu = records.find(
               (record) => record.event === "windows.systemContextMenu",
             );
-            assert.deepEqual(menu?.payload, {
-              windowId: snapshot.windowId,
-              viewId: "main",
-              x: centerX,
-              y,
-            });
+            assert.deepEqual(
+              {
+                ...menu?.payload,
+              },
+              {
+                windowId: snapshot.windowId,
+                viewId: "main",
+                x: centerX,
+                y,
+              },
+            );
             for (const record of records) {
               assert.equal(record.payload.windowId, snapshot.windowId);
             }
