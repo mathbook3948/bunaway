@@ -5,11 +5,12 @@ import { type DeadlineName, deadline } from "../fixtures/deadlines.ts";
 
 /**
  * Generates every UI template with the packed CLI on Windows and drives it the way a developer's
- * first session does: the web build, `doctor`, the backend over the host process protocol, the web dev server
- * (templates that have one) and the web build that `bunaway build` runs before packaging. Each
- * template runs through the verification helper, so the helper and the template are exercised
- * together. A failing step does not stop the other templates; the run fails at the end and
- * `build/windows-templates-results.json`, which the native job uploads, lists every step.
+ * first session does, in this order: the web build the template configures, `doctor`, the backend
+ * over the host process protocol and the web dev server (templates that have one). Generation,
+ * `doctor` and the backend run through the verification helper; the dev server is started here so
+ * this file owns its whole process tree. A failing step does not stop the other templates; the run
+ * fails at the end and `build/windows-templates-results.json`, which the native job uploads, lists
+ * every step.
  *
  * Not covered here: the native window and WebView2 (the other native fixtures run them), HMR edits
  * and installer packaging.
@@ -30,6 +31,14 @@ const TEMPLATES = [
   "vue",
   "svelte",
 ] as const;
+/** The marker the Vite dev server puts in every page it serves. */
+const VITE_CLIENT_MARKER = 'src="/@vite/client"';
+/** Packing the framework and a cold install take several times the generic build deadline. */
+const SETUP_DEADLINE_SCALE = 3;
+/** How much of a failed step's output the report keeps. */
+const OUTPUT_TAIL_CHARS = 4_000;
+/** Pause between requests while the dev server starts. */
+const DEV_SERVER_POLL_MS = 250;
 
 type StepResult = {
   template: string;
@@ -40,11 +49,17 @@ type StepResult = {
   output?: string | undefined;
 };
 
-const results: StepResult[] = [];
-/** How much of a failed step's output the report keeps. */
-const OUTPUT_TAIL_CHARS = 4_000;
+type Outcome = {
+  ok: boolean;
+  output: string;
+};
 
-/** Ends a process and every child it started; `Subprocess.kill` alone leaves a dev server behind. */
+const results: StepResult[] = [];
+
+/**
+ * Ends a process and every child it started; `Subprocess.kill` alone leaves a dev server behind.
+ * A failed `taskkill` is logged and bounded so cleanup can never hang the run.
+ */
 async function killTree(pid: number): Promise<void> {
   const killer = Bun.spawn(
     [
@@ -59,99 +74,85 @@ async function killTree(pid: number): Promise<void> {
       stderr: "ignore",
     },
   );
-  await killer.exited;
+  const finished = await Promise.race([
+    killer.exited.then(() => true),
+    Bun.sleep(deadline("childExit")).then(() => false),
+  ]);
+  if (!finished) {
+    killer.kill();
+    console.log(`taskkill for process ${pid} did not finish`);
+  }
 }
 
 /**
- * Ends every process whose command line mentions `directory`. The helper stops the dev server it
- * starts, but `bun run dev:web` launches Vite as a child and a parent kill can leave Vite running
- * with the project's files open, which would make the project removal fail.
- */
-async function stopProcessesUnder(directory: string): Promise<void> {
-  const escaped = directory.replaceAll("'", "''");
-  const script = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('${escaped}') -and $_.ProcessId -ne ${process.pid} -and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
-  const cleanup = Bun.spawn(
-    [
-      "powershell.exe",
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      script,
-    ],
-    {
-      stdout: "ignore",
-      stderr: "ignore",
-    },
-  );
-  await cleanup.exited;
-}
-
-/**
- * Runs `command` to completion. When `limit` passes the whole process tree is killed, so a hung
- * install or dev server cannot outlive the step and hold files that `rm` needs afterwards.
+ * Runs `command` to completion within the named deadline. On timeout the whole process tree is
+ * killed and the output read so far is returned without waiting for pipes a grandchild may hold.
  */
 async function execute(
   command: string[],
   cwd: string,
   limit: DeadlineName,
   scale = 1,
-): Promise<{
-  code: number;
-  output: string;
-  timedOut: boolean;
-}> {
+): Promise<Outcome> {
   const child = Bun.spawn(command, {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
   });
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    void killTree(child.pid);
-  }, deadline(limit) * scale);
-  try {
-    const [out, err, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
+  const finished = Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  const expired = Bun.sleep(deadline(limit) * scale).then(() => undefined);
+  const settled = await Promise.race([
+    finished,
+    expired,
+  ]);
+  if (settled === undefined) {
+    await killTree(child.pid);
     return {
-      code,
-      output: `${out}\n${err}`,
-      timedOut,
+      ok: false,
+      output: `timed out after ${deadline(limit) * scale} ms`,
     };
-  } finally {
-    clearTimeout(timer);
   }
+  const [out, err, code] = settled;
+  return {
+    ok: code === 0,
+    output: `${out}\n${err}`,
+  };
 }
 
 /** Records one step of one template; the output is kept only when the step failed. */
-async function step(
+async function record(
   template: string,
   name: string,
-  command: string[],
-  cwd: string,
-  limit: DeadlineName,
-  scale = 1,
+  run: () => Promise<Outcome>,
 ): Promise<boolean> {
   const started = Date.now();
-  const { code, output, timedOut } = await execute(command, cwd, limit, scale);
-  const ok = code === 0 && !timedOut;
+  let outcome: Outcome;
+  try {
+    outcome = await run();
+  } catch (error) {
+    outcome = {
+      ok: false,
+      output:
+        error instanceof Error ? (error.stack ?? error.message) : String(error),
+    };
+  }
+  const tail = outcome.output.slice(-OUTPUT_TAIL_CHARS);
   results.push({
     template,
     step: name,
-    ok,
+    ok: outcome.ok,
     durationMs: Date.now() - started,
-    output: ok
-      ? undefined
-      : `${timedOut ? "timed out\n" : ""}${output.slice(-OUTPUT_TAIL_CHARS)}`,
+    output: outcome.ok ? undefined : tail,
   });
-  console.log(`${ok ? "PASS" : "FAIL"} ${template} ${name}`);
-  if (!ok) {
-    console.log(output.slice(-OUTPUT_TAIL_CHARS));
+  console.log(`${outcome.ok ? "PASS" : "FAIL"} ${template} ${name}`);
+  if (!outcome.ok) {
+    console.log(tail);
   }
-  return ok;
+  return outcome.ok;
 }
 
 const helperCommand = (...args: string[]) => [
@@ -160,52 +161,105 @@ const helperCommand = (...args: string[]) => [
   ...args,
 ];
 
-/** Runs the web build the template configures, the same command `bunaway build` runs first. */
-async function webBuild(template: string, app: string): Promise<boolean> {
-  const settings = JSON.parse(
-    await readFile(resolve(app, "src-bunaway/bunaway.json"), "utf8"),
-  ) as {
-    build: {
-      command?: string[];
-    };
+type Settings = {
+  build: {
+    command?: string[];
   };
-  const command = settings.build.command;
-  if (command === undefined) {
-    return true;
-  }
+  dev?: {
+    command: string[];
+  };
+};
+
+/** Replaces the `bun` program name with this run's pinned Bun, as the CLI does. */
+function pinnedBun(command: string[]): string[] {
   const [program, ...rest] = command;
-  return step(
-    template,
-    "web-build",
-    [
-      program === "bun" ? process.execPath : (program ?? ""),
-      ...rest,
-    ],
-    app,
-    "build",
-  );
+  assert(program !== undefined, "an empty command in bunaway.json");
+  return [
+    program === "bun" ? process.execPath : program,
+    ...rest,
+  ];
 }
 
-await mkdir(home, {
-  recursive: true,
-});
-const packages = resolve(home, "packages");
-const packed = await step(
-  "all",
-  "pack",
-  helperCommand("pack", packages),
-  root,
-  "packagedAudit",
-  3,
-);
-if (packed) {
-  for (const template of TEMPLATES) {
-    const app = resolve(home, template);
-    const evidence = resolve(home, `evidence-${template}`);
-    try {
-      const created = await step(
-        template,
-        "create",
+/** Runs the web build the template configures, the same command `bunaway build` runs first. */
+async function webBuild(settings: Settings, app: string): Promise<Outcome> {
+  if (settings.build.command === undefined) {
+    return {
+      ok: true,
+      output: "",
+    };
+  }
+  return execute(pinnedBun(settings.build.command), app, "build");
+}
+
+/** Reserves a free loopback port by binding and releasing it. */
+function freePort(): number {
+  const reservation = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response(""),
+  });
+  const port = reservation.port;
+  void reservation.stop(true);
+  assert(port !== undefined, "no free port");
+  return port;
+}
+
+/**
+ * Starts the template's dev server on a free port and waits for a page that carries the Vite
+ * client marker. The server's whole process tree is killed afterwards on every path.
+ */
+async function webDevServer(settings: Settings, app: string): Promise<Outcome> {
+  assert(settings.dev !== undefined, "this template has no dev server");
+  const port = freePort();
+  const url = `http://127.0.0.1:${port}/`;
+  const server = Bun.spawn(
+    [
+      ...pinnedBun(settings.dev.command),
+      "--port",
+      String(port),
+    ],
+    {
+      cwd: app,
+      stdout: "ignore",
+      stderr: "ignore",
+    },
+  );
+  try {
+    const deadlineAt = Date.now() + deadline("toolchain");
+    while (Date.now() < deadlineAt) {
+      try {
+        const response = await fetch(url);
+        const html = await response.text();
+        if (response.ok) {
+          return {
+            ok: html.includes(VITE_CLIENT_MARKER),
+            output: html,
+          };
+        }
+      } catch {
+        // The server is not listening yet; the loop is bounded by the deadline.
+      }
+      await Bun.sleep(DEV_SERVER_POLL_MS);
+    }
+    return {
+      ok: false,
+      output: `no response from ${url} within ${deadline("toolchain")} ms`,
+    };
+  } finally {
+    await killTree(server.pid);
+  }
+}
+
+/** Runs every step for one template; a failed step that later steps depend on ends the sequence. */
+async function verifyTemplate(
+  template: string,
+  packages: string,
+): Promise<void> {
+  const app = resolve(home, template);
+  const evidence = resolve(home, `evidence-${template}`);
+  try {
+    const created = await record(template, "create", () =>
+      execute(
         helperCommand(
           "create",
           app,
@@ -216,50 +270,79 @@ if (packed) {
         ),
         root,
         "packagedAudit",
-        3,
-      );
-      if (!created) {
-        continue;
-      }
-      // `doctor` runs `bunaway validate`, which needs the built frontend directory to exist.
-      await webBuild(template, app);
-      await step(
-        template,
-        "doctor",
-        helperCommand("doctor", app),
-        root,
-        "toolchain",
-      );
-      await step(
-        template,
-        "backend",
+        SETUP_DEADLINE_SCALE,
+      ),
+    );
+    if (!created) {
+      return;
+    }
+    const settings = JSON.parse(
+      await readFile(resolve(app, "src-bunaway/bunaway.json"), "utf8"),
+    ) as Settings;
+    // `doctor` runs `bunaway validate`, which needs the built frontend directory to exist.
+    const built = await record(template, "web-build", () =>
+      webBuild(settings, app),
+    );
+    if (!built) {
+      return;
+    }
+    await record(template, "doctor", () =>
+      execute(helperCommand("doctor", app), root, "build"),
+    );
+    await record(template, "backend", () =>
+      execute(
         helperCommand("backend", app, "--evidence", evidence),
         root,
-        "toolchain",
-      );
-      if (template !== "vanilla") {
-        await step(
-          template,
-          "web",
-          helperCommand("web", app, "--evidence", evidence),
-          root,
-          "toolchain",
-        );
-      }
-    } finally {
-      await stopProcessesUnder(app);
-      // A project that cannot be removed (a handle still open) is scratch space under build/, so
-      // it is reported but does not hide the step results.
+        "build",
+      ),
+    );
+    if (template !== "vanilla") {
+      await record(template, "web", () => webDevServer(settings, app));
+    }
+  } catch (error) {
+    results.push({
+      template,
+      step: "run",
+      ok: false,
+      durationMs: 0,
+      output: String(error),
+    });
+  } finally {
+    // Removal can fail while a handle is still open; that is recorded, not hidden.
+    await record(template, "remove", async () => {
       await rm(app, {
         recursive: true,
         force: true,
-      }).catch((error: unknown) => {
-        console.log(`could not remove ${app}: ${String(error)}`);
       });
-    }
+      return {
+        ok: true,
+        output: "",
+      };
+    });
   }
 }
-await writeFile(report, `${JSON.stringify(results, null, 2)}\n`);
+
+await mkdir(home, {
+  recursive: true,
+});
+try {
+  const packages = resolve(home, "packages");
+  const packed = await record("all", "pack", () =>
+    execute(
+      helperCommand("pack", packages),
+      root,
+      "packagedAudit",
+      SETUP_DEADLINE_SCALE,
+    ),
+  );
+  if (packed) {
+    for (const template of TEMPLATES) {
+      await verifyTemplate(template, packages);
+    }
+  }
+} finally {
+  await writeFile(report, `${JSON.stringify(results, null, 2)}\n`);
+}
 const failed = results.filter((result) => !result.ok);
 assert.equal(
   failed.length,
