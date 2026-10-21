@@ -2,7 +2,7 @@
 
 `plugins/storage/src/platforms/macos.ts`는 Windows와 같은 공통 어댑터(`node-storage.ts`의 `NodeStorage`)에
 macOS의 경로 문법과 덮어쓰지 않는 이름 변경을 더한 클래스다. 읽기, 쓰기, 추가, 복사, 이동, 목록, 생성,
-삭제, 재귀 삭제, 용량 계산의 열다섯 작업을 구현하며 공개 작업과 권한 계약은 Windows와 같다.
+삭제, 재귀 삭제, 용량 계산의 열여섯 작업을 구현하며 공개 작업과 권한 계약은 Windows와 같다.
 경로 제한은 앱 명령의 책임이고 플러그인은 입력 형식만 검사한다([ADR 0024](../decisions/0024-plugin-path-responsibility.md)).
 
 ## 호스트 통합
@@ -50,7 +50,7 @@ move는 `renamex_np(from, to, RENAME_EXCL)`를 호출한다. Node의 `rename`은
 
 ## 디렉터리
 
-readDirectory는 직접 자식 최대 256개를 UTF-16 순서로 정렬한다. 초과는 `INVALID_ARGUMENT`다.
+readDirectory는 직접 자식 최대 256개를 UTF-16 순서로 정렬한다. 초과는 `INVALID_ARGUMENT`다. 256개를 넘는 디렉터리는 같은 Node 어댑터의 `readDirectoryPage`가 이름 커서로 나눠 읽는다.
 종류는 목록 항목과 `lstat` 중 하나라도 링크이면 `link`이고, dangling symlink도 `link`, hardlink는 `file`이다.
 FIFO, 장치와 socket은 공개 schema로 표현할 수 없어 `UNSUPPORTED`다.
 createDirectory는 recursive 기본값 false에서 없는 부모를 `INVALID_ARGUMENT`로 거부하고, 이미 있는 디렉터리는

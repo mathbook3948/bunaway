@@ -824,6 +824,8 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   256개 상한의 목록과 삭제, 링크를 `link`로 표시하는 목록, 작업별 권한을
   [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)에 정의한다.
 - [ ] 재귀 목록과 큰 목록 pagination을 제공한다.
+  큰 목록은 `storage.readDirectoryPage`가 이름 순 커서로 나눠 읽는다.
+  [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)에 정의하며 재귀 목록은 남아 있다.
 - [x] 파일 또는 디렉터리 트리를 재귀 삭제한다.
   Windows의 `storage.removeRecursive({ path })`는 `storage.remove`와 별도 권한이며 `fs.promises.rm({ recursive: true })`로 지운다.
   트리 안의 symlink와 junction은 따라가지 않고 링크만 삭제하며, hardlink는 만난 이름만 삭제한다.

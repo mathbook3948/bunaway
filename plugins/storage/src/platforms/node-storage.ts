@@ -18,10 +18,13 @@ import { rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { BunawayError, failWithCleanup } from "@bunaway/plugin";
 import {
+  DEFAULT_DIRECTORY_PAGE_ENTRIES,
   MAX_DIRECTORY_SIZE_DEPTH,
   MAX_DIRECTORY_SIZE_ENTRIES,
   type StorageDirectoryCreate,
   type StorageDirectoryEntry,
+  type StorageDirectoryPage,
+  type StorageDirectoryPageRead,
   type StorageDirectorySize,
   type StorageInstance,
   type StorageLocation,
@@ -32,6 +35,7 @@ import { StorageFiles } from "#storage/platforms/files";
 import {
   type DirectorySizeLimits,
   listDirectory,
+  listDirectoryPage,
   sumDirectory,
 } from "#storage/platforms/node-directory";
 
@@ -314,6 +318,18 @@ export abstract class NodeStorage
   readDirectory(input: StorageLocation): StorageDirectoryEntry[] {
     const path = this.selected(input.path);
     return fsCall(() => listDirectory(path));
+  }
+
+  /** One page of a name ordered listing; the scan and paging rules are on listDirectoryPage. */
+  readDirectoryPage(input: StorageDirectoryPageRead): StorageDirectoryPage {
+    const path = this.selected(input.path);
+    return fsCall(() =>
+      listDirectoryPage(
+        path,
+        input.after,
+        input.limit ?? DEFAULT_DIRECTORY_PAGE_ENTRIES,
+      ),
+    );
   }
 
   /**

@@ -1429,6 +1429,7 @@
         "reference/host/storage-transfers": ["copyFile", "move"],
         "reference/host/storage-directories": [
           "readDirectory",
+          "readDirectoryPage",
           "createDirectory",
           "directorySize",
           "remove",
@@ -1542,6 +1543,7 @@
     "reference/host/storage-transfers": ["storage.copyFile", "storage.move"],
     "reference/host/storage-directories": [
       "storage.readDirectory",
+      "storage.readDirectoryPage",
       "storage.createDirectory",
       "storage.directorySize",
       "storage.remove",

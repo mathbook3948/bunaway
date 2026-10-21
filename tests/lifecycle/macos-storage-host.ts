@@ -149,6 +149,7 @@ try {
   assert.equal(storage?.targets.macos?.thread, "worker");
   for (const operation of [
     "storage.readDirectory",
+    "storage.readDirectoryPage",
     "storage.createDirectory",
     "storage.move",
     "storage.remove",

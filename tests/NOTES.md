@@ -953,6 +953,9 @@ junction을 디렉터리 경로로 따라가는 것, 재귀 생성, 파일 및 �
 이름별 합산, junction과 파일 symlink 미추적(만들 수 없는 러너에서는 건너뜀), 링크를 루트로 준 경우의 추종,
 항목 및 깊이 상한, 시작 전과 순회 중 취소, 순회 중 어댑터 해제, deny ACE(icacls)를 건 하위 디렉터리의
 `PERMISSION_DENIED`(icacls를 쓸 수 없는 러너에서는 건너뛰고 정리 때 ACE를 제거), 파일 및 없는 경로 거부를 확인한다.
+`windows-storage-directory-page.ts`는 실제 Windows 파일 시스템에서 대소문자와 보충 문자가 섞인 이름의
+UTF-16 순서, 페이지 크기별 커서 이어 읽기가 `readDirectory`와 같은 결과를 내는지, 256개를 넘어 `readDirectory`가
+거부하는 디렉터리를 페이지로 빠짐없이 읽는지 확인한다.
 `windows-storage-metadata.ts`는 실제 I/O Worker에서 허용된 호출의 합계와 파일 경로 거부를 확인한다.
 
 `windows-storage-long-path.ts`는 실제 Windows 파일 시스템에서 400자를 넘는 경로에 쓰기(상위 폴더 생성 포함), 읽기, 존재와 stat,

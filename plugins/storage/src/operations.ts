@@ -7,6 +7,8 @@ import {
   storageBytesWriteSchema,
   storageDirectoryCreateSchema,
   storageDirectoryEntriesSchema,
+  storageDirectoryPageReadSchema,
+  storageDirectoryPageSchema,
   storageDirectorySizeSchema,
   storageLocationSchema,
   storageMetadataSchema,
@@ -56,6 +58,12 @@ export const storageOperations = {
     input: storageLocationSchema,
     output: storageDirectoryEntriesSchema,
     handler: (input, { instance }) => instance.readDirectory(input),
+  }),
+  // A separate operation, so granting readDirectory never grants paged reads of large directories.
+  readDirectoryPage: operation({
+    input: storageDirectoryPageReadSchema,
+    output: storageDirectoryPageSchema,
+    handler: (input, { instance }) => instance.readDirectoryPage(input),
   }),
   createDirectory: operation({
     input: storageDirectoryCreateSchema,
