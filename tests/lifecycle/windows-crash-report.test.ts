@@ -21,7 +21,7 @@ function newDataRoot(): string {
   const root = join(
     localAppData,
     "bunaway",
-    `crash-report-test-${process.pid}-${crypto.randomUUID()}`,
+    `crt-${process.pid}-${dataRoots.length}`,
   );
   dataRoots.push(root);
   return root;

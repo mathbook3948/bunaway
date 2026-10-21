@@ -1,7 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
 import { test } from "bun:test";
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
 import { withWide } from "@bunaway/plugin/win32";
 
 const symbols = {
@@ -18,7 +16,6 @@ const symbols = {
 } as const;
 
 test.skipIf(process.platform !== "win32")("spike", () => {
-  const local = process.env.LOCALAPPDATA ?? "";
   const names = [
     "kernel32.dll",
     "kernelbase.dll",
@@ -47,61 +44,30 @@ test.skipIf(process.platform !== "win32")("spike", () => {
   console.log(
     `SPIKE package rc ${kernel32.symbols.GetCurrentPackageFullName(ptr(length), null)}`,
   );
-  const base = join(local, "bunaway", `spike-${process.pid}`);
-  mkdirSync(join(base, "dumps"), {
-    recursive: true,
-  });
-  const variants: [
-    string,
-    string,
-  ][] = [
-    [
-      "nested backslash",
-      `bunaway\\spike-${process.pid}\\dumps`,
-    ],
-    [
-      "nested forward slash",
-      `bunaway/spike-${process.pid}/dumps`,
-    ],
-    [
-      "nested trailing backslash",
-      `bunaway\\spike-${process.pid}\\dumps\\`,
-    ],
-    [
-      "leading backslash",
-      `\\bunaway\\spike-${process.pid}\\dumps`,
-    ],
-    [
-      "one segment missing",
-      "bunaway-spike-missing",
-    ],
-    [
-      "one segment existing",
-      "bunaway",
-    ],
-    [
-      "dot",
-      ".",
-    ],
-    [
-      "empty",
-      "",
-    ],
-    [
-      "absolute",
-      join(base, "dumps"),
-    ],
-  ];
-  for (const [label, path] of variants) {
+  for (const total of [
+    16,
+    32,
+    48,
+    60,
+    62,
+    63,
+    64,
+    65,
+    66,
+    72,
+    80,
+    100,
+    128,
+    200,
+    259,
+    300,
+  ]) {
+    const prefix = "bunaway\\";
+    const path = prefix + "a".repeat(total - prefix.length);
     const hr = withWide(path, (address) =>
       kernel32.symbols.WerRegisterAppLocalDump(address),
     );
-    console.log(`SPIKE ${label}: 0x${(hr >>> 0).toString(16)}`);
-    console.log(
-      `SPIKE unregister after ${label}: 0x${(kernel32.symbols.WerUnregisterAppLocalDump() >>> 0).toString(16)}`,
-    );
+    console.log(`SPIKE length ${path.length}: 0x${(hr >>> 0).toString(16)}`);
+    kernel32.symbols.WerUnregisterAppLocalDump();
   }
-  console.log(
-    `SPIKE null pointer: 0x${(kernel32.symbols.WerRegisterAppLocalDump(null) >>> 0).toString(16)}`,
-  );
 });
