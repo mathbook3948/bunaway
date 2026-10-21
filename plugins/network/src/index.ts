@@ -15,6 +15,8 @@ import {
  * `network.onlineChanged` reports changes of that value on Windows. `network.resolveHost` returns
  * the addresses the system resolver gives for a host name. `network.resolveProxy` returns the
  * proxies the Windows system settings select for a URL, or a direct connection.
+ * `network.download` saves a response body to a file the app already checked, `network.downloadStatus`
+ * reports its progress to the source that started it and `network.cancelDownload` stops it.
  */
 export default defineNativePlugin(
   {

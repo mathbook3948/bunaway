@@ -1,6 +1,29 @@
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
 import { MAX_HEADER_BYTES, type requestInputSchema } from "#network/contract";
+/** The response headers as pairs, failing when they exceed the count or byte limit of the contract. */
+export function responseHeaders(response: Response): [
+  string,
+  string,
+][] {
+  const headers = [
+    ...response.headers.entries(),
+  ];
+  if (
+    headers.length > 64 ||
+    headers.reduce(
+      (bytes, [name, value]) =>
+        bytes + Buffer.byteLength(name) + Buffer.byteLength(value),
+      0,
+    ) > MAX_HEADER_BYTES
+  ) {
+    throw new BunawayError({
+      code: "INTERNAL",
+      message: "Response headers exceed the limit.",
+    });
+  }
+  return headers;
+}
 /** Read a bounded, decompressed response. Redirects are returned to the app for a new access check. */
 export async function request(
   input: z.output<typeof requestInputSchema>,
@@ -20,22 +43,7 @@ export async function request(
   });
   const reader = response.body?.getReader();
   try {
-    const headers = [
-      ...response.headers.entries(),
-    ];
-    if (
-      headers.length > 64 ||
-      headers.reduce(
-        (bytes, [name, value]) =>
-          bytes + Buffer.byteLength(name) + Buffer.byteLength(value),
-        0,
-      ) > MAX_HEADER_BYTES
-    ) {
-      throw new BunawayError({
-        code: "INTERNAL",
-        message: "Response headers exceed the limit.",
-      });
-    }
+    const headers = responseHeaders(response);
     const chunks: Uint8Array[] = [];
     let bytes = 0;
     if (reader) {

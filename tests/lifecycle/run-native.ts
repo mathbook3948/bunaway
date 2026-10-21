@@ -161,6 +161,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-process-spawn.test.ts",
           "tests/lifecycle/process-run.test.ts",
           "tests/lifecycle/windows-network.test.ts",
+          "tests/lifecycle/windows-network-download.test.ts",
           "tests/lifecycle/windows-network-online.test.ts",
           "tests/lifecycle/windows-network-resolve-host.test.ts",
           "tests/lifecycle/windows-network-resolve-proxy.test.ts",

@@ -1,6 +1,11 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
+  downloadIdInputSchema,
+  downloadInputSchema,
+  downloadResultSchema,
+  downloadStatusSchema,
+  emptyResultSchema,
   exchangeInputSchema,
   exchangeResultSchema,
   onlineSchema,
@@ -13,6 +18,9 @@ import {
 } from "#network/contract";
 import {
   type initialize as initializeMacos,
+  runCancelDownload as runMacosCancelDownload,
+  runDownload as runMacosDownload,
+  runDownloadStatus as runMacosDownloadStatus,
   runExchange as runMacosExchange,
   runIsOnline as runMacosIsOnline,
   runRequest as runMacosRequest,
@@ -21,6 +29,9 @@ import {
 } from "#network/platforms/macos";
 import {
   type initialize as initializeWindows,
+  runCancelDownload as runWindowsCancelDownload,
+  runDownload as runWindowsDownload,
+  runDownloadStatus as runWindowsDownloadStatus,
   runExchange as runWindowsExchange,
   runIsOnline as runWindowsIsOnline,
   runRequest as runWindowsRequest,
@@ -39,6 +50,24 @@ export const macosOperations = {
     output: responseSchema,
     handler: (input, { instance, signal }) =>
       runMacosRequest(instance, input, signal),
+  }),
+  download: macosOperation({
+    input: downloadInputSchema,
+    output: downloadResultSchema,
+    handler: (input, { instance, source, signal }) =>
+      runMacosDownload(instance, source, input, signal),
+  }),
+  downloadStatus: macosOperation({
+    input: downloadIdInputSchema,
+    output: downloadStatusSchema,
+    handler: (input, { instance, source }) =>
+      runMacosDownloadStatus(instance, source, input),
+  }),
+  cancelDownload: macosOperation({
+    input: downloadIdInputSchema,
+    output: emptyResultSchema,
+    handler: (input, { instance, source }) =>
+      runMacosCancelDownload(instance, source, input),
   }),
   exchange: macosOperation({
     input: exchangeInputSchema,
@@ -69,6 +98,24 @@ export const windowsOperations = {
     output: responseSchema,
     handler: (input, { instance, signal }) =>
       runWindowsRequest(instance, input, signal),
+  }),
+  download: windowsOperation({
+    input: downloadInputSchema,
+    output: downloadResultSchema,
+    handler: (input, { instance, source, signal }) =>
+      runWindowsDownload(instance, source, input, signal),
+  }),
+  downloadStatus: windowsOperation({
+    input: downloadIdInputSchema,
+    output: downloadStatusSchema,
+    handler: (input, { instance, source }) =>
+      runWindowsDownloadStatus(instance, source, input),
+  }),
+  cancelDownload: windowsOperation({
+    input: downloadIdInputSchema,
+    output: emptyResultSchema,
+    handler: (input, { instance, source }) =>
+      runWindowsCancelDownload(instance, source, input),
   }),
   exchange: windowsOperation({
     input: exchangeInputSchema,

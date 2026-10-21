@@ -1,11 +1,15 @@
 import type { NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
-import type {
-  exchangeInputSchema,
-  requestInputSchema,
-  resolveHostInputSchema,
+import {
+  type downloadIdInputSchema,
+  type downloadInputSchema,
+  type exchangeInputSchema,
+  MAX_ACTIVE_DOWNLOADS,
+  type requestInputSchema,
+  type resolveHostInputSchema,
 } from "#network/contract";
+import { type DownloadEntry, download } from "#network/platforms/download";
 import { request } from "#network/platforms/http";
 import {
   hasActiveConnection,
@@ -24,6 +28,8 @@ const MAX_ACTIVE_REQUESTS = 16;
 type RequestInput = z.output<typeof requestInputSchema>;
 type ExchangeInput = z.output<typeof exchangeInputSchema>;
 type ResolveHostInput = z.output<typeof resolveHostInputSchema>;
+type DownloadInput = z.output<typeof downloadInputSchema>;
+type DownloadIdInput = z.output<typeof downloadIdInputSchema>;
 
 /**
  * Own cancellable requests on the selected host thread. Hosts with system event services also
@@ -41,6 +47,8 @@ export function initialize(
     active: new Map<AbortController, Promise<unknown>>(),
     /** Started host lookups, including ones whose caller already left; getaddrinfo cannot be interrupted. */
     lookups: new Set<Promise<unknown>>(),
+    /** Running downloads by the id their caller chose; an entry exists until its temporary file is gone. */
+    downloads: new Map<string, DownloadEntry>(),
     disposed: false,
     stopOnlineWatch: systemEvents
       ? watchOnline({
@@ -193,6 +201,150 @@ export function runResolveHost(
   });
 }
 
+function requireOpen(state: ReturnType<typeof initialize>) {
+  if (state.disposed) {
+    throw new BunawayError({
+      code: "CANCELLED",
+      message: "Network adapter is disposed.",
+    });
+  }
+}
+
+/** A download belongs to the source that started it; another source sees the same error as for an unknown id. */
+function findDownload(
+  state: ReturnType<typeof initialize>,
+  source: string,
+  downloadId: string,
+) {
+  const entry = state.downloads.get(downloadId);
+  return entry?.source === source ? entry : undefined;
+}
+
+/**
+ * Save a response body to a file under its own limits: at most four at once, a whole-download
+ * deadline and a limit on the silence between body chunks. The call returns when the file is in
+ * place or the download has failed and its temporary file is gone.
+ */
+export async function runDownload(
+  state: ReturnType<typeof initialize>,
+  source: string,
+  input: DownloadInput,
+  requestSignal?: AbortSignal,
+) {
+  requireOpen(state);
+  if (state.downloads.size >= MAX_ACTIVE_DOWNLOADS) {
+    throw new BunawayError({
+      code: "BUSY",
+      message: "Too many downloads.",
+    });
+  }
+  if (state.downloads.has(input.downloadId)) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "The download id is already in use.",
+    });
+  }
+  requestSignal?.throwIfAborted();
+  const controller = new AbortController();
+  const signal = AbortSignal.any([
+    controller.signal,
+    ...(requestSignal
+      ? [
+          requestSignal,
+        ]
+      : []),
+  ]);
+  const timeout = (message: string) => () =>
+    controller.abort(
+      new BunawayError({
+        code: "TIMEOUT",
+        message,
+      }),
+    );
+  const deadline = setTimeout(timeout("Download timed out."), input.timeoutMs);
+  let idle = setTimeout(timeout("Download stalled."), input.idleTimeoutMs);
+  const entry: DownloadEntry = {
+    source,
+    controller,
+    task: Promise.resolve(),
+    receivedBytes: 0,
+    totalBytes: null,
+  };
+  const touch = () => {
+    clearTimeout(idle);
+    idle = setTimeout(timeout("Download stalled."), input.idleTimeoutMs);
+  };
+  const task = (async () => {
+    try {
+      return await download(input, signal, entry, touch);
+    } catch (error) {
+      if (signal.aborted) {
+        throw signal.reason instanceof BunawayError
+          ? signal.reason
+          : new BunawayError({
+              code: "CANCELLED",
+              message: "Download was cancelled.",
+            });
+      }
+      if (error instanceof BunawayError) {
+        throw error;
+      }
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Download failed.",
+      });
+    } finally {
+      clearTimeout(deadline);
+      clearTimeout(idle);
+      state.downloads.delete(input.downloadId);
+    }
+  })();
+  entry.task = task;
+  state.downloads.set(input.downloadId, entry);
+  return task;
+}
+
+/** Bytes received so far by a running download of the same source. */
+export function runDownloadStatus(
+  state: ReturnType<typeof initialize>,
+  source: string,
+  { downloadId }: DownloadIdInput,
+) {
+  requireOpen(state);
+  const entry = findDownload(state, source, downloadId);
+  if (!entry) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Unknown download.",
+    });
+  }
+  return {
+    receivedBytes: entry.receivedBytes,
+    totalBytes: entry.totalBytes,
+  };
+}
+
+/** Stop a download of the same source and wait until its temporary file is removed; unknown or finished ids succeed. */
+export async function runCancelDownload(
+  state: ReturnType<typeof initialize>,
+  source: string,
+  { downloadId }: DownloadIdInput,
+) {
+  const entry = findDownload(state, source, downloadId);
+  if (entry) {
+    entry.controller.abort(
+      new BunawayError({
+        code: "CANCELLED",
+        message: "Download was cancelled.",
+      }),
+    );
+    await Promise.allSettled([
+      entry.task,
+    ]);
+  }
+  return {};
+}
+
 /** Cancel and drain all in-flight work; repeated cleanup is safe. */
 export async function dispose(state: ReturnType<typeof initialize>) {
   if (!state.disposed) {
@@ -207,5 +359,18 @@ export async function dispose(state: ReturnType<typeof initialize>) {
       );
     }
   }
-  await Promise.allSettled(state.active.values());
+  for (const entry of state.downloads.values()) {
+    entry.controller.abort(
+      new BunawayError({
+        code: "CANCELLED",
+        message: "Network adapter is disposed.",
+      }),
+    );
+  }
+  await Promise.allSettled([
+    ...state.active.values(),
+    ...[
+      ...state.downloads.values(),
+    ].map((entry) => entry.task),
+  ]);
 }

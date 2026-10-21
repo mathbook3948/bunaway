@@ -11,7 +11,7 @@ sidebar: { order: 8 }
 
 ## 권한과 앱의 URL 규칙
 
-`network.request`, `network.exchange`, `network.isOnline`, `network.resolveHost`와 `network.resolveProxy`는 각각 독립 Host 권한입니다. 권한은 작업 호출을
+`network.request`, `network.exchange`, `network.isOnline`, `network.resolveHost`, `network.resolveProxy`, `network.download`, `network.downloadStatus`와 `network.cancelDownload`는 각각 독립 Host 권한입니다. 권한은 작업 호출을
 허용하고 대상 URL은 앱 명령이 검사합니다. 이 API는 Bun 네트워크 요청이므로 브라우저의
 CORS 제한을 적용하지 않습니다. 승인한 Origin 목록은 앱이 작성하며 임의 Origin header는
 입력으로 받지 않습니다. 뷰의 명령과 Host 권한을 통해 호출 가능한 출처를 제한합니다.
@@ -98,7 +98,7 @@ async function readChunks(url: string, signal: AbortSignal) {
 ```
 
 직접 stream은 플러그인의 64 KiB 상한을 적용하지 않습니다. 앱이 대상 접근 규칙, 읽기 상한,
-저장 위치와 취소를 소유합니다. 정책을 중재하는 공개 stream API는 후속 작업입니다.
+저장 위치와 취소를 소유합니다. 응답 본문을 파일로 저장하는 정책 중재 경로는 아래 `network.download`입니다.
 
 ## WebSocket 교환
 
@@ -207,6 +207,54 @@ Chromium의 자체 DNS 클라이언트와 DNS-over-HTTPS 설정은 사용하지 
 이 조회는 프록시를 거치지 않으므로 프록시 뒤 환경에서 `network.request`가 접속하는 주소와
 다를 수 있습니다. 프록시 경로는 아래 `network.resolveProxy`로 조회합니다.
 
+## 파일 다운로드
+
+```ts
+const downloadId = crypto.randomUUID();
+// 앱 명령이 url과 path를 먼저 검사합니다.
+const saved = network.download({
+  downloadId,
+  url: "https://downloads.example.com/data.bin",
+  path: "C:\\Users\\me\\Downloads\\data.bin",
+  maxBytes: 512 * 1024 * 1024,
+});
+const { receivedBytes, totalBytes } = await network.downloadStatus({ downloadId });
+await network.cancelDownload({ downloadId });
+const { status, saved: written, bytesWritten } = await saved;
+```
+
+`network.download`는 `network.request`의 64 KiB 본문 한도 없이 응답 본문을 메모리에 모으지 않고 앱이 정한 파일로
+흘려 씁니다. Electron `session.downloadURL`과 `will-download`, Tauri `upload` 플러그인의 `download`에 대응하지만
+진행률은 이벤트로 방송하지 않고 시작한 쪽이 `network.downloadStatus`로 읽습니다. 이벤트는 같은 앱의 모든 화면에
+전달되므로 다운로드 ID와 바이트 수가 다른 화면에 퍼지고, 이를 막으려면 화면에 파일 쓰기 권한을 줘야 합니다. 화면에 보여줄
+때는 앱 명령이 status를 읽어 자기 이벤트를 특정 화면으로 보냅니다. 독립 Host 권한 `network.download`,
+`network.downloadStatus`와 `network.cancelDownload`가 필요합니다.
+
+- 입력은 `downloadId`(호출자가 만드는 UUID), `url`(사용자 정보와 fragment가 없는 `http:`/`https:` 절대 URL), `path`, `headers`,
+  `maxBytes`(필수, 1부터 4 GiB), `timeoutMs`(전체 기한, 기본 10분, 최대 1시간), `idleTimeoutMs`(본문 조각 사이의 무응답 한도,
+  기본 30초, 최대 5분), `overwrite`(기본 `false`)입니다. 메서드는 GET뿐이고 header 규칙은 `network.request`와 같습니다.
+  서버가 본문을 압축하지 않도록 `Accept-Encoding: identity`를 보내므로 `totalBytes`는 저장될 파일 크기입니다.
+- 경로 접근 규칙은 앱이 정합니다. 플러그인은 storage 범위와 연동하지 않고 앱 명령이 검사한 절대 경로만 받습니다.
+  Windows에서는 드라이브 또는 UNC 경로이며 각 이름이 파일 이름 규칙(예약 장치 이름, 금지 문자, 끝의 점과 공백)을 지켜야 하고
+  `\\?\`와 `\\.\` 접두사는 거부합니다. 그 밖의 시스템에서는 `.`와 `..` 요소가 없는 절대 경로입니다. 상위 폴더는
+  만들지 않으며 없으면 요청 전에 `INVALID_ARGUMENT`입니다. 심볼릭 링크와 junction은 따라갑니다.
+- 대상이 이미 있으면 `overwrite`가 `false`일 때 `INVALID_ARGUMENT`이고, 폴더는 `overwrite`여도 같습니다.
+  `overwrite`가 `false`이면 하드 링크로 배치해 기존 파일을 절대 바꾸지 않으며 링크를 지원하지 않는 파일 시스템에서만
+  존재를 확인한 뒤 이름을 바꿉니다.
+- 본문은 `<경로>.<ID 앞 8자>.part`에 쓰고 전부 받은 뒤에만 대상으로 옮깁니다. 실패, 취소, 기한 초과와 어댑터 정리는 임시 파일을
+  삭제합니다. 백신 등이 파일을 잡고 있으면 3번 다시 시도하고, 그래도 지우지 못하면 로그만 남기며 호출자에게는 원래 오류를 돌려줍니다.
+- 2xx 응답만 저장하며 결과는 `{ status, headers, saved: true, bytesWritten }`입니다. 3xx를 포함한 다른 상태는 파일을 만들지 않고
+  `saved: false`로 돌려주고 redirect는 따라가지 않으므로 새 대상은 앱이 다시 검사합니다. 알려진 길이나 받은 크기가 `maxBytes`를 넘으면
+  `INTERNAL`이며 길이를 먼저 알면 파일을 만들기 전에 실패합니다.
+- `network.downloadStatus`는 실행 중인 다운로드의 `{ receivedBytes, totalBytes }`를 돌려주며 길이를 모르면 `totalBytes`는
+  `null`입니다. 다운로드는 시작한 호출 출처(source)에만 보입니다. 다른 출처나 끝난 ID는 `INVALID_ARGUMENT`입니다.
+- `network.cancelDownload`는 임시 파일을 지울 때까지 기다린 뒤 `{}`를 돌려주고 호출 중인 `network.download`는 `CANCELLED`로
+  끝납니다. 없는 ID나 이미 끝난 ID도 성공입니다. 앱 명령은 30초 안에 끝나야 하므로 그보다 오래 걸리는 다운로드는 setup에서
+  받은 backend 실행 컨텍스트에서 시작합니다. 호출의 `signal`로도 취소할 수 있습니다.
+- 동시 다운로드는 최대 4개이며 다른 요청의 16개 한도와 따로 셉니다. 초과는 `BUSY`이고 사용 중인 ID를 다시 쓰면
+  `INVALID_ARGUMENT`입니다. 디스크가 가득 찬 경우와 쓰기 권한이 없는 경우는 `INTERNAL`입니다.
+- 로컬 서버로 확인한 결과만 보장합니다. 느린 회선이나 대용량 전송 시간은 측정하지 않았습니다.
+
 ## 프록시 경로 조회
 
 ```ts
@@ -255,7 +303,7 @@ macOS에서는 `UNSUPPORTED`입니다. Electron `session.resolveProxy(url)`에 �
 
 ## 취소, 정리와 오류
 
-한 어댑터에서 HTTP, WebSocket과 호스트 이름 조회를 합쳐 최대 16개까지 실행합니다. 초과하면 `BUSY`입니다.
+한 어댑터에서 HTTP, WebSocket과 호스트 이름 조회를 합쳐 최대 16개까지 실행합니다. 초과하면 `BUSY`입니다. 파일 다운로드는 이와 따로 4개까지입니다.
 화면 함수의 마지막 인자는 `NativeInvokeOptions`입니다. `signal`과 `deadline`은
 [invoke](/reference/client/invoke/)를 따릅니다. 백엔드는 명령의 취소와 기한을 이어받습니다.
 취소, 컨텍스트 폐기나 앱 종료는 HTTP 읽기를 중단하고 WebSocket을 terminate합니다.

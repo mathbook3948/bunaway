@@ -1,6 +1,6 @@
 # Bounded network plugin
 
-Register `network` to use `network.request`, `network.exchange`, `network.isOnline` and `network.resolveHost` on Windows and macOS, and `network.resolveProxy` on Windows.
+Register `network` to use `network.request`, `network.exchange`, `network.isOnline`, `network.resolveHost`, `network.download`, `network.downloadStatus` and `network.cancelDownload` on Windows and macOS, and `network.resolveProxy` on Windows.
 Each operation has an independent permission. Applications own URL access rules in backend commands;
 operation grants do not contain resource allowlists. Trusted backend code can use Bun fetch and WebSocket directly.
 See the [public contract](../../docs/site/src/content/docs/reference/plugins/network.mdx) for limits and access-rule examples.
@@ -39,3 +39,13 @@ client cancellation, continued UI responses and shutdown with requests in flight
 `tests/cli/network.test.ts` installs the packed plugin with isolated dependencies and checks both
 native exports and exclusion of Bun network implementation from the browser bundle.
 These checks do not validate external proxies, OS authentication, TLS certificates or manual network setups.
+
+`network.download` saves a 2xx response body to a file the app already checked and returns `{ status, headers, saved, bytesWritten }`
+without holding the body in memory. It corresponds to Electron's `session.downloadURL()` and Tauri's upload plugin `download`.
+`downloadId` (a UUID the caller picks), `url`, an absolute `path` and `maxBytes` (required, at most 4 GiB) are needed; `timeoutMs` (default 10 minutes,
+at most 1 hour), `idleTimeoutMs` (default 30 seconds, at most 5 minutes) and `overwrite` (default false) are optional. The body goes to
+`<path>.<id prefix>.part` and replaces the target only when it is complete; failure, cancellation, the deadline and disposal remove the temporary file.
+An existing target is refused unless `overwrite` is set, and a missing parent folder fails before the request. Any status other than 2xx, redirects
+included, is returned with `saved: false` and no file. The plugin does not tie the path to a storage scope; the app checks it. Progress is read with
+`network.downloadStatus({ downloadId })` (`{ receivedBytes, totalBytes | null }`, visible to the source that started the download only) instead of a
+broadcast event, and `network.cancelDownload({ downloadId })` stops the transfer; both succeed or fail like a process handle's operations. At most four downloads run at once.

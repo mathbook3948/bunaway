@@ -14,6 +14,9 @@ import {
 } from "#network/platforms/shared";
 
 export {
+  runCancelDownload,
+  runDownload,
+  runDownloadStatus,
   runExchange,
   runIsOnline,
   runRequest,

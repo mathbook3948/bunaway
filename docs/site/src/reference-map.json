@@ -1492,7 +1492,10 @@
       "network.exchange",
       "network.isOnline",
       "network.resolveHost",
-      "network.resolveProxy"
+      "network.resolveProxy",
+      "network.download",
+      "network.downloadStatus",
+      "network.cancelDownload"
     ],
     "reference/plugins/process": [
       "process.run",
