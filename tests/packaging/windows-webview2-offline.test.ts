@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +16,7 @@ import {
   renderInnoScript,
 } from "#packaging/channels/windows/inno";
 import { readPeMachine } from "#packaging/channels/windows/webview2-offline";
+import { deadline } from "../fixtures/deadlines.ts";
 
 const base: InnoOptions = {
   name: "Offline fixture",
@@ -37,6 +38,8 @@ const base: InnoOptions = {
   assetPaths: [],
   executableName: "App.exe",
 };
+
+setDefaultTimeout(deadline("build"));
 
 const AMD64 = 0x8664;
 const ARM64 = 0xaa64;
@@ -107,6 +110,9 @@ test("webView2 offline settings reject unknown keys, escaping paths and the Stor
     }),
     offlineConfig({
       x64: "/absolute.exe",
+    }),
+    offlineConfig({
+      x64: "C:drive-relative.exe",
     }),
     offlineConfig({
       x64: "",
@@ -336,36 +342,32 @@ test.skipIf(process.platform !== "win32")(
 
 const iscc = process.platform === "win32" ? await findIscc() : undefined;
 
-test.skipIf(!iscc)(
-  "Inno compiles the offline installer script",
-  async () => {
-    const root = await realpath(
-      await mkdtemp(join(tmpdir(), "bunaway-inno-offline-")),
-    );
-    try {
-      await Bun.write(join(root, "app", "App.exe"), "runtime fixture");
-      await Bun.write(join(root, "runtime.exe"), peHeader(AMD64));
-      await mkdir(join(root, "installer"));
-      const ctx: StageContext = {
-        input: {} as AdapterInput,
-        staging: root,
-        report() {},
-        addArtifact() {},
-      };
-      const script = renderInnoScript({
-        ...base,
-        payloadDir: join(root, "app"),
-        outputDir: join(root, "installer"),
-        offlineInstallerPath: join(root, "runtime.exe"),
-      });
-      const installer = await compileInno(ctx, script, root, "setup");
-      expect(Bun.file(installer).size).toBeGreaterThan(0);
-    } finally {
-      await rm(root, {
-        recursive: true,
-        force: true,
-      });
-    }
-  },
-  30000,
-);
+test.skipIf(!iscc)("Inno compiles the offline installer script", async () => {
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "bunaway-inno-offline-")),
+  );
+  try {
+    await Bun.write(join(root, "app", "App.exe"), "runtime fixture");
+    await Bun.write(join(root, "runtime.exe"), peHeader(AMD64));
+    await mkdir(join(root, "installer"));
+    const ctx: StageContext = {
+      input: {} as AdapterInput,
+      staging: root,
+      report() {},
+      addArtifact() {},
+    };
+    const script = renderInnoScript({
+      ...base,
+      payloadDir: join(root, "app"),
+      outputDir: join(root, "installer"),
+      offlineInstallerPath: join(root, "runtime.exe"),
+    });
+    const installer = await compileInno(ctx, script, root, "setup");
+    expect(Bun.file(installer).size).toBeGreaterThan(0);
+  } finally {
+    await rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+});

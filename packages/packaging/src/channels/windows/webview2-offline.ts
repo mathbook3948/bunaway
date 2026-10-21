@@ -1,5 +1,5 @@
-import { copyFile, mkdir, open } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { copyFile, mkdir, open, realpath } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { StageContext } from "../../contract.ts";
 import { findWindowsKitTool, must } from "./common.ts";
 
@@ -15,6 +15,9 @@ const PE_MACHINE: Record<TargetArch, number> = {
   x64: 0x8664,
   arm64: 0xaa64,
 };
+
+/** PE `Machine` of 32-bit x86 files; Microsoft's Edge Update based installers can be x86 for every target. */
+const PE_MACHINE_X86 = 0x14c;
 
 /** The PE headers sit inside this prefix of the file. */
 const PE_HEADER_READ_BYTES = 4096;
@@ -67,7 +70,9 @@ async function requireArchitecture(
   if (machine === undefined) {
     throw new Error(`${path} is not a Windows executable.`);
   }
-  if (machine !== PE_MACHINE[arch]) {
+  // An x86 installer runs on both x64 and arm64 Windows, so it is accepted for
+  // either target; any other machine must match the target.
+  if (machine !== PE_MACHINE[arch] && machine !== PE_MACHINE_X86) {
     throw new Error(
       `${path} was built for another architecture (machine 0x${machine.toString(16)}); the ${arch} target needs the ${arch} Standalone Installer.`,
     );
@@ -114,6 +119,20 @@ try { $certificate.GetNameInfo('SimpleName', $false) } finally { $certificate.Di
   }
 }
 
+/** The configured installer path for the target architecture; throws when the app set none. */
+export function requireInstallerPath(
+  installers: Partial<Record<TargetArch, string>>,
+  arch: TargetArch,
+): string {
+  const configured = installers[arch];
+  if (!configured) {
+    throw new Error(
+      `webView2.installers.${arch} is not set; the ${arch} target needs a Standalone Installer.`,
+    );
+  }
+  return configured;
+}
+
 /**
  * Validates the app-supplied Standalone Installer for the build target and
  * copies it into staging, returning the staged path the installer embeds.
@@ -125,18 +144,25 @@ export async function stageOfflineInstaller(
   installers: Partial<Record<TargetArch, string>>,
   arch: TargetArch,
 ): Promise<string> {
-  const configured = installers[arch];
-  if (!configured) {
-    throw new Error(
-      `webView2.installers.${arch} is not set; the ${arch} target needs a Standalone Installer.`,
-    );
-  }
-  const source = resolve(ctx.input.metadata.root, configured);
+  const configured = requireInstallerPath(installers, arch);
+  const root = await realpath(ctx.input.metadata.root);
+  const source = resolve(root, configured);
   const file = Bun.file(source);
   if (!(await file.exists()) || file.size === 0) {
     throw new Error(`WebView2 Standalone Installer not found: ${source}.`);
   }
-  await requireArchitecture(source, arch);
+  // Links and junctions must not lead out of the project.
+  const real = await realpath(source);
+  const fromRoot = relative(root, real);
+  if (
+    fromRoot === ".." ||
+    fromRoot.startsWith(`..${sep}`) ||
+    isAbsolute(fromRoot)
+  ) {
+    throw new Error(
+      `WebView2 Standalone Installer ${source} resolves outside the project.`,
+    );
+  }
   const dest = join(
     ctx.staging,
     "webview2",
@@ -145,8 +171,9 @@ export async function stageOfflineInstaller(
   await mkdir(dirname(dest), {
     recursive: true,
   });
-  // Verify the staged copy so the checked bytes are the embedded bytes.
-  await copyFile(source, dest);
+  // Check the staged copy so the verified bytes are the embedded bytes.
+  await copyFile(real, dest);
+  await requireArchitecture(dest, arch);
   await requireMicrosoftSignature(dest);
   return dest;
 }

@@ -5,7 +5,10 @@ import { copyPayload } from "./common.ts";
 import { compileInno, type InnoOptions, renderInnoScript } from "./inno.ts";
 import { recordPackagedHashes } from "./manifest.ts";
 import { signFiles, verifySignatures } from "./sign.ts";
-import { stageOfflineInstaller } from "./webview2-offline.ts";
+import {
+  requireInstallerPath,
+  stageOfflineInstaller,
+} from "./webview2-offline.ts";
 
 // Shared Inno-based installer pipeline used by win-direct and
 // win-store-unpackaged. Install/update/uninstall semantics live in the
@@ -22,6 +25,11 @@ interface InstallerOptions {
   // Channels that may bootstrap default to it; the store channel defaults to
   // check so it doesn't warn on every run.
   defaultWebView2: "check" | "bootstrap";
+}
+
+/** The architecture half of a build target such as `windows-x64`. */
+function targetArch(target: string): "x64" | "arm64" {
+  return target.endsWith("-arm64") ? "arm64" : "x64";
 }
 
 /**
@@ -60,6 +68,13 @@ export function installerStages(
       id: "stage",
       title: "Copy build artifact into staging",
       async run(ctx) {
+        if (typeof configuredWebView2 === "object") {
+          // Fail before signing anything when the target has no installer.
+          requireInstallerPath(
+            configuredWebView2.installers,
+            targetArch(ctx.input.target),
+          );
+        }
         const payloadDir = join(ctx.staging, "app");
         await copyPayload(input.artifact.packageDir, payloadDir);
         state.payloadDir = payloadDir;
@@ -128,7 +143,7 @@ export function installerStages(
               "Embedded WebView2 runtime installers are not accepted for this channel.",
             );
           }
-          const arch = ctx.input.target.endsWith("-arm64") ? "arm64" : "x64";
+          const arch = targetArch(ctx.input.target);
           state.offlineInstallerPath = await stageOfflineInstaller(
             ctx,
             configuredWebView2.installers,

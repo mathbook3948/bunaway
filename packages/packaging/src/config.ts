@@ -431,10 +431,7 @@ function readChannelSigning(
 /** A nonempty path that is relative to the project root and never climbs out of it. */
 function projectRelativePath(value: unknown, what: string): string {
   const path = nonempty(value, what);
-  if (
-    /^(?:[A-Za-z]:[\\/]|[\\/])/.test(path) ||
-    path.split(/[\\/]/).includes("..")
-  ) {
+  if (/^(?:[A-Za-z]:|[\\/])/.test(path) || path.split(/[\\/]/).includes("..")) {
     fail(`bunaway.json.bundle: ${what} must be project-relative without '..'.`);
   }
   return path;
