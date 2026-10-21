@@ -7,6 +7,7 @@ import {
   PACKAGING_CHANNELS,
   type ResolvedTarget,
   type SigningConfig,
+  type WebView2Config,
 } from "./contract.ts";
 import { parseAssociations } from "./windows-associations.ts";
 
@@ -311,16 +312,7 @@ function parseIcons(value: unknown): NonNullable<PackagingConfig["icons"]> {
   );
   const result: NonNullable<PackagingConfig["icons"]> = {};
   if (icons.directory !== undefined) {
-    const directory = nonempty(icons.directory, "icons.directory");
-    if (
-      /^(?:[A-Za-z]:[\\/]|[\\/])/.test(directory) ||
-      directory.split(/[\\/]/).includes("..")
-    ) {
-      fail(
-        "bunaway.json.bundle: icons.directory must be project-relative without '..'.",
-      );
-    }
-    result.directory = directory;
+    result.directory = projectRelativePath(icons.directory, "icons.directory");
   }
   for (const [platform, allowed] of [
     [
@@ -436,26 +428,91 @@ function readChannelSigning(
   }
 }
 
+/** A nonempty path that is relative to the project root and never climbs out of it. */
+function projectRelativePath(value: unknown, what: string): string {
+  const path = nonempty(value, what);
+  if (
+    /^(?:[A-Za-z]:[\\/]|[\\/])/.test(path) ||
+    path.split(/[\\/]/).includes("..")
+  ) {
+    fail(`bunaway.json.bundle: ${what} must be project-relative without '..'.`);
+  }
+  return path;
+}
+
+/** The object form `{ mode: "offline", installers }`; paths are checked here, files at build time. */
+function parseOfflineWebView2(value: unknown, what: string): WebView2Config {
+  const object = record(value, what);
+  keys(
+    object,
+    [
+      "mode",
+      "installers",
+    ],
+    what,
+  );
+  if (object.mode !== "offline") {
+    fail(`bunaway.json.bundle: ${what}.mode must be "offline".`);
+  }
+  const installers = record(object.installers, `${what}.installers`);
+  keys(
+    installers,
+    [
+      "x64",
+      "arm64",
+    ],
+    `${what}.installers`,
+  );
+  const paths: Partial<Record<"x64" | "arm64", string>> = {};
+  for (const arch of [
+    "x64",
+    "arm64",
+  ] as const) {
+    if (installers[arch] !== undefined) {
+      paths[arch] = projectRelativePath(
+        installers[arch],
+        `${what}.installers.${arch}`,
+      );
+    }
+  }
+  if (Object.keys(paths).length === 0) {
+    fail(
+      `bunaway.json.bundle: ${what}.installers needs at least one of x64 or arm64.`,
+    );
+  }
+  return {
+    mode: "offline",
+    installers: paths,
+  };
+}
+
 function readWebView2(
   channel: ChannelId,
   options: Record<string, unknown>,
   channelPath: string,
   channelConfig: ChannelConfig,
 ): void {
+  const what = `${channelPath}.webView2`;
   if (options.webView2 !== undefined) {
-    if (options.webView2 !== "check" && options.webView2 !== "bootstrap") {
+    if (options.webView2 === "check" || options.webView2 === "bootstrap") {
+      channelConfig.webView2 = options.webView2;
+    } else if (isRecord(options.webView2)) {
+      channelConfig.webView2 = parseOfflineWebView2(options.webView2, what);
+    } else {
       fail(
-        `bunaway.json.bundle: ${channelPath}.webView2 must be "check" or "bootstrap".`,
+        `bunaway.json.bundle: ${what} must be "check", "bootstrap" or { "mode": "offline", "installers": { ... } }.`,
       );
     }
-    channelConfig.webView2 = options.webView2;
   }
   if (
-    channel === "win-store-unpackaged" &&
-    channelConfig.webView2 === "bootstrap"
+    channel !== "win-store-unpackaged" ||
+    channelConfig.webView2 === undefined
   ) {
+    return;
+  }
+  if (channelConfig.webView2 !== "check") {
     fail(
-      'bunaway.json.bundle: channels.win-store-unpackaged.webView2 must be "check"; the Store EXE/MSI requirements forbid installer-time downloads.',
+      'bunaway.json.bundle: channels.win-store-unpackaged.webView2 must be "check"; Store EXE/MSI submissions forbid installer-time downloads and embedded runtime installers are not accepted for this channel.',
     );
   }
 }

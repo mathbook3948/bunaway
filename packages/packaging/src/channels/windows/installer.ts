@@ -5,6 +5,7 @@ import { copyPayload } from "./common.ts";
 import { compileInno, type InnoOptions, renderInnoScript } from "./inno.ts";
 import { recordPackagedHashes } from "./manifest.ts";
 import { signFiles, verifySignatures } from "./sign.ts";
+import { stageOfflineInstaller } from "./webview2-offline.ts";
 
 // Shared Inno-based installer pipeline used by win-direct and
 // win-store-unpackaged. Install/update/uninstall semantics live in the
@@ -33,7 +34,10 @@ export function installerStages(
 ): AdapterStage[] {
   const config = input.channelConfig;
   const scope = config.scope ?? "perUser";
-  let webView2 = config.webView2 ?? options.defaultWebView2;
+  const configuredWebView2 = config.webView2 ?? options.defaultWebView2;
+  // The offline object form is resolved into a mode plus a staged installer path.
+  let webView2: "check" | "bootstrap" | "offline" =
+    typeof configuredWebView2 === "string" ? configuredWebView2 : "offline";
   const desktopShortcut = config.desktopShortcut ?? false;
   const startMenuShortcut = config.startMenuShortcut ?? true;
   const preserveUserData = config.uninstall?.preserveUserData ?? true;
@@ -45,6 +49,7 @@ export function installerStages(
   const state: {
     payloadDir?: string;
     bootstrapperPath?: string;
+    offlineInstallerPath?: string;
     installer?: string;
   } = {};
 
@@ -117,6 +122,25 @@ export function installerStages(
           });
           webView2 = "check";
         }
+        if (typeof configuredWebView2 === "object") {
+          if (!options.allowWebView2Bootstrap) {
+            throw new Error(
+              "Embedded WebView2 runtime installers are not accepted for this channel.",
+            );
+          }
+          const arch = ctx.input.target.endsWith("-arm64") ? "arm64" : "x64";
+          state.offlineInstallerPath = await stageOfflineInstaller(
+            ctx,
+            configuredWebView2.installers,
+            arch,
+          );
+          ctx.report({
+            code: CODES.TOOL_FAILED,
+            severity: "info",
+            message: `Embedded the Microsoft-signed WebView2 Standalone Installer for ${arch}.`,
+          });
+          return;
+        }
         if (webView2 !== "bootstrap") {
           return;
         }
@@ -182,6 +206,11 @@ export function installerStages(
               }
             : {}),
           webView2,
+          ...(state.offlineInstallerPath
+            ? {
+                offlineInstallerPath: state.offlineInstallerPath,
+              }
+            : {}),
           appDataDir: `{localappdata}\\bunaway\\${input.manifest.app.id}`,
           preserveUserData,
           assetPaths: Object.keys(input.manifest.assets),

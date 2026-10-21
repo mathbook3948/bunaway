@@ -1004,7 +1004,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
   탐색하지 않는다. [설치 채널 계약](../packages/packaging/README.md)을 따른다.
 - [ ] 설치 위치 변경에 따른 이전 설치 정리와 바로가기 갱신, 파일 연결과 URL scheme 유지를 제공한다.
 - [ ] 서명된 compiled EXE 앱의 설치, 덮어쓰기 업데이트와 제거를 검증한다.
-- [ ] WebView2 없는 PC의 설치, offline 배포와 최소 runtime 버전을 처리한다.
+- [ ] WebView2 없는 PC의 설치, offline 배포와 최소 runtime 버전을 처리한다. (`win-direct`의 `webView2` offline 모드로 Standalone Installer 임베드와 빌드 시 서명 검증은 구현됨. 최소 runtime 버전과 Store 채널 허용은 남음.)
 - [ ] MSIX 활성화와 안전한 런타임 시작 경로를 구현하고 검증한다.
 - [ ] 업데이트 endpoint, channel, target와 architecture를 지정한다.
 - [ ] 현재 버전과 최신 버전 비교, release notes와 업데이트 유무를 조회한다.

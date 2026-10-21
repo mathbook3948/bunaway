@@ -41,11 +41,15 @@ export interface InnoOptions {
   desktopShortcut: boolean;
   startMenuShortcut: boolean;
   autostart?: boolean;
-  webView2: "check" | "bootstrap";
+  webView2: "check" | "bootstrap" | "offline";
   // Absolute path to Microsoft's Evergreen bootstrapper; only valid for
   // webView2="bootstrap". Store EXE/MSI submissions must be standalone and
   // never download at install time.
   bootstrapperPath?: string;
+  // Absolute path to the Microsoft-signed Evergreen Standalone Installer;
+  // only valid for webView2="offline". The installer embeds it so the runtime
+  // installs without a network connection.
+  offlineInstallerPath?: string;
   // Absolute data root the host writes to; kept on uninstall unless the
   // channel config opts out (uninstall.preserveUserData=false).
   appDataDir: string;
@@ -56,6 +60,9 @@ export interface InnoOptions {
   minVersion?: string;
   associations?: ChannelConfig["associations"];
 }
+
+/** File name the Standalone Installer takes in Setup's temporary directory. */
+const OFFLINE_INSTALLER_NAME = "MicrosoftEdgeWebView2RuntimeInstaller.exe";
 
 function issLiteral(value: string, constants = true): string {
   if (/[\r\n\0]/.test(value)) {
@@ -215,6 +222,12 @@ function filesSection(context: InnoContext): string[] {
   if (options.bootstrapperPath) {
     lines.push(
       `Source: "${issParameter(options.bootstrapperPath, false)}"; DestDir: "{tmp}"; DestName: "MicrosoftEdgeWebview2Setup.exe"; Flags: dontcopy`,
+    );
+  }
+  if (options.offlineInstallerPath) {
+    // The installer is already compressed; skip a second pass over ~170 MB.
+    lines.push(
+      `Source: "${issParameter(options.offlineInstallerPath, false)}"; DestDir: "{tmp}"; DestName: "${OFFLINE_INSTALLER_NAME}"; Flags: dontcopy nocompression`,
     );
   }
   return lines;
@@ -458,7 +471,7 @@ function prepareToInstallSection(context: InnoContext): string[] {
   const lines: string[] = [];
   lines.push(
     "function PrepareToInstall(var NeedsRestart: Boolean): String;",
-    ...(options.bootstrapperPath
+    ...(options.bootstrapperPath || options.offlineInstallerPath
       ? [
           "var ResultCode: Integer;",
         ]
@@ -486,6 +499,23 @@ function prepareToInstallSection(context: InnoContext): string[] {
           "    Result := 'Could not start the WebView2 Runtime installer: ' + SysErrorMessage(ResultCode)",
           "  else if ResultCode <> 0 then",
           "    Result := 'WebView2 Runtime installation failed (exit code ' + IntToStr(ResultCode) + '). Check your internet connection and retry.'",
+          "  else if not HasWebView2Runtime then",
+          "    Result := 'WebView2 Runtime was not detected after installation. Install the runtime and retry.';",
+        ]
+      : []),
+    ...(options.offlineInstallerPath
+      ? [
+          "  if HasWebView2Runtime then Exit;",
+          "  try",
+          `    ExtractTemporaryFile('${OFFLINE_INSTALLER_NAME}');`,
+          "  except",
+          "    Result := 'Could not unpack the WebView2 Runtime installer (check free disk space): ' + GetExceptionMessage;",
+          "    Exit;",
+          "  end;",
+          `  if not Exec(ExpandConstant('{tmp}\\${OFFLINE_INSTALLER_NAME}'), '/silent /install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then`,
+          "    Result := 'Could not start the WebView2 Runtime installer: ' + SysErrorMessage(ResultCode)",
+          "  else if ResultCode <> 0 then",
+          "    Result := 'WebView2 Runtime installation failed (exit code ' + IntToStr(ResultCode) + '). Run the installer as an administrator or install the WebView2 Runtime first.'",
           "  else if not HasWebView2Runtime then",
           "    Result := 'WebView2 Runtime was not detected after installation. Install the runtime and retry.';",
         ]
