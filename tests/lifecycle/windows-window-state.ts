@@ -187,10 +187,15 @@ if (!process.argv.includes("--child")) {
     await windows.unmaximize(target);
     assert.deepEqual(await normal(), saved);
 
-    // A window minimized from maximized is saved as maximized, and restoring a tiny size into a
-    // minimized window stays inside the native size limits instead of throwing.
+    // A minimized window reports not maximized, so saving it keeps the maximized value saved
+    // before. Restoring a tiny size into a minimized window stays inside the native size limits
+    // instead of throwing.
     await place(saved);
     await windows.maximize(target);
+    await windowState.save({
+      ...target,
+      key: "minimized",
+    });
     await windows.minimize(target);
     await windowState.save({
       ...target,
@@ -207,7 +212,7 @@ if (!process.argv.includes("--child")) {
         }
       ).maximized,
       true,
-      `maximized saved from a window minimized from maximized: ${JSON.stringify(await state())}`,
+      "maximized kept when saving the window minimized",
     );
     await store.set({
       name: "window-state",
