@@ -232,12 +232,13 @@ if (!process.argv.includes("--child")) {
             assert.equal(BigInt.asIntN(32, hit), BigInt(HTCAPTION));
 
             // Ignored input first: unknown codes, the client area, keyboard invocation and a
-            // pointer over a child window.
+            // pointer over the client area.
             appCommand(43);
             appCommand(0xfff);
             contextMenu(point(centerX, top + Math.floor(height / 2)));
             contextMenu(-1n);
-            contextMenu(point(centerX, y), hwnd + 1n);
+            // A caption point with another window in wparam would open the default system menu
+            // without publishing, and its modal loop would hold the later messages.
 
             appCommand(1);
             appCommand(14, 0);
