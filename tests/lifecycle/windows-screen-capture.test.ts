@@ -270,6 +270,13 @@ test.skipIf(process.platform !== "win32")(
       expect(own.bounds.height).toBeGreaterThan(0);
 
       // The full-size capture has the listed size and the color painted into the window.
+      for (const delay of [0, 50, 200, 500, 1500, 3000]) {
+        await new Promise((r) => setTimeout(r, delay));
+        const probe = await capture(own.id, 4096);
+        const d = decodePng(Buffer.from(probe.data, "base64"));
+        const c = (Math.floor(d.height / 2) * d.width + Math.floor(d.width / 2)) * 3;
+        console.log(`PROBE delay=${delay} rgb=${[...d.rgb.subarray(c, c + 3)].join(",")} t=${performance.now().toFixed(0)}`);
+      }
       const image = await capture(own.id, 4096);
       expect([
         image.width,
