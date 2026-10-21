@@ -320,12 +320,7 @@ export abstract class NodeStorage
     return fsCall(() => listDirectory(path));
   }
 
-  /**
-   * List one page of a directory by name. Each call reads the directory again and keeps no
-   * state, so the cost is linear in the directory size per page, and a name added or removed
-   * between calls is neither repeated nor skipped except at the cursor itself. The read is a
-   * single synchronous scan and cannot be cancelled once started.
-   */
+  /** One page of a name ordered listing; the scan and paging rules are on listDirectoryPage. */
   readDirectoryPage(input: StorageDirectoryPageRead): StorageDirectoryPage {
     const path = this.selected(input.path);
     return fsCall(() =>

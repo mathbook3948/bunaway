@@ -50,7 +50,7 @@ move는 `renamex_np(from, to, RENAME_EXCL)`를 호출한다. Node의 `rename`은
 
 ## 디렉터리
 
-readDirectory는 직접 자식 최대 256개를 UTF-16 순서로 정렬한다. 초과는 `INVALID_ARGUMENT`다.
+readDirectory는 직접 자식 최대 256개를 UTF-16 순서로 정렬한다. 초과는 `INVALID_ARGUMENT`다. 256개를 넘는 디렉터리는 같은 Node 어댑터의 `readDirectoryPage`가 이름 커서로 나눠 읽는다.
 종류는 목록 항목과 `lstat` 중 하나라도 링크이면 `link`이고, dangling symlink도 `link`, hardlink는 `file`이다.
 FIFO, 장치와 socket은 공개 schema로 표현할 수 없어 `UNSUPPORTED`다.
 createDirectory는 recursive 기본값 false에서 없는 부모를 `INVALID_ARGUMENT`로 거부하고, 이미 있는 디렉터리는

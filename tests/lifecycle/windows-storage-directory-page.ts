@@ -35,11 +35,12 @@ function readPages(path: string, limit?: number): StorageDirectoryEntry[][] {
 }
 
 try {
-  // NTFS compares names without case, but the listing order is by UTF-16 code unit, so upper case
-  // letters come before lower case ones and a supplementary character sorts before U+FF5E.
+  // NTFS compares names without case, so no two names here differ only by case. The listing order
+  // is by UTF-16 code unit: upper case letters come before lower case ones and a supplementary
+  // character sorts before U+FF5E.
   const mixed = [
     "b.txt",
-    "B.txt",
+    "C.txt",
     "a.txt",
     "한글.txt",
     "\u{1F600}.txt",
