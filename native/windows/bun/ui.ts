@@ -1298,6 +1298,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         setAlwaysOnTop: (alwaysOnTop) =>
           nativeWindows.setAlwaysOnTop(hwnd, alwaysOnTop),
         isAlwaysOnTop: () => nativeWindows.isAlwaysOnTop(hwnd),
+        moveTop: () => nativeWindows.moveTop(hwnd),
+        moveToBottom: () => nativeWindows.moveToBottom(hwnd),
         setSkipTaskbar: (skipTaskbar) =>
           nativeWindows.setSkipTaskbar(hwnd, skipTaskbar),
         isSkipTaskbar: () => nativeWindows.isSkipTaskbar(hwnd),

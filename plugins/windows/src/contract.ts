@@ -1266,6 +1266,8 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.isAlwaysOnTop": windowStateResult,
+  "windows.moveTop": windowResult,
+  "windows.moveToBottom": windowResult,
   "windows.setSkipTaskbar": {
     input: windowTarget.extend({
       skipTaskbar: z.boolean(),

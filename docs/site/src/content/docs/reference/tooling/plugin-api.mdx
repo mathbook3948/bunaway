@@ -260,8 +260,8 @@ DWM dark mode를 해제하고 DLL을 닫습니다. 한 번에 하나의 플러�
 `prefers-color-scheme`을 지정합니다. WebView2 프로필 단위 설정이라 같은 프로필의 창은 마지막
 값을 공유하며, 콘텐츠가 아직 없으면 마지막 값을 기억했다가 생성 직후 적용합니다.
 
-Windows의 선택적 `getTitlebar`, `setAlwaysOnTop`, `isAlwaysOnTop`, `setSkipTaskbar`,
-`isSkipTaskbar`는 창 caption 모드와 표시 옵션을 제공합니다. `WindowSpec.window`는
+Windows의 선택적 `getTitlebar`, `setAlwaysOnTop`, `isAlwaysOnTop`, `moveTop`, `moveToBottom`,
+`setSkipTaskbar`, `isSkipTaskbar`는 창 caption 모드와 표시 옵션을 제공합니다. `WindowSpec.window`는
 `titlebar`, `alwaysOnTop`, `skipTaskbar`를 선언합니다. 설정의 기본값은 system, false, false입니다.
 custom은 caption만 제거하며 resize frame과 시스템 메뉴는 유지합니다. WebView2가 CSS
 app-region의 drag/no-drag를 처리하고 없는 런타임은 UNSUPPORTED를 반환합니다.
