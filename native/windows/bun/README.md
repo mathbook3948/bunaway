@@ -203,6 +203,8 @@ The CLI accepts an `app.windows` catalog with one unique policy view per window.
 이미 전체화면인 창은 유지되며 해제는 항상 허용한다.
 `setOpacity`/`getOpacity`는 별도 상태 없이 OS의 layered window alpha를 읽고 쓴다. 1 미만일 때만
 `WS_EX_LAYERED`를 켜고 `SetLayeredWindowAttributes(LWA_ALPHA)`로 적용하며 1이면 (click-through 중이 아닐 때) 스타일을 제거한다.
+`window-input-events.ts`는 창 프로시저가 받은 `WM_APPCOMMAND`(명령 코드의 장치 비트를 떼어 고정 이름으로 바꾸고 목록에 없는 코드는 버린다)와 `WM_CONTEXTMENU`(키보드 호출 -1 제외)를 해석하고, `ui.ts`가 최상위 창 자신이 받은 메시지에 한해 `WM_NCHITTEST`가 `HTCAPTION`이나 `HTSYSMENU`일 때만 `windows.systemContextMenu`로 보낸다. 두 이벤트 모두 `DefWindowProc`의 기본 처리를 막지 않는다.
+
 `startDragging`/`startResizeDragging`은 `window-drag-input.ts`가 `ReleaseCapture` 뒤 `PostMessageW(WM_NCLBUTTONDOWN)`을 현재 커서 위치와 함께 보내 시스템 이동, 크기 조절 루프로 넘긴다(캡션은 `HTCAPTION`, 방향은 `HTLEFT`…`HTBOTTOMRIGHT`). 기본 버튼 상태는 `GetAsyncKeyState`로 읽고 마우스 버튼 바꿈(`SM_SWAPBUTTON`)이면 오른쪽 키를 본다. 상태 검사와 거부 메시지는 `window-drag.ts`의 순수 함수와 `win32.ts`가 맡고 최소화, 최대화, 전체화면, 이동 불가, 크기 조절 불가, 같은 최소 크기와 최대 크기로 고정된 축이면 `INVALID_ARGUMENT`로 거부한다. 루프는 OS가 소유하므로 취소 API는 없다.
 `setHasShadow`/`hasShadow`는 `window-shadow.ts`가 `DwmSetWindowAttribute`로 `DWMWA_NCRENDERING_POLICY`를 쓰고 `DwmGetWindowAttribute`로 `DWMWA_NCRENDERING_ENABLED`를 읽으며(정책 속성은 쓰기 전용) 상태를 따로 두지 않는다. dwmapi는 호출마다 열고 닫는다.
 `titlebar: "custom"` 창만 `DWMNCRP_DISABLED`로 그림자를 끄고(`DWMNCRP_USEWINDOWSTYLE`로 복구) 지오메트리는 그대로다. 그림자는 DWM이 GDI 화면 밖에서 합성해 화면 캡처로 보이지 않으므로 테스트는 DWM이 돌려주는 상태를 확인한다. 네이티브 제목 표시줄 창은 `hasShadow`가 항상 true이며 `setHasShadow(false)`는 `UNSUPPORTED`다.

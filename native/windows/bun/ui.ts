@@ -47,13 +47,22 @@ import {
 } from "./ui-phase.ts";
 import { originOf, WebView } from "./webview.ts";
 import { Windows } from "./win32.ts";
-import { disposeWin32Bindings, kernel, ole } from "./win32-bindings.ts";
+import { disposeWin32Bindings, kernel, ole, user } from "./win32-bindings.ts";
 import {
   WM_CLOSE,
   WM_ENTERSIZEMOVE,
   WM_EXITSIZEMOVE,
   WM_SIZE,
 } from "./win32-constants.ts";
+import { screenPointParam } from "./window-drag.ts";
+import {
+  appCommandName,
+  contextMenuPoint,
+  isSystemMenuArea,
+  WM_APPCOMMAND,
+  WM_CONTEXTMENU,
+  WM_NCHITTEST,
+} from "./window-input-events.ts";
 import { WindowLifecycle } from "./window-lifecycle.ts";
 import { WindowProfiles } from "./window-profiles.ts";
 import { WindowReadinessTracker } from "./window-readiness.ts";
@@ -1513,6 +1522,9 @@ function createWindow(
       if (isMonitorChangeMessage(message)) {
         monitorTracker?.invalidate();
       }
+      if (message === WM_APPCOMMAND || message === WM_CONTEXTMENU) {
+        publishWindowInput(message, wparam, lparam);
+      }
       if (message === WM_CLOSE) {
         close();
       } else if (message === WM_SIZE) {
@@ -1534,6 +1546,46 @@ function createWindow(
     view: spec.view,
     hwnd: window.toString(),
   });
+  /** Input notifications leave the default handling intact and reach only this window's own views. */
+  function publishWindowInput(message: number, wparam: bigint, lparam: bigint) {
+    if (
+      stopping() ||
+      shutdownCommitted() ||
+      views.get(instanceKey)?.native !== native
+    ) {
+      return;
+    }
+    const { windowId, viewId } = readiness.snapshot();
+    if (message === WM_APPCOMMAND) {
+      const command = appCommandName(lparam);
+      if (command) {
+        sendNativeEvent(boundary, "windows.appCommand", {
+          windowId,
+          viewId,
+          command,
+        });
+      }
+      return;
+    }
+    const point = contextMenuPoint(lparam);
+    // wparam names the window under the pointer; only the frame's own title area qualifies.
+    if (!point || wparam !== window) {
+      return;
+    }
+    const hit = user.symbols.SendMessageW(
+      window,
+      WM_NCHITTEST,
+      0n,
+      screenPointParam(point.x, point.y),
+    );
+    if (isSystemMenuArea(Number(BigInt.asIntN(32, BigInt(hit))))) {
+      sendNativeEvent(boundary, "windows.systemContextMenu", {
+        windowId,
+        viewId,
+        ...point,
+      });
+    }
+  }
   windows.observe(window, spec.view, (snapshot, changes) => {
     if (
       stopping() ||

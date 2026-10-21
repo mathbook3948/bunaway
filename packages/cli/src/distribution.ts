@@ -89,6 +89,7 @@ export const frameworkPaths = [
   "native/windows/bun/window-drag.ts",
   "native/windows/bun/window-icon.ts",
   "native/windows/bun/window-drag-input.ts",
+  "native/windows/bun/window-input-events.ts",
   "native/windows/bun/window-shadow.ts",
   "native/windows/bun/window-taskbar.ts",
   "native/windows/bun/win32-bindings.ts",
