@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { arch, hostname, release, version } from "node:os";
 import os from "@bunaway/plugin-os/native/windows";
 import { osOperations } from "#plugins/os/src/operations";
+import { killAfter } from "../fixtures/deadlines.ts";
 import { assertWindowsRegionCode } from "../fixtures/windows-region-code.ts";
 
 test.skipIf(process.platform !== "win32")(
@@ -82,6 +83,45 @@ test.skipIf(process.platform !== "win32")(
       );
       if (process.env.CI) {
         expect(gpus.length).toBeGreaterThan(0);
+      }
+      // The app's own process leads the tree; a child this test starts joins it as another process.
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "-e",
+          "process.stdin.resume()",
+        ],
+        {
+          stdio: [
+            "pipe",
+            "ignore",
+            "ignore",
+          ],
+        },
+      );
+      const stop = killAfter(child, "childStep");
+      try {
+        const processes = osOperations.listAppProcesses.output.parse(
+          await adapter.execute("os.listAppProcesses", null, "backend"),
+        );
+        expect(processes[0]).toMatchObject({
+          pid: process.pid,
+          kind: "app",
+        });
+        expect(processes[0]?.metrics?.workingSetBytes).toBeGreaterThan(0);
+        expect(new Set(processes.map((entry) => entry.pid)).size).toBe(
+          processes.length,
+        );
+        const started = processes.find((entry) => entry.pid === child.pid);
+        expect(started).toMatchObject({
+          parentPid: process.pid,
+          kind: "other",
+        });
+        expect(started?.metrics?.workingSetBytes).toBeGreaterThan(0);
+      } finally {
+        clearTimeout(stop);
+        child.kill();
+        await child.exited;
       }
       for (const kind of [
         undefined,

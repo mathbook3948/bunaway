@@ -1,6 +1,6 @@
 # OS metadata plugin
 
-`@bunaway/plugin-os` provides permission-mediated `os.info(null)`, `os.usage(null)`, `os.locale(null)` and `os.beep({ kind })` on Windows and macOS, and `os.listPrinters(null)`, `os.getDefaultPrinter(null)` and `os.listGpus(null)` on Windows.
+`@bunaway/plugin-os` provides permission-mediated `os.info(null)`, `os.usage(null)`, `os.locale(null)` and `os.beep({ kind })` on Windows and macOS, and `os.listPrinters(null)`, `os.getDefaultPrinter(null)`, `os.listGpus(null)` and `os.listAppProcesses(null)` on Windows.
 Register `os` in the app definition. Each operation requires its own permission; registration grants none.
 Trusted backends can use Bun, `process` and `node:os` directly for runtime metadata.
 
@@ -37,6 +37,17 @@ dedicated video memory and the software-renderer flag; driver versions and rende
 macOS rejects it with `UNSUPPORTED`. `tests/api/os-gpus.test.ts` covers the `DXGI_ADAPTER_DESC1` layout, limits and
 release of every COM object with fake bindings; `tests/lifecycle/windows-os.test.ts` runs the call against real DXGI,
 where CI checks that the list is valid and not empty. Hardware GPU lists are not covered by CI.
+
+`os.listAppProcesses` takes one Toolhelp snapshot (`CreateToolhelp32Snapshot`) and walks the descendants of the app's
+own process. Windows runs the host and the backend in one Bun process, so that process is reported once as `app`.
+A descendant is `webview2` when it, or an ancestor below the app, runs from `msedgewebview2.exe`, and `other`
+otherwise. The image name only classifies; no path, command line or other process memory is read. Metrics come from
+`GetProcessTimes` and `K32GetProcessMemoryInfo` on a `PROCESS_QUERY_LIMITED_INFORMATION` handle that is closed before
+the call returns; a process that cannot be opened keeps its entry with `metrics: null`. A child that was created
+before its listed parent is a reused process ID and is left out. More than 256 processes is an error.
+macOS rejects it with `UNSUPPORTED`. `tests/api/os-app-processes.test.ts` covers the structure layouts, tree walk,
+classification and limits with fake bindings; `tests/lifecycle/windows-os.test.ts` lists the real tree, including a
+child the test starts. Renderer-internal metrics and startup time are not included.
 
 `os.usage` reports cumulative process CPU microseconds, memory bytes, logical CPU count and actual
 IsWow64Process2 machine values. Windows x64 CI does not validate ARM64 translation hardware.

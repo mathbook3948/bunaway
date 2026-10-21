@@ -1,6 +1,6 @@
 ---
 title: os
-description: Windows, macOS와 번들 Bun의 실행 정보, 사용자 locale과 표시 언어를 조회하고 시스템 경고음을 재생하고 Windows 프린터 목록과 그래픽 어댑터 목록을 조회합니다.
+description: Windows, macOS와 번들 Bun의 실행 정보, 사용자 locale과 표시 언어를 조회하고 시스템 경고음을 재생하고 Windows 프린터 목록, 그래픽 어댑터 목록과 앱 프로세스 트리 지표를 조회합니다.
 sidebar: { order: 7 }
 ---
 
@@ -25,6 +25,7 @@ const locale = await os.locale(null);
 | `os.listPrinters` | `null` | `Promise<OSPrinter[]>` | `os.listPrinters` |
 | `os.getDefaultPrinter` | `null` | `Promise<string \| null>` | `os.getDefaultPrinter` |
 | `os.listGpus` | `null` | `Promise<OSGpu[]>` | `os.listGpus` |
+| `os.listAppProcesses` | `null` | `Promise<OSAppProcess[]>` | `os.listAppProcesses` |
 
 `OSInfo`는 `platform: "windows"` 또는 `"macos"`, OS의 `type`, `release`, `version`, 실행 중 프로세스의
 `architecture`, `hostname`과 `runtime: { name: "bun", version, pid }`를 반환합니다.
@@ -93,11 +94,22 @@ macOS에서는 두 작업 모두 `UNSUPPORTED`입니다.
 드라이버 버전, 렌더러 지표와 hardware acceleration 설정은 반환하거나 바꾸지 않습니다. 하드웨어 식별 정보는
 fingerprinting에 쓸 수 있으므로 `os.listGpus`는 독립 권한이며 필요한 뷰만 허용합니다. macOS에서는 `UNSUPPORTED`입니다.
 
+`os.listAppProcesses(null)`은 이 앱이 띄운 프로세스 트리를 `{ pid, parentPid, kind, metrics }` 배열로 반환합니다.
+Windows는 호스트와 백엔드를 하나의 Bun 프로세스로 실행하므로 그 프로세스가 `kind: "app"`으로 한 번 나오며 항상 첫 항목입니다.
+`kind: "webview2"`는 WebView2 브라우저, 렌더러, GPU, 유틸리티 프로세스와 그 하위 프로세스이고, 앱이 직접 시작한 자식 같은
+나머지 하위 프로세스는 `"other"`입니다. 분류는 프로세스 스냅샷의 이미지 이름(`msedgewebview2.exe`)과 부모 관계만 사용하며
+경로, 명령줄, 다른 프로세스의 메모리는 읽지 않습니다. `metrics`는 `{ workingSetBytes, cpuTime: { userMicros, systemMicros } }`로
+`os.usage`와 같은 단위(누적 CPU 마이크로초)이며, 제한된 조회 권한으로도 열 수 없는 프로세스는 목록에 남고 `metrics`가 `null`입니다.
+값은 호출 시점의 스냅샷이며 프로세스는 조회 중에 끝날 수 있습니다. 부모보다 먼저 생성된 자식은 재사용된 프로세스 ID로 보고
+제외합니다. 임의 프로세스를 지정하는 입력은 없고, 프로세스가 256개를 넘으면 일부만 돌려주지 않고 `INTERNAL`입니다.
+프로세스 구성과 메모리는 앱 내부 정보이므로 `os.listAppProcesses`는 독립 권한입니다. macOS에서는 `UNSUPPORTED`입니다.
+GPU 프로세스의 그래픽 메모리, 렌더러 내부 지표와 startup 시간은 반환하지 않습니다.
+
 이모지 패널을 여는 API는 제공하지 않습니다. Windows에는 이모지 패널을 여는 공식 API가 없고
 Win+. 키 입력을 합성하는 방법만 있어 현재 포커스를 가진 창에 의존하므로 지원하지 않습니다.
 
-화면 직접 호출에는 뷰의 `commands`에 `plugin.os.info`, `plugin.os.usage`, `plugin.os.locale`, `plugin.os.beep`, `plugin.os.listPrinters`, `plugin.os.getDefaultPrinter` 또는 `plugin.os.listGpus`를,
-`host.permissions`에 같은 작업의 `os.info`, `os.usage`, `os.locale`, `os.beep`, `os.listPrinters`, `os.getDefaultPrinter` 또는 `os.listGpus`를 허용합니다. 백엔드 명령은
+화면 직접 호출에는 뷰의 `commands`에 `plugin.os.info`, `plugin.os.usage`, `plugin.os.locale`, `plugin.os.beep`, `plugin.os.listPrinters`, `plugin.os.getDefaultPrinter`, `plugin.os.listGpus` 또는 `plugin.os.listAppProcesses`를,
+`host.permissions`에 같은 작업의 `os.info`, `os.usage`, `os.locale`, `os.beep`, `os.listPrinters`, `os.getDefaultPrinter`, `os.listGpus` 또는 `os.listAppProcesses`를 허용합니다. 백엔드 명령은
 호출한 뷰의 권한을 유지하며 setup 호출은 `backend.permissions`를 사용합니다.
 각 작업의 권한은 독립적입니다. hostname을 공개해도 되는 뷰만 `os.info`를 허용합니다.
 

@@ -1491,7 +1491,8 @@
       "os.beep",
       "os.listPrinters",
       "os.getDefaultPrinter",
-      "os.listGpus"
+      "os.listGpus",
+      "os.listAppProcesses"
     ],
     "reference/plugins/notification": [
       "notification.show",
