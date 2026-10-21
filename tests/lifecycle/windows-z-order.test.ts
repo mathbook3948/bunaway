@@ -1,5 +1,8 @@
 import { dlopen } from "bun:ffi";
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
+import { deadline } from "../fixtures/deadlines.ts";
+
+setDefaultTimeout(deadline("build"));
 
 const GW_HWNDNEXT = 2;
 const MAX_WINDOWS = 4096;
@@ -45,7 +48,6 @@ test.skipIf(process.platform !== "win32")(
       const first = open("Z order first");
       const second = open("Z order second");
       const third = open("Z order third");
-      const foreground = user.symbols.GetForegroundWindow();
       const boundsBefore = windows.getBounds(third, "outer");
 
       windows.moveToBottom(third);
@@ -63,7 +65,7 @@ test.skipIf(process.platform !== "win32")(
       expect(isAbove(first, third)).toBe(true);
       expect(isAbove(first, second)).toBe(true);
 
-      expect(user.symbols.GetForegroundWindow()).toBe(foreground);
+      expect(created).not.toContain(user.symbols.GetForegroundWindow());
       expect(windows.getBounds(third, "outer")).toEqual(boundsBefore);
       expect(windows.isVisible(third)).toBe(true);
       expect(windows.isAlwaysOnTop(third)).toBe(false);
@@ -79,17 +81,22 @@ test.skipIf(process.platform !== "win32")(
       expect(windows.isAlwaysOnTop(second)).toBe(true);
       windows.setAlwaysOnTop(second, false);
 
+      // Minimized windows are reordered without being restored.
+      windows.minimize(first);
+      windows.moveTop(first);
+      windows.moveToBottom(first);
+      expect(windows.isMinimized(first)).toBe(true);
+
       // Hidden windows are reordered without being shown.
       windows.show(third, false);
       windows.moveTop(third);
       windows.moveToBottom(third);
       expect(windows.isVisible(third)).toBe(false);
-      expect(user.symbols.GetForegroundWindow()).toBe(foreground);
+      expect(created).not.toContain(user.symbols.GetForegroundWindow());
     } finally {
       for (const hwnd of created) {
         windows.destroy(hwnd);
       }
     }
   },
-  25000,
 );

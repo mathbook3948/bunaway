@@ -1048,18 +1048,7 @@ export class Windows {
     }
     const HWND_TOPMOST = -1n;
     const HWND_NOTOPMOST = -2n;
-    const SWP_NOOWNERZORDER = 0x200;
-    assert(
-      user.symbols.SetWindowPos(
-        window,
-        alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
-        0,
-        0,
-        0,
-        0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER,
-      ),
-    );
+    this.placeInZOrder(window, alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST);
   }
 
   /** Move once to the top of the window's Z-order band without activation, visibility or geometry changes.
@@ -1081,7 +1070,7 @@ export class Windows {
     this.placeInZOrder(window, 1n);
   }
 
-  /** Insert-after handles: HWND_TOP is 0 and HWND_BOTTOM is 1. */
+  /** Insert-after handles: HWND_TOP is 0, HWND_BOTTOM is 1, HWND_TOPMOST is -1 and HWND_NOTOPMOST is -2. */
   private placeInZOrder(window: bigint, insertAfter: bigint): void {
     const SWP_NOOWNERZORDER = 0x200;
     assert(
