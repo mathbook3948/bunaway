@@ -276,9 +276,9 @@ function iconsSection(context: InnoContext): string[] {
     lines.push("", "[Icons]");
     if (options.startMenuShortcut) {
       // Windows starts the app for a toast click only through a Start menu shortcut that names the
-      // activator class. `{{` is Inno's escape for a literal brace.
+      // activator class. Inno takes the GUID without braces for this parameter.
       lines.push(
-        `Name: "{group}\\${directoryName}"; Filename: "{app}\\${executable}"; WorkingDir: "{app}"; IconFilename: "{app}\\${executable}"; AppUserModelID: "${appId}"; AppUserModelToastActivatorCLSID: "{{${toastClsid}}"${shortcutCheck(menuLink)}`,
+        `Name: "{group}\\${directoryName}"; Filename: "{app}\\${executable}"; WorkingDir: "{app}"; IconFilename: "{app}\\${executable}"; AppUserModelID: "${appId}"; AppUserModelToastActivatorCLSID: "${toastClsid}"${shortcutCheck(menuLink)}`,
       );
       lines.push(
         `Name: "{group}\\${directoryName} 제거"; Filename: "{uninstallexe}"${shortcutCheck(uninstallLink)}`,

@@ -143,7 +143,7 @@ null을 반환하며 없어도 성공한다. Tauri의 `schedule`, `pending`, `ca
 ### 앱이 꺼진 뒤의 클릭
 
 `launch.mode`가 `packaged`인 앱은 시작할 때 toast activator(`INotificationActivationCallback`)를 등록한다.
-`takeActivations()`는 입력 null로 앱이 구독하기 전에 도착한 클릭을 오래된 순서로 반환하고 비운다.
+`takeActivations()`는 앱이 구독하기 전에 도착한 클릭을 오래된 순서로 반환하고 비운다.
 Windows는 시작 메뉴 바로가기의 `System.AppUserModel.ToastActivatorCLSID`가 가리키는 클래스를
 `HKCU\Software\Classes\CLSID\{clsid}\LocalServer32`에서 찾아 꺼진 앱을 시작하고, 새 프로세스의
 `CoRegisterClassObject`가 끝나면 `Activate`를 호출한다. 시작 메뉴 바로가기 쪽 CLSID는 설치 프로그램

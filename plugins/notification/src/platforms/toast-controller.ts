@@ -142,7 +142,8 @@ export function createToastController(
      * Route that delivered the first click. Windows reports a click to the toast object and, once an
      * activator is registered, possibly also to the activator. The activator route ignores a toast the
      * object route already delivered and the object route ignores one the activator delivered, so one
-     * click publishes once. Repeated clicks through the object route are all published.
+     * click publishes once. Each duplicate is consumed once and clears the mark, so a later click that
+     * reaches only one route is published. Repeated clicks through the object route are all published.
      */
     activatedBy?: "toast" | "activator";
   };
@@ -221,6 +222,8 @@ export function createToastController(
         }
         if (event.kind === "activated") {
           if (entry.activatedBy === "activator") {
+            // The duplicate of a click the activator already published: consumed, so the next click counts.
+            entry.activatedBy = undefined;
             return;
           }
           const activation = resolveActivation(entry.input, event);
@@ -265,7 +268,12 @@ export function createToastController(
       if (!entry) {
         return false;
       }
-      if (stopping || entry.activatedBy === "toast") {
+      if (stopping) {
+        return true;
+      }
+      if (entry.activatedBy === "toast") {
+        // The duplicate of a click the object route already published: consumed, so the next click counts.
+        entry.activatedBy = undefined;
         return true;
       }
       const activation = resolveTarget(entry.input, parsed.target, typed);

@@ -393,6 +393,9 @@ test("one click publishes once whichever route reports it first", async () => {
   await toastFirst.clickToast(body);
   toastFirst.click(body);
   expect(toastFirst.published).toHaveLength(1);
+  // The duplicate was consumed, so a later click that only the activator reports is not lost.
+  toastFirst.click(body);
+  expect(toastFirst.published).toHaveLength(2);
 
   const activatorFirst = setup({
     actions: [

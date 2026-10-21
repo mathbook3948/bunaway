@@ -38,7 +38,7 @@ test("the Start menu shortcut names the activator class and a per-user uninstall
   const script = renderInnoScript(base);
   const icons = script.split("[Icons]")[1]?.split("[Run]")[0] ?? "";
   const lines = icons.split("\n");
-  const property = `AppUserModelToastActivatorCLSID: "{{${clsid}}"`;
+  const property = `AppUserModelToastActivatorCLSID: "${clsid}"`;
   const menu = lines.find((line) => line.includes('Name: "{group}\\Toast'));
   const desktop = lines.find((line) => line.includes("{autodesktop}"));
   expect(menu).toContain(property);
@@ -259,7 +259,7 @@ test.skipIf(!iscc)(
       await Bun.write(join(root, "stage", "app", "App.exe"), "1");
       // An installer from before the activator existed wrote the same link without the class.
       const current = renderInnoScript(options);
-      const property = `; AppUserModelToastActivatorCLSID: "{{${clsid}}"`;
+      const property = `; AppUserModelToastActivatorCLSID: "${clsid}"`;
       expect(current).toContain(property);
       const previous = current.replace(property, "");
       expect(await install(await build(previous, "previous"))).toBe(0);

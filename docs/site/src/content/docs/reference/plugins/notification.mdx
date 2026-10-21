@@ -225,7 +225,7 @@ group으로 다시 예약하면 이전 예약을 대체하며 새 예약이 접�
 
 예약 알림은 앱이 소유하는 표시 알림이 아닙니다. 표시 시각이 되면 Windows가 예약한 태그와 group으로
 알림 센터에 넣으므로 그 뒤에는 `list`, `clear`, `clearGroup`, `clearAll`이 적용됩니다. 반대로 `clear`, `clearGroup`, `clearAll`과 앱 종료는
-예약을 취소하지 않습니다. 예약 알림에는 toast 객체 callback이 없어 `dismissed`, `failed` 이벤트는 연결되지 않습니다. 설치된 앱은 예약 알림의 클릭을 activator로 받으므로, 첫 `takeActivations` 뒤에는 `notification.clicked`, `actionInvoked`(`data: null`)로 나가고 앱이 꺼져 있었다면 `takeActivations`가 돌려줍니다. 같은 id와 group으로 `show`도 한 알림이 이번 실행에 있으면 그 항목의 `data`와 버튼 검사를 씁니다.
+예약을 취소하지 않습니다. 예약 알림에는 toast 객체 callback이 없어 `dismissed`, `failed` 이벤트는 연결되지 않습니다. 설치된 앱은 예약 알림의 클릭을 activator로 받으므로, 첫 `takeActivations` 뒤에는 `notification.clicked`, `actionInvoked`(`data: null`)로 나가고 앱이 꺼져 있었다면 `takeActivations`가 돌려줍니다. 같은 id와 group으로 `show`도 한 알림이 이번 실행에 있으면 그 항목의 `data`와 버튼 검사를 쓰고, 그 알림의 클릭이 이미 한 경로로 전달돼 중복으로 기다리는 중이면 예약 알림의 첫 클릭 하나가 중복으로 처리되어 사라질 수 있습니다.
 [앱이 꺼진 뒤의 클릭](#앱이-꺼진-뒤의-클릭)을 보세요. `icon`과 `image` 파일은 예약 시점에 검사하지만 Windows가 표시 시각에 다시 읽으므로
 그때까지 파일을 유지해야 합니다.
 
@@ -373,10 +373,10 @@ MSIX는 아직 `UNSUPPORTED`입니다. 클릭을 받아도 자동으로 창을 �
 ## 앱이 꺼진 뒤의 클릭
 
 ```ts
-notification.takeActivations(input: null, options?: NativeInvokeOptions): Promise<TakenActivation[]>
+notification.takeActivations(options?: NativeInvokeOptions): Promise<TakenActivation[]>
 
 // UI를 초기화할 때: 먼저 이벤트를 구독하고, 그다음 한 번 호출합니다.
-const missed = await notification.takeActivations(null);
+const missed = await notification.takeActivations();
 // [{ kind: "actionInvoked", id: "msg-42", group: "chat", actionId: "reply", reply: "곧 갈게요", data: null }]
 ```
 
