@@ -311,7 +311,7 @@ test("toast XML treats content as text and never includes app data as activation
     silent: true,
   });
   expect(toastXml(value)).toBe(
-    '<toast><visual><binding template="ToastGeneric"><text>&lt;text&gt;&amp;&quot;&apos; 🚀</text><text>&lt;/text&gt;&lt;audio src=&quot;evil&quot;/&gt;</text></binding></visual><audio silent="true"/></toast>',
+    '<toast launch="bunaway1;bunaway;first;"><visual><binding template="ToastGeneric"><text>&lt;text&gt;&amp;&quot;&apos; 🚀</text><text>&lt;/text&gt;&lt;audio src=&quot;evil&quot;/&gt;</text></binding></visual><audio silent="true"/></toast>',
   );
   expect(toastXml(input())).not.toContain("audio");
 });
@@ -339,7 +339,7 @@ test("timeoutType never selects the reminder scenario and keeps a dismiss button
       }),
     ),
   ).toBe(
-    '<toast scenario="reminder"><visual><binding template="ToastGeneric"><text>Hello</text><text></text></binding></visual><actions><action content="" arguments="dismiss" activationType="system"/></actions></toast>',
+    '<toast launch="bunaway1;bunaway;reminder;" scenario="reminder"><visual><binding template="ToastGeneric"><text>Hello</text><text></text></binding></visual><actions><action content="" arguments="dismiss" activationType="system"/></actions></toast>',
   );
   // The app's own buttons already satisfy the reminder, so no extra dismiss button is added.
   const withAction = toastXml(
@@ -353,7 +353,7 @@ test("timeoutType never selects the reminder scenario and keeps a dismiss button
       ],
     }),
   );
-  expect(withAction).toContain('<toast scenario="reminder">');
+  expect(withAction).toContain('scenario="reminder">');
   expect(withAction).not.toContain('arguments="dismiss"');
   expect(
     toastXml(
@@ -373,7 +373,7 @@ test("timeoutType never selects the reminder scenario and keeps a dismiss button
         soundLoop: true,
       }),
     ),
-  ).toContain('<toast scenario="reminder" duration="long">');
+  ).toContain('scenario="reminder" duration="long">');
   // expiresAfterSeconds is applied through ExpirationTime, not toast XML.
   expect(
     toastXml(

@@ -592,8 +592,18 @@ if (workerData?.toastMarshalWorker) {
     const withActions = await waitHistory((items) => items.length === 1);
     assert(withActions[0]?.includes('id="reply"'));
     assert(withActions[0]?.includes('hint-inputId="reply"'));
-    assert(withActions[0]?.includes('arguments="reply"'));
-    assert(withActions[0]?.includes('arguments="action:ok"'));
+    assert(
+      withActions[0]?.includes(
+        'arguments="bunaway1;bunaway-test;actions;reply"',
+      ),
+    );
+    assert(
+      withActions[0]?.includes(
+        'arguments="bunaway1;bunaway-test;actions;action:ok"',
+      ),
+    );
+    // A body click comes back as the launch string, which names the same toast.
+    assert(withActions[0]?.includes('launch="bunaway1;bunaway-test;actions;"'));
     assert(withActions[0]?.includes("Type here"));
     assert(withActions[0]?.includes("&lt;more&gt;"));
     controller.clear(interactive);

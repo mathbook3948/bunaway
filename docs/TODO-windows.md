@@ -442,7 +442,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
   Electron과 Chromium처럼 실패 코드를 구분하지 않고 모두 `null`이다. macOS는 지원하지 않는다.
   Windows 실행은 `host:windows`의 opener lifecycle 회귀가 결과 구조와 연결 없음 `null`만
   확인하며, 처리 앱의 종류는 환경별로 다르다. 오류 분류는 `api` 단위 테스트가 검증한다.
-- [ ] AppUserModelID와 toast activation 식별자를 설정하고 설치와 일치시킨다.
+- [x] AppUserModelID와 toast activation 식별자를 설정하고 설치와 일치시킨다.
 - [x] Recent Documents의 추가와 삭제를 제공한다. 조회는 지원하지 않는다.
   `opener.addRecentDocument`는 기존 파일 확인 뒤 `SHAddToRecentDocs(SHARD_PATHW)`를,
   `opener.clearRecentDocuments`는 `SHAddToRecentDocs(NULL)`을 호출해 사용자의 셸 최근 항목
@@ -497,8 +497,8 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] 실행 중 native clicked, dismissed와 failed callback을 전달한다. Show 접수는 반환값으로 구분한다.
 - [ ] 실제 popup 표시 완료 이벤트와 사용자 클릭의 GUI 검증을 제공한다.
 - [x] 앱 범위 ID/group, 같은 ID 교체와 개별 clear를 제공한다. 종료 시 이번 실행의 알림을 정리한다.
-- [x] 액션 버튼과 인라인 응답 입력을 제공한다. `actions`와 `reply`는 알림별로 선언하고 `notification.actionInvoked`로 전달한다. 실행 중 프로세스의 Activated만 지원한다.
-- [ ] 앱이 종료된 상태의 toast activation을 앱 시작과 `onOpen`에 연결한다.
+- [x] 액션 버튼과 인라인 응답 입력을 제공한다. `actions`와 `reply`는 알림별로 선언하고 `notification.actionInvoked`로 전달한다. 실행 중 프로세스의 Activated와 설치된 앱의 toast activator를 지원한다.
+- [x] 앱이 종료된 상태의 toast activation을 앱 시작에 연결한다. 설치된 앱은 COM toast activator로 클릭을 받아 `notification.takeActivations`와 기존 이벤트로 전달하며 `onOpen` 계약은 바꾸지 않는다.
 - [x] timeout의 플랫폼별 동작을 정의한다. silent, `timeoutType`(`never`는 reminder 시나리오)과 `expiresAfterSeconds`(알림 센터 만료)는 Windows에서 구현했다. 표시 우선순위(alarm, incoming call 시나리오)는 Electron과 Tauri에 선례가 없어 남아 있다.
 - [ ] 표시 우선순위(alarm, incoming call 시나리오와 알림 센터 우선 순위)의 플랫폼별 동작을 정의한다.
 - [ ] Windows toast XML과 고급 알림 콘텐츠의 지원을 결정한다.

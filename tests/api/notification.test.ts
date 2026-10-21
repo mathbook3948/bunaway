@@ -21,6 +21,7 @@ test("notification status and Settings require separate permissions and null-onl
     "notification.show",
     "notification.schedule",
     "notification.listScheduled",
+    "notification.takeActivations",
     "notification.cancelScheduled",
     "notification.clear",
     "notification.clearGroup",
@@ -33,6 +34,7 @@ test("notification status and Settings require separate permissions and null-onl
     "notification.clearAll",
     "notification.list",
     "notification.listScheduled",
+    "notification.takeActivations",
     "notification.getStatus",
     "notification.openSettings",
   ]) {

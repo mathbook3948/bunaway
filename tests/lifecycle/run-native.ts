@@ -194,6 +194,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-opener-shortcut.test.ts",
           "tests/lifecycle/windows-opener-jump-list.test.ts",
           "tests/lifecycle/windows-notification.test.ts",
+          "tests/lifecycle/windows-notification-activator.test.ts",
           "tests/lifecycle/windows-dialog.test.ts",
           "tests/lifecycle/windows-toast.test.ts",
           "tests/lifecycle/windows-webview-version.test.ts",

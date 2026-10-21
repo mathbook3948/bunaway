@@ -1,6 +1,9 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { sanitizeWindowsFileName } from "@bunaway/protocol";
+import {
+  sanitizeWindowsFileName,
+  toastActivatorClsid,
+} from "@bunaway/protocol";
 import {
   type ChannelConfig,
   CODES,
@@ -131,6 +134,9 @@ function createInnoContext(options: InnoOptions, parts: number[]) {
     "''",
   );
   const appId = issParameter(options.appId ?? options.identifier);
+  // The notification plugin derives the same class identifier from the application identifier and
+  // registers it at run time, so a click on a toast can start the installed app.
+  const toastClsid = toastActivatorClsid(options.appId ?? options.identifier);
   const menuLink = `{group}\\${directoryName}.lnk`;
   const uninstallLink = `{group}\\${directoryName} 제거.lnk`;
   const desktopLink = `{autodesktop}\\${directoryName} (${identifier}).lnk`;
@@ -150,6 +156,7 @@ function createInnoContext(options: InnoOptions, parts: number[]) {
     executable,
     executableLiteral,
     appId,
+    toastClsid,
     menuLink,
     uninstallLink,
     desktopLink,
@@ -271,6 +278,7 @@ function iconsSection(context: InnoContext): string[] {
     identifier,
     executable,
     appId,
+    toastClsid,
     menuLink,
     uninstallLink,
     desktopLink,
@@ -280,8 +288,10 @@ function iconsSection(context: InnoContext): string[] {
   if (options.startMenuShortcut || options.desktopShortcut) {
     lines.push("", "[Icons]");
     if (options.startMenuShortcut) {
+      // Windows starts the app for a toast click only through a Start menu shortcut that names the
+      // activator class. Inno takes the GUID without braces for this parameter.
       lines.push(
-        `Name: "{group}\\${directoryName}"; Filename: "{app}\\${executable}"; WorkingDir: "{app}"; IconFilename: "{app}\\${executable}"; AppUserModelID: "${appId}"${shortcutCheck(menuLink)}`,
+        `Name: "{group}\\${directoryName}"; Filename: "{app}\\${executable}"; WorkingDir: "{app}"; IconFilename: "{app}\\${executable}"; AppUserModelID: "${appId}"; AppUserModelToastActivatorCLSID: "${toastClsid}"${shortcutCheck(menuLink)}`,
       );
       lines.push(
         `Name: "{group}\\${directoryName} 제거"; Filename: "{uninstallexe}"${shortcutCheck(uninstallLink)}`,
@@ -317,6 +327,27 @@ function runAndDeleteSections(context: InnoContext): string[] {
     );
   }
   return lines;
+}
+
+/**
+ * A GUID as the 16 bytes a shortcut file stores (Windows field order), as a comma separated
+ * list of decimal values that the generated Pascal compares byte by byte.
+ */
+function guidFileBytes(guid: string): string {
+  const hex = guid.replaceAll("-", "");
+  const bytes = Array.from(
+    {
+      length: 16,
+    },
+    (_, index) => Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16),
+  );
+  const ordered = [
+    ...bytes.slice(0, 4).reverse(),
+    ...bytes.slice(4, 6).reverse(),
+    ...bytes.slice(6, 8).reverse(),
+    ...bytes.slice(8),
+  ];
+  return ordered.join(", ");
 }
 
 /** Pascal [Code] support: COM types, install state, association and autostart code, WebView2 detection. */
@@ -532,10 +563,12 @@ function cleanupSection(context: InnoContext): string[] {
     options,
     perUser,
     executableLiteral,
+    toastClsid,
     menuLink,
     uninstallLink,
     desktopLink,
   } = context;
+  const toastClsidBytes = guidFileBytes(toastClsid);
   const lines: string[] = [];
   lines.push(
     "// Retained payloads are not in the overwritten uninstall log. Both retry and",
@@ -637,6 +670,72 @@ begin
   if not DeleteFile(Filename) then Log('Could not remove shortcut: ' + Filename);
 end;
 `,
+    ...(options.startMenuShortcut
+      ? [
+          // ShouldCreateShortcut keeps an existing link, so an install made before the activator
+          // existed would never gain the class. Setup recreates only this app's own Start menu link
+          // (target is the current executable, class missing) and puts the user's arguments back.
+          "var MenuLinkArguments: String;",
+          "    MenuLinkRecreated: Boolean;",
+          "",
+          "function ShortcutHasToastActivator(const Filename: String): Boolean;",
+          "var Content: AnsiString; Needle: array[0..15] of Integer; I, J: Integer; Found: Boolean;",
+          "begin",
+          "  Result := False;",
+          `  ${toastClsidBytes
+            .split(", ")
+            .map((byte, index) => `Needle[${index}] := ${byte};`)
+            .join(" ")}`,
+          "  if not LoadStringFromFile(Filename, Content) then Exit;",
+          // Compare raw bytes: a string search would convert through the ANSI code page and miss GUID bytes above 0x7F.
+          "  for I := 1 to Length(Content) - 15 do begin",
+          "    Found := True;",
+          "    for J := 0 to 15 do",
+          "      if Ord(Content[I + J]) <> Needle[J] then begin Found := False; Break; end;",
+          "    if Found then begin Result := True; Exit; end;",
+          "  end;",
+          "end;",
+          "",
+          "procedure PrepareMenuLinkForToastActivator;",
+          "var Path, Target: String; Link: Variant;",
+          "begin",
+          "  MenuLinkArguments := '';",
+          "  MenuLinkRecreated := False;",
+          `  Path := ExpandConstant('${menuLink.replace(/'/g, "''")}');`,
+          "  if not ReadShortcut(Path, Link, Target) then Exit;",
+          `  if CompareText(Target, ExpandConstant('{app}') + '\\' + '${executableLiteral}') <> 0 then Exit;`,
+          "  if ShortcutHasToastActivator(Path) then Exit;",
+          "  try",
+          "    MenuLinkArguments := Link.Arguments;",
+          "  except Log('Could not read shortcut arguments: ' + Path); Exit; end;",
+          "  if DeleteFile(Path) then MenuLinkRecreated := True",
+          "  else Log('Could not replace shortcut: ' + Path);",
+          "end;",
+          "",
+          "procedure RestoreMenuLinkArguments;",
+          "var Path, Target: String; Link: Variant;",
+          "begin",
+          "  if (not MenuLinkRecreated) or (MenuLinkArguments = '') then Exit;",
+          `  Path := ExpandConstant('${menuLink.replace(/'/g, "''")}');`,
+          "  if not ReadShortcut(Path, Link, Target) then Exit;",
+          "  try",
+          "    Link.Arguments := MenuLinkArguments;",
+          "    Link.Save(Path);",
+          "  except Log('Could not restore shortcut arguments: ' + Path); end;",
+          "end;",
+          "",
+        ]
+      : []),
+    ...(perUser
+      ? [
+          "procedure RemoveToastActivatorRegistration(const Key: String);",
+          "begin",
+          "  if RegKeyExists(HKCU64, Key) and not RegDeleteKeyIncludingSubkeys(HKCU64, Key) then",
+          "    Log('Could not remove toast activator registration: ' + Key);",
+          "end;",
+          "",
+        ]
+      : []),
     "procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);",
     "begin",
     "  if CurUninstallStep <> usUninstall then Exit;",
@@ -644,6 +743,9 @@ end;
     ...(perUser
       ? [
           "  UninstallAutostart;",
+          // The app writes this key when it starts, so Setup has no record of it. A perMachine
+          // uninstall cannot reach other users' hives; their key then points at the removed program.
+          `  RemoveToastActivatorRegistration('Software\\Classes\\CLSID\\{${toastClsid}}');`,
         ]
       : []),
     "  RemovePendingAssociationOwner;",
@@ -705,6 +807,11 @@ end;
         `    Current.Add('${issLiteral(path, false).replace(/\//g, "\\").replace(/'/g, "''")}');`,
     ),
     "    PruneAssets(ExpandConstant('{app}'), 'licenses', Current);",
+    ...(options.startMenuShortcut
+      ? [
+          "    RestoreMenuLinkArguments;",
+        ]
+      : []),
     ...[
       menuLink,
       desktopLink,
@@ -734,6 +841,12 @@ function installStepsSection(context: InnoContext): string[] {
     "  if CurStep = ssInstall then begin",
     "    // This is the last guard before Inno mutates payload and uninstall metadata.",
     "    ValidateInstallationSnapshot;",
+    ...(options.startMenuShortcut
+      ? [
+          // Runs before Inno creates the links, so a link without the activator class is recreated.
+          "    PrepareMenuLinkForToastActivator;",
+        ]
+      : []),
     "    Exit;",
     "  end;",
     "  if CurStep <> ssPostInstall then Exit;",
