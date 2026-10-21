@@ -825,7 +825,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   트리 안의 symlink와 junction은 따라가지 않고 링크만 삭제하며, hardlink는 만난 이름만 삭제한다.
   하나의 호출이라 시작한 뒤에는 취소할 수 없고, 항목 수와 깊이 상한도 없다. 원자적이지 않아 실패 전에 삭제한 항목은 유지되며
   같은 호출을 반복하면 이어서 삭제한다. macOS에서도 같은 방식으로 지원한다.
-  `windows-storage-remove-recursive.ts`가 CI windows-native에서 링크 비추적과 읽기 전용 항목 삭제를 확인한다.
+  `windows-storage-remove-recursive.ts`가 CI windows-native에서 링크와 볼륨 마운트 지점 비추적과 읽기 전용 항목 삭제를 확인한다.
   [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)을 따른다.
 - [x] 파일 크기 조회와 별도로 디렉터리 재귀 용량을 바이트 단위로 계산한다.
   Windows의 `storage.directorySize({ path })`는 `{ bytes, files, directories }`를 반환한다.

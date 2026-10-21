@@ -408,10 +408,11 @@ export abstract class NodeStorage
 
   /**
    * Remove a file, or a directory with everything below it. Links inside the tree are removed
-   * themselves and never followed, as far as `lstat` reports them (a volume mount point may be
-   * reported as a directory and would be descended). The removal is one file system call that cannot be
-   * interrupted, so cancellation only takes effect before it starts; entries deleted before a
-   * failure stay deleted.
+   * themselves and never followed. On Windows a symlink, a junction or a volume mount point loses only its own
+   * name and the files on its target stay; the Windows lifecycle test mounts a virtual disk
+   * inside a tree to check this. Cloud sync placeholder folders are not covered by that test.
+   * The removal is one file system call that cannot be interrupted, so cancellation only takes
+   * effect before it starts; entries deleted before a failure stay deleted.
    */
   async removeRecursive(
     input: StorageLocation,
