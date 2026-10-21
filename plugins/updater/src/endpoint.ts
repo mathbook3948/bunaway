@@ -59,7 +59,9 @@ export function validateEndpointTemplate(
     );
   }
   // Placeholders are limited to the path and query, so a value can never change scheme or host.
-  const head = /^([^/?#]*):\/\/([^/?#]*)/.exec(template);
+  // The host must be written out: the URL parser skips extra slashes, so an empty host would let
+  // the first placeholder become the host.
+  const head = /^([^/?#]*):\/\/([^/?#]+)/.exec(template);
   if (!head) {
     throw invalid("updater endpoint must be an absolute URL.");
   }

@@ -311,6 +311,13 @@ test("invalid settings fail when the adapter is created", () => {
       endpoint: "updates.example.com/path",
     },
     {
+      // An empty host would let the first placeholder become the host.
+      endpoint: "https:///{{channel}}.example.com/x",
+    },
+    {
+      endpoint: "https:////{{target}}/x",
+    },
+    {
       // Longest values would push the address past the length limit at check time.
       endpoint: `https://updates.example.com/${"{{current_version}}".repeat(20)}`,
     },
@@ -645,6 +652,8 @@ test("malformed manifests are INTERNAL with a reason and never echo the response
       "2024-01-01T00:60:00Z",
       "2024-01-01T00:00:60Z",
       "2024-01-01T00:00:00+24:00",
+      "9999-12-31T23:00:00-02:00",
+      "0000-01-01T00:00:00+02:00",
     ].map(
       (
         pub_date,
@@ -715,6 +724,10 @@ test("existing dates and offsets are normalized to UTC", async () => {
     [
       "2024-01-01t00:00:00z",
       "2024-01-01T00:00:00.000Z",
+    ],
+    [
+      "0050-01-01T00:00:00Z",
+      "0050-01-01T00:00:00.000Z",
     ],
   ] as const) {
     const { instance } = updater(() =>

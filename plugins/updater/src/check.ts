@@ -276,7 +276,9 @@ const RFC3339 =
 
 /** Whether the calendar date exists, since `Date` would roll 02-31 over to March. */
 function isCalendarDate(year: number, month: number, day: number): boolean {
-  const date = new Date(Date.UTC(year, month - 1, day));
+  // setUTCFullYear keeps years 0 to 99 as written; Date.UTC would map them to 1900 to 1999.
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
   return (
     date.getUTCFullYear() === year &&
     date.getUTCMonth() === month - 1 &&
@@ -314,6 +316,14 @@ function exposedDate(value: unknown): string | null {
       "INTERNAL",
       "invalidManifest",
       "Update publication date is not an RFC 3339 timestamp.",
+    );
+  }
+  // The offset can carry the instant outside years 0000 to 9999, which ISO 8601 cannot print as four digits.
+  if (parsed.getUTCFullYear() < 0 || parsed.getUTCFullYear() > 9999) {
+    throw fail(
+      "INTERNAL",
+      "invalidManifest",
+      "Update publication date is outside the supported years.",
     );
   }
   return parsed.toISOString();

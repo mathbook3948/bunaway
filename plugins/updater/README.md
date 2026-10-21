@@ -14,4 +14,5 @@ for how settings and the app version reach the adapter.
 
 The comparison, manifest validation and request handling are platform neutral (`src/check.ts`, `src/semver.ts`,
 `src/endpoint.ts`); the platform adapters only name the update target. `tests/api/updater-check.test.ts` checks
-the logic against an injected `fetch`, without a network.
+the logic against an injected `fetch`, and the decompressed size limit, a stalled body and the registered plugin
+against a loopback HTTP server on the same machine.
