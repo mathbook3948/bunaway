@@ -57,6 +57,16 @@ export type NativeEnvironment = {
   /** Trusted app identity and restart command. Callers cannot select another executable. */
   app?: {
     id: string;
+    /**
+     * The app's own version as recorded in the package manifest, or `null` when the build did not
+     * record one. Hosts always set it; a hand-built environment may omit it, which reads as `null`.
+     */
+    version?: string | null;
+    /**
+     * Validated `bunaway.json` `plugins` clauses keyed by plugin name. The host checks only their
+     * shape (JSON object, size limit; the CLI also rejects names of plugins that are not installed); each plugin validates its own clause.
+     */
+    pluginSettings?: Readonly<Record<string, JsonValue>>;
     /** Validated desktop tray permits hidden startup; absence does not grant support. */
     supportsHiddenStart?: boolean;
     launch: {

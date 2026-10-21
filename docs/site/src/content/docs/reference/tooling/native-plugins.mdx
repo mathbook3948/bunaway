@@ -385,6 +385,10 @@ export const createOperations = defineNativeAdapter(systemOperations, {
 Windows의 `app`은 검증한 앱 ID와 재실행 경로, 인자를 제공하며 `app.supportsHiddenStart`는
 검증한 desktop 트레이 설정이 숨김 시작을 허용하는지 나타냅니다. 호출자가 지정할 수 없고
 값이 없으면 숨김 자동 실행 등록을 허용하지 않습니다.
+`app.version`은 `ctx.app.version`과 같은 출처인 패키지 `manifest.json`의 앱 버전이며 기록되지 않았으면
+`null`입니다. `app.pluginSettings`는 `bunaway.json`의 `plugins` 절을 플러그인 이름으로 찾는 읽기 전용
+객체입니다. 호스트는 모양과 크기만 검사하므로 플러그인이 어댑터를 만들 때 자기 절을 직접 검증하고,
+잘못된 값은 오류로 알려야 합니다([ADR 0025](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0025-plugin-settings-and-app-version.md)).
 `NativeAdapterFactory`는 이 환경을 받아 어댑터를 반환하는 함수 타입입니다.
 팩터리의 execute는 JSON 값 또는 Promise를 반환할 수 있으며 SDK가 완료를 기다립니다.
 기존 `NativeAdapter` 타입의 execute는 동기 반환 계약을 유지합니다.

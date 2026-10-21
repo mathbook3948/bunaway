@@ -61,7 +61,9 @@
           "appName",
           "isAppInfoText",
           "toAppInfo",
-          "desktopAppPaths"
+          "desktopAppPaths",
+          "parsePluginSettings",
+          "PLUGIN_SETTINGS_MAX_BYTES"
         ]
       }
     },
@@ -653,6 +655,17 @@
       "pages": {
         "reference/plugins/window-state": ["default"]
       }
+    },
+    {
+      "name": "@bunaway/plugin-updater",
+      "source": "plugins/updater/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/updater": ["default"]
+      }
     }
   ],
   "members": [
@@ -1149,6 +1162,7 @@
           "backendDependencies",
           "frontendDependencies",
           "nativePlugins",
+          "pluginSettings",
           "bundle",
           "dev",
           "app",
@@ -1450,6 +1464,7 @@
     "reference/cli/ios": ["ios"]
   },
   "operations": {
+    "reference/plugins/updater": ["updater.check"],
     "reference/plugins/screen-capture": [
       "screenCapture.listSources",
       "screenCapture.captureSource"

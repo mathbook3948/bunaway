@@ -10,11 +10,15 @@ import { APP_INFO_MAX_LENGTH } from "@bunaway/plugin-api";
 import {
   isRecord,
   isWindowsExecutableName,
+  type JsonValue,
   NativeRegistry,
   type Policy,
   parsePolicy,
 } from "@bunaway/protocol";
-import { isAppInfoText } from "@bunaway/runtime-bun/app-metadata";
+import {
+  isAppInfoText,
+  parsePluginSettings,
+} from "@bunaway/runtime-bun/app-metadata";
 import {
   developmentPolicy,
   developmentUrl,
@@ -95,6 +99,8 @@ export interface Project {
   backendDependencies?: string[];
   frontendDependencies?: string[];
   nativePlugins?: readonly InstalledPlugin[];
+  /** Per-plugin `bunaway.json` `plugins` clauses, passed to the host unchanged. */
+  pluginSettings?: Record<string, JsonValue>;
   bundle?: PackagingConfig;
   dev?: DevServerConfig;
   app: {
@@ -119,6 +125,11 @@ export function runtimeSettings(
   return {
     app: {
       ...project.app,
+      ...(project.pluginSettings
+        ? {
+            pluginSettings: project.pluginSettings,
+          }
+        : {}),
       ...(server
         ? {
             home: server.url,
@@ -262,6 +273,7 @@ export async function readProjectSettings(root: string): Promise<{
   bundle?: PackagingConfig;
   dev?: DevServerConfig;
   buildCommand?: string[];
+  plugins?: unknown;
 }> {
   const directory = await projectPath(root, "src-bunaway");
   const config = record(await json(resolve(directory, "bunaway.json")), "root");
@@ -276,6 +288,7 @@ export async function readProjectSettings(root: string): Promise<{
       "app",
       "bundle",
       "dev",
+      "plugins",
     ],
     "",
   );
@@ -307,6 +320,11 @@ export async function readProjectSettings(root: string): Promise<{
     directory,
     build,
     app: record(config.app, "app"),
+    ...(config.plugins !== undefined
+      ? {
+          plugins: config.plugins,
+        }
+      : {}),
     ...(bundle
       ? {
           bundle,
@@ -582,6 +600,13 @@ async function loadProject(
     await assertHomeDocuments(windows, frontend);
   }
   const primary = windows.find((spec) => spec.startup !== false) ?? windows[0];
+  const pluginSettings =
+    settings.plugins === undefined
+      ? undefined
+      : readPluginClauses(
+          settings.plugins,
+          new Set(plugins.map((plugin) => plugin.name)),
+        );
   return {
     root,
     frameworkRoot,
@@ -590,6 +615,11 @@ async function loadProject(
     backendDependencies,
     frontendDependencies,
     nativePlugins: plugins,
+    ...(pluginSettings
+      ? {
+          pluginSettings,
+        }
+      : {}),
     ...(settings.bundle
       ? {
           bundle: settings.bundle,
@@ -633,6 +663,18 @@ async function loadProject(
         : {}),
     },
   };
+}
+
+/** Validate the `plugins` section; clause contents are checked by each plugin when its adapter is created. */
+function readPluginClauses(
+  value: unknown,
+  installed: ReadonlySet<string>,
+): Record<string, JsonValue> {
+  try {
+    return parsePluginSettings(value, installed);
+  } catch (error) {
+    throw new Error(`bunaway.json: ${(error as Error).message}`);
+  }
 }
 
 /** Resolve settings and framework dependencies without requiring build outputs or app source files. */
