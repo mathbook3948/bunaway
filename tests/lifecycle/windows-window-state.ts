@@ -99,7 +99,7 @@ if (!process.argv.includes("--child")) {
     const code = await child.exited;
     assert.equal(code, 0, `${await stderr}\n${await stdout}`);
     const report = JSON.parse(await readFile(reportPath, "utf8"));
-    assert.equal(report.pass, true);
+    assert.equal(report.pass, true, report.error);
     console.log(
       "PASS window state: bounds, maximized and fullscreen round trips, remove, off-screen fit on a real window",
     );
