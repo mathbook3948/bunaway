@@ -400,6 +400,53 @@ test.skipIf(process.platform !== "win32")(
         },
       });
 
+      // A listing with thumbnailSize carries a thumbnail per capturable source, leaves out the
+      // protected window's, and frees its device contexts and bitmaps. Colors are not checked here.
+      const listWithThumbnails = async () =>
+        sourceListSchema.parse(
+          await adapter.execute(
+            "screenCapture.listSources",
+            {
+              types: [
+                "screen",
+                "window",
+              ],
+              thumbnailSize: {
+                width: 64,
+                height: 64,
+              },
+            },
+            "backend",
+          ),
+        );
+      // The first listing may leave one-time allocations behind, like the first single capture.
+      await listWithThumbnails();
+      const gdiBeforeListing = driver.user32.symbols.GetGuiResources(
+        CURRENT_PROCESS,
+        GR_GDIOBJECTS,
+      );
+      const withThumbnails = await listWithThumbnails();
+      expect(
+        driver.user32.symbols.GetGuiResources(CURRENT_PROCESS, GR_GDIOBJECTS),
+      ).toBe(gdiBeforeListing);
+      const ownListed = withThumbnails.find((source) => source.id === own.id);
+      expect(ownListed?.thumbnail).toBeDefined();
+      expect(
+        Math.max(
+          ownListed?.thumbnail?.width as number,
+          ownListed?.thumbnail?.height as number,
+        ),
+      ).toBe(64);
+      const protectedListed = withThumbnails.find(
+        (source) => source.id === protectedSource.id,
+      );
+      expect(protectedListed).toBeDefined();
+      expect(protectedListed?.thumbnail).toBeUndefined();
+      const screenListed = withThumbnails.find(
+        (source) => source.kind === "screen",
+      );
+      expect(screenListed?.thumbnail).toBeDefined();
+
       // A minimized window is still listed but cannot be captured.
       driver.user32.symbols.ShowWindow(window, SW_MINIMIZE);
       const minimized = (
@@ -414,6 +461,13 @@ test.skipIf(process.platform !== "win32")(
           reason: "SOURCE_UNAVAILABLE",
         },
       });
+      const minimizedListed = (await listWithThumbnails()).find(
+        (source) => source.id === own.id,
+      );
+      expect(minimizedListed).toMatchObject({
+        minimized: true,
+      });
+      expect(minimizedListed?.thumbnail).toBeUndefined();
 
       // A destroyed window is gone.
       driver.user32.symbols.DestroyWindow(window);

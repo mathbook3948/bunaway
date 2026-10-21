@@ -3,6 +3,7 @@ import { BunawayError } from "@bunaway/protocol";
 import {
   DEFAULT_CAPTURE_EDGE_PIXELS,
   MAX_CAPTURE_PNG_BYTES,
+  MAX_LISTED_THUMBNAIL_PNG_BYTES,
   MAX_SOURCE_NAME_CHARS,
   MAX_SOURCE_PIXELS,
   MAX_SOURCES,
@@ -184,9 +185,12 @@ export function fitSize(
   };
 }
 
+/** A native call of a capture reported failure; a listing drops that source's thumbnail instead of failing. */
+class NativeStepError extends Error {}
+
 function checked(done: boolean, what: string): void {
   if (!done) {
-    throw new Error(`${what} failed.`);
+    throw new NativeStepError(`${what} failed.`);
   }
 }
 
@@ -230,7 +234,10 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
         fail("INTERNAL", "Too many capture sources.");
       }
       this.replaceListed(input, placed);
-      return listed;
+      if (input.thumbnailSize === undefined) {
+        return listed;
+      }
+      return this.withThumbnails(listed, placed, input.thumbnailSize);
     });
   }
 
@@ -246,12 +253,9 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
     }
     const maxWidth = input.maxWidth ?? DEFAULT_CAPTURE_EDGE_PIXELS;
     const maxHeight = input.maxHeight ?? DEFAULT_CAPTURE_EDGE_PIXELS;
-    const { pixels, size } = this.inDpiScope(() =>
-      ref.kind === "window"
-        ? this.captureWindow(ref, maxWidth, maxHeight)
-        : this.captureScreen(ref, maxWidth, maxHeight),
+    const { png, size } = this.inDpiScope(() =>
+      this.capturePng(ref, maxWidth, maxHeight),
     );
-    const png = encodePng(pixels, size.width, size.height);
     if (png.length > MAX_CAPTURE_PNG_BYTES) {
       fail(
         "INVALID_ARGUMENT",
@@ -259,12 +263,75 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
         REASON.tooLarge,
       );
     }
+    return toImage(png, size);
+  }
+
+  /** Draw one source and encode it; the caller holds the DPI scope and checks the PNG size. */
+  private capturePng(ref: SourceRef, maxWidth: number, maxHeight: number) {
+    const { pixels, size } =
+      ref.kind === "window"
+        ? this.captureWindow(ref, maxWidth, maxHeight)
+        : this.captureScreen(ref, maxWidth, maxHeight);
     return {
-      mime: "image/png",
-      data: png.toString("base64"),
-      width: size.width,
-      height: size.height,
+      png: encodePng(pixels, size.width, size.height),
+      size,
     };
+  }
+
+  /**
+   * Attach a thumbnail to every listed source, in list order, inside the caller's DPI scope.
+   * A source that cannot be captured now (minimized, protected, closed, not responding, window too
+   * large, a failed native call) stays in the list without one, because one bad window must not fail
+   * the whole listing. Thumbnails stop at the first PNG that does not fit the remaining byte budget
+   * (including one over the single-capture limit), so the response stays under the message limit.
+   * A failure to release GDI objects is not per-source and fails the listing. Like a capture, the
+   * listing cannot be cancelled once it runs, because the worker thread does not poll cancellation.
+   */
+  private withThumbnails(
+    listed: ScreenCaptureSource[],
+    placed: Placed[],
+    box: Size,
+  ): ScreenCaptureSource[] {
+    let remainingBytes = MAX_LISTED_THUMBNAIL_PNG_BYTES;
+    const refs = new Map(
+      placed.map(({ id, ref }) => [
+        id,
+        ref,
+      ]),
+    );
+    return listed.map((source) => {
+      const ref = refs.get(source.id);
+      if (ref === undefined || remainingBytes <= 0) {
+        return source;
+      }
+      const captured = this.tryCapturePng(ref, box);
+      if (captured === null) {
+        return source;
+      }
+      if (captured.png.length > remainingBytes) {
+        remainingBytes = 0;
+        return source;
+      }
+      remainingBytes -= captured.png.length;
+      return {
+        ...source,
+        thumbnail: toImage(captured.png, captured.size),
+      };
+    });
+  }
+
+  /** Capture one source for a listing; null when this source alone cannot be captured. */
+  private tryCapturePng(ref: SourceRef, box: Size) {
+    try {
+      return this.capturePng(ref, box.width, box.height);
+    } catch (error) {
+      // Only the source's own state and native call failures are expected; a release failure
+      // (AggregateError) or a programming error is not about this source and must surface.
+      if (error instanceof BunawayError || error instanceof NativeStepError) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   /** Refuse later calls, forget every source id and release the native libraries; repeating does nothing. */
@@ -520,7 +587,7 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
 
   private nonZero(handle: bigint, what: string): bigint {
     if (handle === 0n) {
-      throw new Error(`${what} failed.`);
+      throw new NativeStepError(`${what} failed.`);
     }
     return handle;
   }
@@ -551,7 +618,7 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
           area.height,
         );
         if (created === null || created.bitmap === 0n) {
-          throw new Error("CreateDIBSection failed.");
+          throw new NativeStepError("CreateDIBSection failed.");
         }
         return created;
       },
@@ -569,6 +636,15 @@ export class WindowsScreenCapture implements ScreenCaptureInstance {
     );
     return dib;
   }
+}
+
+function toImage(png: Buffer, size: Size): ScreenCaptureImage {
+  return {
+    mime: "image/png",
+    data: png.toString("base64"),
+    width: size.width,
+    height: size.height,
+  };
 }
 
 /** Whether a window belongs in the list: an ordinary visible, titled, top-level window. */

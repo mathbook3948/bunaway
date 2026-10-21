@@ -1,4 +1,4 @@
-import { defineNativeOperation } from "@bunaway/plugin";
+import { BunawayError, defineNativeOperation } from "@bunaway/plugin";
 import {
   captureInputSchema,
   captureOutputSchema,
@@ -13,7 +13,21 @@ export const screenCaptureOperations = {
   listSources: operation({
     input: listSourcesInputSchema,
     output: sourceListSchema,
-    handler: (input, { instance }) => instance.listSources(input),
+    handler(input, { instance, permissions }) {
+      // Thumbnails are captures, so a listing that asks for them needs the capture permission too.
+      // `permissions` is absent only on direct adapter calls, which carry no host authority to check.
+      if (
+        input.thumbnailSize !== undefined &&
+        permissions !== undefined &&
+        !permissions.permissions.includes("screenCapture.captureSource")
+      ) {
+        throw new BunawayError({
+          code: "PERMISSION_DENIED",
+          message: "Plugin permission denied.",
+        });
+      }
+      return instance.listSources(input);
+    },
   }),
   captureSource: operation({
     input: captureInputSchema,
