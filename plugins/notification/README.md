@@ -37,7 +37,7 @@ DLL을 정리하며 반복 종료는 안전하다. 정책과 취소 검사는 �
 
 ## Toast 표시와 실행 중 이벤트
 
-`show({ id, group?, title, body?, data?, silent?, suppressPopup? })`는 WinRT에 toast를
+`show({ id, group?, title, body?, data?, silent?, suppressPopup?, timeoutType?, expiresAfterSeconds? })`는 WinRT에 toast를
 전달하고 `{ id, group }`을 반환한다. 반환은 OS 접수이며 화면 표시를 보장하지 않는다.
 `id`와 `group`은 영문 대소문자, 숫자, `.`, `_`, `-`로 된 1~16자이며 기본 group은
 `bunaway`이다. 같은 앱 ID, group, id는 이전 알림을 교체한다. 제목은 1~256자,
@@ -61,6 +61,17 @@ recall 속성을 거부한다. 링크는 따라가고 링크 대상은 이 검�
 `Looping.Call`~`Looping.Call10` 중 하나이며 `ms-winsoundevent:Notification.<이름>`으로 재생한다. Windows
 비패키지 앱은 임의 소리 파일을 재생할 수 없다. `soundLoop`는 `Looping.*` 소리에만 허용한다.
 `silent: true`와 `sound`는 함께 줄 수 없고 `INVALID_ARGUMENT`이다.
+
+`timeoutType`은 `default`(기본)와 `never`이다(Electron `Notification`과 같은 값). `never`는
+`<toast scenario="reminder">`를 출력해 popup이 사용자가 닫을 때까지 남게 한다. reminder는 버튼이 있어야
+하므로 `actions`와 `reply`가 없으면 `<action content="" arguments="dismiss" activationType="system"/>`
+닫기 버튼을 넣고, 있으면 그 버튼을 쓴다. `suppressPopup`이면 효과가 없다.
+`expiresAfterSeconds`(1~604800의 정수 또는 null)는 `IToastNotification.put_ExpirationTime`(slot 7)에
+`PropertyValue.CreateDateTime`(IPropertyValueStatics slot 21)로 만든 값을 `IReference<DateTime>`으로 QueryInterface해 넘겨
+알림 센터에서 그 시간 뒤에 항목을 제거한다. DateTime은 1601-01-01 UTC 기준 100 ns tick이다. DateTime 값과
+팩토리 참조는 호출 직후 해제한다. Windows CI는 시나리오 XML과 보관된 알림의 `ExpirationTime`을
+확인하며, 실제 popup 유지와 만료 시점의 제거는 확인하지 않았다. 생략하면 Windows 기본 보관 기간을 따르고
+CI에서 그 값이 약 3일 뒤로 읽혔다.
 
 `actions`(`{ id, label }` 최대 5개, id 중복 불가, label 1~64자)와 `reply`(`{ placeholder?, buttonLabel }`)를
 지정하면 toast에 버튼과 텍스트 입력 상자를 추가한다. 응답 입력 상자는 `hint-inputId`로 연결한 전송 버튼과 함께 선언하므로

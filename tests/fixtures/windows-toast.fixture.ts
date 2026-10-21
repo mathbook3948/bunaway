@@ -344,7 +344,10 @@ if (workerData?.toastMarshalWorker) {
   const appId = `test.${crypto.randomUUID()}`;
   const removeShortcut = await createNotificationShortcut(appId);
   let controller: ReturnType<typeof createToastController> | undefined;
-  const history = async (timeoutMs: number): Promise<string[]> => {
+  const history = async (
+    timeoutMs: number,
+    expiration = false,
+  ): Promise<string[]> => {
     const child = Bun.spawn(
       [
         "powershell.exe",
@@ -353,6 +356,11 @@ if (workerData?.toastMarshalWorker) {
         fileURLToPath(new URL("./windows-toast-history.ps1", import.meta.url)),
         "-AppId",
         appId,
+        ...(expiration
+          ? [
+              "-Expiration",
+            ]
+          : []),
       ],
       {
         stdout: "pipe",
@@ -494,6 +502,66 @@ if (workerData?.toastMarshalWorker) {
         force: true,
       });
     }
+    // timeoutType never must be accepted by Windows as a reminder with the system dismiss button. Whether the popup
+    // stays until dismissed needs a user at the desktop, so only the stored toast is checked.
+    const reminder = notificationShowSchema.parse({
+      id: "reminder",
+      group: "bunaway-test",
+      title: "reminder fixture",
+      suppressPopup: true,
+      silent: true,
+      timeoutType: "never",
+    });
+    controller.show(reminder);
+    const kept = await waitHistory((items) => items.length === 1);
+    assert(kept[0]?.includes('scenario="reminder"'));
+    assert(kept[0]?.includes('arguments="dismiss"'));
+    assert(kept[0]?.includes('activationType="system"'));
+    controller.clear(reminder);
+    await waitHistory((items) => items.length === 0);
+    // expiresAfterSeconds must land in the stored toast's ExpirationTime, and a replacement without it must drop back to the OS default.
+    const expiring = notificationShowSchema.parse({
+      id: "expiring",
+      group: "bunaway-test",
+      title: "expiring fixture",
+      suppressPopup: true,
+      silent: true,
+      expiresAfterSeconds: 600,
+    });
+    const earliestMs = Date.now() + 600_000 - 120_000;
+    const latestMs = Date.now() + 600_000 + 120_000;
+    controller.show(expiring);
+    await waitHistory((items) => items.length === 1);
+    const [expiresAt] = await history(15000, true);
+    assert(
+      expiresAt,
+      "A toast with expiresAfterSeconds must keep an ExpirationTime",
+    );
+    const expiresAtMs = Date.parse(expiresAt);
+    assert(
+      expiresAtMs >= earliestMs && expiresAtMs <= latestMs,
+      `ExpirationTime ${expiresAt} must be about 600 seconds from now`,
+    );
+    controller.show({
+      ...expiring,
+      title: "unexpiring fixture",
+      expiresAfterSeconds: null,
+    });
+    // The new title proves the stored toast is the replacement before its ExpirationTime is read.
+    await waitHistory(
+      (items) =>
+        items.length === 1 && Boolean(items[0]?.includes("unexpiring fixture")),
+    );
+    // Windows gives a toast without an explicit expiration its default retention (about 3 days), so the replacement
+    // must read as far later than the 600 second value it replaced.
+    const [replacementExpiresAt] = await history(15000, true);
+    assert(replacementExpiresAt);
+    assert(
+      Date.parse(replacementExpiresAt) > Date.now() + 24 * 60 * 60 * 1000,
+      `Replacement ExpirationTime ${replacementExpiresAt} must be the OS default, not the earlier value`,
+    );
+    controller.clear(expiring);
+    await waitHistory((items) => items.length === 0);
     // Buttons and the reply box must be accepted by Windows and survive in the stored toast.
     const interactive = notificationShowSchema.parse({
       id: "actions",

@@ -304,12 +304,20 @@ function actionsXml(input: ResolvedNotification): string {
       button(action.label, `${ACTION_ARGUMENT_PREFIX}${action.id}`),
     )
     .join("");
-  return reply || buttons ? `<actions>${reply}${buttons}</actions>` : "";
+  // A reminder toast stays only while it has a button, so a toast without one gets the system dismiss
+  // button (empty content selects the localized label) and keeps its own buttons otherwise.
+  const dismiss =
+    input.timeoutType === "never" && !reply && !buttons
+      ? '<action content="" arguments="dismiss" activationType="system"/>'
+      : "";
+  const all = `${reply}${buttons}${dismiss}`;
+  return all ? `<actions>${all}</actions>` : "";
 }
 
 /**
  * Build toast XML. Text and file URIs are escaped, and media paths are validated local files.
  * A looping sound needs duration="long", otherwise Windows plays it once with the short toast.
+ * timeoutType "never" maps to scenario="reminder", which keeps the popup until the user dismisses it.
  * Caller data is never treated as markup or an executable activation route.
  */
 export function toastXml(input: ResolvedNotification): string {
@@ -330,5 +338,6 @@ export function toastXml(input: ResolvedNotification): string {
   } else if (input.sound) {
     audio = `<audio src="ms-winsoundevent:Notification.${input.sound}"${input.soundLoop ? ' loop="true"' : ""}/>`;
   }
-  return `<toast${input.soundLoop ? ' duration="long"' : ""}><visual><binding template="ToastGeneric">${media}<text>${escapeXml(input.title)}</text><text>${escapeXml(input.body)}</text></binding></visual>${actionsXml(input)}${audio}</toast>`;
+  const attributes = `${input.timeoutType === "never" ? ' scenario="reminder"' : ""}${input.soundLoop ? ' duration="long"' : ""}`;
+  return `<toast${attributes}><visual><binding template="ToastGeneric">${media}<text>${escapeXml(input.title)}</text><text>${escapeXml(input.body)}</text></binding></visual>${actionsXml(input)}${audio}</toast>`;
 }

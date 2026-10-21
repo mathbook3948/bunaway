@@ -74,6 +74,8 @@ export const MAX_ACTION_LABEL_LENGTH = 64;
 export const MAX_REPLY_PLACEHOLDER_LENGTH = 128;
 /** Same bound as `data`, so a reply fits any payload an app already accepts from a toast. */
 export const MAX_REPLY_LENGTH = 2048;
+/** Seven days: long enough for a reminder, and well inside the Windows DateTime range. */
+export const MAX_EXPIRES_AFTER_SECONDS = 7 * 24 * 60 * 60;
 const identifierSchema = z.string().regex(/^[A-Za-z0-9._-]{1,16}(?![\s\S])/);
 const xmlText = (maximum: number) =>
   z
@@ -181,6 +183,19 @@ export const notificationShowSchema = notificationIdentitySchema
       ])
       .default("inline"),
     sound: z.enum(TOAST_SOUNDS).nullable().default(null),
+    timeoutType: z
+      .enum([
+        "default",
+        "never",
+      ])
+      .default("default"),
+    expiresAfterSeconds: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_EXPIRES_AFTER_SECONDS)
+      .nullable()
+      .default(null),
     soundLoop: z.boolean().default(false),
     actions: z.array(toastActionSchema).default([]),
     reply: toastReplySchema.nullable().default(null),

@@ -9,6 +9,7 @@ import {
 import { publishSystemEvent } from "#native/windows/bun/system-events";
 import {
   MAX_ACTIVE_TOASTS,
+  MAX_EXPIRES_AFTER_SECONDS,
   type NotificationResult,
   notificationShowSchema,
   type ToastEvent,
@@ -310,6 +311,135 @@ test("toast XML treats content as text and never includes app data as activation
     '<toast><visual><binding template="ToastGeneric"><text>&lt;text&gt;&amp;&quot;&apos; 🚀</text><text>&lt;/text&gt;&lt;audio src=&quot;evil&quot;/&gt;</text></binding></visual><audio silent="true"/></toast>',
   );
   expect(toastXml(input())).not.toContain("audio");
+});
+
+test("timeoutType never selects the reminder scenario and keeps a dismiss button", () => {
+  const parse = (extra: Record<string, unknown>) =>
+    notificationShowSchema.parse({
+      id: "reminder",
+      title: "Hello",
+      ...extra,
+    });
+  expect(toastXml(input())).not.toContain("scenario");
+  expect(
+    toastXml(
+      parse({
+        timeoutType: "default",
+      }),
+    ),
+  ).not.toContain("scenario");
+  // Without buttons the system dismiss action (empty content, localized label) keeps the reminder visible.
+  expect(
+    toastXml(
+      parse({
+        timeoutType: "never",
+      }),
+    ),
+  ).toBe(
+    '<toast scenario="reminder"><visual><binding template="ToastGeneric"><text>Hello</text><text></text></binding></visual><actions><action content="" arguments="dismiss" activationType="system"/></actions></toast>',
+  );
+  // The app's own buttons already satisfy the reminder, so no extra dismiss button is added.
+  const withAction = toastXml(
+    parse({
+      timeoutType: "never",
+      actions: [
+        {
+          id: "snooze",
+          label: "Snooze",
+        },
+      ],
+    }),
+  );
+  expect(withAction).toContain('<toast scenario="reminder">');
+  expect(withAction).not.toContain('arguments="dismiss"');
+  expect(
+    toastXml(
+      parse({
+        timeoutType: "never",
+        reply: {
+          buttonLabel: "Send",
+        },
+      }),
+    ),
+  ).not.toContain('arguments="dismiss"');
+  expect(
+    toastXml(
+      parse({
+        timeoutType: "never",
+        sound: "Looping.Alarm",
+        soundLoop: true,
+      }),
+    ),
+  ).toContain('<toast scenario="reminder" duration="long">');
+  // expiresAfterSeconds is applied through ExpirationTime, not toast XML.
+  expect(
+    toastXml(
+      parse({
+        expiresAfterSeconds: 60,
+      }),
+    ),
+  ).toBe(toastXml(input("reminder")));
+});
+
+test("show input validates timeoutType and bounds expiresAfterSeconds", () => {
+  const accepts = (extra: Record<string, unknown>) =>
+    notificationShowSchema.safeParse({
+      id: "t",
+      title: "T",
+      ...extra,
+    }).success;
+  expect(
+    accepts({
+      expiresAfterSeconds: 1,
+    }),
+  ).toBe(true);
+  expect(
+    accepts({
+      expiresAfterSeconds: MAX_EXPIRES_AFTER_SECONDS,
+    }),
+  ).toBe(true);
+  for (const value of [
+    MAX_EXPIRES_AFTER_SECONDS + 1,
+    0,
+    -1,
+    1.5,
+    Number.NaN,
+    "60",
+  ]) {
+    expect(
+      accepts({
+        expiresAfterSeconds: value,
+      }),
+    ).toBe(false);
+  }
+  expect(
+    accepts({
+      timeoutType: "never",
+      expiresAfterSeconds: 60,
+      silent: true,
+    }),
+  ).toBe(true);
+  expect(
+    accepts({
+      timeoutType: "sticky",
+    }),
+  ).toBe(false);
+  // A suppressed popup never shows, so the timeout type has nothing to keep and is not an error.
+  expect(
+    accepts({
+      timeoutType: "never",
+      suppressPopup: true,
+    }),
+  ).toBe(true);
+  expect(
+    notificationShowSchema.parse({
+      id: "t",
+      title: "T",
+    }),
+  ).toMatchObject({
+    timeoutType: "default",
+    expiresAfterSeconds: null,
+  });
 });
 
 test("replacement suppresses retired callbacks and retains the previous generation when Show fails", () => {
