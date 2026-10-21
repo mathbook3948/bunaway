@@ -18,7 +18,11 @@ import {
   checkToast,
   createToastDelegate,
   createToastRuntime,
+  loadXmlDocument,
+  TICKS_PER_SECOND,
+  toWindowsTicks,
 } from "#notification/platforms/toast-winrt";
+import { createScheduledToasts } from "#notification/platforms/windows-scheduled-toasts";
 
 // Windows SDK Windows.UI.Notifications and Windows.Data.Xml.Dom ABI metadata.
 const MANAGER = "Windows.UI.Notifications.ToastNotificationManager";
@@ -27,16 +31,11 @@ const HISTORY_MANAGER_IID = "7ab93c52-0e48-4750-ba9d-1a4113981847";
 const TOAST_FACTORY_IID = "04124b20-82c6-4229-b109-fd9ed4662b53";
 const HISTORY2_IID = "3bc3d253-2f31-4092-9129-8ad5abf067da";
 const TOAST2_IID = "9dfb9fd1-143a-490e-90bf-b9fba7132de7";
-const XML_IO_IID = "6cd0e74e-ee65-4489-9ebf-ca43e87ba637";
 const PROPERTY_VALUE_STATICS_IID = "629bdbc8-d932-4ff4-96b9-8d96c5c1e858";
 const REFERENCE_DATE_TIME_IID = "5541d8a7-497c-5aa4-86fc-7713adbf2a2c";
 // IToastNotification: put_ExpirationTime(7). IPropertyValueStatics: CreateDateTime(21).
 const PUT_EXPIRATION_TIME_SLOT = 7;
 const CREATE_DATE_TIME_SLOT = 21;
-// Windows.Foundation.DateTime counts 100 ns ticks since 1601-01-01 UTC.
-const WINDOWS_EPOCH_OFFSET_MS = 11_644_473_600_000n;
-const TICKS_PER_MS = 10_000n;
-const TICKS_PER_SECOND = 10_000_000n;
 const EVENTS = [
   {
     kind: "clicked",
@@ -212,26 +211,8 @@ export function createWindowsToastDriver(appId: string): ToastDriver {
     }
   };
   function createToast(input: ResolvedNotification): Pointer {
-    const document = runtime.activate("Windows.Data.Xml.Dom.XmlDocument");
+    const document = loadXmlDocument(runtime, toastXml(input));
     try {
-      const io = runtime.query(document, XML_IO_IID);
-      try {
-        runtime.string(toastXml(input), (xml) =>
-          checkToast(
-            runtime.method(
-              io,
-              6,
-              [
-                "ptr",
-              ],
-              xml,
-            ),
-            "XmlDocument.LoadXml",
-          ),
-        );
-      } finally {
-        runtime.release(io);
-      }
       const factory = runtime.factory(
         "Windows.UI.Notifications.ToastNotification",
         TOAST_FACTORY_IID,
@@ -261,8 +242,7 @@ export function createWindowsToastDriver(appId: string): ToastDriver {
   /** Set ToastNotification.ExpirationTime so the notification center drops the toast after the delay. */
   function setExpiration(toast: Pointer, seconds: number): void {
     const ticks =
-      (BigInt(Date.now()) + WINDOWS_EPOCH_OFFSET_MS) * TICKS_PER_MS +
-      BigInt(seconds) * TICKS_PER_SECOND;
+      toWindowsTicks(Date.now()) + BigInt(seconds) * TICKS_PER_SECOND;
     const statics = runtime.factory(
       "Windows.Foundation.PropertyValue",
       PROPERTY_VALUE_STATICS_IID,
@@ -308,7 +288,20 @@ export function createWindowsToastDriver(appId: string): ToastDriver {
       runtime.release(statics);
     }
   }
+  const scheduled = createScheduledToasts(runtime, notifier);
   return {
+    schedule(input) {
+      ensureActive();
+      scheduled.schedule(input);
+    },
+    listScheduled() {
+      ensureActive();
+      return scheduled.listScheduled();
+    },
+    cancelScheduled(identity) {
+      ensureActive();
+      scheduled.cancelScheduled(identity);
+    },
     show(input, receive) {
       ensureActive();
       // A failed show can retain native callbacks without reaching the controller's active map.

@@ -3,7 +3,7 @@
 `@bunaway/plugin-notification`은 Windows의 알림 API 지원과 현재 앱의 OS 알림 설정을
 조회하고 Windows 알림 설정 페이지를 열며 실행 중 toast를 표시하는 선택 네이티브 플러그인이다.
 `defineNativePlugin`과 Zod 계약으로 `notification.getStatus`, `notification.openSettings`를
-`notification.show`, `notification.clear`, `notification.clearGroup`, `notification.clearAll`, `notification.list`를 선언하며 각 작업은 같은 이름의 독립 정책 권한을 요구한다.
+`notification.show`, `notification.schedule`, `notification.listScheduled`, `notification.cancelScheduled`, `notification.clear`, `notification.clearGroup`, `notification.clearAll`, `notification.list`를 선언하며 각 작업은 같은 이름의 독립 정책 권한을 요구한다.
 공개 helper는 `notification.getStatus()`와 `notification.openSettings()`이다.
 
 자세한 반환값, 권한, 오류와 사용 예는
@@ -124,6 +124,16 @@ Tauri 기준으로 제공한다.
 종료는 이번 실행이 소유한 알림을 지우고 구독, COM 객체, callback과 DLL을 정리한다.
 교체와 clear는 지연된 native Release를 STA marshaling pump에서 작업당 최대 1초 기다린다.
 종료는 전체 정리에 하나의 1초 한도를 사용하며 실패는 숨기지 않는다.
+
+`schedule(input)`은 `show`와 같은 내용 필드에 표시 시각 `deliverAt`(epoch 밀리초 정수)을 더한 단발 예약이며
+`expiresAfterSeconds`는 받지 않는다. 현재 시각 이하는 `INVALID_ARGUMENT`이고 `{ id, group }`을 반환한다.
+`IScheduledToastNotificationFactory.CreateScheduledToastNotification`(6번 slot)으로 만들어 Tag, Group,
+SuppressPopup을 `IScheduledToastNotification2`(6, 8, 10번 slot)로 지정한 뒤 `ToastNotifier.AddToSchedule`(9번 slot)에
+넘긴다. 예약은 Windows가 소유하므로 이벤트 delegate를 붙이지 않고 앱 종료로 취소되지 않는다. 같은 id와 group은
+새 예약을 접수한 뒤 `RemoveFromSchedule`(10번 slot)로 이전 예약을 지워 교체하고, 앱당 4096개가 찬 상태의 예약은
+교체도 `BUSY`이다. `listScheduled()`는 `GetScheduledToastNotifications`(11번 slot)에서 읽은 `{ id, group, deliverAt }`
+배열이며 id/group 규칙을 벗어난 항목은 뺀다. `cancelScheduled({ id, group? })`는 일치하는 예약을 모두 지우고
+null을 반환하며 없어도 성공한다. Tauri의 `schedule`, `pending`, `cancel` 범위이고 반복 예약은 제공하지 않는다.
 
 시작 메뉴 바로가기와 process AppUserModelID가 일치하는 unpackaged Windows x64를
 대상으로 한다. MSIX는 패키지 식별자 연동 전까지 `UNSUPPORTED`이다. 플러그인은 바로가기,

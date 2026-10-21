@@ -19,6 +19,9 @@ test("notification status and Settings require separate permissions and null-onl
     ...registry.operations.keys(),
   ]).toEqual([
     "notification.show",
+    "notification.schedule",
+    "notification.listScheduled",
+    "notification.cancelScheduled",
     "notification.clear",
     "notification.clearGroup",
     "notification.clearAll",
@@ -29,6 +32,7 @@ test("notification status and Settings require separate permissions and null-onl
   for (const operation of [
     "notification.clearAll",
     "notification.list",
+    "notification.listScheduled",
     "notification.getStatus",
     "notification.openSettings",
   ]) {

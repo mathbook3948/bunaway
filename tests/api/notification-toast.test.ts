@@ -71,6 +71,9 @@ function fixture() {
     list() {
       return listed;
     },
+    schedule() {},
+    listScheduled: () => [],
+    cancelScheduled() {},
     clearGroup(group) {
       if (failClear) {
         throw new Error("clear failed");

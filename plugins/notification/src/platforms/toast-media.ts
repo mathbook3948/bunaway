@@ -53,7 +53,7 @@ function invalidImage(message: string): never {
  * re-validated.
  */
 export function assertToastMediaFiles(
-  input: ResolvedNotification,
+  input: Pick<ResolvedNotification, "icon" | "image">,
   filesystem: ToastFilesystem,
 ): void {
   for (const path of [

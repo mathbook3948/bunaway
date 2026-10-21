@@ -26,6 +26,21 @@ export function guid(value: string): Buffer {
   bytes.subarray(6, 8).reverse();
   return bytes;
 }
+// Windows.Foundation.DateTime counts 100 ns ticks since 1601-01-01 UTC.
+const WINDOWS_EPOCH_OFFSET_MS = 11_644_473_600_000n;
+const TICKS_PER_MS = 10_000n;
+export const TICKS_PER_SECOND = 10_000_000n;
+
+/** Convert epoch milliseconds to a Windows.Foundation.DateTime tick count. */
+export function toWindowsTicks(epochMs: number): bigint {
+  return (BigInt(epochMs) + WINDOWS_EPOCH_OFFSET_MS) * TICKS_PER_MS;
+}
+
+/** Convert a Windows.Foundation.DateTime tick count to epoch milliseconds, truncating sub-millisecond ticks. */
+export function fromWindowsTicks(ticks: bigint): number {
+  return Number(ticks / TICKS_PER_MS - WINDOWS_EPOCH_OFFSET_MS);
+}
+
 /** HRESULTs reported when the toast activator or its registration is missing on this system. */
 const UNSUPPORTED_TOAST_HRESULTS = new Set([
   0x80040154,
@@ -34,6 +49,7 @@ const UNSUPPORTED_TOAST_HRESULTS = new Set([
   0x80070490,
 ]);
 const E_ACCESSDENIED_HRESULT = 0x80070005;
+const E_INVALIDARG_HRESULT = 0x80070057;
 
 /** Map a failed toast HRESULT to the public error code. */
 function toastFailureCode(
@@ -58,6 +74,24 @@ export function checkToast(result: number, stage: string): void {
       hresult,
     },
   });
+}
+
+/**
+ * Like `checkToast` for scheduling calls, where E_INVALIDARG means the delivery time was not acceptable
+ * (for example it passed between the caller's check and the OS call), an input error of the caller.
+ */
+export function checkSchedule(result: number, stage: string): void {
+  if (result >>> 0 === E_INVALIDARG_HRESULT) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Windows rejected the scheduled notification.",
+      details: {
+        stage,
+        hresult: result >>> 0,
+      },
+    });
+  }
+  checkToast(result, stage);
 }
 
 /** One persistent STA reference, with scoped HSTRINGs and COM method bindings. No import-time DLL loads. */
@@ -213,6 +247,41 @@ export function createToastRuntime() {
       library.close();
     },
   };
+}
+
+// IXmlDocumentIO: LoadXml(6).
+const XML_IO_IID = "6cd0e74e-ee65-4489-9ebf-ca43e87ba637";
+
+/** Parse toast XML into a new XmlDocument. The caller owns and releases the returned reference. */
+export function loadXmlDocument(
+  runtime: ReturnType<typeof createToastRuntime>,
+  xml: string,
+): Pointer {
+  const document = runtime.activate("Windows.Data.Xml.Dom.XmlDocument");
+  try {
+    const io = runtime.query(document, XML_IO_IID);
+    try {
+      runtime.string(xml, (text) =>
+        checkToast(
+          runtime.method(
+            io,
+            6,
+            [
+              "ptr",
+            ],
+            text,
+          ),
+          "XmlDocument.LoadXml",
+        ),
+      );
+    } finally {
+      runtime.release(io);
+    }
+    return document;
+  } catch (error) {
+    runtime.release(document);
+    throw error;
+  }
 }
 
 /**
