@@ -30,7 +30,7 @@ Ctrl+C로 중단하면 실행한 명령과 하위 프로세스 정리가 끝난 
 Windows EXE 컴파일 중에도 같은 취소 처리를 적용합니다.
 
 최종 앱은 포함된 Bun을 사용합니다. 사용자 전역 Bun이나 개발 서버에 의존하지 않습니다.
-Windows 실행에는 WebView2 런타임이 필요합니다.
+Windows 실행에는 WebView2 런타임이 필요합니다. 인터넷이 없는 PC에 배포하려면 설치 파일에 런타임 설치 프로그램을 넣는 `webView2` offline 설정을 사용합니다([채널 문서](/reference/packaging/channels/) 참고).
 
 Windows에서는 `dist/windows-x64/<appId>.exe`를 더블클릭해 실행합니다. 콘솔 창을 열지 않습니다.
 `app.executableName`으로 파일 이름을 바꾸고 `app.icon`에 프로젝트 기준 `.ico` 경로를 지정할 수 있습니다.

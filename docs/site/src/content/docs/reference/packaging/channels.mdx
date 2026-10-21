@@ -23,7 +23,7 @@ macOS에서는 네이티브 `.app`을 빌드할 수 있습니다. macOS 배포 �
 | 옵션 | 기본값 | 동작 |
 | --- | --- | --- |
 | `scope` | `perUser` | `perUser` 또는 `perMachine`. 후자는 관리자 설치 |
-| `webView2` | direct: `bootstrap`, Store: `check` | 런타임 준비 방법 |
+| `webView2` | direct: `bootstrap`, Store: `check` | 런타임 준비 방법: `check`, `bootstrap` 또는 `offline` 객체 |
 | `desktopShortcut` | `false` | 바탕화면 바로가기 생성 |
 | `startMenuShortcut` | `true` | 시작 메뉴 바로가기 생성 |
 | `autostart` | `false` | perUser 로그인 자동 실행 작업 제공 |
@@ -58,7 +58,14 @@ macOS에서는 네이티브 `.app`을 빌드할 수 있습니다. macOS 배포 �
 `bootstrap`은 WebView2 bootstrapper를 준비하고 검증한 뒤 앱 설치 중 런타임을 설치합니다.
 설치 때 네트워크가 필요할 수 있습니다.
 `check`는 이미 설치된 WebView2를 검사하며 없는 런타임을 다운로드하지 않습니다.
-Store unpackaged는 설치 중 다운로드를 허용하지 않으므로 `bootstrap` 설정을 거부합니다.
+`offline`은 앱이 준비한 Evergreen Standalone Installer를 설치 파일에 넣어 네트워크 없이 런타임을 설치합니다.
+설정은 `{ "mode": "offline", "installers": { "x64": "vendor/MicrosoftEdgeWebView2RuntimeInstallerX64.exe" } }` 형태이고 경로는 프로젝트 기준이며 `..`와 절대 경로는 거부합니다.
+빌드는 파일이 대상 아키텍처의 PE인지, Authenticode 서명이 유효한지, 서명자가 Microsoft Corporation인지 확인하고 하나라도 맞지 않으면 `check`로 바꾸지 않고 실패합니다.
+아키텍처 확인은 대상과 같은 PE 또는 32비트 x86 PE를 허용합니다(Microsoft 설치 프로그램은 x86 실행 파일일 수 있습니다). 링크가 프로젝트 밖을 가리키는 파일은 거부합니다.
+서명자 확인은 신뢰된 인증서 체인과 서명자 이름 Microsoft Corporation까지이며, 파일이 WebView2 런타임 설치 프로그램인지는 확인하지 않으므로 앱 개발자가 Microsoft 배포 파일을 사용해야 합니다.
+설치 파일 크기가 Standalone Installer만큼 커지며(아키텍처당 약 170 MB), `win-direct`에서만 쓸 수 있습니다.
+실제 오프라인 PC에서의 설치 동작은 자동 시험이 아니라 수동으로 확인해야 합니다.
+Store unpackaged는 설치 중 다운로드를 허용하지 않으므로 `bootstrap`과 `offline` 설정을 거부합니다.
 
 ### 로그인 자동 실행
 

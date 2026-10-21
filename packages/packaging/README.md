@@ -69,7 +69,12 @@ Inno Setup 스크립트를 생성, 컴파일한다. 앱 바로가기와 설치 �
   실행 파일명이나 설치 경로 기록이 없는 기존 compiled 설치의 이전 EXE는 안전하게 확인할 수 없어
   자동 정리하지 않는다.
 - `webView2`: `bootstrap`(기본: 설치 시 런타임이 없으면 Microsoft 공식
-  Evergreen 부트스트랩을 무인 실행) 또는 `check`(감지만).
+  Evergreen 부트스트랩을 무인 실행), `check`(감지만) 또는
+  `{ "mode": "offline", "installers": { "x64": "<프로젝트 상대 경로>" } }`
+  (앱이 준비한 Evergreen Standalone Installer를 설치 파일에 넣어 네트워크 없이 설치).
+  `offline`은 빌드 시 PE 아키텍처, Authenticode 서명과 서명자(Microsoft Corporation)를
+  확인하고, 하나라도 맞지 않으면 `check`로 폴백하지 않고 빌드를 실패시킨다.
+  `win-direct`에서만 허용한다.
 - `desktopShortcut`(기본 false), `startMenuShortcut`(기본 true).
 - `autostart`(기본 false): `perUser` 설치에 선택하지 않은 로그인 작업을 추가한다.
   업데이트도 이전 선택을 재사용하지 않으며 `/TASKS="autostart"`로 명시적으로 동의한다.
@@ -132,7 +137,9 @@ Windows 10 1809(`10.0.17763.0`)이며 그보다 오래된 버전은 거부한다
 WebView2는 레지스트리 `Clients\{F3017226-...}\pv`의 버전이 `0.0.0.0`보다 큰지 확인하고,
 없으면 번들된 `MicrosoftEdgeWebview2Setup.exe`를 `/silent /install`로
 실행한다(부트스트랩 다운로드가 실패하면 check 모드로 폴백).
-부트스트랩 모드에서는 앱 파일 설치 전에 종료 코드와 런타임 존재를 재검사하며,
+오프라인 모드는 같은 방식으로 `/silent /install`을 실행하되 파일을 `nocompression`으로 임베드하고,
+임시 폴더 압축 해제 실패(디스크 공간 부족 등)를 오류 메시지로 돌려준다.
+부트스트랩과 오프라인 모드에서는 앱 파일 설치 전에 종료 코드와 런타임 존재를 재검사하며,
 실행 실패, 설치 실패, 런타임 미검출은 사일런트 설치에서도 실패로 끝난다.
 
 ### `win-store-msix`: 현재 차단
@@ -146,7 +153,7 @@ WebView2는 레지스트리 `Clients\{F3017226-...}\pv`의 버전이 `0.0.0.0`�
 MSIX와 **다른 업데이트 계약**을 따른다. Store 요구사항에 맞춰:
 
 - standalone 오프라인 인스톨러만 허용: 다운로드 부트스트랩을 쓰지 않는다
-  (`webView2`는 `check`만, `bootstrap`은 검증 단계에서 거부).
+  (`webView2`는 `check`만, `bootstrap`과 `offline`은 검증 단계에서 거부).
 - 인스톨러와 내부 모든 PE는 신뢰된 루트 CA 체인으로 서명해야 제출 가능.
 - 서명 설정이 있으면 payload 전체를 PE 헤더로 검사하여 확장자가 바뀐 실행 파일도
   설치 프로그램 생성 전에 서명, CA 검증한다. 추가 PE는 기존 서명과 자산 해시를 유지하며,

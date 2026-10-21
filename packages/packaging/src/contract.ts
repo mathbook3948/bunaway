@@ -130,9 +130,24 @@ export interface SigningConfig {
   passwordEnv?: string;
 }
 
+/**
+ * How a Windows installer provides the WebView2 Runtime. `check` only warns,
+ * `bootstrap` embeds the Evergreen bootstrapper (needs internet at install
+ * time) and `offline` embeds an Evergreen Standalone Installer the app
+ * supplies per architecture, so the install needs no network.
+ */
+export type WebView2Config =
+  | "check"
+  | "bootstrap"
+  | {
+      mode: "offline";
+      /** Project-relative paths to Microsoft-signed Standalone Installers. */
+      installers: Partial<Record<"x64" | "arm64", string>>;
+    };
+
 export interface ChannelConfig {
   scope?: "perUser" | "perMachine";
-  webView2?: "check" | "bootstrap";
+  webView2?: WebView2Config;
   desktopShortcut?: boolean;
   startMenuShortcut?: boolean;
   /** Offer an unchecked current-user login task in per-user EXE installers. */
