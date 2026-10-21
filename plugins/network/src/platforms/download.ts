@@ -28,7 +28,7 @@ const TRANSIENT_FILE_ERRORS = new Set([
 const PART_SUFFIX_LENGTH = 8;
 /** Longest final name of a file on NTFS and common POSIX systems, which the temporary name must fit too. */
 const MAX_FILE_NAME_LENGTH = 255;
-/** Length of the `.`, the id prefix and `.part` that are appended to the final name. */
+/** Length of the `.`, the last characters of the id and `.part` that are appended to the final name. */
 const PART_NAME_OVERHEAD = 1 + PART_SUFFIX_LENGTH + ".part".length;
 /** Read size when a file is copied because hard links are unavailable. */
 const COPY_CHUNK_BYTES = 1024 * 1024;
@@ -219,6 +219,7 @@ async function copyExclusive(
         // A long copy is progress too, so the idle limit does not end it; the deadline still does.
         touch();
       }
+      await target.sync();
     } finally {
       await source.close();
     }
@@ -318,6 +319,8 @@ async function writeBody(
         touch();
       }
     }
+    // Reach the disk before the file is moved into place, so a power loss cannot leave an empty target.
+    await file.sync();
   } finally {
     try {
       await reader?.cancel();
