@@ -63,7 +63,8 @@ Inno Setup 스크립트를 생성, 컴파일한다. 앱 바로가기와 설치 �
   계산한 UUID(`@bunaway/protocol`의 `toastActivatorClsid`)이며 notification 플러그인이 같은 값으로 실행 중
   `HKCU\Software\Classes\CLSID\{...}\LocalServer32`를 쓰고 클래스를 등록하므로, 앱이 꺼진 동안 알림을 클릭하면
   Windows가 앱을 시작한다. 바탕화면 링크에는 기록하지 않는다. perUser 제거는 그 `HKCU` 키를 지우고
-  perMachine 제거는 다른 사용자의 hive를 지울 수 없어 남긴다.
+  perMachine 제거는 다른 사용자의 hive를 지울 수 없어 남긴다. 업데이트 설치는 대상이 현재 실행 파일이고
+  CLSID가 없는 시작 메뉴 링크를 다시 만들어 CLSID를 기록하고 사용자가 바꾼 `Arguments`를 되돌린다.
   모든 생성 링크에 `uninsneveruninstall`을 적용하고 `UninstallLogMode=overwrite`를 유지해
   Inno 자동 삭제와 이전 버전의 제거 기록이 대상 검증을 우회하지 않게 한다.
   `win-direct`와 `win-store-unpackaged`는 각 설치에서 실행 파일명을 Inno 이전 설치 데이터에 기록한다.

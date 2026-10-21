@@ -254,6 +254,8 @@ export function registerToastActivator(
   clsid: string,
   receive: (call: ActivatorCall) => void,
 ): ToastActivatorServer {
+  // Set by dispose; a click that was queued before revoke is dropped instead of reaching a closed plugin.
+  let disposed = false;
   const activate = new JSCallback(
     (
       _self: Pointer,
@@ -273,7 +275,11 @@ export function registerToastActivator(
           return E_INVALIDARG;
         }
         // The values are copied, so the callback can leave the native stack before publishing.
-        queueMicrotask(() => receive(call));
+        queueMicrotask(() => {
+          if (!disposed) {
+            receive(call);
+          }
+        });
         return S_OK;
       } catch {
         // Never unwind a JS exception through COM; Windows only needs to know the call failed.
@@ -340,7 +346,6 @@ export function registerToastActivator(
     closeAll();
     throw error;
   }
-  let disposed = false;
   return {
     dispose() {
       if (disposed) {

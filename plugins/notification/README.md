@@ -168,6 +168,10 @@ Windows는 시작 메뉴 바로가기의 `System.AppUserModel.ToastActivatorCLSI
   toast 객체 경로의 반복 클릭은 그대로 전달한다.
 - 호스트(`native/windows/bun`), `onOpen`, `NativeEnvironment`, 권한 모델은 바꾸지 않는다. 등록 실패는
   `console.error`로 남기고 알림 표시와 실행 중 클릭은 계속 동작한다.
+- 이 기능 이전에 설치한 앱의 업데이트는 CLSID가 없는 시작 메뉴 링크를 설치 프로그램이 다시 만들어 채운다
+  (사용자의 `Arguments`는 유지). 같은 앱 ID의 개발 실행이나 등록 실패가 있으면 클릭마다 설치된 실행 파일이
+  시작되어 `-Embedding`을 실행 중 인스턴스로 넘길 수 있다. `takeActivations`의 보관 모드는 프로세스당 한 번만
+  끝나므로 두 번째 창이나 새로 고침 뒤의 늦은 구독은 그 사이 클릭을 놓칠 수 있다.
 - 예약 알림에는 toast 객체 callback이 없어도 activator 경로로 클릭이 전달된다. 개발 실행과 CLSID가 없는
   바로가기는 실행 중인 프로세스가 표시한 알림만 받는다.
 

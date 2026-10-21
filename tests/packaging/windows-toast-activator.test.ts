@@ -198,3 +198,115 @@ test.skipIf(!iscc)(
     }
   },
 );
+
+test.skipIf(!iscc)(
+  "an upgrade adds the activator class to a Start menu shortcut made without it and keeps its arguments",
+  async () => {
+    if (!iscc) {
+      throw new Error("Expected ISCC.");
+    }
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "bunaway-toast-upgrade-")),
+    );
+    const identifier = `app.test-${crypto.randomUUID()}`;
+    const appId = `${identifier}.first`;
+    const clsid = toastActivatorClsid(appId);
+    const destination = join(root, "install");
+    const group = join(
+      process.env.APPDATA ?? "",
+      "Microsoft",
+      "Windows",
+      "Start Menu",
+      "Programs",
+      identifier,
+    );
+    const options: InnoOptions = {
+      ...base,
+      identifier,
+      appId,
+      appDataDir: `{localappdata}\\bunaway\\${appId}`,
+      desktopShortcut: false,
+      payloadDir: join(root, "stage", "app"),
+      outputDir: join(root, "stage", "installer"),
+    };
+    const build = async (script: string, name: string) => {
+      const source = join(root, "stage", `${name}.iss`);
+      await Bun.write(source, `﻿${script}`);
+      await must(iscc, [
+        "/Q",
+        source,
+      ]);
+      return join(root, "stage", "installer", "setup.exe");
+    };
+    const install = async (installer: string) =>
+      (
+        await run([
+          installer,
+          "/SP-",
+          "/VERYSILENT",
+          "/SUPPRESSMSGBOXES",
+          "/NORESTART",
+          `/DIR=${destination}`,
+        ])
+      ).code;
+    const shortcutNames = async () =>
+      (await readdir(group)).filter((name) => name.endsWith(".lnk"));
+    try {
+      await mkdir(join(root, "stage", "app"), {
+        recursive: true,
+      });
+      await mkdir(join(root, "stage", "installer"));
+      await Bun.write(join(root, "stage", "app", "App.exe"), "1");
+      // An installer from before the activator existed wrote the same link without the class.
+      const current = renderInnoScript(options);
+      const property = `; AppUserModelToastActivatorCLSID: "{{${clsid}}"`;
+      expect(current).toContain(property);
+      const previous = current.replace(property, "");
+      expect(await install(await build(previous, "previous"))).toBe(0);
+      const [name] = await shortcutNames();
+      expect(name).toBeDefined();
+      const link = join(group, name ?? "");
+      expect(
+        Buffer.from(await Bun.file(link).arrayBuffer()).includes(guid(clsid)),
+      ).toBe(false);
+      const edit = await run([
+        "powershell.exe",
+        "-NoProfile",
+        "-Command",
+        `$s=(New-Object -ComObject WScript.Shell).CreateShortcut('${link.replace(/'/g, "''")}');$s.Arguments='--custom-flag';$s.Save()`,
+      ]);
+      expect(edit.code, edit.stderr).toBe(0);
+      expect(await install(await build(current, "current"))).toBe(0);
+      expect(await shortcutNames()).toEqual([
+        name ?? "",
+      ]);
+      expect(
+        Buffer.from(await Bun.file(link).arrayBuffer()).includes(guid(clsid)),
+      ).toBe(true);
+      const read = await run([
+        "powershell.exe",
+        "-NoProfile",
+        "-Command",
+        `(New-Object -ComObject WScript.Shell).CreateShortcut('${link.replace(/'/g, "''")}').Arguments`,
+      ]);
+      expect(read.stdout.trim()).toBe("--custom-flag");
+    } finally {
+      await run([
+        join(destination, "unins000.exe"),
+        "/VERYSILENT",
+        "/SUPPRESSMSGBOXES",
+        "/NORESTART",
+      ]);
+      await run([
+        "reg.exe",
+        "delete",
+        `HKCU\\Software\\Classes\\CLSID\\{${clsid}}`,
+        "/f",
+      ]);
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);

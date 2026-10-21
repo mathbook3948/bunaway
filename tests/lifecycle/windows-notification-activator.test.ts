@@ -140,7 +140,11 @@ test.skipIf(process.platform !== "win32")(
     const ole = dlopen("ole32.dll", {
       ...pick(OLE32, "CoInitializeEx", "CoUninitialize"),
     });
-    ole.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED);
+    // S_OK or S_FALSE: the apartment is ours either way.
+    expect([
+      0,
+      1,
+    ]).toContain(ole.symbols.CoInitializeEx(null, COINIT_APARTMENTTHREADED));
     const received: ActivatorCall[] = [];
     const server = registerToastActivator(clsid, (call) => {
       received.push(call);
