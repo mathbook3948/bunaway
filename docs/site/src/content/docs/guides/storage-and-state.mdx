@@ -69,7 +69,8 @@ Windows와 macOS 구현에는 절대 경로를 전달합니다.
 Windows와 macOS 구현은 링크(symlink, junction)와 하드 링크를 일반 경로처럼 따라가므로, 폴더 밖으로 나가는 링크를 막아야 하면
 앱 명령이 경로를 정하면서 확인해야 합니다([파일 경로 제한은 앱 명령에서 합니다](/concepts/views-and-policy/#파일-경로-제한은-앱-명령에서-합니다)).
 
-Windows와 macOS에서 `storage.readDirectory`로 직접 자식 이름을 읽고
+Windows와 macOS에서 `storage.readDirectory`로 직접 자식 이름을 읽고(256개를 넘는 디렉터리는
+`storage.readDirectoryPage`로 나눠 읽습니다)
 `storage.createDirectory`로 디렉터리를 만들 수 있습니다. recursive 기본값은 false이며
 작업별 권한을 각각 허용합니다. `storage.remove`로 파일이나 빈 디렉터리를 지웁니다.
 `storage.directorySize`는 트리 안의 링크를 따라가지 않고 파일의 논리 크기를 더합니다.

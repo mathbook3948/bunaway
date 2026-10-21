@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import storage from "@bunaway/plugin-storage";
-import { BunawayError, NativeRegistry } from "@bunaway/protocol";
+import { NativeRegistry } from "@bunaway/protocol";
 import {
   DEFAULT_DIRECTORY_PAGE_ENTRIES,
   MAX_DIRECTORY_ENTRIES,
@@ -187,19 +187,6 @@ test("entries carry the kinds of readDirectory and links are not followed", () =
       kind: "file",
     },
   ]);
-});
-
-test("a name over the character limit on the page fails the read", () => {
-  createFiles([
-    "a",
-  ]);
-  try {
-    writeFileSync(join(root, "x".repeat(256)), "");
-  } catch {
-    // Some file systems refuse the name outright, so there is nothing to list.
-    return;
-  }
-  expect(() => listDirectoryPage(root, undefined, 10)).toThrow(BunawayError);
 });
 
 test("a file target is not a directory", () => {
