@@ -1,13 +1,16 @@
 import type { NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
-import { checkForUpdate } from "#updater/check";
+import { checkForUpdateTarget } from "#updater/check";
 import {
+  type PackageFiles,
   settingsSchema,
   UPDATER_TARGETS,
   type UpdaterInstance,
   type UpdaterPlatform,
   type UpdaterSettings,
+  type UpdateTarget,
 } from "#updater/contract";
+import { downloadPackage } from "#updater/download";
 import { validateEndpointTemplate } from "#updater/endpoint";
 
 /** Update manifest architecture words for the CPUs the hosts run on. */
@@ -48,38 +51,48 @@ export function createUpdater(
   seams: {
     fetchImpl?: typeof fetch;
     timeoutMs?: number;
+    downloadTimeoutMs?: number;
+    /** The update folder; a platform without one cannot download. */
+    files?: PackageFiles;
   } = {},
 ): UpdaterInstance {
   const settings = readSettings(environment);
   const active = new Set<AbortController>();
   let disposed = false;
+  let target: UpdateTarget | null = null;
+  let downloading: Promise<unknown> | null = null;
+  function requireConfigured(): UpdaterSettings {
+    if (disposed) {
+      throw new BunawayError({
+        code: "CANCELLED",
+        message: "Updater adapter is disposed.",
+      });
+    }
+    if (!settings) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message: "bunaway.json has no plugins.updater settings.",
+        details: {
+          reason: "notConfigured",
+        },
+      });
+    }
+    return settings;
+  }
+  const development = environment.app?.launch.mode === "development";
   return {
     async check(signal) {
-      if (disposed) {
-        throw new BunawayError({
-          code: "CANCELLED",
-          message: "Updater adapter is disposed.",
-        });
-      }
-      if (!settings) {
-        throw new BunawayError({
-          code: "UNSUPPORTED",
-          message: "bunaway.json has no plugins.updater settings.",
-          details: {
-            reason: "notConfigured",
-          },
-        });
-      }
+      const configured = requireConfigured();
       const controller = new AbortController();
       active.add(controller);
       try {
-        return await checkForUpdate({
-          template: settings.endpoint,
-          channel: settings.channel,
+        const checked = await checkForUpdateTarget({
+          template: configured.endpoint,
+          channel: configured.channel,
           target: UPDATER_TARGETS[platform],
           arch: ARCHITECTURES[arch] ?? null,
           appVersion: environment.app?.version ?? null,
-          development: environment.app?.launch.mode === "development",
+          development,
           fetch: seams.fetchImpl ?? fetch,
           signal: signal
             ? AbortSignal.any([
@@ -93,15 +106,81 @@ export function createUpdater(
                 timeoutMs: seams.timeoutMs,
               }),
         });
+        target = checked.target;
+        return checked.result;
       } finally {
         active.delete(controller);
       }
     },
-    dispose() {
+    async download(signal) {
+      requireConfigured();
+      if (!target) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message: "No update was found by the last check.",
+          details: {
+            reason: "notChecked",
+          },
+        });
+      }
+      if (!seams.files) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message: "This platform has no update folder.",
+          details: {
+            reason: "notAvailable",
+          },
+        });
+      }
+      if (downloading) {
+        throw new BunawayError({
+          code: "BUSY",
+          message: "An update download is already running.",
+          details: {
+            reason: "downloadInProgress",
+          },
+        });
+      }
+      const controller = new AbortController();
+      active.add(controller);
+      const running = downloadPackage({
+        target,
+        files: seams.files,
+        development,
+        fetch: seams.fetchImpl ?? fetch,
+        signal: signal
+          ? AbortSignal.any([
+              signal,
+              controller.signal,
+            ])
+          : controller.signal,
+        ...(seams.downloadTimeoutMs === undefined
+          ? {}
+          : {
+              timeoutMs: seams.downloadTimeoutMs,
+            }),
+      });
+      downloading = running;
+      try {
+        return await running;
+      } finally {
+        downloading = null;
+        active.delete(controller);
+      }
+    },
+    busy() {
+      return downloading !== null;
+    },
+    async dispose() {
       disposed = true;
       for (const controller of active) {
         controller.abort();
       }
+      // The download's own caller receives its outcome; here only the cleanup it finishes matters.
+      await downloading?.then(
+        (value) => value,
+        (error: unknown) => error,
+      );
     },
   };
 }

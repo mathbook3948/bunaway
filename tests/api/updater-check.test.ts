@@ -561,7 +561,7 @@ test("a stalled server times out and a cancelled call is CANCELLED", async () =>
   expect((await pending).code).toBe("CANCELLED");
   const closing = updater(hang);
   const late = failure(closing.instance.check());
-  closing.instance.dispose();
+  await closing.instance.dispose();
   expect((await late).code).toBe("CANCELLED");
   expect((await failure(closing.instance.check())).code).toBe("CANCELLED");
 });
@@ -806,7 +806,7 @@ test("error statuses and connection failures are classified without the URL", as
   expect(network.message).not.toContain("ECONNREFUSED");
 });
 
-test("the registered plugin exposes one operation with a null input and reads the host environment", async () => {
+test("the registered plugin exposes the check and download operations with a null input and reads the host environment", async () => {
   const registry = new NativeRegistry([
     updaterPlugin._definition,
   ]);
@@ -814,6 +814,7 @@ test("the registered plugin exposes one operation with a null input and reads th
     ...registry.operations.keys(),
   ]).toEqual([
     "updater.check",
+    "updater.download",
   ]);
   const server = Bun.serve({
     hostname: "127.0.0.1",
