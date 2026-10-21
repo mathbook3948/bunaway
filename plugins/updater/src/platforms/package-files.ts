@@ -7,9 +7,11 @@ import type { PackageFiles, PackageSink } from "#updater/contract";
 const PACKAGE_SUFFIX = ".package";
 const PARTIAL_SUFFIX = ".partial";
 
-async function digestOf(path: string): Promise<string> {
+async function digestOf(path: string, signal: AbortSignal): Promise<string> {
   const hash = createHash("sha256");
-  for await (const chunk of createReadStream(path)) {
+  for await (const chunk of createReadStream(path, {
+    signal,
+  })) {
     hash.update(chunk as Uint8Array);
   }
   return hash.digest("hex");
@@ -19,7 +21,6 @@ class FileSink implements PackageSink {
   private readonly hash = createHash("sha256");
   private readonly stream: WriteStream;
   private failure: Error | undefined;
-  private ended = false;
 
   constructor(
     private readonly partial: string,
@@ -44,18 +45,17 @@ class FileSink implements PackageSink {
     });
   }
 
+  /** Resolves once the file handle is closed, so the rename that follows never meets an open handle. */
   finish(): Promise<string> {
-    this.ended = true;
     return new Promise((resolve, reject) => {
       if (this.failure) {
         reject(this.failure);
         return;
       }
-      this.stream.end((error?: Error | null) =>
-        error || this.failure
-          ? reject(error ?? this.failure)
-          : resolve(this.hash.digest("hex")),
+      this.stream.once("close", () =>
+        this.failure ? reject(this.failure) : resolve(this.hash.digest("hex")),
       );
+      this.stream.end();
     });
   }
 
@@ -65,9 +65,11 @@ class FileSink implements PackageSink {
   }
 
   async discard(): Promise<void> {
-    if (!this.ended) {
-      this.ended = true;
-      await new Promise<void>((resolve) => this.stream.end(() => resolve()));
+    if (!this.stream.closed) {
+      await new Promise<void>((resolve) => {
+        this.stream.once("close", () => resolve());
+        this.stream.destroy();
+      });
     }
     await rm(this.partial, {
       force: true,
@@ -81,12 +83,12 @@ export function createPackageFiles(dataRoot: string): PackageFiles {
   const finalPath = (sha256: string) =>
     join(directory, sha256 + PACKAGE_SUFFIX);
   return {
-    async reuse(sha256, size) {
+    async reuse(sha256, size, signal) {
       const path = finalPath(sha256);
       try {
         if (
           (await stat(path)).size === size &&
-          (await digestOf(path)) === sha256
+          (await digestOf(path, signal)) === sha256
         ) {
           return path;
         }

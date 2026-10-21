@@ -112,6 +112,18 @@ async function writeBody(
   }
 }
 
+/** Leftovers from earlier downloads are removed on the next success, so a failure here changes nothing. */
+async function pruneQuietly(
+  files: PackageFiles,
+  sha256: string,
+): Promise<void> {
+  try {
+    await files.prune(sha256);
+  } catch {
+    // The verified package is in place; the leftovers stay until the next successful download.
+  }
+}
+
 /**
  * Fetch the package the last check found into the app's update folder and keep it only when its
  * size and SHA-256 match the manifest. The file is written under a partial name and removed on any failure.
@@ -143,8 +155,10 @@ export async function downloadPackage(
   });
   let sink: PackageSink | undefined;
   try {
-    const existing = await options.files.reuse(sha256, size);
+    const existing = await options.files.reuse(sha256, size, signal);
     if (existing !== null) {
+      signal.throwIfAborted();
+      await pruneQuietly(options.files, sha256);
       return result(existing);
     }
     const response = await fetchFollowingRedirects(
@@ -186,14 +200,14 @@ export async function downloadPackage(
     }
     const path = await sink.publish();
     sink = undefined;
-    try {
-      await options.files.prune(sha256);
-    } catch {
-      // The verified package is in place; leftovers from earlier downloads are removed next time.
-    }
+    await pruneQuietly(options.files, sha256);
     return result(path);
   } catch (error) {
-    await sink?.discard();
+    try {
+      await sink?.discard();
+    } catch {
+      // A partial file that cannot be removed now is removed by the next successful download; the original failure is the one to report.
+    }
     if (timedOut) {
       throw new BunawayError({
         code: "TIMEOUT",

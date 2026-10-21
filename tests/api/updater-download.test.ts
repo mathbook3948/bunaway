@@ -14,7 +14,10 @@ import { join } from "node:path";
 import type { NativeEnvironment } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import { createUpdater } from "#plugins/updater/src/adapter";
-import { MAX_PACKAGE_BYTES } from "#plugins/updater/src/contract";
+import {
+  MAX_PACKAGE_BYTES,
+  type PackageFiles,
+} from "#plugins/updater/src/contract";
 import { createPackageFiles } from "#plugins/updater/src/platforms/package-files";
 
 const ENDPOINT = "https://updates.example.com/{{target}}/{{channel}}";
@@ -89,7 +92,11 @@ type Served = {
   packageResponse?: (signal?: AbortSignal) => Response | Promise<Response>;
 };
 
-function setup(served: Served = {}, downloadTimeoutMs?: number) {
+function setup(
+  served: Served = {},
+  downloadTimeoutMs?: number,
+  files: PackageFiles = createPackageFiles(root),
+) {
   const requests: string[] = [];
   const state: Served = {
     manifest: GOOD,
@@ -113,7 +120,7 @@ function setup(served: Served = {}, downloadTimeoutMs?: number) {
   }) as unknown as typeof fetch;
   const instance = createUpdater("windows", "x64", environment(), {
     fetchImpl,
-    files: createPackageFiles(root),
+    files,
     ...(downloadTimeoutMs === undefined
       ? {}
       : {
@@ -459,4 +466,63 @@ test("a check after the download started does not change the running download's 
   release();
   expect((await running).sha256).toBe(SHA256);
   expect(reasonOf(await failure(instance.download()))).toBe("notChecked");
+});
+
+test("a partial file that cannot be removed does not replace the original failure", async () => {
+  const files = createPackageFiles(root);
+  const { instance } = setup(
+    {
+      packageResponse: () => new Response(BYTES.slice(0, 3)),
+    },
+    undefined,
+    {
+      ...files,
+      async create(sha256) {
+        const sink = await files.create(sha256);
+        return {
+          write: (chunk) => sink.write(chunk),
+          finish: () => sink.finish(),
+          publish: () => sink.publish(),
+          async discard() {
+            await sink.discard();
+            throw new Error("EBUSY: C:\\secret\\path");
+          },
+        };
+      },
+    },
+  );
+  await instance.check();
+  const error = await failure(instance.download());
+  expect(reasonOf(error)).toBe("sizeMismatch");
+  expect(error.message).not.toContain("secret");
+});
+
+test("cancelling while an existing package is verified stops with CANCELLED", async () => {
+  const controller = new AbortController();
+  const files = createPackageFiles(root);
+  const { instance } = setup({}, undefined, {
+    ...files,
+    async reuse(sha256, size, signal) {
+      controller.abort();
+      signal.throwIfAborted();
+      return files.reuse(sha256, size, signal);
+    },
+  });
+  await instance.check();
+  expect((await failure(instance.download(controller.signal))).code).toBe(
+    "CANCELLED",
+  );
+});
+
+test("reusing an existing package also removes the leftovers of other downloads", async () => {
+  const { instance } = setup();
+  await instance.check();
+  await instance.download();
+  const stale = join(updatesDirectory(), `${"2".repeat(64)}.package`);
+  writeFileSync(stale, "old");
+  await instance.download();
+  expect(existsSync(stale)).toBe(false);
+  expect(updateFiles()).toEqual([
+    `${SHA256}.package`,
+  ]);
 });

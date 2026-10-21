@@ -121,7 +121,11 @@ export interface PackageSink {
 /** The app's update folder. The adapter in `platforms/` owns the file system access. */
 export interface PackageFiles {
   /** Path of an existing package with exactly this digest and size, or null; a mismatching file is removed. */
-  reuse(sha256: string, size: number): Promise<string | null>;
+  reuse(
+    sha256: string,
+    size: number,
+    signal: AbortSignal,
+  ): Promise<string | null>;
   create(sha256: string): Promise<PackageSink>;
   /** Remove every other package and partial file left in the folder. */
   prune(sha256: string): Promise<void>;
