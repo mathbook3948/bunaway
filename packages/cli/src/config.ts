@@ -665,7 +665,7 @@ async function loadProject(
   };
 }
 
-/** Validate the `plugins` section; clause contents are checked by each plugin at host startup. */
+/** Validate the `plugins` section; clause contents are checked by each plugin when its adapter is created. */
 function readPluginClauses(
   value: unknown,
   installed: ReadonlySet<string>,

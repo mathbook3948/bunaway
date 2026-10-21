@@ -318,6 +318,19 @@ test("invalid settings fail when the adapter is created", () => {
       endpoint: "https:////{{target}}/x",
     },
     {
+      // The URL parser deletes tabs and line breaks, which would leave the host empty.
+      endpoint: "https://\t/{{channel}}/m",
+    },
+    {
+      endpoint: "https://\n/{{target}}",
+    },
+    {
+      endpoint: "https://\r\n/{{channel}}.json",
+    },
+    {
+      endpoint: "https://updates.example.com/a b",
+    },
+    {
       // Longest values would push the address past the length limit at check time.
       endpoint: `https://updates.example.com/${"{{current_version}}".repeat(20)}`,
     },

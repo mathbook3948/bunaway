@@ -15,6 +15,8 @@ const PLACEHOLDERS = [
 ] as const;
 export type EndpointValues = Record<(typeof PLACEHOLDERS)[number], string>;
 
+// biome-ignore lint/suspicious/noControlCharactersInRegex: this is the check itself.
+const CONTROL_OR_SPACE = /[\u0000-\u0020\u007f-\u009f]/;
 const PLACEHOLDER = /\{\{([^{}]*)\}\}/g;
 const LOOPBACK_HOSTS = new Set([
   "localhost",
@@ -45,7 +47,7 @@ export function isAllowedUrl(url: URL, development: boolean): boolean {
   );
 }
 
-/** Validate an endpoint template once, so a bad setting fails at startup rather than at check time. */
+/** Validate an endpoint template when the adapter is created, so a bad setting fails there rather than at check time. */
 export function validateEndpointTemplate(
   template: string,
   development: boolean,
@@ -56,6 +58,13 @@ export function validateEndpointTemplate(
   if (unknown) {
     throw invalid(
       `updater endpoint uses unknown placeholder {{${unknown[1]}}}.`,
+    );
+  }
+  // The URL parser deletes tabs and line breaks and trims control characters, which would hide an
+  // empty host from the check below, so none of them may appear in the template at all.
+  if (CONTROL_OR_SPACE.test(template)) {
+    throw invalid(
+      "updater endpoint must not contain spaces or control characters.",
     );
   }
   // Placeholders are limited to the path and query, so a value can never change scheme or host.
@@ -84,7 +93,7 @@ export function validateEndpointTemplate(
       "updater endpoint must be https without credentials (http only for loopback in development).",
     );
   }
-  // Reject at startup a template that could exceed the length limit once the longest values are
+  // Reject when the adapter is created a template that could exceed the length limit once the longest values are
   // substituted, so a check call never fails on the settings. `+` is the worst case: it becomes %2B.
   expandEndpoint(template, {
     target: "x".repeat(MAX_TARGET_LENGTH),
