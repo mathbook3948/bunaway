@@ -15,12 +15,15 @@ import {
 
 export {
   runCancelDownload,
+  runCancelUpload,
   runDownload,
   runDownloadStatus,
   runExchange,
   runIsOnline,
   runRequest,
   runResolveHost,
+  runUpload,
+  runUploadStatus,
 } from "#network/platforms/shared";
 
 type ResolveProxyInput = z.output<typeof resolveProxyInputSchema>;

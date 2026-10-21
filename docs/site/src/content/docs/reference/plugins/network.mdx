@@ -11,7 +11,7 @@ sidebar: { order: 8 }
 
 ## 권한과 앱의 URL 규칙
 
-`network.request`, `network.exchange`, `network.isOnline`, `network.resolveHost`, `network.resolveProxy`, `network.download`, `network.downloadStatus`와 `network.cancelDownload`는 각각 독립 Host 권한입니다. 권한은 작업 호출을
+`network.request`, `network.exchange`, `network.isOnline`, `network.resolveHost`, `network.resolveProxy`, `network.download`, `network.downloadStatus`, `network.cancelDownload`, `network.upload`, `network.uploadStatus`와 `network.cancelUpload`는 각각 독립 Host 권한입니다. 권한은 작업 호출을
 허용하고 대상 URL은 앱 명령이 검사합니다. 이 API는 Bun 네트워크 요청이므로 브라우저의
 CORS 제한을 적용하지 않습니다. 승인한 Origin 목록은 앱이 작성하며 임의 Origin header는
 입력으로 받지 않습니다. 뷰의 명령과 Host 권한을 통해 호출 가능한 출처를 제한합니다.
@@ -270,6 +270,54 @@ try {
   받은 backend 실행 컨텍스트에서 시작합니다. 호출의 `signal`로도 취소할 수 있습니다.
 - 동시 다운로드는 어댑터 전체에서 최대 4개이며(출처별 한도가 아닙니다) 다른 요청의 16개 한도와 따로 셉니다. 초과는 `BUSY`이고 사용 중인 ID를 다시 쓰면
   `INVALID_ARGUMENT`입니다. 디스크가 가득 찬 경우와 쓰기 권한이 없는 경우는 `INTERNAL`입니다.
+- 로컬 서버로 확인한 결과만 보장합니다. 느린 회선이나 대용량 전송 시간은 측정하지 않았습니다.
+
+## 파일 업로드
+
+```ts
+const uploadId = crypto.randomUUID();
+// 앱 명령이 url과 path를 먼저 검사합니다.
+const sent = network.upload({
+  uploadId,
+  url: "https://uploads.example.com/reports/daily.csv",
+  path: "C:\\Users\\me\\Documents\\daily.csv",
+  method: "PUT",
+  headers: [["content-type", "text/csv"]],
+});
+try {
+  const { status, bodyBase64, bytesSent } = await sent;
+} catch (error) {
+  // 취소는 CANCELLED, 기한은 TIMEOUT, 파일이 바뀐 경우와 그 밖의 실패는 INTERNAL 같은 오류 코드로 끝납니다.
+}
+```
+
+`network.upload`는 앱이 검사한 로컬 파일 하나를 요청 본문으로 보내고 서버 응답을 `network.request`와 같은 모양으로 돌려줍니다.
+파일을 메모리에 모으지 않고 조각으로 읽어 보내며, 전송 길이를 열어 둔 파일의 크기로 알리므로 서버는 chunked 본문을 받지 않습니다.
+Tauri `upload` 플러그인의 `upload(url, filePath, progressHandler, headers)`에 대응합니다. Electron에는 전용 업로드 API가 없어
+`net.request`에 본문 스트림을 쓰므로 호출 모양은 Tauri를 따랐고 메서드는 `PUT`과 `POST`로 제한했습니다. 진행률은 이벤트로 방송하지 않고
+`network.downloadStatus`와 같은 이유로 시작한 쪽이 `network.uploadStatus`로 읽습니다. 독립 Host 권한 `network.upload`,
+`network.uploadStatus`와 `network.cancelUpload`가 필요합니다. 화면에 `network.upload`를 주면 그 화면이 앱 프로세스가 읽을 수 있는
+임의 파일을 임의 URL로 보낼 수 있으므로, 화면에는 주지 않고 앱 명령이 경로와 URL을 검사한 뒤 호출하는 구성을 권장합니다.
+
+- 입력은 `uploadId`(호출자가 만드는 소문자 UUID), `url`(사용자 정보와 fragment가 없는 `http:`/`https:` 절대 URL), `path`, `method`(`PUT` 또는 `POST`, 기본 `PUT`),
+  `headers`, `maxResponseBytes`(0부터 64 KiB, 기본 64 KiB), `timeoutMs`(전체 기한, 기본 10분, 최대 1시간), `idleTimeoutMs`(기본 30초, 최대 5분)입니다.
+  `Content-Length`와 `Transfer-Encoding`을 포함한 `network.request`의 전송 관리 header는 `INVALID_ARGUMENT`입니다.
+  `idleTimeoutMs`는 호출이 시작될 때 시작해 응답 header와 파일 조각을 읽을 때마다 다시 시작하므로, 서버가 본문을 받지 않아 전송이 멈추면
+  `TIMEOUT`으로 끝납니다.
+- 경로 접근 규칙은 앱이 정합니다. 플러그인은 storage 범위와 연동하지 않고 앱 명령이 검사한 절대 경로만 받으며, 경로 문법은
+  `network.download`의 대상과 같습니다. 파일이 없거나 일반 파일이 아니면(폴더 포함) 요청 전에 `INVALID_ARGUMENT`이고, 크기가
+  4 GiB를 넘어도 같습니다. 크기는 열어 둔 파일에서 읽으므로 검사한 파일과 보낸 파일이 같습니다. 오류 메시지에는 경로와 서버 응답 본문을 담지 않습니다.
+- 알린 길이보다 파일이 짧아지면 `INTERNAL`이며 일부만 보낸 전송을 성공으로 알리지 않습니다. 알린 길이보다 늘어난 부분은 보내지 않습니다.
+- 결과는 `{ status, headers, bodyBase64, bytesSent }`입니다. redirect는 따라가지 않고 3xx와 4xx, 5xx도 그대로 돌려주며, 서버가 본문을 다 받기 전에
+  응답하면 `bytesSent`가 파일 크기보다 작을 수 있습니다. 응답 본문이 `maxResponseBytes`를 넘으면 `INTERNAL`입니다.
+- `network.uploadStatus`는 실행 중인 업로드의 `{ sentBytes, totalBytes }`를 돌려줍니다. `sentBytes`는 연결에 넘기려고 읽은 파일 바이트이며
+  서버가 받았다는 확인이 아니고 소켓 버퍼만큼 앞설 수 있습니다. `totalBytes`는 파일을 확인하기 전에는 `null`입니다. 업로드는 시작한 출처(source)에만 보이며
+  다른 출처나 끝난 ID는 `INVALID_ARGUMENT`입니다.
+- `network.cancelUpload`는 연결을 끊고 파일을 닫을 때까지 기다린 뒤 `{}`를 돌려주고 호출 중인 `network.upload`는 `CANCELLED`로 끝납니다.
+  이미 서버가 응답을 마친 뒤 도착한 취소는 결과를 바꾸지 않습니다. 없는 ID나 이미 끝난 ID도 성공입니다. 호출의 `signal`로도 취소할 수 있습니다.
+  이미 연결로 넘어간 바이트를 서버가 처리했는지는 취소로 되돌릴 수 없으므로 서버는 일부만 받은 요청을 버려야 합니다.
+- 동시 업로드는 어댑터 전체에서 최대 4개이며 다운로드와 다른 요청의 한도와 따로 셉니다. 초과는 `BUSY`이고 사용 중인 ID를 다시 쓰면 `INVALID_ARGUMENT`입니다.
+- 여러 파일과 multipart 본문 조립은 제공하지 않습니다. 필요하면 앱이 파일 하나를 보내는 서버 규약을 쓰거나 `network.request`로 작은 본문을 직접 구성합니다.
 - 로컬 서버로 확인한 결과만 보장합니다. 느린 회선이나 대용량 전송 시간은 측정하지 않았습니다.
 
 ## 프록시 경로 조회

@@ -1,6 +1,6 @@
 # Bounded network plugin
 
-Register `network` to use `network.request`, `network.exchange`, `network.isOnline`, `network.resolveHost`, `network.download`, `network.downloadStatus` and `network.cancelDownload` on Windows and macOS, and `network.resolveProxy` on Windows.
+Register `network` to use `network.request`, `network.exchange`, `network.isOnline`, `network.resolveHost`, `network.download`, `network.downloadStatus`, `network.cancelDownload`, `network.upload`, `network.uploadStatus` and `network.cancelUpload` on Windows and macOS, and `network.resolveProxy` on Windows.
 Each operation has an independent permission. Applications own URL access rules in backend commands;
 operation grants do not contain resource allowlists. Trusted backend code can use Bun fetch and WebSocket directly.
 See the [public contract](../../docs/site/src/content/docs/reference/plugins/network.mdx) for limits and access-rule examples.
@@ -49,3 +49,10 @@ An existing target is refused unless `overwrite` is set, and a missing parent fo
 included, is returned with `saved: false` and no file. The plugin does not tie the path to a storage scope; the app checks it. Progress is read with
 `network.downloadStatus({ downloadId })` (`{ receivedBytes, totalBytes | null }`, visible to the source that started the download only) instead of a
 broadcast event, and `network.cancelDownload({ downloadId })` stops the transfer; an unknown id fails for `downloadStatus` with `INVALID_ARGUMENT` and succeeds for `cancelDownload`. At most four downloads run at once.
+
+`network.upload` sends one local file the app already checked as the body of a `PUT` or `POST` and returns `{ status, headers, bodyBase64, bytesSent }`,
+the bounded answer of `network.request` plus the file bytes handed to the connection. It corresponds to the Tauri upload plugin's `upload`; Electron has no dedicated upload API.
+`uploadId` (a lower case UUID the caller picks), `url`, an absolute `path` to a regular file of at most 4 GiB are needed; `method` (default `PUT`), `headers`, `maxResponseBytes` (default 64 KiB),
+`timeoutMs` and `idleTimeoutMs` (same defaults and limits as a download) are optional. The file is read in chunks with its size as the announced length, so no chunked body is sent; a file that ends early fails with `INTERNAL`.
+Progress is read with `network.uploadStatus({ uploadId })` (`{ sentBytes, totalBytes | null }`, bytes read for the connection rather than confirmed by the server, visible to the source that started the upload only) and
+`network.cancelUpload({ uploadId })` ends the connection and closes the file. Redirects are returned, not followed. The app checks the path and URL. Multiple files and multipart assembly are out of scope. At most four uploads run at once.
