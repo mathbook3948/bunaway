@@ -1337,3 +1337,11 @@ Linux에서도 실행하는 순수 계산은 가장자리별 기준 축과 고�
 문서와 탐색 후 재구성, 전체화면 복원, 미지원 COM 인터페이스 및 자원 정리를 검사합니다.
 Windows native 실행기에 포함하며 결과는 `build/windows-webview-titlebar-results.json`에 기록합니다.
 물리 마우스 드래그, 우클릭 메뉴 조작, 다중 모니터 DPI 이동과 screen reader 검증은 별도입니다.
+
+`cli/measure-baseline.test.ts`는 `scripts/measure-baseline.ts`의 측정 정의를 가짜 실행기로 검사합니다.
+중앙값, 최소, 최대 요약, 프로세스 트리 합산(재사용된 pid 포함), PowerShell 프로세스 표 해석,
+메모리 표본 뒤에만 probe를 풀어 주는 순서, 응답이 없거나 결과가 잘못되었을 때와 실행 파일이 표에 없을 때
+앱을 반드시 종료하는지를 Linux에서 확인합니다. `lifecycle/windows-baseline.ts`는 기본 템플릿을 실제로
+빌드해 5회 실행하고 시작 시간, 유휴 working set, 패키지 크기, 명령 왕복 지연을
+`build/windows-baseline-results.json`에 기록합니다. 값은 기록만 하며 통과 기준으로 쓰지 않습니다.
+Windows native 실행기에 포함하고, 결과 파일은 `windows-native-diagnostics` 아티팩트에 올라갑니다.
