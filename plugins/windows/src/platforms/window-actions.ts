@@ -141,6 +141,10 @@ const unsupportedOverlayIcon = unsupportedError(
   "Taskbar overlay icon is not implemented on this platform.",
 );
 
+const unsupportedThumbnailToolbar = unsupportedError(
+  "Taskbar thumbnail toolbar is not implemented on this platform.",
+);
+
 /** Return an optional native control, or throw the platform's UNSUPPORTED error when it is absent. */
 function supported<T>(control: T | undefined, unsupported: () => BunawayError) {
   if (control === undefined) {
@@ -1013,6 +1017,20 @@ function applyTaskbar(scope: ActionScope, call: WindowCall): ActionResult {
           ? null
           : overlayIconProvider(call.payload.ico),
         call.payload.description,
+      );
+      return null;
+    case "windows.setThumbnailToolbar":
+      // Every provider validates its ICO before any native call, so one bad button leaves the toolbar untouched.
+      supported(
+        window.setThumbnailToolbar,
+        unsupportedThumbnailToolbar,
+      )(
+        call.payload.buttons.map((button) => ({
+          id: button.id,
+          icon: overlayIconProvider(button.ico, "thumbnail button"),
+          tooltip: button.tooltip ?? "",
+          flags: button.flags ?? [],
+        })),
       );
       return null;
     default:

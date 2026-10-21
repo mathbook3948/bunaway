@@ -1163,10 +1163,10 @@ const release = await client.listen("windows.closeRequested", async ({ payload }
 
 ## 창 이벤트
 
-`windows.changed`, `windows.appCommand`, `windows.systemContextMenu`와 `windows.getSnapshot`은 현재 Windows에서만 지원합니다. `windows.lifecycle`과
+`windows.changed`, `windows.appCommand`, `windows.systemContextMenu`, `windows.thumbnailToolbarClicked`와 `windows.getSnapshot`은 현재 Windows에서만 지원합니다. `windows.lifecycle`과
 `windows.closeRequested`는 Windows와 macOS에서 지원합니다.
 
-`windows`는 `windows.changed`, `windows.appCommand`, `windows.systemContextMenu`, `windows.readiness`, `windows.lifecycle`, `windows.closeRequested`를 등록합니다. 기존 `client.listen`과 직접 함수
+`windows`는 `windows.changed`, `windows.appCommand`, `windows.systemContextMenu`, `windows.thumbnailToolbarClicked`, `windows.readiness`, `windows.lifecycle`, `windows.closeRequested`를 등록합니다. 기존 `client.listen`과 직접 함수
 `listen`으로 구독하며, 이벤트 payload 타입은 앱의 `EventsOf`에서 추론합니다.
 `windows.changed`는 생성한 창의 정책 뷰에만 전달합니다. 다른 창을 제어하도록 허용해도
 그 창의 changed 이벤트가 호출한 뷰로 전달되지는 않습니다. `windows.readiness`의 수신 대상은
@@ -1323,6 +1323,12 @@ HWND와 콜백을 기존 WebView 및 Worker 종료 순서에 맞춰 정리합니
 최상위 창까지 올라오는지, 사용자 정의 제목 표시줄(`titlebar: "custom"`)에서 오른쪽 클릭이 도착하는지는 합성 메시지
 시험으로 확인할 수 없어 실제 입력 확인이 남아 있습니다.
 
+### 썸네일 툴바 클릭 이벤트 (Windows)
+
+`windows.thumbnailToolbarClicked`는 `{ windowId, viewId, buttonId }`입니다. 사용자가 [작업 표시줄 썸네일 툴바](#작업-표시줄-썸네일-툴바)의 버튼을 누르면 앱이 `setThumbnailToolbar`로 등록한 그 버튼의 `id`를 `buttonId`로 전달합니다.
+버튼마다 콜백을 두는 Electron의 `click`과 달리 이벤트 하나로 받으며, 클릭한 창 자신의 뷰에만 전달합니다. 숨김, 비활성, `noninteractive` 버튼과 등록하지 않은 칸의 메시지는 전달하지 않습니다.
+상태가 바뀌는 알림이 아니므로 `revision`을 올리지 않습니다.
+
 ### 닫기 요청 이벤트
 
 `windows.closeRequested`는 `{ windowId, viewId, requestId }`입니다. 닫히려는 창 자신의 현재 문서에만
@@ -1450,6 +1456,37 @@ await windows.setOverlayIcon({ view: "main", ico: null, description: "" });
 자동으로 다시 만들지 않으므로 필요하면 다시 호출하세요.
 [ITaskbarList3::SetOverlayIcon](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-setoverlayicon)의
 요청 처리가 끝나면 성공이며, 실제 표시는 Windows가 결정합니다.
+
+## 작업 표시줄 썸네일 툴바
+
+Windows의 `windows.setThumbnailToolbar({ view, windowId?, buttons })`는 작업 표시줄 썸네일 아래에 미디어 제어 같은 아이콘 버튼을 둡니다. Electron의 `setThumbarButtons`에 대응하며 `null`을 반환합니다. 작업 권한이 필요하고 macOS는 `UNSUPPORTED`입니다.
+
+- `buttons`는 최대 7개이며 순서대로 놓입니다. 호출마다 툴바 전체를 바꾸고, 빈 배열이면 모든 버튼을 숨깁니다. 개수는 호출마다 달라도 됩니다. 호스트는 처음 적용할 때 7칸을 모두 만들고 쓰지 않는 칸을 숨겨 두며 이후는 갱신만 하므로, Windows가 창당 한 번만 허용하는 추가 호출과 충돌하지 않습니다.
+- `id`는 앱이 정하는 이름입니다. 영문자나 숫자로 시작하고 영문자, 숫자, `.`, `_`, `-`만 쓰는 64자 이하이며 한 호출 안에서 겹칠 수 없습니다. 눌린 버튼은 이 이름으로 알립니다.
+- `ico`는 `windows.setOverlayIcon`과 같은 base64 ICO 바이트입니다. 모든 프레임을 먼저 검증해 잘못된 ICO는 `INVALID_ARGUMENT`이고 기존 툴바를 유지합니다. 호스트는 호출 시점 창 DPI의 작은 아이콘 크기에 맞는 프레임을 고릅니다.
+- `tooltip`은 UTF-16 259 단위 이하이고 NUL을 포함할 수 없습니다(기본값 빈 문자열). 길이는 Windows의 `THUMBBUTTON.szTip` 260칸에서 종료 문자를 뺀 값입니다.
+- `flags`는 Electron과 같은 이름 `enabled`, `disabled`, `dismissonclick`, `nobackground`, `hidden`, `noninteractive`의 집합입니다(기본값 없음, 곧 활성). `enabled`와 `disabled`를 함께 줄 수 없습니다.
+
+```ts
+await windows.setThumbnailToolbar({
+  view: "main",
+  buttons: [
+    { id: "prev", ico: prevIcoBase64, tooltip: "이전" },
+    { id: "play", ico: playIcoBase64, tooltip: "재생" },
+    { id: "next", ico: nextIcoBase64, tooltip: "다음", flags: ["disabled"] },
+  ],
+});
+client.listen("windows.thumbnailToolbarClicked", ({ payload }) => {
+  if (payload.buttonId === "play") togglePlayback();
+});
+```
+
+작업 표시줄 버튼 준비(`BUSY`), 버튼 재생성 때의 재적용, HWND 파괴 때의 폐기는 [썸네일](#작업-표시줄-썸네일)과 같습니다. Explorer가 버튼을 다시 만들면 마지막으로 성공한 툴바를 새 버튼에 다시 추가합니다. 창을 재생성하면 새 창이므로 앱이 다시 설정해야 합니다.
+버튼은 창에 붙어 있어 문서가 새로고침되거나 다른 페이지로 이동해도 남고, 이후 클릭은 그 시점의 현재 문서가 구독하고 있을 때만 받습니다.
+호스트가 만든 아이콘은 다음 설정이나 창 파괴 때 해제하며, 아이콘 크기는 설정하거나 다시 적용하는 시점의 DPI로 정합니다.
+
+CI는 실제 `ITaskbarList3` 호출(추가 한 번 뒤 갱신, 개수 변경, 빈 목록), 입력 검증과 오류 코드, 최상위 HWND에 합성한 `WM_COMMAND`가 등록한 버튼 id로만 바뀌는 것을 확인합니다. 사람이 작업 표시줄 썸네일에서 직접 누르는 동작, Explorer를 실제로 재시작한 뒤의 재적용과 썸네일에 그려지는 모양은 자동 검증에 포함되지 않습니다.
+[ITaskbarList3::ThumbBarAddButtons](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-thumbbaraddbuttons)의 요청 처리가 끝나면 성공이며, 실제 표시는 Windows가 결정합니다.
 
 ## 오류
 

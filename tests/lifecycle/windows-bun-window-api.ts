@@ -1918,6 +1918,66 @@ if (!process.argv.includes("--child")) {
               code: "INVALID_ARGUMENT",
             },
           );
+          // The thumbnail toolbar adds seven slots once, then changes the visible buttons through updates.
+          const toolbarIco = trayIco(16).toString("base64");
+          const toolbarButton = (id: string) => ({
+            id,
+            ico: toolbarIco,
+            tooltip: id,
+          });
+          for (const buttons of [
+            [],
+            [
+              toolbarButton("prev"),
+              toolbarButton("play"),
+              toolbarButton("next"),
+            ],
+            [
+              toolbarButton("play"),
+            ],
+            Array.from(
+              {
+                length: 7,
+              },
+              (_, index) => toolbarButton(`b${index}`),
+            ),
+            [],
+          ]) {
+            assert.equal(
+              await windows.setThumbnailToolbar({
+                ...thumbnailTarget,
+                buttons,
+              }),
+              null,
+            );
+          }
+          // A rejected image keeps the current toolbar and reports an argument error, not a shell failure.
+          await assert.rejects(
+            windows.setThumbnailToolbar({
+              ...thumbnailTarget,
+              buttons: [
+                {
+                  id: "bad",
+                  ico: Buffer.alloc(64).toString("base64"),
+                },
+              ],
+            }),
+            {
+              code: "INVALID_ARGUMENT",
+            },
+          );
+          await assert.rejects(
+            windows.setThumbnailToolbar({
+              ...thumbnailTarget,
+              buttons: [
+                toolbarButton("dup"),
+                toolbarButton("dup"),
+              ],
+            }),
+            {
+              code: "INVALID_ARGUMENT",
+            },
+          );
           // First run covers sizing/fullscreen; later runs cover recreation and renderer recovery.
           if (++runs === 1) {
             assert.equal(

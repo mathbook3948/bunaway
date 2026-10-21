@@ -359,6 +359,26 @@ export type NativeMonitorServices = {
  */
 export type NativeOverlayIconProvider = (sizePx: number) => bigint;
 
+/** Taskbar thumbnail toolbar slots Windows provides per window (`ITaskbarList3::ThumbBarAddButtons`). */
+export const NATIVE_THUMBNAIL_BUTTON_LIMIT = 7;
+
+/** Behavior flags of a thumbnail toolbar button; `enabled` and `disabled` are mutually exclusive. */
+export type NativeThumbnailButtonFlag =
+  | "enabled"
+  | "disabled"
+  | "dismissonclick"
+  | "nobackground"
+  | "hidden"
+  | "noninteractive";
+
+/** One thumbnail toolbar button; `id` is the app-chosen name reported when the button is pressed. */
+export type NativeThumbnailButton = {
+  id: string;
+  icon: NativeOverlayIconProvider;
+  tooltip: string;
+  flags: readonly NativeThumbnailButtonFlag[];
+};
+
 /**
  * Native controls exposed to an installed window plugin.
  * The plugin rejects minimized/maximized transitions during fullscreen before invoking these controls.
@@ -604,6 +624,14 @@ export type NativeWindow = {
     icon: NativeOverlayIconProvider | null,
     description: string,
   ): void;
+  /**
+   * Replace this window's taskbar thumbnail toolbar with `buttons` in order (at most
+   * `NATIVE_THUMBNAIL_BUTTON_LIMIT`); an empty list hides every button. The host owns the handles each
+   * button's `icon` returns, keeps the buttons across Explorer restarts and reports a press as
+   * `windows.thumbnailToolbarClicked` with the pressed button's `id`. Errors thrown by `icon` propagate
+   * and keep the current toolbar; BUSY like `setTaskbarProgress`. Windows only.
+   */
+  setThumbnailToolbar?(buttons: readonly NativeThumbnailButton[]): void;
   /** Sets or clears the confirmation shown before a user closes the window. */
   setCloseConfirmation(message: string | null): void;
 };

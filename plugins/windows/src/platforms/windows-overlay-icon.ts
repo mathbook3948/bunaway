@@ -41,7 +41,7 @@ let createIconFromResource: ReturnType<typeof openCreateIcon> | undefined;
  */
 export function overlayIconProvider(
   ico: string,
-  subject: "overlay" | "window" = "overlay",
+  subject: "overlay" | "window" | "thumbnail button" = "overlay",
 ): NativeOverlayIconProvider {
   const frames = parseNativeIco(ico);
   if (!frames) {

@@ -9,6 +9,7 @@ import {
   MAX_WINDOW_DIMENSION,
   MIN_WINDOW_DIMENSION,
   type NativeOverlayIconProvider,
+  type NativeThumbnailButton,
   type NativeWindow,
   type WindowAttentionMode,
   type WindowBounds,
@@ -3299,6 +3300,22 @@ export class Windows {
       return;
     }
     this.windowIcons.set(window, icon, this.getDpi(window));
+  }
+
+  /** Replace the taskbar thumbnail toolbar with `buttons`; an empty list hides every button. */
+  setThumbnailToolbar(
+    window: bigint,
+    buttons: readonly NativeThumbnailButton[],
+  ): void {
+    assert(this.windows.has(window), "Taskbar target is not a live window");
+    this.taskbar.setThumbnailToolbar(window, buttons);
+  }
+
+  /** The id of the thumbnail toolbar button that a WM_COMMAND wParam presses, if any. */
+  thumbnailToolbarButton(window: bigint, wparam: bigint): string | undefined {
+    return this.windows.has(window)
+      ? this.taskbar.pressedButton(window, wparam)
+      : undefined;
   }
 
   /** Show the overlay icon with an accessibility description on the taskbar button, or remove it for null. */
