@@ -222,6 +222,7 @@ if (target === "windows-x64") {
       "resident-empty",
       "tray",
       "tray-empty",
+      "tray-hidden",
       "nonfocusable-resident",
       "nonfocusable-tray",
       "destroy-resident",

@@ -24,10 +24,17 @@ const scenario = process.argv[2] ?? "resident";
 const assets = resolve(output, "assets");
 const dataRoot = resolve(output, `${scenario}-${process.pid}`);
 const hasTray = scenario.includes("tray");
+// A tray app that hides its icon while no window is open must keep running and stay recoverable.
+const hiddenTray = scenario === "tray-hidden";
 const nonfocusable = scenario.startsWith("nonfocusable-");
 const empty = scenario.endsWith("empty");
 const registry = new NativeRegistry([
   windows._definition,
+  ...(hasTray
+    ? [
+        tray._definition,
+      ]
+    : []),
 ]);
 const emit = (event: string, fields: Record<string, unknown> = {}) =>
   console.log(
@@ -352,6 +359,53 @@ if (!process.argv.includes("--child")) {
     );
   };
   const ready = () => waitFor(() => sessions > 0);
+  const callTray = async (
+    operation: "tray.get" | "tray.setVisible",
+    payload: null | {
+      visible: boolean;
+    },
+  ) => {
+    assert(backend);
+    return backend.host.call(registry.operation(operation), payload);
+  };
+  /** The icon is hidden and the last window is gone: the app keeps running and a second launch restores a window. */
+  async function exerciseHiddenTray(desktop: DesktopContext, windowId: string) {
+    await callTray("tray.setVisible", {
+      visible: false,
+    });
+    const hidden = (await callTray("tray.get", null)) as {
+      visible: boolean;
+    };
+    assert.equal(hidden.visible, false);
+    const hiddenTicks = ticks;
+    await Bun.sleep(300);
+    assert(ticks > hiddenTicks, "backend must continue with the icon hidden");
+    assert.equal(attempts, 0, "hiding the icon must not start a quit");
+    assert.equal(sessions, 1, "hiding the icon must not create a window");
+    // A second launch calls show(), which creates the window while the icon stays hidden.
+    await desktop.show();
+    await waitFor(() => sessions === 2);
+    assert.notEqual(
+      (
+        await call("windows.getSnapshot", {
+          view: "main",
+        })
+      ).windowId,
+      windowId,
+    );
+    assert.equal(
+      (
+        (await callTray("tray.get", null)) as {
+          visible: boolean;
+        }
+      ).visible,
+      false,
+      "restoring a window must not show the icon again",
+    );
+    await callTray("tray.setVisible", {
+      visible: true,
+    });
+  }
   /** Exercise deferred creation, last close and restoration through real backend Host calls. */
   async function exercise(desktop: DesktopContext) {
     assert(backend);
@@ -597,7 +651,9 @@ if (!process.argv.includes("--child")) {
     assert.equal(attempts, 0, "keep-alive last close must not call beforeQuit");
     await Bun.sleep(100);
     const closedTicks = ticks;
-    if (hasTray) {
+    if (hiddenTray) {
+      await exerciseHiddenTray(desktop, original.windowId);
+    } else if (hasTray) {
       emit("recreate-requested");
     } else {
       await desktop.show();
@@ -715,6 +771,12 @@ if (!process.argv.includes("--child")) {
           backend: {
             permissions: [
               ...windowPermissions(),
+              ...(hasTray
+                ? [
+                    "tray.get",
+                    "tray.setVisible",
+                  ]
+                : []),
             ],
           },
           views: [
