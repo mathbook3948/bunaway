@@ -119,9 +119,13 @@ export function createPackageFiles(dataRoot: string): PackageFiles {
           name !== keep &&
           (name.endsWith(PACKAGE_SUFFIX) || name.endsWith(PARTIAL_SUFFIX))
         ) {
-          await rm(join(directory, name), {
-            force: true,
-          });
+          try {
+            await rm(join(directory, name), {
+              force: true,
+            });
+          } catch {
+            // A file another process holds stays until a later download; the others are still removed.
+          }
         }
       }
     },

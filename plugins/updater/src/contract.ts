@@ -17,7 +17,7 @@ export const UPDATER_CHECK_TIMEOUT_MS = 15_000;
 export const MAX_PACKAGE_BYTES = 1024 * 1024 * 1024;
 /** Whole package download, redirects included. */
 export const UPDATER_DOWNLOAD_TIMEOUT_MS = 30 * 60_000;
-/** Redirects followed before the check fails. */
+/** Redirects followed before a check or download fails. */
 export const MAX_REDIRECTS = 3;
 /** Longest release notes returned to the view. */
 export const MAX_NOTES_LENGTH = 16_384;

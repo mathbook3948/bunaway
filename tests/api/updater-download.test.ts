@@ -526,3 +526,13 @@ test("reusing an existing package also removes the leftovers of other downloads"
     `${SHA256}.package`,
   ]);
 });
+
+test("a package of the declared size with another digest is fetched again", async () => {
+  const { instance, packageRequests } = setup();
+  await instance.check();
+  const first = await instance.download();
+  writeFileSync(first.path, new Uint8Array(BYTES.byteLength));
+  expect(await instance.download()).toEqual(first);
+  expect(packageRequests()).toHaveLength(2);
+  expect(new Uint8Array(readFileSync(first.path))).toEqual(BYTES);
+});

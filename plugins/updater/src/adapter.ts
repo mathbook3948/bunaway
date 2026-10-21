@@ -60,7 +60,7 @@ export function createUpdater(
   const active = new Set<AbortController>();
   let disposed = false;
   let target: UpdateTarget | null = null;
-  let downloading: Promise<unknown> | null = null;
+  let downloading: Promise<unknown> | undefined;
   function requireConfigured(): UpdaterSettings {
     if (disposed) {
       throw new BunawayError({
@@ -132,7 +132,7 @@ export function createUpdater(
           },
         });
       }
-      if (downloading) {
+      if (downloading !== undefined) {
         throw new BunawayError({
           code: "BUSY",
           message: "An update download is already running.",
@@ -164,12 +164,12 @@ export function createUpdater(
       try {
         return await running;
       } finally {
-        downloading = null;
+        downloading = undefined;
         active.delete(controller);
       }
     },
     busy() {
-      return downloading !== null;
+      return downloading !== undefined;
     },
     async dispose() {
       disposed = true;

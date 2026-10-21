@@ -133,7 +133,7 @@ interface UpdaterDownloadResult {
 
 | 코드 | `details.reason` |
 | --- | --- |
-| `UNSUPPORTED` | `notConfigured`, `appVersionMissing`, `appVersionInvalid`, `unsupportedArch`, `notChecked`, `integrityMissing` |
+| `UNSUPPORTED` | `notConfigured`, `appVersionMissing`, `appVersionInvalid`, `unsupportedArch`, `notChecked`, `integrityMissing`, `notAvailable`(업데이트 폴더를 제공하지 않는 어댑터) |
 | `TIMEOUT` | 제한 시간 초과 |
 | `CANCELLED` | 호출 취소, 어댑터 dispose |
 | `INTERNAL` | `network`, `httpStatus`(`details.status`), `redirectLimit`, `redirectScheme`, `tooLarge`, `invalidJson`, `invalidManifest`, `invalidVersion`, `platformMissing`, `integrityInvalid`, `integrityMismatch`, `sizeMismatch`, `storage` |
