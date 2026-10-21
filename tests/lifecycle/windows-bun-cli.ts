@@ -21,6 +21,7 @@ import { findIscc, must } from "#packaging/channels/windows/common";
 import { recordPackagedHashes } from "#packaging/channels/windows/manifest";
 import type { PackageReport } from "#packaging/contract";
 import { createProject, storageRoundtripUI } from "../cli/project.ts";
+import { seedWindowsBuildCaches } from "./windows-project-caches.ts";
 
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
@@ -62,27 +63,7 @@ await command([
   "install",
 ]);
 const snapshot = resolve(project, "node_modules/@bunaway/cli");
-const cache = resolve(snapshot, "build/cache/bun");
-await mkdir(cache, {
-  recursive: true,
-});
-for (const name of [
-  "bun-windows-x64-baseline.zip",
-  "bun-windows-x64-baseline",
-  "LICENSE.bun",
-]) {
-  await cp(resolve(root, "build/cache/bun", name), resolve(cache, name), {
-    recursive: true,
-  });
-}
-const sdk = resolve(snapshot, "build/cache/webview2");
-await mkdir(sdk, {
-  recursive: true,
-});
-await cp(
-  resolve(root, "build/cache/webview2/webview2-1.0.4129.50.nupkg"),
-  resolve(sdk, "webview2-1.0.4129.50.nupkg"),
-);
+await seedWindowsBuildCaches(project, root);
 assert(
   !existsSync(resolve(snapshot, "native/windows/host")) &&
     !existsSync(resolve(snapshot, "native/windows/probe")),

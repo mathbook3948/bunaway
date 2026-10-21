@@ -259,6 +259,7 @@ if (target === "windows-x64") {
       "windows-safe-storage.ts",
       "windows-bun-cli.ts",
       "windows-app-reload.ts",
+      "windows-baseline.ts",
     ]) {
       await test(name);
     }
