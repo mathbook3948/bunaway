@@ -5,7 +5,7 @@ import { type DeadlineName, deadline } from "../fixtures/deadlines.ts";
 
 /**
  * Generates every UI template with the packed CLI on Windows and drives it the way a developer's
- * first session does: `doctor`, the backend over the host process protocol, the web dev server
+ * first session does: the web build, `doctor`, the backend over the host process protocol, the web dev server
  * (templates that have one) and the web build that `bunaway build` runs before packaging. Each
  * template runs through the verification helper, so the helper and the template are exercised
  * together. A failing step does not stop the other templates; the run fails at the end and
@@ -221,6 +221,8 @@ if (packed) {
       if (!created) {
         continue;
       }
+      // `doctor` runs `bunaway validate`, which needs the built frontend directory to exist.
+      await webBuild(template, app);
       await step(
         template,
         "doctor",
@@ -244,7 +246,6 @@ if (packed) {
           "toolchain",
         );
       }
-      await webBuild(template, app);
     } finally {
       await stopProcessesUnder(app);
       // A project that cannot be removed (a handle still open) is scratch space under build/, so
