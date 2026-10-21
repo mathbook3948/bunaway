@@ -1,6 +1,4 @@
 import {
-  constants,
-  copyFile,
   type FileHandle,
   link,
   lstat,
@@ -30,8 +28,10 @@ const TRANSIENT_FILE_ERRORS = new Set([
 const PART_SUFFIX_LENGTH = 8;
 /** Longest final name of a file on NTFS and common POSIX systems, which the temporary name must fit too. */
 const MAX_FILE_NAME_LENGTH = 255;
-/** Length of the `.` + id prefix + `.part` that is appended to the final name. */
-const PART_NAME_OVERHEAD = PART_SUFFIX_LENGTH + ".part".length + 2;
+/** Length of the `.`, the id prefix and `.part` that are appended to the final name. */
+const PART_NAME_OVERHEAD = 1 + PART_SUFFIX_LENGTH + ".part".length;
+/** Read size when a file is copied because hard links are unavailable. */
+const COPY_CHUNK_BYTES = 1024 * 1024;
 
 /** A download that has started, addressed by the caller's id and owned by the `source` that began it. */
 export type DownloadEntry = {
@@ -109,6 +109,11 @@ async function existingKind(path: string, followLink = true) {
   }
 }
 
+/** NTFS limits a name in UTF-16 units; ext4 and APFS limit it in bytes. */
+function nameLength(name: string, windows = process.platform === "win32") {
+  return windows ? name.length : Buffer.byteLength(name);
+}
+
 /** Fail before any request when the folder is missing or the target may not be replaced. */
 async function checkTarget(path: string, overwrite: boolean) {
   if (!isAbsolute(path)) {
@@ -118,7 +123,7 @@ async function checkTarget(path: string, overwrite: boolean) {
   if ((await existingKind(dirname(path))) !== "directory") {
     throw invalid("The destination folder does not exist.");
   }
-  if (basename(path).length + PART_NAME_OVERHEAD > MAX_FILE_NAME_LENGTH) {
+  if (nameLength(basename(path)) + PART_NAME_OVERHEAD > MAX_FILE_NAME_LENGTH) {
     throw invalid("The file name is too long.");
   }
   const kind = await existingKind(path, false);
@@ -145,48 +150,21 @@ async function removePart(path: string) {
   }
 }
 
-/**
- * Place the finished temporary file once. Without `overwrite` the target is never replaced: a hard
- * link fails when the target exists, and where links are unavailable an exclusive copy takes over, so
- * no step can overwrite a file that appeared meanwhile. Returns whether the temporary name is gone.
- */
-async function placeOnce(part: string, path: string, overwrite: boolean) {
-  if (overwrite) {
-    await rename(part, path);
-    return true;
-  }
-  try {
-    await link(part, path);
-  } catch (error) {
-    if (errorCode(error) === "EEXIST") {
-      throw invalid("The destination already exists.");
-    }
-    try {
-      await copyFile(part, path, constants.COPYFILE_EXCL);
-    } catch (copyError) {
-      if (errorCode(copyError) === "EEXIST") {
-        throw invalid("The destination already exists.");
-      }
-      // A failed copy may have left a partial target, which this download created and removes.
-      await unlink(path).catch((cleanup: unknown) => {
-        if (errorCode(cleanup) !== "ENOENT") {
-          console.error(
-            "Partial download target could not be removed.",
-            cleanup,
-          );
-        }
-      });
-      throw copyError;
-    }
-  }
-  return false;
-}
+/** File operations that placing a file uses; tests replace them to make hard links fail. */
+export type PlaceOps = {
+  link: typeof link;
+  rename: typeof rename;
+};
+const systemPlaceOps: PlaceOps = {
+  link,
+  rename,
+};
 
-/** Place the file, trying again while a scanner or indexer holds it; returns whether the temporary name is gone. */
-async function commit(part: string, path: string, overwrite: boolean) {
+/** Run a file step, trying again while a scanner or indexer may hold the file for a moment. */
+async function retryTransient<T>(step: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
-      return await placeOnce(part, path, overwrite);
+      return await step();
     } catch (error) {
       const code = errorCode(error);
       if (
@@ -199,6 +177,74 @@ async function commit(part: string, path: string, overwrite: boolean) {
       await Bun.sleep(FILE_STEP_RETRY_MS);
     }
   }
+}
+
+/**
+ * Copy `part` into a target that this call creates exclusively, for file systems without hard
+ * links. Only a target created here is ever removed again, so a file that another process put at
+ * the path is neither overwritten nor deleted, and a copy that fails leaves no partial target.
+ */
+async function copyExclusive(part: string, path: string, touch: () => void) {
+  let target: FileHandle;
+  try {
+    target = await open(path, "wx");
+  } catch (error) {
+    throw errorCode(error) === "EEXIST"
+      ? invalid("The destination already exists.")
+      : error;
+  }
+  let complete = false;
+  try {
+    const source = await open(part, "r");
+    try {
+      const buffer = Buffer.allocUnsafe(COPY_CHUNK_BYTES);
+      while (true) {
+        const { bytesRead } = await source.read(buffer, 0, buffer.byteLength);
+        if (bytesRead === 0) {
+          break;
+        }
+        await writeAll(target, buffer.subarray(0, bytesRead));
+        // A long copy is progress too, so the idle limit does not end it.
+        touch();
+      }
+    } finally {
+      await source.close();
+    }
+    complete = true;
+  } finally {
+    await target.close();
+    if (!complete) {
+      await removePart(path);
+    }
+  }
+}
+
+/**
+ * Move the finished temporary file to `path`; returns whether the temporary name is gone.
+ * With `overwrite` a rename replaces the target atomically. Without it a hard link fails when the
+ * target exists, so nothing is replaced; where links cannot be made the file is copied instead.
+ */
+export async function commit(
+  part: string,
+  path: string,
+  overwrite: boolean,
+  touch: () => void,
+  ops: PlaceOps = systemPlaceOps,
+) {
+  if (overwrite) {
+    await retryTransient(() => ops.rename(part, path));
+    return true;
+  }
+  try {
+    await retryTransient(() => ops.link(part, path));
+    return false;
+  } catch (error) {
+    if (errorCode(error) === "EEXIST") {
+      throw invalid("The destination already exists.");
+    }
+  }
+  await copyExclusive(part, path, touch);
+  return false;
 }
 
 /** Write every byte of a chunk; a handle may accept fewer bytes than offered, and none means the disk refused. */
@@ -328,10 +374,10 @@ export async function download(
     if (entry.totalBytes !== null && entry.receivedBytes !== entry.totalBytes) {
       throw new BunawayError({
         code: "INTERNAL",
-        message: "Response body is shorter than announced.",
+        message: "Response body length differs from the announced length.",
       });
     }
-    gone = await commit(part, input.path, input.overwrite);
+    gone = await commit(part, input.path, input.overwrite, touch);
   } finally {
     // After a rename the name is free again and may belong to another download, so only a hard
     // link, a copy or a failure leaves a file here to remove.

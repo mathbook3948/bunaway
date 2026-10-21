@@ -1,10 +1,13 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
 import {
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
+  type PathLike,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -19,7 +22,10 @@ import {
   MAX_ACTIVE_DOWNLOADS,
   MAX_DOWNLOAD_BYTES,
 } from "#plugins/network/src/contract";
-import { checkDestination } from "#plugins/network/src/platforms/download";
+import {
+  checkDestination,
+  commit,
+} from "#plugins/network/src/platforms/download";
 import {
   dispose,
   initialize,
@@ -315,6 +321,105 @@ test("an encoded body, a Range header, an over-long name and a dangling link are
   }
   expect(leftovers()).toEqual([]);
   await dispose(state);
+});
+
+const fsError = (code: string) =>
+  Object.assign(new Error(code), {
+    code,
+  });
+
+test("placing a file without hard links copies exclusively and never touches a file that appeared", async () => {
+  const touched = {
+    count: 0,
+  };
+  const touch = () => {
+    touched.count += 1;
+  };
+  const noLinks = {
+    link: async () => {
+      throw fsError("ENOTSUP");
+    },
+    rename: async () => {},
+  };
+  const part = join(folder, "place.part");
+  writeFileSync(part, "complete body");
+  const target = join(folder, "placed.bin");
+  expect(await commit(part, target, false, touch, noLinks)).toBe(false);
+  expect(readFileSync(target, "utf8")).toBe("complete body");
+  expect(existsSync(part)).toBe(true);
+  expect(touched.count).toBeGreaterThan(0);
+  // A file at the path is kept, both when the copy starts and when it is the reason for the failure.
+  const error = await commit(part, target, false, touch, noLinks).catch(
+    (caught: { code?: string }) => caught,
+  );
+  expect(
+    (
+      error as {
+        code?: string;
+      }
+    ).code,
+  ).toBe("INVALID_ARGUMENT");
+  expect(readFileSync(target, "utf8")).toBe("complete body");
+  // A copy that fails after creating the target removes that target and reports the real cause.
+  const lost = join(folder, "lost.bin");
+  const cause = await commit(
+    join(folder, "missing.part"),
+    lost,
+    false,
+    touch,
+    noLinks,
+  ).catch((caught: { code?: string }) => caught);
+  expect(
+    (
+      cause as {
+        code?: string;
+      }
+    ).code,
+  ).toBe("ENOENT");
+  expect(existsSync(lost)).toBe(false);
+  rmSync(part);
+});
+
+test("placing a file tries again while the file is held and replaces only with overwrite", async () => {
+  const part = join(folder, "retry.part");
+  writeFileSync(part, "new");
+  const target = join(folder, "retried.bin");
+  let linkFailures = 2;
+  const busyLinks = {
+    link: async (from: PathLike, to: PathLike) => {
+      if (linkFailures > 0) {
+        linkFailures -= 1;
+        throw fsError("EBUSY");
+      }
+      linkSync(from, to);
+    },
+    rename: async () => {},
+  };
+  expect(await commit(part, target, false, () => {}, busyLinks)).toBe(false);
+  expect(linkFailures).toBe(0);
+  expect(readFileSync(target, "utf8")).toBe("new");
+  let renameFailures = 1;
+  const busyRename = {
+    link: async () => {},
+    rename: async (from: PathLike, to: PathLike) => {
+      if (renameFailures > 0) {
+        renameFailures -= 1;
+        throw fsError("EPERM");
+      }
+      renameSync(from, to);
+    },
+  };
+  // The linked target shares its content with `part`, so the replacement starts from fresh files.
+  rmSync(part);
+  rmSync(target);
+  writeFileSync(target, "old");
+  const replacement = join(folder, "replacement.part");
+  writeFileSync(replacement, "new");
+  expect(await commit(replacement, target, true, () => {}, busyRename)).toBe(
+    true,
+  );
+  expect(readFileSync(target, "utf8")).toBe("new");
+  expect(existsSync(replacement)).toBe(false);
 });
 
 test("a body over maxBytes, announced or streamed, fails and leaves no file", async () => {

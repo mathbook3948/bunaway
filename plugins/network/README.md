@@ -48,4 +48,4 @@ at most 1 hour), `idleTimeoutMs` (default 30 seconds, at most 5 minutes) and `ov
 An existing target is refused unless `overwrite` is set, and a missing parent folder fails before the request. Any status other than 2xx, redirects
 included, is returned with `saved: false` and no file. The plugin does not tie the path to a storage scope; the app checks it. Progress is read with
 `network.downloadStatus({ downloadId })` (`{ receivedBytes, totalBytes | null }`, visible to the source that started the download only) instead of a
-broadcast event, and `network.cancelDownload({ downloadId })` stops the transfer; both succeed or fail like a process handle's operations. At most four downloads run at once.
+broadcast event, and `network.cancelDownload({ downloadId })` stops the transfer; an unknown id fails for `downloadStatus` with `INVALID_ARGUMENT` and succeeds for `cancelDownload`. At most four downloads run at once.
