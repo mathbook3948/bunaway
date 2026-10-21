@@ -1,5 +1,29 @@
 # Windows Bun FFI 실행 기록
 
+## 2026-10-21 기준 측정
+
+CI의 `Windows native integration` 잡(run 39544420391, GitHub 호스트 러너 windows-2022, Windows
+`10.0.20348`, 4 vCPU, RAM 16 GiB, 고정 Bun 1.4.2)에서 `tests/lifecycle/windows-baseline.ts`가
+기본 템플릿(vanilla)을 `bunaway build`로 패키징해 5회 실행한 결과다. 원본은
+`windows-native-diagnostics` 아티팩트의 `windows-baseline-results.json`이다. 지표 정의와 단위는
+[`scripts/measure-baseline.ts`](../../scripts/measure-baseline.ts) 머리말이 소유한다.
+이 값은 기록용이며 통과 기준이나 회귀 검사에 쓰지 않는다. 공유 러너라 실행마다 달라지고,
+같은 조건으로 재지 않은 Electron, Tauri 수치와는 비교하지 않는다.
+
+| 지표 | 중앙값 | 최소 | 최대 |
+| --- | --- | --- | --- |
+| 시작 시간 (런처 생성부터 첫 명령 완료) | 459 ms | 422 ms | 2062 ms |
+| 유휴 working set 합 (프로세스 7개, 시작 5초 뒤) | 333.5 MiB | 333.0 MiB | 338.6 MiB |
+| 명령 왕복 (`message.read`, 실행별 중앙값) | 5.8 ms | 5.8 ms | 5.8 ms |
+| 명령 왕복 최댓값 (실행별) | 8.3 ms | 7.6 ms | 9.4 ms |
+
+- 패키지 크기: 빌드 출력 7개 파일 87,595,595 bytes, 실행 파일 87,417,856 bytes(약 83.4 MiB).
+  대부분이 Bun 런타임을 포함한 실행 파일이다.
+- 가장 긴 시작 시간 2062 ms는 첫 실행이다. 이후 4회는 422~466 ms이므로, 첫 실행 값은 파일 캐시가
+  차가운 경우의 참고치로 본다.
+- 명령 왕복 중앙값이 5.8 ms로 일정한 것은 `performance.now()`가 0.1 ms 단위로 보이기 때문이다.
+- 이 값은 CI 러너 한 종류에서 한 번 실행한 결과다. 로컬 장비나 다른 Windows 버전의 값은 검증하지 않았다.
+
 ## 2026-10-11 창 없는 상주 앱과 트레이 시작
 
 main `488f88a`에서 분기해 구현했다. Windows x64 `10.0.26200.0`, 고정 Bun 1.4.2와
