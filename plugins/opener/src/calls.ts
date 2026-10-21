@@ -1,4 +1,8 @@
-import type { NativeInvokeOptions, NativePluginAPI } from "@bunaway/plugin";
+import {
+  BunawayError,
+  type NativeInvokeOptions,
+  type NativePluginAPI,
+} from "@bunaway/plugin";
 import type {
   FileIcon,
   FileIconSize,
@@ -256,6 +260,12 @@ export function createOpener(api: NativePluginAPI<typeof windowsOperations>) {
     size: FileIconSize = DEFAULT_FILE_ICON_SIZE,
     options?: NativeInvokeOptions,
   ): Promise<FileIcon> {
+    if ("path" in target && "extension" in target) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Expected a path or an extension, not both.",
+      });
+    }
     if ("extension" in target) {
       return api.getFileIcon(
         {

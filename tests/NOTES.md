@@ -836,7 +836,7 @@ Explorer와 compiled helper로 파일 및 HTTP/HTTPS URL 하나의 argv 보존�
 `{ name, path }` 구조인지, 연결이 없는 scheme이 `null`인지, 잘못된 URL 거부와 dispose 뒤 호출 취소를
 `host:windows`에서 확인한다. 처리 앱의 종류는 러너마다 다르므로 값은 검증하지 않는다.
 `api/opener-file-icon.test.ts`는 `opener.getFileIcon`의 strict 입력(경로 또는 확장자 하나, 크기 열거값, 확장자 문자 규칙),
-PNG 출력 상한, RGBA PNG 인코더의 행 배치와 독립 권한을 확인한다. Windows의 `lifecycle/windows-opener-file-icon.test.ts`는
+PNG 출력 상한, RGBA PNG 인코더의 행 배치, BGRA에서 RGBA로의 변환과 AND 마스크 투명도 복원, 경로와 확장자를 함께 준 호출의 클라이언트 거부, 독립 권한을 확인한다. Windows의 `lifecycle/windows-opener-file-icon.test.ts`는
 `host:windows`에서 확장자와 실제 파일(텍스트 파일, 실행 파일)의 셸 아이콘이 RGBA PNG로 반환되고 보이는 픽셀이 있는지,
 `small`부터 `large`까지 해상도가 줄지 않는지, 없는 파일과 디렉터리 거부, 종료 뒤 호출의 `CANCELLED`를 확인한다.
 아이콘의 실제 모양은 검증하지 않으며 육안 확인은 수동 검증이다.

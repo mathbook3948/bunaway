@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { inflateSync } from "node:zlib";
 import opener from "@bunaway/plugin-opener";
 import { NativeRegistry } from "@bunaway/protocol";
+import { createOpener } from "#plugins/opener/src/calls";
 import {
   fileIconSchema,
   MAX_FILE_ICON_EDGE_PIXELS,
@@ -11,6 +12,10 @@ import {
   macosOperations,
   windowsOperations,
 } from "#plugins/opener/src/operations";
+import {
+  hasAlphaChannel,
+  toRgba,
+} from "#plugins/opener/src/platforms/icon-pixels";
 import { encodeRgbaPng } from "#plugins/opener/src/platforms/rgba-png";
 import { normalizeFileIconExtension } from "#plugins/opener/src/platforms/windows-path";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
@@ -290,4 +295,102 @@ test("getFileIcon has its own permission", async () => {
 
 test("macOS does not declare getFileIcon", () => {
   expect("getFileIcon" in macosOperations).toBe(false);
+});
+
+test("the client rejects a path and an extension given together", async () => {
+  const sent: unknown[] = [];
+  const client = createOpener({
+    getFileIcon: async (input: unknown) => {
+      sent.push(input);
+      return null;
+    },
+  } as never);
+  await expect(
+    client.getFileIcon({
+      path: "C:\\a.txt",
+      extension: ".txt",
+    } as never),
+  ).rejects.toThrow(
+    expect.objectContaining({
+      code: "INVALID_ARGUMENT",
+    }),
+  );
+  await expect(client.getFileIcon({} as never)).rejects.toThrow(
+    expect.objectContaining({
+      code: "INVALID_ARGUMENT",
+    }),
+  );
+  expect(sent).toEqual([]);
+});
+
+test("icon pixels become straight RGBA and use the AND mask only without alpha", () => {
+  const withAlpha = Buffer.from([
+    10,
+    20,
+    30,
+    128,
+    1,
+    2,
+    3,
+    0,
+  ]);
+  expect(hasAlphaChannel(withAlpha)).toBe(true);
+  expect(toRgba(withAlpha)).toEqual(
+    Buffer.from([
+      30,
+      20,
+      10,
+      128,
+      3,
+      2,
+      1,
+      0,
+    ]),
+  );
+  const noAlpha = Buffer.from([
+    10,
+    20,
+    30,
+    0,
+    40,
+    50,
+    60,
+    0,
+  ]);
+  expect(hasAlphaChannel(noAlpha)).toBe(false);
+  expect(toRgba(noAlpha)).toEqual(
+    Buffer.from([
+      30,
+      20,
+      10,
+      255,
+      60,
+      50,
+      40,
+      255,
+    ]),
+  );
+  // A non-zero mask byte marks a transparent pixel, which stays all zero.
+  const mask = Buffer.from([
+    0,
+    0,
+    0,
+    0,
+    255,
+    255,
+    255,
+    0,
+  ]);
+  expect(toRgba(noAlpha, mask)).toEqual(
+    Buffer.from([
+      30,
+      20,
+      10,
+      255,
+      0,
+      0,
+      0,
+      0,
+    ]),
+  );
 });

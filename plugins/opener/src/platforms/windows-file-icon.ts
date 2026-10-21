@@ -10,14 +10,12 @@ import {
 } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import { type FileIconSize, MAX_FILE_ICON_EDGE_PIXELS } from "#opener/contract";
+import {
+  hasAlphaChannel,
+  type IconPixels,
+  toRgba,
+} from "#opener/platforms/icon-pixels";
 import { ComScope } from "#opener/platforms/windows-com";
-
-/** Raster of one icon: straight (non-premultiplied) RGBA rows, top row first. */
-export type IconPixels = {
-  width: number;
-  height: number;
-  rgba: Buffer;
-};
 
 /** What to look up: an existing file's own icon, or the icon registered for an extension. */
 export type FileIconTarget =
@@ -55,43 +53,12 @@ const BI_RGB = 0;
 const DIB_RGB_COLORS = 0;
 const BYTES_PER_PIXEL = 4;
 const BITS_PER_PIXEL = 32;
-const OPAQUE_ALPHA = 0xff;
 
 function failed(message: string): never {
   throw new BunawayError({
     code: "INTERNAL",
     message,
   });
-}
-
-/** Whether any BGRA pixel carries a non-zero alpha value. */
-function hasAlphaChannel(bgra: Buffer): boolean {
-  for (let offset = 3; offset < bgra.length; offset += BYTES_PER_PIXEL) {
-    if (bgra[offset] !== 0) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Convert BGRA to straight RGBA. An icon with an alpha channel keeps it. An older icon without one
- * is opaque except where its AND mask (expanded to 32 bits per pixel) is non-zero: those pixels
- * stay fully transparent.
- */
-function toRgba(bgra: Buffer, andMask?: Buffer): Buffer {
-  const hasAlpha = andMask === undefined && hasAlphaChannel(bgra);
-  const rgba = Buffer.alloc(bgra.length);
-  for (let offset = 0; offset < bgra.length; offset += BYTES_PER_PIXEL) {
-    if (andMask && andMask[offset] !== 0) {
-      continue;
-    }
-    rgba[offset] = bgra[offset + 2] ?? 0;
-    rgba[offset + 1] = bgra[offset + 1] ?? 0;
-    rgba[offset + 2] = bgra[offset] ?? 0;
-    rgba[offset + 3] = hasAlpha ? (bgra[offset + 3] ?? 0) : OPAQUE_ALPHA;
-  }
-  return rgba;
 }
 
 /**
