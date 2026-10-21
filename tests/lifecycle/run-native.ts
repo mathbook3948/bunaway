@@ -264,6 +264,7 @@ if (target === "windows-x64") {
       "windows-bun-cli.ts",
       "windows-app-reload.ts",
       "windows-baseline.ts",
+      "windows-templates.ts",
     ]) {
       await test(name);
     }
