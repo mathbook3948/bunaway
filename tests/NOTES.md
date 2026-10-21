@@ -475,6 +475,12 @@ focus/blur를 발행하는지 확인한다. 실제 OS 전경 전환 검증과는
 권한 거부, 구독 해제, snapshot 조회, 탐색과 창 재생성 및 정상 종료를 확인한다.
 `mise run host:windows`에 포함되며, 네이티브 입력 준비 후 이 파일만 실행할 수도 있다.
 
+`api/window-state-persistence.test.ts`는 모니터 목록을 주입해 `window-state`의 보정(보이는 위치 유지, 사라진
+모니터, 작은 겹침, DPI 비율, 작업 영역 한도)을 확인하고, 가짜 `windows`와 `store`로 저장 값, 복원 순서,
+`include`, 손상된 기록, 삭제와 입력 검증을 확인한다. `lifecycle/windows-window-state.ts`는 실제 WebView2 창에서
+위치와 크기, 최대화, 전체화면 왕복, 일부 항목만 복원, 화면 밖 좌표 기록의 보정, 삭제 뒤 복원 없음을 확인한다.
+CI는 모니터 1개와 DPI 96이라 실제 모니터 분리와 혼합 DPI는 만들 수 없고 화면 밖 좌표 기록으로 대신한다.
+
 `cli/app-manifest.test.ts`는 Windows 실행 manifest의 형식과 계약 검증, 플러그인 제거 후
 재생성, 생성 import와 metadata 불일치를 검사한다.
 `cli/plugins.test.ts`는 index.ts 한곳의 선언에서 플랫폼 경로를 찾고 설치만 한 어댑터를

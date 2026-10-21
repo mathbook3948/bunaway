@@ -1,0 +1,166 @@
+import {
+  MAX_WINDOW_DIMENSION,
+  MIN_WINDOW_DIMENSION,
+} from "@bunaway/plugin-api/native";
+import type { Monitor } from "@bunaway/plugin-windows";
+import {
+  LOGICAL_DPI,
+  MIN_VISIBLE_LOGICAL_PIXELS,
+  type SavedWindowState,
+} from "#window-state/contract";
+
+/** Physical outer rectangle. */
+export type Rect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type FittedBounds = {
+  bounds: Rect;
+  /** The result differs from the saved rectangle. */
+  adjusted: boolean;
+};
+
+type Bounds = Pick<SavedWindowState, "x" | "y" | "width" | "height" | "dpi">;
+
+function overlap(
+  a: Rect,
+  b: Rect,
+): {
+  width: number;
+  height: number;
+} {
+  return {
+    width: Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x),
+    height: Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y),
+  };
+}
+
+/**
+ * What the window size limits mean for an outer size. The limits are logical pixels of the
+ * content area at the window's current DPI, so the outer limits add the frame.
+ */
+export type WindowFrame = {
+  /** Outer minus content size, in physical pixels. */
+  width: number;
+  height: number;
+  /** DPI of the window when the frame was measured. */
+  dpi: number;
+  /**
+   * The frame is an upper estimate, not a measurement. It raises the minimum so the native check
+   * cannot reject a size, but is left out of the maximum, which an overestimate would push past
+   * the native limit.
+   */
+  estimated?: boolean;
+};
+
+/** Keep a physical outer size inside the window size limits and the work area. */
+function clampSize(
+  value: number,
+  available: number,
+  frame: number,
+  dpi: number,
+  estimated: boolean,
+): number {
+  const minimum = Math.ceil((MIN_WINDOW_DIMENSION * dpi) / LOGICAL_DPI) + frame;
+  const maximum =
+    Math.floor((MAX_WINDOW_DIMENSION * dpi) / LOGICAL_DPI) +
+    (estimated ? 0 : frame);
+  const limit = Math.max(minimum, Math.min(maximum, available));
+  return Math.min(Math.max(Math.round(value), minimum), limit);
+}
+
+/** The monitor whose work area holds the largest part of the rectangle, if enough of it shows. */
+function visibleMonitor(
+  saved: Rect,
+  monitors: readonly Monitor[],
+): Monitor | null {
+  let best: Monitor | null = null;
+  let bestArea = 0;
+  for (const monitor of monitors) {
+    const { width, height } = overlap(saved, monitor.workArea);
+    const minimum = Math.ceil(
+      (MIN_VISIBLE_LOGICAL_PIXELS * monitor.dpi) / LOGICAL_DPI,
+    );
+    if (
+      width >= Math.min(minimum, saved.width) &&
+      height >= Math.min(minimum, saved.height)
+    ) {
+      if (width * height > bestArea) {
+        best = monitor;
+        bestArea = width * height;
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * Fit a saved rectangle to the monitors that exist now. A rectangle that still shows at least a
+ * small piece of a work area keeps its position; otherwise it is centered on the primary work
+ * area. When the monitor under it runs at another DPI than when it was saved, the size follows
+ * the DPI ratio so the window keeps its logical size. The size never exceeds the work area.
+ */
+export function fitToMonitors(
+  saved: Bounds,
+  monitors: readonly Monitor[],
+  frame: Partial<WindowFrame> & Pick<WindowFrame, "width" | "height"> = {
+    width: 0,
+    height: 0,
+  },
+): FittedBounds {
+  const original: Rect = {
+    x: saved.x,
+    y: saved.y,
+    width: saved.width,
+    height: saved.height,
+  };
+  const home = visibleMonitor(original, monitors);
+  const target =
+    home ?? monitors.find((monitor) => monitor.primary) ?? monitors[0];
+  if (!target) {
+    return {
+      bounds: original,
+      adjusted: false,
+    };
+  }
+  const scale = target.dpi / saved.dpi;
+  const width = clampSize(
+    saved.width * scale,
+    target.workArea.width,
+    frame.width,
+    frame.dpi ?? target.dpi,
+    frame.estimated === true,
+  );
+  const height = clampSize(
+    saved.height * scale,
+    target.workArea.height,
+    frame.height,
+    frame.dpi ?? target.dpi,
+    frame.estimated === true,
+  );
+  const area = target.workArea;
+  const bounds: Rect = home
+    ? {
+        x: saved.x,
+        y: saved.y,
+        width,
+        height,
+      }
+    : {
+        x: area.x + Math.floor((area.width - width) / 2),
+        y: area.y + Math.floor((area.height - height) / 2),
+        width,
+        height,
+      };
+  return {
+    bounds,
+    adjusted:
+      bounds.x !== original.x ||
+      bounds.y !== original.y ||
+      bounds.width !== original.width ||
+      bounds.height !== original.height,
+  };
+}
