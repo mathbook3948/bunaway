@@ -419,6 +419,8 @@ test.skipIf(process.platform !== "win32")(
             "backend",
           ),
         );
+      // The first listing may leave one-time allocations behind, like the first single capture.
+      await listWithThumbnails();
       const gdiBeforeListing = driver.user32.symbols.GetGuiResources(
         CURRENT_PROCESS,
         GR_GDIOBJECTS,
