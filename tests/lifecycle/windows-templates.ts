@@ -37,6 +37,9 @@ const VITE_CLIENT_MARKER = 'src="/@vite/client"';
 const SETUP_DEADLINE_SCALE = 3;
 /** How much of a failed step's output the report keeps. */
 const OUTPUT_TAIL_CHARS = 4_000;
+/** Attempts and pause when removing a project whose files a stopped process still holds. */
+const REMOVE_RETRIES = 5;
+const REMOVE_RETRY_DELAY_MS = 500;
 /** Pause between requests while the dev server starts. */
 const DEV_SERVER_POLL_MS = 250;
 
@@ -86,7 +89,7 @@ async function killTree(pid: number): Promise<void> {
 
 /**
  * Runs `command` to completion within the named deadline. On timeout the whole process tree is
- * killed and the output read so far is returned without waiting for pipes a grandchild may hold.
+ * killed and the step fails without waiting for pipes a grandchild may hold, so its output is lost.
  */
 async function execute(
   command: string[],
@@ -181,14 +184,8 @@ function pinnedBun(command: string[]): string[] {
 }
 
 /** Runs the web build the template configures, the same command `bunaway build` runs first. */
-async function webBuild(settings: Settings, app: string): Promise<Outcome> {
-  if (settings.build.command === undefined) {
-    return {
-      ok: true,
-      output: "",
-    };
-  }
-  return execute(pinnedBun(settings.build.command), app, "build");
+function webBuild(command: string[], app: string): Promise<Outcome> {
+  return execute(pinnedBun(command), app, "build");
 }
 
 /** Reserves a free loopback port by binding and releasing it. */
@@ -217,6 +214,8 @@ async function webDevServer(settings: Settings, app: string): Promise<Outcome> {
       ...pinnedBun(settings.dev.command),
       "--port",
       String(port),
+      // Fail instead of moving to the next port if another process takes this one first.
+      "--strictPort",
     ],
     {
       cwd: app,
@@ -227,8 +226,17 @@ async function webDevServer(settings: Settings, app: string): Promise<Outcome> {
   try {
     const deadlineAt = Date.now() + deadline("toolchain");
     while (Date.now() < deadlineAt) {
+      if (server.exitCode !== null) {
+        return {
+          ok: false,
+          output: `the dev server exited with code ${server.exitCode} before answering`,
+        };
+      }
       try {
-        const response = await fetch(url);
+        // A request that connects but never answers must not outlive the step deadline.
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(Math.max(1, deadlineAt - Date.now())),
+        });
         const html = await response.text();
         if (response.ok) {
           return {
@@ -247,6 +255,11 @@ async function webDevServer(settings: Settings, app: string): Promise<Outcome> {
     };
   } finally {
     await killTree(server.pid);
+    // Let the processes release their files before the project is removed.
+    await Promise.race([
+      server.exited,
+      Bun.sleep(deadline("childExit")),
+    ]);
   }
 }
 
@@ -280,11 +293,13 @@ async function verifyTemplate(
       await readFile(resolve(app, "src-bunaway/bunaway.json"), "utf8"),
     ) as Settings;
     // `doctor` runs `bunaway validate`, which needs the built frontend directory to exist.
-    const built = await record(template, "web-build", () =>
-      webBuild(settings, app),
-    );
-    if (!built) {
-      return;
+    if (settings.build.command !== undefined) {
+      const built = await record(template, "web-build", () =>
+        webBuild(settings.build.command ?? [], app),
+      );
+      if (!built) {
+        return;
+      }
     }
     await record(template, "doctor", () =>
       execute(helperCommand("doctor", app), root, "build"),
@@ -313,6 +328,9 @@ async function verifyTemplate(
       await rm(app, {
         recursive: true,
         force: true,
+        // Windows can keep a handle on a just-stopped process's files for a moment.
+        maxRetries: REMOVE_RETRIES,
+        retryDelay: REMOVE_RETRY_DELAY_MS,
       });
       return {
         ok: true,

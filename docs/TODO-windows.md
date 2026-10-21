@@ -1079,7 +1079,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [x] 로그 level(`minimumLevel`), target(`appData`만), rotation(`maxFileBytes`), retention(`maxArchives`)과 flush를 `log.configure`/`log.flush`로 제공한다.
 - [x] 시작 시간, 유휴 메모리, 패키지 크기와 명령 지연의 기준 측정을 기록한다. [`scripts/measure-baseline.ts`](../scripts/measure-baseline.ts)가 측정하고 수치는 [Windows Bun FFI 실행 기록](./architecture/windows-bun-results.md)에 있다. 기록용이며 통과 기준은 없다.
 - [ ] 각 UI 템플릿의 실제 Windows dev, HMR, build와 package 실행을 검증한다.
-  - 완료: `lifecycle/windows-templates.ts`가 템플릿 5종을 Windows에서 생성하고 doctor, 백엔드 실행, 웹 개발 서버 응답(vanilla 제외), 웹 빌드까지 확인한다. 남은 범위: HMR 편집 반영과 package(설치 파일) 실행.
+  - 완료: `lifecycle/windows-templates.ts`가 템플릿 5종을 Windows에서 생성하고 웹 빌드, doctor, 백엔드 실행(검증 도구가 호스트 역할을 대신하므로 실제 Windows 호스트와 WebView2는 포함하지 않음), 템플릿이 설정한 개발 서버 명령의 응답(vanilla 제외, `bunaway dev` 자체는 아님)까지 확인한다. 남은 범위: HMR 편집 반영과 package(설치 파일) 실행.
 - [ ] 고급 process crash, hang, heap snapshot과 JavaScript stack 수집의 지원 범위를 결정한다.
 
 명령 교체는 Windows 개발 모드에만 적용한다. 모듈 변수는 새로 초기화되며 플러그인
