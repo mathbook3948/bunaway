@@ -7,7 +7,7 @@ import {
   captureOutputSchema,
   sourceListSchema,
 } from "#plugins/screen-capture/src/contract";
-import { deadline } from "../fixtures/deadlines.ts";
+import { deadline, waitFor } from "../fixtures/deadlines.ts";
 import { decodePng } from "../fixtures/png.ts";
 
 setDefaultTimeout(deadline("build"));
@@ -27,6 +27,23 @@ const FILL = {
 };
 const WARM_UP_CAPTURES = 2;
 const LEAK_CHECK_CAPTURES = 20;
+const expectedColor = [
+  FILL.red,
+  FILL.green,
+  FILL.blue,
+];
+
+/** The color at the center of a captured PNG. */
+function centerColor(shot: { data: string }): number[] {
+  const pixels = decodePng(Buffer.from(shot.data, "base64"));
+  const at =
+    (Math.floor(pixels.height / 2) * pixels.width +
+      Math.floor(pixels.width / 2)) *
+    3;
+  return [
+    ...pixels.rgb.subarray(at, at + 3),
+  ];
+}
 
 /** The few user32 and gdi32 calls the test needs to own a window of a known color. */
 function openDriver() {
@@ -133,9 +150,16 @@ function openDriver() {
       returns: "i32",
     },
   });
+  const dwmapi = dlopen("dwmapi.dll", {
+    DwmFlush: {
+      args: [],
+      returns: "i32",
+    },
+  });
   return {
     user32,
     gdi32,
+    dwmapi,
   };
 }
 
@@ -270,25 +294,53 @@ test.skipIf(process.platform !== "win32")(
       expect(own.bounds.height).toBeGreaterThan(0);
 
       // The full-size capture has the listed size and the color painted into the window.
-      const image = await capture(own.id, 4096);
+      // The window shows its color only once the compositor has taken the painted content, and a
+      // window of the test thread is not composed in step with its painting. Wait for a
+      // composition pass first. A capture that reads black is taken again after another pass until
+      // the wait limit; any other color fails at once, and earlier black readings are reported.
+      driver.dwmapi.symbols.DwmFlush();
+      // The tolerance for black reads is deliberate and limited to the compositor catching up
+      // within the wait limit; a capture that stays black fails with the number of reads.
+      let blackReads = 0;
+      const image = await waitFor(
+        async () => {
+          const shot = await capture(own.id, 4096);
+          const color = centerColor(shot);
+          if (color.join() === expectedColor.join()) {
+            return shot;
+          }
+          if (color.some((channel) => channel !== 0)) {
+            throw new Error(
+              `The window capture read ${color.join(",")} instead of ${expectedColor.join(",")}.`,
+            );
+          }
+          blackReads += 1;
+          driver.dwmapi.symbols.DwmFlush();
+          return false;
+        },
+        {
+          deadline: "inProcess",
+          what: "the painted color in the window capture",
+        },
+      ).catch((error: unknown) => {
+        throw new Error(
+          `${error instanceof Error ? error.message : String(error)} (black reads before: ${blackReads})`,
+          {
+            cause: error,
+          },
+        );
+      });
+      if (blackReads > 0) {
+        console.warn(
+          `window capture read black ${blackReads} time(s) before the painted color`,
+        );
+      }
       expect([
         image.width,
         image.height,
       ]).toEqual([
         own.bounds.width,
         own.bounds.height,
-      ]);
-      const decoded = decodePng(Buffer.from(image.data, "base64"));
-      const center =
-        (Math.floor(decoded.height / 2) * decoded.width +
-          Math.floor(decoded.width / 2)) *
-        3;
-      expect([
-        ...decoded.rgb.subarray(center, center + 3),
-      ]).toEqual([
-        FILL.red,
-        FILL.green,
-        FILL.blue,
       ]);
 
       // A thumbnail keeps the aspect ratio inside the requested box.
@@ -392,6 +444,7 @@ test.skipIf(process.platform !== "win32")(
       windowClass.release();
       driver.user32.close();
       driver.gdi32.close();
+      driver.dwmapi.close();
       await adapter.dispose();
       await adapter.dispose();
     }
