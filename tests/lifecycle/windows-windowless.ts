@@ -377,8 +377,8 @@ if (!process.argv.includes("--child")) {
   };
   /**
    * The icon was hidden before the last window closed: the app keeps running and show() restores a window.
-   * The snapshot `visible` is the value the app last set, so the shell's NIS_HIDDEN state is not read here;
-   * the hidden state itself is covered by windows-tray-controls.test.ts.
+   * The snapshot `visible` is the value the app last set, so the shell's NIS_HIDDEN state is not read
+   * here; the scenario checks the app lifetime, not what Explorer draws.
    */
   async function exerciseHiddenTray(desktop: DesktopContext, windowId: string) {
     const hidden = (await callTray("tray.get", null)) as {
@@ -414,6 +414,15 @@ if (!process.argv.includes("--child")) {
     await callTray("tray.setVisible", {
       visible: true,
     });
+    assert.equal(
+      (
+        (await callTray("tray.get", null)) as {
+          visible: boolean;
+        }
+      ).visible,
+      true,
+      "showing the icon again must be recorded",
+    );
   }
   /** Exercise deferred creation, last close and restoration through real backend Host calls. */
   async function exercise(desktop: DesktopContext) {
