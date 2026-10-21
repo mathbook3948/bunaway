@@ -243,9 +243,10 @@ Windows 소리 설정이나 집중 지원이 소리를 막을 수 있습니다.
 
 `expiresAfterSeconds`는 Electron과 Tauri에 없는 확장으로 `ToastNotification.ExpirationTime`을
 현재 시각에 지정한 초를 더한 값으로 설정합니다. 알림 센터는 그 시각이 지나면 항목을 제거합니다.
-`timeoutType`, `silent`, `sound`와 자유롭게 함께 쓸 수 있으며 생략하면 만료되지 않습니다.
-같은 id와 group으로 다시 `show`하면 새 알림의 값이 적용되므로 `expiresAfterSeconds`를 생략한
-교체는 이전 만료를 없앱니다.
+`timeoutType`, `silent`, `sound`와 자유롭게 함께 쓸 수 있습니다. 생략하면 Windows의 기본 보관
+기간을 따르며, CI에서 만료를 지정하지 않은 알림의 `ExpirationTime`이 약 3일 뒤로 읽히는 것을
+확인했습니다. 같은 id와 group으로 다시 `show`하면 새 알림의 값이 적용되므로
+`expiresAfterSeconds`를 생략한 교체는 이전 값 대신 이 기본 보관 기간으로 돌아갑니다.
 
 검증 범위: Windows CI는 `reminder` 시나리오와 시스템 닫기 버튼이 들어간 toast를 Windows가 받아
 알림 기록에 보관하는 것과, 보관된 알림의 `ExpirationTime`이 지정한 시간에 맞는 것을 확인합니다.

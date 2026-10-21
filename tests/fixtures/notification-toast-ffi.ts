@@ -639,7 +639,7 @@ for (const stage of [
   );
   assert.equal(strings.size, 0);
 }
-// expiresAfterSeconds boxes a DateTime and assigns it to the toast. Each failure releases both objects.
+// expiresAfterSeconds boxes a DateTime and assigns it to the toast. A failure at any step leaves no COM object or string behind.
 const expiring = notificationShowSchema.parse({
   id: "expiring",
   title: "Expires",
@@ -647,6 +647,7 @@ const expiring = notificationShowSchema.parse({
 });
 for (const stage of [
   "factory:21",
+  "dateTimeBox:0",
   "toast:7",
 ]) {
   failStage = stage;

@@ -519,7 +519,7 @@ if (workerData?.toastMarshalWorker) {
     assert(kept[0]?.includes('activationType="system"'));
     controller.clear(reminder);
     await waitHistory((items) => items.length === 0);
-    // expiresAfterSeconds must land in the stored toast's ExpirationTime, and a replacement without it must clear it.
+    // expiresAfterSeconds must land in the stored toast's ExpirationTime, and a replacement without it must drop back to the OS default.
     const expiring = notificationShowSchema.parse({
       id: "expiring",
       group: "bunaway-test",
@@ -552,9 +552,14 @@ if (workerData?.toastMarshalWorker) {
       (items) =>
         items.length === 1 && Boolean(items[0]?.includes("unexpiring fixture")),
     );
-    assert.deepEqual(await history(15000, true), [
-      "",
-    ]);
+    // Windows gives a toast without an explicit expiration its default retention (about 3 days), so the replacement
+    // must read as far later than the 600 second value it replaced.
+    const [replacementExpiresAt] = await history(15000, true);
+    assert(replacementExpiresAt);
+    assert(
+      Date.parse(replacementExpiresAt) > Date.now() + 24 * 60 * 60 * 1000,
+      `Replacement ExpirationTime ${replacementExpiresAt} must be the OS default, not the earlier value`,
+    );
     controller.clear(expiring);
     await waitHistory((items) => items.length === 0);
     // Buttons and the reply box must be accepted by Windows and survive in the stored toast.

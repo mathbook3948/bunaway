@@ -70,7 +70,8 @@ recall 속성을 거부한다. 링크는 따라가고 링크 대상은 이 검�
 `PropertyValue.CreateDateTime`(IPropertyValueStatics slot 21)로 만든 값을 `IReference<DateTime>`으로 QueryInterface해 넘겨
 알림 센터에서 그 시간 뒤에 항목을 제거한다. DateTime은 1601-01-01 UTC 기준 100 ns tick이다. DateTime 값과
 팩토리 참조는 호출 직후 해제한다. Windows CI는 시나리오 XML과 보관된 알림의 `ExpirationTime`을
-확인하며, 실제 popup 유지와 만료 시점의 제거는 확인하지 않았다.
+확인하며, 실제 popup 유지와 만료 시점의 제거는 확인하지 않았다. 생략하면 Windows 기본 보관 기간을 따르고
+CI에서 그 값이 약 3일 뒤로 읽혔다.
 
 `actions`(`{ id, label }` 최대 5개, id 중복 불가, label 1~64자)와 `reply`(`{ placeholder?, buttonLabel }`)를
 지정하면 toast에 버튼과 텍스트 입력 상자를 추가한다. 응답 입력 상자는 `hint-inputId`로 연결한 전송 버튼과 함께 선언하므로
