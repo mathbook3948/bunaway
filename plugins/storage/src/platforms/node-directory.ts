@@ -152,9 +152,9 @@ export function listDirectory(path: string): StorageDirectoryEntry[] {
 
 /**
  * List the first `limit` children whose names sort after `after`, in the order and with the entry
- * rules of listDirectory. The scan keeps at most 2 * limit + 1 candidate children, so memory stays
- * bounded for huge directories, and only the children of the returned page are statted. `next` is
- * the last name of the page when more names follow it, otherwise null. A child that vanishes
+ * rules of listDirectory. The runtime reads the whole directory on the first step, so the cost per
+ * call is linear in the directory size; only the children of the returned page are statted. `next`
+ * is the last name of the page when more names follow it, otherwise null. A child that vanishes
  * after the scan is left out of its page, so a page can hold fewer than `limit` entries.
  */
 export function listDirectoryPage(
@@ -162,11 +162,7 @@ export function listDirectoryPage(
   after: string | undefined,
   limit: number,
 ): StorageDirectoryPage {
-  let candidates: Dirent[] = [];
-  const keepFirst = (count: number): void => {
-    candidates.sort((left, right) => compareNames(left.name, right.name));
-    candidates = candidates.slice(0, count);
-  };
+  const candidates: Dirent[] = [];
   const directory = opendirSync(path);
   try {
     for (
@@ -174,18 +170,14 @@ export function listDirectoryPage(
       child;
       child = directory.readSync()
     ) {
-      if (after !== undefined && child.name <= after) {
-        continue;
-      }
-      candidates.push(child);
-      if (candidates.length > 2 * limit) {
-        keepFirst(limit + 1);
+      if (after === undefined || child.name > after) {
+        candidates.push(child);
       }
     }
   } finally {
     directory.closeSync();
   }
-  keepFirst(limit + 1);
+  candidates.sort((left, right) => compareNames(left.name, right.name));
   const page = candidates.slice(0, limit);
   const entries: StorageDirectoryEntry[] = [];
   for (const child of page) {

@@ -189,6 +189,31 @@ test("entries carry the kinds of readDirectory and links are not followed", () =
   ]);
 });
 
+test("a special file fails only the page that holds it", () => {
+  if (process.platform === "win32") {
+    return;
+  }
+  createFiles([
+    "a",
+    "b",
+  ]);
+  expect(
+    Bun.spawnSync([
+      "mkfifo",
+      join(root, "c"),
+    ]).exitCode,
+  ).toBe(0);
+  expect(names(listDirectoryPage(root, undefined, 2).entries)).toEqual([
+    "a",
+    "b",
+  ]);
+  expect(() => listDirectoryPage(root, "b", 2)).toThrow(
+    expect.objectContaining({
+      code: "UNSUPPORTED",
+    }),
+  );
+});
+
 test("a file target is not a directory", () => {
   createFiles([
     "a",
