@@ -649,7 +649,7 @@ test("download input is bounded and takes only plain http(s) GET fields", () => 
       downloadId: "not-a-uuid",
     },
     {
-      downloadId: crypto.randomUUID().toUpperCase(),
+      downloadId: "6F9619FF-8B86-4011-B42D-00C04FC964FF",
     },
     {
       url: "file:///tmp/x",

@@ -219,7 +219,6 @@ async function copyExclusive(
         // A long copy is progress too, so the idle limit does not end it; the deadline still does.
         touch();
       }
-      await target.sync();
     } finally {
       await source.close();
     }
@@ -319,8 +318,6 @@ async function writeBody(
         touch();
       }
     }
-    // Reach the disk before the file is moved into place, so a power loss cannot leave an empty target.
-    await file.sync();
   } finally {
     try {
       await reader?.cancel();

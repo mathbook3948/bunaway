@@ -218,12 +218,14 @@ const saved = network.download({
   path: "C:\\Users\\me\\Downloads\\data.bin",
   maxBytes: 512 * 1024 * 1024,
 });
-// 진행률은 download 호출이 호스트에 도착한 뒤 읽습니다. 그 전에는 INVALID_ARGUMENT입니다.
-const { receivedBytes, totalBytes } = await network.downloadStatus({ downloadId });
+// 진행률은 download 호출이 호스트에 도착한 뒤에만 읽을 수 있습니다. 그 전에는 INVALID_ARGUMENT이므로 다시 시도합니다.
+const progress = await network.downloadStatus({ downloadId }).catch(() => null);
 const { status, saved: written, bytesWritten } = await saved;
 ```
 
-취소하면 기다리던 `network.download`가 `CANCELLED`로 끝나므로 결과를 꺼내는 대신 그 오류를 처리합니다.
+`network.cancelDownload`는 이미 시작된 다운로드만 멈춥니다. 호출이 도착하기 전에 보낸 취소는 아무 일도 하지 않으므로(없는 ID도 성공입니다),
+처음부터 취소할 수 있어야 하면 `network.download` 호출의 `signal`을 씁니다. 실행 중인 다운로드를 취소하면 기다리던
+`network.download`가 `CANCELLED`로 끝나므로 결과를 꺼내는 대신 그 오류를 처리합니다.
 
 ```ts
 await network.cancelDownload({ downloadId });

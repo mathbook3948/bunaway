@@ -279,7 +279,12 @@ export const MAX_DOWNLOAD_IDLE_TIMEOUT_MS = 5 * 60_000;
 export const MAX_ACTIVE_DOWNLOADS = 4;
 export const MAX_DOWNLOAD_PATH_LENGTH = 4096;
 /** Lower case, because file names differ only in case on NTFS and APFS and the id names the temporary file. */
-const downloadId = z.uuid().refine((value) => value === value.toLowerCase());
+const downloadId = z
+  .uuid()
+  .refine(
+    (value) => value === value.toLowerCase(),
+    "Expected a lower case UUID.",
+  );
 /**
  * `network.download` input. The app checks `path` against its own rules before the call; the plugin
  * only requires an absolute path whose parent folder exists. `downloadId` is chosen by the caller
