@@ -394,6 +394,31 @@ if (!process.argv.includes("--child")) {
               "play",
               "next",
             ]);
+            // A rejected image keeps the current toolbar, so its slots still press the same ids.
+            await assert.rejects(
+              windows.setThumbnailToolbar({
+                ...target,
+                buttons: [
+                  {
+                    id: "bad",
+                    ico: Buffer.alloc(64).toString("base64"),
+                  },
+                ],
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
+            press(0);
+            await waitFor(() => pressed().length >= 3, {
+              deadline: "childStep",
+              what: "the press after a rejected toolbar",
+            });
+            assert.deepEqual(pressed(), [
+              "play",
+              "next",
+              "play",
+            ]);
             // A shorter toolbar hides the remaining slots, so their old presses are ignored. The app
             // command that follows proves the earlier message was handled without publishing.
             await windows.setThumbnailToolbar({
@@ -423,6 +448,7 @@ if (!process.argv.includes("--child")) {
             assert.deepEqual(pressed(), [
               "play",
               "next",
+              "play",
               "solo",
             ]);
             await windows.setThumbnailToolbar({
@@ -443,7 +469,7 @@ if (!process.argv.includes("--child")) {
                 what: "the app command after the toolbar was emptied",
               },
             );
-            assert.equal(pressed().length, 3);
+            assert.equal(pressed().length, 4);
             for (const record of records) {
               assert.equal(record.payload.windowId, snapshot.windowId);
             }
