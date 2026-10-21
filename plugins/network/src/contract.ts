@@ -320,7 +320,7 @@ export const downloadInputSchema = z.strictObject({
   overwrite: z.boolean().default(false),
 });
 /**
- * A 2xx body is written to `path` and `saved` is true. Any other status, redirects included, is
+ * A 200 body is written to `path` and `saved` is true. Any other status, redirects included, is
  * returned like `network.request` does and creates no file.
  */
 export const downloadResultSchema = z.strictObject({

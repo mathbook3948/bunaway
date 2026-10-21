@@ -182,9 +182,15 @@ async function retryTransient<T>(step: () => Promise<T>): Promise<T> {
 /**
  * Copy `part` into a target that this call creates exclusively, for file systems without hard
  * links. Only a target created here is ever removed again, so a file that another process put at
- * the path is neither overwritten nor deleted, and a copy that fails leaves no partial target.
+ * the path is neither overwritten nor deleted, and a copy that fails, is cancelled or cannot be
+ * closed leaves no partial target. The copy is not atomic: until it ends the target holds a prefix.
  */
-async function copyExclusive(part: string, path: string, touch: () => void) {
+async function copyExclusive(
+  part: string,
+  path: string,
+  touch: () => void,
+  signal: AbortSignal,
+) {
   let target: FileHandle;
   try {
     target = await open(path, "wx");
@@ -193,29 +199,44 @@ async function copyExclusive(part: string, path: string, touch: () => void) {
       ? invalid("The destination already exists.")
       : error;
   }
-  let complete = false;
+  let failure:
+    | {
+        cause: unknown;
+      }
+    | undefined;
   try {
     const source = await open(part, "r");
     try {
       const buffer = Buffer.allocUnsafe(COPY_CHUNK_BYTES);
       while (true) {
+        signal.throwIfAborted();
         const { bytesRead } = await source.read(buffer, 0, buffer.byteLength);
         if (bytesRead === 0) {
           break;
         }
         await writeAll(target, buffer.subarray(0, bytesRead));
-        // A long copy is progress too, so the idle limit does not end it.
+        // A long copy is progress too, so the idle limit does not end it; the deadline still does.
         touch();
       }
     } finally {
       await source.close();
     }
-    complete = true;
-  } finally {
+  } catch (error) {
+    failure = {
+      cause: error,
+    };
+  }
+  try {
+    // Closing can report a write that failed late, so a copy only counts once it is closed.
     await target.close();
-    if (!complete) {
-      await removePart(path);
-    }
+  } catch (error) {
+    failure ??= {
+      cause: error,
+    };
+  }
+  if (failure) {
+    await removePart(path);
+    throw failure.cause;
   }
 }
 
@@ -229,6 +250,7 @@ export async function commit(
   path: string,
   overwrite: boolean,
   touch: () => void,
+  signal: AbortSignal,
   ops: PlaceOps = systemPlaceOps,
 ) {
   if (overwrite) {
@@ -242,8 +264,10 @@ export async function commit(
     if (errorCode(error) === "EEXIST") {
       throw invalid("The destination already exists.");
     }
+    // Links are not available here (or stayed locked); the copy below decides the outcome.
+    console.warn("Hard link failed, copying the download instead.", error);
   }
-  await copyExclusive(part, path, touch);
+  await copyExclusive(part, path, touch, signal);
   return false;
 }
 
@@ -304,7 +328,7 @@ async function writeBody(
 }
 
 /**
- * Stream a 2xx body into `path` through `<path>.<id>.part`, which replaces the target only after the
+ * Stream a 200 body into `path` through `<path>.<id>.part`, which replaces the target only after the
  * whole body arrived. Any failure, cancellation or deadline removes the temporary file. Redirects are
  * returned for the app to check again, as `network.request` does.
  */
@@ -335,7 +359,8 @@ export async function download(
   });
   const headers = responseHeaders(response);
   touch();
-  if (response.status < 200 || response.status > 299) {
+  // Only a complete body is a file: 206 is a fragment and 204 or 205 carry no body.
+  if (response.status !== 200) {
     await response.body?.cancel();
     return {
       status: response.status,
@@ -377,7 +402,7 @@ export async function download(
         message: "Response body length differs from the announced length.",
       });
     }
-    gone = await commit(part, input.path, input.overwrite, touch);
+    gone = await commit(part, input.path, input.overwrite, touch, signal);
   } finally {
     // After a rename the name is free again and may belong to another download, so only a hard
     // link, a copy or a failure leaves a file here to remove.

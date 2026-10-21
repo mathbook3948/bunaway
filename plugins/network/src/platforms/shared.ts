@@ -232,16 +232,16 @@ export async function runDownload(
   requestSignal?: AbortSignal,
 ) {
   requireOpen(state);
-  if (state.downloads.size >= MAX_ACTIVE_DOWNLOADS) {
-    throw new BunawayError({
-      code: "BUSY",
-      message: "Too many downloads.",
-    });
-  }
   if (state.downloads.has(input.downloadId)) {
     throw new BunawayError({
       code: "INVALID_ARGUMENT",
       message: "The download id is already in use.",
+    });
+  }
+  if (state.downloads.size >= MAX_ACTIVE_DOWNLOADS) {
+    throw new BunawayError({
+      code: "BUSY",
+      message: "Too many downloads.",
     });
   }
   requestSignal?.throwIfAborted();

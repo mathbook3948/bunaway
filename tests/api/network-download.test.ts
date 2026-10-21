@@ -196,7 +196,7 @@ const firstChunk = (
 
 const leftovers = () => readdirSync(folder).filter((n) => n.endsWith(".part"));
 
-test("network.download saves a 2xx body and reports status and headers", async () => {
+test("network.download saves a 200 body and reports status and headers", async () => {
   const state = initialize();
   const request = input("small.txt", "/small");
   const result = await runDownload(state, SOURCE, request);
@@ -213,7 +213,7 @@ test("network.download saves a 2xx body and reports status and headers", async (
   await dispose(state);
 });
 
-test("a non-2xx status or a redirect is returned and creates no file", async () => {
+test("a status other than 200 or a redirect is returned and creates no file", async () => {
   const state = initialize();
   for (const [path, status] of [
     [
@@ -329,6 +329,7 @@ const fsError = (code: string) =>
   });
 
 test("placing a file without hard links copies exclusively and never touches a file that appeared", async () => {
+  const signal = new AbortController().signal;
   const touched = {
     count: 0,
   };
@@ -344,12 +345,12 @@ test("placing a file without hard links copies exclusively and never touches a f
   const part = join(folder, "place.part");
   writeFileSync(part, "complete body");
   const target = join(folder, "placed.bin");
-  expect(await commit(part, target, false, touch, noLinks)).toBe(false);
+  expect(await commit(part, target, false, touch, signal, noLinks)).toBe(false);
   expect(readFileSync(target, "utf8")).toBe("complete body");
   expect(existsSync(part)).toBe(true);
   expect(touched.count).toBeGreaterThan(0);
   // A file at the path is kept, both when the copy starts and when it is the reason for the failure.
-  const error = await commit(part, target, false, touch, noLinks).catch(
+  const error = await commit(part, target, false, touch, signal, noLinks).catch(
     (caught: { code?: string }) => caught,
   );
   expect(
@@ -367,6 +368,7 @@ test("placing a file without hard links copies exclusively and never touches a f
     lost,
     false,
     touch,
+    signal,
     noLinks,
   ).catch((caught: { code?: string }) => caught);
   expect(
@@ -381,6 +383,7 @@ test("placing a file without hard links copies exclusively and never touches a f
 });
 
 test("placing a file tries again while the file is held and replaces only with overwrite", async () => {
+  const signal = new AbortController().signal;
   const part = join(folder, "retry.part");
   writeFileSync(part, "new");
   const target = join(folder, "retried.bin");
@@ -395,7 +398,9 @@ test("placing a file tries again while the file is held and replaces only with o
     },
     rename: async () => {},
   };
-  expect(await commit(part, target, false, () => {}, busyLinks)).toBe(false);
+  expect(await commit(part, target, false, () => {}, signal, busyLinks)).toBe(
+    false,
+  );
   expect(linkFailures).toBe(0);
   expect(readFileSync(target, "utf8")).toBe("new");
   let renameFailures = 1;
@@ -415,11 +420,41 @@ test("placing a file tries again while the file is held and replaces only with o
   writeFileSync(target, "old");
   const replacement = join(folder, "replacement.part");
   writeFileSync(replacement, "new");
-  expect(await commit(replacement, target, true, () => {}, busyRename)).toBe(
-    true,
-  );
+  expect(
+    await commit(replacement, target, true, () => {}, signal, busyRename),
+  ).toBe(true);
   expect(readFileSync(target, "utf8")).toBe("new");
   expect(existsSync(replacement)).toBe(false);
+});
+
+test("cancelling during the copy ends the download and removes the partial target", async () => {
+  const part = join(folder, "cancel-copy.part");
+  writeFileSync(part, "x".repeat(4 * 1024 * 1024));
+  const target = join(folder, "cancel-copy.bin");
+  const controller = new AbortController();
+  const noLinks = {
+    link: async () => {
+      throw fsError("ENOTSUP");
+    },
+    rename: async () => {},
+  };
+  const outcome = await commit(
+    part,
+    target,
+    false,
+    () => controller.abort(),
+    controller.signal,
+    noLinks,
+  ).catch((caught: unknown) => caught);
+  expect(
+    (
+      outcome as {
+        name?: string;
+      }
+    ).name,
+  ).toBe("AbortError");
+  expect(existsSync(target)).toBe(false);
+  rmSync(part);
 });
 
 test("a body over maxBytes, announced or streamed, fails and leaves no file", async () => {

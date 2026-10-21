@@ -231,7 +231,7 @@ const { status, saved: written, bytesWritten } = await saved;
 `network.downloadStatus`와 `network.cancelDownload`가 필요합니다.
 
 - 입력은 `downloadId`(호출자가 만드는 UUID), `url`(사용자 정보와 fragment가 없는 `http:`/`https:` 절대 URL), `path`, `headers`,
-  `maxBytes`(필수, 1부터 4 GiB), `timeoutMs`(전체 기한, 기본 10분, 최대 1시간), `idleTimeoutMs`(본문 조각 사이의 무응답 한도,
+  `maxBytes`(필수, 1부터 4 GiB), `timeoutMs`(전체 기한, 기본 10분, 최대 1시간), `idleTimeoutMs`(요청을 보낸 뒤 응답 header와 본문 조각 사이의 무응답 한도,
   기본 30초, 최대 5분), `overwrite`(기본 `false`)입니다. 메서드는 GET뿐이고 header 규칙은 `network.request`와 같습니다.
   서버가 본문을 압축하지 않도록 `Accept-Encoding: identity`를 보내므로 `totalBytes`는 저장될 파일 크기입니다. 그래도 `Content-Encoding`이
   `identity`가 아닌 응답은 크기와 진행률이 서로 다른 바이트를 가리키게 되므로 파일을 만들기 전에 `INTERNAL`로 실패합니다.
@@ -246,10 +246,10 @@ const { status, saved: written, bytesWritten } = await saved;
 - 대상이 이미 있으면 `overwrite`가 `false`일 때 `INVALID_ARGUMENT`이고, 폴더는 `overwrite`여도 같습니다.
   `overwrite`가 `false`이면 하드 링크로 배치해 기존 파일을 절대 바꾸지 않으며, 링크를 만들 수 없는 파일 시스템에서는
   대상이 있으면 실패하는 복사로 대신하므로 그 사이에 생긴 파일도 덮어쓰거나 지우지 않습니다. 복사가 실패하면 이 다운로드가 만든 대상만 지웁니다.
-- 본문은 `<경로>.<ID 앞 8자>.part`에 쓰고 전부 받은 뒤에만 대상으로 옮깁니다. 실패, 취소, 기한 초과와 어댑터 정리는 임시 파일을
+- 본문은 `<경로>.<ID 앞 8자>.part`에 쓰고 전부 받은 뒤에만 대상으로 옮깁니다. 하드 링크를 만들 수 없어 복사로 대신하는 경우에는 복사가 끝나기 전까지 대상에 일부만 쓰인 내용이 보이고 프로세스가 복사 중에 끝나면 남을 수 있습니다. 복사 중에도 취소, 기한 초과와 어댑터 정리가 적용되며 이때는 대상을 지우고 `CANCELLED` 또는 `TIMEOUT`으로 끝납니다. 실패, 취소, 기한 초과와 어댑터 정리는 임시 파일을
   삭제합니다. 백신 등이 파일을 잡고 있으면 임시 파일 삭제와 배치를 각각 최대 3번(첫 시도 포함) 시도하고, 그래도 지우지 못하면 로그만 남기며
   호출자에게는 원래 오류를 돌려줍니다. 받은 크기가 알려진 길이와 다르거나 파일이 일부만 써지면 `INTERNAL`이며 파일을 놓지 않습니다.
-- 2xx 응답만 저장하며 결과는 `{ status, headers, saved: true, bytesWritten }`입니다. 3xx를 포함한 다른 상태는 파일을 만들지 않고
+- 200 응답만 저장하며 결과는 `{ status, headers, saved: true, bytesWritten }`입니다. 3xx와 206, 204를 포함한 다른 상태는 파일을 만들지 않고
   `saved: false`로 돌려주고 redirect는 따라가지 않으므로 새 대상은 앱이 다시 검사합니다. 알려진 길이나 받은 크기가 `maxBytes`를 넘으면
   `INTERNAL`이며 길이를 먼저 알면 파일을 만들기 전에 실패합니다.
 - `network.downloadStatus`는 실행 중인 다운로드의 `{ receivedBytes, totalBytes }`를 돌려주며 길이를 모르면 `totalBytes`는

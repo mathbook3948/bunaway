@@ -40,12 +40,12 @@ client cancellation, continued UI responses and shutdown with requests in flight
 native exports and exclusion of Bun network implementation from the browser bundle.
 These checks do not validate external proxies, OS authentication, TLS certificates or manual network setups.
 
-`network.download` saves a 2xx response body to a file the app already checked and returns `{ status, headers, saved, bytesWritten }`
+`network.download` saves a 200 response body to a file the app already checked and returns `{ status, headers, saved, bytesWritten }`
 without holding the body in memory. It corresponds to Electron's `session.downloadURL()` and Tauri's upload plugin `download`.
 `downloadId` (a UUID the caller picks), `url`, an absolute `path` and `maxBytes` (required, at most 4 GiB) are needed; `timeoutMs` (default 10 minutes,
 at most 1 hour), `idleTimeoutMs` (default 30 seconds, at most 5 minutes) and `overwrite` (default false) are optional. The body goes to
-`<path>.<id prefix>.part` and replaces the target only when it is complete; failure, cancellation, the deadline and disposal remove the temporary file.
-An existing target is refused unless `overwrite` is set, and a missing parent folder fails before the request. Any status other than 2xx, redirects
+`<path>.<id prefix>.part` and replaces the target only when it is complete (where hard links are unavailable the file is copied, so the target can show a prefix until the copy ends); failure, cancellation, the deadline and disposal remove the temporary file.
+An existing target is refused unless `overwrite` is set, and a missing parent folder fails before the request. Any status other than 200, redirects
 included, is returned with `saved: false` and no file. The plugin does not tie the path to a storage scope; the app checks it. Progress is read with
 `network.downloadStatus({ downloadId })` (`{ receivedBytes, totalBytes | null }`, visible to the source that started the download only) instead of a
 broadcast event, and `network.cancelDownload({ downloadId })` stops the transfer; an unknown id fails for `downloadStatus` with `INVALID_ARGUMENT` and succeeds for `cancelDownload`. At most four downloads run at once.
