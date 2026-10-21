@@ -1,10 +1,13 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import assert from "node:assert/strict";
 import { arch, hostname, release, version } from "node:os";
 import os from "@bunaway/plugin-os/native/windows";
 import { osOperations } from "#plugins/os/src/operations";
-import { killAfter } from "../fixtures/deadlines.ts";
+import { deadline, killAfter } from "../fixtures/deadlines.ts";
 import { assertWindowsRegionCode } from "../fixtures/windows-region-code.ts";
+
+// One test reads the print spooler and DXGI and starts a child process.
+setDefaultTimeout(deadline("toolchain"));
 
 test.skipIf(process.platform !== "win32")(
   "Windows locale FFI and runtime metadata execute through generated Zod adapters",
