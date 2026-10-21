@@ -667,7 +667,7 @@ export const COMBASE = {
   },
 } as const satisfies Record<string, FFIFunction>;
 
-/** advapi32.dll: registry access. */
+/** advapi32.dll: registry access and the Credential Manager. */
 export const ADVAPI32 = {
   RegCreateKeyExW: {
     args: [
@@ -728,6 +728,36 @@ export const ADVAPI32 = {
       "ptr",
     ],
     returns: "i32",
+  },
+  CredWriteW: {
+    args: [
+      "ptr",
+      "u32",
+    ],
+    returns: "i32",
+  },
+  CredReadW: {
+    args: [
+      "ptr",
+      "u32",
+      "u32",
+      "ptr",
+    ],
+    returns: "i32",
+  },
+  CredDeleteW: {
+    args: [
+      "ptr",
+      "u32",
+      "u32",
+    ],
+    returns: "i32",
+  },
+  CredFree: {
+    args: [
+      "ptr",
+    ],
+    returns: "void",
   },
 } as const satisfies Record<string, FFIFunction>;
 

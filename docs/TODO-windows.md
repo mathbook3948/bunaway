@@ -965,7 +965,11 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   재시도 계약은 같은 입력으로 다시 호출하는 것뿐이며 자동 재시도, 대기 한도 옵션과 평문 fallback은 없다.
   `tests/api/safe-storage.test.ts`가 분류를, `tests/lifecycle/windows-safe-storage.test.ts`가 Bun FFI에서
   `GetLastError`를 읽을 수 있음을 Windows CI에서 확인한다. 실제 키 서비스 중단은 재현하지 않는다.
-- [ ] OS credential store에 secret을 저장, 조회하고 삭제하는 기능의 지원을 결정한다.
+- [x] OS credential store에 secret을 저장, 조회하고 삭제하는 기능의 지원을 결정한다.
+  Windows에서 지원하며 `safe-storage`의 `setSecret`, `getSecret`, `deleteSecret`이 자격 증명 관리자에
+  `bunaway.safe-storage:<app.id>:<key>` 이름의 generic 항목(`CRED_PERSIST_LOCAL_MACHINE`)으로 저장한다.
+  `tests/api/safe-storage-credential.test.ts`가 입력 상한과 이름 구성을, `tests/lifecycle/windows-safe-storage.test.ts`가
+  실제 저장소 왕복을 Windows CI에서 확인한다. 다른 사용자, 머신과 로밍 프로필은 검증하지 않았다.
 - [ ] Stronghold 방식의 vault, client, key와 record 관리 기능을 제공한다.
 - [ ] vault unlock, lock, save와 암호 변경을 제공한다.
 - [ ] 키 생성과 cryptographic operation을 secret 노출 없이 실행한다.

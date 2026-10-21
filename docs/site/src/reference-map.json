@@ -1582,7 +1582,10 @@
       "safe-storage.encryptString",
       "safe-storage.decryptString",
       "safe-storage.encryptBytes",
-      "safe-storage.decryptBytes"
+      "safe-storage.decryptBytes",
+      "safe-storage.setSecret",
+      "safe-storage.getSecret",
+      "safe-storage.deleteSecret"
     ],
     "reference/plugins/clipboard": [
       "clipboard.readText",
