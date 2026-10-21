@@ -72,6 +72,36 @@ export const gpuSchema = z.strictObject({
   software: z.boolean(),
 });
 export const gpuListSchema = z.array(gpuSchema).max(MAX_GPUS);
+/** Most processes one os.listAppProcesses call returns; a larger tree is an error, not a shortened one. */
+export const MAX_APP_PROCESSES = 256;
+/**
+ * One process of the app's process tree. Windows runs the host and the backend in one Bun process, so
+ * `app` is that process; `webview2` is a WebView2 browser, renderer, GPU or utility process (and its
+ * descendants); `other` is any other descendant, such as a child the app started.
+ */
+export const appProcessKindSchema = z.enum([
+  "app",
+  "webview2",
+  "other",
+]);
+/** Memory and CPU time of a process that could be opened for limited queries. */
+export const appProcessMetricsSchema = z.strictObject({
+  workingSetBytes: z.number().int().nonnegative(),
+  cpuTime: z.strictObject({
+    userMicros: z.number().int().nonnegative(),
+    systemMicros: z.number().int().nonnegative(),
+  }),
+});
+export const appProcessSchema = z.strictObject({
+  pid: z.number().int().positive(),
+  parentPid: z.number().int().nonnegative(),
+  kind: appProcessKindSchema,
+  /** Null when the process cannot be opened for limited queries (for example a protected process). */
+  metrics: appProcessMetricsSchema.nullable(),
+});
+export const appProcessListSchema = z
+  .array(appProcessSchema)
+  .max(MAX_APP_PROCESSES);
 /** System sound played by os.beep; defaults to the plain default beep. macOS has one alert sound and plays it for every kind. */
 export const beepInputSchema = z.strictObject({
   kind: z
@@ -96,6 +126,9 @@ export type OSPrinter = z.infer<typeof printerSchema>;
 /** Graphics adapter as listed by os.listGpus. */
 export type OSGpu = z.infer<typeof gpuSchema>;
 
+/** One process of the app's process tree as listed by os.listAppProcesses. */
+export type OSAppProcess = z.infer<typeof appProcessSchema>;
+
 /** Process CPU time, memory and architecture translation snapshot. */
 export type OSUsage = z.infer<typeof usageSchema>;
 /**
@@ -111,5 +144,6 @@ export interface OSInstance {
   listPrinters(): OSPrinter[];
   getDefaultPrinter(): string | null;
   listGpus(): OSGpu[];
+  listAppProcesses(): OSAppProcess[];
   dispose(): void;
 }

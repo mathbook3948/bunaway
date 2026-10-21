@@ -1,6 +1,7 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import { z } from "zod";
 import {
+  appProcessListSchema,
   beepInputSchema,
   defaultPrinterSchema,
   gpuListSchema,
@@ -48,5 +49,10 @@ export const osOperations = {
     input: z.null(),
     output: gpuListSchema,
     handler: (_input, { instance }) => instance.listGpus(),
+  }),
+  listAppProcesses: operation({
+    input: z.null(),
+    output: appProcessListSchema,
+    handler: (_input, { instance }) => instance.listAppProcesses(),
   }),
 };

@@ -47,6 +47,13 @@ function unsupportedGpus(): never {
   });
 }
 
+function unsupportedAppProcesses(): never {
+  throw new BunawayError({
+    code: "UNSUPPORTED",
+    message: "App process queries are not supported on macOS.",
+  });
+}
+
 function unsupportedPrinters(): never {
   throw new BunawayError({
     code: "UNSUPPORTED",
@@ -281,6 +288,10 @@ export function initialize(): OSInstance {
     listGpus() {
       assertActive();
       return unsupportedGpus();
+    },
+    listAppProcesses() {
+      assertActive();
+      return unsupportedAppProcesses();
     },
     beep() {
       assertActive();

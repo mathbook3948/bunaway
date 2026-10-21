@@ -9,9 +9,15 @@ import {
   type,
   version,
 } from "node:os";
+import { ResourceOwner } from "@bunaway/plugin";
 import { KERNEL32, pick } from "@bunaway/plugin/win32";
 import { BunawayError } from "@bunaway/protocol";
 import type { OSInstance } from "#os/contract";
+import {
+  appProcessBindings,
+  listAppProcesses,
+  openAppProcessApi,
+} from "#os/platforms/windows-app-processes";
 import { gpuBindings, listGpus, openDxgi } from "#os/platforms/windows-gpus";
 import {
   defaultPrinterName,
@@ -103,33 +109,22 @@ export function initialize(): OSInstance {
       returns: "i32",
     },
   });
-  let user32: ReturnType<typeof openUser32>;
-  let winspool: ReturnType<typeof openWinspool>;
-  let dxgi: ReturnType<typeof openDxgi>;
-  try {
-    user32 = openUser32();
-    try {
-      winspool = openWinspool();
-      try {
-        dxgi = openDxgi();
-      } catch (error) {
-        winspool.close();
-        throw error;
-      }
-    } catch (error) {
-      user32.close();
-      throw error;
-    }
-  } catch (error) {
-    // Do not leak the already opened Kernel32 handle when initialization fails.
-    api.close();
-    throw error;
-  }
+  // A library that fails to open releases the ones opened before it.
+  const owner = new ResourceOwner("OS libraries");
+  owner.acquire(
+    () => api,
+    (library) => library.close(),
+  );
+  const user32 = owner.acquire(openUser32, (library) => library.close());
+  const winspool = owner.acquire(openWinspool, (library) => library.close());
+  const dxgi = owner.acquire(openDxgi, (library) => library.close());
+  const processApi = owner.acquire(openAppProcessApi, (library) =>
+    library.close(),
+  );
   const printers = () =>
     printerBindings(winspool, () => api.symbols.GetLastError());
-  let disposed = false;
   const assertActive = () => {
-    if (disposed) {
+    if (owner.disposed) {
       throw new BunawayError({
         code: "CANCELLED",
         message: "OS adapter is disposed.",
@@ -282,6 +277,10 @@ export function initialize(): OSInstance {
       assertActive();
       return listGpus(gpuBindings(dxgi));
     },
+    listAppProcesses() {
+      assertActive();
+      return listAppProcesses(appProcessBindings(processApi), process.pid);
+    },
     beep(kind: keyof typeof BEEP_SOUND_TYPES) {
       assertActive();
       if (!user32.symbols.MessageBeep(BEEP_SOUND_TYPES[kind])) {
@@ -313,13 +312,7 @@ export function initialize(): OSInstance {
       };
     },
     dispose() {
-      if (!disposed) {
-        disposed = true;
-        dxgi.close();
-        winspool.close();
-        user32.close();
-        api.close();
-      }
+      owner.dispose();
     },
   };
 }

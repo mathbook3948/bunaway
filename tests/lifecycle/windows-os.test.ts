@@ -1,9 +1,13 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import assert from "node:assert/strict";
 import { arch, hostname, release, version } from "node:os";
 import os from "@bunaway/plugin-os/native/windows";
 import { osOperations } from "#plugins/os/src/operations";
+import { deadline, killAfter } from "../fixtures/deadlines.ts";
 import { assertWindowsRegionCode } from "../fixtures/windows-region-code.ts";
+
+// One test reads the print spooler and DXGI and starts a child process.
+setDefaultTimeout(deadline("toolchain"));
 
 test.skipIf(process.platform !== "win32")(
   "Windows locale FFI and runtime metadata execute through generated Zod adapters",
@@ -82,6 +86,47 @@ test.skipIf(process.platform !== "win32")(
       );
       if (process.env.CI) {
         expect(gpus.length).toBeGreaterThan(0);
+      }
+      // The app's own process leads the tree; a child this test starts joins it as another process.
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "-e",
+          "process.stdin.resume()",
+        ],
+        {
+          // A visible console window would take focus from the input tests that run after this one.
+          windowsHide: true,
+          stdio: [
+            "pipe",
+            "ignore",
+            "ignore",
+          ],
+        },
+      );
+      const stop = killAfter(child, "childStep");
+      try {
+        const processes = osOperations.listAppProcesses.output.parse(
+          await adapter.execute("os.listAppProcesses", null, "backend"),
+        );
+        expect(processes[0]).toMatchObject({
+          pid: process.pid,
+          kind: "app",
+        });
+        expect(processes[0]?.metrics?.workingSetBytes).toBeGreaterThan(0);
+        expect(new Set(processes.map((entry) => entry.pid)).size).toBe(
+          processes.length,
+        );
+        const started = processes.find((entry) => entry.pid === child.pid);
+        expect(started).toMatchObject({
+          parentPid: process.pid,
+          kind: "other",
+        });
+        expect(started?.metrics?.workingSetBytes).toBeGreaterThan(0);
+      } finally {
+        clearTimeout(stop);
+        child.kill();
+        await child.exited;
       }
       for (const kind of [
         undefined,
