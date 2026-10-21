@@ -3026,10 +3026,11 @@ test.skipIf(!iscc)(
       quote,
       cleanup,
     } = fixture;
+    const first = join(root, "first");
     const moved = join(root, "moved");
     const startMenuGroup = `Join-Path $env:APPDATA ${quote(`Microsoft\\Windows\\Start Menu\\Programs\\${identifier}`)}`;
     const desktop = "[Environment]::GetFolderPath('Desktop')";
-    // WScript.Shell reads ANSI targets, so this test installs an ASCII executable name.
+    // WScript.Shell reads ANSI targets, so this test uses an ASCII executable name and ASCII folders.
     const targets = (dir: string, filter: string) =>
       powershell(
         `$s=New-Object -ComObject WScript.Shell; Get-ChildItem -LiteralPath ${dir} -Filter ${quote(filter)} | ForEach-Object { $s.CreateShortcut($_.FullName).TargetPath }`,
@@ -3055,10 +3056,10 @@ test.skipIf(!iscc)(
               : {}),
           })
         ).finish();
-      await install("links-first");
+      await install("links-first", first);
       // A user argument proves the links are updated in place, not recreated.
       await powershell(
-        `$s=New-Object -ComObject WScript.Shell; foreach ($dir in (${startMenuGroup}), (${desktop})) { Get-ChildItem -LiteralPath $dir -Filter '*.lnk' | ForEach-Object { $l=$s.CreateShortcut($_.FullName); if ($l.TargetPath -like '*\\App.exe') { $l.Arguments='--user'; $l.Save() } } }`,
+        `$s=New-Object -ComObject WScript.Shell; foreach ($dir in (${startMenuGroup}), (${desktop})) { Get-ChildItem -LiteralPath $dir -Filter '*.lnk' | ForEach-Object { $l=$s.CreateShortcut($_.FullName); if ($l.TargetPath -like '*\\App.exe') { $l.Arguments='--user'; if ($dir -ne (${startMenuGroup})) { $l.WorkingDirectory=${quote(root)} }; $l.Save() } } }`,
       );
       const movedExecutable = join(moved, "App.exe");
       expect(await targets(`(${desktop})`, `*${identifier}*.lnk`)).not.toBe(
@@ -3066,8 +3067,9 @@ test.skipIf(!iscc)(
       );
       await install("links-second", moved);
       const appLink = `${movedExecutable}|--user|${moved}|${movedExecutable},0`;
+      // A start folder the user chose is kept; the default one follows the move.
       expect(await details(`(${desktop})`, `*${identifier}*.lnk`)).toBe(
-        appLink,
+        `${movedExecutable}|--user|${root}|${movedExecutable},0`,
       );
       const menu = (await details(`(${startMenuGroup})`, "*.lnk"))
         .split(/\r?\n/)

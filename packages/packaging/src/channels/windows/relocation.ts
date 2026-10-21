@@ -132,6 +132,7 @@ begin
   Result := IsSameDirectory(Dir, ExtractFileDrive(Dir)) or
     IsSameDirectory(Dir, ExpandConstant('{userdesktop}')) or
     IsSameDirectory(Dir, ExpandConstant('{commondesktop}')) or
+    IsSameDirectory(Dir, ExtractFileDir(ExpandConstant('{commondesktop}'))) or
     IsSameDirectory(Dir, ExpandConstant('{userdocs}')) or
     IsSameDirectory(Dir, ExpandConstant('{commondocs}')) or
     IsSameDirectory(Dir, ExpandConstant('{userappdata}')) or
@@ -145,6 +146,9 @@ begin
     IsSameDirectory(Dir, ExpandConstant('{sys}')) or
     ((Profile <> '') and (IsSameDirectory(Dir, Profile) or
       IsSameDirectory(Dir, Profile + '\Downloads') or
+      IsSameDirectory(Dir, Profile + '\Music') or
+      IsSameDirectory(Dir, Profile + '\Pictures') or
+      IsSameDirectory(Dir, Profile + '\Videos') or
       IsSameDirectory(Dir, ExtractFileDir(Profile))));
 end;
 
@@ -252,6 +256,7 @@ begin
   if Uninstaller <> '' then begin
     DeleteRelocationFile(Uninstaller, Failed);
     DeleteRelocationFile(ChangeFileExt(Uninstaller, '.dat'), Failed);
+    DeleteRelocationFile(ChangeFileExt(Uninstaller, '.msg'), Failed);
   end;
   if Payload <> nil then RemoveRelocationPayload(Dir, Payload, Failed);
   DeleteRelocationFile(Dir + '\' + ExecutableName, Failed);
@@ -265,7 +270,7 @@ var Payload: TStringList;
 begin
   if not IsRelocation then Exit;
   if RelocationShortcutFailed then
-    RaiseException('Could not update a shortcut to the new executable. Run the installer again to finish removing the previous installation.');
+    RaiseException('Could not update a shortcut to the new executable. Repair or delete the unreadable shortcut and run the installer again to finish removing the previous installation.');
   Payload := nil;
   try${
     options.hasPayloadList
