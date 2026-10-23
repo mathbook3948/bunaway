@@ -376,7 +376,7 @@ if (!process.argv.includes("--child")) {
     desktop: {
       // The app has no window at start and stays up when its window closes; the scenario quits it.
       closeBehavior: "keep-alive",
-      onOpen(_request, context) {
+      onReady(context) {
         desktop = context;
       },
       // A quit before the scenario is over is refused.
