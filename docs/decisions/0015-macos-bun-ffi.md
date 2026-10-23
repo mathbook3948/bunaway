@@ -6,6 +6,8 @@ status: accepted
 
 결정일: 2026-10-10
 
+2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)에 따라 macOS의 다중 창 범위는 단일 창으로 대체한다.
+
 ## 결정
 
 [ADR 0010](./0010-windows-first-platform-model.md)의 macOS 전환을 구현한다.
