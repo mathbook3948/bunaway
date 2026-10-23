@@ -85,6 +85,9 @@ const HIT_TESTS = {
   southEast: 17n,
 } as const;
 
+/** How long a synthesized press may stay out of the key state before it is sent again. */
+const PRESS_RESEND_MS = 250;
+
 test.skipIf(process.platform !== "win32")(
   "real HWND posts the non-client press only for a held button and a draggable window",
   async () => {
@@ -117,16 +120,30 @@ test.skipIf(process.platform !== "win32")(
     const native = new Windows(() => {});
     const hwnds: bigint[] = [];
     let held = false;
+    const leftIsDown = () => !!(user.symbols.GetAsyncKeyState(0x01) & 0x8000);
     const press = async () => {
       // Keep the pointer off the test window so the system does not turn the press into its own caption message.
       input.symbols.SetCursorPos(10, 10);
-      input.symbols.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0n);
       held = true;
-      // The synthesized press reaches the asynchronous key state a moment later.
-      await waitFor(() => !!(user.symbols.GetAsyncKeyState(0x01) & 0x8000), {
-        deadline: "inProcess",
-        what: "the synthesized left button to appear in the key state",
-      });
+      // A runner can drop synthesized input while its desktop is busy, so a press that has not
+      // reached the key state is sent again; a repeated press of a held button changes nothing.
+      let sentAt = 0;
+      await waitFor(
+        () => {
+          if (leftIsDown()) {
+            return true;
+          }
+          if (Date.now() - sentAt >= PRESS_RESEND_MS) {
+            input.symbols.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0n);
+            sentAt = Date.now();
+          }
+          return false;
+        },
+        {
+          deadline: "inProcess",
+          what: "the synthesized left button to appear in the key state",
+        },
+      );
     };
     const release = () => {
       if (held) {
