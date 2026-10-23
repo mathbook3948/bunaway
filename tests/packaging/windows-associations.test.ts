@@ -15,6 +15,7 @@ import { findIscc, must, stableGuid } from "#packaging/channels/windows/common";
 import { renderInnoScript } from "#packaging/channels/windows/inno";
 import { innoIdentity } from "#packaging/channels/windows/inno-identity";
 import { installationMutexNames } from "#packaging/channels/windows/installation-state";
+import { deadline } from "../fixtures/deadlines.ts";
 
 const associations = {
   files: [
@@ -222,6 +223,8 @@ const script = (
   outputDir: string,
   executableName: string,
   declarations?: ChannelConfig["associations"],
+  payloadListPath?: string,
+  shortcuts = false,
 ) =>
   renderInnoScript({
     name: "연결 App {문서}",
@@ -233,12 +236,17 @@ const script = (
     outputDir,
     outputBaseName: "setup",
     executableName,
-    desktopShortcut: false,
-    startMenuShortcut: false,
+    desktopShortcut: shortcuts,
+    startMenuShortcut: shortcuts,
     webView2: "check",
     appDataDir: "{localappdata}\\bunaway\\association-test",
     preserveUserData: true,
     assetPaths: [],
+    ...(payloadListPath
+      ? {
+          payloadListPath,
+        }
+      : {}),
     ...(declarations
       ? {
           associations: declarations,
@@ -398,6 +406,7 @@ type InstallerFailure =
   | "write"
   | "cleanup"
   | "payload-cleanup"
+  | "relocation-cleanup"
   | "pending-owner"
   | "busy"
   | "stale"
@@ -415,6 +424,10 @@ interface NativeInstallerRequest {
   failure?: InstallerFailure;
   fault?: "icon" | "mapping";
   destination?: string;
+  // Extra payload files (Windows relative paths) written to the payload and listed for relocation cleanup.
+  payloadFiles?: string[];
+  // Also create the start menu, uninstall and desktop links.
+  shortcuts?: boolean;
   setupGate?: NativeGate;
   uninstallGate?: NativeGate;
   legacySetup?: boolean;
@@ -457,6 +470,38 @@ async function whileGated(
   if (completionResult?.status === "rejected") {
     throw completionResult.reason;
   }
+}
+
+/** Failures that lock an old executable on purpose, so Restart Manager must not close the test process. */
+function holdsLockedExecutable(failure: InstallerFailure | undefined) {
+  return (
+    failure === "payload-cleanup" ||
+    failure === "relocation-cleanup" ||
+    failure === "pending-owner"
+  );
+}
+
+/** Writes the extra payload files and the list that relocation cleanup unpacks, when the request has any. */
+async function stagePayloadFiles(
+  payload: string,
+  listPath: string,
+  executable: string,
+  request: NativeInstallerRequest,
+) {
+  const files = request.payloadFiles;
+  if (!files) {
+    return;
+  }
+  for (const file of files) {
+    await Bun.write(join(payload, file), "installer payload fixture");
+  }
+  await Bun.write(
+    listPath,
+    `\ufeff${[
+      executable,
+      ...files,
+    ].join("\r\n")}\r\n`,
+  );
 }
 
 async function createNativeAssociationFixture(compiler: string) {
@@ -586,8 +631,18 @@ async function createNativeAssociationFixture(compiler: string) {
     });
     await mkdir(output);
     await Bun.write(join(payload, executable), "installer payload fixture");
+    const payloadList = join(staging, "payload-files.txt");
+    await stagePayloadFiles(payload, payloadList, executable, request);
     const iss = join(staging, "setup.iss");
-    let rendered = script(identifier, payload, output, executable, config);
+    let rendered = script(
+      identifier,
+      payload,
+      output,
+      executable,
+      config,
+      request.payloadFiles ? payloadList : undefined,
+      request.shortcuts,
+    );
     if (request.legacySetup) {
       // Model a previous installer which did not participate in coordination.
       // Registry/payload operations and snapshot validation still execute natively.
@@ -606,7 +661,7 @@ async function createNativeAssociationFixture(compiler: string) {
         request.uninstallGate,
       );
     }
-    if (failure === "payload-cleanup" || failure === "pending-owner") {
+    if (holdsLockedExecutable(failure)) {
       // The dummy EXE cannot run. Keep Restart Manager from closing the test
       // process that owns the deliberate no-delete-sharing handle.
       rendered = rendered.replace(
@@ -690,6 +745,7 @@ async function createNativeAssociationFixture(compiler: string) {
           write: "Could not register app association",
           cleanup: "Could not remove app association value",
           "payload-cleanup": "Could not remove previous app executable",
+          "relocation-cleanup": "Could not remove the previous installation",
           "pending-owner": "Complete the previous executable cleanup",
           busy: "Another setup or uninstall is maintaining this application",
           stale:
@@ -855,6 +911,7 @@ async function createNativeAssociationFixture(compiler: string) {
     });
   }
   return {
+    identifier,
     root,
     extension,
     scheme,
@@ -2515,4 +2572,518 @@ test.skipIf(!iscc)(
     }
   },
   120000,
+);
+
+/** Remove the Inno uninstall record a relocated fixture leaves, since cleanup only uninstalls the default folder. */
+async function removeInstallRecord(
+  fixture: Awaited<ReturnType<typeof createNativeAssociationFixture>>,
+) {
+  const { powershell, quote, previousDataKey } = fixture;
+  await powershell(
+    `$key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(${quote(previousDataKey)}); if ($key) { $key.Dispose(); [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree(${quote(previousDataKey)},$false) }`,
+  );
+}
+
+const relocationPayload = [
+  "data\\sub\\리소스.bin",
+  "data\\config.json",
+];
+
+test.skipIf(!iscc)(
+  "native installer moves to another folder, keeps registrations on the new executable and removes only shipped files",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      root,
+      installDir,
+      declarations,
+      associationRoot,
+      previousDataKey,
+      fileProgId,
+      urlProgId,
+      startInstall,
+      query,
+      cleanup,
+    } = fixture;
+    const moved = join(root, "새 설치 폴더");
+    const oldExecutable = join(installDir, "앱.exe");
+    const newExecutable = join(moved, "앱.exe");
+    try {
+      const first = await startInstall({
+        version: "relocate-first",
+        executable: "앱.exe",
+        config: declarations,
+        tasks: "fileassociations,urlschemes",
+        payloadFiles: relocationPayload,
+      });
+      await first.finish();
+      const userFile = join(installDir, "data", "user-notes.txt");
+      await Bun.write(userFile, "user data");
+      const second = await startInstall({
+        version: "relocate-second",
+        executable: "앱.exe",
+        config: declarations,
+        tasks: "fileassociations,urlschemes",
+        destination: moved,
+        payloadFiles: relocationPayload,
+      });
+      await second.finish();
+      // The record, the associations and the new files all name the new folder.
+      expect(await query(previousDataKey, "Inno Setup: App Path")).toBe(moved);
+      expect(await query(associationRoot, "Executable")).toBe(newExecutable);
+      for (const progId of [
+        fileProgId,
+        urlProgId,
+      ]) {
+        expect(
+          await query(`Software\\Classes\\${progId}\\shell\\open\\command`),
+        ).toBe(`"${newExecutable}" "%1"`);
+      }
+      expect(await Bun.file(newExecutable).exists()).toBe(true);
+      expect(await Bun.file(join(moved, "data", "config.json")).exists()).toBe(
+        true,
+      );
+      expect(await Bun.file(join(moved, "unins000.exe")).exists()).toBe(true);
+      // The old folder loses the executable, uninstaller and shipped files only.
+      expect(await Bun.file(oldExecutable).exists()).toBe(false);
+      expect(await Bun.file(join(installDir, "unins000.exe")).exists()).toBe(
+        false,
+      );
+      expect(await Bun.file(join(installDir, "unins000.dat")).exists()).toBe(
+        false,
+      );
+      expect(
+        await Bun.file(join(installDir, "data", "config.json")).exists(),
+      ).toBe(false);
+      expect(
+        await Bun.file(join(installDir, "data", "sub", "리소스.bin")).exists(),
+      ).toBe(false);
+      expect(await Bun.file(userFile).text()).toBe("user data");
+      expect(
+        await query(
+          previousDataKey,
+          "Inno Setup CodeFile: PendingAssociationOwner",
+        ),
+      ).toBe("");
+    } finally {
+      await removeInstallRecord(fixture);
+      await cleanup();
+    }
+  },
+  deadline("packagedAudit"),
+);
+
+test.skipIf(!iscc)(
+  "native relocation does not enable associations the earlier installation did not select",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      root,
+      installDir,
+      declarations,
+      associationRoot,
+      fileProgId,
+      startInstall,
+      query,
+      cleanup,
+    } = fixture;
+    const moved = join(root, "moved");
+    try {
+      await (
+        await startInstall({
+          version: "optout-first",
+          executable: "앱.exe",
+          config: declarations,
+          tasks: "",
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      await (
+        await startInstall({
+          version: "optout-second",
+          executable: "앱.exe",
+          config: declarations,
+          tasks: "",
+          destination: moved,
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      expect(await query(associationRoot, "Executable")).toBe("MISSING");
+      expect(
+        await query(`Software\\Classes\\${fileProgId}\\shell\\open\\command`),
+      ).toBe("MISSING");
+      expect(await Bun.file(join(installDir, "앱.exe")).exists()).toBe(false);
+      expect(await Bun.file(join(moved, "앱.exe")).exists()).toBe(true);
+    } finally {
+      await removeInstallRecord(fixture);
+      await cleanup();
+    }
+  },
+  deadline("packagedAudit"),
+);
+
+test.skipIf(!iscc)(
+  "native relocation keeps the old folder when the new folder is inside it or the old record is unrelated",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      root,
+      installDir,
+      declarations,
+      previousDataKey,
+      startInstall,
+      powershell,
+      quote,
+      cleanup,
+    } = fixture;
+    try {
+      await (
+        await startInstall({
+          version: "nested-first",
+          executable: "앱.exe",
+          config: declarations,
+          tasks: "",
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      const nested = join(installDir, "nested");
+      await (
+        await startInstall({
+          version: "nested-second",
+          executable: "앱.exe",
+          config: declarations,
+          tasks: "",
+          destination: nested,
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      expect(await Bun.file(join(installDir, "앱.exe")).exists()).toBe(true);
+      expect(await Bun.file(join(nested, "앱.exe")).exists()).toBe(true);
+      // An Inno record that disagrees with the app's own record is not trusted for the uninstaller.
+      const elsewhere = join(root, "elsewhere");
+      await powershell(
+        `Set-ItemProperty -Path ${quote(`HKCU:\\${previousDataKey}`)} -Name 'Inno Setup: App Path' -Value ${quote(join(root, "other"))}`,
+      );
+      await (
+        await startInstall({
+          version: "nested-third",
+          executable: "앱.exe",
+          config: declarations,
+          tasks: "",
+          destination: elsewhere,
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      expect(await Bun.file(join(nested, "unins000.exe")).exists()).toBe(true);
+      expect(await Bun.file(join(nested, "앱.exe")).exists()).toBe(false);
+    } finally {
+      await removeInstallRecord(fixture);
+      await cleanup();
+    }
+  },
+  deadline("packagedAudit"),
+);
+
+test.skipIf(!iscc)(
+  "native relocation reports a locked old executable and finishes the cleanup on the next run",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      root,
+      installDir,
+      declarations,
+      previousDataKey,
+      startInstall,
+      query,
+      cleanup,
+    } = fixture;
+    const moved = join(root, "moved");
+    const oldExecutable = join(installDir, "앱.exe");
+    try {
+      await (
+        await startInstall({
+          version: "locked-first",
+          executable: "앱.exe",
+          config: declarations,
+          tasks: "fileassociations,urlschemes",
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      const release = await preventFileDeletion(oldExecutable);
+      try {
+        await (
+          await startInstall({
+            version: "locked-second",
+            executable: "앱.exe",
+            config: declarations,
+            tasks: "fileassociations,urlschemes",
+            destination: moved,
+            failure: "relocation-cleanup",
+            payloadFiles: relocationPayload,
+          })
+        ).finish();
+      } finally {
+        release();
+      }
+      expect(await Bun.file(oldExecutable).exists()).toBe(true);
+      expect(
+        await query(
+          previousDataKey,
+          "Inno Setup CodeFile: PendingAssociationOwner",
+        ),
+      ).toBe(oldExecutable);
+      await (
+        await startInstall({
+          version: "locked-third",
+          executable: "앱.exe",
+          config: declarations,
+          tasks: "fileassociations,urlschemes",
+          destination: moved,
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      expect(await Bun.file(oldExecutable).exists()).toBe(false);
+      expect(
+        await Bun.file(join(installDir, "data", "config.json")).exists(),
+      ).toBe(false);
+      expect(
+        await query(
+          previousDataKey,
+          "Inno Setup CodeFile: PendingAssociationOwner",
+        ),
+      ).toBe("");
+    } finally {
+      await removeInstallRecord(fixture);
+      await cleanup();
+    }
+  },
+  deadline("packagedAudit"),
+);
+
+test.skipIf(!iscc)(
+  "native relocation to a link of the old folder removes nothing",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      root,
+      installDir,
+      declarations,
+      startInstall,
+      powershell,
+      quote,
+      cleanup,
+    } = fixture;
+    const link = join(root, "link");
+    try {
+      await (
+        await startInstall({
+          version: "link-first",
+          executable: "앱.exe",
+          config: declarations,
+          tasks: "",
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      await powershell(
+        `New-Item -ItemType Junction -Path ${quote(link)} -Target ${quote(installDir)} | Out-Null`,
+      );
+      await (
+        await startInstall({
+          version: "link-second",
+          executable: "앱.exe",
+          config: declarations,
+          tasks: "",
+          destination: link,
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      // Both paths are one folder: the files the second install just wrote must remain.
+      expect(await Bun.file(join(installDir, "앱.exe")).exists()).toBe(true);
+      expect(await Bun.file(join(installDir, "unins000.exe")).exists()).toBe(
+        true,
+      );
+      expect(
+        await Bun.file(join(installDir, "data", "config.json")).exists(),
+      ).toBe(true);
+    } finally {
+      await powershell(
+        `if (Test-Path ${quote(link)}) { (Get-Item ${quote(link)}).Delete() }`,
+      );
+      await removeInstallRecord(fixture);
+      await cleanup();
+    }
+  },
+  deadline("packagedAudit"),
+);
+
+test.skipIf(!iscc)(
+  "native relocation that fails before cleanup keeps the old uninstaller path and removes it on retry",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      root,
+      installDir,
+      declarations,
+      previousDataKey,
+      startInstall,
+      restoreRegistrationFault,
+      query,
+      cleanup,
+    } = fixture;
+    const moved = join(root, "moved");
+    const config = {
+      files: declarations.files,
+    };
+    const oldUninstaller = join(installDir, "unins000.exe");
+    try {
+      await (
+        await startInstall({
+          version: "pending-first",
+          executable: "앱.exe",
+          config,
+          tasks: "fileassociations",
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      // The registration fails after the new files are installed, before any cleanup.
+      try {
+        await (
+          await startInstall({
+            version: "pending-second",
+            executable: "앱.exe",
+            config,
+            tasks: "fileassociations",
+            destination: moved,
+            failure: "write",
+            fault: "icon",
+            payloadFiles: relocationPayload,
+          })
+        ).finish();
+      } finally {
+        await restoreRegistrationFault("pending-second", "icon");
+      }
+      expect(await Bun.file(join(installDir, "앱.exe")).exists()).toBe(true);
+      expect(await Bun.file(oldUninstaller).exists()).toBe(true);
+      // Inno's own record already names the new folder; only the saved path remembers the old one.
+      expect(await query(previousDataKey, "Inno Setup: App Path")).toBe(moved);
+      expect(
+        await query(previousDataKey, "Inno Setup CodeFile: PendingUninstaller"),
+      ).toBe(oldUninstaller);
+      await (
+        await startInstall({
+          version: "pending-third",
+          executable: "앱.exe",
+          config,
+          tasks: "fileassociations",
+          destination: moved,
+          payloadFiles: relocationPayload,
+        })
+      ).finish();
+      expect(await Bun.file(oldUninstaller).exists()).toBe(false);
+      expect(await Bun.file(join(installDir, "앱.exe")).exists()).toBe(false);
+      expect(
+        await query(previousDataKey, "Inno Setup CodeFile: PendingUninstaller"),
+      ).toBe("");
+    } finally {
+      await removeInstallRecord(fixture);
+      await cleanup();
+    }
+  },
+  deadline("packagedAudit"),
+);
+
+test.skipIf(!iscc)(
+  "native relocation points the app, uninstall and desktop links at the new installation",
+  async () => {
+    if (!iscc) {
+      throw new Error("ISCC is required.");
+    }
+    const fixture = await createNativeAssociationFixture(iscc);
+    const {
+      identifier,
+      root,
+      declarations,
+      startInstall,
+      powershell,
+      quote,
+      cleanup,
+    } = fixture;
+    const first = join(root, "first");
+    const moved = join(root, "moved");
+    const startMenuGroup = `Join-Path $env:APPDATA ${quote(`Microsoft\\Windows\\Start Menu\\Programs\\${identifier}`)}`;
+    const desktop = "[Environment]::GetFolderPath('Desktop')";
+    // Shell.Application keeps Unicode link names, which the scripting host converts to ANSI.
+    const shellLinks = (dir: string, filter: string, edit = "") =>
+      powershell(
+        `$sh=New-Object -ComObject Shell.Application; $folder=$sh.Namespace((${dir})); foreach ($item in $folder.Items()) { if ($item.IsLink -and $item.Name -like ${quote(filter)}) { $l=$item.GetLink; ${edit} $l.Path + '|' + $l.Arguments + '|' + $l.WorkingDirectory } }`,
+      );
+    const userEdit = (workingDirectory: string) =>
+      `if ($l.Path -like '*\\App.exe') { $l.Arguments='--user'; ${workingDirectory} $l.Save() }`;
+    const install = async (version: string, destination: string) =>
+      (
+        await startInstall({
+          version,
+          executable: "App.exe",
+          config: declarations,
+          tasks: "desktopicon",
+          shortcuts: true,
+          payloadFiles: relocationPayload,
+          destination,
+        })
+      ).finish();
+    try {
+      await install("links-first", first);
+      // A user argument proves the links are updated in place, not recreated. The desktop link
+      // also gets a start folder the user chose.
+      await shellLinks(startMenuGroup, "*", userEdit(""));
+      await shellLinks(
+        desktop,
+        `*${identifier}*`,
+        userEdit(`$l.WorkingDirectory=${quote(root)};`),
+      );
+      const before = await shellLinks(desktop, `*${identifier}*`);
+      expect(before).toBe(`${join(first, "App.exe")}|--user|${root}`);
+      await install("links-second", moved);
+      const movedExecutable = join(moved, "App.exe");
+      // A start folder the user chose is kept; the default one follows the move.
+      expect(await shellLinks(desktop, `*${identifier}*`)).toBe(
+        `${movedExecutable}|--user|${root}`,
+      );
+      const menu = (await shellLinks(startMenuGroup, "*"))
+        .split(/\r?\n/)
+        .sort();
+      expect(menu).toHaveLength(2);
+      expect(menu).toContain(`${movedExecutable}|--user|${moved}`);
+      expect(
+        menu.filter((line) =>
+          line.startsWith(`${join(moved, "unins000.exe")}|`),
+        ),
+      ).toHaveLength(1);
+    } finally {
+      await powershell(
+        `Remove-Item -LiteralPath (${startMenuGroup}) -Recurse -Force -ErrorAction SilentlyContinue; Get-ChildItem -LiteralPath (${desktop}) -Filter ${quote(`*${identifier}*.lnk`)} | Remove-Item -Force`,
+      );
+      await removeInstallRecord(fixture);
+      await cleanup();
+    }
+  },
+  deadline("packagedAudit"),
 );

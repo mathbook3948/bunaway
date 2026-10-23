@@ -1013,7 +1013,9 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
   설정된 경로의 앱 바로가기가 같은 설치의 이전 EXE를 가리킬 때 대상과 기본 아이콘을 갱신한다.
   사용자 인자, 작업 디렉터리와 사용자 지정 아이콘을 보존한다. 이동하거나 이름을 바꾼 링크는
   탐색하지 않는다. [설치 채널 계약](../packages/packaging/README.md)을 따른다.
-- [ ] 설치 위치 변경에 따른 이전 설치 정리와 바로가기 갱신, 파일 연결과 URL scheme 유지를 제공한다.
+- [x] 설치 위치 변경에 따른 이전 설치 정리와 바로가기 갱신, 파일 연결과 URL scheme 유지를 제공한다.
+  같은 범위에서 다른 폴더로 설치하면 등록과 바로가기를 새 EXE로 옮긴 뒤 이전 폴더의 앱 파일만 정리한다.
+  `perUser`와 `perMachine` 사이의 전환은 정리하지 않는다. [설치 채널 계약](../packages/packaging/README.md)을 따른다.
 - [ ] 서명된 compiled EXE 앱의 설치, 덮어쓰기 업데이트와 제거를 검증한다.
 - [ ] WebView2 없는 PC의 설치, offline 배포와 최소 runtime 버전을 처리한다. (`win-direct`의 `webView2` offline 모드로 Standalone Installer 임베드와 빌드 시 서명 검증은 구현됨. 최소 runtime 버전과 Store 채널 허용은 남음.)
 - [ ] MSIX 활성화와 안전한 런타임 시작 경로를 구현하고 검증한다.

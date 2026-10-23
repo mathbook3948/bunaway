@@ -1,9 +1,10 @@
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { type AdapterInput, type AdapterStage, CODES } from "../../contract.ts";
 import { copyPayload } from "./common.ts";
 import { compileInno, type InnoOptions, renderInnoScript } from "./inno.ts";
 import { recordPackagedHashes } from "./manifest.ts";
+import { RELOCATION_PAYLOAD_LIST } from "./relocation.ts";
 import { signFiles, verifySignatures } from "./sign.ts";
 import {
   requireInstallerPath,
@@ -25,6 +26,27 @@ interface InstallerOptions {
   // Channels that may bootstrap default to it; the store channel defaults to
   // check so it doesn't warn on every run.
   defaultWebView2: "check" | "bootstrap";
+}
+
+/**
+ * Lists every payload file as a Windows relative path (UTF-8 with BOM, one per line).
+ * Setup uses it to remove exactly the files this app ships when it moves to another folder.
+ */
+async function writePayloadList(payloadDir: string, path: string) {
+  const entries = await readdir(payloadDir, {
+    recursive: true,
+    withFileTypes: true,
+  });
+  const files = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) =>
+      relative(payloadDir, join(entry.parentPath, entry.name)).replaceAll(
+        "/",
+        "\\",
+      ),
+    )
+    .sort();
+  await writeFile(path, `\uFEFF${files.join("\r\n")}\r\n`, "utf8");
 }
 
 /** The architecture half of a build target such as `windows-x64`. */
@@ -202,6 +224,8 @@ export function installerStages(
         await mkdir(outputDir, {
           recursive: true,
         });
+        const payloadListPath = join(ctx.staging, RELOCATION_PAYLOAD_LIST);
+        await writePayloadList(state.payloadDir, payloadListPath);
         const innoOptions: InnoOptions = {
           name: metadata.name,
           identifier: metadata.identifier,
@@ -210,6 +234,7 @@ export function installerStages(
           publisher: metadata.publisher.display,
           scope,
           payloadDir: state.payloadDir,
+          payloadListPath,
           outputDir,
           outputBaseName,
           desktopShortcut,
