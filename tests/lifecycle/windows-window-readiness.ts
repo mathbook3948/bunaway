@@ -276,6 +276,8 @@ if (!process.argv.includes("--child")) {
     await windows.recreate();
     await waitFor(() => counts.get("main") === 4);
     await ready();
+    // Creating needs the window to be gone, so the recreated one is closed first.
+    await closeWindow();
     for (const showWhenReady of [
       "sdk",
       "document",
