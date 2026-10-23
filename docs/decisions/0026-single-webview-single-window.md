@@ -50,14 +50,18 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
    권한 이름은 계속 완전한 Host operation 이름(`windows.setOuterSize` 등)이며 바꾸지 않는다.
    [ADR 0002](./0002-host-owned-call-context.md)의 호스트 발급 호출 컨텍스트는 그대로 유지한다.
 3. **창 제어 대상.** 창 API는 대상 인자 없이 앱의 창을 제어한다. 웹 문서와 백엔드가 같은 창을 가리킨다.
-   `view`와 `windowId` 입력은 바로 제거한다. `windowId`는 창 수명 식별자로 이벤트와
-   스냅샷 결과에 남겨 재생성 여부를 구분하는 데 쓴다.
+   `view`와 `windowId` 입력은 모든 플러그인에서 바로 제거한다. `windowId`는 창 수명 식별자로
+   `windows.getSnapshot()` 결과와 이벤트 payload에 남겨, 호출자가 재생성 여부를 구분하는 데 쓴다.
 4. **모바일.** 창 크기, 위치, 최대화, 전체화면, Z 순서, 작업 표시줄 같은 데스크톱 창 작업은
    Android와 iOS에서 `UNSUPPORTED`로 실패한다. 앱은 `capabilities()`로 작업별 지원 여부를 먼저 조회한다.
    경고만 남기고 성공으로 처리하지 않는다.
 5. **`window.open`과 링크.** 새 창 요청은 창을 만들지 않는다.
    정책 뷰의 `origins`에 속한 URL은 같은 WebView에서 탐색하고, 그 밖의 `http`, `https` URL은
    사용자 동작으로 시작한 요청만 시스템 기본 브라우저로 넘긴다. 다른 scheme은 차단하고 진단을 남긴다.
+   외부 URL을 여는 일은 `opener.openUrl`과 같은 보안 경계이므로 정책이 `opener.openUrl`을 허용한 뷰에서만
+   동작하고, 허용하지 않았으면 차단하고 진단을 남긴다. 사용자 동작 판정은 각 플랫폼 WebView가 제공하는
+   사용자 시작 탐색 신호(Windows는 WebView2 `NewWindowRequested`의 `IsUserInitiated`, macOS는 `WKNavigationAction`의
+   링크 활성화, Android는 `WebChromeClient.onCreateWindow`의 `isUserGesture`, iOS는 `WKNavigationAction`)를 따른다.
 6. **Android 뒤로가기.** 시스템 뒤로가기는 WebView history를 먼저 소비하고, 더 돌아갈 곳이 없을 때만
    Activity를 종료한다.
 7. **다중 창은 코어 계약이 아니다.** 필요성이 확인되면 별도 플러그인의 opt-in 기능으로 다시 제안한다.
@@ -70,13 +74,14 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
 | 항목 | 계약 |
 | --- | --- |
 | 창 선언 | `bunaway.json`의 `app.view`(선택, 생략하면 정책의 유일한 뷰), `app.home`, `app.window`, `app.startup`, `app.visible`, `app.showWhenReady`. `app.windows`, `instances`, `maxInstances`, `profile`은 제거 |
-| 창 없는 시작 | `app.startup: false`. 트레이 Open, 두 번째 실행, `windows.create()`가 창을 만든다. 기존 `desktop.tray` 또는 `closeBehavior: "keep-alive"` 요구는 유지 |
+| 창 없는 시작 | `app.startup: false`. 트레이 Open, 두 번째 실행, `windows.create()`가 창을 만든다. 기존 `desktop.tray` 또는 `closeBehavior: "keep-alive"` 요구는 유지. macOS는 [ADR 0021](./0021-macos-desktop-lifecycle.md)대로 계속 `UNSUPPORTED`이고, Android와 iOS는 빌드에서 `app.startup: false`를 거부한다 |
 | 생성과 재생성 | `windows.create(options?)`, `windows.recreate(options?)`. 이미 열려 있으면 create는 기존처럼 `BUSY`. 옵션 허용 범위는 ADR 0016, 0019를 유지 |
 | 열린 상태 조회 | `windows.isOpen()`이 `windows.list()`와 `isDestroyed`를 대신한다 |
-| 창이 없을 때의 제어 | 창 제어와 상태 조회는 `INVALID_ARGUMENT`(창 없음). 기존 "닫힌 windowId" 오류와 같은 코드 |
-| WebView 프로필 | 영속 프로필 하나. 경로는 `webview/` |
-| 이벤트 | `windows.changed`, `windows.lifecycle`, `windows.closeRequested` 등의 payload 형식은 유지한다. `windows.lifecycle` 수신 권한은 `windows.listInstances` 대신 `windows.getSnapshot`으로 바꾼다 |
-| 다른 플러그인 | dialog의 `ownerWindowId`, menu의 `windowId`, window-state의 `view`와 `windowId`는 생략하면 앱의 창을 뜻한다 |
+| 창이 없을 때의 제어 | 창 제어와 상태 조회는 `INVALID_ARGUMENT`(창 없음). 기존 "닫힌 windowId" 오류와 같은 코드. 예외로 `windows.isOpen()`은 성공하고, `windows.getReadiness()`는 닫힌 창의 마지막 결과를 유지한다 |
+| WebView 프로필 | 영속 프로필 하나. Windows 경로는 `webview/`이며 기존 `webview/<view>` 데이터는 옮기지 않는다. macOS는 지금 창마다 비영속 저장소를 쓰므로 이 결정으로 영속 프로필 하나로 바뀐다 |
+| 이벤트 | `windows.changed`, `windows.lifecycle`, `windows.closeRequested` 등의 payload 형식과 전달 대상(창의 문서 세션)은 유지한다. 단일 창에서 `windows.lifecycle`로 받는 것은 그 창의 문서가 살아 있는 동안의 상태 변화뿐이고, 창 재생성 여부는 `windows.getSnapshot()`의 `windowId`로 구분한다. 수신 권한은 `windows.listInstances` 대신 `windows.getSnapshot`으로 바꾸며 macOS 어댑터도 `getSnapshot`을 구현해야 한다 |
+| 다른 플러그인 | dialog의 `ownerWindowId`, menu의 `windowId`, window-state의 `view`와 `windowId`, appearance의 `windowId`는 입력에서 제거하고 항상 앱의 창을 뜻한다. appearance의 창 테마와 앱 테마는 하나로 합친다 |
+| 선언 필드 | `app.title`은 그대로 유지한다. `backgroundColor`는 `app.window` 아래 필드다 |
 
 ## 결과
 
@@ -105,9 +110,12 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
 - **창 간 통신.** 창끼리 메시지를 주고받는 경로가 필요 없어진다. 대신 같은 문서 안의 상태와
   백엔드 이벤트를 쓴다. 여러 창 사이의 상태 동기화 문제도 함께 사라진다.
 - **창별 권한과 정책 뷰.** 쓰기 가능한 편집 창과 읽기 전용 창처럼 뷰마다 다른 권한을 주는 구성을
-  잃는다. 화면별 접근 제한은 앱 명령에서 검사한다(ADR 0016의 "특정 창의 접근 제한은 앱 명령에서
-  검사한다"와 같은 원칙). 렌더러 장애를 뷰 단위로 격리하던 효과도 사라지며, 창 하나의 렌더러 장애는
-  그 창의 세션 폐기와 재탐색으로 처리한다.
+  잃는다. 한 앱의 모든 화면이 같은 세션과 같은 호출 컨텍스트를 쓰므로 호스트와 백엔드는 호출한
+  라우트를 구별하지 못하고, 화면별 권한 분리를 다른 곳으로 옮길 수 없다. 화면마다 권한이 달라야 하는
+  앱은 별도 앱으로 나누거나 같은 권한 집합으로 설계해야 한다. 렌더러 장애를 뷰 단위로 격리하던 효과도
+  사라지며, 창 하나의 렌더러 장애는 그 창의 세션 폐기와 재탐색으로 처리한다.
+- **기존 데이터 경로.** `app.windows`를 쓰던 Windows 앱은 `webview/<view>`에 쿠키와 웹 저장소가 있으며
+  이 결정으로 `webview/`를 쓰면 이전 데이터를 읽지 못한다. 개발 단계이므로 옮기지 않는다.
 - **부모와 모달 창, 창별 프로필 격리.** `setParent`, 부모 종속 모달, `profile: "isolated"`를 제거한다.
   네이티브 대화상자의 소유 창은 앱의 창으로 고정된다.
 - **이미 구현하고 검증한 코드.** Windows 다중 창, 소유 관계, 격리 프로필 구현과 그 실제 OS 검증을 버린다.
@@ -159,13 +167,13 @@ Capacitor 동작 기준처럼 외부 링크는 시스템 브라우저, 내부 �
 
 | ADR | 관계 | 내용 |
 | --- | --- | --- |
-| [0004](./0004-multi-window-per-view-policy.md) 창과 뷰별 정책 분리 | 대체 | 창 N개와 뷰별 정책, 뷰별 프로필, 창별 종료 규칙을 단일 창으로 대체. 렌더러 장애 처리와 "창 닫기 = 세션 폐기"는 유지 |
+| [0004](./0004-multi-window-per-view-policy.md) 창과 뷰별 정책 분리 | 대체 | 창 N개와 뷰별 정책, 뷰별 프로필, 창별 종료 규칙을 단일 창으로 대체. 렌더러 장애 처리와 "창 닫기 = 세션 폐기"는 유지. splashscreen 전환 서술도 대체 |
 | [0016](./0016-window-creation-contract.md) 창 생성 계약 | 수정 | 호출별 옵션 허용 범위와 검증, 오류 표는 유지. `view` 입력, 선언 0–128개, 뷰별 슬롯과 식별자 조회 절은 대체 |
 | [0017](./0017-multiple-windows-per-view.md) 같은 뷰의 다중 창 | 대체 | `instances`, `maxInstances`, `profile`, `createInstance`, `recreateInstance`, `listInstances`, ID 지정 제어 전체 |
 | [0013](./0013-desktop-lifecycle.md) 데스크톱 수명주기 | 수정 | 트레이 Open과 두 번째 실행은 "살아 있는 모든 창"이 아니라 앱의 창을 복원하거나 생성. `completeSplashscreen`, 부모와 자식 종료 절 제거. `app.windows: []`는 `app.startup: false`로 대체 |
 | [0019](./0019-initial-window-placement.md) 초기 창 배치 | 유지(용어 수정) | "네 생성 API"를 create, recreate 두 개로 수정. 배치 계산은 그대로 |
 | [0020](./0020-close-and-quit-lifecycle.md) 닫기와 종료 수명주기 | 수정 | `windows.lifecycle` 수신 권한을 `windows.getSnapshot`으로 변경. 여러 창, 자식 확인, splashscreen 언급 제거. `onAllWindowsClosed`는 이름을 유지하고 "앱의 창이 닫혀 0개가 됨"으로 정의 |
-| [0021](./0021-macos-desktop-lifecycle.md) macOS 데스크톱 수명주기 | 수정 | `windows.listInstances` 권한 언급을 0020과 같이 변경 |
+| [0021](./0021-macos-desktop-lifecycle.md) macOS 데스크톱 수명주기 | 수정 | `windows.listInstances` 권한 언급을 0020과 같이 변경. macOS의 영속 프로필 하나와 `getSnapshot` 구현이 추가된다. 창 없는 시작은 계속 `UNSUPPORTED` |
 | [0002](./0002-host-owned-call-context.md) 호출 컨텍스트 | 유지 | 호출 컨텍스트 발급과 철회는 그대로 |
 | [0010](./0010-windows-first-platform-model.md) Windows 우선 | 유지 | 구현 순서의 근거 |
 | [0015](./0015-android-bundled-process-host.md) Android | 수정 | 뒤로가기를 "Activity 종료"에서 "WebView history 먼저"로 변경. 단일 뷰 조건은 이 결정의 공통 계약이 됨 |
