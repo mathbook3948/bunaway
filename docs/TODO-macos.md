@@ -188,7 +188,7 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 
 우선순위 P1. 소유자: 선택 자동 실행 기능과 패키저.
 
-- [x] 로그인 항목 등록, 해제와 현재 상태 조회를 제공한다. 사용자 LaunchAgent(`~/Library/LaunchAgents`)로 구현했고 등록, 반복 등록, 해제와 재실행 뒤 조회는 macOS CI의 compiled 앱 실행(`tests/lifecycle/macos-autostart-host.ts`)으로 검증했고 실제 로그인 때의 실행은 검증하지 않았다.
+- [x] 로그인 항목 등록, 해제와 현재 상태 조회를 제공한다. 사용자 LaunchAgent(`~/Library/LaunchAgents`)로 구현했고 등록, 반복 등록, 해제와 재실행 뒤 조회는 macOS CI의 shared Bun과 compiled 앱 실행(`tests/lifecycle/macos-autostart-host.ts`)으로 검증했고 실제 로그인 때의 실행은 검증하지 않았다.
 - [ ] 사용자가 승인 또는 비활성화한 상태와 앱 설정을 구분한다. 현재는 앱 설정(plist 등록)만 읽고 시스템 설정의 로그인 항목 상태는 읽을 공개 API가 없어 `startupState`가 항상 `unknown`이다.
 - [ ] 숨김 실행, 인자, 실행 경로 변경과 업데이트 후 등록 유지의 계약을 정한다.
 - [ ] 직접 배포와 App Sandbox에서의 helper, 서명과 허용 경로를 검증한다.

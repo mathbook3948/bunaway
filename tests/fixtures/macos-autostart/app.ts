@@ -33,7 +33,7 @@ export default defineApp({
         const before = await autostart.getAutostartStatus();
         const enabled = await autostart.enableAutostart(args);
         const repeated = await autostart.enableAutostart(args);
-        // The fixture app declares no desktop.tray, so a hidden start cannot be registered.
+        // The macOS host does not offer hidden start yet, so the request is rejected.
         const hiddenCode = await errorCode(
           autostart.enableAutostart({
             args,
