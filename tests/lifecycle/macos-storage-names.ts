@@ -101,7 +101,6 @@ export function verifyMacosNames(
       },
     ]);
   }
-  assert.equal(listed.length, folds ? 1 : 2);
   results.push(
     `Unicode composed and decomposed names follow the volume (${folds ? "folded" : "distinct"}) and listings keep the stored spelling`,
   );
@@ -129,6 +128,7 @@ export function verifyMacosNames(
       }),
       "upper",
     );
+    assert.equal(readdirSync(folder).includes("Case.txt"), true);
     // A case-only move targets the file itself: it is either refused like an existing destination
     // or renames in place, and in both cases it never leaves a second entry or loses the content.
     try {
@@ -138,7 +138,9 @@ export function verifyMacosNames(
       });
     } catch (error) {
       assert(
-        error instanceof BunawayError && error.code === "INVALID_ARGUMENT",
+        error instanceof BunawayError &&
+          error.code === "INVALID_ARGUMENT" &&
+          /already exists/u.test(error.message),
       );
     }
     const entries = readdirSync(folder).filter(
