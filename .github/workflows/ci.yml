@@ -264,6 +264,10 @@ jobs:
             build/macos-opener-host-diagnostics/
             build/macos-log-capabilities-results.json
             build/macos-log-capabilities-diagnostics/
+            build/macos-store-results.json
+            build/macos-store-diagnostics/
+            build/macos-desktop-results.json
+            build/macos-desktop-diagnostics/
             build/macos-host-results.json
             build/macos-clipboard-results.json
             build/macos-native-logs/
