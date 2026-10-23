@@ -48,8 +48,11 @@ AppAssets는 application context로 한 번 읽어 Bun과 회전 후 Activity가
 WebView는 현재 Activity context를 사용하며 기능 지원은 초기화 때 검사한다.
 백엔드 ready 이후에 WebView를 생성하고 문서를 로드한다. 생성이나 부팅이 실패하면
 두 소유자를 함께 닫는다.
-시스템 뒤로가기는 Activity를 명시적으로 종료한다. Android 13 이상은 시스템 Back 콜백을,
-이전 버전은 `onBackPressed`를 사용한다. 홈 버튼은 종료로 처리하지 않는다.
+시스템 뒤로가기는 WebView history를 먼저 소비하고, 돌아갈 곳이 없을 때만 Activity를 명시적으로
+종료한다. Android 13 이상은 시스템 Back 콜백을, 이전 버전은 `onBackPressed`를 사용한다. 홈 버튼은
+종료로 처리하지 않는다. 앱 Activity는 `launchMode="singleTask"`라서 두 번째 실행은 기존 Activity를
+앞으로 가져온다. `window.open`과 `target="_blank"` 같은 새 창 요청은 `onCreateWindow`가 `false`를
+돌려주어 창을 만들지 않는다.
 기본 앱 메시지는 WebView에서 `127.0.0.1`의 Bun WebSocket으로 직접 보낸다.
 Java가 확인한 main frame과 origin에만 일회용 주소를 전달하며, Bun은 정확한 Origin과
 Host를 검사하고 토큰을 한 번만 사용한다. 제어 파이프에서 연 Core 세션에 연결하므로

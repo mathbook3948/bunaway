@@ -1173,6 +1173,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 - [x] Android의 Java Activity, 단일 WebView와 APK에 번들한 Bun 자식 프로세스를 공통 앱 정의, Core와 SDK에 연결한다.
 - [x] Android의 `sync`, `build`, `run`으로 사용자 네이티브 프로젝트를 유지하고 debug APK를 빌드, 설치 및 실행한다.
 - [x] Android 화면 회전에서 Bun과 Core를 유지하고 홈 이동과 복귀, 뒤로가기 종료를 구분한다.
+- [x] 모바일은 앱 하나에 창 하나다. Android Activity는 `singleTask`이고 뒤로가기는 WebView history를 먼저 소비하며, Android와 iOS 모두 새 창 요청(`window.open`, `target="_blank"`)을 열지 않는다.
 - [ ] Android의 저메모리와 백그라운드 종료 이후 상태 복원, WebView 장애 복구와 네이티브 플러그인 어댑터를 구현한다.
 - [ ] Android release APK/AAB와 서명, 스토어 배포 경로를 구현한다.
 - [ ] iOS의 호스트, Bun 실행, 중단과 복귀, 배포 경로를 구현한다.

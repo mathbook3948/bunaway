@@ -127,9 +127,12 @@ WebView의 localStorage와 sessionStorage는 활성화합니다.
 Activity를 종료하면 Core와 Bun을 종료합니다. 앱 프로세스 재시작 뒤 메모리 상태 복원은 제공하지 않습니다.
 백엔드가 기본 프로세스 그룹을 상속해 만든 하위 프로세스도 종료합니다.
 별도 세션이나 프로세스 그룹으로 분리한 자식의 종료는 앱이 관리해야 합니다.
-현재 단일 뷰 호스트는 시스템 뒤로가기로 Activity를 명시적으로 종료합니다.
+시스템 뒤로가기는 WebView history를 먼저 소비하고, 돌아갈 곳이 없을 때만 Activity를 명시적으로 종료합니다.
 Android 12 이상에서도 루트 화면을 백그라운드로 옮기는 기본 동작 대신 종료하며,
-홈 버튼으로 이동할 때는 Bun을 종료하지 않습니다.
+홈 버튼으로 이동할 때는 Bun을 종료하지 않습니다. 화면 회전은 문서를 홈부터 다시 로드하므로
+회전 뒤에는 이전 history가 없어 뒤로가기가 Activity를 종료합니다.
+앱 Activity는 `launchMode="singleTask"`라서 두 번째 실행은 기존 Activity를 앞으로 가져옵니다.
+`window.open`과 `target="_blank"` 같은 새 창 요청은 창을 만들지 않고 무시합니다.
 
 ## 출력과 실패
 

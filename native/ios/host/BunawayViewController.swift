@@ -733,12 +733,26 @@ open class BunawayViewController: UIViewController, WKScriptMessageHandler, WKNa
     _ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
   ) {
+    // A nil target frame is a new-window request (window.open, target=_blank). The app is one
+    // window, so it is cancelled rather than loaded here.
+    guard action.targetFrame != nil else {
+      decisionHandler(.cancel)
+      return
+    }
     let url = action.request.url
     guard url?.scheme == "bunaway", url?.host == home.host, url?.port == nil else {
       decisionHandler(.cancel)
       return
     }
     decisionHandler(.allow)
+  }
+
+  /// Refuses new-window requests; the app has one WebView and one window.
+  public func webView(
+    _ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+    for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures
+  ) -> WKWebView? {
+    nil
   }
 
   /// Denies media access because this host exposes no native permission contract for it.

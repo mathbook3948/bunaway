@@ -27,9 +27,10 @@ public class BunawayActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        // Back ends this single-view host, including root tasks opened by the home launcher.
+        // Back consumes WebView history first and ends this single-view host only when none is
+        // left, including root tasks opened by the home launcher.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            backCallback = this::finish;
+            backCallback = this::goBackOrFinish;
             getOnBackInvokedDispatcher()
                     .registerOnBackInvokedCallback(
                             OnBackInvokedDispatcher.PRIORITY_DEFAULT, backCallback);
@@ -90,13 +91,15 @@ public class BunawayActivity extends Activity {
         return runtime;
     }
 
-    /**
-     * Preserves the same Back-to-finish contract before Android 13 and when predictive Back is
-     * disabled.
-     */
+    /** Goes back in the WebView history, or finishes the Activity when there is no history. */
+    private void goBackOrFinish() {
+        if (renderer == null || !renderer.goBack()) finish();
+    }
+
+    /** Preserves the same Back contract before Android 13 and when predictive Back is disabled. */
     @Override
     public void onBackPressed() {
-        finish();
+        goBackOrFinish();
     }
 
     @Override
