@@ -5,8 +5,6 @@ import type { notesApp } from "../src-bunaway/app.ts";
 
 /** Idle time after the last keystroke before the draft is written. */
 const AUTOSAVE_DELAY_MS = 800;
-/** Policy view of the only window. */
-const VIEW = "main";
 
 const input = document.querySelector<HTMLTextAreaElement>("#note");
 const statusEl = document.querySelector<HTMLElement>("#status");
@@ -61,8 +59,6 @@ async function start() {
     } finally {
       // An unanswered request leaves the window waiting with no deadline.
       await windows.respondClose({
-        view: VIEW,
-        windowId: request.windowId,
         requestId: request.requestId,
         allow,
       });

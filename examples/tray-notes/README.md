@@ -23,7 +23,7 @@ tray-notes/
 
 ## 동작
 
-- 시작하면 창을 보이지 않은 채 트레이에만 나타난다(`app.windows[0].visible: false`). 트레이 아이콘을 누르거나
+- 시작하면 창을 보이지 않은 채 트레이에만 나타난다(`app.visible: false`). 트레이 아이콘을 누르거나
   Open을 고르면 창이 보인다. Open이 새로 만든 창은 `visible` 값과 관계없이 항상 표시한다.
 - `desktop.closeBehavior: "keep-alive"`이므로 창을 닫으면 창과 WebView, 문서 세션은 정리하지만 백엔드와 트레이는
   계속 실행한다. 다음 Open은 새 창과 새 세션을 만들며, 페이지가 저장한 메모와 창 위치를 다시 불러온다.

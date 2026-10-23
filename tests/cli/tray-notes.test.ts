@@ -63,10 +63,8 @@ test("tray notes example validates and bundles as a one-window tray app", async 
     }
     const definition = await validateProject(project);
     // The only window starts hidden; the tray Open item shows the window it creates.
-    expect(definition.app.windows?.map((spec) => spec.view)).toEqual([
-      "main",
-    ]);
-    expect(definition.app.windows?.[0]?.visible).toBe(false);
+    expect(definition.app.view).toBe("main");
+    expect(definition.app.visible).toBe(false);
     expect(definition.policy.views.map((view) => view.id)).toEqual([
       "main",
     ]);
