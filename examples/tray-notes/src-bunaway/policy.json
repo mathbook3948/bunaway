@@ -14,6 +14,7 @@
       "events": ["windows.closeRequested"],
       "host": {
         "permissions": [
+          "storage.exists",
           "storage.readText",
           "storage.writeText",
           "windows.respondClose",

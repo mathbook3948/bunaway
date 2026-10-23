@@ -24,11 +24,15 @@ export async function saveNote(text: string): Promise<void> {
   });
 }
 
-/** Reads persisted note text; a missing file or denied read rejects. */
-export function readNote(): Promise<string> {
-  return storage.readText({
+/** Reads persisted note text; the first run has no file and reads as empty, other failures reject. */
+export async function readNote(): Promise<string> {
+  const location = {
     path: notePath,
-  });
+  };
+  if (!(await storage.exists(location))) {
+    return "";
+  }
+  return storage.readText(location);
 }
 
 /** Applies the saved position and size to the open window; its visibility is not touched. */

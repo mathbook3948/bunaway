@@ -73,8 +73,20 @@ test("tray notes example validates and bundles as a one-window tray app", async 
     expect(definition.policy.views[0]?.events).toEqual([
       "windows.closeRequested",
     ]);
-    expect(definition.policy.views[0]?.host.permissions).toContain(
-      "windows.respondClose",
+    expect(definition.policy.views[0]?.commands).toContain(
+      "plugin.windows.respondClose",
+    );
+    // Close requests and the window-state save and restore run with the view's permissions.
+    expect(definition.policy.views[0]?.host.permissions).toEqual(
+      expect.arrayContaining([
+        "windows.respondClose",
+        "windows.getNormalBounds",
+        "windows.setOuterBounds",
+        "store.load",
+        "store.set",
+        "store.save",
+        "storage.exists",
+      ]),
     );
     const assets = resolve(root, "windows-assets");
     await bundleAssets(definition, assets, true);

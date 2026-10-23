@@ -29,6 +29,7 @@ async function start() {
     EventsOf<typeof notesApp>
   >();
   let saved = "";
+  let loaded = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   // Saves the current text; a write that fails leaves the text marked unsaved.
   const save = async () => {
@@ -45,8 +46,11 @@ async function start() {
   }) => {
     let allow = false;
     try {
-      clearTimeout(timer);
-      await client.invoke("notes.closing", ui.input.value);
+      // Before the saved note is loaded the input is empty, and writing it would erase the note.
+      // A pending autosave stays scheduled so a refused close does not lose it.
+      if (loaded) {
+        await client.invoke("notes.closing", ui.input.value);
+      }
       allow = true;
     } catch {
       setStatus("Could not save. The window stays open.", "error");
@@ -78,10 +82,15 @@ async function start() {
   try {
     saved = await client.invoke("notes.read", null);
     ui.input.value = saved;
+    loaded = true;
     setStatus("Loaded.");
   } catch {
-    // The first run has no file yet.
-    setStatus("Start a new note.");
+    // The input stays disabled: typing over a note that could not be read would replace it.
+    setStatus(
+      "Could not load the note. Close and open the app again.",
+      "error",
+    );
+    return;
   }
   ui.input.disabled = false;
   ui.input.focus();
