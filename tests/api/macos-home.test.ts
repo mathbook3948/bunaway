@@ -33,6 +33,7 @@ test("a data root outside the layout or for another app is rejected", () => {
 test("a derived home must be a bounded absolute path without line breaks or NUL", () => {
   rejected("Library/Application Support/bunaway/dev.example.app");
   rejected(layout("relative/home"));
+  rejected(layout(""));
   rejected(layout("/Users/al\nice"));
   rejected(layout("/Users/al\rice"));
   rejected(layout("/Users/al\0ice"));
