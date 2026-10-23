@@ -137,7 +137,7 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
   Capacitor처럼 창 하나를 런타임이 소유하고, 데스크톱 창 제어는 Electron과 같은 범위의 작업을 그 창에 대해 제공한다.
 - **Tauri 동작 기준 대비 개선.** Tauri v2는 모바일에서 `set_size`, `set_position`을 효과 없이 경고만 남긴다.
   bunaway는 `UNSUPPORTED`와 지원 조회로 앱이 실패를 알 수 있게 한다.
-- **링크 동작의 개선.** 내부 링크는 같은 WebView, 외부 링크는 `opener.openUrl` 권한이 있을 때 시스템 브라우저로 보낸다
+- **링크 동작의 개선.** 내부 링크는 같은 WebView, 외부 링크는 뷰 `commands`의 `plugin.opener.openUrl`과 host 권한 `opener.openUrl`이 모두 있을 때 시스템 브라우저로 보낸다
   (Capacitor 동작 기준). 시작 프레임을 확인할 수 없는 플랫폼은 확인할 때까지 외부 링크를 차단하므로 개선은 그때부터 적용된다.
 
 ### 포기하는 것
@@ -220,7 +220,7 @@ Capacitor 동작 기준처럼 외부 링크는 시스템 브라우저, 내부 �
 | [0015](./0015-macos-bun-ffi.md) macOS Bun FFI | 수정 | 다중 창 서술은 단일 창으로 대체 |
 | [0019](./0019-initial-window-placement.md) 초기 창 배치 | 수정 | 생성 API 개수 표현을 create, recreate 두 개로 수정. 배치 계산은 유지 |
 | [0002](./0002-host-owned-call-context.md) 호출 컨텍스트 | 수정 | 발급과 철회는 그대로. opener 대리 호출 전용 호스트 발급 호출 프레임을 추가했다 |
-| [0024](./0024-plugin-path-responsibility.md) 경로 책임 | 유지(링크 예외는 ADR 0002에 기록) | 외부 콘텐츠를 표시하는 뷰의 최소 권한 지침은 단일 뷰에서 앱 전체 권한에 적용된다. opener 대리 호출을 위해 뷰에 `plugin.opener.openUrl`을 직접 허용하는 일반 지침의 예외 하나를 ADR 0002에 적었다. 외부 콘텐츠 뷰에는 허용하지 않는다 |
+| [0024](./0024-plugin-path-responsibility.md) 경로 책임 | 수정(링크 예외 한 줄 추가) | 외부 콘텐츠를 표시하는 뷰의 최소 권한 지침은 단일 뷰에서 앱 전체 권한에 적용된다. opener 대리 호출을 위해 뷰에 `plugin.opener.openUrl`을 직접 허용하는 일반 지침의 예외 하나를 ADR 0002에 적었다. 외부 콘텐츠 뷰에는 허용하지 않는다 |
 | [0010](./0010-windows-first-platform-model.md) Windows 우선 | 유지 | 구현 순서의 근거 |
 | [0018](./0018-ios-embedded-bun-worker.md) iOS | 유지 | 단일 뷰 조건이 공통 계약이 됨 |
 | `docs/GLOSSARY.md` | 수정 | 창 인스턴스, 창 소유 관계, 부모 종속 모달 창 항목 삭제. 뷰 ID, WebView 프로필, 앱 접근 규칙 수정 |
