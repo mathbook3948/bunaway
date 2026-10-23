@@ -428,14 +428,17 @@ if (!process.argv.includes("--child")) {
   /** Exercise deferred creation, last close and restoration through real backend Host calls. */
   async function exercise(desktop: DesktopContext) {
     assert(backend);
-    assert.equal(
-      validateWindowOutput(
-        "windows.isOpen",
-        await backend.host.call(registry.operation("windows.isOpen"), null),
-      ),
-      false,
-      "a window must not exist before it is created",
-    );
+    // An app without any window definition has nothing to ask about.
+    if (!empty) {
+      assert.equal(
+        validateWindowOutput(
+          "windows.isOpen",
+          await backend.host.call(registry.operation("windows.isOpen"), null),
+        ),
+        false,
+        "a window must not exist before it is created",
+      );
+    }
     if (scenario.startsWith("force-")) {
       const child = Bun.spawn(
         [
