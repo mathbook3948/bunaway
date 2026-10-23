@@ -521,7 +521,8 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
         undefined,
         {
           events: {
-            emit: (event, payload) => ui?.emitPluginEvent(event, payload),
+            emit: (event, payload, requiredOperation) =>
+              ui?.emitPluginEvent(event, payload, requiredOperation),
           },
         },
       );

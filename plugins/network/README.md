@@ -7,8 +7,8 @@ See the [public contract](../../docs/site/src/content/docs/reference/plugins/net
 
 `network.isOnline` corresponds to Electron's `net.isOnline()` (whether an active connection exists). It is true when an
 operational interface holds an address that is neither loopback nor link-local; virtual adapters count, and captive
-portals and internet reachability are not checked. On Windows the plugin also publishes `network.onlineChanged` when
-that value changes, found by comparing it every 2 seconds. macOS does not publish the event.
+portals and internet reachability are not checked. The plugin also publishes `network.onlineChanged` when
+that value changes, found by comparing it every 2 seconds, on Windows and macOS.
 
 `network.resolveHost` corresponds to Electron's `net.resolveHost()`. It returns `{ endpoints: [{ address, family }] }` from
 the system resolver (getaddrinfo), so the hosts file and system DNS settings apply. It takes an ASCII host name or IPv4

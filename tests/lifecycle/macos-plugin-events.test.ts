@@ -53,3 +53,20 @@ test("a macOS plugin event reaches subscribed and subscribing views only and sto
   ]);
   expect(result.whileStopping).toEqual([]);
 });
+
+test("a macOS plugin event with a required operation also needs the view's host permission", async () => {
+  const result = await runFixture();
+  // Only a holds both the subscription and the grant; b is pending without the grant, c lacks a subscription.
+  expect(result.withGrant).toEqual([
+    {
+      to: "a",
+      payload: {
+        count: 3,
+      },
+    },
+  ]);
+  // Granted to view a but not registered by any plugin: nothing is delivered.
+  expect(result.unknownOperation).toEqual([]);
+  // The permission is read again at every emit, so a revoked grant stops delivery.
+  expect(result.afterRevoke).toEqual([]);
+});

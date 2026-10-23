@@ -4,7 +4,8 @@ import type { Packet, Route } from "@bunaway/runtime-bun/worker-channel";
 
 /**
  * Drives the real MacosWindows plugin event broadcast with a fake WebView: only the view whose
- * document subscribed receives the event, and nothing is sent once the host is stopping.
+ * document subscribed receives the event, a required operation also needs the view's host
+ * permission, and nothing is sent once the host is stopping.
  * Prints one JSON result for the test to assert.
  */
 const ORIGIN = "https://app.bunaway.local";
@@ -67,7 +68,14 @@ const windowSpec = (view: string) => ({
     height: 600,
   },
 });
-const policyView = (id: string) => ({
+const READ = "plugin.read";
+// Granted to view a but never registered, like an operation no installed plugin declares.
+const UNREGISTERED = "plugin.unregistered";
+const registered = new Set([
+  READ,
+]);
+let readRevoked = false;
+const policyView = (id: string, permissions: string[] = []) => ({
   id,
   origins: [
     ORIGIN,
@@ -77,7 +85,7 @@ const policyView = (id: string) => ({
     EVENT,
   ],
   host: {
-    permissions: [],
+    permissions,
   },
 });
 const config = {
@@ -99,9 +107,14 @@ const config = {
       permissions: [],
     },
     views: [
-      policyView("a"),
+      policyView("a", [
+        READ,
+        UNREGISTERED,
+      ]),
       policyView("b"),
-      policyView("c"),
+      policyView("c", [
+        READ,
+      ]),
     ],
   },
 } as never;
@@ -129,7 +142,17 @@ const windows = new MacosWindows(
     cancelled: () => false,
     requestContext: () => undefined,
     forward: (packet: Packet) => forwarded.push(packet),
-    observes: () => false,
+    observes: (
+      host: {
+        permissions: string[];
+      },
+      call: {
+        operation: string;
+      },
+    ) =>
+      registered.has(call.operation) &&
+      !(readRevoked && call.operation === READ) &&
+      host.permissions.includes(call.operation),
     nativeEvent: async (
       packet: Extract<
         Packet,
@@ -229,6 +252,33 @@ windows.emitPluginEvent(EVENT, {
   count: 1,
 });
 const whileRunning = delivered.splice(0);
+// View a is subscribed with the grant, b is pending without it, c has the grant but no subscription.
+windows.emitPluginEvent(
+  EVENT,
+  {
+    count: 3,
+  },
+  READ,
+);
+const withGrant = delivered.splice(0);
+windows.emitPluginEvent(
+  EVENT,
+  {
+    count: 4,
+  },
+  UNREGISTERED,
+);
+const unknownOperation = delivered.splice(0);
+// The grant is checked at every emit: once revoked, the subscribed view stops receiving.
+readRevoked = true;
+windows.emitPluginEvent(
+  EVENT,
+  {
+    count: 5,
+  },
+  READ,
+);
+const afterRevoke = delivered.splice(0);
 stopping = true;
 windows.emitPluginEvent(EVENT, {
   count: 2,
@@ -236,6 +286,9 @@ windows.emitPluginEvent(EVENT, {
 console.log(
   JSON.stringify({
     whileRunning,
+    withGrant,
+    unknownOperation,
+    afterRevoke,
     whileStopping: delivered,
   }),
 );
