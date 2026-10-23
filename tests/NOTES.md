@@ -82,6 +82,13 @@ disposable private Keychain을 만들고 공유 Bun과 ad-hoc compiled 실행 �
 내부 provider만 disposable Keychain으로 지정하며 검증한 패키지의 identity 전달,
 호출자의 appId 거부, 개별 정책, 문자열과 바이트 왕복, 동일 실행 파일의 재시작 복호화와
 Core 정리 뒤 네이티브 정리를 확인한다. 결과는 `build/macos-safe-storage-results.json`이다.
+`lifecycle/macos-store.ts`는 ad-hoc 서명한 compiled 앱과 실제 WKWebView에서 운영 `store` 플러그인을
+사용한다. 백엔드가 defaults 병합, 저장 파일 모드(0600, 폴더 0700), 저장 전 파일 없음, reload의
+`ignoreDefaults`, reset 뒤 reload, 쓰기 불가 폴더에서 저장 실패 시 원본 보존과 임시 파일 없음, 손상 파일의
+`error`와 `reset`, autosave 대기, 저장하지 않은 저장소의 종료 시 flush를 실행하고, 같은 실행 파일을 다시
+시작해 파일에서 `file`로 읽히는지 확인한다. 화면은 `store.get`만 허용받아 쓰기 거부와 경로 형태 이름 거부를
+확인한다. 변경 이벤트는 다루지 않는다. 결과는 `build/macos-store-results.json`과
+`build/macos-store-diagnostics/`이다.
 `macos-bun.test.ts`의 macOS 설정 단위 검사는 선언과 호출별 창 옵션에서 `visible`과
 `showWhenReady`를 허용하고 배치, titlebar, alwaysOnTop, 초기 상태와 multiple 선언을 `UNSUPPORTED`로
 거부하는지 확인한다. 같은 파일의 identity 회귀는 실제 Worker와 호스트 수명을 사용하지만 네이티브 UI를
