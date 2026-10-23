@@ -24,23 +24,17 @@ export function responseHeaders(response: Response): [
   }
   return headers;
 }
-/** Read a bounded, decompressed response. Redirects are returned to the app for a new access check. */
-export async function request(
-  input: z.output<typeof requestInputSchema>,
+/**
+ * Read a response body of at most `maxBytes`, failing when it is longer, and return the status,
+ * headers and base64 body. The reader is always cancelled and released. `onChunk` runs after each
+ * body chunk, for callers that treat a slow body as progress.
+ */
+export async function readBoundedResponse(
+  response: Response,
+  maxBytes: number,
   signal: AbortSignal,
+  onChunk?: () => void,
 ) {
-  const response = await fetch(input.url, {
-    method: input.method,
-    headers: input.headers,
-    ...(input.bodyBase64 === undefined
-      ? {}
-      : {
-          body: Buffer.from(input.bodyBase64, "base64"),
-        }),
-    redirect: "manual",
-    credentials: "omit",
-    signal,
-  });
   const reader = response.body?.getReader();
   try {
     const headers = responseHeaders(response);
@@ -54,13 +48,14 @@ export async function request(
           break;
         }
         bytes += result.value.byteLength;
-        if (bytes > input.maxResponseBytes) {
+        if (bytes > maxBytes) {
           throw new BunawayError({
             code: "INTERNAL",
             message: "Response body exceeds the limit.",
           });
         }
         chunks.push(result.value);
+        onChunk?.();
       }
     }
     return {
@@ -78,4 +73,23 @@ export async function request(
       }
     }
   }
+}
+/** Read a bounded, decompressed response. Redirects are returned to the app for a new access check. */
+export async function request(
+  input: z.output<typeof requestInputSchema>,
+  signal: AbortSignal,
+) {
+  const response = await fetch(input.url, {
+    method: input.method,
+    headers: input.headers,
+    ...(input.bodyBase64 === undefined
+      ? {}
+      : {
+          body: Buffer.from(input.bodyBase64, "base64"),
+        }),
+    redirect: "manual",
+    credentials: "omit",
+    signal,
+  });
+  return readBoundedResponse(response, input.maxResponseBytes, signal);
 }

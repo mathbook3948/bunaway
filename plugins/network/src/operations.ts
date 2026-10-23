@@ -15,10 +15,15 @@ import {
   resolveProxyInputSchema,
   resolveProxyResultSchema,
   responseSchema,
+  uploadIdInputSchema,
+  uploadInputSchema,
+  uploadResultSchema,
+  uploadStatusSchema,
 } from "#network/contract";
 import {
   type initialize as initializeMacos,
   runCancelDownload as runMacosCancelDownload,
+  runCancelUpload as runMacosCancelUpload,
   runDownload as runMacosDownload,
   runDownloadStatus as runMacosDownloadStatus,
   runExchange as runMacosExchange,
@@ -26,10 +31,13 @@ import {
   runRequest as runMacosRequest,
   runResolveHost as runMacosResolveHost,
   runResolveProxy as runMacosResolveProxy,
+  runUpload as runMacosUpload,
+  runUploadStatus as runMacosUploadStatus,
 } from "#network/platforms/macos";
 import {
   type initialize as initializeWindows,
   runCancelDownload as runWindowsCancelDownload,
+  runCancelUpload as runWindowsCancelUpload,
   runDownload as runWindowsDownload,
   runDownloadStatus as runWindowsDownloadStatus,
   runExchange as runWindowsExchange,
@@ -37,6 +45,8 @@ import {
   runRequest as runWindowsRequest,
   runResolveHost as runWindowsResolveHost,
   runResolveProxy as runWindowsResolveProxy,
+  runUpload as runWindowsUpload,
+  runUploadStatus as runWindowsUploadStatus,
 } from "#network/platforms/windows";
 
 const macosOperation =
@@ -68,6 +78,24 @@ export const macosOperations = {
     output: emptyResultSchema,
     handler: (input, { instance, source }) =>
       runMacosCancelDownload(instance, source, input),
+  }),
+  upload: macosOperation({
+    input: uploadInputSchema,
+    output: uploadResultSchema,
+    handler: (input, { instance, source, signal }) =>
+      runMacosUpload(instance, source, input, signal),
+  }),
+  uploadStatus: macosOperation({
+    input: uploadIdInputSchema,
+    output: uploadStatusSchema,
+    handler: (input, { instance, source }) =>
+      runMacosUploadStatus(instance, source, input),
+  }),
+  cancelUpload: macosOperation({
+    input: uploadIdInputSchema,
+    output: emptyResultSchema,
+    handler: (input, { instance, source }) =>
+      runMacosCancelUpload(instance, source, input),
   }),
   exchange: macosOperation({
     input: exchangeInputSchema,
@@ -116,6 +144,24 @@ export const windowsOperations = {
     output: emptyResultSchema,
     handler: (input, { instance, source }) =>
       runWindowsCancelDownload(instance, source, input),
+  }),
+  upload: windowsOperation({
+    input: uploadInputSchema,
+    output: uploadResultSchema,
+    handler: (input, { instance, source, signal }) =>
+      runWindowsUpload(instance, source, input, signal),
+  }),
+  uploadStatus: windowsOperation({
+    input: uploadIdInputSchema,
+    output: uploadStatusSchema,
+    handler: (input, { instance, source }) =>
+      runWindowsUploadStatus(instance, source, input),
+  }),
+  cancelUpload: windowsOperation({
+    input: uploadIdInputSchema,
+    output: emptyResultSchema,
+    handler: (input, { instance, source }) =>
+      runWindowsCancelUpload(instance, source, input),
   }),
   exchange: windowsOperation({
     input: exchangeInputSchema,

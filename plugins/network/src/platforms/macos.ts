@@ -4,12 +4,15 @@ export {
   dispose,
   initialize,
   runCancelDownload,
+  runCancelUpload,
   runDownload,
   runDownloadStatus,
   runExchange,
   runIsOnline,
   runRequest,
   runResolveHost,
+  runUpload,
+  runUploadStatus,
 } from "#network/platforms/shared";
 
 /** The system proxy route lookup is implemented for Windows only. */

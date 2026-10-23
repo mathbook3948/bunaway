@@ -6,8 +6,11 @@ import {
   type downloadInputSchema,
   type exchangeInputSchema,
   MAX_ACTIVE_DOWNLOADS,
+  MAX_ACTIVE_UPLOADS,
   type requestInputSchema,
   type resolveHostInputSchema,
+  type uploadIdInputSchema,
+  type uploadInputSchema,
 } from "#network/contract";
 import { type DownloadEntry, download } from "#network/platforms/download";
 import { request } from "#network/platforms/http";
@@ -22,6 +25,7 @@ import {
   resolveHost,
   systemLookup,
 } from "#network/platforms/resolve-host";
+import { type UploadEntry, upload } from "#network/platforms/upload";
 import { exchange } from "#network/platforms/websocket";
 
 const MAX_ACTIVE_REQUESTS = 16;
@@ -30,6 +34,8 @@ type ExchangeInput = z.output<typeof exchangeInputSchema>;
 type ResolveHostInput = z.output<typeof resolveHostInputSchema>;
 type DownloadInput = z.output<typeof downloadInputSchema>;
 type DownloadIdInput = z.output<typeof downloadIdInputSchema>;
+type UploadInput = z.output<typeof uploadInputSchema>;
+type UploadIdInput = z.output<typeof uploadIdInputSchema>;
 
 /**
  * Own cancellable requests on the selected host thread. Hosts with system event services also
@@ -49,6 +55,8 @@ export function initialize(
     lookups: new Set<Promise<unknown>>(),
     /** Running downloads by the id their caller chose; an entry exists until its temporary file is gone. */
     downloads: new Map<string, DownloadEntry>(),
+    /** Running uploads by the id their caller chose; an entry exists until its file is closed. */
+    uploads: new Map<string, UploadEntry>(),
     disposed: false,
     stopOnlineWatch: systemEvents
       ? watchOnline({
@@ -220,28 +228,47 @@ function findDownload(
   return entry?.source === source ? entry : undefined;
 }
 
+/** What downloads and uploads share: the owning source, the abort handle and the running task. */
+type TransferEntry = {
+  readonly source: string;
+  readonly controller: AbortController;
+  task: Promise<unknown>;
+};
+
+type TransferSpec<E extends TransferEntry> = {
+  /** Lower case name used in errors, "download" or "upload". */
+  noun: string;
+  registry: Map<string, E>;
+  id: string;
+  maxActive: number;
+  timeoutMs: number;
+  idleTimeoutMs: number;
+};
+
 /**
- * Save a response body to a file under its own limits: at most four at once, a whole-download
- * deadline and a limit on the silence between body chunks. The call returns when the file is in
- * place or the download has failed and its temporary file is gone.
+ * Run one transfer under the limits that downloads and uploads share: a caller-chosen id that is
+ * free, a cap on transfers in flight, a whole-transfer deadline and a limit on silence that
+ * `touch` restarts. The entry stays registered until `execute` has cleaned up after itself, and
+ * the connection is always ended.
  */
-export async function runDownload(
-  state: ReturnType<typeof initialize>,
-  source: string,
-  input: DownloadInput,
-  requestSignal?: AbortSignal,
-) {
-  requireOpen(state);
-  if (state.downloads.has(input.downloadId)) {
+function runTransfer<E extends TransferEntry, T>(
+  spec: TransferSpec<E>,
+  requestSignal: AbortSignal | undefined,
+  makeEntry: (controller: AbortController) => E,
+  execute: (signal: AbortSignal, entry: E, touch: () => void) => Promise<T>,
+): Promise<T> {
+  const { noun, registry, id } = spec;
+  const label = `${noun[0]?.toUpperCase()}${noun.slice(1)}`;
+  if (registry.has(id)) {
     throw new BunawayError({
       code: "INVALID_ARGUMENT",
-      message: "The download id is already in use.",
+      message: `The ${noun} id is already in use.`,
     });
   }
-  if (state.downloads.size >= MAX_ACTIVE_DOWNLOADS) {
+  if (registry.size >= spec.maxActive) {
     throw new BunawayError({
       code: "BUSY",
-      message: "Too many downloads.",
+      message: `Too many ${noun}s.`,
     });
   }
   requestSignal?.throwIfAborted();
@@ -261,51 +288,111 @@ export async function runDownload(
         message,
       }),
     );
-  const deadline = setTimeout(timeout("Download timed out."), input.timeoutMs);
-  let idle = setTimeout(timeout("Download stalled."), input.idleTimeoutMs);
-  const entry: DownloadEntry = {
-    source,
-    controller,
-    task: Promise.resolve(),
-    receivedBytes: 0,
-    totalBytes: null,
-  };
+  const deadline = setTimeout(timeout(`${label} timed out.`), spec.timeoutMs);
+  let idle = setTimeout(timeout(`${label} stalled.`), spec.idleTimeoutMs);
+  const entry = makeEntry(controller);
   const touch = () => {
     clearTimeout(idle);
-    idle = setTimeout(timeout("Download stalled."), input.idleTimeoutMs);
+    idle = setTimeout(timeout(`${label} stalled.`), spec.idleTimeoutMs);
   };
   const task = (async () => {
     try {
-      return await download(input, signal, entry, touch);
+      return await execute(signal, entry, touch);
     } catch (error) {
       if (signal.aborted) {
         throw signal.reason instanceof BunawayError
           ? signal.reason
           : new BunawayError({
               code: "CANCELLED",
-              message: "Download was cancelled.",
+              message: `${label} was cancelled.`,
             });
       }
       if (error instanceof BunawayError) {
         throw error;
       }
-      // The cause stays in the log; the caller only learns that the download failed.
-      console.error("Download failed.", error);
+      // The cause stays in the log; the caller only learns that the transfer failed.
+      console.error(`${label} failed.`, error);
       throw new BunawayError({
         code: "INTERNAL",
-        message: "Download failed.",
+        message: `${label} failed.`,
       });
     } finally {
       clearTimeout(deadline);
       clearTimeout(idle);
-      // Ends the connection of a download that stopped before its body was read to the end.
+      // Ends the connection of a transfer that stopped before its body was read to the end.
       controller.abort();
-      state.downloads.delete(input.downloadId);
+      registry.delete(id);
     }
   })();
   entry.task = task;
-  state.downloads.set(input.downloadId, entry);
+  registry.set(id, entry);
   return task;
+}
+
+/**
+ * Save a response body to a file under its own limits: at most four at once, a whole-download
+ * deadline and a limit on the silence between body chunks. The call returns when the file is in
+ * place or the download has failed and its temporary file is gone.
+ */
+export async function runDownload(
+  state: ReturnType<typeof initialize>,
+  source: string,
+  input: DownloadInput,
+  requestSignal?: AbortSignal,
+) {
+  requireOpen(state);
+  return runTransfer(
+    {
+      noun: "download",
+      registry: state.downloads,
+      id: input.downloadId,
+      maxActive: MAX_ACTIVE_DOWNLOADS,
+      timeoutMs: input.timeoutMs,
+      idleTimeoutMs: input.idleTimeoutMs,
+    },
+    requestSignal,
+    (controller): DownloadEntry => ({
+      source,
+      controller,
+      task: Promise.resolve(),
+      receivedBytes: 0,
+      totalBytes: null,
+    }),
+    (signal, entry, touch) => download(input, signal, entry, touch),
+  );
+}
+
+/**
+ * Send a file as a request body under the same kind of limits as a download: at most four at
+ * once, a whole-upload deadline and a limit on the silence between file chunks. The call returns
+ * with the server's bounded answer once the file is closed.
+ */
+export async function runUpload(
+  state: ReturnType<typeof initialize>,
+  source: string,
+  input: UploadInput,
+  requestSignal?: AbortSignal,
+) {
+  requireOpen(state);
+  return runTransfer(
+    {
+      noun: "upload",
+      registry: state.uploads,
+      id: input.uploadId,
+      maxActive: MAX_ACTIVE_UPLOADS,
+      timeoutMs: input.timeoutMs,
+      idleTimeoutMs: input.idleTimeoutMs,
+    },
+    requestSignal,
+    (controller): UploadEntry => ({
+      source,
+      controller,
+      task: Promise.resolve(),
+      sentBytes: 0,
+      totalBytes: null,
+    }),
+    (signal, entry, touch) => upload(input, signal, entry, touch),
+  );
 }
 
 /** Bytes received so far by a running download of the same source. */
@@ -349,6 +436,47 @@ export async function runCancelDownload(
   return {};
 }
 
+/** Bytes read so far by a running upload of the same source. */
+export function runUploadStatus(
+  state: ReturnType<typeof initialize>,
+  source: string,
+  { uploadId }: UploadIdInput,
+) {
+  requireOpen(state);
+  const entry = state.uploads.get(uploadId);
+  if (entry?.source !== source) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "Unknown upload.",
+    });
+  }
+  return {
+    sentBytes: entry.sentBytes,
+    totalBytes: entry.totalBytes,
+  };
+}
+
+/** Stop an upload of the same source and wait until its file is closed; unknown or finished ids succeed. */
+export async function runCancelUpload(
+  state: ReturnType<typeof initialize>,
+  source: string,
+  { uploadId }: UploadIdInput,
+) {
+  const entry = state.uploads.get(uploadId);
+  if (entry?.source === source) {
+    entry.controller.abort(
+      new BunawayError({
+        code: "CANCELLED",
+        message: "Upload was cancelled.",
+      }),
+    );
+    await Promise.allSettled([
+      entry.task,
+    ]);
+  }
+  return {};
+}
+
 /** Cancel and drain all in-flight work; repeated cleanup is safe. */
 export async function dispose(state: ReturnType<typeof initialize>) {
   if (!state.disposed) {
@@ -363,7 +491,11 @@ export async function dispose(state: ReturnType<typeof initialize>) {
       );
     }
   }
-  for (const entry of state.downloads.values()) {
+  const transfers = [
+    ...state.downloads.values(),
+    ...state.uploads.values(),
+  ];
+  for (const entry of transfers) {
     entry.controller.abort(
       new BunawayError({
         code: "CANCELLED",
@@ -373,8 +505,6 @@ export async function dispose(state: ReturnType<typeof initialize>) {
   }
   await Promise.allSettled([
     ...state.active.values(),
-    ...[
-      ...state.downloads.values(),
-    ].map((entry) => entry.task),
+    ...transfers.map((entry) => entry.task),
   ]);
 }

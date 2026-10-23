@@ -343,6 +343,75 @@ export const downloadStatusSchema = z.strictObject({
   receivedBytes: z.number().int().min(0).max(MAX_DOWNLOAD_BYTES),
   totalBytes: z.number().int().min(0).max(MAX_DOWNLOAD_BYTES).nullable(),
 });
+/** Largest file one upload sends; the same bound as a download. */
+export const MAX_UPLOAD_BYTES = MAX_DOWNLOAD_BYTES;
+/** Whole-upload deadline and no-progress limit, with the same defaults and ceilings as a download. */
+export const DEFAULT_UPLOAD_TIMEOUT_MS = DEFAULT_DOWNLOAD_TIMEOUT_MS;
+export const MAX_UPLOAD_TIMEOUT_MS = MAX_DOWNLOAD_TIMEOUT_MS;
+export const DEFAULT_UPLOAD_IDLE_TIMEOUT_MS = DEFAULT_DOWNLOAD_IDLE_TIMEOUT_MS;
+export const MAX_UPLOAD_IDLE_TIMEOUT_MS = MAX_DOWNLOAD_IDLE_TIMEOUT_MS;
+/** Uploads in flight at once, counted apart from requests and downloads. */
+export const MAX_ACTIVE_UPLOADS = 4;
+/**
+ * `network.upload` input. The app checks `path` against its own rules before the call; the plugin
+ * only requires an absolute path to an existing regular file. The file is the whole request body,
+ * sent with `PUT` or `POST`; `uploadId` is chosen by the caller so `network.uploadStatus` and
+ * `network.cancelUpload` can name the transfer while it runs.
+ */
+export const uploadInputSchema = z.strictObject({
+  uploadId: downloadId,
+  url: urlFor([
+    "http:",
+    "https:",
+  ]),
+  path: z.string().min(1).max(MAX_DOWNLOAD_PATH_LENGTH),
+  method: z
+    .enum([
+      "PUT",
+      "POST",
+    ])
+    .default("PUT"),
+  headers: requestHeaders.default([]),
+  maxResponseBytes: z
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_BODY_BYTES)
+    .default(MAX_BODY_BYTES),
+  timeoutMs: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_UPLOAD_TIMEOUT_MS)
+    .default(DEFAULT_UPLOAD_TIMEOUT_MS),
+  idleTimeoutMs: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_UPLOAD_IDLE_TIMEOUT_MS)
+    .default(DEFAULT_UPLOAD_IDLE_TIMEOUT_MS),
+});
+/**
+ * The server's answer in the shape of `network.request`, plus the file bytes handed to the
+ * connection. A redirect or error status is returned as is; the file was still sent.
+ */
+export const uploadResultSchema = z.strictObject({
+  status: z.number().int().min(100).max(599),
+  headers,
+  bodyBase64: base64,
+  bytesSent: z.number().int().min(0).max(MAX_UPLOAD_BYTES),
+});
+export const uploadIdInputSchema = z.strictObject({
+  uploadId: downloadId,
+});
+/**
+ * Progress of a running upload. `sentBytes` counts file bytes read for the connection, not bytes
+ * the server confirmed; `totalBytes` is null until the file has been checked.
+ */
+export const uploadStatusSchema = z.strictObject({
+  sentBytes: z.number().int().min(0).max(MAX_UPLOAD_BYTES),
+  totalBytes: z.number().int().min(0).max(MAX_UPLOAD_BYTES).nullable(),
+});
 export const emptyResultSchema = z.strictObject({});
 /** `network.isOnline` result: whether a non-loopback network connection exists. */
 export const onlineSchema = z.boolean();

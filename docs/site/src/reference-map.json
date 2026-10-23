@@ -1499,7 +1499,10 @@
       "network.resolveProxy",
       "network.download",
       "network.downloadStatus",
-      "network.cancelDownload"
+      "network.cancelDownload",
+      "network.upload",
+      "network.uploadStatus",
+      "network.cancelUpload"
     ],
     "reference/plugins/process": [
       "process.run",

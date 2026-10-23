@@ -782,7 +782,9 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [ ] 속도, 진행률과 완료와 실패 이벤트를 제공한다. 현재 진행 및 종료 상태는 snapshot 조회로 확인한다.
 - [x] `pauseDownload`, `resumeDownload`, `cancelDownload`와 `getDownloads`로 pause, resume, cancel과 재개 가능 여부를 제공한다.
 - [ ] 중단 다운로드의 metadata 저장과 재개를 제공한다.
-- [ ] 파일 업로드와 다운로드에 progress, 취소, timeout을 제공한다.
+- [x] 파일 업로드와 다운로드에 progress, 취소, timeout을 제공한다.
+  [`network.download`와 `network.upload`](./site/src/content/docs/reference/plugins/network.mdx)가 `downloadStatus`와 `cancelDownload`,
+  `uploadStatus`와 `cancelUpload`, 전체 기한과 무진행 기한을 제공한다.
 - [x] 프린터 목록과 기본 프린터를 조회한다.
   [`os.listPrinters`와 `os.getDefaultPrinter`](./site/src/content/docs/reference/plugins/os.mdx)는
   이름과 기본 여부만 반환하며 독립 권한이다.
@@ -916,7 +918,8 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [ ] HTTP stream, timeout, 취소와 progress를 제공한다. [#81](https://github.com/mathbook3948/bunaway/issues/81).
   `network.request`의 제한된 응답, timeout과 호출 취소에 더해 `network.download`가 응답 본문을 앱이 검사한
   파일로 저장하고 `network.downloadStatus`로 진행률을, `network.cancelDownload`로 취소를 제공한다.
-  요청 본문 stream과 화면에 직접 전달하는 응답 stream은 남아 있다.
+  `network.upload`는 앱이 검사한 파일 하나를 요청 본문으로 보내고 `network.uploadStatus`와 `network.cancelUpload`를 제공한다.
+  임의 요청 본문 stream과 화면에 직접 전달하는 응답 stream은 남아 있다.
 - [ ] WebSocket 연결, 메시지, close, 상태와 backpressure를 공개 계약으로 제공한다. [#81](https://github.com/mathbook3948/bunaway/issues/81).
   `network.exchange`는 호출 하나에 종속된 제한된 text 송신과 text/binary 수신, close와 send buffer
   상한을 제공한다. 장기 연결 handle, 독립 send/receive와 상태 이벤트의 세션 소유권은 남아 있다.
