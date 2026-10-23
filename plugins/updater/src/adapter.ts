@@ -12,6 +12,7 @@ import {
 } from "#updater/contract";
 import { downloadPackage } from "#updater/download";
 import { validateEndpointTemplate } from "#updater/endpoint";
+import type { SignatureVerifier } from "#updater/signature";
 
 /** Update manifest architecture words for the CPUs the hosts run on. */
 const ARCHITECTURES: Readonly<Record<string, string>> = {
@@ -30,7 +31,7 @@ function readSettings(environment: NativeEnvironment): UpdaterSettings | null {
     throw new BunawayError({
       code: "INVALID_ARGUMENT",
       message:
-        "bunaway.json plugins.updater must be { endpoint: string, channel?: string }.",
+        "bunaway.json plugins.updater must be { endpoint: string, channel?: string, authenticode?: { publisherNames: string[] } }.",
     });
   }
   validateEndpointTemplate(
@@ -54,6 +55,14 @@ export function createUpdater(
     downloadTimeoutMs?: number;
     /** The update folder; a platform without one cannot download. */
     files?: PackageFiles;
+    /**
+     * Signature check for the platform's installers, with the owner of its resources. A platform
+     * without one refuses a download when the app asks for a signature.
+     */
+    signature?: {
+      verify: SignatureVerifier;
+      close(): void;
+    };
   } = {},
 ): UpdaterInstance {
   const settings = readSettings(environment);
@@ -146,6 +155,8 @@ export function createUpdater(
       const running = downloadPackage({
         target,
         files: seams.files,
+        authenticode: settings?.authenticode,
+        verifySignature: seams.signature?.verify,
         development,
         fetch: seams.fetchImpl ?? fetch,
         signal: signal
@@ -181,6 +192,7 @@ export function createUpdater(
         (value) => value,
         (error: unknown) => error,
       );
+      seams.signature?.close();
     },
   };
 }

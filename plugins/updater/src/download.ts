@@ -8,11 +8,24 @@ import {
   type UpdateTarget,
 } from "#updater/contract";
 import { discardBody, fail, fetchFollowingRedirects } from "#updater/request";
+import {
+  type SignatureCheck,
+  type SignatureVerifier,
+  signatureFailure,
+} from "#updater/signature";
 
 /** Everything a download needs; the adapter fills it from the last check and the host environment. */
 export type DownloadOptions = {
   target: UpdateTarget;
   files: PackageFiles;
+  /** The app's `plugins.updater.authenticode` setting; when set, only a package signed by a listed publisher is kept. */
+  authenticode?:
+    | {
+        publisherNames: readonly string[];
+      }
+    | undefined;
+  /** The platform's signature check; absent where the platform cannot verify installers. */
+  verifySignature?: SignatureVerifier | undefined;
   /** Development launches may use http on a loopback host. */
   development: boolean;
   fetch: typeof fetch;
@@ -112,6 +125,41 @@ async function writeBody(
   }
 }
 
+/** A rejected package is reported whether or not it could be removed; the next download tries again. */
+async function removeQuietly(
+  files: PackageFiles,
+  sha256: string,
+): Promise<void> {
+  try {
+    await files.remove(sha256);
+  } catch {
+    // The signature failure is the one to report; the package stays unused until it is removed.
+  }
+}
+
+/**
+ * The signature check the app asked for, or null when it asked for none. Refused before any
+ * request when the platform has no verifier, so a download that cannot be trusted is never made.
+ */
+function requiredSignatureCheck(
+  options: DownloadOptions,
+): SignatureCheck | null {
+  if (!options.authenticode) {
+    return null;
+  }
+  if (!options.verifySignature) {
+    throw fail(
+      "UNSUPPORTED",
+      "signatureUnsupported",
+      "This platform cannot check the signature of an update package.",
+    );
+  }
+  return {
+    publisherNames: options.authenticode.publisherNames,
+    verify: options.verifySignature,
+  };
+}
+
 /** Leftovers from earlier downloads are removed on the next success, so a failure here changes nothing. */
 async function pruneQuietly(
   files: PackageFiles,
@@ -132,6 +180,7 @@ export async function downloadPackage(
   options: DownloadOptions,
 ): Promise<UpdaterDownloadResult> {
   const { sha256, size } = declaredIntegrity(options.target);
+  const signature = requiredSignatureCheck(options);
   options.signal?.throwIfAborted();
   const controller = new AbortController();
   let timedOut = false;
@@ -158,6 +207,17 @@ export async function downloadPackage(
     const existing = await options.files.reuse(sha256, size, signal);
     if (existing !== null) {
       signal.throwIfAborted();
+      // The app's publisher list may have changed since the file was saved, so it is checked again.
+      const rejected = signature
+        ? signatureFailure(
+            await signature.verify(existing, signal),
+            signature.publisherNames,
+          )
+        : null;
+      if (rejected) {
+        await removeQuietly(options.files, sha256);
+        throw rejected;
+      }
       await pruneQuietly(options.files, sha256);
       return result(existing);
     }
@@ -198,6 +258,18 @@ export async function downloadPackage(
         "integrityMismatch",
         "Update package does not match the manifest sha256.",
       );
+    }
+    signal.throwIfAborted();
+    // The file is complete and closed but not yet under its final name, so a rejected package is
+    // removed by the `discard` below and is never published.
+    const rejected = signature
+      ? signatureFailure(
+          await signature.verify(sink.pendingPath, signal),
+          signature.publisherNames,
+        )
+      : null;
+    if (rejected) {
+      throw rejected;
     }
     signal.throwIfAborted();
     const path = await sink.publish();

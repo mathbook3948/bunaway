@@ -481,6 +481,7 @@ test("a partial file that cannot be removed does not replace the original failur
       async create(sha256) {
         const sink = await files.create(sha256);
         return {
+          pendingPath: sink.pendingPath,
           write: (chunk) => sink.write(chunk),
           finish: () => sink.finish(),
           publish: () => sink.publish(),

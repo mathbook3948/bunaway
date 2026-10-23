@@ -23,10 +23,10 @@ class FileSink implements PackageSink {
   private failure: Error | undefined;
 
   constructor(
-    private readonly partial: string,
+    readonly pendingPath: string,
     private readonly target: string,
   ) {
-    this.stream = createWriteStream(partial, {
+    this.stream = createWriteStream(pendingPath, {
       flags: "w",
     });
     this.stream.on("error", (error) => {
@@ -60,7 +60,7 @@ class FileSink implements PackageSink {
   }
 
   async publish(): Promise<string> {
-    await rename(this.partial, this.target);
+    await rename(this.pendingPath, this.target);
     return this.target;
   }
 
@@ -71,7 +71,7 @@ class FileSink implements PackageSink {
         this.stream.destroy();
       });
     }
-    await rm(this.partial, {
+    await rm(this.pendingPath, {
       force: true,
     });
   }
@@ -102,6 +102,11 @@ export function createPackageFiles(dataRoot: string): PackageFiles {
         force: true,
       });
       return null;
+    },
+    async remove(sha256) {
+      await rm(finalPath(sha256), {
+        force: true,
+      });
     },
     async create(sha256) {
       await mkdir(directory, {

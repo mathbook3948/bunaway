@@ -1,6 +1,6 @@
 ---
 title: updater
-description: 앱이 bunaway.json에 고정한 엔드포인트의 업데이트 매니페스트를 받아 현재 앱 버전과 비교하고, 직전 조회가 찾은 패키지를 SHA-256과 크기를 확인해 앱 폴더에 내려받습니다.
+description: 앱이 bunaway.json에 고정한 엔드포인트의 업데이트 매니페스트를 받아 현재 앱 버전과 비교하고, 직전 조회가 찾은 패키지를 SHA-256과 크기, 설정했다면 Windows 게시자 서명까지 확인해 앱 폴더에 내려받습니다.
 sidebar: { order: 21 }
 ---
 
@@ -8,7 +8,7 @@ sidebar: { order: 21 }
 
 `@bunaway/plugin-updater` 패키지를 설치하고 앱의 `plugins`에 `updater`를 등록합니다. Windows와
 macOS에서 같은 코드로 제공합니다. 화면과 백엔드는 같은 패키지의 `updater`를 사용합니다.
-이 플러그인은 업데이트가 있는지 조회하고, 직전 조회가 찾은 패키지를 내려받아 매니페스트가 선언한 SHA-256과 크기로 확인합니다. 서명 검증, 설치와 재시작은 하지 않습니다.
+이 플러그인은 업데이트가 있는지 조회하고, 직전 조회가 찾은 패키지를 내려받아 매니페스트가 선언한 SHA-256과 크기로 확인합니다. 앱이 게시자를 고정하면 Windows 설치 파일의 Authenticode 서명도 확인합니다. 설치와 재시작은 하지 않습니다.
 
 ```ts
 import updater from "@bunaway/plugin-updater";
@@ -35,7 +35,10 @@ if (update.updateAvailable) {
   "plugins": {
     "updater": {
       "endpoint": "https://updates.example.com/{{target}}/{{arch}}/{{channel}}/{{current_version}}",
-      "channel": "stable"
+      "channel": "stable",
+      "authenticode": {
+        "publisherNames": ["Example Corp"]
+      }
     }
   }
 }
@@ -47,6 +50,13 @@ if (update.updateAvailable) {
   요청 주소의 호스트가 달라지는 템플릿(스킴이나 호스트 안의 자리표시자, 호스트 앞의 `\` 등), 사용자 정보
   (`user:pass@`), 프래그먼트는 거부합니다.
 - `channel`: 소문자 영숫자와 `-`로 된 32자 이하 이름이며 기본값은 `stable`입니다.
+- `authenticode`(선택): 받은 설치 파일이 이 게시자의 유효한 Authenticode 서명을 가져야 `download`가 성공하게 합니다.
+  `publisherNames`는 1개에서 8개의 문자열이고 각각 256자 이하입니다. 하나라도 서명한 인증서의 subject와 맞으면 통과합니다.
+  `=`가 없는 항목은 인증서 subject의 CN(common name)과 정확히 같아야 합니다. `=`가 있는 항목은
+  `CN=Example Corp, O=Example Corp, C=US`처럼 RFC 2253 형식의 distinguished name으로 읽고, 적은 속성이
+  모두 subject에 같은 값으로 있어야 합니다(적지 않은 속성은 보지 않습니다). 비교는 대소문자를 구분하고 값을 정규화하지
+  않으며 부분 일치나 접두 일치를 허용하지 않습니다. 형식이 잘못된 항목은 어댑터를 만들 때 `INVALID_ARGUMENT`입니다.
+  설정이 없으면 SHA-256과 크기만 확인합니다.
 - `target`은 Windows가 `windows`, macOS가 `darwin`이고 `arch`는 `x86_64` 또는 `aarch64`입니다.
   이 값은 앱이 아니라 실행 중인 호스트에서 정해집니다. 다른 CPU에서는 `UNSUPPORTED`입니다.
   자리표시자를 가장 긴 값으로 채웠을 때 주소가 4096자를 넘을 수 있는 템플릿도 어댑터를 만들 때 거부합니다.
@@ -121,9 +131,39 @@ interface UpdaterDownloadResult {
 - 한 번에 하나만 받을 수 있고 실행 중에 다시 부르면 `BUSY`(`downloadInProgress`)입니다. 호출을 취소하면 `CANCELLED`입니다.
   다운로드 중에는 호스트의 자동 종료가 미뤄집니다.
 - 반환하는 `path`에는 사용자 이름이 들어갈 수 있습니다. 화면에 경로를 보이지 않으려면 백엔드 앱 명령 안에서 호출하고 필요한 값만 넘기세요.
-- SHA-256은 전송 오류와 전송 중 변조를 찾아냅니다. 매니페스트와 패키지가 같은 서버에서 오면 서버가 침해됐을 때는 막지 못하며,
-  패키지를 만든 쪽을 증명하려면 서명 검증이 필요합니다(후속 작업).
+- SHA-256은 전송 오류와 전송 중 변조를 찾아냅니다. 매니페스트와 패키지가 같은 서버에서 오면 서버가 침해됐을 때는 막지 못하므로,
+  패키지를 만든 쪽을 증명하려면 아래 `authenticode` 설정으로 게시자를 고정합니다.
 - 진행률 이벤트는 없습니다. 플러그인 이벤트를 WebView로 보내는 서비스가 이 플러그인이 실행되는 워커에 주입되지 않기 때문입니다.
+
+### 게시자 서명 검증
+
+`plugins.updater.authenticode`를 설정하면 `download`는 해시와 크기가 맞은 파일에 대해 Windows `WinVerifyTrust`
+(`WINTRUST_ACTION_GENERIC_VERIFY_V2`, UI 없음)로 Authenticode 서명을 확인하고, 서명자 인증서가 `publisherNames`에 맞을 때만
+성공합니다. 새로 받은 파일은 `<sha256>.partial` 상태에서 확인한 뒤 최종 이름으로 바꾸므로 거부된 파일은 최종 이름을 갖지
+않습니다. 이미 있는 파일을 재사용할 때도 다시 확인합니다. 호출자가 경로를 넘기지 않고 `download`가 만든 앱 전용 폴더의 파일만
+확인하므로 별도의 검증 연산은 없습니다.
+
+- 대상은 PE 파일(exe)과 MSI 파일입니다. 형식은 파일 이름이 아니라 처음 몇 바이트로 판별하며, 둘 다 아니면 서명을 확인할 수
+  없으므로 `UNSUPPORTED`(`signatureUnsupported`)로 거부합니다. 설정이 없으면 형식을 따지지 않습니다.
+- 서명이 없으면 `signatureMissing`, 서명이 깨졌거나 변조됐거나 폐기됐거나 신뢰하는 루트로 이어지지 않으면 `signatureUntrusted`,
+  서명은 유효하지만 서명자가 목록에 없으면 `publisherMismatch`입니다. 모두 `INTERNAL`이며 받은 파일을 지웁니다.
+- 인증서 체인은 루트를 뺀 모든 인증서의 폐기 여부를 확인합니다. 폐기 확인 서버에 닿지 못해 상태를 알 수 없으면 통과시키지
+  않고 `revocationUnavailable`로 실패하므로, 앱은 네트워크가 돌아온 뒤 `download`를 다시 부를 수 있습니다. 서명 시각에 대한
+  타임스탬프가 유효하면 서명 인증서가 만료된 뒤에도 서명은 유효합니다(Windows의 기본 정책).
+- 검증을 켠 앱에서는 확인할 수 없는 경우(검증 호출 실패, 시간 초과, 서명 없음, 형식 불일치)가 모두 실패입니다. 검증을 건너뛰고
+  통과하는 경로는 없습니다.
+- 오류 메시지와 `details`에는 인증서 subject, 지문, 파일 경로, 운영체제 오류 코드를 넣지 않습니다.
+- 검증은 별도 스레드(Worker)에서 실행해 호스트의 다른 요청을 막지 않습니다. 호출을 취소하거나 시간이 지나면 호출자는 곧바로
+  돌아오고, 이미 시작된 네이티브 호출은 끝난 뒤 정리됩니다. 동시에 남아 있을 수 있는 검증은 2개이며 넘으면 `INTERNAL`
+  (`verifierBusy`)입니다.
+- 인증서 지문이나 공개 키 해시는 고정하지 않습니다. 인증서를 갱신하면 이미 배포된 앱이 새 설치 파일을 받지 못하기 때문입니다.
+  대신 이름을 고정하므로, 같은 인증 기관이 같은 이름의 인증서를 다른 조직에 발급하면 통과합니다. 갱신 중에는
+  `publisherNames`에 이전 이름과 새 이름을 함께 둘 수 있습니다.
+- 검증이 끝난 뒤 설치 전에 같은 사용자 권한의 다른 프로세스가 파일을 바꾸는 것은 막지 않습니다. 설치 단계는 실행 직전에
+  다시 확인해야 합니다.
+- macOS에는 서명 검증이 없습니다. 설정이 있는 앱은 macOS에서 요청을 보내기 전에 `UNSUPPORTED`(`signatureUnsupported`)로
+  실패하므로, macOS용 검증이 생길 때까지 `download`를 쓸 수 없습니다. `check`는 그대로 동작합니다.
+- 서명 전용 앱 키(minisign 방식)는 지원하지 않습니다.
 
 ## 요청과 오류
 
@@ -133,10 +173,10 @@ interface UpdaterDownloadResult {
 
 | 코드 | `details.reason` |
 | --- | --- |
-| `UNSUPPORTED` | `notConfigured`, `appVersionMissing`, `appVersionInvalid`, `unsupportedArch`, `notChecked`, `integrityMissing`, `notAvailable`(업데이트 폴더를 제공하지 않는 어댑터) |
+| `UNSUPPORTED` | `notConfigured`, `appVersionMissing`, `appVersionInvalid`, `unsupportedArch`, `notChecked`, `integrityMissing`, `notAvailable`(업데이트 폴더를 제공하지 않는 어댑터), `signatureUnsupported` |
 | `TIMEOUT` | 제한 시간 초과 |
 | `CANCELLED` | 호출 취소, 어댑터 dispose |
-| `INTERNAL` | `network`, `httpStatus`(`details.status`), `redirectLimit`, `redirectScheme`, `tooLarge`, `invalidJson`, `invalidManifest`, `invalidVersion`, `platformMissing`, `integrityInvalid`, `integrityMismatch`, `sizeMismatch`, `storage` |
+| `INTERNAL` | `network`, `httpStatus`(`details.status`), `redirectLimit`, `redirectScheme`, `tooLarge`, `invalidJson`, `invalidManifest`, `invalidVersion`, `platformMissing`, `integrityInvalid`, `integrityMismatch`, `sizeMismatch`, `signatureMissing`, `signatureUntrusted`, `revocationUnavailable`, `publisherMismatch`, `verifierBusy`, `storage` |
 | `BUSY` | `downloadInProgress` |
 
 앱 버전은 패키지 `manifest.json`의 `app.version`(`ctx.app.version`과 같은 값)이며 기록되지 않았으면
@@ -148,4 +188,8 @@ interface UpdaterDownloadResult {
 압축 해제 후 크기 상한, 본문 전송 중 시간 초과와 등록된 플러그인의 호출 경로는 같은 컴퓨터의 loopback HTTP 서버로 확인합니다.
 `updater.download`는 주입한 `fetch`와 임시 데이터 폴더로 정상 저장, 해시와 크기 불일치, 선언 크기 초과, 취소, 시간 초과,
 dispose, 재사용과 변조 감지, 정리 범위를 확인합니다. 실제 업데이트 서버와의 왕복은 검증하지 않았습니다.
-서명 검증과 설치는 후속 작업입니다.
+게시자 서명 검증은 Linux에서 검증기 대역으로 설정 검사, 게시자 대조, 결과별 오류와 파일 삭제, 취소, 워커 상한을 확인하고,
+Windows CI에서 실제 `WinVerifyTrust`로 확인합니다. Windows 시험은 CI 실행기에 자체 서명 코드 서명 인증서를 신뢰 루트로 넣고
+서명한 exe와 MSI, 서명 없는 파일, 변조한 파일, 신뢰되지 않는 인증서, 형식이 다른 파일을 검사합니다. 운영 인증 기관 체인,
+실제 폐기 서버 응답과 오프라인에서의 `revocationUnavailable`, 타임스탬프로 만료 인증서를 허용하는 동작은 실행하지 않았습니다.
+설치는 후속 작업입니다.
