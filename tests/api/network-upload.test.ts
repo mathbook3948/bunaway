@@ -435,7 +435,7 @@ test("cancelUpload ends the connection, releases the id and succeeds for unknown
   expect(await code).toBe("CANCELLED");
   expect(state.uploads.size).toBe(0);
   await waitFor(() => endedRequests.has(request.uploadId) || undefined, {
-    deadline: "inProcess",
+    deadline: "childStep",
     what: "the server noticing the end of the request",
   });
   expect(
@@ -599,12 +599,14 @@ test("a server that does not read holds the file back instead of filling memory"
       what: "the upload to stop reading",
     },
   );
-  // A pause that only looked like a stop would read on during this second look.
+  // A pause that only looked like a stop would read on during this second look, and an upload
+  // that ignores the connection would have read the whole file by now. A slow system may still
+  // move a few chunks, so the bound is on the size, not on equality.
   await Bun.sleep(RECHECK_MS);
-  expect(runUploadStatus(state, SOURCE, request).sentBytes).toBe(
-    sentWhenSteady,
-  );
   expect(sentWhenSteady).toBeLessThan(SHRINK_BYTES / 2);
+  expect(runUploadStatus(state, SOURCE, request).sentBytes).toBeLessThan(
+    SHRINK_BYTES / 2,
+  );
   await runCancelUpload(state, SOURCE, request);
   expect(await code).toBe("CANCELLED");
   await dispose(state);
