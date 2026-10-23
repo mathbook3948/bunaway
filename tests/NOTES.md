@@ -133,6 +133,10 @@ compile하고 원본 파일을 제거한 뒤 실행한다. 실제 macOS native C
 WebView의 `log.configure`와 `log.flush` 거부, manifest의 등록한 작업과 기능 목록의 일치
 및 정상 종료를 검사한다. `run-native.ts`에 포함하며 결과와 앱 데이터 진단은
 `build/macos-log-capabilities-results.json`과 `build/macos-log-capabilities-diagnostics/`에 남긴다.
+`macos-autostart-host.ts`는 shared Bun과 ad-hoc 서명한 compiled 앱의 백엔드에서 autostart의 등록, 반복 등록,
+숨김 시작 거부, 해제와 재실행 뒤 조회를 실행하고 `~/Library/LaunchAgents`의 plist를 `plutil -lint`와
+`plutil -convert json`으로 검사한다. `run-native.ts`에 포함하며 결과와 진단은 `build/macos-autostart-results.json`과
+`build/macos-autostart-diagnostics/`에 남긴다.
 앱과 화면의 코드는 `fixtures/macos-log-capabilities/`의 타입 검사 대상이며 실행 전
 정책 권한 이름도 실제 설치된 플러그인 계약으로 검사한다.
 

@@ -221,5 +221,6 @@ setup에서는 루트 `backend.permissions`를 사용합니다. 실행 파일이
 macOS는 사용자 LaunchAgent 등록, 조회와 해제를 지원합니다. SMAppService 로그인 항목은 서명된 앱
 번들과 macOS 13 이상이 필요해 사용하지 않습니다. 숨김 시작, 로그인 항목 활성 상태 조회,
 업데이트 뒤 등록 유지와 App Sandbox는 지원하지 않습니다. 임시 홈 디렉터리에서 plist를
-쓰고 읽는 동작은 테스트로 검증했지만 실제 로그인 때 launchd가 앱을 실행하는지는 검증하지 않았습니다.
+쓰고 읽는 동작은 테스트로 검증했습니다. macOS CI는 shared Bun과 ad-hoc 서명한 compiled 앱을 실행해 등록, 반복 등록,
+해제, 재실행 뒤 조회와 `plutil`의 plist 검사를 확인합니다. 실제 로그인 때 launchd가 앱을 실행하는지는 검증하지 않았습니다.
 MSIX, Linux와 모바일은 지원하지 않습니다.
