@@ -217,6 +217,7 @@ if (target === "windows-x64") {
       "dev-hide",
       "dev-pending",
       "lifecycle",
+      "boot-forward-lifecycle",
       "dev-lifecycle",
     ]) {
       await test("windows-desktop.ts", [

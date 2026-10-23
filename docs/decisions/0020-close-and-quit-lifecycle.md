@@ -202,6 +202,7 @@ Linux에서는 훅 순서와 기한, 세션 메시지 처리기, 이벤트와 �
 계약 테스트로 확인한다. 이 통과는 실제 Windows 동작의 검증이 아니다.
 실제 Windows 동작은 windows-native CI에서 실행한다. `tests/lifecycle/windows-desktop.ts`의
 `lifecycle`, `dev-lifecycle` 시나리오가 훅 순서와 종료 원인을 확인하고,
+`boot-forward-lifecycle`이 부팅 중 전달된 요청의 순서를 확인하며,
 `tests/lifecycle/windows-session-end.ts`의 `window`, `control`, `tray` 시나리오가 실제 HWND에
 세션 종료 메시지를 보낸다. `tests/lifecycle/windows-multiple-windows.ts`는 여러 창의
 `windows.lifecycle`을, `tests/lifecycle/windows-close-request.ts`는 닫기 요청 흐름을 실행한다.

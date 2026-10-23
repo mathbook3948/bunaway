@@ -1,6 +1,7 @@
 import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
@@ -25,6 +26,7 @@ import {
 } from "#native/windows/bun/instance";
 import { containAppProcess } from "#native/windows/bun/job";
 import { testAppMetadata } from "../fixtures/app-info.ts";
+import { waitFor } from "../fixtures/deadlines.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
@@ -101,6 +103,8 @@ const devShutdown = scenario.startsWith("dev-");
 const devPending = scenario === "dev-pending";
 // Close-lifecycle scenarios run a keep-alive app that logs every lifecycle hook.
 const closeLifecycle = scenario.endsWith("lifecycle");
+// A second launch forwarded while the first app is still booting, before onReady is queued.
+const bootForward = scenario === "boot-forward-lifecycle";
 /** Hook events whose relative order the parent verifies. */
 const lifecycleEvents = [
   "ready",
@@ -110,10 +114,43 @@ const lifecycleEvents = [
   "desktop-stopped",
   "quit",
 ];
+/** Hook order the parent expects from a close-lifecycle scenario. */
+const expectedHookOrder = () => {
+  if (bootForward) {
+    return [
+      "booting",
+      "ready",
+      "opened",
+      "opened-second-instance",
+      "all-windows-closed",
+      "will-quit:api",
+      "desktop-stopped",
+      "quit:api",
+    ];
+  }
+  if (devShutdown) {
+    return [
+      "ready",
+      "opened",
+      "will-quit:interrupted",
+      "desktop-stopped",
+      "quit:interrupted",
+    ];
+  }
+  return [
+    "ready",
+    "opened",
+    "all-windows-closed",
+    "will-quit:api",
+    "desktop-stopped",
+    "quit:api",
+  ];
+};
 const repoRoot = process.argv.includes("--repo")
   ? (process.argv[process.argv.indexOf("--repo") + 1] ?? "")
   : resolve(import.meta.dir, "../..");
 const root = resolve(repoRoot, `build/windows-desktop-${scenario}`);
+const forwardedMarker = resolve(root, "forwarded-during-boot");
 if (!process.argv.includes("--child")) {
   await mkdir(resolve(root, "web"), {
     recursive: true,
@@ -133,6 +170,9 @@ if (!process.argv.includes("--child")) {
     resolve(root, "web/index.html"),
     '<!doctype html><title>Desktop lifecycle</title><script type="module" src="app.js"></script>',
   );
+  await rm(forwardedMarker, {
+    force: true,
+  });
   const childEntry = await bundleNativeWorker(
     "windows-desktop",
     root,
@@ -199,6 +239,7 @@ if (!process.argv.includes("--child")) {
   let sessionCount = 0;
   let quitCount = 0;
   let stopped = false;
+  let bootForwardError: unknown;
   const hookOrder: string[] = [];
   const decoder = new TextDecoder();
   /** One JSON line the child app prints; only the fields the scenario reads are listed. */
@@ -225,6 +266,15 @@ if (!process.argv.includes("--child")) {
     ) {
       hookOrder.push(
         event.reason ? `${event.event}:${event.reason}` : event.event,
+      );
+    }
+    if (
+      bootForward &&
+      (event.event === "booting" ||
+        (event.event === "opened" && event.source === "second-instance"))
+    ) {
+      hookOrder.push(
+        event.event === "booting" ? event.event : "opened-second-instance",
       );
     }
     if (event.event === "desktop-stopped") {
@@ -274,6 +324,10 @@ if (!process.argv.includes("--child")) {
       api.symbols.IsWindowVisible(hwnd),
       "ordinary startup should retain declared visibility",
     );
+    if (bootForward) {
+      // The window is closed after the request forwarded during boot has been delivered.
+      return;
+    }
     if (devShutdown && !devPending) {
       assert.equal(
         await closeWindowsApp(child.pid),
@@ -310,6 +364,9 @@ if (!process.argv.includes("--child")) {
     assert.deepEqual(event.urls, [
       "memo://open/42",
     ]);
+    if (bootForward) {
+      assert(api.symbols.PostMessageW(hwnd, 0x10, 0n, 0n));
+    }
     if (trayLifecycle) {
       assert(
         hiddenStart ? !api.symbols.IsZoomed(hwnd) : api.symbols.IsZoomed(hwnd),
@@ -344,6 +401,19 @@ if (!process.argv.includes("--child")) {
       await forwardFromChild([
         "memo://open/42",
       ]);
+    } else if (event.event === "booting") {
+      try {
+        await forwardFromChild([
+          "memo://open/42",
+        ]);
+      } catch (error) {
+        // Report the delivery failure itself instead of the child's later boot timeout.
+        bootForwardError = error;
+        child.kill();
+        return;
+      }
+      // The forwarding is acknowledged once queued; only now may the child finish booting.
+      await writeFile(forwardedMarker, "");
     } else if (event.event === "opened" && event.source === "second-instance") {
       await onSecondInstanceOpen(event);
     }
@@ -369,7 +439,11 @@ if (!process.argv.includes("--child")) {
   const errors = new Response(child.stderr).text();
   const timer = setTimeout(() => child.kill(), devShutdown ? 20000 : 60000);
   try {
-    assert.equal(await child.exited, 0, await errors);
+    const exitCode = await child.exited;
+    if (bootForwardError) {
+      throw bootForwardError;
+    }
+    assert.equal(exitCode, 0, await errors);
     await stream;
     assert(stopped, "CLI shutdown must run plugin cleanup");
     if (devShutdown) {
@@ -385,25 +459,8 @@ if (!process.argv.includes("--child")) {
     }
     if (closeLifecycle) {
       // onReady settles before the initial open; shutdown hooks bracket the plugin stop hook.
-      assert.deepEqual(
-        hookOrder,
-        devShutdown
-          ? [
-              "ready",
-              "opened",
-              "will-quit:interrupted",
-              "desktop-stopped",
-              "quit:interrupted",
-            ]
-          : [
-              "ready",
-              "opened",
-              "all-windows-closed",
-              "will-quit:api",
-              "desktop-stopped",
-              "quit:api",
-            ],
-      );
+      // A request forwarded during boot is delivered after the initial open, never before onReady.
+      assert.deepEqual(hookOrder, expectedHookOrder());
     }
     assert.equal(
       sessionCount,
@@ -448,7 +505,21 @@ if (!process.argv.includes("--child")) {
           {
             name: "desktop-test",
             version: "1",
-            setup(context) {
+            async setup(context) {
+              if (bootForward) {
+                // Plugin setup runs while Core boots, before the host starts the UI and calls ready().
+                // Boot waits for the parent's marker, so the request is always held by the inbox.
+                console.log(
+                  JSON.stringify({
+                    event: "booting",
+                  }),
+                );
+                await waitFor(() => existsSync(forwardedMarker), {
+                  deadline: "childStep",
+                  what: "a request forwarded during boot",
+                  intervalMs: 20,
+                });
+              }
               emitReopen = () =>
                 context.events.emit("test.reopen", null, {
                   kind: "broadcast",
