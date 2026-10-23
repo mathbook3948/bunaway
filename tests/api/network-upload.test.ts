@@ -421,20 +421,11 @@ test("cancelUpload ends the connection, releases the id and succeeds for unknown
   const state = initialize();
   // A plain socket shows the connection itself closing, whatever the HTTP server reports.
   let connectionClosed = false;
-  let held:
-    | {
-        resume(): void;
-      }
-    | undefined;
   const sink = Bun.listen({
     hostname: "127.0.0.1",
     port: 0,
     socket: {
-      // Stops reading after the first bytes, so the upload is held back mid-body like a busy server.
-      data(socket) {
-        held = socket;
-        socket.pause();
-      },
+      data() {},
       close() {
         connectionClosed = true;
       },
@@ -444,27 +435,17 @@ test("cancelUpload ends the connection, releases the id and succeeds for unknown
     const request = uploadInputSchema.parse({
       uploadId: crypto.randomUUID(),
       url: `http://127.0.0.1:${sink.port}/`,
-      path: fileOf("cancel.bin", Buffer.alloc(SHRINK_BYTES)),
+      path: fileOf("cancel.bin", Buffer.alloc(LARGE_BYTES)),
     });
     const pending = runUpload(state, SOURCE, request);
     const code = codeOf(pending);
     await firstChunk(state, request);
-    // Cancelling before the server has taken bytes would end a connection that never carried any.
-    await waitFor(() => held !== undefined || undefined, {
-      deadline: "inProcess",
-      what: "the server taking the first bytes",
-    });
-    // The server reads no further, so the cancel ends a transfer with most of the file unsent.
-    expect(runUploadStatus(state, SOURCE, request).sentBytes).toBeLessThan(
-      SHRINK_BYTES,
-    );
     expect(await runCancelUpload(state, SOURCE, request)).toEqual({});
     expect(await code).toBe("CANCELLED");
     expect(state.uploads.size).toBe(0);
-    // A paused socket reports the end of the connection only once it reads again.
-    held?.resume();
     // On macOS runners the socket close arrives later than the two second in-process limit, so
-    // this wait uses the longer limit.
+    // this wait uses the longer limit. A transfer held back mid-body is cancelled by the tests
+    // that use the never-reading route; this one checks that the connection itself closes.
     await waitFor(() => connectionClosed || undefined, {
       deadline: "childStep",
       what: "the connection closing",
