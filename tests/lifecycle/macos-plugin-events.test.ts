@@ -65,5 +65,8 @@ test("a macOS plugin event with a required operation also needs the view's host 
       },
     },
   ]);
+  // Granted to view a but not registered by any plugin: nothing is delivered.
   expect(result.unknownOperation).toEqual([]);
+  // The permission is read again at every emit, so a revoked grant stops delivery.
+  expect(result.afterRevoke).toEqual([]);
 });

@@ -261,7 +261,7 @@ test("online watcher survives a failing baseline read and takes the baseline lat
   ]);
 });
 
-test("initialize watches only with system events, publishes the event with its read grant and stops on dispose", async () => {
+test("initialize on a host without event services does not watch; with system events it publishes the event with its read grant and stops on dispose", async () => {
   const fake = fakeWatchHost(true);
   const seams = {
     read: fake.host.read,

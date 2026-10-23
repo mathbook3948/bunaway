@@ -69,6 +69,12 @@ const windowSpec = (view: string) => ({
   },
 });
 const READ = "plugin.read";
+// Granted to view a but never registered, like an operation no installed plugin declares.
+const UNREGISTERED = "plugin.unregistered";
+const registered = new Set([
+  READ,
+]);
+let readRevoked = false;
 const policyView = (id: string, permissions: string[] = []) => ({
   id,
   origins: [
@@ -103,6 +109,7 @@ const config = {
     views: [
       policyView("a", [
         READ,
+        UNREGISTERED,
       ]),
       policyView("b"),
       policyView("c", [
@@ -142,7 +149,10 @@ const windows = new MacosWindows(
       call: {
         operation: string;
       },
-    ) => host.permissions.includes(call.operation),
+    ) =>
+      registered.has(call.operation) &&
+      !(readRevoked && call.operation === READ) &&
+      host.permissions.includes(call.operation),
     nativeEvent: async (
       packet: Extract<
         Packet,
@@ -256,9 +266,19 @@ windows.emitPluginEvent(
   {
     count: 4,
   },
-  "plugin.unregistered",
+  UNREGISTERED,
 );
 const unknownOperation = delivered.splice(0);
+// The grant is checked at every emit: once revoked, the subscribed view stops receiving.
+readRevoked = true;
+windows.emitPluginEvent(
+  EVENT,
+  {
+    count: 5,
+  },
+  READ,
+);
+const afterRevoke = delivered.splice(0);
 stopping = true;
 windows.emitPluginEvent(EVENT, {
   count: 2,
@@ -268,6 +288,7 @@ console.log(
     whileRunning,
     withGrant,
     unknownOperation,
+    afterRevoke,
     whileStopping: delivered,
   }),
 );
