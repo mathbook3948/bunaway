@@ -121,7 +121,7 @@ UI Automation 클라이언트 연결 변화는 OS 알림이 없고 폴링 비용
 
 ## Windows 앱 테마
 
-`appearance.getTheme()`와 `appearance.setTheme({ theme })`는
+`appearance.getTheme(null)`와 `appearance.setTheme({ theme })`는
 신뢰된 백엔드에서 호출합니다. 각각 `appearance.getTheme`, `appearance.setTheme` 권한이
 필요하며 화면에서 직접 호출하거나 화면 명령의 호출 권한을 이어받으면 `PERMISSION_DENIED`입니다.
 이 API는 Windows의 기본 창 프레임과 웹 콘텐츠의 `prefers-color-scheme`을 함께 제어합니다.
@@ -131,7 +131,7 @@ HTML/CSS와 Windows 사용자 설정은 변경하지 않습니다. 웹 콘텐츠
 ```ts
 // 신뢰된 백엔드의 시작 또는 백그라운드 작업에서 호출합니다.
 await appearance.setTheme({ theme: "dark" });
-const appTheme = await appearance.getTheme();
+const appTheme = await appearance.getTheme(null);
 // system은 앱 지정을 지워 OS 설정을 다시 따릅니다.
 await appearance.setTheme({ theme: "system" });
 ```
@@ -176,14 +176,14 @@ INTERNAL을 반환하며 다음 변경 알림에서 다시 적용합니다. 실�
 
 ## macOS 앱 테마
 
-`appearance.getTheme()`와 `appearance.setTheme({ theme })`는
+`appearance.getTheme(null)`와 `appearance.setTheme({ theme })`는
 신뢰된 백엔드에서 호출하며 권한 조건은 Windows와 같습니다. 앱 전체 `NSApplication.appearance`를
 지정하므로 앱의 모든 창과 WKWebView 콘텐츠의 `prefers-color-scheme`이 함께 바뀝니다.
 macOS 사용자 설정과 HTML/CSS는 변경하지 않습니다.
 
 ```ts
 await appearance.setTheme({ theme: "dark" });
-const state = await appearance.getTheme();
+const state = await appearance.getTheme(null);
 // system은 앱 지정을 지워 OS 설정을 다시 따릅니다.
 await appearance.setTheme({ theme: "system" });
 ```
