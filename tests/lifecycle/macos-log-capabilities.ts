@@ -95,7 +95,6 @@ try {
         "test.waitDenied",
         "test.report",
         "test.writeFailure",
-        "test.configure",
         "plugin.log.write",
         "plugin.log.configure",
         "plugin.log.flush",
@@ -289,19 +288,23 @@ try {
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line));
-  assert.equal(records.length, 36);
+  assert.equal(records.length, 37);
   assert.equal(records[0].source, "backend");
   assert.equal(records[0].message, "backend-ready");
+  // The backend raised the minimum level to warn: the info record is dropped, the warning kept.
+  assert.equal(records[1].source, "backend");
+  assert.equal(records[1].level, "warn");
+  assert.equal(records[1].message, "kept-warn");
   assert(
     records
-      .slice(1, 33)
+      .slice(2, 34)
       .every(
         (record) =>
           record.source === "view:main" && record.message === "renderer",
       ),
   );
   assert.deepEqual(
-    records.slice(1, 33).map((record) => record.details.index),
+    records.slice(2, 34).map((record) => record.details.index),
     Array.from(
       {
         length: 32,
@@ -309,36 +312,20 @@ try {
       (_, index) => index,
     ),
   );
-  assert.equal(records[33].message, "recovered");
+  assert.equal(records[34].message, "recovered");
   for (let index = 0; index < 2; index++) {
-    assert.equal(records[34 + index].source, "view:main");
-    assert.equal(records[34 + index].message, `large-${index}`);
-    assert.equal(records[34 + index].details.text, "x".repeat(524288));
+    assert.equal(records[35 + index].source, "view:main");
+    assert.equal(records[35 + index].message, `large-${index}`);
+    assert.equal(records[35 + index].details.text, "x".repeat(524288));
   }
   const active = (await Bun.file(resolve(dataRoot, "logs/app.log")).text())
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line));
-  // The backend raised the minimum level to warn, so only the warning follows the renderer record.
-  assert.deepEqual(
-    active.map((record) => [
-      record.source,
-      record.level,
-      record.message,
-    ]),
-    [
-      [
-        "view:main",
-        "info",
-        "after-rotation",
-      ],
-      [
-        "backend",
-        "warn",
-        "kept-warn",
-      ],
-    ],
-  );
+  assert.equal(active.length, 1);
+  assert.equal(active[0].message, "after-rotation");
+  assert.equal(active[0].source, "view:main");
+
   assert.deepEqual(
     (await readdir(resolve(dataRoot, "logs")))
       .filter((name) => name.startsWith("app.log"))
