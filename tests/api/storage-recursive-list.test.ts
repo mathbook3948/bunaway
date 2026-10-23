@@ -3,6 +3,7 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -236,6 +237,35 @@ test("a directory far wider than a page lists the same through any page size and
   expect(tail.entries).toEqual(
     whole.entries.slice(paths(whole.entries).indexOf("29") + 1),
   );
+});
+
+test("children that vanish during the scan are skipped and the window is read again without repeats", async () => {
+  createWideTree();
+  const scan = list(undefined, 1);
+  // The scan yields to the event loop while it reads the root; remove the names below "30" then.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  for (let index = 0; index < 30; index++) {
+    rmSync(at(String(index).padStart(2, "0")), {
+      recursive: true,
+      force: true,
+    });
+  }
+  const pages: StorageRecursivePage[] = [];
+  let page = await scan;
+  pages.push(page);
+  while (page.next !== null) {
+    page = await list(page.next, 1);
+    pages.push(page);
+  }
+  const listed = pages.flatMap((entry) => paths(entry.entries));
+  const remaining = readdirSync(root, {
+    recursive: true,
+  })
+    .map(String)
+    .map((path) => path.replaceAll(sep, "/"))
+    .toSorted();
+  expect(listed).toEqual(remaining);
+  expect(new Set(listed).size).toBe(listed.length);
 });
 
 test("a page reads each directory on its way once however wide it is", async () => {

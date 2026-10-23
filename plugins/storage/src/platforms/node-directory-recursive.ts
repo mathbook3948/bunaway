@@ -26,8 +26,8 @@ export type RecursiveListRequest = {
 
 /**
  * A directory being walked: a window of its children in name order and the next child to visit.
- * Only the first names at or after the cursor are held, so memory follows the page size and not the
- * directory size. `more` is set when later children were left out; the window is read again from
+ * Only the first names at or after the cursor are held, so memory follows the page size and the
+ * depth (at most one window per directory on the current path), not the directory size. `more` is set when later children were left out; the window is read again from
  * after its last name once it is used up. `resume` is the part of the cursor still below this
  * directory; children that sort before its first component were already returned.
  */
