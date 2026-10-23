@@ -141,8 +141,10 @@ export type DesktopOptions = {
      * like the icon passed to Electron's `Tray` constructor or Tauri's `trayIcon` configuration.
      * Absolute paths, drive or UNC prefixes, URLs and `..` segments are rejected, and a symlink must
      * not leave the resources directory. Without it the tray uses the app icon. Startup fails with
-     * `INVALID_ARGUMENT` when the file is missing or is not a valid ICO. Only Windows has a tray;
-     * the other platforms do not implement `desktop.tray` and ignore no field of it.
+     * `INVALID_ARGUMENT` when the file is missing or is not a valid ICO. The app ships the file
+     * into that directory (next to the executable in a Windows package); the build does not copy it.
+     * Only Windows implements `desktop.tray`; macOS rejects the option at startup with
+     * `UNSUPPORTED` and there is no Linux host.
      */
     readonly icon?: string;
   };

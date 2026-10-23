@@ -48,3 +48,56 @@ test.skipIf(process.platform !== "win32")(
     }
   },
 );
+
+test.skipIf(process.platform !== "win32")(
+  "the resources directory check follows Windows junctions, case and reserved names",
+  async () => {
+    const { mkdir, mkdtemp, rm, symlink, writeFile } = await import(
+      "node:fs/promises"
+    );
+    const { tmpdir } = await import("node:os");
+    const { resolve } = await import("node:path");
+    const { readTrayIcon } = await import("#native/windows/bun/tray-icon");
+    const base = await mkdtemp(resolve(tmpdir(), "bunaway-tray-icon-"));
+    try {
+      const root = resolve(base, "resources");
+      const outside = resolve(base, "outside");
+      await mkdir(resolve(root, "Icons"), {
+        recursive: true,
+      });
+      await mkdir(outside);
+      await writeFile(resolve(root, "Icons", "tray.ico"), trayIco());
+      await writeFile(resolve(outside, "secret.ico"), trayIco());
+      const expected = trayIco().toString("base64");
+      expect(await readTrayIcon(root, "Icons/tray.ico")).toBe(expected);
+      expect(await readTrayIcon(root, "icons\\TRAY.ICO")).toBe(expected);
+      expect(await readTrayIcon(root.toUpperCase(), "Icons/tray.ico")).toBe(
+        expected,
+      );
+      await symlink(outside, resolve(root, "linked"), "junction");
+      await expect(readTrayIcon(root, "linked/secret.ico")).rejects.toThrow(
+        "outside the resources directory",
+      );
+      for (const icon of [
+        "Icons/CON",
+        "Icons/nul.ico",
+        "Icons/tray.ico::$DATA",
+        "Icons/tray.ico.",
+        "..\\outside\\secret.ico",
+        "\\\\?\\C:\\Windows\\win.ini",
+      ]) {
+        await expect(readTrayIcon(root, icon)).rejects.toThrow(
+          "desktop.tray.icon",
+        );
+      }
+      await expect(readTrayIcon(root, "Icons")).rejects.toThrow(
+        "must be a file",
+      );
+    } finally {
+      await rm(base, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);

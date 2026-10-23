@@ -60,6 +60,10 @@ test("tray icon paths outside the resources directory are rejected", async () =>
     "icons/tray.ico:stream",
     "icons//tray.ico",
     "icons/tray.ico.",
+    "icons/CON",
+    "icons/nul.ico",
+    "COM1.ico",
+    "icons/tray.ico ",
     "icons/tray\0.ico",
     "",
     "x".repeat(300),
@@ -79,14 +83,17 @@ test("tray icon paths outside the resources directory are rejected", async () =>
 
 test("a symlink cannot lead a tray icon out of the resources directory", async () => {
   await resources(async (root, outside) => {
-    await symlink(
-      resolve(outside, "secret.ico"),
-      resolve(root, "icons", "link.ico"),
-    );
-    await expect(readTrayIcon(root, "icons/link.ico")).rejects.toThrow(
-      "outside the resources directory",
-    );
-    await symlink(outside, resolve(root, "linked"), "dir");
+    // Creating a file symlink needs a privilege on Windows; the junction below covers that platform.
+    if (process.platform !== "win32") {
+      await symlink(
+        resolve(outside, "secret.ico"),
+        resolve(root, "icons", "link.ico"),
+      );
+      await expect(readTrayIcon(root, "icons/link.ico")).rejects.toThrow(
+        "outside the resources directory",
+      );
+    }
+    await symlink(outside, resolve(root, "linked"), "junction");
     await expect(readTrayIcon(root, "linked/secret.ico")).rejects.toThrow(
       "outside the resources directory",
     );
@@ -107,6 +114,12 @@ test("a missing, non-file, oversized or invalid tray icon fails", async () => {
     await expect(readTrayIcon(root, "icons/bad.ico")).rejects.toThrow(
       "not a valid ICO",
     );
+    await expect(
+      readTrayIcon(resolve(root, "missing"), "icons/tray.ico"),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+      message: expect.not.stringContaining(root),
+    });
     await expect(readTrayIcon(undefined, "icons/tray.ico")).rejects.toThrow(
       "needs an app resources directory",
     );
