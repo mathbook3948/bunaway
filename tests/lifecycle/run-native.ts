@@ -315,6 +315,7 @@ if (target === "windows-x64") {
     );
     await test("macos-network.ts");
     await test("macos-log-capabilities.ts");
+    await test("macos-store.ts");
     await run(
       [
         inputs.bun,
