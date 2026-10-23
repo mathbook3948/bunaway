@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "build": {
+    "app": "src-bunaway/app.ts",
+    "frontend": "web-dist",
+    "command": ["bun", "run", "build:web"]
+  },
+  "app": {
+    "appId": "examples.bunaway.tray-notes",
+    "title": "bunaway tray notes",
+    "windows": [
+      {
+        "view": "main",
+        "title": "bunaway tray notes",
+        "home": "https://app.bunaway.local/index.html",
+        "visible": false,
+        "window": {
+          "width": 640,
+          "height": 480,
+          "minWidth": 320,
+          "minHeight": 240
+        }
+      }
+    ]
+  },
+  "dev": {
+    "command": ["bun", "run", "dev:web"],
+    "url": "http://127.0.0.1:5173/"
+  },
+  "bundle": {
+    "channels": {
+      "win-direct": {}
+    }
+  }
+}

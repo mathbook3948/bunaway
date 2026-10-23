@@ -157,6 +157,7 @@ iOS는 macOS arm64와 Xcode에서 `mise run host:ios -- <booted Simulator UUID>`
 설정과 제한은 [iOS CLI 문서](./docs/site/src/content/docs/reference/cli/ios.mdx)를 따른다.
 `mise run host:macos -- --app`은 회귀 앱의 `.app` 생성과 ad-hoc 서명을 추가한다.
 [메모 예제](examples/memo/README.md)는 CLI 생성 앱과 같은 구조이며 예제 폴더에서 `bun run dev`로 실행한다. `bun run build`는 웹 UI와 앱을 함께 빌드한다.
+[트레이 메모 예제](examples/tray-notes/README.md)는 트레이, `keep-alive`, window-state 저장, 닫기 요청을 함께 쓰는 단일 창 상주 앱이다.
 
 ## CI
 
@@ -195,7 +196,7 @@ native/     host-api/  windows/  macos/  linux/  android/  ios/
 runtime/    bun-bundle/  patches/  build-manifests/
 plugins/    log/  storage/
 templates/  vanilla/  react/  vue/  svelte/
-examples/   memo/  commands/  lifecycle/  permissions/
+examples/   memo/  tray-notes/  commands/  lifecycle/  permissions/
 tests/      protocol/  core/  conformance/  security/  lifecycle/
 docs/       architecture/  api/  platform-support/  decisions/  agents/
 ```

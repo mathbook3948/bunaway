@@ -30,6 +30,7 @@
 - [Android 호스트 구조와 실제 실행 검사](../native/android/README.md)
 - [Android Core/SDK와 Activity 재생성 실행 결과](./architecture/android-host-results.md)
 - [Windows 메모 샘플 실행 방법](../examples/memo/README.md)
+- [Windows 트레이 메모 샘플(단일 창 상주 앱)](../examples/tray-notes/README.md)
 
 ## 설계 결정
 
