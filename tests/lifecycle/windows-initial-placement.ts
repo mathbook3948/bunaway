@@ -341,9 +341,10 @@ if (!process.argv.includes("--child")) {
     });
     await checkCentered();
     const replacement = await currentWindowId();
+    // The declaration is centered, so a position without `center: false` conflicts with it.
     for (const window of [
       {
-        x: null,
+        x: 0,
       },
       {
         center: true,
