@@ -370,6 +370,18 @@ HRESULT는 unsigned 32비트 정수입니다. Show 자체가 실패하면 명령
 MSIX는 아직 `UNSUPPORTED`입니다. 클릭을 받아도 자동으로 창을 표시하거나 포커스를 바꾸지 않습니다.
 백엔드 이벤트 구독이나 `onOpen` 라우팅은 추가하지 않습니다.
 
+## 사용자 지정 toast XML
+
+`show`와 `schedule`은 toast XML을 받지 않습니다. `toastXml` 같은 필드는 엄격한 입력 검사에서
+`INVALID_ARGUMENT`로 거부됩니다. 플러그인이 본문, 아이콘, 이미지, 소리, 버튼과 입력란을 선언된 필드에서
+조립하고 모든 문자열을 이스케이프합니다.
+
+Electron은 Windows에서 `toastXml`로 XML 전체를 직접 지정할 수 있고 Tauri 알림 플러그인에는 이 옵션이 없습니다.
+bunaway는 이 옵션을 제공하지 않습니다. 임의 XML에서는 `launch`와 버튼의 `arguments`가 플러그인이 검증한
+activation 인자(id, group, 액션 id)를 대체하므로 `notification.actionInvoked`와 앱이 꺼진 뒤의
+`takeActivations` 전달이 깨지고, 이미지 `src`와 `activationType="protocol"`이 로컬 파일 검사와 URI 제한을
+우회합니다. 선언 필드로 표현되지 않는 내용은 필드를 추가하는 방식으로 제공합니다.
+
 ## 앱이 꺼진 뒤의 클릭
 
 ```ts

@@ -11,6 +11,7 @@ import {
   MAX_ACTIVE_TOASTS,
   MAX_EXPIRES_AFTER_SECONDS,
   type NotificationResult,
+  notificationScheduleSchema,
   notificationShowSchema,
   type ToastEvent,
 } from "#plugins/notification/src/contract";
@@ -818,4 +819,30 @@ test("WinRT ABI registers real delegates, copies callback values and retries fai
     ),
   ]);
   expect(child.exitCode, child.stderr.toString()).toBe(0);
+});
+
+test("show and schedule reject raw toast XML and other markup fields", () => {
+  const xml = '<toast launch="app://other"><visual/></toast>';
+  for (const field of [
+    "toastXml",
+    "xml",
+    "launch",
+    "activationType",
+  ]) {
+    expect(() =>
+      notificationShowSchema.parse({
+        id: "example",
+        title: "Hello",
+        [field]: xml,
+      }),
+    ).toThrow();
+    expect(() =>
+      notificationScheduleSchema.parse({
+        id: "example",
+        title: "Hello",
+        deliverAt: 1,
+        [field]: xml,
+      }),
+    ).toThrow();
+  }
 });
