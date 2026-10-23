@@ -168,8 +168,8 @@ const info = await image.getInfo({ id: logo1x.id, scaleFactor: 1.5 }); // 2배 �
 `extension`은 점으로 시작하는 1~31자의 확장자(예: `.txt`)입니다. 영문자, 숫자, `_`, `-`, `+`, `~`만
 허용하며 경로 구분자, NUL, 공백, `:`, 추가 점은 `INVALID_ARGUMENT`입니다. `size`는
 `small`(16), `normal`(32), `large`(48) 중 하나이고 값은 100% 배율의 픽셀 크기입니다. 화면 배율이
-높으면 셸 아이콘 목록의 크기를 따라 더 큰 정사각형 이미지가 반환될 수 있으므로 실제 크기는
-결과의 `width`, `height`를 사용하세요.
+높으면 Windows는 셸 아이콘 목록의 크기를 따라 더 큰 정사각형 이미지를 반환할 수 있으므로 실제 크기는
+결과의 `width`, `height`를 사용하세요. macOS는 항상 요청한 크기의 정사각형입니다.
 
 Windows는 셸에 등록된 확장자의 연결 아이콘을 `SHGFI_USEFILEATTRIBUTES`로 조회합니다.
 디스크의 파일이나 경로를 열지 않으므로 저장소 권한이 필요하지 않고 존재하지 않는 확장자도
@@ -177,7 +177,13 @@ Windows는 셸에 등록된 확장자의 연결 아이콘을 `SHGFI_USEFILEATTRI
 Electron의 `app.getFileIcon`은 실제 경로를 받아 임의 경로에 접근할 수 있지만 이 API는
 확장자만 받아 접근 범위를 줄였습니다. 결과는 straight RGBA이고 alpha 채널이 없는 아이콘은
 마스크로 투명도를 복원합니다. 결과 ID는 다른 생성과 같은 64개, 8 MiB quota와 명시적
-`image.dispose`, 생성 취소 규칙을 따릅니다. macOS는 `UNSUPPORTED`를 반환합니다.
+`image.dispose`, 생성 취소 규칙을 따릅니다.
+
+macOS arm64는 `NSWorkspace`의 `iconForFileType:`으로 확장자에 등록된 형식의 아이콘을 조회하고,
+요청한 크기의 정사각형으로 그려 straight RGBA로 반환합니다. 파일을 열지 않으므로 저장소
+권한이 필요하지 않고, 등록되지 않은 확장자도 오류 없이 아이콘을 반환합니다. 요청보다 큰
+표현이 선택되면 CoreGraphics의 낮은 품질 보간으로 줄이므로 작은 크기에서는 가장자리가 다소
+거칠 수 있습니다.
 
 ```ts
 const icon = await image.createFileTypeIcon({ extension: ".txt", size: "normal" });

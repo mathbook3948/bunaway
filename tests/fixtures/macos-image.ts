@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { deflateSync } from "node:zlib";
-import type { JsonValue } from "@bunaway/protocol";
+import { isRecord, type JsonValue } from "@bunaway/protocol";
 import { nativeFactory } from "./native-platform.ts";
 
 /** Build independent PNG inputs, including palette and grayscale layouts that the encoder never emits. */
@@ -130,6 +130,7 @@ const operationNames = [
   "getRepresentations",
   "crop",
   "resize",
+  "createFileTypeIcon",
 ].map((name) => `image.${name}`);
 
 /** Call helpers bound to one adapter: execution, resource ids, encoded bytes and error codes. */
@@ -265,6 +266,81 @@ async function checkOpaqueRoundTrip(
   await call("dispose", {
     id: decoded,
   });
+}
+
+/** Registered and unregistered extensions yield exact-size icons with visible, non-uniform pixels. */
+async function checkFileTypeIcons(
+  call: ReturnType<typeof createImageCalls>["call"],
+  error: ReturnType<typeof createImageCalls>["error"],
+) {
+  const edges = {
+    small: 16,
+    normal: 32,
+    large: 48,
+  };
+  for (const extension of [
+    ".txt",
+    ".png",
+    ".bunaway-unregistered",
+  ]) {
+    for (const [size, edge] of Object.entries(edges)) {
+      const created = await call("createFileTypeIcon", {
+        extension,
+        size,
+      });
+      assert(isRecord(created));
+      assert(typeof created.id === "string");
+      assert.deepEqual(
+        {
+          ...created,
+          id: undefined,
+        },
+        {
+          id: undefined,
+          width: edge,
+          height: edge,
+          empty: false,
+        },
+      );
+      const pixels = await call("getPixels", {
+        id: created.id,
+      });
+      assert(isRecord(pixels));
+      assert(typeof pixels.rgba === "string");
+      const rgba = Buffer.from(pixels.rgba, "base64");
+      assert.equal(rgba.length, edge * edge * 4);
+      let visible = 0;
+      const colors = new Set<number>();
+      for (let offset = 0; offset < rgba.length; offset += 4) {
+        colors.add(rgba.readUInt32BE(offset));
+        if ((rgba[offset + 3] ?? 0) > 0) {
+          visible++;
+        }
+      }
+      assert(visible > 0, `${extension} ${size} icon has no visible pixel`);
+      // A drawn icon has shading or margins, so a single flat color means the draw step failed.
+      assert(colors.size > 1, `${extension} ${size} icon is a flat color`);
+      assert.equal(
+        await call("dispose", {
+          id: created.id,
+        }),
+        true,
+      );
+    }
+  }
+  // A pre-aborted request creates no resource.
+  await error(
+    () =>
+      call(
+        "createFileTypeIcon",
+        {
+          extension: ".txt",
+          size: "small",
+        },
+        AbortSignal.abort(),
+      ),
+    "CANCELLED",
+  );
 }
 
 /** Exercise a real native adapter, also reused by the compiled and isolated-install consumers. */
@@ -965,6 +1041,8 @@ export async function verifyMacosImage(
         id: value,
       });
     }
+    // Last of the native checks: the portable probe stops at the first codec call, before this.
+    await checkFileTypeIcons(call, error);
     const finalID = await resource("createRGBA", pixels);
     await adapter.dispose();
     await adapter.dispose();

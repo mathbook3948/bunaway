@@ -178,6 +178,48 @@ export function createImageIO() {
       rgba,
     };
   }
+  /** Draw an image into a new context of the given size and return the contract's straight RGBA. */
+  function drawScaled(
+    input: NativePointer,
+    width: number,
+    height: number,
+    own: (object: NativePointer | null) => NativePointer,
+  ): Pixels {
+    const rgba = Buffer.alloc(width * height * 4);
+    const space = own(cg.CGColorSpaceCreateDeviceRGB());
+    const context = own(
+      cg.CGBitmapContextCreate(
+        ptr(rgba),
+        width,
+        height,
+        8,
+        width * 4,
+        space,
+        BYTE_ORDER_32_BIG | ALPHA_PREMULTIPLIED_LAST,
+      ),
+    );
+    cg.CGContextSetBlendMode(context, BLEND_COPY);
+    cg.CGContextSetInterpolationQuality(context, INTERPOLATION_LOW);
+    cg.CGContextDrawImage(context, 0, 0, width, height, input);
+    // CoreGraphics draws into premultiplied RGBA. Return the contract's straight RGBA.
+    for (let index = 0; index < rgba.length; index += 4) {
+      const alpha = rgba[index + 3] ?? 0;
+      for (let channel = 0; channel < 3; channel++) {
+        rgba[index + channel] =
+          alpha === 0
+            ? 0
+            : Math.min(
+                255,
+                Math.round(((rgba[index + channel] ?? 0) * 255) / alpha),
+              );
+      }
+    }
+    return {
+      width,
+      height,
+      rgba,
+    };
+  }
   return {
     decode(bytes: Buffer, mime: ImageMime): Pixels {
       assertActive();
@@ -308,44 +350,19 @@ export function createImageIO() {
       if (interpolation === "nearest") {
         return resizeNearestPixels(source, width, height);
       }
-      return using((own) => {
+      return using((own) =>
         // Enable the image's interpolation hint as well as the context's bilinear quality.
-        const input = image(source, own, true);
-        const rgba = Buffer.alloc(width * height * 4);
-        const space = own(cg.CGColorSpaceCreateDeviceRGB());
-        const context = own(
-          cg.CGBitmapContextCreate(
-            ptr(rgba),
-            width,
-            height,
-            8,
-            width * 4,
-            space,
-            BYTE_ORDER_32_BIG | ALPHA_PREMULTIPLIED_LAST,
-          ),
-        );
-        cg.CGContextSetBlendMode(context, BLEND_COPY);
-        cg.CGContextSetInterpolationQuality(context, INTERPOLATION_LOW);
-        cg.CGContextDrawImage(context, 0, 0, width, height, input);
-        // CoreGraphics draws into premultiplied RGBA. Return the contract's straight RGBA.
-        for (let index = 0; index < rgba.length; index += 4) {
-          const alpha = rgba[index + 3] ?? 0;
-          for (let channel = 0; channel < 3; channel++) {
-            rgba[index + channel] =
-              alpha === 0
-                ? 0
-                : Math.min(
-                    255,
-                    Math.round(((rgba[index + channel] ?? 0) * 255) / alpha),
-                  );
-          }
-        }
-        return {
-          width,
-          height,
-          rgba,
-        };
-      });
+        drawScaled(image(source, own, true), width, height, own),
+      );
+    },
+    /**
+     * Scale a borrowed CGImage into a square of straight RGBA. The caller keeps ownership of the
+     * image, so a file type icon source can pass the image that an NSImage keeps alive.
+     */
+    rasterize(source: NativePointer, edge: number): Pixels {
+      assertActive();
+      assertDimensions(edge, edge);
+      return using((own) => drawScaled(source, edge, edge, own));
     },
     dispose(): void {
       if (disposed) {

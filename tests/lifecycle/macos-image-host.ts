@@ -105,6 +105,10 @@ export default defineApp({ modules: [], plugins: [image, windows, {
         assert.deepEqual({ ...await image.getInfo({ id: decoded.id }) }, { width: 1, height: 1, empty: false });
         await image.dispose({ id: decoded.id });
       }
+      // The icon is rendered on the host's I/O Worker, not the main thread.
+      const fileIcon = await image.createFileTypeIcon({ extension: ".txt", size: "normal" });
+      assert.deepEqual({ ...fileIcon, id: undefined }, { id: undefined, width: 32, height: 32, empty: false });
+      assert.equal(await image.dispose({ id: fileIcon.id }), true);
       const deniedDeadline = Date.now() + 10000;
       while (deniedResult === undefined) {
         if (Date.now() > deniedDeadline) throw new Error("Read-only view did not complete its permission checks.");
@@ -138,6 +142,7 @@ export default defineApp({ modules: [], plugins: [image, windows, {
     "getRepresentations",
     "crop",
     "resize",
+    "createFileTypeIcon",
   ];
   const specs = [
     {
