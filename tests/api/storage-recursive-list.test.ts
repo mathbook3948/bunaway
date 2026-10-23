@@ -39,6 +39,8 @@ class TestStorage extends NodeStorage {
 }
 
 const parsers = pluginParsers("storage", storageOperations);
+// Mode 0 only denies listing to a non-root user on a POSIX file system.
+const cannotDeny = process.platform === "win32" || process.getuid?.() === 0;
 const LIMITS = {
   entries: 1000,
   depth: 8,
@@ -267,6 +269,28 @@ test("a NUL mark after a longest name is a valid cursor but one more character i
   );
 });
 
+test.skipIf(cannotDeny)(
+  "a NUL cursor steps over a directory with a longest name and keeps its siblings",
+  async () => {
+    const longest = "d".repeat(255);
+    createTree([
+      `${longest}/x`,
+      `${"d".repeat(254)}e`,
+      "e",
+    ]);
+    chmodSync(at(longest), 0);
+    try {
+      expect(await codeOf(() => list())).toBe("PERMISSION_DENIED");
+      expect(paths((await list(`${longest}\u0000`)).entries)).toEqual([
+        `${"d".repeat(254)}e`,
+        "e",
+      ]);
+    } finally {
+      chmodSync(at(longest), 0o700);
+    }
+  },
+);
+
 test("links are listed as links and never entered", async () => {
   createTree([
     "target/inner",
@@ -451,9 +475,6 @@ test("a cursor through a link lists nothing from the link target", async () => {
   }
 });
 
-// Mode 0 only denies listing to a non-root user on a POSIX file system.
-const cannotDeny = process.platform === "win32" || process.getuid?.() === 0;
-
 test.skipIf(cannotDeny)(
   "a directory that cannot be listed fails the call and the same cursor keeps failing",
   async () => {
@@ -477,6 +498,39 @@ test.skipIf(cannotDeny)(
       ]);
     } finally {
       chmodSync(at("a", "denied"), 0o700);
+    }
+  },
+);
+
+test.skipIf(cannotDeny)(
+  "a page cut by the path length budget on a directory does not open it",
+  async () => {
+    const outer = "a".repeat(255);
+    const last = "z".repeat(255);
+    // 126 files, the outer directory and the last directory use 65,152 of the 65,536 characters,
+    // so a child of the last directory (at least 513 more) cannot join this page.
+    mkdirSync(at(outer, last, "x"), {
+      recursive: true,
+    });
+    for (let index = 0; index < 126; index++) {
+      writeFileSync(
+        at(outer, `f${String(index).padStart(3, "0")}${"n".repeat(251)}`),
+        "",
+      );
+    }
+    chmodSync(at(outer, last), 0);
+    try {
+      const page = await list();
+      expect(page.entries.at(-1)).toEqual({
+        path: `${outer}/${last}`,
+        kind: "directory",
+      });
+      expect(page.next).toBe(`${outer}/${last}`);
+      expect(await codeOf(() => list(page.next ?? undefined))).toBe(
+        "PERMISSION_DENIED",
+      );
+    } finally {
+      chmodSync(at(outer, last), 0o700);
     }
   },
 );

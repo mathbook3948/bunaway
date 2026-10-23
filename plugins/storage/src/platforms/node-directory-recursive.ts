@@ -182,12 +182,9 @@ class TreeScan {
         continue;
       }
       const relative = joinRelative(frame.relative, child.name);
-      const full =
-        entries.length >= request.limit ||
-        (entries.length > 0 &&
-          pathCharacters + relative.length >
-            MAX_RECURSIVE_PAGE_PATH_CHARACTERS);
-      if (full) {
+      if (
+        pageIsFull(entries.length, pathCharacters, relative.length, request)
+      ) {
         return {
           entries,
           next: entries[entries.length - 1]?.path ?? null,
@@ -203,7 +200,15 @@ class TreeScan {
       });
       pathCharacters += relative.length;
       if (entry.kind === "directory") {
-        if (entries.length >= request.limit) {
+        // The shortest child path adds a separator and one character to the directory path.
+        if (
+          pageIsFull(
+            entries.length,
+            pathCharacters,
+            relative.length + 2,
+            request,
+          )
+        ) {
           // Opening the directory now could fail the page for contents that belong to the next one.
           return {
             entries,
@@ -235,6 +240,23 @@ class TreeScan {
     }
     return await this.openChild(parent, child, resume);
   }
+}
+
+/**
+ * Whether a page of `count` entries and `characters` path characters cannot take one more path of
+ * `nextLength` characters: it holds `limit` entries, or the path length budget would be exceeded.
+ * A page always takes its first entry, whatever its length.
+ */
+function pageIsFull(
+  count: number,
+  characters: number,
+  nextLength: number,
+  request: RecursiveListRequest,
+): boolean {
+  return (
+    count >= request.limit ||
+    (count > 0 && characters + nextLength > MAX_RECURSIVE_PAGE_PATH_CHARACTERS)
+  );
 }
 
 function joinRelative(parent: string, name: string): string {
