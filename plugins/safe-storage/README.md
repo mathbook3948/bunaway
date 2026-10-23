@@ -77,8 +77,8 @@ Without a host `app.id` these operations fail with `INVALID_ARGUMENT`.
 The same three operations keep a user secret in the default file-based Keychain as a generic
 password with service `org.bunaway.safe-storage.secret.v1` and account `<app.id>:<key>`, separate from
 the protection key item, which they never create or read. Keys and values follow the Windows rules; values are
-stored as UTF-8. Setting an existing key modifies the item in place, so a failed replacement keeps the
-previous value. Access follows the executable identity rules above: the creating executable reads its items
+stored as UTF-8. Setting an existing key modifies the item in place instead of deleting and re-adding it;
+tests cover the failure path with a synthetic store only, not a failing real Keychain update. Access follows the executable identity rules above: the creating executable reads its items
 without a prompt and a different executable needs Keychain approval. The native copy and every intermediate buffer are
-zeroed before release. `tests/lifecycle/macos-keychain-native.test.ts` runs the real Security.framework against a
+zeroed before release; no test checks the native cleanup. `tests/lifecycle/macos-keychain-native.test.ts` runs the real Security.framework against a
 disposable private Keychain and `tests/lifecycle/macos-safe-storage-host.ts` covers the public API across a restart.

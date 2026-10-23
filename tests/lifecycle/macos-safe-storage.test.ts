@@ -216,7 +216,7 @@ test("macOS secrets round trip as UTF-8, replace in place, and never create the 
   ).toBe(false);
   for (const value of [
     "t",
-    "한글 🙂 \u0000 ﻿",
+    "한글 🙂 \u0000 \uFEFF",
     "x".repeat(1280),
   ]) {
     expect(

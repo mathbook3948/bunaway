@@ -177,7 +177,7 @@ if (mode === "decrypt") {
     );
     for (const value of [
       "t",
-      "﻿한글\u0000🙂",
+      "\uFEFF한글\u0000🙂",
       "🙂".repeat(640),
       "x".repeat(1280),
     ]) {
