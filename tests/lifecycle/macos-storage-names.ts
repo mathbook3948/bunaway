@@ -72,25 +72,17 @@ export function verifyMacosNames(
   const listed = call("storage.readDirectory", {
     path: folder,
   });
-  const byName = (
-    left: {
-      name: string;
-    },
-    right: {
-      name: string;
-    },
-  ) => Number(left.name > right.name) - Number(left.name < right.name);
   assert(Array.isArray(listed));
+  const sorted = (entries: unknown[]) =>
+    entries.map((entry) => JSON.stringify(entry)).sort();
   assert.deepEqual(
-    [
-      ...listed,
-    ].sort(byName),
-    readdirSync(folder)
-      .map((name) => ({
+    sorted(listed),
+    sorted(
+      readdirSync(folder).map((name) => ({
         name,
         kind: "file",
-      }))
-      .sort(byName),
+      })),
+    ),
   );
   if (folds) {
     // The spelling used when the file was created stays, even after a write through the other one.
