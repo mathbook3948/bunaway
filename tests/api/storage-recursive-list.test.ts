@@ -450,6 +450,38 @@ test("a directory that cannot be listed fails the call and the same cursor keeps
   }
 });
 
+test("a page that ends on a directory does not open it", async () => {
+  if (process.platform === "win32" || process.getuid?.() === 0) {
+    return;
+  }
+  createTree([
+    "ok.txt",
+    "z/x",
+  ]);
+  chmodSync(at("z"), 0);
+  try {
+    const page = await list(undefined, 2);
+    expect(page).toEqual({
+      entries: [
+        {
+          path: "ok.txt",
+          kind: "file",
+        },
+        {
+          path: "z",
+          kind: "directory",
+        },
+      ],
+      next: "z",
+    });
+    expect(await codeOf(() => list(page.next ?? undefined, 2))).toBe(
+      "PERMISSION_DENIED",
+    );
+  } finally {
+    chmodSync(at("z"), 0o700);
+  }
+});
+
 test("a scan cancelled while it walks stops and closes its directory", async () => {
   createTree(
     Array.from(

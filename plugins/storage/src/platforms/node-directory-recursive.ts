@@ -140,7 +140,8 @@ class TreeScan {
   /**
    * Collect the first `request.limit` paths after the cursor. The walk stops as soon as one more
    * child exists, so `next` is null exactly when no child follows the page (a child that vanishes
-   * after that check can leave the following page empty).
+   * after that check can leave the following page empty). A page that ends on a directory does
+   * not open it, so `next` is set and the following page is empty when the directory is empty.
    */
   async list(root: string, request: RecursiveListRequest) {
     const entries: StorageRecursiveEntry[] = [];
@@ -195,6 +196,13 @@ class TreeScan {
       });
       pathCharacters += relative.length;
       if (entry.kind === "directory") {
+        if (entries.length >= request.limit) {
+          // Opening the directory now could fail the page for contents that belong to the next one.
+          return {
+            entries,
+            next: relative,
+          } satisfies StorageRecursivePage;
+        }
         const inner = await this.openChild(frame, child, []);
         if (inner) {
           stack.push(inner);
