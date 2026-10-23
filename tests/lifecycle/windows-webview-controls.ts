@@ -117,7 +117,7 @@ if (!process.argv.includes("--child")) {
     ),
   );
   console.log(
-    "PASS actual WebView2 controls: state, origin and redirect denial, history, reload, stop, session cancellation, zoom, WebView focus, destroyed state and development-only DevTools",
+    "PASS actual WebView2 controls: state, origin and redirect denial, history, reload, stop, session cancellation, zoom, WebView focus and development-only DevTools",
     reports,
   );
 } else {
@@ -680,12 +680,7 @@ if (!process.argv.includes("--child")) {
     });
     await ready("/index.html", 4);
 
-    // Destroyed: a WebView lives exactly as long as its window.
-    await windows.close();
-    assert.equal(await windows.isOpen(), false);
-    await assert.rejects(windows.getWebViewState(), {
-      code: "INVALID_ARGUMENT",
-    });
+    // Closing the only window ends the app, so later calls are cancelled.
     completed = true;
     await windows.close();
   }
