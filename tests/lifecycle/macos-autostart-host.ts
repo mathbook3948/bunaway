@@ -186,17 +186,17 @@ try {
     });
     const launchMode = mode === "compiled" ? "packaged" : "development";
     const name = `bunaway.${launchMode}.${appId}`;
-    // The plugin resolves its home inside the host-operations worker, whose HOME is the app data
-    // root, so the plist may be under either directory. Both are temporary; the real user home is
-    // listed only so a stray registration is found, reported and removed.
-    const homes = [
-      home,
-      resolve(home, "Library/Application Support/bunaway", appId),
-      userInfo().homedir,
+    // The host's HOME is the user's home for this run. The other folders are checked only to show
+    // nothing was written there (the worker's HOME is the data root; the account's own home is
+    // outside the temporary tree) and are cleaned up if it was.
+    const file = resolve(home, "Library/LaunchAgents", `${name}.plist`);
+    const candidates = [
+      file,
+      ...[
+        resolve(home, "Library/Application Support/bunaway", appId),
+        userInfo().homedir,
+      ].map((base) => resolve(base, "Library/LaunchAgents", `${name}.plist`)),
     ];
-    const candidates = homes.map((base) =>
-      resolve(base, "Library/LaunchAgents", `${name}.plist`),
-    );
     strays.push(...candidates);
     const launcher = mode === "compiled" ? executable : process.execPath;
     for (const restart of [
@@ -286,13 +286,15 @@ try {
       assert.equal(report.disabledAgain, null);
       assert.deepEqual(report.final, report.enabled);
 
+      // launchd reads only the user's own LaunchAgents folder, so the plist must be there and
+      // nowhere else, in particular not below the host data root that the worker's HOME names.
       const written = candidates.filter((candidate) => existsSync(candidate));
-      assert.equal(written.length, 1, `Plist locations: ${written.join(", ")}`);
-      const file = written[0] as string;
-      assert.notEqual(
-        file,
-        candidates[2],
-        "The plist was written to the real user home",
+      assert.deepEqual(
+        written,
+        [
+          file,
+        ],
+        `Plist locations: ${written.join(", ")}`,
       );
       // The file launchd loads is a valid property list with the reported launch.
       const lint = Bun.spawn(

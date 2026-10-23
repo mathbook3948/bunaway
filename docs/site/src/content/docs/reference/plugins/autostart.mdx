@@ -218,7 +218,7 @@ setup에서는 루트 `backend.permissions`를 사용합니다. 실행 파일이
 않습니다. 설정 화면은 다시 조회해서 현재 상태를 확인하세요.
 
 현재 Windows x64의 개발 실행, 직접 배포와 Store 비패키지 실행을 지원합니다.
-macOS는 사용자 LaunchAgent 등록, 조회와 해제를 지원합니다. SMAppService 로그인 항목은 서명된 앱
+macOS는 사용자 LaunchAgent 등록, 조회와 해제를 지원합니다. plist는 사용자 홈의 `Library/LaunchAgents`에 쓰며, 호스트 작업 스레드의 HOME이 앱 데이터 루트라서 홈은 데이터 루트의 고정 배치(`<홈>/Library/Application Support/bunaway/<appId>`)에서 구합니다. SMAppService 로그인 항목은 서명된 앱
 번들과 macOS 13 이상이 필요해 사용하지 않습니다. 숨김 시작, 로그인 항목 활성 상태 조회,
 업데이트 뒤 등록 유지와 App Sandbox는 지원하지 않습니다. 임시 홈 디렉터리에서 plist를
 쓰고 읽는 동작은 테스트로 검증했습니다. macOS CI는 shared Bun과 ad-hoc 서명한 compiled 앱을 실행해 등록, 반복 등록,
