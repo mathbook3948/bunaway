@@ -389,6 +389,8 @@ if (!process.argv.includes("--child")) {
           ...position,
           center: false,
           useContentSize: false,
+          // The declaration keeps the window inside the work area; this position is outside it.
+          preventOverflow: false,
         },
       },
     });
