@@ -1,22 +1,25 @@
 import { BunawayError, type NativeEnvironment } from "@bunaway/plugin";
-import { safeStorageLimits } from "#safe-storage/contract";
+import {
+  type SafeStorageInstance,
+  safeStorageLimits,
+} from "#safe-storage/contract";
 import {
   transformMacosEnvelope,
   validateMacosEnvelope,
 } from "#safe-storage/platforms/macos-envelope";
 import {
-  type MacosKeyStore,
+  type MacosKeychainStore,
   protectionKey,
 } from "#safe-storage/platforms/macos-key-store";
 import { MacosKeychain } from "#safe-storage/platforms/macos-keychain";
 /** Own one lazy Keychain provider and clear every per-call key and data buffer. */
-export class MacosSafeStorage {
-  private store: MacosKeyStore | undefined;
+export class MacosSafeStorage implements SafeStorageInstance {
+  private store: MacosKeychainStore | undefined;
   private disposed = false;
 
   constructor(
     private readonly appId: string,
-    private readonly open: () => MacosKeyStore,
+    private readonly open: () => MacosKeychainStore,
   ) {}
 
   private active(): void {
@@ -28,7 +31,7 @@ export class MacosSafeStorage {
     }
   }
 
-  private provider(): MacosKeyStore {
+  private provider(): MacosKeychainStore {
     this.active();
     this.store ??= this.open();
     return this.store;
@@ -93,6 +96,41 @@ export class MacosSafeStorage {
     return this.transform(Buffer.from(ciphertext, "base64"), true, false);
   }
 
+  /** The Keychain stores the UTF-8 bytes; the input copy is zeroed once the Keychain has them. */
+  setSecret(key: string, value: string): void {
+    const bytes = Buffer.from(value, "utf8");
+    try {
+      this.provider().setSecret(key, bytes);
+    } finally {
+      bytes.fill(0);
+    }
+  }
+
+  getSecret(key: string): string | null {
+    const bytes = this.provider().getSecret(key);
+    if (bytes === null) {
+      return null;
+    }
+    try {
+      return new TextDecoder("utf8", {
+        fatal: true,
+        ignoreBOM: true,
+      }).decode(bytes);
+    } catch {
+      // The item was not written by this plugin, so its content has no defined meaning.
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: "Stored secret is not valid text.",
+      });
+    } finally {
+      bytes.fill(0);
+    }
+  }
+
+  deleteSecret(key: string): boolean {
+    return this.provider().deleteSecret(key);
+  }
+
   dispose(): void {
     if (this.disposed) {
       return;
@@ -110,7 +148,7 @@ export class MacosSafeStorage {
  */
 function provider(
   environment: NativeEnvironment,
-  open: (appId: string) => MacosKeyStore,
+  open: (appId: string) => MacosKeychainStore,
 ) {
   const appId = environment.app?.id;
   return {
@@ -133,7 +171,8 @@ function provider(
 
 export function initialize(
   environment: NativeEnvironment,
-  open: (appId: string) => MacosKeyStore = (appId) => new MacosKeychain(appId),
+  open: (appId: string) => MacosKeychainStore = (appId) =>
+    new MacosKeychain(appId),
 ): MacosSafeStorage {
   const source = provider(environment, open);
   return new MacosSafeStorage(source.appId, source.open);

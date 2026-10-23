@@ -48,6 +48,9 @@ export const fixturePlugin = defineNativePlugin({
             available: () => provider.available(),
             read: () => provider.read(),
             add: (key) => provider.add(key),
+            setSecret: (key, value) => provider.setSecret(key, value),
+            getSecret: (key) => provider.getSecret(key),
+            deleteSecret: (key) => provider.deleteSecret(key),
             dispose() {
               try {
                 provider.dispose();

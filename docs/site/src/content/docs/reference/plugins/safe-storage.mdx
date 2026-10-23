@@ -1,6 +1,6 @@
 ---
 title: 암호화 저장
-description: Windows DPAPI와 macOS Keychain 보호 키로 문자열과 바이트를 비동기로 보호하고 복호화합니다.
+description: Windows DPAPI와 macOS Keychain으로 문자열과 바이트를 비동기로 보호하고 복호화하며, 사용자 토큰을 OS 자격 증명 저장소에 보관합니다.
 ---
 
 기본 export(`default`)를 `safeStorage`로 가져와 앱에 등록하고 호출합니다.
@@ -24,14 +24,14 @@ safeStorage.encryptString({ text }): Promise<string>
 safeStorage.decryptString({ ciphertext }): Promise<string>
 safeStorage.encryptBytes({ bytes }): Promise<string>
 safeStorage.decryptBytes({ ciphertext }): Promise<string>
-safeStorage.setSecret({ key, value }): Promise<null> // Windows
-safeStorage.getSecret({ key }): Promise<string | null> // Windows
-safeStorage.deleteSecret({ key }): Promise<boolean> // Windows
+safeStorage.setSecret({ key, value }): Promise<null>
+safeStorage.getSecret({ key }): Promise<string | null>
+safeStorage.deleteSecret({ key }): Promise<boolean>
 ```
 
 작업 권한은 순서대로 `safe-storage.isAvailable`, `safe-storage.encryptString`,
-`safe-storage.decryptString`, `safe-storage.encryptBytes`, `safe-storage.decryptBytes`입니다.
-Windows에는 `safe-storage.setSecret`, `safe-storage.getSecret`, `safe-storage.deleteSecret`이 더 있고
+`safe-storage.decryptString`, `safe-storage.encryptBytes`, `safe-storage.decryptBytes`,
+`safe-storage.setSecret`, `safe-storage.getSecret`, `safe-storage.deleteSecret`이며
 작업마다 따로 허용합니다.
 화면에서 직접 호출하려면 해당 이름 앞에 `plugin.`을 붙인 명령 권한도 필요합니다.
 앱 명령과 setup에서 `safeStorage`를 호출하는 실행 범위는 [백엔드 Host API](/reference/backend/host-api/)를 따릅니다.
@@ -83,11 +83,11 @@ OS 보호 기능을 사용할 수 없거나 복호화가 실패해도 이 플러
 반환한 문자열과 JSON 전송 복사본은
 JavaScript 런타임이 관리하므로 메모리 전체의 비밀 제거를 보장하지 않습니다.
 
-## OS 자격 증명 저장소 (Windows)
+## OS 자격 증명 저장소
 
 `setSecret`, `getSecret`, `deleteSecret`은 앱이 파일을 관리하지 않고 사용자 토큰이나 비밀번호를
-Windows 자격 증명 관리자(`CredWriteW`, `CredReadW`, `CredDeleteW`)에 저장합니다.
-macOS에서는 이 작업이 없고 `UNSUPPORTED`입니다.
+Windows 자격 증명 관리자(`CredWriteW`, `CredReadW`, `CredDeleteW`)나 macOS 기본 Keychain에 저장합니다.
+키 규칙, 값 상한, 교체와 없는 키의 결과는 두 플랫폼이 같고 저장 위치와 실패 분류는 아래에서 나눕니다.
 
 ```ts
 await safeStorage.setSecret({ key: "session-token", value: token });
@@ -97,30 +97,42 @@ const removed = await safeStorage.deleteSecret({ key: "session-token" }); // 없
 
 - `key`는 1에서 128자의 소문자 `a-z 0-9 . _ -`입니다. 자격 증명 관리자가 대상 이름의 대소문자를 구분하지 않아
   `Token`과 `token`이 같은 항목이 되므로 대문자와 `:`를 포함한 그 밖의 문자는 `INVALID_ARGUMENT`입니다.
+  macOS도 같은 키만 받아 앱이 두 플랫폼에서 같은 키 공간을 씁니다.
 - `value`는 비어 있지 않은 문자열이며 UTF-16 code unit 1,280개(2,560바이트, Windows의
   `CRED_MAX_CREDENTIAL_BLOB_SIZE`)까지입니다. 짝이 맞지 않는 surrogate와 상한 초과는 `INVALID_ARGUMENT`입니다.
-  값은 UTF-16LE로 저장합니다.
-- 저장소 이름은 플러그인이 `bunaway.safe-storage:<app.id>:<key>`로 만들며 호출자가 이름을 고르지 않습니다.
+  Windows는 값을 UTF-16LE로, macOS는 UTF-8로 저장합니다.
+- Windows의 저장소 이름은 플러그인이 `bunaway.safe-storage:<app.id>:<key>`로 만들며 호출자가 이름을 고르지 않습니다.
   그래서 이 API로는 다른 앱의 항목이나 사용자가 직접 넣은 자격 증명을 읽거나 덮어쓰지 않습니다.
   같은 이름을 미리 만들어 둔 항목은 앱이 그대로 읽습니다.
   `key`에 `:`가 없어 마지막 `:`가 앱 식별자와 키를 구분합니다. 호스트가 `app.id`를 주지 않으면
-  세 작업은 `INVALID_ARGUMENT`이고 DPAPI 작업은 영향이 없습니다.
+  세 작업은 `INVALID_ARGUMENT`이고 암복호화 작업은 영향이 없습니다. macOS도 같습니다.
 - 같은 `key`에 다시 저장하면 값을 교체합니다. 없는 키의 `getSecret`은 `null`, `deleteSecret`은 `false`이며
   오류가 아닙니다. 항목은 `CRED_TYPE_GENERIC`과 `CRED_PERSIST_LOCAL_MACHINE`으로 저장해 이 머신에 남고
   로밍하지 않습니다.
 - 값은 오류 메시지와 로그에 넣지 않으며 평문 파일로 대체하지 않습니다. 구현은 읽은 native blob과 중간 복사본을
   0으로 채운 뒤 `CredFree`로 해제하지만 이 정리는 테스트로 검증하지 않았습니다. 반환한 문자열은 JavaScript 런타임이 관리합니다.
-- 실패는 `ERROR_BUSY`, `ERROR_SERVICE_NOT_ACTIVE`, `RPC_S_SERVER_UNAVAILABLE`,
+- Windows의 실패는 `ERROR_BUSY`, `ERROR_SERVICE_NOT_ACTIVE`, `RPC_S_SERVER_UNAVAILABLE`,
   `RPC_S_SERVER_TOO_BUSY`이면 `BUSY`(같은 입력으로 다시 호출), `ERROR_ACCESS_DENIED`이면 `PERMISSION_DENIED`,
   그 밖에는 `INTERNAL`입니다.
+
+macOS는 보호 키 항목과 별개의 generic password를 service `org.bunaway.safe-storage.secret.v1`,
+account `<app.id>:<key>`로 현재 사용자의 기본 file-based Keychain에 저장합니다. 같은 `key`에 다시 저장하면
+항목을 제자리에서 수정합니다(삭제 뒤 추가가 아닙니다). 수정 실패 시 이전 값이 남는지는 합성 저장소의 오류 경로로만 확인했고 실제 Keychain의 수정 실패는 재현하지 않았습니다. 암복호화와 달리 보호 키를 만들거나 읽지 않습니다.
+Keychain이 잠겨 있으면 명시적인 호출에서 Apple의 잠금 해제 UI를 허용하고, 사용자가 취소하면 `CANCELLED`,
+접근 거부나 필요한 시스템 상호작용을 할 수 없으면 `PERMISSION_DENIED`, 그 밖의 Keychain 오류와
+UTF-8이 아닌 값은 `INTERNAL`입니다. 접근 identity와 ACL은 아래 [macOS Keychain과 실행 파일 identity](#macos-keychain과-실행-파일-identity)를
+따르며, 다른 실행 파일은 Keychain의 승인을 받아야 항목을 읽을 수 있습니다. 읽은 항목의 native 복사본과 중간 바이트는 지운 뒤 해제합니다. JS 쪽 복사본의 0 채움은 합성 저장소 테스트가 확인하고 native 쪽 정리는 테스트로 검증하지 않았습니다.
 
 자격 증명 관리자는 사용자 단위 저장소입니다. 같은 사용자의 다른 프로세스는 같은 항목을 읽을 수 있으므로
 `app.id` 접두사는 이름 충돌과 실수로 인한 덮어쓰기를 막는 이름 공간이며 OS 보안 주체가 아닙니다.
 Electron `safeStorage`는 암호화만 하고 저장 위치를 앱에 맡기며 Tauri에는 공식 keyring 플러그인이 없어,
-이 작업은 둘에 없는 Windows 기능이고 vault, 암호 파생과 키 생성은 범위 밖입니다.
+이 작업은 둘에 없는 기능이고 vault, 암호 파생과 키 생성은 범위 밖입니다.
 Windows CI(`tests/lifecycle/windows-safe-storage.test.ts`)가 실제 자격 증명 관리자로 저장, 교체, 조회, 삭제,
 앱 간 분리, 저장 형식(`CRED_PERSIST_LOCAL_MACHINE`, UTF-16LE)과 어댑터 재생성 뒤 조회를 확인합니다.
 다른 사용자, 다른 머신, 로밍 프로필과 자격 증명 관리자 서비스 중단은 검증하지 않았습니다.
+macOS CI(`tests/lifecycle/macos-keychain-native.test.ts`)는 임시 private Keychain에서 저장, 교체, 조회, 삭제, 다른 `app.id`와의 분리와
+같은 실행 파일의 재시작 뒤 조회를 공유 Bun과 ad-hoc compiled 실행 파일로 확인하고, `macos-safe-storage-host.ts`는
+공개 backend API와 실제 호스트로 재시작을 가로지른 저장, 조회, 삭제를 확인합니다. 사용자의 login Keychain, 시스템 UI와 다른 서명 빌드는 검증하지 않았습니다.
 이미 시작한 Win32 호출은 중단할 수 없어 취소는 결과 전달만 막습니다.
 
 ## 실패, 취소와 재시도

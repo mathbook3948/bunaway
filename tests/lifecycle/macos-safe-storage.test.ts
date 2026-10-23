@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
+import type { JsonValue } from "@bunaway/protocol";
 import { transformMacosEnvelope } from "../../plugins/safe-storage/src/platforms/macos-envelope.ts";
 import {
   keychainError,
-  type MacosKeyStore,
+  type MacosKeychainStore,
+  secretAccount,
 } from "../../plugins/safe-storage/src/platforms/macos-key-store.ts";
 import { macosSafeStorageOperations as macosOperations } from "../fixtures/injected-native-plugins.ts";
 
@@ -17,7 +19,9 @@ function fixture() {
     disposed: 0,
   };
   const copies: Buffer[] = [];
-  const store: MacosKeyStore = {
+  const secrets = new Map<string, Buffer>();
+  const secretCopies: Buffer[] = [];
+  const store: MacosKeychainStore = {
     available: () => !failure,
     read() {
       counts.read++;
@@ -38,6 +42,31 @@ function fixture() {
       stored = Buffer.from(key);
       return true;
     },
+    setSecret(key, value) {
+      if (failure) {
+        throw failure;
+      }
+      // The Keychain keeps its own copy; the caller's buffer is zeroed afterwards.
+      secrets.set(key, Buffer.from(value));
+      secretCopies.push(value);
+    },
+    getSecret(key) {
+      if (failure) {
+        throw failure;
+      }
+      const stored = secrets.get(key);
+      const copy = stored && Buffer.from(stored);
+      if (copy) {
+        secretCopies.push(copy);
+      }
+      return copy ?? null;
+    },
+    deleteSecret(key) {
+      if (failure) {
+        throw failure;
+      }
+      return secrets.delete(key);
+    },
     dispose() {
       counts.disposed++;
     },
@@ -49,6 +78,8 @@ function fixture() {
   return {
     counts,
     copies,
+    secrets,
+    secretCopies,
     store,
     open,
     fail(status: number) {
@@ -166,6 +197,230 @@ test("macOS operations are lazy, do not provision on availability or decrypt, an
     adapter.execute("safe-storage.isAvailable", null, "backend"),
   ).rejects.toThrow("disposed");
   f.replace(null);
+});
+
+test("macOS secrets round trip as UTF-8, replace in place, and never create the protection key", async () => {
+  const f = fixture();
+  const adapter = macosOperations("tests.bunaway.safe-storage", f.open);
+  const run = (name: string, input: JsonValue) =>
+    adapter.execute(`safe-storage.${name}`, input, "backend");
+  expect(
+    await run("getSecret", {
+      key: "session-token",
+    }),
+  ).toBeNull();
+  expect(
+    await run("deleteSecret", {
+      key: "session-token",
+    }),
+  ).toBe(false);
+  for (const value of [
+    "t",
+    "한글 🙂 \u0000 \uFEFF",
+    "x".repeat(1280),
+  ]) {
+    expect(
+      await run("setSecret", {
+        key: "session-token",
+        value,
+      }),
+    ).toBeNull();
+    expect(
+      await run("getSecret", {
+        key: "session-token",
+      }),
+    ).toBe(value);
+  }
+  await run("setSecret", {
+    key: "other.key_1-a",
+    value: "other",
+  });
+  expect(
+    await run("deleteSecret", {
+      key: "session-token",
+    }),
+  ).toBe(true);
+  expect(
+    await run("deleteSecret", {
+      key: "session-token",
+    }),
+  ).toBe(false);
+  expect(
+    await run("getSecret", {
+      key: "session-token",
+    }),
+  ).toBeNull();
+  expect(
+    await run("getSecret", {
+      key: "other.key_1-a",
+    }),
+  ).toBe("other");
+  // Secrets live in their own Keychain items, so the protection key is never provisioned or read.
+  expect(f.counts).toMatchObject({
+    read: 0,
+    add: 0,
+  });
+  expect(f.secretCopies.every((copy) => copy.every((byte) => byte === 0))).toBe(
+    true,
+  );
+  await adapter.dispose();
+});
+
+test("macOS secret input is validated before the Keychain is opened", async () => {
+  const f = fixture();
+  const adapter = macosOperations("tests.bunaway.safe-storage", f.open);
+  for (const [name, input] of [
+    [
+      "setSecret",
+      {
+        key: "Token",
+        value: "v",
+      },
+    ],
+    [
+      "setSecret",
+      {
+        key: "a:b",
+        value: "v",
+      },
+    ],
+    [
+      "setSecret",
+      {
+        key: "",
+        value: "v",
+      },
+    ],
+    [
+      "setSecret",
+      {
+        key: "token",
+        value: "",
+      },
+    ],
+    [
+      "setSecret",
+      {
+        key: "token",
+        value: "x".repeat(1281),
+      },
+    ],
+    [
+      "setSecret",
+      {
+        key: "token",
+        value: "\ud800",
+      },
+    ],
+    [
+      "getSecret",
+      {
+        key: "Token",
+      },
+    ],
+    [
+      "deleteSecret",
+      {
+        key: "a b",
+      },
+    ],
+  ] as const) {
+    await expect(
+      adapter.execute(`safe-storage.${name}`, input, "backend"),
+    ).rejects.toThrow("Invalid plugin input.");
+  }
+  expect(f.counts.opened).toBe(0);
+  await adapter.dispose();
+});
+
+test("macOS secret failures map to stable error codes and leave the store readable", async () => {
+  const f = fixture();
+  const adapter = macosOperations("tests.bunaway.safe-storage", f.open);
+  const run = (name: string, input: JsonValue) =>
+    adapter.execute(`safe-storage.${name}`, input, "backend");
+  await run("setSecret", {
+    key: "token",
+    value: "kept",
+  });
+  for (const [status, code] of [
+    [
+      -128,
+      "CANCELLED",
+    ],
+    [
+      -25293,
+      "PERMISSION_DENIED",
+    ],
+    [
+      -25308,
+      "PERMISSION_DENIED",
+    ],
+    [
+      -25295,
+      "INTERNAL",
+    ],
+  ] as const) {
+    f.fail(status);
+    for (const [name, input] of [
+      [
+        "setSecret",
+        {
+          key: "token",
+          value: "replaced",
+        },
+      ],
+      [
+        "getSecret",
+        {
+          key: "token",
+        },
+      ],
+      [
+        "deleteSecret",
+        {
+          key: "token",
+        },
+      ],
+    ] as const) {
+      await expect(run(name, input)).rejects.toMatchObject({
+        code,
+      });
+    }
+    f.restore();
+    expect(
+      await run("getSecret", {
+        key: "token",
+      }),
+    ).toBe("kept");
+  }
+  // An item that is not UTF-8 text is reported without exposing its bytes.
+  f.secrets.set(
+    "token",
+    Buffer.from([
+      0xff,
+      0xfe,
+      0xfd,
+    ]),
+  );
+  await expect(
+    run("getSecret", {
+      key: "token",
+    }),
+  ).rejects.toMatchObject({
+    code: "INTERNAL",
+  });
+  await adapter.dispose();
+});
+
+test("macOS secret accounts are namespaced by the host app id", () => {
+  expect(secretAccount("tests.app", "token").toString()).toBe(
+    "tests.app:token",
+  );
+  expect(
+    secretAccount("tests.app", "token").equals(
+      secretAccount("tests.app2", "token"),
+    ),
+  ).toBe(false);
 });
 
 test("macOS AES-GCM matches an independent cryptography AESGCM vector and authenticates all envelope bytes and app identity", () => {
