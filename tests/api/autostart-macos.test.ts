@@ -37,6 +37,11 @@ const app: AppLaunch = {
   },
 };
 let home = "";
+
+/** The host's data root for `appId` below `userHome`. */
+function dataRootOf(userHome: string, appId: string): string {
+  return join(userHome, "Library", "Application Support", "bunaway", appId);
+}
 let state: AutostartState;
 
 // The adapter resolves POSIX paths and runs on macOS only; Windows temporary directories are not
@@ -76,16 +81,24 @@ test("macOS registers the same three operations and an app launch is required", 
     "autostart.getStatus",
   ]);
   const environment = {
-    dataRoot: home,
+    dataRoot: dataRootOf(home, app.id),
     capabilities: [],
   };
   expect(() => initialize(environment)).toThrow("host-selected app launch");
+  // The I/O worker's HOME is the data root; the plist belongs under the user's home above it.
   expect(
     initialize({
       ...environment,
       app,
     }).file,
-  ).toBe(join(homedir(), "Library", "LaunchAgents", `${state.name}.plist`));
+  ).toBe(join(home, "Library", "LaunchAgents", `${state.name}.plist`));
+  expect(() =>
+    initialize({
+      ...environment,
+      dataRoot: join(home, "elsewhere"),
+      app,
+    }),
+  ).toThrow("macOS app layout");
   expect(() => createState(app, "relative/home")).toThrow("absolute home");
 });
 
@@ -527,12 +540,13 @@ bunTest.skipIf(process.platform !== "darwin")(
 bunTest.skipIf(process.platform !== "darwin" || !process.env.CI)(
   "macOS registers and removes a launch agent under the real user home",
   () => {
+    const id = `autostart-test-${crypto.randomUUID()}`;
     const real = initialize({
-      dataRoot: home,
+      dataRoot: dataRootOf(homedir(), id),
       capabilities: [],
       app: {
         ...app,
-        id: `autostart-test-${crypto.randomUUID()}`,
+        id,
       },
     });
     try {
