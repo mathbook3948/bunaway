@@ -121,30 +121,55 @@ test.skipIf(process.platform !== "win32")(
     const hwnds: bigint[] = [];
     let held = false;
     const leftIsDown = () => !!(user.symbols.GetAsyncKeyState(0x01) & 0x8000);
-    const press = async () => {
-      // Keep the pointer off the test window so the system does not turn the press into its own caption message.
-      input.symbols.SetCursorPos(10, 10);
-      held = true;
-      // A runner can drop synthesized input while its desktop is busy, so a press that has not
-      // reached the key state is sent again; a repeated press of a held button changes nothing.
+    /**
+     * Sends a button edge until the key state shows it. A runner can drop synthesized input while
+     * its desktop is busy, so an edge that has not arrived is sent again; the key state is the
+     * same after a repeated edge.
+     */
+    const driveButton = async (down: boolean, what: string) => {
       let sentAt = 0;
       await waitFor(
         () => {
-          if (leftIsDown()) {
+          if (leftIsDown() === down) {
             return true;
           }
           if (Date.now() - sentAt >= PRESS_RESEND_MS) {
-            input.symbols.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0n);
+            if (down) {
+              // Keep the pointer off the test window so the system does not turn the press into its own caption message.
+              input.symbols.SetCursorPos(10, 10);
+            }
+            input.symbols.mouse_event(
+              down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP,
+              0,
+              0,
+              0,
+              0n,
+            );
             sentAt = Date.now();
           }
           return false;
         },
         {
           deadline: "inProcess",
-          what: "the synthesized left button to appear in the key state",
+          what,
         },
       );
     };
+    const press = async () => {
+      held = true;
+      await driveButton(
+        true,
+        "the synthesized left button to appear in the key state",
+      );
+    };
+    const confirmedRelease = async () => {
+      await driveButton(
+        false,
+        "the synthesized left button release to appear in the key state",
+      );
+      held = false;
+    };
+    /** Cleanup that does not wait; it runs while `held` is still set if a confirmed release timed out. */
     const release = () => {
       if (held) {
         input.symbols.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0n);
@@ -255,11 +280,7 @@ test.skipIf(process.platform !== "win32")(
       native.startDragging(hwnd);
       expect(takePosted(hwnd)?.wparam).toBe(2n);
 
-      release();
-      await waitFor(() => !(user.symbols.GetAsyncKeyState(0x01) & 0x8000), {
-        deadline: "inProcess",
-        what: "the synthesized left button release to appear in the key state",
-      });
+      await confirmedRelease();
       rejects(() => native.startDragging(hwnd), "not pressed");
     } finally {
       release();
