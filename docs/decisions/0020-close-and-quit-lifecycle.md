@@ -4,7 +4,7 @@ status: accepted
 
 # 창 닫기와 앱 종료의 수명주기 훅과 이벤트를 정의한다
 
-2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)에 따라 `windows.lifecycle`은 백엔드에도 전달되고(이벤트 수신은 Host API 호출이 아니므로 `backend.permissions` 검사 대상이 아니다) 문서 세션의 수신 조건 중 작업 권한 `windows.listInstances`는 `windows.getSnapshot`이 되고 정책 `events` 조건은 유지하며, 여러 창, 자식 확인, splashscreen 언급은 제거한다. `onAllWindowsClosed`는 이름을 유지하며 앱의 창이 닫혀 0개가 됨을 뜻하고, 승인된 마지막 창의 종료나 종료 중에는 호출하지 않는 제외 조건도 그대로다.
+2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)에 따라 `windows.lifecycle`은 백엔드에도 전달되고(이벤트 수신은 Host API 호출이 아니므로 `backend.permissions` 검사 대상이 아니다) 문서 세션의 수신 조건 중 작업 권한 `windows.listInstances`는 `windows.getSnapshot`이 되고 정책 `events` 조건은 유지하며, 여러 창, 자식 확인, splashscreen 언급은 제거한다. `respondClose`는 입력에서 `view`와 `windowId`를 없애고 `requestId`를 창별 증가가 아니라 앱 실행 동안 유일하게 발급한다. `onAllWindowsClosed`는 이름을 유지하며 앱의 창이 닫혀 0개가 됨을 뜻하고, 승인된 마지막 창의 종료나 종료 중에는 호출하지 않는 제외 조건도 그대로다.
 
 결정일: 2026-10-16
 

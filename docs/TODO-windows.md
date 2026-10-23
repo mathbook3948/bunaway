@@ -72,7 +72,7 @@ debug APK 개발 경로를 반영하고 iOS 및 모바일 후속 작업을 분�
 - [x] 일반 close와 확인을 우회하는 trusted destroy의 계약을 구분한다.
 - [x] 결정 완료: 실행 중 창 생성 옵션은 사전 선언 창의 호출별 제목, 크기와 제약, 표시 및 준비 후 표시로 제한한다. 각 생성 작업의 operation 권한을 허용한다. [ADR 0016](./decisions/0016-window-creation-contract.md).
 - [x] Windows create/recreate에 ADR 0016의 선택적 `options`와 생성별 검증, 실패 정리를 구현했다. 실제 네이티브 회귀는 CI의 windows-native에서 수행한다. [#102](https://github.com/mathbook3948/bunaway/issues/102).
-- [x] 결정 완료: 뷰는 화면과 정책의 생성 정의이며 single 기본값과 multiple 선택으로 창 인스턴스를 생성한다. 창별 ID와 세션, 프로필 공유 및 격리, 선언 및 인스턴스 상한은 [ADR 0017](./decisions/0017-multiple-windows-per-view.md)을 따른다. Windows는 이 계약을 구현하며 실제 네이티브 회귀는 CI로 검증한다.
+- [x] 결정 완료(ADR 0026이 대체): 뷰는 화면과 정책의 생성 정의이며 single 기본값과 multiple 선택으로 창 인스턴스를 생성한다. 창별 ID와 세션, 프로필 공유 및 격리, 선언 및 인스턴스 상한은 [ADR 0017](./decisions/0017-multiple-windows-per-view.md)을 따른다. Windows는 이 계약을 구현하며 실제 네이티브 회귀는 CI로 검증한다.
 - [x] Windows의 동일 뷰 다중 창 생성과 ID별 제어, 창별 세션 라우팅, 프로필 소유권과 상한을 구현했다. 실제 WebView2 검증은 CI의 windows-native 작업에서 수행한다. [#104](https://github.com/mathbook3948/bunaway/issues/104).
 - [x] 부모 창, 자식 창, owner 관계를 설정하고 조회한다.
 - [x] 부모에 종속된 모달 창과 부모의 입력 차단, 종료 순서를 제공한다.
