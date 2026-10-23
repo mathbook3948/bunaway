@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "views": [
+    {
+      "id": "main",
+      "origins": ["https://app.bunaway.local"],
+      "commands": [
+        "notes.read",
+        "notes.save",
+        "notes.restoreWindow",
+        "notes.closing",
+        "plugin.windows.respondClose"
+      ],
+      "events": ["windows.closeRequested"],
+      "host": {
+        "permissions": [
+          "storage.readText",
+          "storage.writeText",
+          "windows.respondClose",
+          "windows.getSnapshot",
+          "windows.getNormalBounds",
+          "windows.getOuterBounds",
+          "windows.getContentBounds",
+          "windows.getMonitors",
+          "windows.setOuterBounds",
+          "windows.maximize",
+          "windows.unmaximize",
+          "windows.setFullscreen",
+          "windows.show",
+          "windows.hide",
+          "store.load",
+          "store.get",
+          "store.set",
+          "store.save"
+        ]
+      }
+    }
+  ],
+  "backend": {
+    "permissions": []
+  }
+}
