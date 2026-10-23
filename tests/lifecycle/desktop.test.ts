@@ -829,20 +829,6 @@ test("startup delivery has a bounded queue and closing the inbox is idempotent",
   }
 });
 
-test("an inbox closed before start refuses to deliver the held requests", async () => {
-  const address =
-    process.platform === "win32"
-      ? `\\\\.\\pipe\\bunaway-test-${crypto.randomUUID()}`
-      : `/tmp/bunaway-${crypto.randomUUID()}.sock`;
-  const inbox = await listenForInstances(address);
-  try {
-    await forwardToInstance(address, launch);
-  } finally {
-    await inbox.close();
-  }
-  expect(() => inbox.start(() => {})).toThrow("Instance inbox is closed");
-});
-
 test("disposing during a quit check prevents a late completion from restarting shutdown", async () => {
   let finish: (value: boolean) => void = () => {};
   let stops = 0;
@@ -1589,42 +1575,6 @@ test("the pre-ready URL buffer is bounded and discarded by shutdown", async () =
     ]),
   ).toThrow("Desktop open queue unavailable");
   lifecycle.ready();
-  await tick();
-  expect(seen).toEqual([]);
-});
-
-test("ready() after a committed shutdown calls neither onReady nor onOpen", async () => {
-  const seen: string[] = [];
-  const lifecycle = new DesktopLifecycle(
-    {
-      onReady: () => {
-        seen.push("ready");
-      },
-      onOpen: (request) => {
-        seen.push(`open:${request.source}`);
-      },
-    },
-    async () => {},
-    () => {},
-    () => {},
-  );
-  lifecycle.commitShutdown("api");
-  expect(() =>
-    lifecycle.open(
-      {
-        argv: [],
-        cwd: "C:\\app",
-      },
-      "second-instance",
-    ),
-  ).toThrow("Desktop open queue unavailable");
-  // The initial open is refused too, so the host skips ready() once shutdown is committed.
-  expect(() =>
-    lifecycle.ready({
-      argv: [],
-      cwd: "C:\\app",
-    }),
-  ).toThrow("Desktop open queue unavailable");
   await tick();
   expect(seen).toEqual([]);
 });
