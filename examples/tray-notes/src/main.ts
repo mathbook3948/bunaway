@@ -30,6 +30,8 @@ async function start() {
   >();
   let saved = "";
   let loaded = false;
+  // Settles when the saved window placement has been applied or has failed.
+  let restoring: Promise<unknown> = Promise.resolve();
   let timer: ReturnType<typeof setTimeout> | undefined;
   // Saves the current text; a write that fails leaves the text marked unsaved.
   const save = async () => {
@@ -49,6 +51,8 @@ async function start() {
       // Before the saved note is loaded the input is empty, and writing it would erase the note.
       // A pending autosave stays scheduled so a refused close does not lose it.
       if (loaded) {
+        // Saving the placement while a restore is moving the window would store the half-moved one.
+        await restoring;
         await client.invoke("notes.closing", ui.input.value);
       }
       allow = true;
@@ -105,7 +109,8 @@ async function start() {
     }, AUTOSAVE_DELAY_MS);
   });
   // A missing saved placement or a failed restore keeps the declared size.
-  await client.invoke("notes.restoreWindow", null).catch(() => false);
+  restoring = client.invoke("notes.restoreWindow", null).catch(() => false);
+  await restoring;
 }
 
 void start().catch(() => {

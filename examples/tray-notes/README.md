@@ -43,6 +43,12 @@ tray-notes/
 `host.permissions`에 둔다. `store.*`는 모든 저장소 이름에 적용되므로 앱에 번들한 문서만 여는 뷰에서만 이렇게 허용한다.
 메모를 읽지 못하면 입력을 막고, 읽기 전에 닫기 요청이 오면 빈 입력으로 저장된 메모를 덮어쓰지 않도록 저장 없이 닫는다.
 
+## 검증한 범위
+
+`tests/cli/tray-notes.test.ts`가 설치, 웹 빌드, `validate`, Windows 번들을 실행하고 창 선언, 정책 권한, 명령 목록,
+`keep-alive`와 트레이 설정을 확인한다. 페이지의 읽기 전 닫기 보호와 읽기 실패 처리, 실제 Windows 창에서의 동작은
+이 예제로 확인하지 않는다. 닫기 요청, window-state, 트레이 `keep-alive`는 각각의 Windows 수명주기 테스트가 확인한다.
+
 ## 실행
 
 저장소 루트에서 프레임워크 패키지를 만든 뒤 이 폴더에서 `bun run dev`, `bun run build`, `bun run package`를
