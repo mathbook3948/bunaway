@@ -1171,6 +1171,8 @@ HWND와 콜백을 기존 WebView 및 Worker 종료 순서에 맞춰 정리합니
 새 windowId의 `created`, `ready`가 이어집니다. 생성 실패는 `created` 전에 끝나면 이벤트가 없습니다.
 앱 종료나 세션 종료가 시작된 뒤에는 발행하지 않습니다. 닫히는 창 자신의 세션은 먼저 철회되므로
 그 창의 문서는 자신의 `closed`와 `destroyed`를 받지 못합니다. 이 phase는 백엔드의 `windows.waitForLifecycle`로 관찰합니다.
+다만 단일 창 앱이 마지막 창을 닫으면 앱 종료가 시작되므로, 닫기 동작이 `quit`이면 그 창의 `closed`와 `destroyed`도 백엔드로 오지 않습니다.
+재생성하거나 `keep-alive` 등으로 앱이 계속 실행될 때만 그 창의 두 phase를 발행합니다.
 
 문서로 수신하려면(Windows) 뷰의 `events`에 `"windows.lifecycle"`을 허용하고 `host.permissions`에 `"windows.getSnapshot"`을
 추가합니다. 초기 이벤트와 과거 이력은 재전송하지 않으므로 구독 전에 열린 창은 `windows.isOpen`으로 확인합니다.

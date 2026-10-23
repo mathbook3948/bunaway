@@ -64,12 +64,21 @@ type View = {
   publishedLifecycle: Set<WindowLifecyclePhase>;
 };
 
+/** Phases kept for a listener that subscribes after they were published. */
+const LIFECYCLE_HISTORY_LIMIT = 32;
+
 /** Own each window's native resources and protocol boundary; closing one view leaves the others live. */
 export class MacosWindows {
   private readonly views = new Map<string, View>();
   private readonly lifecycleListeners = new Set<
     (event: WindowLifecycleEvent) => void
   >();
+  /**
+   * The most recent published phases. The first window can reach `created` before the backend's
+   * adapter subscribes, so a new listener first receives what it missed, as the backend's own
+   * history does for its waiters.
+   */
+  private readonly lifecycleHistory: WindowLifecycleEvent[] = [];
   /** Window that most recently became key; cleared when that window closes. */
   private lastActiveWindowId: string | undefined;
   /** A show request (desktop control, Dock reopen) that the tick has not applied yet. */
@@ -121,6 +130,11 @@ export class MacosWindows {
       supportsCreationOptions: true,
       validateCreation: (spec) => assertMacosWindowOptions(spec),
       onLifecycle: (listener) => {
+        if (!this.hooks.stopping()) {
+          for (const event of this.lifecycleHistory) {
+            listener(event);
+          }
+        }
         this.lifecycleListeners.add(listener);
         return () => {
           this.lifecycleListeners.delete(listener);
@@ -549,14 +563,19 @@ export class MacosWindows {
     }
     view.publishedLifecycle.add(phase);
     const { windowId, viewId } = view.readiness.snapshot();
+    const event: WindowLifecycleEvent = {
+      windowId,
+      viewId,
+      phase,
+    };
+    this.lifecycleHistory.push(event);
+    if (this.lifecycleHistory.length > LIFECYCLE_HISTORY_LIMIT) {
+      this.lifecycleHistory.shift();
+    }
     for (const listener of [
       ...this.lifecycleListeners,
     ]) {
-      listener({
-        windowId,
-        viewId,
-        phase,
-      });
+      listener(event);
     }
   }
 

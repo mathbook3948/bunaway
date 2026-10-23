@@ -70,6 +70,7 @@ test("macOS close request, lifecycle events and last-window quit follow the shar
     "a:created",
     "a:ready",
   ]);
+  expect(result.lateLifecycle).toEqual(result.lifecycle);
   expect(result.windowLifetimes).toEqual([
     "old",
     "old",

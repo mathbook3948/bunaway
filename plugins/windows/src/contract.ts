@@ -633,6 +633,11 @@ export const windowReadinessSchema = {
  * `created` emits nothing. Nothing is emitted once app shutdown or session end has begun, because sessions
  * are being torn down. The closed window's own sessions are revoked first, so it never receives its own
  * `closed` or `destroyed`. The Windows and macOS hosts emit this event.
+ *
+ * The backend's `windows.waitForLifecycle` sees the same phases, with one consequence of the rule above:
+ * when the only window closes and the close ends the app (`closeBehavior` `quit`), shutdown has begun, so
+ * that window's own `closed` and `destroyed` never reach the backend. They are published when the app keeps
+ * running, for a recreation or under `keep-alive`.
  */
 export const windowLifecycleSchema = {
   type: "object",

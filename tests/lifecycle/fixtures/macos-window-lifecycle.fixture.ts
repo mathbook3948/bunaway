@@ -376,6 +376,13 @@ if (mode === "quit") {
   await settle();
   recreating = false;
   result.lifecycle = lifecycle.map((entry) => entry.phase);
+  // A listener that subscribes late, as the backend's adapter does after the first window is up,
+  // still receives every phase from the start.
+  const late: string[] = [];
+  windows.services.onLifecycle?.((event) => {
+    late.push(`${event.viewId}:${event.phase}`);
+  });
+  result.lateLifecycle = late;
   const windowIds = lifecycle.map((entry) => entry.windowId);
   result.windowLifetimes = windowIds.map((id) =>
     id === windowIds[0] ? "old" : "new",
