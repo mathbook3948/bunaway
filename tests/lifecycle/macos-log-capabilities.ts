@@ -325,7 +325,6 @@ try {
   assert.equal(active.length, 1);
   assert.equal(active[0].message, "after-rotation");
   assert.equal(active[0].source, "view:main");
-
   assert.deepEqual(
     (await readdir(resolve(dataRoot, "logs")))
       .filter((name) => name.startsWith("app.log"))

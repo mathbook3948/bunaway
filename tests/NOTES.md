@@ -121,7 +121,7 @@ JSON 줄의 순서와 출처, 새 파일 권한, 반복 회전, 기록과 회전
 compile하고 원본 파일을 제거한 뒤 실행한다. 실제 macOS native CI에도 포함하며
 호스트의 전체 실행 경로를 대신하지 않는다.
 `macos-log-capabilities.ts`는 ad-hoc 서명한 compiled 앱과 실제 WKWebView에서 백엔드 및
-뷰 기록, 권한 거부, 쓰기 실패 후 복구, 회전, 백엔드의 최소 level 변경과 flush,
+뷰 기록, 권한 거부, 쓰기 실패 후 복구, 회전, 백엔드의 최소 level 변경과 flush 호출 성공,
 WebView의 `log.configure`와 `log.flush` 거부, manifest의 등록한 작업과 기능 목록의 일치
 및 정상 종료를 검사한다. `run-native.ts`에 포함하며 결과와 앱 데이터 진단은
 `build/macos-log-capabilities-results.json`과 `build/macos-log-capabilities-diagnostics/`에 남긴다.

@@ -437,7 +437,8 @@ macOS 브리지의 변경에서도 두 사용 방식의 공통 SDK 계약을 유
 - [x] 단일 WKWebView의 idle run loop와 4KB 응답 24,000개 전달의 측정 및 재현 방법을 기록했다.
 - [x] 앱 로그 플러그인의 macOS 어댑터, level/target/rotation/retention과 flush를 제공한다.
   Windows와 같은 `AppLog`를 macOS I/O Worker에서 쓰며, `macos-log-capabilities.ts`가 compiled 앱에서
-  `log.configure`의 최소 level 변경과 `log.flush`를 백엔드 권한으로 실행하고 WebView 호출의 거부를 검사한다.
+  `log.configure`의 최소 level 변경을 기록으로 확인하고 `log.flush` 호출이 성공하는지, WebView 호출이 거부되는지 검사한다.
+  `maxFileBytes`와 `maxArchives` 설정은 격리 어댑터 검사(`app-log.test.ts`)가 두 플랫폼에서 확인한다.
 - [ ] WKWebView inspector 설정과 DevTools 열기, 닫기 및 상태 조회를 제공한다.
 - [ ] 백엔드 `dev --inspect`를 macOS Worker에 연결한다. 현재 CLI는 Windows만 허용한다.
 - [ ] Windows의 호환 명령 교체를 macOS에 적용할 필요성과 Worker 경계를 결정한다.

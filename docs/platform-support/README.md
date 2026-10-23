@@ -42,7 +42,7 @@ macOS에서 시스템 WebKit 버전이며 Android와 iOS는 `null`이다. Window
 
 로그와 기능 조회는 격리 어댑터 검사와 실제 compiled WKWebView 앱 호출 검사를
 구분한다. `macos-log-capabilities.ts`는 기존 entitlement로 ad-hoc 서명한 `.app`에서
-출처와 권한, 쓰기 실패 후 복구, 회전, 최소 level 변경과 flush, 등록한 작업의 지원 목록과 정상 종료를 검사한다.
+출처와 권한, 쓰기 실패 후 복구, 회전, 최소 level 변경과 flush 호출 성공, 등록한 작업의 지원 목록과 정상 종료를 검사한다.
 이 통합 head의 실제 native CI 결과는 확인 전까지 성공으로 기록하지 않는다.
 
 Windows의 선택 [notification 플러그인](../../plugins/notification/README.md)은 unpackaged
