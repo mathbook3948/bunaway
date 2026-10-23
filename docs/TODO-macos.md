@@ -234,7 +234,7 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 - [x] 텍스트, HTML, 이미지와 파일 목록의 읽기, 쓰기 및 비우기를 제공한다. 파일 목록은 `public.file-url` 항목으로 읽고 쓰며 [macOS 형식과 제한](./site/src/content/docs/reference/plugins/clipboard.mdx#macos-형식과-제한)을 따른다.
 - [ ] pasteboard 유형 조회, 사용자 지정 형식의 지원 범위를 정한다.
 - [x] pasteboard 변경 감지(`clipboard.changed`, `waitForChange`)를 제공한다. `NSPasteboard.changeCount`를 100밀리초마다 비교하며 payload는 내용 없이 `sequence`와 `changedAt`만 담는다. [변경 이벤트](./site/src/content/docs/reference/plugins/clipboard.mdx#변경-이벤트)를 따른다.
-- [ ] 이미지 파일과 bytes의 로드, 크기 조회, resize와 PNG 내보내기를 제공한다.
+- [x] 이미지 파일 bytes(PNG, JPEG, BMP)와 data URL의 로드, 크기 조회, resize와 PNG 내보내기를 제공한다. macOS arm64의 `image` 플러그인이 ImageIO와 CoreGraphics로 처리하고 `macos-image-host.ts`가 `macos-native`에서 확인한다([image](./site/src/content/docs/reference/plugins/image.mdx)). 파일 경로는 받지 않으며 파일 bytes는 앱이 기존 저장소 권한으로 읽어 `createBytes`에 넘긴다.
 - [x] `image.createFileTypeIcon`으로 확장자와 크기(16, 32, 48)만 받아 파일 형식 아이콘을 생성한다. `NSWorkspace iconForFileType:`에 확장자만 넘겨 조회하며 요청한 크기의 정사각형 RGBA를 반환한다.
 - [ ] Retina 이미지, template 이미지와 네이티브 이미지 자원의 해제를 정의한다.
 - [ ] 민감한 클립보드 데이터와 비동기 접근의 실패 및 종료 동작을 정의한다.
