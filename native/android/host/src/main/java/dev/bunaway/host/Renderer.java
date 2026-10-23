@@ -110,7 +110,9 @@ final class Renderer {
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
-        settings.setSupportMultipleWindows(false);
+        // New-window requests (window.open, target=_blank) reach onCreateWindow, which refuses
+        // them. With multiple windows off WebView would load the target in this view instead.
+        settings.setSupportMultipleWindows(true);
 
         // WebView injects the native object only for the app origin. Subframes of the same
         // origin also receive it, so the callback checks the main frame itself.
@@ -170,6 +172,16 @@ final class Renderer {
                 Collections.singleton(assets.origin));
         view.setWebChromeClient(
                 new WebChromeClient() {
+                    /** The app is one window: a new-window request creates no WebView. */
+                    @Override
+                    public boolean onCreateWindow(
+                            WebView webView,
+                            boolean isDialog,
+                            boolean isUserGesture,
+                            android.os.Message resultMsg) {
+                        return false;
+                    }
+
                     @Override
                     public boolean onConsoleMessage(ConsoleMessage message) {
                         android.util.Log.i("BunawayWeb", message.message());
@@ -410,6 +422,13 @@ final class Renderer {
     /** Loads the configured home page; the first page start opens the backend session. */
     void load() {
         view.loadUrl(assets.home);
+    }
+
+    /** Steps back in the WebView history; false when there is nothing to go back to. */
+    boolean goBack() {
+        if (closed || !view.canGoBack()) return false;
+        view.goBack();
+        return true;
     }
 
     /**
