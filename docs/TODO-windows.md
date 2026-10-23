@@ -645,9 +645,9 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [x] 허용 origin을 검사하고 탐색 시 기존 세션을 폐기한다.
 - [x] 뷰별 영속 프로필과 렌더러 복구를 제공한다.
 - [ ] WebView ID 조회, 현재와 포커스된 WebView, 전체 목록을 제공한다.
-- [ ] 하나의 창에 여러 WebView를 생성하고 별도 bounds, 표시와 포커스를 제어한다.
+- [ ] 하나의 창에 여러 WebView를 생성하고 별도 bounds, 표시와 포커스를 제어한다. ADR 0026에 따라 보류한다.
 - [ ] 창 크기 변경에 따른 auto-resize와 콘텐츠 크기 기반 배치를 제공한다.
-- [ ] WebView를 다른 창으로 reparent하는 기능과 새 세션 규칙을 정의한다.
+- [ ] WebView를 다른 창으로 reparent하는 기능과 새 세션 규칙을 정의한다. ADR 0026에 따라 보류한다.
 - [ ] WebView만 닫고 재생성하는 공개 API를 제공한다.
 - [x] 기존 허용 origin 안의 URL 로드, 일반 reload와 stop을 제공한다. `navigateWebView`, `reloadWebView`, `stopWebView`는 기존 세션 폐기와 origin 검사를 유지한다.
 - [ ] 로컬 파일 로드와 cache를 무시한 reload를 제공한다.
@@ -1127,7 +1127,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 - [ ] Dock icon, badge, bounce, menu와 recent documents를 제공한다.
 - [ ] macOS titlebar style, traffic-light 위치, 버튼 표시와 hidden title을 제공한다.
 - [ ] macOS native fullscreen, simple fullscreen과 fullscreen transition을 제공한다.
-- [ ] macOS window tab의 추가, 분리, 이동과 tab bar를 제공한다.
+- [ ] macOS window tab의 추가, 분리, 이동과 tab bar를 제공한다. ADR 0026에 따라 보류한다.
 - [ ] represented filename, document edited와 sheet 이벤트를 제공한다.
 - [ ] Mission Control 숨김과 모든 workspace 표시를 제공한다.
 - [ ] vibrancy, window effects와 shadow 갱신을 제공한다.
@@ -1170,7 +1170,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 - [ ] iOS의 호스트, Bun 실행, 중단과 복귀, 배포 경로를 구현한다.
 - [ ] native permission 요청, 거부, 재요청과 시스템 설정 이동을 제공한다.
 - [ ] 앱 foreground/background, resume, pause와 back-button 이벤트를 제공한다.
-- [ ] 모바일 다중 창, Android activity와 iOS scene 식별, 지원 여부 조회를 제공한다.
+- [ ] 모바일 다중 창, Android activity와 iOS scene 식별, 지원 여부 조회를 제공한다. ADR 0026에 따라 보류한다.
 - [ ] geolocation 단일 위치, 연속 watch와 해제를 제공한다.
 - [ ] biometric 지원 상태 조회와 authenticate, 취소를 제공한다.
 - [ ] barcode/QR scan, 카메라 권한과 종료를 제공한다.

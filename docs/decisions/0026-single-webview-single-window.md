@@ -92,6 +92,16 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
 - **`window.open` 반환값.** 새 창을 만들지 않을 때의 반환값(`null`)과 `opener` 참조에 의존하는 웹 코드의 호환을 정한다.
 - **차단 진단.** 반복되는 차단 진단이 로그를 채우지 않도록 빈도 상한을 둔다.
 
+- **모바일 창 수명(모바일 구현 PR의 기본값).** Activity 재생성(Android 회전)은 창 재생성이 아니라 같은 창의 문서
+  재연결로 보고 `windowId`를 유지한다. 뒤로가기로 더 돌아갈 곳이 없어 Activity가 끝나면 창이 닫힌 것으로 보고
+  `onAllWindowsClosed` 뒤 앱을 종료한다. 모바일이 지원하는 창 작업은 `isOpen`, `getSnapshot`, `getReadiness`,
+  lifecycle 구독으로 시작하고 `create`, `recreate`, `close`, `destroy`, `show`, `hide`, `respondClose`는 `UNSUPPORTED`다.
+- **리다이렉트.** 내부 URL로 시작한 요청이 외부로 리다이렉트될 때 판정을 요청 URL로 할지 최종 URL로 할지 정한다.
+  기본값은 최종 URL이다.
+- **Android 전환.** `onCreateWindow`를 쓰려면 `setSupportMultipleWindows(true)`로 바꿔야 하며 지금의 `_blank` 일반 탐색
+  동작이 바뀐다. 전환 순서와 기본값을 링크 구현 PR에서 정한다.
+- **이름 있는 대상.** `noopener`, `features` 인자와 이름 있는 `target`은 기본적으로 새 창 요청과 같게 처리한다.
+
 ### 단일 창 계약의 세부
 
 | 항목 | 계약 |
@@ -104,7 +114,7 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
 | 창이 없을 때의 제어 | 창 제어와 상태 조회는 `INVALID_ARGUMENT`(창 없음). 기존 "닫힌 windowId" 오류와 같은 코드. 예외로 `windows.isOpen()`은 성공하고, `windows.destroy()`는 기존처럼 창이 없어도 `true`로 성공하며, `windows.getReadiness()`는 닫힌 창의 마지막 결과를 유지한다 |
 | WebView 프로필 | 영속 프로필 하나. Windows 경로는 `webview/`이며 기존 `webview/v<인코딩한 view>` 데이터는 옮기거나 지우지 않는다. 격리 프로필을 제거하면서 비정상 종료로 남은 `webview/temporary`와 정리 커서(`webview/.temporary-cleanup-cursor`)는 매 시작 때 삭제한다. macOS는 지금 뷰별로 하나씩 비영속 저장소를 만들고 재생성 때만 유지하므로, 이 결정으로 쿠키와 웹 저장소가 디스크에 남아 실행 사이에도 유지되는 영속 프로필 하나로 바뀐다. 저장소는 앱마다 분리해, 번들 ID가 없는 개발 실행에서도 앱끼리 쿠키와 웹 저장소를 공유하지 않는다. 앱별 식별자로 분리할지 앱 데이터 디렉터리를 쓸지는 macOS 공개 API가 허용하는 방식으로 구현 PR에서 확정한다 |
 | 이벤트 | `windows.changed`, `windows.closeRequested` 등의 payload 형식은 유지한다. 지금 `windows.readiness`와 `windows.lifecycle`은 권한이 있는 열린 창의 문서 세션에 방송하고 백엔드는 받지 않으며, 닫히는 창은 세션이 먼저 철회되어 자신의 `closed`, `destroyed`를 받지 못한다. 단일 창에서는 문서만 받아서는 창 상태를 볼 수 없으므로 `windows.lifecycle`을 백엔드(Bun 쪽 앱 코드)에도 전달한다. 이벤트 수신은 네이티브 작업이 아니라 알림이므로 백엔드의 `backend.permissions` Host API 검사 대상이 아니고(백엔드의 Host API 호출은 계속 검사한다), windows 플러그인이 제공하는 새 백엔드 구독 API로(windows 플러그인이 등록되지 않았으면 이벤트도 발행하지 않는다) `created`부터 `destroyed`까지 모든 단계를 권한 검사 없이 받아, Electron의 `window-all-closed`처럼 창 상태를 본다. 문서 세션이 받는 조건은 정책 `events`에 `windows.lifecycle`이 있어야 하는 기존 조건(유지)과 작업 권한 `windows.getSnapshot`(`windows.listInstances`를 대신한다)이며, 문서 세션도 계속 받는다(단일 창에서 문서 세션이 받을 수 있는 단계는 `ready`뿐이고, 문서의 구독이 `ready` 발행보다 늦으면 하나도 받지 못할 수 있다). 앱 종료나 세션 종료가 시작된 뒤에는 기존 계약대로 전송하지 않는다. 창 재생성 여부는 이벤트와 `getSnapshot()`의 `windowId`로 구분한다. `windows.readiness`는 문서 세션 전달을 그대로 두고, 백엔드는 `getReadiness()`로 조회한다. 이를 위해 macOS 어댑터도 `getSnapshot`을 구현해야 한다 |
-| 다른 플러그인 | dialog의 `ownerWindowId`, menu의 `windowId`, window-state의 `view`와 `windowId`, appearance의 `windowId`는 입력에서 제거하고 항상 앱의 창을 뜻한다. appearance의 창 테마와 앱 테마는 하나로 합친다. 창이 없을 때와 창이 숨겨져 있을 때 dialog는 지금처럼 소유 창 없이 열고(보이는 창이 있을 때만 그 창이 소유 창이다), menu의 창 메뉴는 창 재생성 뒤 새 창에 다시 붙는다. window-state의 저장 키는 `key`를 생략하면 정책의 유일한 뷰 ID이고, `remove`도 `key` 생략 시 같은 값을 쓴다. 창 아이콘, 썸네일 툴바, 오버레이 아이콘, 닫기 확인 같은 런타임 창 상태는 지금의 재생성 동작을 유지한다 |
+| 다른 플러그인 | dialog의 `ownerWindowId`, menu의 `windowId`, window-state의 `view`와 `windowId`, appearance의 `windowId`는 입력에서 제거하고 항상 앱의 창을 뜻한다. appearance의 창 테마와 앱 테마는 하나로 합친다. dialog의 소유 창은 문서 세션이 호출하면 지금처럼 발신 창(숨긴 창 포함)이고, 백엔드가 호출하면 창이 보이는 동안만 그 창이다. 창이 없거나 숨겨져 있으면 소유 창 없이 연다. 백엔드 호출은 지금 항상 소유 창이 없으므로 보이는 창이 있을 때의 동작이 바뀐다. menu의 창 메뉴는 창 재생성 뒤 새 창에 다시 붙는다. window-state의 저장 키는 `key`를 생략하면 정책의 유일한 뷰 ID이고, `remove`도 `key` 생략 시 같은 값을 쓴다. 창 아이콘, 썸네일 툴바, 오버레이 아이콘, 닫기 확인 같은 런타임 창 상태는 지금의 재생성 동작을 유지한다 |
 | 선언 필드 | `app.title`은 그대로 유지한다. `backgroundColor`는 `app.window` 아래 필드다 |
 
 ## 결과
@@ -142,7 +152,7 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
 - **창 없는 트레이 앱.** 지금은 `app.windows: []`로 창을 전혀 만들지 않는 트레이 전용 앱을 표현할 수 있고 트레이 Open이나 두 번째 실행도 창을 만들지 않는다. 이 결정의 `app.startup: false`는 트레이 Open, 두 번째 실행, `windows.create()`가 창을 만들므로 창을 절대 만들지 않는 앱은 표현할 수 없다. 트레이 전용 앱은 창을 숨긴 채 유지하는 방식(`app.visible: false`)으로 대신하며, 이때 트레이 Open과 두 번째 실행은 숨긴 창을 표시한다. 트레이 Open과 두 번째 실행이 새로 만든 창(`startup: false`나 `keep-alive`로 닫은 뒤)은 `visible` 설정과 상관없이 항상 표시한다. 창이 절대 보이지 않는 앱은 표현할 수 없다. 트레이 앱이 유지되려면 `desktop.tray`와 `closeBehavior: "hide"` 또는 `"keep-alive"`가 필요하며, 기본값 `"quit"`이면 창을 닫을 때 앱이 종료된다. 숨긴 창과 WebView, 정책 권한을 가진 문서 세션이 시작부터 상주하므로
   `app.windows: []` 앱보다 메모리 사용과 공격면이 늘고, 이 비용을 받아들인다.
 - **기존 데이터 경로.** `app.windows`를 쓰던 Windows 앱은 `webview/v<인코딩한 view>`에 쿠키와 웹 저장소가 있으며
-  이 결정으로 `webview/`를 쓰면 이전 데이터를 읽지 못한다. 개발 단계이므로 옮기지 않고 이전 디렉터리도 정리하지 않는다. window-state는 저장 키가 `key`가 없으면 `view`이므로, `view`를 생략하는 앱은 입력 제거 뒤에도 정책의 유일한 뷰 ID로 같은 키를 쓰지만 `windowId` 기반으로 저장했던 상태는 읽지 못한다.
+  이 결정으로 `webview/`를 쓰면 이전 데이터를 읽지 못한다. 개발 단계이므로 옮기지 않고 이전 디렉터리도 정리하지 않는다. window-state의 저장 키는 `key`, 없으면 `view`이고 `windowId`는 어느 창의 값을 쓸지만 고른다. `view` 입력을 제거하면 `key`를 생략한 호출은 정책의 유일한 뷰 ID를 키로 쓰므로, 그 밖의 뷰 ID로 저장했던 상태는 고아가 된다.
 - **부모와 모달 창, 창별 프로필 격리.** `setParent`, 부모 종속 모달, `profile: "isolated"`를 제거한다.
   네이티브 대화상자의 소유 창은 앱의 창으로 고정된다.
 - **이미 구현하고 검증한 코드.** Windows 다중 창, 소유 관계, 격리 프로필 구현과 그 실제 OS 검증을 버린다.
