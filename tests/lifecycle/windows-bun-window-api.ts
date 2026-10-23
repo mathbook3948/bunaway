@@ -2548,12 +2548,10 @@ if (!process.argv.includes("--child")) {
               assert.equal(await windows.getOpacity(), 1);
               // The declared color is live, and a runtime change replaces it.
               assert.equal(await windows.getBackgroundColor(), "#112233");
-              assert.equal(await windows.getBackgroundColor(), null);
               await windows.setBackgroundColor({
                 color: "#ABC",
               });
               assert.equal(await windows.getBackgroundColor(), "#aabbcc");
-              assert.equal(await windows.getBackgroundColor(), null);
               await windows.setBackgroundColor({
                 color: "#203040",
               });

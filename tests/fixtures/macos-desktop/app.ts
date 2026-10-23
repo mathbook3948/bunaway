@@ -226,8 +226,7 @@ const scripts: Record<string, () => Promise<void>> = {
     await until(logged("page:main"), "the main page");
     step("close-main");
     await drive("close", "main");
-    step("wait-main-destroyed");
-    await until(logged("lifecycle:destroyed:main"), "main destroyed");
+    // Closing the last window starts the quit, and no phase is published once shutdown starts.
   },
   async "keep-alive"() {
     step("wait-main-page");
@@ -285,8 +284,6 @@ const scripts: Record<string, () => Promise<void>> = {
     log(`visibleAfterDecline:${await drive("visibleWindows")}`);
     step("close-main-to-accept");
     await drive("close", "main");
-    step("wait-main-destroyed");
-    await until(loggedTimes("lifecycle:destroyed:main", 2), "main destroyed");
     // Closing the last window then asks beforeQuit and ends the app.
   },
   async "recreate-release"() {
@@ -326,11 +323,6 @@ const scripts: Record<string, () => Promise<void>> = {
     log(`mainWindowCount:${listed}`);
     step("close-main");
     await drive("close", "main");
-    step("wait-main-destroyed");
-    await until(
-      loggedTimes("lifecycle:destroyed:main", RECREATIONS + 1),
-      "main destroyed",
-    );
   },
   async "open-urls"() {
     step("wait-main-page");

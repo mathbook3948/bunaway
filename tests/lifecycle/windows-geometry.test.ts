@@ -4,6 +4,7 @@ import type {
   NativeWindowServices,
   WindowSnapshot,
 } from "@bunaway/plugin-api/native";
+import { windowDefinitions } from "#plugins/windows/src/contract";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
@@ -439,12 +440,14 @@ test.skipIf(process.platform !== "win32")(
         payload: Record<string, string | number | boolean> = {},
       ) => {
         stage = operation;
+        // An operation without data takes null; an all-optional one takes an object.
+        const definition =
+          windowDefinitions[
+            operation.replace("windows.", "") as keyof typeof windowDefinitions
+          ];
         const result = await execute(
           operation,
-          {
-            view: "main",
-            ...payload,
-          },
+          definition.input.safeParse(null).success ? null : payload,
           "backend",
           context,
         );

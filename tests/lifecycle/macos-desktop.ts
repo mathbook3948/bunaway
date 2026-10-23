@@ -324,20 +324,17 @@ const scenarios: Scenario[] = [
       assert(at(lines, "declining:main") < busy);
       assert(busy < declined);
       assert(at(lines, "visibleAfterDecline:1") > declined);
-      // The recreated main reports created, ready, closed and destroyed in that order. The
-      // decline produced no closed event; the second, accepted close did.
+      // The replaced main reported created, ready, closed and destroyed in that order. The decline
+      // produced no closed event, and the last window's own phases come after shutdown starts, so
+      // the backend does not see them.
       const created = at(lines, "lifecycle:created:main");
       const ready = at(lines, "lifecycle:ready:main");
-      const closed = lines.lastIndexOf("lifecycle:closed:main");
-      const destroyed = lines.lastIndexOf("lifecycle:destroyed:main");
+      const closed = at(lines, "lifecycle:closed:main");
+      const destroyed = at(lines, "lifecycle:destroyed:main");
       assert(created < ready);
-      assert(ready < declined);
-      assert(closed > declined);
-      assert(destroyed > closed);
-      assert.equal(
-        lines.filter((line) => line === "lifecycle:closed:main").length,
-        2,
-      );
+      assert(ready < closed);
+      assert(closed < destroyed);
+      assert(destroyed < declined);
     },
   },
   {
