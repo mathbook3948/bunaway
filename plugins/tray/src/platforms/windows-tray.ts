@@ -165,6 +165,7 @@ export class Tray {
     retain?: (owner: NativeTrayOwner) => void,
     notifyHover?: (event: TrayHoverEvent) => void,
     private readonly notifyBalloon?: (event: TrayBalloonEvent) => void,
+    icon?: string,
   ) {
     // Validate the whole startup value before acquiring this tray's native resources.
     if (/[\0\uD800-\uDFFF]/u.test(tooltip)) {
@@ -256,9 +257,12 @@ export class Tray {
       // Only the hidden bit is ever claimed, so every NIM_MODIFY and Explorer re-add keeps it.
       this.data.writeUInt32LE(NIS_HIDDEN, DW_STATE_MASK_OFFSET);
       this.data.writeUInt32LE(TRAY_CALLBACK_MESSAGE, 24);
-      const icon = windows.icon;
-      assert(icon, "Tray icon unavailable");
-      this.data.writeBigUInt64LE(icon, 32);
+      // A declared icon is owned by this tray like one set later; the app icon stays the fallback.
+      const declared = icon === undefined ? undefined : createTrayIcon(icon);
+      this.customIcon = declared;
+      const initial = declared ?? windows.icon;
+      assert(initial, "Tray icon unavailable");
+      this.data.writeBigUInt64LE(initial, 32);
       // Preserve startup truncation while avoiding a split surrogate at the native WCHAR limit.
       for (const character of tooltip) {
         if (this.tooltip.length + character.length > MAX_TRAY_TOOLTIP_UNITS) {

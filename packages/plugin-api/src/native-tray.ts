@@ -110,6 +110,8 @@ export type NativeTrayOwner = Pick<
 export type NativeTrayInitialization = {
   windows: NativeTrayWindowHost;
   tooltip: string;
+  /** Base64 ICO the host read from the app resources directory; absent means the app icon. */
+  icon?: string;
   receive(action: "show" | "quit"): void;
   notify(event: NativeTrayEvent): void;
   /** Retain partial ownership before shell registration; failed startup releases remain retryable. */

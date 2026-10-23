@@ -66,28 +66,31 @@ export function initializeWith(
   const created: CreatedTray = {
     tray: undefined,
   };
-  services?.initialize?.(({ windows, tooltip, receive, notify, retain }) => {
-    // Hover and balloon events are view-only with no waiter. The host Tray outlives this plugin,
-    // so stop after dispose.
-    created.tray = createTray(
-      windows,
-      tooltip,
-      receive,
-      notify,
-      retain,
-      (event) => {
-        if (hover.open) {
-          services.emit("tray.hover", validateValue({}, event));
-        }
-      },
-      (event) => {
-        if (hover.open) {
-          services.emit("tray.balloon", validateValue({}, event));
-        }
-      },
-    );
-    return created.tray;
-  });
+  services?.initialize?.(
+    ({ windows, tooltip, icon, receive, notify, retain }) => {
+      // Hover and balloon events are view-only with no waiter. The host Tray outlives this plugin,
+      // so stop after dispose.
+      created.tray = createTray(
+        windows,
+        tooltip,
+        receive,
+        notify,
+        retain,
+        (event) => {
+          if (hover.open) {
+            services.emit("tray.hover", validateValue({}, event));
+          }
+        },
+        (event) => {
+          if (hover.open) {
+            services.emit("tray.balloon", validateValue({}, event));
+          }
+        },
+        icon,
+      );
+      return created.tray;
+    },
+  );
   const notifications = new NativeEventWaiters<
     z.output<typeof trayEventSchema>
   >(MAX_TRAY_WAITERS);

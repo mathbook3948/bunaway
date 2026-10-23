@@ -136,6 +136,15 @@ export type DesktopOptions = {
   readonly tray?: {
     /** Text shown by the operating system for the tray icon. */
     readonly tooltip: string;
+    /**
+     * Tray icon as an ICO file path relative to the app resources directory (`app.paths.resources`),
+     * like the icon passed to Electron's `Tray` constructor or Tauri's `trayIcon` configuration.
+     * Absolute paths, drive or UNC prefixes, URLs and `..` segments are rejected, and a symlink must
+     * not leave the resources directory. Without it the tray uses the app icon. Startup fails with
+     * `INVALID_ARGUMENT` when the file is missing or is not a valid ICO. Only Windows has a tray;
+     * the other platforms do not implement `desktop.tray` and ignore no field of it.
+     */
+    readonly icon?: string;
   };
   /**
    * `files-and-urls` derives and validates open metadata before onOpen (the default).

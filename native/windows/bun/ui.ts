@@ -2084,6 +2084,11 @@ try {
                 windowRequests.onModalInterrupt(signal, cancel),
             },
             tooltip: config.desktop.tray.tooltip,
+            ...(config.desktop.tray.icon === undefined
+              ? {}
+              : {
+                  icon: config.desktop.tray.icon,
+                }),
             retain(owner) {
               tray = owner;
             },
