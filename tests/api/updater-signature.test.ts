@@ -170,7 +170,7 @@ const PUBLISHERS = {
 };
 
 test("a distinguished name is parsed from both the Windows and the RFC 2253 spelling", () => {
-  expect(parseDistinguishedName(SUBJECT)).toEqual([
+  expect(parseDistinguishedName(SUBJECT, "windows")).toEqual([
     {
       key: "CN",
       value: "Example, Inc.",
@@ -188,7 +188,9 @@ test("a distinguished name is parsed from both the Windows and the RFC 2253 spel
       value: "KR",
     },
   ]);
-  expect(parseDistinguishedName("cn=Example\\, Inc.,O=A\\2BB")).toEqual([
+  expect(
+    parseDistinguishedName("cn=Example\\, Inc.,O=A\\2BB", "rfc2253"),
+  ).toEqual([
     {
       key: "CN",
       value: "Example, Inc.",
@@ -208,7 +210,7 @@ test("a distinguished name is parsed from both the Windows and the RFC 2253 spel
     "CN=\\",
     "CN=\\ff",
   ]) {
-    expect(parseDistinguishedName(bad)).toBeNull();
+    expect(parseDistinguishedName(bad, "rfc2253")).toBeNull();
   }
 });
 
@@ -225,6 +227,22 @@ test("a publisher entry matches only on an exact, case sensitive common name or 
   expect(publisherMatches(SUBJECT, "CN=Example")).toBe(false);
   expect(publisherMatches("not a name", "not a name")).toBe(false);
   expect(publisherMatches(SUBJECT, "CN=#0403414243")).toBe(false);
+});
+
+test("a backslash in the signer's subject is an ordinary character, and a subject with two common names matches none", () => {
+  // Windows prints a literal backslash as is, so it must not be decoded as an escape.
+  expect(publisherMatches("CN=\\Victim Corp", "Victim Corp")).toBe(false);
+  expect(publisherMatches("CN=\\56ictim Corp", "Victim Corp")).toBe(false);
+  expect(publisherMatches("CN=\\Victim Corp", "\\Victim Corp")).toBe(true);
+  expect(publisherMatches("CN=Foo\\Bar, O=Org", "Foo\\Bar")).toBe(true);
+  expect(publisherMatches("CN=\\Victim Corp", "CN=Victim Corp")).toBe(false);
+  expect(publisherMatches('CN="Say ""hi""", O=Org', 'Say "hi"')).toBe(true);
+  expect(publisherMatches("CN=Attacker, CN=Victim Corp", "Victim Corp")).toBe(
+    false,
+  );
+  expect(
+    publisherMatches("CN=Attacker, CN=Victim Corp", "CN=Victim Corp"),
+  ).toBe(true);
 });
 
 test("the authenticode setting needs one to eight valid publisher names and nothing else", () => {
@@ -455,11 +473,19 @@ test("a WinVerifyTrust result is classified, and an unknown failure never passes
       subject: null,
     }),
   ).toThrow();
-  expect(() =>
-    parseTrustReply({
+  for (const reply of [
+    {
       fail: "x",
-    }),
-  ).toThrow();
+    },
+    null,
+  ]) {
+    try {
+      parseTrustReply(reply);
+      throw new Error("Expected the reply to be refused.");
+    } catch (error) {
+      expect(reasonOf(error as BunawayError)).toBe("verifierFailed");
+    }
+  }
 });
 
 /** A worker double that records messages and lets the test reply or fail it. */
@@ -550,6 +576,33 @@ test("a signature check answers with the worker's reply and retires the worker",
   });
   expect(workers.size).toBe(0);
   expect(created[0]?.terminated()).toBe(true);
+});
+
+test("a worker that cannot start or an installer that cannot be read fails the check with verifierFailed", async () => {
+  const refused = await failure(
+    requestFromWorker(
+      {
+        source: "",
+        request: {},
+        signal: new AbortController().signal,
+        workers: new Set<Worker>(),
+        limit: 2,
+      },
+      () => {
+        throw new Error("no workers here");
+      },
+    ),
+  );
+  expect(reasonOf(refused)).toBe("verifierFailed");
+  expect(refused.message).not.toContain("no workers");
+  const unreadable = await failure(
+    createAuthenticodeVerifier().verify(
+      join(root, "missing.package"),
+      new AbortController().signal,
+    ),
+  );
+  expect(reasonOf(unreadable)).toBe("verifierFailed");
+  expect(unreadable.message).not.toContain(root);
 });
 
 test("the Windows verifier rejects files that are neither PE nor MSI before any worker starts", async () => {

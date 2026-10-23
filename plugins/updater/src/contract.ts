@@ -48,7 +48,8 @@ const publisherNameSchema = z
   .min(1)
   .max(MAX_PUBLISHER_NAME_LENGTH)
   .refine(
-    (name) => !name.includes("=") || parseDistinguishedName(name) !== null,
+    (name) =>
+      !name.includes("=") || parseDistinguishedName(name, "rfc2253") !== null,
   );
 
 /**
@@ -135,6 +136,7 @@ export type UpdaterFailureReason =
   | "revocationUnavailable"
   | "publisherMismatch"
   | "verifierBusy"
+  | "verifierFailed"
   | "storage"
   | "notAvailable";
 

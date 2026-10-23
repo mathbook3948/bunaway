@@ -58,11 +58,20 @@ function powershell(script: string): string {
   return result.stdout.toString().trim();
 }
 
-function sign(path: string, thumbprint: string): void {
+/**
+ * Sign `path` with the certificate. PowerShell reports `Valid` only when the certificate chains to
+ * a trusted root; a signature from the untrusted certificate is attached all the same and reported
+ * as `UnknownError`, which is what the check under test must then refuse.
+ */
+function sign(path: string, thumbprint: string, trusted: boolean): void {
   const status = powershell(
     `(Set-AuthenticodeSignature -FilePath '${path}' -Certificate (Get-Item Cert:\\CurrentUser\\My\\${thumbprint}) -HashAlgorithm SHA256).Status`,
   );
-  expect(status).toBe("Valid");
+  if (trusted) {
+    expect(status).toBe("Valid");
+  } else {
+    expect(status).not.toBe("NotSigned");
+  }
 }
 
 beforeAll(() => {
@@ -70,16 +79,19 @@ beforeAll(() => {
     return;
   }
   folder = mkdtempSync(join(tmpdir(), "bunaway-updater-signature-"));
+  // The thumbprints are known before the trust store changes, so the cleanup can always find them.
   const certificates = powershell(`
     $trusted = New-SelfSignedCertificate -Type CodeSigningCert -Subject '${TRUSTED_SUBJECT}' -CertStoreLocation Cert:\\CurrentUser\\My -NotAfter (Get-Date).AddDays(1)
     $other = New-SelfSignedCertificate -Type CodeSigningCert -Subject '${UNTRUSTED_SUBJECT}' -CertStoreLocation Cert:\\CurrentUser\\My -NotAfter (Get-Date).AddDays(1)
-    $cer = Join-Path '${folder}' 'trusted.cer'
-    Export-Certificate -Cert $trusted -FilePath $cer | Out-Null
-    Import-Certificate -FilePath $cer -CertStoreLocation Cert:\\LocalMachine\\Root | Out-Null
     "$($trusted.Thumbprint) $($other.Thumbprint)"
   `).split(" ");
   trustedThumbprint = certificates[0] ?? "";
   untrustedThumbprint = certificates[1] ?? "";
+  powershell(`
+    $cer = Join-Path '${folder}' 'trusted.cer'
+    Export-Certificate -Cert (Get-Item Cert:\\CurrentUser\\My\\${trustedThumbprint}) -FilePath $cer | Out-Null
+    Import-Certificate -FilePath $cer -CertStoreLocation Cert:\\LocalMachine\\Root | Out-Null
+  `);
 
   // Small unsigned executable and an empty installer database, each signed under both identities.
   const system = process.env.SystemRoot ?? "C:\\Windows";
@@ -98,10 +110,10 @@ beforeAll(() => {
     $database = $installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $installer, @('${files.msi}', 3))
     $database.GetType().InvokeMember('Commit', 'InvokeMethod', $null, $database, $null)
   `);
-  sign(files.trusted as string, trustedThumbprint);
-  sign(files.tampered as string, trustedThumbprint);
-  sign(files.untrusted as string, untrustedThumbprint);
-  sign(files.msi, trustedThumbprint);
+  sign(files.trusted as string, trustedThumbprint, true);
+  sign(files.tampered as string, trustedThumbprint, true);
+  sign(files.untrusted as string, untrustedThumbprint, false);
+  sign(files.msi, trustedThumbprint, true);
   // Change one byte inside the signed image so the digest in the signature no longer matches.
   const bytes = readFileSync(files.tampered as string);
   bytes[1024] = (bytes[1024] ?? 0) ^ 0xff;

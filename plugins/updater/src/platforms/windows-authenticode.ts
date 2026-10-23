@@ -231,8 +231,8 @@ export function parseTrustReply(reply: unknown): SignatureOutcome {
   }
   throw fail(
     "INTERNAL",
-    "signatureUntrusted",
-    "Update package signature check failed.",
+    "verifierFailed",
+    "Update package signature check could not be run.",
   );
 }
 
@@ -265,6 +265,15 @@ async function isSignableInstaller(path: string): Promise<boolean> {
   }
 }
 
+/** A file that cannot be read cannot be checked, which fails the download like any other check that could not run. */
+function unreadable(): never {
+  throw fail(
+    "INTERNAL",
+    "verifierFailed",
+    "Update package signature check could not be run.",
+  );
+}
+
 /**
  * The Windows signature check: Authenticode through `WinVerifyTrust` for PE and MSI files, with
  * the revocation status of the whole chain except the root required. The format is decided by the
@@ -280,7 +289,7 @@ export function createAuthenticodeVerifier(
   const workers = new Set<Worker>();
   return {
     async verify(path, signal) {
-      if (!(await isSignableInstaller(path))) {
+      if (!(await isSignableInstaller(path).catch(unreadable))) {
         return {
           kind: "unsupportedFormat",
         };

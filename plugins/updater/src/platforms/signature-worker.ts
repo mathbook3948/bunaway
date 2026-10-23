@@ -1,4 +1,3 @@
-import { BunawayError } from "@bunaway/protocol";
 import { fail } from "#updater/request";
 
 /** Start a worker from module source; the seam lets tests run any source. */
@@ -56,7 +55,18 @@ export async function requestFromWorker(
       "Too many update package signature checks are running.",
     );
   }
-  const { worker, release } = start(source);
+  let started: ReturnType<typeof startWorker>;
+  try {
+    started = start(source);
+  } catch {
+    // No worker means no check; the cause (a bundler or runtime failure) is not useful to the caller.
+    throw fail(
+      "INTERNAL",
+      "verifierFailed",
+      "Update package signature check could not be run.",
+    );
+  }
+  const { worker, release } = started;
   workers.add(worker);
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -80,10 +90,11 @@ export async function requestFromWorker(
     const failWorker = () => {
       settle(() =>
         reject(
-          new BunawayError({
-            code: "INTERNAL",
-            message: "Update package signature check failed.",
-          }),
+          fail(
+            "INTERNAL",
+            "verifierFailed",
+            "Update package signature check could not be run.",
+          ),
         ),
       );
       retire();

@@ -4,6 +4,14 @@ export type NameAttribute = {
   value: string;
 };
 
+/**
+ * How a name is written. `rfc2253` uses backslash escapes (`Name\, Inc.`), as the app writes
+ * `publisherNames`. `windows` is what `CertGetNameStringW` prints: values with special characters are
+ * quoted with `""` for a quote, and a backslash is an ordinary character, so decoding it would let a
+ * certificate whose name contains `\` pass for another name.
+ */
+export type DistinguishedNameStyle = "rfc2253" | "windows";
+
 /** Windows prints the state attribute as `S`; RFC 2253 names it `ST`. */
 const KEY_ALIASES: Readonly<Record<string, string>> = {
   S: "ST",
@@ -46,13 +54,16 @@ function readEscape(
 }
 
 /** Split `text` into attribute strings at unquoted, unescaped separators. */
-function splitAttributes(text: string): string[] | null {
+function splitAttributes(
+  text: string,
+  style: DistinguishedNameStyle,
+): string[] | null {
   const parts: string[] = [];
   let current = "";
   let quoted = false;
   for (let index = 0; index < text.length; index++) {
     const char = text.charAt(index);
-    if (char === "\\" && !quoted) {
+    if (char === "\\" && style === "rfc2253" && !quoted) {
       current += text.slice(index, index + 2);
       index += 1;
     } else if (char === '"') {
@@ -79,7 +90,7 @@ function splitAttributes(text: string): string[] | null {
 }
 
 /** The text of an attribute value, unquoted and unescaped; null for a form not supported. */
-function readValue(raw: string): string | null {
+function readValue(raw: string, style: DistinguishedNameStyle): string | null {
   const trimmed = raw.trim();
   if (trimmed.startsWith("#")) {
     return null;
@@ -91,7 +102,7 @@ function readValue(raw: string): string | null {
   }
   const bytes: number[] = [];
   for (let index = 0; index < trimmed.length; ) {
-    if (trimmed[index] === "\\") {
+    if (style === "rfc2253" && trimmed[index] === "\\") {
       const escaped = readEscape(trimmed, index);
       if (escaped === null) {
         return null;
@@ -109,12 +120,15 @@ function readValue(raw: string): string | null {
 }
 
 /**
- * Parse a distinguished name written either the Windows way (`CN="Name, Inc.", O=Org`) or as
- * RFC 2253 text (`CN=Name\, Inc.,O=Org`). Returns null for text that is not a list of `KEY=value`
+ * Parse a distinguished name written in the given style (`CN="Name, Inc.", O=Org` for `windows`,
+ * `CN=Name\, Inc.,O=Org` for `rfc2253`). Returns null for text that is not a list of `KEY=value`
  * pairs, so a malformed publisher setting or subject never matches anything.
  */
-export function parseDistinguishedName(text: string): NameAttribute[] | null {
-  const parts = splitAttributes(text);
+export function parseDistinguishedName(
+  text: string,
+  style: DistinguishedNameStyle,
+): NameAttribute[] | null {
+  const parts = splitAttributes(text, style);
   if (parts === null) {
     return null;
   }
@@ -127,7 +141,7 @@ export function parseDistinguishedName(text: string): NameAttribute[] | null {
     const rawKey = part.slice(0, equals).trim().toUpperCase();
     let value: string | null;
     try {
-      value = readValue(part.slice(equals + 1));
+      value = readValue(part.slice(equals + 1), style);
     } catch {
       // Bytes that are not UTF-8 make the name unusable, which is the same outcome as bad syntax.
       value = null;

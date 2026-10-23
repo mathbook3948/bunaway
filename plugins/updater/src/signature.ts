@@ -42,21 +42,21 @@ export type SignatureCheck = {
 
 /**
  * Whether one `publisherNames` entry names the signer. An entry without `=` is a common name and
- * must equal the subject's CN exactly. An entry with `=` is a distinguished name and every
+ * must equal the subject's only CN exactly. An entry with `=` is a distinguished name and every
  * attribute it lists must appear in the subject with the same value. Comparison is exact and case
  * sensitive; nothing is normalized, trimmed inside values or matched by prefix.
  */
 export function publisherMatches(subject: string, entry: string): boolean {
-  const attributes = parseDistinguishedName(subject);
+  const attributes = parseDistinguishedName(subject, "windows");
   if (attributes === null) {
     return false;
   }
   if (!entry.includes("=")) {
-    return attributes.some(
-      (attribute) => attribute.key === "CN" && attribute.value === entry,
-    );
+    // A subject with several CN attributes has no single common name, so none is accepted.
+    const names = attributes.filter((attribute) => attribute.key === "CN");
+    return names.length === 1 && names[0]?.value === entry;
   }
-  const wanted = parseDistinguishedName(entry);
+  const wanted = parseDistinguishedName(entry, "rfc2253");
   if (wanted === null) {
     return false;
   }
