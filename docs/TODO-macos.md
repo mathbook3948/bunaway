@@ -349,7 +349,7 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 - [ ] key-value store의 load/save, 변경 이벤트와 autosave를 제공한다. load, save, autosave는 Windows와 같은 `store` 플러그인이 제공하며 compiled 앱의 실행 검사(`macos-store.ts`)로 확인했다. 남은 범위는 화면으로 보내는 변경 이벤트다.
 - [x] defaults 병합, reload, reset과 저장 실패 시 원본 보존을 정의한다. `macos-store.ts`가 compiled 앱에서 defaults와 파일의 병합(파일에 없는 default 키 채움 포함), `ignoreDefaults` reload, reset 뒤 reload, 쓰기 불가 폴더에서 저장 실패 시 원본 파일 유지와 임시 파일 미잔존, 손상 파일의 `error`와 `reset`, 재시작 뒤 읽기를 확인한다. [store 계약](./site/src/content/docs/reference/plugins/store.mdx)을 따른다.
 - [ ] SQLite의 query/execute, transaction과 migration 지원 범위를 정한다.
-- [ ] 신뢰된 백엔드의 직접 Bun 파일 및 SQLite 사용과 정책 중재 API를 문서에서 구분한다.
+- [x] 신뢰된 백엔드의 직접 Bun 파일 및 SQLite 사용과 정책 중재 API를 문서에서 구분한다. [백엔드 Host API](./site/src/content/docs/reference/backend/host-api.mdx)가 정책은 Host 작업에만 적용되고 `Bun.file`, `Bun.write`, `node:path`, `bun:sqlite` 직접 사용은 앱 코드가 관리하며 SQLite를 화면에 중재하는 공식 플러그인은 아직 없다고 안내한다. 플랫폼 공통 문서다.
 
 ## 20. OS 정보, HTTP, WebSocket와 프로세스
 
