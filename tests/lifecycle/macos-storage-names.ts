@@ -69,13 +69,35 @@ export function verifyMacosNames(
   const listed = call("storage.readDirectory", {
     path: folder,
   });
+  const byName = (
+    left: {
+      name: string;
+    },
+    right: {
+      name: string;
+    },
+  ) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+  assert(Array.isArray(listed));
   assert.deepEqual(
-    listed,
-    readdirSync(folder).map((name) => ({
-      name,
-      kind: "file",
-    })),
+    [
+      ...listed,
+    ].sort(byName),
+    readdirSync(folder)
+      .map((name) => ({
+        name,
+        kind: "file",
+      }))
+      .sort(byName),
   );
+  if (folds) {
+    // The spelling used when the file was created stays, even after a write through the other one.
+    assert.deepEqual(listed, [
+      {
+        name: composed,
+        kind: "file",
+      },
+    ]);
+  }
   assert.equal(Array.isArray(listed) && listed.length, folds ? 1 : 2);
   results.push(
     `Unicode composed and decomposed names follow the volume (${folds ? "folded" : "distinct"}) and listings keep the stored spelling`,
