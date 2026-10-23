@@ -434,6 +434,8 @@ test("a directory that cannot be listed fails the call and the same cursor keeps
   }
   createTree([
     "a/denied/x",
+    "a/denied-old",
+    "a/denied.txt",
     "b",
   ]);
   chmodSync(at("a", "denied"), 0);
@@ -441,8 +443,11 @@ test("a directory that cannot be listed fails the call and the same cursor keeps
     expect(await codeOf(() => list())).toBe("PERMISSION_DENIED");
     expect(await codeOf(() => list("a"))).toBe("PERMISSION_DENIED");
     expect(await codeOf(() => list("a/denied"))).toBe("PERMISSION_DENIED");
-    // A cursor that sorts after the directory name does not open it.
-    expect(paths((await list("a/denied0")).entries)).toEqual([
+    // A cursor right after the directory name steps over it and keeps the siblings that sort
+    // between "denied" and "denied0".
+    expect(paths((await list("a/denied\u0000")).entries)).toEqual([
+      "a/denied-old",
+      "a/denied.txt",
       "b",
     ]);
   } finally {
