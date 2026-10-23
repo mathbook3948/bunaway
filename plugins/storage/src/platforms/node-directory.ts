@@ -224,7 +224,7 @@ export function cancelled(): BunawayError {
 export function limitExceeded(): BunawayError {
   return new BunawayError({
     code: "INVALID_ARGUMENT",
-    message: "Storage directory exceeds the size scan limit.",
+    message: "Storage directory exceeds the scan limit.",
   });
 }
 

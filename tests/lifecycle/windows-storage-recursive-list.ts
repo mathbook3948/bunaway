@@ -148,6 +148,29 @@ try {
     linked.entries,
     allLinked.filter((entry) => created[entry.path]),
   );
+  // A cursor that points below a link lists nothing from the link target.
+  if (outsideLink) {
+    for (const after of [
+      "outside/big.bin",
+      "outside",
+    ]) {
+      const resumed = await storage.readDirectoryRecursive({
+        ...at("linked"),
+        after,
+      });
+      assert.deepEqual(
+        resumed.entries.map((entry) => entry.path),
+        [
+          "own.bin",
+          ...(parentLink
+            ? [
+                "self",
+              ]
+            : []),
+        ],
+      );
+    }
+  }
   console.log(
     `Link coverage: outside junction=${outsideLink}, parent junction=${parentLink}, file symlink=${fileLink}.`,
   );

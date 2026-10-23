@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -324,7 +325,7 @@ test("the entry and depth bounds fail the call with INVALID_ARGUMENT", async () 
       undefined,
       limits,
     );
-  // Seven children are read in total: a, x, y, a/b, a/b/c and a/b/c/file.
+  // Six children are read in total: a, x, y, a/b, a/b/c and a/b/c/file.
   expect(
     (
       await read({
@@ -358,7 +359,7 @@ test("a page after the cursor skips directories that sort before it", async () =
     "a/3",
     "b/1",
   ]);
-  // Reading "b/1" needs the root (3 children) and b (1 child), not the three children of a.
+  // Reading "b/1" needs the root (2 children) and b (1 child), not the three children of a, so a bound of 4 holds.
   const page = await adapter.readDirectoryRecursiveWithin(
     {
       path: root,
@@ -404,6 +405,75 @@ test("the scan ends with CANCELLED when aborted and fails after the adapter is d
   ).toBe("CANCELLED");
   adapter.dispose();
   expect(await codeOf(() => list())).not.toBe("none");
+});
+
+test("a cursor through a link lists nothing from the link target", async () => {
+  createTree([
+    "target/inner",
+    "tree/own",
+  ]);
+  try {
+    symlinkSync(at("target"), at("tree", "dir-link"), "junction");
+  } catch {
+    // Creating links can need a privilege this runner lacks, which is not a storage failure.
+    return;
+  }
+  for (const after of [
+    "dir-link/inner",
+    "dir-link",
+  ]) {
+    expect(paths((await list(after, undefined, at("tree"))).entries)).toEqual([
+      "own",
+    ]);
+  }
+});
+
+test("a directory that cannot be listed fails the call and the same cursor keeps failing", async () => {
+  if (process.platform === "win32" || process.getuid?.() === 0) {
+    return;
+  }
+  createTree([
+    "a/denied/x",
+    "b",
+  ]);
+  chmodSync(at("a", "denied"), 0);
+  try {
+    expect(await codeOf(() => list())).toBe("PERMISSION_DENIED");
+    expect(await codeOf(() => list("a"))).toBe("PERMISSION_DENIED");
+    expect(await codeOf(() => list("a/denied"))).toBe("PERMISSION_DENIED");
+    // A cursor that sorts after the directory name does not open it.
+    expect(paths((await list("a/denied0")).entries)).toEqual([
+      "b",
+    ]);
+  } finally {
+    chmodSync(at("a", "denied"), 0o700);
+  }
+});
+
+test("a scan cancelled while it walks stops and closes its directory", async () => {
+  createTree(
+    Array.from(
+      {
+        length: 200,
+      },
+      (_, index) => `f${String(index).padStart(3, "0")}`,
+    ),
+  );
+  let reads = 0;
+  // Reports the abort on the 51st check, in the middle of reading the directory.
+  const signal = Object.create(AbortSignal.prototype, {
+    aborted: {
+      get: () => ++reads > 50,
+    },
+  });
+  expect(await codeOf(() => list(undefined, undefined, root, signal))).toBe(
+    "CANCELLED",
+  );
+  expect(reads).toBeGreaterThan(50);
+  // The handle was closed, so the tree can be listed again and removed afterwards.
+  expect(await list()).toMatchObject({
+    next: null,
+  });
 });
 
 test("the operation validates its input and output and has its own permission", async () => {

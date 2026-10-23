@@ -44,7 +44,10 @@ function invalidCursor(): BunawayError {
   });
 }
 
-/** Split a cursor into its path components; a cursor is a path this operation returned. */
+/**
+ * Split a cursor into its path components. A cursor normally is a path this operation returned,
+ * but only its position matters, so it need not exist; the spelling is still checked.
+ */
 function cursorComponents(after: string | undefined): string[] {
   if (after === undefined) {
     return [];
