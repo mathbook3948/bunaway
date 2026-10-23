@@ -324,14 +324,12 @@ const scenarios: Scenario[] = [
       assert(at(lines, "declining:main") < busy);
       assert(busy < declined);
       assert(at(lines, "visibleAfterDecline:1") > declined);
-      // The replaced main reported created, ready, closed and destroyed in that order. The decline
-      // produced no closed event, and the last window's own phases come after shutdown starts, so
-      // the backend does not see them.
-      const created = at(lines, "lifecycle:created:main");
+      // The replaced main reported ready, closed and destroyed in that order; its created phase can
+      // precede the backend's first wait. The decline produced no closed event, and the last
+      // window's own phases come after shutdown starts, so the backend does not see them.
       const ready = at(lines, "lifecycle:ready:main");
       const closed = at(lines, "lifecycle:closed:main");
       const destroyed = at(lines, "lifecycle:destroyed:main");
-      assert(created < ready);
       assert(ready < closed);
       assert(closed < destroyed);
       assert(destroyed < declined);

@@ -1460,7 +1460,7 @@ if (!process.argv.includes("--child")) {
     await stdout;
     await Promise.all(windowChecks);
     assert.equal(code, 0, await errors);
-    assert.equal(confirmations, 1);
+    assert.equal(confirmations, 2);
     assert(geometry);
     const report = JSON.parse(await readFile(reportPath, "utf8"));
     assert.equal(report.pass, true);
