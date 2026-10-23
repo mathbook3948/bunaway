@@ -24,6 +24,10 @@ const defaults = {
   theme: "light",
   count: 1,
 };
+const PARTIAL_DEFAULTS = {
+  a: 1,
+  b: 2,
+};
 const nested = {
   list: [
     1,
@@ -235,6 +239,67 @@ async function firstRun(): Promise<void> {
     nested,
   });
 
+  // A file that lacks a default key: a plain reload fills it, `ignoreDefaults` keeps only the file.
+  writeFileSync(resolve(storeDirectory, "partial.json"), '{"a":10}');
+  await store.load({
+    name: "partial",
+    defaults: PARTIAL_DEFAULTS,
+    autosave: false,
+  });
+  assert.deepEqual(
+    await store.entries({
+      name: "partial",
+    }),
+    [
+      [
+        "a",
+        10,
+      ],
+      [
+        "b",
+        2,
+      ],
+    ],
+  );
+  assert.deepEqual(
+    await store.reload({
+      name: "partial",
+      ignoreDefaults: true,
+    }),
+    {
+      changed: true,
+    },
+  );
+  assert.deepEqual(
+    await store.keys({
+      name: "partial",
+    }),
+    [
+      "a",
+    ],
+  );
+  assert.deepEqual(
+    await store.reload({
+      name: "partial",
+    }),
+    {
+      changed: true,
+    },
+  );
+  assert.equal(
+    await store.has({
+      name: "partial",
+      key: "b",
+    }),
+    true,
+  );
+  await store.close({
+    name: "partial",
+  });
+  assert.deepEqual(readJson("partial"), {
+    a: 10,
+  });
+
   // A damaged file is reported unless the caller asks for a reset.
   writeFileSync(resolve(storeDirectory, "broken.json"), "{ not json");
   await rejected(
@@ -335,9 +400,38 @@ async function secondRun(): Promise<void> {
   assert.deepEqual(readJson("broken"), {
     fresh: true,
   });
+  // Defaults gained a key since the file was written: it is filled in and the file value wins.
+  await store.load({
+    name: "partial",
+    defaults: {
+      ...PARTIAL_DEFAULTS,
+      c: 3,
+    },
+    autosave: false,
+  });
+  assert.deepEqual(
+    await store.entries({
+      name: "partial",
+    }),
+    [
+      [
+        "a",
+        10,
+      ],
+      [
+        "b",
+        2,
+      ],
+      [
+        "c",
+        3,
+      ],
+    ],
+  );
   assert.deepEqual(readdirSync(storeDirectory).sort(), [
     "auto.json",
     "broken.json",
+    "partial.json",
     "pending.json",
     "settings.json",
   ]);
