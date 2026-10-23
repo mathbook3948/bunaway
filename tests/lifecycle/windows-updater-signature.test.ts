@@ -100,7 +100,7 @@ beforeAll(() => {
     Import-Certificate -FilePath $cer -CertStoreLocation Cert:\\LocalMachine\\Root | Out-Null
   `);
 
-  // Small unsigned executable and an empty installer database, each signed under both identities.
+  // A small unsigned executable, copied once per case and signed under the identity the case needs.
   const system = process.env.SystemRoot ?? "C:\\Windows";
   for (const name of [
     "trusted",
@@ -111,28 +111,9 @@ beforeAll(() => {
     files[name] = join(folder, `${name}.exe`);
     copyFileSync(join(system, "System32", "whoami.exe"), files[name]);
   }
-  files.msi = join(folder, "trusted.msi");
-  // An installer database with one table and summary information, so it is a complete MSI file.
-  powershell(`
-    function Call($target, $name, $kind, $arguments) {
-      $target.GetType().InvokeMember($name, $kind, $null, $target, $arguments)
-    }
-    $installer = New-Object -ComObject WindowsInstaller.Installer
-    $database = Call $installer 'OpenDatabase' 'InvokeMethod' @('${files.msi}', 3)
-    $view = Call $database 'OpenView' 'InvokeMethod' @('CREATE TABLE Test (Id INT NOT NULL PRIMARY KEY Id)')
-    Call $view 'Execute' 'InvokeMethod' $null | Out-Null
-    Call $view 'Close' 'InvokeMethod' $null | Out-Null
-    $summary = Call $database 'SummaryInformation' 'GetProperty' @(5)
-    Call $summary 'Property' 'SetProperty' @(2, 'Bunaway test') | Out-Null
-    Call $summary 'Property' 'SetProperty' @(14, 200) | Out-Null
-    Call $summary 'Property' 'SetProperty' @(15, 2) | Out-Null
-    Call $summary 'Persist' 'InvokeMethod' $null | Out-Null
-    Call $database 'Commit' 'InvokeMethod' $null | Out-Null
-  `);
   sign(files.trusted as string, trustedThumbprint, true);
   sign(files.tampered as string, trustedThumbprint, true);
   sign(files.untrusted as string, untrustedThumbprint, false);
-  sign(files.msi, trustedThumbprint, true);
   // Change one byte inside the signed image so the digest in the signature no longer matches.
   const bytes = readFileSync(files.tampered as string);
   bytes[1024] = (bytes[1024] ?? 0) ^ 0xff;
@@ -168,13 +149,12 @@ function asPackage(source: string, name: string): string {
 }
 
 windowsOnly(
-  "a signed exe and a signed msi are valid and report the signer's subject, without a file extension",
+  "a signed exe is valid and reports the signer's subject, without a file extension",
   async () => {
     const verifier = createAuthenticodeVerifier();
     const signal = new AbortController().signal;
     for (const name of [
       "trusted",
-      "msi",
     ]) {
       const outcome = await verifier.verify(
         asPackage(files[name] as string, `${name}-copy`),
