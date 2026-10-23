@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type CommandContext, defineApp } from "@bunaway/backend";
+import {
+  type CommandContext,
+  type DesktopContext,
+  defineApp,
+} from "@bunaway/backend";
 import windows from "@bunaway/plugin-windows";
 import type { HostContext, Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
@@ -186,6 +190,7 @@ if (!process.argv.includes("--child")) {
   let completed = false;
   let exerciseTask: Promise<void> | undefined;
   let exerciseFailure: unknown;
+  let desktop: DesktopContext | undefined;
   async function exercise(context: CommandContext): Promise<void> {
     await windows.create({
       options: {
@@ -333,12 +338,13 @@ if (!process.argv.includes("--child")) {
     assert.equal((await windows.getReadiness()).error?.code, "TIMEOUT");
     assert.equal(await windows.isVisible(), false);
     await windows.close();
-    // The last window closing asks beforeQuit once more and, now approved, ends the app.
+    // The scenario ends the app explicitly; quitting asks beforeQuit once more, now approved.
     mode = "main";
     completed = true;
     await windows.create({});
     await ready();
-    await windows.close();
+    assert(desktop);
+    await desktop.quit();
   }
   const app = defineApp({
     modules: [],
@@ -354,13 +360,19 @@ if (!process.argv.includes("--child")) {
             }
             exerciseFailure = error;
             console.error(error);
-            await windows.close().catch(() => {});
+            completed = true;
+            await desktop?.quit();
           });
         },
       },
     ],
     desktop: {
-      // Closing the only window asks every time; the app stays up until the scenario is over.
+      // The app has no window at start and stays up when its window closes; the scenario quits it.
+      closeBehavior: "keep-alive",
+      onOpen(_request, context) {
+        desktop = context;
+      },
+      // A quit before the scenario is over is refused.
       beforeQuit() {
         quitChecks++;
         return completed;
