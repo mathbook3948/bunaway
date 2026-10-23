@@ -363,7 +363,6 @@ export async function verifyMacosImage(
   };
   const { call, resource, encoded, error } = createImageCalls(adapter, grants);
   try {
-    await checkFileTypeIcons(call, error);
     // Direct SDK execution is supported and validates schemas without a host context.
     const direct = await adapter.execute(
       "image.createRGBA",
@@ -1042,6 +1041,8 @@ export async function verifyMacosImage(
         id: value,
       });
     }
+    // Last of the native checks: the portable probe stops at the first codec call, before this.
+    await checkFileTypeIcons(call, error);
     const finalID = await resource("createRGBA", pixels);
     await adapter.dispose();
     await adapter.dispose();
