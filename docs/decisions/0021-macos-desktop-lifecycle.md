@@ -4,7 +4,7 @@ status: accepted
 
 # macOS에서 desktop 수명주기와 창 닫기 계약을 AppKit에 연결한다
 
-2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)에 따라 `windows.lifecycle`은 백엔드에도 전달되고 문서 세션의 수신 권한은 ADR 0020과 같이 `windows.getSnapshot`이 된다. macOS 어댑터는 `getSnapshot`을 구현하고 WebView는 영속 프로필 하나를 쓴다. 창 없는 시작은 계속 `UNSUPPORTED`다.
+2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)에 따라 `windows.lifecycle`은 백엔드에도 전달되고 문서 세션의 수신 작업 권한은 ADR 0020과 같이 `windows.getSnapshot`이 된다. macOS 어댑터는 `getSnapshot`을 구현하고 WebView는 영속 프로필 하나를 쓴다. 창 없는 시작은 계속 `UNSUPPORTED`다.
 
 결정일: 2026-10-16
 갱신일: 2026-10-16 (OS 열기 요청과 재활성화 결정을 설계안에서 확정으로 바꿈)

@@ -31,7 +31,7 @@ bunaway의 목표는 TypeScript만으로 데스크톱과 모바일 앱을 쉽게
 - 모바일 호스트 설정에는 view, home, title, policy만 들어가고 크기와 위치 같은 window 설정은 버려진다.
 - `window.open`과 `target="_blank"`는 플랫폼마다 조용히 무시된다. Windows는 새 창 요청을 처리됨으로
   표시하고 버린다(`native/windows/bun/webview.ts`). Android는 다중 창 지원을 끄고 `onCreateWindow`가 없으며,
-  iOS는 `createWebViewWith`가 없다. origin 밖 탐색은 취소되고 외부 브라우저로 넘기지 않는다.
+  iOS와 macOS는 `createWebViewWith`가 없다. origin 밖 탐색은 취소되고 외부 브라우저로 넘기지 않는다.
 - Android 뒤로가기는 웹 history와 관계없이 Activity를 종료한다(`BunawayActivity.java`).
 - macOS 어댑터는 `instances: "multiple"`과 `profile: "isolated"`를 `UNSUPPORTED`로 거부한다.
 
@@ -56,8 +56,10 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
    Android와 iOS에서 `UNSUPPORTED`로 실패한다. 앱은 `capabilities()`로 작업별 지원 여부를 먼저 조회한다.
    경고만 남기고 성공으로 처리하지 않는다.
 5. **`window.open`과 링크.** 새 창 요청은 창을 만들지 않는다.
-   - **시작 주체.** 메인 프레임, 또는 정책 뷰의 `origins`에 속한 문서가 시작한 요청만 처리한다.
-     `origins` 밖 문서(다른 출처의 iframe 포함)가 시작한 요청은 신뢰하지 않는 문서의 요청이므로 차단하고 진단을 남긴다.
+   - **시작 주체.** 외부 URL 요청은 브리지와 문서 세션이 있는 메인 프레임만 시작할 수 있다. 서브프레임에는 브리지도
+     세션도 없으므로 `origins` 안 서브프레임이 시작한 외부 URL 요청도 차단하고 진단을 남긴다. `origins` 안 서브프레임이
+     시작한 내부 URL 요청은 같은 WebView에서 탐색하고, `origins` 밖 문서가 시작한 요청은 모두 차단한다.
+     플랫폼 API로 시작 프레임을 알 수 없으면(Android `onCreateWindow`) 외부 URL은 차단하고 내부 URL은 URL만으로 판정한다.
    - **내부 URL.** `origins`에 속한 URL은 사용자 동작 여부와 상관없이 같은 WebView에서 탐색한다.
      사용자 동작 조건과 아래 Apple 판정은 외부 URL에만 적용된다.
    - **외부 URL.** 그 밖의 `http`, `https` URL은 사용자 동작으로 시작한 요청만 시스템 기본 브라우저로 넘긴다.
@@ -74,7 +76,9 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
      `onCreateWindow`의 `isUserGesture`를 쓴다. Apple의 `WKNavigationAction`에는 사용자 동작 플래그가 없으므로
      링크 활성화(`navigationType == .linkActivated`)로 시작한 요청만 사용자 동작으로 보고, 스크립트의
      외부 URL `window.open`은 사용자 동작이 아닌 것으로 취급해 차단한다. 같은 동작도 플랫폼마다 판정이 다를 수 있으며
-     차단이 안전한 쪽이다.
+     차단이 안전한 쪽이다. `target` 없는 메인 프레임 탐색은 Windows `NavigationStarting`의 `IsUserInitiated`,
+     Apple `decidePolicyForNavigationAction`의 `.linkActivated`로 판정한다. 이 사용자 동작 조건은 암묵적 링크 처리에만
+     적용되며 권한 경계가 아니다. `opener.openUrl` 권한이 있는 문서가 SDK로 직접 호출하는 것은 별개의 경로다.
 6. **Android 뒤로가기.** 시스템 뒤로가기는 WebView history를 먼저 소비하고, 더 돌아갈 곳이 없을 때만
    Activity를 종료한다.
 7. **다중 창은 코어 계약이 아니다.** 필요성이 확인되면 별도 플러그인의 opt-in 기능으로 다시 제안한다.
@@ -87,12 +91,12 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
 | 항목 | 계약 |
 | --- | --- |
 | 창 선언 | `bunaway.json`의 `app.view`(선택, 생략하면 정책의 유일한 뷰), `app.home`, `app.window`, `app.startup`, `app.visible`, `app.showWhenReady`. `app.windows`, `instances`, `maxInstances`, `profile`은 제거 |
-| 창 없는 시작 | `app.startup: false`. 트레이 Open, 두 번째 실행, `windows.create()`가 창을 만든다. 기존 `desktop.tray` 또는 `closeBehavior: "keep-alive"` 요구는 유지. macOS는 [ADR 0021](./0021-macos-desktop-lifecycle.md)대로 계속 `UNSUPPORTED`이고, Android와 iOS는 빌드에서 `app.startup: false`를 거부한다 |
+| 창 없는 시작 | `app.startup: false`. 트레이 Open, 두 번째 실행, `windows.create()`가 창을 만든다. 기존 `desktop.tray` 또는 `closeBehavior: "keep-alive"` 요구는 유지. macOS는 [ADR 0021](./0021-macos-desktop-lifecycle.md)대로 계속 `UNSUPPORTED`이고, Android와 iOS는 빌드에서 `app.startup: false`와 `app.visible: false`를 거부한다 |
 | 생성과 재생성 | `windows.create(options?)`, `windows.recreate(options?)`. 이미 열려 있으면 create는 기존처럼 `BUSY`. 창이 없을 때 `recreate`는 `INVALID_ARGUMENT`가 아니라 창을 새로 만든다(ADR 0004의 생성 또는 재생성 동작). 옵션 허용 범위는 ADR 0016, 0019를 유지 |
 | 열린 상태 조회 | `windows.isOpen()`이 `windows.list()`와 `isDestroyed`를 대신한다. `getById`, `getCurrent`, `getFocused`, `getLastActive`는 제거하고 `getSnapshot()`과 `isFocused()`가 대신한다 |
 | 창이 없을 때의 제어 | 창 제어와 상태 조회는 `INVALID_ARGUMENT`(창 없음). 기존 "닫힌 windowId" 오류와 같은 코드. 예외로 `windows.isOpen()`은 성공하고, `windows.getReadiness()`는 닫힌 창의 마지막 결과를 유지한다 |
 | WebView 프로필 | 영속 프로필 하나. Windows 경로는 `webview/`이며 기존 `webview/<view>` 데이터는 옮기지 않는다. macOS는 지금 뷰별로 하나씩 비영속 저장소를 만들고 재생성 때만 유지하므로, 이 결정으로 쿠키와 웹 저장소가 디스크에 남아 실행 사이에도 유지되는 영속 프로필 하나로 바뀐다 |
-| 이벤트 | `windows.changed`, `windows.closeRequested` 등의 payload 형식은 유지한다. 지금 `windows.readiness`와 `windows.lifecycle`은 권한이 있는 열린 창의 문서 세션에 방송하고 백엔드는 받지 않으며, 닫히는 창은 세션이 먼저 철회되어 자신의 `closed`, `destroyed`를 받지 못한다. 단일 창에서는 문서만 받아서는 창 상태를 볼 수 없으므로 `windows.lifecycle`을 백엔드(Bun 쪽 앱 코드)에도 전달한다. 백엔드는 정책 밖의 신뢰 코드이므로 새 백엔드 구독 API로 `created`부터 `destroyed`까지 모든 단계를 권한 검사 없이 받아, Electron의 `window-all-closed`처럼 창 상태를 본다. `windows.getSnapshot` 권한 검사는 문서 세션이 받을 때만 적용하고(`windows.listInstances`를 대신한다), 문서 세션도 계속 받는다. 창 재생성 여부는 이벤트와 `getSnapshot()`의 `windowId`로 구분한다. `windows.readiness`는 문서 세션 전달을 그대로 두고, 백엔드는 `getReadiness()`로 조회한다. 이를 위해 macOS 어댑터도 `getSnapshot`을 구현해야 한다 |
+| 이벤트 | `windows.changed`, `windows.closeRequested` 등의 payload 형식은 유지한다. 지금 `windows.readiness`와 `windows.lifecycle`은 권한이 있는 열린 창의 문서 세션에 방송하고 백엔드는 받지 않으며, 닫히는 창은 세션이 먼저 철회되어 자신의 `closed`, `destroyed`를 받지 못한다. 단일 창에서는 문서만 받아서는 창 상태를 볼 수 없으므로 `windows.lifecycle`을 백엔드(Bun 쪽 앱 코드)에도 전달한다. 이벤트 수신은 네이티브 작업이 아니라 알림이므로 백엔드의 `backend.permissions` Host API 검사 대상이 아니고(백엔드의 Host API 호출은 계속 검사한다), 새 백엔드 구독 API로 `created`부터 `destroyed`까지 모든 단계를 권한 검사 없이 받아, Electron의 `window-all-closed`처럼 창 상태를 본다. 문서 세션이 받는 조건은 정책 `events`에 `windows.lifecycle`이 있어야 하는 기존 조건(유지)과 작업 권한 `windows.getSnapshot`(`windows.listInstances`를 대신한다)이며, 문서 세션도 계속 받는다. 앱 종료나 세션 종료가 시작된 뒤에는 기존 계약대로 전송하지 않는다. 창 재생성 여부는 이벤트와 `getSnapshot()`의 `windowId`로 구분한다. `windows.readiness`는 문서 세션 전달을 그대로 두고, 백엔드는 `getReadiness()`로 조회한다. 이를 위해 macOS 어댑터도 `getSnapshot`을 구현해야 한다 |
 | 다른 플러그인 | dialog의 `ownerWindowId`, menu의 `windowId`, window-state의 `view`와 `windowId`, appearance의 `windowId`는 입력에서 제거하고 항상 앱의 창을 뜻한다. appearance의 창 테마와 앱 테마는 하나로 합친다 |
 | 선언 필드 | `app.title`은 그대로 유지한다. `backgroundColor`는 `app.window` 아래 필드다 |
 
@@ -112,7 +116,7 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
 - **Tauri 동작 기준 대비 개선.** Tauri v2는 모바일에서 `set_size`, `set_position`을 효과 없이 경고만
   남긴다. bunaway는 `UNSUPPORTED`와 지원 조회로 앱이 실패를 알 수 있게 한다. 경고만 남기면 앱이
   기능이 동작한 것으로 오해하고 플랫폼별 분기를 테스트로 검증할 수 없다.
-- **링크 동작의 개선.** 지금은 Windows와 iOS에서 `target="_blank"`가 아무 반응 없이 끝나고, Android는 새 창 지원을 꺼서 `_blank`가 일반 탐색이 되어 같은 origin이면 이동하고 밖이면 취소된다.
+- **링크 동작의 개선.** 지금은 Windows, macOS, iOS에서 `target="_blank"`가 아무 반응 없이 끝나고, Android는 새 창 지원을 꺼서 `_blank`가 일반 탐색이 되어 같은 origin이면 이동하고 밖이면 취소된다.
   Capacitor 동작 기준처럼 내부 링크는 같은 WebView, 외부 링크는 `opener.openUrl` 권한이 있을 때 시스템 브라우저로 보낸다.
   모바일은 opener 어댑터가 생길 때까지 외부 링크를 차단한다.
 
@@ -128,7 +132,7 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
   라우트를 구별하지 못하고, 화면별 권한 분리를 다른 곳으로 옮길 수 없다. 화면마다 권한이 달라야 하는
   앱은 별도 앱으로 나누거나 같은 권한 집합으로 설계해야 한다. 렌더러 장애를 뷰 단위로 격리하던 효과도
   사라지며, 창 하나의 렌더러 장애는 그 창의 세션 폐기와 재탐색으로 처리한다.
-- **창 없는 앱.** 지금은 `app.windows: []`로 창을 전혀 만들지 않는 트레이 전용 앱을 표현할 수 있고 트레이 Open이나 두 번째 실행도 창을 만들지 않는다. 이 결정의 `app.startup: false`는 트레이 Open, 두 번째 실행, `windows.create()`가 창을 만들므로 창을 절대 만들지 않는 앱은 표현할 수 없다. 트레이 전용 앱은 창을 숨긴 채 유지하는 방식(`app.visible: false`)으로 대신한다.
+- **창 없는 앱.** 지금은 `app.windows: []`로 창을 전혀 만들지 않는 트레이 전용 앱을 표현할 수 있고 트레이 Open이나 두 번째 실행도 창을 만들지 않는다. 이 결정의 `app.startup: false`는 트레이 Open, 두 번째 실행, `windows.create()`가 창을 만들므로 창을 절대 만들지 않는 앱은 표현할 수 없다. 트레이 전용 앱은 창을 숨긴 채 유지하는 방식(`app.visible: false`)으로 대신하며, 이때 트레이 Open과 두 번째 실행은 숨긴 창을 표시한다. 창이 절대 보이지 않는 앱은 표현할 수 없다.
 - **기존 데이터 경로.** `app.windows`를 쓰던 Windows 앱은 `webview/<view>`에 쿠키와 웹 저장소가 있으며
   이 결정으로 `webview/`를 쓰면 이전 데이터를 읽지 못한다. 개발 단계이므로 옮기지 않는다.
 - **부모와 모달 창, 창별 프로필 격리.** `setParent`, 부모 종속 모달, `profile: "isolated"`를 제거한다.
@@ -178,14 +182,14 @@ Capacitor 동작 기준처럼 외부 링크는 시스템 브라우저, 내부 �
 
 ## 기존 결정과의 관계
 
-대체되거나 수정되는 ADR(0004, 0006, 0013, 0015 두 파일 중 macOS, 0016, 0017, 0019, 0020, 0021)은 머리말에 이 결정으로의 링크를 추가하고 본문은 당시 기록으로 남긴다.
+대체되거나 수정되는 ADR(0004, 0006, 0013, 0015 Android와 macOS 파일, 0016, 0017, 0019, 0020, 0021)은 머리말에 이 결정으로의 링크를 추가하고 본문은 당시 기록으로 남긴다.
 
 | ADR | 관계 | 내용 |
 | --- | --- | --- |
 | [0004](./0004-multi-window-per-view-policy.md) 창과 뷰별 정책 분리 | 대체 | 창 N개와 뷰별 정책, 뷰별 프로필, 창별 종료 규칙을 단일 창으로 대체. 렌더러 장애 처리와 "창 닫기 = 세션 폐기"는 유지. splashscreen 전환 서술도 대체 |
 | [0016](./0016-window-creation-contract.md) 창 생성 계약 | 수정 | 호출별 옵션 허용 범위와 검증, 오류 표는 유지. `view` 입력, 선언 0–128개, 뷰별 슬롯과 식별자 조회 절은 대체 |
 | [0017](./0017-multiple-windows-per-view.md) 같은 뷰의 다중 창 | 대체 | `instances`, `maxInstances`, `profile`, `createInstance`, `recreateInstance`, `listInstances`, ID 지정 제어 전체 |
-| [0013](./0013-desktop-lifecycle.md) 데스크톱 수명주기 | 수정 | 트레이 Open과 두 번째 실행은 "살아 있는 모든 창"이 아니라 앱의 창을 복원하거나 생성. `completeSplashscreen`, 부모와 자식 종료 절 제거. `app.windows: []`는 `app.startup: false`로 대체 |
+| [0013](./0013-desktop-lifecycle.md) 데스크톱 수명주기 | 수정 | 트레이 Open과 두 번째 실행은 "살아 있는 모든 창"이 아니라 앱의 창을 복원하거나 생성. `completeSplashscreen`, 부모와 자식 종료 절 제거. `app.windows: []`는 창 없는 시작(`app.startup: false`)과 창 없는 앱(`app.visible: false`)으로 나누어 대체 |
 | [0019](./0019-initial-window-placement.md) 초기 창 배치 | 유지(용어 수정) | "네 생성 API"를 create, recreate 두 개로 수정. 배치 계산은 그대로 |
 | [0020](./0020-close-and-quit-lifecycle.md) 닫기와 종료 수명주기 | 수정 | `windows.lifecycle`을 백엔드에도 전달하고 문서 세션의 수신 권한을 `windows.getSnapshot`으로 변경. 여러 창, 자식 확인, splashscreen 언급 제거. `onAllWindowsClosed`는 이름을 유지하고 "앱의 창이 닫혀 0개가 됨"으로 정의 |
 | [0021](./0021-macos-desktop-lifecycle.md) macOS 데스크톱 수명주기 | 수정 | `windows.listInstances` 권한 언급을 0020과 같이 변경하고 `windows.lifecycle`의 백엔드 전달을 따른다. macOS의 영속 프로필 하나와 `getSnapshot` 구현이 추가된다. 창 없는 시작은 계속 `UNSUPPORTED` |
