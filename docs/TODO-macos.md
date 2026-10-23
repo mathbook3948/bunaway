@@ -345,7 +345,7 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 - [ ] 파일 선택으로 얻은 범위와 security-scoped bookmark의 영속화 및 철회를 제공한다.
 - [x] 사용자 디렉터리와 appConfig/appData/appLocalData/cache/logs/temp 경로를 제공한다. `path.getDirectory`, `path.getAppDirectory`와 POSIX 문자열 경로 함수다. [경로 계약](./site/src/content/docs/reference/plugins/path.mdx#macos)을 따른다.
 - [ ] resource 경로를 macOS 번들 구조에 맞춰 제공한다. 지금은 `path` 플러그인 범위 밖이다.
-- [ ] Unicode 정규화, 대소문자 구분 파일 시스템과 sandbox container 경로를 검증한다.
+- [ ] Unicode 정규화, 대소문자 구분 파일 시스템과 sandbox container 경로를 검증한다. Unicode 정규화와 대소문자 이름은 기본 APFS의 macOS 네이티브 검증으로 확인했고(`tests/lifecycle/macos-storage-names.ts`, 볼륨이 정하는 대로 따른다), sandbox container 경로가 남았다.
 - [ ] key-value store의 load/save, 변경 이벤트와 autosave를 제공한다. load, save, autosave는 Windows와 같은 `store` 플러그인이 제공하며 compiled 앱의 실행 검사(`macos-store.ts`)로 확인했다. 남은 범위는 화면으로 보내는 변경 이벤트다.
 - [x] defaults 병합, reload, reset과 저장 실패 시 원본 보존을 정의한다. `macos-store.ts`가 compiled 앱에서 defaults와 파일의 병합(파일에 없는 default 키 채움 포함), `ignoreDefaults` reload, reset 뒤 reload, 쓰기 불가 폴더에서 저장 실패 시 원본 파일 유지와 임시 파일 미잔존, 손상 파일의 `error`와 `reset`, 재시작 뒤 읽기를 확인한다. [store 계약](./site/src/content/docs/reference/plugins/store.mdx)을 따른다.
 - [ ] SQLite의 query/execute, transaction과 migration 지원 범위를 정한다.
