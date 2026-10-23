@@ -421,12 +421,18 @@ test("cancelUpload ends the connection, releases the id and succeeds for unknown
   const state = initialize();
   // A plain socket shows the connection itself closing, whatever the HTTP server reports.
   let connectionClosed = false;
+  let held:
+    | {
+        resume(): void;
+      }
+    | undefined;
   const sink = Bun.listen({
     hostname: "127.0.0.1",
     port: 0,
     socket: {
       // Stops reading after the first bytes, so the upload is held back mid-body like a busy server.
       data(socket) {
+        held = socket;
         socket.pause();
       },
       close() {
@@ -450,6 +456,8 @@ test("cancelUpload ends the connection, releases the id and succeeds for unknown
     expect(await runCancelUpload(state, SOURCE, request)).toEqual({});
     expect(await code).toBe("CANCELLED");
     expect(state.uploads.size).toBe(0);
+    // A paused socket reports the end of the connection only once it reads again.
+    held?.resume();
     await waitFor(() => connectionClosed || undefined, {
       deadline: "inProcess",
       what: "the connection closing",
