@@ -26,12 +26,14 @@ export function responseHeaders(response: Response): [
 }
 /**
  * Read a response body of at most `maxBytes`, failing when it is longer, and return the status,
- * headers and base64 body. The reader is always cancelled and released.
+ * headers and base64 body. The reader is always cancelled and released. `onChunk` runs after each
+ * body chunk, for callers that treat a slow body as progress.
  */
 export async function readBoundedResponse(
   response: Response,
   maxBytes: number,
   signal: AbortSignal,
+  onChunk?: () => void,
 ) {
   const reader = response.body?.getReader();
   try {
@@ -53,6 +55,7 @@ export async function readBoundedResponse(
           });
         }
         chunks.push(result.value);
+        onChunk?.();
       }
     }
     return {

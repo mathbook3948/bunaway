@@ -86,8 +86,8 @@ test.each(platforms)(
         }),
       };
     };
-    const outcomeOf = (promise: Promise<unknown> | undefined) =>
-      Promise.resolve(promise).then(
+    const outcomeOf = (pending: unknown) =>
+      Promise.resolve(pending).then(
         () => "sent",
         (error: { code?: string }) => error.code,
       );
@@ -115,7 +115,7 @@ test.each(platforms)(
         bytesSent: CONTENT.length,
       });
       expect(received).toBe(CONTENT);
-      // The file is closed again, so it can be deleted (an open handle blocks deletion on Windows).
+      // The file can be deleted after the transfer.
       unlinkSync(small);
       expect(existsSync(small)).toBe(false);
       await expect(

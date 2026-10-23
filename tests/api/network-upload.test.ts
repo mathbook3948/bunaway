@@ -32,6 +32,11 @@ const SHORT_IDLE_MS = 300;
 const LARGE_BYTES = 8 * 1024 * 1024;
 /** Far beyond what the socket buffers and the stream queue hold, so most of the file is still unread when it shrinks. */
 const SHRINK_BYTES = 64 * 1024 * 1024;
+/** The answer of the trickle route lasts longer than the idle limit the test sets, one byte per step. */
+const TRICKLE_STEP_MS = 150;
+const TRICKLE_STEPS = 6;
+/** Consecutive probes with the same byte count that show the upload has stopped reading. */
+const STEADY_PROBES = 5;
 type Seen = {
   method: string;
   contentLength: string | null;
@@ -42,7 +47,8 @@ type Seen = {
 };
 let folder: string;
 let seen: Seen | undefined;
-let serverCancelled = false;
+/** Upload ids whose request the server saw end; each test looks up its own id. */
+const endedRequests = new Set<string>();
 /** Resolves when the slow-reading route has taken its first chunk; the route then waits for `releaseSlowReader`. */
 let slowReaderStarted: () => void = () => {};
 let releaseSlowReader: () => void = () => {};
@@ -57,7 +63,9 @@ const server = Bun.serve({
         request.signal.addEventListener(
           "abort",
           () => {
-            serverCancelled = true;
+            endedRequests.add(
+              new URL(request.url).searchParams.get("id") ?? "",
+            );
             resolve();
           },
           {
@@ -66,6 +74,22 @@ const server = Bun.serve({
         ),
       );
       return new Response("late");
+    }
+    if (path === "/trickle") {
+      // The body is read in full, then the answer arrives a byte at a time, slower than it ends.
+      await request.arrayBuffer();
+      let sent = 0;
+      return new Response(
+        new ReadableStream({
+          async pull(controller) {
+            await Bun.sleep(TRICKLE_STEP_MS);
+            controller.enqueue(new Uint8Array(1));
+            if (++sent === TRICKLE_STEPS) {
+              controller.close();
+            }
+          },
+        }),
+      );
     }
     if (path === "/slow-reader") {
       const reader = request.body?.getReader();
@@ -138,9 +162,10 @@ function input(
   target = "/ok",
   extra: Partial<Record<string, unknown>> = {},
 ) {
+  const uploadId = crypto.randomUUID();
   return uploadInputSchema.parse({
-    uploadId: crypto.randomUUID(),
-    url: url(target),
+    uploadId,
+    url: `${url(target)}?id=${uploadId}`,
     path,
     ...extra,
   });
@@ -397,7 +422,6 @@ test("status reports progress to the starting source only, and fails for unknown
 
 test("cancelUpload ends the connection, releases the id and succeeds for unknown ids", async () => {
   const state = initialize();
-  serverCancelled = false;
   const request = input(
     fileOf("cancel.bin", Buffer.alloc(LARGE_BYTES)),
     "/never-read",
@@ -408,7 +432,7 @@ test("cancelUpload ends the connection, releases the id and succeeds for unknown
   expect(await runCancelUpload(state, SOURCE, request)).toEqual({});
   expect(await code).toBe("CANCELLED");
   expect(state.uploads.size).toBe(0);
-  await waitFor(() => serverCancelled || undefined, {
+  await waitFor(() => endedRequests.has(request.uploadId) || undefined, {
     deadline: "inProcess",
     what: "the server noticing the end of the request",
   });
@@ -534,3 +558,66 @@ test("dispose cancels running uploads and later calls fail", async () => {
 test("the upload limit matches the download limit", () => {
   expect(MAX_UPLOAD_BYTES).toBe(4 * 1024 * 1024 * 1024);
 });
+
+test("a slow response body counts as progress for the idle limit", async () => {
+  const state = initialize();
+  const result = await runUpload(
+    state,
+    SOURCE,
+    input(fileOf("trickle.txt", "data"), "/trickle", {
+      idleTimeoutMs: TRICKLE_STEP_MS * 3,
+    }),
+  );
+  expect(Buffer.from(result.bodyBase64, "base64").byteLength).toBe(
+    TRICKLE_STEPS,
+  );
+  await dispose(state);
+});
+
+test("a server that does not read holds the file back instead of filling memory", async () => {
+  const state = initialize();
+  const request = input(
+    fileOf("backpressure.bin", Buffer.alloc(SHRINK_BYTES)),
+    "/never-read",
+  );
+  const code = codeOf(runUpload(state, SOURCE, request));
+  await firstChunk(state, request);
+  // Wait until progress stops, which only happens when the connection stops taking the stream.
+  let previous = -1;
+  let steady = 0;
+  const sentWhenSteady = await waitFor(
+    () => {
+      const { sentBytes } = runUploadStatus(state, SOURCE, request);
+      steady = sentBytes === previous ? steady + 1 : 0;
+      previous = sentBytes;
+      return steady >= STEADY_PROBES ? sentBytes : undefined;
+    },
+    {
+      deadline: "inProcess",
+      what: "the upload to stop reading",
+    },
+  );
+  expect(sentWhenSteady).toBeLessThan(SHRINK_BYTES / 2);
+  await runCancelUpload(state, SOURCE, request);
+  expect(await code).toBe("CANCELLED");
+  await dispose(state);
+});
+
+test.skipIf(process.platform === "win32")(
+  "a named pipe is refused before it is opened",
+  async () => {
+    const state = initialize();
+    const pipe = join(folder, "pipe");
+    expect(
+      Bun.spawnSync([
+        "mkfifo",
+        pipe,
+      ]).exitCode,
+    ).toBe(0);
+    expect(await codeOf(runUpload(state, SOURCE, input(pipe)))).toBe(
+      "INVALID_ARGUMENT",
+    );
+    expect(state.uploads.size).toBe(0);
+    await dispose(state);
+  },
+);
