@@ -443,11 +443,12 @@ test("cancelUpload ends the connection, releases the id and succeeds for unknown
     expect(await runCancelUpload(state, SOURCE, request)).toEqual({});
     expect(await code).toBe("CANCELLED");
     expect(state.uploads.size).toBe(0);
-    // On macOS runners the socket close arrives later than the two second in-process limit, so
-    // this wait uses the longer limit. A transfer held back mid-body is cancelled by the tests
+    // The sink reads freely on purpose: a server that stops reading sees the end of the
+    // connection only after it has read the bytes still buffered, which on macOS takes seconds
+    // and says nothing about the upload. A transfer held back mid-body is cancelled by the tests
     // that use the never-reading route; this one checks that the connection itself closes.
     await waitFor(() => connectionClosed || undefined, {
-      deadline: "childStep",
+      deadline: "inProcess",
       what: "the connection closing",
     });
   } finally {
