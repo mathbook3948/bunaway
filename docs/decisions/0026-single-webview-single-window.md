@@ -57,7 +57,8 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
    Android는 `launchMode`를 `singleTask`로 두어 Activity를 하나로 제한하고, 두 번째 실행은 기존 창을 앞으로 가져온다.
 6. **`window.open`과 링크.** 새 창 요청은 창을 만들지 않는다. 정책 뷰의 `origins` 안 문서가 시작한 요청만 처리하고,
    `origins`에 속한 URL은 같은 WebView에서 탐색한다. 그 밖의 `http`, `https` URL은 opener 플러그인(`opener.openUrl`)을
-   거쳐서만 시스템 기본 브라우저로 넘기며, opener가 없거나 권한이 없으면 차단하고 진단을 남긴다. 다른 scheme은
+   거쳐서만 시스템 기본 브라우저로 넘기며, opener가 없거나 뷰 `commands`의 `plugin.opener.openUrl`과 host 권한
+   `opener.openUrl` 중 하나라도 없으면 차단하고 진단을 남긴다. 다른 scheme은
    차단한다. Android와 iOS는 opener 어댑터가 생길 때까지 외부 URL을 차단한다. 세부는 아래 "열린 질문"의 기본값에서
    구현 단계에 확정한다.
 7. **Android 뒤로가기.** 시스템 뒤로가기는 WebView history를 먼저 소비하고, 더 돌아갈 곳이 없을 때만
@@ -86,7 +87,7 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
   호스트 발급 요청 ID(문서의 ID와 분리), 진행 중 요청 상한, 실행 직전 재검사를 적용한다. 처리 중 세션이 철회되면 취소한다.
   문서가 직접 호출하지 않은 새 출처는 [ADR 0002](./0002-host-owned-call-context.md)의 "호스트 발급 호출 프레임"으로 정했다.
   [ADR 0024](./0024-plugin-path-responsibility.md)와의 관계도 같은 절에 적었다. 뷰에 `plugin.*`을 직접 허용하지 말라는
-  일반 지침의 예외는 `plugin.opener.openUrl` 하나이고, 외부 콘텐츠를 표시하는 뷰에는 여전히 허용하지 않는다.
+  일반 지침의 예외는 `plugin.opener.openUrl` 하나이고, 외부 콘텐츠를 표시하는 뷰에는 여전히 허용하지 않는다. 이는 앱 개발자의 책임이며 런타임은 검사하지 않는다.
 - **리다이렉트.** 판정을 요청 URL로 할지 최종 URL로 할지 정한다. 기본값은 최종 URL이다.
 - **`target` 없는 탐색과 내부 URL의 `window.open`.** 기본값은 외부 URL과 같은 조건이며, `target` 없는 외부 탐색은
   취소한다.
@@ -220,7 +221,7 @@ Capacitor 동작 기준처럼 외부 링크는 시스템 브라우저, 내부 �
 | [0015](./0015-macos-bun-ffi.md) macOS Bun FFI | 수정 | 다중 창 서술은 단일 창으로 대체 |
 | [0019](./0019-initial-window-placement.md) 초기 창 배치 | 수정 | 생성 API 개수 표현을 create, recreate 두 개로 수정. 배치 계산은 유지 |
 | [0002](./0002-host-owned-call-context.md) 호출 컨텍스트 | 수정 | 발급과 철회는 그대로. opener 대리 호출 전용 호스트 발급 호출 프레임을 추가했다 |
-| [0024](./0024-plugin-path-responsibility.md) 경로 책임 | 수정(링크 예외 한 줄 추가) | 외부 콘텐츠를 표시하는 뷰의 최소 권한 지침은 단일 뷰에서 앱 전체 권한에 적용된다. opener 대리 호출을 위해 뷰에 `plugin.opener.openUrl`을 직접 허용하는 일반 지침의 예외 하나를 ADR 0002에 적었다. 외부 콘텐츠 뷰에는 허용하지 않는다 |
+| [0024](./0024-plugin-path-responsibility.md) 경로 책임 | 수정(링크 예외 한 줄 추가) | 외부 콘텐츠를 표시하는 뷰의 최소 권한 지침은 단일 뷰에서 앱 전체 권한에 적용된다. opener 대리 호출을 위해 뷰에 `plugin.opener.openUrl`을 직접 허용하는 일반 지침의 예외 하나를 ADR 0002에 적었다. 외부 콘텐츠 뷰에는 허용하지 않으며, 이는 앱 개발자의 책임이고 런타임은 검사하지 않는다(런타임 검사는 ADR 0002의 열린 질문) |
 | [0010](./0010-windows-first-platform-model.md) Windows 우선 | 유지 | 구현 순서의 근거 |
 | [0018](./0018-ios-embedded-bun-worker.md) iOS | 유지 | 단일 뷰 조건이 공통 계약이 됨 |
 | `docs/GLOSSARY.md` | 수정 | 창 인스턴스, 창 소유 관계, 부모 종속 모달 창 항목 삭제. 뷰 ID, WebView 프로필, 앱 접근 규칙 수정 |

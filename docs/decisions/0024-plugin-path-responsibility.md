@@ -12,7 +12,7 @@ status: accepted
 어떤 파일과 폴더를 다룰지는 앱 명령이 정하며, 이는 앱 개발자의 책임이다.
 
 - policy는 뷰가 호출할 수 있는 `commands`와 `host.permissions`, `backend.permissions`만 정한다. 허용 폴더(scope) 칸은 두지 않는다. ADR 0013(optional native plugins)의 "범용 scope와 matches 계약은 두지 않는다"를 유지한다.
-- 화면에는 경로를 제한하는 앱 명령만 허용한다. `plugin.*` 명령을 화면에 직접 허용하면 그 뷰는 해당 작업의 모든 유효한 입력을 쓸 수 있다.
+- 화면에는 경로를 제한하는 앱 명령만 허용한다. `plugin.*` 명령을 화면에 직접 허용하면 그 뷰는 해당 작업의 모든 유효한 입력을 쓸 수 있다. 외부 링크 열기를 위한 `plugin.opener.openUrl` 허용만 예외이며 조건은 [ADR 0002](./0002-host-owned-call-context.md)에 있다.
 - 플러그인은 열린 핸들을 고정하거나 최종 경로를 다시 비교하지 않는다. 부모 디렉터리 핸들 고정, reparse point와 hardlink 거부, 최종 핸들 경로 재비교, 파일 식별자 재확인은 두지 않는다. 기능 안전을 위한 검사(아래 목록)는 남긴다.
 
 플러그인이 폴더 범위를 보장하지 않는 대신, 입력 형식 검사만 프레임워크가 최소한의 보장으로 제공한다.
