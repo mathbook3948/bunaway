@@ -458,8 +458,10 @@ test("cancelUpload ends the connection, releases the id and succeeds for unknown
     expect(state.uploads.size).toBe(0);
     // A paused socket reports the end of the connection only once it reads again.
     held?.resume();
+    // On macOS runners the socket close arrives later than the two second in-process limit, so
+    // this wait uses the longer limit.
     await waitFor(() => connectionClosed || undefined, {
-      deadline: "inProcess",
+      deadline: "childStep",
       what: "the connection closing",
     });
   } finally {
