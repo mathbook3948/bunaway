@@ -269,10 +269,15 @@ const { watchMacosPowerStatus } = await import(${JSON.stringify(STATUS_EVENTS)})
 // The adapter above runs its own status watcher, so this watcher gets its own list.
 let reads = 0;
 const statusEvents = [];
-const read = () => ({
+// The snapshot is constant, so a notification that does arrive is skipped as unchanged.
+const snapshot = {
   source: "ac", batteryPresent: false, charging: false, batteryPercent: null,
-  batterySaver: false, remainingSeconds: null, fullLifeSeconds: null, reads: ++reads,
-});
+  batterySaver: false, remainingSeconds: null, fullLifeSeconds: null,
+};
+const read = () => {
+  reads++;
+  return snapshot;
+};
 const release = watchMacosPowerStatus(read, { emit: (event, payload) => statusEvents.push([event, payload]) });
 try {
   const baselineReads = reads;
