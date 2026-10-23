@@ -36,6 +36,11 @@ const nested = {
   ],
 };
 
+/** Plugin results arrive as null-prototype objects; compare them by content, not prototype. */
+function same(actual: unknown, expected: unknown): void {
+  assert.deepEqual(JSON.parse(JSON.stringify(actual)), expected);
+}
+
 function readJson(name: string): unknown {
   return JSON.parse(
     readFileSync(resolve(storeDirectory, `${name}.json`), "utf8"),
@@ -55,7 +60,7 @@ async function rejected(work: Promise<unknown>, code: string): Promise<void> {
 
 /** First run: every operation against the real macOS file system, ending with unsaved stores. */
 async function firstRun(): Promise<void> {
-  assert.deepEqual(
+  same(
     await store.load({
       name: "settings",
       defaults,
@@ -66,7 +71,7 @@ async function firstRun(): Promise<void> {
     },
   );
   assert.equal(existsSync(settingsPath), false);
-  assert.deepEqual(
+  same(
     await store.set({
       name: "settings",
       key: "theme",
@@ -76,7 +81,7 @@ async function firstRun(): Promise<void> {
       changed: true,
     },
   );
-  assert.deepEqual(
+  same(
     await store.set({
       name: "settings",
       key: "theme",
@@ -96,14 +101,14 @@ async function firstRun(): Promise<void> {
   await store.save({
     name: "settings",
   });
-  assert.deepEqual(readJson("settings"), {
+  same(readJson("settings"), {
     theme: "dark",
     count: 1,
     nested,
   });
   assert.equal(statSync(settingsPath).mode & 0o777, 0o600);
   assert.equal(statSync(storeDirectory).mode & 0o777, 0o700);
-  assert.deepEqual(readdirSync(storeDirectory), [
+  same(readdirSync(storeDirectory), [
     "settings.json",
   ]);
 
@@ -118,7 +123,7 @@ async function firstRun(): Promise<void> {
     key: "extra",
     value: true,
   });
-  assert.deepEqual(
+  same(
     await store.reload({
       name: "settings",
     }),
@@ -126,7 +131,7 @@ async function firstRun(): Promise<void> {
       changed: true,
     },
   );
-  assert.deepEqual(
+  same(
     await store.get({
       name: "settings",
       key: "count",
@@ -143,7 +148,7 @@ async function firstRun(): Promise<void> {
     }),
     false,
   );
-  assert.deepEqual(
+  same(
     await store.keys({
       name: "settings",
     }),
@@ -155,7 +160,7 @@ async function firstRun(): Promise<void> {
   );
 
   // Reset returns to the defaults in memory only, so reload brings the saved file back.
-  assert.deepEqual(
+  same(
     await store.reset({
       name: "settings",
     }),
@@ -163,18 +168,18 @@ async function firstRun(): Promise<void> {
       changed: true,
     },
   );
-  assert.deepEqual(
+  same(
     await store.entries({
       name: "settings",
     }),
     Object.entries(defaults),
   );
-  assert.deepEqual(readJson("settings"), {
+  same(readJson("settings"), {
     theme: "dark",
     count: 1,
     nested,
   });
-  assert.deepEqual(
+  same(
     await store.reload({
       name: "settings",
     }),
@@ -182,7 +187,7 @@ async function firstRun(): Promise<void> {
       changed: true,
     },
   );
-  assert.deepEqual(
+  same(
     await store.get({
       name: "settings",
       key: "theme",
@@ -212,10 +217,10 @@ async function firstRun(): Promise<void> {
     chmodSync(storeDirectory, 0o700);
   }
   assert.equal(readFileSync(settingsPath, "utf8"), original);
-  assert.deepEqual(readdirSync(storeDirectory), [
+  same(readdirSync(storeDirectory), [
     "settings.json",
   ]);
-  assert.deepEqual(
+  same(
     await store.get({
       name: "settings",
       key: "theme",
@@ -233,7 +238,7 @@ async function firstRun(): Promise<void> {
   await store.save({
     name: "settings",
   });
-  assert.deepEqual(readJson("settings"), {
+  same(readJson("settings"), {
     theme: "dark",
     count: 1,
     nested,
@@ -246,7 +251,7 @@ async function firstRun(): Promise<void> {
     defaults: PARTIAL_DEFAULTS,
     autosave: false,
   });
-  assert.deepEqual(
+  same(
     await store.entries({
       name: "partial",
     }),
@@ -261,7 +266,7 @@ async function firstRun(): Promise<void> {
       ],
     ],
   );
-  assert.deepEqual(
+  same(
     await store.reload({
       name: "partial",
       ignoreDefaults: true,
@@ -270,7 +275,7 @@ async function firstRun(): Promise<void> {
       changed: true,
     },
   );
-  assert.deepEqual(
+  same(
     await store.keys({
       name: "partial",
     }),
@@ -278,7 +283,7 @@ async function firstRun(): Promise<void> {
       "a",
     ],
   );
-  assert.deepEqual(
+  same(
     await store.reload({
       name: "partial",
     }),
@@ -296,7 +301,7 @@ async function firstRun(): Promise<void> {
   await store.close({
     name: "partial",
   });
-  assert.deepEqual(readJson("partial"), {
+  same(readJson("partial"), {
     a: 10,
   });
 
@@ -308,7 +313,7 @@ async function firstRun(): Promise<void> {
     }),
     "INVALID_ARGUMENT",
   );
-  assert.deepEqual(
+  same(
     await store.load({
       name: "broken",
       defaults: {
@@ -324,7 +329,7 @@ async function firstRun(): Promise<void> {
   await store.close({
     name: "broken",
   });
-  assert.deepEqual(readJson("broken"), {
+  same(readJson("broken"), {
     fresh: true,
   });
 
@@ -343,7 +348,7 @@ async function firstRun(): Promise<void> {
     assert(Date.now() < deadline, "Autosave did not write.");
     await Bun.sleep(10);
   }
-  assert.deepEqual(readJson("auto"), {
+  same(readJson("auto"), {
     saved: 1,
   });
 
@@ -362,7 +367,7 @@ async function firstRun(): Promise<void> {
 
 /** Second run: the same executable sees what the first run saved. */
 async function secondRun(): Promise<void> {
-  assert.deepEqual(
+  same(
     await store.load({
       name: "settings",
       defaults,
@@ -372,7 +377,7 @@ async function secondRun(): Promise<void> {
       loaded: "file",
     },
   );
-  assert.deepEqual(
+  same(
     await store.entries({
       name: "settings",
     }),
@@ -391,13 +396,13 @@ async function secondRun(): Promise<void> {
       ],
     ],
   );
-  assert.deepEqual(readJson("pending"), {
+  same(readJson("pending"), {
     flushed: "at shutdown",
   });
-  assert.deepEqual(readJson("auto"), {
+  same(readJson("auto"), {
     saved: 1,
   });
-  assert.deepEqual(readJson("broken"), {
+  same(readJson("broken"), {
     fresh: true,
   });
   // Defaults gained a key since the file was written: it is filled in and the file value wins.
@@ -409,7 +414,7 @@ async function secondRun(): Promise<void> {
     },
     autosave: false,
   });
-  assert.deepEqual(
+  same(
     await store.entries({
       name: "partial",
     }),
@@ -428,7 +433,7 @@ async function secondRun(): Promise<void> {
       ],
     ],
   );
-  assert.deepEqual(readdirSync(storeDirectory).sort(), [
+  same(readdirSync(storeDirectory).sort(), [
     "auto.json",
     "broken.json",
     "partial.json",
