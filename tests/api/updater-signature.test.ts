@@ -245,6 +245,28 @@ test("a backslash in the signer's subject is an ordinary character, and a subjec
   ).toBe(true);
 });
 
+test("only ASCII spaces around a value are ignored, so a name with a format or no-break space character does not match", () => {
+  expect(publisherMatches("CN=Victim Corp , O=Org", "Victim Corp")).toBe(true);
+  // U+FEFF, U+00A0, U+200B and a tab: characters `String.prototype.trim` would drop.
+  for (const code of [
+    0xfeff,
+    0xa0,
+    0x200b,
+    0x09,
+  ]) {
+    const extra = String.fromCodePoint(code);
+    expect(
+      publisherMatches(`CN=Victim Corp${extra}, O=Org`, "Victim Corp"),
+    ).toBe(false);
+    expect(
+      publisherMatches(`CN=${extra}Victim Corp, O=Org`, "CN=Victim Corp"),
+    ).toBe(false);
+    expect(
+      publisherMatches(`CN=Victim Corp${extra}, O=Org`, `Victim Corp${extra}`),
+    ).toBe(true);
+  }
+});
+
 test("the authenticode setting needs one to eight valid publisher names and nothing else", () => {
   const parse = (authenticode: unknown) =>
     settingsSchema.safeParse({

@@ -89,9 +89,18 @@ function splitAttributes(
   return parts;
 }
 
+/**
+ * Remove the ASCII spaces around a key or value (the one after a `, ` separator). Other
+ * characters that `String.prototype.trim` would drop, such as U+FEFF or U+00A0, are part of the
+ * name: a certificate that carries one must not match a name without it.
+ */
+function trimSpaces(text: string): string {
+  return text.replace(/^ +| +$/g, "");
+}
+
 /** The text of an attribute value, unquoted and unescaped; null for a form not supported. */
 function readValue(raw: string, style: DistinguishedNameStyle): string | null {
-  const trimmed = raw.trim();
+  const trimmed = trimSpaces(raw);
   if (trimmed.startsWith("#")) {
     return null;
   }
@@ -114,8 +123,10 @@ function readValue(raw: string, style: DistinguishedNameStyle): string | null {
       index += 1;
     }
   }
+  // `ignoreBOM` keeps a leading U+FEFF in the name instead of dropping it as a byte order mark.
   return new TextDecoder("utf-8", {
     fatal: true,
+    ignoreBOM: true,
   }).decode(Uint8Array.from(bytes));
 }
 
@@ -138,7 +149,7 @@ export function parseDistinguishedName(
     if (equals < 1) {
       return null;
     }
-    const rawKey = part.slice(0, equals).trim().toUpperCase();
+    const rawKey = trimSpaces(part.slice(0, equals)).toUpperCase();
     let value: string | null;
     try {
       value = readValue(part.slice(equals + 1), style);
