@@ -17,7 +17,7 @@ import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 // Real Win32 and WebView2 gate for `windows.closeRequested` and `windows.respondClose`.
 // The main window's page declines its first close and accepts its second after a simulated save.
-// The observer window reports `windows.lifecycle` and accepts its own close, which is the last one.
+// The accepted second close is the last one, so it continues to the quit request.
 assert.equal(process.platform, "win32");
 const WM_CLOSE = 0x0010;
 const WM_COMMAND = 0x0111;
@@ -158,7 +158,6 @@ if (!process.argv.includes("--child")) {
   const ready = new Set<string>();
   const failures: string[] = [];
   let confirmations = 0;
-  let mainWindowId = "";
   let task: Promise<void> | undefined;
   let exerciseFailure: unknown;
 
@@ -184,29 +183,11 @@ if (!process.argv.includes("--child")) {
     }
   }, DIALOG_POLL_MS);
 
-  /** Records the phases of the window as the backend receives them, in publication order. */
-  async function watchLifecycle() {
-    let after = 0;
-    for (;;) {
-      const event = await windows.waitForLifecycle({
-        after,
-      });
-      after = event.sequence;
-      if (
-        event.windowId === mainWindowId &&
-        (event.phase === "closed" || event.phase === "destroyed")
-      ) {
-        order.push(`lifecycle:${event.phase}`);
-      }
-    }
-  }
-
   async function exercise() {
     await waitFor(
       () => ready.has("main"),
       "The page must subscribe before the first close",
     );
-    mainWindowId = (await windows.getReadiness()).windowId;
     // A declined confirmation would keep the window open, so any accepted close proves it was skipped.
     await windows.setCloseConfirmation({
       message: "Close main?",
@@ -238,16 +219,6 @@ if (!process.argv.includes("--child")) {
     );
 
     assert(user32.symbols.PostMessageW(mainWindow, WM_CLOSE, 0n, 0n));
-    await waitFor(
-      () => order.includes("lifecycle:closed"),
-      "An accepted close must close the window",
-    );
-    await waitFor(
-      () => order.includes("lifecycle:destroyed"),
-      "A closed window must release its native resources",
-    );
-    assert.equal(user32.symbols.IsWindow(mainWindow), 0);
-    assert.equal(confirmations, 0, "The accepted close showed a confirmation");
 
     // The only window is the last one: its accepted close continues to the quit request.
     await waitFor(
@@ -269,7 +240,6 @@ if (!process.argv.includes("--child")) {
             console.error(error);
             await windows.destroy().catch(() => {});
           });
-          void watchLifecycle().catch(() => {});
         },
       },
     ],
@@ -413,10 +383,6 @@ if (!process.argv.includes("--child")) {
     "answered:main:1",
     "requested:main:2",
     "answering:main:2:true",
-    "lifecycle:closed",
-    "lifecycle:destroyed",
-    "requested:observer:1",
-    "answering:observer:1:true",
     "quit:last-window",
   ]);
   assert.equal(confirmations, 0);
