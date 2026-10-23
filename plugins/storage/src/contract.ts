@@ -23,6 +23,13 @@ export const MAX_RECURSIVE_PATH_COMPONENTS = MAX_DIRECTORY_SIZE_DEPTH + 1;
 export const MAX_RECURSIVE_PATH_CHARACTERS =
   MAX_RECURSIVE_PATH_COMPONENTS * (MAX_FILENAME_CHARACTERS + 1) - 1;
 export const MAX_RECURSIVE_PAGE_PATH_CHARACTERS = 65_536;
+/**
+ * A cursor may end in one NUL character, which sorts right after the name it follows. This is how
+ * an app steps over a directory that cannot be listed, so it has to fit after a longest name.
+ */
+export const RECURSIVE_CURSOR_SUCCESSOR = "\u0000";
+export const MAX_RECURSIVE_CURSOR_CHARACTERS =
+  MAX_RECURSIVE_PATH_CHARACTERS + RECURSIVE_CURSOR_SUCCESSOR.length;
 
 /** An observed child name and kind. This does not authorize or follow the child target. */
 export const directoryEntrySchema = z.strictObject({
@@ -159,7 +166,7 @@ export const storageDirectoryPageSchema = z.strictObject({
  */
 export const storageRecursiveReadSchema = z.strictObject({
   ...pathFields,
-  after: z.string().min(1).max(MAX_RECURSIVE_PATH_CHARACTERS).optional(),
+  after: z.string().min(1).max(MAX_RECURSIVE_CURSOR_CHARACTERS).optional(),
   limit: z.int().min(1).max(MAX_DIRECTORY_ENTRIES).optional(),
 });
 /** `next` is the `after` of the following page, or null when this page reaches the end. */

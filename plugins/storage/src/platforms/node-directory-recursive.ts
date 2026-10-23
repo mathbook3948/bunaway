@@ -5,6 +5,7 @@ import {
   MAX_FILENAME_CHARACTERS,
   MAX_RECURSIVE_PAGE_PATH_CHARACTERS,
   MAX_RECURSIVE_PATH_COMPONENTS,
+  RECURSIVE_CURSOR_SUCCESSOR,
   type StorageRecursiveEntry,
   type StorageRecursivePage,
 } from "#storage/contract";
@@ -53,11 +54,17 @@ function cursorComponents(after: string | undefined): string[] {
     return [];
   }
   const components = after.split("/");
+  // The last name may carry the successor mark on top of a longest name.
+  const last = components.length - 1;
+  const tooLong = (name: string, index: number): boolean =>
+    name.length >
+    MAX_FILENAME_CHARACTERS +
+      (index === last && name.endsWith(RECURSIVE_CURSOR_SUCCESSOR)
+        ? RECURSIVE_CURSOR_SUCCESSOR.length
+        : 0);
   if (
     components.length > MAX_RECURSIVE_PATH_COMPONENTS ||
-    components.some(
-      (name) => name.length === 0 || name.length > MAX_FILENAME_CHARACTERS,
-    )
+    components.some((name, index) => name.length === 0 || tooLong(name, index))
   ) {
     throw invalidCursor();
   }

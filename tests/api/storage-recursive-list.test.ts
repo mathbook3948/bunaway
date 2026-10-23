@@ -244,6 +244,29 @@ test("a cursor with empty or oversized components or too many levels is rejected
   }
 });
 
+test("a NUL mark after a longest name is a valid cursor but one more character is not", async () => {
+  const longest = "n".repeat(255);
+  expect(await list(`${longest}\u0000`)).toEqual({
+    entries: [],
+    next: null,
+  });
+  expect(
+    await list(
+      `${"d/".repeat(MAX_RECURSIVE_PATH_COMPONENTS - 1)}${longest}\u0000`,
+    ),
+  ).toEqual({
+    entries: [],
+    next: null,
+  });
+  expect(await codeOf(() => list(`${longest}x`))).toBe("INVALID_ARGUMENT");
+  expect(await codeOf(() => list(`${longest}\u0000\u0000`))).toBe(
+    "INVALID_ARGUMENT",
+  );
+  expect(await codeOf(() => list(`${longest}\u0000/a`))).toBe(
+    "INVALID_ARGUMENT",
+  );
+});
+
 test("links are listed as links and never entered", async () => {
   createTree([
     "target/inner",
@@ -428,64 +451,67 @@ test("a cursor through a link lists nothing from the link target", async () => {
   }
 });
 
-test("a directory that cannot be listed fails the call and the same cursor keeps failing", async () => {
-  if (process.platform === "win32" || process.getuid?.() === 0) {
-    return;
-  }
-  createTree([
-    "a/denied/x",
-    "a/denied-old",
-    "a/denied.txt",
-    "b",
-  ]);
-  chmodSync(at("a", "denied"), 0);
-  try {
-    expect(await codeOf(() => list())).toBe("PERMISSION_DENIED");
-    expect(await codeOf(() => list("a"))).toBe("PERMISSION_DENIED");
-    expect(await codeOf(() => list("a/denied"))).toBe("PERMISSION_DENIED");
-    // A cursor right after the directory name steps over it and keeps the siblings that sort
-    // between "denied" and "denied0".
-    expect(paths((await list("a/denied\u0000")).entries)).toEqual([
+// Mode 0 only denies listing to a non-root user on a POSIX file system.
+const cannotDeny = process.platform === "win32" || process.getuid?.() === 0;
+
+test.skipIf(cannotDeny)(
+  "a directory that cannot be listed fails the call and the same cursor keeps failing",
+  async () => {
+    createTree([
+      "a/denied/x",
       "a/denied-old",
       "a/denied.txt",
       "b",
     ]);
-  } finally {
-    chmodSync(at("a", "denied"), 0o700);
-  }
-});
+    chmodSync(at("a", "denied"), 0);
+    try {
+      expect(await codeOf(() => list())).toBe("PERMISSION_DENIED");
+      expect(await codeOf(() => list("a"))).toBe("PERMISSION_DENIED");
+      expect(await codeOf(() => list("a/denied"))).toBe("PERMISSION_DENIED");
+      // A cursor right after the directory name steps over it and keeps the siblings that sort
+      // between "denied" and "denied0".
+      expect(paths((await list("a/denied\u0000")).entries)).toEqual([
+        "a/denied-old",
+        "a/denied.txt",
+        "b",
+      ]);
+    } finally {
+      chmodSync(at("a", "denied"), 0o700);
+    }
+  },
+);
 
-test("a page that ends on a directory does not open it", async () => {
-  if (process.platform === "win32" || process.getuid?.() === 0) {
-    return;
-  }
-  createTree([
-    "ok.txt",
-    "z/x",
-  ]);
-  chmodSync(at("z"), 0);
-  try {
-    const page = await list(undefined, 2);
-    expect(page).toEqual({
-      entries: [
-        {
-          path: "ok.txt",
-          kind: "file",
-        },
-        {
-          path: "z",
-          kind: "directory",
-        },
-      ],
-      next: "z",
-    });
-    expect(await codeOf(() => list(page.next ?? undefined, 2))).toBe(
-      "PERMISSION_DENIED",
-    );
-  } finally {
-    chmodSync(at("z"), 0o700);
-  }
-});
+test.skipIf(cannotDeny)(
+  "a page that ends on a directory does not open it",
+  async () => {
+    createTree([
+      "ok.txt",
+      "z/x",
+    ]);
+    chmodSync(at("z"), 0);
+    try {
+      const page = await list(undefined, 2);
+      expect(page).toEqual({
+        entries: [
+          {
+            path: "ok.txt",
+            kind: "file",
+          },
+          {
+            path: "z",
+            kind: "directory",
+          },
+        ],
+        next: "z",
+      });
+      expect(await codeOf(() => list(page.next ?? undefined, 2))).toBe(
+        "PERMISSION_DENIED",
+      );
+    } finally {
+      chmodSync(at("z"), 0o700);
+    }
+  },
+);
 
 test("a scan cancelled while it walks stops and closes its directory", async () => {
   createTree(
