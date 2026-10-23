@@ -3,7 +3,11 @@ import { existsSync, realpathSync, statSync } from "node:fs";
 import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { relative, resolve } from "node:path";
-import { AUTOSTART_ARGUMENT } from "@bunaway/protocol";
+import {
+  AUTOSTART_ARGUMENT,
+  NativeRegistry,
+  type Policy,
+} from "@bunaway/protocol";
 import { bundleMacosHost } from "#cli/assets";
 import { files, hash, writeJson } from "#cli/files";
 import { compileMacosApp } from "#cli/macos-compile";
@@ -54,7 +58,7 @@ try {
   await mkdir(resolve(assets, "web"), {
     recursive: true,
   });
-  const policy = {
+  const policy: Policy = {
     version: 1,
     backend: {
       permissions: [
@@ -109,6 +113,9 @@ try {
     ].includes(plugin.name),
   );
   assert.equal(installed.length, 2);
+  new NativeRegistry(installed, {
+    mode: "catalog",
+  }).validatePolicy(policy);
   const bundled = await bundleMacosHost(
     resolve(root, "native/macos/bun"),
     assets,
