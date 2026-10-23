@@ -162,6 +162,8 @@ try {
       check(Number.isInteger(change.sequence) && change.sequence >= 0 && change.sequence <= 4294967295, "change sequence");
       check(Number.isInteger(change.changedAt) && change.changedAt > 0, "change time");
       same(await clipboard.readText(null), "change probe", "write behind the change");
+      // The host-side check after exit expects native image data on the board.
+      await clipboard.writeImage(maximum);
       await client.invoke("test.report", {ok:true, unicode:true, formats:true, rgba:true, grants:true, limits:true, change:true});
     } catch(error) {
       await client.invoke("test.report", {ok:false,message:error.message,code:error.code ?? null});
