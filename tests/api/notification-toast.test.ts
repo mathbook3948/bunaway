@@ -821,28 +821,49 @@ test("WinRT ABI registers real delegates, copies callback values and retries fai
   expect(child.exitCode, child.stderr.toString()).toBe(0);
 });
 
-test("show and schedule reject raw toast XML and other markup fields", () => {
+test("show and schedule reject raw toast XML and toast markup attributes as unknown fields", () => {
   const xml = '<toast launch="app://other"><visual/></toast>';
+  const unrecognized = (result: {
+    success: boolean;
+    error?: {
+      issues: {
+        code: string;
+        keys?: string[];
+      }[];
+    };
+  }) =>
+    result.error?.issues.flatMap((issue) =>
+      issue.code === "unrecognized_keys" ? (issue.keys ?? []) : [],
+    );
   for (const field of [
     "toastXml",
     "xml",
     "launch",
     "activationType",
   ]) {
-    expect(() =>
-      notificationShowSchema.parse({
+    const base = {
+      id: "example",
+      title: "Hello",
+      [field]: xml,
+    };
+    expect(
+      notificationShowSchema.safeParse({
         id: "example",
         title: "Hello",
-        [field]: xml,
-      }),
-    ).toThrow();
-    expect(() =>
-      notificationScheduleSchema.parse({
-        id: "example",
-        title: "Hello",
-        deliverAt: 1,
-        [field]: xml,
-      }),
-    ).toThrow();
+      }).success,
+    ).toBe(true);
+    expect(unrecognized(notificationShowSchema.safeParse(base))).toEqual([
+      field,
+    ]);
+    expect(
+      unrecognized(
+        notificationScheduleSchema.safeParse({
+          ...base,
+          deliverAt: 1,
+        }),
+      ),
+    ).toEqual([
+      field,
+    ]);
   }
 });

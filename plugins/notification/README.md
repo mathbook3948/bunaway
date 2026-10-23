@@ -143,9 +143,10 @@ null을 반환하며 없어도 성공한다. Tauri의 `schedule`, `pending`, `ca
 ### 사용자 지정 toast XML
 
 `show`와 `schedule` 입력은 strict 스키마라 `toastXml` 같은 필드를 `INVALID_ARGUMENT`로 거부한다. Electron의
-Windows `toastXml`은 지원하지 않는다. 임의 XML은 `launch`와 버튼 `arguments`로 검증된 activation 인자를
-대체해 `notification.actionInvoked`와 `takeActivations` 전달을 깨고, 이미지 `src`와 protocol activation으로
-로컬 파일 검사와 URI 제한을 우회한다. 필요한 내용은 선언 필드로 추가한다.
+Windows `toastXml`은 지원하지 않는다. 임의 XML의 `launch`와 버튼 `arguments`는 플러그인이 만든 activation
+인자 형식이 아니라 해석되지 않고 버려져 `notification.actionInvoked`와 `takeActivations` 전달이 사라진다.
+또 이미지 `src`가 로컬 파일 검사를 거치지 않고 플러그인이 만들지 않는 protocol activation 경로가 열린다.
+필요한 내용은 선언 필드로 추가한다.
 
 ### 앱이 꺼진 뒤의 클릭
 
