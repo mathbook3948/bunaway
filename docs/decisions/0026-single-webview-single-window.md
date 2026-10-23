@@ -40,8 +40,11 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
 3. **창 제어 대상.** 창 API는 대상 인자 없이 앱의 창을 제어한다. 웹 문서와 백엔드가 같은 창을 가리킨다.
    `view`와 `windowId` 입력은 모든 플러그인에서 바로 제거한다. `windowId`는 창 수명 식별자로
    `windows.getSnapshot()` 결과와 이벤트 payload에 남겨, 호출자가 재생성 여부를 구분하는 데 쓴다.
-   창이 열려 있는지는 `windows.isOpen()`으로 조회한다. 창이 없을 때 창 제어와 상태 조회는 `INVALID_ARGUMENT`로
-   실패하고, `windows.isOpen()`과 창과 무관한 작업(모니터, 커서)은 성공한다. 창이 없을 때 `windows.destroy()`는
+   창이 열려 있는지는 `windows.isOpen()`으로 조회한다. `windows.list()`와 `isDestroyed`는 `isOpen`이 대신한다.
+   창이 없을 때 창 제어와 상태 조회는 `INVALID_ARGUMENT`로
+   실패한다. 예외로 `windows.create()`와 `windows.recreate()`는 창을 만들고, `windows.isOpen()`과 창과 무관한 작업
+   (모니터, 커서)은 성공하며, `windows.getReadiness()`는 닫힌 창의 마지막 결과를 유지한다(창을 한 번도 만들지 않았으면
+   `INVALID_ARGUMENT`). 창이 없을 때 `windows.destroy()`는
    아무 일도 하지 않고 `true`를 돌려주며 앱 종료는 `quit`만 맡는다.
 4. **창 수명 이벤트.** `windows.lifecycle`은 문서 세션뿐 아니라 백엔드도 받는다. 백엔드는 windows 플러그인이 제공하는
    구독 API로 권한 검사 없이 모든 단계를 받는다. 문서 세션은 정책 `events`와 `windows.getSnapshot` 권한을 요구한다.
@@ -90,7 +93,7 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
 - **다른 scheme과 다운로드.** `mailto:`, `tel:`은 차단한다. 다운로드 링크는 다운로드 경로로 판정하고 opener로 넘기지 않는다.
 - **차단 진단.** 반복 진단에는 빈도 상한을 둔다.
 - **Android 전환.** `onCreateWindow`를 쓰려면 새 창 지원 설정을 바꿔야 하며 `_blank` 처리가 바뀐다. 전환 순서를 정한다.
-- **앱의 거부 훅과 숨긴 문서.** 앱 코드가 opener 전에 거부할 수 있게 할지는 기본값 없이 정책의 작업 허용만 쓴다.
+- **앱의 거부 훅과 숨긴 문서.** 앱 코드가 opener 전에 거부할 수 있게 할지는 기본값을 두지 않고 정책의 작업 허용만 쓴다.
   숨겨져 상주하는 문서의 요청은 차단한다.
 - **입력 검증.** 대리 호출의 URL 검사는 opener의 일반 입력 검증을 그대로 거친다.
 
@@ -101,6 +104,8 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
   `onAllWindowsClosed`를 호출하지 않는다.
 - **지원 작업.** `isOpen`, `getSnapshot`, `getReadiness`, lifecycle 구독으로 시작한다. `getSnapshot`에서 데스크톱 전용
   필드에 채울 값을 정한다.
+- **모바일과 destroy.** 모바일에서 `destroy`는 `UNSUPPORTED`가 앞서고, macOS의 `destroy`도 `UNSUPPORTED`를 유지한다. 창이 없을 때 no-op `true`는 Windows에 적용한다.
+- **문서 세션이 받는 단계.** 닫히는 창의 세션은 먼저 철회되므로 문서 세션이 받을 수 있는 lifecycle 단계는 `ready`뿐일 수 있다.
 - **`app.window`.** 모바일 CLI는 요구를 유지하되 값은 쓰지 않는다. 이 요구를 없앨지 정한다.
 
 ### 창이 없는 상태
@@ -109,7 +114,6 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
   트레이 Open과 두 번째 실행이 새로 만든 창은 `visible`과 상관없이 표시한다. 창이 절대 보이지 않는 앱은 표현하지 않는다.
   macOS는 창 없는 시작이 `UNSUPPORTED`([ADR 0021](./0021-macos-desktop-lifecycle.md))이고, 숨긴 창을 다시 보여 줄
   경로는 구현 단계에서 확정한다.
-- **`getReadiness`.** 닫힌 창의 마지막 결과를 유지하고, 창을 한 번도 만들지 않았으면 `INVALID_ARGUMENT`로 한다.
 - **프로필 데이터.** Windows는 영속 프로필 하나(`webview/`)를 쓰고 기존 뷰별 디렉터리와 임시 프로필은 옮기거나
   지우지 않는다. macOS는 앱마다 분리한 영속 프로필 하나로 바뀐다. 식별자 방식은 macOS 공개 API가 허용하는 범위에서 정한다.
 - **창 소유 관련 입력.** 대화상자의 소유 창은 앱의 창이고, 메뉴의 창 메뉴는 재생성 뒤 새 창에 다시 붙으며,
@@ -145,8 +149,8 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
   라우트를 구별하지 못하고, 화면별 권한 분리를 다른 곳으로 옮길 수 없다. 화면마다 권한이 달라야 하는
   앱은 별도 앱으로 나누거나 같은 권한 집합으로 설계해야 한다. 렌더러 장애를 뷰 단위로 격리하던 효과도
   사라지며, 창 하나의 렌더러 장애는 그 창의 세션 폐기와 재탐색으로 처리한다.
-- **창 없는 트레이 앱.** 창을 절대 만들지 않는 트레이 전용 앱은 표현할 수 없다. 창을 숨긴 채 유지하는 방식
-  (`app.visible: false`)으로 대신하며, 숨긴 창과 WebView, 정책 권한을 가진 문서 세션이 시작부터 상주하므로
+- **창 없는 트레이 앱.** `app.startup: false`는 창 생성을 미룰 뿐이며 트레이 Open, 두 번째 실행, `windows.create()`가 창을 만든다. 창을
+  절대 만들지 않는 트레이 전용 앱은 표현하지 않고, 창을 숨긴 채 유지하는 방식(`app.visible: false`)을 권장한다. 숨긴 창과 WebView, 정책 권한을 가진 문서 세션이 시작부터 상주하므로
   메모리 사용과 공격면이 늘어난다.
 - **기존 데이터.** 이전 형식의 뷰별 WebView 프로필 데이터와 window-state 저장 키는 옮기지 않는다. 개발 단계이므로
   이전 디렉터리도 정리하지 않으며 쿠키와 웹 저장소가 디스크에 남는다.
@@ -196,24 +200,24 @@ Capacitor 동작 기준처럼 외부 링크는 시스템 브라우저, 내부 �
 
 ## 기존 결정과의 관계
 
-아래 ADR은 머리말에 이 결정으로의 링크를 추가하고 본문은 당시 기록으로 남긴다.
+관계가 대체나 수정인 ADR은 머리말에 이 결정으로의 링크를 추가하고 본문은 당시 기록으로 남긴다. 유지인 ADR은 바꾸지 않는다.
 
 | ADR | 관계 | 내용 |
 | --- | --- | --- |
-| [0004](./0004-multi-window-per-view-policy.md) 창과 뷰별 정책 분리 | 대체 | 창 N개와 뷰별 정책, 뷰별 프로필, 창별 종료 규칙을 단일 창으로 대체. 렌더러 장애 처리와 "창 닫기 = 세션 폐기"는 유지 |
+| [0004](./0004-multi-window-per-view-policy.md) 창과 뷰별 정책 분리 | 대체 | 창 N개와 뷰별 정책, 뷰별 프로필, 창별 종료 규칙을 단일 창으로 대체. splashscreen 전환 서술과 부모와 모달 수명 확장 절도 대체. 렌더러 장애 처리와 "창 닫기 = 세션 폐기"는 유지 |
 | [0017](./0017-multiple-windows-per-view.md) 같은 뷰의 다중 창 | 대체 | 인스턴스 관련 설정과 작업, ID 지정 제어 전체 |
 | [0016](./0016-window-creation-contract.md) 창 생성 계약 | 수정 | 호출별 옵션 허용 범위와 검증은 유지. `app.windows`, `view`, `windowId`가 전제인 부분은 대체 |
 | [0013](./0013-desktop-lifecycle.md) 데스크톱 수명주기 | 수정 | 트레이 Open과 두 번째 실행은 앱의 창을 복원하거나 생성. 부모와 자식, splashscreen 절 제거. `app.windows: []`는 `app.startup: false`와 `app.visible: false`로 대체 |
 | [0013](./0013-optional-native-plugins.md) 선택 네이티브 플러그인 | 수정 | "특정 창의 제어 같은 앱 규칙"은 창이 하나라 적용 대상이 없다 |
 | [0014](./0014-optional-plugin-packages.md) 선택 플러그인 패키지 | 수정 | 허용된 작업은 앱의 창 하나를 대상으로 하며 화면별 접근 제한은 불가능하다 |
 | [0020](./0020-close-and-quit-lifecycle.md) 닫기와 종료 수명주기 | 수정 | 여러 창과 자식 확인 언급 제거. `windows.lifecycle`의 백엔드 전달과 문서 세션 권한 변경. `respondClose` 입력에서 대상 제거와 `requestId`의 앱 실행 동안 유일 발급. `onAllWindowsClosed`는 "앱의 창이 닫혀 0개가 됨" |
-| [0021](./0021-macos-desktop-lifecycle.md) macOS 데스크톱 수명주기 | 수정 | 권한 언급과 `windows.lifecycle` 전달을 0020과 맞춤. 창 없는 시작은 계속 `UNSUPPORTED` |
+| [0021](./0021-macos-desktop-lifecycle.md) macOS 데스크톱 수명주기 | 수정 | 권한 언급과 `windows.lifecycle` 전달을 0020과 맞춤. macOS 어댑터의 `getSnapshot` 구현과 영속 프로필 하나가 추가된다(프로필 식별자 방식은 열린 질문). 창 없는 시작은 계속 `UNSUPPORTED` |
 | [0002](./0002-host-owned-call-context.md) 호출 컨텍스트 | 수정 | 발급과 철회는 그대로. 링크 처리에서 호스트 대리 호출이 추가될 수 있다 |
 | [0006](./0006-windows-bun-ui-worker.md) Windows UI Worker | 수정 | 뷰별 정책과 프로필은 단일 창으로 대체. 문서 세대는 유지 |
 | [0015](./0015-android-bundled-process-host.md) Android | 수정 | 뒤로가기를 "WebView history 먼저"로 변경. `launchMode` 지정 추가 |
 | [0015](./0015-macos-bun-ffi.md) macOS Bun FFI | 수정 | 다중 창 서술은 단일 창으로 대체 |
 | [0019](./0019-initial-window-placement.md) 초기 창 배치 | 수정 | 생성 API 개수 표현을 create, recreate 두 개로 수정. 배치 계산은 유지 |
-| [0024](./0024-plugin-path-responsibility.md) 경로 책임 | 유지 | 외부 콘텐츠를 표시하는 뷰의 최소 권한 지침은 단일 뷰에서 앱 전체 권한에 적용된다 |
+| [0024](./0024-plugin-path-responsibility.md) 경로 책임 | 유지(링크 처리 구현 때 재검토) | 외부 콘텐츠를 표시하는 뷰의 최소 권한 지침은 단일 뷰에서 앱 전체 권한에 적용된다. opener 대리 호출의 정책 항목과 맞추는 방법은 열린 질문 |
 | [0010](./0010-windows-first-platform-model.md) Windows 우선 | 유지 | 구현 순서의 근거 |
 | [0018](./0018-ios-embedded-bun-worker.md) iOS | 유지 | 단일 뷰 조건이 공통 계약이 됨 |
 | `docs/GLOSSARY.md` | 수정 | 창 인스턴스, 창 소유 관계, 부모 종속 모달 창 항목 삭제. 뷰 ID, WebView 프로필, 앱 접근 규칙 수정 |
