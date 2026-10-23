@@ -597,7 +597,8 @@ Windows UI 어댑터의 선택적 `NativeEnvironment.shortcuts`는 `NativeShortc
 전역 단축키 플러그인이 개별 등록과 메시지 창을 소유하고 호스트는 기존 UI 스레드와 앱 실행 유지 정책을 유지합니다.
 
 macOS UI 어댑터의 선택적 `NativeEnvironment.events`는 `NativeEventServices`를 제공합니다.
-`emit(event, payload)`는 해당 이벤트를 구독한(또는 구독 요청이 확정 전인) WebView 문서에만 창 이벤트와 같은 순서 보장 경로로 전달합니다. 정책과 권한은 구독할 때 확인하며 emit마다 다시 확인하지 않습니다.
+`emit(event, payload, requiredOperation?)`는 해당 이벤트를 구독한(또는 구독 요청이 확정 전인) WebView 문서에만 창 이벤트와 같은 순서 보장 경로로 전달합니다. 정책은 구독할 때 확인하며 emit마다 다시 확인하지 않습니다.
+`requiredOperation`을 주면 emit마다 각 화면의 host.permissions가 그 작업을 허용하는지도 확인하고, 허용하지 않거나 등록되지 않은 작업이면 그 화면에는 보내지 않습니다. 호출로 읽을 수 있는 상태를 알리는 이벤트는 읽기 작업을 이 인자로 지정해, 이벤트 구독만으로 값이 새지 않게 합니다(Windows `systemEvents.publish`의 `requiredOperation`과 같은 규칙). 인자는 선택이라 기존 플러그인은 바꾸지 않아도 동작이 그대로입니다.
 호스트가 종료를 시작한 뒤의 emit은 버려지고, 구독자가 없으면 아무것도 보내지 않습니다. 이벤트 이름과 payload 선언은 플러그인이 소유합니다.
 
 Windows UI 어댑터의 선택적 `NativeEnvironment.menus`는 `NativeMenuServices`를 제공합니다.

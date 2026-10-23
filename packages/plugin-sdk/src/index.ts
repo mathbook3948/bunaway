@@ -48,8 +48,13 @@ export type NativeEventServices = {
    * Sends one event to every live view whose current document has subscribed to it, or has a
    * subscription request still pending. Only the subscription is checked per emit; the policy was
    * checked when the subscription was made. Events are dropped once the host stops.
+   *
+   * When `requiredOperation` is given, a view also needs that operation in its host permissions,
+   * checked at every emit, so an event that reports readable state is delivered only to views
+   * that could read the same state by calling the operation. Without it, only the subscription
+   * is checked.
    */
-  emit(event: string, payload: JsonValue): void;
+  emit(event: string, payload: JsonValue, requiredOperation?: string): void;
 };
 
 /** Host-selected values available when a native adapter is created. */

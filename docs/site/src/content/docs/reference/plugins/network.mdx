@@ -141,8 +141,8 @@ utun, bridge)의 fe80 주소만 있는 상태는 연결로 보지 않습니다. 
 getifaddrs에서 주소를 읽습니다. 읽기에 실패하면 `INTERNAL`입니다.
 
 `network.onlineChanged`의 payload는 `{ online: boolean }`이며 값이 실제로 바뀔 때만 보냅니다.
-Electron 렌더러의 `online`과 `offline` 이벤트에 대응합니다. 이벤트는 현재 Windows에서만
-발생하며 macOS에서는 발생하지 않습니다. 화면 정책의 events에 `network.onlineChanged`,
+Electron 렌더러의 `online`과 `offline` 이벤트에 대응합니다. 이벤트는 Windows와
+macOS에서 발생합니다. 화면 정책의 events에 `network.onlineChanged`,
 host.permissions에 `network.isOnline`을 모두 허용해야 하고, 구독한 현재 세션에만 전달합니다.
 먼저 구독한 뒤 `isOnline()`으로 초기 값을 조회하면 두 호출 사이의 변경을 놓치지 않습니다.
 
@@ -155,7 +155,7 @@ const initial = await network.isOnline();
 await stop();
 ```
 
-Windows는 플러그인이 시작된 뒤 2초마다 상태를 다시 읽고 직전에 알린 값과 다를 때만 이벤트를 보냅니다.
+Windows와 macOS는 플러그인이 시작된 뒤 2초마다 상태를 다시 읽고 직전에 알린 값과 다를 때만 이벤트를 보냅니다.
 시작 시점의 값은 이벤트로 보내지 않으므로 변경은 최대 2초 늦게 전달될 수 있고, 2초보다 짧은
 끊김은 놓칠 수 있습니다. 시작 때 읽기에 실패해도 플러그인은 시작하며, 처음 성공한 읽기를
 기준값으로 삼고 그 값은 이벤트로 보내지 않습니다. 이후 읽기 실패는 기존 값을 유지하고 호스트

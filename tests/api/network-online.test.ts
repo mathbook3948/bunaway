@@ -306,3 +306,40 @@ test("initialize watches only with system events, publishes the event with its r
   fake.tick();
   expect(calls).toHaveLength(1);
 });
+
+test("initialize on a host with plugin event services emits the event with its read operation and stops on dispose", async () => {
+  const fake = fakeWatchHost(true);
+  const seams = {
+    read: fake.host.read,
+    startPolling: fake.host.startPolling,
+  };
+  const calls: unknown[][] = [];
+  const environment = {
+    dataRoot: ".",
+    capabilities: [],
+    events: {
+      emit: (...args: unknown[]) => {
+        calls.push(args);
+      },
+    },
+  } as unknown as NativeEnvironment;
+  const state = initialize(environment, seams);
+  fake.tick();
+  expect(calls).toEqual([]);
+  fake.set(false);
+  fake.tick();
+  expect(calls).toEqual([
+    [
+      "network.onlineChanged",
+      {
+        online: false,
+      },
+      "network.isOnline",
+    ],
+  ]);
+  await dispose(state);
+  expect(fake.stops()).toBe(1);
+  fake.set(true);
+  fake.tick();
+  expect(calls).toHaveLength(1);
+});

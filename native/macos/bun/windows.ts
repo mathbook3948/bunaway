@@ -606,13 +606,28 @@ export class MacosWindows {
   /**
    * Delivers one plugin event to every live view that subscribed to it. Delivery uses the same
    * ordered lane as window events; a view without a subscription is skipped and nothing is
-   * delivered once shutdown has begun.
+   * delivered once shutdown has begun. With `requiredOperation`, a view is skipped unless its
+   * host permissions currently allow that operation, so the event never reveals more than the
+   * operation would.
    */
-  emitPluginEvent(event: string, payload: JsonValue): void {
+  emitPluginEvent(
+    event: string,
+    payload: JsonValue,
+    requiredOperation?: string,
+  ): void {
     if (this.hooks.stopping()) {
       return;
     }
     for (const view of this.views.values()) {
+      if (
+        requiredOperation !== undefined &&
+        !this.hooks.observes(view.boundary.policy.host, {
+          operation: requiredOperation,
+          payload: null,
+        })
+      ) {
+        continue;
+      }
       this.sendNativeEvent(view.boundary, event, payload);
     }
   }

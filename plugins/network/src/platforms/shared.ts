@@ -38,7 +38,39 @@ type UploadInput = z.output<typeof uploadInputSchema>;
 type UploadIdInput = z.output<typeof uploadIdInputSchema>;
 
 /**
- * Own cancellable requests on the selected host thread. Hosts with system event services also
+ * The host's way to announce a change, or none. Both hosts deliver only to views that hold the
+ * event subscription and the host permission for `network.isOnline`, checked at every delivery.
+ */
+function onlinePublisher(
+  environment?: NativeEnvironment,
+): ((online: boolean) => void) | undefined {
+  const systemEvents = environment?.windows?.systemEvents;
+  if (systemEvents) {
+    return (online) =>
+      systemEvents.publish(
+        "network.onlineChanged",
+        {
+          online,
+        },
+        "network.isOnline",
+      );
+  }
+  const events = environment?.events;
+  if (events) {
+    return (online) =>
+      events.emit(
+        "network.onlineChanged",
+        {
+          online,
+        },
+        "network.isOnline",
+      );
+  }
+  return undefined;
+}
+
+/**
+ * Own cancellable requests on the selected host thread. Hosts with event services also
  * get `network.onlineChanged`; the watcher stops when the adapter is disposed.
  */
 export function initialize(
@@ -48,7 +80,7 @@ export function initialize(
     startPolling: startIntervalPolling,
   },
 ) {
-  const systemEvents = environment?.windows?.systemEvents;
+  const publishOnline = onlinePublisher(environment);
   return {
     active: new Map<AbortController, Promise<unknown>>(),
     /** Started host lookups, including ones whose caller already left; getaddrinfo cannot be interrupted. */
@@ -58,17 +90,10 @@ export function initialize(
     /** Running uploads by the id their caller chose; an entry exists until its file is closed. */
     uploads: new Map<string, UploadEntry>(),
     disposed: false,
-    stopOnlineWatch: systemEvents
+    stopOnlineWatch: publishOnline
       ? watchOnline({
           ...seams,
-          publish: (online) =>
-            systemEvents.publish(
-              "network.onlineChanged",
-              {
-                online,
-              },
-              "network.isOnline",
-            ),
+          publish: publishOnline,
           fail: (error) => console.error("Online state check failed.", error),
         })
       : undefined,

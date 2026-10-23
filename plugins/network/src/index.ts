@@ -12,7 +12,7 @@ import {
 /**
  * Bounded HTTP requests and WebSocket exchanges. Cancellation releases in-flight resources.
  * `network.isOnline` reports whether a non-loopback connection exists on Windows and macOS;
- * `network.onlineChanged` reports changes of that value on Windows. `network.resolveHost` returns
+ * `network.onlineChanged` reports changes of that value on Windows and macOS. `network.resolveHost` returns
  * the addresses the system resolver gives for a host name. `network.resolveProxy` returns the
  * proxies the Windows system settings select for a URL, or a direct connection.
  * `network.download` saves a response body to a file the app already checked, `network.downloadStatus`
