@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseDistinguishedName } from "#updater/distinguished-name";
 
 /** Platforms the plugin runs on, with the target words the update manifest and endpoint use. */
 export const UPDATER_TARGETS = {
@@ -31,11 +32,42 @@ export const MAX_CHANNEL_LENGTH = 32;
 /** Longest target or architecture word (`windows`, `darwin`, `x86_64`, `aarch64`) with headroom. */
 export const MAX_TARGET_LENGTH = 8;
 export const DEFAULT_CHANNEL = "stable";
+/** Most publisher names an app may accept, so a certificate renewal under a new name can overlap the old one. */
+export const MAX_PUBLISHER_NAMES = 8;
+/** Longest publisher name or distinguished name in the setting, in UTF-16 code units. */
+export const MAX_PUBLISHER_NAME_LENGTH = 256;
+/** Most workers that may check signatures at once, counting ones whose caller already left. */
+export const MAX_SIGNATURE_WORKERS = 2;
 
-/** The `plugins.updater` clause of bunaway.json. The app fixes it; callers cannot choose an endpoint. */
+/**
+ * One accepted publisher: a common name (`Example Corp`), or a distinguished name with `=`
+ * (`CN=Example Corp, O=Example Corp, C=US`) whose attributes must all appear in the signer's subject.
+ */
+const publisherNameSchema = z
+  .string()
+  .min(1)
+  .max(MAX_PUBLISHER_NAME_LENGTH)
+  .refine(
+    (name) =>
+      !name.includes("=") || parseDistinguishedName(name, "rfc2253") !== null,
+  );
+
+/**
+ * The `plugins.updater` clause of bunaway.json. The app fixes it; callers cannot choose an endpoint.
+ * With `authenticode`, `updater.download` also requires a valid Authenticode signature by one of the
+ * listed publishers on the Windows installer, and refuses a package without one.
+ */
 export const settingsSchema = z.strictObject({
   endpoint: z.string().min(1).max(MAX_URL_LENGTH),
   channel: z.string().regex(CHANNEL_PATTERN).default(DEFAULT_CHANNEL),
+  authenticode: z
+    .strictObject({
+      publisherNames: z
+        .array(publisherNameSchema)
+        .min(1)
+        .max(MAX_PUBLISHER_NAMES),
+    })
+    .optional(),
 });
 export type UpdaterSettings = z.output<typeof settingsSchema>;
 
@@ -62,7 +94,9 @@ export const downloadOutputSchema = z.strictObject({
 });
 /**
  * Result of updater.download. The file matches the SHA-256 and size the manifest declared, which
- * detects transfer errors and tampering in transit; it does not prove who published the package.
+ * detects transfer errors and tampering in transit. It proves who published the package only when
+ * the app set `plugins.updater.authenticode`: then the Windows installer also carries a valid
+ * signature by one of the listed publishers.
  */
 export type UpdaterDownloadResult = z.infer<typeof downloadOutputSchema>;
 
@@ -96,6 +130,13 @@ export type UpdaterFailureReason =
   | "integrityInvalid"
   | "integrityMismatch"
   | "sizeMismatch"
+  | "signatureUnsupported"
+  | "signatureMissing"
+  | "signatureUntrusted"
+  | "revocationUnavailable"
+  | "publisherMismatch"
+  | "verifierBusy"
+  | "verifierFailed"
   | "storage"
   | "notAvailable";
 
@@ -110,6 +151,8 @@ export interface UpdaterInstance {
 
 /** An open package being written; `discard` is safe after any other call. */
 export interface PackageSink {
+  /** Where the package is written until `publish`; the file is complete after `finish`. */
+  readonly pendingPath: string;
   write(chunk: Uint8Array): Promise<void>;
   /** Flush and close the file, then report the SHA-256 (lower-case hex) of what was written. */
   finish(): Promise<string>;
@@ -126,6 +169,8 @@ export interface PackageFiles {
     size: number,
     signal: AbortSignal,
   ): Promise<string | null>;
+  /** Remove the package with this digest, if it is there. */
+  remove(sha256: string): Promise<void>;
   create(sha256: string): Promise<PackageSink>;
   /** Remove every other package and partial file left in the folder. */
   prune(sha256: string): Promise<void>;
