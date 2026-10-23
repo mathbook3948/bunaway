@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { type FileHandle, open } from "node:fs/promises";
+import { type FileHandle, open, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
@@ -46,8 +46,23 @@ async function openSource(path: string) {
   try {
     file = await open(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
   } catch (error) {
-    if (errorCode(error) === "ENOENT" || errorCode(error) === "ENOTDIR") {
+    const code = errorCode(error);
+    if (code === "ENOENT" || code === "ENOTDIR") {
       throw invalid("The file does not exist.");
+    }
+    // Systems report opening a folder as a failure of different kinds (EISDIR, or a refused
+    // access on Windows), so those codes are told apart from a real permission error by kind.
+    if (code === "EISDIR" || code === "EPERM" || code === "EACCES") {
+      let isFolder = false;
+      try {
+        isFolder = (await stat(path)).isDirectory();
+      } catch (statError) {
+        // The path cannot be read either, so the open error below is the one worth reporting.
+        console.warn("The upload path could not be inspected.", statError);
+      }
+      if (isFolder) {
+        throw invalid("Expected a regular file.");
+      }
     }
     throw error;
   }

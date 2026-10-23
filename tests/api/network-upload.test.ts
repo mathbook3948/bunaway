@@ -611,7 +611,7 @@ test("a server that does not read holds the file back instead of filling memory"
 });
 
 test.skipIf(process.platform === "win32")(
-  "a named pipe is refused before it is opened",
+  "a named pipe is refused without blocking",
   async () => {
     const state = initialize();
     const pipe = join(folder, "pipe");
