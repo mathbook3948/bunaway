@@ -13,7 +13,8 @@ when its size and SHA-256 match the manifest's `sha256` and `size`. It takes no 
 files on failure, cancellation and time limit, and stops at 1 GiB or 30 minutes. When the app sets
 `plugins.updater.authenticode.publisherNames`, a Windows package (PE or MSI) is also kept only if its Authenticode
 signature is valid for the whole chain and the signer's certificate matches one of the names; macOS refuses such a
-download. It does not install or report progress.
+download. The Windows CI test signs executables only: a signed MSI was not exercised, only its format detection. It does
+not install or report progress.
 
 See the [public contract](../../docs/site/src/content/docs/reference/plugins/updater.mdx) for settings,
 manifest format, limits and failures, and [ADR 0025](../../docs/decisions/0025-plugin-settings-and-app-version.md)

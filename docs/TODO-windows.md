@@ -1029,8 +1029,9 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [ ] 업데이트 서명과 해시를 검증한다.
   `updater.download`가 매니페스트의 SHA-256과 크기를 대조하고, 앱이 `plugins.updater.authenticode`로 게시자를 고정하면
   Windows 설치 파일(exe, MSI)의 Authenticode 서명을 `WinVerifyTrust`로 확인한다.
-  `tests/api/updater-signature.test.ts`와 `tests/lifecycle/windows-updater-signature.test.ts`가 검증한다.
-  macOS 서명 검증과 앱 전용 서명 키(minisign 방식)는 남는다.
+  `tests/api/updater-signature.test.ts`가 설정, 게시자 대조와 실패 계약을, `tests/lifecycle/windows-updater-signature.test.ts`가
+  서명한 exe, 서명 없는 파일, 변조한 파일과 신뢰되지 않는 인증서를 실제 `WinVerifyTrust`로 검증한다.
+  서명한 MSI는 실제 서명으로 시험하지 못했다. macOS 서명 검증과 앱 전용 서명 키(minisign 방식)도 남는다.
 - [ ] 설치, 종료 승인과 relaunch를 연결한다.
 - [ ] downgrade, partial failure와 rollback의 지원 범위를 결정한다.
 - [ ] Store 업데이트와 자체 updater의 사용 조건을 구분한다.

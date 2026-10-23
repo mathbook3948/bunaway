@@ -125,14 +125,18 @@ afterAll(() => {
     return;
   }
   try {
-    if (trustedThumbprint === "" || untrustedThumbprint === "") {
-      return;
+    // Each certificate is removed on its own, so one missing thumbprint never keeps the other (the trusted root) installed.
+    const removals = [
+      trustedThumbprint === ""
+        ? ""
+        : `Remove-Item Cert:\\LocalMachine\\Root\\${trustedThumbprint} -ErrorAction SilentlyContinue; Remove-Item Cert:\\CurrentUser\\My\\${trustedThumbprint} -ErrorAction SilentlyContinue`,
+      untrustedThumbprint === ""
+        ? ""
+        : `Remove-Item Cert:\\CurrentUser\\My\\${untrustedThumbprint} -ErrorAction SilentlyContinue`,
+    ].filter((script) => script !== "");
+    if (removals.length > 0) {
+      powershell(removals.join("; "));
     }
-    powershell(`
-      Remove-Item Cert:\\LocalMachine\\Root\\${trustedThumbprint} -ErrorAction SilentlyContinue
-      Remove-Item Cert:\\CurrentUser\\My\\${trustedThumbprint} -ErrorAction SilentlyContinue
-      Remove-Item Cert:\\CurrentUser\\My\\${untrustedThumbprint} -ErrorAction SilentlyContinue
-    `);
   } finally {
     rmSync(folder, {
       recursive: true,
