@@ -3,17 +3,14 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { frameworkRoot } from "#cli/files";
+import { deadline } from "../fixtures/deadlines.ts";
 import {
   captureNativeChild,
   printNativeChildDiagnostics,
 } from "../fixtures/native-child-diagnostics.ts";
 
-// The two JVM starts take about 9s on a Windows runner and over 15s when it is under load, so the
-// deadlines leave several times the normal duration and the test limit covers both phases.
-const COMPILE_DEADLINE_MS = 45000;
-const HARNESS_DEADLINE_MS = 30000;
-const TEST_TIMEOUT_MS = 90000;
-
+// The two JVM starts take about 9s on a Windows runner and over 15s when it is under load, so each
+// phase gets a shared deadline well above that and the test limit covers both.
 // Windows PATH can select a standalone JRE. Use the compiler's JDK for both commands.
 const javac = Bun.which(
   "javac",
@@ -92,7 +89,7 @@ test.skipIf(!javac || !java)(
             "tests/fixtures/android/native/BackendAssetsHarness.java",
           ),
         ],
-        COMPILE_DEADLINE_MS,
+        deadline("build"),
       );
       expect(
         await run(
@@ -104,7 +101,7 @@ test.skipIf(!javac || !java)(
             "dev.bunaway.host.BackendAssetsHarness",
             root,
           ],
-          HARNESS_DEADLINE_MS,
+          deadline("toolchain"),
         ),
       ).toContain(
         "PASS: APK replacement, removed imports, app data preservation and failed extraction retry",
@@ -116,5 +113,5 @@ test.skipIf(!javac || !java)(
       });
     }
   },
-  TEST_TIMEOUT_MS,
+  deadline("packagedAudit"),
 );
