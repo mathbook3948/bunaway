@@ -55,33 +55,11 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
 4. **모바일.** 창 크기, 위치, 최대화, 전체화면, Z 순서, 작업 표시줄 같은 데스크톱 창 작업은
    Android와 iOS에서 `UNSUPPORTED`로 실패한다. 앱은 `capabilities()`로 작업별 지원 여부를 먼저 조회한다.
    경고만 남기고 성공으로 처리하지 않는다.
-5. **`window.open`과 링크.** 새 창 요청은 창을 만들지 않는다.
-   - **시작 주체.** 외부 URL 요청은 브리지와 문서 세션이 있는 메인 프레임만 시작할 수 있다. 서브프레임에는
-     문서 세션이 없으므로 `origins` 안 서브프레임이 시작한 외부 URL 요청도 차단하고 진단을 남긴다. `origins` 안 서브프레임이
-     시작한 내부 URL 요청은 같은 WebView에서 탐색하고, `origins` 밖 문서가 시작한 요청은 모두 차단한다.
-     시작 프레임은 플랫폼 API가 알려 줄 때만 인정한다(Apple은 `WKNavigationAction`의 `sourceFrame.isMainFrame`).
-     알려 주지 않는 경로(Android `onCreateWindow`, 그 밖에 구현 PR에서 확인되지 않은 경로)는 `target` 없는 탐색을 포함해
-     외부 URL을 차단하고 내부 URL은 URL만으로 판정한다. 따라서 Android는 opener 어댑터가 생겨도 시작 프레임 판정 수단이
-     생길 때까지 외부 URL을 열지 않는다. 서브프레임의 `target="_top"` 링크가 메인 프레임 세션을 빌리는 일은 없다.
-   - **내부 URL.** `origins`에 속한 URL은 사용자 동작 여부와 상관없이 같은 WebView에서 탐색한다.
-     사용자 동작 조건과 아래 Apple 판정은 외부 URL에만 적용된다.
-   - **외부 URL.** 그 밖의 `http`, `https` URL은 사용자 동작으로 시작한 요청만 시스템 기본 브라우저로 넘긴다.
-     다른 scheme은 차단하고 진단을 남긴다.
-   - **실행 주체.** 실제로 여는 것은 opener 플러그인의 `opener.openUrl`이고, 호스트가 따로 열지 않는다.
-     호출은 요청을 시작한 문서 세션의 호스트 발급 핸들([ADR 0002](./0002-host-owned-call-context.md))로 하며,
-     일반 호출과 같은 실행 직전 재검사와 진행 중 요청 상한을 적용한다. 처리 중 탐색으로 그 세션이 철회되면
-     요청을 취소하고 진단만 남긴다.
-     opener가 설치되어 있지 않거나 정책이 `opener.openUrl`을 허용하지 않았으면 차단하고 진단을 남긴다.
-     Android와 iOS는 opener 어댑터가 생길 때까지 외부 URL을 항상 차단한다.
-   - **`target` 없는 링크.** `origins` 밖으로의 탐색은 `window.open`과 같은 원칙을 따른다. 사용자 동작으로
-     시작한 메인 프레임 탐색만 위 외부 URL 규칙으로 처리하고, 스크립트가 일으킨 탐색은 취소하고 진단을 남긴다.
-   - **사용자 동작 판정.** Windows는 WebView2 `NewWindowRequested`의 `IsUserInitiated`, Android는
-     `onCreateWindow`의 `isUserGesture`를 쓴다. Apple의 `WKNavigationAction`에는 사용자 동작 플래그가 없으므로
-     링크 활성화(`navigationType == .linkActivated`)로 시작한 요청만 사용자 동작으로 보고, 스크립트의
-     외부 URL `window.open`은 사용자 동작이 아닌 것으로 취급해 차단한다. 같은 동작도 플랫폼마다 판정이 다를 수 있으며
-     차단이 안전한 쪽이다. `target` 없는 메인 프레임 탐색은 Windows `NavigationStarting`의 `IsUserInitiated`,
-     Apple `decidePolicyForNavigationAction`의 `.linkActivated`로 판정한다. 이 사용자 동작 조건은 암묵적 링크 처리에만
-     적용되며 권한 경계가 아니다. `opener.openUrl` 권한이 있는 문서가 SDK로 직접 호출하는 것은 별개의 경로다.
+5. **`window.open`과 링크.** 새 창 요청은 창을 만들지 않는다. 정책 뷰의 `origins` 안 문서가 시작한 요청만 처리하고,
+   `origins`에 속한 URL은 같은 WebView에서 탐색한다. 그 밖의 `http`, `https` URL은 opener 플러그인(`opener.openUrl`)을
+   거쳐서만 시스템 기본 브라우저로 넘기며, opener가 없거나 권한이 없으면 차단하고 진단을 남긴다. 다른 scheme은
+   차단한다. Android와 iOS는 opener 어댑터가 생길 때까지 외부 URL을 차단한다. 세부 동작은 아래
+   "열린 질문"에 기본값과 함께 두고 링크 구현 PR에서 확정한다.
 6. **Android 뒤로가기.** 시스템 뒤로가기는 WebView history를 먼저 소비하고, 더 돌아갈 곳이 없을 때만
    Activity를 종료한다.
 7. **다중 창은 코어 계약이 아니다.** 필요성이 확인되면 별도 플러그인의 opt-in 기능으로 다시 제안한다.
@@ -89,11 +67,28 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
 8. **순서.** [ADR 0010](./0010-windows-first-platform-model.md)에 따라 Windows에서 먼저 구현하고
    macOS를 병행한다. 다중 창 API는 바로 제거한다. 개발 단계이므로 이전 형식과의 호환, 경고, 유예 기간을 두지 않는다.
 
+### 열린 질문(링크 구현 PR의 기본값)
+
+외부 링크와 `window.open`의 세부는 이 결정의 범위 밖이다. 링크 구현 PR은 아래 기본값에서 시작하고, 플랫폼 API로
+확인한 내용에 따라 바꿀 수 있다.
+
+- **시작 프레임.** 요청을 시작한 프레임을 플랫폼이 알려 줄 때만 인정한다(Apple은 `WKNavigationAction`의
+  `sourceFrame.isMainFrame`). 알 수 없으면 내부 URL을 포함해 모두 차단한다. Windows는 시작 프레임을 확인할 수 있을
+  때까지 차단하고, Android `onCreateWindow`도 같다. 서브프레임은 문서 세션이 없으므로 외부 URL을 시작할 수 없다.
+- **사용자 동작.** 외부 URL은 사용자 동작으로 시작한 요청만 처리한다. 판정에는 Windows `NewWindowRequested`와
+  `NavigationStarting`의 `IsUserInitiated`, Android `onCreateWindow`의 `isUserGesture`, Apple의
+  `.linkActivated`를 쓴다. 이 조건은 암묵적 링크 처리에만 적용되며 권한 경계가 아니다. `opener.openUrl` 권한이 있는
+  문서가 SDK로 직접 호출하는 것은 별개의 경로다. `target` 없는 탐색도 같은 원칙이다.
+- **opener 대리 호출.** 요청을 시작한 문서 세션의 호스트 발급 핸들([ADR 0002](./0002-host-owned-call-context.md))로
+  호출한다. host 권한 `opener.openUrl`과 정책 `commands`의 `plugin.opener.openUrl`을 모두 요구하고, 코어를 거쳐
+  일반 호출과 같은 요청 ID 공간과 진행 중 요청 상한(`maxPending`), 실행 직전 재검사를 적용한다. 처리 중 탐색으로
+  세션이 철회되면 요청을 취소하고 진단만 남긴다.
+
 ### 단일 창 계약의 세부
 
 | 항목 | 계약 |
 | --- | --- |
-| 창 선언 | `bunaway.json`의 `app.view`(선택, 생략하면 정책의 유일한 뷰), `app.home`, `app.window`, `app.startup`, `app.visible`, `app.showWhenReady`. `app.windows`, `instances`, `maxInstances`, `profile`은 제거 |
+| 창 선언 | `bunaway.json`의 `app.home`, `app.window`는 유지한다. `app.view`는 지금 단일 형식에서 필수인데 선택으로 바꾸고, 생략하면 정책의 유일한 뷰를 쓴다. `app.startup`, `app.visible`, `app.showWhenReady`는 지금 `app.windows[]` 항목의 필드인데 `app`으로 옮긴다. `app.windows`, `instances`, `maxInstances`, `profile`은 제거한다 |
 | 창 없는 시작 | `app.startup: false`. 트레이 Open, 두 번째 실행, `windows.create()`가 창을 만든다. 기존 `desktop.tray` 또는 `closeBehavior: "keep-alive"` 요구는 유지. macOS는 [ADR 0021](./0021-macos-desktop-lifecycle.md)대로 계속 `UNSUPPORTED`이고, Android와 iOS는 빌드에서 `app.startup: false`와 `app.visible: false`를 거부한다 |
 | 생성과 재생성 | `windows.create(options?)`, `windows.recreate(options?)`. 이미 열려 있으면 create는 기존처럼 `BUSY`. 창이 없을 때 `recreate`는 `INVALID_ARGUMENT`가 아니라 창을 새로 만든다(ADR 0004의 생성 또는 재생성 동작). 옵션 허용 범위는 ADR 0016, 0019를 유지 |
 | 열린 상태 조회 | `windows.isOpen()`이 `windows.list()`와 `isDestroyed`를 대신한다. `getById`, `getCurrent`, `getFocused`, `getLastActive`는 제거하고 `getSnapshot()`과 `isFocused()`가 대신한다 |
@@ -120,7 +115,7 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
   남긴다. bunaway는 `UNSUPPORTED`와 지원 조회로 앱이 실패를 알 수 있게 한다. 경고만 남기면 앱이
   기능이 동작한 것으로 오해하고 플랫폼별 분기를 테스트로 검증할 수 없다.
 - **링크 동작의 개선.** 지금은 Windows, macOS, iOS에서 `target="_blank"`가 아무 반응 없이 끝나고, Android는 새 창 지원을 꺼서 `_blank`가 일반 탐색이 되어 같은 origin이면 이동하고 밖이면 취소된다.
-  Capacitor 동작 기준처럼 내부 링크는 같은 WebView, 외부 링크는 `opener.openUrl` 권한이 있을 때 시스템 브라우저로 보낸다.
+  Capacitor 동작 기준처럼 내부 링크는 같은 WebView, 외부 링크는 `opener.openUrl` 권한이 있을 때 시스템 브라우저로 보낸다(세부 기본값은 위 열린 질문).
   모바일은 opener 어댑터가 생길 때까지 외부 링크를 차단한다.
 
 ### 포기하는 것
@@ -135,7 +130,7 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
   라우트를 구별하지 못하고, 화면별 권한 분리를 다른 곳으로 옮길 수 없다. 화면마다 권한이 달라야 하는
   앱은 별도 앱으로 나누거나 같은 권한 집합으로 설계해야 한다. 렌더러 장애를 뷰 단위로 격리하던 효과도
   사라지며, 창 하나의 렌더러 장애는 그 창의 세션 폐기와 재탐색으로 처리한다.
-- **창 없는 트레이 앱.** 지금은 `app.windows: []`로 창을 전혀 만들지 않는 트레이 전용 앱을 표현할 수 있고 트레이 Open이나 두 번째 실행도 창을 만들지 않는다. 이 결정의 `app.startup: false`는 트레이 Open, 두 번째 실행, `windows.create()`가 창을 만들므로 창을 절대 만들지 않는 앱은 표현할 수 없다. 트레이 전용 앱은 창을 숨긴 채 유지하는 방식(`app.visible: false`)으로 대신하며, 이때 트레이 Open과 두 번째 실행은 숨긴 창을 표시한다. 창이 절대 보이지 않는 앱은 표현할 수 없다. 숨긴 창과 WebView, 정책 권한을 가진 문서 세션이 시작부터 상주하므로
+- **창 없는 트레이 앱.** 지금은 `app.windows: []`로 창을 전혀 만들지 않는 트레이 전용 앱을 표현할 수 있고 트레이 Open이나 두 번째 실행도 창을 만들지 않는다. 이 결정의 `app.startup: false`는 트레이 Open, 두 번째 실행, `windows.create()`가 창을 만들므로 창을 절대 만들지 않는 앱은 표현할 수 없다. 트레이 전용 앱은 창을 숨긴 채 유지하는 방식(`app.visible: false`)으로 대신하며, 이때 트레이 Open과 두 번째 실행은 숨긴 창을 표시한다. 트레이 Open이 새로 만든 창(`startup: false`나 `keep-alive`로 닫은 뒤)은 `visible` 설정과 상관없이 항상 표시한다. 창이 절대 보이지 않는 앱은 표현할 수 없다. 숨긴 창과 WebView, 정책 권한을 가진 문서 세션이 시작부터 상주하므로
   `app.windows: []` 앱보다 메모리 사용과 공격면이 늘고, 이 비용을 받아들인다.
 - **기존 데이터 경로.** `app.windows`를 쓰던 Windows 앱은 `webview/v<인코딩한 view>`에 쿠키와 웹 저장소가 있으며
   이 결정으로 `webview/`를 쓰면 이전 데이터를 읽지 못한다. 개발 단계이므로 옮기지 않고 이전 디렉터리도 정리하지 않는다.
@@ -186,7 +181,7 @@ Capacitor 동작 기준처럼 외부 링크는 시스템 브라우저, 내부 �
 
 ## 기존 결정과의 관계
 
-대체되거나 수정되는 ADR(0004, 0006, 0013, 0015 Android와 macOS 파일, 0016, 0017, 0019, 0020, 0021)은 머리말에 이 결정으로의 링크를 추가하고 본문은 당시 기록으로 남긴다.
+대체되거나 수정되는 ADR(0002, 0004, 0006, 0013, 0015 Android와 macOS 파일, 0016, 0017, 0019, 0020, 0021)은 머리말에 이 결정으로의 링크를 추가하고 본문은 당시 기록으로 남긴다.
 
 | ADR | 관계 | 내용 |
 | --- | --- | --- |
@@ -197,7 +192,7 @@ Capacitor 동작 기준처럼 외부 링크는 시스템 브라우저, 내부 �
 | [0019](./0019-initial-window-placement.md) 초기 창 배치 | 유지(용어 수정) | "네 생성 API"를 create, recreate 두 개로 수정. 배치 계산은 그대로 |
 | [0020](./0020-close-and-quit-lifecycle.md) 닫기와 종료 수명주기 | 수정 | `windows.lifecycle`을 백엔드에도 전달하고 문서 세션의 수신 권한을 `windows.getSnapshot`으로 변경. 여러 창, 자식 확인, splashscreen 언급 제거. `onAllWindowsClosed`는 이름을 유지하고 "앱의 창이 닫혀 0개가 됨"으로 정의 |
 | [0021](./0021-macos-desktop-lifecycle.md) macOS 데스크톱 수명주기 | 수정 | `windows.listInstances` 권한 언급을 0020과 같이 변경하고 `windows.lifecycle`의 백엔드 전달을 따른다. macOS의 영속 프로필 하나와 `getSnapshot` 구현이 추가된다. 창 없는 시작은 계속 `UNSUPPORTED` |
-| [0002](./0002-host-owned-call-context.md) 호출 컨텍스트 | 유지 | 호출 컨텍스트 발급과 철회는 그대로. 호스트가 문서 세션 핸들로 `opener.openUrl`을 대신 호출하는 경로가 추가된다 |
+| [0002](./0002-host-owned-call-context.md) 호출 컨텍스트 | 수정 | 호출 컨텍스트 발급과 철회는 그대로. 호스트가 요청을 시작한 문서 세션의 핸들로 `opener.openUrl`을 대신 호출하는, 문서가 직접 호출하지 않은 출처가 추가된다 |
 | [0024](./0024-plugin-path-responsibility.md) 경로 책임 | 유지 | 외부 콘텐츠를 표시하는 뷰의 최소 권한 지침은 단일 뷰에서 앱 전체 권한에 적용된다 |
 | [0010](./0010-windows-first-platform-model.md) Windows 우선 | 유지 | 구현 순서의 근거 |
 | [0015](./0015-android-bundled-process-host.md) Android | 수정 | 뒤로가기를 "Activity 종료"에서 "WebView history 먼저"로 변경. 단일 뷰 조건은 이 결정의 공통 계약이 됨 |
