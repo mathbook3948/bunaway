@@ -4,7 +4,7 @@ status: accepted
 
 # 창 생성 옵션은 사전 선언 안에서 확장하고 뷰별 창 하나를 유지한다
 
-2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)이 `view` 입력, 선언 0-128개, 뷰별 슬롯과 식별자 조회 절을 단일 창 계약으로 대체한다. 호출별 옵션의 허용 범위와 검증, 오류 표는 유지한다.
+2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)이 `view` 입력, 선언 0-128개, 뷰별 슬롯과 식별자 조회 절을 단일 창 계약으로 대체한다. 호출별 옵션의 허용 범위와 검증, 옵션 검증 오류 행은 유지하고 `app.windows`, `view`, `windowId`가 전제인 행은 대체한다.
 
 2026-10-11: [ADR 0017](./0017-multiple-windows-per-view.md)에서 같은 뷰의 다중 창 보류를
 변경하고 single 기본값과 multiple 선택을 후속 계약으로 정했다. 아래 뷰별 하나 제한과
