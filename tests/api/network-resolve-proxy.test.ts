@@ -501,7 +501,8 @@ test("automatic detection that names a proxy wins over the manual list", async (
     }),
   );
   expect(
-    await resolveProxy(api, "http://example.com/a?b=1", 1000, live),
+    // A frozen clock keeps the remaining budget exactly the requested timeout.
+    await resolveProxy(api, "http://example.com/a?b=1", 1000, live, () => 0),
   ).toEqual([
     proxy("pac.example", 8080),
   ]);

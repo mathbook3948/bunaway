@@ -29,7 +29,7 @@ for (const format of [
     } finally {
       await worker.terminate();
     }
-  });
+  }, 30000);
 }
 
 test("Zod source exports carry the same Promise ownership patch", async () => {

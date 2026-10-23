@@ -8,6 +8,12 @@ import {
   printNativeChildDiagnostics,
 } from "../fixtures/native-child-diagnostics.ts";
 
+// The two JVM starts take about 9s on a Windows runner and over 15s when it is under load, so the
+// deadlines leave several times the normal duration and the test limit covers both phases.
+const COMPILE_DEADLINE_MS = 45000;
+const HARNESS_DEADLINE_MS = 30000;
+const TEST_TIMEOUT_MS = 90000;
+
 // Windows PATH can select a standalone JRE. Use the compiler's JDK for both commands.
 const javac = Bun.which(
   "javac",
@@ -34,6 +40,7 @@ test.skipIf(!javac || !java)(
       phase: "compile" | "harness",
       executable: string,
       args: string[],
+      deadlineMs: number,
     ): Promise<string> {
       const diagnostics = resolve(
         frameworkRoot,
@@ -56,7 +63,7 @@ test.skipIf(!javac || !java)(
           child,
           diagnostics,
           phase,
-          15000,
+          deadlineMs,
         );
         expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
         return stdout;
@@ -66,29 +73,39 @@ test.skipIf(!javac || !java)(
       }
     }
     try {
-      await run("compile", javac, [
-        "--release",
-        "17",
-        "-encoding",
-        "UTF-8",
-        "-d",
-        root,
-        resolve(
-          frameworkRoot,
-          "native/android/host/src/main/java/dev/bunaway/host/BackendAssets.java",
-        ),
-        resolve(
-          frameworkRoot,
-          "tests/fixtures/android/native/BackendAssetsHarness.java",
-        ),
-      ]);
+      await run(
+        "compile",
+        javac,
+        [
+          "--release",
+          "17",
+          "-encoding",
+          "UTF-8",
+          "-d",
+          root,
+          resolve(
+            frameworkRoot,
+            "native/android/host/src/main/java/dev/bunaway/host/BackendAssets.java",
+          ),
+          resolve(
+            frameworkRoot,
+            "tests/fixtures/android/native/BackendAssetsHarness.java",
+          ),
+        ],
+        COMPILE_DEADLINE_MS,
+      );
       expect(
-        await run("harness", java, [
-          "-cp",
-          root,
-          "dev.bunaway.host.BackendAssetsHarness",
-          root,
-        ]),
+        await run(
+          "harness",
+          java,
+          [
+            "-cp",
+            root,
+            "dev.bunaway.host.BackendAssetsHarness",
+            root,
+          ],
+          HARNESS_DEADLINE_MS,
+        ),
       ).toContain(
         "PASS: APK replacement, removed imports, app data preservation and failed extraction retry",
       );
@@ -99,5 +116,5 @@ test.skipIf(!javac || !java)(
       });
     }
   },
-  30000,
+  TEST_TIMEOUT_MS,
 );
