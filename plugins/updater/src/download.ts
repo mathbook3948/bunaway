@@ -5,6 +5,7 @@ import {
   type PackageSink,
   UPDATER_DOWNLOAD_TIMEOUT_MS,
   type UpdaterDownloadResult,
+  type UpdaterDownloadStatus,
   type UpdateTarget,
 } from "#updater/contract";
 import { discardBody, fail, fetchFollowingRedirects } from "#updater/request";
@@ -31,6 +32,10 @@ export type DownloadOptions = {
   fetch: typeof fetch;
   signal?: AbortSignal | undefined;
   timeoutMs?: number;
+  /** Called once the manifest is accepted and after each chunk is written; never after the download ends. */
+  onProgress?:
+    | ((status: NonNullable<UpdaterDownloadStatus>) => void)
+    | undefined;
 };
 
 const SHA256_HEX = /^[0-9a-fA-F]{64}$/;
@@ -89,6 +94,7 @@ async function writeBody(
   sink: PackageSink,
   size: number,
   signal: AbortSignal,
+  onProgress: (receivedBytes: number) => void,
 ): Promise<void> {
   const reader = response.body?.getReader();
   let received = 0;
@@ -112,6 +118,7 @@ async function writeBody(
         );
       }
       await sink.write(result.value);
+      onProgress(received);
     }
   } finally {
     await discardBody(reader);
@@ -223,6 +230,10 @@ export async function downloadPackage(
     }
     // Created before the response is requested, so a folder that cannot be made never leaves a body open.
     sink = await options.files.create(sha256);
+    options.onProgress?.({
+      receivedBytes: 0,
+      totalBytes: size,
+    });
     const response = await fetchFollowingRedirects(
       new URL(options.target.url),
       {
@@ -251,7 +262,12 @@ export async function downloadPackage(
         "Update package length differs from the manifest.",
       );
     }
-    await writeBody(response, sink, size, signal);
+    await writeBody(response, sink, size, signal, (receivedBytes) =>
+      options.onProgress?.({
+        receivedBytes,
+        totalBytes: size,
+      }),
+    );
     if ((await sink.finish()) !== sha256) {
       throw fail(
         "INTERNAL",

@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   checkOutputSchema,
   downloadOutputSchema,
+  downloadStatusOutputSchema,
   type UpdaterInstance,
 } from "#updater/contract";
 
@@ -18,5 +19,10 @@ export const updaterOperations = {
     input: z.null(),
     output: downloadOutputSchema,
     handler: (_input, { instance, signal }) => instance.download(signal),
+  }),
+  downloadStatus: operation({
+    input: z.null(),
+    output: downloadStatusOutputSchema,
+    handler: (_input, { instance }) => instance.downloadStatus(),
   }),
 };

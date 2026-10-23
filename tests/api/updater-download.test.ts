@@ -19,6 +19,7 @@ import {
   type PackageFiles,
 } from "#plugins/updater/src/contract";
 import { createPackageFiles } from "#plugins/updater/src/platforms/package-files";
+import { waitFor } from "../fixtures/deadlines";
 
 const ENDPOINT = "https://updates.example.com/{{target}}/{{channel}}";
 const PACKAGE_URL = "https://downloads.example.com/app-1.2.0.exe";
@@ -553,4 +554,53 @@ test("a folder that cannot be created fails with a storage reason and a path-fre
   const error = await failure(instance.download());
   expect(reasonOf(error)).toBe("storage");
   expect(error.message).not.toContain(root);
+});
+
+test("downloadStatus reports the bytes written while a download runs and null before and after", async () => {
+  const release = Promise.withResolvers<void>();
+  const { instance } = setup({
+    packageResponse: () =>
+      new Response(
+        new ReadableStream({
+          async start(controller) {
+            controller.enqueue(BYTES.slice(0, 10));
+            await release.promise;
+            controller.enqueue(BYTES.slice(10));
+            controller.close();
+          },
+        }),
+      ),
+  });
+  expect(instance.downloadStatus()).toBeNull();
+  await instance.check();
+  expect(instance.downloadStatus()).toBeNull();
+  const running = instance.download();
+  await waitFor(() => instance.downloadStatus()?.receivedBytes === 10, {
+    deadline: "inProcess",
+    what: "the first chunk to be written",
+  });
+  expect(instance.downloadStatus()).toEqual({
+    receivedBytes: 10,
+    totalBytes: BYTES.byteLength,
+  });
+  release.resolve();
+  await running;
+  expect(instance.downloadStatus()).toBeNull();
+});
+
+test("downloadStatus is null again after a failed download", async () => {
+  const { instance } = setup({
+    packageResponse: () => new Response(BYTES.slice(0, 10)),
+  });
+  await instance.check();
+  expect((await failure(instance.download())).code).toBe("INTERNAL");
+  expect(instance.downloadStatus()).toBeNull();
+});
+
+test("a download that reuses a saved package reports no progress", async () => {
+  const { instance } = setup();
+  await instance.check();
+  await instance.download();
+  await instance.download();
+  expect(instance.downloadStatus()).toBeNull();
 });

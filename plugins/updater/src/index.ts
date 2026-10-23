@@ -13,6 +13,7 @@ import {
 /**
  * Compare the running app version with the update manifest at the endpoint the app fixed in bunaway.json,
  * and download the package it names into the app's update folder after checking its SHA-256 and size.
+ * `updater.downloadStatus` reports the bytes received by the download that is running.
  */
 export default defineNativePlugin({
   name: "updater",
@@ -35,4 +36,5 @@ export default defineNativePlugin({
 export type {
   UpdaterCheckResult,
   UpdaterDownloadResult,
+  UpdaterDownloadStatus,
 } from "#updater/contract";

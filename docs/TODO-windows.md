@@ -1032,7 +1032,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
   `updater.check`가 SemVer 2.0.0으로 비교해 버전, notes, 게시 시각과 다운로드 주소를 돌려준다.
   다운로드, 서명 검증과 설치는 아래 항목에 남는다.
 - [ ] 다운로드 progress, 취소, timeout과 실패 재시도를 제공한다.
-  `updater.download`가 취소, 30분 제한과 1 GiB 상한을 제공한다. 진행률 이벤트와 내장 재시도는 남는다.
+  `updater.download`가 취소, 30분 제한과 1 GiB 상한을 제공한다. `updater.downloadStatus`가 실행 중인 다운로드의 받은 바이트와 선언 크기를 조회로 제공한다(updater가 I/O 스레드에서 실행되어 호스트 이벤트 경로를 쓰지 않는다). 진행률 이벤트와 내장 재시도는 남는다.
 - [ ] 업데이트 서명과 해시를 검증한다.
   `updater.download`가 매니페스트의 SHA-256과 크기를 대조하고, 앱이 `plugins.updater.authenticode`로 게시자를 고정하면
   Windows 설치 파일(exe, MSI)의 Authenticode 서명을 `WinVerifyTrust`로 확인한다.

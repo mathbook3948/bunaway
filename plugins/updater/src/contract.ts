@@ -100,6 +100,19 @@ export const downloadOutputSchema = z.strictObject({
  */
 export type UpdaterDownloadResult = z.infer<typeof downloadOutputSchema>;
 
+export const downloadStatusOutputSchema = z
+  .strictObject({
+    receivedBytes: z.number().int().nonnegative().max(MAX_PACKAGE_BYTES),
+    totalBytes: z.number().int().positive().max(MAX_PACKAGE_BYTES),
+  })
+  .nullable();
+/**
+ * Result of updater.downloadStatus: the bytes written so far and the size the manifest declared
+ * for the download that is running, or null when none is. A download that reuses a package already
+ * in the update folder never reports progress.
+ */
+export type UpdaterDownloadStatus = z.infer<typeof downloadStatusOutputSchema>;
+
 /** What the last successful check found, kept by the adapter so a caller never supplies an address. */
 export type UpdateTarget = {
   version: string;
@@ -144,6 +157,8 @@ export type UpdaterFailureReason =
 export interface UpdaterInstance {
   check(signal?: AbortSignal): Promise<UpdaterCheckResult>;
   download(signal?: AbortSignal): Promise<UpdaterDownloadResult>;
+  /** Progress of the running download, or null when none is running. */
+  downloadStatus(): UpdaterDownloadStatus;
   dispose(): Promise<void>;
   /** Whether a download is running, so the host can delay auto-close. */
   busy(): boolean;

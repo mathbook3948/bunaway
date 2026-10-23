@@ -1,6 +1,6 @@
 # Updater plugin
 
-`@bunaway/plugin-updater` provides the permission-mediated `updater.check(null)` and `updater.download(null)` on Windows and macOS.
+`@bunaway/plugin-updater` provides the permission-mediated `updater.check(null)`, `updater.download(null)` and `updater.downloadStatus(null)` on Windows and macOS.
 Register `updater` in the app definition and set `plugins.updater` in `src-bunaway/bunaway.json`.
 Each operation requires its own permission; registration grants none.
 

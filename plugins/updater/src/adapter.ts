@@ -5,6 +5,7 @@ import {
   type PackageFiles,
   settingsSchema,
   UPDATER_TARGETS,
+  type UpdaterDownloadStatus,
   type UpdaterInstance,
   type UpdaterPlatform,
   type UpdaterSettings,
@@ -70,6 +71,7 @@ export function createUpdater(
   let disposed = false;
   let target: UpdateTarget | null = null;
   let downloading: Promise<unknown> | undefined;
+  let progress: UpdaterDownloadStatus = null;
   function requireConfigured(): UpdaterSettings {
     if (disposed) {
       throw new BunawayError({
@@ -165,6 +167,9 @@ export function createUpdater(
               controller.signal,
             ])
           : controller.signal,
+        onProgress: (status) => {
+          progress = status;
+        },
         ...(seams.downloadTimeoutMs === undefined
           ? {}
           : {
@@ -176,8 +181,13 @@ export function createUpdater(
         return await running;
       } finally {
         downloading = undefined;
+        progress = null;
         active.delete(controller);
       }
+    },
+    downloadStatus() {
+      requireConfigured();
+      return progress;
     },
     busy() {
       return downloading !== undefined;

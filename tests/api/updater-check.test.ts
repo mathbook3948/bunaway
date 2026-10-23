@@ -806,7 +806,7 @@ test("error statuses and connection failures are classified without the URL", as
   expect(network.message).not.toContain("ECONNREFUSED");
 });
 
-test("the registered plugin exposes the check and download operations with a null input and reads the host environment", async () => {
+test("the registered plugin exposes the check, download and downloadStatus operations with a null input and reads the host environment", async () => {
   const registry = new NativeRegistry([
     updaterPlugin._definition,
   ]);
@@ -815,6 +815,7 @@ test("the registered plugin exposes the check and download operations with a nul
   ]).toEqual([
     "updater.check",
     "updater.download",
+    "updater.downloadStatus",
   ]);
   const server = Bun.serve({
     hostname: "127.0.0.1",
