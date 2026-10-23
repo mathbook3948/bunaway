@@ -7,6 +7,9 @@ import {
   MAX_IMAGE_BYTES,
   MAX_TEXT_LENGTH,
 } from "#plugins/clipboard/src/contract";
+import { ClipboardChanges } from "#plugins/clipboard/src/platforms/changes";
+import { MacosClipboard } from "#plugins/clipboard/src/platforms/macos";
+import { pollPasteboard } from "#plugins/clipboard/src/platforms/macos-changes";
 import { createPasteboard } from "#plugins/clipboard/src/platforms/macos-pasteboard";
 import {
   encodeTIFF,
@@ -426,6 +429,59 @@ test.skipIf(
     } finally {
       await adapter.dispose();
       observer.dispose();
+    }
+  },
+);
+
+test.skipIf(
+  process.platform !== "darwin" || process.env.BUNAWAY_CLIPBOARD_NATIVE !== "1",
+)(
+  "real NSPasteboard changeCount reports writes from this adapter and from a second binding",
+  async () => {
+    const name = `tests.bunaway.clipboard.${crypto.randomUUID()}`;
+    const native = createPasteboard(name);
+    const other = createPasteboard(name);
+    const events: unknown[][] = [];
+    const adapter = new MacosClipboard(
+      native,
+      new ClipboardChanges(
+        pollPasteboard(() => native.changeCount(), 10),
+        (...event) => events.push(event),
+      ),
+    );
+    try {
+      const before = native.changeCount();
+      const own = adapter.waitForChange();
+      adapter.writeText("own write");
+      const ownChange = await own;
+      expect(ownChange.sequence).toBeGreaterThan(before);
+      expect(ownChange.sequence).toBeLessThanOrEqual(0xffff_ffff);
+      const external = adapter.waitForChange();
+      other.write([
+        {
+          format: "text/plain",
+          data: "external write",
+        },
+      ]);
+      const externalChange = await external;
+      expect(externalChange.sequence).toBeGreaterThan(ownChange.sequence);
+      expect(externalChange.changedAt).toBeGreaterThanOrEqual(
+        ownChange.changedAt,
+      );
+      expect(events.map(([event]) => event)).toEqual([
+        "clipboard.changed",
+        "clipboard.changed",
+      ]);
+      const pending = adapter.waitForChange();
+      adapter.dispose();
+      await expect(pending).rejects.toThrow(
+        expect.objectContaining({
+          code: "CANCELLED",
+        }),
+      );
+    } finally {
+      adapter.dispose();
+      other.dispose();
     }
   },
 );

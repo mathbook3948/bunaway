@@ -1,7 +1,7 @@
 import { dlopen } from "bun:ffi";
 import { attemptAll } from "@bunaway/plugin";
 import type { NativeShortcutServices } from "@bunaway/plugin-api/native";
-import type { ChangeDriver } from "#clipboard/platforms/windows-changes";
+import type { ChangeDriver } from "#clipboard/platforms/changes";
 
 export const WM_CLIPBOARDUPDATE = 0x031d;
 

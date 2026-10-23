@@ -51,6 +51,8 @@ export type Pasteboard = {
   has(format: ClipboardFormat): boolean;
   write(items: MacosClipboardItem[]): void;
   clear(): void;
+  /** NSPasteboard `changeCount` reduced to an unsigned 32-bit value; it grows with every change by any process. */
+  changeCount(): number;
   dispose(): void;
 };
 
@@ -471,6 +473,11 @@ export function createPasteboard(name?: string): Pasteboard {
         transaction((board) => {
           send(board, "clearContents");
         });
+      },
+      changeCount() {
+        return transaction((board) =>
+          Number(send(board, "changeCount") & 0xffff_ffffn),
+        );
       },
       dispose() {
         if (!disposed) {

@@ -18,7 +18,7 @@ import type { WindowsClipboard } from "#clipboard/platforms/windows";
 
 const macosOperation = defineNativeOperation<MacosClipboard>();
 const windowsOperation = defineNativeOperation<WindowsClipboard>();
-/** macOS calls are synchronous; Windows handlers propagate cancellation through clipboard retries. */
+/** macOS calls are synchronous except `waitForChange`; Windows handlers propagate cancellation through clipboard retries. */
 export const macosOperations = {
   readText: macosOperation({
     input: z.null(),
@@ -66,6 +66,11 @@ export const macosOperations = {
     input: macosWriteFormatsSchema,
     output: z.null(),
     handler: ({ items }, { instance }) => instance.writeFormats(items),
+  }),
+  waitForChange: macosOperation({
+    input: z.null(),
+    output: changeSchema,
+    handler: (_input, { instance, signal }) => instance.waitForChange(signal),
   }),
 };
 export const windowsOperations = {

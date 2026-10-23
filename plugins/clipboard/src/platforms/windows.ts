@@ -7,9 +7,9 @@ import type {
   imageSchema,
   writeFormatsSchema,
 } from "#clipboard/contract";
+import { ClipboardChanges } from "#clipboard/platforms/changes";
 import { createClipboard } from "#clipboard/platforms/windows-bindings";
 import { Win32ClipboardListener } from "#clipboard/platforms/windows-change-bindings";
-import { ClipboardChanges } from "#clipboard/platforms/windows-changes";
 
 const OPEN_TIMEOUT_MS = 250;
 const OPEN_RETRY_MS = 10;

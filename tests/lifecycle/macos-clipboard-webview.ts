@@ -155,7 +155,14 @@ try {
       const oversized = {width:513,height:256,rgba:btoa(String.fromCharCode(17).repeat(513 * 256 * 4))};
       await fails(() => clipboard.writeImage(oversized), "INVALID_ARGUMENT");
       same(await clipboard.readImage(null), maximum, "image limit before mutation");
-      await client.invoke("test.report", {ok:true, unicode:true, formats:true, rgba:true, grants:true, limits:true});
+      const waiting = clipboard.waitForChange(null);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await clipboard.writeText({text:"change probe"});
+      const change = await waiting;
+      check(Number.isInteger(change.sequence) && change.sequence >= 0 && change.sequence <= 4294967295, "change sequence");
+      check(Number.isInteger(change.changedAt) && change.changedAt > 0, "change time");
+      same(await clipboard.readText(null), "change probe", "write behind the change");
+      await client.invoke("test.report", {ok:true, unicode:true, formats:true, rgba:true, grants:true, limits:true, change:true});
     } catch(error) {
       await client.invoke("test.report", {ok:false,message:error.message,code:error.code ?? null});
     } finally {try {await windows.close({view:"main"});} catch(error) {if(error.code !== "CANCELLED") throw error;}}
@@ -246,6 +253,7 @@ try {
     rgba: true,
     grants: true,
     limits: true,
+    change: true,
   });
   const records = (await Bun.file(resolve(dataRoot, "logs/host.log")).text())
     .trim()
