@@ -26,6 +26,7 @@ import {
 } from "#native/windows/bun/instance";
 import { containAppProcess } from "#native/windows/bun/job";
 import { testAppMetadata } from "../fixtures/app-info.ts";
+import { waitFor } from "../fixtures/deadlines.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
@@ -238,6 +239,7 @@ if (!process.argv.includes("--child")) {
   let sessionCount = 0;
   let quitCount = 0;
   let stopped = false;
+  let bootForwardError: unknown;
   const hookOrder: string[] = [];
   const decoder = new TextDecoder();
   /** One JSON line the child app prints; only the fields the scenario reads are listed. */
@@ -400,9 +402,16 @@ if (!process.argv.includes("--child")) {
         "memo://open/42",
       ]);
     } else if (event.event === "booting") {
-      await forwardFromChild([
-        "memo://open/42",
-      ]);
+      try {
+        await forwardFromChild([
+          "memo://open/42",
+        ]);
+      } catch (error) {
+        // Report the delivery failure itself instead of the child's later boot timeout.
+        bootForwardError = error;
+        child.kill();
+        return;
+      }
       // The forwarding is acknowledged once queued; only now may the child finish booting.
       await writeFile(forwardedMarker, "");
     } else if (event.event === "opened" && event.source === "second-instance") {
@@ -430,7 +439,11 @@ if (!process.argv.includes("--child")) {
   const errors = new Response(child.stderr).text();
   const timer = setTimeout(() => child.kill(), devShutdown ? 20000 : 60000);
   try {
-    assert.equal(await child.exited, 0, await errors);
+    const exitCode = await child.exited;
+    if (bootForwardError) {
+      throw bootForwardError;
+    }
+    assert.equal(exitCode, 0, await errors);
     await stream;
     assert(stopped, "CLI shutdown must run plugin cleanup");
     if (devShutdown) {
@@ -501,14 +514,11 @@ if (!process.argv.includes("--child")) {
                     event: "booting",
                   }),
                 );
-                const deadline = Date.now() + 20000;
-                while (!existsSync(forwardedMarker)) {
-                  assert(
-                    Date.now() < deadline,
-                    "no request forwarded during boot",
-                  );
-                  await Bun.sleep(20);
-                }
+                await waitFor(() => existsSync(forwardedMarker), {
+                  deadline: "childStep",
+                  what: "a request forwarded during boot",
+                  intervalMs: 20,
+                });
               }
               emitReopen = () =>
                 context.events.emit("test.reopen", null, {

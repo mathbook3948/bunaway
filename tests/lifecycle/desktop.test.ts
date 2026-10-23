@@ -829,14 +829,17 @@ test("startup delivery has a bounded queue and closing the inbox is idempotent",
   }
 });
 
-test("closing the inbox before start drops the held requests", async () => {
+test("an inbox closed before start refuses to deliver the held requests", async () => {
   const address =
     process.platform === "win32"
       ? `\\\\.\\pipe\\bunaway-test-${crypto.randomUUID()}`
       : `/tmp/bunaway-${crypto.randomUUID()}.sock`;
   const inbox = await listenForInstances(address);
-  await forwardToInstance(address, launch);
-  await inbox.close();
+  try {
+    await forwardToInstance(address, launch);
+  } finally {
+    await inbox.close();
+  }
   expect(() => inbox.start(() => {})).toThrow("Instance inbox is closed");
 });
 
@@ -1615,7 +1618,13 @@ test("ready() after a committed shutdown calls neither onReady nor onOpen", asyn
       "second-instance",
     ),
   ).toThrow("Desktop open queue unavailable");
-  lifecycle.ready();
+  // The initial open is refused too, so the host skips ready() once shutdown is committed.
+  expect(() =>
+    lifecycle.ready({
+      argv: [],
+      cwd: "C:\\app",
+    }),
+  ).toThrow("Desktop open queue unavailable");
   await tick();
   expect(seen).toEqual([]);
 });
