@@ -191,6 +191,11 @@ if (!process.argv.includes("--child")) {
   let exerciseTask: Promise<void> | undefined;
   let exerciseFailure: unknown;
   let desktop: DesktopContext | undefined;
+  /** Closes the window and waits until the next create is accepted. */
+  async function closeWindow() {
+    await windows.close();
+    await waitFor(async () => !(await windows.isOpen()));
+  }
   async function exercise(context: CommandContext): Promise<void> {
     await windows.create({
       options: {
@@ -292,7 +297,7 @@ if (!process.argv.includes("--child")) {
       }
       await waitFor(() => windows.isVisible());
       await windows.hide();
-      await windows.close();
+      await closeWindow();
     }
     mode = "bad";
     await windows.create({
@@ -304,7 +309,7 @@ if (!process.argv.includes("--child")) {
       async () => (await windows.getReadiness()).document === "failed",
     );
     assert.equal(await windows.isVisible(), false);
-    await windows.close();
+    await closeWindow();
     const closed = await windows.getReadiness();
     assert.equal(closed.document, "cancelled");
     held = true;
@@ -318,7 +323,7 @@ if (!process.argv.includes("--child")) {
       async () => (await windows.getReadiness()).document === "cancelled",
     );
     assert.equal(await windows.isVisible(), false);
-    await windows.close();
+    await closeWindow();
     releaseResources();
     mode = "nosdk";
     await windows.create({
@@ -337,7 +342,7 @@ if (!process.argv.includes("--child")) {
     );
     assert.equal((await windows.getReadiness()).error?.code, "TIMEOUT");
     assert.equal(await windows.isVisible(), false);
-    await windows.close();
+    await closeWindow();
     // The scenario ends the app explicitly; quitting asks beforeQuit once more, now approved.
     mode = "main";
     completed = true;
