@@ -4,8 +4,8 @@ import {
   type NativeEnvironment,
 } from "@bunaway/plugin";
 import {
+  type SafeStorageInstance,
   safeStorageLimits,
-  type WindowsSafeStorageInstance,
 } from "#safe-storage/contract";
 import {
   assertCredentialAppId,
@@ -13,7 +13,7 @@ import {
 } from "#safe-storage/platforms/windows-credential";
 import { WindowsDataProtection } from "#safe-storage/platforms/windows-dpapi";
 /** Lazily bind DPAPI so an unavailable provider can still be queried safely. */
-export class WindowsSafeStorage implements WindowsSafeStorageInstance {
+export class WindowsSafeStorage implements SafeStorageInstance {
   private native: WindowsDataProtection | undefined;
   private credentials: WindowsCredentialStore | undefined;
   private disposed = false;

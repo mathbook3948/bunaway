@@ -40,13 +40,9 @@ test("data protection requires independent operation grants and reports platform
   expect(safeStorage._definition.nativePlatforms.macos?.operations).toEqual(
     Object.keys(safeStorageOperations),
   );
-  // Windows keeps the shared operations first; the credential store is covered separately.
-  expect(
-    safeStorage._definition.nativePlatforms.windows?.operations?.slice(
-      0,
-      Object.keys(safeStorageOperations).length,
-    ),
-  ).toEqual(Object.keys(safeStorageOperations));
+  expect(safeStorage._definition.nativePlatforms.windows?.operations).toEqual(
+    Object.keys(safeStorageOperations),
+  );
   expect(() =>
     new NativeRegistry([]).operation("safe-storage.encryptString"),
   ).toThrow();
@@ -247,6 +243,9 @@ test("decryption results carry no re-encryption signal", async () => {
       "decryptString",
       "encryptBytes",
       "decryptBytes",
+      "setSecret",
+      "getSecret",
+      "deleteSecret",
     ]),
   );
   for (const [operation, plain] of [

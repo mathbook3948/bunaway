@@ -49,6 +49,33 @@ export default defineApp({
           }),
           bytes,
         );
+        // A secret written by the first run is read and removed by the restarted host.
+        if (!restarted) {
+          await safeStorage.setSecret({
+            key: "restart-token",
+            value: "synthetic secret 한글🙂",
+          });
+        }
+        assert.equal(
+          await safeStorage.getSecret({
+            key: "restart-token",
+          }),
+          "synthetic secret 한글🙂",
+        );
+        if (restarted) {
+          assert.equal(
+            await safeStorage.deleteSecret({
+              key: "restart-token",
+            }),
+            true,
+          );
+          assert.equal(
+            await safeStorage.getSecret({
+              key: "restart-token",
+            }),
+            null,
+          );
+        }
         writeFileSync(
           resolve(temporary, "backend-report.json"),
           JSON.stringify({

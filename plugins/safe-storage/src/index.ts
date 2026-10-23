@@ -1,8 +1,5 @@
 import { defineNativePlugin } from "@bunaway/plugin";
-import {
-  safeStorageOperations,
-  windowsSafeStorageOperations,
-} from "#safe-storage/operations";
+import { safeStorageOperations } from "#safe-storage/operations";
 import {
   dispose as disposeMacos,
   initialize as initializeMacos,
@@ -23,7 +20,7 @@ export default defineNativePlugin({
     windows: {
       initialize: initializeWindows,
       dispose: disposeWindows,
-      operations: windowsSafeStorageOperations,
+      operations: safeStorageOperations,
     },
   },
 });

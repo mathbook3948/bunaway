@@ -7,10 +7,7 @@ import {
   safeStorageLimits,
   secretKeySchema,
 } from "../../plugins/safe-storage/src/contract.ts";
-import {
-  safeStorageOperations,
-  windowsSafeStorageOperations,
-} from "../../plugins/safe-storage/src/operations.ts";
+import { safeStorageOperations } from "../../plugins/safe-storage/src/operations.ts";
 import { WindowsSafeStorage } from "../../plugins/safe-storage/src/platforms/windows.ts";
 import {
   assertCredentialAppId,
@@ -19,11 +16,11 @@ import {
 } from "../../plugins/safe-storage/src/platforms/windows-credential.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
-const parsers = pluginParsers("safe-storage", windowsSafeStorageOperations);
+const parsers = pluginParsers("safe-storage", safeStorageOperations);
 
-test("credential operations exist on Windows only and each needs its own grant", () => {
+test("credential operations exist on both platforms and each needs its own grant", () => {
   expect(safeStorage._definition.nativePlatforms.windows?.operations).toEqual(
-    Object.keys(windowsSafeStorageOperations),
+    Object.keys(safeStorageOperations),
   );
   expect(safeStorage._definition.nativePlatforms.macos?.operations).toEqual(
     Object.keys(safeStorageOperations),
@@ -217,7 +214,7 @@ test("credential failures are classified without echoing key or value", () => {
   }
 });
 
-test("macOS reports the credential operations as unsupported", async () => {
+test("macOS credential operations require a host app identity before touching the Keychain", async () => {
   const create = macosSafeStorage._definition.nativePlatforms.macos?.create;
   if (!create) {
     throw new Error("macOS adapter is missing.");
@@ -238,7 +235,7 @@ test("macOS reports the credential operations as unsupported", async () => {
         ),
       ),
     ).rejects.toMatchObject({
-      code: "UNSUPPORTED",
+      code: "INVALID_ARGUMENT",
     });
   } finally {
     adapter.dispose();

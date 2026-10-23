@@ -11,7 +11,6 @@ import {
   setSecretInputSchema,
   textInputSchema,
   textSchema,
-  type WindowsSafeStorageInstance,
 } from "#safe-storage/contract";
 
 /** Both implementations share one contract; each operation still needs its own policy grant. */
@@ -44,13 +43,7 @@ export const safeStorageOperations = {
     handler: ({ ciphertext }, { instance }) =>
       instance.decryptBytes(ciphertext),
   }),
-};
-
-const windowsOperation = defineNativeOperation<WindowsSafeStorageInstance>();
-/** The shared operations plus the Credential Manager store, which macOS does not offer. */
-export const windowsSafeStorageOperations = {
-  ...safeStorageOperations,
-  setSecret: windowsOperation({
+  setSecret: operation({
     input: setSecretInputSchema,
     output: z.null(),
     handler: ({ key, value }, { instance }) => {
@@ -58,12 +51,12 @@ export const windowsSafeStorageOperations = {
       return null;
     },
   }),
-  getSecret: windowsOperation({
+  getSecret: operation({
     input: secretKeyInputSchema,
     output: secretValueSchema.nullable(),
     handler: ({ key }, { instance }) => instance.getSecret(key),
   }),
-  deleteSecret: windowsOperation({
+  deleteSecret: operation({
     input: secretKeyInputSchema,
     output: z.boolean(),
     handler: ({ key }, { instance }) => instance.deleteSecret(key),

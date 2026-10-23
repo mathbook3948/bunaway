@@ -69,5 +69,16 @@ keys are 1 to 128 characters of `a-z0-9._-` (lowercase, because target names are
 Values are non-empty UTF-16LE text up to `CRED_MAX_CREDENTIAL_BLOB_SIZE` (2,560 bytes). A missing key
 reads as `null` and deletes as `false`. The implementation zeroes the native blob and every copy and releases it with
 `CredFree`; no test checks that cleanup. The namespace is not an OS principal: other processes of the same user can read the entry.
-Without a host `app.id` these operations fail with `INVALID_ARGUMENT`. macOS does not offer them.
+Without a host `app.id` these operations fail with `INVALID_ARGUMENT`.
 `tests/lifecycle/windows-safe-storage.test.ts` exercises the real store on Windows CI.
+
+## macOS credential store
+
+The same three operations keep a user secret in the default file-based Keychain as a generic
+password with service `org.bunaway.safe-storage.secret.v1` and account `<app.id>:<key>`, separate from
+the protection key item, which they never create or read. Keys and values follow the Windows rules; values are
+stored as UTF-8. Setting an existing key modifies the item in place, so a failed replacement keeps the
+previous value. Access follows the executable identity rules above: the creating executable reads its items
+without a prompt and a different executable needs Keychain approval. The native copy and every intermediate buffer are
+zeroed before release. `tests/lifecycle/macos-keychain-native.test.ts` runs the real Security.framework against a
+disposable private Keychain and `tests/lifecycle/macos-safe-storage-host.ts` covers the public API across a restart.

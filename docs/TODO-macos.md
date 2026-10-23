@@ -368,7 +368,11 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 
 우선순위 P2. 소유자: 선택 보안 기능.
 
-- [ ] Keychain의 secret 저장, 조회, 삭제와 지원 상태를 제공한다.
+- [x] Keychain의 secret 저장, 조회, 삭제와 지원 상태를 제공한다.
+  `safe-storage.setSecret`, `getSecret`, `deleteSecret`이 Windows와 같은 키 규칙과 값 상한으로 기본 file-based Keychain의
+  generic password(service `org.bunaway.safe-storage.secret.v1`, account `<app.id>:<key>`)를 저장하고 제자리에서 교체한다.
+  지원 상태는 기존 `isAvailable`이 Keychain의 잠금 해제, 읽기와 쓰기 상태로 보고한다.
+  [암호화 저장 계약](./site/src/content/docs/reference/plugins/safe-storage.mdx)을 따른다.
 - [ ] 암호화 및 복호화, 키 교체와 재암호화 필요 여부를 제공한다.
 - [ ] 잠긴 저장소와 영구 실패를 구분하고 취소, 기한과 재시도를 정의한다.
 - [ ] 평문 fallback을 묵시적으로 사용하지 않고 손상 입력과 저장 실패를 처리한다.

@@ -73,6 +73,7 @@ macOS는 `macos-storage.ts`와 `macos-storage-directories.ts`에서 실제 파�
 `lifecycle/macos-keychain-native.test.ts`는 실제 Security.framework와 합성 데이터로
 disposable private Keychain을 만들고 공유 Bun과 ad-hoc compiled 실행 파일에서 Unicode,
 바이트 상한, 변조, 잠금 상태와 같은 실행 파일의 프로세스 재시작을 확인한 뒤 삭제한다.
+사용자 secret(`setSecret`, `getSecret`, `deleteSecret`)은 같은 Keychain에서 교체, 다른 `app.id`와의 분리, 삭제와 재시작한 프로세스의 조회 및 삭제를 확인한다.
 기본 Keychain과 search list, trust, ACL이나 signing identity는 바꾸지 않는다.
 사용자의 login Keychain과 실제 credential, 시스템 UI 선택, 다른 서명 빌드로의 이전은
 검증하지 않는다. 기존 macOS native CI에서 별도로 실행하고 로그를 보관한다.

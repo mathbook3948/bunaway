@@ -33,14 +33,15 @@ export const ciphertextInputSchema = z.strictObject({
   ciphertext: ciphertextSchema,
 });
 
-// A lone surrogate has no UTF-16LE round trip through other Credential Manager readers.
+// A lone surrogate has no lossless round trip through Credential Manager's UTF-16LE or Keychain's UTF-8 text.
 const LONE_SURROGATE =
   /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 
 /**
  * Secret keys are lowercase ASCII because Credential Manager compares target names without
- * regard to case, so "Token" and "token" would be one entry. They exclude ":" so the
- * plugin-owned target name `prefix:appId:key` has exactly one reading; the key is the part
+ * regard to case, so "Token" and "token" would be one entry; macOS keeps the same keys so an app
+ * sees one key space on both platforms. They exclude ":" so the plugin-owned target name
+ * (Windows) or Keychain account (macOS) `appId:key` has exactly one reading; the key is the part
  * after the last colon.
  */
 export const secretKeySchema = z
@@ -64,17 +65,17 @@ export const setSecretInputSchema = z.strictObject({
   value: secretValueSchema,
 });
 
-/** Common instance shape chosen by this plugin because both platforms expose the same operations. */
+/**
+ * Common instance shape chosen by this plugin because both platforms expose the same operations.
+ * The secret methods keep one app-scoped OS credential per key (Credential Manager on Windows,
+ * the default Keychain on macOS); a missing key reads as null and deletes as false.
+ */
 export interface SafeStorageInstance {
   isAvailable(): boolean;
   encryptString(text: string): string;
   decryptString(ciphertext: string): string;
   encryptBytes(bytes: string): string;
   decryptBytes(ciphertext: string): string;
-}
-
-/** Windows adds an app-scoped Credential Manager store on top of the shared operations. */
-export interface WindowsSafeStorageInstance extends SafeStorageInstance {
   setSecret(key: string, value: string): void;
   getSecret(key: string): string | null;
   deleteSecret(key: string): boolean;
