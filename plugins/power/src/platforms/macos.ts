@@ -13,18 +13,20 @@ import {
   type MacosAssertions,
 } from "#power/platforms/macos-blockers";
 import { watchMacosPowerLifecycle } from "#power/platforms/macos-lifecycle-events";
+import { watchMacosPowerStatus } from "#power/platforms/macos-status-events";
 
 /**
  * Power queries and app-owned sleep requests on macOS: power source and battery status, the input
  * idle time, IOPMAssertion requests that keep the system or display awake, and the sleep, wake,
- * screen lock and screen unlock events. `power.statusChanged` and the CPU speed limit are not
- * implemented and stay unsupported.
+ * screen lock and screen unlock events, and `power.statusChanged` for power source changes. The
+ * CPU speed limit is not implemented and stays unsupported.
  */
 export class MacosPower implements MacosPowerInstance {
   private readonly native = createMacosPower();
   private readonly assertions: MacosAssertions;
   private readonly blockers: PowerBlockers;
   private readonly releaseLifecycleEvents: (() => void) | undefined;
+  private releaseStatusEvents: (() => void) | undefined;
   private disposed = false;
 
   constructor(events?: NativeEnvironment["events"]) {
@@ -41,6 +43,10 @@ export class MacosPower implements MacosPowerInstance {
     this.blockers = new PowerBlockers(this.assertions);
     try {
       this.releaseLifecycleEvents = watchMacosPowerLifecycle(events);
+      this.releaseStatusEvents = watchMacosPowerStatus(
+        () => this.native.status(),
+        events,
+      );
     } catch (error) {
       failWithCleanup(
         error,
@@ -104,6 +110,7 @@ export class MacosPower implements MacosPowerInstance {
     this.disposed = true;
     attemptAll(
       [
+        () => this.releaseStatusEvents?.(),
         () => this.releaseLifecycleEvents?.(),
         () => this.blockers.dispose(),
         () => this.assertions.dispose(),

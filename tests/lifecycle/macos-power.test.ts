@@ -253,3 +253,59 @@ try {
     });
   },
 );
+
+const STATUS_EVENTS = resolve(
+  import.meta.dir,
+  "../../plugins/power/src/platforms/macos-status-events.ts",
+);
+
+test.skipIf(process.platform !== "darwin")(
+  "a macOS power source notification re-reads the status and stops reaching the app after release",
+  async () => {
+    const result = await runAdapter(
+      `
+const { pumpTurns, pumpUntil } = await import(${JSON.stringify(PUMP)});
+const { watchMacosPowerStatus } = await import(${JSON.stringify(STATUS_EVENTS)});
+const { dlopen } = await import("bun:ffi");
+const system = dlopen("/usr/lib/libSystem.B.dylib", { notify_post: { args: ["cstring"], returns: "u32" } });
+// The keys IOPSNotificationCreateRunLoopSource listens on; posting them stands in for a power change.
+const post = () => {
+  for (const key of ["source", "timeremaining", "percent"]) {
+    system.symbols.notify_post("com.apple.system.powersources." + key);
+  }
+};
+// Each read reports a new percentage, so every notification is a difference.
+let reads = 0;
+const read = () => ({
+  source: "battery", batteryPresent: true, charging: false, batteryPercent: 50 + (reads++ % 40),
+  batterySaver: false, remainingSeconds: null, fullLifeSeconds: null,
+});
+const release = watchMacosPowerStatus(read, { emit: (event, payload) => emitted.push([event, payload]) });
+try {
+  const baselineReads = reads;
+  post();
+  await pumpUntil(() => emitted.length > 0, "power.statusChanged");
+  const whileWatching = emitted.splice(0);
+  release();
+  release();
+  const readsAtRelease = reads;
+  post();
+  pumpTurns(25);
+  console.log(JSON.stringify({ baselineReads, whileWatching, afterRelease: emitted, readsAfterRelease: reads - readsAtRelease }));
+} finally {
+  release?.();
+  await adapter.dispose();
+}`,
+      "nativeFixture",
+      true,
+    );
+    expect(result.baselineReads).toBe(1);
+    expect(result.whileWatching.length).toBeGreaterThan(0);
+    for (const [event, payload] of result.whileWatching) {
+      expect(event).toBe("power.statusChanged");
+      statusSchema.parse(payload);
+    }
+    expect(result.afterRelease).toEqual([]);
+    expect(result.readsAfterRelease).toBe(0);
+  },
+);
