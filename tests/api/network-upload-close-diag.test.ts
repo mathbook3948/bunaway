@@ -41,15 +41,26 @@ type Sink = {
 };
 
 /** Plain socket server that reads freely and notes when its connection closes. */
-function makeSink(): Sink {
+function makeSink(mode: "free" | "paused" = "free"): Sink & {
+  resume: () => void;
+} {
   let closed: number | undefined;
+  let held:
+    | {
+        resume(): void;
+      }
+    | undefined;
   let received = 0;
   const listener = Bun.listen({
     hostname: "127.0.0.1",
     port: 0,
     socket: {
-      data(_socket, chunk) {
+      data(socket, chunk) {
         received += chunk.byteLength;
+        if (mode === "paused") {
+          held = socket;
+          socket.pause();
+        }
       },
       close() {
         closed = performance.now();
@@ -64,6 +75,7 @@ function makeSink(): Sink {
     closedAt: () => closed,
     received: () => received,
     stop: () => listener.stop(true),
+    resume: () => held?.resume(),
   };
 }
 
@@ -203,3 +215,45 @@ test("DIAG raw fetch with buffer body abort", async () => {
     sink.stop();
   }
 });
+
+for (const resume of [
+  false,
+  true,
+]) {
+  test(`DIAG plugin upload cancel against a paused server resume=${resume}`, async () => {
+    for (let round = 0; round < 6; round += 1) {
+      const state = initialize();
+      const sink = makeSink("paused");
+      const request = uploadInputSchema.parse({
+        uploadId: crypto.randomUUID(),
+        url: `http://127.0.0.1:${sink.port}/`,
+        path: file,
+      });
+      const pending = runUpload(state, "app", request).catch(() => undefined);
+      while (sink.received() === 0) {
+        await Bun.sleep(1);
+      }
+      await Bun.sleep(200);
+      const sent = runUploadStatus(state, "app", request).sentBytes;
+      const cancelAt = performance.now();
+      await runCancelUpload(state, "app", request);
+      await pending;
+      const settled = performance.now() - cancelAt;
+      if (resume) {
+        sink.resume();
+      }
+      const closed = await waitClosed(sink);
+      report(
+        `paused-resume=${resume}`,
+        round,
+        cancelAt,
+        sink,
+        closed,
+        `sentAtCancel=${sent} settledMs=${settled.toFixed(0)}`,
+      );
+      sink.resume();
+      sink.stop();
+      await dispose(state);
+    }
+  });
+}
