@@ -61,8 +61,7 @@ const allowed = PLATFORMS.some((name) => name === platform);
 문서 탐색은 ID를 유지하며 네이티브 재생성은 새 ID를 발급합니다. 종료된 ID와 생성 전 뷰,
 외부 전경 창은 `null`입니다. Windows는 활성 상태의 `WM_ACTIVATE`로 이력을 갱신하고
 마지막 활성 창을 파괴하면 이전 창으로 되돌리지 않고 기록을 지웁니다.
-플러그인은 인증된 출처와 대상 권한을 검증하고 닫혔거나 재생성 중인 창을 결과에서 제외합니다.
-`lookup`이 없으면 식별자 탐색 API는 `UNSUPPORTED`를 반환합니다.
+단일 창 모델에서 창 플러그인의 공개 연산은 이 조회를 사용하지 않으며, 이 조회 타입은 호스트 내부 정리 전까지 남아 있습니다.
 `NativeWindow`는 `show(visible)`, `focus()`, `close()`, `isFullscreen()`, `getSizeConstraints()`, `setSizeConstraints(constraints)`, `setSize(width, height)`, `setPosition(x, y)`, `setFullscreen(value)`, `setCloseConfirmation(message)`를 제공합니다.
 Windows의 선택적 `setFocusable`, `isFocusable`과 `WindowSpec.window.focusable`은 전경 활성화 허용을 제어합니다. 현재 실제 포커스와 별도이며 비활성 표시와 blur 후보 선택에도 적용합니다.
 
@@ -201,7 +200,7 @@ Windows와 macOS는 true를 제공합니다. 공통 어댑터는 비어 있지 �
 지원하지 않는 호스트에서 기존 창을 닫기 전에 `UNSUPPORTED`로 거부합니다. macOS는 title, 크기와
 크기 제약, `visible`, `showWhenReady`만 받고 `validateCreation`에서 나머지 창 옵션을 같은 시점에 거부합니다.
 
-`MAX_WINDOWS`는 시작 시 허용하는 창 정의 개수의 상한인 128입니다. 설정 검증이 사용하며
+`MAX_WINDOWS`는 창 정의 개수의 내부 상한인 128입니다. 설정 검증은 정확히 하나의 창 정의를 요구하며
 실행 중인 창 개수와는 별개입니다.
 `lookup.byRequest(requestId)`는 UI 호스트가 관리하는 요청의 인증된 컨텍스트에서 정확한
 호출자 창을 찾습니다.

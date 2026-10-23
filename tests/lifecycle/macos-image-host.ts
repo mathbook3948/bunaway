@@ -53,7 +53,7 @@ export default defineApp({ modules: [], plugins: [image, windows, {
     return (await Bun.file(markerPath).json()).id;
   } },
   "test.complete": { input: { const: null }, output: { const: null }, async run() {
-    await Bun.write(process.env.TMPDIR + "/report.json", JSON.stringify({ ok: true, permissionDenied: true, setup: true, cancellation: true }));
+    await Bun.write(process.env.TMPDIR + "/report.json", JSON.stringify({ ok: true, setup: true, cancellation: true }));
     return null;
   } },
   "test.failure": { input: { type: "string" }, output: { const: null }, async run(error) {
@@ -349,7 +349,7 @@ export default { _definition: { ...definition, nativePlatforms: { ...definition.
   });
   assert.deepEqual(report, {
     ok: true,
-    permissionDenied: true,
+
     setup: true,
     cancellation: true,
   });

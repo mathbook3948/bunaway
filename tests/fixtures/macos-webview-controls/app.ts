@@ -147,9 +147,6 @@ export function controlsApp(origin: string, outside: string) {
     await assert.rejects(windows.openDevTools(), {
       code: "UNSUPPORTED",
     });
-    await assert.rejects(windows.reloadWebView(), {
-      code: "INVALID_ARGUMENT",
-    });
 
     await windows.navigateWebView({
       url: `${origin}/next.html`,

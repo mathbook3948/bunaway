@@ -104,7 +104,7 @@ system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테
 생성 중과 닫힌 소유자의 거부를 검사한다. `lifecycle/macos-webview-controls.ts`는
 기존 `host:macos`에서 실제 compiled WKWebView와 백엔드 Worker의 공통 SDK를 실행한다.
 문서 상태, origin과 redirect 거부, 서브프레임 신원, history, reload, 느린 탐색 중단,
-문서 교체의 명령 취소와 fragment 세션 유지, 뷰별 zoom 및 닫기와 재생성을 검사한다.
+문서 교체의 명령 취소와 fragment 세션 유지, zoom 및 닫기와 재생성을 검사한다.
 각 문서의 대기 명령이 백엔드에 등록된 뒤 history 이동과 reload를 시작한다.
 도착 응답과 명령 등록 사이의 경합이 취소 검사를 건너뛰지 않게 하며 기존 횟수와 기한은 유지한다.
 scheme과 hostname을 대문자로 작성한 자산 URL에서도 실제 문서와 SDK 연결을 확인한다.
@@ -138,7 +138,7 @@ WebView 경계만 제어한다. 닫기 확인 거부와 마지막 창의 quit �
 
 다운로드 UI-loop regression은 생성된 worker 경계에서 전용 `windows-download-cleanup/ui.ts`를
 번들하고 실제 승인 transfer의 cancel 자원만 일시적으로 실패시킨다. 소유 창을 닫는 동안
-다른 창의 SDK 응답과 세 번째 창의 native cleanup이 진행하고, 소유자의 재시도도 복구되는지
+SDK 응답이 진행하고, 소유자의 재시도도 복구되는지
 확인한다. 운영 worker와 다른 테스트 프로세스는 주입하지 않는다. 순수 모델은 조절한 시계로
 재시도 간격과 기한, 자원 보존을 검증하고 cancelled snapshot의 interruptReason을 검사한다.
 
@@ -157,7 +157,7 @@ WebView2 다운로드를 실행한다. 기본 거부, renderer 권한 거부, �
 승인된 전송과 pending 요청이 함께 있는 브라우저를 종료해 죽은 broker에 작업을 보내지 않고
 COM 참조, timer와 창 자원을 정리하는지도 확인한다.
 기존 multiple-automatic-downloads 권한 거부를 유지하며 제어 시나리오는 새 WebView에서
-첫 다운로드로 실행한다. 마지막 장애 검사는 같은 뷰의 두 창이 공유하는 browser 프로세스에서
+첫 다운로드로 실행한다. 마지막 장애 검사는 browser 프로세스에서
 승인된 전송과 pending 요청을 각각 유지한다. 자동 다운로드 권한을 허용하는 검증이 아니다.
 테스트가 기록한 고유한 브라우저 기본 경로의 파일만 지운다. 사용자 지정 경로, 물리 다운로드 UI
 조작이나 앱 재실행 후 재개 검증은 포함하지 않는다. 결과는
@@ -348,7 +348,7 @@ raw 모드와 자동 실행 prefix를 함께 사용해 `launchReason`, 앱 argv�
 UNSUPPORTED, 잘못된 입력의 INVALID_ARGUMENT과 입력 스냅샷을 확인한다.
 
 권한 식별자는 operation 이름이며 작업마다 독립적으로 허용한다. API 검사는 저장 메타데이터의
-exists와 stat 분리, 창 조회의 선언된 대상 반환과 다른 조회 및 제어의 거부를 확인한다.
+exists와 stat 분리, 창 연산의 권한 검사를 확인한다.
 앱 명령의 접근 검사와 직접 플러그인 호출 거부도 확인하며 범용 자원별 권한 계약은 두지 않는다.
 windows-ui-operations.test.ts는 실제 UI Worker에서 정책 승인 전에 플러그인의 동의 요청이
 실행되지 않는지, 비동기 요청의 승인과 사용자 거부가 전달되는지 검사한다. OS 대화상자는 대체하며
@@ -479,8 +479,8 @@ DPI가 바뀐 크기에 대해서도 `centerInWorkArea`가 같은 작업 영역�
 `mise run host:windows`와 CI의 windows-native에 포함하며 네이티브 입력 준비 후
 `bun --no-env-file tests/lifecycle/windows-initial-placement.ts`로도 실행할 수 있다.
 이 검사는 실행 환경의 모니터와 DPI를 기록하며 다중 물리 모니터 검증을 대신하지 않는다.
-`cli/windows-config.test.ts`는 숨김 및 지연 창의 중복 뷰 진단, 식별자 개행과 128개 선언
-상한을 검사한다. `lifecycle/window-operations.test.ts`는 열린 뷰의 두 번째 create가
+`cli/windows-config.test.ts`는 숨김 및 지연 창의 중복 뷰 진단, 식별자 개행과 창 정의
+하나 요구를 검사한다. `lifecycle/window-operations.test.ts`는 열린 뷰의 두 번째 create가
 BUSY로 실패하고 기존 자원 소유자를 유지하는지 확인한다. 호출별 옵션의 크기 보정,
 제약 병합과 선언값 복원, 제목 검증 및 잘못된 옵션과 미지원 플랫폼에서 기존 창 보존도
 검사한다. 실제 WebView2 실행은 포함하지 않는다.
@@ -706,7 +706,7 @@ SDK 호출 컨텍스트, 작업 권한, 닫힌 창 및 시작 전 취소를 GUI 
 기존 문서 취소, 닫기 거절과 종료 경쟁을 검증한다. 미지원 destroy 호출이 실패해도
 진행 중인 재생성은 새 창 생성까지 완료하는지도 확인한다. Windows 네이티브 실행기는
 `windows-bun-window-api.ts`로 크기와 위치, 전체화면 복원, 확인 대화상자 거절과 승인,
-보조 창의 반복 생성과 새로운 세션, 자기 창 재생성을 추가 검증한다.
+창의 반복 재생성과 새로운 세션, 자기 창 재생성을 추가 검증한다.
 닫기 확인을 설정한 창의 브라우저 프로세스를 종료해 확인 없이 닫히는지도 검증한다.
 호출한 뷰의 세션이 종료되면 정리 대기 중인 생성 요청이 새 창을 열지 않는지도 확인한다.
 `macos-bun.test.ts`는 정확한 origin과 포트, 실제 Bun Worker의 명령과 세션 폐기, 종료 수신 확인과 플러그인 정리를 검사한다.
@@ -897,7 +897,7 @@ Run 값의 등록, 조회, 경로 갱신과 반복 해제를 확인한다. 임�
 보충 문자의 UTF-16 상한 왕복과 초과 입력 거부,
 반복 dispose와 독립 어댑터, 저장된 암호문의 새 프로세스 복호화를 검사한다.
 `windows-safe-storage.ts`는 실제 WebView2와 I/O Worker에서 동시 요청, UI 타이머 진행,
-뷰별 권한 거부와 손상 입력을 확인하며 `mise run host:windows`에 포함한다.
+손상 입력을 확인하며 `mise run host:windows`에 포함한다.
 다른 사용자나 머신, Windows 키 복구 및 물리 입력 검증은 포함하지 않는다.
 
 `mise run host:windows`와 `mise run host:macos`는 Bun으로
@@ -1141,7 +1141,7 @@ redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한�
 외부 proxy나 OS 인증, 물리 네트워크 설정 검증은 포함하지 않는다.
 
 `lifecycle/macos-network.ts`는 `host:macos`에서 compiled WKWebView, SDK, Core와 async UI
-어댑터를 실제 loopback 서버에 연결한다. 뷰별 grant와 앱 명령의 출처 유지, backend grant,
+어댑터를 실제 loopback 서버에 연결한다. 뷰 grant와 앱 명령의 출처 유지, backend grant,
 HTTP binary 및 UTF-8, redirect와 WebSocket handshake 거부, decompressed body 상한,
 text/binary 메시지, timeout과 SDK deadline, 취소 뒤 실제 TCP 정리와 종료 중 pending 요청 정리를
 확인한다. 결과는 `build/macos-native-logs/network-results.json`이며 기존 네이티브 CI artifact에 포함된다.

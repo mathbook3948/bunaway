@@ -55,7 +55,6 @@ try {
     support: await capabilities(),
   });
   await windows.close();
-  await windows.close();
 } catch (error) {
   if (
     !(error instanceof Error && "code" in error && error.code === "CANCELLED")
@@ -64,7 +63,6 @@ try {
       ok: false,
       message: String(error),
     });
-    await windows.close();
     await windows.close();
   }
 }

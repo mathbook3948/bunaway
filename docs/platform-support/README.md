@@ -52,8 +52,8 @@ Windows의 선택 [notification 플러그인](../../plugins/notification/README.
 
 | 플랫폼 | 네이티브 구현 | 검증 환경, 범위 | 미검증, 제약 |
 | --- | --- | --- | --- |
-| Windows x64 | Bun 진입점, 직접 FFI UI Worker, WebView2, 번들 Bun x64 baseline | 로컬 FFI/모달/Host API/다중 창/복구/종료/독립 CLI 검증([기록](../architecture/windows-bun-results.md)); PR18의 번들 런처 검증은 아래 기록과 분리 | 최소 Windows, CPU, WebView2 설치 경로, 배포, 스토어 적합성 |
-| macOS arm64 | Bun 진입점, 직접 FFI AppKit/WKWebView, 백엔드 Worker, 다중 창/뷰 | 로컬 26.7.1 arm64: 실제 WKWebView 회귀와 compiled 다중 창 API 검사. [Bun FFI 기록](../architecture/macos-bun-results.md)과 [이전 기록](../architecture/macos-native-results.md)을 구분 | Intel, 영속 프로필, 최소 OS, 현재 Windows 다중 창 메모 샘플, Developer ID, 공증, 설치 |
+| Windows x64 | Bun 진입점, 직접 FFI UI Worker, WebView2, 번들 Bun x64 baseline | 로컬 FFI/모달/Host API/복구/종료/독립 CLI 검증([기록](../architecture/windows-bun-results.md)); PR18의 번들 런처 검증은 아래 기록과 분리 | 최소 Windows, CPU, WebView2 설치 경로, 배포, 스토어 적합성 |
+| macOS arm64 | Bun 진입점, 직접 FFI AppKit/WKWebView, 백엔드 Worker, 창 하나 | 로컬 26.7.1 arm64: 실제 WKWebView 회귀와 compiled 창 API 검사. [Bun FFI 기록](../architecture/macos-bun-results.md)과 [이전 기록](../architecture/macos-native-results.md)을 구분 | Intel, 영속 프로필, 최소 OS, Developer ID, 공증, 설치 |
 | macOS Intel | 고정 Bun 배포물, 해시 없음 | 없음. arm64 빌드 스크립트가 명시적으로 거부 | 별도 pin, 빌드, 실제 실행 검증 필요 |
 | Linux | GTK, WebKitGTK 후보, 호스트 미구현 | Ubuntu 공통 검사, 생성 스키마 검사만 있음 | 네이티브 실행, UI, 프로세스 정리, 패키징 |
 | Android | Java Activity, WebView, 번들 Bun과 공통 Core/SDK, Java 프로젝트 sync와 debug APK | API 36 x86_64 에뮬레이터. 명령, 이벤트, 취소, 자산과 프레임 경계, 화면 회전, 종료 | ARM64 실기기, API 29, 네이티브 플러그인, 외부 개발 서버, 백그라운드 복원, release/AAB/Store |
@@ -77,7 +77,7 @@ Bun 종료를 요구한다. GUI가 없거나 WebKit이 시작하지 못하면 �
 ## 패키지와 출시 검증
 
 macOS WKWebView는 현재 비영속 `WKWebsiteDataStore`를 사용한다. Windows의
-브라우저 프로필 영속성/뷰 분리와 동일한 지원이 아니다. 현재 macOS 회귀 fixture는
+브라우저 프로필 영속성과 동일한 지원이 아니다. 현재 macOS 회귀 fixture는
 메모 상태를 Bun 메모리에 두며 네이티브 저장 플러그인을 검증하지 않는다. 이전 메모
 fixture가 범위 제한 Host API 파일에서 복원한 결과는 선택 플러그인 이관 전 기록이다.
 

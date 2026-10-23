@@ -80,7 +80,6 @@ try {
     cancelled: true,
   });
   await windows.close();
-  await windows.close();
 } catch (error) {
   if (
     !(error instanceof Error && "code" in error && error.code === "CANCELLED")

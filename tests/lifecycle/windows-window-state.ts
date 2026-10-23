@@ -18,9 +18,6 @@ const root = resolve(import.meta.dir, "../..");
 const output = resolve(root, "build/windows-window-state");
 const assets = resolve(output, "assets");
 const reportPath = resolve(output, "report.json");
-const target = {
-  view: "main",
-};
 const grants = [
   ...windowPermissions(),
   ...store._definition.native.operations.map(({ name }) => name),
@@ -133,14 +130,12 @@ if (!process.argv.includes("--child")) {
   };
   const normal = async () => {
     const { dpi: _dpi, ...bounds } = await windows.getNormalBounds({
-      ...target,
       unit: "physical",
     });
     return bounds;
   };
   const place = (bounds: typeof saved) =>
     windows.setOuterBounds({
-      ...target,
       unit: "physical",
       ...bounds,
     });
@@ -148,7 +143,6 @@ if (!process.argv.includes("--child")) {
   /** Put the window back to a plain, restored rectangle between scenarios. */
   const reset = async () => {
     await windows.setFullscreen({
-      ...target,
       fullscreen: false,
     });
     await windows.unmaximize();
@@ -170,12 +164,10 @@ if (!process.argv.includes("--child")) {
     // Maximized: the normal rectangle is kept and the window maximizes again.
     await windows.maximize();
     await windowState.save({
-      ...target,
       key: "maximized",
     });
     await reset();
     await windowState.restore({
-      ...target,
       key: "maximized",
     });
     assert.equal(
@@ -193,7 +185,6 @@ if (!process.argv.includes("--child")) {
     await place(saved);
     await windows.maximize();
     await windowState.save({
-      ...target,
       key: "minimized",
     });
     await windows.minimize();
@@ -203,7 +194,6 @@ if (!process.argv.includes("--child")) {
       "a window minimized from maximized reports not maximized",
     );
     await windowState.save({
-      ...target,
       key: "minimized",
     });
     const minimizedRecord = await store.get({
@@ -237,7 +227,6 @@ if (!process.argv.includes("--child")) {
     assert.equal((await state()).minimized, true, "window is minimized");
     assert.deepEqual(
       await windowState.restore({
-        ...target,
         key: "tiny",
         include: {
           position: false,
@@ -261,21 +250,17 @@ if (!process.argv.includes("--child")) {
     // Fullscreen: restore leaves it, places the window and enters it again.
     await place(saved);
     await windows.setFullscreen({
-      ...target,
       fullscreen: true,
     });
     await windowState.save({
-      ...target,
       key: "fullscreen",
     });
     await windows.setFullscreen({
-      ...target,
       fullscreen: false,
     });
     await place(elsewhere);
     // Restore starts from a fullscreen window: it must leave, place and enter again.
     await windows.setFullscreen({
-      ...target,
       fullscreen: true,
     });
     assert.equal(
@@ -284,7 +269,6 @@ if (!process.argv.includes("--child")) {
       "fullscreen before restoring",
     );
     await windowState.restore({
-      ...target,
       key: "fullscreen",
     });
     assert.equal(
@@ -293,7 +277,6 @@ if (!process.argv.includes("--child")) {
       "fullscreen after restoring a fullscreen record",
     );
     await windows.setFullscreen({
-      ...target,
       fullscreen: false,
     });
     assert.deepEqual(await normal(), saved);
@@ -301,7 +284,6 @@ if (!process.argv.includes("--child")) {
 
     // Only the selected fields are applied.
     await windowState.restore({
-      ...target,
       include: {
         size: false,
         maximized: false,
@@ -331,7 +313,6 @@ if (!process.argv.includes("--child")) {
       },
     });
     const fitted = await windowState.restore({
-      ...target,
       key: "gone",
     });
     assert.deepEqual(fitted, {

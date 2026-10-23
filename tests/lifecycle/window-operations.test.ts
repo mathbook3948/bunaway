@@ -492,7 +492,7 @@ test("failed controller creation uses trusted cleanup even when normal close wou
   ]);
 });
 
-test("parent termination cancels child recreation but permits a later explicit unowned creation", async () => {
+test("a cancelled recreation leaves no window and permits a later explicit creation", async () => {
   const f = fixture();
   await f.operations.execute(
     {

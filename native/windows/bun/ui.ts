@@ -511,8 +511,19 @@ function authorizationFor(context: HostContext) {
     source: `view:${view?.boundary.policy.id ?? "invalid"}`,
   };
 }
+/** The backend observes window lifecycle phases without a grant; documents never do. */
+function isBackendOpenOperation(
+  context: HostContext,
+  operation: string,
+): boolean {
+  return (
+    context === config.backendContext &&
+    operation === "windows.waitForLifecycle"
+  );
+}
 /** An invalid call, a stopping host or a missing permission all deny the request. */
 function isOperationAllowed(
+  context: HostContext,
   operationCall: PacketOf<"operation">["call"],
   permissions: ReturnType<typeof authorizationFor>["permissions"],
   granted: boolean,
@@ -524,7 +535,8 @@ function isOperationAllowed(
       !shutdownCommitted() &&
       granted &&
       !!permissions &&
-      registry.allowed(permissions, call)
+      (isBackendOpenOperation(context, call.operation) ||
+        registry.allowed(permissions, call))
     );
   } catch {
     /* Invalid requests fail closed at the host boundary. */
@@ -573,6 +585,7 @@ function handleGrant(packet: PacketOf<"grant">) {
   uiCalls.delete(packet.requestId);
   const { permissions, source } = authorizationFor(packet.context);
   const allowed = isOperationAllowed(
+    packet.context,
     queued.call,
     permissions,
     packet.allowed && queued.source === source,
@@ -587,7 +600,12 @@ function handleGrant(packet: PacketOf<"grant">) {
 }
 function handleAuthorize(packet: PacketOf<"authorize" | "authorize-input">) {
   const { permissions } = authorizationFor(packet.context);
-  const allowed = isOperationAllowed(packet.call, permissions, true);
+  const allowed = isOperationAllowed(
+    packet.context,
+    packet.call,
+    permissions,
+    true,
+  );
   if (!allowed) {
     log("host-request-denied", {
       operation: packet.call.operation,

@@ -43,7 +43,7 @@ WebView를 위한 추가 네이티브 바이너리는 필요하지 않다.
 `Bun.file(new URL(file, import.meta.url))`로 읽는다.
 
 현재 대상은 macOS arm64다. 하나의 창과 WebView, 명령과 이벤트, 뷰 정책과 세션, 사용자 지정
-자산 스킴, 렌더러 복구와 종료를 제공한다. `app.startup: false`를 지원한다.
+자산 스킴, 렌더러 복구와 종료를 제공한다. macOS는 시작 시 창을 하나 만들어야 하므로 `app.startup: false`를 거부한다.
 `@bunaway/plugin-windows`는 `isOpen`, 생성과 재생성, show/showInactive/hide/focus/close,
 표시와 포커스 조회, `getReadiness`와 `windows.readiness`, `setContentProtection`과 `isContentProtected`, 숨김 생성
 (`visible: false`, `showWhenReady`)을 제공한다. 창 ID는 네이티브 창을 만들거나 재생성할 때마다

@@ -1512,6 +1512,41 @@ if (!process.argv.includes("--child")) {
     }
     mainWindowId = windowId;
   }
+  /** Run 4 follows a recreation without options, which restores the declaration. */
+  async function verifyRecreatedDeclaration(run: number) {
+    assert.equal(run, 4);
+    // Recreation starts from the declaration, not from the previous runtime state.
+    assert.equal(await windows.getBackgroundColor(), "#112233");
+    assert.equal(await windows.isFocusable(), true);
+    assert.equal(await windows.isMinimizable(), true);
+    assert.equal(await windows.isMaximizable(), true);
+    assert.equal(await windows.isClosable(), true);
+    assert.equal(await windows.isFullscreenable(), true);
+    assert.equal(await windows.getTitle(), "Window API editor");
+    assert.deepEqual(
+      {
+        ...(await windows.getSizeConstraints()),
+      },
+      {
+        minWidth: 500,
+        minHeight: 400,
+        maxWidth: 800,
+        maxHeight: 600,
+      },
+    );
+    assert.equal(quitAttempts, 0, "recreation must bypass app quit checks");
+    await writeFile(
+      reportPath,
+      JSON.stringify({
+        pass: true,
+        cancellations,
+        revokedDocuments: cancellations >= 2,
+        navigationPreservesIdentity: true,
+      }),
+    );
+    // Closing the only window ends the app; the quit check approves it.
+    await windows.close();
+  }
   const contract = {
     input: {
       const: null,
@@ -1817,777 +1852,770 @@ if (!process.argv.includes("--child")) {
               },
             );
           }
-          // Run 2 recreates the window with options, run 3 verifies them and the rest of the API,
-          // and run 4 verifies that recreation restores the declaration.
-          if (run === 2) {
-            await windows.recreate({
-              options: {
-                window: {
-                  focusable: false,
-                  maximized: true,
-                  fullscreen: true,
+          // Run 1 ends with the page navigating within the same window. Run 2 recreates the window
+          // with options, run 3 verifies them and the rest of the API, and run 4 verifies that
+          // recreation restores the declaration.
+          switch (run) {
+            case 1:
+              assert.equal(await windows.isOpen(), true);
+              break;
+            case 2:
+              await windows.recreate({
+                options: {
+                  window: {
+                    focusable: false,
+                    maximized: true,
+                    fullscreen: true,
+                  },
+                  visible: false,
                 },
-                visible: false,
-              },
-            });
-          } else if (run === 3) {
-            assert.equal(await windows.isFullscreen(), true);
-            assert.equal(await windows.isMaximized(), true);
-            assert.equal(await windows.isVisible(), false);
-            await windows.setFullscreen({
-              fullscreen: false,
-            });
-            assert.equal(await windows.isMaximized(), true);
-            assert.equal(await windows.isVisible(), false);
-            await windows.unmaximize();
-            assert.deepEqual(
-              {
-                ...(await windows.getSizeConstraints()),
-              },
-              {
-                minWidth: 500,
-                minHeight: 400,
-                maxWidth: 800,
-                maxHeight: 600,
-              },
-            );
-            assert.deepEqual(
-              {
-                ...(await windows.getMinSize()),
-              },
-              {
-                width: 500,
-                height: 400,
-              },
-            );
-            assert.deepEqual(
-              {
-                ...(await windows.getMaxSize()),
-              },
-              {
-                width: 800,
-                height: 600,
-              },
-            );
-            await assertContentSize(500, 600);
-            console.log(
-              JSON.stringify({
-                event: "window-api-focusability",
-              }),
-            );
-            assert.equal(await windows.isFocusable(), false);
-            await windows.setFocusable({
-              focusable: true,
-            });
-            assert.equal(await windows.isFocusable(), true);
-            await windows.setFocusable({
-              focusable: false,
-            });
-            assert.equal(await windows.isFocusable(), false);
-            await windows.setMinimizable({
-              minimizable: false,
-            });
-            await windows.setMaximizable({
-              maximizable: false,
-            });
-            await windows.setClosable({
-              closable: false,
-            });
-            assert.equal(await windows.isMinimizable(), false);
-            assert.equal(await windows.isMaximizable(), false);
-            assert.equal(await windows.isClosable(), false);
-            assert.equal(await windows.getTitle(), "Window API editor");
-            await windows.setTitle({
-              title: "수정된 제목 📝",
-            });
-            assert.equal(await windows.getTitle(), "수정된 제목 📝");
-            await assert.rejects(
-              windows.setTitle({
-                title: "invalid\0title",
-              }),
-              {
-                code: "INVALID_ARGUMENT",
-              },
-            );
-            assert.equal(await windows.getTitle(), "수정된 제목 📝");
-            // The driver verifies that close confirmation uses this runtime caption.
-            assert.equal(await windows.isOpen(), true);
-            assert.equal(await windows.isNormal(), true);
-            await windows.hide();
-            assert.equal(await windows.activate(), false);
-            await windows.showInactive();
-            assert.equal(await windows.isVisible(), true);
-            assert.equal(await windows.isFocused(), false);
-            await windows.minimize();
-            assert.equal(await windows.activate(), false);
-            await windows.showInactive();
-            assert.equal(await windows.isMinimized(), true);
-            await windows.unmaximize();
-            const activated = await windows.activate();
-            assert.equal(activated, await windows.isFocused());
-            assert.equal(await windows.isVisible(), true);
-            assert.equal(await windows.isMinimized(), false);
-            assert.equal(await windows.isMaximized(), false);
-            console.log(
-              JSON.stringify({
-                event: "window-api-maximize-history",
-              }),
-            );
-            await windows.maximize();
-            assert.equal(await windows.isNormal(), false);
-            assert.equal(await windows.isMaximized(), true);
-            await windows.minimize();
-            assert.equal(await windows.isMinimized(), true);
-            await windows.restore();
-            assert.equal(await windows.isMaximized(), true);
-            await windows.minimize();
-            await windows.unmaximize();
-            assert.equal(await windows.isMinimized(), false);
-            assert.equal(await windows.isMaximized(), false);
-            await windows.toggleMaximize();
-            assert.equal(await windows.isMaximized(), true);
-            await windows.toggleMaximize();
-            assert.equal(await windows.isMaximized(), false);
-            for (const name of [
-              "minimize",
-              "maximize",
-              "unmaximize",
-              "restore",
-              "toggleMaximize",
-            ] as const) {
-              await windows.hide();
+              });
+              break;
+            case 3: {
+              assert.equal(await windows.isFullscreen(), true);
+              assert.equal(await windows.isMaximized(), true);
               assert.equal(await windows.isVisible(), false);
-              assert.equal(await windows.isFocused(), false);
-              await windows[name]();
-              assert.equal(await windows.isVisible(), true);
+              await windows.setFullscreen({
+                fullscreen: false,
+              });
+              assert.equal(await windows.isMaximized(), true);
+              assert.equal(await windows.isVisible(), false);
               await windows.unmaximize();
-            }
-            console.log(
-              JSON.stringify({
-                event: "window-api-state",
-              }),
-            );
-            await assert.rejects(
-              windows.create({}),
-              (error: unknown) =>
-                (
-                  error as {
-                    code: string;
-                  }
-                ).code === "BUSY",
-            );
-            await windows.hide();
-            const foreground = user.symbols.GetForegroundWindow();
-            // Read-only queries must not activate a hidden window.
-            assert.equal(await windows.isOpen(), true);
-            await windows.getReadiness();
-            assert.equal(await windows.isVisible(), false);
-            assert.equal(
-              user.symbols.GetForegroundWindow(),
-              foreground,
-              "lookup must not activate a hidden window",
-            );
-            await windows.show();
-            try {
-              await windows.focus();
-            } catch (error) {
-              assert.equal(
-                (
-                  error as {
-                    code: string;
-                  }
-                ).code,
-                "BUSY",
+              assert.deepEqual(
+                {
+                  ...(await windows.getSizeConstraints()),
+                },
+                {
+                  minWidth: 500,
+                  minHeight: 400,
+                  maxWidth: 800,
+                  maxHeight: 600,
+                },
               );
-            }
-            await windows.setSize({
-              width: 700,
-              height: 550,
-            });
-            assert.equal(await windows.isResizable(), true);
-            assert.equal(await windows.isMovable(), true);
-            await windows.setResizable({
-              resizable: false,
-            });
-            await windows.setMovable({
-              movable: false,
-            });
-            assert.equal(await windows.isResizable(), false);
-            assert.equal(await windows.isMovable(), false);
-            // Programmatic geometry remains available while user interactions are disabled.
-            await windows.setSize({
-              width: 700,
-              height: 550,
-            });
-            await windows.setPosition({
-              x: 20,
-              y: 30,
-            });
-            await windows.setResizable({
-              resizable: true,
-            });
-            await windows.setMovable({
-              movable: true,
-            });
-            assert.equal(await windows.getAspectRatio(), null);
-            const beforeAspectRatio = await windows.getOuterBounds();
-            await windows.setAspectRatio({
-              ratio: 16 / 9,
-            });
-            assert.equal(await windows.getAspectRatio(), 16 / 9);
-            // Setting the lock leaves the current size unchanged.
-            assert.deepEqual(await windows.getOuterBounds(), beforeAspectRatio);
-            await assert.rejects(
-              windows.setAspectRatio({
-                ratio: 0,
-              }),
-              {
-                code: "INVALID_ARGUMENT",
-              },
-            );
-            assert.equal(await windows.getAspectRatio(), 16 / 9);
-            await windows.setAspectRatio({
-              ratio: null,
-            });
-            assert.equal(await windows.getAspectRatio(), null);
-            // Verify the public API through the real core, UI worker and HWND.
-            const content = await windows.getContentSize({
-              unit: "logical",
-            });
-            assert.equal(content.width, 700);
-            assert.equal(content.height, 550);
-            assert.deepEqual(
-              {
-                ...(await windows.getOuterPosition({})),
-              },
-              {
+              assert.deepEqual(
+                {
+                  ...(await windows.getMinSize()),
+                },
+                {
+                  width: 500,
+                  height: 400,
+                },
+              );
+              assert.deepEqual(
+                {
+                  ...(await windows.getMaxSize()),
+                },
+                {
+                  width: 800,
+                  height: 600,
+                },
+              );
+              await assertContentSize(500, 600);
+              console.log(
+                JSON.stringify({
+                  event: "window-api-focusability",
+                }),
+              );
+              assert.equal(await windows.isFocusable(), false);
+              await windows.setFocusable({
+                focusable: true,
+              });
+              assert.equal(await windows.isFocusable(), true);
+              await windows.setFocusable({
+                focusable: false,
+              });
+              assert.equal(await windows.isFocusable(), false);
+              await windows.setMinimizable({
+                minimizable: false,
+              });
+              await windows.setMaximizable({
+                maximizable: false,
+              });
+              await windows.setClosable({
+                closable: false,
+              });
+              assert.equal(await windows.isMinimizable(), false);
+              assert.equal(await windows.isMaximizable(), false);
+              assert.equal(await windows.isClosable(), false);
+              assert.equal(await windows.getTitle(), "Window API editor");
+              await windows.setTitle({
+                title: "수정된 제목 📝",
+              });
+              assert.equal(await windows.getTitle(), "수정된 제목 📝");
+              await assert.rejects(
+                windows.setTitle({
+                  title: "invalid\0title",
+                }),
+                {
+                  code: "INVALID_ARGUMENT",
+                },
+              );
+              assert.equal(await windows.getTitle(), "수정된 제목 📝");
+              // The driver verifies that close confirmation uses this runtime caption.
+              assert.equal(await windows.isOpen(), true);
+              assert.equal(await windows.isNormal(), true);
+              await windows.hide();
+              assert.equal(await windows.activate(), false);
+              await windows.showInactive();
+              assert.equal(await windows.isVisible(), true);
+              assert.equal(await windows.isFocused(), false);
+              await windows.minimize();
+              assert.equal(await windows.activate(), false);
+              await windows.showInactive();
+              assert.equal(await windows.isMinimized(), true);
+              await windows.unmaximize();
+              const activated = await windows.activate();
+              assert.equal(activated, await windows.isFocused());
+              assert.equal(await windows.isVisible(), true);
+              assert.equal(await windows.isMinimized(), false);
+              assert.equal(await windows.isMaximized(), false);
+              console.log(
+                JSON.stringify({
+                  event: "window-api-maximize-history",
+                }),
+              );
+              await windows.maximize();
+              assert.equal(await windows.isNormal(), false);
+              assert.equal(await windows.isMaximized(), true);
+              await windows.minimize();
+              assert.equal(await windows.isMinimized(), true);
+              await windows.restore();
+              assert.equal(await windows.isMaximized(), true);
+              await windows.minimize();
+              await windows.unmaximize();
+              assert.equal(await windows.isMinimized(), false);
+              assert.equal(await windows.isMaximized(), false);
+              await windows.toggleMaximize();
+              assert.equal(await windows.isMaximized(), true);
+              await windows.toggleMaximize();
+              assert.equal(await windows.isMaximized(), false);
+              for (const name of [
+                "minimize",
+                "maximize",
+                "unmaximize",
+                "restore",
+                "toggleMaximize",
+              ] as const) {
+                await windows.hide();
+                assert.equal(await windows.isVisible(), false);
+                assert.equal(await windows.isFocused(), false);
+                await windows[name]();
+                assert.equal(await windows.isVisible(), true);
+                await windows.unmaximize();
+              }
+              console.log(
+                JSON.stringify({
+                  event: "window-api-state",
+                }),
+              );
+              await assert.rejects(
+                windows.create({}),
+                (error: unknown) =>
+                  (
+                    error as {
+                      code: string;
+                    }
+                  ).code === "BUSY",
+              );
+              await windows.hide();
+              const foreground = user.symbols.GetForegroundWindow();
+              // Read-only queries must not activate a hidden window.
+              assert.equal(await windows.isOpen(), true);
+              await windows.getReadiness();
+              assert.equal(await windows.isVisible(), false);
+              assert.equal(
+                user.symbols.GetForegroundWindow(),
+                foreground,
+                "lookup must not activate a hidden window",
+              );
+              await windows.show();
+              try {
+                await windows.focus();
+              } catch (error) {
+                assert.equal(
+                  (
+                    error as {
+                      code: string;
+                    }
+                  ).code,
+                  "BUSY",
+                );
+              }
+              await windows.setSize({
+                width: 700,
+                height: 550,
+              });
+              assert.equal(await windows.isResizable(), true);
+              assert.equal(await windows.isMovable(), true);
+              await windows.setResizable({
+                resizable: false,
+              });
+              await windows.setMovable({
+                movable: false,
+              });
+              assert.equal(await windows.isResizable(), false);
+              assert.equal(await windows.isMovable(), false);
+              // Programmatic geometry remains available while user interactions are disabled.
+              await windows.setSize({
+                width: 700,
+                height: 550,
+              });
+              await windows.setPosition({
                 x: 20,
                 y: 30,
-                dpi: content.dpi,
-              },
-            );
-            const outer = await windows.getOuterBounds({});
-            await windows.hide();
-            const centerForeground = user.symbols.GetForegroundWindow();
-            await windows.center();
-            const centered = await windows.getOuterBounds();
-            assert.equal(centered.width, outer.width);
-            assert.equal(centered.height, outer.height);
-            assert.equal(await windows.isVisible(), false);
-            assert.equal(user.symbols.GetForegroundWindow(), centerForeground);
-            await windows.center();
-            assert.deepEqual(await windows.getOuterBounds(), centered);
-            // The centered window lies inside exactly one monitor work area.
-            const centerTarget = (await windows.getMonitors()).find(
-              (monitor) =>
-                centered.x >= monitor.workArea.x &&
-                centered.y >= monitor.workArea.y &&
-                centered.x + centered.width <=
-                  monitor.workArea.x + monitor.workArea.width &&
-                centered.y + centered.height <=
-                  monitor.workArea.y + monitor.workArea.height,
-            );
-            assert(centerTarget);
-            await windows.setPosition({
-              x: outer.x,
-              y: outer.y,
-            });
-            await windows.center({
-              monitorId: centerTarget.id,
-            });
-            assert.deepEqual(await windows.getOuterBounds(), centered);
-            assert.deepEqual(
-              {
-                x: centered.x,
-                y: centered.y,
-              },
-              {
-                x: Math.round(
-                  centerTarget.workArea.x +
-                    (centerTarget.workArea.width - centered.width) / 2,
-                ),
-                y: Math.round(
-                  centerTarget.workArea.y +
-                    (centerTarget.workArea.height - centered.height) / 2,
-                ),
-              },
-            );
-            assert.equal(await windows.isVisible(), false);
-            assert.equal(user.symbols.GetForegroundWindow(), centerForeground);
-            // Start off-center so a fallback to the current monitor cannot pass unnoticed.
-            await windows.setPosition({
-              x: outer.x,
-              y: outer.y,
-            });
-            const movedBeforeReject = await windows.getOuterBounds();
-            assert.notDeepEqual(
-              {
-                x: movedBeforeReject.x,
-                y: movedBeforeReject.y,
-              },
-              {
-                x: centered.x,
-                y: centered.y,
-              },
-            );
-            await assert.rejects(
-              windows.center({
-                monitorId: "\\\\.\\DISPLAY999",
-              }),
-              {
-                code: "INVALID_ARGUMENT",
-              },
-            );
-            assert.deepEqual(await windows.getOuterBounds(), movedBeforeReject);
-            // Every anchor places the hidden window against its work-area edge, inset by margin.
-            const anchorMargin = Math.round((12 * centerTarget.dpi) / 96);
-            const anchorArea = centerTarget.workArea;
-            const anchorLeft = anchorArea.x + anchorMargin;
-            const anchorTop = anchorArea.y + anchorMargin;
-            const anchorRight =
-              anchorArea.x + anchorArea.width - centered.width - anchorMargin;
-            const anchorBottom =
-              anchorArea.y + anchorArea.height - centered.height - anchorMargin;
-            for (const [anchor, x, y] of [
-              [
-                "top-left",
-                anchorLeft,
-                anchorTop,
-              ],
-              [
-                "top",
-                centered.x,
-                anchorTop,
-              ],
-              [
-                "top-right",
-                anchorRight,
-                anchorTop,
-              ],
-              [
-                "left",
-                anchorLeft,
-                centered.y,
-              ],
-              [
-                "center",
-                centered.x,
-                centered.y,
-              ],
-              [
-                "right",
-                anchorRight,
-                centered.y,
-              ],
-              [
-                "bottom-left",
-                anchorLeft,
-                anchorBottom,
-              ],
-              [
-                "bottom",
-                centered.x,
-                anchorBottom,
-              ],
-              [
-                "bottom-right",
-                anchorRight,
-                anchorBottom,
-              ],
-            ] as const) {
+              });
+              await windows.setResizable({
+                resizable: true,
+              });
+              await windows.setMovable({
+                movable: true,
+              });
+              assert.equal(await windows.getAspectRatio(), null);
+              const beforeAspectRatio = await windows.getOuterBounds();
+              await windows.setAspectRatio({
+                ratio: 16 / 9,
+              });
+              assert.equal(await windows.getAspectRatio(), 16 / 9);
+              // Setting the lock leaves the current size unchanged.
+              assert.deepEqual(
+                await windows.getOuterBounds(),
+                beforeAspectRatio,
+              );
+              await assert.rejects(
+                windows.setAspectRatio({
+                  ratio: 0,
+                }),
+                {
+                  code: "INVALID_ARGUMENT",
+                },
+              );
+              assert.equal(await windows.getAspectRatio(), 16 / 9);
+              await windows.setAspectRatio({
+                ratio: null,
+              });
+              assert.equal(await windows.getAspectRatio(), null);
+              // Verify the public API through the real core, UI worker and HWND.
+              const content = await windows.getContentSize({
+                unit: "logical",
+              });
+              assert.equal(content.width, 700);
+              assert.equal(content.height, 550);
+              assert.deepEqual(
+                {
+                  ...(await windows.getOuterPosition({})),
+                },
+                {
+                  x: 20,
+                  y: 30,
+                  dpi: content.dpi,
+                },
+              );
+              const outer = await windows.getOuterBounds({});
+              await windows.hide();
+              const centerForeground = user.symbols.GetForegroundWindow();
+              await windows.center();
+              const centered = await windows.getOuterBounds();
+              assert.equal(centered.width, outer.width);
+              assert.equal(centered.height, outer.height);
+              assert.equal(await windows.isVisible(), false);
+              assert.equal(
+                user.symbols.GetForegroundWindow(),
+                centerForeground,
+              );
+              await windows.center();
+              assert.deepEqual(await windows.getOuterBounds(), centered);
+              // The centered window lies inside exactly one monitor work area.
+              const centerTarget = (await windows.getMonitors()).find(
+                (monitor) =>
+                  centered.x >= monitor.workArea.x &&
+                  centered.y >= monitor.workArea.y &&
+                  centered.x + centered.width <=
+                    monitor.workArea.x + monitor.workArea.width &&
+                  centered.y + centered.height <=
+                    monitor.workArea.y + monitor.workArea.height,
+              );
+              assert(centerTarget);
               await windows.setPosition({
                 x: outer.x,
                 y: outer.y,
               });
-              assert.equal(
-                await windows.moveToAnchor({
-                  anchor,
-                  monitorId: centerTarget.id,
-                  margin: 12,
-                }),
-                null,
+              await windows.center({
+                monitorId: centerTarget.id,
+              });
+              assert.deepEqual(await windows.getOuterBounds(), centered);
+              assert.deepEqual(
+                {
+                  x: centered.x,
+                  y: centered.y,
+                },
+                {
+                  x: Math.round(
+                    centerTarget.workArea.x +
+                      (centerTarget.workArea.width - centered.width) / 2,
+                  ),
+                  y: Math.round(
+                    centerTarget.workArea.y +
+                      (centerTarget.workArea.height - centered.height) / 2,
+                  ),
+                },
               );
+              assert.equal(await windows.isVisible(), false);
+              assert.equal(
+                user.symbols.GetForegroundWindow(),
+                centerForeground,
+              );
+              // Start off-center so a fallback to the current monitor cannot pass unnoticed.
+              await windows.setPosition({
+                x: outer.x,
+                y: outer.y,
+              });
+              const movedBeforeReject = await windows.getOuterBounds();
+              assert.notDeepEqual(
+                {
+                  x: movedBeforeReject.x,
+                  y: movedBeforeReject.y,
+                },
+                {
+                  x: centered.x,
+                  y: centered.y,
+                },
+              );
+              await assert.rejects(
+                windows.center({
+                  monitorId: "\\\\.\\DISPLAY999",
+                }),
+                {
+                  code: "INVALID_ARGUMENT",
+                },
+              );
+              assert.deepEqual(
+                await windows.getOuterBounds(),
+                movedBeforeReject,
+              );
+              // Every anchor places the hidden window against its work-area edge, inset by margin.
+              const anchorMargin = Math.round((12 * centerTarget.dpi) / 96);
+              const anchorArea = centerTarget.workArea;
+              const anchorLeft = anchorArea.x + anchorMargin;
+              const anchorTop = anchorArea.y + anchorMargin;
+              const anchorRight =
+                anchorArea.x + anchorArea.width - centered.width - anchorMargin;
+              const anchorBottom =
+                anchorArea.y +
+                anchorArea.height -
+                centered.height -
+                anchorMargin;
+              for (const [anchor, x, y] of [
+                [
+                  "top-left",
+                  anchorLeft,
+                  anchorTop,
+                ],
+                [
+                  "top",
+                  centered.x,
+                  anchorTop,
+                ],
+                [
+                  "top-right",
+                  anchorRight,
+                  anchorTop,
+                ],
+                [
+                  "left",
+                  anchorLeft,
+                  centered.y,
+                ],
+                [
+                  "center",
+                  centered.x,
+                  centered.y,
+                ],
+                [
+                  "right",
+                  anchorRight,
+                  centered.y,
+                ],
+                [
+                  "bottom-left",
+                  anchorLeft,
+                  anchorBottom,
+                ],
+                [
+                  "bottom",
+                  centered.x,
+                  anchorBottom,
+                ],
+                [
+                  "bottom-right",
+                  anchorRight,
+                  anchorBottom,
+                ],
+              ] as const) {
+                await windows.setPosition({
+                  x: outer.x,
+                  y: outer.y,
+                });
+                assert.equal(
+                  await windows.moveToAnchor({
+                    anchor,
+                    monitorId: centerTarget.id,
+                    margin: 12,
+                  }),
+                  null,
+                );
+                assert.deepEqual(
+                  {
+                    ...(await windows.getOuterBounds()),
+                  },
+                  {
+                    ...centered,
+                    x,
+                    y,
+                  },
+                );
+              }
+              assert.equal(await windows.isVisible(), false);
+              assert.equal(
+                user.symbols.GetForegroundWindow(),
+                centerForeground,
+              );
+              await windows.setPosition({
+                x: outer.x,
+                y: outer.y,
+              });
+              await windows.moveToAnchor({
+                anchor: "bottom-right",
+              });
               assert.deepEqual(
                 {
                   ...(await windows.getOuterBounds()),
                 },
                 {
                   ...centered,
-                  x,
-                  y,
+                  x: anchorArea.x + anchorArea.width - centered.width,
+                  y: anchorArea.y + anchorArea.height - centered.height,
                 },
               );
-            }
-            assert.equal(await windows.isVisible(), false);
-            assert.equal(user.symbols.GetForegroundWindow(), centerForeground);
-            await windows.setPosition({
-              x: outer.x,
-              y: outer.y,
-            });
-            await windows.moveToAnchor({
-              anchor: "bottom-right",
-            });
-            assert.deepEqual(
-              {
-                ...(await windows.getOuterBounds()),
-              },
-              {
-                ...centered,
-                x: anchorArea.x + anchorArea.width - centered.width,
-                y: anchorArea.y + anchorArea.height - centered.height,
-              },
-            );
-            await windows.setPosition({
-              x: outer.x,
-              y: outer.y,
-            });
-            const movedBeforeAnchorReject = await windows.getOuterBounds();
-            await assert.rejects(
-              windows.moveToAnchor({
-                anchor: "top-left",
-                monitorId: "\\\\.\\DISPLAY999",
-              }),
-              {
-                code: "INVALID_ARGUMENT",
-              },
-            );
-            assert.deepEqual(
-              await windows.getOuterBounds(),
-              movedBeforeAnchorReject,
-            );
-            await verifyMoveNextToRect({
-              area: anchorArea,
-              outer,
-              centered,
-              foreground: centerForeground,
-            });
-            await windows.setOuterBounds({
-              x: outer.x,
-              y: outer.y,
-              width: outer.width,
-              height: outer.height,
-            });
-            await windows.show();
-            assert.deepEqual(await windows.getNormalBounds({}), outer);
-            const inner = await windows.getContentBounds({});
-            assert(inner.x >= outer.x && inner.y > outer.y);
-            assert(outer.width > inner.width && outer.height > inner.height);
-            assert.deepEqual(
-              {
-                ...(await windows.getOuterSize({})),
-              },
-              {
+              await windows.setPosition({
+                x: outer.x,
+                y: outer.y,
+              });
+              const movedBeforeAnchorReject = await windows.getOuterBounds();
+              await assert.rejects(
+                windows.moveToAnchor({
+                  anchor: "top-left",
+                  monitorId: "\\\\.\\DISPLAY999",
+                }),
+                {
+                  code: "INVALID_ARGUMENT",
+                },
+              );
+              assert.deepEqual(
+                await windows.getOuterBounds(),
+                movedBeforeAnchorReject,
+              );
+              await verifyMoveNextToRect({
+                area: anchorArea,
+                outer,
+                centered,
+                foreground: centerForeground,
+              });
+              await windows.setOuterBounds({
+                x: outer.x,
+                y: outer.y,
                 width: outer.width,
                 height: outer.height,
-                dpi: outer.dpi,
-              },
-            );
-            assert.deepEqual(
-              {
-                ...(await windows.getContentPosition({})),
-              },
-              {
-                x: inner.x,
-                y: inner.y,
-                dpi: inner.dpi,
-              },
-            );
-            const physical = await windows.toPhysical({
-              value: {
-                width: 700,
-                height: 550,
-              },
-            });
-            assert.deepEqual(
-              {
-                ...physical,
-                value: {
-                  ...physical.value,
+              });
+              await windows.show();
+              assert.deepEqual(await windows.getNormalBounds({}), outer);
+              const inner = await windows.getContentBounds({});
+              assert(inner.x >= outer.x && inner.y > outer.y);
+              assert(outer.width > inner.width && outer.height > inner.height);
+              assert.deepEqual(
+                {
+                  ...(await windows.getOuterSize({})),
                 },
-              },
-              {
-                value: {
-                  width: inner.width,
-                  height: inner.height,
+                {
+                  width: outer.width,
+                  height: outer.height,
+                  dpi: outer.dpi,
                 },
-                dpi: content.dpi,
-              },
-            );
-            const logical = await windows.toLogical({
-              value: physical.value,
-            });
-            assert.deepEqual(
-              {
-                ...logical,
-                value: {
-                  ...logical.value,
+              );
+              assert.deepEqual(
+                {
+                  ...(await windows.getContentPosition({})),
                 },
-              },
-              {
+                {
+                  x: inner.x,
+                  y: inner.y,
+                  dpi: inner.dpi,
+                },
+              );
+              const physical = await windows.toPhysical({
                 value: {
                   width: 700,
                   height: 550,
                 },
-                dpi: content.dpi,
-              },
-            );
-            await windows.setSize({
-              width: 300,
-              height: 300,
-            });
-            await assertContentSize(500, 400);
-            await windows.setSize({
-              width: 1000,
-              height: 800,
-            });
-            await assertContentSize(800, 600);
-            await windows.setSizeConstraints({
-              minWidth: 600,
-              maxWidth: 750,
-              maxHeight: 550,
-            });
-            await assertContentSize(750, 550);
-            await windows.setMinSize({
-              width: 700,
-              height: null,
-            });
-            assert.deepEqual(
-              {
-                ...(await windows.getSizeConstraints()),
-              },
-              {
-                minWidth: 700,
-                minHeight: null,
+              });
+              assert.deepEqual(
+                {
+                  ...physical,
+                  value: {
+                    ...physical.value,
+                  },
+                },
+                {
+                  value: {
+                    width: inner.width,
+                    height: inner.height,
+                  },
+                  dpi: content.dpi,
+                },
+              );
+              const logical = await windows.toLogical({
+                value: physical.value,
+              });
+              assert.deepEqual(
+                {
+                  ...logical,
+                  value: {
+                    ...logical.value,
+                  },
+                },
+                {
+                  value: {
+                    width: 700,
+                    height: 550,
+                  },
+                  dpi: content.dpi,
+                },
+              );
+              await windows.setSize({
+                width: 300,
+                height: 300,
+              });
+              await assertContentSize(500, 400);
+              await windows.setSize({
+                width: 1000,
+                height: 800,
+              });
+              await assertContentSize(800, 600);
+              await windows.setSizeConstraints({
+                minWidth: 600,
                 maxWidth: 750,
                 maxHeight: 550,
-              },
-            );
-            const beforeInvalid = await windows.getSizeConstraints();
-            await assert.rejects(
-              windows.setMaxSize({
-                width: 699,
-                height: null,
-              }),
-              (error: unknown) =>
-                (
-                  error as {
-                    code: string;
-                  }
-                ).code === "INVALID_ARGUMENT",
-            );
-            assert.deepEqual(
-              {
-                ...(await windows.getSizeConstraints()),
-              },
-              {
-                ...beforeInvalid,
-              },
-            );
-            await windows.setSizeConstraints({
-              minHeight: 350,
-            });
-            assert.deepEqual(
-              {
-                ...(await windows.getSizeConstraints()),
-              },
-              {
-                minWidth: null,
-                minHeight: 350,
-                maxWidth: null,
-                maxHeight: null,
-              },
-            );
-            await windows.setMinSize({
-              width: null,
-              height: null,
-            });
-            await windows.setMaxSize({
-              width: null,
-              height: null,
-            });
-            assert.deepEqual(
-              {
-                ...(await windows.getSizeConstraints()),
-              },
-              {
-                minWidth: null,
-                minHeight: null,
-                maxWidth: null,
-                maxHeight: null,
-              },
-            );
-            await windows.setSize({
-              width: 650,
-              height: 550,
-            });
-            await windows.setSizeConstraints({
-              minWidth: 600,
-              minHeight: 500,
-              maxWidth: 800,
-              maxHeight: 700,
-            });
-            await windows.setFullscreen({
-              fullscreen: true,
-            });
-            assert.equal(await windows.isFullscreen(), true);
-            for (const name of [
-              "minimize",
-              "maximize",
-              "unmaximize",
-              "restore",
-              "toggleMaximize",
-              "center",
-            ] as const) {
-              await assert.rejects(windows[name](), {
-                code: "INVALID_ARGUMENT",
               });
-            }
-            await assert.rejects(
-              windows.setSize({
-                width: 500,
-                height: 400,
-              }),
-              (error: unknown) =>
-                (
-                  error as {
-                    code: string;
-                  }
-                ).code === "INVALID_ARGUMENT",
-            );
-            await windows.setSizeConstraints({
-              minWidth: 700,
-              minHeight: 500,
-              maxWidth: 800,
-              maxHeight: 700,
-            });
-            assert.deepEqual(
-              {
-                ...(await windows.getSizeConstraints()),
-              },
-              {
+              await assertContentSize(750, 550);
+              await windows.setMinSize({
+                width: 700,
+                height: null,
+              });
+              assert.deepEqual(
+                {
+                  ...(await windows.getSizeConstraints()),
+                },
+                {
+                  minWidth: 700,
+                  minHeight: null,
+                  maxWidth: 750,
+                  maxHeight: 550,
+                },
+              );
+              const beforeInvalid = await windows.getSizeConstraints();
+              await assert.rejects(
+                windows.setMaxSize({
+                  width: 699,
+                  height: null,
+                }),
+                (error: unknown) =>
+                  (
+                    error as {
+                      code: string;
+                    }
+                  ).code === "INVALID_ARGUMENT",
+              );
+              assert.deepEqual(
+                {
+                  ...(await windows.getSizeConstraints()),
+                },
+                {
+                  ...beforeInvalid,
+                },
+              );
+              await windows.setSizeConstraints({
+                minHeight: 350,
+              });
+              assert.deepEqual(
+                {
+                  ...(await windows.getSizeConstraints()),
+                },
+                {
+                  minWidth: null,
+                  minHeight: 350,
+                  maxWidth: null,
+                  maxHeight: null,
+                },
+              );
+              await windows.setMinSize({
+                width: null,
+                height: null,
+              });
+              await windows.setMaxSize({
+                width: null,
+                height: null,
+              });
+              assert.deepEqual(
+                {
+                  ...(await windows.getSizeConstraints()),
+                },
+                {
+                  minWidth: null,
+                  minHeight: null,
+                  maxWidth: null,
+                  maxHeight: null,
+                },
+              );
+              await windows.setSize({
+                width: 650,
+                height: 550,
+              });
+              await windows.setSizeConstraints({
+                minWidth: 600,
+                minHeight: 500,
+                maxWidth: 800,
+                maxHeight: 700,
+              });
+              await windows.setFullscreen({
+                fullscreen: true,
+              });
+              assert.equal(await windows.isFullscreen(), true);
+              for (const name of [
+                "minimize",
+                "maximize",
+                "unmaximize",
+                "restore",
+                "toggleMaximize",
+                "center",
+              ] as const) {
+                await assert.rejects(windows[name](), {
+                  code: "INVALID_ARGUMENT",
+                });
+              }
+              await assert.rejects(
+                windows.setSize({
+                  width: 500,
+                  height: 400,
+                }),
+                (error: unknown) =>
+                  (
+                    error as {
+                      code: string;
+                    }
+                  ).code === "INVALID_ARGUMENT",
+              );
+              await windows.setSizeConstraints({
                 minWidth: 700,
                 minHeight: 500,
                 maxWidth: 800,
                 maxHeight: 700,
-              },
-            );
-            await windows.setFullscreen({
-              fullscreen: false,
-            });
-            await assertContentSize(700, 550);
-            assert.equal(await windows.isFullscreen(), false);
-            assert.equal(await windows.getOpacity(), 1);
-            await windows.setOpacity({
-              opacity: 0.5,
-            });
-            assert.ok(Math.abs((await windows.getOpacity()) - 0.5) <= 1 / 255);
-            await windows.setOpacity({
-              opacity: 1,
-            });
-            assert.equal(await windows.getOpacity(), 1);
-            // The declared color is live, and a runtime change replaces it.
-            assert.equal(await windows.getBackgroundColor(), "#112233");
-            assert.equal(await windows.getBackgroundColor(), null);
-            await windows.setBackgroundColor({
-              color: "#ABC",
-            });
-            assert.equal(await windows.getBackgroundColor(), "#aabbcc");
-            assert.equal(await windows.getBackgroundColor(), null);
-            await windows.setBackgroundColor({
-              color: "#203040",
-            });
-            assert.equal(await windows.getBackgroundColor(), "#203040");
-            await assert.rejects(
-              windows.setBackgroundColor({
-                color: "#20304080",
-              }),
-              (error: unknown) =>
-                (
-                  error as {
-                    code: string;
-                  }
-                ).code === "INVALID_ARGUMENT",
-            );
-            assert.equal(await windows.getBackgroundColor(), "#203040");
-            assert.equal(await windows.isIgnoreMouseEvents(), false);
-            await windows.setIgnoreMouseEvents({
-              ignore: true,
-            });
-            assert.equal(await windows.isIgnoreMouseEvents(), true);
-            await windows.setIgnoreMouseEvents({
-              ignore: false,
-            });
-            assert.equal(await windows.isIgnoreMouseEvents(), false);
-            assert.equal(await windows.isFullscreenable(), true);
-            await windows.setFullscreenable({
-              fullscreenable: false,
-            });
-            assert.equal(await windows.isFullscreenable(), false);
-            await assert.rejects(
-              windows.setFullscreen({
-                fullscreen: true,
-              }),
-              (error) =>
-                (
-                  error as {
-                    code?: string;
-                  }
-                ).code === "INVALID_ARGUMENT",
-            );
-            assert.equal(await windows.isFullscreen(), false);
-            // The state resets on recreate, which the next run asserts.
-            console.log(
-              JSON.stringify({
-                event: "window-api-geometry",
-              }),
-            );
-            await windows.setCloseConfirmation({
-              message: "Close window?",
-            });
-            await windows.setFocusable({
-              focusable: true,
-            });
-            assert.equal(await windows.close(), false);
-            assert.equal(await windows.isOpen(), true);
-            // Recreation bypasses the close confirmation and revokes this document.
-            await windows.recreate({});
-          } else {
-            assert.equal(run, 4);
-            // Recreation starts from the declaration, not from the previous runtime state.
-            assert.equal(await windows.getBackgroundColor(), "#112233");
-            assert.equal(await windows.isFocusable(), true);
-            assert.equal(await windows.isMinimizable(), true);
-            assert.equal(await windows.isMaximizable(), true);
-            assert.equal(await windows.isClosable(), true);
-            assert.equal(await windows.isFullscreenable(), true);
-            assert.equal(await windows.getTitle(), "Window API editor");
-            assert.deepEqual(
-              {
-                ...(await windows.getSizeConstraints()),
-              },
-              {
-                minWidth: 500,
-                minHeight: 400,
-                maxWidth: 800,
-                maxHeight: 600,
-              },
-            );
-            assert.equal(
-              quitAttempts,
-              0,
-              "recreation must bypass app quit checks",
-            );
-            await writeFile(
-              reportPath,
-              JSON.stringify({
-                pass: true,
-                cancellations,
-                revokedDocuments: cancellations >= 2,
-                navigationPreservesIdentity: true,
-              }),
-            );
-            // Closing the only window ends the app; the quit check approves it.
-            await windows.close();
+              });
+              assert.deepEqual(
+                {
+                  ...(await windows.getSizeConstraints()),
+                },
+                {
+                  minWidth: 700,
+                  minHeight: 500,
+                  maxWidth: 800,
+                  maxHeight: 700,
+                },
+              );
+              await windows.setFullscreen({
+                fullscreen: false,
+              });
+              await assertContentSize(700, 550);
+              assert.equal(await windows.isFullscreen(), false);
+              assert.equal(await windows.getOpacity(), 1);
+              await windows.setOpacity({
+                opacity: 0.5,
+              });
+              assert.ok(
+                Math.abs((await windows.getOpacity()) - 0.5) <= 1 / 255,
+              );
+              await windows.setOpacity({
+                opacity: 1,
+              });
+              assert.equal(await windows.getOpacity(), 1);
+              // The declared color is live, and a runtime change replaces it.
+              assert.equal(await windows.getBackgroundColor(), "#112233");
+              assert.equal(await windows.getBackgroundColor(), null);
+              await windows.setBackgroundColor({
+                color: "#ABC",
+              });
+              assert.equal(await windows.getBackgroundColor(), "#aabbcc");
+              assert.equal(await windows.getBackgroundColor(), null);
+              await windows.setBackgroundColor({
+                color: "#203040",
+              });
+              assert.equal(await windows.getBackgroundColor(), "#203040");
+              await assert.rejects(
+                windows.setBackgroundColor({
+                  color: "#20304080",
+                }),
+                (error: unknown) =>
+                  (
+                    error as {
+                      code: string;
+                    }
+                  ).code === "INVALID_ARGUMENT",
+              );
+              assert.equal(await windows.getBackgroundColor(), "#203040");
+              assert.equal(await windows.isIgnoreMouseEvents(), false);
+              await windows.setIgnoreMouseEvents({
+                ignore: true,
+              });
+              assert.equal(await windows.isIgnoreMouseEvents(), true);
+              await windows.setIgnoreMouseEvents({
+                ignore: false,
+              });
+              assert.equal(await windows.isIgnoreMouseEvents(), false);
+              assert.equal(await windows.isFullscreenable(), true);
+              await windows.setFullscreenable({
+                fullscreenable: false,
+              });
+              assert.equal(await windows.isFullscreenable(), false);
+              await assert.rejects(
+                windows.setFullscreen({
+                  fullscreen: true,
+                }),
+                (error) =>
+                  (
+                    error as {
+                      code?: string;
+                    }
+                  ).code === "INVALID_ARGUMENT",
+              );
+              assert.equal(await windows.isFullscreen(), false);
+              // The state resets on recreate, which the next run asserts.
+              console.log(
+                JSON.stringify({
+                  event: "window-api-geometry",
+                }),
+              );
+              await windows.setCloseConfirmation({
+                message: "Close window?",
+              });
+              await windows.setFocusable({
+                focusable: true,
+              });
+              assert.equal(await windows.close(), false);
+              assert.equal(await windows.isOpen(), true);
+              // Recreation bypasses the close confirmation and revokes this document.
+              await windows.recreate({});
+              break;
+            }
+            default:
+              await verifyRecreatedDeclaration(run);
           }
           return null;
         },

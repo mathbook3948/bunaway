@@ -451,8 +451,6 @@ if (!process.argv.includes("--child")) {
     );
     completed = true;
     await windows.destroy();
-    await windows.destroy();
-    await windows.destroy();
     assert(desktop);
     await desktop.quit();
   }

@@ -514,7 +514,7 @@ macOS는 앱의 독립된 임시 WebKit 프로필을 사용합니다. 창을 재
 승인하며, 마지막 열린 창이면 기본 `desktop.closeBehavior: "quit"`에 따라 `beforeQuit` 승인 뒤 앱을 종료합니다.
 `"keep-alive"`는 앱을 유지합니다. `desktop`은 트레이와 `"hide"`를 제외하고 지원합니다.
 닫기 확인(`setCloseConfirmation`)은 아직 지원하지 않습니다. 아래 상태 변경, 크기와 닫기 확인 설명은 Windows의 동작입니다.
-[닫기 요청](#닫기-요청)과 [창 수명 이벤트](#창-수명-이벤트)는 macOS에서도 같은 규칙으로 동작합니다.
+[닫기 요청](#닫기-요청)은 macOS에서도 같은 규칙으로 동작합니다. [창 수명 이벤트](#창-수명-이벤트)는 macOS에서 백엔드의 `windows.waitForLifecycle`로만 관찰합니다.
 
 ## 창 식별자와 열림 상태
 

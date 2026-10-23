@@ -33,7 +33,7 @@ The existing async host adapter context propagates cancellation and disposal; no
 servers, including redirect refusal, binary preservation, bounds, deadlines, abort and disposal. It runs under
 `mise run host:windows` and the cross-platform contract suite using pinned Bun 1.4.2.
 `tests/lifecycle/macos-network.ts` runs the compiled WKWebView, SDK, Core and async host adapter
-against real loopback servers under `mise run host:macos`. It checks view and backend grants,
+against real loopback servers under `mise run host:macos`. It checks the backend grants,
 HTTP bytes and redirects, WebSocket text and binary, malformed handshakes, bounds, deadlines,
 client cancellation, continued UI responses and shutdown with requests in flight.
 `tests/cli/network.test.ts` installs the packed plugin with isolated dependencies and checks both
