@@ -15,7 +15,7 @@ const text = await clipboard.readText(null);
 await clipboard.clear(null);
 ```
 
-공개 입력, 반환값, 권한, 오류와 취소 규칙은 [API 레퍼런스](../../docs/site/src/content/docs/reference/plugins/clipboard.mdx)에 둔다. URL bookmark와 private namespace의 bounded binary 값은 기존 다중 형식 API로 제공한다. Windows는 `clipboard.changed` 이벤트와 `waitForChange`로 내용 없는 변경 알림(`sequence`, `changedAt`)을 제공하며 macOS는 지원하지 않는다.
+공개 입력, 반환값, 권한, 오류와 취소 규칙은 [API 레퍼런스](../../docs/site/src/content/docs/reference/plugins/clipboard.mdx)에 둔다. URL bookmark와 private namespace의 bounded binary 값은 기존 다중 형식 API로 제공한다. Windows와 macOS는 `clipboard.changed` 이벤트와 `waitForChange`로 내용 없는 변경 알림(`sequence`, `changedAt`)을 제공한다. macOS는 `NSPasteboard.changeCount`를 100밀리초마다 비교한다.
 
 `readImage`와 `writeImage`는 크기와 base64 RGBA 픽셀을 전달한다. `readFormats`와 `writeFormats`는 지원 형식을 한 번의 열기 구간에서 읽거나 교체하며 `getFormats`와 `hasFormat`은 지원 형식의 가용성을 조회한다. 발견 결과에는 Windows가 변환해 제공할 수 있는 기본 형식도 포함된다. 사용자 정의 binary 이름은 `hasFormat`과 `readFormats`에서 명시한다. 네이티브 이미지 ID나 별도 이미지 저장소는 만들지 않는다.
 

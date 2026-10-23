@@ -1,3 +1,5 @@
+import type { NativeEnvironment } from "@bunaway/plugin";
+import { attemptAll, failWithCleanup } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
 import {
@@ -7,6 +9,8 @@ import {
   type macosWriteFormatsSchema,
   nullableTextSchema,
 } from "#clipboard/contract";
+import { ClipboardChanges } from "#clipboard/platforms/changes";
+import { pollPasteboard } from "#clipboard/platforms/macos-changes";
 import {
   createPasteboard,
   type Pasteboard,
@@ -21,11 +25,18 @@ const formats = [
   "image/bmp",
 ] as const;
 
-/** Own one main-thread pasteboard binding and its synchronous commits. */
+/** Own one main-thread pasteboard binding, its synchronous commits and its change notifications. */
 export class MacosClipboard {
   private disposed = false;
 
-  constructor(private readonly native: Pasteboard) {}
+  /** Without `changes`, `waitForChange` fails and no event is published. */
+  constructor(
+    private readonly native: Pasteboard,
+    private readonly changes: ClipboardChanges = new ClipboardChanges(
+      undefined,
+      () => {},
+    ),
+  ) {}
 
   private active(): void {
     if (this.disposed) {
@@ -105,16 +116,46 @@ export class MacosClipboard {
     return null;
   }
 
+  /** Resolve with the next clipboard change, including writes made through this adapter. */
+  waitForChange(signal?: AbortSignal) {
+    this.active();
+    return this.changes.wait(signal);
+  }
+
+  /** Stop notifications first so no event is published while the pasteboard binding is released. */
   dispose(): void {
     if (!this.disposed) {
       this.disposed = true;
-      this.native.dispose();
+      attemptAll(
+        [
+          () => this.changes.dispose(),
+          () => this.native.dispose(),
+        ],
+        "Clipboard cleanup failed.",
+      );
     }
   }
 }
 
-export function initialize(): MacosClipboard {
-  return new MacosClipboard(createPasteboard());
+/** Poll the pasteboard counter when the host can deliver events; otherwise `waitForChange` fails. */
+export function initialize(environment?: NativeEnvironment): MacosClipboard {
+  const native = createPasteboard();
+  const events = environment?.events;
+  if (!events) {
+    return new MacosClipboard(native);
+  }
+  try {
+    return new MacosClipboard(
+      native,
+      new ClipboardChanges(
+        pollPasteboard(() => native.changeCount()),
+        (event, payload) => events.emit(event, payload),
+      ),
+    );
+  } catch (error) {
+    // No caller receives the adapter, so release the pasteboard binding here.
+    failWithCleanup(error, () => native.dispose(), "Clipboard cleanup failed.");
+  }
 }
 
 export function dispose(instance: MacosClipboard): void {

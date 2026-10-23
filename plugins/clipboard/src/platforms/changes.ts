@@ -2,21 +2,23 @@ import { NativeEventWaiters } from "@bunaway/plugin";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import { type ClipboardChange, MAX_CHANGE_WAITERS } from "#clipboard/contract";
 
-/** Native listener ownership boundary, shared by the runtime and focused tests. */
+/** Native listener ownership boundary, shared by the platform adapters and focused tests. */
 export type ChangeDriver = {
-  /** Deliver the clipboard sequence number each time Windows reports an update. */
+  /** Deliver the clipboard change counter each time the platform reports an update. */
   listen(receive: (sequence: number) => void): void;
+  /** Deliver an update the platform has not reported yet, for drivers that poll. */
+  flush?(): void;
   /** Remove the listener and destroy its window. Safe to repeat; may throw after cleanup. */
   dispose(): void;
 };
 
-/** GetClipboardSequenceNumber returns 0 when the window station denies clipboard access. */
+/** On Windows, GetClipboardSequenceNumber returns 0 when the window station denies clipboard access. */
 const UNKNOWN_SEQUENCE = 0;
 
 /**
  * Publishes content-free change notifications to the host event stream and to
  * `waitForChange` callers. A missing driver means the host offers no listener
- * window or Windows rejected the registration; waits then fail instead of hanging.
+ * window or the platform rejected the registration; waits then fail instead of hanging.
  */
 export class ClipboardChanges {
   private readonly waiters = new NativeEventWaiters<ClipboardChange>(
@@ -65,6 +67,8 @@ export class ClipboardChanges {
       error.cause = this.unavailableCause;
       return Promise.reject(error);
     }
+    // A polling driver may still owe an earlier change; deliver it before this wait starts.
+    this.driver.flush?.();
     return this.waiters.wait(signal);
   }
 

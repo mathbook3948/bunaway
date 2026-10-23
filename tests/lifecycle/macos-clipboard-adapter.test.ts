@@ -326,6 +326,10 @@ test("macOS clipboard validates permission and cancellation before touching nati
       calls.push("clear");
       items = [];
     },
+    changeCount() {
+      calls.push("changeCount");
+      return 0;
+    },
     dispose() {
       calls.push("dispose");
     },

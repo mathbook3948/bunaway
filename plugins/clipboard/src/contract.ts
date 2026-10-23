@@ -244,9 +244,9 @@ export const nullableTextSchema = textSchema.nullable();
 export const MAX_CHANGE_WAITERS = 16;
 const MAX_SEQUENCE = 0xffff_ffff;
 /**
- * Content-free change notification. `sequence` is the Windows clipboard sequence number
- * (an unsigned 32-bit counter that wraps) and `changedAt` is the observation time in Unix
- * epoch milliseconds.
+ * Content-free change notification. `sequence` is the platform change counter reduced to an
+ * unsigned 32-bit value that wraps: the Windows clipboard sequence number, or the macOS
+ * NSPasteboard `changeCount`. `changedAt` is the observation time in Unix epoch milliseconds.
  */
 export const changeSchema = z.strictObject({
   sequence: z.number().int().min(0).max(MAX_SEQUENCE),

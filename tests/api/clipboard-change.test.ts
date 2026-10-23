@@ -12,11 +12,11 @@ import {
   macosOperations,
   windowsOperations,
 } from "#plugins/clipboard/src/operations";
-import type { WindowsClipboard } from "#plugins/clipboard/src/platforms/windows";
 import {
   type ChangeDriver,
   ClipboardChanges,
-} from "#plugins/clipboard/src/platforms/windows-changes";
+} from "#plugins/clipboard/src/platforms/changes";
+import type { WindowsClipboard } from "#plugins/clipboard/src/platforms/windows";
 import { nativeFactory } from "../fixtures/native-platform.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
@@ -54,14 +54,14 @@ function fixture(attached = true, unavailableCause?: unknown) {
   };
 }
 
-test("change contract has a content-free payload, strict input and no macOS operation", async () => {
+test("change contract has a content-free payload, strict input and a macOS operation", async () => {
   expect(
     new NativeRegistry([
       clipboard._definition,
     ]).operations.has("clipboard.waitForChange"),
   ).toBe(true);
   expect("waitForChange" in windowsOperations).toBe(true);
-  expect("waitForChange" in macosOperations).toBe(false);
+  expect("waitForChange" in macosOperations).toBe(true);
   expect(Object.keys(clipboardEvents)).toEqual([
     "clipboard.changed",
   ]);
