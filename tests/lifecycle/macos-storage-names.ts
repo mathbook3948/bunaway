@@ -76,7 +76,7 @@ export function verifyMacosNames(
     right: {
       name: string;
     },
-  ) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+  ) => Number(left.name > right.name) - Number(left.name < right.name);
   assert(Array.isArray(listed));
   assert.deepEqual(
     [
