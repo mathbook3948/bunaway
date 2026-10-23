@@ -17,9 +17,9 @@ export const readContract = {
   input: {
     const: null,
   },
-  output: {
-    type: "string",
-  },
+  // A file edited outside the app can exceed the limit; the read then fails instead of loading
+  // text that every later save would reject.
+  output: noteSchema,
 } as const;
 
 /** Restores the saved window placement and reports whether a saved state existed. */
