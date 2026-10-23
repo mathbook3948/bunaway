@@ -107,7 +107,7 @@ async function firstRun(): Promise<void> {
     "settings.json",
   ]);
 
-  // Reload drops unsaved changes; `ignoreDefaults` keeps only what the file holds.
+  // Reload drops unsaved changes and keeps the defaults for keys the file lacks.
   await store.set({
     name: "settings",
     key: "count",
