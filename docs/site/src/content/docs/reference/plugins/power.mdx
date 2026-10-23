@@ -186,6 +186,6 @@ macOS는 IOKit)를 닫지 않습니다.
 
 실제 하드웨어의 절전/화면 timeout 검증은 후속 작업입니다. macOS의 절전과 잠금 이벤트는 macOS CI에서
 같은 알림을 프로세스 안에서 보내 이벤트가 발행되고 정리 뒤 멈추는지 확인하며, 실제 절전과 화면 잠금
-전환은 검증하지 않았습니다. 전원 상태 변경 이벤트는 읽기 함수를 바꿔 넣은 단위 테스트로 발행과 중복 생략을 확인합니다. macOS CI는 root 권한으로 `com.apple.system.powersources.timeremaining` 알림을 보내 run loop 소스의 콜백이 상태를 다시 읽는지 확인하고(권한이 없으면 등록과 해제만 확인), 실제 AC 연결과 분리는 확인하지 않습니다. macOS는 macOS CI에서 `pmset -g assertions`에
+전환은 검증하지 않았습니다. macOS는 macOS CI에서 `pmset -g assertions`에
 assertion이 나타나고 stop과 정리 뒤 사라지는지 확인합니다.
 [Windows PowerSetRequest 계약](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-powersetrequest)을 따릅니다.

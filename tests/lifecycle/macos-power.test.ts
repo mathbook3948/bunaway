@@ -284,15 +284,22 @@ try {
   pumpTurns(25);
   // notifyd lets only root post com.apple.system.* keys, and the runner has passwordless sudo.
   // Without sudo this part is skipped; the run loop source is then only registered and released.
-  const posted = Bun.spawnSync(["sudo", "-n", "/usr/bin/notifyutil", "-p", "com.apple.system.powersources.timeremaining"]).exitCode === 0;
+  const post = () => Bun.spawnSync(["sudo", "-n", "/usr/bin/notifyutil", "-p", "com.apple.system.powersources.timeremaining"], { timeout: 10000 }).exitCode === 0;
+  const posted = post();
   if (posted) {
     await pumpUntil(() => reads > baselineReads, "power source callback re-reads the status");
   }
   const callbackReads = reads - baselineReads;
   release();
   release();
+  // After release the same notification must no longer reach the callback.
+  const readsAtRelease = reads;
+  if (posted) {
+    post();
+  }
   pumpTurns(25);
-  console.log(JSON.stringify({ baselineReads, posted, callbackReads, hasRelease: typeof release === "function", statusEvents }));
+  const readsAfterRelease = reads - readsAtRelease;
+  console.log(JSON.stringify({ baselineReads, posted, callbackReads, readsAfterRelease, hasRelease: typeof release === "function", statusEvents }));
 } finally {
   await adapter.dispose();
   await adapter.dispose();
@@ -304,9 +311,14 @@ try {
     expect(result.baselineReads).toBe(1);
     expect(result.hasRelease).toBe(true);
     expect(result.statusEvents).toEqual([]);
+    // The hosted runner has passwordless sudo, so a missing post there means the check did not run.
+    if (process.env.CI) {
+      expect(result.posted).toBe(true);
+    }
     // A posted notification drives the main run loop to the callback, which re-reads the status.
     if (result.posted) {
       expect(result.callbackReads).toBeGreaterThan(0);
+      expect(result.readsAfterRelease).toBe(0);
     }
   },
 );
