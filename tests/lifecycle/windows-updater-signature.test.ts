@@ -72,7 +72,7 @@ function powershell(script: string): string {
  */
 function sign(path: string, thumbprint: string, trusted: boolean): void {
   const status = powershell(
-    `(Set-AuthenticodeSignature -FilePath '${path}' -Certificate (Get-Item Cert:\\CurrentUser\\My\\${thumbprint}) -HashAlgorithm SHA256).Status`,
+    `Set-AuthenticodeSignature -FilePath '${path}' -Certificate (Get-Item Cert:\\CurrentUser\\My\\${thumbprint}) -HashAlgorithm SHA256 | Out-Null; (Get-AuthenticodeSignature -FilePath '${path}').Status`,
   );
   if (trusted) {
     expect(status).toBe("Valid");
