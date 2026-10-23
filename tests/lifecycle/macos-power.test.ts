@@ -294,12 +294,10 @@ try {
   release();
   // After release the same notification must no longer reach the callback.
   const readsAtRelease = reads;
-  if (posted) {
-    post();
-  }
+  const postedAfterRelease = posted && post();
   pumpTurns(25);
   const readsAfterRelease = reads - readsAtRelease;
-  console.log(JSON.stringify({ baselineReads, posted, callbackReads, readsAfterRelease, hasRelease: typeof release === "function", statusEvents }));
+  console.log(JSON.stringify({ baselineReads, posted, callbackReads, readsAfterRelease, postedAfterRelease, hasRelease: typeof release === "function", statusEvents }));
 } finally {
   await adapter.dispose();
   await adapter.dispose();
@@ -314,6 +312,7 @@ try {
     // The hosted runner has passwordless sudo, so a missing post there means the check did not run.
     if (process.env.CI) {
       expect(result.posted).toBe(true);
+      expect(result.postedAfterRelease).toBe(true);
     }
     // A posted notification drives the main run loop to the callback, which re-reads the status.
     if (result.posted) {
