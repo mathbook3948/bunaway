@@ -83,10 +83,10 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
   경계가 아니다. `opener.openUrl` 권한이 있는 문서가 SDK로 직접 호출하는 것은 별개의 경로다.
 - **opener 대리 호출.** 요청을 시작한 문서 세션의 호스트 발급 핸들([ADR 0002](./0002-host-owned-call-context.md))로
   호출한다. host 권한 `opener.openUrl`과 정책 `commands`의 `plugin.opener.openUrl`을 요구하고, 코어를 거쳐
-  일반 호출과 같은 요청 ID 공간, 진행 중 요청 상한, 실행 직전 재검사를 적용한다. 처리 중 세션이 철회되면 취소한다.
+  호스트 발급 요청 ID(문서의 ID와 분리), 진행 중 요청 상한, 실행 직전 재검사를 적용한다. 처리 중 세션이 철회되면 취소한다.
   문서가 직접 호출하지 않은 새 출처는 [ADR 0002](./0002-host-owned-call-context.md)의 "호스트 발급 호출 프레임"으로 정했다.
-  외부 콘텐츠 뷰에 `plugin.*`을 직접 허용하지 말라는 [ADR 0024](./0024-plugin-path-responsibility.md)와의 관계도
-  같은 절에 적었다(`plugin.opener.openUrl` 하나만 예외).
+  [ADR 0024](./0024-plugin-path-responsibility.md)와의 관계도 같은 절에 적었다. 뷰에 `plugin.*`을 직접 허용하지 말라는
+  일반 지침의 예외는 `plugin.opener.openUrl` 하나이고, 외부 콘텐츠를 표시하는 뷰에는 여전히 허용하지 않는다.
 - **리다이렉트.** 판정을 요청 URL로 할지 최종 URL로 할지 정한다. 기본값은 최종 URL이다.
 - **`target` 없는 탐색과 내부 URL의 `window.open`.** 기본값은 외부 URL과 같은 조건이며, `target` 없는 외부 탐색은
   취소한다.
@@ -220,7 +220,7 @@ Capacitor 동작 기준처럼 외부 링크는 시스템 브라우저, 내부 �
 | [0015](./0015-macos-bun-ffi.md) macOS Bun FFI | 수정 | 다중 창 서술은 단일 창으로 대체 |
 | [0019](./0019-initial-window-placement.md) 초기 창 배치 | 수정 | 생성 API 개수 표현을 create, recreate 두 개로 수정. 배치 계산은 유지 |
 | [0002](./0002-host-owned-call-context.md) 호출 컨텍스트 | 수정 | 발급과 철회는 그대로. opener 대리 호출 전용 호스트 발급 호출 프레임을 추가했다 |
-| [0024](./0024-plugin-path-responsibility.md) 경로 책임 | 유지(링크 예외는 ADR 0002에 기록) | 외부 콘텐츠를 표시하는 뷰의 최소 권한 지침은 단일 뷰에서 앱 전체 권한에 적용된다. opener 대리 호출은 `plugin.opener.openUrl` 하나만 예외로 두며 ADR 0002에 적었다 |
+| [0024](./0024-plugin-path-responsibility.md) 경로 책임 | 유지(링크 예외는 ADR 0002에 기록) | 외부 콘텐츠를 표시하는 뷰의 최소 권한 지침은 단일 뷰에서 앱 전체 권한에 적용된다. opener 대리 호출을 위해 뷰에 `plugin.opener.openUrl`을 직접 허용하는 일반 지침의 예외 하나를 ADR 0002에 적었다. 외부 콘텐츠 뷰에는 허용하지 않는다 |
 | [0010](./0010-windows-first-platform-model.md) Windows 우선 | 유지 | 구현 순서의 근거 |
 | [0018](./0018-ios-embedded-bun-worker.md) iOS | 유지 | 단일 뷰 조건이 공통 계약이 됨 |
 | `docs/GLOSSARY.md` | 수정 | 창 인스턴스, 창 소유 관계, 부모 종속 모달 창 항목 삭제. 뷰 ID, WebView 프로필, 앱 접근 규칙 수정 |
