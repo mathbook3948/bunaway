@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { realpathSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tmpdir, userInfo } from "node:os";
 import { relative, resolve } from "node:path";
 import { AUTOSTART_ARGUMENT } from "@bunaway/protocol";
 import { bundleMacosHost } from "#cli/assets";
@@ -10,6 +10,8 @@ import { compileMacosApp } from "#cli/macos-compile";
 import { installedPlugins } from "#cli/plugins";
 import pin from "../../runtime/build-manifests/darwin-aarch64.json";
 import { testAppMetadata } from "../fixtures/app-info.ts";
+import { deadline } from "../fixtures/deadlines.ts";
+import { REGISTERED_ARGS } from "../fixtures/macos-autostart/args.ts";
 
 assert.equal(process.platform, "darwin");
 assert.equal(process.arch, "arm64");
@@ -17,12 +19,10 @@ const root = resolve(import.meta.dir, "../..");
 const directory = await mkdtemp(resolve(tmpdir(), "bunaway-autostart-host-"));
 const appId = "tests.macos.autostart";
 const resultPath = resolve(root, "build/macos-autostart-results.json");
-const registered = [
-  "--login",
-  "한글 값",
-  '인용"값',
-];
+const registered = REGISTERED_ARGS;
 const reports: object[] = [];
+// Every plist path a run may have created, removed again even when a check fails.
+const strays: string[] = [];
 let child: ReturnType<typeof Bun.spawn> | undefined;
 
 async function plist(path: string) {
@@ -179,7 +179,18 @@ try {
     });
     const launchMode = mode === "compiled" ? "packaged" : "development";
     const name = `bunaway.${launchMode}.${appId}`;
-    const file = resolve(home, "Library/LaunchAgents", `${name}.plist`);
+    // The plugin resolves its home inside the host-operations worker, whose HOME is the app data
+    // root, so the plist may be under either directory. Both are temporary; the real user home is
+    // listed only so a stray registration is found, reported and removed.
+    const homes = [
+      home,
+      resolve(home, "Library/Application Support/bunaway", appId),
+      userInfo().homedir,
+    ];
+    const candidates = homes.map((base) =>
+      resolve(base, "Library/LaunchAgents", `${name}.plist`),
+    );
+    strays.push(...candidates);
     const launcher = mode === "compiled" ? executable : process.execPath;
     for (const restart of [
       false,
@@ -210,7 +221,7 @@ try {
           },
           stdout: "pipe",
           stderr: "pipe",
-          timeout: 45000,
+          timeout: deadline("nativeFixture"),
         },
       );
       child = launched;
@@ -268,6 +279,14 @@ try {
       assert.equal(report.disabledAgain, null);
       assert.deepEqual(report.final, report.enabled);
 
+      const written = candidates.filter((candidate) => existsSync(candidate));
+      assert.equal(written.length, 1, `Plist locations: ${written.join(", ")}`);
+      const file = written[0] as string;
+      assert.notEqual(
+        file,
+        candidates[2],
+        "The plist was written to the real user home",
+      );
       // The file launchd loads is a valid property list with the reported launch.
       const lint = Bun.spawn(
         [
@@ -304,7 +323,11 @@ try {
         plistValid: true,
       });
     }
-    await rm(file);
+    for (const candidate of candidates) {
+      await rm(candidate, {
+        force: true,
+      });
+    }
   }
   await writeJson(resultPath, {
     platform: process.platform,
@@ -350,6 +373,11 @@ try {
     child.kill("SIGKILL");
   }
   await child?.exited;
+  for (const stray of strays) {
+    await rm(stray, {
+      force: true,
+    });
+  }
   await rm(directory, {
     recursive: true,
     force: true,

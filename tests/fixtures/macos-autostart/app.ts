@@ -3,16 +3,13 @@ import { resolve } from "node:path";
 import { defineApp } from "@bunaway/backend";
 import autostart from "@bunaway/plugin-autostart";
 import windows from "@bunaway/plugin-windows";
+import { REGISTERED_ARGS } from "./args.ts";
 
 const temporary = process.env.TMPDIR;
 if (!temporary) {
   throw new Error("Missing fixture host directories.");
 }
-const args = [
-  "--login",
-  "한글 값",
-  '인용"값',
-];
+const args = REGISTERED_ARGS;
 
 async function errorCode(work: Promise<unknown>) {
   try {
