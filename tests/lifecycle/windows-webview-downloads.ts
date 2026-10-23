@@ -432,7 +432,8 @@ if (!process.argv.includes("--child")) {
         .trim()
         .split("\n")
         .map((line) => JSON.parse(line));
-    await windows.close();
+    // Closing the only window would end the app, so the owner is replaced instead.
+    await windows.recreate();
     await waitFor(
       async () =>
         (await readCleanupDiagnostics()).some(
