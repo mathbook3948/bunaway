@@ -12,6 +12,8 @@ import {
   storageDirectorySizeSchema,
   storageLocationSchema,
   storageMetadataSchema,
+  storageRecursivePageSchema,
+  storageRecursiveReadSchema,
   storageTransferSchema,
   storageWriteSchema,
 } from "#storage/contract";
@@ -64,6 +66,13 @@ export const storageOperations = {
     input: storageDirectoryPageReadSchema,
     output: storageDirectoryPageSchema,
     handler: (input, { instance }) => instance.readDirectoryPage(input),
+  }),
+  // A separate operation, so granting readDirectory never grants listing whole trees.
+  readDirectoryRecursive: operation({
+    input: storageRecursiveReadSchema,
+    output: storageRecursivePageSchema,
+    handler: (input, { instance, signal }) =>
+      instance.readDirectoryRecursive(input, signal),
   }),
   createDirectory: operation({
     input: storageDirectoryCreateSchema,

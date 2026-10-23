@@ -98,12 +98,12 @@ function entryKind(
   });
 }
 
-function compareNames(left: string, right: string): number {
+export function compareNames(left: string, right: string): number {
   return left < right ? -1 : Number(left > right);
 }
 
 /** The listed entry for a child, or null when it vanished after the listing. */
-function describeChild(
+export function describeChild(
   parent: string,
   child: Dirent,
 ): StorageDirectoryEntry | null {
@@ -205,7 +205,7 @@ function openIfPresent(path: string): Dir | null {
 }
 
 /** The root was checked by the caller, so only a descendant may have vanished. */
-function openFrame(path: string, depth: number): Dir | null {
+export function openFrame(path: string, depth: number): Dir | null {
   return depth === 0 ? opendirSync(path) : openIfPresent(path);
 }
 
@@ -214,18 +214,38 @@ function yieldToEventLoop(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function cancelled(): BunawayError {
+export function cancelled(): BunawayError {
   return new BunawayError({
     code: "CANCELLED",
     message: "Storage directory scan was cancelled.",
   });
 }
 
-function limitExceeded(): BunawayError {
+export function limitExceeded(): BunawayError {
   return new BunawayError({
     code: "INVALID_ARGUMENT",
     message: "Storage directory exceeds the size scan limit.",
   });
+}
+
+/**
+ * A checkpoint for a long scan: it yields now and then, and throws when the owner went away
+ * (`alive`) or the caller cancelled (CANCELLED).
+ */
+export function createCheckpoint(
+  signal: AbortSignal | undefined,
+  alive: () => void,
+): () => Promise<void> {
+  let steps = 0;
+  return async () => {
+    alive();
+    if (signal?.aborted) {
+      throw cancelled();
+    }
+    if (++steps % YIELD_STEPS === 0) {
+      await yieldToEventLoop();
+    }
+  };
 }
 
 /**
@@ -243,7 +263,6 @@ export async function sumDirectory(
   let files = 0;
   let directories = 0;
   let visited = 0;
-  let steps = 0;
   const pending: {
     path: string;
     depth: number;
@@ -253,16 +272,7 @@ export async function sumDirectory(
       depth: 0,
     },
   ];
-  /** Yield now and then, and stop when the caller cancelled or the adapter was disposed. */
-  const checkpoint = async (): Promise<void> => {
-    alive();
-    if (signal?.aborted) {
-      throw cancelled();
-    }
-    if (++steps % YIELD_STEPS === 0) {
-      await yieldToEventLoop();
-    }
-  };
+  const checkpoint = createCheckpoint(signal, alive);
   await checkpoint();
   for (let frame = pending.pop(); frame; frame = pending.pop()) {
     await checkpoint();

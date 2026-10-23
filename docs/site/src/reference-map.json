@@ -1434,6 +1434,7 @@
         "reference/host/storage-directories": [
           "readDirectory",
           "readDirectoryPage",
+          "readDirectoryRecursive",
           "createDirectory",
           "directorySize",
           "remove",
@@ -1554,6 +1555,7 @@
     "reference/host/storage-directories": [
       "storage.readDirectory",
       "storage.readDirectoryPage",
+      "storage.readDirectoryRecursive",
       "storage.createDirectory",
       "storage.directorySize",
       "storage.remove",

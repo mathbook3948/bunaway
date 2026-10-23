@@ -29,6 +29,8 @@ import {
   type StorageInstance,
   type StorageLocation,
   type StorageMetadata,
+  type StorageRecursivePage,
+  type StorageRecursiveRead,
   type StorageTransfer,
 } from "#storage/contract";
 import { StorageFiles } from "#storage/platforms/files";
@@ -38,6 +40,7 @@ import {
   listDirectoryPage,
   sumDirectory,
 } from "#storage/platforms/node-directory";
+import { listDirectoryTree } from "#storage/platforms/node-directory-recursive";
 
 const MAX_IO_CHUNK_BYTES = 1 << 20;
 const FILE_MODE = 0o600;
@@ -356,16 +359,61 @@ export abstract class NodeStorage
     signal: AbortSignal | undefined,
     limits: DirectorySizeLimits,
   ): Promise<StorageDirectorySize> {
-    const path = this.selected(input.path);
-    const root = fsCall(() => statSync(path));
-    if (!root.isDirectory()) {
-      throw failure("INVALID_ARGUMENT", "Storage target is not a directory.");
-    }
+    const path = this.selectedDirectory(input);
     try {
       return await sumDirectory(path, limits, signal, () => this.requireOpen());
     } catch (error) {
       throw storageError(error);
     }
+  }
+
+  /**
+   * One page of every descendant below a directory, depth first; the walk, the cursor and the
+   * bounds are on listDirectoryTree. Links are listed as links and never entered, a link given as
+   * the root is followed like for directorySize, and a failure below the root fails the call.
+   */
+  readDirectoryRecursive(
+    input: StorageRecursiveRead,
+    signal?: AbortSignal,
+  ): Promise<StorageRecursivePage> {
+    return this.readDirectoryRecursiveWithin(
+      input,
+      signal,
+      DIRECTORY_SIZE_LIMITS,
+    );
+  }
+
+  /** The listing behind readDirectoryRecursive with explicit cost bounds, public for the same reason as directorySizeWithin. */
+  async readDirectoryRecursiveWithin(
+    input: StorageRecursiveRead,
+    signal: AbortSignal | undefined,
+    limits: DirectorySizeLimits,
+  ): Promise<StorageRecursivePage> {
+    const path = this.selectedDirectory(input);
+    try {
+      return await listDirectoryTree(
+        path,
+        {
+          after: input.after,
+          limit: input.limit ?? DEFAULT_DIRECTORY_PAGE_ENTRIES,
+        },
+        limits,
+        signal,
+        () => this.requireOpen(),
+      );
+    } catch (error) {
+      throw storageError(error);
+    }
+  }
+
+  /** The selected path of a scan root, which must be an existing directory. */
+  private selectedDirectory(input: StorageLocation): string {
+    const path = this.selected(input.path);
+    const root = fsCall(() => statSync(path));
+    if (!root.isDirectory()) {
+      throw failure("INVALID_ARGUMENT", "Storage target is not a directory.");
+    }
+    return path;
   }
 
   /** Creating a directory that already exists succeeds; a file in the way is an error. */

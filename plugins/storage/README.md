@@ -3,7 +3,7 @@
 공개 작업과 권한은 [저장 가이드](../../docs/site/src/content/docs/guides/storage-and-state.mdx)를
 따른다. Windows와 macOS의 공개 작업과 권한 계약은 유지한다.
 
-열여섯 작업의 입력, 출력 스키마와 handler는 `src/operations.ts`에서 한 번 선언하고 두 플랫폼이 공유한다.
+열일곱 작업의 입력, 출력 스키마와 handler는 `src/operations.ts`에서 한 번 선언하고 두 플랫폼이 공유한다.
 경로 규칙, 네이티브 검증과 호스트 통합 의존성은
 [macOS 저장 어댑터](../../docs/architecture/macos-storage-adapter.md)에 기록한다.
 

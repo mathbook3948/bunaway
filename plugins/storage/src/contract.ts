@@ -12,6 +12,17 @@ export const DEFAULT_DIRECTORY_PAGE_ENTRIES = MAX_DIRECTORY_ENTRIES;
  */
 export const MAX_DIRECTORY_SIZE_ENTRIES = 100_000;
 export const MAX_DIRECTORY_SIZE_DEPTH = 64;
+/**
+ * Bounds of storage.readDirectoryRecursive. A scan reads at most MAX_DIRECTORY_SIZE_ENTRIES
+ * children and descends at most MAX_DIRECTORY_SIZE_DEPTH levels, like directorySize, so an entry
+ * path has at most one more component than the depth bound. A page stops before its paths exceed
+ * MAX_RECURSIVE_PAGE_PATH_CHARACTERS UTF-16 units in total, which keeps the escaped reply under the
+ * 1 MiB message even when every unit escapes to six bytes.
+ */
+export const MAX_RECURSIVE_PATH_COMPONENTS = MAX_DIRECTORY_SIZE_DEPTH + 1;
+export const MAX_RECURSIVE_PATH_CHARACTERS =
+  MAX_RECURSIVE_PATH_COMPONENTS * (MAX_FILENAME_CHARACTERS + 1) - 1;
+export const MAX_RECURSIVE_PAGE_PATH_CHARACTERS = 65_536;
 
 /** An observed child name and kind. This does not authorize or follow the child target. */
 export const directoryEntrySchema = z.strictObject({
@@ -23,6 +34,16 @@ export const directoryEntrySchema = z.strictObject({
   ]),
 });
 export type StorageDirectoryEntry = z.infer<typeof directoryEntrySchema>;
+
+/**
+ * An observed descendant: its path below the listed directory, with "/" between components on
+ * every platform, and its kind. This does not authorize or follow the target.
+ */
+export const recursiveEntrySchema = z.strictObject({
+  path: z.string().min(1).max(MAX_RECURSIVE_PATH_CHARACTERS),
+  kind: directoryEntrySchema.shape.kind,
+});
+export type StorageRecursiveEntry = z.infer<typeof recursiveEntrySchema>;
 
 /** Binary operations leave room for base64, path and envelope in a 1 MiB message. */
 export const MAX_STORAGE_BYTES = 256 * 1024;
@@ -130,6 +151,29 @@ export const storageDirectoryPageSchema = z.strictObject({
     z.null(),
   ]),
 });
+/**
+ * One page of a depth first listing of every descendant. Each directory's children are in UTF-16
+ * code unit order and a directory comes right before its own children, so the order is the
+ * component by component order of the relative paths. `after` is the `next` of the previous page
+ * (a relative path with "/" separators); the page holds the first `limit` paths that follow it.
+ */
+export const storageRecursiveReadSchema = z.strictObject({
+  ...pathFields,
+  after: z.string().min(1).max(MAX_RECURSIVE_PATH_CHARACTERS).optional(),
+  limit: z.int().min(1).max(MAX_DIRECTORY_ENTRIES).optional(),
+});
+/** `next` is the `after` of the following page, or null when this page reaches the end. */
+export const storageRecursivePageSchema = z.strictObject({
+  entries: z.array(recursiveEntrySchema).max(MAX_DIRECTORY_ENTRIES),
+  next: z.union([
+    z.string().min(1).max(MAX_RECURSIVE_PATH_CHARACTERS),
+    z.null(),
+  ]),
+});
+/** Path and optional cursor and page size accepted by readDirectoryRecursive. */
+export type StorageRecursiveRead = z.infer<typeof storageRecursiveReadSchema>;
+/** One page of descendants returned by storage.readDirectoryRecursive. */
+export type StorageRecursivePage = z.infer<typeof storageRecursivePageSchema>;
 /** Logical byte, file and subdirectory totals returned by storage.directorySize. */
 export type StorageDirectorySize = z.infer<typeof storageDirectorySizeSchema>;
 /** Path and optional cursor and page size accepted by readDirectoryPage. */
@@ -171,6 +215,10 @@ export interface StorageInstance {
   copyFile(input: StorageTransfer): null;
   readDirectory(input: StorageLocation): StorageDirectoryEntry[];
   readDirectoryPage(input: StorageDirectoryPageRead): StorageDirectoryPage;
+  readDirectoryRecursive(
+    input: StorageRecursiveRead,
+    signal?: AbortSignal,
+  ): Promise<StorageRecursivePage>;
   createDirectory(input: StorageDirectoryCreate): null;
   exists(input: StorageLocation): boolean;
   stat(input: StorageLocation): StorageMetadata | null;
@@ -216,6 +264,10 @@ export interface Storage {
     input: StorageDirectoryPageRead,
     options?: NativeInvokeOptions,
   ): Promise<StorageDirectoryPage>;
+  readDirectoryRecursive(
+    input: StorageRecursiveRead,
+    options?: NativeInvokeOptions,
+  ): Promise<StorageRecursivePage>;
   directorySize(
     input: StorageLocation,
     options?: NativeInvokeOptions,
