@@ -21,6 +21,7 @@ import {
   DEFAULT_DIRECTORY_PAGE_ENTRIES,
   MAX_DIRECTORY_SIZE_DEPTH,
   MAX_DIRECTORY_SIZE_ENTRIES,
+  MAX_RECURSIVE_SCAN_ENTRIES,
   type StorageDirectoryCreate,
   type StorageDirectoryEntry,
   type StorageDirectoryPage,
@@ -53,6 +54,12 @@ const DESCRIPTOR_CLEANUP_MESSAGE =
 /** Cost bounds of one directorySize call; only tests pass values other than the contract defaults. */
 export const DIRECTORY_SIZE_LIMITS: DirectorySizeLimits = {
   entries: MAX_DIRECTORY_SIZE_ENTRIES,
+  depth: MAX_DIRECTORY_SIZE_DEPTH,
+};
+
+/** Cost bounds of one readDirectoryRecursive call; only tests pass other values. */
+export const RECURSIVE_LIST_LIMITS: DirectorySizeLimits = {
+  entries: MAX_RECURSIVE_SCAN_ENTRIES,
   depth: MAX_DIRECTORY_SIZE_DEPTH,
 };
 
@@ -379,7 +386,7 @@ export abstract class NodeStorage
     return this.readDirectoryRecursiveWithin(
       input,
       signal,
-      DIRECTORY_SIZE_LIMITS,
+      RECURSIVE_LIST_LIMITS,
     );
   }
 

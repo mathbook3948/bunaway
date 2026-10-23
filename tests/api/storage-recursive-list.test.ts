@@ -195,6 +195,69 @@ test("pages of any size concatenate to the unpaged listing and the last page end
   expect((await readAllPages(12)).length).toBe(1);
 });
 
+/** A wide directory whose names arrive in no useful order, with directories among the files. */
+function createWideTree(): void {
+  const names = Array.from(
+    {
+      length: 60,
+    },
+    (_, index) => String((index * 37) % 60).padStart(2, "0"),
+  );
+  for (const name of names) {
+    if (Number(name) % 7 === 0) {
+      createTree([
+        `${name}/inner`,
+      ]);
+    } else {
+      createTree([
+        name,
+      ]);
+    }
+  }
+}
+
+test("a directory far wider than a page lists the same through any page size and cursor", async () => {
+  createWideTree();
+  const whole = await list(undefined, MAX_DIRECTORY_ENTRIES);
+  expect(whole.next).toBeNull();
+  expect(whole.entries).toHaveLength(60 + 9);
+  expect(paths(whole.entries)).toEqual(paths(whole.entries).toSorted());
+  for (const limit of [
+    1,
+    2,
+    7,
+    20,
+  ]) {
+    const pages = await readAllPages(limit);
+    expect(pages.flatMap((page) => page.entries)).toEqual(whole.entries);
+  }
+  // A cursor in the middle of the wide directory continues right after it.
+  const tail = await list("29", 1000);
+  expect(tail.entries).toEqual(
+    whole.entries.slice(paths(whole.entries).indexOf("29") + 1),
+  );
+});
+
+test("a page reads each directory on its way once however wide it is", async () => {
+  createWideTree();
+  // The root has 60 children and the first page opens one inner directory (1 child): 61 reads hold only without a second pass.
+  const page = await adapter.readDirectoryRecursiveWithin(
+    {
+      path: root,
+      limit: 2,
+    },
+    undefined,
+    {
+      entries: 61,
+      depth: 8,
+    },
+  );
+  expect(paths(page.entries)).toEqual([
+    "00",
+    "00/inner",
+  ]);
+});
+
 test("a cursor need not name an existing path and continues after its position", async () => {
   createTree([
     "a/1",

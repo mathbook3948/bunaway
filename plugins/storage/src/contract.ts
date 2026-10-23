@@ -13,12 +13,14 @@ export const DEFAULT_DIRECTORY_PAGE_ENTRIES = MAX_DIRECTORY_ENTRIES;
 export const MAX_DIRECTORY_SIZE_ENTRIES = 100_000;
 export const MAX_DIRECTORY_SIZE_DEPTH = 64;
 /**
- * Bounds of storage.readDirectoryRecursive. A scan reads at most MAX_DIRECTORY_SIZE_ENTRIES
- * children and descends at most MAX_DIRECTORY_SIZE_DEPTH levels, like directorySize, so an entry
- * path has at most one more component than the depth bound. A page stops before its paths exceed
+ * Bounds of storage.readDirectoryRecursive. A scan reads at most MAX_RECURSIVE_SCAN_ENTRIES
+ * children, which bounds time only because a page keeps just the names it needs, and descends at
+ * most MAX_DIRECTORY_SIZE_DEPTH levels, like directorySize, so an entry path has at most one more
+ * component than the depth bound. A page stops before its paths exceed
  * MAX_RECURSIVE_PAGE_PATH_CHARACTERS UTF-16 units in total, which keeps the escaped reply under the
  * 1 MiB message even when every unit escapes to six bytes.
  */
+export const MAX_RECURSIVE_SCAN_ENTRIES = 1_000_000;
 export const MAX_RECURSIVE_PATH_COMPONENTS = MAX_DIRECTORY_SIZE_DEPTH + 1;
 export const MAX_RECURSIVE_PATH_CHARACTERS =
   MAX_RECURSIVE_PATH_COMPONENTS * (MAX_FILENAME_CHARACTERS + 1) - 1;

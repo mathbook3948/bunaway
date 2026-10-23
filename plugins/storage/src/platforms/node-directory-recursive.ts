@@ -25,17 +25,26 @@ export type RecursiveListRequest = {
 };
 
 /**
- * A directory being walked: its children in name order and the next child to visit. `resume` is
- * the part of the cursor still below this directory; children that sort before its first
- * component were already returned and are not kept.
+ * A directory being walked: a window of its children in name order and the next child to visit.
+ * Only the first names at or after the cursor are held, so memory follows the page size and not the
+ * directory size. `more` is set when later children were left out; the window is read again from
+ * after its last name once it is used up. `resume` is the part of the cursor still below this
+ * directory; children that sort before its first component were already returned.
  */
 type TreeFrame = {
   path: string;
   relative: string;
   depth: number;
   children: Dirent[];
+  more: boolean;
   next: number;
   resume: string[];
+};
+
+/** A window of one directory's children: the first ones at or after a name, and whether more follow. */
+type ChildWindow = {
+  children: Dirent[];
+  more: boolean;
 };
 
 function invalidCursor(): BunawayError {
@@ -75,19 +84,22 @@ function cursorComponents(after: string | undefined): string[] {
 class TreeScan {
   private visited = 0;
   private readonly checkpoint: () => Promise<void>;
+  /** Children held per directory: a page takes at most `limit` of them, plus the cursor's own name and one that shows the page is not last. */
+  private readonly windowSize: number;
 
   constructor(
     private readonly limits: DirectorySizeLimits,
+    limit: number,
     signal: AbortSignal | undefined,
     alive: () => void,
   ) {
     this.checkpoint = createCheckpoint(signal, alive);
+    this.windowSize = limit + 2;
   }
 
   /**
-   * Read a directory into a frame, or null when a descendant vanished. Every child read counts
-   * against the entry bound, including those the cursor skips, and the directory handle is closed
-   * before the walk goes on so the handles in use do not grow with the depth.
+   * Read a directory into a frame, or null when a descendant vanished. The directory handle is
+   * closed before the walk goes on so the handles in use do not grow with the depth.
    */
   private async openTreeFrame(
     path: string,
@@ -98,11 +110,47 @@ class TreeScan {
     if (depth > this.limits.depth) {
       throw limitExceeded();
     }
+    const window = await this.readWindow(path, depth, resume[0]);
+    if (!window) {
+      return null;
+    }
+    return {
+      path,
+      relative,
+      depth,
+      ...window,
+      next: 0,
+      resume,
+    };
+  }
+
+  /**
+   * Stream a directory once and keep its first `windowSize` children whose name is not below
+   * `from`, in name order. Every child read counts against the entry bound, including those that
+   * are skipped or left out. A name above the window's current end is dropped at once, and the
+   * buffer is cut back whenever it doubles, so memory stays near the window size however large
+   * the directory is. Null when the directory vanished.
+   */
+  private async readWindow(
+    path: string,
+    depth: number,
+    from: string | undefined,
+  ): Promise<ChildWindow | null> {
     const directory = openFrame(path, depth);
     if (!directory) {
       return null;
     }
-    const children: Dirent[] = [];
+    let buffer: Dirent[] = [];
+    let ceiling: string | undefined;
+    let more = false;
+    const cut = () => {
+      buffer.sort((left, right) => compareNames(left.name, right.name));
+      if (buffer.length > this.windowSize) {
+        buffer = buffer.slice(0, this.windowSize);
+        ceiling = buffer[this.windowSize - 1]?.name;
+        more = true;
+      }
+    };
     try {
       for (
         let child = directory.readSync();
@@ -113,22 +161,46 @@ class TreeScan {
         if (++this.visited > this.limits.entries) {
           throw limitExceeded();
         }
-        if (resume.length === 0 || child.name >= (resume[0] ?? "")) {
-          children.push(child);
+        if (from !== undefined && child.name < from) {
+          continue;
+        }
+        if (ceiling !== undefined && child.name > ceiling) {
+          more = true;
+          continue;
+        }
+        buffer.push(child);
+        if (buffer.length >= this.windowSize * 2) {
+          cut();
         }
       }
     } finally {
       directory.closeSync();
     }
-    children.sort((left, right) => compareNames(left.name, right.name));
+    cut();
     return {
-      path,
-      relative,
-      depth,
-      children,
-      next: 0,
-      resume,
+      children: buffer,
+      more,
     };
+  }
+
+  /**
+   * The next child of a frame, reading the following window of its directory when the current one
+   * is used up. Undefined when the frame has no more children.
+   */
+  private async nextChild(frame: TreeFrame): Promise<Dirent | undefined> {
+    if (frame.next >= frame.children.length && frame.more) {
+      const last = frame.children.at(-1);
+      // A NUL sorts right after the name it follows and cannot be part of a file name.
+      const window = await this.readWindow(
+        frame.path,
+        frame.depth,
+        last ? `${last.name}${RECURSIVE_CURSOR_SUCCESSOR}` : undefined,
+      );
+      frame.children = window?.children ?? [];
+      frame.more = window?.more ?? false;
+      frame.next = 0;
+    }
+    return frame.children[frame.next++];
   }
 
   private openChild(
@@ -165,7 +237,7 @@ class TreeScan {
         ]
       : [];
     for (let frame = stack.at(-1); frame; frame = stack.at(-1)) {
-      const child = frame.children[frame.next++];
+      const child = await this.nextChild(frame);
       if (!child) {
         stack.pop();
         continue;
@@ -279,5 +351,5 @@ export function listDirectoryTree(
   signal: AbortSignal | undefined,
   alive: () => void,
 ): Promise<StorageRecursivePage> {
-  return new TreeScan(limits, signal, alive).list(root, request);
+  return new TreeScan(limits, request.limit, signal, alive).list(root, request);
 }
