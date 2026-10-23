@@ -21,6 +21,7 @@ import { BunawayError } from "@bunaway/plugin";
 import { MacosStorage } from "../../plugins/storage/src/platforms/macos.ts";
 import { executeMacosStorage } from "../fixtures/macos-storage-operations.ts";
 import { verifyMacosDirectories } from "./macos-storage-directories.ts";
+import { verifyMacosNames } from "./macos-storage-names.ts";
 
 const mode = process.argv[2];
 const pathArgument = process.argv[3];
@@ -98,6 +99,7 @@ if (mode === "verify") {
   const results: string[] = [];
   try {
     results.push(...verifyMacosDirectories(storage, root));
+    results.push(...verifyMacosNames(storage, root));
     const other = new MacosStorage();
     other.dispose();
     other.dispose();
