@@ -101,13 +101,6 @@ export function assertMacosWindowOptions(spec: WindowSpec): void {
       message: "Initial window placement options are not implemented on macOS.",
     });
   }
-  if (spec.instances === "multiple" || spec.profile === "isolated") {
-    throw new BunawayError({
-      code: "UNSUPPORTED",
-      message:
-        "Multiple windows and isolated instance profiles are not implemented on macOS.",
-    });
-  }
 }
 
 /** Preserve the host-owned asset origin's exact port while sharing window and policy validation. */
@@ -206,12 +199,15 @@ export async function verifyMacosPackage(
     mode: "catalog",
   }).validatePolicy(policy);
   const developmentUrl = verifyDevelopmentLaunch(app.development, devUrl);
-  const declarations = app.windows ?? [
+  const declarations = [
     {
       view: app.view,
       home: app.home,
       title: app.title,
       window: app.window,
+      startup: app.startup,
+      visible: app.visible,
+      showWhenReady: app.showWhenReady,
     },
   ];
   const specs = readMacosWindowSpecs(declarations, policy, developmentUrl);

@@ -99,9 +99,7 @@ try {
     view,
     ok: true,
   });
-  await windows.close({
-    view,
-  });
+  await windows.close();
 } catch (error) {
   if (
     !(error instanceof Error && "code" in error && error.code === "CANCELLED")
@@ -111,8 +109,6 @@ try {
       ok: false,
       message: error instanceof Error ? error.message : String(error),
     });
-    await windows.close({
-      view,
-    });
+    await windows.close();
   }
 }

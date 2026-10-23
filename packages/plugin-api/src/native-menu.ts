@@ -71,6 +71,8 @@ export type NativeMenuServices = {
 
 /** Borrowed live app-window facilities. HWNDs never cross the public operation boundary. */
 export type NativeMenuWindowHost = {
+  /** The app's open window, or INVALID_ARGUMENT when there is none. */
+  current(): string;
   /** Reject unknown or closing window lifetimes with INVALID_ARGUMENT. */
   resolve(windowId: string): bigint;
   /** Notify before HWND destruction. The subscriber detaches/releases its native menus. */

@@ -2,6 +2,7 @@ import type {
   NativeWindow,
   NativeWindowServices,
   WindowIdentity,
+  WindowLifecycleEvent,
   WindowReadiness,
   WindowSpec,
   WindowState,
@@ -37,7 +38,7 @@ const unsupported = (): never => {
   });
 };
 /** Lifetime transitions of one windowId, as published by the `windows.lifecycle` event. */
-type WindowLifecyclePhase = "created" | "ready" | "closed" | "destroyed";
+type WindowLifecyclePhase = WindowLifecycleEvent["phase"];
 type View = {
   /** Native lifetime ID, replaced whenever the view is created or recreated. */
   windowId: string;
@@ -66,6 +67,9 @@ type View = {
 /** Own each window's native resources and protocol boundary; closing one view leaves the others live. */
 export class MacosWindows {
   private readonly views = new Map<string, View>();
+  private readonly lifecycleListeners = new Set<
+    (event: WindowLifecycleEvent) => void
+  >();
   /** Window that most recently became key; cleared when that window closes. */
   private lastActiveWindowId: string | undefined;
   /** A show request (desktop control, Dock reopen) that the tick has not applied yet. */
@@ -116,13 +120,12 @@ export class MacosWindows {
       read: (view) => this.views.get(view)?.state,
       supportsCreationOptions: true,
       validateCreation: (spec) => assertMacosWindowOptions(spec),
-      instances: () =>
-        [
-          ...this.views,
-        ].map(([key, view]) => ({
-          key,
-          identity: this.identity(view),
-        })),
+      onLifecycle: (listener) => {
+        this.lifecycleListeners.add(listener);
+        return () => {
+          this.lifecycleListeners.delete(listener);
+        };
+      },
       lookup: {
         byId: (windowId) => {
           const view = this.viewById(windowId);
@@ -533,8 +536,8 @@ export class MacosWindows {
    * Each phase is published at most once per windowId. Shutdown suppresses delivery because the
    * sessions are being torn down. Every later phase requires `created`, so a lifetime whose
    * WebView never became ready (creation failed or timed out) emits no lifecycle events at all.
-   * Recipients need a `windows.lifecycle` subscription and the `windows.listInstances` permission,
-   * the same boundary as listing windows, because the event exposes every window.
+   * Backend listeners are notified without a grant. Document recipients need a `windows.lifecycle`
+   * subscription and the `windows.getSnapshot` permission.
    */
   private publishLifecycle(view: View, phase: WindowLifecyclePhase): void {
     if (
@@ -546,11 +549,20 @@ export class MacosWindows {
     }
     view.publishedLifecycle.add(phase);
     const { windowId, viewId } = view.readiness.snapshot();
+    for (const listener of [
+      ...this.lifecycleListeners,
+    ]) {
+      listener({
+        windowId,
+        viewId,
+        phase,
+      });
+    }
     for (const recipient of this.views.values()) {
       if (
         !recipient.boundary.eventRoute("windows.lifecycle") ||
         !this.hooks.observes(recipient.boundary.policy.host, {
-          operation: "windows.listInstances",
+          operation: "windows.getSnapshot",
           payload: null,
         })
       ) {

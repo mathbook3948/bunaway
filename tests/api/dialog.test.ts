@@ -59,13 +59,10 @@ function fixture(
             viewId: "main",
           }
         : null,
-    owner: (windowId) =>
-      windowId === "owner"
-        ? {
-            hwnd: 42n,
-            alive: () => alive,
-          }
-        : null,
+    owner: () => ({
+      hwnd: 42n,
+      alive: () => alive,
+    }),
     stopping: () => stopping,
     poll: () => {
       polls++;
@@ -267,7 +264,6 @@ test("returns selected paths or explicit user cancellation and releases every pi
   }));
   await expect(
     f.invoke("openFile", {
-      ownerWindowId: "owner",
       defaultDirectory: "C:\\자료",
       multiple: true,
       filters: [
@@ -289,7 +285,6 @@ test("returns selected paths or explicit user cancellation and releases every pi
   });
   await expect(
     f.invoke("saveFile", {
-      ownerWindowId: "owner",
       defaultDirectory: "C:\\자료",
       defaultFileName: "memo",
       defaultExtension: "txt",
@@ -315,26 +310,8 @@ test("view calls are bound to their exact authenticated native window", async ()
   await expect(f.invoke("selectFolder", {}, "view:main")).resolves.toEqual({
     cancelled: true,
   });
-  await expect(
-    f.invoke(
-      "openFile",
-      {
-        ownerWindowId: "other",
-      },
-      "view:main",
-    ),
-  ).rejects.toMatchObject({
-    code: "PERMISSION_DENIED",
-  });
   await expect(f.invoke("openFile", {}, "view:other")).rejects.toMatchObject({
     code: "PERMISSION_DENIED",
-  });
-  await expect(
-    f.invoke("openFile", {
-      ownerWindowId: "missing",
-    }),
-  ).rejects.toMatchObject({
-    code: "INVALID_ARGUMENT",
   });
   f.closeOwner();
   await expect(f.invoke("openFile", {}, "view:main")).rejects.toMatchObject({
@@ -376,14 +353,7 @@ test("call abort, shutdown and owner retirement remain failures, even after nati
       },
     }));
     await expect(
-      f.invoke(
-        "openFile",
-        {
-          ownerWindowId: "owner",
-        },
-        "backend",
-        controller.signal,
-      ),
+      f.invoke("openFile", {}, "backend", controller.signal),
     ).rejects.toMatchObject({
       code: "CANCELLED",
     });
@@ -654,7 +624,6 @@ test("showMessage needs its own grant and passes the button result through", asy
   });
   await expect(
     f.invoke("showMessage", {
-      ownerWindowId: "owner",
       message: "Delete?",
       detail: "This cannot be undone.",
       type: "warning",
@@ -686,18 +655,6 @@ test("showMessage binds views to their window and rejects retired owners", async
       "view:main",
     ),
   ).resolves.toEqual(messageResult);
-  await expect(
-    f.invoke(
-      "showMessage",
-      {
-        message: "Hi",
-        ownerWindowId: "other",
-      },
-      "view:main",
-    ),
-  ).rejects.toMatchObject({
-    code: "PERMISSION_DENIED",
-  });
   f.closeOwner();
   await expect(
     f.invoke(
@@ -746,7 +703,6 @@ test("showMessage abort, shutdown and owner retirement stay CANCELLED after nati
       f.invoke(
         "showMessage",
         {
-          ownerWindowId: "owner",
           message: "Hi",
         },
         "backend",
@@ -792,7 +748,6 @@ test("a driver failure after host interruption is CANCELLED, otherwise it passes
     try {
       state.showMessage(
         {
-          ownerWindowId: "owner",
           message: "Hi",
         },
         "backend",
@@ -840,14 +795,7 @@ test("a picker driver failure after host interruption is not rewritten to CANCEL
     }));
     let failure: unknown;
     try {
-      state.show(
-        "openFile",
-        {
-          ownerWindowId: "owner",
-        },
-        "backend",
-        controller.signal,
-      );
+      state.show("openFile", {}, "backend", controller.signal);
     } catch (error) {
       failure = error;
     }

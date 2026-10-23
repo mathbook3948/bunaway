@@ -214,7 +214,7 @@ if (!process.argv.includes("--child")) {
     const report = JSON.parse(await readFile(reportPath, "utf8"));
     assert.equal(report.pass, true);
     console.log(
-      `PASS initial placement: HWND + WebView2 startup, single/multiple create/recreate, preflight and declaration restoration (${displays} displays)`,
+      `PASS initial placement: HWND + WebView2 startup, create/recreate overrides, preflight and declaration restoration (${displays} displays)`,
     );
   } finally {
     clearTimeout(timer);
@@ -249,33 +249,6 @@ if (!process.argv.includes("--child")) {
         preventOverflow: true,
       },
     },
-    {
-      view: "single",
-      title: "Placement single",
-      home: "https://app.bunaway.local/index.html",
-      visible: false,
-      startup: false,
-      window: {
-        ...specSize,
-        x: area.x + 40,
-        y: area.y + 40,
-        useContentSize: false,
-      },
-    },
-    {
-      view: "multiple",
-      title: "Placement multiple",
-      home: "https://app.bunaway.local/index.html",
-      visible: false,
-      startup: false,
-      instances: "multiple",
-      maxInstances: 2,
-      profile: "isolated",
-      window: {
-        ...specSize,
-        center: true,
-      },
-    },
   ];
   const original = JSON.stringify(specs);
   const policy: Policy = {
@@ -299,18 +272,12 @@ if (!process.argv.includes("--child")) {
   let desktop: DesktopContext | undefined;
   let failure: unknown;
   let completed = false;
-  async function getByView(target: { view: string }) {
-    return (
-      (await windows.listInstances()).find(
-        ({ viewId }) => viewId === target.view,
-      ) ?? null
-    );
+  async function currentWindowId() {
+    return (await windows.getReadiness()).windowId;
   }
-  async function checkCentered(target: { view: string; windowId?: string }) {
-    await waitForDocument(target);
-    const outer = await windows.getOuterBounds({
-      ...target,
-    });
+  async function checkCentered() {
+    await waitForDocument();
+    const outer = await windows.getOuterBounds();
     assert.deepEqual(
       {
         x: outer.x,
@@ -318,21 +285,18 @@ if (!process.argv.includes("--child")) {
       },
       centerInWorkArea(area, outer.width, outer.height),
     );
-    assert.equal(await windows.isVisible(target), false);
+    assert.equal(await windows.isVisible(), false);
   }
-  async function waitForDocument(target: { view: string; windowId?: string }) {
+  async function waitForDocument() {
     const deadline = Date.now() + 15_000;
-    while ((await windows.getReadiness(target)).document !== "ready") {
+    while ((await windows.getReadiness()).document !== "ready") {
       assert(Date.now() < deadline, "Placement document did not load.");
       await Bun.sleep(5);
     }
   }
-  async function checkMinimumContent(target: {
-    view: string;
-    windowId?: string;
-  }) {
-    await waitForDocument(target);
-    const content = await windows.getContentBounds(target);
+  async function checkMinimumContent() {
+    await waitForDocument();
+    const content = await windows.getContentBounds();
     assert.equal(
       content.width,
       physicalPixels(MAX_WINDOW_DIMENSION, content.dpi),
@@ -344,35 +308,29 @@ if (!process.argv.includes("--child")) {
   }
   async function exercise() {
     const deadline = Date.now() + 15_000;
-    while (
-      (await getByView({
-        view: "main",
-      })) === null
-    ) {
+    while (!(await windows.isOpen())) {
       assert(Date.now() < deadline, "Startup window did not arrive.");
       await Bun.sleep(5);
     }
-    await checkCentered({
-      view: "main",
+    await checkCentered();
+    const startup = await currentWindowId();
+    await windows.recreate({
+      options: {
+        window: {
+          center: false,
+          x: area.x + 40,
+          y: area.y + 40,
+          useContentSize: false,
+        },
+      },
     });
-    await windows.create({
-      view: "single",
-    });
-    const single = await getByView({
-      view: "single",
-    });
-    assert(single);
-    await waitForDocument({
-      view: "single",
-    });
-    const declared = await windows.getOuterBounds({
-      view: "single",
-    });
+    await waitForDocument();
+    const declared = await windows.getOuterBounds({});
     assert.equal(declared.x, area.x + 40);
     assert.equal(declared.y, area.y + 40);
     assert(Math.abs(declared.width - physicalPixels(600, declared.dpi)) <= 1);
+    assert.notEqual(await currentWindowId(), startup);
     await windows.recreate({
-      view: "single",
       options: {
         window: {
           x: null,
@@ -381,14 +339,8 @@ if (!process.argv.includes("--child")) {
         },
       },
     });
-    await checkCentered({
-      view: "single",
-    });
-    const replacement = await getByView({
-      view: "single",
-    });
-    assert(replacement);
-    assert.notEqual(replacement.windowId, single.windowId);
+    await checkCentered();
+    const replacement = await currentWindowId();
     for (const window of [
       {
         x: null,
@@ -406,7 +358,6 @@ if (!process.argv.includes("--child")) {
     ]) {
       await assert.rejects(
         windows.recreate({
-          view: "single",
           options: {
             window,
           },
@@ -415,48 +366,23 @@ if (!process.argv.includes("--child")) {
           code: "INVALID_ARGUMENT",
         },
       );
-      assert.equal(
-        (
-          await getByView({
-            view: "single",
-          })
-        )?.windowId,
-        replacement.windowId,
-      );
+      assert.equal(await currentWindowId(), replacement);
     }
     if (minimumFits) {
       await windows.recreate({
-        view: "single",
         options: {
           window: minimumWindow,
         },
       });
-      await checkMinimumContent({
-        view: "single",
-      });
+      await checkMinimumContent();
     }
-    await windows.recreate({
-      view: "single",
-    });
-    const restored = await windows.getOuterBounds({
-      view: "single",
-    });
-    assert.equal(restored.x, declared.x);
-    assert.equal(restored.y, declared.y);
-    assert.equal(restored.width, declared.width);
-    const first = await windows.createInstance({
-      view: "multiple",
-    });
-    await checkCentered({
-      view: "multiple",
-      windowId: first.windowId,
-    });
+    await windows.recreate({});
+    await checkCentered();
     const position = {
       x: area.x - 80,
       y: area.y - 60,
     };
-    const second = await windows.createInstance({
-      view: "multiple",
+    await windows.recreate({
       options: {
         window: {
           ...position,
@@ -465,16 +391,11 @@ if (!process.argv.includes("--child")) {
         },
       },
     });
-    const target = {
-      view: "multiple",
-      windowId: second.windowId,
-    };
-    const positioned = await windows.getOuterBounds({
-      ...target,
-    });
-    await waitForDocument(target);
+    await waitForDocument();
+    const positioned = await windows.getOuterBounds();
     assert.equal(positioned.x, position.x);
     assert.equal(positioned.y, position.y);
+    const positionedId = await currentWindowId();
     for (const window of [
       {
         x: 0,
@@ -486,8 +407,7 @@ if (!process.argv.includes("--child")) {
           ]),
     ]) {
       await assert.rejects(
-        windows.recreateInstance({
-          ...target,
+        windows.recreate({
           options: {
             window,
           },
@@ -496,31 +416,9 @@ if (!process.argv.includes("--child")) {
           code: "INVALID_ARGUMENT",
         },
       );
-      assert.equal(
-        (
-          await windows.getById({
-            windowId: target.windowId,
-          })
-        )?.windowId,
-        target.windowId,
-      );
+      assert.equal(await currentWindowId(), positionedId);
     }
-    let fittingTarget = target;
-    if (minimumFits) {
-      const identity = await windows.recreateInstance({
-        ...target,
-        options: {
-          window: minimumWindow,
-        },
-      });
-      fittingTarget = {
-        ...target,
-        windowId: identity.windowId,
-      };
-      await checkMinimumContent(fittingTarget);
-    }
-    const fitted = await windows.recreateInstance({
-      ...fittingTarget,
+    await windows.recreate({
       options: {
         window: {
           width: 4096,
@@ -532,30 +430,13 @@ if (!process.argv.includes("--child")) {
         },
       },
     });
-    const fittedTarget = {
-      view: "multiple",
-      windowId: fitted.windowId,
-    };
-    await waitForDocument(fittedTarget);
-    const bounds = await windows.getOuterBounds({
-      ...fittedTarget,
-    });
+    await waitForDocument();
+    const bounds = await windows.getOuterBounds();
     assert(bounds.x >= area.x && bounds.y >= area.y);
     assert(bounds.x + bounds.width <= area.x + area.width);
     assert(bounds.y + bounds.height <= area.y + area.height);
-    assert.equal(
-      (
-        await windows.getById({
-          windowId: first.windowId,
-        })
-      )?.windowId,
-      first.windowId,
-    );
-    const reset = await windows.recreateInstance(fittedTarget);
-    await checkCentered({
-      view: "multiple",
-      windowId: reset.windowId,
-    });
+    await windows.recreate({});
+    await checkCentered();
     assert.equal(JSON.stringify(specs), original);
     await writeFile(
       reportPath,
@@ -569,17 +450,9 @@ if (!process.argv.includes("--child")) {
       }),
     );
     completed = true;
-    await windows.destroy({
-      view: "multiple",
-      windowId: reset.windowId,
-    });
-    await windows.destroy({
-      view: "multiple",
-      windowId: first.windowId,
-    });
-    await windows.destroy({
-      view: "single",
-    });
+    await windows.destroy();
+    await windows.destroy();
+    await windows.destroy();
     assert(desktop);
     await desktop.quit();
   }

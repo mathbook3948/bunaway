@@ -25,7 +25,6 @@ const LOCAL_POLLER =
  */
 const LITERAL_DEADLINES: Record<string, number> = {
   "api/default-client.test.ts": 1,
-  "api/window-readiness.test.ts": 1,
   "cli/managed-command.test.ts": 3,
   "cli/windows-opener-files.ts": 1,
   "fixtures/android/app.ts": 1,
@@ -100,9 +99,7 @@ const LOCAL_POLLERS: Record<string, number> = {
   "lifecycle/windows-host.ts": 1,
   "lifecycle/windows-initial-placement.ts": 1,
   "lifecycle/windows-monitor-events.ts": 1,
-  "lifecycle/windows-multiple-windows.ts": 1,
   "lifecycle/windows-opener-recent.test.ts": 1,
-  "lifecycle/windows-owned-modal.ts": 1,
   "lifecycle/windows-session-end.ts": 1,
   "lifecycle/windows-ui-lifecycle.test.ts": 1,
   "lifecycle/windows-ui-operations.test.ts": 2,

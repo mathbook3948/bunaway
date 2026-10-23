@@ -70,6 +70,7 @@ const hwnd = windows.create(
   true,
 );
 const menus = new WindowMenus({
+  current: () => "main",
   resolve: () => hwnd,
   subscribe(_id, receive) {
     listeners.add(receive);

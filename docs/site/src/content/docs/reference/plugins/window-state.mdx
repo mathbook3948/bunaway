@@ -15,22 +15,21 @@ import windowState from "@bunaway/plugin-window-state";
 import windows from "@bunaway/plugin-windows";
 
 // 창을 보이기 전에 복원하고, 닫기 요청을 받으면 저장한 뒤 닫습니다.
-await windowState.restore({ view: "main" });
-await windows.show({ view: "main" });
+await windowState.restore();
+await windows.show();
 
-await windowState.save({ view: "main" });
-await windowState.remove({ view: "main" });
+await windowState.save();
+await windowState.remove();
 ```
 
 | 함수 | 입력 | 결과 |
 | --- | --- | --- |
-| `windowState.save` | `{ view, windowId?, key? }` | `Promise<null>` |
-| `windowState.restore` | `{ view, windowId?, key?, include? }` | `Promise<{ restored, adjusted }>` |
-| `windowState.remove` | `{ view?, key? }` | `Promise<{ removed }>` |
+| `windowState.save` | `{ key? }` | `Promise<null>` |
+| `windowState.restore` | `{ key?, include? }` | `Promise<{ restored, adjusted }>` |
+| `windowState.remove` | `{ key? }` | `Promise<{ removed }>` |
 
-`view`와 `windowId`는 `windows` 작업의 창 지정과 같습니다. `key`는 저장 항목의 이름이며 생략하면 `view`를
-씁니다. 한 뷰에 창이 여러 개일 때 `key`로 창마다 따로 저장합니다. `key`는 영문자, 숫자, `_`, `.`, `:`, `-`로
-이루어진 1자 이상 128자 이하입니다. `remove`는 `view`나 `key` 중 하나가 필요합니다.
+세 작업은 앱의 창을 대상으로 하며 모든 입력을 생략할 수 있습니다. `key`는 저장 항목의 이름이며 생략하면 앱의
+뷰 ID를 씁니다. `key`는 영문자, 숫자, `_`, `.`, `:`, `-`로 이루어진 1자 이상 128자 이하입니다.
 
 ## 권한
 

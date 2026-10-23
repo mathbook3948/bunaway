@@ -32,7 +32,7 @@ const state = {
 };
 
 /** Keep real authorization and instance dispatch, replacing only the native resource boundary. */
-function fixture(multiple = false) {
+function fixture() {
   const actions: unknown[] = [];
   let closed = false;
   let cancelled = false;
@@ -100,21 +100,6 @@ function fixture(multiple = false) {
           width: 800,
           height: 600,
         },
-        ...(multiple
-          ? ({
-              instances: "multiple",
-              maxInstances: 2,
-            } as const)
-          : {}),
-      },
-    ],
-    instances: () => [
-      {
-        key: "main",
-        identity: {
-          viewId: "main",
-          windowId: "native-main",
-        },
       },
     ],
     read: () => ({
@@ -140,12 +125,7 @@ function fixture(multiple = false) {
   const permissions = {
     permissions: names.map((name) => `windows.${name}`),
   };
-  const invoke = (
-    name: (typeof names)[number],
-    payload: JsonValue = {
-      view: "main",
-    },
-  ) => {
+  const invoke = (name: (typeof names)[number], payload: JsonValue = null) => {
     if (!adapter.executeUI) {
       throw new Error("Missing UI adapter");
     }
@@ -216,12 +196,10 @@ test("WebView operations use strict Zod contracts and individual registered perm
       validateWindowCall({
         operation: "windows.setZoomFactor",
         payload: {
-          view: "main",
           factor,
         },
       }).payload,
     ).toEqual({
-      view: "main",
       factor,
     });
   }
@@ -237,7 +215,6 @@ test("WebView operations use strict Zod contracts and individual registered perm
       validateWindowCall({
         operation: "windows.setZoomFactor",
         payload: {
-          view: "main",
           factor,
         },
       }),
@@ -252,7 +229,6 @@ test("WebView operations use strict Zod contracts and individual registered perm
       validateWindowCall({
         operation: "windows.navigateWebView",
         payload: {
-          view: "main",
           url,
         },
       }),
@@ -262,7 +238,6 @@ test("WebView operations use strict Zod contracts and individual registered perm
     validateWindowCall({
       operation: "windows.reloadWebView",
       payload: {
-        view: "main",
         ignoreCache: true,
       },
     }),
@@ -276,12 +251,10 @@ test("WebView helpers dispatch queries, navigation and normalized zoom results",
   expect(await f.invoke("goForward")).toBe(false);
   expect(
     await f.invoke("setZoomFactor", {
-      view: "main",
       factor: 1.5,
     }),
   ).toBe(1.5);
   await f.invoke("navigateWebView", {
-    view: "main",
     url: state.url,
   });
   await f.invoke("reloadWebView");
@@ -316,28 +289,6 @@ test("permission denial and cancelled or closed calls never enter native control
   });
   expect(f.actions).toEqual([]);
   expect(closed.actions).toEqual([]);
-});
-
-test("WebView targeting rejects wrong lifetimes and requires an ID for multiple windows", async () => {
-  const f = fixture(true);
-  await expect(f.invoke("reloadWebView")).rejects.toMatchObject({
-    code: "INVALID_ARGUMENT",
-  });
-  await expect(
-    f.invoke("reloadWebView", {
-      view: "main",
-      windowId: "old-main",
-    }),
-  ).rejects.toMatchObject({
-    code: "INVALID_ARGUMENT",
-  });
-  await f.invoke("reloadWebView", {
-    view: "main",
-    windowId: "native-main",
-  });
-  expect(f.actions).toEqual([
-    "reload",
-  ]);
 });
 
 test("missing platform services and native failures are preserved", async () => {

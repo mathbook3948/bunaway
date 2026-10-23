@@ -207,7 +207,6 @@ if (!process.argv.includes("--child")) {
   assert(address && typeof address === "object");
   const origin = `http://127.0.0.1:${address.port}`;
   const main = {
-    view: "main",
     windowId: "",
   };
   const waitFor = async (
@@ -221,22 +220,29 @@ if (!process.argv.includes("--child")) {
       await Bun.sleep(10);
     }
   };
-  const item = async (id: string, target = main) => {
-    const found = (await windows.getDownloads(target)).find(
+  const item = async (id: string) => {
+    const found = (await windows.getDownloads()).find(
       (download) => download.id === id,
     );
     assert(found, "Missing retained download");
     return found;
   };
   const freshView = async () => {
-    const replacement = await windows.recreateInstance(main);
-    main.windowId = replacement.windowId;
+    const previous = main.windowId;
+    await windows.recreate();
+    await waitFor(async () => {
+      const { windowId } = await windows.getReadiness();
+      if (windowId === previous) {
+        return false;
+      }
+      main.windowId = windowId;
+      return true;
+    }, "Replacement window did not open");
     await waitFor(
       () => arrivals.has(main.windowId),
       "Replacement document did not reconnect",
     );
     await windows.setDownloadRequestsEnabled({
-      ...main,
       enabled: true,
     });
   };
@@ -247,14 +253,14 @@ if (!process.argv.includes("--child")) {
     });
     await waitFor(
       async () =>
-        (await windows.getDownloads(target)).some(
+        (await windows.getDownloads()).some(
           (download) =>
             download.state === "pending" &&
             download.url.endsWith(`/${name}.bin`),
         ),
       `Missing download request ${name}`,
     );
-    const found = (await windows.getDownloads(target)).find(
+    const found = (await windows.getDownloads()).find(
       (download) =>
         download.state === "pending" && download.url.endsWith(`/${name}.bin`),
     );
@@ -285,7 +291,7 @@ if (!process.argv.includes("--child")) {
         log.includes("/disabled.bin")
       );
     }, "Default-denied download was not observed");
-    assert.deepEqual(await windows.getDownloads(main), []);
+    assert.deepEqual(await windows.getDownloads(), []);
     // The unchanged multiple-automatic-downloads permission stays denied.
     // A new WebView supplies one fresh browser request for each control scenario.
     await freshView();
@@ -296,14 +302,12 @@ if (!process.argv.includes("--child")) {
       "Pending download created its destination before approval",
     );
     await windows.cancelDownload({
-      ...main,
       id: denied.id,
     });
     assert.equal((await item(denied.id)).state, "cancelled");
     assert.equal(await Bun.file(denied.path).exists(), false);
     await assert.rejects(
       windows.approveDownload({
-        ...main,
         id: denied.id,
       }),
       {
@@ -311,7 +315,6 @@ if (!process.argv.includes("--child")) {
       },
     );
     await windows.forgetDownload({
-      ...main,
       id: denied.id,
     });
 
@@ -319,7 +322,6 @@ if (!process.argv.includes("--child")) {
     const accepted = await request("approved");
     assert.equal(accepted.mimeType, "application/octet-stream");
     await windows.approveDownload({
-      ...main,
       id: accepted.id,
     });
     await waitFor(async () => {
@@ -329,7 +331,6 @@ if (!process.argv.includes("--child")) {
     // The deferred DownloadStarting snapshot can precede the runtime's final size metadata.
     assert.equal((await item(accepted.id)).totalBytes, content.length);
     await windows.pauseDownload({
-      ...main,
       id: accepted.id,
     });
     await waitFor(
@@ -338,7 +339,6 @@ if (!process.argv.includes("--child")) {
     );
     assert.equal((await item(accepted.id)).paused, true);
     await windows.resumeDownload({
-      ...main,
       id: accepted.id,
     });
     await waitFor(
@@ -354,14 +354,12 @@ if (!process.argv.includes("--child")) {
     assert.equal(saved.receivedBytes, content.length);
     assert.deepEqual(await readFile(saved.path), content);
     await windows.forgetDownload({
-      ...main,
       id: accepted.id,
     });
 
     await freshView();
     const interrupted = await request("cancelled");
     await windows.approveDownload({
-      ...main,
       id: interrupted.id,
     });
     await waitFor(
@@ -369,16 +367,13 @@ if (!process.argv.includes("--child")) {
       "Cancellation item did not start",
     );
     await windows.cancelDownload({
-      ...main,
       id: interrupted.id,
     });
     await windows.cancelDownload({
-      ...main,
       id: interrupted.id,
     });
     assert.equal((await item(interrupted.id)).state, "cancelled");
     await windows.forgetDownload({
-      ...main,
       id: interrupted.id,
     });
 
@@ -392,7 +387,6 @@ if (!process.argv.includes("--child")) {
     assert.equal(await Bun.file(expired.path).exists(), false);
     await assert.rejects(
       windows.approveDownload({
-        ...main,
         id: expired.id,
       }),
       {
@@ -400,7 +394,6 @@ if (!process.argv.includes("--child")) {
       },
     );
     await windows.forgetDownload({
-      ...main,
       id: expired.id,
     });
 
@@ -422,28 +415,16 @@ if (!process.argv.includes("--child")) {
     );
     await freshView();
     const cleanupOwner = {
-      ...main,
+      windowId: main.windowId,
     };
     const faulted = await request("cleanup-failure");
     await windows.approveDownload({
-      ...cleanupOwner,
       id: faulted.id,
     });
     await waitFor(async () => {
-      const state = await item(faulted.id, cleanupOwner);
+      const state = await item(faulted.id);
       return state.state === "inProgress" && (state.receivedBytes ?? 0) > 0;
     }, "Cleanup fault transfer did not start");
-    const healthy = await windows.createInstance({
-      view: "main",
-    });
-    const closingPeer = await windows.createInstance({
-      view: "main",
-    });
-    await waitFor(
-      () =>
-        arrivals.has(healthy.windowId) && arrivals.has(closingPeer.windowId),
-      "Peer documents did not connect",
-    );
     const readCleanupDiagnostics = async (): Promise<
       Record<string, unknown>[]
     > =>
@@ -451,9 +432,7 @@ if (!process.argv.includes("--child")) {
         .trim()
         .split("\n")
         .map((line) => JSON.parse(line));
-    await windows.close({
-      ...cleanupOwner,
-    });
+    await windows.close();
     await waitFor(
       async () =>
         (await readCleanupDiagnostics()).some(
@@ -462,27 +441,6 @@ if (!process.argv.includes("--child")) {
             entry.windowId === cleanupOwner.windowId,
         ),
       "Closing owner did not retain and retry its failed cancellation",
-    );
-    await windows.close({
-      view: "main",
-      windowId: closingPeer.windowId,
-    });
-    actions.set(healthy.windowId, {
-      kind: "ping",
-      url: "",
-    });
-    await waitFor(
-      () => heartbeats.has(healthy.windowId),
-      "Healthy peer lost its live SDK session after another owner's cleanup failure",
-    );
-    await waitFor(
-      async () =>
-        (await readCleanupDiagnostics()).some(
-          (entry) =>
-            entry.event === "view-cleaned" &&
-            entry.windowId === closingPeer.windowId,
-        ),
-      "Peer cleanup was blocked by the closing owner's retry",
     );
     await waitFor(
       async () =>
@@ -493,53 +451,21 @@ if (!process.argv.includes("--child")) {
         ),
       "Transient cancellation did not recover",
     );
-    const cleanupRecords = await readCleanupDiagnostics();
-    const peerCleaned = cleanupRecords.findIndex(
-      (entry) =>
-        entry.event === "view-cleaned" &&
-        entry.windowId === closingPeer.windowId,
-    );
-    const ownerRecovered = cleanupRecords.findIndex(
-      (entry) =>
-        entry.event === "download-cleanup-recovered" &&
-        entry.windowId === cleanupOwner.windowId,
-    );
-    assert(
-      peerCleaned >= 0 && ownerRecovered > peerCleaned,
-      "Peer cleanup did not progress while owner cancellation was still failing",
-    );
     assert.equal(
-      cleanupRecords.some((entry) => entry.event === "ui-failed"),
+      (await readCleanupDiagnostics()).some(
+        (entry) => entry.event === "ui-failed",
+      ),
       false,
     );
-    main.windowId = healthy.windowId;
     await freshView();
     const crashing = await request("crashing");
     await windows.approveDownload({
-      ...main,
       id: crashing.id,
     });
     await waitFor(async () => {
       const state = await item(crashing.id);
       return state.state === "inProgress" && (state.receivedBytes ?? 0) > 0;
     }, "Crash item did not start");
-    const pendingWindow = await windows.createInstance({
-      view: "main",
-    });
-    const pendingTarget = {
-      view: "main",
-      windowId: pendingWindow.windowId,
-    };
-    await waitFor(
-      () => arrivals.has(pendingTarget.windowId),
-      "Second shared-profile document did not connect",
-    );
-    await windows.setDownloadRequestsEnabled({
-      ...pendingTarget,
-      enabled: true,
-    });
-    const closing = await request("closing", pendingTarget);
-    assert.equal(await Bun.file(closing.path).exists(), false);
     assert.equal((await item(crashing.id)).state, "inProgress");
     const diagnostics: unknown[] = (
       await readFile(resolve(dataRoot, "logs/host.log"), "utf8")
@@ -630,14 +556,7 @@ if (!process.argv.includes("--child")) {
             }
             failure = error;
             console.error(error);
-            for (const identity of await windows.listInstances()) {
-              await windows
-                .close({
-                  view: identity.viewId,
-                  windowId: identity.windowId,
-                })
-                .catch(() => {});
-            }
+            await windows.close().catch(() => {});
           });
         },
       },
@@ -651,8 +570,7 @@ if (!process.argv.includes("--child")) {
           const: null,
         },
         async run() {
-          const identity = await windows.getCurrent();
-          assert(identity);
+          const identity = await windows.getReadiness();
           heartbeats.add(identity.windowId);
           return null;
         },
@@ -674,8 +592,8 @@ if (!process.argv.includes("--child")) {
           additionalProperties: false,
         },
         async run() {
-          const identity = await windows.getCurrent();
-          assert(identity && identity.viewId === "main");
+          const identity = await windows.getReadiness();
+          assert(identity.viewId === "main");
           arrivals.set(
             identity.windowId,
             (arrivals.get(identity.windowId) ?? 0) + 1,
@@ -705,8 +623,6 @@ if (!process.argv.includes("--child")) {
       windows: [
         {
           view: "main",
-          instances: "multiple",
-          maxInstances: 3,
           title: "Downloads",
           home: `${origin}/index.html`,
           visible: false,
@@ -733,7 +649,6 @@ if (!process.argv.includes("--child")) {
           nativeCleanup: true,
           browserCrashCleanup: true,
           cancelFailureContained: true,
-          peerCleanupContinued: true,
         },
         null,
         2,

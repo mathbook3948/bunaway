@@ -5,8 +5,6 @@ import {
   MAX_WINDOW_ASPECT_RATIO,
   MAX_WINDOW_COORDINATE,
   MAX_WINDOW_DIMENSION,
-  MAX_WINDOW_INSTANCES,
-  MAX_WINDOWS,
   MIN_WINDOW_ASPECT_RATIO,
   MIN_WINDOW_COORDINATE,
   MIN_WINDOW_DIMENSION,
@@ -274,15 +272,6 @@ const thumbnailButton = z.strictObject({
     .default([]),
 });
 
-const viewTarget = z.strictObject({
-  view: z.string().regex(new RegExp(WINDOW_VIEW_NAME_PATTERN, "u")),
-});
-
-const windowTarget = z.strictObject({
-  view: viewTarget.shape.view,
-  windowId: viewTarget.shape.view.exactOptional(),
-});
-
 /** Must stay aligned with the plugin API's `WindowAttentionMode`. */
 const attentionMode = z.enum([
   "untilFocused",
@@ -301,8 +290,12 @@ const resizeDirection = z.enum([
   "southWest",
 ]) satisfies z.ZodType<WindowResizeDirection>;
 
+const windowIdentifier = z
+  .string()
+  .regex(new RegExp(WINDOW_VIEW_NAME_PATTERN, "u"));
+
 const windowResult = {
-  input: windowTarget,
+  input: z.null(),
   output: z.null(),
 };
 
@@ -314,32 +307,17 @@ const aspectRatio = z
   .nullable();
 
 const windowStateResult = {
-  input: windowTarget,
+  input: z.null(),
   output: z.boolean(),
 };
 
-const downloadTarget = windowTarget.extend({
+const downloadTarget = z.strictObject({
   id: z.string().uuid(),
 });
 
 const downloadResult = {
   input: downloadTarget,
   output: z.null(),
-};
-
-const windowIdentitySchema = z.strictObject({
-  windowId: windowTarget.shape.view,
-  viewId: windowTarget.shape.view,
-});
-
-const windowLookupOutput = z.union([
-  z.null(),
-  windowIdentitySchema,
-]);
-
-const windowLookup = {
-  input: z.null(),
-  output: windowLookupOutput,
 };
 
 const sizeDimension = z.union([
@@ -357,7 +335,6 @@ const creationDimension = z
 
 const creationResult = {
   input: z.strictObject({
-    view: viewTarget.shape.view,
     options: z
       .strictObject({
         title: windowTitle.exactOptional(),
@@ -439,8 +416,6 @@ const _boundsProperties = {
 };
 
 const geometryTarget = z.strictObject({
-  view: viewTarget.shape.view,
-  windowId: viewTarget.shape.view.exactOptional(),
   unit: z
     .union([
       z.literal("physical"),
@@ -456,8 +431,6 @@ const positionOutput = z.strictObject({
 });
 
 const geometryPositionInput = z.strictObject({
-  view: viewTarget.shape.view,
-  windowId: viewTarget.shape.view.exactOptional(),
   unit: z
     .union([
       z.literal("physical"),
@@ -469,8 +442,6 @@ const geometryPositionInput = z.strictObject({
 });
 
 const geometrySizeInput = z.strictObject({
-  view: viewTarget.shape.view,
-  windowId: viewTarget.shape.view.exactOptional(),
   unit: z
     .union([
       z.literal("physical"),
@@ -482,8 +453,6 @@ const geometrySizeInput = z.strictObject({
 });
 
 const geometryBoundsInput = z.strictObject({
-  view: viewTarget.shape.view,
-  windowId: viewTarget.shape.view.exactOptional(),
   unit: z
     .union([
       z.literal("physical"),
@@ -936,7 +905,7 @@ export const windowOperations = {
     output: monitorSchema,
   },
   "windows.getMonitor": {
-    input: windowTarget,
+    input: z.null(),
     output: monitorSchema,
   },
   "windows.getMonitorNearestPoint": {
@@ -952,7 +921,7 @@ export const windowOperations = {
     output: monitorPointSchema,
   },
   "windows.showPrintUI": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       kind: z
         .enum([
           "browser",
@@ -963,13 +932,13 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.setDownloadRequestsEnabled": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       enabled: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.getDownloads": {
-    input: windowTarget,
+    input: z.null(),
     output: z
       .array(
         z.strictObject({
@@ -1001,7 +970,7 @@ export const windowOperations = {
   "windows.resumeDownload": downloadResult,
   "windows.forgetDownload": downloadResult,
   "windows.getWebViewState": {
-    input: windowTarget,
+    input: z.null(),
     output: z.strictObject({
       url: z.string(),
       title: z.string(),
@@ -1013,7 +982,7 @@ export const windowOperations = {
     }),
   },
   "windows.navigateWebView": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       url: z
         .string()
         .min(1)
@@ -1027,34 +996,34 @@ export const windowOperations = {
   "windows.goBack": windowStateResult,
   "windows.goForward": windowStateResult,
   "windows.setZoomFactor": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       factor: z.number().min(0.25).max(5),
     }),
     output: z.number().positive(),
   },
   "windows.openDevTools": windowResult,
   "windows.getWebViewAudioState": {
-    input: windowTarget,
+    input: z.null(),
     output: z.strictObject({
       muted: z.boolean(),
       playing: z.boolean(),
     }),
   },
   "windows.setWebViewAudioMuted": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       muted: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.setTaskbarProgress": {
     input: z.union([
-      windowTarget.extend({
+      z.strictObject({
         state: z.enum([
           "none",
           "indeterminate",
         ]),
       }),
-      windowTarget.extend({
+      z.strictObject({
         state: z.enum([
           "normal",
           "paused",
@@ -1067,7 +1036,7 @@ export const windowOperations = {
   },
   // Region is client-area DIPs (96 DPI), matching setSize; null clears the clip.
   "windows.setThumbnailClip": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       region: z
         .strictObject({
           x: z.int().min(0).max(MAX_WINDOW_COORDINATE),
@@ -1087,14 +1056,14 @@ export const windowOperations = {
   },
   // null or an empty string restores the default thumbnail tooltip (the window title).
   "windows.setThumbnailToolTip": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       toolTip: accessibleTitle.nullable(),
     }),
     output: z.null(),
   },
   // A null ico removes the overlay and ignores description; otherwise description is the accessibility text.
   "windows.setOverlayIcon": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       ico: icoBytes.nullable(),
       description: accessibleTitle,
     }),
@@ -1102,7 +1071,7 @@ export const windowOperations = {
   },
   // Replaces the whole toolbar: buttons keep their order, ids are unique and an empty list hides every button.
   "windows.setThumbnailToolbar": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       buttons: z
         .array(thumbnailButton)
         .max(NATIVE_THUMBNAIL_BUTTON_LIMIT)
@@ -1116,60 +1085,45 @@ export const windowOperations = {
   },
   // A null ico returns the window to the application icon from the EXE resource.
   "windows.setIcon": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       ico: icoBytes.nullable(),
     }),
     output: z.null(),
   },
   "windows.hasCustomIcon": windowStateResult,
-  "windows.createInstance": {
-    input: creationResult.input,
-    output: windowIdentitySchema,
-  },
-  "windows.recreateInstance": {
-    input: creationResult.input.extend({
-      windowId: viewTarget.shape.view,
-    }),
-    output: windowIdentitySchema,
-  },
-  "windows.listInstances": {
-    input: z.null(),
-    output: z.array(windowIdentitySchema),
-  },
-  "windows.getById": {
-    input: z.strictObject({
-      windowId: windowTarget.shape.view,
-    }),
-    output: windowLookupOutput,
-  },
-  "windows.getCurrent": windowLookup,
-  "windows.getFocused": windowLookup,
-  "windows.getLastActive": windowLookup,
   "windows.getReadiness": {
-    input: windowTarget,
+    input: z.null(),
     output: readinessDefinition,
   },
-  "windows.completeSplashscreen": {
-    input: z.strictObject({
-      view: viewTarget.shape.view,
-      splash: windowTarget.shape.view,
-    }),
-    output: z.boolean(),
-  },
   "windows.getSnapshot": {
-    input: windowTarget,
+    input: z.null(),
     output: snapshotDefinition,
   },
-  "windows.list": {
+  "windows.isOpen": {
     input: z.null(),
-    output: z
-      .array(
-        z.strictObject({
-          view: windowTarget.shape.view,
-          open: z.boolean(),
-        }),
-      )
-      .max(MAX_WINDOWS),
+    output: z.boolean(),
+  },
+  /**
+   * Backend subscription to `windows.lifecycle`: resolves with the next phase of any window lifetime,
+   * or with the first retained phase after `after` (a `sequence` from an earlier result), so a loop
+   * that passes each result's `sequence` back misses no phase. Backend only and without a permission
+   * check, since it only reports that a window appeared or ended. Phases are not sent once shutdown starts.
+   */
+  "windows.waitForLifecycle": {
+    input: z.strictObject({
+      after: z.int().min(0).max(Number.MAX_SAFE_INTEGER).exactOptional(),
+    }),
+    output: z.strictObject({
+      sequence: z.int().min(1).max(Number.MAX_SAFE_INTEGER),
+      windowId: windowIdentifier,
+      viewId: windowIdentifier,
+      phase: z.enum([
+        "created",
+        "ready",
+        "closed",
+        "destroyed",
+      ]),
+    }),
   },
   "windows.create": creationResult,
   "windows.recreate": creationResult,
@@ -1177,7 +1131,6 @@ export const windowOperations = {
   "windows.showInactive": windowResult,
   "windows.hide": windowResult,
   "windows.focus": windowResult,
-  "windows.blur": windowStateResult,
   "windows.activate": windowStateResult,
   "windows.minimize": windowResult,
   "windows.maximize": windowResult,
@@ -1189,10 +1142,9 @@ export const windowOperations = {
   "windows.isFullscreen": windowStateResult,
   "windows.isVisible": windowStateResult,
   "windows.isFocused": windowStateResult,
-  "windows.isDestroyed": windowStateResult,
   "windows.isNormal": windowStateResult,
   "windows.close": {
-    input: windowTarget,
+    input: z.null(),
     output: z.boolean(),
   },
   /**
@@ -1204,63 +1156,35 @@ export const windowOperations = {
    */
   "windows.respondClose": {
     input: z.strictObject({
-      view: viewTarget.shape.view,
-      windowId: viewTarget.shape.view.exactOptional(),
       requestId: z.int().min(1).max(Number.MAX_SAFE_INTEGER),
       allow: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.destroy": windowStateResult,
-  "windows.setParent": {
-    input: z.strictObject({
-      view: viewTarget.shape.view,
-      windowId: viewTarget.shape.view.exactOptional(),
-      parent: z.union([
-        z.null(),
-        windowTarget.shape.view,
-      ]),
-      modal: z.boolean(),
-    }),
-    output: z.null(),
-  },
-  "windows.getParent": {
-    input: windowTarget,
-    output: windowLookupOutput,
-  },
-  "windows.getOwner": {
-    input: windowTarget,
-    output: windowLookupOutput,
-  },
-  "windows.getChildren": {
-    input: windowTarget,
-    output: z.array(windowIdentitySchema).max(MAX_WINDOW_INSTANCES),
-  },
   "windows.setEnabled": {
     input: z.strictObject({
-      view: viewTarget.shape.view,
-      windowId: viewTarget.shape.view.exactOptional(),
       enabled: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.isEnabled": windowStateResult,
   "windows.setFocusable": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       focusable: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.isFocusable": windowStateResult,
   "windows.getTitlebar": {
-    input: windowTarget,
+    input: z.null(),
     output: z.enum([
       "system",
       "custom",
     ]),
   },
   "windows.setAlwaysOnTop": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       alwaysOnTop: z.boolean(),
     }),
     output: z.null(),
@@ -1269,143 +1193,141 @@ export const windowOperations = {
   "windows.moveTop": windowResult,
   "windows.moveToBottom": windowResult,
   "windows.setSkipTaskbar": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       skipTaskbar: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.isSkipTaskbar": windowStateResult,
   "windows.setContentProtection": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       contentProtection: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.isContentProtected": windowStateResult,
   "windows.requestAttention": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       mode: attentionMode.exactOptional(),
     }),
     output: z.null(),
   },
   "windows.cancelAttention": windowResult,
   "windows.setMinimizable": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       minimizable: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.isMinimizable": windowStateResult,
   "windows.setMaximizable": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       maximizable: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.isMaximizable": windowStateResult,
   "windows.setFullscreenable": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       fullscreenable: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.isFullscreenable": windowStateResult,
   "windows.setOpacity": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       opacity: z.number().min(0).max(1),
     }),
     output: z.null(),
   },
   "windows.getOpacity": {
-    input: windowTarget,
+    input: z.null(),
     output: z.number().min(0).max(1),
   },
   "windows.setHasShadow": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       hasShadow: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.hasShadow": windowStateResult,
   "windows.setBackgroundColor": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       color: windowBackgroundColor,
     }),
     output: z.null(),
   },
   "windows.getBackgroundColor": {
-    input: windowTarget,
+    input: z.null(),
     output: windowBackgroundColor.nullable(),
   },
   "windows.setIgnoreMouseEvents": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       ignore: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.isIgnoreMouseEvents": windowStateResult,
   "windows.setClosable": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       closable: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.isClosable": windowStateResult,
   "windows.setTitle": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       title: windowTitle,
     }),
     output: z.null(),
   },
   "windows.getTitle": {
-    input: windowTarget,
+    input: z.null(),
     output: nativeTitle,
   },
   "windows.setAccessibleTitle": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       title: accessibleTitle,
     }),
     output: z.null(),
   },
   "windows.getAccessibleTitle": {
-    input: windowTarget,
+    input: z.null(),
     output: windowTitle.nullable(),
   },
   "windows.setResizable": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       resizable: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.isResizable": windowStateResult,
   "windows.setMovable": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       movable: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.isMovable": windowStateResult,
   "windows.setAspectRatio": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       ratio: aspectRatio,
     }),
     output: z.null(),
   },
   "windows.getAspectRatio": {
-    input: windowTarget,
+    input: z.null(),
     output: aspectRatio,
   },
   "windows.startDragging": windowResult,
   "windows.startResizeDragging": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       direction: resizeDirection,
     }),
     output: z.null(),
   },
   "windows.setSize": {
     input: z.strictObject({
-      view: viewTarget.shape.view,
-      windowId: viewTarget.shape.view.exactOptional(),
       width: z.int().min(MIN_WINDOW_DIMENSION).max(MAX_WINDOW_DIMENSION),
       height: z.int().min(MIN_WINDOW_DIMENSION).max(MAX_WINDOW_DIMENSION),
     }),
@@ -1457,32 +1379,26 @@ export const windowOperations = {
   },
   "windows.toLogical": {
     input: z.strictObject({
-      view: viewTarget.shape.view,
-      windowId: viewTarget.shape.view.exactOptional(),
       value: geometryValue,
     }),
     output: conversionOutput,
   },
   "windows.toPhysical": {
     input: z.strictObject({
-      view: viewTarget.shape.view,
-      windowId: viewTarget.shape.view.exactOptional(),
       value: geometryValue,
     }),
     output: conversionOutput,
   },
   "windows.getMinSize": {
-    input: windowTarget,
+    input: z.null(),
     output: sizePairOutput,
   },
   "windows.getMaxSize": {
-    input: windowTarget,
+    input: z.null(),
     output: sizePairOutput,
   },
   "windows.setMinSize": {
     input: z.strictObject({
-      view: viewTarget.shape.view,
-      windowId: viewTarget.shape.view.exactOptional(),
       width: sizeDimension,
       height: sizeDimension,
     }),
@@ -1490,21 +1406,17 @@ export const windowOperations = {
   },
   "windows.setMaxSize": {
     input: z.strictObject({
-      view: viewTarget.shape.view,
-      windowId: viewTarget.shape.view.exactOptional(),
       width: sizeDimension,
       height: sizeDimension,
     }),
     output: z.null(),
   },
   "windows.getSizeConstraints": {
-    input: windowTarget,
+    input: z.null(),
     output: sizeConstraintsOutput,
   },
   "windows.setSizeConstraints": {
     input: z.strictObject({
-      view: viewTarget.shape.view,
-      windowId: viewTarget.shape.view.exactOptional(),
       minWidth: sizeDimension.exactOptional(),
       minHeight: sizeDimension.exactOptional(),
       maxWidth: sizeDimension.exactOptional(),
@@ -1514,21 +1426,19 @@ export const windowOperations = {
   },
   "windows.setPosition": {
     input: z.strictObject({
-      view: viewTarget.shape.view,
-      windowId: viewTarget.shape.view.exactOptional(),
       x: z.int().min(-32768).max(32767),
       y: z.int().min(-32768).max(32767),
     }),
     output: z.null(),
   },
   "windows.center": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       monitorId: monitorSchema.shape.id.exactOptional(),
     }),
     output: z.null(),
   },
   "windows.moveToAnchor": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       anchor: z.enum(WINDOW_ANCHORS),
       monitorId: monitorSchema.shape.id.exactOptional(),
       margin: z.int().min(0).max(MAX_ANCHOR_MARGIN).exactOptional(),
@@ -1536,7 +1446,7 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.moveNextToRect": {
-    input: windowTarget.extend({
+    input: z.strictObject({
       rect: referenceRectSchema,
       placement: z.enum(WINDOW_RECT_PLACEMENTS),
       align: z.enum(WINDOW_RECT_ALIGNMENTS).exactOptional(),
@@ -1546,16 +1456,12 @@ export const windowOperations = {
   },
   "windows.setFullscreen": {
     input: z.strictObject({
-      view: viewTarget.shape.view,
-      windowId: viewTarget.shape.view.exactOptional(),
       fullscreen: z.boolean(),
     }),
     output: z.null(),
   },
   "windows.setCloseConfirmation": {
     input: z.strictObject({
-      view: viewTarget.shape.view,
-      windowId: viewTarget.shape.view.exactOptional(),
       message: z.union([
         z.null(),
         z.string().max(1024).regex(new RegExp(WINDOW_TEXT_PATTERN, "u")),

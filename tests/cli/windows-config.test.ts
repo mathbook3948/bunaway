@@ -1,19 +1,14 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
-import { MAX_WINDOW_INSTANCES, MAX_WINDOWS } from "@bunaway/plugin-api/native";
 import type { Policy } from "@bunaway/protocol";
 import {
   developmentPolicy,
   developmentWindowHome,
 } from "@bunaway/runtime-bun/development";
-import {
-  readWindowSpecs,
-  MAX_WINDOWS as runtimeMaxWindows,
-} from "@bunaway/runtime-bun/window-config";
+import { readWindowSpecs } from "@bunaway/runtime-bun/window-config";
 
 const specs = [
   "main",
-  "editor",
 ].map((view) => ({
   view,
   title: view,
@@ -22,11 +17,6 @@ const specs = [
     width: 800,
     height: 600,
   },
-  ...(view === "editor"
-    ? {
-        startup: false,
-      }
-    : {}),
 }));
 const policy: Policy = {
   version: 1,
@@ -259,11 +249,12 @@ test("window placement declarations validate paired physical coordinates and exc
   }
 });
 
-test("window settings preserve deferred startup and require unique policy-backed views", () => {
+test("window settings require one valid policy-backed window", () => {
   expect(readWindowSpecs(specs, policy)).toEqual(specs);
   for (const invalid of [
+    [],
     [
-      ...specs,
+      specs[0],
       specs[0],
     ],
     [
@@ -316,8 +307,7 @@ test("window settings preserve deferred startup and require unique policy-backed
   }
 });
 
-test("window catalogs accept an empty or fully deferred Windows start without weakening declaration validation", () => {
-  expect(readWindowSpecs([], policy)).toEqual([]);
+test("a deferred startup window keeps its declaration validation", () => {
   const deferred = specs.map((spec) => ({
     ...spec,
     startup: false,
@@ -334,31 +324,6 @@ test("window catalogs accept an empty or fully deferred Windows start without we
       policy,
     ),
   ).toThrow("allowed app origin");
-});
-
-test("one-window-per-view declarations reject duplicates even when deferred or hidden", () => {
-  for (const overrides of [
-    {},
-    {
-      startup: false,
-    },
-    {
-      visible: false,
-    },
-  ]) {
-    expect(() =>
-      readWindowSpecs(
-        [
-          specs[0],
-          {
-            ...specs[0],
-            ...overrides,
-          },
-        ],
-        policy,
-      ),
-    ).toThrow("Only one window declaration per view is supported");
-  }
   // Invalid identifiers must fail before policy lookup, including a trailing newline.
   expect(() =>
     readWindowSpecs(
@@ -371,45 +336,29 @@ test("one-window-per-view declarations reject duplicates even when deferred or h
       policy,
     ),
   ).toThrow("Window view IDs must contain");
-});
-
-test("the shared window catalog limit includes deferred definitions and rejects larger catalogs", () => {
-  expect(runtimeMaxWindows).toBe(MAX_WINDOWS);
-  const baseSpec = specs[0];
-  const basePolicy = policy.views[0];
-  assert(baseSpec && basePolicy);
-  const catalog = Array.from(
+  for (const removed of [
     {
-      length: MAX_WINDOWS,
+      instances: "single",
     },
-    (_, index) => ({
-      ...baseSpec,
-      view: `view-${index}`,
-      startup: false,
-    }),
-  );
-  const catalogPolicy: Policy = {
-    ...policy,
-    views: catalog.map((spec) => ({
-      ...basePolicy,
-      id: spec.view,
-    })),
-  };
-  expect(readWindowSpecs(catalog, catalogPolicy)).toEqual(catalog);
-  expect(() =>
-    readWindowSpecs(
-      [
-        ...catalog,
-        {
-          ...baseSpec,
-          view: "overflow",
-        },
-      ],
-      catalogPolicy,
-    ),
-  ).toThrow(
-    `windows must contain between 0 and ${MAX_WINDOWS} window definitions.`,
-  );
+    {
+      maxInstances: 1,
+    },
+    {
+      profile: "shared",
+    },
+  ]) {
+    expect(() =>
+      readWindowSpecs(
+        [
+          {
+            ...specs[0],
+            ...removed,
+          },
+        ],
+        policy,
+      ),
+    ).toThrow("Unknown window configuration field");
+  }
 });
 
 test("window size constraints accept nullable axes and reject invalid or contradictory bounds", () => {
@@ -475,7 +424,7 @@ test("window size constraints accept nullable axes and reject invalid or contrad
   }
 });
 
-test("multi-window development replaces each view origin and preserves each home path and query", () => {
+test("development replaces the view origin and preserves the home path and query", () => {
   const server = "http://127.0.0.1:5173/health";
   const devPolicy = developmentPolicy(
     policy,
@@ -488,93 +437,12 @@ test("multi-window development replaces each view origin and preserves each home
   }));
   expect(devSpecs.map((spec) => spec.home)).toEqual([
     "http://127.0.0.1:5173/main.html?mode=1",
-    "http://127.0.0.1:5173/editor.html?mode=1",
   ]);
   expect(readWindowSpecs(devSpecs, devPolicy, server)).toEqual(devSpecs);
   expect(policy.views[0]?.origins).toEqual([
     "https://app.bunaway.local",
   ]);
   expect(() => readWindowSpecs(devSpecs, policy, server)).toThrow();
-});
-
-test("instance configuration validates multiplicity, explicit bounds and fixed profile selection", () => {
-  const first = specs[0];
-  assert(first);
-  expect(
-    readWindowSpecs(
-      [
-        {
-          ...first,
-          instances: "multiple",
-          maxInstances: MAX_WINDOW_INSTANCES,
-          profile: "isolated",
-        },
-      ],
-      policy,
-    )[0],
-  ).toMatchObject({
-    instances: "multiple",
-    maxInstances: MAX_WINDOW_INSTANCES,
-    profile: "isolated",
-  });
-  expect(
-    readWindowSpecs(
-      [
-        {
-          ...first,
-          instances: "single",
-          maxInstances: 1,
-          profile: "shared",
-        },
-      ],
-      policy,
-    )[0],
-  ).toMatchObject({
-    instances: "single",
-    maxInstances: 1,
-  });
-  for (const extra of [
-    {
-      instances: "many",
-    },
-    {
-      instances: "multiple",
-    },
-    {
-      maxInstances: 2,
-    },
-    {
-      instances: "multiple",
-      maxInstances: 0,
-    },
-    {
-      instances: "multiple",
-      maxInstances: MAX_WINDOW_INSTANCES + 1,
-    },
-    {
-      instances: "multiple",
-      maxInstances: 1.5,
-    },
-    {
-      instances: "multiple",
-      maxInstances: "2",
-    },
-    {
-      profile: "custom",
-    },
-  ]) {
-    expect(() =>
-      readWindowSpecs(
-        [
-          {
-            ...first,
-            ...extra,
-          },
-        ],
-        policy,
-      ),
-    ).toThrow();
-  }
 });
 
 test("backgroundColor declarations are normalized to lowercase #rrggbb and reject other forms", () => {
@@ -610,23 +478,6 @@ test("backgroundColor declarations are normalized to lowercase #rrggbb and rejec
       "Window backgroundColor must be #RGB or #RRGGBB.",
     );
   }
-});
-
-test("instance configuration errors describe the shared instance limit", () => {
-  expect(() =>
-    readWindowSpecs(
-      [
-        {
-          ...specs[0],
-          instances: "multiple",
-          maxInstances: MAX_WINDOW_INSTANCES + 1,
-        },
-      ],
-      policy,
-    ),
-  ).toThrow(
-    `Multiple windows require maxInstances from 1 through ${MAX_WINDOW_INSTANCES}; single permits only 1.`,
-  );
 });
 
 test("display declarations preserve explicit defaults and reject invalid options", () => {

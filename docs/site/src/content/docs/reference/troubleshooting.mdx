@@ -41,11 +41,10 @@ origin은 실제 문서 출처와 정확히 일치해야 합니다. 정책에는
 반복된다면 읽기 권한과 실제 저장 경로가 일치하는지 확인합니다.
 템플릿은 파일 없음과 다른 읽기 실패를 UI에서 함께 알리므로 오류 내용을 확인해야 합니다.
 
-## Single-window settings require one configured policy view
+## The app requires exactly one configured policy view
 
-단일 창 설정은 정책에 정확히 하나의 뷰를 요구하고 그 ID가 `app.view`와 같아야 합니다.
-Windows에서 여러 창을 사용하려면 `app.windows`에 창을 정의하고 `policy.views`에 해당 뷰를 선언하세요. 단일 창 필드와 배열 형식은 함께 사용할 수 없습니다.
-`windows` 배열은 `bunaway.json`의 `app` 안에 작성합니다.
+앱은 창 하나와 뷰 하나를 가집니다. `policy.json`의 `views`에는 뷰를 정확히 하나만 선언하세요.
+`app.view`를 지정하면 그 뷰의 ID와 같아야 하며, 다르면 `app.view must be the policy's only view.` 오류가 납니다.
 
 ## Vite 페이지는 열리는데 네이티브 호출이 안 됨
 
@@ -68,14 +67,14 @@ CLI가 개발 서버를 실행하므로 포트 5173에 별도 서버가 실행 �
 
 명령 핸들러에서 예기치 않은 예외가 발생했습니다. 개발 터미널의 해당 명령 이름과 원래 오류, 스택을 확인하세요. Windows 앱 로그에도 `command-failed`로 기록됩니다. UI 응답에는 내부 오류 메시지나 스택을 포함하지 않습니다.
 
-## app.windows has no startup window
+## app.startup is false
 
-Windows 앱의 창 선언이 비어 있거나 모두 `startup: false`인데 실행 유지 설정이 없습니다.
+Windows 앱의 `app.startup`이 `false`인데 실행 유지 설정이 없습니다.
 앱 정의의 `desktop.tray` 또는 `desktop.closeBehavior: "keep-alive"`를 지정하세요.
 백엔드 타이머나 `onOpen`, `beforeQuit`만 지정해도 이 오류를 해결할 수는 없습니다.
 CLI 설정 검증은 앱 정의를 실행하지 않으므로 이 조건은 앱 시작 때 검사합니다.
 `desktop.closeBehavior: "hide"`에는 유효한 트레이 tooltip도 필요합니다.
-macOS는 창 없는 시작을 아직 지원하지 않으므로 시작 창을 하나 이상 선언해야 합니다.
+macOS는 창 없는 시작을 아직 지원하지 않으므로 `app.startup`을 `false`로 둘 수 없습니다.
 
 ## 플러그인 초기화 또는 종료 훅 실패
 

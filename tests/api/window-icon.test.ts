@@ -13,9 +13,7 @@ import { trayIco } from "../fixtures/tray-icon.ts";
 
 const setIcon = "windows.setIcon";
 const hasCustomIcon = "windows.hasCustomIcon";
-const target = {
-  view: "main",
-};
+const target = {};
 const ico = trayIco().toString("base64");
 const brokenFrame = trayIco();
 brokenFrame.writeUInt16LE(7, 22 + 14);
@@ -25,11 +23,6 @@ test("window icon schema takes the tray ICO contract or null and nothing else", 
   for (const payload of [
     {
       ...target,
-      ico,
-    },
-    {
-      ...target,
-      windowId: "id-1",
       ico,
     },
     {
@@ -46,6 +39,11 @@ test("window icon schema takes the tray ICO contract or null and nothing else", 
   }
   for (const payload of [
     target,
+    {
+      ...target,
+      windowId: "id-1",
+      ico,
+    },
     {
       ...target,
       ico: "C:/icon.ico",
@@ -80,13 +78,13 @@ test("window icon schema takes the tray ICO contract or null and nothing else", 
   expect(() => validateWindowOutput(setIcon, true)).toThrow();
 });
 
-test("hasCustomIcon takes a window target and returns a boolean", () => {
+test("hasCustomIcon takes no input and returns a boolean", () => {
   expect(
     validateWindowCall({
       operation: hasCustomIcon,
-      payload: target,
+      payload: null,
     }).payload,
-  ).toEqual(target);
+  ).toBeNull();
   expect(() =>
     validateWindowCall({
       operation: hasCustomIcon,
@@ -201,7 +199,7 @@ test("setIcon forwards an icon provider and clears with null", async () => {
     "object",
   ]);
   expect(f.calls[1]?.[1]).toBeNull();
-  expect(await f.invoke(hasCustomIcon, target)).toBe(true);
+  expect(await f.invoke(hasCustomIcon, null)).toBe(true);
 });
 
 test("the icon provider is validated before any native call", async () => {
@@ -231,7 +229,7 @@ test("each icon operation requires its own permission, a live target and platfor
     code: "PERMISSION_DENIED",
   });
   await expect(
-    f.invoke(hasCustomIcon, target, [
+    f.invoke(hasCustomIcon, null, [
       setIcon,
     ]),
   ).rejects.toMatchObject({
@@ -240,7 +238,7 @@ test("each icon operation requires its own permission, a live target and platfor
   await expect(
     f.invoke(setIcon, {
       ...payload,
-      view: "unknown",
+      view: "main",
     }),
   ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
@@ -255,7 +253,7 @@ test("each icon operation requires its own permission, a live target and platfor
   await expect(f.invoke(setIcon, payload)).rejects.toMatchObject({
     code: "UNSUPPORTED",
   });
-  await expect(f.invoke(hasCustomIcon, target)).rejects.toMatchObject({
+  await expect(f.invoke(hasCustomIcon, null)).rejects.toMatchObject({
     code: "UNSUPPORTED",
   });
   f.close();

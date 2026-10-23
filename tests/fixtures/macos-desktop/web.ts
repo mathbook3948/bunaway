@@ -2,10 +2,8 @@ import { createClient } from "@bunaway/client";
 import windows from "@bunaway/plugin-windows";
 
 /**
- * Page for tests/lifecycle/macos-desktop.ts. The role is the file name (`main.html`, `observer.html`).
- * `main` answers `windows.closeRequested` and, in `close-lifecycle`, declines its first close after
- * the backend and the observer probed the pending request. `observer` reports `windows.lifecycle`
- * events and tries to answer a close request it does not own.
+ * Page for tests/lifecycle/macos-desktop.ts. The page answers `windows.closeRequested` and, in
+ * `close-lifecycle`, declines its first close after the backend probed the pending request.
  *
  * Every stage after the handshake logs `page-step:<role>:<step>`, and a failure of any stage logs
  * `page-failed:<role>:<step>:<code>:<details>`, which the harness treats like `script-failed`. A
@@ -16,14 +14,8 @@ import windows from "@bunaway/plugin-windows";
  */
 const client = createClient();
 // The test tsconfig has no DOM library; the page itself always has a location.
-const { pathname } = (
-  globalThis as unknown as {
-    location: URL;
-  }
-).location;
-const role = pathname.slice(1, -".html".length);
+const role = "main";
 const POLL_MS = 50;
-const POLL_LIMIT = 200;
 /** Keeps a failure token short enough to read in a CI log. */
 const DETAILS_LIMIT = 160;
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
@@ -87,7 +79,6 @@ async function listenAsMain(scenario: unknown) {
   await client.listen(
     "windows.closeRequested",
     (event) => {
-      const windowId = field(event.payload, "windowId");
       const viewId = field(event.payload, "viewId");
       const requestId = Number(field(event.payload, "requestId"));
       requests++;
@@ -95,12 +86,10 @@ async function listenAsMain(scenario: unknown) {
       void (async () => {
         if (!allow) {
           await log(`declining:${viewId}`);
-          // The backend probes the pending request and waits for the observer to do the same.
+          // The backend probes the pending request before the page answers.
           await client.invoke("test.pendingClose", requestId);
         }
         await windows.respondClose({
-          view: viewId,
-          windowId,
           requestId,
           allow,
         });
@@ -126,58 +115,12 @@ async function listenAsMain(scenario: unknown) {
   }
 }
 
-async function listenAsObserver(scenario: unknown) {
-  await enter("listen-lifecycle");
-  await client.listen(
-    "windows.lifecycle",
-    (event) => {
-      void log(
-        `lifecycle:${field(event.payload, "phase")}:${field(event.payload, "viewId")}`,
-      ).catch(logFailure);
-    },
-    {
-      onError: console.error,
-    },
-  );
-  if (scenario === "close-lifecycle") {
-    // Only the asked window may answer its close request, whatever the policy of this window allows.
-    void (async () => {
-      let requestId = 0;
-      for (
-        let attempt = 0;
-        requestId === 0 && attempt < POLL_LIMIT;
-        attempt++
-      ) {
-        requestId = Number(await client.invoke("test.pendingRequest", null));
-        if (requestId === 0) {
-          await sleep(POLL_MS);
-        }
-      }
-      const outcome = await windows
-        .respondClose({
-          view: "main",
-          requestId,
-          allow: true,
-        })
-        .then(
-          () => "RESOLVED",
-          (error: unknown) => codeOf(error),
-        );
-      await log(`observerRespond:${outcome}`);
-    })().catch(logFailure);
-  }
-}
-
 /** Boots the page for its role; each awaited stage reports its own failure through `logFailure`. */
 async function run() {
   await client.ready;
   await enter("scenario");
   const scenario = await client.invoke("test.scenario", null);
-  if (role === "main") {
-    await listenAsMain(scenario);
-  } else {
-    await listenAsObserver(scenario);
-  }
+  await listenAsMain(scenario);
   await enter("report");
   await log(`page:${role}`);
 }

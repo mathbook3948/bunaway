@@ -19,9 +19,7 @@ import { createOperations } from "#plugins/windows/src/platforms/windows";
 import { trayIco } from "../fixtures/tray-icon.ts";
 
 const operation = "windows.setThumbnailToolbar";
-const target = {
-  view: "main",
-};
+const target = {};
 const ico = trayIco().toString("base64");
 const identity = {
   windowId: "window-1",
@@ -90,16 +88,6 @@ test("toolbar schema takes up to seven uniquely named buttons with defaults", ()
     {
       ...target,
       buttons: [],
-    },
-    {
-      ...target,
-      windowId: "id-1",
-      buttons: Array.from(
-        {
-          length: 7,
-        },
-        (_, index) => button(`b${index}`),
-      ),
     },
     {
       ...target,

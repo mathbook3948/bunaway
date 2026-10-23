@@ -27,7 +27,6 @@ test("initial state overrides are fieldwise and recreation restores declared sta
     {
       operation: "windows.create",
       payload: {
-        view: "main",
         options: {
           window: {
             fullscreen: false,
@@ -57,9 +56,7 @@ test("initial state overrides are fieldwise and recreation restores declared sta
   await f.operations.execute(
     {
       operation: "windows.recreate",
-      payload: {
-        view: "main",
-      },
+      payload: {},
     },
     "declared-state",
   );
@@ -74,17 +71,16 @@ function fixture(
   validateCreation?: (spec: WindowSpec) => void,
 ) {
   const specs: WindowSpec[] = [
-    "main",
-    "editor",
-  ].map((view) => ({
-    view,
-    title: view,
-    home: "https://app.bunaway.local/index.html",
-    window: {
-      width: 800,
-      height: 600,
+    {
+      view: "main",
+      title: "main",
+      home: "https://app.bunaway.local/index.html",
+      window: {
+        width: 800,
+        height: 600,
+      },
     },
-  }));
+  ];
   const views = new Map<string, WindowState>();
   function requireView(id: string): WindowState {
     const view = views.get(id);
@@ -192,9 +188,7 @@ test("merged placement errors preserve the existing HWND and do not reserve a re
   await f.operations.execute(
     {
       operation: "windows.create",
-      payload: {
-        view: "main",
-      },
+      payload: {},
     },
     "initial",
   );
@@ -218,7 +212,6 @@ test("merged placement errors preserve the existing HWND and do not reserve a re
         {
           operation: "windows.recreate",
           payload: {
-            view: "main",
             options: {
               window,
             },
@@ -251,58 +244,31 @@ test("display-dependent validation fails before reservation and close and leaves
   await f.operations.execute(
     {
       operation: "windows.create",
-      payload: {
-        view: "main",
-      },
+      payload: {},
     },
     "initial",
   );
-  for (const [operation, view] of [
-    [
-      "windows.create",
-      "editor",
-    ],
-    [
-      "windows.recreate",
-      "main",
-    ],
-  ] as const) {
-    await expect(
-      f.operations.execute(
-        {
-          operation,
-          payload: {
-            view,
-            options: {
-              window: {
-                preventOverflow: true,
-              },
+  await expect(
+    f.operations.execute(
+      {
+        operation: "windows.recreate",
+        payload: {
+          options: {
+            window: {
+              preventOverflow: true,
             },
           },
         },
-        "invalid",
-      ),
-    ).rejects.toMatchObject({
-      code: "INVALID_ARGUMENT",
-    });
-    expect(f.views.get("main")?.closed).toBe(false);
-    expect(f.operations.replacing.size).toBe(0);
-    expect(f.created).toEqual([
-      "main",
-    ]);
-  }
-  await f.operations.execute(
-    {
-      operation: "windows.create",
-      payload: {
-        view: "editor",
       },
-    },
-    "valid",
-  );
+      "invalid",
+    ),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(f.views.get("main")?.closed).toBe(false);
+  expect(f.operations.replacing.size).toBe(0);
   expect(f.created).toEqual([
     "main",
-    "editor",
   ]);
 });
 
@@ -319,7 +285,6 @@ test("per-call placement merges axes and clears declared coordinates without cha
     {
       operation: "windows.create",
       payload: {
-        view: "main",
         options: {
           window: {
             x: -600,
@@ -345,7 +310,6 @@ test("per-call placement merges axes and clears declared coordinates without cha
     {
       operation: "windows.recreate",
       payload: {
-        view: "main",
         options: {
           window: {
             x: null,
@@ -368,9 +332,7 @@ test("per-call placement merges axes and clears declared coordinates without cha
   await f.operations.execute(
     {
       operation: "windows.recreate",
-      payload: {
-        view: "main",
-      },
+      payload: {},
     },
     "restore",
   );
@@ -394,9 +356,7 @@ test("cancelling a newly created hidden window while its controller prepares clo
     f.operations.execute(
       {
         operation: "windows.create",
-        payload: {
-          view: "main",
-        },
+        payload: {},
       },
       "new",
     ),
@@ -412,13 +372,10 @@ test("cancelling a newly created hidden window while its controller prepares clo
 
 test("unsupported destruction leaves an already committed recreation running", async () => {
   const f = fixture(false);
-  const target = {
-    view: "main",
-  };
   await f.operations.execute(
     {
       operation: "windows.create",
-      payload: target,
+      payload: {},
     },
     "initial",
   );
@@ -434,7 +391,7 @@ test("unsupported destruction leaves an already committed recreation running", a
   const replacement = f.operations.execute(
     {
       operation: "windows.recreate",
-      payload: target,
+      payload: {},
     },
     "replacement",
   );
@@ -444,7 +401,7 @@ test("unsupported destruction leaves an already committed recreation running", a
     f.operations.execute(
       {
         operation: "windows.destroy",
-        payload: target,
+        payload: null,
       },
       "unsupported",
     ),
@@ -465,13 +422,10 @@ test("unsupported destruction leaves an already committed recreation running", a
 
 test("trusted destruction interrupts an already committed recreation without resurrecting its window", async () => {
   const f = fixture();
-  const target = {
-    view: "main",
-  };
   await f.operations.execute(
     {
       operation: "windows.create",
-      payload: target,
+      payload: {},
     },
     "initial",
   );
@@ -487,7 +441,7 @@ test("trusted destruction interrupts an already committed recreation without res
   const replacement = f.operations.execute(
     {
       operation: "windows.recreate",
-      payload: target,
+      payload: {},
     },
     "replacement",
   );
@@ -497,7 +451,7 @@ test("trusted destruction interrupts an already committed recreation without res
     await f.operations.execute(
       {
         operation: "windows.destroy",
-        payload: target,
+        payload: null,
       },
       "force",
     ),
@@ -525,9 +479,7 @@ test("failed controller creation uses trusted cleanup even when normal close wou
     f.operations.execute(
       {
         operation: "windows.create",
-        payload: {
-          view: "main",
-        },
+        payload: {},
       },
       "failed",
     ),
@@ -542,13 +494,10 @@ test("failed controller creation uses trusted cleanup even when normal close wou
 
 test("parent termination cancels child recreation but permits a later explicit unowned creation", async () => {
   const f = fixture();
-  const target = {
-    view: "main",
-  };
   await f.operations.execute(
     {
       operation: "windows.create",
-      payload: target,
+      payload: {},
     },
     "initial",
   );
@@ -562,7 +511,7 @@ test("parent termination cancels child recreation but permits a later explicit u
     f.operations.execute(
       {
         operation: "windows.recreate",
-        payload: target,
+        payload: {},
       },
       "recreation",
     ),
@@ -575,7 +524,7 @@ test("parent termination cancels child recreation but permits a later explicit u
   await f.operations.execute(
     {
       operation: "windows.create",
-      payload: target,
+      payload: {},
     },
     "explicit",
   );
@@ -591,13 +540,10 @@ test.each([
   "parent termination during replacement controller setup reports cancellation even when ready=%j",
   async (ready) => {
     const f = fixture();
-    const target = {
-      view: "main",
-    };
     await f.operations.execute(
       {
         operation: "windows.create",
-        payload: target,
+        payload: {},
       },
       "initial",
     );
@@ -619,7 +565,7 @@ test.each([
       f.operations.execute(
         {
           operation: "windows.recreate",
-          payload: target,
+          payload: {},
         },
         "replacement",
       ),
@@ -637,13 +583,10 @@ test.each([
 
 test("trusted destroy after controller readiness but before recreation resumes reports cancellation", async () => {
   const f = fixture();
-  const target = {
-    view: "main",
-  };
   await f.operations.execute(
     {
       operation: "windows.create",
-      payload: target,
+      payload: {},
     },
     "initial",
   );
@@ -661,7 +604,7 @@ test("trusted destroy after controller readiness but before recreation resumes r
         await f.operations.execute(
           {
             operation: "windows.destroy",
-            payload: target,
+            payload: null,
           },
           "destroy",
         ),
@@ -672,7 +615,7 @@ test("trusted destroy after controller readiness but before recreation resumes r
     f.operations.execute(
       {
         operation: "windows.recreate",
-        payload: target,
+        payload: {},
       },
       "replacement",
     ),
@@ -683,55 +626,17 @@ test("trusted destroy after controller readiness but before recreation resumes r
   expect(f.operations.replacing.size).toBe(0);
 });
 
-test("window catalog lists configured views and cannot open arbitrary views", async () => {
-  const f = fixture();
-  expect(
-    await f.operations.execute(
-      {
-        operation: "windows.list",
-        payload: null,
-      },
-      "1",
-    ),
-  ).toEqual([
-    {
-      view: "main",
-      open: false,
-    },
-    {
-      view: "editor",
-      open: false,
-    },
-  ]);
-  await expect(
-    f.operations.execute(
-      {
-        operation: "windows.create",
-        payload: {
-          view: "unknown",
-        },
-      },
-      "2",
-    ),
-  ).rejects.toMatchObject({
-    code: "INVALID_ARGUMENT",
-  });
-  expect(f.created).toEqual([]);
-});
-
-test("a second creation of an open view is BUSY and preserves its window and session owner", async () => {
+test("creating while the window is open is BUSY and preserves its window and session owner", async () => {
   const f = fixture();
   const call = {
     operation: "windows.create",
-    payload: {
-      view: "main",
-    },
+    payload: {},
   } as const;
   await f.operations.execute(call, "first");
   const original = f.views.get("main");
   await expect(f.operations.execute(call, "second")).rejects.toMatchObject({
     code: "BUSY",
-    message: expect.stringContaining("Only one window per view is supported"),
+    message: expect.stringContaining("Window is already open"),
   });
   expect(f.views.get("main")).toBe(original);
   expect(f.created).toEqual([
@@ -746,9 +651,7 @@ test("recreation reserves the last window through cleanup, rejects competing cre
   await f.operations.execute(
     {
       operation: "windows.create",
-      payload: {
-        view: "main",
-      },
+      payload: {},
     },
     "1",
   );
@@ -764,32 +667,23 @@ test("recreation reserves the last window through cleanup, rejects competing cre
   const recreation = f.operations.execute(
     {
       operation: "windows.recreate",
-      payload: {
-        view: "main",
-      },
+      payload: {},
     },
     "2",
   );
   expect(original.closed).toBe(true);
   expect(f.operations.replacing.has("main")).toBe(true);
-  for (const operation of [
-    "windows.isDestroyed",
-    "windows.isNormal",
-  ] as const) {
-    await expect(
-      f.operations.execute(
-        {
-          operation,
-          payload: {
-            view: "main",
-          },
-        },
-        "state",
-      ),
-    ).rejects.toMatchObject({
-      code: "BUSY",
-    });
-  }
+  await expect(
+    f.operations.execute(
+      {
+        operation: "windows.isNormal",
+        payload: null,
+      },
+      "state",
+    ),
+  ).rejects.toMatchObject({
+    code: "BUSY",
+  });
   expect(f.created).toEqual([
     "main",
   ]);
@@ -797,9 +691,7 @@ test("recreation reserves the last window through cleanup, rejects competing cre
     f.operations.execute(
       {
         operation: "windows.create",
-        payload: {
-          view: "main",
-        },
+        payload: {},
       },
       "3",
     ),
@@ -824,9 +716,7 @@ test("close refusal preserves the existing window and recreation releases its re
   await f.operations.execute(
     {
       operation: "windows.create",
-      payload: {
-        view: "main",
-      },
+      payload: {},
     },
     "1",
   );
@@ -835,9 +725,7 @@ test("close refusal preserves the existing window and recreation releases its re
     await f.operations.execute(
       {
         operation: "windows.close",
-        payload: {
-          view: "main",
-        },
+        payload: null,
       },
       "2",
     ),
@@ -846,9 +734,7 @@ test("close refusal preserves the existing window and recreation releases its re
     f.operations.execute(
       {
         operation: "windows.recreate",
-        payload: {
-          view: "main",
-        },
+        payload: {},
       },
       "3",
     ),
@@ -868,7 +754,7 @@ test("cancelling creation while an already closed window drains prevents a new w
     "windows.recreate",
   ] as const) {
     const f = fixture();
-    f.views.set("editor", {
+    f.views.set("main", {
       closed: true,
       cleaned: false,
       ready: true,
@@ -877,7 +763,7 @@ test("cancelling creation while an already closed window drains prevents a new w
     });
     f.setTick(async () => {
       f.cancel();
-      const previous = f.views.get("editor");
+      const previous = f.views.get("main");
       assert(previous);
       previous.cleaned = true;
     });
@@ -885,9 +771,7 @@ test("cancelling creation while an already closed window drains prevents a new w
       f.operations.execute(
         {
           operation,
-          payload: {
-            view: "editor",
-          },
+          payload: {},
         },
         "1",
       ),
@@ -906,9 +790,7 @@ test("shutdown, cancellation before creation and cleanup timeout do not create r
     cancelled.operations.execute(
       {
         operation: "windows.create",
-        payload: {
-          view: "main",
-        },
+        payload: {},
       },
       "1",
     ),
@@ -924,9 +806,7 @@ test("shutdown, cancellation before creation and cleanup timeout do not create r
     await f.operations.execute(
       {
         operation: "windows.create",
-        payload: {
-          view: "main",
-        },
+        payload: {},
       },
       "1",
     );
@@ -941,9 +821,7 @@ test("shutdown, cancellation before creation and cleanup timeout do not create r
       f.operations.execute(
         {
           operation: "windows.recreate",
-          payload: {
-            view: "main",
-          },
+          payload: {},
         },
         "2",
       ),
@@ -968,7 +846,6 @@ test("creation options clamp merged constraints and restore declaration defaults
     {
       operation: "windows.create",
       payload: {
-        view: "main",
         options: {
           title: "Draft",
           visible: false,
@@ -1003,9 +880,7 @@ test("creation options clamp merged constraints and restore declaration defaults
   await f.operations.execute(
     {
       operation: "windows.recreate",
-      payload: {
-        view: "main",
-      },
+      payload: {},
     },
     "defaults",
   );
@@ -1028,9 +903,7 @@ test("invalid merged creation constraints leave the live window and reservation 
   await f.operations.execute(
     {
       operation: "windows.create",
-      payload: {
-        view: "main",
-      },
+      payload: {},
     },
     "initial",
   );
@@ -1040,7 +913,6 @@ test("invalid merged creation constraints leave the live window and reservation 
       {
         operation: "windows.recreate",
         payload: {
-          view: "main",
           options: {
             window: {
               maxWidth: 900,
@@ -1067,7 +939,6 @@ test("platforms without creation options accept empty options and reject overrid
     {
       operation: "windows.create",
       payload: {
-        view: "main",
         options: {},
       },
     },
@@ -1078,7 +949,6 @@ test("platforms without creation options accept empty options and reject overrid
       {
         operation: "windows.recreate",
         payload: {
-          view: "main",
           options: {
             visible: false,
           },
@@ -1099,7 +969,6 @@ test("creation titles use the same UTF-16 bound as declarations before closing a
     {
       operation: "windows.create",
       payload: {
-        view: "main",
         options: {
           title: "😀".repeat(512),
         },
@@ -1112,7 +981,6 @@ test("creation titles use the same UTF-16 bound as declarations before closing a
       {
         operation: "windows.recreate",
         payload: {
-          view: "main",
           options: {
             title: "😀".repeat(513),
           },
@@ -1143,7 +1011,6 @@ test("unsupported native creation retains its capability error and cleans the re
       {
         operation: "windows.create",
         payload: {
-          view: "main",
           options: {
             window: {
               titlebar: "custom",

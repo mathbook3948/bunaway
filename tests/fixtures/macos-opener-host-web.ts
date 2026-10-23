@@ -91,12 +91,8 @@ try {
       unsupported: "openFileWith",
       cancelled: true,
     });
-    await windows.close({
-      view: "denied",
-    });
-    await windows.close({
-      view: "main",
-    });
+    await windows.close();
+    await windows.close();
   }
 } catch (error) {
   if (
@@ -106,8 +102,6 @@ try {
       ok: false,
       message: String(error),
     });
-    await windows.close({
-      view: "main",
-    });
+    await windows.close();
   }
 }

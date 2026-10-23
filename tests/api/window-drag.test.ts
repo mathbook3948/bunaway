@@ -8,7 +8,7 @@ import {
   validateWindowCall,
   validateWindowOutput,
 } from "@bunaway/plugin-windows";
-import type { Policy } from "@bunaway/protocol";
+import type { JsonValue, Policy } from "@bunaway/protocol";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
 
@@ -92,21 +92,13 @@ function fixture(supported = true) {
     permissions,
     invoke: (
       name: "startDragging" | "startResizeDragging",
-      payload: Record<string, unknown> = {},
+      payload: Record<string, unknown> | null = null,
     ) =>
       Promise.resolve().then(() =>
-        execute(
-          `windows.${name}`,
-          {
-            view: "main",
-            ...payload,
-          },
-          "backend",
-          {
-            requestId: name,
-            permissions,
-          },
-        ),
+        execute(`windows.${name}`, payload as JsonValue, "backend", {
+          requestId: name,
+          permissions,
+        }),
       ),
   };
 }
@@ -115,9 +107,7 @@ test("drag schemas take a target window and a closed set of resize directions", 
   expect(
     validateWindowCall({
       operation: "windows.startDragging",
-      payload: {
-        view: "main",
-      },
+      payload: null,
     }).operation,
   ).toBe("windows.startDragging");
   for (const direction of DIRECTIONS) {
@@ -125,7 +115,6 @@ test("drag schemas take a target window and a closed set of resize directions", 
       validateWindowCall({
         operation: "windows.startResizeDragging",
         payload: {
-          view: "main",
           direction,
         },
       }).operation,
@@ -151,7 +140,6 @@ test("drag schemas take a target window and a closed set of resize directions", 
       validateWindowCall({
         operation: "windows.startResizeDragging",
         payload: {
-          view: "main",
           ...payload,
         },
       }),
@@ -161,7 +149,6 @@ test("drag schemas take a target window and a closed set of resize directions", 
     validateWindowCall({
       operation: "windows.startDragging",
       payload: {
-        view: "main",
         direction: "north",
       },
     }),

@@ -10,7 +10,7 @@ description: 뷰와 백엔드의 명령, 이벤트, 플러그인 작업 권한�
 
 ## views
 
-최대 128개입니다. 단일 창 설정은 뷰 하나를, `app.windows`는 창별로 정책에 있는 뷰를 사용합니다.
+최대 128개입니다. 앱 설정은 창 하나에 정책의 뷰 하나를 사용합니다.
 각 항목은 아래 필드를 모두 요구하며 추가 필드를 거부합니다.
 
 | 필드 | 제약 | 의미 |
@@ -51,7 +51,7 @@ storage.readText처럼 플러그인의 완전한 operation 이름이며 각 작�
 {
   "permissions": [
     "log.write",
-    "windows.list",
+    "windows.isOpen",
     "windows.show",
     "storage.readText"
   ]

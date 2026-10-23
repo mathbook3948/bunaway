@@ -4,6 +4,7 @@ import type { ShutdownReason } from "@bunaway/core";
 import { COINIT_APARTMENTTHREADED, checkHresult } from "@bunaway/plugin/win32";
 import type {
   NativeTrayOwner,
+  WindowLifecycleEvent,
   WindowReadiness,
 } from "@bunaway/plugin-api/native";
 import {
@@ -63,7 +64,6 @@ import {
   WM_CONTEXTMENU,
 } from "./window-input-events.ts";
 import { WindowLifecycle } from "./window-lifecycle.ts";
-import { WindowProfiles } from "./window-profiles.ts";
 import { WindowReadinessTracker } from "./window-readiness.ts";
 import {
   WindowInputRestoreError,
@@ -257,7 +257,7 @@ function showWindows() {
   showRequested = false;
 }
 /** Lifetime transitions of one windowId, as published by the `windows.lifecycle` event. */
-type WindowLifecyclePhase = "created" | "ready" | "closed" | "destroyed";
+type WindowLifecyclePhase = WindowLifecycleEvent["phase"];
 type ViewState = {
   key: string;
   startup: boolean;
@@ -285,14 +285,7 @@ type ViewState = {
   closeRequests: CloseRequests;
 };
 const views = new Map<string, ViewState>();
-const profiles = new WindowProfiles(
-  config.dataRoot,
-  config.legacyProfile ?? false,
-  (event, data) =>
-    log(event, {
-      ...data,
-    }),
-);
+const lifecycleListeners = new Set<(event: WindowLifecycleEvent) => void>();
 const closingWindows = new Set<string>();
 const replacements = new Map<
   string,
@@ -428,9 +421,7 @@ function cleanupView(view: ViewState) {
     return;
   }
   if (view.lifecycle.phase === "released") {
-    view.lifecycle.settleProfile(replacements.has(view.key), () =>
-      profiles.release(view.key, false),
-    );
+    view.lifecycle.settleProfile(replacements.has(view.key), () => true);
     return;
   }
   const windowId = view.readiness.snapshot().windowId;
@@ -455,9 +446,7 @@ function cleanupView(view: ViewState) {
   ) {
     return;
   }
-  view.lifecycle.settleProfile(replacements.has(view.key), () =>
-    profiles.release(view.key, false),
-  );
+  view.lifecycle.settleProfile(replacements.has(view.key), () => true);
 }
 /** Cancel profile retention while leaving already completed native cleanup intact. */
 function cancelReplacement(key: string) {
@@ -1158,16 +1147,12 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       assert(windows);
       windows.validateCreation(spec.window);
     },
-    instances: () =>
-      [
-        ...views,
-      ].map(([key, view]) => ({
-        key,
-        identity: {
-          windowId: view.readiness.snapshot().windowId,
-          viewId: view.boundary.policy.id,
-        },
-      })),
+    onLifecycle(listener) {
+      lifecycleListeners.add(listener);
+      return () => {
+        lifecycleListeners.delete(listener);
+      };
+    },
     lookup: {
       byId: (windowId) => windows?.getById(windowId) ?? null,
       byView: (viewId) => windows?.getByView(viewId) ?? null,
@@ -1403,9 +1388,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
 function createWindow(
   spec: WindowSpec,
   replacingLiveWindow = false,
-  instanceKey = spec.instances === "multiple"
-    ? `instance-${crypto.randomUUID()}`
-    : spec.view,
+  instanceKey = spec.view,
 ) {
   assert(windows);
   const replacement = replacingLiveWindow
@@ -1716,7 +1699,6 @@ function createWindow(
       },
       config.legacyProfile,
       config.devtools,
-      profiles.path(spec, instanceKey),
     );
     // Content joins the appearance lifetime after attach, so a theme chosen earlier is replayed.
     const created = native;
@@ -1730,7 +1712,6 @@ function createWindow(
     });
     appearanceWindows.detach(readiness.snapshot().windowId);
     windows.destroy(window);
-    profiles.release(instanceKey, false);
     throw error;
   }
   // A new HWND lifetime joins the end of its definition's creation order.
@@ -1815,18 +1796,30 @@ function publishLifecycle(view: ViewState, phase: WindowLifecyclePhase): void {
     stopping() ||
     shutdownCommitted() ||
     view.publishedLifecycle.has(phase) ||
-    (phase !== "created" && !view.publishedLifecycle.has("created")) ||
-    !registry.operations.has("windows.listInstances")
+    (phase !== "created" && !view.publishedLifecycle.has("created"))
   ) {
     return;
   }
   view.publishedLifecycle.add(phase);
   const { windowId, viewId } = view.readiness.snapshot();
+  // The backend is notified without a grant; documents need the subscription and `windows.getSnapshot`.
+  for (const listener of [
+    ...lifecycleListeners,
+  ]) {
+    listener({
+      windowId,
+      viewId,
+      phase,
+    });
+  }
+  if (!registry.operations.has("windows.getSnapshot")) {
+    return;
+  }
   for (const recipient of views.values()) {
     if (
       !recipient.boundary.eventRoute("windows.lifecycle") ||
       !registry.allowed(recipient.boundary.policy.host, {
-        operation: "windows.listInstances",
+        operation: "windows.getSnapshot",
         payload: null,
       })
     ) {
@@ -2018,13 +2011,13 @@ try {
           assert(windows);
           windows.destroy(hwnd);
         },
-        owner(windowId) {
+        owner() {
           const view = [
             ...views.values(),
           ].find(
             (view) =>
-              view.readiness.snapshot().windowId === windowId &&
-              !view.lifecycle.closed,
+              !view.lifecycle.closed &&
+              windows?.isVisible(view.native.hwnd) === true,
           );
           if (!view) {
             return null;
@@ -2124,6 +2117,18 @@ try {
       },
       menus: {
         windows: {
+          current() {
+            const view = [
+              ...views.values(),
+            ].find((view) => !view.lifecycle.closed);
+            if (!view || stopping()) {
+              throw new BunawayError({
+                code: "INVALID_ARGUMENT",
+                message: "Window is not open.",
+              });
+            }
+            return view.readiness.snapshot().windowId;
+          },
           resolve(windowId) {
             const view = viewById(windowId);
             if (!view || view.lifecycle.closed || stopping()) {
@@ -2310,7 +2315,6 @@ try {
     pid: process.pid,
     thread: kernel.symbols.GetCurrentThreadId(),
   });
-  profiles.collectOrphans();
   for (const spec of config.windows) {
     if (spec.startup !== false) {
       // Keep the catalog defaults for later creation, but prevent initial ready callbacks from showing.
@@ -2393,14 +2397,6 @@ try {
       }
       view.boundary.scanDeadlines();
       cleanupView(view);
-      if (
-        view.lifecycle.cleanupComplete &&
-        !replacements.has(viewId) &&
-        config.windows.find((spec) => spec.view === view.boundary.policy.id)
-          ?.instances === "multiple"
-      ) {
-        views.delete(viewId);
-      }
     }
     if (
       !shutdownCommitted() &&

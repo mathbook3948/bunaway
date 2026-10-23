@@ -21,6 +21,8 @@ const MENU_POLL_INTERVAL_MS = 50;
 
 /** Narrow ownership boundary used by both the production adapter and contract tests. */
 export type WindowMenuDriver = {
+  /** The app's open window; INVALID_ARGUMENT when there is none. */
+  current(): string;
   validate(windowId: string): void;
   set(
     windowId: string,
@@ -72,6 +74,10 @@ export class WindowMenus implements WindowMenuDriver {
   private disposed = false;
 
   constructor(private readonly host: NativeMenuWindowHost) {}
+
+  current() {
+    return this.host.current();
+  }
 
   validate(windowId: string) {
     this.resolve(windowId);

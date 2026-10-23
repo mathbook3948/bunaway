@@ -142,11 +142,9 @@ try {
   ];
   const specs = [
     "main",
-    "peer",
-    "denied",
   ].map((view) => ({
     view,
-    home: `https://app.bunaway.local/${view === "main" ? "index" : view}.html`,
+    home: "https://app.bunaway.local/index.html",
     title: view,
     window: {
       width: 600,
@@ -167,7 +165,6 @@ try {
           ...operations,
           "openDevTools",
           "close",
-          "recreate",
         ].map((name) => `windows.${name}`),
       },
       views: specs.map(({ view }) => ({
@@ -187,12 +184,9 @@ try {
           "plugin.windows.reloadWebView",
         ],
         host: {
-          permissions:
-            view === "denied"
-              ? []
-              : [
-                  "windows.getWebViewState",
-                ],
+          permissions: [
+            "windows.getWebViewState",
+          ],
         },
       })),
     },
@@ -231,8 +225,6 @@ try {
   }
   for (const path of [
     "/index.html",
-    "/peer.html",
-    "/denied.html",
     "/frame.html",
     "/upper-scheme.html",
     "/upper-host.html",
@@ -324,11 +316,6 @@ try {
     1,
   );
   assert.equal(records.at(-1).failed, false);
-  assert(
-    records.filter(
-      (record) => record.event === "session-open" && record.view === "peer",
-    ).length === 2,
-  );
   await writeJson(result, {
     platform: process.platform,
     arch: process.arch,

@@ -8,7 +8,7 @@ export const MIN_VISIBLE_LOGICAL_PIXELS = 48;
 /** Reference DPI of a logical pixel. */
 export const LOGICAL_DPI = 96;
 
-/** Window name or custom key: the characters and length the window operations accept for a view name. */
+/** Custom state key; the default key is the app's view ID, so it accepts the same characters and length. */
 export const stateKeySchema = z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/u);
 
 const coordinate = int32Schema;
@@ -33,8 +33,6 @@ export const savedWindowStateSchema = z.strictObject({
 export type SavedWindowState = z.infer<typeof savedWindowStateSchema>;
 
 const target = {
-  view: stateKeySchema,
-  windowId: stateKeySchema.exactOptional(),
   key: stateKeySchema.exactOptional(),
 };
 
@@ -57,14 +55,7 @@ export const restoreInputSchema = z.strictObject({
 });
 export type WindowStateRestoreInput = z.infer<typeof restoreInputSchema>;
 
-export const removeInputSchema = z
-  .strictObject({
-    view: stateKeySchema.exactOptional(),
-    key: stateKeySchema.exactOptional(),
-  })
-  .refine((input) => input.view !== undefined || input.key !== undefined, {
-    message: "Pass view or key.",
-  });
+export const removeInputSchema = z.strictObject(target);
 export type WindowStateRemoveInput = z.infer<typeof removeInputSchema>;
 
 /** Result of `windowState.restore`. */

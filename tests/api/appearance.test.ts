@@ -195,7 +195,6 @@ test("frame theme contracts are additive, independently granted and Windows-only
       parser.validateCall({
         operation: "appearance.setTheme",
         payload: {
-          windowId: "window-1",
           theme,
         },
       }),
@@ -207,10 +206,14 @@ test("frame theme contracts are additive, independently granted and Windows-only
   }
   for (const payload of [
     {
+      windowId: null,
       theme: "dark",
     },
     {
-      windowId: null,
+      windowId: "window-1",
+      theme: "dark",
+    },
+    {
       theme: "auto",
     },
     {
@@ -248,7 +251,6 @@ test("frame theme contracts are additive, independently granted and Windows-only
       {
         operation: "appearance.setTheme",
         payload: {
-          windowId: null,
           theme: "dark",
         },
       },
@@ -264,7 +266,6 @@ test("frame theme contracts are additive, independently granted and Windows-only
       {
         operation: "appearance.setTheme",
         payload: {
-          windowId: null,
           theme: "dark",
         },
       },
@@ -298,7 +299,6 @@ test("frame theme contracts are additive, independently granted and Windows-only
     expect(() =>
       windowsAppearanceOperations.setTheme.handler(
         {
-          windowId: "window-1",
           theme: "dark",
         },
         {
@@ -315,7 +315,6 @@ test("frame theme contracts are additive, independently granted and Windows-only
     expect(
       windowsAppearanceOperations.setTheme.handler(
         {
-          windowId: "window-1",
           theme: "dark",
         },
         {
@@ -325,7 +324,7 @@ test("frame theme contracts are additive, independently granted and Windows-only
       ),
     ).toMatchObject({
       preference: "dark",
-      override: "dark",
+      override: null,
       highContrast: true,
       effectiveTheme: null,
     });

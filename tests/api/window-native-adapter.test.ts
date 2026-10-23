@@ -2,9 +2,12 @@ import { expect, test } from "bun:test";
 import type {
   NativeWindow,
   NativeWindowServices,
-  WindowIdentity,
 } from "@bunaway/plugin-api/native";
 import type { JsonValue } from "@bunaway/protocol";
+import {
+  type WindowOperation,
+  windowOperations,
+} from "#plugins/windows/src/contract";
 import { createOperations } from "#plugins/windows/src/platforms/windows";
 
 /** Pins how the Windows UI adapter maps each public window operation onto the native controls. */
@@ -439,24 +442,6 @@ const rows: Row[] = [
     unsupported: MESSAGES.close,
   },
   query("destroy", true, MESSAGES.relations),
-  {
-    operation: "windows.setParent",
-    payload: {
-      parent: null,
-      modal: true,
-    },
-    calls: [
-      [
-        "setParent",
-        [
-          null,
-          true,
-        ],
-      ],
-    ],
-    result: null,
-    unsupported: MESSAGES.relations,
-  },
   ...flag("setEnabled", "isEnabled", "enabled", MESSAGES.relations),
   ...flag("setFocusable", "isFocusable", "focusable", MESSAGES.focusability),
   query("getTitlebar", "custom", MESSAGES.display),
@@ -773,7 +758,6 @@ const rows: Row[] = [
         "setTaskbarProgress",
         [
           {
-            view: "main",
             state: "normal",
             value: 0.5,
           },
@@ -1095,19 +1079,6 @@ const rows: Row[] = [
   },
 ];
 
-/** Operations whose input has no `view` target. */
-const UNTARGETED =
-  /^windows\.(list|getById|getCurrent|getFocused|getLastActive|getMonitors|getMonitorSnapshot|getPrimaryMonitor|getMonitorNearestPoint|getMonitorNearestRect|getCursorPosition)$/;
-
-const DOWNLOAD_PAYLOADS: Record<string, Record<string, unknown>> = {
-  setDownloadRequestsEnabled: {
-    enabled: true,
-  },
-  approveDownload: {
-    id: DOWNLOAD_ID,
-  },
-};
-
 const CONSTRAINTS = {
   minWidth: 250,
   minHeight: 260,
@@ -1117,18 +1088,22 @@ const CONSTRAINTS = {
 
 type Fixture = ReturnType<typeof fixture>;
 
-/** Wire input: targeted operations name the main view, untargeted ones take the payload or null. */
+/** Wire input: an operation without data takes null, one with optional fields may take `{}`. */
 function requestInput(
   operation: string,
   payload: Record<string, unknown> | null,
 ) {
-  if (!UNTARGETED.test(operation)) {
-    return {
-      view: "main",
-      ...payload,
-    };
+  const empty = !payload || Object.keys(payload).length === 0;
+  if (
+    empty &&
+    operation in windowOperations &&
+    windowOperations[operation as WindowOperation].input.safeParse(null).success
+  ) {
+    return null;
   }
-  return payload && Object.keys(payload).length > 0 ? payload : null;
+  return {
+    ...payload,
+  };
 }
 
 /** Build a recording native window and the services around it. */
@@ -1302,7 +1277,6 @@ function fixture(
   }
   const specs = [
     "main",
-    "editor",
   ].map((view) => ({
     view,
     home: "https://app.bunaway.local/index.html",
@@ -1696,313 +1670,6 @@ test("a taskbar overlay is validated by the icon provider before any native call
   expect(f.calls).toEqual([]);
 });
 
-test("blur hands activation to the next ready, visible window and never to an external one", async () => {
-  const focus = {
-    main: true,
-    editor: false,
-  };
-  const activated: string[] = [];
-  const visible = {
-    editor: true,
-  };
-  const editorState = {
-    closed: false,
-    cleaned: false,
-    ready: true,
-    failure: undefined as unknown,
-    deadline: Infinity,
-  };
-  const build = (key: "main" | "editor"): Partial<NativeWindow> => ({
-    isMinimized: () => false,
-    isVisible: () => (key === "editor" ? visible.editor : true),
-    isFocused: () => focus[key],
-    activate: () => {
-      activated.push(key);
-      focus.main = false;
-      focus.editor = true;
-      return true;
-    },
-  });
-  const make = () =>
-    fixture({
-      windows: {
-        main: build("main"),
-        editor: build("editor"),
-      },
-      services: {
-        read: (key: string) =>
-          key === "editor"
-            ? editorState
-            : {
-                ...editorState,
-              },
-      },
-    });
-  const f = make();
-  expect(await f.invoke("windows.blur")).toBe(true);
-  expect(activated).toEqual([
-    "editor",
-  ]);
-  // The next window is hidden, not ready or failed: nothing to activate.
-  for (const change of [
-    () => {
-      visible.editor = false;
-    },
-    () => {
-      visible.editor = true;
-      editorState.ready = false;
-    },
-    () => {
-      editorState.ready = true;
-      editorState.failure = new Error("setup failed");
-    },
-  ]) {
-    focus.main = true;
-    focus.editor = false;
-    activated.length = 0;
-    change();
-    expect(await make().invoke("windows.blur")).toBe(false);
-    expect(activated).toEqual([]);
-  }
-  // A window that is not focused is already blurred.
-  focus.main = false;
-  editorState.failure = undefined;
-  expect(await make().invoke("windows.blur")).toBe(true);
-});
-
-test("a minimized or hidden window reports blur from its own focus", async () => {
-  const minimized = fixture({
-    returns: {
-      isMinimized: true,
-      isFocused: false,
-    },
-  });
-  expect(await minimized.invoke("windows.blur")).toBe(true);
-  const hidden = fixture({
-    returns: {
-      isVisible: false,
-      isFocused: true,
-    },
-  });
-  expect(await hidden.invoke("windows.blur")).toBe(false);
-});
-
-test("splashscreen handoff checks both windows and the ownership chain before changing either", async () => {
-  const handoff = (
-    options: Parameters<typeof fixture>[0] = {},
-    splash = "editor",
-  ) => {
-    const f = fixture(options);
-    return {
-      f,
-      run: (source = "backend") =>
-        f.invoke(
-          "windows.completeSplashscreen",
-          {
-            splash,
-          },
-          source,
-        ),
-    };
-  };
-  const ok = handoff();
-  expect(await ok.run()).toBe(true);
-  expect(ok.f.calls.map(([name]) => name)).toEqual([
-    "getReadiness",
-    "getParent",
-    "show",
-  ]);
-  expect(ok.f.calls[2]).toEqual([
-    "show",
-    [
-      true,
-    ],
-  ]);
-  expect(ok.f.closed).toEqual([
-    [
-      "editor",
-      false,
-    ],
-  ]);
-  await rejects(
-    handoff({}, "main").run(),
-    "INVALID_ARGUMENT",
-    "Splashscreen and main window must differ.",
-  );
-  await rejects(
-    handoff({
-      returns: {
-        getReadiness: {
-          document: "loading",
-          sdk: "ready",
-        },
-      },
-    }).run(),
-    "BUSY",
-    "Main window is not ready.",
-  );
-  await rejects(
-    handoff({
-      services: {
-        read: (key: string) =>
-          key === "editor"
-            ? {
-                closed: true,
-                cleaned: false,
-                ready: true,
-                failure: undefined,
-                deadline: 0,
-              }
-            : {
-                closed: false,
-                cleaned: false,
-                ready: true,
-                failure: undefined,
-                deadline: 0,
-              },
-      },
-    }).run(),
-    "INVALID_ARGUMENT",
-    "Splashscreen is not open.",
-  );
-  const owned = handoff({
-    windows: {
-      main: {
-        getParent: () => ({
-          windowId: "w-editor",
-          viewId: "editor",
-        }),
-      },
-    },
-  });
-  await rejects(
-    owned.run(),
-    "INVALID_ARGUMENT",
-    "Splashscreen cannot own the main window.",
-  );
-  expect(owned.f.closed).toEqual([]);
-  await rejects(
-    ok.run("view:editor"),
-    "INVALID_ARGUMENT",
-    "Complete the splashscreen handoff from the main window or backend.",
-  );
-});
-
-test("owner and child lists hide windows that are not configured", async () => {
-  const known: WindowIdentity = {
-    windowId: "w-editor",
-    viewId: "editor",
-  };
-  const stranger: WindowIdentity = {
-    windowId: "w-other",
-    viewId: "other",
-  };
-  const f = fixture({
-    windows: {
-      main: {
-        getParent: () => known,
-        getChildren: () => [
-          known,
-          stranger,
-        ],
-      },
-    },
-  });
-  expect(await f.invoke("windows.getParent")).toEqual(known);
-  expect(await f.invoke("windows.getOwner")).toEqual(known);
-  expect(await f.invoke("windows.getChildren")).toEqual([
-    known,
-  ]);
-  const orphan = fixture({
-    windows: {
-      main: {
-        getParent: () => stranger,
-        getChildren: () => [],
-      },
-    },
-  });
-  expect(await orphan.invoke("windows.getParent")).toBeNull();
-  const unowned = fixture({
-    windows: {
-      main: {
-        getParent: () => null,
-        getChildren: () => [],
-      },
-    },
-  });
-  expect(await unowned.invoke("windows.getOwner")).toBeNull();
-  await rejects(
-    fixture({
-      bare: true,
-    }).invoke("windows.getChildren"),
-    "UNSUPPORTED",
-    MESSAGES.relations,
-  );
-});
-
-test("window policy is checked before the target view is resolved", async () => {
-  const f = fixture({
-    permissions: [],
-  });
-  await rejects(
-    f.invoke("windows.show", {
-      view: "unknown",
-    }),
-    "PERMISSION_DENIED",
-    "Window policy denied.",
-  );
-  await rejects(
-    f.invoke("windows.setParent", {
-      parent: null,
-      modal: false,
-    }),
-    "PERMISSION_DENIED",
-    "Window relationship policy denied.",
-  );
-  await rejects(
-    f.invoke("windows.list"),
-    "PERMISSION_DENIED",
-    "Window listing permission required.",
-  );
-  expect(f.calls).toEqual([]);
-  const granted = fixture({
-    permissions: [
-      "windows.destroy",
-    ],
-  });
-  await rejects(
-    granted.invoke("windows.destroy", {}, "view:main"),
-    "PERMISSION_DENIED",
-    "Trusted backend destroy permission required.",
-  );
-  await rejects(
-    fixture({
-      permissions: [],
-    }).invoke("windows.destroy"),
-    "PERMISSION_DENIED",
-    "Trusted backend destroy permission required.",
-  );
-  for (const operation of [
-    "setDownloadRequestsEnabled",
-    "getDownloads",
-    "approveDownload",
-  ]) {
-    await rejects(
-      fixture({
-        permissions: [
-          `windows.${operation}`,
-        ],
-      }).invoke(
-        `windows.${operation}`,
-        DOWNLOAD_PAYLOADS[operation] ?? {},
-        "view:main",
-      ),
-      "PERMISSION_DENIED",
-      "WebView downloads require a trusted backend context.",
-    );
-  }
-});
-
 test("only the backend or the asked document answers a close request", async () => {
   const caller = (viewId: string): Partial<NativeWindowServices> => ({
     lookup: {
@@ -2062,163 +1729,6 @@ test("only the backend or the asked document answers a close request", async () 
     );
     expect(f.calls).toEqual([]);
   }
-});
-
-test("a parent must be an open window lifetime", async () => {
-  const lookup = (
-    found: WindowIdentity | null,
-  ): Partial<NativeWindowServices> => ({
-    lookup: {
-      byId: () => found,
-      byView: () => null,
-      focused: () => null,
-      lastActive: () => null,
-    },
-  });
-  const payload = {
-    parent: "w-editor",
-    modal: true,
-  };
-  const ok = fixture({
-    services: lookup({
-      windowId: "w-editor",
-      viewId: "editor",
-    }),
-  });
-  await ok.invoke("windows.setParent", payload);
-  expect(ok.calls).toEqual([
-    [
-      "setParent",
-      [
-        "w-editor",
-        true,
-      ],
-    ],
-  ]);
-  for (const services of [
-    lookup(null),
-    {
-      ...lookup({
-        windowId: "w-editor",
-        viewId: "editor",
-      }),
-      read: () => ({
-        closed: true,
-        cleaned: false,
-        ready: true,
-        failure: undefined,
-        deadline: 0,
-      }),
-    },
-  ]) {
-    const f = fixture({
-      services,
-    });
-    await rejects(
-      f.invoke("windows.setParent", payload),
-      "INVALID_ARGUMENT",
-      "Parent window lifetime is not open.",
-    );
-    expect(f.calls).toEqual([]);
-  }
-});
-
-test("identity lookups return only open, configured windows of the caller", async () => {
-  const identity = {
-    windowId: "w-main",
-    viewId: "main",
-  };
-  const lookup = (
-    extra: Partial<NonNullable<NativeWindowServices["lookup"]>> = {},
-  ): Partial<NativeWindowServices> => ({
-    lookup: {
-      byId: (windowId) => (windowId === "w-main" ? identity : null),
-      byView: (viewId) => (viewId === "main" ? identity : null),
-      focused: () => identity,
-      lastActive: () => ({
-        windowId: "w-other",
-        viewId: "other",
-      }),
-      ...extra,
-    },
-  });
-  async function call(
-    operation: string,
-    source: string,
-    services = lookup(),
-    payload: Record<string, unknown> = {},
-  ) {
-    const f = fixture({
-      services,
-      permissions: [
-        operation,
-      ],
-    });
-    return f.invoke(operation, payload, source);
-  }
-  expect(
-    await call("windows.getById", "backend", lookup(), {
-      windowId: "w-main",
-    }),
-  ).toEqual(identity);
-  expect(
-    await call("windows.getById", "backend", lookup(), {
-      windowId: "w-none",
-    }),
-  ).toBeNull();
-  expect(await call("windows.getFocused", "backend")).toEqual(identity);
-  // lastActive names a view that is not configured, so its identifiers stay hidden.
-  expect(await call("windows.getLastActive", "backend")).toBeNull();
-  expect(await call("windows.getCurrent", "backend")).toBeNull();
-  expect(await call("windows.getCurrent", "view:main")).toEqual(identity);
-  await rejects(
-    call("windows.getCurrent", "view:other"),
-    "PERMISSION_DENIED",
-    "Invalid window call source.",
-  );
-  await rejects(
-    call("windows.getCurrent", "something"),
-    "PERMISSION_DENIED",
-    "Invalid window call source.",
-  );
-  // An authenticated request that belongs to another view contradicts the source.
-  await rejects(
-    call(
-      "windows.getCurrent",
-      "view:main",
-      lookup({
-        byRequest: () => ({
-          windowId: "w-editor",
-          viewId: "editor",
-        }),
-      }),
-    ),
-    "PERMISSION_DENIED",
-    "Window source does not match its authenticated request.",
-  );
-  expect(
-    await call(
-      "windows.getCurrent",
-      "view:main",
-      lookup({
-        byRequest: () => identity,
-      }),
-    ),
-  ).toEqual(identity);
-  expect(
-    await call(
-      "windows.getCurrent",
-      "view:main",
-      lookup({
-        byRequest: () => null,
-      }),
-    ),
-  ).toBeNull();
-  await rejects(
-    call("windows.getFocused", "backend", {}),
-    "UNSUPPORTED",
-    "Window identity lookup is not implemented on this platform.",
-  );
 });
 
 test("monitor queries need their grant, honor cancellation and report missing services", async () => {

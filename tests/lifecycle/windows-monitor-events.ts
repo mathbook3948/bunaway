@@ -34,16 +34,10 @@ if (!process.argv.includes("--child")) {
     recursive: true,
   });
   await writeFile(controlPath, "initial");
-  for (const name of [
-    "index",
-    "no-event",
-    "no-operation",
-  ]) {
-    await writeFile(
-      resolve(assets, `web/${name}.html`),
-      '<!doctype html><title>Monitor events</title><script type="module" src="/events.js"></script>',
-    );
-  }
+  await writeFile(
+    resolve(assets, "web/index.html"),
+    '<!doctype html><title>Monitor events</title><script type="module" src="/events.js"></script>',
+  );
   const web = await Bun.build({
     entrypoints: [
       resolve(root, "tests/lifecycle/windows-bun/monitor-events.js"),
@@ -108,7 +102,6 @@ if (!process.argv.includes("--child")) {
     const report = JSON.parse(await readFile(reportPath, "utf8"));
     assert.equal(report.pass, true);
     assert.equal(report.documents, 3);
-    assert.equal(report.denied, 2);
     console.log(
       "PASS actual Win32/WebView2 monitor routing with synthetic notifications/metrics: permissions, error recovery, unlisten, navigation, recreation, cleanup; hardware hotplug not exercised",
     );
@@ -140,9 +133,6 @@ if (!process.argv.includes("--child")) {
     },
   });
   let documents = 0;
-  let finished = false;
-  let deniedListenerReady = false;
-  const denied = new Set<string>();
   const records: ReturnType<
     typeof validateValue<typeof monitorChangeSchema>
   >[] = [];
@@ -185,43 +175,24 @@ if (!process.argv.includes("--child")) {
       ],
     },
     views: [
-      "main",
-      "no-event",
-      "no-operation",
-    ].map((id) => ({
-      id,
-      origins: [
-        "https://app.bunaway.local",
-      ],
-      commands:
-        id === "main"
-          ? commands
-          : [
-              "test.denied",
-              "test.waitDenied",
-              "plugin.windows.getMonitorSnapshot",
-            ],
-      events:
-        id === "no-event"
-          ? []
-          : [
-              "windows.monitorsChanged",
-            ],
-      host: {
-        permissions:
-          id === "no-operation"
-            ? []
-            : [
-                "windows.getMonitorSnapshot",
-                ...(id === "main"
-                  ? [
-                      "windows.recreate",
-                      "windows.close",
-                    ]
-                  : []),
-              ],
+      {
+        id: "main",
+        origins: [
+          "https://app.bunaway.local",
+        ],
+        commands,
+        events: [
+          "windows.monitorsChanged",
+        ],
+        host: {
+          permissions: [
+            "windows.getMonitorSnapshot",
+            "windows.recreate",
+            "windows.close",
+          ],
+        },
       },
-    })),
+    ],
   };
   const app = defineApp({
     modules: [],
@@ -239,31 +210,6 @@ if (!process.argv.includes("--child")) {
           return null;
         },
       },
-      "test.denied": {
-        input: {
-          type: "string",
-        },
-        output: {
-          const: null,
-        },
-        async run(input: unknown) {
-          assert.equal(typeof input, "string");
-          denied.add(input as string);
-          return null;
-        },
-      },
-      "test.waitDenied": {
-        input: {
-          const: null,
-        },
-        output: {
-          type: "boolean",
-        },
-        async run() {
-          deniedListenerReady = true;
-          return finished;
-        },
-      },
       "test.exercise": {
         input: {
           const: null,
@@ -272,7 +218,6 @@ if (!process.argv.includes("--child")) {
           type: "integer",
         },
         async run() {
-          await waitFor(() => deniedListenerReady);
           documents++;
           assert.equal(
             records.length,
@@ -360,17 +305,13 @@ if (!process.argv.includes("--child")) {
       "test.recreate": {
         ...noInput,
         async run() {
-          await windows.recreate({
-            view: "main",
-          });
+          await windows.recreate({});
           return null;
         },
       },
       "test.finish": {
         ...noInput,
         async run() {
-          finished = true;
-          await waitFor(() => denied.size === 2);
           assert.equal(
             new Set(sources).size,
             1,
@@ -381,19 +322,10 @@ if (!process.argv.includes("--child")) {
             JSON.stringify({
               pass: true,
               documents,
-              denied: denied.size,
               records: records.length,
             }),
           );
-          for (const view of [
-            "no-event",
-            "no-operation",
-            "main",
-          ]) {
-            await windows.close({
-              view,
-            });
-          }
+          await windows.close();
           return null;
         },
       },
@@ -415,18 +347,16 @@ if (!process.argv.includes("--child")) {
         "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
       ),
       windows: [
-        "main",
-        "no-event",
-        "no-operation",
-      ].map((view) => ({
-        view,
-        title: `Monitor ${view}`,
-        home: `https://app.bunaway.local/${view === "main" ? "index" : view}.html`,
-        window: {
-          width: 640,
-          height: 480,
+        {
+          view: "main",
+          title: "Monitor main",
+          home: "https://app.bunaway.local/index.html",
+          window: {
+            width: 640,
+            height: 480,
+          },
         },
-      })),
+      ],
     });
   } finally {
     driver.close();

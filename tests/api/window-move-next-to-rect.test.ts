@@ -183,7 +183,6 @@ function fixture(
     return adapter.executeUI(
       "windows.moveNextToRect",
       {
-        view: "main",
         ...payload,
       } as JsonValue,
       "backend",
@@ -603,7 +602,6 @@ test("the contract accepts every side and alignment and returns null", () => {
   for (const placement of WINDOW_RECT_PLACEMENTS) {
     for (const align of WINDOW_RECT_ALIGNMENTS) {
       const payload = {
-        view: "main",
         rect: TARGET,
         placement,
         align,

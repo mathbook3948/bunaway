@@ -30,7 +30,12 @@ function fixture() {
   const hidden = new Set<string>();
   let failAttachment = false;
   let popupAction: (signal: AbortSignal) => string | null = () => "a";
+  let currentWindow = "one";
   const driver: WindowMenuDriver = {
+    current() {
+      driver.validate(currentWindow);
+      return currentWindow;
+    },
     validate(windowId) {
       if (!alive.has(windowId)) {
         throw new BunawayError({
@@ -137,6 +142,9 @@ function fixture() {
     attachments,
     events,
     alive,
+    setCurrent(windowId: string) {
+      currentWindow = windowId;
+    },
     fail(value: boolean) {
       failAttachment = value;
     },
@@ -161,23 +169,10 @@ test("window menu attachments are exclusive, update atomically and reject retire
     ],
   });
   await f.invoke("setWindowMenu", {
-    windowId: "one",
     menuId: "shared",
   });
-  expect(
-    await f.invoke("getWindowMenu", {
-      windowId: "one",
-    }),
-  ).toBe("shared");
+  expect(await f.invoke("getWindowMenu", null)).toBe("shared");
   const old = f.attachments.get("one");
-  await expect(
-    f.invoke("setWindowMenu", {
-      windowId: "two",
-      menuId: "shared",
-    }),
-  ).rejects.toMatchObject({
-    code: "BUSY",
-  });
   await expect(
     f.invoke("setTrayMenu", {
       menuId: "shared",
@@ -232,11 +227,7 @@ test("window menu attachments are exclusive, update atomically and reject retire
   current?.selected("b");
   expect(f.events).toHaveLength(2);
   expect(f.attachments.size).toBe(0);
-  expect(
-    await f.invoke("getWindowMenu", {
-      windowId: "one",
-    }),
-  ).toBeNull();
+  expect(await f.invoke("getWindowMenu", null)).toBeNull();
   await f.adapter.dispose();
 });
 
@@ -253,7 +244,6 @@ test("owner teardown drops only its attachment and resource can attach to a new 
   });
   await expect(
     f.invoke("setWindowMenu", {
-      windowId: "one",
       menuId: "shared",
     }),
   ).rejects.toMatchObject({
@@ -263,7 +253,6 @@ test("owner teardown drops only its attachment and resource can attach to a new 
     menuId: null,
   });
   await f.invoke("setWindowMenu", {
-    windowId: "one",
     menuId: "shared",
   });
   const old = f.attachments.get("one");
@@ -271,11 +260,7 @@ test("owner teardown drops only its attachment and resource can attach to a new 
   f.alive.delete("one");
   old?.selected("a");
   expect(f.events).toHaveLength(0);
-  await expect(
-    f.invoke("getWindowMenu", {
-      windowId: "one",
-    }),
-  ).rejects.toMatchObject({
+  await expect(f.invoke("getWindowMenu", null)).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
   expect(
@@ -283,8 +268,8 @@ test("owner teardown drops only its attachment and resource can attach to a new 
       menuId: "shared",
     }),
   ).not.toBeNull();
+  f.setCurrent("two");
   await f.invoke("setWindowMenu", {
-    windowId: "two",
     menuId: "shared",
   });
   await f.adapter.dispose();
@@ -302,7 +287,6 @@ test("context popup uses a snapshot, reports its owner and handles dismissal, ab
   });
   const input = {
     menuId: "shared",
-    windowId: "one",
     x: -200,
     y: 40,
   };
@@ -352,7 +336,6 @@ test("window operations retain independent permissions, strict input and cancell
     ],
   });
   const input = {
-    windowId: "one",
     menuId: "shared",
   };
   await expect(
@@ -421,7 +404,6 @@ test("a rejected tray role change leaves an open popup of the same menu untouche
   expect(
     await f.invoke("showContextMenu", {
       menuId: "shared",
-      windowId: "one",
       x: 1,
       y: 2,
     }),
@@ -442,7 +424,6 @@ test("role items attach to windows with resolved labels and a role selection rep
     ],
   });
   await f.invoke("setWindowMenu", {
-    windowId: "one",
     menuId: "edit",
   });
   expect(f.attachments.get("one")?.items).toMatchObject([
@@ -457,7 +438,6 @@ test("role items attach to windows with resolved labels and a role selection rep
   expect(
     await f.invoke("showContextMenu", {
       menuId: "edit",
-      windowId: "one",
       x: 1,
       y: 2,
     }),
@@ -466,36 +446,30 @@ test("role items attach to windows with resolved labels and a role selection rep
   await f.adapter.dispose();
 });
 
-test("window menu bar visibility defaults to visible, is per window and validates its target", async () => {
+test("window menu bar visibility defaults to visible and validates its input and window", async () => {
   const f = fixture();
-  const read = (windowId: string) =>
-    f.invoke("getWindowMenuVisible", {
-      windowId,
-    });
-  expect(await read("one")).toBe(true);
+  const read = () => f.invoke("getWindowMenuVisible", null);
+  expect(await read()).toBe(true);
   expect(
     await f.invoke("setWindowMenuVisible", {
-      windowId: "one",
       visible: false,
     }),
   ).toBeNull();
-  expect(await read("one")).toBe(false);
-  expect(await read("two")).toBe(true);
+  expect(await read()).toBe(false);
   await f.invoke("setWindowMenuVisible", {
-    windowId: "one",
     visible: true,
   });
-  expect(await read("one")).toBe(true);
+  expect(await read()).toBe(true);
   for (const payload of [
     {
-      windowId: "one",
       visible: "no",
     },
+    {},
     {
       windowId: "one",
+      visible: true,
     },
     {
-      windowId: "one",
       visible: true,
       extra: 1,
     },
@@ -509,24 +483,16 @@ test("window menu bar visibility defaults to visible, is per window and validate
   f.alive.delete("one");
   await expect(
     f.invoke("setWindowMenuVisible", {
-      windowId: "one",
       visible: false,
     }),
   ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
-  await expect(read("one")).rejects.toMatchObject({
+  await expect(read()).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
   await expect(
-    f.invoke(
-      "getWindowMenuVisible",
-      {
-        windowId: "two",
-      },
-      undefined,
-      [],
-    ),
+    f.invoke("getWindowMenuVisible", null, undefined, []),
   ).rejects.toMatchObject({
     code: "PERMISSION_DENIED",
   });

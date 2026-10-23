@@ -46,7 +46,7 @@ type RunReport = {
 /**
  * Subprocess body. It imports the fixture app (which reads `HOME` at import), starts a Core with a
  * fake `callHost`, and runs the desktop hooks in the order of the macOS backend: `onReady`, then
- * the initial `onOpen`. The runner then plays the pages by logging `page:main` and `page:observer`.
+ * the initial `onOpen`. The runner then plays the pages by logging `page:main`.
  */
 const RUNNER = `
 import { appendFileSync, readFileSync } from "node:fs";
@@ -64,7 +64,7 @@ const core = await createCore(app, {
   app: testAppInfo,
   policy: {
     version: 1,
-    backend: { permissions: ["driver.drive", "windows.list", "windows.listInstances", "windows.close", "windows.recreate"] },
+    backend: { permissions: ["driver.drive", "windows.isOpen", "windows.getReadiness", "windows.close", "windows.recreate"] },
     views: [{ id: "main", origins: ["https://app.bunaway.local"], commands: [], events: [], host: { permissions: [] } }],
   },
   platform: "macos",
@@ -88,12 +88,15 @@ const core = await createCore(app, {
         ? { kind: "error", error: { code: "INTERNAL", message: "Host operation failed.", details: { reason: "fixture" } } }
         : { kind: "result", payload: 2 };
     }
-    return { kind: "result", payload: call.operation === "windows.listInstances" ? [] : null };
+    if (call.operation === "windows.waitForLifecycle") {
+      return new Promise(() => {});
+    }
+    return { kind: "result", payload: call.operation === "windows.isOpen" ? false : null };
   },
 });
 const desktop = new DesktopLifecycle(app.desktop, async () => {}, () => {}, (error) => console.error(error));
 desktop.ready({ argv: [], cwd: process.cwd() });
-appendFileSync(logPath, "page:main\\npage:observer\\n");
+appendFileSync(logPath, "page:main\\n");
 const deadline = Date.now() + ${STEP_TIMEOUT_MS};
 while (!(failDrive ? readLog().some((line) => line.startsWith("script-failed:")) : calls.some((call) => call.operation === "driver.drive"))) {
   if (Date.now() > deadline) {

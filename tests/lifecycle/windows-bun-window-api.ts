@@ -20,15 +20,11 @@ import { windowPermissions } from "../fixtures/window-permissions.ts";
 assert.equal(process.platform, "win32");
 /** Real HWND placement beside synthetic reference rectangles; the hidden window and the foreground window stay as they were. */
 async function verifyMoveNextToRect({
-  editor,
   area,
   outer,
   centered,
   foreground,
 }: {
-  editor: {
-    view: string;
-  };
   area: {
     x: number;
     y: number;
@@ -104,13 +100,11 @@ async function verifyMoveNextToRect({
     ],
   ] as const) {
     await windows.setPosition({
-      ...editor,
       x: outer.x,
       y: outer.y,
     });
     assert.equal(
       await windows.moveNextToRect({
-        ...editor,
         rect,
         placement,
         align,
@@ -120,7 +114,7 @@ async function verifyMoveNextToRect({
     );
     assert.deepEqual(
       {
-        ...(await windows.getOuterBounds(editor)),
+        ...(await windows.getOuterBounds()),
       },
       {
         ...centered,
@@ -130,18 +124,16 @@ async function verifyMoveNextToRect({
     );
   }
   await windows.setPosition({
-    ...editor,
     x: outer.x,
     y: outer.y,
   });
   await windows.moveNextToRect({
-    ...editor,
     rect: anchorRect,
     placement: "below",
   });
   assert.deepEqual(
     {
-      ...(await windows.getOuterBounds(editor)),
+      ...(await windows.getOuterBounds()),
     },
     {
       ...centered,
@@ -155,7 +147,6 @@ async function verifyMoveNextToRect({
   );
   await assert.rejects(
     windows.moveNextToRect({
-      ...editor,
       rect: {
         ...anchorRect,
         width: -1,
@@ -163,7 +154,7 @@ async function verifyMoveNextToRect({
       placement: "below",
     }),
   );
-  assert.equal(await windows.isVisible(editor), false);
+  assert.equal(await windows.isVisible(), false);
   assert.equal(user.symbols.GetForegroundWindow(), foreground);
 }
 
@@ -188,26 +179,13 @@ const policy: Policy = {
       ],
       commands: [
         "test.run",
+        "test.hold",
       ],
       events: [],
       host: {
         permissions: [
           ...windowPermissions(),
         ],
-      },
-    },
-    {
-      id: "editor",
-      origins: [
-        "https://app.bunaway.local",
-      ],
-      commands: [
-        "test.aux",
-        "test.hold",
-      ],
-      events: [],
-      host: {
-        permissions: [],
       },
     },
   ],
@@ -228,15 +206,10 @@ if (!process.argv.includes("--child")) {
     resolve(assets, "web/app.js"),
     new Uint8Array(await built.outputs[0].arrayBuffer()),
   );
-  for (const name of [
-    "index.html",
-    "editor.html",
-  ]) {
-    await writeFile(
-      resolve(assets, "web", name),
-      '<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'"><script type="module" src="app.js"></script>',
-    );
-  }
+  await writeFile(
+    resolve(assets, "web/index.html"),
+    '<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'"><script type="module" src="app.js"></script>',
+  );
   const driver = dlopen("user32.dll", {
     FindWindowW: {
       args: [
@@ -1361,14 +1334,12 @@ if (!process.argv.includes("--child")) {
   const dialogClass = Buffer.from("#32770\0", "utf16le");
   const dialogTitle = Buffer.from("수정된 제목 📝\0", "utf16le");
   let confirmations = 0,
-    editorWindows = 0,
+    windowCreations = 0,
     geometry = false,
     pending = "";
   const windowChecks: Promise<void>[] = [];
   const decoder = new TextDecoder();
   const timers = new Set<ReturnType<typeof setInterval>>();
-  let editorBrowser = 0;
-  const crashes: Promise<void>[] = [];
   /** Checks native client dimensions against logical size at the current DPI. */
   function assertClientSize(hwnd: bigint, width: number, height: number) {
     const client = new Int32Array(4);
@@ -1434,35 +1405,15 @@ if (!process.argv.includes("--child")) {
           ) {
             console.log(`Window API stage: ${event.event}`);
           }
-          if (event.event === "webview-ready" && event.view === "editor") {
-            editorBrowser = event.browserPid;
-          }
-          if (event.event === "window-api-browser-crash") {
-            // Kill only the editor renderer to check view-local recovery.
-            assert(editorBrowser);
-            const killer = Bun.spawn(
-              [
-                "taskkill",
-                "/F",
-                "/PID",
-                String(editorBrowser),
-              ],
-              {
-                stdout: "ignore",
-                stderr: "ignore",
-              },
-            );
-            crashes.push(killer.exited.then((code) => assert.equal(code, 0)));
-          }
           if (event.event === "window-created") {
             handles.set(event.view, BigInt(event.hwnd));
-            if (event.view === "editor" && ++editorWindows > 4) {
+            if (++windowCreations > 3) {
               child.kill();
-              throw new Error("Revoked creation reopened the editor window.");
+              throw new Error("Recreation opened an unexpected extra window.");
             }
           }
           if (event.event === "window-api-geometry") {
-            const hwnd = handles.get("editor");
+            const hwnd = handles.get("main");
             assert(hwnd);
             const frame = new Int32Array(4);
             assertClientSize(hwnd, 700, 550);
@@ -1478,7 +1429,7 @@ if (!process.argv.includes("--child")) {
             );
           }
           if (event.event === "window-close-confirmation") {
-            const answer = ++confirmations === 1 ? 7n : 6n; // IDNO then IDYES
+            const answer = ++confirmations === 1 ? 7n : 6n; // IDNO
             const deadline = Date.now() + 10000;
             // Poll because the native confirmation dialog appears asynchronously.
             const timer = setInterval(() => {
@@ -1507,20 +1458,16 @@ if (!process.argv.includes("--child")) {
   try {
     const code = await child.exited;
     await stdout;
-    await Promise.all(crashes);
     await Promise.all(windowChecks);
     assert.equal(code, 0, await errors);
-    assert.equal(confirmations, 2);
-    assert.equal(crashes.length, 1);
+    assert.equal(confirmations, 1);
     assert(geometry);
     const report = JSON.parse(await readFile(reportPath, "utf8"));
     assert.equal(report.pass, true);
-    assert.equal(report.auxiliaryDocuments, 4);
-    assert.equal(editorWindows, 4);
-    assert.equal(report.cancelledCreation, true);
-    assert.equal(report.browserFailureClosed, true);
+    assert.equal(windowCreations, 3);
+    assert.equal(report.revokedDocuments, true);
     console.log(
-      "PASS Windows public window API: identity lookup, navigation identity preservation, native recreation identity replacement, destroyed and normal state, size constraints, GetDpiForWindow scaling at the current monitor, maximize and restore, fullscreen visibility, geometry, close refusal, browser failure, dynamic creation, fresh sessions and revoked creation",
+      "PASS Windows public window API: identity lookup, navigation identity preservation, native recreation identity replacement, destroyed and normal state, size constraints, GetDpiForWindow scaling at the current monitor, maximize and restore, fullscreen visibility, geometry, close refusal, recreation with options, fresh sessions and revoked documents",
     );
   } finally {
     clearTimeout(timeout);
@@ -1536,12 +1483,10 @@ if (!process.argv.includes("--child")) {
   }
 } else {
   let runs = 0,
-    auxiliaryDocuments = 0,
     holds = 0,
     cancellations = 0,
     quitAttempts = 0;
   let mainWindowId = "";
-  let editorWindowId = "";
   /** Waits for state changes reported by separate WebView documents. */
   async function waitFor(check: () => boolean | Promise<boolean>) {
     const deadline = Date.now() + 10000;
@@ -1549,6 +1494,23 @@ if (!process.argv.includes("--child")) {
       assert(Date.now() < deadline, "Fresh document did not connect");
       await Bun.sleep(10);
     }
+  }
+  /** Run 2 follows a navigation of the same window; later runs follow a recreation. */
+  function assertIdentity(run: number, windowId: string) {
+    if (run === 2) {
+      assert.equal(
+        windowId,
+        mainWindowId,
+        "navigation preserves native identity",
+      );
+    } else if (run > 2) {
+      assert.notEqual(
+        windowId,
+        mainWindowId,
+        "native recreation replaces identity",
+      );
+    }
+    mainWindowId = windowId;
   }
   const contract = {
     input: {
@@ -1561,7 +1523,6 @@ if (!process.argv.includes("--child")) {
   /** Query before the next setter; delayed stdout can observe a later resize. */
   async function assertContentSize(width: number, height: number) {
     const size = await windows.getContentSize({
-      view: "editor",
       unit: "logical",
     });
     assert.equal(size.width, width);
@@ -1573,77 +1534,12 @@ if (!process.argv.includes("--child")) {
       windows,
     ],
     desktop: {
-      beforeQuit: () => ++quitAttempts > 1,
+      beforeQuit: () => {
+        quitAttempts++;
+        return true;
+      },
     },
     commands: {
-      "test.aux": {
-        ...contract,
-        async run(_input: unknown, _context: CommandContext) {
-          for (const name of [
-            "minimize",
-            "maximize",
-            "unmaximize",
-            "restore",
-            "toggleMaximize",
-            "isMinimized",
-            "isMaximized",
-            "isFullscreen",
-            "isVisible",
-            "isFocused",
-            "isNormal",
-            "isDestroyed",
-            "showInactive",
-            "blur",
-            "activate",
-            "getMonitor",
-          ] as const) {
-            await assert.rejects(
-              windows[name]({
-                view: "main",
-              }),
-              {
-                code: "PERMISSION_DENIED",
-              },
-            );
-          }
-          for (const lookup of [
-            windows.getCurrent,
-            windows.getFocused,
-            windows.getLastActive,
-            windows.getMonitors,
-            windows.getPrimaryMonitor,
-            windows.getCursorPosition,
-          ]) {
-            await assert.rejects(lookup(), {
-              code: "PERMISSION_DENIED",
-            });
-          }
-          await assert.rejects(
-            windows.show({
-              view: "main",
-            }),
-            (error: unknown) =>
-              (
-                error as {
-                  code: string;
-                }
-              ).code === "PERMISSION_DENIED",
-          );
-          await assert.rejects(
-            windows.getSizeConstraints({
-              view: "main",
-            }),
-            (error: unknown) =>
-              (
-                error as {
-                  code: string;
-                }
-              ).code === "PERMISSION_DENIED",
-          );
-          auxiliaryDocuments++;
-          return null;
-        },
-      },
       "test.hold": {
         ...contract,
         async run(_input: unknown, context: CommandContext) {
@@ -1659,11 +1555,10 @@ if (!process.argv.includes("--child")) {
       "test.run": {
         ...contract,
         async run() {
-          const current = await windows.getCurrent();
-          assert(current && current.viewId === "main");
-          const snapshot = await windows.getSnapshot({
-            view: "main",
-          });
+          const run = ++runs;
+          const snapshot = await windows.getSnapshot();
+          // Every document connects once; recreation revokes the previous document's pending call.
+          await waitFor(() => holds === run && cancellations >= run - 2);
           const monitors = await windows.getMonitors();
           assert(monitors.length > 0);
           const primary = await windows.getPrimaryMonitor();
@@ -1671,10 +1566,7 @@ if (!process.argv.includes("--child")) {
             primary.primary &&
               monitors.some((monitor) => monitor.id === primary.id),
           );
-          const monitor = await windows.getMonitor({
-            view: "main",
-            windowId: current.windowId,
-          });
+          const monitor = await windows.getMonitor();
           assert(monitors.some((entry) => entry.id === monitor.id));
           const point = {
             x: monitor.bounds.x,
@@ -1690,304 +1582,245 @@ if (!process.argv.includes("--child")) {
           );
           const cursor = await windows.getCursorPosition();
           assert(Number.isInteger(cursor.x) && Number.isInteger(cursor.y));
-          assert.equal(current.windowId, snapshot.windowId);
-          assert.deepEqual(
-            await windows.getById({
-              windowId: current.windowId,
-            }),
-            current,
-          );
-          assert.equal(
-            await windows.getById({
-              windowId: "main",
-            }),
-            null,
-          );
-          if (runs === 1 || runs === 2) {
-            assert.equal(
-              current.windowId,
-              mainWindowId,
-              "navigation preserves native identity",
-            );
-          } else if (runs === 3) {
-            assert.notEqual(
-              current.windowId,
-              mainWindowId,
-              "native recreation replaces identity",
-            );
-            assert.equal(
-              await windows.getById({
-                windowId: mainWindowId,
-              }),
-              null,
-            );
-          }
-          mainWindowId = current.windowId;
-          // Exercise the public plugin, actual UI STA and ITaskbarList3 on each native lifetime.
-          // Explorer creates buttons asynchronously; WebView readiness does not imply button readiness.
-          await waitFor(async () => {
-            try {
-              await windows.setTaskbarProgress({
-                view: "main",
-                windowId: current.windowId,
-                state: "indeterminate",
-              });
-              return true;
-            } catch (error) {
-              if (
-                error instanceof Error &&
-                "code" in error &&
-                error.code === "BUSY"
-              ) {
-                return false;
+          assertIdentity(run, snapshot.windowId);
+          if (run !== 3) {
+            // Exercise the public plugin, actual UI STA and ITaskbarList3 on each native lifetime.
+            // Explorer creates buttons asynchronously; WebView readiness does not imply button readiness.
+            await waitFor(async () => {
+              try {
+                await windows.setTaskbarProgress({
+                  state: "indeterminate",
+                });
+                return true;
+              } catch (error) {
+                if (
+                  error instanceof Error &&
+                  "code" in error &&
+                  error.code === "BUSY"
+                ) {
+                  return false;
+                }
+                throw error;
               }
-              throw error;
+            });
+            for (const state of [
+              "normal",
+              "paused",
+              "error",
+            ] as const) {
+              assert.equal(
+                await windows.setTaskbarProgress({
+                  state,
+                  value: 0.375,
+                }),
+                null,
+              );
             }
-          });
-          for (const state of [
-            "normal",
-            "paused",
-            "error",
-          ] as const) {
             assert.equal(
               await windows.setTaskbarProgress({
-                view: "main",
-                windowId: current.windowId,
-                state,
-                value: 0.375,
+                state: "none",
               }),
               null,
             );
-          }
-          assert.equal(
-            await windows.setTaskbarProgress({
-              view: "main",
-              windowId: current.windowId,
-              state: "none",
-            }),
-            null,
-          );
-          // The button exists now, so thumbnail calls reach the real ITaskbarList3.
-          const thumbnailTarget = {
-            view: "main",
-            windowId: current.windowId,
-          };
-          assert.equal(
-            await windows.setThumbnailClip({
-              ...thumbnailTarget,
-              region: {
-                x: 0,
-                y: 0,
-                width: 100,
-                height: 80,
-              },
-            }),
-            null,
-          );
-          // A minimized HWND has an empty client rectangle and an unknown restored size, so only the
-          // lower bounds are checked while minimized; the upper bound is left to the shell.
-          await windows.minimize(thumbnailTarget);
-          assert.equal(await windows.isMinimized(thumbnailTarget), true);
-          assert.equal(
-            await windows.setThumbnailClip({
-              ...thumbnailTarget,
-              region: {
-                x: 0,
-                y: 0,
-                width: 100,
-                height: 80,
-              },
-            }),
-            null,
-          );
-          // Lower-bound violations stay rejected while minimized.
-          await assert.rejects(
-            windows.setThumbnailClip({
-              ...thumbnailTarget,
-              region: {
-                x: -1,
-                y: 0,
-                width: 100,
-                height: 80,
-              },
-            }),
-            {
-              code: "INVALID_ARGUMENT",
-            },
-          );
-          await windows.restore(thumbnailTarget);
-          assert.equal(await windows.isMinimized(thumbnailTarget), false);
-          // Minimizing from maximized restores to a larger area, so no upper bound is checked then.
-          await windows.maximize(thumbnailTarget);
-          await windows.minimize(thumbnailTarget);
-          assert.equal(
-            await windows.setThumbnailClip({
-              ...thumbnailTarget,
-              region: {
-                x: 0,
-                y: 0,
-                width: 100,
-                height: 80,
-              },
-            }),
-            null,
-          );
-          await windows.restore(thumbnailTarget);
-          assert.equal(await windows.isMaximized(thumbnailTarget), true);
-          await windows.unmaximize(thumbnailTarget);
-          assert.equal(await windows.isMaximized(thumbnailTarget), false);
-          // Beyond the client area the region is clamped; one starting outside it is empty and rejected.
-          assert.equal(
-            await windows.setThumbnailClip({
-              ...thumbnailTarget,
-              region: {
-                x: 0,
-                y: 0,
-                width: 100_000,
-                height: 80,
-              },
-            }),
-            null,
-          );
-          await assert.rejects(
-            windows.setThumbnailClip({
-              ...thumbnailTarget,
-              region: {
-                x: 100_000,
-                y: 0,
-                width: 100,
-                height: 80,
-              },
-            }),
-            {
-              code: "INVALID_ARGUMENT",
-            },
-          );
-          assert.equal(
-            await windows.setThumbnailClip({
-              ...thumbnailTarget,
-              region: null,
-            }),
-            null,
-          );
-          for (const toolTip of [
-            "Window preview",
-            "",
-            null,
-          ]) {
+            // The button exists now, so thumbnail calls reach the real ITaskbarList3.
             assert.equal(
-              await windows.setThumbnailToolTip({
-                ...thumbnailTarget,
-                toolTip,
-              }),
-              null,
-            );
-          }
-          // Set, replace (which releases the previous HICON) and remove the overlay through the real ITaskbarList3.
-          for (const [ico, description] of [
-            [
-              trayIco(16),
-              "3 unread",
-            ],
-            [
-              trayIco(32),
-              "",
-            ],
-            [
-              null,
-              "ignored",
-            ],
-          ] as const) {
-            assert.equal(
-              await windows.setOverlayIcon({
-                ...thumbnailTarget,
-                ico: ico?.toString("base64") ?? null,
-                description,
-              }),
-              null,
-            );
-          }
-          // A rejected image keeps the current overlay and reports an argument error, not a shell failure.
-          await assert.rejects(
-            windows.setOverlayIcon({
-              ...thumbnailTarget,
-              ico: Buffer.alloc(64).toString("base64"),
-              description: "bad",
-            }),
-            {
-              code: "INVALID_ARGUMENT",
-            },
-          );
-          // The thumbnail toolbar adds seven slots once, then changes the visible buttons through updates.
-          const toolbarIco = trayIco(16).toString("base64");
-          const toolbarButton = (id: string) => ({
-            id,
-            ico: toolbarIco,
-            tooltip: id,
-          });
-          for (const buttons of [
-            [],
-            [
-              toolbarButton("prev"),
-              toolbarButton("play"),
-              toolbarButton("next"),
-            ],
-            [
-              toolbarButton("play"),
-            ],
-            Array.from(
-              {
-                length: 7,
-              },
-              (_, index) => toolbarButton(`b${index}`),
-            ),
-            [],
-          ]) {
-            assert.equal(
-              await windows.setThumbnailToolbar({
-                ...thumbnailTarget,
-                buttons,
-              }),
-              null,
-            );
-          }
-          // A rejected image keeps the current toolbar and reports an argument error, not a shell failure.
-          await assert.rejects(
-            windows.setThumbnailToolbar({
-              ...thumbnailTarget,
-              buttons: [
-                {
-                  id: "bad",
-                  ico: Buffer.alloc(64).toString("base64"),
+              await windows.setThumbnailClip({
+                region: {
+                  x: 0,
+                  y: 0,
+                  width: 100,
+                  height: 80,
                 },
-              ],
-            }),
-            {
-              code: "INVALID_ARGUMENT",
-            },
-          );
-          await assert.rejects(
-            windows.setThumbnailToolbar({
-              ...thumbnailTarget,
-              buttons: [
-                toolbarButton("dup"),
-                toolbarButton("dup"),
-              ],
-            }),
-            {
-              code: "INVALID_ARGUMENT",
-            },
-          );
-          // First run covers sizing/fullscreen; later runs cover recreation and renderer recovery.
-          if (++runs === 1) {
-            assert.equal(
-              await windows.isDestroyed({
-                view: "editor",
               }),
-              true,
+              null,
             );
-            await windows.create({
-              view: "editor",
+            // A minimized HWND has an empty client rectangle and an unknown restored size, so only the
+            // lower bounds are checked while minimized; the upper bound is left to the shell.
+            await windows.minimize();
+            assert.equal(await windows.isMinimized(), true);
+            assert.equal(
+              await windows.setThumbnailClip({
+                region: {
+                  x: 0,
+                  y: 0,
+                  width: 100,
+                  height: 80,
+                },
+              }),
+              null,
+            );
+            // Lower-bound violations stay rejected while minimized.
+            await assert.rejects(
+              windows.setThumbnailClip({
+                region: {
+                  x: -1,
+                  y: 0,
+                  width: 100,
+                  height: 80,
+                },
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
+            await windows.restore();
+            assert.equal(await windows.isMinimized(), false);
+            // Minimizing from maximized restores to a larger area, so no upper bound is checked then.
+            await windows.maximize();
+            await windows.minimize();
+            assert.equal(
+              await windows.setThumbnailClip({
+                region: {
+                  x: 0,
+                  y: 0,
+                  width: 100,
+                  height: 80,
+                },
+              }),
+              null,
+            );
+            await windows.restore();
+            assert.equal(await windows.isMaximized(), true);
+            await windows.unmaximize();
+            assert.equal(await windows.isMaximized(), false);
+            // Beyond the client area the region is clamped; one starting outside it is empty and rejected.
+            assert.equal(
+              await windows.setThumbnailClip({
+                region: {
+                  x: 0,
+                  y: 0,
+                  width: 100_000,
+                  height: 80,
+                },
+              }),
+              null,
+            );
+            await assert.rejects(
+              windows.setThumbnailClip({
+                region: {
+                  x: 100_000,
+                  y: 0,
+                  width: 100,
+                  height: 80,
+                },
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
+            assert.equal(
+              await windows.setThumbnailClip({
+                region: null,
+              }),
+              null,
+            );
+            for (const toolTip of [
+              "Window preview",
+              "",
+              null,
+            ]) {
+              assert.equal(
+                await windows.setThumbnailToolTip({
+                  toolTip,
+                }),
+                null,
+              );
+            }
+            // Set, replace (which releases the previous HICON) and remove the overlay through the real ITaskbarList3.
+            for (const [ico, description] of [
+              [
+                trayIco(16),
+                "3 unread",
+              ],
+              [
+                trayIco(32),
+                "",
+              ],
+              [
+                null,
+                "ignored",
+              ],
+            ] as const) {
+              assert.equal(
+                await windows.setOverlayIcon({
+                  ico: ico?.toString("base64") ?? null,
+                  description,
+                }),
+                null,
+              );
+            }
+            // A rejected image keeps the current overlay and reports an argument error, not a shell failure.
+            await assert.rejects(
+              windows.setOverlayIcon({
+                ico: Buffer.alloc(64).toString("base64"),
+                description: "bad",
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
+            // The thumbnail toolbar adds seven slots once, then changes the visible buttons through updates.
+            const toolbarIco = trayIco(16).toString("base64");
+            const toolbarButton = (id: string) => ({
+              id,
+              ico: toolbarIco,
+              tooltip: id,
+            });
+            for (const buttons of [
+              [],
+              [
+                toolbarButton("prev"),
+                toolbarButton("play"),
+                toolbarButton("next"),
+              ],
+              [
+                toolbarButton("play"),
+              ],
+              Array.from(
+                {
+                  length: 7,
+                },
+                (_, index) => toolbarButton(`b${index}`),
+              ),
+              [],
+            ]) {
+              assert.equal(
+                await windows.setThumbnailToolbar({
+                  buttons,
+                }),
+                null,
+              );
+            }
+            // A rejected image keeps the current toolbar and reports an argument error, not a shell failure.
+            await assert.rejects(
+              windows.setThumbnailToolbar({
+                buttons: [
+                  {
+                    id: "bad",
+                    ico: Buffer.alloc(64).toString("base64"),
+                  },
+                ],
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
+            await assert.rejects(
+              windows.setThumbnailToolbar({
+                buttons: [
+                  toolbarButton("dup"),
+                  toolbarButton("dup"),
+                ],
+              }),
+              {
+                code: "INVALID_ARGUMENT",
+              },
+            );
+          }
+          // Run 2 recreates the window with options, run 3 verifies them and the rest of the API,
+          // and run 4 verifies that recreation restores the declaration.
+          if (run === 2) {
+            await windows.recreate({
               options: {
                 window: {
                   focusable: false,
@@ -1997,24 +1830,19 @@ if (!process.argv.includes("--child")) {
                 visible: false,
               },
             });
-            const initiallyFullscreen = {
-              view: "editor",
-            };
-            assert.equal(await windows.isFullscreen(initiallyFullscreen), true);
-            assert.equal(await windows.isMaximized(initiallyFullscreen), true);
-            assert.equal(await windows.isVisible(initiallyFullscreen), false);
+          } else if (run === 3) {
+            assert.equal(await windows.isFullscreen(), true);
+            assert.equal(await windows.isMaximized(), true);
+            assert.equal(await windows.isVisible(), false);
             await windows.setFullscreen({
-              ...initiallyFullscreen,
               fullscreen: false,
             });
-            assert.equal(await windows.isMaximized(initiallyFullscreen), true);
-            assert.equal(await windows.isVisible(initiallyFullscreen), false);
-            await windows.unmaximize(initiallyFullscreen);
+            assert.equal(await windows.isMaximized(), true);
+            assert.equal(await windows.isVisible(), false);
+            await windows.unmaximize();
             assert.deepEqual(
               {
-                ...(await windows.getSizeConstraints({
-                  view: "editor",
-                })),
+                ...(await windows.getSizeConstraints()),
               },
               {
                 minWidth: 500,
@@ -2025,9 +1853,7 @@ if (!process.argv.includes("--child")) {
             );
             assert.deepEqual(
               {
-                ...(await windows.getMinSize({
-                  view: "editor",
-                })),
+                ...(await windows.getMinSize()),
               },
               {
                 width: 500,
@@ -2036,9 +1862,7 @@ if (!process.argv.includes("--child")) {
             );
             assert.deepEqual(
               {
-                ...(await windows.getMaxSize({
-                  view: "editor",
-                })),
+                ...(await windows.getMaxSize()),
               },
               {
                 width: 800,
@@ -2046,99 +1870,84 @@ if (!process.argv.includes("--child")) {
               },
             );
             await assertContentSize(500, 600);
-            await waitFor(() => holds === 1);
             console.log(
               JSON.stringify({
                 event: "window-api-focusability",
               }),
             );
-            const editor = {
-              view: "editor",
-            };
-            assert.equal(await windows.isFocusable(editor), false);
+            assert.equal(await windows.isFocusable(), false);
             await windows.setFocusable({
-              ...editor,
               focusable: true,
             });
-            assert.equal(await windows.isFocusable(editor), true);
+            assert.equal(await windows.isFocusable(), true);
             await windows.setFocusable({
-              ...editor,
               focusable: false,
             });
-            assert.equal(await windows.isFocusable(editor), false);
+            assert.equal(await windows.isFocusable(), false);
             await windows.setMinimizable({
-              ...editor,
               minimizable: false,
             });
             await windows.setMaximizable({
-              ...editor,
               maximizable: false,
             });
             await windows.setClosable({
-              ...editor,
               closable: false,
             });
-            assert.equal(await windows.isMinimizable(editor), false);
-            assert.equal(await windows.isMaximizable(editor), false);
-            assert.equal(await windows.isClosable(editor), false);
-            assert.equal(await windows.getTitle(editor), "Window API editor");
+            assert.equal(await windows.isMinimizable(), false);
+            assert.equal(await windows.isMaximizable(), false);
+            assert.equal(await windows.isClosable(), false);
+            assert.equal(await windows.getTitle(), "Window API editor");
             await windows.setTitle({
-              ...editor,
               title: "수정된 제목 📝",
             });
-            assert.equal(await windows.getTitle(editor), "수정된 제목 📝");
+            assert.equal(await windows.getTitle(), "수정된 제목 📝");
             await assert.rejects(
               windows.setTitle({
-                ...editor,
                 title: "invalid\0title",
               }),
               {
                 code: "INVALID_ARGUMENT",
               },
             );
-            assert.equal(await windows.getTitle(editor), "수정된 제목 📝");
+            assert.equal(await windows.getTitle(), "수정된 제목 📝");
             // The driver verifies that close confirmation uses this runtime caption.
-            const editorSnapshot = await windows.getSnapshot(editor);
-            editorWindowId = editorSnapshot.windowId;
-            assert.equal(await windows.isDestroyed(editor), false);
-            assert.equal(await windows.isNormal(editor), true);
-            await windows.hide(editor);
-            assert.equal(await windows.activate(editor), false);
-            await windows.showInactive(editor);
-            assert.equal(await windows.isVisible(editor), true);
-            assert.equal(await windows.isFocused(editor), false);
-            await windows.minimize(editor);
-            assert.equal(await windows.activate(editor), false);
-            await windows.showInactive(editor);
-            assert.equal(await windows.isMinimized(editor), true);
-            await windows.unmaximize(editor);
-            const activated = await windows.activate(editor);
-            assert.equal(activated, await windows.isFocused(editor));
-            const blurred = await windows.blur(editor);
-            assert.equal(blurred, !(await windows.isFocused(editor)));
-            assert.equal(await windows.isVisible(editor), true);
-            assert.equal(await windows.isMinimized(editor), false);
-            assert.equal(await windows.isMaximized(editor), false);
+            assert.equal(await windows.isOpen(), true);
+            assert.equal(await windows.isNormal(), true);
+            await windows.hide();
+            assert.equal(await windows.activate(), false);
+            await windows.showInactive();
+            assert.equal(await windows.isVisible(), true);
+            assert.equal(await windows.isFocused(), false);
+            await windows.minimize();
+            assert.equal(await windows.activate(), false);
+            await windows.showInactive();
+            assert.equal(await windows.isMinimized(), true);
+            await windows.unmaximize();
+            const activated = await windows.activate();
+            assert.equal(activated, await windows.isFocused());
+            assert.equal(await windows.isVisible(), true);
+            assert.equal(await windows.isMinimized(), false);
+            assert.equal(await windows.isMaximized(), false);
             console.log(
               JSON.stringify({
                 event: "window-api-maximize-history",
               }),
             );
-            await windows.maximize(editor);
-            assert.equal(await windows.isNormal(editor), false);
-            assert.equal(await windows.isMaximized(editor), true);
-            await windows.minimize(editor);
-            assert.equal(await windows.isMinimized(editor), true);
-            await windows.restore(editor);
-            assert.equal(await windows.isMaximized(editor), true);
-            await windows.minimize(editor);
-            await windows.unmaximize(editor);
-            assert.equal(await windows.isMinimized(editor), false);
-            assert.equal(await windows.isMaximized(editor), false);
-            await windows.toggleMaximize(editor);
-            assert.equal(await windows.isMaximized(editor), true);
-            await windows.toggleMaximize(editor);
-            assert.equal(await windows.isMaximized(editor), false);
+            await windows.maximize();
+            assert.equal(await windows.isNormal(), false);
+            assert.equal(await windows.isMaximized(), true);
+            await windows.minimize();
+            assert.equal(await windows.isMinimized(), true);
+            await windows.restore();
+            assert.equal(await windows.isMaximized(), true);
+            await windows.minimize();
+            await windows.unmaximize();
+            assert.equal(await windows.isMinimized(), false);
+            assert.equal(await windows.isMaximized(), false);
+            await windows.toggleMaximize();
+            assert.equal(await windows.isMaximized(), true);
+            await windows.toggleMaximize();
+            assert.equal(await windows.isMaximized(), false);
             for (const name of [
               "minimize",
               "maximize",
@@ -2146,12 +1955,12 @@ if (!process.argv.includes("--child")) {
               "restore",
               "toggleMaximize",
             ] as const) {
-              await windows.hide(editor);
-              assert.equal(await windows.isVisible(editor), false);
-              assert.equal(await windows.isFocused(editor), false);
-              await windows[name](editor);
-              assert.equal(await windows.isVisible(editor), true);
-              await windows.unmaximize(editor);
+              await windows.hide();
+              assert.equal(await windows.isVisible(), false);
+              assert.equal(await windows.isFocused(), false);
+              await windows[name]();
+              assert.equal(await windows.isVisible(), true);
+              await windows.unmaximize();
             }
             console.log(
               JSON.stringify({
@@ -2159,9 +1968,7 @@ if (!process.argv.includes("--child")) {
               }),
             );
             await assert.rejects(
-              windows.create({
-                view: "editor",
-              }),
+              windows.create({}),
               (error: unknown) =>
                 (
                   error as {
@@ -2169,37 +1976,20 @@ if (!process.argv.includes("--child")) {
                   }
                 ).code === "BUSY",
             );
-            await windows.hide({
-              view: "editor",
-            });
+            await windows.hide();
             const foreground = user.symbols.GetForegroundWindow();
-            const lastActive = await windows.getLastActive();
-            assert.deepEqual(
-              {
-                ...(await windows.getById({
-                  windowId: editorWindowId,
-                })),
-              },
-              {
-                windowId: editorWindowId,
-                viewId: "editor",
-              },
-            );
-            await windows.getFocused();
-            assert.equal(await windows.isVisible(editor), false);
+            // Read-only queries must not activate a hidden window.
+            assert.equal(await windows.isOpen(), true);
+            await windows.getReadiness();
+            assert.equal(await windows.isVisible(), false);
             assert.equal(
               user.symbols.GetForegroundWindow(),
               foreground,
               "lookup must not activate a hidden window",
             );
-            assert.deepEqual(await windows.getLastActive(), lastActive);
-            await windows.show({
-              view: "editor",
-            });
+            await windows.show();
             try {
-              await windows.focus({
-                view: "editor",
-              });
+              await windows.focus();
             } catch (error) {
               assert.equal(
                 (
@@ -2211,80 +2001,64 @@ if (!process.argv.includes("--child")) {
               );
             }
             await windows.setSize({
-              view: "editor",
               width: 700,
               height: 550,
             });
-            assert.equal(await windows.isResizable(editor), true);
-            assert.equal(await windows.isMovable(editor), true);
+            assert.equal(await windows.isResizable(), true);
+            assert.equal(await windows.isMovable(), true);
             await windows.setResizable({
-              ...editor,
               resizable: false,
             });
             await windows.setMovable({
-              ...editor,
               movable: false,
             });
-            assert.equal(await windows.isResizable(editor), false);
-            assert.equal(await windows.isMovable(editor), false);
+            assert.equal(await windows.isResizable(), false);
+            assert.equal(await windows.isMovable(), false);
             // Programmatic geometry remains available while user interactions are disabled.
             await windows.setSize({
-              ...editor,
               width: 700,
               height: 550,
             });
             await windows.setPosition({
-              view: "editor",
               x: 20,
               y: 30,
             });
             await windows.setResizable({
-              ...editor,
               resizable: true,
             });
             await windows.setMovable({
-              ...editor,
               movable: true,
             });
-            assert.equal(await windows.getAspectRatio(editor), null);
-            const beforeAspectRatio = await windows.getOuterBounds(editor);
+            assert.equal(await windows.getAspectRatio(), null);
+            const beforeAspectRatio = await windows.getOuterBounds();
             await windows.setAspectRatio({
-              ...editor,
               ratio: 16 / 9,
             });
-            assert.equal(await windows.getAspectRatio(editor), 16 / 9);
+            assert.equal(await windows.getAspectRatio(), 16 / 9);
             // Setting the lock leaves the current size unchanged.
-            assert.deepEqual(
-              await windows.getOuterBounds(editor),
-              beforeAspectRatio,
-            );
+            assert.deepEqual(await windows.getOuterBounds(), beforeAspectRatio);
             await assert.rejects(
               windows.setAspectRatio({
-                ...editor,
                 ratio: 0,
               }),
               {
                 code: "INVALID_ARGUMENT",
               },
             );
-            assert.equal(await windows.getAspectRatio(editor), 16 / 9);
+            assert.equal(await windows.getAspectRatio(), 16 / 9);
             await windows.setAspectRatio({
-              ...editor,
               ratio: null,
             });
-            assert.equal(await windows.getAspectRatio(editor), null);
+            assert.equal(await windows.getAspectRatio(), null);
             // Verify the public API through the real core, UI worker and HWND.
             const content = await windows.getContentSize({
-              view: "editor",
               unit: "logical",
             });
             assert.equal(content.width, 700);
             assert.equal(content.height, 550);
             assert.deepEqual(
               {
-                ...(await windows.getOuterPosition({
-                  view: "editor",
-                })),
+                ...(await windows.getOuterPosition({})),
               },
               {
                 x: 20,
@@ -2292,19 +2066,17 @@ if (!process.argv.includes("--child")) {
                 dpi: content.dpi,
               },
             );
-            const outer = await windows.getOuterBounds({
-              view: "editor",
-            });
-            await windows.hide(editor);
+            const outer = await windows.getOuterBounds({});
+            await windows.hide();
             const centerForeground = user.symbols.GetForegroundWindow();
-            await windows.center(editor);
-            const centered = await windows.getOuterBounds(editor);
+            await windows.center();
+            const centered = await windows.getOuterBounds();
             assert.equal(centered.width, outer.width);
             assert.equal(centered.height, outer.height);
-            assert.equal(await windows.isVisible(editor), false);
+            assert.equal(await windows.isVisible(), false);
             assert.equal(user.symbols.GetForegroundWindow(), centerForeground);
-            await windows.center(editor);
-            assert.deepEqual(await windows.getOuterBounds(editor), centered);
+            await windows.center();
+            assert.deepEqual(await windows.getOuterBounds(), centered);
             // The centered window lies inside exactly one monitor work area.
             const centerTarget = (await windows.getMonitors()).find(
               (monitor) =>
@@ -2317,15 +2089,13 @@ if (!process.argv.includes("--child")) {
             );
             assert(centerTarget);
             await windows.setPosition({
-              ...editor,
               x: outer.x,
               y: outer.y,
             });
             await windows.center({
-              ...editor,
               monitorId: centerTarget.id,
             });
-            assert.deepEqual(await windows.getOuterBounds(editor), centered);
+            assert.deepEqual(await windows.getOuterBounds(), centered);
             assert.deepEqual(
               {
                 x: centered.x,
@@ -2342,15 +2112,14 @@ if (!process.argv.includes("--child")) {
                 ),
               },
             );
-            assert.equal(await windows.isVisible(editor), false);
+            assert.equal(await windows.isVisible(), false);
             assert.equal(user.symbols.GetForegroundWindow(), centerForeground);
             // Start off-center so a fallback to the current monitor cannot pass unnoticed.
             await windows.setPosition({
-              ...editor,
               x: outer.x,
               y: outer.y,
             });
-            const movedBeforeReject = await windows.getOuterBounds(editor);
+            const movedBeforeReject = await windows.getOuterBounds();
             assert.notDeepEqual(
               {
                 x: movedBeforeReject.x,
@@ -2363,17 +2132,13 @@ if (!process.argv.includes("--child")) {
             );
             await assert.rejects(
               windows.center({
-                ...editor,
                 monitorId: "\\\\.\\DISPLAY999",
               }),
               {
                 code: "INVALID_ARGUMENT",
               },
             );
-            assert.deepEqual(
-              await windows.getOuterBounds(editor),
-              movedBeforeReject,
-            );
+            assert.deepEqual(await windows.getOuterBounds(), movedBeforeReject);
             // Every anchor places the hidden window against its work-area edge, inset by margin.
             const anchorMargin = Math.round((12 * centerTarget.dpi) / 96);
             const anchorArea = centerTarget.workArea;
@@ -2431,13 +2196,11 @@ if (!process.argv.includes("--child")) {
               ],
             ] as const) {
               await windows.setPosition({
-                ...editor,
                 x: outer.x,
                 y: outer.y,
               });
               assert.equal(
                 await windows.moveToAnchor({
-                  ...editor,
                   anchor,
                   monitorId: centerTarget.id,
                   margin: 12,
@@ -2446,7 +2209,7 @@ if (!process.argv.includes("--child")) {
               );
               assert.deepEqual(
                 {
-                  ...(await windows.getOuterBounds(editor)),
+                  ...(await windows.getOuterBounds()),
                 },
                 {
                   ...centered,
@@ -2455,20 +2218,18 @@ if (!process.argv.includes("--child")) {
                 },
               );
             }
-            assert.equal(await windows.isVisible(editor), false);
+            assert.equal(await windows.isVisible(), false);
             assert.equal(user.symbols.GetForegroundWindow(), centerForeground);
             await windows.setPosition({
-              ...editor,
               x: outer.x,
               y: outer.y,
             });
             await windows.moveToAnchor({
-              ...editor,
               anchor: "bottom-right",
             });
             assert.deepEqual(
               {
-                ...(await windows.getOuterBounds(editor)),
+                ...(await windows.getOuterBounds()),
               },
               {
                 ...centered,
@@ -2477,15 +2238,12 @@ if (!process.argv.includes("--child")) {
               },
             );
             await windows.setPosition({
-              ...editor,
               x: outer.x,
               y: outer.y,
             });
-            const movedBeforeAnchorReject =
-              await windows.getOuterBounds(editor);
+            const movedBeforeAnchorReject = await windows.getOuterBounds();
             await assert.rejects(
               windows.moveToAnchor({
-                ...editor,
                 anchor: "top-left",
                 monitorId: "\\\\.\\DISPLAY999",
               }),
@@ -2494,40 +2252,29 @@ if (!process.argv.includes("--child")) {
               },
             );
             assert.deepEqual(
-              await windows.getOuterBounds(editor),
+              await windows.getOuterBounds(),
               movedBeforeAnchorReject,
             );
             await verifyMoveNextToRect({
-              editor,
               area: anchorArea,
               outer,
               centered,
               foreground: centerForeground,
             });
             await windows.setOuterBounds({
-              ...editor,
               x: outer.x,
               y: outer.y,
               width: outer.width,
               height: outer.height,
             });
-            await windows.show(editor);
-            assert.deepEqual(
-              await windows.getNormalBounds({
-                view: "editor",
-              }),
-              outer,
-            );
-            const inner = await windows.getContentBounds({
-              view: "editor",
-            });
+            await windows.show();
+            assert.deepEqual(await windows.getNormalBounds({}), outer);
+            const inner = await windows.getContentBounds({});
             assert(inner.x >= outer.x && inner.y > outer.y);
             assert(outer.width > inner.width && outer.height > inner.height);
             assert.deepEqual(
               {
-                ...(await windows.getOuterSize({
-                  view: "editor",
-                })),
+                ...(await windows.getOuterSize({})),
               },
               {
                 width: outer.width,
@@ -2537,9 +2284,7 @@ if (!process.argv.includes("--child")) {
             );
             assert.deepEqual(
               {
-                ...(await windows.getContentPosition({
-                  view: "editor",
-                })),
+                ...(await windows.getContentPosition({})),
               },
               {
                 x: inner.x,
@@ -2548,7 +2293,6 @@ if (!process.argv.includes("--child")) {
               },
             );
             const physical = await windows.toPhysical({
-              view: "editor",
               value: {
                 width: 700,
                 height: 550,
@@ -2570,7 +2314,6 @@ if (!process.argv.includes("--child")) {
               },
             );
             const logical = await windows.toLogical({
-              view: "editor",
               value: physical.value,
             });
             assert.deepEqual(
@@ -2589,34 +2332,28 @@ if (!process.argv.includes("--child")) {
               },
             );
             await windows.setSize({
-              view: "editor",
               width: 300,
               height: 300,
             });
             await assertContentSize(500, 400);
             await windows.setSize({
-              view: "editor",
               width: 1000,
               height: 800,
             });
             await assertContentSize(800, 600);
             await windows.setSizeConstraints({
-              view: "editor",
               minWidth: 600,
               maxWidth: 750,
               maxHeight: 550,
             });
             await assertContentSize(750, 550);
             await windows.setMinSize({
-              view: "editor",
               width: 700,
               height: null,
             });
             assert.deepEqual(
               {
-                ...(await windows.getSizeConstraints({
-                  view: "editor",
-                })),
+                ...(await windows.getSizeConstraints()),
               },
               {
                 minWidth: 700,
@@ -2625,12 +2362,9 @@ if (!process.argv.includes("--child")) {
                 maxHeight: 550,
               },
             );
-            const beforeInvalid = await windows.getSizeConstraints({
-              view: "editor",
-            });
+            const beforeInvalid = await windows.getSizeConstraints();
             await assert.rejects(
               windows.setMaxSize({
-                view: "editor",
                 width: 699,
                 height: null,
               }),
@@ -2643,23 +2377,18 @@ if (!process.argv.includes("--child")) {
             );
             assert.deepEqual(
               {
-                ...(await windows.getSizeConstraints({
-                  view: "editor",
-                })),
+                ...(await windows.getSizeConstraints()),
               },
               {
                 ...beforeInvalid,
               },
             );
             await windows.setSizeConstraints({
-              view: "editor",
               minHeight: 350,
             });
             assert.deepEqual(
               {
-                ...(await windows.getSizeConstraints({
-                  view: "editor",
-                })),
+                ...(await windows.getSizeConstraints()),
               },
               {
                 minWidth: null,
@@ -2669,20 +2398,16 @@ if (!process.argv.includes("--child")) {
               },
             );
             await windows.setMinSize({
-              view: "editor",
               width: null,
               height: null,
             });
             await windows.setMaxSize({
-              view: "editor",
               width: null,
               height: null,
             });
             assert.deepEqual(
               {
-                ...(await windows.getSizeConstraints({
-                  view: "editor",
-                })),
+                ...(await windows.getSizeConstraints()),
               },
               {
                 minWidth: null,
@@ -2692,22 +2417,19 @@ if (!process.argv.includes("--child")) {
               },
             );
             await windows.setSize({
-              view: "editor",
               width: 650,
               height: 550,
             });
             await windows.setSizeConstraints({
-              view: "editor",
               minWidth: 600,
               minHeight: 500,
               maxWidth: 800,
               maxHeight: 700,
             });
             await windows.setFullscreen({
-              view: "editor",
               fullscreen: true,
             });
-            assert.equal(await windows.isFullscreen(editor), true);
+            assert.equal(await windows.isFullscreen(), true);
             for (const name of [
               "minimize",
               "maximize",
@@ -2716,13 +2438,12 @@ if (!process.argv.includes("--child")) {
               "toggleMaximize",
               "center",
             ] as const) {
-              await assert.rejects(windows[name](editor), {
+              await assert.rejects(windows[name](), {
                 code: "INVALID_ARGUMENT",
               });
             }
             await assert.rejects(
               windows.setSize({
-                view: "editor",
                 width: 500,
                 height: 400,
               }),
@@ -2734,7 +2455,6 @@ if (!process.argv.includes("--child")) {
                 ).code === "INVALID_ARGUMENT",
             );
             await windows.setSizeConstraints({
-              view: "editor",
               minWidth: 700,
               minHeight: 500,
               maxWidth: 800,
@@ -2742,9 +2462,7 @@ if (!process.argv.includes("--child")) {
             });
             assert.deepEqual(
               {
-                ...(await windows.getSizeConstraints({
-                  view: "editor",
-                })),
+                ...(await windows.getSizeConstraints()),
               },
               {
                 minWidth: 700,
@@ -2754,51 +2472,33 @@ if (!process.argv.includes("--child")) {
               },
             );
             await windows.setFullscreen({
-              view: "editor",
               fullscreen: false,
             });
             await assertContentSize(700, 550);
-            assert.equal(await windows.isFullscreen(editor), false);
-            assert.equal(await windows.getOpacity(editor), 1);
+            assert.equal(await windows.isFullscreen(), false);
+            assert.equal(await windows.getOpacity(), 1);
             await windows.setOpacity({
-              ...editor,
               opacity: 0.5,
             });
-            assert.ok(
-              Math.abs((await windows.getOpacity(editor)) - 0.5) <= 1 / 255,
-            );
+            assert.ok(Math.abs((await windows.getOpacity()) - 0.5) <= 1 / 255);
             await windows.setOpacity({
-              ...editor,
               opacity: 1,
             });
-            assert.equal(await windows.getOpacity(editor), 1);
-            // The declared color is live, a runtime change replaces it, and another window keeps its own.
-            assert.equal(await windows.getBackgroundColor(editor), "#112233");
-            assert.equal(
-              await windows.getBackgroundColor({
-                view: "main",
-              }),
-              null,
-            );
+            assert.equal(await windows.getOpacity(), 1);
+            // The declared color is live, and a runtime change replaces it.
+            assert.equal(await windows.getBackgroundColor(), "#112233");
+            assert.equal(await windows.getBackgroundColor(), null);
             await windows.setBackgroundColor({
-              ...editor,
               color: "#ABC",
             });
-            assert.equal(await windows.getBackgroundColor(editor), "#aabbcc");
-            assert.equal(
-              await windows.getBackgroundColor({
-                view: "main",
-              }),
-              null,
-            );
+            assert.equal(await windows.getBackgroundColor(), "#aabbcc");
+            assert.equal(await windows.getBackgroundColor(), null);
             await windows.setBackgroundColor({
-              ...editor,
               color: "#203040",
             });
-            assert.equal(await windows.getBackgroundColor(editor), "#203040");
+            assert.equal(await windows.getBackgroundColor(), "#203040");
             await assert.rejects(
               windows.setBackgroundColor({
-                ...editor,
                 color: "#20304080",
               }),
               (error: unknown) =>
@@ -2808,27 +2508,23 @@ if (!process.argv.includes("--child")) {
                   }
                 ).code === "INVALID_ARGUMENT",
             );
-            assert.equal(await windows.getBackgroundColor(editor), "#203040");
-            assert.equal(await windows.isIgnoreMouseEvents(editor), false);
+            assert.equal(await windows.getBackgroundColor(), "#203040");
+            assert.equal(await windows.isIgnoreMouseEvents(), false);
             await windows.setIgnoreMouseEvents({
-              ...editor,
               ignore: true,
             });
-            assert.equal(await windows.isIgnoreMouseEvents(editor), true);
+            assert.equal(await windows.isIgnoreMouseEvents(), true);
             await windows.setIgnoreMouseEvents({
-              ...editor,
               ignore: false,
             });
-            assert.equal(await windows.isIgnoreMouseEvents(editor), false);
-            assert.equal(await windows.isFullscreenable(editor), true);
+            assert.equal(await windows.isIgnoreMouseEvents(), false);
+            assert.equal(await windows.isFullscreenable(), true);
             await windows.setFullscreenable({
-              ...editor,
               fullscreenable: false,
             });
-            assert.equal(await windows.isFullscreenable(editor), false);
+            assert.equal(await windows.isFullscreenable(), false);
             await assert.rejects(
               windows.setFullscreen({
-                ...editor,
                 fullscreen: true,
               }),
               (error) =>
@@ -2838,7 +2534,7 @@ if (!process.argv.includes("--child")) {
                   }
                 ).code === "INVALID_ARGUMENT",
             );
-            assert.equal(await windows.isFullscreen(editor), false);
+            assert.equal(await windows.isFullscreen(), false);
             // The state resets on recreate, which the next run asserts.
             console.log(
               JSON.stringify({
@@ -2846,91 +2542,28 @@ if (!process.argv.includes("--child")) {
               }),
             );
             await windows.setCloseConfirmation({
-              view: "editor",
-              message: "Close editor?",
+              message: "Close window?",
             });
             await windows.setFocusable({
-              ...editor,
               focusable: true,
             });
-            assert.equal(
-              await windows.close({
-                view: "editor",
-              }),
-              false,
-            );
-            assert(
-              (await windows.list()).find((spec) => spec.view === "editor")
-                ?.open,
-            );
-            await windows.recreate({
-              view: "editor",
-            });
-            assert.equal(
-              await windows.getById({
-                windowId: editorWindowId,
-              }),
-              null,
-            );
-            assert.notEqual(
-              (await windows.getSnapshot(editor)).windowId,
-              editorWindowId,
-            );
-            await waitFor(() => holds === 2 && cancellations === 1);
-          } else if (runs === 2) {
-            // Recreation starts from the declaration, not from the previous runtime color.
-            assert.equal(
-              await windows.getBackgroundColor({
-                view: "editor",
-              }),
-              "#112233",
-            );
-            assert.equal(
-              await windows.isFocusable({
-                view: "editor",
-              }),
-              true,
-            );
-            assert.equal(
-              await windows.isMinimizable({
-                view: "editor",
-              }),
-              true,
-            );
-            assert.equal(
-              await windows.isMaximizable({
-                view: "editor",
-              }),
-              true,
-            );
-            assert.equal(
-              await windows.isClosable({
-                view: "editor",
-              }),
-              true,
-            );
-            assert.equal(
-              await windows.isFullscreenable({
-                view: "editor",
-              }),
-              true,
-            );
-            assert.equal(
-              await windows.getTitle({
-                view: "editor",
-              }),
-              "Window API editor",
-            );
-            editorWindowId = (
-              await windows.getSnapshot({
-                view: "editor",
-              })
-            ).windowId;
+            assert.equal(await windows.close(), false);
+            assert.equal(await windows.isOpen(), true);
+            // Recreation bypasses the close confirmation and revokes this document.
+            await windows.recreate({});
+          } else {
+            assert.equal(run, 4);
+            // Recreation starts from the declaration, not from the previous runtime state.
+            assert.equal(await windows.getBackgroundColor(), "#112233");
+            assert.equal(await windows.isFocusable(), true);
+            assert.equal(await windows.isMinimizable(), true);
+            assert.equal(await windows.isMaximizable(), true);
+            assert.equal(await windows.isClosable(), true);
+            assert.equal(await windows.isFullscreenable(), true);
+            assert.equal(await windows.getTitle(), "Window API editor");
             assert.deepEqual(
               {
-                ...(await windows.getSizeConstraints({
-                  view: "editor",
-                })),
+                ...(await windows.getSizeConstraints()),
               },
               {
                 minWidth: 500,
@@ -2940,139 +2573,21 @@ if (!process.argv.includes("--child")) {
               },
             );
             assert.equal(
-              await windows.close({
-                view: "editor",
-              }),
-              true,
-            ); // confirmation resets on recreation
-            assert.equal(
-              await windows.isDestroyed({
-                view: "editor",
-              }),
-              true,
-            );
-            assert.equal(
-              await windows.getById({
-                windowId: editorWindowId,
-              }),
-              null,
-            );
-            await assert.rejects(
-              windows.isNormal({
-                view: "editor",
-              }),
-              {
-                code: "INVALID_ARGUMENT",
-              },
-            );
-            await assert.rejects(
-              windows.getAspectRatio({
-                view: "editor",
-              }),
-              {
-                code: "INVALID_ARGUMENT",
-              },
-            );
-            await assert.rejects(
-              windows.setAspectRatio({
-                view: "editor",
-                ratio: 1,
-              }),
-              {
-                code: "INVALID_ARGUMENT",
-              },
-            );
-            await windows.create({
-              view: "editor",
-            });
-            await waitFor(() => holds === 3 && cancellations === 2);
-          } else if (runs === 3) {
-            // Renderer failure revokes this document while the main view is recreated.
-            await windows.setCloseConfirmation({
-              view: "editor",
-              message: "Close editor?",
-            });
-            console.log(
-              JSON.stringify({
-                event: "window-api-browser-crash",
-              }),
-            );
-            await waitFor(async () =>
-              (await windows.list()).some(
-                (spec) => spec.view === "editor" && !spec.open,
-              ),
-            );
-            await waitFor(() => cancellations === 3);
-            await windows.recreate({
-              view: "main",
-            }); // revokes this caller, but replacement must finish
-          } else {
-            // Race a pending editor creation against caller revocation during main-window close.
-            assert.equal(runs, 4);
-            assert.equal(
               quitAttempts,
               0,
               "recreation must bypass app quit checks",
             );
-            await Bun.sleep(50); // let the replacement readiness reply release its reservation
-            await windows.create({
-              view: "editor",
-            });
-            await waitFor(() => holds === 4);
-            assert.equal(
-              await windows.close({
-                view: "editor",
-              }),
-              true,
-            );
-            assert.equal(
-              await windows.close({
-                view: "main",
-              }),
-              false,
-            );
-            assert.equal(quitAttempts, 1);
-            assert(
-              (await windows.list()).find((spec) => spec.view === "main")?.open,
-            );
-            const reopening = assert.rejects(
-              windows.create({
-                view: "editor",
-              }),
-              (error: unknown) =>
-                (
-                  error as {
-                    code: string;
-                  }
-                ).code === "CANCELLED",
-            );
-            await Bun.sleep(20); // revoke the caller while the editor still drains
-            await assert.rejects(
-              windows.close({
-                view: "main",
-              }),
-              (error: unknown) =>
-                (
-                  error as {
-                    code: string;
-                  }
-                ).code === "CANCELLED",
-            );
-            await reopening;
-            assert.equal(quitAttempts, 2);
-            assert.equal(auxiliaryDocuments, 4);
             await writeFile(
               reportPath,
               JSON.stringify({
                 pass: true,
-                auxiliaryDocuments,
                 cancellations,
-                cancelledCreation: true,
-                browserFailureClosed: true,
-                identityLookup: true,
+                revokedDocuments: cancellations >= 2,
                 navigationPreservesIdentity: true,
               }),
             );
+            // Closing the only window ends the app; the quit check approves it.
+            await windows.close();
           }
           return null;
         },
@@ -3088,27 +2603,21 @@ if (!process.argv.includes("--child")) {
     backendContext: `backend-${crypto.randomUUID()}` as HostContext,
     policy,
     windows: [
-      "main",
-      "editor",
-    ].map((view) => ({
-      view,
-      title: `Window API ${view}`,
-      home: `https://app.bunaway.local/${view === "main" ? "index" : "editor"}.html`,
-      window: {
-        width: view === "editor" ? 300 : 800,
-        height: view === "editor" ? 1000 : 600,
-        ...(view === "editor"
-          ? {
-              minWidth: 500,
-              minHeight: 400,
-              maxWidth: 800,
-              maxHeight: 600,
-              backgroundColor: "#112233",
-            }
-          : {}),
+      {
+        view: "main",
+        title: "Window API editor",
+        home: "https://app.bunaway.local/index.html",
+        window: {
+          width: 300,
+          height: 1000,
+          minWidth: 500,
+          minHeight: 400,
+          maxWidth: 800,
+          maxHeight: 600,
+          backgroundColor: "#112233",
+        },
       },
-      startup: view === "main",
-    })),
+    ],
     assets,
     dataRoot: resolve(output, `data-${process.pid}`),
     loader: resolve(

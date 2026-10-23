@@ -32,22 +32,17 @@ test("an empty plugin registry exposes no built-in window or feature calls", asy
     },
     empty,
   );
-  await expect(
-    host.call(operation, {
-      view: "main",
-    }),
-  ).rejects.toMatchObject({
+  await expect(host.call(operation, {})).rejects.toMatchObject({
     code: "UNSUPPORTED",
   });
   expect(nativeCalls).toBe(0);
 });
 
-test("window operations use name grants and list all configured windows", async () => {
+test("window operations use name grants for the app's only window", async () => {
   const actions: string[] = [];
   const sizeConstraints = new Map<string, WindowSizeConstraints>(
     [
       "main",
-      "private",
     ].map((view) => [
       view,
       {
@@ -66,7 +61,6 @@ test("window operations use name grants and list all configured windows", async 
   const services: NativeWindowServices = {
     specs: [
       "main",
-      "private",
     ].map((view) => ({
       view,
       home: "https://app.bunaway.local",
@@ -162,37 +156,13 @@ test("window operations use name grants and list all configured windows", async 
   expect(
     registry.allowed(permissions, {
       operation: "windows.show",
-      payload: {
-        view: "private",
-      },
+      payload: null,
     }),
   ).toBe(true);
-  expect(
-    await execute("windows.list", null, "backend", {
-      requestId: "list",
-      permissions,
-    }),
-  ).toEqual([
-    {
-      view: "main",
-      open: true,
-    },
-    {
-      view: "private",
-      open: true,
-    },
-  ]);
-  await execute(
-    "windows.show",
-    {
-      view: "main",
-    },
-    "backend",
-    {
-      requestId: "show",
-      permissions,
-    },
-  );
+  await execute("windows.show", null, "backend", {
+    requestId: "show",
+    permissions,
+  });
 
   const invoke = (
     operationName: string,
@@ -203,48 +173,31 @@ test("window operations use name grants and list all configured windows", async 
       requestId,
       permissions,
     });
-  expect(
-    await invoke("windows.getSizeConstraints", {
-      view: "main",
-    }),
-  ).toEqual({
+  expect(await invoke("windows.getSizeConstraints", null)).toEqual({
     minWidth: null,
     minHeight: null,
     maxWidth: null,
     maxHeight: null,
   });
   await invoke("windows.setMinSize", {
-    view: "main",
     width: 400,
     height: null,
   });
   await invoke("windows.setMaxSize", {
-    view: "main",
     width: 1200,
     height: null,
   });
-  expect(
-    await invoke("windows.getMinSize", {
-      view: "main",
-    }),
-  ).toEqual({
+  expect(await invoke("windows.getMinSize", null)).toEqual({
     width: 400,
     height: null,
   });
-  expect(
-    await invoke("windows.getMaxSize", {
-      view: "main",
-    }),
-  ).toEqual({
+  expect(await invoke("windows.getMaxSize", null)).toEqual({
     width: 1200,
     height: null,
   });
-  const beforeInvalid = await invoke("windows.getSizeConstraints", {
-    view: "main",
-  });
+  const beforeInvalid = await invoke("windows.getSizeConstraints", null);
   await expect(
     invoke("windows.setMaxSize", {
-      view: "main",
       width: 399,
       height: null,
     }),
@@ -253,54 +206,42 @@ test("window operations use name grants and list all configured windows", async 
   });
   await expect(
     invoke("windows.setSizeConstraints", {
-      view: "main",
       minHeight: 480,
       maxHeight: 470,
     }),
   ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
-  expect(
-    await invoke("windows.getSizeConstraints", {
-      view: "main",
-    }),
-  ).toEqual(beforeInvalid);
+  expect(await invoke("windows.getSizeConstraints", null)).toEqual(
+    beforeInvalid,
+  );
   await expect(
     invoke("windows.setMinSize", {
-      view: "private",
+      view: "main",
       width: 300,
       height: null,
     }),
-  ).resolves.toBeNull();
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
   await invoke("windows.setSizeConstraints", {
-    view: "main",
     minHeight: 320,
   });
-  expect(
-    await invoke("windows.getSizeConstraints", {
-      view: "main",
-    }),
-  ).toEqual({
+  expect(await invoke("windows.getSizeConstraints", null)).toEqual({
     minWidth: null,
     minHeight: 320,
     maxWidth: null,
     maxHeight: null,
   });
   await invoke("windows.setMinSize", {
-    view: "main",
     width: null,
     height: null,
   });
   await invoke("windows.setMaxSize", {
-    view: "main",
     width: null,
     height: null,
   });
-  expect(
-    await invoke("windows.getSizeConstraints", {
-      view: "main",
-    }),
-  ).toEqual({
+  expect(await invoke("windows.getSizeConstraints", null)).toEqual({
     minWidth: null,
     minHeight: null,
     maxWidth: null,
@@ -308,19 +249,12 @@ test("window operations use name grants and list all configured windows", async 
   });
   await expect(
     Promise.resolve().then(() =>
-      execute(
-        "windows.show",
-        {
-          view: "private",
+      execute("windows.show", null, "backend", {
+        requestId: "denied",
+        permissions: {
+          permissions: [],
         },
-        "backend",
-        {
-          requestId: "denied",
-          permissions: {
-            permissions: [],
-          },
-        },
-      ),
+      }),
     ),
   ).rejects.toMatchObject({
     code: "PERMISSION_DENIED",

@@ -144,23 +144,23 @@ if (!process.argv.includes("--child")) {
       unit: "physical",
       ...bounds,
     });
-  const state = async () => (await windows.getSnapshot(target)).state;
+  const state = async () => (await windows.getSnapshot()).state;
   /** Put the window back to a plain, restored rectangle between scenarios. */
   const reset = async () => {
     await windows.setFullscreen({
       ...target,
       fullscreen: false,
     });
-    await windows.unmaximize(target);
+    await windows.unmaximize();
     await place(elsewhere);
   };
   async function scenario() {
     // Position and size round trip.
     await place(saved);
-    await windowState.save(target);
+    await windowState.save();
     await place(elsewhere);
     assert.deepEqual(await normal(), elsewhere);
-    assert.deepEqual(await windowState.restore(target), {
+    assert.deepEqual(await windowState.restore(), {
       restored: true,
       adjusted: false,
     });
@@ -168,7 +168,7 @@ if (!process.argv.includes("--child")) {
     assert.equal((await state()).maximized, false);
 
     // Maximized: the normal rectangle is kept and the window maximizes again.
-    await windows.maximize(target);
+    await windows.maximize();
     await windowState.save({
       ...target,
       key: "maximized",
@@ -184,19 +184,19 @@ if (!process.argv.includes("--child")) {
       "maximized after restoring a maximized record",
     );
     assert.deepEqual(await normal(), saved);
-    await windows.unmaximize(target);
+    await windows.unmaximize();
     assert.deepEqual(await normal(), saved);
 
     // A minimized window reports not maximized, so saving it keeps the maximized value saved
     // before. Restoring a tiny size into a minimized window stays inside the native size limits
     // instead of throwing.
     await place(saved);
-    await windows.maximize(target);
+    await windows.maximize();
     await windowState.save({
       ...target,
       key: "minimized",
     });
-    await windows.minimize(target);
+    await windows.minimize();
     assert.equal(
       (await state()).maximized,
       false,
@@ -250,7 +250,7 @@ if (!process.argv.includes("--child")) {
         adjusted: true,
       },
     );
-    await windows.restore(target);
+    await windows.restore();
     const grown = await normal();
     assert(
       grown.width > 100 && grown.height > 100,
@@ -350,11 +350,11 @@ if (!process.argv.includes("--child")) {
     );
 
     // Removing the state makes restore a no-op.
-    assert.deepEqual(await windowState.remove(target), {
+    assert.deepEqual(await windowState.remove(), {
       removed: true,
     });
     const before = await normal();
-    assert.deepEqual(await windowState.restore(target), {
+    assert.deepEqual(await windowState.restore(), {
       restored: false,
       adjusted: false,
     });
@@ -395,7 +395,7 @@ if (!process.argv.includes("--child")) {
             );
             throw error;
           } finally {
-            await windows.close(target);
+            await windows.close();
           }
           return null;
         },

@@ -214,17 +214,15 @@ if (!process.argv.includes("--child")) {
         },
         async run() {
           documents++;
-          const before = await windows.getSnapshot(target);
+          const before = await windows.getSnapshot();
           ids.push(before.windowId);
           const start = records.length;
-          await windows.hide(target);
-          assert.equal(await windows.activate(target), false);
-          await windows.showInactive(target);
-          assert.equal(await windows.isVisible(target), true);
-          const activated = await windows.activate(target);
-          assert.equal(activated, await windows.isFocused(target));
-          const blurred = await windows.blur(target);
-          assert.equal(blurred, !(await windows.isFocused(target)));
+          await windows.hide();
+          assert.equal(await windows.activate(), false);
+          await windows.showInactive();
+          assert.equal(await windows.isVisible(), true);
+          const activated = await windows.activate();
+          assert.equal(activated, await windows.isFocused());
           const driver = dlopen("user32.dll", {
             FindWindowW: {
               args: [
@@ -269,7 +267,7 @@ if (!process.argv.includes("--child")) {
             driver.close();
           }
           // Exercise setters through the public SDK, Core, UI worker and WebView2 events.
-          const content = await windows.getContentBounds(target);
+          const content = await windows.getContentBounds();
           await windows.setContentPosition({
             ...target,
             x: content.x + 13,
@@ -277,7 +275,7 @@ if (!process.argv.includes("--child")) {
           });
           assert.deepEqual(
             {
-              ...(await windows.getContentPosition(target)),
+              ...(await windows.getContentPosition()),
             },
             {
               x: content.x + 13,
@@ -285,7 +283,7 @@ if (!process.argv.includes("--child")) {
               dpi: content.dpi,
             },
           );
-          const outer = await windows.getOuterBounds(target);
+          const outer = await windows.getOuterBounds();
           await windows.setOuterSize({
             ...target,
             width: outer.width + 9,
@@ -326,7 +324,7 @@ if (!process.argv.includes("--child")) {
             ...target,
             ...desired,
           });
-          const applied = await windows.getSnapshot(target);
+          const applied = await windows.getSnapshot();
           assert.deepEqual(
             {
               ...applied.bounds,
@@ -361,10 +359,10 @@ if (!process.argv.includes("--child")) {
               ],
             },
           );
-          await windows.maximize(target);
-          await windows.unmaximize(target);
-          await windows.minimize(target);
-          await windows.restore(target);
+          await windows.maximize();
+          await windows.unmaximize();
+          await windows.minimize();
+          await windows.restore();
           await windows.setFullscreen({
             ...target,
             fullscreen: true,
@@ -404,11 +402,8 @@ if (!process.argv.includes("--child")) {
                 .some((record) => record.changes.includes(change)),
             ),
           );
-          const snapshot = await windows.getSnapshot(target);
-          assert.deepEqual(
-            snapshot.bounds,
-            await windows.getOuterBounds(target),
-          );
+          const snapshot = await windows.getSnapshot();
+          assert.deepEqual(snapshot.bounds, await windows.getOuterBounds());
           const current = records.slice(start);
           assert(
             current.every((event) => event.windowId === snapshot.windowId),
@@ -456,7 +451,7 @@ if (!process.argv.includes("--child")) {
         async run(input: { onceWindowId: string }) {
           assert.equal(
             input.onceWindowId,
-            (await windows.getSnapshot(target)).windowId,
+            (await windows.getSnapshot()).windowId,
           );
           onceDocuments++;
           const count = records.length;
@@ -477,7 +472,7 @@ if (!process.argv.includes("--child")) {
       "test.recreate": {
         ...noInput,
         async run() {
-          await windows.recreate(target);
+          await windows.recreate();
           return null;
         },
       },
@@ -502,10 +497,8 @@ if (!process.argv.includes("--child")) {
               ids,
             }),
           );
-          await windows.close({
-            view: "denied",
-          });
-          await windows.close(target);
+          await windows.close();
+          await windows.close();
           return null;
         },
       },

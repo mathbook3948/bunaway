@@ -314,7 +314,5 @@ try {
     message: String(error),
   });
 } finally {
-  await windows.close({
-    view,
-  });
+  await windows.close();
 }

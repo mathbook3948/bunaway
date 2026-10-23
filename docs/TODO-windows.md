@@ -55,39 +55,39 @@ debug APK 개발 경로를 반영하고 iOS 및 모바일 후속 작업을 분�
 
 우선순위 P1. 소유자: 호스트와 창 API. 출처: [T-window], [T-webview], [E-window], [E-app].
 
-- [x] `app.windows`로 여러 창을 선언하고 시작 창을 생성한다.
-- [x] `startup: false`인 사전 선언 창을 API로 생성한다.
-- [x] 닫은 보조 창을 다시 생성하고 열린 창을 재생성한다.
-- [x] 허용된 창의 목록과 열림 여부를 조회한다.
+- [x] `app`에 창 하나를 선언하고 시작 창을 생성한다.
+- [x] `app.startup: false`이면 창을 API로 생성한다.
+- [x] 닫은 창을 다시 생성하고 열린 창을 재생성한다. 창이 없을 때의 `recreate`는 새로 만든다.
+- [x] `isOpen`으로 창이 열려 있는지 조회한다.
 - [x] 창 show, hide, focus, close를 제공한다.
 - [x] 창 재생성에서 이전 세션을 정리하고 새 세션을 만든다.
-- [x] 창별 권한, WebView 프로필과 렌더러 복구를 분리한다.
-- [x] `getById`, `getCurrent`, `getFocused`, `getLastActive`로 창 ID, 현재 창, 포커스된 창과 마지막 활성 창을 조회한다.
+- [x] 창 권한, WebView 프로필과 렌더러 복구를 분리한다.
+- [x] `getSnapshot`과 `getReadiness`로 창 ID를 조회한다.
 - [x] `windows.readiness`와 `getReadiness`로 네이티브 창 생성, 현재 문서 완료와 SDK 협상 확인을 구분한다.
 - [x] `visible: false`, `showWhenReady: "document" | "sdk"`로 처음부터 숨겨서 생성하고 첫 준비 뒤 표시한다.
 - [x] 포커스를 가져오지 않고 창을 표시하는 `showInactive`를 제공한다.
-- [x] blur와 활성 창 전환 API를 제공한다.
+- [x] `activate`로 전경 전환을 요청한다.
 - [x] `isVisible`과 `isFocused`로 실제 창의 표시 상태와 전경 창 여부를 조회한다.
-- [x] `isDestroyed`와 `isNormal`로 창의 destroyed와 normal 상태를 조회한다.
+- [x] `isOpen`과 `isNormal`로 창의 열림과 normal 상태를 조회한다.
 - [x] 일반 close와 확인을 우회하는 trusted destroy의 계약을 구분한다.
 - [x] 결정 완료: 실행 중 창 생성 옵션은 사전 선언 창의 호출별 제목, 크기와 제약, 표시 및 준비 후 표시로 제한한다. 각 생성 작업의 operation 권한을 허용한다. [ADR 0016](./decisions/0016-window-creation-contract.md).
 - [x] Windows create/recreate에 ADR 0016의 선택적 `options`와 생성별 검증, 실패 정리를 구현했다. 실제 네이티브 회귀는 CI의 windows-native에서 수행한다. [#102](https://github.com/mathbook3948/bunaway/issues/102).
-- [x] 결정 완료(ADR 0026이 대체): 뷰는 화면과 정책의 생성 정의이며 single 기본값과 multiple 선택으로 창 인스턴스를 생성한다. 창별 ID와 세션, 프로필 공유 및 격리, 선언 및 인스턴스 상한은 [ADR 0017](./decisions/0017-multiple-windows-per-view.md)을 따른다. Windows는 이 계약을 구현하며 실제 네이티브 회귀는 CI로 검증한다.
-- [x] Windows의 동일 뷰 다중 창 생성과 ID별 제어, 창별 세션 라우팅, 프로필 소유권과 상한을 구현했다. 실제 WebView2 검증은 CI의 windows-native 작업에서 수행한다. [#104](https://github.com/mathbook3948/bunaway/issues/104).
-- [x] 부모 창, 자식 창, owner 관계를 설정하고 조회한다.
-- [x] 부모에 종속된 모달 창과 부모의 입력 차단, 종료 순서를 제공한다.
+- [x] 결정 완료: 앱은 창 하나와 WebView 하나를 가진다. 같은 뷰의 다중 인스턴스, 프로필 격리, 부모와 모달, splashscreen 전환과 대상 창 입력은 제거했다. [ADR 0026](./decisions/0026-single-webview-single-window.md)을 따른다.
 - [x] 창 enabled 상태의 변경과 조회를 제공한다.
-- [x] 창이 없는 상주 앱과 트레이만 있는 앱의 시작을 지원한다. 빈 창 선언 또는 모든 `startup: false`를 허용하며 트레이 또는 `closeBehavior: "keep-alive"`를 요구한다.
-- [x] 앱 초기화 뒤 `completeSplashscreen`으로 준비된 주 창을 먼저 표시하고 splashscreen을 닫는다.
+- [x] 창이 없는 상주 앱과 트레이만 있는 앱의 시작을 지원한다. `app.startup: false`를 허용하며 트레이 또는 `closeBehavior: "keep-alive"`를 요구한다.
 
 2026-10-11 main `49ed0a5` 이후 ADR 0017로 같은 뷰의 여러 창 보류를 변경했다.
 호출별 옵션과 다중 인스턴스를 구현했다. single 기본값과 중복 선언의 시작 전 진단,
-열린 뷰의 create에 대한 BUSY와 자원 보존, 허용하지 않은 생성 필드와 임의 ID 거부,
-식별자 개행 거부 및 128개 선언 상한 검사는 유지한다. #102와 #104는 실제 구현과 검증 뒤 닫는다.
+열린 창의 create에 대한 BUSY와 자원 보존, 허용하지 않은 생성 필드와 임의 ID 거부,
+식별자 개행 거부 검사는 유지한다. #102와 #104는 실제 구현과 검증 뒤 닫는다.
+
+2026-10-23 ADR 0026의 단일 창 계약을 코드에 적용했다. 대상 창 입력(`view`, `windowId`)과 인스턴스, 부모, 조회 작업을
+제거하고 `isOpen`과 백엔드 `waitForLifecycle`을 추가했다. 호스트 내부의 인스턴스 표, 관계 추적과 프로필 클래스는
+후속 정리로 남는다. 여러 창을 전제한 시험은 제거하거나 단일 창으로 줄였다.
 
 2026-10-11 창 없는 시작은 트레이 또는 명시적 keep-alive로 실행 유지 조건을 검증한다.
 keep-alive는 마지막 창을 닫아도 백엔드를 유지하고 Quit 또는 `DesktopContext.quit()`으로 종료한다.
-트레이 Open과 show는 살아 있는 창을 복원하며 열린 창이 없으면 첫 사전 선언 창을 생성한다.
+트레이 Open과 show는 살아 있는 창을 복원하며 열린 창이 없으면 창을 생성한다.
 빈 선언 배열이면 창을 만들지 않는다. 종료 취소, 창 없는 상태의 개발 CLI 중단과
 강제 종료 검증 범위는 [실행 기록](./architecture/windows-bun-results.md)을 따른다.
 
@@ -159,13 +159,13 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `getNormalBounds`로 최소화, 최대화와 전체화면에서 복원할 일반 창의 outer bounds를 조회한다.
 - [x] `toLogical`과 `toPhysical`로 대상 창 DPI를 사용해 좌표, 크기와 bounds를 변환한다.
   반올림, 정수 범위와 오류, 대상 창 권한과 닫힌 창의 동작은 창 API 계약을 따른다.
-- [x] 초기 x, y, center와 content-size 기준 옵션을 구현했다. ADR 0019의 필드별 병합과 예약 전 검증을 single/multiple 생성 및 재생성에 적용한다.
+- [x] 초기 x, y, center와 content-size 기준 옵션을 구현했다. ADR 0019의 필드별 병합과 예약 전 검증을 생성 및 재생성에 적용한다.
 - [x] `windows.center`로 실행 중 창을 현재 모니터의 작업 영역 중앙에 배치한다. 숨김과 최소화, 최대화 상태를 유지하며 최소화와 최대화 중에는 일반 복원 영역만 배치한다.
 - [x] `windows.center`의 `monitorId`로 공개 모니터 ID가 가리키는 모니터의 작업 영역 중앙에 배치한다. 호출 시점에 ID를 해석하며 연결되지 않은 ID는 주 모니터로 대체하지 않고 거부한다. Windows Server 2022의 모니터 1개와 DPI 96에서 실제 HWND로 확인했다.
 - [ ] 실행 중 `windows.center`의 `monitorId` 배치를 최소화와 최대화 창을 포함해 다중 물리 모니터와 혼합 DPI에서 실행 검증한다. 합성 입력과 CI는 이 범위를 대신하지 않는다.
 - [x] 초기 창 위치와 크기를 작업 영역에 맞추는 preventOverflow를 구현했다. 최소 content 크기와 프레임을 유지할 수 없으면 예약 및 기존 창 종료 전에 거부한다.
 - [x] 초기 배치의 순수 계산과 오류 경계 검증을 완료했다. 음수 좌표, signed 32-bit 경계, DPI 96/120/144/192, content/outer, 제약 충돌과 선언 보존을 검사했다.
-- [x] 초기 배치의 실제 HWND 및 WebView2 집중 검증을 완료했다. Windows Server 2022의 모니터 1개와 DPI 96에서 초기 선언 및 single/multiple 생성과 재생성을 확인했다. multiple은 isolated 프로필이다.
+- [x] 초기 배치의 실제 HWND 및 WebView2 집중 검증을 완료했다. Windows Server 2022의 모니터 1개와 DPI 96에서 초기 선언, 생성과 재생성을 확인했다.
 - [ ] 초기 배치를 다중 물리 모니터, 혼합 DPI와 실제 높은 DPI에서 실행 검증한다. 합성 입력과 CI는 이 범위를 대신하지 않는다.
 - [x] `setAspectRatio`와 `getAspectRatio`로 내용 영역의 너비/높이 비율(0.1–10, `null`은 해제)을 고정하고 조회한다.
   설정 시 현재 크기는 바꾸지 않고(Electron과 같음) 이후 사용자 크기 조절의 `WM_SIZING` 사각형만 조정한다.
@@ -233,14 +233,14 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 
 - [x] 닫기 확인 메시지의 승인과 거절을 처리한다.
 - [x] `windows.changed`로 shown과 hidden 전환을 제공한다.
-- [x] `windows.lifecycle`로 created, ready, closed, destroyed 이벤트를 windowId마다 한 번씩 순서대로 제공한다. 수신에는 이벤트 정책과 `windows.listInstances` 권한이 필요하다. 실제 WebView2 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
+- [x] `windows.lifecycle`로 created, ready, closed, destroyed 이벤트를 windowId마다 한 번씩 순서대로 제공한다. 문서의 수신에는 이벤트 정책과 `windows.getSnapshot` 권한이 필요하고, 백엔드는 권한 없이 `windows.waitForLifecycle`로 모든 phase를 관찰한다. 실제 WebView2 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [x] `windows.changed`로 실제 전경 창 상태의 focus와 blur 전환을 제공한다.
 - [x] move와 resize 전환에 현재 outer bounds와 DPI를 함께 제공한다.
 - [x] Windows의 네이티브 이동과 크기 조절 루프가 끝나면 `windows.changed`에 `moved`, `resized`를 제공한다. 시작과 최종 geometry의 실제 차이를 판정하고 최종 bounds와 별도 revision을 전달한다.
 - [ ] will-move와 will-resize의 취소 가능 여부를 정의한다.
 - [x] minimize, maximize, unmaximize와 restore 전환을 제공한다.
 - [x] enterFullscreen과 leaveFullscreen 전환을 제공한다.
-- [x] `windows.changed`로 enterAlwaysOnTop과 leaveAlwaysOnTop 전환을 제공한다. API 호출과 `SetWindowPos` topmost 변경을 같은 창 위치 알림으로 관찰하고 함께 바뀐 owner와 owned 창도 알리며 동일 값은 생략한다.
+- [x] `windows.changed`로 enterAlwaysOnTop과 leaveAlwaysOnTop 전환을 제공한다. API 호출과 `SetWindowPos` topmost 변경을 같은 창 위치 알림으로 관찰하며 동일 값은 생략한다.
 - [x] `windows.closeRequested`와 `windows.respondClose`로 비동기 저장 후 닫기 승인 흐름을 제공한다. 창의 문서가 구독할 때만 사용자 닫기를 대기시키고 자동 기한은 두지 않는다. 대기 중 마지막 구독을 해제하면 요청을 취소하고 창을 유지한다. 실제 WebView2 검증은 CI windows-native에서 실행한다. [ADR 0020](./decisions/0020-close-and-quit-lifecycle.md)을 따른다.
 - [x] DPI 변경을 resize 전환과 bounds의 `dpi`로 전달한다.
 - [x] theme 변경 이벤트를 제공한다. Windows는 `appearance.changed`로 테마, 고대비와 접근성 설정을 알리며 동일 값은 생략한다. 13절 테마 항목과 같다.
@@ -257,7 +257,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 
 창 이벤트는 대상 창의 정책 뷰에 기존 typed `listen`으로 전달한다. `windows.changed`
 구독에는 이벤트 권한이, `getSnapshot`에는 windows.getSnapshot 작업 권한이 필요하다.
-`windows.lifecycle`은 이벤트 권한과 `windows.listInstances` 작업 권한을 가진 모든 열린 뷰에,
+`windows.lifecycle`은 이벤트 권한과 `windows.getSnapshot` 작업 권한을 가진 뷰의 문서에,
 `windows.closeRequested`는 닫히는 창 자신의 문서에만 전달한다.
 초기 이벤트와 과거 이력은 재전송하지 않으며, 같은 값의 반복 관찰은 이벤트를 만들지 않는다.
 창별 windowId와 revision, 구독 수명 및 용량 초과의 `BUSY` 처리 계약은
@@ -653,7 +653,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [x] 기존 허용 origin 안의 URL 로드, 일반 reload와 stop을 제공한다. `navigateWebView`, `reloadWebView`, `stopWebView`는 기존 세션 폐기와 origin 검사를 유지한다.
 - [ ] 로컬 파일 로드와 cache를 무시한 reload를 제공한다.
 - [x] `getWebViewState`로 현재 URL, title과 최상위 loading 상태를 조회한다.
-- [x] `getWebViewState`의 `focused`로 WebView 포커스를, `isDestroyed`로 창과 같은 수명의 WebView destroyed 상태를 조회한다. 실제 포커스 전환은 CI Windows native integration에서 검증한다.
+- [x] `getWebViewState`의 `focused`로 WebView 포커스를, `isOpen`으로 창과 같은 수명의 WebView 열림 상태를 조회한다. 실제 포커스 전환은 CI Windows native integration에서 검증한다.
 - [ ] 탐색 전 허용와 거부, redirect와 popup 새 창 처리 훅을 제공한다.
 - [ ] 로드 시작, DOM ready, 완료와 실패 이벤트를 제공한다.
 - [ ] 문서, 프레임과 same-document 탐색 이벤트를 제공한다.
@@ -1129,7 +1129,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 출처: [T-window], [T-app], [E-window], [E-app], [E-dock], [E-touch], [E-system], [E-share], [E-purchase], [E-push].
 
 - [x] macOS를 같은 Bun 앱 정의로 실행하고 직접 FFI와 같은 프로세스의 백엔드 Worker에 연결한다.
-- [x] macOS의 사전 선언 다중 창과 기본 창 수명주기를 공통 네이티브 플러그인 계약에 연결한다.
+- [x] macOS의 단일 창과 기본 창 수명주기를 공통 네이티브 플러그인 계약에 연결한다.
 - [ ] macOS의 desktop, 나머지 창 API와 선택 네이티브 플러그인 계약을 맞춘다. [macOS TODO](./TODO-macos.md)를 따른다. [#78](https://github.com/mathbook3948/bunaway/issues/78).
 - [ ] Linux 호스트와 렌더러를 구현하고 X11/Wayland별 기능 차이를 명시한다.
 - [ ] macOS activation policy, app hide/show와 Dock visibility를 제공한다.

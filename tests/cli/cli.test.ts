@@ -1759,78 +1759,60 @@ test("dev build failure does not launch old assets; the next edit recovers, clos
   expect(calls).toEqual(before);
 });
 
-test("CLI bundles startup and deferred window specs without implicitly selecting window control", async () => {
+test("CLI carries the window start settings, defaults the view and rejects removed multi-window settings", async () => {
   const configPath = resolve(project, "src-bunaway/bunaway.json");
   const policyPath = resolve(project, "src-bunaway/policy.json");
   const config = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
   const policy = JSON.parse(originals["src-bunaway/policy.json"] ?? "");
-  const spec = {
-    view: config.app.view,
-    home: config.app.home,
-    title: config.app.title,
-    window: config.app.window,
-  };
   try {
+    const base = config.app;
     config.app = {
-      appId: config.app.appId,
-      title: config.app.title,
-      windows: [
-        spec,
-        {
-          ...spec,
-          view: "editor",
-          startup: false,
-        },
-      ],
+      ...base,
+      startup: false,
+      visible: false,
+      showWhenReady: "sdk",
     };
-    policy.views.push({
-      ...policy.views[0],
-      id: "editor",
-      host: {
-        ...policy.views[0].host,
-      },
-    });
-    await writeJson(policyPath, policy);
+    delete config.app.view;
     await writeJson(configPath, config);
     const validated = await validateProject(project);
-    expect(validated.app.windows).toHaveLength(2);
-    expect(validated.app.windows?.[1]?.startup).toBe(false);
-    const assets = resolve(home, "multi-window-assets");
-    await bundleAssets(validated, assets, true);
-    expect(await Bun.file(resolve(assets, "ui.js")).text()).not.toContain(
-      "Window cleanup did not complete.",
-    );
-    config.app.windows = config.app.windows.map(
-      (window: { startup?: boolean }) => ({
-        ...window,
-        startup: false,
-      }),
-    );
-    await writeJson(configPath, config);
-    expect(
-      (await validateProject(project)).app.windows?.every(
-        (window) => window.startup === false,
-      ),
-    ).toBe(true);
-    config.app.view = "main";
-    await writeJson(configPath, config);
-    await expect(validateProject(project)).rejects.toThrow("without mixing");
-    delete config.app.view;
-    config.app.windows[1].home = "https://app.bunaway.local/missing.html";
+    expect(validated.app.view).toBe(policy.views[0].id);
+    expect(validated.app.startup).toBe(false);
+    expect(validated.app.visible).toBe(false);
+    expect(validated.app.showWhenReady).toBe("sdk");
+    await bundleAssets(validated, resolve(home, "deferred-assets"), true);
+    for (const removed of [
+      {
+        windows: [],
+      },
+      {
+        instances: "single",
+      },
+      {
+        maxInstances: 1,
+      },
+      {
+        profile: "shared",
+      },
+    ]) {
+      config.app = {
+        ...base,
+        ...removed,
+      };
+      await writeJson(configPath, config);
+      await expect(validateProject(project)).rejects.toThrow();
+    }
+    config.app = {
+      ...base,
+      view: "other",
+    };
     await writeJson(configPath, config);
     await expect(validateProject(project)).rejects.toThrow();
-    // Build preflight must accept a catalog before the web command creates its output.
-    config.build.frontend = "multi-window-web-dist";
+    config.app = {
+      ...base,
+      startup: "no",
+    };
     await writeJson(configPath, config);
-    const metadata = await readProjectMetadata(project);
-    expect(metadata.app.windows?.[1]?.home).toEndWith("/missing.html");
-    config.app.windows = [];
-    await mkdir(resolve(project, config.build.frontend));
-    await writeJson(configPath, config);
-    const windowless = await validateProject(project);
-    expect(windowless.app.windows).toEqual([]);
-    expect(windowless.app.home).toBeUndefined();
-    await bundleAssets(windowless, resolve(home, "windowless-assets"), true);
+    await expect(validateProject(project)).rejects.toThrow();
   } finally {
     await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
     await Bun.write(policyPath, originals["src-bunaway/policy.json"] ?? "");

@@ -24,8 +24,8 @@ const windowsOperation =
       typeof import("#appearance/platforms/windows-controller").createAppearanceController
     >
   >();
-const target = z.strictObject({
-  windowId: z.string().min(1).max(128).nullable(),
+const themeChange = z.strictObject({
+  theme: themePreferenceSchema.nullable(),
 });
 /** App and cross-window frame control belongs to trusted backend calls, with independent grants. */
 function backend(source: string) {
@@ -48,21 +48,19 @@ export const windowsAppearanceOperations = {
     },
   }),
   getTheme: windowsOperation({
-    input: target,
+    input: z.null(),
     output: themeStateSchema,
-    handler: ({ windowId }, { instance, source }) => {
+    handler: (_input, { instance, source }) => {
       backend(source);
-      return instance.getTheme(windowId);
+      return instance.getTheme(null);
     },
   }),
   setTheme: windowsOperation({
-    input: target.extend({
-      theme: themePreferenceSchema.nullable(),
-    }),
+    input: themeChange,
     output: themeStateSchema,
-    handler: ({ windowId, theme }, { instance, source }) => {
+    handler: ({ theme }, { instance, source }) => {
       backend(source);
-      return instance.setTheme(windowId, theme);
+      return instance.setTheme(null, theme);
     },
   }),
 };
@@ -71,34 +69,21 @@ const macosOperation =
   defineNativeOperation<
     ReturnType<typeof import("#appearance/platforms/macos").initialize>
   >();
-/** macOS controls only the app-wide theme: a window ID is UNSUPPORTED and the app theme cannot be cleared. */
-function requireAppScope(windowId: string | null) {
-  if (windowId !== null) {
-    throw new BunawayError({
-      code: "UNSUPPORTED",
-      message: "macOS supports only the app-wide theme (windowId: null).",
-    });
-  }
-}
 export const macosAppearanceOperations = {
   ...appearanceOperations,
   getTheme: macosOperation({
-    input: target,
+    input: z.null(),
     output: themeStateSchema,
-    handler: ({ windowId }, { instance, source }) => {
+    handler: (_input, { instance, source }) => {
       backend(source);
-      requireAppScope(windowId);
       return instance.getTheme();
     },
   }),
   setTheme: macosOperation({
-    input: target.extend({
-      theme: themePreferenceSchema.nullable(),
-    }),
+    input: themeChange,
     output: themeStateSchema,
-    handler: ({ windowId, theme }, { instance, source }) => {
+    handler: ({ theme }, { instance, source }) => {
       backend(source);
-      requireAppScope(windowId);
       if (theme === null) {
         throw new BunawayError({
           code: "INVALID_ARGUMENT",

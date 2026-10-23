@@ -688,14 +688,12 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
     {
       operation: "windows.setCloseConfirmation",
       payload: {
-        view: "main",
         message: "",
       },
     },
     {
       operation: "windows.setCloseConfirmation",
       payload: {
-        view: "main",
         message: "bad\0message",
       },
     },
@@ -714,7 +712,6 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
       JSON.stringify({
         operation: "windows.setCloseConfirmation",
         payload: {
-          view: "main",
           message: null,
         },
       }),
@@ -722,7 +719,6 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
   ).toEqual({
     operation: "windows.setCloseConfirmation",
     payload: {
-      view: "main",
       message: null,
     },
   });
@@ -730,23 +726,18 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
     parseWindowCall(
       JSON.stringify({
         operation: "windows.getSizeConstraints",
-        payload: {
-          view: "main",
-        },
+        payload: null,
       }),
     ),
   ).toEqual({
     operation: "windows.getSizeConstraints",
-    payload: {
-      view: "main",
-    },
+    payload: null,
   });
   expect(
     parseWindowCall(
       JSON.stringify({
         operation: "windows.setMinSize",
         payload: {
-          view: "main",
           width: null,
           height: 500,
         },
@@ -755,7 +746,6 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
   ).toEqual({
     operation: "windows.setMinSize",
     payload: {
-      view: "main",
       width: null,
       height: 500,
     },
@@ -765,7 +755,6 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
       JSON.stringify({
         operation: "windows.setSizeConstraints",
         payload: {
-          view: "main",
           minWidth: 500,
         },
       }),
@@ -773,7 +762,6 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
   ).toEqual({
     operation: "windows.setSizeConstraints",
     payload: {
-      view: "main",
       minWidth: 500,
     },
   });

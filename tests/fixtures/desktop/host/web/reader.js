@@ -2,6 +2,7 @@
 // writes, log output and most commands. Exercises per-view policy, request-id
 // isolation and event filtering, then closes its own window while siblings run.
 import { createClient, createWebViewTransport } from "@bunaway/client";
+
 const client = createClient({
   transport: createWebViewTransport(window.chrome.webview),
   hello: {

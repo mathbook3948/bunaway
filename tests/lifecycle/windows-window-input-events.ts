@@ -204,7 +204,7 @@ if (!process.argv.includes("--child")) {
             const caption = Buffer.from("Input main\0", "utf16le");
             const hwnd = driver.symbols.FindWindowW(null, ptr(caption));
             assert(hwnd);
-            const snapshot = await windows.getSnapshot(target);
+            const snapshot = await windows.getSnapshot();
             const rect = Buffer.alloc(16);
             assert(driver.symbols.GetWindowRect(hwnd, ptr(rect)));
             const left = rect.readInt32LE(0);
@@ -489,7 +489,7 @@ if (!process.argv.includes("--child")) {
               records: records.length,
             }),
           );
-          await windows.close(target);
+          await windows.close();
           return null;
         },
       },

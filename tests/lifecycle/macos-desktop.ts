@@ -305,7 +305,7 @@ const scenarios: Scenario[] = [
       ...SHUTDOWN_AFTER("quit-command"),
     ],
     verify(lines) {
-      at(lines, "windowsAfterVisibleReopen:2");
+      at(lines, "windowsAfterVisibleReopen:1");
       at(lines, "windowsAfterHiddenReopen:0");
     },
   },
@@ -318,14 +318,12 @@ const scenarios: Scenario[] = [
       ...SHUTDOWN_AFTER("last-window"),
     ],
     verify(lines) {
-      // While the first request was pending, the app could not close the window and the observer
-      // could not answer for it.
+      // While the first request was pending, the app could not close the window.
       const busy = at(lines, "closeWhilePending:BUSY");
-      const denied = at(lines, "observerRespond:PERMISSION_DENIED");
       const declined = at(lines, "answered:main:decline");
       assert(at(lines, "declining:main") < busy);
-      assert(busy < declined && denied < declined);
-      assert(at(lines, "visibleAfterDecline:2") > declined);
+      assert(busy < declined);
+      assert(at(lines, "visibleAfterDecline:1") > declined);
       // The recreated main reports created, ready, closed and destroyed in that order. The
       // decline produced no closed event; the second, accepted close did.
       const created = at(lines, "lifecycle:created:main");
@@ -444,7 +442,6 @@ try {
   });
   const views = [
     "main",
-    "observer",
   ];
   const app = {
     appId: "tests.macos.desktop",
@@ -458,7 +455,7 @@ try {
       },
     })),
   };
-  /** `main` is asked about its closes; `observer` watches the windows and probes the request. */
+  /** `main` is asked about its closes. */
   const viewPolicies: Record<
     string,
     {
@@ -484,30 +481,14 @@ try {
         "windows.respondClose",
       ],
     },
-    observer: {
-      commands: [
-        "test.scenario",
-        "test.log",
-        "test.pendingRequest",
-        "plugin.windows.respondClose",
-      ],
-      events: [
-        "windows.lifecycle",
-      ],
-      // listInstances is what entitles a window to receive windows.lifecycle.
-      permissions: [
-        "windows.listInstances",
-        "windows.respondClose",
-      ],
-    },
   };
   const policy = {
     version: 1,
     backend: {
       permissions: [
         "driver.drive",
-        "windows.list",
-        "windows.listInstances",
+        "windows.isOpen",
+        "windows.getReadiness",
         "windows.close",
         "windows.recreate",
       ],

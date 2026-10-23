@@ -57,23 +57,13 @@ try {
       text: "x".repeat(524288),
     });
     await log.info("after-rotation");
-    await rejected(
-      () =>
-        windows.getContentSize({
-          view: "main",
-        }),
-      "UNSUPPORTED",
-    );
+    await rejected(() => windows.getContentSize({}), "UNSUPPORTED");
     await client.invoke("test.report", {
       ok: true,
       support: await capabilities(),
     });
-    await windows.close({
-      view: "denied",
-    });
-    await windows.close({
-      view: "main",
-    });
+    await windows.close();
+    await windows.close();
   }
 } catch (error) {
   if (
@@ -83,11 +73,7 @@ try {
       ok: false,
       message: String(error),
     });
-    await windows.close({
-      view: "denied",
-    });
-    await windows.close({
-      view: "main",
-    });
+    await windows.close();
+    await windows.close();
   }
 }

@@ -7,7 +7,7 @@ import {
   read,
   toArrayBuffer,
 } from "bun:ffi";
-import { OLE32, SHELL32, USER32, pick, wide } from "@bunaway/plugin/win32";
+import { OLE32, pick, SHELL32, USER32, wide } from "@bunaway/plugin/win32";
 import type { NativeDialogServices } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
 import {

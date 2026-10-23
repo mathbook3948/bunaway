@@ -253,7 +253,6 @@ Worker 객체로 만든 채널에서 호출하면 예외를 던집니다. 수신
 실패한 기록을 다시 시도하지 않으며 이후 기록은 계속 처리합니다. 종료할 때 `drain()`으로
 대기 중인 쓰기가 끝날 때까지 기다립니다. 원본 오류와 스택은 신뢰된 진단 경로에만 기록합니다.
 
-WindowSpec의 선택적 `instances`, `maxInstances`, `profile`은 Windows의 생성 모드, 뷰별 상한과 프로필 수명을 정합니다. [설정](/reference/configuration/)의 값을 따릅니다.
 
 호스트 어댑터는 선택적 `connection`에 Node.js `Readable` 입력, `Writable` 출력과 `Platform`을
 `{ input, output, platform }`으로 전달할 수 있습니다. 기본값은 프로세스 stdin/stdout과 현재 플랫폼입니다.

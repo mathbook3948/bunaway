@@ -1,6 +1,6 @@
 // Exercise CLI orchestration with real frontend processes and a small host process.
 // Native WebView behavior is covered separately by the platform integration runners.
-import { deadline } from "../fixtures/deadlines.ts";
+
 import { expect, mock } from "bun:test";
 import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -9,6 +9,7 @@ import * as build from "#cli/build";
 import type { Project } from "#cli/config";
 import { DevApp } from "#cli/dev-app";
 import * as windowsDevLaunch from "#cli/windows-dev-launch";
+import { deadline } from "../fixtures/deadlines.ts";
 
 const root = process.argv[2];
 if (!root) {

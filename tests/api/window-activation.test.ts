@@ -14,11 +14,10 @@ import { windowPermissions } from "../fixtures/window-permissions.ts";
 
 const names = [
   "showInactive",
-  "blur",
   "activate",
 ] as const;
 
-test("inactive display and activation contracts accept only a view and validate their actual results", () => {
+test("inactive display and activation contracts take no input and validate their actual results", () => {
   const registry = new NativeRegistry([
     windows._definition,
   ]);
@@ -28,27 +27,18 @@ test("inactive display and activation contracts accept only a view and validate 
     expect(
       validateWindowCall({
         operation,
-        payload: {
-          view: "main",
-        },
+        payload: null,
       }).payload,
-    ).toEqual({
-      view: "main",
-    });
+    ).toBeNull();
     for (const payload of [
-      null,
       {},
       {
-        view: "",
-      },
-      {
-        view: "main\n",
-      },
-      {
-        view: 1,
-      },
-      {
         view: "main",
+      },
+      {
+        windowId: "main",
+      },
+      {
         force: true,
       },
     ]) {
@@ -90,38 +80,21 @@ test("inactive display and activation contracts accept only a view and validate 
 
 /** Keep native outcomes explicit while exercising the real adapter, permissions and lifecycle. */
 function fixture() {
-  const nonfocusable = new Set<string>();
-  const views = [
-    "main",
-    "private",
-    "editor",
-    "reader",
-  ];
   const calls: string[] = [];
-  let focused = "main";
+  let focused = false;
   let acceptsActivation = true;
   let failure: Error | undefined;
-  const states = new Map<string, WindowState>(
-    views.map((view) => [
-      view,
-      {
-        closed: false,
-        cleaned: false,
-        ready: true,
-        failure: null,
-        deadline: Infinity,
-      } satisfies WindowState,
-    ]),
-  );
-  const displays = new Map(
-    views.map((view) => [
-      view,
-      {
-        visible: view !== "private",
-        minimized: false,
-      },
-    ]),
-  );
+  const state: WindowState = {
+    closed: false,
+    cleaned: false,
+    ready: true,
+    failure: null,
+    deadline: Infinity,
+  };
+  const display = {
+    visible: false,
+    minimized: false,
+  };
   const grants: Policy["backend"] = {
     permissions: [
       ...windowPermissions(),
@@ -130,68 +103,64 @@ function fixture() {
   const unused = (): never => {
     throw new Error("Unexpected native call");
   };
-  function window(view: string): NativeWindow {
-    const display = displays.get(view);
-    if (!display) {
-      throw new Error("Unknown test view");
-    }
-    return {
-      showInactive() {
-        if (failure) {
-          throw failure;
-        }
-        calls.push(`showInactive:${view}`);
-        display.visible = true;
-      },
-      activate() {
-        if (failure) {
-          throw failure;
-        }
-        calls.push(`activate:${view}`);
-        if (acceptsActivation && display.visible && !display.minimized) {
-          focused = view;
-        }
-        return focused === view;
-      },
-      isVisible: () => display.visible,
-      isMinimized: () => display.minimized,
-      isFocusable: () => !nonfocusable.has(view),
-      isFocused: () => focused === view,
-      focus: unused,
-      show: unused,
-      close: unused,
-      getSnapshot: unused,
-      getReadiness: unused,
-      minimize: unused,
-      maximize: unused,
-      unmaximize: unused,
-      restore: unused,
-      toggleMaximize: unused,
-      isMaximized: unused,
-      isFullscreen: unused,
-      getBounds: unused,
-      getDpi: unused,
-      getSizeConstraints: unused,
-      setSizeConstraints: unused,
-      setSize: unused,
-      setPosition: unused,
-      setGeometry: unused,
-      setFullscreen: unused,
-      setCloseConfirmation: unused,
-    };
-  }
+  const native: NativeWindow = {
+    showInactive() {
+      if (failure) {
+        throw failure;
+      }
+      calls.push("showInactive");
+      display.visible = true;
+    },
+    activate() {
+      if (failure) {
+        throw failure;
+      }
+      calls.push("activate");
+      if (acceptsActivation && display.visible && !display.minimized) {
+        focused = true;
+      }
+      return focused;
+    },
+    isVisible: () => display.visible,
+    isMinimized: () => display.minimized,
+    isFocusable: () => true,
+    isFocused: () => focused,
+    focus: unused,
+    show: unused,
+    close: unused,
+    getSnapshot: unused,
+    getReadiness: unused,
+    minimize: unused,
+    maximize: unused,
+    unmaximize: unused,
+    restore: unused,
+    toggleMaximize: unused,
+    isMaximized: unused,
+    isFullscreen: unused,
+    getBounds: unused,
+    getDpi: unused,
+    getSizeConstraints: unused,
+    setSizeConstraints: unused,
+    setSize: unused,
+    setPosition: unused,
+    setGeometry: unused,
+    setFullscreen: unused,
+    setCloseConfirmation: unused,
+  };
   const services: NativeWindowServices = {
-    specs: views.map((view) => ({
-      view,
-      title: view,
-      home: "https://app.bunaway.local",
-      window: {
-        width: 600,
-        height: 400,
+    specs: [
+      {
+        view: "main",
+        title: "main",
+        home: "https://app.bunaway.local",
+        window: {
+          width: 600,
+          height: 400,
+        },
       },
-    })),
-    read: (view) => states.get(view),
-    window,
+    ],
+    read: (view) => (view === "main" ? state : undefined),
+    window: () => native,
     create: unused,
     close: unused,
     stopping: () => false,
@@ -208,129 +177,52 @@ function fixture() {
     throw new Error("Missing UI adapter");
   }
   return {
-    nonfocusable,
     calls,
-    states,
-    displays,
+    state,
+    display,
     grants,
-    focus: (view: string) => {
-      focused = view;
-    },
-    focused: () => focused,
     decline: () => {
       acceptsActivation = false;
     },
     fail: (error: Error) => {
       failure = error;
     },
-    invoke: (name: (typeof names)[number], view = "main") =>
+    focused: () => focused,
+    invoke: (name: (typeof names)[number]) =>
       Promise.resolve().then(() =>
-        execute(
-          `windows.${name}`,
-          {
-            view,
-          },
-          "main",
-          {
-            requestId: name,
-            permissions: grants,
-          },
-        ),
+        execute(`windows.${name}`, null, "main", {
+          requestId: name,
+          permissions: grants,
+        }),
       ),
   };
 }
 
-test("blur selects the first ready visible non-minimized app window and never an external target", async () => {
+test("showInactive shows without activating and activate follows the OS decision", async () => {
   const f = fixture();
-  expect(await f.invoke("blur")).toBe(true);
-  expect(f.focused()).toBe("editor");
+  expect(await f.invoke("showInactive")).toBeNull();
+  expect(f.focused()).toBe(false);
+  expect(await f.invoke("activate")).toBe(true);
   expect(f.calls).toEqual([
-    "activate:editor",
+    "showInactive",
+    "activate",
   ]);
-  expect(await f.invoke("blur")).toBe(true);
-  expect(f.calls).toHaveLength(1);
-  for (const excluded of [
-    "hidden",
-    "minimized",
-    "closed",
-    "not-ready",
-    "failed",
-    "nonfocusable",
-  ] as const) {
-    const next = fixture();
-    const display = next.displays.get("editor");
-    const state = next.states.get("editor");
-    if (!display || !state) {
-      throw new Error("Missing editor");
-    }
-    if (excluded === "hidden") {
-      display.visible = false;
-    }
-    if (excluded === "minimized") {
-      display.minimized = true;
-    }
-    if (excluded === "closed") {
-      state.closed = true;
-    }
-    if (excluded === "not-ready") {
-      state.ready = false;
-    }
-    if (excluded === "failed") {
-      state.failure = new Error("Failed setup");
-    }
-    if (excluded === "nonfocusable") {
-      next.nonfocusable.add("editor");
-    }
-    expect(await next.invoke("blur")).toBe(true);
-    expect(next.focused()).toBe("reader");
-    expect(next.calls).toEqual([
-      "activate:reader",
-    ]);
-  }
-  const noSuccessor = fixture();
-  for (const [view, display] of noSuccessor.displays) {
-    if (view !== "main") {
-      display.visible = false;
-    }
-  }
-  expect(await noSuccessor.invoke("blur")).toBe(false);
-  expect(noSuccessor.calls).toEqual([]);
-  const denied = fixture();
-  denied.decline();
-  expect(await denied.invoke("blur")).toBe(false);
-  expect(denied.focused()).toBe("main");
-  expect(denied.calls).toEqual([
-    "activate:editor",
-  ]);
+  const declined = fixture();
+  declined.decline();
+  declined.display.visible = true;
+  expect(await declined.invoke("activate")).toBe(false);
+  expect(declined.focused()).toBe(false);
 });
 
-test("activation rejection is a boolean and every new operation enforces source grants and open lifetime", async () => {
-  const f = fixture();
-  f.decline();
-  expect(await f.invoke("activate", "editor")).toBe(false);
-  expect(f.focused()).toBe("main");
-  expect(await f.invoke("showInactive", "editor")).toBeNull();
-  expect(f.focused()).toBe("main");
+test("every operation enforces source grants and an open window", async () => {
   for (const name of names) {
     const scoped = fixture();
     scoped.grants.permissions = [];
-    for (const view of [
-      "private",
-      "ungranted",
-    ]) {
-      await expect(scoped.invoke(name, view)).rejects.toMatchObject({
-        code: "PERMISSION_DENIED",
-      });
-    }
-    scoped.grants.permissions = windowPermissions();
-    await expect(scoped.invoke(name, "undeclared")).rejects.toMatchObject({
-      code: "INVALID_ARGUMENT",
+    await expect(scoped.invoke(name)).rejects.toMatchObject({
+      code: "PERMISSION_DENIED",
     });
-    const main = scoped.states.get("main");
-    if (!main) {
-      throw new Error("Missing main");
-    }
-    main.closed = true;
+    scoped.grants.permissions = windowPermissions();
+    scoped.state.closed = true;
     await expect(scoped.invoke(name)).rejects.toMatchObject({
       code: "INVALID_ARGUMENT",
     });

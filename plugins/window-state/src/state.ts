@@ -39,10 +39,6 @@ export type WindowStateDependencies = {
   store: Pick<typeof store, "delete" | "get" | "load" | "save" | "set">;
 };
 type WindowsClient = WindowStateDependencies["windows"];
-type WindowTarget = {
-  view: string;
-  windowId?: string;
-};
 type DisplayState = Awaited<ReturnType<WindowsClient["getSnapshot"]>>["state"];
 
 /** Logical pixels added to the size limits of a minimized window, whose frame cannot be read. */
@@ -56,27 +52,12 @@ const DEFAULT_INCLUDE = {
   visible: false,
 } satisfies Required<WindowStateInclude>;
 
-function windowTarget(input: {
-  view: string;
-  windowId?: string | undefined;
-}): WindowTarget {
-  return input.windowId === undefined
-    ? {
-        view: input.view,
-      }
-    : {
-        view: input.view,
-        windowId: input.windowId,
-      };
-}
-
 /**
  * Move and resize to the saved rectangle fitted to the current monitors. A field left out of
  * `include` keeps the window's current value.
  */
 async function applyBounds(
   windows: WindowsClient,
-  window: WindowTarget,
   saved: SavedWindowState,
   include: Required<WindowStateInclude>,
   minimized: boolean,
@@ -85,7 +66,6 @@ async function applyBounds(
     include.position && include.size
       ? saved
       : await windows.getNormalBounds({
-          ...window,
           unit: "physical",
         });
   const requested = {
@@ -98,31 +78,25 @@ async function applyBounds(
   };
   const monitors = await windows.getMonitors();
   const fit = async () =>
-    fitToMonitors(
-      requested,
-      monitors,
-      await measureFrame(windows, window, minimized),
-    );
+    fitToMonitors(requested, monitors, await measureFrame(windows, minimized));
   const fitted = await fit();
-  await place(windows, window, fitted.bounds);
+  await place(windows, fitted.bounds);
   // A window that crosses to a monitor with another DPI is resized by the OS when the DPI
   // change arrives, after the call returned. Once it sits on the target monitor, fit it again
   // with the frame and size limits of the new DPI and place it a second time.
   const { dpi: _dpi, ...placed } = await windows.getNormalBounds({
-    ...window,
     unit: "physical",
   });
   if (sameRect(placed, fitted.bounds)) {
     return fitted.adjusted;
   }
   const refitted = await fit();
-  await place(windows, window, refitted.bounds);
+  await place(windows, refitted.bounds);
   return refitted.adjusted;
 }
 
-function place(windows: WindowsClient, window: WindowTarget, bounds: Rect) {
+function place(windows: WindowsClient, bounds: Rect) {
   return windows.setOuterBounds({
-    ...window,
     unit: "physical",
     ...bounds,
   });
@@ -137,12 +111,10 @@ function place(windows: WindowsClient, window: WindowTarget, bounds: Rect) {
  */
 async function measureFrame(
   windows: WindowsClient,
-  window: WindowTarget,
   minimized: boolean,
 ): Promise<WindowFrame> {
   if (minimized) {
     const { dpi } = await windows.getNormalBounds({
-      ...window,
       unit: "physical",
     });
     const allowance = Math.ceil(
@@ -156,11 +128,9 @@ async function measureFrame(
     };
   }
   const outer = await windows.getOuterBounds({
-    ...window,
     unit: "physical",
   });
   const content = await windows.getContentBounds({
-    ...window,
     unit: "physical",
   });
   return {
@@ -179,16 +149,13 @@ function sameRect(a: Rect, b: Rect): boolean {
 /** Returns whether a window operation ran, because maximizing or restoring can show a hidden window. */
 async function applyMaximized(
   windows: WindowsClient,
-  window: WindowTarget,
   saved: SavedWindowState,
   current: DisplayState,
 ): Promise<boolean> {
   if (saved.maximized === current.maximized) {
     return false;
   }
-  await (saved.maximized
-    ? windows.maximize(window)
-    : windows.unmaximize(window));
+  await (saved.maximized ? windows.maximize() : windows.unmaximize());
   return true;
 }
 
@@ -218,18 +185,16 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
 
   return {
     /** Store the window's normal bounds, DPI, maximized, fullscreen and visible state. */
-    async save(input: WindowStateSaveInput): Promise<null> {
+    async save(input: WindowStateSaveInput = {}): Promise<null> {
       const parsed = saveInputSchema.parse(input);
-      const window = windowTarget(parsed);
-      const snapshot = await windows.getSnapshot(window);
+      const snapshot = await windows.getSnapshot();
       const normal = await windows.getNormalBounds({
-        ...window,
         unit: "physical",
       });
       // A window minimized from maximized may report not maximized, so a minimized window also
       // keeps what an earlier save recorded.
       const earlier = snapshot.state.minimized
-        ? await read(parsed.key ?? parsed.view)
+        ? await read(parsed.key ?? snapshot.viewId)
         : null;
       const state: SavedWindowState = {
         version: 1,
@@ -245,7 +210,7 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
       await open();
       await store.set({
         name: WINDOW_STATE_STORE,
-        key: parsed.key ?? parsed.view,
+        key: parsed.key ?? snapshot.viewId,
         value: state,
       });
       await store.save({
@@ -256,10 +221,12 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
 
     /** Apply the saved state, leaving the window alone when nothing valid is saved. */
     async restore(
-      input: WindowStateRestoreInput,
+      input: WindowStateRestoreInput = {},
     ): Promise<WindowStateRestoreResult> {
       const parsed = restoreInputSchema.parse(input);
-      const saved = await read(parsed.key ?? parsed.view);
+      // The default key is the app's view ID, which the open window's snapshot names.
+      const { viewId, state } = await windows.getSnapshot();
+      const saved = await read(parsed.key ?? viewId);
       if (!saved) {
         return {
           restored: false,
@@ -270,8 +237,6 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
         ...DEFAULT_INCLUDE,
         ...parsed.include,
       };
-      const window = windowTarget(parsed);
-      const { state } = await windows.getSnapshot(window);
       const wantFullscreen = include.fullscreen
         ? saved.fullscreen
         : state.fullscreen;
@@ -284,27 +249,24 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
           !wantFullscreen);
       if (leavesFullscreen) {
         await windows.setFullscreen({
-          ...window,
           fullscreen: false,
         });
       }
       const adjusted =
         (include.position || include.size) &&
-        (await applyBounds(windows, window, saved, include, state.minimized));
+        (await applyBounds(windows, saved, include, state.minimized));
       const changedShowState =
-        include.maximized &&
-        (await applyMaximized(windows, window, saved, state));
+        include.maximized && (await applyMaximized(windows, saved, state));
       if (wantFullscreen && (leavesFullscreen || !state.fullscreen)) {
         await windows.setFullscreen({
-          ...window,
           fullscreen: true,
         });
       }
       if (include.visible) {
-        await (saved.visible ? windows.show(window) : windows.hide(window));
+        await (saved.visible ? windows.show() : windows.hide());
       } else if (changedShowState && !state.visible) {
         // Maximizing or restoring shows a hidden window; keep it hidden as it was.
-        await windows.hide(window);
+        await windows.hide();
       }
       return {
         restored: true,
@@ -312,15 +274,16 @@ export function createWindowState({ windows, store }: WindowStateDependencies) {
       };
     },
 
-    /** Delete the saved state of a window name or key. */
-    async remove(input: WindowStateRemoveInput): Promise<{
+    /** Delete the saved state of a key; without one, the open window's view ID. */
+    async remove(input: WindowStateRemoveInput = {}): Promise<{
       removed: boolean;
     }> {
       const parsed = removeInputSchema.parse(input);
+      const key = parsed.key ?? (await windows.getSnapshot()).viewId;
       await open();
       const { changed } = await store.delete({
         name: WINDOW_STATE_STORE,
-        key: parsed.key ?? parsed.view ?? "",
+        key,
       });
       await store.save({
         name: WINDOW_STATE_STORE,

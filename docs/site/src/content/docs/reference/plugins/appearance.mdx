@@ -119,9 +119,9 @@ UI Automation 클라이언트 연결 변화는 OS 알림이 없고 폴링 비용
 `screenReaderEnabled`의 변화는 `appearance.changed`로 구독할 수 있으며, 연결 상태는 필요한 시점에 다시 조회합니다.
 실제 스크린 리더 연결 시의 값은 보조 기술이 있는 대화형 세션에서 수동으로 검증해야 하며, 자동 검증은 값의 타입만 확인합니다.
 
-## Windows 앱 기본값과 창 테마
+## Windows 앱 테마
 
-`appearance.getTheme({ windowId })`와 `appearance.setTheme({ windowId, theme })`는
+`appearance.getTheme()`와 `appearance.setTheme({ theme })`는
 신뢰된 백엔드에서 호출합니다. 각각 `appearance.getTheme`, `appearance.setTheme` 권한이
 필요하며 화면에서 직접 호출하거나 화면 명령의 호출 권한을 이어받으면 `PERMISSION_DENIED`입니다.
 이 API는 Windows의 기본 창 프레임과 웹 콘텐츠의 `prefers-color-scheme`을 함께 제어합니다.
@@ -130,26 +130,21 @@ HTML/CSS와 Windows 사용자 설정은 변경하지 않습니다. 웹 콘텐츠
 
 ```ts
 // 신뢰된 백엔드의 시작 또는 백그라운드 작업에서 호출합니다.
-await appearance.setTheme({ windowId: null, theme: "dark" });
-const appTheme = await appearance.getTheme({ windowId: null });
-// windows.list() 등으로 얻은 현재 창 수명 ID를 사용합니다.
-await appearance.setTheme({ windowId, theme: "system" });
-// null은 이 창의 override를 없애고 앱 기본값을 다시 따르게 합니다.
-await appearance.setTheme({ windowId, theme: null });
+await appearance.setTheme({ theme: "dark" });
+const appTheme = await appearance.getTheme();
+// system은 앱 지정을 지워 OS 설정을 다시 따릅니다.
+await appearance.setTheme({ theme: "system" });
 ```
 
 | 입력 또는 결과 | 의미 |
 | --- | --- |
-| windowId: null | 앱 기본값. 시작값은 system이며 기존 상속 창과 이후 생성할 창에 적용 |
-| windowId: string | 현재 네이티브 창 수명 ID. 파괴되었거나 알 수 없는 ID는 INVALID_ARGUMENT |
-| theme | system, light 또는 dark. 창에는 null로 상속을 복구할 수 있지만 앱 기본값에 null은 INVALID_ARGUMENT |
-| preference | 창 override 또는 앱 기본값으로 결정한 요청 선호 |
-| override | 이 창에 직접 지정한 선호. 앱 조회와 상속 창은 null |
-| effectiveTheme | 앱 조회는 관측한 OS 설정으로 결정한 기본값, 창 조회는 마지막 적용에 성공한 light 또는 dark. 고대비 또는 알 수 없는 system 선호는 null |
+| theme | system, light 또는 dark. 시작값은 system이며 기존 창과 이후 생성할 창에 적용. null은 INVALID_ARGUMENT |
+| preference | 요청한 앱 선호 |
+| override | 항상 null. 창 단위 지정이 없음 |
+| effectiveTheme | 관측한 OS 설정으로 결정한 기본값. 고대비 또는 알 수 없는 system 선호는 null |
 | highContrast | 마지막으로 관측한 OS 고대비 상태 |
 
-`system`은 OS의 앱 테마 선호를 따릅니다. 창의 명시적 `system`은 앱의 light/dark 기본값보다
-우선합니다. 고대비가 활성화되면 DWM dark mode를 끄고 Windows 색 처리를 우선합니다.
+`system`은 OS의 앱 테마 선호를 따릅니다. 고대비가 활성화되면 DWM dark mode를 끄고 Windows 색 처리를 우선합니다.
 요청한 선호는 유지하므로 고대비 종료 뒤 다시 적용합니다. OS 선호가 없으면 dark mode를 끄되
 `effectiveTheme`은 null로 유지합니다. 이 값은 화면의 픽셀 색이나 WebView의 CSS 색을 읽은 결과가
 아니며 OS 설정 변경 알림을 처리한 시점의 상태입니다. 창 적용에 실패하면 이전 effectiveTheme을
@@ -163,41 +158,38 @@ await appearance.setTheme({ windowId, theme: null });
 WebView2의 Auto로 두어 OS의 앱 테마를 따릅니다. 고대비에서도 Auto로 두어 Windows 색 처리를
 우선합니다. 플러그인을 종료하면 Auto로 돌려놓습니다.
 
-WebView2는 이 값을 프로필 단위로 저장합니다. 같은 프로필을 공유하는 창들은 마지막으로 지정한
-값을 함께 봅니다. 프레임 테마는 창마다 독립입니다. WebView2 런타임이 프로필 색 구성표를
+WebView2 런타임이 프로필 색 구성표를
 지원하지 않으면 프레임 적용은 그대로 두고 콘텐츠 적용만 건너뜁니다. 폼 컨트롤과 스크롤바의 색은
 CSS `color-scheme` 속성을 따르며 WebView의 배경색은 바꾸지 않습니다.
 
-문서 reload는 같은 창의 override를 유지합니다. 창 파괴와 재생성은 기존 override를 버리고
-앱 기본값을 따릅니다. 앱 재시작이나 플러그인 재초기화는 system으로 돌아가며 디스크에 저장하지
+문서 reload와 창 재생성은 앱 테마를 유지합니다. 앱 재시작이나 플러그인 재초기화는 system으로 돌아가며 디스크에 저장하지
 않습니다. 플러그인 종료는 살아 있는 창의 DWM dark mode를 해제합니다.
 
 Windows의 `DWMWA_USE_IMMERSIVE_DARK_MODE`를 사용합니다. 해당 DWM 속성을 지원하지 않는
-Windows에서는 OS 조회와 변경 이벤트를 계속 제공하지만 창 테마 조회와 지정은 `UNSUPPORTED`입니다.
-앱 기본값 조회는 적용된 창 상태와 별개로 요청 선호를 반환합니다.
-macOS는 아래 절의 앱 전체 테마만 지원하며 다른 플랫폼의 테마 작업은 `UNSUPPORTED`입니다. 네이티브 적용 실패는 `INTERNAL`이며
-앱 기본값 변경 중 실패하면 이전 선호와 기존 창의 적용 상태를 복원하려 시도합니다. 복원도 실패하면
+Windows에서는 OS 조회와 변경 이벤트를 계속 제공하지만 테마 조회와 지정은 `UNSUPPORTED`입니다.
+조회는 적용된 창 상태와 별개로 요청 선호를 반환합니다.
+macOS는 아래 절의 앱 테마를 지원하며 다른 플랫폼의 테마 작업은 `UNSUPPORTED`입니다. 네이티브 적용 실패는 `INTERNAL`이며
+테마 변경 중 실패하면 이전 선호와 창의 적용 상태를 복원하려 시도합니다. 복원도 실패하면
 INTERNAL을 반환하며 다음 변경 알림에서 다시 적용합니다. 실제 프레임 색, 사용자 테마 전환 및
 고대비 렌더링은 대화형 Windows 세션에서 추가 검증해야 합니다. 콘텐츠의 `prefers-color-scheme`은
 실제 WebView2 런타임에서 확인합니다.
 
 ## macOS 앱 테마
 
-`appearance.getTheme({ windowId: null })`와 `appearance.setTheme({ windowId: null, theme })`는
+`appearance.getTheme()`와 `appearance.setTheme({ theme })`는
 신뢰된 백엔드에서 호출하며 권한 조건은 Windows와 같습니다. 앱 전체 `NSApplication.appearance`를
 지정하므로 앱의 모든 창과 WKWebView 콘텐츠의 `prefers-color-scheme`이 함께 바뀝니다.
 macOS 사용자 설정과 HTML/CSS는 변경하지 않습니다.
 
 ```ts
-await appearance.setTheme({ windowId: null, theme: "dark" });
-const state = await appearance.getTheme({ windowId: null });
+await appearance.setTheme({ theme: "dark" });
+const state = await appearance.getTheme();
 // system은 앱 지정을 지워 OS 설정을 다시 따릅니다.
-await appearance.setTheme({ windowId: null, theme: "system" });
+await appearance.setTheme({ theme: "system" });
 ```
 
 | 입력 또는 결과 | 의미 |
 | --- | --- |
-| windowId | null만 지원. 문자열 창 ID는 UNSUPPORTED |
 | theme | system, light 또는 dark. null은 INVALID_ARGUMENT |
 | preference | 마지막으로 요청한 앱 선호. 시작값은 system |
 | override | 항상 null. 창 단위 지정이 없음 |

@@ -60,7 +60,7 @@ export default defineApp({ modules: [memo], plugins: [storage] });
 권한 항목은 완전한 작업 이름의 문자열입니다.
 저장은 `storage.readText`, `storage.writeText`, 앱 로그는 `log.write`, 지원 조회는
 `capabilities.get`을 사용합니다. 파일별 접근이나 특정 창의 제어는 앱 명령에서 검사하고
-화면에는 그 앱 명령만 허용합니다. 창 제어도 windows.list, windows.show 등 각 작업을 독립적으로 허용합니다.
+화면에는 그 앱 명령만 허용합니다. 창 제어도 windows.isOpen, windows.show 등 각 작업을 독립적으로 허용합니다.
 
 등록하지 않은 Host operation은 `UNSUPPORTED`, 권한 밖의 작업은
 `PERMISSION_DENIED`입니다. 잘못된 설정과 미등록 작업 이름은 시작 전에 거부합니다.

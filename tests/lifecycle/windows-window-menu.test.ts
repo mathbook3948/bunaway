@@ -51,6 +51,7 @@ test.skipIf(process.platform !== "win32")(
     const handles = new Map<string, bigint>();
     const roles: string[] = [];
     const host: NativeMenuWindowHost = {
+      current: () => handles.keys().next().value ?? "main",
       resolve(id) {
         const hwnd = handles.get(id);
         if (!hwnd) {
@@ -373,6 +374,7 @@ test.skipIf(process.platform !== "win32")(
       true,
     );
     const menus = new WindowMenus({
+      current: () => "main",
       resolve: () => hwnd,
       subscribe: () => () => {},
       changed() {},
@@ -462,6 +464,7 @@ for (const { trigger, message: triggerMessage, observesHandle } of [
         true,
       );
       const menus = new WindowMenus({
+        current: () => "main",
         resolve: () => hwnd,
         subscribe(_id, receive) {
           listeners.add(receive);

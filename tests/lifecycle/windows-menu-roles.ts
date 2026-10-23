@@ -431,6 +431,7 @@ try {
   };
 
   const host: NativeMenuWindowHost = {
+    current: () => "main",
     resolve: () => hwnd,
     subscribe(_id, receive) {
       listeners.add(receive);

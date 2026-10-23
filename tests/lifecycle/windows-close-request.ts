@@ -29,7 +29,6 @@ const WAIT_TIMEOUT_MS = 20_000;
 const SCENARIO_TIMEOUT_MS = 120_000;
 const views = [
   "main",
-  "observer",
 ];
 const root =
   process.env.BUNAWAY_CLOSE_REQUEST_TEST_ROOT ??
@@ -112,29 +111,16 @@ if (!process.argv.includes("--child")) {
         "test.requested",
         "test.answering",
         "test.answered",
-        "test.lifecycle",
         "test.failed",
         "plugin.windows.respondClose",
       ],
-      events:
-        id === "observer"
-          ? [
-              "windows.closeRequested",
-              "windows.lifecycle",
-            ]
-          : [
-              "windows.closeRequested",
-            ],
+      events: [
+        "windows.closeRequested",
+      ],
       host: {
-        permissions:
-          id === "observer"
-            ? [
-                "windows.respondClose",
-                "windows.listInstances",
-              ]
-            : [
-                "windows.respondClose",
-              ],
+        permissions: [
+          "windows.respondClose",
+        ],
       },
     })),
   };
@@ -198,18 +184,31 @@ if (!process.argv.includes("--child")) {
     }
   }, DIALOG_POLL_MS);
 
+  /** Records the phases of the window as the backend receives them, in publication order. */
+  async function watchLifecycle() {
+    let after = 0;
+    for (;;) {
+      const event = await windows.waitForLifecycle({
+        after,
+      });
+      after = event.sequence;
+      if (
+        event.windowId === mainWindowId &&
+        (event.phase === "closed" || event.phase === "destroyed")
+      ) {
+        order.push(`lifecycle:${event.phase}`);
+      }
+    }
+  }
+
   async function exercise() {
     await waitFor(
-      () => ready.has("main") && ready.has("observer"),
-      "Both pages must subscribe before the first close",
+      () => ready.has("main"),
+      "The page must subscribe before the first close",
     );
-    const main = {
-      view: "main",
-    };
-    mainWindowId = (await windows.getReadiness(main)).windowId;
+    mainWindowId = (await windows.getReadiness()).windowId;
     // A declined confirmation would keep the window open, so any accepted close proves it was skipped.
     await windows.setCloseConfirmation({
-      ...main,
       message: "Close main?",
     });
     const mainWindow = findWindow("main");
@@ -231,7 +230,7 @@ if (!process.argv.includes("--child")) {
       user32.symbols.IsWindow(mainWindow),
       "A declined close keeps the window",
     );
-    assert.equal(await windows.isDestroyed(main), false);
+    assert.equal(await windows.isOpen(), true);
     assert.equal(
       order.includes("requested:main:2"),
       false,
@@ -250,10 +249,7 @@ if (!process.argv.includes("--child")) {
     assert.equal(user32.symbols.IsWindow(mainWindow), 0);
     assert.equal(confirmations, 0, "The accepted close showed a confirmation");
 
-    // The observer is the last window: its accepted close continues to the quit request.
-    const observerWindow = findWindow("observer");
-    assert(observerWindow, "Observer window must exist");
-    assert(user32.symbols.PostMessageW(observerWindow, WM_CLOSE, 0n, 0n));
+    // The only window is the last one: its accepted close continues to the quit request.
     await waitFor(
       () => order.includes("quit:last-window"),
       "The last accepted close must ask beforeQuit",
@@ -271,14 +267,9 @@ if (!process.argv.includes("--child")) {
           task = exercise().catch(async (error) => {
             exerciseFailure = error;
             console.error(error);
-            for (const view of views) {
-              await windows
-                .destroy({
-                  view,
-                })
-                .catch(() => {});
-            }
+            await windows.destroy().catch(() => {});
           });
+          void watchLifecycle().catch(() => {});
         },
       },
     ],
@@ -368,22 +359,6 @@ if (!process.argv.includes("--child")) {
         },
         async run(input: { view: string; requestId: number }) {
           order.push(`answered:${input.view}:${input.requestId}`);
-          return null;
-        },
-      },
-      "test.lifecycle": {
-        input: windowEvents["windows.lifecycle"],
-        output: {
-          const: null,
-        },
-        async run(input: unknown) {
-          const event = validateValue(windowEvents["windows.lifecycle"], input);
-          if (
-            event.windowId === mainWindowId &&
-            (event.phase === "closed" || event.phase === "destroyed")
-          ) {
-            order.push(`lifecycle:${event.phase}`);
-          }
           return null;
         },
       },

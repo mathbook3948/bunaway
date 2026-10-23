@@ -44,11 +44,11 @@ await menu.setTrayMenu({ menuId: "tray-menu" });
 | `menu.updateItem` | `{ menuId, itemId, changes }` | 변경한 리소스 |
 | `menu.setTrayMenu` | `{ menuId: string \| null }` | `null` |
 | `menu.getTrayMenu` | `null` | 연결한 메뉴 ID 또는 `null` |
-| `menu.setWindowMenu` | `{ windowId, menuId: string \| null }` | `null` |
-| `menu.getWindowMenu` | `{ windowId }` | 연결한 메뉴 ID 또는 `null` |
-| `menu.setWindowMenuVisible` | `{ windowId, visible: boolean }` | `null` |
-| `menu.getWindowMenuVisible` | `{ windowId }` | `boolean` |
-| `menu.showContextMenu` | `{ windowId, menuId, x, y }` | 선택한 항목 ID 또는 닫았을 때 `null` |
+| `menu.setWindowMenu` | `{ menuId: string \| null }` | `null` |
+| `menu.getWindowMenu` | `null` | 연결한 메뉴 ID 또는 `null` |
+| `menu.setWindowMenuVisible` | `{ visible: boolean }` | `null` |
+| `menu.getWindowMenuVisible` | `null` | `boolean` |
+| `menu.showContextMenu` | `{ menuId, x, y }` | 선택한 항목 ID 또는 닫았을 때 `null` |
 | `menu.waitForClick` | `null` | 다음 `{ menuId, itemId, source, windowId }` |
 
 모든 결과는 Promise입니다. 리소스는 앱 수명에 속하며 창이나 화면 재연결에 종속되지 않습니다.
@@ -150,9 +150,9 @@ checkbox와 radio는 `icon: null`을 포함한 모든 icon 변경을 `INVALID_AR
 
 ## 창 메뉴바와 컨텍스트 팝업
 
-`setWindowMenu`는 살아 있는 `windowId`에 메뉴바를 연결합니다. `menuId: null`이면
-분리합니다. `getWindowMenu`는 해당 창의 연결을 조회합니다. 창 메뉴에는 tray 플러그인이
-필요하지 않습니다. 뷰 ID나 HWND를 입력하지 않습니다.
+`setWindowMenu`는 앱의 창에 메뉴바를 연결합니다. `menuId: null`이면
+분리합니다. `getWindowMenu`는 창의 연결을 조회합니다. 창 메뉴에는 tray 플러그인이
+필요하지 않습니다. 창을 고르는 입력은 없으며 뷰 ID나 HWND를 받지 않습니다.
 
 `setWindowMenuVisible`은 연결한 메뉴바를 숨기거나 다시 표시하고(Electron `setMenuBarVisibility`),
 `getWindowMenuVisible`은 현재 값을 돌려줍니다(`isMenuBarVisible`). 기본값은 `true`입니다. 숨겨도
@@ -169,12 +169,12 @@ await menu.create({
     items: [{ id: "save", type: "item", label: "저장" }],
   }],
 });
-await menu.setWindowMenu({ windowId, menuId: "main-menu" });
-await menu.setWindowMenu({ windowId, menuId: null });
+await menu.setWindowMenu({ menuId: "main-menu" });
+await menu.setWindowMenu({ menuId: null });
 
 const popup = new AbortController();
 const selected = await menu.showContextMenu(
-  { windowId, menuId: "main-menu", x: 320, y: 200 },
+  { menuId: "main-menu", x: 320, y: 200 },
   { signal: popup.signal },
 );
 ```
@@ -191,7 +191,7 @@ const selected = await menu.showContextMenu(
 먼저 분리하거나 리소스를 복사해 다른 ID로 만듭니다. 같은 리소스로 컨텍스트 팝업을 표시할
 수는 있습니다. 리소스 변경은 연결된 메뉴바를 교체하며 제거하면 자동으로 분리합니다.
 창을 닫으면 메뉴바의 네이티브 핸들을 먼저 해제하지만 앱 범위 리소스는 유지합니다.
-재생성한 창에는 새 windowId로 다시 연결해야 합니다.
+재생성한 창에는 다시 연결해야 합니다.
 
 메뉴바 선택 이벤트의 source는 `"window"`, 팝업은 `"context"`이며 windowId는 소유 창의
 ID입니다. 팝업의 반환값과 `menu.clicked`는 같은 선택을 나타내므로 앱 작업을 둘 다에서

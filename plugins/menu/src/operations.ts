@@ -12,7 +12,6 @@ import {
   updateItemSchema,
   windowMenuSchema,
   windowMenuVisibleSchema,
-  windowTargetSchema,
 } from "#menu/contract";
 import {
   create,
@@ -91,28 +90,36 @@ export const menuOperations = {
     handler: (input, { instance }) => setWindowMenu(instance, input),
   }),
   getWindowMenu: operation({
-    input: windowTargetSchema,
+    input: z.null(),
     output: idSchema.nullable(),
-    handler: ({ windowId }, { instance }) => instance.getWindow(windowId),
+    handler: (_input, { instance }) =>
+      instance.getWindow(instance.currentWindowId()),
   }),
   setWindowMenuVisible: operation({
     input: windowMenuVisibleSchema,
     output: z.null(),
-    handler: ({ windowId, visible }, { instance }) => {
-      instance.setWindowVisible(windowId, visible);
+    handler: ({ visible }, { instance }) => {
+      instance.setWindowVisible(instance.currentWindowId(), visible);
       return null;
     },
   }),
   getWindowMenuVisible: operation({
-    input: windowTargetSchema,
+    input: z.null(),
     output: z.boolean(),
-    handler: ({ windowId }, { instance }) => instance.isWindowVisible(windowId),
+    handler: (_input, { instance }) =>
+      instance.isWindowVisible(instance.currentWindowId()),
   }),
   showContextMenu: operation({
     input: contextMenuSchema,
     output: idSchema.nullable(),
     handler: (input, { instance, signal }) =>
-      instance.showContext(input, signal),
+      instance.showContext(
+        {
+          ...input,
+          windowId: instance.currentWindowId(),
+        },
+        signal,
+      ),
   }),
   waitForClick: operation({
     input: z.null(),

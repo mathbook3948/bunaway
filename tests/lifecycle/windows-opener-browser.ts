@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { dlopen, ptr } from "bun:ffi";
 import createOperationsDefinition from "#plugins/opener/src/index";
 import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
+
 const createOperations = createOperationsFactory(
   createOperationsDefinition,
   "windows",

@@ -66,31 +66,18 @@ function fixture(
   } as unknown as NativeWindow;
   const services: NativeWindowServices = {
     specs: [
-      "main",
-      "other",
-    ].map((view) => ({
-      view,
-      title: view,
-      home: "https://app.bunaway.local",
-      window: {
-        width: 400,
-        height: 300,
+      {
+        view: "main",
+        title: "main",
+        home: "https://app.bunaway.local",
+        window: {
+          width: 400,
+          height: 300,
+        },
       },
-    })),
-    instances: () =>
-      [
-        mainIdentity,
-        otherIdentity,
-      ].map((identity) => ({
-        key: identity.viewId,
-        identity,
-      })),
+    ],
     lookup: {
-      byId: (windowId) =>
-        [
-          mainIdentity,
-          otherIdentity,
-        ].find((identity) => identity.windowId === windowId) ?? null,
+      byId: unused,
       byView: unused,
       ...(caller === "unavailable"
         ? {}
@@ -138,7 +125,6 @@ function fixture(
 
 test("respondClose input requires a positive safe integer requestId and a boolean decision", () => {
   const accepted = {
-    view: "main",
     requestId: 1,
     allow: true,
   };
@@ -156,7 +142,6 @@ test("respondClose input requires a positive safe integer requestId and a boolea
       operation: "windows.respondClose",
       payload: {
         ...accepted,
-        windowId: "window-1",
         requestId: Number.MAX_SAFE_INTEGER,
       },
     }).operation,
@@ -187,16 +172,18 @@ test("respondClose input requires a positive safe integer requestId and a boolea
       allow: "yes",
     },
     {
-      view: "main",
       requestId: 1,
     },
     {
-      view: "main",
       allow: true,
     },
     {
       ...accepted,
       extra: true,
+    },
+    {
+      ...accepted,
+      windowId: "window-1",
     },
   ] satisfies JsonValue[]) {
     expect(() =>
@@ -213,7 +200,6 @@ test("respondClose input requires a positive safe integer requestId and a boolea
 test("respondClose needs its own operation grant and reports a request that is not pending", async () => {
   const f = fixture();
   const input = {
-    view: "main",
     requestId: f.pendingRequestId,
     allow: false,
   };
@@ -263,24 +249,14 @@ test("respondClose needs its own operation grant and reports a request that is n
   });
 });
 
-test("respondClose from the asked window's document is allowed, with or without an explicit windowId", async () => {
+test("respondClose from the asked window's document is allowed", async () => {
   const f = fixture();
   const input = {
-    view: "main",
     requestId: f.pendingRequestId,
     allow: true,
   };
   expect(await f.invoke(input, "view:main")).toBeNull();
-  expect(
-    await f.invoke(
-      {
-        ...input,
-        windowId: mainIdentity.windowId,
-      },
-      "view:main",
-    ),
-  ).toBeNull();
-  expect(f.answers).toHaveLength(2);
+  expect(f.answers).toHaveLength(1);
 });
 
 test("respondClose from another window's document is denied before reaching the native window", async () => {
@@ -288,7 +264,6 @@ test("respondClose from another window's document is denied before reaching the 
     code: "PERMISSION_DENIED",
   };
   const input = {
-    view: "main",
     requestId: 7,
     allow: true,
   };
@@ -297,17 +272,6 @@ test("respondClose from another window's document is denied before reaching the 
     caller: otherIdentity,
   });
   await expect(other.invoke(input, "view:other")).rejects.toMatchObject(denied);
-  // The same view cannot answer for a different window lifetime of its own view either.
-  const sameViewOtherWindow = fixture();
-  await expect(
-    sameViewOtherWindow.invoke(
-      {
-        ...input,
-        view: "other",
-      },
-      "view:main",
-    ),
-  ).rejects.toMatchObject(denied);
   // The authenticated identity must match the claimed call source.
   const mismatched = fixture({
     caller: otherIdentity,
@@ -330,7 +294,6 @@ test("respondClose from another window's document is denied before reaching the 
   );
   for (const f of [
     other,
-    sameViewOtherWindow,
     mismatched,
     unknown,
     unavailable,
@@ -345,7 +308,6 @@ test("respondClose from the backend does not need request lookup", async () => {
   });
   expect(
     await f.invoke({
-      view: "main",
       requestId: f.pendingRequestId,
       allow: false,
     }),
@@ -359,7 +321,6 @@ test("respondClose is unsupported where the native window has no close requests"
   });
   await expect(
     f.invoke({
-      view: "main",
       requestId: 1,
       allow: true,
     }),

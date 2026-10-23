@@ -12,9 +12,7 @@ import { createOperations } from "#plugins/windows/src/platforms/windows";
 import { trayIco } from "../fixtures/tray-icon.ts";
 
 const operation = "windows.setOverlayIcon";
-const target = {
-  view: "main",
-};
+const target = {};
 const ico = trayIco().toString("base64");
 const brokenFrame = trayIco();
 brokenFrame.writeUInt16LE(7, 22 + 14);
@@ -26,12 +24,6 @@ test("overlay icon schema takes the tray ICO contract and a description with win
       ...target,
       ico,
       description: "3 unread",
-    },
-    {
-      ...target,
-      windowId: "id-1",
-      ico,
-      description: "",
     },
     {
       ...target,
