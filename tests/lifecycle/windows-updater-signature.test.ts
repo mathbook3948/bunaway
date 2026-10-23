@@ -36,6 +36,13 @@ let trustedThumbprint = "";
 let untrustedThumbprint = "";
 const files: Record<string, string> = {};
 
+/**
+ * Start every script from the machine's own module path and load the certificate provider. The
+ * test runner can pass a module path of another PowerShell edition, which hides the `Cert:` drive.
+ */
+const POWERSHELL_PRELUDE =
+  "$ErrorActionPreference = 'Stop'; $env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine'); Import-Module Microsoft.PowerShell.Security, PKI;";
+
 function powershell(script: string): string {
   const result = Bun.spawnSync(
     [
@@ -43,7 +50,7 @@ function powershell(script: string): string {
       "-NoProfile",
       "-NonInteractive",
       "-Command",
-      `$ErrorActionPreference = 'Stop'; ${script}`,
+      `${POWERSHELL_PRELUDE} ${script}`,
     ],
     {
       stdout: "pipe",
@@ -105,10 +112,22 @@ beforeAll(() => {
     copyFileSync(join(system, "System32", "whoami.exe"), files[name]);
   }
   files.msi = join(folder, "trusted.msi");
+  // An installer database with one table and summary information, so it is a complete MSI file.
   powershell(`
+    function Call($target, $name, $kind, $arguments) {
+      $target.GetType().InvokeMember($name, $kind, $null, $target, $arguments)
+    }
     $installer = New-Object -ComObject WindowsInstaller.Installer
-    $database = $installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $installer, @('${files.msi}', 3))
-    $database.GetType().InvokeMember('Commit', 'InvokeMethod', $null, $database, $null)
+    $database = Call $installer 'OpenDatabase' 'InvokeMethod' @('${files.msi}', 3)
+    $view = Call $database 'OpenView' 'InvokeMethod' @('CREATE TABLE Test (Id INT NOT NULL PRIMARY KEY Id)')
+    Call $view 'Execute' 'InvokeMethod' $null | Out-Null
+    Call $view 'Close' 'InvokeMethod' $null | Out-Null
+    $summary = Call $database 'SummaryInformation' 'GetProperty' @(5)
+    Call $summary 'Property' 'SetProperty' @(2, 'Bunaway test') | Out-Null
+    Call $summary 'Property' 'SetProperty' @(14, 200) | Out-Null
+    Call $summary 'Property' 'SetProperty' @(15, 2) | Out-Null
+    Call $summary 'Persist' 'InvokeMethod' $null | Out-Null
+    Call $database 'Commit' 'InvokeMethod' $null | Out-Null
   `);
   sign(files.trusted as string, trustedThumbprint, true);
   sign(files.tampered as string, trustedThumbprint, true);
@@ -125,6 +144,9 @@ afterAll(() => {
     return;
   }
   try {
+    if (trustedThumbprint === "" || untrustedThumbprint === "") {
+      return;
+    }
     powershell(`
       Remove-Item Cert:\\LocalMachine\\Root\\${trustedThumbprint} -ErrorAction SilentlyContinue
       Remove-Item Cert:\\CurrentUser\\My\\${trustedThumbprint} -ErrorAction SilentlyContinue
