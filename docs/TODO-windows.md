@@ -1170,7 +1170,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 - [ ] iOS의 호스트, Bun 실행, 중단과 복귀, 배포 경로를 구현한다.
 - [ ] native permission 요청, 거부, 재요청과 시스템 설정 이동을 제공한다.
 - [ ] 앱 foreground/background, resume, pause와 back-button 이벤트를 제공한다.
-- [ ] 모바일 다중 창, Android activity와 iOS scene 식별, 지원 여부 조회를 제공한다. 다중 창은 ADR 0026에서 채택하지 않았고, 지원 여부 조회는 `capabilities()`로 제공한다.
+- [ ] 모바일 다중 창, Android activity와 iOS scene 식별, 지원 여부 조회를 제공한다. 다중 창은 ADR 0026에서 채택하지 않았고, 지원 여부 조회는 `capabilities()`로 제공할 예정이며 모바일 어댑터가 필요하다.
 - [ ] geolocation 단일 위치, 연속 watch와 해제를 제공한다.
 - [ ] biometric 지원 상태 조회와 authenticate, 취소를 제공한다.
 - [ ] barcode/QR scan, 카메라 권한과 종료를 제공한다.
