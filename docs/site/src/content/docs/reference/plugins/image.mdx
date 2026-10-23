@@ -181,7 +181,9 @@ Electron의 `app.getFileIcon`은 실제 경로를 받아 임의 경로에 접근
 
 macOS arm64는 `NSWorkspace`의 `iconForFileType:`으로 확장자에 등록된 형식의 아이콘을 조회하고,
 요청한 크기의 정사각형으로 그려 straight RGBA로 반환합니다. 파일을 열지 않으므로 저장소
-권한이 필요하지 않고, 등록되지 않은 확장자는 일반 문서 아이콘을 반환합니다.
+권한이 필요하지 않고, 등록되지 않은 확장자도 오류 없이 아이콘을 반환합니다. 요청보다 큰
+표현이 선택되면 CoreGraphics의 낮은 품질 보간으로 줄이므로 작은 크기에서는 가장자리가 다소
+거칠 수 있습니다.
 
 ```ts
 const icon = await image.createFileTypeIcon({ extension: ".txt", size: "normal" });

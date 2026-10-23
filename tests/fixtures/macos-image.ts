@@ -268,7 +268,7 @@ async function checkOpaqueRoundTrip(
   });
 }
 
-/** Registered and unregistered extensions yield exact-size icons with visible, partly transparent pixels. */
+/** Registered and unregistered extensions yield exact-size icons with visible, non-uniform pixels. */
 async function checkFileTypeIcons(
   call: ReturnType<typeof createImageCalls>["call"],
   error: ReturnType<typeof createImageCalls>["error"],
@@ -310,12 +310,16 @@ async function checkFileTypeIcons(
       const rgba = Buffer.from(pixels.rgba, "base64");
       assert.equal(rgba.length, edge * edge * 4);
       let visible = 0;
-      for (let offset = 3; offset < rgba.length; offset += 4) {
-        if ((rgba[offset] ?? 0) > 0) {
+      const colors = new Set<number>();
+      for (let offset = 0; offset < rgba.length; offset += 4) {
+        colors.add(rgba.readUInt32BE(offset));
+        if ((rgba[offset + 3] ?? 0) > 0) {
           visible++;
         }
       }
       assert(visible > 0, `${extension} ${size} icon has no visible pixel`);
+      // A drawn icon has shading or margins, so a single flat color means the draw step failed.
+      assert(colors.size > 1, `${extension} ${size} icon is a flat color`);
       assert.equal(
         await call("dispose", {
           id: created.id,

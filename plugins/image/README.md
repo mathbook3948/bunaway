@@ -20,15 +20,17 @@ try {
 파일 경로 읽기와 저장소 scope 추가, 파일 기반 thumbnail은
 제공하지 않는다. 파일 bytes의 확보와 저장은 앱이 기존 저장소 계약에서 수행한다.
 
-`image.createFileTypeIcon`은 확장자와 크기(`small` 16, `normal` 32, `large` 48)만 받아 Windows 셸의
-연결 아이콘을 새 리소스로 만든다. `windows-file-icon.ts`가 `SHGetFileInfoW`(`SHGFI_USEFILEATTRIBUTES`
+`image.createFileTypeIcon`은 확장자와 크기(`small` 16, `normal` 32, `large` 48)만 받아 연결 아이콘을
+새 리소스로 만든다. Windows는 `windows-file-icon.ts`가 `SHGetFileInfoW`(`SHGFI_USEFILEATTRIBUTES`
 | `SHGFI_SYSICONINDEX`)로 아이콘 인덱스를 얻고 `SHGetImageList`의 `IImageList::GetIcon`으로 HICON을
 받아 `GetIconInfo`와 `GetDIBits`(32bpp top-down)로 RGBA를 읽는다. 디스크를 열지 않으므로 저장소
 권한이 필요 없다. HICON, 비트맵 두 개, 화면 DC와 image list reference는 예외 경로에서도 해제하며
 알파가 모두 0이면 마스크 비트맵으로 투명도를 복원한다. macOS arm64는 `macos-file-icon.ts`가
 `NSWorkspace iconForFileType:`으로 확장자의 NSImage를 얻고, `CGImageForProposedRect:context:hints:`가
 고른 CGImage(NSImage가 소유하며 autorelease pool이 끝날 때까지 유효)를 codec의 `rasterize`로 요청
-크기의 정사각형 straight RGBA로 그린다. 파일을 열지 않아 저장소 권한이 필요 없다.
+크기의 정사각형 straight RGBA로 그린다. 파일을 열지 않아 저장소 권한이 필요 없다. 이 조회는
+I/O Worker에서 실행되며 `NSApplicationLoad`를 호출하지 않는다. 컴파일된 호스트 fixture
+(`macos-image-host.ts`)가 같은 경로를 실제 호스트에서 실행한다.
 
 `image.crop`은 양수 크기의 in-bounds rectangle을 복사하고 `image.resize`는
 nearest 또는 linear filtering으로 새 리소스를 만든다. Nearest는 출력 픽셀 중심에
