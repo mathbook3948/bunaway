@@ -22,6 +22,17 @@ export default defineApp({
       version: "1",
       async setup() {
         await log.info("backend-ready");
+        // Backend settings need the backend's own authority, so they run in setup rather than in
+        // a command that a WebView invoked.
+        await log.configure({
+          minimumLevel: "warn",
+        });
+        await log.info("filtered-info");
+        await log.warn("kept-warn");
+        await log.flush();
+        await log.configure({
+          minimumLevel: "info",
+        });
         await Bun.write(
           resolve(temporary, "setup.json"),
           JSON.stringify(await capabilities()),

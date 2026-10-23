@@ -49,6 +49,8 @@ try {
     text: "x".repeat(524288),
   });
   await log.info("after-rotation");
+  await rejected(() => log.configure({}), "PERMISSION_DENIED");
+  await rejected(() => log.flush(), "PERMISSION_DENIED");
   await rejected(() => windows.getContentSize({}), "UNSUPPORTED");
   await client.invoke("test.report", {
     ok: true,
