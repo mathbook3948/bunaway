@@ -25,7 +25,10 @@ try {
 | `SHGFI_SYSICONINDEX`)로 아이콘 인덱스를 얻고 `SHGetImageList`의 `IImageList::GetIcon`으로 HICON을
 받아 `GetIconInfo`와 `GetDIBits`(32bpp top-down)로 RGBA를 읽는다. 디스크를 열지 않으므로 저장소
 권한이 필요 없다. HICON, 비트맵 두 개, 화면 DC와 image list reference는 예외 경로에서도 해제하며
-알파가 모두 0이면 마스크 비트맵으로 투명도를 복원한다. macOS는 `UNSUPPORTED`이다.
+알파가 모두 0이면 마스크 비트맵으로 투명도를 복원한다. macOS arm64는 `macos-file-icon.ts`가
+`NSWorkspace iconForFileType:`으로 확장자의 NSImage를 얻고, `CGImageForProposedRect:context:hints:`가
+고른 CGImage(NSImage가 소유하며 autorelease pool이 끝날 때까지 유효)를 codec의 `rasterize`로 요청
+크기의 정사각형 straight RGBA로 그린다. 파일을 열지 않아 저장소 권한이 필요 없다.
 
 `image.crop`은 양수 크기의 in-bounds rectangle을 복사하고 `image.resize`는
 nearest 또는 linear filtering으로 새 리소스를 만든다. Nearest는 출력 픽셀 중심에
@@ -108,7 +111,8 @@ WebView 페이지 표시, 다른 앱의 가져오기, 색상 관리, 하드웨�
 
 macOS 전용 `tests/lifecycle/macos-image.test.ts`는 실제 framework로 RGBA와 PNG의
 alpha 및 투명 RGB 왕복, grayscale과 palette PNG, JPEG/BMP, malformed 입력과 decode
-크기, crop/resize, 앱별 ID, 권한, quota, 생성 취소와 반복 종료를 검사한다.
+크기, crop/resize, 파일 형식 아이콘(등록된 확장자와 미등록 확장자의 세 크기, 보이는 픽셀, 생성 전 취소),
+앱별 ID, 권한, quota, 생성 취소와 반복 종료를 검사한다.
 `tests/cli/image.test.ts`는 tarball을 isolated 설치해 neutral, Windows와 macOS 출력의
 분리와 browser FFI 제외를 확인하고 macOS arm64에서 설치된 native adapter를 실행한다.
 `.github/workflows/ci.yml`의 기존 `macos-native` 작업은 이 두 검사와 기존 entitlement로

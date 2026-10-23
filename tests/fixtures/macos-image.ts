@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { deflateSync } from "node:zlib";
-import type { JsonValue } from "@bunaway/protocol";
+import { isRecord, type JsonValue } from "@bunaway/protocol";
 import { nativeFactory } from "./native-platform.ts";
 
 /** Build independent PNG inputs, including palette and grayscale layouts that the encoder never emits. */
@@ -130,6 +130,7 @@ const operationNames = [
   "getRepresentations",
   "crop",
   "resize",
+  "createFileTypeIcon",
 ].map((name) => `image.${name}`);
 
 /** Call helpers bound to one adapter: execution, resource ids, encoded bytes and error codes. */
@@ -267,6 +268,77 @@ async function checkOpaqueRoundTrip(
   });
 }
 
+/** Registered and unregistered extensions yield exact-size icons with visible, partly transparent pixels. */
+async function checkFileTypeIcons(
+  call: ReturnType<typeof createImageCalls>["call"],
+  error: ReturnType<typeof createImageCalls>["error"],
+) {
+  const edges = {
+    small: 16,
+    normal: 32,
+    large: 48,
+  };
+  for (const extension of [
+    ".txt",
+    ".png",
+    ".bunaway-unregistered",
+  ]) {
+    for (const [size, edge] of Object.entries(edges)) {
+      const created = await call("createFileTypeIcon", {
+        extension,
+        size,
+      });
+      assert(isRecord(created));
+      assert(typeof created.id === "string");
+      assert.deepEqual(
+        {
+          ...created,
+          id: undefined,
+        },
+        {
+          id: undefined,
+          width: edge,
+          height: edge,
+          empty: false,
+        },
+      );
+      const pixels = await call("getPixels", {
+        id: created.id,
+      });
+      assert(isRecord(pixels));
+      assert(typeof pixels.rgba === "string");
+      const rgba = Buffer.from(pixels.rgba, "base64");
+      assert.equal(rgba.length, edge * edge * 4);
+      let visible = 0;
+      for (let offset = 3; offset < rgba.length; offset += 4) {
+        if ((rgba[offset] ?? 0) > 0) {
+          visible++;
+        }
+      }
+      assert(visible > 0, `${extension} ${size} icon has no visible pixel`);
+      assert.equal(
+        await call("dispose", {
+          id: created.id,
+        }),
+        true,
+      );
+    }
+  }
+  // A pre-aborted request creates no resource.
+  await error(
+    () =>
+      call(
+        "createFileTypeIcon",
+        {
+          extension: ".txt",
+          size: "small",
+        },
+        AbortSignal.abort(),
+      ),
+    "CANCELLED",
+  );
+}
+
 /** Exercise a real native adapter, also reused by the compiled and isolated-install consumers. */
 export async function verifyMacosImage(
   plugin: Parameters<typeof nativeFactory>[0],
@@ -287,6 +359,7 @@ export async function verifyMacosImage(
   };
   const { call, resource, encoded, error } = createImageCalls(adapter, grants);
   try {
+    await checkFileTypeIcons(call, error);
     // Direct SDK execution is supported and validates schemas without a host context.
     const direct = await adapter.execute(
       "image.createRGBA",
