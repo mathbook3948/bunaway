@@ -27,7 +27,7 @@ macOS 플러그인 어댑터는 후속 작업이다.
 
 - 앱은 WebView 하나와 창 하나로 실행하고, 화면 전환은 웹 라우팅으로 한다.
   [ADR 0026](./decisions/0026-single-webview-single-window.md)이 다중 창을 대체했다.
-  Windows의 다중 창 구현([ADR 0017](./decisions/0017-multiple-windows-per-view.md))은 구현 PR에서 제거한다.
+  Windows의 다중 창 구현([ADR 0017](./decisions/0017-multiple-windows-per-view.md))은 구현 단계에서 제거한다.
 - React, Vue, Svelte, vanilla HTML/JS에서 같은 클라이언트 SDK를 사용한다. 코어는 특정 UI 프레임워크를 import하지 않는다.
 - SDK는 앱 정의에서 명령과 이벤트 타입을 추론하는 클라이언트를 제공한다. 직접 명령을 호출하고 이벤트를 구독하는 함수 API도 지원한다.
 - 앱 개발자는 일반적인 기능을 TypeScript로 작성한다. 새 운영체제 기능을 추가할 때만 네이티브 어댑터를 작성한다.
