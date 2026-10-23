@@ -165,14 +165,20 @@ COM 참조, timer와 창 자원을 정리하는지도 확인한다.
 `lifecycle/macos-clipboard-adapter.test.ts`는 RGBA TIFF의 endian, alpha, orientation과 unsigned SampleFormat,
 크기와 잘못된 외부 데이터 및 네이티브 호출 전 권한과 취소를 검사한다.
 `lifecycle/macos-clipboard-native.test.ts`는 고유 이름의 실제 NSPasteboard에서 Unicode,
-빈 텍스트, 없는 형식, HTML/RTF, RGBA 상한과 자원 정리를 확인한다.
+빈 텍스트, 없는 형식, HTML/RTF, RGBA 상한과 자원 정리를 확인한다. 같은 보드에서
+`changeCount` 비교가 어댑터의 쓰기와 두 번째 바인딩의 쓰기를 `waitForChange`와
+`clipboard.changed` 발행으로 알리고, 대기 직전의 쓰기로는 대기가 풀리지 않으며 종료 시
+대기가 `CANCELLED`로 끝남을 확인하고 `changeCount` 1회 읽기 시간을 로그로 남긴다.
+`api/clipboard-macos-change.test.ts`는 이 폴러를 수동 비교(`flush`)로 구동해 기준값, 합쳐짐,
+읽기 실패 재시도, 종료 뒤 정지와 이벤트 서비스가 없을 때의 `INTERNAL`을 결정적으로 검사한다.
 `lifecycle/macos-dialog-native.test.ts`는 실제 NSOpenPanel과 NSSavePanel의 파일, 폴더, 다중 선택,
 숨김 항목, 기본 위치와 이름, 허용 확장자를 AppKit에서 다시 읽고, 모달 패널을 예약한 `cancel:`로 닫아
 사용자 취소 결과를 확인한다. 실제 NSAlert의 문구, 버튼 순서와 key equivalent, 스타일, 확인란도 다시 읽고,
 모달 알림을 예약한 `performClick:`으로 눌러 버튼 순번과 확인란 상태를 확인한다.
 항목을 고르는 사용자 조작과 Return, Escape 입력은 자동화하지 않는다.
 `lifecycle/macos-clipboard-webview.ts`는 compiled macOS host, WKWebView와 공개 SDK에서
-backend setup과 뷰 명령의 권한 보존, 다중 형식, 파일 목록 거부와 종료를 확인한다.
+backend setup과 뷰 명령의 권한 보존, 다중 형식, 파일 목록 거부, 뷰에서 호출한 `waitForChange`가
+쓰기 뒤 `sequence`와 `changedAt`을 반환함(`change` 결과)과 종료를 확인한다.
 macOS native CI에서 `BUNAWAY_CLIPBOARD_NATIVE=1`로 실행한다. WKWebView 검사는 CI
 데스크톱의 일반 클립보드를 변경하고 종료 시 fixture 내용을 지우므로 개인 데스크톱에서
 실행하려면 이 동작을 먼저 확인한다. 결과는 `build/macos-clipboard-results.json`이다.
