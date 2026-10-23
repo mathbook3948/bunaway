@@ -76,6 +76,8 @@ try {
     backend: {
       permissions: [
         "log.write",
+        "log.configure",
+        "log.flush",
         "capabilities.get",
       ],
     },
@@ -94,6 +96,8 @@ try {
         "test.report",
         "test.writeFailure",
         "plugin.log.write",
+        "plugin.log.configure",
+        "plugin.log.flush",
         "plugin.capabilities.get",
         "plugin.windows.close",
         "plugin.windows.getContentSize",
@@ -284,19 +288,23 @@ try {
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line));
-  assert.equal(records.length, 36);
+  assert.equal(records.length, 37);
   assert.equal(records[0].source, "backend");
   assert.equal(records[0].message, "backend-ready");
+  // The backend raised the minimum level to warn: the info record is dropped, the warning kept.
+  assert.equal(records[1].source, "backend");
+  assert.equal(records[1].level, "warn");
+  assert.equal(records[1].message, "kept-warn");
   assert(
     records
-      .slice(1, 33)
+      .slice(2, 34)
       .every(
         (record) =>
           record.source === "view:main" && record.message === "renderer",
       ),
   );
   assert.deepEqual(
-    records.slice(1, 33).map((record) => record.details.index),
+    records.slice(2, 34).map((record) => record.details.index),
     Array.from(
       {
         length: 32,
@@ -304,11 +312,11 @@ try {
       (_, index) => index,
     ),
   );
-  assert.equal(records[33].message, "recovered");
+  assert.equal(records[34].message, "recovered");
   for (let index = 0; index < 2; index++) {
-    assert.equal(records[34 + index].source, "view:main");
-    assert.equal(records[34 + index].message, `large-${index}`);
-    assert.equal(records[34 + index].details.text, "x".repeat(524288));
+    assert.equal(records[35 + index].source, "view:main");
+    assert.equal(records[35 + index].message, `large-${index}`);
+    assert.equal(records[35 + index].details.text, "x".repeat(524288));
   }
   const active = (await Bun.file(resolve(dataRoot, "logs/app.log")).text())
     .trim()
