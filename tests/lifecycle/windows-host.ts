@@ -477,7 +477,7 @@ try {
       const browser = await waitLog(
         (entry) => entry.event === "webview-ready" && entry.view === "main",
       );
-      const renderers = await rendererPids(dataRoot, "main");
+      const renderers = await rendererPids(dataRoot, "main", true);
       const targets = [
         childPid,
         browser.browserPid as number,

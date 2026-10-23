@@ -2608,7 +2608,7 @@ if (!process.argv.includes("--child")) {
               });
               assert.equal(await windows.close(), false);
               assert.equal(await windows.isOpen(), true);
-              // Recreation bypasses the close confirmation and revokes this document.
+              // Recreation asks for the close confirmation again and revokes this document.
               await windows.recreate({});
               break;
             }

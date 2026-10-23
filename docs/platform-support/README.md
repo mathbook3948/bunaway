@@ -1,7 +1,7 @@
 # 플랫폼 지원과 검증 범위
 
-창 생성은 사전 선언 뷰의 single 또는 Windows의 multiple 모드를 따른다. [ADR 0016](../decisions/0016-window-creation-contract.md)은
-Windows의 호출별 표시 옵션 범위를 정의한다. create와 recreate는 `{ view, options? }`를 받는다.
+앱은 선언한 창 하나를 사용하며 창 생성은 그 선언을 따른다. [ADR 0016](../decisions/0016-window-creation-contract.md)은
+Windows의 호출별 표시 옵션 범위를 정의한다. create와 recreate는 `{ options? }`를 받는다.
 제목, 부분 크기와 제약, 표시와 준비 후 표시를 생성마다 병합하고 검증한다. macOS는 title, 크기와 제약, contentProtection, visible, showWhenReady만 받고
 배치, titlebar, alwaysOnTop, skipTaskbar, backgroundColor, focusable, maximized, fullscreen은 기존 창을 닫기 전에 `UNSUPPORTED`로 거부한다.
 macOS는 `contentProtection`을 `NSWindow.sharingType`으로 지원하지만 macOS 15 이상의 ScreenCaptureKit 기반 캡처는 이를 무시할 수 있다.
@@ -20,12 +20,12 @@ macOS는 `getReadiness`, `windows.readiness`와 `visible: false`, `showWhenReady
 
 macOS의 single 뷰는 `getWebViewState`, `navigateWebView`, `reloadWebView`,
 `stopWebView`, `goBack`, `goForward`, `setZoomFactor`를 구현한다.
-대상과 개별 작업 권한은 공통 창 계약을 따르며 탐색은 기존 origin을 확장하지 않는다.
+개별 작업 권한은 공통 창 계약을 따르며 탐색은 기존 origin을 확장하지 않는다.
 실제 compiled WKWebView 검사는 `tests/lifecycle/macos-webview-controls.ts`이며
 기존 macOS native CI에서 실행한다. `build/macos-webview-controls-results.json`과
 실패 시 진단 로그를 함께 수집한다. DevTools와 다운로드는 이 macOS 구현 범위에 없다.
 
-Windows의 창 없는 시작은 빈 창 선언 또는 모든 `startup: false`로 설정하며
+Windows의 창 없는 시작은 `app.startup: false`로 설정하며
 트레이 또는 `desktop.closeBehavior: "keep-alive"`를 요구한다.
 Windows x64 `10.0.26200.0`, Bun 1.4.2에서 실제 트레이와 WebView2의 지연 생성,
 마지막 창 닫기 뒤 백엔드 유지, 새 세션, 종료 취소, CLI 중단과 Job 강제 종료를 확인했다.

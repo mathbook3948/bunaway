@@ -266,7 +266,7 @@ const scripts: Record<string, () => Promise<void>> = {
     await until(loggedTimes("page:main", 2), "the recreated main page");
     step("wait-recreated-main-ready");
     await until(
-      loggedTimes("lifecycle:ready:main", 1),
+      loggedTimes("lifecycle:ready:main", 2),
       "the recreated main ready",
     );
     step("wait-replaced-main-destroyed");
