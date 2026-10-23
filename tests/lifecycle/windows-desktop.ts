@@ -1,6 +1,7 @@
 import { dlopen } from "bun:ffi";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
@@ -148,6 +149,7 @@ const repoRoot = process.argv.includes("--repo")
   ? (process.argv[process.argv.indexOf("--repo") + 1] ?? "")
   : resolve(import.meta.dir, "../..");
 const root = resolve(repoRoot, `build/windows-desktop-${scenario}`);
+const forwardedMarker = resolve(root, "forwarded-during-boot");
 if (!process.argv.includes("--child")) {
   await mkdir(resolve(root, "web"), {
     recursive: true,
@@ -167,6 +169,9 @@ if (!process.argv.includes("--child")) {
     resolve(root, "web/index.html"),
     '<!doctype html><title>Desktop lifecycle</title><script type="module" src="app.js"></script>',
   );
+  await rm(forwardedMarker, {
+    force: true,
+  });
   const childEntry = await bundleNativeWorker(
     "windows-desktop",
     root,
@@ -398,6 +403,8 @@ if (!process.argv.includes("--child")) {
       await forwardFromChild([
         "memo://open/42",
       ]);
+      // The forwarding is acknowledged once queued; only now may the child finish booting.
+      await writeFile(forwardedMarker, "");
     } else if (event.event === "opened" && event.source === "second-instance") {
       await onSecondInstanceOpen(event);
     }
@@ -485,14 +492,23 @@ if (!process.argv.includes("--child")) {
           {
             name: "desktop-test",
             version: "1",
-            setup(context) {
+            async setup(context) {
               if (bootForward) {
                 // Plugin setup runs while Core boots, before the host starts the UI and calls ready().
+                // Boot waits for the parent's marker, so the request is always held by the inbox.
                 console.log(
                   JSON.stringify({
                     event: "booting",
                   }),
                 );
+                const deadline = Date.now() + 20000;
+                while (!existsSync(forwardedMarker)) {
+                  assert(
+                    Date.now() < deadline,
+                    "no request forwarded during boot",
+                  );
+                  await Bun.sleep(20);
+                }
               }
               emitReopen = () =>
                 context.events.emit("test.reopen", null, {

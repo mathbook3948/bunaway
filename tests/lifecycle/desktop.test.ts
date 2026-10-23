@@ -829,6 +829,17 @@ test("startup delivery has a bounded queue and closing the inbox is idempotent",
   }
 });
 
+test("closing the inbox before start drops the held requests", async () => {
+  const address =
+    process.platform === "win32"
+      ? `\\\\.\\pipe\\bunaway-test-${crypto.randomUUID()}`
+      : `/tmp/bunaway-${crypto.randomUUID()}.sock`;
+  const inbox = await listenForInstances(address);
+  await forwardToInstance(address, launch);
+  await inbox.close();
+  expect(() => inbox.start(() => {})).toThrow("Instance inbox is closed");
+});
+
 test("disposing during a quit check prevents a late completion from restarting shutdown", async () => {
   let finish: (value: boolean) => void = () => {};
   let stops = 0;
@@ -1579,7 +1590,7 @@ test("the pre-ready URL buffer is bounded and discarded by shutdown", async () =
   expect(seen).toEqual([]);
 });
 
-test("a shutdown committed before ready() drops onReady and the held open requests", async () => {
+test("ready() after a committed shutdown calls neither onReady nor onOpen", async () => {
   const seen: string[] = [];
   const lifecycle = new DesktopLifecycle(
     {
