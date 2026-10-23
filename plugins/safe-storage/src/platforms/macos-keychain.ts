@@ -334,7 +334,8 @@ export class MacosKeychain implements MacosKeychainStore {
 
   /**
    * Store or replace one secret. Adding first keeps creation atomic; an existing item is modified
-   * in place, so a failed replacement keeps the previous value. A delete between the two steps
+   * in place rather than deleted and re-added, so a failed update is not expected to lose the previous
+   * value (not reproduced against a real Keychain). A delete between the two steps
    * makes the add run once more.
    */
   setSecret(key: string, value: Buffer): void {

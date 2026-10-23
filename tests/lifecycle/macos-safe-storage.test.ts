@@ -333,7 +333,7 @@ test("macOS secret input is validated before the Keychain is opened", async () =
   await adapter.dispose();
 });
 
-test("macOS secret failures keep the stored value and map to stable errors", async () => {
+test("macOS secret failures map to stable error codes and leave the store readable", async () => {
   const f = fixture();
   const adapter = macosOperations("tests.bunaway.safe-storage", f.open);
   const run = (name: string, input: JsonValue) =>
