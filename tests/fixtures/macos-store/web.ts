@@ -53,17 +53,13 @@ try {
     "Denied write changed the store",
   );
   await client.invoke("test.report", "passed");
-  await windows.close({
-    view: "main",
-  });
+  await windows.close();
 } catch (error) {
   if (
     !(error instanceof Error && "code" in error && error.code === "CANCELLED")
   ) {
     console.error("Store native host fixture failed", error);
     await client.invoke("test.report", "failed");
-    await windows.close({
-      view: "main",
-    });
+    await windows.close();
   }
 }
