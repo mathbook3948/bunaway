@@ -425,7 +425,10 @@ test("cancelUpload ends the connection, releases the id and succeeds for unknown
     hostname: "127.0.0.1",
     port: 0,
     socket: {
-      data() {},
+      // Stops reading after the first bytes, so the upload is held back mid-body like a busy server.
+      data(socket) {
+        socket.pause();
+      },
       close() {
         connectionClosed = true;
       },
@@ -435,16 +438,20 @@ test("cancelUpload ends the connection, releases the id and succeeds for unknown
     const request = uploadInputSchema.parse({
       uploadId: crypto.randomUUID(),
       url: `http://127.0.0.1:${sink.port}/`,
-      path: fileOf("cancel.bin", Buffer.alloc(LARGE_BYTES)),
+      path: fileOf("cancel.bin", Buffer.alloc(SHRINK_BYTES)),
     });
     const pending = runUpload(state, SOURCE, request);
     const code = codeOf(pending);
     await firstChunk(state, request);
+    // The body is still unsent, so the cancel ends a transfer in progress.
+    expect(runUploadStatus(state, SOURCE, request).sentBytes).toBeLessThan(
+      SHRINK_BYTES,
+    );
     expect(await runCancelUpload(state, SOURCE, request)).toEqual({});
     expect(await code).toBe("CANCELLED");
     expect(state.uploads.size).toBe(0);
     await waitFor(() => connectionClosed || undefined, {
-      deadline: "childStep",
+      deadline: "inProcess",
       what: "the connection closing",
     });
   } finally {
@@ -611,9 +618,8 @@ test("a server that does not read holds the file back instead of filling memory"
       what: "the upload to stop reading",
     },
   );
-  // A pause that only looked like a stop would read on during this second look, and an upload
-  // that ignores the connection would have read the whole file by now. A slow system may still
-  // move a few chunks, so the bound is on the size, not on equality.
+  // An upload that ignores the connection would have read the whole file by now. A slow system
+  // may still move a few chunks after the first pause, so the bound is on the size, not on equality.
   await Bun.sleep(RECHECK_MS);
   expect(sentWhenSteady).toBeLessThan(SHRINK_BYTES / 2);
   expect(runUploadStatus(state, SOURCE, request).sentBytes).toBeLessThan(
