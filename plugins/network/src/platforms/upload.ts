@@ -1,4 +1,5 @@
-import { type FileHandle, open, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { type FileHandle, open } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
@@ -30,26 +31,26 @@ function invalid(message: string) {
 /**
  * Open the file for reading and return its size. The size comes from the open handle, so the file
  * that is checked is the file that is read. Only a regular file within the upload limit is accepted;
- * the handle is closed again when a check fails.
+ * the handle is closed again when a check fails. A missing file is `INVALID_ARGUMENT`.
  */
 async function openSource(path: string) {
   if (!isAbsolute(path)) {
     throw invalid("Expected an absolute file path.");
   }
   checkDestination(path);
-  // A pipe or device blocks `open` until the other end appears, and that wait cannot be cancelled,
-  // so the kind is read before the file is opened. The handle is checked again below.
+  // Opening a pipe blocks until the other end appears, and that wait cannot be cancelled. With
+  // O_NONBLOCK the open returns at once and the kind check below refuses it, however the path
+  // changed after the app checked it. Windows paths cannot name pipes or devices (see
+  // `checkDestination`), and the flag does not change reads of a regular file.
+  let file: FileHandle;
   try {
-    if (!(await stat(path)).isFile()) {
-      throw invalid("Expected a regular file.");
-    }
+    file = await open(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
   } catch (error) {
     if (errorCode(error) === "ENOENT" || errorCode(error) === "ENOTDIR") {
       throw invalid("The file does not exist.");
     }
     throw error;
   }
-  const file = await open(path, "r");
   try {
     const info = await file.stat();
     if (!info.isFile()) {
@@ -97,11 +98,11 @@ function fileStream(
       controller.error(new Error("The file is closed."));
       return;
     }
-    if (entry.sentBytes >= size) {
-      controller.close();
-      return;
-    }
     try {
+      if (entry.sentBytes >= size) {
+        controller.close();
+        return;
+      }
       const chunk = new Uint8Array(
         Math.min(UPLOAD_CHUNK_BYTES, size - entry.sentBytes),
       );

@@ -37,6 +37,8 @@ const TRICKLE_STEP_MS = 150;
 const TRICKLE_STEPS = 6;
 /** Consecutive probes with the same byte count that show the upload has stopped reading. */
 const STEADY_PROBES = 5;
+/** Second look at the byte count after the upload seems to have stopped reading. */
+const RECHECK_MS = 500;
 type Seen = {
   method: string;
   contentLength: string | null;
@@ -596,6 +598,11 @@ test("a server that does not read holds the file back instead of filling memory"
       deadline: "inProcess",
       what: "the upload to stop reading",
     },
+  );
+  // A pause that only looked like a stop would read on during this second look.
+  await Bun.sleep(RECHECK_MS);
+  expect(runUploadStatus(state, SOURCE, request).sentBytes).toBe(
+    sentWhenSteady,
   );
   expect(sentWhenSteady).toBeLessThan(SHRINK_BYTES / 2);
   await runCancelUpload(state, SOURCE, request);
