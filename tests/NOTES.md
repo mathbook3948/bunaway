@@ -1027,7 +1027,10 @@ FIFO 거부, chmod 0 파일의 `PERMISSION_DENIED`, 4 MiB를 넘는 복사, 기�
 덮어쓰지 않는 복사와 이동, 디렉터리와 다른 폴더로의 이동, 자기 하위로의 이동 거부, 링크가 든 트리의 용량 계산과
 재귀 삭제(링크의 대상 유지), 재시작과 fd 정리를 확인한다.
 `macos-storage-directories.ts`는 목록의 UTF-16 정렬과 링크 및 hardlink 종류, 256개 경계, 생성 계약, 링크 추종,
-파일과 링크와 빈 디렉터리 삭제를 확인한다. 기존 native workflow가 source fixture를 compile하고 ad-hoc 서명한 뒤 실행한다.
+파일과 링크와 빈 디렉터리 삭제를 확인한다.
+`macos-storage-names.ts`는 합성형과 분해형 이름, 대소문자만 다른 이름이 볼륨의 조회 결과와 어댑터에서 일치하는지와
+목록이 만든 때의 표기를 유지하는지를 확인한다. CI의 macOS 러너는 기본 APFS(대소문자 무시)라 대소문자를 구분하는
+볼륨은 이 검사로 실행하지 않는다. 기존 native workflow가 source fixture를 compile하고 ad-hoc 서명한 뒤 실행한다.
 `macos-storage-host.ts`와 browser fixture는 실제 packaged WKWebView에서 디렉터리 목록과
 생성, 이동과 삭제, 독립 권한과 재시작을 검증하며 `mise run host:macos`에 포함한다.
 확인하지 않는 범위: 다른 볼륨 이동(`EXDEV`)과 `RENAME_EXCL`을 지원하지 않는 파일 시스템(`ENOTSUP`),

@@ -51,10 +51,13 @@ export function verifyMacosNames(
       "composed",
     );
     // Writing through the other spelling replaces the same file instead of adding a second one.
-    call("storage.writeText", {
-      path: `${folder}/${decomposed}`,
-      text: "decomposed",
-    });
+    assert.equal(
+      call("storage.writeText", {
+        path: `${folder}/${decomposed}`,
+        text: "decomposed",
+      }),
+      null,
+    );
     assert.equal(readFileSync(`${folder}/${composed}`, "utf8"), "decomposed");
   } else {
     assert.equal(
@@ -98,7 +101,7 @@ export function verifyMacosNames(
       },
     ]);
   }
-  assert.equal(Array.isArray(listed) && listed.length, folds ? 1 : 2);
+  assert.equal(listed.length, folds ? 1 : 2);
   results.push(
     `Unicode composed and decomposed names follow the volume (${folds ? "folded" : "distinct"}) and listings keep the stored spelling`,
   );
