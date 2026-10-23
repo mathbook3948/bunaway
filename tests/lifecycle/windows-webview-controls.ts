@@ -538,7 +538,6 @@ if (!process.argv.includes("--child")) {
     assert.equal(initialState.canGoForward, false);
     assert.equal(await windows.goBack(), false);
     assert.equal(await windows.goForward(), false);
-    const initialZoom = (await windows.getWebViewState()).zoomFactor;
     assert(
       Math.abs(
         (await windows.setZoomFactor({
@@ -549,7 +548,6 @@ if (!process.argv.includes("--child")) {
     assert(
       Math.abs((await windows.getWebViewState()).zoomFactor - 1.5) < 0.001,
     );
-    assert.equal((await windows.getWebViewState()).zoomFactor, initialZoom);
     for (const url of [
       `${outside.url.origin}/outside.html`,
       "file:///C:/Windows/win.ini",
