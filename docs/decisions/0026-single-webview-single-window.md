@@ -1,0 +1,185 @@
+---
+status: accepted
+---
+
+# 앱 하나는 WebView 하나와 창 하나로 실행한다
+
+결정일: 2026-10-23. 검토 기준: main `6f32e6cd`.
+
+## 배경
+
+bunaway의 목표는 TypeScript만으로 데스크톱과 모바일 앱을 쉽게 만드는 것이다.
+지금 데스크톱 창 모델은 Electron의 `BrowserWindow` 여러 개를 기준으로 커졌다.
+
+- [ADR 0004](./0004-multi-window-per-view-policy.md)는 창마다 정책 뷰를 붙이고 뷰별 WebView2 프로필과
+  세션을 분리했다.
+- [ADR 0016](./0016-window-creation-contract.md)은 사전 선언 창의 호출별 생성 옵션을 정했다.
+- [ADR 0017](./0017-multiple-windows-per-view.md)은 같은 뷰의 창 인스턴스 여러 개
+  (`instances`, `maxInstances`, `profile`, `createInstance`, `listInstances`)를 도입했다.
+- 그 결과 `plugins/windows/src/contract.ts`는 1,646줄, 작업 139개와 이벤트 8개가 되었다.
+  거의 모든 작업 입력이 `{ view, windowId? }`를 받고, 호출하는 쪽이 대상 창을 고른다.
+  Windows 호스트는 창 인스턴스 Map, 슬롯 예약, 부모와 모달 관계(`native/windows/bun/window-relations.ts`),
+  격리 프로필(`native/windows/bun/window-profiles.ts`)과 창별 세션 라우팅을
+  `native/windows/bun/ui.ts`(2,530줄)에서 관리한다.
+
+반면 모바일 호스트는 이미 단일 화면이다.
+
+- Android는 Activity 하나가 Bun과 WebView 하나를 소유한다([ADR 0015](./0015-android-bundled-process-host.md)).
+  CLI는 `app.windows`를 거부하고 `app.view`, `app.home` 하나를 요구한다(`packages/cli/src/android.ts`).
+- iOS도 UIWindow 하나와 `BunawayViewController`를 쓰며 UIScene을 지원하지 않는다.
+  `packages/cli/src/ios.ts`가 같은 단일 뷰 조건을 검사한다([ADR 0018](./0018-ios-embedded-bun-worker.md)).
+- 모바일 호스트 설정에는 view, home, title, policy만 들어가고 크기와 위치 같은 window 설정은 버려진다.
+- `window.open`과 `target="_blank"`는 플랫폼마다 조용히 무시된다. Windows는 새 창 요청을 처리됨으로
+  표시하고 버린다(`native/windows/bun/webview.ts`). Android는 다중 창 지원을 끄고 `onCreateWindow`가 없으며,
+  iOS는 `createWebViewWith`가 없다. origin 밖 탐색은 취소되고 외부 브라우저로 넘기지 않는다.
+- Android 뒤로가기는 웹 history와 관계없이 Activity를 종료한다(`BunawayActivity.java`).
+- macOS 어댑터는 `instances: "multiple"`과 `profile: "isolated"`를 `UNSUPPORTED`로 거부한다.
+
+앱 개발자는 플랫폼마다 다른 창 모델을 배워야 하고, 데스크톱에서만 쓰는 창 선택 인자를
+모든 호출에 넘긴다. 다중 창 계약은 세션 라우팅, 프로필 소유권, 상한 예약, 부모 종료 순서처럼
+보안 경계와 수명주기에 걸친 규칙을 늘렸고, 새 창 기능마다 이 규칙을 다시 검증해야 한다.
+
+## 결정
+
+bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 하나**인 앱 런타임으로 정의한다.
+
+1. **화면 단위.** 앱은 실행 중 네이티브 창을 최대 하나 가진다. 그 창은 WebView 하나와
+   정책 뷰 하나를 가진다. 화면 전환과 모달은 같은 WebView 안의 웹 라우팅과 웹 UI로 한다.
+   데스크톱에서는 창을 닫았다 다시 만들 수 있지만(트레이, `keep-alive`) 동시에 두 개를 열지 않는다.
+2. **정책.** 정책 뷰는 하나다. `policy.json`의 `views` 배열 형식은 유지하고 항목 수를 1로 제한한다.
+   권한 이름은 계속 완전한 Host operation 이름(`windows.setOuterSize` 등)이며 바꾸지 않는다.
+   [ADR 0002](./0002-host-owned-call-context.md)의 호스트 발급 호출 컨텍스트는 그대로 유지한다.
+3. **창 제어 대상.** 창 API는 대상 인자 없이 앱의 창을 제어한다. 웹 문서와 백엔드가 같은 창을 가리킨다.
+   `view`와 `windowId` 입력은 바로 제거한다. `windowId`는 창 수명 식별자로 이벤트와
+   스냅샷 결과에 남겨 재생성 여부를 구분하는 데 쓴다.
+4. **모바일.** 창 크기, 위치, 최대화, 전체화면, Z 순서, 작업 표시줄 같은 데스크톱 창 작업은
+   Android와 iOS에서 `UNSUPPORTED`로 실패한다. 앱은 `capabilities()`로 작업별 지원 여부를 먼저 조회한다.
+   경고만 남기고 성공으로 처리하지 않는다.
+5. **`window.open`과 링크.** 새 창 요청은 창을 만들지 않는다.
+   정책 뷰의 `origins`에 속한 URL은 같은 WebView에서 탐색하고, 그 밖의 `http`, `https` URL은
+   사용자 동작으로 시작한 요청만 시스템 기본 브라우저로 넘긴다. 다른 scheme은 차단하고 진단을 남긴다.
+6. **Android 뒤로가기.** 시스템 뒤로가기는 WebView history를 먼저 소비하고, 더 돌아갈 곳이 없을 때만
+   Activity를 종료한다.
+7. **다중 창은 코어 계약이 아니다.** 필요성이 확인되면 별도 플러그인의 opt-in 기능으로 다시 제안한다.
+   그때도 이 결정의 기본값(창 하나)을 바꾸지 않는다.
+8. **순서.** [ADR 0010](./0010-windows-first-platform-model.md)에 따라 Windows에서 먼저 구현하고
+   macOS를 병행한다. 다중 창 API는 바로 제거한다. 개발 단계이므로 이전 형식과의 호환, 경고, 유예 기간을 두지 않는다.
+
+### 단일 창 계약의 세부
+
+| 항목 | 계약 |
+| --- | --- |
+| 창 선언 | `bunaway.json`의 `app.view`(선택, 생략하면 정책의 유일한 뷰), `app.home`, `app.window`, `app.startup`, `app.visible`, `app.showWhenReady`. `app.windows`, `instances`, `maxInstances`, `profile`은 제거 |
+| 창 없는 시작 | `app.startup: false`. 트레이 Open, 두 번째 실행, `windows.create()`가 창을 만든다. 기존 `desktop.tray` 또는 `closeBehavior: "keep-alive"` 요구는 유지 |
+| 생성과 재생성 | `windows.create(options?)`, `windows.recreate(options?)`. 이미 열려 있으면 create는 기존처럼 `BUSY`. 옵션 허용 범위는 ADR 0016, 0019를 유지 |
+| 열린 상태 조회 | `windows.isOpen()`이 `windows.list()`와 `isDestroyed`를 대신한다 |
+| 창이 없을 때의 제어 | 창 제어와 상태 조회는 `INVALID_ARGUMENT`(창 없음). 기존 "닫힌 windowId" 오류와 같은 코드 |
+| WebView 프로필 | 영속 프로필 하나. 경로는 `webview/` |
+| 이벤트 | `windows.changed`, `windows.lifecycle`, `windows.closeRequested` 등의 payload 형식은 유지한다. `windows.lifecycle` 수신 권한은 `windows.listInstances` 대신 `windows.getSnapshot`으로 바꾼다 |
+| 다른 플러그인 | dialog의 `ownerWindowId`, menu의 `windowId`, window-state의 `view`와 `windowId`는 생략하면 앱의 창을 뜻한다 |
+
+## 결과
+
+### 얻는 것
+
+- **한 가지 모델.** 데스크톱과 모바일이 같은 화면 모델과 같은 앱 정의를 쓴다. 모바일에서 다른 것은
+  데스크톱 전용 창 작업의 지원 여부뿐이고, 이를 `capabilities()`로 조회한다.
+- **짧은 호출.** `windows.minimize({ view: "main" })`가 `windows.minimize()`가 된다.
+  호출자가 창을 고르지 않으므로 대상 창을 다루는 오류(ID와 뷰 불일치, multiple 뷰에서 ID 생략)가 사라진다.
+- **작은 코어와 보안 경계.** 창별 세션 라우팅, 같은 요청 ID의 창 간 분리, 슬롯 예약, 격리 프로필
+  정리, 부모 종료 순서를 검증할 필요가 없다. 정책 뷰가 하나라 권한 검토 대상도 하나다.
+- **Electron 동작 기준과의 관계.** Electron은 `BrowserWindow`를 앱 코드가 직접 만든다. bunaway는
+  Capacitor처럼 창 하나를 런타임이 소유하고, 데스크톱 창 제어는 Electron과 같은 범위의 작업
+  (크기, 위치, 최대화, 전체화면, 제목, Z 순서, 썸네일 툴바 등)을 그 창에 대해 제공한다.
+- **Tauri 동작 기준 대비 개선.** Tauri v2는 모바일에서 `set_size`, `set_position`을 효과 없이 경고만
+  남긴다. bunaway는 `UNSUPPORTED`와 지원 조회로 앱이 실패를 알 수 있게 한다. 경고만 남기면 앱이
+  기능이 동작한 것으로 오해하고 플랫폼별 분기를 테스트로 검증할 수 없다.
+- **링크 동작의 개선.** 지금은 모든 플랫폼에서 `target="_blank"`가 아무 반응 없이 끝난다.
+  Capacitor 동작 기준처럼 내부 링크는 같은 WebView, 외부 링크는 시스템 브라우저로 보낸다.
+
+### 포기하는 것
+
+- **다중 창.** 문서 편집기의 문서별 창, 채팅의 대화별 창, 분리 가능한 도구 창, 설정 창,
+  splashscreen 창을 만들 수 없다. 화면은 같은 WebView의 라우트, dialog 플러그인,
+  메뉴, 트레이로 대신한다. splashscreen은 `showWhenReady`와 `backgroundColor`로 대신한다.
+- **창 간 통신.** 창끼리 메시지를 주고받는 경로가 필요 없어진다. 대신 같은 문서 안의 상태와
+  백엔드 이벤트를 쓴다. 여러 창 사이의 상태 동기화 문제도 함께 사라진다.
+- **창별 권한과 정책 뷰.** 쓰기 가능한 편집 창과 읽기 전용 창처럼 뷰마다 다른 권한을 주는 구성을
+  잃는다. 화면별 접근 제한은 앱 명령에서 검사한다(ADR 0016의 "특정 창의 접근 제한은 앱 명령에서
+  검사한다"와 같은 원칙). 렌더러 장애를 뷰 단위로 격리하던 효과도 사라지며, 창 하나의 렌더러 장애는
+  그 창의 세션 폐기와 재탐색으로 처리한다.
+- **부모와 모달 창, 창별 프로필 격리.** `setParent`, 부모 종속 모달, `profile: "isolated"`를 제거한다.
+  네이티브 대화상자의 소유 창은 앱의 창으로 고정된다.
+- **이미 구현하고 검증한 코드.** Windows 다중 창, 소유 관계, 격리 프로필 구현과 그 실제 OS 검증을 버린다.
+  이 비용은 이후 모든 창 기능의 검증 비용을 줄이는 것으로 회수한다고 판단한다.
+
+## 대안과 기각 이유
+
+### 다중 창을 코어에 유지하고 기본값만 single로 둔다(현재 상태)
+
+기각. ADR 0017이 이미 single을 기본값으로 두었지만 모든 입력이 `view`, `windowId`를 받고, 호스트는 다중 창
+라우팅과 상한, 프로필 규칙을 계속 소유한다. 기본값만으로는 계약 크기와 검증 비용이 줄지 않으며,
+모바일과 모델이 다르다는 문제도 남는다.
+
+### 나중에 플러그인 opt-in으로 다중 창을 제공한다
+
+지금은 채택하지 않고 재검토 경로로 남긴다. 코어는 작게, 기능은 플러그인으로 둔다는 원칙에 맞지만,
+다중 창은 세션 라우팅과 호출 컨텍스트([ADR 0002](./0002-host-owned-call-context.md))를 바꾸므로
+보통의 플러그인처럼 Host operation만 추가해서는 만들 수 없다. 재제안 조건은 다음과 같다.
+
+- 같은 WebView의 라우트, dialog, 트레이로 해결되지 않는 실제 앱 사례가 있다.
+- 코어 변경 없이 플러그인이 소유할 수 있는 확장점(추가 WebView의 세션 발급과 회수)이 별도 ADR로 정해진다.
+- 기본 단일 창 앱의 계약과 성능, 보안 검토 범위를 늘리지 않는다.
+
+### Tauri 2.11 방식(모바일 다중 창)
+
+기각. Tauri v2는 2.11.0부터 Android activity embedding과 iOS scene으로 모바일 다중 창을 지원한다.
+이 방식은 Android에서 Activity마다 WebView를 두고 iOS에서 scene 수명을 따로 다뤄야 한다.
+현재 Android 호스트는 Activity 하나가 Bun과 WebView를 소유하고 여러 Activity의 동시 실행을 지원하지 않으며
+([ADR 0015](./0015-android-bundled-process-host.md)), iOS 호스트는 UIScene을 쓰지 않는다. 모바일 다중 창은
+태블릿과 폴더블의 일부 사례에만 이득이 있고, 플랫폼마다 다른 수명주기를 코어 계약에 끌어들인다.
+
+### 창은 하나지만 WebView 여러 개(Electron `WebContentsView` 방식)
+
+기각. 창 수는 줄지만 WebView별 세션, 정책, 포커스, 배치가 다시 필요해 다중 창과 같은 비용이 든다.
+
+### 모바일에서 창 API를 경고만 남기고 성공으로 처리한다(Tauri 모바일 동작)
+
+기각. 앱이 실패를 알 수 없다. `UNSUPPORTED`와 `capabilities()` 조회는 기존 bunaway 플러그인의
+플랫폼별 미지원 처리와도 일치한다.
+
+### `window.open`을 모두 차단한다(현재 동작)
+
+기각. 내부 링크의 `target="_blank"`가 아무 반응 없이 끝나 앱 개발자가 원인을 찾기 어렵다.
+Capacitor 동작 기준처럼 외부 링크는 시스템 브라우저, 내부 링크는 같은 WebView가 사용자 기대와 맞는다.
+
+## 기존 결정과의 관계
+
+대체되거나 수정되는 ADR(0004, 0013, 0015, 0016, 0017, 0019, 0020, 0021)은 머리말에 이 결정으로의 링크를 추가하고 본문은 당시 기록으로 남긴다.
+
+| ADR | 관계 | 내용 |
+| --- | --- | --- |
+| [0004](./0004-multi-window-per-view-policy.md) 창과 뷰별 정책 분리 | 대체 | 창 N개와 뷰별 정책, 뷰별 프로필, 창별 종료 규칙을 단일 창으로 대체. 렌더러 장애 처리와 "창 닫기 = 세션 폐기"는 유지 |
+| [0016](./0016-window-creation-contract.md) 창 생성 계약 | 수정 | 호출별 옵션 허용 범위와 검증, 오류 표는 유지. `view` 입력, 선언 0–128개, 뷰별 슬롯과 식별자 조회 절은 대체 |
+| [0017](./0017-multiple-windows-per-view.md) 같은 뷰의 다중 창 | 대체 | `instances`, `maxInstances`, `profile`, `createInstance`, `recreateInstance`, `listInstances`, ID 지정 제어 전체 |
+| [0013](./0013-desktop-lifecycle.md) 데스크톱 수명주기 | 수정 | 트레이 Open과 두 번째 실행은 "살아 있는 모든 창"이 아니라 앱의 창을 복원하거나 생성. `completeSplashscreen`, 부모와 자식 종료 절 제거. `app.windows: []`는 `app.startup: false`로 대체 |
+| [0019](./0019-initial-window-placement.md) 초기 창 배치 | 유지(용어 수정) | "네 생성 API"를 create, recreate 두 개로 수정. 배치 계산은 그대로 |
+| [0020](./0020-close-and-quit-lifecycle.md) 닫기와 종료 수명주기 | 수정 | `windows.lifecycle` 수신 권한을 `windows.getSnapshot`으로 변경. 여러 창, 자식 확인, splashscreen 언급 제거. `onAllWindowsClosed`는 이름을 유지하고 "앱의 창이 닫혀 0개가 됨"으로 정의 |
+| [0021](./0021-macos-desktop-lifecycle.md) macOS 데스크톱 수명주기 | 수정 | `windows.listInstances` 권한 언급을 0020과 같이 변경 |
+| [0002](./0002-host-owned-call-context.md) 호출 컨텍스트 | 유지 | 호출 컨텍스트 발급과 철회는 그대로 |
+| [0010](./0010-windows-first-platform-model.md) Windows 우선 | 유지 | 구현 순서의 근거 |
+| [0015](./0015-android-bundled-process-host.md) Android | 수정 | 뒤로가기를 "Activity 종료"에서 "WebView history 먼저"로 변경. 단일 뷰 조건은 이 결정의 공통 계약이 됨 |
+| [0018](./0018-ios-embedded-bun-worker.md) iOS | 유지 | 단일 뷰 조건이 공통 계약이 됨 |
+| `docs/GLOSSARY.md` | 수정 | "창 인스턴스" 항목 삭제, "뷰 ID"와 "WebView 프로필"의 multiple, isolated 설명 삭제, "창 소유 관계", "부모 종속 모달 창" 삭제 |
+
+## 후속 작업
+
+- 이 결정 PR은 문서만 바꾼다. 런타임, 계약, 설정 스키마는 구현 PR에서 바꾼다.
+- 다중 창 API와 설정은 구현 PR에서 바로 제거한다. 개발 단계이므로 이전 형식과의 호환, 경고, 유예 기간을 두지 않는다.
+- 구현 PR은 계약 테스트, windows-native CI, macOS 네이티브 CI 결과를 구분해서 보고한다.
+- 다중 창 재제안은 위 조건을 갖춘 새 ADR로만 한다.
+
+근거: [창 계약](../../plugins/windows/src/contract.ts), [창 선언 검증](../../packages/runtime-bun/src/window-config.ts),
+[CLI 설정](../../packages/cli/src/config.ts), [Android 조건](../../packages/cli/src/android.ts),
+[UI 소유권](../../native/windows/bun/ui.ts), [새 창 요청 처리](../../native/windows/bun/webview.ts),
+[Android Activity](../../native/android/host/src/main/java/dev/bunaway/host/BunawayActivity.java).

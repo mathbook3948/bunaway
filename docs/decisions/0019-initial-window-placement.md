@@ -4,6 +4,8 @@ status: accepted
 
 # ADR 0019: 초기 창 배치와 중앙 배치의 공통 계약
 
+2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)에 따라 "네 생성 API"는 `create`, `recreate` 두 개가 된다. 배치 계산은 그대로다.
+
 결정일: 2026-10-12. Windows에서 먼저 구현한다. 런타임 center API와
 resizable, movable은 이 결정의 구현 범위가 아니다.
 

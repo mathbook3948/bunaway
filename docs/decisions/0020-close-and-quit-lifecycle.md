@@ -4,6 +4,8 @@ status: accepted
 
 # 창 닫기와 앱 종료의 수명주기 훅과 이벤트를 정의한다
 
+2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)에 따라 `windows.lifecycle` 수신 권한은 `windows.getSnapshot`이 되고, 여러 창, 자식 확인, splashscreen 언급은 제거한다. `onAllWindowsClosed`는 이름을 유지하며 앱의 창이 닫혀 0개가 됨을 뜻한다.
+
 결정일: 2026-10-16
 
 [ADR 0013](./0013-desktop-lifecycle.md)을 확장한다. 0013의 `beforeQuit`, 닫기 동작과
