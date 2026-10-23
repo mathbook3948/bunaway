@@ -1579,6 +1579,36 @@ test("the pre-ready URL buffer is bounded and discarded by shutdown", async () =
   expect(seen).toEqual([]);
 });
 
+test("a shutdown committed before ready() drops onReady and the held open requests", async () => {
+  const seen: string[] = [];
+  const lifecycle = new DesktopLifecycle(
+    {
+      onReady: () => {
+        seen.push("ready");
+      },
+      onOpen: (request) => {
+        seen.push(`open:${request.source}`);
+      },
+    },
+    async () => {},
+    () => {},
+    () => {},
+  );
+  lifecycle.commitShutdown("api");
+  expect(() =>
+    lifecycle.open(
+      {
+        argv: [],
+        cwd: "C:\\app",
+      },
+      "second-instance",
+    ),
+  ).toThrow("Desktop open queue unavailable");
+  lifecycle.ready();
+  await tick();
+  expect(seen).toEqual([]);
+});
+
 test("onOpenUrls receives a frozen copy of the URL list", async () => {
   const received: (readonly string[])[] = [];
   const lifecycle = new DesktopLifecycle(
