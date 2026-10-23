@@ -77,6 +77,30 @@ const onAc: PowerStatus = {
   fullLifeSeconds: null,
 };
 
+test("a failing baseline read does not throw and the first successful read is emitted", () => {
+  let failRead = true;
+  const emitted: PowerStatus[] = [];
+  const notify = createStatusPublisher(
+    () => {
+      if (failRead) {
+        throw new Error("Read failed");
+      }
+      return onAc;
+    },
+    {
+      emit: (_event, payload) => emitted.push(payload),
+    },
+  );
+  notify();
+  expect(emitted).toEqual([]);
+  failRead = false;
+  notify();
+  notify();
+  expect(emitted).toEqual([
+    onAc,
+  ]);
+});
+
 test("a power source notification emits only when the status differs from the last one", () => {
   let status = onAc;
   let failRead = false;

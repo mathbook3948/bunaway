@@ -280,18 +280,20 @@ const read = () => ({
   source: "battery", batteryPresent: true, charging: false, batteryPercent: 50 + (reads++ % 40),
   batterySaver: false, remainingSeconds: null, fullLifeSeconds: null,
 });
-const release = watchMacosPowerStatus(read, { emit: (event, payload) => emitted.push([event, payload]) });
+// The adapter above runs its own status watcher on the real status, so this watcher gets its own list.
+const statusEvents = [];
+const release = watchMacosPowerStatus(read, { emit: (event, payload) => statusEvents.push([event, payload]) });
 try {
   const baselineReads = reads;
   post();
-  await pumpUntil(() => emitted.length > 0, "power.statusChanged");
-  const whileWatching = emitted.splice(0);
+  await pumpUntil(() => statusEvents.length > 0, "power.statusChanged");
+  const whileWatching = statusEvents.splice(0);
   release();
   release();
   const readsAtRelease = reads;
   post();
   pumpTurns(25);
-  console.log(JSON.stringify({ baselineReads, whileWatching, afterRelease: emitted, readsAfterRelease: reads - readsAtRelease }));
+  console.log(JSON.stringify({ baselineReads, whileWatching, afterRelease: statusEvents, readsAfterRelease: reads - readsAtRelease }));
 } finally {
   release?.();
   await adapter.dispose();

@@ -20,14 +20,21 @@ const closeLibrary = (library: { close(): void }) => library.close();
  *
  * `read` is called once as the baseline and again on every power source notification. Equal
  * snapshots are skipped, so the event reports only differences visible to `power.getStatus`. A
- * failing re-read is reported and keeps the baseline, and the next notification retries it.
+ * failing read is reported and keeps the baseline, and the next notification retries it. When
+ * the baseline read itself fails, the first successful read is emitted, because nothing is known
+ * to compare it with. A failing baseline must not fail the adapter, which still serves queries.
  * Returns the function the notification calls.
  */
 export function createStatusPublisher(
   read: () => PowerStatus,
   events: StatusEmitter,
 ): () => void {
-  let lastPublished = JSON.stringify(read());
+  let lastPublished: string | undefined;
+  try {
+    lastPublished = JSON.stringify(read());
+  } catch (error) {
+    console.error("Could not read the initial power status.", error);
+  }
   return () => {
     try {
       const next = read();
@@ -45,9 +52,8 @@ export function createStatusPublisher(
 }
 
 /**
- * Observe power source changes (AC and battery state, charge level and remaining time estimates)
- * with an IOKit run loop source and emit `power.statusChanged` for each difference from the last
- * status. This is the notification Electron's power monitor builds on for the same information.
+ * Observe IOKit power source notifications with a run loop source, re-read the status on each one
+ * and emit `power.statusChanged` for each difference from the last status.
  *
  * The source is added to the main run loop, which the host pumps in its default mode, so it must
  * run on the macOS main thread. The returned release removes the source before it frees it and
