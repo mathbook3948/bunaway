@@ -57,6 +57,11 @@ try {
       text: "x".repeat(524288),
     });
     await log.info("after-rotation");
+    await rejected(() => log.configure({}), "PERMISSION_DENIED");
+    await rejected(() => log.flush(), "PERMISSION_DENIED");
+    if ((await client.invoke("test.configure", null)) !== true) {
+      throw new Error("Backend configure and flush did not complete.");
+    }
     await rejected(
       () =>
         windows.getContentSize({

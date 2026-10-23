@@ -100,6 +100,26 @@ export default defineApp({
         return true;
       },
     },
+    "test.configure": {
+      input: {
+        const: null,
+      },
+      output: {
+        const: true,
+      },
+      async run() {
+        await log.configure({
+          minimumLevel: "warn",
+        });
+        await log.info("filtered-info");
+        await log.warn("kept-warn");
+        await log.flush();
+        await log.configure({
+          minimumLevel: "info",
+        });
+        return true;
+      },
+    },
     "test.report": {
       input: {},
       output: {

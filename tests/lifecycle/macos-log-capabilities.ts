@@ -76,6 +76,8 @@ try {
     backend: {
       permissions: [
         "log.write",
+        "log.configure",
+        "log.flush",
         "capabilities.get",
       ],
     },
@@ -93,7 +95,10 @@ try {
         "test.waitDenied",
         "test.report",
         "test.writeFailure",
+        "test.configure",
         "plugin.log.write",
+        "plugin.log.configure",
+        "plugin.log.flush",
         "plugin.capabilities.get",
         "plugin.windows.close",
         "plugin.windows.getContentSize",
@@ -314,9 +319,26 @@ try {
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line));
-  assert.equal(active.length, 1);
-  assert.equal(active[0].message, "after-rotation");
-  assert.equal(active[0].source, "view:main");
+  // The backend raised the minimum level to warn, so only the warning follows the renderer record.
+  assert.deepEqual(
+    active.map((record) => [
+      record.source,
+      record.level,
+      record.message,
+    ]),
+    [
+      [
+        "view:main",
+        "info",
+        "after-rotation",
+      ],
+      [
+        "backend",
+        "warn",
+        "kept-warn",
+      ],
+    ],
+  );
   assert.deepEqual(
     (await readdir(resolve(dataRoot, "logs")))
       .filter((name) => name.startsWith("app.log"))
