@@ -449,7 +449,12 @@ test("cancelUpload ends the connection, releases the id and succeeds for unknown
     const pending = runUpload(state, SOURCE, request);
     const code = codeOf(pending);
     await firstChunk(state, request);
-    // The body is still unsent, so the cancel ends a transfer in progress.
+    // Cancelling before the server has taken bytes would end a connection that never carried any.
+    await waitFor(() => held !== undefined || undefined, {
+      deadline: "inProcess",
+      what: "the server taking the first bytes",
+    });
+    // The server reads no further, so the cancel ends a transfer with most of the file unsent.
     expect(runUploadStatus(state, SOURCE, request).sentBytes).toBeLessThan(
       SHRINK_BYTES,
     );
