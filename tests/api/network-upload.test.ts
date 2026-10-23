@@ -49,8 +49,6 @@ type Seen = {
 };
 let folder: string;
 let seen: Seen | undefined;
-/** Upload ids whose request the server saw end; each test looks up its own id. */
-const endedRequests = new Set<string>();
 /** Resolves when the slow-reading route has taken its first chunk; the route then waits for `releaseSlowReader`. */
 let slowReaderStarted: () => void = () => {};
 let releaseSlowReader: () => void = () => {};
@@ -65,9 +63,6 @@ const server = Bun.serve({
         request.signal.addEventListener(
           "abort",
           () => {
-            endedRequests.add(
-              new URL(request.url).searchParams.get("id") ?? "",
-            );
             resolve();
           },
           {
@@ -424,20 +419,37 @@ test("status reports progress to the starting source only, and fails for unknown
 
 test("cancelUpload ends the connection, releases the id and succeeds for unknown ids", async () => {
   const state = initialize();
-  const request = input(
-    fileOf("cancel.bin", Buffer.alloc(LARGE_BYTES)),
-    "/never-read",
-  );
-  const pending = runUpload(state, SOURCE, request);
-  const code = codeOf(pending);
-  await firstChunk(state, request);
-  expect(await runCancelUpload(state, SOURCE, request)).toEqual({});
-  expect(await code).toBe("CANCELLED");
-  expect(state.uploads.size).toBe(0);
-  await waitFor(() => endedRequests.has(request.uploadId) || undefined, {
-    deadline: "childStep",
-    what: "the server noticing the end of the request",
+  // A plain socket shows the connection itself closing, whatever the HTTP server reports.
+  let connectionClosed = false;
+  const sink = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: {
+      data() {},
+      close() {
+        connectionClosed = true;
+      },
+    },
   });
+  try {
+    const request = uploadInputSchema.parse({
+      uploadId: crypto.randomUUID(),
+      url: `http://127.0.0.1:${sink.port}/`,
+      path: fileOf("cancel.bin", Buffer.alloc(LARGE_BYTES)),
+    });
+    const pending = runUpload(state, SOURCE, request);
+    const code = codeOf(pending);
+    await firstChunk(state, request);
+    expect(await runCancelUpload(state, SOURCE, request)).toEqual({});
+    expect(await code).toBe("CANCELLED");
+    expect(state.uploads.size).toBe(0);
+    await waitFor(() => connectionClosed || undefined, {
+      deadline: "childStep",
+      what: "the connection closing",
+    });
+  } finally {
+    sink.stop(true);
+  }
   expect(
     await runCancelUpload(state, SOURCE, {
       uploadId: crypto.randomUUID(),
