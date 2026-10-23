@@ -4,7 +4,7 @@ status: accepted
 
 # Windows 앱 열기와 종료를 앱 정의에 연결한다
 
-2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)에 따라 트레이 Open과 두 번째 실행은 앱의 창을 복원하거나 생성한다. `completeSplashscreen`과 부모, 자식 종료 절은 제거하고 `app.windows: []`는 창 없는 시작(`app.startup: false`)과 숨긴 창 앱(`app.visible: false`, 창과 문서 세션이 상주하며 트레이 Open과 두 번째 실행 시 표시됨)으로 나누어 대체한다.
+2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)에 따라 트레이 Open과 두 번째 실행은 앱의 창을 복원하거나 생성한다. `completeSplashscreen`과 부모, 자식 종료 절은 제거하고 `app.windows: []`의 "창을 만들지 않는다"는 의미는 포기하고, 창 생성 지연(`app.startup: false`, 트레이 Open과 두 번째 실행이 창을 만든다)과 숨긴 창 앱(`app.visible: false`, 창과 문서 세션이 상주하며 트레이 Open과 두 번째 실행 시 표시됨)으로 바꾼다.
 
 결정일: 2026-10-07
 

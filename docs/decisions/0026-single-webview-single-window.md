@@ -45,7 +45,8 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
    실패한다. 예외로 `windows.create()`와 `windows.recreate()`는 창을 만들고, `windows.isOpen()`과 창과 무관한 작업
    (모니터, 커서)은 성공하며, `windows.getReadiness()`는 닫힌 창의 마지막 결과를 유지한다(창을 한 번도 만들지 않았으면
    `INVALID_ARGUMENT`). 창이 없을 때 `windows.destroy()`는
-   아무 일도 하지 않고 `true`를 돌려주며 앱 종료는 `quit`만 맡는다.
+   아무 일도 하지 않고 `true`를 돌려주며 앱 종료는 `quit`만 맡는다. 플랫폼 미지원(`UNSUPPORTED`) 판정이 창 없음
+   판정보다 앞서므로, `destroy`가 `UNSUPPORTED`인 macOS와 모바일에서는 창이 없어도 `UNSUPPORTED`다.
 4. **창 수명 이벤트.** `windows.lifecycle`은 문서 세션뿐 아니라 백엔드도 받는다. 백엔드는 windows 플러그인이 제공하는
    구독 API로 권한 검사 없이 모든 단계를 받는다. 문서 세션은 정책 `events`와 `windows.getSnapshot` 권한을 요구한다.
    앱 종료나 세션 종료가 시작된 뒤에는 전송하지 않는다.
@@ -91,6 +92,7 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
 - **이름 있는 대상과 반환값.** `noopener`, `features`, 이름 있는 `target`은 새 창 요청과 같게 처리한다.
   `window.open`의 반환값(`null`)과 `opener`에 의존하는 웹 코드(팝업 OAuth 포함)는 지원하지 않고 차단 진단을 남긴다.
 - **다른 scheme과 다운로드.** `mailto:`, `tel:`은 차단한다. 다운로드 링크는 다운로드 경로로 판정하고 opener로 넘기지 않는다.
+- **내부 링크의 영향.** 내부 URL을 같은 WebView에서 열면 기존 세션과 진행 중 요청이 무효화되어 문서 상태를 잃는다.
 - **차단 진단.** 반복 진단에는 빈도 상한을 둔다.
 - **Android 전환.** `onCreateWindow`를 쓰려면 새 창 지원 설정을 바꿔야 하며 `_blank` 처리가 바뀐다. 전환 순서를 정한다.
 - **앱의 거부 훅과 숨긴 문서.** 앱 코드가 opener 전에 거부할 수 있게 할지는 기본값을 두지 않고 정책의 작업 허용만 쓴다.
@@ -104,8 +106,8 @@ bunaway는 데스크톱과 모바일 모두 **앱 하나에 WebView 하나, 창 
   `onAllWindowsClosed`를 호출하지 않는다.
 - **지원 작업.** `isOpen`, `getSnapshot`, `getReadiness`, lifecycle 구독으로 시작한다. `getSnapshot`에서 데스크톱 전용
   필드에 채울 값을 정한다.
-- **모바일과 destroy.** 모바일에서 `destroy`는 `UNSUPPORTED`가 앞서고, macOS의 `destroy`도 `UNSUPPORTED`를 유지한다. 창이 없을 때 no-op `true`는 Windows에 적용한다.
 - **문서 세션이 받는 단계.** 닫히는 창의 세션은 먼저 철회되므로 문서 세션이 받을 수 있는 lifecycle 단계는 `ready`뿐일 수 있다.
+- **종료 훅.** Android 뒤로가기나 Activity 종료로 앱이 끝날 때 종료 훅이 실행되는지 정한다.
 - **`app.window`.** 모바일 CLI는 요구를 유지하되 값은 쓰지 않는다. 이 요구를 없앨지 정한다.
 
 ### 창이 없는 상태
@@ -207,16 +209,16 @@ Capacitor 동작 기준처럼 외부 링크는 시스템 브라우저, 내부 �
 | [0004](./0004-multi-window-per-view-policy.md) 창과 뷰별 정책 분리 | 대체 | 창 N개와 뷰별 정책, 뷰별 프로필, 창별 종료 규칙을 단일 창으로 대체. splashscreen 전환 서술과 부모와 모달 수명 확장 절도 대체. 렌더러 장애 처리와 "창 닫기 = 세션 폐기"는 유지 |
 | [0017](./0017-multiple-windows-per-view.md) 같은 뷰의 다중 창 | 대체 | 인스턴스 관련 설정과 작업, ID 지정 제어 전체 |
 | [0016](./0016-window-creation-contract.md) 창 생성 계약 | 수정 | 호출별 옵션 허용 범위와 검증은 유지. `app.windows`, `view`, `windowId`가 전제인 부분은 대체 |
-| [0013](./0013-desktop-lifecycle.md) 데스크톱 수명주기 | 수정 | 트레이 Open과 두 번째 실행은 앱의 창을 복원하거나 생성. 부모와 자식, splashscreen 절 제거. `app.windows: []`는 `app.startup: false`와 `app.visible: false`로 대체 |
+| [0013](./0013-desktop-lifecycle.md) 데스크톱 수명주기 | 수정 | 트레이 Open과 두 번째 실행은 앱의 창을 복원하거나 생성. 부모와 자식, splashscreen 절 제거. `app.windows: []`의 "창을 만들지 않는다"는 의미는 포기하고, 창 생성 지연(`app.startup: false`)과 숨긴 창 앱(`app.visible: false`)으로 바꾼다 |
 | [0013](./0013-optional-native-plugins.md) 선택 네이티브 플러그인 | 수정 | "특정 창의 제어 같은 앱 규칙"은 창이 하나라 적용 대상이 없다 |
 | [0014](./0014-optional-plugin-packages.md) 선택 플러그인 패키지 | 수정 | 허용된 작업은 앱의 창 하나를 대상으로 하며 화면별 접근 제한은 불가능하다 |
 | [0020](./0020-close-and-quit-lifecycle.md) 닫기와 종료 수명주기 | 수정 | 여러 창과 자식 확인 언급 제거. `windows.lifecycle`의 백엔드 전달과 문서 세션 권한 변경. `respondClose` 입력에서 대상 제거와 `requestId`의 앱 실행 동안 유일 발급. `onAllWindowsClosed`는 "앱의 창이 닫혀 0개가 됨" |
 | [0021](./0021-macos-desktop-lifecycle.md) macOS 데스크톱 수명주기 | 수정 | 권한 언급과 `windows.lifecycle` 전달을 0020과 맞춤. macOS 어댑터의 `getSnapshot` 구현과 영속 프로필 하나가 추가된다(프로필 식별자 방식은 열린 질문). 창 없는 시작은 계속 `UNSUPPORTED` |
-| [0002](./0002-host-owned-call-context.md) 호출 컨텍스트 | 수정 | 발급과 철회는 그대로. 링크 처리에서 호스트 대리 호출이 추가될 수 있다 |
 | [0006](./0006-windows-bun-ui-worker.md) Windows UI Worker | 수정 | 뷰별 정책과 프로필은 단일 창으로 대체. 문서 세대는 유지 |
 | [0015](./0015-android-bundled-process-host.md) Android | 수정 | 뒤로가기를 "WebView history 먼저"로 변경. `launchMode` 지정 추가 |
 | [0015](./0015-macos-bun-ffi.md) macOS Bun FFI | 수정 | 다중 창 서술은 단일 창으로 대체 |
 | [0019](./0019-initial-window-placement.md) 초기 창 배치 | 수정 | 생성 API 개수 표현을 create, recreate 두 개로 수정. 배치 계산은 유지 |
+| [0002](./0002-host-owned-call-context.md) 호출 컨텍스트 | 유지(링크 처리 구현 때 재검토) | 발급과 철회는 그대로. 링크 처리에서 호스트 대리 호출이 추가되면 갱신한다 |
 | [0024](./0024-plugin-path-responsibility.md) 경로 책임 | 유지(링크 처리 구현 때 재검토) | 외부 콘텐츠를 표시하는 뷰의 최소 권한 지침은 단일 뷰에서 앱 전체 권한에 적용된다. opener 대리 호출의 정책 항목과 맞추는 방법은 열린 질문 |
 | [0010](./0010-windows-first-platform-model.md) Windows 우선 | 유지 | 구현 순서의 근거 |
 | [0018](./0018-ios-embedded-bun-worker.md) iOS | 유지 | 단일 뷰 조건이 공통 계약이 됨 |
