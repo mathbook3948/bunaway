@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./windows-menu": "./src/windows-menu.ts",
     "./win32": "./src/win32.ts",
-    "./darwin": "./src/darwin.ts"
+    "./darwin": "./src/darwin.ts",
+    "./macos-home": "./src/macos-home.ts"
   },
   "imports": {
     "#transport": {

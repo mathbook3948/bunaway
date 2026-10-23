@@ -1,6 +1,7 @@
 import { tmpdir } from "node:os";
 import { posix } from "node:path";
 import { BunawayError, type NativeEnvironment } from "@bunaway/plugin";
+import { macosUserHome } from "@bunaway/plugin/macos-home";
 import {
   type AppDirectory,
   type PathInstance,
@@ -8,7 +9,6 @@ import {
   type UserDirectory,
 } from "#path/contract";
 
-const DATA_ROOT_PARENT = "Library/Application Support/bunaway";
 const USER_FOLDERS: Record<Exclude<UserDirectory, "home">, string> = {
   documents: "Documents",
   downloads: "Downloads",
@@ -31,27 +31,9 @@ export class MacosPath implements PathInstance {
       : posix.join(home, USER_FOLDERS[directory]);
   }
 
-  /**
-   * The worker's HOME and TMPDIR point at the host data root, so the user's home comes from the
-   * data root's fixed layout `<home>/Library/Application Support/bunaway/<appId>`. Inside an App
-   * Sandbox container the data root, and therefore this home, is the container's.
-   */
+  /** The user's home, derived from the host data root's fixed layout. */
   private home(): string {
-    const suffix = `/${DATA_ROOT_PARENT}/${this.appId()}`;
-    const { dataRoot } = this.environment;
-    const home = dataRoot.endsWith(suffix)
-      ? dataRoot.slice(0, -suffix.length)
-      : undefined;
-    if (
-      home === undefined ||
-      !posixAbsolutePathSchema.safeParse(home).success
-    ) {
-      throw new BunawayError({
-        code: "INTERNAL",
-        message: "The host data root does not match the macOS app layout.",
-      });
-    }
-    return home;
+    return macosUserHome(this.environment.dataRoot, this.appId());
   }
 
   private appId(): string {
