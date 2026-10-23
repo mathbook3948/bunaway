@@ -1,11 +1,14 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { ClipboardChanges } from "#plugins/clipboard/src/platforms/changes";
 import { MacosClipboard } from "#plugins/clipboard/src/platforms/macos";
 import { pollPasteboard } from "#plugins/clipboard/src/platforms/macos-changes";
 import type { Pasteboard } from "#plugins/clipboard/src/platforms/macos-pasteboard";
+import { deadline, waitFor } from "../fixtures/deadlines.ts";
 
-const INTERVAL_MS = 5;
-const tick = () => Bun.sleep(INTERVAL_MS * 6);
+setDefaultTimeout(deadline("inProcess"));
+
+/** An interval that never fires inside a test, so `flush` is the only comparison. */
+const MANUAL_MS = 3_600_000;
 
 function counter() {
   let value = 7;
@@ -26,66 +29,114 @@ function counter() {
   };
 }
 
-test("the poller reports changes after the counter seen at start and coalesces ticks", async () => {
+function adapter(board: ReturnType<typeof counter>, intervalMs = MANUAL_MS) {
+  const events: unknown[][] = [];
+  const released = {
+    count: 0,
+  };
+  const driver = pollPasteboard(board.read, intervalMs);
+  const clipboard = new MacosClipboard(
+    {
+      dispose: () => {
+        released.count++;
+      },
+    } as unknown as Pasteboard,
+    new ClipboardChanges(driver, (...event) => events.push(event)),
+  );
+  return {
+    clipboard,
+    driver,
+    events,
+    released,
+  };
+}
+
+test("the poller reports changes after the counter seen at start and coalesces them", () => {
   const board = counter();
   const seen: number[] = [];
-  const driver = pollPasteboard(board.read, INTERVAL_MS);
+  const driver = pollPasteboard(board.read, MANUAL_MS);
   driver.listen((sequence) => seen.push(sequence));
-  await tick();
+  driver.flush?.();
   expect(seen).toEqual([]);
   board.set(8);
   board.set(9);
-  await tick();
-  expect(seen).toEqual([
-    9,
-  ]);
-  await tick();
+  driver.flush?.();
+  driver.flush?.();
   expect(seen).toEqual([
     9,
   ]);
   driver.dispose();
   driver.dispose();
   board.set(10);
-  await tick();
+  driver.flush?.();
   expect(seen).toEqual([
     9,
   ]);
 });
 
-test("a failing read keeps the last counter and is retried", async () => {
+test("a failing baseline read fails listening and a later failing read is retried", () => {
   const board = counter();
+  const driver = pollPasteboard(board.read, MANUAL_MS);
+  board.fail(true);
+  expect(() => driver.listen(() => {})).toThrow("pasteboard unavailable");
+  board.fail(false);
   const seen: number[] = [];
-  const driver = pollPasteboard(board.read, INTERVAL_MS);
   driver.listen((sequence) => seen.push(sequence));
   board.fail(true);
   board.set(8);
-  await tick();
+  driver.flush?.();
   expect(seen).toEqual([]);
   board.fail(false);
-  await tick();
+  driver.flush?.();
   expect(seen).toEqual([
     8,
   ]);
   driver.dispose();
 });
 
-test("the adapter publishes polled changes, serves waiters and stops on dispose", async () => {
+test("the timer compares on its own without being flushed", async () => {
   const board = counter();
-  const events: unknown[][] = [];
-  let released = 0;
-  const native = {
-    dispose: () => {
-      released++;
-    },
-  } as unknown as Pasteboard;
-  const adapter = new MacosClipboard(
-    native,
-    new ClipboardChanges(pollPasteboard(board.read, INTERVAL_MS), (...event) =>
-      events.push(event),
-    ),
-  );
-  const waiting = adapter.waitForChange();
+  const seen: number[] = [];
+  const driver = pollPasteboard(board.read, 5);
+  driver.listen((sequence) => seen.push(sequence));
   board.set(8);
+  await waitFor(() => seen.length > 0 || undefined, {
+    deadline: "inProcess",
+    what: "the polled change",
+  });
+  expect(seen).toEqual([
+    8,
+  ]);
+  driver.dispose();
+});
+
+test("a wait does not resolve with a change made before it started", async () => {
+  const board = counter();
+  const { clipboard, driver, events } = adapter(board);
+  board.set(8);
+  const waiting = clipboard.waitForChange();
+  let settled = false;
+  void waiting.then(() => {
+    settled = true;
+  });
+  await Bun.sleep(0);
+  expect(settled).toBe(false);
+  // The earlier change is still published as an event.
+  expect(events.map(([event]) => event)).toEqual([
+    "clipboard.changed",
+  ]);
+  board.set(9);
+  driver.flush?.();
+  expect((await waiting).sequence).toBe(9);
+  clipboard.dispose();
+});
+
+test("the adapter publishes changes, serves waiters and stops on dispose", async () => {
+  const board = counter();
+  const { clipboard, driver, events, released } = adapter(board);
+  const waiting = clipboard.waitForChange();
+  board.set(8);
+  driver.flush?.();
   const change = await waiting;
   expect(change.sequence).toBe(8);
   expect(events).toEqual([
@@ -94,19 +145,19 @@ test("the adapter publishes polled changes, serves waiters and stops on dispose"
       change,
     ],
   ]);
-  const pending = adapter.waitForChange();
-  adapter.dispose();
-  adapter.dispose();
+  const pending = clipboard.waitForChange();
+  clipboard.dispose();
+  clipboard.dispose();
   await expect(pending).rejects.toThrow(
     expect.objectContaining({
       code: "CANCELLED",
     }),
   );
-  expect(released).toBe(1);
+  expect(released.count).toBe(1);
   board.set(9);
-  await tick();
+  driver.flush?.();
   expect(events).toHaveLength(1);
-  expect(() => adapter.waitForChange()).toThrow(
+  expect(() => clipboard.waitForChange()).toThrow(
     expect.objectContaining({
       code: "CANCELLED",
     }),
@@ -114,13 +165,13 @@ test("the adapter publishes polled changes, serves waiters and stops on dispose"
 });
 
 test("an adapter without an event service fails waits instead of hanging", async () => {
-  const adapter = new MacosClipboard({
+  const clipboard = new MacosClipboard({
     dispose() {},
   } as unknown as Pasteboard);
-  await expect(adapter.waitForChange()).rejects.toThrow(
+  await expect(clipboard.waitForChange()).rejects.toThrow(
     expect.objectContaining({
       code: "INTERNAL",
     }),
   );
-  adapter.dispose();
+  clipboard.dispose();
 });

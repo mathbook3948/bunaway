@@ -1,5 +1,5 @@
 import type { NativeEnvironment } from "@bunaway/plugin";
-import { attemptAll } from "@bunaway/plugin";
+import { attemptAll, failWithCleanup } from "@bunaway/plugin";
 import { BunawayError } from "@bunaway/protocol";
 import type { z } from "zod";
 import {
@@ -144,13 +144,18 @@ export function initialize(environment?: NativeEnvironment): MacosClipboard {
   if (!events) {
     return new MacosClipboard(native);
   }
-  return new MacosClipboard(
-    native,
-    new ClipboardChanges(
-      pollPasteboard(() => native.changeCount()),
-      (event, payload) => events.emit(event, payload),
-    ),
-  );
+  try {
+    return new MacosClipboard(
+      native,
+      new ClipboardChanges(
+        pollPasteboard(() => native.changeCount()),
+        (event, payload) => events.emit(event, payload),
+      ),
+    );
+  } catch (error) {
+    // No caller receives the adapter, so release the pasteboard binding here.
+    failWithCleanup(error, () => native.dispose(), "Clipboard cleanup failed.");
+  }
 }
 
 export function dispose(instance: MacosClipboard): void {

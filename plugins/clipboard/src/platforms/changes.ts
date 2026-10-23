@@ -6,6 +6,8 @@ import { type ClipboardChange, MAX_CHANGE_WAITERS } from "#clipboard/contract";
 export type ChangeDriver = {
   /** Deliver the clipboard change counter each time the platform reports an update. */
   listen(receive: (sequence: number) => void): void;
+  /** Deliver an update the platform has not reported yet, for drivers that poll. */
+  flush?(): void;
   /** Remove the listener and destroy its window. Safe to repeat; may throw after cleanup. */
   dispose(): void;
 };
@@ -65,6 +67,8 @@ export class ClipboardChanges {
       error.cause = this.unavailableCause;
       return Promise.reject(error);
     }
+    // A polling driver may still owe an earlier change; deliver it before this wait starts.
+    this.driver.flush?.();
     return this.waiters.wait(signal);
   }
 

@@ -1,5 +1,5 @@
 import { ptr } from "bun:ffi";
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import type { JsonValue } from "@bunaway/protocol";
 import { Objc } from "#native/macos/bun/objc";
 import type { ClipboardItem } from "#plugins/clipboard/src/contract";
@@ -15,7 +15,10 @@ import {
   encodeTIFF,
   MAX_TIFF_BYTES,
 } from "#plugins/clipboard/src/platforms/macos-tiff";
+import { deadline } from "../fixtures/deadlines.ts";
 import { pasteboardOperations } from "../fixtures/injected-native-plugins.ts";
+
+setDefaultTimeout(deadline("childStep"));
 
 test.skipIf(
   process.platform !== "darwin" || process.env.BUNAWAY_CLIPBOARD_NATIVE !== "1",
@@ -451,10 +454,26 @@ test.skipIf(
     );
     try {
       const before = native.changeCount();
+      // Measured per comparison: one changeCount message inside an autorelease pool.
+      const started = performance.now();
+      for (let index = 0; index < 1000; index++) {
+        native.changeCount();
+      }
+      console.log(
+        `pasteboard changeCount: ${((performance.now() - started) / 1000).toFixed(4)} ms per read`,
+      );
+      // A write made before the wait starts must not resolve it.
+      adapter.writeText("earlier write");
       const own = adapter.waitForChange();
+      let settled = false;
+      void own.then(() => {
+        settled = true;
+      });
+      await Bun.sleep(300);
+      expect(settled).toBe(false);
       adapter.writeText("own write");
       const ownChange = await own;
-      expect(ownChange.sequence).toBeGreaterThan(before);
+      expect(ownChange.sequence).toBeGreaterThan(before + 1);
       expect(ownChange.sequence).toBeLessThanOrEqual(0xffff_ffff);
       const external = adapter.waitForChange();
       other.write([
@@ -469,6 +488,7 @@ test.skipIf(
         ownChange.changedAt,
       );
       expect(events.map(([event]) => event)).toEqual([
+        "clipboard.changed",
         "clipboard.changed",
         "clipboard.changed",
       ]);
