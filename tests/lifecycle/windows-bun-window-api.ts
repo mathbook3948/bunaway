@@ -1467,7 +1467,7 @@ if (!process.argv.includes("--child")) {
     assert.equal(windowCreations, 3);
     assert.equal(report.revokedDocuments, true);
     console.log(
-      "PASS Windows public window API: identity lookup, navigation identity preservation, native recreation identity replacement, destroyed and normal state, size constraints, GetDpiForWindow scaling at the current monitor, maximize and restore, fullscreen visibility, geometry, close refusal, recreation with options, fresh sessions and revoked documents",
+      "PASS Windows public window API: window identity, navigation identity preservation, native recreation identity replacement, destroyed and normal state, size constraints, GetDpiForWindow scaling at the current monitor, maximize and restore, fullscreen visibility, geometry, close refusal, recreation with options, fresh sessions and revoked documents",
     );
   } finally {
     clearTimeout(timeout);

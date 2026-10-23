@@ -619,14 +619,14 @@ export const windowReadinessSchema = {
   additionalProperties: false,
 } as const;
 /**
- * One lifetime transition of a single windowId, delivered to every open view whose policy allows
- * `windows.lifecycle` and `windows.listInstances`.
+ * One lifetime transition of a single windowId, delivered to the open document when its policy allows
+ * `windows.lifecycle` and `windows.getSnapshot`.
  *
  * - `created`: the native window and its WebView controller exist.
  * - `ready`: the window's first document reached readiness `ready`; later navigations do not repeat it.
  *   Not emitted when preparation fails or is cancelled.
- * - `closed`: the close was committed and its sessions were revoked, including children closed with a
- *   parent, forced closes and the previous windowId of a recreation.
+ * - `closed`: the close was committed and its sessions were revoked, including forced closes and the
+ *   previous windowId of a recreation.
  * - `destroyed`: the native window and WebView resources were released, always after `closed`.
  *
  * Each phase is emitted at most once per windowId in that order. A window whose creation failed before
@@ -663,8 +663,7 @@ export const windowLifecycleSchema = {
  * windowId and increasing, so a late answer to an earlier request is rejected.
  *
  * Covers the title bar, Alt+F4 and system menu, WebView `window.close()` and the public `windows.close`.
- * It is not sent for recreation, splashscreen handoff, trusted `windows.destroy`, closing children with a
- * parent, app quit, shutdown or session end, nor when `closeBehavior` hides the window. While a request is
+ * It is not sent for recreation, trusted `windows.destroy`, app quit, shutdown or session end, nor when `closeBehavior` hides the window. While a request is
  * pending, further user closes of that window are ignored while `windows.close` and `windows.recreate`
  * fail with BUSY and the wait continues. There is no deadline; a navigation or revoked session of the
  * document, the document ending its last `windows.closeRequested` subscription (for example after a
@@ -1105,8 +1104,9 @@ export const windowOperations = {
   },
   /**
    * Backend subscription to `windows.lifecycle`: resolves with the next phase of any window lifetime,
-   * or with the first retained phase after `after` (a `sequence` from an earlier result), so a loop
-   * that passes each result's `sequence` back misses no phase. Backend only and without a permission
+   * or with the first retained phase after `after` (a `sequence` from an earlier result). A loop that
+   * passes each result's `sequence` back sees every phase while it keeps up with the retained history; a
+   * jump in `sequence` means older phases were dropped. Backend only and without a permission
    * check, since it only reports that a window appeared or ended. Phases are not sent once shutdown starts.
    */
   "windows.waitForLifecycle": {

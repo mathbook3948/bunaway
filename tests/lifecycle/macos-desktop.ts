@@ -440,47 +440,33 @@ try {
   await mkdir(resolve(assets, "web"), {
     recursive: true,
   });
-  const views = [
-    "main",
-  ];
   const app = {
     appId: "tests.macos.desktop",
-    windows: views.map((view) => ({
-      view,
-      home: `https://app.bunaway.local/${view}.html`,
-      title: view,
-      window: {
-        width: 500,
-        height: 400,
-      },
-    })),
+    view: "main",
+    home: "https://app.bunaway.local/main.html",
+    title: "main",
+    window: {
+      width: 500,
+      height: 400,
+    },
   };
   /** `main` is asked about its closes. */
-  const viewPolicies: Record<
-    string,
-    {
-      commands: string[];
-      events: string[];
-      permissions: string[];
-    }
-  > = {
-    main: {
-      commands: [
-        "test.scenario",
-        "test.log",
-        "test.vetoed",
-        "test.pendingClose",
-        "plugin.windows.respondClose",
-      ],
-      events: [
-        "windows.closeRequested",
-      ],
-      permissions: [
-        // test.pendingClose runs in main's command context and probes windows.close there.
-        "windows.close",
-        "windows.respondClose",
-      ],
-    },
+  const viewPolicy = {
+    commands: [
+      "test.scenario",
+      "test.log",
+      "test.vetoed",
+      "test.pendingClose",
+      "plugin.windows.respondClose",
+    ],
+    events: [
+      "windows.closeRequested",
+    ],
+    permissions: [
+      // test.pendingClose runs in main's command context and probes windows.close there.
+      "windows.close",
+      "windows.respondClose",
+    ],
   };
   const policy = {
     version: 1,
@@ -493,11 +479,9 @@ try {
         "windows.recreate",
       ],
     },
-    views: views.map((id) => {
-      const viewPolicy = viewPolicies[id];
-      assert(viewPolicy, id);
-      return {
-        id,
+    views: [
+      {
+        id: "main",
         origins: [
           "https://app.bunaway.local",
         ],
@@ -506,8 +490,8 @@ try {
         host: {
           permissions: viewPolicy.permissions,
         },
-      };
-    }),
+      },
+    ],
   };
   await writeJson(resolve(assets, "manifest.json"), {
     format: 1,
@@ -556,12 +540,10 @@ try {
   for (const output of web.outputs) {
     await Bun.write(output.path, await output.arrayBuffer());
   }
-  for (const view of views) {
-    await Bun.write(
-      resolve(assets, "web", `${view}.html`),
-      '<!doctype html><title>Desktop</title><script type="module" src="web.js"></script>',
-    );
-  }
+  await Bun.write(
+    resolve(assets, "web", "main.html"),
+    '<!doctype html><title>Desktop</title><script type="module" src="web.js"></script>',
+  );
   const executable = resolve(directory, "bunaway-host");
   await compileMacosApp(assets, process.execPath, executable, bundled);
   const inventory: Record<string, string> = {};

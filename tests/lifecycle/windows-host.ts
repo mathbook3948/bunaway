@@ -224,27 +224,11 @@ try {
     assert.equal(await errors, "");
   });
 
-  await test("multi-view windows share one backend with per-view policy", async () => {
+  await test("the app window runs the full host suite on one backend", async () => {
     await resetData();
     const child = launch();
     try {
-      // The writable editor view saves first; the read-only reader view waits on
-      // the allowed memo.saved event inside its checks.
-      const editorReport = await reportFile("editor.json");
-      for (const r of editorReport.results) {
-        assert.equal(r.ok, true, r.name);
-      }
-      const readerReport = await reportFile("reader.json");
-      // Diagnostic packets may be dropped at capacity. The page checks the
-      // actual permission errors and reports them through an allowed command.
-      assertReport(readerReport, [
-        "save denied for read-only view",
-        "unlisted event listen denied",
-        "write command denied for read-only view",
-        "log.write denied for this view",
-      ]);
-      // Document loading is independent per view; require every actual session,
-      // rather than infer main readiness from the faster reader's report.
+      // Require the actual session of the app's view.
       await waitLog(
         (entry) => entry.event === "session-open" && entry.viewId === "main",
       );
@@ -254,158 +238,25 @@ try {
         event: string,
         extra: (e: LogEntry) => boolean = () => true,
       ) => log1.filter((entry) => entry.event === event && extra(entry)).length;
-      assert.ok(count("host-started") === 1, "one backend for all windows");
+      assert.ok(count("host-started") === 1, "one backend for the window");
       assert.ok(count("webview-ready", (e) => e.view === "main") >= 1);
-      assert.ok(count("webview-ready", (e) => e.view === "editor") >= 1);
-      assert.ok(count("webview-ready", (e) => e.view === "reader") >= 1);
       assert.ok(count("session-open", (e) => e.viewId === "main") >= 1);
-      assert.ok(count("session-open", (e) => e.viewId === "editor") >= 1);
-      assert.ok(count("session-open", (e) => e.viewId === "reader") >= 1);
-      // The denied write must not exist.
-      assert.equal(
-        existsSync(join(dataRoot, "data", "notes", "reader.txt")),
-        false,
-      );
-      // test.changed is only allowed for the main view: event deliveries must
-      // never reach editor/reader sessions.
+      // test.changed and memo.saved are allowed for the main view and must never be delivered to a
+      // session outside it.
       const mainCtxs = contextsOf(log1, "main");
       for (const entry of log1.filter(
         (e) =>
           e.event === "web-delivered" &&
           e.kind === "event" &&
-          e.name === "test.changed",
+          (e.name === "test.changed" || e.name === "memo.saved"),
       )) {
         assert.ok(
           mainCtxs.has(entry.context),
-          "test.changed left the main view",
+          `${entry.name} delivered outside the main view`,
         );
       }
-      const readerCtxs = contextsOf(log1, "reader");
-      const editorCtxs = contextsOf(log1, "editor");
-      const savedDeliveries = log1.filter(
-        (e) =>
-          e.event === "web-delivered" &&
-          e.kind === "event" &&
-          e.name === "memo.saved",
-      );
-      // memo.saved is allowed for editor and reader; both subscribed views must
-      // have received the broadcast by the time reader reported.
-      for (const ctxs of [
-        editorCtxs,
-        readerCtxs,
-      ]) {
-        assert.ok(
-          savedDeliveries.some((e) => ctxs.has(e.context)),
-          "memo.saved missed an allowed view",
-        );
-      }
-      for (const entry of savedDeliveries) {
-        assert.ok(
-          mainCtxs.has(entry.context) ||
-            editorCtxs.has(entry.context) ||
-            readerCtxs.has(entry.context),
-          "memo.saved delivered outside declared views",
-        );
-      }
-      // The reader view closed its own window after reporting: sibling views and
-      // the backend keep running. Its pending invoke (leaving-1) settles after
-      // the revoke; the backend drops the reply for the dead session and the
-      // host must never deliver anything to the revoked context again.
-      await waitLog(
-        (e) => e.event === "view-window-closed" && e.view === "reader",
-      );
-      assert.equal(
-        child.exitCode,
-        null,
-        "host exited while sibling windows are open",
-      );
-      const readerCtx = [
-        ...contextsOf(await hostLog(), "reader"),
-      ].pop();
-      assert.ok(readerCtx, "reader session-open context missing");
-      const afterClose = await hostLog();
-      const revokeIndex = afterClose.findIndex(
-        (e) => e.event === "revoke" && e.context === readerCtx,
-      );
-      assert.ok(revokeIndex >= 0, "reader revoke missing");
-      assert.equal(
-        afterClose
-          .slice(revokeIndex + 1)
-          .some((e) => e.event === "web-delivered" && e.context === readerCtx),
-        false,
-        "revoked session still received deliveries",
-      );
 
-      // Kill the editor view's renderer processes only. The view must revoke its
-      // session and recover alone; other views and Bun must keep running.
-      // Wait for main's intentional navigation first so its unrelated revoke
-      // cannot be mistaken for propagation from the editor crash.
-      await reportFile("report3.json");
-      const pids = await rendererPids(dataRoot, "editor");
-      assert.ok(pids.length > 0, "editor renderer missing");
-      const beforeCrash = (await hostLog()).length;
-      await rm(join(dataRoot, "temp", "editor.json"));
-      for (const pid of pids) {
-        const killer = Bun.spawn(
-          [
-            "taskkill",
-            "/F",
-            "/PID",
-            String(pid),
-          ],
-          {
-            stdout: "pipe",
-            stderr: "pipe",
-          },
-        );
-        assert.equal(
-          await killer.exited,
-          0,
-          "editor renderer termination failed",
-        );
-      }
-      await waitLog(
-        (e) => e.event === "webview-process-failed" && e.view === "editor",
-        30000,
-      );
-      const recovered = await reportFile("editor.json");
-      for (const r of recovered.results) {
-        assert.equal(r.ok, true, `editor recovery: ${r.name}`);
-      }
-      const recovery = (await hostLog()).slice(beforeCrash);
-      assert.ok(
-        recovery.some(
-          (e) =>
-            e.event === "revoke" &&
-            e.reason === "process-failed" &&
-            e.view === "editor",
-        ),
-        "editor session not revoked on renderer failure",
-      );
-      assert.ok(
-        recovery.some(
-          (e) => e.event === "session-open" && e.viewId === "editor",
-        ),
-        "editor did not reopen its session",
-      );
-      assert.equal(
-        recovery.some((e) => e.event === "host-started"),
-        false,
-        "renderer failure restarted Bun",
-      );
-      assert.equal(
-        recovery.some((e) => e.event === "revoke" && e.view !== "editor"),
-        false,
-        "renderer failure touched another view's session",
-      );
-      assert.equal(
-        child.exitCode,
-        null,
-        "host exited on single-view renderer failure",
-      );
-
-      // The main view finishes its suite, then navigates to page2: that view's
-      // revoke/reopen must not touch other views.
+      // The main view finishes its suite, then navigates to page2.
       const report = await reportFile("report.json");
       assertReport(report, [
         "denied command",
@@ -473,8 +324,7 @@ try {
         "view label missing on view log entries",
       );
 
-      // Closing the last windows must shut the shared backend down and drain
-      // the Job Object cleanly.
+      // Closing the window must shut the backend down and drain the Job Object cleanly.
       const started = log.find((e) => e.event === "host-started");
       assert.ok(started, "host-started missing");
       const childPid = started.pid as number;

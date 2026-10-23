@@ -63,13 +63,9 @@ if (location.pathname === "/denied.html") {
       },
     },
   );
-  const initial = await windows.getSnapshot({
-    view: "main",
-  });
+  const initial = await windows.getSnapshot();
   const { phase, snapshot } = await client.invoke("test.exercise", null);
-  const recovered = await windows.getSnapshot({
-    view: "main",
-  });
+  const recovered = await windows.getSnapshot();
   if (
     initial.windowId !== snapshot.windowId ||
     recovered.windowId !== snapshot.windowId ||

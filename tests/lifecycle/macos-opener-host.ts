@@ -39,8 +39,6 @@ try {
   });
   const commands = [
     "test.report",
-    "test.denied",
-    "test.wait",
     "plugin.windows.close",
     ...[
       "openUrl",
@@ -49,51 +47,42 @@ try {
       "openFileWith",
     ].map((name) => `plugin.opener.${name}`),
   ];
-  const windows = [
-    "main",
-    "denied",
-  ].map((view) => ({
-    view,
-    home: `https://app.bunaway.local/${view}.html?file=${encodeURIComponent(receiver?.sample ?? "")}`,
-    title: `Opener ${view}`,
-    window: {
-      width: 500,
-      height: 400,
-    },
-  }));
   await writeJson(resolve(assets, "manifest.json"), {
     format: 1,
     app: {
       appId: "tests.macos.opener",
       title: "Opener",
-      windows,
+      view: "main",
+      home: `https://app.bunaway.local/main.html?file=${encodeURIComponent(receiver?.sample ?? "")}`,
+      window: {
+        width: 500,
+        height: 400,
+      },
     },
     policy: {
       version: 1,
       backend: {
         permissions: [],
       },
-      views: windows.map(({ view }) => ({
-        id: view,
-        origins: [
-          "https://app.bunaway.local",
-        ],
-        commands,
-        events: [],
-        host: {
-          permissions: [
-            "windows.close",
-            ...(view === "main"
-              ? [
-                  "opener.openFile",
-                  "opener.revealFile",
-                  "opener.openUrl",
-                  "opener.openFileWith",
-                ]
-              : []),
+      views: [
+        {
+          id: "main",
+          origins: [
+            "https://app.bunaway.local",
           ],
+          commands,
+          events: [],
+          host: {
+            permissions: [
+              "windows.close",
+              "opener.openFile",
+              "opener.revealFile",
+              "opener.openUrl",
+              "opener.openFileWith",
+            ],
+          },
         },
-      })),
+      ],
     },
     plugins: [],
     developmentSdk: {},
@@ -126,7 +115,6 @@ try {
   }
   for (const view of [
     "main",
-    "denied",
   ]) {
     await Bun.write(
       resolve(assets, "web", `${view}.html`),
@@ -199,7 +187,6 @@ try {
       "openUrl.http",
       "openUrl.https",
     ],
-    denied: true,
     unsupported: "openFileWith",
     cancelled: true,
   });

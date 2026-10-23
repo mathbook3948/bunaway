@@ -4,7 +4,6 @@
 `window-readiness.ts`가 기존 windowId와 ViewBoundary 세대별 상태를 소유하고 UI Worker가
 기존 native-event 경로로 권한이 있는 구독자에게 보낸다. 최초 네이티브 완료는 WebView2 생성 전에 발행한다.
 `visible: false`와 `showWhenReady`는 HWND를 처음부터 숨겨서 만들며 준비 중 활성화하지 않는다.
-앱이 요청하는 splashscreen 전환은 주 창 표시 후 splash 닫기를 확정하므로 중간에 마지막 창이 사라지지 않는다.
 공개 계약과 실패, 취소 및 기한은 [창 API](../../../docs/site/src/content/docs/reference/host/windows.mdx)를 따른다.
 
 번들 Bun 1.4.2가 앱 진입점이다. 메인은 기존 `createCore`와 앱을 실행하고,
@@ -192,7 +191,7 @@ SDK는 시작 시의 공통 번들을 재사용하며 계약, 플러그인 객�
 
 ## Public window operations
 
-The CLI accepts an `app.windows` catalog with one unique policy view per window.
+The CLI accepts one window definition in `app` and exactly one policy view.
 상태 변경 `minimize`, `maximize`, `unmaximize`, `restore`, `toggleMaximize`와
 조회 `isMinimized`, `isMaximized`, `isFullscreen`, `isVisible`, `isFocused`도 선택 창 플러그인이
 제공한다. UI Worker의 실제 HWND를 사용하며 조회도 해당 operation 이름을 허용해야 한다.
@@ -234,11 +233,7 @@ Close confirmation uses a native Yes/No dialog with No selected by default.
 WM_CLOSE and WebView close requests defer confirmation outside native callbacks.
 Window close operations also honor close-to-tray and last-window quit vetoes.
 Recreation bypasses those app quit controls while preserving close confirmation.
-Windows의 `setParent`는 현재 `windowId`로 최상위 owner 관계를 맺는다.
-모달 자식은 부모 입력을 차단하며 여러 모달의 마지막 자원 정리 뒤 이전 enabled 상태를 복원한다.
-부모 종료는 모든 자식의 확인을 먼저 검사하고 자식 세션, WebView와 HWND 정리 뒤 부모를 해제한다.
-신뢰된 백엔드 `destroy`는 별도 대상 권한으로 확인과 종료 취소를 우회한다.
-`tests/lifecycle/windows-owned-modal.ts`는 실제 UI Worker와 WebView2로 해당 종료 경쟁을 검사한다.
+신뢰된 백엔드 `destroy`는 별도 권한으로 확인과 종료 취소를 우회한다.
 Deferred and recreated windows inherit the verified development DevTools setting.
 Shutdown bypasses confirmation.
 Browser process failure also closes the affected window without confirmation.
@@ -247,49 +242,32 @@ part of `tests/lifecycle/run-native.ts` and covers native geometry, close refusa
 dynamic creation, fresh sessions and self-recreation. It passed in PR #40's
 Windows CI run 37574470840. The full native job failed on the shared capability
 fixture's old four-operation expectation, which now checks the complete catalog.
-The browser-failure regression also passed locally on Windows on 2026-10-07.
 
 앱 정의의 `desktop.onOpen`은 초기 실행과 두 번째 실행의 인자, URL, 파일을 받는다.
 `desktop.beforeQuit`는 마지막 창, 트레이, 앱의 종료 요청을 취소할 수 있다.
 `desktop.closeBehavior: "hide"`와 `desktop.tray: { tooltip: "Memo" }`를 함께 지정하면
 닫기 버튼으로 창을 숨기고 백엔드, WebView, 세션을 유지한다. 트레이 Open 또는
-두 번째 실행으로 살아 있는 모든 창을 복원하며 Quit은 종료 검사를 거친다. 기본값은 마지막 창 닫기로 종료다.
+두 번째 실행은 새로 만든 창을 표시하며 Quit은 종료 검사를 거친다. 기본값은 마지막 창 닫기로 종료다.
 URL scheme과 파일 확장자의 OS 등록은 제공하지 않으며 실행기에 전달된 인자를 처리한다.
 GUI 실행 파일은 `-Wait`, `-- -draft.txt`와 `-Verbose`를 포함한 모든 인자를 그대로 전달한다.
 배포 EXE는 인자와 작업 디렉터리를 직접 읽는다. Windows와 호출 셸의 명령줄 길이 제한을 따른다.
 개발 CLI의 재시작과 종료는 종료 취소와 숨김을 우회하며 코어, 플러그인 StopHook과 Worker를 정리한다.
-`app.windows: []`와 모든 선언의 `startup: false`는 트레이 또는 `closeBehavior: "keep-alive"`를 요구한다.
-keep-alive는 마지막 창을 실제로 정리한 뒤에도 백엔드를 유지한다. Open과 show는 살아 있는 창을
-복원하거나 첫 사전 선언 창을 생성한다. 빈 선언 배열이면 창은 만들지 않는다.
+`app.startup: false`는 트레이 또는 `closeBehavior: "keep-alive"`를 요구한다.
+keep-alive는 창을 실제로 정리한 뒤에도 백엔드를 유지한다. Open과 show는 창이 있으면
+복원하고 없으면 새로 만든다. `startup: false`이면 시작할 때 창은 만들지 않는다.
 트레이 없는 상주 앱은 숨긴 제어 HWND를 소유해 CLI 종료 메시지를 받고 정상 종료 때 정리한다.
 [데스크톱 수명주기 결정](../../../docs/decisions/0013-desktop-lifecycle.md).
 
-## 같은 뷰의 창 인스턴스
+## 창 수명
 
-`app.windows`는 뷰마다 생성 정의 하나를 유지한다. single이 기본값이며 multiple은
-maxInstances를 요구한다. UI의 자원 Map, 닫기와 재생성 예약은 내부 인스턴스 키로
-구분하고 네이티브 ID는 HWND 수명마다 발급한다. 서버 응답은 인증된 컨텍스트로
-ViewBoundary를 찾은 뒤 viewId와 문서 세대를 확인한다. viewId만으로 창을 선택하지 않는다.
+앱은 창 정의 하나를 가진다. UI의 자원 Map, 닫기와 재생성 예약은 하나의 창 수명을 기준으로
+관리하고 네이티브 ID는 HWND 수명마다 발급한다. 서버 응답은 인증된 컨텍스트로
+ViewBoundary를 찾은 뒤 viewId와 문서 세대를 확인한다.
 
-`webview.ts`의 프로필별 소유자 그룹은 environment 하나와 창별 controller를 관리한다.
-첫 창을 닫아도 남은 controller의 환경을 유지한다. 마지막 controller의 정리만
-브라우저 및 자식 프로세스 종료를 기다리고 그룹의 COM 참조와 DLL을 해제한다.
-`window-profiles.ts`는 영속 shared 경로와 임시 isolated 경로를 소유한다. 격리 경로는
-내부 논리 인스턴스에 연결해 새 HWND로 재생성해도 유지하고 최종 종료 뒤 삭제한다.
-파일 잠금이 지속되면 3초 뒤 진단을 남기고 소유 기록과 슬롯을 유지하며 삭제를 재시도한다.
-정리 완료 전 슬롯을 재사용하지 않으며 종료 기한 초과는 실패로 처리한다.
-splashscreen 전환은 최종 종료이므로 isolated 프로필을 보존하지 않는다.
-공유 프로필의 모든 창을 동시에 재생성할 때는 마지막 environment 정리가 끝날 때까지
-교체 예약을 유지한 뒤 각 새 controller를 생성한다.
+`webview.ts`의 소유자 그룹은 environment 하나와 창의 controller를 관리한다.
+controller 정리는 브라우저 및 자식 프로세스 종료를 기다리고 그룹의 COM 참조와 DLL을 해제한다.
 시작 창의 controller 생성 오류는 강제 닫기 예약보다 먼저 확인해 앱 시작 실패로 보고한다.
-실행 중 생성 오류는 해당 인스턴스만 정리하고 호출자에게 반환하며 기존 창은 유지한다.
-
-선언과 앱 전체 창 상한은 별도이며 활성, 예약과 정리 중인 자원은 128개 이내다.
-공개 목록은 살아 있는 창만 노출하고 숨김 및 WebView 준비 중인 HWND도 포함한다.
-트레이 열기는 선언 순서와 생성 순서의 첫 살아 있는 창을 복원한다. 창이 없으면
-첫 선언에서 하나만 생성한다. 실제 회귀는 `windows-multiple-windows.ts`를
-`mise run host:windows`와 windows-native CI에서 실행한다.
-
+실행 중 생성 오류는 해당 창만 정리하고 호출자에게 반환한다.
 
 ## 모니터 조회
 

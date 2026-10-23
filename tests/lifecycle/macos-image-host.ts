@@ -36,8 +36,6 @@ import { defineApp } from ${JSON.stringify(backend)};
 import image from ${JSON.stringify(image)};
 import windows from ${JSON.stringify(windows)};
 let setupId;
-let sharedId;
-let deniedResult;
 export default defineApp({ modules: [], plugins: [image, windows, {
   name: "image-setup", version: "1", async setup() {
     setupId = (await image.createRGBA({ width: 0, height: 0, rgba: "" })).id;
@@ -62,16 +60,6 @@ export default defineApp({ modules: [], plugins: [image, windows, {
     await Bun.write(process.env.TMPDIR + "/report.json", JSON.stringify({ ok: false, error }));
     return null;
   } },
-  "test.id": { input: { const: null }, output: { type: "string" }, async run(_input, context) {
-    const deadline = Date.now() + 10000;
-    while (!sharedId) {
-      if (context.signal.aborted) throw new Error("Image caller was cancelled.");
-      if (Date.now() > deadline) throw new Error("Image creation did not reach the I/O worker.");
-      await Bun.sleep(5);
-    }
-    return sharedId;
-  } },
-  "test.denial": { input: { type: "boolean" }, output: { const: null }, run(value) { deniedResult = value; return null; } },
   "test.image": { input: { const: null }, output: { const: true }, async run() {
     try {
       assert(setupId, "Backend setup must create resources through the I/O worker.");
@@ -80,7 +68,6 @@ export default defineApp({ modules: [], plugins: [image, windows, {
       await assert.rejects(image.createBytes({ mime: "image/png", data: "AA==" }), { code: "INVALID_ARGUMENT" });
       const pixels = { width: 2, height: 1, rgba: Buffer.from([255,0,0,128,17,31,63,0]).toString("base64") };
       const source = await image.createRGBA(pixels);
-      sharedId = source.id;
       assert.deepEqual({ ...await image.getPixels({ id: source.id }) }, pixels);
       const png = await image.exportBytes({ id: source.id, format: "image/png" });
       const restored = await image.createBytes(png);
@@ -109,17 +96,11 @@ export default defineApp({ modules: [], plugins: [image, windows, {
       const fileIcon = await image.createFileTypeIcon({ extension: ".txt", size: "normal" });
       assert.deepEqual({ ...fileIcon, id: undefined }, { id: undefined, width: 32, height: 32, empty: false });
       assert.equal(await image.dispose({ id: fileIcon.id }), true);
-      const deniedDeadline = Date.now() + 10000;
-      while (deniedResult === undefined) {
-        if (Date.now() > deniedDeadline) throw new Error("Read-only view did not complete its permission checks.");
-        await Bun.sleep(5);
-      }
-      assert.equal(deniedResult, true, "Read-only view must allow getInfo and deny getPixels for the same app-owned ID.");
       for (const resource of [source, restored, cropped, nearest, solid, linear, opaque]) {
         assert.equal(await image.dispose({ id: resource.id }), true);
         assert.equal(await image.dispose({ id: resource.id }), false);
       }
-      console.log("PASS real host image setup, codecs, transforms, independent view grants and disposal");
+      console.log("PASS real host image setup, codecs, transforms, disposal");
       return true;
     } catch (error) {
       await Bun.write(process.env.TMPDIR + "/report.json", JSON.stringify({ ok: false, error: String(error), code: error?.code }));
@@ -144,32 +125,17 @@ export default defineApp({ modules: [], plugins: [image, windows, {
     "resize",
     "createFileTypeIcon",
   ];
-  const specs = [
-    {
-      view: "main",
-      home: "https://app.bunaway.local/main.html",
-      title: "Image host fixture",
-      window: {
-        width: 400,
-        height: 300,
-      },
-    },
-    {
-      view: "reader",
-      home: "https://app.bunaway.local/reader.html",
-      title: "Read-only image view",
-      window: {
-        width: 300,
-        height: 200,
-      },
-    },
-  ];
   await writeJson(resolve(assets, "manifest.json"), {
     format: 1,
     app: {
       appId,
       title: "Image host fixture",
-      windows: specs,
+      view: "main",
+      home: "https://app.bunaway.local/main.html",
+      window: {
+        width: 400,
+        height: 300,
+      },
     },
     policy: {
       version: 1,
@@ -199,26 +165,6 @@ export default defineApp({ modules: [], plugins: [image, windows, {
             ],
           },
         },
-        {
-          id: "reader",
-          origins: [
-            "https://app.bunaway.local",
-          ],
-          commands: [
-            "test.id",
-            "test.denial",
-            "plugin.image.getInfo",
-            "plugin.image.getPixels",
-            "plugin.windows.close",
-          ],
-          events: [],
-          host: {
-            permissions: [
-              "image.getInfo",
-              "windows.close",
-            ],
-          },
-        },
       ],
     },
     plugins: [],
@@ -230,40 +176,27 @@ export default defineApp({ modules: [], plugins: [image, windows, {
     `import { createClient } from ${JSON.stringify(client)};
 import image from ${JSON.stringify(image)};
 import windows from ${JSON.stringify(windows)};
-const close = async (view) => {
-  try { await windows.close({ view }); } catch (error) {
+const close = async () => {
+  try { await windows.close(); } catch (error) {
     if (error?.code !== "CANCELLED") throw error;
   }
 };
 const client = createClient();
-if (location.pathname === "/reader.html") {
-  let ok = false;
-  try {
-    const id = await client.invoke("test.id", null);
-    let denied = false;
-    try { await image.getPixels({ id }); } catch (error) { denied = error?.code === "PERMISSION_DENIED"; }
-    if (!denied) throw new Error("Read-only getPixels permission was not enforced.");
-    const info = await image.getInfo({ id });
-    if (info.width !== 2 || info.height !== 1 || info.empty) throw new Error("Read-only getInfo cannot see the app-owned ID.");
-    ok = true;
-  } finally { await client.invoke("test.denial", ok); await close("reader"); }
-} else {
-  try {
-    await client.invoke("test.image", null);
-    const controller = new AbortController();
-    const pending = image.createRGBA({ width: 1, height: 1, rgba: "CAcGBQ==" }, { signal: controller.signal }).then(
-      () => false, (error) => error?.code === "CANCELLED"
-    );
-    const id = await client.invoke("test.created", null);
-    controller.abort();
-    if (!await pending) throw new Error("Held image creation was not cancelled.");
-    let discarded = false;
-    try { await image.getInfo({ id }); } catch (error) { discarded = error?.code === "INVALID_ARGUMENT"; }
-    if (!discarded) throw new Error("Undelivered image resource survived cancellation during synchronous I/O.");
-    await client.invoke("test.complete", null);
-  } catch (error) { await client.invoke("test.failure", String(error)); }
-  finally { await close("main"); }
-}
+try {
+  await client.invoke("test.image", null);
+  const controller = new AbortController();
+  const pending = image.createRGBA({ width: 1, height: 1, rgba: "CAcGBQ==" }, { signal: controller.signal }).then(
+    () => false, (error) => error?.code === "CANCELLED"
+  );
+  const id = await client.invoke("test.created", null);
+  controller.abort();
+  if (!await pending) throw new Error("Held image creation was not cancelled.");
+  let discarded = false;
+  try { await image.getInfo({ id }); } catch (error) { discarded = error?.code === "INVALID_ARGUMENT"; }
+  if (!discarded) throw new Error("Undelivered image resource survived cancellation during synchronous I/O.");
+  await client.invoke("test.complete", null);
+} catch (error) { await client.invoke("test.failure", String(error)); }
+finally { await close(); }
 `,
   );
   const web = await Bun.build({
@@ -277,12 +210,10 @@ if (location.pathname === "/reader.html") {
   for (const output of web.outputs) {
     await Bun.write(output.path, await output.arrayBuffer());
   }
-  for (const spec of specs) {
-    await Bun.write(
-      resolve(assets, "web", `${spec.view}.html`),
-      '<!doctype html><title>Image host fixture</title><script type="module" src="web.js"></script>',
-    );
-  }
+  await Bun.write(
+    resolve(assets, "web", "main.html"),
+    '<!doctype html><title>Image host fixture</title><script type="module" src="web.js"></script>',
+  );
   const installed = await installedPlugins(root, "0.0.0");
   const imageEntry = installed.find((plugin) => plugin.name === "image");
   assert(imageEntry?.targets.macos, "Installed image I/O adapter must exist.");
@@ -433,9 +364,7 @@ export default { _definition: { ...definition, nativePlatforms: { ...definition.
     records
       .filter((record) => record.event === "window-closed")
       .map((record) => record.view),
-    [
-      "reader",
-    ],
+    [],
   );
   const mainRevoked = records.findIndex(
     (record) =>

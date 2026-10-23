@@ -27,7 +27,7 @@ const windowsOperation =
 const themeChange = z.strictObject({
   theme: themePreferenceSchema.nullable(),
 });
-/** App and cross-window frame control belongs to trusted backend calls, with independent grants. */
+/** App and window frame control belongs to trusted backend calls, with independent grants. */
 function backend(source: string) {
   if (source !== "backend") {
     throw new BunawayError({

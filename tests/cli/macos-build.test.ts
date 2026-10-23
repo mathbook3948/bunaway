@@ -154,23 +154,6 @@ test.skipIf(!macos)(
       expect(await install.exited, await errors).toBe(0);
       const configPath = resolve(project, "src-bunaway/bunaway.json");
       const config = await Bun.file(configPath).json();
-      const main = {
-        view: config.app.view,
-        home: config.app.home,
-        title: config.app.title,
-        window: config.app.window,
-      };
-      config.app.windows = [
-        main,
-        {
-          ...main,
-          view: "lazy",
-          startup: false,
-        },
-      ];
-      delete config.app.view;
-      delete config.app.home;
-      delete config.app.window;
       const policyPath = resolve(project, "src-bunaway/policy.json");
       const policy = await Bun.file(policyPath).json();
       policy.backend.permissions = [];
@@ -181,10 +164,6 @@ test.skipIf(!macos)(
       policy.views[0].host = {
         permissions: [],
       };
-      policy.views.push({
-        ...policy.views[0],
-        id: "lazy",
-      });
       await Bun.write(policyPath, JSON.stringify(policy));
       await Bun.write(configPath, JSON.stringify(config));
       await Bun.write(
@@ -197,9 +176,7 @@ test.skipIf(!macos)(
       const verified = await verifyMacosPackage(built.package);
       expect(verified.windows.map((spec) => spec.view)).toEqual([
         "main",
-        "lazy",
       ]);
-      expect(verified.windows[1]?.startup).toBe(false);
       expect(built.executable).toEndWith("Contents/MacOS/bunaway-host");
       const manifest = await Bun.file(
         resolve(built.package, "manifest.json"),

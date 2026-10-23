@@ -1,6 +1,6 @@
 import { mkdir, rename, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type CommandContext, defineApp } from "@bunaway/backend";
+import { defineApp } from "@bunaway/backend";
 import capabilities from "@bunaway/plugin-capabilities";
 import log from "@bunaway/plugin-log";
 import windows from "@bunaway/plugin-windows";
@@ -10,7 +10,6 @@ const temporary = process.env.TMPDIR;
 if (!dataRoot || !temporary) {
   throw new Error("Missing fixture host directories.");
 }
-let denied = false;
 
 export default defineApp({
   modules: [],
@@ -34,35 +33,6 @@ export default defineApp({
     },
   ],
   commands: {
-    "test.denied": {
-      input: {
-        const: null,
-      },
-      output: {
-        const: null,
-      },
-      async run() {
-        denied = true;
-        return null;
-      },
-    },
-    "test.waitDenied": {
-      input: {
-        const: null,
-      },
-      output: {
-        const: null,
-      },
-      async run(_value: unknown, context: CommandContext) {
-        while (!denied) {
-          if (context.signal.aborted) {
-            throw new Error("Cancelled wait.");
-          }
-          await Bun.sleep(5);
-        }
-        return null;
-      },
-    },
     "test.writeFailure": {
       input: {
         const: null,

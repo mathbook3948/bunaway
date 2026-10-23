@@ -111,20 +111,15 @@ SDK 기한 초과 및 전환 중 마지막 창 종료 억제를 확인했다.
 이전 ID 조회, normal과 destroyed 상태, 뷰별 권한 거부를 확인했다. 다중 물리 모니터와
 사용자 입력에 의한 모든 포커스 전환을 검증했다는 뜻은 아니다.
 
-`showInactive`는 숨김만 해제하며 최소화, 최대화 상태와 다른 창의 입력 포커스를 유지한다.
+`showInactive`는 숨김만 해제하며 최소화, 최대화 상태와 다른 프로그램의 입력 포커스를 유지한다.
 `activate`는 표시된 비최소화 창을 지정해 전환하고 실제 전경 여부를 반환한다.
-`blur`는 같은 호출 컨텍스트에서 제어 권한이 있는 적격 앱 창을 설정 순서로 선택한다.
-OS 거부와 후보 없음, 기존 show, hide, focus와의 차이는 [창 API](./site/src/content/docs/reference/host/windows.mdx)의 공개 계약을 따른다.
+OS 거부와 기존 show, hide, focus와의 차이는 [창 API](./site/src/content/docs/reference/host/windows.mdx)의 공개 계약을 따른다.
 실제 두 Win32 창과 입력 필드의 포커스 보존, 전경 전환의 검증 한계는
 [실행 기록](./architecture/windows-bun-results.md)에 구분한다.
 
-2026-10-11 부모와 모달 구현은 main `488f88a`의 네이티브 창 식별자와 준비 계약을
-유지한다. `setParent`, `getParent`, `getOwner`, `getChildren`, `setEnabled`, `isEnabled`와
-백엔드 전용 `destroy`를 제공한다. 일반 close는 확인과 종료 취소를 유지하며,
-destroy는 별도 권한으로 확인을 우회한다. 여러 모달의 차단과 이전 enabled 상태 복원,
-자식부터의 자원 정리, 재생성 중 부모 수명 종료를 처리한다. 초기 설정의 관계 지정과
-child HWND 임베딩은 지원하지 않는다. 계약과 실제 HWND 검증은 통과했으며,
-WebView2 실행 검증 결과와 남은 정리 문제는 [실행 기록](./architecture/windows-bun-results.md)에 구분한다.
+2026-10-11에 구현한 부모와 모달 관계(`setParent`, `getParent`, `getOwner`, `getChildren`)는 ADR 0026의 단일 창 모델에서
+공개 계약을 제거했다. `setEnabled`, `isEnabled`와 백엔드 전용 `destroy`는 대상 없이 유지한다. 일반 close는 확인과 종료 취소를
+유지하며 destroy는 별도 권한으로 확인을 우회한다. 호스트 내부의 관계 구현 정리는 후속 과제다.
 
 ## 02. 창 크기와 위치, 최소 크기와 최대 크기 제약
 
@@ -325,7 +320,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 
 - [x] 창별 메뉴바를 연결, 교체, 조회하고 분리한다.
 - [ ] 앱 전체 기본 메뉴바를 자동으로 연결한다.
-- [x] 메뉴바 visible을 설정하고 조회한다. `menu.setWindowMenuVisible({ windowId, visible })`와 `menu.getWindowMenuVisible({ windowId })`가 창별 값(기본 true)을 다룬다(Electron `setMenuBarVisibility`, `isMenuBarVisible`). 숨기면 `SetMenu(hwnd, NULL)`로 HMENU만 분리하고 트리와 연결은 유지하며, 다시 표시하면 같은 트리를 붙인다. 창 바깥 크기는 그대로이고 내용 영역이 메뉴바 높이만큼 커진다. 숨긴 상태의 연결과 교체도 숨김을 유지하고, 메뉴 없는 창의 값도 저장해 이후 연결에 적용한다. 닫힌 창은 조회할 수 없다. 계약은 `window-menu.test.ts`, 실제 HMENU 분리와 재연결과 내용 영역 크기는 `windows-window-menu.test.ts`가 검증한다.
+- [x] 메뉴바 visible을 설정하고 조회한다. `menu.setWindowMenuVisible({ visible })`와 `menu.getWindowMenuVisible()`이 앱 창의 값(기본 true)을 다룬다(Electron `setMenuBarVisibility`, `isMenuBarVisible`). 숨기면 `SetMenu(hwnd, NULL)`로 HMENU만 분리하고 트리와 연결은 유지하며, 다시 표시하면 같은 트리를 붙인다. 창 바깥 크기는 그대로이고 내용 영역이 메뉴바 높이만큼 커진다. 숨긴 상태의 연결과 교체도 숨김을 유지하고, 메뉴 없는 창의 값도 저장해 이후 연결에 적용한다. 닫힌 창은 조회할 수 없다. 계약은 `window-menu.test.ts`, 실제 HMENU 분리와 재연결과 내용 영역 크기는 `windows-window-menu.test.ts`가 검증한다.
 - [ ] 메뉴바 auto-hide(Alt 키로 임시 표시)를 설정하고 조회한다.
 - [x] 지정 창과 물리 화면 좌표에 컨텍스트 메뉴를 표시하고 선택 또는 취소로 닫는다. AbortSignal 취소로 닫으며 별도 close 작업은 제공하지 않는다.
 - [x] 공유 메뉴 리소스에서 일반, separator, checkbox, radio와 submenu 항목을 제공한다.
@@ -534,8 +529,8 @@ MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이�
 - [x] 폴더 선택, 다중 파일과 폴더 선택을 제공한다.
 - [x] 파일 형식 필터, 기본 경로와 파일 이름, 기본 확장자를 제공한다.
 - [x] 숨긴 파일 표시와 저장 overwrite 확인 옵션을 제공한다. 새 폴더 생성은 OS 기본 UI를 유지하며 Windows에서 끄는 옵션은 지원하지 않는다.
-- [x] 부모 창을 지정해 모달 대화상자를 연결한다.
-- [x] 선택 취소, 호출 취소와 부모 창 종료의 결과를 정의한다.
+- [ ] 부모 창을 지정해 모달 대화상자를 연결한다. 단일 창 모델(ADR 0026)에서 `ownerWindowId`를 제거했다.
+- [x] 선택 취소와 호출 취소의 결과를 정의한다.
 - [x] 선택한 파일 접근 권한의 수명과 영속화 여부를 정의한다.
 - [x] 결정 완료: 인증서 신뢰 확인 대화상자는 제공하지 않는다. Electron `showCertificateTrustDialog`는 인증서 검증 처리기의 인증서 객체가 입력인데 이 프로젝트에는 그 인증서 경로가 없고 Tauri에는 대응 기능이 없다. WebView 인증서 오류와 신뢰 판단은 16절 항목이 소유한다.
 - [x] 결정 완료: 동기 대화상자는 제공하지 않는다. 모든 dialog 작업이 이미 Promise이고 대화상자 중에도 앱 백엔드가 계속 실행되므로 동기 변형을 두지 않는다. 작업 집합은 dialog 계약 테스트가 고정한다.

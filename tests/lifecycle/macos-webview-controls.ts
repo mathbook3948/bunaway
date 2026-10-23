@@ -140,23 +140,17 @@ try {
     "goForward",
     "setZoomFactor",
   ];
-  const specs = [
-    "main",
-  ].map((view) => ({
-    view,
-    home: "https://app.bunaway.local/index.html",
-    title: view,
-    window: {
-      width: 600,
-      height: 400,
-    },
-  }));
   await writeJson(resolve(assets, "manifest.json"), {
     format: 1,
     app: {
       appId: "tests.macos.webview-controls",
       title: "WebView controls",
-      windows: specs,
+      view: "main",
+      home: "https://app.bunaway.local/index.html",
+      window: {
+        width: 600,
+        height: 400,
+      },
     },
     policy: {
       version: 1,
@@ -167,28 +161,30 @@ try {
           "close",
         ].map((name) => `windows.${name}`),
       },
-      views: specs.map(({ view }) => ({
-        id: view,
-        origins: [
-          "https://app.bunaway.local",
-          server.url.origin,
-        ],
-        events: [],
-        commands: [
-          "test.arrived",
-          "test.hold",
-          "test.fragment",
-          "test.spoof",
-          "test.failure",
-          "plugin.windows.getWebViewState",
-          "plugin.windows.reloadWebView",
-        ],
-        host: {
-          permissions: [
-            "windows.getWebViewState",
+      views: [
+        {
+          id: "main",
+          origins: [
+            "https://app.bunaway.local",
+            server.url.origin,
           ],
+          events: [],
+          commands: [
+            "test.arrived",
+            "test.hold",
+            "test.fragment",
+            "test.spoof",
+            "test.failure",
+            "plugin.windows.getWebViewState",
+            "plugin.windows.reloadWebView",
+          ],
+          host: {
+            permissions: [
+              "windows.getWebViewState",
+            ],
+          },
         },
-      })),
+      ],
     },
     plugins: [],
     developmentSdk: {},

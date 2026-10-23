@@ -41,22 +41,15 @@ try {
     await mkdir(resolve(assets, "web"), {
       recursive: true,
     });
-    const views = [
-      "main",
-      "denied",
-    ];
     const app = {
       appId: "tests.macos.appearance",
       title: "Appearance",
-      windows: views.map((view) => ({
-        view,
-        home: `https://app.bunaway.local/${view}.html${backendAllowed ? "" : "?backend-denied"}`,
-        title: `Appearance ${view}`,
-        window: {
-          width: 500,
-          height: 400,
-        },
-      })),
+      view: "main",
+      home: `https://app.bunaway.local/main.html${backendAllowed ? "" : "?backend-denied"}`,
+      window: {
+        width: 500,
+        height: 400,
+      },
     };
     const policy = {
       version: 1,
@@ -67,30 +60,28 @@ try {
             ]
           : [],
       },
-      views: views.map((view) => ({
-        id: view,
-        origins: [
-          "https://app.bunaway.local",
-        ],
-        commands: [
-          "test.backend",
-          "test.inherited",
-          "test.report",
-          "plugin.appearance.getPreferences",
-          "plugin.windows.close",
-        ],
-        events: [],
-        host: {
-          permissions: [
-            "windows.close",
-            ...(view === "main"
-              ? [
-                  "appearance.getPreferences",
-                ]
-              : []),
+      views: [
+        {
+          id: "main",
+          origins: [
+            "https://app.bunaway.local",
           ],
+          commands: [
+            "test.backend",
+            "test.inherited",
+            "test.report",
+            "plugin.appearance.getPreferences",
+            "plugin.windows.close",
+          ],
+          events: [],
+          host: {
+            permissions: [
+              "windows.close",
+              "appearance.getPreferences",
+            ],
+          },
         },
-      })),
+      ],
     };
     await writeJson(resolve(assets, "manifest.json"), {
       format: 1,
@@ -110,12 +101,10 @@ try {
     for (const output of web.outputs) {
       await Bun.write(output.path, await output.arrayBuffer());
     }
-    for (const view of views) {
-      await Bun.write(
-        resolve(assets, "web", `${view}.html`),
-        '<!doctype html><title>Appearance</title><script type="module" src="web.js"></script>',
-      );
-    }
+    await Bun.write(
+      resolve(assets, "web", "main.html"),
+      '<!doctype html><title>Appearance</title><script type="module" src="web.js"></script>',
+    );
     const installed = (await installedPlugins(root, "0.0.0")).filter((plugin) =>
       [
         "appearance",
@@ -241,28 +230,12 @@ try {
       const report = await Bun.file(
         resolve(dataRoot, "temp/report.json"),
       ).json();
-      assert.deepEqual(
-        report.toSorted(
-          (
-            a: {
-              view: string;
-            },
-            b: {
-              view: string;
-            },
-          ) => a.view.localeCompare(b.view),
-        ),
-        [
-          {
-            view: "denied",
-            ok: true,
-          },
-          {
-            view: "main",
-            ok: true,
-          },
-        ],
-      );
+      assert.deepEqual(report, [
+        {
+          view: "main",
+          ok: true,
+        },
+      ]);
       const records = log
         .trim()
         .split("\n")

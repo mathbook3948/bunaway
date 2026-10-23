@@ -1203,7 +1203,7 @@ test("macOS shutdown cancels setup Host calls before waiting for plugin cleanup"
         {name:"cleanup",version:"1.0.0",setup(){return () => Bun.write(${JSON.stringify(marker)},"stopped").then(() => {});}},
         {name:"close",version:"1.0.0",async setup(context){
           const operation = windows._definition.native.operations.find(operation => operation.name === "windows.close");
-          try { await context.host.call(operation, {view:"main"}); }
+          try { await context.host.call(operation, null); }
           catch (error) { await Bun.write(${JSON.stringify(cancelled)}, error.code); throw error; }
         }}
       ]};`,

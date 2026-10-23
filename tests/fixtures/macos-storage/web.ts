@@ -2,12 +2,8 @@ import { createClient } from "@bunaway/client";
 import storage from "@bunaway/plugin-storage";
 import windows from "@bunaway/plugin-windows";
 
-// This fixture is bundled only for the real browser document.
-declare const location: {
-  readonly pathname: string;
-};
 const client = createClient();
-const view = location.pathname.includes("denied") ? "denied" : "main";
+const view = "main";
 let restarted = false;
 function check(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -45,261 +41,230 @@ try {
     })) === "persistent 한글\0✓",
     "Backend setup and restart text.",
   );
-  if (view === "denied") {
-    await rejected(
-      storage.writeText({
-        path: `${root}/denied.txt`,
-        text: "forbidden",
-      }),
-      "PERMISSION_DENIED",
-    );
-    await rejected(
-      client.invoke("test.backendViaView", null),
-      "PERMISSION_DENIED",
-    );
-    await rejected(
-      storage.readDirectory({
-        path: `${root}/directory-fixture`,
-      }),
-      "PERMISSION_DENIED",
-    );
-    await rejected(
-      storage.createDirectory({
-        path: `${root}/denied-directory`,
-      }),
-      "PERMISSION_DENIED",
-    );
-    check(
-      (await storage.readText({
-        path: `${root}/denied.txt`,
-      })) === "preserved",
-      "Denied writes changed data.",
-    );
-  } else {
-    const directory = `${root}/created-directories/parent/child`;
-    await rejected(
-      storage.createDirectory({
-        path: `${root}/missing-default/child`,
-      }),
-      "INVALID_ARGUMENT",
-    );
-    check(
-      !(await storage.exists({
-        path: `${root}/missing-default`,
-      })),
-      "Default recursive must not create parents.",
-    );
-    await storage.createDirectory({
-      path: directory,
-      recursive: true,
-    });
-    await storage.createDirectory({
-      path: directory,
-    });
-    check(
-      (
-        await storage.readDirectory({
-          path: directory,
-        })
-      ).length === 0,
-      "Empty idempotently created directory.",
-    );
-    const entries = await storage.readDirectory({
-      path: `${root}/directory-fixture`,
-    });
-    check(
-      JSON.stringify(entries) ===
-        JSON.stringify([
-          {
-            name: "dangling",
-            kind: "link",
-          },
-          {
-            name: "folder",
-            kind: "directory",
-          },
-          {
-            name: "link",
-            kind: "link",
-          },
-          {
-            name: "한글🙂.txt",
-            kind: "file",
-          },
-        ]),
-      "Direct Unicode names and observed link kinds.",
-    );
-    await rejected(
-      storage.readDirectory({
-        path: `${root}/outside`,
-      }),
-      "INVALID_ARGUMENT",
-    );
-    await rejected(
-      storage.createDirectory({
-        path: `${root}/outside`,
-      }),
-      "INVALID_ARGUMENT",
-    );
-    await rejected(
-      storage.createDirectory({
-        path: `${root}/symlink`,
-      }),
-      "INVALID_ARGUMENT",
-    );
-    await rejected(
-      storage.remove({
-        path: `${root}/created-directories/parent`,
-      }),
-      "INVALID_ARGUMENT",
-    );
-    check(
-      (await storage.readText({
-        path: `${root}/outside`,
-      })) === "outside" &&
-        (await storage.exists({
-          path: directory,
-        })),
-      "A refused remove must preserve files and directories.",
-    );
-    const text = `${root}/nested/한글 memo.txt`;
-    await storage.writeText({
-      path: text,
-      text: "long initial content",
-    });
-    await storage.writeText({
-      path: text,
-      text: "short",
-    });
-    await storage.appendText({
-      path: text,
-      text: "\0✓",
-    });
-    check(
-      (await storage.readText({
-        path: text,
-      })) === "short\0✓",
-      "Text replacement and append.",
-    );
-    check(
-      await storage.exists({
-        path: text,
-      }),
-      "Existing path.",
-    );
-    const info = await storage.stat({
-      path: text,
-    });
-    check(
-      info?.kind === "file" && info.sizeBytes === 9,
-      "Native stat byte size.",
-    );
-    check(
+  const directory = `${root}/created-directories/parent/child`;
+  await rejected(
+    storage.createDirectory({
+      path: `${root}/missing-default/child`,
+    }),
+    "INVALID_ARGUMENT",
+  );
+  check(
+    !(await storage.exists({
+      path: `${root}/missing-default`,
+    })),
+    "Default recursive must not create parents.",
+  );
+  await storage.createDirectory({
+    path: directory,
+    recursive: true,
+  });
+  await storage.createDirectory({
+    path: directory,
+  });
+  check(
+    (
+      await storage.readDirectory({
+        path: directory,
+      })
+    ).length === 0,
+    "Empty idempotently created directory.",
+  );
+  const entries = await storage.readDirectory({
+    path: `${root}/directory-fixture`,
+  });
+  check(
+    JSON.stringify(entries) ===
+      JSON.stringify([
+        {
+          name: "dangling",
+          kind: "link",
+        },
+        {
+          name: "folder",
+          kind: "directory",
+        },
+        {
+          name: "link",
+          kind: "link",
+        },
+        {
+          name: "한글🙂.txt",
+          kind: "file",
+        },
+      ]),
+    "Direct Unicode names and observed link kinds.",
+  );
+  await rejected(
+    storage.readDirectory({
+      path: `${root}/outside`,
+    }),
+    "INVALID_ARGUMENT",
+  );
+  await rejected(
+    storage.createDirectory({
+      path: `${root}/outside`,
+    }),
+    "INVALID_ARGUMENT",
+  );
+  await rejected(
+    storage.createDirectory({
+      path: `${root}/symlink`,
+    }),
+    "INVALID_ARGUMENT",
+  );
+  await rejected(
+    storage.remove({
+      path: `${root}/created-directories/parent`,
+    }),
+    "INVALID_ARGUMENT",
+  );
+  check(
+    (await storage.readText({
+      path: `${root}/outside`,
+    })) === "outside" &&
       (await storage.exists({
-        path: `${root}/absent/leaf`,
-      })) === false,
-      "Absent exists.",
-    );
-    check(
-      (await storage.stat({
-        path: `${root}/absent/leaf`,
-      })) === null,
-      "Absent stat.",
-    );
-    await rejected(
-      storage.readText({
-        path: `${root}/absent`,
-      }),
-      "INVALID_ARGUMENT",
-    );
-    check(
-      (await storage.readText({
-        path: `${root}/symlink`,
-      })) === "outside",
-      "A symlink is followed to its target.",
-    );
-    const binary = `${root}/binary.bin`;
-    await storage.writeBytes({
+        path: directory,
+      })),
+    "A refused remove must preserve files and directories.",
+  );
+  const text = `${root}/nested/한글 memo.txt`;
+  await storage.writeText({
+    path: text,
+    text: "long initial content",
+  });
+  await storage.writeText({
+    path: text,
+    text: "short",
+  });
+  await storage.appendText({
+    path: text,
+    text: "\0✓",
+  });
+  check(
+    (await storage.readText({
+      path: text,
+    })) === "short\0✓",
+    "Text replacement and append.",
+  );
+  check(
+    await storage.exists({
+      path: text,
+    }),
+    "Existing path.",
+  );
+  const info = await storage.stat({
+    path: text,
+  });
+  check(
+    info?.kind === "file" && info.sizeBytes === 9,
+    "Native stat byte size.",
+  );
+  check(
+    (await storage.exists({
+      path: `${root}/absent/leaf`,
+    })) === false,
+    "Absent exists.",
+  );
+  check(
+    (await storage.stat({
+      path: `${root}/absent/leaf`,
+    })) === null,
+    "Absent stat.",
+  );
+  await rejected(
+    storage.readText({
+      path: `${root}/absent`,
+    }),
+    "INVALID_ARGUMENT",
+  );
+  check(
+    (await storage.readText({
+      path: `${root}/symlink`,
+    })) === "outside",
+    "A symlink is followed to its target.",
+  );
+  const binary = `${root}/binary.bin`;
+  await storage.writeBytes({
+    path: binary,
+    bytes: "AP8=",
+  });
+  await storage.appendBytes({
+    path: binary,
+    bytes: "gA==",
+  });
+  check(
+    (await storage.readBytes({
       path: binary,
-      bytes: "AP8=",
-    });
-    await storage.appendBytes({
-      path: binary,
-      bytes: "gA==",
-    });
-    check(
-      (await storage.readBytes({
-        path: binary,
-      })) === "AP+A",
-      "Binary round-trip.",
-    );
-    const copied = `${root}/copy.bin`;
-    const existing = await storage.exists({
-      path: copied,
-    });
-    if (!existing) {
-      await storage.copyFile({
-        from: binary,
-        to: copied,
-      });
-    }
-    await rejected(
-      storage.copyFile({
-        from: binary,
-        to: copied,
-      }),
-      "INVALID_ARGUMENT",
-    );
-    check(
-      (await storage.readBytes({
-        path: copied,
-      })) === "AP+A",
-      "No-overwrite copy.",
-    );
-    await storage.move({
-      from: copied,
-      to: `${root}/moved.bin`,
-    });
-    check(
-      !(await storage.exists({
-        path: copied,
-      })) &&
-        (await storage.readBytes({
-          path: `${root}/moved.bin`,
-        })) === "AP+A",
-      "Move renames the file.",
-    );
+    })) === "AP+A",
+    "Binary round-trip.",
+  );
+  const copied = `${root}/copy.bin`;
+  const existing = await storage.exists({
+    path: copied,
+  });
+  if (!existing) {
     await storage.copyFile({
-      from: `${root}/moved.bin`,
+      from: binary,
       to: copied,
     });
-    await rejected(
-      storage.move({
-        from: copied,
-        to: `${root}/moved.bin`,
-      }),
-      "INVALID_ARGUMENT",
-    );
-    await storage.remove({
-      path: `${root}/moved.bin`,
-    });
-    check(
-      (await storage.exists({
-        path: copied,
-      })) &&
-        !(await storage.exists({
-          path: `${root}/moved.bin`,
-        })),
-      "A refused move keeps both names, and remove deletes one file.",
-    );
-    await client.invoke("test.backendViaView", null);
-    check(
-      (await storage.readText({
-        path: `${root}/command.txt`,
-      })) === "view authority",
-      "View command uses I/O dispatch.",
-    );
   }
+  await rejected(
+    storage.copyFile({
+      from: binary,
+      to: copied,
+    }),
+    "INVALID_ARGUMENT",
+  );
+  check(
+    (await storage.readBytes({
+      path: copied,
+    })) === "AP+A",
+    "No-overwrite copy.",
+  );
+  await storage.move({
+    from: copied,
+    to: `${root}/moved.bin`,
+  });
+  check(
+    !(await storage.exists({
+      path: copied,
+    })) &&
+      (await storage.readBytes({
+        path: `${root}/moved.bin`,
+      })) === "AP+A",
+    "Move renames the file.",
+  );
+  await storage.copyFile({
+    from: `${root}/moved.bin`,
+    to: copied,
+  });
+  await rejected(
+    storage.move({
+      from: copied,
+      to: `${root}/moved.bin`,
+    }),
+    "INVALID_ARGUMENT",
+  );
+  await storage.remove({
+    path: `${root}/moved.bin`,
+  });
+  check(
+    (await storage.exists({
+      path: copied,
+    })) &&
+      !(await storage.exists({
+        path: `${root}/moved.bin`,
+      })),
+    "A refused move keeps both names, and remove deletes one file.",
+  );
+  await client.invoke("test.backendViaView", null);
+  check(
+    (await storage.readText({
+      path: `${root}/command.txt`,
+    })) === "view authority",
+    "View command uses I/O dispatch.",
+  );
+
   await client.invoke("test.report", {
     view,
     ok: true,

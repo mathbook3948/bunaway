@@ -86,18 +86,12 @@ try {
   const app = {
     appId: "tests.macos.storage",
     title: "Storage",
-    windows: [
-      "main",
-      "denied",
-    ].map((view) => ({
-      view,
-      home: `https://app.bunaway.local/${view}.html`,
-      title: `Storage ${view}`,
-      window: {
-        width: 500,
-        height: 400,
-      },
-    })),
+    view: "main",
+    home: "https://app.bunaway.local/main.html",
+    window: {
+      width: 500,
+      height: 400,
+    },
   };
   const policy = {
     version: 1,
@@ -109,28 +103,21 @@ try {
       ],
     },
     views: [
-      "main",
-      "denied",
-    ].map((id) => ({
-      id,
-      origins: [
-        "https://app.bunaway.local",
-      ],
-      commands,
-      events: [],
-      host: {
-        permissions:
-          id === "main"
-            ? [
-                "windows.close",
-                ...operations.map((name) => `storage.${name}`),
-              ]
-            : [
-                "windows.close",
-                "storage.readText",
-              ],
+      {
+        id: "main",
+        origins: [
+          "https://app.bunaway.local",
+        ],
+        commands,
+        events: [],
+        host: {
+          permissions: [
+            "windows.close",
+            ...operations.map((name) => `storage.${name}`),
+          ],
+        },
       },
-    })),
+    ],
   };
   await writeJson(resolve(assets, "manifest.json"), {
     format: 1,
@@ -182,7 +169,6 @@ try {
   }
   for (const view of [
     "main",
-    "denied",
   ]) {
     await Bun.write(
       resolve(assets, `web/${view}.html`),
@@ -229,7 +215,6 @@ try {
     });
     for (const view of [
       "main",
-      "denied",
     ]) {
       await rm(resolve(storageRoot, `${view}-report.json`), {
         force: true,
@@ -262,7 +247,6 @@ try {
     assert.equal(exitCode, 0, `${stdout}\n${stderr}`);
     for (const view of [
       "main",
-      "denied",
     ]) {
       assert.deepEqual(
         await Bun.file(resolve(storageRoot, `${view}-report.json`)).json(),
@@ -274,10 +258,6 @@ try {
         },
       );
     }
-    assert.equal(
-      await Bun.file(resolve(storageRoot, "denied.txt")).text(),
-      "preserved",
-    );
     assert.equal(
       await Bun.file(resolve(storageRoot, "outside")).text(),
       "outside",
@@ -325,7 +305,6 @@ try {
   }
   for (const view of [
     "main",
-    "denied",
   ]) {
     const report = resolve(
       directory,

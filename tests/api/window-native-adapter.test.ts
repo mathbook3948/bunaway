@@ -1820,6 +1820,20 @@ test("monitor queries need their grant, honor cancellation and report missing se
   );
 });
 
+test("only the backend waits for window lifecycle phases, with no grant", async () => {
+  const f: Fixture = fixture();
+  await rejects(
+    f.invoke("windows.waitForLifecycle", {}, "view:main"),
+    "PERMISSION_DENIED",
+    "Window lifecycle subscription requires the backend.",
+  );
+  await rejects(
+    f.invoke("windows.waitForLifecycle", {}, "backend", []),
+    "UNSUPPORTED",
+    "Window lifecycle notification is not available.",
+  );
+});
+
 test("an unknown native operation is rejected", () => {
   const f: Fixture = fixture();
   return rejects(

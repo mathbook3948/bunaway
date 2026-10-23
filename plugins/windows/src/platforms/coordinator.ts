@@ -127,7 +127,8 @@ export class WindowOperations {
     view: WindowState | undefined,
   ): JsonValue | Promise<JsonValue> {
     this.throwIfCancelled(requestId);
-    if (!view) {
+    // A closed view the host still remembers is no window either: destroying it must not end the app.
+    if (!view || (view.closed && !this.replacing.has(viewId))) {
       if (!this.hooks.destroy) {
         throw new BunawayError({
           code: "UNSUPPORTED",

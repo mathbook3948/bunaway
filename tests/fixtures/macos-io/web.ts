@@ -83,7 +83,7 @@ try {
             typeof item === "object" &&
             "name" in item &&
             "support" in item &&
-            item.name === "windows.list" &&
+            item.name === "windows.isOpen" &&
             item.support === "supported",
         ),
       "Mixed I/O/UI capabilities",
@@ -175,9 +175,7 @@ try {
         }
       });
     await client.invoke("test.marker", "revoked-parsing");
-    await client.invoke("plugin.windows.recreate", {
-      view: "main",
-    });
+    await client.invoke("plugin.windows.recreate", {});
   } else {
     check(phase === 3, "Fresh WebView preserves backend state");
     await client.invoke("test.release", "revoked");
@@ -194,9 +192,7 @@ try {
       phase,
     });
     await client.invoke("test.startShutdownWork", null);
-    await client.invoke("plugin.windows.close", {
-      view: "main",
-    });
+    await client.invoke("plugin.windows.close", null);
   }
 } catch (error) {
   if (
@@ -206,8 +202,6 @@ try {
       ok: false,
       message: String(error),
     });
-    await client.invoke("plugin.windows.close", {
-      view: "main",
-    });
+    await client.invoke("plugin.windows.close", null);
   }
 }

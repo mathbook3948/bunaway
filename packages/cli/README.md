@@ -265,14 +265,12 @@ MSIX 앱 활성화 경로와 Developer ID 공증/배포는 후속 범위다. 기
 
 ## Windows 창 API
 
-`src-bunaway/bunaway.json`의 `app.windows`에 창별 `view`, `title`, `home`,
-`window: { width, height }`를 정의한다. 단일 창의 `app.view/home/window`와 함께
-사용하지 않는다. `startup: false`인 창은 `@bunaway/backend`의 `windows.create`로
-연다. `policy.json`의 `host.windows` 또는 `backend.windows`에 제어할 대상 뷰 ID를
-선언한다. 새 창 API는 Windows에 구현했고 실제 GUI 회귀를 통과했다.
-macOS 빌드는 `app.windows`를 거부한다.
+`src-bunaway/bunaway.json`의 `app.view`, `title`, `home`, `window: { width, height }`로 앱의 창 하나를
+정의한다. `app.startup: false`이면 창 없이 시작하고 `@bunaway/backend`의 `windows.create`로
+연다. `policy.json`에는 정책 뷰를 하나만 둔다. 창 작업은 대상 인자를 받지 않는다.
+Windows와 macOS의 창 계약은 같다.
 
-설정 예제는 [여러 창 가이드](../../docs/site/src/content/docs/guides/windows.mdx),
+설정 예제는 [창 가이드](../../docs/site/src/content/docs/guides/windows.mdx),
 메서드와 권한, 수명은 [windows API](../../docs/site/src/content/docs/reference/host/windows.mdx)를 참고한다.
 
 ## 생성물 관리

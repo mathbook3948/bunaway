@@ -92,17 +92,12 @@ try {
   const app = {
     appId,
     title: "Safe storage fixture",
-    windows: [
-      {
-        view: "main",
-        home: "https://app.bunaway.local/",
-        title: "Safe storage fixture",
-        window: {
-          width: 400,
-          height: 300,
-        },
-      },
-    ],
+    view: "main",
+    home: "https://app.bunaway.local/",
+    window: {
+      width: 400,
+      height: 300,
+    },
   };
   await writeJson(resolve(assets, "manifest.json"), {
     format: 1,

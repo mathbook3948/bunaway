@@ -69,18 +69,20 @@ export const desktopTestApp = {
       async run(_input, context) {
         if (trayLifecycle) {
           assert.equal(
-            await context.host.call(windowRegistry.operation("windows.close"), {
-              view: "main",
-            }),
+            await context.host.call(
+              windowRegistry.operation("windows.close"),
+              null,
+            ),
             false,
           );
           assert(
             !context.signal.aborted,
             "close to tray must keep the request context alive",
           );
-          await context.host.call(windowRegistry.operation("windows.show"), {
-            view: "main",
-          });
+          await context.host.call(
+            windowRegistry.operation("windows.show"),
+            null,
+          );
         }
         uiRestoredResolve();
         return null;

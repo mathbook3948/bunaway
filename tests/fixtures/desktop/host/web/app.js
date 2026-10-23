@@ -128,8 +128,7 @@ const cancel = (id) =>
     id,
   });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const multiView =
-  new URL(location.href).searchParams.get("test") === "multi-view";
+const fullSuite = new URL(location.href).searchParams.get("test") === "full";
 const nativePlugins =
   new URL(location.href).searchParams.get("nativePlugins") !== "0";
 
@@ -187,7 +186,7 @@ async function run() {
     assert(isBunaway(), "isBunaway was false after connect");
   });
 
-  if (multiView) {
+  if (fullSuite) {
     await test("embedded resources, ranges and web workers", async () => {
       const response = await fetch("asset-probe.txt", {
         headers: {
@@ -230,8 +229,7 @@ async function run() {
   }
 
   await test("shared request id stays in this view", async () => {
-    // The reader page uses the same request id concurrently; each view must
-    // receive the response carrying its own payload.
+    // A response carries the payload of the request with the same id.
     const r = await new Promise((resolve) => {
       pending.set("shared-1", resolve);
       send({
@@ -321,7 +319,6 @@ async function run() {
       `expected denial ${JSON.stringify(r)}`,
     );
     const after = (await call("test.count")).payload;
-    // Count only the registered forbidden handler: sibling-view commands may run concurrently.
     assert(after === before, "denied command handler ran");
   });
   await test("denied event listen", async () => {
@@ -614,20 +611,6 @@ async function run() {
     );
   });
   await test("memo input save event refresh", async () => {
-    if (multiView) {
-      // The editor checks the same shared memo; finish before overwriting it.
-      const deadline = Date.now() + 60000;
-      while (
-        (
-          await call("test.tempRead", {
-            path: "editor.json",
-          })
-        ).payload?.ok !== true
-      ) {
-        assert(Date.now() < deadline, "editor did not finish its memo checks");
-        await sleep(100);
-      }
-    }
     const input = document.getElementById("memo");
     const display = document.getElementById("saved-memo");
     const release = await client.listen(

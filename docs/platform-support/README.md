@@ -6,20 +6,17 @@ Windows의 호출별 표시 옵션 범위를 정의한다. create와 recreate는
 배치, titlebar, alwaysOnTop, skipTaskbar, backgroundColor, focusable, maximized, fullscreen은 기존 창을 닫기 전에 `UNSUPPORTED`로 거부한다.
 macOS는 `contentProtection`을 `NSWindow.sharingType`으로 지원하지만 macOS 15 이상의 ScreenCaptureKit 기반 캡처는 이를 무시할 수 있다.
 새 옵션의 실제 Windows 검증은 CI의 windows-native 작업에서 수행한다.
-[ADR 0017](../decisions/0017-multiple-windows-per-view.md)은
-single 기본값과 multiple 선택, 창별 ID와 세션, 프로필 공유 및 격리를 정의한다.
-Windows는 createInstance, recreateInstance와 listInstances, ID별 제어를 구현한다.
-macOS는 새 인스턴스 API와 multiple 또는 isolated 선언을 UNSUPPORTED로 거부한다.
-새 옵션과 인스턴스의 실제 WebView2 실행은 CI에서 검증하며 임의 동적 선언은 허용하지 않는다.
+[ADR 0026](../decisions/0026-single-webview-single-window.md)에 따라 앱은 창 하나와 WebView 하나를 가진다.
+창 작업은 대상 인자를 받지 않고 `create`, `recreate`, `close`, `destroy`, `isOpen`이 그 창의 수명을 다룬다.
+Windows와 macOS의 계약은 같으며, 새 옵션의 실제 WebView2 실행은 CI에서 검증한다.
 
-Windows 창 준비, 숨김 생성과 splashscreen 전환은 [창 API](../site/src/content/docs/reference/host/windows.mdx)를 따른다.
+Windows 창 준비와 숨김 생성은 [창 API](../site/src/content/docs/reference/host/windows.mdx)를 따른다.
 Windows 11 Pro x64 `10.0.26200`, Bun 1.4.2와 실제 WebView2에서 단계별 준비, 탐색과 재생성,
 실패와 취소, SDK 기한 초과 및 전환 중 앱 유지를 확인했다.
 Win32 메시지와 WinEvent로 숨김 생성 중 순간 표시, 활성화와 포커스가 없고 입력 포커스가 유지되는 것도 확인했다.
 이 두 검증과 계약 검사 결과는 [Windows 실행 기록](../architecture/windows-bun-results.md)에 구분한다.
 macOS는 `getReadiness`, `windows.readiness`와 `visible: false`, `showWhenReady` 숨김 생성을 같은 의미로 제공한다.
 문서 완료는 WKWebView 메인 프레임의 탐색 완료이며 숨김 생성은 앞으로 가져오기, key window 전환과 앱 활성화를 하지 않는다.
-macOS의 splashscreen 전환 API는 아직 지원하지 않는다.
 
 macOS의 single 뷰는 `getWebViewState`, `navigateWebView`, `reloadWebView`,
 `stopWebView`, `goBack`, `goForward`, `setZoomFactor`를 구현한다.
@@ -120,27 +117,25 @@ Windows 배포 근거와 한계:
 
 ## 공개 창 API
 
-Windows CLI는 `app.windows` 설정과 백엔드 `windows` API를 제공한다. 생성과 재생성,
+Windows CLI는 `app.view`, `app.home`, `app.window` 설정과 백엔드 `windows` API를 제공한다. 생성과 재생성,
 show/hide/focus, 크기와 위치, 전체화면, 닫기 확인을 정식 지원하며 기능 조회에서
 `supported`로 보고한다. 로컬 Windows x64, Bun 1.4.2에서 전체화면의 표시 상태와 좌표 복원,
 닫기 확인, 브라우저 장애, 반복 생성과 자기 창 재생성, 세션 종료에 따른 생성 취소를 통과했다.
 CI 실행 [37574470840](https://github.com/mathbook3948/bunaway/actions/runs/37574470840)에서
 새 창 API의 실제 GUI 회귀는 통과했다. 같은 실행의 전체 네이티브 작업은 공용 기능 목록 테스트에서 실패했다.
-Windows는 `showInactive`, `blur`, `activate`도 제공한다. 실제 두 Win32 창과 입력 필드에서
-비활성 표시의 활성 창과 키보드 포커스 보존을 확인했다. 이번 실행 세션은 전경 전환을
-거부했으므로 실제 전경 blur와 focus 성공은 미검증이다. 후보 권한과 거부 시 결과,
-상태와 이벤트의 일치는 계약 및 DLL 대체 검사로 구분한다.
-macOS는 `showInactive`를 `orderFront:`로 제공하며 key window 전환과 앱 활성화를 하지 않는다. macOS의 `blur`와 `activate`는 `UNSUPPORTED`다.
+Windows는 `showInactive`와 `activate`도 제공한다. 앱 창과 입력 필드를 가진 보조 Win32 창에서
+비활성 표시의 활성 창과 키보드 포커스 보존을 확인한다. 전경 전환은 OS가 거부할 수 있어
+실제 전경 활성화 성공은 실행 환경에 따라 검증하지 못할 수 있다.
+macOS는 `showInactive`를 `orderFront:`로 제공하며 key window 전환과 앱 활성화를 하지 않는다. macOS의 `activate`는 `UNSUPPORTED`다.
 Linux에서는 계약, 정책, 재생성 수명 조정과 CLI 번들을 검증한다.
 Windows의 `setContentPosition`, `setOuterSize`, `setContentBounds`, `setOuterBounds`는
 물리 또는 논리 픽셀을 받으며 숨김 상태를 유지하고 최소화 및 최대화 중에는 일반
 복원 영역을 변경한다. 전체화면은 거부한다. 2026-10-10 로컬 Win32와 WebView2에서
 설정 후 조회 및 `windows.changed` 일치를 확인했다. 합성 DPI 메시지와 실제 물리
 모니터 이동의 검증 범위는 [실행 기록](../architecture/windows-bun-results.md)에 구분했다.
-macOS는 `app.windows`, 지연 생성과 재생성, 목록 및 열림 여부, show/hide/focus/close,
-표시와 포커스 조회, `getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`, `setContentProtection`, `isContentProtected`를 제공한다.
-창 ID는 네이티브 수명마다 새로 발급한다. 뷰마다 임시 WebKit 프로필을 분리하고 실행 중 재생성에서
-유지한다. 뷰마다 창 하나만 지원하므로 createInstance, recreateInstance, multiple과 isolated는 `UNSUPPORTED`다.
+macOS는 창 생성과 재생성, `isOpen`, show/hide/focus/close,
+표시와 포커스 조회, `setContentProtection`, `isContentProtected`를 제공한다.
+창 ID는 네이티브 수명마다 새로 발급한다. 임시 WebKit 프로필은 실행 중 재생성에서 유지한다.
 `getSnapshot`, `windows.changed`, 크기, 위치, 전체화면, 닫기 확인 등 다른 공개 창 작업도 `UNSUPPORTED`다.
 
 Windows의 앱 정의 `desktop`에 인자, 딥링크, 파일 열기와 종료 취소, 트레이 숨김을

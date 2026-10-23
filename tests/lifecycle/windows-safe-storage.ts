@@ -68,29 +68,14 @@ const policy: Policy = {
         permissions,
       },
     },
-    {
-      id: "denied",
-      origins: [
-        "https://app.bunaway.local",
-      ],
-      commands: [
-        "plugin.safe-storage.decryptString",
-        "test.report-denied",
-      ],
-      events: [],
-      host: {
-        permissions: [],
-      },
-    },
   ],
   backend: {
     permissions,
   },
 };
 let mainReported = false;
-let deniedReported = false;
 if (!process.argv.includes("--child")) {
-  // Build both browser clients before starting the native host.
+  // Build the browser client before starting the native host.
   try {
     await mkdir(resolve(assets, "web"), {
       recursive: true,
@@ -111,10 +96,6 @@ if (!process.argv.includes("--child")) {
       '<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'"><script type="module" src="app.js"></script>',
     );
 
-    await writeFile(
-      resolve(assets, "web/denied.html"),
-      '<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'"><script type="module" src="app.js"></script>',
-    );
     const childEntry = await bundleNativeWorker(
       "windows-safe-storage",
       assets,
@@ -177,11 +158,7 @@ if (!process.argv.includes("--child")) {
         confirmed,
         "Browser did not confirm receipt of the report result.",
       );
-      assert.equal(
-        closedWindows,
-        2,
-        "Expected to close both test app windows.",
-      );
+      assert.equal(closedWindows, 1, "Expected to close the test app window.");
       const report = JSON.parse(await readFile(reportPath, "utf8"));
       assert.equal(
         report.pass,
@@ -192,9 +169,8 @@ if (!process.argv.includes("--child")) {
       assert.equal(report.concurrent, true);
       assert.equal(report.tamperRejected, true);
       assert.equal(report.uiTicksDuringRequests > 0, true);
-      assert.equal(report.denied, true);
       console.log(
-        "PASS Windows WebView2 DPAPI: SDK, I/O Worker, real current-user encryption, concurrent requests, permission denial, tampering and cleanup",
+        "PASS Windows WebView2 DPAPI: SDK, I/O Worker, real current-user encryption, concurrent requests, tampering and cleanup",
       );
     } finally {
       clearTimeout(timeout);
@@ -228,18 +204,6 @@ if (!process.argv.includes("--child")) {
           return null;
         },
       },
-      "test.report-denied": {
-        input: {
-          const: true,
-        },
-        output: {
-          const: null,
-        },
-        async run() {
-          deniedReported = true;
-          return null;
-        },
-      },
       "test.report-confirmed": {
         input: {
           const: true,
@@ -249,15 +213,12 @@ if (!process.argv.includes("--child")) {
         },
         async run() {
           const deadline = performance.now() + 10000;
-          while (!mainReported || !deniedReported) {
+          while (!mainReported) {
             if (performance.now() >= deadline) {
-              throw new Error("Both browser reports are required.");
+              throw new Error("The browser report is required.");
             }
             await Bun.sleep(10);
           }
-          const report = JSON.parse(await readFile(reportPath, "utf8"));
-          report.denied = true;
-          await writeFile(reportPath, JSON.stringify(report));
           console.log(
             JSON.stringify({
               event: "safe-storage-report-confirmed",
@@ -281,15 +242,6 @@ if (!process.argv.includes("--child")) {
         view: "main",
         title: "DPAPI regression",
         home: "https://app.bunaway.local/index.html",
-        window: {
-          width: 640,
-          height: 480,
-        },
-      },
-      {
-        view: "denied",
-        title: "DPAPI permission denial",
-        home: "https://app.bunaway.local/denied.html",
         window: {
           width: 640,
           height: 480,

@@ -53,7 +53,6 @@ const sockets: Record<string, number> = {};
 const cancelledReads = new Set<string>();
 const closedSockets = new Set<string>();
 let redirectedRequests = 0;
-let deniedRequests = 0;
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -71,9 +70,6 @@ const server = Bun.serve({
           ...closedSockets,
         ],
       });
-    }
-    if (path === "/denied") {
-      deniedRequests++;
     }
     if (path === "/redirect") {
       return new Response(null, {
@@ -231,29 +227,11 @@ try {
     `import {defineNetworkFixture} from ${JSON.stringify(resolve(import.meta.dir, "fixtures/macos-network-app.ts"))};
 export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws)});`,
   );
-  const views = [
-    "main",
-    "request-only",
-    "denied",
-  ];
-  const viewPermissions: Record<string, string[]> = {
-    main: [
-      "network.request",
-      "network.exchange",
-    ],
-    "request-only": [
-      "network.request",
-    ],
-  };
   const commands = [
     "test.config",
-    "test.ready",
-    "test.peers",
     "test.stats",
     "test.echo",
     "test.report",
-    "test.inheritedHttp",
-    "test.inheritedWs",
     "plugin.network.request",
     "plugin.network.exchange",
   ];
@@ -262,15 +240,12 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
     app: {
       appId: "tests.macos.network",
       title: "macOS network",
-      windows: views.map((view) => ({
-        view,
-        home: `https://app.bunaway.local/${view}.html`,
-        title: `Network ${view}`,
-        window: {
-          width: 400,
-          height: 300,
-        },
-      })),
+      view: "main",
+      home: "https://app.bunaway.local/main.html",
+      window: {
+        width: 400,
+        height: 300,
+      },
     },
     policy: {
       version: 1,
@@ -279,17 +254,22 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
           "network.request",
         ],
       },
-      views: views.map((id) => ({
-        id,
-        origins: [
-          "https://app.bunaway.local",
-        ],
-        commands,
-        events: [],
-        host: {
-          permissions: viewPermissions[id] ?? [],
+      views: [
+        {
+          id: "main",
+          origins: [
+            "https://app.bunaway.local",
+          ],
+          commands,
+          events: [],
+          host: {
+            permissions: [
+              "network.request",
+              "network.exchange",
+            ],
+          },
         },
-      })),
+      ],
     },
     plugins: [],
     developmentSdk: {},
@@ -305,12 +285,10 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
   for (const output of web.outputs) {
     await Bun.write(output.path, await output.arrayBuffer());
   }
-  for (const view of views) {
-    await Bun.write(
-      resolve(assets, "web", `${view}.html`),
-      '<!doctype html><title>Network</title><script type="module" src="macos-network-web.js"></script>',
-    );
-  }
+  await Bun.write(
+    resolve(assets, "web", "main.html"),
+    '<!doctype html><title>Network</title><script type="module" src="macos-network-web.js"></script>',
+  );
   // Bundle only the installed network plugin. No unrelated native adapters enter this fixture.
   const installed = (await installedPlugins(root, "0.0.0")).filter(
     (plugin) => plugin.name === "network",
@@ -374,7 +352,6 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
     0,
     "HTTP and WebSocket redirects must never be followed",
   );
-  assert.equal(deniedRequests, 0, "denied view must not reach the server");
   assert.equal(waits["/wait-shutdown"], 1);
   assert.equal(sockets["/socket-shutdown"], 1);
   phase = "HTTP abort cleanup";
@@ -407,7 +384,7 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
     .map((line) => JSON.parse(line));
   assert.equal(
     records.filter((record) => record.event === "session-open").length,
-    3,
+    1,
   );
   assert.equal(
     records.filter((record) => record.event === "host-stopped").length,
@@ -428,7 +405,6 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
       bunVersion: Bun.version,
       bun: pin.bun,
       redirectedRequests,
-      deniedRequests,
       cancelledReads: [
         ...cancelledReads,
       ].sort(),
@@ -470,7 +446,6 @@ export default defineNetworkFixture(${JSON.stringify(http)}, ${JSON.stringify(ws
       ...closedSockets,
     ].sort(),
     redirectedRequests,
-    deniedRequests,
     pendingWebSockets: server.pendingWebSockets,
   };
   try {

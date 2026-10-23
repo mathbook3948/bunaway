@@ -532,12 +532,12 @@ export class MacosWindows {
   }
 
   /**
-   * Tells open sessions that may enumerate instances about one lifetime phase of a window.
+   * Tells backend listeners about one lifetime phase of a window.
    * Each phase is published at most once per windowId. Shutdown suppresses delivery because the
    * sessions are being torn down. Every later phase requires `created`, so a lifetime whose
    * WebView never became ready (creation failed or timed out) emits no lifecycle events at all.
-   * Backend listeners are notified without a grant. Document recipients need a `windows.lifecycle`
-   * subscription and the `windows.getSnapshot` permission.
+   * Backend listeners are notified without a grant. Documents get no event on macOS because the
+   * `windows.getSnapshot` permission that guards delivery is not available there.
    */
   private publishLifecycle(view: View, phase: WindowLifecyclePhase): void {
     if (
@@ -553,22 +553,6 @@ export class MacosWindows {
       ...this.lifecycleListeners,
     ]) {
       listener({
-        windowId,
-        viewId,
-        phase,
-      });
-    }
-    for (const recipient of this.views.values()) {
-      if (
-        !recipient.boundary.eventRoute("windows.lifecycle") ||
-        !this.hooks.observes(recipient.boundary.policy.host, {
-          operation: "windows.getSnapshot",
-          payload: null,
-        })
-      ) {
-        continue;
-      }
-      this.sendNativeEvent(recipient.boundary, "windows.lifecycle", {
         windowId,
         viewId,
         phase,

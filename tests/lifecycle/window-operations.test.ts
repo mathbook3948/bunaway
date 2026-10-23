@@ -646,6 +646,27 @@ test("creating while the window is open is BUSY and preserves its window and ses
   expect(original?.closed).toBe(false);
 });
 
+test("destroying a window the host still remembers as closed is a no-op that does not end the app", async () => {
+  const f = fixture();
+  f.views.set("main", {
+    closed: true,
+    cleaned: true,
+    ready: true,
+    failure: undefined,
+    deadline: 30000,
+  });
+  await expect(
+    f.operations.execute(
+      {
+        operation: "windows.destroy",
+        payload: null,
+      },
+      "destroy",
+    ),
+  ).resolves.toBe(true);
+  expect(f.destroyed).toEqual([]);
+});
+
 test("recreation reserves the last window through cleanup, rejects competing creation, and survives old-context cancellation", async () => {
   const f = fixture();
   await f.operations.execute(

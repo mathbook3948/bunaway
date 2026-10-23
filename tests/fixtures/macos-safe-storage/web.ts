@@ -68,17 +68,13 @@ try {
     "INTERNAL",
   );
   await client.invoke("test.report", "passed");
-  await client.invoke("plugin.windows.close", {
-    view: "main",
-  });
+  await client.invoke("plugin.windows.close", null);
 } catch (error) {
   if (
     !(error instanceof Error && "code" in error && error.code === "CANCELLED")
   ) {
     console.error("Safe storage native host fixture failed", error);
     await client.invoke("test.report", "failed");
-    await client.invoke("plugin.windows.close", {
-      view: "main",
-    });
+    await client.invoke("plugin.windows.close", null);
   }
 }
