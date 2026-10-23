@@ -1,7 +1,7 @@
 # 트레이 메모 예제
 
 창 하나로 실행하는 상주 데스크톱 앱 예제다. 트레이, `keep-alive`, window-state 저장, 닫기 요청을
-함께 쓴다. 구조와 실행 명령은 [memo](../memo/README.md)와 같다. Windows에서 동작을 맞췄고
+함께 쓴다. 구조와 실행 명령은 [memo](../memo/README.md)와 같다. Windows를 대상으로 하며
 macOS는 트레이를 지원하지 않아 시작이 `UNSUPPORTED`로 실패한다.
 
 ```text

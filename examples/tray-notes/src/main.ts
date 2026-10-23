@@ -94,8 +94,7 @@ async function start() {
   }
   ui.input.disabled = false;
   ui.input.focus();
-  // A missing saved placement or a failed restore keeps the declared size.
-  await client.invoke("notes.restoreWindow", null).catch(() => false);
+  // Listen before the slower window restore so early typing is autosaved too.
   ui.input.addEventListener("input", () => {
     setStatus("Editing...");
     clearTimeout(timer);
@@ -105,6 +104,8 @@ async function start() {
       });
     }, AUTOSAVE_DELAY_MS);
   });
+  // A missing saved placement or a failed restore keeps the declared size.
+  await client.invoke("notes.restoreWindow", null).catch(() => false);
 }
 
 void start().catch(() => {
