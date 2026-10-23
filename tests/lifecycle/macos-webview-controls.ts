@@ -140,25 +140,17 @@ try {
     "goForward",
     "setZoomFactor",
   ];
-  const specs = [
-    "main",
-    "peer",
-    "denied",
-  ].map((view) => ({
-    view,
-    home: `https://app.bunaway.local/${view === "main" ? "index" : view}.html`,
-    title: view,
-    window: {
-      width: 600,
-      height: 400,
-    },
-  }));
   await writeJson(resolve(assets, "manifest.json"), {
     format: 1,
     app: {
       appId: "tests.macos.webview-controls",
       title: "WebView controls",
-      windows: specs,
+      view: "main",
+      home: "https://app.bunaway.local/index.html",
+      window: {
+        width: 600,
+        height: 400,
+      },
     },
     policy: {
       version: 1,
@@ -167,34 +159,32 @@ try {
           ...operations,
           "openDevTools",
           "close",
-          "recreate",
         ].map((name) => `windows.${name}`),
       },
-      views: specs.map(({ view }) => ({
-        id: view,
-        origins: [
-          "https://app.bunaway.local",
-          server.url.origin,
-        ],
-        events: [],
-        commands: [
-          "test.arrived",
-          "test.hold",
-          "test.fragment",
-          "test.spoof",
-          "test.failure",
-          "plugin.windows.getWebViewState",
-          "plugin.windows.reloadWebView",
-        ],
-        host: {
-          permissions:
-            view === "denied"
-              ? []
-              : [
-                  "windows.getWebViewState",
-                ],
+      views: [
+        {
+          id: "main",
+          origins: [
+            "https://app.bunaway.local",
+            server.url.origin,
+          ],
+          events: [],
+          commands: [
+            "test.arrived",
+            "test.hold",
+            "test.fragment",
+            "test.spoof",
+            "test.failure",
+            "plugin.windows.getWebViewState",
+            "plugin.windows.reloadWebView",
+          ],
+          host: {
+            permissions: [
+              "windows.getWebViewState",
+            ],
+          },
         },
-      })),
+      ],
     },
     plugins: [],
     developmentSdk: {},
@@ -231,8 +221,6 @@ try {
   }
   for (const path of [
     "/index.html",
-    "/peer.html",
-    "/denied.html",
     "/frame.html",
     "/upper-scheme.html",
     "/upper-host.html",
@@ -324,11 +312,6 @@ try {
     1,
   );
   assert.equal(records.at(-1).failed, false);
-  assert(
-    records.filter(
-      (record) => record.event === "session-open" && record.view === "peer",
-    ).length === 2,
-  );
   await writeJson(result, {
     platform: process.platform,
     arch: process.arch,

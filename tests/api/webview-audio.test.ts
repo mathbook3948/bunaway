@@ -93,9 +93,7 @@ function fixture() {
   };
   const invoke = (
     operation: "windows.getWebViewAudioState" | "windows.setWebViewAudioMuted",
-    payload: JsonValue = {
-      view: "main",
-    },
+    payload: JsonValue = null,
     source = "backend",
   ) => {
     if (!adapter.executeUI) {
@@ -131,15 +129,11 @@ test("audio operations have individual grants and strict target/mute contracts",
     "windows.setWebViewAudioMuted",
   );
   for (const payload of [
+    {},
     {
-      view: "main",
-    },
-    {
-      view: "main",
       muted: 1,
     },
     {
-      view: "main",
       muted: true,
       autoplay: true,
     },
@@ -155,7 +149,6 @@ test("audio operations have individual grants and strict target/mute contracts",
     validateWindowCall({
       operation: "windows.getWebViewAudioState",
       payload: {
-        view: "main",
         muted: false,
       },
     }),
@@ -172,27 +165,17 @@ test("mute dispatch preserves the independent native playing state and per-view 
     await f.invoke(
       "windows.setWebViewAudioMuted",
       {
-        view: "main",
         muted: true,
       },
       "main",
     ),
   ).toBeNull();
-  expect(
-    await f.invoke(
-      "windows.getWebViewAudioState",
-      {
-        view: "main",
-      },
-      "main",
-    ),
-  ).toEqual({
+  expect(await f.invoke("windows.getWebViewAudioState", null, "main")).toEqual({
     muted: true,
     playing: true,
   });
   expect(
     await f.invoke("windows.setWebViewAudioMuted", {
-      view: "main",
       muted: false,
     }),
   ).toBeNull();
@@ -209,11 +192,8 @@ test("denied, cancelled, closed and unsupported targets never dispatch audio con
   ] as const) {
     const payload =
       operation === "windows.getWebViewAudioState"
-        ? {
-            view: "main",
-          }
+        ? null
         : {
-            view: "main",
             muted: true,
           };
     const denied = fixture();

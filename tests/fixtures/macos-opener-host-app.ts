@@ -1,10 +1,7 @@
 import { resolve } from "node:path";
 import { defineApp } from "@bunaway/backend";
-import type { CommandContext } from "@bunaway/core";
 import opener from "@bunaway/plugin-opener";
 import windows from "@bunaway/plugin-windows";
-
-let deniedReady = false;
 
 export default defineApp({
   modules: [],
@@ -14,35 +11,6 @@ export default defineApp({
   ],
   events: {},
   commands: {
-    "test.denied": {
-      input: {
-        const: null,
-      },
-      output: {
-        const: null,
-      },
-      async run() {
-        deniedReady = true;
-        return null;
-      },
-    },
-    "test.wait": {
-      input: {
-        const: null,
-      },
-      output: {
-        const: null,
-      },
-      async run(_value: unknown, context: CommandContext) {
-        while (!deniedReady) {
-          if (context.signal.aborted) {
-            throw new Error("Fixture wait cancelled.");
-          }
-          await Bun.sleep(5);
-        }
-        return null;
-      },
-    },
     "test.report": {
       input: {},
       output: {

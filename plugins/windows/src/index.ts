@@ -71,7 +71,8 @@ const windowsOperations = Object.fromEntries(
 ) as PlatformOperations<keyof WindowDefinitions>;
 
 const macosOperations = {
-  list: operation("list"),
+  isOpen: operation("isOpen"),
+  waitForLifecycle: operation("waitForLifecycle"),
   create: operation("create"),
   recreate: operation("recreate"),
   show: operation("show"),
@@ -80,7 +81,6 @@ const macosOperations = {
   close: operation("close"),
   isVisible: operation("isVisible"),
   isFocused: operation("isFocused"),
-  isDestroyed: operation("isDestroyed"),
   getWebViewState: operation("getWebViewState"),
   navigateWebView: operation("navigateWebView"),
   reloadWebView: operation("reloadWebView"),
@@ -88,11 +88,6 @@ const macosOperations = {
   goBack: operation("goBack"),
   goForward: operation("goForward"),
   setZoomFactor: operation("setZoomFactor"),
-  getById: operation("getById"),
-  getCurrent: operation("getCurrent"),
-  getFocused: operation("getFocused"),
-  getLastActive: operation("getLastActive"),
-  listInstances: operation("listInstances"),
   getReadiness: operation("getReadiness"),
   showInactive: operation("showInactive"),
   setContentProtection: operation("setContentProtection"),
@@ -134,7 +129,7 @@ export default defineNativePlugin(
         initialize: createMacosOperations,
         dispose,
         busy,
-        // macOS supplies basic window and WebView services, identity lookup, readiness, inactive show, content protection, minimize, maximize (zoom) and their state queries,
+        // macOS supplies basic window and WebView services, readiness, inactive show, content protection, minimize, maximize (zoom) and their state queries,
         // `windows.lifecycle` and the `windows.closeRequested` flow answered by `windows.respondClose`;
         // geometry remains unsupported.
         operations: macosOperations,

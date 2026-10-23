@@ -31,12 +31,7 @@ export function assertAndroidProject(
 ): asserts project is Pick<Project, "app" | "policy"> & {
   app: Required<Pick<Project["app"], "view" | "home" | "window">>;
 } {
-  if (
-    project.app.windows ||
-    !project.app.view ||
-    !project.app.home ||
-    !project.app.window
-  ) {
+  if (!project.app.view || !project.app.home || !project.app.window) {
     throw new Error("Android currently requires one app.view and app.home.");
   }
   const home = new URL(project.app.home);

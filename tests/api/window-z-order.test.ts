@@ -11,14 +11,12 @@ for (const name of [
 ] as const) {
   const operation = `windows.${name}` as const;
 
-  test(`${name} takes only a window target and returns null`, () => {
+  test(`${name} takes no input and returns null`, () => {
     expect(windowOperations[operation]).toBeDefined();
     expect(
       validateWindowCall({
         operation,
-        payload: {
-          view: "main",
-        },
+        payload: null,
       }),
     ).toMatchObject({
       operation,
@@ -27,7 +25,6 @@ for (const name of [
       validateWindowCall({
         operation,
         payload: {
-          view: "main",
           extra: true,
         },
       } as never),

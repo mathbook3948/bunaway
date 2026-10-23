@@ -1,7 +1,6 @@
 import { createClient } from "@bunaway/client";
 
 declare const location: {
-  pathname: string;
   search: string;
 };
 
@@ -9,7 +8,7 @@ import appearance from "@bunaway/plugin-appearance";
 import windows from "@bunaway/plugin-windows";
 
 const client = createClient();
-const view = location.pathname.includes("denied") ? "denied" : "main";
+const view = "main";
 function check(value: unknown, message: string): asserts value {
   if (!value) {
     throw new Error(message);
@@ -67,41 +66,32 @@ function snapshot(value: unknown) {
   }
 }
 try {
-  if (view === "denied") {
-    await denied(() => appearance.getPreferences(), "PERMISSION_DENIED");
-    await denied(
-      () => client.invoke("test.inherited", null),
-      "PERMISSION_DENIED",
+  for (let index = 0; index < 100; index++) {
+    snapshot(await appearance.getPreferences());
+  }
+  await denied(
+    () => client.invoke("plugin.appearance.getPreferences", {}),
+    "INVALID_ARGUMENT",
+  );
+  snapshot(await client.invoke("test.inherited", null));
+  const backend = await client.invoke("test.backend", null);
+  if (new URLSearchParams(location.search).has("backend-denied")) {
+    check(
+      backend &&
+        typeof backend === "object" &&
+        "code" in backend &&
+        backend.code === "PERMISSION_DENIED",
+      "Backend permission denial",
     );
   } else {
-    for (let index = 0; index < 100; index++) {
-      snapshot(await appearance.getPreferences());
-    }
-    await denied(
-      () => client.invoke("plugin.appearance.getPreferences", {}),
-      "INVALID_ARGUMENT",
-    );
-    snapshot(await client.invoke("test.inherited", null));
-    const backend = await client.invoke("test.backend", null);
-    if (new URLSearchParams(location.search).has("backend-denied")) {
-      check(
-        backend &&
-          typeof backend === "object" &&
-          "code" in backend &&
-          backend.code === "PERMISSION_DENIED",
-        "Backend permission denial",
-      );
-    } else {
-      snapshot(backend);
-    }
+    snapshot(backend);
   }
+
   await client.invoke("test.report", {
     view,
     ok: true,
   });
-  await windows.close({
-    view,
-  });
+  await windows.close();
 } catch (error) {
   if (
     !(error instanceof Error && "code" in error && error.code === "CANCELLED")
@@ -111,8 +101,6 @@ try {
       ok: false,
       message: error instanceof Error ? error.message : String(error),
     });
-    await windows.close({
-      view,
-    });
+    await windows.close();
   }
 }

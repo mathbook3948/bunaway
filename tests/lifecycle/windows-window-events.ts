@@ -23,9 +23,6 @@ const root = resolve(import.meta.dir, "../..");
 const output = resolve(root, "build/windows-window-events");
 const assets = resolve(output, "assets");
 const reportPath = resolve(output, "report.json");
-const target = {
-  view: "main",
-};
 const grants = windowPermissions();
 const policy: Policy = {
   version: 1,
@@ -35,41 +32,29 @@ const policy: Policy = {
     ],
   },
   views: [
-    "main",
-    "denied",
-  ].map((id) => ({
-    id,
-    origins: [
-      "https://app.bunaway.local",
-    ],
-    commands:
-      id === "main"
-        ? [
-            "test.exercise",
-            "test.record",
-            "test.unsubscribed",
-            "test.recreate",
-            "test.finish",
-            "plugin.windows.getSnapshot",
-          ]
-        : [
-            "test.denied",
-          ],
-    events:
-      id === "main"
-        ? [
-            "windows.changed",
-          ]
-        : [],
-    host: {
-      permissions:
-        id === "main"
-          ? [
-              ...grants,
-            ]
-          : [],
+    {
+      id: "main",
+      origins: [
+        "https://app.bunaway.local",
+      ],
+      commands: [
+        "test.exercise",
+        "test.record",
+        "test.unsubscribed",
+        "test.recreate",
+        "test.finish",
+        "plugin.windows.getSnapshot",
+      ],
+      events: [
+        "windows.changed",
+      ],
+      host: {
+        permissions: [
+          ...grants,
+        ],
+      },
     },
-  })),
+  ],
 };
 const noInput = {
   input: {
@@ -87,10 +72,6 @@ if (!process.argv.includes("--child")) {
   await writeFile(
     resolve(assets, "web/index.html"),
     '<!doctype html><title>Window events</title><script type="module" src="/events.js"></script>',
-  );
-  await writeFile(
-    resolve(assets, "web/denied.html"),
-    '<!doctype html><title>Denied events</title><script type="module" src="/events.js"></script>',
   );
   const web = await Bun.build({
     entrypoints: [
@@ -133,10 +114,9 @@ if (!process.argv.includes("--child")) {
     const report = JSON.parse(await readFile(reportPath, "utf8"));
     assert.equal(report.pass, true);
     assert.equal(report.documents, 3);
-    assert.equal(report.denied, true);
     assert.equal(report.onceDocuments, 3);
     console.log(
-      "PASS WebView2 native events: delivery, once, cancellation, permission denial, snapshot recovery, unlisten, navigation, recreation, shutdown",
+      "PASS WebView2 native events: delivery, once, cancellation, snapshot recovery, unlisten, navigation, recreation, shutdown",
     );
   } finally {
     clearTimeout(timeout);
@@ -155,7 +135,6 @@ if (!process.argv.includes("--child")) {
     "build/windows-window-events/report.json",
   );
   let documents = 0;
-  let denied = false;
   let onceDocuments = 0;
   const ids: string[] = [];
   const records: {
@@ -187,13 +166,6 @@ if (!process.argv.includes("--child")) {
           return null;
         },
       },
-      "test.denied": {
-        ...noInput,
-        async run() {
-          denied = true;
-          return null;
-        },
-      },
       "test.exercise": {
         input: {
           const: null,
@@ -214,17 +186,15 @@ if (!process.argv.includes("--child")) {
         },
         async run() {
           documents++;
-          const before = await windows.getSnapshot(target);
+          const before = await windows.getSnapshot();
           ids.push(before.windowId);
           const start = records.length;
-          await windows.hide(target);
-          assert.equal(await windows.activate(target), false);
-          await windows.showInactive(target);
-          assert.equal(await windows.isVisible(target), true);
-          const activated = await windows.activate(target);
-          assert.equal(activated, await windows.isFocused(target));
-          const blurred = await windows.blur(target);
-          assert.equal(blurred, !(await windows.isFocused(target)));
+          await windows.hide();
+          assert.equal(await windows.activate(), false);
+          await windows.showInactive();
+          assert.equal(await windows.isVisible(), true);
+          const activated = await windows.activate();
+          assert.equal(activated, await windows.isFocused());
           const driver = dlopen("user32.dll", {
             FindWindowW: {
               args: [
@@ -247,7 +217,6 @@ if (!process.argv.includes("--child")) {
           const hwnd = driver.symbols.FindWindowW(null, ptr(caption));
           assert(hwnd);
           const contentBefore = await windows.getContentSize({
-            ...target,
             unit: "logical",
           });
           try {
@@ -255,12 +224,10 @@ if (!process.argv.includes("--child")) {
             // through the actual UI owner, Core session and subscribed WebView document.
             driver.symbols.SendMessageW(hwnd, 0x0231, 0n, 0n);
             await windows.setPosition({
-              ...target,
               x: before.bounds.x + 31,
               y: before.bounds.y + 29,
             });
             await windows.setSize({
-              ...target,
               width: contentBefore.width + 10,
               height: contentBefore.height + 10,
             });
@@ -269,15 +236,14 @@ if (!process.argv.includes("--child")) {
             driver.close();
           }
           // Exercise setters through the public SDK, Core, UI worker and WebView2 events.
-          const content = await windows.getContentBounds(target);
+          const content = await windows.getContentBounds();
           await windows.setContentPosition({
-            ...target,
             x: content.x + 13,
             y: content.y + 17,
           });
           assert.deepEqual(
             {
-              ...(await windows.getContentPosition(target)),
+              ...(await windows.getContentPosition()),
             },
             {
               x: content.x + 13,
@@ -285,14 +251,12 @@ if (!process.argv.includes("--child")) {
               dpi: content.dpi,
             },
           );
-          const outer = await windows.getOuterBounds(target);
+          const outer = await windows.getOuterBounds();
           await windows.setOuterSize({
-            ...target,
             width: outer.width + 9,
             height: outer.height + 11,
           });
           await windows.setContentBounds({
-            ...target,
             x: 100,
             y: 110,
             width: 700,
@@ -300,7 +264,6 @@ if (!process.argv.includes("--child")) {
             unit: "logical",
           });
           const logical = await windows.getContentBounds({
-            ...target,
             unit: "logical",
           });
           assert.deepEqual(
@@ -323,10 +286,9 @@ if (!process.argv.includes("--child")) {
           };
           const beforeBounds = records.length;
           await windows.setOuterBounds({
-            ...target,
             ...desired,
           });
-          const applied = await windows.getSnapshot(target);
+          const applied = await windows.getSnapshot();
           assert.deepEqual(
             {
               ...applied.bounds,
@@ -361,24 +323,20 @@ if (!process.argv.includes("--child")) {
               ],
             },
           );
-          await windows.maximize(target);
-          await windows.unmaximize(target);
-          await windows.minimize(target);
-          await windows.restore(target);
+          await windows.maximize();
+          await windows.unmaximize();
+          await windows.minimize();
+          await windows.restore();
           await windows.setFullscreen({
-            ...target,
             fullscreen: true,
           });
           await windows.setFullscreen({
-            ...target,
             fullscreen: false,
           });
           await windows.setAlwaysOnTop({
-            ...target,
             alwaysOnTop: true,
           });
           await windows.setAlwaysOnTop({
-            ...target,
             alwaysOnTop: false,
           });
           const expected = [
@@ -404,11 +362,8 @@ if (!process.argv.includes("--child")) {
                 .some((record) => record.changes.includes(change)),
             ),
           );
-          const snapshot = await windows.getSnapshot(target);
-          assert.deepEqual(
-            snapshot.bounds,
-            await windows.getOuterBounds(target),
-          );
+          const snapshot = await windows.getSnapshot();
+          assert.deepEqual(snapshot.bounds, await windows.getOuterBounds());
           const current = records.slice(start);
           assert(
             current.every((event) => event.windowId === snapshot.windowId),
@@ -456,12 +411,11 @@ if (!process.argv.includes("--child")) {
         async run(input: { onceWindowId: string }) {
           assert.equal(
             input.onceWindowId,
-            (await windows.getSnapshot(target)).windowId,
+            (await windows.getSnapshot()).windowId,
           );
           onceDocuments++;
           const count = records.length;
           await windows.setPosition({
-            ...target,
             x: 180,
             y: 90,
           });
@@ -477,14 +431,13 @@ if (!process.argv.includes("--child")) {
       "test.recreate": {
         ...noInput,
         async run() {
-          await windows.recreate(target);
+          await windows.recreate();
           return null;
         },
       },
       "test.finish": {
         ...noInput,
         async run() {
-          await waitFor(() => denied);
           assert.equal(ids[0], ids[1], "Navigation changed native identity");
           assert.notEqual(
             ids[1],
@@ -496,16 +449,12 @@ if (!process.argv.includes("--child")) {
             JSON.stringify({
               pass: true,
               documents,
-              denied,
               onceDocuments,
               records: records.length,
               ids,
             }),
           );
-          await windows.close({
-            view: "denied",
-          });
-          await windows.close(target);
+          await windows.close();
           return null;
         },
       },
@@ -529,16 +478,15 @@ if (!process.argv.includes("--child")) {
       "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
     ),
     windows: [
-      "main",
-      "denied",
-    ].map((view) => ({
-      view,
-      title: `Events ${view}`,
-      home: `https://app.bunaway.local/${view === "main" ? "index" : "denied"}.html`,
-      window: {
-        width: 640,
-        height: 480,
+      {
+        view: "main",
+        title: "Events main",
+        home: "https://app.bunaway.local/index.html",
+        window: {
+          width: 640,
+          height: 480,
+        },
       },
-    })),
+    ],
   });
 }

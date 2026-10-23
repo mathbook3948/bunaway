@@ -66,13 +66,12 @@ function fixture(supported = true) {
       name: "setAspectRatio" | "getAspectRatio",
       payload: {
         ratio?: number | null;
-      } = {},
+      } | null = null,
     ) =>
       Promise.resolve().then(() =>
         execute(
           `windows.${name}`,
-          {
-            view: "main",
+          payload && {
             ...payload,
           },
           "backend",
@@ -97,7 +96,6 @@ test("aspect ratio schemas accept null or a finite ratio in range and reject eve
       validateWindowCall({
         operation: "windows.setAspectRatio",
         payload: {
-          view: "main",
           ratio,
         },
       }).operation,
@@ -136,7 +134,6 @@ test("aspect ratio schemas accept null or a finite ratio in range and reject eve
       validateWindowCall({
         operation: "windows.setAspectRatio",
         payload: {
-          view: "main",
           ...payload,
         },
       }),

@@ -30,7 +30,6 @@ const KEY_DIRECT_OBJECT = "----";
 const FIRST_LIST_INDEX = 1;
 const WINDOW_TITLES = [
   "main",
-  "observer",
 ];
 
 /** The argument an `openUrl` or `openFile` stimulus needs. */

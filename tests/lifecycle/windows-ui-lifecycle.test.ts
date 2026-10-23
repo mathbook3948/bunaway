@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync } from "node:fs";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -49,7 +48,6 @@ async function startUI(
   trayFailures?: number,
   registerTray = true,
   lifecycleOptions: {
-    isolated?: boolean;
     failCreationNumber?: number;
     creationFailure?: "controller" | "constructor";
     /** Withholds the controller completion of this creation until `parser.run` settles it. */
@@ -57,11 +55,11 @@ async function startUI(
     holdProfileReuse?: boolean;
     closeBehavior?: "keep-alive" | "quit" | "hide";
     /**
-     * Lets both views listen to `windows.lifecycle`; only `main` is also granted
-     * `windows.listInstances`, which the event requires of its recipients.
+     * Lets the document listen to `windows.lifecycle` and grants it
+     * `windows.getSnapshot`, which the event requires of its recipients.
      */
     lifecycleEvents?: boolean;
-    /** Lets both views listen to `windows.closeRequested` and answer it with `windows.respondClose`. */
+    /** Lets the document listen to `windows.closeRequested` and answer it with `windows.respondClose`. */
     closeRequestEvents?: boolean;
     /** Leaves every `listen` unanswered, as while its result is still crossing the channel. */
     withholdListenResult?: boolean;
@@ -139,35 +137,17 @@ async function startUI(
       {
         view: "main",
         title: "Main",
-        ...(lifecycleOptions.isolated
-          ? {
-              profile: "isolated" as const,
-            }
-          : {}),
         home: "https://app.bunaway.local",
         window: {
           width: 800,
           height: 600,
         },
-      },
-      {
-        view: "editor",
-        title: "Editor",
-        home: "https://app.bunaway.local",
-        window: {
-          width: 800,
-          height: 600,
-        },
-        instances: "multiple",
-        maxInstances: 3,
-        startup: false,
       },
     ],
     policy: {
       version: 1,
       views: [
         "main",
-        "editor",
       ].map((id) => ({
         id,
         origins: [
@@ -188,9 +168,9 @@ async function startUI(
         ],
         host: {
           permissions: [
-            ...(lifecycleOptions.lifecycleEvents && id === "main"
+            ...(lifecycleOptions.lifecycleEvents
               ? [
-                  "windows.listInstances",
+                  "windows.getSnapshot",
                 ]
               : []),
             ...(lifecycleOptions.closeRequestEvents
@@ -518,23 +498,11 @@ async function startUI(
   };
 }
 
-/** The production profile owner allocates this directory before controlled WebView creation. */
-async function isolatedProfile(ui: { directory: string }): Promise<string> {
-  const root = resolve(ui.directory, "webview", "temporary");
-  const paths = await readdir(root);
-  expect(paths).toHaveLength(1);
-  return resolve(root, paths[0] ?? "");
-}
-
 test(
-  "declined user close and recreation preserve the live lifetime and isolated profile",
+  "declined user close and recreation preserve the live lifetime",
   async () => {
-    const ui = await startUI(undefined, "ui", undefined, true, {
-      isolated: true,
-    });
-    const target = {
-      view: "main",
-    };
+    const ui = await startUI(undefined, "ui", undefined, true);
+    const target = null;
     try {
       await ui.waitFor(() =>
         ui.packets.some((packet) => packet.kind === "ready"),
@@ -543,10 +511,7 @@ test(
         kind: "start",
       });
       const before = await ui.call("windows.getSnapshot", target);
-      const profile = await isolatedProfile(ui);
-      await writeFile(resolve(profile, "storage"), "private");
       await ui.call("windows.setCloseConfirmation", {
-        ...target,
         message: "Close?",
       });
       Atomics.store(ui.lifecycle, uiLifecycleSlots.confirmClose, 0);
@@ -555,20 +520,17 @@ test(
         () => Atomics.load(ui.lifecycle, uiLifecycleSlots.confirmations) === 1,
       );
       const failure = await ui
-        .call("windows.recreate", target)
+        .call("windows.recreate", {})
         .catch((error: unknown) => error);
       expect(String(failure)).toContain("CANCELLED");
       expect(await ui.call("windows.getSnapshot", target)).toEqual(before);
-      expect(await readFile(resolve(profile, "storage"), "utf8")).toBe(
-        "private",
-      );
       expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.close)).toBe(0);
       expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.detach)).toBe(0);
       // Forced renderer retirement bypasses the same declined confirmation.
       await ui.call("parser.run", "force-close");
-      await ui.waitFor(() => !existsSync(profile));
+      await ui.waitFor(async () => !(await ui.call("windows.isOpen", null)));
       for (let tick = 0; tick < 3; tick++) {
-        expect(await ui.call("windows.isDestroyed", target)).toBe(true);
+        expect(await ui.call("windows.isOpen", null)).toBe(false);
       }
       await ui.channel.send({
         kind: "shutdown",
@@ -595,9 +557,7 @@ test(
     const ui = await startUI(undefined, "ui", undefined, true, {
       closeBehavior: "quit",
     });
-    const target = {
-      view: "main",
-    };
+    const target = null;
     try {
       await ui.waitFor(() =>
         ui.packets.some((packet) => packet.kind === "ready"),
@@ -629,321 +589,6 @@ test(
       });
       expect(await ui.exited).toBe(0);
       expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.close)).toBe(1);
-    } finally {
-      await ui.close();
-    }
-  },
-  timeoutMs + 5_000,
-);
-
-test(
-  "successful recreation retains isolated storage and final shutdown releases each native lifetime once",
-  async () => {
-    const ui = await startUI(undefined, undefined, undefined, true, {
-      isolated: true,
-    });
-    const target = {
-      view: "main",
-    };
-    try {
-      await ui.waitFor(() =>
-        ui.packets.some((packet) => packet.kind === "ready"),
-      );
-      await ui.channel.send({
-        kind: "start",
-      });
-      const before = await ui.call("windows.getSnapshot", target);
-      const profile = await isolatedProfile(ui);
-      await writeFile(resolve(profile, "storage"), "private");
-      expect(await ui.call("windows.recreate", target)).toBeNull();
-      expect(await ui.call("windows.getSnapshot", target)).not.toEqual(before);
-      expect(await isolatedProfile(ui)).toBe(profile);
-      expect(await readFile(resolve(profile, "storage"), "utf8")).toBe(
-        "private",
-      );
-      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.finish)).toBe(1);
-      await ui.channel.send({
-        kind: "shutdown",
-      });
-      expect(await ui.exited).toBe(0);
-      expect(existsSync(profile)).toBe(false);
-      for (const slot of [
-        uiLifecycleSlots.close,
-        uiLifecycleSlots.detach,
-        uiLifecycleSlots.finish,
-        uiLifecycleSlots.destroy,
-      ]) {
-        expect(Atomics.load(ui.lifecycle, slot)).toBe(2);
-      }
-    } finally {
-      await ui.close();
-    }
-  },
-  timeoutMs + 5_000,
-);
-
-test.each([
-  "controller",
-  "constructor",
-] as const)(
-  "replacement %s failure releases retained storage and permits a fresh isolated creation",
-  async (creationFailure) => {
-    const ui = await startUI(undefined, undefined, undefined, true, {
-      isolated: true,
-      failCreationNumber: 2,
-      creationFailure,
-    });
-    const target = {
-      view: "main",
-    };
-    try {
-      await ui.waitFor(() =>
-        ui.packets.some((packet) => packet.kind === "ready"),
-      );
-      await ui.channel.send({
-        kind: "start",
-      });
-      const profile = await isolatedProfile(ui);
-      await writeFile(resolve(profile, "storage"), "private");
-      const failure = await ui
-        .call("windows.recreate", target)
-        .catch((error: unknown) => error);
-      expect(String(failure)).toContain("INTERNAL");
-      await ui.waitFor(() => !existsSync(profile));
-      expect(await ui.call("windows.listInstances", null)).toEqual([]);
-      expect(ui.packets.some((packet) => packet.kind === "fatal")).toBe(false);
-      expect(await ui.call("windows.create", target)).toBeNull();
-      const fresh = await isolatedProfile(ui);
-      expect(fresh).not.toBe(profile);
-      expect(existsSync(resolve(fresh, "storage"))).toBe(false);
-      await ui.channel.send({
-        kind: "shutdown",
-      });
-      expect(await ui.exited).toBe(0);
-      for (const slot of [
-        uiLifecycleSlots.close,
-        uiLifecycleSlots.detach,
-        uiLifecycleSlots.finish,
-        uiLifecycleSlots.destroy,
-      ]) {
-        expect(Atomics.load(ui.lifecycle, slot)).toBe(
-          creationFailure === "controller" || slot === uiLifecycleSlots.destroy
-            ? 3
-            : 2,
-        );
-      }
-    } finally {
-      await ui.close();
-    }
-  },
-  timeoutMs + 5_000,
-);
-
-test(
-  "modal input restoration retries after COM completion without repeating native cleanup",
-  async () => {
-    const ui = await startUI();
-    const main = {
-      view: "main",
-    };
-    try {
-      await ui.waitFor(() =>
-        ui.packets.some((packet) => packet.kind === "ready"),
-      );
-      await ui.channel.send({
-        kind: "start",
-      });
-      const parent = validateWindowOutput(
-        "windows.listInstances",
-        await ui.call("windows.listInstances", null),
-      )[0];
-      expect(parent).toBeDefined();
-      const child = validateWindowOutput(
-        "windows.createInstance",
-        await ui.call("windows.createInstance", {
-          view: "editor",
-        }),
-      );
-      const target = {
-        view: child.viewId,
-        windowId: child.windowId,
-      };
-      await ui.call("windows.setParent", {
-        ...target,
-        parent: parent?.windowId ?? null,
-        modal: true,
-      });
-      expect(await ui.call("windows.isEnabled", main)).toBe(false);
-      Atomics.store(ui.lifecycle, uiLifecycleSlots.inputRestoreFailures, 1);
-      expect(await ui.call("windows.close", target)).toBe(true);
-      await ui.waitFor(
-        async () => (await ui.call("windows.isEnabled", main)) === true,
-      );
-      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.inputRestores)).toBe(
-        2,
-      );
-      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.finish)).toBe(1);
-      expect(
-        ui.packets.some(
-          (packet) =>
-            packet.kind === "diagnostic" &&
-            packet.event === "window-input-restore-retry",
-        ),
-      ).toBe(true);
-      await ui.channel.send({
-        kind: "shutdown",
-      });
-      expect(await ui.exited).toBe(0);
-      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.finish)).toBe(2);
-    } finally {
-      await ui.close();
-    }
-  },
-  timeoutMs + 5_000,
-);
-
-test(
-  "a recoverable download cleanup failure defers detach, retries it and then completes the close once",
-  async () => {
-    const ui = await startUI();
-    try {
-      await ui.waitFor(() =>
-        ui.packets.some((packet) => packet.kind === "ready"),
-      );
-      await ui.channel.send({
-        kind: "start",
-      });
-      const child = validateWindowOutput(
-        "windows.createInstance",
-        await ui.call("windows.createInstance", {
-          view: "editor",
-        }),
-      );
-      Atomics.store(ui.lifecycle, uiLifecycleSlots.detachFailures, 1);
-      expect(
-        await ui.call("windows.close", {
-          view: child.viewId,
-          windowId: child.windowId,
-        }),
-      ).toBe(true);
-      // The diagnostic travels by message, the counters by shared memory; wait for both.
-      await ui.waitFor(
-        () =>
-          Atomics.load(ui.lifecycle, uiLifecycleSlots.finish) === 1 &&
-          ui.packets.some(
-            (packet) =>
-              packet.kind === "diagnostic" &&
-              packet.event === "download-cleanup-recovered",
-          ),
-      );
-      // One failed attempt keeps the native references, the retry detaches and finishes once.
-      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.detach)).toBe(2);
-      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.destroy)).toBe(1);
-      const events = ui.packets.flatMap((packet) =>
-        packet.kind === "diagnostic"
-          ? [
-              packet.event,
-            ]
-          : [],
-      );
-      expect(events).toContain("download-cleanup-retry");
-      expect(events).toContain("download-cleanup-recovered");
-      await ui.channel.send({
-        kind: "shutdown",
-      });
-      expect(await ui.exited).toBe(0);
-    } finally {
-      await ui.close();
-    }
-  },
-  timeoutMs + 5_000,
-);
-
-test.each([
-  "destroy",
-  "shutdown",
-] as const)(
-  "%s cancels a replacement after native release and deletes its retained profile without repeating cleanup",
-  async (action) => {
-    const ui = await startUI(undefined, undefined, undefined, true, {
-      isolated: true,
-      holdProfileReuse: true,
-    });
-    const target = {
-      view: "main",
-    };
-    const requestId = crypto.randomUUID();
-    try {
-      await ui.waitFor(() =>
-        ui.packets.some((packet) => packet.kind === "ready"),
-      );
-      await ui.channel.send({
-        kind: "start",
-      });
-      // Keep another live lifetime so destroying the replacement does not commit app shutdown.
-      await ui.call("windows.createInstance", {
-        view: "editor",
-      });
-      const profile = await isolatedProfile(ui);
-      await ui.channel.send({
-        kind: "operation",
-        context: "backend" as UIConfig["backendContext"],
-        source: "backend",
-        requestId,
-        call: {
-          operation: "windows.recreate",
-          payload: target,
-        },
-      });
-      await ui.waitFor(
-        () => Atomics.load(ui.lifecycle, uiLifecycleSlots.finish) === 1,
-      );
-      // Native release completes while the shared environment still prevents profile reuse.
-      expect(existsSync(profile)).toBe(true);
-      expect(
-        ui.packets.some(
-          (packet) =>
-            packet.kind === "host-response" && packet.requestId === requestId,
-        ),
-      ).toBe(false);
-      if (action === "destroy") {
-        expect(await ui.call("windows.destroy", target)).toBe(true);
-        await ui.waitFor(() =>
-          ui.packets.some(
-            (packet) =>
-              packet.kind === "host-response" && packet.requestId === requestId,
-          ),
-        );
-        expect(
-          ui.packets.find(
-            (packet) =>
-              packet.kind === "host-response" && packet.requestId === requestId,
-          ),
-        ).toMatchObject({
-          response: {
-            kind: "error",
-            error: {
-              code: "CANCELLED",
-            },
-          },
-        });
-        await ui.waitFor(() => !existsSync(profile));
-        expect(await ui.call("windows.listInstances", null)).toHaveLength(1);
-        expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.finish)).toBe(1);
-      }
-      await ui.channel.send({
-        kind: "shutdown",
-      });
-      expect(await ui.exited).toBe(0);
-      expect(existsSync(profile)).toBe(false);
-      for (const slot of [
-        uiLifecycleSlots.close,
-        uiLifecycleSlots.detach,
-        uiLifecycleSlots.finish,
-        uiLifecycleSlots.destroy,
-      ]) {
-        expect(Atomics.load(ui.lifecycle, slot)).toBe(2);
-      }
     } finally {
       await ui.close();
     }
@@ -999,9 +644,7 @@ test(
   "user-close policy blocks renderer callbacks but forced renderer cleanup retires the HWND",
   async () => {
     const ui = await startUI(undefined, "ui");
-    const target = {
-      view: "main",
-    };
+    const target = null;
     try {
       await ui.waitFor(() =>
         ui.packets.some((packet) => packet.kind === "ready"),
@@ -1011,21 +654,18 @@ test(
       });
       const before = await ui.call("windows.getSnapshot", target);
       await ui.call("windows.setClosable", {
-        ...target,
         closable: false,
       });
       expect(await ui.call("windows.isClosable", target)).toBe(false);
       await ui.call("parser.run", "user-close");
       // Additional queued operations advance the actual UI loop after the close callback.
       for (let tick = 0; tick < 3; tick++) {
-        expect(await ui.call("windows.isDestroyed", target)).toBe(false);
+        expect(await ui.call("windows.isOpen", null)).toBe(true);
       }
       expect(await ui.call("windows.getSnapshot", target)).toEqual(before);
       await ui.call("parser.run", "force-close");
-      await ui.waitFor(
-        async () => (await ui.call("windows.isDestroyed", target)) === true,
-      );
-      expect(await ui.call("windows.listInstances", null)).toEqual([]);
+      await ui.waitFor(async () => !(await ui.call("windows.isOpen", null)));
+      expect(await ui.call("windows.isOpen", null)).toBe(false);
       expect(ui.packets.some((packet) => packet.kind === "fatal")).toBe(false);
       await ui.channel.send({
         kind: "shutdown",
@@ -1039,7 +679,7 @@ test(
 );
 
 test(
-  "desktop Open restores all live single and multiple windows without creating extra lifetimes",
+  "desktop Open shows the live window without creating another lifetime",
   async () => {
     const ui = await startUI();
     try {
@@ -1049,18 +689,10 @@ test(
       await ui.channel.send({
         kind: "start",
       });
-      const first = await ui.call("windows.createInstance", {
-        view: "editor",
-      });
-      const second = await ui.call("windows.createInstance", {
-        view: "editor",
-      });
-      expect(first).not.toEqual(second);
-      const identities = validateWindowOutput(
-        "windows.listInstances",
-        await ui.call("windows.listInstances", null),
+      const identity = validateWindowOutput(
+        "windows.getReadiness",
+        await ui.call("windows.getReadiness", null),
       );
-      expect(identities).toHaveLength(3);
       for (const action of [
         "hide",
         "show",
@@ -1069,25 +701,21 @@ test(
           kind: "desktop-control",
           action,
         });
-        for (const identity of identities) {
-          // Desktop control is queued for the UI pump; wait for its observable effect.
-          await ui.waitFor(
-            async () =>
-              (await ui.call("windows.isVisible", {
-                view: identity.viewId,
-                windowId: identity.windowId,
-              })) ===
-              (action === "show"),
-          );
-          expect(
-            await ui.call("windows.isVisible", {
-              view: identity.viewId,
-              windowId: identity.windowId,
-            }),
-          ).toBe(action === "show");
-        }
+        // Desktop control is queued for the UI pump; wait for its observable effect.
+        await ui.waitFor(
+          async () =>
+            (await ui.call("windows.isVisible", null)) === (action === "show"),
+        );
+        expect(await ui.call("windows.isVisible", null)).toBe(
+          action === "show",
+        );
       }
-      expect(await ui.call("windows.listInstances", null)).toEqual(identities);
+      expect(
+        validateWindowOutput(
+          "windows.getReadiness",
+          await ui.call("windows.getReadiness", null),
+        ).windowId,
+      ).toBe(identity.windowId);
       await ui.channel.send({
         kind: "shutdown",
       });
@@ -1138,42 +766,6 @@ test(
   timeoutMs + 5_000,
 );
 
-test(
-  "a runtime controller failure cleans only its instance and keeps existing windows usable",
-  async () => {
-    const ui = await startUI("editor");
-    try {
-      await ui.waitFor(() =>
-        ui.packets.some((packet) => packet.kind === "ready"),
-      );
-      await ui.channel.send({
-        kind: "start",
-      });
-      const failure = await ui
-        .call("windows.createInstance", {
-          view: "editor",
-        })
-        .catch((error: unknown) => error);
-      expect(failure).toBeInstanceOf(Error);
-      expect(String(failure)).toContain("INTERNAL");
-      expect(
-        await ui.call("windows.isVisible", {
-          view: "main",
-        }),
-      ).toBe(true);
-      expect(await ui.call("windows.listInstances", null)).toHaveLength(1);
-      expect(ui.packets.some((packet) => packet.kind === "fatal")).toBe(false);
-      await ui.channel.send({
-        kind: "shutdown",
-      });
-      expect(await ui.exited).toBe(0);
-    } finally {
-      await ui.close();
-    }
-  },
-  timeoutMs + 5_000,
-);
-
 test.each([
   "ui",
   "sync",
@@ -1202,9 +794,7 @@ test.each([
         () => Atomics.load(ui.parsing, parserSlots.started) === 1,
       );
       // Last-window destruction commits closing locally; deliberately withhold cancel/shutdown packets.
-      await ui.call("windows.destroy", {
-        view: "main",
-      });
+      await ui.call("windows.destroy", null);
       await ui.waitFor(() =>
         ui.packets.some((packet) => packet.kind === "closing"),
       );
@@ -1284,19 +874,13 @@ test(
         kind: "start",
       });
       // A live window at startup is not an empty transition.
-      await ui.call("windows.isVisible", {
-        view: "main",
-      });
+      await ui.call("windows.isVisible", null);
       expect(emptyPackets()).toBe(0);
       await ui.call("parser.run", "user-close");
       await ui.waitFor(() => emptyPackets() === 1);
       // Several more pump turns must not repeat the report for the same transition.
       for (let tick = 0; tick < 3; tick++) {
-        expect(
-          await ui.call("windows.isDestroyed", {
-            view: "main",
-          }),
-        ).toBe(true);
+        expect(await ui.call("windows.isOpen", null)).toBe(false);
       }
       expect(emptyPackets()).toBe(1);
       expect(ui.packets.some((packet) => packet.kind === "closing")).toBe(
@@ -1308,10 +892,7 @@ test(
         action: "show",
       });
       await ui.waitFor(
-        async () =>
-          (await ui.call("windows.isDestroyed", {
-            view: "main",
-          })) === false,
+        async () => (await ui.call("windows.isOpen", null)) === true,
       );
       await ui.call("parser.run", "user-close");
       await ui.waitFor(() => emptyPackets() === 2);
@@ -1346,9 +927,7 @@ test(
         ui.packets.some((packet) => packet.kind === "quit-request"),
       );
       for (let tick = 0; tick < 3; tick++) {
-        await ui.call("windows.isVisible", {
-          view: "main",
-        });
+        await ui.call("windows.isVisible", null);
       }
       await ui.channel.send({
         kind: "shutdown",
@@ -1378,9 +957,7 @@ test(
       await ui.channel.send({
         kind: "start",
       });
-      await ui.call("windows.destroy", {
-        view: "main",
-      });
+      await ui.call("windows.destroy", null);
       await ui.waitFor(() =>
         ui.packets.some((packet) => packet.kind === "closing"),
       );
@@ -1419,25 +996,21 @@ test(
       await ui.channel.send({
         kind: "start",
       });
-      // The editor's controller stays pending, so its creation call stays open.
+      // The only created window closes: the app is empty.
+      await ui.call("parser.run", "user-close");
+      await ui.waitFor(() => emptyPackets() === 1);
+      // The next window's controller stays pending, so its creation call stays open.
       const creation = ui
-        .call("windows.createInstance", {
-          view: "editor",
-        })
+        .call("windows.create", {})
         .catch((error: unknown) => error);
       await ui.waitFor(
         async () => (await ui.call("parser.run", "held-controller")) === "held",
       );
-      // The only created window closes while another is being created: the app is empty.
-      await ui.call("parser.run", "user-close");
-      await ui.waitFor(() => emptyPackets() === 1);
       // Creation fails before `created`; the creating window never counted, so nothing is re-armed.
       expect(await ui.call("parser.run", "fail-held")).toBe("settled");
       expect(String(await creation)).toContain("INTERNAL");
       for (let tick = 0; tick < 3; tick++) {
-        await ui.call("windows.isDestroyed", {
-          view: "main",
-        });
+        await ui.call("windows.isOpen", null);
       }
       expect(emptyPackets()).toBe(1);
       await ui.channel.send({
@@ -1467,26 +1040,16 @@ test(
       await ui.channel.send({
         kind: "start",
       });
-      const creation = ui.call("windows.createInstance", {
-        view: "editor",
-      });
+      await ui.call("parser.run", "user-close");
+      await ui.waitFor(() => emptyPackets() === 1);
+      const creation = ui.call("windows.create", {});
       await ui.waitFor(
         async () => (await ui.call("parser.run", "held-controller")) === "held",
       );
-      await ui.call("parser.run", "user-close");
-      await ui.waitFor(() => emptyPackets() === 1);
       expect(await ui.call("parser.run", "ready-held")).toBe("settled");
-      const editor = validateWindowOutput(
-        "windows.createInstance",
-        await creation,
-      );
-      // The ready editor is live again, so its close is a new transition to zero windows.
-      expect(
-        await ui.call("windows.close", {
-          view: editor.viewId,
-          windowId: editor.windowId,
-        }),
-      ).toBe(true);
+      await creation;
+      // The ready window is live again, so its close is a new transition to zero windows.
+      expect(await ui.call("windows.close", null)).toBe(true);
       await ui.waitFor(() => emptyPackets() === 2);
       await ui.channel.send({
         kind: "shutdown",
@@ -1515,9 +1078,7 @@ test(
         kind: "start",
       });
       // The replacement's controller stays pending: the old window is closed and none is ready yet.
-      const recreation = ui.call("windows.recreate", {
-        view: "main",
-      });
+      const recreation = ui.call("windows.recreate", {});
       await ui.waitFor(
         async () => (await ui.call("parser.run", "held-controller")) === "held",
       );
@@ -1559,9 +1120,7 @@ test(
         kind: "start",
       });
       const recreation = ui
-        .call("windows.recreate", {
-          view: "main",
-        })
+        .call("windows.recreate", {})
         .catch((error: unknown) => error);
       await ui.waitFor(
         async () => (await ui.call("parser.run", "held-controller")) === "held",
@@ -1609,9 +1168,7 @@ test(
       });
       const { windowId } = validateWindowOutput(
         "windows.getSnapshot",
-        await ui.call("windows.getSnapshot", {
-          view: "main",
-        }),
+        await ui.call("windows.getSnapshot", null),
       );
       expect(
         await ui.deliverWindowMessage(WM_QUERYENDSESSION, 0, ENDSESSION_LOGOFF),
@@ -1730,8 +1287,21 @@ async function listenToLifecycle(
   });
 }
 
+/** Reads the next published phase after `after` through the backend subscription. */
+async function nextLifecycle(
+  ui: Awaited<ReturnType<typeof startUI>>,
+  after: number,
+) {
+  return validateWindowOutput(
+    "windows.waitForLifecycle",
+    await ui.call("windows.waitForLifecycle", {
+      after,
+    }),
+  );
+}
+
 test(
-  "windows.lifecycle reports each phase once and in order to sessions that may list instances, but not during shutdown",
+  "windows.waitForLifecycle reports each phase once and in order, and nothing during shutdown",
   async () => {
     const ui = await startUI(undefined, undefined, undefined, true, {
       lifecycleEvents: true,
@@ -1743,83 +1313,39 @@ test(
       await ui.channel.send({
         kind: "start",
       });
-      const main = validateWindowOutput(
-        "windows.listInstances",
-        await ui.call("windows.listInstances", null),
-      )[0];
-      expect(main).toBeDefined();
       const first = validateWindowOutput(
-        "windows.createInstance",
-        await ui.call("windows.createInstance", {
-          view: "editor",
-        }),
+        "windows.getReadiness",
+        await ui.call("windows.getReadiness", null),
       );
-      // `main` may list instances; the editor session listens too but lacks that permission.
-      await listenToLifecycle(ui, "main", main?.windowId ?? "");
-      await listenToLifecycle(ui, "editor", first.windowId);
-
-      const second = validateWindowOutput(
-        "windows.createInstance",
-        await ui.call("windows.createInstance", {
-          view: "editor",
-        }),
-      );
-      await ui.deliverWebRequest(second.windowId);
+      await listenToLifecycle(ui, "main", first.windowId);
       // A repeated completion of the same document must not repeat `ready`.
-      await ui.deliverWebRequest(second.windowId);
-      expect(
-        await ui.call("windows.close", {
-          view: second.viewId,
-          windowId: second.windowId,
-        }),
-      ).toBe(true);
-      await ui.waitFor(
-        () =>
-          lifecycleDeliveries(ui.packets, "main", second.windowId).length === 4,
-      );
-      expect(
-        lifecycleDeliveries(ui.packets, "main", second.windowId).map(
-          (event) => event.phase,
-        ),
-      ).toEqual([
+      await ui.deliverWebRequest(first.windowId);
+      // Recreation retires the old windowId and creates a new one.
+      await ui.call("windows.recreate", {});
+      const seen: {
+        windowId: string;
+        phase: string;
+      }[] = [];
+      let after = 0;
+      while (seen.length < 5) {
+        const event = await nextLifecycle(ui, after);
+        after = event.sequence;
+        seen.push({
+          windowId: event.windowId,
+          phase: event.phase,
+        });
+      }
+      expect(seen.map((event) => event.phase)).toEqual([
         "created",
         "ready",
         "closed",
         "destroyed",
-      ]);
-
-      // Recreation retires the old windowId and creates a new one.
-      const recreated = validateWindowOutput(
-        "windows.recreateInstance",
-        await ui.call("windows.recreateInstance", {
-          view: first.viewId,
-          windowId: first.windowId,
-        }),
-      );
-      expect(recreated.windowId).not.toBe(first.windowId);
-      await ui.waitFor(
-        () =>
-          lifecycleDeliveries(ui.packets, "main", first.windowId).length ===
-            2 &&
-          lifecycleDeliveries(ui.packets, "main", recreated.windowId).length ===
-            1,
-      );
-      expect(
-        lifecycleDeliveries(ui.packets, "main", first.windowId).map(
-          (event) => event.phase,
-        ),
-      ).toEqual([
-        "closed",
-        "destroyed",
-      ]);
-      expect(
-        lifecycleDeliveries(ui.packets, "main", recreated.windowId).map(
-          (event) => event.phase,
-        ),
-      ).toEqual([
         "created",
       ]);
-      expect(lifecycleDeliveries(ui.packets, "editor")).toEqual([]);
+      expect(seen.slice(0, 4).every((e) => e.windowId === first.windowId)).toBe(
+        true,
+      );
+      expect(seen[4]?.windowId).not.toBe(first.windowId);
 
       const delivered = lifecycleDeliveries(ui.packets, "main").length;
       await ui.channel.send({
@@ -1849,40 +1375,33 @@ test(
       await ui.channel.send({
         kind: "start",
       });
-      const main = validateWindowOutput(
-        "windows.listInstances",
-        await ui.call("windows.listInstances", null),
-      )[0];
-      await listenToLifecycle(ui, "main", main?.windowId ?? "");
+      const first = await nextLifecycle(ui, 0);
+      expect(first.phase).toBe("created");
       const failure = await ui
-        .call("windows.createInstance", {
-          view: "editor",
-        })
+        .call("windows.recreate", {})
         .catch((error: unknown) => error);
       expect(String(failure)).toContain("INTERNAL");
       // The failed lifetime is released natively, yet it never announced itself.
       await ui.waitFor(
-        () => Atomics.load(ui.lifecycle, uiLifecycleSlots.destroy) === 1,
+        () => Atomics.load(ui.lifecycle, uiLifecycleSlots.destroy) === 2,
       );
-      await ui.call("windows.listInstances", null);
-      expect(lifecycleDeliveries(ui.packets, "main")).toEqual([]);
+      const closed = await nextLifecycle(ui, first.sequence);
+      const destroyed = await nextLifecycle(ui, closed.sequence);
+      expect([
+        closed.phase,
+        destroyed.phase,
+      ]).toEqual([
+        "closed",
+        "destroyed",
+      ]);
+      expect(closed.windowId).toBe(first.windowId);
+      expect(destroyed.windowId).toBe(first.windowId);
 
       // A later successful creation still announces `created` once its controller is ready.
-      const created = validateWindowOutput(
-        "windows.createInstance",
-        await ui.call("windows.createInstance", {
-          view: "editor",
-        }),
-      );
-      await ui.waitFor(
-        () =>
-          lifecycleDeliveries(ui.packets, "main", created.windowId).length >= 1,
-      );
-      expect(
-        lifecycleDeliveries(ui.packets, "main").map((event) => event.phase),
-      ).toEqual([
-        "created",
-      ]);
+      await ui.call("windows.create", {});
+      const created = await nextLifecycle(ui, destroyed.sequence);
+      expect(created.phase).toBe("created");
+      expect(created.windowId).not.toBe(first.windowId);
       await ui.channel.send({
         kind: "shutdown",
       });
@@ -1924,9 +1443,7 @@ async function startCloseRequestUI(
     withholdListenResult: options.withholdListenResult ?? false,
     closeBehavior: options.closeBehavior ?? "keep-alive",
   });
-  const target = {
-    view: "main",
-  };
+  const target = null;
   await ui.waitFor(() => ui.packets.some((packet) => packet.kind === "ready"));
   await ui.channel.send({
     kind: "start",
@@ -1936,7 +1453,6 @@ async function startCloseRequestUI(
     await ui.call("windows.getSnapshot", target),
   );
   await ui.call("windows.setCloseConfirmation", {
-    ...target,
     message: "Close?",
   });
   Atomics.store(ui.lifecycle, uiLifecycleSlots.confirmClose, 0);
@@ -1945,21 +1461,19 @@ async function startCloseRequestUI(
   }
   const respond = (requestId: number, allow: boolean) =>
     ui.call("windows.respondClose", {
-      ...target,
       requestId,
       allow,
     });
   /**
    * Round trips through the UI owner so that an ignored close request would have been handled.
-   * Uses `windows.isDestroyed`, which stays valid after the window is destroyed.
+   * Uses `windows.isOpen`, which stays valid after the window is destroyed.
    */
   const settle = async () => {
     for (let tick = 0; tick < 3; tick++) {
-      await ui.call("windows.isDestroyed", target);
+      await ui.call("windows.isOpen", null);
     }
   };
-  const isDestroyed = async () =>
-    (await ui.call("windows.isDestroyed", target)) === true;
+  const isDestroyed = async () => !(await ui.call("windows.isOpen", null));
   return {
     ui,
     windowId,
@@ -1982,11 +1496,7 @@ test(
       expect(closeRequestEvents(ui.packets)).toHaveLength(1);
       expect(
         String(
-          await ui
-            .call("windows.close", {
-              view: "main",
-            })
-            .catch((error: unknown) => error),
+          await ui.call("windows.close", null).catch((error: unknown) => error),
         ),
       ).toContain("BUSY");
 
@@ -2202,24 +1712,16 @@ test(
 test(
   "trusted destruction closes a window with a pending close request and ends the wait",
   async () => {
-    const { ui, respond, settle, isDestroyed } = await startCloseRequestUI();
+    const { ui } = await startCloseRequestUI();
     try {
-      // Keep another window alive so that destroying `main` does not end the app.
-      await ui.call("windows.createInstance", {
-        view: "editor",
-      });
       await ui.call("parser.run", "user-close");
       await ui.waitFor(() => closeRequestEvents(ui.packets).length === 1);
-      await ui.call("windows.destroy", {
-        view: "main",
-      });
-      await settle();
-      expect(await isDestroyed()).toBe(true);
-      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.close)).toBe(1);
-      // Destruction cancelled the request, so the reservation is gone and the answer is stale.
-      expect(String(await respond(1, true).catch((error) => error))).toContain(
-        "Window is not open.",
+      await ui.call("windows.destroy", null);
+      // Destruction of the only window ends the app and cancels the pending request.
+      await ui.waitFor(() =>
+        ui.packets.some((packet) => packet.kind === "closing"),
       );
+      expect(Atomics.load(ui.lifecycle, uiLifecycleSlots.close)).toBe(1);
       await ui.channel.send({
         kind: "shutdown",
       });
@@ -2321,35 +1823,41 @@ test(
         kind: "start",
       });
       const main = validateWindowOutput(
-        "windows.listInstances",
-        await ui.call("windows.listInstances", null),
-      )[0];
-      await listenToLifecycle(ui, "main", main?.windowId ?? "");
-      const editor = validateWindowOutput(
-        "windows.createInstance",
-        await ui.call("windows.createInstance", {
-          view: "editor",
-        }),
+        "windows.getReadiness",
+        await ui.call("windows.getReadiness", null),
       );
-      await ui.waitFor(
-        () =>
-          lifecycleDeliveries(ui.packets, "main", editor.windowId).length > 0,
-      );
+      await listenToLifecycle(ui, "main", main.windowId);
+      const created = await nextLifecycle(ui, 0);
+      expect(created.phase).toBe("created");
       const delivered = lifecycleDeliveries(ui.packets, "main").length;
       await ui.channel.send({
         kind: "shutdown-committed",
       });
-      // Host calls are not needed: the renderer closes the editor directly on the UI thread.
-      await ui.deliverWebRequest(editor.windowId, undefined, "close");
+      const pending = ui
+        .call("windows.waitForLifecycle", {
+          after: created.sequence,
+        })
+        .catch((error: unknown) => error);
+      // Host calls are not needed: the renderer closes the window directly on the UI thread.
+      await ui.deliverWebRequest(main.windowId, undefined, "close");
       for (let tick = 0; tick < 5; tick++) {
         await ui.deliverWindowMessage(WM_NULL, 0, 0);
       }
+      const outcome = await Promise.race([
+        pending.then(() => "settled"),
+        Bun.sleep(200).then(() => "waiting"),
+      ]);
       expect(lifecycleDeliveries(ui.packets, "main")).toHaveLength(delivered);
       await ui.channel.send({
         kind: "shutdown",
       });
       expect(await ui.exited).toBe(0);
       expect(lifecycleDeliveries(ui.packets, "main")).toHaveLength(delivered);
+      // Only the first retained phase may be answered; the later ones were never published.
+      expect([
+        "waiting",
+        "settled",
+      ]).toContain(outcome);
     } finally {
       await ui.close();
     }
@@ -2384,15 +1892,12 @@ test(
       closeBehavior: "hide",
       subscribe: false,
     });
-    const identity = {
-      view: "main",
-      windowId,
-    };
+    void windowId;
     try {
-      expect(await ui.call("windows.isVisible", identity)).toBe(true);
+      expect(await ui.call("windows.isVisible", null)).toBe(true);
       await ui.call("parser.run", "user-close");
       await ui.waitFor(
-        async () => (await ui.call("windows.isVisible", identity)) === false,
+        async () => (await ui.call("windows.isVisible", null)) === false,
       );
       await settle();
       expect(await isDestroyed()).toBe(false);
@@ -2414,16 +1919,12 @@ test(
 test(
   "a close requested while the app still decides an earlier close is rejected as pending",
   async () => {
-    const { ui, windowId, respond, settle, isDestroyed } =
-      await startCloseRequestUI();
+    const { ui, respond, settle, isDestroyed } = await startCloseRequestUI();
     try {
       await ui.call("parser.run", "user-close");
       await ui.waitFor(() => closeRequestEvents(ui.packets).length === 1);
       const failure = await ui
-        .call("windows.close", {
-          view: "main",
-          windowId,
-        })
+        .call("windows.close", null)
         .catch((error: unknown) => error);
       expect(String(failure)).toContain("Window close is already pending.");
       await settle();

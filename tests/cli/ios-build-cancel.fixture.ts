@@ -2,7 +2,7 @@
 import { spyOn } from "bun:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { acquireBuildOutputLock } from "@bunaway/packaging";
 import { outputPaths } from "@bunaway/packaging/paths";

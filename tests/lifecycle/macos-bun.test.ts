@@ -88,15 +88,11 @@ test("macOS rejects declared initial window state rather than ignoring it", () =
   }
 });
 
-test("macOS rejects explicitly declared initial placement, including defaults on deferred windows", () => {
+test("macOS rejects explicitly declared initial placement, including defaults", () => {
   const config = workerConfig("unused");
   const first = config.windows[0];
   if (!first) {
     throw new Error("Missing test window.");
-  }
-  const policyView = config.policy.views[0];
-  if (!policyView) {
-    throw new Error("Missing policy view.");
   }
   for (const placement of [
     {
@@ -120,27 +116,15 @@ test("macOS rejects explicitly declared initial placement, including defaults on
     expect(() =>
       readMacosWindowSpecs(
         [
-          first,
           {
             ...first,
-            view: "deferred",
-            startup: false,
             window: {
               ...first.window,
               ...placement,
             },
           },
         ],
-        {
-          ...config.policy,
-          views: [
-            ...config.policy.views,
-            {
-              ...policyView,
-              id: "deferred",
-            },
-          ],
-        },
+        config.policy,
       ),
     ).toThrow("Initial window placement options are not implemented on macOS");
   }
@@ -1219,7 +1203,7 @@ test("macOS shutdown cancels setup Host calls before waiting for plugin cleanup"
         {name:"cleanup",version:"1.0.0",setup(){return () => Bun.write(${JSON.stringify(marker)},"stopped").then(() => {});}},
         {name:"close",version:"1.0.0",async setup(context){
           const operation = windows._definition.native.operations.find(operation => operation.name === "windows.close");
-          try { await context.host.call(operation, {view:"main"}); }
+          try { await context.host.call(operation, null); }
           catch (error) { await Bun.write(${JSON.stringify(cancelled)}, error.code); throw error; }
         }}
       ]};`,
@@ -2082,12 +2066,6 @@ test("macOS accepts hidden window preparation and rejects unsupported options pe
       },
     }),
   ).toThrow("Initial window state options are not implemented on macOS");
-  expect(() =>
-    assertMacosWindowOptions({
-      ...first,
-      instances: "multiple",
-    }),
-  ).toThrow("Multiple windows and isolated instance profiles");
 });
 
 test("macOS accepts the contentProtection window declaration", () => {

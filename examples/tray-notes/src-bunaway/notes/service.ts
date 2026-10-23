@@ -12,9 +12,6 @@ const notePath = join(
   "data",
   "note.txt",
 );
-const target = {
-  view: settings.app.windows[0]?.view ?? "main",
-};
 
 /** Writes note text to the app-selected file; permission and I/O failures reject. */
 export async function saveNote(text: string): Promise<void> {
@@ -37,14 +34,14 @@ export async function readNote(): Promise<string> {
 
 /** Applies the saved position and size to the open window; its visibility is not touched. */
 export async function restoreWindow(): Promise<boolean> {
-  return (await windowState.restore(target)).restored;
+  return (await windowState.restore()).restored;
 }
 
 /** Saves the note, then the window placement. Only the note write can reject. */
 export async function saveBeforeClose(text: string): Promise<void> {
   await saveNote(text);
   try {
-    await windowState.save(target);
+    await windowState.save();
   } catch {
     // A placement that cannot be stored must not keep the window from closing.
   }

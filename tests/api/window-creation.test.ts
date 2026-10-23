@@ -22,9 +22,7 @@ test.each([
   async (operation) => {
     const call = {
       operation,
-      payload: {
-        view: "editor",
-      },
+      payload: {},
     };
     expect(validateWindowCall(call)).toEqual(call);
     expect(await parsers.validateCall(call)).toEqual(call);
@@ -46,9 +44,7 @@ test.each([
     expect(
       registry.allowed(permissions, {
         ...call,
-        payload: {
-          view: "main",
-        },
+        payload: {},
       }),
     ).toBe(true);
 

@@ -18,9 +18,6 @@ const root = resolve(import.meta.dir, "../..");
 const output = resolve(root, "build/windows-window-input-events");
 const assets = resolve(output, "assets");
 const reportPath = resolve(output, "report.json");
-const target = {
-  view: "main",
-};
 const policy: Policy = {
   version: 1,
   backend: {
@@ -204,7 +201,7 @@ if (!process.argv.includes("--child")) {
             const caption = Buffer.from("Input main\0", "utf16le");
             const hwnd = driver.symbols.FindWindowW(null, ptr(caption));
             assert(hwnd);
-            const snapshot = await windows.getSnapshot(target);
+            const snapshot = await windows.getSnapshot();
             const rect = Buffer.alloc(16);
             assert(driver.symbols.GetWindowRect(hwnd, ptr(rect)));
             const left = rect.readInt32LE(0);
@@ -316,7 +313,6 @@ if (!process.argv.includes("--child")) {
               async () => {
                 try {
                   await windows.setThumbnailToolbar({
-                    ...target,
                     buttons: [
                       {
                         id: "play",
@@ -397,7 +393,6 @@ if (!process.argv.includes("--child")) {
             // A rejected image keeps the current toolbar, so its slots still press the same ids.
             await assert.rejects(
               windows.setThumbnailToolbar({
-                ...target,
                 buttons: [
                   {
                     id: "bad",
@@ -422,7 +417,6 @@ if (!process.argv.includes("--child")) {
             // A shorter toolbar hides the remaining slots, so their old presses are ignored. The app
             // command that follows proves the earlier message was handled without publishing.
             await windows.setThumbnailToolbar({
-              ...target,
               buttons: [
                 {
                   id: "solo",
@@ -452,7 +446,6 @@ if (!process.argv.includes("--child")) {
               "solo",
             ]);
             await windows.setThumbnailToolbar({
-              ...target,
               buttons: [],
             });
             press(0);
@@ -489,7 +482,7 @@ if (!process.argv.includes("--child")) {
               records: records.length,
             }),
           );
-          await windows.close(target);
+          await windows.close();
           return null;
         },
       },

@@ -612,14 +612,12 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
     {
       operation: "windows.create",
       payload: {
-        view: "main",
         home: "https://remote.example",
       },
     },
     {
       operation: "windows.setSize",
       payload: {
-        view: "main",
         width: 199,
         height: 600,
       },
@@ -627,7 +625,6 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
     {
       operation: "windows.setSize",
       payload: {
-        view: "main",
         width: 800.5,
         height: 600,
       },
@@ -635,14 +632,12 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
     {
       operation: "windows.setMinSize",
       payload: {
-        view: "main",
         width: 500,
       },
     },
     {
       operation: "windows.setMinSize",
       payload: {
-        view: "main",
         width: "500",
         height: null,
       },
@@ -650,7 +645,6 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
     {
       operation: "windows.setMinSize",
       payload: {
-        view: "main",
         width: 199,
         height: null,
       },
@@ -658,7 +652,6 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
     {
       operation: "windows.setMaxSize",
       payload: {
-        view: "main",
         width: null,
         height: 4097,
       },
@@ -666,14 +659,12 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
     {
       operation: "windows.setSizeConstraints",
       payload: {
-        view: "main",
         minWidth: 500.5,
       },
     },
     {
       operation: "windows.setPosition",
       payload: {
-        view: "main",
         x: 32768,
         y: 0,
       },
@@ -681,21 +672,18 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
     {
       operation: "windows.setFullscreen",
       payload: {
-        view: "main",
         fullscreen: 1,
       },
     },
     {
       operation: "windows.setCloseConfirmation",
       payload: {
-        view: "main",
         message: "",
       },
     },
     {
       operation: "windows.setCloseConfirmation",
       payload: {
-        view: "main",
         message: "bad\0message",
       },
     },
@@ -714,7 +702,6 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
       JSON.stringify({
         operation: "windows.setCloseConfirmation",
         payload: {
-          view: "main",
           message: null,
         },
       }),
@@ -722,7 +709,6 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
   ).toEqual({
     operation: "windows.setCloseConfirmation",
     payload: {
-      view: "main",
       message: null,
     },
   });
@@ -730,23 +716,18 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
     parseWindowCall(
       JSON.stringify({
         operation: "windows.getSizeConstraints",
-        payload: {
-          view: "main",
-        },
+        payload: null,
       }),
     ),
   ).toEqual({
     operation: "windows.getSizeConstraints",
-    payload: {
-      view: "main",
-    },
+    payload: null,
   });
   expect(
     parseWindowCall(
       JSON.stringify({
         operation: "windows.setMinSize",
         payload: {
-          view: "main",
           width: null,
           height: 500,
         },
@@ -755,7 +736,6 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
   ).toEqual({
     operation: "windows.setMinSize",
     payload: {
-      view: "main",
       width: null,
       height: 500,
     },
@@ -765,7 +745,6 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
       JSON.stringify({
         operation: "windows.setSizeConstraints",
         payload: {
-          view: "main",
           minWidth: 500,
         },
       }),
@@ -773,7 +752,6 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
   ).toEqual({
     operation: "windows.setSizeConstraints",
     payload: {
-      view: "main",
       minWidth: 500,
     },
   });

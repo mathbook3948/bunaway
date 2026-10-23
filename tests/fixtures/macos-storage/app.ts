@@ -38,10 +38,6 @@ export default defineApp({
             text: "persistent 한글\0✓",
           });
         }
-        await storage.writeText({
-          path: resolve(root, "denied.txt"),
-          text: "preserved",
-        });
         return () => writeFile(resolve(root, "core-cleaned"), "done");
       },
     },
@@ -95,7 +91,6 @@ export default defineApp({
           view: {
             enum: [
               "main",
-              "denied",
             ],
           },
           ok: {
@@ -125,10 +120,7 @@ export default defineApp({
           typeof input !== "object" ||
           !("view" in input) ||
           typeof input.view !== "string" ||
-          ![
-            "main",
-            "denied",
-          ].includes(input.view)
+          input.view !== "main"
         ) {
           throw new Error("Invalid report.");
         }

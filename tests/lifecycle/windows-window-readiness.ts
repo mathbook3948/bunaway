@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type CommandContext, defineApp } from "@bunaway/backend";
-import type { WindowReadiness } from "@bunaway/plugin-api/native";
-import windows, { windowReadinessSchema } from "@bunaway/plugin-windows";
 import {
-  type HostContext,
-  type Policy,
-  validateValue,
-} from "@bunaway/protocol";
+  type CommandContext,
+  type DesktopContext,
+  defineApp,
+} from "@bunaway/backend";
+import windows from "@bunaway/plugin-windows";
+import type { HostContext, Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { testAppMetadata } from "../fixtures/app-info.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
@@ -66,7 +65,7 @@ if (!process.argv.includes("--child")) {
     const report = JSON.parse(await readFile(reportPath, "utf8"));
     assert.equal(report.pass, true);
     console.log(
-      "PASS WebView2 preparation: native/document/SDK, hidden creation, auto-show, event permissions, navigation, recreation, failures, cancellation, splashscreen handoff and final quit",
+      "PASS WebView2 preparation: native/document/SDK, hidden creation, auto-show, navigation, recreation, failures, cancellation and final quit",
       report,
     );
   } finally {
@@ -79,10 +78,8 @@ if (!process.argv.includes("--child")) {
 } else {
   const dataRoot = resolve(output, `data-${process.pid}`);
   const counts = new Map<string, number>();
-  const records: {
-    recipient: string;
-    state: WindowReadiness;
-  }[] = [];
+  /** Which document the next window loads from the home URL. */
+  let mode: "main" | "bad" | "cancel" | "nosdk" = "main";
   let held = true;
   const resourceWaiters: (() => void)[] = [];
   const script = await readFile(resolve(assets, "readiness.js"), "utf8");
@@ -111,12 +108,12 @@ if (!process.argv.includes("--child")) {
           },
         );
       }
-      if (url.pathname === "/bad.html") {
+      if (url.pathname === "/main.html" && mode === "bad") {
         return new Response("failed", {
           status: 404,
         });
       }
-      if (url.pathname === "/cancel.html") {
+      if (url.pathname === "/main.html" && mode === "cancel") {
         return new Response(null, {
           status: 302,
           headers: {
@@ -124,7 +121,7 @@ if (!process.argv.includes("--child")) {
           },
         });
       }
-      if (url.pathname === "/nosdk.html") {
+      if (url.pathname === "/main.html" && mode === "nosdk") {
         return new Response("<!doctype html><title>No SDK</title>", {
           headers: {
             "Content-Type": "text/html",
@@ -142,59 +139,31 @@ if (!process.argv.includes("--child")) {
     },
   });
   const origin = server.url.origin;
-  const views = [
-    "splash",
-    "observer",
-    "denied",
-    "main",
-    "automatic",
-    "document",
-    "bad",
-    "cancel",
-    "nosdk",
-  ];
-  const grants = windowPermissions();
   const policy: Policy = {
     version: 1,
     backend: {
       permissions: [
-        ...grants,
+        ...windowPermissions(),
       ],
     },
-    views: views.map((id) => ({
-      id,
-      origins: [
-        origin,
-      ],
-      commands: [
-        "test.arrived",
-        "test.record",
-        ...(id === "splash"
-          ? [
-              "test.exercise",
-            ]
-          : []),
-        "plugin.windows.getReadiness",
-      ],
-      events:
-        id === "denied"
-          ? []
-          : [
-              "windows.readiness",
-              "test.action",
-            ],
-      host: {
-        permissions:
-          id === "observer"
-            ? [
-                "windows.getReadiness",
-              ]
-            : windowPermissions(),
+    views: [
+      {
+        id: "main",
+        origins: [
+          origin,
+        ],
+        commands: [
+          "test.arrived",
+          "plugin.windows.getReadiness",
+        ],
+        events: [
+          "test.action",
+        ],
+        host: {
+          permissions: windowPermissions(),
+        },
       },
-    })),
-  };
-  const main = {
-    view: "main",
+    ],
   };
   const waitFor = async (
     check: () => boolean | Promise<boolean>,
@@ -206,11 +175,9 @@ if (!process.argv.includes("--child")) {
       await Bun.sleep(10);
     }
   };
-  const ready = (view: string) =>
+  const ready = () =>
     waitFor(async () => {
-      const state = await windows.getReadiness({
-        view,
-      });
+      const state = await windows.getReadiness();
       return state.document === "ready" && state.sdk === "ready";
     });
   const releaseResources = () => {
@@ -223,13 +190,14 @@ if (!process.argv.includes("--child")) {
   let completed = false;
   let exerciseTask: Promise<void> | undefined;
   let exerciseFailure: unknown;
+  let desktop: DesktopContext | undefined;
+  /** Closes the window and waits until the next create is accepted. */
+  async function closeWindow() {
+    await windows.close();
+    await waitFor(async () => !(await windows.isOpen()));
+  }
   async function exercise(context: CommandContext): Promise<void> {
-    await waitFor(
-      () =>
-        counts.has("splash") && counts.has("observer") && counts.has("denied"),
-    );
     await windows.create({
-      ...main,
       options: {
         title: "Creation override",
         visible: false,
@@ -242,13 +210,12 @@ if (!process.argv.includes("--child")) {
         },
       },
     });
-    const overriddenSize = await windows.getContentSize(main);
+    const overriddenSize = await windows.getContentSize();
     assert.equal(overriddenSize.width, 900);
     assert.equal(overriddenSize.height, 500);
-    const originalId = (await windows.getReadiness(main)).windowId;
+    const originalId = (await windows.getReadiness()).windowId;
     await assert.rejects(
       windows.recreate({
-        ...main,
         options: {
           window: {
             minWidth: 1000,
@@ -260,33 +227,24 @@ if (!process.argv.includes("--child")) {
         code: "INVALID_ARGUMENT",
       },
     );
-    assert.equal((await windows.getReadiness(main)).windowId, originalId);
+    assert.equal((await windows.getReadiness()).windowId, originalId);
     await waitFor(() => counts.get("main") === 1);
-    const partial = await windows.getReadiness(main);
+    const partial = await windows.getReadiness();
     assert.equal(partial.nativeCreated, true);
     assert.equal(partial.document, "pending");
     assert.equal(partial.sdk, "ready");
-    assert.equal(await windows.isVisible(main), false);
-    assert.equal(await windows.isFocused(main), false);
-    await assert.rejects(
-      windows.completeSplashscreen({
-        ...main,
-        splash: "splash",
-      }),
-      {
-        code: "BUSY",
-      },
-    );
+    assert.equal(await windows.isVisible(), false);
+    assert.equal(await windows.isFocused(), false);
     releaseResources();
-    await ready("main");
-    assert.equal(await windows.isVisible(main), false);
+    await ready();
+    assert.equal(await windows.isVisible(), false);
     await context.events.emit("test.action", "navigate", {
       kind: "view",
       viewId: "main",
     });
     await waitFor(() => counts.get("main") === 2);
-    await ready("main");
-    const navigated = await windows.getReadiness(main);
+    await ready();
+    const navigated = await windows.getReadiness();
     assert.equal(navigated.windowId, partial.windowId);
     assert(navigated.documentGeneration > partial.documentGeneration);
     await context.events.emit("test.action", "fragment", {
@@ -295,14 +253,14 @@ if (!process.argv.includes("--child")) {
     });
     await waitFor(() => counts.has("fragment"));
     assert.equal(
-      (await windows.getReadiness(main)).documentGeneration,
+      (await windows.getReadiness()).documentGeneration,
       navigated.documentGeneration,
     );
-    await windows.recreate(main);
+    await windows.recreate();
     await waitFor(() => counts.get("main") === 3);
-    await ready("main");
-    const recreated = await windows.getReadiness(main);
-    const declaredSize = await windows.getContentSize(main);
+    await ready();
+    const recreated = await windows.getReadiness();
+    const declaredSize = await windows.getContentSize();
     assert.equal(declaredSize.width, 640);
     assert.equal(declaredSize.height, 480);
     assert.notEqual(recreated.windowId, partial.windowId);
@@ -312,206 +270,88 @@ if (!process.argv.includes("--child")) {
       viewId: "main",
     });
     await waitFor(
-      async () => (await windows.getReadiness(main)).sdk === "cancelled",
+      async () => (await windows.getReadiness()).sdk === "cancelled",
     );
-    assert.equal((await windows.getReadiness(main)).document, "ready");
-    await windows.recreate(main);
+    assert.equal((await windows.getReadiness()).document, "ready");
+    await windows.recreate();
     await waitFor(() => counts.get("main") === 4);
-    await ready("main");
-    for (const view of [
-      "automatic",
+    await ready();
+    // Creating needs the window to be gone, so the recreated one is closed first.
+    await closeWindow();
+    for (const showWhenReady of [
+      "sdk",
       "document",
-    ]) {
+    ] as const) {
+      mode = showWhenReady === "document" ? "nosdk" : "main";
       await windows.create({
-        view,
+        options: {
+          showWhenReady,
+        },
       });
       await waitFor(
-        async () =>
-          (
-            await windows.getReadiness({
-              view,
-            })
-          ).document === "ready",
+        async () => (await windows.getReadiness()).document === "ready",
       );
-      if (view === "automatic") {
-        await ready(view);
+      if (showWhenReady === "sdk") {
+        await ready();
       }
-      if (view === "document") {
-        assert.equal(
-          (
-            await windows.getReadiness({
-              view,
-            })
-          ).sdk,
-          "pending",
-        );
+      if (showWhenReady === "document") {
+        assert.equal((await windows.getReadiness()).sdk, "pending");
       }
-      await waitFor(() =>
-        windows.isVisible({
-          view,
-        }),
-      );
-      await windows.hide({
-        view,
-      });
-      await windows.close({
-        view,
-      });
+      await waitFor(() => windows.isVisible());
+      await windows.hide();
+      await closeWindow();
     }
+    mode = "bad";
     await windows.create({
-      view: "bad",
+      options: {
+        showWhenReady: "sdk",
+      },
     });
     await waitFor(
-      async () =>
-        (
-          await windows.getReadiness({
-            view: "bad",
-          })
-        ).document === "failed",
+      async () => (await windows.getReadiness()).document === "failed",
     );
-    assert.equal(
-      await windows.isVisible({
-        view: "bad",
-      }),
-      false,
-    );
-    await windows.close({
-      view: "bad",
-    });
-    const closed = await windows.getReadiness({
-      view: "bad",
-    });
+    assert.equal(await windows.isVisible(), false);
+    await closeWindow();
+    const closed = await windows.getReadiness();
     assert.equal(closed.document, "cancelled");
     held = true;
+    mode = "cancel";
     await windows.create({
-      view: "cancel",
+      options: {
+        showWhenReady: "sdk",
+      },
     });
     await waitFor(
-      async () =>
-        (
-          await windows.getReadiness({
-            view: "cancel",
-          })
-        ).document === "cancelled",
+      async () => (await windows.getReadiness()).document === "cancelled",
     );
-    assert.equal(
-      await windows.isVisible({
-        view: "cancel",
-      }),
-      false,
-    );
-    await windows.close({
-      view: "cancel",
-    });
+    assert.equal(await windows.isVisible(), false);
+    await closeWindow();
     releaseResources();
+    mode = "nosdk";
     await windows.create({
-      view: "nosdk",
+      options: {
+        showWhenReady: "sdk",
+      },
     });
     await waitFor(
-      async () =>
-        (
-          await windows.getReadiness({
-            view: "nosdk",
-          })
-        ).document === "ready",
+      async () => (await windows.getReadiness()).document === "ready",
     );
-    assert.equal(
-      (
-        await windows.getReadiness({
-          view: "nosdk",
-        })
-      ).sdk,
-      "pending",
-    );
-    assert.equal(
-      await windows.isVisible({
-        view: "nosdk",
-      }),
-      false,
-    );
+    assert.equal((await windows.getReadiness()).sdk, "pending");
+    assert.equal(await windows.isVisible(), false);
     await waitFor(
-      async () =>
-        (
-          await windows.getReadiness({
-            view: "nosdk",
-          })
-        ).sdk === "failed",
+      async () => (await windows.getReadiness()).sdk === "failed",
       35_000,
     );
-    assert.equal(
-      (
-        await windows.getReadiness({
-          view: "nosdk",
-        })
-      ).error?.code,
-      "TIMEOUT",
-    );
-    assert.equal(
-      await windows.isVisible({
-        view: "nosdk",
-      }),
-      false,
-    );
-    await windows.close({
-      view: "nosdk",
-    });
-    await Bun.sleep(100);
-    assert(
-      records.some(
-        (record) =>
-          record.recipient === "splash" &&
-          record.state.viewId === "main" &&
-          record.state.revision === 0,
-      ),
-    );
-    assert(
-      records.some(
-        (record) =>
-          record.recipient === "splash" &&
-          record.state.document === "ready" &&
-          record.state.sdk === "ready",
-      ),
-    );
-    assert(
-      records.some(
-        (record) =>
-          record.recipient === "observer" &&
-          record.state.viewId === "main" &&
-          record.state.sdk === "ready",
-      ),
-    );
-    for (const view of [
-      "observer",
-      "denied",
-    ]) {
-      await windows.close({
-        view,
-      });
-    }
-    const temporaryRoot = resolve(dataRoot, "webview", "temporary");
-    assert.equal((await readdir(temporaryRoot)).length, 1);
-    assert.equal(
-      await windows.completeSplashscreen({
-        ...main,
-        splash: "splash",
-      }),
-      true,
-    );
-    assert.equal(quitChecks, 0, "Handoff invoked the final-window quit rule");
-    assert.equal(await windows.isVisible(main), true);
-    await waitFor(async () => (await readdir(temporaryRoot)).length === 0);
-    // Final handoff must not reserve the old isolated owner for another splash.
-    await windows.create({
-      view: "splash",
-    });
-    await ready("splash");
-    assert.equal((await readdir(temporaryRoot)).length, 1);
-    await windows.close({
-      view: "splash",
-    });
-    await waitFor(async () => (await readdir(temporaryRoot)).length === 0);
+    assert.equal((await windows.getReadiness()).error?.code, "TIMEOUT");
+    assert.equal(await windows.isVisible(), false);
+    await closeWindow();
+    // The scenario ends the app explicitly; quitting asks beforeQuit once more, now approved.
+    mode = "main";
     completed = true;
-    await windows.close(main);
+    await windows.create({});
+    await ready();
+    assert(desktop);
+    await desktop.quit();
   }
   const app = defineApp({
     modules: [],
@@ -527,21 +367,22 @@ if (!process.argv.includes("--child")) {
             }
             exerciseFailure = error;
             console.error(error);
-            for (const view of views) {
-              await windows
-                .close({
-                  view,
-                })
-                .catch(() => {});
-            }
+            completed = true;
+            await desktop?.quit();
           });
         },
       },
     ],
     desktop: {
+      // The app has no window at start and stays up when its window closes; the scenario quits it.
+      closeBehavior: "keep-alive",
+      onReady(context) {
+        desktop = context;
+      },
+      // A quit before the scenario is over is refused.
       beforeQuit() {
         quitChecks++;
-        return true;
+        return completed;
       },
     },
     events: {
@@ -564,46 +405,6 @@ if (!process.argv.includes("--child")) {
           return null;
         },
       },
-      "test.record": {
-        input: {
-          type: "object",
-          properties: {
-            recipient: {
-              type: "string",
-            },
-            state: windowReadinessSchema,
-          },
-          required: [
-            "recipient",
-            "state",
-          ],
-          additionalProperties: false,
-        },
-        output: {
-          const: null,
-        },
-        async run(input: unknown) {
-          const record = validateValue(
-            {
-              type: "object",
-              properties: {
-                recipient: {
-                  type: "string",
-                },
-                state: windowReadinessSchema,
-              },
-              required: [
-                "recipient",
-                "state",
-              ],
-              additionalProperties: false,
-            } as const,
-            input,
-          );
-          records.push(record);
-          return null;
-        },
-      },
     },
   });
   try {
@@ -621,54 +422,30 @@ if (!process.argv.includes("--child")) {
         root,
         "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
       ),
-      windows: views.map((view) => ({
-        view,
-        title: `Readiness ${view}`,
-        home: `${origin}/${view === "document" ? "nosdk" : view}.html`,
-        window: {
-          width: 640,
-          height: 480,
+      windows: [
+        {
+          view: "main",
+          title: "Readiness main",
+          home: `${origin}/main.html`,
+          window: {
+            width: 640,
+            height: 480,
+          },
+          startup: false,
         },
-        startup: [
-          "splash",
-          "observer",
-          "denied",
-        ].includes(view),
-        visible: view === "splash",
-        ...(view === "splash"
-          ? {
-              profile: "isolated" as const,
-            }
-          : {}),
-        ...([
-          "automatic",
-          "bad",
-          "cancel",
-          "nosdk",
-        ].includes(view)
-          ? {
-              showWhenReady: "sdk" as const,
-            }
-          : {}),
-        ...(view === "document"
-          ? {
-              showWhenReady: "document" as const,
-            }
-          : {}),
-      })),
+      ],
     });
     await exerciseTask;
     if (exerciseFailure) {
       throw exerciseFailure;
     }
     assert(completed);
-    assert.equal(quitChecks, 1);
+    assert(quitChecks >= 1);
     await writeFile(
       reportPath,
       JSON.stringify({
         pass: true,
         documents: counts.get("main"),
-        records: records.length,
         quitChecks,
       }),
     );

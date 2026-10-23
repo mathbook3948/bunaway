@@ -99,7 +99,7 @@
       "name": "@bunaway/runtime-bun/window-config",
       "source": "packages/runtime-bun/src/window-config.ts",
       "pages": {
-        "reference/tooling/core-and-runtime": ["MAX_WINDOWS", "readWindowSpecs"]
+        "reference/tooling/core-and-runtime": ["readWindowSpecs"]
       }
     },
     {
@@ -399,7 +399,6 @@
           "hasValidWindowPlacement",
           "clampWindowSize",
           "MAX_WINDOWS",
-          "MAX_WINDOW_INSTANCES",
           "MAX_WEBVIEW_DOWNLOADS",
           "MAX_DOWNLOAD_METADATA_BYTES",
           "MAX_DOWNLOAD_SNAPSHOT_BYTES",
@@ -757,10 +756,7 @@
           "window",
           "startup",
           "visible",
-          "showWhenReady",
-          "instances",
-          "maxInstances",
-          "profile"
+          "showWhenReady"
         ]
       }
     },
@@ -992,7 +988,7 @@
           "cancelled",
           "now",
           "tick",
-          "instances",
+          "onLifecycle",
           "creationSettled",
           "monitors"
         ]
@@ -1099,10 +1095,7 @@
           "window",
           "startup",
           "visible",
-          "showWhenReady",
-          "instances",
-          "maxInstances",
-          "profile"
+          "showWhenReady"
         ]
       }
     },
@@ -1635,12 +1628,6 @@
       "windows.openDevTools",
       "windows.getWebViewAudioState",
       "windows.setWebViewAudioMuted",
-      "windows.list",
-      "windows.getById",
-      "windows.getCurrent",
-      "windows.getFocused",
-      "windows.getLastActive",
-      "windows.isDestroyed",
       "windows.isNormal",
       "windows.create",
       "windows.recreate",
@@ -1648,7 +1635,6 @@
       "windows.showInactive",
       "windows.hide",
       "windows.focus",
-      "windows.blur",
       "windows.activate",
       "windows.minimize",
       "windows.maximize",
@@ -1663,10 +1649,6 @@
       "windows.close",
       "windows.respondClose",
       "windows.destroy",
-      "windows.setParent",
-      "windows.getParent",
-      "windows.getOwner",
-      "windows.getChildren",
       "windows.setEnabled",
       "windows.isEnabled",
       "windows.setFocusable",
@@ -1745,10 +1727,8 @@
       "windows.setCloseConfirmation",
       "windows.getSnapshot",
       "windows.getReadiness",
-      "windows.completeSplashscreen",
-      "windows.createInstance",
-      "windows.recreateInstance",
-      "windows.listInstances",
+      "windows.isOpen",
+      "windows.waitForLifecycle",
       "windows.getMonitors",
       "windows.getMonitorSnapshot",
       "windows.getPrimaryMonitor",

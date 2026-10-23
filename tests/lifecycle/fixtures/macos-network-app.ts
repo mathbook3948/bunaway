@@ -3,9 +3,7 @@ import { type AppDefinition, defineApp } from "@bunaway/backend";
 import network from "@bunaway/plugin-network";
 import { validateValue } from "@bunaway/protocol";
 
-/** App commands deliberately retain the calling view's authority through Core. */
 export function defineNetworkFixture(http: string, ws: string) {
-  const peers = new Set<string>();
   return defineApp({
     modules: [],
     plugins: [
@@ -48,37 +46,6 @@ export function defineNetworkFixture(http: string, ws: string) {
           ws,
         }),
       },
-      "test.ready": {
-        input: {
-          type: "string",
-        },
-        output: {
-          const: null,
-        },
-        async run(name) {
-          assert.equal(typeof name, "string");
-          if (typeof name !== "string") {
-            throw new Error("Invalid peer name");
-          }
-          peers.add(name);
-          return null;
-        },
-      },
-      "test.peers": {
-        input: {
-          const: null,
-        },
-        output: {
-          const: null,
-        },
-        async run(_input, context) {
-          while (peers.size !== 2) {
-            assert(!context.signal.aborted, "Peer wait cancelled");
-            await Bun.sleep(5);
-          }
-          return null;
-        },
-      },
       "test.stats": {
         input: {
           const: null,
@@ -89,34 +56,6 @@ export function defineNetworkFixture(http: string, ws: string) {
         async run() {
           return validateValue({}, await (await fetch(`${http}/stats`)).json());
         },
-      },
-      "test.inheritedHttp": {
-        input: {
-          const: null,
-        },
-        output: {
-          type: "object",
-        },
-        run: () =>
-          network.request({
-            url: `${http}/text`,
-          }),
-      },
-      "test.inheritedWs": {
-        input: {
-          const: null,
-        },
-        output: {
-          type: "object",
-        },
-        run: () =>
-          network.exchange({
-            url: `${ws}/socket`,
-            messages: [
-              "inherited",
-            ],
-            receiveCount: 1,
-          }),
       },
       "test.echo": {
         input: {

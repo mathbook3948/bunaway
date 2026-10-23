@@ -123,8 +123,6 @@ if (target === "windows-x64") {
       root,
     );
     await test("windows-window-readiness.ts");
-    await test("windows-multiple-windows.ts");
-    await test("windows-owned-modal.ts");
     await test("windows-close-request.ts");
     await run(
       [

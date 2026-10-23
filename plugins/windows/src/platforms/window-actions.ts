@@ -4,7 +4,6 @@ import {
   type NativeWindowServices,
   normalizeWindowBackgroundColor,
   type WindowAttentionMode,
-  type WindowIdentity,
   type WindowSizeConstraints,
 } from "@bunaway/plugin-api/native";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
@@ -34,10 +33,6 @@ const DEFAULT_ATTENTION_MODE: WindowAttentionMode = "untilFocused";
 /** Services a window action needs beyond the target window itself. */
 export type WindowActionContext = {
   services: NativeWindowServices;
-  /** Whether a native instance key is being recreated, so its identity is not yet usable. */
-  isReplacing(key: string): boolean;
-  /** Resolve an identity to the logical key the services use. */
-  identityKey(identity: WindowIdentity): string;
 };
 
 type ActionScope = WindowActionContext & {
@@ -287,8 +282,6 @@ function applyLifecycle(scope: ActionScope, call: WindowCall): ActionResult {
       return {
         ...window.getReadiness(),
       };
-    case "windows.completeSplashscreen":
-      return completeSplashscreen(scope, call.payload.splash);
     case "windows.getSnapshot":
       return {
         ...window.getSnapshot(),
@@ -312,8 +305,6 @@ function applyLifecycle(scope: ActionScope, call: WindowCall): ActionResult {
       return null;
     case "windows.activate":
       return window.activate();
-    case "windows.blur":
-      return blur(scope);
     case "windows.close":
       return window.close();
     case "windows.respondClose":
@@ -332,149 +323,10 @@ function applyLifecycle(scope: ActionScope, call: WindowCall): ActionResult {
   }
 }
 
-/**
- * Hand the app from a splashscreen to this main window once the main window is ready.
- * Everything is validated before either window changes, because closing an owner also retires
- * its descendants.
- */
-function completeSplashscreen(
-  scope: ActionScope,
-  splash: string,
-): boolean | Promise<boolean> {
-  const { window, services, viewId } = scope;
-  if (viewId === splash) {
-    throw new BunawayError({
-      code: "INVALID_ARGUMENT",
-      message: "Splashscreen and main window must differ.",
-    });
-  }
-  const readiness = window.getReadiness();
-  if (readiness.document !== "ready" || readiness.sdk !== "ready") {
-    throw new BunawayError({
-      code: "BUSY",
-      message: "Main window is not ready.",
-    });
-  }
-  const splashState = services.read(splash);
-  if (!splashState || splashState.closed) {
-    throw new BunawayError({
-      code: "INVALID_ARGUMENT",
-      message: "Splashscreen is not open.",
-    });
-  }
-  for (
-    let parent = window.getParent?.();
-    parent;
-    parent = services.window(scope.identityKey(parent)).getParent?.()
-  ) {
-    if (parent.viewId === splash) {
-      throw new BunawayError({
-        code: "INVALID_ARGUMENT",
-        message: "Splashscreen cannot own the main window.",
-      });
-    }
-  }
-  // Final handoff preserves confirmation and bypasses quit/hide, without reserving
-  // another splash lifetime or retaining its isolated profile.
-  window.show(true);
-  return services.close(splash, false);
-}
-
-/**
- * Give up focus by activating the next ready, visible window in configuration order.
- * Never activates an external window; returns whether this window is no longer focused.
- */
-function blur(scope: ActionScope): boolean | Promise<boolean> {
-  const { window, services, viewId } = scope;
-  if (window.isMinimized() || !window.isVisible()) {
-    return !window.isFocused();
-  }
-  if (!window.isFocused()) {
-    return true;
-  }
-  // Configuration order is deterministic; never activate an external window.
-  const instances = services.instances?.();
-  const candidates = services.specs.flatMap((spec) =>
-    instances
-      ? instances
-          .filter((entry) => entry.identity.viewId === spec.view)
-          .map((entry) => ({
-            key: entry.key,
-            viewId: spec.view,
-          }))
-      : [
-          {
-            key: spec.view,
-            viewId: spec.view,
-          },
-        ],
-  );
-  for (const candidate of candidates) {
-    if (
-      candidate.key === viewId ||
-      !services.specs.some((spec) => spec.view === candidate.viewId)
-    ) {
-      continue;
-    }
-    const state = services.read(candidate.key);
-    if (
-      !state ||
-      state.closed ||
-      !state.ready ||
-      state.failure ||
-      scope.isReplacing(candidate.key)
-    ) {
-      continue;
-    }
-    const next = services.window(candidate.key);
-    if (
-      next.isVisible() &&
-      !next.isMinimized() &&
-      next.isFocusable?.() !== false
-    ) {
-      next.activate();
-      return !window.isFocused();
-    }
-  }
-  return false;
-}
-
-/** Whether another window of a configured view that is not being recreated may be shown to callers. */
-function isVisibleIdentity(
-  scope: ActionScope,
-  identity: WindowIdentity,
-): boolean {
-  return (
-    scope.services.specs.some((spec) => spec.view === identity.viewId) &&
-    !scope.isReplacing(scope.identityKey(identity))
-  );
-}
-
-/** Ownership and input availability. */
+/** Input availability. */
 function applyRelations(scope: ActionScope, call: WindowCall): ActionResult {
   const { window } = scope;
   switch (call.operation) {
-    case "windows.setParent":
-      supported(window.setParent, unsupportedRelations)(
-        call.payload.parent,
-        call.payload.modal,
-      );
-      return null;
-    case "windows.getParent":
-    case "windows.getOwner": {
-      const parent = supported(window.getParent, unsupportedRelations)();
-      return parent && isVisibleIdentity(scope, parent)
-        ? {
-            ...parent,
-          }
-        : null;
-    }
-    case "windows.getChildren":
-      return supported(window.getChildren, unsupportedRelations)()
-        .filter((child) => isVisibleIdentity(scope, child))
-        .map((child) => ({
-          ...child,
-        }));
     case "windows.setEnabled":
       supported(window.setEnabled, unsupportedRelations)(call.payload.enabled);
       return null;
@@ -851,7 +703,7 @@ function applyGeometry(scope: ActionScope, call: WindowCall): ActionResult {
     case "windows.setContentBounds":
     case "windows.setOuterBounds": {
       rejectInFullscreen(window, "changing window geometry");
-      const { view: _view, unit, ...geometry } = call.payload;
+      const { unit, ...geometry } = call.payload;
       const physical =
         unit === "logical"
           ? convertGeometry(geometry, window.getDpi(), "physical")

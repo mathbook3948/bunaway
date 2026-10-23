@@ -7,13 +7,13 @@ description: 창 제어와 조회, geometry, 네이티브 창 이벤트 및 구�
 
 `@bunaway/plugin-windows`를 설치하고 앱의 `plugins`에 `windows`를 등록합니다. 명령 핸들러나 setup은 이 패키지의 `windows`를 호출합니다. 화면에서도 같은 경로를 import하며 해당 뷰의 commands에 `plugin.windows.<작업>`을 허용해야 합니다.
 
-창 제어 플러그인은 Windows와 macOS에서 실행합니다. macOS는 `list`, `create`, `recreate`,
-`show`, `showInactive`, `hide`, `focus`, `close`, `isVisible`, `isFocused`, `isDestroyed`,
+앱은 창 하나와 WebView 하나를 가지며 모든 작업은 그 창을 대상으로 합니다. 작업 입력에 대상 창을 고르는 필드는 없습니다.
+창 제어 플러그인은 Windows와 macOS에서 실행합니다. macOS는 `isOpen`, `waitForLifecycle`, `create`, `recreate`,
+`show`, `showInactive`, `hide`, `focus`, `close`, `isVisible`, `isFocused`,
 `minimize`, `maximize`, `unmaximize`, `restore`, `toggleMaximize`, `isMinimized`, `isMaximized`, `isFullscreen`,
-창 식별자 조회(`getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`),
 `getReadiness`와 `windows.readiness`, `setContentProtection`, `isContentProtected`,
 아래 WebView 기본 제어를 지원합니다.
-`getSnapshot`, `windows.changed`, 크기와 위치, `activate`, `blur`,
+`getSnapshot`, `windows.changed`, 크기와 위치, `activate`,
 `openDevTools`를 포함한 그 외 작업은 `UNSUPPORTED`입니다. Linux와 모바일은 네이티브 호스트를 지원하지 않습니다.
 플러그인을 등록하지 않은 앱도 설정한 시작 창과 WebView를 사용할 수 있습니다.
 
@@ -30,7 +30,7 @@ export default defineApp({ modules: [], plugins: [windows] });
 선언과 생성별 `options.window`에 `titlebar: "custom"`을 지정하면 시스템 caption을
 제거하고 네이티브 resize 테두리와 시스템 메뉴를 유지합니다. 기본 `"system"`은 기존 창과 같습니다.
 생성 후 모드 변경과 네이티브 caption 버튼 overlay는 지원하지 않습니다.
-`getTitlebar({ view, windowId? })`는 전체화면에서도 생성 시 모드를 반환합니다.
+`getTitlebar()`는 전체화면에서도 생성 시 모드를 반환합니다.
 
 ```css
 .titlebar { app-region: drag; user-select: none; }
@@ -52,19 +52,18 @@ CSS 영역은 이 창에서 허용된 문서에 적용되므로 신뢰하는 ori
 [WebView2의 non-client region 계약](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2settings9)을 사용합니다.
 
 `alwaysOnTop`과 `skipTaskbar`는 선언 및 생성별 boolean이며 기본 `false`입니다.
-`setAlwaysOnTop({ view, windowId?, alwaysOnTop })`과 `isAlwaysOnTop({ view, windowId? })`은
+`setAlwaysOnTop({ alwaysOnTop })`과 `isAlwaysOnTop()`은
 일반 창보다 위에 표시하는 상태를 변경하고 조회합니다. 권한은 `windows.setAlwaysOnTop`, `windows.isAlwaysOnTop`입니다. 활성화와 표시 상태, 크기는 바꾸지 않습니다.
-Windows의 owner 관계에 따라 관련 창의 Z 순서도 영향을 받을 수 있습니다.
 상태 변경은 `windows.changed`의 `enterAlwaysOnTop`, `leaveAlwaysOnTop`으로 전달합니다.
 
-`moveTop({ view, windowId? })`는 창을 포커스와 활성화를 바꾸지 않고 자신이 속한 Z 순서 그룹의 맨 위로 한 번 옮깁니다.
+`moveTop()`는 창을 포커스와 활성화를 바꾸지 않고 자신이 속한 Z 순서 그룹의 맨 위로 한 번 옮깁니다.
 `alwaysOnTop` 창은 항상 위 그룹 안에서만 올라가고, 일반 창은 항상 위 창보다 위로 올라가지 않습니다.
-`moveToBottom({ view, windowId? })`는 같은 방식으로 다른 일반 창의 맨 아래로 한 번 옮깁니다. `alwaysOnTop`이 켜진 창은
+`moveToBottom()`는 같은 방식으로 다른 일반 창의 맨 아래로 한 번 옮깁니다. `alwaysOnTop`이 켜진 창은
 항상 위 상태가 풀리므로 BUSY로 거부합니다. 두 연산 모두 표시 상태와 위치, 크기를 바꾸지 않으며 숨겨졌거나 최소화된 창은 표시하지 않고 순서만 바꿉니다.
 권한은 `windows.moveTop`, `windows.moveToBottom`입니다. `moveToBottom`은 고정이 아닙니다. 사용자가 창을 활성화하면 Windows가 창을 다시 올립니다.
 Tauri의 지속형 `setAlwaysOnBottom`에 해당하는 상태는 Windows에 OS 지원이 없어 제공하지 않습니다.
 
-`setSkipTaskbar({ view, windowId?, skipTaskbar })`과 `isSkipTaskbar({ view, windowId? })`은
+`setSkipTaskbar({ skipTaskbar })`과 `isSkipTaskbar()`은
 명시적인 tool-window 제외 상태를 변경하고 조회합니다. 권한은 `windows.setSkipTaskbar`, `windows.isSkipTaskbar`입니다. 제외하면 작업 표시줄과 Alt+Tab에
 나타나지 않습니다. owned 또는 focusable:false 창은 이 값이 false여도 작업 표시줄에 없을 수 있습니다.
 변경은 숨겨진 일반 창에서만 허용하며 표시 중, 최소화, 최대화 또는 전체화면이면 `BUSY`입니다.
@@ -72,8 +71,8 @@ Tauri의 지속형 `setAlwaysOnBottom`에 해당하는 상태는 Windows에 OS �
 변경하고 필요하면 showInactive로 표시하세요. 암묵적인 hide/show나 포커스 이동은 하지 않습니다.
 
 `contentProtection`은 선언 및 생성별 boolean이며 기본 `false`입니다.
-`setContentProtection({ view, windowId?, contentProtection })`은 `null`을 반환하고
-`isContentProtected({ view, windowId? })`은 boolean을 반환합니다. 권한은 `windows.setContentProtection`,
+`setContentProtection({ contentProtection })`은 `null`을 반환하고
+`isContentProtected()`은 boolean을 반환합니다. 권한은 `windows.setContentProtection`,
 `windows.isContentProtected`입니다. 켜면 스크린샷과 화면 공유에서 창을 제외하며, 창 상태와 관계없이 언제든 변경할 수 있습니다.
 생성할 때는 첫 표시 전에 적용합니다.
 Windows는 `WDA_EXCLUDEFROMCAPTURE`로 창을 캡처에서 제외합니다. Windows 10 버전 2004 이전은 이 값을
@@ -84,8 +83,8 @@ Windows는 `WDA_EXCLUDEFROMCAPTURE`로 창을 캡처에서 제외합니다. Wind
 macOS는 `NSWindow.sharingType`을 `None`(보호) 또는 `ReadOnly`(해제)로 설정합니다. macOS 15 이상에서는
 ScreenCaptureKit 기반 캡처가 이 값을 무시할 수 있으므로 캡처 제외를 보장하지 않습니다.
 
-`requestAttention({ view, windowId?, mode? })`는 작업 표시줄 버튼만 깜박여 사용자의 주의를 끕니다.
-`cancelAttention({ view, windowId? })`는 깜박임을 멈추고 버튼을 원래대로 되돌립니다.
+`requestAttention({ mode? })`는 작업 표시줄 버튼만 깜박여 사용자의 주의를 끕니다.
+`cancelAttention()`는 깜박임을 멈추고 버튼을 원래대로 되돌립니다.
 권한은 `windows.requestAttention`, `windows.cancelAttention`입니다. `mode`의 기본값은
 `untilFocused`이며 창이 전경 창이 되면 멈춥니다. 이미 전경 창이면 바로 멈춥니다.
 `continuous`는 `cancelAttention`을 호출할 때까지 계속 깜박입니다. 반복 호출은 이전 mode를 교체하고,
@@ -94,9 +93,9 @@ ScreenCaptureKit 기반 캡처가 이 값을 무시할 수 있으므로 캡처 �
 없어 눈에 보이는 깜박임은 없지만 호출은 성공합니다.
 
 ```ts
-await windows.setAlwaysOnTop({ view: "main", alwaysOnTop: true });
-await windows.requestAttention({ view: "main", mode: "continuous" });
-const mode = await windows.getTitlebar({ view: "main" });
+await windows.setAlwaysOnTop({ alwaysOnTop: true });
+await windows.requestAttention({ mode: "continuous" });
+const mode = await windows.getTitlebar();
 ```
 
 설정 작업과 attention 작업은 null, 조회는 boolean 또는 titlebar 모드를 반환합니다. 각 작업은 같은 이름의
@@ -108,19 +107,19 @@ const mode = await windows.getTitlebar({ view: "main" });
 
 ## WebView audio
 
-Windows의 `getWebViewAudioState({ view, windowId? })`는 현재 창의 WebView에서
-`{ muted, playing }`을 조회합니다. `setWebViewAudioMuted({ view, windowId?, muted })`는
+Windows의 `getWebViewAudioState()`는 현재 창의 WebView에서
+`{ muted, playing }`을 조회합니다. `setWebViewAudioMuted({ muted })`는
 음소거를 설정하고 null을 반환합니다. `muted`는 boolean이며 자동 재생이나 장치 권한을
 변경하지 않습니다. `playing`은 WebView2가 보고한 문서의 audio 재생 상태입니다.
 음소거된 문서도 재생 중일 수 있으며 이 값은 물리 장치의 출력 여부를 확인하지 않습니다.
 
 ```ts
-await windows.setWebViewAudioMuted({ view: "main", muted: true });
-const { muted, playing } = await windows.getWebViewAudioState({ view: "main" });
+await windows.setWebViewAudioMuted({ muted: true });
+const { muted, playing } = await windows.getWebViewAudioState();
 ```
 
 권한은 각각 `windows.getWebViewAudioState`와 `windows.setWebViewAudioMuted`이며 화면은
-해당 command 권한도 필요합니다. 기존 창 대상 선택과 windowId 수명 검사를 유지합니다.
+해당 command 권한도 필요합니다.
 음소거는 해당 WebView controller의 설정으로, 문서 탐색은 유지하고 창 재생성은 초기화합니다.
 닫힌 창은 `INVALID_ARGUMENT`, 생성 중인 WebView는 `BUSY`, 서비스가 없는 플랫폼은
 `UNSUPPORTED`입니다. 네이티브 읽기와 쓰기 실패는 `INTERNAL`입니다.
@@ -128,27 +127,26 @@ const { muted, playing } = await windows.getWebViewAudioState({ view: "main" });
 
 ## 설정과 권한
 
-대상 창은 [app.windows](/reference/configuration/)에 정의합니다.
-`view`는 화면과 정책을 선언한 ID입니다. `instances`의 기본값은 `"single"`이며
-`"multiple"`과 `maxInstances`를 선언하면 같은 뷰에서 여러 창을 생성할 수 있습니다.
-`startup: false`로 설정하면 `windows.create`로 열 때까지 생성하지 않습니다.
+창은 [app](/reference/configuration/#app)에 선언합니다. `startup: false`로 설정하면
+`windows.create`로 열 때까지 창을 만들지 않습니다. `visible`과 `showWhenReady`도 같은 곳에 선언합니다.
+화면과 정책은 `app.view`로 고르며, 생략하면 정책의 유일한 뷰를 사용합니다.
 호출 인자로 임의 URL이나 새 정책을 전달할 수 없습니다.
 
-Windows의 `create`와 `recreate`는 `{ view, options? }`를 받습니다. options에는
+`create`와 `recreate`는 `{ options? }`를 받고 입력을 모두 생략할 수 있습니다. options에는
 `title`, 부분 `window` 크기와 제약 및 초기 배치, `visible`, `showWhenReady`를 지정할 수 있습니다.
 생략한 값은 선언값을 사용합니다. 크기는 정수 200–4096이며 병합한 min > max는
 기존 창을 닫기 전에 `INVALID_ARGUMENT`로 거부합니다. 초기 크기는 최종 제약 안으로 보정합니다.
 제약의 `null`은 해당 제약을, `showWhenReady: null`은 자동 표시를 이번 생성에서 해제합니다.
 제목은 1–1024자이며 NUL을 허용하지 않습니다. options는 선언을 변경하지 않으며
-옵션 없는 다음 재생성은 원래 선언으로 돌아갑니다. home, 프로필, startup과 임의 ID는 허용하지 않습니다.
+옵션 없는 다음 재생성은 원래 선언으로 돌아갑니다. home, startup과 임의 ID는 허용하지 않습니다.
 macOS는 `title`, `window`의 크기와 크기 제약, `contentProtection`, `visible`, `showWhenReady`만 받습니다.
 `window`의 `x`, `y`, `center`, `useContentSize`, `preventOverflow`, `titlebar`, `alwaysOnTop`,
 `skipTaskbar`, `backgroundColor`, `focusable`, `maximized`, `fullscreen`을 지정하면 기존 창을 닫기 전에
-`UNSUPPORTED`로 거부합니다. macOS에서 `createInstance`와 `recreateInstance`는 사용할 수 없습니다.
+`UNSUPPORTED`로 거부합니다.
 
 `options.window`의 `x`, `y`, `center`, `useContentSize`, `preventOverflow`는
 [초기 창 설정](/reference/configuration/#app)과 같은 단위와 작업 영역 계약을 사용합니다.
-startup, create, recreate, createInstance와 recreateInstance에 모두 적용합니다.
+startup, create, recreate에 모두 적용합니다.
 `options.window.focusable`도 선언과 병합하는 boolean이며 기본은 `true`입니다.
 `false`인 Windows 창은 활성화 없이 표시하고 사용자 클릭 및 호스트의 새 전경 활성화 요청을 차단합니다.
 
@@ -159,91 +157,58 @@ startup, create, recreate, createInstance와 recreateInstance에 모두 적용�
 필드별로 선언과 병합한 결과에서 x/y가 한 축만 있거나 `center: true`와 좌표가 함께 있으면
 `INVALID_ARGUMENT`입니다. 선언의 한 축만 바꾸는 것은 나머지 축이 선언에 있을 때 허용합니다.
 선언 좌표를 지우려면 `{ x: null, y: null }`, center를 해제하려면 `{ center: false }`로 지정합니다.
-작업 영역과 최소 content 크기의 충돌도 슬롯 및 프로필 예약이나 기존 창 종료 전에 거부합니다.
+작업 영역과 최소 content 크기의 충돌도 기존 창 종료 전에 거부합니다.
 검증 이후 디스플레이 구성이 바뀌는 OS 경쟁은 생성 실패로 처리하며 이전 창 복원은 보장하지 않습니다.
 
 ```ts
-await windows.create({ view: "editor", options: {
+await windows.create({ options: {
   title: "새 문서", visible: false,
   window: { width: 1000, minWidth: null, center: true, preventOverflow: true }, showWhenReady: "sdk",
 } });
 ```
 
-같은 뷰의 열린 창에 다시 `create`하면 `BUSY`이며 기존 창과 세션은 유지됩니다.
+창이 열려 있을 때 `create`를 호출하면 `BUSY`이며 기존 창과 세션은 유지됩니다.
 기존 창을 표시하려면 `show`, 이전 세션을 정리하고 설정대로 다시 만들려면 `recreate`를 사용하세요.
+`recreate`는 창이 없으면 새로 만듭니다. 창이 열려 있는지는 `isOpen`으로 확인합니다.
+트레이의 열기와 두 번째 실행은 항상 새로 만든 창을 표시합니다.
 
-뷰마다 생성 정의 하나만 선언하며 중복 view는 시작 전에 거부합니다.
-Windows 선언은 0–128개입니다. 빈 선언은 임의 창 생성 권한이 아닙니다.
-같은 뷰의 모든 창은 같은 UI 자산과 정책을 사용하며 각 창은 별도 windowId와 연결 세션을 가집니다.
-새 창은 생성 요청자의 정책을 복사하지 않고 대상 뷰의 정책을 사용합니다.
-
-`instances: "multiple"`은 정수 1–128의 `maxInstances`를 요구합니다. 앱 전체에서는
-활성, 예약 및 정리 중인 인스턴스가 최대 128개입니다. 한도에 닿으면 `BUSY`이며
-창을 닫았어도 네이티브와 프로필 정리가 끝날 때까지 슬롯을 사용합니다.
-startup은 multiple에서도 시작 창 하나만 만듭니다.
-기존 create/recreate는 single에서만 사용하고 multiple에서는 `INVALID_ARGUMENT`입니다.
-createInstance와 recreateInstance는 single에서도 사용할 수 있으며 ID를 직접 반환합니다.
-
-```ts
-const first = await windows.createInstance({ view: "editor", options: { title: "문서 A" } });
-const second = await windows.createInstance({ view: "editor", options: { title: "문서 B" } });
-await windows.show({ view: "editor", windowId: second.windowId });
-const replacement = await windows.recreateInstance({ view: "editor", windowId: first.windowId });
-```
-
-제어와 상태 입력에는 `{ view, windowId?, ... }`를 사용합니다. view는 권한 대상이며
-windowId는 실제 창을 선택합니다. single에서는 ID를 생략할 수 있습니다.
-multiple에서는 현재 창이 하나여도 반드시 ID를 전달합니다. 다른 뷰에 속한 ID는
-`INVALID_ARGUMENT`입니다. 재생성은 새 ID를 발급하고 이전 ID의 제어는 거부합니다.
-닫힌 ID의 getById는 null이며 허용한 view의 isDestroyed는 true입니다.
-getCurrent는 인증된 호출자 세션의 창을 반환하고 백엔드 호출은 null입니다.
-macOS도 네이티브 창을 만들거나 재생성할 때마다 새 `windowId`를 발급합니다.
-
-선언의 `profile` 기본값은 `"shared"`입니다. 같은 뷰의 창은 하나의 WebView2 환경과
-영속 웹 저장소를 공유하고 controller와 IPC 세션은 별도로 소유합니다. 창 하나를 닫아도
-다른 창은 계속 실행됩니다. `"isolated"`는 창마다 임시 프로필을 만들고 재생성에서는
-저장소를 유지합니다. 최종 종료와 실패 뒤 정리하며 새 생성과 앱 재실행에서는 복원하지 않습니다.
-잠긴 파일은 삭제할 때까지 재시도하며 정리 중인 인스턴스는 계속 상한에 포함합니다.
-3초 뒤에도 삭제하지 못하면 진단을 남기고 소유 기록을 유지합니다. 앱 종료 기한을
-넘기면 정리 실패로 처리합니다. 다음 시작에는 소유 프로세스가 종료된 이전 임시
-폴더를 제한된 개수만 정리하며 다시 열지 않습니다.
-앱 이벤트를 view 대상으로 발행하면 해당 뷰의 구독한 모든 창에 전달합니다.
-windows.changed는 변경된 창의 문서에만 전달합니다.
-macOS는 새 인스턴스 API, multiple과 isolated 선언을 `UNSUPPORTED`로 거부합니다.
+재생성은 새 `windowId`를 발급하고 이전 세션과 그 세션의 진행 중 호출을 취소합니다.
+같은 창 안의 문서 탐색은 `windowId`를 유지합니다. macOS도 네이티브 창을 만들거나
+재생성할 때마다 새 `windowId`를 발급합니다. 닫은 창의 상태 조회는 `INVALID_ARGUMENT`입니다.
+앱 이벤트는 창의 구독한 문서에 전달하고 `windows.changed`는 창의 문서에만 전달합니다.
 
 뷰 명령은 해당 뷰의 `host.permissions`, setup은 `backend.permissions`에 권한을 허용합니다.
-각 메서드의 완전한 작업 이름을 허용합니다. 허용된 작업은 앱에 선언된 모든 창을 대상으로 합니다.
-특정 창의 제어를 제한하려면 앱 명령에서 검사하고 화면에는 그 명령만 허용합니다.
-생략한 작업은 거부합니다. 조회를 허용해도 생성이나 제어 권한은 생기지 않습니다.
+각 메서드의 완전한 작업 이름을 허용합니다. 생략한 작업은 거부합니다.
+조회를 허용해도 생성이나 제어 권한은 생기지 않습니다.
 
 ```json
 {
   "permissions": [
-    "windows.list",
+    "windows.isOpen",
     "windows.show"
   ]
 }
 ```
 
-`windows.list`는 앱에 선언된 모든 창 설정을 반환합니다. 제어할 뷰는 앱 설정에 정의해야 합니다.
+`windows.isOpen`은 창이 열려 있으면 `true`를 반환합니다. 창을 만들지 않으며 닫힌 창에도 성공합니다.
 
 ## 메서드
 
 ### 인쇄 대화상자
 
-Windows의 `windows.showPrintUI({ view, windowId?, kind? })`는 현재 WebView 문서의
+Windows의 `windows.showPrintUI({ kind? })`는 현재 WebView 문서의
 인쇄 대화상자를 엽니다. kind는 기본값 `"browser"` 또는 `"system"`입니다.
 browser는 WebView2의 미리보기와 선택 UI, system은 OS 인쇄 선택 UI를 요청합니다.
 사용자가 프린터와 설정을 선택하고 인쇄를 실행합니다. 이 작업은 프린터를 지정하거나
 자동으로 인쇄하지 않으며 파일 경로, silent 옵션이나 PDF 내보내기 설정을 받지 않습니다.
 
 ```ts
-await windows.showPrintUI({ view: "main" });
-await windows.showPrintUI({ view: "main", kind: "system" });
+await windows.showPrintUI();
+await windows.showPrintUI({ kind: "system" });
 ```
 
 작업 권한은 `windows.showPrintUI`입니다. 화면 호출은 해당 뷰의 command 권한도
-요구합니다. 창과 windowId의 기존 대상 선택 및 접근 규칙을 사용합니다.
+요구합니다.
 반환값 null은 대화상자 요청이 받아들여졌다는 뜻이며 사용자의 선택, 취소 또는 인쇄
 완료를 뜻하지 않습니다. 이미 인쇄 대화상자가 열렸다면 WebView2가 기존 UI를 유지합니다.
 닫힌 창은 `INVALID_ARGUMENT`, WebView 생성 중에는 `BUSY`이며,
@@ -257,7 +222,7 @@ await windows.showPrintUI({ view: "main", kind: "system" });
 
 Windows WebView 다운로드는 기본적으로 거부합니다. `windows`를 등록하지 않은 앱에도
 같은 기본값을 적용합니다. 신뢰된 backend setup은 `windows.setDownloadRequestsEnabled`
-작업 권한으로 `{ view, windowId?, enabled: true }`를 호출해 요청 수집을 시작합니다.
+작업 권한으로 `{ enabled: true }`를 호출해 요청 수집을 시작합니다.
 수집은 승인과 다릅니다. 각 항목은 명시적으로 승인하기 전까지 파일을 만들지 않습니다.
 화면에서 호출한 앱 명령도 view 컨텍스트이므로 다운로드 API를 직접 사용할 수 없습니다.
 화면 정책에 작업을 허용해도 모든 다운로드 작업은 `PERMISSION_DENIED`입니다.
@@ -273,7 +238,7 @@ Windows WebView 다운로드는 기본적으로 거부합니다. `windows`를 �
 | `windows.forgetDownload` | `id: string` | 종료된 기록과 네이티브 참조 정리 뒤 `null` |
 
 모든 작업은 별도 `windows.<작업>` 권한과 backend 출처를 요구합니다.
-대상 선택과 닫힌 창, multiple 뷰의 windowId 규칙은 다른 창 작업과 같습니다.
+닫힌 창의 규칙은 다른 창 작업과 같습니다.
 macOS와 다른 플랫폼은 이 서비스를 제공하지 않으며 `UNSUPPORTED`입니다.
 
 getDownloads는 `{ id, url, mimeType, contentDisposition, path, totalBytes, receivedBytes,
@@ -286,12 +251,12 @@ interrupted의 interruptReason은 WebView2의 네이티브 코드이며 그 외�
 
 ```ts
 // backend setup에서 설정한 권한과 앱의 자체 승인 규칙으로 실행합니다.
-await windows.setDownloadRequestsEnabled({ view: "main", enabled: true });
-const items = await windows.getDownloads({ view: "main" });
+await windows.setDownloadRequestsEnabled({ enabled: true });
+const items = await windows.getDownloads();
 for (const item of items) {
   if (item.state === "pending") {
     // 실제 앱은 URL, MIME, 저장 경로와 사용자 선택을 검사한 뒤 한 항목만 승인합니다.
-    await windows.cancelDownload({ view: "main", id: item.id });
+    await windows.cancelDownload({ id: item.id });
   }
 }
 ```
@@ -333,17 +298,15 @@ false여도 참조를 유지합니다. 없는 ID와 더 이상 pending이 아닌
 
 ### WebView 기본 제어
 
-Windows와 macOS의 각 창은 WebView 하나를 소유합니다. 아래 작업도 `{ view, windowId? }`로
-대상을 선택하고 작업마다 별도 `windows.<작업>` 권한을 요구합니다. multiple 뷰는
-windowId가 필요합니다. 닫힌 창이나 다른 뷰의 ID는 `INVALID_ARGUMENT`이며,
-WebView 생성 중에는 `BUSY`입니다. macOS는 single 뷰의 제어를 지원하며
-`openDevTools`는 `UNSUPPORTED`입니다.
+Windows와 macOS의 창은 WebView 하나를 소유합니다. 아래 작업은 그 창을 대상으로 하며
+작업마다 별도 `windows.<작업>` 권한을 요구합니다. 닫힌 창은 `INVALID_ARGUMENT`이며,
+WebView 생성 중에는 `BUSY`입니다. macOS는 `openDevTools`만 `UNSUPPORTED`입니다.
 
 `focused`는 창이 운영체제의 활성(foreground) 창이고 키보드 입력 포커스가 그 창의
 WebView 안에 있을 때만 `true`입니다. `focused`가 `true`이면 `windows.isFocused`도
 `true`입니다. 반대로 `windows.isFocused`가 `true`여도 키보드 포커스가 WebView 밖에
 있으면 `focused`는 `false`일 수 있습니다. 조회는 포커스를 바꾸지 않습니다. 창과
-WebView는 같은 수명을 가지므로 WebView의 destroyed 상태는 `windows.isDestroyed`와
+WebView는 같은 수명을 가지므로 WebView가 닫힌 상태는 `windows.isOpen`이 `false`인 상태와
 같고, 닫힌 창의 `getWebViewState`는 `INVALID_ARGUMENT`입니다.
 
 | 메서드 | 추가 입력 | 결과 |
@@ -358,11 +321,10 @@ WebView는 같은 수명을 가지므로 WebView의 destroyed 상태는 `windows
 | `windows.openDevTools` | 없음 | 개발 도구 창 열기 요청 뒤 `null` |
 
 ```ts
-const target = { view: "main" };
-const state = await windows.getWebViewState(target);
-await windows.setZoomFactor({ ...target, factor: 1.25 });
-if (state.canGoBack) await windows.goBack(target);
-await windows.navigateWebView({ ...target, url: "https://app.bunaway.local/settings.html" });
+const state = await windows.getWebViewState();
+await windows.setZoomFactor({ factor: 1.25 });
+if (state.canGoBack) await windows.goBack();
+await windows.navigateWebView({ url: "https://app.bunaway.local/settings.html" });
 ```
 
 URL은 1–8192자이며 NUL을 허용하지 않습니다. HTTP/HTTPS URL만 허용하며 대상 뷰의
@@ -404,62 +366,40 @@ DevTools 닫기, 열림 상태와 이벤트, dock 설정은 아직 제공하지 
 창을 닫거나 실패한 cleanup을 완료로 처리하지 않습니다. 취소된 snapshot의 interruptReason은
 null이며 네이티브 USER_CANCELED reason을 interrupted 상태처럼 유지하지 않습니다.
 
-### 부모, 모달과 신뢰된 종료
+### 닫기와 신뢰된 종료
 
-이 API는 Windows에서 지원합니다. `setParent`는 사전 선언된 두 창이 열린 뒤 호출합니다.
-`view`는 제어할 정책 ID이고 선택적 windowId는 자식 창을 선택합니다.
-`parent`는 현재 부모의 네이티브 `windowId`입니다. 같은 뷰의 두 창도 부모 관계를 맺을 수 있습니다.
-`getParent`와 `getOwner`는 같은 관계를 반환합니다. Windows의 owner를 가진 최상위 창이며
-다른 창의 내용 영역에 들어가는 child HWND는 아닙니다. 자기 자신, 순환 관계, 종료된
-부모 ID는 `INVALID_ARGUMENT`입니다. 관계 변경에는 `windows.setParent` 작업 권한이 필요합니다.
-관계 조회 권한은 작업마다 별도로 허용하며, 특정 창의 접근 제한은 앱 명령에서 검사합니다.
-
-`modal: true`는 부모 입력을 즉시 차단합니다. 모달 창을 숨겨도 차단은 유지합니다.
-같은 부모의 여러 모달과 중첩 모달을 지원하며 마지막 모달의 HWND와 WebView 정리가
-끝나면 첫 차단 직전의 enabled 상태를 복원합니다. 이전 상태가 `false`이면 계속
-비활성입니다. 차단 중인 부모의 `setEnabled`는 `BUSY`입니다. 모달의 부모를 바꾸려면
-먼저 `parent: null, modal: false`로 해제합니다. `isEnabled`는 실제 HWND 상태를 읽으며
-표시, 활성화나 준비 완료를 뜻하지 않습니다.
-
-일반 `close`는 자식부터 모든 닫기 확인을 검사하고 거절하면 아직 살아 있는 창과 세션을
-유지합니다. 부모와 자식이 마지막 창 집합이면 `beforeQuit`도 먼저 검사합니다.
-취소나 훅 오류는 종료를 확정하지 않습니다. 부모가 승인되면 직접, 간접 자식을 함께
-종료하며 각 자식 세션 철회, WebView 분리, HWND 파괴와 COM 및 프로세스 정리가 끝난 뒤
-부모를 정리합니다. 소유 관계를 맺은 자식의 닫기는 트레이 숨김을 적용하지 않습니다.
-동시에 진행 중인 일반 닫기나 관계 변경은 `BUSY`입니다.
+일반 `close`는 닫기 확인을 검사하고 거절하면 창과 세션을 유지합니다.
+마지막 창이므로 `beforeQuit`도 먼저 검사합니다. 취소나 훅 오류는 종료를 확정하지 않습니다.
+승인되면 세션 철회, WebView 분리, HWND 파괴와 COM 및 프로세스 정리가 끝난 뒤 창을 정리합니다.
+동시에 진행 중인 일반 닫기는 `BUSY`입니다.
 
 `destroy`의 호출 주체는 신뢰된 앱 백엔드뿐입니다. setup의 백엔드 컨텍스트에서
 호출할 수 있고, 뷰에서 시작한 명령은 `windows.destroy`를 허용해도
 `PERMISSION_DENIED`입니다. 백엔드에는 `windows.destroy` 작업 권한을 허용해야 합니다.
 `destroy`는 닫기 확인, 트레이 숨김과 `beforeQuit`를
-우회하고 대기 중인 닫기와 재생성을 중단합니다. 부모의 destroy는 자식도 종료하며
-부모 종료는 그 관계로 소유한 자식의 종료 권한을 포함합니다. 마지막 창을 destroy하면
+우회하고 대기 중인 닫기와 재생성을 중단합니다. 창을 destroy하면
 앱은 기존 정상 정리 경로로 종료합니다. 앱 프로세스를 즉시 강제 종료하는 API는 아닙니다.
-`closeBehavior: "keep-alive"`에서도 마지막 창의 destroy는 앱 종료를 확정합니다.
-마지막 창의 재생성에서 이전 창 정리를 기다리는 동안 destroy해도 재생성을 취소하고
+`closeBehavior: "keep-alive"`에서도 destroy는 앱 종료를 확정합니다.
+재생성에서 이전 창 정리를 기다리는 동안 destroy해도 재생성을 취소하고
 앱 종료를 확정합니다. 트레이가 있는 앱에도 같은 규칙을 적용합니다.
-이미 닫혔거나 생성하지 않은 선언 창에는 `true`를 반환합니다.
-종료 확정 뒤 앱이 끝나 호출 컨텍스트가 철회되면 마지막 창의 destroy 응답은
+창이 없으면 아무것도 하지 않고 `true`를 반환합니다.
+종료 확정 뒤 앱이 끝나 호출 컨텍스트가 철회되면 destroy 응답은
 `CANCELLED`일 수 있습니다. 이 경우에도 창 종료는 확정되어 다시 열리지 않습니다.
-이미 실행 중인 `beforeQuit` 함수 자체를 강제로 중단하지는 않습니다. 마지막 창의
-destroy 뒤 정리는 훅 완료를 기다리지 않으며 늦은 결과로 종료를 다시 시작하지 않습니다.
+이미 실행 중인 `beforeQuit` 함수 자체를 강제로 중단하지는 않습니다. destroy 뒤
+정리는 훅 완료를 기다리지 않으며 늦은 결과로 종료를 다시 시작하지 않습니다.
 이미 열린 Win32 닫기 확인은 동기 대화상자입니다. 그동안 큐에 들어온 destroy는
 대화상자 응답 뒤 처리하며 추가 닫기 확인을 띄우지 않습니다.
 
 ```ts
 // 신뢰된 백엔드 setup에서 사용합니다.
-const parent = await windows.getReadiness({ view: "main" });
-await windows.create({ view: "dialog" });
-await windows.setParent({ view: "dialog", parent: parent.windowId, modal: true });
+await windows.recreate();
 // 사용자가 거절할 수 있는 닫기입니다.
-await windows.close({ view: "dialog" });
+await windows.close();
 ```
 
 생성 완료는 기존대로 WebView 설정 완료입니다. 문서와 SDK 준비는 `getReadiness`와
-`windows.readiness`로 구분합니다. 살아 있는 자식의 `recreate`와 `recreateInstance`는 부모 수명을 보존하고
-새 자식 ID와 세션을 만듭니다. 기다리는 동안 부모가 종료되면 `CANCELLED`로 끝나며
-같은 뷰의 새 부모에 자동으로 연결하지 않습니다. 닫힌 자식의 `create`는 소유 관계가
-없는 새 창을 만듭니다. 생성 취소나 오류는 확인을 우회해 부분 자원을 정리합니다.
+`windows.readiness`로 구분합니다. 기다리는 동안 창이 종료되면 `CANCELLED`로 끝납니다.
+생성 취소나 오류는 확인을 우회해 부분 자원을 정리합니다.
 `close`와 `destroy`의 응답은 종료 확정 여부이며 비동기 네이티브 정리 완료를 뜻하지 않습니다.
 
 각 메서드는 같은 이름의 Host operation과 입력, 결과가 같습니다.
@@ -467,103 +407,91 @@ await windows.close({ view: "dialog" });
 
 | API | 입력 | 결과와 동작 |
 | --- | --- | --- |
-| `windows.getSnapshot` | `{ view, windowId? }` | `Promise<WindowSnapshot>`. 현재 창 식별자, 관찰 revision, 표시 상태와 물리 outer bounds를 한 번에 조회. macOS는 `UNSUPPORTED` |
-| `windows.listInstances` | 인자 없음. Host operation 입력은 `null` | `Promise<WindowIdentity[]>`. 허용된 살아 있는 창의 ID 목록. 숨김과 준비 중인 창을 포함하고 선언 순서와 생성 순서로 정렬 |
-| `windows.createInstance` | `{ view, options? }` | `Promise<WindowIdentity>`. 새 창을 만들고 WebView 설정 완료 뒤 `{ windowId, viewId }` 반환. macOS는 `UNSUPPORTED` |
-| `windows.recreateInstance` | `{ view, windowId, options? }` | 같은 ID 형태. 살아 있는 해당 창만 교체하고 새 ID 반환. macOS는 `UNSUPPORTED` |
-| `windows.list` | 인자 없음. Host operation 입력은 `null` | `Promise<{ view: string; open: boolean }[]>`. 허용된 뷰 정의와 하나 이상의 창이 열려 있는지 |
-| `windows.getById` | `{ windowId }` | `Promise<WindowIdentity \| null>`. 해당 네이티브 수명의 살아 있는 창 |
-| `windows.getCurrent` | 인자 없음. Host operation 입력은 `null` | 같은 식별자 형태. 인증된 호출 출처의 현재 창 |
-| `windows.getFocused` | 인자 없음. Host operation 입력은 `null` | 같은 식별자 형태. 이 앱에 속한 OS 전경 창 |
-| `windows.getLastActive` | 인자 없음. Host operation 입력은 `null` | 같은 식별자 형태. 마지막으로 실제 활성화된 창 |
-| `windows.getReadiness` | `{ view, windowId? }` | `Promise<WindowReadiness>`. 현재 준비 상태와 실패, 취소 결과. single에서 ID를 생략하면 보존한 닫힌 창의 마지막 결과도 조회 |
-| `windows.destroy` | `{ view, windowId? }` | `Promise<boolean>`. 신뢰된 백엔드가 확인과 종료 취소를 우회해 대상과 자식의 종료를 확정 |
-| `windows.setParent` | `{ view, windowId?, parent: string \| null, modal: boolean }` | `Promise<null>`. 네이티브 `windowId`로 owner 지정. `null`과 `modal: false`로 관계 해제 |
-| `windows.getParent`, `windows.getOwner` | `{ view, windowId? }` | `Promise<WindowIdentity \| null>`. 같은 최상위 창 소유 관계를 조회 |
-| `windows.getChildren` | `{ view, windowId? }` | `Promise<WindowIdentity[]>`. 살아 있고 허용된 직접 자식 조회 |
-| `windows.setEnabled` | `{ view, windowId?, enabled: boolean }` | `Promise<null>`. 실제 입력 가능 상태 변경. 활성 모달이 부모를 막고 있으면 `BUSY` |
-| `windows.isEnabled` | `{ view, windowId? }` | `Promise<boolean>`. 실제 네이티브 입력 가능 상태 |
-| `windows.completeSplashscreen` | `{ view, splash }` | `Promise<boolean>`. 준비된 주 창을 먼저 표시하고 splash 창을 닫음. 닫기 확인을 거절하면 `false` |
-| `windows.create` | `{ view, options? }` | `Promise<null>`. 설정한 창을 생성하고 WebView 준비를 기다림. 열린 창은 `BUSY` |
-| `windows.recreate` | `{ view, options? }` | `Promise<null>`. 닫기 확인 후 기존 창과 WebView를 정리하고 설정대로 다시 생성. 닫힌 창도 생성 가능 |
-| `windows.show` | `{ view, windowId? }` | `Promise<null>`. 창 표시 |
-| `windows.showInactive` | `{ view, windowId? }` | `Promise<null>`. 일반, 최소화 또는 최대화 상태를 유지하며 창 표시. 활성화 요청 없음. macOS는 `orderFront:`로 표시하며 key window 전환과 앱 활성화를 하지 않음. 이미 보이거나 최소화된 창은 그대로 둠(사용자가 최소화한 뒤 숨긴 창은 다시 표시하지 않음) |
-| `windows.hide` | `{ view, windowId? }` | `Promise<null>`. 창 숨김. 창과 세션은 유지 |
-| `windows.focus` | `{ view, windowId? }` | `Promise<null>`. 숨기거나 최소화한 창을 표시하고 포커스 요청. OS가 거부하면 `BUSY` |
-| `windows.blur` | `{ view, windowId? }` | `Promise<boolean>`. 같은 앱의 허용된 다른 창으로 전환해 대상 창이 비활성인지 반환 |
-| `windows.activate` | `{ view, windowId? }` | `Promise<boolean>`. 표시된 비최소화 창으로 전경 전환 요청. 실제 대상 창이 전경이면 `true` |
-| `windows.minimize` | `{ view, windowId? }` | `Promise<null>`. 창을 최소화하고 표시. Windows가 다른 창을 활성화할 수 있음 |
-| `windows.maximize` | `{ view, windowId? }` | `Promise<null>`. 최소화 여부와 관계없이 창을 최대화하고 표시하며 활성화 요청 |
-| `windows.unmaximize` | `{ view, windowId? }` | `Promise<null>`. 창을 일반 크기로 표시하고 활성화 요청. 최소화 전 최대화 상태도 해제 |
-| `windows.restore` | `{ view, windowId? }` | `Promise<null>`. 최소화했다면 이전 일반 또는 최대화 상태로 복원. 그 외에는 일반 크기로 표시하고 활성화 요청 |
-| `windows.toggleMaximize` | `{ view, windowId? }` | `Promise<null>`. 현재 최대화 상태이면 일반 크기, 아니면 최대화로 표시하고 활성화 요청 |
-| `windows.isMinimized` | `{ view, windowId? }` | `Promise<boolean>`. 실제 네이티브 창의 최소화 여부 |
-| `windows.isMaximized` | `{ view, windowId? }` | `Promise<boolean>`. 실제 네이티브 창의 최대화 여부 |
-| `windows.isFullscreen` | `{ view, windowId? }` | `Promise<boolean>`. 네이티브 창의 전체화면 모드 여부. macOS는 사용자가 직접 진입한 전체화면도 `true`로 조회하며, 진입과 해제 작업은 `UNSUPPORTED` |
-| `windows.isVisible` | `{ view, windowId? }` | `Promise<boolean>`. 네이티브 표시 상태. 최소화한 창도 `true`일 수 있음. macOS는 `NSWindow.isVisible` 값을 그대로 반환하므로 최소화한 창은 `false`일 수 있음 |
-| `windows.isFocused` | `{ view, windowId? }` | `Promise<boolean>`. OS 전경 창인지 조회. 창 안의 WebView에 입력 포커스가 있어도 `true` |
-| `windows.isDestroyed` | `{ view, windowId? }` | `Promise<boolean>`. 선언된 뷰에 살아 있는 창이 없으면 `true` |
-| `windows.isNormal` | `{ view, windowId? }` | `Promise<boolean>`. 최소화, 최대화와 전체화면이 모두 아니면 `true` |
-| `windows.setSize` | `{ view, windowId?, width, height }` | `Promise<null>`. 내용 영역의 크기. 각 값은 정수 200–4096 |
-| `windows.setContentPosition` | `{ view, windowId?, x, y, unit? }` | `Promise<null>`. 내용 영역 왼쪽 위의 화면 위치 설정 |
-| `windows.setOuterSize` | `{ view, windowId?, width, height, unit? }` | `Promise<null>`. 제목 표시줄과 테두리를 포함한 바깥 크기 설정 |
-| `windows.setContentBounds` | `{ view, windowId?, x, y, width, height, unit? }` | `Promise<null>`. 내용 영역의 화면 위치와 크기를 함께 설정 |
-| `windows.setOuterBounds` | `{ view, windowId?, x, y, width, height, unit? }` | `Promise<null>`. 바깥 영역의 화면 위치와 크기를 함께 설정 |
-| `windows.getContentSize` | `{ view, windowId?, unit? }` | `Promise<{ width: number; height: number; dpi: number }>` 현재 내용 영역 크기 |
-| `windows.getOuterSize` | `{ view, windowId?, unit? }` | `Promise<{ width: number; height: number; dpi: number }>` 현재 창 바깥 영역 크기 |
-| `windows.getContentPosition` | `{ view, windowId?, unit? }` | `Promise<{ x: number; y: number; dpi: number }>` 내용 영역 왼쪽 위의 화면 위치 |
-| `windows.getOuterPosition` | `{ view, windowId?, unit? }` | `Promise<{ x: number; y: number; dpi: number }>` 창 바깥쪽 왼쪽 위의 화면 위치 |
-| `windows.getContentBounds` | `{ view, windowId?, unit? }` | `Promise<{ x: number; y: number; width: number; height: number; dpi: number }>` 현재 내용 영역 위치와 크기 |
-| `windows.getOuterBounds` | `{ view, windowId?, unit? }` | 같은 bounds 형태. 현재 창 바깥 영역 위치와 크기 |
-| `windows.getNormalBounds` | `{ view, windowId?, unit? }` | 같은 bounds 형태. 일반 상태로 복원할 창 바깥 영역 위치와 크기 |
-| `windows.toLogical` | `{ view, windowId?, value }` | `Promise<{ value, dpi: number }>` 물리 픽셀을 대상 창 DPI로 논리 픽셀로 변환. value 형태 유지 |
-| `windows.toPhysical` | `{ view, windowId?, value }` | `Promise<{ value, dpi: number }>` 96 DPI 논리 픽셀을 대상 창 DPI로 물리 픽셀로 변환. value 형태 유지 |
-| `windows.getMinSize` | `{ view, windowId? }` | `Promise<{ width: number \| null; height: number \| null }>` 축별 최소 크기. 설정하지 않은 축은 `null` |
-| `windows.setMinSize` | `{ view, windowId?, width, height }` | `Promise<null>`. 최소 크기 쌍을 교체하며 두 축 모두 `number \| null`. `null`은 해당 축 제한 해제 |
-| `windows.getMaxSize` | `{ view, windowId? }` | `Promise<{ width: number \| null; height: number \| null }>` 축별 최대 크기. 설정하지 않은 축은 `null` |
-| `windows.setMaxSize` | `{ view, windowId?, width, height }` | `Promise<null>`. 최대 크기 쌍을 교체하며 두 축 모두 `number \| null`. `null`은 해당 축 제한 해제 |
-| `windows.getSizeConstraints` | `{ view, windowId? }` | `Promise<{ minWidth: number \| null; minHeight: number \| null; maxWidth: number \| null; maxHeight: number \| null }>` 네 제약을 한 번에 조회 |
-| `windows.setSizeConstraints` | `{ view, windowId?, minWidth?, minHeight?, maxWidth?, maxHeight? }` | `Promise<null>`. 제약 전체를 교체합니다. 생략하거나 `null`인 축은 제한을 해제합니다 |
-| `windows.setPosition` | `{ view, windowId?, x, y }` | `Promise<null>`. 화면에서 창 바깥쪽 왼쪽 위의 물리 픽셀 위치. 각 값은 정수 -32768–32767 |
-| `windows.setMinimizable` | `{ view, windowId?, minimizable: boolean }` | `Promise<null>`. 네이티브 최소화 버튼과 사용자 최소화 허용 변경 |
-| `windows.isMinimizable` | `{ view, windowId? }` | `Promise<boolean>`. 일반 창의 사용자 최소화 허용 여부 |
-| `windows.setMaximizable` | `{ view, windowId?, maximizable: boolean }` | `Promise<null>`. 네이티브 최대화 버튼과 사용자 최대화 허용 변경 |
-| `windows.isMaximizable` | `{ view, windowId? }` | `Promise<boolean>`. 일반 창의 사용자 최대화 허용 여부 |
-| `windows.setFullscreenable` | `{ view, windowId?, fullscreenable: boolean }` | `Promise<null>`. 이후 전체화면 진입 허용 변경. 현재 전체화면은 유지하며 네이티브 버튼에는 영향 없음 |
-| `windows.isFullscreenable` | `{ view, windowId? }` | `Promise<boolean>`. 이 창 수명의 전체화면 진입 허용 여부 |
-| `windows.setOpacity` | `{ view, windowId?, opacity: number }` | `Promise<null>`. 창 전체(WebView 포함)의 불투명도. `opacity`는 0(투명)–1(불투명)이며 범위를 벗어나면 `INVALID_ARGUMENT` |
-| `windows.getOpacity` | `{ view, windowId? }` | `Promise<number>`. OS에 저장된 현재 불투명도(0–1). 새 창은 `1` |
-| `windows.setHasShadow` | `{ view, windowId?, hasShadow: boolean }` | `Promise<null>`. 창의 시스템 그림자를 켜거나 끔. 네이티브 제목 표시줄 창은 그림자를 끌 수 없어 `false`를 `UNSUPPORTED`로 거부하고 `true`는 변화 없이 성공 |
-| `windows.hasShadow` | `{ view, windowId? }` | `Promise<boolean>`. 창이 시스템 그림자를 가지는지 조회. 새 창은 `true` |
-| `windows.setIcon` | `{ view, windowId?, ico: string \| null }` | `Promise<null>`. Windows에서 제목 표시줄, Alt+Tab, 작업 표시줄의 창 아이콘을 base64 ICO로 바꾸고 `null`이면 앱 기본 아이콘으로 되돌립니다. 자세한 규칙은 [창 아이콘](#창-아이콘) |
-| `windows.hasCustomIcon` | `{ view, windowId? }` | `Promise<boolean>`. `setIcon`으로 지정한 아이콘이 적용 중인지 조회합니다 |
-| `windows.setBackgroundColor` | `{ view, windowId?, color: string }` | `Promise<null>`. 창과 WebView 문서의 불투명 배경색을 `#RGB` 또는 `#RRGGBB`로 설정. 알파가 있는 형식은 `INVALID_ARGUMENT` |
-| `windows.getBackgroundColor` | `{ view, windowId? }` | `Promise<string \| null>`. 선언, 생성 옵션 또는 `setBackgroundColor`로 정한 소문자 `#rrggbb`. 정하지 않았으면 `null` |
-| `windows.setIgnoreMouseEvents` | `{ view, windowId?, ignore: boolean }` | `Promise<null>`. `true`이면 WebView를 포함한 창 전체가 마우스 입력을 받지 않고 아래 창으로 통과 |
-| `windows.isIgnoreMouseEvents` | `{ view, windowId? }` | `Promise<boolean>`. 이 창이 마우스 입력을 무시하는지 조회. 새 창은 `false` |
-| `windows.setClosable` | `{ view, windowId?, closable: boolean }` | `Promise<null>`. 네이티브 닫기 버튼과 사용자 닫기 허용 변경 |
-| `windows.isClosable` | `{ view, windowId? }` | `Promise<boolean>`. 이 창 수명의 사용자 닫기 설정 조회 |
-| `windows.setFocusable` | `{ view, windowId?, focusable: boolean }` | `Promise<null>`. 이후 활성화 허용 변경. 현재 포커스를 다른 창으로 옮기지는 않음 |
-| `windows.isFocusable` | `{ view, windowId? }` | `Promise<boolean>`. 네이티브 활성화 허용 여부. 실제 `isFocused`와 별도 |
-| `windows.setTitle` | `{ view, windowId?, title: string }` | `Promise<null>`. 현재 창의 네이티브 제목 변경. 1–1024 UTF-16 코드 단위, NUL 금지 |
-| `windows.getTitle` | `{ view, windowId? }` | `Promise<string>`. 실제 HWND의 현재 제목 조회. 0–1024 UTF-16 코드 단위 |
-| `windows.setAccessibleTitle` | `{ view, windowId?, title: string }` | `Promise<null>`. 스크린 리더가 읽는 창 이름을 캡션과 별도로 설정. 1–1024 UTF-16 코드 단위, NUL 금지. 빈 문자열은 설정을 제거하고 캡션을 다시 사용 |
-| `windows.getAccessibleTitle` | `{ view, windowId? }` | `Promise<string \| null>`. 이 프로세스에서 마지막으로 적용한 접근성 제목. 설정한 적이 없거나 제거했다면 `null` |
-| `windows.setResizable` | `{ view, windowId?, resizable: boolean }` | `Promise<null>`. 사용자 테두리와 시스템 메뉴 크기 조절 허용 변경 |
-| `windows.isResizable` | `{ view, windowId? }` | `Promise<boolean>`. 일반 창의 사용자 크기 조절 허용 여부 |
-| `windows.setMovable` | `{ view, windowId?, movable: boolean }` | `Promise<null>`. 사용자 제목 표시줄과 시스템 메뉴 이동 허용 변경 |
-| `windows.isMovable` | `{ view, windowId? }` | `Promise<boolean>`. 사용자 이동 허용 여부 |
-| `windows.setAspectRatio` | `{ view, windowId?, ratio: number \| null }` | `Promise<null>`. 사용자 크기 조절 중 내용 영역의 너비/높이 비율을 고정. `null`은 고정 해제. 0.1–10의 유한한 수 |
-| `windows.getAspectRatio` | `{ view, windowId? }` | `Promise<number \| null>`. 고정한 비율. 고정하지 않았다면 `null` |
-| `windows.startDragging` | `{ view, windowId? }` | `Promise<null>`. 누르고 있는 마우스 기본 버튼으로 시스템 창 이동을 시작 |
-| `windows.startResizeDragging` | `{ view, windowId?, direction }` | `Promise<null>`. 누르고 있는 마우스 기본 버튼으로 해당 테두리나 모서리에서 시스템 크기 조절을 시작. `direction`은 `"north"`, `"south"`, `"east"`, `"west"`, `"northEast"`, `"northWest"`, `"southEast"`, `"southWest"` |
-| `windows.center` | `{ view, windowId?, monitorId? }` | `Promise<null>`. `monitorId`가 있으면 그 모니터, 없으면 현재 모니터의 작업 영역 중앙에 창 바깥 영역 배치. 최소화와 최대화 중에는 일반 복원 영역 배치 |
-| `windows.moveToAnchor` | `{ view, windowId?, anchor, monitorId?, margin? }` | `Promise<null>`. `monitorId`가 있으면 그 모니터, 없으면 배치할 사각형에 가장 가까운 모니터의 작업 영역에서 `anchor` 위치에 창 바깥 영역 배치. `anchor`는 `"top-left"`, `"top"`, `"top-right"`, `"left"`, `"center"`, `"right"`, `"bottom-left"`, `"bottom"`, `"bottom-right"`. `margin`은 작업 영역 가장자리에서 띄울 논리 픽셀로 0–8192의 정수(기본 0). 최소화와 최대화 중에는 일반 복원 영역 배치 |
-| `windows.moveNextToRect` | `{ view, windowId?, rect, placement, align?, margin? }` | `Promise<null>`. 물리 화면 좌표의 기준 사각형 `rect`(`{ x, y, width, height }`, `null`이 아닌 `tray.getBounds` 결과를 그대로 넘길 수 있음)의 `placement` 쪽에 창 바깥 영역을 놓고, `rect`에 가장 가까운 모니터의 작업 영역 안으로 밀어 넣습니다. `placement`는 `"above"`, `"below"`, `"left"`, `"right"`. `align`은 기준 변과 나란한 축의 정렬로 `"start"`, `"center"`, `"end"`(기본 `"center"`). `margin`은 `rect`와 창 사이에 띄울 논리 픽셀로 0–8192의 정수(기본 0). 최소화와 최대화 중에는 일반 복원 영역 배치 |
-| `windows.setFullscreen` | `{ view, windowId?, fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원. `setFullscreenable(false)` 상태에서 진입은 `INVALID_ARGUMENT` |
-| `windows.setCloseConfirmation` | `{ view, windowId?, message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
-| `windows.close` | `{ view, windowId? }` | `Promise<boolean>`. 닫기 승인 시 `true`, 확인이나 앱 종료를 취소하거나 트레이로 숨기면 `false`. 정리 완료를 기다리지는 않음 |
-| `windows.respondClose` | `{ view, windowId?, requestId: number, allow: boolean }` | `Promise<null>`. 대기 중인 [닫기 요청](#닫기-요청)에 답함. 백엔드 또는 질문을 받은 창 자신의 문서만 호출할 수 있고 다른 호출자는 `PERMISSION_DENIED`. Windows와 macOS에서 지원 |
+| `windows.getSnapshot` | 인자 없음. Host operation 입력은 `null` | `Promise<WindowSnapshot>`. 현재 창 식별자, 관찰 revision, 표시 상태와 물리 outer bounds를 한 번에 조회. macOS는 `UNSUPPORTED` |
+| `windows.isOpen` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 창이 열려 있으면 `true`. 창을 만들지 않으며 닫힌 창에도 성공 |
+| `windows.waitForLifecycle` | `{ after? }`. 백엔드 전용이며 권한 검사 없음 | `Promise<{ sequence, windowId, viewId, phase }>`. 다음 수명 phase를 기다리고, `after`에 이전 결과의 `sequence`를 주면 그 뒤 첫 phase를 반환. 종료 시작 뒤에는 발행하지 않음 |
+| `windows.getReadiness` | 인자 없음. Host operation 입력은 `null` | `Promise<WindowReadiness>`. 현재 준비 상태와 실패, 취소 결과. 닫은 창의 마지막 결과도 조회 |
+| `windows.destroy` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 신뢰된 백엔드가 확인과 종료 취소를 우회해 창의 종료를 확정. 창이 없으면 `true` |
+| `windows.setEnabled` | `{ enabled: boolean }` | `Promise<null>`. 실제 입력 가능 상태 변경 |
+| `windows.isEnabled` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 실제 네이티브 입력 가능 상태 |
+| `windows.create` | `{ options? }` | `Promise<null>`. 설정한 창을 생성하고 WebView 준비를 기다림. 열린 창은 `BUSY` |
+| `windows.recreate` | `{ options? }` | `Promise<null>`. 닫기 확인 후 기존 창과 WebView를 정리하고 설정대로 다시 생성. 닫힌 창도 생성 가능 |
+| `windows.show` | 인자 없음. Host operation 입력은 `null` | `Promise<null>`. 창 표시 |
+| `windows.showInactive` | 인자 없음. Host operation 입력은 `null` | `Promise<null>`. 일반, 최소화 또는 최대화 상태를 유지하며 창 표시. 활성화 요청 없음. macOS는 `orderFront:`로 표시하며 key window 전환과 앱 활성화를 하지 않음. 이미 보이거나 최소화된 창은 그대로 둠(사용자가 최소화한 뒤 숨긴 창은 다시 표시하지 않음) |
+| `windows.hide` | 인자 없음. Host operation 입력은 `null` | `Promise<null>`. 창 숨김. 창과 세션은 유지 |
+| `windows.focus` | 인자 없음. Host operation 입력은 `null` | `Promise<null>`. 숨기거나 최소화한 창을 표시하고 포커스 요청. OS가 거부하면 `BUSY` |
+| `windows.activate` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 표시된 비최소화 창으로 전경 전환 요청. 실제 대상 창이 전경이면 `true` |
+| `windows.minimize` | 인자 없음. Host operation 입력은 `null` | `Promise<null>`. 창을 최소화하고 표시. Windows가 다른 창을 활성화할 수 있음 |
+| `windows.maximize` | 인자 없음. Host operation 입력은 `null` | `Promise<null>`. 최소화 여부와 관계없이 창을 최대화하고 표시하며 활성화 요청 |
+| `windows.unmaximize` | 인자 없음. Host operation 입력은 `null` | `Promise<null>`. 창을 일반 크기로 표시하고 활성화 요청. 최소화 전 최대화 상태도 해제 |
+| `windows.restore` | 인자 없음. Host operation 입력은 `null` | `Promise<null>`. 최소화했다면 이전 일반 또는 최대화 상태로 복원. 그 외에는 일반 크기로 표시하고 활성화 요청 |
+| `windows.toggleMaximize` | 인자 없음. Host operation 입력은 `null` | `Promise<null>`. 현재 최대화 상태이면 일반 크기, 아니면 최대화로 표시하고 활성화 요청 |
+| `windows.isMinimized` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 실제 네이티브 창의 최소화 여부 |
+| `windows.isMaximized` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 실제 네이티브 창의 최대화 여부 |
+| `windows.isFullscreen` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 네이티브 창의 전체화면 모드 여부. macOS는 사용자가 직접 진입한 전체화면도 `true`로 조회하며, 진입과 해제 작업은 `UNSUPPORTED` |
+| `windows.isVisible` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 네이티브 표시 상태. 최소화한 창도 `true`일 수 있음. macOS는 `NSWindow.isVisible` 값을 그대로 반환하므로 최소화한 창은 `false`일 수 있음 |
+| `windows.isFocused` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. OS 전경 창인지 조회. 창 안의 WebView에 입력 포커스가 있어도 `true`. 창이 없으면 `false` |
+| `windows.isNormal` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 최소화, 최대화와 전체화면이 모두 아니면 `true` |
+| `windows.setSize` | `{ width, height }` | `Promise<null>`. 내용 영역의 크기. 각 값은 정수 200–4096 |
+| `windows.setContentPosition` | `{ x, y, unit? }` | `Promise<null>`. 내용 영역 왼쪽 위의 화면 위치 설정 |
+| `windows.setOuterSize` | `{ width, height, unit? }` | `Promise<null>`. 제목 표시줄과 테두리를 포함한 바깥 크기 설정 |
+| `windows.setContentBounds` | `{ x, y, width, height, unit? }` | `Promise<null>`. 내용 영역의 화면 위치와 크기를 함께 설정 |
+| `windows.setOuterBounds` | `{ x, y, width, height, unit? }` | `Promise<null>`. 바깥 영역의 화면 위치와 크기를 함께 설정 |
+| `windows.getContentSize` | `{ unit? }` | `Promise<{ width: number; height: number; dpi: number }>` 현재 내용 영역 크기 |
+| `windows.getOuterSize` | `{ unit? }` | `Promise<{ width: number; height: number; dpi: number }>` 현재 창 바깥 영역 크기 |
+| `windows.getContentPosition` | `{ unit? }` | `Promise<{ x: number; y: number; dpi: number }>` 내용 영역 왼쪽 위의 화면 위치 |
+| `windows.getOuterPosition` | `{ unit? }` | `Promise<{ x: number; y: number; dpi: number }>` 창 바깥쪽 왼쪽 위의 화면 위치 |
+| `windows.getContentBounds` | `{ unit? }` | `Promise<{ x: number; y: number; width: number; height: number; dpi: number }>` 현재 내용 영역 위치와 크기 |
+| `windows.getOuterBounds` | `{ unit? }` | 같은 bounds 형태. 현재 창 바깥 영역 위치와 크기 |
+| `windows.getNormalBounds` | `{ unit? }` | 같은 bounds 형태. 일반 상태로 복원할 창 바깥 영역 위치와 크기 |
+| `windows.toLogical` | `{ value }` | `Promise<{ value, dpi: number }>` 물리 픽셀을 대상 창 DPI로 논리 픽셀로 변환. value 형태 유지 |
+| `windows.toPhysical` | `{ value }` | `Promise<{ value, dpi: number }>` 96 DPI 논리 픽셀을 대상 창 DPI로 물리 픽셀로 변환. value 형태 유지 |
+| `windows.getMinSize` | 인자 없음. Host operation 입력은 `null` | `Promise<{ width: number \| null; height: number \| null }>` 축별 최소 크기. 설정하지 않은 축은 `null` |
+| `windows.setMinSize` | `{ width, height }` | `Promise<null>`. 최소 크기 쌍을 교체하며 두 축 모두 `number \| null`. `null`은 해당 축 제한 해제 |
+| `windows.getMaxSize` | 인자 없음. Host operation 입력은 `null` | `Promise<{ width: number \| null; height: number \| null }>` 축별 최대 크기. 설정하지 않은 축은 `null` |
+| `windows.setMaxSize` | `{ width, height }` | `Promise<null>`. 최대 크기 쌍을 교체하며 두 축 모두 `number \| null`. `null`은 해당 축 제한 해제 |
+| `windows.getSizeConstraints` | 인자 없음. Host operation 입력은 `null` | `Promise<{ minWidth: number \| null; minHeight: number \| null; maxWidth: number \| null; maxHeight: number \| null }>` 네 제약을 한 번에 조회 |
+| `windows.setSizeConstraints` | `{ minWidth?, minHeight?, maxWidth?, maxHeight? }` | `Promise<null>`. 제약 전체를 교체합니다. 생략하거나 `null`인 축은 제한을 해제합니다 |
+| `windows.setPosition` | `{ x, y }` | `Promise<null>`. 화면에서 창 바깥쪽 왼쪽 위의 물리 픽셀 위치. 각 값은 정수 -32768–32767 |
+| `windows.setMinimizable` | `{ minimizable: boolean }` | `Promise<null>`. 네이티브 최소화 버튼과 사용자 최소화 허용 변경 |
+| `windows.isMinimizable` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 일반 창의 사용자 최소화 허용 여부 |
+| `windows.setMaximizable` | `{ maximizable: boolean }` | `Promise<null>`. 네이티브 최대화 버튼과 사용자 최대화 허용 변경 |
+| `windows.isMaximizable` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 일반 창의 사용자 최대화 허용 여부 |
+| `windows.setFullscreenable` | `{ fullscreenable: boolean }` | `Promise<null>`. 이후 전체화면 진입 허용 변경. 현재 전체화면은 유지하며 네이티브 버튼에는 영향 없음 |
+| `windows.isFullscreenable` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 이 창 수명의 전체화면 진입 허용 여부 |
+| `windows.setOpacity` | `{ opacity: number }` | `Promise<null>`. 창 전체(WebView 포함)의 불투명도. `opacity`는 0(투명)–1(불투명)이며 범위를 벗어나면 `INVALID_ARGUMENT` |
+| `windows.getOpacity` | 인자 없음. Host operation 입력은 `null` | `Promise<number>`. OS에 저장된 현재 불투명도(0–1). 새 창은 `1` |
+| `windows.setHasShadow` | `{ hasShadow: boolean }` | `Promise<null>`. 창의 시스템 그림자를 켜거나 끔. 네이티브 제목 표시줄 창은 그림자를 끌 수 없어 `false`를 `UNSUPPORTED`로 거부하고 `true`는 변화 없이 성공 |
+| `windows.hasShadow` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 창이 시스템 그림자를 가지는지 조회. 새 창은 `true` |
+| `windows.setIcon` | `{ ico: string \| null }` | `Promise<null>`. Windows에서 제목 표시줄, Alt+Tab, 작업 표시줄의 창 아이콘을 base64 ICO로 바꾸고 `null`이면 앱 기본 아이콘으로 되돌립니다. 자세한 규칙은 [창 아이콘](#창-아이콘) |
+| `windows.hasCustomIcon` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. `setIcon`으로 지정한 아이콘이 적용 중인지 조회합니다 |
+| `windows.setBackgroundColor` | `{ color: string }` | `Promise<null>`. 창과 WebView 문서의 불투명 배경색을 `#RGB` 또는 `#RRGGBB`로 설정. 알파가 있는 형식은 `INVALID_ARGUMENT` |
+| `windows.getBackgroundColor` | 인자 없음. Host operation 입력은 `null` | `Promise<string \| null>`. 선언, 생성 옵션 또는 `setBackgroundColor`로 정한 소문자 `#rrggbb`. 정하지 않았으면 `null` |
+| `windows.setIgnoreMouseEvents` | `{ ignore: boolean }` | `Promise<null>`. `true`이면 WebView를 포함한 창 전체가 마우스 입력을 받지 않고 아래 창으로 통과 |
+| `windows.isIgnoreMouseEvents` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 이 창이 마우스 입력을 무시하는지 조회. 새 창은 `false` |
+| `windows.setClosable` | `{ closable: boolean }` | `Promise<null>`. 네이티브 닫기 버튼과 사용자 닫기 허용 변경 |
+| `windows.isClosable` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 이 창 수명의 사용자 닫기 설정 조회 |
+| `windows.setFocusable` | `{ focusable: boolean }` | `Promise<null>`. 이후 활성화 허용 변경. 현재 포커스를 다른 창으로 옮기지는 않음 |
+| `windows.isFocusable` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 네이티브 활성화 허용 여부. 실제 `isFocused`와 별도 |
+| `windows.setTitle` | `{ title: string }` | `Promise<null>`. 현재 창의 네이티브 제목 변경. 1–1024 UTF-16 코드 단위, NUL 금지 |
+| `windows.getTitle` | 인자 없음. Host operation 입력은 `null` | `Promise<string>`. 실제 HWND의 현재 제목 조회. 0–1024 UTF-16 코드 단위 |
+| `windows.setAccessibleTitle` | `{ title: string }` | `Promise<null>`. 스크린 리더가 읽는 창 이름을 캡션과 별도로 설정. 1–1024 UTF-16 코드 단위, NUL 금지. 빈 문자열은 설정을 제거하고 캡션을 다시 사용 |
+| `windows.getAccessibleTitle` | 인자 없음. Host operation 입력은 `null` | `Promise<string \| null>`. 이 프로세스에서 마지막으로 적용한 접근성 제목. 설정한 적이 없거나 제거했다면 `null` |
+| `windows.setResizable` | `{ resizable: boolean }` | `Promise<null>`. 사용자 테두리와 시스템 메뉴 크기 조절 허용 변경 |
+| `windows.isResizable` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 일반 창의 사용자 크기 조절 허용 여부 |
+| `windows.setMovable` | `{ movable: boolean }` | `Promise<null>`. 사용자 제목 표시줄과 시스템 메뉴 이동 허용 변경 |
+| `windows.isMovable` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 사용자 이동 허용 여부 |
+| `windows.setAspectRatio` | `{ ratio: number \| null }` | `Promise<null>`. 사용자 크기 조절 중 내용 영역의 너비/높이 비율을 고정. `null`은 고정 해제. 0.1–10의 유한한 수 |
+| `windows.getAspectRatio` | 인자 없음. Host operation 입력은 `null` | `Promise<number \| null>`. 고정한 비율. 고정하지 않았다면 `null` |
+| `windows.startDragging` | 인자 없음. Host operation 입력은 `null` | `Promise<null>`. 누르고 있는 마우스 기본 버튼으로 시스템 창 이동을 시작 |
+| `windows.startResizeDragging` | `{ direction }` | `Promise<null>`. 누르고 있는 마우스 기본 버튼으로 해당 테두리나 모서리에서 시스템 크기 조절을 시작. `direction`은 `"north"`, `"south"`, `"east"`, `"west"`, `"northEast"`, `"northWest"`, `"southEast"`, `"southWest"` |
+| `windows.center` | `{ monitorId? }` | `Promise<null>`. `monitorId`가 있으면 그 모니터, 없으면 현재 모니터의 작업 영역 중앙에 창 바깥 영역 배치. 최소화와 최대화 중에는 일반 복원 영역 배치 |
+| `windows.moveToAnchor` | `{ anchor, monitorId?, margin? }` | `Promise<null>`. `monitorId`가 있으면 그 모니터, 없으면 배치할 사각형에 가장 가까운 모니터의 작업 영역에서 `anchor` 위치에 창 바깥 영역 배치. `anchor`는 `"top-left"`, `"top"`, `"top-right"`, `"left"`, `"center"`, `"right"`, `"bottom-left"`, `"bottom"`, `"bottom-right"`. `margin`은 작업 영역 가장자리에서 띄울 논리 픽셀로 0–8192의 정수(기본 0). 최소화와 최대화 중에는 일반 복원 영역 배치 |
+| `windows.moveNextToRect` | `{ rect, placement, align?, margin? }` | `Promise<null>`. 물리 화면 좌표의 기준 사각형 `rect`(`{ x, y, width, height }`, `null`이 아닌 `tray.getBounds` 결과를 그대로 넘길 수 있음)의 `placement` 쪽에 창 바깥 영역을 놓고, `rect`에 가장 가까운 모니터의 작업 영역 안으로 밀어 넣습니다. `placement`는 `"above"`, `"below"`, `"left"`, `"right"`. `align`은 기준 변과 나란한 축의 정렬로 `"start"`, `"center"`, `"end"`(기본 `"center"`). `margin`은 `rect`와 창 사이에 띄울 논리 픽셀로 0–8192의 정수(기본 0). 최소화와 최대화 중에는 일반 복원 영역 배치 |
+| `windows.setFullscreen` | `{ fullscreen: boolean }` | `Promise<null>`. 현재 모니터 전체화면. 해제하면 이전 창 위치와 표시 상태 복원. `setFullscreenable(false)` 상태에서 진입은 `INVALID_ARGUMENT` |
+| `windows.setCloseConfirmation` | `{ message: string \| null }` | `Promise<null>`. 창을 닫기 전에 표시할 확인 메시지 설정. 문자열은 1–1024자, NUL 금지. `null`이면 확인 해제 |
+| `windows.close` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 닫기 승인 시 `true`, 확인이나 앱 종료를 취소하거나 트레이로 숨기면 `false`. 정리 완료를 기다리지는 않음 |
+| `windows.respondClose` | `{ requestId: number, allow: boolean }` | `Promise<null>`. 대기 중인 [닫기 요청](#닫기-요청)에 답함. 백엔드 또는 질문을 받은 창 자신의 문서만 호출할 수 있고 다른 호출자는 `PERMISSION_DENIED`. Windows와 macOS에서 지원 |
 
 macOS는 최대화를 AppKit zoom(`zoom:`, 표준 프레임)으로, 최대화 여부를 `isZoomed`로 처리하며 전체화면에 들어가지 않습니다. 최소화는 `miniaturize:`이고 `isMinimized`는 `isMiniaturized`입니다. 이미 요청한 상태이면 오류 없이 성공합니다. Dock과 zoom 전환은 호출이 반환된 뒤 끝나므로 직후 조회는 이전 상태일 수 있습니다. `maximize`와 `unmaximize`는 최소화한 창을 먼저 되돌립니다. `restore`는 최소화한 창이면 최소화를 풀고, 아니면 zoom을 해제합니다. macOS는 위 표와 달리 앱을 활성화하지 않고 창의 최소화와 zoom 상태만 바꿉니다. 숨긴 창에 보냈을 때의 표시 여부는 정의하지 않습니다. 전체화면 중에는 상태 변경이 `INVALID_ARGUMENT`이고 macOS는 전체화면 해제 작업이 `UNSUPPORTED`이므로, 사용자가 직접 전체화면을 나와야 합니다.
 
@@ -578,7 +506,7 @@ macOS는 최대화를 AppKit zoom(`zoom:`, 표준 프레임)으로, 최대화 �
 생성 완료는 WebView 준비를 뜻합니다. 웹 문서의 클라이언트 초기화 완료까지 기다리지는 않습니다.
 아래 준비 조회와 이벤트로 네이티브 창, 웹 문서, SDK의 완료를 각각 확인합니다.
 
-macOS는 뷰마다 독립된 임시 WebKit 프로필을 사용합니다. 같은 뷰를 재생성할 때는
+macOS는 앱의 독립된 임시 WebKit 프로필을 사용합니다. 창을 재생성할 때는
 프로필을 유지하고 앱 종료 후에는 남기지 않습니다. `focus`는 창을 표시하고 앱 활성화를
 요청하며, `isFocused`는 앱이 활성 상태이고 해당 창이 key window인지 확인합니다.
 `show`는 창을 표시하고 key window 전환을 요청합니다. 운영체제가 앱 활성화를 거절할
@@ -586,63 +514,33 @@ macOS는 뷰마다 독립된 임시 WebKit 프로필을 사용합니다. 같은 
 승인하며, 마지막 열린 창이면 기본 `desktop.closeBehavior: "quit"`에 따라 `beforeQuit` 승인 뒤 앱을 종료합니다.
 `"keep-alive"`는 앱을 유지합니다. `desktop`은 트레이와 `"hide"`를 제외하고 지원합니다.
 닫기 확인(`setCloseConfirmation`)은 아직 지원하지 않습니다. 아래 상태 변경, 크기와 닫기 확인 설명은 Windows의 동작입니다.
-[닫기 요청](#닫기-요청)과 [창 수명 이벤트](#창-수명-이벤트)는 macOS에서도 같은 규칙으로 동작합니다.
+[닫기 요청](#닫기-요청)은 macOS에서도 같은 규칙으로 동작합니다. [창 수명 이벤트](#창-수명-이벤트)는 macOS에서 백엔드의 `windows.waitForLifecycle`로만 관찰합니다.
 
-## 창 식별자 조회
+## 창 식별자와 열림 상태
 
-Windows의 네 탐색 메서드는 `WindowIdentity`인 `{ windowId, viewId }` 또는 `null`을 반환합니다.
-`viewId`는 `app.windows`에 선언한 정책 뷰이며 뷰마다 창 하나를 유지합니다.
-`windowId`는 `getSnapshot`과 같은 불투명 네이티브 수명 ID입니다. HWND나 `viewId`로
-만들거나 추측하지 말고 반환된 값을 사용합니다.
+`windowId`는 `getSnapshot`과 `getReadiness`가 반환하는 불투명 네이티브 수명 ID입니다.
+HWND나 `viewId`로 만들거나 추측하지 말고 반환된 값을 사용합니다.
+`viewId`는 앱의 정책 뷰입니다.
 
 같은 네이티브 창의 문서 탐색과 SDK 세션 교체는 `windowId`를 유지합니다. 닫았다 다시
-생성하거나 `recreate`로 네이티브 창을 바꾸면 새 ID를 발급합니다. `getById`는 알 수 없는 ID와
-이전 ID에 `null`을 반환합니다. 닫힌 창, 생성 전 창과 API 생성 또는 재생성 중인 창도
-탐색 결과에서 제외합니다. 시작 창처럼 API 생성 작업이 없는 경우 HWND가 만들어진 뒤에는
-WebView 준비 전에도 식별할 수 있습니다.
+생성하거나 `recreate`로 네이티브 창을 바꾸면 새 ID를 발급합니다.
+macOS도 네이티브 창을 만들거나 재생성할 때마다 새 `windowId`를 발급하며 문서 탐색은 ID를 유지합니다.
 
-`getCurrent`는 입력으로 뷰를 받지 않으며 호스트가 인증한 `view:<viewId>` 출처를 사용합니다.
-백엔드 호출에는 `null`, 잘못된 출처에는 `PERMISSION_DENIED`를 반환합니다.
-`getFocused`는 OS 전경 창이 이 앱의 창일 때만 그 식별자를 반환합니다.
-외부 앱이 전경이거나 전경 창이 없으면 `null`입니다.
-`getLastActive`는 이 호스트에서 마지막으로 실제 활성화를 받은 창을 반환하며 기록이 없으면 `null`입니다.
-
-네 탐색 메서드는 각각 자신의 작업 권한을 확인합니다. 권한이 없으면 `PERMISSION_DENIED`입니다.
-조회 대상은 앱에 선언된 창이며 닫혔거나 교체 중인 창은 반환하지 않습니다.
-
-마지막 활성 기록은 OS가 창을 활성화할 때만 갱신합니다. 비활성화 메시지, 문서 탐색과 조회
-자체는 기록을 바꾸지 않습니다. 해당 네이티브 창을 파괴하면 기록을 삭제하며 이전 활성 창으로
-되돌리지 않습니다. 다른 창을 파괴해도 기록을 유지합니다. 다만 blur, 종료나 숨김 과정에서 OS가
-다른 앱 창을 실제로 활성화하면 그 활성화를 새로 기록합니다.
-기록은 이 호스트 실행에만 유지하며 앱 종료 뒤에는 보존하지 않습니다.
-
-macOS도 같은 다섯 조회(`getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`)를
-제공합니다. 네이티브 창을 만들거나 재생성할 때마다 새 `windowId`를 발급하며 문서 탐색은 ID를
-유지합니다. `getFocused`는 앱이 활성 상태일 때 key window를, `getLastActive`는 마지막으로
-key window가 된 창을 반환하고 그 창을 닫으면 기록을 지웁니다. key window가 닫힐 때 AppKit이
-다른 창을 key window로 바꾸면 그 창이 새 기록입니다. macOS는 뷰마다 창 하나만 지원하므로
-`listInstances`는 열린 뷰마다 한 항목을 선언 순서로 반환하며 `createInstance`와
-`recreateInstance`는 사용할 수 없습니다.
-
-조회는 창 생성, 표시, 포커스나 활성화를 요청하지 않습니다. `getById`의 `windowId`는
-1~128자의 영문, 숫자, `_`, `.`, `:`, `-` 문자열이며 잘못된 입력은 `INVALID_ARGUMENT`입니다.
-호스트 종료와 호출 취소는 `CANCELLED`입니다. 식별자 추적을 제공하지 않는 플랫폼은
-`UNSUPPORTED`, 네이티브 조회 실패는 `INTERNAL`을 반환합니다.
+`isOpen`은 창이 열려 있는지 반환합니다. 닫힌 창과 생성 전 창은 `false`이고 재생성 중에는
+`BUSY`입니다. 조회는 창 생성, 표시, 포커스나 활성화를 요청하지 않으며
+작업 권한 `windows.isOpen`이 필요합니다. 호스트 종료와 호출 취소는 `CANCELLED`,
+네이티브 조회 실패는 `INTERNAL`입니다.
 
 ```ts
-const current = await windows.getCurrent();
-if (current) {
-  const sameLifetime = await windows.getById({ windowId: current.windowId });
-  const normal = await windows.isNormal({ view: current.viewId });
+if (!(await windows.isOpen())) {
+  await windows.create();
 }
-const focused = await windows.getFocused();
-const lastActive = await windows.getLastActive();
-const destroyed = await windows.isDestroyed({ view: "editor" });
+const { windowId } = await windows.getReadiness();
 ```
 
 ## 표시와 활성 창 전환
 
-다음은 Windows의 계약입니다. `blur`와 `activate`는 macOS에서 `UNSUPPORTED`이며,
+다음은 Windows의 계약입니다. `activate`는 macOS에서 `UNSUPPORTED`이며,
 macOS의 `showInactive`는 아래에서 따로 설명합니다. 여기서 활성 창과 포커스된 창은 `isFocused`와 같은 OS 전경 창을
 뜻합니다. 창 안의 입력 요소로 키보드 포커스를 옮기는 API는 아닙니다.
 API 표의 활성화 요청은 기본 `focusable: true` 기준입니다.
@@ -655,7 +553,6 @@ API 표의 활성화 요청은 기본 `focusable: true` 기준입니다.
 | `hide` | 숨김 | 그대로 유지 | 최소화 상태를 보존하며 숨김 | 최대화 상태를 보존하며 숨김 |
 | `focus` | 활성화 요청 | 표시하고 활성화 요청. 최소화했다면 복원 | 최소화 전 일반 또는 최대화 상태로 복원하고 활성화 요청 | 최대화 유지하며 활성화 요청 |
 | `activate` | 전경 전환 요청 | 표시하지 않고 `false` | 복원하지 않고 `false` | 최대화 유지하며 전경 전환 요청 |
-| `blur` | 활성 창이면 다음 허용 창으로 전환 | 그대로 유지하며 이미 비활성이면 `true` | 그대로 유지하며 이미 비활성이면 `true` | 최대화 유지하며 다음 허용 창으로 전환 |
 
 `show`의 `null`은 표시 완료이며 포커스 획득을 보장하지 않습니다. `showInactive`는
 활성화를 요청하지 않고 현재 입력 창과 그 안의 키보드 포커스를 유지합니다. 이미
@@ -664,27 +561,16 @@ API 표의 활성화 요청은 기본 `focusable: true` 기준입니다.
 `hide`는 창과 WebView, 세션을 유지합니다. 활성 창을 숨기면 Windows가 다른 창을
 선택할 수 있으며 다음 창을 지정하는 계약은 아닙니다.
 
-`activate({ view })`의 대상은 앱 설정에 선언하고 이미 열린 창입니다. 임의 HWND,
-다른 앱의 창이나 마지막 활성 창을 지정할 수 없습니다. 숨긴 창을 표시하거나
+`activate()`의 대상은 이미 열린 앱 창입니다. 임의 HWND나
+다른 앱의 창을 지정할 수 없습니다. 숨긴 창을 표시하거나
 최소화한 창을 복원하려면 `focus`를 사용합니다. 표시된 비최소화 대상에는 호출 끝에
 관찰한 전경 여부를 반환합니다. Windows가 전경 전환을 거부해 대상이 전경을 얻지
 못하면 `false`이고 기존 표시 상태를 유지합니다. 이미 해당 창이 전경이면 `true`입니다.
 기존 `focus`는 포커스를 얻지 못하면 `BUSY`입니다. 이 경우에도 먼저 적용한 표시와
 최소화 복원은 되돌리지 않습니다.
 
-`blur({ view })`는 숨긴 창이나 최소화한 창을 변경하지 않고 실제 비활성 여부를
-반환합니다. 이미 비활성인 창도 변경 없이 `true`입니다. 표시된 비최소화 활성 창이면
-`app.windows` 배열 순서에서 자신을 제외한 첫 번째 적격 창을 선택합니다. 후보는
-앱에 선언된 열린 창 중 준비가 완료되고,
-실패하거나 재생성 중이 아니며, 표시된 비최소화 창입니다. 최대화된 창도 후보입니다.
-전환 후 원래 대상이 비활성이면 `true`, 후보가 없거나 Windows가 거부해 원래 대상이
-계속 전경이면 `false`입니다. 첫 후보의 전환이 거부돼도 다음 후보로 재시도하지 않습니다.
-다른 앱의 창을 고르거나 권한 없는 창을 활성화하지 않으며, 대상의 크기와 표시 상태,
-세션은 유지합니다. 다음 창을 직접 지정하려면 `activate`를 호출하세요.
-
-세 API는 각각 windows.showInactive, windows.activate, windows.blur 작업 권한이 필요합니다.
-`blur`의 후보에도 동일한 호출 컨텍스트의 권한을 적용하고 backend 권한을 추가하지
-않습니다. 작업 권한이 없으면 `PERMISSION_DENIED`, 허용된 미선언 뷰나 닫힌 창은
+두 API는 각각 windows.showInactive, windows.activate 작업 권한이 필요합니다.
+작업 권한이 없으면 `PERMISSION_DENIED`, 닫힌 창은
 `INVALID_ARGUMENT`, 재생성 중인 대상은 `BUSY`입니다. OS가 요청한 표시 상태를
 적용하지 못하거나 네이티브 조회가 실패하면 `INTERNAL`입니다.
 
@@ -692,8 +578,7 @@ Windows는 [전경 전환을 제한](https://learn.microsoft.com/en-us/windows/w
 결과는 반환 시점의 관찰이며 이후 사용자 입력으로 달라질 수 있습니다.
 강제 전경 전환이나 제한 우회, 입력 재전송은 하지 않습니다.
 `windows.changed`는 실제 표시와 전경 상태가 바뀐 창에서만 발행합니다.
-성공한 전환에서는 이전 창의 `blur`와 새 창의 `focus`가 각각 자기 뷰에 전달됩니다.
-서로 다른 창의 이벤트 사이에는 전역 순서를 보장하지 않습니다. 거부나 반복 호출에서
+거부나 반복 호출에서
 상태가 바뀌지 않으면 이벤트를 만들지 않습니다. 조회한 snapshot의 상태와 revision은
 동일한 관찰을 사용합니다.
 
@@ -701,16 +586,15 @@ macOS의 `showInactive`는 `orderFront:`로 창을 표시하며 key window 전�
 요청하지 않습니다. 최소화한 창은 최소화 상태로 남습니다.
 
 ```ts
-await windows.showInactive({ view: "editor" });
-const activated = await windows.activate({ view: "editor" });
-const blurred = await windows.blur({ view: "editor" });
+await windows.showInactive();
+const activated = await windows.activate();
 ```
 
 
 ## 창 준비
 
 Windows의 `windows.readiness`는 준비 단계가 바뀔 때 현재 `WindowReadiness`를 전달합니다.
-`windows.getReadiness({ view })`도 같은 형태를 반환합니다. 준비 조회 자체는 기다리지 않습니다.
+`windows.getReadiness()`도 같은 형태를 반환합니다. 준비 조회 자체는 기다리지 않습니다.
 
 ```ts
 type WindowReadiness = {
@@ -733,10 +617,9 @@ type WindowReadiness = {
 
 SDK가 웹 문서보다 먼저 준비될 수 있습니다. 각 단계의 이벤트는 별도로 발생합니다.
 문서 완료는 브라우저 탐색 완료이며 이미지 첫 프레임, 앱 데이터 로드와 UI 초기화 성공을 보장하지 않습니다.
-SDK 완료도 앱 초기화 완료를 뜻하지 않습니다. 앱의 필요한 비동기 작업을 완료한 뒤 창을 표시하거나 splashscreen을 전환하세요.
+SDK 완료도 앱 초기화 완료를 뜻하지 않습니다. 앱의 필요한 비동기 작업을 완료한 뒤 창을 표시하세요.
 
 수신 뷰에는 `events: ["windows.readiness"]`와 `windows.getReadiness` 작업 권한이 모두 필요합니다.
-자기 창뿐 아니라 허용된 다른 창의 준비도 구독합니다. 권한이 없는 대상 창의 상태는 보내지 않습니다.
 이벤트의 `source`는 `"native"`, `target`은 실제 수신 뷰이며 payload의 `viewId`는 준비된 창의 뷰입니다.
 백엔드는 `getReadiness`로 조회합니다. 이벤트는 이력이나 재전송을 제공하지 않습니다.
 구독에 실패하면 오류를 처리하고, 구독에 성공한 뒤 `getReadiness`로 이미 완료된 단계를 확인합니다.
@@ -771,18 +654,6 @@ WebView 생성자가 실패해 HWND를 바로 회수한 시도는 생성 호출 
 명시적 `show`, `focus`와 표시를 동반하는 상태 제어는 준비 전에도 창을 표시할 수 있습니다.
 자동 표시 시점부터는 일반 `show`와 같은 Windows 활성화 동작입니다. `focusable: false`이면 비활성 표시를 사용합니다.
 
-`completeSplashscreen({ view: "main", splash: "splash" })`는 windows.completeSplashscreen 작업 권한을 먼저 검사합니다. 두 창은 앱 설정에 선언해야 합니다.
-주 창이나 백엔드에서 호출해야 합니다. splash 창에서 호출하면 세션이 닫히기 전에 `INVALID_ARGUMENT`를 반환하며 창은 전환하지 않습니다.
-서로 다른 열린 창이어야 하며 주 창의 문서와 SDK가 모두 준비되지 않았으면 `BUSY`입니다.
-splash 창이 주 창의 직접 또는 간접 부모이면 `INVALID_ARGUMENT`이며 두 창을 변경하지 않습니다.
-전환 전에 주 창의 소유 관계를 해제하거나 splash 창을 주 창의 자식으로 설정하세요.
-앱은 데이터와 UI 초기화를 끝낸 뒤 이 API를 호출해 앱 준비를 알립니다.
-주 창을 먼저 표시하고 splash 창의 닫기를 확정하므로 전환 중 마지막 창 종료 규칙을 실행하지 않습니다.
-닫기 확인을 거절하면 주 창은 표시된 상태이고 splash 창도 유지하며 `false`를 반환합니다.
-전환에서는 splash 창을 트레이로 숨기지 않고 닫습니다. `beforeQuit`는 실행하지 않습니다.
-isolated splash의 임시 프로필도 최종 종료로 정리하며 다시 생성하면 새 프로필을 사용합니다.
-그 뒤 마지막 주 창의 일반 닫기는 기존 종료 취소와 트레이 규칙을 따릅니다.
-요청을 실행하기 전 취소하면 전환하지 않습니다. 이미 표시와 닫기를 확정한 뒤에는 그 변경을 되돌리지 않습니다.
 macOS도 `getReadiness`와 `windows.readiness`를 같은 형태와 권한으로 제공합니다.
 웹 문서 완료는 WKWebView 메인 프레임의 탐색 완료이고, 탐색 취소와 정책에 따른 중단은
 `"cancelled"`입니다. SDK 완료는 승인된 세션의 준비 확인이며 문서와 SDK의 기한,
@@ -790,14 +661,14 @@ macOS도 `getReadiness`와 `windows.readiness`를 같은 형태와 권한으로 
 또는 "App shutdown."), 생성 실패의 `INTERNAL`, 생성 기한 초과의 `TIMEOUT`은 Windows와 같습니다.
 `visible: false`와 `showWhenReady`로 숨겨서 생성한 창은 준비 중에 앞으로 나오거나 key window가
 되거나 앱을 활성화하지 않습니다. 준비 조건을 만족하면 최초 표시와 같이 key window 전환과
-앱 활성화를 요청해 한 번 표시합니다. macOS의 splashscreen 전환은 아직 지원하지 않습니다.
+앱 활성화를 요청해 한 번 표시합니다.
 
 ## 활성화 허용
 
 `focusable: false`는 Windows의 [WS_EX_NOACTIVATE](https://learn.microsoft.com/en-us/windows/win32/winmsg/extended-window-styles)를 사용합니다.
 해당 창은 사용자 클릭으로 활성화되지 않고 `show`는 비활성 표시를 사용합니다. `focus`는 새 활성화나
 복원을 요청하지 않으며 이미 전경 창이면 성공, 아니면 `BUSY`입니다. `activate`도 새 활성화를 요청하지 않고
-현재 전경 여부를 반환합니다. `blur` 후보에서는 이 창을 제외합니다. 설정 변경은 현재 전경 창을 강제로
+현재 전경 여부를 반환합니다. 설정 변경은 현재 전경 창을 강제로
 비활성화하지 않으므로 `isFocusable: false`와 `isFocused: true`가 함께 관찰될 수 있습니다.
 최소화, 최대화와 복원 API 및 해당 네이티브 버튼도 활성화를 요청하지 않습니다.
 `desktop.show()`와 트레이 Open, 두 번째 실행의 표시 요청은 숨긴 창을 표시하고 최소화된 창을
@@ -819,11 +690,10 @@ operation 권한을 따로 요구하며 닫힌 창은 `INVALID_ARGUMENT`입니�
 막습니다. `isClosable`은 이 호스트 설정을 반환합니다. 전체화면 중의 변경도 유지하고 해제할 때
 닫기 버튼에 반영합니다. 표시, 위치, 크기와 포커스를 유지하며 재생성하면 기본값으로 돌아갑니다.
 프로그램의 `minimize`, `maximize`, `close`, `recreate`와 trusted `destroy`는 계속 사용할 수 있고
-일반 close의 확인, 종료 취소와 부모 순서도 유지합니다. 렌더러 실패와 강제 호스트 정리는 이 설정으로 막지 않습니다.
+일반 close의 확인과 종료 취소도 유지합니다. 렌더러 실패와 강제 호스트 정리는 이 설정으로 막지 않습니다.
 이 설정은 프로그램의 권한이나 창 종료 정책을 대체하지 않습니다.
 
-`fullscreenable`의 기본값도 `true`이며 창 인스턴스별 상태입니다. 같은 선언의 다른 창과 재생성한 창에는 영향이 없고
-재생성하면 기본값으로 돌아갑니다. 권한과 닫힌 창 오류는 위 설정과 같습니다. `false`이면
+`fullscreenable`의 기본값도 `true`이며 창 인스턴스별 상태입니다. 재생성하면 기본값으로 돌아갑니다. 권한과 닫힌 창 오류는 위 설정과 같습니다. `false`이면
 `setFullscreen({ fullscreen: true })`를 조용히 무시하지 않고 `INVALID_ARGUMENT`로 거부합니다.
 이미 전체화면인 창을 `false`로 바꿔도 전체화면은 유지되며 `setFullscreen({ fullscreen: false })`로는 언제든 나갈 수 있습니다.
 나간 뒤에는 `true`로 되돌릴 때까지 다시 들어갈 수 없습니다. 거부는 호스트의 네이티브 창 계층에서도 적용합니다.
@@ -846,7 +716,7 @@ Windows는 `WS_EX_LAYERED`와 `WS_EX_TRANSPARENT`를 함께 설정하므로 클�
 Electron의 `forward` 옵션(통과 중 마우스 이동을 WebView에 전달)은 지원하지 않으며, 입력에 `ignore` 외의 필드가 있으면 `INVALID_ARGUMENT`입니다.
 사용자가 이 창을 마우스로 닫거나 옮길 수 없게 되므로 해제할 수단(단축키, 트레이 등)을 앱이 따로 두어야 합니다. macOS는 `UNSUPPORTED`입니다.
 
-`setTitle`은 지정한 창 수명의 제목만 변경합니다. 선언, 다른 인스턴스와 앱 이름을 바꾸지 않으며
+`setTitle`은 현재 창 수명의 제목만 변경합니다. 선언과 앱 이름을 바꾸지 않으며
 재생성에서는 선언 또는 해당 생성의 `options.title`로 돌아갑니다. 표시, 크기와 포커스 상태를 유지합니다.
 닫기 확인 대화상자의 caption도 현재 창 제목을 사용합니다. `getTitle`은 캐시 대신 실제 HWND를 읽으며
 신뢰된 네이티브 코드가 빈 제목을 적용하면 빈 문자열을 반환합니다. 외부 코드가 지원 길이를 넘기는
@@ -927,7 +797,7 @@ Windows CI는 모니터 1개와 DPI 96의 실제 HWND에서 숨긴 창의 아홉
 `rect`가 어떤 모니터와도 겹치지 않으면 가장 가까운 모니터를 쓰고, 숨김, 최소화, 최대화 상태 유지와 DPI 변경 뒤 두 번째 배치는 `moveToAnchor`와 같으며 전체화면에서는 `INVALID_ARGUMENT`입니다. `rect`는 정수 좌표이고 폭과 높이는 0 이상입니다(`tray.getBounds`가 빈 사각형을 돌려줘도 그대로 넘길 수 있고, 이때는 `rect`의 좌표에 가장 가까운 모니터를 씁니다). 최소화와 최대화 중 복원 영역 배치는 가짜 네이티브 창으로만 검증했습니다.
 권한은 `windows.moveNextToRect` 하나이고 macOS에서는 `UNSUPPORTED`입니다.
 Windows CI는 모니터 1개와 DPI 96의 실제 HWND에서 작업 영역 중앙과 가장자리의 합성 사각형으로 네 방향, 세 정렬, `margin`, 작업 영역 보정과 잘못된 사각형 거부를 검증합니다. 작업 표시줄이 위쪽이나 좌우에 있을 때의 실제 트레이 위치, 다중 물리 모니터와 혼합 DPI는 검증 범위 밖입니다.
-따라서 `setSize` 뒤에는 `getContentSize({ view, unit: "logical" })`, `setPosition` 뒤에는 `getOuterPosition({ view })`으로 결과를 확인합니다.
+따라서 `setSize` 뒤에는 `getContentSize({ unit: "logical" })`, `setPosition` 뒤에는 `getOuterPosition()`으로 결과를 확인합니다.
 제약에 따른 크기 보정과 운영체제의 배치 결과를 반환합니다.
 
 내용 영역은 제목 표시줄과 테두리를 제외한 Win32 client 영역입니다. 바깥 영역은 제목 표시줄과 보이지 않는 크기 조절 테두리까지 포함합니다.
@@ -966,11 +836,10 @@ Windows CI는 모니터 1개와 DPI 96의 실제 HWND에서 작업 영역 중앙
 import windows from "@bunaway/plugin-windows";
 
 // 아래 호출은 명령 핸들러 또는 setup 내부에 둡니다.
-const content = await windows.getContentSize({ view: "editor", unit: "logical" });
-const outer = await windows.getOuterBounds({ view: "editor" });
-const normal = await windows.getNormalBounds({ view: "editor" });
+const content = await windows.getContentSize({ unit: "logical" });
+const outer = await windows.getOuterBounds();
+const normal = await windows.getNormalBounds();
 const converted = await windows.toPhysical({
-  view: "editor",
   value: { width: 800, height: 600 },
 });
 ```
@@ -1029,13 +898,13 @@ bounds 설정 중의 중간 위치와 크기는 발행하지 않고 적용 후 �
 
 ```ts
 await windows.setContentBounds({
-  view: "editor", x: 100, y: 120, width: 800, height: 600, unit: "logical",
+  x: 100, y: 120, width: 800, height: 600, unit: "logical",
 });
-const content = await windows.getContentBounds({ view: "editor", unit: "logical" });
+const content = await windows.getContentBounds({ unit: "logical" });
 await windows.setOuterBounds({
-  view: "editor", x: -100, y: 50, width: 900, height: 700,
+  x: -100, y: 50, width: 900, height: 700,
 });
-const outer = await windows.getOuterBounds({ view: "editor" });
+const outer = await windows.getOuterBounds();
 ```
 
 ## 창 상태 변경과 조회
@@ -1044,31 +913,31 @@ const outer = await windows.getOuterBounds({ view: "editor" });
 
 `toggleMaximize`는 호출 시 네이티브 최대화 여부를 기준으로 전환합니다. 최소화한 창은 현재 최대화 상태가 아니므로 최대화합니다. 이미 최소화한 창에 `minimize`, 이미 최대화한 창에 `maximize`를 다시 호출해도 해당 상태를 유지합니다.
 
-전체화면 중에는 `minimize`, `maximize`, `unmaximize`, `restore`, `toggleMaximize`를 `INVALID_ARGUMENT`로 거부하고 전체화면과 복원 정보를 유지합니다. 먼저 `setFullscreen({ view, fullscreen: false })`로 해제하세요. 전체화면 중에도 상태 조회는 가능합니다. 전체화면과 최대화는 별개 상태이며 전체화면 진입 전 최대화 여부를 유지할 수 있습니다.
+전체화면 중에는 `minimize`, `maximize`, `unmaximize`, `restore`, `toggleMaximize`를 `INVALID_ARGUMENT`로 거부하고 전체화면과 복원 정보를 유지합니다. 먼저 `setFullscreen({ fullscreen: false })`로 해제하세요. 전체화면 중에도 상태 조회는 가능합니다. 전체화면과 최대화는 별개 상태이며 전체화면 진입 전 최대화 여부를 유지할 수 있습니다.
 
 숨긴 창에 다섯 상태 변경을 호출하면 창을 표시합니다. `minimize`는 최소화된 표시 상태로 만들며 대상 창의 포커스를 요청하지 않습니다. 나머지는 대상 창의 활성화를 요청하지만 OS의 전경 전환 정책에 따라 포커스를 얻지 못할 수 있습니다. 상태 변경 성공은 포커스 획득을 보장하지 않습니다. 반드시 포커스가 필요하면 `focus`를 호출하고 실패를 처리하세요. 조회는 창을 표시하거나 포커스를 바꾸지 않습니다.
 
 최소화, 최대화, 표시 여부와 전경 창 여부는 호출할 때 Windows에서 읽습니다. 전체화면은 해당 HWND에 적용한 호스트의 전체화면 모드입니다. `isVisible`은 다른 창에 가려졌는지나 화면 안에 있는지까지 판정하지 않습니다. 조회 결과는 그 시점의 상태이며 이후 사용자의 창 조작으로 바뀔 수 있습니다.
 
-`isNormal`은 숨긴 창이나 포커스가 없는 창에도 `true`일 수 있습니다. `isDestroyed`는
-아직 생성하지 않은 `startup: false` 뷰와 닫기가 수락된 창에도 `true`를 반환합니다.
-API 생성 작업이 없고 살아 있는 HWND가 있으면 WebView 준비 전에도 `false`입니다. 이 조회는 창을 생성하거나
-문서 준비를 기다리지 않습니다. 트레이로 숨기거나 닫기를 거절한 창은 destroyed가 아닙니다.
+`isNormal`은 숨긴 창이나 포커스가 없는 창에도 `true`일 수 있습니다. `isOpen`은
+아직 생성하지 않은 `startup: false` 창과 닫기가 수락된 창에는 `false`를 반환합니다.
+API 생성 작업이 없고 살아 있는 HWND가 있으면 WebView 준비 전에도 `true`입니다. 이 조회는 창을 생성하거나
+문서 준비를 기다리지 않습니다. 트레이로 숨기거나 닫기를 거절한 창은 닫힌 창이 아닙니다.
 
-제어와 상태 조회 모두 각 작업 이름을 허용해야 합니다. windows.list만으로는
-상태를 조회할 수 없습니다. 권한을 먼저 검사하며 권한이 없으면 대상의 선언 여부와 관계없이
-`PERMISSION_DENIED`입니다. 허용된 미선언 뷰는 `INVALID_ARGUMENT`입니다.
-`isDestroyed`를 제외한 상태 조회는 닫힌 창에 `INVALID_ARGUMENT`를 반환합니다.
-API 생성 또는 재생성 중인 창은 `isDestroyed`를 포함해 `BUSY`입니다.
+제어와 상태 조회 모두 각 작업 이름을 허용해야 합니다. `windows.isOpen`만으로는
+상태를 조회할 수 없습니다. 권한을 먼저 검사하며 권한이 없으면 `PERMISSION_DENIED`입니다.
+`isOpen`과 `isFocused`를 제외한 상태 조회는 닫힌 창에 `INVALID_ARGUMENT`를 반환합니다.
+`isFocused`는 닫힌 창에 `false`입니다.
+API 생성 또는 재생성 중인 창은 `isOpen`을 포함해 `BUSY`입니다.
 
 웹 UI에서는 두 번째 인자로 `signal`, `timeoutMs`를 사용할 수 있습니다. 백엔드 호출은 명령의 취소와 기한을 따르며 별도 취소 옵션을 전달하면 `INVALID_ARGUMENT`입니다. 네이티브 작업 시작 전 취소는 실행을 막습니다. 시작한 작업은 동기 실행하며 이후 취소는 창 상태 변경을 되돌리지 않습니다. OS가 요청한 표시 상태를 적용하지 못하거나 네이티브 조회가 실패하면 `INTERNAL`입니다.
 
 ```ts
-await windows.maximize({ view: "editor" });
-await windows.minimize({ view: "editor" });
-await windows.restore({ view: "editor" });
-const maximized = await windows.isMaximized({ view: "editor" }); // true
-await windows.unmaximize({ view: "editor" });
+await windows.maximize();
+await windows.minimize();
+await windows.restore();
+const maximized = await windows.isMaximized(); // true
+await windows.unmaximize();
 ```
 
 ## 닫기 확인과 수명
@@ -1105,25 +974,25 @@ macOS는 닫기 확인 메시지를 지원하지 않아 아래의 닫기 확인 
 대상은 창의 닫기 버튼, Alt+F4와 시스템 메뉴, 웹 UI의 `window.close()`, 공개 `windows.close`입니다.
 `requestId`는 같은 windowId 안에서 증가하는 양의 정수입니다.
 
-`windows.respondClose({ view, windowId?, requestId, allow })`는 `null`을 반환합니다.
+`windows.respondClose({ requestId, allow })`는 `null`을 반환합니다.
 
 - `allow: false`는 창을 유지합니다. 사용자 닫기는 아무 일도 없던 것처럼 끝나고 `windows.close`는 `false`를 반환합니다.
-- `allow: true`는 그 창 자신의 닫기 확인만 건너뛰고 닫기를 계속합니다. 소유한 자식 창의 닫기 확인,
-  마지막 창이면 `beforeQuit`, 닫기 자체는 기존 순서대로 실행합니다.
+- `allow: true`는 그 창 자신의 닫기 확인만 건너뛰고 닫기를 계속합니다.
+  `beforeQuit`과 닫기 자체는 기존 순서대로 실행합니다.
 - 대기 중인 요청이 아닌 `requestId`는 `INVALID_ARGUMENT`("No pending close request.")입니다.
   이미 답했거나 취소된 요청, 보낸 적 없는 요청, 이전 요청에 대한 늦은 답이 해당합니다.
 - 요청이 대기 중일 때 같은 창의 반복 사용자 닫기는 무시하고
   공개 `windows.close`와 `windows.recreate`는 `BUSY`로 실패하고 대기는 계속됩니다.
 
-`respondClose`는 신뢰된 백엔드 또는 질문을 받은 창 자신의 문서만 호출할 수 있습니다. 다른 창의 문서가
-호출하면 유효한 `requestId`여도 `PERMISSION_DENIED`로 실패하고 요청은 그대로 대기합니다.
+`respondClose`는 신뢰된 백엔드 또는 질문을 받은 창 자신의 문서만 호출할 수 있습니다. 이전 문서의 늦은 답은
+`requestId`가 유효해도 거부하고 요청은 그대로 대기합니다.
 
 요청은 답 없이 끝날 수 있으며 이때 창은 열려 있습니다. 창의 문서가 다른 곳으로 탐색하거나 세션이 철회되면,
 마지막 `windows.closeRequested` 구독을 해제하면, 또는 이벤트를 전달할 수 없으면 요청을 취소합니다.
 강제 닫기, 신뢰된 `windows.destroy`, 앱 종료와 세션 종료는 창을 닫고 대기를 끝냅니다.
 다음 닫기는 요청을 보내지 않습니다.
 대기 중이 아닐 때의 `windows.recreate`는 질문 없이 창을 닫고 다시 만듭니다.
-`closeBehavior: "hide"`의 숨김, splashscreen 전환, 부모와 함께 닫히는 자식 창에도
+`closeBehavior: "hide"`의 숨김에도
 요청을 보내지 않습니다.
 
 대기에는 자동 기한이 없으므로 앱이 반드시 답해야 합니다. 신뢰된 `windows.destroy`와 앱 종료는 대기 중에도
@@ -1145,8 +1014,6 @@ const release = await client.listen("windows.closeRequested", async ({ payload }
   } finally {
     // 저장이 실패해도 답해야 창이 대기 상태로 남지 않습니다.
     await windows.respondClose({
-      view: "editor",
-      windowId: payload.windowId,
       requestId: payload.requestId,
       allow: saved,
     });
@@ -1171,12 +1038,12 @@ const release = await client.listen("windows.closeRequested", async ({ payload }
 ## 창 이벤트
 
 `windows.changed`, `windows.appCommand`, `windows.systemContextMenu`, `windows.thumbnailToolbarClicked`와 `windows.getSnapshot`은 현재 Windows에서만 지원합니다. `windows.lifecycle`과
-`windows.closeRequested`는 Windows와 macOS에서 지원합니다.
+`windows.closeRequested`는 Windows와 macOS에서 지원합니다. 다만 `windows.lifecycle`을 문서로 전달하는 일은 Windows에서만 지원하고,
+macOS에서는 백엔드의 `windows.waitForLifecycle`로만 관찰합니다.
 
 `windows`는 `windows.changed`, `windows.appCommand`, `windows.systemContextMenu`, `windows.thumbnailToolbarClicked`, `windows.readiness`, `windows.lifecycle`, `windows.closeRequested`를 등록합니다. 기존 `client.listen`과 직접 함수
 `listen`으로 구독하며, 이벤트 payload 타입은 앱의 `EventsOf`에서 추론합니다.
-`windows.changed`는 생성한 창의 정책 뷰에만 전달합니다. 다른 창을 제어하도록 허용해도
-그 창의 changed 이벤트가 호출한 뷰로 전달되지는 않습니다. `windows.readiness`의 수신 대상은
+`windows.changed`는 창의 문서에만 전달합니다. `windows.readiness`의 수신 대상은
 위의 창 준비 계약을 따릅니다.
 
 구독하려면 해당 뷰의 `events`에 `"windows.changed"`를 허용합니다. 구독 자체는
@@ -1229,7 +1096,7 @@ API 호출과 사용자 조작은 같은 네이티브 관찰 경로를 사용합
 관찰합니다. 다른 프로세스가 호출한 `SetWindowPos`도 같은 알림 경로로 들어옵니다.
 `SetWindowPos`를 거치지 않는 변경은 다음 창 위치 변경 알림이나 `getSnapshot`
 호출 때 반영합니다. 같은 값으로 호출하면 이벤트가 없습니다. 한 창의 항상 위 상태
-변경을 관찰하면 Windows가 함께 바꾼 owner나 owned 창의 view도 같은 시점에
+변경을 관찰하면 같은 시점에
 `enterAlwaysOnTop` 또는 `leaveAlwaysOnTop`을 받습니다. macOS는
 `windows.changed`를 제공하지 않으므로 이 이벤트도 Windows에서만 발행합니다.
 
@@ -1253,7 +1120,7 @@ API 호출과 사용자 조작은 같은 네이티브 관찰 경로를 사용합
 ### 구독 후 현재 상태 복구
 
 초기 이벤트와 과거 이력은 재전송하지 않습니다. UI 초기화에서 클라이언트의 준비와
-실패를 처리하고, 먼저 구독한 다음 `windows.getSnapshot({ view })`을 호출합니다.
+실패를 처리하고, 먼저 구독한 다음 `windows.getSnapshot()`을 호출합니다.
 이 조회는 이벤트와 같은 식별자, revision, 상태와 bounds를 반환합니다. 조회와
 버퍼에 남은 이벤트가 엇갈릴 수 있으므로 같은 windowId에서는 더 큰 revision만
 적용합니다. `getSnapshot`은 상태가 바뀌지 않으면 revision을 늘리지 않습니다.
@@ -1275,7 +1142,7 @@ function apply(next: WindowOutput<"windows.getSnapshot">) {
 const release = await client.listen("windows.changed", ({ payload }) => apply(payload), {
   onError: (error) => console.error(error.code, error.message),
 });
-apply(await windows.getSnapshot({ view: "main" }));
+apply(await windows.getSnapshot());
 // 컴포넌트 정리에서 await release()를 호출하고 공유 클라이언트는 유지합니다.
 ```
 
@@ -1297,18 +1164,34 @@ HWND와 콜백을 기존 WebView 및 Worker 종료 순서에 맞춰 정리합니
 | --- | --- |
 | `created` | 네이티브 창과 WebView 컨트롤러가 생성됨 |
 | `ready` | 그 windowId의 첫 문서가 ready가 됨. 이후 탐색은 다시 발행하지 않음. 준비 실패나 취소에서는 발행하지 않음 |
-| `closed` | 닫기가 확정되어 세션을 철회함. 부모와 함께 닫히는 자식, 강제 닫기와 재생성 전의 창도 포함 |
+| `closed` | 닫기가 확정되어 세션을 철회함. 강제 닫기와 재생성 전의 창도 포함 |
 | `destroyed` | 네이티브 창과 WebView 자원을 해제함. 항상 `closed` 뒤 |
 
 각 phase는 windowId마다 최대 한 번, 위 순서로 발행합니다. 재생성하면 이전 windowId의 `closed`, `destroyed`와
 새 windowId의 `created`, `ready`가 이어집니다. 생성 실패는 `created` 전에 끝나면 이벤트가 없습니다.
 앱 종료나 세션 종료가 시작된 뒤에는 발행하지 않습니다. 닫히는 창 자신의 세션은 먼저 철회되므로
-그 창의 문서는 자신의 `closed`와 `destroyed`를 받지 못하고 다른 창의 뷰가 받습니다.
+그 창의 문서는 자신의 `closed`와 `destroyed`를 받지 못합니다. 이 phase는 백엔드의 `windows.waitForLifecycle`로 관찰합니다.
+다만 단일 창 앱이 마지막 창을 닫으면 앱 종료가 시작되므로, 닫기 동작이 `quit`이면 그 창의 `closed`와 `destroyed`도 백엔드로 오지 않습니다.
+재생성하거나 `keep-alive` 등으로 앱이 계속 실행될 때만 그 창의 두 phase를 발행합니다.
 
-수신하려면 뷰의 `events`에 `"windows.lifecycle"`을 허용하고 `host.permissions`에 `"windows.listInstances"`를
-추가합니다. 열린 모든 창의 수명을 알리므로 창 목록 조회와 같은 권한이 필요합니다.
-`windows.changed`와 달리 정책 뷰가 같은 창만 받는 것이 아니라 두 권한을 가진 열린 뷰 모두에게 전달합니다.
-초기 이벤트와 과거 이력은 재전송하지 않으므로 구독 전에 열린 창은 `windows.list`로 확인합니다.
+문서로 수신하려면(Windows) 뷰의 `events`에 `"windows.lifecycle"`을 허용하고 `host.permissions`에 `"windows.getSnapshot"`을
+추가합니다. 초기 이벤트와 과거 이력은 재전송하지 않으므로 구독 전에 열린 창은 `windows.isOpen`으로 확인합니다.
+
+백엔드는 이벤트 대신 `windows.waitForLifecycle({ after? })`를 호출합니다. 권한 검사는 없으며
+창이 나타나거나 끝났다는 사실만 알립니다. 결과는 `{ sequence, windowId, viewId, phase }`이고
+`after`를 생략하면 다음 phase를 기다립니다. 이전 결과의 `sequence`를 `after`로 전달하면 그 뒤에 보존된 첫 phase를
+반환하므로, 결과마다 `sequence`를 이어서 전달하는 반복문은 보존 이력을 따라가는 동안 모든 phase를 받습니다. `sequence`가 건너뛰면 보존 한도를 넘어 오래된 phase가 버려진 것입니다. `after: 0`은 보존한 이력의 처음부터 읽습니다.
+어댑터는 최근 32개 phase를 보존하고 동시에 16개 호출을 대기시킵니다. 한도를 넘는 호출은 `BUSY`입니다.
+종료가 시작된 뒤에는 새 phase를 발행하지 않습니다.
+
+```ts
+let after = 0;
+for (;;) {
+  const event = await windows.waitForLifecycle({ after });
+  after = event.sequence;
+  if (event.phase === "ready") break;
+}
+```
 
 ### 입력 알림 이벤트 (Windows)
 
@@ -1344,10 +1227,10 @@ HWND와 콜백을 기존 WebView 및 Worker 종료 순서에 맞춰 정리합니
 
 ## 작업 표시줄 진행률
 
-Windows의 `windows.setTaskbarProgress({ view, windowId?, state, value? })`는 선택한 창의
+Windows의 `windows.setTaskbarProgress({ state, value? })`는 앱 창의
 작업 표시줄 버튼에 진행률을 설정하고 `null`을 반환합니다.
 `windows.setTaskbarProgress` 권한을 독립적으로 허용해야 합니다. macOS는 `UNSUPPORTED`입니다.
-다중 창의 windowId와 권한 규칙은 다른 창 제어와 같습니다.
+권한 규칙은 다른 창 제어와 같습니다.
 
 | state | value | 동작 |
 | --- | --- | --- |
@@ -1361,9 +1244,9 @@ value는 유한한 0~1의 비율이며 네이티브 호출에는 백만분의 �
 1을 전달해도 표시를 자동으로 제거하지 않습니다. 작업 완료나 취소 때 `none`을 호출하세요.
 
 ```ts
-await windows.setTaskbarProgress({ view: "main", state: "normal", value: 0.25 });
-await windows.setTaskbarProgress({ view: "main", state: "paused", value: 0.25 });
-await windows.setTaskbarProgress({ view: "main", state: "none" });
+await windows.setTaskbarProgress({ state: "normal", value: 0.25 });
+await windows.setTaskbarProgress({ state: "paused", value: 0.25 });
+await windows.setTaskbarProgress({ state: "none" });
 ```
 
 WebView 준비와 작업 표시줄 버튼 준비는 별개입니다. Windows가 버튼 생성 메시지를
@@ -1380,10 +1263,10 @@ Explorer가 버튼을 다시 만들면 마지막 성공 설정을 다시 적용�
 
 ## 작업 표시줄 썸네일
 
-Windows의 `windows.setThumbnailClip({ view, windowId?, region })`은 작업 표시줄 썸네일에 창 내용
-영역의 일부만 표시하고, `windows.setThumbnailToolTip({ view, windowId?, toolTip })`은 썸네일 툴팁을
+Windows의 `windows.setThumbnailClip({ region })`은 작업 표시줄 썸네일에 창 내용
+영역의 일부만 표시하고, `windows.setThumbnailToolTip({ toolTip })`은 썸네일 툴팁을
 설정합니다. 둘 다 `null`을 반환하며 각각 독립적인 작업 권한이 필요합니다. macOS는 `UNSUPPORTED`입니다.
-다중 창의 windowId와 권한 규칙은 다른 창 제어와 같습니다.
+권한 규칙은 다른 창 제어와 같습니다.
 
 - `region`은 `{ x, y, width, height }`이며 내용 영역 왼쪽 위를 원점으로 하는 96 DPI 논리 픽셀(`setSize`와 같은 단위)입니다.
   `x`, `y`는 0 이상, `width`, `height`는 1 이상의 정수입니다. `null`이면 clip을 해제하고 내용 영역 전체를 표시합니다.
@@ -1397,12 +1280,11 @@ Windows의 `windows.setThumbnailClip({ view, windowId?, region })`은 작업 표
 
 ```ts
 await windows.setThumbnailClip({
-  view: "main",
   region: { x: 0, y: 0, width: 320, height: 180 },
 });
-await windows.setThumbnailToolTip({ view: "main", toolTip: "Build preview" });
-await windows.setThumbnailClip({ view: "main", region: null });
-await windows.setThumbnailToolTip({ view: "main", toolTip: null });
+await windows.setThumbnailToolTip({ toolTip: "Build preview" });
+await windows.setThumbnailClip({ region: null });
+await windows.setThumbnailToolTip({ toolTip: null });
 ```
 
 작업 표시줄 버튼 준비는 [작업 표시줄 진행률](#작업-표시줄-진행률)과 같아 버튼 생성 전에는 `BUSY`이며 설정을 저장하지 않습니다.
@@ -1414,8 +1296,8 @@ Explorer가 버튼을 다시 만들면 마지막 성공 설정을 다시 적용�
 
 ## 창 아이콘
 
-Windows의 `windows.setIcon({ view, windowId?, ico })`는 창의 제목 표시줄, Alt+Tab, 작업 표시줄 버튼 아이콘을 실행 중에 바꿉니다.
-`null`을 반환하며 창마다 독립 권한이 필요하고 macOS는 `UNSUPPORTED`입니다. `windows.hasCustomIcon({ view, windowId? })`는 `setIcon`으로 지정한 아이콘이 적용 중인지 `boolean`으로 돌려줍니다.
+Windows의 `windows.setIcon({ ico })`는 창의 제목 표시줄, Alt+Tab, 작업 표시줄 버튼 아이콘을 실행 중에 바꿉니다.
+`null`을 반환하며 창마다 독립 권한이 필요하고 macOS는 `UNSUPPORTED`입니다. `windows.hasCustomIcon()`는 `setIcon`으로 지정한 아이콘이 적용 중인지 `boolean`으로 돌려줍니다.
 현재 아이콘 이미지는 돌려주지 않고 적용 여부만 제공합니다. 이미지를 돌려주면 입력 크기만큼 응답이 커지기 때문입니다.
 
 - `ico`는 `windows.setOverlayIcon`과 같은 base64 ICO 바이트입니다(디코딩 후 64 KiB 이하). PNG나 파일 경로는 받지 않으며, 파일 읽기는 앱이 정한 경로 정책에 따라 앱이 맡습니다.
@@ -1424,9 +1306,9 @@ Windows의 `windows.setIcon({ view, windowId?, ico })`는 창의 제목 표시�
 - `null`이면 두 아이콘을 `0`으로 지정해 창 클래스(EXE 리소스)의 앱 기본 아이콘으로 되돌리며, 이미 기본이면 아무 일도 하지 않습니다.
 
 ```ts
-await windows.setIcon({ view: "main", ico: connectedIcoBase64 });
-const custom = await windows.hasCustomIcon({ view: "main" }); // true
-await windows.setIcon({ view: "main", ico: null });
+await windows.setIcon({ ico: connectedIcoBase64 });
+const custom = await windows.hasCustomIcon(); // true
+await windows.setIcon({ ico: null });
 ```
 
 숨긴 창, 최소화한 창, 작업 표시줄에 표시하지 않는 창에도 같은 방식으로 지정하며 오류 없이 값을 유지합니다.
@@ -1438,9 +1320,9 @@ await windows.setIcon({ view: "main", ico: null });
 
 ## 작업 표시줄 오버레이 아이콘
 
-Windows의 `windows.setOverlayIcon({ view, windowId?, ico, description })`은 작업 표시줄 버튼 위에 작은
+Windows의 `windows.setOverlayIcon({ ico, description })`은 작업 표시줄 버튼 위에 작은
 오버레이 아이콘과 접근성 설명을 표시합니다. `null`을 반환하며 작업 권한이 필요하고 macOS는 `UNSUPPORTED`입니다.
-다중 창의 windowId와 권한 규칙은 다른 창 제어와 같습니다.
+권한 규칙은 다른 창 제어와 같습니다.
 
 - `ico`는 `tray.setIcon`과 같은 base64 ICO 바이트입니다(디코딩 후 64 KiB 이하). `null`이면 오버레이를 제거합니다. 이때도 `description`은 필요하며(빈 문자열 가능) 형식을 검사하지만 사용하지 않습니다.
   ICO 전체(모든 프레임의 PNG 또는 비압축 DIB 형식과 크기)를 먼저 검증하며, 잘못된 ICO는 `INVALID_ARGUMENT`이고 기존 오버레이를 유지합니다.
@@ -1450,11 +1332,10 @@ Windows의 `windows.setOverlayIcon({ view, windowId?, ico, description })`은 �
 
 ```ts
 await windows.setOverlayIcon({
-  view: "main",
   ico: unreadBadgeIcoBase64,
   description: "읽지 않은 알림 3개",
 });
-await windows.setOverlayIcon({ view: "main", ico: null, description: "" });
+await windows.setOverlayIcon({ ico: null, description: "" });
 ```
 
 작업 표시줄 버튼 준비, 버튼 재생성 때의 재적용, HWND 파괴 때의 폐기는 [썸네일](#작업-표시줄-썸네일)과 같습니다.
@@ -1466,7 +1347,7 @@ await windows.setOverlayIcon({ view: "main", ico: null, description: "" });
 
 ## 작업 표시줄 썸네일 툴바
 
-Windows의 `windows.setThumbnailToolbar({ view, windowId?, buttons })`는 작업 표시줄 썸네일 아래에 미디어 제어 같은 아이콘 버튼을 둡니다. Electron의 `setThumbarButtons`에 대응하며 `null`을 반환합니다. 작업 권한이 필요하고 macOS는 `UNSUPPORTED`입니다.
+Windows의 `windows.setThumbnailToolbar({ buttons })`는 작업 표시줄 썸네일 아래에 미디어 제어 같은 아이콘 버튼을 둡니다. Electron의 `setThumbarButtons`에 대응하며 `null`을 반환합니다. 작업 권한이 필요하고 macOS는 `UNSUPPORTED`입니다.
 
 - `buttons`는 최대 7개이며 순서대로 놓입니다. 호출마다 툴바 전체를 바꾸고, 빈 배열이면 모든 버튼을 숨깁니다. 개수는 호출마다 달라도 됩니다. 호스트는 처음 적용할 때 7칸을 모두 만들고 쓰지 않는 칸을 숨겨 두며 이후는 갱신만 하므로, Windows가 창당 한 번만 허용하는 추가 호출과 충돌하지 않습니다.
 - `id`는 앱이 정하는 이름입니다. 영문자나 숫자로 시작하고 영문자, 숫자, `.`, `_`, `-`만 쓰는 64자 이하이며 한 호출 안에서 겹칠 수 없습니다. 눌린 버튼은 이 이름으로 알립니다.
@@ -1476,7 +1357,6 @@ Windows의 `windows.setThumbnailToolbar({ view, windowId?, buttons })`는 작업
 
 ```ts
 await windows.setThumbnailToolbar({
-  view: "main",
   buttons: [
     { id: "prev", ico: prevIcoBase64, tooltip: "이전" },
     { id: "play", ico: playIcoBase64, tooltip: "재생" },
@@ -1498,7 +1378,7 @@ CI는 실제 `ITaskbarList3`에 개수를 바꿔 가며 연속 호출해도 오�
 ## 오류
 
 `PERMISSION_DENIED`는 대상 창 권한이 없거나 호스트가 정책상 호출을 거부한 경우입니다.
-view 형식이나 입력이 잘못되면 `INVALID_ARGUMENT`입니다. 열린 창을 요구하는 작업은 닫힌 대상에도 `INVALID_ARGUMENT`를 반환합니다. 대상 창 권한을 먼저 검사하므로 설정에 없는 view의 조회나 변환은 `PERMISSION_DENIED`입니다.
+입력이 잘못되거나 제거한 입력 필드(`view`, `windowId` 등)를 전달하면 `INVALID_ARGUMENT`입니다. 열린 창을 요구하는 작업은 닫힌 창에도 `INVALID_ARGUMENT`를 반환합니다.
 동시에 같은 창을 생성하거나 재생성하는 작업은 `BUSY`입니다.
 호출 수명 종료, 호출 취소와 종료 중인 작업은 `CANCELLED`입니다.
 macOS는 setup 중에도 종료 시 대기 중인 Host API 호출을 `CANCELLED`로 끝내고,
@@ -1507,15 +1387,13 @@ macOS는 setup 중에도 종료 시 대기 중인 Host API 호출을 `CANCELLED`
 생성이나 네이티브 호출 실패는 `INTERNAL`입니다.
 [오류 처리](/guides/cancellation-and-errors/)도 확인하세요.
 
-completeSplashscreen은 주 창과 splash 선언 모두 single이어야 합니다. multiple 선언은 `INVALID_ARGUMENT`입니다.
-
 
 ## 모니터와 커서
 
 Windows에서 `getMonitors()`는 현재 데스크톱의 모니터 배열을, `windows.getPrimaryMonitor()`는
-주 모니터를 반환합니다. `getMonitor({ view, windowId? })`는 대상 창과 가장 많이 겹치는
+주 모니터를 반환합니다. `getMonitor()`는 대상 창과 가장 많이 겹치는
 모니터를 반환합니다. 최소화한 창은 최소화 이전 rectangle을 사용하고 화면 밖의 창은
-가장 가까운 모니터를 선택합니다. 닫힌 창과 유효하지 않은 windowId는 `INVALID_ARGUMENT`입니다.
+가장 가까운 모니터를 선택합니다. 닫힌 창은 `INVALID_ARGUMENT`입니다.
 
 `windows.getMonitorNearestPoint({ x, y })`와 `getMonitorNearestRect({ x, y, width, height })`는
 물리 화면 좌표를 받습니다. rectangle은 가장 많이 겹치는 모니터를 우선하고 겹치지 않으면
@@ -1525,7 +1403,7 @@ rectangle의 width와 height는 양수이고 오른쪽과 아래쪽 좌표도 32
 
 각 결과의 `id`는 `\\.\DISPLAY1` 같은 현재 Windows 디스플레이 장치명이고 `name`은
 드라이버의 모니터 이름입니다. 이름이 없으면 id를 사용합니다. id는 HWND나 영구 하드웨어
-식별자가 아니며 디스플레이 구성 변경 뒤 다시 조회해야 합니다. `windows.center({ view, monitorId })`에 이 id를 넘기면
+식별자가 아니며 디스플레이 구성 변경 뒤 다시 조회해야 합니다. `windows.center({ monitorId })`에 이 id를 넘기면
 해당 모니터의 작업 영역 중앙에 창을 배치합니다.
 `bounds`와 `workArea`는 `{ x, y, width, height }` 형태의 물리 픽셀 rectangle입니다.
 workArea는 작업 표시줄과 등록된 데스크톱 도구 모음을 제외한 영역입니다.
@@ -1536,12 +1414,12 @@ workArea는 작업 표시줄과 등록된 데스크톱 도구 모음을 제외�
 
 `getCursorPosition()`은 `{ x, y }` 물리 화면 좌표를 조회합니다. 조회는 커서를 이동하거나
 창을 표시하고 활성화하지 않습니다. 창 기준 논리 좌표가 필요하면 기존
-`toLogical({ view, value: point })`로 대상 창의 현재 DPI를 사용해 변환합니다.
+`toLogical({ value: point })`로 대상 창의 현재 DPI를 사용해 변환합니다.
 전역 논리 데스크톱 좌표계는 정의하지 않습니다.
 
 ```ts
 const displays = await windows.getMonitors();
-const current = await windows.getMonitor({ view: "main" });
+const current = await windows.getMonitor();
 const nearest = await windows.getMonitorNearestRect(current.workArea);
 const cursor = await windows.getCursorPosition();
 ```

@@ -64,7 +64,6 @@ try {
   }
   for (const view of [
     "main",
-    "denied",
   ]) {
     await Bun.write(
       resolve(assets, "web", `${view}.html`),
@@ -82,58 +81,44 @@ try {
       ],
     },
     views: [
-      "main",
-      "denied",
-    ].map((id) => ({
-      id,
-      origins: [
-        "https://app.bunaway.local",
-      ],
-      events: [],
-      commands: [
-        "test.denied",
-        "test.waitDenied",
-        "test.report",
-        "test.writeFailure",
-        "plugin.log.write",
-        "plugin.log.configure",
-        "plugin.log.flush",
-        "plugin.capabilities.get",
-        "plugin.windows.close",
-        "plugin.windows.getContentSize",
-      ],
-      host: {
-        permissions:
-          id === "main"
-            ? [
-                "log.write",
-                "capabilities.get",
-                "windows.close",
-                "windows.getContentSize",
-              ]
-            : [
-                "windows.close",
-              ],
+      {
+        id: "main",
+        origins: [
+          "https://app.bunaway.local",
+        ],
+        events: [],
+        commands: [
+          "test.report",
+          "test.writeFailure",
+          "plugin.log.write",
+          "plugin.log.configure",
+          "plugin.log.flush",
+          "plugin.capabilities.get",
+          "plugin.windows.close",
+          "plugin.windows.getContentSize",
+        ],
+        host: {
+          permissions: [
+            "log.write",
+            "capabilities.get",
+            "windows.close",
+            "windows.getContentSize",
+          ],
+        },
       },
-    })),
+    ],
   };
   await writeJson(resolve(assets, "manifest.json"), {
     format: 1,
     app: {
       appId: "tests.macos.log-capabilities",
       title: "Log and capabilities",
-      windows: [
-        "main",
-        "denied",
-      ].map((view) => ({
-        view,
-        home: `https://app.bunaway.local/${view}.html`,
-        title: view,
-        window: {
-          width: 400,
-          height: 300,
-        },
-      })),
+      view: "main",
+      home: "https://app.bunaway.local/main.html",
+      window: {
+        width: 400,
+        height: 300,
+      },
     },
     policy,
     plugins: [],

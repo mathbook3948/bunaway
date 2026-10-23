@@ -9,7 +9,11 @@ import windows, {
   validateWindowOutput,
   type WindowOperation,
 } from "@bunaway/plugin-windows";
-import { type HostContext, NativeRegistry } from "@bunaway/protocol";
+import {
+  type HostContext,
+  type JsonValue,
+  NativeRegistry,
+} from "@bunaway/protocol";
 import { closeWindowsApp } from "#cli/windows-dev-launch";
 import { runWindowsApp } from "#native/windows/bun/entry";
 import { testAppMetadata } from "../fixtures/app-info.ts";
@@ -355,9 +359,7 @@ if (!process.argv.includes("--child")) {
   }, 10);
   const call = async <K extends WindowOperation>(
     operation: K,
-    payload: {
-      view: string;
-    },
+    payload: JsonValue,
   ) => {
     assert(backend);
     return validateWindowOutput(
@@ -398,11 +400,7 @@ if (!process.argv.includes("--child")) {
     await desktop.show();
     await waitFor(() => sessions === 2);
     assert.notEqual(
-      (
-        await call("windows.getSnapshot", {
-          view: "main",
-        })
-      ).windowId,
+      (await call("windows.getSnapshot", null)).windowId,
       windowId,
     );
     assert.equal(
@@ -430,24 +428,17 @@ if (!process.argv.includes("--child")) {
   /** Exercise deferred creation, last close and restoration through real backend Host calls. */
   async function exercise(desktop: DesktopContext) {
     assert(backend);
-    const listed = validateWindowOutput(
-      "windows.list",
-      await backend.host.call(registry.operation("windows.list"), null),
-    );
-    assert.deepEqual(
-      listed.map((window) => [
-        window.view,
-        window.open,
-      ]),
-      empty
-        ? []
-        : [
-            [
-              "main",
-              false,
-            ],
-          ],
-    );
+    // An app without any window definition has nothing to ask about.
+    if (!empty) {
+      assert.equal(
+        validateWindowOutput(
+          "windows.isOpen",
+          await backend.host.call(registry.operation("windows.isOpen"), null),
+        ),
+        false,
+        "a window must not exist before it is created",
+      );
+    }
     if (scenario.startsWith("force-")) {
       const child = Bun.spawn(
         [
@@ -480,78 +471,40 @@ if (!process.argv.includes("--child")) {
       return;
     }
     if (!hasTray) {
-      await call("windows.create", {
-        view: "main",
-      });
+      await call("windows.create", {});
     }
     await ready();
     if (nonfocusable) {
-      assert.equal(
-        await call("windows.isFocusable", {
-          view: "main",
-        }),
-        false,
-      );
+      assert.equal(await call("windows.isFocusable", null), false);
       if (!hasTray) {
-        assert.equal(
-          await call("windows.isVisible", {
-            view: "main",
-          }),
-          false,
-        );
+        assert.equal(await call("windows.isVisible", null), false);
         await desktop.show();
-        await waitFor(() =>
-          call("windows.isVisible", {
-            view: "main",
-          }),
-        );
+        await waitFor(() => call("windows.isVisible", null));
       }
-      assert.equal(
-        await call("windows.isVisible", {
-          view: "main",
-        }),
-        true,
-      );
-      assert.equal(
-        await call("windows.isFocused", {
-          view: "main",
-        }),
-        false,
-      );
+      assert.equal(await call("windows.isVisible", null), true);
+      assert.equal(await call("windows.isFocused", null), false);
     }
     if (scenario.startsWith("destroy-")) {
       let recreation: Promise<void> | undefined;
       if (scenario.startsWith("destroy-recreate-")) {
-        recreation = assert.rejects(
-          call("windows.recreate", {
-            view: "main",
-          }),
-          {
-            code: "CANCELLED",
-          },
-        );
+        recreation = assert.rejects(call("windows.recreate", {}), {
+          code: "CANCELLED",
+        });
         // Observe the old session's retirement before destroying its pending replacement.
         await waitFor(
           async () =>
-            (
-              await call("windows.getReadiness", {
-                view: "main",
-              })
-            ).sdk === "cancelled",
+            (await call("windows.getReadiness", null)).sdk === "cancelled",
         );
       } else {
         await backend.host.call(
           registry.operation("windows.setCloseConfirmation"),
           {
-            view: "main",
             message: "Trusted destroy must bypass this confirmation",
           },
         );
       }
       emit("verified");
-      await call("windows.destroy", {
-        view: "main",
-      }).catch((error: unknown) => {
+      await call("windows.destroy", null).catch((error: unknown) => {
         assert(
           error instanceof Error &&
             "code" in error &&
@@ -562,99 +515,35 @@ if (!process.argv.includes("--child")) {
       assert.equal(attempts, 0);
       return;
     }
-    const original = await call("windows.getSnapshot", {
-      view: "main",
-    });
-    await call("windows.maximize", {
-      view: "main",
-    });
+    const original = await call("windows.getSnapshot", null);
+    await call("windows.maximize", null);
     if (hasTray) {
       await desktop.hide();
-      await waitFor(
-        async () =>
-          !(await call("windows.isVisible", {
-            view: "main",
-          })),
-      );
+      await waitFor(async () => !(await call("windows.isVisible", null)));
       emit("restore-requested");
-      await waitFor(() =>
-        call("windows.isVisible", {
-          view: "main",
-        }),
-      );
-      assert(
-        await call("windows.isMaximized", {
-          view: "main",
-        }),
-      );
+      await waitFor(() => call("windows.isVisible", null));
+      assert(await call("windows.isMaximized", null));
       assert.equal(
-        (
-          await call("windows.getSnapshot", {
-            view: "main",
-          })
-        ).windowId,
+        (await call("windows.getSnapshot", null)).windowId,
         original.windowId,
       );
       assert.equal(sessions, 1, "tray restoration must preserve the session");
-      await call("windows.minimize", {
-        view: "main",
-      });
+      await call("windows.minimize", null);
       emit("restore-requested");
-      await waitFor(
-        async () =>
-          !(await call("windows.isMinimized", {
-            view: "main",
-          })),
-      );
+      await waitFor(async () => !(await call("windows.isMinimized", null)));
     } else if (nonfocusable) {
-      await call("windows.minimize", {
-        view: "main",
-      });
-      assert.equal(
-        await call("windows.isMinimized", {
-          view: "main",
-        }),
-        true,
-      );
+      await call("windows.minimize", null);
+      assert.equal(await call("windows.isMinimized", null), true);
       await desktop.show();
-      await waitFor(
-        async () =>
-          !(await call("windows.isMinimized", {
-            view: "main",
-          })),
-      );
+      await waitFor(async () => !(await call("windows.isMinimized", null)));
     }
     if (nonfocusable) {
+      assert.equal(await call("windows.isVisible", null), true);
+      assert.equal(await call("windows.isMinimized", null), false);
+      assert.equal(await call("windows.isMaximized", null), true);
+      assert.equal(await call("windows.isFocused", null), false);
       assert.equal(
-        await call("windows.isVisible", {
-          view: "main",
-        }),
-        true,
-      );
-      assert.equal(
-        await call("windows.isMinimized", {
-          view: "main",
-        }),
-        false,
-      );
-      assert.equal(
-        await call("windows.isMaximized", {
-          view: "main",
-        }),
-        true,
-      );
-      assert.equal(
-        await call("windows.isFocused", {
-          view: "main",
-        }),
-        false,
-      );
-      assert.equal(
-        (
-          await call("windows.getSnapshot", {
-            view: "main",
-          })
-        ).windowId,
+        (await call("windows.getSnapshot", null)).windowId,
         original.windowId,
       );
       assert.equal(
@@ -669,11 +558,7 @@ if (!process.argv.includes("--child")) {
       });
     }
     emit("native-close-requested");
-    await waitFor(() =>
-      call("windows.isDestroyed", {
-        view: "main",
-      }),
-    );
+    await waitFor(async () => !(await call("windows.isOpen", null)));
     assert.equal(attempts, 0, "keep-alive last close must not call beforeQuit");
     await Bun.sleep(100);
     const closedTicks = ticks;
@@ -687,19 +572,10 @@ if (!process.argv.includes("--child")) {
     await waitFor(() => sessions === 2);
     assert(ticks > closedTicks);
     assert.notEqual(
-      (
-        await call("windows.getSnapshot", {
-          view: "main",
-        })
-      ).windowId,
+      (await call("windows.getSnapshot", null)).windowId,
       original.windowId,
     );
-    assert.equal(
-      await call("windows.close", {
-        view: "main",
-      }),
-      true,
-    );
+    assert.equal(await call("windows.close", null), true);
     emit("verified");
     if (hasTray) {
       emit("tray-quit-requested");

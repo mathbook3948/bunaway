@@ -1,6 +1,6 @@
 import { dlopen } from "bun:ffi";
-import { USER32, pick } from "@bunaway/plugin/win32";
 import { attemptAll } from "@bunaway/plugin";
+import { pick, USER32 } from "@bunaway/plugin/win32";
 import type { NativeShortcutServices } from "@bunaway/plugin-api/native";
 import type { GlobalShortcut } from "#global-shortcut/contract";
 import type { ShortcutDriver } from "#global-shortcut/platforms/windows";

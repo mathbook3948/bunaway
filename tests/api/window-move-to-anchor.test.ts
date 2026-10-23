@@ -288,7 +288,6 @@ function fixture(
     return adapter.executeUI(
       "windows.moveToAnchor",
       {
-        view: "main",
         ...payload,
       } as JsonValue,
       "backend",
@@ -479,14 +478,12 @@ test("the contract accepts every anchor with optional monitorId and margin and r
       validateWindowCall({
         operation: "windows.moveToAnchor",
         payload: {
-          view: "main",
           anchor,
           monitorId: "\\\\.\\DISPLAY1",
           margin: 8192,
         },
       }).payload,
     ).toEqual({
-      view: "main",
       anchor,
       monitorId: "\\\\.\\DISPLAY1",
       margin: 8192,

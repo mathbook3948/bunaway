@@ -117,7 +117,7 @@ if (!process.argv.includes("--child")) {
     ),
   );
   console.log(
-    "PASS actual WebView2 controls: state, origin and redirect denial, history, reload, stop, session cancellation, zoom, WebView focus, destroyed state and development-only DevTools",
+    "PASS actual WebView2 controls: state, origin and redirect denial, history, reload, stop, session cancellation, zoom, WebView focus and development-only DevTools",
     reports,
   );
 } else {
@@ -175,9 +175,6 @@ if (!process.argv.includes("--child")) {
   let exerciseTask: Promise<void> | undefined;
   const main = {
     view: "main",
-  };
-  const peer = {
-    view: "peer",
   };
   /** Poll until `check` holds; `step` names the awaited condition in the timeout message. */
   const waitFor = async (
@@ -454,7 +451,7 @@ if (!process.argv.includes("--child")) {
     );
   };
   const isMainWebViewFocused = async () =>
-    (await windows.getWebViewState(main)).focused;
+    (await windows.getWebViewState()).focused;
   /**
    * Make a visible window the foreground window with its WebView holding keyboard focus.
    * SetForegroundWindow is not relied on: the foreground lock refuses it when the child
@@ -466,7 +463,7 @@ if (!process.argv.includes("--child")) {
   const activateByClick = async (target: { view: string }) => {
     let focusSucceeded = false;
     try {
-      await windows.focus(target);
+      await windows.focus();
       focusSucceeded = true;
     } catch (error) {
       const declined =
@@ -478,8 +475,8 @@ if (!process.argv.includes("--child")) {
     // Observation only: window activation without WebView focus is informative, not a failure.
     if (
       focusSucceeded &&
-      (await windows.isFocused(target)) &&
-      !(await windows.getWebViewState(target)).focused
+      (await windows.isFocused()) &&
+      !(await windows.getWebViewState()).focused
     ) {
       console.log(
         `Observed: ${target.view} is focused but its WebView is not right after windows.focus`,
@@ -495,7 +492,7 @@ if (!process.argv.includes("--child")) {
       setTopmost(hwnd, false);
     }
     await waitFor(
-      async () => (await windows.getWebViewState(target)).focused,
+      async () => (await windows.getWebViewState()).focused,
       `${target.view} WebView input focus after activation`,
     );
   };
@@ -504,10 +501,10 @@ if (!process.argv.includes("--child")) {
     for (let attempt = 1; attempt <= CLICK_ATTEMPTS; attempt++) {
       const point = await clickClientCenter(target.view);
       const deadline = Date.now() + CLICK_ACTIVATION_TIMEOUT_MS;
-      while (!(await windows.isFocused(target)) && Date.now() < deadline) {
+      while (!(await windows.isFocused()) && Date.now() < deadline) {
         await Bun.sleep(10);
       }
-      if (await windows.isFocused(target)) {
+      if (await windows.isFocused()) {
         break;
       }
       logInputDiagnostics(
@@ -524,51 +521,32 @@ if (!process.argv.includes("--child")) {
   const ready = async (path: string, count = 1) => {
     await waitFor(() => (arrivals.get(path) ?? 0) >= count);
     await waitFor(async () => {
-      const state = await windows.getReadiness(main);
+      const state = await windows.getReadiness();
       return state.document === "ready" && state.sdk === "ready";
     });
   };
   async function exercise() {
     await ready("/index.html");
-    await waitFor(
-      () =>
-        arrivals.has("/peer.html") &&
-        arrivals.has("/denied.html") &&
-        heldCalls >= 1,
-    );
-    const initial = await windows.getReadiness(main);
-    const initialState = await windows.getWebViewState(main);
+    await waitFor(() => heldCalls >= 1);
+    const initial = await windows.getReadiness();
+    const initialState = await windows.getWebViewState();
     assert.equal(initialState.title, "/index.html");
     assert.equal(initialState.loading, false);
     // Hidden windows are never the foreground window.
     assert.equal(initialState.focused, false);
     assert.equal(initialState.canGoBack, false);
     assert.equal(initialState.canGoForward, false);
-    assert.equal(await windows.goBack(main), false);
-    assert.equal(await windows.goForward(main), false);
-    const initialZoom = (
-      await windows.getWebViewState({
-        view: "peer",
-      })
-    ).zoomFactor;
+    assert.equal(await windows.goBack(), false);
+    assert.equal(await windows.goForward(), false);
     assert(
       Math.abs(
         (await windows.setZoomFactor({
-          ...main,
           factor: 1.5,
         })) - 1.5,
       ) < 0.001,
     );
     assert(
-      Math.abs((await windows.getWebViewState(main)).zoomFactor - 1.5) < 0.001,
-    );
-    assert.equal(
-      (
-        await windows.getWebViewState({
-          view: "peer",
-        })
-      ).zoomFactor,
-      initialZoom,
+      Math.abs((await windows.getWebViewState()).zoomFactor - 1.5) < 0.001,
     );
     for (const url of [
       `${outside.url.origin}/outside.html`,
@@ -578,7 +556,6 @@ if (!process.argv.includes("--child")) {
     ]) {
       await assert.rejects(
         windows.navigateWebView({
-          ...main,
           url,
         }),
         {
@@ -587,17 +564,14 @@ if (!process.argv.includes("--child")) {
       );
     }
     assert.equal(
-      (await windows.getReadiness(main)).documentGeneration,
+      (await windows.getReadiness()).documentGeneration,
       initial.documentGeneration,
     );
-    assert.equal(
-      (await windows.getWebViewState(main)).url,
-      `${origin}/index.html`,
-    );
+    assert.equal((await windows.getWebViewState()).url, `${origin}/index.html`);
     // Focus runs before DevTools so a DevTools top-level window cannot take the
     // foreground or the input focus during the scenario.
-    assert.equal(await windows.isDestroyed(peer), false);
-    // Show both windows side by side so a click on one never lands on the other.
+    assert.equal(await windows.isOpen(), true);
+    // Show the window where a click lands on it.
     const screenWidth = input.symbols.GetSystemMetrics(SM_CXSCREEN);
     const screenHeight = input.symbols.GetSystemMetrics(SM_CYSCREEN);
     const layoutWidth = Math.min(
@@ -608,157 +582,107 @@ if (!process.argv.includes("--child")) {
       MAX_LAYOUT_HEIGHT,
       screenHeight - LAYOUT_MARGIN * 4,
     );
-    for (const [target, x] of [
-      [
-        main,
-        LAYOUT_MARGIN,
-      ],
-      [
-        peer,
-        Math.floor(screenWidth / 2) + LAYOUT_MARGIN,
-      ],
-    ] as const) {
-      await windows.showInactive(target);
-      await windows.setOuterBounds({
-        ...target,
-        unit: "physical",
-        x,
-        y: LAYOUT_MARGIN,
-        width: layoutWidth,
-        height: layoutHeight,
-      });
-    }
-    logInputDiagnostics("layout applied", peer.view);
-    // (a) Activating peer takes the input focus away from the main WebView.
-    await activateByClick(peer);
-    assert.equal(await windows.isFocused(peer), true);
-    await waitFor(
-      async () => !(await isMainWebViewFocused()),
-      "main WebView to lose input focus",
-    );
-    // (b) Activating main gives its WebView the input focus.
+    await windows.showInactive();
+    await windows.setOuterBounds({
+      unit: "physical",
+      x: LAYOUT_MARGIN,
+      y: LAYOUT_MARGIN,
+      width: layoutWidth,
+      height: layoutHeight,
+    });
+    logInputDiagnostics("layout applied", main.view);
+    // Activating the window gives its WebView the input focus.
     await activateByClick(main);
-    assert.equal(await windows.isFocused(main), true);
+    assert.equal(await windows.isFocused(), true);
     assert.equal(await isMainWebViewFocused(), true);
     // Reading state must not move focus.
     const focusBefore = {
-      window: await windows.isFocused(main),
+      window: await windows.isFocused(),
       webView: await isMainWebViewFocused(),
     };
-    await windows.getWebViewState(main);
-    await windows.getWebViewState(peer);
+    await windows.getWebViewState();
     assert.deepEqual(
       {
-        window: await windows.isFocused(main),
+        window: await windows.isFocused(),
         webView: await isMainWebViewFocused(),
       },
       focusBefore,
     );
-    // (c) Activating peer again removes the focus from main.
-    await activateByClick(peer);
-    await waitFor(
-      async () => !(await isMainWebViewFocused()),
-      "main WebView to lose input focus",
-    );
-    assert.equal(await windows.isFocused(main), false);
-    // Hide both again so the remaining steps run in the original hidden state.
-    await windows.hide(main);
-    await windows.hide(peer);
+    // Hide again so the remaining steps run in the original hidden state.
+    await windows.hide();
 
     if (development) {
-      await windows.openDevTools(main);
+      await windows.openDevTools();
     } else {
-      await assert.rejects(windows.openDevTools(main), {
+      await assert.rejects(windows.openDevTools(), {
         code: "PERMISSION_DENIED",
       });
     }
 
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/next.html`,
     });
     await ready("/next.html");
     await waitFor(() => cancelledCalls >= 1);
-    assert.equal((await windows.getReadiness(main)).windowId, initial.windowId);
+    assert.equal((await windows.getReadiness()).windowId, initial.windowId);
     assert(
-      (await windows.getReadiness(main)).documentGeneration >
+      (await windows.getReadiness()).documentGeneration >
         initial.documentGeneration,
     );
-    assert.equal((await windows.getWebViewState(main)).canGoBack, true);
-    assert.equal(await windows.goBack(main), true);
+    assert.equal((await windows.getWebViewState()).canGoBack, true);
+    assert.equal(await windows.goBack(), true);
     await ready("/index.html", 2);
-    assert.equal((await windows.getWebViewState(main)).canGoForward, true);
-    assert.equal(await windows.goForward(main), true);
+    assert.equal((await windows.getWebViewState()).canGoForward, true);
+    assert.equal(await windows.goForward(), true);
     await ready("/next.html", 2);
-    const beforeReload = await windows.getReadiness(main);
-    await windows.reloadWebView(main);
+    const beforeReload = await windows.getReadiness();
+    await windows.reloadWebView();
     await ready("/next.html", 3);
     assert(
-      (await windows.getReadiness(main)).documentGeneration >
+      (await windows.getReadiness()).documentGeneration >
         beforeReload.documentGeneration,
     );
-    const beforeFragment = await windows.getReadiness(main);
+    const beforeFragment = await windows.getReadiness();
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/next.html#fragment`,
     });
     await waitFor(async () =>
-      (await windows.getWebViewState(main)).url.endsWith("#fragment"),
+      (await windows.getWebViewState()).url.endsWith("#fragment"),
     );
     assert.equal(
-      (await windows.getReadiness(main)).documentGeneration,
+      (await windows.getReadiness()).documentGeneration,
       beforeFragment.documentGeneration,
     );
 
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/slow.html`,
     });
-    await waitFor(async () => (await windows.getWebViewState(main)).loading);
-    await windows.stopWebView(main);
-    await waitFor(async () => !(await windows.getWebViewState(main)).loading);
+    await waitFor(async () => (await windows.getWebViewState()).loading);
+    await windows.stopWebView();
+    await waitFor(async () => !(await windows.getWebViewState()).loading);
     await waitFor(
-      async () => (await windows.getReadiness(main)).document === "cancelled",
+      async () => (await windows.getReadiness()).document === "cancelled",
     );
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/index.html`,
     });
     await ready("/index.html", 3);
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/redirect.html`,
     });
     await waitFor(
-      async () => (await windows.getReadiness(main)).document === "cancelled",
+      async () => (await windows.getReadiness()).document === "cancelled",
     );
     assert.equal(outsideRequests, 0, "Disallowed redirect reached its server");
-    assert.equal(
-      new URL((await windows.getWebViewState(main)).url).origin,
-      origin,
-    );
+    assert.equal(new URL((await windows.getWebViewState()).url).origin, origin);
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/index.html`,
     });
     await ready("/index.html", 4);
 
-    // Destroyed: a WebView lives exactly as long as its window.
-    await windows.close(peer);
-    assert.equal(await windows.isDestroyed(peer), true);
-    await assert.rejects(
-      windows.getWebViewState({
-        view: "peer",
-      }),
-      {
-        code: "INVALID_ARGUMENT",
-      },
-    );
-    await windows.close({
-      view: "denied",
-    });
+    // Closing the only window ends the app, so later calls are cancelled.
     completed = true;
-    await windows.close(main);
+    await windows.close();
   }
   const policy: Policy = {
     version: 1,
@@ -766,30 +690,25 @@ if (!process.argv.includes("--child")) {
       permissions: windowPermissions(),
     },
     views: [
-      "main",
-      "peer",
-      "denied",
-    ].map((id) => ({
-      id,
-      origins: [
-        origin,
-      ],
-      events: [],
-      commands: [
-        "test.arrived",
-        "test.hold",
-        "plugin.windows.getWebViewState",
-        "plugin.windows.reloadWebView",
-      ],
-      host: {
-        permissions:
-          id === "denied"
-            ? []
-            : [
-                "windows.getWebViewState",
-              ],
+      {
+        id: "main",
+        origins: [
+          origin,
+        ],
+        events: [],
+        commands: [
+          "test.arrived",
+          "test.hold",
+          "plugin.windows.getWebViewState",
+          "plugin.windows.reloadWebView",
+        ],
+        host: {
+          permissions: [
+            "windows.getWebViewState",
+          ],
+        },
       },
-    })),
+    ],
   };
   const app = defineApp({
     modules: [],
@@ -806,17 +725,7 @@ if (!process.argv.includes("--child")) {
             }
             failure = error;
             console.error(error);
-            for (const view of [
-              "peer",
-              "denied",
-              "main",
-            ]) {
-              await windows
-                .close({
-                  view,
-                })
-                .catch(() => {});
-            }
+            await windows.close().catch(() => {});
           });
         },
       },
@@ -879,19 +788,17 @@ if (!process.argv.includes("--child")) {
         "build/cache/webview2/sdk/build/native/x64/WebView2Loader.dll",
       ),
       windows: [
-        "main",
-        "peer",
-        "denied",
-      ].map((view) => ({
-        view,
-        title: windowCaption(view),
-        home: `${origin}/${view === "main" ? "index" : view}.html`,
-        visible: false,
-        window: {
-          width: 640,
-          height: 480,
+        {
+          view: "main",
+          title: windowCaption("main"),
+          home: `${origin}/index.html`,
+          visible: false,
+          window: {
+            width: 640,
+            height: 480,
+          },
         },
-      })),
+      ],
     });
     await exerciseTask;
     if (failure) {

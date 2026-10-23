@@ -22,7 +22,6 @@ import {
 import {
   developmentPolicy,
   developmentUrl,
-  developmentWindowHome,
 } from "@bunaway/runtime-bun/development";
 import {
   readWindowSpecs,
@@ -111,7 +110,9 @@ export interface Project {
     view?: string;
     home?: string;
     window?: WindowSpec["window"];
-    windows?: WindowSpec[];
+    startup?: boolean;
+    visible?: boolean;
+    showWhenReady?: WindowSpec["showWhenReady"];
   };
   policy: Policy;
 }
@@ -136,14 +137,6 @@ export function runtimeSettings(
             development: {
               url: server.url,
             },
-            ...(project.app.windows
-              ? {
-                  windows: project.app.windows.map((spec) => ({
-                    ...spec,
-                    home: developmentWindowHome(spec.home, server.url),
-                  })),
-                }
-              : {}),
           }
         : {}),
       ...(devtools
@@ -153,13 +146,7 @@ export function runtimeSettings(
         : {}),
     },
     policy: server
-      ? developmentPolicy(
-          project.policy,
-          project.app.windows?.map((spec) => spec.view) ??
-            project.app.view ??
-            [],
-          server.url,
-        )
+      ? developmentPolicy(project.policy, project.app.view ?? [], server.url)
       : project.policy,
   };
 }
@@ -431,49 +418,45 @@ async function readAppPolicy(
   return policy;
 }
 
-/** Normalize legacy single-window settings through the same validator as multi-window settings. */
-function readAppWindows(
+/** Validate the app's single window declaration; `app.view` defaults to the policy's only view. */
+function readAppWindow(
   raw: Record<string, unknown>,
-  multiple: boolean,
   policy: ReturnType<typeof parsePolicy>,
-): ReturnType<typeof readWindowSpecs> {
-  const windows = readWindowSpecs(
-    multiple
-      ? raw.windows
-      : [
-          {
-            view: raw.view,
-            home: raw.home,
-            title: raw.title,
-            window: raw.window,
-          },
-        ],
+): WindowSpec {
+  if (policy.views.length !== 1) {
+    throw new Error("The app requires exactly one configured policy view.");
+  }
+  const [window] = readWindowSpecs(
+    [
+      {
+        view: raw.view ?? policy.views[0]?.id,
+        home: raw.home,
+        title: raw.title,
+        window: raw.window,
+        startup: raw.startup,
+        visible: raw.visible,
+        showWhenReady: raw.showWhenReady,
+      },
+    ],
     policy,
   );
-  if (
-    !multiple &&
-    (policy.views.length !== 1 || policy.views[0]?.id !== windows[0]?.view)
-  ) {
-    throw new Error(
-      "Single-window settings require one configured policy view.",
-    );
+  if (!window || window.view !== policy.views[0]?.id) {
+    throw new Error("app.view must be the policy's only view.");
   }
-  return windows;
+  return window;
 }
 
-/** Every window's home document must be a file inside the frontend directory. */
-async function assertHomeDocuments(
-  windows: ReturnType<typeof readWindowSpecs>,
+/** The window's home document must be a file inside the frontend directory. */
+async function assertHomeDocument(
+  spec: WindowSpec,
   frontend: string,
 ): Promise<void> {
-  for (const spec of windows) {
-    const homePath = await projectPath(
-      frontend,
-      decodeURIComponent(new URL(spec.home).pathname).slice(1),
-    );
-    if (!(await lstat(homePath)).isFile()) {
-      throw new Error("Home document is not a file.");
-    }
+  const homePath = await projectPath(
+    frontend,
+    decodeURIComponent(new URL(spec.home).pathname).slice(1),
+  );
+  if (!(await lstat(homePath)).isFile()) {
+    throw new Error("Home document is not a file.");
   }
 }
 
@@ -493,7 +476,9 @@ async function readAppSection(
       "view",
       "home",
       "window",
-      "windows",
+      "startup",
+      "visible",
+      "showWhenReady",
       "executableName",
       "icon",
     ],
@@ -509,27 +494,13 @@ async function readAppSection(
   const title = appTitle(raw.title);
   assertExecutableName(raw, appId);
   await assertIcon(raw, root, validateFiles);
-  const multiple = raw.windows !== undefined;
-  if (
-    multiple &&
-    [
-      "view",
-      "home",
-      "window",
-    ].some((key) => key in raw)
-  ) {
-    throw new Error(
-      "Use app.windows or app.view/home/window, without mixing the two formats.",
-    );
-  }
   const policy = await readAppPolicy(settingsDirectory, plugins);
-  const windows = readAppWindows(raw, multiple, policy);
+  const window = readAppWindow(raw, policy);
   return {
     appId,
     title,
-    multiple,
     policy,
-    windows,
+    window,
   };
 }
 
@@ -589,7 +560,7 @@ async function loadProject(
         ],
   );
   const raw = settings.app;
-  const { appId, title, multiple, policy, windows } = await readAppSection(
+  const { appId, title, policy, window } = await readAppSection(
     raw,
     settings.directory,
     plugins,
@@ -597,9 +568,8 @@ async function loadProject(
     validateFiles,
   );
   if (!server && validateFiles) {
-    await assertHomeDocuments(windows, frontend);
+    await assertHomeDocument(window, frontend);
   }
-  const primary = windows.find((spec) => spec.startup !== false) ?? windows[0];
   const pluginSettings =
     settings.plugins === undefined
       ? undefined
@@ -649,18 +619,24 @@ async function loadProject(
             icon: raw.icon as string,
           }
         : {}),
-      ...(primary
-        ? {
-            view: primary.view,
-            home: primary.home,
-            window: primary.window,
-          }
-        : {}),
-      ...(multiple
-        ? {
-            windows,
-          }
-        : {}),
+      view: window.view,
+      home: window.home,
+      window: window.window,
+      ...(window.startup === undefined
+        ? {}
+        : {
+            startup: window.startup,
+          }),
+      ...(window.visible === undefined
+        ? {}
+        : {
+            visible: window.visible,
+          }),
+      ...(window.showWhenReady === undefined
+        ? {}
+        : {
+            showWhenReady: window.showWhenReady,
+          }),
     },
   };
 }

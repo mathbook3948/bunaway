@@ -42,18 +42,19 @@ WebView를 위한 추가 네이티브 바이너리는 필요하지 않다.
 `with { type: "file" }`로 가져온 파일은 compiled 실행 파일에 포함하며,
 `Bun.file(new URL(file, import.meta.url))`로 읽는다.
 
-현재 대상은 macOS arm64다. 다중 창, 명령과 이벤트, 뷰별 정책과 세션, 사용자 지정
-자산 스킴, 렌더러 복구와 종료를 제공한다. `app.windows`와 `startup: false`를 지원한다.
-`@bunaway/plugin-windows`는 목록, 생성과 재생성, show/showInactive/hide/focus/close,
-표시와 포커스 조회, 창 ID 조회, `getReadiness`와 `windows.readiness`, `setContentProtection`과 `isContentProtected`, 숨김 생성
+현재 대상은 macOS arm64다. 하나의 창과 WebView, 명령과 이벤트, 뷰 정책과 세션, 사용자 지정
+자산 스킴, 렌더러 복구와 종료를 제공한다. macOS는 시작 시 창을 하나 만들어야 하므로 `app.startup: false`를 거부한다.
+`@bunaway/plugin-windows`는 `isOpen`, 생성과 재생성, show/showInactive/hide/focus/close,
+표시와 포커스 조회, `getReadiness`와 `windows.readiness`, `setContentProtection`과 `isContentProtected`, 숨김 생성
 (`visible: false`, `showWhenReady`)을 제공한다. 창 ID는 네이티브 창을 만들거나 재생성할 때마다
-새로 발급하며 뷰마다 창 하나만 지원한다. `getSnapshot`, `windows.changed`, 크기와 위치,
-상태 변경, `activate`, 다중 인스턴스 등 다른 창 작업은 `UNSUPPORTED`다. 로그와 기능 조회는
+새로 발급한다. 백엔드는 `windows.waitForLifecycle`로 수명 phase를 관찰하며, 문서로의 `windows.lifecycle` 전달은
+Windows에서만 지원한다. `getSnapshot`, `windows.changed`, 크기와 위치,
+상태 변경, `activate` 등 다른 창 작업은 `UNSUPPORTED`다. 로그와 기능 조회는
 등록한 I/O 어댑터로 실행한다. `desktop`은 트레이와 `closeBehavior: "hide"`를 제외하고 지원한다
 ([ADR 0021](../../../docs/decisions/0021-macos-desktop-lifecycle.md)). 저장과 opener 어댑터는 지원하지 않는다.
 
-창마다 임시 `WKWebsiteDataStore`를 따로 만들고 같은 뷰의 재생성에서 유지한다.
-앱 실행이 끝나면 데이터는 남기지 않는다. 보조 창을 닫으면 해당 세션과 창만 정리하며,
+임시 `WKWebsiteDataStore`를 만들고 재생성에서 유지한다.
+앱 실행이 끝나면 데이터는 남기지 않는다. 창을 닫으면 해당 세션과 창을 정리하며,
 마지막 창을 닫으면 앱을 종료한다. 재생성 중에는 마지막 창 자동 종료를 보류한다.
 생성 완료는 WebView 설정과 리소스 규칙 준비이며 문서나 SDK 준비를 보장하지 않는다.
 
@@ -62,7 +63,7 @@ WebView를 위한 추가 네이티브 바이너리는 필요하지 않다.
 `boot.ts`는 실행 인자를 읽고, `config.ts`는 패키지 설정과 정책을 검증한다.
 `entry.ts`는 UI, Host API와 백엔드 및 I/O Worker의 시작과 종료를 조정하고, `backend.ts`는 앱과 코어를 실행한다.
 `host-operations.ts`는 Windows와 공유하는 `native/host-api/bun/io-worker.ts`의 큐와 어댑터 수명을 사용한다.
-`windows.ts`는 창별 세션 경계와 지연 생성, 재생성 및 개별 정리를 소유한다.
+`windows.ts`는 창의 세션 경계와 지연 생성, 재생성 및 정리를 소유한다.
 `webkit-version.ts`는 시스템 WebKit 번들의 `CFBundleShortVersionString`(없으면 `CFBundleVersion`)을 읽는다.
 `entry.ts`가 백엔드 Worker를 시작하기 전에 메인 스레드에서 한 번 조회해 Worker에 넘기며, 실패는 `webview-version-unavailable`로 기록하고 값을 `null`로 둔다.
 `process-group.ts`는 하위 프로세스의 종료와 호스트 비정상 종료 감시를 소유한다.

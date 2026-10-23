@@ -14,9 +14,7 @@ import { createOperations } from "#plugins/windows/src/platforms/windows";
 import { testAppInfo } from "../fixtures/app-info.ts";
 
 const operation = "windows.setTaskbarProgress";
-const target = {
-  view: "main",
-};
+const target = {};
 
 test("taskbar schemas require bounded progress only for determinate states", () => {
   for (const state of [
@@ -53,14 +51,12 @@ test("taskbar schemas require bounded progress only for determinate states", () 
             ...target,
             state,
             value,
-            windowId: "id-1",
           },
         }).payload,
       ).toEqual({
         ...target,
         state,
         value,
-        windowId: "id-1",
       });
     }
   }
@@ -206,12 +202,10 @@ function fixture() {
       permissions: string[] = [
         operation,
       ],
-      view = "main",
     ) =>
       execute(
         operation,
         {
-          view,
           state: "paused",
           value: 0.25,
         },
@@ -242,19 +236,6 @@ test("taskbar dispatch preserves independent authority, live targets and platfor
     ]),
   ).rejects.toMatchObject({
     code: "PERMISSION_DENIED",
-  });
-  await expect(f.invoke([], "unknown")).rejects.toMatchObject({
-    code: "PERMISSION_DENIED",
-  });
-  await expect(
-    f.invoke(
-      [
-        operation,
-      ],
-      "unknown",
-    ),
-  ).rejects.toMatchObject({
-    code: "INVALID_ARGUMENT",
   });
   delete f.native.setTaskbarProgress;
   await expect(f.invoke()).rejects.toMatchObject({

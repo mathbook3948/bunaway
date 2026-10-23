@@ -267,8 +267,8 @@ macOS는 앱 실행 인자를 받지 않으므로(`OpenRequest.argv`는 항상 `
 숨김은 창, WebView, 세션과 앱 상태를 유지하므로 백엔드 작업도 계속 실행됩니다.
 트레이를 클릭하거나 메뉴의 Open을 선택하면 창을 복원합니다. 숨기기 전의 최대화 상태를 유지하며,
 최소화된 창은 복원합니다. Quit은 종료 검사를 거칩니다.
-열린 창이 없으면 Open은 첫 선언의 `startup` 값과 관계없이 그 창을 생성해 표시합니다.
-다른 창은 자동 생성하지 않으며 `app.windows: []`이면 아이콘과 Quit만 사용합니다.
+열린 창이 없으면 Open은 `startup` 값과 관계없이 창을 새로 생성해 표시합니다.
+`app.startup: false`로 시작해도 Open이 창을 생성합니다.
 이 표시 요청은 `visible`과 `showWhenReady`의 자동 표시 조건을 기다리지 않고 창을 표시합니다.
 반복 표시 요청은 합치고 이전 WebView 정리와 진행 중인 창 API 작업이 끝난 뒤 생성합니다.
 
@@ -312,7 +312,7 @@ macOS에서 `beforeQuit`가 `false`를 반환하면 열린 창과 세션을 모�
 | `onQuit` | 코어와 Worker 정지 뒤 호스트가 반환하기 직전에 한 번 | 세션 종료에서는 호출을 보장하지 않습니다 |
 
 `ShutdownReason`은 `QuitReason`에 `"window-destroyed"`, `"session-end"`, `"interrupted"`를 더한 값입니다.
-`"window-destroyed"`는 [신뢰된 `windows.destroy`](/reference/host/windows/#부모-모달과-신뢰된-종료)로
+`"window-destroyed"`는 [신뢰된 `windows.destroy`](/reference/host/windows/#닫기와-신뢰된-종료)로
 마지막 창을 파괴했을 때, `"interrupted"`는 `bunaway dev`의 종료 요청이나 SIGINT, SIGTERM일 때,
 `"session-end"`는 Windows 로그오프와 시스템 종료, macOS 로그아웃, 재시작과 시스템 종료일 때입니다.
 macOS에서 사용자 결정 없이 마지막 창이 사라지는 창 생성 실패도 `"window-destroyed"`입니다.

@@ -3,8 +3,8 @@ import { PROTOCOL_VERSION } from "@bunaway/protocol";
 import type { Packet, Route } from "@bunaway/runtime-bun/worker-channel";
 
 /**
- * Drives the real MacosWindows close order, `windows.lifecycle` events and resident-app signals with
- * a fake WebView. `mode` is the first argument: `quit` (default close behavior), `keep-alive` or
+ * Drives the real MacosWindows close order, lifecycle phases and resident-app signals for the app's
+ * single window with a fake WebView. `mode` is the first argument: `quit` (default close behavior), `keep-alive` or
  * `reopen-failure` (keep-alive whose Dock reopen cannot create its window).
  * Prints one JSON result for the test to assert.
  */
@@ -87,7 +87,6 @@ const policyView = (id: string) => ({
   ],
   host: {
     permissions: [
-      "windows.listInstances",
       "windows.respondClose",
     ],
   },
@@ -102,7 +101,6 @@ const config = {
   dataRoot: "unused",
   windows: [
     windowSpec("a"),
-    windowSpec("b"),
   ],
   policy: {
     version: 1,
@@ -111,11 +109,11 @@ const config = {
     },
     views: [
       policyView("a"),
-      policyView("b"),
     ],
   },
 } as never;
 
+let recreating = false;
 const forwarded: Packet[] = [];
 const delivered: {
   to: string;
@@ -140,7 +138,8 @@ const windows = new MacosWindows(
   {
     ready: () => true,
     stopping: () => false,
-    busy: () => false,
+    // A recreation is a window API operation in flight, which the host treats as busy.
+    busy: () => recreating,
     cancelled: () => false,
     requestContext: () => undefined,
     forward: (packet: Packet) => forwarded.push(packet),
@@ -267,10 +266,18 @@ const errorCode = (action: () => unknown) => {
 };
 const isClosed = (view: string) =>
   windows.services.read(view)?.closed ?? "missing";
-const lifecycleSeenBy = (view: string) =>
-  delivered
-    .filter((entry) => entry.to === view && entry.event === "windows.lifecycle")
-    .map((entry) => `${entry.payload.viewId}:${entry.payload.phase}`);
+// The window's own document never sees its closed and destroyed phases, so the host's lifecycle feed
+// (what the backend's `windows.waitForLifecycle` reads) is the observer.
+const lifecycle: {
+  windowId: string;
+  phase: string;
+}[] = [];
+windows.services.onLifecycle?.((event) => {
+  lifecycle.push({
+    windowId: event.windowId,
+    phase: `${event.viewId}:${event.phase}`,
+  });
+});
 
 await settle();
 desktop.configure({
@@ -286,9 +293,6 @@ subscribe(
       ]
     : [],
 );
-subscribe("b", [
-  "windows.lifecycle",
-]);
 
 const result: Record<string, unknown> = {
   mode,
@@ -330,7 +334,7 @@ if (mode === "quit") {
     stale: errorCode(() => respondA.respondClose?.(1, true)),
   };
 
-  // 3. Allowing closes A (B stays live, so no quit); B sees closed and, after the tick, destroyed.
+  // 3. Allowing the only window asks the app to quit and keeps the window while the app decides.
   respondA.respondClose?.(2, true);
   await settle();
   result.afterAllow = {
@@ -338,54 +342,61 @@ if (mode === "quit") {
     quitRequests: [
       ...quitRequests,
     ],
+    quitPending: desktop.quitPending,
   };
+
+  // 4. A veto lets the next close ask the document again, and allowing asks to quit again.
+  desktop.quitCancelled();
+  await settle();
+  nativeHooks.a?.close();
+  await settle();
+  respondA.respondClose?.(3, true);
+  await settle();
+  result.afterVeto = {
+    requests: delivered.filter(
+      (entry) => entry.event === "windows.closeRequested",
+    ).length,
+    quitRequests: [
+      ...quitRequests,
+    ],
+    closed: isClosed("a"),
+  };
+
+  // 5. Recreating is announced as closed and destroyed for the old windowId, then created and ready for
+  // a new one, and does not ask the app to quit.
+  desktop.quitCancelled();
+  await settle();
+  recreating = true;
+  await windows.services.close("a", true);
   windows.tick();
   await settle();
-
-  // 4. Recreating A is announced as created then ready for a new windowId.
   windows.services.create(windowSpec("a") as never, true);
   await settle();
   nativeHooks.a?.documentComplete(null);
   await settle();
-  result.lifecycleSeenByB = lifecycleSeenBy("b");
-  // The first two phases belong to the closed lifetime, the last two to its replacement.
-  const windowIds = delivered
-    .filter((entry) => entry.event === "windows.lifecycle")
-    .map((entry) => entry.payload.windowId);
+  recreating = false;
+  result.lifecycle = lifecycle.map((entry) => entry.phase);
+  // A listener that subscribes late, as the backend's adapter does after the first window is up,
+  // still receives every phase from the start.
+  const late: string[] = [];
+  windows.services.onLifecycle?.((event) => {
+    late.push(`${event.viewId}:${event.phase}`);
+  });
+  result.lateLifecycle = late;
+  const windowIds = lifecycle.map((entry) => entry.windowId);
   result.windowLifetimes = windowIds.map((id) =>
     id === windowIds[0] ? "old" : "new",
   );
-
-  // 5. Closing every window: the second-to-last closes, the last one asks to quit and stays open.
-  nativeHooks.a?.close();
-  await settle();
-  nativeHooks.b?.close();
-  await settle();
-  nativeHooks.b?.close();
-  await settle();
-  result.lastWindow = {
+  result.afterRecreate = {
     quitRequests: [
       ...quitRequests,
     ],
-    bClosed: isClosed("b"),
-    quitPending: desktop.quitPending,
-  };
-  // A veto lets the next close ask again.
-  desktop.quitCancelled();
-  await settle();
-  nativeHooks.b?.close();
-  await settle();
-  result.afterVeto = {
-    quitRequests: [
-      ...quitRequests,
-    ],
-    bClosed: isClosed("b"),
+    closed: isClosed("a"),
   };
   windows.tick();
   result.windowsGone = windowsGone;
 } else if (mode === "reopen-failure") {
   nativeHooks.a?.close();
-  nativeHooks.b?.close();
   await settle();
   windows.tick();
   // The Dock reopen cannot create its window: the host keeps running and only logs the failure.
@@ -423,27 +434,22 @@ if (mode === "quit") {
     aClosed: isClosed("a"),
   };
 } else {
-  // keep-alive: closing windows never asks the app to quit and the last one reports windows-empty.
+  // keep-alive: closing the window never asks the app to quit and reports an empty app.
+  // A tick while the window is ready records that the app had a live window.
+  windows.tick();
   nativeHooks.a?.close();
   await settle();
   windows.tick();
-  result.afterFirstClose = {
+  windows.tick();
+  result.afterClose = {
     aClosed: isClosed("a"),
-    windowsEmpty,
-  };
-  nativeHooks.b?.close();
-  await settle();
-  windows.tick();
-  windows.tick();
-  result.afterLastClose = {
-    bClosed: isClosed("b"),
     windowsEmpty,
     quitRequests: [
       ...quitRequests,
     ],
     windowsGone,
   };
-  // Showing creates the first declared window again and re-arms the report.
+  // Showing creates the window again and re-arms the report.
   windows.requestShow();
   windows.tick();
   await settle();

@@ -1081,25 +1081,13 @@ test("window state helpers retain context, validate results and honor pre-call c
     ...nullContract,
     async handle() {
       for (const name of controls) {
-        expect(
-          await windows[name]({
-            view: "editor",
-          }),
-        ).toBeNull();
+        expect(await windows[name]()).toBeNull();
       }
       for (const name of queries) {
-        expect(
-          await windows[name]({
-            view: "editor",
-          }),
-        ).toBe(true);
+        expect(await windows[name]()).toBe(true);
       }
       validOutput = false;
-      await expect(
-        windows.isVisible({
-          view: "editor",
-        }),
-      ).rejects.toMatchObject({
+      await expect(windows.isVisible()).rejects.toMatchObject({
         code: "INTERNAL",
       });
       cancellation.abort();
@@ -1107,11 +1095,7 @@ test("window state helpers retain context, validate results and honor pre-call c
         ...controls,
         ...queries,
       ]) {
-        await expect(
-          windows[name]({
-            view: "editor",
-          }),
-        ).rejects.toMatchObject({
+        await expect(windows[name]()).rejects.toMatchObject({
           code: "CANCELLED",
         });
       }
@@ -1126,27 +1110,20 @@ test("window state helpers retain context, validate results and honor pre-call c
     ].map((name) => `windows.${name}`),
   );
   for (const call of calls) {
-    expect(call.payload).toEqual({
-      view: "editor",
-    });
+    expect(call.payload).toEqual(null);
   }
 });
 
 test("window helpers preserve the command context and typed operation payloads", async () => {
   const { default: windows } = await import("@bunaway/plugin-windows");
-  await expect(windows.list()).rejects.toMatchObject({
+  await expect(windows.isOpen()).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
   const calls: HostCall[] = [];
   function response(call: HostCall): JsonValue {
     switch (call.operation) {
-      case "windows.list":
-        return [
-          {
-            view: "editor",
-            open: false,
-          },
-        ];
+      case "windows.isOpen":
+        return false;
       case "windows.getMinSize":
         return {
           width: 480,
@@ -1165,7 +1142,6 @@ test("window helpers preserve the command context and typed operation payloads",
           maxHeight: 1200,
         };
       case "windows.close":
-      case "windows.blur":
       case "windows.activate":
         return false;
       default:
@@ -1183,122 +1159,69 @@ test("window helpers preserve the command context and typed operation payloads",
   await command({
     ...nullContract,
     async handle() {
-      expect(await windows.list()).toEqual([
-        {
-          view: "editor",
-          open: false,
-        },
-      ]);
-      await windows.create({
-        view: "editor",
-      });
-      await windows.recreate({
-        view: "editor",
-      });
-      await windows.show({
-        view: "editor",
-      });
-      await windows.hide({
-        view: "editor",
-      });
-      await windows.focus({
-        view: "editor",
-      });
-      await windows.showInactive({
-        view: "editor",
-      });
-      expect(
-        await windows.blur({
-          view: "editor",
-        }),
-      ).toBe(false);
-      expect(
-        await windows.activate({
-          view: "editor",
-        }),
-      ).toBe(false);
+      expect(await windows.isOpen()).toBe(false);
+      await windows.create({});
+      await windows.recreate({});
+      await windows.show();
+      await windows.hide();
+      await windows.focus();
+      await windows.showInactive();
+      expect(await windows.activate()).toBe(false);
       await windows.setSize({
-        view: "editor",
         width: 900,
         height: 700,
       });
-      expect(
-        await windows.getMinSize({
-          view: "editor",
-        }),
-      ).toEqual({
+      expect(await windows.getMinSize()).toEqual({
         width: 480,
         height: null,
       });
       await windows.setMinSize({
-        view: "editor",
         width: null,
         height: 500,
       });
-      expect(
-        await windows.getMaxSize({
-          view: "editor",
-        }),
-      ).toEqual({
+      expect(await windows.getMaxSize()).toEqual({
         width: null,
         height: 1200,
       });
       await windows.setMaxSize({
-        view: "editor",
         width: 1600,
         height: null,
       });
-      expect(
-        await windows.getSizeConstraints({
-          view: "editor",
-        }),
-      ).toEqual({
+      expect(await windows.getSizeConstraints()).toEqual({
         minWidth: 480,
         minHeight: null,
         maxWidth: null,
         maxHeight: 1200,
       });
       await windows.setSizeConstraints({
-        view: "editor",
         minWidth: 600,
       });
-      await windows.setSizeConstraints({
-        view: "editor",
-      });
+      await windows.setSizeConstraints({});
       await windows.setPosition({
-        view: "editor",
         x: -100,
         y: 20,
       });
       await windows.setFullscreen({
-        view: "editor",
         fullscreen: true,
       });
       await windows.setCloseConfirmation({
-        view: "editor",
         message: "Close?",
       });
       await windows.setCloseConfirmation({
-        view: "editor",
         message: null,
       });
-      expect(
-        await windows.close({
-          view: "editor",
-        }),
-      ).toBe(false);
+      expect(await windows.close()).toBe(false);
       return null;
     },
   }).run(null, ctx);
   expect(calls.map((call) => call.operation)).toEqual([
-    "windows.list",
+    "windows.isOpen",
     "windows.create",
     "windows.recreate",
     "windows.show",
     "windows.hide",
     "windows.focus",
     "windows.showInactive",
-    "windows.blur",
     "windows.activate",
     "windows.setSize",
     "windows.getMinSize",
@@ -1316,80 +1239,45 @@ test("window helpers preserve the command context and typed operation payloads",
   ]);
   expect(calls.map((call) => call.payload)).toEqual([
     null,
+    {},
+    {},
+    null,
+    null,
+    null,
+    null,
+    null,
     {
-      view: "editor",
-    },
-    {
-      view: "editor",
-    },
-    {
-      view: "editor",
-    },
-    {
-      view: "editor",
-    },
-    {
-      view: "editor",
-    },
-    {
-      view: "editor",
-    },
-    {
-      view: "editor",
-    },
-    {
-      view: "editor",
-    },
-    {
-      view: "editor",
       width: 900,
       height: 700,
     },
+    null,
     {
-      view: "editor",
-    },
-    {
-      view: "editor",
       width: null,
       height: 500,
     },
+    null,
     {
-      view: "editor",
-    },
-    {
-      view: "editor",
       width: 1600,
       height: null,
     },
+    null,
     {
-      view: "editor",
-    },
-    {
-      view: "editor",
       minWidth: 600,
     },
+    {},
     {
-      view: "editor",
-    },
-    {
-      view: "editor",
       x: -100,
       y: 20,
     },
     {
-      view: "editor",
       fullscreen: true,
     },
     {
-      view: "editor",
       message: "Close?",
     },
     {
-      view: "editor",
       message: null,
     },
-    {
-      view: "editor",
-    },
+    null,
   ]);
 });

@@ -433,18 +433,14 @@ export const menuEvents = {
   },
 } as const;
 
-/** Targets a particular HWND lifetime, never a view or a raw native handle. */
-export const windowTargetSchema = z.strictObject({
-  windowId: idSchema,
-});
-export const windowMenuSchema = windowTargetSchema.extend({
+export const windowMenuSchema = z.strictObject({
   menuId: idSchema.nullable(),
 });
-export const windowMenuVisibleSchema = windowTargetSchema.extend({
+export const windowMenuVisibleSchema = z.strictObject({
   visible: z.boolean(),
 });
 /** Context-popup coordinates are physical screen pixels (including negative monitor origins). */
-export const contextMenuSchema = windowTargetSchema.extend({
+export const contextMenuSchema = z.strictObject({
   menuId: idSchema,
   x: int32Schema,
   y: int32Schema,

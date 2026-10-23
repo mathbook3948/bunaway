@@ -143,10 +143,23 @@ function describeFailure(error: unknown): string {
   return parts.join(" ").replaceAll(/\s*\n\s*/g, " ");
 }
 
-/** The windowId of the live fixture window of `view`, or undefined while none exists. */
-async function windowIdOf(view: string) {
-  const instances = await windows.listInstances();
-  return instances.find((instance) => instance.viewId === view)?.windowId;
+/** The windowId of the live fixture window, or undefined while none exists. */
+async function liveWindowId() {
+  return (await windows.isOpen())
+    ? (await windows.getReadiness()).windowId
+    : undefined;
+}
+
+/** Logs every window phase the host publishes, so scripts can wait on it like on a hook. */
+async function watchLifecycle() {
+  let after = 0;
+  for (;;) {
+    const event = await windows.waitForLifecycle({
+      after,
+    });
+    after = event.sequence;
+    log(`lifecycle:${event.phase}:${event.viewId}`);
+  }
 }
 
 /** Polls an async probe until it returns a value. */
@@ -167,8 +180,6 @@ async function waitFor<T>(
   }
 }
 
-/** Request id of the close that `main` left pending, handed to the observer page. */
-let pendingCloseRequestId = 0;
 /** Counts backend turns; a loop that stays alive keeps raising it. */
 let ticks = 0;
 setInterval(() => {
@@ -213,28 +224,18 @@ const scripts: Record<string, () => Promise<void>> = {
   async "last-window"() {
     step("wait-main-page");
     await until(logged("page:main"), "the main page");
-    step("wait-observer-page");
-    await until(logged("page:observer"), "the observer page");
     step("close-main");
     await drive("close", "main");
-    step("wait-main-destroyed");
-    await until(logged("lifecycle:destroyed:main"), "main destroyed");
-    // The observer window is now the last one.
-    step("close-observer");
-    await drive("close", "observer");
+    // Closing the last window starts the quit, and no phase is published once shutdown starts.
   },
   async "keep-alive"() {
     step("wait-main-page");
     await until(logged("page:main"), "the main page");
-    step("wait-observer-page");
-    await until(logged("page:observer"), "the observer page");
-    log(`mainWindow:before:${await windowIdOf("main")}`);
+    log(`mainWindow:before:${await liveWindowId()}`);
     step("close-main");
     await drive("close", "main");
     step("wait-main-destroyed");
     await until(logged("lifecycle:destroyed:main"), "main destroyed");
-    step("close-observer");
-    await drive("close", "observer");
     step("wait-all-windows-closed");
     await until(logged("onAllWindowsClosed"), "onAllWindowsClosed");
     // The backend keeps running with no window left.
@@ -249,10 +250,7 @@ const scripts: Record<string, () => Promise<void>> = {
     step("reopen");
     await drive("reopen");
     step("wait-recreated-main");
-    const recreated = await waitFor(
-      () => windowIdOf("main"),
-      "a recreated main window",
-    );
+    const recreated = await waitFor(liveWindowId, "a recreated main window");
     log(`mainWindow:after:${recreated}`);
     step("quit-event");
     await drive("quitEvent");
@@ -260,19 +258,15 @@ const scripts: Record<string, () => Promise<void>> = {
   async "close-lifecycle"() {
     step("wait-main-page");
     await until(logged("page:main"), "the main page");
-    step("wait-observer-page");
-    await until(logged("page:observer"), "the observer page");
-    // The observer subscribes after main's first creation. Recreating main gives it a complete
-    // created, ready, closed and destroyed sequence to watch.
+    // Recreating main gives the lifecycle log a complete created, ready, closed and destroyed
+    // sequence to watch.
     step("recreate-main");
-    await windows.recreate({
-      view: "main",
-    });
+    await windows.recreate({});
     step("wait-recreated-main-page");
     await until(loggedTimes("page:main", 2), "the recreated main page");
     step("wait-recreated-main-ready");
     await until(
-      loggedTimes("lifecycle:ready:main", 1),
+      loggedTimes("lifecycle:ready:main", 2),
       "the recreated main ready",
     );
     step("wait-replaced-main-destroyed");
@@ -290,22 +284,14 @@ const scripts: Record<string, () => Promise<void>> = {
     log(`visibleAfterDecline:${await drive("visibleWindows")}`);
     step("close-main-to-accept");
     await drive("close", "main");
-    step("wait-main-destroyed");
-    await until(loggedTimes("lifecycle:destroyed:main", 2), "main destroyed");
     // Closing the last window then asks beforeQuit and ends the app.
-    step("close-observer");
-    await drive("close", "observer");
   },
   async "recreate-release"() {
     step("wait-main-page");
     await until(logged("page:main"), "the main page");
-    step("wait-observer-page");
-    await until(logged("page:observer"), "the observer page");
     for (let round = 1; round <= RECREATIONS; round++) {
       step(`recreate-main-${round}`);
-      await windows.recreate({
-        view: "main",
-      });
+      await windows.recreate({});
       step(`wait-recreated-main-page-${round}`);
       await until(
         loggedTimes("page:main", round + 1),
@@ -337,13 +323,6 @@ const scripts: Record<string, () => Promise<void>> = {
     log(`mainWindowCount:${listed}`);
     step("close-main");
     await drive("close", "main");
-    step("wait-main-destroyed");
-    await until(
-      loggedTimes("lifecycle:destroyed:main", RECREATIONS + 1),
-      "main destroyed",
-    );
-    step("close-observer");
-    await drive("close", "observer");
   },
   async "open-urls"() {
     step("wait-main-page");
@@ -372,20 +351,16 @@ const scripts: Record<string, () => Promise<void>> = {
   async "reopen-handler"() {
     step("wait-main-page");
     await until(logged("page:main"), "the main page");
-    step("wait-observer-page");
-    await until(logged("page:observer"), "the observer page");
     // A reopen while windows are visible reaches the app and creates nothing.
     step("reopen-visible");
     await drive("reopen");
     await until(logged("onReopen:true"), "onReopen with a visible window");
     await Bun.sleep(SETTLE_MS);
-    log(`windowsAfterVisibleReopen:${(await windows.listInstances()).length}`);
+    log(`windowsAfterVisibleReopen:${(await windows.isOpen()) ? 1 : 0}`);
     step("close-main");
     await drive("close", "main");
     step("wait-main-destroyed");
     await until(logged("lifecycle:destroyed:main"), "main destroyed");
-    step("close-observer");
-    await drive("close", "observer");
     step("wait-all-windows-closed");
     await until(logged("onAllWindowsClosed"), "onAllWindowsClosed");
     // With onReopen registered the host leaves the empty app to the app: no window comes back.
@@ -393,7 +368,7 @@ const scripts: Record<string, () => Promise<void>> = {
     await drive("reopen");
     await until(logged("onReopen:false"), "onReopen without a visible window");
     await Bun.sleep(SETTLE_MS);
-    log(`windowsAfterHiddenReopen:${(await windows.listInstances()).length}`);
+    log(`windowsAfterHiddenReopen:${(await windows.isOpen()) ? 1 : 0}`);
     step("quit-event");
     await drive("quitEvent");
   },
@@ -476,6 +451,9 @@ export default defineApp({
           throw new Error(`Unknown scenario ${scenario}.`);
         }
         // Not awaited: setup must finish for the app to start, and the first open comes after it.
+        void watchLifecycle().catch((error) => {
+          log(`lifecycle-watch-failed:${describeFailure(error)}`);
+        });
         void (async () => {
           await firstOpen;
           step("start");
@@ -519,18 +497,9 @@ export default defineApp({
         return null;
       },
     },
-    "test.pendingRequest": {
-      input: {
-        const: null,
-      },
-      output: {
-        type: "integer",
-      },
-      run: async () => pendingCloseRequestId,
-    },
     /**
      * Called by `main` while its first close request is pending. Probes that the pending close
-     * blocks `windows.close` and rejects a non-owner answer, then returns so `main` can decline.
+     * blocks `windows.close`, then returns so `main` can decline.
      */
     "test.pendingClose": {
       input: {
@@ -541,20 +510,12 @@ export default defineApp({
         const: null,
       },
       run: async (value: unknown) => {
-        pendingCloseRequestId = Number(value);
-        const closed = await windows
-          .close({
-            view: "main",
-          })
-          .then(
-            () => "RESOLVED",
-            (error: unknown) => codeOf(error),
-          );
-        log(`closeWhilePending:${closed}`);
-        await until(
-          () => lines().some((line) => line.startsWith("observerRespond:")),
-          "the observer's answer attempt",
+        void value;
+        const closed = await windows.close().then(
+          () => "RESOLVED",
+          (error: unknown) => codeOf(error),
         );
+        log(`closeWhilePending:${closed}`);
         return null;
       },
     },
@@ -607,7 +568,7 @@ export default defineApp({
       log(`onWillQuit:${reason}`);
       if (scenario === "quit-veto") {
         // The hook has no Host API scope, so a host operation fails with INVALID_ARGUMENT.
-        const code = await windows.list().then(
+        const code = await windows.isOpen().then(
           () => "RESOLVED",
           (error: unknown) => codeOf(error),
         );

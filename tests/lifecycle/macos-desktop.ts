@@ -305,7 +305,7 @@ const scenarios: Scenario[] = [
       ...SHUTDOWN_AFTER("quit-command"),
     ],
     verify(lines) {
-      at(lines, "windowsAfterVisibleReopen:2");
+      at(lines, "windowsAfterVisibleReopen:1");
       at(lines, "windowsAfterHiddenReopen:0");
     },
   },
@@ -318,28 +318,24 @@ const scenarios: Scenario[] = [
       ...SHUTDOWN_AFTER("last-window"),
     ],
     verify(lines) {
-      // While the first request was pending, the app could not close the window and the observer
-      // could not answer for it.
+      // While the first request was pending, the app could not close the window.
       const busy = at(lines, "closeWhilePending:BUSY");
-      const denied = at(lines, "observerRespond:PERMISSION_DENIED");
       const declined = at(lines, "answered:main:decline");
       assert(at(lines, "declining:main") < busy);
-      assert(busy < declined && denied < declined);
-      assert(at(lines, "visibleAfterDecline:2") > declined);
-      // The recreated main reports created, ready, closed and destroyed in that order. The
-      // decline produced no closed event; the second, accepted close did.
+      assert(busy < declined);
+      assert(at(lines, "visibleAfterDecline:1") > declined);
+      // The replaced main reported created, ready, closed and destroyed in that order, including
+      // the created phase that was published before the backend's first wait. The decline produced
+      // no closed event, and the last window's own phases come after shutdown starts, so the
+      // backend does not see them.
       const created = at(lines, "lifecycle:created:main");
       const ready = at(lines, "lifecycle:ready:main");
-      const closed = lines.lastIndexOf("lifecycle:closed:main");
-      const destroyed = lines.lastIndexOf("lifecycle:destroyed:main");
+      const closed = at(lines, "lifecycle:closed:main");
+      const destroyed = at(lines, "lifecycle:destroyed:main");
       assert(created < ready);
-      assert(ready < declined);
-      assert(closed > declined);
-      assert(destroyed > closed);
-      assert.equal(
-        lines.filter((line) => line === "lifecycle:closed:main").length,
-        2,
-      );
+      assert(ready < closed);
+      assert(closed < destroyed);
+      assert(destroyed < declined);
     },
   },
   {
@@ -442,81 +438,48 @@ try {
   await mkdir(resolve(assets, "web"), {
     recursive: true,
   });
-  const views = [
-    "main",
-    "observer",
-  ];
   const app = {
     appId: "tests.macos.desktop",
-    windows: views.map((view) => ({
-      view,
-      home: `https://app.bunaway.local/${view}.html`,
-      title: view,
-      window: {
-        width: 500,
-        height: 400,
-      },
-    })),
+    view: "main",
+    home: "https://app.bunaway.local/main.html",
+    title: "main",
+    window: {
+      width: 500,
+      height: 400,
+    },
   };
-  /** `main` is asked about its closes; `observer` watches the windows and probes the request. */
-  const viewPolicies: Record<
-    string,
-    {
-      commands: string[];
-      events: string[];
-      permissions: string[];
-    }
-  > = {
-    main: {
-      commands: [
-        "test.scenario",
-        "test.log",
-        "test.vetoed",
-        "test.pendingClose",
-        "plugin.windows.respondClose",
-      ],
-      events: [
-        "windows.closeRequested",
-      ],
-      permissions: [
-        // test.pendingClose runs in main's command context and probes windows.close there.
-        "windows.close",
-        "windows.respondClose",
-      ],
-    },
-    observer: {
-      commands: [
-        "test.scenario",
-        "test.log",
-        "test.pendingRequest",
-        "plugin.windows.respondClose",
-      ],
-      events: [
-        "windows.lifecycle",
-      ],
-      // listInstances is what entitles a window to receive windows.lifecycle.
-      permissions: [
-        "windows.listInstances",
-        "windows.respondClose",
-      ],
-    },
+  /** `main` is asked about its closes. */
+  const viewPolicy = {
+    commands: [
+      "test.scenario",
+      "test.log",
+      "test.vetoed",
+      "test.pendingClose",
+      "plugin.windows.respondClose",
+    ],
+    events: [
+      "windows.closeRequested",
+    ],
+    permissions: [
+      // test.pendingClose runs in main's command context and probes windows.close there.
+      "windows.close",
+      "windows.respondClose",
+    ],
   };
   const policy = {
     version: 1,
     backend: {
       permissions: [
         "driver.drive",
-        "windows.list",
-        "windows.listInstances",
+        "windows.isOpen",
+        "windows.getReadiness",
         "windows.close",
         "windows.recreate",
       ],
     },
-    views: views.map((id) => {
-      const viewPolicy = viewPolicies[id];
-      assert(viewPolicy, id);
-      return {
-        id,
+    views: [
+      {
+        id: "main",
         origins: [
           "https://app.bunaway.local",
         ],
@@ -525,8 +488,8 @@ try {
         host: {
           permissions: viewPolicy.permissions,
         },
-      };
-    }),
+      },
+    ],
   };
   await writeJson(resolve(assets, "manifest.json"), {
     format: 1,
@@ -575,12 +538,10 @@ try {
   for (const output of web.outputs) {
     await Bun.write(output.path, await output.arrayBuffer());
   }
-  for (const view of views) {
-    await Bun.write(
-      resolve(assets, "web", `${view}.html`),
-      '<!doctype html><title>Desktop</title><script type="module" src="web.js"></script>',
-    );
-  }
+  await Bun.write(
+    resolve(assets, "web", "main.html"),
+    '<!doctype html><title>Desktop</title><script type="module" src="web.js"></script>',
+  );
   const executable = resolve(directory, "bunaway-host");
   await compileMacosApp(assets, process.execPath, executable, bundled);
   const inventory: Record<string, string> = {};

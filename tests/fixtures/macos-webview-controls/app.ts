@@ -14,12 +14,6 @@ export function controlsApp(origin: string, outside: string) {
   const arrivals = new Map<string, number>();
   const held = new Map<string, number>();
   const cancelled = new Map<string, number>();
-  const main = {
-    view: "main",
-  };
-  const peer = {
-    view: "peer",
-  };
   let pageFailure: string | undefined;
   let fragmentCalls = 0;
   let spoofedCalls = 0;
@@ -67,7 +61,7 @@ export function controlsApp(origin: string, outside: string) {
   const ready = controlsClientReadiness({
     arrivals,
     held,
-    isLoading: async () => (await windows.getWebViewState(main)).loading,
+    isLoading: async () => (await windows.getWebViewState()).loading,
     waitFor,
   });
   async function requests(
@@ -88,14 +82,8 @@ export function controlsApp(origin: string, outside: string) {
   }
   async function exercise() {
     await ready("/index.html");
-    await waitFor(
-      () =>
-        arrivals.has("/peer.html") &&
-        arrivals.has("/denied.html") &&
-        held.has("/index.html"),
-      "peer and denied clients",
-    );
-    const { focused, ...initialState } = await windows.getWebViewState(main);
+    await waitFor(() => held.has("/index.html"), "the held command");
+    const { focused, ...initialState } = await windows.getWebViewState();
     // Real key-window state depends on the CI desktop session, so only the type is stable.
     assert.equal(typeof focused, "boolean");
     assert.deepEqual(initialState, {
@@ -106,8 +94,8 @@ export function controlsApp(origin: string, outside: string) {
       canGoForward: false,
       zoomFactor: 1,
     });
-    assert.equal(await windows.goBack(main), false);
-    assert.equal(await windows.goForward(main), false);
+    assert.equal(await windows.goBack(), false);
+    assert.equal(await windows.goForward(), false);
     for (const factor of [
       0.25,
       1.5,
@@ -116,24 +104,20 @@ export function controlsApp(origin: string, outside: string) {
       assert(
         Math.abs(
           (await windows.setZoomFactor({
-            ...main,
             factor,
           })) - factor,
         ) < 0.001,
       );
       assert(
-        Math.abs((await windows.getWebViewState(main)).zoomFactor - factor) <
-          0.001,
+        Math.abs((await windows.getWebViewState()).zoomFactor - factor) < 0.001,
       );
     }
-    assert.equal((await windows.getWebViewState(peer)).zoomFactor, 1);
     for (const factor of [
       0.249,
       5.001,
     ]) {
       await assert.rejects(
         windows.setZoomFactor({
-          ...main,
           factor,
         }),
         {
@@ -141,7 +125,7 @@ export function controlsApp(origin: string, outside: string) {
         },
       );
     }
-    const beforeDenied = await windows.getWebViewState(main);
+    const beforeDenied = await windows.getWebViewState();
     for (const url of [
       outside,
       "file:///etc/passwd",
@@ -152,7 +136,6 @@ export function controlsApp(origin: string, outside: string) {
     ]) {
       await assert.rejects(
         windows.navigateWebView({
-          ...main,
           url,
         }),
         {
@@ -160,21 +143,12 @@ export function controlsApp(origin: string, outside: string) {
         },
       );
     }
-    assert.deepEqual(await windows.getWebViewState(main), beforeDenied);
-    await assert.rejects(windows.openDevTools(main), {
+    assert.deepEqual(await windows.getWebViewState(), beforeDenied);
+    await assert.rejects(windows.openDevTools(), {
       code: "UNSUPPORTED",
     });
-    await assert.rejects(
-      windows.reloadWebView({
-        view: "missing",
-      }),
-      {
-        code: "INVALID_ARGUMENT",
-      },
-    );
 
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/next.html`,
     });
     await ready("/next.html");
@@ -182,57 +156,46 @@ export function controlsApp(origin: string, outside: string) {
       () => (cancelled.get("/index.html") ?? 0) === 1,
       "document revocation",
     );
-    assert.equal(
-      (await windows.getWebViewState(main)).url,
-      `${origin}/next.html`,
-    );
-    assert.equal((await windows.getWebViewState(main)).canGoBack, true);
-    assert.equal(await windows.goBack(main), true);
+    assert.equal((await windows.getWebViewState()).url, `${origin}/next.html`);
+    assert.equal((await windows.getWebViewState()).canGoBack, true);
+    assert.equal(await windows.goBack(), true);
     await ready("/index.html", 2);
-    assert.equal((await windows.getWebViewState(main)).canGoForward, true);
-    assert.equal(await windows.goForward(main), true);
+    assert.equal((await windows.getWebViewState()).canGoForward, true);
+    assert.equal(await windows.goForward(), true);
     await ready("/next.html", 2);
-    await windows.reloadWebView(main);
+    await windows.reloadWebView();
     await ready("/next.html", 3);
     await waitFor(() => (held.get("/next.html") ?? 0) >= 3, "reload client");
     const cancelledBeforeFragment = cancelled.get("/next.html") ?? 0;
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/next.html#fragment`,
     });
     await waitFor(() => fragmentCalls === 1, "existing fragment client");
     assert.equal(cancelled.get("/next.html") ?? 0, cancelledBeforeFragment);
     assert.equal(
-      (await windows.getWebViewState(main)).url,
+      (await windows.getWebViewState()).url,
       `${origin}/next.html#fragment`,
-    );
-    assert.equal(
-      (await windows.getWebViewState(peer)).url,
-      "https://app.bunaway.local/peer.html",
     );
 
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/slow.html`,
     });
     await waitFor(async () => (await requests("slow")) >= 1, "slow request");
     await waitFor(
-      async () => (await windows.getWebViewState(main)).loading,
+      async () => (await windows.getWebViewState()).loading,
       "slow loading",
     );
-    await windows.stopWebView(main);
+    await windows.stopWebView();
     await waitFor(
-      async () => !(await windows.getWebViewState(main)).loading,
+      async () => !(await windows.getWebViewState()).loading,
       "stop loading",
     );
     assert.equal(arrivals.has("/slow.html"), false);
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/recovered.html`,
     });
     await ready("/recovered.html");
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/redirect.html`,
     });
     await waitFor(
@@ -240,15 +203,14 @@ export function controlsApp(origin: string, outside: string) {
       "redirect request",
     );
     await waitFor(
-      async () => !(await windows.getWebViewState(main)).loading,
+      async () => !(await windows.getWebViewState()).loading,
       "denied redirect",
     );
     assert.notEqual(
-      new URL((await windows.getWebViewState(main)).url).origin,
+      new URL((await windows.getWebViewState()).url).origin,
       outside,
     );
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/final.html`,
     });
     await ready("/final.html");
@@ -270,19 +232,14 @@ export function controlsApp(origin: string, outside: string) {
       assert(url && path);
       checkpoint(`navigate requested: ${path}`);
       await windows.navigateWebView({
-        ...main,
         url,
       });
       checkpoint(`navigate returned: ${path}`);
       await ready(path);
-      assert.equal(
-        (await windows.getWebViewState(main)).url,
-        new URL(url).href,
-      );
-      assert.equal((await windows.getWebViewState(main)).title, path);
+      assert.equal((await windows.getWebViewState()).url, new URL(url).href);
+      assert.equal((await windows.getWebViewState()).title, path);
     }
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/cache-probe.html`,
     });
     await ready("/cache-probe.html", 2);
@@ -303,28 +260,10 @@ export function controlsApp(origin: string, outside: string) {
       "completed reload after synthetic persisted restore",
     );
     await windows.navigateWebView({
-      ...main,
       url: `${origin}/final.html`,
     });
     await ready("/final.html", 2);
-    await windows.close(peer);
-    await assert.rejects(windows.getWebViewState(peer), {
-      code: "INVALID_ARGUMENT",
-    });
-    await windows.recreate(peer);
-    await waitFor(
-      () => (arrivals.get("/peer.html") ?? 0) === 2,
-      "recreated peer",
-    );
-    const recreated = await windows.getWebViewState(peer);
-    assert.equal(recreated.zoomFactor, 1);
-    assert.equal(recreated.canGoBack, false);
-    assert.equal(recreated.canGoForward, false);
-    await windows.setZoomFactor({
-      ...peer,
-      factor: 1.25,
-    });
-    assert.equal((await windows.getWebViewState(main)).title, "/final.html");
+    assert.equal((await windows.getWebViewState()).title, "/final.html");
     if (pageFailure) {
       throw new Error(pageFailure);
     }
@@ -360,7 +299,7 @@ export function controlsApp(origin: string, outside: string) {
                 arrivals: Object.fromEntries(arrivals),
                 held: Object.fromEntries(held),
                 cancelled: Object.fromEntries(cancelled),
-                state: await windows.getWebViewState(main).catch((error) => ({
+                state: await windows.getWebViewState().catch((error) => ({
                   error: String(error),
                 })),
               };
@@ -370,17 +309,9 @@ export function controlsApp(origin: string, outside: string) {
               resolve(process.env.TMPDIR ?? "", "report.json"),
               JSON.stringify(report),
             );
-            for (const view of [
-              "peer",
-              "denied",
-            ]) {
-              await windows.close({
-                view,
-              });
-            }
             // The final close retires the backend route before its response can be delivered.
             try {
-              await windows.close(main);
+              await windows.close();
             } catch (error) {
               if (
                 !(error instanceof BunawayError) ||

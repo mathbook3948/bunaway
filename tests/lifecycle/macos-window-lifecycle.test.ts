@@ -45,55 +45,59 @@ test("macOS close request, lifecycle events and last-window quit follow the shar
     recreate: "BUSY",
     stale: "INVALID_ARGUMENT",
   });
-  // Allowing closes a window that is not the last one without asking the app to quit.
+  // Allowing the only window asks the app to quit and keeps the window while the app decides.
   expect(result.afterAllow).toEqual({
-    closed: true,
-    quitRequests: [],
+    closed: false,
+    quitRequests: [
+      "last-window",
+    ],
+    quitPending: true,
   });
-  // Another window observes closed, destroyed, then the replacement's created and ready, in order.
-  expect(result.lifecycleSeenByB).toEqual([
+  // A veto lets the next close ask again.
+  expect(result.afterVeto).toEqual({
+    requests: 3,
+    quitRequests: [
+      "last-window",
+      "last-window",
+    ],
+    closed: false,
+  });
+  // The backend feed sees closed, destroyed, then the replacement's created and ready, in order.
+  expect(result.lifecycle).toEqual([
+    "a:created",
     "a:closed",
     "a:destroyed",
     "a:created",
     "a:ready",
   ]);
+  expect(result.lateLifecycle).toEqual(result.lifecycle);
   expect(result.windowLifetimes).toEqual([
+    "old",
     "old",
     "old",
     "new",
     "new",
   ]);
-  // The last window asks once, stays open while the app decides, and asks again after a veto.
-  expect(result.lastWindow).toEqual({
-    quitRequests: [
-      "last-window",
-    ],
-    bClosed: false,
-    quitPending: true,
-  });
-  expect(result.afterVeto).toEqual({
+  // Recreation bypasses the quit check.
+  expect(result.afterRecreate).toEqual({
     quitRequests: [
       "last-window",
       "last-window",
     ],
-    bClosed: false,
+    closed: false,
   });
   expect(result.windowsGone).toBe(0);
 });
 
 test("macOS keep-alive closes the last window without a quit request and reports an empty app once per transition", async () => {
   const result = await runFixture("keep-alive");
-  expect(result.afterFirstClose).toEqual({
+  expect(result.afterClose).toEqual({
     aClosed: true,
-    windowsEmpty: 0,
-  });
-  expect(result.afterLastClose).toEqual({
-    bClosed: true,
     windowsEmpty: 1,
     quitRequests: [],
     windowsGone: 0,
   });
-  // Showing creates the first declared window, and closing it empties the app again.
+  // Showing creates the window again, and closing it empties the app again.
   expect(result.afterShow).toEqual({
     aClosed: false,
   });

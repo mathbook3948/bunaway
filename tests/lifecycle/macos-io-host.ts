@@ -71,17 +71,12 @@ try {
   const app = {
     appId: "tests.macos.io",
     title: "I/O lifecycle",
-    windows: [
-      {
-        view: "main",
-        home: "https://app.bunaway.local/",
-        title: "I/O lifecycle",
-        window: {
-          width: 500,
-          height: 400,
-        },
-      },
-    ],
+    view: "main",
+    home: "https://app.bunaway.local/",
+    window: {
+      width: 500,
+      height: 400,
+    },
   };
   await writeJson(resolve(assets, "manifest.json"), {
     format: 1,

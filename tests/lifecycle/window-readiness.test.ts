@@ -1,10 +1,7 @@
 import { expect, test } from "bun:test";
 import { createClient, createWebViewTransport } from "@bunaway/client";
 import type { WindowReadiness } from "@bunaway/plugin-api/native";
-import {
-  validateWindowCall,
-  validateWindowOutput,
-} from "@bunaway/plugin-windows";
+import { validateWindowOutput } from "@bunaway/plugin-windows";
 import {
   type Hello,
   type HostContext,
@@ -339,7 +336,7 @@ test("SDK readiness and automatic display complete while the Worker channel is f
   expect(listeners.size).toBe(0);
 });
 
-test("preparation schemas reject invalid phases and splashscreen targets", () => {
+test("preparation schemas reject invalid phases", () => {
   const f = fixture();
   expect(() =>
     validateWindowOutput("windows.getReadiness", {
@@ -347,23 +344,6 @@ test("preparation schemas reject invalid phases and splashscreen targets", () =>
       sdk: "loaded",
     }),
   ).toThrow();
-  expect(() =>
-    validateWindowCall({
-      operation: "windows.completeSplashscreen",
-      payload: {
-        view: "main",
-      },
-    }),
-  ).toThrow();
-  expect(
-    validateWindowCall({
-      operation: "windows.completeSplashscreen",
-      payload: {
-        view: "main",
-        splash: "splash",
-      },
-    }).operation,
-  ).toBe("windows.completeSplashscreen");
 });
 
 test("document failure retains an already acknowledged SDK and its error through reconnection", () => {

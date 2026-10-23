@@ -1,5 +1,5 @@
 import { expect } from "bun:test";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Project } from "#cli/config";
 import { startDevServer } from "#cli/dev-server";

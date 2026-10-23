@@ -15,7 +15,7 @@ const WM_KILLFOCUS = 0x0008;
 const MAX_ACTIVATION_RECORDS = 64;
 
 test.skipIf(process.platform !== "win32")(
-  "two real Win32 windows preserve input on inactive display and report observed activation transitions",
+  "a real Win32 app window preserves input on inactive display and reports observed activation transitions",
   async () => {
     const { Windows } = await import("#native/windows/bun/win32");
     const { user, kernel } = await import("#native/windows/bun/win32-bindings");
@@ -132,7 +132,6 @@ test.skipIf(process.platform !== "win32")(
     const services: NativeWindowServices = {
       specs: [
         "main",
-        "editor",
       ].map((view) => ({
         view,
         title: view,
@@ -168,22 +167,15 @@ test.skipIf(process.platform !== "win32")(
     if (!execute) {
       throw new Error("Missing UI adapter");
     }
-    const invoke = (operation: string, view: string) =>
-      execute(
-        operation,
-        {
-          view,
+    const invoke = (operation: string) =>
+      execute(operation, null, "backend", {
+        requestId: operation,
+        permissions: {
+          permissions: [
+            ...windowPermissions(),
+          ],
         },
-        "main",
-        {
-          requestId: operation,
-          permissions: {
-            permissions: [
-              ...windowPermissions(),
-            ],
-          },
-        },
-      );
+      });
     /** Compare the latest event for each HWND with the same live query used by subscribers. */
     function checkEvents() {
       native.pump();
@@ -205,22 +197,23 @@ test.skipIf(process.platform !== "win32")(
         "Inactive display input",
         400,
         300,
-        (message, wparam) => recordMessage("main", message, wparam),
+        (message, wparam) => recordMessage("helper", message, wparam),
       );
-      handles.set("main", first);
+      // The app has one window, so the second HWND is the app window and the first only holds focus.
+      handles.set("helper", first);
       const second = native.create(
         "Inactive display target",
         500,
         350,
         (message, wparam) => {
-          recordMessage("editor", message, wparam);
+          recordMessage("main", message, wparam);
           if (message === WM_ACTIVATE && (wparam & 0xffffn) !== 0n) {
             targetActivations++;
           }
         },
         false,
       );
-      handles.set("editor", second);
+      handles.set("main", second);
       const WS_CHILD = 0x40000000;
       const WS_VISIBLE = 0x10000000;
       const input = user.symbols.CreateWindowExW(
@@ -310,7 +303,7 @@ test.skipIf(process.platform !== "win32")(
         const foregroundBefore = driver.symbols.GetForegroundWindow();
         const start = events.length;
         phase = `${state}:${hidden ? "hidden" : "visible"}:showInactive`;
-        expect(await invoke("windows.showInactive", "editor")).toBeNull();
+        expect(await invoke("windows.showInactive")).toBeNull();
         checkEvents();
         expect(driver.symbols.GetActiveWindow()).toBe(first);
         expect(driver.symbols.GetFocus()).toBe(input);
@@ -322,29 +315,11 @@ test.skipIf(process.platform !== "win32")(
         if (foregroundBefore === first) {
           expect(driver.symbols.GetForegroundWindow()).toBe(first);
         }
-        expect(reported(start, "editor", "shown")).toBe(hidden);
+        expect(reported(start, "main", "shown")).toBe(hidden);
         const duplicate = events.length;
-        await invoke("windows.showInactive", "editor");
+        await invoke("windows.showInactive");
         checkEvents();
         expect(events).toHaveLength(duplicate);
-      };
-      /** Blurring the activated window reports blur and focus events when Windows hands over focus. */
-      const verifyBlur = async () => {
-        const start = events.length;
-        const blurred = await invoke("windows.blur", "main");
-        checkEvents();
-        expect(blurred).toBe(!native.isFocused(first));
-        if (native.isFocused(second)) {
-          expect(reported(start, "main", "blur")).toBe(true);
-          expect(reported(start, "editor", "focus")).toBe(true);
-          console.log(
-            "Verified real foreground blur and activation between two Win32 windows.",
-          );
-        } else {
-          console.warn(
-            "Foreground blur not verified: Windows declined the successor activation.",
-          );
-        }
       };
       for (const state of [
         "normal",
@@ -373,32 +348,21 @@ test.skipIf(process.platform !== "win32")(
       }
       native.show(second, false);
       const hidden = native.getSnapshot(second);
-      expect(await invoke("windows.activate", "editor")).toBe(false);
+      expect(await invoke("windows.activate")).toBe(false);
       expect(native.getSnapshot(second)).toEqual(hidden);
       native.minimize(second);
       const minimized = native.getSnapshot(second);
-      expect(await invoke("windows.activate", "editor")).toBe(false);
+      expect(await invoke("windows.activate")).toBe(false);
       expect(native.getSnapshot(second)).toEqual(minimized);
-      native.unmaximize(second);
-      const activated = await invoke("windows.activate", "main");
-      expect(activated).toBe(native.isFocused(first));
+      native.restore(second);
+      const activated = await invoke("windows.activate");
+      expect(activated).toBe(native.isFocused(second));
       checkEvents();
-      if (activated) {
-        await verifyBlur();
-      } else {
+      if (!activated) {
         console.warn(
-          "Foreground transitions not verified: Windows declined activation. Thread-active and keyboard-focus preservation passed.",
+          "Foreground activation not verified: Windows declined activation. Thread-active and keyboard-focus preservation passed.",
         );
       }
-      const noOp = events.length;
-      expect(
-        await invoke(
-          "windows.blur",
-          native.isFocused(first) ? "editor" : "main",
-        ),
-      ).toBe(true);
-      checkEvents();
-      expect(events).toHaveLength(noOp);
       for (const view of handles.keys()) {
         const revisions = events
           .filter((event) => event.snapshot.viewId === view)

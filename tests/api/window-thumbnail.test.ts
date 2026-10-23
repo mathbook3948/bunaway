@@ -12,9 +12,7 @@ import { createOperations } from "#plugins/windows/src/platforms/windows";
 
 const clipOperation = "windows.setThumbnailClip";
 const toolTipOperation = "windows.setThumbnailToolTip";
-const target = {
-  view: "main",
-};
+const target = {};
 const region = {
   x: 4,
   y: 8,
@@ -27,11 +25,6 @@ test("thumbnail clip schema requires a positive in-range integer region or null"
     {
       ...target,
       region,
-    },
-    {
-      ...target,
-      windowId: "id-1",
-      region: null,
     },
     {
       ...target,

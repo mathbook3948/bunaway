@@ -3,8 +3,6 @@ import {
   hasValidWindowSizeConstraints,
   isWindowSizeDimension,
   MAX_WINDOW_DIMENSION,
-  MAX_WINDOW_INSTANCES,
-  MAX_WINDOWS,
   MIN_WINDOW_DIMENSION,
   normalizeWindowBackgroundColor,
   type WindowSizeConstraints,
@@ -13,7 +11,7 @@ import {
 import type { Policy } from "@bunaway/protocol";
 import { isRecord } from "@bunaway/protocol";
 
-export { MAX_WINDOWS, type WindowSpec } from "@bunaway/plugin-api/native";
+export type { WindowSpec } from "@bunaway/plugin-api/native";
 
 function object(value: unknown): Record<string, unknown> {
   if (!isRecord(value)) {
@@ -30,9 +28,6 @@ const SPEC_FIELDS = [
   "startup",
   "visible",
   "showWhenReady",
-  "instances",
-  "maxInstances",
-  "profile",
 ];
 
 const SIZE_FIELDS = [
@@ -82,7 +77,7 @@ function definedEntries<T extends object>(entries: T): Defined<T> {
 }
 
 /**
- * Validates window definitions against the app origin and view policy.
+ * Validates the app's single window definition against the app origin and view policy.
  * A development URL, when supplied, becomes the required home origin.
  * Startup liveness is validated by the host after loading the app definition.
  */
@@ -91,10 +86,8 @@ export function readWindowSpecs(
   policy: Policy,
   developmentUrl?: string,
 ): WindowSpec[] {
-  if (!Array.isArray(value) || value.length > MAX_WINDOWS) {
-    throw new Error(
-      `windows must contain between 0 and ${MAX_WINDOWS} window definitions.`,
-    );
+  if (!Array.isArray(value) || value.length !== 1) {
+    throw new Error("windows must contain exactly one window definition.");
   }
   const seen = new Set<string>();
   return value.map((item) =>
@@ -128,22 +121,9 @@ function readWindowSpec(
   ) {
     throw new Error("Window showWhenReady must be document or sdk.");
   }
-  const { instances, maxInstances } = readInstances(spec);
-  if (
-    spec.profile !== undefined &&
-    spec.profile !== "shared" &&
-    spec.profile !== "isolated"
-  ) {
-    throw new Error("Window profile must be shared or isolated.");
-  }
   return {
     view,
     title,
-    ...definedEntries({
-      instances,
-      maxInstances,
-      profile: spec.profile,
-    }),
     home,
     ...definedEntries({
       visible: spec.visible,
@@ -168,7 +148,7 @@ function readViewId(view: unknown, seen: Set<string>): string {
   }
   if (seen.has(view)) {
     throw new Error(
-      `Only one window declaration per view is supported (duplicate: ${view}). Declare instances: multiple to create multiple windows.`,
+      `Only one window declaration per view is supported (duplicate: ${view}).`,
     );
   }
   seen.add(view);
@@ -325,38 +305,6 @@ function readInitialState(size: Record<string, unknown>): InitialState {
     initialState[name] = option;
   }
   return initialState;
-}
-
-/** Validates `instances` and `maxInstances`: multiple needs a bounded count, single permits only 1. */
-function readInstances(spec: Record<string, unknown>): {
-  instances: WindowSpec["instances"];
-  maxInstances: number | undefined;
-} {
-  if (
-    spec.instances !== undefined &&
-    spec.instances !== "single" &&
-    spec.instances !== "multiple"
-  ) {
-    throw new Error("Window instances must be single or multiple.");
-  }
-  if (
-    (spec.instances === "multiple" && spec.maxInstances === undefined) ||
-    (spec.maxInstances !== undefined &&
-      (typeof spec.maxInstances !== "number" ||
-        !Number.isInteger(spec.maxInstances) ||
-        spec.maxInstances < 1 ||
-        spec.maxInstances > MAX_WINDOW_INSTANCES ||
-        (spec.instances !== "multiple" && spec.maxInstances !== 1)))
-  ) {
-    throw new Error(
-      `Multiple windows require maxInstances from 1 through ${MAX_WINDOW_INSTANCES}; single permits only 1.`,
-    );
-  }
-  return {
-    instances: spec.instances,
-    maxInstances:
-      spec.maxInstances === undefined ? undefined : Number(spec.maxInstances),
-  };
 }
 
 function readSizeConstraint(

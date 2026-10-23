@@ -85,12 +85,15 @@ export async function verifyWindowsPackage(
   );
   const policy = parsePolicy(JSON.stringify(manifest.policy));
   const executablePath = await realpath(process.execPath);
-  const specs = config.windows ?? [
+  const specs = [
     {
       view: config.view,
       home: config.home,
       title: config.title,
       window: config.window,
+      startup: config.startup,
+      visible: config.visible,
+      showWhenReady: config.showWhenReady,
     },
   ];
   const windows = readWindowSpecs(specs, policy, devUrl);
@@ -142,7 +145,7 @@ export async function verifyWindowsPackage(
           icon: isCompiledApp ? process.execPath : resolve(assets, "app.ico"),
         }
       : {}),
-    legacyProfile: !Array.isArray(config.windows),
+    legacyProfile: true,
     devtools,
     dataRoot: resolve(localAppData(), "bunaway", config.appId),
   };

@@ -42,17 +42,17 @@ const allowed = PLATFORMS.some((name) => name === platform);
 | `WindowReadiness` | 기존 창 ID와 문서 세대, 준비 revision, nativeCreated, document와 sdk의 단계, 공개 error |
 | `NativeWindowServices` | 창 사양, 상태 조회와 생성, 종료, 창 객체, 호스트 종료와 취소 확인, 시각과 UI tick |
 
-`WindowSpec`은 `view`, `home`, `title`, `window`, `startup`과 선택적 `instances`, `maxInstances`, `profile` 필드를 가집니다. 인스턴스 모드와 프로필 수명은 [창 API](/reference/host/windows/)를 따릅니다. `window`에는 초기 `width`, `height`와 선택적 `minWidth`, `minHeight`, `maxWidth`, `maxHeight`를 둡니다. 크기 값은 96 DPI 기준 논리 픽셀입니다.
-Windows와 macOS에서는 선택적 `visible`, `showWhenReady`도 받으며 기본값과 완료 조건은 [창 준비](/reference/host/windows/#창-준비)를 따릅니다.
+`WindowSpec`은 `view`, `home`, `title`, `window`, `startup`과 선택적 `visible`, `showWhenReady` 필드를 가집니다. `window`에는 초기 `width`, `height`와 선택적 `minWidth`, `minHeight`, `maxWidth`, `maxHeight`를 둡니다. 크기 값은 96 DPI 기준 논리 픽셀입니다.
+`visible`, `showWhenReady`의 기본값과 완료 조건은 [창 준비](/reference/host/windows/#창-준비)를 따릅니다.
 `WindowState.ready`는 WebView 설정 완료만 뜻합니다. `NativeWindow.getReadiness()`는 별도 WindowReadiness를 읽습니다.
 선택적 `WindowState.replacementCancelled`는 부모 종료로 해당 수명의 진행 중인
 재생성을 취소해야 한다는 뜻입니다. 닫힌 뷰에 나중에 요청한 명시적 create는 허용합니다.
 호스트가 준비 상태를 소유하며 SDK 확인은 현재 세션과 문서 세대에 연결합니다. HostContext는 공개 준비 payload에 넣지 않습니다.
-`NativeWindowServices`는 `specs`, `read(key)`, `create(spec, replacingLiveWindow?, instanceKey?)`, `close(key, replacing?)`, `window(key)`, `stopping()`, `cancelled(requestId)`, `now()`, `tick()`을 제공합니다.
-`close`의 replacing 기본값은 true이며 교체할 인스턴스의 자원을 보존합니다.
-splashscreen 최종 종료에는 false를 전달해 임시 프로필과 교체 예약을 보존하지 않습니다.
-공유 프로필의 모든 창을 동시에 재생성하면 read의 cleaned는 공유 환경의 마지막
-정리까지 false를 유지해 각 교체 예약이 새 환경을 기다리게 합니다.
+`NativeWindowServices`는 `specs`, `onLifecycle(listener)`, `read(key)`, `create(spec, replacingLiveWindow?, instanceKey?)`, `close(key, replacing?)`, `window(key)`, `stopping()`, `cancelled(requestId)`, `now()`, `tick()`을 제공합니다.
+`close`의 replacing 기본값은 true이며 교체할 창의 자원을 보존합니다.
+선택적 `onLifecycle(listener)`는 호스트가 문서에 발행하는 창 수명 phase를 발행 순서대로 관찰하고
+종료가 시작된 뒤에는 호출하지 않습니다. 반환한 함수로 리스너를 제거하며, 호스트가 phase를 발행하지 않으면 없습니다.
+창 플러그인은 이 서비스로 백엔드의 `windows.waitForLifecycle`을 제공합니다.
 `create(spec, replacingLiveWindow)`의 선택적 두 번째 인자는 살아 있던 창의 재생성인지
 구분하며 기본값은 false입니다. 호스트는 이 경우에만 닫기 전 포착한 부모 수명을 재사용합니다.
 선택적 `lookup`은 `byId(windowId)`, `byView(viewId)`, `focused()`, `lastActive()`로
@@ -61,8 +61,7 @@ splashscreen 최종 종료에는 false를 전달해 임시 프로필과 교체 �
 문서 탐색은 ID를 유지하며 네이티브 재생성은 새 ID를 발급합니다. 종료된 ID와 생성 전 뷰,
 외부 전경 창은 `null`입니다. Windows는 활성 상태의 `WM_ACTIVATE`로 이력을 갱신하고
 마지막 활성 창을 파괴하면 이전 창으로 되돌리지 않고 기록을 지웁니다.
-플러그인은 인증된 출처와 대상 권한을 검증하고 닫혔거나 재생성 중인 창을 결과에서 제외합니다.
-`lookup`이 없으면 식별자 탐색 API는 `UNSUPPORTED`를 반환합니다.
+단일 창 모델에서 창 플러그인의 공개 연산은 이 조회를 사용하지 않으며, 이 조회 타입은 호스트 내부 정리 전까지 남아 있습니다.
 `NativeWindow`는 `show(visible)`, `focus()`, `close()`, `isFullscreen()`, `getSizeConstraints()`, `setSizeConstraints(constraints)`, `setSize(width, height)`, `setPosition(x, y)`, `setFullscreen(value)`, `setCloseConfirmation(message)`를 제공합니다.
 Windows의 선택적 `setFocusable`, `isFocusable`과 `WindowSpec.window.focusable`은 전경 활성화 허용을 제어합니다. 현재 실제 포커스와 별도이며 비활성 표시와 blur 후보 선택에도 적용합니다.
 
@@ -201,16 +200,10 @@ Windows와 macOS는 true를 제공합니다. 공통 어댑터는 비어 있지 �
 지원하지 않는 호스트에서 기존 창을 닫기 전에 `UNSUPPORTED`로 거부합니다. macOS는 title, 크기와
 크기 제약, `visible`, `showWhenReady`만 받고 `validateCreation`에서 나머지 창 옵션을 같은 시점에 거부합니다.
 
-`MAX_WINDOWS`는 시작 시 허용하는 창 정의 개수의 상한인 128입니다. 설정 검증과
-`windows.list` 응답 계약이 공유하며 실행 중인 창 인스턴스 개수와는 별개입니다.
-`MAX_WINDOW_INSTANCES`는 앱 전체의 활성, 예약 및 정리 중인 창 상한인 128입니다.
-`windows.getChildren` 응답 계약도 이 상수를 사용합니다. 두 상수는 서로 다른 정책입니다.
-선택적 `NativeWindowServices.instances()`는 `{ key, identity }` 네이티브 소유자 목록을 반환합니다.
-key는 창 제어, 예약과 프로필을 연결하는 호스트 내부 논리 수명 키이며 웹에 노출하지 않습니다.
-identity는 HWND 수명마다 새로 발급합니다. 정리 중인 소유자를 포함해 슬롯을 계산하며
-공개 listInstances에서는 닫힌 창과 네이티브 자원 없는 예약을 제외합니다.
+`MAX_WINDOWS`는 창 정의 개수의 내부 상한인 128입니다. 설정 검증은 정확히 하나의 창 정의를 요구하며
+실행 중인 창 개수와는 별개입니다.
 `lookup.byRequest(requestId)`는 UI 호스트가 관리하는 요청의 인증된 컨텍스트에서 정확한
-호출자 창을 찾습니다. 다중 창 호스트는 view로 대체하지 않습니다.
+호출자 창을 찾습니다.
 `creationSettled(key)`는 생성 성공, 실패와 취소 모두에서 재생성 메타데이터를 해제합니다.
 
 선택적 `NativeWindowServices.systemEvents`는 UI 플러그인에 OS 변경 알림을 제공합니다.

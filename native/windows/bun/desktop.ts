@@ -50,7 +50,7 @@ export function validateDesktopStartup(
     options?.closeBehavior !== "keep-alive"
   ) {
     throw new Error(
-      "app.windows has no startup window; configure desktop.tray or desktop.closeBehavior: keep-alive in the app definition.",
+      "app.startup is false; configure desktop.tray or desktop.closeBehavior: keep-alive in the app definition.",
     );
   }
 }

@@ -169,7 +169,7 @@ iOS는 macOS arm64와 Xcode에서 `mise run host:ios -- <booted Simulator UUID>`
 - Ubuntu에서 `mise run protocol:generate` 후 diff를 검사해 커밋된 네이티브
   스키마가 현재 TypeScript 정의와 일치하는지 확인한다.
 - 별도 Windows 작업에서 `mise run host:windows`로 Bun FFI, WebView2, 모달 비동기 진행,
-  경계/파일/다중 창/정리와 이동한 독립 CLI 프로젝트를 검증한다. 기존 Windows C++ 호스트, probe는 삭제했다.
+  경계/파일/정리와 이동한 독립 CLI 프로젝트를 검증한다. 기존 Windows C++ 호스트, probe는 삭제했다.
   결과 JSON과 호스트 로그는 성공, 실패 시 모두 `windows-native-diagnostics`
   artifact로 7일간 보관한다. 생성 전 실패한 경우에는 파일이 없을 수 있다.
 - 별도 `macos-15` ARM64 작업에서 runner CPU와 `darwin-aarch64` pin을 확인하고

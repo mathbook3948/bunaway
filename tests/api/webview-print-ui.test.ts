@@ -83,11 +83,7 @@ function fixture() {
       "windows.showPrintUI",
     ],
   };
-  const invoke = (
-    payload: JsonValue = {
-      view: "main",
-    },
-  ) => {
+  const invoke = (payload: JsonValue = {}) => {
     if (!adapter.executeUI) {
       throw new Error("Missing UI adapter");
     }
@@ -119,15 +115,12 @@ test("print UI uses its own operation grant and strict browser/system contract",
   );
   for (const payload of [
     {
-      view: "main",
       kind: "silent",
     },
     {
-      view: "main",
       printer: "PDF",
     },
     {
-      view: "main",
       path: "C:\\output.pdf",
     },
   ]) {
@@ -145,7 +138,6 @@ test("print UI defaults to browser and dispatches system without claiming print 
   expect(await f.invoke()).toBeNull();
   expect(
     await f.invoke({
-      view: "main",
       kind: "system",
     }),
   ).toBeNull();

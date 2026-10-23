@@ -196,11 +196,8 @@ export function clampWindowSize(
   };
 }
 
-/** Maximum number of window definitions accepted at startup, independent of instance capacity. */
+/** Upper bound for per-window host queues and ID tables. */
 export const MAX_WINDOWS = 128;
-
-/** Maximum active, reserved and cleaning native window instances per app. */
-export const MAX_WINDOW_INSTANCES = 128;
 
 /** Validated definition of a screen, policy and window defaults. */
 export type WindowSpec = {
@@ -235,12 +232,6 @@ export type WindowSpec = {
     /** Start fullscreen. When combined with maximized, exit restores maximized state. Windows only. */
     fullscreen?: boolean;
   };
-  /** Single by default. Multiple allows explicit ID-addressed instances on Windows. */
-  instances?: "single" | "multiple";
-  /** Required for multiple: an integer from 1 through MAX_WINDOW_INSTANCES. */
-  maxInstances?: number;
-  /** Shared persistent per-view storage by default; isolated is temporary per logical instance. */
-  profile?: "shared" | "isolated";
   /** Whether the runtime creates one instance of this definition during startup. */
   startup?: boolean;
   /** Initial visibility, default true. Hidden creation never activates the window. */
@@ -287,6 +278,13 @@ export type WindowBounds = {
   height: number;
   /** DPI used for this physical screen-coordinate snapshot. */
   dpi: number;
+};
+
+/** One phase of a window lifetime, as published by `windows.lifecycle`. */
+export type WindowLifecycleEvent = {
+  windowId: string;
+  viewId: string;
+  phase: "created" | "ready" | "closed" | "destroyed";
 };
 
 /** A current desktop display snapshot. IDs are device names, not persistent hardware identities. */
@@ -853,11 +851,11 @@ export type NativeWindowServices = {
   validateCreation?(spec: WindowSpec): void;
   /** Configured windows available to the plugin. */
   specs: readonly WindowSpec[];
-  /** All native lifetimes, including resources still being cleaned. Keys are host-private logical owners. */
-  instances?(): readonly {
-    key: string;
-    identity: WindowIdentity;
-  }[];
+  /**
+   * Observe each lifecycle phase the host publishes, in publication order and never after shutdown
+   * starts. Returns a function that removes the listener. Absent when the host publishes none.
+   */
+  onLifecycle?(listener: (event: WindowLifecycleEvent) => void): () => void;
   /** Read-only native identity discovery. Missing on platforms without identity tracking. */
   lookup?: {
     /** Unknown or destroyed native lifetimes return null. */
@@ -909,8 +907,8 @@ export type NativeDialogServices = {
   destroyWindow(hwnd: bigint): void;
   /** Resolve the authenticated originating window, never a caller-supplied view ID. */
   origin(requestId: string): WindowIdentity | null;
-  /** Capture an exact native lifetime, never retarget a recreated owner. */
-  owner(windowId: string): {
+  /** Capture the app's window as the dialog owner, or null when it is not open and shown. It never retargets a recreated window. */
+  owner(): {
     hwnd: bigint;
     alive(): boolean;
   } | null;

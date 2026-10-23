@@ -247,6 +247,10 @@ export function initializeMenuOperations(
     resources,
     clicks,
     setWindow,
+    /** The app's window; INVALID_ARGUMENT when it is not open. */
+    currentWindowId() {
+      return driver().current();
+    },
     getWindow(windowId: string) {
       driver().validate(windowId);
       return windowAttachments.get(windowId)?.menuId ?? null;
@@ -483,19 +487,17 @@ export function dispose(state: State): void {
   state.dispose();
 }
 
-/** Attach or detach a persistent menu bar on one live window lifetime. */
+/** Attach or detach the persistent menu bar of the app's open window. */
 export function setWindowMenu(
   state: State,
   {
-    windowId,
     menuId,
   }: {
-    windowId: string;
     menuId: string | null;
   },
 ): null {
   state.setWindow(
-    windowId,
+    state.currentWindowId(),
     menuId,
     menuId === null ? null : state.requireMenu(menuId),
   );

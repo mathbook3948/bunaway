@@ -122,20 +122,18 @@ function fixture() {
   };
   const defaultPayloads: Partial<Record<(typeof names)[number], JsonValue>> = {
     setDownloadRequestsEnabled: {
-      view: "main",
       enabled: true,
     },
-    getDownloads: {
-      view: "main",
-    },
+    getDownloads: null,
   };
   const invoke = (
     name: (typeof names)[number],
     source = "backend",
-    payload: JsonValue = defaultPayloads[name] ?? {
-      view: "main",
-      id,
-    },
+    payload: JsonValue = name in defaultPayloads
+      ? (defaultPayloads[name] ?? null)
+      : {
+          id,
+        },
   ) => {
     if (!adapter.executeUI) {
       throw new Error("Missing UI adapter");
@@ -164,7 +162,6 @@ test("download contracts register individual grants and forbid caller-selected p
     validateWindowCall({
       operation: "windows.approveDownload",
       payload: {
-        view: "main",
         id,
         path: "C:\\arbitrary.txt",
       },
@@ -174,7 +171,6 @@ test("download contracts register individual grants and forbid caller-selected p
     validateWindowCall({
       operation: "windows.cancelDownload",
       payload: {
-        view: "main",
         id: "not-a-lifetime-handle",
       },
     }),
@@ -183,7 +179,6 @@ test("download contracts register individual grants and forbid caller-selected p
     validateWindowCall({
       operation: "windows.setDownloadRequestsEnabled",
       payload: {
-        view: "main",
         enabled: 1,
       },
     }),

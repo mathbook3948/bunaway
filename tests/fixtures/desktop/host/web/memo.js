@@ -19,8 +19,6 @@ const button = document.getElementById("save");
 const testPhase = new URL(location.href).searchParams.get("test");
 const ephemeralBrowserStorage =
   new URL(location.href).searchParams.get("browserStorage") === "ephemeral";
-let expectedEditorSave;
-let resolveEditorSave;
 window.addEventListener("pagehide", () => {
   void client.close();
 });
@@ -43,9 +41,6 @@ async function start() {
     (event) => {
       saved.textContent = event.payload;
       statusEl.textContent = "저장 완료";
-      if (event.payload === expectedEditorSave) {
-        resolveEditorSave?.();
-      }
     },
     {
       onError: (error) => {
@@ -77,52 +72,6 @@ async function start() {
     button.click();
     await waitForSaved();
     localStorage.setItem("bunaway-profile-regression", "legacy-profile");
-  }
-  if (testPhase === "editor") {
-    // Multi-view integration: the writable memo view saves, observes its own
-    // memo.saved broadcast and reports so the reader view's assertions can run.
-    const editorResults = [];
-    try {
-      input.value = "편집 뷰가 저장한 메모 ✏️";
-      expectedEditorSave = input.value;
-      const savedEvent = new Promise((resolve) => {
-        resolveEditorSave = resolve;
-      });
-      await client.invoke("memo.save", input.value);
-      await Promise.race([
-        savedEvent,
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error("memo.saved event was not delivered")),
-            5000,
-          ),
-        ),
-      ]);
-      editorResults.push({
-        name: "editor save broadcasts to subscribed views",
-        ok: saved.textContent === input.value,
-      });
-      editorResults.push({
-        name: "editor reads back shared storage",
-        ok: (await client.invoke("memo.read", null)) === input.value,
-      });
-    } catch (error) {
-      editorResults.push({
-        name: "editor save",
-        ok: false,
-        error: String(error?.message ?? error),
-      });
-    } finally {
-      expectedEditorSave = undefined;
-      resolveEditorSave = undefined;
-    }
-    await client.invoke("test.report", {
-      file: "editor.json",
-      report: {
-        page: "editor",
-        results: editorResults,
-      },
-    });
   }
   if (testPhase === "read" || testPhase === "write") {
     await client.invoke("test.report", {

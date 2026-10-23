@@ -50,7 +50,6 @@ export class WindowsDialogs implements DialogInstance {
     requestId?: string,
   ): DialogResult {
     return this.run(
-      input.ownerWindowId,
       source,
       signal,
       requestId,
@@ -69,7 +68,6 @@ export class WindowsDialogs implements DialogInstance {
     requestId?: string,
   ): MessageResult {
     return this.run(
-      input.ownerWindowId,
       source,
       signal,
       requestId,
@@ -91,7 +89,6 @@ export class WindowsDialogs implements DialogInstance {
    * surfacing native Close failures unchanged.
    */
   private run<Result>(
-    requestedOwnerWindowId: string | undefined,
     source: string,
     signal: AbortSignal | undefined,
     requestId: string | undefined,
@@ -127,23 +124,18 @@ export class WindowsDialogs implements DialogInstance {
         message: "A dialog is already open.",
       });
     }
-    let ownerWindowId = requestedOwnerWindowId;
     if (source !== "backend") {
       const origin = requestId ? services.origin(requestId) : null;
-      if (
-        !origin ||
-        source !== `view:${origin.viewId}` ||
-        (ownerWindowId !== undefined && ownerWindowId !== origin.windowId)
-      ) {
+      if (!origin || source !== `view:${origin.viewId}`) {
         throw new BunawayError({
           code: "PERMISSION_DENIED",
           message: "A view may open dialogs only for its originating window.",
         });
       }
-      ownerWindowId = origin.windowId;
     }
-    const owner = ownerWindowId ? services.owner(ownerWindowId) : null;
-    if (ownerWindowId && !owner?.alive()) {
+    // The app's window owns the dialog while it is open and shown; otherwise the dialog is unowned.
+    const owner = services.owner();
+    if (owner && !owner.alive()) {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
         message: "Dialog owner window is no longer live.",

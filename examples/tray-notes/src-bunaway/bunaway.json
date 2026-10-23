@@ -8,20 +8,15 @@
   "app": {
     "appId": "examples.bunaway.tray-notes",
     "title": "bunaway tray notes",
-    "windows": [
-      {
-        "view": "main",
-        "title": "bunaway tray notes",
-        "home": "https://app.bunaway.local/index.html",
-        "visible": false,
-        "window": {
-          "width": 640,
-          "height": 480,
-          "minWidth": 320,
-          "minHeight": 240
-        }
-      }
-    ]
+    "view": "main",
+    "home": "https://app.bunaway.local/index.html",
+    "visible": false,
+    "window": {
+      "width": 640,
+      "height": 480,
+      "minWidth": 320,
+      "minHeight": 240
+    }
   },
   "dev": {
     "command": ["bun", "run", "dev:web"],

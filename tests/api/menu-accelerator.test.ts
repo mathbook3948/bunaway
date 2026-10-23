@@ -27,6 +27,7 @@ function fixture() {
       menus,
     },
     () => ({
+      current: () => "window",
       validate() {},
       set(_windowId, items) {
         driverCalls.push(items);

@@ -8,7 +8,7 @@
 - `ios/`: Swift UIKit, WKWebView와 내장 Bun entry, 백엔드 Worker. 단일 뷰 Xcode 동기화와 Simulator debug 빌드 구현. [현재 범위](./ios/README.md).
 
 Windows는 번들 Bun이 진입점이고 같은 프로세스의 UI Worker가 직접 FFI로 Win32,
-WebView2를 소유한다. `windows/bun/`에서 실제 SDK, 코어, Host API, 정책, 파일 경계, 다중 창을
+WebView2를 소유한다. `windows/bun/`에서 실제 SDK, 코어, Host API, 정책, 파일 경계, 창 하나를
 [검증](../docs/architecture/windows-bun-results.md)한다. 기존 Windows C++ 호스트, probe, CMake와
 전용 실행기는 삭제했다. 공용 데이터는 `tests/fixtures/desktop/host/`에 있다.
 독립 FFI, POSIX 프로세스와 App Sandbox 실험 코드는 제거했다.

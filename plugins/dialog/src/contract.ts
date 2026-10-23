@@ -16,7 +16,6 @@ const extension = z
   .max(32)
   .regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/);
 const owner = {
-  ownerWindowId: text(128).optional(),
   title: text(256).optional(),
 };
 const base = {

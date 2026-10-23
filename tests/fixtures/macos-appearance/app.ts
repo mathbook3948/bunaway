@@ -67,7 +67,7 @@ export default defineApp({
       },
       async run(input: unknown) {
         reports.push(input);
-        if (reports.length === 2) {
+        if (reports.length === 1) {
           await Bun.write(
             `${process.env.TMPDIR}/report.json`,
             JSON.stringify(reports),

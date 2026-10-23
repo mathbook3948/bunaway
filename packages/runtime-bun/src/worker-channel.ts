@@ -4,6 +4,7 @@ import {
   type Worker,
 } from "node:worker_threads";
 import type { ShutdownReason } from "@bunaway/core";
+import { MAX_WINDOWS } from "@bunaway/plugin-api/native";
 import {
   API_LIMITS,
   BunawayError,
@@ -26,17 +27,12 @@ import {
   type WireError,
 } from "@bunaway/protocol";
 
-import { MAX_WINDOWS } from "./window-config.ts";
-
 export type Route = {
   viewId: string;
   documentGeneration: number;
   context: HostContext;
 };
-export {
-  MAX_WINDOWS,
-  type WindowSpec,
-} from "./window-config.ts";
+export { MAX_WINDOWS, type WindowSpec } from "@bunaway/plugin-api/native";
 
 type Side = "main" | "ui" | "io" | "main-io" | "macos-main" | "macos-backend";
 type Lane =

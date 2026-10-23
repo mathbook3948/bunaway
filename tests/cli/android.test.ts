@@ -345,15 +345,6 @@ test("Android accepts the common app model and rejects unsupported native inputs
       },
     }),
   ).toThrow("permissions must be empty");
-  expect(() =>
-    assertAndroidProject({
-      ...project,
-      app: {
-        ...project.app,
-        windows: [],
-      },
-    }),
-  ).toThrow("one app.view");
 });
 
 test("Android APK identity comes from validated Gradle output, including native debug suffixes", async () => {

@@ -62,17 +62,12 @@ try {
     app: {
       appId: "tests.macos.clipboard",
       title: "Clipboard regression",
-      windows: [
-        {
-          view: "main",
-          title: "Clipboard regression",
-          home: "https://app.bunaway.local/",
-          window: {
-            width: 500,
-            height: 400,
-          },
-        },
-      ],
+      view: "main",
+      home: "https://app.bunaway.local/",
+      window: {
+        width: 500,
+        height: 400,
+      },
     },
     policy: {
       version: 1,
@@ -167,7 +162,7 @@ try {
       await client.invoke("test.report", {ok:true, unicode:true, formats:true, rgba:true, grants:true, limits:true, change:true});
     } catch(error) {
       await client.invoke("test.report", {ok:false,message:error.message,code:error.code ?? null});
-    } finally {try {await windows.close({view:"main"});} catch(error) {if(error.code !== "CANCELLED") throw error;}}
+    } finally {try {await windows.close();} catch(error) {if(error.code !== "CANCELLED") throw error;}}
   `,
   );
   const web = await Bun.build({

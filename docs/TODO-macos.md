@@ -12,7 +12,7 @@
 현재 제품 경로는 Bun 진입점, 메인 스레드의 AppKit/WKWebView 직접 FFI와 같은
 프로세스의 백엔드 Worker다. 이전 C/ObjC++ 호스트와 Bun 자식 프로세스 실험의
 완료 표시를 현재 구현으로 옮기지 않는다. 별도 개발자 진입점 없이 공통 앱 정의
-하나를 사용하는 모델과 다중 창은 구현했다. 창 플러그인의 기본 제어를 제공하며,
+하나를 사용하는 모델은 구현했다. 창 플러그인의 기본 제어를 제공하며,
 `desktop`은 트레이를 제외하고 구현했다. 저장, 로그 등 다른 네이티브 플러그인 어댑터는 남아 있다.
 
 ## 상태와 작업 기준
@@ -38,7 +38,7 @@
 | 영역 | 현재 구현 | 남은 범위 |
 | --- | --- | --- |
 | 실행 | 고정 Bun 1.4.2, 직접 FFI, 같은 PID의 백엔드 Worker, arm64 네이티브 CI 통과 | 최소 OS와 Intel 실행 검증 |
-| 창 | 다중 창, 생성과 재생성, 기본 제어, 초기 크기 제약, 창 ID 조회, 준비 이벤트, 숨김 생성, `showInactive` | 모달과 sheet, 상주 앱 |
+| 창 | 창 하나의 생성과 재생성, 기본 제어, 초기 크기 제약, 준비 이벤트, 숨김 생성, `showInactive` | 모달과 sheet, 상주 앱 |
 | WebView | 명령, 이벤트, 정책, 자산 스킴, 탐색과 리소스 경계, 복구 | 영속 프로필과 세션 제어 API |
 | 종료 | Worker 정리, 기한 초과 강제 종료, 프로세스 그룹 정리, `desktop`의 `beforeQuit`, 수명주기 훅, 세션 종료, Dock 재활성화(`onReopen`), OS 파일과 URL 열기(`onOpenUrls`) | 트레이, `"hide"`, 창 없는 상주 앱 |
 | 네이티브 플러그인 | 등록과 권한 검증, 기본 창 어댑터 | 저장, 로그, 기능 조회, opener와 창 제어 확장 |
@@ -50,10 +50,10 @@
 
 - [x] 공통 앱 정의와 `build.app`으로 단일 창을 생성한다.
 - [x] 창 닫기와 앱 종료 요청에서 세션, 코어, Worker와 UI를 정리한다.
-- [x] `app.windows`의 다중 창과 뷰별 정책, 세션, 임시 프로필을 지원한다. 한 뷰에 창 하나를 선언한다.
-- [x] `startup: false` 창의 지연 생성, 닫은 창의 생성과 열린 창의 재생성을 제공한다.
-- [x] 허용된 창 목록과 열림 여부, 개별 창의 표시와 포커스 여부를 조회한다.
-- [x] 창 ID, 현재 창, 포커스된 창과 마지막 활성 창을 조회한다.
+- [x] 앱 창 하나와 뷰 정책, 세션, 임시 프로필을 지원한다. 창은 `app.view`, `app.home`, `app.window`로 선언한다.
+- [x] 닫은 창의 생성과 열린 창의 재생성을 제공한다. `startup: false`는 창 없는 앱이 Windows에서만 지원되므로 macOS가 거부한다.
+- [x] 창의 열림 여부(`isOpen`), 표시와 포커스 여부를 조회한다.
+- [x] 창 ID를 `getReadiness`로 조회하고 수명 phase를 백엔드의 `waitForLifecycle`로 관찰한다.
 - [x] 공개 show, hide, focus, close API를 제공한다.
 - [x] 숨긴 상태로 창을 생성하고 앱이 준비된 뒤 표시하는 초기 옵션을 제공한다.
 - [x] 포커스를 가져오지 않고 표시하는 `showInactive` API를 제공한다.
@@ -63,9 +63,9 @@
 - [ ] 창 없는 상주 앱, 메뉴 막대 앱과 splashscreen 전환을 지원한다. splashscreen 전환은 ADR 0026에서 채택하지 않았다.
 - [ ] 실행 중 창 옵션과 하나의 뷰에서 여러 창을 만드는 기능의 권한 및 식별자를 결정한다. 여러 창은 ADR 0026에서 채택하지 않았다.
 
-창과 뷰의 정책, 세션을 따로 관리하며 보조 창을 닫아도 다른 창과 백엔드는 유지한다.
-재생성은 기존 세션을 폐기하고 새 세션을 만든다. 같은 뷰의 임시 WebKit 프로필은
-앱 실행 중 유지하며 다른 뷰와 공유하지 않는다. 앱 종료 후 프로필은 남기지 않는다.
+창과 뷰의 정책, 세션을 따로 관리한다.
+재생성은 기존 세션을 폐기하고 새 세션을 만든다. 임시 WebKit 프로필은
+앱 실행 중 유지한다. 앱 종료 후 프로필은 남기지 않는다.
 숨긴 창은 열린 창이며 마지막 열린 창을 닫으면 앱이 종료된다. 재생성 중에는 자동
 종료를 보류한다. 생성 완료는 WebView 설정과 리소스 규칙 준비이며 웹 문서나 SDK
 초기화 완료가 아니다. 공개 계약은 [창 API](./site/src/content/docs/reference/host/windows.mdx)를 따른다.
@@ -502,7 +502,7 @@ iOS의 WKWebView 구현은 macOS 구현만으로 완료 처리하지 않는다.
 - [x] 실제 창의 초기 크기 보정과 최소/최대 제약, 제한 해제를 검사했다.
 - [x] 설치된 네이티브 delegate로 카메라/마이크 거부를 검사했다. 실제 장치를 열지는 않았다.
 - [x] JSON 변환 불가 메시지, 응답 전달 메모리와 리소스 규칙 교체 회귀를 검사했다.
-- [x] compiled 앱에서 다중 창, 지연 생성과 반복 재생성, 뷰별 권한 및 세션 분리, 마지막 창의 자기 재생성과 종료를 검증했다.
+- [x] compiled 앱에서 창 하나의 생성, 반복 재생성, 마지막 창의 자기 재생성과 종료를 검증했다.
 - [x] GitHub Actions의 macOS 15 arm64에서 실제 WKWebView와 서명한 `.app` 회귀를 통과했다. [기준 커밋의 CI 실행](https://github.com/mathbook3948/bunaway/actions/runs/38042996617/job/114186820712)에 결과를 기록했다.
 - [ ] 최소 지원 macOS와 WKWebView 환경을 실제 기기에서 확정한다. plist의 14.0 값만으로 지원을 선언하지 않는다.
 - [ ] Intel Bun pin, FFI ABI, 빌드와 실제 실행을 지원하거나 제외를 확정한다.
@@ -526,9 +526,9 @@ iOS의 WKWebView 구현은 macOS 구현만으로 완료 처리하지 않는다.
 
 ## 구현과 검증 근거
 
-- [다중 창 설정과 카탈로그 권한 검증](../native/macos/bun/config.ts)
+- [창 설정과 카탈로그 권한 검증](../native/macos/bun/config.ts)
 - [AppKit 앱 수명과 뷰별 임시 프로필](../native/macos/bun/application.ts)
-- [개별 창 소유권, 생성과 정리 및 세션 경계](../native/macos/bun/windows.ts)
+- [창 소유권, 생성과 정리 및 세션 경계](../native/macos/bun/windows.ts)
 - [백엔드 Worker와 Host API, desktop 훅과 tray 거부](../native/macos/bun/backend.ts)
 - [Quit 요청 보류와 종료 원인 분류](../native/macos/bun/desktop-requests.ts)와
   [세션 종료 응답 보류](../native/macos/bun/session-end-termination.ts)
@@ -541,7 +541,7 @@ iOS의 WKWebView 구현은 macOS 구현만으로 완료 처리하지 않는다.
   [공증](../packages/packaging/src/channels/macos/notarize.ts)과
   [DMG/PKG 조립](../packages/packaging/src/channels/macos/package.ts)
 - [계약 및 실제 네이티브 검사 구분](../tests/README.md)
-- [실제 compiled 앱의 다중 창 및 기본 창 API 회귀](../tests/lifecycle/macos-window-api.ts)
+- [실제 compiled 앱의 창 생성 및 기본 창 API 회귀](../tests/lifecycle/macos-window-api.ts)
 - [기준 커밋의 macOS 네이티브 CI 결과](https://github.com/mathbook3948/bunaway/actions/runs/38042996617/job/114186820712)
 - [현재 Bun FFI 실행 결과](./architecture/macos-bun-results.md),
   [이전 네이티브 기록](./architecture/macos-native-results.md)과

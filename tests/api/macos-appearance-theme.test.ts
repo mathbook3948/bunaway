@@ -35,7 +35,6 @@ test("macOS app theme control requires a trusted backend call", () => {
     expect(() =>
       macosAppearanceOperations.setTheme.handler(
         {
-          windowId: null,
           theme: "dark",
         },
         {
@@ -49,15 +48,10 @@ test("macOS app theme control requires a trusted backend call", () => {
       }),
     );
     expect(() =>
-      macosAppearanceOperations.getTheme.handler(
-        {
-          windowId: null,
-        },
-        {
-          instance,
-          source,
-        },
-      ),
+      macosAppearanceOperations.getTheme.handler(null, {
+        instance,
+        source,
+      }),
     ).toThrow(
       expect.objectContaining({
         code: "PERMISSION_DENIED",
@@ -72,7 +66,6 @@ test("macOS sets and reads the app-wide theme", () => {
   expect(
     macosAppearanceOperations.setTheme.handler(
       {
-        windowId: null,
         theme: "dark",
       },
       {
@@ -87,15 +80,10 @@ test("macOS sets and reads the app-wide theme", () => {
     highContrast: false,
   });
   expect(
-    macosAppearanceOperations.getTheme.handler(
-      {
-        windowId: null,
-      },
-      {
-        instance,
-        source: "backend",
-      },
-    ),
+    macosAppearanceOperations.getTheme.handler(null, {
+      instance,
+      source: "backend",
+    }),
   ).toMatchObject({
     preference: "dark",
   });
@@ -104,7 +92,7 @@ test("macOS sets and reads the app-wide theme", () => {
   ]);
 });
 
-test("macOS rejects window IDs as UNSUPPORTED and a cleared app theme as INVALID_ARGUMENT", () => {
+test("macOS rejects a cleared app theme as INVALID_ARGUMENT", () => {
   const { instance, calls } = fakeInstance();
   const context = {
     instance,
@@ -113,32 +101,6 @@ test("macOS rejects window IDs as UNSUPPORTED and a cleared app theme as INVALID
   expect(() =>
     macosAppearanceOperations.setTheme.handler(
       {
-        windowId: "window-1",
-        theme: "dark",
-      },
-      context,
-    ),
-  ).toThrow(
-    expect.objectContaining({
-      code: "UNSUPPORTED",
-    }),
-  );
-  expect(() =>
-    macosAppearanceOperations.getTheme.handler(
-      {
-        windowId: "window-1",
-      },
-      context,
-    ),
-  ).toThrow(
-    expect.objectContaining({
-      code: "UNSUPPORTED",
-    }),
-  );
-  expect(() =>
-    macosAppearanceOperations.setTheme.handler(
-      {
-        windowId: null,
         theme: null,
       },
       context,

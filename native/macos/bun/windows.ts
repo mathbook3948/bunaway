@@ -2,6 +2,7 @@ import type {
   NativeWindow,
   NativeWindowServices,
   WindowIdentity,
+  WindowLifecycleEvent,
   WindowReadiness,
   WindowSpec,
   WindowState,
@@ -37,7 +38,7 @@ const unsupported = (): never => {
   });
 };
 /** Lifetime transitions of one windowId, as published by the `windows.lifecycle` event. */
-type WindowLifecyclePhase = "created" | "ready" | "closed" | "destroyed";
+type WindowLifecyclePhase = WindowLifecycleEvent["phase"];
 type View = {
   /** Native lifetime ID, replaced whenever the view is created or recreated. */
   windowId: string;
@@ -63,9 +64,21 @@ type View = {
   publishedLifecycle: Set<WindowLifecyclePhase>;
 };
 
+/** Phases kept for a listener that subscribes after they were published. */
+const LIFECYCLE_HISTORY_LIMIT = 32;
+
 /** Own each window's native resources and protocol boundary; closing one view leaves the others live. */
 export class MacosWindows {
   private readonly views = new Map<string, View>();
+  private readonly lifecycleListeners = new Set<
+    (event: WindowLifecycleEvent) => void
+  >();
+  /**
+   * The most recent published phases. The first window can reach `created` before the backend's
+   * adapter subscribes, so a new listener first receives what it missed, as the backend's own
+   * history does for its waiters.
+   */
+  private readonly lifecycleHistory: WindowLifecycleEvent[] = [];
   /** Window that most recently became key; cleared when that window closes. */
   private lastActiveWindowId: string | undefined;
   /** A show request (desktop control, Dock reopen) that the tick has not applied yet. */
@@ -116,13 +129,17 @@ export class MacosWindows {
       read: (view) => this.views.get(view)?.state,
       supportsCreationOptions: true,
       validateCreation: (spec) => assertMacosWindowOptions(spec),
-      instances: () =>
-        [
-          ...this.views,
-        ].map(([key, view]) => ({
-          key,
-          identity: this.identity(view),
-        })),
+      onLifecycle: (listener) => {
+        if (!this.hooks.stopping()) {
+          for (const event of this.lifecycleHistory) {
+            listener(event);
+          }
+        }
+        this.lifecycleListeners.add(listener);
+        return () => {
+          this.lifecycleListeners.delete(listener);
+        };
+      },
       lookup: {
         byId: (windowId) => {
           const view = this.viewById(windowId);
@@ -529,12 +546,12 @@ export class MacosWindows {
   }
 
   /**
-   * Tells open sessions that may enumerate instances about one lifetime phase of a window.
+   * Tells backend listeners about one lifetime phase of a window.
    * Each phase is published at most once per windowId. Shutdown suppresses delivery because the
    * sessions are being torn down. Every later phase requires `created`, so a lifetime whose
    * WebView never became ready (creation failed or timed out) emits no lifecycle events at all.
-   * Recipients need a `windows.lifecycle` subscription and the `windows.listInstances` permission,
-   * the same boundary as listing windows, because the event exposes every window.
+   * Backend listeners are notified without a grant. Documents get no event on macOS because the
+   * `windows.getSnapshot` permission that guards delivery is not available there.
    */
   private publishLifecycle(view: View, phase: WindowLifecyclePhase): void {
     if (
@@ -546,21 +563,19 @@ export class MacosWindows {
     }
     view.publishedLifecycle.add(phase);
     const { windowId, viewId } = view.readiness.snapshot();
-    for (const recipient of this.views.values()) {
-      if (
-        !recipient.boundary.eventRoute("windows.lifecycle") ||
-        !this.hooks.observes(recipient.boundary.policy.host, {
-          operation: "windows.listInstances",
-          payload: null,
-        })
-      ) {
-        continue;
-      }
-      this.sendNativeEvent(recipient.boundary, "windows.lifecycle", {
-        windowId,
-        viewId,
-        phase,
-      });
+    const event: WindowLifecycleEvent = {
+      windowId,
+      viewId,
+      phase,
+    };
+    this.lifecycleHistory.push(event);
+    if (this.lifecycleHistory.length > LIFECYCLE_HISTORY_LIMIT) {
+      this.lifecycleHistory.shift();
+    }
+    for (const listener of [
+      ...this.lifecycleListeners,
+    ]) {
+      listener(event);
     }
   }
 

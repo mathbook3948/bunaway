@@ -70,7 +70,7 @@ export default defineConfig({
               slug: "guides/frontend",
             },
             {
-              label: "여러 창 만들기",
+              label: "창 만들기와 제어",
               slug: "guides/windows",
             },
             {

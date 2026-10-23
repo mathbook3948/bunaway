@@ -18,7 +18,7 @@ test.skipIf(process.platform !== "darwin")(
     });
     const call = async (
       operation: string,
-      payload: Record<string, string | null>,
+      payload: Record<string, string | null> | null,
     ) =>
       themeStateSchema.parse(
         await adapter.execute(`appearance.${operation}`, payload, "backend"),
@@ -34,11 +34,7 @@ test.skipIf(process.platform !== "darwin")(
         : objc.text(objc.send(appearance, "name"));
     };
     try {
-      expect(
-        await call("getTheme", {
-          windowId: null,
-        }),
-      ).toMatchObject({
+      expect(await call("getTheme", null)).toMatchObject({
         preference: "system",
         override: null,
       });
@@ -53,7 +49,6 @@ test.skipIf(process.platform !== "darwin")(
         ],
       ] as const) {
         const state = await call("setTheme", {
-          windowId: null,
           theme,
         });
         expect(assigned()).toBe(name);
@@ -61,18 +56,12 @@ test.skipIf(process.platform !== "darwin")(
         expect(state.override).toBeNull();
         // Increase Contrast can resolve an explicit assignment differently, but never to null.
         expect(state.effectiveTheme).not.toBeNull();
-        expect(
-          await call("getTheme", {
-            windowId: null,
-          }),
-        ).toEqual(state);
+        expect(await call("getTheme", null)).toEqual(state);
       }
       await call("setTheme", {
-        windowId: null,
         theme: "dark",
       });
       await call("setTheme", {
-        windowId: null,
         theme: "system",
       });
       // system clears the assignment instead of pinning the current OS appearance.
@@ -88,14 +77,13 @@ test.skipIf(process.platform !== "darwin")(
         ),
       ).rejects.toThrow(
         expect.objectContaining({
-          code: "UNSUPPORTED",
+          code: "INVALID_ARGUMENT",
         }),
       );
       await expect(
         adapter.execute(
           "appearance.setTheme",
           {
-            windowId: null,
             theme: null,
           },
           "backend",
@@ -109,7 +97,6 @@ test.skipIf(process.platform !== "darwin")(
         adapter.execute(
           "appearance.setTheme",
           {
-            windowId: null,
             theme: "dark",
           },
           "untrusted-view",
@@ -121,7 +108,6 @@ test.skipIf(process.platform !== "darwin")(
       );
       expect(assigned()).toBeNull();
       await call("setTheme", {
-        windowId: null,
         theme: "dark",
       });
       expect(assigned()).toBe("NSAppearanceNameDarkAqua");

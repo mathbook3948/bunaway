@@ -43,10 +43,9 @@ const stateQueries = [
   "isResizable",
   "isMovable",
   "isNormal",
-  "isDestroyed",
 ] as const;
 
-test("window state schemas accept only a view and validate null or boolean outputs", () => {
+test("window state schemas take no input and validate null or boolean outputs", () => {
   for (const name of [
     ...controls,
     ...stateQueries,
@@ -57,30 +56,18 @@ test("window state schemas accept only a view and validate null or boolean outpu
     expect(
       validateWindowCall({
         operation,
-        payload: {
-          view: "main",
-        },
+        payload: null,
       }),
     ).toEqual({
       operation,
-      payload: {
-        view: "main",
-      },
+      payload: null,
     });
     for (const payload of [
-      null,
       {},
       {
-        view: "",
-      },
-      {
-        view: "main\n",
-      },
-      {
-        view: 1,
-      },
-      {
         view: "main",
+      },
+      {
         force: true,
       },
     ]) {
@@ -289,7 +276,6 @@ function fixture() {
   const services: NativeWindowServices = {
     specs: [
       "main",
-      "private",
     ].map((view) => ({
       view,
       title: view,
@@ -363,7 +349,6 @@ function fixture() {
         | "getAccessibleTitle"
         | "setResizable"
         | "setMovable",
-      view = "main",
       payload: {
         focusable?: boolean;
         alwaysOnTop?: boolean;
@@ -387,10 +372,11 @@ function fixture() {
       Promise.resolve().then(() =>
         execute(
           `windows.${name}`,
-          {
-            view,
-            ...payload,
-          },
+          Object.keys(payload).length === 0 && name !== "requestAttention"
+            ? null
+            : {
+                ...payload,
+              },
           "backend",
           {
             requestId: name,
@@ -429,13 +415,11 @@ test("focusability validates booleans and keeps activation policy separate from 
       validateWindowCall({
         operation: "windows.setFocusable",
         payload: {
-          view: "main",
-          windowId: "window-1",
           ...payload,
         },
       }).operation,
     ).toBe("windows.setFocusable");
-    expect(await f.invoke("setFocusable", "main", payload)).toBeNull();
+    expect(await f.invoke("setFocusable", payload)).toBeNull();
     expect(await f.invoke("isFocusable")).toBe(focusable);
     expect(await f.invoke("isFocused")).toBe(false);
   }
@@ -459,7 +443,6 @@ test("focusability validates booleans and keeps activation policy separate from 
       validateWindowCall({
         operation: "windows.setFocusable",
         payload: {
-          view: "main",
           ...payload,
         },
       }),
@@ -469,23 +452,16 @@ test("focusability validates booleans and keeps activation policy separate from 
     "windows.isFocusable",
   ];
   await expect(
-    f.invoke("setFocusable", "main", {
+    f.invoke("setFocusable", {
       focusable: true,
     }),
   ).rejects.toMatchObject({
     code: "PERMISSION_DENIED",
   });
   f.permissions.permissions = windowPermissions();
-  await expect(
-    f.invoke("setFocusable", "missing", {
-      focusable: true,
-    }),
-  ).rejects.toMatchObject({
-    code: "INVALID_ARGUMENT",
-  });
   f.setClosed();
   await expect(
-    f.invoke("setFocusable", "main", {
+    f.invoke("setFocusable", {
       focusable: true,
     }),
   ).rejects.toMatchObject({
@@ -495,7 +471,7 @@ test("focusability validates booleans and keeps activation policy separate from 
   const unsupported = fixture();
   delete unsupported.native.setFocusable;
   await expect(
-    unsupported.invoke("setFocusable", "main", {
+    unsupported.invoke("setFocusable", {
       focusable: true,
     }),
   ).rejects.toMatchObject({
@@ -540,13 +516,11 @@ test("caption controls validate booleans, retain independent operation grants an
         validateWindowCall({
           operation: `windows.${setter}`,
           payload: {
-            view: "main",
-            windowId: "window-1",
             ...payload,
           },
         }).operation,
       ).toBe(`windows.${setter}`);
-      expect(await f.invoke(setter, "main", payload)).toBeNull();
+      expect(await f.invoke(setter, payload)).toBeNull();
       expect(await f.invoke(getter)).toBe(value);
     }
     for (const payload of [
@@ -569,7 +543,6 @@ test("caption controls validate booleans, retain independent operation grants an
         validateWindowCall({
           operation: `windows.${setter}`,
           payload: {
-            view: "main",
             ...payload,
           },
         }),
@@ -581,23 +554,16 @@ test("caption controls validate booleans, retain independent operation grants an
       `windows.${getter}`,
     ];
     await expect(
-      f.invoke(setter, "main", {
+      f.invoke(setter, {
         [field]: true,
       }),
     ).rejects.toMatchObject({
       code: "PERMISSION_DENIED",
     });
     f.permissions.permissions = windowPermissions();
-    await expect(
-      f.invoke(setter, "missing", {
-        [field]: true,
-      }),
-    ).rejects.toMatchObject({
-      code: "INVALID_ARGUMENT",
-    });
     f.setClosed();
     await expect(
-      f.invoke(setter, "main", {
+      f.invoke(setter, {
         [field]: true,
       }),
     ).rejects.toMatchObject({
@@ -607,7 +573,7 @@ test("caption controls validate booleans, retain independent operation grants an
     const unsupported = fixture();
     delete unsupported.native[setter];
     await expect(
-      unsupported.invoke(setter, "main", {
+      unsupported.invoke(setter, {
         [field]: true,
       }),
     ).rejects.toMatchObject({
@@ -616,13 +582,13 @@ test("caption controls validate booleans, retain independent operation grants an
     const failed = fixture();
     failed.setFailure(new Error("Caption control failed"));
     await expect(
-      failed.invoke(setter, "main", {
+      failed.invoke(setter, {
         [field]: false,
       }),
     ).rejects.toThrow("Caption control failed");
     // These properties control user operations, independently of backend state APIs.
     const controlled = fixture();
-    await controlled.invoke(setter, "main", {
+    await controlled.invoke(setter, {
       [field]: false,
     });
     expect(await controlled.invoke("minimize")).toBeNull();
@@ -633,21 +599,21 @@ test("caption controls validate booleans, retain independent operation grants an
 test("fullscreenable rejects entering fullscreen, keeps the current fullscreen and always allows leaving", async () => {
   const f = fixture();
   // Fullscreenable by default, so entering is forwarded to the native window.
-  await f.invoke("setFullscreen", "main", {
+  await f.invoke("setFullscreen", {
     fullscreen: true,
   });
   expect(f.fullscreenRequests).toEqual([
     true,
   ]);
-  await f.invoke("setFullscreen", "main", {
+  await f.invoke("setFullscreen", {
     fullscreen: false,
   });
 
-  await f.invoke("setFullscreenable", "main", {
+  await f.invoke("setFullscreenable", {
     fullscreenable: false,
   });
   await expect(
-    f.invoke("setFullscreen", "main", {
+    f.invoke("setFullscreen", {
       fullscreen: true,
     }),
   ).rejects.toMatchObject({
@@ -660,26 +626,26 @@ test("fullscreenable rejects entering fullscreen, keeps the current fullscreen a
   ]);
 
   // Re-enabling allows entering again.
-  await f.invoke("setFullscreenable", "main", {
+  await f.invoke("setFullscreenable", {
     fullscreenable: true,
   });
-  await f.invoke("setFullscreen", "main", {
+  await f.invoke("setFullscreen", {
     fullscreen: true,
   });
   expect(await f.invoke("isFullscreen")).toBe(true);
 
   // Changing the setting while fullscreen keeps the state and still allows leaving.
-  await f.invoke("setFullscreenable", "main", {
+  await f.invoke("setFullscreenable", {
     fullscreenable: false,
   });
   expect(await f.invoke("isFullscreen")).toBe(true);
   expect(await f.invoke("isFullscreenable")).toBe(false);
-  await f.invoke("setFullscreen", "main", {
+  await f.invoke("setFullscreen", {
     fullscreen: false,
   });
   expect(await f.invoke("isFullscreen")).toBe(false);
   await expect(
-    f.invoke("setFullscreen", "main", {
+    f.invoke("setFullscreen", {
       fullscreen: true,
     }),
   ).rejects.toMatchObject({
@@ -705,18 +671,14 @@ test("title operations preserve Unicode, enforce bounded input, individual permi
       validateWindowCall({
         operation: "windows.setTitle",
         payload: {
-          view: "main",
-          windowId: "window-1",
           title,
         },
       }).payload,
     ).toEqual({
-      view: "main",
-      windowId: "window-1",
       title,
     });
     expect(
-      await f.invoke("setTitle", "main", {
+      await f.invoke("setTitle", {
         title,
       }),
     ).toBeNull();
@@ -735,7 +697,6 @@ test("title operations preserve Unicode, enforce bounded input, individual permi
       validateWindowCall({
         operation: "windows.setTitle",
         payload: {
-          view: "main",
           title,
         },
       }),
@@ -745,7 +706,6 @@ test("title operations preserve Unicode, enforce bounded input, individual permi
     validateWindowCall({
       operation: "windows.getTitle",
       payload: {
-        view: "main",
         title: "extra",
       },
     }),
@@ -761,7 +721,7 @@ test("title operations preserve Unicode, enforce bounded input, individual permi
     "windows.getTitle",
   ];
   await expect(
-    f.invoke("setTitle", "main", {
+    f.invoke("setTitle", {
       title: "Denied",
     }),
   ).rejects.toMatchObject({
@@ -774,13 +734,6 @@ test("title operations preserve Unicode, enforce bounded input, individual permi
     code: "PERMISSION_DENIED",
   });
   f.permissions.permissions = windowPermissions();
-  await expect(
-    f.invoke("setTitle", "missing", {
-      title: "Missing",
-    }),
-  ).rejects.toMatchObject({
-    code: "INVALID_ARGUMENT",
-  });
   f.setClosed();
   for (const operation of [
     "setTitle",
@@ -789,7 +742,6 @@ test("title operations preserve Unicode, enforce bounded input, individual permi
     await expect(
       f.invoke(
         operation,
-        "main",
         operation === "setTitle"
           ? {
               title: "Closed",
@@ -810,7 +762,6 @@ test("title operations preserve Unicode, enforce bounded input, individual permi
     await expect(
       unsupported.invoke(
         operation,
-        "main",
         operation === "setTitle"
           ? {
               title: "Unsupported",
@@ -824,7 +775,7 @@ test("title operations preserve Unicode, enforce bounded input, individual permi
   const failed = fixture();
   failed.setFailure(new Error("Title change failed"));
   await expect(
-    failed.invoke("setTitle", "main", {
+    failed.invoke("setTitle", {
       title: "Failed",
     }),
   ).rejects.toThrow("Title change failed");
@@ -842,16 +793,14 @@ test("accessible titles are separate from captions, clear with an empty string a
       validateWindowCall({
         operation: "windows.setAccessibleTitle",
         payload: {
-          view: "main",
           title,
         },
       }).payload,
     ).toEqual({
-      view: "main",
       title,
     });
     expect(
-      await f.invoke("setAccessibleTitle", "main", {
+      await f.invoke("setAccessibleTitle", {
         title,
       }),
     ).toBeNull();
@@ -859,12 +808,12 @@ test("accessible titles are separate from captions, clear with an empty string a
   }
   // The caption is untouched by accessible title changes, and the reverse also holds.
   expect(await f.invoke("getTitle")).toBe("Declared title");
-  await f.invoke("setTitle", "main", {
+  await f.invoke("setTitle", {
     title: "Caption only",
   });
   expect(await f.invoke("getAccessibleTitle")).toBe("x".repeat(1024));
   expect(
-    await f.invoke("setAccessibleTitle", "main", {
+    await f.invoke("setAccessibleTitle", {
       title: "",
     }),
   ).toBeNull();
@@ -881,7 +830,6 @@ test("accessible titles are separate from captions, clear with an empty string a
       validateWindowCall({
         operation: "windows.setAccessibleTitle",
         payload: {
-          view: "main",
           title,
         },
       }),
@@ -899,7 +847,7 @@ test("accessible titles are separate from captions, clear with an empty string a
     "windows.getAccessibleTitle",
   ];
   await expect(
-    f.invoke("setAccessibleTitle", "main", {
+    f.invoke("setAccessibleTitle", {
       title: "Denied",
     }),
   ).rejects.toMatchObject({
@@ -920,7 +868,6 @@ test("accessible titles are separate from captions, clear with an empty string a
     await expect(
       unsupported.invoke(
         operation,
-        "main",
         operation === "setAccessibleTitle"
           ? {
               title: "Unsupported",
@@ -960,13 +907,11 @@ test("user movement controls validate booleans and keep per-operation grants and
         validateWindowCall({
           operation: `windows.${setter}`,
           payload: {
-            view: "main",
-            windowId: "window-1",
             ...payload,
           },
         }).operation,
       ).toBe(`windows.${setter}`);
-      expect(await f.invoke(setter, "main", payload)).toBeNull();
+      expect(await f.invoke(setter, payload)).toBeNull();
       expect(await f.invoke(getter)).toBe(value);
     }
     for (const payload of [
@@ -989,7 +934,6 @@ test("user movement controls validate booleans and keep per-operation grants and
         validateWindowCall({
           operation: `windows.${setter}`,
           payload: {
-            view: "main",
             ...payload,
           },
         }),
@@ -1001,23 +945,16 @@ test("user movement controls validate booleans and keep per-operation grants and
       `windows.${getter}`,
     ];
     await expect(
-      f.invoke(setter, "main", {
+      f.invoke(setter, {
         [field]: true,
       }),
     ).rejects.toMatchObject({
       code: "PERMISSION_DENIED",
     });
     f.permissions.permissions = windowPermissions();
-    await expect(
-      f.invoke(setter, "missing", {
-        [field]: true,
-      }),
-    ).rejects.toMatchObject({
-      code: "INVALID_ARGUMENT",
-    });
     f.setClosed();
     await expect(
-      f.invoke(setter, "main", {
+      f.invoke(setter, {
         [field]: true,
       }),
     ).rejects.toMatchObject({
@@ -1027,7 +964,7 @@ test("user movement controls validate booleans and keep per-operation grants and
     const unsupported = fixture();
     delete unsupported.native[setter];
     await expect(
-      unsupported.invoke(setter, "main", {
+      unsupported.invoke(setter, {
         [field]: true,
       }),
     ).rejects.toMatchObject({
@@ -1036,7 +973,7 @@ test("user movement controls validate booleans and keep per-operation grants and
     const failed = fixture();
     failed.setFailure(new Error("Movement failed"));
     await expect(
-      failed.invoke(setter, "main", {
+      failed.invoke(setter, {
         [field]: false,
       }),
     ).rejects.toThrow("Movement failed");
@@ -1086,34 +1023,24 @@ test("every state call enforces operation permission and open configured windows
   ]) {
     const f = fixture();
     f.permissions.permissions = [];
-    for (const view of [
-      "private",
-      "ungranted",
-    ]) {
-      expect(
-        registry.allowed(
-          {
-            permissions: [],
-          },
-          {
-            operation: `windows.${name}`,
-            payload: {
-              view,
-            },
-          },
-        ),
-      ).toBe(false);
-      await expect(f.invoke(name, view)).rejects.toMatchObject({
-        code: "PERMISSION_DENIED",
-      });
-    }
-    f.permissions.permissions = windowPermissions();
-    await expect(f.invoke(name, "undeclared")).rejects.toMatchObject({
-      code: "INVALID_ARGUMENT",
+    expect(
+      registry.allowed(
+        {
+          permissions: [],
+        },
+        {
+          operation: `windows.${name}`,
+          payload: null,
+        },
+      ),
+    ).toBe(false);
+    await expect(f.invoke(name)).rejects.toMatchObject({
+      code: "PERMISSION_DENIED",
     });
+    f.permissions.permissions = windowPermissions();
     f.setClosed();
-    if (name === "isDestroyed") {
-      expect(await f.invoke(name)).toBe(true);
+    if (name === "isFocused") {
+      expect(await f.invoke(name)).toBe(false);
     } else {
       await expect(f.invoke(name)).rejects.toMatchObject({
         code: "INVALID_ARGUMENT",
@@ -1136,7 +1063,6 @@ test("native failures propagate from state operations", async () => {
 test("normal excludes minimized, maximized and fullscreen but not hidden or unfocused windows", async () => {
   const f = fixture();
   expect(await f.invoke("isNormal")).toBe(true);
-  expect(await f.invoke("isDestroyed")).toBe(false);
   for (const name of [
     "isMinimized",
     "isMaximized",
@@ -1149,7 +1075,6 @@ test("normal excludes minimized, maximized and fullscreen but not hidden or unfo
   f.setFullscreen();
   expect(await f.invoke("isNormal")).toBe(false);
   f.setClosed();
-  expect(await f.invoke("isDestroyed")).toBe(true);
   await expect(f.invoke("isNormal")).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
   });
@@ -1181,7 +1106,7 @@ test("display controls retain independent permissions, strict input and closed/u
       false,
     ]) {
       expect(
-        await f.invoke(setter, "main", {
+        await f.invoke(setter, {
           [field]: value,
         }),
       ).toBeNull();
@@ -1196,7 +1121,6 @@ test("display controls retain independent permissions, strict input and closed/u
         validateWindowCall({
           operation: `windows.${setter}`,
           payload: {
-            view: "main",
             [field]: value,
           },
         }),
@@ -1206,7 +1130,7 @@ test("display controls retain independent permissions, strict input and closed/u
       `windows.${getter}`,
     ];
     await expect(
-      f.invoke(setter, "main", {
+      f.invoke(setter, {
         [field]: true,
       }),
     ).rejects.toMatchObject({
@@ -1216,7 +1140,7 @@ test("display controls retain independent permissions, strict input and closed/u
     f.permissions.permissions = windowPermissions();
     f.setClosed();
     await expect(
-      f.invoke(setter, "main", {
+      f.invoke(setter, {
         [field]: true,
       }),
     ).rejects.toMatchObject({
@@ -1225,7 +1149,7 @@ test("display controls retain independent permissions, strict input and closed/u
     const unsupported = fixture();
     delete unsupported.native[setter];
     await expect(
-      unsupported.invoke(setter, "main", {
+      unsupported.invoke(setter, {
         [field]: true,
       }),
     ).rejects.toMatchObject({
@@ -1258,7 +1182,7 @@ test("attention requests resolve the default mode, validate input and stay separ
   const f = fixture();
   expect(await f.invoke("requestAttention")).toBeNull();
   expect(
-    await f.invoke("requestAttention", "main", {
+    await f.invoke("requestAttention", {
       mode: "continuous",
     }),
   ).toBeNull();
@@ -1283,13 +1207,12 @@ test("attention requests resolve the default mode, validate input and stay separ
       validateWindowCall({
         operation: "windows.requestAttention",
         payload: {
-          view: "main",
           mode,
         },
       }),
     ).toThrow();
     await expect(
-      f.invoke("requestAttention", "main", {
+      f.invoke("requestAttention", {
         mode,
       }),
     ).rejects.toMatchObject({
@@ -1300,7 +1223,6 @@ test("attention requests resolve the default mode, validate input and stay separ
     validateWindowCall({
       operation: "windows.cancelAttention",
       payload: {
-        view: "main",
         mode: "continuous",
       },
     }),
@@ -1338,7 +1260,7 @@ test("opacity accepts only numbers from 0 to 1, round-trips and keeps its own pe
     1,
   ]) {
     expect(
-      await f.invoke("setOpacity", "main", {
+      await f.invoke("setOpacity", {
         opacity,
       }),
     ).toBeNull();
@@ -1367,7 +1289,6 @@ test("opacity accepts only numbers from 0 to 1, round-trips and keeps its own pe
       validateWindowCall({
         operation: "windows.setOpacity",
         payload: {
-          view: "main",
           ...payload,
         },
       }),
@@ -1415,7 +1336,7 @@ test("window shadow takes only a boolean, round-trips from the default and keeps
     true,
   ]) {
     expect(
-      await f.invoke("setHasShadow", "main", {
+      await f.invoke("setHasShadow", {
         hasShadow,
       }),
     ).toBeNull();
@@ -1441,7 +1362,6 @@ test("window shadow takes only a boolean, round-trips from the default and keeps
       validateWindowCall({
         operation: "windows.setHasShadow",
         payload: {
-          view: "main",
           ...payload,
         },
       }),
@@ -1478,7 +1398,7 @@ test("window background color normalizes valid colors, rejects alpha and other f
     ],
   ] as const) {
     expect(
-      await f.invoke("setBackgroundColor", "main", {
+      await f.invoke("setBackgroundColor", {
         color,
       }),
     ).toBeNull();
@@ -1501,7 +1421,6 @@ test("window background color normalizes valid colors, rejects alpha and other f
       validateWindowCall({
         operation: "windows.setBackgroundColor",
         payload: {
-          view: "main",
           color,
         },
       }),
@@ -1511,7 +1430,6 @@ test("window background color normalizes valid colors, rejects alpha and other f
     validateWindowCall({
       operation: "windows.setBackgroundColor",
       payload: {
-        view: "main",
         color: "#112233",
         alpha: 1,
       },
@@ -1569,7 +1487,7 @@ test("ignoring mouse events takes only a boolean, round-trips and keeps its own 
     false,
   ]) {
     expect(
-      await f.invoke("setIgnoreMouseEvents", "main", {
+      await f.invoke("setIgnoreMouseEvents", {
         ignore,
       }),
     ).toBeNull();
@@ -1595,7 +1513,6 @@ test("ignoring mouse events takes only a boolean, round-trips and keeps its own 
       validateWindowCall({
         operation: "windows.setIgnoreMouseEvents",
         payload: {
-          view: "main",
           ...payload,
         },
       }),

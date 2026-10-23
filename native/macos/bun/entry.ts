@@ -617,9 +617,13 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
         !access ||
         access.source !== packet.source ||
         !registry ||
-        !registry.allowed(
-          access.permissions,
-          registry.validateCall(packet.call),
+        !(
+          (packet.context === config.backendContext &&
+            packet.call.operation === "windows.waitForLifecycle") ||
+          registry.allowed(
+            access.permissions,
+            registry.validateCall(packet.call),
+          )
         )
       ) {
         throw new BunawayError({

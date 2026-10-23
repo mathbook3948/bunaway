@@ -39,17 +39,14 @@ Worker 계약 테스트는 명령 결과, 세션 폐기, 종료 수신 확인과
 각 Host API 호출에서 현재 컨텍스트와 뷰별 권한을 검증한다. 다른 플러그인의 macOS
 작업은 어댑터가 없으므로 `UNSUPPORTED`다.
 
-다중 창 검사는 compiled Bun 호스트에서 setup의 Host API를 먼저 확인한 뒤 주 창과 읽기 뷰를 시작하고, 지연 창을
-반복 생성과 재생성한다. 뷰별 목록 필터링, 권한 없는 명령과 대상 창 거부,
-show/hide와 상태 조회, 닫은 창의 조회 오류와 미지원 작업의 오류를 확인한다.
-보조 창을 닫아도 주 창과 백엔드를 유지하고, 주 창만 남은 상태에서 자기 재생성을
-완료한 뒤 새로운 세션과 유지된 백엔드 상태로 마지막 창을 닫는다.
+창 API 검사는 compiled Bun 호스트에서 setup의 Host API를 먼저 확인한 뒤 앱 창을 반복 재생성한다.
+show/hide와 상태 조회, 중복 생성의 `BUSY`, 미지원 작업의 오류를 확인한다.
+자기 재생성마다 새로운 세션과 유지된 백엔드 상태를 확인하고 마지막 창을 닫는다.
 포커스 요청은 OS가 거절하면 `BUSY`를 허용하며, 성공하면 실제 key window와 앱의
-활성 상태를 조회한다. 다른 뷰의 임시 프로필 분리와 같은 뷰의 프로필 유지도 검사한다.
-창 ID 조회(`getById`, `getCurrent`, `getFocused`, `getLastActive`, `listInstances`),
+활성 상태를 조회한다. 임시 프로필 유지도 검사한다.
 숨김 생성(`visible: false`, `showWhenReady`), `getReadiness`와 `windows.readiness`, `showInactive`도
 같은 검사에서 확인한다. 미지원 생성 옵션은 기존 창을 닫기 전에 `UNSUPPORTED`로 거부한다.
-영속 프로필, 모달 창, `getSnapshot`, 다중 인스턴스와 크기, 위치 같은 상태 제어의 완료 검증은 포함하지 않는다.
+영속 프로필, `getSnapshot`과 크기, 위치 같은 상태 제어의 완료 검증은 포함하지 않는다.
 
 하위 프로세스 회귀는 백엔드에서 shell과 그 자식 `sleep`을 실행한다. 일반 실행과
 `unref()` 실행, 플러그인 종료 훅의 무한 루프, 호스트 SIGKILL의 네 경로에서

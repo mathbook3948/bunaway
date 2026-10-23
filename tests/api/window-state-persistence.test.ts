@@ -375,9 +375,7 @@ test("save keeps the normal bounds with the maximized, fullscreen and visible st
     fullscreen: false,
     visible: true,
   });
-  await api.save({
-    view: "main",
-  });
+  await api.save({});
   expect(records.get("main")).toEqual({
     version: 1,
     x: 100,
@@ -404,11 +402,9 @@ test("restore applies the saved bounds and leaves visibility alone by default", 
     visible: false,
   });
   await api.save({
-    view: "main",
     key: "saved",
   });
   const result = await api.restore({
-    view: "main",
     key: "saved",
   });
   expect(result).toEqual({
@@ -427,13 +423,10 @@ test("restore leaves fullscreen before changing geometry and re-enters it last",
     visible: true,
   };
   const state = fixture(display);
-  await state.api.save({
-    view: "main",
-  });
+  await state.api.save({});
   // The window is fullscreen again but no longer maximized when restore runs.
   display.maximized = false;
   const result = await state.api.restore({
-    view: "main",
     include: {
       visible: true,
     },
@@ -466,7 +459,6 @@ test("restore un-maximizes a window whose saved state was not maximized", async 
     visible: false,
   });
   await api.restore({
-    view: "main",
     include: {
       visible: true,
     },
@@ -503,7 +495,6 @@ test("include limits what restore touches", async () => {
     dpi: 96,
   });
   await api.restore({
-    view: "main",
     include: {
       size: false,
       maximized: false,
@@ -514,7 +505,6 @@ test("include limits what restore touches", async () => {
     "bounds:300,200",
   ]);
   await api.restore({
-    view: "main",
     include: {
       position: false,
       size: false,
@@ -544,11 +534,7 @@ test("restore reports adjusted when the monitor is gone", async () => {
     fullscreen: false,
     visible: true,
   });
-  expect(
-    await api.restore({
-      view: "main",
-    }),
-  ).toEqual({
+  expect(await api.restore({})).toEqual({
     restored: true,
     adjusted: true,
   });
@@ -567,11 +553,7 @@ test("a missing or invalid record restores nothing and touches no window", async
     restored: false,
     adjusted: false,
   };
-  expect(
-    await api.restore({
-      view: "main",
-    }),
-  ).toEqual(none);
+  expect(await api.restore({})).toEqual(none);
   for (const value of [
     null,
     "text",
@@ -599,11 +581,7 @@ test("a missing or invalid record restores nothing and touches no window", async
     },
   ]) {
     records.set("main", value);
-    expect(
-      await api.restore({
-        view: "main",
-      }),
-    ).toEqual(none);
+    expect(await api.restore({})).toEqual(none);
   }
   expect(calls).toEqual([]);
 });
@@ -614,29 +592,15 @@ test("remove deletes the saved state and reports whether one existed", async () 
     fullscreen: false,
     visible: true,
   });
-  await api.save({
-    view: "main",
-  });
-  expect(
-    await api.remove({
-      view: "main",
-    }),
-  ).toEqual({
+  await api.save({});
+  expect(await api.remove({})).toEqual({
     removed: true,
   });
   expect(records.size).toBe(0);
-  expect(
-    await api.remove({
-      view: "main",
-    }),
-  ).toEqual({
+  expect(await api.remove({})).toEqual({
     removed: false,
   });
-  expect(
-    await api.restore({
-      view: "main",
-    }),
-  ).toEqual({
+  expect(await api.restore({})).toEqual({
     restored: false,
     adjusted: false,
   });
@@ -650,24 +614,26 @@ test("inputs outside the contract are rejected before any call", async () => {
   });
   await expect(
     api.save({
-      view: "a/b",
-    }),
+      view: "main",
+    } as never),
   ).rejects.toThrow();
   await expect(
     api.restore({
-      view: "main",
       key: "x".repeat(129),
     }),
   ).rejects.toThrow();
   await expect(
     api.restore({
-      view: "main",
       include: {
         extra: true,
       } as never,
     }),
   ).rejects.toThrow();
-  await expect(api.remove({})).rejects.toThrow();
+  await expect(
+    api.remove({
+      windowId: "main",
+    } as never),
+  ).rejects.toThrow();
   expect(calls).toEqual([]);
   expect(loads).toEqual([]);
 });
@@ -692,17 +658,13 @@ test("restore places the window again when a DPI change resized it", async () =>
   });
   records.set("main", plainRecord);
   behavior.resizedByDpiChange = true;
-  await api.restore({
-    view: "main",
-  });
+  await api.restore({});
   expect(calls).toEqual([
     "bounds:10,20",
     "bounds:10,20",
   ]);
   // The first placement was doubled by the fake DPI change; the second one is the saved size.
-  await api.save({
-    view: "main",
-  });
+  await api.save({});
   expect(records.get("main")).toMatchObject({
     width: 640,
     height: 480,
@@ -735,12 +697,8 @@ test("a window that lands on a lower DPI is fitted again with that DPI's limits"
     height: 300,
   });
   behavior.resizedByDpiChange = true;
-  await api.restore({
-    view: "main",
-  });
-  await api.save({
-    view: "main",
-  });
+  await api.restore({});
+  await api.save({});
   // The first placement is held to the 192 DPI minimum, the second keeps the saved size.
   expect(records.get("main")).toMatchObject({
     width: 316,
@@ -772,17 +730,11 @@ test("a minimized window gets a frame allowance instead of a measured frame", as
     width: 100,
     height: 240,
   });
-  expect(
-    await api.restore({
-      view: "main",
-    }),
-  ).toEqual({
+  expect(await api.restore({})).toEqual({
     restored: true,
     adjusted: true,
   });
-  await api.save({
-    view: "main",
-  });
+  await api.save({});
   // 200 logical content pixels plus the 64 pixel allowance; the measured 160 is not used.
   expect(records.get("main")).toMatchObject({
     width: 264,
@@ -800,9 +752,7 @@ test("a hidden window stays hidden after maximize shows it", async () => {
     ...plainRecord,
     maximized: true,
   });
-  await api.restore({
-    view: "main",
-  });
+  await api.restore({});
   expect(calls).toEqual([
     "bounds:10,20",
     "maximize",
@@ -822,16 +772,12 @@ test("saving a minimized window keeps the maximized state saved before", async (
     ...plainRecord,
     maximized: true,
   });
-  await earlier.api.save({
-    view: "main",
-  });
+  await earlier.api.save({});
   expect(earlier.records.get("main")).toMatchObject({
     maximized: true,
   });
   const fresh = fixture(display);
-  await fresh.api.save({
-    view: "main",
-  });
+  await fresh.api.save({});
   expect(fresh.records.get("main")).toMatchObject({
     maximized: false,
   });
@@ -899,9 +845,7 @@ test("an already maximized window is not maximized again", async () => {
     ...plainRecord,
     maximized: true,
   });
-  await api.restore({
-    view: "main",
-  });
+  await api.restore({});
   expect(calls).toEqual([
     "bounds:10,20",
   ]);
@@ -914,9 +858,7 @@ test("saving a minimized window that reports maximized keeps maximized", async (
     visible: true,
     minimized: true,
   });
-  await api.save({
-    view: "main",
-  });
+  await api.save({});
   expect(records.get("main")).toMatchObject({
     maximized: true,
   });

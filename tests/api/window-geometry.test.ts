@@ -139,9 +139,7 @@ test("window geometry helpers preserve context, shapes, DPI and default units", 
     },
     async handle() {
       for (const query of queries) {
-        const result = await windows[query]({
-          view: "main",
-        });
+        const result = await windows[query]({});
         expect(result.dpi).toBe(144);
         expect(validateWindowOutput(`windows.${query}`, result)).toEqual(
           result,
@@ -149,7 +147,6 @@ test("window geometry helpers preserve context, shapes, DPI and default units", 
       }
       expect(
         await windows.toLogical({
-          view: "main",
           value: {
             x: -120,
             y: 30,
@@ -163,23 +160,17 @@ test("window geometry helpers preserve context, shapes, DPI and default units", 
         dpi: 144,
       });
       await windows.toPhysical({
-        view: "main",
         value: {
           x: -80,
           y: 20,
         },
       });
-      expect(
-        await windows.center({
-          view: "main",
-        }),
-      ).toBeNull();
+      expect(await windows.center({})).toBeNull();
       for (const { name, geometry } of setters) {
         switch (name) {
           case "setContentPosition":
             expect(
               await windows.setContentPosition({
-                view: "main",
                 ...geometry,
               }),
             ).toBeNull();
@@ -187,7 +178,6 @@ test("window geometry helpers preserve context, shapes, DPI and default units", 
           case "setOuterSize":
             expect(
               await windows.setOuterSize({
-                view: "main",
                 ...geometry,
               }),
             ).toBeNull();
@@ -195,7 +185,6 @@ test("window geometry helpers preserve context, shapes, DPI and default units", 
           case "setContentBounds":
             expect(
               await windows.setContentBounds({
-                view: "main",
                 ...geometry,
               }),
             ).toBeNull();
@@ -203,7 +192,6 @@ test("window geometry helpers preserve context, shapes, DPI and default units", 
           case "setOuterBounds":
             expect(
               await windows.setOuterBounds({
-                view: "main",
                 ...geometry,
               }),
             ).toBeNull();
@@ -219,7 +207,6 @@ test("window geometry helpers preserve context, shapes, DPI and default units", 
 test("geometry schemas reject malformed shapes and out of range inputs and outputs", () => {
   for (const { name, geometry } of setters) {
     const payload = {
-      view: "main",
       ...geometry,
     };
     expect(
@@ -302,7 +289,6 @@ test("geometry schemas reject malformed shapes and out of range inputs and outpu
       validateWindowCall({
         operation: `windows.${query}`,
         payload: {
-          view: "main",
           unit: "logical",
         },
       }).operation,
@@ -311,7 +297,6 @@ test("geometry schemas reject malformed shapes and out of range inputs and outpu
       validateWindowCall({
         operation: `windows.${query}`,
         payload: {
-          view: "main",
           unit: "pixels",
         },
       }),
@@ -359,7 +344,6 @@ test("geometry schemas reject malformed shapes and out of range inputs and outpu
         validateWindowCall({
           operation,
           payload: {
-            view: "main",
             value,
           },
         }),
@@ -549,16 +533,7 @@ async function expectLifetimeRejections(
 
 async function checkCenterOperation(harness: GeometryHarness): Promise<void> {
   const { state, centerRequests, execute, context } = harness;
-  expect(
-    await execute(
-      "windows.center",
-      {
-        view: "main",
-      },
-      "backend",
-      context,
-    ),
-  ).toBeNull();
+  expect(await execute("windows.center", {}, "backend", context)).toBeNull();
   expect(centerRequests).toEqual([
     undefined,
   ]);
@@ -566,7 +541,6 @@ async function checkCenterOperation(harness: GeometryHarness): Promise<void> {
     await execute(
       "windows.center",
       {
-        view: "main",
         monitorId: "\\\\.\\DISPLAY2",
       },
       "backend",
@@ -578,31 +552,17 @@ async function checkCenterOperation(harness: GeometryHarness): Promise<void> {
     "\\\\.\\DISPLAY2",
   ]);
   await expectLifetimeRejections(harness, () =>
-    execute(
-      "windows.center",
-      {
-        view: "main",
-      },
-      "backend",
-      context,
-    ),
+    execute("windows.center", {}, "backend", context),
   );
   await expect(
-    execute(
-      "windows.center",
-      {
-        view: "main",
+    execute("windows.center", {}, "backend", {
+      ...context,
+      permissions: {
+        permissions: [
+          "windows.setPosition",
+        ],
       },
-      "backend",
-      {
-        ...context,
-        permissions: {
-          permissions: [
-            "windows.setPosition",
-          ],
-        },
-      },
-    ),
+    }),
   ).rejects.toMatchObject({
     code: "PERMISSION_DENIED",
   });
@@ -628,11 +588,8 @@ async function checkCenterOperation(harness: GeometryHarness): Promise<void> {
       execute(
         "windows.center",
         monitorId === undefined
-          ? {
-              view: "main",
-            }
+          ? {}
           : {
-              view: "main",
               monitorId,
             },
         "backend",
@@ -650,7 +607,6 @@ async function checkGeometrySetters(harness: GeometryHarness): Promise<void> {
   for (const { name, geometry } of setters) {
     const operation = `windows.${name}`;
     const payload = {
-      view: "main",
       ...geometry,
     };
     await execute(operation, payload, "backend", context);
@@ -694,7 +650,7 @@ async function checkGeometrySetters(harness: GeometryHarness): Promise<void> {
         operation,
         {
           ...payload,
-          view: "missing",
+          view: "main",
         },
         "backend",
         context,
@@ -702,30 +658,19 @@ async function checkGeometrySetters(harness: GeometryHarness): Promise<void> {
     ).rejects.toMatchObject({
       code: "INVALID_ARGUMENT",
     });
-    for (const denied of [
-      true,
-      false,
-    ]) {
-      const view = denied ? "main" : "missing";
-      await expect(
-        execute(
-          operation,
-          {
-            ...payload,
-            view,
-          },
-          "backend",
-          {
-            ...context,
-            permissions: {
-              permissions: denied ? [] : windowPermissions(),
-            },
-          },
-        ),
-      ).rejects.toMatchObject({
-        code: denied ? "PERMISSION_DENIED" : "INVALID_ARGUMENT",
-      });
-    }
+    await expect(
+      execute(
+        operation,
+        {
+          ...payload,
+          windowId: "main",
+        },
+        "backend",
+        context,
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
     if ("x" in geometry) {
       await expect(
         execute(
@@ -752,7 +697,6 @@ async function checkQueryOperations(harness: GeometryHarness): Promise<void> {
     const result = await execute(
       `windows.${query}`,
       {
-        view: "main",
         unit: "logical",
       },
       "backend",
@@ -791,14 +735,7 @@ async function checkQueryOperations(harness: GeometryHarness): Promise<void> {
     "normal",
   ]);
   expect(
-    await execute(
-      "windows.getOuterBounds",
-      {
-        view: "main",
-      },
-      "backend",
-      context,
-    ),
+    await execute("windows.getOuterBounds", {}, "backend", context),
   ).toEqual({
     x: -120,
     y: 30,
@@ -821,7 +758,6 @@ async function checkUnitConversions(harness: GeometryHarness): Promise<void> {
       await execute(
         "windows.toPhysical",
         {
-          view: "main",
           value: {
             x: -1,
             y: 1,
@@ -845,7 +781,6 @@ async function checkUnitConversions(harness: GeometryHarness): Promise<void> {
       await execute(
         "windows.toLogical",
         {
-          view: "main",
           value: {
             x: -1,
             y: 1,
@@ -866,7 +801,6 @@ async function checkUnitConversions(harness: GeometryHarness): Promise<void> {
     execute(
       "windows.toPhysical",
       {
-        view: "main",
         value: {
           width: 2147483647,
           height: 0,
@@ -891,15 +825,12 @@ async function checkReadOperationDenials(
   ]) {
     const payload = operation.includes(".to")
       ? {
-          view: "main",
           value: {
             x: 0,
             y: 0,
           },
         }
-      : {
-          view: "main",
-        };
+      : {};
     await expect(
       execute(operation, payload, "backend", {
         ...context,
@@ -942,64 +873,51 @@ test("geometry adapter selects the area, converts at current DPI, and enforces o
   await checkReadOperationDenials(harness);
 });
 
-test("centering accepts only authenticated window targets and null results", () => {
+test("centering accepts only an optional monitor and null results", () => {
   expect(
     validateWindowCall({
       operation: "windows.center",
-      payload: {
-        view: "main",
-        windowId: "window-1",
-      },
+      payload: {},
     }).payload,
-  ).toEqual({
-    view: "main",
-    windowId: "window-1",
-  });
+  ).toEqual({});
   expect(
     validateWindowCall({
       operation: "windows.center",
       payload: {
-        view: "main",
         monitorId: "\\\\.\\DISPLAY1",
       },
     }).payload,
   ).toEqual({
-    view: "main",
     monitorId: "\\\\.\\DISPLAY1",
   });
   for (const payload of [
     null,
-    {},
     {
       view: "",
     },
     {
-      view: "main",
+      windowId: "window-1",
+    },
+    {
       monitor: "primary",
     },
     {
-      view: "main",
       monitorId: "",
     },
     {
-      view: "main",
       monitorId: "x".repeat(33),
     },
     {
-      view: "main",
       monitorId: 1,
     },
     {
-      view: "main",
       monitorId: "\\\\.\\DISPLAY1",
       x: 1,
     },
     {
-      view: "main",
       x: 1,
     },
     {
-      view: "main",
       windowId: 1,
     },
   ]) {

@@ -6,13 +6,9 @@ await client.ready;
 for (const call of [
   () =>
     windows.setDownloadRequestsEnabled({
-      view: "main",
       enabled: true,
     }),
-  () =>
-    windows.getDownloads({
-      view: "main",
-    }),
+  () => windows.getDownloads(),
 ]) {
   try {
     await call();
