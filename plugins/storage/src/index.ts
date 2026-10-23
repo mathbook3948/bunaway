@@ -33,6 +33,9 @@ export type {
   StorageDirectorySize,
   StorageLocation,
   StorageMetadata,
+  StorageRecursiveEntry,
+  StorageRecursivePage,
+  StorageRecursiveRead,
   StorageTransfer,
   StorageWrite,
 } from "#storage/contract";

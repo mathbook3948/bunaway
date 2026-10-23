@@ -150,6 +150,7 @@ try {
   for (const operation of [
     "storage.readDirectory",
     "storage.readDirectoryPage",
+    "storage.readDirectoryRecursive",
     "storage.createDirectory",
     "storage.move",
     "storage.remove",

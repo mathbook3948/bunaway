@@ -970,6 +970,10 @@ junction을 디렉터리 경로로 따라가는 것, 재귀 생성, 파일 및 �
 `windows-storage-directory-page.ts`는 실제 Windows 파일 시스템에서 대소문자와 보충 문자가 섞인 이름의
 UTF-16 순서, 페이지 크기별 커서 이어 읽기가 `readDirectory`와 같은 결과를 내는지, 256개를 넘어 `readDirectory`가
 거부하는 디렉터리를 페이지로 빠짐없이 읽는지 확인한다.
+`windows-storage-recursive-list.ts`는 실제 Windows 파일 시스템에서 깊이 우선 순서(디렉터리가 자기 내용 바로 앞, 형제는
+UTF-16 순서), 페이지 크기별 커서 이어 읽기가 한 번에 읽은 결과와 같은지, 바깥 junction과 상위로 돌아가는 junction과
+파일 symlink가 `link`로만 나오고 들어가지 않는지(만들 수 없는 러너에서는 건너뜀), 256개를 넘는 트리를 빠짐없이 읽는지,
+파일과 없는 경로의 거부를 확인한다.
 `windows-storage-metadata.ts`는 실제 I/O Worker에서 허용된 호출의 합계와 파일 경로 거부를 확인한다.
 
 `windows-storage-long-path.ts`는 실제 Windows 파일 시스템에서 400자를 넘는 경로에 쓰기(상위 폴더 생성 포함), 읽기, 존재와 stat,

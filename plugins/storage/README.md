@@ -3,7 +3,7 @@
 공개 작업과 권한은 [저장 가이드](../../docs/site/src/content/docs/guides/storage-and-state.mdx)를
 따른다. Windows와 macOS의 공개 작업과 권한 계약은 유지한다.
 
-열여섯 작업의 입력, 출력 스키마와 handler는 `src/operations.ts`에서 한 번 선언하고 두 플랫폼이 공유한다.
+열일곱 작업의 입력, 출력 스키마와 handler는 `src/operations.ts`에서 한 번 선언하고 두 플랫폼이 공유한다.
 경로 규칙, 네이티브 검증과 호스트 통합 의존성은
 [macOS 저장 어댑터](../../docs/architecture/macos-storage-adapter.md)에 기록한다.
 
@@ -19,7 +19,7 @@ Windows와 macOS는 `node:fs` 위의 공통 어댑터를 쓴다. `src/platforms/
 목록 결과와 공개 오류 메시지에는 접두사가 나타나지 않는다. `windows-storage-long-path.ts`가
 CI windows-native에서 400자를 넘는 경로의 쓰기, 읽기, 목록, 복사, 이동, 삭제가 동작하는지 확인하며
 러너의 `LongPathsEnabled` 값을 로그에 남긴다. 이 설정이 꺼진 환경과의 비교는 하지 않았다.
-removeRecursive와 directorySize는 트리 안의 링크를 따라가지 않는다.
+removeRecursive, directorySize와 readDirectoryRecursive는 트리 안의 링크를 따라가지 않는다.
 `copyFile`은 대상을 `CREATE_NEW`로 만든다. `windows-storage-create-new.ts`가 CI windows-native에서 같은 대상으로의
 동시 복사는 하나만 성공하고 나머지는 `INVALID_ARGUMENT`이며, 삭제 대기 중인 이름은 `PERMISSION_DENIED`임을 확인한다.
 네트워크 파일 시스템의 보장은 서버에 달려 있어 확인하지 않는다.
