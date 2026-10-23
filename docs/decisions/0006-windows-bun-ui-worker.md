@@ -4,6 +4,8 @@ status: accepted
 
 # Windows는 Bun 진입점과 전용 UI Worker로 이식한다
 
+2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)에 따라 뷰별 정책과 프로필은 단일 창으로 대체한다. 문서 세대는 유지한다.
+
 개발 순서는 [ADR 0010](./0010-windows-first-platform-model.md)에 따라 Windows를
 먼저 완성한 뒤 다른 플랫폼을 같은 Bun 기반 개발 모델에 맞춘다. 아래 `windowsApp`과
 기존 backend 진입점 분리는 당시 구현 기록이며, 공통 앱 정의 하나를 사용하는 방향으로 정리한다.

@@ -58,10 +58,10 @@
 - [x] 숨긴 상태로 창을 생성하고 앱이 준비된 뒤 표시하는 초기 옵션을 제공한다.
 - [x] 포커스를 가져오지 않고 표시하는 `showInactive` API를 제공한다.
 - [x] 창 생성, 웹 문서 준비와 SDK 준비를 구분한 이벤트를 제공한다.
-- [ ] 부모와 자식 창, 모달 창 및 sheet의 입력 차단과 종료 순서를 제공한다.
+- [ ] 부모와 자식 창, 모달 창 및 sheet의 입력 차단과 종료 순서를 제공한다. ADR 0026에서 채택하지 않았다.
 - [ ] 일반 close와 확인을 우회하는 destroy의 계약을 구분한다.
-- [ ] 창 없는 상주 앱, 메뉴 막대 앱과 splashscreen 전환을 지원한다.
-- [ ] 실행 중 창 옵션과 하나의 뷰에서 여러 창을 만드는 기능의 권한 및 식별자를 결정한다.
+- [ ] 창 없는 상주 앱, 메뉴 막대 앱과 splashscreen 전환을 지원한다. splashscreen 전환은 ADR 0026에서 채택하지 않았다.
+- [ ] 실행 중 창 옵션과 하나의 뷰에서 여러 창을 만드는 기능의 권한 및 식별자를 결정한다. 여러 창은 ADR 0026에서 채택하지 않았다.
 
 창과 뷰의 정책, 세션을 따로 관리하며 보조 창을 닫아도 다른 창과 백엔드는 유지한다.
 재생성은 기존 세션을 폐기하고 새 세션을 만든다. 같은 뷰의 임시 WebKit 프로필은
@@ -459,7 +459,7 @@ macOS 브리지의 변경에서도 두 사용 방식의 공통 SDK 계약을 유
 
 - [x] 일반 activation policy로 AppKit 앱을 시작한다.
 - [ ] activation policy 변경과 Dock visibility, app hide/show를 제공한다.
-- [ ] 창 tab의 추가, 분리와 이동, tab bar를 제공한다.
+- [ ] 창 tab의 추가, 분리와 이동, tab bar를 제공한다. ADR 0026에 따라 보류한다.
 - [ ] represented filename, document edited와 sheet 이벤트를 제공한다.
 - [ ] Mission Control 숨김과 모든 workspace 표시, first-mouse 및 gesture를 제공한다.
 - [ ] Quick Look와 선택 단어 사전 기능을 제공한다.

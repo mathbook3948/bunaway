@@ -4,6 +4,8 @@ status: accepted
 
 # Android Activity가 번들 Bun과 WebView의 수명을 소유한다
 
+2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)에 따라 시스템 뒤로가기는 WebView history를 먼저 소비하고 더 돌아갈 곳이 없을 때만 Activity를 종료한다. 두 번째 실행이 Activity를 늘리지 않도록 `launchMode`를 `singleTask`로 지정한다. 단일 뷰 조건은 모든 플랫폼의 공통 계약이 된다.
+
 결정일: 2026-10-10
 
 Android는 APK의 Activity에서 시작하므로 Java 호스트가 번들 Bun 자식 프로세스와

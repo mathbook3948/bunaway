@@ -4,6 +4,8 @@ status: accepted
 
 # 뷰는 화면과 정책을 선언하고 창 인스턴스는 실행 중에 생성한다
 
+2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)이 이 결정을 대체한다. `instances`, `maxInstances`, `profile`, `createInstance`, `recreateInstance`, `listInstances`와 ID 지정 제어는 제거한다.
+
 결정일: 2026-10-11. 검토 기준: main `49ed0a5`.
 Windows SDK와 호스트가 이 계약을 구현한다. 실제 WebView2 검증은 windows-native CI에서 수행한다.
 

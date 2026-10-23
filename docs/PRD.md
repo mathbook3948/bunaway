@@ -21,14 +21,13 @@ Tauri에서 참고할 부분은 웹 UI, 백엔드 코어, 네이티브 호스트
 확정했으며 Windows의 저장, 로그와 기능 지원 조회는 개별 플러그인으로 이관했다.
 macOS 플러그인 어댑터는 후속 작업이다.
 
-이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스, IPC 실험을 완료했다. C 단계에서는 실제 SDK, 코어, Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장, 이벤트, 재실행 후 복원과 오류, 취소, 권한, 렌더러 재생성, 창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). macOS arm64의 AppKit, WKWebView 다중 창/뷰와 기본 창 API도 구현돼 있다. 독립 실험 코드는 제거했으며 과거 결과는 설계 기록으로 남긴다. [macOS 실행 기록](./architecture/macos-native-results.md)은 기존 로컬 기록, 이번 재실행과 실제 CI 결과를 구분한다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. macOS Intel, 영속 뷰 프로필과 Linux 호스트, 설치와 배포는 미검증이다. iOS arm64는 Swift UIKit, WKWebView와 내장 Bun entry, 백엔드 Worker를 연결했다. Xcode 프로젝트 동기화와 Simulator에서 공통 SDK, Core와 두 번의 Worker 교체를 검증했다. 검증 근거는 [iOS 실행 결과](./architecture/ios-host-results.md)에 기록했다. iOS 실기기와 배포 서명, 스토어 제출은 미검증이다. macOS `.app` 생성, ad-hoc 서명은 Developer ID, 공증, 설치 검증이 아니다. Android는 단일 뷰 WebView와 번들 Bun을 연결하고 debug APK 설치, 공통 SDK와 Core, 화면 회전 및 종료를 API 36 x86_64 에뮬레이터에서 검증했다([Android 실행 결과](./architecture/android-host-results.md)). Android arm64 실기기와 모바일 release 배포는 미검증이다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)와 [플랫폼 지원 표](./platform-support/README.md)를 따른다.
+이 문서는 책임, 인터페이스, 보안 규칙과 단계별 완료 조건을 정한다. A 단계의 계약 구현과 Windows B 단계의 번들 Bun 프로세스, IPC 실험을 완료했다. C 단계에서는 실제 SDK, 코어, Host API와 Windows WebView2 호스트를 연결했다. 세 창의 다중 창/뷰와 뷰별 정책 분리에서 메모 저장, 이벤트, 재실행 후 복원과 오류, 취소, 권한, 렌더러 재생성, 창별 종료를 검증한 기록이 있다([Windows C 실행 결과](./architecture/windows-host-results.md)). macOS arm64의 AppKit, WKWebView 다중 창/뷰와 기본 창 API도 구현돼 있다. 독립 실험 코드는 제거했으며 과거 결과는 설계 기록으로 남긴다. [macOS 실행 기록](./architecture/macos-native-results.md)은 기존 로컬 기록, 이번 재실행과 실제 CI 결과를 구분한다. [Windows B 실행 결과](./architecture/windows-probe-results.md)는 별도 실험 기록이다. macOS Intel, Linux 호스트, 설치와 배포는 미검증이고 영속 프로필 하나(ADR 0026)는 macOS 전체(뷰별 비영속 저장소)와 Windows의 `app.windows` 형식에서 미구현이다. iOS arm64는 Swift UIKit, WKWebView와 내장 Bun entry, 백엔드 Worker를 연결했다. Xcode 프로젝트 동기화와 Simulator에서 공통 SDK, Core와 두 번의 Worker 교체를 검증했다. 검증 근거는 [iOS 실행 결과](./architecture/ios-host-results.md)에 기록했다. iOS 실기기와 배포 서명, 스토어 제출은 미검증이다. macOS `.app` 생성, ad-hoc 서명은 Developer ID, 공증, 설치 검증이 아니다. Android는 단일 뷰 WebView와 번들 Bun을 연결하고 debug APK 설치, 공통 SDK와 Core, 화면 회전 및 종료를 API 36 x86_64 에뮬레이터에서 검증했다([Android 실행 결과](./architecture/android-host-results.md)). Android arm64 실기기와 모바일 release 배포는 미검증이다. 아래 요구사항 전체를 완료한 것은 아니며, 현재 범위는 [진행 상태](./architecture/progress.md)와 [플랫폼 지원 표](./platform-support/README.md)를 따른다.
 
 ### 제품 요구사항
 
-- 같은 화면과 정책의 뷰 선언에서 여러 창 인스턴스를 실행 중 생성할 수 있게 한다.
-  단일 창을 기본값으로 유지하고 창별 ID와 연결 세션, WebView 프로필 공유 및 격리,
-  인스턴스 상한을 구분한다. [ADR 0017](./decisions/0017-multiple-windows-per-view.md)의
-  Windows에서 구현했으며 macOS의 다중 창 어댑터는 후속 작업이다.
+- 앱은 WebView 하나와 창 하나로 실행하고, 화면 전환은 웹 라우팅으로 한다.
+  [ADR 0026](./decisions/0026-single-webview-single-window.md)이 다중 창을 대체했다.
+  Windows의 다중 창 구현([ADR 0017](./decisions/0017-multiple-windows-per-view.md))은 구현 단계에서 제거한다.
 - React, Vue, Svelte, vanilla HTML/JS에서 같은 클라이언트 SDK를 사용한다. 코어는 특정 UI 프레임워크를 import하지 않는다.
 - SDK는 앱 정의에서 명령과 이벤트 타입을 추론하는 클라이언트를 제공한다. 직접 명령을 호출하고 이벤트를 구독하는 함수 API도 지원한다.
 - 앱 개발자는 일반적인 기능을 TypeScript로 작성한다. 새 운영체제 기능을 추가할 때만 네이티브 어댑터를 작성한다.
@@ -106,7 +105,7 @@ Windows는 현재 TypeScript Bun FFI 호스트를 사용하며 C++ 컴파일 의
 - 부트 설정, `hello`/`ready`, 요청, 응답, 이벤트, Host API 요청과 종료 제어는 버전이 있는 IPC 계약으로 전달한다. 기존 Web IPC JSON은 별도 내부 envelope의 payload로 운반하며 WebView가 내부 컨텍스트나 제어 메시지를 만들 수 없게 한다.
 - 큐 투입 결과와 작업 완료 결과를 구분한다. 프로세스 사이에는 직렬화한 데이터만 전달하며 JS 객체, 네이티브 포인터를 전달하지 않는다. Bun 런타임 DLL과 VM 호출용 C ABI는 필수 구현에서 제외한다.
 - 런타임 ID, 세대 번호와 호출 컨텍스트는 호스트가 발급한다. 프로세스 종료 뒤 도착한 메시지는 폐기하고 큐 크기, 메시지 크기, 진행 중 요청 수에 상한을 둔다.
-- 초기 구현은 앱 인스턴스당 Bun 자식 프로세스 하나다. 여러 WebView는 같은 백엔드의 분리된 라우팅 컨텍스트를 사용한다. 재시작은 새 프로세스와 새 세션으로 수행하며 자동 재시작, 요청 재전송은 MVP에 포함하지 않는다.
+- 초기 구현은 앱 인스턴스당 Bun 자식 프로세스 하나다. 앱의 WebView 하나가 백엔드와 연결된다. 재시작은 새 프로세스와 새 세션으로 수행하며 자동 재시작, 요청 재전송은 MVP에 포함하지 않는다.
 
 ### 상태 전이
 
@@ -135,13 +134,13 @@ Android Activity 재생성은 백엔드 수명과 분리한다. iOS scene 변경
 
 앱에 포함한 Bun 백엔드와 네이티브 플러그인은 신뢰 코드다. WebView는 XSS나 공급망 문제로 공격받을 수 있다고 가정한다. 이 권한 모델은 WebView가 요청할 수 있는 기능을 제한한다. 악성 백엔드 코드를 샌드박싱하지 않으며 신뢰 백엔드의 직접 Bun API 사용까지 가로막는다고 주장하지 않는다.
 
-1. 권한은 기본 거부다. 앱 manifest에 창/뷰별 허용 명령, 이벤트와 네이티브 작업 이름을 선언한다. 자원별 접근 규칙은 앱 명령이 검사하고 화면에는 해당 앱 명령만 허용한다. 와일드카드 전체 허용은 기본 템플릿에 넣지 않는다.
+1. 권한은 기본 거부다. 앱 manifest에 정책 뷰의 허용 명령, 이벤트와 네이티브 작업 이름을 선언한다. 자원별 접근 규칙은 앱 명령이 검사하고 화면에는 해당 앱 명령만 허용한다. 와일드카드 전체 허용은 기본 템플릿에 넣지 않는다.
 2. 네이티브 브리지 진입점에서 세션, frame, origin, 명령 권한을 검사한다. Bun 코어는 핸들러 실행 전에 런타임 스키마로 입력을 검증한다. TypeScript 타입만으로 입력을 검증한 것으로 간주하지 않는다.
 3. 각 네이티브 권한 기능을 실행하기 직전에 발신 컨텍스트, 작업 권한과 대상 자원의 유효성을 재검사한다. OS 동의가 필요한 기능은 플랫폼 구현이 상태를 확인하고 필요하면 요청한다. 플러그인, 대체 렌더러, 다른 IPC 경로도 같은 검사를 통과한다.
 4. WebView에서 시작한 작업의 호출 컨텍스트는 호스트가 소유한 불투명 핸들로 전달한다. SDK나 payload가 권한을 위조하거나 백엔드 자체 작업으로 승격하지 못하게 한다. 백엔드 자체 작업도 명시적으로 선언한 Host API 범위를 사용한다.
 5. 파일 저장 위치와 파일별 접근 규칙은 앱이 정한다. 저장 플러그인은 경로를 입력으로 받으며 기본 저장 폴더를 지정하지 않는다. 플랫폼 경로 문법, 링크와 검사 이후 대상 변경은 실제 파일을 여는 네이티브 경계에서 검증한다.
 6. 임의 `eval`, shell 실행, 경로 제한 없는 파일 접근, 임의 동적 라이브러리 로딩을 프런트엔드 명령으로 제공하지 않는다. 비밀값, 원본 스택, 환경 변수는 응답과 로그에서 제거한다.
-7. 원격 페이지와 서브프레임에는 기본적으로 브리지를 주입하지 않는다. 탐색과 새 창 생성은 허용 목록으로 제어한다. 탐색이 발생하면 기존 세션 권한과 미완료 요청을 무효화한다.
+7. 원격 페이지와 서브프레임에는 기본적으로 브리지를 주입하지 않는다. 탐색은 허용 목록으로 제어하고 새 창은 만들지 않는다. 새 창 요청은 허용 origin 문서가 시작한 것만 처리해 내부 URL은 같은 WebView에서 탐색하고, 외부 `http`, `https` URL은 opener 플러그인을 거쳐서만 시스템 브라우저로 넘긴다. opener가 없거나 권한이 없으면 차단하고, 모바일은 opener 어댑터가 생길 때까지 차단한다. 세부는 열린 질문으로 남긴다([ADR 0026](./decisions/0026-single-webview-single-window.md)). 탐색이 발생하면 기존 세션 권한과 미완료 요청을 무효화한다.
 8. 개발 모드의 HMR origin과 디버그 브리지는 명시적으로 활성화한다. 프로덕션은 서명된 배포물에 포함된 자산과 정책만 로드하고 CSP를 적용한다. 내부 자산 공급 경로는 순회 공격을 차단하며 공개 localhost 서버를 기본 통신 경로로 삼지 않는다.
 
 OS 권한 선언과 런타임 사용자 동의는 프레임워크 권한과 별개로 충족해야 한다. OS 권한이 거부되거나 철회되면 오류를 반환한다. 권한 토큰을 프런트엔드에 전달하거나 요청이 있었다는 이유만으로 권한을 확대하지 않는다.
@@ -225,7 +224,7 @@ void start().catch(console.error);
 | 파일 I/O | 앱 샌드박스, 명명된 범위 | 임시 파일과 앱 데이터부터 검증 |
 | Node.js 호환 모듈, SQLite, 추가 Worker | 기능별 지원 목록 | 모듈별 검증 전에는 미검증으로 표시 |
 | `bun:ffi`, TCC, native addon, `spawn` | 공통 SDK의 필수 기능에서 제외 | 초기 지원 보장 없음. iOS는 우선 비지원 |
-| 창 다중 생성, 메뉴, 트레이 | 데스크톱 확장 API | 자동 모사하지 않고 `UNSUPPORTED` 반환 |
+| 창 크기와 위치 같은 데스크톱 창 작업, 메뉴, 트레이 | 데스크톱 확장 API | 자동 모사하지 않고 `UNSUPPORTED` 반환 |
 
 `@bunaway/plugin-capabilities`는 앱에 등록된 네이티브 작업의 플랫폼 지원 여부를 반환한다. OS 동의 상태 조회와 요청은 해당 기능 플러그인이 소유한다. 작업 이름으로 허용한 앱 정책은 OS 동의와 별개로 검사한다. 조회 결과에 없는 플랫폼 기능은 지원 여부가 확인되지 않은 상태로 다룬다.
 
@@ -296,6 +295,6 @@ Skal의 고정 commit `7edb44aceb8c69ac1abd76549e2c09cf6cdc8a57`에서는 VM 작
 
 CLI create/validate/doctor/dev/build와 vanilla, Vite, React, Vue, Svelte 템플릿, 로컬 프레임워크 설치 artifact, 버전 검증은 구현했다.
 [프레임워크 배포 문서](./framework-distribution.md)에 저장소 밖 설치, 업그레이드와 개발/최종 사용자 요구사항을 구분한다.
-현재 다음 작업은 플랫폼별 검증 범위 확대, macOS의 다른 네이티브 플러그인 어댑터와 영속 뷰 프로필, UI framework 템플릿의 네이티브 검증,
+현재 다음 작업은 플랫폼별 검증 범위 확대, macOS의 다른 네이티브 플러그인 어댑터와 영속 프로필 하나(ADR 0026), UI framework 템플릿의 네이티브 검증,
 공개 릴리스/프레임워크 라이선스 결정, Linux, 모바일 확장과 설치, 서명, 배포 검증이다.
 A, B 및 Windows C, macOS 다중 창/뷰 성공으로 초기 버전 출시 기준 전체를 충족했다고 판단하지 않는다.

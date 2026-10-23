@@ -4,6 +4,8 @@ status: accepted
 
 # 모든 기능 플러그인을 선택으로 두고 Core에서 분리한다
 
+2026-10-23 후속 결정: [ADR 0026](./0026-single-webview-single-window.md)에 따라 `windows.list`는 제거되고 `windows.isOpen`이 대신한다. 허용된 작업은 앱의 창 하나를 대상으로 하며, 특정 창 단위 접근 제한은 창이 하나라 적용 대상이 없다.
+
 결정일: 2026-10-07
 
 [ADR 0013](./0013-optional-native-plugins.md)의 설치, 등록, 권한 및 개별 플랫폼 어댑터 계약은 유지한다. 창 제어가 공통 SDK와 프로토콜에 남아 있고 플러그인 작성 SDK가 Backend SDK를 통해 Core를 의존하는 부분을 제거한다.
