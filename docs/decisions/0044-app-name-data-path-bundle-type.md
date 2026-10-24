@@ -11,7 +11,7 @@ status: accepted
 아래 Electron과 Tauri 서술은 해당 프로젝트의 공개 문서와 소스 확인에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다.
 
 [ADR 0022](./0022-app-info-context.md)는 `ctx.app.name`을 앱 설정의 `title`에서, `identifier`를 `appId`에서 가져오게 했고,
-`plugin-path`는 앱 전용 폴더를 `%LOCALAPPDATA%\bunaway\<appId>` 아래에 둔다(`path.mdx`의 경로 표).
+`plugin-path`의 앱 전용 폴더는 `appId`로 정해지며, 그중 `appLocalData`, `cache`, `logs`는 `%LOCALAPPDATA%\bunaway\<appId>` 아래에 있다(`path.mdx`의 경로 표).
 Electron(v45)은 `app.setName`, `app.setPath`와 `app.getPath`로 실행 중 이름과 경로를 바꾸거나 조회할 수 있다. `setName`은 `userData` 기본 경로 계산에 반영되지만 OS가 쓰는 이름은 바꾸지 않으며, `sessionData`는 `ready` 전에 `setPath`로 바꿔야 하고, 경로 계산 결과가 캐시되므로 이름 기반 경로도 `userData`가 처음 계산되기 전에 바꿔야 할 것으로 본다(Chromium 소스에서 추론한 것이며 Electron 45가 쓰는 리비전에서는 확인하지 않았다).
 Tauri(2.12)는 앱이 뜬 뒤 이름과 식별자를 바꾸는 API가 없다. 다만 앱 생성 전에 `Context::config_mut()`와 `package_info_mut()`로 코드에서 바꿀 수 있고, `app > appDirectoriesOverride` 설정으로 `app_*_dir` 경로를 식별자와 무관하게 지정하며, webview마다 `data_directory`를 줄 수 있다.
 Tauri는 빌드된 패키지 종류를 `bundle_type()`/`getBundleType()`으로 조회한다. Windows에서는 `msi`, `nsis`이고 번들러가 패치하지 않은 실행 파일은 `null`이다. Electron에는 범용 조회가 없고 `process.windowsStore`(MSIX/AppX로 실행 중이면 `true`, 아니면 `undefined`), `process.mas`, `app.isPackaged`만 있다.
