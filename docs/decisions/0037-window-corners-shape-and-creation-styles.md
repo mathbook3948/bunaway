@@ -57,33 +57,38 @@ Tauri 2와 tao:
   한 번이라 코어가 늘지 않고, 타이틀바 없는 창이 Windows 11에서 둥근 모서리를 원하는 흔한 요구에 맞다.
   Electron은 frameless 창이면 옵션이 적용되지만 이 저장소는 `custom`일 때만 끌 수 있게 제한한다. 프레임 창에
   `false`를 조용히 무시하면 설정과 조회가 어긋나므로 `hasShadow`처럼 명시적으로 거부한다. 이는 Electron과 다른 부분이다.
-- 아래 DWM 동작은 Microsoft 문서와 Electron 구현을 읽고 정리한 것이며 이 저장소에서 실행으로 확인하지 않았다.
-  `DWMWA_WINDOW_CORNER_PREFERENCE`는 Windows 11(빌드 22000 이상)에서만 효과가 있고 힌트이며 보장이 아니다. 프레임과
-  캡션이 있는 창이나 1px 비클라이언트 테두리가 있는 창은 기본으로 둥글다고 알려져 있고, per-pixel alpha나 window region이
-  있는 창, 최대화와 스냅된 창은 둥글지 않다고 알려져 있다. 그래서 구현 PR은 이 동작을 Windows CI에서 먼저
-  확인하고, 계약은 조회 값을 "요청한 선호"로 정의한다.
+- 아래 DWM 동작은 Microsoft의 [Apply rounded corners](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-rounded-corners)
+  문서를 출처로 하며 이 저장소에서 실행으로 확인하지 않았다. 이 문서에 따르면 `DWMWA_WINDOW_CORNER_PREFERENCE`는 힌트이며
+  보장이 아니고, 최대화와 스냅된 창은 설계상 둥글지 않으며, per-pixel alpha나 window region이 있는 창은 둥글게 처리되지
+  않는다. Windows 11(빌드 22000 이상)에서만 효과가 있다는 조건은 Electron 구현에서 확인한 것이다. 그래서 구현 PR은
+  이 동작을 Windows CI에서 먼저 확인하고, 계약은 조회 값을 "요청한 선호"로 정의한다.
 - `WS_THICKFRAME` 옵션을 제공하지 않는 것은 Electron과 다른 결정이다. 이유는 다음과 같다.
   - `titlebar: "custom"` 창은 `resizable: true`인 동안 `WS_THICKFRAME`을 유지하므로 Electron의 `thickFrame: false`가
     만드는 Snap과 최대화 문제가 생기지 않는다. `resizable: false`로 `WS_THICKFRAME`이 빠진 창은 아래 열린 질문 1과
-    같은 상태이며 확인하지 못했다. Electron에서 `thickFrame: false`는 최대화 버튼 비활성(프레임 창)이나 Windows 10의
-    Win+방향키와 끌기 Snap 실패(frameless 창)와 함께 보고되어 있다.
+    같은 상태이며 확인하지 못했다. Electron에서 `thickFrame: false`는 프레임 창의 최대화 버튼 비활성
+    ([electron/electron#10414](https://github.com/electron/electron/issues/10414)), Windows 10 frameless 창의
+    Win+방향키와 끌기 Snap 실패(기본값에서는 동작, [#11568](https://github.com/electron/electron/issues/11568)),
+    `transparent: true`(thickFrame 강제 `false`)에서 Snap Assist의 창 인식 실패
+    ([#37888](https://github.com/electron/electron/issues/37888))와 함께 보고되어 있다.
   - 크기 조절 금지는 `resizable`로, custom titlebar 창의 그림자 제거는 `setHasShadow`로 표현된다. 네이티브 제목 표시줄
     창은 그림자를 끌 수 없고(`setHasShadow(false)`는 `UNSUPPORTED`) Electron의 `thickFrame: false`는 이 경우의 그림자도
-    제거하므로 두 API가 옵션을 완전히 대신하지는 않는다. 그 외 남는 효과는 최소화와 최대화 애니메이션 제거이고, 이를 위해 Snap과 시스템 메뉴 동작이 달라지는 스타일 비트를 공개 계약으로 만들 필요는
-    확인되지 않았다.
+    제거하므로 두 API가 옵션을 완전히 대신하지는 않는다. 그 외 남는 효과는 최소화와 최대화 애니메이션 제거이고, 이를 위해 Snap과
+    시스템 메뉴 동작이 달라지는 스타일 비트를 공개 계약으로 만들 필요는 확인되지 않았다.
   - Tauri에는 같은 옵션이 없다.
 - 창 shape는 Electron도 Experimental로 표시하고 macOS는 지원하지 않으며 Tauri에는 없다. `SetWindowRgn`은 안티앨리어싱이
   없어 곡선이 계단 모양이고, 영역 밖 입력 통과 규칙과 layered 스타일(opacity, click-through), WebView2와 DWM 그림자와의
   관계를 계약으로 정해야 한다. 쓰는 곳이 없어 제공하지 않는다.
 - `WS_EX_NOREDIRECTIONBITMAP`은 Electron이 노출하지 않고 Chromium이 조건에 맞으면 스스로 붙인다. Tauri만 노출한다.
-  이 저장소가 창을 만들므로 스타일을 직접 줄 수는 있지만, 이 비트는 창이 첫 프레임을 낼 때까지의 합성 방식을 바꾸는
-  성능과 깜박임 최적화이고 요구한 기능이나 앱이 없다. 이 저장소에는 이 스타일을 쓰거나 요구하는 코드와 문서가 없다.
-  쓰임이 확인되면 앱 옵션이 아니라 호스트가 정하는 내부 최적화로 먼저 다룬다.
+  Microsoft의 [Extended Window Styles](https://learn.microsoft.com/en-us/windows/win32/winmsg/extended-window-styles)
+  문서는 이 스타일을 "The window does not render to a redirection surface. This is for windows that do not have visible
+  content or that use mechanisms other than surfaces to provide their visual."로 정의한다. 이 저장소에는 이 스타일을
+  쓰거나 요구하는 코드와 문서가 없고, WebView2를 호스팅하는 창에서 어떻게 동작하는지는 확인하지 않았다. bunaway는
+  이 스타일을 앱 옵션으로 두지 않는다.
 
 ## 열린 질문
 
 - Windows 11에서 `WS_THICKFRAME`이 없는 창(`resizable: false`)이 Snap(Win+방향키, 가장자리 끌기)에 참여하는지.
-  Windows 10의 Electron 보고는 있으나 Windows 11 근거는 확인하지 못했다. 깨지는 것으로 확인되면
+  Windows 10의 Electron 보고(위 #11568)는 있으나 Windows 11 근거는 확인하지 못했다. 깨지는 것으로 확인되면
   `resizable: false`가 `WS_THICKFRAME`을 빼는 방식 자체를 다시 봐야 하며, 그때 `thickFrame` 옵션 결정도 다시 연다.
 - `titlebar: "custom"` 창에 Snap Layouts(최대화 버튼 hover)를 주려면 `WM_NCHITTEST`가 `HTMAXBUTTON`을 반환해야 하는데
   현재 구현은 반환하지 않는다. 별도 기능으로 다룬다.
