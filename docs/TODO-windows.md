@@ -477,7 +477,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
   macOS는 `UNSUPPORTED`다. 버튼 재생성 때 마지막 성공 값을 다시 적용하고 HWND 파괴 때 폐기한다.
   계약 검증은 `window-thumbnail.test.ts`, 변환과 복원은 `taskbar-thumbnail.test.ts`이며 실제 ITaskbarList3 호출은
   `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
-- [ ] 창별 앱 표시 이름, relaunch 명령과 아이콘을 설정한다.
+- [x] 결정 완료: 창별 앱 표시 이름, relaunch 명령과 아이콘 설정(Electron `setAppDetails`)은 제공하지 않는다. 작업 표시줄 정체성은 앱 ID에서 정한 프로세스 AUMID 하나이고 창 아이콘은 `windows.setIcon`이 맡는다. [ADR 0033](./decisions/0033-window-app-details.md)을 따른다.
 - [x] Windows elevation과 de-elevation 실행 요구사항의 지원 범위를 결정한다. 상승은 `perMachine` 설치 프로그램에만 둔다. 설치 뒤 앱 실행은 `runasoriginaluser`로 상승 전 사용자 토큰을 쓴다. 앱 내부 상승 실행 API는 제공하지 않는다. [ADR 0023](./decisions/0023-windows-elevation.md)을 따른다. 생성한 설치 스크립트의 실행 항목은 `tests/packaging/windows.test.ts`가 확인한다.
 
 ## 10. 알림
