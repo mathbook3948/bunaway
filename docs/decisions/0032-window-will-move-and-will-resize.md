@@ -11,10 +11,11 @@ status: accepted
 사용자가 창을 끌어 이동하거나 크기를 조절하기 전에 앱이 그 변경을 취소하거나 수정하는 이벤트(`will-move`,
 `will-resize`)를 제공할지 정해야 했다.
 
-- Electron은 `will-move`(Windows, macOS)와 `will-resize`(Windows, macOS)를 제공하고 `preventDefault()`로
-  취소한다. Tauri는 같은 종류의 사전 취소 이벤트를 제공하지 않고 이동과 크기 조절을 이미 일어난 뒤에 알린다.
-- 이 저장소는 사용자 조작이 끝난 뒤의 `moved`, `resized`를 `windows.changed`로 제공한다. 사용자 조작 하나는
-  `WM_ENTERSIZEMOVE`와 `WM_EXITSIZEMOVE` 사이로 추적한다.
+- 두 프레임워크의 문서 기준 설명이며 이 저장소의 테스트로 검증한 것은 아니다. Electron은 `will-move`와
+  `will-resize`(Windows, macOS)를 제공하고 `preventDefault()`로 취소한다. Tauri는 같은 종류의 사전 취소
+  이벤트를 제공하지 않고 이동과 크기 조절을 이미 일어난 뒤에 알린다.
+- 이 저장소는 끄는 도중에 `move`, `resize`를, 사용자 조작이 끝난 뒤에 `moved`, `resized`를 `windows.changed`로
+  제공한다. 사용자 조작 하나는 `WM_ENTERSIZEMOVE`와 `WM_EXITSIZEMOVE` 사이로 추적한다.
 - Windows 창 프로시저는 이동 중에 `WM_MOVING`, 크기 조절 중에 `WM_SIZING`을 포인터 이동마다 동기적으로 받고,
   메시지가 가리키는 RECT를 고쳐 쓰는 것으로 결과를 정한다(Win32 문서 기준이며 `WM_MOVING`은 이 저장소에서 처리하지
   않는다). 호스트는 이미 `WM_SIZING`에서 가로세로 비율 고정(`setAspectRatio`)을, `WM_GETMINMAXINFO`에서 최소,
@@ -26,20 +27,22 @@ status: accepted
 ## 결정
 
 1. `will-move`와 `will-resize` 같은 앱 코드 응답 대기형 취소 이벤트와 그에 응답하는 API는 제공하지 않는다.
-2. 크기에 대한 제약은 선언형 설정으로 둔다. 이미 제공하는 `setMinSize`, `setMaxSize`, `setSizeConstraints`,
-   `setAspectRatio`가 `WM_GETMINMAXINFO`와 `WM_SIZING`에서 적용된다. 이동 범위를 제한하는 선언형 옵션은 지금
-   제공하지 않는다.
-3. 이동과 크기 조절의 결과를 바꿔야 하는 앱은 `windows.changed`의 `moved`, `resized`를 받은 뒤 `setBounds` 등으로
-   보정한다. 이 경로는 이미 반영된 변경을 되돌리므로 사전 취소가 아니라는 점을 문서에 적는다.
+2. 크기에 대한 제약은 선언형 설정으로 둔다. 이미 제공하는 `setMinSize`, `setMaxSize`, `setSizeConstraints`는
+   `WM_GETMINMAXINFO`에서, `setAspectRatio`는 `WM_SIZING`에서 적용된다. 최대화, 전체화면, 스냅 배치는
+   `WM_SIZING`을 보내지 않으므로 비율은 강제되지 않는다. 이동 범위를 제한하는 선언형 옵션은 지금 제공하지 않는다.
+3. 이동과 크기 조절의 결과를 바꿔야 하는 앱은 조작이 끝난 뒤 받는 `moved`, `resized`에서 `setPosition`,
+   `setSize`로 보정한다. 끄는 도중의 `move`, `resize`에서 보정하지 않는다. 이 경로는 이미 반영된 변경을
+   되돌리므로 사전 취소가 아니라는 점을 문서에 적는다.
 4. 사전 취소가 실제 요구로 확인되면 앱 응답을 기다리지 않는 선언형 이동 제한(작업 영역, 모니터 안쪽 유지 등)
    형태로 별도 결정에서 다룬다.
 
 ## 근거
 
 - 동기 창 프로시저에서 앱 코드의 IPC 응답을 기다리면 사용자가 끄는 동안 창 메시지 처리가 그 응답 시간만큼
-  멈춘다. 이동과 크기 조절은 포인터 이동마다 반복되므로 지연이 누적되고, 기한을 두면 기한 초과 때 어느 쪽으로
+  멈출 것으로 본다(측정한 값이 아니라 창 프로시저가 동기 반환값을 요구한다는 Win32 계약에서 낸 추정이다). 이동과 크기 조절은 포인터 이동마다 반복되므로 지연이 누적되고, 기한을 두면 기한 초과 때 어느 쪽으로
   처리할지가 별도로 필요하다. 호스트가 지금 쓰는 크기 제약은 응답을 기다리지 않는 선언형이라 이 문제가 없다.
-- Tauri는 같은 사전 취소 이벤트가 없고, 이 저장소에 사전 취소를 쓰는 곳이 없다. 코어를 작게 두고 필요한 제약은
+- Tauri는 같은 사전 취소 이벤트가 없고, 이동과 크기 조절에는 사전 취소를 쓰는 곳이 없다(닫기 요청만 응답을
+  기다린다). 코어를 작게 두고 필요한 제약은
   선언형 설정으로 두는 쪽이 기존 방침과 맞다.
 - Electron의 `will-move`, `will-resize`가 덮는 대표 용도(최소 크기, 비율 고정, 화면 안쪽 유지) 가운데 크기 쪽은
   이미 선언형으로 제공한다.
