@@ -668,6 +668,17 @@
       "pages": {
         "reference/plugins/updater": ["default"]
       }
+    },
+    {
+      "name": "@bunaway/plugin-crash-report",
+      "source": "plugins/crash-report/src/index.ts",
+      "buildOutputs": {
+        ".": "./dist/index.js",
+        "./native/*": "./dist/native/*.js"
+      },
+      "pages": {
+        "reference/plugins/crash-report": ["default"]
+      }
     }
   ],
   "members": [
@@ -1465,6 +1476,12 @@
     "reference/cli/ios": ["ios"]
   },
   "operations": {
+    "reference/plugins/crash-report": [
+      "crashReport.enable",
+      "crashReport.disable",
+      "crashReport.list",
+      "crashReport.remove"
+    ],
     "reference/plugins/updater": ["updater.check", "updater.download"],
     "reference/plugins/screen-capture": [
       "screenCapture.listSources",
