@@ -16,8 +16,7 @@ status: accepted
 
 근거가 되는 동작은 다음과 같다.
 
-- Electron `Notification`은 Windows에서 `timeoutType`(`default`, `never`), `silent`, `icon`, `actions`, `reply`와
-  `toastXml`을 받는다. `scenario`(alarm, incomingCall) 전용 옵션과 진행률 필드는 없고, 이런 내용은 `toastXml`에서
+- Electron `Notification`은 Windows에서 `timeoutType`(`default`, `never`), `silent`, `icon`과 `toastXml`을 받는다. `scenario`(alarm, incomingCall) 전용 옵션과 진행률 필드는 없고, 이런 내용은 `toastXml`에서
   XML을 직접 쓰는 방법뿐이다. 우선순위는 `urgency`(`normal`, `critical`, `low`)가 Linux와 Windows에서 있다.
   `critical`은 알림 센터에서 위쪽에 정렬되지만 자동으로 닫히는 것을 막지는 않는다(`timeoutType: "never"`를 함께 쓴다).
 - Tauri 알림 플러그인은 데스크톱에서 제목, 본문, 아이콘, 소리, 액션을 받으며 우선순위와 진행률 필드가 없다.
