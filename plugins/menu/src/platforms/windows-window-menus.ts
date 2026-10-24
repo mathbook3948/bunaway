@@ -152,7 +152,8 @@ export class WindowMenus implements WindowMenuDriver {
 
   /**
    * Turning auto-hide on leaves the current bar as it is; the first Alt tap, Esc or deactivation then
-   * changes it. Turning it off from on shows a hidden bar again, because Alt can no longer bring it back.
+   * changes it. Turning it off from on shows a hidden bar again whatever hid it, because the bar has a
+   * single shown state and Alt can no longer bring it back.
    */
   setAutoHide(windowId: string, autoHide: boolean) {
     const hwnd = this.resolve(windowId);

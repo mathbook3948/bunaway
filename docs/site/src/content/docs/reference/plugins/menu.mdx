@@ -179,7 +179,7 @@ auto-hide를 켠 창에서는 `getWindowMenuVisible`이 지금 메뉴바가 실�
 (Alt로 잠깐 띄운 동안 `true`, Electron `isMenuBarVisible`과 같음). `setWindowMenuVisible`로 표시해도
 같은 규칙으로 다시 숨습니다. 메뉴바가 보이는 동안 내용 영역은 메뉴바 높이만큼 줄고 숨기면 원래대로
 돌아옵니다. 숨겨진 동안에는 메뉴바가 없으므로 Alt와 글자 키로 메뉴를 바로 여는 니모닉은 동작하지 않습니다.
-auto-hide를 켠 창에서 끌 때 숨겨져 있던 메뉴바는 다시 표시합니다(`setWindowMenuVisible`로 숨긴 뒤 auto-hide를 켜지 않은 채 끄는 호출은 표시 상태를 바꾸지 않습니다). 닫힌 창의 값은 조회할 수 없습니다.
+메뉴바의 표시 상태는 하나라서(Electron과 같음) auto-hide를 켠 창에서 끌 때 숨겨져 있던 메뉴바는 숨긴 이유와 상관없이 다시 표시합니다. auto-hide를 켜지 않은 창에서 끄는 호출은 표시 상태를 바꾸지 않습니다. 닫힌 창의 값은 조회할 수 없습니다.
 
 ```ts
 await menu.create({

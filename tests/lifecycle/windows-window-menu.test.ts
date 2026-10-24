@@ -556,7 +556,14 @@ test.skipIf(process.platform !== "win32")(
       key(WM_KEYDOWN, VK_ESCAPE);
       expect(menus.isVisible("main")).toBe(false);
 
-      // Turning auto-hide off does not show a bar the app hid while auto-hide was off.
+      // Turning auto-hide off from on shows the bar again, also when the app hid it.
+      menus.setVisible("main", false);
+      menus.setAutoHide("main", false);
+      expect(menus.isVisible("main")).toBe(true);
+      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
+      menus.setAutoHide("main", true);
+
+      // Turning auto-hide off when it was off does not show a bar the app hid.
       menus.setAutoHide("main", false);
       menus.setVisible("main", false);
       menus.setAutoHide("main", false);
