@@ -49,10 +49,13 @@ function fakeDriver(options: {
   readyAfterMs?: number;
   table?: ProcessRow[];
   result?: string;
+  /** Reads of the result that see only its first half, as when a read lands mid-write. */
+  partialResultReads?: number;
 }) {
   let clock = 0;
   let launchedAt: number | undefined;
   let marker: string | undefined;
+  let partialReadsLeft = options.partialResultReads ?? 0;
   const calls: string[] = [];
   const handle: AppHandle = {
     pid: 10,
@@ -78,6 +81,10 @@ function fakeDriver(options: {
         clock >= launchedAt + options.readyAfterMs
       ) {
         marker = READY_MARKER;
+      }
+      if (marker?.startsWith("{") && partialReadsLeft > 0) {
+        partialReadsLeft -= 1;
+        return marker.slice(0, Math.floor(marker.length / 2));
       }
       return marker;
     },
@@ -216,6 +223,28 @@ test("measureRun records start time, tree memory and command timings, then stops
     `write:${GO_MARKER}`,
     "kill",
   ]);
+});
+
+test("measureRun waits for a result that is still being written instead of failing to parse it", async () => {
+  const { driver } = fakeDriver({
+    readyAfterMs: 0,
+    result: goodResult,
+    partialResultReads: 3,
+  });
+  const sample = await measureRun(driver, OPTIONS);
+  expect(sample.commandMaxMs).toBe(9);
+});
+
+test("measureRun reports the unfinished result when it never becomes complete JSON", async () => {
+  const { driver, calls } = fakeDriver({
+    readyAfterMs: 0,
+    result: goodResult,
+    partialResultReads: Number.POSITIVE_INFINITY,
+  });
+  await expect(measureRun(driver, OPTIONS)).rejects.toThrow(
+    /waiting for the probe's command timings\..*not complete JSON/,
+  );
+  expect(calls.at(-1)).toBe("kill");
 });
 
 test("measureRun stops the app and names the wait when the app never answers", async () => {
