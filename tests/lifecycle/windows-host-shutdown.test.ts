@@ -285,7 +285,7 @@ async function checkShutdownDuringStart(
     const address =
       process.platform === "win32"
         ? `\\\\.\\pipe\\bunaway-start-race-${crypto.randomUUID()}`
-        : resolve(directory, "inbox.sock");
+        : `/tmp/bunaway-start-race-${crypto.randomUUID()}.sock`;
     const signaled = resolve(directory, "signaled");
     await bundleIOPluginFixture(
       directory,
