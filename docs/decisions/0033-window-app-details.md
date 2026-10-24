@@ -16,8 +16,9 @@ Windows 작업 표시줄은 창의 AppUserModelID(AUMID)로 버튼을 묶고, �
   `BrowserWindow.setAppDetails({ appId, appIconPath, appIconIndex, relaunchCommand, relaunchDisplayName })`을
   제공한다. Tauri는 같은 종류의 창별 API를 제공하지 않는다.
 - 호스트는 시작할 때 프로세스 전체의 AUMID를 앱 ID로 한 번 설정한다(`SetCurrentProcessExplicitAppUserModelID`,
-  `native/windows/bun/win32.ts`). 창에 속성을 따로 쓰지 않으면 창은 프로세스 AUMID를 따른다.
-- 같은 프로세스 AUMID에 다른 기능이 묶여 있다. 시작 메뉴 바로가기는 같은 AUMID와 toast activator CLSID를 기록하고,
+  `native/windows/bun/win32.ts`). 앱 ID는 호스트 설정 검증에서 필수로 확인한다. 창에 속성을 따로 쓰지 않으면 창은 프로세스 AUMID를 따른다.
+- 같은 프로세스 AUMID에 다른 기능이 묶여 있다. 설치본의 시작 메뉴 바로가기는 같은 AUMID와 toast activator CLSID를 기록하고(바탕 화면 바로가기는
+  AUMID만 기록한다),
   notification 플러그인은 같은 프로세스 AUMID로 toast를 띄우고 기록을 조회하며, opener의 Jump List도 프로세스
   AUMID에 속한다.
 - 앱 하나는 창 하나로 실행한다([ADR 0026](./0026-single-webview-single-window.md)). 창별 값이 프로세스 값과
@@ -30,12 +31,13 @@ Windows 작업 표시줄은 창의 AppUserModelID(AUMID)로 버튼을 묶고, �
    해당)는 제공하지 않는다.
 2. 작업 표시줄 버튼의 앱 정체성은 프로세스 AUMID 하나이며 앱 ID에서 정해진다. 고정 항목의 이름, 아이콘과 실행
    명령은 같은 AUMID를 기록한 시작 메뉴 바로가기(패키징이 만든다)를 따른다.
-3. 창 아이콘 변경은 `windows.setIcon`, 앱 재시작은 `desktop.relaunch`가 맡는다. 이 둘로 충족하지 못하는 요구가
+3. `windows.setIcon`은 창 아이콘만, `desktop.relaunch`는 앱 재시작만 맡는다. 둘 다 고정 항목의 아이콘이나
+   실행 명령을 정하지 않으며 `setAppDetails`의 대체가 아니라 인접 기능이다. 고정 항목에 관한 요구가
    확인되면 별도 결정에서 다룬다.
 
 ## 근거
 
-- 창 AUMID를 프로세스 AUMID와 다르게 쓰면 그 창의 작업 표시줄 버튼은 시작 메뉴 바로가기, toast, Jump List가
+- 설치본에서 창 AUMID를 프로세스 AUMID와 다르게 쓰면 그 창의 작업 표시줄 버튼은 시작 메뉴 바로가기, toast, Jump List가
   쓰는 정체성에서 분리된다. 단일 창 앱에서는 얻는 것 없이 알림 클릭이나 고정 항목이 앱 창과 이어지지 않을
   위험만 생긴다. 이 위험은 Win32 문서 기준 추정이며 이 저장소에서 측정한 값이 아니다.
 - relaunch 명령은 고정 항목을 눌렀을 때 실행할 명령을 임의 문자열로 쓰게 하는 설정이다. 앱 코드가 정한 실행
