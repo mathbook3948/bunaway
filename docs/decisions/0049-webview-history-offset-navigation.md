@@ -24,16 +24,17 @@ WebView history에서 `goBack`, `goForward` 외에 offset 이동과 index 이동
 - 페이지 컨텍스트의 `history.go(n)`은 범위를 벗어난 값을 조용히 무시하고 결과가 비동기라 이동 성공 여부를 알 수 없다.
   이동을 시작했다는 `true`와 항목이 없다는 `false`를 구분하는 현재 `goBack` 계약과 맞지 않고, 오류 페이지처럼 스크립트를
   실행할 수 없는 문서에서는 동작하지 않는다.
-- macOS 호스트(WKWebView)와 Android 호스트(WebView)의 기존 `goBack`, `goForward`도 같은 두 메서드만 노출한다. 네이티브
-  WebView 쪽은 플랫폼마다 다르다. WKWebView는 항목 목록(`backForwardList`)과 항목 지정 이동을 제공하고, Android WebView는
-  항목 목록과 함께 step 단위 이동(`goBackOrForward`)을 제공한다. 이 저장소는 둘 다 아직 쓰지 않는다.
+- macOS 호스트(WKWebView)도 `goBack`, `goForward`만 노출한다. Android 호스트는 앱에 노출된 history 이동 API가 없고 뒤로
+  가기 키 처리에서만 `goBack`을 쓴다. 네이티브 WebView 쪽은 플랫폼마다 다르다. WKWebView는 항목 목록(`backForwardList`)과
+  항목 지정 이동을 제공하고, Android WebView는 항목 목록과 함께 step 단위 이동(`goBackOrForward`)을 제공한다. 이 저장소는
+  둘 다 아직 쓰지 않는다.
 
 ## 결정
 
 1. 호스트 API로 `goToOffset`, `goToIndex`, `canGoToOffset`을 추가하지 않는다. `getWebViewState`에도 history 길이나 현재
-   index를 넣지 않는다. 이 결정은 Windows, macOS, Android 호스트 모두에 적용한다.
-2. 여러 단계 이동이 필요한 앱은 `goBack`과 `goForward`를 반복한다. 호출은 이동을 시작했는지만 알려주므로, 앱은 탐색이
-   끝난 뒤(`getWebViewState`의 `loading`과 `canGoBack`, `canGoForward`) 다음 호출을 한다.
+   index를 넣지 않는다. 이 결정은 `windows` 플러그인을 제공하는 Windows와 macOS 호스트에 적용한다. Android는 앱에 노출된 history 이동 API가 없다.
+2. 여러 단계 이동이 필요한 앱은 `goBack`과 `goForward`를 반복한다. 호출은 이동을 시작했는지만 알려주므로, 앱은
+   `getWebViewState`에서 `loading`이 `false`가 된 것을 확인하고 `canGoBack` 또는 `canGoForward`를 본 뒤 다음 호출을 한다.
 3. 페이지가 직접 `history.go(n)`을 쓰는 것은 막지 않는다. 이는 렌더러 내부 동작이며 호스트 계약이 아니다.
 4. 이동할 항목을 앱이 고를 필요가 있는 용도가 확인되면 history 조회와 함께 별도 결정에서 다룬다. 그때 플랫폼별 경로
    (WebView2는 DevTools 프로토콜, WKWebView는 항목 목록, Android WebView는 step 이동)를 함께 정한다.
