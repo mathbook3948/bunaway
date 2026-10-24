@@ -73,6 +73,7 @@ Windows와 macOS의 로그오프(로그아웃), 재시작과 시스템 종료는
 창을 닫기 전에 저장을 마쳐야 하면 문서에서 `windows.closeRequested`를 구독하고
 `windows.respondClose`로 허용 여부를 답합니다. 자세한 흐름은 [닫기 요청](/reference/host/windows/#닫기-요청)을 따릅니다.
 창의 생성과 닫힘 시점은 `windows.lifecycle` 이벤트로 알 수 있습니다. 닫기 요청은 Windows와 macOS에서 같은 규칙으로 동작합니다.
+단일 창 앱이 마지막 창을 닫으면 앱 종료가 시작되므로, 닫기 동작이 `quit`이면 그 창의 `closed`와 `destroyed`는 발행하지 않습니다.
 `windows.lifecycle`을 문서로 받는 일은 Windows에서만 지원하며, macOS에서는 백엔드가 `windows.waitForLifecycle`로 관찰합니다.
 macOS의 사용자 닫기는 타이틀바의 닫기 버튼과 `windows.close`이며 WebView의 `window.close()`는 해당하지 않습니다.
 

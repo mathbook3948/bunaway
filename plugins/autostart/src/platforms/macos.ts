@@ -12,7 +12,6 @@ import {
   unlinkSync,
   writeSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { join, posix } from "node:path";
 import {
   attemptAll,
@@ -86,6 +85,29 @@ export function createState(app: AppLaunch, home: string): AutostartState {
   };
 }
 
+/** Where the host keeps an app's data, relative to the user's home. */
+const DATA_ROOT_PARENT = "Library/Application Support/bunaway";
+
+/**
+ * The I/O worker's HOME is the host data root, so `os.homedir()` is not the user's home and
+ * launchd would never read a plist written below it. The user's home is the data root without its
+ * fixed `<home>/Library/Application Support/bunaway/<appId>` layout, the same derivation the path
+ * plugin uses.
+ */
+function userHome(dataRoot: string, appId: string): string {
+  const suffix = `/${DATA_ROOT_PARENT}/${appId}`;
+  const home = dataRoot.endsWith(suffix)
+    ? dataRoot.slice(0, -suffix.length)
+    : undefined;
+  if (home === undefined || !posix.isAbsolute(home)) {
+    throw new BunawayError({
+      code: "INTERNAL",
+      message: "The host data root does not match the macOS app layout.",
+    });
+  }
+  return home;
+}
+
 /** Bind the current user's home and the host-selected app launch. No file is touched. */
 export function initialize(environment: NativeEnvironment): AutostartState {
   const app = environment.app;
@@ -95,7 +117,7 @@ export function initialize(environment: NativeEnvironment): AutostartState {
       message: "Autostart requires a host-selected app launch.",
     });
   }
-  return createState(app, homedir());
+  return createState(app, userHome(environment.dataRoot, app.id));
 }
 
 function failure(error: unknown, message: string): BunawayError {
