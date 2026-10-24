@@ -434,8 +434,9 @@ test("runtime center computes the same work area center for a DPI-changed outer 
   });
 });
 
-test("the largest logical size at the largest Windows scale stays inside the 16-bit WM_SIZE fields", () => {
-  // Windows offers at most 500 percent scaling, which is 480 DPI.
+test("the largest logical size converts below the 16-bit WM_SIZE field limit at the largest Windows scale", () => {
+  // The host does not read the WM_SIZE lparam, so this guards the conversion
+  // arithmetic only. Windows offers at most 500 percent scaling, which is 480 DPI.
   const MAX_SCALE_DPI = 480;
   const WM_SIZE_FIELD_MAX = 0xffff;
   expect(physicalPixels(MAX_WINDOW_DIMENSION, MAX_SCALE_DPI)).toBeLessThan(
