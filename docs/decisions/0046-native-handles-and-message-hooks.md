@@ -8,16 +8,20 @@ status: accepted
 
 ## 배경
 
-아래 Electron과 Tauri 서술은 해당 프로젝트의 공개 문서 확인에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다.
+아래 Electron과 Tauri 서술은 Electron v45.0.0과 Tauri 2.12.5(tao 0.37.2)의 문서와 소스 확인에 따른 것이며 이 저장소의
+테스트로 검증한 것은 아니다.
 
 두 가지를 정해야 했다. 하나는 신뢰된 네이티브 어댑터(플러그인의 Windows 어댑터)에 창 HWND와 WebView2 객체를 넘기는 범위,
 다른 하나는 Windows 창 메시지를 임의로 구독하는 훅이다.
 
-- Electron의 `BrowserWindow.getNativeWindowHandle()`은 메인 프로세스에서 플랫폼 핸들을 `Buffer`로 돌려준다.
+- Electron의 `BrowserWindow.getNativeWindowHandle()`은 플랫폼 핸들(Windows는 HWND)을 `Buffer`로 돌려준다.
   `hookWindowMessage(message, callback)`, `isWindowMessageHooked`, `unhookWindowMessage`, `unhookAllWindowMessages`는
-  Windows 전용이며 콜백은 `wParam`과 `lParam`을 `Buffer`로 받는다. 결과를 돌려주거나 처리를 막는 수단은 없다.
-- Tauri는 Rust 쪽 `Window::hwnd()`와 `with_webview`(플랫폼 WebView 컨트롤러 접근)를 제공하고, 메시지 훅은 창 생성 시
-  빌더 옵션(`with_msg_hook`)으로만 받는다. 실행 중 등록, 조회, 해제는 없다.
+  Windows 전용이며 실행 중 등록, 조회, 해제가 가능하다. 콜백은 `wParam`과 `lParam`을 `Buffer`로 받고 메시지당 하나만
+  등록된다. 결과를 돌려주거나 기본 처리를 막는 수단은 없어 알림 전용이다.
+- Tauri는 Rust 쪽 `Window::hwnd()`(Windows)를 제공하고, 플랫폼 WebView 접근인 `with_webview`는 `Webview`와
+  `WebviewWindow`에만 공개돼 있다. 메시지 훅은 tao의 `with_msg_hook`이 창 빌더가 아니라 이벤트 루프 빌더에 한 번만
+  설정하는 옵션이다. Tauri는 이를 메뉴 단축키 처리에 내부적으로 쓰며, 앱이 등록하는 공개 API와 실행 중 등록, 조회,
+  해제 API는 없다.
 - 이 저장소의 어댑터는 범용 핸들 대신 기능별 호스트 서비스를 받고, HWND를 다루는 방식은 세 가지다.
   - 창 ID로 해석하는 방식: 메뉴 어댑터는 `NativeMenuWindowHost`로 창 ID를 살아 있는 HWND로 해석(`resolve`)하고 파괴 전
     알림(`subscribe`)을 받는다. appearance 어댑터는 `NativeAppearanceWindows.subscribe`로 창별 기능
@@ -46,8 +50,8 @@ status: accepted
 
 ## 근거
 
-- 두 프레임워크가 다르다. Electron은 핸들과 훅을 모두 메인 프로세스에 열어 두고, Tauri는 핸들만 Rust 쪽에 열고 훅은
-  생성 시 한 번만 받는다. 이 저장소에는 둘을 쓰는 곳이 없고, 코어 계약은 작게 유지하고 기능은 플러그인별 좁은 계약으로
+- 두 프레임워크가 다르다. Electron은 핸들과 훅을 모두 메인 프로세스에 열어 두고, Tauri는 핸들만 Rust 쪽에 열며
+  메시지 훅은 앱에 공개하지 않는다. 이 저장소에는 둘을 쓰는 곳이 없고, 코어 계약은 작게 유지하고 기능은 플러그인별 좁은 계약으로
   두는 현재 구조에 맞는 쪽을 따랐다.
 - 원시 HWND는 창이 파괴된 뒤 같은 값이 다른 창에 재사용될 수 있어 수명 검사 없이 넘기면 엉뚱한 창을 조작할 수 있다.
   메뉴처럼 창 ID 해석과 파괴 전 알림을 거치는 방식은 이 문제를 호스트가 막는다. Electron의 `Buffer` 핸들은 이 보호가 없다
