@@ -8,6 +8,8 @@ status: accepted
 
 ## 배경
 
+아래 Electron과 Tauri 서술은 해당 프로젝트의 공개 문서와 소스 확인에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다.
+
 Windows tablet 모드인지 조회하는 API를 제공할지 정해야 했다. 창 상태 조회는 `visible`, `focused`, `minimized`,
 `maximized`, `fullscreen`, `alwaysOnTop`만 제공한다. Snap 배치 상태 조회는 [ADR 0031](./0031-window-snapped-state.md)에서
 제공하지 않기로 했고, tablet 모드는 그 결정에서 따로 정하기로 남겼다.
@@ -32,8 +34,9 @@ Windows tablet 모드인지 조회하는 API를 제공할지 정해야 했다. �
 - 두 프레임워크가 다르다. Electron은 제공하고 Tauri는 제공하지 않는다. Electron의 값은 Windows 10 경로에 묶여 있어
   Windows 11에서 쓰기 어렵고, 이 저장소에서 쓰는 곳도 없다. 쓰는 곳이 없는 기능을 위해 코어 API를 늘리지 않고
   Windows 11 동작이 불분명한 값을 계약에 넣지 않는다.
-- 터치 환경에 맞춘 화면은 tablet 모드라는 기기 상태보다 입력 장치와 화면 크기에 맞추는 편이 키보드가 붙은 태블릿과
-  터치 노트북에서도 맞는다.
+- 터치 환경에 맞춘 화면은 tablet 모드라는 기기 상태보다 입력 장치와 화면 크기에 맞추는 편이 Windows 11에서도
+  같은 기준을 쓸 수 있다. `(pointer: coarse)`는 주 입력 장치 기준이라 터치 화면이 있어도 마우스나 터치패드가 주 입력이면
+  `fine`이 되므로 모든 터치 환경을 가리지는 못한다. 이 한계는 3번 조건으로 다룬다.
 
 ## 결과
 
