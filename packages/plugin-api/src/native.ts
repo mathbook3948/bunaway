@@ -781,8 +781,9 @@ export type NativeWebView = {
   /** Starts HTTP(S) navigation only to an origin already allowed for this view. */
   navigate(url: string): void;
   /**
-   * Reloads the current document. With `ignoreCache`, the document and its subresources are
-   * fetched again without cache validation; otherwise normal browser cache behavior applies.
+   * Reloads the current document. With `ignoreCache`, the engine reloads without reading its
+   * cache (Chromium bypassing-cache reload, WKWebView `reloadFromOrigin`); otherwise the normal
+   * reload revalidates cached entries.
    */
   reload(ignoreCache?: boolean): void;
   /** Requests cancellation of pending navigation and resource loads. */
