@@ -18,10 +18,10 @@ status: accepted
 - Tauri 2의 `set_ignore_cursor_events(bool)`은 `forward`에 해당하는 인자가 없다. 켜면 창 전체가 입력을 받지 않고,
   그 상태에서 WebView가 마우스 이동을 받는 경로는 제공하지 않는다.
 - 이 저장소의 Windows 구현은 `WS_EX_LAYERED | WS_EX_TRANSPARENT`다. `WS_EX_TRANSPARENT` 창은 hit-test에서 제외되어
-  마우스 메시지가 창으로 오지 않으므로, 이동을 WebView에 넘기려면 창 밖 입력을 따로 가로채야 한다. 마우스
-  메시지를 가로채는 방법은 전역 저수준 마우스 훅(`WH_MOUSE_LL`) 또는 커서 위치 폴링이며, 어느 쪽이든 앱 창이 아닌
-  곳의 마우스 움직임을 호스트가 계속 읽게 된다.
-- 폴링은 앱이 이미 할 수 있다. `windows.getCursorPosition`(물리 화면 좌표)과 창 bounds 조회로 커서가 창 안 어느
+  마우스 메시지가 창으로 오지 않으므로, 이동을 WebView에 넘기려면 창 밖 입력을 따로 얻어야 한다. 방법은
+  전역 저수준 마우스 훅(`WH_MOUSE_LL`) 또는 호스트의 커서 위치 상시 폴링이며, 어느 쪽이든 앱 창이 아닌 곳의 마우스
+  움직임을 호스트가 계속 읽게 된다.
+- 앱이 필요할 때 권한을 받아 조회하는 폴링은 호스트가 상시 관찰하는 것과 다르며, 앱이 이미 할 수 있다. `windows.getCursorPosition`(물리 화면 좌표)과 창 bounds 조회로 커서가 창 안 어느
   요소 위에 있는지 계산해 `setIgnoreMouseEvents`를 전환할 수 있다.
 
 ## 결정
