@@ -19,6 +19,7 @@ import {
 } from "@bunaway/packaging";
 import { outputPaths } from "@bunaway/packaging/paths";
 import { readAppVersions } from "./app-versions.ts";
+import { copyBuildResources } from "./build-resources.ts";
 import {
   type Project,
   readProjectMetadata,
@@ -793,6 +794,14 @@ async function assembleProject(
         bundledAssets,
         signal,
         root,
+      );
+    }
+    if (project.resources) {
+      await copyBuildResources(
+        project.root,
+        context.packageRoot,
+        project.resources,
+        context.executableName,
       );
     }
     await ownedDirectory(project.root, context.staging);

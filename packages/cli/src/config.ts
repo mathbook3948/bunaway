@@ -27,6 +27,7 @@ import {
   readWindowSpecs,
   type WindowSpec,
 } from "@bunaway/runtime-bun/window-config";
+import { parseBuildResources } from "./build-resources.ts";
 import { validateFramework } from "./distribution.ts";
 import { inside, json, projectPath } from "./files.ts";
 import type { InstalledPlugin } from "./plugins.ts";
@@ -95,6 +96,8 @@ export interface Project {
   appEntry: string;
   frontend: string;
   buildCommand?: string[];
+  /** Project-relative files and directories copied into the app resource directory at build time. */
+  resources?: string[];
   backendDependencies?: string[];
   frontendDependencies?: string[];
   nativePlugins?: readonly InstalledPlugin[];
@@ -260,6 +263,7 @@ export async function readProjectSettings(root: string): Promise<{
   bundle?: PackagingConfig;
   dev?: DevServerConfig;
   buildCommand?: string[];
+  resources?: string[];
   plugins?: unknown;
 }> {
   const directory = await projectPath(root, "src-bunaway");
@@ -291,6 +295,7 @@ export async function readProjectSettings(root: string): Promise<{
       "app",
       "frontend",
       "command",
+      "resources",
     ],
     "build",
   );
@@ -298,6 +303,7 @@ export async function readProjectSettings(root: string): Promise<{
     build.command === undefined
       ? undefined
       : command(build.command, "build.command");
+  const resources = parseBuildResources(build.resources);
   const bundle =
     config.bundle === undefined
       ? undefined
@@ -325,6 +331,11 @@ export async function readProjectSettings(root: string): Promise<{
     ...(buildCommand
       ? {
           buildCommand,
+        }
+      : {}),
+    ...(resources
+      ? {
+          resources,
         }
       : {}),
   };
@@ -603,6 +614,11 @@ async function loadProject(
     ...(settings.buildCommand
       ? {
           buildCommand: settings.buildCommand,
+        }
+      : {}),
+    ...(settings.resources
+      ? {
+          resources: settings.resources,
         }
       : {}),
     policy,

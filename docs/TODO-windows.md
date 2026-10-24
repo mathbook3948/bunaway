@@ -296,6 +296,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 트레이 클릭으로 살아 있는 창을 복원하고 Quit에 앱 종료 확인을 적용한다.
 - [x] Explorer 재시작 후 트레이 아이콘을 다시 등록한다.
 - [x] 앱 선언 `desktop.tray.icon`에 리소스 디렉터리 상대 경로의 ICO 파일을 지정한다. 절대 경로, URL, `..` 탈출과 리소스 밖을 가리키는 링크는 거부한다. PNG 단독 파일은 받지 않고 ICO 안의 PNG 프레임만 받는다. 실행 중 `tray.setIcon` ICO bytes 적용은 구현됐다.
+- [x] 빌드 시 `build.resources`로 프로젝트의 파일과 디렉터리를 앱 리소스 디렉터리(Windows는 실행 파일 폴더)에 복사한다. 링크, 빌드 파일을 덮는 이름과 앱 출력 경로는 거부한다. [설정](site/src/content/docs/reference/configuration.mdx)
 - [x] `tray.setIcon`으로 ICO bytes를 적용하거나 앱 아이콘으로 복원하고 `tray.setTooltip`으로 tooltip을 실행 중 변경한다.
 - [ ] 트레이 생성, 조회, 표시, 숨김, 제거와 제거 여부 조회 API를 제공한다. 조회와 표시, 숨김은 `tray.get`의 `visible`과 `tray.setVisible`(`NIS_HIDDEN`)로 구현했다. 생성과 제거는 `desktop.tray` 선언이 소유하므로 남아 있다.
 - [ ] 여러 트레이 아이콘과 고유 ID, Windows GUID를 지원한다.

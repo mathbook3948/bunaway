@@ -1165,6 +1165,7 @@
           "appEntry",
           "frontend",
           "buildCommand",
+          "resources",
           "backendDependencies",
           "frontendDependencies",
           "nativePlugins",

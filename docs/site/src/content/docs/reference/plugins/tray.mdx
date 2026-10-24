@@ -54,13 +54,14 @@ native 길이 보정에서는 surrogate를 나누지 않습니다.
 ```ts
 desktop: {
   closeBehavior: "keep-alive",
-  tray: { tooltip: "Notes", icon: "assets/tray.ico" },
+  tray: { tooltip: "Notes", icon: "resources/tray.ico" },
 },
 ```
 
-파일은 앱이 직접 리소스 디렉터리에 배치해야 합니다. Windows 패키지에서는 실행 파일이 있는 폴더이고,
-개발 실행에서는 빌드 출력 폴더입니다. 빌드가 이 파일을 자동으로 복사하지는 않습니다. 위 예시의
-`assets/tray.ico`는 실행 파일 폴더의 `assets` 하위 폴더에 두는 파일입니다.
+파일은 리소스 디렉터리에 있어야 합니다. Windows 패키지에서는 실행 파일이 있는 폴더이고,
+개발 실행에서는 빌드 출력 폴더입니다. `bunaway.json`의 `build.resources`에 프로젝트 기준
+`"resources/tray.ico"`를 선언하면 빌드가 같은 상대 경로로 복사합니다
+([설정](/reference/configuration/#build)).
 
 경로는 리소스 디렉터리 안의 일반 세그먼트만 허용합니다. 절대 경로, 드라이브와 UNC 접두사, URL,
 `..`와 `.` 세그먼트, 빈 세그먼트, 스트림(`:`), 예약 문자, 예약 장치 이름(`CON`, `NUL` 등), 끝의 점과 공백은 `INVALID_ARGUMENT`로 거부합니다.
