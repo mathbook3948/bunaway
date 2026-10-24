@@ -484,9 +484,9 @@ DPI가 바뀐 크기에 대해서도 `centerInWorkArea`가 같은 작업 영역�
 실행되고 호출별 옵션이 선언을 바꾸지 않는지 확인한다. macOS 선언의 미지원 오류도 검사한다.
 `lifecycle/windows-initial-placement.ts`는 실제 HWND와 WebView2에서 초기 선언,
 생성 및 재생성, 예약 전 거부와 선언 복원을 확인한다.
-실제 HWND에서 4096 논리 픽셀의 content 및 outer 요청을 기본 tracking 제한으로 줄이지 않고
+실제 HWND에서 8192 논리 픽셀의 content 및 outer 요청을 기본 tracking 제한으로 줄이지 않고
 중앙에 배치하는지도 확인한다.
-4096 content 최소 크기가 들어가는지는 실제 작업 영역과 측정한 DPI 및 프레임으로 계산한다.
+8192 content 최소 크기가 들어가는지는 실제 작업 영역과 측정한 DPI 및 프레임으로 계산한다.
 들어가면 재생성 성공을, 들어가지 않으면 기존 창을 보존하는 거부를 검사한다.
 `mise run host:windows`와 CI의 windows-native에 포함하며 네이티브 입력 준비 후
 `bun --no-env-file tests/lifecycle/windows-initial-placement.ts`로도 실행할 수 있다.

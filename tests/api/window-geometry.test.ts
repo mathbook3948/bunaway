@@ -761,7 +761,7 @@ async function checkUnitConversions(harness: GeometryHarness): Promise<void> {
           value: {
             x: -1,
             y: 1,
-            width: 4097,
+            width: 8193,
             height: 0,
           },
         },
@@ -772,7 +772,7 @@ async function checkUnitConversions(harness: GeometryHarness): Promise<void> {
       value: {
         x: Math.round(-dpi / 96) || 0,
         y: Math.round(dpi / 96),
-        width: Math.round((4097 * dpi) / 96),
+        width: Math.round((8193 * dpi) / 96),
         height: 0,
       },
       dpi,

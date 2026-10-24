@@ -82,14 +82,14 @@
 - [x] 초기 `minWidth`, `minHeight`, `maxWidth`, `maxHeight`를 AppKit 창에 적용한다.
 - [x] 초기 크기를 제약 안으로 보정하고 사용자 크기 변경에도 제약을 적용한다.
 - [x] 제약의 `null`과 생략은 제한 없음으로 처리하고 한 축만 제한할 수 있다.
-- [x] 공통 설정 검증으로 200–4096 범위와 min > max 입력 오류를 처리한다.
+- [x] 공통 설정 검증으로 200–8192 범위와 min > max 입력 오류를 처리한다.
 - [ ] `setSize`, `setPosition`과 최소/최대 제약의 실행 중 변경 및 조회를 제공한다.
 - [ ] content와 outer 크기, 위치, bounds와 최대화 전 normal bounds를 구분한다.
 - [ ] AppKit 좌표와 공통 좌표의 원점, 논리 픽셀과 backing scale 변환을 정의한다.
 - [ ] 초기 x, y, center, 실행 중 중앙 배치와 작업 영역 넘침 방지를 제공한다.
 - [ ] 모니터 이동, 배율 변경과 전체화면 해제 뒤 현재 제약을 유지한다.
 - [ ] resizable, movable, aspect ratio와 선택적 크기 및 위치 애니메이션을 제공한다.
-- [x] 결정 완료: 공통 상한은 8192 논리 픽셀로 올리고 하한 200은 유지한다. [ADR 0040](./decisions/0040-window-size-limit.md). 상수 변경과 이 문서의 200–4096 문구 갱신은 Windows TODO의 구현 항목에서 함께 한다.
+- [x] 결정 완료: 공통 상한은 8192 논리 픽셀로 올리고 하한 200은 유지한다. [ADR 0040](./decisions/0040-window-size-limit.md). 상수 변경과 이 문서의 200–4096 문구 갱신은 Windows TODO의 구현 항목에서 함께 했다.
 
 ## 03. 창 상태, 외관과 사용자 타이틀바
 

@@ -699,7 +699,7 @@ test.skipIf(process.platform !== "win32")(
         {
           x: 0,
           y: 0,
-          width: 4097,
+          width: 8193,
           height: 500,
           unit: "logical",
         },

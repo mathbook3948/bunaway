@@ -653,7 +653,7 @@ test("window operations reject invalid geometry, arbitrary fields and invalid cl
       operation: "windows.setMaxSize",
       payload: {
         width: null,
-        height: 4097,
+        height: 8193,
       },
     },
     {

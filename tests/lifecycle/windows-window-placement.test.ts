@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   MAX_WINDOW_COORDINATE,
+  MAX_WINDOW_DIMENSION,
   MIN_WINDOW_COORDINATE,
 } from "@bunaway/plugin-api/native";
 import {
@@ -88,7 +89,7 @@ test("initial placement preserves OS-default position, signed physical coordinat
     initialWindowPlacement(
       {
         ...defaults,
-        width: 4096,
+        width: MAX_WINDOW_DIMENSION,
         center: true,
       },
       96,
@@ -160,8 +161,8 @@ test.each([
       height: 703,
     };
     const options = {
-      width: 4096,
-      height: 4096,
+      width: MAX_WINDOW_DIMENSION,
+      height: MAX_WINDOW_DIMENSION,
       preventOverflow: true,
       x: 2000,
       y: -3000,
@@ -240,13 +241,13 @@ test("overflow preserves min/max constraints, rejects impossible minima and allo
     initialWindowPlacement(
       {
         ...defaults,
-        width: 4096,
+        width: MAX_WINDOW_DIMENSION,
       },
       96,
       frame,
       work,
     ).outer.width,
-  ).toBe(4112);
+  ).toBe(MAX_WINDOW_DIMENSION + frame.width);
   expect(
     initialWindowPlacement(
       {
@@ -322,19 +323,19 @@ test("initial rectangles reject signed coordinate overflow without treating CW_U
   ).toThrow("coordinate range");
 });
 
-test("an 8K work area at 100 percent scaling accepts the largest content minimum", () => {
+test("a work area that fits the largest content size at 100 percent scaling accepts the largest content minimum", () => {
   const area = {
     x: 0,
     y: 0,
-    width: 7680,
-    height: 4280,
+    width: MAX_WINDOW_DIMENSION + frame.width + 100,
+    height: MAX_WINDOW_DIMENSION + frame.height + 100,
   };
   const plan = initialWindowPlacement(
     {
-      width: 4096,
-      height: 4096,
-      minWidth: 4096,
-      minHeight: 4096,
+      width: MAX_WINDOW_DIMENSION,
+      height: MAX_WINDOW_DIMENSION,
+      minWidth: MAX_WINDOW_DIMENSION,
+      minHeight: MAX_WINDOW_DIMENSION,
       preventOverflow: true,
     },
     96,
@@ -342,8 +343,8 @@ test("an 8K work area at 100 percent scaling accepts the largest content minimum
     area,
   );
   expect(plan.content).toEqual({
-    width: 4096,
-    height: 4096,
+    width: MAX_WINDOW_DIMENSION,
+    height: MAX_WINDOW_DIMENSION,
   });
   expect(plan.outer.width).toBeLessThanOrEqual(area.width);
   expect(plan.outer.height).toBeLessThanOrEqual(area.height);
@@ -431,4 +432,14 @@ test("runtime center computes the same work area center for a DPI-changed outer 
     x: 668,
     y: 221,
   });
+});
+
+test("the largest logical size converts below the 16-bit WM_SIZE field limit at the largest Windows scale", () => {
+  // The host does not read the WM_SIZE lparam, so this guards the conversion
+  // arithmetic only. Windows offers at most 500 percent scaling, which is 480 DPI.
+  const MAX_SCALE_DPI = 480;
+  const WM_SIZE_FIELD_MAX = 0xffff;
+  expect(physicalPixels(MAX_WINDOW_DIMENSION, MAX_SCALE_DPI)).toBeLessThan(
+    WM_SIZE_FIELD_MAX,
+  );
 });
