@@ -149,6 +149,10 @@ CLI 옵션과 subcommand를 처리하는 앱은 `desktop.openArguments: "raw"`�
 [앱 CLI 인자](/reference/backend/cli/)의 `defineCLI`로 `request.argv`를 검사합니다.
 기본 `"files-and-urls"` 모드의 URL 오류는 훅 호출 전에 요청을 실패시킵니다. raw 모드는
 파일 열기나 URL 검증을 수행하지 않으며 문자열의 의미는 앱의 parser와 schema가 결정합니다.
+Windows에서 컴파일한 앱은 `--devtools`와 `--dev-url`도 다른 인자처럼 `argv`에 그대로 전달합니다.
+이 둘을 떼어내는 것은 컴파일하지 않은 개발 실행뿐이며, 각 옵션은 그 시점의 맨 앞 인자(`--devtools`, `--dev-url` 순서)일 때만 떼어냅니다.
+앱 정의에는 환경 변수와 Chromium command-line switch를 선언하거나 바꾸는 필드가 없습니다.
+앱은 Bun의 `process.env`를 직접 읽습니다. Windows에서 호스트를 직접 실행한 앱의 `relaunch()`는 새 프로세스에 시작 시점의 환경을 주며, Windows `bunaway dev`의 호스트에는 CLI가 고른 시스템 변수 일부만 전달하고 `PATH`는 System32로 바꿔 넣으며 셸의 나머지 변수는 전달하지 않습니다.
 macOS 호스트는 앱 실행 인자를 받지 않습니다. macOS의 `onOpen`은 시작할 때 한 번만 호출하며 `argv`는 `[]`,
 `cwd`는 프로세스의 작업 디렉터리, `files`와 `urls`는 빈 배열입니다. OS의 파일과 URL 열기는
 `onOpenUrls`로 받습니다.
