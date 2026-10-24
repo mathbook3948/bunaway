@@ -16,9 +16,9 @@ Electron의 `nodeIntegration`처럼 WebView 안의 스크립트가 Node/Bun API�
   켜지 말라고 한다. `ipcRenderer.sendSync`는 응답이 올 때까지 렌더러를 멈추며, IPC 안내는 비동기 `invoke`를 권장한다.
 - Tauri는 WebView에 Node 같은 런타임을 주지 않는다. 프런트엔드는 `invoke`(Promise)와 이벤트로만 Rust 명령에 닿고,
   명령은 capability로 허용한 것만 호출된다. 동기 호출 경로는 없다.
-- 위 Electron과 Tauri 서술은 공개 문서에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다.
+- 위 Electron과 Tauri 서술은 공개 문서에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다. 아래 저장소 서술은 코드 위치를 근거로 하며 `AddHostObjectToScript` 미사용을 확인하는 테스트는 없다.
 - 이 저장소의 WebView는 네이티브가 관찰한 origin과 frame으로 명령 권한을 검사하는 웹 메시지 브리지로만 백엔드에 닿는다.
-  Windows 호스트는 WebView2 host object를 노출하지 않고(`AddHostObjectToScript` 미사용) 웹 메시지(`PostWebMessageAsJson`)만 쓴다.
+  Windows 호스트는 WebView2 host object를 노출하지 않고(`AddHostObjectToScript` 미사용) 웹 메시지만 쓴다(페이지로 보내는 쪽은 `native/windows/bun/webview.ts`의 `PostWebMessageAsJson`, 받는 쪽은 같은 파일의 웹 메시지 핸들러).
   요청은 JSON이며 Promise로 완료된다. [PRD](../PRD.md) 1절은 프런트엔드가 등록된 명령과 이벤트만 사용하고 Bun, Node.js,
   파일 시스템, 임의 네이티브 함수에 직접 접근하지 않는다고 정하며, 5절은 WebView가 공격받을 수 있다고 가정하고 기본 거부
   권한 모델을 정한다.
@@ -38,7 +38,7 @@ Electron의 `nodeIntegration`처럼 WebView 안의 스크립트가 Node/Bun API�
 - Tauri는 처음부터 제공하지 않고, Electron은 기본값을 꺼 두며 보안 지침이 쓰지 말라고 한다. 같은 방향이므로 제공하지 않는
   쪽을 따른다.
 - 직접 접근은 브리지의 origin, frame, 명령 권한 검사와 스키마 검증을 모두 우회한다. 이 저장소의 권한 모델은 그 경계 위에 있다.
-- 동기 호출은 UI 스레드를 멈춘다. 백엔드가 UI와 다른 Worker에서 실행되고 명령에 deadline이 있으므로, 동기로
+- 동기 호출은 UI 스레드를 멈춘다. 백엔드가 UI 스레드와 분리돼 있고 명령에 deadline이 있으므로, 동기로
   기다리면 백엔드 지연이 곧 창 멈춤이 된다. 요청마다 deadline과 취소를 두는 프로토콜 설계와도 맞지 않는다.
 - 쓰는 곳이 없다. 현재 명령과 플러그인 어디에도 동기 응답이 필요한 용도가 확인되지 않았다.
 
