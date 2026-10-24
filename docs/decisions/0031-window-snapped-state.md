@@ -27,7 +27,7 @@ Snap 상태 조회를 추가하지 않는다. 창 `state`에 `snapped` 항목을
 - 앱이 필요하면 `windows.getOuterBounds`와 `windows.getMonitor`의 작업 영역을 비교해 직접 판단할 수 있다.
   두 조회 모두 각자의 작업 이름 권한이 필요하며, 창 테두리 여백 때문에 허용 오차가 필요할 수 있다.
 
-tablet 모드 조회는 이 결정에 포함하지 않는다. 별도로 정한다.
+tablet 모드 조회는 이 결정에 포함하지 않는다. [ADR 0043](./0043-tablet-mode-query.md)에서 정했다.
 
 ## 영향
 
