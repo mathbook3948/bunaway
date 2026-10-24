@@ -1086,6 +1086,7 @@ envelope의 `source`는 `"native"`, `target`은 수신 뷰 ID입니다.
 `isAlwaysOnTop`과 의미가 같습니다. `focused`는 WebView 내부 포커스를 포함한 OS 전경 창 여부입니다.
 normal 상태는 최소화, 최대화와 전체화면이 모두 `false`인 상태입니다.
 Snap 배치 여부는 `state`에 없습니다. Snap은 일반 상태 창의 bounds가 바뀐 결과일 뿐 창 상태가 아닙니다. 필요하면 `getOuterBounds`와 `getMonitor`의 작업 영역을 비교하세요. 두 조회는 각자 작업 이름 권한이 필요하고, 창 테두리 여백 때문에 허용 오차가 필요할 수 있습니다.
+Windows tablet 모드 조회도 제공하지 않습니다. Windows 11에는 사용자가 켜는 tablet 모드가 없고 Electron의 `isTabletMode()`도 Windows 10 기준이며 Tauri에는 같은 조회가 없습니다. 터치 환경에 맞춘 화면은 CSS `(pointer: coarse)`, `(hover: none)`과 창 크기로 판단하세요.
 `bounds`는 기본 단위의 `getOuterBounds`와 같은 `{ x, y, width, height, dpi }`입니다.
 좌표와 크기는 프레임을 포함한 물리 화면 픽셀이고, 최소화 시에는 네이티브 iconic
 bounds를 반환합니다. 논리 좌표가 필요하면 기존 변환 API를 사용합니다.
