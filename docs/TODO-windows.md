@@ -288,9 +288,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 앱 About 패널과 이름, 버전, 저작권, 라이선스 정보를 제공한다. `dialog.showAbout({ name, version?, copyright?, credits? })`로 제공한다. Windows에는 앱용 OS About 패널 API가 없고 Electron과 Tauri(muda)도 메시지 박스를 직접 만들므로 버튼 하나의 메시지 대화상자로 구현했다. 라이선스는 별도 필드 없이 `credits`에 담는다. [dialog](site/src/content/docs/reference/plugins/dialog.mdx)에 정리했다. 실행 파일 정보에서 기본값을 읽는 동작과 아이콘은 제공하지 않는다.
 - [x] 환경변수와 실행 인자의 설정, 개발 옵션과 배포 옵션의 적용 범위를 정의한다. 결정 완료(Windows 호스트 기준): 앱 인자는 `OpenRequest`로 전달하고, `--devtools`와 `--dev-url`은 컴파일하지 않은 개발 실행에서만 각각 맨 앞 인자일 때 떼어내며 배포 앱은 그대로 전달한다. 환경 변수 선언과 설정 API는 두지 않는다. [ADR 0030](./decisions/0030-launch-arguments-and-environment.md).
 - [x] command-line switch와 argument의 추가, 조회, 존재 확인과 제거에 대응하는 설정 API를 제공한다. 결정 완료: 제공하지 않는다. 호스트는 WebView2 환경에 브라우저 인자를 넘기지 않는다. [ADR 0030](./decisions/0030-launch-arguments-and-environment.md).
-- [ ] 앱 이름과 데이터 경로의 사용자 지정, 기본 file icon과 bundle type 조회를 제공한다.
-  file icon 조회는 `opener.getFileIcon({ path } | { extension }, size?)`로 구현했다. 셸 이미지 목록에서
-  얻은 아이콘을 알파가 있는 PNG로 반환하며 썸네일은 만들지 않는다. 나머지 항목은 남아 있다.
+- [x] 결정 완료: 앱 이름 변경, 데이터 경로 사용자 지정과 bundle type 조회는 제공하지 않는다. 기본 file icon 조회는 `opener.getFileIcon({ path } | { extension }, size?)`로 제공한다. 셸 이미지 목록에서 얻은 아이콘을 알파가 있는 PNG로 반환하며 썸네일은 만들지 않는다. [ADR 0044](./decisions/0044-app-name-data-path-bundle-type.md)를 따른다.
 
 ## 06. 트레이
 

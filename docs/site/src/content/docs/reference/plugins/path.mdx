@@ -72,6 +72,7 @@ path.getAppDirectory({ directory: AppDirectory }): Promise<string>
 - Windows에서 `appLocalData`와 `cache`는 데이터 루트의 `data`, `cache` 하위 폴더입니다. 템플릿이 저장 경로로 쓰는 `data`와 같은 위치입니다.
 - 데이터 루트 자체와 `webview` 같은 호스트 전용 하위 경로는 반환하지 않습니다. 앱이 WebView 프로필과 잠금 파일을 건드리지 못하게 하기 위해서입니다.
   앱 파일에 `webview`, `host.lock` 이름을 쓰지 마세요.
+- 데이터 루트의 위치는 `appId`로 정해지며 앱이 바꿀 수 없습니다. 다른 위치에 저장해야 하면 앱이 고른 경로에 `storage`로 직접 저장하세요([ADR 0044](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0044-app-name-data-path-bundle-type.md)).
 
 Electron에서는 `userData` 하나가 이 모든 것을 담지만 bunaway는 호스트 파일과 앱 파일을 위 규칙으로 나눕니다.
 
