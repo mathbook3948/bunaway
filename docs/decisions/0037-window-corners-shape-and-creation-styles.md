@@ -35,7 +35,7 @@ Tauri 2와 tao:
   `WS_SYSMENU`, `WS_MINIMIZEBOX`, `WS_MAXIMIZEBOX`는 유지한다.
 - `resizable: false`(`setResizable`)는 `WS_THICKFRAME`을 제거한다. 최소화와 최대화 버튼 스타일은 `minimizable`과
   `maximizable`이 따로 제어한다.
-- `WM_NCHITTEST`에서 `HTMAXBUTTON`을 반환하는 코드는 없다. 사용자 제목 표시줄은 CSS `app-region`으로 끌기만 한다.
+- `WM_NCHITTEST`에서 `HTMAXBUTTON`을 반환하는 코드는 없다. 사용자 제목 표시줄은 CSS `app-region`으로 끌기만 한다(`packages/plugin-api/src/native.ts`의 설명을 따른 서술이며 native 코드에서 직접 확인하지는 않았다).
 - 그림자는 `setHasShadow`가 DWM 비클라이언트 렌더링 정책으로 제어한다.
 - 둥근 모서리를 다루는 코드는 없다.
 
@@ -47,7 +47,7 @@ Tauri 2와 tao:
 2. `WS_THICKFRAME` 옵션: 별도 옵션으로 제공하지 않는다. 크기 조절을 막는 수단은 `resizable`이고, 그림자는
    `setHasShadow`가 맡는다. 이 ADR은 Windows 11에서 `resizable: false` 창의 Snap 동작을 확정하지 않는다(열린 질문).
 3. 창 shape(`setShape`에 해당)는 제공하지 않는다.
-4. `WS_EX_NOREDIRECTIONBITMAP`은 제공하지 않는다.
+4. `WS_EX_NOREDIRECTIONBITMAP`은 앱 옵션으로 제공하지 않는다. 호스트 내부 동작으로 쓸지는 요구가 확인될 때 따로 정한다.
 5. corner-smoothing CSS는 렌더러가 정하는 영역이고 이 저장소는 관여하지 않는다. 문서에는 둥근 모서리가
    창 프레임(DWM)에만 적용되고 WebView 콘텐츠의 CSS 모서리와 별개라고 적는다.
 
@@ -84,8 +84,8 @@ Tauri 2와 tao:
   Microsoft의 [Extended Window Styles](https://learn.microsoft.com/en-us/windows/win32/winmsg/extended-window-styles)
   문서는 이 스타일을 "The window does not render to a redirection surface. This is for windows that do not have visible
   content or that use mechanisms other than surfaces to provide their visual."로 정의한다. 이 저장소에는 이 스타일을
-  쓰거나 요구하는 코드와 문서가 없고, WebView2를 호스팅하는 창에서 어떻게 동작하는지는 확인하지 않았다. 요구가
-  확인될 때까지 보류하며, 그때에도 앱 옵션이 아니라 호스트가 정하는 내부 동작으로 먼저 다룬다. Electron이 앱에 노출하지
+  쓰거나 요구하는 코드와 문서가 없고, WebView2를 호스팅하는 창에서 어떻게 동작하는지는 확인하지 않았다. 그래서
+  앱 옵션으로는 제공하지 않고, 요구가 확인되면 앱 옵션이 아니라 호스트가 정하는 내부 동작으로 먼저 다룬다. Electron이 앱에 노출하지
   않는다는 점은 같지만, 이 저장소가 Chromium처럼 자동으로 붙이는 것은 아니다.
 
 ## 열린 질문
