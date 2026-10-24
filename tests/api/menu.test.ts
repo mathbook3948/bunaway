@@ -886,26 +886,58 @@ test("tray menus reject roles at any depth and keep the previous definition", as
 });
 
 test("menu items reject sublabel and accessibility label fields instead of ignoring them", () => {
-  for (const extra of [
+  const parse = (entry: Record<string, unknown>) =>
+    menuOperations.create.input.safeParse({
+      menuId: "extra",
+      items: [
+        {
+          id: "parent",
+          type: "submenu",
+          label: "Parent",
+          items: [
+            entry,
+          ],
+        },
+      ],
+    });
+  const kinds = [
     {
-      sublabel: "Hint",
+      type: "item",
     },
     {
-      accessibleLabel: "Open",
+      type: "checkbox",
     },
-  ]) {
-    expect(
-      menuOperations.create.input.safeParse({
-        menuId: "extra",
-        items: [
-          {
-            id: "item",
-            type: "item",
-            label: "Open",
-            ...extra,
-          },
-        ],
-      }).success,
-    ).toBe(false);
+    {
+      type: "radio",
+      group: "choice",
+      checked: true,
+    },
+    {
+      type: "submenu",
+      items: [],
+    },
+  ];
+  for (const kind of kinds) {
+    const entry = {
+      id: "entry",
+      label: "Open",
+      ...kind,
+    };
+    expect(parse(entry).error?.issues).toBeUndefined();
+    for (const extra of [
+      {
+        sublabel: "Hint",
+      },
+      {
+        accessibleLabel: "Open",
+      },
+    ]) {
+      const result = parse({
+        ...entry,
+        ...extra,
+      });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.code).toBe("unrecognized_keys");
+    }
   }
 });
