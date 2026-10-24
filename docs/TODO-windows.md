@@ -689,7 +689,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] WebView에서 Node/Bun을 직접 사용하는 Electron nodeIntegration 옵션의 대체 또는 미지원 결정을 기록한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [ ] frame tree, frame URL과 origin 조회, frame별 작업의 지원 범위를 정의한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [ ] 키보드, 마우스와 wheel의 before-input 이벤트와 취소를 제공한다.
-- [ ] 입력 이벤트 주입, cursor 변경과 IME composition의 지원을 결정한다.
+- [ ] 입력 이벤트 주입과 IME composition의 지원을 결정한다. cursor 변경 API는 [제공하지 않는다](decisions/0042-cursor-control.md).
 - [ ] 파일 drop의 enter, over, leave와 drop 이벤트, 경로와 좌표를 제공한다.
 - [ ] WebView의 File 객체와 OS 파일 경로를 안전하게 연결한다.
 - [ ] 파일을 앱 밖으로 드래그하고 표시할 drag 이미지를 제공한다.
@@ -1160,7 +1160,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
   포커스 활성화의 compositor 제약과 전역 창 좌표 조회/이동의 미지원 범위를 기록한다.
   [E-window-live]가 명시한 전역 좌표 제한을 portal 연결만으로 해결된 것으로 취급하지 않는다.
   compositor별 portal 없음, 권한 거부, 취소, 정상 동작과 위치 제어 미지원 결과를 검증한다.
-- [ ] 플랫폼별 window gesture, cursor auto-hide와 first-mouse 동작을 제공한다.
+- [ ] 플랫폼별 window gesture와 first-mouse 동작을 제공한다. cursor 숨김 API는 [제공하지 않는다](decisions/0042-cursor-control.md).
 - [ ] Intel, ARM64와 translation 환경의 runtime pin, 실행과 배포를 검증한다.
 
 ## 27. 모바일 전용 공식 기능

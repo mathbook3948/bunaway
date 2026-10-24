@@ -25,7 +25,7 @@ status: accepted
 
 1. 커서 아이콘, 커서 표시 설정, 커서 위치 이동, grab API를 제공하지 않는다. 조회 API인 `getCursorPosition`만 유지한다.
 2. 페이지 안의 아이콘과 숨김은 렌더러의 CSS `cursor`로 다룬다. 상대 이동값이 필요한 앱은 렌더러의 Pointer Lock API를
-   쓴다. 보이는 커서를 창 안에 제한하는 방법은 제공하지 않는다. 문서의 `getCursorPosition` 절에 이 내용을 적는다.
+   쓴다. 지원 범위와 제약은 WebView 엔진을 따르며 호스트가 바꾸지 않는다. 보이는 커서를 창 안에 제한하는 방법은 제공하지 않는다. 문서의 `getCursorPosition` 절에 이 내용을 적는다.
 3. WebView 밖의 창 가장자리(크기 조절 테두리, 제목 표시줄)의 커서는 OS가 정하며, 이 영역의 커서 변경은 지원하지 않는다.
    문서에도 같은 내용을 적는다.
 4. 위 방법으로 만들 수 없는 용도가 확인되면 별도 결정에서 다룬다. 이때 사용자 세션 전체에 작용하는 위치 이동과 grab은
@@ -43,4 +43,4 @@ status: accepted
 - 이벤트, 권한, 스키마, 네이티브 코드 변경은 없다.
 - `windows.mdx`의 `getCursorPosition` 절에 설정 API가 없다는 점, CSS와 Pointer Lock 대안, 창 가장자리 커서는 OS가
   정한다는 점을 적는다.
-- `docs/TODO-windows.md`의 해당 항목을 완료로 표시한다.
+- `docs/TODO-windows.md`의 해당 항목을 완료로 표시하고, 입력 이벤트와 window gesture 항목에서 cursor 변경과 auto-hide를 이 결정 참조로 바꾼다.
