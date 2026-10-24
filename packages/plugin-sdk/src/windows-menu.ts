@@ -22,15 +22,15 @@ const MENUITEMINFO_SIZE = 80;
 /** Offset of `hbmpItem` in the Win64 MENUITEMINFOW. */
 const MENUITEMINFO_HBMPITEM_OFFSET = 72;
 
-/** Electron's Windows shortcut text for each role. */
-const ROLE_ACCELERATORS = {
+/** Electron's Windows shortcut text for each editing role; the window roles show none by default. */
+const ROLE_ACCELERATORS: Partial<Record<NativeMenuRole, string>> = {
   undo: "Ctrl+Z",
   redo: "Ctrl+Y",
   cut: "Ctrl+X",
   copy: "Ctrl+C",
   paste: "Ctrl+V",
   selectAll: "Ctrl+A",
-} as const satisfies Record<NativeMenuRole, string>;
+};
 
 /** Display text for the item's shortcut: its own accelerator, else the role's default. */
 function acceleratorText(item: MenuEntry): string | undefined {
@@ -45,7 +45,7 @@ function acceleratorText(item: MenuEntry): string | undefined {
     : undefined;
 }
 
-/** A selectable leaf: its app ID and, for a role item, the editing command it stands for. */
+/** A selectable leaf: its app ID and, for a role item, the command it stands for. */
 export type SelectedMenuItem = {
   id: string;
   role?: NativeMenuRole | undefined;

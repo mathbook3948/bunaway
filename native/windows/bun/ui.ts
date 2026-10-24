@@ -141,7 +141,7 @@ function signalClosing(reason: ShutdownReason) {
     reason,
   });
 }
-function requestQuit(reason: "last-window" | "tray") {
+function requestQuit(reason: "last-window" | "tray" | "quit-command") {
   if (closing() || quitPending()) {
     return;
   }
@@ -2188,6 +2188,26 @@ try {
                 role,
                 reason: stopping() ? "host-stopping" : "window-closed",
               });
+              return;
+            }
+            if (role === "close" || role === "minimize" || role === "quit") {
+              // These take the paths of the caption buttons and the tray's Quit, so the close
+              // policy, close requests and quit confirmation still apply.
+              try {
+                if (role === "quit") {
+                  requestQuit("quit-command");
+                } else if (role === "close") {
+                  windows?.requestClose(view.native.hwnd);
+                } else {
+                  windows?.minimize(view.native.hwnd);
+                }
+              } catch (error) {
+                log("menu-role-failed", {
+                  role,
+                  reason:
+                    error instanceof Error ? error.message : String(error),
+                });
+              }
               return;
             }
             try {

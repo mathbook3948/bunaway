@@ -501,6 +501,17 @@ if (!process.argv.includes("--child")) {
         );
         driver.symbols.SendMessageW(hwnd, 0x0010, 0n, 0n);
         assert.equal(closeRequests, 1);
+        // A requested close is posted and reaches the window handler like a caption close, and a
+        // window that is not closable drops it.
+        nativeWindows.requestClose(hwnd);
+        assert.equal(closeRequests, 1);
+        nativeWindows.pump();
+        assert.equal(closeRequests, 2);
+        nativeWindows.setClosable(hwnd, false);
+        nativeWindows.requestClose(hwnd);
+        nativeWindows.pump();
+        assert.equal(closeRequests, 2);
+        nativeWindows.setClosable(hwnd, true);
         assert.equal(nativeWindows.isVisible(hwnd), visible);
         assert.deepEqual(nativeWindows.getBounds(hwnd, "outer"), original);
       } finally {

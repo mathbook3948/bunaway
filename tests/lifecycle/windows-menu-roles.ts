@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type {
+  NativeMenuEditRole,
   NativeMenuItem,
-  NativeMenuRole,
   NativeMenuWindowHost,
 } from "@bunaway/plugin-api/native";
 import {
@@ -50,7 +50,7 @@ const POPUP_KEY_TICKS = {
   giveUp: 40,
 } as const;
 const SEED = "hello world";
-const ROLES: readonly NativeMenuRole[] = [
+const ROLES: readonly NativeMenuEditRole[] = [
   "undo",
   "redo",
   "cut",
@@ -252,7 +252,7 @@ const windows = new Windows(() => {});
 const listeners = new Set<
   (message: number, wparam: bigint, lparam: bigint) => void
 >();
-const executed: NativeMenuRole[] = [];
+const executed: NativeMenuEditRole[] = [];
 // Role outcomes reported by the WebView: completed, failed or skipped.
 let outcomes = 0;
 const failures: string[] = [];
@@ -444,6 +444,9 @@ try {
       page.resize();
     },
     executeRole(_id, role) {
+      if (role === "close" || role === "minimize" || role === "quit") {
+        return;
+      }
       executed.push(role);
       page.executeEditCommand(role, {
         executed: () => {
@@ -522,7 +525,7 @@ try {
   const choose = (position: number) => {
     user.symbols.SendMessageW(hwnd, WM_MENUCOMMAND, BigInt(position), submenu);
   };
-  const roleItem = (role: NativeMenuRole) => ROLES.indexOf(role);
+  const roleItem = (role: NativeMenuEditRole) => ROLES.indexOf(role);
   const spike = (check: string, role: string, frame: Frame, result: object) =>
     console.log(
       `MENU_ROLE_DIRECT_SPIKE ${JSON.stringify({
@@ -539,7 +542,7 @@ try {
    * are also logged as MENU_ROLE_DIRECT_SPIKE lines, since their copy and cut behaviour is
    * recorded rather than asserted.
    */
-  const selectRole = async (frame: Frame, role: NativeMenuRole) => {
+  const selectRole = async (frame: Frame, role: NativeMenuEditRole) => {
     const before = await eventCounts();
     const typesBefore: string[] = await evaluate(`[...window.inputTypes]`);
     const failuresBefore = failures.length;

@@ -102,6 +102,21 @@ test.skipIf(process.platform !== "win32")(
             type: "item",
             role: "copy",
           },
+          {
+            id: "quit",
+            type: "item",
+            role: "quit",
+          },
+          {
+            id: "close",
+            type: "item",
+            role: "close",
+          },
+          {
+            id: "minimize",
+            type: "item",
+            role: "minimize",
+          },
         ],
       },
     ]);
@@ -150,9 +165,19 @@ test.skipIf(process.platform !== "win32")(
       native.symbols.SendMessageW(first, 0x0126, 1n, submenu); // disabled leaf
       native.symbols.SendMessageW(second, 0x0126, 0n, submenu); // foreign HMENU
       native.symbols.SendMessageW(first, 0x0126, 2n, submenu); // role leaf
+      for (const index of [
+        3n,
+        4n,
+        5n,
+      ]) {
+        native.symbols.SendMessageW(first, 0x0126, index, submenu); // window roles
+      }
       // A role runs on its window and is not reported as an app selection.
       expect(roles).toEqual([
         "one:copy",
+        "one:quit",
+        "one:close",
+        "one:minimize",
       ]);
       expect(selections).toEqual([
         "one:open",

@@ -204,10 +204,10 @@ ID입니다. 팝업의 반환값과 `menu.clicked`는 같은 선택을 나타내
 연결과 분리는 창의 바깥 크기를 유지하고 콘텐츠 영역을 변경합니다. 기본 메뉴바 숨김과
 자동 숨김은 제공하지 않으며 분리로 제거합니다.
 
-## 편집 role
+## 편집 role과 창 role
 
 `type: "item"`은 선택 필드 `role`을 가질 수 있습니다. checkbox, radio, submenu와 separator는 role을
-받지 않습니다. role은 `undo`, `redo`, `cut`, `copy`, `paste`, `selectAll`입니다.
+받지 않습니다. 편집 role은 `undo`, `redo`, `cut`, `copy`, `paste`, `selectAll`이고, 창 role은 `close`, `minimize`, `quit`입니다.
 
 ```ts
 await menu.create({
@@ -254,8 +254,18 @@ role 항목은 `menu.clicked`를 보내지 않고 `waitForClick` 대기자도 �
 | `copy` | Copy | Ctrl+C |
 | `paste` | Paste | Ctrl+V |
 | `selectAll` | Select All | Ctrl+A |
+| `close` | Close | 없음 |
+| `minimize` | Minimize | 없음 |
+| `quit` | Quit | 없음 |
 
-트레이 메뉴는 앱 창에 속하지 않아 입력이 다른 앱에 들어갈 수 있으므로 role을 거부합니다.
+창 role은 메뉴를 연 창 또는 앱에 명령을 실행하며 표시 단축키가 없습니다. 필요하면 `accelerator`로 표시 문구를 지정합니다.
+`close`는 제목 표시줄의 닫기 단추와 같은 경로로 창에 닫기 요청을 보냅니다. `closable: false`인 창은 닫히지 않고,
+`windows.closeRequested`를 구독한 문서의 응답과 `closeBehavior`도 그대로 적용됩니다.
+`minimize`는 `windows.minimize`와 같이 창을 최소화하며, 최소화할 수 없는 상태이면 실행하지 않고 호스트 진단에만 기록합니다.
+`quit`은 트레이의 Quit과 같은 종료 요청을 `"quit-command"` 사유로 `beforeQuit`에 전달합니다. 앱이 취소하면 아무것도 닫지 않습니다.
+창 role은 창이 닫히는 중이면 편집 role처럼 조용히 무시합니다.
+
+트레이 메뉴는 앱 창에 속하지 않아 편집 role은 입력이 다른 앱에 들어갈 수 있고 창 role은 대상 창이 없으므로 role을 거부합니다. 트레이에서 종료하려면 일반 항목의 `menu.clicked`에서 `DesktopContext.quit()`를 호출합니다.
 role 항목이 있는 리소스의 `setTrayMenu`와, 트레이에 연결한 리소스에 role을 넣는
 `replace`와 `insert`는 `INVALID_ARGUMENT`입니다. 창 메뉴바와 컨텍스트 팝업에서만 사용합니다.
 
@@ -278,5 +288,5 @@ accelerator는 표시 전용이며 단축키 등록은 제공하지 않습니다
 않습니다. Alt와 F10 같은 Windows 기본 메뉴 탐색 키, `--devtools` 실행에서 WebView2가 직접 처리하는 브라우저 가속키는
 이 규칙의 대상이 아닙니다. 같은 조합을 `globalShortcut`으로도 등록하면 그 등록은 포커스와 관계없이 동작합니다.
 키 처리와 충돌 해소는 앱이 맡습니다.
-편집 role 외의 역할과 `Ctrl+...` 단축키를 자동 실행하지 않습니다.
+role의 표시 단축키를 포함해 `Ctrl+...` 단축키는 자동 실행하지 않습니다.
 라벨의 `&`는 문자 그대로 표시합니다. Windows의 기본 메뉴 탐색 키만 사용합니다.

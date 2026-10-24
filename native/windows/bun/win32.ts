@@ -1922,6 +1922,15 @@ export class Windows {
     );
   }
 
+  /** Post the message a caption close sends, so the window's close policy and handlers decide. */
+  requestClose(window: bigint) {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    assert(
+      user.symbols.PostMessageW(window, WM_CLOSE, 0n, 0n),
+      "Window close could not be requested.",
+    );
+  }
+
   minimize(window: bigint) {
     this.changeShowState(window, SW_MINIMIZE, true, false);
   }

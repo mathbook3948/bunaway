@@ -707,6 +707,18 @@ test("role items default their label, keep an explicit label and reject roles el
       "selectAll",
       "Select All",
     ],
+    [
+      "close",
+      "Close",
+    ],
+    [
+      "minimize",
+      "Minimize",
+    ],
+    [
+      "quit",
+      "Quit",
+    ],
   ] as const;
   expect(
     menuItemsSchema.parse(
@@ -780,7 +792,7 @@ test("role items default their label, keep an explicit label and reject roles el
     {
       id: "a",
       type: "item",
-      role: "close",
+      role: "reload",
     },
     {
       id: "a",
@@ -836,6 +848,25 @@ test("tray menus reject roles at any depth and keep the previous definition", as
   await expect(
     invoke("setTrayMenu", {
       menuId: "roles",
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  expect(await invoke("getTrayMenu", null)).toBeNull();
+  // A window role has no window to act on from the tray.
+  await invoke("create", {
+    menuId: "quit",
+    items: [
+      {
+        id: "quit",
+        type: "item",
+        role: "quit",
+      },
+    ],
+  });
+  await expect(
+    invoke("setTrayMenu", {
+      menuId: "quit",
     }),
   ).rejects.toMatchObject({
     code: "INVALID_ARGUMENT",
