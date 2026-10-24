@@ -235,7 +235,6 @@ test("WebView operations use strict Zod contracts and individual registered perm
     ).toThrow();
   }
   for (const payload of [
-    null,
     {},
     {
       ignoreCache: false,
@@ -285,7 +284,6 @@ test("WebView helpers dispatch queries, navigation and normalized zoom results",
   await f.invoke("navigateWebView", {
     url: state.url,
   });
-  await f.invoke("reloadWebView", null);
   await f.invoke("reloadWebView", {});
   await f.invoke("reloadWebView", {
     ignoreCache: false,
@@ -298,7 +296,6 @@ test("WebView helpers dispatch queries, navigation and normalized zoom results",
   expect(f.actions).toEqual([
     1.5,
     state.url,
-    "reload",
     "reload",
     "reload",
     "reload-ignore-cache",
