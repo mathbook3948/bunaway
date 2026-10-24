@@ -12,7 +12,7 @@ status: accepted
 
 - Electron의 `setBounds`, `setSize`, `setPosition`은 `animate` 인자를 받지만 문서상 macOS에서만 동작한다. 다른 플랫폼에서는 무시된다.
 - Tauri의 `setSize`, `setPosition`은 애니메이션 인자가 없다.
-- Windows에는 창 geometry를 보간하는 시스템 호출이 없다. `SetWindowPos`는 즉시 적용한다. 창 최소화, 최대화, 복원 애니메이션은 시스템 설정을 따르며 앱이 geometry 호출별로 켜고 끌 수 없다.
+- Windows에는 창 geometry를 보간하는 시스템 호출이 없다. 일반 상태의 창은 `SetWindowPos`로 즉시 적용한다. geometry 호출이 애니메이션을 고르는 인자를 제공하지 않는다.
   애니메이션이 필요하면 앱이 타이머로 중간 bounds를 반복해 설정해야 한다.
 
 ## 결정
@@ -21,7 +21,7 @@ geometry 설정에 `animate` 같은 옵션을 추가하지 않는다. 모든 geo
 
 - Electron도 Windows에서는 `animate`를 무시하므로 Windows 앱이 Electron에서 얻는 동작과 같다. Tauri와도 같다.
 - 두 런타임이 모두 지원하는 공통 동작이 아니므로, 한 플랫폼에서만 동작하는 선택 인자를 계약에 넣으면 같은 호출의 결과가 플랫폼마다 달라진다.
-- 앱이 효과를 원하면 `setOuterBounds`를 짧은 간격으로 반복 호출할 수 있다. 호출마다 `moved`, `resized` 이벤트가 발행되고 DPI와 제약 보정이 매번 적용된다. 이 반복 호출은 프레임 시간을 보장하지 않으므로 매끄러움은 앱 책임이다.
+- 앱이 효과를 원하면 `setOuterBounds`를 짧은 간격으로 반복 호출할 수 있다. DPI와 제약 보정이 호출마다 적용된다. 이 반복 호출은 프레임 시간을 보장하지 않으므로 매끄러움은 앱 책임이다.
   창 안의 콘텐츠 전환은 WebView의 CSS 애니메이션으로 처리하는 편이 부드럽다.
 - 반복 호출 방식이 실제로 널리 필요해지면 앱이 쓰는 도우미를 플러그인으로 따로 제공할 수 있다. 코어 계약은 바꾸지 않는다.
 
