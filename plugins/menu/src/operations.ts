@@ -10,6 +10,7 @@ import {
   resourceSchema,
   targetSchema,
   updateItemSchema,
+  windowMenuAutoHideSchema,
   windowMenuSchema,
   windowMenuVisibleSchema,
 } from "#menu/contract";
@@ -108,6 +109,20 @@ export const menuOperations = {
     output: z.boolean(),
     handler: (_input, { instance }) =>
       instance.isWindowVisible(instance.currentWindowId()),
+  }),
+  setWindowMenuAutoHide: operation({
+    input: windowMenuAutoHideSchema,
+    output: z.null(),
+    handler: ({ autoHide }, { instance }) => {
+      instance.setWindowAutoHide(instance.currentWindowId(), autoHide);
+      return null;
+    },
+  }),
+  getWindowMenuAutoHide: operation({
+    input: z.null(),
+    output: z.boolean(),
+    handler: (_input, { instance }) =>
+      instance.isWindowAutoHide(instance.currentWindowId()),
   }),
   showContextMenu: operation({
     input: contextMenuSchema,

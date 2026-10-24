@@ -1802,6 +1802,8 @@
       "menu.getWindowMenu",
       "menu.setWindowMenuVisible",
       "menu.getWindowMenuVisible",
+      "menu.setWindowMenuAutoHide",
+      "menu.getWindowMenuAutoHide",
       "menu.showContextMenu",
       "menu.waitForClick"
     ],

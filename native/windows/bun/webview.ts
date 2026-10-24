@@ -56,6 +56,8 @@ const GUI_THREAD_INFO_SIZE = 72;
 const GUI_THREAD_INFO_FOCUS_OFFSET = 16;
 // ICoreWebView2Controller::MoveFocus and COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC.
 const WEBVIEW_CONTROLLER_MOVE_FOCUS_SLOT = 12;
+/** ICoreWebView2Controller::add_AcceleratorKeyPressed; its remove slot follows. */
+const WEBVIEW_CONTROLLER_ACCELERATOR_KEY_SLOT = 19;
 const MOVE_FOCUS_REASON_PROGRAMMATIC = 0;
 // ICoreWebView2Controller2::put_DefaultBackgroundColor takes a COREWEBVIEW2_COLOR (A, R, G, B bytes).
 const WEBVIEW_CONTROLLER2_IID = "c979903e-d4ca-4228-92eb-47ee3fa96eab";
@@ -120,6 +122,7 @@ export class WebView {
   private backgroundColor: string | undefined;
   private browserToken: bigint | undefined;
   private readonly events: {
+    target: Pointer;
     slot: number;
     token: bigint;
     callback: ComHandler;
@@ -204,6 +207,8 @@ export class WebView {
       close(force?: boolean): void;
       ready(): void;
       documentComplete(error: WireError | null): void;
+      /** A key event the page did not consume, delivered so the window's menu bar sees keys while the page has focus. */
+      key?(kind: number, virtualKey: number): void;
       log(event: string, data?: object): void;
     },
     legacyProfile = false,
@@ -421,9 +426,17 @@ export class WebView {
     }
   }
 
-  /** Retain an event callback until detach removes its subscription and finish drains it. */
-  private on(slot: number, iid: string, invoke: (args: Pointer) => void) {
-    assert(this.webview);
+  /**
+   * Retain an event callback until detach removes its subscription and finish drains it.
+   * The subscription lives on `target`, which is the WebView unless a controller event is wanted.
+   */
+  private on(
+    slot: number,
+    iid: string,
+    invoke: (args: Pointer) => void,
+    target = this.webview,
+  ) {
+    assert(target);
     const callback = handler(
       `event-${slot}`,
       iid,
@@ -439,13 +452,14 @@ export class WebView {
     );
     const token = new BigInt64Array(1);
     checkHresult(
-      method(this.webview, slot, [
+      method(target, slot, [
         "ptr",
         "ptr",
       ])(callback.pointer, ptr(token)),
       "add event",
     );
     this.events.push({
+      target,
       slot: slot + 1,
       token: token[0] ?? 0n,
       callback,
@@ -731,6 +745,31 @@ export class WebView {
     this.on(59, "5c19e9e0-092f-486b-affa-ca8231913039", () =>
       this.hooks.close(),
     );
+    if (this.controller) {
+      // ICoreWebView2Controller::add_AcceleratorKeyPressed; the page keeps handling the key.
+      this.on(
+        WEBVIEW_CONTROLLER_ACCELERATOR_KEY_SLOT,
+        "b29c7e28-fa79-41a8-8e44-65811c76dcb2",
+        (args) => {
+          const kind = new Int32Array(1);
+          const key = new Uint32Array(1);
+          checkHresult(
+            method(args, 3, [
+              "ptr",
+            ])(ptr(kind)),
+            "get_KeyEventKind",
+          );
+          checkHresult(
+            method(args, 4, [
+              "ptr",
+            ])(ptr(key)),
+            "get_VirtualKey",
+          );
+          this.hooks.key?.(kind[0] ?? 0, key[0] ?? 0);
+        },
+        this.controller,
+      );
+    }
     this.on(25, "79e0aea4-990b-42d9-aa1d-0fcc2e5bc7f1", (args) => {
       const kind = new Int32Array(1);
       checkHresult(
@@ -1562,9 +1601,9 @@ export class WebView {
     // Capture process handles before controller closure to track WebView2 children.
     this.captureProcessHandles();
     if (this.webview) {
-      for (const { slot, token } of this.events) {
+      for (const { target, slot, token } of this.events) {
         checkHresult(
-          method(this.webview, slot, [
+          method(target, slot, [
             "i64",
           ])(token),
           "remove event",
