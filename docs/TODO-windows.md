@@ -278,7 +278,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
   결과는 위조 가능하므로 권한 판단에 쓰지 않는다고 문서화하고, 백엔드와 플러그인 `.ts` 소스가 `isBunaway` 심벌을 참조하지 않음을 소스 스캔 테스트로 확인한다.
 - [ ] 앱 전체 포커스와 활성 상태를 제공한다. 창 생성은 `windows.lifecycle`로 제공하며 앱 전체 포커스와 활성 상태가 남았다.
 - [ ] 단일 인스턴스의 추가 데이터 전달과 lock 상태 조회, 해제 필요성을 결정한다.
-- [ ] 앱 ready 전에 들어온 외부 활성화 요청과 종료 요청의 순서를 공개 계약으로 정한다. 활성화 요청은 구현하고 검증했다: Windows에서 시작 중 받은 두 번째 실행 요청은 호스트가 보관했다가 `onReady`, 초기 `onOpen` 뒤에 도착 순서대로 `onOpen`에 전달한다([app-definition](site/src/content/docs/reference/backend/app-definition.mdx)). `tests/lifecycle/desktop.test.ts`는 인박스가 시작 전 요청을 도착 순서대로 보관하는 것을, CI windows-native의 `windows-desktop.ts boot-forward-lifecycle`은 코어 부팅을 요청 접수까지 대기시킨 뒤 요청 한 건의 `ready`, `opened`, 두 번째 `opened` 순서를 확인한다. 시작 전에 종료가 확정됐을 때 보관 요청의 처리는 호스트 경로(`entry.ts`)를 거치는 테스트가 없어 남아 있다.
+- [x] 앱 ready 전에 들어온 외부 활성화 요청과 종료 요청의 순서를 공개 계약으로 정한다. 활성화 요청은 구현하고 검증했다: Windows에서 시작 중 받은 두 번째 실행 요청은 호스트가 보관했다가 `onReady`, 초기 `onOpen` 뒤에 도착 순서대로 `onOpen`에 전달한다([app-definition](site/src/content/docs/reference/backend/app-definition.mdx)). `tests/lifecycle/desktop.test.ts`는 인박스가 시작 전 요청을 도착 순서대로 보관하는 것을, CI windows-native의 `windows-desktop.ts boot-forward-lifecycle`은 코어 부팅을 요청 접수까지 대기시킨 뒤 요청 한 건의 `ready`, `opened`, 두 번째 `opened` 순서를 확인한다. `tests/lifecycle/windows-host-shutdown.test.ts`는 호스트 경로(`entry.ts`)에서 시작 전에 종료가 확정되면(창 닫힘, 트레이 종료, 시그널) 인박스가 보관한 두 번째 실행 요청과 초기 요청이 모두 `onOpen`에 전달되지 않고 `onWillQuit`, `onQuit`만 실행되는 것을 확인한다.
 - [ ] 렌더러와 관리 프로세스의 비정상 종료 이벤트를 앱에 제공한다. [#78](https://github.com/mathbook3948/bunaway/issues/78).
 - [ ] 앱 About 패널과 이름, 버전, 저작권, 라이선스 정보를 제공한다.
 - [ ] 환경변수와 실행 인자의 설정, 개발 옵션과 배포 옵션의 적용 범위를 정의한다.
