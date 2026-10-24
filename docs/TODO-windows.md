@@ -171,7 +171,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
   순수 계산과 계약은 단위 테스트로, 실제 HWND의 합성 `WM_SIZING`은 Windows CI에서 확인한다.
 - [x] `setResizable`, `isResizable`, `setMovable`, `isMovable`로 Windows 사용자 크기 조절과 이동을 설정하고 조회한다. 프로그램의 geometry API는 계속 허용하며 전체화면 뒤에도 설정을 유지한다.
 - [ ] 설정과 런타임 크기 제한을 실제 모니터, DPI에 맞게 재검토한다. 현재의 4096 상한을 유지할지 결정한다.
-- [ ] 위치와 크기의 선택적 애니메이션을 지원하거나 플랫폼별 미지원으로 명시한다.
+- [x] 결정 완료: 위치와 크기의 선택적 애니메이션 옵션은 제공하지 않기로 결정했다. Electron의 `animate`는 macOS 전용이고 Tauri에는 없으며 Windows는 즉시 적용한다. [ADR 0038](./decisions/0038-window-geometry-animation.md).
 
 ## 03. 창 상태, 외관과 사용자 타이틀바
 
