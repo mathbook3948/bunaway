@@ -363,6 +363,13 @@
       }
     },
     {
+      "name": "@bunaway/plugin/macos-home",
+      "source": "packages/plugin-sdk/src/macos-home.ts",
+      "pages": {
+        "reference/tooling/native-plugins": ["macosUserHome"]
+      }
+    },
+    {
       "name": "@bunaway/plugin-api",
       "source": "packages/plugin-api/src/index.ts",
       "pages": {

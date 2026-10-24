@@ -99,6 +99,19 @@ test("macOS registers the same three operations and an app launch is required", 
       app,
     }),
   ).toThrow("macOS app layout");
+  for (const badHome of [
+    "/Users/al\nice",
+    "/Users/al\0ice",
+    `/${"a".repeat(4096)}`,
+  ]) {
+    expect(() =>
+      initialize({
+        ...environment,
+        dataRoot: dataRootOf(badHome, app.id),
+        app,
+      }),
+    ).toThrow("macOS app layout");
+  }
   expect(() => createState(app, "relative/home")).toThrow("absolute home");
 });
 
