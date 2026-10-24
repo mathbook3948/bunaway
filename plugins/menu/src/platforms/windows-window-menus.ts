@@ -138,8 +138,8 @@ export class WindowMenus implements WindowMenuDriver {
       this.hidden.delete(windowId);
     } else {
       this.hidden.add(windowId);
-      this.altArmed.delete(windowId);
     }
+    this.altArmed.delete(windowId);
     if (attached) {
       this.redraw(hwnd, windowId);
     }
@@ -150,15 +150,26 @@ export class WindowMenus implements WindowMenuDriver {
     return !this.hidden.has(windowId);
   }
 
-  /** Turning auto-hide on leaves the current bar as it is; the first Alt tap, Esc or deactivation then changes it. */
+  /**
+   * Turning auto-hide on leaves the current bar as it is; the first Alt tap, Esc or deactivation then
+   * changes it. Turning it off shows a hidden bar again, because Alt can no longer bring it back.
+   */
   setAutoHide(windowId: string, autoHide: boolean) {
-    this.resolve(windowId);
+    const hwnd = this.resolve(windowId);
+    const restore = !autoHide && this.hidden.has(windowId);
+    const attached = restore && this.link(windowId, hwnd, true);
     if (autoHide) {
       this.autoHide.add(windowId);
     } else {
       this.autoHide.delete(windowId);
     }
+    if (restore) {
+      this.hidden.delete(windowId);
+    }
     this.altArmed.delete(windowId);
+    if (attached) {
+      this.redraw(hwnd, windowId);
+    }
   }
 
   isAutoHide(windowId: string) {

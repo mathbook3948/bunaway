@@ -91,7 +91,7 @@ let loaded = false;
 let verified = false;
 const accelerators: string[] = [];
 const step = (name: string) => console.log(`STEP ${name}`);
-// A stuck native call must end the fixture with a report instead of the job time limit.
+// A stalled wait outside the pump loops ends the fixture with a report instead of the job time limit.
 const watchdog = setTimeout(() => {
   console.error(
     `menu auto-hide fixture exceeded its deadline (accelerator events: ${accelerators.join(",")})`,

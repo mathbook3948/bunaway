@@ -488,9 +488,11 @@ test.skipIf(process.platform !== "win32")(
       expect(native.symbols.GetMenu(hwnd)).toBe(tree);
       key(WM_KEYDOWN, VK_ESCAPE);
       expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      expect(menus.isVisible("main")).toBe(false);
       tap();
       native.symbols.SendMessageW(hwnd, WM_ACTIVATE, 0n, 0);
       expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      expect(menus.isVisible("main")).toBe(false);
 
       // Running a command hides it from the next turn.
       tap();
@@ -505,6 +507,7 @@ test.skipIf(process.platform !== "win32")(
       ]);
       await new Promise((done) => setTimeout(done, 20));
       expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      expect(menus.isVisible("main")).toBe(false);
 
       // Leaving the keyboard menu mode that follows a frame Alt tap ends the display too.
       tap();
@@ -534,19 +537,30 @@ test.skipIf(process.platform !== "win32")(
         () => {},
       );
       expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      expect(menus.isVisible("main")).toBe(false);
       tap();
       const replacement = native.symbols.GetMenu(hwnd);
+      expect(menus.isVisible("main")).toBe(true);
       expect(replacement).not.toBe(0n);
       tap();
 
-      // Explicit visibility still applies, and without auto-hide Alt changes nothing.
-      menus.setVisible("main", true);
-      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
+      // Explicit visibility works with auto-hide: hidden by the app, Alt brings it back, Esc hides it.
       menus.setVisible("main", false);
       expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      tap();
+      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
+      key(WM_KEYDOWN, VK_ESCAPE);
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
       menus.setVisible("main", true);
+      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
+      key(WM_KEYDOWN, VK_ESCAPE);
+      expect(menus.isVisible("main")).toBe(false);
+
+      // Turning auto-hide off shows a hidden bar again and Alt no longer toggles it.
       menus.setAutoHide("main", false);
       expect(menus.isAutoHide("main")).toBe(false);
+      expect(menus.isVisible("main")).toBe(true);
+      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
       tap();
       expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
     } finally {
