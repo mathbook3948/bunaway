@@ -191,6 +191,19 @@ async function pollUntil<T>(
   }
 }
 
+/**
+ * Whether `text` is a whole JSON document. The host writes the marker file in place, so a read that
+ * lands mid-write sees a truncated prefix; the driver keeps polling until the write finished.
+ */
+function isCompleteJson(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Reads the probe's JSON result and returns its round-trip times. */
 function parseRoundTrips(text: string): number[] {
   const parsed: unknown = JSON.parse(text);
@@ -243,7 +256,9 @@ export async function measureRun(
         options.resultTimeoutMs,
         async () => {
           const text = await driver.readMarker();
-          return text?.startsWith("{") ? text : undefined;
+          return text?.startsWith("{") && isCompleteJson(text)
+            ? text
+            : undefined;
         },
       ),
     );
