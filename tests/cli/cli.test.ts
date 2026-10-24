@@ -1186,6 +1186,66 @@ test("build rejects corrupted bundled Bun and leaves the last production package
   ).toBe(false);
 });
 
+test("build copies declared resources into the production and development package directories", async () => {
+  const configPath = resolve(project, "src-bunaway/bunaway.json");
+  const settings = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
+  const resource = resolve(project, "extra-resources/data/tray.ico");
+  await Bun.write(resource, "declared resource");
+  async function buildFixture(development: boolean): Promise<string> {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve(import.meta.dir, "build.fixture.ts"),
+        project,
+        ...(development
+          ? [
+              "--development-artifact",
+            ]
+          : []),
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const output = new Response(child.stdout).text();
+    const errors = new Response(child.stderr).text();
+    expect(await child.exited, await errors).toBe(0);
+    return output;
+  }
+  try {
+    await writeJson(configPath, {
+      ...settings,
+      build: {
+        ...settings.build,
+        resources: [
+          "extra-resources",
+        ],
+      },
+    });
+    await buildFixture(false);
+    expect(
+      await Bun.file(
+        resolve(project, "dist/windows-x64/extra-resources/data/tray.ico"),
+      ).text(),
+    ).toBe("declared resource");
+    const built = JSON.parse(await buildFixture(true)) as {
+      package: string;
+    };
+    expect(
+      await Bun.file(
+        resolve(built.package, "extra-resources/data/tray.ico"),
+      ).text(),
+    ).toBe("declared resource");
+  } finally {
+    await Bun.write(configPath, originals["src-bunaway/bunaway.json"] ?? "");
+    await rm(resolve(project, "extra-resources"), {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
 test("Windows development artifacts enable DevTools only with their launch flag", async () => {
   const configPath = resolve(project, "src-bunaway/bunaway.json");
   const settings = JSON.parse(originals["src-bunaway/bunaway.json"] ?? "");
