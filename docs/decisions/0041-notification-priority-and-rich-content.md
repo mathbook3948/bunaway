@@ -17,8 +17,9 @@ status: accepted
 근거가 되는 동작은 다음과 같다.
 
 - Electron `Notification`은 Windows에서 `timeoutType`(`default`, `never`), `silent`, `icon`, `actions`, `reply`와
-  `toastXml`을 받는다. 우선순위나 시나리오 전용 옵션과 진행률 필드는 없고, 이런 내용은 `toastXml`에서 XML을 직접
-  쓰는 방법뿐이다. `urgency`는 Linux 전용이다.
+  `toastXml`을 받는다. `scenario`(alarm, incomingCall) 전용 옵션과 진행률 필드는 없고, 이런 내용은 `toastXml`에서
+  XML을 직접 쓰는 방법뿐이다. 우선순위는 `urgency`(`normal`, `critical`, `low`)가 Linux와 Windows에서 있다.
+  `critical`은 알림 센터에서 위쪽에 정렬되지만 자동으로 닫히는 것을 막지는 않는다(`timeoutType: "never"`를 함께 쓴다).
 - Tauri 알림 플러그인은 데스크톱에서 제목, 본문, 아이콘, 소리, 액션을 받으며 우선순위와 진행률 필드가 없다.
 - 이 저장소는 `toastXml`을 제공하지 않기로 했다. 임의 XML은 activation 인자 형식, 이미지 경로 검사를 깨기 때문이다.
   따라서 Electron에서 XML로 하던 방법은 bunaway에서 쓸 수 없고, 필요한 기능은 선언 필드로만 들어올 수 있다.
@@ -30,7 +31,7 @@ status: accepted
 
 ## 결정
 
-1. `alarm`, `incomingCall` 시나리오와 알림 센터 우선순위 필드를 제공하지 않는다. 오래 남기는 알림은 `timeoutType:
+1. `alarm`, `incomingCall` 시나리오와 알림 센터 우선순위(`urgency`) 필드를 지금은 제공하지 않는다. 오래 남기는 알림은 `timeoutType:
    "never"`, 소리 반복은 `sound`의 `Looping.*`와 `soundLoop`, 보관 기간은 `expiresAfterSeconds`로 구성한다.
 2. 진행률 막대와 추가 텍스트 줄을 선언 필드로 제공하지 않는다. 본문은 `body` 하나다. 진행률은 작업 표시줄 진행률이나
    앱 화면으로 보이고, 알림은 완료나 실패를 알릴 때 `show`로 같은 id와 group을 교체한다.
@@ -39,8 +40,10 @@ status: accepted
 
 ## 근거
 
-- 두 프레임워크가 같다. Electron과 Tauri 데스크톱 알림은 모두 우선순위 필드와 진행률 필드를 제공하지 않는다. 그대로 따라 코어와 플러그인
-  계약을 작게 유지한다.
+- 시나리오와 진행률은 두 프레임워크가 같다. Electron과 Tauri 데스크톱 알림은 모두 전용 필드를 제공하지 않는다.
+  그대로 따라 코어와 플러그인 계약을 작게 유지한다.
+- 알림 센터 우선순위는 두 프레임워크가 다르다. Electron은 `urgency`를 제공하고 Tauri는 없다. 이 저장소에서 쓰는 곳이
+  없어 지금은 보류하고, 필요해지면 Electron의 `urgency`(`normal`, `critical`, `low`) 선언 필드로 추가하는 것이 첫 후보다.
 - 이 저장소에서 쓰는 곳이 없다. 사용처가 없는 시나리오를 계약에 넣으면 시나리오별 표시 조건과 테스트, 문서를 함께
   유지해야 한다.
 - 진행률 막대는 갱신 작업, 갱신 중 교체와 제거의 경쟁, 앱 종료 시 정리까지 새로 정해야 해서 선언 필드 하나로 끝나지
