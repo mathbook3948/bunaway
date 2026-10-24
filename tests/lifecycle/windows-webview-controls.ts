@@ -172,8 +172,12 @@ if (!process.argv.includes("--child")) {
             "Content-Type": "text/html",
             "Content-Security-Policy": "default-src 'self'; script-src 'self'",
             // A cacheable validator lets a cache-bypassing reload be told from a normal one.
-            ETag: '"static"',
-            "Cache-Control": "max-age=3600",
+            ...(url.pathname === "/next.html"
+              ? {
+                  ETag: '"static"',
+                  "Cache-Control": "max-age=3600",
+                }
+              : {}),
           },
         },
       );
@@ -657,10 +661,15 @@ if (!process.argv.includes("--child")) {
     );
     // A reload that ignores the cache fetches the document unconditionally and with no-cache.
     const requestsBefore = documentRequests.length;
+    const beforeBypass = await windows.getReadiness();
     await windows.reloadWebView({
       ignoreCache: true,
     });
     await ready("/next.html", 4);
+    assert(
+      (await windows.getReadiness()).documentGeneration >
+        beforeBypass.documentGeneration,
+    );
     const bypassed = documentRequests.slice(requestsBefore);
     assert.equal(bypassed.length, 1, "One document request per reload");
     assert.equal(bypassed[0]?.ifNoneMatch, null);

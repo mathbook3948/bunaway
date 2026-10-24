@@ -125,7 +125,7 @@ export class WebView {
     callback: ComHandler;
   }[] = [];
   private readonly completions: ComHandler[] = [];
-  /** In-flight editing-command completions; released ones are pruned on the next command. */
+  /** In-flight DevTools completions (editing commands and cache-ignoring reloads); released ones are pruned on the next call. */
   private readonly editCalls = new EditCommandCalls<ComHandler>({
     dispose: disposeHandlers,
     abandon: abandonHandlers,
