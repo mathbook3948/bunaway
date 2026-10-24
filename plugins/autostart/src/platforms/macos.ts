@@ -95,6 +95,7 @@ export function initialize(environment: NativeEnvironment): AutostartState {
       message: "Autostart requires a host-selected app launch.",
     });
   }
+  // launchd reads LaunchAgents below the user's home, not below the worker's HOME (the data root).
   return createState(app, macosUserHome(environment.dataRoot, app.id));
 }
 
