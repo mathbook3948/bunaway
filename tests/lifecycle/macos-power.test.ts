@@ -253,3 +253,71 @@ try {
     });
   },
 );
+
+const STATUS_EVENTS = resolve(
+  import.meta.dir,
+  "../../plugins/power/src/platforms/macos-status-events.ts",
+);
+
+test.skipIf(process.platform !== "darwin")(
+  "the macOS power source run loop source re-reads on a posted notification and releases repeatedly",
+  async () => {
+    const result = await runAdapter(
+      `
+const { pumpTurns, pumpUntil } = await import(${JSON.stringify(PUMP)});
+const { watchMacosPowerStatus } = await import(${JSON.stringify(STATUS_EVENTS)});
+// The adapter above runs its own status watcher, so this watcher gets its own list.
+let reads = 0;
+const statusEvents = [];
+// The snapshot is constant, so a notification that does arrive is skipped as unchanged.
+const snapshot = {
+  source: "ac", batteryPresent: false, charging: false, batteryPercent: null,
+  batterySaver: false, remainingSeconds: null, fullLifeSeconds: null,
+};
+const read = () => {
+  reads++;
+  return snapshot;
+};
+const release = watchMacosPowerStatus(read, { emit: (event, payload) => statusEvents.push([event, payload]) });
+try {
+  const baselineReads = reads;
+  pumpTurns(25);
+  // notifyd lets only root post com.apple.system.* keys, and the runner has passwordless sudo.
+  // Without sudo this part is skipped; the run loop source is then only registered and released.
+  const post = () => Bun.spawnSync(["sudo", "-n", "/usr/bin/notifyutil", "-p", "com.apple.system.powersources.timeremaining"], { timeout: 10000 }).exitCode === 0;
+  const posted = post();
+  if (posted) {
+    await pumpUntil(() => reads > baselineReads, "power source callback re-reads the status");
+  }
+  const callbackReads = reads - baselineReads;
+  release();
+  release();
+  // After release the same notification must no longer reach the callback.
+  const readsAtRelease = reads;
+  const postedAfterRelease = posted && post();
+  pumpTurns(25);
+  const readsAfterRelease = reads - readsAtRelease;
+  console.log(JSON.stringify({ baselineReads, posted, callbackReads, readsAfterRelease, postedAfterRelease, hasRelease: typeof release === "function", statusEvents }));
+} finally {
+  await adapter.dispose();
+  await adapter.dispose();
+}`,
+      "nativeFixture",
+      true,
+    );
+    // Registration reads the baseline once; the unchanged snapshot is never emitted.
+    expect(result.baselineReads).toBe(1);
+    expect(result.hasRelease).toBe(true);
+    expect(result.statusEvents).toEqual([]);
+    // The hosted runner has passwordless sudo, so a missing post there means the check did not run.
+    if (process.env.CI) {
+      expect(result.posted).toBe(true);
+      expect(result.postedAfterRelease).toBe(true);
+    }
+    // A posted notification drives the main run loop to the callback, which re-reads the status.
+    if (result.posted) {
+      expect(result.callbackReads).toBeGreaterThan(0);
+      expect(result.readsAfterRelease).toBe(0);
+    }
+  },
+);

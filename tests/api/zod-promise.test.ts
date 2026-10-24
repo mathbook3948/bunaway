@@ -1,6 +1,10 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
+import { deadline } from "../fixtures/deadlines.ts";
+
+// A cold Zod load in a Worker can pass the 5s default on a loaded Windows runner.
+setDefaultTimeout(deadline("toolchain"));
 
 for (const format of [
   "esm",

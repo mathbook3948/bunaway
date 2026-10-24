@@ -19,25 +19,36 @@ test("custom creation retains resize and system-command flags while standard def
   });
 });
 
-/**
- * setSkipTaskbar requires a hidden normal window and reports a single BUSY error for any of
- * four states. Asserting them together names the state that was wrong when a run fails.
- */
-function expectHiddenNormalPlacement(
-  native: {
-    isVisible(window: bigint): boolean;
-    isMinimized(window: bigint): boolean;
-    isMaximized(window: bigint): boolean;
-    isFullscreen(window: bigint): boolean;
-  },
-  window: bigint,
-): void {
-  expect({
+type PlacementReader = {
+  isVisible(window: bigint): boolean;
+  isMinimized(window: bigint): boolean;
+  isMaximized(window: bigint): boolean;
+  isFullscreen(window: bigint): boolean;
+};
+
+function placementOf(native: PlacementReader, window: bigint) {
+  return {
     visible: native.isVisible(window),
     minimized: native.isMinimized(window),
     maximized: native.isMaximized(window),
     fullscreen: native.isFullscreen(window),
-  }).toEqual({
+  };
+}
+
+/**
+ * setSkipTaskbar requires a hidden normal window and reports a single BUSY error for any of
+ * four states. Asserting them together names the state that was wrong when a run fails.
+ * `history` names the states seen at earlier steps, so a failure shows where the placement drifted.
+ */
+function expectHiddenNormalPlacement(
+  native: PlacementReader,
+  window: bigint,
+  history: Record<string, unknown> = {},
+): void {
+  expect(
+    placementOf(native, window),
+    `placement history: ${JSON.stringify(history)}`,
+  ).toEqual({
     visible: false,
     minimized: false,
     maximized: false,
@@ -138,8 +149,11 @@ test.skipIf(process.platform !== "win32")(
         "Hide and restore",
       );
       native.restore(hwnd);
+      const restored = placementOf(native, hwnd);
       native.show(hwnd, false);
-      expectHiddenNormalPlacement(native, hwnd);
+      expectHiddenNormalPlacement(native, hwnd, {
+        restored,
+      });
       native.setSkipTaskbar(hwnd, true);
       expect(native.isSkipTaskbar(hwnd)).toBe(true);
       native.showInactive(hwnd);
