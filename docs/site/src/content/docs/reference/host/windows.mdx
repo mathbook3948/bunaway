@@ -1113,7 +1113,7 @@ API 호출과 사용자 조작은 같은 네이티브 관찰 경로를 사용합
 `moved`와 `resized`는 Windows가 반영한 뒤에 알리며, 앱이 사용자의 이동이나 크기 조절을 미리 취소하거나
 수정하는 `will-move`, `will-resize` 이벤트는 없습니다. 크기는 `setMinSize`, `setMaxSize`,
 `setSizeConstraints`, `setAspectRatio`로 선언해 제한합니다. 비율 고정은 사용자가 가장자리를 끄는 크기
-조절에만 적용되고 최대화, 전체화면, 스냅 배치에는 적용되지 않습니다. 이동 결과를 바꿔야 하면 조작이 끝난 뒤
+조절에만 적용되고 최대화와 전체화면에는 적용되지 않습니다. 이동 결과를 바꿔야 하면 조작이 끝난 뒤
 받는 `moved`, `resized`에서 `setPosition`, `setSize`로 보정합니다. 끄는 도중의 `move`, `resize`에서는
 보정하지 않습니다. 이 보정은 이미 반영된 변경을 되돌리는 것이어서 사전 취소와 다릅니다. 이유는 [ADR 0032](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0032-window-will-move-and-will-resize.md)에 있습니다.
 
