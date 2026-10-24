@@ -208,7 +208,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `window.contentProtection`, `setContentProtection`, `isContentProtected`를 제공한다. Windows는 `WDA_EXCLUDEFROMCAPTURE`를 쓰며 Windows 10 2004 이전은 이 값을 `WDA_MONITOR`처럼 처리하고, 호출이 거부되면 `WDA_MONITOR`로 다시 시도한다. macOS는 `sharingType`을 사용한다.
 - [x] 창 mouse click-through를 설정하고 조회한다(`windows.setIgnoreMouseEvents`, `isIgnoreMouseEvents`). `WS_EX_LAYERED | WS_EX_TRANSPARENT`로 WebView를 포함한 창 전체의 마우스 입력을 아래 창으로 통과시키며 불투명도와 layered 스타일을 공유한다.
 - [x] click-through 중 마우스 이동 이벤트를 WebView에 전달하는 `forward` 옵션은 제공하지 않는다. 앱이 `getCursorPosition`과 창 bounds로 `setIgnoreMouseEvents`를 전환한다([결정](decisions/0036-click-through-forward-option.md)).
-- [x] cursor icon, visible, position과 grab 설정 API는 제공하지 않는다. 아이콘과 숨김은 렌더러 CSS `cursor`, 가둠은 Pointer Lock을 쓰고 조회는 `getCursorPosition`만 둔다([결정](decisions/0042-cursor-control.md)).
+- [x] cursor icon, visible, position과 grab 설정 API는 제공하지 않는다. 아이콘과 숨김은 렌더러 CSS `cursor`, 상대 이동은 Pointer Lock을 쓰고 조회는 `getCursorPosition`만 둔다([결정](decisions/0042-cursor-control.md)).
 - [x] 창 포커스 요청과 별개로 작업 표시줄을 점멸하는 attention API를 제공한다. `requestAttention`과 `cancelAttention`을 제공하며 Windows는 FlashWindowEx로 포커스 이동 없이 작업 표시줄 버튼을 점멸하고 untilFocused와 continuous 모드를 지원한다.
 - [ ] 지정 모니터에서 전체화면으로 전환하고 모니터 제거 시 복원한다.
 - [x] Windows snapped 상태 조회는 제공하지 않기로 결정했다. Snap은 창 상태가 아니라 bounds의 결과다. [ADR 0031](./decisions/0031-window-snapped-state.md).
