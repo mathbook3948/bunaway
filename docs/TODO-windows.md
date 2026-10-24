@@ -693,7 +693,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] WebView에서 Node/Bun을 직접 사용하는 Electron nodeIntegration 옵션의 대체 또는 미지원 결정을 기록한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [ ] frame tree, frame URL과 origin 조회, frame별 작업의 지원 범위를 정의한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [ ] 키보드, 마우스와 wheel의 before-input 이벤트와 취소를 제공한다.
-- [ ] 입력 이벤트 주입과 IME composition의 지원을 결정한다. cursor 변경 API는 [제공하지 않는다](decisions/0042-cursor-control.md).
+- [x] 입력 이벤트 주입과 IME composition API는 [제공하지 않는다](decisions/0047-input-injection-and-ime.md). 조합은 WebView2가 처리하고 앱은 페이지의 composition 이벤트를 쓴다. cursor 변경 API도 [제공하지 않는다](decisions/0042-cursor-control.md).
 - [ ] 파일 drop의 enter, over, leave와 drop 이벤트, 경로와 좌표를 제공한다.
 - [ ] WebView의 File 객체와 OS 파일 경로를 안전하게 연결한다.
 - [ ] 파일을 앱 밖으로 드래그하고 표시할 drag 이미지를 제공한다.
