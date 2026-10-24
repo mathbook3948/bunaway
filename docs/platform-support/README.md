@@ -20,6 +20,7 @@ macOS는 `getReadiness`, `windows.readiness`와 `visible: false`, `showWhenReady
 
 macOS의 single 뷰는 `getWebViewState`, `navigateWebView`, `reloadWebView`,
 `stopWebView`, `goBack`, `goForward`, `setZoomFactor`를 구현한다.
+`reloadWebView({ ignoreCache: true })`는 `reloadFromOrigin`을 호출하며 요청 헤더는 macOS에서 검증하지 않는다.
 개별 작업 권한은 공통 창 계약을 따르며 탐색은 기존 origin을 확장하지 않는다.
 실제 compiled WKWebView 검사는 `tests/lifecycle/macos-webview-controls.ts`이며
 기존 macOS native CI에서 실행한다. `build/macos-webview-controls-results.json`과

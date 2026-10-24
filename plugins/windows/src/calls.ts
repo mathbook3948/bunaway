@@ -28,8 +28,10 @@ export function createWindows(api: NativePluginAPI<Definitions>) {
       api.getDownloads(null, options),
     getWebViewState: (options?: NativeInvokeOptions) =>
       api.getWebViewState(null, options),
-    reloadWebView: (options?: NativeInvokeOptions) =>
-      api.reloadWebView(null, options),
+    reloadWebView: (
+      input: Input<"reloadWebView"> = {},
+      options?: NativeInvokeOptions,
+    ) => api.reloadWebView(input, options),
     stopWebView: (options?: NativeInvokeOptions) =>
       api.stopWebView(null, options),
     goBack: (options?: NativeInvokeOptions) => api.goBack(null, options),

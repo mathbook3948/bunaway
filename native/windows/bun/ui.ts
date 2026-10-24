@@ -1234,7 +1234,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         webview: {
           getState: () => view.native.getState(),
           navigate: (url) => view.native.navigateTo(url),
-          reload: () => view.native.reload(),
+          reload: (ignoreCache) => view.native.reload(ignoreCache),
           stop: () => view.native.stop(),
           goBack: () => view.native.goBack(),
           goForward: () => view.native.goForward(),

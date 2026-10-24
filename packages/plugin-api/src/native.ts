@@ -737,8 +737,12 @@ export type NativeWebView = {
   };
   /** Starts HTTP(S) navigation only to an origin already allowed for this view. */
   navigate(url: string): void;
-  /** Reloads the current document using normal browser cache behavior. */
-  reload(): void;
+  /**
+   * Reloads the current document. With `ignoreCache`, Windows reloads without reading the
+   * WebView2 cache and macOS uses `reloadFromOrigin`, an end-to-end reload whose request
+   * headers are not verified here; otherwise the normal reload revalidates cached entries.
+   */
+  reload(ignoreCache?: boolean): void;
   /** Requests cancellation of pending navigation and resource loads. */
   stop(): void;
   /** Starts history navigation; false means that direction has no entry. */
