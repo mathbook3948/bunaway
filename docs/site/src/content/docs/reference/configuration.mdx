@@ -54,8 +54,10 @@ Ctrl+C나 SIGTERM으로 빌드를 중단하면 실행한 명령과 하위 프로
 생략하면 지정한 정적 자산을 그대로 사용합니다. `dev`, `doctor`, `validate`, `contract`, `package` 단독 실행은 웹 빌드 명령을 실행하지 않습니다.
 
 `build.resources`의 각 항목은 같은 상대 경로로 리소스 디렉터리에 복사됩니다. Windows 패키지에서는 실행 파일 폴더,
-개발 빌드에서는 빌드 출력 폴더, macOS에서는 `Contents/Resources`입니다. Electron의 `extraResources`와 Tauri의 `bundle.resources`에 대응하며,
-Windows 설치 파일과 macOS 번들에도 그대로 포함됩니다. 항목은 파일이거나 일반 파일만 담은 디렉터리여야 하고,
+개발 빌드에서는 빌드 출력 폴더, macOS에서는 `Contents/Resources`입니다. Windows 설치 파일과 macOS 번들에도 그대로 포함됩니다.
+Electron의 `extraResources`나 Tauri의 `bundle.resources`처럼 지정한 파일을 리소스 디렉터리로 복사하지만, 더 엄격합니다.
+프로젝트 밖 경로와 glob은 받지 않고, 링크는 따라가지도 다시 만들지도 않고 거부합니다.
+패키지에 선언하지 않은 프로젝트 밖 파일이 섞이지 않게 하려는 선택입니다. 항목은 파일이거나 일반 파일만 담은 디렉터리여야 하고,
 경로의 어느 구간이든 링크이거나 특수 파일이면 따라가지 않고 거부합니다. 원본 검사는 컴파일 전에 하므로 오류가 있으면 빌드가 바로 중단됩니다. 빈 디렉터리는 복사하지 않습니다.
 경로는 `..`, `.`, 빈 세그먼트, 절대 경로, 드라이브 문자와 Windows 파일 이름에 쓸 수 없는 문자를 거부하며 최대 256개입니다.
 빌드가 쓰는 `assets`, `licenses`, `runtime`, `packaged`, `manifest.json`, `WebView2Loader.dll`과 앱 실행 파일 이름으로 시작하는 항목,
