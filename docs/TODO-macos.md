@@ -252,7 +252,7 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 - [ ] VoiceOver, 키보드 탐색, IME와 사용자 타이틀바 접근성을 검증한다.
 - [x] 전원과 배터리 상태(`power.getStatus`)와 입력 idle(`power.getIdleTime`, `power.getIdleState`)을 조회한다.
 - [x] suspend/resume과 잠금 이벤트를 제공한다.
-- [ ] 전원과 배터리 상태 변경 이벤트를 제공한다.
+- [ ] 전원과 배터리 상태 변경 이벤트를 제공한다. IOKit 전원 소스 알림마다 다시 읽고 달라진 값만 보내도록 구현했다. 읽기 함수를 바꿔 넣은 단위 테스트로 발행과 중복 생략을, macOS CI의 root 알림 게시로 콜백의 재조회를 확인한다. 실제 AC 연결과 분리로 알림이 도착하는지는 확인하지 못했다. 저전력 모드 변경과 절전 복귀는 다시 읽지 않는다.
 - [x] 화면 및 시스템 절전 방지의 시작, 해제와 종료 정리를 제공한다.
 
 ## 14. WebView 생성, 배치와 기본 제어
