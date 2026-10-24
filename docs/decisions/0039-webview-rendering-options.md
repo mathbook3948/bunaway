@@ -9,7 +9,7 @@ status: accepted
 ## 배경
 
 앱 정의에 WebView의 렌더링 설정 옵션을 둘지 정해야 했다. 대상은 기본 글꼴과 글꼴 크기, 문서 encoding,
-이미지 animation 정책, textarea 크기 조절, 콘텐츠 크기(preferred-size) 통지, 탐색 시 포커스 이동이다.
+이미지 animation 정책, textarea 크기 조절, preferred-size(콘텐츠 크기) 통지, 탐색 시 포커스 이동이다.
 아래 외부 동작은 Electron v45.0.0, Tauri 2.12.5(wry 0.57.0), WebView2 SDK 1.0.4314.35 기준으로 확인한 것이며
 이 저장소의 테스트로 실행한 것은 아니다.
 
@@ -42,16 +42,16 @@ WebView2:
 ## 결정
 
 1. 이 옵션들을 앱 정의, 창 플러그인 계약, 이벤트로 추가하지 않는다.
-2. 같은 효과가 필요한 앱은 웹 표준으로 처리한다.
+2. 비슷한 효과가 필요한 앱은 웹 표준으로 처리한다. 아래 방법은 근사이며 Electron 옵션과 의미가 같지 않다. 탐색 뒤 포커스는 대체 수단이 없다.
 
 | 목적 | 앱이 쓰는 방법 |
 | --- | --- |
-| 기본 글꼴, 글꼴 크기, 최소 크기 | 문서 CSS의 `font-family`와 `font-size` |
+| 기본 글꼴, 글꼴 크기 | 문서 CSS의 `font-family`와 `font-size`. 작성자 CSS보다 우선하는 `minimumFontSize`에 해당하는 설정은 없다 |
 | textarea 크기 조절 | CSS `resize` |
 | 문서 encoding | 응답의 `Content-Type` charset 또는 `<meta charset>` |
 | 이미지 animation 중지 | 이미지 형식 선택, 또는 스크립트로 정지 이미지 표시 |
-| 콘텐츠 크기 변화 통지 | `ResizeObserver`와 앱 IPC로 백엔드에 전달 |
-| 탐색 뒤 포커스 | 대체 수단 없음. 문서 안 `element.focus()`로 요소를 고를 수 있으나 키보드 포커스를 WebView로 옮기는 것은 보증하지 않는다 |
+| 콘텐츠 크기 변화 통지 | 콘텐츠를 감싼 요소를 `ResizeObserver`로 관찰해 앱 IPC로 전달한다. `documentElement`는 뷰포트 크기를 준다 |
+| 탐색 뒤 포커스 | 없음. 문서 안 `element.focus()`는 요소만 고르며 키보드 포커스를 WebView로 옮기는 것은 보증하지 않는다 |
 
 3. Electron의 `preferred-size-changed`에 해당하는 이벤트도 제공하지 않는다. TODO의 "title, favicon과
    preferred-size 변경 이벤트" 항목 중 preferred-size 부분은 이 결정으로 닫고, title과 favicon 이벤트는 그 항목에서
@@ -67,7 +67,7 @@ WebView2:
   코어가 커지는 데 비해 얻는 것이 없다.
 - 2026-10-25 기준 `gh issue list`의 열린 이슈 목록과 저장소 검색(docs, plugins, native)에 이 옵션을 쓰거나 요구하는 곳이 없다.
 - 탐색 뒤 포커스는 Electron의 `focusOnNavigation`처럼 탐색마다 자동으로 옮기는 동작을 제공하지 않으며 같은 효과의
-  대체 수단도 정하지 않았다. 호스트의 로드 완료 이벤트(TODO 655, 656행)와 WebView 키보드 포커스 제어가 생기면 다시 다룬다.
+  대체 수단도 정하지 않았다. 호스트의 로드 완료와 탐색 이벤트 항목과 WebView 키보드 포커스 제어가 생기면 다시 다룬다.
 - 이 결정은 Windows 기준이다. macOS WKWebView의 `minimumFontSize` 같은 플랫폼 설정을 나중에 추가하더라도
   플랫폼별로 다른 의미의 옵션이 되지 않도록 별도 결정으로 다룬다.
 
@@ -81,5 +81,5 @@ WebView2:
 ## 결과
 
 - 코드, 스키마, 권한, 이벤트 변경은 없다.
-- `docs/TODO-windows.md` 665행과 666행을 결정 완료로 바꾸고, 657행에서 preferred-size 이벤트를 제외하며 이 ADR을 가리킨다.
+- `docs/TODO-windows.md`의 글꼴, encoding, 이미지 animation 항목과 textarea, preferred-size, focus-on-navigation 항목을 결정 완료로 바꾸고, title과 favicon 이벤트 항목에서 preferred-size를 제외하며 이 ADR을 가리킨다.
 - Windows 창 문서에 해당 옵션이 없다는 사실과 대체 방법을 적는다.
