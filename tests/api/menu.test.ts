@@ -963,6 +963,17 @@ test("insert and updateItem reject sublabel and accessibility label fields", () 
       accessibleLabel: "Open",
     },
   ]) {
+    expect(
+      menuOperations.insert.input.safeParse({
+        menuId: "extra",
+        index: 0,
+        item: {
+          id: "entry",
+          type: "item",
+          label: "Open",
+        },
+      }).success,
+    ).toBe(true);
     const inserted = menuOperations.insert.input.safeParse({
       menuId: "extra",
       index: 0,
@@ -974,6 +985,7 @@ test("insert and updateItem reject sublabel and accessibility label fields", () 
       },
     });
     expect(inserted.success).toBe(false);
+    expect(inserted.error?.issues[0]?.code).toBe("unrecognized_keys");
     const updated = menuOperations.updateItem.input.safeParse({
       menuId: "extra",
       itemId: "entry",
