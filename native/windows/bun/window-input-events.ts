@@ -6,11 +6,15 @@ export const WM_CONTEXTMENU = 0x007b;
 export const WM_NCHITTEST = 0x0084;
 
 /** Window message numbers of the WebView2 key event kinds: key down, key up, system key down, system key up. */
+const WM_KEYDOWN = 0x0100;
+const WM_KEYUP = 0x0101;
+const WM_SYSKEYDOWN = 0x0104;
+const WM_SYSKEYUP = 0x0105;
 const WEBVIEW_KEY_MESSAGES = [
-  0x0100,
-  0x0101,
-  0x0104,
-  0x0105,
+  WM_KEYDOWN,
+  WM_KEYUP,
+  WM_SYSKEYDOWN,
+  WM_SYSKEYUP,
 ] as const;
 
 /** The window message that stands for a WebView2 accelerator key event kind, or undefined for an unknown kind. */

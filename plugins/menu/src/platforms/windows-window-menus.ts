@@ -122,11 +122,6 @@ export class WindowMenus implements WindowMenuDriver {
     return !this.autoHide.has(windowId) || this.revealed.has(windowId);
   }
 
-  /** Whether the bar is linked to the window: not hidden, and for auto-hide only after an Alt tap. */
-  private barShown(windowId: string) {
-    return !this.hidden.has(windowId) && this.autoHideAllowsBar(windowId);
-  }
-
   /** Link or unlink the attached tree, leaving the recorded state to the caller until this succeeds. */
   private link(windowId: string, hwnd: bigint, shown: boolean) {
     const attached = this.attachments.get(windowId);
@@ -200,9 +195,6 @@ export class WindowMenus implements WindowMenuDriver {
   ) {
     const hwnd = this.resolve(windowId);
     const previous = this.attachments.get(windowId);
-    // An Alt tap belongs to the tree it showed; a new or removed tree starts hidden again.
-    this.revealed.delete(windowId);
-    this.altArmed.delete(windowId);
     const tree = items === null ? null : new NativePopupMenu(items, true);
     let unsubscribe: (() => void) | undefined;
     try {
@@ -212,7 +204,9 @@ export class WindowMenus implements WindowMenuDriver {
       assert(
         this.native.symbols.SetMenu(
           hwnd,
-          tree && this.barShown(windowId) ? tree.handle : 0n,
+          tree && !this.hidden.has(windowId) && !this.autoHide.has(windowId)
+            ? tree.handle
+            : 0n,
         ),
         "Window menu attachment failed.",
       );
@@ -223,6 +217,9 @@ export class WindowMenus implements WindowMenuDriver {
       }
       throw error;
     }
+    // An Alt tap belongs to the tree it showed; a new or removed tree starts hidden again.
+    this.revealed.delete(windowId);
+    this.altArmed.delete(windowId);
     // SetMenu transfers no destruction responsibility for the previous detached tree.
     if (tree && unsubscribe) {
       this.attachments.set(windowId, {
