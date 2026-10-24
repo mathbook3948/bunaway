@@ -907,9 +907,9 @@ await windows.setOuterBounds({
 const outer = await windows.getOuterBounds();
 ```
 
-geometry 설정에는 애니메이션 옵션이 없습니다. Electron의 `animate` 인자는 macOS에서만 동작하고 Tauri에는 없으며, Windows에서는 Electron도 즉시 적용합니다. 일반 상태의 창은 호출이 끝나면 새 값이 반영되고, 최소화와 최대화 중에는 복원 영역에 적용되며, 전체화면에서는 위의 규칙대로 거부됩니다.
+위치와 크기를 바꾸는 설정(`setPosition`, `setSize`, `setOuterSize`, `setContentBounds`, `setOuterBounds`, `center`, `moveToAnchor`)에는 애니메이션 옵션이 없습니다. Electron의 `animate` 인자는 macOS에서만 동작하고 Tauri에는 없으며, Windows에서는 Electron도 즉시 적용합니다. 일반 상태의 창은 호출이 끝나면 새 값이 반영되고, 최소화와 최대화 중에는 복원 영역에 적용되며, 전체화면에서는 각 설정의 규칙대로 처리됩니다.
 
-전환 효과가 필요하면 `setOuterBounds`를 반복 호출하거나 WebView 안의 CSS 애니메이션을 씁니다. 반복 호출은 단계마다 `move`, `resize` 이벤트를 만들고 프레임 시간을 보장하지 않습니다. 이유는 [ADR 0038](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0038-window-geometry-animation.md)에 있습니다.
+전환 효과가 필요하면 `setOuterBounds`를 반복 호출하거나 WebView 안의 CSS 애니메이션을 씁니다. 반복 호출은 프레임 시간을 보장하지 않으며, 영역이 바뀐 단계에서만 바뀐 축의 `move`, `resize` 이벤트가 발행됩니다. 최소화나 최대화 중에는 복원 영역만 바뀌므로 눈에 보이는 효과가 없습니다. 이유는 [ADR 0038](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0038-window-geometry-animation.md)에 있습니다.
 
 ## 창 상태 변경과 조회
 
