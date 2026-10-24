@@ -1433,6 +1433,9 @@ workArea는 작업 표시줄과 등록된 데스크톱 도구 모음을 제외�
 `toLogical({ value: point })`로 대상 창의 현재 DPI를 사용해 변환합니다.
 전역 논리 데스크톱 좌표계는 정의하지 않습니다.
 
+커서 아이콘, 표시, 위치 이동, 창 가둠(grab)을 설정하는 API는 없습니다. 페이지 안의 커서 모양과 숨김은 CSS `cursor`로,
+커서를 한 창에 가두거나 상대 이동을 받는 동작은 렌더러의 Pointer Lock API로 처리하세요.
+
 ```ts
 const displays = await windows.getMonitors();
 const current = await windows.getMonitor();
