@@ -90,17 +90,12 @@ try {
     app: {
       appId,
       title: "Autostart fixture",
-      windows: [
-        {
-          view: "main",
-          home: "https://app.bunaway.local/",
-          title: "Autostart fixture",
-          window: {
-            width: 400,
-            height: 300,
-          },
-        },
-      ],
+      view: "main",
+      home: "https://app.bunaway.local/",
+      window: {
+        width: 400,
+        height: 300,
+      },
     },
     policy,
     plugins: [],
