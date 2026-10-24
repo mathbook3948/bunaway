@@ -269,7 +269,8 @@ test.each([
  * Run the production coordinator with a launch request while a fixture UI Worker commits shutdown
  * from inside its `start` handler, so the commit lands before the host sees the start acknowledgement.
  * The host must still run onWillQuit and onQuit, skip the app's open callback, and tell the UI about
- * any shutdown it decided itself before the final `shutdown` packet.
+ * any shutdown it decided itself before the final `shutdown` packet. A second launch already held by
+ * the instance inbox is dropped with the initial one: neither reaches the app.
  */
 async function checkShutdownDuringStart(
   trigger: "closing" | "tray-quit" | "signal",
@@ -281,6 +282,10 @@ async function checkShutdownDuringStart(
     const hooks = resolve(directory, "hooks.log");
     const uiPackets = resolve(directory, "ui-packets.log");
     const startReceived = resolve(directory, "start-received");
+    const address =
+      process.platform === "win32"
+        ? `\\\\.\\pipe\\bunaway-start-race-${crypto.randomUUID()}`
+        : resolve(directory, "inbox.sock");
     const signaled = resolve(directory, "signaled");
     await bundleIOPluginFixture(
       directory,
@@ -345,6 +350,7 @@ async function checkShutdownDuringStart(
       import {appendFileSync,existsSync,writeFileSync} from "node:fs";
       import {defineApp} from ${JSON.stringify(Bun.resolveSync("@bunaway/backend", import.meta.dir))};
       import {runWindowsApp} from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/entry.ts"))};
+      import {forwardToInstance,listenForInstances} from ${JSON.stringify(resolve(import.meta.dir, "../../native/windows/bun/instance.ts"))};
       ${
         trigger === "signal"
           ? `const watch=setInterval(()=>{
@@ -358,11 +364,15 @@ async function checkShutdownDuringStart(
       const note=text=>appendFileSync(${JSON.stringify(hooks)},text+"\\n");
       const app=defineApp({modules:[],commands:{},events:{},desktop:{
         closeBehavior:"keep-alive",
-        onOpen(){note("onOpen");},
+        onOpen(input){note("onOpen:"+input.argv.join(" "));},
         onWillQuit(reason){note("onWillQuit:"+reason);},
         onQuit(reason){note("onQuit:"+reason);},
       }});
-      try{await runWindowsApp(app,${JSON.stringify(config)},{argv:["app.exe","file.txt"],cwd:${JSON.stringify(directory)}});}catch(error){console.error(error);process.exitCode=1;}
+      // A second launch accepted before the host starts delivering stays queued in the inbox.
+      const address=${JSON.stringify(address)};
+      const inbox=await listenForInstances(address);
+      await forwardToInstance(address,{argv:["app.exe","held.txt"],cwd:"C:\\\\docs"});
+      try{await runWindowsApp(app,${JSON.stringify(config)},{argv:["app.exe","file.txt"],cwd:${JSON.stringify(directory)}},inbox);}catch(error){console.error(error);process.exitCode=1;}
     `,
     );
     const build = await Bun.build({
