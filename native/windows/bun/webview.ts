@@ -1333,7 +1333,7 @@ export class WebView {
    * Reload revokes the old document when its NavigationStarting event is accepted.
    *
    * ICoreWebView2 has no cache-bypassing reload, so `ignoreCache` starts `Page.reload` through
-   * DevTools; it fetches the document and its subresources again without validation. The call
+   * DevTools, the cache-bypassing reload of Chromium. The call
    * is started, not awaited: a failure after it started is logged because the caller has
    * already been answered.
    */

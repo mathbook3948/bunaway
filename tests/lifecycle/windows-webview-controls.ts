@@ -660,8 +660,11 @@ if (!process.argv.includes("--child")) {
     await ready("/next.html", 2);
     await expectZoomKept("goForward");
     const beforeReload = await windows.getReadiness();
+    const plainStart = documentRequests.length;
     await windows.reloadWebView();
     await ready("/next.html", 3);
+    // The plain reload revalidates the cached document, which is what the bypassing reload skips.
+    assert.equal(documentRequests[plainStart]?.ifNoneMatch, '"static"');
     assert(
       (await windows.getReadiness()).documentGeneration >
         beforeReload.documentGeneration,

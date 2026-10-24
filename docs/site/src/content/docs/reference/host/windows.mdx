@@ -346,7 +346,7 @@ WebView는 같은 수명을 가지므로 WebView가 닫힌 상태는 `windows.is
 | --- | --- | --- |
 | `windows.getWebViewState` | 없음 | `{ url, title, loading, canGoBack, canGoForward, zoomFactor, focused }` |
 | `windows.navigateWebView` | `url: string` | 탐색 시작 뒤 `null` |
-| `windows.reloadWebView` | `ignoreCache?: boolean` | reload 요청 뒤 `null`. 기본은 일반 cache를 사용하고, `true`이면 cache를 읽지 않고 다시 가져옵니다 |
+| `windows.reloadWebView` | `ignoreCache?: boolean` | reload 요청 뒤 `null`. 기본은 일반 cache를 사용하고, `true`이면 cache를 우회하는 reload를 요청합니다 |
 | `windows.stopWebView` | 없음 | 탐색과 리소스 로드 중단 요청 뒤 `null` |
 | `windows.goBack` | 없음 | 이동을 시작하면 `true`, 이전 항목이 없으면 `false` |
 | `windows.goForward` | 없음 | 이동을 시작하면 `true`, 다음 항목이 없으면 `false` |
@@ -369,14 +369,10 @@ URL은 1–8192자이며 NUL을 허용하지 않습니다. HTTP/HTTPS URL만 허
 다른 origin은 `PERMISSION_DENIED`입니다. 허용한 URL의 redirect도 기존 탐색 및 리소스
 검사를 통과해야 합니다. 이 API는 정책이나 로컬 파일 접근 범위를 추가하지 않습니다.
 
-`reloadWebView({ ignoreCache: true })`는 Electron의 `webContents.reloadIgnoringCache()`처럼 cache를 읽지 않고 문서를
-다시 요청합니다. 일반 reload는 cache 항목을 재검증합니다. Tauri에는 같은 API가 없습니다. Windows는 WebView2에
-같은 API가 없어 DevTools `Page.reload { ignoreCache: true }`로 수행하며, Windows native integration이 문서 요청에
-`Cache-Control: no-cache`가 있고 `If-None-Match`가 없음을 확인합니다. 이 호출은 편집 명령과 같은 DevTools 호출
-한도(뷰당 8개, 종료 중 남은 핸들러 포함)를 공유해 한도를 넘으면 `BUSY`입니다. 호출이 시작된 뒤의 실패는 이미
-`null`을 받은 뒤라 호스트 로그로만 남습니다. macOS는 `WKWebView.reloadFromOrigin`을 사용하며 macOS의 요청 헤더는
-이 저장소에서 검증하지 않습니다. `ignoreCache`를 생략하거나 `false`로 주거나, 입력으로 `null`을 보내면 일반
-reload입니다.
+`reloadWebView({ ignoreCache: true })`는 cache를 우회하는 reload를 요청하고, 일반 reload는 cache 항목을 재검증합니다.
+Windows는 cache를 읽지 않고 문서를 다시 요청합니다. macOS는 `WKWebView.reloadFromOrigin`으로 end-to-end reload를
+요청하며 요청 헤더는 검증하지 않았습니다. Windows의 `ignoreCache: true`는 진행 중인 호출이 많으면 `BUSY`일 수
+있습니다. `ignoreCache`를 생략하거나 `false`로 주거나, 입력으로 `null`을 보내면 일반 reload입니다.
 
 탐색, reload와 history 이동의 결과는 시작 여부이며 문서 완료가 아닙니다.
 허용한 새 문서의 탐색이 시작되면 이전 SDK 세션과 진행 중 명령을 폐기합니다.
