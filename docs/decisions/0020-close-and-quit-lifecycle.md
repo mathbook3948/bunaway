@@ -26,7 +26,7 @@ macOS는 [ADR 0021](./0021-macos-desktop-lifecycle.md)에 따라 같은 계약�
 종료 원인 `ShutdownReason`을 `QuitReason | "window-destroyed" | "session-end" | "interrupted"`로
 정의한다. `beforeQuit`는 기존과 같이 `QuitReason`만 받는다.
 2026-10-16 변경: `QuitReason`에 macOS의 Quit 명령을 뜻하는 `"quit-command"`가 추가되어
-`ShutdownReason`도 이 값을 포함한다. Windows는 발행하지 않는다.
+`ShutdownReason`도 이 값을 포함한다. Windows에서는 창 메뉴의 `quit` role이 발행한다.
 
 - `onReady`는 Core와 백엔드가 준비되고 UI가 시작 창의 네이티브 생성을 시작했다고 보고한 뒤
   한 번 호출한다. 문서나 SDK 준비를 뜻하지 않는다. `onOpen`과 같은 직렬 큐에서 초기

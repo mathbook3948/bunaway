@@ -34,6 +34,7 @@ import {
 import { type CloseDecision, CloseRequests } from "./close-request.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
 import { DownloadCleanupError, DownloadCleanupRetries } from "./downloads.ts";
+import { isWindowRole, runWindowRole } from "./menu-window-role.ts";
 import { isMonitorChangeMessage, MonitorTracker } from "./monitor-events.ts";
 import { monitorServices, windowMonitor } from "./monitors.ts";
 import { createSessionMessageHandler } from "./session-end.ts";
@@ -2190,24 +2191,19 @@ try {
               });
               return;
             }
-            if (role === "close" || role === "minimize" || role === "quit") {
+            if (isWindowRole(role)) {
               // These take the paths of the caption buttons and the tray's Quit, so the close
               // policy, close requests and quit confirmation still apply.
-              try {
-                if (role === "quit") {
-                  requestQuit("quit-command");
-                } else if (role === "close") {
-                  windows?.requestClose(view.native.hwnd);
-                } else {
-                  windows?.minimize(view.native.hwnd);
-                }
-              } catch (error) {
-                log("menu-role-failed", {
-                  role,
-                  reason:
-                    error instanceof Error ? error.message : String(error),
-                });
-              }
+              runWindowRole(role, {
+                requestClose: () => windows?.requestClose(view.native.hwnd),
+                minimize: () => windows?.minimize(view.native.hwnd),
+                requestQuit: () => requestQuit("quit-command"),
+                failed: (reason) =>
+                  log("menu-role-failed", {
+                    role,
+                    reason,
+                  }),
+              });
               return;
             }
             try {
