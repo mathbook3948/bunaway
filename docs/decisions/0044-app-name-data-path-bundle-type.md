@@ -9,7 +9,7 @@ status: accepted
 ## 배경
 
 [ADR 0022](./0022-app-info-context.md)는 `ctx.app.name`을 앱 설정의 `title`에서, `identifier`를 `appId`에서 가져오게 했고,
-[ADR 0024](./0024-plugin-path-responsibility.md)와 `plugin-path`는 앱 전용 폴더를 `%LOCALAPPDATA%\bunaway\<appId>` 아래에 둔다.
+`plugin-path`는 앱 전용 폴더를 `%LOCALAPPDATA%\bunaway\<appId>` 아래에 둔다(`path.mdx`의 경로 표).
 Electron은 `app.setName`, `app.setPath`와 `app.getPath`로 이름과 경로를 바꿀 수 있고, Tauri는 이름과 경로를 설정(`productName`, `identifier`)에서만 정한다.
 Tauri는 빌드된 패키지 종류(`bundle_type`)를 조회하는 API가 있고, Electron에는 `process.windowsStore` 같은 Store 여부 플래그만 있다.
 `opener.getFileIcon`으로 기본 file icon 조회는 이미 제공한다.
