@@ -33,20 +33,20 @@ WebView history에서 `goBack`, `goForward` 외에 offset 이동과 index 이동
 
 1. 호스트 API로 `goToOffset`, `goToIndex`, `canGoToOffset`을 추가하지 않는다. `getWebViewState`에도 history 길이나 현재
    index를 넣지 않는다. 이 결정은 `windows` 플러그인을 제공하는 Windows와 macOS 호스트에 적용한다. Android는 앱에 노출된 history 이동 API가 없다.
-2. 여러 단계 이동이 필요한 앱은 `goBack`과 `goForward`를 반복한다. 호출은 이동을 시작했는지만 알려주므로, 앱은
-   `getWebViewState`에서 `loading`이 `false`가 된 것을 확인하고 `canGoBack` 또는 `canGoForward`를 본 뒤 다음 호출을 한다.
+2. 여러 단계 이동이 필요한 앱은 `goBack`과 `goForward`를 반복한다. 호출은 이동을 시작했는지만 알려주며, 반환 직후의
+   `getWebViewState`가 이동 결과를 반영한다고 보장하지 않는다. 이동 완료를 알리는 전용 신호는 아직 없으므로 연속 호출이 필요한
+   앱은 페이지 쪽에서 확인할 수 있는 상태(예: 이동한 문서가 보내는 신호)를 기다린다.
 3. 페이지가 직접 `history.go(n)`을 쓰는 것은 막지 않는다. 이는 렌더러 내부 동작이며 호스트 계약이 아니다.
 4. 이동할 항목을 앱이 고를 필요가 있는 용도가 확인되면 history 조회와 함께 별도 결정에서 다룬다. 그때 플랫폼별 경로
    (WebView2는 DevTools 프로토콜, WKWebView는 항목 목록, Android WebView는 step 이동)를 함께 정한다.
 
 ## 근거
 
-- 두 프레임워크가 다르다. Electron은 제공하고 Tauri는 제공하지 않는다. 쓰는 곳이 없는 기능을 위해 코어 API를 늘리지
-  않는 쪽으로 Tauri를 따른다.
+- Electron은 제공하고 Tauri는 제공하지 않아 두 프레임워크가 갈린다. 이 저장소에서 쓰는 곳이 없으므로 코어 API를 늘리지
+  않는 Tauri 쪽을 따른다.
 - 같은 범위의 동작을 제공하려면 플랫폼마다 다른 경로를 새로 만들어야 한다. WebView2는 DevTools 프로토콜, WKWebView는
   항목 목록, Android WebView는 step 이동이다. `history.go`만으로는 Electron과 같은 범위의 동작이 되지 않는다.
-- 이 저장소에서 쓰는 곳이 없다. 기본 `goBack`과 `goForward`는 이미 이동 가능 여부를 정확히 반환하고, 여러 단계 이동은 이 두
-  호출을 반복해 대신할 수 있다.
+- 기본 `goBack`과 `goForward`는 이미 이동 가능 여부를 반환하고, 여러 단계 이동은 이 두 호출을 반복해 대신할 수 있다.
 
 ## 결과
 
