@@ -683,7 +683,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [x] `setZoomFactor`와 `getWebViewState`로 controller zoom factor를 설정하고 실제 값을 조회한다.
 - [ ] zoom level과 visual zoom 최소와 최대 한도를 설정하고 조회한다.
 - [ ] 페이지 find, 결과 이벤트와 검색 종료를 제공한다.
-- [x] 결정 완료: 별도 편집 명령 API는 제공하지 않는다. 사용자가 시작하는 undo, redo, cut, copy, paste(평문), select-all은 메뉴 role로 제공한다. [ADR 0050](./decisions/0050-webview-edit-commands-and-selection.md).
+- [x] 결정 완료: 별도 편집 명령 API는 제공하지 않는다. 사용자가 시작하는 undo, redo, cut, copy, paste(평문), select-all은 창 메뉴 role로 제공한다. [ADR 0050](./decisions/0050-webview-edit-commands-and-selection.md).
 - [x] 결정 완료: selection 변경, 텍스트 삽입과 교체, 스크롤 이동 API는 제공하지 않고 렌더러의 웹 표준 API를 쓴다. [ADR 0050](./decisions/0050-webview-edit-commands-and-selection.md).
 - [ ] 맞춤법 검사 활성화, 언어, dictionary와 사용자 단어를 관리한다.
 - [ ] misspelling 조회, suggestion과 교체 API를 제공한다.
