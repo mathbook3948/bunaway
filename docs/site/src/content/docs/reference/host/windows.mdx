@@ -924,6 +924,8 @@ const outer = await windows.getOuterBounds();
 API 생성 작업이 없고 살아 있는 HWND가 있으면 WebView 준비 전에도 `true`입니다. 이 조회는 창을 생성하거나
 문서 준비를 기다리지 않습니다. 트레이로 숨기거나 닫기를 거절한 창은 닫힌 창이 아닙니다.
 
+Windows Snap 배치와 tablet 모드는 조회하지 않습니다. Snap은 일반 상태 창의 bounds가 바뀐 결과일 뿐 창 상태가 아니며 Electron과 Tauri도 제공하지 않습니다. 필요하면 `getOuterBounds`와 `getMonitor`의 작업 영역을 비교하세요.
+
 제어와 상태 조회 모두 각 작업 이름을 허용해야 합니다. `windows.isOpen`만으로는
 상태를 조회할 수 없습니다. 권한을 먼저 검사하며 권한이 없으면 `PERMISSION_DENIED`입니다.
 `isOpen`과 `isFocused`를 제외한 상태 조회는 닫힌 창에 `INVALID_ARGUMENT`를 반환합니다.
