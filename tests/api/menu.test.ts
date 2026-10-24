@@ -1006,3 +1006,49 @@ test("insert and updateItem reject sublabel and accessibility label fields", () 
     });
   }
 });
+
+test("sublabel and accessibility label surface as INVALID_ARGUMENT on a top-level item", async () => {
+  const parsers = pluginParsers("menu", menuOperations);
+  for (const extra of [
+    {
+      sublabel: "Hint",
+    },
+    {
+      accessibleLabel: "Open",
+    },
+  ]) {
+    await expect(
+      parsers.validateCall({
+        operation: "menu.create",
+        payload: {
+          menuId: "extra",
+          items: [
+            {
+              id: "entry",
+              type: "item",
+              label: "Open",
+              ...extra,
+            },
+          ],
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  await expect(
+    parsers.validateCall({
+      operation: "menu.create",
+      payload: {
+        menuId: "extra",
+        items: [
+          {
+            id: "entry",
+            type: "item",
+            label: "Open",
+          },
+        ],
+      },
+    }),
+  ).resolves.toBeDefined();
+});
