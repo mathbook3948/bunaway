@@ -29,6 +29,8 @@ export type UIConfig = {
     closeBehavior: NonNullable<DesktopOptions["closeBehavior"]>;
     tray?: {
       tooltip: string;
+      /** Declared icon path, relative to the resources directory; the tray adapter validates and reads it. */
+      icon?: string;
     };
   };
   devtools?: boolean;

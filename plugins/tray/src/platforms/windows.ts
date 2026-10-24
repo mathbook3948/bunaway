@@ -7,6 +7,7 @@ import {
 import { BunawayError, validateValue } from "@bunaway/protocol";
 import type { z } from "zod";
 import type { TrayBalloon, trayEventSchema } from "#tray/contract";
+import { readTrayIconFile } from "#tray/platforms/windows-icon-file";
 import { Tray } from "#tray/platforms/windows-tray";
 
 function requireTray(
@@ -66,28 +67,32 @@ export function initializeWith(
   const created: CreatedTray = {
     tray: undefined,
   };
-  services?.initialize?.(({ windows, tooltip, receive, notify, retain }) => {
-    // Hover and balloon events are view-only with no waiter. The host Tray outlives this plugin,
-    // so stop after dispose.
-    created.tray = createTray(
-      windows,
-      tooltip,
-      receive,
-      notify,
-      retain,
-      (event) => {
-        if (hover.open) {
-          services.emit("tray.hover", validateValue({}, event));
-        }
-      },
-      (event) => {
-        if (hover.open) {
-          services.emit("tray.balloon", validateValue({}, event));
-        }
-      },
-    );
-    return created.tray;
-  });
+  services?.initialize?.(
+    ({ windows, tooltip, icon, resources, receive, notify, retain }) => {
+      // Hover and balloon events are view-only with no waiter. The host Tray outlives this plugin,
+      // so stop after dispose.
+      created.tray = createTray(
+        windows,
+        tooltip,
+        receive,
+        notify,
+        retain,
+        (event) => {
+          if (hover.open) {
+            services.emit("tray.hover", validateValue({}, event));
+          }
+        },
+        (event) => {
+          if (hover.open) {
+            services.emit("tray.balloon", validateValue({}, event));
+          }
+        },
+        // The host passes the declared path; reading it here keeps file access out of the host core.
+        icon === undefined ? undefined : readTrayIconFile(resources, icon),
+      );
+      return created.tray;
+    },
+  );
   const notifications = new NativeEventWaiters<
     z.output<typeof trayEventSchema>
   >(MAX_TRAY_WAITERS);

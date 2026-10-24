@@ -840,6 +840,11 @@ function withDesktopStart(
     ? {
         tray: {
           tooltip: desktop.tray.tooltip,
+          ...(desktop.tray.icon === undefined
+            ? {}
+            : {
+                icon: desktop.tray.icon,
+              }),
         },
       }
     : {};
