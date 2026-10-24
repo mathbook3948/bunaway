@@ -232,7 +232,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `windows.changed`로 실제 전경 창 상태의 focus와 blur 전환을 제공한다.
 - [x] move와 resize 전환에 현재 outer bounds와 DPI를 함께 제공한다.
 - [x] Windows의 네이티브 이동과 크기 조절 루프가 끝나면 `windows.changed`에 `moved`, `resized`를 제공한다. 시작과 최종 geometry의 실제 차이를 판정하고 최종 bounds와 별도 revision을 전달한다.
-- [ ] will-move와 will-resize의 취소 가능 여부를 정의한다.
+- [x] 결정 완료: 앱 코드가 응답하는 사전 취소 `will-move`, `will-resize`는 제공하지 않는다. 동기 창 프로시저가 앱의 IPC 응답을 기다리면 끄는 동안 메시지 처리가 멈추므로, 크기는 선언형 제약(`setMinSize`, `setMaxSize`, `setAspectRatio`)으로 두고 이동 결과 보정은 `moved` 뒤 `setBounds`로 한다. [ADR 0032](./decisions/0032-window-will-move-and-will-resize.md)를 따른다.
 - [x] minimize, maximize, unmaximize와 restore 전환을 제공한다.
 - [x] enterFullscreen과 leaveFullscreen 전환을 제공한다.
 - [x] `windows.changed`로 enterAlwaysOnTop과 leaveAlwaysOnTop 전환을 제공한다. API 호출과 `SetWindowPos` topmost 변경을 같은 창 위치 알림으로 관찰하며 동일 값은 생략한다.

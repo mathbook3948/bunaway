@@ -1110,6 +1110,13 @@ API 호출과 사용자 조작은 같은 네이티브 관찰 경로를 사용합
 그 구독에서만 의미가 있습니다. `revision`은 창별 관찰 순번이고 재생성하면 0부터
 다시 시작합니다. 여러 changes를 포함한 한 snapshot에는 revision 하나를 사용합니다.
 
+`moved`와 `resized`는 Windows가 반영한 뒤에 알리며, 앱이 사용자의 이동이나 크기 조절을 미리 취소하거나
+수정하는 `will-move`, `will-resize` 이벤트는 없습니다. 동기 창 프로시저가 앱의 IPC 응답을 기다리면 끄는
+동안 창 메시지 처리가 멈추기 때문입니다. 크기는 `setMinSize`, `setMaxSize`, `setSizeConstraints`,
+`setAspectRatio`로 선언해 제한하고, 이동 결과를 바꿔야 하면 `moved`를 받은 뒤 `setBounds`로 보정합니다.
+이 보정은 이미 반영된 변경을 되돌리는 것이므로 보정 전 상태가 잠시 화면에 보일 수 있습니다.
+설계 근거는 [ADR 0032](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0032-window-will-move-and-will-resize.md)에 있습니다.
+
 네이티브 Worker의 미확인 이벤트 용량은 앱 전체 128개입니다. 포화되면 손실이 생긴
 대상 세션을 `BUSY`로 종료해 요청과 구독을 정리합니다. Core의 구독별 대기 용량도
 128개이고, 초과하면 그 구독을 마지막 `subscription-error`의 `BUSY`로 종료합니다.
