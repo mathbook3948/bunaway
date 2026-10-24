@@ -275,6 +275,11 @@ test.each([
 async function checkShutdownDuringStart(
   trigger: "closing" | "tray-quit" | "signal",
 ) {
+  // The unix socket lives outside the temporary directory to stay below the sun_path limit.
+  const address =
+    process.platform === "win32"
+      ? `\\\\.\\pipe\\bunaway-start-race-${crypto.randomUUID()}`
+      : `/tmp/bunaway-start-race-${crypto.randomUUID()}.sock`;
   const directory = await mkdtemp(
     resolve(tmpdir(), "bunaway-windows-start-race-"),
   );
@@ -282,10 +287,6 @@ async function checkShutdownDuringStart(
     const hooks = resolve(directory, "hooks.log");
     const uiPackets = resolve(directory, "ui-packets.log");
     const startReceived = resolve(directory, "start-received");
-    const address =
-      process.platform === "win32"
-        ? `\\\\.\\pipe\\bunaway-start-race-${crypto.randomUUID()}`
-        : `/tmp/bunaway-start-race-${crypto.randomUUID()}.sock`;
     const signaled = resolve(directory, "signaled");
     await bundleIOPluginFixture(
       directory,
@@ -454,6 +455,9 @@ async function checkShutdownDuringStart(
       expect(committed).toBeLessThan(received.indexOf("shutdown"));
     }
   } finally {
+    await rm(address, {
+      force: true,
+    });
     await rm(directory, {
       recursive: true,
       force: true,
