@@ -1049,7 +1049,12 @@ export const windowOperations = {
     }),
     output: z.null(),
   },
-  "windows.reloadWebView": windowResult,
+  "windows.reloadWebView": {
+    input: z.strictObject({
+      ignoreCache: z.boolean().exactOptional(),
+    }),
+    output: z.null(),
+  },
   "windows.stopWebView": windowResult,
   "windows.goBack": windowStateResult,
   "windows.goForward": windowStateResult,

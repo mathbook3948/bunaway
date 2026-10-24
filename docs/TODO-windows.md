@@ -652,7 +652,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] WebView를 다른 창으로 reparent하는 기능과 새 세션 규칙을 정의한다. ADR 0026에 따라 보류한다.
 - [ ] WebView만 닫고 재생성하는 공개 API를 제공한다.
 - [x] 기존 허용 origin 안의 URL 로드, 일반 reload와 stop을 제공한다. `navigateWebView`, `reloadWebView`, `stopWebView`는 기존 세션 폐기와 origin 검사를 유지한다.
-- [ ] 로컬 파일 로드와 cache를 무시한 reload를 제공한다.
+- [x] cache를 무시한 reload를 `reloadWebView({ ignoreCache: true })`로 제공한다. WebView2에는 해당 API가 없어 DevTools `Page.reload`로 구현하며 실제 요청 헤더는 CI Windows native integration에서 검증한다. 로컬 파일 로드는 file URL을 허용하지 않는 기존 탐색 정책을 유지하므로 제공하지 않는다.
 - [x] `getWebViewState`로 현재 URL, title과 최상위 loading 상태를 조회한다.
 - [x] `getWebViewState`의 `focused`로 WebView 포커스를, `isOpen`으로 창과 같은 수명의 WebView 열림 상태를 조회한다. 실제 포커스 전환은 CI Windows native integration에서 검증한다.
 - [ ] 탐색 전 허용와 거부, redirect와 popup 새 창 처리 훅을 제공한다.

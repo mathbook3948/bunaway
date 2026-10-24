@@ -309,7 +309,36 @@ const rows: Row[] = [
     result: null,
     unsupported: MESSAGES.webview,
   },
-  command("reloadWebView", MESSAGES.webview, "webview.reload"),
+  {
+    operation: "windows.reloadWebView",
+    payload: {},
+    calls: [
+      [
+        "webview.reload",
+        [
+          false,
+        ],
+      ],
+    ],
+    result: null,
+    unsupported: MESSAGES.webview,
+  },
+  {
+    operation: "windows.reloadWebView",
+    payload: {
+      ignoreCache: true,
+    },
+    calls: [
+      [
+        "webview.reload",
+        [
+          true,
+        ],
+      ],
+    ],
+    result: null,
+    unsupported: MESSAGES.webview,
+  },
   command("stopWebView", MESSAGES.webview, "webview.stop"),
   {
     ...query("goBack", true, MESSAGES.webview),
