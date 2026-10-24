@@ -23,8 +23,9 @@ status: accepted
   제공한다. 사용자 조작 하나는 `WM_ENTERSIZEMOVE`와 `WM_EXITSIZEMOVE` 사이로 추적한다.
 - Windows 창 프로시저는 이동 중에 `WM_MOVING`, 크기 조절 중에 `WM_SIZING`을 포인터 이동마다 동기적으로 받고,
   메시지가 가리키는 RECT를 고쳐 쓰는 것으로 결과를 정한다(Win32 문서 기준이며 `WM_MOVING`은 이 저장소에서 처리하지
-  않는다). 호스트는 이미 `WM_SIZING`에서 가로세로 비율 고정(`setAspectRatio`)을, `WM_GETMINMAXINFO`에서 최소,
-  최대 크기 제한을 같은 방식으로 적용한다.
+  않는다). 호스트는 이미 `WM_SIZING`의 RECT를 고쳐 가로세로 비율을 고정(`setAspectRatio`)하고,
+  `WM_GETMINMAXINFO`의 MINMAXINFO를 채워 최소, 최대 크기를 제한한다. 둘 다 메시지 안의 값을 고칠 뿐 앱 응답을
+  기다리지 않는다.
 - 앱 코드는 호스트 창 프로시저와 다른 곳(백엔드 또는 WebView)에서 실행되고, 앱 코드의 응답은 IPC를 거치는
   비동기 메시지다. 닫기 요청은 이산적인 사건이라 `windows.closeRequested`와 `windows.respondClose`로 응답을
   기다릴 수 있지만, 이동과 크기 조절은 사용자가 끄는 동안 메시지가 연속으로 온다.
