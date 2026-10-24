@@ -18,10 +18,10 @@ status: accepted
 - Tauri 2는 키오스크 옵션이나 API가 없고 `fullscreen`만 제공한다.
 - 이 저장소의 Windows 전체화면(`setFullscreen`, 선언과 생성 옵션의 `fullscreen`)은 창 스타일에서
   `WS_OVERLAPPEDWINDOW`를 빼고 창을 현재 모니터의 전체 영역으로 옮긴다. 이전 스타일, 위치와 표시 상태는
-  저장했다가 해제할 때 복원한다. 전체 모니터 영역을 덮는 전경 창이라 작업 표시줄은 Windows 셸이 가린다.
+  저장했다가 해제할 때 복원한다. 창을 활성화하거나 최상위로 올리지는 않는다. 전체 모니터 영역을 덮는 창이 전경 창이면 작업 표시줄은 Windows 셸이 가리지만, 비활성 상태에서는 보일 수 있다.
   `setFullscreenable(false)`로 진입을 막을 수 있고, 전체화면 중에는 최소화, 최대화, 복원 호출을 거부한다.
 - 키오스크 앱이 일반적으로 더하는 동작은 이미 개별 API로 있다. 항상 위(`alwaysOnTop`), 작업 표시줄 제외
-  (`skipTaskbar`), 메뉴 막대 숨김, 닫기 요청을 받아 거부하는 `windows.closeRequested`와 `windows.respondClose`,
+  (`skipTaskbar`, 표시 중이거나 전체화면인 창에서는 `BUSY`이므로 숨김 상태에서 먼저 설정하거나 창 옵션으로 지정), 메뉴 막대 숨김(`menu.setWindowMenuVisible`), 닫기 요청을 받아 거부하는 `windows.closeRequested`와 `windows.respondClose`,
   전역 단축키다.
 - Windows에서 사용자가 키오스크를 빠져나가는 경로(Alt+Tab, Win 키, Ctrl+Alt+Del, 작업 관리자)는 OS 기능이라
   창 API로 막을 수 없다. 이를 막는 방법은 OS 설정(할당된 액세스, 셸 런처, 그룹 정책)이며 앱 프로세스의 책임이
@@ -32,10 +32,10 @@ status: accepted
 1. 키오스크를 전체화면과 별도 상태로 제공하지 않는다. `kiosk` 선언 옵션, `setKiosk`, `isKiosk`는 추가하지
    않는다.
 2. 키오스크가 필요한 앱은 전체화면에 위의 개별 API를 앱이 직접 조합한다. 호스트는 조합을 대신하지 않는다.
-3. 전체화면은 키오스크가 아니다. 전체화면은 사용자가 `setFullscreen({ fullscreen: false })`나 앱이 만든
-   조작으로 나갈 수 있는 표시 모드이고, OS 수준의 탈출 경로 차단은 제공하지 않는다고 문서에 적는다.
+3. 전체화면은 키오스크가 아니다. 전체화면은 앱이 `setFullscreen({ fullscreen: false })`로 나갈 수 있는 표시
+   모드이고(제목 표시줄이 없어 해제 UI는 앱이 제공한다), OS 수준의 탈출 경로 차단은 제공하지 않는다고 문서에 적는다.
 4. macOS의 Dock과 메뉴 막대 숨김처럼 플랫폼 고유의 키오스크 표시 옵션은 macOS 전체화면 지원을 정할 때 같이
-   다룬다.
+   다룬다(`docs/TODO-windows.md`의 macOS native fullscreen 항목).
 
 ## 근거
 
