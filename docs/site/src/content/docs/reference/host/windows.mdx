@@ -125,6 +125,20 @@ const { muted, playing } = await windows.getWebViewAudioState();
 `UNSUPPORTED`입니다. 네이티브 읽기와 쓰기 실패는 `INTERNAL`입니다.
 상태 변경 이벤트와 실제 audio 장치의 재생 검증은 아직 제공하지 않습니다.
 
+## WebView 렌더링 옵션
+
+기본 글꼴과 크기, 문서 encoding, 이미지 animation 정책, textarea 크기 조절, 콘텐츠 크기(preferred-size) 통지,
+탐색 시 포커스 이동 옵션은 없습니다. Electron은 이들을 `webPreferences`로 제공하지만 Tauri와 WebView2에는
+Windows 네이티브 설정이 없어 같은 이름의 옵션이 서로 다른 동작이 되기 때문입니다. 웹 표준으로 처리합니다.
+
+- 글꼴과 크기: 문서 CSS의 `font-family`와 `font-size`
+- textarea 크기 조절: CSS `resize`
+- encoding: 응답의 `Content-Type` charset 또는 `<meta charset>`
+- 콘텐츠 크기 변화: `ResizeObserver`로 감지해 앱 IPC로 전달
+- 탐색 뒤 포커스: 문서 안의 `element.focus()`
+
+이유는 [ADR 0039](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0039-webview-rendering-options.md)에 있습니다.
+
 ## 설정과 권한
 
 창은 [app](/reference/configuration/#app)에 선언합니다. `startup: false`로 설정하면
