@@ -7,6 +7,7 @@ import {
 import { BunawayError, validateValue } from "@bunaway/protocol";
 import type { z } from "zod";
 import type { TrayBalloon, trayEventSchema } from "#tray/contract";
+import { readTrayIconFile } from "#tray/platforms/windows-icon-file";
 import { Tray } from "#tray/platforms/windows-tray";
 
 function requireTray(
@@ -67,7 +68,7 @@ export function initializeWith(
     tray: undefined,
   };
   services?.initialize?.(
-    ({ windows, tooltip, icon, receive, notify, retain }) => {
+    ({ windows, tooltip, icon, resources, receive, notify, retain }) => {
       // Hover and balloon events are view-only with no waiter. The host Tray outlives this plugin,
       // so stop after dispose.
       created.tray = createTray(
@@ -86,7 +87,8 @@ export function initializeWith(
             services.emit("tray.balloon", validateValue({}, event));
           }
         },
-        icon,
+        // The host passes the declared path; reading it here keeps file access out of the host core.
+        icon === undefined ? undefined : readTrayIconFile(resources, icon),
       );
       return created.tray;
     },

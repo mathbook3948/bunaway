@@ -43,7 +43,6 @@ import {
   relaunchCommandLineTooLong,
 } from "./relaunch.ts";
 import { releaseSessionEndWait } from "./session-end.ts";
-import { readTrayIcon } from "./tray-icon.ts";
 import { readWebViewVersion } from "./webview-version.ts";
 
 /** How an orderly shutdown ended: the process exit code and an optional app-requested relaunch. */
@@ -178,7 +177,7 @@ export async function runWindowsApp(
   );
   const startHidden = desktopLaunch(launch?.argv ?? []).hidden;
   validateDesktopStartup(config.windows, app.desktop, startHidden);
-  config = await withDesktopStart(config, app.desktop, startHidden);
+  config = withDesktopStart(config, app.desktop, startHidden);
   const worker = new Worker(workerModuleUrl("ui"), {
     workerData: config,
   });
@@ -832,26 +831,19 @@ export async function runWindowsApp(
 }
 
 /** Adds the resolved desktop startup settings (and hidden-start support) to the UI Worker config. */
-async function withDesktopStart(
+function withDesktopStart(
   config: UIConfig,
   desktop: AppDefinition["desktop"],
   startHidden: boolean,
-): Promise<UIConfig> {
-  const trayIcon =
-    desktop?.tray?.icon === undefined
-      ? undefined
-      : await readTrayIcon(
-          config.appMetadata.paths?.resources,
-          desktop.tray.icon,
-        );
+): UIConfig {
   const tray = desktop?.tray
     ? {
         tray: {
           tooltip: desktop.tray.tooltip,
-          ...(trayIcon === undefined
+          ...(desktop.tray.icon === undefined
             ? {}
             : {
-                icon: trayIcon,
+                icon: desktop.tray.icon,
               }),
         },
       }

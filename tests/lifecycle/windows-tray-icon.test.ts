@@ -57,7 +57,9 @@ test.skipIf(process.platform !== "win32")(
     );
     const { tmpdir } = await import("node:os");
     const { resolve } = await import("node:path");
-    const { readTrayIcon } = await import("#native/windows/bun/tray-icon");
+    const { readTrayIconFile } = await import(
+      "#plugins/tray/src/platforms/windows-icon-file"
+    );
     const base = await mkdtemp(resolve(tmpdir(), "bunaway-tray-icon-"));
     try {
       const root = resolve(base, "resources");
@@ -69,13 +71,13 @@ test.skipIf(process.platform !== "win32")(
       await writeFile(resolve(root, "Icons", "tray.ico"), trayIco());
       await writeFile(resolve(outside, "secret.ico"), trayIco());
       const expected = trayIco().toString("base64");
-      expect(await readTrayIcon(root, "Icons/tray.ico")).toBe(expected);
-      expect(await readTrayIcon(root, "icons\\TRAY.ICO")).toBe(expected);
-      expect(await readTrayIcon(root.toUpperCase(), "Icons/tray.ico")).toBe(
+      expect(readTrayIconFile(root, "Icons/tray.ico")).toBe(expected);
+      expect(readTrayIconFile(root, "icons\\TRAY.ICO")).toBe(expected);
+      expect(readTrayIconFile(root.toUpperCase(), "Icons/tray.ico")).toBe(
         expected,
       );
       await symlink(outside, resolve(root, "linked"), "junction");
-      await expect(readTrayIcon(root, "linked/secret.ico")).rejects.toThrow(
+      expect(() => readTrayIconFile(root, "linked/secret.ico")).toThrow(
         "outside the resources directory",
       );
       for (const icon of [
@@ -86,13 +88,9 @@ test.skipIf(process.platform !== "win32")(
         "..\\outside\\secret.ico",
         "\\\\?\\C:\\Windows\\win.ini",
       ]) {
-        await expect(readTrayIcon(root, icon)).rejects.toThrow(
-          "desktop.tray.icon",
-        );
+        expect(() => readTrayIconFile(root, icon)).toThrow("desktop.tray.icon");
       }
-      await expect(readTrayIcon(root, "Icons")).rejects.toThrow(
-        "must be a file",
-      );
+      expect(() => readTrayIconFile(root, "Icons")).toThrow("must be a file");
     } finally {
       await rm(base, {
         recursive: true,

@@ -21,7 +21,6 @@ import {
   MAX_PROCESS_EXIT_CODE,
 } from "@bunaway/runtime-bun/worker-channel";
 import type { LaunchArguments } from "./instance.ts";
-import { validateTrayIconPath } from "./tray-icon.ts";
 
 /** Consume only the registration prefix; later and positional marker strings remain app input. */
 export function desktopLaunch(argv: readonly string[]) {
@@ -336,9 +335,6 @@ export class DesktopLifecycle {
         /[\0\uD800-\uDFFF]/u.test(options.tray.tooltip))
     ) {
       throw new Error("Invalid desktop.tray.tooltip");
-    }
-    if (options?.tray?.icon !== undefined) {
-      validateTrayIconPath(options.tray.icon);
     }
     for (const name of [
       "onReady",

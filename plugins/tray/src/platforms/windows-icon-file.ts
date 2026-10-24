@@ -1,4 +1,10 @@
-import { open, realpath, stat } from "node:fs/promises";
+import {
+  closeSync,
+  fstatSync,
+  openSync,
+  readSync,
+  realpathSync,
+} from "node:fs";
 import { isAbsolute, relative, resolve, win32 } from "node:path";
 import {
   MAX_NATIVE_ICO_BYTES,
@@ -55,12 +61,13 @@ export function validateTrayIconPath(icon: unknown): string {
  * Read the declared tray icon from the app resources directory and return it as the base64 ICO
  * the tray accepts. The canonical file must stay inside the canonical resources directory, so a
  * symlink or junction cannot lead outside it. File system failures are reported without the
- * absolute path; the original error stays as the cause.
+ * absolute path; the original error stays as the cause. The read is synchronous because tray
+ * creation is, and the file is bounded by the ICO limit.
  */
-export async function readTrayIcon(
+export function readTrayIconFile(
   resources: string | undefined,
   icon: unknown,
-): Promise<string> {
+): string {
   const declared = validateTrayIconPath(icon);
   if (!resources) {
     return invalid("desktop.tray.icon needs an app resources directory.");
@@ -68,8 +75,8 @@ export async function readTrayIcon(
   let root: string;
   let canonical: string;
   try {
-    root = await realpath(resolve(resources));
-    canonical = await realpath(resolve(root, declared));
+    root = realpathSync(resolve(resources));
+    canonical = realpathSync(resolve(root, declared));
   } catch (error) {
     const missing = (error as NodeJS.ErrnoException).code === "ENOENT";
     return invalid(
@@ -89,49 +96,50 @@ export async function readTrayIcon(
       "desktop.tray.icon resolves outside the resources directory.",
     );
   }
+  let bytes: Buffer;
   try {
-    // Check the type before opening so a directory or pipe is never opened or waited on.
-    const info = await stat(canonical);
-    if (!info.isFile()) {
-      return invalid("desktop.tray.icon must be a file.");
-    }
-    if (info.size > MAX_NATIVE_ICO_BYTES) {
-      return invalid("desktop.tray.icon is larger than the ICO limit.");
-    }
-    const handle = await open(canonical, "r");
-    let bytes: Buffer;
+    const descriptor = openSync(canonical, "r");
     try {
+      // Check the type on the opened handle so a directory is rejected without being read.
+      const info = fstatSync(descriptor);
+      if (!info.isFile()) {
+        return invalid("desktop.tray.icon must be a file.");
+      }
+      if (info.size > MAX_NATIVE_ICO_BYTES) {
+        return invalid("desktop.tray.icon is larger than the ICO limit.");
+      }
       // Read one byte past the limit so a file that grew after the size check is still bounded.
       const buffer = Buffer.alloc(MAX_NATIVE_ICO_BYTES + 1);
       let length = 0;
       while (length < buffer.length) {
-        const { bytesRead } = await handle.read(
+        const read = readSync(
+          descriptor,
           buffer,
           length,
           buffer.length - length,
           length,
         );
-        if (bytesRead === 0) {
+        if (read === 0) {
           break;
         }
-        length += bytesRead;
+        length += read;
       }
       bytes = buffer.subarray(0, length);
     } finally {
-      await handle.close();
+      closeSync(descriptor);
     }
-    if (bytes.length > MAX_NATIVE_ICO_BYTES) {
-      return invalid("desktop.tray.icon is larger than the ICO limit.");
-    }
-    const base64 = bytes.toString("base64");
-    if (!parseNativeIco(base64)) {
-      return invalid("desktop.tray.icon is not a valid ICO file.");
-    }
-    return base64;
   } catch (error) {
     if (error instanceof BunawayError) {
       throw error;
     }
     return invalid(`desktop.tray.icon could not be read: ${declared}`, error);
   }
+  if (bytes.length > MAX_NATIVE_ICO_BYTES) {
+    return invalid("desktop.tray.icon is larger than the ICO limit.");
+  }
+  const base64 = bytes.toString("base64");
+  if (!parseNativeIco(base64)) {
+    return invalid("desktop.tray.icon is not a valid ICO file.");
+  }
+  return base64;
 }

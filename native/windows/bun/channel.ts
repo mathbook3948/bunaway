@@ -29,7 +29,7 @@ export type UIConfig = {
     closeBehavior: NonNullable<DesktopOptions["closeBehavior"]>;
     tray?: {
       tooltip: string;
-      /** Base64 ICO read from the app resources directory at startup. */
+      /** Declared icon path, relative to the resources directory; the tray adapter validates and reads it. */
       icon?: string;
     };
   };

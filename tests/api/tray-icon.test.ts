@@ -6,11 +6,11 @@ import type {
   NativeTrayInitialization,
   NativeTrayServices,
 } from "@bunaway/plugin-api/native";
-import {
-  readTrayIcon,
-  validateTrayIconPath,
-} from "#native/windows/bun/tray-icon";
 import { initializeWith } from "#plugins/tray/src/platforms/windows";
+import {
+  readTrayIconFile,
+  validateTrayIconPath,
+} from "#plugins/tray/src/platforms/windows-icon-file";
 import { trayIco } from "../fixtures/tray-icon.ts";
 
 async function resources<T>(
@@ -37,10 +37,10 @@ async function resources<T>(
 
 test("a declared tray icon resolves inside the resources directory", async () => {
   await resources(async (root) => {
-    expect(await readTrayIcon(root, "icons/tray.ico")).toBe(
+    expect(readTrayIconFile(root, "icons/tray.ico")).toBe(
       trayIco().toString("base64"),
     );
-    expect(await readTrayIcon(root, "icons\\tray.ico")).toBe(
+    expect(readTrayIconFile(root, "icons\\tray.ico")).toBe(
       trayIco().toString("base64"),
     );
   });
@@ -75,7 +75,7 @@ test("tray icon paths outside the resources directory are rejected", async () =>
     expect(() => validateTrayIconPath(icon)).toThrow("desktop.tray.icon");
   }
   await resources(async (root) => {
-    await expect(readTrayIcon(root, "../outside/secret.ico")).rejects.toThrow(
+    expect(() => readTrayIconFile(root, "../outside/secret.ico")).toThrow(
       "desktop.tray.icon",
     );
   });
@@ -89,12 +89,12 @@ test("a symlink cannot lead a tray icon out of the resources directory", async (
         resolve(outside, "secret.ico"),
         resolve(root, "icons", "link.ico"),
       );
-      await expect(readTrayIcon(root, "icons/link.ico")).rejects.toThrow(
+      expect(() => readTrayIconFile(root, "icons/link.ico")).toThrow(
         "outside the resources directory",
       );
     }
     await symlink(outside, resolve(root, "linked"), "junction");
-    await expect(readTrayIcon(root, "linked/secret.ico")).rejects.toThrow(
+    expect(() => readTrayIconFile(root, "linked/secret.ico")).toThrow(
       "outside the resources directory",
     );
   });
@@ -104,62 +104,78 @@ test("a missing, non-file, oversized or invalid tray icon fails", async () => {
   await resources(async (root) => {
     await writeFile(resolve(root, "icons", "bad.ico"), "not an icon");
     await writeFile(resolve(root, "icons", "big.ico"), Buffer.alloc(70_000));
-    await expect(readTrayIcon(root, "icons/none.ico")).rejects.toThrow(
+    expect(() => readTrayIconFile(root, "icons/none.ico")).toThrow(
       "was not found",
     );
-    await expect(readTrayIcon(root, "icons")).rejects.toThrow("must be a file");
-    await expect(readTrayIcon(root, "icons/big.ico")).rejects.toThrow(
+    expect(() => readTrayIconFile(root, "icons")).toThrow("must be a file");
+    expect(() => readTrayIconFile(root, "icons/big.ico")).toThrow(
       "larger than the ICO limit",
     );
-    await expect(readTrayIcon(root, "icons/bad.ico")).rejects.toThrow(
+    expect(() => readTrayIconFile(root, "icons/bad.ico")).toThrow(
       "not a valid ICO",
     );
-    await expect(
-      readTrayIcon(resolve(root, "missing"), "icons/tray.ico"),
-    ).rejects.toMatchObject({
+    let failure: unknown;
+    try {
+      readTrayIconFile(resolve(root, "missing"), "icons/tray.ico");
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({
       code: "INVALID_ARGUMENT",
       message: expect.not.stringContaining(root),
+      cause: expect.anything(),
     });
-    await expect(readTrayIcon(undefined, "icons/tray.ico")).rejects.toThrow(
+    expect(() => readTrayIconFile(undefined, "icons/tray.ico")).toThrow(
       "needs an app resources directory",
     );
   });
 });
 
-test("the tray plugin hands the declared icon to the tray factory", () => {
-  let create:
-    | ((initialization: NativeTrayInitialization) => unknown)
-    | undefined;
-  const services = {
-    initialize(callback: typeof create) {
-      create = callback;
-    },
-    subscribe: () => () => {},
-  } as unknown as NativeTrayServices;
-  const received: unknown[] = [];
-  initializeWith(
-    {
-      tray: services,
-    } as never,
-    (...args) => {
-      received.push(args[7]);
-      return {} as never;
-    },
-  );
-  const base = {
-    windows: {},
-    tooltip: "t",
-    receive: () => {},
-    notify: () => {},
-    retain: () => {},
-  } as unknown as NativeTrayInitialization;
-  create?.({
-    ...base,
-    icon: "AAAA",
+test("the tray plugin reads the declared icon and passes it to the tray factory", async () => {
+  await resources(async (root) => {
+    let create:
+      | ((initialization: NativeTrayInitialization) => unknown)
+      | undefined;
+    const services = {
+      initialize(callback: typeof create) {
+        create = callback;
+      },
+      subscribe: () => () => {},
+    } as unknown as NativeTrayServices;
+    const received: unknown[] = [];
+    initializeWith(
+      {
+        tray: services,
+      } as never,
+      (...args) => {
+        received.push(args[7]);
+        return {} as never;
+      },
+    );
+    const base = {
+      windows: {},
+      tooltip: "t",
+      receive: () => {},
+      notify: () => {},
+      retain: () => {},
+    } as unknown as NativeTrayInitialization;
+    create?.({
+      ...base,
+      icon: "icons/tray.ico",
+      resources: root,
+    });
+    create?.(base);
+    expect(received).toEqual([
+      trayIco().toString("base64"),
+      undefined,
+    ]);
+    expect(() =>
+      create?.({
+        ...base,
+        icon: "../outside/secret.ico",
+        resources: root,
+      }),
+    ).toThrow("desktop.tray.icon");
+    expect(received).toHaveLength(2);
   });
-  create?.(base);
-  expect(received).toEqual([
-    "AAAA",
-    undefined,
-  ]);
 });

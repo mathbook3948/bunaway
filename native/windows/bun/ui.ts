@@ -2088,6 +2088,7 @@ try {
               ? {}
               : {
                   icon: config.desktop.tray.icon,
+                  resources: config.appMetadata.paths?.resources,
                 }),
             retain(owner) {
               tray = owner;
