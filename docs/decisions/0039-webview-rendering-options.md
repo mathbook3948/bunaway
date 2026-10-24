@@ -35,7 +35,7 @@ WebView2:
 - `ICoreWebView2Settings`부터 `Settings9`, `ICoreWebView2Controller`부터 `Controller4`, `ICoreWebView2_27`부터
   `_29`에서 글꼴, encoding, 이미지 animation, preferred size 통지에 해당하는 멤버를 찾지 못했다. `ICoreWebView2_2`부터
   `_26`까지는 전부 대조하지 않았다.
-- 전용 설정이 없으면 호스트가 같은 효과를 내는 경로는 문서에 CSS나 스크립트를 주입하는 것이다. 환경 생성 시 브라우저
+- 전용 설정이 없으면 호스트가 같은 효과를 내기 위해 검토한 경로는 문서에 CSS나 스크립트를 주입하는 것뿐이다. 환경 생성 시 브라우저
   인자를 넘기는 경로는 [ADR 0030](./0030-launch-arguments-and-environment.md)이 호스트에서 쓰지 않기로 했고, DevTools
   프로토콜 호출 같은 다른 경로는 검토하지 않았다.
 
@@ -51,7 +51,7 @@ WebView2:
 | 문서 encoding | 응답의 `Content-Type` charset 또는 `<meta charset>` |
 | 이미지 animation 중지 | 이미지 형식 선택, 또는 스크립트로 정지 이미지 표시 |
 | 콘텐츠 크기 변화 통지 | `ResizeObserver`와 앱 IPC로 백엔드에 전달 |
-| 탐색 뒤 포커스 | 앱이 필요한 시점에 `windows.focus`로 창을 활성화하고 문서 안 `element.focus()`로 요소를 고른다 |
+| 탐색 뒤 포커스 | 대체 수단 없음. 문서 안 `element.focus()`로 요소를 고를 수 있으나 키보드 포커스를 WebView로 옮기는 것은 보증하지 않는다 |
 
 3. Electron의 `preferred-size-changed`에 해당하는 이벤트도 제공하지 않는다. TODO의 "title, favicon과
    preferred-size 변경 이벤트" 항목 중 preferred-size 부분은 이 결정으로 닫고, title과 favicon 이벤트는 그 항목에서
@@ -65,9 +65,9 @@ WebView2:
   이미 파싱된 문서에는 적용되지 않는다) 같은 이름의 옵션이 다른 의미를 갖게 된다.
 - 글꼴, textarea, encoding, 크기 관찰은 모두 웹 표준으로 앱이 직접 할 수 있다. 호스트가 대신하면 앱 정의 설정이 늘고
   코어가 커지는 데 비해 얻는 것이 없다.
-- 2026-10-25 기준 열린 이슈와 저장소의 예제, 템플릿, 코드에 이 옵션을 쓰거나 요구하는 곳이 없다.
-- 탐색 뒤 포커스는 Electron의 `focusOnNavigation`처럼 탐색마다 자동으로 옮기는 동작과 같지 않다. 앱이 탐색 완료를 알게 된 뒤
-  직접 포커스를 호출해야 하며, 자동 이동은 제공하지 않는다.
+- 2026-10-25 기준 `gh issue list`의 열린 이슈 목록과 저장소 검색(docs, plugins, native)에 이 옵션을 쓰거나 요구하는 곳이 없다.
+- 탐색 뒤 포커스는 Electron의 `focusOnNavigation`처럼 탐색마다 자동으로 옮기는 동작을 제공하지 않으며 같은 효과의
+  대체 수단도 정하지 않았다. 호스트의 로드 완료 이벤트(TODO 655, 656행)와 WebView 키보드 포커스 제어가 생기면 다시 다룬다.
 - 이 결정은 Windows 기준이다. macOS WKWebView의 `minimumFontSize` 같은 플랫폼 설정을 나중에 추가하더라도
   플랫폼별로 다른 의미의 옵션이 되지 않도록 별도 결정으로 다룬다.
 
@@ -81,5 +81,5 @@ WebView2:
 ## 결과
 
 - 코드, 스키마, 권한, 이벤트 변경은 없다.
-- `docs/TODO-windows.md`의 두 항목과 preferred-size 변경 이벤트 항목의 범위를 정리하고 이 ADR을 가리킨다.
+- `docs/TODO-windows.md` 665행과 666행을 결정 완료로 바꾸고, 657행에서 preferred-size 이벤트를 제외하며 이 ADR을 가리킨다.
 - Windows 창 문서에 해당 옵션이 없다는 사실과 대체 방법을 적는다.

@@ -662,8 +662,8 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] user agent, accept languages, proxy와 incognito 옵션을 제공한다.
 - [ ] 프로필 디렉터리와 데이터 저장소 선택, 조회와 삭제를 제공한다.
 - [ ] JavaScript, 이미지, WebGL, autoplay와 background throttling 설정을 제공한다.
-- [x] 기본 글꼴, 글꼴 크기, encoding과 이미지 animation 정책 옵션은 제공하지 않기로 결정했다. Electron은 제공하지만 Tauri는 Windows에서 제공하지 않고 WebView2에서 대응 설정을 찾지 못해 CSS와 웹 표준으로 대체한다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
-- [x] textarea resize, preferred-size와 focus-on-navigation 옵션은 제공하지 않기로 결정했다. CSS `resize`, `ResizeObserver`와 앱의 명시적 포커스 호출로 대체한다. 탐색마다 자동으로 옮기는 동작은 제공하지 않는다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
+- [x] 기본 글꼴, 글꼴 크기, encoding과 이미지 animation 정책 옵션은 제공하지 않기로 결정했다. Electron은 제공하지만 Tauri는 이 옵션들을 Windows에서 제공하지 않고 WebView2에서 대응 설정을 찾지 못해 CSS와 웹 표준으로 대체한다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
+- [x] textarea resize, preferred-size와 focus-on-navigation 옵션은 제공하지 않기로 결정했다. CSS `resize`와 `ResizeObserver`로 대체한다. 탐색 뒤 자동 포커스 이동은 제공하지 않으며 대체 수단은 로드 이벤트와 WebView 포커스 제어가 생길 때 다시 다룬다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
 - [ ] zoom을 origin별로 공유할지 WebView별로 독립 관리할지 설정한다. 컨트롤러 `setZoomFactor`/`zoomFactor` 조회는 구현됐다.
 - [ ] 브라우저 기본 대화상자, context menu와 zoom hotkey 설정을 제공한다.
 - [ ] autofill, password autosave와 HTTP authentication의 명시적 설정을 제공한다.
