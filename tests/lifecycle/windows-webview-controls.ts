@@ -129,6 +129,10 @@ if (!process.argv.includes("--child")) {
     releaseSlow = done;
   });
   let outsideRequests = 0;
+  const documentRequests: {
+    ifNoneMatch: string | null;
+    cacheControl: string | null;
+  }[] = [];
   const outside = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -155,12 +159,21 @@ if (!process.argv.includes("--child")) {
       if (url.pathname === "/slow.html") {
         await slow;
       }
+      if (url.pathname === "/next.html") {
+        documentRequests.push({
+          ifNoneMatch: request.headers.get("if-none-match"),
+          cacheControl: request.headers.get("cache-control"),
+        });
+      }
       return new Response(
         `<!doctype html><title>${url.pathname}</title><script type="module" src="/webview.js"></script>`,
         {
           headers: {
             "Content-Type": "text/html",
             "Content-Security-Policy": "default-src 'self'; script-src 'self'",
+            // A cacheable validator lets a cache-bypassing reload be told from a normal one.
+            ETag: '"static"',
+            "Cache-Control": "max-age=3600",
           },
         },
       );
@@ -642,6 +655,16 @@ if (!process.argv.includes("--child")) {
       (await windows.getReadiness()).documentGeneration >
         beforeReload.documentGeneration,
     );
+    // A reload that ignores the cache fetches the document unconditionally and with no-cache.
+    const requestsBefore = documentRequests.length;
+    await windows.reloadWebView({
+      ignoreCache: true,
+    });
+    await ready("/next.html", 4);
+    const bypassed = documentRequests.slice(requestsBefore);
+    assert.equal(bypassed.length, 1, "One document request per reload");
+    assert.equal(bypassed[0]?.ifNoneMatch, null);
+    assert.match(bypassed[0]?.cacheControl ?? "", /no-cache/);
     const beforeFragment = await windows.getReadiness();
     await windows.navigateWebView({
       url: `${origin}/next.html#fragment`,

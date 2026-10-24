@@ -1184,9 +1184,50 @@ export class WebView {
     return value[0] !== 0;
   }
 
-  /** Reload revokes the old document when its NavigationStarting event is accepted. */
-  reload() {
-    checkHresult(method(this.requireWebView(), 31, [])(), "Reload");
+  /**
+   * Reload revokes the old document when its NavigationStarting event is accepted.
+   *
+   * ICoreWebView2 has no cache-bypassing reload, so `ignoreCache` starts `Page.reload` through
+   * DevTools; it fetches the document and its subresources again without validation. The call
+   * is started, not awaited: a failure after it started is logged because the caller has
+   * already been answered.
+   */
+  reload(ignoreCache = false) {
+    const webview = this.requireWebView();
+    if (!ignoreCache) {
+      checkHresult(method(webview, 31, [])(), "Reload");
+      return;
+    }
+    this.editCalls.prune();
+    if (this.editCalls.isBusy()) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "Too many WebView DevTools calls are in flight.",
+      });
+    }
+    try {
+      this.editCalls.start("reload", (isActive) =>
+        callDevToolsProtocolMethod(
+          webview,
+          "Page.reload",
+          JSON.stringify({
+            ignoreCache: true,
+          }),
+          ({ hresult }) => {
+            if (isActive() && hresult < 0) {
+              this.hooks.log("reload-ignore-cache-failed", {
+                reason: hresultText(hresult),
+              });
+            }
+          },
+        ),
+      );
+    } catch (error) {
+      throw new BunawayError({
+        code: "INTERNAL",
+        message: `Reload ignoring the cache failed: ${describeDevToolsFailure(error)}`,
+      });
+    }
   }
 
   /** Stop completes through the existing NavigationCompleted cancellation path. */

@@ -737,8 +737,11 @@ export type NativeWebView = {
   };
   /** Starts HTTP(S) navigation only to an origin already allowed for this view. */
   navigate(url: string): void;
-  /** Reloads the current document using normal browser cache behavior. */
-  reload(): void;
+  /**
+   * Reloads the current document. With `ignoreCache`, the document and its subresources are
+   * fetched again without cache validation; otherwise normal browser cache behavior applies.
+   */
+  reload(ignoreCache?: boolean): void;
   /** Requests cancellation of pending navigation and resource loads. */
   stop(): void;
   /** Starts history navigation; false means that direction has no entry. */

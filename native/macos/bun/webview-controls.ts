@@ -101,9 +101,13 @@ export class MacosWebviewControls implements NativeWebView {
     });
   }
 
-  reload(): void {
+  /** `reloadFromOrigin` revalidates the page against its origin; `reload` uses the cache. */
+  reload(ignoreCache = false): void {
     this.objc.withAutoreleasePool(() =>
-      this.objc.send(this.requireWebview(), "reload"),
+      this.objc.send(
+        this.requireWebview(),
+        ignoreCache ? "reloadFromOrigin" : "reload",
+      ),
     );
   }
   stop(): void {

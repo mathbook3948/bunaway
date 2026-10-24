@@ -47,8 +47,8 @@ function fixture() {
       navigate: (url) => {
         actions.push(url);
       },
-      reload: () => {
-        actions.push("reload");
+      reload: (ignoreCache) => {
+        actions.push(ignoreCache ? "reload-ignore-cache" : "reload");
       },
       stop: () => {
         actions.push("stop");
@@ -234,14 +234,41 @@ test("WebView operations use strict Zod contracts and individual registered perm
       }),
     ).toThrow();
   }
-  expect(() =>
-    validateWindowCall({
-      operation: "windows.reloadWebView",
-      payload: {
-        ignoreCache: true,
-      },
-    }),
-  ).toThrow();
+  for (const payload of [
+    {},
+    {
+      ignoreCache: false,
+    },
+    {
+      ignoreCache: true,
+    },
+  ]) {
+    expect(
+      validateWindowCall({
+        operation: "windows.reloadWebView",
+        payload,
+      }),
+    ).toBeDefined();
+  }
+  for (const payload of [
+    {
+      ignoreCache: "true",
+    },
+    {
+      ignoreCache: 1,
+    },
+    {
+      ignoreCache: true,
+      extra: true,
+    },
+  ]) {
+    expect(() =>
+      validateWindowCall({
+        operation: "windows.reloadWebView",
+        payload,
+      }),
+    ).toThrow();
+  }
 });
 
 test("WebView helpers dispatch queries, navigation and normalized zoom results", async () => {
@@ -257,13 +284,21 @@ test("WebView helpers dispatch queries, navigation and normalized zoom results",
   await f.invoke("navigateWebView", {
     url: state.url,
   });
-  await f.invoke("reloadWebView");
+  await f.invoke("reloadWebView", {});
+  await f.invoke("reloadWebView", {
+    ignoreCache: false,
+  });
+  await f.invoke("reloadWebView", {
+    ignoreCache: true,
+  });
   await f.invoke("stopWebView");
   await f.invoke("openDevTools");
   expect(f.actions).toEqual([
     1.5,
     state.url,
     "reload",
+    "reload",
+    "reload-ignore-cache",
     "stop",
     "devtools",
   ]);
@@ -274,7 +309,7 @@ test("permission denial and cancelled or closed calls never enter native control
   f.permissions.permissions = [
     "windows.getWebViewState",
   ];
-  await expect(f.invoke("reloadWebView")).rejects.toMatchObject({
+  await expect(f.invoke("reloadWebView", {})).rejects.toMatchObject({
     code: "PERMISSION_DENIED",
   });
   expect(await f.invoke("getWebViewState")).toEqual(state);
@@ -305,5 +340,5 @@ test("missing platform services and native failures are preserved", async () => 
   failed.native.webview.reload = () => {
     throw error;
   };
-  await expect(failed.invoke("reloadWebView")).rejects.toBe(error);
+  await expect(failed.invoke("reloadWebView", {})).rejects.toBe(error);
 });
