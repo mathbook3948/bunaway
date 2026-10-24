@@ -365,6 +365,231 @@ test.skipIf(process.platform !== "win32")(
 );
 
 test.skipIf(process.platform !== "win32")(
+  "an auto-hide menu bar links only after an Alt tap and unlinks on Esc, a command or deactivation",
+  async () => {
+    const { Windows } = await import("#native/windows/bun/win32");
+    const { WindowMenus } = await import(
+      "#plugins/menu/src/platforms/windows-window-menus"
+    );
+    const native = dlopen("user32.dll", {
+      GetMenu: {
+        args: [
+          "u64",
+        ],
+        returns: "u64",
+      },
+      GetSubMenu: {
+        args: [
+          "u64",
+          "i32",
+        ],
+        returns: "u64",
+      },
+      SendMessageW: {
+        args: [
+          "u64",
+          "u32",
+          "u64",
+          "i64",
+        ],
+        returns: "i64",
+      },
+    });
+    const WM_ACTIVATE = 0x0006;
+    const WM_KEYDOWN = 0x0100;
+    const WM_SYSKEYDOWN = 0x0104;
+    const WM_SYSKEYUP = 0x0105;
+    const WM_MENUCOMMAND = 0x0126;
+    const WM_EXITMENULOOP = 0x0212;
+    const VK_MENU = 0x12n;
+    const VK_ESCAPE = 0x1bn;
+    const windows = new Windows(() => {});
+    let receive: Parameters<NativeMenuWindowHost["subscribe"]>[1] = () => {};
+    let hwnd = 0n;
+    const host: NativeMenuWindowHost = {
+      current: () => "main",
+      resolve: () => hwnd,
+      subscribe(_id, listener) {
+        receive = listener;
+        return () => {};
+      },
+      interrupt: () => () => {},
+      changed: () => windows.getSnapshot(hwnd),
+      executeRole() {},
+    };
+    const menus = new WindowMenus(host);
+    const selections: string[] = [];
+    hwnd = windows.create(
+      "main",
+      640,
+      480,
+      (message, wparam, lparam) => receive(message, wparam, lparam),
+      false,
+    );
+    try {
+      windows.observe(hwnd, "main", () => {});
+      menus.set(
+        "main",
+        menuItemsSchema.parse([
+          {
+            id: "file",
+            type: "submenu",
+            label: "File",
+            items: [
+              {
+                id: "open",
+                type: "item",
+                label: "Open",
+              },
+            ],
+          },
+        ]),
+        (item) => selections.push(item),
+        () => {},
+      );
+      const tree = native.symbols.GetMenu(hwnd);
+      expect(tree).not.toBe(0n);
+      const withBar = windows.getBounds(hwnd, "content");
+      const key = (message: number, virtualKey: bigint) =>
+        native.symbols.SendMessageW(hwnd, message, virtualKey, 0);
+      const tap = () => {
+        key(WM_SYSKEYDOWN, VK_MENU);
+        key(WM_SYSKEYUP, VK_MENU);
+      };
+
+      // Turning auto-hide on does not hide the bar by itself.
+      menus.setAutoHide("main", true);
+      expect(menus.isAutoHide("main")).toBe(true);
+      expect(menus.isVisible("main")).toBe(true);
+      expect(native.symbols.GetMenu(hwnd)).toBe(tree);
+
+      // An Alt tap toggles the bar and the visibility getter reports what is shown.
+      tap();
+      expect(menus.isVisible("main")).toBe(false);
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      expect(windows.getBounds(hwnd, "content").height).toBeGreaterThan(
+        withBar.height,
+      );
+      tap();
+      expect(menus.isVisible("main")).toBe(true);
+      expect(native.symbols.GetMenu(hwnd)).toBe(tree);
+      expect(windows.getBounds(hwnd, "content")).toEqual(withBar);
+      tap();
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+
+      // Alt used with another key is not a tap.
+      key(WM_SYSKEYDOWN, VK_MENU);
+      key(WM_SYSKEYDOWN, 0x46n);
+      key(WM_SYSKEYUP, VK_MENU);
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+
+      // Esc and losing activation hide a shown bar.
+      tap();
+      expect(native.symbols.GetMenu(hwnd)).toBe(tree);
+      key(WM_KEYDOWN, VK_ESCAPE);
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      expect(menus.isVisible("main")).toBe(false);
+      tap();
+      native.symbols.SendMessageW(hwnd, WM_ACTIVATE, 0n, 0);
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      expect(menus.isVisible("main")).toBe(false);
+
+      // Running a command hides it from the next turn.
+      tap();
+      native.symbols.SendMessageW(
+        hwnd,
+        WM_MENUCOMMAND,
+        0n,
+        native.symbols.GetSubMenu(tree, 0),
+      );
+      expect(selections).toEqual([
+        "open",
+      ]);
+      await new Promise((done) => setTimeout(done, 20));
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      expect(menus.isVisible("main")).toBe(false);
+
+      // Leaving the keyboard menu mode that follows a frame Alt tap ends the display too.
+      tap();
+      expect(native.symbols.GetMenu(hwnd)).toBe(tree);
+      native.symbols.SendMessageW(hwnd, WM_EXITMENULOOP, 0n, 0);
+      await new Promise((done) => setTimeout(done, 20));
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+
+      // A menu attached to an auto-hide window starts hidden.
+      tap();
+      menus.set(
+        "main",
+        null,
+        () => {},
+        () => {},
+      );
+      menus.set(
+        "main",
+        menuItemsSchema.parse([
+          {
+            id: "again",
+            type: "item",
+            label: "Again",
+          },
+        ]),
+        () => {},
+        () => {},
+      );
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      expect(menus.isVisible("main")).toBe(false);
+      tap();
+      const replacement = native.symbols.GetMenu(hwnd);
+      expect(menus.isVisible("main")).toBe(true);
+      expect(replacement).not.toBe(0n);
+      tap();
+
+      // Explicit visibility works with auto-hide: hidden by the app, Alt brings it back, Esc hides it.
+      menus.setVisible("main", false);
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      tap();
+      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
+      key(WM_KEYDOWN, VK_ESCAPE);
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      menus.setVisible("main", true);
+      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
+      key(WM_KEYDOWN, VK_ESCAPE);
+      expect(menus.isVisible("main")).toBe(false);
+
+      // Turning auto-hide off from on shows the bar again, also when the app hid it.
+      menus.setVisible("main", false);
+      menus.setAutoHide("main", false);
+      expect(menus.isVisible("main")).toBe(true);
+      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
+      menus.setAutoHide("main", true);
+
+      // Turning auto-hide off when it was off does not show a bar the app hid.
+      menus.setAutoHide("main", false);
+      menus.setVisible("main", false);
+      menus.setAutoHide("main", false);
+      expect(menus.isVisible("main")).toBe(false);
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      menus.setVisible("main", true);
+      menus.setAutoHide("main", true);
+      key(WM_KEYDOWN, VK_ESCAPE);
+
+      // Turning auto-hide off from on shows a hidden bar again and Alt no longer toggles it.
+      menus.setAutoHide("main", false);
+      expect(menus.isAutoHide("main")).toBe(false);
+      expect(menus.isVisible("main")).toBe(true);
+      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
+      tap();
+      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
+    } finally {
+      menus.dispose();
+      windows.destroy(hwnd);
+      windows.dispose();
+      native.close();
+    }
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
   "real context popup cancellation exits its modal loop and releases its temporary HMENU",
   async () => {
     const { Windows } = await import("#native/windows/bun/win32");

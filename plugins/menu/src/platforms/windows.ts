@@ -264,6 +264,12 @@ export function initializeMenuOperations(
     isWindowVisible(windowId: string) {
       return driver().isVisible(windowId);
     },
+    setWindowAutoHide(windowId: string, autoHide: boolean) {
+      driver().setAutoHide(windowId, autoHide);
+    },
+    isWindowAutoHide(windowId: string) {
+      return driver().isAutoHide(windowId);
+    },
     detachResource(menuId: string) {
       cancelPopup(menuId);
       for (const [windowId, entry] of windowAttachments) {

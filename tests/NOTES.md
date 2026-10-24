@@ -1339,6 +1339,11 @@ PR #191과 같은 native child observer 및 notification 진단을 사용하고 
 실제 UI Worker fixture는 요청 취소, 컨텍스트 폐기, 세션 실패와 종료 패킷으로
 TrackPopupMenuEx 모달 루프를 끝내고 핸들을 해제한다. 메뉴 막대 진입 전 종료 경합도 포함한다.
 사용자 포인터 메뉴 선택, 물리 키보드 탐색과 혼합 DPI 검증을 대신하지 않는다.
+같은 파일은 auto-hide 메뉴바도 검사한다. 창 프로시저로 보낸 Alt 키 메시지가 HMENU를 연결하고 떼는지,
+Alt와 다른 키의 조합과 Esc, 비활성화, 항목 실행, 메뉴 모드 종료, 메뉴 교체를 다룬다.
+`lifecycle/windows-menu-auto-hide.ts`는 실제 WebView2 페이지에 포커스가 있을 때 렌더 위젯 창에 보낸 Alt와 Esc
+키 메시지가 컨트롤러 accelerator 이벤트로 도착해 메뉴바를 붙이고 떼는지 검사한다. 물리 키보드와
+창 틀에서 Alt 뒤에 Windows가 여는 메뉴 모드의 실제 동작은 검증하지 않는다.
 
 `api/dialog.test.ts`는 실제 작업 정의로 입력, 개별 권한, 정확한 창 출처, 사용자 취소와
 호출 실패, 정리를 검사한다. 이후 tick에서 Close가 수락되면 앞선 Close 실패보다 우선해

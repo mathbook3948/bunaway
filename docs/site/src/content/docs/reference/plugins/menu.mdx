@@ -48,6 +48,8 @@ await menu.setTrayMenu({ menuId: "tray-menu" });
 | `menu.getWindowMenu` | `null` | 연결한 메뉴 ID 또는 `null` |
 | `menu.setWindowMenuVisible` | `{ visible: boolean }` | `null` |
 | `menu.getWindowMenuVisible` | `null` | `boolean` |
+| `menu.setWindowMenuAutoHide` | `{ autoHide: boolean }` | `null` |
+| `menu.getWindowMenuAutoHide` | `null` | `boolean` |
 | `menu.showContextMenu` | `{ menuId, x, y }` | 선택한 항목 ID 또는 닫았을 때 `null` |
 | `menu.waitForClick` | `null` | 다음 `{ menuId, itemId, source, windowId }` |
 
@@ -163,8 +165,21 @@ checkbox와 radio는 `icon: null`을 포함한 모든 icon 변경을 `INVALID_AR
 `getWindowMenuVisible`은 현재 값을 돌려줍니다(`isMenuBarVisible`). 기본값은 `true`입니다. 숨겨도
 연결과 메뉴 리소스는 유지하며 창의 바깥 크기는 바뀌지 않고 메뉴바 높이만큼 내용 영역이 커집니다.
 숨긴 상태에서 연결한 메뉴나 교체한 메뉴도 표시하기 전까지 보이지 않습니다. 메뉴가 없는 창에도
-값을 저장하며 이후 연결한 메뉴에 적용합니다. 닫힌 창의 값은 조회할 수 없습니다. Alt 키로
-임시 표시하는 auto-hide는 제공하지 않습니다.
+값을 저장하며 이후 연결한 메뉴에 적용합니다. 닫힌 창의 값은 조회할 수 없습니다.
+
+`setWindowMenuAutoHide`는 Alt 키를 단독으로 눌렀다 뗄 때 메뉴바를 표시하거나 숨기게 하고
+(Electron `setAutoHideMenuBar`, `isMenuBarAutoHide`), `getWindowMenuAutoHide`가 현재 값을 돌려줍니다.
+기본값은 `false`입니다. 켜는 것만으로 지금 보이는 메뉴바를 숨기지는 않으며(Electron과 같음), 켠 창에
+새로 연결하거나 교체한 메뉴는 숨긴 채 시작합니다. 켠 창에서 표시 중인 메뉴바는 Alt를 다시 단독으로 누르거나,
+Esc를 누르거나, 항목을 실행하거나, 창 틀에서 Alt 뒤에 Windows가 연 메뉴 모드가 끝나거나, 창이
+비활성화되면 숨깁니다. 포커스가 창 틀에 있든 페이지 안에 있든 같은 Alt 입력을 따르고, Alt와 다른 키를
+함께 누르면 단독 입력으로 세지 않습니다. 이 규칙은 auto-hide를 켠 창에만 적용합니다.
+
+auto-hide를 켠 창에서는 `getWindowMenuVisible`이 지금 메뉴바가 실제로 보이는지를 돌려줍니다
+(Alt로 잠깐 띄운 동안 `true`, Electron `isMenuBarVisible`과 같음). `setWindowMenuVisible`로 표시해도
+같은 규칙으로 다시 숨습니다. 메뉴바가 보이는 동안 내용 영역은 메뉴바 높이만큼 줄고 숨기면 원래대로
+돌아옵니다. 숨겨진 동안에는 메뉴바가 없으므로 Alt와 글자 키로 메뉴를 바로 여는 니모닉은 동작하지 않습니다.
+메뉴바의 표시 상태는 하나라서(Electron과 같음) auto-hide를 켠 창에서 끌 때 숨겨져 있던 메뉴바는 숨긴 이유와 상관없이 다시 표시합니다. auto-hide를 켜지 않은 창에서 끄는 호출은 표시 상태를 바꾸지 않습니다. 닫힌 창의 값은 조회할 수 없습니다.
 
 ```ts
 await menu.create({
