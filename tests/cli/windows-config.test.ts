@@ -385,7 +385,7 @@ test("window size constraints accept nullable axes and reject invalid or contrad
     },
     {
       ...constrainedSpec.window,
-      maxHeight: 4097,
+      maxHeight: 8193,
     },
     {
       ...constrainedSpec.window,

@@ -82,7 +82,7 @@
 - [x] 초기 `minWidth`, `minHeight`, `maxWidth`, `maxHeight`를 AppKit 창에 적용한다.
 - [x] 초기 크기를 제약 안으로 보정하고 사용자 크기 변경에도 제약을 적용한다.
 - [x] 제약의 `null`과 생략은 제한 없음으로 처리하고 한 축만 제한할 수 있다.
-- [x] 공통 설정 검증으로 200–4096 범위와 min > max 입력 오류를 처리한다.
+- [x] 공통 설정 검증으로 200–8192 범위와 min > max 입력 오류를 처리한다.
 - [ ] `setSize`, `setPosition`과 최소/최대 제약의 실행 중 변경 및 조회를 제공한다.
 - [ ] content와 outer 크기, 위치, bounds와 최대화 전 normal bounds를 구분한다.
 - [ ] AppKit 좌표와 공통 좌표의 원점, 논리 픽셀과 backing scale 변환을 정의한다.

@@ -31,7 +31,7 @@ export {
 
 /** Inclusive accepted dimension range for window sizes. */
 export const MIN_WINDOW_DIMENSION = 200;
-export const MAX_WINDOW_DIMENSION = 4096;
+export const MAX_WINDOW_DIMENSION = 8192;
 
 /** Native integers (Win32 geometry, sizes and identifiers) are signed 32-bit. */
 export const INT32_MIN = -2147483648;
@@ -565,7 +565,7 @@ export type NativeWindow = {
   /**
    * Applies physical content or outer geometry without showing or activating the window.
    * While minimized/maximized, edits normal restoration bounds. Rejects fullscreen and
-   * content sizes outside 200..4096 logical pixels before clamping to current limits.
+   * content sizes outside 200..8192 logical pixels before clamping to current limits.
    * Position and size pairs must be complete; native failures throw.
    */
   setGeometry(

@@ -2909,7 +2909,7 @@ export class Windows {
       contentHeight > MAX_WINDOW_DIMENSION
     ) {
       invalidGeometry(
-        "Requested content size must be 200..4096 logical pixels before constraints.",
+        "Requested content size must be 200..8192 logical pixels before constraints.",
       );
     }
     const { width, height } = constrainedOuterSize(

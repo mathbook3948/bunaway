@@ -19,7 +19,7 @@ resizable, movable은 이 결정의 구현 범위가 아니다.
 `INVALID_ARGUMENT`다. 어느 쪽도 조용히 우선하지 않는다. 선언의 좌표를 없애려면
 호출에서 x/y를 모두 null로, 선언의 center를 해제하려면 false로 지정한다.
 
-width/height는 기존 200–4096 정수와 96-DPI 논리 단위를 유지한다.
+width/height는 기존 200–8192 정수와 96-DPI 논리 단위를 유지한다.
 `useContentSize`는 기본 true다. false이면 요청 크기를 outer 크기로 해석한 뒤
 대상 DPI의 프레임을 빼 content 크기로 바꾼다. min/max는 이 옵션과 관계없이
 항상 논리 content 제약이다. 보정된 content와 프레임으로 실제 outer를 계산한다.

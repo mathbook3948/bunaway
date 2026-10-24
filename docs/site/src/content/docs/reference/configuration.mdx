@@ -83,10 +83,10 @@ Electron의 `extraResources`나 Tauri의 `bundle.resources`처럼 지정한 파�
 | `startup` | 선택 boolean, 기본 `true`. `false`이면 앱이 `windows.create`로 열 때까지 창을 만들지 않음 |
 | `visible` | 선택 boolean, 기본 `true`. `false`이면 숨긴 채 생성 |
 | `showWhenReady` | 선택 `"document"` 또는 `"sdk"`. 첫 준비 완료 뒤 한 번 표시 |
-| `window.width` | 정수, 200–4096 |
-| `window.height` | 정수, 200–4096 |
-| `window.minWidth`, `window.minHeight` | 선택적 정수 또는 `null`, 200–4096. 생략하거나 `null`이면 해당 축의 최소 제한 없음 |
-| `window.maxWidth`, `window.maxHeight` | 선택적 정수 또는 `null`, 200–4096. 생략하거나 `null`이면 해당 축의 최대 제한 없음 |
+| `window.width` | 정수, 200–8192 |
+| `window.height` | 정수, 200–8192 |
+| `window.minWidth`, `window.minHeight` | 선택적 정수 또는 `null`, 200–8192. 생략하거나 `null`이면 해당 축의 최소 제한 없음 |
+| `window.maxWidth`, `window.maxHeight` | 선택적 정수 또는 `null`, 200–8192. 생략하거나 `null`이면 해당 축의 최대 제한 없음 |
 | `window.x`, `window.y` | Windows 전용. signed 32-bit outer 물리 화면 좌표. 두 축을 함께 지정하며 음수도 허용. 생략하거나 둘 다 `null`이면 위치 미지정 |
 | `window.center` | Windows 전용 boolean, 기본 `false`. 주 모니터 작업 영역의 outer 중앙. x/y와 함께 켜면 오류 |
 | `window.useContentSize` | Windows 전용 boolean, 기본 `true`. `false`이면 width/height를 논리 outer 크기로 해석. min/max는 항상 content 제약 |

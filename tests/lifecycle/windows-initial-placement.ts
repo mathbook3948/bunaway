@@ -424,8 +424,8 @@ if (!process.argv.includes("--child")) {
     await windows.recreate({
       options: {
         window: {
-          width: 4096,
-          height: 4096,
+          width: MAX_WINDOW_DIMENSION,
+          height: MAX_WINDOW_DIMENSION,
           center: false,
           x: area.x + area.width - 10,
           y: area.y + area.height - 10,

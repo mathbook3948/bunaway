@@ -166,7 +166,7 @@ test.each([
       },
       {
         window: {
-          maxHeight: 4097,
+          maxHeight: 8193,
         },
       },
       {

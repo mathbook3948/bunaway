@@ -13,6 +13,7 @@ const SWP_NOMOVE = 0x2;
 const SWP_NOSIZE = 0x1;
 const FRAME_WIDTH = 16;
 const FRAME_HEIGHT = 39;
+const OSCILLATING_WIDTH = 4096;
 const monitors = [
   {
     handle: 1n,
@@ -384,6 +385,8 @@ try {
   }
 
   // These centered sizes alternate between the two monitor DPIs indefinitely.
+  // The width is chosen so the centered rectangle overlaps each monitor in turn;
+  // it is not the size limit.
   primary.dpi = 144;
   secondary.dpi = 96;
   const previousDestroyed = destroyedWindows;
@@ -391,7 +394,7 @@ try {
   assert.throws(
     () =>
       create({
-        width: 4096,
+        width: OSCILLATING_WIDTH,
         height: 400,
         center: true,
       }),

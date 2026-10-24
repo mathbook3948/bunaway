@@ -53,8 +53,8 @@ Windows의 `create`와 `recreate`에 선택적인 `options`를 추가하는 범�
 | 허용할 options 필드 | 값, 적용과 기본값 |
 | --- | --- |
 | `title` | 1–1024자 문자열, NUL 금지. 생략하면 선언 제목. |
-| `window.width`, `window.height` | 내용 영역의 96 DPI 논리 픽셀, 정수 200–4096. 각 필드를 생략하면 선언값. |
-| `window.minWidth`, `window.minHeight`, `window.maxWidth`, `window.maxHeight` | 정수 200–4096 또는 `null`. 생략하면 선언값, `null`이면 해당 축의 제약 해제. 병합한 min > max는 거부하고 초기 크기는 최종 제약 안으로 보정. |
+| `window.width`, `window.height` | 내용 영역의 96 DPI 논리 픽셀, 정수 200–8192. 각 필드를 생략하면 선언값. |
+| `window.minWidth`, `window.minHeight`, `window.maxWidth`, `window.maxHeight` | 정수 200–8192 또는 `null`. 생략하면 선언값, `null`이면 해당 축의 제약 해제. 병합한 min > max는 거부하고 초기 크기는 최종 제약 안으로 보정. |
 | `visible` | boolean. 생략하면 선언값, 선언도 생략하면 `true`. `false`는 처음부터 숨겨 생성하며 활성화하지 않는다. |
 | `showWhenReady` | `"document"`, `"sdk"` 또는 `null`. 생략하면 선언값, `null`이면 선언된 자동 표시를 이번 생성에서 해제. 설정하면 visible과 관계없이 숨겨 생성하고 첫 준비 뒤 한 번 표시. |
 

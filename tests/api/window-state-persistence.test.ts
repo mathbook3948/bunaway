@@ -120,14 +120,14 @@ test("an estimated frame raises the minimum but not the maximum", () => {
     workArea: {
       x: 0,
       y: 0,
-      width: 8000,
+      width: 16000,
       height: 4500,
     },
   });
   const request = {
     x: 0,
     y: 0,
-    width: 6000,
+    width: 12000,
     height: 100,
     dpi: 96,
   };
@@ -136,7 +136,7 @@ test("an estimated frame raises the minimum but not the maximum", () => {
     height: 64,
     dpi: 96,
   };
-  // 200 plus the allowance at the minimum, the plain 4096 limit at the maximum.
+  // 200 plus the allowance at the minimum, the plain 8192 limit at the maximum.
   expect(
     fitToMonitors(
       request,
@@ -149,7 +149,7 @@ test("an estimated frame raises the minimum but not the maximum", () => {
       },
     ).bounds,
   ).toMatchObject({
-    width: 4096,
+    width: 8192,
     height: 264,
   });
   // A measured frame is added to both limits.
@@ -162,7 +162,7 @@ test("an estimated frame raises the minimum but not the maximum", () => {
       estimate,
     ).bounds,
   ).toMatchObject({
-    width: 4160,
+    width: 8256,
     height: 264,
   });
 });
