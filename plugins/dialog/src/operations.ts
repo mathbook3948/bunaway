@@ -1,5 +1,8 @@
 import { defineNativeOperation } from "@bunaway/plugin";
 import {
+  aboutMessage,
+  aboutResultSchema,
+  aboutSchema,
   type DialogInstance,
   messageResultSchema,
   messageSchema,
@@ -35,5 +38,13 @@ export const dialogOperations = {
     output: messageResultSchema,
     handler: (input, { instance, source, signal, requestId }) =>
       instance.showMessage(input, source, signal, requestId),
+  }),
+  showAbout: operation({
+    input: aboutSchema,
+    output: aboutResultSchema,
+    handler: (input, { instance, source, signal, requestId }) => {
+      instance.showMessage(aboutMessage(input), source, signal, requestId);
+      return {};
+    },
   }),
 };

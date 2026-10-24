@@ -22,11 +22,12 @@ dialog.openFile(input: OpenFileInput, options?: NativeInvokeOptions): Promise<Di
 dialog.selectFolder(input: SelectFolderInput, options?: NativeInvokeOptions): Promise<DialogResult>
 dialog.saveFile(input: SaveFileInput, options?: NativeInvokeOptions): Promise<DialogResult>
 dialog.showMessage(input: MessageInput, options?: NativeInvokeOptions): Promise<MessageResult>
+dialog.showAbout(input: AboutInput, options?: NativeInvokeOptions): Promise<Record<string, never>>
 ```
 
 모든 작업에 입력 객체가 필요합니다. 파일 선택의 기본 설정은 `{}`로 지정합니다.
-`dialog.showMessage`는 `message`가 필수입니다.
-`dialog.openFile`, `dialog.selectFolder`, `dialog.saveFile`, `dialog.showMessage`는 각각 별도 권한입니다.
+`dialog.showMessage`는 `message`, `dialog.showAbout`은 `name`이 필수입니다.
+`dialog.openFile`, `dialog.selectFolder`, `dialog.saveFile`, `dialog.showMessage`, `dialog.showAbout`은 각각 별도 권한입니다.
 뷰의 명령은 해당 뷰의 `host.permissions`, setup은 `backend.permissions`에 허용합니다.
 화면에서 플러그인을 직접 호출할 때는 `plugin.dialog.openFile`, `plugin.dialog.showMessage` 등 해당 명령도
 뷰의 `commands`에 허용해야 합니다.
@@ -103,6 +104,35 @@ const result = await dialog.showMessage({
 if (result.button === 0) {
   // "삭제"를 눌렀습니다. result.checkboxChecked로 확인란 선택 여부를 확인합니다.
 }
+```
+
+## About 패널
+
+`dialog.showAbout`은 앱 이름, 버전, 저작권과 크레딧을 보여 주는 About 패널을 표시하고 사용자가 닫으면
+`{}`를 돌려줍니다. Windows에는 앱용 OS About 패널 API가 없습니다. Electron의 `app.showAboutPanel()`과
+Tauri(muda)의 About 메뉴 항목도 Windows에서는 정보 메시지 박스를 직접 만들어 표시합니다.
+따라서 이 작업은 버튼이 하나인 메시지 대화상자(`dialog.showMessage`)로 구현하며 대기열, 소유 창, 취소 규칙이 같습니다.
+
+| 입력 | 의미 |
+| --- | --- |
+| `name` | 필수. 주 문구이며 기본 제목은 `About {name}`입니다. 128 UTF-16 단위 이하. |
+| `version` | 선택. 이름 아래 줄. 256 단위 이하. |
+| `copyright` | 선택. 버전 아래 줄. 256 단위 이하. |
+| `credits` | 선택. 마지막 줄들. 4096 단위 이하. |
+| `title` | 선택. 대화상자 제목을 `About {name}` 대신 지정합니다. |
+
+이름, 버전, 저작권, 크레딧을 줄바꿈으로 이어 표시하는 점은 Electron과 같습니다. 값은 호출자가 넘기며
+기본값을 실행 파일 정보에서 읽지 않습니다. 앱 이름과 버전은 백엔드의 `ctx.app`에서 읽어 넘기세요.
+`authors`, `website`, `license` 같은 필드와 아이콘은 제공하지 않습니다. Electron은 `version`, `authors`,
+`website`를 Windows에서 무시하고 Tauri(muda)는 Windows에서 `icon`을 지원하지 않으므로 겹치는 필드만 제공합니다.
+macOS에서는 같은 입력이 `NSAlert`로 표시되며 `title`은 무시됩니다.
+
+```ts
+await dialog.showAbout({
+  name: "Demo",
+  version: "1.2.3",
+  copyright: "Copyright 2026 Demo Inc.",
+});
 ```
 
 ## 결과, 소유 창과 취소
@@ -198,5 +228,5 @@ Tauri에는 대응 기능이 없습니다. 인증서 오류와 사용자 신뢰 
 동기 대화상자(Electron의 `showMessageBoxSync`, `showOpenDialogSync`, `showSaveDialogSync`)도 제공하지
 않습니다. 모든 작업이 Promise로 결과를 돌려주며 대화상자가 떠 있는 동안에도 앱 백엔드 스레드는
 계속 실행합니다. 동기 변형은 백엔드 진행을 막으므로 추가하지 않습니다.
-제공하는 작업은 `openFile`, `selectFolder`, `saveFile`, `showMessage` 네 가지이며 계약 테스트가
+제공하는 작업은 `openFile`, `selectFolder`, `saveFile`, `showMessage`, `showAbout` 다섯 가지이며 계약 테스트가
 이 목록을 검사합니다.

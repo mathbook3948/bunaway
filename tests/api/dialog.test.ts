@@ -7,7 +7,7 @@ import {
   type JsonValue,
   NativeRegistry,
 } from "@bunaway/protocol";
-import type { MessageResult } from "#plugins/dialog/src/contract";
+import type { MessageInput, MessageResult } from "#plugins/dialog/src/contract";
 import { dialogOperations } from "#plugins/dialog/src/operations";
 import {
   type DialogFactory,
@@ -139,6 +139,7 @@ test("dialog is opt-in, declares independent grants and has only the Windows and
     "dialog.openFile",
     "dialog.saveFile",
     "dialog.selectFolder",
+    "dialog.showAbout",
     "dialog.showMessage",
   ]);
   expect(Object.keys(dialog._definition.nativePlatforms)).toEqual([
@@ -1321,7 +1322,86 @@ test("the operation set has no synchronous or certificate trust variants", () =>
       "openFile",
       "saveFile",
       "selectFolder",
+      "showAbout",
       "showMessage",
     ]),
   );
+});
+
+test("showAbout maps to a single-button message dialog under its own grant", async () => {
+  const shown: MessageInput[] = [];
+  const f = fixture(undefined, (input) => {
+    shown.push(input);
+    return {
+      show: () => messageResult,
+      dispose() {},
+    };
+  });
+  await expect(
+    f.invoke(
+      "showAbout",
+      {
+        name: "Demo",
+      },
+      "backend",
+      undefined,
+      [
+        "dialog.showMessage",
+      ],
+    ),
+  ).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  expect(shown).toEqual([]);
+  await expect(
+    f.invoke("showAbout", {
+      name: "Demo",
+      version: "1.2.3",
+      copyright: "Copyright 2026",
+      credits: "Built with bunaway",
+    }),
+  ).resolves.toEqual({});
+  await expect(
+    f.invoke("showAbout", {
+      name: "Demo",
+    }),
+  ).resolves.toEqual({});
+  expect(shown).toEqual([
+    {
+      title: "About Demo",
+      message: "Demo",
+      detail: "1.2.3\nCopyright 2026\nBuilt with bunaway",
+      type: "none",
+    },
+    {
+      title: "About Demo",
+      message: "Demo",
+      type: "none",
+    },
+  ]);
+  for (const input of [
+    {},
+    {
+      name: "",
+    },
+    {
+      name: "a".repeat(129),
+    },
+    {
+      name: "Demo",
+      credits: "a".repeat(4097),
+    },
+    {
+      name: "Demo",
+      buttons: [
+        "OK",
+      ],
+    },
+  ]) {
+    await expect(f.invoke("showAbout", input)).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  expect(shown).toHaveLength(2);
+  await f.adapter.dispose();
 });

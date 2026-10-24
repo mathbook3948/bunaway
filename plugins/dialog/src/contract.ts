@@ -154,6 +154,44 @@ export const messageResultSchema = z.strictObject({
 });
 export type MessageInput = z.output<typeof messageSchema>;
 export type MessageResult = z.output<typeof messageResultSchema>;
+export const MAX_ABOUT_NAME_UNITS = 128;
+export const MAX_ABOUT_LINE_UNITS = 256;
+export const MAX_ABOUT_CREDITS_UNITS = 4096;
+/**
+ * About panel request. Windows has no OS-provided application About panel, so the panel is a
+ * single-button message dialog: `name` is the main instruction and `version`, `copyright` and
+ * `credits` follow as separate lines. The values are supplied by the caller; read the name and
+ * version from `ctx.app`. Fields other than `name` are optional and omitted lines are not shown.
+ */
+export const aboutSchema = z.strictObject({
+  ...owner,
+  name: text(MAX_ABOUT_NAME_UNITS),
+  version: text(MAX_ABOUT_LINE_UNITS).optional(),
+  copyright: text(MAX_ABOUT_LINE_UNITS).optional(),
+  credits: text(MAX_ABOUT_CREDITS_UNITS).optional(),
+});
+export const aboutResultSchema = z.strictObject({});
+export type AboutInput = z.output<typeof aboutSchema>;
+/** Map an About request onto the message dialog so it shares queueing, owner and cancellation rules. */
+export function aboutMessage(input: AboutInput): MessageInput {
+  const detail = [
+    input.version,
+    input.copyright,
+    input.credits,
+  ]
+    .filter((line) => line !== undefined)
+    .join("\n");
+  return {
+    title: input.title ?? `About ${input.name}`,
+    message: input.name,
+    ...(detail
+      ? {
+          detail,
+        }
+      : {}),
+    type: "none",
+  };
+}
 /** Resolve the button that Escape and window close return, or undefined when closing is disabled. */
 export function resolveCancelButton(
   buttonCount: number,
