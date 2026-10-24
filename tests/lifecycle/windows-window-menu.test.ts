@@ -556,7 +556,17 @@ test.skipIf(process.platform !== "win32")(
       key(WM_KEYDOWN, VK_ESCAPE);
       expect(menus.isVisible("main")).toBe(false);
 
-      // Turning auto-hide off shows a hidden bar again and Alt no longer toggles it.
+      // Turning auto-hide off does not show a bar the app hid while auto-hide was off.
+      menus.setAutoHide("main", false);
+      menus.setVisible("main", false);
+      menus.setAutoHide("main", false);
+      expect(menus.isVisible("main")).toBe(false);
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      menus.setVisible("main", true);
+      menus.setAutoHide("main", true);
+      key(WM_KEYDOWN, VK_ESCAPE);
+
+      // Turning auto-hide off from on shows a hidden bar again and Alt no longer toggles it.
       menus.setAutoHide("main", false);
       expect(menus.isAutoHide("main")).toBe(false);
       expect(menus.isVisible("main")).toBe(true);
