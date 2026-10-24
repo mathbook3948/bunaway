@@ -1,7 +1,7 @@
 # Native dialogs
 
 Optional `@bunaway/plugin-dialog` provides the file pickers `openFile`, `selectFolder` and `saveFile`
-and the message dialog `showMessage` on Windows and macOS; see [macOS](#macos) for the differences.
+the message dialog `showMessage` and the About panel `showAbout` on Windows and macOS; see [macOS](#macos) for the differences.
 Register the default export and grant each operation independently. See the
 [public reference](../../docs/site/src/content/docs/reference/plugins/dialog.mdx) for inputs,
 owner authorization, cancellation, limits and examples. Choosing paths never grants storage access.
@@ -99,3 +99,9 @@ The packed (pshpack1) `TASKDIALOGCONFIG` layout is verified by Linux contract te
 behavior (custom button click, checkbox, `IDCANCEL` mapping, the injected Escape key message, ignored
 `IDCANCEL` without a cancel button, abort and recovery after abort) is covered only by the
 Windows-only lifecycle test.
+
+## About panel
+
+`showAbout` has no OS panel to call on Windows, so `aboutMessage` in `src/contract.ts` turns the request
+into a single-button message dialog (`name` as the instruction, `version`, `copyright` and `credits` as
+detail lines) that runs through `showMessage`. It therefore shares the queue, owner and cancellation rules.

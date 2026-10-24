@@ -1828,7 +1828,8 @@
       "dialog.openFile",
       "dialog.selectFolder",
       "dialog.saveFile",
-      "dialog.showMessage"
+      "dialog.showMessage",
+      "dialog.showAbout"
     ]
   },
   "configuration": {

@@ -185,6 +185,7 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
               "dialog.openFile",
               "dialog.saveFile",
               "dialog.selectFolder",
+              "dialog.showAbout",
               "dialog.showMessage",
             ],
           },
@@ -233,7 +234,10 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
         const requestId = crypto.randomUUID();
         const title = `Bunaway dialog ${requestId}`;
         titles.push(title);
-        if (operation === "dialog.showMessage") {
+        if (
+          operation === "dialog.showMessage" ||
+          operation === "dialog.showAbout"
+        ) {
           messageTitles.add(title);
         }
         let response: HostResponse | undefined;
@@ -505,6 +509,21 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
           button: 0,
           checkboxChecked: false,
         },
+      });
+      // The About panel is a single-button TaskDialog that Escape dismisses.
+      const about = invoke("dialog.showAbout", {
+        name: "Demo",
+        version: "1.2.3",
+        copyright: "Copyright 2026",
+      });
+      await until(
+        () => native.symbols.IsWindowVisible(find(about.title)) !== 0,
+        "about panel visibility",
+      );
+      native.symbols.PostMessageW(find(about.title), WM_COMMAND, 2n, 0n);
+      expect(await about.result()).toEqual({
+        kind: "result",
+        payload: {},
       });
       const abortedMessage = await openMessage({});
       const abortedHwnd = find(abortedMessage.title);

@@ -280,7 +280,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 단일 인스턴스의 추가 데이터 전달과 lock 상태 조회, 해제 필요성을 결정한다. 결정 완료(Windows 호스트 기준): 세 가지 모두 제공하지 않고 두 번째 실행의 `argv`와 `cwd`만 `onOpen`으로 전달한다. [ADR 0027](./decisions/0027-single-instance-lock-surface.md).
 - [x] 앱 ready 전에 들어온 외부 활성화 요청과 종료 요청의 순서를 공개 계약으로 정한다. 활성화 요청은 구현하고 검증했다: Windows에서 시작 중 받은 두 번째 실행 요청은 호스트가 보관했다가 `onReady`, 초기 `onOpen` 뒤에 도착 순서대로 `onOpen`에 전달한다([app-definition](site/src/content/docs/reference/backend/app-definition.mdx)). `tests/lifecycle/desktop.test.ts`는 인박스가 시작 전 요청을 도착 순서대로 보관하는 것을, CI windows-native의 `windows-desktop.ts boot-forward-lifecycle`은 코어 부팅을 요청 접수까지 대기시킨 뒤 요청 한 건의 `ready`, `opened`, 두 번째 `opened` 순서를 확인한다. `tests/lifecycle/windows-host-shutdown.test.ts`는 호스트 경로(`entry.ts`)에서 시작 전에 종료가 확정되면(창 닫힘, 트레이 종료, 시그널) 인박스가 보관한 두 번째 실행 요청과 초기 요청이 모두 `onOpen`에 전달되지 않고 `onWillQuit`, `onQuit`만 실행되는 것을 확인한다.
 - [ ] 렌더러와 관리 프로세스의 비정상 종료 이벤트를 앱에 제공한다. [#78](https://github.com/mathbook3948/bunaway/issues/78).
-- [ ] 앱 About 패널과 이름, 버전, 저작권, 라이선스 정보를 제공한다.
+- [x] 앱 About 패널과 이름, 버전, 저작권, 라이선스 정보를 제공한다. `dialog.showAbout({ name, version?, copyright?, credits? })`로 제공한다. Windows에는 앱용 OS About 패널 API가 없고 Electron과 Tauri(muda)도 메시지 박스를 직접 만들므로 버튼 하나의 메시지 대화상자로 구현했다. 라이선스는 별도 필드 없이 `credits`에 담는다. [dialog](site/src/content/docs/reference/plugins/dialog.mdx)에 정리했다. 실행 파일 정보에서 기본값을 읽는 동작과 아이콘은 제공하지 않는다.
 - [ ] 환경변수와 실행 인자의 설정, 개발 옵션과 배포 옵션의 적용 범위를 정의한다.
 - [ ] command-line switch와 argument의 추가, 조회, 존재 확인과 제거에 대응하는 설정 API를 제공한다.
 - [ ] 앱 이름과 데이터 경로의 사용자 지정, 기본 file icon과 bundle type 조회를 제공한다.

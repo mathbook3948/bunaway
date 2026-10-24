@@ -83,6 +83,7 @@ test("macOS registers every dialog operation and shares the Windows schemas", ()
     "selectFolder",
     "saveFile",
     "showMessage",
+    "showAbout",
   ]);
   expect(macos?.operations).toEqual(windows?.operations);
 });
