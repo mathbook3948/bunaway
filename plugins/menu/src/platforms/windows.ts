@@ -183,7 +183,10 @@ export function initializeMenuOperations(
   });
   const requireMenu = (menuId: string) =>
     resources.get(menuId) ?? invalid("Menu resource does not exist.");
-  /** The tray is not tied to an app window, so an editing role would type into whichever app has focus and a window role has no window to act on. */
+  /**
+   * The tray is not tied to an app window: an editing role would type into whichever app has
+   * focus, and a window role has no window to act on.
+   */
   const requireTrayItems = (items: readonly NativeMenuItem[] | null) => {
     if (items && hasRole(items)) {
       invalid("Tray menus do not support roles.");

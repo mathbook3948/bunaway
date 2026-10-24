@@ -18,7 +18,7 @@ role을 알려 준다. `WindowMenus`는 role 선택을 `menu.clicked` 없이 창
 document를 따라가며 키 이벤트는 만들지 않는다). paste는 `execCommand("paste")`가 거부되므로 호스트가
 클립보드의 CF_UNICODETEXT를 한 번 읽어 `Input.insertText`로 넣는다(`paste` 이벤트 대신 `beforeinput`).
 cross-origin iframe에 포커스가 있으면 실행하지 않는다.
-창 role은 호스트가 `WM_CLOSE` 게시(캡션 닫기와 같은 경로), 최소화, `"quit-command"` 종료 요청으로 실행한다. 트레이 메뉴는 role 전체를 거부한다.
+창 role은 호스트가 `WM_CLOSE` 게시(캡션 닫기와 같은 경로), 최소화(`minimizable: false`이면 건너뜀), `"quit-command"` 종료 요청으로 실행한다. 트레이 메뉴는 role 전체를 거부한다.
 `type: "item"`(role 포함)과 submenu는 선택 필드 `icon`(tray `setIcon`과 같은 base64 ICO, null이면 없음)을
 가진다. 스키마가 ICO 디렉터리를 검사하고 checkbox, radio, separator의 icon은 거부한다. `NativePopupMenu`가
 `SM_CXSMICON` 크기의 32bpp premultiplied-alpha DIB section을 트리 인스턴스마다 만들어

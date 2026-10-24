@@ -5,7 +5,7 @@ import {
   type WindowRoleTargets,
 } from "#native/windows/bun/menu-window-role";
 
-function targets(throwing?: keyof WindowRoleTargets) {
+function targets(throwing?: keyof WindowRoleTargets, minimizable = true) {
   const calls: string[] = [];
   const record =
     (name: keyof WindowRoleTargets) =>
@@ -17,9 +17,11 @@ function targets(throwing?: keyof WindowRoleTargets) {
     };
   const value: WindowRoleTargets = {
     requestClose: record("requestClose"),
+    minimizable: () => minimizable,
     minimize: record("minimize"),
     requestQuit: record("requestQuit"),
     failed: record("failed"),
+    skipped: record("skipped"),
   };
   return {
     calls,
@@ -72,6 +74,14 @@ test("a failing target is reported and not thrown", () => {
       `failed:${name} failed`,
     ]);
   }
+});
+
+test("minimize does nothing when the window is not minimizable", () => {
+  const { calls, value } = targets(undefined, false);
+  runWindowRole("minimize", value);
+  expect(calls).toEqual([
+    "skipped:not-minimizable",
+  ]);
 });
 
 test("editing roles are not window roles", () => {

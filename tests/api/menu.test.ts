@@ -717,7 +717,7 @@ test("role items default their label, keep an explicit label and reject roles el
     ],
     [
       "quit",
-      "Quit",
+      "Exit",
     ],
   ] as const;
   expect(

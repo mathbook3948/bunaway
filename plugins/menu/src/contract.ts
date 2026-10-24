@@ -122,7 +122,7 @@ export const iconSchema = z
   .min(4)
   .max(Math.ceil(MAX_NATIVE_ICO_BYTES / 3) * 4)
   .refine((value) => parseNativeIco(value) !== undefined, "Invalid ICO.");
-/** Role default labels. The editing roles use Electron's Windows labels; accelerators are drawn by the native menu. */
+/** Role default labels, which are Electron's Windows labels; accelerators are drawn by the native menu. */
 export const MENU_ROLE_LABELS = {
   undo: "Undo",
   redo: "Redo",
@@ -132,7 +132,7 @@ export const MENU_ROLE_LABELS = {
   selectAll: "Select All",
   close: "Close",
   minimize: "Minimize",
-  quit: "Quit",
+  quit: "Exit",
 } as const satisfies Record<NativeMenuRole, string>;
 export const roleSchema = z.enum(
   Object.keys(MENU_ROLE_LABELS) as [

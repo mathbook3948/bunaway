@@ -89,8 +89,8 @@ export type NativeMenuWindowHost = {
   /** Register only modal-loop termination for validated cancellation/shutdown. Cleanup stays deferred. */
   interrupt(signal: AbortSignal | undefined, cancel: () => void): () => void;
   /**
-   * Run a menu role: an editing command on the window's page, or a window or app command. A closed window or missing WebView is ignored with a
-   * diagnostic, because a menu selection is user input and must not fail the app.
+   * Run a menu role: an editing command on the window's page, or a window or app command.
+   * A closed window or missing WebView is ignored with a diagnostic, because a menu selection is user input and must not fail the app.
    */
   executeRole(windowId: string, role: NativeMenuRole): void;
   /** Resize the WebView and refresh the observed content bounds after menu attachment changes. */

@@ -22,14 +22,16 @@ const MENUITEMINFO_SIZE = 80;
 /** Offset of `hbmpItem` in the Win64 MENUITEMINFOW. */
 const MENUITEMINFO_HBMPITEM_OFFSET = 72;
 
-/** Electron's Windows shortcut text for each editing role; the window roles show none by default. */
-const ROLE_ACCELERATORS: Partial<Record<NativeMenuRole, string>> = {
+/** Electron's Windows shortcut text for each role; `quit` has none on Windows. */
+const ROLE_ACCELERATORS: Record<Exclude<NativeMenuRole, "quit">, string> = {
   undo: "Ctrl+Z",
   redo: "Ctrl+Y",
   cut: "Ctrl+X",
   copy: "Ctrl+C",
   paste: "Ctrl+V",
   selectAll: "Ctrl+A",
+  close: "Ctrl+W",
+  minimize: "Ctrl+M",
 };
 
 /** Display text for the item's shortcut: its own accelerator, else the role's default. */
@@ -40,7 +42,7 @@ function acceleratorText(item: MenuEntry): string | undefined {
   if (item.accelerator) {
     return item.accelerator;
   }
-  return item.type === "item" && item.role
+  return item.type === "item" && item.role && item.role !== "quit"
     ? ROLE_ACCELERATORS[item.role]
     : undefined;
 }

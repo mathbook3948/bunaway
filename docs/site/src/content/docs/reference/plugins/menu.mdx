@@ -254,14 +254,17 @@ role 항목은 `menu.clicked`를 보내지 않고 `waitForClick` 대기자도 �
 | `copy` | Copy | Ctrl+C |
 | `paste` | Paste | Ctrl+V |
 | `selectAll` | Select All | Ctrl+A |
-| `close` | Close | 없음 |
-| `minimize` | Minimize | 없음 |
-| `quit` | Quit | 없음 |
+| `close` | Close | Ctrl+W |
+| `minimize` | Minimize | Ctrl+M |
+| `quit` | Exit | 없음 |
 
-창 role은 메뉴를 연 창 또는 앱에 명령을 실행하며 표시 단축키가 없습니다. 필요하면 `accelerator`로 표시 문구를 지정합니다.
+창 role은 메뉴를 연 창 또는 앱에 명령을 실행합니다. 표시 단축키는 표시 전용이며 키 입력을 가로채거나 등록하지 않습니다.
+필요하면 `accelerator`로 표시 문구를 바꿉니다.
 `close`는 제목 표시줄의 닫기 단추와 같은 경로로 창에 닫기 요청을 보냅니다. `closable: false`인 창은 닫히지 않고,
 `windows.closeRequested`를 구독한 문서의 응답과 `closeBehavior`도 그대로 적용됩니다.
-`minimize`는 `windows.minimize`와 같이 창을 최소화하며, `minimizable: false`와 무관하게 실행합니다(그 설정은 제목 표시줄 단추에만 적용). 전체 화면처럼 Windows가 거부하는 상태이면 호스트 진단에만 기록합니다.
+`minimize`는 `windows.minimize`와 같이 창을 최소화합니다. `minimizable: false`인 창에서는 실행하지 않고 호스트 진단에만 기록합니다.
+전체 화면 창은 호스트가 상태 변경을 거부하므로 같은 방식으로 진단에만 기록합니다.
+`closable: false`나 `minimizable: false`여도 항목을 비활성으로 표시하지 않으며, 선택하면 아무 일도 일어나지 않습니다.
 `quit`은 트레이의 Quit과 같은 종료 요청을 `"quit-command"` 사유로 `beforeQuit`에 전달합니다. 앱이 취소하면 아무것도 닫지 않습니다.
 창 role은 창이 닫히는 중이면 편집 role처럼 조용히 무시합니다.
 

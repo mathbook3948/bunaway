@@ -4,10 +4,13 @@ import type { NativeMenuWindowRole } from "@bunaway/plugin-api/native";
 export type WindowRoleTargets = {
   /** Post the close the caption button sends, so close policy and close requests still decide. */
   requestClose(): void;
+  /** Whether the window allows minimizing; Electron's minimize role does nothing when it does not. */
+  minimizable(): boolean;
   minimize(): void;
   /** Ask the app to quit with the `quit-command` reason, through its quit confirmation. */
   requestQuit(): void;
   failed(reason: string): void;
+  skipped(reason: string): void;
 };
 
 export function isWindowRole(role: string): role is NativeMenuWindowRole {
@@ -24,8 +27,10 @@ export function runWindowRole(
       targets.requestQuit();
     } else if (role === "close") {
       targets.requestClose();
-    } else {
+    } else if (targets.minimizable()) {
       targets.minimize();
+    } else {
+      targets.skipped("not-minimizable");
     }
   } catch (error) {
     targets.failed(error instanceof Error ? error.message : String(error));

@@ -2196,10 +2196,17 @@ try {
               // policy, close requests and quit confirmation still apply.
               runWindowRole(role, {
                 requestClose: () => windows?.requestClose(view.native.hwnd),
+                minimizable: () =>
+                  windows?.isMinimizable(view.native.hwnd) ?? false,
                 minimize: () => windows?.minimize(view.native.hwnd),
                 requestQuit: () => requestQuit("quit-command"),
                 failed: (reason) =>
                   log("menu-role-failed", {
+                    role,
+                    reason,
+                  }),
+                skipped: (reason) =>
+                  log("menu-role-skipped", {
                     role,
                     reason,
                   }),
