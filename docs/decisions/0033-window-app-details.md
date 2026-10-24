@@ -9,7 +9,8 @@ status: accepted
 ## 배경
 
 Windows 작업 표시줄은 창의 AppUserModelID(AUMID)로 버튼을 묶고, 창에 붙은 속성(`System.AppUserModel.ID`,
-`RelaunchCommand`, `RelaunchDisplayNameResource`, `RelaunchIconResource`)으로 고정 항목의 실행 명령, 표시 이름,
+`System.AppUserModel.RelaunchCommand`, `System.AppUserModel.RelaunchDisplayNameResource`,
+`System.AppUserModel.RelaunchIconResource`)으로 고정 항목의 실행 명령, 표시 이름,
 아이콘을 정한다. 이 속성을 창 단위로 설정하는 API를 제공할지 정해야 했다.
 
 - 두 프레임워크의 문서 기준 설명이며 이 저장소의 테스트로 검증한 것은 아니다. Electron은 Windows에서
@@ -29,8 +30,9 @@ Windows 작업 표시줄은 창의 AppUserModelID(AUMID)로 버튼을 묶고, �
 
 1. 창 AUMID, relaunch 명령, relaunch 표시 이름, relaunch 아이콘을 설정하는 창별 API(Electron `setAppDetails`에
    해당)는 제공하지 않는다.
-2. 작업 표시줄 버튼의 앱 정체성은 프로세스 AUMID 하나이며 앱 ID에서 정해진다. 고정 항목의 이름, 아이콘과 실행
-   명령은 같은 AUMID를 기록한 시작 메뉴 바로가기(패키징이 만든다)를 따른다.
+2. 작업 표시줄 버튼의 앱 정체성은 프로세스 AUMID 하나이며 앱 ID에서 정해진다. 설치본에서 고정 항목의 이름,
+   아이콘과 실행 명령은 같은 AUMID를 기록한 시작 메뉴 바로가기(패키징이 만든다)를 따르는 것으로 본다(Win32
+   문서 기준 추정이며 이 저장소의 테스트로 확인한 것은 아니다). 패키징 없이 실행하면 바로가기가 없다.
 3. `windows.setIcon`은 창 아이콘만, `desktop.relaunch`는 앱 재시작만 맡는다. 둘 다 고정 항목의 아이콘이나
    실행 명령을 정하지 않으며 `setAppDetails`의 대체가 아니라 인접 기능이다. 고정 항목에 관한 요구가
    확인되면 별도 결정에서 다룬다.
