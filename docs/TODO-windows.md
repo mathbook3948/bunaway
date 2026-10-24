@@ -212,7 +212,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `window.contentProtection`, `setContentProtection`, `isContentProtected`를 제공한다. Windows는 `WDA_EXCLUDEFROMCAPTURE`를 쓰며 Windows 10 2004 이전은 이 값을 `WDA_MONITOR`처럼 처리하고, 호출이 거부되면 `WDA_MONITOR`로 다시 시도한다. macOS는 `sharingType`을 사용한다.
 - [x] 창 mouse click-through를 설정하고 조회한다(`windows.setIgnoreMouseEvents`, `isIgnoreMouseEvents`). `WS_EX_LAYERED | WS_EX_TRANSPARENT`로 WebView를 포함한 창 전체의 마우스 입력을 아래 창으로 통과시키며 불투명도와 layered 스타일을 공유한다.
 - [x] click-through 중 마우스 이동 이벤트를 WebView에 전달하는 `forward` 옵션은 제공하지 않는다. 앱이 `getCursorPosition`과 창 bounds로 `setIgnoreMouseEvents`를 전환한다([결정](decisions/0036-click-through-forward-option.md)).
-- [ ] cursor icon, visible, position과 grab의 지원 범위를 제공한다.
+- [x] cursor icon, visible, position과 grab 설정 API는 제공하지 않는다. 아이콘과 숨김은 렌더러 CSS `cursor`, 상대 이동은 Pointer Lock을 쓰고 조회는 `getCursorPosition`만 둔다([결정](decisions/0042-cursor-control.md)).
 - [x] 창 포커스 요청과 별개로 작업 표시줄을 점멸하는 attention API를 제공한다. `requestAttention`과 `cancelAttention`을 제공하며 Windows는 FlashWindowEx로 포커스 이동 없이 작업 표시줄 버튼을 점멸하고 untilFocused와 continuous 모드를 지원한다.
 - [ ] 지정 모니터에서 전체화면으로 전환하고 모니터 제거 시 복원한다.
 - [x] Windows snapped 상태 조회는 제공하지 않기로 결정했다. Snap은 창 상태가 아니라 bounds의 결과다. [ADR 0031](./decisions/0031-window-snapped-state.md).
@@ -693,7 +693,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] WebView에서 Node/Bun을 직접 사용하는 Electron nodeIntegration 옵션의 대체 또는 미지원 결정을 기록한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [ ] frame tree, frame URL과 origin 조회, frame별 작업의 지원 범위를 정의한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [ ] 키보드, 마우스와 wheel의 before-input 이벤트와 취소를 제공한다.
-- [ ] 입력 이벤트 주입, cursor 변경과 IME composition의 지원을 결정한다.
+- [ ] 입력 이벤트 주입과 IME composition의 지원을 결정한다. cursor 변경 API는 [제공하지 않는다](decisions/0042-cursor-control.md).
 - [ ] 파일 drop의 enter, over, leave와 drop 이벤트, 경로와 좌표를 제공한다.
 - [ ] WebView의 File 객체와 OS 파일 경로를 안전하게 연결한다.
 - [ ] 파일을 앱 밖으로 드래그하고 표시할 drag 이미지를 제공한다.
@@ -1164,7 +1164,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
   포커스 활성화의 compositor 제약과 전역 창 좌표 조회/이동의 미지원 범위를 기록한다.
   [E-window-live]가 명시한 전역 좌표 제한을 portal 연결만으로 해결된 것으로 취급하지 않는다.
   compositor별 portal 없음, 권한 거부, 취소, 정상 동작과 위치 제어 미지원 결과를 검증한다.
-- [ ] 플랫폼별 window gesture, cursor auto-hide와 first-mouse 동작을 제공한다.
+- [ ] 플랫폼별 window gesture와 first-mouse 동작을 제공한다. cursor 숨김 API는 [제공하지 않는다](decisions/0042-cursor-control.md).
 - [ ] Intel, ARM64와 translation 환경의 runtime pin, 실행과 배포를 검증한다.
 
 ## 27. 모바일 전용 공식 기능
