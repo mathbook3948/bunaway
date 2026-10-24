@@ -125,6 +125,22 @@ const { muted, playing } = await windows.getWebViewAudioState();
 `UNSUPPORTED`입니다. 네이티브 읽기와 쓰기 실패는 `INTERNAL`입니다.
 상태 변경 이벤트와 실제 audio 장치의 재생 검증은 아직 제공하지 않습니다.
 
+## WebView 렌더링 옵션
+
+기본 글꼴과 크기, 문서 encoding, 이미지 animation 정책, textarea 크기 조절, preferred-size(콘텐츠 크기) 통지,
+탐색 시 포커스 이동 옵션은 없습니다. Electron은 이들을 `webPreferences`로 제공하지만 Tauri는 글꼴, encoding, textarea, 이미지 animation, preferred size를
+Windows에서 제공하지 않고 WebView2에서도 대응하는 설정을 찾지 못했습니다. 옵션을 만들면 호스트가 문서에 CSS나 스크립트를
+주입해 흉내 내야 해 Electron과 의미가 달라집니다(다른 경로는 검토하지 않았습니다). 비슷한 효과는 아래 웹 표준으로 근사할 수 있으며 Electron 옵션과 의미가 같지는 않습니다.
+
+- 글꼴과 크기: 문서 CSS의 `font-family`와 `font-size`(작성자 CSS보다 우선하는 최소 글꼴 크기 설정은 없습니다)
+- textarea 크기 조절: CSS `resize`
+- encoding: 응답의 `Content-Type` charset 또는 `<meta charset>`
+- 이미지 animation 중지: 정지 이미지 형식을 쓰거나 스크립트로 정지 이미지를 표시
+- 콘텐츠 크기 변화: `ResizeObserver`로 관찰해 앱 IPC로 전달(관찰하는 요소와 문서 CSS에 따라 얻는 크기가 달라집니다)
+- 탐색 뒤 포커스: 자동 이동도 대체 수단도 제공하지 않습니다. 문서 안 `element.focus()`는 요소만 고르며 키보드 포커스를 WebView로 옮기는 것은 보증하지 않습니다.
+
+이유는 [ADR 0039](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0039-webview-rendering-options.md)에 있습니다.
+
 ## 설정과 권한
 
 창은 [app](/reference/configuration/#app)에 선언합니다. `startup: false`로 설정하면
