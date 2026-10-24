@@ -34,8 +34,8 @@ Electron과 Tauri:
 - `WM_QUERYENDSESSION`은 항상 TRUE로 응답한다. `WM_ENDSESSION(TRUE)`는 취소할 수 없는 `"session-end"` 종료이고,
   UI 스레드는 최대 4초 동안 `onWillQuit`과 플러그인 StopHook을 기다린 뒤 반환한다.
 - 4초 안에 끝나지 않는 작업(대용량 저장, 업로드, 설치)을 위한 수단은 지금 없다.
-- 이 요구를 가진 앱은 확인되지 않았다. 2026-10-25에 `gh issue list`의 열린 이슈 6건과 `rg`로 저장소 전체를
-  검색했을 때 예제, 템플릿, 코드에 이 기능을 쓰거나 요구하는 곳이 없었다(ADR 0020과 TODO 문구만 일치).
+- 이 요구를 가진 앱은 확인되지 않았다. 검토 시점의 열린 이슈와 저장소 전체 검색에서 예제, 템플릿, 코드에
+  이 기능을 쓰거나 요구하는 곳이 없었고 ADR 0020과 TODO 문구만 `ShutdownBlockReason`을 언급한다.
 
 ## 결정
 
@@ -49,10 +49,12 @@ Electron과 Tauri:
 
 ## 근거
 
-- Electron과 Tauri 모두 차단 사유를 등록하는 API를 제공하지 않는다. 같은 방식을 따른다.
-- 사유는 차단 화면이 나올 때만 보이고, 차단 화면은 `WM_QUERYENDSESSION`에 FALSE를 반환하거나 응답을 5초 넘게
-  지연해야 나온다. ADR 0020은 항상 TRUE로 응답하고 4초 안에 반환하므로 사유 등록만 추가해서는 사용자에게
-  보이지 않는다. 보이게 하려면 종료 거부나 5초 초과 지연이 필요하고, 이는 0020의 계약을 바꾸는 일이다.
+- 차단 사유를 등록하는 API는 Electron도 Tauri도 제공하지 않는다. 이 점에서 같은 방식을 따른다.
+  Electron은 이와 별개로 종료 거부 수단(`query-session-end`)을 갖고 있고 이 저장소는 그렇지 않다는 차이가 아래에 있다.
+- 사유는 차단 화면이 나올 때만 보이고, 차단 화면은 `WM_QUERYENDSESSION`에 FALSE를 반환하거나 그 응답을
+  5초 넘게 지연해야 나온다. ADR 0020은 `WM_QUERYENDSESSION`에 즉시 TRUE로 응답하므로(4초 대기는 그 뒤
+  `WM_ENDSESSION(TRUE)` 단계의 시간이다) 사유 등록만 추가해서는 사용자에게 보이지 않는다. 보이게 하려면
+  종료 거부나 쿼리 응답의 5초 초과 지연이 필요하고, 이는 0020의 계약을 바꾸는 일이다.
 - Electron이 Windows에서 제공하는 종료 거부(`query-session-end`)는 이 결정의 대상이 아니다. 0020은 `beforeQuit`이
   비동기라 동기 메시지 안에서 답할 수 없고 사용자가 이미 종료를 요청했다는 이유로 항상 허용을 정했으며,
   이 점은 Tauri와 같다. 이 PR은 그 결정을 바꾸지 않는다.
@@ -75,4 +77,4 @@ Electron과 Tauri:
 ## 결과
 
 - 코드, 스키마, 권한, 이벤트 변경은 없다.
-- `docs/TODO-windows.md`의 ShutdownBlockReason 항목(243행)을 결정 완료로 바꾸고 이 ADR을 가리킨다.
+- `docs/TODO-windows.md`의 ShutdownBlockReason 항목을 결정 완료로 바꾸고 이 ADR을 가리킨다.
