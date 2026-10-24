@@ -44,18 +44,7 @@ jobs:
         run: mise run install
       - name: Install Inno Setup for installer regression tests
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $installer = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.3.exe'
-          Invoke-WebRequest -Uri 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe' -OutFile $installer
-          if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne '9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732') {
-            throw 'Inno Setup installer checksum mismatch.'
-          }
-          $installation = Start-Process -FilePath $installer -ArgumentList '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/ALLUSERS' -Wait -PassThru -WindowStyle Hidden
-          if ($installation.ExitCode -ne 0) { throw "Inno Setup installation failed: $($installation.ExitCode)" }
-          if (-not (Test-Path -LiteralPath "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
-            throw 'Inno Setup compiler is required for Windows installer regression tests.'
-          }
+        uses: ./.github/actions/install-inno-setup
       - name: Check formatting, lint and types
         run: 'mise run lint ::: format:check ::: format:java:check ::: typecheck'
       # These two complete image suites run once in macos-native, including the
@@ -65,7 +54,11 @@ jobs:
         env:
           BUNAWAY_DMG_DIAGNOSTICS: '1'
           BUNAWAY_SIZE_CONSTRAINTS_DIAGNOSTICS: '1'
-        run: mise run test --path-ignore-patterns '**/macos-image.test.ts' --path-ignore-patterns '**/cli/image.test.ts'
+        # On Windows the three real-installer files run in the Windows installer
+        # tests job; keep this list equal to the files that job runs.
+        run: >-
+          mise run test --path-ignore-patterns '**/macos-image.test.ts' --path-ignore-patterns '**/cli/image.test.ts'
+          ${{ runner.os == 'Windows' && '--path-ignore-patterns **/packaging/windows-associations.test.ts --path-ignore-patterns **/packaging/windows.test.ts --path-ignore-patterns **/packaging/windows-autostart.test.ts' || '' }}
       # Compare after the unchanged full suite, so the probe cannot initialize
       # native state before the shared-process regression runs.
       - name: Compare size constraints in one fresh native process
@@ -119,6 +112,29 @@ jobs:
         run: |
           mise run protocol:generate
           git diff --exit-code -- native/host-api/generated
+
+  windows-installer:
+    name: Windows installer tests
+    runs-on: windows-2022
+    # Same limit as the Windows Check job. These tests run the real Inno Setup
+    # installer and the packaging contracts that need it, one after another.
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up mise and pinned Bun
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+      - name: Install locked dependencies
+        run: mise run install
+      - name: Install Inno Setup for installer regression tests
+        uses: ./.github/actions/install-inno-setup
+      - name: Build workspace packages
+        run: mise run plugins:build
+      # The Check job skips exactly these files on Windows; keep both lists equal.
+      - name: Run installer and packaging tests
+        run: mise exec -- bun --no-env-file test tests/packaging/windows-associations.test.ts tests/packaging/windows.test.ts tests/packaging/windows-autostart.test.ts
 
   windows-native:
     name: Windows native integration

@@ -17,6 +17,10 @@ Linux에서는 Windows와 macOS 전용 테스트가 skip되므로 네이티브 �
 `windows-native`, `macos-native` 잡에서 확인한다. 계약 테스트가 통과했다는 보고와 실제 네이티브
 실행 결과는 항상 구분해서 적는다.
 
+Windows CI에서는 실제 Inno Setup 설치기를 실행하는 `tests/packaging/windows-associations.test.ts`,
+`windows.test.ts`, `windows-autostart.test.ts`를 `Check (windows-2022)`의 계약 테스트에서 제외하고
+`Windows installer tests` 잡이 실행한다. 두 목록은 `.github/workflows/ci.yml`에서 같아야 한다.
+
 ## 디렉터리
 
 | 디렉터리 | 내용 |
