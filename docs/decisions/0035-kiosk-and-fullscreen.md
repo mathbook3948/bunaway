@@ -11,14 +11,21 @@ status: accepted
 키오스크 모드와 일반 전체화면의 차이를 정하고, 키오스크용 별도 API(`kiosk` 옵션, `setKiosk`, `isKiosk`)를
 제공할지 정해야 했다.
 
-- Electron은 `kiosk` 창 옵션과 `setKiosk`, `isKiosk`를 제공한다. Windows에서 키오스크가 전체화면과 다르게
-  동작하는지는 확인하지 못했다. 키오스크가 Windows에서는 전체화면 전환과 같은 경로라고 추정하며, 이 추정이
-  틀리면 이 결정의 근거 가운데 Electron 쪽 서술을 고친다. macOS에서는 전체화면 진입에 더해 Dock과 메뉴 막대를
-  숨기고 앱 전환을 막는 표시 옵션을 쓰는 것으로 알려져 있다.
-- Tauri 2는 키오스크 옵션이나 API가 없고 `fullscreen`만 제공한다.
+- Electron은 `kiosk` 창 옵션과 `setKiosk`, `isKiosk`를 제공한다. Electron 45 기준으로 Windows와 Linux에서
+  `setKiosk(k)`는 `setFullScreen(k)`만 호출하고 `isKiosk()`는 `isFullScreen()`을 반환한다. 항상 위, 작업 표시줄
+  숨김, Alt+Tab 차단 같은 키오스크 전용 처리는 없다. `fullscreenable: false`이면 전체화면 전환이 바로 반환하므로
+  키오스크도 동작하지 않는다. Windows 전체화면은 Chromium이 `WS_CAPTION`, `WS_THICKFRAME`을 없애고 모니터 크기로
+  배치하며 Z 순서는 바꾸지 않고(TOPMOST 아님) `ITaskbarList2::MarkFullscreenWindow`를 호출한다. macOS에서만
+  키오스크가 다르다. presentation options(`HideDock`, `HideMenuBar`, `DisableAppleMenu`,
+  `DisableProcessSwitching`, `DisableForceQuit`, `DisableSessionTermination`, `DisableHideApplication`)를 건 뒤
+  전체화면에 들어가고, 해제하면 저장한 옵션을 복원한다. 일반 전체화면은 이 옵션을 바꾸지 않는다.
+- Tauri 2(tao 0.37)는 키오스크 옵션이나 API가 없다. `set_fullscreen`은 tao의 Borderless 전체화면이고
+  `set_simple_fullscreen`은 macOS 전용이며 다른 플랫폼에서는 `set_fullscreen`으로 대체된다. 앱 전환과 강제 종료를
+  막는 `Disable*` 계열은 어느 모드에도 없다. Windows는 `MarkFullscreenWindow`를 호출하고 TOPMOST는
+  `always_on_top`일 때만 쓴다.
 - 이 저장소의 Windows 전체화면(`setFullscreen`, 선언과 생성 옵션의 `fullscreen`)은 창 스타일에서
   `WS_OVERLAPPEDWINDOW`를 빼고 창을 현재 모니터의 전체 영역으로 옮긴다. 이전 스타일, 위치와 표시 상태는
-  저장했다가 해제할 때 복원한다. 창을 활성화하거나 최상위로 올리지는 않는다(`SWP_NOZORDER | SWP_NOACTIVATE`). 전체 모니터 영역을 덮는 전경 창이 작업 표시줄을 가리는 것은 Windows 셸의 동작으로 추정하며 이 저장소에서 따로 검증하지 않았다.
+  저장했다가 해제할 때 복원한다. 창을 활성화하거나 최상위로 올리지는 않는다(`SWP_NOZORDER | SWP_NOACTIVATE`). 이 저장소는 `ITaskbarList2::MarkFullscreenWindow`를 호출하지 않는다.
   `setFullscreenable(false)`로 진입을 막을 수 있고, 전체화면 중에는 `minimize`, `maximize`, `unmaximize`, `restore`, `toggleMaximize`를 `INVALID_ARGUMENT`로 거부한다.
 - 키오스크 앱이 일반적으로 더하는 동작은 이미 개별 API로 있다. 항상 위(`alwaysOnTop`), 작업 표시줄 제외
   (`skipTaskbar`, 숨김이 아니거나 최소화, 최대화, 전체화면이면 `BUSY`이므로 선언이나 창 옵션으로 지정), 메뉴 막대 숨김(`menu.setWindowMenuVisible`), 닫기 요청을 받아 거부하는 `windows.closeRequested`와 `windows.respondClose`(닫기 요청이 가는 경우만 대상이다. 문서가 구독하고 그 뷰에 `windows.respondClose` 권한이 있어야 하며, 강제 닫기, `windows.destroy`, 앱 종료, 세션 종료와 `closeBehavior: "hide"`의 숨김은 요청 없이 진행한다. 공개 `windows.close`는 요청 거부 시 `false`를 반환한다),
@@ -39,8 +46,9 @@ status: accepted
 
 ## 근거
 
-- 두 프레임워크가 다르다. Electron은 키오스크 API가 있고 Tauri는 없다. Windows에서 Electron의 키오스크가
-  전체화면과 같다고 보면, 별도 API는 같은 동작에 이름만 하나 더 추가하는 것이 된다. 코어는 작게 두고
+- 두 프레임워크가 다르다. Electron은 키오스크 API가 있고 Tauri는 없다. 그러나 Electron도 Windows에서는
+  키오스크가 전체화면과 같은 경로이므로, Windows에서 별도 API는 같은 동작에 이름만 하나 더 추가하는 것이 된다.
+  Electron의 키오스크가 다른 부분은 macOS의 presentation options뿐이다. 코어는 작게 두고
   필요한 동작은 기존 API 조합으로 얻는 쪽이 이 저장소 방침에 맞다.
 - 키오스크의 차이를 만드는 부분(탈출 경로 차단)은 창 API 밖의 OS 구성이라 호스트가 보장할 수 없다.
   `kiosk: true`라는 이름은 보장하지 못하는 잠금을 약속하는 것처럼 읽힌다.
@@ -51,3 +59,5 @@ status: accepted
 - 이벤트, 권한, 스키마, 네이티브 코드 변경은 없다.
 - `windows.mdx`의 창 상태 절에 전체화면이 키오스크가 아니라는 점과 조합 방법을 적는다.
 - 키오스크 전용 요구가 실제로 확인되면 별도 결정에서 다룬다.
+- Electron과 Tauri는 Windows 전체화면에서 `MarkFullscreenWindow`로 셸에 전체화면 창임을 알리지만 이 저장소는
+  호출하지 않는다. 전체화면 중 작업 표시줄이 남는 경우가 확인되면 별도 변경으로 다룬다.
