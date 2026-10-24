@@ -690,7 +690,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] 신뢰된 앱 백엔드의 JavaScript 실행과 결과 반환 계약을 제공한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [ ] 문서 초기화 script와 CSS 삽입, 제거를 제공한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [ ] isolated world와 preload의 사용 범위, frame별 적용과 자원 정리를 정의한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
-- [ ] WebView에서 Node/Bun을 직접 사용하는 Electron nodeIntegration 옵션의 대체 또는 미지원 결정을 기록한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
+- [x] WebView에서 Node/Bun을 직접 사용하는 Electron nodeIntegration 옵션은 제공하지 않기로 결정했다. 신뢰 코드는 백엔드 명령으로 실행한다. [ADR 0048](decisions/0048-frontend-node-access-and-sync-ipc.md).
 - [ ] frame tree, frame URL과 origin 조회, frame별 작업의 지원 범위를 정의한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [ ] 키보드, 마우스와 wheel의 before-input 이벤트와 취소를 제공한다.
 - [x] 입력 이벤트 주입과 IME composition API는 [제공하지 않는다](decisions/0047-input-injection-and-ime.md). 조합은 WebView2가 처리하고 앱은 페이지의 composition 이벤트를 쓴다. cursor 변경 API도 [제공하지 않는다](decisions/0042-cursor-control.md).
@@ -1066,7 +1066,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [x] 브라우저 테스트용 transport를 제공한다(`createMockTransport`).
 - [ ] 앱 정의에서 mock 핸들러를 생성하는 mock API를 제공한다.
 - [ ] context bridge와 preload의 역할을 기존 SDK와 정책으로 대체하는 범위를 정한다.
-- [ ] 동기 IPC와 프런트엔드의 임의 Node/Bun 접근은 PRD와 충돌하므로 도입 여부를 별도 ADR에서 결정한다.
+- [x] 동기 IPC와 프런트엔드의 임의 Node/Bun 접근은 PRD와 충돌하므로 제공하지 않기로 결정했다. 모든 명령 호출은 Promise로 완료된다. [ADR 0048](decisions/0048-frontend-node-access-and-sync-ipc.md).
 
 ## 24. 개발 도구, 진단과 성능 API
 

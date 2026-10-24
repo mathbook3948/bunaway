@@ -424,7 +424,7 @@ macos-native CI의 `tests/lifecycle/macos-desktop.ts`에서 실행하며 실제 
 - [ ] 기능 지원 조회에서 실제 macOS 작업과 OS 권한 상태를 보고한다.
 - [ ] once와 native 이벤트, binary payload, stream/channel과 transferable 자원 계약을 제공한다.
 - [ ] UI 명령 및 이벤트의 타입과 정책 목록 생성, 브라우저 테스트 transport를 제공한다.
-- [ ] 동기 IPC와 UI의 임의 Node/Bun 접근은 PRD와의 충돌을 먼저 결정한다.
+- [x] 동기 IPC와 UI의 임의 Node/Bun 접근은 제공하지 않기로 결정했다. [ADR 0048](decisions/0048-frontend-node-access-and-sync-ipc.md).
 
 UI 초기화에서 `CommandsOf`와 `EventsOf`로 타입을 지정한 client를 만들고 실패를
 처리하는 방식을 권장한다. 직접 함수 API도 유지하며 컴포넌트 정리는 구독만 해제한다.
