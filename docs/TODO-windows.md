@@ -218,8 +218,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] Windows snapped 상태 조회는 제공하지 않기로 결정했다. Snap은 창 상태가 아니라 bounds의 결과다. [ADR 0031](./decisions/0031-window-snapped-state.md).
 - [x] Windows tablet-mode 상태 조회는 제공하지 않기로 결정했다. Electron 값은 Windows 10 기준이고 Tauri에는 없다. 터치 환경은 pointer 미디어 쿼리와 창 크기로 판단한다. [ADR 0043](./decisions/0043-tablet-mode-query.md).
 - [x] 접근성용 창 제목을 일반 제목과 별도로 설정한다. `IAccPropServices.SetHwndPropStr`로 접근성 이름만 바꾸고 빈 문자열은 설정을 제거하며, Narrator 등 스크린 리더의 실제 낭독 확인은 수동 검증으로 따로 남긴다.
-- [ ] 신뢰된 네이티브 어댑터에 HWND와 native WebView 접근을 제공하는 범위를 정한다.
-- [ ] Windows message hook의 등록, 조회, 개별 해제와 전체 해제를 제공한다.
+- [x] 어댑터에 원시 HWND와 WebView2 컨트롤러를 넘기는 범용 접근자는 제공하지 않기로 결정했다. 필요한 기능마다 창 ID 해석과 파괴 전 알림을 가진 좁은 어댑터 계약을 쓴다. [ADR 0046](./decisions/0046-native-handles-and-message-hooks.md).
+- [x] Windows message hook은 제공하지 않기로 결정했다. 필요한 메시지는 `windows.appCommand`처럼 이름이 고정된 알림 전용 이벤트로 추가한다. [ADR 0046](./decisions/0046-native-handles-and-message-hooks.md).
 
 `restore`는 최소화 전의 일반 또는 최대화 상태를 복원하고 `unmaximize`는 일반 크기를
 적용한다. `isVisible`은 다른 창에 가려졌거나 화면 밖에 있는지 판정하지 않는다.
