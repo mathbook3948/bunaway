@@ -118,7 +118,7 @@ await menu.updateItem({ menuId: "main-menu", itemId: "save", changes: { accelera
 ## sublabel과 접근성 label
 
 항목에는 보조 문구(`sublabel`)나 접근성 전용 label 필드가 없습니다. Windows 메뉴 항목은 문자열 하나를 가지며
-접근성 이름도 그 문자열에서 만들어지므로, `label`이 표시 문자열과 접근성 이름의 기준이 됩니다. 정의되지 않은 필드는
+어댑터는 `label`만 네이티브 메뉴에 넘깁니다. 정의되지 않은 필드는
 무시되지 않고 `INVALID_ARGUMENT`로 거부됩니다. 보조 정보는 `label`에 포함해 주세요.
 
 ## 항목 삽입, 제거와 변경

@@ -900,29 +900,41 @@ test("menu items reject sublabel and accessibility label fields instead of ignor
         },
       ],
     });
-  const kinds = [
+  const entries = [
     {
+      id: "entry",
+      type: "separator",
+    },
+    {
+      id: "entry",
       type: "item",
+      label: "Open",
     },
     {
+      id: "entry",
+      type: "item",
+      role: "copy",
+    },
+    {
+      id: "entry",
       type: "checkbox",
+      label: "Open",
     },
     {
+      id: "entry",
       type: "radio",
+      label: "Open",
       group: "choice",
       checked: true,
     },
     {
+      id: "entry",
       type: "submenu",
+      label: "Open",
       items: [],
     },
   ];
-  for (const kind of kinds) {
-    const entry = {
-      id: "entry",
-      label: "Open",
-      ...kind,
-    };
+  for (const entry of entries) {
     expect(parse(entry).error?.issues).toBeUndefined();
     for (const extra of [
       {
@@ -939,5 +951,37 @@ test("menu items reject sublabel and accessibility label fields instead of ignor
       expect(result.success).toBe(false);
       expect(result.error?.issues[0]?.code).toBe("unrecognized_keys");
     }
+  }
+});
+
+test("insert and updateItem reject sublabel and accessibility label fields", () => {
+  for (const extra of [
+    {
+      sublabel: "Hint",
+    },
+    {
+      accessibleLabel: "Open",
+    },
+  ]) {
+    const inserted = menuOperations.insert.input.safeParse({
+      menuId: "extra",
+      index: 0,
+      item: {
+        id: "entry",
+        type: "item",
+        label: "Open",
+        ...extra,
+      },
+    });
+    expect(inserted.success).toBe(false);
+    const updated = menuOperations.updateItem.input.safeParse({
+      menuId: "extra",
+      itemId: "entry",
+      changes: {
+        ...extra,
+      },
+    });
+    expect(updated.success).toBe(false);
+    expect(updated.error?.issues[0]?.code).toBe("unrecognized_keys");
   }
 });
