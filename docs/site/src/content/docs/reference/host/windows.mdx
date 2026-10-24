@@ -683,6 +683,7 @@ trusted Win32 코드의 직접 활성화까지 막는 보안 경계는 아닙니
 
 조회의 `unit`은 `"physical" | "logical"`이며 기본값은 `"physical"`입니다. `dpi`는 해당 조회에 사용한 대상 창의 DPI입니다.
 `setSize`는 계속 내용 영역의 96 DPI 논리 픽셀을 받고, `setPosition`은 창 바깥쪽 왼쪽 위의 화면 물리 픽셀을 받습니다.
+창의 위치나 크기를 바꾸는 설정에는 애니메이션 옵션이 없고, 호출은 전환 효과 없이 적용됩니다. Electron의 `animate` 인자는 macOS에서만 동작하고 Tauri에는 없습니다. 전환 효과가 필요하면 `setOuterBounds`를 짧은 간격으로 반복 호출하거나 WebView 안의 CSS 애니메이션을 씁니다. 반복 호출은 프레임 시간을 보장하지 않습니다. 이유는 [ADR 0038](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0038-window-geometry-animation.md)에 있습니다.
 `minimizable`, `maximizable`, `closable`의 기본값은 `true`입니다. 각 setter와 getter는 해당 이름의
 operation 권한을 따로 요구하며 닫힌 창은 `INVALID_ARGUMENT`입니다. 최소화와 최대화 버튼 설정은
 실제 일반 창 스타일을 조회하고 전체화면 중에는 복원할 스타일을 변경합니다.
@@ -847,10 +848,6 @@ const converted = await windows.toPhysical({
 모든 조회와 변환은 각각의 작업 권한과 열린 창이 필요합니다.
 
 ## 내용 위치, 바깥 크기와 bounds 설정
-
-창의 위치나 크기를 바꾸는 모든 설정에는 애니메이션 옵션이 없습니다. Electron의 `animate` 인자는 macOS에서만 동작하고 Tauri에는 없으며, Windows에서는 Electron도 즉시 적용합니다. 일반 상태의 창은 호출이 끝나면 크기 제약 등의 보정을 거친 값이 반영되고, 최소화와 최대화 중에는 복원 영역에 적용되며, 전체화면에서는 `INVALID_ARGUMENT`로 거부됩니다.
-
-전환 효과가 필요하면 `setOuterBounds`를 반복 호출하거나 WebView 안의 CSS 애니메이션을 씁니다. 반복 호출은 프레임 시간을 보장하지 않으며, 영역이 바뀐 단계에서만 바뀐 축의 `move`, `resize` 이벤트가 발행됩니다. 최소화나 최대화 중에는 복원 영역만 바뀌므로 눈에 보이는 효과가 없습니다. 이유는 [ADR 0038](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0038-window-geometry-animation.md)에 있습니다.
 
 `setContentPosition`, `setOuterSize`, `setContentBounds`, `setOuterBounds`의 `unit`은
 `"physical" | "logical"`이며 기본값은 `"physical"`입니다. 위치는 조회와 같은 화면 원점을
