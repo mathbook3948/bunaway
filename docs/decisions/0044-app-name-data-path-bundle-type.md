@@ -4,7 +4,7 @@ status: accepted
 
 # 앱 이름 변경, 데이터 경로 변경, bundle type 조회는 제공하지 않는다
 
-결정일: 2026-10-25. 검토 기준: main `33af1adf`. 대상: Windows 호스트.
+결정일: 2026-10-25. 검토 기준: main `f295a967`. 대상: Windows 호스트.
 
 ## 배경
 
