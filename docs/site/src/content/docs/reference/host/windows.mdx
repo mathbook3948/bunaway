@@ -336,6 +336,8 @@ WebView는 같은 수명을 가지므로 WebView가 닫힌 상태는 `windows.is
 | `windows.setZoomFactor` | `factor: number` | 브라우저가 실제 적용한 zoom factor |
 | `windows.openDevTools` | 없음 | 개발 도구 창 열기 요청 뒤 `null` |
 
+history의 offset과 index로 이동하는 메서드는 없습니다. 여러 단계 이동은 `goBack`과 `goForward`를 반복하되, 두 메서드는 이동을 시작했는지만 알려주며 반환 직후의 `getWebViewState`가 이동 결과를 반영한다고 보장하지 않습니다.
+
 ```ts
 const state = await windows.getWebViewState();
 await windows.setZoomFactor({ factor: 1.25 });
