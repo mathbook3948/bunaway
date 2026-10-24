@@ -372,12 +372,12 @@ MSIX는 아직 `UNSUPPORTED`입니다. 클릭을 받아도 자동으로 창을 �
 
 ## 우선순위와 고급 콘텐츠
 
-알림 센터 우선순위와 `alarm`, `incomingCall` 시나리오 필드는 없습니다. Electron과 Tauri도 이런 필드를 제공하지
+알림 센터 우선순위와 `alarm`, `incomingCall` 시나리오 필드는 없습니다. Electron과 Tauri의 데스크톱 알림도 이런 필드를 제공하지
 않습니다. 사용자가 닫을 때까지 남기려면 `timeoutType: "never"`, 소리를 반복하려면 `sound`의 `Looping.*`와
 `soundLoop`, 알림 센터 보관 기간은 `expiresAfterSeconds`를 쓰세요.
 
 진행률 막대와 제목, 본문 밖의 추가 텍스트 줄도 없습니다. 본문은 `body` 하나입니다. 진행률은
-`windows.setTaskbarProgress`나 앱 화면으로 보이고, 끝났을 때 같은 `id`로 `show`해 알림을 교체하세요.
+`windows.setTaskbarProgress`나 앱 화면으로 보이고, 끝났을 때 같은 `id`와 `group`으로 `show`해 알림을 교체하세요.
 Electron에서 `toastXml`로 이런 내용을 쓰던 앱은 옮길 수 없습니다.
 
 ## 사용자 지정 toast XML
