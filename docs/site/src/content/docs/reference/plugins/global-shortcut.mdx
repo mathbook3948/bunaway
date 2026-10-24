@@ -131,5 +131,5 @@ CANCELLED로 끝냅니다. 백엔드에는 `globalShortcut.waitForPress` 권한�
 
 Windows에서는 UI 어댑터가 보이지 않는 메시지 HWND를 소유하고 종료 때 모든 단축키와 HWND를 해제합니다.
 macOS에서는 UI 어댑터가 Carbon 이벤트 핸들러와 등록을 소유하고 종료 때 모두 해제합니다.
-OS 정리 실패도 호스트에 보고하며 나머지 정리를 시도합니다. 창별 메뉴 accelerator와 WebView
-입력의 우선순위, Linux 지원은 후속 작업입니다.
+OS 정리 실패도 호스트에 보고하며 나머지 정리를 시도합니다. 메뉴 accelerator는 표시 전용이라 단축키를 등록하지
+않으며, 키 입력은 menu API가 정한 규칙을 따릅니다. Linux 지원은 후속 작업입니다.
