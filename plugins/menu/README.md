@@ -11,13 +11,14 @@
 팝업은 표시 종료나 생성 실패 때 해제한다. checkbox와 radio 선택은 상태를 자동 변경하지 않는다.
 `setWindowMenu`는 창에 메뉴를 연결하고 `setWindowMenuVisible`은 연결을 유지한 채 HWND에서 HMENU만 떼었다 붙여 메뉴바를 숨기고 표시하며, `showContextMenu`는 화면 물리 좌표에 임시 팝업을 표시한다.
 리소스 하나는 트레이나 창 하나에만 연결할 수 있다. 팝업은 독립 복사본을 사용하며 요청 신호로 취소한다.
-편집 role(undo, redo, cut, copy, paste, selectAll)은 `type: "item"`에만 허용한다. 스키마가
+role은 편집 role(undo, redo, cut, copy, paste, selectAll)과 창 role(close, minimize, quit)이며 `type: "item"`에만 허용한다. 스키마가
 생략한 label을 기본 label로 채우고, `NativePopupMenu`가 role의 표시용 단축키 문구를 붙이며 선택 때
 role을 알려 준다. `WindowMenus`는 role 선택을 `menu.clicked` 없이 창 호스트의 `executeRole`로 넘기고,
 호스트가 해당 창 WebView에 DevTools 프로토콜의 `Runtime.evaluate`로 `document.execCommand`를 실행한다(포커스된
 document를 따라가며 키 이벤트는 만들지 않는다). paste는 `execCommand("paste")`가 거부되므로 호스트가
 클립보드의 CF_UNICODETEXT를 한 번 읽어 `Input.insertText`로 넣는다(`paste` 이벤트 대신 `beforeinput`).
 cross-origin iframe에 포커스가 있으면 실행하지 않는다.
+창 role은 호스트가 `WM_CLOSE` 게시(캡션 닫기와 같은 경로), 최소화(`minimizable: false`이면 건너뜀), `"quit-command"` 종료 요청으로 실행한다. 트레이 메뉴는 role 전체를 거부한다.
 `type: "item"`(role 포함)과 submenu는 선택 필드 `icon`(tray `setIcon`과 같은 base64 ICO, null이면 없음)을
 가진다. 스키마가 ICO 디렉터리를 검사하고 checkbox, radio, separator의 icon은 거부한다. `NativePopupMenu`가
 `SM_CXSMICON` 크기의 32bpp premultiplied-alpha DIB section을 트리 인스턴스마다 만들어

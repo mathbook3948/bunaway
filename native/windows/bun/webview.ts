@@ -10,7 +10,7 @@ import {
 } from "@bunaway/plugin/win32";
 import type {
   NativeContentColorScheme,
-  NativeMenuRole,
+  NativeMenuEditRole,
 } from "@bunaway/plugin-api/native";
 import { BunawayError, type WireError } from "@bunaway/protocol";
 import type { WindowSpec } from "./channel.ts";
@@ -987,7 +987,7 @@ export class WebView {
    * DevTools call and is reported as skipped (`busy`).
    */
   executeEditCommand(
-    command: NativeMenuRole,
+    command: NativeMenuEditRole,
     report: EditCommandReport,
   ): boolean {
     if (this.closing || !this.webview || !this.controller) {

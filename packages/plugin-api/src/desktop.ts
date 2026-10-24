@@ -1,9 +1,9 @@
 /**
  * `last-window` follows a window close, `tray` follows the tray's Quit action,
  * and `api` follows a call to `DesktopContext.quit()`. `quit-command` is the
- * macOS Quit command: the app menu's Quit item or Cmd+Q, the Dock's Quit, or a
- * quit Apple event that is not a logout, restart or shutdown. Windows never
- * produces it.
+ * Quit command: on macOS the app menu's Quit item or Cmd+Q, the Dock's Quit, or a
+ * quit Apple event that is not a logout, restart or shutdown; on Windows a
+ * window menu item with the `quit` role.
  */
 export type QuitReason = "last-window" | "tray" | "api" | "quit-command";
 

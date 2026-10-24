@@ -1,10 +1,10 @@
-import type { NativeMenuRole } from "@bunaway/plugin-api/native";
+import type { NativeMenuEditRole } from "@bunaway/plugin-api/native";
 
 /**
  * Roles run through `document.execCommand`. Paste is excluded: `execCommand("paste")` is
  * refused for host-triggered calls, so the host inserts clipboard text itself.
  */
-export type ExecCommandRole = Exclude<NativeMenuRole, "paste">;
+export type ExecCommandRole = Exclude<NativeMenuEditRole, "paste">;
 
 /** `document.execCommand` name for each such role. */
 const EXEC_COMMANDS = {

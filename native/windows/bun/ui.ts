@@ -34,6 +34,7 @@ import {
 import { type CloseDecision, CloseRequests } from "./close-request.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
 import { DownloadCleanupError, DownloadCleanupRetries } from "./downloads.ts";
+import { isWindowRole, runWindowRole } from "./menu-window-role.ts";
 import { isMonitorChangeMessage, MonitorTracker } from "./monitor-events.ts";
 import { monitorServices, windowMonitor } from "./monitors.ts";
 import { createSessionMessageHandler } from "./session-end.ts";
@@ -141,7 +142,7 @@ function signalClosing(reason: ShutdownReason) {
     reason,
   });
 }
-function requestQuit(reason: "last-window" | "tray") {
+function requestQuit(reason: "last-window" | "tray" | "quit-command") {
   if (closing() || quitPending()) {
     return;
   }
@@ -2187,6 +2188,28 @@ try {
               log("menu-role-skipped", {
                 role,
                 reason: stopping() ? "host-stopping" : "window-closed",
+              });
+              return;
+            }
+            if (isWindowRole(role)) {
+              // These take the paths of the caption buttons and the tray's Quit, so the close
+              // policy, close requests and quit confirmation still apply.
+              runWindowRole(role, {
+                requestClose: () => windows?.requestClose(view.native.hwnd),
+                minimizable: () =>
+                  windows?.isMinimizable(view.native.hwnd) ?? false,
+                minimize: () => windows?.minimize(view.native.hwnd),
+                requestQuit: () => requestQuit("quit-command"),
+                failed: (reason) =>
+                  log("menu-role-failed", {
+                    role,
+                    reason,
+                  }),
+                skipped: (reason) =>
+                  log("menu-role-skipped", {
+                    role,
+                    reason,
+                  }),
               });
               return;
             }

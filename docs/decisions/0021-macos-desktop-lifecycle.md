@@ -66,7 +66,7 @@ macOS는 `keep-alive`여도 모든 창이 `startup: false`이거나 `app.windows
 
 공개 `QuitReason`에 `"quit-command"`를 추가한다. macOS의 Quit 명령(앱 메뉴의 Quit과 Cmd+Q,
 Dock의 Quit, 로그아웃, 재시작, 시스템 종료 이유가 없는 quit Apple event)을 뜻한다.
-`"tray"`처럼 진입점을 나타내는 값이며 Windows는 발행하지 않는다.
+`"tray"`처럼 진입점을 나타내는 값이며 Windows에서는 창 메뉴의 `quit` role이 발행한다(ADR 0020).
 `QuitReason`을 `switch`로 완전하게 처리하는 앱은 새 값을 처리해야 하므로 이는 타입 수준의 확장이다.
 기존 값을 재사용하지 않은 이유는 `"last-window"`가 창 닫기, `"api"`가 앱 코드의 호출이라는
 뜻을 이미 가지고 있어 사용자의 명시적 Quit과 구분되지 않기 때문이다.

@@ -746,6 +746,6 @@ Windows UI 플러그인은 `@bunaway/plugin/windows-menu`의 `NativePopupMenu`�
 
 `NativeEnvironment.menus.windows`는 창 수명 조회, 메시지와 종료 구독, 메뉴 변경 후
 콘텐츠 갱신 및 네이티브 모달 루프 중단을 제공합니다. `executeRole(windowId, role)`은 해당 창
-페이지에 편집 role(`undo`, `redo`, `cut`, `copy`, `paste`, `selectAll`)을 실행하며, 닫힌 창이나
+페이지에 편집 role(`undo`, `redo`, `cut`, `copy`, `paste`, `selectAll`)을, 창 role(`close`, `minimize`, `quit`)은 해당 창 또는 앱에 실행하며, 닫힌 창이나
 없는 WebView는 예외 없이 진단 로그만 남깁니다. 중단 콜백은 `EndMenu`처럼 루프 종료만
 요청하며 창과 플러그인 자원 정리는 일반 Worker dispatch에서 수행합니다.

@@ -7,10 +7,12 @@ export {
   selectNativeIcoFrame,
 } from "./native-ico.ts";
 export type {
+  NativeMenuEditRole,
   NativeMenuItem,
   NativeMenuRole,
   NativeMenuServices,
   NativeMenuWindowHost,
+  NativeMenuWindowRole,
 } from "./native-menu.ts";
 export type { NativeShortcutServices } from "./native-shortcut.ts";
 export type {

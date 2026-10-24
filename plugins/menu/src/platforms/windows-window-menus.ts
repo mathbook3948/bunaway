@@ -211,7 +211,7 @@ export class WindowMenus implements WindowMenuDriver {
         }
         const item = tree.selectedItemAt(handle, Number(position));
         if (item?.role) {
-          // A role runs its editing command and is not an app-level selection.
+          // A role runs its command and is not an app-level selection.
           this.host.executeRole(windowId, item.role);
         } else if (item) {
           selected(item.id);
@@ -355,7 +355,7 @@ export class WindowMenus implements WindowMenuDriver {
       }
       const item = tree.selectedItem(command);
       if (item?.role) {
-        // Report no selection for a role; run it once the popup has released focus to the page.
+        // Report no selection for a role; run it once the popup has released focus.
         this.host.executeRole(windowId, item.role);
         return null;
       }
