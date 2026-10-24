@@ -10,8 +10,8 @@ status: accepted
 
 `setPosition`, `setSize`, `setOuterSize`, `setContentBounds`, `setOuterBounds`, `center`, `moveToAnchor` 같은 geometry 설정에 전환 애니메이션을 고르는 선택 인자를 둘지 정해야 했다.
 
-- Electron의 `setBounds`, `setSize`, `setPosition`은 `animate` 인자를 받지만 문서상 macOS에서만 동작한다. 다른 플랫폼에서는 무시된다.
-- Tauri의 `setSize`, `setPosition`은 애니메이션 인자가 없다.
+- Electron의 `setBounds`, `setContentBounds`, `setSize`, `setContentSize`, `setPosition`은 `animate` 인자를 받지만 문서상 macOS에서만 동작한다. Windows와 Linux 구현은 이 인자를 쓰지 않고 경고 없이 즉시 적용한다. 시간이나 곡선 옵션은 없다.
+- Tauri 2의 `setSize`, `setPosition`(Rust `set_size`, `set_position` 포함)과 하위 라이브러리 tao의 공개 API에는 애니메이션 인자가 없다.
 - Windows에는 창 geometry를 보간하는 시스템 호출이 없다. 일반 상태의 창은 `SetWindowPos`로 즉시 적용한다. geometry 호출이 애니메이션을 고르는 인자를 제공하지 않는다.
   애니메이션이 필요하면 앱이 타이머로 중간 bounds를 반복해 설정해야 한다.
 
