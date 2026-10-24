@@ -29,8 +29,9 @@ status: accepted
 1. `setIgnoreMouseEvents`에 `forward` 옵션과 마우스 이동 전달 이벤트를 제공하지 않는다. `ignore: boolean` 하나만
    받는 계약을 유지한다.
 2. "요소 위에서만 입력을 받는" 오버레이는 앱이 `getCursorPosition`과 창 bounds로 커서가 상호작용 영역 안인지 계산해
-   `setIgnoreMouseEvents`를 전환하는 방식으로 만든다. 문서의 `setIgnoreMouseEvents` 절에 이 방법과 `forward`가
-   없다는 점을 적는다.
+   `setIgnoreMouseEvents`를 전환하는 방식으로 만든다. 두 조회는 물리 화면 좌표로 단위를 맞춰야 하고 각각 권한이
+   필요하다. `setIgnoreMouseEvents`가 Windows 전용이므로 이 대안도 Windows 기준이다. 문서의 `setIgnoreMouseEvents` 절에 이
+   방법과 `forward`가 없다는 점을 적는다.
 3. 폴링 방식이 지연이나 부하 때문에 실제 요구를 못 채운다고 확인되면, 호스트가 창 영역별로 hit-test 여부를
    정하는 선언형 영역 옵션(앱 응답을 기다리지 않는 형태)을 별도 결정에서 다룬다.
 
