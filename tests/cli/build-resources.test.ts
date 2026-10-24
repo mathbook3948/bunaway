@@ -10,7 +10,12 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { copyBuildResources, parseBuildResources } from "#cli/build-resources";
+import {
+  copyBuildResources,
+  type PlannedResource,
+  parseBuildResources,
+  planBuildResources,
+} from "#cli/build-resources";
 import { readProjectSettings } from "#cli/config";
 import { writeJson } from "#cli/files";
 
@@ -175,13 +180,15 @@ test("build resources are copied to the same relative path in the package direct
     await writeFile(resolve(root, "res/icons/a.png"), "a");
     await writeFile(resolve(root, "res/icons/nested/b.png"), "b");
     await copyBuildResources(
-      root,
-      packageRoot,
-      [
-        "res/tray.ico",
-        "res/icons",
-      ],
-      "app.exe",
+      await planBuildResources(
+        root,
+        packageRoot,
+        [
+          "res/tray.ico",
+          "res/icons",
+        ],
+        "app.exe",
+      ),
     );
     expect(await readFile(resolve(packageRoot, "res/tray.ico"), "utf8")).toBe(
       "ico",
@@ -196,30 +203,45 @@ test("build resources are copied to the same relative path in the package direct
   });
 });
 
-test("build resources reject missing sources, links, special names and build output", async () => {
+test("build resources reject missing sources, links at any level, special names and build output", async () => {
   await withProject(async (root, packageRoot) => {
     await mkdir(resolve(root, "res"));
     await writeFile(resolve(root, "res/a.txt"), "a");
-    await writeFile(resolve(root, "outside.txt"), "x");
     await mkdir(resolve(root, "dist/windows-x64"), {
       recursive: true,
     });
-    await mkdir(resolve(root, "linked"));
+    await mkdir(resolve(root, ".bunaway/work"), {
+      recursive: true,
+    });
+    await mkdir(resolve(root, "outside"));
+    await writeFile(resolve(root, "outside/x.txt"), "x");
+    // Junctions need no privilege on Windows and behave as directory links elsewhere.
     await symlink(
-      resolve(root, "outside.txt"),
-      resolve(root, "linked/out.txt"),
-      "file",
-    ).catch(() => undefined);
-    const copy = (...entries: string[]) =>
-      copyBuildResources(root, packageRoot, entries, "App.exe");
-    await expect(copy("missing")).rejects.toThrow("existing regular file");
-    await expect(copy("app.EXE")).rejects.toThrow("replace the app executable");
-    await expect(copy("dist/windows-x64")).rejects.toThrow("app outputs");
-    await expect(copy(".bunaway/x")).rejects.toThrow("app outputs");
-    await expect(copy("linked/out.txt")).rejects.toThrow(
-      "existing regular file",
+      resolve(root, ".bunaway"),
+      resolve(root, "cache"),
+      "junction",
     );
-    await copy("res/a.txt");
+    await symlink(
+      resolve(root, "outside"),
+      resolve(root, "res/inner"),
+      "junction",
+    );
+    await symlink(resolve(root, "dist"), resolve(root, "alias"), "junction");
+    const plan = (...entries: string[]) =>
+      planBuildResources(root, packageRoot, entries, "App.exe");
+    await expect(plan("missing")).rejects.toThrow("existing regular file");
+    await expect(plan("res/a.txt/x")).rejects.toThrow("build.resources entry");
+    await expect(plan("app.EXE")).rejects.toThrow("replace the app executable");
+    await expect(plan("dist/windows-x64")).rejects.toThrow("app outputs");
+    await expect(plan(".bunaway/x")).rejects.toThrow("app outputs");
+    // A link in the middle of the path would read build output the lexical check cannot see.
+    await expect(plan("cache/work")).rejects.toThrow("without links");
+    await expect(plan("alias/windows-x64")).rejects.toThrow("without links");
+    await expect(plan("res/inner/x.txt")).rejects.toThrow("without links");
+    // A link inside a declared directory is rejected by the directory walk.
+    await expect(plan("res")).rejects.toThrow("Symlink not allowed");
+    const planned: PlannedResource[] = await plan("res/a.txt");
+    await copyBuildResources(planned);
     expect(await readFile(resolve(packageRoot, "res/a.txt"), "utf8")).toBe("a");
   });
 });

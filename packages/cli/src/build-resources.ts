@@ -1,8 +1,9 @@
+import type { Stats } from "node:fs";
 import { copyFile, lstat, mkdir } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { OUTPUT_TARGETS, outputPaths } from "@bunaway/packaging/paths";
 import { isWindowsFileName } from "@bunaway/protocol";
-import { files, inside, projectPath } from "./files.ts";
+import { files, inside } from "./files.ts";
 
 /** More entries than any app needs; keeps a mistaken generated list from copying a whole tree piecemeal. */
 const MAX_RESOURCES = 256;
@@ -71,64 +72,107 @@ export function parseBuildResources(value: unknown): string[] | undefined {
   return normalized;
 }
 
+/** One validated file to copy: an absolute source in the project and its destination in the package directory. */
+export interface PlannedResource {
+  source: string;
+  target: string;
+}
+
+/** Lstat that reports a missing path as undefined and keeps every other failure, with the entry named. */
+async function lstatEntry(path: string, entry: string) {
+  try {
+    return await lstat(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return undefined;
+    }
+    throw new Error(`build.resources entry ${entry} cannot be read.`, {
+      cause: error,
+    });
+  }
+}
+
+/** Reject a link at any segment of the entry, so the path read is the path declared. */
+async function assertNoLinks(
+  projectRoot: string,
+  entry: string,
+): Promise<Stats> {
+  let current = projectRoot;
+  let info: Stats | undefined;
+  for (const part of entry.split("/")) {
+    current = resolve(current, part);
+    info = await lstatEntry(current, entry);
+    if (!info || info.isSymbolicLink()) {
+      throw new Error(
+        `build.resources entry ${entry} must be an existing regular file or directory reached without links.`,
+      );
+    }
+  }
+  if (!info || !(info.isFile() || info.isDirectory())) {
+    throw new Error(
+      `build.resources entry ${entry} must be a regular file or a directory.`,
+    );
+  }
+  return info;
+}
+
 /**
- * Copy the declared files and directories into the staged package directory.
- * Sources must be regular files or directories of regular files inside the
- * project; links, special files and build output are rejected rather than followed.
+ * Validate every declared source before the build starts compiling and list the
+ * files to copy. Sources must be regular files or directories of regular files
+ * inside the project; links at any level, special files, build output and the app
+ * executable name are rejected rather than followed.
  */
-export async function copyBuildResources(
+export async function planBuildResources(
   projectRoot: string,
   packageRoot: string,
   entries: readonly string[],
   executableName: string,
-): Promise<void> {
+): Promise<PlannedResource[]> {
   const outputs = [
     ".bunaway",
     ...OUTPUT_TARGETS.map((target) => outputPaths(projectRoot, target).output),
   ].map((path) => resolve(projectRoot, path).toLowerCase());
+  const planned: PlannedResource[] = [];
   for (const entry of entries) {
     if (entry.split("/")[0]?.toLowerCase() === executableName.toLowerCase()) {
       throw new Error(
         `build.resources entry ${entry} would replace the app executable.`,
       );
     }
-    const lexical = resolve(projectRoot, entry);
-    const lower = lexical.toLowerCase();
+    const source = resolve(projectRoot, entry);
+    const lower = source.toLowerCase();
     if (outputs.some((out) => inside(out, lower) || inside(lower, out))) {
       throw new Error(
         `build.resources entry ${entry} must not overlap app outputs or build locks.`,
       );
     }
-    const info = await lstat(lexical).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== "ENOENT") {
-        throw error;
-      }
-      return undefined;
-    });
-    if (
-      !info ||
-      info.isSymbolicLink() ||
-      !(info.isFile() || info.isDirectory())
-    ) {
-      throw new Error(
-        `build.resources entry ${entry} must be an existing regular file or directory, not a link.`,
-      );
-    }
-    // Resolve through any directory link in the parents so the source stays inside the project.
-    const source = await projectPath(projectRoot, entry);
+    const info = await assertNoLinks(projectRoot, entry);
+    // files() rejects links and special files below a directory entry.
     const sources = info.isDirectory()
       ? await files(source)
       : [
           source,
         ];
     for (const file of sources) {
-      const target = info.isDirectory()
-        ? resolve(packageRoot, entry, relative(source, file))
-        : resolve(packageRoot, entry);
-      await mkdir(dirname(target), {
-        recursive: true,
+      planned.push({
+        source: file,
+        target: info.isDirectory()
+          ? resolve(packageRoot, entry, relative(source, file))
+          : resolve(packageRoot, entry),
       });
-      await copyFile(file, target);
     }
+  }
+  return planned;
+}
+
+/** Copy the files of a plan into the staged package directory. */
+export async function copyBuildResources(
+  planned: readonly PlannedResource[],
+): Promise<void> {
+  for (const { source, target } of planned) {
+    await mkdir(dirname(target), {
+      recursive: true,
+    });
+    await copyFile(source, target);
   }
 }

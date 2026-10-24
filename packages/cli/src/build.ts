@@ -19,7 +19,7 @@ import {
 } from "@bunaway/packaging";
 import { outputPaths } from "@bunaway/packaging/paths";
 import { readAppVersions } from "./app-versions.ts";
-import { copyBuildResources } from "./build-resources.ts";
+import { copyBuildResources, planBuildResources } from "./build-resources.ts";
 import {
   type Project,
   readProjectMetadata,
@@ -773,6 +773,13 @@ async function assembleProject(
   const preserved: PreservedEntry[] = [];
   let published = false;
   try {
+    // Check declared resources before the slow compile; copy them once the package is compiled.
+    const resources = await planBuildResources(
+      project.root,
+      context.packageRoot,
+      project.resources ?? [],
+      context.executableName,
+    );
     // Complete each package in its owned work directory before replacing the output.
     await stageRuntimeFiles(context);
     const bundledAssets = await bundleAssets(
@@ -796,14 +803,7 @@ async function assembleProject(
         root,
       );
     }
-    if (project.resources) {
-      await copyBuildResources(
-        project.root,
-        context.packageRoot,
-        project.resources,
-        context.executableName,
-      );
-    }
+    await copyBuildResources(resources);
     await ownedDirectory(project.root, context.staging);
     const version = await writePackageManifest(context, pin);
     if (!windows) {
