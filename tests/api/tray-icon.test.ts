@@ -40,9 +40,12 @@ test("a declared tray icon resolves inside the resources directory", async () =>
     expect(readTrayIconFile(root, "icons/tray.ico")).toBe(
       trayIco().toString("base64"),
     );
-    expect(readTrayIconFile(root, "icons\\tray.ico")).toBe(
-      trayIco().toString("base64"),
-    );
+    // A backslash separates segments only on Windows; the Windows lifecycle test covers that form.
+    if (process.platform === "win32") {
+      expect(readTrayIconFile(root, "icons\\tray.ico")).toBe(
+        trayIco().toString("base64"),
+      );
+    }
   });
 });
 

@@ -116,7 +116,7 @@ export type NativeTrayInitialization = {
    */
   icon?: string;
   /** Directory of files shipped with the app, the base of `icon`. */
-  resources?: string;
+  resources?: string | undefined;
   receive(action: "show" | "quit"): void;
   notify(event: NativeTrayEvent): void;
   /** Retain partial ownership before shell registration; failed startup releases remain retryable. */
