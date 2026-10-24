@@ -884,3 +884,171 @@ test("tray menus reject roles at any depth and keep the previous definition", as
     ],
   });
 });
+
+test("menu items reject sublabel and accessibility label fields instead of ignoring them", () => {
+  const parse = (entry: Record<string, unknown>) =>
+    menuOperations.create.input.safeParse({
+      menuId: "extra",
+      items: [
+        {
+          id: "parent",
+          type: "submenu",
+          label: "Parent",
+          items: [
+            entry,
+          ],
+        },
+      ],
+    });
+  const entries = [
+    {
+      id: "entry",
+      type: "separator",
+    },
+    {
+      id: "entry",
+      type: "item",
+      label: "Open",
+    },
+    {
+      id: "entry",
+      type: "item",
+      role: "copy",
+    },
+    {
+      id: "entry",
+      type: "checkbox",
+      label: "Open",
+    },
+    {
+      id: "entry",
+      type: "radio",
+      label: "Open",
+      group: "choice",
+      checked: true,
+    },
+    {
+      id: "entry",
+      type: "submenu",
+      label: "Open",
+      items: [],
+    },
+  ];
+  for (const entry of entries) {
+    expect(parse(entry).error?.issues).toBeUndefined();
+    for (const extra of [
+      {
+        sublabel: "Hint",
+      },
+      {
+        accessibleLabel: "Open",
+      },
+    ]) {
+      const result = parse({
+        ...entry,
+        ...extra,
+      });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.code).toBe("unrecognized_keys");
+      expect(result.error?.issues[0]).toMatchObject({
+        keys: Object.keys(extra),
+      });
+    }
+  }
+});
+
+test("insert and updateItem reject sublabel and accessibility label fields", () => {
+  for (const extra of [
+    {
+      sublabel: "Hint",
+    },
+    {
+      accessibleLabel: "Open",
+    },
+  ]) {
+    expect(
+      menuOperations.insert.input.safeParse({
+        menuId: "extra",
+        index: 0,
+        item: {
+          id: "entry",
+          type: "item",
+          label: "Open",
+        },
+      }).success,
+    ).toBe(true);
+    const inserted = menuOperations.insert.input.safeParse({
+      menuId: "extra",
+      index: 0,
+      item: {
+        id: "entry",
+        type: "item",
+        label: "Open",
+        ...extra,
+      },
+    });
+    expect(inserted.success).toBe(false);
+    expect(inserted.error?.issues[0]?.code).toBe("unrecognized_keys");
+    expect(inserted.error?.issues[0]).toMatchObject({
+      keys: Object.keys(extra),
+    });
+    const updated = menuOperations.updateItem.input.safeParse({
+      menuId: "extra",
+      itemId: "entry",
+      changes: {
+        ...extra,
+      },
+    });
+    expect(updated.success).toBe(false);
+    expect(updated.error?.issues[0]?.code).toBe("unrecognized_keys");
+    expect(updated.error?.issues[0]).toMatchObject({
+      keys: Object.keys(extra),
+    });
+  }
+});
+
+test("sublabel and accessibility label surface as INVALID_ARGUMENT on a top-level item", async () => {
+  const parsers = pluginParsers("menu", menuOperations);
+  for (const extra of [
+    {
+      sublabel: "Hint",
+    },
+    {
+      accessibleLabel: "Open",
+    },
+  ]) {
+    await expect(
+      parsers.validateCall({
+        operation: "menu.create",
+        payload: {
+          menuId: "extra",
+          items: [
+            {
+              id: "entry",
+              type: "item",
+              label: "Open",
+              ...extra,
+            },
+          ],
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  await expect(
+    parsers.validateCall({
+      operation: "menu.create",
+      payload: {
+        menuId: "extra",
+        items: [
+          {
+            id: "entry",
+            type: "item",
+            label: "Open",
+          },
+        ],
+      },
+    }),
+  ).resolves.toBeDefined();
+});

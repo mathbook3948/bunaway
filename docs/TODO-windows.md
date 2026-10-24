@@ -333,7 +333,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] accelerator, 표시 문자열과 실제 등록 여부를 구분한다. item, checkbox, radio의 선택 필드 `accelerator`(`Ctrl+Shift+N` 형식, `updateItem.changes`로 변경, null이면 없음)는 항목 오른쪽에 그리는 표시 문자열일 뿐이며 단축키를 등록하거나 실행하지 않는다(키 처리는 앱 책임). 등록과 WebView 키 입력 우선순위는 아래 단축키 항목에서 다룬다.
 - [x] Undo, Redo, Cut, Copy, Paste, Select All 등 기본 menu role을 제공한다. 6개 role을 `type: "item"`의 선택 필드로 두고, 선택하면 창 WebView의 포커스된 document에 CDP `Runtime.evaluate`와 `document.execCommand`로 실행한다(키 이벤트 없음, paste는 호스트가 읽은 클립보드 텍스트를 `Input.insertText`로 삽입, cross-origin iframe은 건너뜀)(`menu.clicked`와 click waiter 없음). label을 생략하면 Electron 기본 label과 단축키 표시를 쓰며 트레이 메뉴의 role은 `INVALID_ARGUMENT`로 거부한다.
 - [ ] About, Quit, 창 전환과 도움말 등 플랫폼 기본 메뉴 항목을 제공한다.
-- [ ] 메뉴 sublabel과 접근성 label의 플랫폼별 지원을 결정한다.
+- [x] 메뉴 sublabel과 접근성 전용 label 필드를 두지 않기로 결정한다([ADR 0029](./decisions/0029-menu-item-sublabel.md)). 정의되지 않은 필드는 스키마가 거부한다.
 - [x] Windows 전역 단축키를 하나 또는 여러 개 등록한다. `globalShortcut.register`와 `registerMany`를 제공한다.
 - [x] Windows 전역 단축키의 등록 상태 조회, 목록, 개별 해제와 전체 해제를 제공한다.
 - [x] Windows에서 등록 목록을 유지한 채 전역 단축키 처리를 일시중지, 재개하고 중지 상태를 조회한다.
