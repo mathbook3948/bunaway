@@ -41,8 +41,8 @@ Tauri 2와 tao:
 
 ## 결정
 
-1. 둥근 모서리: 제공한다. `titlebar: "custom"` 창에서만 `false`로 끌 수 있다. Windows 11 미만은 효과가 없고
-   기본 상태를 그대로 조회한다. 네이티브 제목 표시줄(프레임) 창은 OS 기본을 따르며 `false` 설정은 `UNSUPPORTED`로
+1. 둥근 모서리: 제공한다. `titlebar: "custom"` 창에서만 `false`로 끌 수 있다. Windows 11 미만은 OS에 반영되지 않고
+   조회는 설정한 값(요청한 선호)을 그대로 반환한다. 네이티브 제목 표시줄(프레임) 창은 OS 기본을 따르며 `false` 설정은 `UNSUPPORTED`로
    거부한다(`setHasShadow`와 같은 규칙). 구현은 이 ADR과 별개의 PR에서 한다.
 2. `WS_THICKFRAME` 옵션: 별도 옵션으로 제공하지 않는다. 크기 조절을 막는 수단은 `resizable`이고, 그림자는
    `setHasShadow`가 맡는다. 이 ADR은 Windows 11에서 `resizable: false` 창의 Snap 동작을 확정하지 않는다(열린 질문).
@@ -53,7 +53,7 @@ Tauri 2와 tao:
 
 ## 근거
 
-- 둥근 모서리는 Electron이 제공하고 Tauri는 제공하지 않는다. 둘이 다르면 Electron을 따르는 기준에 따라 제공한다. 호출이 DWM 속성
+- 둥근 모서리는 Electron이 제공하고 Tauri는 제공하지 않는다. 이 ADR은 이 항목에서 Electron을 따른다. 호출이 DWM 속성
   한 번이라 코어가 늘지 않고, 타이틀바 없는 창이 Windows 11에서 둥근 모서리를 원하는 흔한 요구에 맞다.
   Electron은 frameless 창이면 옵션이 적용되지만 이 저장소는 `custom`일 때만 끌 수 있게 제한한다. 프레임 창에
   `false`를 조용히 무시하면 설정과 조회가 어긋나므로 `hasShadow`처럼 명시적으로 거부한다. 이는 Electron과 다른 부분이다.
@@ -85,8 +85,8 @@ Tauri 2와 tao:
   문서는 이 스타일을 "The window does not render to a redirection surface. This is for windows that do not have visible
   content or that use mechanisms other than surfaces to provide their visual."로 정의한다. 이 저장소에는 이 스타일을
   쓰거나 요구하는 코드와 문서가 없고, WebView2를 호스팅하는 창에서 어떻게 동작하는지는 확인하지 않았다. 요구가
-  확인될 때까지 보류하며, 그때에도 앱 옵션이 아니라 호스트가 정하는 내부 동작으로 먼저 다룬다. 이 스타일은 Electron처럼
-  앱이 정하지 않는 쪽을 따른다.
+  확인될 때까지 보류하며, 그때에도 앱 옵션이 아니라 호스트가 정하는 내부 동작으로 먼저 다룬다. Electron이 앱에 노출하지
+  않는다는 점은 같지만, 이 저장소가 Chromium처럼 자동으로 붙이는 것은 아니다.
 
 ## 열린 질문
 

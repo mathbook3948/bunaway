@@ -204,7 +204,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [ ] Windows Mica, Acrylic와 배경 material, accent color를 제공한다.
 - [x] 결정 완료: 창 shape(Electron `setShape`)는 제공하지 않는다. 근거는 [ADR 0037](./decisions/0037-window-corners-shape-and-creation-styles.md)에 있다.
 - [x] 결정 완료: 둥근 모서리는 제공하고 `titlebar: "custom"` 창에서만 끌 수 있다. corner-smoothing CSS는 렌더러 영역이라 관여하지 않는다. [ADR 0037](./decisions/0037-window-corners-shape-and-creation-styles.md)을 따른다.
-- [ ] 창 둥근 모서리(Windows 11 `DWMWA_WINDOW_CORNER_PREFERENCE`)의 설정과 조회를 구현한다. `titlebar: "custom"` 창에서만 `false`를 허용하고 프레임 창은 `UNSUPPORTED`로 거부한다. Windows 11 미만은 효과가 없다.
+- [ ] 창 둥근 모서리(Windows 11 `DWMWA_WINDOW_CORNER_PREFERENCE`)의 설정과 조회를 구현한다. `titlebar: "custom"` 창에서만 `false`를 허용하고 프레임 창은 `UNSUPPORTED`로 거부한다. Windows 11 미만은 OS에 반영되지 않고 조회는 설정한 값(요청한 선호)을 반환한다. 그림자를 끈 창에서의 모서리 동작은 Windows CI에서 확인한다.
 - [x] 결정 완료: `WS_THICKFRAME`과 `WS_EX_NOREDIRECTIONBITMAP` 생성 옵션은 제공하지 않는다(크기 조절은 `resizable`, custom titlebar 창의 그림자는 `setHasShadow`가 맡고, 네이티브 제목 표시줄 창의 그림자는 끌 수 없다). [ADR 0037](./decisions/0037-window-corners-shape-and-creation-styles.md)을 따른다.
 - [ ] Windows 11에서 `WS_THICKFRAME`이 없는 창(`resizable: false`)이 Snap(Win+방향키, 가장자리 끌기)에 참여하는지 Windows CI나 실행으로 확인하고, 깨지면 `thickFrame` 옵션 결정을 다시 연다.
 - [ ] `titlebar: "custom"` 창의 Snap Layouts(최대화 버튼 hover)를 위한 `WM_NCHITTEST` `HTMAXBUTTON` 반환의 지원을 결정한다.
