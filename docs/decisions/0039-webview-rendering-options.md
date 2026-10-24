@@ -35,8 +35,8 @@ WebView2:
 - `ICoreWebView2Settings`부터 `Settings9`, `ICoreWebView2Controller`부터 `Controller4`, `ICoreWebView2_27`부터
   `_29`에서 글꼴, encoding, 이미지 animation, preferred size 통지에 해당하는 멤버를 찾지 못했다. `ICoreWebView2_2`부터
   `_26`까지는 전부 대조하지 않았다.
-- 전용 설정이 없으면 호스트가 같은 효과를 내기 위해 검토한 경로는 문서에 CSS나 스크립트를 주입하는 것뿐이다. 환경 생성 시 브라우저
-  인자를 넘기는 경로는 [ADR 0030](./0030-launch-arguments-and-environment.md)이 호스트에서 쓰지 않기로 했고, DevTools
+- 전용 설정이 없으면 호스트가 같은 효과를 내기 위해 검토한 경로는 문서에 CSS나 스크립트를 주입하는 것뿐이다. 호스트는 환경 생성 시 브라우저
+  인자를 넘기지 않는다([ADR 0030](./0030-launch-arguments-and-environment.md)). 환경 변수로 앱 환경에서 브라우저 인자를 넘기는 경로는 열려 있지만 글꼴이나 encoding을 바꾼다는 근거를 찾지 못했다. DevTools
   프로토콜 호출 같은 다른 경로는 검토하지 않았다.
 
 ## 결정
@@ -50,7 +50,7 @@ WebView2:
 | textarea 크기 조절 | CSS `resize` |
 | 문서 encoding | 응답의 `Content-Type` charset 또는 `<meta charset>` |
 | 이미지 animation 중지 | 이미지 형식 선택, 또는 스크립트로 정지 이미지 표시 |
-| 콘텐츠 크기 변화 통지 | 콘텐츠를 감싼 요소를 `ResizeObserver`로 관찰해 앱 IPC로 전달한다. `documentElement`는 뷰포트 크기를 준다 |
+| 콘텐츠 크기 변화 통지 | `ResizeObserver`로 관찰해 앱 IPC로 전달한다. 어느 요소를 관찰하느냐와 문서 CSS에 따라 얻는 크기가 달라진다 |
 | 탐색 뒤 포커스 | 없음. 문서 안 `element.focus()`는 요소만 고르며 키보드 포커스를 WebView로 옮기는 것은 보증하지 않는다 |
 
 3. Electron의 `preferred-size-changed`에 해당하는 이벤트도 제공하지 않는다. TODO의 "title, favicon과
@@ -63,7 +63,7 @@ WebView2:
 - WebView2에서 대응하는 네이티브 설정을 찾지 못했다. 옵션을 두면 호스트가 문서에 CSS나 스크립트를
   주입해 흉내 내야 한다. 주입은 탐색, 프레임, 사용자 스타일과 겹쳐 결과가 Electron의 Blink 설정과 달라지고(예: encoding은
   이미 파싱된 문서에는 적용되지 않는다) 같은 이름의 옵션이 다른 의미를 갖게 된다.
-- 글꼴, textarea, encoding, 크기 관찰은 모두 웹 표준으로 앱이 직접 할 수 있다. 호스트가 대신하면 앱 정의 설정이 늘고
+- 글꼴, textarea, encoding, 크기 관찰은 웹 표준으로 근사할 수 있고 이미지 animation은 형식 선택이나 스크립트 정지로 근사한다. 근사로 충분하다고 판단했으며 호스트가 대신하면 앱 정의 설정이 늘고
   코어가 커지는 데 비해 얻는 것이 없다.
 - 2026-10-25 기준 `gh issue list`의 열린 이슈 목록과 저장소 검색(docs, plugins, native)에 이 옵션을 쓰거나 요구하는 곳이 없다.
 - 탐색 뒤 포커스는 Electron의 `focusOnNavigation`처럼 탐색마다 자동으로 옮기는 동작을 제공하지 않으며 같은 효과의
