@@ -884,3 +884,28 @@ test("tray menus reject roles at any depth and keep the previous definition", as
     ],
   });
 });
+
+test("menu items reject sublabel and accessibility label fields instead of ignoring them", () => {
+  for (const extra of [
+    {
+      sublabel: "Hint",
+    },
+    {
+      accessibleLabel: "Open",
+    },
+  ]) {
+    expect(
+      menuOperations.create.input.safeParse({
+        menuId: "extra",
+        items: [
+          {
+            id: "item",
+            type: "item",
+            label: "Open",
+            ...extra,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  }
+});
