@@ -53,7 +53,7 @@ Tauri 2와 tao:
 
 ## 근거
 
-- 둥근 모서리는 Electron이 제공하고 Tauri는 제공하지 않는다. 이 ADR은 이 항목에서 Electron을 따른다. 호출이 DWM 속성
+- 둥근 모서리는 Electron이 전용 옵션(`roundedCorners`)으로 제공하고, Tauri에는 전용 옵션이 없다(decorations 없는 창의 `shadow`가 Windows 11 둥근 모서리를 함께 준다). 이 ADR은 이 항목에서 Electron을 따른다. 호출이 DWM 속성
   한 번이라 코어가 늘지 않고, 타이틀바 없는 창이 Windows 11에서 둥근 모서리를 원하는 흔한 요구에 맞다.
   Electron은 frameless 창이면 옵션이 적용되지만 이 저장소는 `custom`일 때만 끌 수 있게 제한한다. 프레임 창에
   `false`를 조용히 무시하면 설정과 조회가 어긋나므로 `hasShadow`처럼 명시적으로 거부한다. 이는 Electron과 다른 부분이다.
@@ -90,7 +90,9 @@ Tauri 2와 tao:
 
 ## 열린 질문
 
-- Windows 11에서 `WS_THICKFRAME`이 없는 창(`resizable: false`)이 Snap(Win+방향키, 가장자리 끌기)에 참여하는지.
+- Windows 11에서 `WS_THICKFRAME`이 없는 창(`resizable: false`)이 Snap(Win+방향키, 가장자리 끌기)에 참여하는지, 그리고 최대화 버튼이
+  `maximizable` 설정대로 동작하는지(electron#10414은 `thickFrame: false` 프레임 창의 최대화 버튼 비활성 보고이고, 이 저장소는
+  `WS_MAXIMIZEBOX`를 따로 제어하지만 실행으로 확인하지 않았다).
   Windows 10의 Electron 보고(위 #11568)는 있으나 Windows 11 근거는 확인하지 못했다. 깨지는 것으로 확인되면
   `resizable: false`가 `WS_THICKFRAME`을 빼는 방식 자체를 다시 봐야 하며, 그때 `thickFrame` 옵션 결정도 다시 연다.
 - `titlebar: "custom"` 창에 Snap Layouts(최대화 버튼 hover)를 주려면 `WM_NCHITTEST`가 `HTMAXBUTTON`을 반환해야 하는데
