@@ -196,7 +196,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] `window.alwaysOnTop`, `setAlwaysOnTop`, `isAlwaysOnTop`으로 활성화 없는 topmost 설정과 조회를 제공한다.
 - [x] 창 Z 순서 이동의 지원 범위를 정한다. `moveTop`과 `moveToBottom`으로 활성화 없이 한 번 옮기고, 지속형 alwaysOnBottom은 Windows에 OS 지원이 없어 제공하지 않는다.
 - [x] `window.skipTaskbar`, `setSkipTaskbar`, `isSkipTaskbar`를 제공한다. 실행 중 변경은 숨겨진 일반 창에서만 허용하며 tool-window style로 작업 표시줄과 Alt+Tab에서 제외한다.
-- [ ] 키오스크 모드와 일반 전체화면의 차이를 정의한다.
+- [x] 결정 완료: 키오스크를 전체화면과 별도 상태로 제공하지 않는다. 전체화면은 표시 모드이고 OS 수준의 탈출 경로 차단은 창 API로 보장할 수 없으므로, 필요한 앱은 전체화면에 `alwaysOnTop`, `skipTaskbar`, 닫기 요청 거부, 메뉴 숨김을 조합한다. [ADR 0035](./decisions/0035-kiosk-and-fullscreen.md)를 따른다.
 - [x] 창 opacity를 설정하고 조회한다. layered window의 상수 alpha로 WebView를 포함한 창 전체에 적용하며 1이면 layered 스타일을 제거한다.
 - [x] 창 불투명 background color를 제공한다(`window.backgroundColor`, `setBackgroundColor`, `getBackgroundColor`). `#RGB`와 `#RRGGBB`만 받고 창별 `WM_ERASEBKGND`와 WebView2 `DefaultBackgroundColor`를 같은 색으로 맞춘다. macOS는 아직 없다.
 - [ ] 창 투명 배경을 제공한다. 알파 0은 DWM 합성과 layered 스타일(opacity, click-through가 쓰는 스타일 비트)과 함께 정해야 한다.
