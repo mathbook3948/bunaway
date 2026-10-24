@@ -500,10 +500,10 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] 앱 범위 ID/group, 같은 ID 교체와 개별 clear를 제공한다. 종료 시 이번 실행의 알림을 정리한다.
 - [x] 액션 버튼과 인라인 응답 입력을 제공한다. `actions`와 `reply`는 알림별로 선언하고 `notification.actionInvoked`로 전달한다. 실행 중 프로세스의 Activated와 설치된 앱의 toast activator를 지원한다.
 - [x] 앱이 종료된 상태의 toast activation을 앱 시작에 연결한다. 설치된 앱은 COM toast activator로 클릭을 받아 `notification.takeActivations`와 기존 이벤트로 전달하며 `onOpen` 계약은 바꾸지 않는다.
-- [x] timeout의 플랫폼별 동작을 정의한다. silent, `timeoutType`(`never`는 reminder 시나리오)과 `expiresAfterSeconds`(알림 센터 만료)는 Windows에서 구현했다. 표시 우선순위(alarm, incoming call 시나리오)는 Electron과 Tauri에 선례가 없어 남아 있다.
-- [ ] 표시 우선순위(alarm, incoming call 시나리오와 알림 센터 우선 순위)의 플랫폼별 동작을 정의한다.
+- [x] timeout의 플랫폼별 동작을 정의한다. silent, `timeoutType`(`never`는 reminder 시나리오)과 `expiresAfterSeconds`(알림 센터 만료)는 Windows에서 구현했다. 표시 우선순위(alarm, incoming call 시나리오)는 [ADR 0041](decisions/0041-notification-priority-and-rich-content.md)에 따라 제공하지 않는다.
+- [x] 표시 우선순위(alarm, incoming call 시나리오와 알림 센터 우선 순위)의 플랫폼별 동작을 정의한다. 시나리오는 Electron과 Tauri 데스크톱 모두 필드가 없어 제공하지 않고, 알림 센터 우선순위는 Electron `urgency`에 해당하며 사용처가 생길 때까지 보류하기로 결정했다([ADR 0041](decisions/0041-notification-priority-and-rich-content.md)). 오래 남기기는 `timeoutType: "never"`, 반복 소리는 `soundLoop`을 쓴다.
 - [x] Windows toast XML의 지원을 결정한다. 임의 XML(Electron `toastXml`)은 activation 인자 전달과 미디어 경로 검사를 깨므로 제공하지 않고 `show`와 `schedule`이 `INVALID_ARGUMENT`로 거부한다.
-- [ ] 진행률 막대와 추가 텍스트 줄 같은 고급 알림 콘텐츠를 선언 필드로 제공할지 결정한다.
+- [x] 진행률 막대와 추가 텍스트 줄 같은 고급 알림 콘텐츠를 선언 필드로 제공할지 결정한다. 제공하지 않는다([ADR 0041](decisions/0041-notification-priority-and-rich-content.md)). 진행률은 `windows.setTaskbarProgress`나 앱 화면으로 보인다.
 - [x] OS에 남은 알림 조회와 그룹, 전체 제거의 플랫폼별 지원을 결정한다. Windows 개별 ID/group 제거, 앱 전체 제거(`notification.clearAll`)와 남은 알림 조회(`notification.list`)는 구현했다. group 단위 제거(`notification.clearGroup`)도 구현했다.
 - [x] 예약 알림과 pending 조회, 취소의 플랫폼별 지원을 제공한다. Windows 단발 예약(`notification.schedule`), 조회(`notification.listScheduled`)와 취소(`notification.cancelScheduled`)는 구현했다. 반복 예약은 제공하지 않는다.
 - [ ] 첨부 파일과 클릭 액션 종류를 등록한다.
