@@ -1,6 +1,6 @@
 # Native dialogs
 
-Optional `@bunaway/plugin-dialog` provides the file pickers `openFile`, `selectFolder` and `saveFile`
+Optional `@bunaway/plugin-dialog` provides the file pickers `openFile`, `selectFolder` and `saveFile`,
 the message dialog `showMessage` and the About panel `showAbout` on Windows and macOS; see [macOS](#macos) for the differences.
 Register the default export and grant each operation independently. See the
 [public reference](../../docs/site/src/content/docs/reference/plugins/dialog.mdx) for inputs,

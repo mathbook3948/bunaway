@@ -510,7 +510,8 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
           checkboxChecked: false,
         },
       });
-      // The About panel is a single-button TaskDialog that Escape dismisses.
+      // The About panel is a single-button TaskDialog. Escape and the close button send IDCANCEL
+      // (WM_COMMAND 2), which a lone button resolves as its own result.
       const about = invoke("dialog.showAbout", {
         name: "Demo",
         version: "1.2.3",
