@@ -98,6 +98,18 @@ test("build.resources rejects paths that escape, shadow build files or overlap",
     ],
     [
       [
+        "WEBVIE~1.DLL",
+      ],
+      "8.3 short name",
+    ],
+    [
+      [
+        "dist/WINDOW~1",
+      ],
+      "8.3 short name",
+    ],
+    [
+      [
         "Assets/x",
       ],
       "build uses for its own files",
@@ -243,5 +255,27 @@ test("build resources reject missing sources, links at any level, special names 
     const planned: PlannedResource[] = await plan("res/a.txt");
     await copyBuildResources(planned);
     expect(await readFile(resolve(packageRoot, "res/a.txt"), "utf8")).toBe("a");
+  });
+});
+
+test("copying a resource never replaces an existing package file", async () => {
+  await withProject(async (root, packageRoot) => {
+    await writeFile(resolve(root, "loader.dll"), "resource");
+    await writeFile(resolve(packageRoot, "loader.dll"), "host file");
+    await expect(
+      copyBuildResources(
+        await planBuildResources(
+          root,
+          packageRoot,
+          [
+            "loader.dll",
+          ],
+          "App.exe",
+        ),
+      ),
+    ).rejects.toThrow("would overwrite");
+    expect(await readFile(resolve(packageRoot, "loader.dll"), "utf8")).toBe(
+      "host file",
+    );
   });
 });

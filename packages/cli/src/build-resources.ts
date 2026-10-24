@@ -1,4 +1,4 @@
-import type { Stats } from "node:fs";
+import { constants, type Stats } from "node:fs";
 import { copyFile, lstat, mkdir } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { OUTPUT_TARGETS, outputPaths } from "@bunaway/packaging/paths";
@@ -17,6 +17,9 @@ const RESERVED_NAMES = [
   "manifest.json",
   "webview2loader.dll",
 ];
+
+/** The `~N` marker of an NTFS 8.3 short name. */
+const SHORT_NAME_ALIAS = /~\d/;
 
 function segments(name: string): string[] {
   return name.split(/[\\/]/);
@@ -47,6 +50,12 @@ export function parseBuildResources(value: unknown): string[] | undefined {
     if (!parts.every((part) => isWindowsFileName(part))) {
       throw new Error(
         `bunaway.json: build.resources entry ${JSON.stringify(entry)} must be a relative path without '..', '.', empty segments, drive letters or characters Windows rejects in file names.`,
+      );
+    }
+    // NTFS 8.3 aliases (WEBVIE~1.DLL, BUNAWA~1) name the same file as a longer name this check cannot compare.
+    if (parts.some((part) => SHORT_NAME_ALIAS.test(part))) {
+      throw new Error(
+        `bunaway.json: build.resources entry ${JSON.stringify(entry)} has a segment with '~' followed by a digit, which can alias a Windows 8.3 short name; rename the file.`,
       );
     }
     if (RESERVED_NAMES.includes(parts[0]?.toLowerCase() ?? "")) {
@@ -165,7 +174,11 @@ export async function planBuildResources(
   return planned;
 }
 
-/** Copy the files of a plan into the staged package directory. */
+/**
+ * Copy the files of a plan into the staged package directory. An existing
+ * destination fails the build instead of being replaced, so a resource can never
+ * overwrite the compiled host, the loader or another resource.
+ */
 export async function copyBuildResources(
   planned: readonly PlannedResource[],
 ): Promise<void> {
@@ -173,6 +186,18 @@ export async function copyBuildResources(
     await mkdir(dirname(target), {
       recursive: true,
     });
-    await copyFile(source, target);
+    try {
+      await copyFile(source, target, constants.COPYFILE_EXCL);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        throw new Error(
+          `build.resources would overwrite an existing package file: ${relative(dirname(target), target)}.`,
+          {
+            cause: error,
+          },
+        );
+      }
+      throw error;
+    }
   }
 }
