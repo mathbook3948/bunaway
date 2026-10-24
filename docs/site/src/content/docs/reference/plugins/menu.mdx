@@ -170,7 +170,7 @@ checkbox와 radio는 `icon: null`을 포함한 모든 icon 변경을 `INVALID_AR
 `setWindowMenuAutoHide`는 메뉴바를 평소에는 숨기고 Alt 키를 단독으로 눌렀다 뗄 때만 표시합니다
 (Electron `setAutoHideMenuBar`, `isMenuBarAutoHide`). `getWindowMenuAutoHide`가 현재 값을 돌려주며
 기본값은 `false`입니다. 표시한 메뉴바는 Alt를 다시 단독으로 누르거나, Esc를 누르거나, 항목을 실행하거나,
-창이 비활성화되면 다시 숨깁니다. 포커스가 창 틀에 있든 페이지 안에 있든 같은 Alt 입력을 따르고,
+창 틀에서 Alt 뒤에 Windows가 연 메뉴 모드가 끝나거나, 창이 비활성화되면 다시 숨깁니다. 포커스가 창 틀에 있든 페이지 안에 있든 같은 Alt 입력을 따르고,
 Alt와 다른 키를 함께 누르면 단독 입력으로 세지 않습니다. auto-hide는 `setWindowMenuVisible`과 독립입니다.
 `setWindowMenuVisible({ visible: false })`인 창은 Alt로도 표시하지 않으며 `getWindowMenuVisible`은
 auto-hide 중 임시 표시 여부와 상관없이 `setWindowMenuVisible`로 정한 값을 돌려줍니다. 임시 표시 중에는

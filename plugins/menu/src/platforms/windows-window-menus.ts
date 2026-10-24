@@ -117,12 +117,14 @@ export class WindowMenus implements WindowMenuDriver {
     this.altArmed.delete(windowId);
   }
 
+  /** An auto-hide window allows its bar only after an Alt tap. */
+  private autoHideAllowsBar(windowId: string) {
+    return !this.autoHide.has(windowId) || this.revealed.has(windowId);
+  }
+
   /** Whether the bar is linked to the window: not hidden, and for auto-hide only after an Alt tap. */
   private barShown(windowId: string) {
-    return (
-      !this.hidden.has(windowId) &&
-      (!this.autoHide.has(windowId) || this.revealed.has(windowId))
-    );
+    return !this.hidden.has(windowId) && this.autoHideAllowsBar(windowId);
   }
 
   /** Link or unlink the attached tree, leaving the recorded state to the caller until this succeeds. */
@@ -147,7 +149,7 @@ export class WindowMenus implements WindowMenuDriver {
     const attached = this.link(
       windowId,
       hwnd,
-      visible && (!this.autoHide.has(windowId) || this.revealed.has(windowId)),
+      visible && this.autoHideAllowsBar(windowId),
     );
     if (visible) {
       this.hidden.delete(windowId);
@@ -198,6 +200,9 @@ export class WindowMenus implements WindowMenuDriver {
   ) {
     const hwnd = this.resolve(windowId);
     const previous = this.attachments.get(windowId);
+    // An Alt tap belongs to the tree it showed; a new or removed tree starts hidden again.
+    this.revealed.delete(windowId);
+    this.altArmed.delete(windowId);
     const tree = items === null ? null : new NativePopupMenu(items, true);
     let unsubscribe: (() => void) | undefined;
     try {
@@ -267,6 +272,9 @@ export class WindowMenus implements WindowMenuDriver {
           stopModal?.();
           stopModal = undefined;
           modalCancelled = false;
+          // Windows enters keyboard menu mode after a frame Alt tap and consumes Esc and the next
+          // Alt there, so leaving it ends the temporary display.
+          this.hideRevealedLater(windowId);
         } else if (
           message === WM_TIMER &&
           position === BigInt(MENU_TIMER_ID) &&
@@ -289,11 +297,8 @@ export class WindowMenus implements WindowMenuDriver {
         } else if (item) {
           selected(item.id);
         }
-        // A bar shown by an Alt tap goes away once a command has run. The native menu loop is
-        // still unwinding here, so the bar is unlinked from the next turn.
-        if (this.revealed.has(windowId)) {
-          setTimeout(() => this.reveal(windowId, false), 0);
-        }
+        // A bar shown by an Alt tap goes away once a command has run.
+        this.hideRevealedLater(windowId);
       },
       () => {
         this.detach(windowId);
@@ -335,6 +340,13 @@ export class WindowMenus implements WindowMenuDriver {
     ) {
       this.altArmed.delete(windowId);
       this.reveal(windowId, false);
+    }
+  }
+
+  /** The native menu loop is still unwinding in its messages, so the bar is unlinked from the next turn. */
+  private hideRevealedLater(windowId: string) {
+    if (this.revealed.has(windowId)) {
+      setTimeout(() => this.reveal(windowId, false), 0);
     }
   }
 

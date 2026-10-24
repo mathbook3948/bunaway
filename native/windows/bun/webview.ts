@@ -207,7 +207,7 @@ export class WebView {
       close(force?: boolean): void;
       ready(): void;
       documentComplete(error: WireError | null): void;
-      /** A key event the page did not consume, delivered so the window's menu bar sees keys while the page has focus. */
+      /** Every key event the controller reports (the page still handles it), so the window's menu bar sees keys while the page has focus. */
       key?(kind: number, virtualKey: number): void;
       log(event: string, data?: object): void;
     },

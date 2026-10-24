@@ -13,6 +13,7 @@ import {
 import { WebView } from "#native/windows/bun/webview";
 import { Windows } from "#native/windows/bun/win32";
 import { disposeWin32Bindings, ole } from "#native/windows/bun/win32-bindings";
+import { webViewKeyMessage } from "#native/windows/bun/window-input-events";
 import { menuItemsSchema } from "#plugins/menu/src/contract";
 import { WindowMenus } from "#plugins/menu/src/platforms/windows-window-menus";
 import { deadline } from "../fixtures/deadlines.ts";
@@ -141,12 +142,6 @@ try {
       titlebar: "system",
     },
   );
-  const keyMessages = [
-    WM_KEYDOWN,
-    WM_KEYUP,
-    WM_SYSKEYDOWN,
-    WM_SYSKEYUP,
-  ];
   view = new WebView(
     hwnd,
     {
@@ -185,7 +180,7 @@ try {
       documentComplete() {},
       key(kind, virtualKey) {
         accelerators.push(`${kind}:${virtualKey}`);
-        const message = keyMessages[kind];
+        const message = webViewKeyMessage(kind);
         if (message !== undefined) {
           // The host defers the dispatch out of the COM callback the same way.
           setTimeout(() => {
@@ -275,6 +270,16 @@ try {
   post(WM_SYSKEYDOWN, VK_F, SCAN_F);
   post(WM_SYSKEYUP, VK_F, SCAN_F);
   post(WM_SYSKEYUP, VK_MENU, SCAN_MENU);
+  // The last key of the sequence has arrived once its accelerator event is recorded; the bar
+  // must still be unlinked after the deferred dispatch has run.
+  const seen = accelerators.length;
+  await pumpUntil(
+    () => accelerators.length >= seen + 4,
+    "Alt+F accelerator events",
+  );
+  await Bun.sleep(50);
+  windows.pump();
+  assert.equal(user.symbols.GetMenu(hwnd), 0n, "Alt+F must not show the bar");
   tap();
   await pumpUntil(
     () => user.symbols.GetMenu(hwnd) === tree,

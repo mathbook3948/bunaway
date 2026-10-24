@@ -54,11 +54,7 @@ import {
   WM_CLOSE,
   WM_ENTERSIZEMOVE,
   WM_EXITSIZEMOVE,
-  WM_KEYDOWN,
-  WM_KEYUP,
   WM_SIZE,
-  WM_SYSKEYDOWN,
-  WM_SYSKEYUP,
 } from "./win32-constants.ts";
 import {
   appCommandName,
@@ -67,6 +63,7 @@ import {
   WM_APPCOMMAND,
   WM_COMMAND,
   WM_CONTEXTMENU,
+  webViewKeyMessage,
 } from "./window-input-events.ts";
 import { WindowLifecycle } from "./window-lifecycle.ts";
 import { WindowReadinessTracker } from "./window-readiness.ts";
@@ -130,13 +127,6 @@ function dispatchMenuMessage(
     }
   }
 }
-/** WebView2 key event kinds in order: key down, key up, system key down, system key up. */
-const WEBVIEW_KEY_MESSAGES = [
-  WM_KEYDOWN,
-  WM_KEYUP,
-  WM_SYSKEYDOWN,
-  WM_SYSKEYUP,
-] as const;
 const trayListeners = new Set<
   (event: import("@bunaway/plugin-api/native").NativeTrayEvent) => void
 >();
@@ -1712,8 +1702,8 @@ function createWindow(
         },
         sameDocument: (source) => boundary.sameDocument(source),
         key: (kind, virtualKey) => {
-          const message = WEBVIEW_KEY_MESSAGES[kind];
-          if (message !== undefined) {
+          const message = webViewKeyMessage(kind);
+          if (message !== undefined && menuListeners.size) {
             // The menu bar resizes the WebView, which must not happen inside its own key callback.
             setTimeout(
               () =>

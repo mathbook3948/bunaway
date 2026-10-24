@@ -400,6 +400,7 @@ test.skipIf(process.platform !== "win32")(
     const WM_SYSKEYDOWN = 0x0104;
     const WM_SYSKEYUP = 0x0105;
     const WM_MENUCOMMAND = 0x0126;
+    const WM_EXITMENULOOP = 0x0212;
     const VK_MENU = 0x12n;
     const VK_ESCAPE = 0x1bn;
     const windows = new Windows(() => {});
@@ -499,6 +500,39 @@ test.skipIf(process.platform !== "win32")(
       await new Promise((done) => setTimeout(done, 20));
       expect(native.symbols.GetMenu(hwnd)).toBe(0n);
 
+      // Leaving the keyboard menu mode that follows a frame Alt tap ends the display too.
+      tap();
+      expect(native.symbols.GetMenu(hwnd)).toBe(tree);
+      native.symbols.SendMessageW(hwnd, WM_EXITMENULOOP, 0n, 0);
+      await new Promise((done) => setTimeout(done, 20));
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+
+      // A shown bar does not survive replacing or removing the menu.
+      tap();
+      menus.set(
+        "main",
+        null,
+        () => {},
+        () => {},
+      );
+      menus.set(
+        "main",
+        menuItemsSchema.parse([
+          {
+            id: "again",
+            type: "item",
+            label: "Again",
+          },
+        ]),
+        () => {},
+        () => {},
+      );
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      tap();
+      const replacement = native.symbols.GetMenu(hwnd);
+      expect(replacement).not.toBe(0n);
+      tap();
+
       // Hidden menus ignore Alt, and turning auto-hide off links the bar again.
       menus.setVisible("main", false);
       tap();
@@ -507,9 +541,9 @@ test.skipIf(process.platform !== "win32")(
       expect(native.symbols.GetMenu(hwnd)).toBe(0n);
       menus.setAutoHide("main", false);
       expect(menus.isAutoHide("main")).toBe(false);
-      expect(native.symbols.GetMenu(hwnd)).toBe(tree);
+      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
       tap();
-      expect(native.symbols.GetMenu(hwnd)).toBe(tree);
+      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
     } finally {
       menus.dispose();
       windows.destroy(hwnd);

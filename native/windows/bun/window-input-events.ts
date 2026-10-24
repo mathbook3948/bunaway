@@ -4,6 +4,19 @@ export const WM_COMMAND = 0x0111;
 export const WM_APPCOMMAND = 0x0319;
 export const WM_CONTEXTMENU = 0x007b;
 export const WM_NCHITTEST = 0x0084;
+
+/** Window message numbers of the WebView2 key event kinds: key down, key up, system key down, system key up. */
+const WEBVIEW_KEY_MESSAGES = [
+  0x0100,
+  0x0101,
+  0x0104,
+  0x0105,
+] as const;
+
+/** The window message that stands for a WebView2 accelerator key event kind, or undefined for an unknown kind. */
+export function webViewKeyMessage(kind: number): number | undefined {
+  return WEBVIEW_KEY_MESSAGES[kind];
+}
 const HTSYSMENU = 3;
 /** Device bits (mouse, key, OEM) share the high word with the command; they are not part of it. */
 const FAPPCOMMAND_MASK = 0xf000;
