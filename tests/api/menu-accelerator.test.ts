@@ -34,6 +34,8 @@ function fixture() {
       },
       setVisible() {},
       isVisible: () => true,
+      setAutoHide() {},
+      isAutoHide: () => false,
       popup: () => null,
       dispose() {},
     }),

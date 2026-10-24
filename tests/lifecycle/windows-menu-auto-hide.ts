@@ -90,6 +90,14 @@ let menus: WindowMenus | undefined;
 let loaded = false;
 let verified = false;
 const accelerators: string[] = [];
+const step = (name: string) => console.log(`STEP ${name}`);
+// A stuck native call must end the fixture with a report instead of the job time limit.
+const watchdog = setTimeout(() => {
+  console.error(
+    `menu auto-hide fixture exceeded its deadline (accelerator events: ${accelerators.join(",")})`,
+  );
+  process.exit(1);
+}, deadline("nativeFixture"));
 
 async function pumpUntil(done: () => boolean, what: string): Promise<void> {
   const limit = Date.now() + STEP_TIMEOUT_MS;
@@ -233,8 +241,9 @@ try {
   );
   const tree = user.symbols.GetMenu(hwnd);
   assert(tree, "Menu bar was not attached");
+  // Turning auto-hide on does not hide the bar by itself.
   menus.setAutoHide("main", true);
-  assert.equal(user.symbols.GetMenu(hwnd), 0n);
+  assert.equal(user.symbols.GetMenu(hwnd), tree);
   page.moveFocusToContent();
 
   // Post the keys to the page's own window, as Windows delivers them while the page has focus.
@@ -260,33 +269,45 @@ try {
     post(WM_SYSKEYUP, VK_MENU, SCAN_MENU);
   };
 
-  tap();
-  await pumpUntil(() => user.symbols.GetMenu(hwnd) === tree, "Alt tap shows");
-  tap();
-  await pumpUntil(() => user.symbols.GetMenu(hwnd) === 0n, "Alt tap hides");
+  const linked = (expected: bigint) => () =>
+    user.symbols.GetMenu(hwnd) === expected;
 
-  // Alt used with another key is not a tap; the following tap still shows the bar.
+  // The bar is shown until the first Alt tap; each tap toggles it.
+  step("first Alt tap");
+  tap();
+  await pumpUntil(linked(0n), "Alt tap hides");
+  step("second Alt tap");
+  tap();
+  await pumpUntil(linked(tree), "Alt tap shows");
+
+  // Alt used with another key is not a tap.
+  step("Alt+F");
+  const seen = accelerators.length;
   post(WM_SYSKEYDOWN, VK_MENU, SCAN_MENU);
   post(WM_SYSKEYDOWN, VK_F, SCAN_F);
   post(WM_SYSKEYUP, VK_F, SCAN_F);
   post(WM_SYSKEYUP, VK_MENU, SCAN_MENU);
-  // The last key of the sequence has arrived once its accelerator event is recorded; the bar
-  // must still be unlinked after the deferred dispatch has run.
-  const seen = accelerators.length;
+  // The sequence has arrived once its accelerator events are recorded; the bar must still be
+  // linked after the deferred dispatch has run.
   await pumpUntil(
     () => accelerators.length >= seen + 4,
     "Alt+F accelerator events",
   );
   await Bun.sleep(50);
   windows.pump();
-  assert.equal(user.symbols.GetMenu(hwnd), 0n, "Alt+F must not show the bar");
-  tap();
-  await pumpUntil(
-    () => user.symbols.GetMenu(hwnd) === tree,
-    "Alt tap after Alt+F",
+  assert.equal(
+    user.symbols.GetMenu(hwnd),
+    tree,
+    "Alt+F must not toggle the bar",
   );
+  step("Alt tap after Alt+F");
+  tap();
+  await pumpUntil(linked(0n), "Alt tap after Alt+F hides");
+  tap();
+  await pumpUntil(linked(tree), "Alt tap shows again");
+  step("Esc");
   post(WM_KEYDOWN, VK_ESCAPE, SCAN_ESCAPE);
-  await pumpUntil(() => user.symbols.GetMenu(hwnd) === 0n, "Esc hides");
+  await pumpUntil(linked(0n), "Esc hides");
   verified = true;
 } finally {
   menus?.dispose();
@@ -315,6 +336,7 @@ try {
   ole.symbols.CoUninitialize();
   disposeWin32Bindings();
 }
+clearTimeout(watchdog);
 assert(verified);
 console.log(
   "PASS an auto-hide window menu bar follows Alt taps and Esc delivered to the WebView2 page",

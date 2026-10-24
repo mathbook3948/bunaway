@@ -457,15 +457,21 @@ test.skipIf(process.platform !== "win32")(
         key(WM_SYSKEYUP, VK_MENU);
       };
 
+      // Turning auto-hide on does not hide the bar by itself.
       menus.setAutoHide("main", true);
       expect(menus.isAutoHide("main")).toBe(true);
       expect(menus.isVisible("main")).toBe(true);
-      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
-      const withoutBar = windows.getBounds(hwnd, "content");
-      expect(withoutBar.height).toBeGreaterThan(withBar.height);
+      expect(native.symbols.GetMenu(hwnd)).toBe(tree);
 
-      // An Alt tap shows the bar and the next one hides it.
+      // An Alt tap toggles the bar and the visibility getter reports what is shown.
       tap();
+      expect(menus.isVisible("main")).toBe(false);
+      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
+      expect(windows.getBounds(hwnd, "content").height).toBeGreaterThan(
+        withBar.height,
+      );
+      tap();
+      expect(menus.isVisible("main")).toBe(true);
       expect(native.symbols.GetMenu(hwnd)).toBe(tree);
       expect(windows.getBounds(hwnd, "content")).toEqual(withBar);
       tap();
@@ -507,7 +513,7 @@ test.skipIf(process.platform !== "win32")(
       await new Promise((done) => setTimeout(done, 20));
       expect(native.symbols.GetMenu(hwnd)).toBe(0n);
 
-      // A shown bar does not survive replacing or removing the menu.
+      // A menu attached to an auto-hide window starts hidden.
       tap();
       menus.set(
         "main",
@@ -533,15 +539,14 @@ test.skipIf(process.platform !== "win32")(
       expect(replacement).not.toBe(0n);
       tap();
 
-      // Hidden menus ignore Alt, and turning auto-hide off links the bar again.
+      // Explicit visibility still applies, and without auto-hide Alt changes nothing.
+      menus.setVisible("main", true);
+      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
       menus.setVisible("main", false);
-      tap();
       expect(native.symbols.GetMenu(hwnd)).toBe(0n);
       menus.setVisible("main", true);
-      expect(native.symbols.GetMenu(hwnd)).toBe(0n);
       menus.setAutoHide("main", false);
       expect(menus.isAutoHide("main")).toBe(false);
-      expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
       tap();
       expect(native.symbols.GetMenu(hwnd)).toBe(replacement);
     } finally {

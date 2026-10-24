@@ -80,10 +80,8 @@ export class WindowMenus implements WindowMenuDriver {
   private readonly retired = new Set<NativePopupMenu>();
   /** Windows whose menu bar is hidden; the attached tree is kept and only unlinked from the HWND. */
   private readonly hidden = new Set<string>();
-  /** Windows whose menu bar shows only after an Alt tap; it hides again on Esc, a command or deactivation. */
+  /** Windows whose Alt tap toggles the bar; a shown bar hides again on Esc, a command, menu mode exit or deactivation. */
   private readonly autoHide = new Set<string>();
-  /** Auto-hide windows whose menu bar is currently shown by an Alt tap. */
-  private readonly revealed = new Set<string>();
   /** Windows where Alt went down and no other key has followed, so its release is an Alt tap. */
   private readonly altArmed = new Set<string>();
   private popupActive = false;
@@ -113,13 +111,7 @@ export class WindowMenus implements WindowMenuDriver {
   private forget(windowId: string) {
     this.hidden.delete(windowId);
     this.autoHide.delete(windowId);
-    this.revealed.delete(windowId);
     this.altArmed.delete(windowId);
-  }
-
-  /** An auto-hide window allows its bar only after an Alt tap. */
-  private autoHideAllowsBar(windowId: string) {
-    return !this.autoHide.has(windowId) || this.revealed.has(windowId);
   }
 
   /** Link or unlink the attached tree, leaving the recorded state to the caller until this succeeds. */
@@ -141,16 +133,11 @@ export class WindowMenus implements WindowMenuDriver {
 
   setVisible(windowId: string, visible: boolean) {
     const hwnd = this.resolve(windowId);
-    const attached = this.link(
-      windowId,
-      hwnd,
-      visible && this.autoHideAllowsBar(windowId),
-    );
+    const attached = this.link(windowId, hwnd, visible);
     if (visible) {
       this.hidden.delete(windowId);
     } else {
       this.hidden.add(windowId);
-      this.revealed.delete(windowId);
       this.altArmed.delete(windowId);
     }
     if (attached) {
@@ -163,23 +150,15 @@ export class WindowMenus implements WindowMenuDriver {
     return !this.hidden.has(windowId);
   }
 
+  /** Turning auto-hide on leaves the current bar as it is; the first Alt tap, Esc or deactivation then changes it. */
   setAutoHide(windowId: string, autoHide: boolean) {
-    const hwnd = this.resolve(windowId);
-    const attached = this.link(
-      windowId,
-      hwnd,
-      !this.hidden.has(windowId) && !autoHide,
-    );
+    this.resolve(windowId);
     if (autoHide) {
       this.autoHide.add(windowId);
     } else {
       this.autoHide.delete(windowId);
     }
-    this.revealed.delete(windowId);
     this.altArmed.delete(windowId);
-    if (attached) {
-      this.redraw(hwnd, windowId);
-    }
   }
 
   isAutoHide(windowId: string) {
@@ -217,8 +196,10 @@ export class WindowMenus implements WindowMenuDriver {
       }
       throw error;
     }
-    // An Alt tap belongs to the tree it showed; a new or removed tree starts hidden again.
-    this.revealed.delete(windowId);
+    // A new tree of an auto-hide window starts hidden until the next Alt tap.
+    if (tree && this.autoHide.has(windowId)) {
+      this.hidden.add(windowId);
+    }
     this.altArmed.delete(windowId);
     // SetMenu transfers no destruction responsibility for the previous detached tree.
     if (tree && unsubscribe) {
@@ -314,7 +295,7 @@ export class WindowMenus implements WindowMenuDriver {
    * has focus and from the WebView's accelerator event when the page has it.
    */
   private trackAltTap(windowId: string, message: number, wparam: bigint) {
-    if (!this.autoHide.has(windowId) || this.hidden.has(windowId)) {
+    if (!this.autoHide.has(windowId)) {
       return;
     }
     const key = Number(wparam);
@@ -329,7 +310,7 @@ export class WindowMenus implements WindowMenuDriver {
       }
     } else if (message === WM_SYSKEYUP || message === WM_KEYUP) {
       if (key === VK_MENU && this.altArmed.delete(windowId)) {
-        this.reveal(windowId, !this.revealed.has(windowId));
+        this.reveal(windowId, this.hidden.has(windowId));
       }
     } else if (
       message === WM_ACTIVATE &&
@@ -342,23 +323,23 @@ export class WindowMenus implements WindowMenuDriver {
 
   /** The native menu loop is still unwinding in its messages, so the bar is unlinked from the next turn. */
   private hideRevealedLater(windowId: string) {
-    if (this.revealed.has(windowId)) {
+    if (this.autoHide.has(windowId) && !this.hidden.has(windowId)) {
       setTimeout(() => this.reveal(windowId, false), 0);
     }
   }
 
   /** Show or hide the bar of an auto-hide window. Keyboard input must not throw, so failures are logged. */
   private reveal(windowId: string, shown: boolean) {
-    if (!this.autoHide.has(windowId) || this.revealed.has(windowId) === shown) {
+    if (!this.autoHide.has(windowId) || !this.hidden.has(windowId) === shown) {
       return;
     }
     try {
       const hwnd = this.host.resolve(windowId);
       this.link(windowId, hwnd, shown);
       if (shown) {
-        this.revealed.add(windowId);
+        this.hidden.delete(windowId);
       } else {
-        this.revealed.delete(windowId);
+        this.hidden.add(windowId);
       }
       this.redraw(hwnd, windowId);
     } catch (error) {
