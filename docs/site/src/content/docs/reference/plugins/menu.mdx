@@ -117,9 +117,9 @@ await menu.updateItem({ menuId: "main-menu", itemId: "save", changes: { accelera
 
 ## sublabel과 접근성 label
 
-항목에는 보조 문구(`sublabel`)나 접근성 전용 label 필드가 없습니다. Windows 메뉴 항목은 문자열 하나를 가지며
-표시 문자열은 `label` 하나입니다. 정의되지 않은 필드는
-무시되지 않고 `INVALID_ARGUMENT`로 거부됩니다. 보조 정보는 `label`에 포함해 주세요.
+항목에는 보조 문구(`sublabel`)나 접근성 전용 label 필드가 없습니다. Windows 메뉴 항목에는 보조 줄을 그리는
+속성이 없기 때문입니다. 정의되지 않은 필드는 무시되지 않고 `INVALID_ARGUMENT`로 거부됩니다. 보조 정보는
+`label`에 포함해 주세요. `accelerator`는 단축키 표시 문자열 전용이므로 보조 문구로 쓰지 마세요.
 
 ## 항목 삽입, 제거와 변경
 

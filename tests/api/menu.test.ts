@@ -950,6 +950,9 @@ test("menu items reject sublabel and accessibility label fields instead of ignor
       });
       expect(result.success).toBe(false);
       expect(result.error?.issues[0]?.code).toBe("unrecognized_keys");
+      expect(result.error?.issues[0]).toMatchObject({
+        keys: Object.keys(extra),
+      });
     }
   }
 });
@@ -986,6 +989,9 @@ test("insert and updateItem reject sublabel and accessibility label fields", () 
     });
     expect(inserted.success).toBe(false);
     expect(inserted.error?.issues[0]?.code).toBe("unrecognized_keys");
+    expect(inserted.error?.issues[0]).toMatchObject({
+      keys: Object.keys(extra),
+    });
     const updated = menuOperations.updateItem.input.safeParse({
       menuId: "extra",
       itemId: "entry",
@@ -995,5 +1001,8 @@ test("insert and updateItem reject sublabel and accessibility label fields", () 
     });
     expect(updated.success).toBe(false);
     expect(updated.error?.issues[0]?.code).toBe("unrecognized_keys");
+    expect(updated.error?.issues[0]).toMatchObject({
+      keys: Object.keys(extra),
+    });
   }
 });
