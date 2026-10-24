@@ -996,12 +996,9 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.reloadWebView": {
-    input: z.union([
-      z.null(),
-      z.strictObject({
-        ignoreCache: z.boolean().exactOptional(),
-      }),
-    ]),
+    input: z.strictObject({
+      ignoreCache: z.boolean().exactOptional(),
+    }),
     output: z.null(),
   },
   "windows.stopWebView": windowResult,
