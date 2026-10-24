@@ -235,6 +235,18 @@ test("measureRun waits for a result that is still being written instead of faili
   expect(sample.commandMaxMs).toBe(9);
 });
 
+test("measureRun reports the unfinished result when it never becomes complete JSON", async () => {
+  const { driver, calls } = fakeDriver({
+    readyAfterMs: 0,
+    result: goodResult,
+    partialResultReads: Number.POSITIVE_INFINITY,
+  });
+  await expect(measureRun(driver, OPTIONS)).rejects.toThrow(
+    /waiting for the probe's command timings\..*not complete JSON/,
+  );
+  expect(calls.at(-1)).toBe("kill");
+});
+
 test("measureRun stops the app and names the wait when the app never answers", async () => {
   const { driver, calls } = fakeDriver({});
   await expect(measureRun(driver, OPTIONS)).rejects.toThrow(

@@ -249,19 +249,38 @@ export async function measureRun(
       throw new Error(`Process ${app.pid} was not in the process table.`);
     }
     await driver.writeMarker(GO_MARKER);
-    const roundTrips = parseRoundTrips(
-      await pollUntil(
+    let unfinished: string | undefined;
+    let resultText: string;
+    try {
+      resultText = await pollUntil(
         driver,
         "the probe's command timings",
         options.resultTimeoutMs,
         async () => {
           const text = await driver.readMarker();
-          return text?.startsWith("{") && isCompleteJson(text)
-            ? text
-            : undefined;
+          if (!text?.startsWith("{")) {
+            return undefined;
+          }
+          if (isCompleteJson(text)) {
+            return text;
+          }
+          unfinished = text;
+          return undefined;
         },
-      ),
-    );
+      );
+    } catch (error) {
+      if (unfinished === undefined) {
+        throw error;
+      }
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `${reason} The last read was not complete JSON (${unfinished.length} characters, ending ${JSON.stringify(unfinished.slice(-40))}).`,
+        {
+          cause: error,
+        },
+      );
+    }
+    const roundTrips = parseRoundTrips(resultText);
     const timings = summarize(roundTrips);
     const sample = {
       startupMs,
