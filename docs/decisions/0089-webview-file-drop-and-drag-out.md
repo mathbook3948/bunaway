@@ -39,20 +39,25 @@ status: accepted
    `arrayBuffer()`, `FileReader`)로 읽는다. 경로가 필요한 앱은 `dialog` 플러그인의 파일 선택 대화상자로 경로를 받는다.
 3. 파일을 앱 밖으로 끌어내는 API와 drag 이미지 지정 API를 제공하지 않는다.
 4. 사용처가 확인되면 별도 결정에서 다룬다. 그때 정할 것은 경로를 페이지에 노출할지 여부, 허용 범위(창, origin, 파일 종류), 호스트가
-   drop target을 가질 때 HTML5 drop과 공존하는 방식(composition 모드 전환 여부)이다.
+   drop target을 가질 때 HTML5 drop과 공존하는 방식(composition 모드 전환 여부), 페이지가 `File`을 메시지로 보내 호스트가 경로를 얻는
+   방식을 쓸지 여부다.
 
 ## 근거
 
 - 두 프레임워크가 다르다. Electron은 main 프로세스에 drop 이벤트가 없고 페이지의 HTML5 drop과 renderer의 경로 변환 함수를 쓰며, Tauri는
   이벤트와 경로를 주는 대신 Windows에서 HTML5 drop을 끈다. 이 결정은 Electron의 main 프로세스 쪽과 같게 호스트에 drop 이벤트를 두지 않고
   페이지의 HTML5 drop을 그대로 둔다. 경로 변환은 사용처가 없어 보류하며, 코어는 작게 두는 쪽을 따랐다.
-- 이벤트를 주려면 둘 중 하나를 골라야 한다. Tauri 방식은 drop target 교체로 페이지의 HTML5 drop이 꺼져 같은 창에서 두 방식을 함께 쓸 수
-  없다. WebView2 공식 방식은 composition 모드로 바꿔야 하는데 입력, 포커스, 접근성, 렌더링 경로가 모두 달라져 이 결정의 범위를 넘는다.
+- 호스트가 drop 이벤트를 직접 받으려면 Tauri 방식이나 composition 모드 중 하나를 골라야 한다. Tauri 방식은 drop target 교체로 페이지의
+  HTML5 drop이 꺼져 같은 창에서 두 방식을 함께 쓸 수 없다. composition 모드는 호스트가 `IDropTarget`을 등록하고 `IDataObject`와 좌표를
+  전달해야 하며, controller 구성이 달라지는 별도 설계가 필요해 이 결정의 범위를 넘는다.
+- 경로만 필요하면 페이지가 `chrome.webview.postMessageWithAdditionalObjects`로 `File`을 보내고 호스트가 `ICoreWebView2File::get_Path`로
+  얻는 방식이 있어 composition 모드가 필요 없다. 다만 페이지가 명시적으로 보내야 하고 OS 경로가 호스트 코드에 닿으므로 아래 보안 경계와
+  함께 사용처가 생길 때 정한다.
 - 경로를 페이지에 주는 일은 모든 앱의 보안 경계를 바꾼다. 페이지가 OS 경로를 알면 앱이 허용하지 않은 파일 위치를 백엔드 명령에 넘길 수 있다.
   경로 제한은 앱의 책임이므로 기본으로 열지 않고 사용처가 생긴 뒤 허용 범위와 함께 정한다. Electron도 전체 경로를 웹 콘텐츠에 노출하지
   않기를 권한다.
-- 앱 밖 드래그는 Tauri에 공개 API가 없고 Electron만 제공한다. WebView2에서 구현하려면 composition 모드의 `DragStarting`이 필요해 위 이벤트와
-  같은 전환 비용을 진다.
+- 앱 밖 드래그는 Electron만 `startDrag`로 제공하고 Tauri에서는 공개 API를 확인하지 못했다. WebView2에서 WebView 안에서 시작한 드래그를
+  다루는 `DragStarting`은 `ICoreWebView2CompositionController5`에 있어 composition 모드가 전제다.
 - 사용처가 없다. 파일 열기는 파일 선택 대화상자가, 내용 읽기는 `File`의 웹 표준 API가 맡는다.
 
 ## 결과
