@@ -8,14 +8,19 @@ status: accepted
 
 ## 배경
 
-아래 Electron과 Tauri 서술은 해당 프로젝트의 공개 문서 확인에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다.
+아래 Electron(v45.0.0)과 Tauri(2.12.5) 서술은 해당 프로젝트의 공식 문서와 해당 태그의 소스 확인에 따른 것이며
+이 저장소의 테스트로 검증한 것은 아니다.
 
 앱이 메뉴를 연결하지 않아도 창에 기본 메뉴바를 자동으로 붙일지 정해야 했다.
 
-- Electron은 앱이 메뉴를 정하지 않으면 기본 애플리케이션 메뉴(편집, 보기, 창, 도움말 등)를 Windows 창에도 붙이고,
-  `Menu.setApplicationMenu(null)`로 없앤다. 기본 메뉴에는 reload와 개발자 도구 항목이 포함되어 배포 앱은 보통 이를 제거한다.
-- Tauri 2는 macOS에서만 기본 앱 메뉴를 붙이고, Windows와 Linux 창은 앱이 메뉴를 설정하지 않으면 메뉴바가 없다.
-- 이 저장소는 창 메뉴바를 `menu.setWindowMenu`로 연결한다. 창이 하나이므로 자동 연결 대상도 그 창 하나다.
+- Electron은 앱이 `Menu.setApplicationMenu`를 `ready` 전에 호출하지 않으면 기본 애플리케이션 메뉴를 만들고, Windows와
+  Linux에서는 이 메뉴가 각 창의 메뉴바가 된다. 기본 메뉴는 File, Edit, View, Window이며 View에 reload, force reload,
+  개발자 도구(Ctrl+Shift+I)가 들어 있다. `Menu.setApplicationMenu(null)`은 기본 메뉴를 만들지 않고 Windows와 Linux 창의
+  메뉴바도 없앤다.
+- Tauri 2는 macOS 빌드에서만 `enable_macos_default_menu`(기본 true)일 때 기본 앱 메뉴를 설정한다. Windows와 Linux에서는
+  앱이 `Builder::menu`나 `AppHandle::set_menu`로 메뉴를 지정하지 않으면 창에 메뉴바가 없다(tao의 Windows 창 `menu` 기본값은 None).
+- 이 저장소는 창 메뉴바를 `menu.setWindowMenu`로 연결한다. 창이 하나이므로([ADR 0026](./0026-single-webview-single-window.md))
+  자동 연결 대상도 그 창 하나다.
   role 항목은 편집 6개(undo, redo, cut, copy, paste, selectAll)와 창 3개(close, minimize, quit)이며,
   보기와 도움말 계열 role(reload, 개발자 도구, about, zoom 등)은 없다.
 - 메뉴바는 창의 콘텐츠 영역을 줄이므로 자동 연결은 모든 앱의 창 크기와 레이아웃에 영향을 준다.
