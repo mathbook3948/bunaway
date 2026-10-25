@@ -27,7 +27,7 @@ WebView의 media 시작과 중단, HTML `theme-color` 변경, 링크 위에 포�
 
 1. media 시작과 중단, `theme-color` 변경, 링크 hover URL을 알리는 새 이벤트, 작업과 권한을 추가하지 않는다.
 2. 앱 UI가 이 값을 필요로 하면 페이지에서 직접 관찰한다(`meta[name=theme-color]`의 `MutationObserver`, media 요소의 `play`와 `pause`,
-   링크의 `pointerover`). 백엔드가 필요로 하면 UI가 앱 명령으로 보낸다.
+   링크의 `pointerover`와 `focus`). 백엔드가 필요로 하면 UI가 앱 명령으로 보낸다.
 3. 문서의 audio 재생 상태는 기존 `getWebViewAudioState`로 조회한다. 그 변경 이벤트는 별도 항목에서 다루며 이 결정에 포함하지 않는다.
 4. `origins`에 넣은 외부 출처처럼 앱이 제어하지 않는 페이지의 값이나, 페이지에서 알 수 없는 media 상태를 확인해야 하는 용도가 나오면 별도 결정에서 다룬다.
 
@@ -37,8 +37,8 @@ WebView의 media 시작과 중단, HTML `theme-color` 변경, 링크 위에 포�
   작게 유지한다.
 - WebView2에는 `theme-color`에 대응하는 이벤트가 없어 제공하려면 호스트가 문서에 스크립트를 삽입해 관찰해야 한다. media 요소 단위의 시작과
   중단도 같은 방식이 필요하다. 문서 초기화 스크립트는 별도 항목에서 범위를 정한다.
-- 링크 hover URL은 WebView2의 상태 표시줄 텍스트 변경으로 알 수 있지만(호스트가 상태 표시줄을 끈 설정에서의 동작은 확인하지 않았다) 페이지 UI가 `pointerover`로 같은 정보를 얻는다. 이벤트는 포인터 이동마다
-  발생해 큐 한도와 합치기 규칙이 필요하다.
+- 링크 hover URL은 WebView2의 상태 표시줄 텍스트 변경으로 알 수 있지만(호스트가 상태 표시줄을 끈 설정에서의 동작은 확인하지 않았다) 페이지 UI가 `pointerover`와 `focus`로 같은 정보를 얻는다. 호스트가 이를
+  전달하려면 별도 이벤트와 권한을 계약에 추가해야 한다.
 
 ## 결과
 
