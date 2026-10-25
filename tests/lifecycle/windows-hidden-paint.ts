@@ -115,6 +115,9 @@ if (!process.argv.includes("--child")) {
     const report = JSON.parse(written);
     // Document scripts run and the document reaches readiness while the window stays hidden.
     assert.equal(report.hidden.timerRan, true);
+    // The hidden page is already painted: frames are delivered and first paint is reported.
+    assert.equal(report.hidden.frame, true);
+    assert(report.hidden.paintEntries.includes("first-paint"));
     assert.equal(report.hiddenNative.isVisible, false);
     assert.equal(report.hiddenNative.document, "ready");
     // An explicit show makes the page visible and painting.
@@ -155,7 +158,7 @@ if (!process.argv.includes("--child")) {
     });
   const recordCommand = (name: string) => ({
     input: {
-      type: "object",
+      type: "object" as const,
     },
     output: {
       const: null,
