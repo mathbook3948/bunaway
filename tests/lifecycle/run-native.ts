@@ -123,6 +123,7 @@ if (target === "windows-x64") {
     await test("windows-window-input-events.ts");
     await test("windows-document-title.ts");
     await test("windows-process-failure.ts");
+    await test("windows-hidden-paint.ts");
     await test("windows-monitor-events.ts");
     await run(
       [
