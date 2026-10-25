@@ -664,7 +664,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] 처음 숨긴 WebView의 paint, visibility와 ready-to-show 관계를 정의한다.
 - [ ] user agent, accept languages, proxy와 incognito 옵션을 제공한다.
 - [ ] 프로필 디렉터리와 데이터 저장소 선택, 조회와 삭제를 제공한다.
-- [x] JavaScript, 이미지, WebGL, autoplay와 background throttling 설정은 제공하지 않기로 결정했다. Electron은 제공하지만 Tauri는 Windows에서 제공하지 않고, JavaScript를 끄면 호스트 브리지가 끊기며 나머지는 WebView2 환경 전체의 브라우저 인자로만 바꿀 수 있다. [ADR 0065](./decisions/0065-webview-content-settings.md).
+- [x] JavaScript, 이미지, WebGL, autoplay와 background throttling 설정은 제공하지 않기로 결정했다. Electron은 제공하지만, JavaScript를 끄면 호스트 메시지 경로가 끊기고 나머지는 WebView2에 전용 설정이 없어 환경 전체의 브라우저 인자로만 바꿀 수 있다. [ADR 0065](./decisions/0065-webview-content-settings.md).
 - [x] 기본 글꼴, 글꼴 크기, encoding과 이미지 animation 정책 옵션은 제공하지 않기로 결정했다. Electron은 제공하지만 Tauri는 이 옵션들을 Windows에서 제공하지 않고 WebView2에서 대응 설정을 찾지 못해 CSS와 웹 표준으로 대체한다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
 - [x] textarea resize, preferred-size와 focus-on-navigation 옵션은 제공하지 않기로 결정했다. CSS `resize`와 `ResizeObserver`로 대체한다. 탐색 뒤 자동 포커스 이동은 제공하지 않으며 대체 수단은 로드 이벤트와 WebView 포커스 제어가 생길 때 다시 다룬다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
 - [ ] zoom을 origin별로 공유할지 WebView별로 독립 관리할지 설정한다. 컨트롤러 `setZoomFactor`/`zoomFactor` 조회는 구현됐다.
