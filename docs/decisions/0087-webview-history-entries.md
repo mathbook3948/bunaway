@@ -14,13 +14,18 @@ WebView의 탐색 history 항목을 읽고, 지우고, 저장했다가 되살리
 `windows.goForward`와 `windows.getWebViewState`의 `canGoBack`, `canGoForward`만 제공한다. offset과 index 이동은
 [ADR 0049](./0049-webview-history-offset-navigation.md)에서 제공하지 않기로 했다.
 
-- Electron의 `webContents.navigationHistory`는 항목 조회(`getEntryAtIndex`, `getActiveIndex`, `length`), 전체 항목 조회,
-  비우기와 복원을 제공한다. 복원은 저장해 둔 항목 배열과 활성 index로 탭 history를 다시 만든다.
-- Tauri 2와 wry에는 history 항목 조회, 삭제, 복원 API가 없다. 앱은 자신이 알고 있는 URL을 기록해 둔다.
+- Electron의 `webContents.navigationHistory`는 항목 조회(`getEntryAtIndex(index)`, `getActiveIndex()`, `length()`는 Electron 30부터),
+  비우기 `clear()`(32), 전체 항목 조회 `getAllEntries()`와 항목 삭제 `removeEntryAtIndex(index)`(33), 복원 `restore({ entries, index })`(35)를
+  제공한다. 항목은 `{ url, title, pageState }`이고 `pageState`는 스크롤 위치와 폼 값을 담은 Chromium 페이지 상태다. `clear()`는 현재
+  항목 하나를 남기고, 현재 활성 항목은 `removeEntryAtIndex`로 지울 수 없다. `restore`는 아직 페이지를 로드하지 않은 `webContents`에만
+  쓸 수 있고 로드가 끝나면 resolve된다.
+- Tauri 2와 wry의 history API는 `go_back`, `go_forward`, `can_go_back`, `can_go_forward`뿐이고 Tauri는 이것도 공개하지 않는다. 항목
+  목록, 삭제, 복원 API는 없다. 네이티브 핸들을 받는 `Webview::with_webview`로 플랫폼 API를 직접 호출할 수 있을 뿐이다. 앱은 자신이
+  알고 있는 URL을 기록해 둔다.
 - WebView2의 `ICoreWebView2`는 `GoBack`, `GoForward`, `CanGoBack`, `CanGoForward`만 제공하며 항목 목록, 비우기, 복원
   메서드가 없다. 이 저장소의 Windows 호스트는 `CallDevToolsProtocolMethod` 바인딩을 이미 쓰므로 DevTools 프로토콜의
-  `Page.getNavigationHistory`(항목 조회)와 `Page.resetNavigationHistory`(전체 비우기)로 조회와 전체 초기화는 만들 수 있다. 항목 하나만 지우는 메서드는 없다. 복원에
-  해당하는 프로토콜 메서드는 없다. 항목을 순서대로 `Navigate`하면 항목마다 새 탐색이 쌓여 원래의 history 구조(항목별 스크롤
+  `Page.getNavigationHistory`(항목 조회)와 `Page.resetNavigationHistory`(전체 비우기)로 조회와 전체 초기화는 만들 수 있다. 항목 하나만 지우는 메서드는 없고, 비우기는 Electron `clear()`와 같이 현재 항목
+  하나를 남기며 최상위 활성 프레임에서만 동작하고 이동이 진행 중이면 오류를 돌려준다. 복원에 해당하는 프로토콜 메서드는 없다. 항목을 순서대로 `Navigate`하면 항목마다 새 탐색이 쌓여 원래의 history 구조(항목별 스크롤
   위치, 폼 상태, POST 본문, 같은 문서 항목)를 되살리지 못한다.
 - 조회가 필요한 앱은 UI(렌더러) 쪽에서 `location`과 탐색 이벤트로 항목 목록을 직접 쌓을 수 있다. 백엔드는 페이지 내 탐색을
   알리는 호스트 이벤트가 없으므로 UI가 기록해 필요하면 백엔드에 전달한다.
