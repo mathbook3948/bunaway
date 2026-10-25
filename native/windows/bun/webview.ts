@@ -206,6 +206,8 @@ export class WebView {
       sameDocument(source: string): void;
       /** Optional: only the window host publishes document titles. */
       titleChanged?(title: string): void;
+      /** Optional: only the window host reports process failures to the backend. */
+      processFailed?(kind: number, recovery: "reload" | "close"): void;
       close(force?: boolean): void;
       ready(): void;
       documentComplete(error: WireError | null): void;
@@ -790,6 +792,10 @@ export class WebView {
         kind: kind[0],
       });
       this.hooks.revoke("process-failed");
+      this.hooks.processFailed?.(
+        kind[0] ?? 9,
+        kind[0] === 0 ? "close" : "reload",
+      );
       if (kind[0] === 0) {
         this.browserFailed = true;
         this.hooks.close(true);

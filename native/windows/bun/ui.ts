@@ -5,6 +5,7 @@ import { COINIT_APARTMENTTHREADED, checkHresult } from "@bunaway/plugin/win32";
 import type {
   NativeTrayOwner,
   WindowLifecycleEvent,
+  WindowProcessFailureEvent,
   WindowReadiness,
 } from "@bunaway/plugin-api/native";
 import {
@@ -39,6 +40,7 @@ import { DownloadCleanupError, DownloadCleanupRetries } from "./downloads.ts";
 import { isWindowRole, runWindowRole } from "./menu-window-role.ts";
 import { isMonitorChangeMessage, MonitorTracker } from "./monitor-events.ts";
 import { monitorServices, windowMonitor } from "./monitors.ts";
+import { processFailureKind } from "./process-failure.ts";
 import { createSessionMessageHandler } from "./session-end.ts";
 import { createSessionNotifications } from "./session-notifications.ts";
 import { publishSystemEvent, SystemEvents } from "./system-events.ts";
@@ -403,6 +405,9 @@ type ViewState = {
 };
 const views = new Map<string, ViewState>();
 const lifecycleListeners = new Set<(event: WindowLifecycleEvent) => void>();
+const processFailureListeners = new Set<
+  (event: WindowProcessFailureEvent) => void
+>();
 const closingWindows = new Set<string>();
 const replacements = new Map<
   string,
@@ -637,7 +642,8 @@ function isBackendOpenOperation(
 ): boolean {
   return (
     context === config.backendContext &&
-    operation === "windows.waitForLifecycle"
+    (operation === "windows.waitForLifecycle" ||
+      operation === "windows.waitForProcessFailure")
   );
 }
 /** An invalid call, a stopping host or a missing permission all deny the request. */
@@ -1292,6 +1298,12 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         lifecycleListeners.delete(listener);
       };
     },
+    onProcessFailure(listener) {
+      processFailureListeners.add(listener);
+      return () => {
+        processFailureListeners.delete(listener);
+      };
+    },
     lookup: {
       byId: (windowId) => windows?.getById(windowId) ?? null,
       byView: (viewId) => windows?.getByView(viewId) ?? null,
@@ -1827,6 +1839,26 @@ function createWindow(
                 ),
               0,
             );
+          }
+        },
+        processFailed: (kind, recovery) => {
+          if (
+            stopping() ||
+            shutdownCommitted() ||
+            views.get(instanceKey)?.native !== native
+          ) {
+            return;
+          }
+          const { windowId, viewId } = readiness.snapshot();
+          for (const listener of [
+            ...processFailureListeners,
+          ]) {
+            listener({
+              windowId,
+              viewId,
+              kind: processFailureKind(kind),
+              recovery,
+            });
           }
         },
         titleChanged: createTitleCoalescer((title, settled) => {

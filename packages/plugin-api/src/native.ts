@@ -289,6 +289,28 @@ export type WindowLifecycleEvent = {
   phase: "created" | "ready" | "closed" | "destroyed";
 };
 
+/** Which WebView2 process failed, as named by `windows.waitForProcessFailure`. */
+export type WindowProcessFailureKind =
+  | "browser-exited"
+  | "renderer-exited"
+  | "renderer-unresponsive"
+  | "frame-renderer-exited"
+  | "utility-exited"
+  | "sandbox-helper-exited"
+  | "gpu-exited"
+  | "plugin-exited"
+  | "plugin-broker-exited"
+  | "unknown-exited";
+
+/** One WebView process failure and what the host did about it. */
+export type WindowProcessFailureEvent = {
+  windowId: string;
+  viewId: string;
+  kind: WindowProcessFailureKind;
+  /** `reload` navigates the view again in the same window; `close` closes the window. */
+  recovery: "reload" | "close";
+};
+
 /** A current desktop display snapshot. IDs are device names, not persistent hardware identities. */
 export type NativeMonitor = {
   id: string;
@@ -862,6 +884,13 @@ export type NativeWindowServices = {
    * starts. Returns a function that removes the listener. Absent when the host publishes none.
    */
   onLifecycle?(listener: (event: WindowLifecycleEvent) => void): () => void;
+  /**
+   * Observe each WebView process failure the host handles, in order and never after shutdown starts.
+   * Returns a function that removes the listener. Absent when the host reports none.
+   */
+  onProcessFailure?(
+    listener: (event: WindowProcessFailureEvent) => void,
+  ): () => void;
   /** Read-only native identity discovery. Missing on platforms without identity tracking. */
   lookup?: {
     /** Unknown or destroyed native lifetimes return null. */

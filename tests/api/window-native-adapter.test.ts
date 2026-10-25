@@ -1843,6 +1843,20 @@ test("only the backend waits for window lifecycle phases, with no grant", async 
   );
 });
 
+test("only the backend waits for WebView process failures, with no grant", async () => {
+  const f: Fixture = fixture();
+  await rejects(
+    f.invoke("windows.waitForProcessFailure", {}, "view:main"),
+    "PERMISSION_DENIED",
+    "WebView process failure subscription requires the backend.",
+  );
+  await rejects(
+    f.invoke("windows.waitForProcessFailure", {}, "backend", []),
+    "UNSUPPORTED",
+    "WebView process failure notification is not available.",
+  );
+});
+
 test("an unknown native operation is rejected", () => {
   const f: Fixture = fixture();
   return rejects(

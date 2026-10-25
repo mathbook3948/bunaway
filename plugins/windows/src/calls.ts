@@ -126,6 +126,10 @@ export function createWindows(api: NativePluginAPI<Definitions>) {
       input: Input<"waitForLifecycle"> = {},
       options?: NativeInvokeOptions,
     ) => api.waitForLifecycle(input, options),
+    waitForProcessFailure: (
+      input: Input<"waitForProcessFailure"> = {},
+      options?: NativeInvokeOptions,
+    ) => api.waitForProcessFailure(input, options),
     create: (input: Input<"create"> = {}, options?: NativeInvokeOptions) =>
       api.create(input, options),
     recreate: (input: Input<"recreate"> = {}, options?: NativeInvokeOptions) =>
