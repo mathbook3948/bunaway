@@ -13,11 +13,13 @@ status: accepted
 문서 탐색, 프레임 탐색과 same-document 탐색(해시 변경, `history.pushState`, `history.replaceState`)을 앱에 알리는
 이벤트를 따로 제공할지 정해야 했다.
 
-- Electron의 `webContents`는 `did-navigate`(최상위 문서), `did-navigate-in-page`(same-document), `did-frame-navigate`
-  (프레임 포함), `did-redirect-navigation`을 제공하고, 탐색 전에는 `will-navigate`, `will-frame-navigate`로 취소할 수 있다.
-  `did-navigate-in-page`와 `did-frame-navigate`는 하위 프레임의 탐색도 알린다.
-- Tauri 2는 탐색 전 허용 여부를 정하는 `on_navigation` 콜백만 제공한다. 탐색 완료, 프레임 탐색과 same-document 탐색의
-  이벤트는 없고, 페이지 로드는 `on_page_load`의 시작과 완료 두 단계뿐이다.
+- Electron 45의 `webContents`는 `did-navigate`(최상위 프레임만), `did-navigate-in-page`(same-document, 하위 프레임 포함),
+  `did-frame-navigate`(하위 프레임 포함), `did-redirect-navigation`(하위 프레임 포함)을 제공하고, 탐색 전에는
+  `will-navigate`, `will-frame-navigate`(하위 프레임 포함, same-document 탐색에는 발생하지 않음)로 취소할 수 있다.
+  `did-navigate`와 `did-frame-navigate`는 same-document 탐색에는 발생하지 않는다.
+- Tauri 2(2.12 기준)와 wry가 공개하는 탐색 관련 콜백은 탐색 전 허용 여부를 정하는 `on_navigation`과 페이지 로드의
+  시작과 완료를 알리는 `on_page_load` 둘뿐이다. 탐색 완료, 프레임 단위, same-document, 리디렉션 전용 이벤트와 콜백
+  인자의 프레임 정보는 없다.
 - WebView2는 `NavigationStarting`, `NavigationCompleted`, `FrameNavigationStarting`, `FrameNavigationCompleted`,
   `SourceChanged`(`IsNewDocument`로 same-document를 구분), `HistoryChanged`, `ContentLoading`을 제공한다.
 - 이 저장소의 Windows 호스트는 이미 아래 범위를 다룬다.
@@ -59,8 +61,8 @@ status: accepted
 
 ## 근거
 
-- 두 프레임워크가 다르다. Electron은 문서, 프레임, same-document 이벤트를 제공하고 Tauri는 탐색 전 허용 훅과 페이지 로드 시작과 완료만 제공한다. 이 저장소는
-  탐색 결과를 `getWebViewState`와 `windows.readiness`로 이미 제공하므로 같은 정보의 이벤트를 더하면 순서, 세대와 큐 한도 규칙을
+- 두 프레임워크가 다르다. Electron은 문서, 프레임, same-document 이벤트를 제공하고 Tauri는 이를 제공하지 않는다. 다르면
+  코어는 작게 두는 쪽을 따른다. 이 저장소는 탐색 결과를 `getWebViewState`와 `windows.readiness`로 이미 제공하므로 같은 정보의 이벤트를 더하면 순서, 세대와 큐 한도 규칙을
   두 곳에서 지켜야 한다. 코어 계약은 작게 유지한다.
 - same-document 탐색은 UI가 표준 웹 API로 직접 알 수 있고, 시점이 필요 없는 현재 URL 확인은 조회로 충분하다. 시점이 필요한
   백엔드는 UI가 앱 명령으로 알린다. 문서 탐색은 새 문서가 구독하기 전에
