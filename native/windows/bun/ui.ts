@@ -663,12 +663,21 @@ function handleOperation(packet: PacketOf<"operation">) {
     "Invalid UI queue request",
   );
   uiCalls.set(packet.requestId, packet);
-  channel.notify({
-    kind: "prepare",
-    context: packet.context,
-    requestId: packet.requestId,
-    call: packet.call,
-  });
+  console.log(`diag-prepare-send ${packet.call.operation}`);
+  channel
+    .send({
+      kind: "prepare",
+      context: packet.context,
+      requestId: packet.requestId,
+      call: packet.call,
+    })
+    .then(
+      () => console.log(`diag-prepare-acked ${packet.call.operation}`),
+      (error: unknown) => {
+        console.log(`diag-prepare-failed ${String(error)}`);
+        fail(error);
+      },
+    );
 }
 /** A queued call runs only when the grant matches the context and source that queued it. */
 function handleGrant(packet: PacketOf<"grant">) {
