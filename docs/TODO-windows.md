@@ -658,7 +658,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] 탐색 전 허용와 거부, redirect와 popup 새 창 처리 훅을 제공한다.
 - [x] 결정 완료: 로드 시작, DOM ready, 완료와 실패 이벤트는 새로 제공하지 않고 `windows.readiness`, `getReadiness`, `getWebViewState`의 `loading`과 페이지의 `DOMContentLoaded`, `load`를 쓴다. [ADR 0068](./decisions/0068-webview-load-events.md).
 - [ ] 문서, 프레임과 same-document 탐색 이벤트를 제공한다.
-- [ ] title, favicon 변경 이벤트를 제공한다. title은 `windows.documentTitleChanged`로 제공하며 favicon이 남았다. preferred-size 변경 이벤트는 제공하지 않기로 했다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
+- [x] title, favicon 변경 이벤트를 제공한다. title은 `windows.documentTitleChanged`, favicon은 `windows.documentFaviconChanged`로 제공한다. Windows CI의 `windows-document-favicon.ts`가 검증한다. preferred-size 변경 이벤트는 제공하지 않기로 했다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
 - [ ] renderer gone, unresponsive와 responsive 이벤트를 제공한다.
 - [x] console 메시지, 스크립트 초기화 실패와 context-menu 이벤트는 제공하지 않기로 결정했다. Electron은 세 이벤트를 제공하고 Tauri는 제공하지 않으며, WebView2에는 전용 console 이벤트가 없어 DevTools 프로토콜 세션이나 페이지 스크립트 래핑이 필요하고 초기화 스크립트 API는 아직 없다. context menu는 페이지의 `contextmenu` 이벤트와 `showContextMenu`로 처리한다. [ADR 0075](./decisions/0075-webview-console-and-context-menu-events.md).
 - [ ] WebView 투명 배경과 scrollbar 옵션을 제공한다. 불투명 배경색은 `window.backgroundColor`가 창과 WebView2에 함께 적용한다.

@@ -36,6 +36,7 @@ import {
 } from "./channel.ts";
 import { type CloseDecision, CloseRequests } from "./close-request.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
+import { limitFaviconUrl } from "./document-favicon.ts";
 import { createTitleCoalescer, limitDocumentTitle } from "./document-title.ts";
 import { DownloadCleanupError, DownloadCleanupRetries } from "./downloads.ts";
 import { isWindowRole, runWindowRole } from "./menu-window-role.ts";
@@ -1909,6 +1910,29 @@ function createWindow(
               windowId,
               viewId,
               title: limitDocumentTitle(title),
+            },
+            undefined,
+            settled,
+          );
+        }),
+        // The coalescer is generic over the published string; it keeps the latest icon address.
+        faviconChanged: createTitleCoalescer((url, settled) => {
+          if (
+            stopping() ||
+            shutdownCommitted() ||
+            views.get(instanceKey)?.native !== native
+          ) {
+            settled();
+            return;
+          }
+          const { windowId, viewId } = readiness.snapshot();
+          sendNativeEvent(
+            boundary,
+            "windows.documentFaviconChanged",
+            {
+              windowId,
+              viewId,
+              url: limitFaviconUrl(url),
             },
             undefined,
             settled,

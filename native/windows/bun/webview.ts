@@ -152,6 +152,8 @@ export class WebView {
   }[] = [];
   /** ICoreWebView2_8 held for the audio change events until they are removed; undefined without it. */
   private audioEvents: Pointer | undefined;
+  /** ICoreWebView2_15 that owns the FaviconChanged subscription; released after the event is removed. */
+  private faviconTarget: Pointer | undefined;
   private readonly completions: ComHandler[] = [];
   /** In-flight editing-command completions; released ones are pruned on the next command. */
   private readonly editCalls = new EditCommandCalls<ComHandler>({
@@ -231,6 +233,8 @@ export class WebView {
       sameDocument(source: string): void;
       /** Optional: only the window host publishes document titles. */
       titleChanged?(title: string): void;
+      /** Optional: only the window host publishes favicon changes. */
+      faviconChanged?(url: string): void;
       /** Optional: only the window host reports process failures to the backend. */
       processFailed?(kind: number, recovery: "reload" | "close"): void;
       /** Optional: only the window host reports audio changes to the backend. */
@@ -526,6 +530,33 @@ export class WebView {
     this.on(85, "5def109a-2f4b-49fa-b7f6-11c39e513328", notify, audio);
   }
 
+  /**
+   * ICoreWebView2_15 add_FaviconChanged (slot 109): the handler reads get_FaviconUri (slot 111) of
+   * the sender, which may be empty. A runtime without the interface reports no favicon events.
+   */
+  private subscribeFavicon() {
+    const faviconChanged = this.hooks.faviconChanged;
+    if (!faviconChanged || !this.webview) {
+      return;
+    }
+    const webview15 = query(
+      this.webview,
+      "517b2d1d-7dae-4a66-a4f4-10352ffb9518",
+      true,
+    );
+    if (!webview15) {
+      this.hooks.log("favicon-events-unsupported");
+      return;
+    }
+    this.faviconTarget = webview15;
+    this.on(
+      109,
+      "2913da94-833d-4de0-8dca-900fc9ac1dd9",
+      () => faviconChanged(getString(webview15, 111)),
+      webview15,
+    );
+  }
+
   /** Apply browser settings and origin/resource policy before the view is shown. */
   private configure(assets: string) {
     assert(this.webview);
@@ -775,6 +806,7 @@ export class WebView {
         this.hooks.titleChanged?.(getString(this.webview, 48));
       }
     });
+    this.subscribeFavicon();
     // ICoreWebView2 receives top-level messages only; no FrameWebMessageReceived handlers are installed.
     this.on(34, "57213f19-00e6-49fa-8e07-898ea01ecbd2", (args) =>
       this.hooks.message(getString(args, 3), getString(args, 4)),
@@ -1671,6 +1703,10 @@ export class WebView {
         if (this.audioEvents) {
           release(this.audioEvents);
           this.audioEvents = undefined;
+        }
+        if (this.faviconTarget) {
+          release(this.faviconTarget);
+          this.faviconTarget = undefined;
         }
       }
     }
