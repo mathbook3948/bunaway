@@ -14,7 +14,7 @@ import { callDevToolsProtocolMethod } from "#native/windows/bun/webview-devtools
 import { enableCustomTitlebar } from "#native/windows/bun/webview-titlebar";
 import { Windows } from "#native/windows/bun/win32";
 import { disposeWin32Bindings, ole } from "#native/windows/bun/win32-bindings";
-import { deadline } from "../fixtures/deadlines.ts";
+import { deadline, waitFor } from "../fixtures/deadlines.ts";
 
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
@@ -27,8 +27,9 @@ await writeFile(
   resolve(assets, "web/index.html"),
   `<!doctype html><title>Custom titlebar</title>
   <style>header { app-region: drag; height: 48px; } button { app-region: no-drag; }</style>
-  <header>Window title <button aria-label="Example titlebar button" onclick="window.titlebarClicks = (window.titlebarClicks || 0) + 1">Action</button></header>
-  <script>addEventListener("load", () => chrome.webview.postMessage({
+  <header>Window title <button aria-label="Example titlebar button" onclick="window.titlebarClicks++">Action</button></header>
+  <button id="after-titlebar">After titlebar</button>
+  <script>window.titlebarClicks = 0;addEventListener("load", () => chrome.webview.postMessage({
     drag: getComputedStyle(document.querySelector("header")).getPropertyValue("app-region"),
     noDrag: getComputedStyle(document.querySelector("button")).getPropertyValue("app-region")
   }));</script>`,
@@ -142,15 +143,13 @@ try {
           json: string;
         }
       | undefined;
-    pendingCalls.push(
-      callDevToolsProtocolMethod(
-        page.webview,
-        method,
-        JSON.stringify(params),
-        (value) => {
-          result = value;
-        },
-      ),
+    const call = callDevToolsProtocolMethod(
+      page.webview,
+      method,
+      JSON.stringify(params),
+      (value) => {
+        result = value;
+      },
     );
     const callDeadline = Date.now() + deadline("toolchain");
     while (result === undefined) {
@@ -159,6 +158,9 @@ try {
       checkCallbacks();
       await Bun.sleep(5);
     }
+    // Only a completed call is retired in the cleanup: native may still hold the handler of one
+    // that never completed, and retiring that one would hide the timeout behind a COM error.
+    pendingCalls.push(call);
     assert(result.hresult >= 0, `${method} failed: ${result.hresult}`);
     return JSON.parse(result.json || "{}");
   };
@@ -190,26 +192,34 @@ try {
     assert(!parsed.exceptionDetails, JSON.stringify(parsed));
     return parsed.result?.value;
   };
-  // The tree that WebView2 hands to UI Automation is built from this accessibility tree, so a
-  // control inside a CSS drag region must stay exposed with its accessible name.
+  // A control inside a CSS drag region must stay exposed in the page's accessibility tree with
+  // its accessible name. The tree is computed after Accessibility.enable, so it is polled until
+  // the button appears.
   await cdp("Accessibility.enable", {});
-  const tree = await cdp("Accessibility.getFullAXTree", {});
-  accessibleButtonNames = (
-    tree.nodes as {
-      ignored?: boolean;
-      role?: {
-        value?: string;
-      };
-      name?: {
-        value?: string;
-      };
-    }[]
-  )
-    .filter((node) => !node.ignored && node.role?.value === "button")
-    .map((node) => node.name?.value ?? "");
-  assert.deepEqual(accessibleButtonNames, [
-    "Example titlebar button",
-  ]);
+  accessibleButtonNames = await waitFor(
+    async () => {
+      const tree = await cdp("Accessibility.getFullAXTree", {});
+      const names = (
+        tree.nodes as {
+          ignored?: boolean;
+          role?: {
+            value?: string;
+          };
+          name?: {
+            value?: string;
+          };
+        }[]
+      )
+        .filter((node) => !node.ignored && node.role?.value === "button")
+        .map((node) => node.name?.value ?? "");
+      return names.includes("Example titlebar button") ? names : undefined;
+    },
+    {
+      deadline: "toolchain",
+      what: "the titlebar button in the accessibility tree",
+      intervalMs: 100,
+    },
+  );
   // Keyboard navigation reaches a no-drag control inside the drag region and activates it.
   // Focus emulation keeps the renderer from treating the page as unfocused when the CI session
   // has no foreground window.
@@ -235,10 +245,10 @@ try {
     "Enter and Space did not activate the button",
   );
   await press("Tab", "Tab", 9);
-  assert.notEqual(
-    await evaluate("document.activeElement?.tagName"),
-    "BUTTON",
-    "Tab did not leave the titlebar button",
+  assert.equal(
+    await evaluate("document.activeElement?.id"),
+    "after-titlebar",
+    "Tab did not move on from the titlebar button",
   );
   const initialWidth = windows.getBounds(hwnd, "content").width;
   windows.setFullscreen(hwnd, true);
@@ -250,12 +260,11 @@ try {
   await waitForDocument(2);
   verified = true;
 } finally {
-  disposeHandlers(pendingCalls);
   if (webview) {
     webview.requestClose();
-    const deadline = Date.now() + 35_000;
+    const closeLimit = Date.now() + 35_000;
     while (!webview.detach()) {
-      assert(Date.now() < deadline, "Titlebar controller did not detach");
+      assert(Date.now() < closeLimit, "Titlebar controller did not detach");
       windows.pump();
       await Bun.sleep(5);
     }
@@ -263,7 +272,7 @@ try {
     hwnd = 0n;
     while (!webview.finish()) {
       assert(
-        Date.now() < deadline,
+        Date.now() < closeLimit,
         "Titlebar controller retained native resources",
       );
       windows.pump();
@@ -273,6 +282,7 @@ try {
   if (hwnd) {
     windows.destroy(hwnd);
   }
+  disposeHandlers(pendingCalls);
   disposeCom();
   windows.dispose();
   ole.symbols.CoUninitialize();
@@ -290,7 +300,7 @@ await writeFile(
       cssRegionDocuments: regionDocuments,
       accessibleButtonNames,
       keyboardClicks,
-      physicalMouseAndAccessibilityVerified: false,
+      physicalInputAndAssistiveClientVerified: false,
     },
     null,
     2,
