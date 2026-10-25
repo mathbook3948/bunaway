@@ -209,13 +209,16 @@ await writeFile(
       (document.hasFocus() ? "focused:" : "unfocused:") +
       (document.activeElement ? document.activeElement.tagName : "none");
     let lastFocusState = "";
-    setInterval(() => {
+    const reportFocus = () => {
       const state = focusState();
       if (state !== lastFocusState) {
         lastFocusState = state;
         chrome.webview.postMessage({ focus: state });
       }
-    }, 50);
+    };
+    setInterval(reportFocus, 20);
+    addEventListener("focus", reportFocus);
+    addEventListener("blur", reportFocus);
     addEventListener("keydown", (event) => {
       chrome.webview.postMessage({ keydown: event.key, focus: focusState() });
     });
@@ -238,6 +241,12 @@ const accelerators: string[] = [];
 const pageKeys: string[] = [];
 // Latest focus state the page reported: whether the document has focus and its active element.
 let pageFocus = "none reported";
+// Every focus state the page reported and every fixture action, in order with the time since the
+// fixture started, to show whether the page ever had focus and when it lost it.
+const focusTimeline: string[] = [];
+const startedAt = Date.now();
+const markTimeline = (event: string) =>
+  focusTimeline.push(`${Date.now() - startedAt}ms ${event}`);
 const step = (name: string) => console.log(`STEP ${name}`);
 // Reports the fixture state and fails when it outlives its deadline while the event loop still runs.
 const watchdog = setTimeout(() => {
@@ -580,6 +589,7 @@ try {
         } else if (isRecord(parsed)) {
           if (typeof parsed.focus === "string") {
             pageFocus = parsed.focus;
+            markTimeline(`page ${parsed.focus}`);
           }
           if (typeof parsed.keydown === "string") {
             pageKeys.push(parsed.keydown);
@@ -656,9 +666,23 @@ try {
 
   // Real input needs the window in the foreground with the page focused.
   step("activate");
+  markTimeline("click start");
   await activateByClick(hwnd);
-  // The click normally focuses the page; asking again makes the key target certain.
-  page.moveFocusToContent();
+  markTimeline("click done");
+  await settle(KEY_REPORT_SETTLE_MS);
+  logInputState("after the click");
+  // The click normally focuses the page; asking again makes the key target certain. The result
+  // is logged because a rejected move would leave the page without focus.
+  try {
+    page.moveFocusToContent();
+    markTimeline("MoveFocus returned S_OK");
+    console.log("MoveFocus result: S_OK");
+  } catch (error) {
+    markTimeline("MoveFocus failed");
+    console.log(`MoveFocus result: ${String(error)}`);
+  }
+  await settle(KEY_REPORT_SETTLE_MS);
+  logInputState("after MoveFocus");
   const tap = () => {
     sendKey(VK_MENU, false);
     sendKey(VK_MENU, true);
@@ -670,6 +694,7 @@ try {
   // A plain key must raise the controller's accelerator event, or the Alt checks below cannot work.
   step("accelerator probe");
   logInputState("before focusing the render widget");
+  markTimeline("SetFocus on the render widget");
   focusRenderWidget();
   await settle(KEY_REPORT_SETTLE_MS);
   logInputState("before probe key");
@@ -678,6 +703,7 @@ try {
   // the key never reached the page or only the controller event is missing.
   await settle(KEY_REPORT_SETTLE_MS);
   logInputState("after probe key");
+  console.log(`Page focus timeline: ${JSON.stringify(focusTimeline)}`);
   await pumpUntil(
     () => accelerators.length > 0,
     "Controller accelerator event for a real key",
