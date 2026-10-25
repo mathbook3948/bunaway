@@ -131,6 +131,7 @@ function fixture() {
   let opacity = 1;
   let ignoreMouseEvents = false;
   let hasShadow = true;
+  let roundedCorners = true;
   let backgroundColor: string | null = null;
   let accessibleTitle: string | null = null;
   const native: NativeWindow = {
@@ -230,6 +231,11 @@ function fixture() {
       hasShadow = value;
     },
     hasShadow: () => hasShadow,
+    setRoundedCorners(value) {
+      apply("setRoundedCorners");
+      roundedCorners = value;
+    },
+    hasRoundedCorners: () => roundedCorners,
     setBackgroundColor(value) {
       apply("setBackgroundColor");
       backgroundColor = value;
@@ -340,6 +346,8 @@ function fixture() {
         | "getOpacity"
         | "setHasShadow"
         | "hasShadow"
+        | "setRoundedCorners"
+        | "hasRoundedCorners"
         | "setBackgroundColor"
         | "getBackgroundColor"
         | "setIgnoreMouseEvents"
@@ -364,6 +372,7 @@ function fixture() {
         opacity?: number | string | null;
         ignore?: boolean;
         hasShadow?: boolean;
+        roundedCorners?: boolean;
         color?: string | number | null;
         resizable?: boolean;
         movable?: boolean;
@@ -1380,6 +1389,58 @@ test("window shadow takes only a boolean, round-trips from the default and keeps
   });
 });
 
+test("window rounded corners take only a boolean, round-trip from the default and keep their own permission grants", async () => {
+  const f = fixture();
+  expect(await f.invoke("hasRoundedCorners")).toBe(true);
+  for (const roundedCorners of [
+    false,
+    true,
+  ]) {
+    expect(
+      await f.invoke("setRoundedCorners", {
+        roundedCorners,
+      }),
+    ).toBeNull();
+    expect(await f.invoke("hasRoundedCorners")).toBe(roundedCorners);
+  }
+  for (const payload of [
+    {},
+    {
+      roundedCorners: "false",
+    },
+    {
+      roundedCorners: 0,
+    },
+    {
+      roundedCorners: null,
+    },
+    {
+      roundedCorners: true,
+      radius: 8,
+    },
+  ]) {
+    expect(() =>
+      validateWindowCall({
+        operation: "windows.setRoundedCorners",
+        payload: {
+          ...payload,
+        },
+      }),
+    ).toThrow();
+  }
+  expect(validateWindowOutput("windows.hasRoundedCorners", true)).toBe(true);
+  expect(() => validateWindowOutput("windows.hasRoundedCorners", 1)).toThrow();
+  f.permissions.permissions = [];
+  await expect(f.invoke("hasRoundedCorners")).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  f.permissions.permissions = windowPermissions();
+  f.setClosed();
+  await expect(f.invoke("hasRoundedCorners")).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+});
+
 test("window background color normalizes valid colors, rejects alpha and other forms, and keeps its own permission grants", async () => {
   const f = fixture();
   expect(await f.invoke("getBackgroundColor")).toBeNull();
@@ -1475,6 +1536,8 @@ test("macOS target does not declare the Windows-only shadow operations", () => {
     expect.arrayContaining([
       "setHasShadow",
       "hasShadow",
+      "setRoundedCorners",
+      "hasRoundedCorners",
     ]),
   );
 });

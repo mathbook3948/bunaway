@@ -606,12 +606,39 @@ if (!process.argv.includes("--child")) {
         nativeWindows.setHasShadow(custom, true);
         assert.equal(nativeWindows.hasShadow(custom), true);
         assert.deepEqual(nativeWindows.getBounds(custom, "outer"), bounds);
+
+        // The corner preference is a DWM hint with no read-back, so the requested value is the
+        // state. DWM accepts the call on every Windows build (builds before 11 ignore it), and
+        // geometry, visibility and the shadow setting are not part of it. A native title bar
+        // window keeps the system default: squaring it is rejected, asking for round is a no-op.
+        assert.equal(nativeWindows.hasRoundedCorners(custom), true);
+        nativeWindows.setRoundedCorners(custom, false);
+        assert.equal(nativeWindows.hasRoundedCorners(custom), false);
+        nativeWindows.setRoundedCorners(custom, false);
+        assert.equal(nativeWindows.hasRoundedCorners(custom), false);
+        nativeWindows.setHasShadow(custom, false);
+        nativeWindows.setRoundedCorners(custom, true);
+        assert.equal(nativeWindows.hasRoundedCorners(custom), true);
+        assert.equal(nativeWindows.hasShadow(custom), false);
+        nativeWindows.setHasShadow(custom, true);
+        assert.deepEqual(nativeWindows.getBounds(custom, "outer"), bounds);
+        assert.equal(nativeWindows.isVisible(custom), true);
+        assert.equal(nativeWindows.hasRoundedCorners(system), true);
+        nativeWindows.setRoundedCorners(system, true);
+        assert.throws(
+          () => nativeWindows.setRoundedCorners(system, false),
+          (error) =>
+            error instanceof BunawayError && error.code === "UNSUPPORTED",
+        );
+        assert.equal(nativeWindows.hasRoundedCorners(system), true);
       } finally {
         nativeWindows.destroy(system);
         nativeWindows.destroy(custom);
       }
       assert.throws(() => nativeWindows.hasShadow(custom));
       assert.throws(() => nativeWindows.setHasShadow(custom, false));
+      assert.throws(() => nativeWindows.hasRoundedCorners(custom));
+      assert.throws(() => nativeWindows.setRoundedCorners(custom, false));
     }
     {
       const gdi = dlopen("gdi32.dll", {

@@ -1256,6 +1256,13 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.hasShadow": windowStateResult,
+  "windows.setRoundedCorners": {
+    input: z.strictObject({
+      roundedCorners: z.boolean(),
+    }),
+    output: z.null(),
+  },
+  "windows.hasRoundedCorners": windowStateResult,
   "windows.setBackgroundColor": {
     input: z.strictObject({
       color: windowBackgroundColor,

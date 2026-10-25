@@ -1,6 +1,6 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
-import { checkHresult, OLE32, pick, withWide } from "@bunaway/plugin/win32";
 import assert from "node:assert/strict";
+import { checkHresult, OLE32, pick, withWide } from "@bunaway/plugin/win32";
 import { guid } from "./guid.ts";
 
 /** MSDN samples use CLSCTX_SERVER for AccPropServices. */

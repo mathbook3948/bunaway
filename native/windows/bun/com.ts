@@ -1,7 +1,7 @@
 import type { FFIType, Pointer } from "bun:ffi";
-import { checkHresult, withBuffer, withWide } from "@bunaway/plugin/win32";
 import { CFunction, JSCallback, ptr, read, toArrayBuffer } from "bun:ffi";
 import assert from "node:assert/strict";
+import { checkHresult, withBuffer, withWide } from "@bunaway/plugin/win32";
 import { MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 import { guid } from "./guid.ts";
 

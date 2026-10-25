@@ -81,6 +81,9 @@ const unsupportedFullscreenable = unsupportedError(
 const unsupportedOpacity = unsupportedError(
   "Window opacity is not implemented on this platform.",
 );
+const unsupportedRoundedCorners = unsupportedError(
+  "Window corner control is not implemented on this platform.",
+);
 const unsupportedShadow = unsupportedError(
   "Window shadow control is not implemented on this platform.",
 );
@@ -451,6 +454,14 @@ function applyUserControls(scope: ActionScope, call: WindowCall): ActionResult {
       return null;
     case "windows.hasShadow":
       return supported(window.hasShadow, unsupportedShadow)();
+    case "windows.setRoundedCorners":
+      supported(
+        window.setRoundedCorners,
+        unsupportedRoundedCorners,
+      )(call.payload.roundedCorners);
+      return null;
+    case "windows.hasRoundedCorners":
+      return supported(window.hasRoundedCorners, unsupportedRoundedCorners)();
     case "windows.setBackgroundColor":
       supported(
         window.setBackgroundColor,
