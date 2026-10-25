@@ -490,7 +490,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
 출처: [E-notification], [T-notification].
 
 - [x] Windows toast API 지원 여부와 앱, 사용자, 정책의 알림 차단 상태를 조회한다.
-- [x] 필요한 OS 권한 요청의 플랫폼별 계약을 정한다. Windows 데스크톱 경로에는 알림 동의 팝업이 없으며 설정 변경은 사용자에게 맡기므로 권한 요청 API는 제공하지 않고 `getStatus`와 `openSettings`만 둔다([ADR 0052](decisions/0052-notification-permission-request-and-attachments.md)).
+- [x] 필요한 OS 권한 요청의 플랫폼별 계약을 정한다. Windows 데스크톱 경로에는 알림 동의 팝업이 없으며 설정 변경은 사용자에게 맡기므로 권한 요청 API는 제공하지 않고 `getStatus`와 `openSettings`만 둔다([ADR 0052](./decisions/0052-notification-permission-request-and-attachments.md)).
 - [x] 제목과 본문의 text-only toast, silent와 popup 억제 옵션을 제공한다.
 - [x] 아이콘, 본문 이미지(inline/hero)와 시스템 소리를 제공한다. 이미지는 로컬 절대 경로, 확장자(png, jpg, jpeg, gif), 고정 드라이브, 디렉터리와 클라우드 파일 거부(링크는 따라감), 3,000,000바이트 검사 후 file URI로 전달하고, Windows 비패키지 앱은 임의 소리 파일을 재생할 수 없어 `ms-winsoundevent` 시스템 소리 이름과 loop만 지원한다. `silent`와 `sound`는 함께 줄 수 없다.
 - [x] 실행 중 native clicked, dismissed와 failed callback을 전달한다. Show 접수는 반환값으로 구분한다.
@@ -504,7 +504,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] 진행률 막대와 추가 텍스트 줄 같은 고급 알림 콘텐츠를 선언 필드로 제공할지 결정한다. 제공하지 않는다([ADR 0041](decisions/0041-notification-priority-and-rich-content.md)). 진행률은 `windows.setTaskbarProgress`나 앱 화면으로 보인다.
 - [x] OS에 남은 알림 조회와 그룹, 전체 제거의 플랫폼별 지원을 결정한다. Windows 개별 ID/group 제거, 앱 전체 제거(`notification.clearAll`)와 남은 알림 조회(`notification.list`)는 구현했다. group 단위 제거(`notification.clearGroup`)도 구현했다.
 - [x] 예약 알림과 pending 조회, 취소의 플랫폼별 지원을 제공한다. Windows 단발 예약(`notification.schedule`), 조회(`notification.listScheduled`)와 취소(`notification.cancelScheduled`)는 구현했다. 반복 예약은 제공하지 않는다.
-- [x] 첨부 파일과 클릭 액션 종류 등록의 지원을 결정한다. Windows toast에 파일 첨부 개념이 없고 Electron도 제공하지 않으며 Tauri는 모바일 전용이라 제공하지 않는다. 클릭은 `clicked`, `actionInvoked`, `dismissed` 이벤트로 받는다([ADR 0052](decisions/0052-notification-permission-request-and-attachments.md)).
+- [x] 첨부 파일과 클릭 액션 종류 등록의 지원을 결정한다. Windows toast에 파일 첨부 개념이 없고 Electron도 제공하지 않으며 Tauri는 모바일 전용이라 제공하지 않는다. 클릭은 `clicked`, `actionInvoked`, `dismissed`(`show` 알림 기준) 이벤트로 받는다([ADR 0052](./decisions/0052-notification-permission-request-and-attachments.md)).
 - [x] Windows 알림 설정 페이지로 이동하는 요청과 사용자에 의한 차단 상태를 제공한다.
 
 `@bunaway/plugin-notification`은 현재 호스트 앱 ID로 WinRT `ToastNotifier.Setting`을
