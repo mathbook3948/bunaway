@@ -1,6 +1,6 @@
 import { JSCallback, ptr } from "bun:ffi";
-import assert from "node:assert/strict";
 import { checkHresult, withWide } from "@bunaway/plugin/win32";
+import assert from "node:assert/strict";
 import type {
   NativeMonitor,
   NativeMonitorServices,

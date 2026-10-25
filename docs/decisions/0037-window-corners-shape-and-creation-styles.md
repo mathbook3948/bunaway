@@ -37,13 +37,13 @@ Tauri 2와 tao:
   `maximizable`이 따로 제어한다.
 - `WM_NCHITTEST`에서 `HTMAXBUTTON`을 반환하는 코드는 없다. 사용자 제목 표시줄은 CSS `app-region`으로 끌기만 한다(`packages/plugin-api/src/native.ts`의 설명을 따른 서술이며 native 코드에서 직접 확인하지는 않았다).
 - 그림자는 `setHasShadow`가 DWM 비클라이언트 렌더링 정책으로 제어한다.
-- 둥근 모서리를 다루는 코드는 없다.
+- 둥근 모서리는 `window-corners.ts`가 `DwmSetWindowAttribute`로 적용한다(이 ADR 이후 구현).
 
 ## 결정
 
 1. 둥근 모서리: 제공한다. `titlebar: "custom"` 창에서만 `false`로 끌 수 있다. Windows 11 미만은 OS에 반영되지 않고
    조회는 설정한 값(요청한 선호)을 그대로 반환한다. 네이티브 제목 표시줄(프레임) 창은 OS 기본을 따르며 `false` 설정은 `UNSUPPORTED`로
-   거부한다(`setHasShadow`와 같은 규칙). 구현은 이 ADR과 별개의 PR에서 한다.
+   거부한다(`setHasShadow`와 같은 규칙).
 2. `WS_THICKFRAME` 옵션: 별도 옵션으로 제공하지 않는다. 크기 조절을 막는 수단은 `resizable`이고, 그림자는
    `setHasShadow`가 맡는다. 이 ADR은 Windows 11에서 `resizable: false` 창의 Snap 동작을 확정하지 않는다(열린 질문).
 3. 창 shape(`setShape`에 해당)는 제공하지 않는다.
@@ -97,5 +97,6 @@ Tauri 2와 tao:
   `resizable: false`가 `WS_THICKFRAME`을 빼는 방식 자체를 다시 봐야 하며, 그때 `thickFrame` 옵션 결정도 다시 연다.
 - `titlebar: "custom"` 창에 Snap Layouts(최대화 버튼 hover)를 주려면 `WM_NCHITTEST`가 `HTMAXBUTTON`을 반환해야 하는데
   현재 구현은 반환하지 않는다. 별도 기능으로 다룬다.
-- `setHasShadow(false)`로 비클라이언트 렌더링을 끈 창에서 둥근 모서리 선호가 어떻게 보이는지는 구현 PR의 Windows CI에서
-  실행으로 확인한다.
+- `setHasShadow(false)`로 비클라이언트 렌더링을 끈 창에서 둥근 모서리 선호가 화면에 어떻게 보이는지는 확인하지 못했다.
+  DWM이 GDI 화면 밖에서 합성해 화면 캡처로 볼 수 없고 선호도 읽어 주지 않으므로, Windows CI는 두 설정을 함께 바꿔도 요청한 값과
+  그림자 상태가 서로 영향을 주지 않는지만 확인한다.

@@ -608,7 +608,8 @@ if (!process.argv.includes("--child")) {
         assert.deepEqual(nativeWindows.getBounds(custom, "outer"), bounds);
 
         // The corner preference is a DWM hint with no read-back, so the requested value is the
-        // state. DWM accepts the call on every Windows build (builds before 11 ignore it), and
+        // state. The call succeeds on every Windows build (builds before 11 ignore it; see
+        // cornerPreferenceFailure), and
         // geometry, visibility and the shadow setting are not part of it. A native title bar
         // window keeps the system default: squaring it is rejected, asking for round is a no-op.
         assert.equal(nativeWindows.hasRoundedCorners(custom), true);
