@@ -1,17 +1,10 @@
 import { expect, setDefaultTimeout, test } from "bun:test";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join, parse, resolve } from "node:path";
-import createOperationsDefinition from "#plugins/opener/src/index";
-import { deadline } from "../fixtures/deadlines.ts";
-import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
+import { deadline, killAfter } from "../fixtures/deadlines.ts";
 import { recycledItem } from "../fixtures/windows-recycle-bin.ts";
 
 setDefaultTimeout(deadline("build"));
-
-const createOperations = createOperationsFactory(
-  createOperationsDefinition,
-  "windows",
-);
 
 const EXPLORER_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion";
 const POLICY_KEY = `${EXPLORER_KEY}\\Policies\\Explorer`;
@@ -98,6 +91,41 @@ function volumeGuid(path: string): string {
 }
 
 /**
+ * Run `opener.trashFile` in a new Bun process, because the shell keeps the Recycle Bin settings it
+ * first read for the life of a process. Resolves to `ok` or the error code the call failed with.
+ */
+async function trashInFreshProcess(
+  root: string,
+  path: string,
+): Promise<string> {
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "--no-env-file",
+      resolve(import.meta.dir, "windows-trash-limits.fixture.ts"),
+      root,
+      path,
+    ],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const timer = killAfter(child, "childStep");
+  try {
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code, stderr + stdout).toBe(0);
+    return stdout.trim();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Create a file in a directory of this test, ask Windows to recycle it while `configure` has
  * changed the bin settings, and check that nothing was lost: the call fails, the file stays where
  * it was and the bin holds no copy.
@@ -113,34 +141,15 @@ async function expectRefused(
   });
   const sample = join(root, `${label}.bin`);
   await writeFile(sample, Buffer.alloc(size, 7));
-  const adapter = createOperations({
-    dataRoot: root,
-    capabilities: [],
-  });
   try {
-    let failure: unknown;
+    let outcome = "";
     await configure(volumeGuid(sample), async () => {
-      try {
-        await adapter.execute(
-          "opener.trashFile",
-          {
-            path: sample,
-          },
-          "backend",
-        );
-      } catch (error) {
-        failure = error;
-      }
+      outcome = await trashInFreshProcess(root, sample);
     });
-    expect(failure).toEqual(
-      expect.objectContaining({
-        code: "UNSUPPORTED",
-      }),
-    );
+    expect(outcome).toBe("UNSUPPORTED");
     expect((await stat(sample)).size).toBe(size);
     expect(await recycledItem(sample)).toBeUndefined();
   } finally {
-    await adapter.dispose();
     // If the refusal regressed and the file reached the bin, remove only this test's entry.
     const leaked = await recycledItem(sample);
     if (leaked) {
