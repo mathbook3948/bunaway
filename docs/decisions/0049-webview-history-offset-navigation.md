@@ -40,8 +40,8 @@ WebView history에서 `goBack`, `goForward` 외에 offset 이동과 index 이동
 2. 여러 단계 이동이 필요한 앱은 `goBack`과 `goForward`를 반복한다. 호출은 이동을 시작했는지만 알려주며, 반환 직후의
    `getWebViewState`가 이동 결과를 반영한다고 보장하지 않는다. 이동 완료를 알리는 전용 신호는 아직 없으므로 연속 호출이 필요한
    앱은 페이지 쪽에서 확인할 수 있는 상태(예: 이동한 문서가 보내는 신호)를 기다린다.
-3. offset 이동이 필요한 앱은 페이지에서 `history.go(n)`을 직접 쓴다. 이동 범위는 Electron의 `goToOffset`과 같고, 호스트는
-   이를 막지 않는다.
+3. offset 이동이 필요한 앱은 페이지에서 `history.go(n)`을 직접 쓴다. 이동 범위는 Electron의 `goToOffset`과 같다. 호스트의
+   탐색 정책(origin 허용 목록)은 이 이동에도 그대로 적용된다.
 4. 이동할 항목을 앱이 고를 필요가 있는 용도가 확인되면 history 조회와 함께 별도 결정에서 다룬다. 그때 플랫폼별 경로
    (WebView2는 DevTools 프로토콜, WKWebView는 항목 목록, Android WebView는 step 이동)를 함께 정한다.
 
@@ -49,12 +49,12 @@ WebView history에서 `goBack`, `goForward` 외에 offset 이동과 index 이동
 
 이동 범위는 `history.go`와 Electron의 `goToOffset`이 같다. 전용 API를 두지 않는 이유는 범위가 아니라 비용과 쓰임이다.
 
-- Electron은 제공하고 Tauri는 제공하지 않아 두 프레임워크가 갈린다. 이 저장소에서 쓰는 곳이 없으므로 코어 API를 늘리지
+- Electron은 제공하고 Tauri는 제공하지 않아 두 프레임워크가 갈린다. 이 저장소에서 확인된 사용처가 없으므로 코어 API를 늘리지
   않는 Tauri 쪽을 따른다.
-- WebView2에는 `GoToOffset`에 해당하는 네이티브 API가 없다. 호스트가 제공하려면 페이지 스크립트 실행(`ExecuteScript`)으로
-  `history.go`를 감싸야 하는데, 이 경로는 위에서 본 렌더러 요청의 제한(`history.go(0)`의 reload 의미, 비활성 문서와 진행
-  중인 탐색에서의 무시)을 호스트 계약으로 정리해야 하는 부담을 만든다. DevTools 프로토콜 경로는 두 번 호출과 항목 id
-  관리가 필요하다.
+- WebView2에는 `GoToOffset`에 해당하는 네이티브 API가 없어 호스트가 만들 수 있는 경로는 둘이다. `ExecuteScript`로
+  `history.go`를 감싸면 렌더러 요청의 제한(`history.go(0)`의 reload 의미, 비활성 문서와 진행 중인 탐색에서의 무시)을 호스트
+  계약으로 정리해야 한다. DevTools 프로토콜 경로(`Page.getNavigationHistory`, `Page.navigateToHistoryEntry`)로 만들면 항목
+  id를 쓰는 두 번 호출과 그 사이의 history 변경을 다뤄야 한다. 어느 쪽이든 쓰임이 확인되지 않은 기능에 비해 부담이 크다.
 - 기본 `goBack`과 `goForward`는 이미 이동 가능 여부를 반환하고, 여러 단계 이동은 이 두 호출을 반복해 대신할 수 있다. 앱이
   offset 이동을 직접 원하면 페이지에서 `history.go`를 쓰면 된다.
 
