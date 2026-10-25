@@ -4,6 +4,8 @@ import { parse, serialize } from "./validation.ts";
 /** Identifies an installed host operation. Its parser stays in the owning plugin code. */
 export type HostOperationContract = {
   readonly name: string;
+  /** Only the backend may hold a grant; policy validation rejects a view grant. */
+  readonly backendOnly?: true;
 };
 /** Collects the host operations owned by one native plugin. */
 export type NativePluginContract = {

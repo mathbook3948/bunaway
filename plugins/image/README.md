@@ -17,8 +17,11 @@ try {
 ```
 
 공개 입력, 반환값, 권한과 오류는 [API 레퍼런스](../../docs/site/src/content/docs/reference/plugins/image.mdx)에 둔다.
-파일 경로 읽기와 저장소 scope 추가, 파일 기반 thumbnail은
-제공하지 않는다. 파일 bytes의 확보와 저장은 앱이 기존 저장소 계약에서 수행한다.
+`image.createFromPath`는 백엔드 전용 작업이다(화면에 허용하면 정책 검사가 거부한다). Windows에서
+로컬 드라이브의 PNG, JPEG, BMP 파일을 읽어 `maxDimension`과 리소스 픽셀 상한 안으로 축소해 새
+리소스로 만든다. 읽기는 `image-file.ts`가 열린 파일의 크기와 종류를 확인한 뒤 수행하고, 축소는
+`windows-codec.ts`의 `decodeScaled`가 WIC의 premultiplied BGRA 변환과 Fant 스케일러로 한다.
+원본 헤더 크기는 픽셀 디코드 전에 검사한다. 허용 폴더는 앱이 정한다.
 
 `image.createFileTypeIcon`은 확장자와 크기(`small` 16, `normal` 32, `large` 48)만 받아 연결 아이콘을
 새 리소스로 만든다. Windows는 `windows-file-icon.ts`가 `SHGetFileInfoW`(`SHGFI_USEFILEATTRIBUTES`

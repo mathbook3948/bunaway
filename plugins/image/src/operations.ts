@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   addRepresentationSchema,
   bytesSchema,
+  createFromPathSchema,
   cropSchema,
   dataURLSchema,
   exportSchema,
@@ -32,6 +33,14 @@ export const imageOperations = {
     output: resourceSchema,
     handler: (input, { instance, signal }) =>
       instance.createBytes(input, signal),
+  }),
+  createFromPath: operation({
+    input: createFromPathSchema,
+    output: resourceSchema,
+    // Only the backend may read a file path; policy validation rejects a view grant.
+    backendOnly: true,
+    handler: (input, { instance, signal }) =>
+      instance.createFromPath(input, signal),
   }),
   createDataURL: operation({
     input: z.strictObject({

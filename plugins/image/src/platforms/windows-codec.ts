@@ -14,10 +14,13 @@ import {
   MAX_ENCODED_BYTES,
   MAX_IMAGE_BYTES,
   MAX_IMAGE_DIMENSION,
+  MAX_SOURCE_DIMENSION,
+  MAX_SOURCE_PIXELS,
 } from "#image/contract";
 import type { Pixels } from "#image/platforms/codec";
 import {
   assertResizeDimensions,
+  fitWithin,
   resizeNearestPixels,
 } from "#image/platforms/resize";
 
@@ -33,6 +36,7 @@ const WIC_ENCODER_NO_CACHE = 2;
 const WIC_DITHER_NONE = 0;
 const WIC_PALETTE_CUSTOM = 0;
 const WIC_INTERPOLATION_LINEAR = 1;
+const WIC_INTERPOLATION_FANT = 3;
 const containers: Record<ImageMime, string> = {
   "image/png": "1b7cfaf4-713f-473c-bbcd-6137425faeaf",
   "image/jpeg": "19e4a5aa-5662-4fc5-a0c0-1758028e1057",
@@ -328,6 +332,188 @@ export function createWIC() {
       });
     }
   }
+  /** Open the single frame of an encoded image; `owned` receives the decoder and frame for release. */
+  function openFrame(
+    input: Pointer,
+    mime: ImageMime,
+    owned: Pointer[],
+  ): Pointer {
+    const container = guid(containers[mime]);
+    const decoder = acquire((out) =>
+      invoke(
+        factory,
+        7,
+        [
+          "ptr",
+          "ptr",
+          "ptr",
+        ],
+        [
+          ptr(container),
+          null,
+          out,
+        ],
+      ),
+    );
+    owned.push(decoder);
+    check(
+      invoke(
+        decoder,
+        4,
+        [
+          "ptr",
+          "u32",
+        ],
+        [
+          input,
+          WIC_METADATA_ON_DEMAND,
+        ],
+      ),
+      true,
+    );
+    const count = new Uint32Array(1);
+    check(
+      invoke(
+        decoder,
+        12,
+        [
+          "ptr",
+        ],
+        [
+          ptr(count),
+        ],
+      ),
+      true,
+    );
+    if (count[0] !== 1) {
+      throw new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "Only single-frame images are supported.",
+      });
+    }
+    const frame = acquire(
+      (out) =>
+        invoke(
+          decoder,
+          13,
+          [
+            "u32",
+            "ptr",
+          ],
+          [
+            0,
+            out,
+          ],
+        ),
+      true,
+    );
+    owned.push(frame);
+    return frame;
+  }
+  /** Header size of a decoded frame; no pixel data is read. */
+  function frameSize(frame: Pointer): {
+    width: number;
+    height: number;
+  } {
+    const size = new Uint32Array(2);
+    check(
+      invoke(
+        frame,
+        3,
+        [
+          "ptr",
+          "ptr",
+        ],
+        [
+          ptr(size),
+          ptr(size, 4),
+        ],
+      ),
+      true,
+    );
+    return {
+      width: size[0] ?? 0,
+      height: size[1] ?? 0,
+    };
+  }
+  /** Filter a bitmap source to the given size; the scaler is released through `owned`. */
+  function scale(
+    source: Pointer,
+    width: number,
+    height: number,
+    mode: number,
+    owned: Pointer[],
+  ): Pointer {
+    const scaler = acquire((out) =>
+      invoke(
+        factory,
+        11,
+        [
+          "ptr",
+        ],
+        [
+          out,
+        ],
+      ),
+    );
+    owned.push(scaler);
+    check(
+      invoke(
+        scaler,
+        8,
+        [
+          "ptr",
+          "u32",
+          "u32",
+          "u32",
+        ],
+        [
+          source,
+          width,
+          height,
+          mode,
+        ],
+      ),
+    );
+    return scaler;
+  }
+  /**
+   * Copy a BGRA source into RGBA bytes. Decoders read lazily, so corrupt encoded data surfaces
+   * here; `input` selects the invalid-argument mapping for decoded sources.
+   */
+  function readRgba(
+    source: Pointer,
+    width: number,
+    height: number,
+    input: boolean,
+  ): Buffer {
+    const rgba = Buffer.alloc(width * height * 4);
+    check(
+      invoke(
+        source,
+        7,
+        [
+          "ptr",
+          "u32",
+          "u32",
+          "ptr",
+        ],
+        [
+          null,
+          width * 4,
+          rgba.length,
+          ptr(rgba),
+        ],
+      ),
+      input,
+    );
+    for (let index = 0; index < rgba.length; index += 4) {
+      const blue = rgba[index] ?? 0;
+      rgba[index] = rgba[index + 2] ?? 0;
+      rgba[index + 2] = blue;
+    }
+    return rgba;
+  }
   return {
     decode(bytes: Buffer, mime: ImageMime): Pixels {
       assertActive();
@@ -336,94 +522,8 @@ export function createWIC() {
         input,
       ];
       try {
-        const container = guid(containers[mime]);
-        const decoder = acquire((out) =>
-          invoke(
-            factory,
-            7,
-            [
-              "ptr",
-              "ptr",
-              "ptr",
-            ],
-            [
-              ptr(container),
-              null,
-              out,
-            ],
-          ),
-        );
-        owned.push(decoder);
-        check(
-          invoke(
-            decoder,
-            4,
-            [
-              "ptr",
-              "u32",
-            ],
-            [
-              input,
-              WIC_METADATA_ON_DEMAND,
-            ],
-          ),
-          true,
-        );
-        const count = new Uint32Array(1);
-        check(
-          invoke(
-            decoder,
-            12,
-            [
-              "ptr",
-            ],
-            [
-              ptr(count),
-            ],
-          ),
-          true,
-        );
-        if (count[0] !== 1) {
-          throw new BunawayError({
-            code: "INVALID_ARGUMENT",
-            message: "Only single-frame images are supported.",
-          });
-        }
-        const frame = acquire(
-          (out) =>
-            invoke(
-              decoder,
-              13,
-              [
-                "u32",
-                "ptr",
-              ],
-              [
-                0,
-                out,
-              ],
-            ),
-          true,
-        );
-        owned.push(frame);
-        const size = new Uint32Array(2);
-        check(
-          invoke(
-            frame,
-            3,
-            [
-              "ptr",
-              "ptr",
-            ],
-            [
-              ptr(size),
-              ptr(size, 4),
-            ],
-          ),
-          true,
-        );
-        const width = size[0] ?? 0;
-        const height = size[1] ?? 0;
+        const frame = openFrame(input, mime, owned);
+        const { width, height } = frameSize(frame);
         if (
           width < 1 ||
           width > MAX_IMAGE_DIMENSION ||
@@ -436,72 +536,57 @@ export function createWIC() {
             message: "Decoded image exceeds the pixel limit.",
           });
         }
-        const converter = acquire((out) =>
-          invoke(
-            factory,
-            10,
-            [
-              "ptr",
-            ],
-            [
-              out,
-            ],
-          ),
-        );
-        owned.push(converter);
-        const format = guid(bgraFormat);
-        check(
-          invoke(
-            converter,
-            8,
-            [
-              "ptr",
-              "ptr",
-              "u32",
-              "ptr",
-              "f64",
-              "u32",
-            ],
-            [
-              frame,
-              ptr(format),
-              WIC_DITHER_NONE,
-              null,
-              0,
-              WIC_PALETTE_CUSTOM,
-            ],
-          ),
-          true,
-        );
-        const rgba = Buffer.alloc(width * height * 4);
-        check(
-          invoke(
-            converter,
-            7,
-            [
-              "ptr",
-              "u32",
-              "u32",
-              "ptr",
-            ],
-            [
-              null,
-              width * 4,
-              rgba.length,
-              ptr(rgba),
-            ],
-          ),
-          true,
-        );
-        for (let index = 0; index < rgba.length; index += 4) {
-          const blue = rgba[index] ?? 0;
-          rgba[index] = rgba[index + 2] ?? 0;
-          rgba[index + 2] = blue;
-        }
+        const converted = convert(frame, bgraFormat, owned);
         return {
           width,
           height,
-          rgba,
+          rgba: readRgba(converted, width, height, true),
+        };
+      } finally {
+        for (const object of owned.reverse()) {
+          release(object);
+        }
+      }
+    },
+    decodeScaled(bytes: Buffer, mime: ImageMime, maxDimension: number): Pixels {
+      assertActive();
+      const input = stream(bytes);
+      const owned: Pointer[] = [
+        input,
+      ];
+      try {
+        const frame = openFrame(input, mime, owned);
+        const source = frameSize(frame);
+        // The header size is checked before any pixel is decoded or allocated.
+        if (
+          source.width < 1 ||
+          source.width > MAX_SOURCE_DIMENSION ||
+          source.height < 1 ||
+          source.height > MAX_SOURCE_DIMENSION ||
+          source.width * source.height > MAX_SOURCE_PIXELS
+        ) {
+          throw new BunawayError({
+            code: "INVALID_ARGUMENT",
+            message: "Image file exceeds the decoding size limit.",
+          });
+        }
+        const target = fitWithin(source.width, source.height, maxDimension);
+        // Scaling needs premultiplied alpha so transparent edges do not bleed color.
+        let scaled = convert(frame, premultipliedBgraFormat, owned);
+        if (target.width !== source.width || target.height !== source.height) {
+          scaled = scale(
+            scaled,
+            target.width,
+            target.height,
+            WIC_INTERPOLATION_FANT,
+            owned,
+          );
+        }
+        const converted = convert(scaled, bgraFormat, owned);
+        return {
+          width: target.width,
+          height: target.height,
+          rgba: readRgba(converted, target.width, target.height, true),
         };
       } finally {
         for (const object of owned.reverse()) {
@@ -527,62 +612,15 @@ export function createWIC() {
       ];
       try {
         const source = convert(bitmap, premultipliedBgraFormat, owned);
-        const scaler = acquire((out) =>
-          invoke(
-            factory,
-            11,
-            [
-              "ptr",
-            ],
-            [
-              out,
-            ],
-          ),
+        const scaled = scale(
+          source,
+          width,
+          height,
+          WIC_INTERPOLATION_LINEAR,
+          owned,
         );
-        owned.push(scaler);
-        check(
-          invoke(
-            scaler,
-            8,
-            [
-              "ptr",
-              "u32",
-              "u32",
-              "u32",
-            ],
-            [
-              source,
-              width,
-              height,
-              WIC_INTERPOLATION_LINEAR,
-            ],
-          ),
-        );
-        const result = convert(scaler, bgraFormat, owned);
-        const rgba = Buffer.alloc(width * height * 4);
-        check(
-          invoke(
-            result,
-            7,
-            [
-              "ptr",
-              "u32",
-              "u32",
-              "ptr",
-            ],
-            [
-              null,
-              width * 4,
-              rgba.length,
-              ptr(rgba),
-            ],
-          ),
-        );
-        for (let index = 0; index < rgba.length; index += 4) {
-          const blue = rgba[index] ?? 0;
-          rgba[index] = rgba[index + 2] ?? 0;
-          rgba[index + 2] = blue;
-        }
+        const result = convert(scaled, bgraFormat, owned);
+        const rgba = readRgba(result, width, height, false);
         return {
           width,
           height,

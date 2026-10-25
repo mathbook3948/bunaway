@@ -81,6 +81,9 @@ export class NativeRegistry {
                     name: {
                       type: "string",
                     },
+                    backendOnly: {
+                      const: true,
+                    },
                   },
                   required: [
                     "name",
@@ -151,6 +154,17 @@ export class NativeRegistry {
         if (!this.operations.has(grant)) {
           fail("Policy references an unregistered operation.");
         }
+      }
+    }
+    for (const view of policy.views) {
+      const grants = [
+        ...view.host.permissions,
+        ...view.commands
+          .filter((command) => command.startsWith("plugin."))
+          .map((command) => command.slice("plugin.".length)),
+      ];
+      if (grants.some((name) => this.operations.get(name)?.backendOnly)) {
+        fail("Policy grants a backend-only operation to a view.");
       }
     }
   }

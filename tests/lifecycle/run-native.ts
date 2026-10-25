@@ -279,6 +279,7 @@ if (target === "windows-x64") {
         "test",
         resolve(root, "tests/lifecycle/windows-image.test.ts"),
         resolve(root, "tests/lifecycle/windows-image-file-icon.test.ts"),
+        resolve(root, "tests/lifecycle/windows-image-file.test.ts"),
       ],
       root,
     );
