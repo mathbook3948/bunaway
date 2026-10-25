@@ -1432,7 +1432,11 @@
           "appendBytes",
           "appendText"
         ],
-        "reference/host/storage-transfers": ["copyFile", "move"],
+        "reference/host/storage-transfers": [
+          "copyFile",
+          "copyDirectory",
+          "move"
+        ],
         "reference/host/storage-directories": [
           "readDirectory",
           "readDirectoryPage",
@@ -1553,7 +1557,11 @@
       "storage.appendBytes",
       "storage.appendText"
     ],
-    "reference/host/storage-transfers": ["storage.copyFile", "storage.move"],
+    "reference/host/storage-transfers": [
+      "storage.copyFile",
+      "storage.copyDirectory",
+      "storage.move"
+    ],
     "reference/host/storage-directories": [
       "storage.readDirectory",
       "storage.readDirectoryPage",

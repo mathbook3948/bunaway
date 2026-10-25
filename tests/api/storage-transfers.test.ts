@@ -13,6 +13,7 @@ const endpoints = {
 test("file transfers require two explicit endpoints and reject implicit overwrite or recursive policy", async () => {
   for (const operation of [
     "storage.copyFile",
+    "storage.copyDirectory",
     "storage.move",
   ]) {
     expect(
@@ -52,7 +53,16 @@ test("file transfers require two explicit endpoints and reject implicit overwrit
         code: "INVALID_ARGUMENT",
       });
     }
-    expect(await parsers.validateOutput(operation, null)).toBeNull();
+    if (operation === "storage.copyDirectory") {
+      const copied = {
+        bytes: 8,
+        files: 3,
+        directories: 1,
+      };
+      expect(await parsers.validateOutput(operation, copied)).toEqual(copied);
+    } else {
+      expect(await parsers.validateOutput(operation, null)).toBeNull();
+    }
   }
 });
 
@@ -62,6 +72,7 @@ test("copy and move grants do not imply one another or general read/write", () =
   ]);
   for (const operation of [
     "storage.copyFile",
+    "storage.copyDirectory",
     "storage.move",
   ]) {
     for (const target of registry.operations.keys()) {

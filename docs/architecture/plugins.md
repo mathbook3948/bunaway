@@ -65,7 +65,7 @@ src 내부 파일과 tsconfig 별칭은 Bun이 해석하므로 로컬 browser �
 storage는 각 플랫폼의 operations에 입력과 출력 스키마, handler를 함께 선언한다.
 최상위 공통 작업 맵은 없으며 `src/index.ts`는 실행 위치, 인스턴스 수명과 작업 맵을 조립한다.
 두 플랫폼의 공통 작업은 자원을 만들지 않는 operations.ts에 한 번 선언한다.
-move, remove, removeRecursive와 directorySize도 같은 목록에 있다.
+move, copyDirectory, remove, removeRecursive와 directorySize도 같은 목록에 있다.
 OS 자원 구현은 기존 `src/platforms/<platform>.ts`에 있어 중립 출력과 다른 OS 출력에서 제외된다.
 지원 여부는 각 작업 맵의 키로 판단한다.
 공개 Storage 인터페이스와 재사용할 값 스키마는 플러그인 작성자가 정한다.

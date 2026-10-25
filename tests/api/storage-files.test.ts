@@ -19,6 +19,7 @@ import {
   MAX_STORAGE_BYTES,
   MAX_STORAGE_TEXT_BYTES,
 } from "../../plugins/storage/src/contract.ts";
+import { copyDirectoryTree } from "../../plugins/storage/src/platforms/node-directory-copy.ts";
 import {
   NodeStorage,
   storageError,
@@ -918,6 +919,302 @@ test("move renames files and directories and refuses an existing destination or 
       }),
     ),
   ).toBe("INVALID_ARGUMENT");
+});
+
+test("copyDirectory copies a nested tree, empty directories and empty files, and reports what it copied", async () => {
+  mkdirSync(at("src", "한글", "deep"), {
+    recursive: true,
+  });
+  mkdirSync(at("src", "empty"));
+  writeFileSync(at("src", "a.txt"), "alpha");
+  writeFileSync(
+    at("src", "한글", "b.bin"),
+    Buffer.from([
+      0,
+      255,
+      1,
+    ]),
+  );
+  writeFileSync(at("src", "한글", "deep", "zero"), "");
+  const result = await storage.copyDirectory({
+    from: at("src"),
+    to: at("dst"),
+  });
+  expect(result).toEqual({
+    bytes: 8,
+    files: 3,
+    directories: 3,
+  });
+  expect(readFileSync(at("dst", "a.txt"), "utf8")).toBe("alpha");
+  expect([
+    ...readFileSync(at("dst", "한글", "b.bin")),
+  ]).toEqual([
+    0,
+    255,
+    1,
+  ]);
+  expect(readFileSync(at("dst", "한글", "deep", "zero"))).toHaveLength(0);
+  expect(existsSync(at("dst", "empty"))).toBe(true);
+  expect(readFileSync(at("src", "a.txt"), "utf8")).toBe("alpha");
+});
+
+test("copyDirectory never merges into or replaces an existing destination", async () => {
+  mkdirSync(at("src"));
+  writeFileSync(at("src", "a.txt"), "new");
+  mkdirSync(at("dst"));
+  writeFileSync(at("dst", "a.txt"), "old");
+  writeFileSync(at("file"), "x");
+  for (const to of [
+    at("dst"),
+    at("file"),
+  ]) {
+    expect(
+      await asyncCodeOf(() =>
+        storage.copyDirectory({
+          from: at("src"),
+          to,
+        }),
+      ),
+    ).toBe("INVALID_ARGUMENT");
+  }
+  expect(readFileSync(at("dst", "a.txt"), "utf8")).toBe("old");
+  expect(readFileSync(at("file"), "utf8")).toBe("x");
+});
+
+test("copyDirectory refuses a missing source, a file source and a missing destination parent", async () => {
+  writeFileSync(at("file"), "x");
+  mkdirSync(at("src"));
+  for (const input of [
+    {
+      from: at("missing"),
+      to: at("dst"),
+    },
+    {
+      from: at("file"),
+      to: at("dst"),
+    },
+    {
+      from: at("src"),
+      to: at("no-parent", "dst"),
+    },
+  ]) {
+    expect(await asyncCodeOf(() => storage.copyDirectory(input))).toBe(
+      "INVALID_ARGUMENT",
+    );
+  }
+  expect(existsSync(at("dst"))).toBe(false);
+});
+
+test("copyDirectory refuses a destination inside the source before creating anything", async () => {
+  mkdirSync(at("src", "sub"), {
+    recursive: true,
+  });
+  writeFileSync(at("src", "a.txt"), "x");
+  for (const to of [
+    at("src", "copy"),
+    at("src", "sub", "copy"),
+  ]) {
+    expect(
+      await asyncCodeOf(() =>
+        storage.copyDirectory({
+          from: at("src"),
+          to,
+        }),
+      ),
+    ).toBe("INVALID_ARGUMENT");
+    expect(existsSync(to)).toBe(false);
+  }
+});
+
+test("copyDirectory refuses a destination that a link places inside the source before creating anything", async () => {
+  mkdirSync(at("src"));
+  writeFileSync(at("src", "a.txt"), "x");
+  if (!link(at("src"), at("alias"), "junction")) {
+    return;
+  }
+  expect(
+    await asyncCodeOf(() =>
+      storage.copyDirectory({
+        from: at("src"),
+        to: at("alias", "copy"),
+      }),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+  // The destination is resolved before anything is created, so the source is left untouched.
+  expect(existsSync(at("src", "copy"))).toBe(false);
+});
+
+test("copyDirectory fails on a link entry without copying or touching its target", async () => {
+  mkdirSync(at("src"));
+  mkdirSync(at("outside"));
+  writeFileSync(at("outside", "secret.txt"), "secret");
+  if (!link(at("outside"), at("src", "ln"), "junction")) {
+    return;
+  }
+  expect(
+    await asyncCodeOf(() =>
+      storage.copyDirectory({
+        from: at("src"),
+        to: at("dst"),
+      }),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+  expect(existsSync(at("dst", "ln"))).toBe(false);
+  expect(existsSync(at("outside", "secret.txt"))).toBe(true);
+});
+
+test("copyDirectory refuses a destination below a linked ancestor of the source's own directory", async () => {
+  mkdirSync(at("src", "sub"), {
+    recursive: true,
+  });
+  if (!link(at("src"), at("alias"), "junction")) {
+    return;
+  }
+  expect(
+    await asyncCodeOf(() =>
+      storage.copyDirectory({
+        from: at("src"),
+        to: at("alias", "sub", "copy"),
+      }),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+  expect(existsSync(at("src", "sub", "copy"))).toBe(false);
+});
+
+test("the walk stops at the destination root when a link places it inside the source after the check", async () => {
+  mkdirSync(at("src"));
+  writeFileSync(at("src", "a.txt"), "x");
+  // Bypass the pre-check on purpose: the destination is inside the source, as if a link had been
+  // created after the check passed. The file identity test must still end the walk.
+  expect(
+    await asyncCodeOf(() =>
+      copyDirectoryTree(
+        at("src"),
+        at("src", "copy"),
+        {
+          entries: 100,
+          depth: 8,
+        },
+        () => {},
+        undefined,
+        () => {},
+      ),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+});
+
+test("the walk stops between entries when cancelled after the first file is copied", async () => {
+  mkdirSync(at("src"));
+  for (const name of [
+    "a",
+    "b",
+    "c",
+  ]) {
+    writeFileSync(at("src", name), "x");
+  }
+  const controller = new AbortController();
+  let copied = 0;
+  expect(
+    await asyncCodeOf(() =>
+      copyDirectoryTree(
+        at("src"),
+        at("dst"),
+        {
+          entries: 100,
+          depth: 8,
+        },
+        () => {
+          copied++;
+          controller.abort();
+        },
+        controller.signal,
+        () => {},
+      ),
+    ),
+  ).toBe("CANCELLED");
+  expect(copied).toBe(1);
+});
+
+test("copyDirectory follows a link given as the root but copies the files below it", async () => {
+  mkdirSync(at("real"));
+  writeFileSync(at("real", "a.txt"), "x");
+  if (!link(at("real"), at("alias"), "junction")) {
+    return;
+  }
+  expect(
+    await storage.copyDirectory({
+      from: at("alias"),
+      to: at("dst"),
+    }),
+  ).toMatchObject({
+    files: 1,
+  });
+  expect(readFileSync(at("dst", "a.txt"), "utf8")).toBe("x");
+});
+
+test("copyDirectory enforces the entry and depth bounds", async () => {
+  mkdirSync(at("src", "one", "two"), {
+    recursive: true,
+  });
+  writeFileSync(at("src", "a"), "x");
+  writeFileSync(at("src", "b"), "x");
+  const input = (name: string) => ({
+    from: at("src"),
+    to: at(name),
+  });
+  expect(
+    await storage.copyDirectoryWithin(input("ok"), undefined, {
+      entries: 4,
+      depth: 2,
+    }),
+  ).toMatchObject({
+    files: 2,
+    directories: 2,
+  });
+  expect(
+    await asyncCodeOf(() =>
+      storage.copyDirectoryWithin(input("entries"), undefined, {
+        entries: 3,
+        depth: 2,
+      }),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+  expect(
+    await asyncCodeOf(() =>
+      storage.copyDirectoryWithin(input("depth"), undefined, {
+        entries: 4,
+        depth: 1,
+      }),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+});
+
+test("copyDirectory stops when cancelled or when the adapter is disposed", async () => {
+  mkdirSync(at("src"));
+  writeFileSync(at("src", "f"), "x");
+  const controller = new AbortController();
+  controller.abort();
+  expect(
+    await asyncCodeOf(() =>
+      storage.copyDirectory(
+        {
+          from: at("src"),
+          to: at("dst"),
+        },
+        controller.signal,
+      ),
+    ),
+  ).toBe("CANCELLED");
+  expect(existsSync(at("dst"))).toBe(false);
+  storage.dispose();
+  expect(
+    await asyncCodeOf(() =>
+      storage.copyDirectory({
+        from: at("src"),
+        to: at("dst2"),
+      }),
+    ),
+  ).toBe("CANCELLED");
 });
 
 test("a disposed adapter refuses work", () => {

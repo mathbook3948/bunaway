@@ -220,6 +220,10 @@ export interface StorageInstance {
   appendText(input: StorageWrite): null;
   appendBytes(input: StorageBytesWrite): null;
   copyFile(input: StorageTransfer): null;
+  copyDirectory(
+    input: StorageTransfer,
+    signal?: AbortSignal,
+  ): Promise<StorageDirectorySize>;
   readDirectory(input: StorageLocation): StorageDirectoryEntry[];
   readDirectoryPage(input: StorageDirectoryPageRead): StorageDirectoryPage;
   readDirectoryRecursive(
@@ -262,6 +266,10 @@ export interface Storage {
     input: StorageTransfer,
     options?: NativeInvokeOptions,
   ): Promise<null>;
+  copyDirectory(
+    input: StorageTransfer,
+    options?: NativeInvokeOptions,
+  ): Promise<StorageDirectorySize>;
   move(input: StorageTransfer, options?: NativeInvokeOptions): Promise<null>;
   readDirectory(
     input: StorageLocation,
