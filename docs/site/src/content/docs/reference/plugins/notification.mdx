@@ -78,6 +78,10 @@ AppUserModelID가 필요합니다. Windows 호스트와 설치 바로가기는 �
 권한을 허용했다는 뜻이 아닙니다. 설정 화면에서 돌아오면 `getStatus`를 다시 호출하세요.
 OS에 해당 페이지나 처리 앱이 없거나 요청이 거부되면 오류를 반환합니다.
 
+권한을 요청하는 `requestPermission` 같은 API는 없습니다. Windows 데스크톱 앱의 toast에는 동의 팝업이 없고 앱이
+알림 설정을 바꿀 수도 없습니다. Electron 메인 프로세스의 `Notification`도 권한 요청 API가 없고, Tauri의 요청 호출은
+데스크톱에서 항상 허용으로 응답합니다. 앱은 `getStatus`로 상태를 읽고 사용자가 선택했을 때 `openSettings`를 호출하세요.
+
 ## 정책과 오류
 
 | 작업 | 입력 | 권한 |
@@ -380,6 +384,11 @@ MSIX는 아직 `UNSUPPORTED`입니다. 클릭을 받아도 자동으로 창을 �
 진행률 막대와 제목, 본문 밖의 추가 텍스트 줄도 없습니다. 본문은 `body` 하나입니다. 진행률은
 `windows.setTaskbarProgress`나 앱 화면으로 보이고, 끝났을 때 같은 `id`와 `group`으로 `show`해 알림을 교체하세요.
 Electron에서 `toastXml`로 이런 내용을 쓰던 앱은 옮길 수 없습니다.
+
+임의 파일 첨부 필드와 클릭 동작 종류(action type, 카테고리) 등록도 없습니다. Windows toast에 파일 첨부 개념이 없고
+Electron도 제공하지 않으며, Tauri의 `attachments`와 action type은 모바일용입니다. 보이는 이미지와 소리는 `icon`,
+`image`, `sound` 필드를 쓰고, 클릭은 `notification.clicked`, `notification.actionInvoked`, `notification.dismissed`
+이벤트로 받아 처리하세요. 자세한 근거는 [ADR 0052](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0052-notification-permission-request-and-attachments.md)에 있습니다.
 
 ## 사용자 지정 toast XML
 
