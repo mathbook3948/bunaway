@@ -17,7 +17,8 @@ Electron의 `app.setAccessibilitySupportEnabled`, `getAccessibilitySupportFeatur
   연결을 알리며, WebView 접근성 트리를 강제로 켜는 기능이 아니다.
 - [ADR 0030](./0030-launch-arguments-and-environment.md)은 앱 정의에 실행 인자, 환경 변수, switch 필드를 두지 않기로 했다.
   앱이 접근성 관련 switch를 시작 시 고정하려면 이 필드가 필요하다. 배포 앱의 프로세스 환경 변수
-  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` 경로는 0030이 막지 않으므로 이 결정도 막지 않는다.
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` 경로는 0030이 막지 않으므로 이 결정도 막지 않는다. 다만 0030 결정 4처럼 `bunaway dev` 호스트는 이 변수를 받지 않아 개발 실행에서
+  시험한 결과가 배포 앱 동작을 대변하지 않는다.
 - Tauri v2(`tauri` 2.12.5, `wry` 0.57.1 기준)에는 Electron의 접근성 지원 설정 API에 해당하는 공개 API가 없다. Windows에서
   창 생성 시 `additionalBrowserArgs`로 `--force-renderer-accessibility`를 넘기는 방법만 있고, macOS와 Linux에서는 이 인자도
   지원하지 않는다.
@@ -28,7 +29,7 @@ Electron의 `app.setAccessibilitySupportEnabled`, `getAccessibilitySupportFeatur
 ## 결정
 
 1. 접근성 지원을 강제로 켜거나 끄는 API, 지원 기능을 조회하거나 선택하는 API를 제공하지 않는다.
-2. 접근성 지원 상태의 조회는 기존 `appearance.getAccessibilityState`로 한정한다.
+2. 접근성 지원 상태를 바꾸는 경로는 두지 않는다. 읽기는 기존 `appearance.getAccessibilityState`, `getPreferences`와 `appearance.changed`가 맡는다.
 3. 접근성 트리와 키보드 탐색의 실제 동작 검증은 별도 항목(WebView 접근성 트리와 사용자 타이틀바의 키보드 탐색 검증)으로 남기며
    이 결정이 대신하지 않는다.
 
