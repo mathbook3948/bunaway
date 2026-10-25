@@ -393,6 +393,8 @@ Windows에서 같은 origin 안의 탐색, 뒤로와 앞으로 이동, reload �
 
 history의 offset과 index로 이동하는 메서드는 없습니다. 여러 단계 이동은 `goBack`과 `goForward`를 반복하되, 두 메서드는 이동을 시작했는지만 알려주며 반환 직후의 `getWebViewState`가 이동 결과를 반영한다고 보장하지 않습니다.
 
+history 항목의 조회, 삭제, 전체 초기화와 복원도 제공하지 않습니다. 마지막 위치를 이어 가려면 앱이 URL을 직접 저장했다가 `navigate`로 열고, 이렇게 열면 새 탐색 하나라 이전 항목으로의 `goBack`은 복원되지 않습니다.
+
 ```ts
 const state = await windows.getWebViewState();
 await windows.setZoomFactor({ factor: 1.25 });

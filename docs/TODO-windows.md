@@ -683,7 +683,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 
 - [x] `goBack`, `goForward`와 `getWebViewState`로 기본 history 이동과 가능 여부 조회를 제공한다.
 - [x] WebView history의 offset과 index 이동은 제공하지 않기로 결정했다. Electron은 항목 조회와 함께 제공하고 Tauri에는 없으며, WebView2에는 전용 메서드가 없어 DevTools 프로토콜이나 `history.go` 래핑이 필요하고, `history.go`는 이동 성공 여부를 알 수 없다. 여러 단계 이동은 `goBack`과 `goForward`를 반복한다. [ADR 0049](./decisions/0049-webview-history-offset-navigation.md).
-- [ ] 탐색 history의 조회, 삭제, 전체 초기화와 복원을 제공한다.
+- [x] 결정 완료: WebView 탐색 history의 항목 조회, 삭제, 전체 초기화와 복원은 제공하지 않는다. WebView2에는 조회와 비우기를 DevTools 프로토콜로 만들 수 있으나 복원에 해당하는 경로가 없다. 앱은 URL을 직접 기록하고 `navigate`로 이어 간다. [ADR 0087](./decisions/0087-webview-history-entries.md).
 - [x] `setZoomFactor`와 `getWebViewState`로 controller zoom factor를 설정하고 실제 값을 조회한다.
 - [x] 결정 완료: zoom level과 visual zoom 한도 API는 제공하지 않는다. 앱은 `setZoomFactor`(입력 0.25~5)와 `getWebViewState`의 `zoomFactor`를 쓰고 level은 앱에서 변환한다. [ADR 0073](./decisions/0073-webview-zoom-level-and-limits.md).
 - [x] 결정 완료: 페이지 find, 결과 이벤트와 검색 종료 API는 제공하지 않고 검색을 렌더러의 웹 표준 API로 구현한다. [ADR 0059](./decisions/0059-webview-page-find.md).
