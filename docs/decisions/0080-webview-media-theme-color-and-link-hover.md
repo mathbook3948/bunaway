@@ -9,12 +9,13 @@ status: accepted
 ## 배경
 
 아래 Electron, Tauri, WebView2 서술은 해당 프로젝트의 공개 문서와 소스 확인에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다.
+확인한 버전은 Electron v45.0.0, Tauri 2.12.5, wry 0.57.1, WebView2 SDK 1.0.4314.35이다.
 
 WebView의 media 시작과 중단, HTML `theme-color` 변경, 링크 위에 포인터가 놓였을 때의 대상 URL을 앱에 알리는 이벤트를 제공할지 정해야 했다.
 
 - Electron의 `webContents`는 `media-started-playing`, `media-paused`, `did-change-theme-color`, `update-target-url` 이벤트를
   메인 프로세스에서 제공한다. `update-target-url`은 마우스가 링크 위로 이동하거나 키보드 포커스가 링크로 옮겨질 때 대상 URL을 알린다.
-- Tauri 2와 wry의 공개 이벤트와 핸들러에는 이 세 가지에 해당하는 것이 없다(Tauri 2.12, wry 0.57 소스 기준).
+- Tauri 2와 wry의 공개 이벤트와 핸들러에는 이 세 가지에 해당하는 것이 없다(소스 기준).
   Tauri의 `ThemeChanged`는 창의 시스템 테마 변경이며 페이지의 `theme-color`와 무관하다.
   Windows에서는 WebView2 객체에 접근해 직접 등록할 수 있다.
 - WebView2의 `IsDocumentPlayingAudioChanged`(`ICoreWebView2_8`)는 WebView가 audio를 재생 중인지(음소거와 무관하며
@@ -27,13 +28,13 @@ WebView의 media 시작과 중단, HTML `theme-color` 변경, 링크 위에 포�
 - 이 저장소의 Windows 호스트는 `getWebViewAudioState`로 음소거와 문서의 audio 재생 상태를 조회한다. 그 상태의 변경 이벤트는 별도 TODO
   항목이다. 페이지 제목은 `windows.documentTitleChanged`로 전달한다.
 - 앱이 작성하고 제어하는 페이지는 `<meta name="theme-color">`,
-  `<video>`와 `<audio>`의 `play`와 `pause` 이벤트, 링크의 `pointerover`와 `focus` 이벤트를 직접 관찰할 수 있고, 값을 앱 명령으로 백엔드에 보낼 수 있다.
+  `<video>`와 `<audio>`의 `play`와 `pause` 이벤트, 링크의 `pointerover`와 `focusin` 이벤트를 직접 관찰할 수 있고, 값을 앱 명령으로 백엔드에 보낼 수 있다.
 
 ## 결정
 
 1. media 시작과 중단, `theme-color` 변경, 링크 hover URL을 알리는 새 이벤트, 작업과 권한을 추가하지 않는다.
-2. 앱 UI가 이 값을 필요로 하면 페이지에서 직접 관찰한다(`meta[name=theme-color]`의 `MutationObserver`, media 요소의 `play`와 `pause`,
-   링크의 `pointerover`와 `focus`). 백엔드가 필요로 하면 UI가 앱 명령으로 보낸다.
+2. 앱 UI가 이 값을 필요로 하면 페이지에서 직접 관찰한다(`meta[name=theme-color]`의 `MutationObserver`, media 요소의 `play`와 `pause`(버블링되지 않으므로
+   캡처 단계로 듣는다), 링크의 `pointerover`와 `focusin`). 백엔드가 필요로 하면 UI가 앱 명령으로 보낸다.
 3. 문서의 audio 재생 상태는 기존 `getWebViewAudioState`로 조회한다. 그 변경 이벤트는 별도 항목에서 다루며 이 결정에 포함하지 않는다.
 4. `origins`에 넣은 외부 출처처럼 앱이 제어하지 않는 페이지의 값이나, 페이지에서 알 수 없는 media 상태를 확인해야 하는 용도가 나오면 별도 결정에서 다룬다.
 
@@ -43,7 +44,7 @@ WebView의 media 시작과 중단, HTML `theme-color` 변경, 링크 위에 포�
   작게 유지한다.
 - WebView2에는 `theme-color`에 대응하는 이벤트가 없어 제공하려면 호스트가 문서에 스크립트를 삽입해 관찰해야 한다. media 요소 단위의 시작과
   중단도 같은 방식이 필요하다. 문서에 스크립트를 삽입하는 기능은 이 결정과 별개로 TODO의 문서 초기화 script 항목에서 다룬다.
-- 링크 hover URL은 페이지 UI가 `pointerover`와 `focus`로 얻을 수 있다. WebView2의 상태 표시줄 텍스트는 URL과 상태 메시지를 구분하지 않는
+- 링크 hover URL은 페이지 UI가 `pointerover`와 `focusin`으로 얻을 수 있다. WebView2의 상태 표시줄 텍스트는 URL과 상태 메시지를 구분하지 않는
   간접 경로이고 동작 조건이 확인되지 않았으므로, 호스트가 전달하려면 별도 이벤트와 권한을 계약에 추가하고 그 조건을 먼저 확인해야 한다.
 
 ## 결과
