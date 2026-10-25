@@ -1215,7 +1215,7 @@ Worker에서 검사한다. 메뉴, 사용자 정의 아이콘, 단축키와 입�
 `mise run host:windows`에 포함되며 사용자 클릭과 키보드 메뉴 조작의 수동 검증을 대신하지 않는다.
 
 `api/tray.test.ts`는 ICO 범위, UTF-16 tooltip, 권한과 입력 대기의 정리를 검사한다.
-`lifecycle/windows-tray-controls.test.ts`와 `windows-tray-ui.test.ts`는 실제 shell 업데이트와 synthetic mouse/TaskbarCreated 메시지, UI Worker와 HWND 정리를 확인한다.
+`lifecycle/windows-tray-controls.test.ts`와 `windows-tray-ui.test.ts`는 실제 shell 업데이트와 synthetic mouse/TaskbarCreated 메시지, UI Worker와 HWND 정리를 확인한다. `windows-tray-ui.test.ts`는 `tray.destroy`와 `tray.create`도 확인한다: 제거 뒤 HWND 소멸, keep-alive 종료 메시지 창 유지, 제거 중 `UNSUPPORTED`, 재생성 뒤 새 HWND와 입력 재수신, 중복 `create`의 `INVALID_ARGUMENT`.
 물리 마우스나 실제 Explorer process 재시작은 별도 검증이다.
 `lifecycle/tray-cleanup.test.ts`는 실제 Tray 소유자를 별도 프로세스에 번들하고 Win32
 해제 실패를 주입해 핸들 소유권, 재시도와 종료 중 콜백 차단을 확인한다.

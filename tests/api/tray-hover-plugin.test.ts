@@ -26,6 +26,7 @@ function harness() {
     displayBalloon: () => {},
     removeBalloon: () => {},
     hwnd: 1n,
+    popupOpen: false,
     get: () => null,
     getBounds: () => null,
     setTooltip: () => {},
@@ -58,6 +59,8 @@ function harness() {
     setClickBehavior: owner.setClickBehavior,
     setVisible: owner.setVisible,
     focus: owner.focus,
+    remove: () => false,
+    create: () => {},
     popUpContextMenu: owner.popUpContextMenu,
     subscribe(receive) {
       listener = receive;

@@ -20,6 +20,8 @@ function services(
     setClickBehavior: () => {},
     setVisible: () => {},
     focus: () => true,
+    remove: () => false,
+    create: () => {},
     popUpContextMenu,
     subscribe: () => () => {},
     emit: () => {},

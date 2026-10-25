@@ -33,6 +33,7 @@ function harness(options: { configured?: boolean } = {}) {
   let balloon: BalloonCallback | undefined;
   const owner: BalloonTrayOwner = {
     hwnd: 1n,
+    popupOpen: false,
     get: () => null,
     getBounds: () => null,
     setTooltip: () => {},
@@ -73,6 +74,8 @@ function harness(options: { configured?: boolean } = {}) {
     setClickBehavior: owner.setClickBehavior,
     setVisible: owner.setVisible,
     focus: owner.focus,
+    remove: () => false,
+    create: () => {},
     popUpContextMenu: owner.popUpContextMenu,
     subscribe: () => () => {},
     emit: (name, payload) =>

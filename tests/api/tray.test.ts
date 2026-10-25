@@ -208,10 +208,23 @@ test("tray notifications and controls keep ownership in host services and cancel
     menuOnRightClick: true,
     visible: true,
   };
+  let present = true;
   const services: NativeTrayServices = {
-    get: () => ({
-      ...state,
-    }),
+    get: () =>
+      present
+        ? {
+            ...state,
+          }
+        : null,
+    remove() {
+      const removed = present;
+      present = false;
+      return removed;
+    },
+    create() {
+      expect(present).toBe(false);
+      present = true;
+    },
     getBounds: () => null,
     setTooltip(tooltip) {
       state = {
@@ -343,6 +356,21 @@ test("tray notifications and controls keep ownership in host services and cancel
     visible: true,
   });
   expect(await invoke("focus", null)).toBe(true);
+  // Destroying twice is not an error; create registers the declared tray again.
+  expect(await invoke("destroy", null)).toBeNull();
+  expect(await invoke("get", null)).toBeNull();
+  expect(await invoke("destroy", null)).toBeNull();
+  expect(await invoke("create", null)).toMatchObject({
+    id: "main",
+    visible: true,
+  });
+  await expect(
+    invoke("destroy", {
+      extra: 1,
+    }),
+  ).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
   const waiting = invoke("waitForEvent", null);
   // Parsing is asynchronous; let the owning adapter install the wait before native input.
   await Bun.sleep(0);

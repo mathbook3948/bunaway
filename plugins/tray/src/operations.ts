@@ -9,6 +9,8 @@ import {
   trayEventSchema,
 } from "#tray/contract";
 import {
+  create,
+  destroy,
   displayBalloon,
   focus,
   get,
@@ -70,6 +72,16 @@ export const trayOperations = {
     }),
     output: z.null(),
     handler: ({ visible }, { instance }) => setVisible(instance, visible),
+  }),
+  create: operation({
+    input: z.null(),
+    output: snapshotSchema.nullable(),
+    handler: (_input, { instance }) => create(instance),
+  }),
+  destroy: operation({
+    input: z.null(),
+    output: z.null(),
+    handler: (_input, { instance }) => destroy(instance),
   }),
   focus: operation({
     input: z.null(),

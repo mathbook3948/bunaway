@@ -146,6 +146,20 @@ export function setVisible(state: State, visible: boolean): null {
   return null;
 }
 
+/** Removes the icon; a no-op when it is already removed. The declared tray can be created again. */
+export function destroy(state: State): null {
+  if (requireTray(state.services).remove()) {
+    state.created.tray = undefined;
+  }
+  return null;
+}
+
+/** Registers the tray declared by `desktop.tray` again and returns its snapshot. */
+export function create(state: State) {
+  requireTray(state.services).create();
+  return get(state);
+}
+
 export function focus(state: State) {
   return requireTray(state.services).focus();
 }
