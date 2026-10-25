@@ -523,7 +523,7 @@ export class WebView {
     );
     const notify = () => changes.check();
     this.on(81, "57d90347-cd0e-4952-a4a2-7483a2756f08", notify, audio);
-    this.on(85, "5def109a-2f4b-11eb-adc1-0242ac120002", notify, audio);
+    this.on(85, "5def109a-2f4b-49fa-b7f6-11c39e513328", notify, audio);
   }
 
   /** Apply browser settings and origin/resource policy before the view is shown. */
