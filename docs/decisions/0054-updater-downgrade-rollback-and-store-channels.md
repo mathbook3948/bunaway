@@ -24,6 +24,8 @@ status: accepted
 - 패키징 채널은 `win-direct`(Inno Setup 설치 파일), `win-store-unpackaged`(Store에 제출하는 일반 EXE/MSI),
   `win-store-msix`(이름만 등록돼 있고 패키지 생성은 차단됨)다([ADR 0005](./0005-packaging-contract.md),
   [플랫폼 지원 표](../platform-support/README.md)).
+- 아래 MSIX와 패키지 ID 서술은 Windows의 일반 동작이며 이 저장소의 테스트로 검증한 것이 아니다. `GetCurrentPackagePath`는
+  이 저장소에서 아직 쓰지 않는다.
 - MSIX로 설치된 앱은 읽기 전용 패키지 폴더에서 실행되고, 패키지의 교체는 패키지 관리자(Store 포함)만 한다. 앱이 내려받은
   EXE로 이 패키지를 바꿀 수 없다. 패키지 ID가 있는 프로세스는 `GetCurrentPackageFullName`으로 구분할 수 있으며
   `autostart`와 `notification` 플러그인이 이미 이 호출을 쓴다. 다만 패키지 ID만으로는 MSIX 설치와 구분되지 않는다.
@@ -38,13 +40,16 @@ status: accepted
    이전 동작으로 되돌리려는 앱은 이전 코드를 더 높은 버전 번호로 다시 게시한다(roll forward).
 2. 프레임워크는 설치 단계에서 파일을 직접 교체하거나 이전 버전을 보관해 되돌리는 롤백을 구현하지 않는다. 설치는 검증된
    설치 파일을 실행하는 것으로 한다. `win-direct`의 Inno Setup 설치 프로그램은 현재 설치 후 실패를 되돌리지 않고,
-   원인을 해결한 뒤 같은 설치 프로그램을 다시 실행해 복구하도록 정해져 있다([패키징 README](../../packages/packaging/README.md)).
-   따라서 설치가 중간에 실패하면 일부 파일만 바뀐 상태가 남을 수 있고, 프레임워크는 이를 되돌리지 않는다.
+   원인을 해결한 뒤 같은 설치 프로그램을 다시 실행해 복구하도록 정해져 있다([패키징 README](../../packages/packaging/README.md)의
+   Run 등록, 파일 연결 등록과 이전 EXE 정리 단계). 파일 복사 단계 자체의 실패 동작은 그 문서가 정하지 않았으므로 이 결정도
+   정하지 않으며, 프레임워크는 어느 단계의 실패도 되돌리지 않는다.
    - 현재 동작(구현됨): 내려받기 단계의 실패는 설치된 앱을 바꾸지 않는다(`download` 동작).
    - 설치 구현이 지켜야 할 조건(구현 예정): 설치 파일은 실행 직전에 SHA-256을 다시 확인하고, 앱이 `authenticode`를 설정했다면
      서명도 다시 확인한다([updater 문서](../site/src/content/docs/reference/plugins/updater.mdx)의 "검증이 끝난 뒤 설치 전에
      파일을 바꾸는 것은 막지 않는다"는 제한을 닫는 조건이다). 설치 파일을 시작하지 못한 경우는 앱이 살아 있는 동안 오류로
-     전달한다. 설치 실패 뒤의 복구는 같은 설치 파일을 다시 실행하는 방식을 전제로 한다.
+     전달한다. 설치 실패 뒤의 복구는 같은 설치 파일을 다시 실행하는 방식을 전제로 하므로, 설치를 시작한 뒤에도 검증된 설치 파일을
+   앱 데이터 폴더에 남겨 두어야 한다. 그 파일을 언제 지울지는 설치 항목에서 정한다(`download`는 다음 성공한 내려받기에서
+   다른 `.package`를 지운다).
    앱이 종료된 뒤의 설치 실패를 어떻게 알리고 relaunch할지, 설치와 종료 승인, relaunch의 구체적 계약은 [TODO](../TODO-windows.md)의 해당 항목에서 이 결정을 전제로 정한다.
 3. 패키지 ID가 있고 실행 파일이 패키지 설치 위치(`GetCurrentPackagePath`) 안에 있는 프로세스, 곧 MSIX로 설치된 앱에서는 `updater`가 `UNSUPPORTED`(`details.reason: "managedByStore"`)로 실패한다.
    `check`와 `download` 모두 해당한다. 앱은 같은 코드에서 이 오류를 보고 업데이트 UI를 숨기거나 Store의 업데이트 안내로

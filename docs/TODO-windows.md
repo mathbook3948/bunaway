@@ -1041,7 +1041,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
   서명한 MSI는 실제 서명으로 시험하지 못했다. macOS 서명 검증과 앱 전용 서명 키(minisign 방식)도 남는다.
 - [ ] 설치, 종료 승인과 relaunch를 연결한다.
 - [x] downgrade, partial failure와 rollback의 지원 범위를 결정한다. 결정 완료: downgrade와 프레임워크의 롤백은 제공하지 않고
-  설치 후 실패는 되돌리지 않고 설치 파일 재실행으로 복구한다. [ADR 0054](./decisions/0054-updater-downgrade-rollback-and-store-channels.md)를 따른다.
+  프레임워크는 설치 실패를 되돌리지 않고, 설치 후 단계의 실패는 설치 파일 재실행으로 복구한다. [ADR 0054](./decisions/0054-updater-downgrade-rollback-and-store-channels.md)를 따른다.
 - [ ] Store 업데이트와 자체 updater의 사용 조건을 구분한다. MSIX 설치는 `UNSUPPORTED`(`managedByStore`)로 결정했고
   구현은 `win-store-msix` 패키지 생성과 함께 한다. `win-store-unpackaged`는 Store 정책 확인 뒤 정한다.
   [ADR 0054](./decisions/0054-updater-downgrade-rollback-and-store-channels.md)를 따른다.
