@@ -202,7 +202,8 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 창 불투명 background color를 제공한다(`window.backgroundColor`, `setBackgroundColor`, `getBackgroundColor`). `#RGB`와 `#RRGGBB`만 받고 창별 `WM_ERASEBKGND`와 WebView2 `DefaultBackgroundColor`를 같은 색으로 맞춘다. macOS는 아직 없다.
 - [ ] 창 투명 배경을 제공한다. 알파 0은 DWM 합성과 layered 스타일(opacity, click-through가 쓰는 스타일 비트)과 함께 정해야 한다.
 - [x] shadow의 설정과 조회를 제공한다(`windows.setHasShadow`, `hasShadow`). `titlebar: "custom"` 창은 DWM 비클라이언트 렌더링 정책으로 끄고 같은 값으로 조회하며, 네이티브 제목 표시줄 창은 항상 shadow가 있어 `false` 설정을 `UNSUPPORTED`로 거부한다. macOS는 아직 없다.
-- [ ] Windows Mica, Acrylic와 배경 material, accent color를 제공한다.
+- [x] Windows Mica, Acrylic, Tabbed 배경 material을 `windows.setBackgroundMaterial`, `getBackgroundMaterial`로 제공한다. Electron의 `setBackgroundMaterial`과 같은 이름을 받고 `DWMWA_SYSTEMBACKDROP_TYPE`으로 적용한다. Windows 11 22H2 미만은 화면에 반영되지 않고 성공하며, CI(Windows Server 2022)는 요청과 조회 값, 미지원 빌드 처리를 확인하고 화면에 그려진 material은 확인하지 않는다. 불투명 WebView 배경이 material을 가리므로 보이려면 WebView 투명 배경이 필요하다(아래 WebView 투명 배경 항목).
+- [ ] 창 accent color(제목 표시줄과 테두리 색)를 제공한다.
 - [x] 결정 완료: 창 shape(Electron `setShape`)는 제공하지 않는다. 근거는 [ADR 0037](./decisions/0037-window-corners-shape-and-creation-styles.md)에 있다.
 - [x] 결정 완료: 둥근 모서리는 제공하고 `titlebar: "custom"` 창에서만 끌 수 있다. corner-smoothing CSS는 렌더러 영역이라 관여하지 않는다. [ADR 0037](./decisions/0037-window-corners-shape-and-creation-styles.md)을 따른다.
 - [x] 창 둥근 모서리(Windows 11 `DWMWA_WINDOW_CORNER_PREFERENCE`)의 설정과 조회를 구현한다. `titlebar: "custom"` 창에서만 `false`를 허용하고 프레임 창은 `UNSUPPORTED`로 거부한다. Windows 11 미만은 OS에 반영되지 않고 조회는 설정한 값(요청한 선호)을 반환한다. 그림자를 끈 창에서 모서리가 화면에 어떻게 보이는지는 DWM 합성이라 CI로 볼 수 없어 [ADR 0037](./decisions/0037-window-corners-shape-and-creation-styles.md)의 열린 질문으로 남긴다. 문서에는 모서리가 창 프레임(DWM)에만 적용되고 WebView 콘텐츠의 CSS 모서리와 별개라고 적는다.

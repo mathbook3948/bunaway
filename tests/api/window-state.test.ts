@@ -132,6 +132,8 @@ function fixture() {
   let ignoreMouseEvents = false;
   let hasShadow = true;
   let roundedCorners = true;
+  let backgroundMaterial: "auto" | "none" | "mica" | "acrylic" | "tabbed" =
+    "auto";
   let backgroundColor: string | null = null;
   let accessibleTitle: string | null = null;
   const native: NativeWindow = {
@@ -236,6 +238,11 @@ function fixture() {
       roundedCorners = value;
     },
     hasRoundedCorners: () => roundedCorners,
+    setBackgroundMaterial(value) {
+      apply("setBackgroundMaterial");
+      backgroundMaterial = value;
+    },
+    getBackgroundMaterial: () => backgroundMaterial,
     setBackgroundColor(value) {
       apply("setBackgroundColor");
       backgroundColor = value;
@@ -348,6 +355,8 @@ function fixture() {
         | "hasShadow"
         | "setRoundedCorners"
         | "hasRoundedCorners"
+        | "setBackgroundMaterial"
+        | "getBackgroundMaterial"
         | "setBackgroundColor"
         | "getBackgroundColor"
         | "setIgnoreMouseEvents"
@@ -373,6 +382,7 @@ function fixture() {
         ignore?: boolean;
         hasShadow?: boolean;
         roundedCorners?: boolean;
+        material?: string;
         color?: string | number | null;
         resizable?: boolean;
         movable?: boolean;
@@ -1441,6 +1451,68 @@ test("window rounded corners take only a boolean, round-trip from the default an
   });
 });
 
+test("window background material takes only the five names, round-trips from auto and keeps its own permission grants", async () => {
+  const f = fixture();
+  expect(await f.invoke("getBackgroundMaterial")).toBe("auto");
+  for (const material of [
+    "mica",
+    "acrylic",
+    "tabbed",
+    "none",
+    "auto",
+  ]) {
+    expect(
+      await f.invoke("setBackgroundMaterial", {
+        material,
+      }),
+    ).toBeNull();
+    expect(await f.invoke("getBackgroundMaterial")).toBe(material);
+  }
+  for (const payload of [
+    {},
+    {
+      material: "blur",
+    },
+    {
+      material: "Mica",
+    },
+    {
+      material: 2,
+    },
+    {
+      material: null,
+    },
+    {
+      material: "mica",
+      alpha: 1,
+    },
+  ]) {
+    expect(() =>
+      validateWindowCall({
+        operation: "windows.setBackgroundMaterial",
+        payload: {
+          ...payload,
+        },
+      }),
+    ).toThrow();
+  }
+  expect(validateWindowOutput("windows.getBackgroundMaterial", "mica")).toBe(
+    "mica",
+  );
+  expect(() =>
+    validateWindowOutput("windows.getBackgroundMaterial", 1),
+  ).toThrow();
+  f.permissions.permissions = [];
+  await expect(f.invoke("getBackgroundMaterial")).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  f.permissions.permissions = windowPermissions();
+  f.setClosed();
+  await expect(f.invoke("getBackgroundMaterial")).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+});
+
 test("window background color normalizes valid colors, rejects alpha and other forms, and keeps its own permission grants", async () => {
   const f = fixture();
   expect(await f.invoke("getBackgroundColor")).toBeNull();
@@ -1538,6 +1610,8 @@ test("macOS target does not declare the Windows-only shadow operations", () => {
       "hasShadow",
       "setRoundedCorners",
       "hasRoundedCorners",
+      "setBackgroundMaterial",
+      "getBackgroundMaterial",
     ]),
   );
 });

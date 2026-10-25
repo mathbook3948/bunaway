@@ -631,10 +631,36 @@ if (!process.argv.includes("--child")) {
             error instanceof BunawayError && error.code === "UNSUPPORTED",
         );
         assert.equal(nativeWindows.hasRoundedCorners(system), true);
+
+        // The backdrop material is a DWM hint with no read-back, so the requested value is the
+        // state. The call succeeds on every Windows build (builds before 22H2 ignore it; see
+        // backdropIgnored), for native and custom title bars alike, and leaves geometry alone.
+        for (const target of [
+          system,
+          custom,
+        ]) {
+          assert.equal(nativeWindows.getBackgroundMaterial(target), "auto");
+          for (const material of [
+            "mica",
+            "acrylic",
+            "tabbed",
+            "none",
+            "auto",
+          ] as const) {
+            nativeWindows.setBackgroundMaterial(target, material);
+            assert.equal(nativeWindows.getBackgroundMaterial(target), material);
+          }
+        }
+        nativeWindows.setBackgroundMaterial(custom, "mica");
+        assert.equal(nativeWindows.getBackgroundMaterial(system), "auto");
+        assert.deepEqual(nativeWindows.getBounds(custom, "outer"), bounds);
+        assert.equal(nativeWindows.isVisible(custom), true);
       } finally {
         nativeWindows.destroy(system);
         nativeWindows.destroy(custom);
       }
+      assert.throws(() => nativeWindows.getBackgroundMaterial(custom));
+      assert.throws(() => nativeWindows.setBackgroundMaterial(custom, "mica"));
       assert.throws(() => nativeWindows.hasShadow(custom));
       assert.throws(() => nativeWindows.setHasShadow(custom, false));
       assert.throws(() => nativeWindows.hasRoundedCorners(custom));

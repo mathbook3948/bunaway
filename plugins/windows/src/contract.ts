@@ -327,6 +327,14 @@ const sizeDimension = z.union([
 
 /** Opaque `#RGB` or `#RRGGBB`; returned values are always lowercase `#rrggbb`. */
 const windowBackgroundColor = z.string().regex(WINDOW_BACKGROUND_COLOR_PATTERN);
+/** System backdrop materials, in Electron's `setBackgroundMaterial` spelling. */
+const windowBackgroundMaterial = z.enum([
+  "auto",
+  "none",
+  "mica",
+  "acrylic",
+  "tabbed",
+]);
 
 const creationDimension = z
   .int()
@@ -1286,6 +1294,16 @@ export const windowOperations = {
     output: z.null(),
   },
   "windows.hasRoundedCorners": windowStateResult,
+  "windows.setBackgroundMaterial": {
+    input: z.strictObject({
+      material: windowBackgroundMaterial,
+    }),
+    output: z.null(),
+  },
+  "windows.getBackgroundMaterial": {
+    input: z.null(),
+    output: windowBackgroundMaterial,
+  },
   "windows.setBackgroundColor": {
     input: z.strictObject({
       color: windowBackgroundColor,

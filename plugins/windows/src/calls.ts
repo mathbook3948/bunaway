@@ -96,6 +96,8 @@ export function createWindows(api: NativePluginAPI<Definitions>) {
     hasShadow: (options?: NativeInvokeOptions) => api.hasShadow(null, options),
     hasRoundedCorners: (options?: NativeInvokeOptions) =>
       api.hasRoundedCorners(null, options),
+    getBackgroundMaterial: (options?: NativeInvokeOptions) =>
+      api.getBackgroundMaterial(null, options),
     getBackgroundColor: (options?: NativeInvokeOptions) =>
       api.getBackgroundColor(null, options),
     isIgnoreMouseEvents: (options?: NativeInvokeOptions) =>

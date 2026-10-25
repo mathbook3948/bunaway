@@ -84,6 +84,9 @@ const unsupportedOpacity = unsupportedError(
 const unsupportedRoundedCorners = unsupportedError(
   "Window corner control is not implemented on this platform.",
 );
+const unsupportedBackgroundMaterial = unsupportedError(
+  "Window background material is not implemented on this platform.",
+);
 const unsupportedShadow = unsupportedError(
   "Window shadow control is not implemented on this platform.",
 );
@@ -462,6 +465,17 @@ function applyUserControls(scope: ActionScope, call: WindowCall): ActionResult {
       return null;
     case "windows.hasRoundedCorners":
       return supported(window.hasRoundedCorners, unsupportedRoundedCorners)();
+    case "windows.setBackgroundMaterial":
+      supported(
+        window.setBackgroundMaterial,
+        unsupportedBackgroundMaterial,
+      )(call.payload.material);
+      return null;
+    case "windows.getBackgroundMaterial":
+      return supported(
+        window.getBackgroundMaterial,
+        unsupportedBackgroundMaterial,
+      )();
     case "windows.setBackgroundColor":
       supported(
         window.setBackgroundColor,

@@ -1457,6 +1457,9 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         setRoundedCorners: (rounded) =>
           nativeWindows.setRoundedCorners(hwnd, rounded),
         hasRoundedCorners: () => nativeWindows.hasRoundedCorners(hwnd),
+        setBackgroundMaterial: (material) =>
+          nativeWindows.setBackgroundMaterial(hwnd, material),
+        getBackgroundMaterial: () => nativeWindows.getBackgroundMaterial(hwnd),
         setIgnoreMouseEvents: (ignore) =>
           nativeWindows.setIgnoreMouseEvents(hwnd, ignore),
         isIgnoreMouseEvents: () => nativeWindows.isIgnoreMouseEvents(hwnd),
