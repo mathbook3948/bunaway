@@ -151,6 +151,10 @@ export class Tray {
   private userClosed = false;
   /** A native menu loop owns the UI thread; a second one must not nest inside it. */
   private popupActive = false;
+  /** True while the context menu loop runs; the owner cannot be disposed underneath it. */
+  get popupOpen() {
+    return this.popupActive;
+  }
   /** Set when a cancellation arrives, possibly before the loop has started tracking. */
   private popupCancelled = false;
   private readonly hover: TrayHoverTracker;

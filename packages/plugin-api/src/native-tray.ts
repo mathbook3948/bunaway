@@ -47,10 +47,10 @@ export type NativeTrayServices = {
   setVisible(visible: boolean): void;
   focus(): boolean;
   /**
-   * Releases the icon and its hidden window. Returns false when there is no icon. Throws UNSUPPORTED
-   * while the app depends on the icon (`desktop.closeBehavior: "hide"`) and INVALID_ARGUMENT while no
-   * window is visible, because the app would then have no way to be reached. A failed release keeps
-   * the owner so a later call or shutdown retries it.
+   * Releases the icon and its hidden window. Returns false when there is no icon. Throws BUSY while
+   * the app is shutting down or a context menu is open, and INVALID_ARGUMENT when no window is open
+   * and the icon is what keeps the app running. Hidden windows are the app's responsibility, as with
+   * `setVisible`. A failed release keeps the owner so a later call or shutdown retries it.
    */
   remove(): boolean;
   /**
@@ -108,6 +108,8 @@ export type NativeTrayOwner = Pick<
   | "popUpContextMenu"
 > & {
   readonly hwnd: bigint;
+  /** True while a context menu loop runs; the owner must not be disposed until it returns. */
+  readonly popupOpen: boolean;
   setMenu(
     items:
       | readonly import("./native-menu.ts").NativeMenuItem[]

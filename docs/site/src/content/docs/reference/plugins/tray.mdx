@@ -124,9 +124,11 @@ Tauri `remove_tray_by_id`에 대응). 이미 없으면 그대로 `null`입니다
 `displayBalloon`은 `UNSUPPORTED`입니다. 제거는 숨김처럼 앱을 종료하지 않지만, 창이 하나도 없고
 `keep-alive`도 아니어서 아이콘이 앱을 살려 두는 상태에서는 `INVALID_ARGUMENT`로 거부합니다.
 창이 숨겨진 상태의 복구는 `setVisible`과 마찬가지로 앱이 책임집니다.
+컨텍스트 메뉴가 열려 있거나 앱이 종료 중이면 `BUSY`입니다. 해제에 실패해 `INTERNAL`이 되면 남은 자원은 다음 `destroy`나 종료 정리에서 다시 해제합니다.
 
 `tray.create(null)`은 `desktop.tray`에 선언한 tooltip과 아이콘으로 트레이를 다시 등록하고 snapshot을 반환합니다.
-실행 중 바꾼 tooltip, 아이콘, 클릭 동작과 숨김 상태는 이어지지 않고 `menu.setTrayMenu`로 연결한 메뉴도 다시 연결해야 합니다.
+실행 중 바꾼 tooltip, 아이콘, 클릭 동작과 숨김 상태는 이어지지 않고 `menu.setTrayMenu`로 연결한 메뉴도 다시 연결해야 합니다(메뉴 플러그인의 `getTrayMenu`는 제거 뒤에도 이전 연결을 돌려줍니다).
+제거한 동안 메뉴 연결 해제(`setTrayMenu`의 `undefined`)는 할 일이 없어 그대로 성공합니다.
 이미 있으면 `INVALID_ARGUMENT`, `desktop.tray` 선언이 없으면 `UNSUPPORTED`, 종료 중이면 `BUSY`입니다.
 제거한 동안에는 트레이 입력이 없으므로 `closeBehavior: "hide"` 창을 닫으면 숨기지 않고 일반 닫기로 처리하며,
 `desktop.hide()`는 효과가 없습니다.

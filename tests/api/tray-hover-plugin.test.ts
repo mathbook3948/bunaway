@@ -26,6 +26,7 @@ function harness() {
     displayBalloon: () => {},
     removeBalloon: () => {},
     hwnd: 1n,
+    popupOpen: false,
     get: () => null,
     getBounds: () => null,
     setTooltip: () => {},

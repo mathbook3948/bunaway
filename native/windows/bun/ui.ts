@@ -133,6 +133,19 @@ function removeTray(): boolean {
   if (!tray) {
     return false;
   }
+  if (closing()) {
+    throw new BunawayError({
+      code: "BUSY",
+      message: "The app is shutting down.",
+    });
+  }
+  // The popup loop still uses the tray window and the shell bindings that disposal closes.
+  if (tray.popupOpen) {
+    throw new BunawayError({
+      code: "BUSY",
+      message: "The tray cannot be removed while its menu is open.",
+    });
+  }
   const hasWindow = [
     ...views.values(),
   ].some((view) => !view.lifecycle.closed);
@@ -2334,7 +2347,8 @@ try {
           },
         },
         setTrayMenu(items, selected) {
-          if (stopping() && items === undefined && !tray) {
+          // Detaching has nothing to do once the tray is gone, whether removed or at shutdown.
+          if (items === undefined && !tray) {
             return;
           }
           if (!tray) {
