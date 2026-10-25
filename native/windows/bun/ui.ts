@@ -34,6 +34,7 @@ import {
 } from "./channel.ts";
 import { type CloseDecision, CloseRequests } from "./close-request.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
+import { limitDocumentTitle } from "./document-title.ts";
 import { DownloadCleanupError, DownloadCleanupRetries } from "./downloads.ts";
 import { isWindowRole, runWindowRole } from "./menu-window-role.ts";
 import { isMonitorChangeMessage, MonitorTracker } from "./monitor-events.ts";
@@ -1827,6 +1828,21 @@ function createWindow(
               0,
             );
           }
+        },
+        titleChanged: (title) => {
+          if (
+            stopping() ||
+            shutdownCommitted() ||
+            views.get(instanceKey)?.native !== native
+          ) {
+            return;
+          }
+          const { windowId, viewId } = readiness.snapshot();
+          sendNativeEvent(boundary, "windows.documentTitleChanged", {
+            windowId,
+            viewId,
+            title: limitDocumentTitle(title),
+          });
         },
         documentComplete: (error) =>
           views.get(instanceKey)?.readiness?.documentComplete(error),
