@@ -8,8 +8,6 @@ status: accepted
 
 ## 배경
 
-아래 Electron과 Tauri 서술은 해당 프로젝트의 공개 문서와 소스 확인에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다.
-
 배율이 다른 모니터를 함께 쓰는 Windows 화면에서 좌표 변환을 어디까지 제공할지 정해야 했다. 현재 계약은 다음과 같다.
 
 - 화면 좌표(`setPosition`, `getOuterBounds`, `getCursorPosition`, `windows.changed`의 bounds, 모니터의 `bounds`와
@@ -18,6 +16,9 @@ status: accepted
   `(0, 0)`에 같은 배율을 곱한다.
 - `getMonitors`, `getMonitor`, `getMonitorNearestPoint`, `getMonitorNearestRect`는 모니터마다 물리 `bounds`, `workArea`,
   유효 `dpi`와 `scaleFactor`를 반환한다.
+
+다른 프레임워크는 다음과 같다. 아래 Electron과 Tauri 서술은 해당 프로젝트의 공개 문서와 소스 확인에 따른 것이며 이 저장소의
+테스트로 검증한 것은 아니다.
 
 - Electron은 화면 좌표를 DIP로 다루는 `screen.screenToDipPoint`, `dipToScreenPoint`와 사각형 변환을 Windows에서 제공한다.
   변환에는 지점 또는 사각형이 놓인 디스플레이의 배율을 쓴다. `Display.bounds`는 DIP이고 `scaleFactor`를 함께 준다.
@@ -36,8 +37,9 @@ status: accepted
 ## 근거
 
 - 두 프레임워크가 다르다. Electron은 지점 기준 변환을 제공하고 Tauri는 모니터의 배율만 주고 변환을 호출자에게 맡긴다.
-  이 저장소는 이미 모니터별 `scaleFactor`와 물리 좌표 모니터 조회를 공개하므로 두 호출로 같은 결과를 얻을 수 있다.
-  쓰는 곳이 없는 변환 API를 코어에 더하지 않고 계약을 작게 유지하는 쪽을 따른다.
+  이 저장소는 이미 모니터별 `scaleFactor`와 물리 좌표 모니터 조회를 공개하므로 두 호출과 곱셈으로 근사한 값을 얻을 수 있다.
+  `windows.toLogical`이 적용하는 정수 반올림, `-0` 정규화와 범위 검사는 앱이 직접 맞춰야 한다. 이 변환을 쓰려는 요구가 아직
+  없어, 코어 API를 늘리지 않고 계약을 작게 유지하는 쪽을 따른다. 요구가 생기면 4번에 따라 다시 정한다.
 - 공통 논리 좌표계는 모니터 배율마다 논리 좌표의 간격이 달라져 인접한 모니터 경계에서 연속하지 않을 수 있다. 창 배치 API는
   모두 물리 좌표를 받아 반올림 오차 없이 모니터 경계를 다룬다. 공통 논리 좌표를 만들면 이 API와 단위가 둘로 갈린다.
 - 창이 두 모니터에 걸치면 어느 배율을 쓸지 정해야 한다. 창 단위 변환은 Windows가 그 창에 적용 중인 DPI를 기준으로 하므로
