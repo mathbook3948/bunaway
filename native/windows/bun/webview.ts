@@ -532,7 +532,7 @@ export class WebView {
 
   /**
    * ICoreWebView2_15 add_FaviconChanged (slot 109): the handler reads get_FaviconUri (slot 111) of
-   * the sender, which is empty when the page has no icon. A runtime without the interface reports
+   * the sender, which may be empty. A runtime without the interface reports
    * no favicon events.
    */
   private subscribeFavicon() {

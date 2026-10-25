@@ -844,8 +844,8 @@ export const windowDocumentTitleChangedSchema = {
 } as const;
 /**
  * The favicon of the window's page changed (Windows only). `url` is the address of the icon the
- * page declared, or the empty string when WebView2 reports no address or the address is longer than 2048
- * UTF-16 code units. The icon bytes are not delivered; the page fetches the address itself.
+ * page declared, or the empty string when WebView2 reports no address or the address is longer
+ * than 2048 UTF-16 code units. The icon bytes are not delivered; the page fetches the address itself.
  */
 export const windowDocumentFaviconChangedSchema = {
   type: "object",

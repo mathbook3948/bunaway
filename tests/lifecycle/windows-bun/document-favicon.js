@@ -30,10 +30,6 @@ await client.listen(
   },
 );
 
-let failure;
-const stalled = new Promise((_, reject) => {
-  failure = reject;
-});
 const link = document.createElement("link");
 link.rel = "icon";
 
@@ -44,15 +40,8 @@ async function setIcon(href, expected = href) {
   if (!link.isConnected) {
     document.head.append(link);
   }
-  const timer = setTimeout(
-    () => failure(new Error(`No favicon event for ${expected.slice(0, 40)}`)),
-    10000,
-  );
-  await Promise.race([
-    arrived,
-    stalled,
-  ]);
-  clearTimeout(timer);
+  // The host's native fixture deadline ends a run that never receives the event.
+  await arrived;
 }
 
 await setIcon(ICON_A);

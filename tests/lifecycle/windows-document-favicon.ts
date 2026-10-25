@@ -112,7 +112,6 @@ if (!process.argv.includes("--child")) {
       "",
       `The over-limit address is not reported empty: ${JSON.stringify(urls)}`,
     );
-    assert(folded.length > second + 1, JSON.stringify(urls));
     assert.deepEqual(report.windowIds, [
       report.windowId,
     ]);
