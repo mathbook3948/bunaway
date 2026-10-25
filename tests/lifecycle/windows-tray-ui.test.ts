@@ -22,7 +22,6 @@ test.skipIf(process.platform !== "win32")(
     let cleaned = false;
     let hwnd = 0n;
     let controlHwnd = 0n;
-    const seen: string[] = [];
     const pending = new Map<string, (response: HostResponse) => void>();
     const native = dlopen("user32.dll", {
       PostMessageW: {
@@ -110,9 +109,6 @@ test.skipIf(process.platform !== "win32")(
         config.runtime,
         "main",
         (packet) => {
-          seen.push(
-            `${packet.kind}${"requestId" in packet ? `:${packet.requestId}` : ""}`,
-          );
           if (packet.kind === "ready") {
             readyResolve();
           } else if (packet.kind === "prepare") {
@@ -161,11 +157,7 @@ test.skipIf(process.platform !== "win32")(
           const requestId = crypto.randomUUID();
           const timeout = setTimeout(() => {
             pending.delete(requestId);
-            reject(
-              new Error(
-                `Tray call timed out: ${operation} ${requestId} seen=${seen.slice(-8).join(",")} failure=${String(failure)}`,
-              ),
-            );
+            reject(new Error(`Tray call timed out: ${operation}`));
           }, 5000);
           pending.set(requestId, (response) => {
             clearTimeout(timeout);
@@ -239,11 +231,16 @@ test.skipIf(process.platform !== "win32")(
       expect(await invoke("get", null)).toBeNull();
       expect(await invoke("getBounds", null)).toBeNull();
       expect(await invoke("destroy", null)).toBeNull();
-      await expect(
-        invoke("setVisible", {
+      // Settle the call before asserting: `.rejects` on a pending Worker-backed promise blocks the
+      // Worker message delivery that would settle it.
+      expect(
+        await invoke("setVisible", {
           visible: false,
-        }),
-      ).rejects.toMatchObject({
+        }).then(
+          () => undefined,
+          (error: unknown) => error,
+        ),
+      ).toMatchObject({
         code: "UNSUPPORTED",
       });
       // Creating registers the declared tray again with a new window and the declared tooltip.
@@ -254,7 +251,12 @@ test.skipIf(process.platform !== "win32")(
         visible: true,
       });
       expect(hwnd).not.toBe(removedHwnd);
-      await expect(invoke("create", null)).rejects.toMatchObject({
+      expect(
+        await invoke("create", null).then(
+          () => undefined,
+          (error: unknown) => error,
+        ),
+      ).toMatchObject({
         code: "INVALID_ARGUMENT",
       });
       const recreated = invoke("waitForEvent", null);

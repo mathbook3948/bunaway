@@ -663,21 +663,12 @@ function handleOperation(packet: PacketOf<"operation">) {
     "Invalid UI queue request",
   );
   uiCalls.set(packet.requestId, packet);
-  console.log(`diag-prepare-send ${packet.call.operation}`);
-  channel
-    .send({
-      kind: "prepare",
-      context: packet.context,
-      requestId: packet.requestId,
-      call: packet.call,
-    })
-    .then(
-      () => console.log(`diag-prepare-acked ${packet.call.operation}`),
-      (error: unknown) => {
-        console.log(`diag-prepare-failed ${String(error)}`);
-        fail(error);
-      },
-    );
+  channel.notify({
+    kind: "prepare",
+    context: packet.context,
+    requestId: packet.requestId,
+    call: packet.call,
+  });
 }
 /** A queued call runs only when the grant matches the context and source that queued it. */
 function handleGrant(packet: PacketOf<"grant">) {
@@ -760,12 +751,6 @@ function handleHostResult(packet: PacketOf<"host-result">) {
 }
 /** Route one packet from the main thread to the handler that owns its kind. */
 function handleHostPacket(packet: Packet) {
-  if (packet.kind === "operation") {
-    log("diag-packet", {
-      kind: packet.kind,
-      operation: packet.call.operation,
-    });
-  }
   switch (packet.kind) {
     case "start":
       move("start");
@@ -888,23 +873,11 @@ async function executeWindowRequest(
     );
     response = hostResponse(() => payload);
   } catch (error) {
-    log("diag-request-error", {
-      operation: queued.call.operation,
-      message: error instanceof Error ? error.message : String(error),
-      bunaway: error instanceof BunawayError,
-    });
     response = hostResponse(() => {
       throw error;
     });
   }
   const active = windowRequests.finish(queued.requestId, signal);
-  log("diag-request-finish", {
-    operation: queued.call.operation,
-    kind: response.kind,
-    active,
-    stopping: stopping(),
-    context: activeContext(queued.context),
-  });
   if (stopping() || !active || !activeContext(queued.context)) {
     return;
   }
@@ -2504,15 +2477,7 @@ try {
   await channel.send({
     kind: "ready",
   });
-  let diagBeat = 0;
   while (!stopping()) {
-    if (Date.now() - diagBeat > 400) {
-      diagBeat = Date.now();
-      log("diag-loop", {
-        tray: !!tray,
-        views: views.size,
-      });
-    }
     checkCallbacks();
     windows.pump();
     monitorTracker?.flush();
