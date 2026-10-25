@@ -170,6 +170,17 @@ if (!process.argv.includes("--child")) {
     },
   });
   let desktop: DesktopContext | undefined;
+  /** Writes what has been observed so far, so a later failure still leaves the earlier values. */
+  const writeReport = () =>
+    writeFile(
+      childReport,
+      JSON.stringify({
+        hidden: samples.hidden,
+        hiddenNative: natives.hidden,
+        shown: samples.shown,
+        shownNative: natives.shown,
+      }),
+    );
   async function scenario(): Promise<void> {
     await windows.create({
       options: {
@@ -177,6 +188,7 @@ if (!process.argv.includes("--child")) {
       },
     });
     await sampleArrived("hidden");
+    await writeReport();
     // Readiness is checked after the page's own sample, so the document may still be loading.
     await waitFor(
       async () => (await windows.getReadiness()).document === "ready",
@@ -189,27 +201,18 @@ if (!process.argv.includes("--child")) {
       isVisible: await windows.isVisible(),
       document: (await windows.getReadiness()).document,
     };
+    await writeReport();
     await windows.show();
     natives.shown = {
       isVisible: await windows.isVisible(),
     };
-    const writeReport = () =>
-      writeFile(
-        childReport,
-        JSON.stringify({
-          hidden: samples.hidden,
-          hiddenNative: natives.hidden,
-          shown: samples.shown,
-          shownNative: natives.shown,
-        }),
-      );
-    await writeReport();
     release();
     await sampleArrived("shown");
     await writeReport();
     await windows.close();
     // The app has no startup window and stays up when its window closes; the scenario quits it.
-    await desktop?.quit();
+    assert(desktop, "desktop context");
+    await desktop.quit();
   }
   const app = defineApp({
     modules: [],
@@ -222,6 +225,7 @@ if (!process.argv.includes("--child")) {
           void scenario().catch((error) => {
             console.error(error);
             process.exitCode = 1;
+            void writeReport().catch(console.error);
             // A page still waiting for the show must not hold the shutdown.
             release();
             if (desktop === undefined) {
