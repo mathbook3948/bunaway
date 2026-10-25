@@ -1,4 +1,5 @@
 import type { Hello, Message, ProcessFrame, WireError } from "./index.ts";
+import { DEFAULT_MAX_PENDING } from "./pending-limit.ts";
 import { errorSchema } from "./schema.ts";
 import { type JsonValue, validate } from "./validation.ts";
 
@@ -74,7 +75,8 @@ export const API_LIMITS = {
   shutdownTimeoutMs: 2000,
   maxCommandDurationMs: 30000,
   // Includes SDK listen cleanup and WebView IDs awaiting replies after cancellation or timeout.
-  maxPending: 128,
+  // Default; an app may raise it up to MAX_PENDING_CEILING through its policy.
+  maxPending: DEFAULT_MAX_PENDING,
   maxSubscriptions: 128,
   // Recent IDs in acceptance order; pending IDs remain protected separately.
   // This history does not cap total requests.

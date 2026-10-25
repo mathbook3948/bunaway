@@ -123,6 +123,9 @@
           "MAX_MESSAGE_BYTES",
           "ProtocolError",
           "API_LIMITS",
+          "DEFAULT_MAX_PENDING",
+          "MAX_PENDING_CEILING",
+          "resolveMaxPending",
           "BunawayError"
         ],
         "reference/protocol": [

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { API_LIMITS, type HostContext } from "@bunaway/protocol";
+import { DEFAULT_MAX_PENDING, type HostContext } from "@bunaway/protocol";
 import type { Packet } from "@bunaway/runtime-bun/worker-channel";
 
 /** Own active native calls. Cancellation releases capacity while callers still observe late settlement. */
@@ -11,6 +11,9 @@ export class NativeRequests {
       controller: AbortController;
     }
   >();
+
+  /** @param maxActive Most native calls that may run at once; the app-configured pending limit. */
+  constructor(private readonly maxActive: number = DEFAULT_MAX_PENDING) {}
 
   private modalShutdownObserved = false;
   private readonly modalInterrupts = new Set<{
@@ -64,7 +67,7 @@ export class NativeRequests {
   /** Register before starting plugin code; the returned signal identifies this exact lifetime. */
   begin(id: string, context: HostContext): AbortSignal {
     assert(
-      !this.active.has(id) && this.active.size < API_LIMITS.maxPending,
+      !this.active.has(id) && this.active.size < this.maxActive,
       "Invalid native request",
     );
     const controller = new AbortController();

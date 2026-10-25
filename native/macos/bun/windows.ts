@@ -13,6 +13,7 @@ import {
   type HostCall,
   type HostContext,
   type JsonValue,
+  resolveMaxPending,
   type ServerMessage,
 } from "@bunaway/protocol";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
@@ -223,55 +224,60 @@ export class MacosWindows {
         failure: undefined,
         deadline: now + WINDOW_PREPARATION_TIMEOUT_MS,
       },
-      boundary: new ViewBoundary(policy, {
-        origin: macosOrigin,
-        source: () => view.native?.source() ?? "",
-        ready: () => this.hooks.ready() && !this.hooks.stopping(),
-        capacity: (count) =>
-          this.hooks.capacity(
-            count,
-            [
-              ...this.views.values(),
-            ].reduce((total, item) => total + item.boundary.pendingCount, 0),
-          ),
-        forward: this.hooks.forward,
-        deliver: (text) => view.native?.deliver(text),
-        log,
-        // The tracker is built in the same literal, so every hook resolves it lazily through `view`.
-        sessionOpened: (route) => {
-          view.sdkDeadline = Date.now() + API_LIMITS.handshakeTimeoutMs;
-          view.readiness.sessionOpened(route.documentGeneration);
-        },
-        sdkReady: (route) =>
-          view.readiness.sdkComplete(route.documentGeneration),
-        subscriptionEnded: (event) => {
-          // Without a confirmed listener left nobody can answer the pending question; a pending or
-          // rejected listen does not count. Cancelling keeps the window open.
-          if (
-            event === "windows.closeRequested" &&
-            !view.boundary.subscribed("windows.closeRequested")
-          ) {
+      boundary: new ViewBoundary(
+        policy,
+        {
+          origin: macosOrigin,
+          source: () => view.native?.source() ?? "",
+          ready: () => this.hooks.ready() && !this.hooks.stopping(),
+          capacity: (count) =>
+            this.hooks.capacity(
+              count,
+              [
+                ...this.views.values(),
+              ].reduce((total, item) => total + item.boundary.pendingCount, 0),
+            ),
+          forward: this.hooks.forward,
+          deliver: (text) => view.native?.deliver(text),
+          log,
+          // The tracker is built in the same literal, so every hook resolves it lazily through `view`.
+          sessionOpened: (route) => {
+            view.sdkDeadline = Date.now() + API_LIMITS.handshakeTimeoutMs;
+            view.readiness.sessionOpened(route.documentGeneration);
+          },
+          sdkReady: (route) =>
+            view.readiness.sdkComplete(route.documentGeneration),
+          subscriptionEnded: (event) => {
+            // Without a confirmed listener left nobody can answer the pending question; a pending or
+            // rejected listen does not count. Cancelling keeps the window open.
+            if (
+              event === "windows.closeRequested" &&
+              !view.boundary.subscribed("windows.closeRequested")
+            ) {
+              view.closeRequests.cancel();
+            }
+          },
+          revoked: (reason, generation, error) => {
+            // The question was asked of the revoked document session, which can no longer answer it.
             view.closeRequests.cancel();
-          }
+            if (reason === "navigation") {
+              view.documentDeadline =
+                Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
+              view.sdkDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
+              view.readiness.reset(generation);
+            } else {
+              view.readiness.sessionEnded(
+                generation,
+                error ?? {
+                  code: "CANCELLED",
+                  message: "SDK session ended.",
+                },
+              );
+            }
+          },
         },
-        revoked: (reason, generation, error) => {
-          // The question was asked of the revoked document session, which can no longer answer it.
-          view.closeRequests.cancel();
-          if (reason === "navigation") {
-            view.documentDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
-            view.sdkDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
-            view.readiness.reset(generation);
-          } else {
-            view.readiness.sessionEnded(
-              generation,
-              error ?? {
-                code: "CANCELLED",
-                message: "SDK session ended.",
-              },
-            );
-          }
-        },
-      }),
+        resolveMaxPending(this.config.policy),
+      ),
       readiness: new WindowReadinessTracker(
         windowId,
         spec.view,

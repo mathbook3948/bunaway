@@ -574,3 +574,41 @@ test("Android binds only its document port, flushes in order, bounds setup and c
   }
   expect(() => queued.postMessage({})).toThrow("queue full");
 });
+
+test("the bridge queues up to the pending limit configured for the app", async () => {
+  const configured = API_LIMITS.maxPending * 2;
+  const view = {};
+  const waiting = {
+    crypto: {
+      randomUUID: () => nonce,
+    },
+    window: {
+      top: view,
+    },
+    chrome: {
+      webview: undefined as WebViewBridge | undefined,
+    },
+    bunawayNative: {
+      postMessage: (_text: string) => {},
+      onmessage: (_event: { data: string }) => {},
+    },
+    addEventListener: (_type: string, _callback: (event: Event) => void) => {},
+    removeEventListener: (_type: string) => {},
+  };
+  waiting.window.top = waiting.window;
+  const source = await mobileBridge(frameworkRoot, "android", configured);
+  runInNewContext(
+    source.replaceAll("__BUNAWAY_PORT_PREFIX__", portPrefix),
+    waiting,
+  );
+  const queued = waiting.chrome.webview;
+  if (!queued) {
+    throw new Error("Missing waiting bridge");
+  }
+  for (let i = 0; i < configured; i++) {
+    queued.postMessage({
+      i,
+    });
+  }
+  expect(() => queued.postMessage({})).toThrow("queue full");
+});

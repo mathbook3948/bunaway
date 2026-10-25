@@ -38,6 +38,11 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9_.:-]+$(?![\\s\\S])",
           "maxLength": 128
+        },
+        "maxPending": {
+          "type": "integer",
+          "minimum": 128,
+          "maximum": 1024
         }
       },
       "required": ["kind", "protocol", "features", "buildId"],

@@ -1278,6 +1278,36 @@ test.each(reservedPackets)(
   },
 );
 
+test("a configured pending limit sizes the client lane of both channel ends", async () => {
+  const configured = API_LIMITS.maxPending * 2;
+  const { port1, port2 } = new MessageChannel();
+  const sender = new Channel(
+    port1,
+    runtime,
+    "ui",
+    () => {},
+    () => {},
+    undefined,
+    configured,
+  );
+  const pending: Promise<void>[] = [];
+  try {
+    for (let i = 0; i < configured; i++) {
+      const sent = sender.send(fixtures.client.packet);
+      void sent.catch(() => {});
+      pending.push(sent);
+    }
+    await expect(sender.send(fixtures.client.packet)).rejects.toThrow(
+      "Worker channel full",
+    );
+  } finally {
+    sender.close();
+    await Promise.allSettled(pending);
+    port1.close();
+    port2.close();
+  }
+});
+
 test("a nested client cancellation retains its separate lane when client data is full", async () => {
   const { port1, port2 } = new MessageChannel();
   const sender = new Channel(

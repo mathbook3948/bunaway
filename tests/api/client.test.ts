@@ -1304,6 +1304,42 @@ test("generic client forwards optional plugin commands", async () => {
   await expect(invalid).resolves.toHaveLength(2);
 });
 
+test("the server hello raises the pending request limit", async () => {
+  const configured = API_LIMITS.maxPending * 2;
+  const transport = new TestTransport();
+  const client = createClient<Commands, Events>({
+    transport,
+    hello,
+  });
+  transport.emit({
+    ...serverHello,
+    maxPending: configured,
+  });
+  await client.ready;
+  const pending = Array.from(
+    {
+      length: configured,
+    },
+    () =>
+      client.invoke("notes.read", {
+        key: "x",
+      }),
+  );
+  await expect(
+    client.invoke("notes.read", {
+      key: "overflow",
+    }),
+  ).rejects.toMatchObject({
+    code: "BUSY",
+  });
+  transport.drop();
+  for (const call of pending) {
+    await expect(call).rejects.toMatchObject({
+      code: "INTERNAL",
+    });
+  }
+});
+
 test("the pending request limit rejects new calls with BUSY", async () => {
   const { transport, client } = await connected();
   const pending = Array.from(

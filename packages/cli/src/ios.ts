@@ -9,6 +9,7 @@ import {
   messageSchema,
   PROCESS_IPC_VERSION,
   PROTOCOL_VERSION,
+  resolveMaxPending,
 } from "@bunaway/protocol";
 import {
   type Project,
@@ -262,7 +263,11 @@ async function prepareIosInputs(
   );
   await writeFile(
     resolve(assets, "bridge.js"),
-    await mobileBridge(project.frameworkRoot, "ios"),
+    await mobileBridge(
+      project.frameworkRoot,
+      "ios",
+      resolveMaxPending(project.policy),
+    ),
   );
   await writeJson(resolve(assets, "host.json"), {
     view: project.app.view,
@@ -274,7 +279,7 @@ async function prepareIosInputs(
     limits: {
       messageBytes: MAX_MESSAGE_BYTES,
       depth: MAX_JSON_DEPTH,
-      pending: API_LIMITS.maxPending,
+      pending: resolveMaxPending(project.policy),
       startupTimeoutMs: API_LIMITS.handshakeTimeoutMs,
     },
   });

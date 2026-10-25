@@ -1072,6 +1072,73 @@ test("concurrent invokes run without blocking receive and respect the pending li
   await session.close();
 });
 
+test("a policy maxPending raises the pending limit and is announced in the server hello", async () => {
+  const configured = 512;
+  const { services, sent } = createServices(createClock());
+  const app = createApp({
+    commands: {
+      "notes.slow": command({
+        input: {
+          type: "string",
+        },
+        output: {
+          type: "string",
+        },
+        handle: (key) => new Promise<string>(() => key),
+      }),
+    },
+  });
+  const { session } = await openSession(
+    {
+      ...services,
+      policy: {
+        ...policy,
+        maxPending: configured,
+      },
+    },
+    "ctx" as HostContext,
+    "main",
+    app,
+  );
+  expect(sent[0]?.message).toMatchObject({
+    kind: "hello",
+    maxPending: configured,
+  });
+  const invoke = (id: string) =>
+    session.receive({
+      kind: "invoke",
+      protocol: helloMessage.protocol,
+      id,
+      command: "notes.slow",
+      payload: id,
+    });
+  // Beyond the default of 128, up to the configured value, requests are still accepted.
+  for (let i = 0; i < configured; i++) {
+    await invoke(`p-${i}`);
+  }
+  await invoke("over");
+  await flush();
+  expect(results(sent, "p-300")).toEqual([]);
+  expect(results(sent, "over")).toMatchObject([
+    {
+      kind: "error",
+      error: {
+        code: "BUSY",
+        message: "Pending request limit reached.",
+      },
+    },
+  ]);
+  await session.close();
+});
+
+test("a policy without maxPending keeps the default limit and sends the unchanged hello", async () => {
+  const { services, sent } = createServices(createClock());
+  const { session } = await openSession(services);
+  expect(sent[0]?.message).toEqual(services.hello);
+  expect(sent[0]?.message).not.toHaveProperty("maxPending");
+  await session.close();
+});
+
 test("cancel ends a pending request with CANCELLED and discards its late result", async () => {
   const clock = createClock();
   const { services, sent } = createServices(clock);

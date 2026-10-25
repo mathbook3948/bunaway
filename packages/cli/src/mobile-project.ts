@@ -2,7 +2,7 @@ import { lstat, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { acquireBuildOutputLock, ownedDirectory } from "@bunaway/packaging";
 import { outputPaths } from "@bunaway/packaging/paths";
-import { API_LIMITS, MAX_MESSAGE_BYTES } from "@bunaway/protocol";
+import { DEFAULT_MAX_PENDING, MAX_MESSAGE_BYTES } from "@bunaway/protocol";
 import { json } from "./files.ts";
 
 type MobileTarget = "android" | "ios";
@@ -86,6 +86,8 @@ export async function withMobileBuild<T>(
 export async function mobileBridge(
   root: string,
   target: MobileTarget,
+  /** Pending request limit from the app policy; queued bridge messages are bounded by it. */
+  maxPending: number = DEFAULT_MAX_PENDING,
 ): Promise<string> {
   const result = await Bun.build({
     entrypoints: [
@@ -99,6 +101,6 @@ export async function mobileBridge(
     throw new AggregateError(result.logs, "Could not build the mobile bridge.");
   }
   return (await output.text())
-    .replaceAll("__BUNAWAY_MAX_PENDING__", String(API_LIMITS.maxPending))
+    .replaceAll("__BUNAWAY_MAX_PENDING__", String(maxPending))
     .replaceAll("__BUNAWAY_MAX_MESSAGE_BYTES__", String(MAX_MESSAGE_BYTES));
 }

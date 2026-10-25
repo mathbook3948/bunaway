@@ -42,13 +42,15 @@ JSON과 스키마 검증, 버전 협상 헬퍼에서 발생하는 오류입니�
 | handshakeTimeoutMs | 10,000 ms | 클라이언트 연결 준비 |
 | shutdownTimeoutMs | 2,000 ms | 앱 종료 정리 |
 | maxCommandDurationMs | 30,000 ms | 명령 최대 시간 |
-| maxPending | 128 | 동시에 대기할 수 있는 요청 수. SDK의 취소된 구독 정리와 WebView 호스트의 취소된 요청 응답 대기 포함 |
+| maxPending | 128 | 동시에 대기할 수 있는 요청 수. 정책의 `maxPending`으로 1,024까지 올릴 수 있음. SDK의 취소된 구독 정리와 WebView 호스트의 취소된 요청 응답 대기 포함 |
 | maxSubscriptions | 128 | 세션 구독 |
 | maxRequestIds | 1,024 | 중복 요청을 거부하려고 세션이 보관하는 최근 요청 ID 수 |
 
 `MAX_MESSAGE_BYTES`는 1,048,576 UTF-8 바이트, `MAX_JSON_DEPTH`는 루트 0 기준 64입니다.
 바이트 제한을 계산할 때는 한글과 emoji를 포함한 데이터의 UTF-8 인코딩 크기를 사용합니다.
 
-이 상수는 프레임워크에서 정하며 앱의 정책 설정으로 바꿀 수 없습니다.
+`maxPending`만 앱 정책의 `maxPending`으로 128 이상 1,024 이하로 올릴 수 있으며([뷰와 정책](/concepts/views-and-policy/)), 표의 값은 설정하지 않았을 때의 기본값입니다. 나머지 상수는 프레임워크에서 정하며 바꿀 수 없습니다.
+
+`DEFAULT_MAX_PENDING`(128)과 `MAX_PENDING_CEILING`(1,024)은 설정 가능한 범위를 나타내는 상수이고, `resolveMaxPending(source)`는 정책이나 hello에서 적용할 `maxPending`을 구하며 값이 없으면 `DEFAULT_MAX_PENDING`을 돌려줍니다.
 CLI 패키징 도구는 API 오류 코드 대신 PKG_* 진단 코드를 사용합니다.
 [패키징 보고서](/reference/packaging/report/)에서 도구 오류를 확인하세요.

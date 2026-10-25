@@ -13,6 +13,7 @@ import {
   type HostContext,
   type HostResponse,
   type Policy,
+  resolveMaxPending,
 } from "@bunaway/protocol";
 import { ViewBoundary } from "@bunaway/runtime-bun/view-boundary";
 import { hostResponse } from "../../host-api/bun/host-response.ts";
@@ -460,7 +461,9 @@ function cancelReplacements() {
     cancelReplacement(key);
   }
 }
-const windowRequests = new NativeRequests();
+// One app-configured limit sizes every pending-request queue on this side of the Workers.
+const maxPending = resolveMaxPending(config.policy);
+const windowRequests = new NativeRequests(maxPending);
 const approved = new Map<string, HostContext>();
 const uiCalls = new Map<
   string,
@@ -563,9 +566,7 @@ function handleSessionFailure(packet: PacketOf<"session-failure">) {
 }
 function handleOperation(packet: PacketOf<"operation">) {
   assert(
-    !stopping() &&
-      !uiCalls.has(packet.requestId) &&
-      uiCalls.size < API_LIMITS.maxPending,
+    !stopping() && !uiCalls.has(packet.requestId) && uiCalls.size < maxPending,
     "Invalid UI queue request",
   );
   uiCalls.set(packet.requestId, packet);
@@ -730,6 +731,7 @@ const channel = new Channel(
     },
     (packet) => windowRequests.interruptModal(packet),
   ),
+  maxPending,
 );
 
 /** Observe plugin completion independently of grant acceptance and discard cancelled results. */
@@ -1431,73 +1433,79 @@ function createWindow(
   const policy = config.policy.views.find((view) => view.id === spec.view);
   assert(policy);
   let native: WebView;
-  const boundary = new ViewBoundary(policy, {
-    origin: originOf,
-    source: () => native.source(),
-    ready: () => phase.kind === "live" && phase.start === "running",
-    capacity: (count) =>
-      channel.canSend(
-        count,
-        [
-          ...views.values(),
-        ].reduce((total, view) => total + view.boundary.pendingCount, 0),
-      ),
-    forward: (packet) => {
-      if (packet.kind === "revoke") {
-        discardContext(packet.route.context);
-      }
-      channel.notify(packet);
-    },
-    deliver: (text) => native.send(text),
-    log: (event, data) =>
-      log(event, {
-        view: spec.view,
-        ...data,
-      }),
-    sessionOpened: (route) => {
-      const view = views.get(instanceKey);
-      if (view) {
-        view.sdkDeadline = Date.now() + API_LIMITS.handshakeTimeoutMs;
-        view.readiness?.sessionOpened(route.documentGeneration);
-      }
-    },
-    sdkReady: (route) =>
-      views.get(instanceKey)?.readiness?.sdkComplete(route.documentGeneration),
-    subscriptionEnded: (event) => {
-      const view = views.get(instanceKey);
-      // Without a confirmed listener left, nobody can answer the pending question; a pending or
-      // rejected listen does not count. Cancelling keeps the window open and releases its closing
-      // reservation through closeWindow's cleanup.
-      if (
-        event === "windows.closeRequested" &&
-        view &&
-        !view.boundary.subscribed("windows.closeRequested")
-      ) {
+  const boundary = new ViewBoundary(
+    policy,
+    {
+      origin: originOf,
+      source: () => native.source(),
+      ready: () => phase.kind === "live" && phase.start === "running",
+      capacity: (count) =>
+        channel.canSend(
+          count,
+          [
+            ...views.values(),
+          ].reduce((total, view) => total + view.boundary.pendingCount, 0),
+        ),
+      forward: (packet) => {
+        if (packet.kind === "revoke") {
+          discardContext(packet.route.context);
+        }
+        channel.notify(packet);
+      },
+      deliver: (text) => native.send(text),
+      log: (event, data) =>
+        log(event, {
+          view: spec.view,
+          ...data,
+        }),
+      sessionOpened: (route) => {
+        const view = views.get(instanceKey);
+        if (view) {
+          view.sdkDeadline = Date.now() + API_LIMITS.handshakeTimeoutMs;
+          view.readiness?.sessionOpened(route.documentGeneration);
+        }
+      },
+      sdkReady: (route) =>
+        views
+          .get(instanceKey)
+          ?.readiness?.sdkComplete(route.documentGeneration),
+      subscriptionEnded: (event) => {
+        const view = views.get(instanceKey);
+        // Without a confirmed listener left, nobody can answer the pending question; a pending or
+        // rejected listen does not count. Cancelling keeps the window open and releases its closing
+        // reservation through closeWindow's cleanup.
+        if (
+          event === "windows.closeRequested" &&
+          view &&
+          !view.boundary.subscribed("windows.closeRequested")
+        ) {
+          view.closeRequests.cancel();
+        }
+      },
+      revoked: (reason, generation, error) => {
+        const view = views.get(instanceKey);
+        if (!view) {
+          return;
+        }
+        // The question was asked of the revoked document session, which can no longer answer it.
         view.closeRequests.cancel();
-      }
+        if (reason === "navigation") {
+          view.documentDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
+          view.sdkDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
+          view.readiness?.reset(generation);
+        } else {
+          view.readiness?.sessionEnded(
+            generation,
+            error ?? {
+              code: "CANCELLED",
+              message: "SDK session ended.",
+            },
+          );
+        }
+      },
     },
-    revoked: (reason, generation, error) => {
-      const view = views.get(instanceKey);
-      if (!view) {
-        return;
-      }
-      // The question was asked of the revoked document session, which can no longer answer it.
-      view.closeRequests.cancel();
-      if (reason === "navigation") {
-        view.documentDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
-        view.sdkDeadline = Date.now() + WINDOW_PREPARATION_TIMEOUT_MS;
-        view.readiness?.reset(generation);
-      } else {
-        view.readiness?.sessionEnded(
-          generation,
-          error ?? {
-            code: "CANCELLED",
-            message: "SDK session ended.",
-          },
-        );
-      }
-    },
-  });
+    maxPending,
+  );
   const close = (force = false) => {
     const view = views.get(instanceKey);
     if (view && !view.lifecycle.closed) {

@@ -30,6 +30,16 @@ test("native cancellation releases slots and isolates late completions from a re
   expect(requests.context("healthy")).toBeUndefined();
 });
 
+test("native requests accept as many active calls as the configured limit", () => {
+  const configured = API_LIMITS.maxPending * 2;
+  const requests = new NativeRequests(configured);
+  const context = "limit" as HostContext;
+  for (let index = 0; index < configured; index++) {
+    requests.begin(String(index), context);
+  }
+  expect(() => requests.begin("overflow", context)).toThrow();
+});
+
 test("modal interruption matches the active request and context without releasing its slot", () => {
   const requests = new NativeRequests();
   const context = "menu" as HostContext;

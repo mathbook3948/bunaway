@@ -5,6 +5,7 @@ import {
   type CancellationSignal,
   type ClientMessage,
   type CommandMap,
+  DEFAULT_MAX_PENDING,
   type Dispose,
   type EventMap,
   errorSchema,
@@ -17,6 +18,7 @@ import {
   negotiateProtocol,
   ProtocolError,
   parseMessage,
+  resolveMaxPending,
   SDK_READY_FEATURE,
   serializeMessage,
   type Transport,
@@ -229,6 +231,8 @@ class ClientSession<C extends CommandMap, E extends EventMap>
   private requestIds = 0;
   private readySettled = false;
   private helloAccepted = false;
+  /** Default until the server hello states the app-configured limit. */
+  private maxPending: number = DEFAULT_MAX_PENDING;
   private readyResolve: (value: NegotiatedProtocol) => void = () => {};
   private readyReject: (error: unknown) => void = () => {};
 
@@ -552,10 +556,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
         return;
       }
       // Cancelled listens still own a slot until their late subscription is cleaned up.
-      if (
-        this.requests.size + this.cancelledListens.size >=
-        API_LIMITS.maxPending
-      ) {
+      if (this.requests.size + this.cancelledListens.size >= this.maxPending) {
         reject(requestError("BUSY", "Pending request limit reached."));
         return;
       }
@@ -795,6 +796,7 @@ class ClientSession<C extends CommandMap, E extends EventMap>
       );
       return;
     }
+    this.maxPending = resolveMaxPending(remote);
     // Publish readiness only after the shared protocol contract has been accepted.
     this.negotiated = {
       protocol: negotiated.protocol,

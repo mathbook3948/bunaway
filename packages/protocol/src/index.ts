@@ -55,6 +55,11 @@ export {
   type NativeRegistryOptions,
 } from "./native-registry.ts";
 export {
+  DEFAULT_MAX_PENDING,
+  MAX_PENDING_CEILING,
+  resolveMaxPending,
+} from "./pending-limit.ts";
+export {
   bootstrapSchema,
   errorSchema,
   hostResponseSchema,

@@ -27,7 +27,9 @@ const view: Policy["views"][number] = {
   },
 };
 
-function setup(options: { ready?: boolean; capacity?: number } = {}) {
+function setup(
+  options: { ready?: boolean; capacity?: number; maxPending?: number } = {},
+) {
   const state = {
     ready: options.ready ?? true,
     capacity: options.capacity ?? Number.POSITIVE_INFINITY,
@@ -36,16 +38,20 @@ function setup(options: { ready?: boolean; capacity?: number } = {}) {
   const packets: Packet[] = [];
   const logs: string[] = [];
   const sdkReady: string[] = [];
-  const boundary = new ViewBoundary(view, {
-    origin: (text) => new URL(text).origin,
-    source: () => source,
-    ready: () => state.ready,
-    capacity: (count) => count <= state.capacity,
-    forward: (packet) => packets.push(packet),
-    deliver: (text) => delivered.push(text),
-    log: (event) => logs.push(event),
-    sdkReady: (route) => sdkReady.push(route.context),
-  });
+  const boundary = new ViewBoundary(
+    view,
+    {
+      origin: (text) => new URL(text).origin,
+      source: () => source,
+      ready: () => state.ready,
+      capacity: (count) => count <= state.capacity,
+      forward: (packet) => packets.push(packet),
+      deliver: (text) => delivered.push(text),
+      log: (event) => logs.push(event),
+      sdkReady: (route) => sdkReady.push(route.context),
+    },
+    options.maxPending,
+  );
   const receive = (message: object, from = source) =>
     boundary.receive(
       from,
@@ -336,6 +342,30 @@ test("request ids are single use and the pending, deadline and capacity limits a
   expect(f.lastError()).toBe(
     `bulk-${API_LIMITS.maxPending - 1} BUSY Request limit reached.`,
   );
+});
+
+test("a configured pending limit raises the per-session request limit", () => {
+  const configured = API_LIMITS.maxPending * 2;
+  const f = setup({
+    maxPending: configured,
+  });
+  f.negotiate();
+  for (let index = 0; index < configured; index++) {
+    f.receive({
+      kind: "invoke",
+      id: `bulk-${index}`,
+      command: "ping",
+      payload: null,
+    });
+  }
+  expect(f.lastError()).not.toContain("BUSY");
+  f.receive({
+    kind: "invoke",
+    id: "overflow",
+    command: "ping",
+    payload: null,
+  });
+  expect(f.lastError()).toBe("overflow BUSY Request limit reached.");
 });
 
 test("cancel answers a pending invoke once, keeps a listen and ignores unknown ids", () => {
