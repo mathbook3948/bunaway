@@ -21,8 +21,10 @@ status: accepted
 - WebView2는 `NavigationStarting`, `NavigationCompleted`, `FrameNavigationStarting`, `FrameNavigationCompleted`,
   `SourceChanged`(`IsNewDocument`로 same-document를 구분), `HistoryChanged`, `ContentLoading`을 제공한다.
 - 이 저장소의 Windows 호스트는 이미 아래 범위를 다룬다.
-  - 최상위 `NavigationStarting`: 허용 origin이 아니면 취소하고, 허용되면 `loading`을 올리고 새 탐색 id마다(WebView2가 fragment 이동에 새 id를 내는지는 확인하지 않았으며 `windows.mdx`는 fragment 이동이 세션을 유지한다고 적는다) 이전 문서의
-    세션과 보류 중인 다운로드를 폐기한다. 이 폐기가 문서 단위 세대(`documentGeneration`)를 올린다.
+  - 최상위 `NavigationStarting`: 허용 origin이 아니면 취소하고, 허용되면 `loading`을 올리고 새 탐색 id마다 이전 문서의
+    세션과 보류 중인 다운로드를 폐기한다. 이 폐기가 문서 단위 세대(`documentGeneration`)를 올린다. `windows.mdx`는 같은 문서의
+    fragment 이동이 세션과 세대를 유지한다고 적는다. WebView2가 fragment 이동에 새 탐색 id를 내는지는 이 저장소에서 확인하지
+    않았다.
   - `FrameNavigationStarting`: 허용 origin이 아니면 취소하고 로그만 남긴다. 허용된 프레임 탐색은 상태를 바꾸지 않는다.
   - `SourceChanged`의 same-document: 새 문서가 아니면 세션의 신뢰된 URL(UI 요청의 출처 판단에 쓰는 값)만 갱신한다. 허용
     origin이 아니면 갱신하지 않는다. `windows.getWebViewState`의 `url`은 이 값과 별개로 호출 시점의 WebView2 `Source`를
@@ -40,8 +42,9 @@ status: accepted
 1. 문서, 프레임과 same-document 탐색을 알리는 새 이벤트와 작업을 추가하지 않는다.
 2. 백엔드는 기존 계약으로 탐색 결과를 확인한다.
    - 현재 URL, `loading`, `canGoBack`, `canGoForward`: `windows.getWebViewState`. macOS도 같은 작업을 제공하며 `url`은 WKWebView의 현재 URL을 읽고 앱 URL의 자산 scheme을 `https://app.bunaway.local`로 되돌려 돌려준다.
-   - 새 문서의 준비 상태, 실패와 취소: `windows.readiness`, `windows.getReadiness`. `loading`은 탐색 완료 이벤트가 올 때까지
-     true로 남으므로 완료 기한 초과로 `document`가 `failed`가 된 뒤에도 true일 수 있다.
+   - 새 문서의 준비 상태, 실패와 취소: `windows.readiness`, `windows.getReadiness`. Windows의 `loading`은 탐색 완료 이벤트가
+     올 때까지 true로 남으므로 완료 기한 초과로 `document`가 `failed`가 된 뒤에도 true일 수 있다. macOS의 `loading`은
+     WKWebView의 `isLoading`을 그대로 돌려준다.
    - same-document 탐색 뒤의 URL: `getWebViewState`의 `url`이 호출 시점의 현재 URL을 돌려준다. 호출 직후 값이 방금 시작한
      탐색을 반영한다는 보장은 없다.
    - same-document 탐색의 시점이 필요한 UI는 `hashchange`, `popstate`(엔진이 지원하면 Navigation API)를 쓰고
@@ -56,7 +59,7 @@ status: accepted
 
 ## 근거
 
-- 두 프레임워크가 다르다. Electron은 문서, 프레임, same-document 이벤트를 제공하고 Tauri는 탐색 전 허용 훅만 제공한다. 이 저장소는
+- 두 프레임워크가 다르다. Electron은 문서, 프레임, same-document 이벤트를 제공하고 Tauri는 탐색 전 허용 훅과 페이지 로드 시작과 완료만 제공한다. 이 저장소는
   탐색 결과를 `getWebViewState`와 `windows.readiness`로 이미 제공하므로 같은 정보의 이벤트를 더하면 순서, 세대와 큐 한도 규칙을
   두 곳에서 지켜야 한다. 코어 계약은 작게 유지한다.
 - same-document 탐색은 UI가 표준 웹 API로 직접 알 수 있고, 시점이 필요 없는 현재 URL 확인은 조회로 충분하다. 시점이 필요한
@@ -66,6 +69,4 @@ status: accepted
 ## 결과
 
 - 이벤트, 권한, 스키마, 네이티브 코드 변경은 없다.
-- 로드 시작, DOM ready, 완료와 실패 이벤트를 다루는 결정(ADR 0068, WebView 로드 이벤트)이 이 결정의 짝이며, 그 결정은 문서,
-  프레임과 same-document 탐색 이벤트를 이 결정에서 다루도록 남겼다.
 - `docs/TODO-windows.md`의 해당 항목을 완료로 표시하고 이 결정을 참조한다.
