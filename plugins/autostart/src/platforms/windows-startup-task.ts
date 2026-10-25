@@ -43,6 +43,8 @@ const ASYNC_ERROR = 3;
 /** The state poll keeps the I/O worker responsive and bounds a task that never completes. */
 const POLL_INTERVAL_MS = 10;
 export const STARTUP_TASK_TIMEOUT_MS = 10_000;
+/** After Cancel, wait this long for Windows to leave the started state before reporting the call as ended. */
+const CANCEL_SETTLE_MS = 1000;
 
 /** Windows.ApplicationModel.StartupTaskState. */
 export const STARTUP_TASK_STATE = {
@@ -219,6 +221,7 @@ async function completed(
   signal: AbortSignal | undefined,
   own: (object: Pointer) => Pointer,
   stage: string,
+  deadline: number,
 ): Promise<void> {
   const out = new BigUint64Array(1);
   const iid = windowsGuid(ASYNC_INFO_IID);
@@ -237,7 +240,6 @@ async function completed(
   );
   const info = own(Number(out[0]) as Pointer);
   const status = new Int32Array(1);
-  const deadline = performance.now() + STARTUP_TASK_TIMEOUT_MS;
   for (;;) {
     check(
       method(
@@ -256,6 +258,26 @@ async function completed(
     const aborted = signal?.aborted === true;
     if (aborted || performance.now() >= deadline) {
       method(info, SLOT_ASYNC_CANCEL, []);
+      // Cancel is a request. Report the call as ended only once Windows stopped the operation, so
+      // the caller's next request cannot overlap one that is still running.
+      const settleBy = performance.now() + CANCEL_SETTLE_MS;
+      while (performance.now() < settleBy) {
+        check(
+          method(
+            info,
+            SLOT_ASYNC_STATUS,
+            [
+              "ptr",
+            ],
+            ptr(status),
+          ),
+          stage,
+        );
+        if (status[0] !== ASYNC_STARTED) {
+          break;
+        }
+        await Bun.sleep(POLL_INTERVAL_MS);
+      }
       throw new BunawayError({
         code: aborted ? "CANCELLED" : "TIMEOUT",
         message: "Windows startup task operation did not complete.",
@@ -295,6 +317,8 @@ async function completed(
  */
 export const openStartupTask: StartupTaskOpener = async (signal, use) => {
   throwIfAborted(signal);
+  // One limit covers the whole call, including the enablement request.
+  const deadline = performance.now() + STARTUP_TASK_TIMEOUT_MS;
   const library = dlopen(
     "combase.dll",
     pick(
@@ -375,7 +399,7 @@ export const openStartupTask: StartupTaskOpener = async (signal, use) => {
           "GetAsync",
         ),
       );
-      await completed(opening, signal, own, "GetAsync");
+      await completed(opening, signal, own, "GetAsync", deadline);
       // GetResults yields null for an ID the manifest does not declare; outObject reports it.
       const task = outObject(
         (out) =>
@@ -421,7 +445,13 @@ export const openStartupTask: StartupTaskOpener = async (signal, use) => {
                 ),
               "RequestEnableAsync",
             );
-            await completed(request, abort, own, "RequestEnableAsync");
+            await completed(
+              request,
+              abort,
+              own,
+              "RequestEnableAsync",
+              deadline,
+            );
             const state = new Int32Array(1);
             check(
               method(

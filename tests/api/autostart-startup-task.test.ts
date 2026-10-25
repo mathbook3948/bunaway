@@ -208,8 +208,15 @@ test.skipIf(process.platform !== "win32")(
     const details = (outcome as BunawayError).details as
       | Record<string, unknown>
       | undefined;
-    const hresult = details?.hresult;
-    expect(hresult).not.toBe(E_NOINTERFACE);
-    expect(hresult).not.toBe(REGDB_E_CLASSNOT_REG);
+    if (details === undefined) {
+      // GetResults returned no task: the class, interface and slots all worked.
+      expect(outcome).toMatchObject({
+        code: "UNSUPPORTED",
+      });
+      return;
+    }
+    expect(typeof details.hresult).toBe("number");
+    expect(details.hresult).not.toBe(E_NOINTERFACE);
+    expect(details.hresult).not.toBe(REGDB_E_CLASSNOT_REG);
   },
 );

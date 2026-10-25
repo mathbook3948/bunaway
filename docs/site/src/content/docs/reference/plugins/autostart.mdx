@@ -217,7 +217,8 @@ MSIX 패키지는 작업 ID `BunawayAutostart`를 `Enabled="false"`로 선언하
 manifest의 StartupTask는 실행 파일을 인자 없이 시작합니다. 그래서 MSIX에서
 `args`가 비어 있지 않거나 `hidden: true`인 `enableAutostart`는 `INVALID_ARGUMENT`로 거부하고,
 예약 시작 인자가 없으므로 로그인 실행을 `launchReason: "autostart"`로 구분하지 못합니다. manifest에 이 작업을 선언하지 않은
-패키지는 오류를 반환하며 코드는 Windows의 응답에 따라 `UNSUPPORTED` 또는 `INTERNAL`입니다. 호출은 비동기 WinRT 작업이므로 호출 취소와 10초 기한을 따릅니다.
+패키지는 오류를 반환하며 코드는 Windows의 응답에 따라 `UNSUPPORTED` 또는 `INTERNAL`입니다. 호출은 비동기 WinRT 작업이므로 호출 취소와, 활성화 요청까지 포함한 호출 전체 10초 기한을 따릅니다. 취소나 기한 뒤에는 Windows가 작업을
+멈출 때까지 최대 1초 기다린 다음 오류를 반환합니다.
 작업이 이미 바뀐 뒤 취소되거나 기한이 지나면 변경을 되돌리지 않으므로 `getAutostartStatus`로 현재 상태를
 다시 확인하세요. 대기 중에 다른 등록 변경 요청이 오면 `BUSY`로 거부합니다. MSIX 패키지는 `autostart` 플러그인을 쓰지 않아도 비활성 상태의 작업을 선언하며,
 Windows 설정의 시작 앱 목록에 앱 항목이 나타납니다.
@@ -237,9 +238,10 @@ setup에서는 루트 `backend.permissions`를 사용합니다. 실행 파일이
 선택하는 입력과 관리자 범위는 제공하지 않습니다.
 
 - `INVALID_ARGUMENT`: 입력, 인자 인코딩이나 전체 명령줄 길이가 유효하지 않거나 숨김 등록에 필요한 트레이가 없습니다.
-- `PERMISSION_DENIED`: 정책 권한이나 사용자 레지스트리 접근 권한이 없습니다.
+- `PERMISSION_DENIED`: 정책 권한이나 사용자 레지스트리 접근 권한이 없거나, StartupTask 호출을 Windows가 접근 거부로 거절했습니다.
 - `UNSUPPORTED`: Windows 어댑터나 호스트 실행 정보가 없거나, MSIX 패키지의 manifest에 StartupTask가 없다고 Windows가 알린 경우입니다.
-- `INTERNAL`: 레지스트리 조회, 갱신이나 명령줄 파싱에 실패했습니다. macOS에서는 plist 파일 접근에 실패했거나
+- `INTERNAL`: 레지스트리 조회, 갱신이나 명령줄 파싱에 실패했습니다. MSIX에서는 StartupTask 호출이 다른 HRESULT로 실패했거나
+  변경 뒤 WinRT 객체 해제에 실패했습니다. 후자는 변경이 이미 적용됐을 수 있어 `getAutostartStatus`로 확인하세요. macOS에서는 plist 파일 접근에 실패했거나
   같은 이름의 기존 plist를 이 앱이 만들지 않았습니다.
 - `CANCELLED`, `TIMEOUT`, `BUSY`: 기존 Host API의 취소, 기한과 대기열 제한입니다.
 
