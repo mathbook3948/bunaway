@@ -791,11 +791,11 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   [`os.listPrinters`와 `os.getDefaultPrinter`](./site/src/content/docs/reference/plugins/os.mdx)는
   이름과 기본 여부만 반환하며 독립 권한이다.
 - [x] `showPrintUI`로 WebView2 browser 또는 system 인쇄 대화상자를 요청한다. 반환은 인쇄 완료가 아니며 사용자가 프린터와 제출을 선택한다.
-- [ ] silent print와 프로그램에서 지정하는 프린터 및 인쇄 옵션을 제공한다.
+- [x] silent print와 프로그램에서 지정하는 프린터 및 인쇄 옵션은 제공하지 않는다. 인쇄는 `windows.showPrintUI`가 맡고, 사용자 확인 없는 출력은 요구가 확인되면 별도 결정에서 다룬다. [ADR 0091](./decisions/0091-webview-print-pdf-and-page-capture.md).
 - [ ] system 인쇄 대화상자의 실제 사용자 선택과 취소, 프린터의 실제 출력을 검증한다. CI의 browser UI 요청과 자원 정리는 물리 인쇄 검증이 아니다.
-- [ ] PDF 내보내기와 용지, 방향, 여백, 페이지 범위, 배경 옵션을 제공한다.
-- [ ] 페이지 이미지 capture와 지정 영역 capture를 제공한다.
-- [ ] 페이지를 HTML 또는 리소스를 포함한 형태로 저장한다.
+- [x] PDF 내보내기와 용지, 방향, 여백, 페이지 범위, 배경 옵션은 제공하지 않는다. 요구가 확인되면 결과 크기 상한과 저장 경로 책임을 먼저 정한다. [ADR 0091](./decisions/0091-webview-print-pdf-and-page-capture.md).
+- [x] 페이지 이미지 capture와 지정 영역 capture는 제공하지 않는다. 화면과 창 이미지는 `screen-capture`의 `captureSource`를 쓴다. [ADR 0091](./decisions/0091-webview-print-pdf-and-page-capture.md).
+- [x] 페이지를 HTML 또는 리소스를 포함한 형태로 저장하는 기능은 제공하지 않는다. WebView2에 `HTMLComplete`와 같은 범위의 API가 없다. [ADR 0091](./decisions/0091-webview-print-pdf-and-page-capture.md).
 - [ ] 화면과 창 capture source 목록, 이름, thumbnail과 식별자를 제공한다.
   `screen-capture` 플러그인이 모니터와 최상위 창의 목록, 이름, 불투명 식별자와 `captureSource`의 축소 PNG(thumbnail)를
   제공하고, `listSources`의 선택 `thumbnailSize`로 목록 항목마다 thumbnail을 함께 돌려준다. 실제 모니터와 다른 앱 창의 캡처, 혼합 DPI,
