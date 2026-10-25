@@ -91,8 +91,10 @@ function volumeGuid(path: string): string {
   ]);
   expect(result.exitCode, result.stderr.toString()).toBe(0);
   const match = /Volume(\{[0-9a-f-]+\})/i.exec(result.stdout.toString());
-  expect(match?.[1]).toBeDefined();
-  return match?.[1] ?? "";
+  if (!match?.[1]) {
+    throw new Error(`No volume GUID in mountvol output: ${result.stdout}`);
+  }
+  return match[1];
 }
 
 /**
@@ -139,6 +141,16 @@ async function expectRefused(
     expect(await recycledItem(sample)).toBeUndefined();
   } finally {
     await adapter.dispose();
+    // If the refusal regressed and the file reached the bin, remove only this test's entry.
+    const leaked = await recycledItem(sample);
+    if (leaked) {
+      await rm(leaked.data, {
+        force: true,
+      });
+      await rm(leaked.info, {
+        force: true,
+      });
+    }
     await rm(root, {
       recursive: true,
       force: true,
