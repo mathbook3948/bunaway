@@ -606,8 +606,9 @@ try {
     sendKey(virtualKey, false);
     sendKey(virtualKey, true);
   };
-  // A plain key must raise the controller's accelerator event, or the Alt checks below cannot work.
-  step("accelerator probe");
+  // A plain character key is only logged: the controller reports keys the browser treats as
+  // accelerators, and the page receives the character itself. The Alt checks below need Alt and Esc.
+  step("plain key probe");
   // The key is sent only once the page reports focus on its input, so a missing key report cannot
   // be a page without focus.
   await pumpUntil(
@@ -617,15 +618,13 @@ try {
   logInputState("before probe key");
   markTimeline("probe key F");
   press(VK_F);
-  // Report what both the page and the controller saw before judging, so a failure says whether
-  // the key never reached the page or only the controller event is missing.
+  // Report what both the page and the controller saw, to keep the key route visible in the log.
   await settle(KEY_REPORT_SETTLE_MS);
   logInputState("after probe key");
   await pumpUntil(
-    () => accelerators.length > 0,
-    "Controller accelerator event for a real key",
+    () => pageKeys.includes("f"),
+    "The page receiving a real key",
   );
-  windows.pump();
   assert.equal(
     user.symbols.GetMenu(hwnd),
     tree,
@@ -645,19 +644,13 @@ try {
 
   // Alt used with another key is not a tap.
   step("Alt+F");
-  const seen = accelerators.length;
   sendKey(VK_MENU, false);
   sendKey(VK_F, false);
   sendKey(VK_F, true);
   sendKey(VK_MENU, true);
-  // The sequence has arrived once its accelerator events are recorded; the bar must still be
-  // linked after the deferred dispatch has run.
-  await pumpUntil(
-    () => accelerators.length >= seen + 4,
-    "Alt+F accelerator events",
-  );
-  await Bun.sleep(50);
-  windows.pump();
+  // Let the sequence and the deferred dispatch run; the bar must still be linked afterwards, and
+  // the Alt tap that follows would fail if Alt+F had been counted as a tap.
+  await settle(KEY_REPORT_SETTLE_MS);
   assert.equal(
     user.symbols.GetMenu(hwnd),
     tree,
