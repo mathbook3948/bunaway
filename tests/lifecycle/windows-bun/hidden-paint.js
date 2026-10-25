@@ -1,6 +1,7 @@
 import { createClient } from "@bunaway/client";
 
 const SAMPLE_WAIT_MS = 1000;
+const VISIBLE_WAIT_MS = 3000;
 const client = createClient();
 await client.ready;
 
@@ -38,7 +39,9 @@ await client.invoke("test.hidden", {
 await client.invoke("test.awaitShown", null);
 // The browser learns about the new visibility asynchronously; wait for it instead of sampling at once.
 if (document.visibilityState !== "visible") {
+  // A window the browser keeps hidden must still report what the page saw, so the wait is bounded.
   await new Promise((resolve) => {
+    setTimeout(resolve, VISIBLE_WAIT_MS);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
         resolve();

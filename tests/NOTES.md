@@ -1426,6 +1426,8 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 `lifecycle/windows-process-failure.ts`는 실제 WebView2 렌더러를 강제 종료해 백엔드가 `renderer-exited`와 `reload`를 받고 뷰가 같은 창에서 다시 로드되는지 확인한다. Windows native 실행기에 포함한다.
 `lifecycle/windows-document-title.ts`는 실제 WebView2 문서가 `document.title`을 바꿀 때마다 이벤트가 순서대로 도착하는지(한글, 이모지 경계, 1024 초과 제목 포함)와 네이티브 캡션이 그대로인지 확인한다. Windows native 실행기에 포함한다. 첫 로드의 제목은 구독 전에 도착할 수 있어 검증 대상에서 제외한다.
 
+`lifecycle/windows-hidden-paint.ts`는 `visible: false`로 만든 창의 실제 WebView2 문서를 `windows.show()` 전후로 관찰한다. 숨김 상태에서 페이지 타이머가 도는지, 네이티브 `isVisible`이 거짓이고 문서 준비가 `ready`인지 확인하고, 표시 뒤에는 `document.visibilityState`가 `visible`이고 `requestAnimationFrame`이 전달되는지 확인한다. 숨김 상태의 `visibilityState`, 프레임 전달, paint timing 항목은 값을 보고서(`build/windows-hidden-paint/report.json`)에 남긴다.
+
 `api/window-thumbnail-toolbar.test.ts`는 썸네일 툴바 입력 스키마(개수, id, 툴팁 길이, 플래그, 잘못된 ICO), 클릭 이벤트 스키마, 어댑터 전달과 macOS의 `UNSUPPORTED`, 호스트의 재검증, 7칸 구성과 `WM_COMMAND` 칸 번호의 id 변환(비활성, 숨김, 미등록, 알림 코드 불일치 제외)을 확인한다.
 `lifecycle/windows-bun-window-api.ts`는 실제 `ITaskbarList3`로 개수를 바꾸는 연속 호출(0, 3, 1, 7, 0개)이 오류 없이 끝나는 것과 잘못된 ICO, 중복 id 거절을 확인하고(어느 vtable 슬롯을 불렀는지는 관찰하지 않는다), `lifecycle/windows-window-input-events.ts`는 최상위 HWND에 합성한 `THBN_CLICKED` `WM_COMMAND`가 등록한 버튼 id로만 전달되는지(비활성, 숨김, 미등록, 범위 밖, 메뉴 명령, 툴바를 줄이거나 비운 뒤의 이전 칸 제외)와 잘못된 ICO를 거절한 뒤에도 기존 칸이 같은 id로 눌리는 것을 확인한다.
 사람이 작업 표시줄 썸네일에서 누르는 동작, Explorer 실제 재시작 뒤 재적용, 썸네일에 그려지는 모양은 자동 검증하지 않는다.

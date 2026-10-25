@@ -108,9 +108,11 @@ if (!process.argv.includes("--child")) {
   const timeout = killAfter(child, "nativeFixture");
   try {
     const code = await child.exited;
+    // The child writes what it saw before each later step, so a failure still leaves the values.
+    const written = await readFile(reportPath, "utf8").catch(() => "{}");
+    console.log("hidden paint observation", written);
     assert.equal(code, 0, `${await stderr}\n${await stdout}`);
-    const report = JSON.parse(await readFile(reportPath, "utf8"));
-    console.log("hidden paint observation", JSON.stringify(report));
+    const report = JSON.parse(written);
     // Document scripts run and the document reaches readiness while the window stays hidden.
     assert.equal(report.hidden.timerRan, true);
     assert.equal(report.hiddenNative.isVisible, false);
@@ -191,17 +193,20 @@ if (!process.argv.includes("--child")) {
     natives.shown = {
       isVisible: await windows.isVisible(),
     };
+    const writeReport = () =>
+      writeFile(
+        childReport,
+        JSON.stringify({
+          hidden: samples.hidden,
+          hiddenNative: natives.hidden,
+          shown: samples.shown,
+          shownNative: natives.shown,
+        }),
+      );
+    await writeReport();
     release();
     await sampleArrived("shown");
-    await writeFile(
-      childReport,
-      JSON.stringify({
-        hidden: samples.hidden,
-        hiddenNative: natives.hidden,
-        shown: samples.shown,
-        shownNative: natives.shown,
-      }),
-    );
+    await writeReport();
     await windows.close();
     // The app has no startup window and stays up when its window closes; the scenario quits it.
     await desktop?.quit();
@@ -217,7 +222,15 @@ if (!process.argv.includes("--child")) {
           void scenario().catch((error) => {
             console.error(error);
             process.exitCode = 1;
-            void desktop?.quit();
+            // A page still waiting for the show must not hold the shutdown.
+            release();
+            if (desktop === undefined) {
+              process.exit(1);
+            }
+            void desktop.quit().catch((quitError) => {
+              console.error(quitError);
+              process.exit(1);
+            });
           });
         },
       },
