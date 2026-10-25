@@ -710,7 +710,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [x] 결정 완료: cache 크기 조회와 cache, localStorage, IndexedDB, service worker 데이터 삭제는 제공하지 않는다. UI는 웹 표준 API로 자기 origin의 데이터를 지운다. WebView2에는 cache 크기를 읽는 API가 없다. 로그아웃 때 전체 삭제가 필요한 앱이 확인되면 인자 없는 전체 삭제부터 다시 검토한다([ADR 0081](./decisions/0081-webview-browsing-data.md)).
 - [x] 결정 완료: 저장소 종류, origin과 기간별 데이터 삭제는 제공하지 않는다. WebView2는 종류와 기간별 삭제를 제공하지만 origin별 삭제는 DevTools 프로토콜로만 가능하다([ADR 0081](./decisions/0081-webview-browsing-data.md)).
 - [x] 결정 완료: 인증 cache, DNS cache와 code cache의 조회와 삭제는 제공하지 않는다. WebView2에 대응하는 API가 없다([ADR 0081](./decisions/0081-webview-browsing-data.md)).
-- [ ] 세션의 persistent 여부와 storage path를 조회한다.
+- [x] 결정 완료: 세션의 persistent 여부와 storage path 조회는 제공하지 않는다. 호스트는 InPrivate를 쓰지 않아 항상 persistent이고 프로필 폴더 위치는 공개 계약이 아니다([ADR 0074](./decisions/0074-webview-session-info.md)).
 - [x] 세션별 proxy 설정, 조회와 재적용은 [제공하지 않는다](decisions/0062-webview-network-identity-options.md). 설정 수단이 없으므로 조회와 재적용 대상도 없다. 호스트가 WebView2 브라우저 인자를 넘기지 않는 방침(ADR 0030 결정 4)을 유지하며, 배포 앱의 환경 변수 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`로 들어가는 `--proxy-server`는 앱 계약이 아니다. 앱 백엔드의 시스템 proxy 조회는 `network.resolveProxy`가 맡는다.
 - [ ] 세션의 모든 연결 종료를 제공한다. preconnect와 connection 정리 항목과 함께 결정한다.
 - [x] HTTP 요청 전 취소, redirect와 URL filter는 [제공하지 않는다](decisions/0083-webview-request-interception.md). 탐색 허용은 허용 origin 검사와 탐색 훅 항목이, 백엔드 HTTP는 `network.request`가 맡는다.
