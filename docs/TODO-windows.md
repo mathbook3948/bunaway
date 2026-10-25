@@ -734,9 +734,9 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
   `convertFileSrc`에 대응하며 URL 변환과 파일 접근 허용을 구분한다. 19절의 파일 접근 규칙과
   17절의 CSP에 연결하고, 허용한 이미지와 미디어 표시, Unicode와 예약 문자 인코딩을 검증한다.
   앱의 거부 경로, 경로 순회, 링크 우회와 접근 철회 후 호출을 차단하는지 테스트한다.
-- [ ] 세션에 preload 등록, 조회와 해제를 제공한다.
-- [ ] service worker 등록, 실행 상태와 console 이벤트를 제공한다.
-- [ ] service worker와 shared worker 조회, 시작과 IPC의 지원 범위를 결정한다.
+- [x] 세션 preload 등록, 조회와 해제 API는 [제공하지 않는다](decisions/0084-webview-workers-and-session-preload.md). 문서 로드 시점의 주입은 문서 초기화 스크립트 항목에서 정한다.
+- [x] service worker 등록, 실행 상태와 console 이벤트 API는 [제공하지 않는다](decisions/0084-webview-workers-and-session-preload.md).
+- [x] service worker와 shared worker의 조회, 시작과 IPC는 [제공하지 않는다](decisions/0084-webview-workers-and-session-preload.md). 앱 페이지의 웹 표준 worker는 호스트 개입 없이 동작한다.
 - [x] 브라우저 extension 설치, 조회, 제거와 이벤트는 [제공하지 않는다](decisions/0070-webview-browser-extensions.md). 호스트는 WebView2 환경에서 extension을 켜지 않는다.
 - [x] extension을 지원하지 않으므로 Chrome API subset은 정하지 않는다. [ADR 0070](decisions/0070-webview-browser-extensions.md).
 - [ ] shared dictionary와 압축 dictionary cache 관리의 지원을 결정한다.
