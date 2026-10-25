@@ -15,9 +15,12 @@ WebView 문서의 로드 시작, DOM ready, 완료, 실패를 앱에 알리는 �
 - Electron의 `webContents`는 `did-start-loading`, `dom-ready`, `did-finish-load`, `did-fail-load`, `did-stop-loading`
   다섯 이벤트를 포함한 로드 관련 이벤트를 메인 프로세스에서 제공한다(Electron 45 기준). `dom-ready`와
   `did-finish-load`는 최상위 프레임만, `did-fail-load`는 하위 프레임도 포함한다. `did-stop-loading`은 성공, 실패와
-  중단을 가리지 않고 로딩이 멈출 때 오며(소스 기준, 공식 문서는 정의만 적는다), 이 저장소에서는 `loading`이 false가 되는 시점과 `cancelled` 상태가 이에 해당한다.
-- Tauri 2는 창 빌더의 `on_page_load` 콜백 하나로 `Started`와 `Finished` 두 단계를 알리며, DOM ready와 실패를 구분하지
-  않는다. Windows에서 `Finished`는 `NavigationCompleted`에 대응하고 성공 여부를 보지 않는다.
+  중단을 가리지 않고 로딩이 멈출 때 오며(소스 기준, 공식 문서는 정의만 적는다), 프레임 트리 전체의 로딩 상태 신호다. 이 저장소의 `loading`이
+  false가 되는 시점에 대응하지만 범위는 허용된 최상위 문서 탐색 하나로 다르다. 취소는 `did-fail-provisional-load`에
+  가깝고, 이 저장소의 `cancelled` 상태에 대응한다.
+- Tauri 2(2.12 기준)는 `on_page_load` 콜백(웹뷰와 창 빌더, 앱 빌더, 플러그인에서 등록)으로 `Started`와 `Finished` 두
+  단계를 알리며, DOM ready와 실패를 구분하지 않는다. Windows에서 `Started`는 WebView2 `ContentLoading`에, `Finished`는
+  `NavigationCompleted`에 대응하고 성공 여부를 보지 않는다. macOS와 Linux 대응은 확인하지 않았다.
 - WebView2는 `NavigationStarting`, `NavigationCompleted`(성공 여부와 `WebErrorStatus` 포함), `DOMContentLoaded`
   (`ICoreWebView2_2`)를 제공한다.
 - 이 저장소의 Windows 호스트는 이미 허용된 최상위 문서의 `NavigationStarting`과 `NavigationCompleted`를 쓴다.
