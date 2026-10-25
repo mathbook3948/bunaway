@@ -171,6 +171,72 @@ test.skipIf(process.platform !== "win32")(
 );
 
 test.skipIf(process.platform !== "win32")(
+  "a display change refits a fullscreen window to its monitor and keeps the normal placement",
+  async () => {
+    const [{ Windows }, { user }, { dlopen }] = await Promise.all([
+      import("#native/windows/bun/win32"),
+      import("#native/windows/bun/win32-bindings"),
+      import("bun:ffi"),
+    ]);
+    const messages = dlopen("user32.dll", {
+      SendMessageW: {
+        args: [
+          "u64",
+          "u32",
+          "u64",
+          "i64",
+        ],
+        returns: "i64",
+      },
+    });
+    const WM_DISPLAYCHANGE = 0x7e;
+    const SWP_NOZORDER_NOACTIVATE = 0x14;
+    const native = new Windows(() => {});
+    let hwnd = 0n;
+    try {
+      hwnd = native.create("Fullscreen refit", 640, 480, () => {}, false, {
+        x: 100,
+        y: 100,
+      });
+      const normal = native.getBounds(hwnd, "outer");
+      native.setFullscreen(hwnd, true);
+      const fullscreenBounds = native.getBounds(hwnd, "outer");
+
+      // Windows only moves a window off a removed monitor and keeps its size.
+      expect(
+        user.symbols.SetWindowPos(
+          hwnd,
+          0n,
+          fullscreenBounds.x + 40,
+          fullscreenBounds.y + 30,
+          fullscreenBounds.width - 200,
+          fullscreenBounds.height - 100,
+          SWP_NOZORDER_NOACTIVATE,
+        ),
+      ).not.toBe(0);
+      expect(native.getBounds(hwnd, "outer")).not.toEqual(fullscreenBounds);
+
+      messages.symbols.SendMessageW(hwnd, WM_DISPLAYCHANGE, 32n, 0n);
+      expect(native.isFullscreen(hwnd)).toBe(true);
+      expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenBounds);
+
+      // A change that leaves the window already fitted does nothing.
+      messages.symbols.SendMessageW(hwnd, WM_DISPLAYCHANGE, 32n, 0n);
+      expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenBounds);
+
+      native.setFullscreen(hwnd, false);
+      expect(native.getBounds(hwnd, "outer")).toEqual(normal);
+    } finally {
+      if (hwnd) {
+        native.destroy(hwnd);
+      }
+      native.dispose();
+      messages.close();
+    }
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
   "taskbar attention requests never activate or show the window and reject destroyed windows",
   async () => {
     const [{ Windows }, { user }] = await Promise.all([

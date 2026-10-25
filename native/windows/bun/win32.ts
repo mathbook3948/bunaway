@@ -649,16 +649,58 @@ export class Windows {
     if (message === WM_ACTIVATE) {
       this.recordActivation(window, wparam);
     }
+    if (message === WM_DISPLAYCHANGE && this.windows.has(window)) {
+      if (this.fullscreen.has(window)) {
+        this.refitFullscreen(window);
+      } else {
+        // Refresh even without a query while the previous monitor is disconnected.
+        this.readNormalMonitorInfo(
+          window,
+          this.getPlacement(window).subarray(
+            WINDOWPLACEMENT_NORMAL_RECT_OFFSET,
+          ),
+        );
+      }
+    }
+  }
+
+  /**
+   * Windows keeps a window's size when a monitor is removed or changes resolution and only
+   * moves it onto a remaining monitor, so a fullscreen window would no longer cover its
+   * monitor. Fit it to the monitor it is now nearest to; the saved normal placement is untouched.
+   */
+  private refitFullscreen(window: bigint) {
+    if (user.symbols.IsIconic(window) !== 0) {
+      return; // SetWindowPos on a minimized window is not a fullscreen refit.
+    }
+    const bounds = this.monitorBounds(
+      user.symbols.MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
+    );
+    const current = this.getBounds(window, "outer");
     if (
-      message === WM_DISPLAYCHANGE &&
-      this.windows.has(window) &&
-      !this.fullscreen.has(window)
+      current.x === bounds.x &&
+      current.y === bounds.y &&
+      current.width === bounds.width &&
+      current.height === bounds.height
     ) {
-      // Refresh even without a query while the previous monitor is disconnected.
-      this.readNormalMonitorInfo(
-        window,
-        this.getPlacement(window).subarray(WINDOWPLACEMENT_NORMAL_RECT_OFFSET),
+      return;
+    }
+    this.changingGeometry.add(window);
+    try {
+      assert(
+        user.symbols.SetWindowPos(
+          window,
+          0n,
+          bounds.x,
+          bounds.y,
+          bounds.width,
+          bounds.height,
+          SWP_NOZORDER | SWP_NOACTIVATE,
+        ),
       );
+    } finally {
+      this.changingGeometry.delete(window);
+      this.observeChanges(window);
     }
   }
 
