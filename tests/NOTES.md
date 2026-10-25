@@ -1427,6 +1427,8 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 `api/window-process-failure.test.ts`는 `windows.waitForProcessFailure`의 WebView2 종류 번호 대응(모르는 값은 `unknown-exited`), 결과 스키마, 순서 번호와 커서 재개, 지원하지 않는 플랫폼의 `UNSUPPORTED`를 확인한다.
 `lifecycle/windows-process-failure.ts`는 실제 WebView2 렌더러를 강제 종료해 백엔드가 `renderer-exited`와 `reload`를 받고 뷰가 같은 창에서 다시 로드되는지 확인한다. Windows native 실행기에 포함한다.
 `lifecycle/windows-document-title.ts`는 실제 WebView2 문서가 `document.title`을 바꿀 때마다 이벤트가 순서대로 도착하는지(한글, 이모지 경계, 1024 초과 제목 포함)와 네이티브 캡션이 그대로인지 확인한다. Windows native 실행기에 포함한다. 첫 로드의 제목은 구독 전에 도착할 수 있어 검증 대상에서 제외한다.
+`api/window-document-favicon.test.ts`는 `windows.documentFaviconChanged`의 스키마(필수 필드, 2048 초과, 추가 필드)와 주소 길이 제한(초과하면 빈 문자열)을 확인한다.
+`lifecycle/windows-document-favicon.ts`는 실제 WebView2 문서가 `<link rel="icon">`을 바꾸거나 지울 때 이벤트가 순서대로 도착하는지와 네이티브 캡션이 그대로인지 확인한다. Windows native 실행기에 포함한다. 첫 로드의 아이콘은 구독 전에 도착할 수 있어 검증 대상에서 제외한다.
 
 `lifecycle/windows-hidden-paint.ts`는 `visible: false`로 만든 창의 실제 WebView2 문서를 `windows.show()` 전후로 관찰한다. 숨김 상태에서 페이지 타이머가 돌고 `requestAnimationFrame`이 전달되며 `first-paint` 항목이 있는지, 네이티브 `isVisible`이 거짓이고 문서 준비가 `ready`인지 확인하고, 표시 뒤에는 `document.visibilityState`가 `visible`이고 프레임이 전달되는지 확인한다. 숨김 상태의 `visibilityState`는 단언하지 않고 보고서(`build/windows-hidden-paint/report.json`)와 로그에 남긴다. 실패해도 그 시점까지의 값은 보고서에 남는다.
 

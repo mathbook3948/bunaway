@@ -842,6 +842,28 @@ export const windowDocumentTitleChangedSchema = {
   ],
   additionalProperties: false,
 } as const;
+/**
+ * The favicon of the window's page changed (Windows only). `url` is the address of the icon the
+ * page declared, or the empty string when the page has none or the address is longer than 2048
+ * UTF-16 code units. The icon bytes are not delivered; the page fetches the address itself.
+ */
+export const windowDocumentFaviconChangedSchema = {
+  type: "object",
+  properties: {
+    windowId: eventIdentity,
+    viewId: eventIdentity,
+    url: {
+      type: "string",
+      maxLength: 2048,
+    },
+  },
+  required: [
+    "windowId",
+    "viewId",
+    "url",
+  ],
+  additionalProperties: false,
+} as const;
 /** Ordered native transitions and preparation snapshots, subject to view event policy. */
 export const windowEvents = {
   "windows.appCommand": windowAppCommandSchema,
@@ -849,6 +871,7 @@ export const windowEvents = {
   "windows.thumbnailToolbarClicked": windowThumbnailToolbarClickedSchema,
   "windows.closeRequested": windowCloseRequestedSchema,
   "windows.documentTitleChanged": windowDocumentTitleChangedSchema,
+  "windows.documentFaviconChanged": windowDocumentFaviconChangedSchema,
   "windows.monitorsChanged": monitorChangeSchema,
   "windows.readiness": windowReadinessSchema,
   "windows.lifecycle": windowLifecycleSchema,
