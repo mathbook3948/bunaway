@@ -19,24 +19,25 @@ Tauri의 해당 옵션 제공 범위는 버전별 확인이 끝나지 않았고,
 - WebView2에는 `ICoreWebView2Settings.IsScriptEnabled`가 있다. 이미지 로드, WebGL, autoplay, 타이머 throttling을 켜고 끄는
   전용 `ICoreWebView2Settings` 항목은 없다. 이들을 바꾸려면 환경 생성 시점의 브라우저 인자(`AdditionalBrowserArguments`)가
   필요하고, 이 인자는 같은 환경을 쓰는 모든 WebView에 적용되며 생성 뒤에는 바꿀 수 없다.
-- Windows 호스트는 WebView2의 `WebMessageReceived`(페이지의 `window.chrome.webview.postMessage`)로 UI 메시지를 받고
-  `PostWebMessageAsJson`으로 보낸다(`native/windows/bun/webview.ts`). JavaScript를 끄면 이 경로가 끊겨 앱 UI와 백엔드가
-  통신할 수 없다.
+- Windows 호스트는 슬롯 34의 `add_WebMessageReceived` 핸들러로 페이지 메시지를 받고 `PostWebMessageAsJson`으로 보낸다
+  (`native/windows/bun/webview.ts`). 페이지에서 이 경로로 보내는 것은 스크립트 실행에 의존하므로, WebView2에서
+  JavaScript를 끄면 앱 UI와 백엔드의 메시지 통신이 끊길 것으로 본다(WebView2 동작에 대한 추론이며 이 저장소에서 검증하지 않았다).
 
 ## 결정
 
 1. JavaScript, 이미지, WebGL, autoplay, background throttling 설정을 앱 정의와 컨트롤러 API에 추가하지 않는다.
 2. WebView는 WebView2 기본 동작을 그대로 쓴다.
-3. 이미지와 미디어 제어는 앱의 HTML과 CSS(`<img loading>`, `<video autoplay muted>`, `media` 속성)로,
-   throttling이 문제인 작업은 Worker나 백엔드로 옮겨서 해결한다.
+3. 이 설정들의 대체 수단은 제공하지 않는다. 앱은 자신의 페이지 안에서 처리하고(예: throttling이 문제인 작업은 백엔드로
+   옮긴다), 이미지, WebGL, autoplay 정책 자체를 바꾸는 방법은 이 결정에서 정하지 않는다.
 4. 이 설정이 필요한 구체적 사용처가 확인되면 별도 결정에서 다룬다.
 
 ## 근거
 
-- 쓰는 곳이 없다. JavaScript를 끄면 UI와 백엔드 통신이 끊겨 의미 있는 사용처가 없고, 나머지 설정은 WebView2에 전용 설정이
-  없어 환경 단위 브라우저 인자로만 바꿀 수 있다. 이를 앱 정의에 노출하면 환경 생성 규칙과 창 설정이 서로 묶인다.
-  코어는 작게 두고, 필요한 앱은 HTML과 CSS로 해결한다.
-- Electron과 같은 옵션을 제공하지 않는 점에서 이 결정은 Electron과 다르다. 사용처가 확인되면 별도 결정에서 다시 다룬다.
+- 쓰는 곳이 없다. JavaScript를 끄면 UI와 백엔드 통신이 끊길 것으로 보여 의미 있는 사용처가 없고, 나머지 설정은 WebView2에
+  전용 설정이 없어 환경 단위 브라우저 인자로만 바꿀 수 있다. 이를 앱 정의에 노출하면 환경 생성 규칙과 창 설정이 서로
+  묶인다. 코어는 작게 두고, 사용처가 확인되면 그때 결정한다.
+- Electron은 이 옵션들을 제공하므로 이 결정은 Electron과 다르다. 같은 구역의 렌더링 옵션 결정
+  ([ADR 0039](./0039-webview-rendering-options.md))과 같은 방침이다.
 
 ## 결과
 
