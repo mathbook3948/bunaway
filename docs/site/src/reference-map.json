@@ -1002,6 +1002,7 @@
           "now",
           "tick",
           "onLifecycle",
+          "onProcessFailure",
           "creationSettled",
           "monitors"
         ]
@@ -1753,6 +1754,7 @@
       "windows.getReadiness",
       "windows.isOpen",
       "windows.waitForLifecycle",
+      "windows.waitForProcessFailure",
       "windows.getMonitors",
       "windows.getMonitorSnapshot",
       "windows.getPrimaryMonitor",

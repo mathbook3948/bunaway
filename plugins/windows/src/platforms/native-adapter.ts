@@ -3,7 +3,10 @@ import type { NativeWindowServices } from "@bunaway/plugin-api/native";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import { validateWindowCall, type WindowCall } from "#windows/contract";
 import { WindowOperations } from "#windows/platforms/coordinator";
-import { LifecycleFeed } from "#windows/platforms/lifecycle-feed";
+import {
+  LifecycleFeed,
+  ProcessFailureFeed,
+} from "#windows/platforms/lifecycle-feed";
 import {
   applyWindowCall,
   type WindowActionContext,
@@ -132,6 +135,14 @@ function assertCallerAllowed(
     }
     return;
   }
+  if (call.operation === "windows.waitForProcessFailure") {
+    if (source !== "backend") {
+      throw denied(
+        "WebView process failure subscription requires the backend.",
+      );
+    }
+    return;
+  }
   if (
     call.operation === "windows.destroy" &&
     (source !== "backend" || !permitted)
@@ -160,6 +171,9 @@ export function createOperations(
     apply: (call, viewId) => applyWindowCall(scope, call, viewId),
   });
   const lifecycle = new LifecycleFeed(services.onLifecycle?.bind(services));
+  const processFailures = new ProcessFailureFeed(
+    services.onProcessFailure?.bind(services),
+  );
   /**
    * Allows a close answer only from the trusted backend or from the document that was asked.
    * Request IDs are small increasing integers, so permission alone would let another document
@@ -203,6 +217,11 @@ export function createOperations(
           ...(await lifecycle.wait(call.payload.after, context.signal)),
         };
       }
+      if (call.operation === "windows.waitForProcessFailure") {
+        return {
+          ...(await processFailures.wait(call.payload.after, context.signal)),
+        };
+      }
       if (call.operation === "windows.respondClose") {
         assertAskedWindowAnswers(source, context.requestId);
       }
@@ -211,6 +230,7 @@ export function createOperations(
     busy: () => operations.replacing.size !== 0,
     dispose() {
       lifecycle.dispose();
+      processFailures.dispose();
     },
   };
 }

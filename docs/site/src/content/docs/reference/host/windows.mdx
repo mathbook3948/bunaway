@@ -430,6 +430,7 @@ await windows.close();
 | `windows.getSnapshot` | 인자 없음. Host operation 입력은 `null` | `Promise<WindowSnapshot>`. 현재 창 식별자, 관찰 revision, 표시 상태와 물리 outer bounds를 한 번에 조회. macOS는 `UNSUPPORTED` |
 | `windows.isOpen` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 창이 열려 있으면 `true`. 창을 만들지 않으며 닫힌 창에도 성공 |
 | `windows.waitForLifecycle` | `{ after? }`. 백엔드 전용이며 권한 검사 없음 | `Promise<{ sequence, windowId, viewId, phase }>`. 다음 수명 phase를 기다리고, `after`에 이전 결과의 `sequence`를 주면 그 뒤 첫 phase를 반환. 종료 시작 뒤에는 발행하지 않음 |
+| `windows.waitForProcessFailure` | `{ after? }`. 백엔드 전용이며 권한 검사 없음. Windows만 지원 | `Promise<{ sequence, windowId, viewId, kind, recovery }>`. 호스트가 처리한 다음 WebView 프로세스 실패를 기다리고, `after`에 이전 결과의 `sequence`를 주면 그 뒤 첫 실패를 반환. [WebView 프로세스 실패](#webview-프로세스-실패-windows) 참고 |
 | `windows.getReadiness` | 인자 없음. Host operation 입력은 `null` | `Promise<WindowReadiness>`. 현재 준비 상태와 실패, 취소 결과. 닫은 창의 마지막 결과도 조회 |
 | `windows.destroy` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 신뢰된 백엔드가 확인과 종료 취소를 우회해 창의 종료를 확정. 창이 없으면 `true` |
 | `windows.setEnabled` | `{ enabled: boolean }` | `Promise<null>`. 실제 입력 가능 상태 변경 |
@@ -1237,6 +1238,25 @@ for (;;) {
   if (event.phase === "ready") break;
 }
 ```
+
+### WebView 프로세스 실패 (Windows)
+
+백엔드는 `windows.waitForProcessFailure({ after? })`로 WebView2의 `ProcessFailed`를 관찰합니다. 결과는
+`{ sequence, windowId, viewId, kind, recovery }`입니다. Electron의 `render-process-gone`(`app`과 `webContents`)과
+`child-process-gone`(`app`)은 메인 프로세스 이벤트이고, 일반 렌더러 API에는 대응 이벤트가 없습니다(`<webview>` 태그의
+게스트 종료만 예외). Tauri(wry)는 Windows에서 `ProcessFailed`를 감싼 API 없이 raw `ICoreWebView2`만 열어 두므로
+앱이 직접 등록해야 합니다. 이 때문에 실패한 문서가 아니라 백엔드에 전달합니다.
+실패한 렌더러의 문서는 세션이 철회되어 이벤트를 받을 수 없습니다.
+
+- `kind`: `browser-exited`, `renderer-exited`, `renderer-unresponsive`, `frame-renderer-exited`, `utility-exited`,
+  `sandbox-helper-exited`, `gpu-exited`, `plugin-exited`, `plugin-broker-exited`, `unknown-exited`. 값은 WebView2
+  `COREWEBVIEW2_PROCESS_FAILED_KIND`의 순서와 같고 모르는 값은 `unknown-exited`입니다.
+- `recovery`: 호스트의 처리입니다. `reload`는 세션을 철회하고 같은 창에서 뷰를 다시 탐색하며 windowId는 그대로입니다.
+  `close`는 브라우저 프로세스가 끝나 창을 닫는 경우(`browser-exited`)입니다.
+- `waitForLifecycle`과 같은 규칙으로 `sequence`를 이어 전달하면 보존된 이력(최근 32개)을 따라가고, 동시에 16개 호출을
+  대기시키며 넘으면 `BUSY`입니다. 앱 종료나 세션 종료가 시작된 뒤에는 발행하지 않습니다.
+- 문서 이벤트는 제공하지 않습니다. 복구한 문서가 필요하면 백엔드가 알고 있는 실패를 명령으로 전달합니다.
+- macOS는 지원하지 않습니다.
 
 ### 입력 알림 이벤트 (Windows)
 

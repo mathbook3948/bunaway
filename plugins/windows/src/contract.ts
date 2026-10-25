@@ -1153,6 +1153,39 @@ export const windowOperations = {
       ]),
     }),
   },
+  /**
+   * Waits for the next WebView process failure the host handled (Windows only), or returns the first
+   * retained one after `after` (a `sequence` from an earlier result), like `windows.waitForLifecycle`.
+   * `kind` names the failed WebView2 process. `recovery` is `reload` when the host navigated the view
+   * again and `close` when the browser process exited and the window was closed. Backend only and
+   * without a permission check. Failures are not sent once shutdown starts.
+   */
+  "windows.waitForProcessFailure": {
+    input: z.strictObject({
+      after: z.int().min(0).max(Number.MAX_SAFE_INTEGER).exactOptional(),
+    }),
+    output: z.strictObject({
+      sequence: z.int().min(1).max(Number.MAX_SAFE_INTEGER),
+      windowId: windowIdentifier,
+      viewId: windowIdentifier,
+      kind: z.enum([
+        "browser-exited",
+        "renderer-exited",
+        "renderer-unresponsive",
+        "frame-renderer-exited",
+        "utility-exited",
+        "sandbox-helper-exited",
+        "gpu-exited",
+        "plugin-exited",
+        "plugin-broker-exited",
+        "unknown-exited",
+      ]),
+      recovery: z.enum([
+        "reload",
+        "close",
+      ]),
+    }),
+  },
   "windows.create": creationResult,
   "windows.recreate": creationResult,
   "windows.show": windowResult,
