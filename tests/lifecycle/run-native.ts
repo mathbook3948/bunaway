@@ -64,6 +64,15 @@ if (target === "windows-x64") {
       ],
       root,
     );
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/lifecycle/windows-resizable-maximize.test.ts"),
+      ],
+      root,
+    );
     // Own process: the test shows windows and switches the thread's DPI awareness while capturing.
     await run(
       [
