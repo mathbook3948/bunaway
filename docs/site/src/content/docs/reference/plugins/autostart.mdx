@@ -212,11 +212,11 @@ MSIX 패키지는 작업 ID `BunawayAutostart`를 `Enabled="false"`로 선언하
 `startupState: "disabled"`를 반환하며, 사용자는 Windows 설정의 시작 앱에서 직접 켜야 합니다.
 정의된 값이 아닌 상태는 `unknown`입니다. `registrationName`은 작업 ID이고 `commandLine`,
 `executablePath`, `args`는 `null`, `matchesCurrentLaunch`는 `false`입니다.
-`disableAutostart`는 작업을 끄며 이미 꺼져 있어도 성공합니다.
+`disableAutostart`는 작업을 끕니다.
 
 manifest의 StartupTask는 실행 파일을 인자 없이 시작합니다. 그래서 MSIX에서
 `args`가 비어 있지 않거나 `hidden: true`인 `enableAutostart`는 `INVALID_ARGUMENT`로 거부하고,
-로그인 실행의 `launchReason`은 `"manual"`로 전달됩니다. manifest에 이 작업을 선언하지 않은
+예약 시작 인자가 없으므로 로그인 실행을 `launchReason: "autostart"`로 구분하지 못합니다. manifest에 이 작업을 선언하지 않은
 패키지는 `UNSUPPORTED`입니다. 호출은 비동기 WinRT 작업이므로 호출 취소와 10초 기한을 따릅니다.
 
 ## 정책과 오류

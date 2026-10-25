@@ -104,7 +104,7 @@ manifest에는 `desktop:StartupTask`를 `Enabled="false"`로 선언하며 작업
 `registrationName`은 작업 ID이고 `commandLine`, `executablePath`, `args`는 `null`,
 `matchesCurrentLaunch`는 `false`다. StartupTask는 manifest의 실행 파일을 인자 없이 시작하므로
 `args`가 비어 있지 않거나 `hidden: true`인 등록은 `INVALID_ARGUMENT`로 거부한다.
-로그인 실행의 `launchReason`은 `manual`로 보이며 숨김 시작은 지원하지 않는다.
+예약 시작 인자가 없으므로 로그인 실행을 `launchReason: "autostart"`로 구분하지 못하며 숨김 시작은 지원하지 않는다.
 manifest에 이 작업을 선언하지 않은 패키지는 `UNSUPPORTED`다.
 
 이 결정의 근거는 다음과 같다. Electron은 `setLoginItemSettings`가 패키지 여부와 관계없이
@@ -114,7 +114,6 @@ autostart 플러그인도 Run 키만 쓰며 MSIX 번들을 만들지 않는다. 
 동의를 우선하는 `Enabled="false"`로 한다.
 
 ## Windows 공식 자료
-
 
 - [Run and RunOnce Registry Keys](https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys)
 - [Parsing C command-line arguments](https://learn.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments)

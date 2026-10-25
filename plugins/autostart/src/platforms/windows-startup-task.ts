@@ -1,4 +1,5 @@
 import { CFunction, dlopen, type Pointer, ptr, read } from "bun:ffi";
+import { attemptAll } from "@bunaway/plugin";
 import { COMBASE, pick } from "@bunaway/plugin/win32";
 import { BunawayError, MSIX_STARTUP_TASK_ID } from "@bunaway/protocol";
 import type { z } from "zod";
@@ -30,7 +31,7 @@ const SLOT_ASYNC_STATUS = 7;
 const SLOT_ASYNC_ERROR_CODE = 8;
 const SLOT_ASYNC_CANCEL = 9;
 const POINTER_BYTES = 8;
-const RO_INIT_MULTITHREADED = 1;
+const RO_INIT_SINGLETHREADED = 0;
 const S_FALSE = 1;
 const RPC_E_CHANGED_MODE = 0x80010106;
 const E_ACCESSDENIED = 0x80070005;
@@ -202,6 +203,16 @@ function method(
   }
 }
 
+/** Stop before work that could show a consent prompt or touch the task once the caller gave up. */
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new BunawayError({
+      code: "CANCELLED",
+      message: "Windows startup task operation was cancelled.",
+    });
+  }
+}
+
 /** Wait for an async operation, cancelling it when the caller aborts or the time limit passes. */
 async function completed(
   operation: Pointer,
@@ -210,6 +221,8 @@ async function completed(
   stage: string,
 ): Promise<void> {
   const out = new BigUint64Array(1);
+  // Keep the IID buffer referenced for the whole native call.
+  const iid = windowsGuid(ASYNC_INFO_IID);
   check(
     method(
       operation,
@@ -218,7 +231,7 @@ async function completed(
         "ptr",
         "ptr",
       ],
-      ptr(windowsGuid(ASYNC_INFO_IID)),
+      ptr(iid),
       ptr(out),
     ),
     stage,
@@ -276,11 +289,13 @@ async function completed(
 
 /**
  * Open the manifest task for one operation. WinRT objects, the HSTRING and the combase library
- * live only for the call; the apartment is joined as multithreaded because the I/O worker has no
- * message pump. A thread that already joined another apartment keeps it, and the agile
- * StartupTask objects work in either.
+ * live only for the call. The apartment mode matches the notification runtime that shares the I/O
+ * worker, so neither plugin can make the other's `RoInitialize` fail while this call waits. The
+ * wait polls status and never needs a message pump, and a thread that already joined another
+ * apartment keeps it, because the agile StartupTask objects work in either.
  */
 export const openStartupTask: StartupTaskOpener = async (signal, use) => {
+  throwIfAborted(signal);
   const library = dlopen(
     "combase.dll",
     pick(
@@ -324,20 +339,17 @@ export const openStartupTask: StartupTaskOpener = async (signal, use) => {
     }
   };
   try {
-    const initialized = library.symbols.RoInitialize(RO_INIT_MULTITHREADED);
+    const initialized = library.symbols.RoInitialize(RO_INIT_SINGLETHREADED);
     const joined = initialized >= 0 && initialized <= S_FALSE;
     if (!joined && initialized >>> 0 !== RPC_E_CHANGED_MODE) {
       throw failure(initialized, "RoInitialize");
     }
     try {
+      const staticsIid = windowsGuid(STATICS_IID);
       const statics = withString(STARTUP_TASK_CLASS, (name) =>
         outObject(
           (out) =>
-            library.symbols.RoGetActivationFactory(
-              name,
-              ptr(windowsGuid(STATICS_IID)),
-              out,
-            ),
+            library.symbols.RoGetActivationFactory(name, ptr(staticsIid), out),
           "RoGetActivationFactory",
         ),
       );
@@ -388,6 +400,7 @@ export const openStartupTask: StartupTaskOpener = async (signal, use) => {
           return state[0] ?? -1;
         },
         async requestEnable(abort) {
+          throwIfAborted(abort);
           const request = outObject(
             (out) =>
               method(
@@ -420,12 +433,20 @@ export const openStartupTask: StartupTaskOpener = async (signal, use) => {
         },
       });
     } finally {
-      for (const object of held.reverse()) {
-        method(object, SLOT_RELEASE, []);
-      }
-      if (joined) {
-        library.symbols.RoUninitialize();
-      }
+      // Release every object and leave the apartment even when one release fails.
+      attemptAll(
+        [
+          ...held.reverse().map((object) => () => {
+            method(object, SLOT_RELEASE, []);
+          }),
+          () => {
+            if (joined) {
+              library.symbols.RoUninitialize();
+            }
+          },
+        ],
+        "Could not release the startup task objects.",
+      );
     }
   } finally {
     library.close();

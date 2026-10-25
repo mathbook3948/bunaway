@@ -182,6 +182,16 @@ test("disable and getStatus drive the same task", async () => {
   expect((await getStatus(state)).startupState).toBe("disabled");
 });
 
+test("an aborted call stops before touching WinRT", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await expect(
+    openStartupTask(controller.signal, () => Promise.resolve(null)),
+  ).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
+});
+
 // Without package identity Windows refuses the lookup. Reaching that refusal proves the activation
 // class, the statics interface ID and the GetAsync slot are valid, and that cleanup does not fault.
 test.skipIf(process.platform !== "win32")(
