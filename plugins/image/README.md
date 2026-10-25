@@ -20,7 +20,7 @@ try {
 `image.createFromPath`는 백엔드 전용 작업이다(화면에 허용하면 정책 검사가 거부한다). Windows에서
 로컬 드라이브의 PNG, JPEG, BMP 파일을 읽어 `maxDimension`과 리소스 픽셀 상한 안으로 축소해 새
 리소스로 만든다. 읽기는 `image-file.ts`가 열린 파일의 크기와 종류를 확인한 뒤 수행하고, 축소는
-`windows-codec.ts`의 `decodeScaled`가 WIC의 premultiplied BGRA 변환과 Fant 스케일러로 한다.
+`windows-codec.ts`의 `decodeScaled`가 WIC의 Fant 스케일러로 한다. 크기를 줄일 때만 premultiplied BGRA로 변환해 스케일하고, 줄이지 않으면 straight BGRA로 바로 읽는다.
 원본 헤더 크기는 픽셀 디코드 전에 검사한다. 허용 폴더는 앱이 정한다.
 
 `image.createFileTypeIcon`은 확장자와 크기(`small` 16, `normal` 32, `large` 48)만 받아 연결 아이콘을

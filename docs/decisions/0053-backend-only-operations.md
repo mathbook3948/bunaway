@@ -33,7 +33,7 @@ status: accepted
 4. 크기 제한은 다음과 같다. 파일은 16 MiB, 가로와 세로는 16,384, 픽셀은 64,000,000개까지이며, 헤더 크기를 픽셀 디코드 전에
    검사한다. 결과는 기존 이미지 상한(4,096, 524,288 바이트)을 지킨다.
 5. 셸의 파일 thumbnail 캐시(`IShellItemImageFactory`)는 이번에 쓰지 않는다. 파일 형식별 미리 보기가 필요하면 후속으로 다룬다.
-6. macOS는 이번 변경에서 지원하지 않는다. 입력 스키마가 Windows 드라이브 경로만 받으므로 macOS의 경로는 `INVALID_ARGUMENT`다.
+6. macOS는 이번 변경에서 지원하지 않는다. 입력 스키마가 Windows 드라이브 경로만 받으므로 macOS에서 POSIX 경로는 `INVALID_ARGUMENT`, 드라이브 경로는 `UNSUPPORTED`다.
 
 ## 근거
 
