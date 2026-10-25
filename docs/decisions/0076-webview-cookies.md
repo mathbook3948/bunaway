@@ -13,7 +13,7 @@ Electron은 세션의 `cookies` 객체로 조회, 설정, 삭제, `changed` 이�
 WebView2에는 `ICoreWebView2CookieManager`가 있어 조회(`GetCookies`), 설정(`AddOrUpdateCookie`), 삭제(`DeleteCookie` 등)는
 구현할 수 있으나 변경 이벤트와 flush에 해당하는 API는 없다.
 
-- ADR 0026이 정한 대로 WebView 안에는 정책 뷰의 `origins`에 허용된 origin의 문서만 열리며, 같은 origin의 페이지는 `document.cookie`로
+- WebView에 열린 같은 host의 페이지(cookie는 포트로 분리되지 않는다)는 `document.cookie`로
   `HttpOnly`가 아닌 cookie를 읽고 쓸 수 있다. 서버가 보낸 `Set-Cookie`는 WebView가 그대로 처리한다.
 - 백엔드는 WebView와 별개인 Bun 프로세스다. 선택 플러그인 `network`는 WebView cookie를 공유하지 않으며
   요청 header의 `Cookie`도 받지 않는다([network 계약](../site/src/content/docs/reference/plugins/network.mdx)).
@@ -28,8 +28,8 @@ WebView2에는 `ICoreWebView2CookieManager`가 있어 조회(`GetCookies`), 설�
 
 1. cookie 조회, 설정, 삭제, 변경 이벤트와 flush를 제공하지 않는다. 호스트는 WebView의 cookie 저장을 그대로 두고
    별도 계약을 얹지 않는다. 이 결정은 Windows 호스트(WebView2)의 계약을 정하며, macOS 호스트는 macOS TODO에서 따로 판단한다.
-2. UI 코드가 필요하면 `document.cookie`를 쓴다. cookie가 재시작 뒤에도 남는지는 WebView2 저장소와 페이지의 host를 따르며(cookie는
-   포트로 분리되지 않는다) 이 결정은 이를 보장하지 않는다. 백엔드가 UI의 로그인 결과를 필요로 하면 UI가 토큰 값을 앱 명령으로
+2. UI 코드가 필요하면 `document.cookie`를 쓴다. cookie가 재시작 뒤에도 남는지는 WebView2 저장소와 페이지의 host를 따르며
+   이 결정은 이를 보장하지 않는다. 백엔드가 UI의 로그인 결과를 필요로 하면 UI가 토큰 값을 앱 명령으로
    전달하고, 백엔드는 이를 `safe-storage` 플러그인에 보관한다.
 3. WebView의 `HttpOnly` cookie 값을 백엔드가 읽어야 하는 앱이 확인되면 별도 결정에서 다룬다. 그때는 허용 origin 안의
    URL 하나와 cookie 이름을 지정하는 읽기 전용 조회를 먼저 검토하고, 설정과 삭제, 변경 이벤트는 그 뒤에 따로 판단한다.
