@@ -27,6 +27,10 @@ const output = resolve(root, "build/windows-menu-auto-hide");
 const assets = resolve(output, "assets");
 const caption = "Bunaway menu auto-hide";
 const STEP_TIMEOUT_MS = deadline("childStep");
+const WM_TIMER = 0x0113;
+const WM_ENTERMENULOOP = 0x0211;
+const WM_EXITMENULOOP = 0x0212;
+const END_MENU_TIMER = 0xb171n;
 const WM_KEYDOWN = 0x0100;
 const WM_KEYUP = 0x0101;
 const WM_SYSKEYDOWN = 0x0104;
@@ -53,6 +57,26 @@ const user = dlopen("user32.dll", {
       "ptr",
     ],
     returns: "u64",
+  },
+  SetTimer: {
+    args: [
+      "u64",
+      "u64",
+      "u32",
+      "ptr",
+    ],
+    returns: "u64",
+  },
+  KillTimer: {
+    args: [
+      "u64",
+      "u64",
+    ],
+    returns: "i32",
+  },
+  EndMenu: {
+    args: [],
+    returns: "i32",
   },
   PostMessageW: {
     args: [
@@ -139,6 +163,21 @@ try {
     640,
     480,
     (message, wparam, lparam) => {
+      // An Alt key up that reaches the frame makes Windows enter keyboard menu mode, a modal loop
+      // that would stop this fixture's pump. The fixture ends the loop itself and keeps the loop
+      // messages from the menu code, so only the page key route is under test.
+      if (message === WM_ENTERMENULOOP) {
+        user.symbols.SetTimer(hwnd, END_MENU_TIMER, 20, null);
+        return;
+      }
+      if (message === WM_EXITMENULOOP) {
+        return;
+      }
+      if (message === WM_TIMER && wparam === END_MENU_TIMER) {
+        user.symbols.KillTimer(hwnd, END_MENU_TIMER);
+        user.symbols.EndMenu();
+        return;
+      }
       for (const receive of [
         ...listeners,
       ]) {
