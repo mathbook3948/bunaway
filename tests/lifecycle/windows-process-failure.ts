@@ -10,7 +10,7 @@ import { testAppMetadata } from "../fixtures/app-info.ts";
 import { killAfter, waitFor } from "../fixtures/deadlines.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
-import { rendererPids } from "./windows-host-processes.ts";
+import { closeAllWindows, rendererPids } from "./windows-host-processes.ts";
 
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
@@ -131,6 +131,19 @@ if (!process.argv.includes("--child")) {
       );
       assert.equal(await killer.exited, 0, "renderer termination failed");
     }
+    await waitFor(
+      () =>
+        access(reportPath).then(
+          () => true,
+          () => false,
+        ),
+      {
+        deadline: "childStep",
+        what: "the backend report",
+      },
+    );
+    // The host API is closed to the backend after the command, so the driver closes the window.
+    await closeAllWindows(child.pid);
     const code = await child.exited;
     assert.equal(code, 0, `${await stderr}\n${await stdout}`);
     const report = JSON.parse(await readFile(reportPath, "utf8"));
@@ -185,6 +198,8 @@ if (!process.argv.includes("--child")) {
             return null;
           }
           firstArm = (async () => {
+            // The host API is only usable while this command runs, so read the window id first.
+            const snapshot = await windows.getSnapshot();
             // `after: 0` replays retained history, so a failure that lands before the wait registers is kept.
             const waiting = windows.waitForProcessFailure({
               after: 0,
@@ -199,7 +214,6 @@ if (!process.argv.includes("--child")) {
               deadline: "childStep",
               what: "the reloaded page",
             });
-            const snapshot = await windows.getSnapshot();
             await writeFile(
               resolve(childRoot, "build/windows-process-failure/report.json"),
               JSON.stringify({
@@ -208,7 +222,6 @@ if (!process.argv.includes("--child")) {
                 reloaded: armCount > 1,
               }),
             );
-            await windows.close();
           })().catch(async (error: unknown) => {
             // Surface the cause to the driver instead of leaving it to an opaque timeout.
             await writeFile(
@@ -217,7 +230,6 @@ if (!process.argv.includes("--child")) {
                 error: String(error),
               }),
             );
-            await windows.close();
           });
           return null;
         },
