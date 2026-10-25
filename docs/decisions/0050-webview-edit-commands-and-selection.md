@@ -45,8 +45,8 @@ status: accepted
   DevTools 프로토콜 경로를 늘리지 않는다.
 - 백엔드가 호출하는 `cut`, `copy`, `paste` API는 사용자 활성화 없이 클립보드를 읽고 쓰는 경로가 된다. 메뉴 role은
   사용자가 창 메뉴바나 컨텍스트 팝업에서 항목을 고른 경우에만 실행된다. 호스트는 그 선택을 사용자 활성화로 삼아
-  편집 명령 스크립트(`cut`, `copy` 포함)를 `userGesture`로 실행한다. paste의 텍스트 삽입(`Input.insertText`)은
-  `userGesture` 없이 호출한다. 별도 API는 사용자 선택 없이 이 활성화를 대신하게 되므로 그 경계를 먼저 정해야 한다.
+  편집 명령 스크립트(`cut`, `copy` 포함)를 `userGesture`로 실행한다. paste는 포커스를 확인하는 스크립트만
+  `userGesture`로 실행하고, 텍스트 삽입(`Input.insertText`)은 `userGesture` 없이 호출한다. 별도 API는 사용자 선택 없이 이 활성화를 대신하게 되므로 그 경계를 먼저 정해야 한다.
 
 ## 결과
 
