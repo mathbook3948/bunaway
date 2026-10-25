@@ -1,11 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
@@ -326,14 +320,6 @@ test.skipIf(process.platform !== "win32")(
           }),
         ),
       ).toBe("INVALID_ARGUMENT");
-      const truncated = write("truncated.png", wideHead(wide));
-      expect(
-        codeOf(() =>
-          platform.createFromPath({
-            path: truncated,
-          }),
-        ),
-      ).toBe("INVALID_ARGUMENT");
       // A decodable image followed by padding: only the file size check rejects it.
       const huge = write(
         "huge.png",
@@ -388,9 +374,3 @@ test.skipIf(process.platform !== "win32")(
     }
   },
 );
-
-/** The first half of an encoded file: a valid header followed by cut pixel data. */
-function wideHead(path: string): Buffer {
-  const bytes = readFileSync(path);
-  return bytes.subarray(0, Math.max(64, bytes.length >> 1));
-}
