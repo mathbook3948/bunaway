@@ -224,6 +224,38 @@ test.skipIf(process.platform !== "win32")(
       messages.symbols.SendMessageW(hwnd, WM_DISPLAYCHANGE, 32n, 0n);
       expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenBounds);
 
+      // A change while minimized is applied when the window is restored.
+      const SW_SHOWMINNOACTIVE = 7;
+      const SW_SHOWNOACTIVATE = 4;
+      const showWindow = dlopen("user32.dll", {
+        ShowWindow: {
+          args: [
+            "u64",
+            "i32",
+          ],
+          returns: "i32",
+        },
+      });
+      try {
+        user.symbols.SetWindowPos(
+          hwnd,
+          0n,
+          fullscreenBounds.x + 40,
+          fullscreenBounds.y + 30,
+          fullscreenBounds.width - 200,
+          fullscreenBounds.height - 100,
+          SWP_NOZORDER_NOACTIVATE,
+        );
+        showWindow.symbols.ShowWindow(hwnd, SW_SHOWMINNOACTIVE);
+        expect(user.symbols.IsIconic(hwnd)).not.toBe(0);
+        messages.symbols.SendMessageW(hwnd, WM_DISPLAYCHANGE, 32n, 0n);
+        showWindow.symbols.ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        expect(user.symbols.IsIconic(hwnd)).toBe(0);
+        expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenBounds);
+      } finally {
+        showWindow.close();
+      }
+
       native.setFullscreen(hwnd, false);
       expect(native.getBounds(hwnd, "outer")).toEqual(normal);
     } finally {

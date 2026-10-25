@@ -70,6 +70,7 @@ import {
   SC_MOVE,
   SC_RESTORE,
   SC_SIZE,
+  SIZE_RESTORED,
   SM_CXMAXTRACK,
   SM_CXMINTRACK,
   SM_CXPADDEDBORDER,
@@ -113,6 +114,7 @@ import {
   WM_MOUSEACTIVATE,
   WM_OBSERVE_WINDOW,
   WM_QUIT,
+  WM_SIZE,
   WM_SIZING,
   WM_SYSCOMMAND,
   WM_WINDOWPOSCHANGED,
@@ -281,6 +283,8 @@ export class Windows {
   private creatingConstraints: WindowSizeConstraints | undefined;
   private readonly callback: JSCallback;
   private readonly previousDpiAwarenessContext: bigint;
+  /** Fullscreen windows that missed a display change while minimized; refitted when restored. */
+  private readonly fullscreenRefitPending = new Set<bigint>();
   private readonly fullscreen = new Map<
     bigint,
     {
@@ -649,6 +653,14 @@ export class Windows {
     if (message === WM_ACTIVATE) {
       this.recordActivation(window, wparam);
     }
+    if (
+      message === WM_SIZE &&
+      wparam === SIZE_RESTORED &&
+      this.fullscreenRefitPending.delete(window) &&
+      this.fullscreen.has(window)
+    ) {
+      this.refitFullscreen(window);
+    }
     if (message === WM_DISPLAYCHANGE && this.windows.has(window)) {
       if (this.fullscreen.has(window)) {
         this.refitFullscreen(window);
@@ -671,7 +683,9 @@ export class Windows {
    */
   private refitFullscreen(window: bigint) {
     if (user.symbols.IsIconic(window) !== 0) {
-      return; // SetWindowPos on a minimized window is not a fullscreen refit.
+      // SetWindowPos on a minimized window is not a fullscreen refit; wait for the restore.
+      this.fullscreenRefitPending.add(window);
+      return;
     }
     const bounds = this.monitorBounds(
       user.symbols.MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
@@ -3323,6 +3337,7 @@ export class Windows {
     this.dpiByWindow.delete(window);
     this.normalMonitors.delete(window);
     this.fullscreen.delete(window);
+    this.fullscreenRefitPending.delete(window);
   }
 
   /** Dispatch a bounded message batch and surface any callback failure. */
