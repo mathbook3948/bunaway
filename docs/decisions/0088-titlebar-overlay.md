@@ -33,14 +33,15 @@ title-bar overlay는 시스템 caption(제목 줄)을 없애고 WebView가 그 �
    제공하지 않는다.
 2. 사용자 타이틀바가 필요한 앱은 `titlebar: "custom"`과 CSS `app-region`, 앱이 그린 button으로
    `windows.minimize`, `windows.toggleMaximize`, `windows.close`를 호출한다. 네이티브 caption 모양과 Snap Layouts가
-   필요한 앱은 `titlebar: "system"`을 쓴다.
+   필요한 앱은 `titlebar: "system"`을 쓴다. 시스템 타이틀바에서 Snap Layouts가 뜨는지는 확인하지 않았다
+   ([ADR 0057](./0057-custom-titlebar-snap-layouts.md)).
 3. `titlebar: "custom"`의 현재 동작과 `getTitlebar()` 계약은 바꾸지 않는다.
 4. 문서에는 overlay를 지원하지 않는다고 적고 위 대안을 안내한다.
 
 ## 근거
 
 - Electron은 호스트가 버튼을 그리는 방식이고 Tauri는 제공하지 않는다. 두 선례가 갈리므로 코어를 작게 두는 쪽을 따른다.
-  앱이 만든 버튼으로 같은 결과를 얻을 수 있고 이 저장소에서 이를 요구한 사용처도 없다.
+  앱이 만든 버튼으로 같은 결과를 얻을 수 있으므로 코어 API를 늘리지 않는다.
 - 호스트가 버튼을 그리면 WebView 위에 겹치는 자식 창이나 비클라이언트 영역 처리가 필요하다. 그러면 시스템 테마(밝음, 어두움, 고대비),
   DPI 변경, hover와 pressed 상태, 접근성 이름, `setMaximizable(false)`와 `setClosable(false)` 반영, RTL 배치,
   전체화면 진입과 해제 때의 숨김을 코어가 모두 맞춰야 한다. 버튼 영역을 WebView 문서와 겹치지 않게 하려면 앱에 영역 크기를 알려

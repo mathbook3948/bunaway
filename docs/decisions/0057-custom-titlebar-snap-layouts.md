@@ -40,7 +40,7 @@ Windows 11의 Snap Layouts는 최대화 버튼에 마우스를 올리면 뜨는 
 2. Snap Layouts가 필요한 앱은 시스템 타이틀바(`titlebar: "system"`)를 쓴다. 시스템 caption 버튼은 OS가 hit-test하는
    경로라서 Snap Layouts의 전제가 되지만, 이 저장소의 창에서 실제로 뜨는지는 확인하지 않았다(`maximizable: false`와
    `resizable: false` 창은 `WS_MAXIMIZEBOX`와 `WS_THICKFRAME`이 빠진다). 네이티브 caption 버튼을 유지하는 title-bar overlay는
-   아직 제공하지 않으며 별도 항목([TODO-windows.md](../TODO-windows.md)의 title-bar overlay)에서 정한다.
+   제공하지 않는다([ADR 0088](./0088-titlebar-overlay.md)).
 3. 이 ADR은 `WS_THICKFRAME`과 `WS_MAXIMIZEBOX`를 다루는 현재 동작(`resizable`, `maximizable`)을 바꾸지 않는다.
    `resizable: false` 창의 Snap 참여는 확인되지 않았고 [TODO-windows.md](../TODO-windows.md)의 해당 항목에서 확인한다.
 4. 문서에는 사용자 타이틀바의 HTML 최대화 버튼이 Snap Layouts를 띄우지 않는다고 적고, 대안으로 최대화가 켜진 시스템 타이틀바를
@@ -49,7 +49,7 @@ Windows 11의 Snap Layouts는 최대화 버튼에 마우스를 올리면 뜨는 
 ## 근거
 
 - 두 프레임워크 모두 최대화 버튼 영역을 앱이 등록하는 API를 제공하지 않으므로 같은 쪽을 따른다. Electron의 유일한 경로인
-  네이티브 caption 버튼 overlay는 이 저장소에서 별도 항목으로 남아 있다. 쓰는 곳이 없는 기능으로 코어 API를
+  네이티브 caption 버튼 overlay는 이 저장소에서 제공하지 않는다([ADR 0088](./0088-titlebar-overlay.md)). 쓰는 곳이 없는 기능으로 코어 API를
   늘리지 않는다.
 - `HTMAXBUTTON`은 비클라이언트 hit-test 결과이다. 이 저장소의 WebView 호스팅에서 부모 창이 WebView 영역의 `WM_NCHITTEST`를
   받는지는 확인하지 않았다. Tauri 메인테이너는 WebView 안의 클릭에는 이 메시지가 전달되지 않는다고 설명했다. 받는다면 그 영역의
