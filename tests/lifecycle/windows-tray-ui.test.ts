@@ -21,6 +21,7 @@ test.skipIf(process.platform !== "win32")(
     let failure: unknown;
     let cleaned = false;
     let hwnd = 0n;
+    let controlHwnd = 0n;
     const pending = new Map<string, (response: HostResponse) => void>();
     const native = dlopen("user32.dll", {
       PostMessageW: {
@@ -126,6 +127,12 @@ test.skipIf(process.platform !== "win32")(
             readyResolve();
           } else if (
             packet.kind === "diagnostic" &&
+            packet.event === "desktop-control-created" &&
+            typeof packet.fields.hwnd === "string"
+          ) {
+            controlHwnd = BigInt(packet.fields.hwnd);
+          } else if (
+            packet.kind === "diagnostic" &&
             packet.event === "tray-created" &&
             typeof packet.fields.hwnd === "string"
           ) {
@@ -218,6 +225,9 @@ test.skipIf(process.platform !== "win32")(
       const removedHwnd = hwnd;
       expect(await invoke("destroy", null)).toBeNull();
       expect(native.symbols.IsWindow(removedHwnd)).toBe(0);
+      // The keep-alive app keeps a window for the CLI's shutdown message after the tray window is gone.
+      expect(controlHwnd).not.toBe(0n);
+      expect(native.symbols.IsWindow(controlHwnd)).not.toBe(0);
       expect(await invoke("get", null)).toBeNull();
       expect(await invoke("getBounds", null)).toBeNull();
       expect(await invoke("destroy", null)).toBeNull();
@@ -272,6 +282,7 @@ test.skipIf(process.platform !== "win32")(
       expect(cleaned).toBe(true);
       expect(failure).toBeUndefined();
       expect(native.symbols.IsWindow(hwnd)).toBe(0);
+      expect(native.symbols.IsWindow(controlHwnd)).toBe(0);
     } finally {
       channel?.close();
       await worker?.terminate();

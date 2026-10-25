@@ -126,6 +126,20 @@ function requireTray(): NativeTrayOwner {
   return tray;
 }
 /**
+ * A resident app needs an HWND for the CLI's private shutdown message, even before its first view.
+ * With a declared tray the tray window serves, so this runs for tray-less apps and after removal.
+ */
+function ensureControlWindow() {
+  if (controlWindow) {
+    return;
+  }
+  assert(windows);
+  controlWindow = windows.create(config.runtime.id, 200, 200, () => {}, false);
+  log("desktop-control-created", {
+    hwnd: controlWindow.toString(),
+  });
+}
+/**
  * Removes the icon. Removal never ends the app, so it is refused while the icon is what keeps a
  * window-less app running. Hidden windows are the app's responsibility, as with `setVisible`.
  */
@@ -154,6 +168,10 @@ function removeTray(): boolean {
       code: "INVALID_ARGUMENT",
       message: "The tray cannot be removed while it keeps the app running.",
     });
+  }
+  // Take over the shutdown message role before the tray window goes away.
+  if (config.desktop?.closeBehavior === "keep-alive") {
+    ensureControlWindow();
   }
   // A failed release keeps the owner, so a later call or shutdown retries it.
   tray.dispose();
@@ -2348,7 +2366,7 @@ try {
         },
         setTrayMenu(items, selected) {
           // Detaching has nothing to do once the tray is gone, whether removed or at shutdown.
-          if (items === undefined && !tray) {
+          if (!items && !tray) {
             return;
           }
           if (!tray) {
@@ -2430,17 +2448,7 @@ try {
     });
   }
   if (!config.desktop?.tray && config.desktop?.closeBehavior === "keep-alive") {
-    // A resident app needs an HWND for the CLI's private shutdown message, even before its first view.
-    controlWindow = windows.create(
-      config.runtime.id,
-      200,
-      200,
-      () => {},
-      false,
-    );
-    log("desktop-control-created", {
-      hwnd: controlWindow.toString(),
-    });
+    ensureControlWindow();
   }
   if (tray) {
     log("tray-created", {
