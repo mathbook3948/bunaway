@@ -649,10 +649,10 @@ try {
   sendKey(VK_F, false);
   sendKey(VK_F, true);
   sendKey(VK_MENU, true);
-  // The page reporting the F confirms the sequence reached the window. Then let the deferred
-  // dispatch run; the bar must still be linked afterwards.
+  // An F reported after the baseline, not the Alt key, confirms the sequence reached the window.
+  // Then let the deferred dispatch run; the bar must still be linked afterwards.
   await pumpUntil(
-    () => pageKeys.length > keysBefore,
+    () => pageKeys.slice(keysBefore).some((key) => key.toLowerCase() === "f"),
     "The page receiving Alt+F",
   );
   await settle(KEY_REPORT_SETTLE_MS);
