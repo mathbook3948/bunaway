@@ -2,7 +2,7 @@ import { dlopen, ptr } from "bun:ffi";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { checkHresult } from "@bunaway/plugin/win32";
+import { checkHresult, pick, USER32 } from "@bunaway/plugin/win32";
 import type { NativeMenuWindowHost } from "@bunaway/plugin-api/native";
 import {
   type ComHandler,
@@ -58,22 +58,7 @@ const user = dlopen("user32.dll", {
     ],
     returns: "u64",
   },
-  SetTimer: {
-    args: [
-      "u64",
-      "u64",
-      "u32",
-      "ptr",
-    ],
-    returns: "u64",
-  },
-  KillTimer: {
-    args: [
-      "u64",
-      "u64",
-    ],
-    returns: "i32",
-  },
+  ...pick(USER32, "SetTimer", "KillTimer"),
   EndMenu: {
     args: [],
     returns: "i32",
@@ -164,17 +149,22 @@ try {
     480,
     (message, wparam, lparam) => {
       // An Alt key up that reaches the frame makes Windows enter keyboard menu mode, a modal loop
-      // that would stop this fixture's pump. The fixture ends the loop itself and keeps the loop
-      // messages from the menu code, so only the page key route is under test.
+      // that would stop this fixture's pump. The fixture ends the loop itself, retrying EndMenu from
+      // a timer because it is ignored before tracking starts, and does not pass the loop messages to
+      // the menu code (Windows still runs its default handling). The loop only opens while the bar
+      // is linked; the menu code's own handling of the loop end is covered by the frame test.
       if (message === WM_ENTERMENULOOP) {
-        user.symbols.SetTimer(hwnd, END_MENU_TIMER, 20, null);
+        assert(
+          user.symbols.SetTimer(hwnd, END_MENU_TIMER, 20, null),
+          "SetTimer failed",
+        );
         return;
       }
       if (message === WM_EXITMENULOOP) {
+        user.symbols.KillTimer(hwnd, END_MENU_TIMER);
         return;
       }
       if (message === WM_TIMER && wparam === END_MENU_TIMER) {
-        user.symbols.KillTimer(hwnd, END_MENU_TIMER);
         user.symbols.EndMenu();
         return;
       }
