@@ -21,7 +21,6 @@ status: accepted
   `over`(position), `drop`(paths, position), `leave`를 준다. position은 webview 왼쪽 위 기준 물리 픽셀이다. Windows에서 wry는
   `SetAllowExternalDrop(false)`를 호출하고 WebView2의 child HWND drop target을 자기 `IDropTarget`으로 교체해 `CF_HDROP`에서 경로를
   얻는다. 그래서 HTML5 drag and drop이 꺼지며, 쓰려면 `disable_drag_drop_handler()` 또는 설정 `dragDropEnabled: false`가 필요하다.
-  앱 밖으로 끄는 공개 API는 확인하지 못했다.
 - WebView2는 `ICoreWebView2Controller4::AllowExternalDrop`(기본 TRUE)로 외부 drop 허용 여부를 정한다. 호스트가 직접 받으려면
   `ICoreWebView2CompositionController3`의 `DragEnter`, `DragOver`, `DragLeave`, `Drop`을 쓰는 composition 모드에서 `IDropTarget`을
   등록하고 `IDataObject`와 WebView client 좌표를 전달해야 한다. 이 모드에서 `IDataObject`로 경로를 얻는 방법은 확인하지 못했다.
@@ -56,7 +55,7 @@ status: accepted
 - 경로를 페이지에 주는 일은 모든 앱의 보안 경계를 바꾼다. 페이지가 OS 경로를 알면 앱이 허용하지 않은 파일 위치를 백엔드 명령에 넘길 수 있다.
   경로 제한은 앱의 책임이므로 기본으로 열지 않고 사용처가 생긴 뒤 허용 범위와 함께 정한다. Electron도 전체 경로를 웹 콘텐츠에 노출하지
   않기를 권한다.
-- 앱 밖 드래그는 Electron만 `startDrag`로 제공하고 Tauri에서는 공개 API를 확인하지 못했다. WebView2에서 WebView 안에서 시작한 드래그를
+- 앱 밖 드래그는 Electron이 `startDrag`로 제공한다. WebView2에서 WebView 안에서 시작한 드래그를
   다루는 `DragStarting`은 `ICoreWebView2CompositionController5`에 있어 composition 모드가 전제다.
 - 사용처가 없다. 파일 열기는 파일 선택 대화상자가, 내용 읽기는 `File`의 웹 표준 API가 맡는다.
 
