@@ -338,6 +338,8 @@ WebView는 같은 수명을 가지므로 WebView가 닫힌 상태는 `windows.is
 | `windows.setZoomFactor` | `factor: number` | 브라우저가 실제 적용한 zoom factor |
 | `windows.openDevTools` | 없음 | 개발 도구 창 열기 요청 뒤 `null` |
 
+Windows에서 같은 origin 안의 탐색, 뒤로와 앞으로 이동, reload 뒤에도 설정한 zoom factor가 유지됩니다. origin 사이를 이동할 때의 값은 WebView2의 동작을 따르므로 `getWebViewState`로 다시 조회합니다. 호스트는 이 값을 저장하지 않으므로 창을 다시 만든 뒤 같은 값이 필요하면 앱이 저장한 값을 `setZoomFactor`로 적용합니다.
+
 history의 offset과 index로 이동하는 메서드는 없습니다. 여러 단계 이동은 `goBack`과 `goForward`를 반복하되, 두 메서드는 이동을 시작했는지만 알려주며 반환 직후의 `getWebViewState`가 이동 결과를 반영한다고 보장하지 않습니다.
 
 ```ts
@@ -371,8 +373,8 @@ factor는 유한한 0.25–5 값입니다. 1은 100%이며 CSS zoom과 visual zo
 아닙니다. Windows에서는 대상 WebView2 controller에, macOS에서는 WKWebView의
 공개 `pageZoom`에 적용하고 실제 값을 반환합니다. 창 간 zoom 설정은 독립적이며
 macOS의 새 창이나 재생성한 창은 1로 시작합니다.
-이 API는 origin별 zoom 공유 정책을 추가하지 않습니다. 탐색에 따른 zoom 값 변화는
-WebView2의 동작을 따르므로 현재 값은 다시 조회합니다.
+이 API는 origin별 zoom 공유 정책을 추가하지 않습니다. origin 사이 이동에 따른 zoom 값
+변화는 WebView2의 동작을 따르므로 현재 값은 다시 조회합니다.
 
 Windows의 openDevTools는 작업 권한과 호스트의 개발 모드 설정이 모두 필요합니다.
 프로덕션 호스트는 작업 권한이 있어도 `PERMISSION_DENIED`입니다.
