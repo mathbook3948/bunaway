@@ -1103,6 +1103,38 @@ test("the walk stops at the destination root when a link places it inside the so
   ).toBe("INVALID_ARGUMENT");
 });
 
+test("the walk stops between entries when cancelled after the first file is copied", async () => {
+  mkdirSync(at("src"));
+  for (const name of [
+    "a",
+    "b",
+    "c",
+  ]) {
+    writeFileSync(at("src", name), "x");
+  }
+  const controller = new AbortController();
+  let copied = 0;
+  expect(
+    await asyncCodeOf(() =>
+      copyDirectoryTree(
+        at("src"),
+        at("dst"),
+        {
+          entries: 100,
+          depth: 8,
+        },
+        () => {
+          copied++;
+          controller.abort();
+        },
+        controller.signal,
+        () => {},
+      ),
+    ),
+  ).toBe("CANCELLED");
+  expect(copied).toBe(1);
+});
+
 test("copyDirectory follows a link given as the root but copies the files below it", async () => {
   mkdirSync(at("real"));
   writeFileSync(at("real", "a.txt"), "x");

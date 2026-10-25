@@ -122,6 +122,8 @@ export async function copyDirectoryTree(
 ): Promise<StorageDirectorySize> {
   const checkpoint = createCheckpoint(signal, alive);
   await checkpoint();
+  // Open the source root before creating anything, so an unreadable source leaves no empty `to`.
+  openFrame(from, 0)?.closeSync();
   mkdirSync(to, {
     mode: DIRECTORY_MODE,
   });
