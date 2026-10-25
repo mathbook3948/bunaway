@@ -661,7 +661,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] renderer gone, unresponsive와 responsive 이벤트를 제공한다.
 - [ ] console 메시지, 스크립트 초기화 실패와 context-menu 이벤트를 제공한다.
 - [ ] WebView 투명 배경과 scrollbar 옵션을 제공한다. 불투명 배경색은 `window.backgroundColor`가 창과 WebView2에 함께 적용한다.
-- [x] 처음 숨긴 WebView의 paint, visibility와 ready-to-show 관계를 정의한다. 숨긴 창의 문서는 표시 전에 로드, 스크립트 실행, 첫 paint와 프레임 전달을 마치고 문서 준비가 `ready`가 된다. 페이지의 `visibilityState`는 관찰값으로 `visible`이라 창 표시 판단에 쓰지 않고 `windows.isVisible`로 확인한다. Windows CI의 `windows-hidden-paint.ts`가 검증한다.
+- [x] 처음 숨긴 WebView의 paint, visibility와 ready-to-show 관계를 정의한다. 숨긴 창의 문서는 표시 전에 로드, 스크립트 실행, 첫 paint와 프레임 전달을 마치고 문서 준비가 `ready`가 된다. 창 표시 여부는 페이지 쪽 값이 아니라 `windows.isVisible`로 확인한다. Windows CI의 `windows-hidden-paint.ts`가 검증한다.
 - [x] user agent, accept languages, proxy와 incognito 옵션은 제공하지 않기로 결정했다. 앱 백엔드 요청은 `network.request` 헤더로 지정할 수 있지만 WebView 페이지의 값을 바꾸는 수단은 쓰는 곳이 확인될 때까지 제공하지 않는다. 시크릿 모드는 프로필 디렉터리 결정과 함께 다시 다룬다. [ADR 0062](./decisions/0062-webview-network-identity-options.md).
 - [ ] 프로필 디렉터리와 데이터 저장소 선택, 조회와 삭제를 제공한다.
 - [ ] JavaScript, 이미지, WebGL, autoplay와 background throttling 설정을 제공한다.
