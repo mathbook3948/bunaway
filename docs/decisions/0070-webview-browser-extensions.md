@@ -21,8 +21,8 @@ WebView에 Chrome 계열 브라우저 extension을 설치, 조회, 제거하고 
   앱을 다시 시작하면 기억하지 않아 매번 불러와야 한다.
 - Tauri는 실행 중에 extension을 설치, 조회, 제거하는 공개 API가 없다. 대신 웹뷰 생성 때 쓰는 옵션이 있다.
   `WebviewBuilder::browser_extensions_enabled`(Windows에서 WebView2 환경의 `AreBrowserExtensionsEnabled`)와
-  `extensions_path`, 설정 파일의 `browserExtensionsEnabled`(기본값 꺼짐)다. wry는 `extensions_path`가 있으면 웹뷰를 만들 때 그
-  폴더의 하위 항목마다 `AddBrowserExtension`을 호출해 설치하고 결과는 쓰지 않는다. 조회, 제거, 활성화, 이벤트는 노출하지 않는다.
+  `extensions_path`, 설정 파일의 `browserExtensionsEnabled`(기본값 꺼짐)다. wry는 extension이 켜져 있고 `extensions_path`가 있을 때
+  웹뷰를 만들면서 그 폴더의 하위 항목마다 `AddBrowserExtension`을 호출해 설치하고 결과는 쓰지 않는다. 조회, 제거, 활성화, 이벤트는 노출하지 않는다.
 - WebView2는 환경 옵션 `AreBrowserExtensionsEnabled`(기본값 FALSE)를 켜야 한다. 끄면 `AddBrowserExtension`이
   `ERROR_NOT_SUPPORTED`로 실패하고 `GetBrowserExtensions`는 아무것도 반환하지 않는다. 프로필(`ICoreWebView2Profile7`)에는
   압축 해제된 폴더를 추가하는 `AddBrowserExtension`과 목록을 조회하는 `GetBrowserExtensions`가 있고, 제거와 활성화는 개별
