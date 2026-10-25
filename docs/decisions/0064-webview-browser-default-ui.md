@@ -25,15 +25,15 @@ status: accepted
 - 컨트롤러 `setZoomFactor`와 `getWebViewState`의 zoom factor는 이미 제공한다. 호스트는 `IsZoomControlEnabled`를 꺼서 Ctrl+휠과 Ctrl+더하기, 빼기로 zoom이 바뀌는
   경로를 닫는다. 터치 핀치 zoom(`IsPinchZoomEnabled`)은 호스트가 설정하지 않아 WebView2 기본값을 따르며 이 계약에 포함하지 않는다.
   개발 도구를 켠 빌드의 브라우저 가속키도 포함하지 않는다. 그래서 앱이 zoom 단계를 메뉴나 단축키로 직접 정할 수 있다.
-- 호스트는 `BasicAuthenticationRequested`를 처리하지 않는다. 허용 origin 안의 문서가 401 응답을 받으면 WebView2 기본 인증 창이
-  뜬다. 앱 자산과 개발 서버가 인증을 쓰지 않으므로 이 경로는 현재 쓰는 곳이 없다.
+- 호스트는 `BasicAuthenticationRequested`를 처리하지 않는다. 핸들러가 없으면 WebView2 문서상 기본 인증 창이
+  뜨는 것으로 알려져 있으며 이 저장소에서 검증하지 않았다. 앱 자산과 개발 서버가 인증을 쓰지 않으므로 이 경로는 현재 쓰는 곳이 없다.
 - 페이지 안에서는 대화상자를 HTML 요소로, context menu를 `contextmenu` 이벤트와 앱 메뉴(메뉴 플러그인의 `showContextMenu`)로,
   autofill을 `autocomplete` 속성으로 다룰 수 있다.
 
 ## 결정
 
 1. 기본 JavaScript 대화상자, 기본 context menu, zoom 단축키, autofill, 비밀번호 자동 저장을 켜는 설정을 추가하지 않는다.
-   호스트의 현재 고정값(핀치 zoom 제외, 나머지는 끔)이 계약이다. 개발 도구를 켠 빌드의 브라우저 가속키(zoom 포함)는 계약에 포함하지 않는다.
+   호스트의 현재 고정값(핀치 zoom과 HTTP 인증 창 제외, 나머지는 끔)이 계약이다. 개발 도구를 켠 빌드의 브라우저 가속키(zoom 포함)는 계약에 포함하지 않는다.
 2. 앱은 대화상자 용도에 dialog 플러그인과 HTML 요소를, context menu에 메뉴 플러그인의 `showContextMenu`를, zoom에 `setZoomFactor`를 쓴다.
 3. HTTP 인증 설정과 인증 요청 이벤트를 추가하지 않는다. 인증이 필요한 원격 자원이 확인되면 별도 결정에서 다룬다.
    그때까지 WebView2 기본 인증 창은 호스트가 바꾸지 않는 동작이며 앱 계약으로 보장하지 않는다.
