@@ -331,27 +331,25 @@ function focusRenderWidget(): void {
   const attached =
     widgetThread !== ownThread &&
     user.symbols.AttachThreadInput(ownThread, widgetThread, 1) !== 0;
-  // The focus is read before the threads are detached, because detaching gives each thread its own
-  // input state again.
-  let focusIsWidget = false;
-  let setFocusReturned = false;
+  // The focus is read both while the threads share input and after they are detached, because
+  // detaching gives each thread its own input state again and the focus can change then.
+  const result: Record<string, boolean> = {
+    sameThread: widgetThread === ownThread,
+    attached,
+  };
   try {
-    setFocusReturned = user.symbols.SetFocus(widget) !== 0n;
-    focusIsWidget = focusWindow(widgetThread) === widget;
+    // SetFocus returns null both on failure and when no window had focus before.
+    result.setFocusReturnedPreviousWindow =
+      user.symbols.SetFocus(widget) !== 0n;
+    result.focusIsWidgetWhileAttached = focusWindow(widgetThread) === widget;
   } finally {
     if (attached) {
-      user.symbols.AttachThreadInput(ownThread, widgetThread, 0);
+      result.detached =
+        user.symbols.AttachThreadInput(ownThread, widgetThread, 0) !== 0;
     }
+    result.focusIsWidgetAfterDetach = focusWindow(widgetThread) === widget;
+    console.log(`Render widget focus: ${JSON.stringify(result)}`);
   }
-  console.log(
-    `Render widget focus: ${JSON.stringify({
-      sameThread: widgetThread === ownThread,
-      attached,
-      // SetFocus returns null both on failure and when no window had focus before.
-      setFocusReturnedPreviousWindow: setFocusReturned,
-      focusIsWidget,
-    })}`,
-  );
 }
 
 /** Pump the UI thread for a fixed time so late callbacks and page messages arrive. */
