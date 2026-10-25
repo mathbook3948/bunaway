@@ -51,7 +51,7 @@ function readWindowsBuild(): number {
 }
 
 /** The build number, or Infinity when it cannot be read so the original HRESULT is reported. */
-function tryReadWindowsBuild(): number {
+export function tryReadWindowsBuild(): number {
   try {
     return readWindowsBuild();
   } catch {

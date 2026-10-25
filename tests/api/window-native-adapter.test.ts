@@ -46,6 +46,8 @@ const MESSAGES = {
   mouse: "Ignoring mouse events is not implemented on this platform.",
   shadow: "Window shadow control is not implemented on this platform.",
   roundedCorners: "Window corner control is not implemented on this platform.",
+  backgroundMaterial:
+    "Window background material is not implemented on this platform.",
   backgroundColor:
     "Window background color is not implemented on this platform.",
   title: "Window title control is not implemented on this platform.",
@@ -519,6 +521,23 @@ const rows: Row[] = [
     "roundedCorners",
     MESSAGES.roundedCorners,
   ),
+  {
+    operation: "windows.setBackgroundMaterial",
+    payload: {
+      material: "mica",
+    },
+    calls: [
+      [
+        "setBackgroundMaterial",
+        [
+          "mica",
+        ],
+      ],
+    ],
+    result: null,
+    unsupported: MESSAGES.backgroundMaterial,
+  },
+  query("getBackgroundMaterial", "acrylic", MESSAGES.backgroundMaterial),
   {
     operation: "windows.setBackgroundColor",
     payload: {
@@ -1213,6 +1232,8 @@ function fixture(
     "hasShadow",
     "setRoundedCorners",
     "hasRoundedCorners",
+    "setBackgroundMaterial",
+    "getBackgroundMaterial",
     "setBackgroundColor",
     "getBackgroundColor",
     "setIgnoreMouseEvents",

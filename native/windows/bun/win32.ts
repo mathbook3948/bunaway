@@ -127,6 +127,10 @@ import {
   WS_MINIMIZEBOX,
   WS_THICKFRAME,
 } from "./win32-constants.ts";
+import {
+  type BackgroundMaterial,
+  writeWindowBackdrop,
+} from "./window-backdrop.ts";
 import { WindowBackgrounds } from "./window-background.ts";
 import { writeWindowCornerPreference } from "./window-corners.ts";
 import {
@@ -262,6 +266,8 @@ export class Windows {
   private readonly backgrounds = new WindowBackgrounds();
   /** Windows whose corners were squared through setRoundedCorners; absence means the default (rounded). */
   private readonly squareCorners = new Set<bigint>();
+  /** Requested backdrop material per window; absence means `auto`. */
+  private readonly backgroundMaterials = new Map<bigint, BackgroundMaterial>();
   private readonly windowIcons = new WindowIconSet();
   /** Content width / height locked for user resizing; absent when unlocked. */
   private readonly aspectRatios = new Map<bigint, number>();
@@ -1357,6 +1363,26 @@ export class Windows {
       this.squareCorners.delete(window);
     } else {
       this.squareCorners.add(window);
+    }
+  }
+
+  /**
+   * The requested backdrop material, `auto` until set. DWM does not report it back and
+   * Windows before 11 22H2 skip it, so the requested value is the state.
+   */
+  getBackgroundMaterial(window: bigint): BackgroundMaterial {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return this.backgroundMaterials.get(window) ?? "auto";
+  }
+
+  /** Ask DWM to draw a system material behind the window frame. */
+  setBackgroundMaterial(window: bigint, material: BackgroundMaterial): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    writeWindowBackdrop(window, material);
+    if (material === "auto") {
+      this.backgroundMaterials.delete(window);
+    } else {
+      this.backgroundMaterials.set(window, material);
     }
   }
 
@@ -3325,6 +3351,7 @@ export class Windows {
     this.aspectRatios.delete(window);
     this.backgrounds.forget(window);
     this.squareCorners.delete(window);
+    this.backgroundMaterials.delete(window);
     try {
       this.accessibleTitles.forget(window);
     } catch (error) {
