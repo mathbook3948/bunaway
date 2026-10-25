@@ -1004,6 +1004,7 @@
           "now",
           "tick",
           "onLifecycle",
+          "onAudioChange",
           "onProcessFailure",
           "creationSettled",
           "monitors"
