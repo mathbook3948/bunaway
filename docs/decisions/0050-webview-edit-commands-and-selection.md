@@ -19,8 +19,8 @@ status: accepted
   `document.execCommand`를 쓴다.
 - 이 저장소의 메뉴 플러그인은 편집 role `undo`, `redo`, `cut`, `copy`, `paste`, `selectAll`을 이미 제공한다. Windows
   호스트는 role을 포커스된 문서에서 `document.execCommand`로 실행하고, paste는 클립보드의 평문(CF_UNICODETEXT)을
-  `Input.insertText`로 넣는다. 그래서 평문 paste는 `paste` role의 동작이다. role은 창 메뉴 항목에서만 쓸 수 있고
-  트레이 메뉴와 백엔드 호출에서는 거부한다. 같은 origin의 중첩 프레임은 따라가고 cross-origin 프레임은 건드리지
+  `Input.insertText`로 넣는다. 그래서 평문 paste는 `paste` role의 동작이다. role은 창 메뉴바와 컨텍스트 팝업의
+  항목에서만 실행되고 트레이 메뉴에서는 거부한다. 백엔드가 role을 직접 실행하는 operation은 없다. 같은 origin의 중첩 프레임은 따라가고 cross-origin 프레임은 건드리지
   않는다. 다만 paste는 포커스 확인과 삽입이 서로 다른 호출이라, 그 사이에 포커스가 cross-origin 프레임으로 옮겨지면
   그 프레임이 텍스트를 받을 수 있다. 이 role 구현은 현재 Windows에만 있고 macOS는 이 결정에서 다루지 않는다.
 - 페이지 안에서는 `getSelection()`, `Range`, 입력 요소의 `setSelectionRange`, `execCommand("insertText")`,
@@ -44,8 +44,9 @@ status: accepted
   덮고, 나머지는 렌더러의 웹 표준 API로 같은 일을 할 수 있다. 이 저장소에서 쓰는 곳이 없는 기능을 위해 코어 API와
   DevTools 프로토콜 경로를 늘리지 않는다.
 - 백엔드가 호출하는 `cut`, `copy`, `paste` API는 사용자 활성화 없이 클립보드를 읽고 쓰는 경로가 된다. 메뉴 role은
-  사용자가 창 메뉴에서 항목을 고른 경우에만 실행되고, 호스트는 그 선택을 사용자 활성화로 삼아 `userGesture`를 켜서
-  실행한다. 별도 API는 사용자 선택 없이 이 활성화를 대신하게 되므로 그 경계를 먼저 정해야 한다.
+  사용자가 창 메뉴바나 컨텍스트 팝업에서 항목을 고른 경우에만 실행된다. 호스트는 그 선택을 사용자 활성화로 삼아
+  편집 명령 스크립트(`cut`, `copy` 포함)를 `userGesture`로 실행한다. paste의 텍스트 삽입(`Input.insertText`)은
+  `userGesture` 없이 호출한다. 별도 API는 사용자 선택 없이 이 활성화를 대신하게 되므로 그 경계를 먼저 정해야 한다.
 
 ## 결과
 
