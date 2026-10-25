@@ -1397,8 +1397,12 @@ Linux에서도 실행하는 순수 계산은 가장자리별 기준 축과 고�
 실제 `sharingType` 동작은 macOS 네이티브 실행의 `lifecycle/macos-window-api.ts`가 확인합니다.
 `lifecycle/windows-webview-titlebar.ts`는 실제 WebView2의 Settings9 설정, CSS drag/no-drag
 문서와 탐색 후 재구성, 전체화면 복원, 미지원 COM 인터페이스 및 자원 정리를 검사합니다.
+같은 문서에서 DevTools 프로토콜의 `Accessibility.getFullAXTree`로 drag 영역 안 버튼이 접근 가능한
+이름의 button 노드로 남는지, 프로토콜 키 이벤트(Tab, Enter, Space)가 포커스를 그 버튼으로 옮기고
+활성화한 뒤 Tab으로 벗어나는지 확인합니다.
 Windows native 실행기에 포함하며 결과는 `build/windows-webview-titlebar-results.json`에 기록합니다.
-물리 마우스 드래그, 우클릭 메뉴 조작, 다중 모니터 DPI 이동과 screen reader 검증은 별도입니다.
+물리 마우스 드래그, 우클릭 메뉴 조작, 다중 모니터 DPI 이동과 UI Automation 클라이언트(screen reader)
+연결 검증은 별도입니다.
 
 `cli/measure-baseline.test.ts`는 `scripts/measure-baseline.ts`의 측정 정의를 가짜 실행기로 검사합니다.
 중앙값, 최소, 최대 요약, 프로세스 트리 합산(재사용된 pid 포함), PowerShell 프로세스 표 해석,
