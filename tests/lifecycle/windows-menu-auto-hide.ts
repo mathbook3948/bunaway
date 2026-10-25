@@ -224,13 +224,28 @@ function sendMouse(screenX: number, screenY: number, flags: number[]): void {
   );
 }
 
-/** Press or release one virtual key as real keyboard input. */
-function sendKey(virtualKey: number, up: boolean): void {
+/** Whether the fixture pressed Alt and has not released it yet. */
+let altHeld = false;
+
+/**
+ * Press or release one virtual key as real keyboard input. Returns whether Windows accepted the
+ * event; a rejected event leaves the Alt state unchanged.
+ */
+function trySendKey(virtualKey: number, up: boolean): boolean {
   const event = Buffer.alloc(INPUT_SIZE);
   event.writeUInt32LE(INPUT_KEYBOARD, 0);
   event.writeUInt16LE(virtualKey, 8);
   event.writeUInt32LE(up ? KEYEVENTF_KEYUP : 0, 12);
-  assert.equal(user.symbols.SendInput(1, ptr(event), INPUT_SIZE), 1);
+  const sent = user.symbols.SendInput(1, ptr(event), INPUT_SIZE) === 1;
+  if (sent && virtualKey === VK_MENU) {
+    altHeld = !up;
+  }
+  return sent;
+}
+
+/** Press or release one virtual key, failing the test when Windows rejects the input. */
+function sendKey(virtualKey: number, up: boolean): void {
+  assert(trySendKey(virtualKey, up), "SendInput rejected a key event");
 }
 
 /** Move the test window above other windows, or back, without activating it. */
@@ -461,7 +476,7 @@ try {
   // Real input needs the window in the foreground with the page focused.
   step("activate");
   await activateByClick(hwnd);
-  // The click focuses the page in most runs; asking again makes the key target certain.
+  // The click normally focuses the page; asking again makes the key target certain.
   page.moveFocusToContent();
   const tap = () => {
     sendKey(VK_MENU, false);
@@ -526,8 +541,11 @@ try {
   await pumpUntil(linked(0n), "Esc hides");
   verified = true;
 } finally {
-  // A failure between the Alt press and release must not leave Alt held for the rest of the session.
-  sendKey(VK_MENU, true);
+  // A failure between the Alt press and release must not leave Alt held for the rest of the
+  // session. A rejected release is ignored so the cleanup below still runs.
+  if (altHeld) {
+    trySendKey(VK_MENU, true);
+  }
   menus?.dispose();
   if (view) {
     view.requestClose();
