@@ -14,7 +14,7 @@ status: accepted
   이 함수는 `GetClientRect`로 읽은 내용 영역 전체를 컨트롤러의 `put_Bounds`로 적용한다(`native/windows/bun/webview.ts`).
   `setSize`(전체화면 중에는 `INVALID_ARGUMENT`로 거부), 크기 제약과 geometry 변경, 전체화면 전환, 메뉴 변경은 네이티브 호출 뒤에 같은 `resize()`를 직접 한 번 더 호출하고,
   컨트롤러 생성 직후에도 호출한다. 최대화, 복원, DPI 변경과 사용자 크기 조절은 `WM_SIZE`를 통해 같은 함수에 닿는다.
-- 한 창에 WebView를 여러 개 두는 구성은 ADR 0026이 기각했다(재제안 조건은 같은 ADR의 다중 창 절에 있고 추가 WebView의 세션 발급과 회수를 별도 ADR로 정하는 것이다). 따라서 WebView에 따로 bounds를 줄 일이 없고 창과 WebView 크기가 어긋날 수 있는 구성이 없다.
+- 한 창에 WebView를 여러 개 두는 구성은 ADR 0026이 기각했다("창은 하나지만 WebView 여러 개" 항목). 추가 WebView를 다시 제안하는 조건은 같은 ADR의 "나중에 플러그인 opt-in으로 다중 창을 제공한다" 항목에 있다. 따라서 WebView에 따로 bounds를 줄 일이 없고 창과 WebView 크기가 어긋날 수 있는 구성이 없다.
 - 콘텐츠 크기 기준의 배치는 이미 제공한다. 초기 크기는 기본으로 내용 영역 크기이고(`useContentSize`, ADR 0019), `setSize`는 내용 영역 크기를 받으며,
   `getContentSize`, `getContentBounds`, `setContentBounds`, `setContentPosition`이 내용 영역 기준 조회와 설정을 제공한다. 최소와 최대 크기도 내용 영역 기준이다.
 - 문서 콘텐츠 크기의 변화를 호스트가 통지하는 preferred-size 이벤트는 제공하지 않기로 했다(ADR 0039). 앱은 `ResizeObserver`로 관찰해 IPC로 보낼 수 있다.
@@ -25,7 +25,7 @@ status: accepted
 2. 문서 콘텐츠 크기에 맞춰 창 크기를 자동으로 바꾸는 옵션이나 이벤트는 추가하지 않는다. 필요한 앱은 페이지에서 `ResizeObserver`로 크기를 얻어
    백엔드로 보내고 `setSize`(내용 영역, 96 DPI 논리 픽셀)로 적용한다. 최소와 최대 크기 제약은 그대로 적용된다.
 3. 콘텐츠 크기 기준 배치는 기존 `useContentSize`와 내용 영역 기준 geometry API로 충족한다.
-4. 추가 WebView가 필요해져 ADR 0026의 재제안 조건을 충족하면, 그 결정에서 bounds와 auto-resize를 함께 정한다.
+4. 추가 WebView가 필요해져 ADR 0026의 재제안 조건(앱 사례, 세션 발급과 회수 결정, 기본 앱의 검토 범위 유지)을 충족하면, 그 결정에서 bounds와 auto-resize를 함께 정한다.
 
 ## 근거
 
