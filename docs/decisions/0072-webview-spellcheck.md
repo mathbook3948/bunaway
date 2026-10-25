@@ -22,7 +22,7 @@ status: accepted
   `ContextMenuRequested`의 메뉴 항목에 맞춤법 관련 항목이 포함되는지는 확인하지 못했다. 사전과 사용자 단어는 런타임이 사용자 데이터 폴더와
   OS 설정에서 관리하므로 앱이 소유한 상태가 아니다.
 - 이 저장소는 기본 context menu를 켜는 설정을 추가하지 않고 앱이 메뉴 플러그인의 `showContextMenu`로 메뉴를 만든다([ADR 0064](./0064-webview-browser-default-ui.md)).
-  메뉴 role은 undo, redo, cut, copy, paste, select-all까지만 제공하고 selection 변경과 텍스트 교체 API는 제공하지 않는다([ADR 0050](./0050-webview-edit-commands-and-selection.md)).
+  편집용 메뉴 role은 undo, redo, cut, copy, paste, select-all까지만 제공하고 selection 변경과 텍스트 교체 API는 제공하지 않는다([ADR 0050](./0050-webview-edit-commands-and-selection.md)).
   그래서 이 저장소의 앱에서는 기본 맞춤법 메뉴가 뜨지 않는다.
 
 ## 결정
@@ -30,7 +30,7 @@ status: accepted
 1. 맞춤법 검사의 활성화, 언어, dictionary, 사용자 단어를 관리하는 API를 추가하지 않는다.
 2. misspelling 조회, suggestion, 교체 API를 추가하지 않는다. 맞춤법 교정 UI가 필요한 앱은 페이지 안에서 직접 구현하거나 자체 사전을 쓴다.
    페이지 편집 영역의 `spellcheck` 속성은 웹 표준대로 동작한다.
-3. WebView2가 맞춤법 호스트 API(검사 설정, 틀린 단어와 추천 단어의 전달)를 제공하게 되거나 쓰는 앱이 생기면 별도 결정에서 다룬다. 이때
+3. WebView2가 맞춤법 호스트 API(검사 설정, 틀린 단어와 추천 단어의 전달)를 제공하게 되거나 맞춤법 검사 관리가 필요한 앱이 확인되면 별도 결정에서 다룬다. 이때
    Windows와 macOS의 사전 소유와 언어 목록의 차이를 먼저 정한다.
 
 ## 근거
