@@ -1,3 +1,4 @@
+import { MSIX_STARTUP_TASK_ID } from "@bunaway/protocol";
 import type { AdapterStage, PackageAdapter } from "../../contract.ts";
 import { WINDOWS_MIN_VERSION, WINDOWS_VERSION_PART_MAX } from "./common.ts";
 
@@ -138,10 +139,11 @@ export function renderAppxManifest(options: MsixOptions): string {
   return `<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
          xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
          xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
          xmlns:virtualization="http://schemas.microsoft.com/appx/manifest/virtualization/windows10"
-         IgnorableNamespaces="uap rescap desktop6 virtualization">
+         IgnorableNamespaces="uap rescap desktop desktop6 virtualization">
   <Identity Name="${escapeXml(options.packageName)}" Publisher="${escapeXml(options.publisherIdentity)}" Version="${escapeXml(options.version)}" ProcessorArchitecture="x64"/>
   <Properties>
     <DisplayName>${escapeXml(options.name)}</DisplayName>
@@ -156,6 +158,12 @@ export function renderAppxManifest(options: MsixOptions): string {
     <Application Id="App" Executable="${escapeXml(options.executable)}" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements DisplayName="${escapeXml(options.name)}" Square150x150Logo="${options.logo.square150}" Square44x44Logo="${options.logo.square44}" Description="${escapeXml(options.name)}" BackgroundColor="transparent">${options.logo.wide ? `\n        <uap:DefaultTile Wide310x150Logo="${escapeXml(options.logo.wide)}"/>` : ""}
       </uap:VisualElements>
+      <Extensions>
+        <!-- Declared disabled: only an explicit enableAutostart call, made after user consent, turns login launch on. -->
+        <desktop:Extension Category="windows.startupTask" Executable="${escapeXml(options.executable)}" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="${MSIX_STARTUP_TASK_ID}" Enabled="false" DisplayName="${escapeXml(options.name)}"/>
+        </desktop:Extension>
+      </Extensions>
     </Application>
   </Applications>
   <Capabilities>

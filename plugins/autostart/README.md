@@ -23,7 +23,8 @@ await autostart.disableAutostart();
 HKCU Run에 REG_SZ를 쓰고 작업 관리자의 활성 상태는 별도로 읽습니다.
 반복 등록은 현재 경로와 인자로 갱신하지만 사용자가 비활성화한 선택을 바꾸지 않습니다.
 전체 명령줄은 Windows가 문서화한 260 UTF-16 코드 단위 제한을 따릅니다.
-개발과 배포 등록은 분리하며 MSIX StartupTask는 지원하지 않습니다.
+개발과 배포 등록은 분리합니다. MSIX 패키지에서는 같은 API가 manifest StartupTask로 동작하며
+인자와 숨김 시작은 지원하지 않습니다.
 
 [공개 계약, 경로와 갱신 규칙](../../docs/site/src/content/docs/reference/plugins/autostart.mdx),
 [등록 방식 결정](../../docs/decisions/0016-windows-autostart.md)을 참고하세요.

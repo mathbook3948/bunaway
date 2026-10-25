@@ -6,3 +6,5 @@ export const AUTOSTART_HIDDEN_ARGUMENT = "--bunaway-autostart-hidden";
 export const AUTOSTART_MUTEX_PREFIX = "Global\\Bunaway.Autostart.";
 /** Bound each installer mutex wait. Runtime I/O writers poll and return BUSY without waiting. */
 export const AUTOSTART_MUTEX_WAIT_MS = 5000;
+/** Task ID of the manifest `desktop:StartupTask` that MSIX packages declare and the autostart plugin opens. */
+export const MSIX_STARTUP_TASK_ID = "BunawayAutostart";

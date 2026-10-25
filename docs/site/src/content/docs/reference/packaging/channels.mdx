@@ -108,7 +108,8 @@ Run 등록은 설치 폴더 변경에 맞춰 갱신하고, 이전 폴더의 앱 
 이동한 바로가기는 탐색하지 않습니다.
 바로가기와 이전 EXE 정리는 위의 기존 설치 폴더 및 설정된 링크 경로 정책을 따릅니다.
 `perMachine`에서는 로그인 작업과 사용자별 Run 정리를 제공하지 않습니다.
-MSIX의 StartupTask와 실제 로그아웃 및 로그인 검증은 별도 범위입니다.
+MSIX 패키지의 로그인 실행은 manifest StartupTask를 쓰며 [autostart](/reference/plugins/autostart/#msix-패키지)가 다룹니다.
+실제 로그아웃 및 로그인 검증은 별도 범위입니다.
 
 ### 파일과 URL 연결
 

@@ -20,6 +20,7 @@ export {
   AUTOSTART_HIDDEN_ARGUMENT,
   AUTOSTART_MUTEX_PREFIX,
   AUTOSTART_MUTEX_WAIT_MS,
+  MSIX_STARTUP_TASK_ID,
 } from "./autostart-launch.ts";
 export {
   API_LIMITS,

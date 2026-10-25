@@ -198,21 +198,19 @@ export function createRegistry() {
   }
   return {
     withRunLock,
-    /** MSIX requires a manifest StartupTask, not this unpackaged Run implementation. */
-    unpackaged(): void {
+    /** Whether the process has MSIX package identity, which routes autostart to the manifest StartupTask. */
+    packaged(): boolean {
       active();
       const size = new Uint32Array(1);
       const result = kernel.symbols.GetCurrentPackageFullName(ptr(size), null);
       if (result === APPMODEL_ERROR_NO_PACKAGE) {
-        return;
+        return false;
       }
       if (result === ERROR_INSUFFICIENT_BUFFER || result === ERROR_SUCCESS) {
-        throw new BunawayError({
-          code: "UNSUPPORTED",
-          message: "MSIX autostart requires a manifest startup task.",
-        });
+        return true;
       }
       check(result);
+      return false;
     },
     read(
       key: string,

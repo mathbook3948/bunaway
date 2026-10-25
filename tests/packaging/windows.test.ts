@@ -24,6 +24,7 @@ import {
   type SigningConfig,
   type StageContext,
 } from "@bunaway/packaging";
+import { MSIX_STARTUP_TASK_ID } from "@bunaway/protocol";
 import * as windowsTools from "#packaging/channels/windows/common";
 import {
   copyPayload,
@@ -1097,6 +1098,37 @@ test.skipIf(!makeappx)(
   },
   30000,
 );
+
+test("the MSIX manifest declares one disabled startup task for the autostart plugin", () => {
+  const manifest = renderAppxManifest({
+    packageName: "Bunaway.Test",
+    appId: "app.test",
+    name: "Test & <App>",
+    publisherDisplay: "Test",
+    publisherIdentity: "CN=Test",
+    version: "1.0.0.0",
+    minVersion: "10.0.18362.0",
+    unvirtualizedData: false,
+    capabilities: [],
+    executable: "com.example.app.exe",
+    logo: {
+      square44: "logo.png",
+      square150: "logo.png",
+      storeLogo: "logo.png",
+    },
+  });
+  expect(manifest).toContain(
+    'xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"',
+  );
+  expect(manifest).toMatch(/IgnorableNamespaces="[^"]*\bdesktop\b/);
+  expect(manifest).toContain(
+    `<desktop:Extension Category="windows.startupTask" Executable="com.example.app.exe" EntryPoint="Windows.FullTrustApplication">`,
+  );
+  expect(manifest).toContain(
+    `<desktop:StartupTask TaskId="${MSIX_STARTUP_TASK_ID}" Enabled="false" DisplayName="Test &amp; &lt;App&gt;"/>`,
+  );
+  expect(manifest.match(/<desktop:StartupTask /g)).toHaveLength(1);
+});
 
 test("Windows adapters register all three channels", () => {
   expect(registeredChannels()).toEqual([

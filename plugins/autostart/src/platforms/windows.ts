@@ -15,10 +15,16 @@ import {
   registryCommand,
   startupState,
 } from "#autostart/platforms/windows-registry";
+import {
+  disablePackaged,
+  enablePackaged,
+  getPackagedStatus,
+  openStartupTask,
+} from "#autostart/platforms/windows-startup-task";
 
 type EnableInput = z.output<typeof enableSchema>;
 
-/** Own one user's app-scoped Run value on the host I/O worker. */
+/** Own one user's app-scoped Run value, or the manifest StartupTask of an MSIX package, on the host I/O worker. */
 export function initialize(environment: NativeEnvironment) {
   const app = environment.app;
   if (!app) {
@@ -31,14 +37,47 @@ export function initialize(environment: NativeEnvironment) {
     app,
     name: registrationName(app),
     registry: createRegistry(),
+    startupTask: openStartupTask,
+    /** True while a StartupTask change waits on Windows. */
+    changing: false,
   };
 }
 
-/** Read both Run registration and the user's separate startup approval state. */
+/**
+ * The StartupTask path yields while Windows works, unlike the synchronous Run path. Overlapping
+ * changes are rejected instead of interleaved, so one request cannot raise a second consent
+ * prompt or race a disable.
+ */
+async function exclusive<T>(
+  state: ReturnType<typeof initialize>,
+  change: () => Promise<T>,
+): Promise<T> {
+  if (state.changing) {
+    throw new BunawayError({
+      code: "BUSY",
+      message: "Another autostart change is in progress.",
+    });
+  }
+  state.changing = true;
+  try {
+    return await change();
+  } finally {
+    state.changing = false;
+  }
+}
+
+/** Read the registration and the user's separate startup approval state. */
 export function getStatus(
   state: ReturnType<typeof initialize>,
-): AutostartStatus {
-  state.registry.unpackaged();
+  signal?: AbortSignal,
+): AutostartStatus | Promise<AutostartStatus> {
+  if (state.registry.packaged()) {
+    return getPackagedStatus(state.startupTask, signal);
+  }
+  return getRunStatus(state);
+}
+
+function getRunStatus(state: ReturnType<typeof initialize>): AutostartStatus {
   const value = state.registry.read(RUN_KEY, state.name);
   const command = registryCommand(value);
   const parsed = command ? state.registry.parse(command) : [];
@@ -65,20 +104,30 @@ export function getStatus(
 export function enable(
   state: ReturnType<typeof initialize>,
   input: EnableInput,
-) {
-  state.registry.unpackaged();
+  signal?: AbortSignal,
+): AutostartStatus | Promise<AutostartStatus> {
+  if (state.registry.packaged()) {
+    return exclusive(state, () =>
+      enablePackaged(state.startupTask, input, signal),
+    );
+  }
   const command = commandLine(state.app, input.args, input.hidden);
   return state.registry.withRunLock(state.name, () => {
     // Repeating the request must not rewrite Run during a login launch.
     if (registryCommand(state.registry.read(RUN_KEY, state.name)) !== command) {
       state.registry.write(state.name, command);
     }
-    return getStatus(state);
+    return getRunStatus(state);
   });
 }
 
-export function disable(state: ReturnType<typeof initialize>): null {
-  state.registry.unpackaged();
+export function disable(
+  state: ReturnType<typeof initialize>,
+  signal?: AbortSignal,
+): null | Promise<null> {
+  if (state.registry.packaged()) {
+    return exclusive(state, () => disablePackaged(state.startupTask, signal));
+  }
   state.registry.remove(state.name);
   return null;
 }
