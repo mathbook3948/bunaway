@@ -1,4 +1,5 @@
 import { dlopen, ptr } from "bun:ffi";
+import { checkHresult } from "@bunaway/plugin/win32";
 
 /** DwmSetWindowAttribute: DWM_WINDOW_CORNER_PREFERENCE, honored on Windows 11 (build 22000) and later. */
 const DWMWA_WINDOW_CORNER_PREFERENCE = 33;
@@ -7,7 +8,7 @@ const DWMWCP_DEFAULT = 0;
 /** Preference value: never round the window corners. */
 const DWMWCP_DONOTROUND = 1;
 /** HRESULT DWM returns for an attribute the running Windows does not know. */
-const E_INVALIDARG = 0x80070057;
+const E_INVALIDARG = -2147024809;
 /** First Windows build that knows the corner preference attribute (Windows 11). */
 const FIRST_CORNER_BUILD = 22000;
 /** OSVERSIONINFOW is 276 bytes; dwBuildNumber follows three DWORDs and the size field. */
@@ -15,25 +16,15 @@ const OSVERSIONINFOW_SIZE = 276;
 const BUILD_NUMBER_OFFSET = 12;
 
 /**
- * Decide what a DwmSetWindowAttribute result means for the corner preference. A Windows
- * build before 11 rejects the unknown attribute with E_INVALIDARG, which is the documented
- * "no effect" case and counts as success. The same code on a build that knows the
- * attribute is a real rejection, and every other failing HRESULT is one too. Returns the
- * error to throw, or null when the call counts as done.
+ * Whether a failing DwmSetWindowAttribute result is the documented "no effect" case: a
+ * Windows build before 11 rejects the unknown attribute with E_INVALIDARG. The same code
+ * on a build that knows the attribute is a real rejection.
  */
-export function cornerPreferenceFailure(
+export function cornerPreferenceIgnored(
   result: number,
   build: number,
-): Error | null {
-  if (result >= 0) {
-    return null;
-  }
-  if (result >>> 0 === E_INVALIDARG && build < FIRST_CORNER_BUILD) {
-    return null;
-  }
-  return new Error(
-    `DwmSetWindowAttribute failed: 0x${(result >>> 0).toString(16)}`,
-  );
+): boolean {
+  return result === E_INVALIDARG && build < FIRST_CORNER_BUILD;
 }
 
 /** The running Windows build number from RtlGetVersion, which is not subject to manifest version lies. */
@@ -59,11 +50,19 @@ function readWindowsBuild(): number {
   }
 }
 
+/** The build number, or Infinity when it cannot be read so the original HRESULT is reported. */
+function tryReadWindowsBuild(): number {
+  try {
+    return readWindowsBuild();
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
 /**
  * Ask DWM to round the window corners (the system default) or keep them square. The value
- * is a hint: DWM keeps maximized and snapped windows square and skips windows that have a
- * window region or per-pixel alpha. dwmapi is opened for the call and closed before
- * returning; see cornerPreferenceFailure for which results are errors.
+ * is a hint that DWM may not honor, for example for maximized or snapped windows. dwmapi is opened for the call and closed before
+ * returning; see cornerPreferenceIgnored for the one failing result that is not an error.
  */
 export function writeWindowCornerPreference(
   window: bigint,
@@ -89,12 +88,8 @@ export function writeWindowCornerPreference(
       ptr(value),
       value.length,
     );
-    const failure = cornerPreferenceFailure(
-      result,
-      result < 0 ? readWindowsBuild() : FIRST_CORNER_BUILD,
-    );
-    if (failure) {
-      throw failure;
+    if (result < 0 && !cornerPreferenceIgnored(result, tryReadWindowsBuild())) {
+      checkHresult(result, "DwmSetWindowAttribute");
     }
   } finally {
     library.close();
