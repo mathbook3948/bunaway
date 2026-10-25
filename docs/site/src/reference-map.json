@@ -1758,6 +1758,7 @@
       "windows.getReadiness",
       "windows.isOpen",
       "windows.waitForLifecycle",
+      "windows.waitForAudioChange",
       "windows.waitForProcessFailure",
       "windows.getMonitors",
       "windows.getMonitorSnapshot",

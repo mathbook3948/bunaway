@@ -311,6 +311,15 @@ export type WindowProcessFailureEvent = {
   recovery: "reload" | "close";
 };
 
+/** A WebView's audio state after a change, as published by `windows.waitForAudioChange`. */
+export type WindowAudioChangeEvent = {
+  windowId: string;
+  viewId: string;
+  muted: boolean;
+  /** Whether the document is playing audio, independent of `muted`. */
+  playing: boolean;
+};
+
 /** A current desktop display snapshot. IDs are device names, not persistent hardware identities. */
 export type NativeMonitor = {
   id: string;
@@ -890,6 +899,11 @@ export type NativeWindowServices = {
    * starts. Returns a function that removes the listener. Absent when the host publishes none.
    */
   onLifecycle?(listener: (event: WindowLifecycleEvent) => void): () => void;
+  /**
+   * Observe each change of a WebView's mute setting or playback state, in order and never after
+   * shutdown starts. Returns a function that removes the listener. Absent when the host reports none.
+   */
+  onAudioChange?(listener: (event: WindowAudioChangeEvent) => void): () => void;
   /**
    * Observe each WebView process failure the host handles, in order and never after shutdown starts.
    * Returns a function that removes the listener. Absent when the host reports none.

@@ -1422,6 +1422,8 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 오른쪽 클릭이 도착하는지는 합성 메시지로 확인할 수 없어 별도 GUI 확인이 필요하다.
 
 `api/window-document-title.test.ts`는 `windows.documentTitleChanged`의 스키마(필수 필드, 1024 초과, 추가 필드)와 1024 UTF-16 단위 제한(서로게이트 쌍이 경계에 걸리면 통째로 제외)을 확인한다.
+`api/window-audio-change.test.ts`는 `windows.waitForAudioChange`의 결과 스키마, 같은 상태를 다시 전달하지 않는 필터, 순서 번호와 커서 재개, 지원하지 않는 플랫폼의 `UNSUPPORTED`를 확인한다.
+`lifecycle/windows-webview-audio.ts`는 실제 WebView2에서 음소거를 바꿀 때 변경 이벤트가 그 상태로 한 번씩 도착하는지도 확인한다.
 `api/window-process-failure.test.ts`는 `windows.waitForProcessFailure`의 WebView2 종류 번호 대응(모르는 값은 `unknown-exited`), 결과 스키마, 순서 번호와 커서 재개, 지원하지 않는 플랫폼의 `UNSUPPORTED`를 확인한다.
 `lifecycle/windows-process-failure.ts`는 실제 WebView2 렌더러를 강제 종료해 백엔드가 `renderer-exited`와 `reload`를 받고 뷰가 같은 창에서 다시 로드되는지 확인한다. Windows native 실행기에 포함한다.
 `lifecycle/windows-document-title.ts`는 실제 WebView2 문서가 `document.title`을 바꿀 때마다 이벤트가 순서대로 도착하는지(한글, 이모지 경계, 1024 초과 제목 포함)와 네이티브 캡션이 그대로인지 확인한다. Windows native 실행기에 포함한다. 첫 로드의 제목은 구독 전에 도착할 수 있어 검증 대상에서 제외한다.

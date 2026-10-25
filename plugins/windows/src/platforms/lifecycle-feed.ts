@@ -1,5 +1,6 @@
 import { NativeEventWaiters } from "@bunaway/plugin";
 import type {
+  WindowAudioChangeEvent,
   WindowLifecycleEvent,
   WindowProcessFailureEvent,
 } from "@bunaway/plugin-api/native";
@@ -79,6 +80,17 @@ export class LifecycleFeed extends HostEventFeed<WindowLifecycleEvent> {
       | undefined,
   ) {
     super(subscribe, "Window lifecycle notification is not available.");
+  }
+}
+
+/** WebView mute and playback changes for `windows.waitForAudioChange`. */
+export class AudioChangeFeed extends HostEventFeed<WindowAudioChangeEvent> {
+  constructor(
+    subscribe:
+      | ((listener: (event: WindowAudioChangeEvent) => void) => () => void)
+      | undefined,
+  ) {
+    super(subscribe, "WebView audio change notification is not available.");
   }
 }
 

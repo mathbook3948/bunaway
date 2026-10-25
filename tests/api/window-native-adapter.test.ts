@@ -1878,6 +1878,20 @@ test("only the backend waits for WebView process failures, with no grant", async
   );
 });
 
+test("only the backend waits for WebView audio changes, with no grant", async () => {
+  const f: Fixture = fixture();
+  await rejects(
+    f.invoke("windows.waitForAudioChange", {}, "view:main"),
+    "PERMISSION_DENIED",
+    "WebView audio subscription requires the backend.",
+  );
+  await rejects(
+    f.invoke("windows.waitForAudioChange", {}, "backend", []),
+    "UNSUPPORTED",
+    "WebView audio change notification is not available.",
+  );
+});
+
 test("an unknown native operation is rejected", () => {
   const f: Fixture = fixture();
   return rejects(
