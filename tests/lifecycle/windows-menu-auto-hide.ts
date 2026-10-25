@@ -504,6 +504,8 @@ async function activateByClick(window: bigint): Promise<void> {
         Date.now() < limit
       ) {
         windows.pump();
+        // Page reports that arrive during the click are timed when they arrive, not afterwards.
+        checkCallbacks();
         await Bun.sleep(10);
       }
       const activated = user.symbols.GetForegroundWindow() === window;
@@ -589,10 +591,12 @@ try {
         } else if (isRecord(parsed)) {
           if (typeof parsed.focus === "string") {
             pageFocus = parsed.focus;
-            markTimeline(`page ${parsed.focus}`);
           }
           if (typeof parsed.keydown === "string") {
             pageKeys.push(parsed.keydown);
+            markTimeline(`page keydown ${parsed.keydown} (${pageFocus})`);
+          } else if (typeof parsed.focus === "string") {
+            markTimeline(`page ${parsed.focus}`);
           }
         }
       },
@@ -698,12 +702,12 @@ try {
   focusRenderWidget();
   await settle(KEY_REPORT_SETTLE_MS);
   logInputState("before probe key");
+  markTimeline("probe key F");
   press(VK_F);
   // Report what both the page and the controller saw before judging, so a failure says whether
   // the key never reached the page or only the controller event is missing.
   await settle(KEY_REPORT_SETTLE_MS);
   logInputState("after probe key");
-  console.log(`Page focus timeline: ${JSON.stringify(focusTimeline)}`);
   await pumpUntil(
     () => accelerators.length > 0,
     "Controller accelerator event for a real key",
@@ -756,6 +760,8 @@ try {
   await pumpUntil(linked(0n), "Esc hides");
   verified = true;
 } finally {
+  // Printed on every path, so a failure before the probe key still shows what the page reported.
+  console.log(`Page focus timeline: ${JSON.stringify(focusTimeline)}`);
   // A failure between the Alt press and release must not leave Alt held for the rest of the
   // session. A rejected release is ignored so the cleanup below still runs.
   if (altHeld) {
