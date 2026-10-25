@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { checkHresult, pick, USER32 } from "@bunaway/plugin/win32";
 import type { NativeMenuWindowHost } from "@bunaway/plugin-api/native";
+import { isRecord } from "@bunaway/protocol";
 import {
   type ComHandler,
   checkCallbacks,
@@ -28,6 +29,11 @@ const root = resolve(import.meta.dir, "../..");
 const output = resolve(root, "build/windows-menu-auto-hide");
 const assets = resolve(output, "assets");
 const caption = "Bunaway menu auto-hide";
+// GUITHREADINFO is 72 bytes on 64-bit Windows; hwndFocus follows flags, hwndActive.
+const GUI_THREAD_INFO_SIZE = 72;
+const GUI_THREAD_INFO_FOCUS_OFFSET = 16;
+// Time given to the page and the controller to report one real key.
+const KEY_REPORT_SETTLE_MS = 750;
 const STEP_TIMEOUT_MS = deadline("childStep");
 const WM_TIMER = 0x0113;
 const WM_ENTERMENULOOP = 0x0211;
@@ -133,6 +139,20 @@ const user = dlopen("user32.dll", {
     returns: "u32",
   },
   ...pick(USER32, "SetTimer", "KillTimer"),
+  GetGUIThreadInfo: {
+    args: [
+      "u32",
+      "ptr",
+    ],
+    returns: "i32",
+  },
+  IsChild: {
+    args: [
+      "u64",
+      "u64",
+    ],
+    returns: "i32",
+  },
   EndMenu: {
     args: [],
     returns: "i32",
@@ -150,6 +170,9 @@ await writeFile(
       document.getElementById("a").focus();
       chrome.webview.postMessage("loaded");
     });
+    addEventListener("keydown", (event) => {
+      chrome.webview.postMessage({ keydown: event.key });
+    });
   </script>`,
 );
 checkHresult(ole.symbols.CoInitializeEx(null, 2), "CoInitializeEx(STA)");
@@ -164,6 +187,9 @@ let menus: WindowMenus | undefined;
 let loaded = false;
 let verified = false;
 const accelerators: string[] = [];
+// Keys the page itself received, to tell a key that never reached the page from one the
+// controller did not report.
+const pageKeys: string[] = [];
 const step = (name: string) => console.log(`STEP ${name}`);
 // Reports the fixture state and fails when it outlives its deadline while the event loop still runs.
 const watchdog = setTimeout(() => {
@@ -185,6 +211,41 @@ async function pumpUntil(done: () => boolean, what: string): Promise<void> {
     if (view?.failure) {
       throw view.failure;
     }
+    await Bun.sleep(5);
+  }
+}
+
+/** Window that holds keyboard focus in the foreground thread, for diagnostics. */
+function focusWindow(): bigint {
+  const info = new DataView(new ArrayBuffer(GUI_THREAD_INFO_SIZE));
+  info.setUint32(0, GUI_THREAD_INFO_SIZE, true);
+  if (!user.symbols.GetGUIThreadInfo(0, ptr(info.buffer))) {
+    return 0n;
+  }
+  return info.getBigUint64(GUI_THREAD_INFO_FOCUS_OFFSET, true);
+}
+
+/** Log which window has focus and which keys the controller and the page have seen. */
+function logInputState(label: string): void {
+  const focus = focusWindow();
+  console.log(
+    `Input state ${label}: ${JSON.stringify({
+      focusClass: focus === 0n ? "none" : className(focus),
+      focusIsHost: focus === hwnd,
+      focusInsideHost: focus !== 0n && user.symbols.IsChild(hwnd, focus) !== 0,
+      foregroundIsHost: user.symbols.GetForegroundWindow() === hwnd,
+      accelerators,
+      pageKeys,
+    })}`,
+  );
+}
+
+/** Pump the UI thread for a fixed time so late callbacks and page messages arrive. */
+async function settle(milliseconds: number): Promise<void> {
+  const end = Date.now() + milliseconds;
+  while (Date.now() < end) {
+    windows.pump();
+    checkCallbacks();
     await Bun.sleep(5);
   }
 }
@@ -401,8 +462,11 @@ try {
     ],
     {
       message(_source, raw) {
-        if (JSON.parse(raw) === "loaded") {
+        const parsed: unknown = JSON.parse(raw);
+        if (parsed === "loaded") {
           loaded = true;
+        } else if (isRecord(parsed) && typeof parsed.keydown === "string") {
+          pageKeys.push(parsed.keydown);
         }
       },
       revoke() {},
@@ -488,7 +552,12 @@ try {
   };
   // A plain key must raise the controller's accelerator event, or the Alt checks below cannot work.
   step("accelerator probe");
+  logInputState("before probe key");
   press(VK_F);
+  // Report what both the page and the controller saw before judging, so a failure says whether
+  // the key never reached the page or only the controller event is missing.
+  await settle(KEY_REPORT_SETTLE_MS);
+  logInputState("after probe key");
   await pumpUntil(
     () => accelerators.length > 0,
     "Controller accelerator event for a real key",
