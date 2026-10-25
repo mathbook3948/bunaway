@@ -751,6 +751,12 @@ function handleHostResult(packet: PacketOf<"host-result">) {
 }
 /** Route one packet from the main thread to the handler that owns its kind. */
 function handleHostPacket(packet: Packet) {
+  if (packet.kind === "operation") {
+    log("diag-packet", {
+      kind: packet.kind,
+      operation: packet.call.operation,
+    });
+  }
   switch (packet.kind) {
     case "start":
       move("start");
@@ -2489,7 +2495,15 @@ try {
   await channel.send({
     kind: "ready",
   });
+  let diagBeat = 0;
   while (!stopping()) {
+    if (Date.now() - diagBeat > 400) {
+      diagBeat = Date.now();
+      log("diag-loop", {
+        tray: !!tray,
+        views: views.size,
+      });
+    }
     checkCallbacks();
     windows.pump();
     monitorTracker?.flush();
