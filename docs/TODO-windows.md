@@ -583,7 +583,7 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 - [x] Windows에서 모니터 장치명과 이름, bounds, work area, DPI와 배율, 드라이버가 제공하는 rotation과 정수 refresh rate를 조회한다.
 - [x] Windows에서 모니터 추가, 제거와 display metrics 변경 이벤트 및 versioned snapshot 복구를 제공한다.
 - [x] Windows 커서의 물리 화면 좌표를 조회한다. 창 기준 physical/logical 변환은 기존 toLogical과 toPhysical을 사용한다.
-- [ ] 모니터별 좌표 변환과 혼합 DPI의 전역 논리 좌표계 지원 범위를 결정한다.
+- [x] 혼합 DPI 화면의 공통 논리 좌표계와 지점 기준 변환은 제공하지 않기로 결정했다. [ADR 0051](./decisions/0051-mixed-dpi-coordinate-space.md).
 - [x] system/light/dark 테마를 앱과 창에 지정하고 조회한다. 네이티브 프레임과 WebView 콘텐츠의 `prefers-color-scheme`에 앱 기본값과 창 override를 적용한다. 같은 WebView2 프로필의 창은 콘텐츠 값을 공유한다.
 - [x] 테마, accent color와 시스템 색 변경을 알린다. appearance.changed는 고대비와 접근성 설정도 포함하며 동일 값은 생략한다.
 - [x] Windows 고대비와 OS forced colors 플래그, 시스템 색을 조회한다.
