@@ -19,6 +19,8 @@ const adapter = createOperationsFactory(
   capabilities: [],
 });
 try {
+  // Tells the test the call began, so a stop after this line is the call waiting, not a slow start.
+  console.log("started");
   await adapter.execute(
     "opener.trashFile",
     {

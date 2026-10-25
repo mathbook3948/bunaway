@@ -134,10 +134,12 @@ async function trashInFreshProcess(
       new Response(child.stderr).text(),
     ]);
     if (waiting) {
+      // Only a stop after the child began the call counts as the call waiting.
+      expect(stdout, stderr).toContain("started");
       return "waiting";
     }
     expect(code, stderr + stdout).toBe(0);
-    return stdout.trim();
+    return stdout.trim().split(/\s+/).at(-1) ?? "";
   } finally {
     clearTimeout(timer);
   }
@@ -170,19 +172,22 @@ async function expectRefused(
     expect(await recycledItem(sample)).toBeUndefined();
   } finally {
     // If the refusal regressed and the file reached the bin, remove only this test's entry.
-    const leaked = await recycledItem(sample);
-    if (leaked) {
-      await rm(leaked.data, {
-        force: true,
-      });
-      await rm(leaked.info, {
+    try {
+      const leaked = await recycledItem(sample);
+      if (leaked) {
+        await rm(leaked.data, {
+          force: true,
+        });
+        await rm(leaked.info, {
+          force: true,
+        });
+      }
+    } finally {
+      await rm(root, {
+        recursive: true,
         force: true,
       });
     }
-    await rm(root, {
-      recursive: true,
-      force: true,
-    });
   }
 }
 
