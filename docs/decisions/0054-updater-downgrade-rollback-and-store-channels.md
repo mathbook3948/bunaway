@@ -20,30 +20,34 @@ status: accepted
 - `check`는 원격 버전이 현재 버전보다 클 때만 `updateAvailable`을 `true`로 하고, 같거나 낮은 버전은 내리지 않는다.
   호출자가 이 비교를 바꾸는 입력이나 설정은 없다.
 - `download`는 `<sha256>.partial`에 받은 뒤 크기와 SHA-256(설정했다면 Authenticode 게시자)을 모두 확인하고서야 최종
-  이름으로 바꾼다. 실패, 취소, 시간 초과에서는 부분 파일을 지운다. 이미 설치된 앱 파일은 건드리지 않는다.
+  이름으로 바꾼다. 실패, 취소, 시간 초과에서는 부분 파일을 지우려 하고, 지우지 못하면 다음 성공한 내려받기가 지운다. 이미 설치된 앱 파일은 건드리지 않는다.
 - 패키징 채널은 `win-direct`(Inno Setup 설치 파일), `win-store-unpackaged`(Store에 제출하는 일반 EXE/MSI),
   `win-store-msix`(이름만 등록돼 있고 패키지 생성은 차단됨)다([ADR 0005](./0005-packaging-contract.md),
   [플랫폼 지원 표](../platform-support/README.md)).
 - MSIX로 설치된 앱은 읽기 전용 패키지 폴더에서 실행되고, 패키지의 교체는 패키지 관리자(Store 포함)만 한다. 앱이 내려받은
   EXE로 이 패키지를 바꿀 수 없다. 패키지 ID가 있는 프로세스는 `GetCurrentPackageFullName`으로 구분할 수 있으며
-  `autostart`와 `notification` 플러그인이 이미 이 호출을 쓴다.
+  `autostart`와 `notification` 플러그인이 이미 이 호출을 쓴다. 다만 패키지 ID만으로는 MSIX 설치와 구분되지 않는다.
+  외부 위치의 실행 파일에 패키지 ID만 붙이는 방식(sparse package)도 같은 호출이 성공하지만 실행 파일 폴더는 패키지가
+  소유하지 않는다.
 
 ## 결정
+
+결정 1과 2는 Windows 앱에 적용한다. macOS의 업데이트 채널과 설치는 [macOS TODO](../TODO-macos.md)의 범위로 따로 정한다.
 
 1. 낮거나 같은 버전으로의 downgrade는 제공하지 않는다. `allowDowngrade` 같은 설정이나 호출 인자를 추가하지 않는다.
    이전 동작으로 되돌리려는 앱은 이전 코드를 더 높은 버전 번호로 다시 게시한다(roll forward).
 2. 프레임워크는 설치 단계에서 파일을 직접 교체하거나 이전 버전을 보관해 되돌리는 롤백을 구현하지 않는다. 설치는 검증된
    설치 파일을 실행하는 것으로 하고, 설치 중 실패의 원자성과 복구는 그 설치 프로그램(`win-direct`는 Inno Setup)이
    맡는다. 프레임워크가 보장하는 범위는 다음으로 한정한다.
-   - 내려받기 단계의 실패는 설치된 앱을 바꾸지 않는다(현재 `download` 동작).
-   - 설치 파일은 실행 직전에 해시와 서명을 다시 확인한다([updater 문서](../site/src/content/docs/reference/plugins/updater.mdx)의
+   - 내려받기 단계의 실패는 설치된 앱을 바꾸지 않는다(구현됨, 현재 `download` 동작).
+   - 설치 파일은 실행 직전에 SHA-256을 다시 확인하고, 앱이 `authenticode`를 설정했다면 서명도 다시 확인한다(설치 항목에서 구현 예정, [updater 문서](../site/src/content/docs/reference/plugins/updater.mdx)의
      "검증이 끝난 뒤 설치 전에 파일을 바꾸는 것은 막지 않는다"는 제한을 닫는 조건이다).
    - 설치 파일이 시작되지 못했거나 실패로 끝났다는 결과는 앱에 오류로 전달한다. 설치 프로그램이 앱을 되돌렸는지는
      프레임워크가 판정하지 않는다.
    설치와 종료 승인, relaunch의 구체적 계약은 [TODO](../TODO-windows.md)의 해당 항목에서 이 결정을 전제로 정한다.
-3. 패키지 ID를 가진 프로세스(MSIX 설치)에서는 `updater`가 `UNSUPPORTED`(`details.reason: "managedByStore"`)로 실패한다.
+3. 패키지 ID가 있고 실행 파일이 패키지 설치 위치(`GetCurrentPackagePath`) 안에 있는 프로세스, 곧 MSIX로 설치된 앱에서는 `updater`가 `UNSUPPORTED`(`details.reason: "managedByStore"`)로 실패한다.
    `check`와 `download` 모두 해당한다. 앱은 같은 코드에서 이 오류를 보고 업데이트 UI를 숨기거나 Store의 업데이트 안내로
-   대체한다. 패키지 ID 유무는 실행 중인 호스트가 판단하며 앱 설정으로 바꿀 수 없다. 이 조건은 [`win-store-msix`](../platform-support/README.md)
+   대체한다. 이 조건은 실행 중인 호스트가 판단하며 앱 설정으로 바꿀 수 없다. 이 조건은 [`win-store-msix`](../platform-support/README.md)
    패키지 생성이 열릴 때 함께 구현하고 검증한다. 지금은 패키지 생성이 차단돼 있어 이 경로를 실행할 수 없다.
 4. `win-direct` 설치는 자체 updater를 쓰는 채널이며 이 결정으로 달라지는 것이 없다.
 
@@ -69,4 +73,4 @@ status: accepted
 ## 영향
 
 - 코드 변경은 없다. `check`의 비교와 `download`의 임시 파일 규칙은 이미 이 결정과 같다.
-- 후속 구현: 패키지 ID 프로세스의 `managedByStore` 거부(`win-store-msix` 생성과 함께), 설치 직전 재검증(설치 항목과 함께).
+- 후속 구현: MSIX 설치 프로세스의 `managedByStore` 거부(`win-store-msix` 생성과 함께), 설치 직전 재검증(설치 항목과 함께).
