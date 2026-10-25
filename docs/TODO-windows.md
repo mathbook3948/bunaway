@@ -656,7 +656,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] 탐색 전 허용와 거부, redirect와 popup 새 창 처리 훅을 제공한다.
 - [ ] 로드 시작, DOM ready, 완료와 실패 이벤트를 제공한다.
 - [ ] 문서, 프레임과 same-document 탐색 이벤트를 제공한다.
-- [ ] title, favicon 변경 이벤트를 제공한다. preferred-size 변경 이벤트는 제공하지 않기로 했다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
+- [ ] title, favicon 변경 이벤트를 제공한다. title은 `windows.documentTitleChanged`로 제공하며 favicon이 남았다. preferred-size 변경 이벤트는 제공하지 않기로 했다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
 - [ ] renderer gone, unresponsive와 responsive 이벤트를 제공한다.
 - [ ] console 메시지, 스크립트 초기화 실패와 context-menu 이벤트를 제공한다.
 - [ ] WebView 투명 배경과 scrollbar 옵션을 제공한다. 불투명 배경색은 `window.backgroundColor`가 창과 WebView2에 함께 적용한다.

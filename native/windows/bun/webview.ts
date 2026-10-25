@@ -204,6 +204,8 @@ export class WebView {
       message(source: string, raw: string): void;
       revoke(reason: string): void;
       sameDocument(source: string): void;
+      /** Optional: only the window host publishes document titles. */
+      titleChanged?(title: string): void;
       close(force?: boolean): void;
       ready(): void;
       documentComplete(error: WireError | null): void;
@@ -708,6 +710,12 @@ export class WebView {
         };
       }
       this.hooks.documentComplete(error);
+    });
+    // add_DocumentTitleChanged: the handler reads get_DocumentTitle (slot 48) of the sender.
+    this.on(46, "f5f2b923-958e-4042-8f5f-a2b3d6ba1a0b", () => {
+      if (this.webview) {
+        this.hooks.titleChanged?.(getString(this.webview, 48));
+      }
     });
     // ICoreWebView2 receives top-level messages only; no FrameWebMessageReceived handlers are installed.
     this.on(34, "57213f19-00e6-49fa-8e07-898ea01ecbd2", (args) =>

@@ -1072,11 +1072,11 @@ const release = await client.listen("windows.closeRequested", async ({ payload }
 
 ## 창 이벤트
 
-`windows.changed`, `windows.appCommand`, `windows.systemContextMenu`, `windows.thumbnailToolbarClicked`와 `windows.getSnapshot`은 현재 Windows에서만 지원합니다. `windows.lifecycle`과
+`windows.changed`, `windows.appCommand`, `windows.systemContextMenu`, `windows.thumbnailToolbarClicked`, `windows.documentTitleChanged`와 `windows.getSnapshot`은 현재 Windows에서만 지원합니다. `windows.lifecycle`과
 `windows.closeRequested`는 Windows와 macOS에서 지원합니다. 다만 `windows.lifecycle`을 문서로 전달하는 일은 Windows에서만 지원하고,
 macOS에서는 백엔드의 `windows.waitForLifecycle`로만 관찰합니다.
 
-`windows`는 `windows.changed`, `windows.appCommand`, `windows.systemContextMenu`, `windows.thumbnailToolbarClicked`, `windows.readiness`, `windows.lifecycle`, `windows.closeRequested`를 등록합니다. 기존 `client.listen`과 직접 함수
+`windows`는 `windows.changed`, `windows.appCommand`, `windows.systemContextMenu`, `windows.thumbnailToolbarClicked`, `windows.documentTitleChanged`, `windows.readiness`, `windows.lifecycle`, `windows.closeRequested`를 등록합니다. 기존 `client.listen`과 직접 함수
 `listen`으로 구독하며, 이벤트 payload 타입은 앱의 `EventsOf`에서 추론합니다.
 `windows.changed`는 창의 문서에만 전달합니다. `windows.readiness`의 수신 대상은
 위의 창 준비 계약을 따릅니다.
@@ -1257,6 +1257,21 @@ for (;;) {
 이벤트는 최상위 창에 도착한 메시지만 해석합니다. WebView2가 포커스를 가진 동안 마우스 확장 버튼과 미디어 키가
 최상위 창까지 올라오는지, 사용자 정의 제목 표시줄(`titlebar: "custom"`)에서 오른쪽 클릭이 도착하는지는 합성 메시지
 시험으로 확인할 수 없어 실제 입력 확인이 남아 있습니다.
+
+### 문서 제목 변경 이벤트 (Windows)
+
+`windows.documentTitleChanged`는 `{ windowId, viewId, title }`입니다. 창의 페이지가 `document.title`을 바꿀 때마다
+WebView2의 `DocumentTitleChanged`에 맞춰 새 제목을 전달합니다. Electron의 `page-title-updated`, Tauri의
+`on_document_title_changed`에 대응합니다.
+
+- 알림 전용입니다. 네이티브 창 캡션은 바꾸지 않으므로 캡션에 반영하려면 앱이 `windows.setTitle`을 호출합니다
+  (Electron은 기본으로 캡션을 따라가고 Tauri는 따라가지 않습니다. 코어를 작게 두려고 호출을 앱에 맡깁니다).
+- 앞선 이벤트를 전달하는 동안 제목이 더 바뀌면 중간 값은 건너뛰고 마지막 값 하나만 전달합니다. 페이지가 제목을 빠르게 바꿔도 이벤트 큐가 차지 않으며, 마지막 제목은 항상 전달합니다.
+- `title`은 UTF-16 1024 코드 단위까지입니다. 더 길면 그 길이로 자르며 서로게이트 쌍이 경계에 걸리면 쌍을 통째로 뺍니다.
+- 이벤트를 받은 창 자신의 뷰에만 전달하며 뷰의 `events`에 이름을 허용하면 수신합니다. 상태가 바뀌는 알림이
+  아니므로 `revision`을 올리지 않고 `getSnapshot`에 제목은 없습니다. 구독하기 전의 제목은 전달하지 않으므로
+  현재 값이 필요하면 페이지가 `document.title`을 읽습니다.
+- favicon 변경 이벤트는 아직 제공하지 않습니다.
 
 ### 썸네일 툴바 클릭 이벤트 (Windows)
 

@@ -812,12 +812,35 @@ export const windowSystemContextMenuSchema = {
   ],
   additionalProperties: false,
 } as const;
+/**
+ * The document title of the window's page changed (Windows only). `title` is the page's
+ * `document.title`, cut to at most 1024 UTF-16 code units without splitting a surrogate pair.
+ * The native caption is not changed by this event.
+ */
+export const windowDocumentTitleChangedSchema = {
+  type: "object",
+  properties: {
+    windowId: eventIdentity,
+    viewId: eventIdentity,
+    title: {
+      type: "string",
+      maxLength: 1024,
+    },
+  },
+  required: [
+    "windowId",
+    "viewId",
+    "title",
+  ],
+  additionalProperties: false,
+} as const;
 /** Ordered native transitions and preparation snapshots, subject to view event policy. */
 export const windowEvents = {
   "windows.appCommand": windowAppCommandSchema,
   "windows.systemContextMenu": windowSystemContextMenuSchema,
   "windows.thumbnailToolbarClicked": windowThumbnailToolbarClickedSchema,
   "windows.closeRequested": windowCloseRequestedSchema,
+  "windows.documentTitleChanged": windowDocumentTitleChangedSchema,
   "windows.monitorsChanged": monitorChangeSchema,
   "windows.readiness": windowReadinessSchema,
   "windows.lifecycle": windowLifecycleSchema,

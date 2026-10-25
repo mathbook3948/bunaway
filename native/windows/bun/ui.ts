@@ -34,6 +34,7 @@ import {
 } from "./channel.ts";
 import { type CloseDecision, CloseRequests } from "./close-request.ts";
 import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
+import { createTitleCoalescer, limitDocumentTitle } from "./document-title.ts";
 import { DownloadCleanupError, DownloadCleanupRetries } from "./downloads.ts";
 import { isWindowRole, runWindowRole } from "./menu-window-role.ts";
 import { isMonitorChangeMessage, MonitorTracker } from "./monitor-events.ts";
@@ -1828,6 +1829,28 @@ function createWindow(
             );
           }
         },
+        titleChanged: createTitleCoalescer((title, settled) => {
+          if (
+            stopping() ||
+            shutdownCommitted() ||
+            views.get(instanceKey)?.native !== native
+          ) {
+            settled();
+            return;
+          }
+          const { windowId, viewId } = readiness.snapshot();
+          sendNativeEvent(
+            boundary,
+            "windows.documentTitleChanged",
+            {
+              windowId,
+              viewId,
+              title: limitDocumentTitle(title),
+            },
+            undefined,
+            settled,
+          );
+        }),
         documentComplete: (error) =>
           views.get(instanceKey)?.readiness?.documentComplete(error),
         close,
@@ -1994,10 +2017,12 @@ function sendNativeEvent(
   event: string,
   payload: import("@bunaway/protocol").JsonValue,
   onUndelivered?: () => void,
+  onSettled?: () => void,
 ): void {
   const route = boundary.eventRoute(event);
   if (!route) {
     onUndelivered?.();
+    onSettled?.();
     return;
   }
   void channel
@@ -2020,7 +2045,8 @@ function sendNativeEvent(
         return;
       }
       fail(error);
-    });
+    })
+    .finally(onSettled);
 }
 
 /** Gate each recipient before forwarding plugin events through its current live route. */
