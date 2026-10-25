@@ -24,12 +24,14 @@ status: accepted
   - 최상위 `NavigationStarting`: 허용 origin이 아니면 취소하고, 허용되면 `loading`을 올리고 새 탐색 id마다 이전 문서의
     세션과 보류 중인 다운로드를 폐기한다. 이 폐기가 문서 단위 세대(`documentGeneration`)를 올린다.
   - `FrameNavigationStarting`: 허용 origin이 아니면 취소하고 로그만 남긴다. 허용된 프레임 탐색은 상태를 바꾸지 않는다.
-  - `SourceChanged`의 same-document: 새 문서가 아니면 세션의 신뢰된 URL만 갱신한다. 허용 origin이 아니면 갱신하지 않는다.
-    `windows.getWebViewState`의 `url`이 이 값을 따른다.
+  - `SourceChanged`의 same-document: 새 문서가 아니면 세션의 신뢰된 URL(UI 요청의 출처 판단에 쓰는 값)만 갱신한다. 허용
+    origin이 아니면 갱신하지 않는다. `windows.getWebViewState`의 `url`은 이 값과 별개로 호출 시점의 WebView2 `Source`를
+    직접 읽는다.
   - `NavigationCompleted`: `windows.readiness`와 `getReadiness`의 `document` 상태와 `loading`을 갱신한다.
   - 제목 변경은 `windows.documentTitleChanged`로 따로 제공한다.
 - 이 저장소의 이벤트는 WebView(UI)로 전달된다. UI의 스크립트는 같은 문서 안에서 `hashchange`, `popstate`와 Navigation API
-  (`navigation` 객체의 `navigate`, `currententrychange`) 이벤트로 same-document 탐색을 직접 안다. 새 문서의 탐색은 새
+  (`navigation` 객체의 `currententrychange`, 엔진이 지원할 때만) 이벤트로 same-document 탐색을 직접 안다. Navigation
+  API의 지원 범위는 호스트별 WebView 엔진에 따르며 이 저장소에서 확인하지 않았다. 새 문서의 탐색은 새
   스크립트가 구독하기 전에 시작되므로 UI가 이벤트로 받을 수 없다. 프레임 안의 탐색은 허용 origin 안에서만 일어나며, 프레임은
   이 저장소의 호스트 API 대상이 아니다(앱 명령과 이벤트 구독은 최상위 문서 하나에 묶인다).
 
@@ -37,15 +39,18 @@ status: accepted
 
 1. 문서, 프레임과 same-document 탐색을 알리는 새 이벤트와 작업을 추가하지 않는다.
 2. 백엔드는 기존 계약으로 탐색 결과를 확인한다.
-   - 현재 URL, `loading`, `canGoBack`, `canGoForward`: `windows.getWebViewState`.
-   - 새 문서의 준비 상태, 실패와 취소: `windows.readiness`, `windows.getReadiness`.
-   - same-document 탐색 뒤의 URL: `getWebViewState`의 `url`이 호스트가 받은 최신 값을 돌려준다. 호출 직후 값이 방금 시작한
+   - 현재 URL, `loading`, `canGoBack`, `canGoForward`: `windows.getWebViewState`(Windows 호스트).
+   - 새 문서의 준비 상태, 실패와 취소: `windows.readiness`, `windows.getReadiness`. `loading`은 탐색 완료 이벤트가 올 때까지
+     true로 남으므로 완료 기한 초과로 `document`가 `failed`가 된 뒤에도 true일 수 있다.
+   - same-document 탐색 뒤의 URL: `getWebViewState`의 `url`이 호출 시점의 현재 URL을 돌려준다. 호출 직후 값이 방금 시작한
      탐색을 반영한다는 보장은 없다.
-   - same-document 탐색의 시점이 필요한 UI는 `hashchange`, `popstate`, Navigation API를 쓰고 필요하면 앱 명령으로
-     백엔드에 보낸다.
+   - same-document 탐색의 시점이 필요한 UI는 `hashchange`, `popstate`(엔진이 지원하면 Navigation API)를 쓰고
+     백엔드가 필요로 하면 앱 명령으로 보낸다.
 3. 프레임 탐색은 호스트가 허용 origin 검사와 로그만 맡고 앱에 알리지 않는다. 프레임별 탐색 정보, 프레임 URL과 origin 조회는
    별도 TODO(프레임 tree 지원 범위)에서 다룬다.
-4. 위 결정은 Windows와 macOS 호스트에 같이 적용한다. 두 호스트의 same-document 처리는 같은 `sameDocument` 경계를 쓴다.
+4. 새 이벤트를 추가하지 않는 결정은 Windows와 macOS 호스트에 같이 적용한다. 기존 계약으로 확인할 수 있다는 판단은 Windows만
+   다룬다. macOS에는 `windows.getWebViewState`가 없고, `ViewBoundary.sameDocument`는 UI 메시지가 도착할 때 그 시점의 출처로
+   세션 URL을 갱신하는 데 쓰인다. macOS의 탐색 상태는 `windows.mdx`에 적힌 기존 계약을 따른다.
 5. 기존 계약으로 얻을 수 없는 용도(탐색 이력 추적, 리디렉션 체인 조회 등)가 확인되면 별도 결정에서 다룬다. 탐색 전 허용과
    거부, 리디렉션과 popup 처리는 별도 TODO 항목이다.
 
@@ -54,10 +59,13 @@ status: accepted
 - 두 프레임워크가 다르다. Electron은 문서, 프레임, same-document 이벤트를 제공하고 Tauri는 탐색 전 허용 훅만 제공한다. 이 저장소는
   탐색 결과를 `getWebViewState`와 `windows.readiness`로 이미 제공하므로 같은 정보의 이벤트를 더하면 순서, 세대와 큐 한도 규칙을
   두 곳에서 지켜야 한다. 코어 계약은 작게 유지한다.
-- same-document 탐색은 UI가 표준 웹 API로 직접 알 수 있고, 백엔드는 URL 조회로 충분하다. 문서 탐색은 새 문서가 구독하기 전에
+- same-document 탐색은 UI가 표준 웹 API로 직접 알 수 있고, 시점이 필요 없는 현재 URL 확인은 조회로 충분하다. 시점이 필요한
+  백엔드는 UI가 앱 명령으로 알린다. 문서 탐색은 새 문서가 구독하기 전에
   일어나 UI 이벤트로 전달할 수 없다. 프레임은 최상위 문서 하나에 묶인 호스트 API의 대상이 아니라 이벤트를 받을 소비자가 없다.
 
 ## 결과
 
 - 이벤트, 권한, 스키마, 네이티브 코드 변경은 없다.
+- 로드 시작, DOM ready, 완료와 실패 이벤트를 다루는 결정(WebView 로드 이벤트 ADR)이 이 결정의 짝이며, 그 결정은 문서,
+  프레임과 same-document 탐색 이벤트를 이 결정에서 다루도록 남겼다.
 - `docs/TODO-windows.md`의 해당 항목을 완료로 표시하고 이 결정을 참조한다.
