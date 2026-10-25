@@ -950,7 +950,7 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   `@bunaway/backend/cli`의 `defineCLI`는 기존 `onOpen` argv를 명시적으로 받아 Bun
   `parseArgs`와 앱의 Zod schema로 검사한다. help와 오류는 결과이며 실행과 종료를 제어하지 않는다.
 - [ ] utility process의 독립 실행과 양방향 메시지, 종료와 오류 이벤트를 제공한다.
-- [x] 결정 완료: localhost 자산 서버는 제공하지 않는다. 패키지 자산은 포트를 열지 않는 가상 호스트와 `bunaway://`로 로드한다. [ADR 0060](./decisions/0060-localhost-asset-server.md)을 따른다.
+- [x] 결정 완료: localhost 자산 서버는 제공하지 않는다. 패키지 자산은 포트를 열지 않는 경로(Windows는 `https://app.bunaway.local`, macOS와 iOS는 `bunaway://`)로 로드한다. [ADR 0060](./decisions/0060-localhost-asset-server.md)을 따른다.
 - [x] HTTP client-request와 incoming-message의 stream 기능을 Bun 대체 API에 매핑한다.
   신뢰된 backend는 `fetch`, `RequestInit.body`, `Response`와 `Response.body`를 사용한다.
   [network 계약](./site/src/content/docs/reference/plugins/network.mdx)의 대응 표와 stream 예제를 따른다.
