@@ -58,12 +58,6 @@ const GUI_THREAD_INFO_FOCUS_OFFSET = 16;
 const WEBVIEW_CONTROLLER_MOVE_FOCUS_SLOT = 12;
 /** ICoreWebView2Controller::add_AcceleratorKeyPressed; its remove slot follows. */
 const WEBVIEW_CONTROLLER_ACCELERATOR_KEY_SLOT = 19;
-// Temporary diagnosis of controller events: ICoreWebView2Controller add_GotFocus and add_LostFocus
-// share the focus-changed handler interface.
-const WEBVIEW_CONTROLLER_GOT_FOCUS_SLOT = 15;
-const WEBVIEW_CONTROLLER_LOST_FOCUS_SLOT = 17;
-const WEBVIEW_FOCUS_CHANGED_HANDLER_IID =
-  "05ea24bd-6452-4926-9014-4b82b498135d";
 const MOVE_FOCUS_REASON_PROGRAMMATIC = 0;
 // ICoreWebView2Controller2::put_DefaultBackgroundColor takes a COREWEBVIEW2_COLOR (A, R, G, B bytes).
 const WEBVIEW_CONTROLLER2_IID = "c979903e-d4ca-4228-92eb-47ee3fa96eab";
@@ -771,43 +765,10 @@ export class WebView {
             ])(ptr(key)),
             "get_VirtualKey",
           );
-          // Diagnostic: tells an event that never arrives from one that stops before the key hook.
-          this.hooks.log("webview-accelerator-event", {
-            kind: kind[0],
-            key: key[0],
-            hasKeyHook: this.hooks.key !== undefined,
-          });
           this.hooks.key?.(kind[0] ?? 0, key[0] ?? 0);
         },
         this.controller,
       );
-      // Diagnostic: a registration that succeeded leaves a non-zero token and one more event entry.
-      this.hooks.log("webview-accelerator-registered", {
-        slot: WEBVIEW_CONTROLLER_ACCELERATOR_KEY_SLOT,
-        token: String(this.events[this.events.length - 1]?.token),
-        events: this.events.length,
-      });
-      // Diagnostic: shows whether controller events arrive at all, apart from the key event.
-      for (const [slot, name] of [
-        [
-          WEBVIEW_CONTROLLER_GOT_FOCUS_SLOT,
-          "got-focus",
-        ],
-        [
-          WEBVIEW_CONTROLLER_LOST_FOCUS_SLOT,
-          "lost-focus",
-        ],
-      ] as const) {
-        this.on(
-          slot,
-          WEBVIEW_FOCUS_CHANGED_HANDLER_IID,
-          () =>
-            this.hooks.log("webview-accelerator-diagnosis", {
-              event: name,
-            }),
-          this.controller,
-        );
-      }
     }
     this.on(25, "79e0aea4-990b-42d9-aa1d-0fcc2e5bc7f1", (args) => {
       const kind = new Int32Array(1);

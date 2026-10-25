@@ -529,12 +529,7 @@ try {
           }, 0);
         }
       },
-      log(event, data) {
-        // Registration and delivery of the controller accelerator event, for the key diagnosis.
-        if (event.startsWith("webview-accelerator")) {
-          console.log(`Host log ${event}: ${JSON.stringify(data)}`);
-        }
-      },
+      log() {},
     },
   );
   const page = view;
@@ -635,12 +630,17 @@ try {
     user.symbols.GetMenu(hwnd) === expected;
 
   // The bar is shown until the first Alt tap; each tap toggles it.
+  // After a tap, the fixture waits for the keyboard menu mode that Windows may open for the Alt key
+  // up to end, because a modal loop that is still starting would swallow the next key.
+  const tapUntil = async (expected: bigint, what: string) => {
+    tap();
+    await pumpUntil(linked(expected), what);
+    await settle(KEY_REPORT_SETTLE_MS);
+  };
   step("first Alt tap");
-  tap();
-  await pumpUntil(linked(0n), "Alt tap hides");
+  await tapUntil(0n, "Alt tap hides");
   step("second Alt tap");
-  tap();
-  await pumpUntil(linked(tree), "Alt tap shows");
+  await tapUntil(tree, "Alt tap shows");
 
   // Alt used with another key is not a tap.
   step("Alt+F");
@@ -662,10 +662,8 @@ try {
     "Alt+F must not toggle the bar",
   );
   step("Alt tap after Alt+F");
-  tap();
-  await pumpUntil(linked(0n), "Alt tap after Alt+F hides");
-  tap();
-  await pumpUntil(linked(tree), "Alt tap shows again");
+  await tapUntil(0n, "Alt tap after Alt+F hides");
+  await tapUntil(tree, "Alt tap shows again");
   step("Esc");
   press(VK_ESCAPE);
   await pumpUntil(linked(0n), "Esc hides");
