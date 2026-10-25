@@ -4,8 +4,10 @@ import {
   MAX_STORAGE_TEXT_BYTES,
   MAX_STORAGE_TEXT_JSON_BYTES,
   type StorageBytesRead,
+  type StorageBytesReplace,
   type StorageBytesWrite,
   type StorageLocation,
+  type StorageReplace,
   type StorageWrite,
 } from "#storage/contract";
 
@@ -31,6 +33,8 @@ export abstract class StorageFiles {
     bytes: Buffer,
     append: boolean,
   ): null;
+  /** Replace the file at `path` with `bytes` through a temporary file swapped in at the end. */
+  protected abstract replaceFile(path: string, bytes: Buffer): null;
   /** Release this adapter's native bindings; called at most once. */
   protected abstract release(): void;
 
@@ -84,9 +88,9 @@ export abstract class StorageFiles {
     ).toString("base64");
   }
 
-  /** Replace the file's text. */
-  writeText(input: StorageWrite): null {
-    return this.writeFile(input.path, Buffer.from(input.text), false);
+  /** Replace the file's text, through a temporary file when `atomic` is set. */
+  writeText(input: StorageReplace): null {
+    return this.replace(input.path, Buffer.from(input.text), input.atomic);
   }
 
   /** Append text through an append-only open and sync before reporting success. */
@@ -94,17 +98,27 @@ export abstract class StorageFiles {
     return this.writeFile(input.path, Buffer.from(input.text), true);
   }
 
-  /** Replace the file's bytes. */
-  writeBytes(input: StorageBytesWrite): null {
-    return this.writeFile(
+  /** Replace the file's bytes, through a temporary file when `atomic` is set. */
+  writeBytes(input: StorageBytesReplace): null {
+    return this.replace(
       input.path,
       Buffer.from(input.bytes, "base64"),
-      false,
+      input.atomic,
     );
   }
 
   /** Append bytes through an append-only open and sync before reporting success. */
   appendBytes(input: StorageBytesWrite): null {
     return this.writeFile(input.path, Buffer.from(input.bytes, "base64"), true);
+  }
+
+  private replace(
+    path: string,
+    bytes: Buffer,
+    atomic: boolean | undefined,
+  ): null {
+    return atomic
+      ? this.replaceFile(path, bytes)
+      : this.writeFile(path, bytes, false);
   }
 }

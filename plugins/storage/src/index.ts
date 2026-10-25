@@ -25,6 +25,7 @@ export default defineNativePlugin({
 export type {
   Storage,
   StorageBytesRead,
+  StorageBytesReplace,
   StorageBytesWrite,
   StorageDirectoryCreate,
   StorageDirectoryEntry,
@@ -36,6 +37,7 @@ export type {
   StorageRecursiveEntry,
   StorageRecursivePage,
   StorageRecursiveRead,
+  StorageReplace,
   StorageTransfer,
   StorageWrite,
 } from "#storage/contract";

@@ -5,7 +5,7 @@ sidebar: { order: 2 }
 ---
 
 ```ts
-storage.writeText({ path, text }): Promise<null>
+storage.writeText({ path, text, atomic? }): Promise<null>
 ```
 
 `@bunaway/plugin-storage`의 화면용 함수는 두 번째 인자로 `InvokeOptions`를 받습니다.
@@ -29,7 +29,7 @@ await storage.writeText({
 [백엔드 Host API](/reference/backend/host-api/)에서 확인하세요.
 
 `path`는 [storage.readText](/reference/host/storage-read-text/)와 같은 필수 경로 계약입니다.
-`text`는 필수 JSON 문자열이며 추가 필드는 허용하지 않습니다.
+`text`는 필수 JSON 문자열이며 `atomic`을 뺀 추가 필드는 허용하지 않습니다.
 text에는 별도 글자 수 제한이 없지만 전체 요청은 UTF-8 기준 1 MiB 이하여야 합니다.
 앱 명령의 입력 스키마에 더 작은 상한을 정할 수 있으며 템플릿은 10,000자로 제한합니다.
 
@@ -37,6 +37,33 @@ text에는 별도 글자 수 제한이 없지만 전체 요청은 UTF-8 기준 1
 UI에서 직접 호출하려면 commands에 `plugin.storage.writeText`도 허용합니다. 읽기 권한만 있으면 쓰기를 거부합니다.
 저장 위치와 파일별 접근 제한은 앱 명령에서 정하고 화면에는 그 명령만 허용합니다.
 대상이 링크이면 링크가 가리키는 파일에 씁니다. 디렉터리나 FIFO처럼 일반 파일이 아닌 대상은 `INVALID_ARGUMENT`입니다.
+
+## 원자적 저장
+
+`atomic: true`를 주면 같은 폴더의 임시 파일에 전체 내용을 쓰고 디스크에 반영한 뒤 대상 위에 교체합니다.
+쓰는 도중 실패하거나 프로세스가 끝나도 대상은 이전 내용이거나 새 내용이며, 반쯤 쓰인 파일이 되지 않습니다.
+실패하면 임시 파일을 지우고 기존 대상은 바뀌지 않습니다. 생략하거나 `false`이면 지금처럼 같은 파일에 덮어씁니다.
+`atomic`은 `storage.writeText`와 `storage.writeBytes`에만 있고 append 작업은 이 필드를 거부합니다.
+
+- 교체는 같은 폴더 안의 이동이므로 대상 파일은 새 파일로 바뀝니다. 기존 파일의 ACL, 대체 데이터 스트림과
+  하드 링크는 이어지지 않습니다. POSIX 권한 비트는 유지합니다.
+- 대상이 링크이면 링크는 그대로 두고 가리키는 파일을 교체합니다. 가리키는 파일이 없는 링크는 `INVALID_ARGUMENT`입니다.
+- 읽기 전용 파일은 덮어쓰기와 같이 `PERMISSION_DENIED`이고, 다른 프로세스가 삭제 공유 없이 열고 있어
+  교체할 수 없을 때도 짧게 다시 시도한 뒤 `PERMISSION_DENIED`로 실패합니다.
+- Windows는 `MoveFileExW`의 교체와 write-through로 이동을 디스크에 반영합니다. macOS는 이름 바꾸기 뒤 폴더를 동기화합니다.
+- 보장은 같은 볼륨 안의 교체입니다. 네트워크 파일 시스템에서는 서버의 동작에 따릅니다.
+  전원 차단에서의 내구성은 운영체제와 저장 장치가 쓰기를 실제로 반영하는지에 달려 있어 보장하지 않습니다.
+- 임시 파일은 `.bunaway-`로 시작하고 `.tmp`로 끝나는 예측할 수 없는 이름으로 배타적으로 만듭니다.
+  프로세스가 교체 전에 끝나면 이 파일이 남을 수 있습니다.
+- 파일 변경 감지(충돌 처리)와 대용량 stream I/O는 이 옵션의 범위가 아닙니다.
+
+```ts
+await storage.writeText({
+  path: "C:/Users/me/Documents/messages/current.txt",
+  text: "저장할 문자열",
+  atomic: true,
+});
+```
 
 ## 반환과 이벤트
 

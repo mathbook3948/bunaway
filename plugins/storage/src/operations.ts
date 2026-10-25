@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   type StorageInstance,
   storageBytesReadSchema,
+  storageBytesReplaceSchema,
   storageBytesSchema,
   storageBytesWriteSchema,
   storageDirectoryCreateSchema,
@@ -14,6 +15,7 @@ import {
   storageMetadataSchema,
   storageRecursivePageSchema,
   storageRecursiveReadSchema,
+  storageReplaceSchema,
   storageTransferSchema,
   storageWriteSchema,
 } from "#storage/contract";
@@ -27,7 +29,7 @@ export const storageOperations = {
     handler: (input, { instance }) => instance.readText(input),
   }),
   writeText: operation({
-    input: storageWriteSchema,
+    input: storageReplaceSchema,
     output: z.null(),
     handler: (input, { instance }) => instance.writeText(input),
   }),
@@ -37,7 +39,7 @@ export const storageOperations = {
     handler: (input, { instance }) => instance.readBytes(input),
   }),
   writeBytes: operation({
-    input: storageBytesWriteSchema,
+    input: storageBytesReplaceSchema,
     output: z.null(),
     handler: (input, { instance }) => instance.writeBytes(input),
   }),

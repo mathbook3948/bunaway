@@ -861,7 +861,11 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   트리 안 junction 거부를 확인한다. 다른 볼륨의 move, 덮어쓰기와 truncate는 남아 있다.
   [전송 계약](./site/src/content/docs/reference/host/storage-transfers.mdx)을 따른다.
 - [ ] 파일 watch와 recursive watch, 이벤트 구독 해제를 제공한다.
-- [ ] 원자적 저장, 충돌 처리와 대용량 stream I/O를 제공한다.
+- [x] 원자적 저장을 제공한다. `storage.writeText`와 `storage.writeBytes`의 `atomic: true`가 같은 폴더의 임시 파일을
+  `MoveFileExW`로 교체해 실패해도 기존 파일을 보존한다. CI windows-native의 `windows-storage-atomic-write.ts`가 교체, 열린 핸들,
+  삭제 공유 없는 보유 핸들, 읽기 전용, 디렉터리와 MAX_PATH 초과 경로를 확인한다.
+  [저장 계약](./site/src/content/docs/reference/host/storage-write-text.mdx)을 따른다.
+- [ ] 충돌 처리(동시 수정 감지)와 대용량 stream I/O를 제공한다.
 - [ ] 파일 대화상자로 획득한 범위의 일시 허용과 영속화를 제공한다.
 - [x] Windows current-user Known Folder로 home, documents, downloads, desktop, pictures, music과 videos 경로를 조회한다.
   OS redirection을 따르며 폴더 생성과 파일 접근 권한을 부여하지 않는다.

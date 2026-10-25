@@ -6,6 +6,7 @@ import {
   win32CallError,
   withWide,
 } from "@bunaway/plugin/win32";
+import { retrySwap } from "#storage/platforms/node-atomic-write";
 import { NodeStorage } from "#storage/platforms/node-storage";
 import { normalizeForFileSystem } from "#storage/platforms/windows-path";
 
@@ -13,6 +14,10 @@ const ERROR_FILE_NOT_FOUND = 2;
 const ERROR_PATH_NOT_FOUND = 3;
 const ERROR_ACCESS_DENIED = 5;
 const ERROR_NOT_SAME_DEVICE = 17;
+const ERROR_SHARING_VIOLATION = 32;
+const ERROR_LOCK_VIOLATION = 33;
+const MOVEFILE_REPLACE_EXISTING = 0x1;
+const MOVEFILE_WRITE_THROUGH = 0x8;
 const ERROR_FILE_EXISTS = 80;
 const ERROR_ALREADY_EXISTS = 183;
 const ERROR_INVALID_NAME = 123;
@@ -62,6 +67,23 @@ function moveFailure(code: number): Error {
   return new Error(`Storage move failed (${code})`);
 }
 
+/** Sharing and lock violations are access failures that a short wait can clear. */
+function swapFailure(code: number): Error {
+  if (code === ERROR_SHARING_VIOLATION || code === ERROR_LOCK_VIOLATION) {
+    return new BunawayError({
+      code: "PERMISSION_DENIED",
+      message: "Storage access denied.",
+    });
+  }
+  return code === ERROR_ACCESS_DENIED ||
+    code === ERROR_FILE_NOT_FOUND ||
+    code === ERROR_PATH_NOT_FOUND ||
+    code === ERROR_INVALID_NAME ||
+    code === ERROR_FILENAME_EXCED_RANGE
+    ? moveFailure(code)
+    : new Error(`Storage replace failed (${code})`);
+}
+
 /**
  * Windows storage: Windows path syntax on the shared file operations, plus a rename that
  * refuses to replace. Node's rename replaces an existing destination, so the move calls
@@ -97,6 +119,38 @@ export class WindowsStorage extends NodeStorage {
       throw moveFailure(code);
     }
   }
+
+  /**
+   * Replace `target` and return only after the move reached the disk. A sharing conflict with a
+   * scanner or indexer is retried; a read-only target stays an access failure.
+   */
+  protected override swapIn(temporary: string, target: string): void {
+    retrySwap(
+      () => {
+        const code = withWide(temporary, (source) =>
+          withWide(target, (destination) =>
+            win32CallError(
+              () =>
+                this.api.symbols.MoveFileExW(
+                  source,
+                  destination,
+                  MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+                ),
+              () => this.api.symbols.GetLastError(),
+            ),
+          ),
+        );
+        if (code) {
+          throw swapFailure(code);
+        }
+      },
+      (error) =>
+        error instanceof BunawayError && error.code === "PERMISSION_DENIED",
+    );
+  }
+
+  /** Windows cannot open a folder to flush it; the write-through move already did. */
+  protected override syncDirectory(): void {}
 
   /** Release only this adapter's bindings. */
   protected release(): void {
