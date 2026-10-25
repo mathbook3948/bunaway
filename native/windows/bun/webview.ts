@@ -792,10 +792,13 @@ export class WebView {
         kind: kind[0],
       });
       this.hooks.revoke("process-failed");
-      this.hooks.processFailed?.(
-        kind[0] ?? 9,
-        kind[0] === 0 ? "close" : "reload",
-      );
+      // A view that is already closing neither reloads nor needs a recovery report.
+      if (!this.closing) {
+        this.hooks.processFailed?.(
+          kind[0] ?? 9,
+          kind[0] === 0 ? "close" : "reload",
+        );
+      }
       if (kind[0] === 0) {
         this.browserFailed = true;
         this.hooks.close(true);

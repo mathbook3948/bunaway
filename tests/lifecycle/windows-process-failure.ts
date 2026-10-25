@@ -134,6 +134,7 @@ if (!process.argv.includes("--child")) {
     const code = await child.exited;
     assert.equal(code, 0, `${await stderr}\n${await stdout}`);
     const report = JSON.parse(await readFile(reportPath, "utf8"));
+    assert.equal(report.error, undefined, report.error);
     assert.equal(report.failure.viewId, "main");
     assert.equal(report.failure.windowId, report.windowId);
     // Killing the renderer is a renderer exit, and the host reloads the view in place.
@@ -180,11 +181,14 @@ if (!process.argv.includes("--child")) {
         },
         async run() {
           armCount++;
-          if (firstArm) {
+          if (firstArm !== undefined) {
             return null;
           }
           firstArm = (async () => {
-            const waiting = windows.waitForProcessFailure();
+            // `after: 0` replays retained history, so a failure that lands before the wait registers is kept.
+            const waiting = windows.waitForProcessFailure({
+              after: 0,
+            });
             await writeFile(
               resolve(childRoot, "build/windows-process-failure/armed"),
               "",
@@ -205,7 +209,16 @@ if (!process.argv.includes("--child")) {
               }),
             );
             await windows.close();
-          })();
+          })().catch(async (error: unknown) => {
+            // Surface the cause to the driver instead of leaving it to an opaque timeout.
+            await writeFile(
+              resolve(childRoot, "build/windows-process-failure/report.json"),
+              JSON.stringify({
+                error: String(error),
+              }),
+            );
+            await windows.close();
+          });
           return null;
         },
       },
