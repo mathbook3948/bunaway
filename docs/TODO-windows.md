@@ -694,9 +694,9 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] frame tree, frame URL과 origin 조회, frame별 작업의 지원 범위를 정의한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [x] 키보드, 마우스와 wheel의 before-input 이벤트와 취소는 [제공하지 않는다](decisions/0066-webview-before-input.md). 페이지의 DOM 이벤트, `globalShortcut`을 쓴다.
 - [x] 입력 이벤트 주입과 IME composition API는 [제공하지 않는다](decisions/0047-input-injection-and-ime.md). 조합은 WebView2가 처리하고 앱은 페이지의 composition 이벤트를 쓴다. cursor 변경 API도 [제공하지 않는다](decisions/0042-cursor-control.md).
-- [ ] 파일 drop의 enter, over, leave와 drop 이벤트, 경로와 좌표를 제공한다.
-- [ ] WebView의 File 객체와 OS 파일 경로를 안전하게 연결한다.
-- [ ] 파일을 앱 밖으로 드래그하고 표시할 drag 이미지를 제공한다.
+- [x] 결정 완료: 파일 drop의 enter, over, leave와 drop 이벤트, 경로와 좌표는 제공하지 않고 페이지의 HTML5 drag 이벤트를 쓴다. [ADR 0089](decisions/0089-webview-file-drop-and-drag-out.md).
+- [x] 결정 완료: WebView의 File 객체와 OS 파일 경로를 연결하는 API는 제공하지 않는다. 내용은 웹 표준 API로 읽고 경로는 파일 선택 대화상자로 받는다. [ADR 0089](decisions/0089-webview-file-drop-and-drag-out.md).
+- [x] 결정 완료: 파일을 앱 밖으로 드래그하는 API와 drag 이미지는 제공하지 않는다. [ADR 0089](decisions/0089-webview-file-drop-and-drag-out.md).
 - [x] `setWebViewAudioMuted`로 음소거를 변경하고 `getWebViewAudioState`로 음소거와 문서의 audio 재생 상태를 조회한다. 두 상태는 독립이며 탐색은 음소거를 유지한다.
 - [ ] audio muted와 재생 상태의 변경 이벤트를 제공한다. 실제 장치의 출력과 재생 중 음소거는 수동 검증이 필요하다.
 - [x] 결정 완료: caret browsing 활성화, selection 가운데 표시와 image-at-point 복사 API는 제공하지 않고 렌더러의 웹 표준 API를 쓴다. [ADR 0069](./decisions/0069-webview-caret-browsing-and-image-copy.md).
