@@ -1242,8 +1242,10 @@ for (;;) {
 ### WebView 프로세스 실패 (Windows)
 
 백엔드는 `windows.waitForProcessFailure({ after? })`로 WebView2의 `ProcessFailed`를 관찰합니다. 결과는
-`{ sequence, windowId, viewId, kind, recovery }`입니다. Electron의 `render-process-gone`과 `child-process-gone`은
-메인 프로세스 이벤트이고 Tauri(wry)는 이 알림을 앱에 주지 않으므로, 실패한 문서가 아니라 백엔드에 전달합니다.
+`{ sequence, windowId, viewId, kind, recovery }`입니다. Electron의 `render-process-gone`(`app`과 `webContents`)과
+`child-process-gone`(`app`)은 메인 프로세스 이벤트이고, 일반 렌더러 API에는 대응 이벤트가 없습니다(`<webview>` 태그의
+게스트 종료만 예외). Tauri(wry)는 Windows에서 `ProcessFailed`를 감싼 API 없이 raw `ICoreWebView2`만 열어 두므로
+앱이 직접 등록해야 합니다. 이 때문에 실패한 문서가 아니라 백엔드에 전달합니다.
 실패한 렌더러의 문서는 세션이 철회되어 이벤트를 받을 수 없습니다.
 
 - `kind`: `browser-exited`, `renderer-exited`, `renderer-unresponsive`, `frame-renderer-exited`, `utility-exited`,
