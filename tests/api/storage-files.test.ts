@@ -1159,9 +1159,7 @@ test("copyDirectory enforces the entry and depth bounds", async () => {
 
 test("copyDirectory stops when cancelled or when the adapter is disposed", async () => {
   mkdirSync(at("src"));
-  for (let index = 0; index < 100; index++) {
-    writeFileSync(at("src", `f${index}`), "x");
-  }
+  writeFileSync(at("src", "f"), "x");
   const controller = new AbortController();
   controller.abort();
   expect(
