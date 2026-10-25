@@ -326,7 +326,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 출처: [T-menu], [E-menu], [E-menu-item], [E-shortcut], [T-global-shortcut].
 
 - [x] 창별 메뉴바를 연결, 교체, 조회하고 분리한다.
-- [ ] 앱 전체 기본 메뉴바를 자동으로 연결한다.
+- [x] 앱 전체 기본 메뉴바를 자동으로 연결한다. 결정 완료: 연결하지 않는다. 앱이 role 항목으로 표준 메뉴를 만들어 `menu.setWindowMenu`로 연결한다([ADR 0061](./decisions/0061-default-menubar.md)).
 - [x] 메뉴바 visible을 설정하고 조회한다. `menu.setWindowMenuVisible({ visible })`와 `menu.getWindowMenuVisible(null)`이 앱 창의 값(기본 true)을 다룬다(Electron `setMenuBarVisibility`, `isMenuBarVisible`). 숨기면 `SetMenu(hwnd, NULL)`로 HMENU만 분리하고 트리와 연결은 유지하며, 다시 표시하면 같은 트리를 붙인다. 창 바깥 크기는 그대로이고 내용 영역이 메뉴바 높이만큼 커진다. 숨긴 상태의 연결과 교체도 숨김을 유지하고, 메뉴 없는 창의 값도 저장해 이후 연결에 적용한다. 닫힌 창은 조회할 수 없다. 계약은 `window-menu.test.ts`, 실제 HMENU 분리와 재연결과 내용 영역 크기는 `windows-window-menu.test.ts`가 검증한다.
 - [x] 메뉴바 auto-hide(Alt 키로 임시 표시)를 설정하고 조회한다. `menu.setWindowMenuAutoHide({ autoHide })`와 `menu.getWindowMenuAutoHide(null)`이 앱 창의 값(기본 false)을 다룬다(Electron `setAutoHideMenuBar`, `isMenuBarAutoHide`). 켜는 것만으로 보이는 메뉴바를 숨기지 않고, 켠 창의 새 메뉴는 숨긴 채 시작한다. Alt 단독 입력(다른 키 없이 누르고 뗌)이 HMENU 연결을 토글하고, Esc, 항목 실행, 창 틀 Alt 뒤에 Windows가 연 메뉴 모드 종료, 창 비활성화는 보이는 메뉴바를 뗀다. `getWindowMenuVisible`은 실제 표시 상태를 돌려준다. 창 틀 포커스는 창 프로시저의 키 메시지로, 페이지 포커스는 WebView2 컨트롤러의 `AcceleratorKeyPressed`로 받는다. 숨은 동안 Alt+글자 니모닉은 동작하지 않고, auto-hide를 켠 창에서 끄면 숨은 메뉴바를 숨긴 이유와 상관없이 다시 표시한다. 계약은 `window-menu.test.ts`, 실제 HMENU 연결과 내용 영역 크기는 `windows-window-menu.test.ts`, 페이지 포커스의 Alt는 `windows-menu-auto-hide.ts`가 클릭으로 활성화한 창에 SendInput으로 보낸 키로 검증한다.
 - [x] 지정 창과 물리 화면 좌표에 컨텍스트 메뉴를 표시하고 선택 또는 취소로 닫는다. AbortSignal 취소로 닫으며 별도 close 작업은 제공하지 않는다.
