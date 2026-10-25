@@ -301,7 +301,9 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 앱 선언 `desktop.tray.icon`에 리소스 디렉터리 상대 경로의 ICO 파일을 지정한다. 절대 경로, URL, `..` 탈출과 리소스 밖을 가리키는 링크는 거부한다. PNG 단독 파일은 받지 않고 ICO 안의 PNG 프레임만 받는다. 실행 중 `tray.setIcon` ICO bytes 적용은 구현됐다.
 - [x] 빌드 시 `build.resources`로 프로젝트의 파일과 디렉터리를 앱 리소스 디렉터리(Windows는 실행 파일 폴더)에 복사한다. 링크, 빌드 파일을 덮는 이름과 앱 출력 경로는 거부한다. [설정](site/src/content/docs/reference/configuration.mdx)
 - [x] `tray.setIcon`으로 ICO bytes를 적용하거나 앱 아이콘으로 복원하고 `tray.setTooltip`으로 tooltip을 실행 중 변경한다.
-- [ ] 트레이 생성, 조회, 표시, 숨김, 제거와 제거 여부 조회 API를 제공한다. 조회와 표시, 숨김은 `tray.get`의 `visible`과 `tray.setVisible`(`NIS_HIDDEN`)로 구현했다. 생성과 제거는 `desktop.tray` 선언이 소유하므로 남아 있다.
+- [x] 트레이 생성, 조회, 표시, 숨김, 제거와 제거 여부 조회 API를 제공한다. 조회와 표시, 숨김은 `tray.get`의 `visible`과 `tray.setVisible`(`NIS_HIDDEN`)로 구현했다.
+  `tray.destroy`가 아이콘과 트레이 창을 해제하고 `tray.create`가 `desktop.tray` 선언으로 다시 등록한다. 제거 여부는 `tray.get`의 `null`로 읽는다.
+  창이 없는 앱을 아이콘이 살려 두는 상태의 제거는 거부한다. `windows-tray-ui.test.ts`가 CI windows-native에서 실제 호스트의 제거, 재생성과 입력 재수신을 확인한다.
 - [x] 결정 완료: 여러 트레이 아이콘과 고유 ID는 필요해질 때 선택 필드 `trayId`로 더하고, Windows GUID는 지원하지 않는다. [ADR 0045](./decisions/0045-windows-tray-single-icon.md).
 - [x] 사용자 정의 메뉴와 메뉴의 동적 교체, 제거를 지원한다. `menu.setTrayMenu`로 공유 메뉴 리소스를 연결한다.
 - [x] 왼쪽, 오른쪽, 가운데 버튼의 down/up, double-click과 context-menu 알림을 `tray.input` 및 창 없는 백엔드 `waitForEvent`로 전달한다.

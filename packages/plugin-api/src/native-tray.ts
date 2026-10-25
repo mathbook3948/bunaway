@@ -47,6 +47,18 @@ export type NativeTrayServices = {
   setVisible(visible: boolean): void;
   focus(): boolean;
   /**
+   * Releases the icon and its hidden window. Returns false when there is no icon. Throws UNSUPPORTED
+   * while the app depends on the icon (`desktop.closeBehavior: "hide"`) and INVALID_ARGUMENT while no
+   * window is visible, because the app would then have no way to be reached. A failed release keeps
+   * the owner so a later call or shutdown retries it.
+   */
+  remove(): boolean;
+  /**
+   * Registers the icon declared by `desktop.tray` again after `remove`. Throws UNSUPPORTED without a
+   * declaration and INVALID_ARGUMENT while the icon exists. The attached menu is not restored.
+   */
+  create(): void;
+  /**
    * Tracks the menu attached with `setTrayMenu` at a physical screen position (null for the
    * pointer) until a choice, dismissal or `signal` abort. A choice is delivered through the
    * attachment's selection callback, not the return value. Throws INVALID_ARGUMENT without an

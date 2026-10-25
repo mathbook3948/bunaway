@@ -214,6 +214,39 @@ test.skipIf(process.platform !== "win32")(
         state: "up",
       });
       expect(native.symbols.IsWindowVisible(hwnd)).toBe(0);
+      // Destroying releases the icon window; the app keeps running because it is keep-alive.
+      const removedHwnd = hwnd;
+      expect(await invoke("destroy", null)).toBeNull();
+      expect(native.symbols.IsWindow(removedHwnd)).toBe(0);
+      expect(await invoke("get", null)).toBeNull();
+      expect(await invoke("getBounds", null)).toBeNull();
+      expect(await invoke("destroy", null)).toBeNull();
+      await expect(
+        invoke("setVisible", {
+          visible: false,
+        }),
+      ).rejects.toMatchObject({
+        code: "UNSUPPORTED",
+      });
+      // Creating registers the declared tray again with a new window and the declared tooltip.
+      expect(await invoke("create", null)).toMatchObject({
+        id: "main",
+        tooltip: `${"😀".repeat(63)}x`,
+        icon: "app",
+        visible: true,
+      });
+      expect(hwnd).not.toBe(removedHwnd);
+      await expect(invoke("create", null)).rejects.toMatchObject({
+        code: "INVALID_ARGUMENT",
+      });
+      const recreated = invoke("waitForEvent", null);
+      await invoke("get", null);
+      expect(native.symbols.PostMessageW(hwnd, 0x8001, 1n, 0x207n)).not.toBe(0);
+      expect(await recreated).toMatchObject({
+        id: "main",
+        button: "middle",
+        state: "down",
+      });
       await channel.send({
         kind: "operation",
         context: config.backendContext,

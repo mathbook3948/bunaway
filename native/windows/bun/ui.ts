@@ -96,6 +96,8 @@ let systemEvents: SystemEvents | undefined;
 const appearanceWindows = new AppearanceWindows();
 let adapters: Awaited<ReturnType<typeof operations>> | undefined;
 let tray: NativeTrayOwner | undefined;
+/** Registers the declared tray again; set once the tray adapter has created the first icon. */
+let spawnTray: (() => NativeTrayOwner) | undefined;
 type MenuListener = {
   receive(message: number, wparam: bigint, lparam: bigint): void;
   closing(): void;
@@ -122,6 +124,67 @@ function requireTray(): NativeTrayOwner {
     });
   }
   return tray;
+}
+/**
+ * Removes the icon. Removal never ends the app, so it is refused while the icon is what keeps a
+ * window-less app running. Hidden windows are the app's responsibility, as with `setVisible`.
+ */
+function removeTray(): boolean {
+  if (!tray) {
+    return false;
+  }
+  const hasWindow = [
+    ...views.values(),
+  ].some((view) => !view.lifecycle.closed);
+  if (!hasWindow && config.desktop?.closeBehavior !== "keep-alive") {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "The tray cannot be removed while it keeps the app running.",
+    });
+  }
+  // A failed release keeps the owner, so a later call or shutdown retries it.
+  tray.dispose();
+  tray = undefined;
+  log("tray-removed", {});
+  return true;
+}
+/** Registers the declared tray again after `removeTray`. */
+function createTray() {
+  if (!config.desktop?.tray || !spawnTray) {
+    throw new BunawayError({
+      code: "UNSUPPORTED",
+      message: "The app has no configured tray.",
+    });
+  }
+  if (closing()) {
+    throw new BunawayError({
+      code: "BUSY",
+      message: "The app is shutting down.",
+    });
+  }
+  if (tray) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: "The tray already exists.",
+    });
+  }
+  try {
+    tray = spawnTray();
+  } catch (error) {
+    // `retain` may have kept a partly built owner; release it so a retry starts clean.
+    try {
+      tray?.dispose();
+      tray = undefined;
+    } catch (cleanup) {
+      log("tray-create-cleanup-failed", {
+        message: cleanup instanceof Error ? cleanup.message : String(cleanup),
+      });
+    }
+    throw error;
+  }
+  log("tray-created", {
+    hwnd: tray.hwnd.toString(),
+  });
 }
 let controlWindow: bigint | undefined;
 let monitorWindow: bigint | undefined;
@@ -663,8 +726,9 @@ function handleHostPacket(packet: Packet) {
       startViews();
       return;
     case "desktop-control":
-      if (packet.action === "hide") {
-        assert(tray, "Hiding requires a tray");
+      // A removed tray leaves nothing to restore the windows from, so hiding is ignored.
+      if (packet.action === "hide" && !tray) {
+        return;
       }
       visibility(packet.action);
       return;
@@ -938,7 +1002,9 @@ function forceClose(
 /** True when a user close of this top-level window only hides it to the tray. */
 function closesToTray(windowId: string): boolean {
   return (
-    config.desktop?.closeBehavior === "hide" && !relations.getParent(windowId)
+    config.desktop?.closeBehavior === "hide" &&
+    !!tray &&
+    !relations.getParent(windowId)
   );
 }
 
@@ -2075,38 +2141,47 @@ try {
           assert(windows);
           assert(!tray, "Tray initialized twice");
           const nativeWindows = windows;
-          tray = create({
-            windows: {
-              icon: nativeWindows.icon,
-              create: (title, width, height, receive) =>
-                nativeWindows.create(title, width, height, receive, false),
-              destroy: (hwnd) => nativeWindows.destroy(hwnd),
-              interrupt: (signal, cancel) =>
-                windowRequests.onModalInterrupt(signal, cancel),
-            },
-            tooltip: config.desktop.tray.tooltip,
-            ...(config.desktop.tray.icon === undefined
-              ? {}
-              : {
-                  icon: config.desktop.tray.icon,
-                  resources: config.appMetadata.paths?.resources,
-                }),
-            retain(owner) {
-              tray = owner;
-            },
-            receive(action) {
-              if (action === "show") {
-                visibility("show");
-              } else {
-                requestQuit("tray");
-              }
-            },
-            notify(event) {
-              for (const receive of trayListeners) {
-                receive(event);
-              }
-            },
-          });
+          const trayOptions = config.desktop.tray;
+          spawnTray = () =>
+            create({
+              windows: {
+                icon: nativeWindows.icon,
+                create: (title, width, height, receive) =>
+                  nativeWindows.create(title, width, height, receive, false),
+                destroy: (hwnd) => nativeWindows.destroy(hwnd),
+                interrupt: (signal, cancel) =>
+                  windowRequests.onModalInterrupt(signal, cancel),
+              },
+              tooltip: trayOptions.tooltip,
+              ...(trayOptions.icon === undefined
+                ? {}
+                : {
+                    icon: trayOptions.icon,
+                    resources: config.appMetadata.paths?.resources,
+                  }),
+              retain(owner) {
+                tray = owner;
+              },
+              receive(action) {
+                if (action === "show") {
+                  visibility("show");
+                } else {
+                  requestQuit("tray");
+                }
+              },
+              notify(event) {
+                for (const receive of trayListeners) {
+                  receive(event);
+                }
+              },
+            });
+          tray = spawnTray();
+        },
+        remove() {
+          return removeTray();
+        },
+        create() {
+          createTray();
         },
         get: () => tray?.get() ?? null,
         getBounds: () => tray?.getBounds() ?? null,

@@ -29,6 +29,8 @@ const input = await tray.waitForEvent(null);
 | `tray.setIcon` | `{ ico: string \| null }` | `null` |
 | `tray.setClickBehavior` | `{ showOnLeftClick, menuOnRightClick }` | `null` |
 | `tray.setVisible` | `{ visible: boolean }` | `null` |
+| `tray.destroy` | `null` | `null` (이미 없으면 그대로 `null`) |
+| `tray.create` | `null` | 다시 만든 트레이의 snapshot |
 | `tray.focus` | `null` | OS가 요청을 수락하면 `true`, 거절하면 `false` |
 | `tray.popUpContextMenu` | `{ position?: { x, y } }` | 메뉴가 닫히면 `null` |
 | `tray.displayBalloon` | `{ title, content, iconType?, silent? }` | shell이 요청을 받으면 `null` |
@@ -113,6 +115,21 @@ shell이 상태 변경을 거부하면 `INTERNAL`이며 이전 값을 유지합�
 검증한 범위는 `keep-alive`에서 앱 상태 값, 앱 수명, backend의 `show()` 호출로 인한 창 복원입니다.
 `closeBehavior: "hide"`, 숨긴 아이콘 상태에서의 실제 재실행(`onOpen` 없는 앱 포함), Windows 11 설정으로 가려진 경우,
 Explorer 재시작과 로그오프, Explorer가 실제로 그리는 아이콘은 검증하지 않았습니다.
+
+## 제거와 다시 만들기
+
+`tray.destroy(null)`은 알림 영역의 아이콘과 트레이 창을 해제합니다(Electron `Tray.destroy()`,
+Tauri `remove_tray_by_id`에 대응). 이미 없으면 그대로 `null`입니다. 제거한 뒤 `tray.get`은 `null`,
+`tray.getBounds`는 `null`이고 `setTooltip`, `setIcon`, `setVisible`, `focus`, `popUpContextMenu`,
+`displayBalloon`은 `UNSUPPORTED`입니다. 제거는 숨김처럼 앱을 종료하지 않지만, 창이 하나도 없고
+`keep-alive`도 아니어서 아이콘이 앱을 살려 두는 상태에서는 `INVALID_ARGUMENT`로 거부합니다.
+창이 숨겨진 상태의 복구는 `setVisible`과 마찬가지로 앱이 책임집니다.
+
+`tray.create(null)`은 `desktop.tray`에 선언한 tooltip과 아이콘으로 트레이를 다시 등록하고 snapshot을 반환합니다.
+실행 중 바꾼 tooltip, 아이콘, 클릭 동작과 숨김 상태는 이어지지 않고 `menu.setTrayMenu`로 연결한 메뉴도 다시 연결해야 합니다.
+이미 있으면 `INVALID_ARGUMENT`, `desktop.tray` 선언이 없으면 `UNSUPPORTED`, 종료 중이면 `BUSY`입니다.
+제거한 동안에는 트레이 입력이 없으므로 `closeBehavior: "hide"` 창을 닫으면 숨기지 않고 일반 닫기로 처리하며,
+`desktop.hide()`는 효과가 없습니다.
 
 ## 클릭 동작과 입력
 
@@ -251,7 +268,7 @@ native shell 변경 실패는 INTERNAL이며 이전 tooltip과 이미지 설정�
 호스트가 custom HICON을 소유하고 교체와 종료 때 해제하며 앱 아이콘은 빌린 핸들로 유지합니다.
 플러그인 종료는 입력 구독과 대기자를 정리합니다. Windows 트레이는 앱당 아이콘 하나이며 여러 아이콘과 GUID는
 지원하지 않습니다([ADR 0045](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0045-windows-tray-single-icon.md)).
-제거 작업이 없어 아이콘은 앱 종료까지 남습니다. 초기 독립 이미지 옵션과 생성/제거 API는 후속 작업입니다.
+아이콘은 `tray.destroy`로 제거하고 `tray.create`로 다시 만들 수 있습니다. 초기 독립 이미지 옵션은 후속 작업입니다.
 
 ## macOS 메뉴 막대 아이콘
 

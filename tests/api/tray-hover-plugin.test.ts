@@ -58,6 +58,8 @@ function harness() {
     setClickBehavior: owner.setClickBehavior,
     setVisible: owner.setVisible,
     focus: owner.focus,
+    remove: () => false,
+    create: () => {},
     popUpContextMenu: owner.popUpContextMenu,
     subscribe(receive) {
       listener = receive;
