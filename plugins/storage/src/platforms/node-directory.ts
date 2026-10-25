@@ -45,7 +45,7 @@ export function isLink(entry: Dirent, info: BigIntStats): boolean {
   return entry.isSymbolicLink() || info.isSymbolicLink();
 }
 
-function entryInfo(parent: string, entry: Dirent): BigIntStats | null {
+export function entryInfo(parent: string, entry: Dirent): BigIntStats | null {
   try {
     return lstatSync(join(parent, entry.name), {
       bigint: true,

@@ -258,6 +258,7 @@ if (target === "windows-x64") {
       "windows-bun-storage.ts",
       "windows-storage-metadata.ts",
       "windows-storage-directory-size.ts",
+      "windows-storage-copy-directory.ts",
       "windows-storage-directory-page.ts",
       "windows-storage-recursive-list.ts",
       "windows-storage-remove-recursive.ts",

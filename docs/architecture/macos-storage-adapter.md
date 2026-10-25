@@ -2,7 +2,7 @@
 
 `plugins/storage/src/platforms/macos.ts`는 Windows와 같은 공통 어댑터(`node-storage.ts`의 `NodeStorage`)에
 macOS의 경로 문법과 덮어쓰지 않는 이름 변경을 더한 클래스다. 읽기, 쓰기, 추가, 복사, 이동, 목록, 생성,
-삭제, 재귀 삭제, 용량 계산의 열일곱 작업을 구현하며 공개 작업과 권한 계약은 Windows와 같다.
+삭제, 재귀 삭제, 용량 계산, 디렉터리 복사의 열여덟 작업을 구현하며 공개 작업과 권한 계약은 Windows와 같다.
 경로 제한은 앱 명령의 책임이고 플러그인은 입력 형식만 검사한다([ADR 0024](../decisions/0024-plugin-path-responsibility.md)).
 
 ## 호스트 통합
@@ -59,6 +59,7 @@ remove는 파일, 링크 자체, 빈 디렉터리를 지운다. removeRecursive�
 트리 안의 링크는 링크만 지운다. 하나의 호출이라 취소는 시작 전에만 효과가 있다.
 directorySize는 `opendirSync` 순회로 파일의 논리 크기를 더하고 링크는 따라가지 않는다.
 항목 100,000개와 깊이 64 상한, 취소, 어댑터 해제를 처리한다.
+copyDirectory도 같은 순회 상한과 취소를 쓰며 파일은 copyFile과 같은 `O_EXCL` 복사로 옮기고 트리 안의 링크는 거부한다.
 
 ## 남는 위험
 

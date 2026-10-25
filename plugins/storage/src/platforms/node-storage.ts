@@ -40,6 +40,7 @@ import {
   listDirectoryPage,
   sumDirectory,
 } from "#storage/platforms/node-directory";
+import { copyDirectoryTree } from "#storage/platforms/node-directory-copy";
 import { listDirectoryTree } from "#storage/platforms/node-directory-recursive";
 
 const MAX_IO_CHUNK_BYTES = 1 << 20;
@@ -580,8 +581,12 @@ export abstract class NodeStorage
    * partially written destination stays.
    */
   copyFile(input: StorageTransfer): null {
-    const from = this.selected(input.from);
-    const to = this.selected(input.to);
+    this.copyContents(this.selected(input.from), this.selected(input.to));
+    return null;
+  }
+
+  /** The file copy behind copyFile and copyDirectory, for paths that already passed `selected`. */
+  private copyContents(from: string, to: string): void {
     this.withFile(from, constants.O_RDONLY, (source, info) => {
       const size = Number(info.size);
       const destination = openSync(
@@ -611,7 +616,47 @@ export abstract class NodeStorage
         fsyncSync(destination);
       });
     });
-    return null;
+  }
+
+  /**
+   * Copy a directory tree to a new directory; the walk, the bounds and the failure rules are on
+   * copyDirectoryTree. Files are copied like copyFile, so the destination is never merged into or
+   * replaced, a failed copy leaves what was already copied, and the file system failures use the
+   * storage error contract. The source root is followed like for directorySize, and the same
+   * scan bounds apply. Permissions, ACLs and timestamps of the source are not carried over.
+   */
+  copyDirectory(
+    input: StorageTransfer,
+    signal?: AbortSignal,
+  ): Promise<StorageDirectorySize> {
+    return this.copyDirectoryWithin(input, signal, DIRECTORY_SIZE_LIMITS);
+  }
+
+  /** The copy behind copyDirectory with explicit cost bounds, public for the same reason as directorySizeWithin. */
+  async copyDirectoryWithin(
+    input: StorageTransfer,
+    signal: AbortSignal | undefined,
+    limits: DirectorySizeLimits,
+  ): Promise<StorageDirectorySize> {
+    const from = this.selectedDirectory({
+      path: input.from,
+    });
+    const to = this.selected(input.to);
+    if (from === to || this.rules.isBelow(from, to)) {
+      throw failure("INVALID_ARGUMENT", "Cannot copy a directory into itself.");
+    }
+    try {
+      return await copyDirectoryTree(
+        from,
+        to,
+        limits,
+        (source, target) => this.copyContents(source, target),
+        signal,
+        () => this.requireOpen(),
+      );
+    } catch (error) {
+      throw storageError(error);
+    }
   }
 
   /** Rename a file or directory without replacing an existing destination. */

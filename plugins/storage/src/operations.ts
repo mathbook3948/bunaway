@@ -56,6 +56,13 @@ export const storageOperations = {
     output: z.null(),
     handler: (input, { instance }) => instance.copyFile(input),
   }),
+  // A separate operation, so granting copyFile never grants copying whole trees.
+  copyDirectory: operation({
+    input: storageTransferSchema,
+    output: storageDirectorySizeSchema,
+    handler: (input, { instance, signal }) =>
+      instance.copyDirectory(input, signal),
+  }),
   readDirectory: operation({
     input: storageLocationSchema,
     output: storageDirectoryEntriesSchema,

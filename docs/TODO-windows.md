@@ -853,6 +853,11 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   `windows-storage-create-new.ts`가 CI windows-native에서 같은 대상으로의 동시 복사는 하나만 성공함을 확인한다.
   [전송 계약](./site/src/content/docs/reference/host/storage-transfers.mdx)을 따른다.
 - [ ] 디렉터리 재귀 copy, 다른 볼륨의 move, 덮어쓰기 및 truncate를 제공한다.
+  디렉터리 재귀 copy는 `storage.copyDirectory`로 구현했다. 아직 없는 대상에 트리를 복사하고 트리 안의 링크는 거부하며
+  항목 100,000개와 깊이 64 상한, 항목 사이의 취소를 쓴다. macOS에서도 같은 방식으로 지원한다.
+  `windows-storage-copy-directory.ts`가 CI windows-native에서 중첩 트리의 바이트 일치, 자기 하위 대상 거부(junction 경유 포함)와
+  트리 안 junction 거부를 확인한다. 다른 볼륨의 move, 덮어쓰기와 truncate는 남아 있다.
+  [전송 계약](./site/src/content/docs/reference/host/storage-transfers.mdx)을 따른다.
 - [ ] 파일 watch와 recursive watch, 이벤트 구독 해제를 제공한다.
 - [ ] 원자적 저장, 충돌 처리와 대용량 stream I/O를 제공한다.
 - [ ] 파일 대화상자로 획득한 범위의 일시 허용과 영속화를 제공한다.

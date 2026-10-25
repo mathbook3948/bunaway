@@ -1,21 +1,24 @@
 ---
 title: 파일 복사와 대상 이동
-description: 작은 파일을 복사하거나 파일과 디렉터리의 이름을 덮어쓰기 없이 바꿉니다.
+description: 파일과 디렉터리 트리를 복사하거나 파일과 디렉터리의 이름을 덮어쓰기 없이 바꿉니다.
 sidebar: { order: 7 }
 ---
 
 ```ts
 storage.copyFile({ from, to }): Promise<null>
+storage.copyDirectory({ from, to }): Promise<StorageDirectorySize>
 storage.move({ from, to }): Promise<null>
 ```
 
-`copyFile`과 `move`는 Windows와 macOS에서 지원합니다. `storage`를 등록하고
-`storage.copyFile` 또는 `storage.move` 권한을 각각 허용합니다.
+`copyFile`, `copyDirectory`와 `move`는 Windows와 macOS에서 지원합니다. `storage`를 등록하고
+`storage.copyFile`, `storage.copyDirectory` 또는 `storage.move` 권한을 각각 허용합니다.
+파일 복사 권한은 디렉터리 트리 복사를 허용하지 않습니다.
 직접 화면 호출에는 해당 이름 앞에 `plugin.`을 붙인 명령 권한도 필요합니다.
 이 권한은 다른 전송 작업이나 일반 읽기와 쓰기를 허용하지 않습니다.
 
 `from`과 `to`는 [텍스트 읽기](/reference/host/storage-read-text/)와 같은 앱 지정 절대 경로입니다.
 앱 명령에서 두 위치의 접근 규칙을 모두 검사하세요. 추가 필드, overwrite와 recursive 옵션은 받지 않습니다.
+`copyDirectory`는 별도 작업이라 recursive 옵션이 필요 없습니다.
 `to`의 상위 디렉터리는 존재해야 합니다. 원본이 링크이면 링크가 가리키는 파일을 복사합니다.
 
 ## 파일 복사
@@ -49,7 +52,34 @@ await storage.copyFile({
 이 복사는 원자적 저장이나 crash recovery를 제공하지 않습니다.
 읽기나 쓰기가 중간에 실패하면 일부만 복사된 대상이 남을 수 있습니다.
 대상 이름이 다른 파일로 바뀌었을 수 있으므로 이름으로 찾아 삭제하지 않으며 원본은 유지합니다.
-큰 파일과 stream 복사, 디렉터리 재귀 복사는 후속 작업입니다.
+큰 파일의 stream 복사는 후속 작업입니다.
+
+## 디렉터리 트리 복사
+
+`copyDirectory`는 `from` 디렉터리의 트리를 아직 없는 `to`에 복사하고 복사한 `{ bytes, files, directories }`를 반환합니다.
+루트는 `directories`에 세지 않고, `bytes`는 목록을 읽을 때 본 파일 크기의 합입니다.
+`to`는 배타적으로 만들어지므로 이미 있는 파일, 디렉터리와 링크는 합치거나 덮어쓰지 않고 `INVALID_ARGUMENT`로 실패합니다.
+`to`의 상위 디렉터리가 없어도 `INVALID_ARGUMENT`입니다. `from`이 링크이면 `copyFile`처럼 링크가 가리키는 디렉터리를 복사합니다.
+
+- 파일은 `copyFile`과 같은 방식으로 복사합니다. 빈 파일과 빈 디렉터리도 그대로 만듭니다.
+- 트리 안의 링크(symlink, junction)와 소켓, FIFO, 장치는 복사할 수 없어 `INVALID_ARGUMENT`로 실패합니다. 건너뛰거나 따라가지 않으므로 링크의 대상 파일은 읽지도, 바꾸지도 않습니다.
+- `to`가 `from` 안에 있으면 아무것도 만들기 전에 `INVALID_ARGUMENT`로 실패합니다. 링크를 거쳐 `from` 안에 놓인 `to`는 순회가 그 디렉터리에 닿는 시점에 파일 식별자로 찾아 같은 오류로 멈추며, 그때까지 만든 디렉터리가 남습니다.
+- 항목 100,000개와 깊이 64 상한은 `directorySize`와 같고 넘으면 `INVALID_ARGUMENT`입니다.
+- 취소와 어댑터 해제는 항목 사이에 반영되며 `CANCELLED`로 끝납니다. 파일 하나를 복사하는 동안에는 취소되지 않습니다.
+- 복사본은 상속 ACL, 권한과 새 생성 시각을 사용하며 원본의 ACL, 속성, 시각과 hardlink 관계를 옮기지 않습니다.
+
+중간에 실패하면 이미 복사한 항목은 지우지 않고 남깁니다. 같은 호출을 반복하려면 남은 `to`를 먼저 정리하세요.
+순회 중 원본이 바뀌면 복사본은 일관된 스냅샷이 아닙니다.
+
+```ts
+import storage from "@bunaway/plugin-storage";
+
+const copied = await storage.copyDirectory({
+  from: "C:/notes",
+  to: "C:/archive/notes-2026",
+});
+// copied: { bytes, files, directories }
+```
 
 ## 파일과 디렉터리 이동
 

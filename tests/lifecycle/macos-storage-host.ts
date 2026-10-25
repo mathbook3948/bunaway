@@ -135,6 +135,7 @@ try {
   const storage = installed.find((plugin) => plugin.name === "storage");
   assert.equal(storage?.targets.macos?.thread, "worker");
   for (const operation of [
+    "storage.copyDirectory",
     "storage.readDirectory",
     "storage.readDirectoryPage",
     "storage.readDirectoryRecursive",
