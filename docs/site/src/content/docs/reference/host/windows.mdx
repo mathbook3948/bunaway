@@ -29,7 +29,8 @@ export default defineApp({ modules: [], plugins: [windows] });
 
 선언과 생성별 `options.window`에 `titlebar: "custom"`을 지정하면 시스템 caption을
 제거하고 네이티브 resize 테두리와 시스템 메뉴를 유지합니다. 기본 `"system"`은 기존 창과 같습니다.
-생성 후 모드 변경과 네이티브 caption 버튼 overlay는 지원하지 않습니다.
+생성 후 모드 변경과 네이티브 caption 버튼을 유지하는 title-bar overlay는 지원하지 않습니다.
+네이티브 caption 모양이 필요하면 `titlebar: "system"`을 쓰세요.
 `getTitlebar()`는 전체화면에서도 생성 시 모드를 반환합니다.
 
 ```css
