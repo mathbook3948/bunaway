@@ -1368,7 +1368,7 @@ export class Windows {
 
   /**
    * The requested backdrop material, `auto` until set. DWM does not report it back and
-   * Windows before 11 22H2 ignore it, so the requested value is the state.
+   * Windows before 11 22H2 skip it, so the requested value is the state.
    */
   getBackgroundMaterial(window: bigint): BackgroundMaterial {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");

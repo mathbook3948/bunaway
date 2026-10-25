@@ -4,8 +4,6 @@ import { tryReadWindowsBuild } from "./window-corners.ts";
 
 /** DwmSetWindowAttribute: DWM_SYSTEMBACKDROP_TYPE, honored on Windows 11 22H2 (build 22621) and later. */
 const DWMWA_SYSTEMBACKDROP_TYPE = 38;
-/** HRESULT DWM returns for an attribute the running Windows does not know. */
-const E_INVALIDARG = -2147024809;
 /** First Windows build that knows the system backdrop attribute (Windows 11 22H2). */
 const FIRST_BACKDROP_BUILD = 22621;
 
@@ -27,23 +25,26 @@ const BACKDROP_TYPE: Readonly<Record<BackgroundMaterial, number>> = {
 };
 
 /**
- * Whether a failing DwmSetWindowAttribute result is the documented "no effect" case: a
- * Windows build before 22H2 rejects the unknown attribute with E_INVALIDARG. The same code
- * on a build that knows the attribute is a real rejection.
+ * Whether this Windows build knows the system backdrop attribute. An unreadable build
+ * is reported as Infinity, so the call is made and a failure is not hidden.
  */
-export function backdropIgnored(result: number, build: number): boolean {
-  return result === E_INVALIDARG && build < FIRST_BACKDROP_BUILD;
+export function backdropSupported(build: number): boolean {
+  return build >= FIRST_BACKDROP_BUILD;
 }
 
 /**
  * Ask DWM to draw the system material behind the window frame. The material is visible
- * where the window is not covered by opaque content. dwmapi is opened for the call and
- * closed before returning; see backdropIgnored for the one failing result that is not an error.
+ * where the window is not covered by opaque content. A build before 22H2 does not know the
+ * attribute, so the call is skipped there without touching DWM. On a build that knows it,
+ * a failing HRESULT is reported. dwmapi is opened for the call and closed before returning.
  */
 export function writeWindowBackdrop(
   window: bigint,
   material: BackgroundMaterial,
 ): void {
+  if (!backdropSupported(tryReadWindowsBuild())) {
+    return;
+  }
   const library = dlopen("dwmapi.dll", {
     DwmSetWindowAttribute: {
       args: [
@@ -64,7 +65,7 @@ export function writeWindowBackdrop(
       ptr(value),
       value.length,
     );
-    if (result < 0 && !backdropIgnored(result, tryReadWindowsBuild())) {
+    if (result < 0) {
       checkHresult(result, "DwmSetWindowAttribute");
     }
   } finally {

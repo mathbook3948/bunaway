@@ -479,7 +479,7 @@ export type NativeWindow = {
   setRoundedCorners?(rounded: boolean): void;
   /** Reads the requested corner preference, true until squared. Windows only. */
   hasRoundedCorners?(): boolean;
-  /** Requests the system backdrop material (`auto`, `none`, `mica`, `acrylic`, `tabbed`) behind this HWND's frame. A DWM hint that takes effect on Windows 11 22H2 and later. Windows only. */
+  /** Requests the system backdrop material (`auto`, `none`, `mica`, `acrylic`, `tabbed`) behind this HWND's frame. A DWM hint that takes effect on Windows 11 22H2 and later; earlier builds skip the DWM call. Windows only. */
   setBackgroundMaterial?(
     material: "auto" | "none" | "mica" | "acrylic" | "tabbed",
   ): void;
