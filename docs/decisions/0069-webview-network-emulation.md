@@ -16,8 +16,9 @@ status: accepted
   `session.disableNetworkEmulation()`을 제공한다. 세션 단위로 적용되어 그 세션을 쓰는 모든 WebContents에 영향을 준다.
 - Tauri와 wry는 같은 기능을 제공하지 않는다. 앱이 필요하면 `Webview::with_webview`가 넘겨주는 WebView2 객체로 직접 구현한다.
 - WebView2에는 전용 설정이 없고, DevTools 프로토콜의 `Network.emulateNetworkConditions`를 `CallDevToolsProtocolMethod`로 호출해야 한다.
-  이 설정은 호출한 WebView의 대상(target)에 적용되며 같은 프로필의 다른 WebView에는 영향을 주지 않는다. 호스트가 쓰는
-  WebView2 프로필은 선언 뷰마다 하나이므로 Electron의 세션 단위 의미와도 다르다.
+  이 설정은 호출한 WebView의 대상(target)에 적용되며 같은 프로필의 다른 WebView에는 영향을 주지 않는다. 호스트는 선언 뷰마다 앱 데이터 아래의
+  프로필 하나를 쓰고([ADR 0016](./0016-window-creation-contract.md)) 창 하나에 WebView 하나를 둔다([ADR 0026](./0026-single-webview-single-window.md)).
+  Electron의 세션 단위 emulation은 같은 세션의 모든 WebContents에 걸리지만, 대상 단위 호출은 호출한 WebView에만 걸리므로 의미가 다르다.
 - 이 저장소는 `network.isOnline`과 `network.onlineChanged`로 운영체제의 활성 인터페이스 유무를 알려 준다. emulation이 같은 이름의
   "오프라인"을 페이지에만 적용하면 두 값이 어긋나고, 앱 백엔드의 `network.request`는 emulation의 영향을 받지 않는다.
   백엔드와 페이지가 서로 다른 네트워크 상태를 보게 된다.
@@ -38,8 +39,8 @@ status: accepted
 
 - Electron만 제공하고 Tauri는 제공하지 않는다. 둘이 다르므로 코어는 작게, 기능은 필요한 곳에 맞추는 쪽을 따른다. 쓰는 곳이 없다
   (`plugins`, `packages`, `examples`에서 emulation을 요구하는 코드는 없다).
-- 구현하면 DevTools 프로토콜 호출이 호스트에 들어오고, 적용 범위가 Electron(세션)과 WebView2(대상)에서 달라 같은 이름의 API가
-  다른 범위를 약속하게 된다.
+- 호스트에는 `CallDevToolsProtocolMethod` 바인딩이 이미 있어 호출 자체는 추가할 수 있다. 문제는 적용 범위다. 적용 범위가
+  Electron(세션)과 WebView2(대상)에서 달라 같은 이름의 API가 다른 범위를 약속하고, 재생성과 탐색 뒤 재적용 규칙도 새로 정해야 한다.
 - 개발 모드 DevTools가 같은 확인 수단을 이미 제공한다.
 
 ## 결과
