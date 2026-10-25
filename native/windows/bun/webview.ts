@@ -532,8 +532,7 @@ export class WebView {
 
   /**
    * ICoreWebView2_15 add_FaviconChanged (slot 109): the handler reads get_FaviconUri (slot 111) of
-   * the sender, which may be empty. A runtime without the interface reports
-   * no favicon events.
+   * the sender, which may be empty. A runtime without the interface reports no favicon events.
    */
   private subscribeFavicon() {
     const faviconChanged = this.hooks.faviconChanged;
@@ -1705,11 +1704,11 @@ export class WebView {
           release(this.audioEvents);
           this.audioEvents = undefined;
         }
+        if (this.faviconTarget) {
+          release(this.faviconTarget);
+          this.faviconTarget = undefined;
+        }
       }
-    }
-    if (this.faviconTarget) {
-      release(this.faviconTarget);
-      this.faviconTarget = undefined;
     }
     if (this.controller) {
       checkHresult(method(this.controller, 24)(), "Close");
