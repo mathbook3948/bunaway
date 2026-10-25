@@ -70,6 +70,7 @@ import {
   SC_MOVE,
   SC_RESTORE,
   SC_SIZE,
+  SIZE_MAXIMIZED,
   SIZE_RESTORED,
   SM_CXMAXTRACK,
   SM_CXMINTRACK,
@@ -655,7 +656,7 @@ export class Windows {
     }
     if (
       message === WM_SIZE &&
-      wparam === SIZE_RESTORED &&
+      (wparam === SIZE_RESTORED || wparam === SIZE_MAXIMIZED) &&
       this.fullscreenRefitPending.delete(window) &&
       this.fullscreen.has(window)
     ) {
@@ -699,6 +700,8 @@ export class Windows {
     ) {
       return;
     }
+    // A restore can arrive inside another geometry change; leave that change's flag set.
+    const nested = this.changingGeometry.has(window);
     this.changingGeometry.add(window);
     try {
       assert(
@@ -713,8 +716,10 @@ export class Windows {
         ),
       );
     } finally {
-      this.changingGeometry.delete(window);
-      this.observeChanges(window);
+      if (!nested) {
+        this.changingGeometry.delete(window);
+        this.observeChanges(window);
+      }
     }
   }
 
@@ -3268,6 +3273,7 @@ export class Windows {
           ),
         );
         this.fullscreen.delete(window);
+        this.fullscreenRefitPending.delete(window);
         const dpi = this.readDpi(window);
         this.dpiByWindow.set(window, dpi);
         this.resizePlacement(

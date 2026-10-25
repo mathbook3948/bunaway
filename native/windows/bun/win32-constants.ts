@@ -6,6 +6,8 @@
 export const WM_SIZE = 0x0005;
 /** WM_SIZE wparam: the window was restored from minimized or maximized. */
 export const SIZE_RESTORED = 0n;
+/** WM_SIZE wparam: the window was maximized; a restore of a window that keeps WS_MAXIMIZE reports this. */
+export const SIZE_MAXIMIZED = 2n;
 export const WM_ACTIVATE = 0x0006;
 export const WA_INACTIVE = 0n;
 /** Host-private message in the WM_APP range; not a Windows SDK value. */

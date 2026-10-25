@@ -237,18 +237,23 @@ test.skipIf(process.platform !== "win32")(
         },
       });
       try {
-        user.symbols.SetWindowPos(
-          hwnd,
-          0n,
-          fullscreenBounds.x + 40,
-          fullscreenBounds.y + 30,
-          fullscreenBounds.width - 200,
-          fullscreenBounds.height - 100,
-          SWP_NOZORDER_NOACTIVATE,
-        );
+        expect(
+          user.symbols.SetWindowPos(
+            hwnd,
+            0n,
+            fullscreenBounds.x + 40,
+            fullscreenBounds.y + 30,
+            fullscreenBounds.width - 200,
+            fullscreenBounds.height - 100,
+            SWP_NOZORDER_NOACTIVATE,
+          ),
+        ).not.toBe(0);
+        const shrunk = native.getBounds(hwnd, "outer");
+        expect(shrunk).not.toEqual(fullscreenBounds);
         showWindow.symbols.ShowWindow(hwnd, SW_SHOWMINNOACTIVE);
         expect(user.symbols.IsIconic(hwnd)).not.toBe(0);
         messages.symbols.SendMessageW(hwnd, WM_DISPLAYCHANGE, 32n, 0n);
+        expect(native.isFullscreen(hwnd)).toBe(true);
         showWindow.symbols.ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         expect(user.symbols.IsIconic(hwnd)).toBe(0);
         expect(native.getBounds(hwnd, "outer")).toEqual(fullscreenBounds);

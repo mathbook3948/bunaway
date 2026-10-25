@@ -17,7 +17,7 @@ status: accepted
 - 이 저장소의 `windows.setFullscreen`도 `MonitorFromWindow(MONITOR_DEFAULTTONEAREST)`로 고른 현재 모니터의
   전체 영역을 채운다. 모니터 선택에 필요한 `windows.center`, `windows.moveToAnchor`,
   `windows.moveNextToRect`의 `monitorId`와 `monitors.list`가 이미 있다.
-- Windows는 모니터를 제거하거나 해상도를 바꿔도 창 크기를 유지한 채 남은 모니터로 옮기기만 한다. 전체화면
+- Windows는 모니터를 제거하거나 해상도를 바꿔도 창 크기를 유지한 채 남은 모니터로 옮기기만 하는 것으로 알려져 있다(CI 러너에서는 모니터를 제거할 수 없어 테스트로 확인하지 못했다). 전체화면
   창은 `WM_DISPLAYCHANGE`를 받아도 이전에는 아무 처리도 하지 않아, 새 모니터를 덮지 못하거나 모니터 밖으로
   넘치는 영역이 남았다.
 
