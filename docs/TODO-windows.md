@@ -667,7 +667,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] JavaScript, 이미지, WebGL, autoplay와 background throttling 설정을 제공한다.
 - [x] 기본 글꼴, 글꼴 크기, encoding과 이미지 animation 정책 옵션은 제공하지 않기로 결정했다. Electron은 제공하지만 Tauri는 이 옵션들을 Windows에서 제공하지 않고 WebView2에서 대응 설정을 찾지 못해 CSS와 웹 표준으로 대체한다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
 - [x] textarea resize, preferred-size와 focus-on-navigation 옵션은 제공하지 않기로 결정했다. CSS `resize`와 `ResizeObserver`로 대체한다. 탐색 뒤 자동 포커스 이동은 제공하지 않으며 대체 수단은 로드 이벤트와 WebView 포커스 제어가 생길 때 다시 다룬다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
-- [x] 결정 완료: zoom 범위(origin별 공유 또는 WebView별 독립) 설정은 제공하지 않는다. zoom factor는 WebView 컨트롤러의 값이며 같은 WebView의 탐색, history 이동과 reload에서 유지된다. [ADR 0067](./decisions/0067-webview-zoom-scope.md).
+- [x] 결정 완료: zoom 범위(origin별 공유 또는 WebView별 독립) 설정은 제공하지 않는다. zoom factor는 WebView 컨트롤러의 값이다. Windows CI는 허용 origin이 하나일 때 탐색, history 이동과 reload 뒤 값이 유지되는 것을 확인하고, origin 사이 이동은 WebView2 동작을 따른다. [ADR 0067](./decisions/0067-webview-zoom-scope.md).
 - [x] 결정 완료: 브라우저 기본 JavaScript 대화상자, context menu와 zoom 단축키를 켜는 설정은 제공하지 않고 호스트의 고정값(핀치 zoom 제외, 나머지는 끔)을 계약으로 한다. [ADR 0064](./decisions/0064-webview-browser-default-ui.md).
 - [x] 결정 완료: autofill, 비밀번호 자동 저장은 끈 채로 고정하고 HTTP 인증 설정과 이벤트는 제공하지 않는다. [ADR 0064](./decisions/0064-webview-browser-default-ui.md).
 - [ ] HTML 전체화면과 네이티브 창 전체화면의 연동 및 이벤트를 제공한다.
