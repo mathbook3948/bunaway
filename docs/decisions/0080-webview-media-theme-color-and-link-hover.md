@@ -17,9 +17,10 @@ WebView의 media 시작과 중단, HTML `theme-color` 변경, 링크 위에 포�
 - Tauri 2와 wry의 공개 이벤트와 핸들러에는 이 세 가지에 해당하는 것이 없다(Tauri 2.12, wry 0.57 소스 기준).
   Tauri의 `ThemeChanged`는 창의 시스템 테마 변경이며 페이지의 `theme-color`와 무관하다.
   Windows에서는 WebView2 객체에 접근해 직접 등록할 수 있다.
-- WebView2의 `IsDocumentPlayingAudioChanged`(`ICoreWebView2_8`)는 해당 WebView의 audio 출력 재생 여부(음소거 상태에서도 true)가
-  바뀔 때 발생한다. `<video>` 등 media 요소의 재생 시작과 중단을 알리지는 않는다.
-  `theme-color`에 대응하는 호스트 이벤트나 속성은 없다(WebView2 SDK 1.0.4314 기준).
+- WebView2의 `IsDocumentPlayingAudioChanged`(`ICoreWebView2_8`)는 WebView가 audio를 재생 중인지(음소거와 무관하며
+  물리 장치의 출력 여부와는 별개)가 바뀔 때 발생한다. `<video>` 등 media 요소의 재생 시작과 중단을 알리지는 않는다.
+  `theme-color`에 대응하는 호스트 이벤트나 속성은 없다. 이 서술은 WebView2 SDK 1.0.4314를 조사한 결과이며
+  이 저장소가 고정한 SDK 버전(1.0.4129.50)과 다를 수 있다.
 - 링크 hover URL은 WebView2에서 `StatusBarTextChanged`(`ICoreWebView2_12`)와 `StatusBarText`로 간접적으로만 얻을 수 있다.
   이 이벤트는 상태 메시지, URL 또는 상태 표시줄을 숨기라는 빈 문자열에 대해 발생하므로 텍스트가 항상 URL이라는 보장이 없다.
   키보드 포커스에서도 발생하는지, 상태 표시줄 설정(`IsStatusBarEnabled`)을 끈 경우에도 발생하는지는 확인하지 못했다.
@@ -38,7 +39,7 @@ WebView의 media 시작과 중단, HTML `theme-color` 변경, 링크 위에 포�
 
 ## 근거
 
-- Electron은 제공하고 Tauri는 제공하지 않는다. 쓰는 곳이 확인되지 않았고, 값이 앱이 작성한 페이지 안에서 이미 관찰 가능하므로 코어 계약을
+- Electron은 제공하고 Tauri는 제공하지 않는다. 기록된 요구가 없고, 값이 앱이 작성한 페이지 안에서 이미 관찰 가능하므로 코어 계약을
   작게 유지한다.
 - WebView2에는 `theme-color`에 대응하는 이벤트가 없어 제공하려면 호스트가 문서에 스크립트를 삽입해 관찰해야 한다. media 요소 단위의 시작과
   중단도 같은 방식이 필요하다. 문서에 스크립트를 삽입하는 기능은 이 결정과 별개로 TODO의 문서 초기화 script 항목에서 다룬다.
