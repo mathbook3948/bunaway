@@ -4,7 +4,7 @@ status: accepted
 
 # WebView 접근성 지원의 강제 활성화와 기능 선택 API는 제공하지 않는다
 
-결정일: 2026-10-25. 검토 기준: main `e0813827`.
+결정일: 2026-10-25. 검토 기준: main `41979b11`.
 
 ## 배경
 
@@ -29,21 +29,22 @@ Electron의 `app.setAccessibilitySupportEnabled`, `getAccessibilitySupportFeatur
 ## 결정
 
 1. 접근성 지원을 강제로 켜거나 끄는 API, 지원 기능을 조회하거나 선택하는 API를 제공하지 않는다.
-2. 접근성 지원 상태를 바꾸는 경로는 두지 않는다. 읽기는 기존 `appearance.getAccessibilityState`, `getPreferences`와 `appearance.changed`가 맡는다.
+2. 프레임워크 API로 접근성 지원 상태를 바꾸지 않는다. 앱 정의의 선언 필드도 두지 않는다. 읽기는 기존 `appearance.getAccessibilityState`, `getPreferences`와 `appearance.changed`가 맡는다.
 3. 접근성 트리와 키보드 탐색의 실제 동작 검증은 별도 항목(WebView 접근성 트리와 사용자 타이틀바의 키보드 탐색 검증)으로 남기며
    이 결정이 대신하지 않는다.
 
 ## 근거
 
 - 앱이 접근성 트리를 강제로 만들게 해야 하는 사용처가 이 저장소에 없다. 코어를 작게 두고 기능은 필요가 확인될 때 더한다.
-- Electron은 런타임 설정 API를 두지만 Tauri와 WebView2에는 대응이 없고, 보조 기술 감지에 따른 자동 활성화가 기본 동작이다. 따라서
-  Electron의 API를 그대로 옮기려면 WebView2에 없는 런타임 제어를 만들어야 하며, 코어를 작게 두는 쪽으로 제공하지 않는다.
-- 시작 시 고정하는 방법은 switch 필드를 앱 정의에 노출해야 하고, ADR 0030이 이미 그 노출을 하지 않기로 했다.
+- Electron의 런타임 설정 API를 옮기려면 WebView2에 없는 런타임 제어를 만들어야 한다. 기본 동작은 보조 기술 감지에 따른 자동
+  활성화이다.
+- 시작 시 고정하는 방법은 switch 필드를 앱 정의에 노출해야 한다. ADR 0030은 그 필드를 쓰는 곳이 생기면 별도로 결정하기로
+  했으므로, 사용처가 없는 지금은 더하지 않는다.
 
 ## 대안
 
 - Electron과 같은 3개 API를 제공한다. 사용처가 없다.
-- 시작 시 접근성 모드를 고정하는 앱 설정을 둔다. ADR 0030의 switch 비노출과 부딪힌다.
+- 시작 시 접근성 모드를 고정하는 앱 설정을 둔다. ADR 0030에 따라 사용처가 생길 때 별도로 결정한다.
 
 ## 영향
 
