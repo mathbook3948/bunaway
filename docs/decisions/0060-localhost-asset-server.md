@@ -17,7 +17,7 @@ status: accepted
 - Tauri 2는 `tauri-plugin-localhost`를 코어에 포함하지 않는 선택 플러그인으로 제공한다. 공식 문서는 상당한 보안 위험이
   있으니 확신이 없으면 기본 사용자 정의 protocol을 쓰라고 안내하고, 플러그인 소스 문서(`Builder`)는 서버에 인증이 없어
   같은 기기의 어떤 로컬 프로세스든 접속해 자산을 읽을 수 있다고 경고한다. 기본 자산 경로는 사용자 정의 protocol이다.
-- 이 저장소의 Windows 호스트는 `https://app.bunaway.local`로 자산을 로드한다. 개발 실행은 WebView2 가상 호스트 이름을
+- 이 저장소의 Windows 호스트는 `https://app.bunaway.local`로 자산을 로드한다. 컴파일하지 않은 실행은 WebView2 가상 호스트 이름을
   `web` 폴더에 매핑하고 접근 종류 값 2(`DENY_CORS`)를 쓰며, 컴파일된 앱은 매핑 없이 `WebResourceRequested`에서 임베드한
   파일로 응답한다(`native/windows/bun/webview.ts`). macOS와 iOS는 `bunaway://` scheme handler로 같은 자산을 읽는다.
   어느 경로도 네트워크 포트를 열지 않는다. 기본 통신 경로는 이 로컬 자산과 브리지다.
