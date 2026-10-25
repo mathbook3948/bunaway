@@ -36,6 +36,16 @@ await client.invoke("test.hidden", {
 });
 // The backend shows the window before this command returns.
 await client.invoke("test.awaitShown", null);
+// The browser learns about the new visibility asynchronously; wait for it instead of sampling at once.
+if (document.visibilityState !== "visible") {
+  await new Promise((resolve) => {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        resolve();
+      }
+    });
+  });
+}
 await client.invoke("test.shown", {
   payload: await sample(),
 });

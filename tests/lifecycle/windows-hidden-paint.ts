@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type CommandContext, defineApp } from "@bunaway/backend";
+import {
+  type CommandContext,
+  type DesktopContext,
+  defineApp,
+} from "@bunaway/backend";
 import windows from "@bunaway/plugin-windows";
 import type { HostContext, Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
@@ -78,6 +82,10 @@ if (!process.argv.includes("--child")) {
     assets,
     fileURLToPath(import.meta.url),
   );
+  // A report left by an earlier run must not satisfy this one.
+  await rm(reportPath, {
+    force: true,
+  });
   const child = Bun.spawn(
     [
       process.execPath,
@@ -159,6 +167,7 @@ if (!process.argv.includes("--child")) {
       return null;
     },
   });
+  let desktop: DesktopContext | undefined;
   async function scenario(): Promise<void> {
     await windows.create({
       options: {
@@ -194,6 +203,8 @@ if (!process.argv.includes("--child")) {
       }),
     );
     await windows.close();
+    // The app has no startup window and stays up when its window closes; the scenario quits it.
+    await desktop?.quit();
   }
   const app = defineApp({
     modules: [],
@@ -205,11 +216,18 @@ if (!process.argv.includes("--child")) {
         async setup(_context: CommandContext) {
           void scenario().catch((error) => {
             console.error(error);
-            process.exit(1);
+            process.exitCode = 1;
+            void desktop?.quit();
           });
         },
       },
     ],
+    desktop: {
+      closeBehavior: "keep-alive",
+      onReady(context) {
+        desktop = context;
+      },
+    },
     commands: {
       "test.hidden": recordCommand("hidden"),
       "test.shown": recordCommand("shown"),
