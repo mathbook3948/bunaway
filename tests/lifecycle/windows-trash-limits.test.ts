@@ -224,7 +224,7 @@ test.skipIf(process.platform !== "win32")(
 );
 
 test.skipIf(process.platform !== "win32")(
-  "Windows trashFile refuses and keeps a file larger than the Recycle Bin capacity",
+  "Windows trashFile keeps a file larger than the Recycle Bin capacity, whether it fails or stays pending",
   async () => {
     await expectRefused(
       "over-capacity",
