@@ -64,6 +64,7 @@ import {
   WM_APPCOMMAND,
   WM_COMMAND,
   WM_CONTEXTMENU,
+  webViewKeyMessage,
 } from "./window-input-events.ts";
 import { WindowLifecycle } from "./window-lifecycle.ts";
 import { WindowReadinessTracker } from "./window-readiness.ts";
@@ -112,6 +113,22 @@ function closeWindowMenus(windowId: string) {
     listener.closing();
   }
   menuListeners.delete(windowId);
+}
+/** Deliver a window message, or a key the page left unhandled, to the menus attached to the view's window. */
+function dispatchMenuMessage(
+  instanceKey: string,
+  message: number,
+  wparam: bigint,
+  lparam: bigint,
+) {
+  const owner = menuListeners.size ? views.get(instanceKey) : undefined;
+  if (owner && !owner.lifecycle.closed) {
+    for (const listener of [
+      ...(menuListeners.get(owner.readiness.snapshot().windowId) ?? []),
+    ]) {
+      listener.receive(message, wparam, lparam);
+    }
+  }
 }
 const trayListeners = new Set<
   (event: import("@bunaway/plugin-api/native").NativeTrayEvent) => void
@@ -1627,14 +1644,7 @@ function createWindow(
     spec.window.width,
     spec.window.height,
     (message, wparam, lparam) => {
-      const owner = menuListeners.size ? views.get(instanceKey) : undefined;
-      if (owner && !owner.lifecycle.closed) {
-        for (const listener of [
-          ...(menuListeners.get(owner.readiness.snapshot().windowId) ?? []),
-        ]) {
-          listener.receive(message, wparam, lparam);
-        }
-      }
+      dispatchMenuMessage(instanceKey, message, wparam, lparam);
       if (isMonitorChangeMessage(message)) {
         monitorTracker?.invalidate();
       }
@@ -1802,6 +1812,22 @@ function createWindow(
           }
         },
         sameDocument: (source) => boundary.sameDocument(source),
+        key: (kind, virtualKey) => {
+          const message = webViewKeyMessage(kind);
+          if (message !== undefined && menuListeners.size) {
+            // The menu bar resizes the WebView, which must not happen inside its own key callback.
+            setTimeout(
+              () =>
+                dispatchMenuMessage(
+                  instanceKey,
+                  message,
+                  BigInt(virtualKey),
+                  0n,
+                ),
+              0,
+            );
+          }
+        },
         documentComplete: (error) =>
           views.get(instanceKey)?.readiness?.documentComplete(error),
         close,

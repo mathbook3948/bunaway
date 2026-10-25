@@ -11,6 +11,14 @@ import { BunawayError } from "@bunaway/protocol";
 const WM_ENTERMENULOOP = 0x0211;
 const WM_EXITMENULOOP = 0x0212;
 const WM_CLOSE = 0x0010;
+const WM_ACTIVATE = 0x0006;
+const WM_KEYDOWN = 0x0100;
+const WM_KEYUP = 0x0101;
+const WM_SYSKEYDOWN = 0x0104;
+const WM_SYSKEYUP = 0x0105;
+const VK_ESCAPE = 0x1b;
+const VK_MENU = 0x12;
+const WA_INACTIVE = 0;
 const WM_MENUCOMMAND = 0x0126;
 const WM_TIMER = 0x0113;
 const TPM_RETURNCMD = 0x0100;
@@ -32,6 +40,8 @@ export type WindowMenuDriver = {
   ): void;
   setVisible(windowId: string, visible: boolean): void;
   isVisible(windowId: string): boolean;
+  setAutoHide(windowId: string, autoHide: boolean): void;
+  isAutoHide(windowId: string): boolean;
   popup(
     windowId: string,
     items: readonly NativeMenuItem[],
@@ -70,6 +80,10 @@ export class WindowMenus implements WindowMenuDriver {
   private readonly retired = new Set<NativePopupMenu>();
   /** Windows whose menu bar is hidden; the attached tree is kept and only unlinked from the HWND. */
   private readonly hidden = new Set<string>();
+  /** Windows whose Alt tap toggles the bar; a shown bar hides again on Esc, a command, menu mode exit or deactivation. */
+  private readonly autoHide = new Set<string>();
+  /** Windows where Alt went down and no other key has followed, so its release is an Alt tap. */
+  private readonly altArmed = new Set<string>();
   private popupActive = false;
   private disposed = false;
 
@@ -88,34 +102,81 @@ export class WindowMenus implements WindowMenuDriver {
     try {
       return this.host.resolve(windowId);
     } catch (error) {
-      this.hidden.delete(windowId);
+      this.forget(windowId);
       throw error;
     }
   }
 
-  setVisible(windowId: string, visible: boolean) {
-    const hwnd = this.resolve(windowId);
+  /** Drop the per-window menu bar state once the window can no longer be addressed. */
+  private forget(windowId: string) {
+    this.hidden.delete(windowId);
+    this.autoHide.delete(windowId);
+    this.altArmed.delete(windowId);
+  }
+
+  /** Link or unlink the attached tree, leaving the recorded state to the caller until this succeeds. */
+  private link(windowId: string, hwnd: bigint, shown: boolean) {
     const attached = this.attachments.get(windowId);
     if (attached) {
       assert(
-        this.native.symbols.SetMenu(hwnd, visible ? attached.tree.handle : 0n),
+        this.native.symbols.SetMenu(hwnd, shown ? attached.tree.handle : 0n),
         "Window menu bar visibility change failed.",
       );
     }
+    return attached !== undefined;
+  }
+
+  private redraw(hwnd: bigint, windowId: string) {
+    this.native.symbols.DrawMenuBar(hwnd);
+    this.host.changed(windowId);
+  }
+
+  setVisible(windowId: string, visible: boolean) {
+    const hwnd = this.resolve(windowId);
+    const attached = this.link(windowId, hwnd, visible);
     if (visible) {
       this.hidden.delete(windowId);
     } else {
       this.hidden.add(windowId);
     }
+    this.altArmed.delete(windowId);
     if (attached) {
-      this.native.symbols.DrawMenuBar(hwnd);
-      this.host.changed(windowId);
+      this.redraw(hwnd, windowId);
     }
   }
 
   isVisible(windowId: string) {
     this.resolve(windowId);
     return !this.hidden.has(windowId);
+  }
+
+  /**
+   * Turning auto-hide on leaves the current bar as it is; the first Alt tap, Esc or deactivation then
+   * changes it. Turning it off from on shows a hidden bar again whatever hid it, because the bar has a
+   * single shown state and Alt can no longer bring it back.
+   */
+  setAutoHide(windowId: string, autoHide: boolean) {
+    const hwnd = this.resolve(windowId);
+    const restore =
+      !autoHide && this.autoHide.has(windowId) && this.hidden.has(windowId);
+    const attached = restore && this.link(windowId, hwnd, true);
+    if (autoHide) {
+      this.autoHide.add(windowId);
+    } else {
+      this.autoHide.delete(windowId);
+    }
+    if (restore) {
+      this.hidden.delete(windowId);
+    }
+    this.altArmed.delete(windowId);
+    if (attached) {
+      this.redraw(hwnd, windowId);
+    }
+  }
+
+  isAutoHide(windowId: string) {
+    this.resolve(windowId);
+    return this.autoHide.has(windowId);
   }
 
   set(
@@ -135,7 +196,9 @@ export class WindowMenus implements WindowMenuDriver {
       assert(
         this.native.symbols.SetMenu(
           hwnd,
-          tree && !this.hidden.has(windowId) ? tree.handle : 0n,
+          tree && !this.hidden.has(windowId) && !this.autoHide.has(windowId)
+            ? tree.handle
+            : 0n,
         ),
         "Window menu attachment failed.",
       );
@@ -146,6 +209,11 @@ export class WindowMenus implements WindowMenuDriver {
       }
       throw error;
     }
+    // A new tree of an auto-hide window starts hidden until the next Alt tap.
+    if (tree && this.autoHide.has(windowId)) {
+      this.hidden.add(windowId);
+    }
+    this.altArmed.delete(windowId);
     // SetMenu transfers no destruction responsibility for the previous detached tree.
     if (tree && unsubscribe) {
       this.attachments.set(windowId, {
@@ -195,6 +263,9 @@ export class WindowMenus implements WindowMenuDriver {
           stopModal?.();
           stopModal = undefined;
           modalCancelled = false;
+          // Windows enters keyboard menu mode after a frame Alt tap and consumes Esc and the next
+          // Alt there, so leaving it ends the temporary display.
+          this.hideRevealedLater(windowId);
         } else if (
           message === WM_TIMER &&
           position === BigInt(MENU_TIMER_ID) &&
@@ -206,6 +277,7 @@ export class WindowMenus implements WindowMenuDriver {
         } else if (message === WM_CLOSE && stopModal) {
           this.native.symbols.EndMenu();
         }
+        this.trackAltTap(windowId, message, position);
         if (message !== WM_MENUCOMMAND) {
           return;
         }
@@ -216,6 +288,8 @@ export class WindowMenus implements WindowMenuDriver {
         } else if (item) {
           selected(item.id);
         }
+        // A bar shown by an Alt tap goes away once a command has run.
+        this.hideRevealedLater(windowId);
       },
       () => {
         this.detach(windowId);
@@ -226,6 +300,64 @@ export class WindowMenus implements WindowMenuDriver {
       stopModal?.();
       unlisten();
     };
+  }
+
+  /**
+   * Alt pressed and released with no other key in between shows or hides an auto-hide bar. Esc and
+   * losing activation hide a shown bar. The keys arrive from the window procedure when the frame
+   * has focus and from the WebView's accelerator event when the page has it.
+   */
+  private trackAltTap(windowId: string, message: number, wparam: bigint) {
+    if (!this.autoHide.has(windowId)) {
+      return;
+    }
+    const key = Number(wparam);
+    if (message === WM_SYSKEYDOWN || message === WM_KEYDOWN) {
+      if (key === VK_MENU) {
+        this.altArmed.add(windowId);
+        return;
+      }
+      this.altArmed.delete(windowId);
+      if (key === VK_ESCAPE) {
+        this.reveal(windowId, false);
+      }
+    } else if (message === WM_SYSKEYUP || message === WM_KEYUP) {
+      if (key === VK_MENU && this.altArmed.delete(windowId)) {
+        this.reveal(windowId, this.hidden.has(windowId));
+      }
+    } else if (
+      message === WM_ACTIVATE &&
+      Number(wparam & 0xffffn) === WA_INACTIVE
+    ) {
+      this.altArmed.delete(windowId);
+      this.reveal(windowId, false);
+    }
+  }
+
+  /** The native menu loop is still unwinding in its messages, so the bar is unlinked from the next turn. */
+  private hideRevealedLater(windowId: string) {
+    if (this.autoHide.has(windowId) && !this.hidden.has(windowId)) {
+      setTimeout(() => this.reveal(windowId, false), 0);
+    }
+  }
+
+  /** Show or hide the bar of an auto-hide window. Keyboard input must not throw, so failures are logged. */
+  private reveal(windowId: string, shown: boolean) {
+    if (!this.autoHide.has(windowId) || !this.hidden.has(windowId) === shown) {
+      return;
+    }
+    try {
+      const hwnd = this.host.resolve(windowId);
+      this.link(windowId, hwnd, shown);
+      if (shown) {
+        this.hidden.delete(windowId);
+      } else {
+        this.hidden.add(windowId);
+      }
+      this.redraw(hwnd, windowId);
+    } catch (error) {
+      console.error("Window menu bar auto-hide change failed.", error);
+    }
   }
 
   /** Once SetMenu commits, a failed old-tree release must not undo only the logical state. */
@@ -252,7 +384,7 @@ export class WindowMenus implements WindowMenuDriver {
       "Window menu detachment failed.",
     );
     this.attachments.delete(windowId);
-    this.hidden.delete(windowId);
+    this.forget(windowId);
     attached.unsubscribe();
     this.retire(attached.tree);
     this.native.symbols.DrawMenuBar(attached.hwnd);

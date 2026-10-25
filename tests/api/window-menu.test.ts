@@ -28,6 +28,7 @@ function fixture() {
   >();
   const events: JsonValue[] = [];
   const hidden = new Set<string>();
+  const autoHidden = new Set<string>();
   let failAttachment = false;
   let popupAction: (signal: AbortSignal) => string | null = () => "a";
   let currentWindow = "one";
@@ -66,6 +67,18 @@ function fixture() {
       } else {
         hidden.add(windowId);
       }
+    },
+    setAutoHide(windowId, autoHide) {
+      driver.validate(windowId);
+      if (autoHide) {
+        autoHidden.add(windowId);
+      } else {
+        autoHidden.delete(windowId);
+      }
+    },
+    isAutoHide(windowId) {
+      driver.validate(windowId);
+      return autoHidden.has(windowId);
     },
     isVisible(windowId) {
       driver.validate(windowId);
@@ -443,6 +456,54 @@ test("role items attach to windows with resolved labels and a role selection rep
     }),
   ).toBeNull();
   expect(f.events).toEqual([]);
+  await f.adapter.dispose();
+});
+
+test("window menu bar auto-hide defaults to off and validates its input and window", async () => {
+  const f = fixture();
+  const read = () => f.invoke("getWindowMenuAutoHide", null);
+  expect(await read()).toBe(false);
+  expect(
+    await f.invoke("setWindowMenuAutoHide", {
+      autoHide: true,
+    }),
+  ).toBeNull();
+  expect(await read()).toBe(true);
+  // Visibility is a separate setting.
+  expect(await f.invoke("getWindowMenuVisible", null)).toBe(true);
+  await f.invoke("setWindowMenuAutoHide", {
+    autoHide: false,
+  });
+  expect(await read()).toBe(false);
+  for (const payload of [
+    {
+      autoHide: "yes",
+    },
+    {},
+    {
+      windowId: "one",
+      autoHide: true,
+    },
+    {
+      autoHide: true,
+      extra: 1,
+    },
+  ]) {
+    await expect(
+      f.invoke("setWindowMenuAutoHide", payload),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
+  }
+  f.alive.delete("one");
+  await expect(read()).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+  await expect(
+    f.invoke("getWindowMenuAutoHide", null, undefined, []),
+  ).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
   await f.adapter.dispose();
 });
 

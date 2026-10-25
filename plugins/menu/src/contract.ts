@@ -442,6 +442,9 @@ export const windowMenuSchema = z.strictObject({
 export const windowMenuVisibleSchema = z.strictObject({
   visible: z.boolean(),
 });
+export const windowMenuAutoHideSchema = z.strictObject({
+  autoHide: z.boolean(),
+});
 /** Context-popup coordinates are physical screen pixels (including negative monitor origins). */
 export const contextMenuSchema = z.strictObject({
   menuId: idSchema,
