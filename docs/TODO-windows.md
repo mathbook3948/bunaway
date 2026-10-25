@@ -737,8 +737,8 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] 세션에 preload 등록, 조회와 해제를 제공한다.
 - [ ] service worker 등록, 실행 상태와 console 이벤트를 제공한다.
 - [ ] service worker와 shared worker 조회, 시작과 IPC의 지원 범위를 결정한다.
-- [ ] 브라우저 extension 설치, 조회, 제거와 이벤트의 지원을 결정한다.
-- [ ] extension이 사용할 수 있는 Chrome API subset을 명시한다.
+- [x] 브라우저 extension 설치, 조회, 제거와 이벤트는 [제공하지 않는다](decisions/0070-webview-browser-extensions.md). 호스트는 WebView2 환경에서 extension을 켜지 않는다.
+- [x] extension을 지원하지 않으므로 Chrome API subset은 정하지 않는다. [ADR 0070](decisions/0070-webview-browser-extensions.md).
 - [ ] shared dictionary와 압축 dictionary cache 관리의 지원을 결정한다.
 
 ## 17. WebView 권한과 장치
@@ -1130,7 +1130,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 - [ ] View tree와 native child view의 배치, 순서, bounds, clipping과 visibility를 제공한다.
 - [ ] native ImageView, border radius와 background blur의 지원을 결정한다.
 - [ ] `<webview>` 태그와 같은 UI 내 guest WebView의 필요성과 권한 경계를 결정한다.
-- [ ] 브라우저 확장과 Chrome API 호환 subset을 제공한다.
+- [ ] 선택 Chromium 렌더러에서 브라우저 확장과 Chrome API 호환 subset을 제공할지 결정한다. WebView2 기준으로는 [제공하지 않는다](decisions/0070-webview-browser-extensions.md).
 - [ ] Chromium feature flag, V8 code-cache와 sandbox 설정은 Bun과 WebView2의 대체 또는 미지원으로 매핑한다.
 - [ ] trusted backend sandbox가 필요한 앱에 별도 프로세스 격리 모델을 제공할지 결정한다.
 - [ ] WebRTC, WebGL, shared worker와 Web API의 엔진별 지원 차이를 검증한다.
