@@ -2365,8 +2365,9 @@ try {
           },
         },
         setTrayMenu(items, selected) {
-          // Detaching has nothing to do once the tray is gone, whether removed or at shutdown.
-          if (!items && !tray) {
+          // Detaching has nothing to do once the declared tray is gone, whether removed or at
+          // shutdown. An app that never declared a tray still gets the configuration error.
+          if (!items && !tray && (spawnTray || stopping())) {
             return;
           }
           if (!tray) {
