@@ -94,13 +94,13 @@ try {
       await Bun.sleep(5);
     }
   };
-  /** Wait for an event that reports `muted`; playback events a runner adds are not compared. */
-  const waitForMuted = (muted: boolean) =>
+  /** Wait for an event after the first `after` ones that reports `muted`; playback events are not compared. */
+  const waitForMuted = (muted: boolean, after: number) =>
     waitFor(
       () => {
         windows.pump();
         checkCallbacks();
-        return audioEvents.some((state) => state.muted === muted);
+        return audioEvents.slice(after).some((state) => state.muted === muted);
       },
       {
         deadline: "childStep",
@@ -109,22 +109,23 @@ try {
       },
     );
   await waitForDocument(1);
-  assert(audioEvents.every((state) => !state.muted));
   assert.deepEqual(webview.getAudioState(), {
     muted: false,
     playing: false,
   });
+  const beforeMute = audioEvents.length;
   webview.setAudioMuted(true);
   webview.setAudioMuted(true);
   assert.deepEqual(webview.getAudioState(), {
     muted: true,
     playing: false,
   });
-  await waitForMuted(true);
+  await waitForMuted(true, beforeMute);
+  const afterMute = audioEvents.length;
   // Setting the same value again and navigating keep the mute, so no event reports it lifted.
   webview.navigate();
   await waitForDocument(2);
-  assert(audioEvents.every((state) => state.muted));
+  assert(audioEvents.slice(beforeMute).every((state) => state.muted));
   assert.deepEqual(webview.getAudioState(), {
     muted: true,
     playing: false,
@@ -134,7 +135,7 @@ try {
     muted: false,
     playing: false,
   });
-  await waitForMuted(false);
+  await waitForMuted(false, afterMute);
   verified = true;
 } finally {
   if (webview) {

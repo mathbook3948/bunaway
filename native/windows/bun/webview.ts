@@ -102,7 +102,6 @@ type EnvironmentGroup = {
 };
 const environments = new Map<string, EnvironmentGroup>();
 
-/** The failure text reported for an edit role whose DevTools call did not start. */
 /** Read mute and playback through an acquired ICoreWebView2_8 (get_IsMuted 83, get_IsDocumentPlayingAudio 87). */
 function readAudioState(audio: Pointer): AudioState {
   const muted = new Int32Array(1);
@@ -125,6 +124,7 @@ function readAudioState(audio: Pointer): AudioState {
   };
 }
 
+/** The failure text reported for an edit role whose DevTools call did not start. */
 function describeDevToolsFailure(error: unknown): string {
   if (error instanceof DevToolsStartError) {
     return hresultText(error.hresult);
