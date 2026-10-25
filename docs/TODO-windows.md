@@ -736,8 +736,8 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] 세션에 preload 등록, 조회와 해제를 제공한다.
 - [ ] service worker 등록, 실행 상태와 console 이벤트를 제공한다.
 - [ ] service worker와 shared worker 조회, 시작과 IPC의 지원 범위를 결정한다.
-- [ ] 브라우저 extension 설치, 조회, 제거와 이벤트의 지원을 결정한다.
-- [ ] extension이 사용할 수 있는 Chrome API subset을 명시한다.
+- [x] 브라우저 extension 설치, 조회, 제거와 이벤트는 [제공하지 않는다](decisions/0070-webview-browser-extensions.md). 호스트는 WebView2 환경에서 extension을 켜지 않는다.
+- [x] extension을 지원하지 않으므로 Chrome API subset은 정하지 않는다. [ADR 0070](decisions/0070-webview-browser-extensions.md).
 - [ ] shared dictionary와 압축 dictionary cache 관리의 지원을 결정한다.
 
 ## 17. WebView 권한과 장치
