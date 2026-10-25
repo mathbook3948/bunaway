@@ -13,3 +13,34 @@ export function limitDocumentTitle(title: string): string {
   const splitsPair = lastUnit >= 0xd800 && lastUnit <= 0xdbff;
   return title.slice(0, MAX_DOCUMENT_TITLE_LENGTH - (splitsPair ? 1 : 0));
 }
+
+/**
+ * Keep at most one title event in flight per view. A page decides how often it renames itself, so
+ * titles that arrive while a send is pending collapse to the latest one instead of filling the
+ * native event queue, which would fail the view. `send` must call `settled` exactly once when the
+ * event was delivered, dropped or refused.
+ */
+export function createTitleCoalescer(
+  send: (title: string, settled: () => void) => void,
+): (title: string) => void {
+  let sending = false;
+  let waiting: string | undefined;
+  const publish = (title: string): void => {
+    sending = true;
+    send(title, () => {
+      sending = false;
+      const next = waiting;
+      waiting = undefined;
+      if (next !== undefined) {
+        publish(next);
+      }
+    });
+  };
+  return (title) => {
+    if (sending) {
+      waiting = title;
+      return;
+    }
+    publish(title);
+  };
+}

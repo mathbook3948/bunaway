@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { windowEvents } from "@bunaway/plugin-windows";
 import { validateValue } from "@bunaway/protocol";
 import {
+  createTitleCoalescer,
   limitDocumentTitle,
   MAX_DOCUMENT_TITLE_LENGTH,
 } from "#native/windows/bun/document-title";
@@ -60,4 +61,32 @@ test("the event schema rejects a missing or oversized title and extra fields", (
       url: "https://app.bunaway.local/",
     }),
   ).toThrow();
+});
+
+test("titles arriving during a send collapse to the latest one", () => {
+  const sent: string[] = [];
+  const settle: (() => void)[] = [];
+  const publish = createTitleCoalescer((title, settled) => {
+    sent.push(title);
+    settle.push(settled);
+  });
+  publish("a");
+  publish("b");
+  publish("c");
+  expect(sent).toEqual([
+    "a",
+  ]);
+  settle[0]?.();
+  expect(sent).toEqual([
+    "a",
+    "c",
+  ]);
+  settle[1]?.();
+  // Nothing waited, so the next title goes out immediately.
+  publish("d");
+  expect(sent).toEqual([
+    "a",
+    "c",
+    "d",
+  ]);
 });
