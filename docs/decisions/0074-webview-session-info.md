@@ -23,10 +23,12 @@ status: accepted
   있고 프로필은 `ICoreWebView2_13::get_Profile`(슬롯 105)로 얻는다. 환경의 사용자 데이터 폴더는
   `ICoreWebView2Environment7::get_UserDataFolder`(슬롯 15)로 얻는다. InPrivate 프로필에서 `ProfilePath`가 무엇을 돌려주는지는
   IDL과 문서에 규정이 없어, Electron의 "in-memory면 null" 의미는 호출 측 매핑으로만 만들 수 있다.
-- 이 호스트는 InPrivate를 쓰지 않는다. 사용자 데이터 폴더를 `<dataRoot>/webview/<뷰 식별자 인코딩>`으로 정해
-  `CreateCoreWebView2EnvironmentWithOptions`에 넘기고(`native/windows/bun/webview.ts`, `view-profile.ts`), 환경과 컨트롤러
-  옵션에 InPrivate나 프로필 이름을 지정하지 않는다. 그래서 모든 WebView 세션은 항상 persistent이고 경로는 호스트가
-  정한 위치다. 앱 전용 디렉터리는 `path` 플러그인이 별도로 제공한다([ADR 0024](./0024-plugin-path-responsibility.md)).
+- 이 호스트는 InPrivate를 쓰지 않는다. 사용자 데이터 폴더를 호스트가 정해
+  `CreateCoreWebView2EnvironmentWithOptions`에 넘기고(`native/windows/bun/webview.ts`), 환경과 컨트롤러 옵션에
+  InPrivate나 프로필 이름을 지정하지 않는다. 프로덕션 호스트는 호환 경로 `<dataRoot>/webview`를 쓰고
+  (`config.ts`가 `legacyProfile: true`를 넘긴다), 뷰 식별자를 인코딩한 `<dataRoot>/webview/<인코딩>`
+  (`view-profile.ts`)은 `legacyProfile`이 false일 때의 규칙이다. 그래서 모든 WebView 세션은 항상 persistent이고 경로는
+  호스트가 정한 위치다. 앱 전용 디렉터리는 `path` 플러그인이 별도로 제공한다([ADR 0024](./0024-plugin-path-responsibility.md)).
 
 ## 결정
 
@@ -41,8 +43,8 @@ status: accepted
   플러그인 디렉터리로 이미 제공된다. `plugins`, `packages`, `examples`에는 WebView 프로필 폴더를 읽는 코드가 없다.
 - Electron은 두 값을 제공하고 Tauri는 제공하지 않는다. 둘이 다르므로 코어는 작게, 기능은 필요한 곳에 맞추는 쪽을 따른다.
   Electron의 조회는 앱이 partition으로 세션 종류를 고르기 때문에 의미가 있는데, 이 호스트에는 그 선택이 없다.
-- 프로필 경로를 노출하면 호스트의 폴더 배치(뷰 식별자 인코딩 포함)가 앱이 의존하는 계약이 되어 바꿀 수 없게 된다. 경로를
-  받는 기능의 제한은 앱 명령이 맡는다는 방침([ADR 0024](./0024-plugin-path-responsibility.md))과도 맞지 않는다.
+- 프로필 경로를 노출하면 호스트의 폴더 배치(호환 경로와 뷰별 인코딩 경로의 구분 포함)가 앱이 의존하는 계약이 되어
+  바꿀 수 없게 된다.
 - InPrivate의 `ProfilePath`가 규정되어 있지 않아 Electron의 `null` 의미를 보장하는 계약을 만들려면 호스트가 따로 정해야
   하는데, 그 경우가 이 호스트에 없다.
 
