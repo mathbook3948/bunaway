@@ -475,6 +475,10 @@ export type NativeWindow = {
   setHasShadow?(shadow: boolean): void;
   /** Reads whether this HWND has its system shadow. Windows only. */
   hasShadow?(): boolean;
+  /** Requests rounded (true, the system default) or square (false) window corners for this HWND. Squaring is accepted only for a window with a custom title bar. The corners are a DWM hint that takes effect on Windows 11 and later. Windows only. */
+  setRoundedCorners?(rounded: boolean): void;
+  /** Reads the requested corner preference, true until squared. Windows only. */
+  hasRoundedCorners?(): boolean;
   /** Sets the opaque `#rrggbb` color of the window and its WebView for this HWND. Windows only. */
   setBackgroundColor?(color: string): void;
   /** Reads the color set by the declaration, creation option or setBackgroundColor; null when none was set. Windows only. */

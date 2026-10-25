@@ -45,6 +45,7 @@ const MESSAGES = {
   opacity: "Window opacity is not implemented on this platform.",
   mouse: "Ignoring mouse events is not implemented on this platform.",
   shadow: "Window shadow control is not implemented on this platform.",
+  roundedCorners: "Window corner control is not implemented on this platform.",
   backgroundColor:
     "Window background color is not implemented on this platform.",
   title: "Window title control is not implemented on this platform.",
@@ -512,6 +513,12 @@ const rows: Row[] = [
   },
   query("getOpacity", 0.75, MESSAGES.opacity),
   ...flag("setHasShadow", "hasShadow", "hasShadow", MESSAGES.shadow),
+  ...flag(
+    "setRoundedCorners",
+    "hasRoundedCorners",
+    "roundedCorners",
+    MESSAGES.roundedCorners,
+  ),
   {
     operation: "windows.setBackgroundColor",
     payload: {
@@ -1204,6 +1211,8 @@ function fixture(
     "getOpacity",
     "setHasShadow",
     "hasShadow",
+    "setRoundedCorners",
+    "hasRoundedCorners",
     "setBackgroundColor",
     "getBackgroundColor",
     "setIgnoreMouseEvents",

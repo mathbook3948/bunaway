@@ -125,6 +125,7 @@ import {
   WS_THICKFRAME,
 } from "./win32-constants.ts";
 import { WindowBackgrounds } from "./window-background.ts";
+import { writeWindowCornerPreference } from "./window-corners.ts";
 import {
   dragRejected,
   resizeIsPinned,
@@ -256,6 +257,8 @@ export class Windows {
   private readonly interactiveGeometry = new Map<bigint, WindowBounds>();
   private readonly immovable = new Set<bigint>();
   private readonly backgrounds = new WindowBackgrounds();
+  /** Windows whose corners were squared through setRoundedCorners; absence means the default (rounded). */
+  private readonly squareCorners = new Set<bigint>();
   private readonly windowIcons = new WindowIconSet();
   /** Content width / height locked for user resizing; absent when unlocked. */
   private readonly aspectRatios = new Map<bigint, number>();
@@ -1260,6 +1263,40 @@ export class Windows {
       return;
     }
     writeWindowShadow(window, shadow);
+  }
+
+  /**
+   * The requested corner preference: true unless setRoundedCorners(false) was applied. DWM
+   * does not report the preference back, and Windows before 11 ignore it, so the requested
+   * value is the state.
+   */
+  hasRoundedCorners(window: bigint): boolean {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return !this.squareCorners.has(window);
+  }
+
+  /**
+   * Round or square the window corners. A native title bar window follows the system
+   * default, so squaring it is rejected while asking for rounded corners is a no-op.
+   */
+  setRoundedCorners(window: bigint, rounded: boolean): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    if (this.getTitlebar(window) === "system") {
+      if (!rounded) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message:
+            "The corners of a window with a native title bar cannot be squared.",
+        });
+      }
+      return;
+    }
+    writeWindowCornerPreference(window, rounded);
+    if (rounded) {
+      this.squareCorners.delete(window);
+    } else {
+      this.squareCorners.add(window);
+    }
   }
 
   /** The color set through the declaration, creation option or setBackgroundColor; null when none was set. */
@@ -3225,6 +3262,7 @@ export class Windows {
     this.immovable.delete(window);
     this.aspectRatios.delete(window);
     this.backgrounds.forget(window);
+    this.squareCorners.delete(window);
     try {
       this.accessibleTitles.forget(window);
     } catch (error) {
