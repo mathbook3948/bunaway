@@ -1,3 +1,5 @@
+import { DEFAULT_MAX_PENDING, MAX_PENDING_CEILING } from "./pending-limit.ts";
+
 // This JSON Schema subset is also exported for native host implementations.
 const identifier = {
   type: "string",
@@ -33,6 +35,13 @@ const version = {
     "minor",
   ],
   additionalProperties: false,
+} as const;
+
+/** Optional app-configured pending request limit, shared by the policy and the server hello. */
+const maxPending = {
+  type: "integer",
+  minimum: DEFAULT_MAX_PENDING,
+  maximum: MAX_PENDING_CEILING,
 } as const;
 
 /** Schema for the wire error shape sent in protocol responses. */
@@ -73,6 +82,7 @@ export const messageSchema = {
         protocol: version,
         features: names,
         buildId: identifier,
+        maxPending,
       },
       required: [
         "kind",
@@ -330,6 +340,7 @@ export const policySchema = {
       },
     },
     backend: hostPermissions,
+    maxPending,
   },
   required: [
     "version",

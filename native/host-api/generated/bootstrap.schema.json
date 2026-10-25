@@ -96,6 +96,11 @@
           },
           "required": ["permissions"],
           "additionalProperties": false
+        },
+        "maxPending": {
+          "type": "integer",
+          "minimum": 128,
+          "maximum": 1024
         }
       },
       "required": ["version", "views", "backend"],

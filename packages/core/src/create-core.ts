@@ -12,6 +12,7 @@ import {
   negotiateProtocol,
   type Policy,
   ProtocolError,
+  resolveMaxPending,
   type Schema,
   SDK_READY_FEATURE,
   type ServerMessage,
@@ -223,7 +224,7 @@ class SessionImpl implements CoreSession {
       return;
     }
     try {
-      const negotiated = negotiateProtocol(this.core.services.hello, message);
+      const negotiated = negotiateProtocol(this.core.hello, message);
       this.outProtocol = negotiated.protocol;
       this.sdkReadyAllowed = negotiated.features.includes(SDK_READY_FEATURE);
     } catch (cause) {
@@ -236,12 +237,12 @@ class SessionImpl implements CoreSession {
       // The SDK must receive our hello to reject an incompatible major version
       // immediately; silently closing only the core session leaves ready pending.
       if (code === "UNSUPPORTED") {
-        await this.sendOrFail(this.core.services.hello);
+        await this.sendOrFail(this.core.hello);
       }
       return;
     }
     this.helloDone = true;
-    await this.sendOrFail(this.core.services.hello);
+    await this.sendOrFail(this.core.hello);
   }
 
   // A failed send means the transport path is broken: stop emitting and let the
@@ -307,7 +308,7 @@ class SessionImpl implements CoreSession {
     if (!this.acceptRequest(message.id)) {
       return;
     }
-    if (this.pending.size >= API_LIMITS.maxPending) {
+    if (this.pending.size >= this.core.maxPending) {
       this.respondError(message.id, {
         code: "BUSY",
         message: "Pending request limit reached.",
@@ -627,7 +628,7 @@ class SessionImpl implements CoreSession {
     if (subscription.dead) {
       return;
     }
-    if (subscription.queued >= API_LIMITS.maxPending) {
+    if (subscription.queued >= this.core.maxPending) {
       this.terminateSubscription(subscription, {
         code: "BUSY",
         message: "Subscription queue full.",
@@ -683,6 +684,10 @@ class BunawayCore implements Core {
   }[] = [];
   private stopPromise: Promise<void> | null = null;
   private readonly backendController: CancellationController;
+  /** Pending request and subscription queue limit from the policy, or the default. */
+  readonly maxPending: number;
+  /** Server hello; carries the configured limit so the SDK applies the same one. */
+  readonly hello: Hello;
 
   constructor(
     readonly services: CoreServices,
@@ -696,6 +701,14 @@ class BunawayCore implements Core {
     this.events = prepared.events;
     this.views = prepared.views;
     this.backendController = services.runtime.createCancellation();
+    this.maxPending = resolveMaxPending(services.policy);
+    this.hello =
+      services.policy.maxPending === undefined
+        ? services.hello
+        : {
+            ...services.hello,
+            maxPending: this.maxPending,
+          };
   }
 
   openSession(context: HostContext, viewId: string): CoreSession {

@@ -9,6 +9,7 @@ import {
   API_LIMITS,
   BunawayError,
   type ClientMessage,
+  DEFAULT_MAX_PENDING,
   errorSchema,
   type HostCall,
   type HostContext,
@@ -717,7 +718,7 @@ const CONTROL_LANE_LIMIT = 16;
 const DRAIN_TIMEOUT_MS = 10_000;
 
 /** Most packets one lane may hold before the channel refuses more of them. */
-function laneLimit(lane: Lane): number {
+function laneLimit(lane: Lane, maxPending: number): number {
   switch (lane) {
     case "revoke":
     case "session-failure":
@@ -726,7 +727,7 @@ function laneLimit(lane: Lane): number {
     case "approval":
     case "cancel":
     case "native-event":
-      return API_LIMITS.maxPending;
+      return maxPending;
     default:
       return CONTROL_LANE_LIMIT;
   }
@@ -771,6 +772,8 @@ export class Channel {
     private readonly fail: (error: unknown) => void,
     /** Record cancellation or end an owned native modal loop only. Never dispatch operations, abort arbitrary listeners or release native resources. */
     private readonly observePolled?: (packet: Packet) => void,
+    /** App-configured pending limit; both ends of one channel must use the same value. */
+    private readonly maxPending: number = DEFAULT_MAX_PENDING,
   ) {
     port.on("message", this.accept);
   }
@@ -858,11 +861,7 @@ export class Channel {
     }
     this.polling = true;
     try {
-      for (
-        let count = 0;
-        count < API_LIMITS.maxPending && !this.closed;
-        count++
-      ) {
+      for (let count = 0; count < this.maxPending && !this.closed; count++) {
         const received = receiveMessageOnPort(this.port);
         if (!received) {
           break;
@@ -916,7 +915,7 @@ export class Channel {
       }
       validatePacket(packet, opposite);
       // A full request burst must still leave room for approvals, cancellation and shutdown.
-      const limit = laneLimit(lane);
+      const limit = laneLimit(lane, this.maxPending);
       if (
         packet.kind === "server" ||
         packet.kind === "host-result" ||
@@ -933,7 +932,7 @@ export class Channel {
         }
         if (
           packet.kind !== "server" &&
-          this.queuedCompletions >= API_LIMITS.maxPending
+          this.queuedCompletions >= this.maxPending
         ) {
           throw new Error("Host response queue full");
         }
@@ -1002,7 +1001,7 @@ export class Channel {
         count++;
       }
     }
-    while (!this.closed && count < API_LIMITS.maxPending) {
+    while (!this.closed && count < this.maxPending) {
       const queued = this.queuedData.values().next().value;
       if (!queued) {
         return;
@@ -1048,7 +1047,7 @@ export class Channel {
         ...this.pending.values(),
       ].filter((item) => item.lane === "data").length +
         count <=
-        API_LIMITS.maxPending &&
+        this.maxPending &&
       // Reserve room until cancellation and approval acknowledgements also arrive.
       pendingRequests +
         [
@@ -1056,7 +1055,7 @@ export class Channel {
         ].filter((item) => item.lane === "cancel" || item.lane === "approval")
           .length +
         count <=
-        API_LIMITS.maxPending
+        this.maxPending
     );
   }
 

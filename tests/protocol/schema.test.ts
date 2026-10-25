@@ -1,14 +1,18 @@
 import { expect, test } from "bun:test";
 import {
   bootstrapSchema,
+  DEFAULT_MAX_PENDING,
   hostCallSchema,
   hostResponseSchema,
+  MAX_PENDING_CEILING,
   messageSchema,
   parseBootstrap,
   parseHostResponse,
   parseMessage,
+  parsePolicy,
   policySchema,
   processSchema,
+  resolveMaxPending,
   serializeHostResponse,
 } from "@bunaway/protocol";
 
@@ -98,4 +102,82 @@ test("Host API responses correlate out of band and cannot impersonate web IPC", 
       ),
     ).toThrow();
   }
+});
+
+const minimalPolicy = {
+  version: 1,
+  views: [],
+  backend: {
+    permissions: [],
+  },
+};
+
+test("the pending request limit is configurable from the default up to its ceiling", () => {
+  expect(DEFAULT_MAX_PENDING).toBe(128);
+  expect(MAX_PENDING_CEILING).toBe(1024);
+  expect(resolveMaxPending(undefined)).toBe(DEFAULT_MAX_PENDING);
+  expect(resolveMaxPending(parsePolicy(JSON.stringify(minimalPolicy)))).toBe(
+    DEFAULT_MAX_PENDING,
+  );
+  for (const maxPending of [
+    DEFAULT_MAX_PENDING,
+    500,
+    MAX_PENDING_CEILING,
+  ]) {
+    const policy = parsePolicy(
+      JSON.stringify({
+        ...minimalPolicy,
+        maxPending,
+      }),
+    );
+    expect(resolveMaxPending(policy)).toBe(maxPending);
+  }
+  for (const maxPending of [
+    0,
+    DEFAULT_MAX_PENDING - 1,
+    MAX_PENDING_CEILING + 1,
+    256.5,
+    "256",
+    null,
+  ]) {
+    expect(() =>
+      parsePolicy(
+        JSON.stringify({
+          ...minimalPolicy,
+          maxPending,
+        }),
+      ),
+    ).toThrow();
+  }
+});
+
+test("a server hello may state the configured pending request limit", () => {
+  const hello = {
+    kind: "hello" as const,
+    protocol: {
+      major: 1,
+      minor: 0,
+    },
+    features: [] as string[],
+    buildId: "test",
+  };
+  expect(parseMessage(JSON.stringify(hello))).toEqual(hello);
+  expect(
+    parseMessage(
+      JSON.stringify({
+        ...hello,
+        maxPending: MAX_PENDING_CEILING,
+      }),
+    ),
+  ).toMatchObject({
+    maxPending: MAX_PENDING_CEILING,
+  });
+  expect(() =>
+    parseMessage(
+      JSON.stringify({
+        ...hello,
+        maxPending: MAX_PENDING_CEILING + 1,
+      }),
+    ),
+  ).toThrow();
 });

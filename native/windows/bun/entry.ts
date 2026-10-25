@@ -14,6 +14,7 @@ import {
   type HostContext,
   type HostResponse,
   PROTOCOL_VERSION,
+  resolveMaxPending,
   SDK_READY_FEATURE,
 } from "@bunaway/protocol";
 import { toAppInfo } from "@bunaway/runtime-bun/app-metadata";
@@ -204,7 +205,17 @@ export async function runWindowsApp(
     // A failed host cannot finish cleanup, so do not keep Windows waiting on the UI thread.
     settleSessionEnd();
   };
-  const channel = new Channel(worker, config.runtime, "main", receive, fail);
+  // Both Worker channels use the app-configured limit that Core and the UI Worker also read.
+  const maxPending = resolveMaxPending(config.policy);
+  const channel = new Channel(
+    worker,
+    config.runtime,
+    "main",
+    receive,
+    fail,
+    undefined,
+    maxPending,
+  );
   const ioChannel = new Channel(
     io,
     config.runtime,
@@ -259,6 +270,8 @@ export async function runWindowsApp(
       }
     },
     fail,
+    undefined,
+    maxPending,
   );
   io.on("error", (error) => {
     fail(error);

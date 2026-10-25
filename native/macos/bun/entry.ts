@@ -6,6 +6,7 @@ import {
   type HostContext,
   type HostResponse,
   type NativeRegistration,
+  resolveMaxPending,
 } from "@bunaway/protocol";
 import { DiagnosticLog } from "@bunaway/runtime-bun/diagnostic-log";
 import { Channel, type Packet } from "@bunaway/runtime-bun/worker-channel";
@@ -106,7 +107,8 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
   let adapters: Awaited<ReturnType<typeof operations>> | undefined;
   let registry: ReturnType<typeof pluginRegistry> | undefined;
   const pendingPlugins: NativeRegistration[] = [];
-  const requests = new NativeRequests();
+  const maxPending = resolveMaxPending(config.policy);
+  const requests = new NativeRequests(maxPending);
   const ioCalls = new Map<
     string,
     {
@@ -313,6 +315,8 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
       "main-io",
       (packet) => receiveIoPacket(packet, started),
       fail,
+      undefined,
+      maxPending,
     );
     await started.promise;
     // Shutdown may have arrived while adapter imports were initializing.
@@ -383,6 +387,8 @@ export async function runMacosApp(config: MacosConfig): Promise<number> {
     "macos-main",
     receiveUiPacket,
     fail,
+    undefined,
+    maxPending,
   );
   /** Authorization requests of the I/O Worker: grant only a live call the current authority allows. */
   async function answerIoAuthorization(

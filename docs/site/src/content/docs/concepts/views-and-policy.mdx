@@ -98,6 +98,25 @@ UI 명령 핸들러의 `context.host`는 **요청을 보낸 뷰의 권한**을 �
 플러그인 setup에서 창을 제어하려면 backend.permissions에 사용할 windows 작업 이름을 허용합니다.
 정책은 Host API에 적용합니다. 신뢰된 백엔드가 직접 호출하는 Bun API는 이 검사 범위 밖입니다.
 
+## 동시 요청 한도를 올리려면 `maxPending`을 지정합니다
+
+세션 하나가 동시에 대기시킬 수 있는 요청은 기본 128개이고, 넘으면 `BUSY`로 끝납니다.
+동시 호출이 많은 앱은 정책 루트에 `maxPending`을 정수로 지정해 128 이상 1024 이하로 올릴 수 있습니다.
+지정하지 않으면 128입니다. 이 범위 밖의 값은 정책을 읽을 때 거부하며, 무제한은 지정할 수 없습니다.
+
+```json
+{
+  "version": 1,
+  "maxPending": 512,
+  "views": [],
+  "backend": { "permissions": [] }
+}
+```
+
+SDK, Core, 백엔드 런타임과 Windows, macOS, Android, iOS 호스트가 같은 값을 씁니다. SDK는 서버 hello로 받은 값을 적용합니다.
+구독 수(`maxSubscriptions`)와 명령 시간(`maxCommandDurationMs`)은 바꿀 수 없습니다.
+기준은 [ADR 0055](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0055-max-pending-app-setting.md)입니다.
+
 앱은 창과 뷰 하나를 사용합니다. 정책에는 뷰 하나를 선언하고 `app.view`를 생략하거나 그 ID와 같게 지정합니다.
 창을 만들고 제어하는 공개 API는 [창 만들기와 제어](/guides/windows/)에서 확인하세요.
 

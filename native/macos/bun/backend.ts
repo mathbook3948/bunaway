@@ -11,6 +11,7 @@ import {
   type HostContext,
   type HostResponse,
   PROTOCOL_VERSION,
+  resolveMaxPending,
   SDK_READY_FEATURE,
 } from "@bunaway/protocol";
 import { toAppInfo } from "@bunaway/runtime-bun/app-metadata";
@@ -318,6 +319,8 @@ const channel = new Channel(
   "macos-backend",
   receivePacket,
   fail,
+  undefined,
+  resolveMaxPending(config.policy),
 );
 
 try {

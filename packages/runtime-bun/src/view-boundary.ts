@@ -2,6 +2,7 @@ import {
   API_LIMITS,
   BunawayError,
   type ClientMessage,
+  DEFAULT_MAX_PENDING,
   type HostContext,
   MAX_MESSAGE_BYTES,
   type Policy,
@@ -96,6 +97,8 @@ export class ViewBoundary {
        */
       subscriptionEnded?(event: string): void;
     },
+    /** App-configured limit on requests waiting in this view's session. */
+    private readonly maxPending: number = DEFAULT_MAX_PENDING,
   ) {}
   private error(id: string, error: WireError) {
     if (/^[A-Za-z0-9_.:-]{1,128}$/.test(id)) {
@@ -375,7 +378,7 @@ export class ViewBoundary {
       });
     }
     if (
-      session.pending.size + session.cancelled.size >= API_LIMITS.maxPending ||
+      session.pending.size + session.cancelled.size >= this.maxPending ||
       (message.kind === "listen" &&
         session.subscriptions.size +
           [

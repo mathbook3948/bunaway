@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
 import {
-  API_LIMITS,
   BunawayError,
   type HostCall,
   type HostContext,
@@ -10,6 +9,7 @@ import {
   type NativeRegistration,
   type Policy,
   type RuntimeIdentity,
+  resolveMaxPending,
 } from "@bunaway/protocol";
 import { Channel, type Packet } from "@bunaway/runtime-bun/worker-channel";
 import { hostResponse } from "./host-response.ts";
@@ -50,8 +50,9 @@ const queue = new Map<
         };
   }
 >();
+const maxPending = resolveMaxPending(config.policy);
 // Channel permits one full unacknowledged data lane and one full completion backlog.
-const MAX_RESPONSE_OWNERS = 2 * API_LIMITS.maxPending;
+const MAX_RESPONSE_OWNERS = 2 * maxPending;
 const responses = new Map<string, NonNullable<ReturnType<typeof queue.get>>>();
 let active: string | undefined;
 let stopping = false;
@@ -63,6 +64,8 @@ const channel = new Channel(
   (error) => {
     throw error;
   },
+  undefined,
+  maxPending,
 );
 /** Ask the policy owner before running any plugin input callbacks. */
 function startNext() {
@@ -228,7 +231,7 @@ function enqueueOperation(
     !stopping &&
       !queue.has(packet.requestId) &&
       !responses.has(packet.requestId) &&
-      queue.size < API_LIMITS.maxPending,
+      queue.size < maxPending,
     "Invalid I/O queue request",
   );
   // Map insertion order keeps operations FIFO while the UI authorizes one at a time.

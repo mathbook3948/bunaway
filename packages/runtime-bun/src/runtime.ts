@@ -8,7 +8,6 @@ import {
   type Platform,
 } from "@bunaway/core";
 import {
-  API_LIMITS,
   BunawayError,
   type ClientMessage,
   type HostContext,
@@ -20,6 +19,7 @@ import {
   type ProcessFrame,
   parseProcessFrame,
   type RuntimeIdentity,
+  resolveMaxPending,
   serializeProcessFrame,
 } from "@bunaway/protocol";
 import { type AppMetadata, toAppInfo } from "./app-metadata.ts";
@@ -120,6 +120,11 @@ class ProcessRuntime {
     private readonly platform: Platform,
   ) {}
 
+  /** Pending limit from the boot policy; the default until the boot frame arrives. */
+  private get maxPending(): number {
+    return resolveMaxPending(this.policy);
+  }
+
   /** Reads host frames until shutdown; any failure reports a fatal frame once the runtime booted. */
   async run(): Promise<void> {
     try {
@@ -166,7 +171,7 @@ class ProcessRuntime {
 
   private send(body: OutboundFrame): Promise<void> {
     const text = `${this.serializeFrame(body)}\n`;
-    if (this.queued >= API_LIMITS.maxPending) {
+    if (this.queued >= this.maxPending) {
       return Promise.reject(new Error("Output queue full."));
     }
     this.queued++;
@@ -352,7 +357,7 @@ class ProcessRuntime {
         }),
       );
     }
-    if (this.calls.size >= API_LIMITS.maxPending) {
+    if (this.calls.size >= this.maxPending) {
       return Promise.reject(
         new BunawayError({
           code: "BUSY",
@@ -473,7 +478,7 @@ class ProcessRuntime {
     if (this.sessions.has(frame.context)) {
       throw new Error("Duplicate session context.");
     }
-    if (this.sessions.size >= API_LIMITS.maxPending) {
+    if (this.sessions.size >= this.maxPending) {
       throw new Error("Session limit reached.");
     }
     this.sessions.set(frame.context, {
@@ -514,21 +519,24 @@ class ProcessRuntime {
 
   private createChannel(): LoopbackChannel | undefined {
     try {
-      return new LoopbackChannel({
-        receive: async (context, message) => {
-          const active = this.sessions.get(context);
-          if (!active || this.stopping) {
-            throw new Error("Document session closed.");
-          }
-          await active.session.receive(message);
+      return new LoopbackChannel(
+        {
+          receive: async (context, message) => {
+            const active = this.sessions.get(context);
+            if (!active || this.stopping) {
+              throw new Error("Document session closed.");
+            }
+            await active.session.receive(message);
+          },
+          disconnected: (context) => {
+            // Document transport failures revoke that session, not the host control pipe.
+            void this.closeSession(context).catch(() =>
+              this.input.destroy(new Error("Document cleanup failed.")),
+            );
+          },
         },
-        disconnected: (context) => {
-          // Document transport failures revoke that session, not the host control pipe.
-          void this.closeSession(context).catch(() =>
-            this.input.destroy(new Error("Document cleanup failed.")),
-          );
-        },
-      });
+        this.maxPending,
+      );
     } catch {
       // A mobile host can retain its native bridge when the listener is unavailable.
       return undefined;

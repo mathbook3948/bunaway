@@ -6,6 +6,7 @@ import {
   API_LIMITS,
   MAX_JSON_DEPTH,
   MAX_MESSAGE_BYTES,
+  resolveMaxPending,
 } from "@bunaway/protocol";
 import {
   type Project,
@@ -100,7 +101,7 @@ async function prepareAndroidInputs(
   );
   await writeFile(
     resolve(inputs, "generated/ProtocolLimits.java"),
-    `package dev.bunaway.host;\n/** Generated from @bunaway/protocol. */\nfinal class ProtocolLimits {\n    static final int MAX_MESSAGE_BYTES = ${MAX_MESSAGE_BYTES};\n    static final int MAX_JSON_DEPTH = ${MAX_JSON_DEPTH};\n    static final int MAX_PENDING = ${API_LIMITS.maxPending};\n    static final long HANDSHAKE_TIMEOUT_MS = ${API_LIMITS.handshakeTimeoutMs}L;\n    static final long SHUTDOWN_TIMEOUT_MS = ${API_LIMITS.shutdownTimeoutMs}L;\n    private ProtocolLimits() {}\n}\n`,
+    `package dev.bunaway.host;\n/** Generated from @bunaway/protocol. */\nfinal class ProtocolLimits {\n    static final int MAX_MESSAGE_BYTES = ${MAX_MESSAGE_BYTES};\n    static final int MAX_JSON_DEPTH = ${MAX_JSON_DEPTH};\n    static final int MAX_PENDING = ${resolveMaxPending(project.policy)};\n    static final long HANDSHAKE_TIMEOUT_MS = ${API_LIMITS.handshakeTimeoutMs}L;\n    static final long SHUTDOWN_TIMEOUT_MS = ${API_LIMITS.shutdownTimeoutMs}L;\n    private ProtocolLimits() {}\n}\n`,
   );
   for (const name of [
     "process",
@@ -114,7 +115,7 @@ async function prepareAndroidInputs(
   }
   await writeFile(
     resolve(assets, "bridge.js"),
-    await mobileBridge(root, "android"),
+    await mobileBridge(root, "android", resolveMaxPending(project.policy)),
   );
   await writeFile(resolve(assets, "bunfig.toml"), "env = false\n");
   await writeJson(resolve(assets, "tsconfig.json"), {});

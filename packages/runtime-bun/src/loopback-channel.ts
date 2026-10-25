@@ -1,6 +1,7 @@
 import {
   API_LIMITS,
   type ClientMessage,
+  DEFAULT_MAX_PENDING,
   type HostContext,
   MAX_MESSAGE_BYTES,
   parseMessage,
@@ -45,6 +46,8 @@ export class LoopbackChannel {
       /** Synchronously starts owned session cleanup; invoked once on peer/protocol failure. */
       disconnected(context: HostContext, failed: boolean): void;
     },
+    /** App-configured limit on queued socket messages per connection and on live document grants. */
+    private readonly maxPending: number = DEFAULT_MAX_PENDING,
   ) {
     this.server = Bun.serve<Lease>({
       hostname: "127.0.0.1",
@@ -103,10 +106,7 @@ export class LoopbackChannel {
           if (!lease.live) {
             return;
           }
-          if (
-            typeof input !== "string" ||
-            lease.queued >= API_LIMITS.maxPending
-          ) {
+          if (typeof input !== "string" || lease.queued >= this.maxPending) {
             this.disconnect(lease, true);
             return;
           }
@@ -164,7 +164,7 @@ export class LoopbackChannel {
     if (this.closed || this.contexts.has(context)) {
       throw new Error("Document channel unavailable.");
     }
-    if (this.contexts.size >= API_LIMITS.maxPending) {
+    if (this.contexts.size >= this.maxPending) {
       throw new Error("Document channel limit reached.");
     }
     const parsed = new URL(origin);
