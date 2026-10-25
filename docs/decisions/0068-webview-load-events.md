@@ -36,16 +36,16 @@ WebView 문서의 로드 시작, DOM ready, 완료, 실패를 앱에 알리는 �
 
 1. 로드 시작, DOM ready, 완료, 실패를 알리는 새 이벤트와 작업을 추가하지 않는다.
 2. 탐색의 진행과 결과는 기존 계약으로 확인한다. 백엔드는 `windows.getReadiness`의 `document`와 `error`,
-   `windows.getWebViewState`의 `loading`을 조회한다. `document`가 `failed`인지 먼저 확인하고,
-   그 뒤 `error.code`로 `TIMEOUT`과 탐색 실패를 구분한다(SDK 준비 오류가 `error`를 덮을 수 있어 `document`가 `ready`여도
-   `error`가 있을 수 있다). 이벤트가 필요한 UI는 `windows.readiness` 이벤트와 `getReadiness` 권한을 받아 구독하고, 구독
+   `windows.getWebViewState`의 `loading`을 조회한다. `document`와 `sdk` 상태를 함께 확인한다.
+   `error`는 마지막 준비 또는 세션 오류이므로 `document`가 실패한 원인으로 단정하지 않는다(SDK 오류나 창 종료가
+   `error`를 덮을 수 있다). 이벤트가 필요한 UI는 `windows.readiness` 이벤트와 `getReadiness` 권한을 받아 구독하고, 구독
    뒤에 `getReadiness`로 이미 끝난 단계를 확인한다. 페이지는 `DOMContentLoaded`와 `load`를 쓰되 구독이 늦으면
    `document.readyState`로 확인한다. DOM ready와 load 완료의 구분은 UI에서만 가능하고 백엔드는 `ready`(탐색 완료)만
    본다. 백엔드가 이 구분을 필요로 하면 UI가 페이지 이벤트를 앱 명령으로 백엔드에 보낸다.
 3. 새 이벤트를 추가하지 않는 결정은 Windows와 macOS 호스트에 같이 적용한다. 로드 단계 구분이 두 호스트에서 동등하다는
    판단은 Windows만 다루며, macOS의 문서 완료와 `loading`은 `windows.mdx`에 적힌 기존 계약을 따른다.
 4. 프레임 단위 로드 단계나 로드 중단 원인의 구분처럼 기존 계약으로 얻을 수 없는 용도가 확인되면 별도 결정에서
-   다룬다. 문서, 프레임과 same-document 탐색 이벤트는 같은 근거로 따로 다룬다.
+   다룬다. 문서, 프레임과 same-document 탐색 이벤트(별도 TODO 항목)도 별도 결정에서 다룬다.
 
 ## 근거
 
@@ -53,7 +53,8 @@ WebView 문서의 로드 시작, DOM ready, 완료, 실패를 앱에 알리는 �
   `windows.readiness`로 이미 전달하므로 같은 정보를 담은 이벤트가 둘이 되면 순서와 세대 규칙을 두 곳에서 지켜야 한다.
   코어 계약은 작게 유지한다.
 - UI로 가는 이벤트는 새 문서가 구독하기 전의 시작 단계를 전달할 수 없고, DOM ready 이후는 페이지의 표준 이벤트로 얻는다.
-  이 구조에서 로드 이벤트가 추가로 주는 정보가 없으므로 이벤트를 위해 정렬, 합치기와 큐 한도 규칙을 만들지 않는다.
+  UI에는 로드 이벤트가 추가로 주는 정보가 없고, 백엔드는 UI가 페이지 이벤트를 앱 명령으로 보내는 방법으로 충분하다.
+  따라서 이벤트를 위해 정렬, 합치기와 큐 한도 규칙을 만들지 않는다.
 
 ## 결과
 
