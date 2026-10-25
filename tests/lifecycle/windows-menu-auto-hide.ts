@@ -263,11 +263,14 @@ async function pumpUntil(done: () => boolean, what: string): Promise<void> {
   }
 }
 
-/** Window that holds keyboard focus in the foreground thread, for diagnostics. */
-function focusWindow(): bigint {
+/**
+ * Window that holds keyboard focus in the given thread's input state (0 means the foreground
+ * thread), for diagnostics.
+ */
+function focusWindow(thread = 0): bigint {
   const info = new DataView(new ArrayBuffer(GUI_THREAD_INFO_SIZE));
   info.setUint32(0, GUI_THREAD_INFO_SIZE, true);
-  if (!user.symbols.GetGUIThreadInfo(0, ptr(info.buffer))) {
+  if (!user.symbols.GetGUIThreadInfo(thread, ptr(info.buffer))) {
     return 0n;
   }
   return info.getBigUint64(GUI_THREAD_INFO_FOCUS_OFFSET, true);
@@ -328,16 +331,25 @@ function focusRenderWidget(): void {
   const attached =
     widgetThread !== ownThread &&
     user.symbols.AttachThreadInput(ownThread, widgetThread, 1) !== 0;
-  const previous = user.symbols.SetFocus(widget);
-  if (attached) {
-    user.symbols.AttachThreadInput(ownThread, widgetThread, 0);
+  // The focus is read before the threads are detached, because detaching gives each thread its own
+  // input state again.
+  let focusIsWidget = false;
+  let setFocusReturned = false;
+  try {
+    setFocusReturned = user.symbols.SetFocus(widget) !== 0n;
+    focusIsWidget = focusWindow(widgetThread) === widget;
+  } finally {
+    if (attached) {
+      user.symbols.AttachThreadInput(ownThread, widgetThread, 0);
+    }
   }
   console.log(
     `Render widget focus: ${JSON.stringify({
       sameThread: widgetThread === ownThread,
       attached,
-      setFocusReturned: previous !== 0n,
-      focusIsWidget: focusWindow() === widget,
+      // SetFocus returns null both on failure and when no window had focus before.
+      setFocusReturnedPreviousWindow: setFocusReturned,
+      focusIsWidget,
     })}`,
   );
 }
