@@ -18,6 +18,12 @@ Electron의 `app.setAccessibilitySupportEnabled`, `getAccessibilitySupportFeatur
 - [ADR 0030](./0030-launch-arguments-and-environment.md)은 앱 정의에 실행 인자, 환경 변수, switch 필드를 두지 않기로 했다.
   앱이 접근성 관련 switch를 시작 시 고정하려면 이 필드가 필요하다. 배포 앱의 프로세스 환경 변수
   `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` 경로는 0030이 막지 않으므로 이 결정도 막지 않는다.
+- Tauri v2(`tauri` 2.12.5, `wry` 0.57.1 기준)에는 Electron의 접근성 지원 설정 API에 해당하는 공개 API가 없다. Windows에서
+  창 생성 시 `additionalBrowserArgs`로 `--force-renderer-accessibility`를 넘기는 방법만 있고, macOS와 Linux에서는 이 인자도
+  지원하지 않는다.
+- WebView2에는 접근성을 켜거나 강제하는 문서화된 API가 없다. 렌더러 접근성은 스크린 리더가 감지되면 자동으로 켜지며, 강제하는
+  `force-renderer-accessibility` 브라우저 플래그는 WebView2 문서가 개발용으로 안내하고 출시 앱에는 쓰지 말라고 한다. 이 플래그는
+  환경 생성 시점에만 적용되므로 실행 중에 바꿀 수 없다.
 
 ## 결정
 
@@ -29,6 +35,8 @@ Electron의 `app.setAccessibilitySupportEnabled`, `getAccessibilitySupportFeatur
 ## 근거
 
 - 앱이 접근성 트리를 강제로 만들게 해야 하는 사용처가 이 저장소에 없다. 코어를 작게 두고 기능은 필요가 확인될 때 더한다.
+- Electron은 런타임 설정 API를 두지만 Tauri와 WebView2에는 대응이 없고, 보조 기술 감지에 따른 자동 활성화가 기본 동작이다. 따라서
+  Electron의 API를 그대로 옮기려면 WebView2에 없는 런타임 제어를 만들어야 하며, 코어를 작게 두는 쪽으로 제공하지 않는다.
 - 시작 시 고정하는 방법은 switch 필드를 앱 정의에 노출해야 하고, ADR 0030이 이미 그 노출을 하지 않기로 했다.
 
 ## 대안
