@@ -410,8 +410,9 @@ Windows의 비활성화 기록을 수정하지 않는다.
   반환했음을 뜻한다. UNC, 이동식 드라이브와 디렉터리는 지원하지 않는다.
   부모를 고정하고 삭제 직전 파일 ID를 다시 확인하지만 마지막 검사 이후의
   파일 자체 교체 경쟁은 남는다. Windows 네이티브 회귀는 `host:windows`에 포함한다.
-  실제 Windows 실행 결과와 휴지통 비활성화, 용량 초과 및 경고 UI 수동 검증은 별도 확인이 필요하다.
-- [ ] 휴지통 비활성화, 용량 초과와 영구 삭제 경고 UI의 동작을 실제 Windows에서 검증한다.
+  경고 UI의 화면 표시는 아래 항목이 다룬다.
+- [x] 휴지통 비활성화 정책과 볼륨의 영구 삭제 설정에서 `trashFile`이 `UNSUPPORTED`로 실패하고 파일을 남기는지 Windows CI에서 검증한다. 셸이 설정을 프로세스 단위로 유지하므로 호출마다 자식 프로세스를 쓴다(`windows-trash-limits.test.ts`).
+- [ ] 휴지통 용량 초과 파일의 영구 삭제 경고 동작과 경고 UI의 화면 표시를 검증한다. CI에서 용량 초과 호출이 기한까지 끝나지 않은 적이 있으며 원인은 확인하지 않았다(영구 삭제 경고의 응답 대기로 추정).
 - [x] Windows 바로가기 생성, 읽기와 변경을 제공한다.
   `opener.readShortcutLink(path)`와 `opener.writeShortcutLink(path, details, operation)`이
   `IShellLinkW`와 `IPersistFile`로 `.lnk`의 `target`, `cwd`, `args`, `description`, `icon`,

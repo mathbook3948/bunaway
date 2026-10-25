@@ -153,6 +153,15 @@ if (target === "windows-x64") {
         inputs.bun,
         "--no-env-file",
         "test",
+        resolve(root, "tests/lifecycle/windows-trash-limits.test.ts"),
+      ],
+      root,
+    );
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
         ...[
           "tests/lifecycle/desktop.test.ts",
           "tests/lifecycle/windows-os.test.ts",

@@ -1,65 +1,14 @@
 import { expect, test } from "bun:test";
-import {
-  link,
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { join, parse, resolve } from "node:path";
+import { link, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import createOperationsDefinition from "#plugins/opener/src/index";
 import { nativeFactory as createOperationsFactory } from "../fixtures/native-platform.ts";
+import { recycledItem } from "../fixtures/windows-recycle-bin.ts";
 
 const createOperations = createOperationsFactory(
   createOperationsDefinition,
   "windows",
 );
-
-/** Find only this test's recycle metadata; never empty or change another user's bin. */
-async function recycledItem(path: string): Promise<
-  | {
-      info: string;
-      data: string;
-    }
-  | undefined
-> {
-  const bin = join(parse(path).root, "$Recycle.Bin");
-  for (const directory of await readdir(bin)) {
-    const userBin = join(bin, directory);
-    let entries: string[];
-    try {
-      entries = await readdir(userBin);
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        "code" in error &&
-        (error.code === "EACCES" ||
-          error.code === "EPERM" ||
-          error.code === "ENOTDIR")
-      ) {
-        continue;
-      }
-      throw error;
-    }
-    for (const entry of entries.filter((name) => name.startsWith("$I"))) {
-      const info = join(userBin, entry);
-      const contents = await readFile(info);
-      // $I format 1 uses a fixed UTF-16 path; format 2 stores a character count first.
-      const offset = contents.readBigUInt64LE(0) === 2n ? 28 : 24;
-      const original = contents
-        .subarray(offset)
-        .toString("utf16le")
-        .split("\0")[0];
-      if (original === path) {
-        return {
-          info,
-          data: join(userBin, `$R${entry.slice(2)}`),
-        };
-      }
-    }
-  }
-}
 
 test.skipIf(process.platform !== "win32")(
   "Windows trashFile recycles one name of a file and preserves its other names and companions",
