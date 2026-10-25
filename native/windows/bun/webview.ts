@@ -765,10 +765,22 @@ export class WebView {
             ])(ptr(key)),
             "get_VirtualKey",
           );
+          // Diagnostic: tells an event that never arrives from one that stops before the key hook.
+          this.hooks.log("webview-accelerator-event", {
+            kind: kind[0],
+            key: key[0],
+            hasKeyHook: this.hooks.key !== undefined,
+          });
           this.hooks.key?.(kind[0] ?? 0, key[0] ?? 0);
         },
         this.controller,
       );
+      // Diagnostic: a registration that succeeded leaves a non-zero token and one more event entry.
+      this.hooks.log("webview-accelerator-registered", {
+        slot: WEBVIEW_CONTROLLER_ACCELERATOR_KEY_SLOT,
+        token: String(this.events[this.events.length - 1]?.token),
+        events: this.events.length,
+      });
     }
     this.on(25, "79e0aea4-990b-42d9-aa1d-0fcc2e5bc7f1", (args) => {
       const kind = new Int32Array(1);

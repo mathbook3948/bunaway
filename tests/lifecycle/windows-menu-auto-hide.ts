@@ -529,7 +529,12 @@ try {
           }, 0);
         }
       },
-      log() {},
+      log(event, data) {
+        // Registration and delivery of the controller accelerator event, for the key diagnosis.
+        if (event.startsWith("webview-accelerator")) {
+          console.log(`Host log ${event}: ${JSON.stringify(data)}`);
+        }
+      },
     },
   );
   const page = view;
