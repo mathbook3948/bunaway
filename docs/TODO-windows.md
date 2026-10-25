@@ -711,7 +711,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] 저장소 종류, origin과 기간별 데이터 삭제를 제공한다.
 - [ ] 인증 cache, DNS cache와 code cache의 조회 또는 삭제를 제공한다.
 - [ ] 세션의 persistent 여부와 storage path를 조회한다.
-- [ ] 세션별 proxy 설정, 조회, 재적용과 모든 연결 종료를 제공한다.
+- [x] 세션별 proxy 설정, 조회와 재적용은 [제공하지 않는다](decisions/0062-webview-network-identity-options.md). 호스트가 WebView2 브라우저 인자를 넘기지 않는 방침(ADR 0030 결정 4)을 유지한다. 앱 백엔드의 시스템 proxy 조회는 `network.resolveProxy`가 맡는다. 모든 연결 종료는 preconnect와 connection 정리 항목이 함께 다룬다.
 - [x] HTTP 요청 전 취소, redirect와 URL filter는 [제공하지 않는다](decisions/0083-webview-request-interception.md). 탐색 허용은 허용 origin 검사와 탐색 훅 항목이, 백엔드 HTTP는 `network.request`가 맡는다.
 - [x] 요청과 응답 header 조회, 변경 및 response stream 처리는 [제공하지 않는다](decisions/0083-webview-request-interception.md).
 - [x] 요청 완료, 실패와 redirect 이벤트는 [제공하지 않는다](decisions/0083-webview-request-interception.md). WebView2 이벤트 목록에는 리소스 요청 단위의 네트워크 오류와 완료 전용 이벤트가 없다.
