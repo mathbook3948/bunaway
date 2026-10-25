@@ -1323,7 +1323,7 @@ WebView2의 `DocumentTitleChanged`에 맞춰 새 제목을 전달합니다. Elec
 WebView2의 `FaviconChanged`에 맞춰 새 아이콘 주소를 전달합니다. Electron의 `page-favicon-updated`에 대응합니다.
 Electron은 주소 배열을 주지만 WebView2는 브라우저가 고른 아이콘 하나만 알려 주므로 `url` 하나를 전달합니다.
 
-- `url`은 아이콘 주소입니다. 페이지에 아이콘이 없으면 빈 문자열이고, 주소가 UTF-16 2048 코드 단위를 넘으면(큰
+- `url`은 아이콘 주소입니다. WebView2가 아이콘 주소를 비워 알리면 빈 문자열이고, 주소가 UTF-16 2048 코드 단위를 넘으면(큰
   `data:` 아이콘) 잘라 쓸 수 없어 같은 빈 문자열로 전달합니다. 아이콘 내용은 전달하지 않으며 페이지가 주소를 직접 가져옵니다.
 - 알림 전용이며 창 아이콘은 바꾸지 않습니다. 창 아이콘은 앱이 `windows.setIcon` 등으로 정합니다.
 - `windows.documentTitleChanged`와 같이 앞선 이벤트를 전달하는 동안 주소가 더 바뀌면 마지막 값 하나만 전달합니다.
