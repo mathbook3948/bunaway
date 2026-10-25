@@ -12,8 +12,8 @@ status: accepted
 
 - 창 하나에 WebView 하나이고(ADR 0026) WebView는 창 내용 영역 전체를 차지한다. `native/windows/bun/ui.ts`는 `WM_SIZE`마다 `WebView.resize()`를 호출하고,
   이 함수는 `GetClientRect`로 읽은 내용 영역 전체를 컨트롤러의 `put_Bounds`로 적용한다(`native/windows/bun/webview.ts`).
-  최대화, 복원, 전체화면, DPI 변경, 앱이 부른 `setSize`와 사용자 크기 조절이 모두 같은 경로를 지난다.
-- WebView에 따로 bounds를 주거나 여러 WebView를 두는 기능은 ADR 0026에서 채택하지 않았다. 따라서 창과 WebView 크기가 어긋날 수 있는 구성이 없다.
+  최대화, 복원, 전체화면 진입과 해제, DPI 변경, 앱이 부른 `setSize`(전체화면 중에는 `INVALID_ARGUMENT`로 거부)와 사용자 크기 조절에서 바뀐 크기는 같은 경로를 지난다.
+- 한 창에 WebView를 여러 개 두는 구성은 ADR 0026이 기각했고 다시 여는 조건도 정해 두었다. 따라서 WebView에 따로 bounds를 줄 일이 없고 창과 WebView 크기가 어긋날 수 있는 구성이 없다.
 - 콘텐츠 크기 기준의 배치는 이미 제공한다. 초기 크기는 기본으로 내용 영역 크기이고(`useContentSize`, ADR 0019), `setSize`는 내용 영역 크기를 받으며,
   `getContentSize`, `getContentBounds`, `setContentBounds`, `setContentPosition`이 내용 영역 기준 조회와 설정을 제공한다. 최소와 최대 크기도 내용 영역 기준이다.
 - 문서 콘텐츠 크기의 변화를 호스트가 통지하는 preferred-size 이벤트는 제공하지 않기로 했다(ADR 0039). 앱은 `ResizeObserver`로 관찰해 IPC로 보낼 수 있다.
