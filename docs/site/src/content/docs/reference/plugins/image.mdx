@@ -205,7 +205,8 @@ Windows에서 PNG, JPEG, BMP 파일을 읽어 새 리소스로 만듭니다. `cr
 축소합니다. 결과의 긴 변은 `maxDimension`(1부터 4,096까지의 정수, 기본 4,096) 이하이고 비율을 유지하며
 원본보다 키우지 않습니다. 픽셀 수가 상한을 넘으면 `width * height * 4`가 524,288바이트 이하가 되도록
 더 줄입니다. 작은 `maxDimension`으로 thumbnail을 만들 수 있습니다. 축소는 premultiplied alpha에서 하므로
-투명한 가장자리의 색이 번지지 않습니다. 크기를 줄이지 않는 이미지는 premultiplied 변환을 거치지 않으므로 투명 픽셀의 색도 유지하며, 결과는 8비트 straight RGBA입니다.
+투명한 가장자리의 색이 번지지 않습니다. 크기를 줄이지 않는 이미지는 premultiplied 변환을 거치지 않으므로 완전히 투명한 픽셀의 색도 유지하고,
+줄이는 이미지는 premultiplied로 변환하므로 그 픽셀의 RGB가 0이 됩니다. 결과는 8비트 straight RGBA입니다.
 
 - `path`는 `C:\` 같은 로컬 드라이브의 절대 경로이며 259자까지 받습니다. UNC, `\\?\`와 `\\.\` 접두사,
   `.`와 `..`, 예약된 장치 이름, `:`(대체 데이터 스트림)과 금지 문자는 `INVALID_ARGUMENT`입니다.
@@ -218,7 +219,8 @@ Windows에서 PNG, JPEG, BMP 파일을 읽어 새 리소스로 만듭니다. `cr
 - 이 작업은 **백엔드 전용**입니다. 정책의 `backend.permissions`에만 허용할 수 있고, 화면의
   `host.permissions`나 `commands`(`plugin.image.createFromPath`)에 넣으면 앱을 시작하거나 빌드할 때
   거부합니다. 화면은 앱 명령이 정한 경로로 이 함수를 호출한 백엔드 명령을 거쳐 결과 ID만 받습니다.
-  Electron의 `nativeImage.createFromPath`가 main 프로세스 API인 것과 같은 범위입니다.
+  Electron과 Tauri는 이 기능에 경로 scope를 두지 않으며, Tauri는 프런트엔드에 권한만 주면 호출을 허용합니다.
+  이 작업은 그보다 좁게 앱 백엔드만 호출할 수 있습니다.
 - 결과 ID는 다른 생성과 같은 64개, 8 MiB quota와 명시적 `image.dispose`, 생성 취소 규칙을 따릅니다.
   macOS는 아직 지원하지 않습니다. 입력 검사가 Windows 드라이브 경로만 받으므로 macOS에서 POSIX 경로는 `INVALID_ARGUMENT`, 드라이브 경로는 `UNSUPPORTED`입니다.
   셸의 파일 thumbnail 캐시(`IShellItemImageFactory`)는
@@ -250,7 +252,7 @@ try {
 | 오류 | 의미 |
 | --- | --- |
 | `INVALID_ARGUMENT` | 잘못된 크기, base64, MIME, encoded 입력, 없는 ID, 기준 크기와 맞지 않는 표현, 지원하지 않는 export 또는 읽을 수 없는 이미지 파일 |
-| `PERMISSION_DENIED` | 해당 operation 권한이 없거나 운영체제가 파일 접근을 거부함(링크 순환 포함) |
+| `PERMISSION_DENIED` | 해당 operation 권한이 없거나 운영체제가 파일 접근을 거부함 |
 | `UNSUPPORTED` | 등록하지 않은 작업이나 지원하지 않는 플랫폼 |
 | `BUSY` | 리소스 수, 리소스당 표현 8개 또는 앱 픽셀 메모리 상한에 도달함 |
 | `INTERNAL` | 플랫폼 codec의 native 리소스 처리나 인코딩이 실패함 |

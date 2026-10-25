@@ -10,8 +10,10 @@ status: accepted
 
 이미지 리소스를 파일 경로에서 만드는 기능과 파일 기반 thumbnail을 제공할지, 제공한다면 경로 접근을 어떻게 다룰지 정해야 했다.
 
-- Electron의 `nativeImage.createFromPath`는 main 프로세스에서 임의 경로를 읽는 API이고, 렌더러는 앱이 만든 IPC를 거쳐서만
-  쓸 수 있다.
+- Electron의 `nativeImage.createFromPath`는 경로 검사나 scope가 없는 API이고, 호출 가능 여부는 어느 컨텍스트(main, preload,
+  contextBridge로 노출한 코드)에서 접근할 수 있는지로만 정해진다.
+- Tauri의 `Image.fromPath`는 capability 권한 `core:image:allow-from-path` 하나로 프런트엔드 호출을 허용하며, 경로 단위 scope는 적용하지
+  않는다(fs 플러그인과 asset 프로토콜에만 경로 scope가 있다). 두 프레임워크 모두 이 기능에 경로 scope를 두지 않는다.
 - `image.createBytes`는 인코딩된 입력을 600,000바이트와 4,096 픽셀, 524,288 바이트의 이미지 상한으로 제한한다. 일반 사진은
   이 상한을 넘으므로 `storage.readFile`로 읽어 `createBytes`에 넘기는 방법으로는 thumbnail을 만들 수 없다. 큰 파일을 읽고
   디코드하면서 축소하는 경로가 필요하다.
@@ -37,7 +39,9 @@ status: accepted
 
 ## 근거
 
-- 백엔드는 신뢰된 앱 코드이므로 Electron main 프로세스의 `createFromPath`와 같은 위치에서 경로를 읽는다. 화면이 같은 기능을
+- 두 프레임워크 모두 경로 scope를 두지 않으므로 정책에 허용 폴더 칸을 두지 않는다. Tauri는 프런트엔드가 권한만 있으면 임의 경로를 열 수
+  있지만, 이 결정은 그보다 좁게 백엔드만 호출하게 한다. 백엔드는 신뢰된 앱 코드이며 Electron에서 main이나 preload가 같은 API를
+  쓰는 위치와 같다. 화면이 같은 기능을
   쓰려면 앱 명령이 경로를 정해 호출하므로, 경로 제한 책임이 ADR 0024와 어긋나지 않는다.
 - 정책에 허용 폴더(scope) 칸을 두지 않는 기존 방침을 유지한다. 대신 "화면에 허용하지 못한다"는 단순한 검사 하나로, 임의 파일
   읽기가 화면에 직접 열리는 일을 막는다.
