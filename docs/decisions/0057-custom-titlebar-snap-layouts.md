@@ -21,13 +21,17 @@ Windows 11의 Snap Layouts는 최대화 버튼에 마우스를 올리면 뜨는 
 - `WM_NCHITTEST`에서 `HTMAXBUTTON`을 돌려주는 코드는 없다. 최대화 버튼은 앱이 그린 button이고 호스트는 그 위치를 모른다.
 - `docs/site/src/content/docs/reference/host/windows.mdx`는 네이티브 caption 버튼 overlay를 지원하지 않는다고 적고 있다.
 
-선례(공개 API 기준):
+선례(Electron 45.0.0, Tauri 2.12.5 소스와 문서 기준):
 
-- Electron은 `BrowserWindow`에 `HTMAXBUTTON`을 반환하거나 최대화 버튼 영역을 등록하는 옵션이 없다. 네이티브 caption 버튼을
-  유지하는 `titleBarOverlay`(`titleBarStyle: "hidden"`과 함께)가 시스템 최대화 버튼을 그대로 쓰므로 Snap Layouts는
-  이 경로로만 얻는다.
-- Tauri 2의 `Window`와 `WindowBuilder`에도 같은 옵션이 없다. 사용자 타이틀바는 `decorations: false`와 `data-tauri-drag-region`으로 만들며
-  Snap Layouts용 영역을 지정하는 API가 없다.
+- Electron의 `BrowserWindow`에는 최대화 버튼 영역을 등록하거나 `HTMAXBUTTON`을 반환하게 하는 공개 옵션이 없다.
+  소스에서 `HTMAXBUTTON`을 반환하는 곳은 Window Controls Overlay의 캡션 버튼 컨테이너뿐이고, 이는 `titleBarStyle: "hidden"`과
+  `titleBarOverlay`를 함께 지정할 때만 켜진다. CSS `-webkit-app-region: drag` 영역은 `HTCAPTION`만 반환한다.
+  `titleBarOverlay`의 하위 키는 `color`, `symbolColor`, `height`뿐이다. 그래서 Snap Layouts는 Electron이 그리는 시스템 캡션 버튼을
+  쓸 때만 얻는다. `hookWindowMessage`는 메시지를 관찰만 하고 반환값을 돌려줄 수 없어 이 용도로 쓸 수 없다.
+- Tauri의 `WindowBuilder`, `WebviewWindowBuilder`, `Window`에도 최대화 영역 등록이나 `HTMAXBUTTON` 관련 API가 없다.
+  `title_bar_style`은 macOS 전용이고 Windows용 overlay 옵션도 없다. `data-tauri-drag-region`은 `mousedown`에서 창 끌기 또는
+  더블클릭 최대화를 호출할 뿐 `WM_NCHITTEST`에 응답하지 않는다. 메인테이너는 WebView 안의 클릭에는 `WM_NCHITTEST`가
+  전달되지 않아 Snap Layouts를 열 수 없다고 설명했고, 요청 이슈 tauri#4531은 열려 있다.
 
 ## 결정
 
@@ -40,7 +44,8 @@ Windows 11의 Snap Layouts는 최대화 버튼에 마우스를 올리면 뜨는 
 
 ## 근거
 
-- 두 프레임워크 모두 최대화 버튼 영역을 앱이 등록하는 API를 제공하지 않으므로 같은 쪽을 따른다. 쓰는 곳이 없는 기능으로 코어 API를
+- 두 프레임워크 모두 최대화 버튼 영역을 앱이 등록하는 API를 제공하지 않으므로 같은 쪽을 따른다. Electron의 유일한 경로인
+  네이티브 caption 버튼 overlay는 이 저장소에서 별도 항목으로 남아 있다. 쓰는 곳이 없는 기능으로 코어 API를
   늘리지 않는다.
 - `HTMAXBUTTON`은 비클라이언트 hit-test 결과라서 그 영역에서는 마우스 이동, 눌림과 클릭이 WebView가 아니라 창 프로시저로 가고
   시스템이 최대화를 직접 수행한다. 그러면 HTML 버튼의 CSS hover와 active 표시, 클릭 핸들러, 키보드와 접근성 이름을
