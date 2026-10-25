@@ -36,7 +36,7 @@ status: accepted
 ## 근거
 
 - Electron은 제공하고 Tauri는 제공하지 않는다. 둘이 다르므로 코어는 작게, 기능은 필요한 곳에 맞추는 쪽을 따른다. 쓰는 곳이 없다(`plugins`,
-  `packages`, `examples`에 맞춤법 검사를 쓰는 코드는 없다).
+  `packages`, `examples`에 맞춤법 검사를 관리하는 코드는 없고, 예제는 입력 요소의 `spellcheck="false"` 속성만 쓴다).
 - Electron의 API 대부분은 Chromium 내장 검사기를 전제로 한다. WebView2에서는 호스트가 같은 범위를 약속할 수 없어서(위 호스트 API 부재) 같은
   이름의 API가 플랫폼마다 다른 범위를 약속하게 된다.
 - 교체는 selection 변경과 텍스트 삽입 API를 제공하지 않는 결정(ADR 0050)과 충돌한다. 단독으로 열면 그 결정의 범위가 달라진다.
