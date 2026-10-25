@@ -70,6 +70,8 @@ import {
   SC_MOVE,
   SC_RESTORE,
   SC_SIZE,
+  SIZE_MAXIMIZED,
+  SIZE_RESTORED,
   SM_CXMAXTRACK,
   SM_CXMINTRACK,
   SM_CXPADDEDBORDER,
@@ -113,6 +115,7 @@ import {
   WM_MOUSEACTIVATE,
   WM_OBSERVE_WINDOW,
   WM_QUIT,
+  WM_SIZE,
   WM_SIZING,
   WM_SYSCOMMAND,
   WM_WINDOWPOSCHANGED,
@@ -281,6 +284,8 @@ export class Windows {
   private creatingConstraints: WindowSizeConstraints | undefined;
   private readonly callback: JSCallback;
   private readonly previousDpiAwarenessContext: bigint;
+  /** Fullscreen windows that missed a display change while minimized; refitted when restored. */
+  private readonly fullscreenRefitPending = new Set<bigint>();
   private readonly fullscreen = new Map<
     bigint,
     {
@@ -650,15 +655,71 @@ export class Windows {
       this.recordActivation(window, wparam);
     }
     if (
-      message === WM_DISPLAYCHANGE &&
-      this.windows.has(window) &&
-      !this.fullscreen.has(window)
+      message === WM_SIZE &&
+      (wparam === SIZE_RESTORED || wparam === SIZE_MAXIMIZED) &&
+      this.fullscreenRefitPending.delete(window) &&
+      this.fullscreen.has(window)
     ) {
-      // Refresh even without a query while the previous monitor is disconnected.
-      this.readNormalMonitorInfo(
-        window,
-        this.getPlacement(window).subarray(WINDOWPLACEMENT_NORMAL_RECT_OFFSET),
+      this.refitFullscreen(window);
+    }
+    if (message === WM_DISPLAYCHANGE && this.windows.has(window)) {
+      if (this.fullscreen.has(window)) {
+        this.refitFullscreen(window);
+      } else {
+        // Refresh even without a query while the previous monitor is disconnected.
+        this.readNormalMonitorInfo(
+          window,
+          this.getPlacement(window).subarray(
+            WINDOWPLACEMENT_NORMAL_RECT_OFFSET,
+          ),
+        );
+      }
+    }
+  }
+
+  /**
+   * Windows keeps a window's size when a monitor is removed or changes resolution and only
+   * moves it onto a remaining monitor, so a fullscreen window would no longer cover its
+   * monitor. Fit it to the monitor it is now nearest to; the saved normal placement is untouched.
+   */
+  private refitFullscreen(window: bigint) {
+    if (user.symbols.IsIconic(window) !== 0) {
+      // SetWindowPos on a minimized window is not a fullscreen refit; wait for the restore.
+      this.fullscreenRefitPending.add(window);
+      return;
+    }
+    const bounds = this.monitorBounds(
+      user.symbols.MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
+    );
+    const current = this.getBounds(window, "outer");
+    if (
+      current.x === bounds.x &&
+      current.y === bounds.y &&
+      current.width === bounds.width &&
+      current.height === bounds.height
+    ) {
+      return;
+    }
+    // A restore can arrive inside another geometry change; leave that change's flag set.
+    const nested = this.changingGeometry.has(window);
+    this.changingGeometry.add(window);
+    try {
+      assert(
+        user.symbols.SetWindowPos(
+          window,
+          0n,
+          bounds.x,
+          bounds.y,
+          bounds.width,
+          bounds.height,
+          SWP_NOZORDER | SWP_NOACTIVATE,
+        ),
       );
+    } finally {
+      if (!nested) {
+        this.changingGeometry.delete(window);
+        this.observeChanges(window);
+      }
     }
   }
 
@@ -3212,6 +3273,7 @@ export class Windows {
           ),
         );
         this.fullscreen.delete(window);
+        this.fullscreenRefitPending.delete(window);
         const dpi = this.readDpi(window);
         this.dpiByWindow.set(window, dpi);
         this.resizePlacement(
@@ -3281,6 +3343,7 @@ export class Windows {
     this.dpiByWindow.delete(window);
     this.normalMonitors.delete(window);
     this.fullscreen.delete(window);
+    this.fullscreenRefitPending.delete(window);
   }
 
   /** Dispatch a bounded message batch and surface any callback failure. */

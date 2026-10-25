@@ -214,7 +214,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] click-through 중 마우스 이동 이벤트를 WebView에 전달하는 `forward` 옵션은 제공하지 않는다. 앱이 `getCursorPosition`과 창 bounds로 `setIgnoreMouseEvents`를 전환한다([결정](decisions/0036-click-through-forward-option.md)).
 - [x] cursor icon, visible, position과 grab 설정 API는 제공하지 않는다. 아이콘과 숨김은 렌더러 CSS `cursor`, 상대 이동은 Pointer Lock을 쓰고 조회는 `getCursorPosition`만 둔다([결정](decisions/0042-cursor-control.md)).
 - [x] 창 포커스 요청과 별개로 작업 표시줄을 점멸하는 attention API를 제공한다. `requestAttention`과 `cancelAttention`을 제공하며 Windows는 FlashWindowEx로 포커스 이동 없이 작업 표시줄 버튼을 점멸하고 untilFocused와 continuous 모드를 지원한다.
-- [ ] 지정 모니터에서 전체화면으로 전환하고 모니터 제거 시 복원한다.
+- [x] 지정 모니터 전체화면용 인자는 두지 않는다. 창을 `monitorId` 배치 API로 옮긴 뒤 `setFullscreen`을 호출하고, 전체화면 중 디스플레이가 바뀌면 창을 가장 가까운 모니터 영역에 다시 맞춘다. [ADR 0058](./decisions/0058-fullscreen-monitor.md).
 - [x] Windows snapped 상태 조회는 제공하지 않기로 결정했다. Snap은 창 상태가 아니라 bounds의 결과다. [ADR 0031](./decisions/0031-window-snapped-state.md).
 - [x] Windows tablet-mode 상태 조회는 제공하지 않기로 결정했다. Electron 값은 Windows 10 기준이고 Tauri에는 없다. 터치 환경은 pointer 미디어 쿼리와 창 크기로 판단한다. [ADR 0043](./decisions/0043-tablet-mode-query.md).
 - [x] 접근성용 창 제목을 일반 제목과 별도로 설정한다. `IAccPropServices.SetHwndPropStr`로 접근성 이름만 바꾸고 빈 문자열은 설정을 제거하며, Narrator 등 스크린 리더의 실제 낭독 확인은 수동 검증으로 따로 남긴다.
