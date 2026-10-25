@@ -11,9 +11,11 @@ status: accepted
 지정한 모니터에서 전체화면으로 전환하는 방법과, 전체화면 중 모니터가 제거되거나 해상도가 바뀔 때의
 동작을 정해야 했다.
 
-- Electron의 `setFullScreen(flag)`와 Tauri의 `setFullscreen(fullscreen)`은 모니터 인자를 받지 않는다.
-  두 프레임워크 모두 창이 놓인 모니터에서 전체화면이 된다. 다른 모니터에서 전체화면을 쓰려면 먼저 창을
-  그 모니터로 옮기고 전환한다.
+- Electron의 `setFullScreen(flag)`는 boolean 하나만 받고 모니터 인자가 없다. 창이 놓인 모니터에서 전체화면이
+  되며, 다른 모니터에서 쓰려면 창을 먼저 그 모니터로 옮기고 호출한다.
+- Tauri의 `setFullscreen(fullscreen)`도 boolean 하나이고 현재 모니터를 쓴다. Tauri 2.12부터는 별도 API
+  `setFullscreenOnMonitor(position)`이 있어 물리 좌표를 포함하는 모니터에서 전체화면이 된다(좌표를 포함하는
+  모니터가 없으면 아무것도 하지 않는다).
 - 이 저장소의 `windows.setFullscreen`도 `MonitorFromWindow(MONITOR_DEFAULTTONEAREST)`로 고른 현재 모니터의
   전체 영역을 채운다. 모니터 선택에 필요한 `windows.center`, `windows.moveToAnchor`,
   `windows.moveNextToRect`의 `monitorId`와 `monitors.list`가 이미 있다.
@@ -36,8 +38,10 @@ status: accepted
 
 ## 근거
 
-- 두 프레임워크가 모니터 인자를 두지 않으므로 같은 방식을 따른다. 모니터 선택은 이미 있는 배치 API가
-  맡고, 전체화면 계약은 불리언 하나로 유지한다. 쓰는 곳도 없다.
+- 두 프레임워크가 다르다. Electron은 전체화면에 모니터 인자가 없고 Tauri는 2.12부터 별도 API를 더했다.
+  다르면 Electron을 따르고, 코어는 작게 두며 모니터 선택은 이미 있는 배치 API(`monitorId`)가 맡는다. 전체화면
+  계약은 불리언 하나로 유지하고, 쓰는 곳도 없다. 별도 모니터 지정 API가 필요해지면 `setFullscreen`을
+  바꾸지 않고 추가할 수 있다.
 - 디스플레이 변경 때 다시 맞추는 부분은 위 프레임워크 동작과 무관하게 전체화면의 정의("모니터를 채운다")를
   유지하기 위한 보완이다. 이전에는 모니터를 제거하면 앱이 `isFullscreen`은 `true`인데 화면 일부만 덮는
   창을 받았다.
