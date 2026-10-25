@@ -3,6 +3,7 @@ import {
   canonicalBase64Bytes,
   base64Schema as sharedBase64Schema,
 } from "@bunaway/plugin";
+import { isWindowsFileName } from "@bunaway/protocol";
 import { z } from "zod";
 export const MAX_IMAGE_BYTES = 524_288;
 /** Largest width or height of an image, also the largest crop origin coordinate. */
@@ -136,6 +137,37 @@ export const cropSchema = transformSizeSchema.safeExtend({
 export const resizeSchema = transformSizeSchema.safeExtend({
   id: idSchema,
   interpolation: interpolationSchema.optional(),
+});
+/** Largest image file `createFromPath` reads; the size is checked on the opened file before any byte is read. */
+export const MAX_SOURCE_FILE_BYTES = 16_777_216;
+/** Largest width or height of an image file `createFromPath` decodes, checked from the header before pixel decoding. */
+export const MAX_SOURCE_DIMENSION = 16_384;
+/** Largest pixel count of an image file `createFromPath` decodes. */
+export const MAX_SOURCE_PIXELS = 64_000_000;
+/** Longest drive path `createFromPath` accepts, the Win32 `MAX_PATH` limit without the terminating NUL. */
+export const MAX_SOURCE_PATH_LENGTH = 259;
+/**
+ * Absolute local drive path of a PNG, JPEG or BMP file. UNC paths, device namespaces and
+ * alternate data streams are rejected, as are `.` and `..` parts and reserved device names. The
+ * check is syntactic: a mapped network drive or a link can still lead to a network share, which
+ * the app decides to allow or not.
+ */
+export const imagePathSchema = z
+  .string()
+  .max(MAX_SOURCE_PATH_LENGTH)
+  .regex(/^[A-Za-z]:[\\/]/, "Path must be an absolute local drive path.")
+  .refine(
+    (path) =>
+      path
+        .slice(3)
+        .split(/[\\/]/)
+        .every((name) => isWindowsFileName(name)),
+    "Path must contain only valid Windows file names.",
+  );
+/** `maxDimension` bounds the longer edge of the result; the image is never enlarged. */
+export const createFromPathSchema = z.strictObject({
+  path: imagePathSchema,
+  maxDimension: z.number().int().min(1).max(MAX_IMAGE_DIMENSION).optional(),
 });
 /** Pixel edge length of each file type icon size, matching the shell small, large and extra-large icon lists. */
 export const FILE_TYPE_ICON_PIXELS = {

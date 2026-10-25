@@ -558,13 +558,13 @@ MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이�
 - [x] Windows clipboard의 사용자 정의 binary 형식(`application/x-bunaway-binary/...`) 읽기와 쓰기를 제공한다. 형식당 256 KiB, 어댑터 수명마다 서로 다른 이름 64개까지다.
 - [x] Windows clipboard의 변경 이벤트(`clipboard.changed`)와 `waitForChange`를 제공한다. `AddClipboardFormatListener`와 `WM_CLIPBOARDUPDATE`로 감지하며 payload는 내용 없이 `sequence`와 `changedAt`만 담는다. 같은 sequence의 연속 갱신은 합치고 자기 쓰기도 알린다. macOS의 같은 계약은 `changeCount` 비교로 제공한다([계약](../plugins/clipboard/README.md)).
 - [x] Windows `@bunaway/plugin-image`에서 PNG, JPEG와 BMP bytes, RGBA와 data URL로 앱 소유 이미지 리소스를 만든다.
-- [ ] 파일 경로에서 이미지 리소스를 읽는 API와 저장소 접근 정책을 연결한다.
+- [x] 파일 경로에서 이미지 리소스를 읽는다. `image.createFromPath`는 백엔드 전용 작업이며 로컬 드라이브 경로의 PNG, JPEG, BMP를 디코드하면서 `maxDimension`과 리소스 상한으로 축소한다. 허용 폴더는 앱이 정한다([ADR 0053](decisions/0053-backend-only-operations.md)).
 - [x] `image.getInfo`와 `image.getPixels`로 크기, 빈 이미지 여부와 RGBA 픽셀 데이터를 조회한다.
 - [x] `image.exportBytes`와 `image.exportDataURL`로 PNG, JPEG, BMP와 data URL을 내보낸다. PNG는 alpha를 보존하고 JPEG와 BMP는 불투명 픽셀만 받는다.
 - [x] `image.crop`과 `image.resize`로 소스와 분리된 새 이미지 리소스를 만든다. Windows resize는 nearest와 alpha를 고려한 linear filtering을 제공한다.
 - [x] 한 이미지 ID의 scale-factor별 representation 그룹과 선택 API를 제공한다. `image.addRepresentation`, `image.getRepresentations`와 읽기 4개의 `scaleFactor` 선택(정확히 일치, 아니면 큰 쪽 중 가장 작은 것, 없으면 가장 큰 것). 플러그인 안의 픽셀 풀 관리라 codec은 바꾸지 않는다.
 - [x] `image.createFileTypeIcon`으로 확장자와 크기(16, 32, 48)만 받아 파일 형식 아이콘을 생성한다. `SHGFI_USEFILEATTRIBUTES`로 디스크에 접근하지 않으므로 저장소 권한이 필요 없고 실제 경로는 받지 않는다. macOS 구현은 `docs/TODO-macos.md` 12절에 있다.
-- [ ] 실제 파일 기반 이미지 thumbnail을 생성한다. 파일 경로 접근 정책(저장소 scope와 권한)이 먼저 정해져야 한다.
+- [x] 실제 파일 기반 이미지 thumbnail을 생성한다. `image.createFromPath`의 `maxDimension`으로 축소한다. 셸 thumbnail 캐시(`IShellItemImageFactory`)는 후속이다.
 - [x] 앱 소유 이미지 ID, `image.dispose`, 결과 전달 전 생성 취소와 앱 종료 정리를 제공한다. 작업별 권한과 64개, 8 MiB 상한을 적용한다.
 
 2026-10-12 clipboard 확장은 `defineNativePlugin`과 Zod 계약, 작업별 권한, 입력과 출력 상한,

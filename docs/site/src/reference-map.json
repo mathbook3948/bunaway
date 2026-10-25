@@ -1235,7 +1235,7 @@
       "source": "packages/plugin-sdk/src/index.ts",
       "type": "NativeOperationDefinition",
       "pages": {
-        "reference/tooling/native-plugins": ["input", "output"]
+        "reference/tooling/native-plugins": ["input", "output", "backendOnly"]
       }
     },
     {
@@ -1249,7 +1249,7 @@
       "source": "packages/protocol/src/host-api.ts",
       "type": "HostOperationContract",
       "pages": {
-        "reference/protocol": ["name"]
+        "reference/protocol": ["name", "backendOnly"]
       }
     },
     {
@@ -1774,7 +1774,8 @@
       "image.getRepresentations",
       "image.crop",
       "image.resize",
-      "image.createFileTypeIcon"
+      "image.createFileTypeIcon",
+      "image.createFromPath"
     ],
     "reference/plugins/global-shortcut": [
       "globalShortcut.register",

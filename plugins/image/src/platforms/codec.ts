@@ -15,6 +15,12 @@ export type Pixels = {
 /** The two platform codecs expose the same bounded pixel operations. */
 export type ImageCodec = {
   decode(bytes: Buffer, mime: ImageMime): Pixels;
+  /**
+   * Decode an image file's bytes into pixels that fit within `maxDimension` and the resource pixel
+   * limit, scaling while decoding so the full-size pixels are never held. Absent on platforms
+   * without file image support.
+   */
+  decodeScaled?(bytes: Buffer, mime: ImageMime, maxDimension: number): Pixels;
   encode(pixels: Pixels, mime: ImageMime): Buffer;
   resize(
     pixels: Pixels,

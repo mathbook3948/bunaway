@@ -7,7 +7,7 @@ sidebar: { order: 7 }
 기본 export(`default`)를 `image`로 가져와 앱에 등록하고 호출합니다.
 
 `@bunaway/plugin-image`를 설치하고 `image`를 앱의 `plugins`에 등록합니다.
-화면과 앱 백엔드는 같은 `image` API를 사용합니다. Windows와 macOS arm64에서 제공합니다. macOS Intel은 지원하지 않습니다.
+화면과 앱 백엔드는 같은 `image` API를 사용합니다(`image.createFromPath`만 백엔드 전용). Windows와 macOS arm64에서 제공합니다. macOS Intel은 지원하지 않습니다.
 
 ```ts
 import { defineApp } from "@bunaway/backend";
@@ -194,7 +194,47 @@ try {
 }
 ```
 
-실제 파일 기반 이미지 thumbnail은 제공하지 않습니다.
+## 파일에서 만들기
+
+| 함수 | 입력 | 결과 | 권한 |
+| --- | --- | --- | --- |
+| `image.createFromPath` | `{ path, maxDimension? }` | 새 `{ id, width, height, empty }` | `image.createFromPath` (백엔드 전용) |
+
+Windows에서 PNG, JPEG, BMP 파일을 읽어 새 리소스로 만듭니다. `createBytes`의 인코딩 상한(600,000바이트)과
+이미지 상한(4,096, 524,288바이트)을 넘는 사진도 읽을 수 있도록, 디코드하면서 이미지 상한 안으로
+축소합니다. 결과의 긴 변은 `maxDimension`(1부터 4,096까지의 정수, 기본 4,096) 이하이고 비율을 유지하며
+원본보다 키우지 않습니다. 픽셀 수가 상한을 넘으면 `width * height * 4`가 524,288바이트 이하가 되도록
+더 줄입니다. 작은 `maxDimension`으로 thumbnail을 만들 수 있습니다. 축소는 premultiplied alpha에서 하므로
+투명한 가장자리의 색이 번지지 않습니다. 크기를 줄이지 않는 이미지는 premultiplied 변환을 거치지 않으므로 완전히 투명한 픽셀의 색도 유지하고,
+줄이는 이미지는 premultiplied로 변환하므로 그 픽셀의 RGB가 0이 됩니다. 결과는 8비트 straight RGBA입니다.
+
+- `path`는 `C:\` 같은 로컬 드라이브의 절대 경로이며 259자까지 받습니다. UNC, `\\?\`와 `\\.\` 접두사,
+  `.`와 `..`, 예약된 장치 이름, `:`(대체 데이터 스트림)과 금지 문자는 `INVALID_ARGUMENT`입니다.
+  경로는 문법만 검사합니다. 링크는 따라가고 연결된 네트워크 드라이브나 네트워크 공유를 가리키는 링크도 열 수 있으므로,
+  어떤 폴더의 파일을 허용할지는 앱이 정합니다([ADR 0024](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0024-plugin-path-responsibility.md)).
+- 형식은 확장자가 아니라 파일 내용으로 판별합니다. 파일은 16 MiB까지이며 열린 파일의 크기를 읽기 전에
+  확인합니다. 일반 파일이 아니거나(디렉터리, 장치) 없는 파일, 지원하지 않는 형식, 여러 프레임인 파일은
+  `INVALID_ARGUMENT`입니다. 가로나 세로가 16,384를 넘거나 픽셀이 64,000,000개를 넘는 파일은 픽셀을
+  디코드하기 전에 헤더 크기로 거부합니다.
+- 이 작업은 **백엔드 전용**입니다. 정책의 `backend.permissions`에만 허용할 수 있고, 화면의
+  `host.permissions`나 `commands`(`plugin.image.createFromPath`)에 넣으면 앱을 시작하거나 빌드할 때
+  거부합니다. 화면은 앱 명령이 정한 경로로 이 함수를 호출한 백엔드 명령을 거쳐 결과 ID만 받습니다.
+  Electron과 Tauri는 이 기능에 경로 scope를 두지 않으며, Tauri는 프런트엔드에 권한만 주면 호출을 허용합니다.
+  이 작업은 그보다 좁게 앱 백엔드만 호출할 수 있습니다.
+- 결과 ID는 다른 생성과 같은 64개, 8 MiB quota와 명시적 `image.dispose`, 생성 취소 규칙을 따릅니다.
+  macOS는 아직 지원하지 않습니다. 입력 검사가 Windows 드라이브 경로만 받으므로 macOS에서 POSIX 경로는 `INVALID_ARGUMENT`, 드라이브 경로는 `UNSUPPORTED`입니다.
+  셸의 파일 thumbnail 캐시(`IShellItemImageFactory`)는
+  사용하지 않으며 파일을 직접 디코드합니다.
+
+```ts
+// 백엔드 명령 안에서, 앱이 정한 폴더의 경로만 넘깁니다.
+const thumbnail = await image.createFromPath({ path: photoPath, maxDimension: 256 });
+try {
+  const png = await image.exportBytes({ id: thumbnail.id, format: "image/png" });
+} finally {
+  await image.dispose({ id: thumbnail.id });
+}
+```
 
 ## 정책, 취소와 오류
 
@@ -206,13 +246,13 @@ try {
 백엔드는 현재 명령의 취소와 기한을 이어받습니다. 호스트가 생성 작업을 완료하기 전에
 요청이 취소되면 새 ID와 픽셀 버퍼를 버리고 quota를 복원합니다. 완료한 생성은 뒤늦은
 화면 취소로 되돌리지 않습니다. 받은 ID의 수명은 정상 호출 완료와 창 탐색으로 끝나지
-않으며 앱이 명시적으로 해제합니다. 네이티브 codec의 동기 decode/encode를 중간에 중단하지는 않습니다.
+않으며 앱이 명시적으로 해제합니다. 네이티브 codec의 동기 decode/encode를 중간에 중단하지는 않습니다. `createFromPath`는 파일 읽기와 디코드를 UI 스레드에서 동기로 실행하므로 큰 파일이나 느린 네트워크 드라이브에서는 창이 그동안 응답하지 않을 수 있습니다.
 취소된 결과는 호스트가 폐기하며 이미 실행한 명시적 해제는 되돌리지 않습니다.
 
 | 오류 | 의미 |
 | --- | --- |
-| `INVALID_ARGUMENT` | 잘못된 크기, base64, MIME, encoded 입력, 없는 ID, 기준 크기와 맞지 않는 표현 또는 지원하지 않는 export |
-| `PERMISSION_DENIED` | 해당 operation 권한이 없음 |
+| `INVALID_ARGUMENT` | 잘못된 크기, base64, MIME, encoded 입력, 없는 ID, 기준 크기와 맞지 않는 표현, 지원하지 않는 export 또는 읽을 수 없는 이미지 파일 |
+| `PERMISSION_DENIED` | 해당 operation 권한이 없거나 운영체제가 파일 접근을 거부함 |
 | `UNSUPPORTED` | 등록하지 않은 작업이나 지원하지 않는 플랫폼 |
 | `BUSY` | 리소스 수, 리소스당 표현 8개 또는 앱 픽셀 메모리 상한에 도달함 |
 | `INTERNAL` | 플랫폼 codec의 native 리소스 처리나 인코딩이 실패함 |

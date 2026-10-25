@@ -48,3 +48,25 @@ export function resizeNearestPixels(
     rgba,
   };
 }
+
+/**
+ * The largest size that keeps the aspect ratio, has a longer edge of at most `maxDimension` and
+ * fits the pixel limit of an image resource. A source that already fits keeps its size. Each edge
+ * is rounded down but never below 1, so the result stays within every limit.
+ */
+export function fitWithin(
+  width: number,
+  height: number,
+  maxDimension: number,
+): {
+  width: number;
+  height: number;
+} {
+  const edgeScale = maxDimension / Math.max(width, height);
+  const pixelScale = Math.sqrt(MAX_IMAGE_BYTES / 4 / (width * height));
+  const scale = Math.min(1, edgeScale, pixelScale);
+  return {
+    width: Math.max(1, Math.floor(width * scale)),
+    height: Math.max(1, Math.floor(height * scale)),
+  };
+}

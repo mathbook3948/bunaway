@@ -3,14 +3,17 @@ import type { z } from "zod";
 import {
   type addRepresentationSchema,
   bytesSchema,
+  type createFromPathSchema,
   type cropSchema,
   type exportSchema,
   type fileTypeIconSchema,
+  MAX_IMAGE_DIMENSION,
   type resizeSchema,
   type rgbaSchema,
 } from "#image/contract";
 import type { FileTypeIconSource, ImageCodec } from "#image/platforms/codec";
 import { cropPixels } from "#image/platforms/crop";
+import { readImageFile } from "#image/platforms/image-file";
 import { ImageResources } from "#image/platforms/resources";
 /** Own decoded image resources and one platform codec for a host adapter lifetime. */
 export class ImagePlatform {
@@ -61,6 +64,36 @@ export class ImagePlatform {
     });
     return this.resources.create(
       this.codec.decode(Buffer.from(bytes.data, "base64"), bytes.mime),
+      signal,
+    );
+  }
+
+  /**
+   * Decode an image file into a resource that fits within `maxDimension` (default: the largest
+   * image edge) and the resource pixel limit; platforms without a scaling codec report UNSUPPORTED.
+   * The file is read and decoded before the resource is created, and a late cancellation drops
+   * the result.
+   */
+  createFromPath(
+    input: z.output<typeof createFromPathSchema>,
+    signal?: AbortSignal,
+  ) {
+    this.active();
+    const decodeScaled = this.codec.decodeScaled?.bind(this.codec);
+    if (!decodeScaled) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message: "Image files are not supported on this platform.",
+      });
+    }
+    this.resources.assertCapacity();
+    const file = readImageFile(input.path);
+    return this.resources.create(
+      decodeScaled(
+        file.bytes,
+        file.mime,
+        input.maxDimension ?? MAX_IMAGE_DIMENSION,
+      ),
       signal,
     );
   }

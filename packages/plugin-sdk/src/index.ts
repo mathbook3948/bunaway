@@ -141,6 +141,8 @@ export type NativeOperationDefinition = {
   readonly input: z.ZodType;
   /** Parsed with parseAsync after execution; raw and parsed values must be JSON. */
   readonly output: z.ZodType;
+  /** Policy validation rejects a grant of this operation to a view; only the backend may hold it. */
+  readonly backendOnly?: true;
 };
 /** Metadata shared by both platform declarations and existing adapter factories. */
 type NativePluginMetadata = {
@@ -199,6 +201,7 @@ export function defineNativeOperation<Instance>() {
   >(operation: {
     readonly input: Input;
     readonly output: Output;
+    readonly backendOnly?: true;
     readonly handler: Handler;
   }) => operation;
 }
@@ -210,6 +213,7 @@ type NativePluginResult<Metadata, API> = API & {
       native: {
         operations: {
           name: string;
+          backendOnly?: true;
         }[];
       };
       nativePlatforms: Readonly<
@@ -311,6 +315,7 @@ function readOperationSchemas(
   pluginName: string,
   definitions: Readonly<Record<string, NativeOperationDefinition>>,
   names: Set<string>,
+  backendOnly: Set<string>,
 ) {
   return new Map(
     Object.entries(definitions).map(([name, operation]) => {
@@ -329,6 +334,11 @@ function readOperationSchemas(
       }
       const fullName = `${pluginName}.${name}`;
       names.add(fullName);
+      if (operation.backendOnly === true) {
+        backendOnly.add(fullName);
+      } else if (operation.backendOnly !== undefined) {
+        throw new Error("backendOnly must be true when present.");
+      }
       return [
         fullName,
         {
@@ -413,6 +423,7 @@ function readLifecyclePlatform(
   target: NativePlatformDefinition,
   hasLegacyDefinitions: boolean,
   names: Set<string>,
+  backendOnly: Set<string>,
 ): PlatformParts {
   if (
     hasLegacyDefinitions ||
@@ -426,7 +437,12 @@ function readLifecyclePlatform(
   ) {
     throw new Error("Invalid native platform lifecycle.");
   }
-  const schemas = readOperationSchemas(pluginName, target.operations, names);
+  const schemas = readOperationSchemas(
+    pluginName,
+    target.operations,
+    names,
+    backendOnly,
+  );
   const handlers = new Map<string, NativeHandler>();
   for (const [name, operation] of Object.entries(target.operations)) {
     const declared: unknown = operation;
@@ -567,9 +583,15 @@ export function defineNativePlugin(
   };
   const platforms = declaredPlatforms ?? {};
   const names = new Set<string>();
+  const backendOnly = new Set<string>();
   const legacySchemas =
     legacyDefinitions &&
-    readOperationSchemas(definition.name, legacyDefinitions, names);
+    readOperationSchemas(
+      definition.name,
+      legacyDefinitions,
+      names,
+      backendOnly,
+    );
   const nativePlatforms = Object.fromEntries(
     Object.entries(platforms).map(([platform, target]) => {
       assertPlatformDeclaration(platform, target);
@@ -581,6 +603,7 @@ export function defineNativePlugin(
               target,
               !!legacyDefinitions,
               names,
+              backendOnly,
             );
       return [
         platform,
@@ -597,6 +620,11 @@ export function defineNativePlugin(
         ...names,
       ].map((name) => ({
         name,
+        ...(backendOnly.has(name)
+          ? {
+              backendOnly: true as const,
+            }
+          : {}),
       })),
     },
   };
