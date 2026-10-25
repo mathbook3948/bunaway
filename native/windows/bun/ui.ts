@@ -160,9 +160,12 @@ function removeTray(): boolean {
       message: "The tray cannot be removed while its menu is open.",
     });
   }
-  const hasWindow = [
-    ...views.values(),
-  ].some((view) => !view.lifecycle.closed);
+  // A window being recreated is still a window: its old view is closed and the new one is not registered yet.
+  const hasWindow =
+    replacements.size > 0 ||
+    [
+      ...views.values(),
+    ].some((view) => !view.lifecycle.closed);
   if (!hasWindow && config.desktop?.closeBehavior !== "keep-alive") {
     throw new BunawayError({
       code: "INVALID_ARGUMENT",

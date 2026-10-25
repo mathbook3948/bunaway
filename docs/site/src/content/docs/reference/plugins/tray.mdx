@@ -121,22 +121,20 @@ Explorer 재시작과 로그오프, Explorer가 실제로 그리는 아이콘은
 `tray.destroy(null)`은 알림 영역의 아이콘과 트레이 창을 해제합니다(Electron `Tray.destroy()`,
 Tauri `remove_tray_by_id`에 대응). 이미 없으면 그대로 `null`입니다. 제거한 뒤 `tray.get`은 `null`,
 `tray.getBounds`는 `null`이고 `setTooltip`, `setIcon`, `setVisible`, `focus`, `popUpContextMenu`,
-`displayBalloon`은 `UNSUPPORTED`입니다. 제거는 숨김처럼 앱을 종료하지 않지만, 창이 하나도 없고
+`displayBalloon`, `removeBalloon`은 `UNSUPPORTED`입니다. `waitForEvent`와 `subscribe`는 제거한 동안에도 오류 없이 대기합니다. 제거는 숨김처럼 앱을 종료하지 않지만, 창이 하나도 없고
 `keep-alive`도 아니어서 아이콘이 앱을 살려 두는 상태에서는 `INVALID_ARGUMENT`로 거부합니다.
 창이 숨겨진 상태의 복구는 `setVisible`과 마찬가지로 앱이 책임집니다.
-컨텍스트 메뉴가 열려 있거나 앱이 종료 중이면 `BUSY`입니다. 해제에 실패해 `INTERNAL`이 되면 남은 자원은 다음 `destroy`나 종료 정리에서 다시 해제합니다.
+컨텍스트 메뉴가 열려 있거나 앱이 종료 중이면 `BUSY`입니다. 해제에 실패해 `INTERNAL`이 되면 남은 자원은 다음 `destroy`나 종료 정리에서 다시 해제하며, 그 사이 트레이는 제거된 상태가 아니라 부분적으로 해제된 상태로 남습니다.
 
 `tray.create(null)`은 `desktop.tray`에 선언한 tooltip과 아이콘으로 트레이를 다시 등록하고 snapshot을 반환합니다.
 실행 중 바꾼 tooltip, 아이콘, 클릭 동작과 숨김 상태는 이어지지 않고 `menu.setTrayMenu`로 연결한 메뉴도 다시 연결해야 합니다(메뉴 플러그인의 `getTrayMenu`는 제거 뒤에도 이전 연결을 돌려줍니다).
 제거한 동안 메뉴 연결 해제(`setTrayMenu`의 `undefined`와 `null`)는 할 일이 없어 그대로 성공하고, 연결된 메뉴를 새 항목으로 연결하거나 편집하면 `UNSUPPORTED`입니다. `desktop.tray` 선언이 없는 앱의 해제는 계속 `UNSUPPORTED`입니다.
-`setTrayMenu({ menuId: null })`로 메뉴를 숨겼던 상태도 `create` 뒤에는 복원되지 않아 기본 Open/Quit 메뉴로 시작하므로 다시 지정해야 합니다.
-제거한 동안 `setTrayMenu({ menuId: null })`을 호출했다면 메뉴 플러그인은 숨김으로 기록하지만 `create`한 트레이는 기본 메뉴를 가집니다. 연결했던 메뉴의 항목을 `create` 뒤에 편집하면 그 메뉴가 트레이에 다시 적용될 수 있으므로, `create` 직후에 `setTrayMenu`를 다시 호출해 메뉴 상태를 맞추세요.
-제거한 동안 `desktop.hide()`는 오류 없이 끝나지만 창을 숨기지 않습니다.
+`setTrayMenu({ menuId: null })`로 메뉴를 숨겼던 상태도 `create` 뒤에는 복원되지 않아 기본 Open/Quit 메뉴로 시작합니다. 제거한 동안 메뉴를 해제했다면 메뉴 플러그인은 숨김으로 기록하지만 `create`한 트레이는 기본 메뉴를 가지고, 연결했던 메뉴의 항목을 `create` 뒤에 편집하면 그 메뉴가 트레이에 다시 적용될 수 있습니다. `create` 직후에 `setTrayMenu`를 다시 호출해 메뉴 상태를 맞추세요.
 `keep-alive` 앱은 트레이 창이 맡던 종료 메시지 수신 창을 제거와 함께 따로 만들어 CLI의 정상 종료 경로를 유지합니다.
 macOS의 `tray.create`는 `{ title?, tooltip? }`로 새 아이콘을 만들지만 Windows의 `tray.create`는 선언한 트레이를 다시 등록하므로 입력이 `null`입니다. 플랫폼별 코드를 나누어 호출하세요.
 이미 있으면 `INVALID_ARGUMENT`, `desktop.tray` 선언이 없으면 `UNSUPPORTED`, 종료 중이면 `BUSY`입니다.
 제거한 동안에는 트레이 입력이 없으므로 `closeBehavior: "hide"` 창을 닫으면 숨기지 않고 일반 닫기로 처리하며,
-`desktop.hide()`는 효과가 없습니다.
+`desktop.hide()`는 오류 없이 끝나지만 창을 숨기지 않습니다.
 
 ## 클릭 동작과 입력
 
