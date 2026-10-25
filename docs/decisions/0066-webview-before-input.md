@@ -4,7 +4,7 @@ status: accepted
 
 # WebView before-input 이벤트와 취소를 제공하지 않는다
 
-결정일: 2026-10-25. 검토 기준: main `ab181b62`.
+결정일: 2026-10-25. 검토 기준: main `94fa3d36`.
 
 ## 배경
 
