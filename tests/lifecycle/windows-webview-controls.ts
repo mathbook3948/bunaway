@@ -545,9 +545,11 @@ if (!process.argv.includes("--child")) {
         })) - 1.5,
       ) < 0.001,
     );
-    assert(
-      Math.abs((await windows.getWebViewState()).zoomFactor - 1.5) < 0.001,
-    );
+    const expectZoomKept = async (step: string) => {
+      const { zoomFactor } = await windows.getWebViewState();
+      assert(Math.abs(zoomFactor - 1.5) < 0.001, `Zoom lost after ${step}`);
+    };
+    await expectZoomKept("setZoomFactor");
     for (const url of [
       `${outside.url.origin}/outside.html`,
       "file:///C:/Windows/win.ini",
@@ -642,6 +644,9 @@ if (!process.argv.includes("--child")) {
       (await windows.getReadiness()).documentGeneration >
         beforeReload.documentGeneration,
     );
+    // The factor belongs to the WebView controller, so same-origin navigation,
+    // history moves and reload keep it.
+    await expectZoomKept("navigate, history and reload");
     const beforeFragment = await windows.getReadiness();
     await windows.navigateWebView({
       url: `${origin}/next.html#fragment`,
@@ -667,6 +672,7 @@ if (!process.argv.includes("--child")) {
       url: `${origin}/index.html`,
     });
     await ready("/index.html", 3);
+    await expectZoomKept("stop and renavigate");
     await windows.navigateWebView({
       url: `${origin}/redirect.html`,
     });
