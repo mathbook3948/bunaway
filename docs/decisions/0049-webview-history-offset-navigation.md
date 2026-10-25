@@ -40,8 +40,8 @@ WebView history에서 `goBack`, `goForward` 외에 offset 이동과 index 이동
 2. 여러 단계 이동이 필요한 앱은 `goBack`과 `goForward`를 반복한다. 호출은 이동을 시작했는지만 알려주며, 반환 직후의
    `getWebViewState`가 이동 결과를 반영한다고 보장하지 않는다. 이동 완료를 알리는 전용 신호는 아직 없으므로 연속 호출이 필요한
    앱은 페이지 쪽에서 확인할 수 있는 상태(예: 이동한 문서가 보내는 신호)를 기다린다.
-3. offset 이동이 필요한 앱은 페이지에서 `history.go(n)`을 직접 쓴다. 이동 범위는 Electron의 `goToOffset`과 같다. 호스트의
-   탐색 정책(origin 허용 목록)은 이 이동에도 그대로 적용된다.
+3. offset 이동이 필요한 앱은 페이지에서 `history.go(n)`을 직접 쓴다. 이동 범위는 Electron의 `goToOffset`과 같지만
+   실행 조건과 반환은 다르다(배경 참조). 이 이동은 호스트 계약에 포함하지 않는다.
 4. 이동할 항목을 앱이 고를 필요가 있는 용도가 확인되면 history 조회와 함께 별도 결정에서 다룬다. 그때 플랫폼별 경로
    (WebView2는 DevTools 프로토콜, WKWebView는 항목 목록, Android WebView는 step 이동)를 함께 정한다.
 
@@ -55,8 +55,8 @@ WebView history에서 `goBack`, `goForward` 외에 offset 이동과 index 이동
   `history.go`를 감싸면 렌더러 요청의 제한(`history.go(0)`의 reload 의미, 비활성 문서와 진행 중인 탐색에서의 무시)을 호스트
   계약으로 정리해야 한다. DevTools 프로토콜 경로(`Page.getNavigationHistory`, `Page.navigateToHistoryEntry`)로 만들면 항목
   id를 쓰는 두 번 호출과 그 사이의 history 변경을 다뤄야 한다. 어느 쪽이든 쓰임이 확인되지 않은 기능에 비해 부담이 크다.
-- 기본 `goBack`과 `goForward`는 이미 이동 가능 여부를 반환하고, 여러 단계 이동은 이 두 호출을 반복해 대신할 수 있다. 앱이
-  offset 이동을 직접 원하면 페이지에서 `history.go`를 쓰면 된다.
+- 기본 `goBack`과 `goForward`는 이동을 시작했는지를 반환하므로, 한 단계 이동은 이미 가능하다. 여러 단계 이동은 결정 2의
+  조건으로 이 두 호출을 반복해 할 수 있고, offset 이동을 직접 원하는 앱은 페이지에서 `history.go`를 쓰면 된다.
 
 ## 결과
 
