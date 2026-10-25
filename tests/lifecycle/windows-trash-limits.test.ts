@@ -1,7 +1,7 @@
 import { expect, setDefaultTimeout, test } from "bun:test";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join, parse, resolve } from "node:path";
-import { deadline, killAfter } from "../fixtures/deadlines.ts";
+import { deadline } from "../fixtures/deadlines.ts";
 import { recycledItem } from "../fixtures/windows-recycle-bin.ts";
 
 setDefaultTimeout(deadline("build"));
@@ -10,6 +10,15 @@ const EXPLORER_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion";
 const POLICY_KEY = `${EXPLORER_KEY}\\Policies\\Explorer`;
 const BIN_VOLUME_KEY = `${EXPLORER_KEY}\\Explorer\\BitBucket\\Volume`;
 const MEBIBYTE = 1024 * 1024;
+const REFUSED = [
+  "UNSUPPORTED",
+];
+// A file over the bin capacity makes the shell ask whether to delete it permanently. The adapter
+// keeps that warning (FOF_WANTNUKEWARNING), so with nobody to answer it the call is still pending.
+const REFUSED_OR_WARNING = [
+  "UNSUPPORTED",
+  "waiting",
+];
 
 type RegistryValue = {
   key: string;
@@ -92,7 +101,9 @@ function volumeGuid(path: string): string {
 
 /**
  * Run `opener.trashFile` in a new Bun process, because the shell keeps the Recycle Bin settings it
- * first read for the life of a process. Resolves to `ok` or the error code the call failed with.
+ * first read for the life of a process. Resolves to `ok`, the error code the call failed with, or
+ * `waiting` when the call was still running at the deadline, which is how a shell warning that
+ * waits for a user answer looks to a session nobody can click in. The child is killed then.
  */
 async function trashInFreshProcess(
   root: string,
@@ -111,13 +122,20 @@ async function trashInFreshProcess(
       stderr: "pipe",
     },
   );
-  const timer = killAfter(child, "childStep");
+  let waiting = false;
+  const timer = setTimeout(() => {
+    waiting = true;
+    child.kill();
+  }, deadline("childStep"));
   try {
     const [code, stdout, stderr] = await Promise.all([
       child.exited,
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
     ]);
+    if (waiting) {
+      return "waiting";
+    }
     expect(code, stderr + stdout).toBe(0);
     return stdout.trim();
   } finally {
@@ -128,11 +146,12 @@ async function trashInFreshProcess(
 /**
  * Create a file in a directory of this test, ask Windows to recycle it while `configure` has
  * changed the bin settings, and check that nothing was lost: the call fails, the file stays where
- * it was and the bin holds no copy.
+ * it was and the bin holds no copy. `accepted` lists the outcomes of the call that keep the file.
  */
 async function expectRefused(
   label: string,
   size: number,
+  accepted: string[],
   configure: (volume: string, run: () => Promise<void>) => Promise<void>,
 ): Promise<void> {
   const root = resolve("build", `windows-trash-limits-${crypto.randomUUID()}`);
@@ -146,7 +165,7 @@ async function expectRefused(
     await configure(volumeGuid(sample), async () => {
       outcome = await trashInFreshProcess(root, sample);
     });
-    expect(outcome).toBe("UNSUPPORTED");
+    expect(accepted).toContain(outcome);
     expect((await stat(sample)).size).toBe(size);
     expect(await recycledItem(sample)).toBeUndefined();
   } finally {
@@ -170,7 +189,7 @@ async function expectRefused(
 test.skipIf(process.platform !== "win32")(
   "Windows trashFile refuses and keeps the file when the policy turns the Recycle Bin off",
   async () => {
-    await expectRefused("policy-off", 16, async (_volume, run) => {
+    await expectRefused("policy-off", 16, REFUSED, async (_volume, run) => {
       await withDword(
         {
           key: POLICY_KEY,
@@ -186,7 +205,7 @@ test.skipIf(process.platform !== "win32")(
 test.skipIf(process.platform !== "win32")(
   "Windows trashFile refuses and keeps the file when the volume deletes files permanently",
   async () => {
-    await expectRefused("volume-nuke", 16, async (volume, run) => {
+    await expectRefused("volume-nuke", 16, REFUSED, async (volume, run) => {
       await withDword(
         {
           key: `${BIN_VOLUME_KEY}\\${volume}`,
@@ -202,15 +221,20 @@ test.skipIf(process.platform !== "win32")(
 test.skipIf(process.platform !== "win32")(
   "Windows trashFile refuses and keeps a file larger than the Recycle Bin capacity",
   async () => {
-    await expectRefused("over-capacity", 3 * MEBIBYTE, async (volume, run) => {
-      await withDword(
-        {
-          key: `${BIN_VOLUME_KEY}\\${volume}`,
-          name: "MaxCapacity",
-        },
-        1,
-        run,
-      );
-    });
+    await expectRefused(
+      "over-capacity",
+      3 * MEBIBYTE,
+      REFUSED_OR_WARNING,
+      async (volume, run) => {
+        await withDword(
+          {
+            key: `${BIN_VOLUME_KEY}\\${volume}`,
+            name: "MaxCapacity",
+          },
+          1,
+          run,
+        );
+      },
+    );
   },
 );

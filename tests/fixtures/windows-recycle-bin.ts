@@ -10,7 +10,17 @@ export async function recycledItem(path: string): Promise<
   | undefined
 > {
   const bin = join(parse(path).root, "$Recycle.Bin");
-  for (const directory of await readdir(bin)) {
+  let directories: string[];
+  try {
+    directories = await readdir(bin);
+  } catch (error) {
+    // A volume whose bin was never used has no `$Recycle.Bin` yet.
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  }
+  for (const directory of directories) {
     const userBin = join(bin, directory);
     let entries: string[];
     try {

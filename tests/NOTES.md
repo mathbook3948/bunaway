@@ -1196,11 +1196,11 @@ browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS,
 파일 소실, 부모 고정과 삭제 공유 중 파일 교체 거부를 검사한다. 테스트는 해당
 파일의 휴지통 항목만 정리하며 전체 휴지통을 비우지 않는다. 셸이 유지하는 COM Worker가
 다른 초기화 회귀에 영향을 주지 않도록 별도 Bun 프로세스에서 실행한다. `host:windows`에
-포함한다. `lifecycle/windows-trash-limits.test.ts`는 셸이 설정을 프로세스 단위로 유지하므로 호출마다 새 Bun
-자식 프로세스에서 현재 사용자(HKCU)의
-휴지통 정책 비활성화, 볼륨 영구 삭제 설정과 용량보다 큰 파일에서 `UNSUPPORTED`로 실패하고
-파일이 제자리에 남으며 휴지통에 사본이 없음을 확인하고 레지스트리 값을 되돌린다. 경고 UI의
-화면 표시는 검증하지 않는다.
+포함한다. `lifecycle/windows-trash-limits.test.ts`는 셸이 설정을 프로세스 단위로 유지하므로 호출마다
+새 Bun 자식 프로세스에서 현재 사용자(HKCU)의 휴지통 설정을 바꾸고 확인한다. 정책 비활성화와 볼륨 영구
+삭제 설정은 `UNSUPPORTED`로 실패해야 하고, 용량보다 큰 파일은 `UNSUPPORTED` 또는 경고 응답 대기(기한에
+자식 종료) 중 하나여야 한다. 모든 경우 파일이 제자리에 남고 휴지통에 사본이 없으며, 레지스트리 값은
+되돌린다. 경고 UI의 화면 표시는 검증하지 않는다.
 
 `api/global-shortcut.test.ts`는 전역 단축키 권한, 등록 rollback, 중지와 재개 및 이전 메시지 폐기를 검사한다.
 `api/global-shortcut-macos.test.ts`는 가짜 Carbon 드라이버로 macOS 어댑터의 키 표, 등록 충돌과 rollback,
