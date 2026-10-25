@@ -21,6 +21,8 @@ import { deadline } from "../fixtures/deadlines.ts";
 // Alt taps while the page owns keyboard focus, in a real WebView2 window: the controller's
 // accelerator event reaches WindowMenus like a frame key, so an auto-hide menu bar links after
 // an Alt tap and unlinks on the next one and on Esc, and Alt used with another key is no tap.
+// The keys are real input (SendInput) after a real click activated the window, because messages
+// posted to the browser's widget window do not raise the accelerator event.
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
 const output = resolve(root, "build/windows-menu-auto-hide");
@@ -31,16 +33,32 @@ const WM_TIMER = 0x0113;
 const WM_ENTERMENULOOP = 0x0211;
 const WM_EXITMENULOOP = 0x0212;
 const END_MENU_TIMER = 0xb171n;
-const WM_KEYDOWN = 0x0100;
-const WM_KEYUP = 0x0101;
-const WM_SYSKEYDOWN = 0x0104;
-const WM_SYSKEYUP = 0x0105;
 const VK_MENU = 0x12;
 const VK_ESCAPE = 0x1b;
 const VK_F = 0x46;
-const SCAN_MENU = 0x38;
-const SCAN_ESCAPE = 0x01;
-const SCAN_F = 0x21;
+// SendInput structures: INPUT is 40 bytes; the mouse and keyboard members start at offset 8.
+const INPUT_SIZE = 40;
+const INPUT_MOUSE = 0;
+const INPUT_KEYBOARD = 1;
+const MOUSEEVENTF_MOVE = 0x0001;
+const MOUSEEVENTF_LEFTDOWN = 0x0002;
+const MOUSEEVENTF_LEFTUP = 0x0004;
+const MOUSEEVENTF_ABSOLUTE = 0x8000;
+const KEYEVENTF_KEYUP = 0x0002;
+const ABSOLUTE_COORDINATE_RANGE = 65535;
+const SM_CXSCREEN = 0;
+const SM_CYSCREEN = 1;
+const GA_ROOT = 2;
+const CLASS_NAME_CHARS = 256;
+const HWND_TOPMOST = -1n;
+const HWND_NOTOPMOST = -2n;
+const SWP_NOSIZE = 0x0001;
+const SWP_NOMOVE = 0x0002;
+const SWP_NOACTIVATE = 0x0010;
+// Wait after moving the pointer so the browser sees a hover target before the click.
+const POINTER_SETTLE_MS = 150;
+const CLICK_ATTEMPTS = 3;
+const CLICK_ACTIVATION_TIMEOUT_MS = 4_000;
 
 const user = dlopen("user32.dll", {
   GetMenu: {
@@ -49,27 +67,75 @@ const user = dlopen("user32.dll", {
     ],
     returns: "u64",
   },
-  FindWindowExW: {
+  GetClientRect: {
     args: [
       "u64",
-      "u64",
-      "ptr",
       "ptr",
     ],
+    returns: "i32",
+  },
+  ClientToScreen: {
+    args: [
+      "u64",
+      "ptr",
+    ],
+    returns: "i32",
+  },
+  GetSystemMetrics: {
+    args: [
+      "i32",
+    ],
+    returns: "i32",
+  },
+  GetForegroundWindow: {
+    args: [],
     returns: "u64",
+  },
+  // POINT is passed by value as one 64-bit register: x in the low half, y in the high half.
+  WindowFromPoint: {
+    args: [
+      "i64",
+    ],
+    returns: "u64",
+  },
+  GetAncestor: {
+    args: [
+      "u64",
+      "u32",
+    ],
+    returns: "u64",
+  },
+  GetClassNameW: {
+    args: [
+      "u64",
+      "ptr",
+      "i32",
+    ],
+    returns: "i32",
+  },
+  SetWindowPos: {
+    args: [
+      "u64",
+      "i64",
+      "i32",
+      "i32",
+      "i32",
+      "i32",
+      "u32",
+    ],
+    returns: "i32",
+  },
+  SendInput: {
+    args: [
+      "u32",
+      "ptr",
+      "i32",
+    ],
+    returns: "u32",
   },
   ...pick(USER32, "SetTimer", "KillTimer"),
   EndMenu: {
     args: [],
-    returns: "i32",
-  },
-  PostMessageW: {
-    args: [
-      "u64",
-      "u32",
-      "u64",
-      "u64",
-    ],
     returns: "i32",
   },
 });
@@ -124,22 +190,134 @@ async function pumpUntil(done: () => boolean, what: string): Promise<void> {
   }
 }
 
-/** Depth-first search for the first descendant window of the given class. */
-function findDescendant(parent: bigint, className: string): bigint {
-  const name = ptr(Buffer.from(`${className}\0`, "utf16le"));
-  const direct = user.symbols.FindWindowExW(parent, 0n, name, null);
-  if (direct) {
-    return direct;
-  }
-  let child = user.symbols.FindWindowExW(parent, 0n, null, null);
-  while (child) {
-    const found = findDescendant(child, className);
-    if (found) {
-      return found;
+/** Class name of a window, for diagnostics. */
+function className(window: bigint): string {
+  const name = Buffer.alloc(CLASS_NAME_CHARS * 2);
+  const length = user.symbols.GetClassNameW(
+    window,
+    ptr(name),
+    CLASS_NAME_CHARS,
+  );
+  return name.toString("utf16le", 0, length * 2);
+}
+
+/** Send absolute mouse events at a physical screen point. */
+function sendMouse(screenX: number, screenY: number, flags: number[]): void {
+  const width = user.symbols.GetSystemMetrics(SM_CXSCREEN);
+  const height = user.symbols.GetSystemMetrics(SM_CYSCREEN);
+  const events = Buffer.alloc(INPUT_SIZE * flags.length);
+  flags.forEach((flag, index) => {
+    const base = INPUT_SIZE * index;
+    events.writeUInt32LE(INPUT_MOUSE, base);
+    events.writeInt32LE(
+      Math.round((screenX * ABSOLUTE_COORDINATE_RANGE) / (width - 1)),
+      base + 8,
+    );
+    events.writeInt32LE(
+      Math.round((screenY * ABSOLUTE_COORDINATE_RANGE) / (height - 1)),
+      base + 12,
+    );
+    events.writeUInt32LE(flag, base + 20);
+  });
+  assert.equal(
+    user.symbols.SendInput(flags.length, ptr(events), INPUT_SIZE),
+    flags.length,
+  );
+}
+
+/** Press or release one virtual key as real keyboard input. */
+function sendKey(virtualKey: number, up: boolean): void {
+  const event = Buffer.alloc(INPUT_SIZE);
+  event.writeUInt32LE(INPUT_KEYBOARD, 0);
+  event.writeUInt16LE(virtualKey, 8);
+  event.writeUInt32LE(up ? KEYEVENTF_KEYUP : 0, 12);
+  assert.equal(user.symbols.SendInput(1, ptr(event), INPUT_SIZE), 1);
+}
+
+/** Move the test window above other windows, or back, without activating it. */
+function setTopmost(window: bigint, topmost: boolean): void {
+  assert(
+    user.symbols.SetWindowPos(
+      window,
+      topmost ? HWND_TOPMOST : HWND_NOTOPMOST,
+      0,
+      0,
+      0,
+      0,
+      SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE,
+    ) !== 0,
+    "SetWindowPos failed",
+  );
+}
+
+/** Top-level window under a screen point. */
+function rootAtPoint(
+  x: number,
+  y: number,
+): {
+  hit: bigint;
+  root: bigint;
+} {
+  const point = (BigInt(y) << 32n) | (BigInt(x) & 0xffff_ffffn);
+  const hit = user.symbols.WindowFromPoint(BigInt.asIntN(64, point));
+  return {
+    hit,
+    root: hit === 0n ? 0n : user.symbols.GetAncestor(hit, GA_ROOT),
+  };
+}
+
+/**
+ * Click the middle of the window's client area, which is the WebView, until the window is the
+ * foreground window. A real click is always accepted by the foreground lock and gives the page
+ * keyboard focus, as a user's click would.
+ */
+async function activateByClick(window: bigint): Promise<void> {
+  const clientRect = new Int32Array(4);
+  assert(user.symbols.GetClientRect(window, ptr(clientRect)));
+  const [, , clientWidth = 0, clientHeight = 0] = clientRect;
+  const center = new Int32Array([
+    Math.floor(clientWidth / 2),
+    Math.floor(clientHeight / 2),
+  ]);
+  assert(user.symbols.ClientToScreen(window, ptr(center)));
+  const [screenX = 0, screenY = 0] = center;
+  setTopmost(window, true);
+  try {
+    for (let attempt = 1; attempt <= CLICK_ATTEMPTS; attempt++) {
+      sendMouse(screenX, screenY, [
+        MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE,
+      ]);
+      await Bun.sleep(POINTER_SETTLE_MS);
+      const under = rootAtPoint(screenX, screenY);
+      console.log(
+        `Input diagnostics: ${JSON.stringify({
+          attempt,
+          underClass: className(under.hit),
+          underIsTarget: under.root === window,
+          foregroundIsTarget: user.symbols.GetForegroundWindow() === window,
+        })}`,
+      );
+      assert.equal(under.root, window, "Another window covers the click point");
+      sendMouse(screenX, screenY, [
+        MOUSEEVENTF_LEFTDOWN,
+        MOUSEEVENTF_LEFTUP,
+      ]);
+      const limit = Date.now() + CLICK_ACTIVATION_TIMEOUT_MS;
+      while (
+        user.symbols.GetForegroundWindow() !== window &&
+        Date.now() < limit
+      ) {
+        windows.pump();
+        await Bun.sleep(10);
+      }
+      if (user.symbols.GetForegroundWindow() === window) {
+        return;
+      }
     }
-    child = user.symbols.FindWindowExW(parent, child, null, null);
+    assert.fail("A click never made the test window the foreground window");
+  } finally {
+    setTopmost(window, false);
   }
-  return 0n;
 }
 
 try {
@@ -273,30 +451,31 @@ try {
   // Turning auto-hide on does not hide the bar by itself.
   menus.setAutoHide("main", true);
   assert.equal(user.symbols.GetMenu(hwnd), tree);
-  page.moveFocusToContent();
 
-  // Post the keys to the page's own window, as Windows delivers them while the page has focus.
-  const target = findDescendant(hwnd, "Chrome_RenderWidgetHostHWND");
-  assert(target, "The WebView render widget window was not found");
-  const post = (message: number, virtualKey: number, scan: number) => {
-    const up = message === WM_KEYUP || message === WM_SYSKEYUP;
-    const system = message === WM_SYSKEYDOWN || message === WM_SYSKEYUP;
-    const lparam =
-      1 | (scan << 16) | (system ? 1 << 29 : 0) | (up ? 0xc0000000 : 0);
-    assert(
-      user.symbols.PostMessageW(
-        target,
-        message,
-        BigInt(virtualKey),
-        BigInt(lparam >>> 0),
-      ),
-      "PostMessageW failed",
-    );
-  };
+  // Real input needs the window in the foreground with the page focused.
+  step("activate");
+  await activateByClick(hwnd);
   const tap = () => {
-    post(WM_SYSKEYDOWN, VK_MENU, SCAN_MENU);
-    post(WM_SYSKEYUP, VK_MENU, SCAN_MENU);
+    sendKey(VK_MENU, false);
+    sendKey(VK_MENU, true);
   };
+  const press = (virtualKey: number) => {
+    sendKey(virtualKey, false);
+    sendKey(virtualKey, true);
+  };
+  // A plain key must raise the controller's accelerator event, or the Alt checks below cannot work.
+  step("accelerator probe");
+  press(VK_F);
+  await pumpUntil(
+    () => accelerators.length > 0,
+    "Controller accelerator event for a real key",
+  );
+  windows.pump();
+  assert.equal(
+    user.symbols.GetMenu(hwnd),
+    tree,
+    "A plain key must not toggle the bar",
+  );
 
   const linked = (expected: bigint) => () =>
     user.symbols.GetMenu(hwnd) === expected;
@@ -312,10 +491,10 @@ try {
   // Alt used with another key is not a tap.
   step("Alt+F");
   const seen = accelerators.length;
-  post(WM_SYSKEYDOWN, VK_MENU, SCAN_MENU);
-  post(WM_SYSKEYDOWN, VK_F, SCAN_F);
-  post(WM_SYSKEYUP, VK_F, SCAN_F);
-  post(WM_SYSKEYUP, VK_MENU, SCAN_MENU);
+  sendKey(VK_MENU, false);
+  sendKey(VK_F, false);
+  sendKey(VK_F, true);
+  sendKey(VK_MENU, true);
   // The sequence has arrived once its accelerator events are recorded; the bar must still be
   // linked after the deferred dispatch has run.
   await pumpUntil(
@@ -335,7 +514,7 @@ try {
   tap();
   await pumpUntil(linked(tree), "Alt tap shows again");
   step("Esc");
-  post(WM_KEYDOWN, VK_ESCAPE, SCAN_ESCAPE);
+  press(VK_ESCAPE);
   await pumpUntil(linked(0n), "Esc hides");
   verified = true;
 } finally {
@@ -368,5 +547,5 @@ try {
 clearTimeout(watchdog);
 assert(verified);
 console.log(
-  "PASS an auto-hide window menu bar follows Alt taps and Esc delivered to the WebView2 page",
+  "PASS an auto-hide window menu bar follows Alt taps and Esc typed into the WebView2 page",
 );
