@@ -1002,8 +1002,9 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 
 자동 업데이트 구현은 배포 책임자의 신뢰 및 릴리스 정책 결정 전까지 보류한다.
 신뢰할 서명 키와 루트, 키 교체와 폐기, 메타데이터 서명 및 endpoint 허용 목록,
-버전 선택과 downgrade, 부분 실패와 rollback 규칙, Store 업데이트와 자체 updater의
-채널 구분, 설치와 종료 승인 및 relaunch 계약을 먼저 정해야 한다.
+버전 선택, 설치와 종료 승인 및 relaunch 계약을 먼저 정해야 한다. downgrade, 부분 실패와 rollback 규칙은
+[ADR 0054](decisions/0054-updater-downgrade-rollback-and-store-channels.md)에서 정했고, Store 업데이트와 자체 updater의
+채널 구분은 `win-store-unpackaged`만 남았다.
 PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는다. 아래 관련 항목은 미완료이며
 프로덕션 키나 외부 업데이트 호스팅을 구성하지 않는다.
 
@@ -1039,8 +1040,11 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
   서명한 exe, 서명 없는 파일, 변조한 파일과 신뢰되지 않는 인증서를 실제 `WinVerifyTrust`로 검증한다.
   서명한 MSI는 실제 서명으로 시험하지 못했다. macOS 서명 검증과 앱 전용 서명 키(minisign 방식)도 남는다.
 - [ ] 설치, 종료 승인과 relaunch를 연결한다.
-- [ ] downgrade, partial failure와 rollback의 지원 범위를 결정한다.
-- [ ] Store 업데이트와 자체 updater의 사용 조건을 구분한다.
+- [x] downgrade, partial failure와 rollback의 지원 범위를 결정한다. 결정 완료: downgrade와 프레임워크의 롤백은 제공하지 않고
+  설치 중 복구는 설치 프로그램에 맡긴다. [ADR 0054](decisions/0054-updater-downgrade-rollback-and-store-channels.md)를 따른다.
+- [ ] Store 업데이트와 자체 updater의 사용 조건을 구분한다. MSIX 설치는 `UNSUPPORTED`(`managedByStore`)로 결정했고
+  구현은 `win-store-msix` 패키지 생성과 함께 한다. `win-store-unpackaged`는 Store 정책 확인 뒤 정한다.
+  [ADR 0054](decisions/0054-updater-downgrade-rollback-and-store-channels.md)를 따른다.
 - [ ] framework와 공식 기능 패키지의 공개 배포, 라이선스와 릴리스 자동화를 완료한다.
 - [ ] 설치된 프레임워크 업그레이드와 설정 변경의 migration 도구를 제공한다.
 
