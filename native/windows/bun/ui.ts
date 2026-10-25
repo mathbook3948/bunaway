@@ -4,6 +4,7 @@ import type { ShutdownReason } from "@bunaway/core";
 import { COINIT_APARTMENTTHREADED, checkHresult } from "@bunaway/plugin/win32";
 import type {
   NativeTrayOwner,
+  WindowAudioChangeEvent,
   WindowLifecycleEvent,
   WindowProcessFailureEvent,
   WindowReadiness,
@@ -405,6 +406,7 @@ type ViewState = {
 };
 const views = new Map<string, ViewState>();
 const lifecycleListeners = new Set<(event: WindowLifecycleEvent) => void>();
+const audioChangeListeners = new Set<(event: WindowAudioChangeEvent) => void>();
 const processFailureListeners = new Set<
   (event: WindowProcessFailureEvent) => void
 >();
@@ -643,7 +645,8 @@ function isBackendOpenOperation(
   return (
     context === config.backendContext &&
     (operation === "windows.waitForLifecycle" ||
-      operation === "windows.waitForProcessFailure")
+      operation === "windows.waitForProcessFailure" ||
+      operation === "windows.waitForAudioChange")
   );
 }
 /** An invalid call, a stopping host or a missing permission all deny the request. */
@@ -1298,6 +1301,12 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         lifecycleListeners.delete(listener);
       };
     },
+    onAudioChange(listener) {
+      audioChangeListeners.add(listener);
+      return () => {
+        audioChangeListeners.delete(listener);
+      };
+    },
     onProcessFailure(listener) {
       processFailureListeners.add(listener);
       return () => {
@@ -1861,6 +1870,25 @@ function createWindow(
               viewId,
               kind: processFailureKind(kind),
               recovery,
+            });
+          }
+        },
+        audioChanged: (state) => {
+          if (
+            stopping() ||
+            shutdownCommitted() ||
+            views.get(instanceKey)?.native !== native
+          ) {
+            return;
+          }
+          const { windowId, viewId } = readiness.snapshot();
+          for (const listener of [
+            ...audioChangeListeners,
+          ]) {
+            listener({
+              windowId,
+              viewId,
+              ...state,
             });
           }
         },

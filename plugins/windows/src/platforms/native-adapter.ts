@@ -4,6 +4,7 @@ import { BunawayError, type JsonValue } from "@bunaway/protocol";
 import { validateWindowCall, type WindowCall } from "#windows/contract";
 import { WindowOperations } from "#windows/platforms/coordinator";
 import {
+  AudioChangeFeed,
   LifecycleFeed,
   ProcessFailureFeed,
 } from "#windows/platforms/lifecycle-feed";
@@ -135,6 +136,12 @@ function assertCallerAllowed(
     }
     return;
   }
+  if (call.operation === "windows.waitForAudioChange") {
+    if (source !== "backend") {
+      throw denied("WebView audio subscription requires the backend.");
+    }
+    return;
+  }
   if (call.operation === "windows.waitForProcessFailure") {
     if (source !== "backend") {
       throw denied(
@@ -171,6 +178,9 @@ export function createOperations(
     apply: (call, viewId) => applyWindowCall(scope, call, viewId),
   });
   const lifecycle = new LifecycleFeed(services.onLifecycle?.bind(services));
+  const audioChanges = new AudioChangeFeed(
+    services.onAudioChange?.bind(services),
+  );
   const processFailures = new ProcessFailureFeed(
     services.onProcessFailure?.bind(services),
   );
@@ -217,6 +227,11 @@ export function createOperations(
           ...(await lifecycle.wait(call.payload.after, context.signal)),
         };
       }
+      if (call.operation === "windows.waitForAudioChange") {
+        return {
+          ...(await audioChanges.wait(call.payload.after, context.signal)),
+        };
+      }
       if (call.operation === "windows.waitForProcessFailure") {
         return {
           ...(await processFailures.wait(call.payload.after, context.signal)),
@@ -230,6 +245,7 @@ export function createOperations(
     busy: () => operations.replacing.size !== 0,
     dispose() {
       lifecycle.dispose();
+      audioChanges.dispose();
       processFailures.dispose();
     },
   };

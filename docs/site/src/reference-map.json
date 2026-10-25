@@ -1004,6 +1004,7 @@
           "now",
           "tick",
           "onLifecycle",
+          "onAudioChange",
           "onProcessFailure",
           "creationSettled",
           "monitors"
@@ -1758,6 +1759,7 @@
       "windows.getReadiness",
       "windows.isOpen",
       "windows.waitForLifecycle",
+      "windows.waitForAudioChange",
       "windows.waitForProcessFailure",
       "windows.getMonitors",
       "windows.getMonitorSnapshot",

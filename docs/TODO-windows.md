@@ -698,7 +698,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] WebView의 File 객체와 OS 파일 경로를 안전하게 연결한다.
 - [ ] 파일을 앱 밖으로 드래그하고 표시할 drag 이미지를 제공한다.
 - [x] `setWebViewAudioMuted`로 음소거를 변경하고 `getWebViewAudioState`로 음소거와 문서의 audio 재생 상태를 조회한다. 두 상태는 독립이며 탐색은 음소거를 유지한다.
-- [ ] audio muted와 재생 상태의 변경 이벤트를 제공한다. 실제 장치의 출력과 재생 중 음소거는 수동 검증이 필요하다.
+- [x] audio muted와 재생 상태의 변경 이벤트를 제공한다. 백엔드 `windows.waitForAudioChange`가 WebView2 `IsMutedChanged`와 `IsDocumentPlayingAudioChanged` 뒤의 `{ muted, playing }`을 순서대로 전달한다. 실제 장치의 출력과 재생 중 음소거는 CI에서 검증하지 않는다.
 - [x] 결정 완료: caret browsing 활성화, selection 가운데 표시와 image-at-point 복사 API는 제공하지 않고 렌더러의 웹 표준 API를 쓴다. [ADR 0069](./decisions/0069-webview-caret-browsing-and-image-copy.md).
 - [ ] media 시작과 중단, HTML theme-color와 링크 hover URL 이벤트를 제공한다.
 

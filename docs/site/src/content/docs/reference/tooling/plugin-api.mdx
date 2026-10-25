@@ -53,6 +53,8 @@ const allowed = PLATFORMS.some((name) => name === platform);
 선택적 `onLifecycle(listener)`는 호스트가 문서에 발행하는 창 수명 phase를 발행 순서대로 관찰하고
 종료가 시작된 뒤에는 호출하지 않습니다. 반환한 함수로 리스너를 제거하며, 호스트가 phase를 발행하지 않으면 없습니다.
 창 플러그인은 이 서비스로 백엔드의 `windows.waitForLifecycle`을 제공합니다.
+선택적 `onAudioChange(listener)`는 같은 방식으로 WebView의 음소거 설정과 재생 상태 변경(`{ windowId, viewId, muted, playing }`)을
+관찰하며 `windows.waitForAudioChange`가 사용합니다.
 선택적 `onProcessFailure(listener)`는 같은 방식으로 호스트가 처리한 WebView 프로세스 실패(`{ windowId, viewId, kind, recovery }`)를
 관찰하며 `windows.waitForProcessFailure`가 사용합니다.
 `create(spec, replacingLiveWindow)`의 선택적 두 번째 인자는 살아 있던 창의 재생성인지

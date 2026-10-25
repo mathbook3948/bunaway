@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { checkHresult } from "@bunaway/plugin/win32";
 import { checkCallbacks, disposeCom } from "#native/windows/bun/com";
 import { WebView } from "#native/windows/bun/webview";
 import { Windows } from "#native/windows/bun/win32";
 import { disposeWin32Bindings, ole } from "#native/windows/bun/win32-bindings";
-import { checkHresult } from "@bunaway/plugin/win32";
+import { waitFor } from "../fixtures/deadlines.ts";
 
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
@@ -23,6 +24,10 @@ const windows = new Windows(() => {});
 let hwnd = 0n;
 let webview: WebView | undefined;
 let documents = 0;
+const audioEvents: {
+  muted: boolean;
+  playing: boolean;
+}[] = [];
 let browserVersion = "";
 let verified = false;
 try {
@@ -57,6 +62,9 @@ try {
       ready() {
         webview?.navigate();
       },
+      audioChanged(state) {
+        audioEvents.push(state);
+      },
       documentComplete(error) {
         assert.equal(error, null);
         documents++;
@@ -86,19 +94,38 @@ try {
       await Bun.sleep(5);
     }
   };
+  /** Wait for an event after the first `after` ones that reports `muted`; playback events are not compared. */
+  const waitForMuted = (muted: boolean, after: number) =>
+    waitFor(
+      () => {
+        windows.pump();
+        checkCallbacks();
+        return audioEvents.slice(after).some((state) => state.muted === muted);
+      },
+      {
+        deadline: "childStep",
+        what: `an audio change event with muted ${muted}`,
+        intervalMs: 5,
+      },
+    );
   await waitForDocument(1);
   assert.deepEqual(webview.getAudioState(), {
     muted: false,
     playing: false,
   });
+  const beforeMute = audioEvents.length;
   webview.setAudioMuted(true);
   webview.setAudioMuted(true);
   assert.deepEqual(webview.getAudioState(), {
     muted: true,
     playing: false,
   });
+  await waitForMuted(true, beforeMute);
+  const afterMute = audioEvents.length;
+  // Setting the same value again and navigating keep the mute, so no event reports it lifted.
   webview.navigate();
   await waitForDocument(2);
+  assert(audioEvents.slice(beforeMute).every((state) => state.muted));
   assert.deepEqual(webview.getAudioState(), {
     muted: true,
     playing: false,
@@ -108,6 +135,7 @@ try {
     muted: false,
     playing: false,
   });
+  await waitForMuted(false, afterMute);
   verified = true;
 } finally {
   if (webview) {
@@ -151,6 +179,7 @@ await writeFile(
       pass: true,
       browserVersion,
       mutedPersistedAcrossNavigation: true,
+      audioChangeEvents: audioEvents.length,
       nativeCleanup: true,
       hardwarePlaybackVerified: false,
     },

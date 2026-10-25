@@ -125,7 +125,21 @@ const { muted, playing } = await windows.getWebViewAudioState();
 음소거는 해당 WebView controller의 설정으로, 문서 탐색은 유지하고 창 재생성은 초기화합니다.
 닫힌 창은 `INVALID_ARGUMENT`, 생성 중인 WebView는 `BUSY`, 서비스가 없는 플랫폼은
 `UNSUPPORTED`입니다. 네이티브 읽기와 쓰기 실패는 `INTERNAL`입니다.
-상태 변경 이벤트와 실제 audio 장치의 재생 검증은 아직 제공하지 않습니다.
+변경 이벤트는 백엔드의 `windows.waitForAudioChange`가 제공합니다([WebView audio 변경](#webview-audio-변경-windows)).
+실제 audio 장치의 재생 검증은 아직 제공하지 않습니다.
+
+### WebView audio 변경 (Windows)
+
+백엔드는 `windows.waitForAudioChange({ after? })`로 WebView2 `ICoreWebView2_8`의 `IsMutedChanged`와
+`IsDocumentPlayingAudioChanged`를 관찰합니다. 결과는 `{ sequence, windowId, viewId, muted, playing }`이며
+`muted`와 `playing`은 변경 뒤의 상태입니다. 두 이벤트가 연달아 와도 직전에 전달한 상태와 같은 값은 다시 전달하지 않습니다.
+새 WebView의 기준은 `{ muted: false, playing: false }`이라 첫 알림은 그 상태에서 달라질 때 도착합니다.
+
+- `waitForLifecycle`과 같은 규칙으로 `sequence`를 이어 전달하면 보존된 이력(최근 32개)을 따라가고, 동시에 16개 호출을
+  대기시키며 넘으면 `BUSY`입니다. 앱 종료나 세션 종료가 시작된 뒤에는 발행하지 않습니다.
+- 백엔드 전용이며 권한 검사가 없습니다. 문서에는 전달하지 않습니다.
+- `playing`은 WebView2가 보고한 문서의 재생 상태이며 물리 장치의 출력 여부가 아닙니다.
+- macOS는 지원하지 않습니다.
 
 ## WebView 렌더링 옵션
 
@@ -432,6 +446,7 @@ await windows.close();
 | `windows.getSnapshot` | 인자 없음. Host operation 입력은 `null` | `Promise<WindowSnapshot>`. 현재 창 식별자, 관찰 revision, 표시 상태와 물리 outer bounds를 한 번에 조회. macOS는 `UNSUPPORTED` |
 | `windows.isOpen` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 창이 열려 있으면 `true`. 창을 만들지 않으며 닫힌 창에도 성공 |
 | `windows.waitForLifecycle` | `{ after? }`. 백엔드 전용이며 권한 검사 없음 | `Promise<{ sequence, windowId, viewId, phase }>`. 다음 수명 phase를 기다리고, `after`에 이전 결과의 `sequence`를 주면 그 뒤 첫 phase를 반환. 종료 시작 뒤에는 발행하지 않음 |
+| `windows.waitForAudioChange` | `{ after? }`. 백엔드 전용이며 권한 검사 없음. Windows만 지원 | `Promise<{ sequence, windowId, viewId, muted, playing }>`. WebView의 음소거 설정이나 재생 상태가 바뀐 다음 상태를 기다리고, `after`에 이전 결과의 `sequence`를 주면 그 뒤 첫 변경을 반환. [WebView audio 변경](#webview-audio-변경-windows) 참고 |
 | `windows.waitForProcessFailure` | `{ after? }`. 백엔드 전용이며 권한 검사 없음. Windows만 지원 | `Promise<{ sequence, windowId, viewId, kind, recovery }>`. 호스트가 처리한 다음 WebView 프로세스 실패를 기다리고, `after`에 이전 결과의 `sequence`를 주면 그 뒤 첫 실패를 반환. [WebView 프로세스 실패](#webview-프로세스-실패-windows) 참고 |
 | `windows.getReadiness` | 인자 없음. Host operation 입력은 `null` | `Promise<WindowReadiness>`. 현재 준비 상태와 실패, 취소 결과. 닫은 창의 마지막 결과도 조회 |
 | `windows.destroy` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 신뢰된 백엔드가 확인과 종료 취소를 우회해 창의 종료를 확정. 창이 없으면 `true` |

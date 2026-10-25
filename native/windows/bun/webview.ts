@@ -13,6 +13,7 @@ import type {
   NativeMenuEditRole,
 } from "@bunaway/plugin-api/native";
 import { BunawayError, type WireError } from "@bunaway/protocol";
+import { AudioChanges, type AudioState } from "./audio-events.ts";
 import type { WindowSpec } from "./channel.ts";
 import { readClipboardText } from "./clipboard-text.ts";
 import {
@@ -101,6 +102,28 @@ type EnvironmentGroup = {
 };
 const environments = new Map<string, EnvironmentGroup>();
 
+/** Read mute and playback through an acquired ICoreWebView2_8 (get_IsMuted 83, get_IsDocumentPlayingAudio 87). */
+function readAudioState(audio: Pointer): AudioState {
+  const muted = new Int32Array(1);
+  const playing = new Int32Array(1);
+  checkHresult(
+    method(audio, 83, [
+      "ptr",
+    ])(ptr(muted)),
+    "get_IsMuted",
+  );
+  checkHresult(
+    method(audio, 87, [
+      "ptr",
+    ])(ptr(playing)),
+    "get_IsDocumentPlayingAudio",
+  );
+  return {
+    muted: muted[0] !== 0,
+    playing: playing[0] !== 0,
+  };
+}
+
 /** The failure text reported for an edit role whose DevTools call did not start. */
 function describeDevToolsFailure(error: unknown): string {
   if (error instanceof DevToolsStartError) {
@@ -127,6 +150,8 @@ export class WebView {
     token: bigint;
     callback: ComHandler;
   }[] = [];
+  /** ICoreWebView2_8 held for the audio change events until they are removed; undefined without it. */
+  private audioEvents: Pointer | undefined;
   private readonly completions: ComHandler[] = [];
   /** In-flight editing-command completions; released ones are pruned on the next command. */
   private readonly editCalls = new EditCommandCalls<ComHandler>({
@@ -208,6 +233,8 @@ export class WebView {
       titleChanged?(title: string): void;
       /** Optional: only the window host reports process failures to the backend. */
       processFailed?(kind: number, recovery: "reload" | "close"): void;
+      /** Optional: only the window host reports audio changes to the backend. */
+      audioChanged?(state: AudioState): void;
       close(force?: boolean): void;
       ready(): void;
       documentComplete(error: WireError | null): void;
@@ -468,6 +495,35 @@ export class WebView {
       token: token[0] ?? 0n,
       callback,
     });
+  }
+
+  /**
+   * Report mute and playback changes to the host. A runtime without ICoreWebView2_8 publishes none.
+   * ICoreWebView2_8 orders add_IsMutedChanged (81), remove (82), get_IsMuted (83), put_IsMuted (84),
+   * add_IsDocumentPlayingAudioChanged (85), remove (86), get_IsDocumentPlayingAudio (87).
+   */
+  private subscribeAudio() {
+    if (!this.hooks.audioChanged || !this.webview) {
+      return;
+    }
+    const audio = query(
+      this.webview,
+      "e9632730-6e1e-43ab-b7b8-7b2c9e62e094",
+      true,
+    );
+    if (!audio) {
+      this.hooks.log("webview-audio-events-unavailable");
+      return;
+    }
+    this.audioEvents = audio;
+    // The handlers read through the interface held until detach, so no event acquires another one.
+    const changes = new AudioChanges(
+      () => readAudioState(audio),
+      (state) => this.hooks.audioChanged?.(state),
+    );
+    const notify = () => changes.check();
+    this.on(81, "57d90347-cd0e-4952-a4a2-7483a2756f08", notify, audio);
+    this.on(85, "5def109a-2f4b-49fa-b7f6-11c39e513328", notify, audio);
   }
 
   /** Apply browser settings and origin/resource policy before the view is shown. */
@@ -811,6 +867,7 @@ export class WebView {
         }, 0);
       }
     });
+    this.subscribeAudio();
     this.on(55, "ab00b74c-15f1-4646-80e8-e76341d25d71", (args) => {
       const request = getObject(args, 3);
       let uri: string;
@@ -1339,24 +1396,7 @@ export class WebView {
   getAudioState() {
     const audio = this.audioInterface();
     try {
-      const muted = new Int32Array(1);
-      const playing = new Int32Array(1);
-      checkHresult(
-        method(audio, 83, [
-          "ptr",
-        ])(ptr(muted)),
-        "get_IsMuted",
-      );
-      checkHresult(
-        method(audio, 87, [
-          "ptr",
-        ])(ptr(playing)),
-        "get_IsDocumentPlayingAudio",
-      );
-      return {
-        muted: muted[0] !== 0,
-        playing: playing[0] !== 0,
-      };
+      return readAudioState(audio);
     } finally {
       release(audio);
     }
@@ -1618,13 +1658,20 @@ export class WebView {
     // Capture process handles before controller closure to track WebView2 children.
     this.captureProcessHandles();
     if (this.webview) {
-      for (const { target, slot, token } of this.events) {
-        checkHresult(
-          method(target, slot, [
-            "i64",
-          ])(token),
-          "remove event",
-        );
+      try {
+        for (const { target, slot, token } of this.events) {
+          checkHresult(
+            method(target, slot, [
+              "i64",
+            ])(token),
+            "remove event",
+          );
+        }
+      } finally {
+        if (this.audioEvents) {
+          release(this.audioEvents);
+          this.audioEvents = undefined;
+        }
       }
     }
     if (this.controller) {

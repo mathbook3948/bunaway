@@ -1194,6 +1194,25 @@ export const windowOperations = {
       ]),
     }),
   },
+  /**
+   * Waits for the next change of a WebView's mute setting or playback state (Windows only), or
+   * returns the first retained change after `after` (a `sequence` from an earlier result), like
+   * `windows.waitForLifecycle`. The result is the state after the change: `muted` is the controller's
+   * mute setting and `playing` whether the document is playing audio. Backend only and without a
+   * permission check. Changes are not sent once shutdown starts.
+   */
+  "windows.waitForAudioChange": {
+    input: z.strictObject({
+      after: z.int().min(0).max(Number.MAX_SAFE_INTEGER).exactOptional(),
+    }),
+    output: z.strictObject({
+      sequence: z.int().min(1).max(Number.MAX_SAFE_INTEGER),
+      windowId: windowIdentifier,
+      viewId: windowIdentifier,
+      muted: z.boolean(),
+      playing: z.boolean(),
+    }),
+  },
   "windows.create": creationResult,
   "windows.recreate": creationResult,
   "windows.show": windowResult,
