@@ -12,8 +12,8 @@ Compression Dictionary Transport(응답의 `Use-As-Dictionary` 헤더로 이전 
 `Available-Dictionary`와 `Accept-Encoding: dcb, dcz`로 Brotli 또는 Zstandard 차분 압축을 받는 기능)가 저장한 dictionary를
 조회하거나 지우는 API를 제공할지 정해야 했다.
 
-아래 외부 동작은 Electron v45.0.0, Tauri 2.12.5(wry 0.57.1), WebView2 SDK 1.0.4314.35와 Chromium 소스를 확인한 것이며
-이 저장소의 테스트로 검증한 것은 아니다.
+아래 외부 동작은 Electron v45.0.0, Tauri 2.12.5(wry 0.57.1), WebView2 SDK 1.0.4314.35와 Chromium을 공식 문서와 해당 태그의
+소스로 확인한 것이며 이 저장소의 테스트로 검증한 것은 아니다.
 
 - Electron의 `Session`은 `getSharedDictionaryUsageInfo()`(격리 키별 사용량), `getSharedDictionaryInfo({ frameOrigin, topFrameSite })`
   (항목 조회), `clearSharedDictionaryCache()`(전체 삭제), `clearSharedDictionaryCacheForIsolationKey({ frameOrigin, topFrameSite })`
@@ -33,7 +33,8 @@ Compression Dictionary Transport(응답의 `Use-As-Dictionary` 헤더로 이전 
 ## 결정
 
 1. shared dictionary와 압축 dictionary cache의 조회, 삭제, 사용량 확인 API를 추가하지 않는다.
-2. Compression Dictionary Transport의 켜기와 끄기 설정도 추가하지 않는다. WebView2 런타임 기본값을 따른다.
+2. Compression Dictionary Transport의 켜기와 끄기 설정도 추가하지 않는다. WebView2 런타임 기본값을 따른다. 이 기본값이
+   켜짐인지는 문서로 확인되지 않았고, 결정은 켜짐과 꺼짐 어느 쪽이든 같다.
 3. 이 기능이 필요한 구체적 사용처가 확인되면 별도 결정에서 다룬다. 그때 browsing data 삭제 계열 API의 설계와 함께 정한다.
 
 ## 근거
@@ -44,11 +45,11 @@ Compression Dictionary Transport(응답의 `Use-As-Dictionary` 헤더로 이전 
   삭제에 기대야 하는데, 그 삭제가 dictionary를 지우는지 공개 문서로 확인되지 않고 cache나 cookies까지 함께 지우게 된다.
   Electron의 격리 키별 조회와 삭제는 WebView2로 구현할 수 없다.
 - Electron은 제공하고 Tauri는 제공하지 않아 둘이 다르다. Electron 방식은 WebView2 API 밖이라 그대로 따를 수 없고, 코어는
-  작게 두고 사용처가 확인되면 browsing data 삭제 계열과 함께 정하는 편이 맞다. 이 결정은 Windows에서 가능한 범위로는 Tauri와
-  같다.
-- 켜기와 끄기 설정은 브라우저 인자(`--disable-features=CompressionDictionaryTransport`)가 필요하다. 이 인자는 같은 사용자
-  데이터 폴더의 브라우저 프로세스 전체에 적용되고 환경 생성 때만 넘길 수 있어 앱 설정과 묶이므로
-  ([ADR 0065](./0065-webview-content-settings.md)와 같은 이유) 제공하지 않는다.
+  작게 두고 사용처가 확인되면 browsing data 삭제 계열과 함께 정하는 편이 맞다. 이 결정은 dictionary 전용 API를 두지 않는다는
+  점에서 Tauri와 같다. Tauri의 전체 삭제 `clear_all_browsing_data()`에 해당하는 일반 삭제 API는 이 결정의 범위가 아니다.
+- 켜기와 끄기 설정은 브라우저 인자(`--disable-features=CompressionDictionaryTransport`)가 필요하다. 이 인자가 WebView2에서
+  실제로 기능을 끄는지는 문서로 확인되지 않았다. 또한 인자는 같은 사용자 데이터 폴더의 브라우저 프로세스 전체에 적용되고
+  환경 생성 때만 넘길 수 있어 앱 설정과 묶이므로([ADR 0065](./0065-webview-content-settings.md)와 같은 이유) 제공하지 않는다.
 
 ## 결과
 
