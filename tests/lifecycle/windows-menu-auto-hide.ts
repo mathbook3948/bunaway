@@ -58,7 +58,6 @@ const SWP_NOACTIVATE = 0x0010;
 // Wait after moving the pointer so the browser sees a hover target before the click.
 const POINTER_SETTLE_MS = 150;
 const CLICK_ATTEMPTS = 3;
-const CLICK_ACTIVATION_TIMEOUT_MS = 4_000;
 
 const user = dlopen("user32.dll", {
   GetMenu: {
@@ -302,7 +301,7 @@ async function activateByClick(window: bigint): Promise<void> {
         MOUSEEVENTF_LEFTDOWN,
         MOUSEEVENTF_LEFTUP,
       ]);
-      const limit = Date.now() + CLICK_ACTIVATION_TIMEOUT_MS;
+      const limit = Date.now() + deadline("childStep");
       while (
         user.symbols.GetForegroundWindow() !== window &&
         Date.now() < limit
@@ -310,7 +309,14 @@ async function activateByClick(window: bigint): Promise<void> {
         windows.pump();
         await Bun.sleep(10);
       }
-      if (user.symbols.GetForegroundWindow() === window) {
+      const activated = user.symbols.GetForegroundWindow() === window;
+      console.log(
+        `Input diagnostics after click: ${JSON.stringify({
+          attempt,
+          foregroundIsTarget: activated,
+        })}`,
+      );
+      if (activated) {
         return;
       }
     }
@@ -455,6 +461,8 @@ try {
   // Real input needs the window in the foreground with the page focused.
   step("activate");
   await activateByClick(hwnd);
+  // The click focuses the page in most runs; asking again makes the key target certain.
+  page.moveFocusToContent();
   const tap = () => {
     sendKey(VK_MENU, false);
     sendKey(VK_MENU, true);
@@ -518,6 +526,8 @@ try {
   await pumpUntil(linked(0n), "Esc hides");
   verified = true;
 } finally {
+  // A failure between the Alt press and release must not leave Alt held for the rest of the session.
+  sendKey(VK_MENU, true);
   menus?.dispose();
   if (view) {
     view.requestClose();
