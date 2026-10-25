@@ -16,8 +16,9 @@ status: accepted
   `session.disableNetworkEmulation()`을 제공한다. 세션 단위로 적용되어 그 세션을 쓰는 모든 WebContents에 영향을 준다.
 - Tauri와 wry는 같은 기능을 제공하지 않는다. 앱이 필요하면 `Webview::with_webview`가 넘겨주는 WebView2 객체로 직접 구현한다.
 - WebView2에는 전용 설정이 없고, DevTools 프로토콜의 `Network.emulateNetworkConditions`를 `CallDevToolsProtocolMethod`로 호출해야 한다.
-  이 설정은 호출한 WebView의 대상(target)에 적용되며 같은 프로필의 다른 WebView에는 영향을 주지 않는다. 호스트는 선언 뷰마다 앱 데이터 아래의
-  프로필 하나를 쓰고([ADR 0016](./0016-window-creation-contract.md)) 창 하나에 WebView 하나를 둔다([ADR 0026](./0026-single-webview-single-window.md)).
+  이 설정은 호출한 WebView의 대상(target)에 적용되며 같은 프로필의 다른 WebView에는 영향을 주지 않는다. ADR 0026은 창 하나에 WebView 하나와
+  영속 프로필 하나를 정하며([ADR 0026](./0026-single-webview-single-window.md)), 현재 구현은 ADR 0016의 뷰별 프로필 디렉터리를 아직 쓴다
+  ([ADR 0016](./0016-window-creation-contract.md)). 어느 쪽이든 한 WebView가 한 프로필을 쓴다.
   Electron의 세션 단위 emulation은 같은 세션의 모든 WebContents에 걸리지만, 대상 단위 호출은 호출한 WebView에만 걸리므로 의미가 다르다.
 - 이 저장소는 `network.isOnline`과 `network.onlineChanged`로 운영체제의 활성 인터페이스 유무를 알려 준다. emulation이 같은 이름의
   "오프라인"을 페이지에만 적용하면 두 값이 어긋나고, 앱 백엔드의 `network.request`는 emulation의 영향을 받지 않는다.

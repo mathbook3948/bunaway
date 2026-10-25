@@ -723,7 +723,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
   이벤트는 2초 주기 확인으로 Windows에서만 보낸다. host resolve `network.resolveHost`는 Electron `net.resolveHost()`에 대응해
   시스템 리졸버(getaddrinfo)로 구현했다. proxy resolve `network.resolveProxy`는 Electron `session.resolveProxy()`에 대응해
   WinHTTP로 사용자 인터넷 옵션(자동 감지, PAC, 수동 목록과 예외 목록)을 적용한 구조화 목록을 돌려준다. 쿼리 유형(`queryType`)은 제공한다. `source`, cache와 secure DNS 옵션은 Windows 시스템 리졸버에 대응이 없어 미지원이다.
-- [x] 오프라인, latency와 bandwidth emulation은 [제공하지 않는다](decisions/0069-webview-network-emulation.md). Electron은 세션 단위로 제공하고 Tauri에는 없으며, WebView2는 DevTools 프로토콜로 WebView 단위에만 적용할 수 있다. 개발 중에는 `--devtools`의 DevTools throttling을 쓴다.
+- [x] 오프라인, latency와 bandwidth emulation은 [제공하지 않는다](decisions/0071-webview-network-emulation.md). Electron은 세션 단위로 제공하고 Tauri에는 없으며, WebView2는 DevTools 프로토콜로 WebView 단위에만 적용할 수 있다. 개발 중에는 `--devtools`의 DevTools throttling을 쓴다.
 - [ ] preconnect, connection 정리와 network log를 제공한다.
 - [ ] 사용자 정의 앱 protocol의 등록, 해제와 등록 상태 조회를 제공한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [ ] protocol 응답에 파일, bytes, text, HTTP와 stream을 사용한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
