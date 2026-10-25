@@ -22,12 +22,11 @@ WebView 문서의 로드 시작, DOM ready, 완료, 실패를 앱에 알리는 �
 - 이 저장소의 Windows 호스트는 이미 허용된 최상위 문서의 `NavigationStarting`과 `NavigationCompleted`를 쓴다.
   - `windows.getWebViewState`의 `loading`은 탐색 시작부터 해당 탐색 완료까지다.
   - `windows.readiness`와 `windows.getReadiness`의 `document`는 `pending`, `ready`, `failed`, `cancelled`로
-    허용된 새 최상위 탐색마다 `documentGeneration`과 함께 바뀌고 오류를 `error`로 전달한다. 같은 문서의 fragment 이동은
-    세대를 바꾸지 않는다. `ready`는 `NavigationCompleted` 성공이며, 호스트는 `DOMContentLoaded`를 구독하지 않는다.
+    허용된 새 최상위 탐색마다 `documentGeneration`과 함께 바뀌고 오류를 `error`로 전달한다. `ready`는 `NavigationCompleted` 성공이며, 호스트는 `DOMContentLoaded`를 구독하지 않는다.
 - 이 저장소의 이벤트는 WebView(UI)로 전달된다. 새 문서의 스크립트는 로드가 시작된 뒤에 실행되어 구독하므로, 그 문서의
   "로드 시작"은 UI 이벤트로 받을 수 없다. 스크립트 실행 이후 단계는 페이지의 `DOMContentLoaded`와 `load`
   이벤트로 UI가 알 수 있다. 문서가 로드에 실패하면(허용된 출처의 네트워크 오류 등) 그 문서의 스크립트는 실행되지 않으므로
-  UI는 실패를 관찰할 수 없고, 실패는 백엔드가 `getReadiness`로 확인한다.
+  실패한 새 문서의 UI는 실패를 관찰할 수 없고, 실패는 백엔드가 `getReadiness`로 확인한다.
 
 ## 결정
 
@@ -47,8 +46,8 @@ WebView 문서의 로드 시작, DOM ready, 완료, 실패를 앱에 알리는 �
   `windows.readiness`로 이미 전달하므로 같은 정보를 담은 이벤트가 둘이 되면 순서와 세대 규칙을 두 곳에서 지켜야 한다.
   코어 계약은 작게 유지한다.
 - UI로 가는 이벤트는 새 문서가 구독하기 전의 시작 단계를 전달할 수 없고, DOM ready 이후는 페이지의 표준 이벤트로 얻는다.
-  `plugins`, `packages`, `examples`, `templates`에서 `windows.readiness`와 `DOMContentLoaded` 외에 로드 단계를 소비하는 코드는
-  찾지 못했다. 이 저장소에서 쓰는 곳이 없는 이벤트를 위해 정렬, 합치기와 큐 한도 규칙을 만들지 않는다.
+  `plugins`, `packages`, `examples`, `templates`에서 `windows.readiness`, `getReadiness`, `DOMContentLoaded`를 검색했을 때
+  정의부(`plugins/windows/src`, `packages/plugin-api/src/native.ts`) 밖의 앱 소비처는 없었다. 이 저장소에서 쓰는 곳이 없는 이벤트를 위해 정렬, 합치기와 큐 한도 규칙을 만들지 않는다.
 
 ## 결과
 
