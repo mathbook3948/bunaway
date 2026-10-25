@@ -120,13 +120,13 @@ if (!process.argv.includes("--child")) {
     assert(report.hidden.paintEntries.includes("first-paint"));
     assert.equal(report.hiddenNative.isVisible, false);
     assert.equal(report.hiddenNative.document, "ready");
-    // An explicit show makes the page visible and painting.
+    // After an explicit show the native window is visible and the page still reports visible frames.
     assert.equal(report.shownNative.isVisible, true);
     assert.equal(report.shown.visibilityState, "visible");
     assert.equal(report.shown.hidden, false);
     assert.equal(report.shown.frame, true);
     console.log(
-      "PASS hidden WebView2 window: scripts and readiness while hidden, visible and painting after show",
+      "PASS hidden WebView2 window: scripts, frames, first paint and readiness while hidden, native window visible after show",
     );
   } finally {
     clearTimeout(timeout);
@@ -225,12 +225,13 @@ if (!process.argv.includes("--child")) {
         name: "hidden-paint-test",
         version: "1.0.0",
         async setup(_context: CommandContext) {
-          void scenario().catch((error) => {
+          void scenario().catch(async (error) => {
             console.error(error);
             process.exitCode = 1;
-            void writeReport().catch(console.error);
             // A page still waiting for the show must not hold the shutdown.
             release();
+            // Leave the values seen so far before the process ends.
+            await writeReport().catch(console.error);
             if (desktop === undefined) {
               process.exit(1);
             }
