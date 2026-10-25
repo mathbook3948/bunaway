@@ -15,15 +15,16 @@ WebView가 보내는 HTTP 요청을 백엔드가 취소, 리다이렉트, URL �
 
 - Electron은 `session.webRequest`로 `onBeforeRequest`(취소와 `redirectURL`), `onBeforeSendHeaders`와 `onHeadersReceived`(header 변경),
   `onSendHeaders`, `onResponseStarted`, `onBeforeRedirect`, `onCompleted`, `onErrorOccurred`를 제공한다. 이벤트마다 URL 패턴 필터(`urls`,
-  `excludeUrls`, `types`)를 받고, 같은 이벤트에 마지막으로 붙인 리스너만 유효하다. 응답 본문을 직접 만드는 것은 `protocol.handle`과 `net.fetch`가 맡는다.
-- Tauri 2.12와 wry 0.57에는 임의 http(s) 요청을 요청 단위로 가로채거나 요청 header를 바꾸는 크로스플랫폼 공개 API가 없다. `on_web_resource_request`는
+  `excludeUrls`, `types`)를 받고, 같은 이벤트에 마지막으로 붙인 리스너만 유효하다.
+- Tauri 2.12와 wry 0.57에는 임의 http(s) 요청을 요청 단위로 가로채거나 요청 header를 바꾸는 크로스플랫폼 공개 API를 찾지 못했다(최초 로드 URL의 header 지정은 제외). `on_web_resource_request`는
   공개 API이지만 `tauri` 스킴에만 실행되고 외부 URL에는 실행되지 않으며 응답만 수정할 수 있다. 그 밖에 사용자 정의 scheme 핸들러와 탐색 허용 여부를 정하는
   `on_navigation` 훅이 있다. Windows에서는 `with_webview`로 얻은 WebView2 객체에 앱이 직접 `WebResourceRequested`를 붙일 수 있다.
 - WebView2(SDK 1.0.4314.35)는 `AddWebResourceRequestedFilterWithRequestSourceKinds`로 URL, 리소스 종류, 요청 출처별 필터를 걸고
-  `WebResourceRequested`에서 요청 header를 바꾸거나 요청을 막고 직접 만든 응답을 돌려줄 수 있다. 요청 출처는 문서(전용 worker와 iframe 포함),
+  `WebResourceRequested`에서 요청을 처리한다. 요청 출처는 문서(전용 worker와 iframe 포함),
   shared worker, service worker 중에서 고르고, worker 필터는 프로필당 한 WebView에만 추가하라고 안내한다. 구 `AddWebResourceRequestedFilter`는 deprecated이며
   메인 프레임과 같은 origin의 iframe에만 이벤트를 낸다. `WebResourceResponseReceived`는 관찰 전용이고 `GetContent`로 응답 본문 stream을
-  받을 수 있으나 123MB를 넘거나 다운로드가 되는 응답이면 null이다. 리소스 요청 단위의 네트워크 오류와 완료를 알리는 이벤트는 없다.
+  받을 수 있으나 123MB를 넘거나 다운로드가 되는 응답이면 null이다. 리소스 요청 단위의 네트워크 오류와 완료를 알리는 전용 호스트 이벤트는 `add_` 이벤트 목록에 없다. `DevToolsProtocolEventReceived`로 CDP Network 이벤트를 받을 수 있는지는
+  검증하지 않았다.
   `NavigationCompleted`는 탐색만, `ServerCertificateErrorDetected`는 TLS 인증서 오류만 다룬다. 즉 Electron의 `onCompleted`, `onErrorOccurred`에
   해당하는 이벤트를 같은 범위로 만들 수 없다.
 - 이 저장소는 탐색마다 `NavigationStarting`에서 허용 origin을 검사하고 redirect도 같은 검사를 거친다. 탐색 허용과 거부의 앱 훅은 별도
@@ -47,9 +48,9 @@ WebView가 보내는 HTTP 요청을 백엔드가 취소, 리다이렉트, URL �
 
 ## 근거
 
-- Electron은 요청 가로채기와 결과 이벤트를 제공하고 Tauri는 제공하지 않는다. 둘이 다르므로 코어는 작게, 기능은 필요한 곳에 맞추는 쪽을 따른다.
-  쓰는 곳이 없다(`plugins`, `packages`, `examples`에서 WebView 요청을 가로채거나 header를 바꾸는 코드는 없고, `native`는 내장 자산 응답에만 `WebResourceRequested`를 쓴다).
-- Electron과 같은 범위를 제공해도 WebView2에는 리소스 요청의 완료와 실패 이벤트가 없어 `onCompleted`, `onErrorOccurred`를 같은 의미로
+- Electron은 요청 가로채기와 결과 이벤트를 제공하고 Tauri는 임의 요청 단위의 크로스플랫폼 API를 제공하지 않는다. 둘이 다르므로 코어는 작게, 기능은 필요한 곳에 맞추는 쪽을 따른다.
+  또한 쓰는 곳이 없다(`plugins`, `packages`, `examples`에서 WebView 요청을 가로채거나 header를 바꾸는 코드는 없고, `native`는 내장 자산 응답에만 `WebResourceRequested`를 쓴다).
+- Electron과 같은 범위를 제공해도 WebView2에는 리소스 요청의 완료와 실패를 알리는 전용 호스트 이벤트가 없어 `onCompleted`, `onErrorOccurred`를 같은 의미로
   약속할 수 없다. 같은 이름의 이벤트가 플랫폼마다 다른 범위를 약속하게 되어 계약이 모호해진다.
 - 요청 경로에 백엔드 응답을 끼우지 않으면 로드 시간이 백엔드와 무관하게 유지되고, 기존 origin 검사와 CSP 방침이 우회되지 않는다.
 
