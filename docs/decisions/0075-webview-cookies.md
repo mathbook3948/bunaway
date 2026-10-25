@@ -25,9 +25,10 @@ WebView2에는 `ICoreWebView2CookieManager`가 있어 호스트가 같은 범위
 
 ## 결정
 
-1. cookie 조회, 설정, 삭제, 변경 이벤트와 flush를 제공하지 않는다. 호스트는 WebView2의 cookie 저장을 그대로 두고
-   별도 계약을 얹지 않는다.
-2. UI 코드가 필요하면 `document.cookie`를 쓴다. 백엔드가 UI의 로그인 결과를 필요로 하면 UI가 토큰 값을 앱 명령으로
+1. cookie 조회, 설정, 삭제, 변경 이벤트와 flush를 제공하지 않는다. 호스트는 WebView의 cookie 저장을 그대로 두고
+   별도 계약을 얹지 않는다. 이 결정은 Windows 호스트(WebView2)의 계약을 정하며, macOS 호스트는 macOS TODO에서 따로 판단한다.
+2. UI 코드가 필요하면 `document.cookie`를 쓴다. cookie가 재시작 뒤에도 남는지는 WebView2 저장소와 페이지 origin(포트
+   포함)을 따르며 이 결정은 이를 보장하지 않는다. 백엔드가 UI의 로그인 결과를 필요로 하면 UI가 토큰 값을 앱 명령으로
    전달하고, 백엔드는 이를 저장소 플러그인에 보관한다.
 3. WebView의 `HttpOnly` cookie 값을 백엔드가 읽어야 하는 앱이 확인되면 별도 결정에서 다룬다. 그때는 허용 origin 안의
    URL 하나와 cookie 이름을 지정하는 읽기 전용 조회를 먼저 검토하고, 설정과 삭제, 변경 이벤트는 그 뒤에 따로 판단한다.
