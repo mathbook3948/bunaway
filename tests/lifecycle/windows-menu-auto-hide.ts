@@ -13,11 +13,7 @@ import {
 } from "#native/windows/bun/com";
 import { WebView } from "#native/windows/bun/webview";
 import { Windows } from "#native/windows/bun/win32";
-import {
-  disposeWin32Bindings,
-  kernel,
-  ole,
-} from "#native/windows/bun/win32-bindings";
+import { disposeWin32Bindings, ole } from "#native/windows/bun/win32-bindings";
 import { webViewKeyMessage } from "#native/windows/bun/window-input-events";
 import { menuItemsSchema } from "#plugins/menu/src/contract";
 import { WindowMenus } from "#plugins/menu/src/platforms/windows-window-menus";
@@ -143,36 +139,6 @@ const user = dlopen("user32.dll", {
     returns: "u32",
   },
   ...pick(USER32, "SetTimer", "KillTimer"),
-  FindWindowExW: {
-    args: [
-      "u64",
-      "u64",
-      "ptr",
-      "ptr",
-    ],
-    returns: "u64",
-  },
-  GetWindowThreadProcessId: {
-    args: [
-      "u64",
-      "ptr",
-    ],
-    returns: "u32",
-  },
-  AttachThreadInput: {
-    args: [
-      "u32",
-      "u32",
-      "i32",
-    ],
-    returns: "i32",
-  },
-  SetFocus: {
-    args: [
-      "u64",
-    ],
-    returns: "u64",
-  },
   GetGUIThreadInfo: {
     args: [
       "u32",
@@ -299,66 +265,6 @@ function logInputState(label: string): void {
       pageFocus,
     })}`,
   );
-}
-
-const RENDER_WIDGET_CLASS = "Chrome_RenderWidgetHostHWND";
-
-/** First descendant window of the given class, searching depth first. */
-function findDescendant(parent: bigint, name: string): bigint {
-  const search = (from: bigint): bigint => {
-    for (
-      let child = user.symbols.FindWindowExW(from, 0n, null, null);
-      child !== 0n;
-      child = user.symbols.FindWindowExW(from, child, null, null)
-    ) {
-      if (className(child) === name) {
-        return child;
-      }
-      const inner = search(child);
-      if (inner !== 0n) {
-        return inner;
-      }
-    }
-    return 0n;
-  };
-  return search(parent);
-}
-
-/**
- * Give keyboard focus to the browser's render widget window, which the click and the controller's
- * own focus move did not do. The widget belongs to another thread, so this thread's input is
- * attached to the widget's thread for the call and detached afterwards. Logs what happened.
- */
-function focusRenderWidget(): void {
-  const widget = findDescendant(hwnd, RENDER_WIDGET_CLASS);
-  if (widget === 0n) {
-    console.log("Render widget focus: widget window not found");
-    return;
-  }
-  const ownThread = kernel.symbols.GetCurrentThreadId();
-  const widgetThread = user.symbols.GetWindowThreadProcessId(widget, null);
-  const attached =
-    widgetThread !== ownThread &&
-    user.symbols.AttachThreadInput(ownThread, widgetThread, 1) !== 0;
-  // The focus is read both while the threads share input and after they are detached, because
-  // detaching gives each thread its own input state again and the focus can change then.
-  const result: Record<string, boolean> = {
-    sameThread: widgetThread === ownThread,
-    attached,
-  };
-  try {
-    // SetFocus returns null both on failure and when no window had focus before.
-    result.setFocusReturnedPreviousWindow =
-      user.symbols.SetFocus(widget) !== 0n;
-    result.focusIsWidgetWhileAttached = focusWindow(widgetThread) === widget;
-  } finally {
-    if (attached) {
-      result.detached =
-        user.symbols.AttachThreadInput(ownThread, widgetThread, 0) !== 0;
-    }
-    result.focusIsWidgetAfterDetach = focusWindow(widgetThread) === widget;
-    console.log(`Render widget focus: ${JSON.stringify(result)}`);
-  }
 }
 
 /** Pump the UI thread for a fixed time so late callbacks and page messages arrive. */
@@ -697,10 +603,12 @@ try {
   };
   // A plain key must raise the controller's accelerator event, or the Alt checks below cannot work.
   step("accelerator probe");
-  logInputState("before focusing the render widget");
-  markTimeline("SetFocus on the render widget");
-  focusRenderWidget();
-  await settle(KEY_REPORT_SETTLE_MS);
+  // The key is sent only once the page reports focus on its input, so a missing key report cannot
+  // be a page without focus.
+  await pumpUntil(
+    () => pageFocus === "focused:INPUT",
+    "Page focus on the input",
+  );
   logInputState("before probe key");
   markTimeline("probe key F");
   press(VK_F);
