@@ -685,8 +685,8 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [x] 결정 완료: 페이지 find, 결과 이벤트와 검색 종료 API는 제공하지 않고 검색을 렌더러의 웹 표준 API로 구현한다. [ADR 0059](./decisions/0059-webview-page-find.md).
 - [x] 결정 완료: 별도 편집 명령 API는 제공하지 않는다. 사용자가 시작하는 undo, redo, cut, copy, paste(평문), select-all은 창 메뉴바와 컨텍스트 팝업의 메뉴 role로 제공한다. [ADR 0050](./decisions/0050-webview-edit-commands-and-selection.md).
 - [x] 결정 완료: selection 변경, 텍스트 삽입과 교체, 스크롤 이동 API는 제공하지 않고 렌더러의 웹 표준 API를 쓴다. [ADR 0050](./decisions/0050-webview-edit-commands-and-selection.md).
-- [ ] 맞춤법 검사 활성화, 언어, dictionary와 사용자 단어를 관리한다.
-- [ ] misspelling 조회, suggestion과 교체 API를 제공한다.
+- [x] 결정 완료: 맞춤법 검사 활성화, 언어, dictionary와 사용자 단어 관리 API는 제공하지 않는다. [ADR 0072](./decisions/0072-webview-spellcheck.md).
+- [x] 결정 완료: misspelling 조회, suggestion과 교체 API는 제공하지 않는다. [ADR 0072](./decisions/0072-webview-spellcheck.md).
 - [ ] 신뢰된 앱 백엔드의 JavaScript 실행과 결과 반환 계약을 제공한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [ ] 문서 초기화 script와 CSS 삽입, 제거를 제공한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
 - [ ] isolated world와 preload의 사용 범위, frame별 적용과 자원 정리를 정의한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
