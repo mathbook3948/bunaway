@@ -1043,7 +1043,7 @@ test("copyDirectory stops at a destination that a link places inside the source"
   expect(existsSync(at("src", "copy", "copy"))).toBe(false);
 });
 
-test("copyDirectory fails on a link or special entry and keeps what was already copied", async () => {
+test("copyDirectory fails on a link entry without copying or touching its target", async () => {
   mkdirSync(at("src"));
   mkdirSync(at("outside"));
   writeFileSync(at("outside", "secret.txt"), "secret");

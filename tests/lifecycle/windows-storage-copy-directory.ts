@@ -116,6 +116,12 @@ try {
       storage.copyDirectory(transfer("src", "alias/viaLink")),
       "INVALID_ARGUMENT",
     );
+    // The refused copy leaves the directory it created inside the source; remove it so the
+    // copies below count only the original tree.
+    assert.equal(existsSync(path("src/viaLink")), true);
+    await rm(path("src/viaLink"), {
+      recursive: true,
+    });
     // A junction given as the root is followed.
     assert.deepEqual(
       await storage.copyDirectory(transfer("alias", "fromAlias")),
