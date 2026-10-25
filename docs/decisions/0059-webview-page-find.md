@@ -12,9 +12,12 @@ status: accepted
 
 앱 백엔드가 WebView 안의 텍스트를 검색하고, 일치 개수와 활성 위치를 이벤트로 받고, 검색을 끝내는 API를 제공할지 정해야 했다.
 
-- Electron의 `webContents`는 `findInPage(text, options)`와 `stopFindInPage(action)`을 제공하고, 결과는 `found-in-page`
+- Electron의 `webContents`는 `findInPage(text[, options])`와 `stopFindInPage(action)`을 제공하고, 결과는 `found-in-page`
   이벤트(`matches`, `activeMatchOrdinal`, `finalUpdate`)로 돌려준다.
-- Tauri 2의 `Webview`와 `Window`에는 페이지 find API가 없다.
+- Tauri 2의 `Webview`와 `Window`에는 페이지 find API가 없다. 앱이 `with_webview`로 얻은 플랫폼 핸들에서 직접 호출하는
+  방법만 있다.
+- WebView2에는 `ICoreWebView2_28::get_Find`로 얻는 `ICoreWebView2Find`(WebView2 Win32 1.0.3405.78부터)가 있고,
+  `Start`는 WebView2 자체 찾기 창을 띄운다. Tauri와 wry는 이를 감싸지 않는다. 이 저장소도 쓰지 않는다.
 - 이 저장소의 Windows 호스트는 일반 빌드에서 `AreBrowserAcceleratorKeysEnabled`를 끈다(`native/windows/bun/README.md`).
   그래서 WebView2의 기본 Ctrl+F 찾기 창은 뜨지 않고, 검색 UI는 앱이 만든다.
 - 페이지 안에서는 DOM을 직접 탐색해 텍스트를 찾고 `Range`와 `Selection`, CSS Custom Highlight API로 일치 위치를
