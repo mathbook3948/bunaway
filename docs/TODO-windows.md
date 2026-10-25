@@ -356,7 +356,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 
 공유 메뉴 계약과 트레이 연결은 [menu API](./site/src/content/docs/reference/plugins/menu.mdx)를 따른다.
 실제 HMENU와 창 없는 UI Worker 회귀, 창 메뉴바 연결과 분리, 실제 Worker 컨텍스트 팝업 취소 회귀를 Windows 테스트에 포함한다.
-메뉴바 자동 숨김, 편집 role과 accelerator는 미구현이다. 다중 행 메뉴바의 최소/최대 크기, 최소화 복원과 혼합 DPI는 별도 검증이 남아 있다.
+메뉴바 자동 숨김과 accelerator 등록은 미구현이다. 다중 행 메뉴바의 최소/최대 크기, 최소화 복원과 혼합 DPI는 별도 검증이 남아 있다.
 사용자 포인터와 키보드 메뉴 조작, Explorer 재시작 중 사용자 정의 메뉴는 수동 검증이 남아 있다.
 
 ## 08. 로그인 시 자동 실행
@@ -681,8 +681,8 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [x] `setZoomFactor`와 `getWebViewState`로 controller zoom factor를 설정하고 실제 값을 조회한다.
 - [ ] zoom level과 visual zoom 최소와 최대 한도를 설정하고 조회한다.
 - [ ] 페이지 find, 결과 이벤트와 검색 종료를 제공한다.
-- [ ] undo, redo, cut, copy, paste, plain-text paste와 select-all을 제공한다.
-- [ ] selection 변경, 텍스트 삽입과 교체, scroll-to-top/bottom을 제공한다.
+- [x] 결정 완료: 별도 편집 명령 API는 제공하지 않는다. 사용자가 시작하는 undo, redo, cut, copy, paste(평문), select-all은 창 메뉴바와 컨텍스트 팝업의 메뉴 role로 제공한다. [ADR 0050](./decisions/0050-webview-edit-commands-and-selection.md).
+- [x] 결정 완료: selection 변경, 텍스트 삽입과 교체, 스크롤 이동 API는 제공하지 않고 렌더러의 웹 표준 API를 쓴다. [ADR 0050](./decisions/0050-webview-edit-commands-and-selection.md).
 - [ ] 맞춤법 검사 활성화, 언어, dictionary와 사용자 단어를 관리한다.
 - [ ] misspelling 조회, suggestion과 교체 API를 제공한다.
 - [ ] 신뢰된 앱 백엔드의 JavaScript 실행과 결과 반환 계약을 제공한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
