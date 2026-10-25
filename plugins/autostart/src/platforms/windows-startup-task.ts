@@ -463,9 +463,20 @@ export const openStartupTask: StartupTaskOpener = async (signal, use) => {
         "Could not release the startup task objects.",
       );
     } catch (cleanupError) {
+      // The change already happened, so report only the release failure, as a coded error.
       if ("value" in outcome) {
-        throw cleanupError;
+        throw new BunawayError({
+          code: "INTERNAL",
+          message: "Windows startup task objects were not released.",
+          details: {
+            failures:
+              cleanupError instanceof AggregateError
+                ? cleanupError.errors.length
+                : 1,
+          },
+        });
       }
+      // Otherwise the operation's own failure is the more useful result and is thrown below.
     }
     if ("error" in outcome) {
       throw outcome.error;

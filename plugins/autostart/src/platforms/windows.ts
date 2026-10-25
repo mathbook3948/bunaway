@@ -38,7 +38,32 @@ export function initialize(environment: NativeEnvironment) {
     name: registrationName(app),
     registry: createRegistry(),
     startupTask: openStartupTask,
+    /** True while a StartupTask change waits on Windows. */
+    changing: false,
   };
+}
+
+/**
+ * The StartupTask path yields while Windows works, unlike the synchronous Run path. Overlapping
+ * changes are rejected instead of interleaved, so one request cannot raise a second consent
+ * prompt or race a disable.
+ */
+async function exclusive<T>(
+  state: ReturnType<typeof initialize>,
+  change: () => Promise<T>,
+): Promise<T> {
+  if (state.changing) {
+    throw new BunawayError({
+      code: "BUSY",
+      message: "Another autostart change is in progress.",
+    });
+  }
+  state.changing = true;
+  try {
+    return await change();
+  } finally {
+    state.changing = false;
+  }
 }
 
 /** Read the registration and the user's separate startup approval state. */
@@ -82,7 +107,9 @@ export function enable(
   signal?: AbortSignal,
 ): AutostartStatus | Promise<AutostartStatus> {
   if (state.registry.packaged()) {
-    return enablePackaged(state.startupTask, input, signal);
+    return exclusive(state, () =>
+      enablePackaged(state.startupTask, input, signal),
+    );
   }
   const command = commandLine(state.app, input.args, input.hidden);
   return state.registry.withRunLock(state.name, () => {
@@ -99,7 +126,7 @@ export function disable(
   signal?: AbortSignal,
 ): null | Promise<null> {
   if (state.registry.packaged()) {
-    return disablePackaged(state.startupTask, signal);
+    return exclusive(state, () => disablePackaged(state.startupTask, signal));
   }
   state.registry.remove(state.name);
   return null;

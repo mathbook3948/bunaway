@@ -106,7 +106,8 @@ Windows 설정의 시작 앱 목록에 비활성 항목이 나타나는 것은 �
 `matchesCurrentLaunch`는 `false`다. StartupTask는 manifest의 실행 파일을 인자 없이 시작하므로
 `args`가 비어 있지 않거나 `hidden: true`인 등록은 `INVALID_ARGUMENT`로 거부한다.
 예약 시작 인자가 없으므로 로그인 실행을 `launchReason: "autostart"`로 구분하지 못하며 숨김 시작은 지원하지 않는다.
-manifest에 이 작업을 선언하지 않은 패키지는 `UNSUPPORTED`다.
+manifest에 이 작업을 선언하지 않은 패키지는 오류를 반환하며 코드는 Windows의 응답에 따라 `UNSUPPORTED` 또는 `INTERNAL`이다.
+작업 변경이 진행되는 동안 다른 변경은 `BUSY`로 거부한다.
 
 이 결정의 근거는 다음과 같다. Electron은 `setLoginItemSettings`가 패키지 여부와 관계없이
 Run 키만 쓰며 MSIX에서는 manifest 선언과 서드파티 WinRT 호출이 필요하다. Tauri의

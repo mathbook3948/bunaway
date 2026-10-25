@@ -13,6 +13,9 @@ import {
 } from "#plugins/autostart/src/platforms/windows-startup-task";
 import { deadline } from "../fixtures/deadlines.ts";
 
+const E_NOINTERFACE = 0x80004002;
+const REGDB_E_CLASSNOT_REG = 0x80040154;
+
 setDefaultTimeout(deadline("inProcess"));
 
 /** A task whose state changes the way Windows reports it after RequestEnableAsync. */
@@ -144,7 +147,7 @@ test("enable keeps a task the user or policy disabled and reports it", async () 
   }
 });
 
-test("enable rejects arguments and hidden startup that a manifest task cannot carry", () => {
+test("enable rejects arguments and hidden startup that a manifest task cannot carry", async () => {
   const task = fakeTask(
     STARTUP_TASK_STATE.disabled,
     STARTUP_TASK_STATE.enabled,
@@ -162,11 +165,9 @@ test("enable rejects arguments and hidden startup that a manifest task cannot ca
       hidden: true,
     },
   ]) {
-    expect(() => enable(state, input)).toThrow(
-      expect.objectContaining({
-        code: "INVALID_ARGUMENT",
-      }),
-    );
+    await expect(enable(state, input)).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT",
+    });
   }
   expect(task.calls).toEqual([]);
 });
@@ -192,8 +193,8 @@ test("an aborted call stops before touching WinRT", async () => {
   });
 });
 
-// Without package identity Windows refuses the lookup. Reaching that refusal proves the activation
-// class, the statics interface ID and the GetAsync slot are valid, and that cleanup does not fault.
+// Without package identity Windows refuses the lookup. A wrong activation class or statics
+// interface ID would fail with REGDB_E_CLASSNOT_REG or E_NOINTERFACE, so neither may appear.
 test.skipIf(process.platform !== "win32")(
   "the WinRT binding reaches the StartupTask statics and fails cleanly without a package",
   async () => {
@@ -204,5 +205,11 @@ test.skipIf(process.platform !== "win32")(
       (error: unknown) => error,
     );
     expect(outcome).toBeInstanceOf(BunawayError);
+    const details = (outcome as BunawayError).details as
+      | Record<string, unknown>
+      | undefined;
+    const hresult = details?.hresult;
+    expect(hresult).not.toBe(E_NOINTERFACE);
+    expect(hresult).not.toBe(REGDB_E_CLASSNOT_REG);
   },
 );
