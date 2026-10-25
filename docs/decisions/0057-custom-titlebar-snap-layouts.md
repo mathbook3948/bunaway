@@ -15,10 +15,11 @@ Windows 11의 Snap Layouts는 최대화 버튼에 마우스를 올리면 뜨는 
 
 현재 구현:
 
-- `titlebar: "custom"` 창은 `WS_CAPTION`만 빼고 `WS_THICKFRAME`, `WS_SYSMENU`, `WS_MAXIMIZEBOX`를 유지한다
-  ([ADR 0037](./0037-window-corners-shape-and-creation-styles.md)). Win+방향키와 가장자리 끌기 Snap은 이 스타일로 동작하는 경로이다.
+- `titlebar: "custom"` 창은 `WS_CAPTION`만 빼고 `WS_THICKFRAME`, `WS_SYSMENU`, `WS_MAXIMIZEBOX`를 유지한다.
+  `setResizable(false)`와 `setMaximizable(false)`는 각각 `WS_THICKFRAME`과 `WS_MAXIMIZEBOX`를 뺀다
+  ([ADR 0037](./0037-window-corners-shape-and-creation-styles.md)).
 - `WM_NCHITTEST`에서 `HTMAXBUTTON`을 돌려주는 코드는 없다. 최대화 버튼은 앱이 그린 button이고 호스트는 그 위치를 모른다.
-- `docs/site/src/content/docs/reference/host/windows.mdx`는 자동 snap-layout 버튼 overlay를 제공하지 않는다고 적고 있다.
+- `docs/site/src/content/docs/reference/host/windows.mdx`는 네이티브 caption 버튼 overlay를 지원하지 않는다고 적고 있다.
 
 선례(공개 API 기준):
 
@@ -32,9 +33,9 @@ Windows 11의 Snap Layouts는 최대화 버튼에 마우스를 올리면 뜨는 
 
 1. `titlebar: "custom"` 창의 최대화 버튼 위치에 `HTMAXBUTTON`을 돌려주는 기능과, 그 위치를 앱이 등록하는 API는 제공하지 않는다.
 2. Snap Layouts가 필요한 앱은 `titlebar: "system"`을 쓴다. 네이티브 caption 버튼을 유지하는 title-bar overlay는
-   별도 항목([TODO-windows.md](../TODO-windows.md)의 title-bar overlay)에서 정하고, 그 결정이 이 용도를 대신 채운다.
-3. 사용자 타이틀바 창의 Win+방향키와 가장자리 끌기 Snap은 지금처럼 `WS_THICKFRAME`과 `WS_MAXIMIZEBOX`로 유지한다.
-   이 ADR은 그 동작을 바꾸지 않는다.
+   아직 제공하지 않으며 별도 항목([TODO-windows.md](../TODO-windows.md)의 title-bar overlay)에서 정한다.
+3. 이 ADR은 `WS_THICKFRAME`과 `WS_MAXIMIZEBOX`를 다루는 현재 동작(`resizable`, `maximizable`)을 바꾸지 않는다.
+   `resizable: false` 창의 Snap 참여는 확인되지 않았고 [TODO-windows.md](../TODO-windows.md)의 해당 항목에서 확인한다.
 4. 문서에는 사용자 타이틀바의 HTML 최대화 버튼이 Snap Layouts를 띄우지 않으며, 필요하면 시스템 타이틀바를 쓰라고 적는다.
 
 ## 근거

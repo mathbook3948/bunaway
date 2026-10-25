@@ -96,7 +96,7 @@ Tauri 2와 tao:
   Windows 10의 Electron 보고(위 #11568)는 있으나 Windows 11 근거는 확인하지 못했다. 깨지는 것으로 확인되면
   `resizable: false`가 `WS_THICKFRAME`을 빼는 방식 자체를 다시 봐야 하며, 그때 `thickFrame` 옵션 결정도 다시 연다.
 - `titlebar: "custom"` 창에 Snap Layouts(최대화 버튼 hover)를 주려면 `WM_NCHITTEST`가 `HTMAXBUTTON`을 반환해야 하는데
-  현재 구현은 반환하지 않는다. 별도 기능으로 다룬다.
+  현재 구현은 반환하지 않으며 제공하지 않기로 했다([ADR 0057](./0057-custom-titlebar-snap-layouts.md)).
 - `setHasShadow(false)`로 비클라이언트 렌더링을 끈 창에서 둥근 모서리 선호가 화면에 어떻게 보이는지는 확인하지 못했다.
   DWM이 GDI 화면 밖에서 합성해 화면 캡처로 볼 수 없고 선호도 읽어 주지 않으므로, Windows CI는 두 설정을 함께 바꿔도 요청한 값과
   그림자 상태가 서로 영향을 주지 않는지만 확인한다.
