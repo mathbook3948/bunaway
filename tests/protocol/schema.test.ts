@@ -153,12 +153,12 @@ test("the pending request limit is configurable from the default up to its ceili
 
 test("a server hello may state the configured pending request limit", () => {
   const hello = {
-    kind: "hello",
+    kind: "hello" as const,
     protocol: {
       major: 1,
       minor: 0,
     },
-    features: [],
+    features: [] as string[],
     buildId: "test",
   };
   expect(parseMessage(JSON.stringify(hello))).toEqual(hello);
