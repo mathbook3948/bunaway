@@ -11,15 +11,24 @@ status: accepted
 WebView에 Chrome 계열 브라우저 extension을 설치, 조회, 제거하고 그 이벤트를 받는 기능과, extension이 쓸 수 있는 Chrome API
 범위를 정해야 했다.
 
-아래 외부 동작은 해당 프로젝트의 공개 문서와 소스에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다.
+아래 외부 동작은 Electron v45.0.0, Tauri 2.12.5(wry 0.57.1), WebView2 SDK 1.0.4314.35 기준으로 공식 문서와 해당 태그의
+소스를 확인한 것이며 이 저장소의 테스트로 검증한 것은 아니다.
 
-- Electron은 `session`에 extension 불러오기와 제거, 목록 조회를 제공하고, 지원하는 Chrome API가 일부로 제한된다고
-  문서에 밝힌다. Chrome Web Store 설치는 지원하지 않는다.
-- Tauri는 설치, 조회, 제거를 하는 공개 API가 없다. wry의 Windows 빌더에 `with_browser_extensions_enabled`와
-  `with_extensions_path`가 있어 환경 옵션으로 extension을 켜고 폴더를 지정할 수 있을 뿐이다(wry 0.57.1 기준).
-- WebView2는 환경 옵션에서 extension을 켜야 하고(기본값은 꺼짐), 켠 환경의 프로필에서 압축 해제된 extension을 추가하고
-  제거한다. 환경 옵션은 환경 생성 때만 넘기며, 같은 사용자 데이터 폴더를 쓰는 프로세스와 옵션이 다르면 환경 생성이
-  실패한다([ADR 0065](./0065-webview-content-settings.md)의 브라우저 인자와 같은 제약).
+- Electron의 정식 API는 `session.extensions`의 `loadExtension`, `removeExtension`, `getExtension`, `getAllExtensions`와
+  `extension-loaded`, `extension-unloaded`, `extension-ready` 이벤트다. `session`에 직접 붙은 같은 이름의 메서드는 Electron 36부터
+  deprecated다. 문서는 Chrome extension API 전체를 지원하지 않고 DevTools extension 등을 위한 부분 집합만 지원하며, 지원 목록
+  밖의 API는 임시 지원이라 제거될 수 있다고 밝힌다. Chrome Web Store 설치는 지원하지 않고 압축 해제된 폴더만 불러온다.
+  앱을 다시 시작하면 기억하지 않아 매번 불러와야 한다.
+- Tauri는 실행 중에 extension을 설치, 조회, 제거하는 공개 API가 없다. 대신 웹뷰 생성 때 쓰는 옵션이 있다.
+  `WebviewBuilder::browser_extensions_enabled`(Windows에서 WebView2 환경의 `AreBrowserExtensionsEnabled`)와
+  `extensions_path`, 설정 파일의 `browserExtensionsEnabled`(기본값 꺼짐)다. wry는 `extensions_path`가 있으면 웹뷰를 만들 때 그
+  폴더의 하위 항목마다 `AddBrowserExtension`을 호출해 설치하고 결과는 쓰지 않는다. 조회, 제거, 활성화, 이벤트는 노출하지 않는다.
+- WebView2는 환경 옵션 `AreBrowserExtensionsEnabled`(기본값 FALSE)를 켜야 한다. 끄면 `AddBrowserExtension`이
+  `ERROR_NOT_SUPPORTED`로 실패하고 `GetBrowserExtensions`는 아무것도 반환하지 않는다. 프로필(`ICoreWebView2Profile7`)에는
+  압축 해제된 폴더를 추가하는 `AddBrowserExtension`과 목록을 조회하는 `GetBrowserExtensions`가 있고, 제거와 활성화는 개별
+  extension 객체의 `Remove`와 `Enable`이다. 추가한 extension은 프로필에 저장된다. 이미 실행 중인 환경과 이 옵션 값이 다르면
+  환경 생성이 `HRESULT_FROM_WIN32(ERROR_INVALID_STATE)`로 실패한다. 환경 옵션은 환경 생성 때만 넘기며, 같은 제약이
+  [ADR 0065](./0065-webview-content-settings.md)의 브라우저 인자에도 있다.
 - Windows 호스트는 `CreateCoreWebView2EnvironmentWithOptions`에 환경 옵션을 넘기지 않으므로(`native/windows/bun/webview.ts`)
   extension은 꺼진 상태다.
 
@@ -39,9 +48,10 @@ WebView에 Chrome 계열 브라우저 extension을 설치, 조회, 제거하고 
   앱의 origin 정책, CSP에 어떻게 닿는지 정의해야 한다. 이 정의는 이 결정의 범위 밖이다.
 - 환경 옵션을 켜는 일은 코어의 환경 생성 규칙에 영향을 준다. 같은 사용자 데이터 폴더의 창과 옵션이 어긋나면 환경 생성이
   실패하므로 앱 정의 설정과 창 설정이 서로 묶인다. 코어는 작게 둔다.
-- Electron은 제한된 API로 제공하고 Tauri는 설치와 조회를 위한 API를 제공하지 않아 두 프레임워크가 다르다. 이 결정은
-  Electron과 다르고 Tauri와 같다. 지원 범위가 불완전한 기능을 계약으로 굳히지 않으므로 Chrome API subset(결정 2)도 정하지
-  않는다. 같은 구역의 결정([ADR 0065](./0065-webview-content-settings.md))과 같은 방침이다.
+- 두 프레임워크가 다르다. Electron은 부분 집합의 Chrome API로 불러오기, 제거, 조회와 이벤트를 제공하고, Tauri는 생성 때 켜기와
+  폴더 일괄 설치만 선택적으로 제공한다. 이 결정은 둘 다와 다르게 아무것도 제공하지 않는다. 사용처가 없고 보안 경계 정의가
+  선행되어야 하며, 지원 범위가 불완전한 기능을 계약으로 굳히지 않으므로 코어는 작게 두는 쪽을 따랐다. 같은 구역의 결정
+  ([ADR 0065](./0065-webview-content-settings.md))과 같은 방침이다.
 
 ## 결과
 
