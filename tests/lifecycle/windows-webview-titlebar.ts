@@ -232,8 +232,8 @@ try {
   );
   await press("Tab", "Tab", 9);
   assert.equal(
-    await evaluate("document.activeElement?.tagName"),
-    "BUTTON",
+    await evaluate("document.activeElement?.getAttribute('aria-label')"),
+    "Example titlebar button",
     "Tab did not reach the titlebar button",
   );
   await press("Enter", "Enter", 13, "\r");
