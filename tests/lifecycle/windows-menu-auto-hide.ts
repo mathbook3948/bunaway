@@ -13,7 +13,11 @@ import {
 } from "#native/windows/bun/com";
 import { WebView } from "#native/windows/bun/webview";
 import { Windows } from "#native/windows/bun/win32";
-import { disposeWin32Bindings, ole } from "#native/windows/bun/win32-bindings";
+import {
+  disposeWin32Bindings,
+  kernel,
+  ole,
+} from "#native/windows/bun/win32-bindings";
 import { webViewKeyMessage } from "#native/windows/bun/window-input-events";
 import { menuItemsSchema } from "#plugins/menu/src/contract";
 import { WindowMenus } from "#plugins/menu/src/platforms/windows-window-menus";
@@ -139,6 +143,36 @@ const user = dlopen("user32.dll", {
     returns: "u32",
   },
   ...pick(USER32, "SetTimer", "KillTimer"),
+  FindWindowExW: {
+    args: [
+      "u64",
+      "u64",
+      "ptr",
+      "ptr",
+    ],
+    returns: "u64",
+  },
+  GetWindowThreadProcessId: {
+    args: [
+      "u64",
+      "ptr",
+    ],
+    returns: "u32",
+  },
+  AttachThreadInput: {
+    args: [
+      "u32",
+      "u32",
+      "i32",
+    ],
+    returns: "i32",
+  },
+  SetFocus: {
+    args: [
+      "u64",
+    ],
+    returns: "u64",
+  },
   GetGUIThreadInfo: {
     args: [
       "u32",
@@ -170,8 +204,20 @@ await writeFile(
       document.getElementById("a").focus();
       chrome.webview.postMessage("loaded");
     });
+    // The page reports whether it has focus and which element holds it, on every change and key.
+    const focusState = () =>
+      (document.hasFocus() ? "focused:" : "unfocused:") +
+      (document.activeElement ? document.activeElement.tagName : "none");
+    let lastFocusState = "";
+    setInterval(() => {
+      const state = focusState();
+      if (state !== lastFocusState) {
+        lastFocusState = state;
+        chrome.webview.postMessage({ focus: state });
+      }
+    }, 50);
     addEventListener("keydown", (event) => {
-      chrome.webview.postMessage({ keydown: event.key });
+      chrome.webview.postMessage({ keydown: event.key, focus: focusState() });
     });
   </script>`,
 );
@@ -190,6 +236,8 @@ const accelerators: string[] = [];
 // Keys the page itself received, to tell a key that never reached the page from one the
 // controller did not report.
 const pageKeys: string[] = [];
+// Latest focus state the page reported: whether the document has focus and its active element.
+let pageFocus = "none reported";
 const step = (name: string) => console.log(`STEP ${name}`);
 // Reports the fixture state and fails when it outlives its deadline while the event loop still runs.
 const watchdog = setTimeout(() => {
@@ -236,6 +284,60 @@ function logInputState(label: string): void {
       foregroundIsHost: user.symbols.GetForegroundWindow() === hwnd,
       accelerators,
       pageKeys,
+      pageFocus,
+    })}`,
+  );
+}
+
+const RENDER_WIDGET_CLASS = "Chrome_RenderWidgetHostHWND";
+
+/** First descendant window of the given class, searching depth first. */
+function findDescendant(parent: bigint, name: string): bigint {
+  const search = (from: bigint): bigint => {
+    for (
+      let child = user.symbols.FindWindowExW(from, 0n, null, null);
+      child !== 0n;
+      child = user.symbols.FindWindowExW(from, child, null, null)
+    ) {
+      if (className(child) === name) {
+        return child;
+      }
+      const inner = search(child);
+      if (inner !== 0n) {
+        return inner;
+      }
+    }
+    return 0n;
+  };
+  return search(parent);
+}
+
+/**
+ * Give keyboard focus to the browser's render widget window, which the click and the controller's
+ * own focus move did not do. The widget belongs to another thread, so this thread's input is
+ * attached to the widget's thread for the call and detached afterwards. Logs what happened.
+ */
+function focusRenderWidget(): void {
+  const widget = findDescendant(hwnd, RENDER_WIDGET_CLASS);
+  if (widget === 0n) {
+    console.log("Render widget focus: widget window not found");
+    return;
+  }
+  const ownThread = kernel.symbols.GetCurrentThreadId();
+  const widgetThread = user.symbols.GetWindowThreadProcessId(widget, null);
+  const attached =
+    widgetThread !== ownThread &&
+    user.symbols.AttachThreadInput(ownThread, widgetThread, 1) !== 0;
+  const previous = user.symbols.SetFocus(widget);
+  if (attached) {
+    user.symbols.AttachThreadInput(ownThread, widgetThread, 0);
+  }
+  console.log(
+    `Render widget focus: ${JSON.stringify({
+      sameThread: widgetThread === ownThread,
+      attached,
+      setFocusReturned: previous !== 0n,
+      focusIsWidget: focusWindow() === widget,
     })}`,
   );
 }
@@ -465,8 +567,13 @@ try {
         const parsed: unknown = JSON.parse(raw);
         if (parsed === "loaded") {
           loaded = true;
-        } else if (isRecord(parsed) && typeof parsed.keydown === "string") {
-          pageKeys.push(parsed.keydown);
+        } else if (isRecord(parsed)) {
+          if (typeof parsed.focus === "string") {
+            pageFocus = parsed.focus;
+          }
+          if (typeof parsed.keydown === "string") {
+            pageKeys.push(parsed.keydown);
+          }
         }
       },
       revoke() {},
@@ -552,6 +659,9 @@ try {
   };
   // A plain key must raise the controller's accelerator event, or the Alt checks below cannot work.
   step("accelerator probe");
+  logInputState("before focusing the render widget");
+  focusRenderWidget();
+  await settle(KEY_REPORT_SETTLE_MS);
   logInputState("before probe key");
   press(VK_F);
   // Report what both the page and the controller saw before judging, so a failure says whether
