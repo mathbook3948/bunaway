@@ -706,7 +706,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 
 우선순위 P2. 소유자: 세션과 렌더러 API. 출처: [E-session], [E-cookies], [E-request], [E-protocol], [E-net], [T-webview-rust].
 
-- [x] 결정 완료: cookies 조회, 설정, 삭제, 변경 이벤트와 flush는 제공하지 않는다. UI는 `document.cookie`를 쓰고 백엔드는 토큰을 앱 명령으로 받아 저장소에 보관한다. `HttpOnly` 값을 백엔드가 읽어야 하는 앱이 확인되면 읽기 전용 조회부터 다시 검토한다([ADR 0075](./decisions/0075-webview-cookies.md)).
+- [x] 결정 완료: cookies 조회, 설정, 삭제, 변경 이벤트와 flush는 제공하지 않는다. UI는 `document.cookie`를 쓰고 백엔드는 토큰을 앱 명령으로 받아 저장소에 보관한다. `HttpOnly` 값을 백엔드가 읽어야 하는 앱이 확인되면 읽기 전용 조회부터 다시 검토한다([ADR 0076](./decisions/0076-webview-cookies.md)).
 - [ ] cache 크기 조회, cache와 localStorage, IndexedDB, service worker 데이터 삭제를 제공한다.
 - [ ] 저장소 종류, origin과 기간별 데이터 삭제를 제공한다.
 - [ ] 인증 cache, DNS cache와 code cache의 조회 또는 삭제를 제공한다.

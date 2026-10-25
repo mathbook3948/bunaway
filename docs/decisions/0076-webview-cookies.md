@@ -4,7 +4,7 @@ status: accepted
 
 # WebView cookie 조회, 설정, 삭제, 변경 이벤트와 flush를 제공하지 않는다
 
-결정일: 2026-10-25. 검토 기준: main `e43c2d59`.
+결정일: 2026-10-25. 검토 기준: main `a419fe05`.
 
 ## 배경
 
@@ -13,7 +13,7 @@ Electron은 세션의 `cookies` 객체로 조회, 설정, 삭제, `changed` 이�
 WebView2에는 `ICoreWebView2CookieManager`가 있어 조회(`GetCookies`), 설정(`AddOrUpdateCookie`), 삭제(`DeleteCookie` 등)는
 구현할 수 있으나 변경 이벤트와 flush에 해당하는 API는 없다.
 
-- 앱 UI는 허용 origin 안에서만 탐색하며(ADR 0026, 앱 정의의 `origins`), 같은 origin의 페이지는 `document.cookie`로
+- WebView 안에서는 정책 뷰의 `origins`에 허용된 origin만 탐색하며(ADR 0026), 같은 origin의 페이지는 `document.cookie`로
   `HttpOnly`가 아닌 cookie를 읽고 쓸 수 있다. 서버가 보낸 `Set-Cookie`는 WebView가 그대로 처리한다.
 - 백엔드는 WebView와 별개인 Bun 프로세스다. 선택 플러그인 `network`는 WebView cookie를 공유하지 않으며
   요청 header의 `Cookie`도 받지 않는다([network 계약](../site/src/content/docs/reference/plugins/network.mdx)).
