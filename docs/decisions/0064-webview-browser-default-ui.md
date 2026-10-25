@@ -13,11 +13,14 @@ status: accepted
 앱이 WebView의 브라우저 기본 UI를 켜고 끄는 설정을 제공할지 정해야 했다. 대상은 JavaScript 대화상자(`alert`, `confirm`, `prompt`),
 기본 context menu, zoom 단축키(Ctrl+휠, Ctrl+더하기와 빼기), autofill, 비밀번호 자동 저장, HTTP 인증이다.
 
-- Electron의 WebView에는 기본 context menu가 없고, 앱이 `context-menu` 이벤트를 받아 직접 메뉴를 만든다. JavaScript 대화상자를
-  끄는 `disableDialogs` 옵션이 있다. zoom 단축키는 앱 메뉴의 `zoomIn`, `zoomOut` role이 만든다. HTTP 인증은 `login` 이벤트로
-  앱이 처리한다.
-- Tauri 2의 Windows 창 빌더에는 zoom 단축키를 켜고 끄는 `zoom_hotkeys_enabled` 옵션이 있다. 그 밖의 항목에는 앱이 쓰는
-  설정이 없다.
+- Electron은 앱이 `context-menu` 이벤트를 받아 직접 메뉴를 만든다. JavaScript 대화상자를 끄는
+  `webPreferences.disableDialogs` 옵션(기본 `false`)이 있다. zoom 단축키는 앱 메뉴의 `zoomIn`, `zoomOut` role이 만든다.
+  HTTP 인증은 `app`과 `webContents`의 `login` 이벤트로 앱이 처리하고, 앱이 처리하지 않으면 인증을 취소한다(자체 인증 창을 띄우지 않는다).
+- Tauri 2는 `WebviewBuilder`와 `WebviewWindowBuilder`(데스크톱 공용)에 `zoom_hotkeys_enabled`(기본 `false`)를 둔다. Windows에서는
+  WebView2 `IsZoomControlEnabled`를 제어하고, 내부 wry가 같은 값으로 `IsPinchZoomEnabled`도 설정한다. 일반 autofill은
+  `general_autofill_enabled`(기본 `true`, Windows만 지원, `IsGeneralAutofillEnabled`)로 끌 수 있고 비밀번호와 카드 autofill은
+  끄지 않는다. 기본 context menu, JavaScript 대화상자, HTTP 인증, 비밀번호 자동 저장을 설정하는 공개 API는 없으며(기본 context menu는
+  WebView2 기본값인 켜짐), 앱은 `with_webview`로 얻은 WebView2 컨트롤러로 직접 접근해야 한다.
 - 이 저장소의 Windows 호스트는 WebView2 설정을 고정한다(`native/windows/bun/webview.ts`). JavaScript 대화상자
   (`AreDefaultScriptDialogsEnabled`), 기본 context menu(`AreDefaultContextMenusEnabled`), zoom 컨트롤(`IsZoomControlEnabled`),
   상태 표시줄, host object를 끄고, 비밀번호 자동 저장(`IsPasswordAutosaveEnabled`)과 일반 autofill(`IsGeneralAutofillEnabled`)도 끈다.
@@ -25,8 +28,8 @@ status: accepted
 - 컨트롤러 `setZoomFactor`와 `getWebViewState`의 zoom factor는 이미 제공한다. 호스트는 `IsZoomControlEnabled`를 꺼서 Ctrl+휠과 Ctrl+더하기, 빼기로 zoom이 바뀌는
   경로를 닫는다. 터치 핀치 zoom(`IsPinchZoomEnabled`)은 호스트가 설정하지 않아 WebView2 기본값을 따르며 이 계약에 포함하지 않는다.
   개발 도구를 켠 빌드의 브라우저 가속키도 포함하지 않는다. 그래서 앱이 zoom 단계를 메뉴나 단축키로 직접 정할 수 있다.
-- 호스트는 `BasicAuthenticationRequested`를 처리하지 않는다. 핸들러가 없으면 WebView2 문서상 기본 인증 창이
-  뜨는 것으로 알려져 있으며 이 저장소에서 검증하지 않았다. 앱 자산과 개발 서버가 인증을 쓰지 않으므로 이 경로는 현재 쓰는 곳이 없다.
+- 호스트는 `BasicAuthenticationRequested`를 처리하지 않는다. 핸들러가 없을 때 WebView2가 기본 인증 창을
+  띄우는지는 WebView2 문서에 명시되어 있지 않고 이 저장소에서도 검증하지 않았다(Electron은 처리하지 않으면 인증을 취소한다). 앱 자산과 개발 서버가 인증을 쓰지 않으므로 이 경로는 현재 쓰는 곳이 없다.
 - 페이지 안에서는 대화상자를 HTML 요소로, context menu를 `contextmenu` 이벤트와 앱 메뉴(메뉴 플러그인의 `showContextMenu`)로,
   autofill을 `autocomplete` 속성으로 다룰 수 있다.
 
@@ -41,8 +44,9 @@ status: accepted
 
 ## 근거
 
-- 두 프레임워크가 다르다. Electron은 기본 context menu 없이 앱이 만드는 모델이고, Tauri는 zoom 단축키 하나만 설정으로 둔다.
-  이 저장소는 핀치 zoom과 HTTP 인증 창을 뺀 기본 UI를 끈 상태로 시작하고, 같은 일을 메뉴 플러그인의 `showContextMenu`와 `setZoomFactor`로 할 수 있다.
+- 두 프레임워크가 다르다. Electron은 대화상자 끄기 옵션과 앱이 처리하는 이벤트(`context-menu`, `login`)를 두고, Tauri는 zoom 단축키와
+  일반 autofill 두 설정만 둔다. 둘이 겹치는 설정이 없고 쓰는 곳도 없다.
+  Tauri는 zoom 단축키를 켜면 핀치 zoom도 함께 켜지만, 이 저장소는 핀치 zoom을 호스트가 설정하지 않는다. 이 저장소는 핀치 zoom과 HTTP 인증 창을 뺀 기본 UI를 끈 상태로 시작하고, 같은 일을 메뉴 플러그인의 `showContextMenu`와 `setZoomFactor`로 할 수 있다.
   쓰는 곳이 없는 설정을 위해 앱 정의 스키마와 코어 계약을 늘리지 않는다.
 - 브라우저 기본 UI를 켜면 앱이 그리지 않은 창(대화상자, 인증, autofill 목록)이 WebView 위에 뜬다. 이 창은 앱 창의 종료,
   숨김과 모달 처리 규칙 바깥에 있어서, 켜는 설정은 그 규칙을 먼저 정해야 한다.
