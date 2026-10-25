@@ -94,29 +94,22 @@ try {
       await Bun.sleep(5);
     }
   };
-  const waitForAudioEvents = async (count: number) => {
-    await waitFor(
+  /** Wait for an event that reports `muted`; playback events a runner adds are not compared. */
+  const waitForMuted = (muted: boolean) =>
+    waitFor(
       () => {
         windows.pump();
         checkCallbacks();
-        return audioEvents.length >= count;
+        return audioEvents.some((state) => state.muted === muted);
       },
       {
         deadline: "childStep",
-        what: "the audio change event",
+        what: `an audio change event with muted ${muted}`,
         intervalMs: 5,
       },
     );
-    // Let a duplicate or stray event arrive before the count is trusted.
-    for (let i = 0; i < 20; i++) {
-      windows.pump();
-      checkCallbacks();
-      await Bun.sleep(5);
-    }
-    assert.equal(audioEvents.length, count);
-  };
   await waitForDocument(1);
-  assert.deepEqual(audioEvents, []);
+  assert(audioEvents.every((state) => !state.muted));
   assert.deepEqual(webview.getAudioState(), {
     muted: false,
     playing: false,
@@ -127,14 +120,11 @@ try {
     muted: true,
     playing: false,
   });
-  await waitForAudioEvents(1);
-  assert.deepEqual(audioEvents[0], {
-    muted: true,
-    playing: false,
-  });
+  await waitForMuted(true);
+  // Setting the same value again and navigating keep the mute, so no event reports it lifted.
   webview.navigate();
   await waitForDocument(2);
-  await waitForAudioEvents(1);
+  assert(audioEvents.every((state) => state.muted));
   assert.deepEqual(webview.getAudioState(), {
     muted: true,
     playing: false,
@@ -144,11 +134,7 @@ try {
     muted: false,
     playing: false,
   });
-  await waitForAudioEvents(2);
-  assert.deepEqual(audioEvents[1], {
-    muted: false,
-    playing: false,
-  });
+  await waitForMuted(false);
   verified = true;
 } finally {
   if (webview) {

@@ -103,6 +103,28 @@ type EnvironmentGroup = {
 const environments = new Map<string, EnvironmentGroup>();
 
 /** The failure text reported for an edit role whose DevTools call did not start. */
+/** Read mute and playback through an acquired ICoreWebView2_8 (get_IsMuted 83, get_IsDocumentPlayingAudio 87). */
+function readAudioState(audio: Pointer): AudioState {
+  const muted = new Int32Array(1);
+  const playing = new Int32Array(1);
+  checkHresult(
+    method(audio, 83, [
+      "ptr",
+    ])(ptr(muted)),
+    "get_IsMuted",
+  );
+  checkHresult(
+    method(audio, 87, [
+      "ptr",
+    ])(ptr(playing)),
+    "get_IsDocumentPlayingAudio",
+  );
+  return {
+    muted: muted[0] !== 0,
+    playing: playing[0] !== 0,
+  };
+}
+
 function describeDevToolsFailure(error: unknown): string {
   if (error instanceof DevToolsStartError) {
     return hresultText(error.hresult);
@@ -477,7 +499,8 @@ export class WebView {
 
   /**
    * Report mute and playback changes to the host. A runtime without ICoreWebView2_8 publishes none.
-   * add_IsMutedChanged and add_IsDocumentPlayingAudioChanged are slots 85 and 88 of ICoreWebView2_8.
+   * ICoreWebView2_8 orders add_IsMutedChanged (81), remove (82), get_IsMuted (83), put_IsMuted (84),
+   * add_IsDocumentPlayingAudioChanged (85), remove (86), get_IsDocumentPlayingAudio (87).
    */
   private subscribeAudio() {
     if (!this.hooks.audioChanged || !this.webview) {
@@ -493,13 +516,14 @@ export class WebView {
       return;
     }
     this.audioEvents = audio;
+    // The handlers read through the interface held until detach, so no event acquires another one.
     const changes = new AudioChanges(
-      () => this.getAudioState(),
+      () => readAudioState(audio),
       (state) => this.hooks.audioChanged?.(state),
     );
     const notify = () => changes.check();
-    this.on(85, "57d90347-cd0e-4952-a4a2-7483a2756f08", notify, audio);
-    this.on(88, "5def109a-2f4b-11eb-adc1-0242ac120002", notify, audio);
+    this.on(81, "57d90347-cd0e-4952-a4a2-7483a2756f08", notify, audio);
+    this.on(85, "5def109a-2f4b-11eb-adc1-0242ac120002", notify, audio);
   }
 
   /** Apply browser settings and origin/resource policy before the view is shown. */
@@ -1372,24 +1396,7 @@ export class WebView {
   getAudioState() {
     const audio = this.audioInterface();
     try {
-      const muted = new Int32Array(1);
-      const playing = new Int32Array(1);
-      checkHresult(
-        method(audio, 83, [
-          "ptr",
-        ])(ptr(muted)),
-        "get_IsMuted",
-      );
-      checkHresult(
-        method(audio, 87, [
-          "ptr",
-        ])(ptr(playing)),
-        "get_IsDocumentPlayingAudio",
-      );
-      return {
-        muted: muted[0] !== 0,
-        playing: playing[0] !== 0,
-      };
+      return readAudioState(audio);
     } finally {
       release(audio);
     }
@@ -1651,17 +1658,20 @@ export class WebView {
     // Capture process handles before controller closure to track WebView2 children.
     this.captureProcessHandles();
     if (this.webview) {
-      for (const { target, slot, token } of this.events) {
-        checkHresult(
-          method(target, slot, [
-            "i64",
-          ])(token),
-          "remove event",
-        );
-      }
-      if (this.audioEvents) {
-        release(this.audioEvents);
-        this.audioEvents = undefined;
+      try {
+        for (const { target, slot, token } of this.events) {
+          checkHresult(
+            method(target, slot, [
+              "i64",
+            ])(token),
+            "remove event",
+          );
+        }
+      } finally {
+        if (this.audioEvents) {
+          release(this.audioEvents);
+          this.audioEvents = undefined;
+        }
       }
     }
     if (this.controller) {
