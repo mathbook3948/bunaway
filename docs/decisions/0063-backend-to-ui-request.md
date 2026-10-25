@@ -20,7 +20,8 @@ status: accepted
 - 이 저장소의 `context.events.emit`은 broadcast 또는 정확한 view ID로 보내는 단방향 알림이며 UI 콜백의 완료나 반환값을 기다리지
   않는다([events.emit](../site/src/content/docs/reference/backend/events.mdx)). UI에서 백엔드로는 등록한 명령을 Promise로 호출한다.
 - 백엔드가 UI 스레드와 분리되어 있어 UI 응답을 기다리는 호출은 UI의 로드, 숨김, 탐색, 종료 상태에 백엔드 작업이 묶인다.
-  명령은 deadline과 취소를 가지며([ADR 0048](./0048-frontend-node-access-and-sync-ipc.md)), 늦은 응답은 종료된 세션에서 버려진다.
+  명령은 deadline과 취소를 가지며([ADR 0048](./0048-frontend-node-access-and-sync-ipc.md)),
+  기한이 끝나거나 취소된 요청의 늦은 응답은 폐기된다([invoke](../site/src/content/docs/reference/client/invoke.mdx)).
 - UI 코드를 백엔드가 임의로 실행하는 경로(`executeJavaScript` 대응)는 별도 항목(신뢰된 앱 백엔드의 JavaScript 실행)으로 남아 있다.
   이 결정은 그 항목을 대신하지 않는다.
 
