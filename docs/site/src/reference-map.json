@@ -1002,6 +1002,7 @@
           "now",
           "tick",
           "onLifecycle",
+          "onProcessFailure",
           "creationSettled",
           "monitors"
         ]
