@@ -84,7 +84,7 @@ try {
     "INVALID_ARGUMENT",
   );
   await expectRejected(
-    storage.copyDirectory(transfer("src", "src/a.txt")),
+    storage.copyDirectory(transfer("src", "dst/a.txt")),
     "INVALID_ARGUMENT",
   );
   await expectRejected(
@@ -116,12 +116,8 @@ try {
       storage.copyDirectory(transfer("src", "alias/viaLink")),
       "INVALID_ARGUMENT",
     );
-    // The refused copy leaves the directory it created inside the source; remove it so the
-    // copies below count only the original tree.
-    assert.equal(existsSync(path("src/viaLink")), true);
-    await rm(path("src/viaLink"), {
-      recursive: true,
-    });
+    // The destination parent resolves into the source, so nothing was created there.
+    assert.equal(existsSync(path("src/viaLink")), false);
     // A junction given as the root is followed.
     assert.deepEqual(
       await storage.copyDirectory(transfer("alias", "fromAlias")),

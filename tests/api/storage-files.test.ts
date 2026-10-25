@@ -1025,7 +1025,7 @@ test("copyDirectory refuses a destination inside the source before creating anyt
   }
 });
 
-test("copyDirectory stops at a destination that a link places inside the source", async () => {
+test("copyDirectory refuses a destination that a link places inside the source before creating anything", async () => {
   mkdirSync(at("src"));
   writeFileSync(at("src", "a.txt"), "x");
   if (!link(at("src"), at("alias"), "junction")) {
@@ -1039,8 +1039,8 @@ test("copyDirectory stops at a destination that a link places inside the source"
       }),
     ),
   ).toBe("INVALID_ARGUMENT");
-  // The copy stops when the walk reaches the destination, which holds only what was copied so far.
-  expect(existsSync(at("src", "copy", "copy"))).toBe(false);
+  // The destination is resolved before anything is created, so the source is left untouched.
+  expect(existsSync(at("src", "copy"))).toBe(false);
 });
 
 test("copyDirectory fails on a link entry without copying or touching its target", async () => {

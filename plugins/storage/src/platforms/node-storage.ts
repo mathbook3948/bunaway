@@ -9,6 +9,7 @@ import {
   mkdirSync,
   openSync,
   readSync,
+  realpathSync,
   rmdirSync,
   statSync,
   unlinkSync,
@@ -632,6 +633,19 @@ export abstract class NodeStorage
     return this.copyDirectoryWithin(input, signal, DIRECTORY_SIZE_LIMITS);
   }
 
+  /**
+   * Refuse a destination whose parent resolves into the source through a link, before anything is
+   * created, so the copy cannot write into the tree it is reading. The walk's file identity check
+   * remains as the backstop for a link that appears later.
+   */
+  private requireOutsideSource(from: string, to: string): void {
+    const realFrom = realpathSync.native(from);
+    const realParent = realpathSync.native(dirname(to));
+    if (realParent === realFrom || this.rules.isBelow(realFrom, realParent)) {
+      throw failure("INVALID_ARGUMENT", "Cannot copy a directory into itself.");
+    }
+  }
+
   /** The copy behind copyDirectory with explicit cost bounds, public for the same reason as directorySizeWithin. */
   async copyDirectoryWithin(
     input: StorageTransfer,
@@ -646,6 +660,7 @@ export abstract class NodeStorage
       throw failure("INVALID_ARGUMENT", "Cannot copy a directory into itself.");
     }
     try {
+      this.requireOutsideSource(from, to);
       return await copyDirectoryTree(
         from,
         to,
