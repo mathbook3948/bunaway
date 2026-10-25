@@ -33,7 +33,7 @@ const policy: Policy = {
         "https://app.bunaway.local",
       ],
       commands: [
-        "test.arm",
+        "test.loaded",
       ],
       events: [],
       host: {
@@ -93,7 +93,7 @@ if (!process.argv.includes("--child")) {
   const stderr = new Response(child.stderr).text();
   const timeout = killAfter(child, "nativeFixture");
   try {
-    // The backend is waiting once it wrote the marker; the failure then cannot be missed.
+    // The first page load marks the window as ready for the kill; the backend wait replays history either way.
     await waitFor(
       () =>
         access(armedPath).then(
@@ -102,7 +102,7 @@ if (!process.argv.includes("--child")) {
         ),
       {
         deadline: "nativeFixture",
-        what: "the backend to wait for a process failure",
+        what: "the first page load",
       },
     );
     const pids = await waitFor(
@@ -142,23 +142,22 @@ if (!process.argv.includes("--child")) {
         what: "the backend report",
       },
     );
-    // The host API is closed to the backend after the command, so the driver closes the window.
+    // The driver closes the window like a user would; the backend has nothing left to do.
     await closeAllWindows(child.pid);
     const code = await child.exited;
     assert.equal(code, 0, `${await stderr}\n${await stdout}`);
     const report = JSON.parse(await readFile(reportPath, "utf8"));
     assert.equal(report.error, undefined, report.error);
     assert.equal(report.failure.viewId, "main");
-    assert.equal(report.failure.windowId, report.windowId);
+    // Both loads belong to the same window, which is the one the failure names.
+    assert.deepEqual(report.windowIds, [
+      report.failure.windowId,
+      report.failure.windowId,
+    ]);
     // Killing the renderer is a renderer exit, and the host reloads the view in place.
     assert.equal(report.failure.kind, "renderer-exited");
     assert.equal(report.failure.recovery, "reload");
     assert.equal(report.failure.sequence, 1);
-    assert.equal(
-      report.reloaded,
-      true,
-      "page did not reload after the renderer exit",
-    );
     console.log(
       "PASS WebView2 process failure: backend receives renderer-exited with a reload, the view reloads, and the window id is unchanged",
     );
@@ -177,15 +176,48 @@ if (!process.argv.includes("--child")) {
     childRoot,
     "build/windows-process-failure/assets",
   );
-  let armCount = 0;
-  let firstArm: Promise<void> | undefined;
+  const dir = resolve(childRoot, "build/windows-process-failure");
+  const windowIds: string[] = [];
   const app = defineApp({
     modules: [],
     plugins: [
       windows,
+      {
+        name: "process-failure-watch",
+        version: "1",
+        // A setup scope outlives commands, so the wait survives the page and its session being revoked.
+        setup() {
+          // `after: 0` replays retained history, so a failure that lands before the wait registers is kept.
+          void (async () => {
+            const failure = await windows.waitForProcessFailure({
+              after: 0,
+            });
+            // The reloaded page reports itself again once it is ready, which proves the view recovered.
+            await waitFor(() => (windowIds.length > 1 ? true : undefined), {
+              deadline: "childStep",
+              what: "the reloaded page",
+            });
+            await writeFile(
+              resolve(dir, "report.json"),
+              JSON.stringify({
+                failure,
+                windowIds,
+              }),
+            );
+          })().catch(async (error: unknown) => {
+            // Surface the cause to the driver instead of leaving it to an opaque timeout.
+            await writeFile(
+              resolve(dir, "report.json"),
+              JSON.stringify({
+                error: String(error),
+              }),
+            );
+          });
+        },
+      },
     ],
     commands: {
-      "test.arm": {
+      "test.loaded": {
         input: {
           const: null,
         },
@@ -193,44 +225,10 @@ if (!process.argv.includes("--child")) {
           const: null,
         },
         async run() {
-          armCount++;
-          if (firstArm !== undefined) {
-            return null;
+          windowIds.push((await windows.getSnapshot()).windowId);
+          if (windowIds.length === 1) {
+            await writeFile(resolve(dir, "armed"), "");
           }
-          firstArm = (async () => {
-            // The host API is only usable while this command runs, so read the window id first.
-            const snapshot = await windows.getSnapshot();
-            // `after: 0` replays retained history, so a failure that lands before the wait registers is kept.
-            const waiting = windows.waitForProcessFailure({
-              after: 0,
-            });
-            await writeFile(
-              resolve(childRoot, "build/windows-process-failure/armed"),
-              "",
-            );
-            const failure = await waiting;
-            // The reloaded page arms again once it is ready, which proves the view recovered.
-            await waitFor(() => (armCount > 1 ? true : undefined), {
-              deadline: "childStep",
-              what: "the reloaded page",
-            });
-            await writeFile(
-              resolve(childRoot, "build/windows-process-failure/report.json"),
-              JSON.stringify({
-                failure,
-                windowId: snapshot.windowId,
-                reloaded: armCount > 1,
-              }),
-            );
-          })().catch(async (error: unknown) => {
-            // Surface the cause to the driver instead of leaving it to an opaque timeout.
-            await writeFile(
-              resolve(childRoot, "build/windows-process-failure/report.json"),
-              JSON.stringify({
-                error: String(error),
-              }),
-            );
-          });
           return null;
         },
       },
