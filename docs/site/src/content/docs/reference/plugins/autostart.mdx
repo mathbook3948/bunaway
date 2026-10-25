@@ -7,7 +7,8 @@ sidebar: { order: 6 }
 기본 export(`default`)를 `autostart`로 가져와 앱에 등록하고 호출합니다.
 
 `@bunaway/plugin-autostart`는 현재 사용자의 Windows와 macOS 로그인 자동 실행을 제공합니다.
-Windows는 사용자 Run 값, macOS는 `~/Library/LaunchAgents`의 LaunchAgent plist에 등록합니다.
+Windows는 사용자 Run 값, MSIX 패키지로 실행하는 Windows 앱은 manifest StartupTask,
+macOS는 `~/Library/LaunchAgents`의 LaunchAgent plist에 등록합니다.
 패키지를 설치하고 `autostart`를 등록해야 합니다. 설치와 등록만으로 자동 실행이
 켜지지 않습니다. 사용자가 동의한 설정 변경에서 `enableAutostart`를 호출하세요.
 
@@ -191,6 +192,33 @@ EXE를 가리키는 등록과 기록된 이전 ID의 소유 등록을 정리합�
 `perMachine` 설치는 사용자 Run 정리를 제공하지 않습니다.
 [설치 계약](/reference/packaging/channels/#로그인-자동-실행)에 ID 변경과 복구 규칙이 있습니다.
 
+## MSIX 패키지
+
+패키지 ID가 있는 프로세스에서는 같은 API가 manifest의 `desktop:StartupTask`로 동작합니다.
+MSIX 패키지는 작업 ID `BunawayAutostart`를 `Enabled="false"`로 선언하므로 사용자가
+앱을 실행하는 것만으로 로그인 실행이 켜지지 않습니다. 사용자가 동의한 설정 변경에서
+`enableAutostart`를 호출해야 켜집니다.
+
+`StartupTaskState`는 기존 `AutostartStatus` 필드로 표현하며 새 필드는 없습니다.
+
+| `StartupTaskState` | `registered` | `startupState` |
+| --- | --- | --- |
+| `Disabled` | `false` | `disabled` |
+| `DisabledByUser` | `true` | `disabled` |
+| `DisabledByPolicy` | `false` | `disabled` |
+| `Enabled`, `EnabledByPolicy` | `true` | `enabled` |
+
+사용자나 정책이 끈 작업은 앱이 다시 켤 수 없습니다. 이때 `enableAutostart`는 실패하지 않고
+`startupState: "disabled"`를 반환하며, 사용자는 Windows 설정의 시작 앱에서 직접 켜야 합니다.
+정의된 값이 아닌 상태는 `unknown`입니다. `registrationName`은 작업 ID이고 `commandLine`,
+`executablePath`, `args`는 `null`, `matchesCurrentLaunch`는 `false`입니다.
+`disableAutostart`는 작업을 끄며 이미 꺼져 있어도 성공합니다.
+
+manifest의 StartupTask는 실행 파일을 인자 없이 시작합니다. 그래서 MSIX에서
+`args`가 비어 있지 않거나 `hidden: true`인 `enableAutostart`는 `INVALID_ARGUMENT`로 거부하고,
+로그인 실행의 `launchReason`은 `"manual"`로 전달됩니다. manifest에 이 작업을 선언하지 않은
+패키지는 `UNSUPPORTED`입니다. 호출은 비동기 WinRT 작업이므로 호출 취소와 10초 기한을 따릅니다.
+
 ## 정책과 오류
 
 | 작업 | 입력 | 권한 |
@@ -207,8 +235,7 @@ setup에서는 루트 `backend.permissions`를 사용합니다. 실행 파일이
 
 - `INVALID_ARGUMENT`: 입력, 인자 인코딩이나 전체 명령줄 길이가 유효하지 않거나 숨김 등록에 필요한 트레이가 없습니다.
 - `PERMISSION_DENIED`: 정책 권한이나 사용자 레지스트리 접근 권한이 없습니다.
-- `UNSUPPORTED`: Windows 어댑터, 호스트 실행 정보가 없거나 MSIX 패키지로 실행 중입니다.
-  MSIX는 manifest StartupTask와 별도의 사용자 동의 계약이 필요합니다.
+- `UNSUPPORTED`: Windows 어댑터나 호스트 실행 정보가 없거나, MSIX 패키지의 manifest에 StartupTask가 없습니다.
 - `INTERNAL`: 레지스트리 조회, 갱신이나 명령줄 파싱에 실패했습니다. macOS에서는 plist 파일 접근에 실패했거나
   같은 이름의 기존 plist를 이 앱이 만들지 않았습니다.
 - `CANCELLED`, `TIMEOUT`, `BUSY`: 기존 Host API의 취소, 기한과 대기열 제한입니다.
@@ -223,4 +250,9 @@ macOS는 사용자 LaunchAgent 등록, 조회와 해제를 지원합니다. plis
 업데이트 뒤 등록 유지와 App Sandbox는 지원하지 않습니다. 임시 홈 디렉터리에서 plist를
 쓰고 읽는 동작은 테스트로 검증했습니다. macOS CI는 shared Bun과 ad-hoc 서명한 compiled 앱을 실행해 등록, 반복 등록,
 해제, 재실행 뒤 조회와 `plutil`의 plist 검사를 확인합니다. 실제 로그인 때 launchd가 앱을 실행하는지는 검증하지 않았습니다.
-MSIX, Linux와 모바일은 지원하지 않습니다.
+Linux와 모바일은 지원하지 않습니다.
+
+MSIX 경로는 manifest 생성 결과와 상태 변환, 입력 거부를 테스트로 검증했습니다.
+WinRT 호출은 패키지 ID가 없는 Windows 프로세스에서 호출이 오류로 끝나는 것까지 확인했습니다.
+`win-store-msix` 채널은 컴파일된 앱 패키징을 아직 지원하지 않아 설치된 MSIX에서
+StartupTask 활성화, 상태 조회와 로그인 실행은 검증하지 않았습니다.

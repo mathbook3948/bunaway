@@ -501,7 +501,7 @@ test("host supplies trusted app metadata only to a registered adapter", async ()
   expect(observed).toEqual(app);
   await registered.dispose();
 });
-test("MSIX package identity is unsupported and native DLL disposal is idempotent", () => {
+test("package identity selects the StartupTask path and native DLL disposal is idempotent", () => {
   const registryModule = new URL(
     "../../plugins/autostart/src/platforms/windows-registry.ts",
     import.meta.url,
@@ -521,15 +521,15 @@ mock.module("bun:ffi", () => ({ ...ffi, dlopen: (name) => ({
 }) }));
 const { createRegistry } = await import(${JSON.stringify(registryModule)});
 const registry = createRegistry();
-registry.unpackaged();
+assert.equal(registry.packaged(), false);
 packageResult = 122; // GetCurrentPackageFullName's real size-query result for a packaged process.
-assert.throws(() => registry.unpackaged(), { code: "UNSUPPORTED" });
+assert.equal(registry.packaged(), true);
 packageResult = 5;
-assert.throws(() => registry.unpackaged(), { code: "PERMISSION_DENIED" });
+assert.throws(() => registry.packaged(), { code: "PERMISSION_DENIED" });
 registry.dispose();
 registry.dispose();
 assert.equal(closed.length, 3);
-assert.throws(() => registry.unpackaged(), { code: "CANCELLED" });
+assert.throws(() => registry.packaged(), { code: "CANCELLED" });
 `,
   ]);
   expect(child.exitCode, child.stderr.toString()).toBe(0);

@@ -374,7 +374,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 제거 시 현재 ID의 등록을 해제하고 ID 변경 전 등록을 정리하는 설치 계약을 연결한다. Inno `UninstallAutostart`와 소유자 정리를 사용한다.
 - [x] Windows 작업 관리자에서 사용자가 비활성화한 상태를 별도로 조회하고 갱신 시 보존한다.
 - [x] 설치 프로그램의 opt-in 설정과 런타임 설정을 연결한다. Inno `unchecked checkedonce`와 `DesiredAutostartCommand`를 사용한다.
-- [ ] MSIX manifest StartupTask와 사용자 동의 계약을 구현한다.
+- [x] MSIX manifest StartupTask와 사용자 동의 계약을 구현한다. manifest는 `Enabled="false"`로 선언하고 `autostart`가 WinRT로 활성화, 조회와 해제를 제공한다. 설치된 MSIX에서의 실행 검증은 `win-store-msix` 패키징이 지원될 때까지 남는다.
 
 현재 `@bunaway/plugin-autostart`는 개발과 배포 앱 ID를 분리하며 등록 변경과 조회 권한도
 분리한다. 전체 Run 명령줄은 260 UTF-16 코드 단위 이하다. Windows 활성 상태를

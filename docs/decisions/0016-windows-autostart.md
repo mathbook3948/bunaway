@@ -19,9 +19,9 @@ COM 작성과 파일 수명 관리가 추가된다. 이번 범위는 Run의 문�
 260 UTF-16 코드 단위 제한을 명시적으로 적용한다. 긴 개발 경로와 인자를 지원해야
 한다면 제한을 우회하지 않고 별도의 등록 방식을 검토한다.
 
-MSIX는 manifest StartupTask로 사용자 동의를 관리해야 하므로 Run 구현을 사용하지
-않는다. 앱 패키지 ID가 있는 프로세스는 등록, 조회와 해제 모두 UNSUPPORTED로 거부한다.
-기계 범위 등록과 자동 관리자 권한 상승도 제공하지 않는다.
+MSIX 패키지 ID가 있는 프로세스는 Run 구현을 사용하지 않고 manifest `StartupTask`를 쓴다.
+기계 범위 등록과 자동 관리자 권한 상승은 제공하지 않는다. 자세한 규칙은 아래
+"MSIX는 manifest StartupTask를 사용한다"를 따른다.
 
 ## 신뢰 경계와 수명
 
@@ -74,10 +74,52 @@ Run 명령줄 제한에 포함한다. 호스트가 접두어를 소비하고 `on
 이전 소유 등록을 정리하며 새로운 ID의 동의를 자동으로 넘기지 않는다.
 [설치 채널 계약](../site/src/content/docs/reference/packaging/channels.mdx#로그인-자동-실행)을 따른다.
 
+## MSIX는 manifest StartupTask를 사용한다
+
+패키지 ID가 있는 프로세스에서는 같은 공개 API가 `Windows.ApplicationModel.StartupTask`로
+동작한다. 호출은 `autostart` 플러그인 안의 작은 WinRT FFI 바인딩이 맡는다.
+별도 도우미 프로세스나 패키징 단계의 helper는 두지 않는다. 바인딩은 `RoGetActivationFactory`로
+`IStartupTaskStatics`를 얻어 `GetAsync`로 작업을 열고, `RequestEnableAsync`, `Disable`, `get_State`를
+호출한다. 비동기 결과는 `IAsyncInfo.Status`를 짧은 간격으로 조회해 기다리며 호출 취소와
+기한을 반영한다. 패키지 여부는 `GetCurrentPackageFullName`으로 판정하며 이 판정은
+기존 비패키지 Run 경로와 겹치지 않는다.
+
+manifest에는 `desktop:StartupTask`를 `Enabled="false"`로 선언하며 작업 ID는
+`@bunaway/protocol`의 `MSIX_STARTUP_TASK_ID` 하나를 manifest 생성과 런타임이 함께 쓴다.
+`Enabled="true"`는 앱이 호출하지 않아도 사용자가 앱을 한 번 실행하면 로그인 실행이
+켜지므로 사용자 동의 없는 활성화가 된다. 기본값을 `false`로 두고 앱이 사용자 동의가 있는
+설정 변경에서 `enableAutostart`를 호출해야 켜진다.
+
+기존 공개 상태 필드로만 표현하고 새 필드는 추가하지 않는다.
+
+| `StartupTaskState` | `registered` | `startupState` |
+| --- | --- | --- |
+| `Disabled` | `false` | `disabled` |
+| `DisabledByUser` | `true` | `disabled` |
+| `DisabledByPolicy` | `false` | `disabled` |
+| `Enabled`, `EnabledByPolicy` | `true` | `enabled` |
+
+사용자나 정책이 끈 작업은 프로그램으로 다시 켤 수 없다. `enableAutostart`는 Run 경로와 같이
+성공하고 `startupState`가 `disabled`인 상태를 돌려준다. 사용자 선택을 우회하지 않는다.
+`registrationName`은 작업 ID이고 `commandLine`, `executablePath`, `args`는 `null`,
+`matchesCurrentLaunch`는 `false`다. StartupTask는 manifest의 실행 파일을 인자 없이 시작하므로
+`args`가 비어 있지 않거나 `hidden: true`인 등록은 `INVALID_ARGUMENT`로 거부한다.
+로그인 실행의 `launchReason`은 `manual`로 보이며 숨김 시작은 지원하지 않는다.
+manifest에 이 작업을 선언하지 않은 패키지는 `UNSUPPORTED`다.
+
+이 결정의 근거는 다음과 같다. Electron은 `setLoginItemSettings`가 패키지 여부와 관계없이
+Run 키만 쓰며 MSIX에서는 manifest 선언과 서드파티 WinRT 호출이 필요하다. Tauri의
+autostart 플러그인도 Run 키만 쓰며 MSIX 번들을 만들지 않는다. 둘 다 공식 지원이
+없으므로 프레임워크가 같은 공개 API 안에서 StartupTask를 제공하되, 기본값은 사용자
+동의를 우선하는 `Enabled="false"`로 한다.
+
 ## Windows 공식 자료
+
 
 - [Run and RunOnce Registry Keys](https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys)
 - [Parsing C command-line arguments](https://learn.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments)
 - [CommandLineToArgvW](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-commandlinetoargvw)
 - [RegGetValueW](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-reggetvaluew)
 - [RegSetValueExW](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regsetvalueexw)
+- [StartupTask](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask)
+- [StartupTaskState](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptaskstate)

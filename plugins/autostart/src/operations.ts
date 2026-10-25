@@ -22,17 +22,17 @@ export const autostartOperations = {
   enable: operation({
     input: enableSchema,
     output: statusSchema,
-    handler: (input, { instance }) => enable(instance, input),
+    handler: (input, { instance, signal }) => enable(instance, input, signal),
   }),
   disable: operation({
     input: z.null(),
     output: z.null(),
-    handler: (_input, { instance }) => disable(instance),
+    handler: (_input, { instance, signal }) => disable(instance, signal),
   }),
   getStatus: operation({
     input: z.null(),
     output: statusSchema,
-    handler: (_input, { instance }) => getStatus(instance),
+    handler: (_input, { instance, signal }) => getStatus(instance, signal),
   }),
 };
 /** The same operations over the user's LaunchAgent on macOS. */

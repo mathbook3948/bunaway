@@ -176,6 +176,9 @@ Run 쓰기 조율 계약입니다. `Global\Bunaway.Autostart.` 접두어 뒤에 
 런타임 I/O Worker는 기다리지 않고 BUSY로 거부합니다. 앱 권한이나 자동 실행
 동의의 근거로 사용하지 않습니다.
 
+`MSIX_STARTUP_TASK_ID`는 MSIX manifest의 `desktop:StartupTask`가 선언하는 작업 ID이며
+패키징과 `autostart` 플러그인이 같은 값을 씁니다. 앱 코드에서 설정하는 값이 아닙니다.
+
 ## Windows toast activator 클래스 식별자
 
 `toastActivatorClsid(appId)`는 앱 ID에서 toast activator의 COM 클래스 식별자를 계산합니다. 고정한
