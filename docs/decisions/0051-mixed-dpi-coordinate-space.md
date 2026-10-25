@@ -20,10 +20,14 @@ status: accepted
 다른 프레임워크는 다음과 같다. 아래 Electron과 Tauri 서술은 해당 프로젝트의 공개 문서와 소스 확인에 따른 것이며 이 저장소의
 테스트로 검증한 것은 아니다.
 
-- Electron은 화면 좌표를 DIP로 다루는 `screen.screenToDipPoint`, `dipToScreenPoint`와 사각형 변환을 Windows에서 제공한다.
-  변환에는 지점 또는 사각형이 놓인 디스플레이의 배율을 쓴다. `Display.bounds`는 DIP이고 `scaleFactor`를 함께 준다.
-- Tauri 2와 tao의 모니터는 물리 `position`, `size`와 `scale_factor`를 주고 창 위치와 크기는 물리와 논리 단위 타입으로
-  나뉜다. 논리 값으로 바꾸는 배율은 호출자가 고르며 모니터 전체에 걸친 공통 논리 좌표계는 없다.
+- Electron은 모든 디스플레이의 `Display.bounds`와 `workArea`를 하나의 DIP 좌표계로 주고 `scaleFactor`를 함께 준다.
+  `screen.screenToDipPoint`와 `dipToScreenPoint`는 Windows와 Linux(X11)에서, `screenToDipRect`와 `dipToScreenRect`는
+  Windows에서만 제공되며 macOS에는 없다. Windows는 모니터별 DPI를 쓴다. 지점 변환은 그 지점이 놓인 디스플레이의 배율을
+  쓰고 디스플레이 원점을 기준으로 상대 변환한다. 사각형 변환은 `window`를 넘기면 그 창에 가장 가까운 디스플레이의 배율을,
+  `window`가 null이면 사각형에 가장 가까운 디스플레이의 배율을 쓴다.
+- Tauri 2와 tao의 모니터는 물리 `position`, `size`, `scale_factor`를 주고 Tauri는 물리 `work_area`를 더한다. 모니터에
+  걸친 공통 논리 좌표계와 지점 기준 변환 API는 없다. 논리 값으로 바꾸는 `to_logical(scale_factor)`는 값 하나를 배율 하나로
+  나누며 디스플레이 원점 보정을 하지 않는다.
 
 ## 결정
 
@@ -37,7 +41,8 @@ status: accepted
 ## 근거
 
 - 이 저장소는 Tauri처럼 모니터의 물리 `bounds`와 `scaleFactor`를 공개하고 변환의 기준 모니터는 호출자가 고르게 한다.
-  Electron의 지점 기준 변환은 같은 정보를 코어가 대신 조합하는 것이므로, 코어는 작게 두고 앱이 조합하게 한다.
+  Electron의 변환은 모든 디스플레이를 한 DIP 좌표계에 놓고 디스플레이 원점을 보정한다. 이 저장소에는 그런 DIP 좌표계가
+  없어 같은 API를 더하려면 좌표계부터 새로 정해야 한다. 코어는 작게 두고 앱이 모니터를 골라 변환하게 한다.
 - 지점과 사각형 기준 모니터 조회가 이미 있다. `scaleFactor`는 `dpi / 96`이라 물리 값을 `scaleFactor`로 나누면 그 모니터의
   논리 값이다. 이 식은 대상 창이 그 모니터에 있을 때 `windows.toLogical`과 같고, 앱이 직접 계산하면 `toLogical`이 적용하는
   정수 반올림, `-0` 정규화와 범위 검사만 앱이 필요한 만큼 맞춰야 한다.
