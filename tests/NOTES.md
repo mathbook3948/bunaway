@@ -1381,6 +1381,12 @@ Linux에서도 실행하는 순수 계산은 가장자리별 기준 축과 고�
 설정 시 현재 크기 불변, 크기 제약과 시스템 최대 크기 처리, `null` 해제 뒤 사각형 보존을 확인합니다.
 실제 마우스 드래그, 혼합 DPI와 다중 모니터는 검사하지 않습니다.
 
+`lifecycle/windows-resizable-maximize.test.ts`는 `resizable: false` 창(`WS_THICKFRAME` 없음)을 실제 HWND로
+검사합니다. 크기 조절 가능했을 때의 가장자리 hit(`HTLEFT`)가 사라지는지, 앱의 시스템 명령 정책이 `SC_SIZE`를 무시해 크기가 바뀌지 않는지,
+`maximizable` 설정에 따라 `SC_MAXIMIZE`가 동작하거나 무시되고 `SC_RESTORE`가 원래 bounds로 되돌리는지,
+프로그램 호출 `maximize`가 설정과 무관하게 동작하는지 확인합니다. Snap(Win+방향키, 가장자리 끌기)은
+셸 기능이라 검사하지 않습니다. `host:windows`가 별도 프로세스로 돌립니다.
+
 `lifecycle/windows-display.test.ts`는 기본 style 보존과 실제 Windows의 custom caption,
 네이티브 resize hit test, topmost/tool-window flag, content 크기와 전체화면 복원을
 검사합니다. 작업 표시줄 attention 요청이 창을 활성화하거나 표시하지 않는지,
