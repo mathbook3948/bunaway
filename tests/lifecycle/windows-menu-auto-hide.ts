@@ -622,7 +622,7 @@ try {
   await settle(KEY_REPORT_SETTLE_MS);
   logInputState("after probe key");
   await pumpUntil(
-    () => pageKeys.includes("f"),
+    () => pageKeys.some((key) => key.toLowerCase() === "f"),
     "The page receiving a real key",
   );
   assert.equal(
@@ -644,12 +644,17 @@ try {
 
   // Alt used with another key is not a tap.
   step("Alt+F");
+  const keysBefore = pageKeys.length;
   sendKey(VK_MENU, false);
   sendKey(VK_F, false);
   sendKey(VK_F, true);
   sendKey(VK_MENU, true);
-  // Let the sequence and the deferred dispatch run; the bar must still be linked afterwards, and
-  // the Alt tap that follows would fail if Alt+F had been counted as a tap.
+  // The page reporting the F confirms the sequence reached the window. Then let the deferred
+  // dispatch run; the bar must still be linked afterwards.
+  await pumpUntil(
+    () => pageKeys.length > keysBefore,
+    "The page receiving Alt+F",
+  );
   await settle(KEY_REPORT_SETTLE_MS);
   assert.equal(
     user.symbols.GetMenu(hwnd),
