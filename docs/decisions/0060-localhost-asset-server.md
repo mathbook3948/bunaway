@@ -20,7 +20,8 @@ status: accepted
 - 이 저장소의 Windows 호스트는 `https://app.bunaway.local`로 자산을 로드한다. 컴파일하지 않은 실행은 WebView2 가상 호스트 이름을
   `web` 폴더에 매핑하고 접근 종류 값 2(`DENY_CORS`)를 쓰며, 컴파일된 앱은 매핑 없이 `WebResourceRequested`에서 임베드한
   파일로 응답한다(`native/windows/bun/webview.ts`). macOS와 iOS는 `bunaway://` scheme handler로 같은 자산을 읽는다.
-  어느 경로도 네트워크 포트를 열지 않는다. 기본 통신 경로는 이 로컬 자산과 브리지다.
+  어느 자산 경로도 네트워크 포트를 열지 않는다. 자산 로딩과 달리 iOS의 백엔드 연결은 loopback WebSocket을 쓰며 이
+  결정의 대상이 아니다.
 - 개발 모드의 `dev.url`은 localhost 또는 127.0.0.1만 허용하며 개발 산출물에만 적용한다([ADR 0009](./0009-development-server.md)).
   이 결정은 개발 서버를 바꾸지 않는다.
 
