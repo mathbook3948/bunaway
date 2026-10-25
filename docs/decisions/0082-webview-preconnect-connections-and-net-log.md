@@ -29,7 +29,7 @@ online 상태 조회와 변경 이벤트, host와 proxy resolve는 `network.isOn
 ## 결정
 
 1. preconnect, 연결 정리, network log API를 추가하지 않는다.
-2. 대체 API는 두지 않는다. 연결을 미리 여는 용도는 문서의 `<link rel="preconnect">`로, 개발 중 요청 확인은 DevTools로 충당한다.
+2. 대체 API는 두지 않는다. 연결을 미리 여는 용도는 페이지(HTML 문서)의 `<link rel="preconnect">`로, 개발 중 요청 확인은 Windows x64의 DevTools로 충당한다.
 3. 배포 앱에서 이 기능이 필요하다는 요구가 확인되면 별도 결정에서 다룬다. 이때 환경 옵션 전달 경로, 기록 범위,
    민감 정보 포함 여부(capture 수준), 출력 경로의 책임을 먼저 정한다.
 
@@ -39,7 +39,7 @@ online 상태 조회와 변경 이벤트, host와 proxy resolve는 `network.isOn
   쓰는 곳이 없다(`plugins`, `packages`, `examples`에서 이 기능을 요구하는 코드는 없다).
 - preconnect와 연결 정리는 WebView2에 대응 API가 없다. Electron과 같은 이름의 API를 약속하려면 공개 표면이 없는
   Chromium 내부 동작이나 DevTools 프로토콜에 기대야 한다.
-- network log는 호스트의 환경 생성 경로를 바꾸고 프로세스 시작 뒤에는 켜고 끌 수 없어 Electron의 `startLogging`,
+- network log는 호스트의 환경 생성 경로를 바꾸고 환경 생성 뒤에는 켜고 끌 수 없어 Electron의 `startLogging`,
   `stopLogging` 의미를 지킬 수 없다. 민감 정보를 파일에 남기는 기능이라 쓰는 곳 없이 먼저 열 이유가 없다.
 - 쓰는 곳이 확인되지 않았으므로 결정을 미뤄도 앱이 막히지 않는다.
 
