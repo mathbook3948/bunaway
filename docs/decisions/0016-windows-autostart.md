@@ -84,7 +84,8 @@ Run 명령줄 제한에 포함한다. 호스트가 접두어를 소비하고 `on
 기한을 반영한다. 패키지 여부는 `GetCurrentPackageFullName`으로 판정하며 이 판정은
 기존 비패키지 Run 경로와 겹치지 않는다.
 
-manifest에는 `desktop:StartupTask`를 `Enabled="false"`로 선언하며 작업 ID는
+manifest에는 `desktop:StartupTask`를 `Enabled="false"`로 선언하고 `autostart` 사용 여부와 관계없이 모든 MSIX 패키지에 넣는다.
+Windows 설정의 시작 앱 목록에 비활성 항목이 나타나는 것은 감수한다. 작업 ID는
 `@bunaway/protocol`의 `MSIX_STARTUP_TASK_ID` 하나를 manifest 생성과 런타임이 함께 쓴다.
 `Enabled="true"`는 앱이 호출하지 않아도 사용자가 앱을 한 번 실행하면 로그인 실행이
 켜지므로 사용자 동의 없는 활성화가 된다. 기본값을 `false`로 두고 앱이 사용자 동의가 있는

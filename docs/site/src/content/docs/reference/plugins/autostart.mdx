@@ -218,6 +218,9 @@ manifest의 StartupTask는 실행 파일을 인자 없이 시작합니다. 그�
 `args`가 비어 있지 않거나 `hidden: true`인 `enableAutostart`는 `INVALID_ARGUMENT`로 거부하고,
 예약 시작 인자가 없으므로 로그인 실행을 `launchReason: "autostart"`로 구분하지 못합니다. manifest에 이 작업을 선언하지 않은
 패키지는 `UNSUPPORTED`입니다. 호출은 비동기 WinRT 작업이므로 호출 취소와 10초 기한을 따릅니다.
+작업이 이미 바뀐 뒤 취소되거나 기한이 지나면 변경을 되돌리지 않으므로 `getAutostartStatus`로 현재 상태를
+다시 확인하세요. MSIX 패키지는 `autostart` 플러그인을 쓰지 않아도 비활성 상태의 작업을 선언하며,
+Windows 설정의 시작 앱 목록에 앱 항목이 나타납니다.
 
 ## 정책과 오류
 

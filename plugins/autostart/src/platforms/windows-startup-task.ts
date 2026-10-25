@@ -221,7 +221,6 @@ async function completed(
   stage: string,
 ): Promise<void> {
   const out = new BigUint64Array(1);
-  // Keep the IID buffer referenced for the whole native call.
   const iid = windowsGuid(ASYNC_INFO_IID);
   check(
     method(
@@ -344,6 +343,13 @@ export const openStartupTask: StartupTaskOpener = async (signal, use) => {
     if (!joined && initialized >>> 0 !== RPC_E_CHANGED_MODE) {
       throw failure(initialized, "RoInitialize");
     }
+    let outcome:
+      | {
+          value: Awaited<ReturnType<typeof use>>;
+        }
+      | {
+          error: unknown;
+        };
     try {
       const staticsIid = windowsGuid(STATICS_IID);
       const statics = withString(STARTUP_TASK_CLASS, (name) =>
@@ -383,57 +389,66 @@ export const openStartupTask: StartupTaskOpener = async (signal, use) => {
           ),
         "GetAsync.GetResults",
       );
-      return await use({
-        state() {
-          const state = new Int32Array(1);
-          check(
-            method(
-              task,
-              SLOT_GET_STATE,
-              [
-                "ptr",
-              ],
-              ptr(state),
-            ),
-            "get_State",
-          );
-          return state[0] ?? -1;
-        },
-        async requestEnable(abort) {
-          throwIfAborted(abort);
-          const request = outObject(
-            (out) =>
+      throwIfAborted(signal);
+      outcome = {
+        value: await use({
+          state() {
+            const state = new Int32Array(1);
+            check(
               method(
                 task,
-                SLOT_REQUEST_ENABLE,
+                SLOT_GET_STATE,
                 [
                   "ptr",
                 ],
-                out,
+                ptr(state),
               ),
-            "RequestEnableAsync",
-          );
-          await completed(request, abort, own, "RequestEnableAsync");
-          const state = new Int32Array(1);
-          check(
-            method(
-              request,
-              SLOT_GET_RESULTS,
-              [
-                "ptr",
-              ],
-              ptr(state),
-            ),
-            "RequestEnableAsync.GetResults",
-          );
-          return state[0] ?? -1;
-        },
-        disable() {
-          check(method(task, SLOT_DISABLE, []), "Disable");
-        },
-      });
-    } finally {
-      // Release every object and leave the apartment even when one release fails.
+              "get_State",
+            );
+            return state[0] ?? -1;
+          },
+          async requestEnable(abort) {
+            throwIfAborted(abort);
+            const request = outObject(
+              (out) =>
+                method(
+                  task,
+                  SLOT_REQUEST_ENABLE,
+                  [
+                    "ptr",
+                  ],
+                  out,
+                ),
+              "RequestEnableAsync",
+            );
+            await completed(request, abort, own, "RequestEnableAsync");
+            const state = new Int32Array(1);
+            check(
+              method(
+                request,
+                SLOT_GET_RESULTS,
+                [
+                  "ptr",
+                ],
+                ptr(state),
+              ),
+              "RequestEnableAsync.GetResults",
+            );
+            return state[0] ?? -1;
+          },
+          disable() {
+            check(method(task, SLOT_DISABLE, []), "Disable");
+          },
+        }),
+      };
+    } catch (error) {
+      outcome = {
+        error,
+      };
+    }
+    // Release every object and leave the apartment even when one release fails. A failed release
+    // never replaces the operation's own failure.
+    try {
       attemptAll(
         [
           ...held.reverse().map((object) => () => {
@@ -447,7 +462,15 @@ export const openStartupTask: StartupTaskOpener = async (signal, use) => {
         ],
         "Could not release the startup task objects.",
       );
+    } catch (cleanupError) {
+      if ("value" in outcome) {
+        throw cleanupError;
+      }
     }
+    if ("error" in outcome) {
+      throw outcome.error;
+    }
+    return outcome.value;
   } finally {
     library.close();
   }
