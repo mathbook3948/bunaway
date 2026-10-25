@@ -16,18 +16,16 @@ WebView가 보내는 HTTP 요청을 백엔드가 취소, 리다이렉트, URL �
 - Electron은 `session.webRequest`로 `onBeforeRequest`(취소와 `redirectURL`), `onBeforeSendHeaders`와 `onHeadersReceived`(header 변경),
   `onSendHeaders`, `onResponseStarted`, `onBeforeRedirect`, `onCompleted`, `onErrorOccurred`를 제공한다. 모두 URL 패턴 필터를 받고
   리스너 하나만 등록할 수 있다. 응답 본문을 직접 만드는 것은 `protocol.handle`과 `net.fetch`가 맡는다.
-- Tauri와 wry는 일반 HTTP 요청을 가로채는 공개 API를 제공하지 않는다. 앱이 등록한 사용자 정의 scheme 요청에 응답하는 핸들러와 탐색 허용 여부를
-  정하는 `on_navigation` 훅만 있다. 요청 header 변경이나 요청 결과 이벤트는 없고, Windows에서 `with_webview`로 얻은 WebView2 객체에 앱이 직접
-  붙이는 방식이 유일하다.
+- Tauri와 wry는 요청 단위로 HTTP 요청을 가로채거나 header를 바꾸는 공개 API를 제공하지 않는다. 앱이 등록한 사용자 정의 scheme 요청에 응답하는
+  핸들러와 탐색 허용 여부를 정하는 `on_navigation` 훅이 있다. Windows에서는 `with_webview`로 얻은 WebView2 객체에 앱이 직접 이벤트를 붙일 수 있다.
 - WebView2는 `AddWebResourceRequestedFilter`로 URL과 리소스 종류별 필터를 걸고 `WebResourceRequested`에서 요청 header를 바꾸거나, 요청을
-  막고 직접 만든 응답을 돌려줄 수 있다. 응답을 관찰하는 `WebResourceResponseReceived`는 요청과 응답 header, 상태 코드를 읽기만 한다. 리소스
-  요청의 완료와 네트워크 오류를 알리는 이벤트는 없고 `NavigationCompleted`는 탐색만 다룬다. 즉 Electron의 `onCompleted`, `onErrorOccurred`에
-  해당하는 이벤트를 같은 범위로 만들 수 없다. 필터에 맞는 요청은 서비스 워커와 worker의 요청까지 같은 방식으로 다루는지는 필터의 소스 설정에 따라
-  달라진다.
+  막고 직접 만든 응답을 돌려줄 수 있다. 응답 수신은 `WebResourceResponseReceived`가 알리지만, 리소스
+  요청의 네트워크 오류와 완료를 알리는 이벤트는 찾지 못했고 `NavigationCompleted`는 탐색만 다룬다. 즉 Electron의 `onCompleted`, `onErrorOccurred`에
+  해당하는 이벤트를 같은 범위로 만들 수 없다. 서비스 워커와 worker의 요청이 필터 대상인지는 필터에 지정하는 요청 출처에 따라 달라진다.
 - 이 저장소는 탐색마다 `NavigationStarting`에서 허용 origin을 검사하고 redirect도 같은 검사를 거친다. 탐색 허용과 거부의 앱 훅은 별도
   항목(TODO-windows의 탐색 전 허용과 거부 훅)으로 남아 있다. 백엔드의 HTTP 요청은 선택 플러그인 `network.request`가 제한된 header와 base64
-  body로 제공하고 redirect를 따라가지 않는다([network 계약](../site/src/content/docs/reference/plugins/network.mdx)). WebView 쪽 자산
-  제공은 앱 자산 경로가 맡는다.
+  body로 제공하고 redirect를 따라가지 않는다([network 계약](../site/src/content/docs/reference/plugins/network.mdx)). 네이티브 호스트는 이미 `WebResourceRequested`로
+  내장 웹 자산을 응답으로 제공한다(`native/windows/bun/README.md`). 후속 결정이 같은 이벤트에 필터를 더하면 이 자산 필터와의 관계를 함께 정해야 한다.
 - 요청마다 백엔드의 응답을 기다리는 훅은 페이지 하나가 수백 개의 하위 리소스를 요청하므로 로드 시간이 백엔드의 응답 시간과 deadline에 묶인다.
   백엔드가 응답하지 않을 때 요청을 통과시킬지 막을지를 계약으로 정해야 하고, 어느 쪽이든 페이지 로드 동작이 달라진다.
 - header 변경은 `Origin`, `Referer`, `Cookie`, `Authorization`, `Content-Security-Policy`처럼 웹 보안 경계를 이루는 header를 백엔드가
@@ -46,7 +44,7 @@ WebView가 보내는 HTTP 요청을 백엔드가 취소, 리다이렉트, URL �
 ## 근거
 
 - Electron은 요청 가로채기와 결과 이벤트를 제공하고 Tauri는 제공하지 않는다. 둘이 다르므로 코어는 작게, 기능은 필요한 곳에 맞추는 쪽을 따른다.
-  쓰는 곳이 없다(`plugins`, `packages`, `examples`에서 WebView 요청을 가로채거나 header를 바꾸는 코드는 없다).
+  쓰는 곳이 없다(`plugins`, `packages`, `examples`에서 WebView 요청을 가로채거나 header를 바꾸는 코드는 없고, `native`는 내장 자산 응답에만 `WebResourceRequested`를 쓴다).
 - Electron과 같은 범위를 제공해도 WebView2에는 리소스 요청의 완료와 실패 이벤트가 없어 `onCompleted`, `onErrorOccurred`를 같은 의미로
   약속할 수 없다. 같은 이름의 이벤트가 플랫폼마다 다른 범위를 약속하게 되어 계약이 모호해진다.
 - 요청 경로에 백엔드 응답을 끼우지 않으면 로드 시간이 백엔드와 무관하게 유지되고, 기존 origin 검사와 CSP 방침이 우회되지 않는다.
