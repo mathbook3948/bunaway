@@ -13,11 +13,11 @@ Electron의 `app.setAccessibilitySupportEnabled`, `getAccessibilitySupportFeatur
 
 - Electron은 Chromium의 접근성 모드를 앱 코드가 직접 바꾸게 한다. 보조 기술이 감지되기 전에도 접근성 트리를 만들게 하거나
   기능을 선택할 수 있다.
-- Tauri v2에는 같은 API가 없다.
 - 이 저장소의 `appearance.getAccessibilityState`는 읽기 전용이다. `assistiveTechnologyActive`로 UI Automation 클라이언트의
   연결을 알리며, WebView 접근성 트리를 강제로 켜는 기능이 아니다.
-- [ADR 0030](./0030-launch-arguments-and-environment.md)은 앱 정의에 브라우저 switch를 두지 않기로 했다. 접근성 모드를 시작 시
-  고정하는 switch도 같은 범위에 속한다.
+- [ADR 0030](./0030-launch-arguments-and-environment.md)은 앱 정의에 실행 인자, 환경 변수, switch 필드를 두지 않기로 했다.
+  앱이 접근성 관련 switch를 시작 시 고정하려면 이 필드가 필요하다. 배포 앱의 프로세스 환경 변수
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` 경로는 0030이 막지 않으므로 이 결정도 막지 않는다.
 
 ## 결정
 
@@ -28,13 +28,12 @@ Electron의 `app.setAccessibilitySupportEnabled`, `getAccessibilitySupportFeatur
 
 ## 근거
 
-- Electron과 Tauri가 다르다. 코어를 작게 두고 기능은 필요가 확인될 때 더하는 기준에 따라 Tauri와 같이 제공하지 않는다.
-- 시작 시 고정하는 방법은 브라우저 switch를 앱 정의에 노출해야 하고, ADR 0030이 이미 그 노출을 하지 않기로 했다.
-- 앱이 접근성 트리를 강제로 만들게 해야 하는 사용처가 이 저장소에 없다.
+- 앱이 접근성 트리를 강제로 만들게 해야 하는 사용처가 이 저장소에 없다. 코어를 작게 두고 기능은 필요가 확인될 때 더한다.
+- 시작 시 고정하는 방법은 switch 필드를 앱 정의에 노출해야 하고, ADR 0030이 이미 그 노출을 하지 않기로 했다.
 
 ## 대안
 
-- Electron과 같은 3개 API를 제공한다. 사용처가 없고 Tauri에도 없다.
+- Electron과 같은 3개 API를 제공한다. 사용처가 없다.
 - 시작 시 접근성 모드를 고정하는 앱 설정을 둔다. ADR 0030의 switch 비노출과 부딪힌다.
 
 ## 영향
