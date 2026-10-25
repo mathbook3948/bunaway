@@ -24,11 +24,20 @@ type Rgba = [
   number,
 ];
 
-/** Encode a single-color 8-bit RGBA PNG; each row is one filter byte followed by repeated pixels. */
+/** Encode a single-color 8-bit RGBA PNG. */
 function solidPng(width: number, height: number, color: Rgba): Buffer {
+  return columnsPng(width, height, () => color);
+}
+
+/** Encode an 8-bit RGBA PNG whose pixels depend only on the column; each row is a filter byte and its pixels. */
+function columnsPng(
+  width: number,
+  height: number,
+  colorAt: (x: number) => Rgba,
+): Buffer {
   const row = Buffer.alloc(1 + width * 4);
   for (let x = 0; x < width; x++) {
-    row.set(color, 1 + x * 4);
+    row.set(colorAt(x), 1 + x * 4);
   }
   const raw = Buffer.concat(
     Array.from(
@@ -178,40 +187,86 @@ test.skipIf(process.platform !== "win32")(
         6,
       ]);
 
-      // Scaling uses premultiplied alpha, so a translucent color keeps its channels.
-      const translucent = write(
-        "translucent.png",
-        solidPng(
-          200,
-          200,
-          [
-            255,
-            0,
-            0,
-            128,
-          ],
-        ),
+      // Scaling uses premultiplied alpha: column 151 is red, the rest of its 3-pixel block
+      // (columns 150 to 152) is transparent, so the scaled pixel keeps full red at a third of the alpha.
+      const edge = write(
+        "edge.png",
+        columnsPng(300, 30, (x): Rgba => {
+          if (x < 150) {
+            return [
+              255,
+              0,
+              0,
+              255,
+            ];
+          }
+          return x === 151
+            ? [
+                255,
+                0,
+                0,
+                255,
+              ]
+            : [
+                0,
+                0,
+                0,
+                0,
+              ];
+        }),
       );
-      const half = platform.createFromPath({
-        path: translucent,
+      const scaledEdge = platform.createFromPath({
+        path: edge,
         maxDimension: 100,
       });
       expect([
-        half.width,
-        half.height,
+        scaledEdge.width,
+        scaledEdge.height,
       ]).toEqual([
         100,
-        100,
+        10,
       ]);
-      const halfPixels = Buffer.from(
-        platform.getPixels(half.id).rgba,
+      const edgePixels = Buffer.from(
+        platform.getPixels(scaledEdge.id).rgba,
         "base64",
       );
-      const [red = 0, green = 0, blue = 0, alpha = 0] = halfPixels;
-      expect(red).toBeGreaterThanOrEqual(253);
-      expect(green).toBeLessThanOrEqual(2);
-      expect(blue).toBeLessThanOrEqual(2);
-      expect(Math.abs(alpha - 128)).toBeLessThanOrEqual(2);
+      const [red = 0, green = 0, blue = 0, alpha = 0] = edgePixels.subarray(
+        50 * 4,
+        50 * 4 + 4,
+      );
+      expect(red).toBeGreaterThanOrEqual(250);
+      expect(green).toBeLessThanOrEqual(5);
+      expect(blue).toBeLessThanOrEqual(5);
+      expect(Math.abs(alpha - 85)).toBeLessThanOrEqual(5);
+
+      // An image that keeps its size is not converted, so a transparent pixel keeps its color.
+      const hidden = write(
+        "hidden.png",
+        solidPng(
+          4,
+          4,
+          [
+            200,
+            100,
+            50,
+            0,
+          ],
+        ),
+      );
+      const kept = platform.createFromPath({
+        path: hidden,
+      });
+      expect([
+        ...Buffer.from(platform.getPixels(kept.id).rgba, "base64").subarray(
+          0,
+          4,
+        ),
+      ]).toEqual([
+        200,
+        100,
+        50,
+        0,
+      ]);
 
       // JPEG and BMP files are recognized from their content.
       for (const [name, format] of [
@@ -279,6 +334,7 @@ test.skipIf(process.platform !== "win32")(
           }),
         ),
       ).toBe("INVALID_ARGUMENT");
+      // A decodable image followed by padding: only the file size check rejects it.
       const huge = write(
         "huge.png",
         Buffer.concat([
@@ -291,7 +347,7 @@ test.skipIf(process.platform !== "win32")(
               0,
               255,
             ],
-          ).subarray(0, 8),
+          ),
           Buffer.alloc(MAX_SOURCE_FILE_BYTES),
         ]),
       );

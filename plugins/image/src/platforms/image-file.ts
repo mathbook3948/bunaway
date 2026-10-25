@@ -48,9 +48,12 @@ function fileError(error: unknown): unknown {
     case "EISDIR":
     case "ENXIO":
       return failure("INVALID_ARGUMENT", "Image path is not a file.", error);
+    case "ENAMETOOLONG":
+      return failure("INVALID_ARGUMENT", "Image path is too long.", error);
     case "EACCES":
     case "EPERM":
     case "EBUSY":
+    case "ELOOP":
       return failure("PERMISSION_DENIED", "Image file access denied.", error);
     default:
       return error;

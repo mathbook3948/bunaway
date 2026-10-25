@@ -281,10 +281,12 @@ export function createWIC() {
     storage.set(bitmap, bgra);
     return bitmap;
   }
+  /** Convert to another pixel format; `input` maps a failure on encoded data to invalid-argument. */
   function convert(
     source: Pointer,
     formatId: string,
     owned: Pointer[],
+    input = false,
   ): Pointer {
     const converter = acquire((out) =>
       invoke(
@@ -321,6 +323,7 @@ export function createWIC() {
           WIC_PALETTE_CUSTOM,
         ],
       ),
+      input,
     );
     return converter;
   }
@@ -536,7 +539,7 @@ export function createWIC() {
             message: "Decoded image exceeds the pixel limit.",
           });
         }
-        const converted = convert(frame, bgraFormat, owned);
+        const converted = convert(frame, bgraFormat, owned, true);
         return {
           width,
           height,
@@ -571,18 +574,20 @@ export function createWIC() {
           });
         }
         const target = fitWithin(source.width, source.height, maxDimension);
-        // Scaling needs premultiplied alpha so transparent edges do not bleed color.
-        let scaled = convert(frame, premultipliedBgraFormat, owned);
+        let scaled = frame;
         if (target.width !== source.width || target.height !== source.height) {
+          // Scaling needs premultiplied alpha so transparent edges do not bleed color. An image
+          // that keeps its size skips the premultiplied round trip, which would zero the color
+          // of fully transparent pixels.
           scaled = scale(
-            scaled,
+            convert(frame, premultipliedBgraFormat, owned, true),
             target.width,
             target.height,
             WIC_INTERPOLATION_FANT,
             owned,
           );
         }
-        const converted = convert(scaled, bgraFormat, owned);
+        const converted = convert(scaled, bgraFormat, owned, true);
         return {
           width: target.width,
           height: target.height,

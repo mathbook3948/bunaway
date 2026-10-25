@@ -148,8 +148,9 @@ export const MAX_SOURCE_PIXELS = 64_000_000;
 export const MAX_SOURCE_PATH_LENGTH = 259;
 /**
  * Absolute local drive path of a PNG, JPEG or BMP file. UNC paths, device namespaces and
- * alternate data streams are rejected, as are `.` and `..` parts and reserved device names, so the
- * open never reaches a network share or a device.
+ * alternate data streams are rejected, as are `.` and `..` parts and reserved device names. The
+ * check is syntactic: a mapped network drive or a link can still lead to a network share, which
+ * the app decides to allow or not.
  */
 export const imagePathSchema = z
   .string()
