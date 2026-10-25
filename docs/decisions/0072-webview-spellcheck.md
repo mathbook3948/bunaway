@@ -8,19 +8,21 @@ status: accepted
 
 ## 배경
 
-아래 Electron, Tauri, WebView2 서술은 해당 프로젝트의 공개 문서와 소스에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다. Electron v45 기준이다.
+아래 Electron, Tauri, WebView2 서술은 해당 프로젝트의 공개 문서와 소스에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다. Electron v45, Tauri 2.12(wry 0.57), WebView2 SDK 1.0.4314.35 기준이다.
 
 앱이 맞춤법 검사의 활성화, 언어, dictionary와 사용자 단어를 관리하고, 틀린 단어와 추천 단어를 조회해 교체하는 API를 제공할지 정해야 했다.
 
 - Electron의 `session`은 `setSpellCheckerEnabled`, `setSpellCheckerLanguages`, `listWordsInSpellCheckerDictionary`,
   `addWordToSpellCheckerDictionary`, `removeWordFromSpellCheckerDictionary`, `setSpellCheckerDictionaryDownloadURL`을 제공한다. 틀린 단어와
-  추천 단어는 `context-menu` 이벤트의 `misspelledWord`, `dictionarySuggestions`로 받고, `webContents.replaceMisspelling`으로 바꾼다. Windows와
-  Linux에서는 Hunspell 사전을 내려받아 쓰며, 앱이 컨텍스트 메뉴를 직접 만들 때 이 값들이 필요하다.
-- Tauri와 wry는 맞춤법 검사 API를 제공하지 않는다. 앱은 WebView의 기본 동작에 맡긴다.
-- WebView2 호스트 API에서는 맞춤법 검사 켜기와 끄기, 언어, 사용자 사전을 다루는 인터페이스를 찾지 못했다. 편집 가능한 요소의 검사는 런타임이
-  기본으로 처리하고, 기본 context menu(`AreDefaultContextMenusEnabled`)가 켜져 있으면 추천 단어와 "사전에 추가"가 거기에 나타난다.
-  `ContextMenuRequested`의 메뉴 항목에 맞춤법 관련 항목이 포함되는지는 확인하지 못했다. 사전과 사용자 단어는 런타임이 사용자 데이터 폴더와
-  OS 설정에서 관리하므로 앱이 소유한 상태가 아니다.
+  추천 단어는 `context-menu` 이벤트의 `misspelledWord`, `dictionarySuggestions`로 받고, `webContents.replaceMisspelling`으로 바꾼다. 사전은 Linux에서
+  Hunspell 사전을 내려받아 쓰고, Windows는 OS 맞춤법 검사기를 우선 쓰되 OS가 지원하지 않는 언어에만 Hunspell 사전을 내려받으며,
+  macOS는 OS 검사기만 쓴다(`setSpellCheckerLanguages`는 macOS에서 동작하지 않는다). 앱이 컨텍스트 메뉴를 직접 만들 때 이 값들이 필요하다.
+- Tauri와 wry는 맞춤법 검사 API를 제공하지 않는다(소스에 맞춤법 관련 API가 없다). 앱은 WebView의 기본 동작에 맡기거나
+  `Webview::with_webview`로 플랫폼 WebView에 직접 접근한다.
+- WebView2 SDK에는 맞춤법 검사 켜기와 끄기, 언어, 사용자 사전을 다루는 인터페이스가 없다. 편집 가능한 요소의 검사는 런타임이 기본으로 처리한다.
+  `ContextMenuRequested`의 메뉴 항목에는 이름이 `spellCheck`인 맞춤법 항목이 들어올 수 있으나, `ICoreWebView2ContextMenuTarget`에는
+  틀린 단어나 추천 단어 필드가 없고, `AreDefaultContextMenusEnabled`가 꺼져 있으면 이 이벤트 자체가 발생하지 않는다. 사전과 사용자 단어는
+  런타임이 사용자 데이터 폴더와 OS 설정에서 관리하므로 앱이 소유한 상태가 아니다.
 - 이 저장소는 기본 context menu를 켜는 설정을 추가하지 않고 앱이 메뉴 플러그인의 `showContextMenu`로 메뉴를 만든다([ADR 0064](./0064-webview-browser-default-ui.md)).
   편집용 메뉴 role은 undo, redo, cut, copy, paste, select-all까지만 제공하고 selection 변경과 텍스트 교체 API는 제공하지 않는다([ADR 0050](./0050-webview-edit-commands-and-selection.md)).
   그래서 이 저장소의 앱에서는 기본 맞춤법 메뉴가 뜨지 않는다.
