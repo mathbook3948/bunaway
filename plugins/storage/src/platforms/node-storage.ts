@@ -640,9 +640,21 @@ export abstract class NodeStorage
    */
   private requireOutsideSource(from: string, to: string): void {
     const realFrom = realpathSync.native(from);
-    const realParent = realpathSync.native(dirname(to));
-    if (realParent === realFrom || this.rules.isBelow(realFrom, realParent)) {
-      throw failure("INVALID_ARGUMENT", "Cannot copy a directory into itself.");
+    // Walk up from the destination parent instead of comparing prefixes, which also covers a
+    // file system root as the source.
+    let directory = realpathSync.native(dirname(to));
+    for (;;) {
+      if (directory === realFrom) {
+        throw failure(
+          "INVALID_ARGUMENT",
+          "Cannot copy a directory into itself.",
+        );
+      }
+      const parent = dirname(directory);
+      if (parent === directory) {
+        return;
+      }
+      directory = parent;
     }
   }
 

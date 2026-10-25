@@ -111,7 +111,7 @@ try {
   assert.equal(existsSync(path("src/inside")), false);
 
   if (await tryJunction("src", "alias")) {
-    // A junction that places the destination inside the source is found by file identity.
+    // A junction that places the destination inside the source is refused by comparing real paths.
     await expectRejected(
       storage.copyDirectory(transfer("src", "alias/viaLink")),
       "INVALID_ARGUMENT",

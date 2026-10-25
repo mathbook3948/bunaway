@@ -19,6 +19,7 @@ import {
   MAX_STORAGE_BYTES,
   MAX_STORAGE_TEXT_BYTES,
 } from "../../plugins/storage/src/contract.ts";
+import { copyDirectoryTree } from "../../plugins/storage/src/platforms/node-directory-copy.ts";
 import {
   NodeStorage,
   storageError,
@@ -1060,6 +1061,46 @@ test("copyDirectory fails on a link entry without copying or touching its target
   ).toBe("INVALID_ARGUMENT");
   expect(existsSync(at("dst", "ln"))).toBe(false);
   expect(existsSync(at("outside", "secret.txt"))).toBe(true);
+});
+
+test("copyDirectory refuses a destination below a linked ancestor of the source's own directory", async () => {
+  mkdirSync(at("src", "sub"), {
+    recursive: true,
+  });
+  if (!link(at("src"), at("alias"), "junction")) {
+    return;
+  }
+  expect(
+    await asyncCodeOf(() =>
+      storage.copyDirectory({
+        from: at("src"),
+        to: at("alias", "sub", "copy"),
+      }),
+    ),
+  ).toBe("INVALID_ARGUMENT");
+  expect(existsSync(at("src", "sub", "copy"))).toBe(false);
+});
+
+test("the walk stops at the destination root when a link places it inside the source after the check", async () => {
+  mkdirSync(at("src"));
+  writeFileSync(at("src", "a.txt"), "x");
+  // Bypass the pre-check on purpose: the destination is inside the source, as if a link had been
+  // created after the check passed. The file identity test must still end the walk.
+  expect(
+    await asyncCodeOf(() =>
+      copyDirectoryTree(
+        at("src"),
+        at("src", "copy"),
+        {
+          entries: 100,
+          depth: 8,
+        },
+        () => {},
+        undefined,
+        () => {},
+      ),
+    ),
+  ).toBe("INVALID_ARGUMENT");
 });
 
 test("copyDirectory follows a link given as the root but copies the files below it", async () => {
