@@ -338,7 +338,7 @@ WebView는 같은 수명을 가지므로 WebView가 닫힌 상태는 `windows.is
 | `windows.setZoomFactor` | `factor: number` | 브라우저가 실제 적용한 zoom factor |
 | `windows.openDevTools` | 없음 | 개발 도구 창 열기 요청 뒤 `null` |
 
-zoom factor는 WebView에 속한 값이며 같은 WebView의 탐색, 뒤로와 앞으로 이동과 reload에서 유지됩니다. 호스트는 이 값을 저장하지 않으므로 창을 다시 만든 뒤 같은 값이 필요하면 앱이 저장한 값을 `setZoomFactor`로 적용합니다.
+Windows에서 같은 origin 안의 탐색, 뒤로와 앞으로 이동, reload 뒤에도 설정한 zoom factor가 유지됩니다. origin 사이를 이동할 때의 값은 WebView2의 동작을 따르므로 `getWebViewState`로 다시 조회합니다. 호스트는 이 값을 저장하지 않으므로 창을 다시 만든 뒤 같은 값이 필요하면 앱이 저장한 값을 `setZoomFactor`로 적용합니다.
 
 history의 offset과 index로 이동하는 메서드는 없습니다. 여러 단계 이동은 `goBack`과 `goForward`를 반복하되, 두 메서드는 이동을 시작했는지만 알려주며 반환 직후의 `getWebViewState`가 이동 결과를 반영한다고 보장하지 않습니다.
 
