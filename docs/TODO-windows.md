@@ -1002,9 +1002,10 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 
 자동 업데이트 구현은 배포 책임자의 신뢰 및 릴리스 정책 결정 전까지 보류한다.
 신뢰할 서명 키와 루트, 키 교체와 폐기, 메타데이터 서명 및 endpoint 허용 목록,
-버전 선택과 downgrade, 부분 실패와 rollback 규칙, Store 업데이트와 자체 updater의
-채널 구분, 설치와 종료 승인 및 relaunch 계약을 먼저 정해야 한다.
-PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는다. 아래 관련 항목은 미완료이며
+설치와 종료 승인 및 relaunch 계약을 먼저 정해야 한다. downgrade, 부분 실패와 rollback 규칙은
+[ADR 0054](./decisions/0054-updater-downgrade-rollback-and-store-channels.md)에서 정했고, Store 업데이트와 자체 updater의
+채널 구분도 같은 ADR에서 정했다.
+PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는다. 아래 항목 중 체크하지 않은 것은 미완료이며
 프로덕션 키나 외부 업데이트 호스팅을 구성하지 않는다.
 
 - [x] 고정 Bun으로 앱 코드와 웹 자산, 설정과 정책을 compiled EXE에 포함한 Windows 앱 패키지를 만든다.
@@ -1039,8 +1040,15 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
   서명한 exe, 서명 없는 파일, 변조한 파일과 신뢰되지 않는 인증서를 실제 `WinVerifyTrust`로 검증한다.
   서명한 MSI는 실제 서명으로 시험하지 못했다. macOS 서명 검증과 앱 전용 서명 키(minisign 방식)도 남는다.
 - [ ] 설치, 종료 승인과 relaunch를 연결한다.
-- [ ] downgrade, partial failure와 rollback의 지원 범위를 결정한다.
-- [ ] Store 업데이트와 자체 updater의 사용 조건을 구분한다.
+  [ADR 0054](./decisions/0054-updater-downgrade-rollback-and-store-channels.md)의 조건을 따른다: 실행 직전 SHA-256과 서명 재확인,
+  설치 파일 시작 실패의 전달, 재실행 복구를 위한 설치 파일 보존.
+- [x] downgrade, partial failure와 rollback의 지원 범위를 결정한다. 결정 완료: downgrade와 프레임워크의 롤백은 제공하지 않고
+  프레임워크는 설치 실패를 되돌리지 않고, 파일 연결 등록과 이전 EXE 정리의 실패는 설치 파일 재실행으로 복구한다. [ADR 0054](./decisions/0054-updater-downgrade-rollback-and-store-channels.md)를 따른다.
+- [x] Store 업데이트와 자체 updater의 사용 조건을 구분한다. 결정 완료: `win-direct`와 `win-store-unpackaged`는 자체 updater를
+  쓰고, MSIX 설치는 `UNSUPPORTED`(`managedByStore`)로 거부한다.
+  [ADR 0054](./decisions/0054-updater-downgrade-rollback-and-store-channels.md)를 따른다.
+- [ ] MSIX 설치 프로세스에서 `updater`가 `UNSUPPORTED`(`managedByStore`)로 실패하게 구현하고 실제 MSIX 패키지로 판별 조건을 검증한다.
+  `win-store-msix` 패키지 생성과 함께 한다.
 - [ ] framework와 공식 기능 패키지의 공개 배포, 라이선스와 릴리스 자동화를 완료한다.
 - [ ] 설치된 프레임워크 업그레이드와 설정 변경의 migration 도구를 제공한다.
 
