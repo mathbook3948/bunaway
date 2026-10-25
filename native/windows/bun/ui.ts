@@ -873,11 +873,23 @@ async function executeWindowRequest(
     );
     response = hostResponse(() => payload);
   } catch (error) {
+    log("diag-request-error", {
+      operation: queued.call.operation,
+      message: error instanceof Error ? error.message : String(error),
+      bunaway: error instanceof BunawayError,
+    });
     response = hostResponse(() => {
       throw error;
     });
   }
   const active = windowRequests.finish(queued.requestId, signal);
+  log("diag-request-finish", {
+    operation: queued.call.operation,
+    kind: response.kind,
+    active,
+    stopping: stopping(),
+    context: activeContext(queued.context),
+  });
   if (stopping() || !active || !activeContext(queued.context)) {
     return;
   }
