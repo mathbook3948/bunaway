@@ -16,7 +16,8 @@ status: accepted
   렌더러가 메인을 호출하는 방향뿐이다. 메인이 렌더러의 값을 얻는 방법은 `webContents.executeJavaScript`(결과 Promise)와,
   렌더러가 별도 채널로 답을 보내는 방식이다.
 - Tauri 2의 `emit`, `emit_to`는 단방향 이벤트이고 창 쪽에서 `listen`으로 받는다. `Webview::eval`은 스크립트를 실행할 뿐 결과를
-  돌려주지 않는다. 응답이 필요하면 UI가 `invoke`로 명령을 다시 호출한다.
+  돌려주지 않는다. Tauri 2.11부터 `eval_with_callback`이 평가 결과를 JSON 문자열로 Rust 콜백에 넘기지만, 이는 임의 스크립트의
+  평가 결과이고 JS 핸들러를 호출하는 요청/응답이 아니다. 핸들러 호출형 IPC는 찾지 못했다. 응답이 필요하면 UI가 `invoke`로 명령을 다시 호출한다.
 - 이 저장소의 `context.events.emit`은 broadcast 또는 정확한 view ID로 보내는 단방향 알림이며 UI 콜백의 완료나 반환값을 기다리지
   않는다([events.emit](../site/src/content/docs/reference/backend/events.mdx)). UI에서 백엔드로는 등록한 명령을 Promise로 호출한다.
 - 백엔드가 UI 스레드와 분리되어 있어 UI 응답을 기다리는 호출은 UI의 로드, 숨김, 탐색, 종료 상태에 백엔드 작업이 묶인다.
@@ -38,7 +39,7 @@ status: accepted
 ## 근거
 
 - Electron과 Tauri 모두 렌더러의 핸들러를 호출해 반환값을 받는 요청/응답 IPC를 제공하지 않고, 이벤트와 반대 방향 명령의
-  조합으로 푼다. 같은 방향이므로 제공하지 않는 쪽을 따른다. `executeJavaScript`는 임의 스크립트 실행이라 별개 항목이다.
+  조합으로 푼다. 같은 방향이므로 제공하지 않는 쪽을 따른다. `executeJavaScript`와 Tauri의 `eval_with_callback`은 임의 스크립트 실행이라 별개 항목이다.
 - 요청/응답은 수신자가 없거나(창을 만들기 전, 숨김, 탐색 중) 응답하지 않는 UI를 백엔드가 기다리게 만들고, 그 시간 제한과 취소 규칙을
   모든 플러그인과 앱이 같이 지켜야 한다. 이벤트와 명령으로 풀면 각 방향이 기존 deadline, 권한, 스키마 검증을 그대로 쓴다.
 - 쓰는 곳이 없다. `plugins`, `packages`, `examples`에서 UI의 반환값을 기다리는 호출을 찾았으나 없었다(검토 기준 커밋에서 이벤트 발행과 `executeJavaScript` 계열 이름을 검색).
