@@ -8,7 +8,7 @@ sidebar: { order: 8 }
 
 `@bunaway/plugin-tray`를 설치하고 앱의 `plugins`에 `tray`를 등록합니다.
 Windows와 macOS에서 제공합니다. macOS는 아래 [macOS 메뉴 막대 아이콘](#macos-메뉴-막대-아이콘)을 따르고, 이 문단 이후의 설명은 따로 적지 않으면 Windows 기준입니다. Windows에서 등록한 플러그인이 앱 정의의 `desktop.tray` 설정으로 아이콘을 만들고 `tray`로 제어합니다.
-이 API는 트레이나 앱 창을 새로 만들거나 제거하지 않으며 기존 실행 유지와 종료 규칙을 따릅니다.
+이 API는 앱 창을 새로 만들거나 제거하지 않으며 기존 실행 유지와 종료 규칙을 따릅니다. 트레이 아이콘은 `tray.destroy`로 제거하고 `tray.create`로 다시 등록할 수 있습니다.
 
 ```ts
 import tray from "@bunaway/plugin-tray";
@@ -130,6 +130,7 @@ Tauri `remove_tray_by_id`에 대응). 이미 없으면 그대로 `null`입니다
 실행 중 바꾼 tooltip, 아이콘, 클릭 동작과 숨김 상태는 이어지지 않고 `menu.setTrayMenu`로 연결한 메뉴도 다시 연결해야 합니다(메뉴 플러그인의 `getTrayMenu`는 제거 뒤에도 이전 연결을 돌려줍니다).
 제거한 동안 메뉴 연결 해제(`setTrayMenu`의 `undefined`와 `null`)는 할 일이 없어 그대로 성공하고, 연결된 메뉴를 새 항목으로 연결하거나 편집하면 `UNSUPPORTED`입니다. `desktop.tray` 선언이 없는 앱의 해제는 계속 `UNSUPPORTED`입니다.
 `setTrayMenu({ menuId: null })`로 메뉴를 숨겼던 상태도 `create` 뒤에는 복원되지 않아 기본 Open/Quit 메뉴로 시작하므로 다시 지정해야 합니다.
+제거한 동안 `setTrayMenu({ menuId: null })`을 호출했다면 메뉴 플러그인은 숨김으로 기록하지만 `create`한 트레이는 기본 메뉴를 가집니다. 연결했던 메뉴의 항목을 `create` 뒤에 편집하면 그 메뉴가 트레이에 다시 적용될 수 있으므로, `create` 직후에 `setTrayMenu`를 다시 호출해 메뉴 상태를 맞추세요.
 제거한 동안 `desktop.hide()`는 오류 없이 끝나지만 창을 숨기지 않습니다.
 `keep-alive` 앱은 트레이 창이 맡던 종료 메시지 수신 창을 제거와 함께 따로 만들어 CLI의 정상 종료 경로를 유지합니다.
 macOS의 `tray.create`는 `{ title?, tooltip? }`로 새 아이콘을 만들지만 Windows의 `tray.create`는 선언한 트레이를 다시 등록하므로 입력이 `null`입니다. 플랫폼별 코드를 나누어 호출하세요.

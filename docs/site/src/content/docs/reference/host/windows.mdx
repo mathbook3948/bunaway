@@ -973,7 +973,7 @@ await windows.unmaximize();
 열린 창의 `windows.recreate`에 같은 운영체제 확인 대화상자를 적용합니다.
 기본 선택은 거절이며 거절하면 창과 세션을 유지합니다. 재생성을 거절하면 `CANCELLED`입니다.
 `desktop.closeBehavior: "hide"`이면 닫기 버튼, `window.close()`와 `windows.close`는
-확인 대화상자 없이 해당 창을 숨기며 세션을 유지합니다. 기본 `"quit"`에서 마지막 창을 닫을 때는
+확인 대화상자 없이 해당 창을 숨기며 세션을 유지합니다. 선언한 트레이를 `tray.destroy`로 제거해 둔 동안에는 숨기지 않고 일반 닫기로 처리하며, 마지막 창이면 앱이 종료됩니다. 기본 `"quit"`에서 마지막 창을 닫을 때는
 `desktop.beforeQuit`의 승인도 기다립니다. 종료가 취소되면 `windows.close`는 `false`를 반환합니다.
 `"keep-alive"`에서는 닫기 확인 뒤 마지막 창도 실제로 닫고 `true`를 반환하며 앱 백엔드는 계속 실행합니다.
 이 닫기는 `beforeQuit`를 호출하지 않습니다. 트레이 Quit 또는 `DesktopContext.quit()`으로 종료를 요청합니다.
