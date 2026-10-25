@@ -8,17 +8,22 @@ status: accepted
 
 ## 배경
 
-아래 Electron, Tauri, WebView2 서술은 해당 프로젝트의 공개 문서에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다.
+아래 Electron, Tauri, WebView2 서술은 해당 프로젝트의 공개 문서와 소스에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다. Electron v45 기준이고,
+wheel이 대상에서 빠진다는 점은 문서가 아니라 소스로 확인했다.
 
 백엔드가 WebView로 가는 키보드, 마우스, wheel 입력을 페이지보다 먼저 받아 취소할 수 있는 이벤트를 제공할지 정해야 했다.
 
-- Electron의 `webContents`는 `before-input-event`를 발생시킨다. 페이지에 입력이 전달되기 전에 메인 프로세스가 `preventDefault()`로 취소할 수
-  있고, 문서상 대상은 키보드 입력(`keyDown`, `keyUp`)이다. 마우스와 wheel을 취소하는 같은 형태의 이벤트는 문서에서 확인하지 못했다.
-- Tauri는 WebView 입력을 가로채는 이벤트를 제공하지 않는다. 앱은 페이지의 DOM 이벤트로 입력을 처리하고 `invoke`로 백엔드에 알린다.
-  Tauri 쪽 전역 단축키는 별도 플러그인이다.
-- WebView2의 `ICoreWebView2Controller::AcceleratorKeyPressed`는 포커스가 WebView에 있을 때 브라우저 가속키와 단축키 조합을 호스트에 먼저
-  알리고 `Handled`로 막을 수 있다. 일반 문자 입력은 이 이벤트의 대상이 아니다. WebView2에는 마우스와 wheel을 페이지보다
-  먼저 받아 취소하는 호스트 이벤트가 없다.
+- Electron의 `webContents`는 `before-input-event`로 키보드 입력(`keyDown`, `keyUp`)을, `before-mouse-event`(v37 이후)로 마우스 입력을
+  페이지에 전달하기 전에 알리고, 메인 프로세스가 `preventDefault()`로 취소할 수 있다. 마우스 이벤트의 대상은 소스상 mouseDown, mouseUp,
+  mouseMove, mouseEnter, mouseLeave, contextMenu이고 wheel은 다른 경로라 포함되지 않는다. wheel을 취소하는 이벤트는 찾지 못했다.
+- Tauri와 wry는 WebView 입력을 가로채는 공개 API를 제공하지 않는다. 앱은 페이지의 DOM 이벤트로 입력을 처리하고 `invoke`로 백엔드에 알린다.
+  Windows에서는 `Webview::with_webview`가 넘겨주는 `ICoreWebView2Controller`에 앱이 직접 WebView2 이벤트를 붙일 수 있으나, 이는 Tauri의
+  기능이 아니라 플랫폼 API 사용이다. Tauri 쪽 전역 단축키는 별도 플러그인이다.
+- WebView2의 `ICoreWebView2Controller::AcceleratorKeyPressed`는 포커스가 WebView에 있을 때 가속키를 호스트에 먼저 알리고 `Handled`로
+  막으면 페이지가 그 키를 받지 못한다. 가속키는 Ctrl 또는 Alt가 눌린 키, 문자로 매핑되지 않는 키(기능키, 방향키, Home과 End 등)이며 Escape는
+  항상 포함하고 Shift 같은 일부 키는 제외한다. Ctrl과 Alt 없이 문자를 만드는 일반 문자 키는 대상이 아니다. windowed hosting에는 마우스와 wheel을
+  페이지보다 먼저 받아 취소하는 호스트 이벤트가 없다. visual hosting(`ICoreWebView2CompositionController`)은 호스트가 입력을 받아 전달하는
+  방식이라 호스트가 먼저 보지만 이벤트 API가 아니라 호스팅 방식의 전환이며, 이 저장소는 쓰지 않는다.
 - 이 저장소는 이미 `AcceleratorKeyPressed`로 Alt와 F10 메뉴 탐색을 처리한다. 메뉴 `accelerator`는 표시 전용이고, 포커스가 있는 WebView의
   키 입력은 일반 실행에서 페이지로 전달된다([TODO-windows](../TODO-windows.md)의 WebView 포커스 시 단축키 우선순위 항목).
   포커스와 관계없는 단축키는 `globalShortcut`이 맡는다. 입력 주입과 IME composition API는 제공하지 않는다([ADR 0047](./0047-input-injection-and-ime.md)).
@@ -38,10 +43,10 @@ status: accepted
 
 ## 근거
 
-- Electron은 키보드 입력의 취소 가능한 이벤트를 제공하고 Tauri는 제공하지 않는다. 둘이 다르므로 코어는 작게, 기능은 필요한 곳에 맞추는
-  쪽을 따른다. 쓰는 곳이 없다(`plugins`, `packages`, `examples`에서 입력 가로채기 요구를 찾지 못했다).
-- Electron과 같은 범위를 지금 제공해도 WebView2는 마우스와 wheel을 지원하지 않고 키보드도 가속키 조합에 한정된다. 같은 이름의 이벤트가
-  플랫폼마다 다른 입력 범위를 약속하게 되어 계약이 모호해진다.
+- Electron은 키보드와 마우스(wheel 제외)의 취소 가능한 이벤트를 제공하고 Tauri는 제공하지 않는다. 둘이 다르므로 코어는 작게, 기능은 필요한
+  곳에 맞추는 쪽을 따른다. 쓰는 곳이 없다(`plugins`, `packages`, `examples`에서 입력 가로채기 요구를 찾지 못했다).
+- Electron과 같은 범위를 지금 제공해도 WebView2 windowed hosting은 마우스와 wheel의 호스트 이벤트가 없고 키보드도 가속키에 한정된다. 같은
+  이름의 이벤트가 플랫폼마다 다른 입력 범위를 약속하게 되어 계약이 모호해진다.
 - 입력 경로에 백엔드 응답을 끼우지 않으면 기존 deadline 규칙과 UI 스레드 처리 순서를 그대로 유지한다.
 
 ## 결과
