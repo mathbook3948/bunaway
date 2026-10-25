@@ -504,7 +504,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] 진행률 막대와 추가 텍스트 줄 같은 고급 알림 콘텐츠를 선언 필드로 제공할지 결정한다. 제공하지 않는다([ADR 0041](decisions/0041-notification-priority-and-rich-content.md)). 진행률은 `windows.setTaskbarProgress`나 앱 화면으로 보인다.
 - [x] OS에 남은 알림 조회와 그룹, 전체 제거의 플랫폼별 지원을 결정한다. Windows 개별 ID/group 제거, 앱 전체 제거(`notification.clearAll`)와 남은 알림 조회(`notification.list`)는 구현했다. group 단위 제거(`notification.clearGroup`)도 구현했다.
 - [x] 예약 알림과 pending 조회, 취소의 플랫폼별 지원을 제공한다. Windows 단발 예약(`notification.schedule`), 조회(`notification.listScheduled`)와 취소(`notification.cancelScheduled`)는 구현했다. 반복 예약은 제공하지 않는다.
-- [x] 첨부 파일과 클릭 액션 종류 등록의 지원을 결정한다. Windows toast에 파일 첨부 개념이 없고 Electron도 제공하지 않으며 Tauri는 모바일 전용이라 제공하지 않는다. 클릭은 `clicked`, `actionInvoked`, `dismissed`(`show` 알림 기준) 이벤트로 받는다([ADR 0052](./decisions/0052-notification-permission-request-and-attachments.md)).
+- [x] 첨부 파일과 클릭 액션 종류 등록의 지원을 결정한다. Windows toast에 파일 첨부 개념이 없고 Electron도 첨부 전용 필드가 없으며 Tauri의 `attachments`는 모바일 전용이라 제공하지 않는다. 액션 종류 등록(Tauri 데스크톱 2.6.0 이상)은 알림별 `actions` 선언(Electron 방식)으로 대신해 제공하지 않는다. 클릭은 `clicked`, `actionInvoked`, `dismissed`(`show` 알림 기준) 이벤트로 받는다([ADR 0052](./decisions/0052-notification-permission-request-and-attachments.md)).
 - [x] Windows 알림 설정 페이지로 이동하는 요청과 사용자에 의한 차단 상태를 제공한다.
 
 `@bunaway/plugin-notification`은 현재 호스트 앱 ID로 WinRT `ToastNotifier.Setting`을
