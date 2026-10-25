@@ -21,7 +21,7 @@ status: accepted
 - WebView2는 `NavigationStarting`, `NavigationCompleted`, `FrameNavigationStarting`, `FrameNavigationCompleted`,
   `SourceChanged`(`IsNewDocument`로 same-document를 구분), `HistoryChanged`, `ContentLoading`을 제공한다.
 - 이 저장소의 Windows 호스트는 이미 아래 범위를 다룬다.
-  - 최상위 `NavigationStarting`: 허용 origin이 아니면 취소하고, 허용되면 `loading`을 올리고 새 탐색 id마다 이전 문서의
+  - 최상위 `NavigationStarting`: 허용 origin이 아니면 취소하고, 허용되면 `loading`을 올리고 새 탐색 id마다(WebView2가 fragment 이동에 새 id를 내는지는 확인하지 않았으며 `windows.mdx`는 fragment 이동이 세션을 유지한다고 적는다) 이전 문서의
     세션과 보류 중인 다운로드를 폐기한다. 이 폐기가 문서 단위 세대(`documentGeneration`)를 올린다.
   - `FrameNavigationStarting`: 허용 origin이 아니면 취소하고 로그만 남긴다. 허용된 프레임 탐색은 상태를 바꾸지 않는다.
   - `SourceChanged`의 same-document: 새 문서가 아니면 세션의 신뢰된 URL(UI 요청의 출처 판단에 쓰는 값)만 갱신한다. 허용
@@ -39,7 +39,7 @@ status: accepted
 
 1. 문서, 프레임과 same-document 탐색을 알리는 새 이벤트와 작업을 추가하지 않는다.
 2. 백엔드는 기존 계약으로 탐색 결과를 확인한다.
-   - 현재 URL, `loading`, `canGoBack`, `canGoForward`: `windows.getWebViewState`(Windows 호스트).
+   - 현재 URL, `loading`, `canGoBack`, `canGoForward`: `windows.getWebViewState`. macOS도 같은 작업을 제공하며 `url`은 WKWebView의 현재 URL을 읽고 앱 URL의 자산 scheme을 `https://app.bunaway.local`로 되돌려 돌려준다.
    - 새 문서의 준비 상태, 실패와 취소: `windows.readiness`, `windows.getReadiness`. `loading`은 탐색 완료 이벤트가 올 때까지
      true로 남으므로 완료 기한 초과로 `document`가 `failed`가 된 뒤에도 true일 수 있다.
    - same-document 탐색 뒤의 URL: `getWebViewState`의 `url`이 호출 시점의 현재 URL을 돌려준다. 호출 직후 값이 방금 시작한
@@ -48,9 +48,9 @@ status: accepted
      백엔드가 필요로 하면 앱 명령으로 보낸다.
 3. 프레임 탐색은 호스트가 허용 origin 검사와 로그만 맡고 앱에 알리지 않는다. 프레임별 탐색 정보, 프레임 URL과 origin 조회는
    별도 TODO(프레임 tree 지원 범위)에서 다룬다.
-4. 새 이벤트를 추가하지 않는 결정은 Windows와 macOS 호스트에 같이 적용한다. 기존 계약으로 확인할 수 있다는 판단은 Windows만
-   다룬다. macOS에는 `windows.getWebViewState`가 없고, `ViewBoundary.sameDocument`는 UI 메시지가 도착할 때 그 시점의 출처로
-   세션 URL을 갱신하는 데 쓰인다. macOS의 탐색 상태는 `windows.mdx`에 적힌 기존 계약을 따른다.
+4. 이 결정은 Windows와 macOS 호스트에 같이 적용한다. 두 호스트 모두 `getWebViewState`로 현재 URL과 `loading`을 조회한다.
+   same-document 탐색에서 세션 URL을 갱신하는 계기는 다르다. Windows는 `SourceChanged` 이벤트에서, macOS는 UI 메시지가
+   도착할 때 그 시점의 출처로 `ViewBoundary.sameDocument`를 호출한다.
 5. 기존 계약으로 얻을 수 없는 용도(탐색 이력 추적, 리디렉션 체인 조회 등)가 확인되면 별도 결정에서 다룬다. 탐색 전 허용과
    거부, 리디렉션과 popup 처리는 별도 TODO 항목이다.
 
@@ -66,6 +66,6 @@ status: accepted
 ## 결과
 
 - 이벤트, 권한, 스키마, 네이티브 코드 변경은 없다.
-- 로드 시작, DOM ready, 완료와 실패 이벤트를 다루는 결정(WebView 로드 이벤트 ADR)이 이 결정의 짝이며, 그 결정은 문서,
+- 로드 시작, DOM ready, 완료와 실패 이벤트를 다루는 결정(ADR 0068, WebView 로드 이벤트)이 이 결정의 짝이며, 그 결정은 문서,
   프레임과 same-document 탐색 이벤트를 이 결정에서 다루도록 남겼다.
 - `docs/TODO-windows.md`의 해당 항목을 완료로 표시하고 이 결정을 참조한다.
