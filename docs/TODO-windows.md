@@ -707,9 +707,9 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 우선순위 P2. 소유자: 세션과 렌더러 API. 출처: [E-session], [E-cookies], [E-request], [E-protocol], [E-net], [T-webview-rust].
 
 - [x] 결정 완료: cookies 조회, 설정, 삭제, 변경 이벤트와 flush는 제공하지 않는다. UI는 `document.cookie`를 쓰고 백엔드는 토큰을 앱 명령으로 받아 `safe-storage` 플러그인에 보관한다. `HttpOnly` 값을 백엔드가 읽어야 하는 앱이 확인되면 읽기 전용 조회부터 다시 검토한다([ADR 0076](./decisions/0076-webview-cookies.md)).
-- [ ] cache 크기 조회, cache와 localStorage, IndexedDB, service worker 데이터 삭제를 제공한다.
-- [ ] 저장소 종류, origin과 기간별 데이터 삭제를 제공한다.
-- [ ] 인증 cache, DNS cache와 code cache의 조회 또는 삭제를 제공한다.
+- [x] 결정 완료: cache 크기 조회와 cache, localStorage, IndexedDB, service worker 데이터 삭제는 제공하지 않는다. UI는 웹 표준 API로 자기 origin의 데이터를 지운다. WebView2에는 cache 크기를 읽는 API가 없다. 로그아웃 때 전체 삭제가 필요한 앱이 확인되면 인자 없는 전체 삭제부터 다시 검토한다([ADR 0081](./decisions/0081-webview-browsing-data.md)).
+- [x] 결정 완료: 저장소 종류, origin과 기간별 데이터 삭제는 제공하지 않는다. WebView2는 종류와 기간별 삭제를 제공하지만 origin별 삭제는 DevTools 프로토콜로만 가능하다([ADR 0081](./decisions/0081-webview-browsing-data.md)).
+- [x] 결정 완료: 인증 cache, DNS cache와 code cache의 조회와 삭제는 제공하지 않는다. WebView2에 대응하는 API가 없다([ADR 0081](./decisions/0081-webview-browsing-data.md)).
 - [ ] 세션의 persistent 여부와 storage path를 조회한다.
 - [ ] 세션별 proxy 설정, 조회, 재적용과 모든 연결 종료를 제공한다.
 - [x] HTTP 요청 전 취소, redirect와 URL filter는 [제공하지 않는다](decisions/0083-webview-request-interception.md). 탐색 허용은 허용 origin 검사와 탐색 훅 항목이, 백엔드 HTTP는 `network.request`가 맡는다.
