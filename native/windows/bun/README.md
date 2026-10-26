@@ -45,6 +45,7 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 반올림, 입력 및 대상 창 권한을 검사한다.
 `webview-version.ts`는 시작 때 WebView2Loader로 설치된 런타임 버전을 한 번 조회해 `ctx.app.runtime.webview`에 전달하며,
 `wide-string.ts`는 이 조회에서 쓰는 NUL 종료 UTF-16 문자열 읽기를 제공한다. 조회 실패는 `webview-version-unavailable`로 기록하고 값을 `null`로 둔다.
+`webview-version-check.ts`는 이 버전을 최소 런타임 버전과 비교하며(Worker를 시작하기 전에 검사한다), 더 낮으면 `webview-version-too-old`를 기록하고 시작을 실패시킨다. 해석할 수 없는 문자열은 `webview-version-unparsable`로 기록하고 계속한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 UI 스레드의 수명주기(시작 요청, 시작 탐색, 대기 중인 quit 요청, 종료 확정, 정지)는

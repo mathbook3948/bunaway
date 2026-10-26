@@ -36,9 +36,10 @@ export function isWebViewVersionTooOld(
   if (!actual || !required) {
     return false;
   }
-  for (let index = 0; index < 4; index++) {
-    if (actual[index] !== required[index]) {
-      return actual[index] < required[index];
+  for (const [index, part] of actual.entries()) {
+    const floor = required[index] ?? 0;
+    if (part !== floor) {
+      return part < floor;
     }
   }
   return false;

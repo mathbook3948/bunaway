@@ -45,9 +45,10 @@ test("runtime versions compare by numeric part and unreadable shapes never count
   expect(isWebViewVersionTooOld("97.0.1072.53", minimum)).toBe(true);
   expect(isWebViewVersionTooOld("96.9.9999.99", minimum)).toBe(true);
   expect(isWebViewVersionTooOld("97.0.1072.54", minimum)).toBe(false);
-  // Numeric, not lexical: 1072 < 2210 and 99 > 9.
+  // Numeric, not lexical: "100" sorts before "54" as text.
   expect(isWebViewVersionTooOld("97.0.1072.100", minimum)).toBe(false);
   expect(isWebViewVersionTooOld("120.0.2210.91", minimum)).toBe(false);
+  expect(isWebViewVersionTooOld("100.0.1.1", minimum)).toBe(false);
   expect(isWebViewVersionTooOld("120.0.2210.91 canary", minimum)).toBe(false);
   expect(isWebViewVersionTooOld("96.0.1.1 canary", minimum)).toBe(true);
   expect(isWebViewVersionTooOld("unknown", minimum)).toBe(false);

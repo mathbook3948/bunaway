@@ -184,6 +184,8 @@ export async function runWindowsApp(
   const startHidden = desktopLaunch(launch?.argv ?? []).hidden;
   validateDesktopStartup(config.windows, app.desktop, startHidden);
   config = withDesktopStart(config, app.desktop, startHidden);
+  const webviewVersion = checkWebViewVersion(config.loader);
+  failure = webviewVersion.failure;
   const worker = new Worker(workerModuleUrl("ui"), {
     workerData: config,
   });
@@ -551,7 +553,13 @@ export async function runWindowsApp(
     if (failure) {
       throw failure;
     }
-    const webview = await webViewVersionOrNull(config.loader, log);
+    if (webviewVersion.event) {
+      await log.write(webviewVersion.event.name, webviewVersion.event.fields);
+    }
+    if (failure) {
+      throw failure;
+    }
+    const webview = webviewVersion.version;
     booting = createCore(app, {
       app: toAppInfo(config.appMetadata, {
         bun: Bun.version,
@@ -890,35 +898,62 @@ function workerModuleUrl(name: "ui" | "host-operations"): URL {
   return new URL(source ? `./${name}.ts` : `./${name}.js`, import.meta.url);
 }
 
+/** What the startup version check found: the value for `app.webview`, a log entry and, below the minimum, the startup failure. */
+interface WebViewVersionCheck {
+  version: string | null;
+  event?: {
+    name: string;
+    fields: Record<string, string>;
+  };
+  failure?: Error;
+}
+
 /**
- * Reads the WebView2 runtime version. A failed read is logged and exposed as null so startup
- * continues; a version that was read but is below the minimum fails startup.
+ * Reads the WebView2 runtime version before the Workers start, so a runtime below the minimum
+ * reports the version error instead of a later QueryInterface failure from window creation.
+ * A failed read or an unparsable version leaves startup running with the version as null or as read.
  */
-async function webViewVersionOrNull(
-  loader: UIConfig["loader"],
-  log: DiagnosticLog,
-): Promise<string | null> {
+function checkWebViewVersion(loader: UIConfig["loader"]): WebViewVersionCheck {
   let version: string;
   try {
     version = readWebViewVersion(loader);
   } catch (cause) {
-    await log.write("webview-version-unavailable", {
-      message: cause instanceof Error ? cause.message : String(cause),
-    });
-    return null;
+    return {
+      version: null,
+      event: {
+        name: "webview-version-unavailable",
+        fields: {
+          message: cause instanceof Error ? cause.message : String(cause),
+        },
+      },
+    };
   }
   if (isWebViewVersionTooOld(version)) {
-    await log.write("webview-version-too-old", {
+    return {
       version,
-    });
-    throw new Error(webViewVersionTooOldMessage(version));
+      event: {
+        name: "webview-version-too-old",
+        fields: {
+          version,
+        },
+      },
+      failure: new Error(webViewVersionTooOldMessage(version)),
+    };
   }
   if (!parseWebViewVersion(version)) {
-    await log.write("webview-version-unparsable", {
+    return {
       version,
-    });
+      event: {
+        name: "webview-version-unparsable",
+        fields: {
+          version,
+        },
+      },
+    };
   }
-  return version;
+  return {
+    version,
+  };
 }
 
 /** Exit code and, after an approved relaunch, the arguments of the new process. */

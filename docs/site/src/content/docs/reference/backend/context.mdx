@@ -70,6 +70,7 @@ Android, iOS와 `runBunApp`은 파일 시스템 패키지를 노출하지 않으
 Windows나 macOS에서 버전 조회가 실패해도 앱은 시작되고 `runtime.webview`만 `null`이 됩니다.
 호스트 로그에는 `webview-version-unavailable` 항목이 남습니다.
 버전을 읽었지만 필요한 최소 WebView2 런타임(128.0.2739.15)보다 낮으면(Windows) 앱 시작이 실패하고 `webview-version-too-old` 항목과 설치 안내 오류가 남습니다.
+버전 문자열을 해석할 수 없으면 `webview-version-unparsable` 항목만 남기고 시작합니다.
 
 `ctx.app`은 백엔드에서만 사용합니다. UI에서 확인하려면 앱이 직접 명령을 만들어 `ctx.app`을 반환합니다.
 별도의 내장 명령은 없습니다.
