@@ -1141,7 +1141,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 - [ ] GPU shared texture의 가져오기, 전달, 수명과 동기화를 제공한다.
 - [ ] View tree와 native child view의 배치, 순서, bounds, clipping과 visibility를 제공한다.
 - [ ] native ImageView, border radius와 background blur의 지원을 결정한다.
-- [x] 결정 완료: `<webview>` 태그와 같은 UI 내 guest WebView는 [제공하지 않는다](decisions/0098-guest-webview-tag.md). 외부 콘텐츠는 `<iframe>`, 같은 WebView의 라우팅, `opener.openUrl`로 처리한다.
+- [x] 결정 완료: `<webview>` 태그와 같은 UI 내 guest WebView는 [제공하지 않는다](decisions/0098-guest-webview-tag.md). 외부 사이트는 `opener.openUrl`(ADR 0026의 링크 처리 조건을 따른다)로 열고, 앱 화면은 같은 WebView의 라우팅으로 처리한다.
 - [ ] 선택 Chromium 렌더러에서 브라우저 확장과 Chrome API 호환 subset을 제공할지 결정한다. WebView2 기준으로는 [제공하지 않는다](decisions/0070-webview-browser-extensions.md).
 - [ ] Chromium feature flag, V8 code-cache와 sandbox 설정은 Bun과 WebView2의 대체 또는 미지원으로 매핑한다.
 - [ ] trusted backend sandbox가 필요한 앱에 별도 프로세스 격리 모델을 제공할지 결정한다.
