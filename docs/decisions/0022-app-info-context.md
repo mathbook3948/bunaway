@@ -81,7 +81,7 @@ Electron의 `app.isPackaged`와 `process.resourcesPath`, Tauri의 `resource_dir`
   Objective-C 접근은 메인 스레드에서 해야 하므로 `entry.ts`가 백엔드 Worker를 시작하기 전에 조회해 Worker에 넘긴다.
 - Android, iOS와 프로세스 런타임(`runBunApp`): 호스트가 보고하는 WebView 엔진 버전이 없으므로 `null`이다.
 
-버전은 정보 제공용이므로 조회 실패는 앱 시작을 막지 않는다. 호스트 로그에 `webview-version-unavailable`을
+`app.webview` 값은 정보 제공용이므로 조회 실패는 앱 시작을 막지 않는다(읽은 Windows 버전이 최소 버전보다 낮을 때의 시작 실패는 [ADR 0101](./0101-webview2-minimum-runtime.md)). 호스트 로그에 `webview-version-unavailable`을
 남기고 값을 `null`로 둔다. 값은 Core 시작 시점에 한 번 정해지며 실행 중의 WebView2 업데이트는 반영하지 않는다.
 
 ## 백엔드 전용

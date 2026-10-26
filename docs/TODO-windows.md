@@ -1034,7 +1034,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
   같은 범위에서 다른 폴더로 설치하면 등록과 바로가기를 새 EXE로 옮긴 뒤 이전 폴더의 앱 파일만 정리한다.
   `perUser`와 `perMachine` 사이의 전환은 정리하지 않는다. [설치 채널 계약](../packages/packaging/README.md)을 따른다.
 - [ ] 서명된 compiled EXE 앱의 설치, 덮어쓰기 업데이트와 제거를 검증한다.
-- [ ] WebView2 없는 PC의 설치, offline 배포와 최소 runtime 버전을 처리한다. (`win-direct`의 `webView2` offline 모드로 Standalone Installer 임베드와 빌드 시 서명 검증은 구현됨. 최소 runtime 버전과 Store 채널 허용은 남음.)
+- [ ] WebView2 없는 PC의 설치, offline 배포와 최소 runtime 버전을 처리한다. (`win-direct`의 `webView2` offline 모드로 Standalone Installer 임베드와 빌드 시 서명 검증은 구현됨. 최소 runtime 버전은 시작 때 검사한다([ADR 0101](./decisions/0101-webview2-minimum-runtime.md)). Store 채널 허용은 남음.)
 - [ ] MSIX 활성화와 안전한 런타임 시작 경로를 구현하고 검증한다.
 - [x] 업데이트 endpoint, channel, target와 architecture를 지정한다.
   앱이 `bunaway.json`의 `plugins.updater`에 endpoint 템플릿과 channel을 고정하고 target과 architecture는
@@ -1226,7 +1226,7 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
 결과는 날짜, 기준 revision과 검증 방식으로 구분한다.
 
 - [ ] Windows 10/11의 지원 최소 버전과 실제 검증 환경을 확정한다.
-- [ ] WebView2 최소 버전과 Evergreen, Fixed Version 배포 지원을 확정한다.
+- [x] 결정 완료: 읽은 WebView2 runtime 버전이 최소 버전보다 낮으면 시작을 실패시키고, 읽지 못한 경우는 계속한다. Evergreen만 지원하고 Fixed Version은 제공하지 않는다. [ADR 0101](./decisions/0101-webview2-minimum-runtime.md).
 - [ ] Windows ARM64 지원과 x64 emulation 범위를 확정한다.
 - [ ] 최소와 최대 크기, DPI와 다중 모니터 회귀를 실제 사용자 조작으로 검증한다.
   최소/최대 크기의 물리 경계 조작과 서로 다른 DPI의 물리 모니터 이동은 미검증이다.

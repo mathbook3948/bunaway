@@ -45,6 +45,10 @@ import {
 } from "./relaunch.ts";
 import { releaseSessionEndWait } from "./session-end.ts";
 import { readWebViewVersion } from "./webview-version.ts";
+import {
+  isWebViewVersionTooOld,
+  webViewVersionTooOldMessage,
+} from "./webview-version-check.ts";
 
 /** How an orderly shutdown ended: the process exit code and an optional app-requested relaunch. */
 export type WindowsAppResult = {
@@ -885,19 +889,30 @@ function workerModuleUrl(name: "ui" | "host-operations"): URL {
   return new URL(source ? `./${name}.ts` : `./${name}.js`, import.meta.url);
 }
 
-/** The WebView version is informational: failure is logged and exposed as null. */
+/**
+ * Reads the WebView2 runtime version. A failed read is logged and exposed as null so startup
+ * continues; a version that was read but is below the minimum fails startup.
+ */
 async function webViewVersionOrNull(
   loader: UIConfig["loader"],
   log: DiagnosticLog,
 ): Promise<string | null> {
+  let version: string;
   try {
-    return readWebViewVersion(loader);
+    version = readWebViewVersion(loader);
   } catch (cause) {
     await log.write("webview-version-unavailable", {
       message: cause instanceof Error ? cause.message : String(cause),
     });
     return null;
   }
+  if (isWebViewVersionTooOld(version)) {
+    await log.write("webview-version-too-old", {
+      version,
+    });
+    throw new Error(webViewVersionTooOldMessage(version));
+  }
+  return version;
 }
 
 /** Exit code and, after an approved relaunch, the arguments of the new process. */

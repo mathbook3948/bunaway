@@ -33,3 +33,29 @@ test.skipIf(process.platform !== "win32")(
     ).toThrow();
   },
 );
+
+// Pure comparison logic: runs on every platform.
+test("runtime versions compare by numeric part and unreadable shapes never count as old", async () => {
+  const {
+    MIN_WEBVIEW_RUNTIME_VERSION,
+    isWebViewVersionTooOld,
+    webViewVersionTooOldMessage,
+  } = await import("#native/windows/bun/webview-version-check");
+  const minimum = "97.0.1072.54";
+  expect(isWebViewVersionTooOld("97.0.1072.53", minimum)).toBe(true);
+  expect(isWebViewVersionTooOld("96.9.9999.99", minimum)).toBe(true);
+  expect(isWebViewVersionTooOld("97.0.1072.54", minimum)).toBe(false);
+  // Numeric, not lexical: 1072 < 2210 and 99 > 9.
+  expect(isWebViewVersionTooOld("97.0.1072.100", minimum)).toBe(false);
+  expect(isWebViewVersionTooOld("120.0.2210.91", minimum)).toBe(false);
+  expect(isWebViewVersionTooOld("120.0.2210.91 canary", minimum)).toBe(false);
+  expect(isWebViewVersionTooOld("96.0.1.1 canary", minimum)).toBe(true);
+  expect(isWebViewVersionTooOld("unknown", minimum)).toBe(false);
+  expect(isWebViewVersionTooOld("1.2.3", minimum)).toBe(false);
+  expect(isWebViewVersionTooOld("1.0.0.0")).toBe(true);
+  expect(MIN_WEBVIEW_RUNTIME_VERSION).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
+  const message = webViewVersionTooOldMessage("90.0.1.1");
+  expect(message).toContain("90.0.1.1");
+  expect(message).toContain(MIN_WEBVIEW_RUNTIME_VERSION);
+  expect(message).not.toMatch(/[A-Za-z]:\\|\.dll/);
+});
