@@ -14,7 +14,7 @@ JavaScript stack 수집)을 API로 제공할지 정해야 했다. network log는
 이 결정의 범위 밖이다.
 
 아래 Electron, Tauri, WebView2, Bun 서술은 해당 프로젝트의 공개 문서와 소스 확인에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다.
-기준은 Electron v45.0.0(Chromium 156.0.8078.48), Tauri 2.12.5, wry 0.57.1, WebView2 SDK 1.0.4314.35이다.
+기준은 Electron v45.0.0(Chromium 156.0.8078.48), Tauri 2.12.5, wry 0.57.1, WebView2 SDK 1.0.4314.35이다. 이 저장소의 호스트가 쓰는 SDK는 1.0.4129.50이며, 아래 WebView2 API 유무는 위 기준 버전의 `WebView2.idl`을 확인한 것이다.
 
 - Electron은 메인 프로세스의 `contentTracing`으로 `getCategories()`, `startRecording(options)`, `stopRecording(resultFilePath)`,
   `getTraceBufferUsage()`를 제공한다. 결과는 앱이 정한 파일 경로에 기록되며 모든 프로세스(브라우저, 렌더러, GPU)의 이벤트를 포함한다.
@@ -33,17 +33,17 @@ JavaScript stack 수집)을 API로 제공할지 정해야 했다. network log는
 - tracing과 heap snapshot 결과에는 페이지 메모리의 내용, 방문한 URL, 입력 이벤트 같은 민감한 정보가 들어갈 수 있다. 기록 위치와 보관은
   앱 책임이며 경로 제한은 코어가 맡지 않는 방침([ADR 0024](./0024-plugin-path-responsibility.md))과 맞물린다.
 - WebView2의 응답 없는 렌더러는 `windows.waitForProcessFailure`가 `renderer-unresponsive`로 보고한다
-  ([Windows 호스트 참조](../site/src/content/docs/reference/host/windows.mdx)). 호스트는 이 상태의 렌더러를 종료하거나 되살리지 않고
-  보고만 한다.
-- 개발 중에는 Windows x64의 `bunaway dev`가 UI DevTools를 연결하므로 Performance와 Memory 패널로 tracing과 heap snapshot을 수집할 수 있고,
-  백엔드는 `bunaway dev --inspect`로 연결한 디버거에서 호출 스택과 힙을 확인한다
+  ([Windows 호스트 참조](../site/src/content/docs/reference/host/windows.mdx)). 보고에 담기는 복구 방식(`recovery`)은 같은 참조를 따르며
+  이 결정이 바꾸지 않는다.
+- 개발 중에는 Windows x64의 `bunaway dev`가 UI DevTools를 연결하므로 DevTools의 Performance와 Memory 패널로 tracing과 heap snapshot을
+  수집할 수 있고(패널 구성은 Chromium DevTools의 공개 문서에 따른다), 백엔드는 `bunaway dev --inspect`로 연결한 디버거에서 호출 스택과 힙을 확인한다
   ([디버깅 가이드](../site/src/content/docs/guides/debugging.mdx)). Bun 런타임도 `Bun.generateHeapSnapshot()`으로 백엔드의 힙을 직접 얻을 수 있다.
 
 ## 결정
 
 1. tracing(category 조회, 기록 시작과 중단, buffer usage), UI heap snapshot, JavaScript stack 수집 API를 추가하지 않는다.
 2. process hang 진단 수집 API를 추가하지 않는다. 응답 없는 렌더러는 기존대로 `windows.waitForProcessFailure`의
-   `renderer-unresponsive` 보고로만 알린다.
+   `renderer-unresponsive` 보고로 알리고, 호출 스택 같은 추가 수집은 제공하지 않는다.
 3. 대체 API는 두지 않는다. 개발 중 수집은 DevTools와 `--inspect`로, 백엔드 힙은 Bun 런타임으로 충당한다.
 4. 배포 앱에서 이 기능이 필요하다는 요구가 확인되면 별도 결정에서 다룬다. 이때 환경 옵션 전달 경로 또는 허용할 프로토콜 도메인 목록,
    개발 모드 한정 여부, 결과 파일에 들어갈 민감 정보와 출력 경로의 책임을 먼저 정한다.
