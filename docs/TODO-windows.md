@@ -961,7 +961,10 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   pipe를 닫는다. 직접 자식이 정상 종료해도 남은 자손을 정리한다. 앱 종료의 descendant
   정리는 기존 host Job Object를 따른다. 장기 spawn handle은 핸들별 Job Object를 가지며
   `kill`, 루트 종료, 어댑터 폐기가 자손까지 종료한다.
-- [ ] 번들 sidecar의 플랫폼 선택, 실행 경로, 라이선스와 패키징을 제공한다.
+- [x] 번들 sidecar의 플랫폼 선택, 실행 경로, 라이선스와 패키징을 제공한다.
+  새 API 없이 `build.resources`로 패키징하고 `ctx.app.paths.resources` 경로를 `process.spawn`에 넘긴다.
+  Windows는 x64 한 벌(ARM64는 x64 에뮬레이션)이라 플랫폼 선택 규칙은 없고, 서명과 라이선스 고지는
+  문서 규칙이다. `tests/lifecycle/windows-sidecar.ts`가 패키지 실행을 Windows CI에서 확인한다.
 - [x] 앱 restart와 exit를 desktop 수명주기에 연결한다.
   `DesktopContext`의 `quit({ exitCode })`, `exit()`, `relaunch()`로 이미 연결되어 있고 검증도 "종료 코드 지정, 강제 exit, relaunch와 인자 보존 API를 제공한다" 항목과 같다. updater 설치 뒤 relaunch 연결은 별도 항목이다.
 - [x] CLI argument와 subcommand schema, help, 오류와 match 결과를 제공한다.
