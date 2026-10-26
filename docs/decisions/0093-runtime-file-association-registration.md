@@ -18,16 +18,18 @@ status: accepted
   `packages/packaging`이 정하고 `stableGuid`, `AssociationRoot`, 대기 후보 기록을 쓴다.
 - 배포 채널 중 `win-direct`와 `win-store-unpackaged`는 Inno 설치 프로그램이다. 포터블 채널은 없다.
   MSIX 채널(`win-store-msix`)은 아직 패키징을 지원하지 않고, 매니페스트 렌더러에도 파일 연결 선언이 없다.
-- 더블클릭은 `앱 실행 파일 "<경로>"`로 새 프로세스를 시작하고, 앱은 단일 인스턴스 전달의 `argv`와 `desktop.onOpen`으로
-  경로를 받는다.
+- 더블클릭은 `앱 실행 파일 "<경로>"`로 새 프로세스를 시작한다. 앱은 초기 실행과 두 번째 실행 모두
+  `desktop.onOpen`의 `request.files`(작업 디렉터리 기준 절대 경로)와 `desktop.onOpenUrls`(`file:` URL)로 경로를 받는다.
+  두 훅은 `openArguments`가 기본값 `"files-and-urls"`일 때 채워지고, `"raw"`에서는 `argv`만 전달한다.
 
 ## 결정
 
 1. 파일 확장자의 런타임 등록, 해제, 조회 API를 제공하지 않는다. 파일 연결은 설치 때 선택하는 후보 등록으로만 둔다.
    설치 뒤에 켜려면 `win-direct`는 설치 프로그램을 다시 실행해 작업을 선택한다. Store가 무인으로 설치하는
-   `win-store-unpackaged`는 사용자가 작업을 고를 화면이 없어 이 방법이 없다.
-2. 연결 파일을 여는 경로는 기존 단일 인스턴스 전달과 `desktop.onOpen`을 쓴다. 호스트에 파일 열기 전용 이벤트를
-   새로 만들지 않는다.
+   `win-store-unpackaged`는 사용자가 작업을 고를 화면이 없다. 무인 설치 인자에 `/TASKS="fileassociations"`를 넣으면
+   모든 사용자에게 연결이 켜지므로 설치 때 사용자가 선택한다는 원칙과 맞지 않아 쓰지 않는다.
+2. 연결 파일을 여는 경로는 기존 `desktop.onOpen`의 `request.files`와 `desktop.onOpenUrls`를 쓴다. 호스트에 파일 열기
+   전용 이벤트를 새로 만들지 않는다.
 3. 받은 경로는 신뢰하지 않는 입력이다. 어디까지 읽고 쓸지는 앱이 정한다
    ([ADR 0024](./0024-plugin-path-responsibility.md)).
 
