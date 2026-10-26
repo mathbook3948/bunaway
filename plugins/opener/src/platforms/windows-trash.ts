@@ -7,6 +7,8 @@ import {
   read,
   toArrayBuffer,
 } from "bun:ffi";
+import { realpathSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { BunawayError } from "@bunaway/plugin";
 import {
   ADVAPI32,
@@ -361,6 +363,18 @@ const REGISTRY_VALUE_MISSING = [
 ];
 const MAX_VOLUME_PATH_UNITS = 32768;
 
+/**
+ * Resolve links in the folders above the file, which decide the volume the shell recycles to.
+ * The last component is kept as it is, because a link itself is what gets recycled.
+ */
+function resolveParentLinks(path: string): string {
+  try {
+    return join(realpathSync(dirname(path)), basename(path));
+  } catch {
+    throw cannotJudgeCapacity("The folder of the file could not be resolved.");
+  }
+}
+
 function cannotJudgeCapacity(message: string): BunawayError {
   return new BunawayError({
     code: "UNSUPPORTED",
@@ -388,9 +402,10 @@ export function assertFitsRecycleBin(path: string, size: number): void {
   try {
     // Stage 1: the mount point of the volume that holds the file, then that volume's GUID.
     const mountPoint = Buffer.alloc(MAX_VOLUME_PATH_UNITS * 2);
+    const resolvedPath = wide(resolveParentLinks(path));
     if (
       !kernel.symbols.GetVolumePathNameW(
-        ptr(wide(path)),
+        ptr(resolvedPath),
         ptr(mountPoint),
         MAX_VOLUME_PATH_UNITS,
       )
@@ -426,10 +441,13 @@ export function assertFitsRecycleBin(path: string, size: number): void {
         const length = new Uint32Array([
           4,
         ]);
+        // Own both buffers until the call returns; a pointer alone does not keep them alive.
+        const subkeyText = wide(subkey);
+        const nameText = wide(name);
         const status = advapi.symbols.RegGetValueW(
           HKEY_CURRENT_USER,
-          ptr(wide(subkey)),
-          ptr(wide(name)),
+          ptr(subkeyText),
+          ptr(nameText),
           RRF_RT_REG_DWORD | RRF_SUBKEY_WOW6464KEY,
           null,
           ptr(data),
@@ -548,8 +566,9 @@ export function trashWindowsFile(path: string): void {
     // Ask Windows to recycle, suppress companion deletion and copy hooks, and retain
     // permanent-delete warnings. Without FOF_WANTNUKEWARNING a file over the bin capacity
     // is deleted permanently and silently, because the sink sees the recycle intent and
-    // only the result shows that nothing was recycled. A file over the capacity is refused
-    // before this call, so the warning is only a backstop. Missing recycle flags are
+    // only the result shows that nothing was recycled. A file over a known capacity is
+    // refused before this call, but a volume without a MaxCapacity value is left to the
+    // shell, where this warning is the only protection. Never remove the flag. Missing recycle flags are
     // vetoed by our sink; a recycled-item result is also required. Do not add a framework
     // delete fallback.
     checkResult(
