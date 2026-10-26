@@ -4,6 +4,7 @@ import {
   lstatSync,
   openSync,
   realpathSync,
+  type Stats,
   statSync,
 } from "node:fs";
 import { dirname } from "node:path";
@@ -98,15 +99,17 @@ export function resolveReadableFile(path: string): string {
  * link, so moving a link to the Recycle Bin moves the link itself. Reports a missing path as
  * `FILE_NOT_FOUND` and a directory as `INVALID_ARGUMENT`.
  */
-export function assertExistingFile(path: string): void {
+export function assertExistingFile(path: string): Stats {
   // A final link is not followed, so a link to a directory is still moved as the link it is.
   try {
-    if (lstatSync(path).isDirectory()) {
+    const stats = lstatSync(path);
+    if (stats.isDirectory()) {
       throw new BunawayError({
         code: "INVALID_ARGUMENT",
         message: "Opener requires a file, not a directory.",
       });
     }
+    return stats;
   } catch (error) {
     throw fileError(error);
   }

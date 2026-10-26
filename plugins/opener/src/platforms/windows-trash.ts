@@ -25,6 +25,8 @@ const RRF_RT_REG_DWORD = 0x10;
 const RRF_SUBKEY_WOW6464KEY = 0x10000;
 const BIN_VOLUME_KEY =
   "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\BitBucket\\Volume";
+const POLICY_KEY =
+  "Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer";
 const BYTES_PER_MEGABYTE = 1024 * 1024;
 /** Characters of a `\\?\Volume{GUID}\` name plus its terminator. */
 const VOLUME_NAME_UNITS = 64;
@@ -352,53 +354,114 @@ export function validateTrashDrive(path: string): void {
   }
 }
 
+/** Win32 errors of a registry value that is absent, which leaves the decision to the shell. */
+const REGISTRY_VALUE_MISSING = [
+  2,
+  3,
+];
+const MAX_VOLUME_PATH_UNITS = 32768;
+
+function cannotJudgeCapacity(message: string): BunawayError {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message,
+  });
+}
+
 /**
  * Refuse a file larger than the Recycle Bin capacity of its volume. The shell deletes such a
  * file permanently and otherwise asks for confirmation through a prompt nothing answers, so
  * the call must end before the shell is asked. The capacity is the per-user `MaxCapacity`
- * (megabytes) of the volume; a volume without that value is left to the shell.
+ * (megabytes) of the volume that holds the file, found through its mount point so a folder
+ * mount is judged by its own volume. A volume without that value is left to the shell. When
+ * the capacity cannot be read, or the `RecycleBinSize` policy overrides it, the call is
+ * refused instead of guessed, because a wrong guess deletes the file or waits forever.
  */
 export function assertFitsRecycleBin(path: string, size: number): void {
   const kernel = dlopen("kernel32.dll", {
-    ...pick(KERNEL32, "GetVolumeNameForVolumeMountPointW"),
+    ...pick(
+      KERNEL32,
+      "GetVolumePathNameW",
+      "GetVolumeNameForVolumeMountPointW",
+    ),
   });
   try {
+    // Stage 1: the mount point of the volume that holds the file, then that volume's GUID.
+    const mountPoint = Buffer.alloc(MAX_VOLUME_PATH_UNITS * 2);
+    if (
+      !kernel.symbols.GetVolumePathNameW(
+        ptr(wide(path)),
+        ptr(mountPoint),
+        MAX_VOLUME_PATH_UNITS,
+      )
+    ) {
+      throw cannotJudgeCapacity("The volume of the file could not be found.");
+    }
     const volume = Buffer.alloc(VOLUME_NAME_UNITS * 2);
+    // A substituted drive has no volume of its own to read the capacity from.
     if (
       !kernel.symbols.GetVolumeNameForVolumeMountPointW(
-        ptr(Buffer.from(`${path.slice(0, 3)}\0`, "utf16le")),
+        ptr(mountPoint),
         ptr(volume),
         VOLUME_NAME_UNITS,
       )
     ) {
-      return;
+      throw cannotJudgeCapacity(
+        "The volume of the file has no Recycle Bin settings.",
+      );
     }
     const guidText = /\{[0-9a-f-]+\}/i.exec(volume.toString("utf16le"))?.[0];
     if (!guidText) {
-      return;
+      throw cannotJudgeCapacity(
+        "The volume of the file has no Recycle Bin settings.",
+      );
     }
+    // Stage 2: the policy size, which overrides every volume, then the volume capacity.
     const advapi = dlopen("advapi32.dll", {
       ...pick(ADVAPI32, "RegGetValueW"),
     });
     try {
-      const data = new Uint32Array(1);
-      const length = new Uint32Array([
-        4,
-      ]);
-      const status = advapi.symbols.RegGetValueW(
-        HKEY_CURRENT_USER,
-        ptr(wide(`${BIN_VOLUME_KEY}\\${guidText}`)),
-        ptr(wide("MaxCapacity")),
-        RRF_RT_REG_DWORD | RRF_SUBKEY_WOW6464KEY,
-        null,
-        ptr(data),
-        ptr(length),
+      const readDword = (subkey: string, name: string): number | undefined => {
+        const data = new Uint32Array(1);
+        const length = new Uint32Array([
+          4,
+        ]);
+        const status = advapi.symbols.RegGetValueW(
+          HKEY_CURRENT_USER,
+          ptr(wide(subkey)),
+          ptr(wide(name)),
+          RRF_RT_REG_DWORD | RRF_SUBKEY_WOW6464KEY,
+          null,
+          ptr(data),
+          ptr(length),
+        );
+        if (status === 0) {
+          return data[0];
+        }
+        if (REGISTRY_VALUE_MISSING.includes(status)) {
+          return undefined;
+        }
+        // Access denied or a value of another type: the capacity is unknown, not absent.
+        throw cannotJudgeCapacity(
+          `The Recycle Bin capacity could not be read (Win32 ${status}).`,
+        );
+      };
+      if (readDword(POLICY_KEY, "RecycleBinSize") !== undefined) {
+        throw cannotJudgeCapacity(
+          "A policy sets the Recycle Bin size, which trashFile does not evaluate.",
+        );
+      }
+      const capacityMegabytes = readDword(
+        `${BIN_VOLUME_KEY}\\${guidText}`,
+        "MaxCapacity",
       );
-      if (status === 0 && size > (data[0] ?? 0) * BYTES_PER_MEGABYTE) {
-        throw new BunawayError({
-          code: "UNSUPPORTED",
-          message: "The file is larger than the Recycle Bin capacity.",
-        });
+      if (
+        capacityMegabytes !== undefined &&
+        size > capacityMegabytes * BYTES_PER_MEGABYTE
+      ) {
+        throw cannotJudgeCapacity(
+          "The file is larger than the Recycle Bin capacity.",
+        );
       }
     } finally {
       advapi.close();

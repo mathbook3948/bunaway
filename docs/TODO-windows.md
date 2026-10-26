@@ -414,7 +414,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
   파일 자체 교체 경쟁은 남는다. Windows 네이티브 회귀는 `host:windows`에 포함한다.
   경고 UI의 화면 표시는 아래 항목이 다룬다.
 - [x] 휴지통 비활성화 정책과 볼륨의 영구 삭제 설정에서 `trashFile`이 `UNSUPPORTED`로 실패하고 파일을 남기는지 Windows CI에서 검증한다. 셸이 설정을 프로세스 단위로 유지하므로 호출마다 자식 프로세스를 쓴다(`windows-trash-limits.test.ts`).
-- [x] 휴지통 용량 초과 파일의 호출 종료와 파일 보존을 검증한다. 영구 삭제 경고를 끄면 셸이 파일을 조용히 영구 삭제하고 켜 두면 경고 응답을 기다리며 멈추므로, 호출 전에 볼륨의 `MaxCapacity`와 크기를 비교해 `UNSUPPORTED`로 거절한다(`windows-trash-limits.test.ts`). `MaxCapacity` 값이 없는 볼륨은 셸의 판단에 맡기며 경고 UI의 화면 표시는 검증하지 않는다.
+- [x] 휴지통 용량 초과 파일의 호출 종료와 파일 보존을 검증한다. 영구 삭제 경고를 끄면 셸이 파일을 조용히 영구 삭제하고 켜 두면 경고 응답을 기다리며 멈추므로, 호출 전에 볼륨의 `MaxCapacity`와 크기를 비교해 `UNSUPPORTED`로 거절한다(`windows-trash-limits.test.ts`). 볼륨 정보나 용량을 읽지 못하거나 `RecycleBinSize` 정책이 있으면 같은 오류로 거절한다. `MaxCapacity` 값이 없는 볼륨은 셸의 판단에 맡기며 경고 UI의 화면 표시는 검증하지 않는다.
 - [x] Windows 바로가기 생성, 읽기와 변경을 제공한다.
   `opener.readShortcutLink(path)`와 `opener.writeShortcutLink(path, details, operation)`이
   `IShellLinkW`와 `IPersistFile`로 `.lnk`의 `target`, `cwd`, `args`, `description`, `icon`,
