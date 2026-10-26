@@ -1421,7 +1421,7 @@ export class WebView {
         message: "WebView is not ready.",
       });
     }
-    // ICoreWebView2_8, SDK 1.0.4129.50; required by the supported WebView2 runtime.
+    // ICoreWebView2_8, SDK 1.0.4129.50; queried only when the app calls an audio API.
     return query(this.webview, "e9632730-6e1e-43ab-b7b8-7b2c9e62e094");
   }
   /** Report actual browser playback independently of its controller's mute setting. */

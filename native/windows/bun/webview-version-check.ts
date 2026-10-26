@@ -1,6 +1,7 @@
 /**
  * Oldest WebView2 runtime the host starts with. Window creation and the request and permission
  * handlers query these interfaces without a fallback: `ICoreWebView2_4` (download policy),
+ * `ICoreWebView2Settings4`, `ICoreWebView2_3` (virtual host mapping outside embedded mode),
  * `ICoreWebView2Controller2` (background color), `ICoreWebView2Environment8` (browser process
  * list), `ICoreWebView2PermissionRequestedEventArgs3` (permission denial) and, for embedded
  * assets, `ICoreWebView2_22` (resource filters by request source). A runtime older than the one
