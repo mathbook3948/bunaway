@@ -1,11 +1,15 @@
 /**
- * Oldest WebView2 runtime the host starts with. The host queries `ICoreWebView2_4` (download
- * policy), `ICoreWebView2_8` (audio state) and `ICoreWebView2Controller2` (background color)
- * without a fallback, so a runtime older than the one that introduced the newest of them fails
- * later with an unrelated QueryInterface error. Interfaces the host treats as optional, such as
- * `ICoreWebView2Settings9`, do not raise this value.
+ * Oldest WebView2 runtime the host starts with. Window creation and the request and permission
+ * handlers query these interfaces without a fallback: `ICoreWebView2_4` (download policy),
+ * `ICoreWebView2Controller2` (background color), `ICoreWebView2Environment8` (browser process
+ * list), `ICoreWebView2PermissionRequestedEventArgs3` (permission denial) and, for embedded
+ * assets, `ICoreWebView2_22` (resource filters by request source). A runtime older than the one
+ * that introduced the newest of them fails later with an unrelated QueryInterface error, so the
+ * value follows the newest (`ICoreWebView2_22`). Interfaces the host treats as optional, such as
+ * `ICoreWebView2Settings9`, and ones queried only when the app calls the matching API, such as
+ * `ICoreWebView2_8` audio state, do not raise this value.
  */
-export const MIN_WEBVIEW_RUNTIME_VERSION = "97.0.1072.54";
+export const MIN_WEBVIEW_RUNTIME_VERSION = "128.0.2739.15";
 
 const VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)\.(\d+)(?: .+)?$/;
 

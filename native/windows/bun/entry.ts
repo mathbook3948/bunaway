@@ -47,6 +47,7 @@ import { releaseSessionEndWait } from "./session-end.ts";
 import { readWebViewVersion } from "./webview-version.ts";
 import {
   isWebViewVersionTooOld,
+  parseWebViewVersion,
   webViewVersionTooOldMessage,
 } from "./webview-version-check.ts";
 
@@ -911,6 +912,11 @@ async function webViewVersionOrNull(
       version,
     });
     throw new Error(webViewVersionTooOldMessage(version));
+  }
+  if (!parseWebViewVersion(version)) {
+    await log.write("webview-version-unparsable", {
+      version,
+    });
   }
   return version;
 }
