@@ -28,13 +28,13 @@ status: accepted
   ([ADR 0030](./0030-launch-arguments-and-environment.md) 결정 4). 이 경로는 앱 계약이 아니다.
 - Bun 백엔드는 JavaScriptCore를 쓰므로 V8 code-cache에 해당하는 설정이 없다. WebView2의 JavaScript 코드 캐시는 브라우저 프로세스가 관리하며
   앱이 제어하는 설정은 확인하지 못했다. 캐시 삭제 API는 [ADR 0081](./0081-webview-browsing-data.md)이 제공하지 않기로 했다.
-- WebView2 렌더러는 항상 sandbox 안에서 돌고 이를 끄는 설정을 확인하지 못했다. 백엔드(Bun) 격리는 별도 항목에서 다룬다.
+- WebView2 렌더러의 sandbox를 끄는 앱용 설정을 확인하지 못했다. 백엔드(Bun) 격리는 별도 항목에서 다룬다.
 
 ## 결정
 
 1. 임의 Chromium 스위치, feature flag, 브라우저 인자를 넘기는 공개 설정을 추가하지 않는다.
 2. V8 code-cache 설정은 제공하지 않는다. Bun 백엔드에는 대응 설정이 없고 WebView2는 브라우저 프로세스가 관리한다(대체 불가).
-3. 렌더러 sandbox 설정은 제공하지 않는다. WebView2 렌더러를 sandbox 밖에서 실행하는 설정을 확인하지 못했다(앱 정의에서 끄는 수단은 미지원. 위 환경 변수 경로는 앱 계약이 아니며 이 결정이 보장하지 않는다).
+3. 렌더러 sandbox 설정은 제공하지 않는다. 앱 정의에서 sandbox를 끄는 수단은 미지원이다. 환경 변수 경로는 앱 계약이 아니다.
 4. 프레임워크가 넘기는 브라우저 인자는 지금 없고 이 결정으로 추가하지 않는다. 이는 [ADR 0030](./0030-launch-arguments-and-environment.md) 결정 4의
    방침(브라우저 인자 API를 두지 않고 호스트는 인자를 넘기지 않는다)을 sandbox, feature flag, code-cache까지 확인한 것이다.
 5. 재검토 조건: WebView2가 지원되는 설정 API를 추가할 때, 선택 Chromium 렌더러가 구현될 때, 개별 기능에 대한 요구가 확인될 때.
