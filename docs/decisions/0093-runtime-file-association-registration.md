@@ -13,7 +13,7 @@ status: accepted
 
 현재 구현:
 
-- 설치 프로그램은 패키징 채널 설정(`bunaway.json`의 `bundle`)의 `associations` 선언을 Inno `fileassociations` 작업으로 등록한다. 이 작업은 새 설치에서
+- 설치 프로그램은 패키징 채널 설정(`bunaway.json`의 `bundle`)의 `associations.files` 선언을 Inno `fileassociations` 작업으로 등록한다(URL scheme은 별도 `urlschemes` 작업). 이 작업은 새 설치에서
   기본으로 선택되지 않으며, 제거와 업데이트에서 앱이 소유한 후보를 정리한다. ProgId(`BW.<guid>`)와 등록 기록은
   `packages/packaging`이 정하고 `stableGuid`, `AssociationRoot`, 대기 후보 기록을 쓴다.
 - 배포 채널 중 `win-direct`와 `win-store-unpackaged`는 Inno 설치 프로그램이다. 포터블 채널은 없다.
@@ -60,4 +60,4 @@ status: accepted
 
 ## 영향
 
-- 코드와 공개 API는 바뀌지 않는다. `docs/TODO-windows.md`와 `opener` 문서에 이 결정을 연결한다.
+- 코드와 공개 API는 바뀌지 않는다. `docs/TODO-windows.md`, `opener` 문서와 패키징 채널 문서에 이 결정을 반영한다.
