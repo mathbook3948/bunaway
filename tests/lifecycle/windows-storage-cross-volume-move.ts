@@ -139,9 +139,9 @@ try {
       "inner",
     );
 
-    // A source held open without delete sharing. Which call fails first (the rename attempt or the
-    // delete after the copy) is the OS's choice, so this only requires that the move throws and
-    // the source stays whole. A leftover destination is recorded, not asserted.
+    // A source held open without delete sharing. A sharing violation is reported as a plain
+    // failure (INTERNAL), as for a same-volume move, so this only requires that the move throws
+    // and the source stays whole. A leftover destination is recorded, not asserted.
     await writeFile(`${home}/locked.txt`, "locked content");
     const marker = `${home}/locked.ready`;
     const holder = Bun.spawn(
@@ -212,6 +212,8 @@ try {
     }
   }
 } finally {
+  // A read-only file left by the refusal case would make the folder removal fail.
+  await chmod(`${home}/readonly.txt`, 0o666).catch(() => undefined);
   disk?.detach();
   storage.dispose();
   await rm(root, {
