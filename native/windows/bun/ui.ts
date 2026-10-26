@@ -39,6 +39,8 @@ import { callbackCalls, checkCallbacks, disposeCom } from "./com.ts";
 import { limitFaviconUrl } from "./document-favicon.ts";
 import { createTitleCoalescer, limitDocumentTitle } from "./document-title.ts";
 import { DownloadCleanupError, DownloadCleanupRetries } from "./downloads.ts";
+import { createLatestCoalescer } from "./event-coalescer.ts";
+import { createHtmlFullscreenLink } from "./html-fullscreen.ts";
 import { isWindowRole, runWindowRole } from "./menu-window-role.ts";
 import { isMonitorChangeMessage, MonitorTracker } from "./monitor-events.ts";
 import { monitorServices, windowMonitor } from "./monitors.ts";
@@ -1812,6 +1814,61 @@ function createWindow(
     },
   );
   publishReadiness(readiness.snapshot());
+  const viewWindows = windows;
+  const htmlFullscreenLink = createHtmlFullscreenLink({
+    isFullscreen: () => viewWindows.isFullscreen(window),
+    isFullscreenable: () => viewWindows.isFullscreenable(window),
+    setFullscreen: (enabled) => {
+      viewWindows.setFullscreen(window, enabled);
+      // Same as the app-facing setFullscreen: fit the WebView to the new client area.
+      native.resize();
+    },
+    fullscreenSession: () => viewWindows.fullscreenSession(window),
+  });
+  const publishHtmlFullscreen = createLatestCoalescer<boolean>(
+    (fullscreen, settled) => {
+      if (
+        stopping() ||
+        shutdownCommitted() ||
+        views.get(instanceKey)?.native !== native
+      ) {
+        settled();
+        return;
+      }
+      const { windowId, viewId } = readiness.snapshot();
+      sendNativeEvent(
+        boundary,
+        "windows.htmlFullscreenChanged",
+        {
+          windowId,
+          viewId,
+          fullscreen,
+        },
+        undefined,
+        settled,
+      );
+    },
+  );
+  /** Move the window with the page's fullscreen element, then report the page state. */
+  const applyHtmlFullscreen = (contains: boolean): void => {
+    if (
+      stopping() ||
+      shutdownCommitted() ||
+      views.get(instanceKey)?.native !== native
+    ) {
+      return;
+    }
+    try {
+      htmlFullscreenLink(contains);
+    } catch (error) {
+      // The page keeps its fullscreen element inside the window; only the window stays as it was.
+      log("html-fullscreen-window-failed", {
+        view: spec.view,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    publishHtmlFullscreen(contains);
+  };
   // Record partial HWND ownership before environment creation can fail.
   try {
     appearanceWindows.attach(readiness.snapshot().windowId, window);
@@ -1938,6 +1995,11 @@ function createWindow(
             settled,
           );
         }),
+        htmlFullscreenChanged: (contains) => {
+          // Resizing the window must not happen inside the WebView2 callback; the timer keeps
+          // the order of consecutive changes.
+          setTimeout(() => applyHtmlFullscreen(contains), 0);
+        },
         documentComplete: (error) =>
           views.get(instanceKey)?.readiness?.documentComplete(error),
         close,

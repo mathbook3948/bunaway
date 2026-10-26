@@ -1098,11 +1098,11 @@ const release = await client.listen("windows.closeRequested", async ({ payload }
 
 ## 창 이벤트
 
-`windows.changed`, `windows.appCommand`, `windows.systemContextMenu`, `windows.thumbnailToolbarClicked`, `windows.documentTitleChanged`, `windows.documentFaviconChanged`와 `windows.getSnapshot`은 현재 Windows에서만 지원합니다. `windows.lifecycle`과
+`windows.changed`, `windows.appCommand`, `windows.systemContextMenu`, `windows.thumbnailToolbarClicked`, `windows.documentTitleChanged`, `windows.documentFaviconChanged`, `windows.htmlFullscreenChanged`와 `windows.getSnapshot`은 현재 Windows에서만 지원합니다. `windows.lifecycle`과
 `windows.closeRequested`는 Windows와 macOS에서 지원합니다. 다만 `windows.lifecycle`을 문서로 전달하는 일은 Windows에서만 지원하고,
 macOS에서는 백엔드의 `windows.waitForLifecycle`로만 관찰합니다.
 
-`windows`는 `windows.changed`, `windows.appCommand`, `windows.systemContextMenu`, `windows.thumbnailToolbarClicked`, `windows.documentTitleChanged`, `windows.documentFaviconChanged`, `windows.readiness`, `windows.lifecycle`, `windows.closeRequested`를 등록합니다. 기존 `client.listen`과 직접 함수
+`windows`는 `windows.changed`, `windows.appCommand`, `windows.systemContextMenu`, `windows.thumbnailToolbarClicked`, `windows.documentTitleChanged`, `windows.documentFaviconChanged`, `windows.htmlFullscreenChanged`, `windows.readiness`, `windows.lifecycle`, `windows.closeRequested`를 등록합니다. 기존 `client.listen`과 직접 함수
 `listen`으로 구독하며, 이벤트 payload 타입은 앱의 `EventsOf`에서 추론합니다.
 `windows.changed`는 창의 문서에만 전달합니다. `windows.readiness`의 수신 대상은
 위의 창 준비 계약을 따릅니다.
@@ -1331,6 +1331,24 @@ Electron은 주소 배열을 주지만 WebView2는 브라우저가 고른 아이
 - 이벤트를 받은 창 자신의 뷰에만 전달하며 뷰의 `events`에 이름을 허용하면 수신합니다. `revision`을 올리지 않고
   `getSnapshot`에 주소는 없습니다. 구독하기 전의 주소는 전달하지 않습니다.
 - ICoreWebView2_15가 없는 오래된 WebView2 런타임에서는 이벤트가 오지 않습니다.
+
+### HTML 전체화면 (Windows)
+
+페이지가 `element.requestFullscreen()`으로 전체화면 요소를 만들면 창도 전체화면이 되고, 요소가 전체화면을 끝내면 창이
+이전 상태로 돌아갑니다. 창 전체화면은 `windows.setFullscreen`과 같은 경로로 적용하므로 현재 모니터를 채우고
+`windows.changed`로도 전달합니다.
+
+- `windows.htmlFullscreenChanged`는 `{ windowId, viewId, fullscreen }`입니다. `fullscreen`은 페이지가 지금 전체화면
+  요소를 가졌는지이며 WebView2의 `ContainsFullScreenElementChanged`에 맞춰 전달합니다. 뷰의 `events`에 이름을 허용하면
+  수신하고 구독하기 전의 상태는 전달하지 않습니다.
+- 페이지가 전체화면을 시작할 때 창이 이미 전체화면이었거나 `setFullscreenable(false)`이면 창은 그대로 두고 요소만
+  WebView 영역에 채웁니다. 이때 요소가 끝나도 창은 바뀌지 않습니다.
+- 요소가 전체화면인 동안 앱이 `windows.setFullscreen(false)`로 창을 나오게 해도 페이지의 요소는 끝나지 않습니다.
+  요소는 페이지가 끝내거나 사용자가 Esc를 누를 때 끝나며, 그때는 창을 다시 바꾸지 않습니다.
+- 앞선 이벤트를 전달하는 동안 상태가 더 바뀌면 마지막 상태 하나만 전달합니다.
+- 전체화면 요소가 있는 문서에서 다른 문서로 이동하거나 렌더러가 종료될 때 WebView2가 `fullscreen: false`를 알리는지는
+  문서에 나와 있지 않고 이 호스트에서도 확인하지 않았습니다. 알리지 않으면 창은 전체화면으로 남으므로,
+  그런 앱은 `windows.setFullscreen`으로 창을 직접 되돌립니다.
 
 ### 썸네일 툴바 클릭 이벤트 (Windows)
 

@@ -71,6 +71,8 @@ export const frameworkPaths = [
   "native/windows/bun/webview-titlebar.ts",
   "native/windows/bun/document-favicon.ts",
   "native/windows/bun/document-title.ts",
+  "native/windows/bun/event-coalescer.ts",
+  "native/windows/bun/html-fullscreen.ts",
   "native/windows/bun/process-failure.ts",
   "native/windows/bun/audio-events.ts",
   "native/windows/bun/clipboard-text.ts",

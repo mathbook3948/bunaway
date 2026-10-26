@@ -235,6 +235,8 @@ export class WebView {
       titleChanged?(title: string): void;
       /** Optional: only the window host publishes favicon changes. */
       faviconChanged?(url: string): void;
+      /** Optional: only the window host links page fullscreen to the window. */
+      htmlFullscreenChanged?(containsFullscreenElement: boolean): void;
       /** Optional: only the window host reports process failures to the backend. */
       processFailed?(kind: number, recovery: "reload" | "close"): void;
       /** Optional: only the window host reports audio changes to the backend. */
@@ -807,6 +809,23 @@ export class WebView {
       }
     });
     this.subscribeFavicon();
+    // add_ContainsFullScreenElementChanged: the handler reads get_ContainsFullScreenElement (slot 54) of the sender.
+    this.on(52, "e45d98b1-afef-45be-8baf-6c7728867f73", () => {
+      if (!this.webview) {
+        return;
+      }
+      const contains = new Int32Array(1);
+      checkHresult(
+        method(this.webview, 54, [
+          "ptr",
+        ])(ptr(contains)),
+        "get_ContainsFullScreenElement",
+      );
+      this.hooks.log("html-fullscreen-changed", {
+        contains: contains[0] !== 0,
+      });
+      this.hooks.htmlFullscreenChanged?.(contains[0] !== 0);
+    });
     // ICoreWebView2 receives top-level messages only; no FrameWebMessageReceived handlers are installed.
     this.on(34, "57213f19-00e6-49fa-8e07-898ea01ecbd2", (args) =>
       this.hooks.message(getString(args, 3), getString(args, 4)),
