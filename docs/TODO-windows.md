@@ -1158,7 +1158,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 - [ ] Chromium feature flag, V8 code-cache와 sandbox 설정은 Bun과 WebView2의 대체 또는 미지원으로 매핑한다.
 - [ ] trusted backend sandbox가 필요한 앱에 별도 프로세스 격리 모델을 제공할지 결정한다.
 - [x] WebRTC, WebGL, shared worker와 Web API의 엔진별 지원 차이를 검증한다. WebView2 기준 결과는 창 호스트 문서의 "WebView2에서 확인한 Web API" 표에 있다.
-- [x] 결정 완료: 온디바이스 언어 모델용 핸들러와 유틸리티 프로세스, Prompt API 설정은 제공하지 않고 백엔드가 모델을 호출해 결과를 명령 응답과 이벤트로 넘긴다. [ADR 0099](./decisions/0099-webview-local-ai-language-model.md).
+- [x] 결정 완료: Electron localAIHandler와 LanguageModelUtility에 대응하는 온디바이스 언어 모델용 핸들러와 유틸리티 프로세스, Prompt API 설정은 제공하지 않고 백엔드가 모델을 호출해 결과를 명령 응답과 이벤트로 넘긴다. [ADR 0099](./decisions/0099-webview-local-ai-language-model.md).
 - [x] 결정 완료: obsolete BrowserView와 구 protocol API(`register*Protocol`, `intercept*Protocol`)는 구 API 호환을 제공하지 않는다. BrowserView와 WebContentsView는 WebView 하나 모델에서 매핑 대상이 없고, protocol 기능은 제공하게 될 때 현대형 하나만 둔다. [ADR 0120](./decisions/0120-obsolete-browserview-and-protocol-api-mapping.md).
 
 ## 26. macOS와 Linux 전용 기능
