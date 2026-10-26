@@ -94,7 +94,8 @@ source와 destination이 같거나 source의 하위 경로로 이동하면 `INVA
 Windows는 일반 파일만 지원합니다. `MOVEFILE_COPY_ALLOWED`로 OS가 복사한 뒤 source를 지우고, 같은 볼륨 안의 이동은 이 경로를 쓰지 않습니다.
 디렉터리와 링크 source는 `UNSUPPORTED`이며 source를 그대로 둡니다. 디렉터리는 `copyDirectory`와 `removeRecursive`를 이어서 쓰세요.
 복사 뒤 source를 지우지 못하면 `PERMISSION_DENIED`로 실패하며 두 위치에 파일이 남을 수 있습니다.
-다른 볼륨으로의 이동은 파일 크기만큼 걸리고 시작한 뒤에는 취소할 수 없습니다.
+다른 볼륨으로의 이동은 파일 크기만큼 걸리고, 그동안 같은 I/O Worker의 다른 호출을 지연시키며, 시작한 뒤에는 취소할 수 없습니다.
+이 오류를 받으면 source를 지우기 전에 두 파일의 내용을 비교해 어느 쪽이 온전한지 확인하세요. 파일 종류 확인과 이동은 한 번에 처리되지 않으므로 그 사이에 source가 바뀌면 결과가 달라질 수 있습니다.
 대상 상위 디렉터리가 없거나 source가 없으면 `INVALID_ARGUMENT`입니다.
 파일 시스템이나 다른 프로세스의 열린 핸들 때문에 실패할 수 있습니다.
 

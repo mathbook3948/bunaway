@@ -143,6 +143,16 @@ export class WindowsStorage extends NodeStorage {
       to,
       MOVEFILE_COPY_ALLOWED | MOVEFILE_WRITE_THROUGH,
     );
+    if (
+      copyCode === ERROR_SHARING_VIOLATION ||
+      copyCode === ERROR_LOCK_VIOLATION
+    ) {
+      // The copy needs the source readable and the delete needs it unshared: an access failure.
+      throw new BunawayError({
+        code: "PERMISSION_DENIED",
+        message: "Storage access denied.",
+      });
+    }
     if (copyCode !== 0) {
       throw moveFailure(copyCode);
     }

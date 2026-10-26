@@ -116,6 +116,11 @@ try {
         await symlink(target, link, type);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "EPERM") {
+          // The file link is the case that shows lstat does not follow links, so CI must run it.
+          assert.ok(
+            !(type === "file" && process.env.CI),
+            "The CI runner must be able to create a file symlink.",
+          );
           console.log(`SKIP ${type} link: creation is not permitted here.`);
           continue;
         }
@@ -126,7 +131,7 @@ try {
       assert.equal((await stat(target)).isDirectory(), type === "junction");
     }
 
-    // Within one volume a link, a file and a directory still move as before.
+    // Within one volume a directory still moves as before.
     await mkdir(`${home}/same`);
     assert.equal(transfer(`${home}/dir`, `${home}/same/dir`), null);
     assert.equal(
@@ -134,9 +139,9 @@ try {
       "inner",
     );
 
-    // A source held open without delete sharing: the copy can succeed but the delete cannot. The
-    // move must report failure and keep the source whole. The destination may remain, which the
-    // documentation states, so this only records it.
+    // A source held open without delete sharing. Which call fails first (the rename attempt or the
+    // delete after the copy) is the OS's choice, so this only requires that the move throws and
+    // the source stays whole. A leftover destination is recorded, not asserted.
     await writeFile(`${home}/locked.txt`, "locked content");
     const marker = `${home}/locked.ready`;
     const holder = Bun.spawn(
@@ -175,7 +180,9 @@ try {
       "locked content",
     );
 
-    // A read-only source: record the outcome and require that a success removed the source.
+    // A read-only source: either the OS refuses (access denied, source whole) or the move
+    // succeeds and the source is gone. A copy that succeeded with the source left behind must
+    // surface as PERMISSION_DENIED, never as success.
     await writeFile(`${home}/readonly.txt`, "readonly content");
     await chmod(`${home}/readonly.txt`, 0o444);
     let readonlyMoved = false;
@@ -183,7 +190,13 @@ try {
       transfer(`${home}/readonly.txt`, `${volume}/readonly.txt`);
       readonlyMoved = true;
     } catch (error) {
-      console.log(`INFO read-only source refused: ${String(error)}`);
+      assert.ok(
+        error instanceof BunawayError && error.code === "PERMISSION_DENIED",
+        `A read-only source must be refused as PERMISSION_DENIED: ${String(error)}`,
+      );
+      console.log(
+        `INFO read-only source refused, destination remained = ${existsSync(`${volume}/readonly.txt`)}`,
+      );
     }
     if (readonlyMoved) {
       assert.equal(existsSync(`${home}/readonly.txt`), false);
@@ -207,5 +220,5 @@ try {
   });
 }
 console.log(
-  "PASS Windows storage cross-volume move: file content and unicode names in both directions, existing destination, missing source, directory and links unsupported, same-volume moves unchanged, locked and read-only sources",
+  "PASS Windows storage cross-volume move: file content and unicode names in both directions, existing destination, missing source, directory and links unsupported, same-volume moves unchanged, a locked source and a read-only source",
 );
