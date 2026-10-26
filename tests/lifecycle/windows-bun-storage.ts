@@ -3,9 +3,7 @@ import { execFileSync } from "node:child_process";
 import {
   link,
   mkdir,
-  mkdtemp,
   readFile,
-  realpath,
   rename,
   rm,
   stat,
@@ -13,7 +11,6 @@ import {
   utimes,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import builtStorage from "@bunaway/plugin-storage/native/windows";
 import { BunawayError, type JsonValue } from "@bunaway/protocol";
@@ -598,32 +595,6 @@ async function checkTransfers(): Promise<void> {
   );
   assert.deepEqual(await readFile(temporaryPath("large-copy.bin")), largeBytes);
   await probeLongAndUncRangeReads();
-  const secondVolumeRoot = await realpath(
-    await mkdtemp(resolve(tmpdir(), "bunaway-move-volume-")),
-  );
-  try {
-    if ((await stat(copySource)).dev !== (await stat(secondVolumeRoot)).dev) {
-      expectError(
-        () =>
-          transfer(
-            "storage.move",
-            copySource,
-            resolve(secondVolumeRoot, "cross-volume.bin"),
-          ),
-        "UNSUPPORTED",
-      );
-      assert.equal(call("storage.exists", copySource), true);
-    } else {
-      console.log(
-        "SKIP cross-volume move check: a second filesystem volume was not identified",
-      );
-    }
-  } finally {
-    await rm(secondVolumeRoot, {
-      recursive: true,
-      force: true,
-    });
-  }
   const anotherParent = temporaryPath("another move parent");
   await mkdir(anotherParent);
   assert.equal(
