@@ -14,16 +14,34 @@ export type DownloadResource = {
   cancel(): void;
   pause(): void;
   resume(): void;
+  /**
+   * Report native progress and state changes after approval. `notify` only schedules work, so a
+   * native callback never reads or releases anything itself. Reporting stops at `dispose`.
+   */
+  subscribe(notify: (kind: DownloadChangeKind) => void): void;
   /** A failed browser cannot accept deferral completion or cancellation; release references only. */
   dispose(browserGone?: boolean): void;
 };
 
+/** `progress` is a byte count change that is merged per interval; `state` is reported at once. */
+export type DownloadChangeKind = "progress" | "state";
+
 type DownloadEntry = {
   resource?: DownloadResource;
   snapshot: WebViewDownload;
+  /** Last snapshot sent to `onChanged`; a report is due while `snapshot` differs from it. */
+  published?: WebViewDownload;
+  publishedAtMs: number;
   pending: boolean;
   timer?: ReturnType<typeof setTimeout>;
+  report?: {
+    dueMs: number;
+    timer: ReturnType<typeof setTimeout>;
+  };
 };
+
+/** Shortest time between two progress-only reports of one download. */
+export const DOWNLOAD_PROGRESS_INTERVAL_MS = 250;
 
 // COREWEBVIEW2_DOWNLOAD_INTERRUPT_REASON_USER_PAUSED, pinned SDK 1.0.4129.50.
 const USER_PAUSED = 28;
@@ -71,10 +89,18 @@ export class DownloadCleanupRetries {
   }
 }
 
+function isSameSnapshot(a: WebViewDownload, b: WebViewDownload): boolean {
+  return (Object.keys(a) as (keyof WebViewDownload)[]).every(
+    (key) => a[key] === b[key],
+  );
+}
+
 /** Bounded, default-denied approval queue and ownership for a single WebView lifetime. */
 export class Downloads implements NativeDownloads {
   private enabled = false;
   private closed = false;
+  /** Set when disposal starts: a closing WebView reports nothing more. */
+  private silent = false;
   private readonly entries = new Map<string, DownloadEntry>();
 
   constructor(
@@ -84,6 +110,8 @@ export class Downloads implements NativeDownloads {
       throw error;
     },
     private readonly onDenied: (url: string) => void = () => {},
+    private readonly onChanged: (download: WebViewDownload) => void = () => {},
+    private readonly progressIntervalMs = DOWNLOAD_PROGRESS_INTERVAL_MS,
   ) {}
 
   /** Adopt an allowed request, or reject and release it without exposing an approval handle. */
@@ -110,6 +138,7 @@ export class Downloads implements NativeDownloads {
           state: "pending",
           paused: false,
         },
+        publishedAtMs: Number.NEGATIVE_INFINITY,
         pending: true,
       };
       if (!this.fits(entry.snapshot)) {
@@ -127,6 +156,8 @@ export class Downloads implements NativeDownloads {
           this.onFailure(error);
         }
       }, this.approvalTimeoutMs);
+      // The backend learns about the request from this report instead of polling `list`.
+      this.queueReport(entry, "state");
       return id;
     } finally {
       if (!adopted) {
@@ -165,7 +196,7 @@ export class Downloads implements NativeDownloads {
     return [
       ...this.entries.values(),
     ].map((entry) => {
-      this.refresh(entry);
+      this.sync(entry);
       return {
         ...entry.snapshot,
       };
@@ -184,7 +215,8 @@ export class Downloads implements NativeDownloads {
     try {
       entry.resource.decide(true);
       entry.pending = false;
-      this.refresh(entry);
+      entry.resource.subscribe((kind) => this.queueReport(entry, kind));
+      this.sync(entry);
     } catch (error) {
       // A failed commit cannot be approved again; preserve ownership if cancellation also fails.
       entry.pending = false;
@@ -228,12 +260,13 @@ export class Downloads implements NativeDownloads {
     }
     if (entry.resource) {
       this.retire(entry, "cancelled");
+      this.queueReport(entry, "state");
     }
   }
 
   pause(id: string): void {
     const entry = this.requireEntry(id);
-    this.refresh(entry);
+    this.sync(entry);
     if (entry.snapshot.paused) {
       return;
     }
@@ -248,12 +281,12 @@ export class Downloads implements NativeDownloads {
       });
     }
     entry.resource.pause();
-    this.refresh(entry);
+    this.sync(entry);
   }
 
   resume(id: string): void {
     const entry = this.requireEntry(id);
-    this.refresh(entry);
+    this.sync(entry);
     if (entry.pending || !entry.snapshot.canResume || !entry.resource) {
       throw new BunawayError({
         code: "BUSY",
@@ -261,7 +294,7 @@ export class Downloads implements NativeDownloads {
       });
     }
     entry.resource.resume();
-    this.refresh(entry);
+    this.sync(entry);
   }
 
   forget(id: string): void {
@@ -274,6 +307,7 @@ export class Downloads implements NativeDownloads {
       });
     }
     this.retire(entry);
+    this.clearReport(entry);
     this.entries.delete(id);
   }
 
@@ -282,6 +316,7 @@ export class Downloads implements NativeDownloads {
     if (this.closed) {
       return;
     }
+    this.silent = true;
     const errors: unknown[] = [];
     for (const [id, entry] of this.entries) {
       try {
@@ -300,6 +335,9 @@ export class Downloads implements NativeDownloads {
       throw new DownloadCleanupError(errors);
     }
     this.closed = true;
+    for (const entry of this.entries.values()) {
+      this.clearReport(entry);
+    }
     this.entries.clear();
   }
 
@@ -352,6 +390,68 @@ export class Downloads implements NativeDownloads {
     if (entry.snapshot.state === "completed") {
       this.retire(entry);
     }
+  }
+
+  /** Refresh the snapshot and report the change, for calls that read state outside a native event. */
+  private sync(entry: DownloadEntry): void {
+    this.refresh(entry);
+    this.queueReport(entry, "state");
+  }
+
+  /**
+   * Schedule one report of the entry's latest snapshot on the event loop, never inside a native
+   * callback. State changes are due at once; progress waits out the interval since the last report.
+   * An earlier due time replaces a later one, so a state change is never delayed by progress.
+   */
+  private queueReport(entry: DownloadEntry, kind: DownloadChangeKind): void {
+    if (this.silent || this.closed) {
+      return;
+    }
+    const nowMs = performance.now();
+    const dueMs =
+      kind === "state"
+        ? nowMs
+        : Math.max(nowMs, entry.publishedAtMs + this.progressIntervalMs);
+    if (entry.report && entry.report.dueMs <= dueMs) {
+      return;
+    }
+    this.clearReport(entry);
+    entry.report = {
+      dueMs,
+      timer: setTimeout(() => this.report(entry), Math.max(0, dueMs - nowMs)),
+    };
+  }
+
+  /** Publish the snapshot when it differs from the last report; failures close the window like other timers. */
+  private report(entry: DownloadEntry): void {
+    delete entry.report;
+    if (
+      this.silent ||
+      this.closed ||
+      this.entries.get(entry.snapshot.id) !== entry
+    ) {
+      return;
+    }
+    try {
+      this.refresh(entry);
+      if (entry.published && isSameSnapshot(entry.published, entry.snapshot)) {
+        return;
+      }
+      entry.published = entry.snapshot;
+      entry.publishedAtMs = performance.now();
+      this.onChanged({
+        ...entry.snapshot,
+      });
+    } catch (error) {
+      this.onFailure(error);
+    }
+  }
+
+  private clearReport(entry: DownloadEntry): void {
+    if (entry.report) {
+      clearTimeout(entry.report.timer);
+    }
+    delete entry.report;
   }
 
   private fits(snapshot: WebViewDownload, replacing?: DownloadEntry): boolean {

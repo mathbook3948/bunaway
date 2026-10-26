@@ -5,6 +5,7 @@ import { validateWindowCall, type WindowCall } from "#windows/contract";
 import { WindowOperations } from "#windows/platforms/coordinator";
 import {
   AudioChangeFeed,
+  DownloadChangeFeed,
   LifecycleFeed,
   ProcessFailureFeed,
 } from "#windows/platforms/lifecycle-feed";
@@ -142,6 +143,12 @@ function assertCallerAllowed(
     }
     return;
   }
+  if (call.operation === "windows.waitForDownloadChange") {
+    if (source !== "backend") {
+      throw denied("WebView download subscription requires the backend.");
+    }
+    return;
+  }
   if (call.operation === "windows.waitForProcessFailure") {
     if (source !== "backend") {
       throw denied(
@@ -180,6 +187,9 @@ export function createOperations(
   const lifecycle = new LifecycleFeed(services.onLifecycle?.bind(services));
   const audioChanges = new AudioChangeFeed(
     services.onAudioChange?.bind(services),
+  );
+  const downloadChanges = new DownloadChangeFeed(
+    services.onDownloadChange?.bind(services),
   );
   const processFailures = new ProcessFailureFeed(
     services.onProcessFailure?.bind(services),
@@ -232,6 +242,11 @@ export function createOperations(
           ...(await audioChanges.wait(call.payload.after, context.signal)),
         };
       }
+      if (call.operation === "windows.waitForDownloadChange") {
+        return {
+          ...(await downloadChanges.wait(call.payload.after, context.signal)),
+        };
+      }
       if (call.operation === "windows.waitForProcessFailure") {
         return {
           ...(await processFailures.wait(call.payload.after, context.signal)),
@@ -246,6 +261,7 @@ export function createOperations(
     dispose() {
       lifecycle.dispose();
       audioChanges.dispose();
+      downloadChanges.dispose();
       processFailures.dispose();
     },
   };

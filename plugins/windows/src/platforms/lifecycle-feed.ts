@@ -1,6 +1,7 @@
 import { NativeEventWaiters } from "@bunaway/plugin";
 import type {
   WindowAudioChangeEvent,
+  WindowDownloadChangeEvent,
   WindowLifecycleEvent,
   WindowProcessFailureEvent,
 } from "@bunaway/plugin-api/native";
@@ -102,5 +103,16 @@ export class ProcessFailureFeed extends HostEventFeed<WindowProcessFailureEvent>
       | undefined,
   ) {
     super(subscribe, "WebView process failure notification is not available.");
+  }
+}
+
+/** WebView download progress and state changes for `windows.waitForDownloadChange`. */
+export class DownloadChangeFeed extends HostEventFeed<WindowDownloadChangeEvent> {
+  constructor(
+    subscribe:
+      | ((listener: (event: WindowDownloadChangeEvent) => void) => () => void)
+      | undefined,
+  ) {
+    super(subscribe, "WebView download change notification is not available.");
   }
 }

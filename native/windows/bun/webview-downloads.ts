@@ -12,7 +12,34 @@ import {
   query,
   release,
 } from "./com.ts";
-import { type DownloadResource, Downloads } from "./downloads.ts";
+import {
+  type DownloadChangeKind,
+  type DownloadResource,
+  Downloads,
+} from "./downloads.ts";
+
+/**
+ * ICoreWebView2DownloadOperation event registrations: add_BytesReceivedChanged (slot 3) and
+ * add_StateChanged (slot 7). Each remove method follows its add method.
+ */
+const OPERATION_EVENTS: readonly {
+  addSlot: 3 | 7;
+  iid: string;
+  kind: DownloadChangeKind;
+}[] = [
+  {
+    addSlot: 3,
+    iid: "828e8ab6-d94c-4264-9cef-5217170d6251",
+    kind: "progress",
+  },
+  {
+    addSlot: 7,
+    iid: "81336594-7ede-4ba9-bf71-acf0a95b58dd",
+    kind: "state",
+  },
+];
+// HRESULT_FROM_WIN32(ERROR_INVALID_STATE) is expected only after observed broker failure.
+const HRESULT_INVALID_STATE = -2147019873;
 
 /** Read WebView2's INT64 byte counts without silently losing integer precision. */
 function bytes(object: Pointer, slot: 12 | 13): number | null {
@@ -57,7 +84,10 @@ function downloadState(value: number): WebViewDownload["state"] {
 }
 
 /** Retain a start deferral until one decision, then own its operation through terminal cleanup. */
-function resource(args: Pointer): DownloadResource {
+function resource(
+  args: Pointer,
+  retain: (callback: ComHandler) => void,
+): DownloadResource {
   // Reject first, including failures while acquiring the operation or its metadata.
   checkHresult(
     method(args, 5, [
@@ -76,6 +106,10 @@ function resource(args: Pointer): DownloadResource {
   addRef(args);
   let pendingArgs: Pointer | undefined = args;
   let disposed = false;
+  const subscriptions: {
+    removeSlot: number;
+    token: bigint;
+  }[] = [];
   const decide = (allow: boolean) => {
     if (!pendingArgs || !deferral) {
       return;
@@ -101,6 +135,25 @@ function resource(args: Pointer): DownloadResource {
         release(currentDeferral);
         release(currentArgs);
       }
+    }
+  };
+  /** Try every removal; a handler left registered is ignored by `disposed` if it ever fires. */
+  const removeSubscriptions = (browserGone: boolean) => {
+    const errors: unknown[] = [];
+    for (const { removeSlot, token } of subscriptions.splice(0)) {
+      const result = method(operation, removeSlot, [
+        "i64",
+      ])(token);
+      if (!browserGone || result !== HRESULT_INVALID_STATE) {
+        try {
+          checkHresult(result, "remove download event");
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+    }
+    if (errors.length) {
+      throw new AggregateError(errors, "Download event removal failed.");
     }
   };
   return {
@@ -132,12 +185,47 @@ function resource(args: Pointer): DownloadResource {
     resume: () => {
       checkHresult(method(operation, 20, [])(), "Resume download");
     },
+    subscribe(notify) {
+      if (disposed || subscriptions.length) {
+        return;
+      }
+      for (const { addSlot, iid, kind } of OPERATION_EVENTS) {
+        // The handler only schedules work: the owner reads the operation outside the callback.
+        const callback = handler(
+          `download-event-${addSlot}`,
+          iid,
+          [
+            "ptr",
+            "ptr",
+          ],
+          () => {
+            if (!disposed) {
+              notify(kind);
+            }
+          },
+        );
+        retain(callback);
+        const token = new BigInt64Array(1);
+        checkHresult(
+          method(operation, addSlot, [
+            "ptr",
+            "ptr",
+          ])(callback.pointer, ptr(token)),
+          "add download event",
+        );
+        subscriptions.push({
+          removeSlot: addSlot + 1,
+          token: token[0] ?? 0n,
+        });
+      }
+    },
     dispose(browserGone = false) {
       if (disposed) {
         return;
       }
       disposed = true;
       try {
+        removeSubscriptions(browserGone);
         if (browserGone) {
           // The old broker no longer accepts operations. These are owned COM references only.
           if (deferral) {
@@ -174,8 +262,15 @@ export class WebViewDownloads {
     private readonly active: () => boolean,
     onFailure: (error: unknown) => void,
     onDenied: (url: string) => void,
+    onChanged: (download: WebViewDownload) => void,
   ) {
-    this.operations = new Downloads(allowed, undefined, onFailure, onDenied);
+    this.operations = new Downloads(
+      allowed,
+      undefined,
+      onFailure,
+      onDenied,
+      onChanged,
+    );
     this.webview4 = query(webview, "20d02d59-6df2-42dc-bd06-f98a694b1302");
     this.callback = handler(
       "download-starting",
@@ -194,7 +289,7 @@ export class WebViewDownloads {
           );
           return;
         }
-        const pending = resource(args as Pointer);
+        const pending = resource(args as Pointer, retain);
         try {
           this.operations.offer(pending, getString(webview, 4));
         } catch (error) {
@@ -229,8 +324,6 @@ export class WebViewDownloads {
       const result = method(this.webview4, 76, [
         "i64",
       ])(this.token);
-      // HRESULT_FROM_WIN32(ERROR_INVALID_STATE) is expected only after observed broker failure.
-      const HRESULT_INVALID_STATE = -2147019873;
       if (!browserGone || result !== HRESULT_INVALID_STATE) {
         checkHresult(result, "remove_DownloadStarting");
       }

@@ -315,6 +315,27 @@ const windowStateResult = {
   output: z.boolean(),
 };
 
+/** One WebView download as `windows.getDownloads` lists it and `windows.waitForDownloadChange` reports it. */
+const webViewDownloadSchema = z.strictObject({
+  id: z.string().uuid(),
+  url: z.string(),
+  mimeType: z.string(),
+  contentDisposition: z.string(),
+  path: z.string(),
+  totalBytes: z.int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
+  receivedBytes: z.int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
+  state: z.enum([
+    "pending",
+    "inProgress",
+    "interrupted",
+    "completed",
+    "cancelled",
+  ]),
+  interruptReason: z.int().min(0).nullable(),
+  canResume: z.boolean(),
+  paused: z.boolean(),
+});
+
 const downloadTarget = z.strictObject({
   id: z.string().uuid(),
 });
@@ -1048,27 +1069,7 @@ export const windowOperations = {
   "windows.getDownloads": {
     input: z.null(),
     output: z
-      .array(
-        z.strictObject({
-          id: z.string().uuid(),
-          url: z.string(),
-          mimeType: z.string(),
-          contentDisposition: z.string(),
-          path: z.string(),
-          totalBytes: z.int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
-          receivedBytes: z.int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
-          state: z.enum([
-            "pending",
-            "inProgress",
-            "interrupted",
-            "completed",
-            "cancelled",
-          ]),
-          interruptReason: z.int().min(0).nullable(),
-          canResume: z.boolean(),
-          paused: z.boolean(),
-        }),
-      )
+      .array(webViewDownloadSchema)
       .max(MAX_WEBVIEW_DOWNLOADS)
       .refine(isDownloadSnapshotWithinLimits),
   },
@@ -1289,6 +1290,32 @@ export const windowOperations = {
       viewId: windowIdentifier,
       muted: z.boolean(),
       playing: z.boolean(),
+    }),
+  },
+  /**
+   * Waits for the next progress or state change of a WebView download (Windows only), or returns
+   * the first retained change after `after` (a `sequence` from an earlier result), like
+   * `windows.waitForLifecycle`. `download` is the item as `windows.getDownloads` lists it, so a
+   * request awaiting approval is reported as `pending` and a cancelled one as `cancelled`. State
+   * changes arrive at once and byte counts at most every 250 ms per download; speed is the
+   * difference of `receivedBytes` over time. Nothing is sent for a forgotten item, after its
+   * window closes or once shutdown starts. Only recent changes are retained: after a gap in
+   * `sequence`, read `windows.getDownloads` for the current state. Backend only and without a
+   * permission check.
+   */
+  "windows.waitForDownloadChange": {
+    input: z.strictObject({
+      after: z.int().min(0).max(Number.MAX_SAFE_INTEGER).exactOptional(),
+    }),
+    output: z.strictObject({
+      sequence: z.int().min(1).max(Number.MAX_SAFE_INTEGER),
+      windowId: windowIdentifier,
+      viewId: windowIdentifier,
+      download: webViewDownloadSchema.refine((download) =>
+        isDownloadSnapshotWithinLimits([
+          download,
+        ]),
+      ),
     }),
   },
   "windows.create": creationResult,

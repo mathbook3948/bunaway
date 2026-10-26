@@ -346,6 +346,23 @@ multiple-automatic-downloads 권한도 계속 거부하므로 같은 페이지�
 다운로드를 시작하는 최상위 탐색에도 기존 세션 폐기 계약을 적용합니다. 문서 교체가 없어도
 SDK 연결이 종료될 수 있으므로 화면은 클라이언트를 다시 초기화해야 할 수 있습니다.
 pending 항목은 30초 뒤, 새 문서 탐색 또는 요청 수집 비활성화 시 거부합니다.
+
+### 다운로드 변경 알림 (Windows)
+
+백엔드는 `windows.waitForDownloadChange({ after? })`로 `getDownloads`를 반복 조회하지 않고 변경을 받습니다.
+결과는 `{ sequence, windowId, viewId, download }`이고 `download`는 `getDownloads`가 반환하는 항목과 같은 모양의
+snapshot입니다. 속도는 담지 않으므로 받는 쪽이 `receivedBytes`의 차이를 시간으로 나눠 계산합니다.
+
+- 요청이 들어오면 `pending`, 승인하면 `inProgress`, 일시중지나 중단은 `interrupted`(일시중지는 `paused: true`),
+  끝나면 `completed`, 거부하거나 취소하거나 30초가 지나면 `cancelled` snapshot을 한 번씩 전달합니다.
+  Electron의 `updated`와 `done`에 해당하는 변화이고, 승인 대기 요청도 같은 호출로 알 수 있습니다.
+- 상태 변화는 즉시 전달하고 받은 byte 수 변화는 항목마다 250ms에 한 번 최신 값으로 합칩니다.
+- `forgetDownload` 뒤, 창을 닫는 중, 앱 종료나 세션 종료가 시작된 뒤에는 전달하지 않습니다.
+- `waitForLifecycle`과 같은 규칙으로 `sequence`를 이어 전달하면 보존된 이력(최근 32개)을 따라가고, 동시에 16개 호출을
+  대기시키며 넘으면 `BUSY`입니다. `sequence`가 건너뛰었다면 이력에서 밀려난 변경이 있으므로 `getDownloads`로
+  현재 상태를 다시 읽습니다.
+- 백엔드 전용이며 권한 검사가 없습니다. 항목은 URL과 저장 경로를 담으므로 화면 문서에는 이벤트로 전달하지 않습니다.
+- macOS는 지원하지 않습니다.
 백엔드가 승인한 다운로드는 문서 탐색 뒤에도 같은 창 수명에
 속하며 창 종료와 재생성에서는 취소하고 참조를 정리합니다.
 
@@ -493,6 +510,7 @@ await windows.close();
 | `windows.isOpen` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 창이 열려 있으면 `true`. 창을 만들지 않으며 닫힌 창에도 성공 |
 | `windows.waitForLifecycle` | `{ after? }`. 백엔드 전용이며 권한 검사 없음 | `Promise<{ sequence, windowId, viewId, phase }>`. 다음 수명 phase를 기다리고, `after`에 이전 결과의 `sequence`를 주면 그 뒤 첫 phase를 반환. 종료 시작 뒤에는 발행하지 않음 |
 | `windows.waitForAudioChange` | `{ after? }`. 백엔드 전용이며 권한 검사 없음. Windows만 지원 | `Promise<{ sequence, windowId, viewId, muted, playing }>`. WebView의 음소거 설정이나 재생 상태가 바뀐 다음 상태를 기다리고, `after`에 이전 결과의 `sequence`를 주면 그 뒤 첫 변경을 반환. [WebView audio 변경](#webview-audio-변경-windows) 참고 |
+| `windows.waitForDownloadChange` | `{ after? }`. 백엔드 전용이며 권한 검사 없음. Windows만 지원 | `Promise<{ sequence, windowId, viewId, download }>`. 다운로드의 상태나 받은 byte 수가 바뀐 다음 snapshot을 기다리고, `after`에 이전 결과의 `sequence`를 주면 그 뒤 첫 변경을 반환. [다운로드 변경 알림](#다운로드-변경-알림-windows) 참고 |
 | `windows.waitForProcessFailure` | `{ after? }`. 백엔드 전용이며 권한 검사 없음. Windows만 지원 | `Promise<{ sequence, windowId, viewId, kind, recovery }>`. 호스트가 처리한 다음 WebView 프로세스 실패를 기다리고, `after`에 이전 결과의 `sequence`를 주면 그 뒤 첫 실패를 반환. [WebView 프로세스 실패](#webview-프로세스-실패-windows) 참고 |
 | `windows.getReadiness` | 인자 없음. Host operation 입력은 `null` | `Promise<WindowReadiness>`. 현재 준비 상태와 실패, 취소 결과. 닫은 창의 마지막 결과도 조회 |
 | `windows.destroy` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 신뢰된 백엔드가 확인과 종료 취소를 우회해 창의 종료를 확정. 창이 없으면 `true` |
