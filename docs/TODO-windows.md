@@ -650,7 +650,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] 하나의 창에 여러 WebView를 생성하고 별도 bounds, 표시와 포커스를 제어한다. ADR 0026에서 채택하지 않았다.
 - [x] WebView auto-resize 옵션과 콘텐츠 크기에 맞춘 창 크기 자동 조절은 제공하지 않기로 결정했다. 단일 WebView는 항상 창 내용 영역을 채우고(`WM_SIZE`와 크기를 바꾸는 호출마다 `put_Bounds`), 콘텐츠 크기 기준 배치는 `useContentSize`와 내용 영역 기준 geometry API로 제공한다. 문서 크기에 맞춘 조절은 앱이 `ResizeObserver`와 `setSize`로 처리한다. [ADR 0090](./decisions/0090-webview-auto-resize-and-content-size.md).
 - [ ] WebView를 다른 창으로 reparent하는 기능과 새 세션 규칙을 정의한다. ADR 0026에 따라 보류한다.
-- [ ] WebView만 닫고 재생성하는 공개 API를 제공한다.
+- [x] WebView만 닫고 재생성하는 공개 API는 제공하지 않기로 결정했다. 앱은 창 하나에 WebView 하나를 가지므로 WebView의 수명은 창과 같고, 새 문서 세션과 WebView가 필요하면 `windows.recreate()`로 창을 다시 만든다. WebView만 분리하면 별도 세션, 정책과 포커스 규칙이 다시 필요하다. [ADR 0026](./decisions/0026-single-webview-single-window.md).
 - [x] 기존 허용 origin 안의 URL 로드, 일반 reload와 stop을 제공한다. `navigateWebView`, `reloadWebView`, `stopWebView`는 기존 세션 폐기와 origin 검사를 유지한다.
 - [ ] 로컬 파일 로드와 cache를 무시한 reload를 제공한다.
 - [x] `getWebViewState`로 현재 URL, title과 최상위 loading 상태를 조회한다.
