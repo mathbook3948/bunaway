@@ -1010,7 +1010,7 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [ ] 다른 사용자와 머신, 재설치, roaming profile 및 키 복구 시나리오를 실제로 검증한다.
 - [x] 일반 평문 store와 암호화 변환을 구분하고 이 플러그인의 묵시적 평문 fallback을 금지한다.
   평문을 저장하려면 앱이 별도 파일 또는 store API를 명시적으로 선택한다.
-- [ ] Windows Hello를 통한 사용자 확인은 추가 기능으로 지원 여부를 결정한다. Tauri 공식 biometric의 모바일 지원과 구분한다.
+- [x] 결정 완료: Windows Hello 사용자 확인 API는 제공하지 않고 필요한 앱이 자체 네이티브 플러그인으로 구현한다. Tauri 공식 biometric의 모바일 지원과 구분한다. [ADR 0096](decisions/0096-windows-hello-user-verification.md).
 
 ## 22. 자동 업데이트와 앱 배포 기능
 
