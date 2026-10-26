@@ -91,6 +91,26 @@ test("a window that was already fullscreen stays fullscreen when the element end
   expect(window.isFullscreen()).toBe(true);
 });
 
+test("a failure after the window became fullscreen still lets the element end undo it", () => {
+  const { calls, window } = fakeWindow({});
+  const link = createHtmlFullscreenLink({
+    ...window,
+    setFullscreen: (enabled) => {
+      window.setFullscreen(enabled);
+      if (enabled) {
+        throw new Error("The WebView could not be fitted.");
+      }
+    },
+  });
+  expect(() => link(true)).toThrow();
+  link(false);
+  expect(calls).toEqual([
+    true,
+    false,
+  ]);
+  expect(window.isFullscreen()).toBe(false);
+});
+
 test("a window that is not fullscreenable is left alone", () => {
   const { calls, window } = fakeWindow({
     fullscreenable: false,

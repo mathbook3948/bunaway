@@ -23,8 +23,13 @@ export function createHtmlFullscreenLink(
   return (containsFullscreenElement) => {
     if (containsFullscreenElement) {
       if (!window.isFullscreen() && window.isFullscreenable()) {
-        window.setFullscreen(true);
-        enteredSession = window.fullscreenSession();
+        try {
+          window.setFullscreen(true);
+        } finally {
+          // A failure after the window became fullscreen (for example while fitting the WebView)
+          // still leaves a stay this link entered, which the element end must undo.
+          enteredSession = window.fullscreenSession();
+        }
       }
       return;
     }
