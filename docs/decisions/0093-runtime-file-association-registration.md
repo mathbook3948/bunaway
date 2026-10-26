@@ -14,7 +14,7 @@ status: accepted
 현재 구현:
 
 - 설치 프로그램은 패키징 채널 설정(`bunaway.json`의 `bundle`)의 `associations.files` 선언을 Inno `fileassociations` 작업으로 등록한다(URL scheme은 별도 `urlschemes` 작업). 이 작업은 새 설치에서
-  기본으로 선택되지 않으며, 제거와 업데이트에서 앱이 소유한 후보를 정리한다. ProgId(`BW.<guid>`)와 등록 기록은
+  기본으로 선택되지 않으며, 제거와 업데이트에서 앱이 소유한 후보를 정리한다. ProgId(`BW.` 뒤 하이픈 없는 32자리 16진수)와 등록 기록은
   `packages/packaging`이 정하고 `stableGuid`, `AssociationRoot`, 대기 후보 기록을 쓴다.
 - 배포 채널 중 `win-direct`와 `win-store-unpackaged`는 Inno 설치 프로그램이다. 포터블 채널은 없다.
   MSIX 채널(`win-store-msix`)은 아직 패키징을 지원하지 않고, 매니페스트 렌더러에도 파일 연결 선언이 없다.
