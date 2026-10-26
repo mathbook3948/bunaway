@@ -79,7 +79,13 @@ test("the startup check separates unreadable, too old, unparsable and supported 
   });
   const old = checkWebViewVersion(() => "90.0.1.1");
   expect(old.version).toBe("90.0.1.1");
-  expect(old.event?.name).toBe("webview-version-too-old");
+  expect(old.event).toEqual({
+    name: "webview-version-too-old",
+    fields: {
+      version: "90.0.1.1",
+    },
+  });
+  expect(old.failure?.message).toContain("90.0.1.1");
   expect(old.failure).toBeInstanceOf(Error);
   const unparsable = checkWebViewVersion(() => "unknown");
   expect(unparsable.version).toBe("unknown");

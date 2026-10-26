@@ -14,11 +14,11 @@ Windows 호스트는 시작할 때 `WebView2Loader`의 `GetAvailableCoreWebView2
 호스트는 고정 SDK 1.0.4129.50의 vtable slot과 IID로 인터페이스를 직접 호출한다. 일부는 없으면 기능만 줄어든다
 (`ICoreWebView2_12`, `_13`과 Profile은 color scheme, `_15`는 favicon, `_16`은 print, `Settings9`는 titlebar).
 반면 `ICoreWebView2_4`(다운로드 기본 거부 정책), `ICoreWebView2Settings4`(설정), `ICoreWebView2Controller2`(배경색),
-`ICoreWebView2Environment8`(브라우저 프로세스 목록), `ICoreWebView2PermissionRequestedEventArgs3`(권한 거부 처리)와
+`ICoreWebView2Environment8`(모든 WebView 생성 때의 브라우저 프로세스 종료 구독과 프로세스 목록), `ICoreWebView2PermissionRequestedEventArgs3`(권한 거부 처리)와
 `ICoreWebView2_3`(embedded가 아닐 때의 virtual host mapping), embedded 자산을 쓸 때의 `ICoreWebView2_22`(요청 출처별
 resource filter)는 fallback 없이 QueryInterface하므로,
 오래된 runtime에서는 창을 만들거나 요청을 처리하는 중에 원인을 알기 어려운 오류가 난다. `ICoreWebView2_8`(오디오 상태)은
-앱이 audio API를 호출할 때만 조회하므로 시작 조건에 넣지 않는다.
+생성 때는 선택적으로 구독하고 fallback 없는 조회는 앱이 audio API를 호출할 때뿐이므로 시작 조건에 넣지 않는다.
 
 선례:
 
