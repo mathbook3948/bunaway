@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { packageFilename } from "#cli/distribution";
 import { writeJson } from "#cli/files";
 import { createProject, packageDirectory } from "../cli/project.ts";
+import { waitFor } from "../fixtures/deadlines.ts";
 import { seedWindowsBuildCaches } from "./windows-project-caches.ts";
 
 /**
@@ -72,8 +73,10 @@ await writeFile(
 import { command, defineApp } from "@bunaway/backend";
 import processes from "@bunaway/plugin-process";
 import { join } from "node:path";
+import { rename } from "node:fs/promises";
 export const app = defineApp({ modules: [], plugins: [processes], commands: {
   "sidecar.run": command({ input: { const: null } as const, output: { const: null } as const, async handle(_input, context) {
+    if (!context.app.paths) throw new Error("The host reports no app paths.");
     const executablePath = join(context.app.paths.resources, "sidecar", "probe.exe");
     const { handle } = await processes.spawn({ executablePath, args: ["--no-env-file", "-e", "console.log(process.execPath)"] });
     let stdout = "";
@@ -83,7 +86,9 @@ export const app = defineApp({ modules: [], plugins: [processes], commands: {
       stdout += Buffer.from(read.stdoutBase64, "base64").toString();
       exited = read.exited;
     }
-    await Bun.write(${JSON.stringify(reportPath)}, JSON.stringify({ executablePath, stdout: stdout.trim(), exitCode: exited.exitCode }));
+    // Publish a complete report: the driver reads while the file is written.
+    await Bun.write(${JSON.stringify(reportPath)} + ".pending", JSON.stringify({ executablePath, stdout: stdout.trim(), exitCode: exited.exitCode }));
+    await rename(${JSON.stringify(reportPath)} + ".pending", ${JSON.stringify(reportPath)});
     return null;
   } }),
 } });
@@ -106,7 +111,6 @@ policy.views[0].events = [];
 policy.views[0].host.permissions = [
   "process.spawn",
   "process.read",
-  "process.kill",
 ];
 await writeJson(policyPath, policy);
 await writeFile(
@@ -153,14 +157,11 @@ const launched = Bun.spawn(
   },
 );
 try {
-  const deadline = Date.now() + 60_000;
-  while (!(await Bun.file(reportPath).exists())) {
-    assert(
-      Date.now() < deadline,
-      "The packaged app did not report the sidecar run.",
-    );
-    await Bun.sleep(100);
-  }
+  await waitFor(() => Bun.file(reportPath).exists(), {
+    deadline: "nativeFixture",
+    what: "the packaged app to report the sidecar run",
+    intervalMs: 100,
+  });
   const report = JSON.parse(await readFile(reportPath, "utf8"));
   assert.equal(report.exitCode, 0);
   assert.equal(
