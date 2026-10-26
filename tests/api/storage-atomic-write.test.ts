@@ -46,6 +46,13 @@ class TestStorage extends NodeStorage {
     super.swapIn(temporary, target);
   }
 
+  protected override syncDirectory(directory: string): void {
+    // Windows cannot open a folder to flush it; WindowsStorage skips the flush the same way.
+    if (!windows) {
+      super.syncDirectory(directory);
+    }
+  }
+
   protected release(): void {}
 }
 

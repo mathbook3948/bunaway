@@ -104,40 +104,44 @@ try {
     "note.txt",
   ]);
 
-  // A file another process holds open with delete sharing is still replaced.
-  const release = hold(at("note.txt"), SHARE_ALL);
-  try {
+  // MoveFileExW cannot replace a file another handle has open, with or without delete sharing.
+  // The write retries briefly, reports an access failure, keeps the old file and leaves no
+  // temporary file; once the holder closes, the same write succeeds.
+  for (const [name, share] of [
+    [
+      "held-all.txt",
+      SHARE_ALL,
+    ],
+    [
+      "held-no-delete.txt",
+      SHARE_READ_WRITE,
+    ],
+  ] as const) {
+    writeFileSync(at(name), "original");
+    const releaseHeld = hold(at(name), share);
+    try {
+      const error = failureOf(() =>
+        storage.writeText({
+          path: at(name),
+          text: "replacement",
+          atomic: true,
+        }),
+      );
+      assert.equal(error.code, "PERMISSION_DENIED");
+    } finally {
+      releaseHeld();
+    }
+    assert.equal(readFileSync(at(name), "utf8"), "original");
     storage.writeText({
-      path: at("note.txt"),
-      text: "replaced while open",
+      path: at(name),
+      text: "replacement",
       atomic: true,
     });
-  } finally {
-    release();
+    assert.equal(readFileSync(at(name), "utf8"), "replacement");
   }
-  assert.equal(readFileSync(at("note.txt"), "utf8"), "replaced while open");
   assert.deepEqual(names(), [
-    "note.txt",
-  ]);
-
-  // A holder that refuses delete sharing blocks the swap: the old file stays and no temporary remains.
-  writeFileSync(at("held.txt"), "original");
-  const releaseHeld = hold(at("held.txt"), SHARE_READ_WRITE);
-  try {
-    const error = failureOf(() =>
-      storage.writeText({
-        path: at("held.txt"),
-        text: "replacement",
-        atomic: true,
-      }),
-    );
-    assert.equal(error.code, "PERMISSION_DENIED");
-  } finally {
-    releaseHeld();
-  }
-  assert.equal(readFileSync(at("held.txt"), "utf8"), "original");
-  assert.deepEqual(names(), [
-    "held.txt",
+    "held-all.txt",
+    "held-no-delete.txt",
     "note.txt",
   ]);
 
@@ -179,7 +183,8 @@ try {
   assert.equal(refused.code, "INVALID_ARGUMENT");
   assert.deepEqual(names(), [
     "folder",
-    "held.txt",
+    "held-all.txt",
+    "held-no-delete.txt",
     "note.txt",
     "readonly.txt",
   ]);
