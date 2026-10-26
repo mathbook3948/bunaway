@@ -30,7 +30,8 @@ resource filter)는 fallback 없이 QueryInterface하므로,
 
 - 호스트는 읽은 runtime 버전이 최소 버전보다 낮으면 `webview-version-too-old`를 로그에 남기고 시작을 실패시킨다. 버전은
   Worker를 시작하기 전에 읽어 실패로 먼저 기록하므로, 창 생성 중의 QueryInterface 오류 대신 이 오류가 보고되고 호스트는
-  Worker 준비를 기다리지 않고 종료한다. Worker는 이미 시작했으므로 창이 잠깐 만들어질 수 있다. 오류 메시지에는 감지한 버전, 요구 버전, Evergreen runtime 설치 안내만 담고 경로는 담지 않는다. 시작 실패 대화상자가 공통으로 덧붙이는 stack과 로그 파일 위치는 이 결정의 범위 밖이다.
+  Worker 준비를 기다리지 않고 실패 처리에 들어간다. Worker는 이미 시작했으므로 창이 잠깐 만들어질 수 있고, 두 Worker의
+  정리가 끝나야 오류가 표시된다. 오류 메시지에는 감지한 버전, 요구 버전, Evergreen runtime 설치 안내만 담고 경로는 담지 않는다. 시작 실패 대화상자가 공통으로 덧붙이는 stack과 로그 파일 위치는 이 결정의 범위 밖이다.
 - 버전을 읽지 못했거나 모양을 해석할 수 없으면 계속한다(읽기 실패는 `webview-version-unavailable`, 해석 불가는 `webview-version-unparsable`을 남긴다).
   정보를 얻지 못한 것만으로 앱을 막지 않는다.
 - 최소 버전(128.0.2739.15)은 필수 인터페이스(fallback 없는 호출) 중 가장 늦게 나온 `ICoreWebView2_22` 기준으로 정하고,

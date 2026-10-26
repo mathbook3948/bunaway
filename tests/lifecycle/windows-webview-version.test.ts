@@ -60,3 +60,32 @@ test("runtime versions compare by numeric part and unreadable shapes never count
   expect(message).toContain(MIN_WEBVIEW_RUNTIME_VERSION);
   expect(message).not.toMatch(/[A-Za-z]:\\|\.dll/);
 });
+
+test("the startup check separates unreadable, too old, unparsable and supported versions", async () => {
+  const { checkWebViewVersion } = await import(
+    "#native/windows/bun/webview-version-check"
+  );
+  const unavailable = checkWebViewVersion(() => {
+    throw new Error("no runtime");
+  });
+  expect(unavailable).toEqual({
+    version: null,
+    event: {
+      name: "webview-version-unavailable",
+      fields: {
+        message: "no runtime",
+      },
+    },
+  });
+  const old = checkWebViewVersion(() => "90.0.1.1");
+  expect(old.version).toBe("90.0.1.1");
+  expect(old.event?.name).toBe("webview-version-too-old");
+  expect(old.failure).toBeInstanceOf(Error);
+  const unparsable = checkWebViewVersion(() => "unknown");
+  expect(unparsable.version).toBe("unknown");
+  expect(unparsable.event?.name).toBe("webview-version-unparsable");
+  expect(unparsable.failure).toBeUndefined();
+  expect(checkWebViewVersion(() => "999.0.0.0")).toEqual({
+    version: "999.0.0.0",
+  });
+});

@@ -49,3 +49,61 @@ export function isWebViewVersionTooOld(
 export function webViewVersionTooOldMessage(version: string): string {
   return `WebView2 runtime ${version} is older than the required ${MIN_WEBVIEW_RUNTIME_VERSION}. Install or update the Microsoft Edge WebView2 Runtime (Evergreen) and start the app again.`;
 }
+
+/** What the startup version check found: the value for `app.webview`, a log entry and, below the minimum, the startup failure. */
+export interface WebViewVersionCheck {
+  version: string | null;
+  event?: {
+    name: string;
+    fields: Record<string, string>;
+  };
+  failure?: Error;
+}
+
+/**
+ * Classifies the runtime version `read` returns. A failed read or an unparsable version leaves
+ * startup running (with the version as null or as read); a version below the minimum carries the
+ * startup failure. The caller logs the event and throws the failure.
+ */
+export function checkWebViewVersion(read: () => string): WebViewVersionCheck {
+  let version: string;
+  try {
+    version = read();
+  } catch (cause) {
+    return {
+      version: null,
+      event: {
+        name: "webview-version-unavailable",
+        fields: {
+          message: cause instanceof Error ? cause.message : String(cause),
+        },
+      },
+    };
+  }
+  if (isWebViewVersionTooOld(version)) {
+    return {
+      version,
+      event: {
+        name: "webview-version-too-old",
+        fields: {
+          version,
+        },
+      },
+      failure: new Error(webViewVersionTooOldMessage(version)),
+    };
+  }
+  if (!parseWebViewVersion(version)) {
+    return {
+      version,
+      event: {
+        name: "webview-version-unparsable",
+        fields: {
+          version,
+        },
+      },
+    };
+  }
+  return {
+    version,
+  };
+}
