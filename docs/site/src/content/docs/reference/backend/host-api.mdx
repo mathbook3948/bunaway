@@ -104,7 +104,7 @@ SDK의 `command()`와 `defineApp()`을 사용하지 않는 객체형 정의에�
 신뢰된 백엔드는 `Bun.file`, `Bun.write`, `node:path`와 `bun:sqlite`를 직접 사용할 수 있습니다.
 이 경로는 앱 코드가 접근과 수명주기를 관리합니다. 화면에는 이 런타임 API를 노출하지 않고,
 앱 명령과 작업별 Host 권한으로 접근을 중재하세요. SQLite의 query, transaction과 migration을
-화면에 중재하는 공식 플러그인은 아직 없습니다.
+화면에 중재하는 공식 플러그인은 제공하지 않으므로, 앱 명령이 백엔드에서 `bun:sqlite`로 처리하세요.
 바이트와 append 작업은 [바이너리 저장과 append](/reference/host/storage-bytes/)를 따릅니다.
 
 ## 창
