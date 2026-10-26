@@ -545,17 +545,18 @@ export async function runWindowsApp(
       ui: "worker",
       runtime: config.runtime,
     });
+    if (webviewVersion.event) {
+      await log.write(webviewVersion.event.name, webviewVersion.event.fields);
+    }
+    // A runtime below the minimum was already recorded as the failure; stop without waiting for the Workers.
+    if (failure) {
+      throw failure;
+    }
     // Wait for both Workers before Core starts routing host calls.
     await Promise.all([
       ready,
       ioReady,
     ]);
-    if (failure) {
-      throw failure;
-    }
-    if (webviewVersion.event) {
-      await log.write(webviewVersion.event.name, webviewVersion.event.fields);
-    }
     if (failure) {
       throw failure;
     }
