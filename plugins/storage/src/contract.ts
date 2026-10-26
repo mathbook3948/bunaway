@@ -124,6 +124,18 @@ export const storageBytesWriteSchema = z.strictObject({
   ...pathFields,
   bytes: storageBytesSchema,
 });
+/** Replacement writes may ask for a temporary file that is swapped in; appends cannot. */
+const atomicField = {
+  atomic: z.boolean().optional(),
+};
+export const storageReplaceSchema = z.strictObject({
+  ...storageWriteSchema.shape,
+  ...atomicField,
+});
+export const storageBytesReplaceSchema = z.strictObject({
+  ...storageBytesWriteSchema.shape,
+  ...atomicField,
+});
 export const storageTransferSchema = z.strictObject({
   from: pathFields.path,
   to: pathFields.path,
@@ -193,12 +205,16 @@ export type StorageDirectoryPage = z.infer<typeof storageDirectoryPageSchema>;
 export type StorageLocation = z.infer<typeof storageLocationSchema>;
 /** Path and optional byte range accepted by readBytes. */
 export type StorageBytesRead = z.infer<typeof storageBytesReadSchema>;
-/** Path and text accepted by text writes and appends. */
+/** Path and text accepted by text appends. */
 export type StorageWrite = z.infer<typeof storageWriteSchema>;
+/** Path, text and optional `atomic` accepted by writeText. */
+export type StorageReplace = z.infer<typeof storageReplaceSchema>;
 /** File or directory metadata returned by storage.stat. */
 export type StorageMetadata = z.infer<typeof storageMetadataSchema>;
-/** Path and canonical base64 accepted by byte writes and appends. */
+/** Path and canonical base64 accepted by byte appends. */
 export type StorageBytesWrite = z.infer<typeof storageBytesWriteSchema>;
+/** Path, canonical base64 and optional `atomic` accepted by writeBytes. */
+export type StorageBytesReplace = z.infer<typeof storageBytesReplaceSchema>;
 /** Source and destination; transfers never replace existing targets. */
 export type StorageTransfer = z.infer<typeof storageTransferSchema>;
 /** Directory creation input after recursive defaults are resolved. */
@@ -214,9 +230,9 @@ export type StorageDirectoryCreate = z.infer<
  */
 export interface StorageInstance {
   readText(input: StorageLocation): string;
-  writeText(input: StorageWrite): null;
+  writeText(input: StorageReplace): null;
   readBytes(input: StorageBytesRead): string;
-  writeBytes(input: StorageBytesWrite): null;
+  writeBytes(input: StorageBytesReplace): null;
   appendText(input: StorageWrite): null;
   appendBytes(input: StorageBytesWrite): null;
   copyFile(input: StorageTransfer): null;
@@ -248,13 +264,16 @@ export interface Storage {
     input: StorageLocation,
     options?: NativeInvokeOptions,
   ): Promise<string>;
-  writeText(input: StorageWrite, options?: NativeInvokeOptions): Promise<null>;
+  writeText(
+    input: StorageReplace,
+    options?: NativeInvokeOptions,
+  ): Promise<null>;
   readBytes(
     input: StorageBytesRead,
     options?: NativeInvokeOptions,
   ): Promise<string>;
   writeBytes(
-    input: StorageBytesWrite,
+    input: StorageBytesReplace,
     options?: NativeInvokeOptions,
   ): Promise<null>;
   appendText(input: StorageWrite, options?: NativeInvokeOptions): Promise<null>;

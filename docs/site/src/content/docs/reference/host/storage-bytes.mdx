@@ -6,7 +6,7 @@ sidebar: { order: 5 }
 
 ```ts
 storage.readBytes({ path, offset?, length? }): Promise<string>
-storage.writeBytes({ path, bytes }): Promise<null>
+storage.writeBytes({ path, bytes, atomic? }): Promise<null>
 storage.appendBytes({ path, bytes }): Promise<null>
 storage.appendText({ path, text }): Promise<null>
 ```
@@ -64,7 +64,12 @@ const tail = await storage.readBytes({ path: "C:/notes/data.bin", offset: 2, len
 기존 내용을 자르지 않습니다. 없는 파일과 상위 디렉터리는 만들고 빈 append도 없는 파일을 만듭니다.
 읽기 대상이 없으면 `INVALID_ARGUMENT`입니다.
 
-이 작업들은 원자적 저장이나 여러 요청의 트랜잭션을 제공하지 않습니다.
+`storage.writeBytes`에 `atomic: true`를 주면 같은 폴더의 임시 파일을 교체해 저장하며,
+실패해도 기존 파일이 반쯤 쓰인 상태로 남지 않습니다. 동작과 한계는
+[텍스트 저장의 원자적 저장](/reference/host/storage-write-text/#원자적-저장)과 같습니다.
+`atomic`을 생략하면 같은 파일에 덮어쓰며, append 작업은 `atomic`을 받지 않습니다.
+
+덮어쓰기와 append, 여러 요청에 걸친 트랜잭션은 원자성을 제공하지 않습니다.
 네이티브 write가 일부만 완료되면 반복해서 남은 내용을 씁니다. 동시에 실행하는 다른 프로세스의
 append가 그 사이에 들어갈 수 있으므로 레코드 단위 순서와 충돌 처리는 앱에서 관리합니다.
 실패, 종료나 이미 시작한 작업의 취소는 부분 쓰기를 되돌리지 않습니다.

@@ -10,6 +10,7 @@ import {
   openSync,
   readSync,
   realpathSync,
+  renameSync,
   rmdirSync,
   statSync,
   unlinkSync,
@@ -35,6 +36,10 @@ import {
   type StorageTransfer,
 } from "#storage/contract";
 import { StorageFiles } from "#storage/platforms/files";
+import {
+  replaceAtomically,
+  retrySwap,
+} from "#storage/platforms/node-atomic-write";
 import {
   type DirectorySizeLimits,
   listDirectory,
@@ -571,6 +576,53 @@ export abstract class NodeStorage
       fsyncSync(fd);
     });
     return null;
+  }
+
+  /**
+   * Write the bytes to a temporary file in the target's folder and swap it over the target, so a
+   * failure or crash before the swap leaves the old file untouched. A link is followed to its
+   * target file, and a directory or other non-file is refused as in place.
+   */
+  protected replaceFile(path: string, bytes: Buffer): null {
+    const selected = this.selected(path);
+    fsCall(() =>
+      replaceAtomically(selected, bytes, {
+        ensureParent: ensureParentDirectory,
+        writeAll: writeBytes,
+        notAFile: () =>
+          failure("INVALID_ARGUMENT", "Storage target is not a file."),
+        swap: (temporary, target) => this.swapIn(temporary, target),
+        syncDirectory: (directory) => this.syncDirectory(directory),
+      }),
+    );
+    return null;
+  }
+
+  /** Replace `target` with the finished `temporary` file, waiting out brief sharing conflicts. */
+  protected swapIn(temporary: string, target: string): void {
+    retrySwap(
+      () => renameSync(temporary, target),
+      (error) => {
+        const code = errorCode(error);
+        return code === "EPERM" || code === "EACCES" || code === "EBUSY";
+      },
+    );
+  }
+
+  /** Flush the swapped-in directory entry so the replacement survives a power loss. */
+  protected syncDirectory(directory: string): void {
+    const fd = openSync(directory, constants.O_RDONLY);
+    withDescriptor(fd, () => {
+      try {
+        fsyncSync(fd);
+      } catch (error) {
+        // Some file systems cannot flush a directory; the replacement itself already happened.
+        const code = errorCode(error);
+        if (code !== "EINVAL" && code !== "ENOTSUP") {
+          throw error;
+        }
+      }
+    });
   }
 
   /**
