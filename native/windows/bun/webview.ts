@@ -31,6 +31,11 @@ import {
   reclaimHandlers,
   release,
 } from "./com.ts";
+import {
+  planProcessFailure,
+  UNKNOWN_PROCESS_FAILED_KIND,
+  UnresponsiveEpisode,
+} from "./process-failure.ts";
 import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
 import {
@@ -197,6 +202,7 @@ export class WebView {
   private detached = false;
   private browserExited = false;
   private browserFailed = false;
+  private readonly unresponsiveEpisode = new UnresponsiveEpisode();
   private finished = false;
   private quiescence:
     | {
@@ -269,7 +275,7 @@ export class WebView {
       /** Optional: only the window host links page fullscreen to the window. */
       htmlFullscreenChanged?(containsFullscreenElement: boolean): void;
       /** Optional: only the window host reports process failures to the backend. */
-      processFailed?(kind: number, recovery: "reload" | "close"): void;
+      processFailed?(kind: number, recovery: "reload" | "close" | "none"): void;
       /** Optional: only the window host reports audio changes to the backend. */
       audioChanged?(state: AudioState): void;
       close(force?: boolean): void;
@@ -927,21 +933,28 @@ export class WebView {
         ])(ptr(kind)),
         "get_ProcessFailedKind",
       );
-      this.hooks.log("webview-process-failed", {
-        kind: kind[0],
-      });
-      this.hooks.revoke("process-failed");
-      // A view that is already closing neither reloads nor needs a recovery report.
-      if (!this.closing) {
-        this.hooks.processFailed?.(
-          kind[0] ?? 9,
-          kind[0] === 0 ? "close" : "reload",
-        );
+      const failureKind = kind[0] ?? UNKNOWN_PROCESS_FAILED_KIND;
+      const plan = planProcessFailure(
+        failureKind,
+        this.closing,
+        this.unresponsiveEpisode,
+        performance.now(),
+      );
+      if (plan.log) {
+        this.hooks.log("webview-process-failed", {
+          kind: kind[0],
+        });
       }
-      if (kind[0] === 0) {
+      if (plan.revokeSession) {
+        this.hooks.revoke("process-failed");
+      }
+      if (plan.report !== undefined) {
+        this.hooks.processFailed?.(failureKind, plan.report);
+      }
+      if (plan.action === "close-window") {
         this.browserFailed = true;
         this.hooks.close(true);
-      } else {
+      } else if (plan.action === "reload") {
         this.downloads?.operations.revokePending();
         setTimeout(() => {
           if (!this.closing) {
@@ -1272,6 +1285,8 @@ export class WebView {
       ),
       "Navigate",
     );
+    // An app that navigates away from a frozen page starts a fresh document, which can freeze anew.
+    this.unresponsiveEpisode.reset();
   }
 
   /** Move keyboard focus into the page, e.g. after a native popup closed; it does not activate the window. */
@@ -1512,6 +1527,8 @@ export class WebView {
     const webview = this.requireWebView();
     if (!ignoreCache) {
       checkHresult(method(webview, 31, [])(), "Reload");
+      // A reload replaces a frozen document, so a freeze after it is a new one.
+      this.unresponsiveEpisode.reset();
       return;
     }
     this.editCalls.prune();
@@ -1544,6 +1561,7 @@ export class WebView {
         message: `Reload ignoring the cache failed: ${describeDevToolsFailure(error)}`,
       });
     }
+    this.unresponsiveEpisode.reset();
   }
 
   /** Stop completes through the existing NavigationCompleted cancellation path. */

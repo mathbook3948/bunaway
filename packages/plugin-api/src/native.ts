@@ -332,8 +332,11 @@ export type WindowProcessFailureEvent = {
   windowId: string;
   viewId: string;
   kind: WindowProcessFailureKind;
-  /** `reload` navigates the view again in the same window; `close` closes the window. */
-  recovery: "reload" | "close";
+  /**
+   * `reload` navigates the view again in the same window; `close` closes the window; `none` leaves
+   * the view as it is (a renderer that stopped responding keeps its page and may recover).
+   */
+  recovery: "reload" | "close" | "none";
 };
 
 /** A WebView's audio state after a change, as published by `windows.waitForAudioChange`. */

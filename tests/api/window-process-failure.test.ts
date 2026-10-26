@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 import type { WindowProcessFailureEvent } from "@bunaway/plugin-api/native";
-import { processFailureKind } from "#native/windows/bun/process-failure";
+import {
+  isUnresponsiveFailure,
+  planProcessFailure,
+  processFailureKind,
+  UnresponsiveEpisode,
+} from "#native/windows/bun/process-failure";
 import { windowDefinitions } from "#plugins/windows/src/contract";
 import { ProcessFailureFeed } from "#plugins/windows/src/platforms/lifecycle-feed";
 
@@ -78,10 +83,78 @@ test("every mapped kind satisfies the operation output schema", () => {
       sequence: 1,
       windowId: "w1",
       viewId: "main",
+      kind: "renderer-unresponsive",
+      recovery: "none",
+    }).success,
+  ).toBe(true);
+  expect(
+    output.safeParse({
+      sequence: 1,
+      windowId: "w1",
+      viewId: "main",
       kind: "renderer-exited",
       recovery: "restart",
     }).success,
   ).toBe(false);
+});
+
+test("repeated unresponsive reports of one freeze count once and a pause starts a new freeze", () => {
+  const episode = new UnresponsiveEpisode();
+  expect(episode.begins(1_000)).toBe(true);
+  // WebView2 repeats the report every few seconds while the freeze lasts.
+  expect(episode.begins(16_000)).toBe(false);
+  expect(episode.begins(31_000)).toBe(false);
+  expect(episode.begins(150_000)).toBe(true);
+  expect(episode.begins(160_000)).toBe(false);
+  // A reload, a navigation or another failure ends the freeze, so a freeze right after it is reported.
+  episode.reset();
+  expect(episode.begins(165_000)).toBe(true);
+});
+
+test("a frozen renderer keeps its page and is reported once; an exited renderer or browser ends it", () => {
+  const episode = new UnresponsiveEpisode();
+  const frozen = planProcessFailure(2, false, episode, 1_000);
+  expect(frozen).toEqual({
+    log: true,
+    report: "none",
+    revokeSession: false,
+    action: "none",
+  });
+  // A repeated report of the same freeze is neither logged nor forwarded.
+  expect(planProcessFailure(2, false, episode, 16_000)).toEqual({
+    log: false,
+    report: undefined,
+    revokeSession: false,
+    action: "none",
+  });
+  // A closing view reports nothing even for a new freeze.
+  expect(planProcessFailure(2, true, new UnresponsiveEpisode(), 0).report).toBe(
+    undefined,
+  );
+  expect(planProcessFailure(1, false, episode, 20_000)).toEqual({
+    log: true,
+    report: "reload",
+    revokeSession: true,
+    action: "reload",
+  });
+  // The reload ended the freeze, so a freeze right after it is reported again.
+  expect(planProcessFailure(2, false, episode, 21_000).report).toBe("none");
+  expect(planProcessFailure(0, false, episode, 22_000)).toEqual({
+    log: true,
+    report: "close",
+    revokeSession: true,
+    action: "close-window",
+  });
+  expect(planProcessFailure(1, true, episode, 23_000).report).toBe(undefined);
+});
+
+test("only the unresponsive kind leaves the page running", () => {
+  const kept = [
+    ...Array(11).keys(),
+  ].filter((kind) => isUnresponsiveFailure(kind));
+  expect(kept).toEqual([
+    2,
+  ]);
 });
 
 test("a platform without process failure notification reports UNSUPPORTED", async () => {
