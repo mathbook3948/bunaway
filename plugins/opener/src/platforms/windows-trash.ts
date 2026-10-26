@@ -8,11 +8,26 @@ import {
   toArrayBuffer,
 } from "bun:ffi";
 import { BunawayError } from "@bunaway/plugin";
-import { KERNEL32, OLE32, pick, SHELL32 } from "@bunaway/plugin/win32";
+import {
+  ADVAPI32,
+  KERNEL32,
+  OLE32,
+  pick,
+  SHELL32,
+  wide,
+} from "@bunaway/plugin/win32";
 import { guid } from "#opener/platforms/windows-com";
 
 const CLSCTX_INPROC_SERVER = 1;
 const DRIVE_FIXED = 3;
+const HKEY_CURRENT_USER = 0xffffffff80000001n;
+const RRF_RT_REG_DWORD = 0x10;
+const RRF_SUBKEY_WOW6464KEY = 0x10000;
+const BIN_VOLUME_KEY =
+  "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\BitBucket\\Volume";
+const BYTES_PER_MEGABYTE = 1024 * 1024;
+/** Characters of a `\\?\Volume{GUID}\` name plus its terminator. */
+const VOLUME_NAME_UNITS = 64;
 const E_ABORT = -2147467260;
 const E_NOINTERFACE = -2147467262;
 const E_POINTER = -2147467261;
@@ -338,6 +353,62 @@ export function validateTrashDrive(path: string): void {
 }
 
 /**
+ * Refuse a file larger than the Recycle Bin capacity of its volume. The shell deletes such a
+ * file permanently and otherwise asks for confirmation through a prompt nothing answers, so
+ * the call must end before the shell is asked. The capacity is the per-user `MaxCapacity`
+ * (megabytes) of the volume; a volume without that value is left to the shell.
+ */
+export function assertFitsRecycleBin(path: string, size: number): void {
+  const kernel = dlopen("kernel32.dll", {
+    ...pick(KERNEL32, "GetVolumeNameForVolumeMountPointW"),
+  });
+  try {
+    const volume = Buffer.alloc(VOLUME_NAME_UNITS * 2);
+    if (
+      !kernel.symbols.GetVolumeNameForVolumeMountPointW(
+        ptr(Buffer.from(`${path.slice(0, 3)}\0`, "utf16le")),
+        ptr(volume),
+        VOLUME_NAME_UNITS,
+      )
+    ) {
+      return;
+    }
+    const guidText = /\{[0-9a-f-]+\}/i.exec(volume.toString("utf16le"))?.[0];
+    if (!guidText) {
+      return;
+    }
+    const advapi = dlopen("advapi32.dll", {
+      ...pick(ADVAPI32, "RegGetValueW"),
+    });
+    try {
+      const data = new Uint32Array(1);
+      const length = new Uint32Array([
+        4,
+      ]);
+      const status = advapi.symbols.RegGetValueW(
+        HKEY_CURRENT_USER,
+        ptr(wide(`${BIN_VOLUME_KEY}\\${guidText}`)),
+        ptr(wide("MaxCapacity")),
+        RRF_RT_REG_DWORD | RRF_SUBKEY_WOW6464KEY,
+        null,
+        ptr(data),
+        ptr(length),
+      );
+      if (status === 0 && size > (data[0] ?? 0) * BYTES_PER_MEGABYTE) {
+        throw new BunawayError({
+          code: "UNSUPPORTED",
+          message: "The file is larger than the Recycle Bin capacity.",
+        });
+      }
+    } finally {
+      advapi.close();
+    }
+  } finally {
+    kernel.close();
+  }
+}
+
+/**
  * Recycle a checked file on the opener's initialized I/O STA. Own and release every
  * interface, callback and binding within this synchronous operation, before COM teardown.
  */
@@ -412,8 +483,12 @@ export function trashWindowsFile(path: string): void {
       ),
     );
     // Ask Windows to recycle, suppress companion deletion and copy hooks, and retain
-    // permanent-delete warnings. Missing recycle flags are vetoed by our sink; a
-    // recycled-item result is also required. Do not add a framework delete fallback.
+    // permanent-delete warnings. Without FOF_WANTNUKEWARNING a file over the bin capacity
+    // is deleted permanently and silently, because the sink sees the recycle intent and
+    // only the result shows that nothing was recycled. A file over the capacity is refused
+    // before this call, so the warning is only a backstop. Missing recycle flags are
+    // vetoed by our sink; a recycled-item result is also required. Do not add a framework
+    // delete fallback.
     checkResult(
       method(operation, SLOT.setFlags, [
         "u32",

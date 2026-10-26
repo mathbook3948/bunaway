@@ -1,4 +1,5 @@
 import { dlopen } from "bun:ffi";
+import { lstatSync } from "node:fs";
 import { type NativeEnvironment, ResourceOwner } from "@bunaway/plugin";
 import { COINIT_APARTMENTTHREADED, OLE32, pick } from "@bunaway/plugin/win32";
 import { BunawayError, isRecord } from "@bunaway/protocol";
@@ -37,6 +38,7 @@ import { createSchemeStore } from "#opener/platforms/windows-scheme-registry";
 import { createShell } from "#opener/platforms/windows-shell";
 import { createShortcuts } from "#opener/platforms/windows-shortcut";
 import {
+  assertFitsRecycleBin,
   trashWindowsFile,
   validateTrashDrive,
 } from "#opener/platforms/windows-trash";
@@ -234,6 +236,7 @@ export function trashFile(state: State, path: string): null {
   const selected = normalizeFilePath(path);
   validateTrashDrive(selected);
   assertExistingFile(selected);
+  assertFitsRecycleBin(selected, lstatSync(selected).size);
   trashWindowsFile(selected);
   return null;
 }
