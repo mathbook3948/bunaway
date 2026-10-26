@@ -1246,7 +1246,9 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
 
 - [ ] Windows 10/11의 지원 최소 버전과 실제 검증 환경을 확정한다.
 - [ ] WebView2 최소 버전과 Evergreen, Fixed Version 배포 지원을 확정한다.
-- [ ] Windows ARM64 지원과 x64 emulation 범위를 확정한다.
+- [x] Windows ARM64는 x64 emulation을 [지원 목표로 하고](decisions/0097-windows-arm64-scope.md) 네이티브 ARM64 빌드는 후속으로 둔다.
+- [ ] `windows-11-arm` 러너에서 x64 산출물의 호스트 기동, 페이지 로드, IPC 왕복과 종료를 검증하고 결과로 ARM64 지원 상태를 확정한다.
+- [ ] 네이티브 ARM64 Bun 빌드(`windows-aarch64` manifest, FFI 구조체 크기 점검, 패키징 대상)를 제공할지 정한다.
 - [ ] 최소와 최대 크기, DPI와 다중 모니터 회귀를 실제 사용자 조작으로 검증한다.
   최소/최대 크기의 물리 경계 조작과 서로 다른 DPI의 물리 모니터 이동은 미검증이다.
 - [x] 로컬 Windows x64의 실제 두 창에서 focus/blur 왕복과 물리 드래그 중 move/resize 전달을 검증한다.
