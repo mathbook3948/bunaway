@@ -51,9 +51,9 @@ function queryError(code: number): BunawayError {
  * Query kernel32 for the package folder. The library is opened for the one query and closed
  * before returning, so no handle outlives the call.
  */
-export function createPackageQueries(): PackageQueries {
+export function createPackageQueries(executablePath: string): PackageQueries {
   return {
-    executablePath: () => process.execPath,
+    executablePath: () => executablePath,
     packagePath() {
       const kernel = dlopen(
         "kernel32.dll",

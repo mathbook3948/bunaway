@@ -11,7 +11,7 @@ const windowsOnly = process.platform === "win32" ? test : test.skip;
  * package query must report no package and the updater must not treat the install as managed.
  */
 windowsOnly("an unpackaged process is not managed by the Store", () => {
-  const queries = createPackageQueries();
+  const queries = createPackageQueries(process.execPath);
   expect(queries.packagePath()).toBeNull();
   expect(isManagedByStore(queries)).toBe(false);
 });

@@ -14,7 +14,9 @@ import {
  * the update on an MSIX install, which only the package manager can replace.
  */
 export function initialize(environment: NativeEnvironment): UpdaterInstance {
-  const packageQueries = createPackageQueries();
+  const packageQueries = createPackageQueries(
+    environment.app?.launch.executablePath ?? process.execPath,
+  );
   return createUpdater("windows", process.arch, environment, {
     managedByStore: () => isManagedByStore(packageQueries),
     files: createPackageFiles(environment.dataRoot),
