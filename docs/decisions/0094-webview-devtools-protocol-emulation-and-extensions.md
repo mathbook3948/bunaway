@@ -24,7 +24,7 @@ emulation, DevTools의 workspace와 dock 위치와 별도 창과 title 설정, �
 - WebView2는 `ICoreWebView2::CallDevToolsProtocolMethod`와 `GetDevToolsProtocolEventReceiver`로 프로토콜을 연다. DevTools 창은
   `OpenDevToolsWindow`가 열 뿐이고 dock 위치, title, workspace를 정하는 설정은 `CoreWebView2Settings`에 없다.
 - 이 저장소의 Windows 호스트는 `CallDevToolsProtocolMethod` 바인딩을 이미 가지고 있다(`native/windows/bun/webview-devtools.ts`).
-  호스트가 자기 스크립트를 실행하는 `Runtime.evaluate` 호출에만 쓰며 앱에는 노출하지 않는다. 이 호출은 `AreDevToolsEnabled`가 꺼져 있어도
+  호스트 내부의 스크립트 실행(`Runtime.evaluate`)과 붙여넣기 텍스트 입력(`Input.insertText`)에만 쓰며 앱에는 노출하지 않는다. 이 호출은 `AreDevToolsEnabled`가 꺼져 있어도
   동작한다. 그 설정은 브라우저 UI만 막기 때문이다.
 - 현재 앱이 쓸 수 있는 것은 `windows.openDevTools`뿐이다. 작업 권한과 호스트의 개발 모드 설정이 모두 필요하고, 프로덕션 호스트는 작업 권한이 있어도
   `PERMISSION_DENIED`다. 백엔드는 `bunaway dev --inspect`로 디버거에 연결한다([디버깅 가이드](../site/src/content/docs/guides/debugging.mdx)).
@@ -46,8 +46,9 @@ emulation, DevTools의 workspace와 dock 위치와 별도 창과 title 설정, �
   네트워크 emulation([ADR 0071](./0071-webview-network-emulation.md))을 각각 제공하지 않기로 정했다. 프로토콜 연결을 열면 이 결정이 무효가 된다.
   페이지에 스크립트를 넣는 API는 [#158](https://github.com/mathbook3948/bunaway/issues/158)에서 추적하며 CSP와 번들 자산 처리의 경계가 먼저
   정해져야 한다. 프로토콜 연결은 그 경계를 거치지 않는다.
-- 호스트 바인딩은 `AreDevToolsEnabled`와 무관하게 동작한다. 앱 API로 열면 "프로덕션에서는 DevTools가 꺼진다"는
-  `windows.openDevTools`의 보장이 프로토콜 쪽에서는 지켜지지 않으므로 개발 모드 판정과 권한 모델을 새로 만들어야 한다.
+- 호스트 바인딩은 `AreDevToolsEnabled`와 무관하게 동작한다. `windows.openDevTools`는 작업 권한과 호스트의 개발 모드
+  설정이 모두 있어야 하고 프로덕션 호스트는 `PERMISSION_DENIED`로 거부한다. 프로토콜을 앱 API로 열면 이 제한이 적용되지 않으므로 개발 모드
+  판정과 권한 모델을 새로 만들어야 한다.
 - 장치 emulation의 값은 실제 창 크기와 DPI가 앱 동작이므로 개발 시 DevTools UI의 장치 모드로 충분하다. 앱이 런타임에 이 값을 흉내 내야 할
   사용처는 `plugins`, `packages`, `examples`에서 확인되지 않았다.
 - DevTools 창의 dock, title, workspace는 WebView2가 노출하지 않으므로 호스트가 구현하려면 프로토콜 호출이나 창 조작으로 우회해야 한다.
