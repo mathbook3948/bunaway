@@ -19,7 +19,8 @@ status: accepted
   sandbox를 바꾸는 설정은 확인하지 못했다.
 - WebView2의 `AdditionalBrowserArguments`는 환경 생성 때만 넘기며 바꾸는 setter가 없다. 같은 사용자 데이터 폴더의 브라우저 프로세스가
   이미 실행 중이고 옵션이 다르면 환경 생성이 `ERROR_INVALID_STATE`로 실패한다([ADR 0065](./0065-webview-content-settings.md),
-  [ADR 0082](./0082-webview-preconnect-connections-and-net-log.md)). 지원되는 인자 목록은 보장되지 않고, 보안 기능을 끄는 인자도 받는다.
+  [ADR 0082](./0082-webview-preconnect-connections-and-net-log.md)).
+  WebView2 공개 문서 확인으로는 지원되는 인자 목록이 보장되지 않고, 보안 기능을 끄는 인자도 받는 것으로 보인다.
 - 이 저장소의 호스트는 `CreateCoreWebView2EnvironmentWithOptions`에 환경 옵션을 넘기지 않고(`native/windows/bun/webview.ts`),
   `plugins`, `packages`, `native`에서 브라우저 인자나 `WEBVIEW2_` 환경 변수를 설정하는 코드는 찾지 못했다. 즉 지금 프레임워크가 쓰는 고정 인자는 없다.
 - Bun 백엔드는 JavaScriptCore를 쓰므로 V8 code-cache에 해당하는 설정이 없다. WebView2의 JavaScript 코드 캐시는 브라우저 프로세스가 관리하며
@@ -30,7 +31,7 @@ status: accepted
 
 1. 임의 Chromium 스위치, feature flag, 브라우저 인자를 넘기는 공개 설정을 추가하지 않는다.
 2. V8 code-cache 설정은 제공하지 않는다. Bun 백엔드에는 대응 설정이 없고 WebView2는 브라우저 프로세스가 관리한다(대체 불가).
-3. 렌더러 sandbox 설정은 제공하지 않는다. WebView2 렌더러는 항상 sandbox 안에서 실행되며 앱이 끌 수 없다(항상 켜짐, 미지원).
+3. 렌더러 sandbox 설정은 제공하지 않는다. WebView2 렌더러를 sandbox 밖에서 실행하는 설정을 확인하지 못했다(미지원, 앱이 끄는 수단 없음).
 4. 프레임워크가 넘기는 브라우저 인자는 지금 없고 이 결정으로 추가하지 않는다.
 5. 재검토 조건: WebView2가 지원되는 설정 API를 추가할 때, 선택 Chromium 렌더러가 구현될 때, 개별 기능에 대한 요구가 확인될 때.
    개별 기능은 임의 인자가 아니라 이름 붙은 전용 옵션으로 결정하고, 환경 옵션 전달 경로, 같은 사용자 데이터 폴더의 환경 충돌, 보안 기능과의 관계를 먼저 정한다.
