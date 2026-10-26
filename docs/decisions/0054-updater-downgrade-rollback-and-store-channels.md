@@ -25,7 +25,7 @@ status: accepted
   `win-store-msix`(이름만 등록돼 있고 패키지 생성은 차단됨)다([ADR 0005](./0005-packaging-contract.md),
   [플랫폼 지원 표](../platform-support/README.md)).
 - 아래 MSIX와 패키지 ID 서술은 Windows의 일반 동작이며 이 저장소의 테스트로 검증한 것이 아니다. `GetCurrentPackagePath`는
-  이 저장소에서 아직 쓰지 않는다.
+  `updater`가 쓰며, 패키지가 없는 Windows 프로세스에서의 결과만 CI에서 실행해 확인한다.
 - MSIX로 설치된 앱은 읽기 전용 패키지 폴더에서 실행되고, 패키지의 교체는 패키지 관리자(Store 포함)만 한다. 앱이 내려받은
   EXE로 이 패키지를 바꿀 수 없다. 패키지 ID가 있는 프로세스는 `GetCurrentPackageFullName`으로 구분할 수 있으며
   `autostart`와 `notification` 플러그인이 이미 이 호출을 쓴다. 다만 패키지 ID만으로는 MSIX 설치와 구분되지 않는다.

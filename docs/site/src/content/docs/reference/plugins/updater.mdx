@@ -66,6 +66,14 @@ if (update.updateAvailable) {
 `INVALID_ARGUMENT`로 실패합니다. `plugins.updater`가 없으면 `check`가
 `UNSUPPORTED`(`details.reason: "notConfigured"`)로 실패합니다.
 
+Windows에서 MSIX 패키지로 설치돼 실행 중인 앱은 패키지 교체를 패키지 관리자(Store 포함)만 하므로, `check`와 `download`가
+요청을 보내기 전에 `UNSUPPORTED`(`details.reason: "managedByStore"`)로 실패합니다. 앱은 같은 코드에서 이 오류를 보고
+업데이트 화면을 숨기거나 Store의 업데이트 안내로 바꿀 수 있습니다. 실행 중인 호스트가 프로세스의 패키지 ID와 실행 파일이
+패키지 설치 폴더 안에 있는지를 함께 확인하며 앱 설정으로 바꿀 수 없습니다. 패키지 ID만 붙이고 실행 파일은 패키지 밖에 있는
+앱은 거부하지 않습니다. 패키지 ID가 없는 일반 프로세스가 거부되지 않는 것은 Windows CI에서 실행해 확인합니다. MSIX 패키지로
+설치한 프로세스에서의 판별은 `win-store-msix` 패키지 생성이 열리기 전이라 실제로 확인하지 못했고, 패키지 ID와 폴더 비교는
+주입한 값으로만 시험했습니다.
+
 ## 매니페스트
 
 서버는 Tauri 정적 JSON의 읽기 전용 부분집합을 돌려줍니다. 응답 본문은 압축을 푼 뒤 64 KiB 이하여야 합니다.
@@ -176,7 +184,7 @@ interface UpdaterDownloadResult {
 
 | 코드 | `details.reason` |
 | --- | --- |
-| `UNSUPPORTED` | `notConfigured`, `appVersionMissing`, `appVersionInvalid`, `unsupportedArch`, `notChecked`, `integrityMissing`, `notAvailable`(업데이트 폴더를 제공하지 않는 어댑터), `signatureUnsupported` |
+| `UNSUPPORTED` | `notConfigured`, `appVersionMissing`, `appVersionInvalid`, `unsupportedArch`, `notChecked`, `integrityMissing`, `notAvailable`(업데이트 폴더를 제공하지 않는 어댑터), `signatureUnsupported`, `managedByStore`(Windows에서 MSIX로 설치된 프로세스) |
 | `TIMEOUT` | 제한 시간 초과 |
 | `CANCELLED` | 호출 취소, 어댑터 dispose |
 | `INTERNAL` | `network`, `httpStatus`(`details.status`), `redirectLimit`, `redirectScheme`, `tooLarge`, `invalidJson`, `invalidManifest`, `invalidVersion`, `platformMissing`, `integrityInvalid`, `integrityMismatch`, `sizeMismatch`, `signatureMissing`, `signatureUntrusted`, `revocationUnavailable`, `publisherMismatch`, `verifierBusy`, `verifierFailed`, `storage` |

@@ -1060,7 +1060,9 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
   쓰고, MSIX 설치는 `UNSUPPORTED`(`managedByStore`)로 거부한다.
   [ADR 0054](./decisions/0054-updater-downgrade-rollback-and-store-channels.md)를 따른다.
 - [ ] MSIX 설치 프로세스에서 `updater`가 `UNSUPPORTED`(`managedByStore`)로 실패하게 구현하고 실제 MSIX 패키지로 판별 조건을 검증한다.
-  `win-store-msix` 패키지 생성과 함께 한다.
+  `win-store-msix` 패키지 생성과 함께 한다. 구현됨: `check`와 `download`가 패키지 ID와 실행 파일 위치(`GetCurrentPackagePath`)로 판별해
+  거부하고, 주입한 값으로 판별 조건을 시험하며 패키지 ID가 없는 Windows 프로세스가 거부되지 않음을 CI에서 확인한다. 남은 일: 실제 MSIX
+  패키지 프로세스에서 판별 확인.
 - [ ] framework와 공식 기능 패키지의 공개 배포, 라이선스와 릴리스 자동화를 완료한다.
 - [ ] 설치된 프레임워크 업그레이드와 설정 변경의 migration 도구를 제공한다.
 

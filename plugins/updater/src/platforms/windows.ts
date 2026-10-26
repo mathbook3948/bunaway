@@ -3,13 +3,20 @@ import { createUpdater } from "#updater/adapter";
 import type { UpdaterInstance } from "#updater/contract";
 import { createPackageFiles } from "#updater/platforms/package-files";
 import { createAuthenticodeVerifier } from "#updater/platforms/windows-authenticode";
+import {
+  createPackageQueries,
+  isManagedByStore,
+} from "#updater/platforms/windows-package-identity";
 
 /**
  * The check and download are platform neutral; this adapter names the update target and the
- * update folder, and supplies the Authenticode check an app can require of the package.
+ * update folder, supplies the Authenticode check an app can require of the package, and refuses
+ * the update on an MSIX install, which only the package manager can replace.
  */
 export function initialize(environment: NativeEnvironment): UpdaterInstance {
+  const packageQueries = createPackageQueries();
   return createUpdater("windows", process.arch, environment, {
+    managedByStore: () => isManagedByStore(packageQueries),
     files: createPackageFiles(environment.dataRoot),
     signature: createAuthenticodeVerifier(),
   });
