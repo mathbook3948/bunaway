@@ -1266,6 +1266,7 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
 - [ ] 최소 지원 OS, CPU와 다른 Job 정책의 환경에서 장애 및 강제 종료 뒤 자원 정리를 검증한다.
 - [ ] 각 플랫폼의 supported/experimental/unsupported와 OS permission 값을 실제 구현에 맞춘다.
 - [ ] 지원 목록, CLI 진단, 문서와 배포 산출물을 같은 릴리스로 갱신한다.
+  진행: `bunaway doctor`가 선언한 채널에 따라 Inno Setup `ISCC.exe`와 `signtool.exe` 설치 여부를 검사한다.
 - [ ] 플랫폼별 설치 패키지 형식과 배포 채널을 확정하고 [PRD](./PRD.md)의 9절 출시 기준 및
   [플랫폼 지원 표](./platform-support/README.md)의 패키지와 출시 검증에 증거를 연결한다. [T-distribute-live]를 참고한다.
   Windows EXE/MSI/MSIX, macOS app/DMG/PKG, Linux deb/rpm/AppImage 등의 채택 또는 제외를 기록하고,

@@ -21,6 +21,12 @@ bunaway doctor [directory]
 | Windows 도구 | PATH의 tar |
 | Windows WebView2 | WebView2 Evergreen 설치 여부 |
 | macOS 도구 | PATH의 codesign |
+| distribution/ISCC.exe | Windows에서 `win-direct` 또는 `win-store-unpackaged` 채널을 선언했을 때 Inno Setup 6 설치 여부 |
+| distribution/signtool.exe | 위 채널에서 `signing`이 유효하거나 `webView2`가 `offline`일 때 Windows SDK `signtool.exe` 설치 여부 |
+
+`distribution/` 항목은 `bundle.channels`를 선언한 앱에만 나타납니다. `package`가 쓰는 탐색 함수를 그대로 써서 도구가 있는지만 확인하며,
+도구를 실행하지 않고 서명 인증서나 비밀번호 환경 변수도 읽지 않습니다. `bundle`이 없거나 필요한 채널이 없으면 항목이 늘지 않아 출력이 이전과 같습니다.
+macOS는 이 항목을 검사하지 않습니다.
 
 외부 UI 개발 서버를 연결한 앱은 웹 프로덕션 빌드 결과가 아직 없어도 개발 환경을 검사할 수 있습니다.
 HMR은 개발 서버를 실행해 확인하고, 네이티브 패키지는 build 명령으로 만듭니다.
@@ -30,6 +36,8 @@ HMR은 개발 서버를 실행해 확인하고, 네이티브 패키지는 build 
 Bun 버전은 프로젝트가 요구하는 버전으로 맞춥니다.
 Windows에는 기본 제공 tar와 WebView2, macOS에는 codesign과 GUI 세션이 필요합니다. C 컴파일러는 필요하지 않습니다.
 현재 지원 대상은 Windows x64와 macOS arm64입니다.
-배포할 때는 doctor 검사와 별도로 서명과 설치, 배포 동작을 확인하세요.
+`distribution/` 항목이 FAIL이면 종료 코드도 1이며, 개발 도구 항목과 같게 취급합니다. 이름의 `distribution/` 접두어로 구분하세요.
+Inno Setup 6.3 이상과 Windows 10/11 SDK의 서명 도구를 설치한 뒤 다시 실행합니다. doctor는 도구의 존재만 확인하므로
+서명 결과와 설치 동작은 `package` 산출물로 따로 확인하세요.
 
 [개발 환경](/start/prerequisites/), [문제 해결](/reference/troubleshooting/)
