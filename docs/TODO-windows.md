@@ -401,8 +401,10 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] `revealFile`로 Explorer에서 파일을 선택해 표시한다. `opener.revealFile` 권한과 유효한 절대 파일 경로를 요구한다.
   두 작업은 Unicode와 공백을 보존하며 파일 소실, 접근 거부와 OS 요청 실패를 반환한다.
   성공은 요청 접수이며 실제 앱 실행이나 Explorer 선택 완료를 뜻하지 않는다.
-  현재 파일 검사와 셸 요청은 I/O Worker에서 실행한다. 기록된 Windows STA와 compiled EXE
+  현재 파일 검사와 셸 요청은 Worker에서 실행한다. 2026-10-10 기록의 Windows STA와 compiled EXE
   실행 결과는 초기 UI Worker 구현의 근거이며, 이관 후 구현의 실행 근거로 확대하지 않는다.
+  이관 후 구현의 compiled EXE 파일 열기와 Explorer 선택은 windows-native 잡이 실행하며
+  [CI 연결 기록](./architecture/windows-bun-results.md#2026-10-27-opener-파일-열기와-explorer-선택의-ci-연결)에 있다.
   계약 검사와 초기 실행 결과, 이관 후 검증 범위는
   [실행 기록](./architecture/windows-bun-results.md#2026-10-10-opener-파일-작업)에 구분한다.
 - [x] `openFileWith`와 `openUrlWith`로 지정한 절대 `.exe` 앱에 파일과 HTTP/HTTPS URL 하나를 전달한다. 작업별 권한과 앱 및 파일 검사, Windows argv 인코딩을 제공하고 Explorer에 실행을 위임한다. 기본 연결은 변경하지 않는다. 실제 Windows 회귀는 CI의 `mise run host:windows`에서 수행하며 앱 표시와 수동 검증 완료를 뜻하지 않는다.
