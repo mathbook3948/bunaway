@@ -124,7 +124,8 @@ test.skipIf(process.platform !== "win32")(
       BUNAWAY_FIXTURE_DATA: resolve(root, "data"),
       BUNAWAY_FIXTURE_RELEASE: release,
     });
-    const timer = killAfter(app, "nativeFixture");
+    // Shorter than the test timeout, so a stalled app is killed before bun fails the test.
+    const timer = killAfter(app, "childStep");
     // Nothing reads stderr until the end, so collect it from the start to keep the pipe drained.
     const stderr = new Response(app.stderr).text();
     try {
