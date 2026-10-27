@@ -6,10 +6,11 @@ import {
   readFile,
   realpath,
   rm,
+  rmdir,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { findWindowsKitTool } from "#packaging/channels/windows/common";
 import { renderAppxManifest } from "#packaging/channels/windows/msix";
 import { deadline, waitFor } from "../fixtures/deadlines.ts";
@@ -262,6 +263,8 @@ async function measureVariant(
       recursive: true,
       force: true,
     });
+    // Leave no pre-existing parent behind, so the packaged run starts from a clean profile.
+    await rmdir(dirname(folder)).catch(() => undefined);
   }
 
   await writeFile(join(stage, "logo.png"), Buffer.from(LOGO, "base64"));

@@ -4,11 +4,8 @@ import type { NativeEnvironment } from "@bunaway/plugin";
 import { localAppData } from "#native/windows/bun/config";
 import { openRequest } from "#native/windows/bun/desktop";
 import { parseLaunchArguments } from "#native/windows/bun/instance";
-import { createUpdater } from "#plugins/updater/src/adapter";
-import {
-  createPackageQueries,
-  isManagedByStore,
-} from "#plugins/updater/src/platforms/windows-package-identity";
+import { initialize as initializeUpdater } from "#plugins/updater/src/platforms/windows";
+import { createPackageQueries } from "#plugins/updater/src/platforms/windows-package-identity";
 
 /**
  * Compiled with `define` values from tests/packaging/windows-msix-probe.test.ts. It has no window:
@@ -74,10 +71,7 @@ async function updateCheck() {
       },
     },
   };
-  const updater = createUpdater("windows", process.arch, environment, {
-    managedByStore: () =>
-      isManagedByStore(createPackageQueries(process.execPath)),
-  });
+  const updater = initializeUpdater(environment);
   try {
     await updater.check();
     return {
