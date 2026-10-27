@@ -117,7 +117,8 @@ uiautomationcore.dll은 첫 조회 때 로드합니다. 이 DLL을 로드하거�
 이 조회만 `UNSUPPORTED`이고 `getPreferences()`와 테마 API는 계속 동작합니다. 호스트 종료 뒤 호출은 `CANCELLED`입니다.
 
 UI Automation 클라이언트 연결 변화는 연결과 해제를 모두 알리는 OS 알림이 없고 폴링은 상시 비용을 지며 주기 사이의 변화를 놓치므로
-전용 이벤트를 제공하지 않습니다([ADR 0118](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0118-uia-client-connection-change-event.md)). `screenReaderEnabled`의 변화는 `appearance.changed`로 구독할 수 있으며, 연결 상태는 필요한 시점에 다시 조회합니다.
+전용 이벤트를 제공하지 않습니다([ADR 0118](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0118-uia-client-connection-change-event.md)).
+`screenReaderEnabled`의 변화는 `appearance.changed`로 구독할 수 있으며, 연결 상태는 필요한 시점에 다시 조회합니다.
 실제 스크린 리더 연결 시의 값은 보조 기술이 있는 대화형 세션에서 수동으로 검증해야 하며, 자동 검증은 값의 타입만 확인합니다.
 
 ## Windows 앱 테마
