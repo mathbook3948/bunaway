@@ -629,7 +629,7 @@ macOS fixture용 symlink를 만들 때 발생한 EPERM이다. 이전 CLI 시간 
 - 결과: 세 잡 모두 `PASS Windows public window API: ...` 줄을 포함해 통과했고,
   `WebView cleanup timed out`은 나오지 않았다.
 - 정리 시간: run 40256783654의 로그에 찍힌 `view-cleaned` 세 줄은 추적한 WebView 프로세스
-  핸들 5개, 5개, 4개를 닫은 뒤 2~4ms 안에 정리 완료를 기록했다. 다른 두 run에서는 이 값을 확인하지 않았다.
+  핸들 5개, 5개, 4개를 정리했고, 닫기 요청부터 정리 완료까지 `elapsedMs`는 308ms, 282ms, 477ms였다. 다른 두 run에서는 이 값을 확인하지 않았다.
 - 판단: 이 세 run에서는 재현되지 않았다. 10-10 이후 `webview.ts`와 창 API 시나리오가 여러 번 바뀌어
   비재현이 코드 변경 덕인지 환경 차이인지는 규명하지 못했다. 그래서 정리 순서와 진단 필드는
   바꾸지 않았고 기한도 늘리지 않았다. 다시 발생하면 기존 오류 메시지의 `browserExited`와
