@@ -132,20 +132,21 @@ async function trashInFreshProcess(
 async function expectRefused(
   label: string,
   configure: (volume: string, run: () => Promise<void>) => Promise<void>,
+  size = 16,
 ): Promise<void> {
   const root = resolve("build", `windows-trash-limits-${crypto.randomUUID()}`);
   await mkdir(root, {
     recursive: true,
   });
   const sample = join(root, `${label}.bin`);
-  await writeFile(sample, Buffer.alloc(16, 7));
+  await writeFile(sample, Buffer.alloc(size, 7));
   try {
     let outcome = "";
     await configure(volumeGuid(sample), async () => {
       outcome = await trashInFreshProcess(root, sample);
     });
     expect(outcome).toBe("UNSUPPORTED");
-    expect((await stat(sample)).size).toBe(16);
+    expect((await stat(sample)).size).toBe(size);
     expect(await recycledItem(sample)).toBeUndefined();
   } finally {
     // If the refusal regressed and the file reached the bin, remove only this test's entry.
@@ -197,5 +198,90 @@ test.skipIf(process.platform !== "win32")(
         run,
       );
     });
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
+  "Windows trashFile refuses and keeps a file larger than the Recycle Bin capacity",
+  async () => {
+    // MaxCapacity is in megabytes. A 3 MB file cannot fit into a 1 MB bin, which is the case
+    // where the shell would otherwise ask whether to delete the file permanently.
+    await expectRefused(
+      "over-capacity",
+      async (volume, run) => {
+        await withDword(
+          {
+            key: `${BIN_VOLUME_KEY}\\${volume}`,
+            name: "MaxCapacity",
+          },
+          1,
+          run,
+        );
+      },
+      3 * 1024 * 1024,
+    );
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
+  "Windows trashFile refuses and keeps the file when a policy sets the Recycle Bin size",
+  async () => {
+    // The policy overrides every volume capacity and trashFile does not evaluate it.
+    await expectRefused("policy-size", async (_volume, run) => {
+      await withDword(
+        {
+          key: POLICY_KEY,
+          name: "RecycleBinSize",
+        },
+        1,
+        run,
+      );
+    });
+  },
+);
+
+test.skipIf(process.platform !== "win32")(
+  "Windows trashFile still recycles a file that fits the Recycle Bin capacity",
+  async () => {
+    // Same 1 MB capacity as the refusal above, so a unit mistake in the comparison shows here.
+    const root = resolve(
+      "build",
+      `windows-trash-limits-${crypto.randomUUID()}`,
+    );
+    await mkdir(root, {
+      recursive: true,
+    });
+    const sample = join(root, "fits.bin");
+    await writeFile(sample, Buffer.alloc(512 * 1024, 7));
+    try {
+      let outcome = "";
+      await withDword(
+        {
+          key: `${BIN_VOLUME_KEY}\\${volumeGuid(sample)}`,
+          name: "MaxCapacity",
+        },
+        1,
+        async () => {
+          outcome = await trashInFreshProcess(root, sample);
+        },
+      );
+      expect(outcome).toBe("ok");
+      expect(await Bun.file(sample).exists()).toBe(false);
+      expect(await recycledItem(sample)).toBeDefined();
+    } finally {
+      const recycled = await recycledItem(sample);
+      if (recycled) {
+        await rm(recycled.data, {
+          force: true,
+        });
+        await rm(recycled.info, {
+          force: true,
+        });
+      }
+      await rm(root, {
+        recursive: true,
+        force: true,
+      });
+    }
   },
 );

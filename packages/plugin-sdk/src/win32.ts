@@ -176,6 +176,22 @@ export const KERNEL32 = {
     args: [],
     returns: "u64",
   },
+  GetVolumePathNameW: {
+    args: [
+      "ptr",
+      "ptr",
+      "u32",
+    ],
+    returns: "i32",
+  },
+  GetVolumeNameForVolumeMountPointW: {
+    args: [
+      "ptr",
+      "ptr",
+      "u32",
+    ],
+    returns: "i32",
+  },
   GetDriveTypeW: {
     args: [
       "ptr",

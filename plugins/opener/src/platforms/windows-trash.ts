@@ -7,12 +7,31 @@ import {
   read,
   toArrayBuffer,
 } from "bun:ffi";
+import { realpathSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { BunawayError } from "@bunaway/plugin";
-import { KERNEL32, OLE32, pick, SHELL32 } from "@bunaway/plugin/win32";
+import {
+  ADVAPI32,
+  KERNEL32,
+  OLE32,
+  pick,
+  SHELL32,
+  wide,
+} from "@bunaway/plugin/win32";
 import { guid } from "#opener/platforms/windows-com";
 
 const CLSCTX_INPROC_SERVER = 1;
 const DRIVE_FIXED = 3;
+const HKEY_CURRENT_USER = 0xffffffff80000001n;
+const RRF_RT_REG_DWORD = 0x10;
+const RRF_SUBKEY_WOW6464KEY = 0x10000;
+const BIN_VOLUME_KEY =
+  "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\BitBucket\\Volume";
+const POLICY_KEY =
+  "Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer";
+const BYTES_PER_MEGABYTE = 1024 * 1024;
+/** Characters of a `\\?\Volume{GUID}\` name plus its terminator. */
+const VOLUME_NAME_UNITS = 64;
 const E_ABORT = -2147467260;
 const E_NOINTERFACE = -2147467262;
 const E_POINTER = -2147467261;
@@ -337,6 +356,139 @@ export function validateTrashDrive(path: string): void {
   }
 }
 
+/** Win32 errors of a registry value that is absent, which leaves the decision to the shell. */
+const REGISTRY_VALUE_MISSING = [
+  2,
+  3,
+];
+const MAX_VOLUME_PATH_UNITS = 32768;
+
+/**
+ * Resolve links in the folders above the file, which decide the volume the shell recycles to.
+ * The last component is kept as it is, because a link itself is what gets recycled.
+ */
+function resolveParentLinks(path: string): string {
+  try {
+    return join(realpathSync(dirname(path)), basename(path));
+  } catch {
+    throw cannotJudgeCapacity("The folder of the file could not be resolved.");
+  }
+}
+
+function cannotJudgeCapacity(message: string): BunawayError {
+  return new BunawayError({
+    code: "UNSUPPORTED",
+    message,
+  });
+}
+
+/**
+ * Refuse a file larger than the Recycle Bin capacity of its volume. The shell deletes such a
+ * file permanently and otherwise asks for confirmation through a prompt nothing answers, so
+ * the call must end before the shell is asked. The capacity is the per-user `MaxCapacity`
+ * (megabytes) of the volume that holds the file, found through its mount point so a folder
+ * mount is judged by its own volume. A volume without that value is left to the shell. When
+ * the capacity cannot be read, or the `RecycleBinSize` policy overrides it, the call is
+ * refused instead of guessed, because a wrong guess deletes the file or waits forever.
+ */
+export function assertFitsRecycleBin(path: string, size: number): void {
+  const kernel = dlopen("kernel32.dll", {
+    ...pick(
+      KERNEL32,
+      "GetVolumePathNameW",
+      "GetVolumeNameForVolumeMountPointW",
+    ),
+  });
+  try {
+    // Stage 1: the mount point of the volume that holds the file, then that volume's GUID.
+    const mountPoint = Buffer.alloc(MAX_VOLUME_PATH_UNITS * 2);
+    const resolvedPath = wide(resolveParentLinks(path));
+    if (
+      !kernel.symbols.GetVolumePathNameW(
+        ptr(resolvedPath),
+        ptr(mountPoint),
+        MAX_VOLUME_PATH_UNITS,
+      )
+    ) {
+      throw cannotJudgeCapacity("The volume of the file could not be found.");
+    }
+    const volume = Buffer.alloc(VOLUME_NAME_UNITS * 2);
+    // A substituted drive has no volume of its own to read the capacity from.
+    if (
+      !kernel.symbols.GetVolumeNameForVolumeMountPointW(
+        ptr(mountPoint),
+        ptr(volume),
+        VOLUME_NAME_UNITS,
+      )
+    ) {
+      throw cannotJudgeCapacity(
+        "The volume of the file has no Recycle Bin settings.",
+      );
+    }
+    const guidText = /\{[0-9a-f-]+\}/i.exec(volume.toString("utf16le"))?.[0];
+    if (!guidText) {
+      throw cannotJudgeCapacity(
+        "The volume of the file has no Recycle Bin settings.",
+      );
+    }
+    // Stage 2: the policy size, which overrides every volume, then the volume capacity.
+    const advapi = dlopen("advapi32.dll", {
+      ...pick(ADVAPI32, "RegGetValueW"),
+    });
+    try {
+      const readDword = (subkey: string, name: string): number | undefined => {
+        const data = new Uint32Array(1);
+        const length = new Uint32Array([
+          4,
+        ]);
+        // Own both buffers until the call returns; a pointer alone does not keep them alive.
+        const subkeyText = wide(subkey);
+        const nameText = wide(name);
+        const status = advapi.symbols.RegGetValueW(
+          HKEY_CURRENT_USER,
+          ptr(subkeyText),
+          ptr(nameText),
+          RRF_RT_REG_DWORD | RRF_SUBKEY_WOW6464KEY,
+          null,
+          ptr(data),
+          ptr(length),
+        );
+        if (status === 0) {
+          return data[0];
+        }
+        if (REGISTRY_VALUE_MISSING.includes(status)) {
+          return undefined;
+        }
+        // Access denied or a value of another type: the capacity is unknown, not absent.
+        throw cannotJudgeCapacity(
+          `The Recycle Bin capacity could not be read (Win32 ${status}).`,
+        );
+      };
+      if (readDword(POLICY_KEY, "RecycleBinSize") !== undefined) {
+        throw cannotJudgeCapacity(
+          "A policy sets the Recycle Bin size, which trashFile does not evaluate.",
+        );
+      }
+      const capacityMegabytes = readDword(
+        `${BIN_VOLUME_KEY}\\${guidText}`,
+        "MaxCapacity",
+      );
+      if (
+        capacityMegabytes !== undefined &&
+        size > capacityMegabytes * BYTES_PER_MEGABYTE
+      ) {
+        throw cannotJudgeCapacity(
+          "The file is larger than the Recycle Bin capacity.",
+        );
+      }
+    } finally {
+      advapi.close();
+    }
+  } finally {
+    kernel.close();
+  }
+}
+
 /**
  * Recycle a checked file on the opener's initialized I/O STA. Own and release every
  * interface, callback and binding within this synchronous operation, before COM teardown.
@@ -412,8 +564,13 @@ export function trashWindowsFile(path: string): void {
       ),
     );
     // Ask Windows to recycle, suppress companion deletion and copy hooks, and retain
-    // permanent-delete warnings. Missing recycle flags are vetoed by our sink; a
-    // recycled-item result is also required. Do not add a framework delete fallback.
+    // permanent-delete warnings. Without FOF_WANTNUKEWARNING a file over the bin capacity
+    // is deleted permanently and silently, because the sink sees the recycle intent and
+    // only the result shows that nothing was recycled. A file over a known capacity is
+    // refused before this call, but a volume without a MaxCapacity value is left to the
+    // shell, where this warning is the only protection. Never remove the flag. Missing recycle flags are
+    // vetoed by our sink; a recycled-item result is also required. Do not add a framework
+    // delete fallback.
     checkResult(
       method(operation, SLOT.setFlags, [
         "u32",

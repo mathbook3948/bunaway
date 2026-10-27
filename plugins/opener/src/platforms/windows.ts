@@ -37,6 +37,7 @@ import { createSchemeStore } from "#opener/platforms/windows-scheme-registry";
 import { createShell } from "#opener/platforms/windows-shell";
 import { createShortcuts } from "#opener/platforms/windows-shortcut";
 import {
+  assertFitsRecycleBin,
   trashWindowsFile,
   validateTrashDrive,
 } from "#opener/platforms/windows-trash";
@@ -233,7 +234,8 @@ export function trashFile(state: State, path: string): null {
   active(state);
   const selected = normalizeFilePath(path);
   validateTrashDrive(selected);
-  assertExistingFile(selected);
+  const { size } = assertExistingFile(selected);
+  assertFitsRecycleBin(selected, size);
   trashWindowsFile(selected);
   return null;
 }
