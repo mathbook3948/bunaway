@@ -275,11 +275,7 @@ async function measureVariant(
       publisherIdentity: `CN=Bunaway MSIX Probe ${suffix}`,
       version: "1.0.0.0",
       minVersion: "10.0.18362.0",
-      ...(variant.unvirtualizedData
-        ? {
-            maxVersionTested: "10.0.26100.0",
-          }
-        : {}),
+      maxVersionTested: "10.0.26100.0",
       unvirtualizedData: variant.unvirtualizedData,
       capabilities: [],
       associations: {
