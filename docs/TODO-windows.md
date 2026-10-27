@@ -431,6 +431,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
 - [x] URL scheme을 등록, 해제하고 기본 처리 앱 여부를 조회한다.
   설치의 opt-in 처리 후보 등록과 제거는 구현했다. `opener.registerUrlScheme`, `unregisterUrlScheme`, `isUrlSchemeRegistered`는 `HKCU\Software\Classes`에 이 앱의 소유 표식과 명령을 쓰고, 조회는 그 등록이 온전한지만 읽는다. 사용자의 기본 앱 선택을 반영한 실제 처리 앱은 `getUrlHandler`가 알려 준다.
 - [x] 파일 확장자, MIME, 표시 이름과 앱 EXE의 파일 아이콘을 설치에 등록한다.
+  실행 중 앱이 확장자를 등록하는 런타임 API는 제공하지 않는다([ADR 0093](./decisions/0093-runtime-file-association-registration.md)).
 - [x] 설치와 제거에서 앱이 소유한 처리 후보를 정리하고 기존 기본 앱 설정을 존중한다.
   Inno `associations` 작업은 새 설치에서 선택하지 않는다. 업데이트의 실행 파일명 변경,
   선언 제거와 선택 해제는 이전 후보를 정리한다. 기본값과 UserChoice는 쓰지 않는다.
