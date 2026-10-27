@@ -169,9 +169,15 @@ async function execute(
   cwd: string,
   limit: DeadlineName,
   scale = 1,
+  env?: Record<string, string | undefined>,
 ): Promise<Outcome> {
   const child = Bun.spawn(command, {
     cwd,
+    ...(env === undefined
+      ? {}
+      : {
+          env,
+        }),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -497,8 +503,8 @@ async function webDevServer(
  * Builds the generated app into a compiled EXE with `bunaway build`, then starts it from the
  * package directory. The probe appended to the UI entry (see `COMPILED_PROBE`) closes the window
  * after a backend round trip, which makes the EXE exit with code 0. A launch that outlives its
- * deadline is killed with its process tree. The message the probe saved is removed from the user
- * data directory the app wrote it to.
+ * deadline is killed with its process tree. The app runs with its own `LOCALAPPDATA`, so the
+ * message the probe saves never reaches the machine's real app data.
  */
 async function compiledExe(app: string, appId: string): Promise<Outcome> {
   const entry = UI_ENTRIES.map((name) => resolve(app, name)).find((path) =>
@@ -531,23 +537,21 @@ async function compiledExe(app: string, appId: string): Promise<Outcome> {
     existsSync(resolve(packageRoot, "manifest.json")),
     "the package has no manifest.json",
   );
-  const userData = resolve(process.env.LOCALAPPDATA ?? "", "bunaway", appId);
-  try {
-    return await execute(
-      [
-        executable,
-      ],
-      home,
-      "packagedAudit",
-    );
-  } finally {
-    await rm(userData, {
-      recursive: true,
-      force: true,
-      maxRetries: REMOVE_RETRIES,
-      retryDelay: REMOVE_RETRY_DELAY_MS,
-    });
-  }
+  // The app writes its user data under LOCALAPPDATA; a directory inside this run keeps it away
+  // from a developer's real app data and goes away with the run's directory.
+  return execute(
+    [
+      executable,
+    ],
+    home,
+    "packagedAudit",
+    1,
+    {
+      ...process.env,
+      BUN_OPTIONS: undefined,
+      LOCALAPPDATA: resolve(home, `local-app-data-${appId}`),
+    },
+  );
 }
 
 /** Runs every step for one template; a failed step that later steps depend on ends the sequence. */

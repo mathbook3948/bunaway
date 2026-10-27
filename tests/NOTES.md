@@ -1448,7 +1448,7 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 저장한 메시지를 `message.read`로 읽어 같을 때만 `window.close()`), 시험용 Bun 캐시를 시드한 뒤 `bun run build`(`bunaway build`)로
 `dist/windows-x64/<appId>.exe`를 만듭니다. EXE 크기와 `manifest.json` 존재를 확인한 다음 EXE를 실행해 종료 코드 0을 기다립니다.
 확인 코드가 백엔드를 거쳐야 창을 닫으므로 종료 코드 0은 컴파일된 EXE, 번들 백엔드와 UI 자산, 실제 호스트와 WebView2가
-시작해 UI 스크립트가 백엔드에 닿았다는 뜻입니다. 기한을 넘기면 프로세스 트리째 종료하고 실패로 기록하며, 앱이 사용자 데이터에 쓴 메시지는 단계 끝에서 지웁니다.
+시작해 UI 스크립트가 백엔드에 닿았다는 뜻입니다. 기한을 넘기면 프로세스 트리째 종료하고 실패로 기록하며, EXE는 이 실행의 디렉터리를 가리키는 `LOCALAPPDATA`로 시작하므로 확인 메시지가 실제 앱 데이터에 쓰이지 않습니다.
 한 단계가 실패해도 나머지 템플릿을 계속 돌리고 마지막에 실패 단계를 모아 실패하며, 단계별 결과는
 `build/windows-templates-results.json`에 기록합니다. HMR 갱신 뒤의 화면 DOM, 설치 파일 생성과 설치 파일 실행, 화면에
 그려진 내용은 확인하지 않습니다. Windows native 실행기에 포함합니다.
