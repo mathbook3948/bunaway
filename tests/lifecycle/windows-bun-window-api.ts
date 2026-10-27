@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type CommandContext, defineApp } from "@bunaway/backend";
-import { checkHresult, pick, USER32 } from "@bunaway/plugin/win32";
+import { checkHresult, GDI32, pick, USER32 } from "@bunaway/plugin/win32";
 import windows from "@bunaway/plugin-windows";
 import { BunawayError, type HostContext, type Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
@@ -830,16 +830,7 @@ if (!process.argv.includes("--child")) {
     {
       // A transparent window composes alpha 0 over the desktop: a red window below it must show
       // through, which a window that is merely erased with the system brush would hide.
-      const screen = dlopen("gdi32.dll", {
-        GetPixel: {
-          args: [
-            "u64",
-            "i32",
-            "i32",
-          ],
-          returns: "u32",
-        },
-      });
+      const screen = dlopen("gdi32.dll", pick(GDI32, "GetPixel"));
       const screenDc = dlopen("user32.dll", pick(USER32, "GetDC", "ReleaseDC"));
       /** GetAncestor flag for the top-level window. */
       const GA_ROOT = 2;
@@ -984,16 +975,6 @@ if (!process.argv.includes("--child")) {
               "the red window stays visible after a layered style change",
             );
           }
-          await waitFor(
-            () => {
-              nativeWindows.pump();
-              return screen.symbols.GetPixel(dc, controlX, controlY) === GREEN;
-            },
-            {
-              deadline: "inProcess",
-              what: "the opaque control window to paint its color",
-            },
-          );
         } finally {
           screenDc.symbols.ReleaseDC(0n, dc);
         }

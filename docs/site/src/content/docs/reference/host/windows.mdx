@@ -512,9 +512,9 @@ await windows.close();
 | `windows.hasRoundedCorners` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 요청한 모서리 선호. 새 창은 `true` |
 | `windows.setIcon` | `{ ico: string \| null }` | `Promise<null>`. Windows에서 제목 표시줄, Alt+Tab, 작업 표시줄의 창 아이콘을 base64 ICO로 바꾸고 `null`이면 앱 기본 아이콘으로 되돌립니다. 자세한 규칙은 [창 아이콘](#창-아이콘) |
 | `windows.hasCustomIcon` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. `setIcon`으로 지정한 아이콘이 적용 중인지 조회합니다 |
-| `windows.setBackgroundMaterial` | `{ material: "auto" \| "none" \| "mica" \| "acrylic" \| "tabbed" }` | `Promise<null>`. 창 프레임 뒤에 그릴 시스템 배경 material을 요청. Windows 11 22H2(빌드 22621) 미만에서는 DWM 호출을 건너뛰고 성공 |
+| `windows.setBackgroundMaterial` | `{ material: "auto" \| "none" \| "mica" \| "acrylic" \| "tabbed" }` | `Promise<null>`. 창 프레임 뒤에 그릴 시스템 배경 material을 요청. Windows 11 22H2(빌드 22621) 미만에서는 DWM 호출을 건너뛰고 성공. `transparent: true` 창은 `auto`와 `none` 외에 `UNSUPPORTED` |
 | `windows.getBackgroundMaterial` | 인자 없음. Host operation 입력은 `null` | `Promise<"auto" \| "none" \| "mica" \| "acrylic" \| "tabbed">`. 호스트가 기억한 요청 material(Electron에 없는 확장). 새 창은 `"auto"` |
-| `windows.setBackgroundColor` | `{ color: string }` | `Promise<null>`. 창과 WebView 문서의 불투명 배경색을 `#RGB` 또는 `#RRGGBB`로 설정. 알파가 있는 형식은 `INVALID_ARGUMENT` |
+| `windows.setBackgroundColor` | `{ color: string }` | `Promise<null>`. 창과 WebView 문서의 불투명 배경색을 `#RGB` 또는 `#RRGGBB`로 설정. 알파가 있는 형식은 `INVALID_ARGUMENT`, `transparent: true` 창은 `UNSUPPORTED` |
 | `windows.getBackgroundColor` | 인자 없음. Host operation 입력은 `null` | `Promise<string \| null>`. 선언, 생성 옵션 또는 `setBackgroundColor`로 정한 소문자 `#rrggbb`. 정하지 않았으면 `null` |
 | `windows.setIgnoreMouseEvents` | `{ ignore: boolean }` | `Promise<null>`. `true`이면 WebView를 포함한 창 전체가 마우스 입력을 받지 않고 아래 창으로 통과 |
 | `windows.isIgnoreMouseEvents` | 인자 없음. Host operation 입력은 `null` | `Promise<boolean>`. 이 창이 마우스 입력을 무시하는지 조회. 새 창은 `false` |
