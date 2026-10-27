@@ -864,6 +864,27 @@ export const windowDocumentFaviconChangedSchema = {
   ],
   additionalProperties: false,
 } as const;
+/**
+ * The window's page entered or left HTML fullscreen, for example through
+ * `element.requestFullscreen()` (Windows only). `fullscreen` is whether the page now has a
+ * fullscreen element. A change is also reported as `windows.changed` when it moves the window.
+ */
+export const windowHtmlFullscreenChangedSchema = {
+  type: "object",
+  properties: {
+    windowId: eventIdentity,
+    viewId: eventIdentity,
+    fullscreen: {
+      type: "boolean",
+    },
+  },
+  required: [
+    "windowId",
+    "viewId",
+    "fullscreen",
+  ],
+  additionalProperties: false,
+} as const;
 /** Ordered native transitions and preparation snapshots, subject to view event policy. */
 export const windowEvents = {
   "windows.appCommand": windowAppCommandSchema,
@@ -872,6 +893,7 @@ export const windowEvents = {
   "windows.closeRequested": windowCloseRequestedSchema,
   "windows.documentTitleChanged": windowDocumentTitleChangedSchema,
   "windows.documentFaviconChanged": windowDocumentFaviconChangedSchema,
+  "windows.htmlFullscreenChanged": windowHtmlFullscreenChangedSchema,
   "windows.monitorsChanged": monitorChangeSchema,
   "windows.readiness": windowReadinessSchema,
   "windows.lifecycle": windowLifecycleSchema,

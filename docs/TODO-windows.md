@@ -672,7 +672,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [x] 결정 완료: zoom 범위(origin별 공유 또는 WebView별 독립) 설정은 제공하지 않는다. zoom factor는 WebView 컨트롤러의 값이다. Windows CI는 허용 origin이 하나일 때 탐색, history 이동과 reload 뒤 값이 유지되는 것을 확인하고, origin 사이 이동은 WebView2 동작을 따른다. [ADR 0067](./decisions/0067-webview-zoom-scope.md).
 - [x] 결정 완료: 브라우저 기본 JavaScript 대화상자, context menu와 zoom 단축키를 켜는 설정은 제공하지 않고 호스트의 고정값(핀치 zoom 제외, 나머지는 끔)을 계약으로 한다. [ADR 0064](./decisions/0064-webview-browser-default-ui.md).
 - [x] 결정 완료: autofill, 비밀번호 자동 저장은 끈 채로 고정하고 HTTP 인증 설정과 이벤트는 제공하지 않는다. [ADR 0064](./decisions/0064-webview-browser-default-ui.md).
-- [ ] HTML 전체화면과 네이티브 창 전체화면의 연동 및 이벤트를 제공한다.
+- [x] HTML 전체화면은 창 전체화면과 연동하고 `windows.htmlFullscreenChanged`로 알린다. 페이지가 전체화면을 시작하면 창이 전체화면이 되고 끝나면 이전 상태로 돌아간다. 창을 전체화면에서 나오게 해도 페이지의 전체화면 요소는 끝나지 않는다.
 
 ## 15. WebView 탐색, 편집, 스크립트와 입력
 

@@ -3195,6 +3195,11 @@ export class Windows {
     return this.fullscreen.has(window);
   }
 
+  /** Identity of the window's current fullscreen stay; each entry creates a new record. */
+  fullscreenSession(window: bigint): object | undefined {
+    return this.fullscreen.get(window);
+  }
+
   private monitorBounds(display: bigint) {
     const monitor = Buffer.alloc(MONITORINFO_SIZE);
     monitor.writeUInt32LE(MONITORINFO_SIZE);
