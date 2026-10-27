@@ -250,7 +250,7 @@ function applyWebContent(scope: ActionScope, call: WindowCall): ActionResult {
       webview().navigate(call.payload.url);
       return null;
     case "windows.reloadWebView":
-      webview().reload();
+      webview().reload(call.payload.ignoreCache === true);
       return null;
     case "windows.stopWebView":
       webview().stop();
