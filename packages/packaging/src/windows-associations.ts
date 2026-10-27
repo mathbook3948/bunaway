@@ -16,7 +16,11 @@ function object(value: unknown, allowed: string[]): Record<string, unknown> {
   return result;
 }
 
-/** Rejects control characters other than TAB, DEL, lone surrogates, U+FFFE and U+FFFF, which break generated XML or installer scripts. */
+/**
+ * Reports C0 control characters (except TAB) and DEL, which are kept out of
+ * installer scripts and manifests, plus lone surrogates, U+FFFE and U+FFFF,
+ * which are not valid XML 1.0 text.
+ */
 function hasInvalidXmlChar(value: string): boolean {
   return [
     ...value,
