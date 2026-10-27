@@ -1517,6 +1517,25 @@ client.listen("windows.thumbnailToolbarClicked", ({ payload }) => {
 CI는 실제 `ITaskbarList3`에 개수를 바꿔 가며 연속 호출해도 오류가 없는 것, 입력 검증과 오류 코드, 잘못된 ICO를 거절해도 기존 버튼이 유지되는 것, 최상위 HWND에 합성한 `WM_COMMAND`가 등록한 버튼 id로만 바뀌는 것을 확인합니다. 호스트가 추가와 갱신 중 어느 호출을 고르는지와 아이콘 핸들 해제는 CI에서 관찰하지 않습니다. 사람이 작업 표시줄 썸네일에서 직접 누르는 동작, Explorer를 실제로 재시작한 뒤의 재적용과 썸네일에 그려지는 모양은 자동 검증에 포함되지 않습니다.
 처음 적용할 때는 [ITaskbarList3::ThumbBarAddButtons](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-thumbbaraddbuttons), 이후는 [ThumbBarUpdateButtons](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-thumbbarupdatebuttons)를 부르며, 요청 처리가 끝나면 성공이고 실제 표시는 Windows가 결정합니다. 버튼을 한 번도 표시한 적 없는 창에 빈 목록을 주면 셸을 호출하지 않고 성공합니다.
 
+## WebView2에서 확인한 Web API
+
+Windows 화면은 WebView2(Chromium) 위에서 동작하므로 번들 Chromium을 쓰는 Electron과 같은 엔진 계열이고, WebView2 런타임 버전은 사용자 PC의 Evergreen 런타임을 따릅니다. 아래 표는 CI의 `windows-native` 잡이 `https://app.bunaway.local` 자산 페이지에서 직접 실행해 얻은 결과입니다. 호스트는 Web API를 따로 켜거나 끄는 설정을 제공하지 않으므로 페이지가 쓰는 API는 WebView2가 제공하는 그대로입니다.
+
+| Web API | 확인한 방법 | 결과 |
+| --- | --- | --- |
+| `Worker` | 자산의 스크립트를 띄워 메시지를 주고받음 | 지원 |
+| `SharedWorker` | 같은 스크립트를 공유 워커로 띄워 메시지를 주고받음 | 지원 |
+| `BroadcastChannel` | 같은 이름의 채널 두 개 사이로 메시지 전달 | 지원 |
+| `WebSocket` | `ws://127.0.0.1` 소켓 생성(서버 없음) | 생성 가능, 연결은 거부됨 |
+| `RTCPeerConnection` | STUN 서버 없이 생성 | 지원 |
+| WebRTC 데이터 채널 | 한 페이지의 두 peer를 host candidate로 연결해 메시지 전달 | 지원 |
+| `WebGL`, `WebGL2` | 컨텍스트 생성 | 지원. CI 러너의 렌더러는 소프트웨어 렌더러(SwiftShader)였음 |
+| `ServiceWorker` | `/probe-sw.js` 등록과 활성화 | 지원(범위 `https://app.bunaway.local/`) |
+| `navigator.mediaDevices` | `enumerateDevices()` 호출 | 있음(러너에는 장치 0개) |
+| `getUserMedia({ video: true })` | 카메라 없는 러너에서 호출 | `NotFoundError`로 거부 |
+
+러너에서 확인하지 않은 것: GPU가 있는 PC의 WebGL 하드웨어 가속, 카메라와 마이크가 있는 PC의 `getUserMedia` 성공과 권한 요청 동작, 외부 네트워크를 거치는 WebRTC 연결과 WebSocket 통신. 위 시험의 필수 항목은 `Worker`, `SharedWorker`, `BroadcastChannel`, `WebSocket` 생성, `RTCPeerConnection` 생성이고 나머지는 관찰값으로만 기록합니다.
+
 ## 오류
 
 `PERMISSION_DENIED`는 대상 창 권한이 없거나 호스트가 정책상 호출을 거부한 경우입니다.
