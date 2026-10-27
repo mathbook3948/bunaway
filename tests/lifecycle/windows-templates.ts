@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { type DeadlineName, deadline, waitFor } from "../fixtures/deadlines.ts";
 
@@ -73,6 +73,10 @@ const OUTPUT_TAIL_CHARS = 4_000;
 /** Attempts and pause when removing a project whose files a stopped process still holds. */
 const REMOVE_RETRIES = 5;
 const REMOVE_RETRY_DELAY_MS = 500;
+/** Pause before the HMR edit is written again when the watcher has not reported it yet. */
+const HMR_EDIT_RETRY_MS = 1_000;
+/** How much of the received HMR messages a failure keeps. */
+const HMR_MESSAGES_TAIL_CHARS = 1_500;
 /** Pause between requests while the dev server starts. */
 const DEV_SERVER_POLL_MS = 250;
 
@@ -235,6 +239,22 @@ function freePort(): number {
 }
 
 /**
+ * Fetches a dev server URL within the toolchain deadline and returns its body, so a server that
+ * never answers cannot outlive the step. An error status throws with the start of the body.
+ */
+async function moduleText(url: string): Promise<string> {
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(deadline("toolchain")),
+  });
+  const body = await response.text();
+  assert(
+    response.ok,
+    `${url} answered ${response.status}: ${body.slice(0, 500)}`,
+  );
+  return body;
+}
+
+/**
  * Edits one source file of the running project and waits for the dev server to announce it on the
  * HMR WebSocket, then checks that the module the server serves now carries the edit. A browser
  * normally requests modules first, which registers them in the server's module graph, so the
@@ -254,9 +274,13 @@ async function verifyHmrEdit(
   assert(edit !== undefined, `no HMR edit is defined for ${template}`);
   const moduleUrl = `${origin}/${edit.file}`;
   // The client script carries the token the server requires on an HMR connection.
-  const client = await (await fetch(`${origin}/@vite/client`)).text();
+  const client = await moduleText(`${origin}/@vite/client`);
   const token = /wsToken\s*=\s*["']([^"']+)["']/.exec(client)?.[1];
-  const before = await (await fetch(moduleUrl)).text();
+  if (token === undefined) {
+    // Connecting without it is still tried; a refusal is then reported with this context.
+    console.log(`no HMR token found in the Vite client of ${template}`);
+  }
+  const before = await moduleText(moduleUrl);
   assert(
     !before.includes(HMR_EDIT_MARKER),
     `${edit.file} already has the marker`,
@@ -270,6 +294,13 @@ async function verifyHmrEdit(
   socket.addEventListener("message", (event) => {
     messages.push(String(event.data));
   });
+  // A refused upgrade or an early close would otherwise surface only as a connect timeout.
+  socket.addEventListener("error", () => {
+    messages.push("websocket error");
+  });
+  socket.addEventListener("close", (event) => {
+    messages.push(`websocket closed with code ${event.code}`);
+  });
   const serverExited = () =>
     server.exitCode !== null &&
     `the dev server exited with code ${server.exitCode} during the HMR check`;
@@ -280,29 +311,39 @@ async function verifyHmrEdit(
       intervalMs: DEV_SERVER_POLL_MS,
       failed: serverExited,
     });
-    await appendFile(resolve(app, edit.file), edit.appended);
+    // Only messages after the first write count; earlier ones (such as a dependency
+    // re-optimization reload) say nothing about the edit.
+    const sinceEdit = messages.length;
+    const original = await readFile(resolve(app, edit.file), "utf8");
     await waitFor(
-      () =>
-        messages.some(
-          (text) =>
-            text.includes('"type":"update"') ||
-            text.includes('"type":"full-reload"'),
-        ),
+      async () => {
+        // The file watcher may still be finishing its first scan when the edit lands and miss it,
+        // so the same edit is written again until a message arrives.
+        await writeFile(resolve(app, edit.file), original + edit.appended);
+        return messages
+          .slice(sinceEdit)
+          .some(
+            (text) =>
+              text.includes('"type":"update"') ||
+              text.includes('"type":"full-reload"'),
+          );
+      },
       {
         deadline: "toolchain",
         what: `an HMR update after editing ${edit.file}`,
-        intervalMs: DEV_SERVER_POLL_MS,
+        intervalMs: HMR_EDIT_RETRY_MS,
         failed: serverExited,
       },
     );
-    const after = await (await fetch(moduleUrl)).text();
+    const after = await moduleText(moduleUrl);
     assert(
       after.includes(HMR_EDIT_MARKER),
       `the served ${edit.file} does not contain the edit`,
     );
     return `HMR reported the edit of ${edit.file}`;
   } catch (error) {
-    const received = messages.join("\n").slice(-OUTPUT_TAIL_CHARS);
+    // Kept short so the step's output tail still holds the start of the error message.
+    const received = messages.join("\n").slice(-HMR_MESSAGES_TAIL_CHARS);
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}\nHMR messages:\n${received}`,
       {
