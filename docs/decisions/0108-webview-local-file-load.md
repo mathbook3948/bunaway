@@ -23,7 +23,7 @@ status: accepted
 
 1. 앱 창이 `file:` URL을 탐색 대상으로 로드하는 기능, 옵션, 권한을 추가하지 않는다. 현행 거부 동작을 유지한다.
 2. 로컬 UI는 번들 자산 경로로 제공한다. 외부 페이지가 필요하면 정책의 허용 origin 안에서 탐색한다.
-3. 임의 로컬 파일 표시가 필요한 앱은 백엔드가 `storage`로 읽어 UI에 전달한다. 파일 경로를 표시용 URL로 바꾸는 공개 기능은 사용자 정의 protocol과 함께 [#158](https://github.com/mathbook3948/bunaway/issues/158)(TODO-windows 736행)에서 다룬다.
+3. 임의 로컬 파일 표시가 필요한 앱은 백엔드가 `storage`로 읽어 UI에 전달한다. 파일 경로를 표시용 URL로 바꾸는 공개 기능은 사용자 정의 protocol과 함께 [#158](https://github.com/mathbook3948/bunaway/issues/158)(`docs/TODO-windows.md`의 "로컬 파일 경로를 WebView 표시용 URL로 변환하는 공개 기능" 항목)에서 다룬다.
 4. 위 대체로 만들 수 없는 용도가 확인되면 별도 결정에서 경로 범위, origin 격리, CSP 모델을 함께 정한다.
 
 ## 근거
@@ -35,5 +35,5 @@ status: accepted
 ## 결과
 
 - 스키마, 이벤트, 권한, 옵션과 네이티브 코드 변경은 없다.
-- 시험이 확인하는 범위: Windows 호스트에서 도는 `tests/lifecycle/windows-webview-controls.ts`는 공개 `windows.navigateWebView`에 `file:///C:/Windows/win.ini`를 넘기면 `PERMISSION_DENIED`로 거부되고 문서 세대(`documentGeneration`)가 바뀌지 않는 것을 실제 UI Worker에서 확인한다. macOS는 실제 compiled WKWebView에서 도는 `tests/lifecycle/macos-webview-controls.ts`(`tests/fixtures/macos-webview-controls/app.ts`)가 공개 `navigateWebView`에 `file:///etc/passwd`를 넘기면 `PERMISSION_DENIED`로 거부되고 WebView 상태가 그대로인 것을 확인하고, Objective-C 호출을 대체한 Linux 계약 시험 `tests/lifecycle/macos-webview-controls.test.ts`도 같은 거부를 확인한다. `tests/lifecycle/macos-bun.test.ts`는 `macosOrigin`이 `file:` URL에 빈 문자열을 돌려주는 것을 확인한다. 같은 Windows 호스트에서 도는 `tests/lifecycle/windows-host.ts`는 허용 목록 밖 탐색이 취소되어 `navigation-blocked` 로그가 남고, 프레임 탐색은 `https://example.org/`가 취소되는 것을 확인한다. 시험이 없는 것은 두 플랫폼 모두 탐색 처리기(Windows는 `NavigationStarting`, macOS는 `decidePolicyForNavigationAction`)를 거쳐 오는 `file:` 탐색의 취소(페이지 내부 이동, 리디렉션, 프레임 탐색), Windows `originOf`에 `file:` URL을 넣는 단위 시험, 정책 스키마의 `file:` origin 거부다. macOS 호스트 시험(`tests/lifecycle/macos-host.ts`)은 `navigation-blocked` 로그 개수만 확인한다. 이 경로들의 거부는 위 코드의 판정에 따른다.
+- 시험이 확인하는 범위: Windows 호스트에서 도는 `tests/lifecycle/windows-webview-controls.ts`는 공개 `windows.navigateWebView`에 `file:///C:/Windows/win.ini`를 넘기면 `PERMISSION_DENIED`로 거부되고 문서 세대(`documentGeneration`)가 바뀌지 않는 것을 실제 UI Worker에서 확인한다. macOS는 실제 compiled WKWebView에서 도는 `tests/lifecycle/macos-webview-controls.ts`(`tests/fixtures/macos-webview-controls/app.ts`)가 공개 `navigateWebView`에 `file:///etc/passwd`를 넘기면 `PERMISSION_DENIED`로 거부되고 WebView 상태가 그대로인 것을 확인하고, Objective-C 호출을 대체한 Linux 계약 시험 `tests/lifecycle/macos-webview-controls.test.ts`는 `navigate`가 `file:///etc/passwd`를 `PERMISSION_DENIED`로 거부하고 WKWebView 로드를 호출하지 않는 것을 확인한다. `tests/lifecycle/macos-bun.test.ts`는 `macosOrigin`이 `file:` URL에 빈 문자열을 돌려주는 것을 확인한다. 같은 Windows 호스트에서 도는 `tests/lifecycle/windows-host.ts`는 허용 목록 밖 탐색이 취소되어 `navigation-blocked` 로그가 남고, 프레임 탐색은 `https://example.org/`가 취소되는 것을 확인한다. 시험이 없는 것은 두 플랫폼 모두 탐색 처리기(Windows는 `NavigationStarting`, macOS는 `decidePolicyForNavigationAction`)를 거쳐 오는 `file:` 탐색의 취소(페이지 내부 이동, 리디렉션, 프레임 탐색), Windows `originOf`에 `file:` URL을 넣는 단위 시험, 정책 스키마의 `file:` origin 거부다. macOS 호스트 시험(`tests/lifecycle/macos-host.ts`)은 `navigation-blocked` 로그 개수만 확인한다. 이 경로들의 거부는 위 코드의 판정에 따른다.
 - `docs/TODO-windows.md`의 해당 항목을 완료로 표시하고 이 결정을 참조한다.
