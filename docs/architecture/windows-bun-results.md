@@ -616,3 +616,19 @@ macOS fixture용 symlink를 만들 때 발생한 EPERM이다. 이전 CLI 시간 
 - 이 단계를 처음 연결한 CI 실행은 프로브가 옛 `io` 스레드와 동기 `execute`를 가정해 `UNSUPPORTED`로 실패했다. `worker`와 `await`로 고친 뒤 같은 잡에서 통과했다.
 - 통과한 실행은 GitHub Actions run 40499674577(PR 553, windows-2022 러너, 고정 Bun 1.4.2)이다.
 - 이 프로브는 실제 WebView2 앱 전체, 서명된 앱, MSIX와 Inno 설치 프로그램을 검증한 결과가 아니다.
+
+## 2026-10-27 WebView 종료 기한 초과 재현 여부
+
+2026-10-10 기록의 `WebView cleanup timed out`(`checkShutdownDeadline`, 닫은 뒤 30초)이
+최신 main에서 재현되는지 windows-native CI 로그로 판정했다. 로컬 재현은 하지 않았다.
+
+- 대상: main의 CI 세 번(`d6a5d04`, `1e20a51`, `c6b9ecc`)의 Windows native integration 잡.
+  각 잡은 `mise run host:windows`로 `windows-bun-window-api.ts`를 포함한 전체 호스트 회귀를 실행한다.
+- 결과: 세 잡 모두 `PASS Windows public window API: ...` 줄을 포함해 통과했고,
+  `WebView cleanup timed out`은 한 번도 나오지 않았다.
+- 정리 시간: `c6b9ecc` 잡의 `view-cleaned` 로그는 추적한 WebView 프로세스 핸들
+  5개, 5개, 4개를 닫은 뒤 2~4ms 안에 정리 완료를 기록했다. 30초 기한에 근접한 값은 없다.
+- 판단: 10-10 기록은 geometry 검사 추가 직후의 로컬 실행에서 나왔고 같은 시기의
+  전체 검사에서 다른 기한 초과도 함께 발생했다. 현재 CI의 깨끗한 환경에서는
+  재현되지 않으므로 정리 순서나 진단 필드는 바꾸지 않았고 기한도 늘리지 않았다.
+  다시 발생하면 기존 오류 메시지의 `browserExited`와 `live` pid로 남은 프로세스를 확인한다.
