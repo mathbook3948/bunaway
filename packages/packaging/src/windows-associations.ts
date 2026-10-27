@@ -16,15 +16,28 @@ function object(value: unknown, allowed: string[]): Record<string, unknown> {
   return result;
 }
 
+/** Rejects characters XML 1.0 cannot represent: controls, lone surrogates, U+FFFE and U+FFFF. */
+function hasInvalidXmlChar(value: string): boolean {
+  return [
+    ...value,
+  ].some((char) => {
+    const code = char.codePointAt(0) ?? 0;
+    return (
+      code < 0x20 ||
+      code === 0x7f ||
+      (code >= 0xd800 && code <= 0xdfff) ||
+      code === 0xfffe ||
+      code === 0xffff
+    );
+  });
+}
+
 function text(value: unknown, field: string, pattern?: RegExp): string {
   if (
     typeof value !== "string" ||
     !value ||
     value.length > 128 ||
-    // Control characters are not valid in XML 1.0 and break generated manifests.
-    [
-      ...value,
-    ].some((char) => char.charCodeAt(0) < 0x20 || char === "\x7f") ||
+    hasInvalidXmlChar(value) ||
     (pattern && !pattern.test(value))
   ) {
     throw new Error(`Invalid ${field}.`);
