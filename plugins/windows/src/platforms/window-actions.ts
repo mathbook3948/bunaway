@@ -57,6 +57,9 @@ const unsupportedMonitor = unsupportedError("Monitor queries are unavailable.");
 const unsupportedPrint = unsupportedError(
   "WebView print dialogs are not implemented on this platform.",
 );
+const unsupportedCapture = unsupportedError(
+  "WebView page capture is not implemented on this platform.",
+);
 const unsupportedDownloads = unsupportedError(
   "WebView downloads are not implemented on this platform.",
 );
@@ -218,6 +221,14 @@ function applyWebContent(scope: ActionScope, call: WindowCall): ActionResult {
         unsupportedPrint,
       )(call.payload.kind ?? "browser");
       return null;
+    case "windows.capturePage":
+      return supported(
+        window.capturePage,
+        unsupportedCapture,
+      )({
+        format: call.payload.format ?? "png",
+        region: call.payload.region ?? null,
+      });
     case "windows.setDownloadRequestsEnabled":
       downloads().setRequestsEnabled(call.payload.enabled);
       return null;
