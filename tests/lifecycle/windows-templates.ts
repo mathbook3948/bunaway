@@ -77,6 +77,8 @@ const REMOVE_RETRY_DELAY_MS = 500;
 const HMR_EDIT_RETRY_MS = 1_000;
 /** How much of the received HMR messages a failure keeps. */
 const HMR_MESSAGES_TAIL_CHARS = 1_500;
+/** How much of a retried attempt's error is noted in the HMR messages. */
+const HMR_RETRY_NOTE_CHARS = 300;
 /** Pause between requests while the dev server starts. */
 const DEV_SERVER_POLL_MS = 250;
 
@@ -326,19 +328,31 @@ async function verifyHmrEdit(
       async () => {
         // The file watcher may still be finishing its first scan when the edit lands and miss it,
         // so the same edit is written again until a message arrives.
-        await writeFile(resolve(app, edit.file), original + edit.appended);
-        const announced = messages
-          .slice(sinceEdit)
-          .some(
-            (text) =>
-              text.includes('"type":"update"') ||
-              text.includes('"type":"full-reload"'),
+        try {
+          await writeFile(resolve(app, edit.file), original + edit.appended);
+          const announced = messages
+            .slice(sinceEdit)
+            .some(
+              (text) =>
+                text.includes('"type":"update"') ||
+                text.includes('"type":"full-reload"'),
+            );
+          // A reload that did not come from this edit must not end the wait before the server
+          // serves the edit, so both the message and the served module have to agree.
+          return (
+            announced && (await moduleText(moduleUrl)).includes(HMR_EDIT_MARKER)
           );
-        // A reload that did not come from this edit must not end the wait before the server
-        // serves the edit, so both the message and the served module have to agree.
-        return (
-          announced && (await moduleText(moduleUrl)).includes(HMR_EDIT_MARKER)
-        );
+        } catch (error) {
+          // A watcher, scanner or the repeated write can hold the file or make one transform fail
+          // for a moment on Windows; the next attempt retries, and the deadline error lists it.
+          messages.push(
+            `retry after: ${error instanceof Error ? error.message : String(error)}`.slice(
+              0,
+              HMR_RETRY_NOTE_CHARS,
+            ),
+          );
+          return false;
+        }
       },
       {
         deadline: "toolchain",
@@ -349,7 +363,7 @@ async function verifyHmrEdit(
     );
     return `HMR reported the edit of ${edit.file}`;
   } catch (error) {
-    // Kept short so the step's output tail still holds the start of the error message.
+    // The messages are limited so the error text itself is not crowded out of the report.
     const received = messages.join("\n").slice(-HMR_MESSAGES_TAIL_CHARS);
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}\nHMR messages:\n${received}`,
