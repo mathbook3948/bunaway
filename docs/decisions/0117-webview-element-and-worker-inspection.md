@@ -16,8 +16,8 @@ status: accepted
 - Tauri는 `WebviewWindow`의 `open_devtools`, `close_devtools`, `is_devtools_open`만 제공한다. 좌표 검사나 worker 대상 열기 API는 없다.
 - WebView2는 `ICoreWebView2::OpenDevToolsWindow`로 DevTools 창을 열 수 있다. 좌표를 받는 검사 API와 worker를 대상으로 DevTools를 여는 API는 없다. 요소 선택(inspect mode)과 worker 대상 선택은 Chromium DevTools 창 안의 기능이며, 열린 DevTools에서 사용자가 직접 고른다. 임의 좌표를 호스트가 지정하려면 DevTools 프로토콜(`DOM`, `Overlay`)을 호출해야 한다.
 - 이 저장소의 Windows 호스트는 개발 도구를 켠 빌드에서만 WebView2 `AreDevToolsEnabled`와 브라우저 가속키(`AreBrowserAcceleratorKeysEnabled`)를 켠다. 기본 context menu(`AreDefaultContextMenusEnabled`)는 항상 끄므로([ADR 0064](./0064-webview-browser-default-ui.md)) 우클릭 "검사" 항목은 없다. `windows.openDevTools`는 개발 모드와 작업 권한이 모두 있을 때만 DevTools 창을 연다.
-- worker의 조회, 시작, IPC와 console 이벤트는 제공하지 않기로 이미 정했다(세션 preload, service worker, shared worker 관리 API 결정). 이 결정은 그 결정이 다루지 않은 "DevTools 열기"만 다룬다.
-- 제품 빌드에서 DevTools를 여는 경로는 없고, DevTools 프로토콜 직접 호출은 별도 결정(WebView DevTools 프로토콜, emulation, 확장 결정)이 다룬다. 이 문서는 그 결정의 문장을 옮기지 않는다.
+- worker의 조회, 시작, IPC와 console 이벤트는 제공하지 않기로 이미 정했다([ADR 0086](./0086-webview-workers-and-session-preload.md)). 이 결정은 그 결정이 다루지 않은 "DevTools 열기"만 다룬다.
+- 제품 빌드에서 DevTools를 여는 경로는 없고, DevTools 프로토콜 직접 호출의 제공 여부는 `docs/TODO-windows.md`의 debugger protocol 항목에서 따로 정하며, 이 결정은 그 결과에 기대지 않는다.
 
 ## 결정
 
@@ -29,8 +29,8 @@ status: accepted
 
 ## 근거
 
-- 두 프레임워크가 다르다. Electron은 세 검사 API를 제공하고 Tauri는 DevTools 열기와 닫기만 제공한다. 이 결정은 Tauri와 같은 쪽이다. WebView2에는 대응 API가 없어, 구현하려면 DevTools 프로토콜 호출을 호스트에 넣어야 하고 그것은 프로토콜 접근을 제공하지 않기로 한 방침과 겹친다. worker 대상은 식별자를 얻는 조회 API가 선행되어야 하는데 그 API도 제공하지 않기로 했다.
-- 이 기능들은 사람이 DevTools 화면을 보며 쓰는 개발 보조이고, 앱 코드가 호출해 얻는 결과가 없다. 앱이 좌표를 알고 있어야 하는 호출 경로(Electron에서는 주로 context menu의 "Inspect Element")는 이 저장소의 메뉴 플러그인과 `openDevTools`로 대체되며, DevTools를 연 뒤 사용자가 `Ctrl+Shift+C`로 같은 요소를 고를 수 있다.
+- 두 프레임워크가 다르다. Electron은 세 검사 API를 제공하고 Tauri는 DevTools 열기와 닫기만 제공한다. 이 결정은 Tauri와 같은 쪽이다. WebView2에는 대응 API가 없어, 구현하려면 DevTools 프로토콜 호출을 호스트에 넣어야 하고, 그것은 debugger protocol 항목의 범위와 겹친다. worker 대상은 식별자를 얻는 조회 API가 선행되어야 하는데 그 API도 제공하지 않기로 했다.
+- 이 기능들은 사람이 DevTools 화면을 보며 쓰는 개발 보조이고, 앱 코드가 호출해 얻는 결과가 없다. 앱이 좌표를 알고 있어야 하는 호출 경로(Electron에서는 주로 context menu의 "Inspect Element")는 이 저장소의 메뉴 플러그인으로 앱 메뉴를 만들 수 있고, 요소 검사는 `openDevTools`로 DevTools를 연 뒤 사용자가 `Ctrl+Shift+C`로 같은 요소를 고르는 다른 경로로 같은 목적을 이룬다. 단축키 동작은 Chromium DevTools 기준이며 이 저장소의 테스트로 검증하지 않았다.
 - 코어는 작게 둔다. 호출하는 곳이 없는 API를 위해 operation, 권한, 스키마를 늘리지 않는다. 개발 모드 한정 기능이어서 프로덕션 보안 경계는 바뀌지 않는다.
 
 ## 결과
