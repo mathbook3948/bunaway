@@ -107,6 +107,21 @@ SDK의 `command()`와 `defineApp()`을 사용하지 않는 객체형 정의에�
 화면에 중재하는 공식 플러그인은 아직 없습니다.
 바이트와 append 작업은 [바이너리 저장과 append](/reference/host/storage-bytes/)를 따릅니다.
 
+### 백그라운드 작업과 별도 프로세스
+
+Electron의 `utilityProcess`에 해당하는 전용 API는 없습니다. 신뢰된 백엔드가 Bun 기능을 직접 사용합니다.
+
+| 용도 | 사용할 것 | 메시지 | 종료와 오류 |
+| --- | --- | --- | --- |
+| 같은 프로세스에서 CPU 작업 분산 | `new Worker(module)` | `postMessage`, `onmessage` | `onerror`, `terminate()` |
+| 크래시 격리, 별도 메모리 | `Bun.spawn([...], { ipc })` | `proc.send`, `ipc` 콜백 | `onExit(proc, code, signal)` |
+| 외부 프로그램의 바이트 스트림 | [`process.spawn`](/reference/plugins/process/) | stdin/stdout 파이프 | 종료 상태 |
+
+컴파일한 백엔드에서 Worker 모듈은 `bun build --compile`의 추가 entry point로 포함해야 합니다.
+`Bun.spawn({ ipc })` 자식은 앱 실행 파일 자신(`process.execPath`와 역할 환경 변수)이나 같은 앱의 Bun 스크립트입니다.
+자식은 앱 프로세스와 같은 Job Object에 속해 앱이 끝나면 함께 종료됩니다.
+`serviceName`, 프로세스별 샌드박스와 MessagePort 전달은 제공하지 않습니다.
+
 ## 창
 
 `windows`는 선택 패키지인 `@bunaway/plugin-windows`의 창 제어 API입니다.
