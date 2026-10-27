@@ -837,14 +837,17 @@ test("the registered plugin exposes the check and download operations with a nul
     throw new Error("Missing Windows adapter.");
   }
   try {
-    expect(await adapter.execute("updater.check", null, "backend")).toEqual({
-      updateAvailable: false,
-      currentVersion: "1.0.0",
-      version: null,
-      notes: null,
-      publishedAt: null,
-      downloadUrl: null,
-    });
+    // The Windows adapter asks kernel32 whether the install is an MSIX package, which only Windows can answer.
+    if (process.platform === "win32") {
+      expect(await adapter.execute("updater.check", null, "backend")).toEqual({
+        updateAvailable: false,
+        currentVersion: "1.0.0",
+        version: null,
+        notes: null,
+        publishedAt: null,
+        downloadUrl: null,
+      });
+    }
     // The caller cannot pick an address: any input other than null is refused.
     await expect(
       adapter.execute(

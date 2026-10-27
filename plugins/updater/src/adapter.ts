@@ -53,6 +53,11 @@ export function createUpdater(
     fetchImpl?: typeof fetch;
     timeoutMs?: number;
     downloadTimeoutMs?: number;
+    /**
+     * Whether the package manager of the platform, not the app, replaces this install (an MSIX
+     * package). Checked before any request; a `true` makes `check` and `download` fail.
+     */
+    managedByStore?: () => boolean;
     /** The update folder; a platform without one cannot download. */
     files?: PackageFiles;
     /**
@@ -88,10 +93,26 @@ export function createUpdater(
     }
     return settings;
   }
+  /** The install's owner never changes while the process runs, so the platform answers once. */
+  let managedByStore: boolean | undefined;
+  function rejectManagedInstall(): void {
+    managedByStore ??= seams.managedByStore?.() ?? false;
+    if (managedByStore) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message:
+          "This install is updated by the Microsoft Store, not by the app.",
+        details: {
+          reason: "managedByStore",
+        },
+      });
+    }
+  }
   const development = environment.app?.launch.mode === "development";
   return {
     async check(signal) {
       const configured = requireConfigured();
+      rejectManagedInstall();
       const controller = new AbortController();
       active.add(controller);
       try {
@@ -123,6 +144,7 @@ export function createUpdater(
     },
     async download(signal) {
       requireConfigured();
+      rejectManagedInstall();
       if (!target) {
         throw new BunawayError({
           code: "UNSUPPORTED",

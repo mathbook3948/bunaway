@@ -172,6 +172,13 @@ export const KERNEL32 = {
     ],
     returns: "i32",
   },
+  GetCurrentPackagePath: {
+    args: [
+      "ptr",
+      "ptr",
+    ],
+    returns: "i32",
+  },
   GetCurrentProcess: {
     args: [],
     returns: "u64",
