@@ -614,7 +614,12 @@ export class WebView {
         this.hooks.log("download-rejected", {
           url,
         }),
-      (download) => this.hooks.downloadChanged?.(download),
+      (download) => {
+        // Reports queued before the close request fire later; a closing WebView sends none.
+        if (!this.closing) {
+          this.hooks.downloadChanged?.(download);
+        }
+      },
     );
     const settings = getObject(this.webview, 3);
     try {

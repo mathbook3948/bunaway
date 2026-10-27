@@ -398,7 +398,14 @@ if (!process.argv.includes("--child")) {
       "Completion was not reported",
     );
     const reported = changesFor(accepted.id);
-    assert.equal(reported[0]?.download.state, "pending");
+    // A request and its approval can merge into one report, so the first is never a later state.
+    assert(
+      [
+        "pending",
+        "inProgress",
+      ].includes(reported[0]?.download.state ?? ""),
+      "The first report was not the request or its approval",
+    );
     assert.equal(reported.at(-1)?.download.state, "completed");
     assert.equal(reported.at(-1)?.download.receivedBytes, content.length);
     assert.equal(
