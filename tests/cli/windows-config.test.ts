@@ -546,3 +546,50 @@ test("display declarations preserve explicit defaults and reject invalid options
     ).toThrow();
   }
 });
+
+test("transparent declarations are booleans that require a custom titlebar and no background color", () => {
+  const first = specs[0];
+  assert(first);
+  const declare = (window: Record<string, unknown>) =>
+    readWindowSpecs(
+      [
+        {
+          ...first,
+          window: {
+            ...first.window,
+            ...window,
+          },
+        },
+      ],
+      policy,
+    );
+  expect(
+    declare({
+      transparent: true,
+      titlebar: "custom",
+    })[0]?.window.transparent,
+  ).toBe(true);
+  expect(
+    declare({
+      transparent: false,
+    })[0]?.window.transparent,
+  ).toBe(false);
+  expect(declare({})[0]?.window).not.toHaveProperty("transparent");
+  expect(() =>
+    declare({
+      transparent: "yes",
+    }),
+  ).toThrow("Window transparent must be a boolean.");
+  expect(() =>
+    declare({
+      transparent: true,
+    }),
+  ).toThrow('A transparent window requires titlebar "custom".');
+  expect(() =>
+    declare({
+      transparent: true,
+      titlebar: "custom",
+      backgroundColor: "#112233",
+    }),
+  ).toThrow("A transparent window cannot declare backgroundColor.");
+});

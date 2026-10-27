@@ -5,6 +5,7 @@ import {
   MAX_WINDOW_DIMENSION,
   MIN_WINDOW_DIMENSION,
   normalizeWindowBackgroundColor,
+  transparentWindowError,
   type WindowSizeConstraints,
   type WindowSpec,
 } from "@bunaway/plugin-api/native";
@@ -48,6 +49,7 @@ const SIZE_FIELDS = [
   "skipTaskbar",
   "contentProtection",
   "backgroundColor",
+  "transparent",
   "maximized",
   "fullscreen",
 ];
@@ -224,6 +226,18 @@ function readWindowSize(size: Record<string, unknown>): WindowSpec["window"] {
   }
   const initialState = readInitialState(size);
   const backgroundColor = readBackgroundColor(size.backgroundColor);
+  const transparent = size.transparent;
+  if (transparent !== undefined && typeof transparent !== "boolean") {
+    throw new Error("Window transparent must be a boolean.");
+  }
+  const transparentError = transparentWindowError({
+    transparent,
+    titlebar,
+    backgroundColor,
+  });
+  if (transparentError !== undefined) {
+    throw new Error(transparentError);
+  }
   for (const dimension of [
     size.width,
     size.height,
@@ -261,6 +275,7 @@ function readWindowSize(size: Record<string, unknown>): WindowSpec["window"] {
     ...initialState,
     ...definedEntries({
       backgroundColor,
+      transparent,
       titlebar,
       x: size.x,
       y: size.y,

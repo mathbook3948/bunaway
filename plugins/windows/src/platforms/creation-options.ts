@@ -3,6 +3,7 @@ import {
   hasValidWindowPlacement,
   hasValidWindowSizeConstraints,
   normalizeWindowBackgroundColor,
+  transparentWindowError,
   type WindowSpec,
 } from "@bunaway/plugin-api/native";
 import { BunawayError } from "@bunaway/protocol";
@@ -30,6 +31,13 @@ export function mergeCreationOptions(
   );
   if (backgroundColor !== undefined) {
     window.backgroundColor = backgroundColor;
+  }
+  const transparentError = transparentWindowError(window);
+  if (transparentError !== undefined) {
+    throw new BunawayError({
+      code: "INVALID_ARGUMENT",
+      message: transparentError,
+    });
   }
   const constraints = {
     minWidth: window.minWidth ?? null,

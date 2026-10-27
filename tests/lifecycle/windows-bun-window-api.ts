@@ -13,6 +13,7 @@ import { Windows } from "#native/windows/bun/win32";
 import { ole, user } from "#native/windows/bun/win32-bindings";
 import { overlayIconProvider } from "#plugins/windows/src/platforms/windows-overlay-icon";
 import { testAppMetadata } from "../fixtures/app-info.ts";
+import { waitFor } from "../fixtures/deadlines.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { trayIco } from "../fixtures/tray-icon.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
@@ -825,6 +826,135 @@ if (!process.argv.includes("--child")) {
       }
       assert.throws(() => nativeWindows.getBackgroundColor(painted));
       assert.throws(() => nativeWindows.setBackgroundColor(painted, "#010203"));
+    }
+    {
+      // A transparent window composes alpha 0 over the desktop: a red window below it must show
+      // through, which a window that is merely erased with the system brush would hide.
+      const screen = dlopen("gdi32.dll", {
+        GetPixel: {
+          args: [
+            "u64",
+            "i32",
+            "i32",
+          ],
+          returns: "u32",
+        },
+      });
+      const screenDc = dlopen("user32.dll", {
+        GetDC: {
+          args: [
+            "u64",
+          ],
+          returns: "u64",
+        },
+        ReleaseDC: {
+          args: [
+            "u64",
+            "u64",
+          ],
+          returns: "i32",
+        },
+      });
+      /** COLORREF 0x00BBGGRR of the red and of the opaque control windows. */
+      const RED = 0x0000ff;
+      const area = {
+        x: 120,
+        y: 120,
+      };
+      const below = nativeWindows.create(
+        "Transparent below",
+        300,
+        300,
+        () => {},
+        true,
+        {
+          ...area,
+          backgroundColor: "#ff0000",
+          titlebar: "custom",
+        },
+      );
+      const clear = nativeWindows.create(
+        "Transparent window",
+        300,
+        300,
+        () => {},
+        true,
+        {
+          ...area,
+          titlebar: "custom",
+          transparent: true,
+        },
+      );
+      const opaque = nativeWindows.create(
+        "Opaque control",
+        300,
+        300,
+        () => {},
+        true,
+        {
+          x: 520,
+          y: 120,
+          titlebar: "custom",
+          backgroundColor: "#00ff00",
+        },
+      );
+      try {
+        assert.equal(nativeWindows.getBackgroundColor(clear), null);
+        assert.throws(
+          () => nativeWindows.setBackgroundColor(clear, "#112233"),
+          (error) =>
+            error instanceof BunawayError && error.code === "UNSUPPORTED",
+        );
+        assert.throws(
+          () => nativeWindows.setBackgroundMaterial(clear, "mica"),
+          (error) =>
+            error instanceof BunawayError && error.code === "UNSUPPORTED",
+        );
+        nativeWindows.setBackgroundMaterial(clear, "none");
+        assert.equal(nativeWindows.getBackgroundMaterial(clear), "none");
+        const dc = screenDc.symbols.GetDC(0n);
+        try {
+          const bounds = nativeWindows.getBounds(clear, "outer");
+          const x = bounds.x + Math.floor(bounds.width / 2);
+          const y = bounds.y + Math.floor(bounds.height / 2);
+          await waitFor(
+            () => {
+              nativeWindows.pump();
+              return screen.symbols.GetPixel(dc, x, y) === RED;
+            },
+            {
+              deadline: "inProcess",
+              what: "the red window to show through the transparent window",
+            },
+          );
+          const control = nativeWindows.getBounds(opaque, "outer");
+          await waitFor(
+            () => {
+              nativeWindows.pump();
+              return (
+                screen.symbols.GetPixel(
+                  dc,
+                  control.x + Math.floor(control.width / 2),
+                  control.y + Math.floor(control.height / 2),
+                ) === 0x00ff00
+              );
+            },
+            {
+              deadline: "inProcess",
+              what: "the opaque control window to paint its color",
+            },
+          );
+        } finally {
+          screenDc.symbols.ReleaseDC(0n, dc);
+        }
+      } finally {
+        nativeWindows.destroy(opaque);
+        nativeWindows.destroy(clear);
+        nativeWindows.destroy(below);
+        screen.close();
+        screenDc.close();
+      }
+      assert.throws(() => nativeWindows.setBackgroundColor(clear, "#010203"));
     }
     {
       const hwnd = nativeWindows.create(

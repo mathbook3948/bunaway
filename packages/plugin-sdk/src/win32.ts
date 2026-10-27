@@ -567,6 +567,15 @@ export const GDI32 = {
     ],
     returns: "u64",
   },
+  CreateRectRgn: {
+    args: [
+      "i32",
+      "i32",
+      "i32",
+      "i32",
+    ],
+    returns: "u64",
+  },
   DeleteDC: {
     args: [
       "u64",

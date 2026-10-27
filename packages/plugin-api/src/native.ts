@@ -124,6 +124,27 @@ export function isWindowAspectRatio(value: unknown): value is number | null {
   );
 }
 
+/**
+ * Why a window declaration cannot be transparent, or undefined when it can. A native title bar
+ * is always drawn opaque, and a background color would hide the desktop the declaration asks for.
+ */
+export function transparentWindowError(window: {
+  transparent?: boolean | undefined;
+  titlebar?: string | undefined;
+  backgroundColor?: unknown;
+}): string | undefined {
+  if (window.transparent !== true) {
+    return undefined;
+  }
+  if (window.titlebar !== "custom") {
+    return 'A transparent window requires titlebar "custom".';
+  }
+  if (window.backgroundColor !== undefined) {
+    return "A transparent window cannot declare backgroundColor.";
+  }
+  return undefined;
+}
+
 /** An opaque window background color: `#RGB` or `#RRGGBB`. Alpha forms are rejected because their byte order differs between CSS and Electron. */
 export const WINDOW_BACKGROUND_COLOR_PATTERN =
   /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$(?![\s\S])/;
@@ -229,6 +250,8 @@ export type WindowSpec = {
     contentProtection?: boolean;
     /** Opaque `#RGB` or `#RRGGBB` color shown behind and before the document; absent keeps the system color and the WebView default. Windows only. */
     backgroundColor?: string;
+    /** Let the desktop show through the parts of the page that are not painted, default false. Requires `titlebar: "custom"` and excludes `backgroundColor`. Windows only. */
+    transparent?: boolean;
     /** Start maximized, retaining the initial normal placement for restoration. Windows only. */
     maximized?: boolean;
     /** Start fullscreen. When combined with maximized, exit restores maximized state. Windows only. */

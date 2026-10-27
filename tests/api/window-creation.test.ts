@@ -297,3 +297,73 @@ test("creation options override the declared background color and normalize it",
   );
   expect(declared.window.backgroundColor).toBe("#203040");
 });
+
+test("a transparent window requires a custom titlebar and no background color", () => {
+  const declared = {
+    view: "main",
+    title: "Main",
+    home: "https://app.bunaway.local/",
+    window: {
+      width: 800,
+      height: 600,
+    },
+  };
+  const create = (window: Record<string, unknown>) =>
+    mergeCreationOptions(declared, {
+      window,
+    });
+  expect(
+    create({
+      transparent: true,
+      titlebar: "custom",
+    }).window.transparent,
+  ).toBe(true);
+  expect(create({}).window).not.toHaveProperty("transparent");
+  expect(
+    create({
+      transparent: false,
+    }).window.transparent,
+  ).toBe(false);
+  for (const window of [
+    {
+      transparent: true,
+    },
+    {
+      transparent: true,
+      titlebar: "system",
+    },
+    {
+      transparent: true,
+      titlebar: "custom",
+      backgroundColor: "#112233",
+    },
+  ]) {
+    expect(() => create(window)).toThrow(
+      expect.objectContaining({
+        code: "INVALID_ARGUMENT",
+      }),
+    );
+  }
+  // A declared background color conflicts with a transparent creation option.
+  expect(() =>
+    mergeCreationOptions(
+      {
+        ...declared,
+        window: {
+          ...declared.window,
+          titlebar: "custom",
+          backgroundColor: "#203040",
+        },
+      },
+      {
+        window: {
+          transparent: true,
+        },
+      },
+    ),
+  ).toThrow(
+    expect.objectContaining({
+      code: "INVALID_ARGUMENT",
+    }),
+  );
+});

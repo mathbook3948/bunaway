@@ -370,6 +370,7 @@ const creationResult = {
             skipTaskbar: z.boolean().exactOptional(),
             contentProtection: z.boolean().exactOptional(),
             backgroundColor: windowBackgroundColor.exactOptional(),
+            transparent: z.boolean().exactOptional(),
             maximized: z.boolean().exactOptional(),
             fullscreen: z.boolean().exactOptional(),
           })

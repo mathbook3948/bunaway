@@ -1471,6 +1471,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         setOpacity: (opacity) => nativeWindows.setOpacity(hwnd, opacity),
         getOpacity: () => nativeWindows.getOpacity(hwnd),
         setBackgroundColor(color) {
+          nativeWindows.assertBackgroundColorSettable(hwnd);
           // The WebView first, so a rejected color never reaches the window; a failure after the controller accepted it leaves the window color unchanged.
           view.native.setBackgroundColor(color);
           nativeWindows.setBackgroundColor(hwnd, color);
