@@ -830,7 +830,8 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   디렉터리 크기는 `null`이고 재귀 용량은 별도 작업이다.
   [exists 계약](./site/src/content/docs/reference/host/storage-exists.mdx)과
   [stat 계약](./site/src/content/docs/reference/host/storage-stat.mdx)을 따른다.
-- [ ] 파일과 디렉터리의 OS 권한 및 ACL 조회 범위와 공개 계약을 정의한다.
+- [x] 파일과 디렉터리의 OS 권한 및 ACL 조회 범위와 공개 계약을 정의한다. ACL과 소유자 조회는 제공하지 않는다
+  ([ADR 0109](./decisions/0109-storage-os-permissions-and-acl.md)).
 - [x] Windows의 직접 자식 목록, 선택적인 상위 디렉터리 생성과 파일 및 빈 디렉터리 삭제를 제공한다.
   256개 상한의 목록과 삭제, 링크를 `link`로 표시하는 목록, 작업별 권한을
   [디렉터리 계약](./site/src/content/docs/reference/host/storage-directories.mdx)에 정의한다.
