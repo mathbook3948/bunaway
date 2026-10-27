@@ -1038,6 +1038,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [ ] 서명된 compiled EXE 앱의 설치, 덮어쓰기 업데이트와 제거를 검증한다.
 - [ ] WebView2 없는 PC의 설치, offline 배포와 최소 runtime 버전을 처리한다. (`win-direct`의 `webView2` offline 모드로 Standalone Installer 임베드와 빌드 시 서명 검증은 구현됨. 최소 runtime 버전과 Store 채널 허용은 남음.)
 - [ ] MSIX 활성화와 안전한 런타임 시작 경로를 구현하고 검증한다.
+  `win-store-msix`의 `associations`는 매니페스트의 파일 형식과 URL scheme 확장으로 렌더링한다(활성화 검증은 남음).
 - [x] 업데이트 endpoint, channel, target와 architecture를 지정한다.
   앱이 `bunaway.json`의 `plugins.updater`에 endpoint 템플릿과 channel을 고정하고 target과 architecture는
   호스트에서 정한다. 호출자는 주소를 고를 수 없다.

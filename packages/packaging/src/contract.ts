@@ -152,7 +152,7 @@ export interface ChannelConfig {
   startMenuShortcut?: boolean;
   /** Offer an unchecked current-user login task in per-user EXE installers. */
   autostart?: boolean;
-  /** Optional installer tasks register candidates; Windows users choose defaults. */
+  /** Optional installer tasks (MSIX: manifest extensions) register candidates; Windows users choose defaults. */
   associations?: {
     files?: {
       extension: string;

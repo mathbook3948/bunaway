@@ -146,7 +146,7 @@ test("installer association config normalizes keys and rejects unsafe or ambiguo
   ]) {
     expect(() => parse(value)).toThrow();
   }
-  expect(() => parse(associations, "win-store-msix")).toThrow("unknown field");
+  expect(() => parse(associations, "mac-direct")).toThrow("unknown field");
 });
 
 test("installer URL schemes preserve desktop drive parsing and reach onOpen as URLs", () => {

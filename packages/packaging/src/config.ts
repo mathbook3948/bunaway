@@ -66,6 +66,7 @@ const CHANNEL_KEYS: Record<ChannelId, string[]> = {
     "minVersion",
     "maxVersionTested",
     "capabilities",
+    "associations",
     "signing",
   ],
   "win-store-unpackaged": [
