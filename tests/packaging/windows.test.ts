@@ -40,6 +40,7 @@ import {
 import { innoIdentity } from "#packaging/channels/windows/inno-identity";
 import { renderAppxManifest } from "#packaging/channels/windows/msix";
 import { signingArgs } from "#packaging/channels/windows/sign";
+import { parseAssociations } from "#packaging/windows-associations";
 
 const metadata: ResolvedPackaging = {
   root: "C:\\proj",
@@ -1128,6 +1129,146 @@ test("the MSIX manifest declares one disabled startup task for the autostart plu
     `<desktop:StartupTask TaskId="${MSIX_STARTUP_TASK_ID}" Enabled="false" DisplayName="Test &amp; &lt;App&gt;"/>`,
   );
   expect(manifest.match(/<desktop:StartupTask /g)).toHaveLength(1);
+});
+
+test("the MSIX manifest declares file types and URL schemes next to the startup task", () => {
+  const manifest = renderAppxManifest({
+    packageName: "Bunaway.Test",
+    appId: "app.test",
+    name: "Test",
+    publisherDisplay: "Test",
+    publisherIdentity: "CN=Test",
+    version: "1.0.0.0",
+    minVersion: "10.0.18362.0",
+    unvirtualizedData: false,
+    capabilities: [],
+    associations: parseAssociations({
+      files: [
+        {
+          extension: ".Note",
+          name: "Note & <file>",
+        },
+        {
+          extension: ".md",
+          name: "Markdown",
+        },
+      ],
+      urlSchemes: [
+        {
+          scheme: "Example-App",
+          name: 'Example "link"',
+        },
+      ],
+    }),
+    executable: "com.example.app.exe",
+    logo: {
+      square44: "logo.png",
+      square150: "logo.png",
+      storeLogo: "logo.png",
+    },
+  });
+  expect(manifest).toContain(
+    '<uap:Extension Category="windows.fileTypeAssociation" Executable="com.example.app.exe" EntryPoint="Windows.FullTrustApplication">',
+  );
+  expect(manifest).toContain('<uap:FileTypeAssociation Name="file1">');
+  expect(manifest).toContain('<uap:FileTypeAssociation Name="file2">');
+  expect(manifest).toContain("<uap:FileType>.note</uap:FileType>");
+  expect(manifest).toContain("<uap:FileType>.md</uap:FileType>");
+  expect(manifest).toContain(
+    "<uap:DisplayName>Note &amp; &lt;file&gt;</uap:DisplayName>",
+  );
+  expect(manifest).toContain(
+    '<uap:Extension Category="windows.protocol" Executable="com.example.app.exe" EntryPoint="Windows.FullTrustApplication">',
+  );
+  expect(manifest).toContain('<uap:Protocol Name="example-app">');
+  expect(manifest).toContain(
+    "<uap:DisplayName>Example &quot;link&quot;</uap:DisplayName>",
+  );
+  expect(manifest.match(/<desktop:StartupTask /g)).toHaveLength(1);
+  expect(manifest.match(/<\/Extensions>/g)).toHaveLength(1);
+  const order = [
+    "windows.startupTask",
+    "windows.fileTypeAssociation",
+    "windows.protocol",
+    "</Extensions>",
+  ].map((marker) => manifest.indexOf(marker));
+  expect(order).toEqual(
+    [
+      ...order,
+    ].sort((a, b) => a - b),
+  );
+  expect(order.every((index) => index > 0)).toBe(true);
+});
+
+test("the MSIX manifest has no activation extensions without associations", () => {
+  const manifest = renderAppxManifest({
+    packageName: "Bunaway.Test",
+    appId: "app.test",
+    name: "Test",
+    publisherDisplay: "Test",
+    publisherIdentity: "CN=Test",
+    version: "1.0.0.0",
+    minVersion: "10.0.18362.0",
+    unvirtualizedData: false,
+    capabilities: [],
+    executable: "com.example.app.exe",
+    logo: {
+      square44: "logo.png",
+      square150: "logo.png",
+      storeLogo: "logo.png",
+    },
+  });
+  expect(manifest).not.toContain("fileTypeAssociation");
+  expect(manifest).not.toContain("windows.protocol");
+});
+
+test("win-store-msix accepts associations and applies the shared validation", () => {
+  const parse = (associations: unknown) =>
+    parsePackaging(
+      JSON.stringify({
+        channels: {
+          "win-store-msix": {
+            associations,
+          },
+        },
+      }),
+    );
+  expect(() =>
+    parse({
+      files: [
+        {
+          extension: ".note",
+          name: "Note",
+        },
+      ],
+      urlSchemes: [
+        {
+          scheme: "example",
+          name: "Example",
+        },
+      ],
+    }),
+  ).not.toThrow();
+  expect(() =>
+    parse({
+      urlSchemes: [
+        {
+          scheme: "c",
+          name: "Drive",
+        },
+      ],
+    }),
+  ).toThrow(/associations/);
+  expect(() =>
+    parse({
+      files: [
+        {
+          extension: "note",
+          name: "Note",
+        },
+      ],
+    }),
+  ).toThrow(/associations/);
 });
 
 test("Windows adapters register all three channels", () => {

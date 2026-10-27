@@ -1,5 +1,9 @@
 import { MSIX_STARTUP_TASK_ID } from "@bunaway/protocol";
-import type { AdapterStage, PackageAdapter } from "../../contract.ts";
+import type {
+  AdapterStage,
+  ChannelConfig,
+  PackageAdapter,
+} from "../../contract.ts";
 import { WINDOWS_MIN_VERSION, WINDOWS_VERSION_PART_MAX } from "./common.ts";
 
 // Pure manifest rendering remains available for schema-level tests. The
@@ -52,6 +56,7 @@ interface MsixOptions {
   maxVersionTested?: string;
   unvirtualizedData: boolean;
   capabilities: string[];
+  associations?: ChannelConfig["associations"];
   executable: string;
   logo: {
     square44: string;
@@ -68,6 +73,42 @@ function escapeXml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
+}
+
+/**
+ * Renders the file type and protocol activation extensions. The values were
+ * already validated by parseAssociations; they are escaped again because they
+ * are written into XML. MSIX has no install-time opt-in, so every declared
+ * entry is registered and Windows users still choose the default app.
+ */
+function renderAssociations(
+  associations: ChannelConfig["associations"],
+  executable: string,
+): string {
+  const target = `Executable="${escapeXml(executable)}" EntryPoint="Windows.FullTrustApplication"`;
+  const extensions: string[] = [];
+  (associations?.files ?? []).forEach((file, index) => {
+    // The association name only groups file types; it must be lowercase and
+    // unique within the package, so it is derived from the declaration order.
+    extensions.push(`
+        <uap:Extension Category="windows.fileTypeAssociation" ${target}>
+          <uap:FileTypeAssociation Name="file${index + 1}">
+            <uap:DisplayName>${escapeXml(file.name)}</uap:DisplayName>
+            <uap:SupportedFileTypes>
+              <uap:FileType>${escapeXml(file.extension)}</uap:FileType>
+            </uap:SupportedFileTypes>
+          </uap:FileTypeAssociation>
+        </uap:Extension>`);
+  });
+  for (const urlScheme of associations?.urlSchemes ?? []) {
+    extensions.push(`
+        <uap:Extension Category="windows.protocol" ${target}>
+          <uap:Protocol Name="${escapeXml(urlScheme.scheme)}">
+            <uap:DisplayName>${escapeXml(urlScheme.name)}</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>`);
+  }
+  return extensions.join("");
 }
 
 /**
@@ -162,7 +203,7 @@ export function renderAppxManifest(options: MsixOptions): string {
         <!-- Declared disabled: only an explicit enableAutostart call, made after user consent, turns login launch on. -->
         <desktop:Extension Category="windows.startupTask" Executable="${escapeXml(options.executable)}" EntryPoint="Windows.FullTrustApplication">
           <desktop:StartupTask TaskId="${MSIX_STARTUP_TASK_ID}" Enabled="false" DisplayName="${escapeXml(options.name)}"/>
-        </desktop:Extension>
+        </desktop:Extension>${renderAssociations(options.associations, options.executable)}
       </Extensions>
     </Application>
   </Applications>

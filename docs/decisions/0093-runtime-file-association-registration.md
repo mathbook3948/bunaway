@@ -17,7 +17,7 @@ status: accepted
   기본으로 선택되지 않으며, 제거와 업데이트에서 앱이 소유한 후보를 정리한다. ProgId(`BW.` 뒤 하이픈 없는 32자리 16진수)와 등록 기록은
   `packages/packaging`이 정하고 `stableGuid`, `AssociationRoot`, 대기 후보 기록을 쓴다.
 - 배포 채널 중 `win-direct`와 `win-store-unpackaged`는 Inno 설치 프로그램이다. 포터블 채널은 없다.
-  MSIX 채널(`win-store-msix`)은 아직 패키징을 지원하지 않고, 매니페스트 렌더러에도 파일 연결 선언이 없다.
+  MSIX 채널(`win-store-msix`)은 아직 패키징을 지원하지 않고, 매니페스트 렌더러는 파일 연결과 URL scheme 선언만 렌더링하고, 활성화는 검증하지 않았다.
 - 더블클릭은 `앱 실행 파일 "<경로>"`로 새 프로세스를 시작한다. 앱은 초기 실행과 두 번째 실행 모두
   `desktop.onOpen`의 `request.files`(작업 디렉터리 기준 절대 경로)와 `desktop.onOpenUrls`(`file:` URL)로 경로를 받는다.
   두 훅은 `openArguments`가 기본값 `"files-and-urls"`일 때 채워지고, `"raw"`에서는 `argv`만 전달한다.

@@ -27,7 +27,7 @@ macOS에서는 네이티브 `.app`을 빌드할 수 있습니다. macOS 배포 �
 | `desktopShortcut` | `false` | 바탕화면 바로가기 생성 |
 | `startMenuShortcut` | `true` | 시작 메뉴 바로가기 생성 |
 | `autostart` | `false` | perUser 로그인 자동 실행 작업 제공 |
-| `associations` | 없음 | 사용자 선택으로 파일과 URL 처리 후보 등록 |
+| `associations` | 없음 | 사용자 선택으로 파일과 URL 처리 후보 등록(`win-store-msix`는 [예약 옵션](#win-store-msix-예약-옵션)의 설명 참고) |
 | `uninstall.preserveUserData` | `true` | 제거 시 사용자 데이터 보존 |
 | `signing` | 최상위 설정 | [서명 객체](/reference/packaging/signing/) 전체 대체 |
 
@@ -127,7 +127,7 @@ MSIX 패키지의 로그인 실행은 manifest StartupTask를 쓰며 [autostart]
 }
 ```
 
-각 목록은 1–32개 항목을 받습니다. 이름은 최대 128자이며 개행과 NUL을 허용하지 않습니다.
+각 목록은 1–32개 항목을 받습니다. 이름은 최대 128자이며 TAB을 제외한 C0 제어 문자, DEL, 단독 서로게이트, U+FFFE, U+FFFF를 허용하지 않습니다.
 확장자는 점과 영숫자로 시작하고 나머지는 영숫자, `_`, `-`만 받습니다. 점 뒤에는 최대 32자입니다.
 scheme은 2~32자이며 영문자로 시작하고 나머지는 영숫자, `+`, `.`, `-`만 받습니다.
 영문자 한 개의 scheme은 `desktop.onOpen`이 Windows 드라이브 경로로 해석하므로 거부합니다.
@@ -216,9 +216,13 @@ PE와 설치 파일이 제출용 서명 조건 및 오프라인 설치 조건을
 | `minVersion` | 비어 있지 않은 문자열, 최대 64자 |
 | `maxVersionTested` | 비어 있지 않은 문자열, 최대 64자 |
 | `capabilities` | 비어 있지 않은 문자열의 배열 |
+| `associations` | `win-direct`와 같은 `files`, `urlSchemes` 선언 |
 | `signing` | 서명 객체 |
 
-현재는 이 필드의 형식만 검증하며 MSIX 생성에는 사용하지 않습니다.
+`win-store-msix`는 아직 패키징이 막혀 있어 `associations`는 매니페스트 렌더링 함수와 설정 검증까지만 구현되어 있습니다. 렌더링 결과는 파일 형식과 URL scheme 확장입니다. MSIX에는
+설치 시 선택 작업이 없어 선언한 항목은 항상 등록되고, 기본 앱은 Windows 사용자가 정합니다.
+`mimeType`은 MSIX 선언에 쓰지 않습니다. `associations`의 텍스트 값은 TAB을 제외한 C0 제어 문자, DEL, 단독 서로게이트, U+FFFE, U+FFFF를 쓸 수 없으며 `win-direct`와 `win-store-unpackaged`에도 같은 검증이 적용됩니다. 나머지 필드는 현재 형식만 검증하며 MSIX 생성에는
+사용하지 않습니다.
 
 ## macOS 예약 옵션
 

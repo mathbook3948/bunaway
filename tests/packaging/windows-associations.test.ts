@@ -48,6 +48,17 @@ test("installer association config normalizes keys and rejects unsafe or ambiguo
     parse(associations).channels?.["win-direct"]?.associations?.files?.[0]
       ?.extension,
   ).toBe(".note");
+  // TAB and astral characters are valid XML text and stay accepted.
+  expect(() =>
+    parse({
+      files: [
+        {
+          extension: ".a",
+          name: "A\tB \u{1F4DD}",
+        },
+      ],
+    }),
+  ).not.toThrow();
   expect(
     parse(associations, "win-store-unpackaged").channels?.[
       "win-store-unpackaged"
@@ -104,6 +115,38 @@ test("installer association config normalizes keys and rejects unsafe or ambiguo
       files: [
         {
           extension: ".a",
+          name: "Notes\u000b",
+        },
+      ],
+    },
+    {
+      files: [
+        {
+          extension: ".a",
+          name: "Notes\ud800",
+        },
+      ],
+    },
+    {
+      files: [
+        {
+          extension: ".a",
+          name: "Notes\uffff",
+        },
+      ],
+    },
+    {
+      files: [
+        {
+          extension: ".a",
+          name: "Notes\x7f",
+        },
+      ],
+    },
+    {
+      files: [
+        {
+          extension: ".a",
           name: "A",
         },
         {
@@ -146,7 +189,7 @@ test("installer association config normalizes keys and rejects unsafe or ambiguo
   ]) {
     expect(() => parse(value)).toThrow();
   }
-  expect(() => parse(associations, "win-store-msix")).toThrow("unknown field");
+  expect(() => parse(associations, "mac-direct")).toThrow("unknown field");
 });
 
 test("installer URL schemes preserve desktop drive parsing and reach onOpen as URLs", () => {
