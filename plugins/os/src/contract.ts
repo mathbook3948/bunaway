@@ -113,7 +113,7 @@ export const mediaAccessInputSchema = z.strictObject({
 /**
  * OS privacy setting for a device class, using the value set of Electron's
  * `systemPreferences.getMediaAccessStatus`. Windows reports `granted` (setting on), `denied`
- * (user turned it off), `restricted` (device policy turned it off), `not-determined` (no
+ * (user turned it off), `restricted` (the device-wide setting is off), `not-determined` (no
  * setting stored) and `unknown` (unreadable or unexpected value).
  */
 export const mediaAccessStatusSchema = z.enum([

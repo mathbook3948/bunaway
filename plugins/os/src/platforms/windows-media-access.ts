@@ -89,9 +89,9 @@ export function mediaAccessBindings(
 }
 
 /**
- * The OS privacy setting for a device class, read from the Windows consent store (the same
- * setting Electron's `getMediaAccessStatus` reads). The device policy hive decides first: a
- * `Deny` there is `restricted`. Otherwise the user hive decides: `Allow` is `granted`, `Deny`
+ * The OS privacy setting for a device class, read from the Windows consent store. The
+ * device-wide hive (the "allow access on this device" setting; group policy keys are not read)
+ * decides first: a `Deny` there is `restricted`. Otherwise the user hive decides: `Allow` is `granted`, `Deny`
  * is `denied` and no stored value is `not-determined`. A failed read or any other value is
  * `unknown`; a missing value is never assumed to be granted. The answer is the system-wide
  * setting only; per-app entries under `NonPackaged` are not consulted.

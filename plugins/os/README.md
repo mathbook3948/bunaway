@@ -58,9 +58,9 @@ The value remains a string, preserving leading zeros, as documented by Microsoft
 The deterministic locale regression uses the same assertion as the actual Windows test and rejects malformed shapes.
 
 `os.getMediaAccessStatus` reads the `Value` string under the `CapabilityAccessManager\ConsentStore\webcam` or `microphone`
-key with `RegGetValueW`, first in `HKLM` (device policy; `Deny` is `restricted`) and then in `HKCU` (`Allow` is `granted`, `Deny` is
+key with `RegGetValueW`, first in `HKLM` (device-wide setting; `Deny` is `restricted`; group policy keys are not read) and then in `HKCU` (`Allow` is `granted`, `Deny` is
 `denied`, no value is `not-determined`). A failed read or any other value is `unknown`. `RegGetValueW` takes the predefined
 hive and subkey path directly, so no key handle is opened; the key paths are constants and caller input never reaches them. Per-app
 `NonPackaged` entries are not read. macOS rejects it with `UNSUPPORTED`. `tests/api/os-media-access.test.ts` covers the decision
 table and the key choice with fake bindings; `tests/lifecycle/windows-os.test.ts` runs both device classes against the real
-consent store, where CI checks that the call succeeds and returns a valid status other than `unknown`; which of the other statuses it is depends on the runner.
+consent store, where CI checks that the call succeeds and returns the status that the same keys read with `reg.exe` give under the decision table.
