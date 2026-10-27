@@ -614,5 +614,5 @@ macOS fixture용 symlink를 만들 때 발생한 EPERM이다. 이전 CLI 시간 
 - `tests/lifecycle/run-native.ts`가 windows-native 잡에서 `BUNAWAY_OPENER_FILES_TEST=1`로 `tests/cli/opener.test.ts`를 별도 프로세스로 실행한다.
 - 프로브는 `worker` 스레드의 opener 어댑터를 compiled EXE에 넣고, 한글, 공백, 쉼표와 emoji가 있는 실행 파일의 `openFile`과 텍스트 파일의 `revealFile`(Explorer 선택)을 확인한다.
 - 이 단계를 처음 연결한 CI 실행은 프로브가 옛 `io` 스레드와 동기 `execute`를 가정해 `UNSUPPORTED`로 실패했다. `worker`와 `await`로 고친 뒤 같은 잡에서 통과했다.
-- 통과한 실행은 GitHub Actions run 40499674577(커밋 28ebdb7, windows-2022 러너, 고정 Bun 1.4.2)이다.
+- 통과한 실행은 GitHub Actions run 40499674577(PR 553, windows-2022 러너, 고정 Bun 1.4.2)이다.
 - 이 프로브는 실제 WebView2 앱 전체, 서명된 앱, MSIX와 Inno 설치 프로그램을 검증한 결과가 아니다.

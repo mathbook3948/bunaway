@@ -19,7 +19,7 @@ async function run(args: string[], cwd: string): Promise<void> {
 }
 
 /**
- * Run an installed plugin in a compiled I/O adapter probe. The executable file opens by
+ * Run an installed plugin in a compiled worker adapter probe. The executable file opens by
  * its default action; Explorer's selected item is observed separately. No user
  * file associations or existing application windows are changed.
  */
