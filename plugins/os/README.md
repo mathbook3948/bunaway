@@ -63,4 +63,4 @@ key with `RegGetValueW`, first in `HKLM` (device policy; `Deny` is `restricted`)
 hive and subkey path directly, so no key handle is opened; the key paths are constants and caller input never reaches them. Per-app
 `NonPackaged` entries are not read. macOS rejects it with `UNSUPPORTED`. `tests/api/os-media-access.test.ts` covers the decision
 table and the key choice with fake bindings; `tests/lifecycle/windows-os.test.ts` runs both device classes against the real
-consent store, where CI checks that the call succeeds and returns a valid status, not which status.
+consent store, where CI checks that the call succeeds and returns a valid status other than `unknown`; which of the other statuses it is depends on the runner.

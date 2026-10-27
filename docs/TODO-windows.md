@@ -763,7 +763,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   COOP, COEP, CORP와 `X-Content-Type-Options`의 기본값, 덮어쓰기 규칙과 WebView별 지원을 기록한다.
   실제 응답 헤더와 교차 origin 허용/차단을 개발 및 패키지 실행에서 검증하고 적용 불가 경로를 명시한다.
 - [ ] 카메라와 마이크의 OS 권한 확인 및 요청을 연결한다.
-  OS 권한 조회: 구현(`os.getMediaAccessStatus`, 시스템 전체 설정만 조회). 요청은 Windows에 대응 API가 없어 제공하지 않고 설정 화면은 `ms-settings:privacy-webcam`, `ms-settings:privacy-microphone`으로 연다.
+  OS 권한 조회: 구현(`os.getMediaAccessStatus`, 시스템 전체 설정만 조회). 요청은 Windows에 대응 API가 없어 제공하지 않는다. 개인정보 설정 화면 열기는 `opener.openUrl`이 `http:`와 `https:`만 열어 현재 제공하지 않는다.
 - [ ] geolocation, notification과 clipboard 권한을 연결한다.
 - [ ] display capture, fullscreen, pointer lock과 wake lock 권한을 연결한다.
 - [ ] file system access와 파일 선택 범위를 연결한다.
