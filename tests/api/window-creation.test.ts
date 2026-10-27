@@ -344,6 +344,33 @@ test("a transparent window requires a custom titlebar and no background color", 
       }),
     );
   }
+  // A declared transparent window cannot be turned into a system-titlebar window or given a color.
+  const transparentDeclared = {
+    ...declared,
+    window: {
+      ...declared.window,
+      titlebar: "custom",
+      transparent: true,
+    },
+  };
+  for (const window of [
+    {
+      titlebar: "system",
+    },
+    {
+      backgroundColor: "#112233",
+    },
+  ]) {
+    expect(() =>
+      mergeCreationOptions(transparentDeclared, {
+        window,
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        code: "INVALID_ARGUMENT",
+      }),
+    );
+  }
   // A declared background color conflicts with a transparent creation option.
   expect(() =>
     mergeCreationOptions(

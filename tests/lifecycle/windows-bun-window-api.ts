@@ -854,7 +854,23 @@ if (!process.argv.includes("--child")) {
           ],
           returns: "i32",
         },
+        // POINT is passed by value as one 64-bit register: x in the low half, y in the high half.
+        WindowFromPoint: {
+          args: [
+            "i64",
+          ],
+          returns: "u64",
+        },
+        GetAncestor: {
+          args: [
+            "u64",
+            "u32",
+          ],
+          returns: "u64",
+        },
       });
+      /** GetAncestor flag for the top-level window. */
+      const GA_ROOT = 2;
       /** COLORREF 0x00BBGGRR of the red and of the opaque control windows. */
       const RED = 0x0000ff;
       const area = {
@@ -917,6 +933,26 @@ if (!process.argv.includes("--child")) {
           const bounds = nativeWindows.getBounds(clear, "outer");
           const x = bounds.x + Math.floor(bounds.width / 2);
           const y = bounds.y + Math.floor(bounds.height / 2);
+          // The red pixel only proves transparency if the transparent window is the one on top.
+          await waitFor(
+            () => {
+              nativeWindows.pump();
+              const hit = screenDc.symbols.WindowFromPoint(
+                BigInt.asIntN(
+                  64,
+                  (BigInt(y) << 32n) | (BigInt(x) & 0xffff_ffffn),
+                ),
+              );
+              return (
+                hit !== 0n &&
+                screenDc.symbols.GetAncestor(hit, GA_ROOT) === BigInt(clear)
+              );
+            },
+            {
+              deadline: "inProcess",
+              what: "the transparent window to be the top window at the probe point",
+            },
+          );
           await waitFor(
             () => {
               nativeWindows.pump();
@@ -954,7 +990,13 @@ if (!process.argv.includes("--child")) {
         screen.close();
         screenDc.close();
       }
-      assert.throws(() => nativeWindows.setBackgroundColor(clear, "#010203"));
+      // A destroyed window is forgotten as transparent, so the error is the closed-window one
+      // rather than the transparent-window UNSUPPORTED.
+      assert.throws(
+        () => nativeWindows.setBackgroundColor(clear, "#010203"),
+        (error) =>
+          !(error instanceof BunawayError && error.code === "UNSUPPORTED"),
+      );
     }
     {
       const hwnd = nativeWindows.create(
