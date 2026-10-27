@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type CommandContext, defineApp } from "@bunaway/backend";
-import { checkHresult } from "@bunaway/plugin/win32";
+import { checkHresult, pick, USER32 } from "@bunaway/plugin/win32";
 import windows from "@bunaway/plugin-windows";
 import { BunawayError, type HostContext, type Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
@@ -840,21 +840,7 @@ if (!process.argv.includes("--child")) {
           returns: "u32",
         },
       });
-      const screenDc = dlopen("user32.dll", {
-        GetDC: {
-          args: [
-            "u64",
-          ],
-          returns: "u64",
-        },
-        ReleaseDC: {
-          args: [
-            "u64",
-            "u64",
-          ],
-          returns: "i32",
-        },
-      });
+      const screenDc = dlopen("user32.dll", pick(USER32, "GetDC", "ReleaseDC"));
       /** GetAncestor flag for the top-level window. */
       const GA_ROOT = 2;
       /** COLORREF 0x00BBGGRR of the red window below the transparent one. */
@@ -952,6 +938,9 @@ if (!process.argv.includes("--child")) {
               what: "the red window to show through the transparent window",
             },
           );
+          const control = nativeWindows.getBounds(opaque, "outer");
+          const controlX = control.x + Math.floor(control.width / 2);
+          const controlY = control.y + Math.floor(control.height / 2);
           // Opacity and click-through turn on the layered style; the per-pixel alpha must still
           // compose, so the red window stays visible instead of a dimmed black fill.
           for (const toggle of [
@@ -961,28 +950,44 @@ if (!process.argv.includes("--child")) {
             () => nativeWindows.setIgnoreMouseEvents(clear, false),
           ]) {
             toggle();
+            // Dimming and restoring the control window shows DWM has composed a frame after the
+            // toggle, so the single read below cannot see the frame from before it.
+            nativeWindows.setOpacity(opaque, 0.5);
             await waitFor(
               () => {
                 nativeWindows.pump();
-                return screen.symbols.GetPixel(dc, x, y) === RED;
+                return (
+                  screen.symbols.GetPixel(dc, controlX, controlY) !== GREEN
+                );
               },
               {
                 deadline: "inProcess",
-                what: "the red window to stay visible after a layered style change",
+                what: "DWM to compose the dimmed control window",
               },
             );
+            nativeWindows.setOpacity(opaque, 1);
+            await waitFor(
+              () => {
+                nativeWindows.pump();
+                return (
+                  screen.symbols.GetPixel(dc, controlX, controlY) === GREEN
+                );
+              },
+              {
+                deadline: "inProcess",
+                what: "DWM to compose the restored control window",
+              },
+            );
+            assert.equal(
+              screen.symbols.GetPixel(dc, x, y),
+              RED,
+              "the red window stays visible after a layered style change",
+            );
           }
-          const control = nativeWindows.getBounds(opaque, "outer");
           await waitFor(
             () => {
               nativeWindows.pump();
-              return (
-                screen.symbols.GetPixel(
-                  dc,
-                  control.x + Math.floor(control.width / 2),
-                  control.y + Math.floor(control.height / 2),
-                ) === GREEN
-              );
+              return screen.symbols.GetPixel(dc, controlX, controlY) === GREEN;
             },
             {
               deadline: "inProcess",

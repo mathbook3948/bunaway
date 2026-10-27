@@ -349,13 +349,13 @@ test("a transparent window requires a custom titlebar and no background color", 
     ...declared,
     window: {
       ...declared.window,
-      titlebar: "custom",
+      titlebar: "custom" as const,
       transparent: true,
     },
   };
   for (const window of [
     {
-      titlebar: "system",
+      titlebar: "system" as const,
     },
     {
       backgroundColor: "#112233",
