@@ -182,7 +182,7 @@ WebView2는 레지스트리 `Clients\{F3017226-...}\pv`의 버전이 `0.0.0.0`�
 `associations`(`files`, `urlSchemes`)는 `win-direct`와 같은 검증(확장자 형식, 스킴 2~32자,
 목록당 32개 이하)을 거쳐 매니페스트의 `windows.fileTypeAssociation`과 `windows.protocol`
 확장으로 렌더링한다. MSIX에는 설치 시 선택 작업이 없으므로 선언한 항목은 항상 등록되고,
-기본 앱은 Windows 사용자가 정한다. `mimeType`은 MSIX 선언에 쓰지 않는다. 텍스트 값의 제어 문자는 모든 채널에서 거부한다. 이 문서는
+기본 앱은 Windows 사용자가 정한다. `mimeType`은 MSIX 선언에 쓰지 않는다. 텍스트 값의 XML 1.0 비허용 문자(제어 문자, 단독 서로게이트, U+FFFE, U+FFFF)는 모든 채널에서 거부한다. 이 문서는
 매니페스트 생성까지만 다루며 활성화로 받은 경로와 URL의 전달은 채널이 열린 뒤 검증한다.
 
 ### `win-store-unpackaged`: Store EXE/MSI 제출
