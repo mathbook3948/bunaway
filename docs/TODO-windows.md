@@ -766,13 +766,13 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [ ] geolocation, notification과 clipboard 권한을 연결한다.
 - [ ] display capture, fullscreen, pointer lock과 wake lock 권한을 연결한다.
 - [ ] file system access와 파일 선택 범위를 연결한다.
-- [ ] Bluetooth 장치 선택과 pairing 이벤트를 제공한다.
-- [ ] USB 장치 선택, 추가, 제거와 권한 revoke 이벤트를 제공한다.
-- [ ] Serial port 선택, 추가, 제거와 권한 revoke 이벤트를 제공한다.
-- [ ] HID 장치 선택, 추가, 제거와 권한 revoke 이벤트를 제공한다.
+- [x] Bluetooth 장치 선택과 pairing 이벤트는 제공하지 않기로 결정했다. WebView2에 선택기를 앱이 처리하는 이벤트가 없고 Tauri도 공개 API가 없으며, 장치 접근은 백엔드나 플러그인이 맡는다 ([ADR 0107](decisions/0107-webview-device-chooser-apis.md)).
+- [x] USB 선택, 추가, 제거와 권한 revoke 이벤트는 제공하지 않기로 결정했다. Bluetooth와 같은 이유다 ([ADR 0107](decisions/0107-webview-device-chooser-apis.md)).
+- [x] Serial port 선택, 추가, 제거와 권한 revoke 이벤트는 제공하지 않기로 결정했다. Bluetooth와 같은 이유다 ([ADR 0107](decisions/0107-webview-device-chooser-apis.md)).
+- [x] HID 선택, 추가, 제거와 권한 revoke 이벤트는 제공하지 않기로 결정했다. Bluetooth와 같은 이유다 ([ADR 0107](decisions/0107-webview-device-chooser-apis.md)).
 - [ ] MIDI, sensors와 protected media 권한의 지원 범위를 결정한다.
 - [ ] WebAuthn authenticator와 account 선택의 지원 범위를 결정한다.
-- [ ] WebView2가 제공하지 않는 장치 API는 선택 렌더러 필요 여부 또는 `UNSUPPORTED`를 명시한다.
+- [x] WebView2가 제공하지 않는 장치 API는 공개 연산이 없으므로 `UNSUPPORTED`나 선택 렌더러 요구 사항을 만들지 않는다. 권한 요청 거부는 유지하고 앱은 이 API에 의존하지 않는다 ([ADR 0107](decisions/0107-webview-device-chooser-apis.md)).
 - [ ] WebRTC IP handling policy와 UDP port range 설정의 지원을 결정한다.
 
 ## 18. 다운로드, 인쇄와 캡처
