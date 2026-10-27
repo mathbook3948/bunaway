@@ -15,7 +15,7 @@ status: accepted
 - Electron은 `BrowserWindow.loadFile`과 `loadURL("file://...")`로 로컬 페이지를 로드하게 안내한다. 보안 가이드는 `file://` 대신 `protocol.handle`로 만든 사용자 정의 protocol을 권고한다([ADR 0060](./0060-localhost-asset-server.md)에 같은 내용이 있다).
 - Tauri는 `file:` URL 탐색을 기본 경로로 쓰지 않는다. 앱 자산은 번들 자산 origin(사용자 정의 protocol)으로 로드하고, 임의 로컬 파일은 asset protocol로 파일 경로를 표시용 URL로 바꿔 쓴다. asset protocol은 허용 범위(scope) 설정이 필요하다.
 - 이 저장소의 탐색 정책은 정책 파일의 허용 origin 목록과 비교한다. 정책 스키마(`packages/protocol/src/schema.ts`)는 origin을 `http(s)://호스트[:포트]` 형태로만 받는다. `policy.json`의 `http:` origin은 설정 읽기 단계에서 거부한다(`packages/cli/src/config.ts`).
-- Windows 호스트의 `originOf`(`native/windows/bun/webview.ts`)는 `https:`와 `http:` 외의 scheme에 빈 문자열을 돌려준다. 빈 문자열은 허용 목록에 있을 수 없으므로 `NavigationStarting`과 프레임 탐색의 `navigation` 처리기가 `file:` URL 탐색을 취소하고, 공개 `navigateTo`도 `PERMISSION_DENIED`로 거부한다. 같은 처리기가 리디렉션에도 적용되므로 허용 origin에서 `file:`로 리디렉션하는 경로도 막힌다.
+- Windows 호스트의 `originOf`(`native/windows/bun/webview.ts`)는 `https:`와 `http:` 외의 scheme에 빈 문자열을 돌려준다. 빈 문자열은 허용 목록에 있을 수 없으므로 `NavigationStarting`과 프레임 탐색의 `navigation` 처리기가 `file:` URL 탐색을 취소하고, 공개 `navigateWebView`가 호출하는 `navigateTo`도 `PERMISSION_DENIED`로 거부한다. 같은 처리기가 리디렉션에도 적용되므로 허용 origin에서 `file:`로 리디렉션하는 경로도 막힌다.
 - 로컬 UI는 `file:`이 아니라 `https://app.bunaway.local`(Windows)과 `bunaway://`(macOS, iOS)의 번들 자산으로 제공한다(ADR 0060). `native/windows/bun/desktop.ts`의 `file:` 처리는 실행 인자로 받은 파일 URL을 열 파일 경로로 바꾸는 코드이며 WebView 탐색과 관계없다.
 
 ## 결정
@@ -34,5 +34,5 @@ status: accepted
 ## 결과
 
 - 스키마, 이벤트, 권한, 옵션과 네이티브 코드 변경은 없다.
-- 시험이 확인하는 범위: Windows 호스트 시험(`tests/lifecycle/windows-webview-controls.ts`)은 공개 `windows.navigateWebView`에 `file:///C:/Windows/win.ini`를 넘기면 `PERMISSION_DENIED`로 거부되고 문서 세대(`documentGeneration`)가 바뀌지 않는 것을 실제 UI Worker에서 확인한다. macOS도 `tests/lifecycle/macos-webview-controls.test.ts`가 `file:///etc/passwd` 탐색의 거부를 확인한다. Windows lifecycle 시험(`tests/lifecycle/windows-host.ts`)은 허용 목록 밖 탐색이 취소되어 `navigation-blocked` 로그가 남고, 프레임 탐색은 `https://example.org/`가 취소되는 것을 확인한다. 시험이 없는 것은 페이지 내부 이동이나 리디렉션으로 오는 `file:` 탐색이 `NavigationStarting`에서 취소되는 경로와, 정책 스키마가 `file:` origin을 거부하는 경로다. 두 경로의 거부는 위 코드의 판정에 따른다.
+- 시험이 확인하는 범위: Windows 호스트 시험(`tests/lifecycle/windows-webview-controls.ts`)은 공개 `windows.navigateWebView`에 `file:///C:/Windows/win.ini`를 넘기면 `PERMISSION_DENIED`로 거부되고 문서 세대(`documentGeneration`)가 바뀌지 않는 것을 실제 UI Worker에서 확인한다. macOS는 실제 compiled WKWebView에서 도는 `tests/lifecycle/macos-webview-controls.ts`(`tests/fixtures/macos-webview-controls/app.ts`)가 `file:///etc/passwd` 탐색의 거부를 확인하고, Objective-C 호출을 대체한 Linux 계약 시험 `tests/lifecycle/macos-webview-controls.test.ts`도 같은 거부를 확인한다. Windows lifecycle 시험(`tests/lifecycle/windows-host.ts`)은 허용 목록 밖 탐색이 취소되어 `navigation-blocked` 로그가 남고, 프레임 탐색은 `https://example.org/`가 취소되는 것을 확인한다. Windows에서 시험이 없는 것은 페이지 내부 이동이나 리디렉션으로 오는 `file:` 탐색이 `NavigationStarting`에서 취소되는 경로, 프레임 탐색으로 오는 `file:`이 취소되는 경로, 정책 스키마가 `file:` origin을 거부하는 경로다. 이 경로들의 거부는 위 코드의 판정에 따른다.
 - `docs/TODO-windows.md`의 해당 항목을 완료로 표시하고 이 결정을 참조한다.
