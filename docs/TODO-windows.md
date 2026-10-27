@@ -1186,7 +1186,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
   포커스 활성화의 compositor 제약과 전역 창 좌표 조회/이동의 미지원 범위를 기록한다.
   [E-window-live]가 명시한 전역 좌표 제한을 portal 연결만으로 해결된 것으로 취급하지 않는다.
   compositor별 portal 없음, 권한 거부, 취소, 정상 동작과 위치 제어 미지원 결과를 검증한다.
-- [ ] 플랫폼별 window gesture와 first-mouse 동작을 제공한다. cursor 숨김 API는 [제공하지 않는다](decisions/0042-cursor-control.md).
+- [x] 플랫폼별 window gesture와 first-mouse 동작은 Windows에서 [제공하지 않는다](decisions/0105-window-gesture-and-first-mouse.md). cursor 숨김 API는 [제공하지 않는다](decisions/0042-cursor-control.md).
 - [ ] Intel, ARM64와 translation 환경의 runtime pin, 실행과 배포를 검증한다.
 
 ## 27. 모바일 전용 공식 기능
