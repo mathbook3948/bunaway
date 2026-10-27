@@ -955,7 +955,8 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   정리는 기존 host Job Object를 따른다. 장기 spawn handle은 핸들별 Job Object를 가지며
   `kill`, 루트 종료, 어댑터 폐기가 자손까지 종료한다.
 - [ ] 번들 sidecar의 플랫폼 선택, 실행 경로, 라이선스와 패키징을 제공한다.
-- [ ] 앱 restart와 exit를 desktop 수명주기에 연결한다.
+- [x] 앱 restart와 exit를 desktop 수명주기에 연결한다.
+  `DesktopContext`의 `quit({ exitCode })`, `exit()`, `relaunch()`로 이미 연결되어 있고 검증도 위 종료 코드, 강제 exit, relaunch 항목과 같다. updater 설치 뒤 relaunch 연결은 별도 항목이다.
 - [x] CLI argument와 subcommand schema, help, 오류와 match 결과를 제공한다.
   `@bunaway/backend/cli`의 `defineCLI`는 기존 `onOpen` argv를 명시적으로 받아 Bun
   `parseArgs`와 앱의 Zod schema로 검사한다. help와 오류는 결과이며 실행과 종료를 제어하지 않는다.
