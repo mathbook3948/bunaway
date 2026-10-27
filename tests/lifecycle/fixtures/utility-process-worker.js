@@ -1,6 +1,4 @@
-declare const self: Worker;
-
-self.onmessage = (event: MessageEvent) => {
+self.onmessage = (event) => {
   if (event.data === "throw") {
     throw new Error("worker failure");
   }

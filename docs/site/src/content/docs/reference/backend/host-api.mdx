@@ -117,9 +117,11 @@ Electron의 `utilityProcess`에 해당하는 전용 API는 없습니다. 신뢰�
 | 크래시 격리, 별도 메모리 | `Bun.spawn([...], { ipc })` | `proc.send`, `ipc` 콜백 | `onExit(proc, code, signal)` |
 | 외부 프로그램의 바이트 스트림 | [`process.spawn`](/reference/plugins/process/) | stdin/stdout 파이프 | 종료 상태 |
 
-컴파일한 백엔드에서 Worker 모듈은 `bun build --compile`의 추가 entry point로 포함해야 합니다.
-`Bun.spawn({ ipc })` 자식은 앱 실행 파일 자신(`process.execPath`와 역할 환경 변수)이나 같은 앱의 Bun 스크립트입니다.
-자식은 앱 프로세스와 같은 Job Object에 속해 앱이 끝나면 함께 종료됩니다.
+패키지한 앱의 빌드는 entry point를 추가할 수 없어 번들에 없는 모듈 경로를 `new Worker`에 주면 실패합니다.
+Worker는 앱이 실행 파일과 함께 배포하는 스크립트 파일의 경로나 소스 문자열로 만든 Blob URL로 만드세요.
+`Bun.spawn({ ipc })` 자식은 배포한 스크립트를 `[process.execPath, script]`로 실행하고 환경 변수 `BUN_BE_BUN=1`을 줍니다.
+이 변수가 없으면 앱 실행 파일이 호스트로 다시 시작해 실행 중인 인스턴스로 인자를 넘기고 끝납니다.
+Windows에서 자식은 앱 프로세스와 같은 Job Object에 속해 앱이 끝나면 함께 종료됩니다.
 `serviceName`, 프로세스별 샌드박스와 MessagePort 전달은 제공하지 않습니다.
 
 ## 창
