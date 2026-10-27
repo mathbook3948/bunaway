@@ -539,7 +539,7 @@ MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이�
 - [x] 폴더 선택, 다중 파일과 폴더 선택을 제공한다.
 - [x] 파일 형식 필터, 기본 경로와 파일 이름, 기본 확장자를 제공한다.
 - [x] 숨긴 파일 표시와 저장 overwrite 확인 옵션을 제공한다. 새 폴더 생성은 OS 기본 UI를 유지하며 Windows에서 끄는 옵션은 지원하지 않는다.
-- [x] 부모 창을 지정해 모달 대화상자를 연결한다. 단일 창 모델([ADR 0026](decisions/0026-single-webview-single-window.md))에서 호출별 `ownerWindowId`를 두지 않고, 대화상자는 항상 앱의 창을 소유 창으로 삼는다. `plugins/dialog/src/platforms/windows.ts`가 소유 창 hwnd를 `show`에 넘기고 소유 창이 닫히면 오류로 끝내며, `tests/api/dialog.test.ts`가 hwnd 전달과 소유 창 종료를 확인한다.
+- [x] 부모 창을 지정해 모달 대화상자를 연결한다. 단일 창 모델([ADR 0026](decisions/0026-single-webview-single-window.md))에서 호출별 `ownerWindowId`를 두지 않고, 대화상자는 앱의 창이 열려 있고 보이는 동안 그 창을 소유 창으로 삼고, 아니면 소유 창 없이 연다. `plugins/dialog/src/platforms/windows.ts`가 소유 창 hwnd를 `show`에 넘기고 소유 창이 닫히면 오류로 끝내며, `tests/api/dialog.test.ts`가 hwnd 전달과 소유 창 종료를 확인한다.
 - [x] 선택 취소와 호출 취소의 결과를 정의한다.
 - [x] 선택한 파일 접근 권한의 수명과 영속화 여부를 정의한다.
 - [x] 결정 완료: 인증서 신뢰 확인 대화상자는 제공하지 않는다. Electron `showCertificateTrustDialog`는 인증서 검증 처리기의 인증서 객체가 입력인데 이 프로젝트에는 그 인증서 경로가 없고 Tauri에는 대응 기능이 없다. WebView 인증서 오류와 신뢰 판단은 16절 항목이 소유한다.
