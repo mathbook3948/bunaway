@@ -15,8 +15,15 @@ import {
   type StorageDirectorySize,
 } from "#storage/contract";
 
-/** Walk steps (opened directories or listed entries) between event loop yields. */
+/** Walk steps (opened directories or listed entries) between looks at the clock. */
 const YIELD_STEPS = 32;
+
+/**
+ * Longest time a scan runs before it yields to the event loop. A yield is a timer round trip of
+ * about a millisecond, so yielding every few steps made a 100,000 child directory spend most of
+ * its time waiting; yielding by elapsed time keeps the loop responsive at a fraction of the cost.
+ */
+const YIELD_INTERVAL_MS = 10;
 
 /** Cost bounds of one directory size scan. */
 export type DirectorySizeLimits = {
@@ -237,13 +244,18 @@ export function createCheckpoint(
   alive: () => void,
 ): () => Promise<void> {
   let steps = 0;
+  let lastYield = performance.now();
   return async () => {
     alive();
     if (signal?.aborted) {
       throw cancelled();
     }
-    if (++steps % YIELD_STEPS === 0) {
+    if (
+      ++steps % YIELD_STEPS === 0 &&
+      performance.now() - lastYield >= YIELD_INTERVAL_MS
+    ) {
       await yieldToEventLoop();
+      lastYield = performance.now();
     }
   };
 }

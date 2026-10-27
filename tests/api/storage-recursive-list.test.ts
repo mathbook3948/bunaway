@@ -195,6 +195,41 @@ test("pages of any size concatenate to the unpaged listing and the last page end
   expect((await readAllPages(12)).length).toBe(1);
 });
 
+test("many children created out of order are listed in UTF-16 order at every page size", async () => {
+  // 37 is coprime with 101, so the creation order is a permutation unrelated to the name order.
+  const names = Array.from(
+    {
+      length: 101,
+    },
+    (_, index) => `n${(index * 37) % 101}`,
+  );
+  createTree(
+    names.flatMap((name) => [
+      `${name}/inner-${name}`,
+      "z-last",
+    ]),
+  );
+  const expected = [
+    ...new Set(names),
+  ]
+    .sort()
+    .flatMap((name) => [
+      name,
+      `${name}/inner-${name}`,
+    ]);
+  expected.push("z-last");
+  const whole = await list(undefined, MAX_DIRECTORY_ENTRIES);
+  expect(paths(whole.entries)).toEqual(expected);
+  for (const limit of [
+    1,
+    7,
+    50,
+  ]) {
+    const pages = await readAllPages(limit);
+    expect(pages.flatMap((page) => paths(page.entries))).toEqual(expected);
+  }
+});
+
 test("a cursor need not name an existing path and continues after its position", async () => {
   createTree([
     "a/1",

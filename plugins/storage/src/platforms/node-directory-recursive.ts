@@ -25,16 +25,69 @@ export type RecursiveListRequest = {
 };
 
 /**
- * A directory being walked: its children in name order and the next child to visit. `resume` is
- * the part of the cursor still below this directory; children that sort before its first
- * component were already returned and are not kept.
+ * Children handed out in name order without sorting all of them first. A page usually visits only
+ * a few children of a large directory, so building a binary min-heap (linear) and popping the
+ * visited ones (logarithmic each) costs less than sorting every child on each page.
+ */
+class ChildQueue {
+  private readonly heap: Dirent[];
+
+  constructor(children: Dirent[]) {
+    this.heap = children;
+    for (let index = (children.length >> 1) - 1; index >= 0; index--) {
+      this.siftDown(index);
+    }
+  }
+
+  /** Remove and return the child with the smallest name, or undefined when none is left. */
+  take(): Dirent | undefined {
+    const smallest = this.heap[0];
+    const last = this.heap.pop();
+    if (smallest && last && this.heap.length > 0) {
+      this.heap[0] = last;
+      this.siftDown(0);
+    }
+    return smallest;
+  }
+
+  private siftDown(start: number): void {
+    const heap = this.heap;
+    const moving = heap[start];
+    if (!moving) {
+      return;
+    }
+    let index = start;
+    for (;;) {
+      let child = 2 * index + 1;
+      const left = heap[child];
+      if (!left) {
+        break;
+      }
+      const right = heap[child + 1];
+      if (right && compareNames(right.name, left.name) < 0) {
+        child++;
+      }
+      const smaller = heap[child];
+      if (!smaller || compareNames(smaller.name, moving.name) >= 0) {
+        break;
+      }
+      heap[index] = smaller;
+      index = child;
+    }
+    heap[index] = moving;
+  }
+}
+
+/**
+ * A directory being walked: its children in name order and the part of the cursor still below it
+ * (`resume`). Children that sort before the first component of `resume` were already returned and
+ * are not kept.
  */
 type TreeFrame = {
   path: string;
   relative: string;
   depth: number;
-  children: Dirent[];
-  next: number;
+  children: ChildQueue;
   resume: string[];
 };
 
@@ -120,13 +173,11 @@ class TreeScan {
     } finally {
       directory.closeSync();
     }
-    children.sort((left, right) => compareNames(left.name, right.name));
     return {
       path,
       relative,
       depth,
-      children,
-      next: 0,
+      children: new ChildQueue(children),
       resume,
     };
   }
@@ -165,7 +216,7 @@ class TreeScan {
         ]
       : [];
     for (let frame = stack.at(-1); frame; frame = stack.at(-1)) {
-      const child = frame.children[frame.next++];
+      const child = frame.children.take();
       if (!child) {
         stack.pop();
         continue;
