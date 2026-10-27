@@ -773,7 +773,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [x] USB 선택, 추가, 제거와 권한 revoke 이벤트는 제공하지 않기로 결정했다. Bluetooth와 같은 이유다 ([ADR 0107](decisions/0107-webview-device-chooser-apis.md)).
 - [x] Serial port 선택, 추가, 제거와 권한 revoke 이벤트는 제공하지 않기로 결정했다. Bluetooth와 같은 이유다 ([ADR 0107](decisions/0107-webview-device-chooser-apis.md)).
 - [x] HID 선택, 추가, 제거와 권한 revoke 이벤트는 제공하지 않기로 결정했다. Bluetooth와 같은 이유다 ([ADR 0107](decisions/0107-webview-device-chooser-apis.md)).
-- [x] MIDI, sensors와 보호 미디어(EME) 요청을 앱이 처리하는 연산은 제공하지 않기로 결정했다. 호스트가 권한 요청 이벤트에 일괄 거부로 응답하는 현재 동작은 그대로 두고, 외부 문서에 근거한 서술은 ADR에서 미확인으로 구분했다 ([ADR 0110](decisions/0110-webview-midi-sensors-protected-media-webauthn.md)).
+- [x] MIDI, sensors와 보호 미디어(EME) 요청을 앱이 처리하는 연산은 제공하지 않기로 결정했다. 호스트가 권한 요청 이벤트에 일괄 거부로 응답하는 현재 동작은 그대로 두며, 어느 요청이 그 이벤트를 거치는지는 확인하지 못했다고 ADR에 구분해 적었다 ([ADR 0110](decisions/0110-webview-midi-sensors-protected-media-webauthn.md)).
 - [x] WebAuthn authenticator와 account 선택을 중개하는 연산은 제공하지 않기로 결정했다. 인증이 필요한 앱은 백엔드나 플러그인이 맡는다 ([ADR 0110](decisions/0110-webview-midi-sensors-protected-media-webauthn.md)).
 - [x] WebView2가 제공하지 않는 장치 API는 `UNSUPPORTED`나 선택 렌더러 요구 사항을 만들지 않고 앱이 이 API에 의존하지 않는다. Bluetooth, USB, Serial, HID는 [ADR 0107](decisions/0107-webview-device-chooser-apis.md), MIDI, sensors, 보호 미디어와 WebAuthn은 [ADR 0110](decisions/0110-webview-midi-sensors-protected-media-webauthn.md)을 따른다.
 - [ ] WebRTC IP handling policy와 UDP port range 설정의 지원을 결정한다.
