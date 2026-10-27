@@ -16,14 +16,14 @@ function object(value: unknown, allowed: string[]): Record<string, unknown> {
   return result;
 }
 
-/** Rejects characters XML 1.0 cannot represent: controls, lone surrogates, U+FFFE and U+FFFF. */
+/** Rejects control characters other than TAB, DEL, lone surrogates, U+FFFE and U+FFFF, which break generated XML or installer scripts. */
 function hasInvalidXmlChar(value: string): boolean {
   return [
     ...value,
   ].some((char) => {
     const code = char.codePointAt(0) ?? 0;
     return (
-      code < 0x20 ||
+      (code < 0x20 && code !== 0x09) ||
       code === 0x7f ||
       (code >= 0xd800 && code <= 0xdfff) ||
       code === 0xfffe ||

@@ -48,6 +48,17 @@ test("installer association config normalizes keys and rejects unsafe or ambiguo
     parse(associations).channels?.["win-direct"]?.associations?.files?.[0]
       ?.extension,
   ).toBe(".note");
+  // TAB and astral characters are valid XML text and stay accepted.
+  expect(() =>
+    parse({
+      files: [
+        {
+          extension: ".a",
+          name: "A\tB \u{1F4DD}",
+        },
+      ],
+    }),
+  ).not.toThrow();
   expect(
     parse(associations, "win-store-unpackaged").channels?.[
       "win-store-unpackaged"
