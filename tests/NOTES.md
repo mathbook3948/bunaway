@@ -1439,9 +1439,11 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 사람이 작업 표시줄 썸네일에서 누르는 동작, Explorer 실제 재시작 뒤 재적용, 썸네일에 그려지는 모양은 자동 검증하지 않는다.
 
 `lifecycle/windows-templates.ts`는 패키징한 CLI로 UI 템플릿(vanilla, vite, react, vue, svelte)을 하나씩
-생성하고, 템플릿이 설정한 웹 빌드, 검증 도구의 doctor와 호스트 프로토콜 백엔드 실행, 웹 개발 서버 응답
-(vanilla는 개발 서버가 없어 제외)을 차례로 확인합니다. 웹 빌드가 실패하면 그 템플릿의 나머지 단계는 건너뜁니다.
+생성하고, 템플릿이 설정한 웹 빌드, 검증 도구의 doctor와 호스트 프로토콜 백엔드 실행, 웹 개발 서버 응답과 HMR 편집 반영
+(vanilla는 개발 서버가 없어 제외)을 차례로 확인합니다. HMR 단계는 Vite HMR WebSocket(`vite-hmr`)에 연결하고
+화면 소스 한 파일(vite `src/main.ts`, react `src/App.tsx`, vue `src/App.vue`, svelte `src/App.svelte`)에 표식을 덧붙인 뒤
+`update` 또는 `full-reload` 메시지가 오고, 다시 요청한 변환 모듈에 표식이 들어 있는지 봅니다. 파일 감시가 다른 프로세스의 편집을 잡는지를 보는 시험이며 브라우저는 쓰지 않습니다. 웹 빌드가 실패하면 그 템플릿의 나머지 단계는 건너뜁니다.
 개발 서버는 이 파일이 직접 띄우고 프로세스 트리째 종료하며, 프로젝트 삭제 실패도 단계로 기록합니다.
 한 단계가 실패해도 나머지 템플릿을 계속 돌리고 마지막에 실패 단계를 모아 실패하며, 단계별 결과는
-`build/windows-templates-results.json`에 기록합니다. 네이티브 창과 WebView2 실행, HMR 편집 반영, 설치 파일
+`build/windows-templates-results.json`에 기록합니다. 네이티브 창과 WebView2 실행, HMR 갱신 뒤의 화면 DOM, 설치 파일
 생성은 확인하지 않습니다. Windows native 실행기에 포함합니다.

@@ -1,19 +1,21 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type DeadlineName, deadline } from "../fixtures/deadlines.ts";
+import { type DeadlineName, deadline, waitFor } from "../fixtures/deadlines.ts";
 
 /**
  * Generates every UI template with the packed CLI on Windows and drives it the way a developer's
  * first session does, in this order: the web build the template configures, `doctor`, the backend
  * over the host process protocol and the web dev server (templates that have one). Generation,
  * `doctor` and the backend run through the verification helper; the dev server is started here so
- * this file owns its whole process tree. A failing step does not stop the other templates; the run
+ * this file owns its whole process tree. After the server answers, one source file is edited and
+ * the Vite HMR WebSocket must report the change, which shows that Windows file watching sees an
+ * edit made by another process. A failing step does not stop the other templates; the run
  * fails at the end and `build/windows-templates-results.json`, which the native job uploads, lists
  * every step.
  *
- * Not covered here: the native window and WebView2 (the other native fixtures run them), HMR edits
- * and installer packaging.
+ * Not covered here: the native window and WebView2 (the other native fixtures run them), the DOM
+ * an HMR update produces and installer packaging.
  */
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
@@ -33,6 +35,37 @@ const TEMPLATES = [
 ] as const;
 /** The marker the Vite dev server puts in every page it serves. */
 const VITE_CLIENT_MARKER = 'src="/@vite/client"';
+/** The text an HMR edit adds to a source file, to find in the module the server serves next. */
+const HMR_EDIT_MARKER = "bunaway-hmr-edit-marker";
+/**
+ * The screen source each template with a dev server is edited in, and the text appended to it.
+ * The appended text is code or markup that survives the transform, since comments do not. Vue
+ * takes a second `<script>` block because text after `</template>` is not valid there.
+ */
+const HMR_EDITS: Record<
+  string,
+  {
+    file: string;
+    appended: string;
+  }
+> = {
+  vite: {
+    file: "src/main.ts",
+    appended: `\nconsole.log("${HMR_EDIT_MARKER}");\n`,
+  },
+  react: {
+    file: "src/App.tsx",
+    appended: `\nexport const hmrEditMarker = "${HMR_EDIT_MARKER}";\n`,
+  },
+  vue: {
+    file: "src/App.vue",
+    appended: `\n<script lang="ts">\nexport const hmrEditMarker = "${HMR_EDIT_MARKER}";\n</script>\n`,
+  },
+  svelte: {
+    file: "src/App.svelte",
+    appended: `\n<p>${HMR_EDIT_MARKER}</p>\n`,
+  },
+};
 /** Packing the framework and a cold install take several times the generic build deadline. */
 const SETUP_DEADLINE_SCALE = 3;
 /** How much of a failed step's output the report keeps. */
@@ -202,13 +235,99 @@ function freePort(): number {
 }
 
 /**
- * Starts the template's dev server on a free port and waits for a page that carries the Vite
- * client marker. The server's whole process tree is killed afterwards on every path.
+ * Edits one source file of the running project and waits for the dev server to announce it on the
+ * HMR WebSocket, then checks that the module the server serves now carries the edit. A browser
+ * normally requests modules first, which registers them in the server's module graph, so the
+ * module is requested once before the edit. The edit stays in the temporary project, which the
+ * caller removes. Resolves with a description of what was seen; throws, with the messages
+ * received, when nothing arrives in time.
  */
-async function webDevServer(settings: Settings, app: string): Promise<Outcome> {
+async function verifyHmrEdit(
+  template: string,
+  app: string,
+  origin: string,
+  server: {
+    exitCode: number | null;
+  },
+): Promise<string> {
+  const edit = HMR_EDITS[template];
+  assert(edit !== undefined, `no HMR edit is defined for ${template}`);
+  const moduleUrl = `${origin}/${edit.file}`;
+  // The client script carries the token the server requires on an HMR connection.
+  const client = await (await fetch(`${origin}/@vite/client`)).text();
+  const token = /wsToken\s*=\s*["']([^"']+)["']/.exec(client)?.[1];
+  const before = await (await fetch(moduleUrl)).text();
+  assert(
+    !before.includes(HMR_EDIT_MARKER),
+    `${edit.file} already has the marker`,
+  );
+  const messages: string[] = [];
+  const query = token === undefined ? "" : `?token=${token}`;
+  const socket = new WebSocket(
+    `${origin.replace("http", "ws")}/${query}`,
+    "vite-hmr",
+  );
+  socket.addEventListener("message", (event) => {
+    messages.push(String(event.data));
+  });
+  const serverExited = () =>
+    server.exitCode !== null &&
+    `the dev server exited with code ${server.exitCode} during the HMR check`;
+  try {
+    await waitFor(() => messages.some((text) => text.includes('"connected"')), {
+      deadline: "toolchain",
+      what: "the HMR WebSocket to connect",
+      intervalMs: DEV_SERVER_POLL_MS,
+      failed: serverExited,
+    });
+    await appendFile(resolve(app, edit.file), edit.appended);
+    await waitFor(
+      () =>
+        messages.some(
+          (text) =>
+            text.includes('"type":"update"') ||
+            text.includes('"type":"full-reload"'),
+        ),
+      {
+        deadline: "toolchain",
+        what: `an HMR update after editing ${edit.file}`,
+        intervalMs: DEV_SERVER_POLL_MS,
+        failed: serverExited,
+      },
+    );
+    const after = await (await fetch(moduleUrl)).text();
+    assert(
+      after.includes(HMR_EDIT_MARKER),
+      `the served ${edit.file} does not contain the edit`,
+    );
+    return `HMR reported the edit of ${edit.file}`;
+  } catch (error) {
+    const received = messages.join("\n").slice(-OUTPUT_TAIL_CHARS);
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}\nHMR messages:\n${received}`,
+      {
+        cause: error,
+      },
+    );
+  } finally {
+    socket.close();
+  }
+}
+
+/**
+ * Starts the template's dev server on a free port, waits for a page that carries the Vite client
+ * marker and then checks that an edit reaches the HMR WebSocket. The server's whole process tree
+ * is killed afterwards on every path.
+ */
+async function webDevServer(
+  settings: Settings,
+  app: string,
+  template: string,
+): Promise<Outcome> {
   assert(settings.dev !== undefined, "this template has no dev server");
   const port = freePort();
-  const url = `http://127.0.0.1:${port}/`;
+  const origin = `http://127.0.0.1:${port}`;
+  const url = `${origin}/`;
   const server = Bun.spawn(
     [
       ...pinnedBun(settings.dev.command),
@@ -225,6 +344,7 @@ async function webDevServer(settings: Settings, app: string): Promise<Outcome> {
   );
   try {
     const deadlineAt = Date.now() + deadline("toolchain");
+    let served = false;
     while (Date.now() < deadlineAt) {
       if (server.exitCode !== null) {
         return {
@@ -239,15 +359,26 @@ async function webDevServer(settings: Settings, app: string): Promise<Outcome> {
         });
         const html = await response.text();
         if (response.ok) {
-          return {
-            ok: html.includes(VITE_CLIENT_MARKER),
-            output: html,
-          };
+          if (!html.includes(VITE_CLIENT_MARKER)) {
+            return {
+              ok: false,
+              output: html,
+            };
+          }
+          served = true;
+          break;
         }
       } catch {
         // The server is not listening yet; the loop is bounded by the deadline.
       }
       await Bun.sleep(DEV_SERVER_POLL_MS);
+    }
+    if (served) {
+      // Outside the polling loop: a failed edit check must not be taken for a server not yet up.
+      return {
+        ok: true,
+        output: await verifyHmrEdit(template, app, origin, server),
+      };
     }
     return {
       ok: false,
@@ -312,7 +443,9 @@ async function verifyTemplate(
       ),
     );
     if (template !== "vanilla") {
-      await record(template, "web", () => webDevServer(settings, app));
+      await record(template, "web", () =>
+        webDevServer(settings, app, template),
+      );
     }
   } catch (error) {
     results.push({
