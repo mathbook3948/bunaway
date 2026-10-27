@@ -854,25 +854,13 @@ if (!process.argv.includes("--child")) {
           ],
           returns: "i32",
         },
-        // POINT is passed by value as one 64-bit register: x in the low half, y in the high half.
-        WindowFromPoint: {
-          args: [
-            "i64",
-          ],
-          returns: "u64",
-        },
-        GetAncestor: {
-          args: [
-            "u64",
-            "u32",
-          ],
-          returns: "u64",
-        },
       });
       /** GetAncestor flag for the top-level window. */
       const GA_ROOT = 2;
-      /** COLORREF 0x00BBGGRR of the red and of the opaque control windows. */
+      /** COLORREF 0x00BBGGRR of the red window below the transparent one. */
       const RED = 0x0000ff;
+      /** COLORREF 0x00BBGGRR of the opaque control window. */
+      const GREEN = 0x00ff00;
       const area = {
         x: 120,
         y: 120,
@@ -937,7 +925,8 @@ if (!process.argv.includes("--child")) {
           await waitFor(
             () => {
               nativeWindows.pump();
-              const hit = screenDc.symbols.WindowFromPoint(
+              // POINT is passed by value as one 64-bit register: x in the low half, y in the high half.
+              const hit = driver.symbols.WindowFromPoint(
                 BigInt.asIntN(
                   64,
                   (BigInt(y) << 32n) | (BigInt(x) & 0xffff_ffffn),
@@ -945,7 +934,7 @@ if (!process.argv.includes("--child")) {
               );
               return (
                 hit !== 0n &&
-                screenDc.symbols.GetAncestor(hit, GA_ROOT) === BigInt(clear)
+                driver.symbols.GetAncestor(hit, GA_ROOT) === BigInt(clear)
               );
             },
             {
@@ -963,6 +952,26 @@ if (!process.argv.includes("--child")) {
               what: "the red window to show through the transparent window",
             },
           );
+          // Opacity and click-through turn on the layered style; the per-pixel alpha must still
+          // compose, so the red window stays visible instead of a dimmed black fill.
+          for (const toggle of [
+            () => nativeWindows.setOpacity(clear, 0.5),
+            () => nativeWindows.setOpacity(clear, 1),
+            () => nativeWindows.setIgnoreMouseEvents(clear, true),
+            () => nativeWindows.setIgnoreMouseEvents(clear, false),
+          ]) {
+            toggle();
+            await waitFor(
+              () => {
+                nativeWindows.pump();
+                return screen.symbols.GetPixel(dc, x, y) === RED;
+              },
+              {
+                deadline: "inProcess",
+                what: "the red window to stay visible after a layered style change",
+              },
+            );
+          }
           const control = nativeWindows.getBounds(opaque, "outer");
           await waitFor(
             () => {
@@ -972,7 +981,7 @@ if (!process.argv.includes("--child")) {
                   dc,
                   control.x + Math.floor(control.width / 2),
                   control.y + Math.floor(control.height / 2),
-                ) === 0x00ff00
+                ) === GREEN
               );
             },
             {

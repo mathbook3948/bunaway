@@ -96,7 +96,7 @@ Electron의 `extraResources`나 Tauri의 `bundle.resources`처럼 지정한 파�
 | `window.alwaysOnTop` | Windows 전용 boolean, 기본 `false`. 활성화 없이 일반 창보다 위에 배치함 |
 | `window.skipTaskbar` | Windows 전용 boolean, 기본 `false`. tool-window style로 작업 표시줄과 Alt+Tab에서 제외함 |
 | `window.contentProtection` | boolean, 기본 `false`. 스크린샷과 화면 공유에서 창을 제외함. Windows와 macOS에서 지원함 |
-| `window.transparent` | Windows 전용 boolean, 기본 `false`. `true`면 창과 WebView2 배경을 알파 0으로 만들어 페이지가 칠하지 않은 영역에 바탕화면이 보임. `titlebar: "custom"`이 필요하고 `backgroundColor`와 함께 선언할 수 없음 |
+| `window.transparent` | Windows 전용 boolean, 기본 `false`. `true`면 창과 WebView2 배경을 알파 0으로 만들어 창 표면과 WebView2 배경색을 알파 0으로 설정함(페이지 배경이 투명해야 아래가 보임). `titlebar: "custom"`이 필요하고 `backgroundColor`와 함께 선언할 수 없음 |
 | `window.backgroundColor` | Windows 전용 문자열 `#RGB` 또는 `#RRGGBB`. 창과 WebView 문서의 뒤와 문서가 그려지기 전에 보이는 불투명 배경색이며 생략하면 시스템 색과 WebView2 기본 색을 유지함. 알파는 받지 않음 |
 | `window.maximized` | Windows 전용 boolean, 기본 `false`. 초기 최대화. 일반 복원 영역에는 초기 크기와 위치 적용 |
 | `window.fullscreen` | Windows 전용 boolean, 기본 `false`. 초기 전체화면. maximized와 함께 켜면 전체화면 해제 뒤 최대화 복원 |
