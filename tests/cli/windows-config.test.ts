@@ -480,6 +480,43 @@ test("backgroundColor declarations are normalized to lowercase #rrggbb and rejec
   }
 });
 
+test("icon declarations keep a relative resource path and reject every other form", () => {
+  const first = specs[0];
+  assert(first);
+  const declare = (icon: unknown) =>
+    readWindowSpecs(
+      [
+        {
+          ...first,
+          window: {
+            ...first.window,
+            icon,
+          },
+        },
+      ],
+      policy,
+    );
+  expect(declare("icons/main.ico")[0]?.window.icon).toBe("icons/main.ico");
+  expect(declare(undefined)[0]?.window).not.toHaveProperty("icon");
+  for (const invalid of [
+    "",
+    "../main.ico",
+    "icons/../main.ico",
+    "/main.ico",
+    "C:\\main.ico",
+    "\\\\server\\share\\main.ico",
+    "https://example.com/main.ico",
+    "icons/main.ico:stream",
+    "icons/CON.ico",
+    "icons/main.ico.",
+    "x".repeat(261),
+    1,
+    null,
+  ]) {
+    expect(() => declare(invalid)).toThrow("window.icon");
+  }
+});
+
 test("display declarations preserve explicit defaults and reject invalid options", () => {
   const first = specs[0];
   assert(first);

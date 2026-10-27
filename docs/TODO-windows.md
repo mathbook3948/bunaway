@@ -189,7 +189,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] Windows `setFullscreenable`/`isFullscreenable`로 창 인스턴스별 전체화면 진입 허용(기본 true)을 설정하고 조회한다. false이면 진입을 `INVALID_ARGUMENT`로 거부하고 전체화면 중 변경은 현재 상태를 유지하며 해제는 항상 허용한다.
 - [x] Windows 선언과 생성별 `window.focusable`, 실행 중 `setFocusable`와 `isFocusable`을 제공한다. 비활성 표시와 사용자 및 호스트 활성화 차단, 현재 포커스와 별도 조회 및 재생성 기본값을 유지한다.
 - [x] `setTitle`과 `getTitle`로 Windows 창 title을 실행 중 변경하고 조회한다. 선언과 다른 인스턴스를 변경하지 않으며 닫기 확인 창에도 현재 title을 사용한다.
-- [x] 창 icon을 실행 중 변경하고 조회한다(`windows.setIcon`, `windows.hasCustomIcon`). 입력은 `tray.setIcon`과 같은 base64 ICO이고 `null`이면 앱 기본 아이콘(EXE 리소스)으로 되돌리며, 조회는 적용 여부 `boolean`만 돌려준다. 선언형 초기 아이콘과 설치 리소스는 아직 없다. macOS는 아직 없다.
+- [x] 창 icon을 실행 중 변경하고 조회한다(`windows.setIcon`, `windows.hasCustomIcon`). 입력은 `tray.setIcon`과 같은 base64 ICO이고 `null`이면 앱 기본 아이콘(EXE 리소스)으로 되돌리며, 조회는 적용 여부 `boolean`만 돌려준다. 선언형 초기 아이콘은 `window.icon`(리소스 상대 ICO 경로)으로 시작 창과 생성 창에 적용한다. 설치 리소스는 아직 없다. macOS는 아직 없다.
 - [ ] decorations와 frame의 초기 설정, 변경과 조회를 제공한다. `titlebar: "custom"`과 CSS drag는 구현됐으며 전체 decorations/frame API는 남아 있다.
 - [x] Windows `titlebar: "custom"`과 WebView2 CSS `app-region: drag/no-drag`, 네이티브 resize 테두리를 제공한다. 전체 테두리 제거와 caption overlay는 미지원이며 물리 마우스 및 접근성 도구 검증은 별도다.
 - [x] 프로그램에서 창 이동과 방향별 크기 조절을 시작한다. 사용자 CSS `app-region: drag` 이동과 함께 `startDragging`, `startResizeDragging(direction)`으로 코드에서 이동과 크기 조절을 시작한다.

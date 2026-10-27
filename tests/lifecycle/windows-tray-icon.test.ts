@@ -57,8 +57,8 @@ test.skipIf(process.platform !== "win32")(
     );
     const { tmpdir } = await import("node:os");
     const { resolve } = await import("node:path");
-    const { readTrayIconFile } = await import(
-      "#plugins/tray/src/platforms/windows-icon-file"
+    const { readResourceIconFile: readTrayIconFile } = await import(
+      "@bunaway/plugin/resource-icon"
     );
     const base = await mkdtemp(resolve(tmpdir(), "bunaway-tray-icon-"));
     try {

@@ -1,4 +1,5 @@
 import { type NativeEnvironment, NativeEventWaiters } from "@bunaway/plugin";
+import { readResourceIconFile } from "@bunaway/plugin/resource-icon";
 import {
   MAX_TRAY_WAITERS,
   type NativeTrayOwner,
@@ -7,7 +8,6 @@ import {
 import { BunawayError, validateValue } from "@bunaway/protocol";
 import type { z } from "zod";
 import type { TrayBalloon, trayEventSchema } from "#tray/contract";
-import { readTrayIconFile } from "#tray/platforms/windows-icon-file";
 import { Tray } from "#tray/platforms/windows-tray";
 
 function requireTray(
@@ -88,7 +88,7 @@ export function initializeWith(
           }
         },
         // The host passes the declared path; reading it here keeps file access out of the host core.
-        icon === undefined ? undefined : readTrayIconFile(resources, icon),
+        icon === undefined ? undefined : readResourceIconFile(resources, icon),
       );
       return created.tray;
     },

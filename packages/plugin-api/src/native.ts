@@ -252,6 +252,8 @@ export type WindowSpec = {
     backgroundColor?: string;
     /** Let the desktop show through the parts of the page that are not painted, default false. Requires `titlebar: "custom"` and excludes `backgroundColor`. Windows only. */
     transparent?: boolean;
+    /** ICO path relative to the app resources directory, applied when the window is created; absent keeps the executable icon. Windows only. */
+    icon?: string;
     /** Start maximized, retaining the initial normal placement for restoration. Windows only. */
     maximized?: boolean;
     /** Start fullscreen. When combined with maximized, exit restores maximized state. Windows only. */
