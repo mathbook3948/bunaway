@@ -33,7 +33,7 @@ Electron의 `utilityProcess.fork(modulePath, args, { serviceName, stdio })`는 �
    `Bun.spawn({ ipc })` 자식은 앱이 실행 파일과 함께 배포하는 Bun 스크립트를 `process.execPath`로 실행하되 환경 변수
    `BUN_BE_BUN=1`을 준다. 이 변수가 있으면 컴파일된 실행 파일이 호스트 대신 일반 Bun으로 동작한다. 앱 실행 파일을 변수
    없이 다시 실행하면 호스트가 새로 시작해 이미 잡힌 앱 잠금을 만나 실행 중인 인스턴스로 인자를 넘기고 끝나므로 ipc
-   자식으로 쓸 수 없다. 번들 sidecar 실행 파일은 이 ADR의 범위가 아니며 sidecar 문서를 따른다.
+   자식으로 쓸 수 없다(`native/windows/bun/boot.ts`의 시작 순서 기준이며 이 동작을 시험으로 확인하지는 않았다). 번들 sidecar 실행 파일은 이 ADR의 범위가 아니며 sidecar 문서를 따른다.
 3. 호스트 빌드는 entry point(`boot.js`, `ui.js`, `host-operations.js`)가 고정이고 앱이 추가할 수 없다. 번들에 들어 있지 않은
    모듈 경로를 `new Worker`에 주면 `ModuleNotFound`로 실패한다. Worker는 (a) 앱이 실행 파일과 함께 배포하는 스크립트 파일의
    경로, 또는 (b) 소스 문자열로 만든 Blob URL로 만든다. 둘 다 컴파일된 실행 파일에서 동작한다.

@@ -34,7 +34,11 @@ async function workerRoundTrip(label: string, source: string | URL) {
   worker.terminate();
 }
 
-function startChild() {
+const WORKER_SOURCE =
+  "self.onmessage = (e) => { if (e.data === 'throw') { throw new Error('worker failure'); } self.postMessage(e.data.double * 2); };";
+
+/** `linger` keeps the child running after its IPC channel closes; otherwise it ends with the channel. */
+function startChild(linger: boolean) {
   const messages: unknown[] = [];
   const waiters: ((message: unknown) => void)[] = [];
   const exited = Promise.withResolvers<{
@@ -52,6 +56,7 @@ function startChild() {
       env: {
         ...process.env,
         BUN_BE_BUN: "1",
+        BUNAWAY_FIXTURE_LINGER: linger ? "1" : "0",
       },
       stdio: [
         "ignore",
@@ -88,7 +93,7 @@ function startChild() {
 }
 
 async function childRoundTrip() {
-  const { child, exited, next } = startChild();
+  const { child, exited, next } = startChild(false);
   const ready = (await next()) as {
     ready: number;
   };
@@ -112,7 +117,7 @@ async function childRoundTrip() {
 
 async function lingeringChild(dataRoot: string, release: string) {
   containAppProcess(dataRoot);
-  const { child, next } = startChild();
+  const { child, next } = startChild(true);
   await next();
   report({
     lingerPid: child.pid,
@@ -134,7 +139,7 @@ if (role === "app") {
     URL.createObjectURL(
       new Blob(
         [
-          await Bun.file(resolve(scripts, "utility-process-worker.js")).text(),
+          WORKER_SOURCE,
         ],
         {
           type: "text/javascript",

@@ -1,5 +1,5 @@
 // Runs as plain Bun (BUN_BE_BUN) next to the compiled app: announces its pid, echoes messages,
-// exits with a code on request, and stays alive when the IPC channel closes.
+// exits with a code on request, and ends with its IPC channel unless the app asks it to linger.
 process.send({
   ready: process.pid,
 });
@@ -10,5 +10,10 @@ process.on("message", (message) => {
   process.send({
     echoed: message,
   });
+});
+process.on("disconnect", () => {
+  if (process.env.BUNAWAY_FIXTURE_LINGER !== "1") {
+    process.exit(0);
+  }
 });
 setInterval(() => {}, 1000);

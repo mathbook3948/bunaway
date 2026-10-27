@@ -138,10 +138,13 @@ test.skipIf(process.platform !== "win32")(
           break;
         }
       }
-      expect(
-        pid,
-        `The app did not report its child: ${text}${await stderr}`,
-      ).toBeGreaterThan(0);
+      if (pid === 0) {
+        // The app is still running here, so stderr only completes after it is killed.
+        app.kill();
+        throw new Error(
+          `The app did not report its child: ${text}${await stderr}`,
+        );
+      }
       const child = processExitProbe(pid);
       try {
         expect(child.exited()).toBe(false);
