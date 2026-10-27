@@ -104,6 +104,14 @@ test("installer association config normalizes keys and rejects unsafe or ambiguo
       files: [
         {
           extension: ".a",
+          name: "Notes\u000b",
+        },
+      ],
+    },
+    {
+      files: [
+        {
+          extension: ".a",
           name: "A",
         },
         {

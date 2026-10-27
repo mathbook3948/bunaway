@@ -21,7 +21,10 @@ function text(value: unknown, field: string, pattern?: RegExp): string {
     typeof value !== "string" ||
     !value ||
     value.length > 128 ||
-    /[\r\n\0]/.test(value) ||
+    // Control characters are not valid in XML 1.0 and break generated manifests.
+    [
+      ...value,
+    ].some((char) => char.charCodeAt(0) < 0x20 || char === "\x7f") ||
     (pattern && !pattern.test(value))
   ) {
     throw new Error(`Invalid ${field}.`);

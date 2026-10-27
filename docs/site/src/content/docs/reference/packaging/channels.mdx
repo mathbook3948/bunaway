@@ -216,9 +216,13 @@ PE와 설치 파일이 제출용 서명 조건 및 오프라인 설치 조건을
 | `minVersion` | 비어 있지 않은 문자열, 최대 64자 |
 | `maxVersionTested` | 비어 있지 않은 문자열, 최대 64자 |
 | `capabilities` | 비어 있지 않은 문자열의 배열 |
+| `associations` | `win-direct`와 같은 `files`, `urlSchemes` 선언 |
 | `signing` | 서명 객체 |
 
-현재는 이 필드의 형식만 검증하며 MSIX 생성에는 사용하지 않습니다.
+`associations`는 매니페스트의 파일 형식과 URL scheme 확장으로 렌더링합니다. MSIX에는
+설치 시 선택 작업이 없어 선언한 항목은 항상 등록되고, 기본 앱은 Windows 사용자가 정합니다.
+`mimeType`은 MSIX 선언에 쓰지 않습니다. 나머지 필드는 현재 형식만 검증하며 MSIX 생성에는
+사용하지 않습니다.
 
 ## macOS 예약 옵션
 

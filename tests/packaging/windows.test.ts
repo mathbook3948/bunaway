@@ -1186,6 +1186,18 @@ test("the MSIX manifest declares file types and URL schemes next to the startup 
   );
   expect(manifest.match(/<desktop:StartupTask /g)).toHaveLength(1);
   expect(manifest.match(/<\/Extensions>/g)).toHaveLength(1);
+  const order = [
+    "windows.startupTask",
+    "windows.fileTypeAssociation",
+    "windows.protocol",
+    "</Extensions>",
+  ].map((marker) => manifest.indexOf(marker));
+  expect(order).toEqual(
+    [
+      ...order,
+    ].sort((a, b) => a - b),
+  );
+  expect(order.every((index) => index > 0)).toBe(true);
 });
 
 test("the MSIX manifest has no activation extensions without associations", () => {
