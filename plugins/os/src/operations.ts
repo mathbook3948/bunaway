@@ -7,6 +7,8 @@ import {
   gpuListSchema,
   infoSchema,
   localeSchema,
+  mediaAccessInputSchema,
+  mediaAccessStatusSchema,
   type OSInstance,
   printerListSchema,
   usageSchema,
@@ -54,5 +56,11 @@ export const osOperations = {
     input: z.null(),
     output: appProcessListSchema,
     handler: (_input, { instance }) => instance.listAppProcesses(),
+  }),
+  getMediaAccessStatus: operation({
+    input: mediaAccessInputSchema,
+    output: mediaAccessStatusSchema,
+    handler: (input, { instance }) =>
+      instance.getMediaAccessStatus(input.mediaType),
   }),
 };

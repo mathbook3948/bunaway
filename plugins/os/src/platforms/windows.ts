@@ -20,6 +20,11 @@ import {
 } from "#os/platforms/windows-app-processes";
 import { gpuBindings, listGpus, openDxgi } from "#os/platforms/windows-gpus";
 import {
+  mediaAccessBindings,
+  mediaAccessStatus,
+  openAdvapi,
+} from "#os/platforms/windows-media-access";
+import {
   defaultPrinterName,
   listPrinterNames,
   openWinspool,
@@ -118,6 +123,7 @@ export function initialize(): OSInstance {
   const user32 = owner.acquire(openUser32, (library) => library.close());
   const winspool = owner.acquire(openWinspool, (library) => library.close());
   const dxgi = owner.acquire(openDxgi, (library) => library.close());
+  const advapi = owner.acquire(openAdvapi, (library) => library.close());
   const processApi = owner.acquire(openAppProcessApi, (library) =>
     library.close(),
   );
@@ -280,6 +286,10 @@ export function initialize(): OSInstance {
     listAppProcesses() {
       assertActive();
       return listAppProcesses(appProcessBindings(processApi), process.pid);
+    },
+    getMediaAccessStatus(mediaType) {
+      assertActive();
+      return mediaAccessStatus(mediaAccessBindings(advapi), mediaType);
     },
     beep(kind: keyof typeof BEEP_SOUND_TYPES) {
       assertActive();

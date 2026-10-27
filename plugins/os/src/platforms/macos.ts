@@ -54,6 +54,13 @@ function unsupportedAppProcesses(): never {
   });
 }
 
+function unsupportedMediaAccess(): never {
+  throw new BunawayError({
+    code: "UNSUPPORTED",
+    message: "Media access status queries are not supported on macOS.",
+  });
+}
+
 function unsupportedPrinters(): never {
   throw new BunawayError({
     code: "UNSUPPORTED",
@@ -292,6 +299,10 @@ export function initialize(): OSInstance {
     listAppProcesses() {
       assertActive();
       return unsupportedAppProcesses();
+    },
+    getMediaAccessStatus() {
+      assertActive();
+      return unsupportedMediaAccess();
     },
     beep() {
       assertActive();

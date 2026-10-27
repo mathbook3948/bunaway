@@ -87,6 +87,21 @@ test.skipIf(process.platform !== "win32")(
       if (process.env.CI) {
         expect(gpus.length).toBeGreaterThan(0);
       }
+      // A runner may have either setting; the call must read the real consent store without an error.
+      for (const mediaType of [
+        "camera",
+        "microphone",
+      ] as const) {
+        osOperations.getMediaAccessStatus.output.parse(
+          await adapter.execute(
+            "os.getMediaAccessStatus",
+            {
+              mediaType,
+            },
+            "backend",
+          ),
+        );
+      }
       // The app's own process leads the tree; a child this test starts joins it as another process.
       const child = Bun.spawn(
         [
