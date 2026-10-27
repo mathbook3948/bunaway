@@ -1255,7 +1255,7 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
 - [ ] autostart를 등록한 뒤 실제 로그아웃과 로그인에서 앱 실행 및 인자 전달을 검증한다.
   Run 값 등록과 저장 명령줄의 CreateProcessW 실행 검사는 실제 로그인 실행을 검증한 결과가 아니다.
   [autostart 검증 범위](../plugins/autostart/README.md#검증)를 따른다.
-- [x] I/O Worker로 이관한 opener의 파일 열기와 Explorer 선택을 실제 Windows 및 compiled EXE에서 재검증한다.
+- [x] Worker로 이관한 opener의 파일 열기와 Explorer 선택을 실제 Windows 및 compiled EXE에서 재검증한다.
   [초기 UI Worker 실행 기록](./architecture/windows-bun-results.md#2026-10-10-opener-파일-작업)과 구분한다.
 - [ ] suspend/resume, 잠금과 Explorer 재시작 후 자원과 구독을 검증한다.
 - [x] 로컬 Windows x64에서 WebView 장애 복구와 앱 강제 종료 후 Job의 자손 회수를 검증한다.
