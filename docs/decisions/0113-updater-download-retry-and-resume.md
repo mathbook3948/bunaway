@@ -17,15 +17,15 @@ status: accepted
   재사용하는 것이 가장 가까운 기능이다. 공개 문서 기준이며 이 저장소의 테스트로 확인한 것은 아니다.
 - Tauri updater의 `download`와 `downloadAndInstall`도 내장 재시도 없이 오류를 돌려주고, 중단 지점부터 이어 받는 경로를 두지
   않는다. 공개 문서 기준이다.
-- 현재 구현은 재시도하지 않는다. 한 번의 호출은 요청 하나(리다이렉트는 따라감)로 본문을 끝까지 읽고, 어떤 실패든 `.partial`을
-  지운 뒤 오류를 낸다. 제한 시간 30분과 크기 상한 1 GiB는 호출마다 새로 적용된다(`plugins/updater/src/download.ts`).
+- 현재 구현은 재시도하지 않는다. 한 번의 호출은 요청 하나(리다이렉트는 따라감)로 본문을 끝까지 읽고, 실패하면 `.partial`을
+  지우고(지우지 못해도 원래 오류를 보고하며, 남은 파일은 다음 성공 때 정리된다) 오류를 낸다. 제한 시간 30분과 크기 상한 1 GiB는 호출마다 새로 적용된다(`plugins/updater/src/download.ts`).
   현행 서술은 [updater 레퍼런스](../site/src/content/docs/reference/plugins/updater.mdx)에 있다.
 
 ## 결정
 
 1. `updater.download`는 실패한 다운로드를 내장 재시도하지 않는다. 실패하면 오류를 돌려주고, 다시 시도할지, 몇 번, 얼마나
    기다릴지, 사용자에게 무엇을 보일지는 앱이 정한다. 재호출은 처음부터 받는다.
-2. 중단 지점부터 이어 받기(`Range`)를 제공하지 않는다. 받는 도중 실패하면 부분 파일은 지워지므로 이어 받을 상태가 남지 않는다.
+2. 중단 지점부터 이어 받기(`Range`)를 제공하지 않는다. 받는 도중 실패하면 부분 파일은 지워지므로 보통 이어 받을 상태가 남지 않는다.
    이 결정은 현행 동작을 확정하며 코드 변경이 없다.
 3. 이어 받기가 필요해지면 별도 결정으로 다룬다. 그때 정해야 할 전제는 아래 "나중에 제공하려면"에 적는다.
 
@@ -40,8 +40,8 @@ Electron과 Tauri가 모두 재시도와 이어 받기를 내장하지 않으므
   안에 두면 총 소요 시간의 상한과 `CANCELLED`와 `TIMEOUT`이 가리키는 범위를 새로 정해야 한다. 앱이 재호출하면 호출마다 상한이
   분명하다.
 - 앱 재시도는 항상 안전하다. 같은 해시의 완성된 파일이 이미 있으면 `download`가 크기와 SHA-256을 다시 계산해 네트워크 없이
-  그 경로를 돌려주고, 맞지 않으면 지우고 다시 받는다. 앞선 호출이 남긴 `.partial`은 지워지거나 다음 성공 때 정리된다. 한 번에
-  하나만 받을 수 있으므로(`downloadInProgress`) 겹친 재호출도 부분 파일을 망가뜨리지 않는다.
+  그 경로를 돌려주고, 맞지 않으면 지우고 다시 받는다. 앞선 호출이 남긴 `.partial`은 지워지거나 다음 성공 때 정리된다. 한 어댑터
+  안에서는 한 번에 하나만 받을 수 있으므로(`downloadInProgress`) 앱이 겹쳐 재호출해도 부분 파일을 망가뜨리지 않는다.
 - 이어 받기는 검증 계약을 건드린다. 서버가 `Range`와 `206`을 지원하는지, 이어 받는 사이 파일이 바뀌지 않았는지(`ETag`,
   `If-Range`), 앞부분을 어떻게 신뢰할지를 새로 정해야 한다. 앞부분이 앱 데이터 폴더에 남아 있는 동안 다른 프로세스가 고쳤을
   가능성이 있으므로 SHA-256은 이어 받은 뒤 전체를 다시 계산해야 하고, 그러면 이어 받아서 줄어드는 것은 네트워크 전송량뿐이다.
@@ -60,18 +60,18 @@ Electron과 Tauri가 모두 재시도와 이어 받기를 내장하지 않으므
 | --- | --- | --- |
 | `TIMEOUT` | 30분 안에 끝나지 않음 | 예. 연결이 느린 것일 수 있다. 같은 조건에서 반복되면 앱이 중단한다. |
 | `CANCELLED` | 호출자가 취소함 | 아니오. 호출자의 의사다. |
-| `BUSY`, `downloadInProgress` | 이미 다른 `download`가 실행 중 | 끝난 뒤. 새로 받지 말고 실행 중인 호출의 결과를 기다린다. |
+| `BUSY`, `downloadInProgress` | 이미 다른 `download`가 실행 중 | 앱이 호출을 직렬화한다. 실행 중인 호출의 결과를 두 번째 호출자가 받을 수는 없으므로, 먼저 시작한 호출이 끝난 뒤에 부른다. |
 | `INTERNAL`, `network` | 서버에 연결하지 못했거나 본문을 읽다 연결이 끊김 | 예. |
 | `INTERNAL`, `httpStatus` | 서버가 200이 아닌 상태를 냄. `details.status`에 값이 있음 | 5xx와 429는 예, 404 같은 4xx는 보통 아니오. 앱이 `details.status`로 가른다. |
 | `INTERNAL`, `redirectLimit`, `redirectScheme` | 리다이렉트 한도 초과, 허용되지 않는 주소 | 아니오. 서버 설정 문제다. |
 | `INTERNAL`, `tooLarge` | 선언 크기가 1 GiB 초과 | 아니오. 같은 매니페스트면 같은 결과다. |
 | `INTERNAL`, `sizeMismatch` | 받은 바이트나 `content-length`가 선언 크기와 다름 | 판별할 수 없음(아래 한계). |
 | `INTERNAL`, `integrityMismatch` | 받은 파일의 SHA-256이 매니페스트와 다름 | 판별할 수 없음(아래 한계). |
-| `INTERNAL`, `integrityMissing`, `integrityInvalid` | 매니페스트에 해시나 크기가 없거나 형식이 틀림 | 아니오. `check`로 매니페스트를 다시 받아야 한다. |
-| `INTERNAL`, `signatureMissing`, `signatureUntrusted`, `signatureUnsupported`, `publisherMismatch` | 서명이 없거나, 신뢰되지 않거나, 서명 형식이 아니거나, 게시자가 고정값과 다름 | 아니오. 같은 파일이면 같은 결과이며 재시도로 서명 검증을 통과시키려 해서는 안 된다. |
+| `UNSUPPORTED`, `integrityMissing`와 `INTERNAL`, `integrityInvalid` | 매니페스트에 해시나 크기가 없거나 형식이 틀림 | 아니오. `check`로 매니페스트를 다시 받아야 한다. |
+| `INTERNAL`, `signatureMissing`, `signatureUntrusted`, `publisherMismatch`와 `UNSUPPORTED`, `signatureUnsupported` | 서명이 없거나, 신뢰되지 않거나, 서명 형식이 아니거나, 게시자가 고정값과 다름 | 아니오. 같은 파일이면 같은 결과이며 재시도로 서명 검증을 통과시키려 해서는 안 된다. |
 | `INTERNAL`, `revocationUnavailable` | 서명 폐기 여부를 확인하지 못함(오프라인 등) | 예. 연결이 돌아오면 다시 받아 확인한다. |
 | `INTERNAL`, `verifierBusy`, `verifierFailed` | 서명 검증 작업이 바쁘거나 실패함 | 잠시 뒤 한두 번까지. 반복되면 중단한다. |
-| `INTERNAL`, `storage` | 부분 파일을 쓰거나 옮기지 못함(디스크 가득, 권한 등) | 조건이 바뀌기 전에는 아니오. |
+| `INTERNAL`, `storage` | 파일 쓰기와 이동, 기존 파일 확인 등 다른 이유에 해당하지 않는 예기치 못한 실패(디스크 가득, 권한 등) | 조건이 바뀌기 전에는 아니오. |
 
 권장 순서는 `TIMEOUT`, `network`, `httpStatus`의 5xx와 429, `revocationUnavailable`만 지수 백오프로 몇 번 다시 부르고, 그
 외는 사용자에게 보이거나 `check`부터 다시 하는 것이다. 취소하려면 매 호출에 `AbortSignal`을 넘기고 재시도 사이의 대기에도
@@ -79,7 +79,7 @@ Electron과 Tauri가 모두 재시도와 이어 받기를 내장하지 않으므
 
 ### 한계
 
-- `sizeMismatch`와 `integrityMismatch`는 연결이 중간에 끊겨 짧게 받았거나 전송 중 깨진 경우(재시도하면 낫는다)와 서버의
+- `sizeMismatch`와 `integrityMismatch`는 서버가 연결을 정상 종료해 짧게 받았거나(연결 오류로 읽기가 실패하면 `network`다) 전송 중 깨진 경우(재시도하면 낫는다)와 서버의
   매니페스트나 파일이 실제로 잘못 게시된 경우(몇 번을 받아도 같다)를 같은 코드로 낸다. 오류만으로 둘을 가를 수 없으므로, 앱은
   이 두 오류를 한두 번만 다시 시도하고 같은 값으로 반복되면 중단해야 한다.
 - 오류 계약에 "일시적" 여부를 나타내는 필드는 없다. 이 결정은 계약을 넓히지 않는다. 앱 쪽 판단이 부담스럽다는 요구가 실제로
