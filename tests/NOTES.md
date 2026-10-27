@@ -278,6 +278,15 @@ slot과 인자 순서, 교체 순서, 4096개 한도, HRESULT 실패 때 COM 참
 바로가기 갱신 뒤에 실행되고, 이전 폴더 조건(로컬 일반 폴더, 겹침 없음, `perMachine`은 Program Files 아래)을
 스크립트가 갖는지를 본다. 실제 Inno 설치 결과는 아래 `windows-associations.test.ts`의 Windows 시험이 확인한다.
 
+`packaging/windows-msix-probe.test.ts`는 `BUNAWAY_MSIX_PROBE=1`인 Windows 러너에서만 돈다. `renderAppxManifest`로 만든 매니페스트와
+컴파일한 시험 앱(`fixtures/msix-probe-app.ts`)을 `makeappx`로 묶고, 임시 인증서(`TrustedPeople`에 공개 인증서만 등록)로 `signtool` 서명해
+현재 사용자에게 설치한다. 셸, URL scheme, 파일 형식으로 각각 활성화해 시험 앱이 쓴 보고서를 읽고, 같은 실행 파일을 설치 전에
+패키지 밖에서 같은 인자로 실행한 결과와 비교한다. `unvirtualizedData`를 끈 패키지와 켠 패키지를 차례로 설치한다.
+확인하는 것: 패키지 ID와 실행 파일이 설치 위치 안에 있음, `updater.check`의 `UNSUPPORTED`(`managedByStore`)는 패키지 안에서만 나옴,
+URL과 파일 활성화 인자가 직접 실행과 같은 시작 인자 경로(`openRequest`)로 해석됨, `%LOCALAPPDATA%`와 `%APPDATA%` 아래 쓰기가 실제 경로와
+패키지의 `LocalCache` 중 어디에 생기고 제거 뒤 남는지(기록만 하고 위치는 단언하지 않는다). 확인하지 않는 것: 채널 어댑터의 패키지 생성
+(여전히 거부), WebView2 창과 단일 인스턴스, 런타임 URL scheme 등록, Store 제출 형식. 시험이 끝나면 패키지 제거와 인증서 삭제(`-DeleteKey`)를 각각 따로 실행한다.
+
 `packaging/windows-associations.test.ts`는 파일과 URL 처리 후보 설정, opt-in 작업과
 실행 명령 계약을 검사한다. Windows에서 Inno Setup이 있으면 실제 설치와 업데이트,
 작업 해제, 선언 제거와 제거 프로그램을 실행한다. 격리된 임의 확장자와 scheme으로

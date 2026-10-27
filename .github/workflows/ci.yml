@@ -136,6 +136,36 @@ jobs:
       - name: Run installer and packaging tests
         run: mise exec -- bun --no-env-file test tests/packaging/windows-associations.test.ts tests/packaging/windows.test.ts tests/packaging/windows-autostart.test.ts
 
+  windows-msix:
+    name: Windows MSIX package probe
+    runs-on: windows-2022
+    # Builds, signs, installs and removes two real MSIX packages and activates each three ways.
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up mise and pinned Bun
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+      - name: Install locked dependencies
+        run: mise run install
+      - name: Build workspace packages
+        run: mise run plugins:build
+      - name: Install and activate the probe packages
+        env:
+          BUNAWAY_MSIX_PROBE: "1"
+          BUNAWAY_MSIX_PROBE_OUTPUT: build/msix-probe/summary.json
+        run: mise exec -- bun --no-env-file test tests/packaging/windows-msix-probe.test.ts
+      - name: Upload the package measurements
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-msix-probe
+          path: build/msix-probe/
+          if-no-files-found: warn
+          retention-days: 7
+
   windows-native:
     name: Windows native integration
     runs-on: windows-2022
