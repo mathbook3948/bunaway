@@ -190,7 +190,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] Windows 선언과 생성별 `window.focusable`, 실행 중 `setFocusable`와 `isFocusable`을 제공한다. 비활성 표시와 사용자 및 호스트 활성화 차단, 현재 포커스와 별도 조회 및 재생성 기본값을 유지한다.
 - [x] `setTitle`과 `getTitle`로 Windows 창 title을 실행 중 변경하고 조회한다. 선언과 다른 인스턴스를 변경하지 않으며 닫기 확인 창에도 현재 title을 사용한다.
 - [x] 창 icon을 실행 중 변경하고 조회한다(`windows.setIcon`, `windows.hasCustomIcon`). 입력은 `tray.setIcon`과 같은 base64 ICO이고 `null`이면 앱 기본 아이콘(EXE 리소스)으로 되돌리며, 조회는 적용 여부 `boolean`만 돌려준다. 선언형 초기 아이콘과 설치 리소스는 아직 없다. macOS는 아직 없다.
-- [ ] decorations와 frame의 초기 설정, 변경과 조회를 제공한다. `titlebar: "custom"`과 CSS drag는 구현됐으며 전체 decorations/frame API는 남아 있다.
+- [x] 결정 완료: decorations의 실행 중 변경과 완전 frameless 창은 제공하지 않는다. 초기 설정은 `titlebar`, 조회는 `getTitlebar()`가 맡고 caption 없는 창은 `titlebar: "custom"`으로 얻는다. [ADR 0116](./decisions/0116-window-decorations-and-frameless.md).
 - [x] Windows `titlebar: "custom"`과 WebView2 CSS `app-region: drag/no-drag`, 네이티브 resize 테두리를 제공한다. 전체 테두리 제거와 caption overlay는 미지원이며 물리 마우스 및 접근성 도구 검증은 별도다.
 - [x] 프로그램에서 창 이동과 방향별 크기 조절을 시작한다. 사용자 CSS `app-region: drag` 이동과 함께 `startDragging`, `startResizeDragging(direction)`으로 코드에서 이동과 크기 조절을 시작한다.
 - [x] 결정 완료: 네이티브 제목 표시줄 버튼을 유지하는 title-bar overlay를 제공하지 않는다. 사용자 타이틀바는 앱이 그린 button과 기존 창 API로, 네이티브 caption 모양은 `titlebar: "system"`으로 얻는다. [ADR 0088](./decisions/0088-titlebar-overlay.md).
