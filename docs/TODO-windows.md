@@ -1076,7 +1076,9 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
   결정됨: `framework.json`의 33개 패키지를 모두 공개 대상으로 하고 버전은 하나로 맞추며, `mise run release:check`가 pack 결과
   tarball을 검사한다([ADR 0125](./decisions/0125-public-release-readiness.md)). 남은 일: 라이선스 값, npm 조직, 첫 공개 버전과
   시점, 릴리스 워크플로와 토큰.
-- [ ] 설치된 프레임워크 업그레이드와 설정 변경의 migration 도구를 제공한다.
+- [ ] 설치된 프레임워크 업그레이드와 설정 변경의 migration 도구를 제공한다. 구현됨: `bunaway upgrade [dir] [--write]`가
+  package.json의 `@bunaway/*`, `packageManager`, `engines.bun`을 실행 중인 CLI 릴리스와 대조하고 `--write`일 때만 고치며 설치 버전도 점검한다.
+  남은 일: 설정 형식을 바꾸는 migration 단계는 첫 형식 변경 때 그 변환과 함께 추가한다.
 
 ## 23. 명령, 이벤트와 전송 확장
 

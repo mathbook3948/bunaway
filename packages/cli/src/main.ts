@@ -19,6 +19,7 @@ import {
 } from "./index.ts";
 import { buildIosProject, runIosProject, syncIosProject } from "./ios.ts";
 import { isTemplate, type Template, templateNames } from "./templates.ts";
+import { upgradeProject } from "./upgrade.ts";
 
 const help = `bunaway (vanilla / Vite / React / Vue / Svelte)
   create <new-directory>   Generate an independent project (then bun install)
@@ -31,6 +32,7 @@ const help = `bunaway (vanilla / Vite / React / Vue / Svelte)
   build [directory]       Build frontend and app with pinned bundled Bun
   package <channel> [dir] Package a build artifact for a channel [--build]
   doctor [directory]      Check project, runtime version and native tools
+  upgrade [directory]     Check framework package pins against this CLI [--write]
   plugin build [dir]     Build a native plugin package from src/index.ts
   plugin new <name>      Scaffold and register a plugin workspace in this repository
   android sync [dir]     Create or refresh the editable Android Studio project
@@ -250,6 +252,20 @@ async function iosCommand(rest: string[]): Promise<number> {
   return 0;
 }
 
+/** Check the project's framework pins, writing package.json only with `--write`. */
+async function upgradeCommand(rest: string[]): Promise<number> {
+  const operands = rest.filter((argument) => argument !== "--write");
+  const writes = rest.length - operands.length;
+  if (
+    operands.length > 1 ||
+    writes > 1 ||
+    operands.some((argument) => argument.startsWith("--"))
+  ) {
+    throw new Error("Usage: bunaway upgrade [directory] [--write]");
+  }
+  return upgradeProject(operands[0] ?? ".", writes === 1);
+}
+
 /** Commands that take one optional project directory. */
 async function projectCommand(
   command: string,
@@ -295,6 +311,8 @@ export async function main(args: string[]): Promise<number> {
       await devProject(directory, options);
       return 0;
     }
+    case "upgrade":
+      return upgradeCommand(rest);
     case "plugin":
       return pluginCommand(rest);
     case "android":
