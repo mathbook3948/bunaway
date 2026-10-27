@@ -822,7 +822,9 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   `offset`과 `length`를 주면 그 범위만 읽는다(호출당 256 KiB). readText는 파일 512 KiB와 JSON 768 KiB를 넘으면 `INVALID_ARGUMENT`다.
   읽거나 복사하는 도중 파일이 줄어들면 짧은 결과 대신 실패하며 단위 테스트로 고정한다.
   [바이너리 계약](./site/src/content/docs/reference/host/storage-bytes.mdx)을 따른다.
-- [ ] open/read/write/seek/close 파일 핸들과 대용량 stream I/O를 제공한다.
+- [x] open/read/write/seek/close 파일 핸들과 대용량 stream I/O를 제공할지 정한다. 제공하지 않으며 큰 파일은 범위 읽기, append,
+  호스트 쪽 복사로 다루고 핸들이 필요한 처리는 백엔드가 맡는다
+  ([ADR 0111](./decisions/0111-storage-file-handle-and-stream-io.md)).
 - [x] 파일과 디렉터리 존재, stat과 metadata를 조회한다.
   `storage.exists`와 `storage.stat`은 앱이 지정한 절대 경로를 받는다.
   작업마다 독립적으로 허용하고 경로 형식을 검사한다. 링크는 따라간다. 없는 대상은 각각 `false`와 `null`이며,
@@ -874,7 +876,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   [저장 계약](./site/src/content/docs/reference/host/storage-write-text.mdx)을 따른다.
 - [x] 충돌 처리(동시 수정 감지)를 제공할지 정한다. 제공하지 않으며 앱이 읽기 전에 `storage.stat`의 `modifiedAtMs`와 `sizeBytes`를 기억해
   쓰기 직전에 비교하고 쓴 뒤 다시 잡는다. 검사와 쓰기 사이의 경쟁, 시각 해상도, `modifiedAtMs`가 `null`이거나 쓴 뒤에도 바뀌지 않는 파일의 한계는 남는다([ADR 0126](./decisions/0126-storage-concurrent-modification-detection.md)).
-  대용량 stream I/O는 별도 항목에서 정한다.
+  대용량 stream I/O는 제공하지 않기로 했다([ADR 0111](./decisions/0111-storage-file-handle-and-stream-io.md)).
 - [ ] 파일 대화상자로 획득한 범위의 일시 허용과 영속화를 제공한다.
 - [x] Windows current-user Known Folder로 home, documents, downloads, desktop, pictures, music과 videos 경로를 조회한다.
   OS redirection을 따르며 폴더 생성과 파일 접근 권한을 부여하지 않는다.
