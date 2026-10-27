@@ -619,7 +619,7 @@ macOS arm64 CI에서는 `BUNAWAY_OPENER_ISOLATED=1`로 `macos-opener-native.test
 프로세스의 Job 분리와 앱 종료 후 생존을 확인한다. `cli/opener.test.ts`는 설치한 `.tgz`의 선언,
 카탈로그, 작업 권한과 브라우저 번들, UI Worker에서 어댑터를 초기화하지 않는지 검사한다. `BUNAWAY_OPENER_FILES_TEST=1`로 실행하면
 `cli/windows-opener-files.ts`의 자체 STA를 소유한 compiled I/O 어댑터 프로브로 실행 파일의 기본 동작과 실제 Explorer 선택을 확인한다.
-이 opt-in 검사는 Explorer 데스크톱이 필요하며 사용자 파일 연결을 바꾸지 않고 테스트 폴더의 창만 닫는다.
+이 검사는 Explorer 데스크톱이 필요하므로 Linux와 일반 `bun test`에서는 실행되지 않고, windows-native 잡의 `run-native.ts`가 환경 변수를 켜서 별도 프로세스로 실행한다. 사용자 파일 연결을 바꾸지 않고 테스트 폴더의 창만 닫는다.
 일반 문서 편집기의 실행 완료, UNC 공유, MSIX나 Inno 설치 검증은 포함하지 않는다.
 `app-reload.test.ts`는 명령 교체 후 상태, 세션, 구독, 진행 중인 명령의 기존 구현과
 비공개 개발 IPC 입력 검증을 확인한다. 일반 경로와 별칭 경로에서 정상 번들을 교체하고,

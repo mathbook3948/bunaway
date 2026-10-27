@@ -197,6 +197,7 @@ Windows 11 Pro x64 `10.0.26200`, Bun 1.4.2에서 확인했다.
   설치한 어댑터를 고정 Bun으로 compiled STA EXE에 포함하고 프로브와 helper 소스를 삭제한 뒤 실행했다.
   `openFile`로 한글, 공백, 쉼표와 emoji가 있는 실행 파일의 기본 동작을 시작해 marker를 확인했다.
   `revealFile`은 같은 문자가 있는 텍스트 파일을 Explorer에서 실제 선택하는지 확인하고 테스트 창을 닫았다.
+  이 프로브는 windows-native 잡의 단계가 되어 CI에서 반복 실행한다.
   이 프로브는 실제 WebView2 앱 전체, 서명된 앱, MSIX와 Inno 설치 프로그램을 검증한 결과가 아니다.
 
 일반 문서의 연결 앱 실행 완료와 UNC 공유는 미검증이다. 임시 확장자를 등록한 추가 실험에서
