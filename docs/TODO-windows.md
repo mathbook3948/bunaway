@@ -786,7 +786,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [x] 신뢰된 backend의 항목별 WebView 다운로드 시작 승인과 거부를 제공한다. 기본 거부, origin 검사, 30초 승인 기한과 창 수명별 자원 정리를 유지한다.
 - [ ] WebView 다운로드의 사용자 지정 저장 경로와 저장 대화상자를 제공한다. WebView2의 경로 기반 쓰기와 덮어쓰기 동작에 맞는 파일 접근 계약이 필요하다. 현재 승인은 브라우저의 기본 경로만 사용한다.
 - [x] `getDownloads`로 URL, MIME, Content-Disposition, 파일명을 포함한 기본 저장 경로, total/received bytes, 상태와 interrupt reason을 조회한다.
-- [ ] redirect chain과 frame별 initiator를 조회한다.
+- [x] redirect chain과 frame별 initiator는 제공하지 않기로 했다. WebView2 다운로드 API에 값이 없고 요청 관찰로 짜 맞추면 부정확하며 요청 가로채기 방침과 어긋난다. [ADR 0119](./decisions/0119-webview-download-redirect-chain-and-initiator.md).
 - [ ] 속도, 진행률과 완료와 실패 이벤트를 제공한다. 현재 진행 및 종료 상태는 snapshot 조회로 확인한다.
 - [x] `pauseDownload`, `resumeDownload`, `cancelDownload`와 `getDownloads`로 pause, resume, cancel과 재개 가능 여부를 제공한다.
 - [ ] 중단 다운로드의 metadata 저장과 재개를 제공한다.

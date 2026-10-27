@@ -312,8 +312,9 @@ macOS와 다른 플랫폼은 이 서비스를 제공하지 않으며 `UNSUPPORTE
 
 getDownloads는 `{ id, url, mimeType, contentDisposition, path, totalBytes, receivedBytes,
 state, interruptReason, canResume, paused }`를 반환합니다. id는 해당 WebView 수명에만
-유효한 불투명 UUID입니다. URL은 최종 다운로드 URI이며 redirect chain이나 frame별
-initiator 정보가 아닙니다. path는 파일명을 포함한 WebView2의 기본 저장 경로입니다.
+유효한 불투명 UUID입니다. URL은 WebView2가 돌려주는 다운로드 URI이며 redirect chain이나 frame별
+initiator 정보가 아닙니다. WebView2 다운로드 API에 그 값이 없어 조회 기능을 제공하지 않습니다
+([ADR 0119](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0119-webview-download-redirect-chain-and-initiator.md)). path는 파일명을 포함한 WebView2의 기본 저장 경로입니다.
 byte 수가 없거나 JavaScript 안전 정수 범위를 넘으면 해당 수치는 null입니다.
 state는 `pending`, `inProgress`, `interrupted`, `completed`, `cancelled` 중 하나입니다.
 interrupted의 interruptReason은 WebView2의 네이티브 코드이며 그 외에는 null입니다.
