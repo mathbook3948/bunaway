@@ -298,18 +298,25 @@ async function verifyHmrEdit(
   socket.addEventListener("error", () => {
     messages.push("websocket error");
   });
+  let socketClosed = false;
   socket.addEventListener("close", (event) => {
+    socketClosed = true;
     messages.push(`websocket closed with code ${event.code}`);
   });
-  const serverExited = () =>
-    server.exitCode !== null &&
-    `the dev server exited with code ${server.exitCode} during the HMR check`;
+  const hmrCheckFailed = () => {
+    if (server.exitCode !== null) {
+      return `the dev server exited with code ${server.exitCode} during the HMR check`;
+    }
+    return (
+      socketClosed && "the HMR WebSocket closed before the edit was reported"
+    );
+  };
   try {
     await waitFor(() => messages.some((text) => text.includes('"connected"')), {
       deadline: "toolchain",
       what: "the HMR WebSocket to connect",
       intervalMs: DEV_SERVER_POLL_MS,
-      failed: serverExited,
+      failed: hmrCheckFailed,
     });
     // Only messages after the first write count; earlier ones (such as a dependency
     // re-optimization reload) say nothing about the edit.
@@ -320,25 +327,25 @@ async function verifyHmrEdit(
         // The file watcher may still be finishing its first scan when the edit lands and miss it,
         // so the same edit is written again until a message arrives.
         await writeFile(resolve(app, edit.file), original + edit.appended);
-        return messages
+        const announced = messages
           .slice(sinceEdit)
           .some(
             (text) =>
               text.includes('"type":"update"') ||
               text.includes('"type":"full-reload"'),
           );
+        // A reload that did not come from this edit must not end the wait before the server
+        // serves the edit, so both the message and the served module have to agree.
+        return (
+          announced && (await moduleText(moduleUrl)).includes(HMR_EDIT_MARKER)
+        );
       },
       {
         deadline: "toolchain",
         what: `an HMR update after editing ${edit.file}`,
         intervalMs: HMR_EDIT_RETRY_MS,
-        failed: serverExited,
+        failed: hmrCheckFailed,
       },
-    );
-    const after = await moduleText(moduleUrl);
-    assert(
-      after.includes(HMR_EDIT_MARKER),
-      `the served ${edit.file} does not contain the edit`,
     );
     return `HMR reported the edit of ${edit.file}`;
   } catch (error) {
