@@ -1157,7 +1157,7 @@ Bun 자식으로 검사한다. stdin/stdout/stderr 왕복과 종료 상태, 종�
 스크립트 파일과 Blob URL로 만든 `new Worker`의 왕복 메시지와 `onerror`, `BUN_BE_BUN=1`로 실행한 `Bun.spawn({ ipc })`
 자식의 양방향 메시지와 `onExit` 종료 코드, 자식이 별도 프로세스이고 부모가 유지되는 것을 모든 호스트에서 확인한다.
 실제 호스트 부팅은 거치지 않는다. Windows에서만 앱 Job Object(`containAppProcess`) 안에서 시작한 ipc 자식이 앱 종료 뒤 남지
-않는지 확인하며 Windows native 실행기에 포함한다.
+않는지 확인한다. 별도 등록 없이 Windows Check 잡의 전체 `bun test`에서 실행된다.
 
 `api/network.test.ts`는 URL, header, bytes 상한과 독립 작업 권한을 검사한다.
 `lifecycle/windows-network.test.ts`는 생성 Windows와 macOS 어댑터 및 실제 loopback HTTP/WebSocket 서버로

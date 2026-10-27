@@ -12,8 +12,8 @@ function report(event: Record<string, unknown>) {
 
 async function workerRoundTrip(label: string, source: string | URL) {
   const worker = new Worker(source);
-  const doubled = new Promise((resolve) => {
-    worker.onmessage = (event) => resolve(event.data);
+  const doubled = new Promise((done) => {
+    worker.onmessage = (event) => done(event.data);
   });
   worker.postMessage({
     double: 21,
@@ -21,10 +21,10 @@ async function workerRoundTrip(label: string, source: string | URL) {
   report({
     [label]: await doubled,
   });
-  const failed = new Promise<string>((resolve) => {
+  const failed = new Promise<string>((done) => {
     worker.onerror = (event) => {
       event.preventDefault();
-      resolve(event.message);
+      done(event.message);
     };
   });
   worker.postMessage("throw");
@@ -87,7 +87,7 @@ function startChild(linger: boolean) {
       if (queued !== undefined) {
         return Promise.resolve(queued);
       }
-      return new Promise((resolve) => waiters.push(resolve));
+      return new Promise((done) => waiters.push(done));
     },
   };
 }

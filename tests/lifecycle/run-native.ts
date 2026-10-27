@@ -180,7 +180,6 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-os.test.ts",
           "tests/lifecycle/windows-process.test.ts",
           "tests/lifecycle/windows-process-spawn.test.ts",
-          "tests/lifecycle/windows-utility-process.test.ts",
           "tests/lifecycle/process-run.test.ts",
           "tests/lifecycle/windows-network.test.ts",
           "tests/lifecycle/windows-network-download.test.ts",

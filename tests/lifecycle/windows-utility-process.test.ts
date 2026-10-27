@@ -132,7 +132,9 @@ test.skipIf(process.platform !== "win32")(
       let pid = 0;
       for await (const chunk of app.stdout) {
         text += Buffer.from(chunk).toString();
-        const found = events(text).find((event) => "lingerPid" in event);
+        // Only complete lines parse; a chunk can end inside the JSON line.
+        const complete = text.slice(0, text.lastIndexOf("\n") + 1);
+        const found = events(complete).find((event) => "lingerPid" in event);
         if (found) {
           pid = Number(found.lingerPid);
           break;
@@ -160,6 +162,8 @@ test.skipIf(process.platform !== "win32")(
     } finally {
       clearTimeout(timer);
       app.kill();
+      // Observe the stderr reader even when the loop above threw, so it never ends unobserved.
+      await stderr;
     }
   },
 );

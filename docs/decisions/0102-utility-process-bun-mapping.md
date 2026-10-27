@@ -16,7 +16,7 @@ Electron의 `utilityProcess.fork(modulePath, args, { serviceName, stdio })`는 �
 
 - Electron은 `utilityProcess`와 `MessagePortMain`을 제공한다.
 - Tauri는 같은 기능이 없고 sidecar(`Command.sidecar`)의 stdout 이벤트로만 대응한다.
-- 이 저장소의 backend는 신뢰된 Bun 코드다. 같은 절의 HTTP client-request와 incoming-message stream 항목은 Bun API에
+- 이 저장소의 backend는 신뢰된 Bun 코드다. `docs/TODO-windows.md`의 같은 절에서 HTTP client-request와 incoming-message stream 항목은 Bun API에
   대응시켰고, 프런트엔드는 임의 Node/Bun에 접근하지 않는다([ADR 0048](./0048-frontend-node-access-and-sync-ipc.md)).
 
 ## 결정
@@ -34,8 +34,9 @@ Electron의 `utilityProcess.fork(modulePath, args, { serviceName, stdio })`는 �
    `BUN_BE_BUN=1`을 준다. 이 변수가 있으면 컴파일된 실행 파일이 호스트 대신 일반 Bun으로 동작한다. 앱 실행 파일을 변수
    없이 다시 실행하면 호스트가 새로 시작해 이미 잡힌 앱 잠금을 만나 실행 중인 인스턴스로 인자를 넘기고 끝나므로 ipc
    자식으로 쓸 수 없다(`native/windows/bun/boot.ts`의 시작 순서 기준이며 이 동작을 시험으로 확인하지는 않았다). 번들 sidecar 실행 파일은 이 ADR의 범위가 아니며 sidecar 문서를 따른다.
-3. 호스트 빌드는 entry point(`boot.js`, `ui.js`, `host-operations.js`)가 고정이고 앱이 추가할 수 없다. 번들에 들어 있지 않은
-   모듈 경로를 `new Worker`에 주면 `ModuleNotFound`로 실패한다. Worker는 (a) 앱이 실행 파일과 함께 배포하는 스크립트 파일의
+3. 호스트 빌드는 entry point(`boot.js`, `ui.js`, `host-operations.js`)가 `packages/cli/src/windows-compile.ts`에 고정이고
+   앱이 추가할 수 없다. entry point 하나로 컴파일한 실행 파일에서 번들에 들어 있지 않은 모듈 경로를 `new Worker`에 주면
+   `ModuleNotFound`로 실패하는 것을 확인했다(이 실패 경로는 시험에 넣지 않았다). Worker는 (a) 앱이 실행 파일과 함께 배포하는 스크립트 파일의
    경로, 또는 (b) 소스 문자열로 만든 Blob URL로 만든다. 둘 다 컴파일된 실행 파일에서 동작한다.
 4. Windows에서 앱 프로세스는 데이터 디렉터리를 점유할 때 Job Object(`KILL_ON_JOB_CLOSE`)에 들어가므로 `Bun.spawn`으로 만든
    자식과 그 후손은 앱이 끝나면 함께 종료된다. 자식을 앱보다 오래 두려면 별도 방법이 필요하고 이 결정은 제공하지 않는다.
