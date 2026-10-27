@@ -120,10 +120,10 @@ GPU 프로세스의 그래픽 메모리, 렌더러 내부 지표와 startup 시�
 
 값은 `CapabilityAccessManager\ConsentStore\webcam` 또는 `microphone` 키의 `Value`(`Allow`/`Deny`)를 `HKLM`(기기 전체 설정), `HKCU`(사용자 설정)
 순서로 읽어 만듭니다. 레지스트리 경로는 상수이고 호출자 입력은 경로에 들어가지 않으며 읽기만 합니다. 값이 없을 때를 `granted`로 가정하지 않습니다.
-이 조회는 OS가 앱 전체에 허용하는지만 답합니다. 데스크톱 앱별 항목(`NonPackaged` 하위 키)은 조회하지 않으므로 앱별로
-꺼져 있어도 `granted`가 나올 수 있고, 사용자가 설정을 바꾸면 다음 호출부터 반영됩니다. 상태가 `denied`이면 WebView의 `getUserMedia`가
-조용히 실패하므로 앱은 먼저 안내 화면을 보여줄 수 있습니다. OS 권한을 요청하는 API는 Windows에 없으므로 `request` 작업은 제공하지 않습니다
-(Electron의 `askForMediaAccess`도 macOS 전용). 개인정보 설정 화면을 여는 API는 현재 제공하지 않습니다(`opener.openUrl`은 `http:`와 `https:`만 엽니다). 개인정보 설정은 fingerprinting과 앱 동작 분기에 쓸 수
+이 조회는 위 두 키 바로 아래의 기기 전체 설정과 사용자 설정만 답합니다. `NonPackaged` 하위 키(데스크톱 앱 접근 허용 설정과
+앱별 항목)는 조회하지 않으므로 그 설정이 꺼져 있어도 `granted`가 나올 수 있습니다. 사용자가 설정을 바꾸면 다음 호출부터 반영됩니다.
+상태가 `denied`나 `restricted`이면 앱은 먼저 안내 화면을 보여줄 수 있습니다. OS 권한을 요청하는 API는 Windows에 없으므로
+`request` 작업은 제공하지 않습니다. 개인정보 설정 화면을 여는 API는 현재 제공하지 않습니다(`opener.openUrl`은 `http:`와 `https:`만 엽니다). 개인정보 설정은 fingerprinting과 앱 동작 분기에 쓸 수
 있으므로 `os.getMediaAccessStatus`는 독립 권한입니다. macOS에서는 `UNSUPPORTED`입니다.
 
 이모지 패널을 여는 API는 제공하지 않습니다. Windows에는 이모지 패널을 여는 공식 API가 없고

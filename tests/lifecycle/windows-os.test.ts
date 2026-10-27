@@ -2,6 +2,7 @@ import { expect, setDefaultTimeout, test } from "bun:test";
 import assert from "node:assert/strict";
 import { arch, hostname, release, version } from "node:os";
 import os from "@bunaway/plugin-os/native/windows";
+import type { OSMediaAccessStatus } from "#plugins/os/src/contract";
 import { osOperations } from "#plugins/os/src/operations";
 import { deadline, killAfter } from "../fixtures/deadlines.ts";
 import { assertWindowsRegionCode } from "../fixtures/windows-region-code.ts";
@@ -34,7 +35,9 @@ function consentValue(
 }
 
 /** The status the documented decision table gives for what reg.exe reads. */
-function expectedMediaAccess(mediaType: "camera" | "microphone"): string {
+function expectedMediaAccess(
+  mediaType: "camera" | "microphone",
+): OSMediaAccessStatus {
   const machine = consentValue("HKLM", mediaType);
   if (machine === "Deny") {
     return "restricted";
@@ -46,12 +49,10 @@ function expectedMediaAccess(mediaType: "camera" | "microphone"): string {
   if (user === null) {
     return "not-determined";
   }
-  return (
-    {
-      Allow: "granted",
-      Deny: "denied",
-    }[user] ?? "unknown"
-  );
+  if (user === "Allow") {
+    return "granted";
+  }
+  return user === "Deny" ? "denied" : "unknown";
 }
 
 // One test reads the print spooler and DXGI and starts a child process.

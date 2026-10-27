@@ -94,7 +94,7 @@ export function mediaAccessBindings(
  * decides first: a `Deny` there is `restricted`. Otherwise the user hive decides: `Allow` is `granted`, `Deny`
  * is `denied` and no stored value is `not-determined`. A failed read or any other value is
  * `unknown`; a missing value is never assumed to be granted. The answer is the system-wide
- * setting only; per-app entries under `NonPackaged` are not consulted.
+ * setting only; the `NonPackaged` subkeys (desktop-app toggle and per-app entries) are not consulted.
  */
 export function mediaAccessStatus(
   bindings: MediaAccessBindings,

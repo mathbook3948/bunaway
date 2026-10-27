@@ -1132,6 +1132,9 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 `api/os.test.ts`는 독립 작업 권한과 metadata 계약을 검사한다. `lifecycle/windows-os.test.ts`는
 실제 Kernel32 언어 설정 조회와 Bun 실행 정보를 생성 어댑터에서 검사하며 `host:windows`에 포함된다.
 사용자 언어 설정 변경이나 translation 하드웨어 검증은 포함하지 않는다.
+`api/os-media-access.test.ts`는 카메라와 마이크 접근 상태의 판정표(기기 전체 설정 우선, 사용자 설정, 읽기 실패와 예상 밖 값)와
+장치별 키 선택을 가짜 바인딩으로 검사한다. `windows-os.test.ts`는 같은 키를 `reg.exe`로 따로 읽어 실제 결과와 비교한다.
+러너의 설정을 바꾸지 않으며 `NonPackaged` 하위 키는 검사하지 않는다.
 
 `api/process-plugin.test.ts`는 local `.exe` argv 계약과 독립 실행 권한을 검사한다.
 `lifecycle/process-run.test.ts`는 실제 Bun 자식의 특수 인자, binary stdin/stdout/stderr, 합계

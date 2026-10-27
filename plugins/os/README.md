@@ -61,6 +61,6 @@ The deterministic locale regression uses the same assertion as the actual Window
 key with `RegGetValueW`, first in `HKLM` (device-wide setting; `Deny` is `restricted`; group policy keys are not read) and then in `HKCU` (`Allow` is `granted`, `Deny` is
 `denied`, no value is `not-determined`). A failed read or any other value is `unknown`. `RegGetValueW` takes the predefined
 hive and subkey path directly, so no key handle is opened; the key paths are constants and caller input never reaches them. Per-app
-`NonPackaged` entries are not read. macOS rejects it with `UNSUPPORTED`. `tests/api/os-media-access.test.ts` covers the decision
+`NonPackaged` subkeys (the desktop-app access toggle and per-app entries) are not read, so `granted` does not rule out that desktop apps are blocked. macOS rejects it with `UNSUPPORTED`. `tests/api/os-media-access.test.ts` covers the decision
 table and the key choice with fake bindings; `tests/lifecycle/windows-os.test.ts` runs both device classes against the real
 consent store, where CI checks that the call succeeds and returns the status that the same keys read with `reg.exe` give under the decision table.
