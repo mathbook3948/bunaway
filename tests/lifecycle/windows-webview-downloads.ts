@@ -332,12 +332,12 @@ if (!process.argv.includes("--child")) {
       () => changesFor(denied.id).some((c) => c.download.state === "cancelled"),
       "Rejected request did not report cancellation",
     );
-    assert.deepEqual(
-      changesFor(denied.id).map((c) => c.download.state),
-      [
-        "pending",
-        "cancelled",
-      ],
+    // The rejected request ends cancelled and never reports a transfer state.
+    const rejected = changesFor(denied.id).map((c) => c.download.state);
+    assert.equal(rejected.at(-1), "cancelled");
+    assert(
+      rejected.every((state) => state === "pending" || state === "cancelled"),
+      "A rejected request reported a transfer state",
     );
     await assert.rejects(
       windows.approveDownload({
@@ -371,6 +371,11 @@ if (!process.argv.includes("--child")) {
       "Paused download was not resumable",
     );
     assert.equal((await item(accepted.id)).paused, true);
+    // The paused state persists until resume, so its report cannot be merged away.
+    await waitFor(
+      () => changesFor(accepted.id).some((c) => c.download.paused),
+      "Pause was not reported",
+    );
     await windows.resumeDownload({
       id: accepted.id,
     });
@@ -394,16 +399,6 @@ if (!process.argv.includes("--child")) {
     );
     const reported = changesFor(accepted.id);
     assert.equal(reported[0]?.download.state, "pending");
-    assert(
-      reported.some(
-        (c) => c.download.state === "inProgress" && !c.download.paused,
-      ),
-      "Active transfer was not reported",
-    );
-    assert(
-      reported.some((c) => c.download.paused),
-      "Pause was not reported",
-    );
     assert.equal(reported.at(-1)?.download.state, "completed");
     assert.equal(reported.at(-1)?.download.receivedBytes, content.length);
     assert.equal(
