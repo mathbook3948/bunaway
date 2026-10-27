@@ -92,7 +92,7 @@ test.skipIf(process.platform !== "win32")(
         "camera",
         "microphone",
       ] as const) {
-        osOperations.getMediaAccessStatus.output.parse(
+        const status = osOperations.getMediaAccessStatus.output.parse(
           await adapter.execute(
             "os.getMediaAccessStatus",
             {
@@ -101,6 +101,8 @@ test.skipIf(process.platform !== "win32")(
             "backend",
           ),
         );
+        // Both hives hold Allow or Deny or nothing, so "unknown" would mean the registry read or its decoding failed.
+        expect(status).not.toBe("unknown");
       }
       // The app's own process leads the tree; a child this test starts joins it as another process.
       const child = Bun.spawn(

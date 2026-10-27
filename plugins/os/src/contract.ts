@@ -150,6 +150,9 @@ export type OSGpu = z.infer<typeof gpuSchema>;
 /** One process of the app's process tree as listed by os.listAppProcesses. */
 export type OSAppProcess = z.infer<typeof appProcessSchema>;
 
+/** Input of os.getMediaAccessStatus. */
+export type OSMediaAccessInput = z.infer<typeof mediaAccessInputSchema>;
+
 /** Device class os.getMediaAccessStatus reads. */
 export type OSMediaType = z.infer<typeof mediaTypeSchema>;
 
