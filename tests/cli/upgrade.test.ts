@@ -298,7 +298,69 @@ test("a package.json that changed after planning is not overwritten", async () =
   ]);
 });
 
+test("a rewrite that would alter the file's formatting is refused and writes nothing", async () => {
+  const stale = `"@bunaway/cli": "1.0.0"`;
+  const variants = [
+    // Duplicate key: the rewrite would drop the first value.
+    `{\n  "name": "a",\n  "name": "b",\n  "dependencies": { ${stale} }\n}\n`,
+    // Number spelling, escape sequence and inline spacing are normalized by JSON.stringify.
+    `{\n  "version": 1.0,\n  "dependencies": {\n    ${stale}\n  }\n}\n`,
+    `{\n  "author": "\\u00e9",\n  "dependencies": {\n    ${stale}\n  }\n}\n`,
+    `{ "dependencies": { ${stale} } }\n`,
+    // Integer-like keys are reordered by the engine.
+    `{\n  "2": 1,\n  "1": 2,\n  "dependencies": {\n    ${stale}\n  }\n}\n`,
+  ];
+  for (const text of variants) {
+    await writePackage(text);
+    expect(await quiet(() => upgradeProject(project, true, target))).toBe(1);
+    expect(await readFile(join(project, "package.json"), "utf8")).toBe(text);
+    expect(await readdir(project)).toEqual([
+      "package.json",
+    ]);
+  }
+});
+
+test("a package.json with invalid UTF-8 bytes is refused and keeps its bytes", async () => {
+  const bytes = Buffer.concat([
+    Buffer.from('{\n  "author": "'),
+    Buffer.from([
+      0xe9,
+    ]),
+    Buffer.from(
+      '",\n  "dependencies": {\n    "@bunaway/cli": "1.0.0"\n  }\n}\n',
+    ),
+  ]);
+  await writeFile(join(project, "package.json"), bytes);
+  await expect(upgradeProject(project, true, target)).rejects.toThrow("UTF-8");
+  expect(await readFile(join(project, "package.json"))).toEqual(bytes);
+});
+
+test("a local package file is skipped and its installed version is not compared", async () => {
+  await writePackage(
+    manifest({
+      dependencies: {
+        "@bunaway/cli": "file:/packs/bunaway-cli-1.0.0.tgz",
+      },
+      devDependencies: {},
+      packageManager: "bun@1.4.2",
+    }),
+  );
+  await install("@bunaway/cli", "1.0.0");
+  const plan = await planUpgrade(project, target);
+  expect(plan.lines.map((line) => line.status)).toEqual([
+    "SKIP",
+    "OK",
+  ]);
+  expect(await quiet(() => upgradeProject(project, false, target))).toBe(0);
+});
+
 test("the command rejects unknown options and extra directories", async () => {
+  await expect(
+    main([
+      "upgrade",
+      "-w",
+    ]),
+  ).rejects.toThrow("Usage");
   await expect(
     main([
       "upgrade",

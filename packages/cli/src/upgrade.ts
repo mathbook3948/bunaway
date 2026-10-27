@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { lstat, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { isRecord } from "@bunaway/protocol";
@@ -85,7 +86,7 @@ function planDependency(
     lines.push({
       status: "SKIP",
       name,
-      detail: `${specifier} is not a registry version and is left as is`,
+      detail: `${specifier} is not a registry version; point it at this release by hand`,
     });
   } else if (specifier !== version) {
     dependencies[name] = version;
@@ -179,7 +180,18 @@ async function readPackageText(project: string): Promise<string> {
   if (!info.isFile()) {
     throw new Error(`${path} must be a regular file, not a link.`);
   }
-  return readFile(path, "utf8");
+  // Strict decoding: invalid bytes would otherwise become U+FFFD and be lost on rewrite.
+  // ignoreBOM keeps a leading BOM in the text so it is written back unchanged.
+  try {
+    return new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(await readFile(path));
+  } catch (cause) {
+    throw new Error(`${path} must be valid UTF-8.`, {
+      cause,
+    });
+  }
 }
 
 /** Compare the project's framework pins with the running CLI's release without writing anything. */
@@ -208,7 +220,12 @@ export async function planUpgrade(
       key.startsWith("@bunaway/"),
     )) {
       planDependency(lines, dependencies, name, known, actual.version);
-      if (typeof dependencies[name] === "string" && known.has(name)) {
+      const specifier = dependencies[name];
+      if (
+        typeof specifier === "string" &&
+        !isExternalSpecifier(specifier) &&
+        known.has(name)
+      ) {
         declared.push(name);
       }
     }
@@ -267,7 +284,7 @@ export async function applyUpgrade(
     return;
   }
   const path = resolve(project, "package.json");
-  const temporary = `${path}.${process.pid}.tmp`;
+  const temporary = `${path}.${randomUUID()}.tmp`;
   const info = await lstat(path);
   try {
     await writeFile(temporary, plan.next, {
@@ -306,11 +323,15 @@ export async function upgradeProject(
   }
   if (!write) {
     const stale = plan.lines.some((line) => line.status === "FAIL");
-    console.log(
-      changes
-        ? "Run bunaway upgrade --write to apply the changes."
-        : "Framework pins are up to date.",
-    );
+    if (changes) {
+      console.log("Run bunaway upgrade --write to apply the changes.");
+    } else if (stale) {
+      console.log(
+        "Declared pins match, but installed packages differ; run bun install.",
+      );
+    } else {
+      console.log("Framework pins are up to date.");
+    }
     return changes || stale ? 1 : 0;
   }
   await applyUpgrade(directory, plan);

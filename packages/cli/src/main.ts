@@ -259,7 +259,7 @@ async function upgradeCommand(rest: string[]): Promise<number> {
   if (
     operands.length > 1 ||
     writes > 1 ||
-    operands.some((argument) => argument.startsWith("--"))
+    operands.some((argument) => argument.startsWith("-"))
   ) {
     throw new Error("Usage: bunaway upgrade [directory] [--write]");
   }

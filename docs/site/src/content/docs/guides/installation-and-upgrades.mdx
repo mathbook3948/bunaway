@@ -43,6 +43,8 @@ SDK는 같은 릴리스로 함께 설치해야 합니다. overrides/resolutions�
 
 1. 새 릴리스의 로컬 묶음을 준비합니다.
 2. 같은 묶음으로 만든 참조 앱과 @bunaway 의존성 선언을 비교해 모두 갱신합니다.
+   `bunaway upgrade`로 선언이 새 CLI와 맞는지 확인하고 `--write`로 정확한 버전에 맞출 수 있습니다.
+   로컬 묶음(`file:` tarball)으로 설치한 앱은 새 묶음의 파일로 직접 바꿔야 합니다. [upgrade](/reference/cli/upgrade/)
 3. `bun install`로 lockfile을 갱신합니다.
 4. 앱의 typecheck, validate, doctor를 실행한 뒤 dev와 build로 기존 기능이 동작하는지 확인합니다.
 5. 실패하면 이전 package.json, bun.lock을 복원하고 frozen install합니다.
