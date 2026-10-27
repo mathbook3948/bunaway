@@ -539,7 +539,7 @@ MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이�
 - [x] 폴더 선택, 다중 파일과 폴더 선택을 제공한다.
 - [x] 파일 형식 필터, 기본 경로와 파일 이름, 기본 확장자를 제공한다.
 - [x] 숨긴 파일 표시와 저장 overwrite 확인 옵션을 제공한다. 새 폴더 생성은 OS 기본 UI를 유지하며 Windows에서 끄는 옵션은 지원하지 않는다.
-- [ ] 부모 창을 지정해 모달 대화상자를 연결한다. 단일 창 모델(ADR 0026)에서 `ownerWindowId`를 제거했다.
+- [x] 부모 창을 지정해 모달 대화상자를 연결한다. 단일 창 모델([ADR 0026](decisions/0026-single-webview-single-window.md))에서 호출별 `ownerWindowId`를 두지 않고, 대화상자는 항상 앱의 창을 소유 창으로 삼는다. `plugins/dialog/src/platforms/windows.ts`가 소유 창 hwnd를 `show`에 넘기고 소유 창이 닫히면 오류로 끝내며, `tests/api/dialog.test.ts`가 hwnd 전달과 소유 창 종료를 확인한다.
 - [x] 선택 취소와 호출 취소의 결과를 정의한다.
 - [x] 선택한 파일 접근 권한의 수명과 영속화 여부를 정의한다.
 - [x] 결정 완료: 인증서 신뢰 확인 대화상자는 제공하지 않는다. Electron `showCertificateTrustDialog`는 인증서 검증 처리기의 인증서 객체가 입력인데 이 프로젝트에는 그 인증서 경로가 없고 Tauri에는 대응 기능이 없다. WebView 인증서 오류와 신뢰 판단은 16절 항목이 소유한다.
@@ -714,7 +714,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [x] 결정 완료: 인증 cache, DNS cache와 code cache의 조회와 삭제는 제공하지 않는다. WebView2에 대응하는 API가 없다([ADR 0081](./decisions/0081-webview-browsing-data.md)).
 - [x] 결정 완료: 세션의 persistent 여부와 storage path 조회는 제공하지 않는다. 호스트는 InPrivate를 쓰지 않아 항상 persistent이고 프로필 폴더 위치는 공개 계약이 아니다([ADR 0074](./decisions/0074-webview-session-info.md)).
 - [x] 세션별 proxy 설정, 조회와 재적용은 [제공하지 않는다](decisions/0062-webview-network-identity-options.md). 설정 수단이 없으므로 조회와 재적용 대상도 없다. 호스트가 WebView2 브라우저 인자를 넘기지 않는 방침(ADR 0030 결정 4)을 유지하며, 배포 앱의 환경 변수 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`로 들어가는 `--proxy-server`는 앱 계약이 아니다. 앱 백엔드의 시스템 proxy 조회는 `network.resolveProxy`가 맡는다.
-- [ ] 세션의 모든 연결 종료를 제공한다. preconnect와 connection 정리 항목과 함께 결정한다.
+- [x] 세션의 모든 연결 종료는 [제공하지 않는다](decisions/0082-webview-preconnect-connections-and-net-log.md). 아래 preconnect, 연결 정리 항목과 함께 결정했다.
 - [x] HTTP 요청 전 취소, redirect와 URL filter는 [제공하지 않는다](decisions/0083-webview-request-interception.md). 탐색 허용은 허용 origin 검사와 탐색 훅 항목이, 백엔드 HTTP는 `network.request`가 맡는다.
 - [x] 요청과 응답 header 조회, 변경 및 response stream 처리는 [제공하지 않는다](decisions/0083-webview-request-interception.md).
 - [x] 요청 완료, 실패와 redirect 이벤트는 [제공하지 않는다](decisions/0083-webview-request-interception.md). WebView2 이벤트 목록에는 리소스 요청 단위의 네트워크 오류와 완료 전용 이벤트가 없다.
