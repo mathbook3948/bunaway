@@ -9,43 +9,45 @@ status: accepted
 ## 배경
 
 `storage`는 호출 하나로 끝나는 파일 작업을 제공한다. 바이트 작업은 `readBytes`(`offset`, `length`, 한 번에 256 KiB 이하),
-`writeBytes`(대체, 선택적 `atomic`), `appendBytes`, `appendText`이고, 복사는 `copyFile`이다. 각 호출은 파일을 새로 열고 끝나면
+`writeBytes`(대체, 선택적 `atomic`), `appendBytes`이고, 텍스트 추가는 `appendText`, 복사는 `copyFile`이다. 각 호출은 파일을 새로 열고 끝나면
 닫는다. 호출 사이에 열린 파일이나 읽기 위치를 가지는 상태는 없다. 이 저장소가 `open`, `read`, `write`, `seek`, `close`로
 이어지는 장기 파일 핸들과 stream I/O를 더 제공할지 정해야 했다.
 
 - Electron의 `fs.promises.open`은 Node의 `FileHandle`을 돌려주며 `read`, `write`, `truncate`, `close`와 읽기와 쓰기용 stream을
-  제공한다. 이는 Node 프로세스(메인 프로세스) 안의 API이고, 렌더러는 기본 설정에서 파일 시스템에 직접 닿지 않는다.
+  제공한다. 이는 Node 프로세스(메인 프로세스) 안의 API이고, 렌더러는 Node 통합을 켜지 않은 기본 설정에서 파일 시스템에 직접 닿지 않는다.
   렌더러가 파일을 다루려면 앱이 IPC로 중계한다. 핸들은 그 Node 프로세스의 메모리 안에서 사는 객체이며 IPC 경계를 넘지 않는다.
 - Tauri의 fs 플러그인은 프런트엔드 API에서 `open`으로 `FileHandle`(`read`, `write`, `seek`, `truncate`, `stat`, `close`)을
   준다. 핸들은 플러그인이 보관하는 자원 번호이며 열기, 읽기, 쓰기는 각각 권한과 허용 경로(scope)로 통제한다. `readFile`,
   `writeFile`처럼 한 번에 끝나는 API도 함께 있다.
 - 위 Electron과 Tauri 서술은 공개 문서에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다. 저장소 서술은 코드와 문서를 근거로 한다.
-- 이 저장소의 앱 백엔드는 Bun에서 도는 신뢰된 코드이며 `Bun.file`, `Bun.write`, `node:fs`를 직접 쓸 수 있다
+- 이 저장소의 앱 백엔드는 Bun에서 도는 신뢰된 코드이며 `Bun.file`, `Bun.write`를 직접 쓸 수 있다
   ([백엔드 Host API](../site/src/content/docs/reference/backend/host-api.mdx),
   [저장 가이드](../site/src/content/docs/guides/storage-and-state.mdx)). 이 직접 호출은 정책의 Host API 검사
-  범위 밖이다. `storage` 플러그인이 맡는 일은 WebView 쪽 호출과 정책 검사를 거치는 경계의 작업이다.
-- 호스트의 `io` 작업은 I/O Worker의 제한된 큐에서 승인을 받고 실행하며, 호출 하나는 취소 신호와 기한 안에서 끝나는 요청과 응답이다
-  ([플러그인 아키텍처](../architecture/plugins.md)). 요청과 응답 한 쌍은 JSON 전송 1 MiB 안에 들어가야 하고, 그래서 바이트 입력과 한 번의
+  범위 밖이다. 위치를 지정한 쓰기와 크기 조정은 `Bun.file`에 없고 Bun이 제공하는 Node 호환 `node:fs`의 `FileHandle`로 한다
+  (`storage`의 Windows와 macOS 어댑터도 `node:fs`를 쓴다). `storage` 플러그인이 맡는 일은 WebView 쪽 호출과 정책 검사를 거치는 경계의 작업이다.
+- 호스트의 `io` 작업은 I/O Worker의 제한된 큐에서 승인을 받고 실행하며, 호출 하나는 취소 신호와 기한을 받는 요청과 응답이다.
+  취소와 기한은 호출자에게 실패를 돌려줄 뿐 이미 시작한 파일 작업을 되돌리지 않는다
+  ([플러그인 아키텍처](../architecture/plugins.md)). 요청과 응답은 각각 JSON 전송 1 MiB 안에 들어가야 하고, 그래서 바이트 입력과 한 번의
   읽기 결과는 256 KiB 상한을 둔다([바이너리 저장과 append](../site/src/content/docs/reference/host/storage-bytes.mdx)).
 - 경로 제한은 앱 명령의 책임이고 플러그인은 열린 핸들을 고정하거나 최종 경로를 다시 비교하지 않는다([ADR 0024](./0024-plugin-path-responsibility.md)).
 
 ## 결정
 
 1. `storage`에 `open`, `read`, `write`, `seek`, `truncate`, `close` 같은 장기 파일 핸들 연산을 추가하지 않는다. 핸들 번호를 돌려주는
-   연산, 파일 단위 stream을 여는 연산, stream 이벤트도 두지 않는다. 코어 계약, 정책 필드, 호스트 자원 표를 바꾸지 않는다.
+   연산, 파일 단위 stream을 여는 연산, stream 이벤트도 두지 않는다. 코어 계약과 정책 필드를 바꾸지 않고 핸들용 자원 표를 새로 만들지 않는다.
 2. 현행 `storage` 연산을 바꾸지 않는다. 큰 파일은 아래 방법으로 다룬다.
    - 읽기: `readBytes`의 `offset`과 `length`로 앞에서부터 반복한다. `offset` 앞을 읽지 않으므로 파일 크기에 상한이 없다.
    - 쓰기: 첫 조각은 `writeBytes`로 대체하고 나머지는 `appendBytes`로 이어 붙인다. 중간 실패나 취소는 지금까지 쓴 부분을
      되돌리지 않는다. 원자적 교체(`atomic: true`)는 한 번에 보내는 256 KiB 이하의 `writeBytes`에서만 쓸 수 있다.
-   - 복사: 호스트 쪽 `copyFile`로 한 번에 복사한다. 내용이 화면을 지나지 않는다.
+   - 복사: 호스트 쪽 `copyFile`로 한 번에 복사한다. 내용이 화면을 지나지 않는다. 대상이 이미 있으면 거부하고, 도중에 실패하면 부분 파일이
+     남을 수 있다.
    - 반복 호출 사이에 파일이 바뀌면 조각이 서로 맞지 않을 수 있다. 이를 막는 잠금이나 변경 감지는 이 결정이 약속하지 않는다.
-3. 핸들이 있어야만 가능한 일은 `storage`로 하지 않는다. 열어 둔 채 위치를 옮기며 읽고 쓰기, 파일 중간의 임의 위치 쓰기, 파일 중간의
-   크기 조정이 여기에 든다. 이런 파일 처리가 필요한 앱은 백엔드에서 `Bun.file`이나 `node:fs`로 직접 처리하고, 화면에는 앱이 정한
-   명령(시작, 진행 이벤트, 결과)을 등록한다. 대용량 처리는 같은 프로세스 안에서 stream으로 이어지므로 256 KiB 전송 상한을 받지 않는다.
+3. 파일을 열어 둔 채 위치를 옮기며 읽고 쓰는 처리는 `storage`로 하지 않는다. 이런 처리가 필요한 앱은 백엔드에서 `node:fs`의
+   `FileHandle`로 직접 처리하고, 화면에는 앱이 정한 명령(시작, 결과)과 이벤트(진행)를 등록한다. 대용량 처리는 같은 프로세스 안에서 stream으로 이어지므로 256 KiB 전송 상한을 받지 않는다.
 4. 화면에서 대용량 파일을 바로 받아야 하는 경우의 전송 방식(바이너리 프레임, 분할 전송)은 이 결정이 정하지 않는다. 그런 요구는
    별도 항목으로 전송 계약과 함께 다룬다.
-5. 임의 위치 쓰기와 truncate 연산, 동시 수정 감지, 핸들 기반 stream은 이 결정이 약속하지 않으며 각각 별도 항목에서 정한다.
-   `UNSUPPORTED` 항목이나 오류 코드를 새로 만들지 않는다. 제공하는 연산이 없으므로 표시할 대상이 없다.
+5. 이 결정은 핸들과 핸들 기반 stream만 닫는다. 핸들 없이 호출 하나로 끝나는 덮어쓰기와 truncate 연산(`docs/TODO-windows.md`의 해당 항목)과
+   동시 수정 감지는 약속하지 않으며 각각 별도 항목에서 정한다. `UNSUPPORTED` 항목이나 오류 코드를 새로 만들지 않는다. 제공하는 연산이 없으므로 표시할 대상이 없다.
 6. 쓰는 곳이 확인되고 아래 전제를 모두 갖출 수 있으면 이 결정을 다시 검토한다.
 
 ## 핸들을 제공할 때 필요한 전제
@@ -78,8 +80,8 @@ status: accepted
 
 - Tauri 방식의 핸들 연산(`open`, `read`, `write`, `seek`, `truncate`, `close`)을 `storage`에 더한다. 위 전제를 모두 코어와 두 플랫폼 어댑터에
   구현해야 하고, 쓰는 곳이 없다.
-- 선택 플러그인(예: `storage-handle`)으로 따로 둔다. 코어는 작게 유지하지만 view 폐기와 종료 정리를 플러그인이 알 방법이 지금 계약에 없다.
-  호스트가 플러그인 자원 정리 훅을 제공해야 하며 이는 별도 결정이 필요한 코어 계약 확대다.
+- 선택 플러그인(예: `storage-handle`)으로 따로 둔다. 코어는 작게 유지한다. 플랫폼 플러그인의 `dispose`가 앱 종료 때 자원을 회수하는 경로는 이미 있지만 view 폐기를 플러그인에 알리는
+  훅은 지금 계약에 없다. 호스트가 그 훅을 제공해야 하며 이는 별도 결정이 필요한 코어 계약 확대다.
 - 읽기 전용 stream만 제공한다. 호출을 묶는 편의일 뿐 반복 `readBytes`와 같은 바이트를 같은 전송 상한으로 보내고, 핸들과 같은 정리 문제를
   가진다.
 - 바이트 상한(256 KiB)을 올린다. 상한은 JSON 전송 1 MiB 안에 base64와 envelope가 들어가도록 정한 값이라 따로 정할 항목이다.
