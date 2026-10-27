@@ -1431,6 +1431,8 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 `lifecycle/windows-document-title.ts`는 실제 WebView2 문서가 `document.title`을 바꿀 때마다 이벤트가 순서대로 도착하는지(한글, 이모지 경계, 1024 초과 제목 포함)와 네이티브 캡션이 그대로인지 확인한다. Windows native 실행기에 포함한다. 첫 로드의 제목은 구독 전에 도착할 수 있어 검증 대상에서 제외한다.
 `api/window-document-favicon.test.ts`는 `windows.documentFaviconChanged`의 스키마(필수 필드, 2048 초과, 추가 필드)와 주소 길이 제한(초과하면 빈 문자열)을 확인한다.
 `lifecycle/windows-document-favicon.ts`는 실제 WebView2 문서가 `<link rel="icon">`을 바꿀 때(2048 초과 주소 포함) 이벤트가 순서대로 도착하는지와 네이티브 캡션이 그대로인지 확인한다. Windows native 실행기에 포함한다. 첫 로드의 아이콘은 구독 전에 도착할 수 있어 검증 대상에서 제외한다.
+`lifecycle/web-api-probe-report.test.ts`는 Web API 실측 보고서의 형식, 필수 항목(Worker, SharedWorker, BroadcastChannel, WebSocket 생성, RTCPeerConnection 생성)의 판정, 러너에 따라 달라지는 항목(WebGL, WebGL2, 로컬 데이터 채널, ServiceWorker, mediaDevices, getUserMedia)이 판정에 영향을 주지 않는 것, 다른 origin과 알 수 없는 항목의 거부를 확인한다.
+`lifecycle/windows-web-api-probe.ts`는 실제 WebView2의 `app.bunaway.local` 페이지가 위 항목을 스스로 실행해 지원, 미지원, 오류 이름을 보고하고 호스트가 필수 항목만 기대값과 비교한다. 나머지 항목은 로그와 보고서(`build/windows-web-api-probe/report.json`)에 관찰값으로만 남기고 단정하지 않는다(GPU 없는 러너의 WebGL 가속, 카메라 없는 러너의 getUserMedia 성공 등은 확인하지 않는다). 외부 네트워크와 STUN 서버를 쓰지 않고, 카메라와 마이크 권한 요청은 호스트의 기본 정책 그대로 두며 결과만 기록한다. Windows native 실행기에 포함한다.
 
 `lifecycle/windows-hidden-paint.ts`는 `visible: false`로 만든 창의 실제 WebView2 문서를 `windows.show()` 전후로 관찰한다. 숨김 상태에서 페이지 타이머가 돌고 `requestAnimationFrame`이 전달되며 `first-paint` 항목이 있는지, 네이티브 `isVisible`이 거짓이고 문서 준비가 `ready`인지 확인하고, 표시 뒤에는 `document.visibilityState`가 `visible`이고 프레임이 전달되는지 확인한다. 숨김 상태의 `visibilityState`는 단언하지 않고 보고서(`build/windows-hidden-paint/report.json`)와 로그에 남긴다. 실패해도 그 시점까지의 값은 보고서에 남는다.
 
