@@ -18,7 +18,7 @@ Windows 호스트가 지원하는 최소 OS 버전이 코드의 여러 곳에 �
 | 빌드 22621 (Windows 11 22H2) | `native/windows/bun/window-backdrop.ts`의 `FIRST_BACKDROP_BUILD` | 배경 재질 속성(`DWMWA_SYSTEMBACKDROP_TYPE`)을 아는 첫 빌드. |
 
 실제로 실행해 확인해 온 환경은 두 가지다. Windows 11 Pro x64 `10.0.26200`(`docs/architecture/windows-probe-results.md`, `docs/architecture/windows-bun-results.md`)과
-CI의 `Windows native integration` 잡이 쓰는 GitHub 호스트 러너 `windows-2022`(Windows Server 2022, `10.0.20348`, `.github/workflows/ci.yml`의 `matrix.os`)다.
+CI의 `Windows native integration` 잡이 쓰는 GitHub 호스트 러너 `windows-2022`(Windows Server 2022, `10.0.20348`, `.github/workflows/ci.yml`에서 이 잡의 `runs-on`)다.
 CI에는 빌드 17763 러너와 22000 이상 러너가 없다.
 
 선례는 공개 문서를 읽은 내용이며 이 저장소의 테스트로 검증한 것이 아니다.
