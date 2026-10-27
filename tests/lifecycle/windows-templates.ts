@@ -503,8 +503,8 @@ async function webDevServer(
  * Builds the generated app into a compiled EXE with `bunaway build`, then starts it from the
  * package directory. The probe appended to the UI entry (see `COMPILED_PROBE`) closes the window
  * after a backend round trip, which makes the EXE exit with code 0. A launch that outlives its
- * deadline is killed with its process tree. The app runs with its own `LOCALAPPDATA`, so the
- * message the probe saves never reaches the machine's real app data.
+ * deadline is killed with its process tree. Exit code 0 alone is not trusted: the message the
+ * probe saved must be in the `LOCALAPPDATA` the EXE was given.
  */
 async function compiledExe(app: string, appId: string): Promise<Outcome> {
   const entry = UI_ENTRIES.map((name) => resolve(app, name)).find((path) =>
@@ -537,9 +537,11 @@ async function compiledExe(app: string, appId: string): Promise<Outcome> {
     existsSync(resolve(packageRoot, "manifest.json")),
     "the package has no manifest.json",
   );
-  // The app writes its user data under LOCALAPPDATA; a directory inside this run keeps it away
-  // from a developer's real app data and goes away with the run's directory.
-  return execute(
+  // The template's message module writes under LOCALAPPDATA, so a directory inside this run
+  // keeps the probe's message away from a developer's real app data. The host's own data root
+  // (WebView2 profile, logs, single-instance lock) does not follow this variable.
+  const localAppData = resolve(home, `local-app-data-${appId}`);
+  const launched = await execute(
     [
       executable,
     ],
@@ -549,9 +551,26 @@ async function compiledExe(app: string, appId: string): Promise<Outcome> {
     {
       ...process.env,
       BUN_OPTIONS: undefined,
-      LOCALAPPDATA: resolve(home, `local-app-data-${appId}`),
+      LOCALAPPDATA: localAppData,
     },
   );
+  if (!launched.ok) {
+    return launched;
+  }
+  // A second instance of the same app forwards to the running one and exits 0 without running
+  // the probe, so the saved message, not the exit code alone, shows that this EXE ran it.
+  const saved = resolve(
+    localAppData,
+    "bunaway",
+    appId,
+    "data/messages/current.txt",
+  );
+  assert(
+    existsSync(saved) &&
+      (await readFile(saved, "utf8")) === COMPILED_PROBE_MESSAGE,
+    `the EXE exited 0 but the probe's message is not in ${saved}`,
+  );
+  return launched;
 }
 
 /** Runs every step for one template; a failed step that later steps depend on ends the sequence. */
