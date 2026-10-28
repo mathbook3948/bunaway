@@ -481,7 +481,14 @@ async function checkText(
   sendText(text);
   const reported = await reportValue(target, text);
   const where = `${label} under layout ${layout} in ${target}`;
-  assert.equal(reported.value, text, `Value of ${where}`);
+  assert.equal(
+    reported.value,
+    text,
+    `Value of ${where} (page: ${JSON.stringify({
+      focus: reported.focus,
+      events: reported.events,
+    })})`,
+  );
   // The value is compared as sent, so the page did not normalize the text; the events carry the
   // same characters, split into any number of insertText events.
   const plain = text.replaceAll("\n", "");
@@ -617,11 +624,6 @@ try {
       layout,
       "The thread input layout did not change",
     );
-    await checkText(name, "a", "Hangul", "한글 입력 테스트");
-    await checkText(name, "a", "Emoji", "a😀b👨‍👩‍👧c");
-    await checkText(name, "a", "Combining sequence", "café ñ");
-    await checkText(name, "b", "Lines", "첫째 줄\n둘째 줄 😀\né\n");
-
     // A letter key keeps its physical code under any layout; its character is the layout's.
     await reset("a");
     pressKey(VK_A);
@@ -642,6 +644,10 @@ try {
       assert.equal(keyEvents[0]?.key, "a");
       assert.equal(letter.value, "a");
     }
+    await checkText(name, "a", "Hangul", "한글 입력 테스트");
+    await checkText(name, "a", "Emoji", "a😀b👨‍👩‍👧c");
+    await checkText(name, "a", "Combining sequence", "café ñ");
+    await checkText(name, "b", "Lines", "첫째 줄\n둘째 줄 😀\né\n");
   }
   verified = true;
 } finally {
