@@ -20,6 +20,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@bunaway/plugin-api": "workspace:*",
     "@bunaway/protocol": "workspace:*",
     "zod": "4.6.5"
   },

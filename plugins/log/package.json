@@ -26,6 +26,8 @@
     "@bunaway/plugin": "workspace:*"
   },
   "dependencies": {
+    "@bunaway/plugin-api": "workspace:*",
+    "@bunaway/protocol": "workspace:*",
     "zod": "4.6.5"
   },
   "imports": {

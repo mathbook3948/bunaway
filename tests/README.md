@@ -33,7 +33,7 @@ Windows CI에서는 실제 Inno Setup 설치기를 실행하는 `tests/packaging
 | `cli/` | CLI 빌드, 플러그인 빌드와 import 해석, 템플릿, 개발 서버, 배포 패키지 설치 검사 |
 | `packaging/` | 패키징 계약, 디렉터리 소유권과 잠금, Windows 설치기와 macOS 배포물 |
 | `lifecycle/` | Worker 채널, 창과 데스크톱 수명주기, 플러그인 실행 경계와 실제 네이티브 fixture. `windows-*`와 `macos-*` 파일 중 실제 네이티브 자원을 쓰는 테스트는 `skipIf`로 해당 OS에 한정되고, fake를 쓰는 테스트는 Linux에서도 실행된다 |
-| `conformance/` | 저장소 구조 규칙: WebView 번들이 Buffer, Bun, process 없이 로드되는지, `framework.json`과 루트 `package.json`이 workspace 디렉터리와 일치하는지, `biome.json`의 복잡도 예외와 workspace tsconfig가 drift하지 않는지, 같은 FFI 심볼이 저장소 안에서 한 시그니처만 갖는지, 테스트의 리터럴 기한과 자체 폴러가 늘지 않는지, 플러그인의 중립 모듈이 플랫폼 타입을 import하지 않는지 |
+| `conformance/` | 저장소 구조 규칙: WebView 번들이 Buffer, Bun, process 없이 로드되는지, `framework.json`과 루트 `package.json`이 workspace 디렉터리와 일치하는지, `biome.json`의 복잡도 예외와 workspace tsconfig가 drift하지 않는지, 같은 FFI 심볼이 저장소 안에서 한 시그니처만 갖는지, 테스트의 리터럴 기한과 자체 폴러가 늘지 않는지, 플러그인의 중립 모듈이 플랫폼 타입을 import하지 않는지, 공개 패키지 tarball 검사(`release-packages`)의 판정 규칙 |
 | `docs/` | 문서 링크와 레퍼런스 검사기, 텍스트 스타일 검사 |
 | `fixtures/` | 여러 테스트가 공유하는 앱 정의, 네이티브 플랫폼 factory, 자식 프로세스 진단 |
 
@@ -57,6 +57,7 @@ Windows CI에서는 실제 Inno Setup 설치기를 실행하는 `tests/packaging
 | 새 플러그인 workspace | `bunaway plugin new <name>`으로 생성, `bun test tests/conformance tests/cli/plugin-new`, `bun run docs:check` | 없음 |
 | `framework.json`, 루트 `package.json`, `biome.json`, workspace tsconfig | `bun test tests/conformance` | 없음 |
 | 테스트 추가, 기한 변경 | `bun test tests/conformance/test-deadlines`, 바뀐 테스트 파일 | 해당 OS의 fixture는 그 OS에서 |
+| 배포 묶음 (`packages/cli/scripts/pack.ts`, 패키지와 플러그인의 `package.json`, `scripts/check-release-packages.ts`) | `bun test tests/conformance/release-packages`, `mise run release:check`(전체 pack, CI 밖) | 없음 |
 | 모든 변경 | `bun test tests/docs` (텍스트 스타일), `mise run check` | 해당 없음 |
 
 표의 `<plugin>`은 플러그인 이름이다. 예를 들어 storage 변경은 `bun test tests/api/storage`로

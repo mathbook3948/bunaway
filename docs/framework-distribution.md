@@ -20,6 +20,8 @@ plugin-opener, plugin-autostart, plugin-clipboard, plugin-appearance, plugin-pow
 절대 tarball 경로로 연결한다. 이는 공개 registry가 없는 동안의 로컬 설치 경로다.
 파일을 다른 디렉터리/머신에 옮겼다면 그 위치에서 로컬 묶음을 다시 생성해야 한다.
 --local 없이 만들면 패키지 간 의존성은 정확한 릴리스 버전이며 공개 publish는 하지 않는다.
+`mise run release:check`는 모든 패키지를 임시 디렉터리에 묶어 tarball의 파일 목록, `exports` 대상, 의존성 선언과
+버전을 검사한다. 공개 대상과 소유자 결정 대기 항목은 [ADR 0125](./decisions/0125-public-release-readiness.md)에 있다.
 
 전달받은 로컬 묶음이 있는 개발 머신에서, bunaway 저장소 밖에서도 실행할 수 있다.
 Bun은 개발용으로 별도 설치하고 버전 **1.4.2**를 사용한다.
