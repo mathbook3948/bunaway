@@ -187,6 +187,50 @@ test("an exports pattern must resolve to the Windows adapter unless the plugin s
   ).toEqual([]);
 });
 
+test("the adapter exemption keeps checking other targets, loose bin entries and all source extensions", () => {
+  const windowState = packed({
+    manifest: {
+      ...packed().manifest,
+      name: "@bunaway/plugin-window-state",
+      bin: "cli.js",
+      exports: {
+        "./native/*": "./dist/native/*.js",
+        ".": "./dist/index.js",
+      },
+    },
+    sources: new Map([
+      [
+        "src/a.cts",
+        'import x from "pkg-cts";',
+      ],
+      [
+        "src/b.jsx",
+        'import y from "pkg-jsx";',
+      ],
+      [
+        "src/c.cjs",
+        'const z = require("pkg-cjs");',
+      ],
+    ]),
+  });
+  const text = auditPackedPackage(windowState, {
+    ...expected,
+    names: new Set([
+      "@bunaway/plugin-window-state",
+    ]),
+  }).join("\n");
+  expect(text).toContain("./dist/index.js named by package.json");
+  expect(text).toContain("./cli.js named by package.json");
+  expect(text).not.toContain("dist/native");
+  for (const missing of [
+    "pkg-cts",
+    "pkg-jsx",
+    "pkg-cjs",
+  ]) {
+    expect(text).toContain(`imports ${missing}`);
+  }
+});
+
 test("Node builtins need no declaration but packages that Bun lists as builtins do", () => {
   const audit = (source: string) =>
     auditPackedPackage(

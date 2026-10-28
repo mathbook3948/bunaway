@@ -21,6 +21,7 @@ import {
 import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, relative, resolve } from "node:path";
+import { isRecord } from "@bunaway/protocol";
 import { packageFilename, release } from "#cli/distribution";
 import { packFramework } from "#cli-scripts/pack";
 import { stripNonCode } from "./strip-non-code.ts";
@@ -71,7 +72,7 @@ function collectTargets(value: unknown, into: string[]): void {
     for (const item of value) {
       collectTargets(item, into);
     }
-  } else if (value && typeof value === "object") {
+  } else if (isRecord(value)) {
     for (const item of Object.values(value)) {
       collectTargets(item, into);
     }
@@ -88,10 +89,9 @@ function targetsOf(manifest: Record<string, unknown>): string[] {
   const loose: string[] = [];
   collectTargets(manifest.main, loose);
   collectTargets(manifest.bin, loose);
-  collectTargets(
-    (manifest.bunaway as Record<string, unknown> | undefined)?.plugin,
-    loose,
-  );
+  if (isRecord(manifest.bunaway)) {
+    collectTargets(manifest.bunaway.plugin, loose);
+  }
   targets.push(
     ...loose.map((target) =>
       target.startsWith("./") ? target : `./${target}`,
@@ -266,7 +266,6 @@ function auditImports(
 ): void {
   const own = new Set([
     name,
-    ...Object.keys((packed.manifest.imports ?? {}) as Record<string, unknown>),
   ]);
   for (const [file, source] of packed.sources) {
     if (!SOURCE_FILE_PATTERN.test(file)) {
