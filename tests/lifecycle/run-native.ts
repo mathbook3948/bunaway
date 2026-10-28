@@ -107,6 +107,7 @@ if (target === "windows-x64") {
       await test("windows-bun.ts", scenario);
     }
     await test("windows-cli-arguments.ts");
+    await test("windows-shell-activation-instance.ts");
     await test("windows-app-exit.ts");
     await test("windows-bun-window-api.ts");
     await test("windows-webview-print-ui.ts");
@@ -220,6 +221,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-opener-url-handler.test.ts",
           "tests/lifecycle/windows-opener-file-icon.test.ts",
           "tests/lifecycle/windows-opener-url-scheme.test.ts",
+          "tests/lifecycle/windows-shell-activation.test.ts",
           "tests/lifecycle/windows-opener-shortcut.test.ts",
           "tests/lifecycle/windows-opener-jump-list.test.ts",
           "tests/lifecycle/windows-notification.test.ts",
