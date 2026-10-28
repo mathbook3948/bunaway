@@ -27,15 +27,14 @@ status: accepted
   스키마는 `supported`, `experimental`, `unsupported`와 선택적 `reason`을 허용하지만 현재 구현은 `supported`와 `unsupported`만
   내보낸다(스키마는 `plugins/capabilities/src/contract.ts`, 스냅샷 생성은 `native/host-api/bun/plugins.ts`). 앱이 작업별 지원 여부를
   조회하고 미지원 작업이 `UNSUPPORTED`로 실패한다는 방침은 [ADR 0013](./0013-optional-native-plugins.md),
-  [ADR 0026](./0026-single-webview-single-window.md)에 있다. 미지원 작업은
-  `UNSUPPORTED`로 실패한다. 플랫폼별 지원 범위는 [플랫폼 지원 문서](../platform-support/README.md)에 있다.
+  [ADR 0026](./0026-single-webview-single-window.md)에 있다. 플랫폼별 지원 범위는 [플랫폼 지원 문서](../platform-support/README.md)에 있다.
 - 선택 렌더러 조건을 단 결정이 있다([ADR 0107](./0107-webview-device-chooser-apis.md), [ADR 0124](./0124-app-startup-time-and-renderer-metrics.md)).
   브라우저 확장은 [ADR 0070](./0070-webview-browser-extensions.md)이 WebView2 기준으로 제공하지 않기로 했고, 선택 렌더러에서의
   제공 여부는 TODO 항목으로 열려 있다.
 
 비교 기준은 공개 문서에 따른 것이며 이 저장소의 테스트로 검증한 것이 아니다.
 
-- Electron은 Chromium 단일 엔진을 번들하므로 렌더러 선택이 없고, 따라서 렌더러 capability를 조회하는 API도 없다. 기능 차이는
+- Electron은 Chromium 단일 엔진을 번들하므로 렌더러 선택이 없다. 렌더러 지원 여부를 조회하는 API는 확인하지 못했고, 기능 차이는
   플랫폼별 문서와 API 오류로 드러난다.
 - Tauri는 플랫폼 WebView(WebView2, WKWebView, WebKitGTK)를 감싸는 계층(wry)을 별도 크레이트로 분리했다. 렌더러가 다르면 지원
   기능이 달라지지만, 앱이 렌더러 지원 여부를 조회하는 API는 확인하지 못했고 문서와 오류로 알린다. Tauri의 `capabilities`는
@@ -45,7 +44,8 @@ status: accepted
 ## 결정
 
 1. 선택 Chromium 렌더러를 지금 만들지 않는다. Windows 데스크톱 렌더러는 WebView2 하나로 두고, 렌더러 구현은 만들게 되더라도
-   `packages/` 아래 별도 패키지로 둔다. 코어, 호스트, 프로토콜에는 렌더러 구현이나 엔진 분기를 넣지 않는다.
+   `packages/` 아래 별도 패키지로 둔다. 선택 렌더러 구현을 코어와 프로토콜에 두지 않는다. 호스트가 렌더러를 연결하는 방식은
+   렌더러를 만드는 결정에서 정한다.
 2. 다시 여는 조건은 WebView2로 풀 수 없는 요구가 실제로 확인되는 경우다. 요구는 이 저장소의 공개 연산이나 앱 요구로 적혀 있어야
    하며, "있으면 좋다"는 이유로 열지 않는다. 열 때는 번들 크기, 하위 프로세스 수명, 서명, 라이선스를 그 결정에서 함께 다룬다.
 3. 선택 렌더러가 생기면 다음을 지켜야 한다. 이 결정은 그 조건을 적어 둘 뿐 구현을 포함하지 않는다.
@@ -61,12 +61,14 @@ status: accepted
    바꿔야 하면 그 결정에서 코어 계약 변경으로 정한다.
 5. 엔진 선택 필드를 앱 정의에 두지 않는다. 렌더러가 둘 이상일 때만 의미가 있고, Windows에서는 지금 하나뿐이다. 선택 렌더러를 만드는 결정에서
    선택 방법(앱 정의, 빌드 설정, 패키지 설치 여부 중 어느 것)을 함께 정한다.
-6. 선택 렌더러 조건을 단 결정(ADR 0107, 0124)과 열린 TODO 항목(브라우저 확장, WebView2가 제공하지 않는 장치 API)의 "선택 렌더러가 생기면 다시 검토한다"는 단서는
-   이 결정이 하나로 모은다. 기존 ADR의 문장은 고치지 않는다. 선택 렌더러를 만드는 결정이 나면 그 항목들을 그 결정에서 하나씩
-   다시 검토한다. ADR 0048의 경계는 재검토 대상이 아니라 선택 렌더러가 지켜야 하는 조건이다(결정 3).
-
-7. 이 결정은 Windows를 다룬다. macOS는 WKWebView를 쓰며([PRD](../PRD.md)), `docs/TODO-macos.md`의 선택 렌더러 관련
-   항목은 이 결정으로 닫지 않고 그대로 둔다. macOS 쪽은 플랫폼 우선순위에 따라 별도로 정한다.
+6. 선택 렌더러와 얽힌 항목은 이 결정을 가리키는 한 곳으로 모은다. ADR 0107은 장치 선택 훅, ADR 0124는 렌더러 지표를 선택 렌더러가
+   생기면 다시 검토하기로 했고, 열린 TODO 항목(브라우저 확장, WebView2가 제공하지 않는 장치 API, 엔진별 Web API 지원 차이 검증)은
+   선택 렌더러 여부에 기대고 있다. 기존 ADR의 문장은 고치지 않는다. 선택 렌더러가 없는 동안 엔진별 차이 검증 항목은 비교 대상이 없어
+   진행하지 않으며, 선택 렌더러를 만드는 결정이 나면 이 항목들을 그 결정에서 하나씩 다시 검토한다. ADR 0048의 경계는 재검토
+   대상이 아니라 선택 렌더러가 지켜야 하는 조건이다(결정 3).
+7. 선택 렌더러를 연결할 시점은 Windows 기준이다. macOS는 WKWebView를 쓰므로([PRD](../PRD.md)) [TODO-macos](../TODO-macos.md)의 선택
+   렌더러 항목은 이 결정으로 닫지 않고 열어 둔다. 새 조회 계약과 앱 정의 엔진 선택 필드를 두지 않는다는 결정 4와 5는 앱 정의,
+   SDK, `capabilities()`가 플랫폼 공통이므로 macOS에도 같은 계약으로 적용된다.
 
 ## 근거
 
