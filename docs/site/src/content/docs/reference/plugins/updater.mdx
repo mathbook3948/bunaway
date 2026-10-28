@@ -201,7 +201,8 @@ interface UpdaterDownloadResult {
 dispose, 재사용과 변조 감지, 정리 범위를 확인합니다. 실제 업데이트 서버와의 왕복은 검증하지 않았습니다.
 게시자 서명 검증은 Linux에서 검증기 대역으로 설정 검사, 게시자 대조, 결과별 오류와 파일 삭제, 취소, 워커 상한을 확인하고,
 Windows CI에서 실제 `WinVerifyTrust`로 확인합니다. Windows 시험은 CI 실행기에 자체 서명 코드 서명 인증서를 신뢰 루트로 넣고
-서명한 exe, 서명 없는 파일, 변조한 파일, 신뢰되지 않는 인증서, 형식이 다른 파일을 검사합니다. 서명한 MSI 파일은 만들지 못해
-실제 서명으로는 시험하지 못했고, MSI는 형식 판별만 시험했습니다. 운영 인증 기관 체인,
+서명한 exe, 서명 없는 파일, 변조한 파일, 신뢰되지 않는 인증서, 형식이 다른 파일을 검사합니다. 서명한 MSI 파일은 실제 서명으로
+시험하지 못했고, MSI는 형식 판별만 시험했습니다. Windows Installer COM으로 만든 최소 MSI를 `Set-AuthenticodeSignature`로
+서명하자 windows-2022 러너에서 `Get-AuthenticodeSignature`가 `HashMismatch`를 돌려줬고, 원인은 확인하지 못했습니다. 운영 인증 기관 체인,
 실제 폐기 서버 응답과 오프라인에서의 `revocationUnavailable`, 타임스탬프로 만료 인증서를 허용하는 동작은 실행하지 않았습니다.
 설치는 후속 작업입니다.
