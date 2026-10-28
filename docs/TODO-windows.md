@@ -1114,7 +1114,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [x] 앱 로그와 플러그인 없이 남기는 프레임워크 진단을 구분한다.
 - [x] `openDevTools`로 개발 모드에서 DevTools를 연다. 작업 권한으로 프로덕션 설정을 우회할 수 없다.
 - [ ] DevTools 닫기, 상태 조회와 이벤트 API를 제공한다.
-- [ ] 요소, service worker와 shared worker 검사 API의 지원을 결정한다.
+- [x] 요소, service worker와 shared worker 검사 API는 제공하지 않기로 결정했다. 열린 DevTools 안에서 요소 선택과 worker 대상 선택을 쓴다 ([ADR 0117](decisions/0117-webview-element-and-worker-inspection.md)).
 - [ ] DevTools workspace의 추가와 제거, dock 위치, 별도 창과 title을 설정한다.
 - [ ] device emulation의 viewport, 화면 배율과 입력 설정을 제공한다.
 - [ ] debugger protocol 연결, 명령 실행과 이벤트를 제공한다.
