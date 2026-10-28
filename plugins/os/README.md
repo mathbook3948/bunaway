@@ -1,6 +1,6 @@
 # OS metadata plugin
 
-`@bunaway/plugin-os` provides permission-mediated `os.info(null)`, `os.usage(null)`, `os.locale(null)` and `os.beep({ kind })` on Windows and macOS, and `os.listPrinters(null)`, `os.getDefaultPrinter(null)`, `os.listGpus(null)` and `os.listAppProcesses(null)` on Windows.
+`@bunaway/plugin-os` provides permission-mediated `os.info(null)`, `os.usage(null)`, `os.locale(null)` and `os.beep({ kind })` on Windows and macOS, and `os.listPrinters(null)`, `os.getDefaultPrinter(null)`, `os.listGpus(null)`, `os.listAppProcesses(null)` and `os.getMediaAccessStatus({ mediaType })` on Windows.
 Register `os` in the app definition. Each operation requires its own permission; registration grants none.
 Trusted backends can use Bun, `process` and `node:os` directly for runtime metadata.
 
@@ -56,3 +56,11 @@ Windows region identifiers can be two-letter codes or three-digit numeric region
 The value remains a string, preserving leading zeros, as documented by Microsoft's
 [LOCALE_SISO constants](https://learn.microsoft.com/en-us/windows/win32/intl/locale-siso-constants).
 The deterministic locale regression uses the same assertion as the actual Windows test and rejects malformed shapes.
+
+`os.getMediaAccessStatus` reads the `Value` string under the `CapabilityAccessManager\ConsentStore\webcam` or `microphone`
+key with `RegGetValueW`, first in `HKLM` (device-wide setting; `Deny` is `restricted`; group policy keys are not read) and then in `HKCU` (`Allow` is `granted`, `Deny` is
+`denied`, no value is `not-determined`). A failed read or any other value is `unknown`. `RegGetValueW` takes the predefined
+hive and subkey path directly, so no key handle is opened; the key paths are constants and caller input never reaches them. Per-app
+`NonPackaged` subkeys (the desktop-app access toggle and per-app entries) are not read, so `granted` does not rule out that desktop apps are blocked. macOS rejects it with `UNSUPPORTED`. `tests/api/os-media-access.test.ts` covers the decision
+table and the key choice with fake bindings; `tests/lifecycle/windows-os.test.ts` runs both device classes against the real
+consent store, where CI checks that the call succeeds and returns the status that the same keys read with `reg.exe` give under the decision table.

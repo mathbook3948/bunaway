@@ -2,9 +2,58 @@ import { expect, setDefaultTimeout, test } from "bun:test";
 import assert from "node:assert/strict";
 import { arch, hostname, release, version } from "node:os";
 import os from "@bunaway/plugin-os/native/windows";
+import type { OSMediaAccessStatus } from "#plugins/os/src/contract";
 import { osOperations } from "#plugins/os/src/operations";
 import { deadline, killAfter } from "../fixtures/deadlines.ts";
 import { assertWindowsRegionCode } from "../fixtures/windows-region-code.ts";
+
+/** The consent store `Value` of one hive and device class as reg.exe prints it, or null when the key or value is absent. */
+function consentValue(
+  hive: "HKLM" | "HKCU",
+  mediaType: "camera" | "microphone",
+): string | null {
+  const key = mediaType === "camera" ? "webcam" : "microphone";
+  const result = Bun.spawnSync(
+    [
+      "reg",
+      "query",
+      `${hive}\\Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\${key}`,
+      "/v",
+      "Value",
+      "/reg:64",
+    ],
+    {
+      windowsHide: true,
+    },
+  );
+  if (result.exitCode !== 0) {
+    return null;
+  }
+  return (
+    /^\s*Value\s+REG_SZ\s+(\S+)\s*$/m.exec(result.stdout.toString())?.[1] ?? ""
+  );
+}
+
+/** The status the documented decision table gives for what reg.exe reads. */
+function expectedMediaAccess(
+  mediaType: "camera" | "microphone",
+): OSMediaAccessStatus {
+  const machine = consentValue("HKLM", mediaType);
+  if (machine === "Deny") {
+    return "restricted";
+  }
+  if (machine !== null && machine !== "Allow") {
+    return "unknown";
+  }
+  const user = consentValue("HKCU", mediaType);
+  if (user === null) {
+    return "not-determined";
+  }
+  if (user === "Allow") {
+    return "granted";
+  }
+  return user === "Deny" ? "denied" : "unknown";
+}
 
 // One test reads the print spooler and DXGI and starts a child process.
 setDefaultTimeout(deadline("toolchain"));
@@ -86,6 +135,23 @@ test.skipIf(process.platform !== "win32")(
       );
       if (process.env.CI) {
         expect(gpus.length).toBeGreaterThan(0);
+      }
+      // A runner may have either setting; the call must read the real consent store without an error.
+      for (const mediaType of [
+        "camera",
+        "microphone",
+      ] as const) {
+        const status = osOperations.getMediaAccessStatus.output.parse(
+          await adapter.execute(
+            "os.getMediaAccessStatus",
+            {
+              mediaType,
+            },
+            "backend",
+          ),
+        );
+        // reg.exe reads the same keys independently, so a wrong key path or hive shows up as a different status.
+        expect(status).toBe(expectedMediaAccess(mediaType));
       }
       // The app's own process leads the tree; a child this test starts joins it as another process.
       const child = Bun.spawn(

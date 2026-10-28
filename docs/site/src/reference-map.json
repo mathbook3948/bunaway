@@ -1537,7 +1537,8 @@
       "os.listPrinters",
       "os.getDefaultPrinter",
       "os.listGpus",
-      "os.listAppProcesses"
+      "os.listAppProcesses",
+      "os.getMediaAccessStatus"
     ],
     "reference/plugins/notification": [
       "notification.show",

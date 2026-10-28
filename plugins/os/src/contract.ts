@@ -102,6 +102,27 @@ export const appProcessSchema = z.strictObject({
 export const appProcessListSchema = z
   .array(appProcessSchema)
   .max(MAX_APP_PROCESSES);
+/** Device class os.getMediaAccessStatus reads the OS privacy setting for. */
+export const mediaTypeSchema = z.enum([
+  "camera",
+  "microphone",
+]);
+export const mediaAccessInputSchema = z.strictObject({
+  mediaType: mediaTypeSchema,
+});
+/**
+ * OS privacy setting for a device class, using the value set of Electron's
+ * `systemPreferences.getMediaAccessStatus`. Windows reports `granted` (setting on), `denied`
+ * (user turned it off), `restricted` (the device-wide setting is off), `not-determined` (no
+ * setting stored) and `unknown` (unreadable or unexpected value).
+ */
+export const mediaAccessStatusSchema = z.enum([
+  "granted",
+  "denied",
+  "not-determined",
+  "restricted",
+  "unknown",
+]);
 /** System sound played by os.beep; defaults to the plain default beep. macOS has one alert sound and plays it for every kind. */
 export const beepInputSchema = z.strictObject({
   kind: z
@@ -129,6 +150,15 @@ export type OSGpu = z.infer<typeof gpuSchema>;
 /** One process of the app's process tree as listed by os.listAppProcesses. */
 export type OSAppProcess = z.infer<typeof appProcessSchema>;
 
+/** Input of os.getMediaAccessStatus. */
+export type OSMediaAccessInput = z.infer<typeof mediaAccessInputSchema>;
+
+/** Device class os.getMediaAccessStatus reads. */
+export type OSMediaType = z.infer<typeof mediaTypeSchema>;
+
+/** Result of os.getMediaAccessStatus. */
+export type OSMediaAccessStatus = z.infer<typeof mediaAccessStatusSchema>;
+
 /** Process CPU time, memory and architecture translation snapshot. */
 export type OSUsage = z.infer<typeof usageSchema>;
 /**
@@ -145,5 +175,6 @@ export interface OSInstance {
   getDefaultPrinter(): string | null;
   listGpus(): OSGpu[];
   listAppProcesses(): OSAppProcess[];
+  getMediaAccessStatus(mediaType: OSMediaType): OSMediaAccessStatus;
   dispose(): void;
 }

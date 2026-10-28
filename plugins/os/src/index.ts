@@ -6,7 +6,7 @@ import {
 } from "#os/platforms/macos";
 import { dispose, initialize } from "#os/platforms/windows";
 /**
- * Read OS and bundled Bun metadata, play system sounds, and list printers, graphics adapters and the app's process tree on Windows.
+ * Read OS and bundled Bun metadata, play system sounds, and list printers, graphics adapters and the app's process tree, and read the camera and microphone privacy settings on Windows.
  * Architecture describes the running process. Printer reads block on the Windows print spooler
  * and cannot be cancelled once started.
  */
@@ -32,6 +32,9 @@ export type {
   OSGpu,
   OSInfo,
   OSLocale,
+  OSMediaAccessInput,
+  OSMediaAccessStatus,
+  OSMediaType,
   OSPrinter,
   OSUsage,
 } from "#os/contract";

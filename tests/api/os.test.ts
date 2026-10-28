@@ -17,6 +17,7 @@ test("OS reads have independent permissions and strict null inputs", () => {
     "getDefaultPrinter",
     "listGpus",
     "listAppProcesses",
+    "getMediaAccessStatus",
   ]);
   for (const operation of [
     "info",
