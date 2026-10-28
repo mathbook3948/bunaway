@@ -12,7 +12,7 @@ status: accepted
 
 아래 외부 동작은 Electron v45.0.0, Tauri 2.12.5(wry 0.57.1), WebView2 SDK 1.0.4314.35 기준의 공식 문서와 해당 태그의 소스에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다. 문서에 없는 부분은 추론이라고 표시한다.
 
-- Electron의 `webContents.inspectElement(x, y)`는 DevTools를 열고 해당 좌표의 요소를 선택한다. DevTools가 닫혀 있으면 먼저 연다. `webContents.inspectSharedWorker()`와 `inspectSharedWorkerById(id)`는 shared worker 대상의 DevTools를 열고, `inspectServiceWorker()`는 service worker 대상의 DevTools를 연다. 어느 것도 대상 worker를 조회하는 공개 API와 짝이 아니며, 앱은 `getAllSharedWorkers()`나 `ses.serviceWorkers`로 얻은 식별자를 쓴다.
+- Electron의 `webContents.inspectElement(x, y)`는 DevTools를 열고 해당 좌표의 요소를 선택한다. DevTools가 닫혀 있으면 먼저 연다. `webContents.inspectSharedWorker()`와 `inspectSharedWorkerById(id)`는 shared worker 대상의 DevTools를 열고, `inspectServiceWorker()`는 service worker 대상의 DevTools를 연다. `inspectSharedWorkerById(id)`의 식별자는 앱이 `getAllSharedWorkers()`로 얻는다.
 - Tauri는 `WebviewWindow`의 `open_devtools`, `close_devtools`, `is_devtools_open`만 제공한다. 좌표 검사나 worker 대상 열기 API는 없다.
 - WebView2는 `ICoreWebView2::OpenDevToolsWindow`로 DevTools 창을 열 수 있다. 좌표를 받는 검사 API와 worker를 대상으로 DevTools를 여는 API는 없다. 요소 선택(inspect mode)과 worker 대상 선택은 Chromium DevTools 창 안의 기능이며, 열린 DevTools에서 사용자가 직접 고른다. 임의 좌표를 호스트가 지정하려면 DevTools 프로토콜(`DOM`, `Overlay`)을 호출해야 한다고 본다(추론).
 - 이 저장소의 Windows 호스트는 개발 도구를 켠 빌드에서만 WebView2 `AreDevToolsEnabled`와 브라우저 가속키(`AreBrowserAcceleratorKeysEnabled`)를 켠다. 기본 context menu(`AreDefaultContextMenusEnabled`)는 항상 끄므로([ADR 0064](./0064-webview-browser-default-ui.md)) 우클릭 "검사" 항목은 없다. `windows.openDevTools`는 개발 모드와 작업 권한이 모두 있을 때만 DevTools 창을 연다.
@@ -29,8 +29,8 @@ status: accepted
 
 ## 근거
 
-- 두 프레임워크가 다르다. Electron은 세 검사 API를 제공하고 Tauri는 DevTools 열기와 닫기만 제공한다. 이 결정은 Tauri와 같은 쪽이다. WebView2에는 대응 API가 없어, 구현하려면 DevTools 프로토콜 호출을 공개 operation으로 노출해야 하고, 그것은 debugger protocol 항목이 다루는 범위다. worker 대상은 식별자를 얻는 조회 API가 선행되어야 하는데 그 API도 제공하지 않기로 했다.
-- 이 기능들은 사람이 DevTools 화면을 보며 쓰는 개발 보조이고, 앱 코드가 호출해 얻는 결과가 없다. 앱이 좌표를 알고 있어야 하는 호출 경로(Electron에서는 주로 context menu의 "Inspect Element")는 이 저장소의 메뉴 플러그인으로 앱 메뉴를 만들 수 있고, 요소 검사는 `openDevTools`로 DevTools를 연 뒤 사용자가 `Ctrl+Shift+C`로 요소를 직접 고르는 우회 경로가 있다. 클릭한 좌표의 요소를 자동으로 선택하는 기능은 잃으며, 우클릭 검사 흐름도 결정 4에 따라 없다. 단축키 동작은 Chromium DevTools 기준이며 이 저장소의 테스트로 검증하지 않았다.
+- 두 프레임워크가 다르다. Electron은 `inspectElement`, shared worker 검사 둘, `inspectServiceWorker`를 제공하고 Tauri는 DevTools 열기와 닫기만 제공한다. 이 결정은 Tauri와 같은 쪽이다. WebView2에는 대응 API가 없어, 구현하려면 DevTools 프로토콜 호출을 공개 operation으로 노출해야 하고, 그것은 debugger protocol 항목이 다루는 범위다. `inspectSharedWorkerById`는 식별자를 얻는 조회 API가 선행되어야 하는데 그 API도 제공하지 않기로 했다(ADR 0086).
+- 이 기능들은 사람이 DevTools 화면을 보며 쓰는 개발 보조이고, 앱 코드가 호출해 얻는 결과가 없다. 앱이 좌표를 알고 있어야 하는 호출 경로(Electron에서는 주로 context menu의 "Inspect Element")는 이 저장소의 메뉴 플러그인으로 앱 메뉴 항목을 만들 수 있으나 그 항목은 `openDevTools`로 DevTools를 열 뿐 클릭한 요소를 고르지 못한다. 요소 검사는 `openDevTools`로 DevTools를 연 뒤 사용자가 `Ctrl+Shift+C`로 요소를 직접 고르는 우회 경로가 있다. 클릭한 좌표의 요소를 자동으로 선택하는 기능은 잃으며, 우클릭 검사 흐름도 결정 4에 따라 없다. 단축키 동작은 Chromium DevTools 기준이며 이 저장소의 테스트로 검증하지 않았다.
 - 코어는 작게 둔다. 호출하는 곳이 없는 API를 위해 operation, 권한, 스키마를 늘리지 않는다. 개발 모드 한정 기능이어서 프로덕션 보안 경계는 바뀌지 않는다.
 
 ## 결과
