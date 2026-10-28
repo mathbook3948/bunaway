@@ -75,7 +75,7 @@ UI 컴포넌트를 제거할 때는 `await unlisten()`으로 해당 구독을 �
 SSR 코드에서도 SDK를 import할 수 있습니다.
 기본 API를 실제로 호출하면 `UNSUPPORTED`로 실패합니다.
 [isBunaway](/reference/client/is-bunaway/)로 실행 환경을 미리 확인할 수 있지만, 이 값은 화면 분기용 힌트이며 권한 판단에 쓰지 않습니다. 백엔드 호출은 실제 네이티브 창에서 확인합니다.
-브라우저 미리보기에서 앱 기능을 시험하려면 [createMockTransport](/reference/client/transport/#createmocktransport)로 만든 전송을 `createClient`에 전달합니다. 명령 핸들러가 응답하므로 호스트 없이 Vite 개발 서버만으로 화면을 개발하고 단위 테스트할 수 있습니다. 스키마 검증과 권한 검사는 실제 WebView에서 확인합니다.
+브라우저 미리보기에서 앱 기능을 시험하려면 [createMockClient](/reference/client/transport/#createmockclient)에 명령 핸들러를 넘깁니다. hello까지 맞춘 클라이언트와 이벤트를 보내는 `emit`을 돌려줍니다. 전송과 hello를 직접 정하려면 [createMockTransport](/reference/client/transport/#createmocktransport)로 만든 전송을 `createClient`에 전달합니다. 명령 핸들러가 응답하므로 호스트 없이 Vite 개발 서버만으로 화면을 개발하고 단위 테스트할 수 있습니다. 스키마 검증과 권한 검사는 실제 WebView에서 확인합니다.
 백엔드 코드, 비밀 설정은 프런트엔드 번들에 넣지 않습니다.
 
 ## 자산과 CSP

@@ -27,8 +27,14 @@ import {
   type WireError,
 } from "@bunaway/protocol";
 import { defaultClient } from "./default-client.ts";
+import {
+  type MockClient,
+  type MockClientOptions,
+  mockClient,
+} from "./mock-client.ts";
 
 export { isBunaway } from "./environment.ts";
+export type { MockClient, MockClientOptions } from "./mock-client.ts";
 export {
   createMockTransport,
   type MockCommandContext,
@@ -985,6 +991,21 @@ export function createClient<
     return defaultClient(createClient) as Client<C, E>;
   }
   return new ClientSession<C, E>(options.transport, options.hello);
+}
+
+/**
+ * Creates a client that talks to an in-memory host instead of the app, for
+ * developing a UI in a plain browser or testing it in a unit test.
+ *
+ * It wraps `createMockTransport` and `createClient`, so command handlers,
+ * `UNSUPPORTED` for commands without one, and `emit` behave as documented
+ * for the mock transport. Closing the returned client also closes the mock host.
+ */
+export function createMockClient<
+  C extends CommandMap = CommandMap,
+  E extends EventMap = EventMap,
+>(options: MockClientOptions<C>): MockClient<C, E> {
+  return mockClient<C, E>(createClient, options);
 }
 
 /**
