@@ -93,6 +93,7 @@
         "packages/plugin-sdk/src/**",
         "!packages/plugin-sdk/src/bun.ts",
         "!packages/plugin-sdk/src/win32.ts",
+        "!packages/plugin-sdk/src/resource-icon.ts",
         "!packages/plugin-sdk/src/windows-*.ts",
         "packages/protocol/src/**",
         "plugins/*/src/*.ts"

@@ -164,6 +164,8 @@ const root = process.argv.includes("--repo")
   : resolve(import.meta.dir, "../..");
 const output = resolve(root, "build/windows-window-api");
 const assets = resolve(output, "assets");
+const resourcesRoot = resolve(output, "resources");
+const declaredIcon = "icons/window.ico";
 const reportPath = resolve(output, "report.json");
 const policy: Policy = {
   version: 1,
@@ -196,6 +198,11 @@ if (!process.argv.includes("--child")) {
   await mkdir(resolve(assets, "web"), {
     recursive: true,
   });
+  // The declared window icon is read from the resources directory when each window is created.
+  await mkdir(resolve(resourcesRoot, "icons"), {
+    recursive: true,
+  });
+  await writeFile(resolve(resourcesRoot, declaredIcon), trayIco(16));
   const built = await Bun.build({
     entrypoints: [
       resolve(import.meta.dir, "windows-bun/window-api.js"),
@@ -1749,6 +1756,8 @@ if (!process.argv.includes("--child")) {
     assert.equal(run, 4);
     // Recreation starts from the declaration, not from the previous runtime state.
     assert.equal(await windows.getBackgroundColor(), "#112233");
+    // The declared icon is applied again to the recreated window.
+    assert.equal(await windows.hasCustomIcon(), true);
     assert.equal(await windows.isFocusable(), true);
     assert.equal(await windows.isMinimizable(), true);
     assert.equal(await windows.isMaximizable(), true);
@@ -2778,6 +2787,8 @@ if (!process.argv.includes("--child")) {
                 opacity: 1,
               });
               assert.equal(await windows.getOpacity(), 1);
+              // The declared icon is applied to the first window as a per-window icon.
+              assert.equal(await windows.hasCustomIcon(), true);
               // The declared color is live, and a runtime change replaces it.
               assert.equal(await windows.getBackgroundColor(), "#112233");
               await windows.setBackgroundColor({
@@ -2853,7 +2864,14 @@ if (!process.argv.includes("--child")) {
     },
   });
   await runWindowsApp(app, {
-    appMetadata: testAppMetadata,
+    appMetadata: {
+      ...testAppMetadata,
+      paths: {
+        package: output,
+        executable: process.execPath,
+        resources: resourcesRoot,
+      },
+    },
     runtime: {
       id: "windows-window-api",
       generation: crypto.randomUUID(),
@@ -2873,6 +2891,7 @@ if (!process.argv.includes("--child")) {
           maxWidth: 800,
           maxHeight: 600,
           backgroundColor: "#112233",
+          icon: declaredIcon,
         },
       },
     ],

@@ -7,6 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./windows-menu": "./src/windows-menu.ts",
+    "./windows-icon-provider": "./src/windows-icon-provider.ts",
+    "./resource-icon": "./src/resource-icon.ts",
     "./win32": "./src/win32.ts",
     "./darwin": "./src/darwin.ts",
     "./macos-home": "./src/macos-home.ts"

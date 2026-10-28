@@ -2,15 +2,15 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import {
+  readResourceIconFile as readTrayIconFile,
+  validateResourceIconPath as validateTrayIconPath,
+} from "@bunaway/plugin/resource-icon";
 import type {
   NativeTrayInitialization,
   NativeTrayServices,
 } from "@bunaway/plugin-api/native";
 import { initializeWith } from "#plugins/tray/src/platforms/windows";
-import {
-  readTrayIconFile,
-  validateTrayIconPath,
-} from "#plugins/tray/src/platforms/windows-icon-file";
 import { trayIco } from "../fixtures/tray-icon.ts";
 
 async function resources<T>(

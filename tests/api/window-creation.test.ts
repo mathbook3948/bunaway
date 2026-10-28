@@ -246,6 +246,12 @@ test.each([
           backgroundColor: null,
         },
       },
+      {
+        // The window icon is declared in the app definition only.
+        window: {
+          icon: "icons/other.ico",
+        },
+      },
     ]) {
       extras.push({
         options,

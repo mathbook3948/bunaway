@@ -1,3 +1,4 @@
+import { validateResourceIconPath } from "@bunaway/plugin/resource-icon";
 import {
   hasValidWindowPlacement,
   hasValidWindowSizeConstraints,
@@ -50,6 +51,7 @@ const SIZE_FIELDS = [
   "contentProtection",
   "backgroundColor",
   "transparent",
+  "icon",
   "maximized",
   "fullscreen",
 ];
@@ -238,6 +240,12 @@ function readWindowSize(size: Record<string, unknown>): WindowSpec["window"] {
   if (transparentError !== undefined) {
     throw new Error(transparentError);
   }
+  // The path rules run at startup so a bad declaration fails before any window exists; the file
+  // itself is read when the window is created.
+  const icon =
+    size.icon === undefined
+      ? undefined
+      : validateResourceIconPath(size.icon, "window.icon");
   for (const dimension of [
     size.width,
     size.height,
@@ -276,6 +284,7 @@ function readWindowSize(size: Record<string, unknown>): WindowSpec["window"] {
     ...definedEntries({
       backgroundColor,
       transparent,
+      icon,
       titlebar,
       x: size.x,
       y: size.y,

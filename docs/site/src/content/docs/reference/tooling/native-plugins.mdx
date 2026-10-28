@@ -736,6 +736,19 @@ I/O 워커의 `HOME`은 호스트 데이터 루트라 `os.homedir()`는 사용�
 포함하면 `INTERNAL` 오류를 던집니다. App Sandbox 컨테이너 안에서는 데이터 루트가 컨테이너의
 것이므로 홈도 컨테이너의 것입니다.
 
+### Windows 아이콘 리소스
+
+앱이 선언한 ICO 경로(`desktop.tray.icon`, `window.icon`)는 `@bunaway/plugin/resource-icon`이
+검사하고 읽습니다. `validateResourceIconPath(icon, label)`은 파일 시스템을 열지 않고 경로
+형식만 검사합니다. 드라이브, UNC, URL, `.`과 `..` 구간, 스트림, 예약 장치 이름, 끝의 점이나
+공백은 `INVALID_ARGUMENT`입니다. `readResourceIconFile(resources, icon, label)`은 리소스
+디렉터리 안의 실제 파일만 읽습니다. 링크나 junction이 디렉터리 밖을 가리키면 거부하고, 파일은
+`MAX_NATIVE_ICO_BYTES`로 제한하며 ICO로 파싱되는지 확인한 뒤 base64로 돌려줍니다.
+`ResourceIconLabel`은 오류 메시지에 쓰는 선언 이름(`desktop.tray.icon` 또는
+`window.icon`)입니다. `@bunaway/plugin/windows-icon-provider`의 `overlayIconProvider(ico)`는
+검증한 base64 ICO에서 요청 크기에 맞는 HICON을 만드는 함수를 돌려주며, 호출마다 새 HICON의
+소유자가 해제해야 합니다. 두 진입점은 Windows Bun 전용입니다.
+
 ### Windows 네이티브 메뉴 트리
 
 Windows UI 플러그인은 `@bunaway/plugin/windows-menu`의 `NativePopupMenu`를 사용해

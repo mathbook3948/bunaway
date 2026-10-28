@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { parentPort, workerData } from "node:worker_threads";
 import type { ShutdownReason } from "@bunaway/core";
+import { readResourceIconFile } from "@bunaway/plugin/resource-icon";
 import { COINIT_APARTMENTTHREADED, checkHresult } from "@bunaway/plugin/win32";
+import { overlayIconProvider } from "@bunaway/plugin/windows-icon-provider";
 import type {
   NativeTrayOwner,
   WindowAudioChangeEvent,
@@ -1669,6 +1671,18 @@ function createWindow(
       view.lifecycle.requestClose(force);
     }
   };
+  // Read and validate the declared icon before the HWND exists, so a bad file acquires nothing.
+  const declaredIcon =
+    spec.window.icon === undefined
+      ? undefined
+      : overlayIconProvider(
+          readResourceIconFile(
+            config.appMetadata.paths?.resources,
+            spec.window.icon,
+            "window.icon",
+          ),
+          "window",
+        );
   const window = windows.create(
     spec.title,
     spec.window.width,
@@ -1874,6 +1888,10 @@ function createWindow(
   // Record partial HWND ownership before environment creation can fail.
   try {
     appearanceWindows.attach(readiness.snapshot().windowId, window);
+    // Owned by the window like an icon set later, so a failure below releases it with the HWND.
+    if (declaredIcon) {
+      windows.setWindowIcon(window, declaredIcon);
+    }
     native = new WebView(
       window,
       spec,

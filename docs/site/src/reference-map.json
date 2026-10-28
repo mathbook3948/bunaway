@@ -321,6 +321,23 @@
       }
     },
     {
+      "name": "@bunaway/plugin/windows-icon-provider",
+      "source": "packages/plugin-sdk/src/windows-icon-provider.ts",
+      "pages": {
+        "reference/tooling/native-plugins": ["overlayIconProvider"]
+      }
+    },
+    {
+      "name": "@bunaway/plugin/resource-icon",
+      "source": "packages/plugin-sdk/src/resource-icon.ts",
+      "pages": {
+        "reference/tooling/native-plugins": [
+          "readResourceIconFile",
+          "validateResourceIconPath"
+        ]
+      }
+    },
+    {
       "name": "@bunaway/plugin/windows-menu",
       "source": "packages/plugin-sdk/src/windows-menu.ts",
       "pages": {
