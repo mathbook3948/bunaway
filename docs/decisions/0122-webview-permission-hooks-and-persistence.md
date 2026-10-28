@@ -60,4 +60,5 @@ origin과 frame별로 허용하거나 거부할 수 있고, 그 결정을 저장
 
 - 코드, 스키마, 권한, 이벤트 변경은 없다.
 - `docs/TODO-windows.md`의 권한 check와 request 훅 항목, 권한 결정 영속화 항목을 결정 완료로 바꾸고 이 결정을 참조한다.
+- geolocation, notification, clipboard 권한을 연결하는 행은 clipboard 쓰기 확인이 남아 있어 이 결정에서 닫지 않는다.
 - 용도가 확인되거나 선택 Chromium 렌더러가 생기면 별도 결정에서 훅을 다시 검토한다.

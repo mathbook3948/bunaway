@@ -756,7 +756,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델에 있는 프로덕션 CSP와
 명시적 개발 origin 요구를 구체화한다. 출처: [T-security-live], [T-csp-live], [T-headers-live].
 
-- [x] 권한 check와 request 훅, origin과 frame별 허용과 거부는 제공하지 않기로 결정했다. 공개 문서 기준으로 Electron은 세션 핸들러를 주지만 Tauri는 공개 API가 없고, 호스트는 모든 권한 요청을 거부하는 보안 기본값을 유지한다. 필요한 앱은 백엔드나 플러그인이 접근한다 ([ADR 0122](decisions/0122-webview-permission-hooks-and-persistence.md)).
+- [x] 권한 check와 request 훅, origin과 frame별 허용과 거부는 제공하지 않기로 결정했다. 공개 문서 기준으로 Electron은 세션 핸들러를 주지만 Tauri는 공개 API가 없고, Windows 호스트는 모든 권한 요청을 거부하는 보안 기본값을 유지한다. 필요한 앱은 백엔드나 플러그인이 접근한다 ([ADR 0122](decisions/0122-webview-permission-hooks-and-persistence.md)).
 - [x] 권한 결정의 영속화, 조회와 초기화는 제공하지 않기로 결정했다. 호스트가 결정을 저장하지 않아 조회하거나 지울 상태가 없다 ([ADR 0122](decisions/0122-webview-permission-hooks-and-persistence.md)).
 - [ ] 프로덕션 CSP와 개발용 CSP(`devCSP`)의 설정, 기본값과 적용 대상을 정의한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).
   nonce/hash 생성과 자산 연결, 허용 origin, 개발 HMR과 프로덕션 정책의 분리를 제공한다.
