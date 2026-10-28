@@ -329,6 +329,22 @@ if (target === "windows-x64") {
       "--package",
       output,
     ]);
+    // Last: the test ends the runner's Explorer shell, so no other step may overlap it. A developer
+    // PC keeps its desktop; only the CI runner is disposable.
+    if (process.env.GITHUB_ACTIONS === "true") {
+      await run(
+        [
+          inputs.bun,
+          "--no-env-file",
+          "test",
+          resolve(root, "tests/lifecycle/windows-explorer-restart.test.ts"),
+        ],
+        root,
+        {
+          BUNAWAY_EXPLORER_RESTART_TEST: "1",
+        },
+      );
+    }
   }
 } else {
   const { buildMacosFixture, buildSignedFixture } = await import(

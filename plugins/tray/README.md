@@ -18,11 +18,14 @@ balloon 알림은 `NIM_MODIFY`에 `NIF_INFO`를 실어 요청하되 아이콘 �
 직접 참조해 두 연산을 호출한다.
 
 계약과 ICO 형식은 `tests/api/tray.test.ts`로 확인한다. `windows-tray-controls.test.ts`는 실제
-shell 아이콘의 tooltip/ICO 변경과 반복 교체, synthetic mouse 메시지, icon 제거 뒤 TaskbarCreated
-알림의 재등록 및 자원 정리를 검사한다. `windows-tray-balloon.test.ts`는 실제 shell 아이콘에 balloon 요청을 보내고 `NIN_BALLOON*` 메시지를
+shell 아이콘의 tooltip/ICO 변경과 반복 교체, synthetic mouse 메시지, icon 제거 뒤 합성한 TaskbarCreated
+알림의 재등록 및 자원 정리를 검사한다.
+`windows-explorer-restart.test.ts`는 실제 `explorer.exe` 종료와 새 셸 시작 뒤 아이콘이 다시 등록되는지를 windows-native CI에서만 검사한다.
+`windows-tray-balloon.test.ts`는 실제 shell 아이콘에 balloon 요청을 보내고 `NIN_BALLOON*` 메시지를
 `tray.balloon`으로 바꾸는 규칙을 검사한다. `windows-tray-ui.test.ts`는 실제 UI Worker의 packaged SDK,
-창 없는 백엔드 대기와 종료 정리를 확인한다. 이 native 회귀는 `mise run host:windows`에 포함한다.
-이는 물리 마우스 입력, 실제 Explorer process 재시작이나 화면의 모든 이미지 모양을 확인했다는 뜻이 아니다.
+창 없는 백엔드 대기와 종료 정리를 확인한다. 이 native 회귀는 `mise run host:windows`에 포함하며,
+`windows-explorer-restart.test.ts`는 GitHub Actions 러너에서만 돈다.
+이는 물리 마우스 입력, 일반 데스크톱의 자동 셸 재시작이나 화면의 모든 이미지 모양을 확인했다는 뜻이 아니다.
 
 ## macOS
 
