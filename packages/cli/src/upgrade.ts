@@ -34,7 +34,13 @@ const dependencyFields = [
 
 /** Specifiers that do not name a registry version are left to the project. */
 function isExternalSpecifier(specifier: string): boolean {
-  return specifier.includes(":") || specifier.endsWith(".tgz");
+  // A registry version or range never contains ":" or "/"; those are URLs,
+  // paths and "owner/repo" git shorthands. Tarballs may be bare file names.
+  return (
+    specifier.includes(":") ||
+    specifier.includes("/") ||
+    /\.(tgz|tar\.gz|tar)$/.test(specifier)
+  );
 }
 
 /** Indentation, line ending, BOM and final newline of the file, so the rewrite keeps them. */
@@ -158,7 +164,11 @@ async function checkInstalled(
         };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
+      return {
+        status: "FAIL",
+        name: `installed ${name}`,
+        detail: `cannot read the installed package (${error instanceof Error ? error.message : String(error)}); run bun install after the update`,
+      };
     }
     return isOptionalDependency(pkg, name)
       ? {

@@ -382,3 +382,49 @@ test("the command rejects unknown options and extra directories", async () => {
     ]),
   ).rejects.toThrow("Usage");
 });
+
+test("git shorthand, relative path and bare tarball specifiers are skipped", async () => {
+  await writePackage(
+    manifest({
+      dependencies: {
+        "@bunaway/cli": "someorg/bunaway-cli#main",
+        "@bunaway/backend": "../vendor/backend",
+        "@bunaway/plugin-opener": "bunaway-opener-1.0.0.tar.gz",
+      },
+      devDependencies: {},
+    }),
+  );
+  const plan = await planUpgrade(project, target);
+  expect(plan.lines.filter((line) => line.status === "SKIP").length).toBe(3);
+  await quiet(() => upgradeProject(project, true, target));
+  const result = JSON.parse(
+    await readFile(join(project, "package.json"), "utf8"),
+  );
+  expect(result.dependencies["@bunaway/cli"]).toBe("someorg/bunaway-cli#main");
+  expect(result.dependencies["@bunaway/backend"]).toBe("../vendor/backend");
+  expect(result.dependencies["@bunaway/plugin-opener"]).toBe(
+    "bunaway-opener-1.0.0.tar.gz",
+  );
+});
+
+test("an unreadable installed package.json is reported as a failure", async () => {
+  await writePackage(
+    manifest({
+      dependencies: {
+        "@bunaway/cli": "2.0.0",
+      },
+      devDependencies: {},
+      packageManager: "bun@1.4.2",
+    }),
+  );
+  await install("@bunaway/cli", "1.0.0");
+  await writeFile(
+    join(project, "node_modules", "@bunaway", "cli", "package.json"),
+    "not json",
+  );
+  const plan = await planUpgrade(project, target);
+  const line = plan.lines.find((entry) => entry.name.startsWith("installed"));
+  expect(line?.status).toBe("FAIL");
+  expect(line?.detail).toContain("cannot read the installed package");
+  expect(await quiet(() => upgradeProject(project, false, target))).toBe(1);
+});
