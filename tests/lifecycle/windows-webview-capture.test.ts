@@ -285,15 +285,24 @@ test("an oversized, mismatched or failed screenshot is reported with a precise e
       code: "INTERNAL",
     }),
   );
-  expect(() =>
+  // The native failure text stays in the cause and out of the public message.
+  let failure: unknown;
+  try {
     decodeScreenshot(
       {
         kind: "failed",
         reason: "RPC_E_DISCONNECTED",
       },
       "png",
-    ),
-  ).toThrow(/RPC_E_DISCONNECTED/);
+    );
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toMatchObject({
+    code: "INTERNAL",
+    message: "Capturing the page failed.",
+    cause: "RPC_E_DISCONNECTED",
+  });
 });
 
 test("capturing the whole page makes one screenshot call and no layout call", async () => {

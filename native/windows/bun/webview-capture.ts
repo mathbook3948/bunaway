@@ -86,6 +86,13 @@ function captureError(
   });
 }
 
+/** Keeps the native failure text for trusted diagnostics; the public message stays generic. */
+function withCause(error: BunawayError, cause: string) {
+  return Object.assign(error, {
+    cause,
+  });
+}
+
 function tooLarge() {
   return captureError(
     "INVALID_ARGUMENT",
@@ -258,9 +265,9 @@ export function decodeScreenshot(
     throw tooLarge();
   }
   if (outcome.kind === "failed") {
-    throw captureError(
-      "INTERNAL",
-      `Capturing the page failed: ${outcome.reason}`,
+    throw withCause(
+      captureError("INTERNAL", "Capturing the page failed."),
+      outcome.reason,
     );
   }
   const reply = parseObject(outcome.json, "screenshot reply");
@@ -313,7 +320,10 @@ export async function capturePageImage(
   if (options.region) {
     const layout = await run("Page.getLayoutMetrics", {});
     if (layout.kind !== "ok") {
-      throw captureError("INTERNAL", "Reading the page layout failed.");
+      throw withCause(
+        captureError("INTERNAL", "Reading the page layout failed."),
+        outcome.kind === "failed" ? outcome.reason : outcome.kind,
+      );
     }
     clip = clipForRegion(options.region, parseVisiblePage(layout.json));
   }
