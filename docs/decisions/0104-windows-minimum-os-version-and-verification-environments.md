@@ -24,7 +24,7 @@ CI에는 빌드 17763 러너와 22000 이상 러너가 없다.
 선례는 공개 문서를 읽은 내용이며 이 저장소의 테스트로 검증한 것이 아니다.
 
 - Electron은 Windows 10 이상을 지원 대상으로 문서화하고, 일부 창 API에 Windows 11 조건을 둔다(`setBackgroundMaterial`은 Windows 11 22H2 이상, `roundedCorners`는 Windows 11).
-- Tauri 2는 WebView2가 동작하는 Windows를 대상으로 한다. 이 프레임워크가 쓰는 번들 Bun의 하한과 같은 방식의 OS 하한은 Tauri 문서에서 확인하지 못했다.
+- Tauri 2는 WebView2가 동작하는 Windows를 대상으로 한다. bunaway가 쓰는 번들 Bun의 하한과 같은 방식의 OS 하한은 Tauri 문서에서 확인하지 못했다.
 - 이 프레임워크의 실질적인 바닥은 번들 Bun이 요구하는 Windows 10 1809이다. Electron의 "Windows 10 이상" 범위 안에 있다.
 
 ## 결정
@@ -35,7 +35,7 @@ CI에는 빌드 17763 러너와 22000 이상 러너가 없다.
 2. **하한 아래 OS에서는 설치 단계의 거부까지만 보장한다.**
    - Inno 설치 프로그램은 `MinVersion`으로, MSIX는 `TargetDeviceFamily`의 `MinVersion`으로 설치를 막는다. 패키징 도구는 하한보다 낮은 `minVersion` 설정을 만들지 않는다.
    - 설치 프로그램을 거치지 않고 실행 파일을 복사해 하한 아래에서 실행하는 경우의 시작 시 진단은 만들지 않는다. 코어 시작 경로를 넓히는 일이고 쓰는 곳이 확인되지 않았다. 필요해지면 후속으로 정한다.
-3. **기능별 빌드 게이트는 하한 안의 구형 OS에서 효과가 없는 힌트로 둔다.** 현재 코드는 `UNSUPPORTED` 오류를 내지 않는다.
+3. **기능별 빌드 게이트는 하한 안의 구형 OS에서 효과가 없는 힌트로 둔다.** 모서리와 재질의 빌드 게이트는 `UNSUPPORTED` 오류를 내지 않는다.
    - `setRoundedCorners`: 빌드 22000 미만에서는 DWM이 속성을 몰라 `E_INVALIDARG`를 돌려주고 호스트는 이를 효과 없음으로 보고 호출을 성공시킨다. 22000 이상에서 같은 오류는 실제 거부로 보고한다(`cornerPreferenceIgnored`).
    - `setBackgroundMaterial`: 빌드 22621 미만에서는 DWM 호출을 건너뛰고 성공한다. `getBackgroundMaterial`은 요청한 값을 돌려준다.
    - 두 동작은 Electron의 버전 조건과 같은 방향(효과 없음, 오류 없음)이다. 이 결정에서는 동작을 바꾸지 않는다.

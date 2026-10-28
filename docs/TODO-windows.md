@@ -1229,7 +1229,7 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
 완료 표시는 각 항목과 연결한 실행 기록의 환경 및 범위를 뜻한다. 새 실행 결과와 이전 실행
 결과는 날짜, 기준 revision과 검증 방식으로 구분한다.
 
-- [x] Windows 10/11의 지원 최소 버전과 실제 검증 환경을 확정한다. [ADR 0104](./decisions/0104-windows-minimum-os-version-and-verification-environments.md).
+- [x] 결정 완료: 지원 하한은 Windows 10 1809로 유지하고 검증 환경과 미검증 구간을 표로 기록한다. [ADR 0104](./decisions/0104-windows-minimum-os-version-and-verification-environments.md).
 - [ ] WebView2 최소 버전과 Evergreen, Fixed Version 배포 지원을 확정한다.
 - [ ] Windows ARM64 지원과 x64 emulation 범위를 확정한다.
 - [ ] 최소와 최대 크기, DPI와 다중 모니터 회귀를 실제 사용자 조작으로 검증한다.
