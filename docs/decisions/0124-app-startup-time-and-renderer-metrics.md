@@ -21,8 +21,8 @@ status: accepted
   `performance` API와 `process.getCPUUsage()` 같은 값을 직접 조합한다.
 - Tauri는 지표 API가 없다. startup 시간도 렌더러 내부 지표도 앱이 직접 잰다.
 - WebView2는 프로세스 정보 외에 렌더러 내부 지표를 위한 공개 API를 주지 않는다. 내부 지표를 얻는 방법은 DevTools 프로토콜의
-  `Performance.getMetrics` 같은 명령뿐인데, 이 저장소는 DevTools 프로토콜 연결을 제공하지 않기로 했다
-  ([ADR 0094](./0094-webview-devtools-protocol-emulation-and-extensions.md)).
+  `Performance.getMetrics` 같은 명령뿐이다. 이 저장소는 현재 DevTools 프로토콜 연결을 공개 연산으로 제공하지 않으며, 그
+  연결을 제공할지는 별도 항목에서 정한다.
 - 위 Electron과 Tauri, WebView2 서술은 공개 문서에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다.
 - 이 저장소의 앱은 `windows.readiness` 이벤트와 `windows.getReadiness` 조회로 네이티브 창 생성, 문서 완료, SDK 협상의 완료
   상태를 받는다. 렌더러의 `performance.timeOrigin`과 `PerformanceNavigationTiming`은 페이지 안에서 읽을 수 있고, 백엔드는
@@ -46,7 +46,7 @@ status: accepted
 - 앱이 이미 받는 readiness 이벤트와 기록한 시각, 페이지의 `performance` API로 같은 값을 얻을 수 있다. 호스트 타임스탬프를
   계약에 넣으면 모든 앱이 받는 코어 계약이 커지고, 값의 기준(창 표시, 문서 완료, SDK 협상 중 어느 시점)이 앱마다 달라 한 가지
   정의로 고정하기 어렵다.
-- 렌더러 내부 지표는 DevTools 프로토콜에만 있고 그 연결은 제공하지 않으므로 같은 결론이다.
+- 렌더러 내부 지표는 DevTools 프로토콜에만 있고 현재 그 연결을 제공하지 않으므로, 이 결정은 지표 전용 연산을 따로 만들지 않는다는 데까지만 정한다. DevTools 프로토콜 연결을 제공하기로 하면 그 연결로 지표를 읽는 방법은 그 결정에서 다룬다.
 
 ## 결과
 
