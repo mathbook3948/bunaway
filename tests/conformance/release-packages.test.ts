@@ -288,6 +288,12 @@ test("regular expression and nested template literals do not hide or invent impo
   expect(
     audit(`const half = total / 2; const x = a / b;\n${hidden}`),
   ).toContain("imports pkg-hidden");
+  expect(
+    audit('const a = loader.import("theme-dark"); ctx.require("config");'),
+  ).toBe("");
+  expect(audit(`const m = ${open}/"/.test(s)};\n${hidden}`)).toContain(
+    "imports pkg-hidden",
+  );
   expect(audit("type X = typeof import(`pkg-tpl`);")).toBe("");
 });
 

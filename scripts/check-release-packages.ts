@@ -45,8 +45,8 @@ const SOURCE_FILE_PATTERN = /\.(ts|tsx|mts|js|mjs)$/;
  */
 const FROM_CLAUSE_PATTERN = /\bfrom\s*["']([^"']+)["']/g;
 const CALL_SPECIFIER_PATTERN =
-  /\b(?:import|require)\s*\(\s*["']([^"']+)["']\s*\)/g;
-const SIDE_EFFECT_IMPORT_PATTERN = /\bimport\s*["']([^"']+)["']/g;
+  /(?<![.\w$])(?:import|require)\s*\(\s*["']([^"']+)["']\s*\)/g;
+const SIDE_EFFECT_IMPORT_PATTERN = /(?<![.\w$])import\s*["']([^"']+)["']/g;
 
 /** One tarball as read back from disk: its file list and the sources of its code files. */
 export type PackedPackage = {

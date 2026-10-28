@@ -9,7 +9,8 @@
  */
 
 /** What may precede a string literal for it to be a module specifier. */
-const SPECIFIER_LEAD_PATTERN = /(?:\bfrom|\bimport\s*\(?|\brequire\s*\()\s*$/;
+const SPECIFIER_LEAD_PATTERN =
+  /(?:\bfrom|(?<![.\w$])import\s*\(?|(?<![.\w$])require\s*\()\s*$/;
 /** A slash after one of these characters or keywords starts a regular expression, not a division. */
 const REGEX_LEAD_PATTERN =
   /(?:^|[(,=:[!&|?{};+\-*%<>~^]|\b(?:return|typeof|case|void|delete|throw|in|of))\s*$/;
@@ -113,7 +114,7 @@ class CodeScanner {
       if (char === "$" && this.source[index + 1] === "{") {
         this.index = index + 2;
         this.expressions.push(this.braceDepth);
-        this.emit('"" ');
+        this.emit('"" (');
         return;
       }
       index += char === "\\" ? 2 : 1;
