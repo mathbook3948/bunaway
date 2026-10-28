@@ -231,6 +231,20 @@ if (target === "windows-x64") {
       ],
       root,
     );
+    // Own process: the probe starts a compiled executable through Explorer and selects a file in an
+    // Explorer window, so it must not share a process with the other opener tests.
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(root, "tests/cli/opener.test.ts"),
+      ],
+      root,
+      {
+        BUNAWAY_OPENER_FILES_TEST: "1",
+      },
+    );
     for (const scenario of [
       "hide",
       "autostart",

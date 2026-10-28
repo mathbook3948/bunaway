@@ -19,7 +19,7 @@ async function run(args: string[], cwd: string): Promise<void> {
 }
 
 /**
- * Run an installed plugin in a compiled I/O adapter probe. The executable file opens by
+ * Run an installed plugin in a compiled worker adapter probe. The executable file opens by
  * its default action; Explorer's selected item is observed separately. No user
  * file associations or existing application windows are changed.
  */
@@ -74,10 +74,10 @@ import { operations } from ${JSON.stringify(resolve("native/host-api/bun/plugins
 import app from "./src-bunaway/app.ts";
 import { pluginImports } from ${JSON.stringify(resolve(assets, "plugin-imports.js"))};
 const catalog = await loadPluginCatalog(${JSON.stringify(assets)}, pluginImports);
-const adapter = await operations(app.plugins, ${JSON.stringify(project)}, "io", undefined, catalog);
+const adapter = await operations(app.plugins, ${JSON.stringify(project)}, "worker", undefined, catalog);
 try {
   for (const [action, path] of [["openFile", ${JSON.stringify(helper)}], ["revealFile", ${JSON.stringify(sample)}]]) {
-    assert.equal(adapter.execute("opener." + action, { path }, "backend"), null);
+    assert.equal(await adapter.execute("opener." + action, { path }, "backend"), null);
     if (action === "openFile") {
       const deadline = Date.now() + 10000;
       while (!(await Bun.file(${JSON.stringify(marker)}).exists())) {

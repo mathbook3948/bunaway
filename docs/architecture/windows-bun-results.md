@@ -178,7 +178,8 @@ main `2b78dc5` 통합 뒤에도 실제 `windows-bun-window-api.ts`, `windows-win
 기존 I/O Worker로 옮기고 어댑터가 자체 STA 초기화와 정리를 소유하도록 변경했다.
 아래 Windows 실행 결과는 후속 수정의 실행 근거로 사용하지 않는다. 후속 검증은
 `windows-opener.test.ts`의 실제 I/O Worker, 권한 승인 거부와 대기 작업 취소, COM 정리와
-`cli/opener.test.ts`의 UI 어댑터 미초기화 검사로 구분한다.
+`cli/opener.test.ts`의 UI 어댑터 미초기화 검사로 구분한다. 이관 후 어댑터의 compiled EXE 파일 열기와
+Explorer 선택은 [2026-10-27 항목](#2026-10-27-opener-파일-열기와-explorer-선택의-ci-연결)을 따른다.
 
 `6f2363c`의 opener를 확장하고 최신 main `87cbba6`에 rebase했다.
 Windows 11 Pro x64 `10.0.26200`, Bun 1.4.2에서 확인했다.
@@ -608,3 +609,10 @@ macOS fixture용 symlink를 만들 때 발생한 EPERM이다. 이전 CLI 시간 
 `build/window-relations-static-complete.log`다.
 초기 설정의 부모 지정, child HWND 임베딩, 다중 물리 모니터와 다른 플랫폼 실행은
 이번 작업에 포함하지 않았다.
+
+## 2026-10-27 opener 파일 열기와 Explorer 선택의 CI 연결
+- `tests/lifecycle/run-native.ts`가 windows-native 잡에서 `BUNAWAY_OPENER_FILES_TEST=1`로 `tests/cli/opener.test.ts`를 별도 프로세스로 실행한다.
+- 프로브는 `worker` 스레드의 opener 어댑터를 compiled EXE에 넣고, 한글, 공백, 쉼표와 emoji가 있는 실행 파일의 `openFile`과 텍스트 파일의 `revealFile`(Explorer 선택)을 확인한다.
+- 이 단계를 처음 연결한 CI 실행은 프로브가 옛 `io` 스레드와 동기 `execute`를 가정해 `UNSUPPORTED`로 실패했다. `worker`와 `await`로 고친 뒤 같은 잡에서 통과했다.
+- 통과한 실행은 GitHub Actions run 40499674577(PR 553, windows-2022 러너, 고정 Bun 1.4.2)이다.
+- 이 프로브는 실제 WebView2 앱 전체, 서명된 앱, MSIX와 Inno 설치 프로그램을 검증한 결과가 아니다.
