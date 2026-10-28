@@ -1168,8 +1168,9 @@ linear filtering의 투명 edge, crop과 빈 소스 및 quota 오류를 추가�
 루트 또는 손자의 PID를 표시한다. 출력 초과 오류는 정리 실패와 구분한다. 제삼자 도구의 부수 효과는 검증하지 않는다.
 `windows-outer-job-policy.test.ts`는 시작기 역할의 프로세스가 breakaway를 막는 바깥 Job(`KILL_ON_JOB_CLOSE`)을 만들고
 그 안에서 실제 `native/windows/bun/job.ts` 호스트를 실행한다. 호스트가 중첩 Job으로 앱 Job을 배정받아 시작하고, 백엔드
-자식을 포함하며, 바깥 Job이 막는 `startOutsideAppJob`이 `Relaunch CreateProcessW failed` 오류를 보고한 뒤에도 계속 동작함을
-확인한다. 호스트 강제 종료, 정상 종료, 바깥 Job 닫기 뒤에 호스트와 모든 자식, 시작기 프로세스가 사라지는지도 검사한다.
+자식을 포함하는지 확인한다. 바깥 Job이 breakaway를 막아도 `startOutsideAppJob`은 거부되지 않고, 시작한 프로세스는 앱 Job만
+벗어나 바깥 Job에 남아 호스트 종료 뒤에도 살아 있다가 바깥 Job을 닫을 때 사라지는지 검사한다. 호스트 강제 종료와 정상 종료 뒤에는
+백엔드 자식이 모두 사라지고, 바깥 Job을 닫으면 호스트와 모든 자식, 시작기 프로세스가 사라지는지도 검사한다.
 Windows 한 환경의 중첩 Job 동작만 확인하며 Job 정책이 다른 러너 이미지나 Windows 8 미만, 바깥 Job의 CPU와 메모리 제한은 실행하지 않는다.
 자식은 PID 파일 쓰기를 완료한 뒤 rename으로 준비를 알린다. 두 생존 검사는 파일 생성과 쓰기 사이의
 경합으로 빈 PID를 읽지 않고, 취소 전에 실제 자식의 Windows process handle을 잡는다.

@@ -97,6 +97,12 @@ function fileExists(name: string) {
     .then((found) => found || undefined);
 }
 
+/** The file's text once it exists, otherwise `undefined` so `waitFor` keeps polling. */
+async function readText(name: string) {
+  const file = Bun.file(join(root, name));
+  return (await file.exists()) ? file.text() : undefined;
+}
+
 async function runLauncher() {
   // No JOB_OBJECT_LIMIT_BREAKAWAY_OK: processes inside cannot break away, as in a locked-down
   // launcher or service. KILL_ON_JOB_CLOSE makes closing the handle the outer shutdown path.
@@ -200,10 +206,13 @@ async function runHost() {
     });
   }
   const descendants = activeDescendants();
-  // The outer Job forbids breakaway, so the relaunch path must report the refusal and start nothing.
+  // The app Job allows breakaway for this call, and Windows checks that permission only for the
+  // Job the caller is directly in, so the outer Job's missing permission does not refuse the launch.
+  // The new process leaves the app Job but stays in the outer Job.
   let refusal: string | undefined;
+  let restoreError: string | undefined;
   try {
-    startOutsideAppJob({
+    const restore = startOutsideAppJob({
       executable: process.execPath,
       args: [
         "--no-env-file",
@@ -213,12 +222,24 @@ async function runHost() {
       cwd: root,
       env: process.env,
     });
+    if (restore !== undefined) {
+      restoreError = String(restore);
+    }
   } catch (error) {
     refusal = error instanceof Error ? error.message : String(error);
   }
-  // The host keeps working after the refusal: its Job still contains the same descendants and
-  // a child started afterwards is still contained.
-  const afterRefusal = activeDescendants();
+  const outsidePid =
+    refusal === undefined
+      ? Number(
+          await waitFor(() => readText("outside.pid"), {
+            deadline: "childStep",
+            what: "the process started outside the app Job to publish its PID",
+          }),
+        )
+      : undefined;
+  // The app Job stays intact: the outside process is not counted, and a child started afterwards
+  // is still contained.
+  const afterOutside = activeDescendants();
   const late = Bun.spawn(
     [
       process.execPath,
@@ -233,16 +254,18 @@ async function runHost() {
   );
   await waitFor(() => fileExists("late.pid"), {
     deadline: "childStep",
-    what: "the child started after the refusal",
+    what: "the child started after the outside launch",
   });
   await publish("host.json", {
     hostPid: process.pid,
     backendPids: backends.map(({ child }) => child.pid),
     latePid: late.pid,
     descendants,
-    afterRefusal,
+    afterOutside,
     afterLate: activeDescendants(),
+    outsidePid,
     refusal,
+    restoreError,
   });
   await waitFor(() => fileExists("release"), {
     deadline: "childStep",

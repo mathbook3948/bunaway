@@ -12,9 +12,11 @@ type HostReport = {
   backendPids: number[];
   latePid: number;
   descendants: number;
-  afterRefusal: number;
+  afterOutside: number;
   afterLate: number;
+  outsidePid?: number;
   refusal?: string;
+  restoreError?: string;
 };
 
 /** How the test ends the app while it sits inside an outer Job that forbids breakaway. */
@@ -66,21 +68,29 @@ test.skipIf(process.platform !== "win32").each(ENDINGS)(
       expect(report.descendants).toBeGreaterThanOrEqual(
         report.backendPids.length,
       );
-      // CreateProcessW with breakaway is refused by the outer Job; the host reports it and goes on.
-      expect(report.refusal).toMatch(
-        /^Relaunch CreateProcessW failed \(Win32 \d+\)$/,
-      );
-      expect(report.afterRefusal).toBeGreaterThanOrEqual(
+      // Breakaway is checked only against the Job the host is directly in (the app Job), so the
+      // outer Job does not refuse startOutsideAppJob and the app Job's flags are restored.
+      expect({
+        refusal: report.refusal,
+        restoreError: report.restoreError,
+      }).toEqual({
+        refusal: undefined,
+        restoreError: undefined,
+      });
+      expect(report.afterOutside).toBeGreaterThanOrEqual(
         report.backendPids.length,
       );
       expect(report.afterLate).toBeGreaterThanOrEqual(
         report.backendPids.length + 1,
       );
-      expect(await Bun.file(join(root, "outside.pid")).exists()).toBe(false);
+      // The outside process is not an app descendant: the late child is the only addition.
+      expect(report.outsidePid).toBeNumber();
+      expect(report.afterLate).toBeGreaterThan(report.afterOutside);
 
       const pids = [
         launcher.pid,
         report.hostPid,
+        report.outsidePid as number,
         ...report.backendPids,
         report.latePid,
       ];
@@ -89,7 +99,7 @@ test.skipIf(process.platform !== "win32").each(ENDINGS)(
       }
       expect(probes.every((probe) => !probe.exited())).toBe(true);
 
-      const [launcherProbe, hostProbe, ...backendProbes] = probes;
+      const [launcherProbe, hostProbe, outsideProbe, ...backendProbes] = probes;
       if (ending === "forced host termination") {
         process.kill(report.hostPid);
         await waitFor(() => hostProbe?.exited(), {
@@ -101,7 +111,9 @@ test.skipIf(process.platform !== "win32").each(ENDINGS)(
           deadline: "childExit",
           what: "the backend children and late child to be reaped after the host was killed",
         });
+        // Leaving the app Job also means surviving the host; only the outer Job still owns it.
         expect(launcherProbe?.exited()).toBe(false);
+        expect(outsideProbe?.exited()).toBe(false);
       } else if (ending === "normal host exit") {
         await Bun.write(join(root, "release"), "release");
         await waitFor(() => backendProbes.every((probe) => probe.exited()), {
@@ -109,6 +121,7 @@ test.skipIf(process.platform !== "win32").each(ENDINGS)(
           what: "the backend children to be reaped after the host exited",
         });
         expect(launcherProbe?.exited()).toBe(false);
+        expect(outsideProbe?.exited()).toBe(false);
       } else {
         await Bun.write(join(root, "close-outer"), "close");
         await waitFor(() => probes.every((probe) => probe.exited()), {
