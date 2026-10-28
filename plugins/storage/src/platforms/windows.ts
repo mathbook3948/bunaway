@@ -157,6 +157,10 @@ export class WindowsStorage extends NodeStorage {
     }
   }
 
+  /**
+   * One `MoveFileExW` call. `flags` 0 is a plain rename that fails across volumes;
+   * `MOVEFILE_COPY_ALLOWED` lets the OS copy then delete. Returns the Win32 error code, 0 on success.
+   */
   private moveFile(from: string, to: string, flags: number): number {
     return withWide(from, (source) =>
       withWide(to, (destination) =>
