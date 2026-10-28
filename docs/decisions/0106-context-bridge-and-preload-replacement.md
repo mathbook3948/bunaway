@@ -4,7 +4,7 @@ status: accepted
 
 # context bridge와 preload는 SDK 클라이언트와 명령 정책으로 대체하고 같은 이름의 기능은 제공하지 않는다
 
-결정일: 2026-10-27. 검토 기준: main `6bee970a`.
+결정일: 2026-10-29. 검토 기준: main `6bee970a`.
 
 ## 배경
 
@@ -19,8 +19,8 @@ Electron에서 넘어오는 앱이 preload 스크립트와 `contextBridge`로 �
 ## 결정
 
 1. 렌더러에 안전한 API를 노출하는 용도(`exposeInMainWorld`)는 앱 정의의 명령과 이벤트 계약, 그리고 SDK 클라이언트로 대신한다. Electron에서 preload에 두던 "main 프로세스에 요청하는 좁은 함수"는 백엔드 명령으로 옮기고, 프런트엔드는 클라이언트로 그 명령을 호출한다. 호출 가능 여부는 정책의 `host.permissions`와 `commands`가 정한다.
-2. 앱이 임의 함수나 객체를 페이지의 `window`에 노출하는 API(`contextBridge` 대체)를 제공하지 않는다. 노출 이름 규칙도 두지 않는다. 노출 지점은 웹 메시지 브리지 하나다.
-3. 이 저장소의 페이지에는 브리지(`window.chrome.webview`)가 있지만, 호출마다 네이티브가 origin과 frame 권한 검사, 스키마 검증을 거친다. Electron의 `contextIsolation`이 막으려는 "페이지 스크립트가 특권 객체를 직접 쥐는 상황"은 이 검사로 대신하므로, 이 결정에서는 앱이 페이지 전역에 특권 객체를 노출하지 않는다(결정 2, ADR 0048). 분리된 컨텍스트(isolated world)의 제공 여부는 #158 항목이 정하며 이 결정은 정하지 않는다.
+2. 앱이 임의 함수나 객체를 페이지의 `window`에 노출하는 API(`contextBridge` 대체)를 제공하지 않는다. 노출 이름 규칙도 현재 두지 않는다. 노출 지점은 웹 메시지 브리지 하나다.
+3. 브리지(`window.chrome.webview`)가 설치된 frame에서는 호출마다 네이티브가 origin과 frame 권한 검사, 스키마 검증을 거친다. Electron의 `contextIsolation`이 막으려는 "페이지 스크립트가 특권 객체를 직접 쥐는 상황"은 이 검사로 대신하므로, 이 결정에서는 앱이 페이지 전역에 특권 객체를 노출하지 않는다(결정 2, ADR 0048). 분리된 컨텍스트(isolated world)의 제공 여부는 #158 항목이 정하며 이 결정은 정하지 않는다.
 4. 창마다 지정하는 preload 파일(`webPreferences.preload` 대체)은 현재 제공하지 않는다. preload에서 하던 일은 용도에 따라 아래로 옮긴다.
    - main 프로세스에 요청하는 함수: 백엔드 명령과 SDK 클라이언트(결정 1).
    - 시작 시점에 필요한 값: 앱이 시작 명령의 결과를 기다린다(ADR 0048 결정 2).
@@ -33,7 +33,7 @@ Electron에서 넘어오는 앱이 preload 스크립트와 `contextBridge`로 �
 
 - 주입 시점(문서 생성 시점, DOM 준비 시점)과 주입 단위(창, 세션).
 - frame별 범위(최상위 frame만, 하위 frame 포함)와 하위 frame에서의 권한.
-- 브리지에 노출하는 이름이 있다면 그 이름 규칙과 충돌 처리.
+- 문서 초기화 script가 브리지 쪽에 이름을 노출하게 되면 그 이름 규칙과 충돌 처리.
 - 주입된 코드가 페이지 전역과 분리돼야 하는지(isolated world 여부)는 #158 항목에서 정한다.
 
 ## 근거
