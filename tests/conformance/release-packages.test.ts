@@ -245,6 +245,69 @@ test("glob strings, trailing comments and string text do not hide or invent impo
   expect(audit('const t = `import x from "react"`;')).toBe("");
 });
 
+test("regular expression and nested template literals do not hide or invent imports", () => {
+  const audit = (source: string) =>
+    auditPackedPackage(
+      packed({
+        manifest: {
+          ...packed().manifest,
+          dependencies: {},
+        },
+        sources: new Map([
+          [
+            "src/a.ts",
+            source,
+          ],
+        ]),
+      }),
+      expected,
+    ).join("\n");
+  // Built from parts so the lint rule against placeholder-looking strings does not apply.
+  const open = "$" + "{";
+  const nestedTemplate = `const m = \`x ${open}\`it's\`}\`;`;
+  const quotedBacktick = `const s = \`a${open}"\`"}b\`;`;
+  const hidden = 'export type T = import("pkg-hidden").T;\n';
+  expect(audit(`const re = /["]/;\n${hidden}const q = "x";`)).toContain(
+    "imports pkg-hidden",
+  );
+  expect(audit(`const re = /^src\\/*/;\n${hidden}/* end */`)).toContain(
+    "imports pkg-hidden",
+  );
+  expect(audit(`const re = /a\\//;\n${hidden}`)).toContain(
+    "imports pkg-hidden",
+  );
+  expect(
+    audit(`const re = /[/"]/;\nconst msg = "cannot load from 'config'";`),
+  ).toBe("");
+  expect(audit(`${nestedTemplate}\n${hidden}const q = 'q';`)).toContain(
+    "imports pkg-hidden",
+  );
+  expect(audit(`${quotedBacktick}\n${hidden}const q = "x";`)).toContain(
+    "imports pkg-hidden",
+  );
+  expect(
+    audit(`const half = total / 2; const x = a / b;\n${hidden}`),
+  ).toContain("imports pkg-hidden");
+  expect(audit("type X = typeof import(`pkg-tpl`);")).toBe("");
+});
+
+test("the import scan stays linear on a large source", () => {
+  const source = 'const a = "x" + b;\n'.repeat(60_000);
+  const started = performance.now();
+  auditPackedPackage(
+    packed({
+      sources: new Map([
+        [
+          "src/big.ts",
+          source,
+        ],
+      ]),
+    }),
+    expected,
+  );
+  expect(performance.now() - started).toBeLessThan(5000);
+});
+
 test("file: and link: ranges are rejected like workspace: ranges", () => {
   const manifest = {
     ...packed().manifest,
