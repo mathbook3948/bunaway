@@ -25,11 +25,11 @@ CI에는 빌드 17763 러너와 22000 이상 러너가 없다.
 
 - Electron은 Windows 10 이상을 지원 대상으로 문서화하고, 일부 창 API에 Windows 11 조건을 둔다(`setBackgroundMaterial`은 Windows 11 22H2 이상, `roundedCorners`는 Windows 11).
 - Tauri 2는 WebView2가 동작하는 Windows를 대상으로 한다. bunaway가 쓰는 번들 Bun의 하한과 같은 방식의 OS 하한은 Tauri 문서에서 확인하지 못했다.
-- 이 프레임워크의 실질적인 바닥은 번들 Bun이 요구하는 Windows 10 1809이다. Electron의 "Windows 10 이상" 범위 안에 있다.
+- bunaway의 실질적인 바닥은 번들 Bun이 요구하는 Windows 10 1809이다. Electron의 "Windows 10 이상" 범위 안에 있다.
 
 ## 결정
 
-1. **하한은 Windows 10 1809(`10.0.17763.0`)로 유지한다.** 하한을 올리려면 코드로 확인되는 근거가 있어야 한다(번들 Bun 요구 상승, WebView2 Runtime의 지원 OS 변경, 이 프레임워크가 쓰는 Win32 API의 하한 상승).
+1. **하한은 Windows 10 1809(`10.0.17763.0`)로 유지한다.** 하한을 올리려면 코드로 확인되는 근거가 있어야 한다(번들 Bun 요구 상승, WebView2 Runtime의 지원 OS 변경, bunaway가 쓰는 Win32 API의 하한 상승).
    하한을 올릴 때는 `WINDOWS_MIN_BUILD`와 이 문서의 표를 바꾸고, 같은 번호가 문자열로 들어 있는 `inno.ts`, `msix.ts`의 오류 문구, `packages/packaging/README.md`, `channels.mdx`의 문장을 함께 갱신한다.
    WebView2 최소 Runtime 버전은 이 결정에서 다시 정하지 않는다(해당 항목이 따로 정한다).
 2. **하한 아래 OS에서는 설치 단계의 거부까지만 보장한다.**
