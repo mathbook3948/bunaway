@@ -283,3 +283,8 @@ try {
 } finally {
   api.close();
 }
+if (role === "host") {
+  // Idle backend children would keep the event loop alive. The real host exits explicitly too, and
+  // the app Job then reaps its children.
+  process.exit(0);
+}
