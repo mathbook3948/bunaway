@@ -57,7 +57,7 @@ status: accepted
    same-document 탐색에서 세션 URL을 갱신하는 계기는 다르다. Windows는 `SourceChanged` 이벤트에서, macOS는 UI 메시지가
    도착할 때 그 시점의 출처로 `ViewBoundary.sameDocument`를 호출한다.
 5. 기존 계약으로 얻을 수 없는 용도(탐색 이력 추적, 리디렉션 체인 조회 등)가 확인되면 별도 결정에서 다룬다. 탐색 전 허용과
-   거부, 리디렉션과 popup 처리는 별도 TODO 항목이다.
+   거부, 리디렉션과 popup 처리는 [ADR 0123](./0123-webview-navigation-hooks.md)에서 훅을 지금은 제공하지 않기로 했다.
 
 ## 근거
 

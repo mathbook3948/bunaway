@@ -8,12 +8,12 @@ status: accepted
 
 ## 배경
 
-아래 Electron과 Tauri 서술은 해당 프로젝트의 공개 문서 확인에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다.
+아래 Electron과 Tauri 서술은 이 저장소의 테스트로 검증한 것이 아니다.
 
 앱 코드가 WebView의 탐색, redirect, `window.open` 요청마다 허용 또는 거부를 결정하는 콜백 훅을 공개 계약으로 제공할지 정해야 했다. [ADR 0078](./0078-webview-navigation-events.md)은 탐색 알림 이벤트를 다루면서 탐색 전 허용과 거부, redirect와 popup 처리는 별도 항목으로 남겼다.
 
 - Electron은 `webContents`의 `will-navigate`, `will-frame-navigate`, `will-redirect`로 탐색을 취소하게 하고, `setWindowOpenHandler`가 `window.open`과 `target="_blank"` 요청마다 허용 또는 거부를 돌려준다. 훅은 앱의 메인 프로세스 코드에서 돌고 판정은 앱 코드가 곧 정책이다. `will-redirect`는 redirect 단계마다 발생한다. 앱이 `loadURL`로 시작한 탐색에는 `will-navigate`가 발생하지 않는다. 외부 링크는 거부한 뒤 앱이 `shell.openExternal`로 여는 패턴이 흔하다([ADR 0002](./0002-host-owned-call-context.md)에도 같은 설명이 있다).
-- Tauri는 탐색 전 허용 여부를 정하는 `on_navigation`을 앱의 Rust 코드가 쓰는 빌더 훅으로 제공한다. JS 공개 API가 아니며 콜백 인자에 프레임 정보도 없다(ADR 0078). 두 프레임워크 모두 앱 백엔드 코드가 탐색을 판정하는 훅을 제공하는 셈이다. 새 창 요청에 대한 Tauri의 처리기는 이 결정에서 확인하지 않았다.
+- Tauri는 탐색 전 허용 여부를 정하는 `on_navigation`을 앱의 Rust 코드가 쓰는 빌더 훅으로 제공한다. JS 공개 API가 아니며 콜백 인자에 프레임 정보도 없다(ADR 0078). 두 프레임워크 모두 앱 백엔드 코드가 탐색을 판정하는 훅을 제공하는 셈이다.
 - 이 저장소는 같은 목적을 선언형으로 해결한다.
   - 정책 뷰의 `origins`(`http(s)://호스트[:포트]`)가 허용 목록이다. Windows 호스트의 `NavigationStarting`과 `FrameNavigationStarting` 처리기는 허용 목록 밖 탐색을 취소하고, redirect도 단계마다 같은 `NavigationStarting`을 거친다(`native/windows/bun/webview.ts`). 따라서 허용 밖 주소를 거치는 redirect는 그 단계에서 취소되는 구조이며, 시험은 허용 origin에서 허용 밖 최종 URL로 가는 redirect의 거부를 확인한다. macOS 호스트는 `decidePolicyForNavigationAction`과 `decidePolicyForNavigationResponse`가 `macosOrigin`으로 판정하고, 중간 단계의 차단은 자원 규칙(`native/macos/bun/urls.ts`)을 읽은 해석이다(`native/macos/bun/webview.ts`).
   - 앱 코드가 시작하는 탐색은 `windows.navigateWebView`가 같은 `origins` 검사를 적용하고 허용 밖은 `PERMISSION_DENIED`로 거부한다(`docs/site/src/content/docs/reference/host/windows.mdx`의 `navigateWebView` 절).
@@ -54,5 +54,5 @@ status: accepted
 
 - 스키마, 이벤트, 권한, 옵션과 네이티브 코드 변경은 없다. 사용자 문서(`docs/site`)에 새 공개 API는 없다.
 - `docs/TODO-windows.md`의 해당 항목을 완료로 표시하고 이 결정을 참조한다.
-- 시험이 확인하는 범위: `tests/lifecycle/windows-host.ts`와 `tests/lifecycle/macos-host.ts`는 허용 목록 밖 탐색 뒤에 `navigation-blocked` 로그가 1건 이상 남는지 확인한다. `tests/lifecycle/windows-webview-controls.ts`와 `tests/fixtures/macos-webview-controls/app.ts`는 `navigateWebView`가 허용 밖 origin, file, 자격 증명, javascript URL을 `PERMISSION_DENIED`로 거부하는지, 그리고 `redirect.html`이 허용 origin에서 허용 밖 origin으로 redirect할 때 탐색이 취소되고 외부 요청이 0건인지 확인한다. 이 결정은 새 시험을 추가하지 않는다. 새 창 요청의 취소와 `new-window-blocked` 로그, 허용 밖 중간 단계를 거쳐 최종 URL이 허용 origin인 redirect의 판정은 시험으로 확인하지 않았고 위 코드의 서술에 따른다.
+- 시험이 확인하는 범위: `tests/lifecycle/windows-host.ts`와 `tests/lifecycle/macos-host.ts`는 허용 목록 밖 탐색 뒤에 `navigation-blocked` 로그가 1건 이상 남는지 확인한다. `tests/lifecycle/windows-webview-controls.ts`와 `tests/fixtures/macos-webview-controls/app.ts`, `tests/lifecycle/macos-webview-controls.ts`는 `navigateWebView`가 허용 밖 origin, file, 자격 증명, javascript URL을 `PERMISSION_DENIED`로 거부하는지, 그리고 `redirect.html`이 허용 origin에서 허용 밖 origin으로 redirect할 때 탐색이 취소되고 외부 요청이 0건인지 확인한다. 이 결정은 새 시험을 추가하지 않는다. 새 창 요청의 취소와 `new-window-blocked` 로그, 허용 밖 중간 단계를 거쳐 최종 URL이 허용 origin인 redirect의 판정은 시험으로 확인하지 않았고 위 코드의 서술에 따른다.
 - 후속: 차단 진단은 호스트 로그로만 남고 앱에 이벤트로 전달되지 않는다. 앱이 차단 사실을 알아야 하는 용도가 확인되면 훅이 아니라 읽기 전용 알림으로 별도 결정한다.
