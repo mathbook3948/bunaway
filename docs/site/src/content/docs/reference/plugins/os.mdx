@@ -105,7 +105,7 @@ Windows는 호스트와 백엔드를 하나의 Bun 프로세스로 실행하므�
 제외합니다. 임의 프로세스를 지정하는 입력은 없고, 프로세스가 256개를 넘으면 일부만 돌려주지 않고 `INTERNAL`입니다.
 프로세스 구성과 메모리는 앱 내부 정보이므로 `os.listAppProcesses`는 독립 권한입니다. macOS에서는 `UNSUPPORTED`입니다.
 GPU 프로세스의 그래픽 메모리, 렌더러 내부 지표와 startup 시간은 반환하지 않습니다. startup 시간은 앱이 백엔드 진입 시각과
-UI가 받은 `windows.readiness` 시각의 차로 직접 잴 수 있습니다([ADR 0124](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0124-app-startup-time-and-renderer-metrics.md)).
+UI가 받은 `windows.readiness` 시각의 차로 직접 잴 수 있습니다(앱이 관측한 시각이며 정확한 준비 완료 시각은 아닙니다)([ADR 0124](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0124-app-startup-time-and-renderer-metrics.md)).
 
 `os.getMediaAccessStatus({ mediaType })`는 Windows 설정의 개인정보 보호 > 카메라 또는 마이크 접근 상태를 읽기 전용으로 조회합니다.
 `mediaType`은 `"camera"`와 `"microphone"`만 받으며 다른 값이나 추가 필드는 `INVALID_ARGUMENT`입니다. 결과는 Electron
