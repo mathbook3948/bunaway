@@ -41,7 +41,7 @@ frame별 PDF, 비디오의 "다른 이름으로 저장"과 "비디오 frame 복�
    뷰의 `commands`에 넣어 페이지가 직접 호출하는 방식은 `screen-capture` 문서가 권장하지 않는다. 썸네일 선택기를 UI에 그리면 화면 내용이 WebView에 노출되므로 그 노출은
    앱이 책임지고 정한다. 연속 갱신이 필요해 호출을 반복하면 캡처가 호스트의 I/O Worker에서 한 번에 하나씩 실행되고 시작한 캡처를 취소할 수 없어 같은 Worker의 다른 작업이
    늦어진다. 반복 호출이 스트림 수준의 프레임 속도를 내는지는 검증하지 않았다. 시스템 audio는 대체 경로가 없다.
-4. frame별 PDF와 비디오 frame 복사, 비디오 저장을 제공하지 않는다. 사용자가 선택하는 인쇄는 `windows.showPrintUI`가 있고, PDF와 페이지 capture는 별도로 결정한다.
+4. frame별 PDF와 비디오 frame 복사, 비디오 저장을 제공하지 않는다. 사용자가 선택하는 인쇄는 `windows.showPrintUI`가 있고, frame 단위가 아닌 PDF 내보내기와 페이지 capture는 별도 항목에서 정한다.
    비디오 파일을 가진 앱은 원본 URL이나 파일을 직접 다루면 된다. WebView2 공개 API에서 frame별 PDF나 비디오 frame 복사에 대응하는 항목은 찾지 못했다.
 5. 이 결정을 위한 `UNSUPPORTED` 항목이나 선택 렌더러 요구 사항을 새로 만들지 않는다. 요구가 확인되면 별도 결정에서 다루며, 그때 전제는 호스트 캡처 세션의 수명과 상한,
    WebView2에서 source 선택 응답이 가능한지의 확인, 앱 단위 동의 방식이다.
@@ -50,7 +50,7 @@ frame별 PDF, 비디오의 "다른 이름으로 저장"과 "비디오 frame 복�
 ## 근거
 
 - Electron은 source 선택과 loopback을 제공하고 Tauri는 제공하지 않아 둘이 다르다. 코어는 작게 두는 쪽을 따르고, 플러그인으로 새로 만들지도 않는다.
-  `plugins`, `packages`, `examples`에서 `getDisplayMedia`나 loopback을 쓰는 코드가 없어 요구가 확인되지 않았기 때문이다.
+  `plugins`, `packages`, `examples`에서 `getDisplayMedia`나 시스템 audio loopback을 쓰는 코드가 없어 요구가 확인되지 않았기 때문이다.
 - 연속 스트림과 loopback은 호스트에 장기 자원과 응답 계약을 새로 요구하고 화면 노출 경계를 모든 앱에 대해 바꾼다. 지킬 수 있는지 확인하지 못한 WebView2 동작 위에 계약을 공개하지 않는다.
 - bunaway가 제공하는 화면 내용 경로는 신뢰 코드(백엔드)가 연산별 권한 검사를 거쳐 얻는 `screen-capture`뿐이다. 이 결정은 페이지가 WebView2 런타임의 기본 동작으로
   `getDisplayMedia`를 직접 호출하는 경로를 통제하지 못하며, 그 경로가 있는지는 확인하지 않았다.
