@@ -4,7 +4,7 @@ status: accepted
 
 # context bridge와 preload는 SDK 클라이언트와 명령 정책으로 대체하고 같은 이름의 기능은 제공하지 않는다
 
-결정일: 2026-10-27. 검토 기준: main `c2ce1e44`.
+결정일: 2026-10-27. 검토 기준: main `6bee970a`.
 
 ## 배경
 
