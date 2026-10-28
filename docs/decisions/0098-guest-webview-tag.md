@@ -20,14 +20,14 @@ status: accepted
   기각했다. 다중 창을 나중에 플러그인으로 제공하는 경우의 재제안 조건(실제 앱 사례, 추가 WebView의 세션 발급과 회수 확장점을 정하는 별도 ADR,
   기본 앱의 계약과 보안 검토 범위를 늘리지 않음)도 같은 ADR에 있다. 이 ADR은 UI 안의 guest WebView도 추가 WebView의 한 형태로 보고 같은 조건을 적용한다(이 적용은 이 ADR의 판단이다).
 - 호스트가 발급하는 문서 세션은 최상위 문서 단위라 하위 프레임(`<iframe>` 등)은 SDK 세션을 가질 수 없다([ADR 0002](./0002-host-owned-call-context.md)).
-  Windows 호스트는 `FrameWebMessageReceived` 핸들러를 설치하지 않아 최상위 문서의 메시지만 받는다(`native/windows/bun/webview.ts`). 자식 iframe이 보낸 invoke가 백엔드에 도달하지 않는 것도 실행으로 확인했다(`docs/architecture/windows-host-results.md`의 origin, frame 항목).
+  Windows 호스트는 `FrameWebMessageReceived` 핸들러를 설치하지 않아 최상위 문서의 메시지만 받는다(`native/windows/bun/webview.ts`). 이전 Windows 호스트의 검증 기록에도 자식 iframe이 보낸 invoke가 백엔드에 도달하지 않았다는 항목이 있다(`docs/architecture/windows-host-results.md`의 origin, frame 항목). 현재 Bun FFI 호스트로 다시 실행해 확인한 것은 아니다.
 - 정책 뷰의 `origins` 밖 `http`, `https` URL은 같은 WebView에서 열지 않고 `opener.openUrl`을 거쳐서만 시스템 기본 브라우저로 넘긴다([ADR 0026](./0026-single-webview-single-window.md)의 `window.open`과 링크 항목).
 
 ## 결정
 
 1. `<webview>` 태그나 이와 같은 UI 내 guest WebView API는 제공하지 않는다.
 2. 대안은 다음과 같다. 앱이 만든 화면은 같은 WebView 안의 라우팅과 모달 UI로 표시한다. 문서를 끼워 넣어야 하면 `<iframe>`을 쓸 수 있고,
-   하위 프레임은 호스트 세션과 SDK 호출을 받지 못하므로 호스트 브리지와 앱 권한을 상속하지 않는다. 다만 `<iframe>`의 탐색은 뷰의 origin 정책과 외부 사이트의
+   하위 프레임은 호스트 세션과 SDK 호출을 받지 못하므로(세션이 최상위 문서 단위라는 ADR 0002의 요구이며 Windows에서만 확인했고 다른 플랫폼은 미검증이다) 호스트 브리지와 앱 권한을 상속하지 않는다. 다만 `<iframe>`의 탐색은 뷰의 origin 정책과 외부 사이트의
    프레임 삽입 허용 여부에 따르며 이 저장소에서 외부 사이트 표시를 검증한 것은 아니다. 외부 사이트는 `opener.openUrl`로 시스템 브라우저에서 연다.
    `opener.openUrl`의 호출 조건(뷰 `commands`의 `plugin.opener.openUrl`과 host 권한 `opener.openUrl`)과 링크, `window.open`의 대리 호출은
    ADR 0026이 정한 대로 따르며, 그 구현은 이 결정의 범위 밖이다.
@@ -46,6 +46,6 @@ status: accepted
 ## 결과
 
 - 이벤트, 권한, 스키마, 네이티브 코드 변경은 없다.
-- 결정은 호스트 계약에 대한 것이라 플랫폼에 공통이다. `docs/TODO-macos.md`의 guest WebView 항목은 extension과 native View tree 수명까지 함께 다루므로 이 문서에서 닫지 않고, guest WebView 부분은 이 결정을 따른다.
+- 결정은 호스트 계약에 대한 것이라 플랫폼에 공통으로 적용한다. `docs/TODO-macos.md`의 guest WebView 항목은 extension과 native View tree 수명까지 함께 다루므로 이 문서에서 닫지 않고, guest WebView 부분은 이 결정을 따른다.
 - 이 결정은 한 창의 다중 WebView(`docs/TODO-windows.md`의 WebView 생성과 bounds 항목), WebView reparent, 선택 Chromium 렌더러 항목을 닫지 않는다. 그 항목들은 각자의 결정을 따른다.
 - `docs/TODO-windows.md`의 해당 항목을 완료로 표시하고 이 결정을 참조한다.
