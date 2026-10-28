@@ -18,7 +18,9 @@ Windows와 macOS는 `node:fs` 위의 공통 어댑터를 쓴다. `src/platforms/
 길이와 관계없이 항상 붙이며(UNC 경로는 Bun의 디렉터리 목록이 `\\?\UNC\` 형태에서 실패해 그대로 둔다), 드라이브 경로에 대해서는 Node와 같다. 앱 입력의 접두사 거부와 공개 계약은 그대로이며
 목록 결과와 공개 오류 메시지에는 접두사가 나타나지 않는다. `windows-storage-long-path.ts`가
 CI windows-native에서 400자를 넘는 경로의 쓰기, 읽기, 목록, 복사, 이동, 삭제가 동작하는지 확인하며
-러너의 `LongPathsEnabled` 값을 로그에 남긴다. 이 설정이 꺼진 환경과의 비교는 하지 않았다.
+러너의 `LongPathsEnabled` 값을 로그에 남긴다. 이 드라이브 경로 테스트는 설정이 꺼진 환경과 비교하지 않는다.
+`windows-storage-long-unc-path.ts`는 관리 공유(`\\localhost\D$`)의 400자를 넘는 UNC 경로에서 같은 동작을 확인하고,
+설정을 끈 자식 프로세스에서 원시 파일 시스템 호출이 어떻게 동작하는지 기록만 한다. 이 테스트는 러너의 `LongPathsEnabled=1`에 의존한다.
 removeRecursive, directorySize와 readDirectoryRecursive는 트리 안의 링크를 따라가지 않고, copyDirectory는 트리 안의 링크를 만나면 실패한다.
 `copyFile`은 대상을 `CREATE_NEW`로 만든다. `windows-storage-create-new.ts`가 CI windows-native에서 같은 대상으로의
 동시 복사는 하나만 성공하고 나머지는 `INVALID_ARGUMENT`이며, 삭제 대기 중인 이름은 `PERMISSION_DENIED`임을 확인한다.

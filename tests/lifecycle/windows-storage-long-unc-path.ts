@@ -238,7 +238,7 @@ try {
         );
       } finally {
         assert(
-          setLongPaths(previous),
+          setLongPaths(previous) && readLongPaths() === previous,
           "The LongPathsEnabled setting must be restored to its previous value.",
         );
       }

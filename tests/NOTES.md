@@ -1001,9 +1001,9 @@ UTF-16 순서), 페이지 크기별 커서 이어 읽기가 한 번에 읽은 �
 목록(접두사 없는 이름), directorySize, 복사, 덮어쓰지 않는 이동, 자기 하위로의 이동 거부, 삭제와 removeRecursive를 확인한다.
 이 드라이브 경로 테스트는 `LongPathsEnabled`를 끈 환경을 확인하지 않는다.
 
-`windows-storage-long-unc-path.ts`는 같은 확인을 관리 공유(`\\localhost\D$`) UNC 경로에서 한다. 400자를 넘는 UNC 경로의 쓰기, 읽기, stat, 목록, directorySize,
+`windows-storage-long-unc-path.ts`는 비슷한 확인을 관리 공유(`\\localhost\D$`) UNC 경로에서 한다. 400자를 넘는 UNC 경로의 쓰기, 읽기, stat, 목록, directorySize,
 복사, 덮어쓰지 않는 이동, 삭제와 removeRecursive를 확인하고, 접두사 유무에 따른 원시 파일 시스템 동작은 기록만 한다. 관리 공유가 없는 러너는
-건너뛴다. removeRecursive 뒤의 삭제 확인은 `\\?\` 접두사 경로로 해서 러너 설정과 무관하게 정확하다. `LongPathsEnabled`를 끈 자식 프로세스는 자식이 읽은 레지스트리 값이 0인지와 종료 코드,
+건너뛴다. removeRecursive 뒤의 삭제 확인은 `\\?\` 접두사 경로로 해서 경로 길이 제한 때문에 폴더가 보이지 않는 일이 없게 한다. `LongPathsEnabled`를 끈 자식 프로세스는 자식이 읽은 레지스트리 값이 0인지와 종료 코드,
 기록 출력을 확인하고 각 원시 호출의 성공 여부는 판정하지 않는다. 부모는 읽어 둔 값 그대로 복구되었는지 단언한다. 레지스트리 값을 읽을 수 없거나 바꿀 수 없는 러너는 그 단계를 건너뛴다.
 이 테스트는 러너의 `LongPathsEnabled=1`에 의존한다(UNC 경로는 접두사 없이 전달되므로).
 
