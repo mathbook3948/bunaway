@@ -55,6 +55,7 @@ Electron과 Tauri가 모두 재시도와 이어 받기를 내장하지 않으므
 
 `download`가 내는 오류는 `code`와 `details.reason`으로 구분된다(`plugins/updater/src/contract.ts`의 `UpdaterFailureReason`).
 `check`가 같은 `request.ts`를 쓰므로 `network`, `httpStatus`, `redirectLimit`, `redirectScheme`은 `check`에서도 같다.
+설정과 선행 조건 오류(`notConfigured`, `managedByStore`, `notChecked`, `notAvailable`)는 다시 불러도 같은 결과라 표에서 뺐다.
 
 | 오류 | 의미 | 다시 시도할 만한가 |
 | --- | --- | --- |
@@ -68,13 +69,14 @@ Electron과 Tauri가 모두 재시도와 이어 받기를 내장하지 않으므
 | `INTERNAL`, `sizeMismatch` | 받은 바이트나 `content-length`가 선언 크기와 다름 | 판별할 수 없음(아래 한계). |
 | `INTERNAL`, `integrityMismatch` | 받은 파일의 SHA-256이 매니페스트와 다름 | 판별할 수 없음(아래 한계). |
 | `UNSUPPORTED`, `integrityMissing`와 `INTERNAL`, `integrityInvalid` | 매니페스트에 해시나 크기가 없거나 형식이 틀림 | 아니오. `check`로 매니페스트를 다시 받아야 한다. |
-| `INTERNAL`, `signatureMissing`, `signatureUntrusted`, `publisherMismatch`와 `UNSUPPORTED`, `signatureUnsupported` | 서명이 없거나, 신뢰되지 않거나, 서명 형식이 아니거나, 게시자가 고정값과 다름 | 아니오. 같은 파일이면 같은 결과이며 재시도로 서명 검증을 통과시키려 해서는 안 된다. |
+| `INTERNAL`, `signatureMissing`, `signatureUntrusted`, `publisherMismatch`와 `UNSUPPORTED`, `signatureUnsupported` | 서명이 없거나, 신뢰되지 않거나, 서명 형식이 아니거나, 게시자가 고정값과 다르거나, 이 플랫폼에 서명 확인기가 없음 | 아니오. 같은 파일이면 같은 결과이며 재시도로 서명 검증을 통과시키려 해서는 안 된다. |
 | `INTERNAL`, `revocationUnavailable` | 서명 폐기 여부를 확인하지 못함(오프라인 등) | 예. 연결이 돌아오면 다시 받아 확인한다. |
 | `INTERNAL`, `verifierBusy`, `verifierFailed` | 서명 검증 작업이 바쁘거나 실패함 | 잠시 뒤 한두 번까지. 반복되면 중단한다. |
 | `INTERNAL`, `storage` | 파일 쓰기와 이동, 기존 파일 확인 등 다른 이유에 해당하지 않는 예기치 못한 실패(디스크 가득, 권한 등) | 조건이 바뀌기 전에는 아니오. |
 
-권장 순서는 `TIMEOUT`, `network`, `httpStatus`의 5xx와 429, `revocationUnavailable`만 지수 백오프로 몇 번 다시 부르고, 그
-외는 사용자에게 보이거나 `check`부터 다시 하는 것이다. 취소하려면 매 호출에 `AbortSignal`을 넘기고 재시도 사이의 대기에도
+권장 순서는 `TIMEOUT`, `network`, `httpStatus`의 5xx와 429, `revocationUnavailable`만 지수 백오프로 몇 번 다시 부르는 것이다.
+`verifierBusy`, `verifierFailed`, `sizeMismatch`, `integrityMismatch`는 한두 번만 다시 부르고, 그 외는 사용자에게 보이거나
+`check`부터 다시 한다. 취소하려면 매 호출에 `AbortSignal`을 넘기고 재시도 사이의 대기에도
 같은 신호를 건다. 매 호출은 새 30분 제한과 1 GiB 상한을 받으므로 총 소요 시간의 상한은 앱이 정한다.
 
 ### 한계
