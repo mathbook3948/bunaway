@@ -1275,8 +1275,10 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
   진행: `bunaway doctor`가 선언한 채널에 따라 Inno Setup `ISCC.exe`와 `signtool.exe` 설치 여부를 검사한다.
 - [ ] 플랫폼별 설치 패키지 형식과 배포 채널을 확정하고 [PRD](./PRD.md)의 9절 출시 기준 및
   [플랫폼 지원 표](./platform-support/README.md)의 패키지와 출시 검증에 증거를 연결한다. [T-distribute-live]를 참고한다.
-  Windows EXE/MSI/MSIX, macOS app/DMG/PKG, Linux deb/rpm/AppImage 등의 채택 또는 제외를 기록하고,
+  macOS app/DMG/PKG, Linux deb/rpm/AppImage 등의 채택 또는 제외를 기록하고,
   채택한 형식마다 깨끗한 대상 OS에서 설치, 최초 실행, 업데이트와 제거를 검증한다. 22절의 기존 작업과 함께 완료를 판정한다.
+  Windows: 결정 완료(Inno Setup EXE 채택, MSI 생성 제외, MSIX 차단 유지), 최초 실행과 설치 실행 검증 남음.
+  [ADR 0127](./decisions/0127-windows-installer-formats-and-channels.md)을 참고한다.
 - [ ] 배포할 Windows 앱과 설치 파일의 프로덕션 코드 서명, 타임스탬프와 변조 거부를 검증한다.
   현재 Bun FFI 산출물로 검사하고, 서명 후 해시와 번들 런타임 검증을 유지한다.
   자체 서명 인증서나 PE-overlay 테스트를 프로덕션 서명 검증으로 대체하지 않는다.
