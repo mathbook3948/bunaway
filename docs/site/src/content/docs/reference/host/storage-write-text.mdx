@@ -68,7 +68,7 @@ await storage.writeText({
 ## 동시 수정
 
 앱이 읽은 뒤 다른 프로세스가 바꾼 파일을 감지하지 않습니다. 감지가 필요한 앱은 파일을 읽기 전에 [storage.stat](/reference/host/storage-stat/)의
-`modifiedAtMs`와 `sizeBytes`를 기억해 두었다가 쓰기 직전의 값과 비교하세요. 앱이 쓴 뒤에는 `stat`으로 기준값을 다시 잡습니다. 비교와 쓰기 사이의 변경, 기준값을 다시 잡기 전의 변경, 같은 앱의 여러 호출 사이의 겹침(앱이 파일 단위로 `stat`, 비교, 쓰기를 한 번에 하나씩 실행해 줄일 수 있습니다), 쓴 뒤에도 수정 시각이 바뀌지 않거나 `null`인 파일, 네트워크 파일 시스템, 시각 해상도 한계는 남습니다
+`modifiedAtMs`와 `sizeBytes`를 기억해 두었다가 쓰기 직전의 값과 비교하세요. 앱이 쓴 뒤에는 `stat`으로 기준값을 다시 잡습니다. 비교와 쓰기 사이의 변경, 기준값을 다시 잡기 전의 변경, 같은 앱의 여러 호출 사이의 겹침(앱이 파일 단위로 비교, 쓰기, 기준값 재설정을 한 번에 하나씩 실행해 줄일 수 있습니다), 수정 시각이 `null`인 파일, 네트워크 파일 시스템, 시각 해상도 한계는 남습니다
 ([결정](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0126-storage-concurrent-modification-detection.md)).
 
 ## 반환과 이벤트
