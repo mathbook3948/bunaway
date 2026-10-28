@@ -14,6 +14,8 @@ import { deadline } from "../fixtures/deadlines.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import {
   canonicalPath,
+  deleteShellExtension,
+  deleteShellScheme,
   newShellTestName,
   registerShellExtension,
   registerShellScheme,
@@ -21,42 +23,54 @@ import {
   shellOpen,
 } from "../fixtures/windows-shell-registration.ts";
 
+/** The value after `flag` on the command line. */
+function flagValue(flag: string): string {
+  const value = process.argv[process.argv.indexOf(flag) + 1];
+  assert(value, `Missing ${flag}`);
+  return value;
+}
+
 /**
  * Runs the real Windows host, then makes the Windows shell open a registered URL scheme and a
  * registered file type. Each registered command starts a second Bun process that forwards what
  * the shell gave it to the running host, which must report it through onOpen and onOpenUrls.
+ * The two requests are sequential: the file is opened after the URL has been reported, so the
+ * order of arrival does not depend on process start-up time. The registration names come from
+ * the parent process, which removes the keys even when this child is killed.
  */
-async function verifyShellActivation(repoDir: string): Promise<void> {
+async function verifyShellActivation(
+  repoDir: string,
+  scheme: string,
+  extension: string,
+): Promise<void> {
   const dataRoot = resolve(root, `data-${process.pid}`);
   await mkdir(dataRoot, {
     recursive: true,
   });
   const address = instanceAddress(dataRoot);
   const inbox = await listenForInstances(address);
-  const forwarder = resolve(
-    repoDir,
-    "tests/fixtures/windows-shell-forwarder.ts",
-  );
-  const command = shellCommand(
-    process.execPath,
-    "--no-env-file",
-    forwarder,
-    address,
-  );
-  const scheme = newShellTestName();
-  const extension = `.${newShellTestName()}`;
-  const file = resolve(root, "folder with space", `note & 100%${extension}`);
-  await mkdir(resolve(root, "folder with space"), {
-    recursive: true,
-  });
-  await writeFile(file, "x");
-  const url = `${scheme}://open/한글?a=1&b=a%20b`;
-  const unregisterScheme = await registerShellScheme(scheme, command);
-  const unregisterExtension = await registerShellExtension(extension, command);
   const requests: OpenRequest[] = [];
   const urlLists: string[][] = [];
   let failure: unknown;
   try {
+    const forwarder = resolve(
+      repoDir,
+      "tests/fixtures/windows-shell-forwarder.ts",
+    );
+    const command = shellCommand(
+      process.execPath,
+      "--no-env-file",
+      forwarder,
+      address,
+    );
+    const file = resolve(root, "folder with space", `note & 100%${extension}`);
+    await mkdir(resolve(root, "folder with space"), {
+      recursive: true,
+    });
+    await writeFile(file, "x");
+    const url = `${scheme}://open/한글?a=1&b=a%20b`;
+    await registerShellScheme(scheme, command);
+    await registerShellExtension(extension, command);
     await runWindowsApp(
       {
         commands: {},
@@ -64,11 +78,10 @@ async function verifyShellActivation(repoDir: string): Promise<void> {
         desktop: {
           closeBehavior: "keep-alive",
           async onReady(desktop) {
-            // The shell calls return once the command is started; the host reports the arguments
+            // The shell call returns once the command is started; the host reports the arguments
             // when the forwarded launch arrives.
             try {
               await shellOpen(url, root);
-              await shellOpen(file, root);
             } catch (error) {
               failure = error;
               await desktop.quit();
@@ -81,8 +94,15 @@ async function verifyShellActivation(repoDir: string): Promise<void> {
             urlLists.push([
               ...urls,
             ]);
-            if (urlLists.length === 2) {
-              assert.equal(await desktop.quit(), true);
+            try {
+              if (urlLists.length === 1) {
+                await shellOpen(file, root);
+              } else {
+                assert.equal(await desktop.quit(), true);
+              }
+            } catch (error) {
+              failure = error;
+              await desktop.quit();
             }
           },
         },
@@ -147,11 +167,12 @@ async function verifyShellActivation(repoDir: string): Promise<void> {
       "PASS: the shell starts a registered URL scheme and file association command, and the arguments reach onOpen and onOpenUrls of the running host",
     );
   } finally {
-    await unregisterScheme();
-    await unregisterExtension();
     await inbox.close();
   }
 }
+
+/** A shell-started process can still hold the working directory for a moment after it reports. */
+const SHELL_CWD_RELEASE_RETRIES = 10;
 
 const repo = process.argv.includes("--repo")
   ? process.argv[process.argv.indexOf("--repo") + 1]
@@ -167,6 +188,8 @@ if (!process.argv.includes("--child")) {
     root,
     import.meta.path,
   );
+  const scheme = newShellTestName();
+  const extension = `.${newShellTestName()}`;
   const child = Bun.spawn(
     [
       process.execPath,
@@ -175,6 +198,10 @@ if (!process.argv.includes("--child")) {
       "--child",
       "--repo",
       repo,
+      "--scheme",
+      scheme,
+      "--extension",
+      extension,
     ],
     {
       stdout: "pipe",
@@ -183,17 +210,28 @@ if (!process.argv.includes("--child")) {
       killSignal: "SIGKILL",
     },
   );
-  const [output, errors, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  assert.equal(code, 0, `${output}\n${errors}`);
-  console.log(output.trim());
-  await rm(root, {
-    recursive: true,
-    force: true,
-  });
+  try {
+    const [output, errors, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    assert.equal(code, 0, `${output}\n${errors}`);
+    console.log(output.trim());
+  } finally {
+    // The child may have been killed at the deadline, so the registrations are removed here.
+    await deleteShellScheme(scheme);
+    await deleteShellExtension(extension);
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: SHELL_CWD_RELEASE_RETRIES,
+    });
+  }
 } else {
-  await verifyShellActivation(repo);
+  await verifyShellActivation(
+    repo,
+    flagValue("--scheme"),
+    flagValue("--extension"),
+  );
 }

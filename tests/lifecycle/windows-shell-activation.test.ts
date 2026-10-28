@@ -15,6 +15,9 @@ import {
 
 setDefaultTimeout(deadline("nativeFixture"));
 
+/** A shell-started process can still hold its working directory for a moment after it reports. */
+const SHELL_CWD_RELEASE_RETRIES = 10;
+
 /**
  * The registered command starts this script, which writes what it received to the file named by
  * its first argument. Writing to a temporary name and renaming keeps the reader from seeing a
@@ -51,6 +54,15 @@ async function createWorkspace(): Promise<Workspace> {
     command: (out) =>
       shellCommand(process.execPath, "--no-env-file", recorder, out),
   };
+}
+
+/** Removes the workspace; the recorder may still hold it as its working directory for a moment. */
+async function removeWorkspace(space: Workspace) {
+  await rm(space.dir, {
+    recursive: true,
+    force: true,
+    maxRetries: SHELL_CWD_RELEASE_RETRIES,
+  });
 }
 
 /** Waits for the recorder to report, then returns what the registered command received. */
@@ -93,10 +105,7 @@ async function activateUrl(makeUrl: (scheme: string) => string): Promise<{
     };
   } finally {
     await unregister();
-    await rm(space.dir, {
-      recursive: true,
-      force: true,
-    });
+    await removeWorkspace(space);
   }
 }
 
@@ -207,10 +216,7 @@ for (const fileName of FILE_NAMES) {
         expect(canonicalPath(argv[0] ?? "")).toBe(canonicalPath(file));
       } finally {
         await unregister();
-        await rm(space.dir, {
-          recursive: true,
-          force: true,
-        });
+        await removeWorkspace(space);
       }
     },
   );

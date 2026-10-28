@@ -57,14 +57,32 @@ async function regAdd(key: string, name: string | null, data: string) {
   }
 }
 
-/** Deletes a key tree this test created; a missing key is already clean. */
+/**
+ * Deletes a key tree this test created. A key that is already absent is clean; any other failure
+ * (access denied, a lock) leaves a registration behind and is reported.
+ */
 async function regDelete(key: string) {
-  await runTool([
+  const result = await runTool([
     "reg",
     "delete",
     key,
     "/f",
   ]);
+  const absent = result.code === 1 && /unable to find/i.test(result.stderr);
+  if (result.code !== 0 && !absent) {
+    throw new Error(`reg delete ${key} failed: ${result.stderr}`);
+  }
+}
+
+/** Removes the scheme key `registerShellScheme` made; safe to call for a scheme never registered. */
+export function deleteShellScheme(scheme: string): Promise<void> {
+  return regDelete(`${CLASSES_KEY}\\${scheme}`);
+}
+
+/** Removes the extension and ProgId keys `registerShellExtension` made; safe to repeat. */
+export async function deleteShellExtension(extension: string): Promise<void> {
+  await regDelete(`${CLASSES_KEY}\\${extension}`);
+  await regDelete(`${CLASSES_KEY}\\${extension.slice(1)}-file`);
 }
 
 /**
@@ -81,35 +99,48 @@ export function shellCommand(executable: string, ...fixed: string[]): string {
     .join(" ");
 }
 
-/** Registers `scheme` as a URL protocol whose open command is `command`; returns its cleanup. */
+/**
+ * Registers `scheme` as a URL protocol whose open command is `command`; returns its cleanup.
+ * A failure part way removes what was already written before it is thrown.
+ */
 export async function registerShellScheme(
   scheme: string,
   command: string,
 ): Promise<() => Promise<void>> {
   const key = `${CLASSES_KEY}\\${scheme}`;
-  await regAdd(key, null, `URL:${scheme}`);
-  await regAdd(key, "URL Protocol", "");
-  await regAdd(`${key}\\shell\\open\\command`, null, command);
-  return () => regDelete(key);
+  try {
+    await regAdd(key, null, `URL:${scheme}`);
+    await regAdd(key, "URL Protocol", "");
+    await regAdd(`${key}\\shell\\open\\command`, null, command);
+  } catch (error) {
+    await deleteShellScheme(scheme);
+    throw error;
+  }
+  return () => deleteShellScheme(scheme);
 }
 
 /**
  * Associates `extension` (with its dot) with a ProgId whose open command is `command`, the way
  * the installer does. A random extension has no UserChoice, so the HKCU association applies.
- * Returns the cleanup that removes both keys.
+ * Returns the cleanup that removes both keys; a failure part way removes what was written.
  */
 export async function registerShellExtension(
   extension: string,
   command: string,
 ): Promise<() => Promise<void>> {
   const progId = `${extension.slice(1)}-file`;
-  const progIdKey = `${CLASSES_KEY}\\${progId}`;
-  await regAdd(`${CLASSES_KEY}\\${extension}`, null, progId);
-  await regAdd(`${progIdKey}\\shell\\open\\command`, null, command);
-  return async () => {
-    await regDelete(`${CLASSES_KEY}\\${extension}`);
-    await regDelete(progIdKey);
-  };
+  try {
+    await regAdd(`${CLASSES_KEY}\\${extension}`, null, progId);
+    await regAdd(
+      `${CLASSES_KEY}\\${progId}\\shell\\open\\command`,
+      null,
+      command,
+    );
+  } catch (error) {
+    await deleteShellExtension(extension);
+    throw error;
+  }
+  return () => deleteShellExtension(extension);
 }
 
 /**
