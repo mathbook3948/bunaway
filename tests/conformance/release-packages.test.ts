@@ -213,6 +213,38 @@ test("inline import type references, inline type specifiers and comments are han
   expect(text).not.toContain("{name}");
 });
 
+test("glob strings, trailing comments and string text do not hide or invent imports", () => {
+  const audit = (source: string) =>
+    auditPackedPackage(
+      packed({
+        manifest: {
+          ...packed().manifest,
+          dependencies: {},
+        },
+        sources: new Map([
+          [
+            "src/a.ts",
+            source,
+          ],
+        ]),
+      }),
+      expected,
+    ).join("\n");
+  expect(
+    audit(
+      'const g = "dist/*";\nimport type { X } from "pkg-hidden";\nconst h = "*/";',
+    ),
+  ).toContain("imports pkg-hidden");
+  expect(
+    audit(
+      '// match src/*.ts\nimport type { X } from "pkg-hidden2";\n/** doc */',
+    ),
+  ).toContain("imports pkg-hidden2");
+  expect(audit('const a = 1; // copied from "pkg-trailing"')).toBe("");
+  expect(audit("throw new Error(\"cannot load from 'config'\");")).toBe("");
+  expect(audit('const t = `import x from "react"`;')).toBe("");
+});
+
 test("file: and link: ranges are rejected like workspace: ranges", () => {
   const manifest = {
     ...packed().manifest,

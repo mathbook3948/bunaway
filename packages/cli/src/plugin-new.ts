@@ -140,6 +140,8 @@ export function dispose(instance: ReturnType<typeof initialize>): void {
           typecheck: "tsc --project tsconfig.json",
         },
         dependencies: {
+          // The built declarations of `defineNativePlugin` name this package's types.
+          "@bunaway/plugin-api": "workspace:*",
           "@bunaway/protocol": "workspace:*",
           zod: spec.zodVersion,
         },

@@ -39,14 +39,14 @@ const FORBIDDEN_FILE_PATTERN =
 const SOURCE_FILE_PATTERN = /\.(ts|tsx|mts|js|mjs)$/;
 /**
  * Static `from "x"` clauses (including `import type` and `import { type A }`) and `import("x")`
- * type references, which the transpiler's import scan drops. Comments are removed first so an
- * example inside a comment is not counted.
+ * type references, which the transpiler's import scan drops. `stripNonCode` runs first so text
+ * inside comments and string or template literals is not counted.
  */
 const FROM_CLAUSE_PATTERN = /\bfrom\s*["']([^"']+)["']/g;
 const IMPORT_TYPE_PATTERN = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
-const INVALID_SPECIFIER_PATTERN = /[${}\s]/;
-const BLOCK_COMMENT_PATTERN = /\/\*[\s\S]*?\*\//g;
-const LINE_COMMENT_PATTERN = /^\s*\/\/.*$/gm;
+/** What may precede a string literal for it to be a module specifier. */
+const SPECIFIER_LEAD_PATTERN = /(?:\bfrom|\bimport\s*\(?)\s*$/;
+const LEAD_WINDOW = 24;
 
 /** One tarball as read back from disk: its file list and the sources of its code files. */
 export type PackedPackage = {
@@ -85,6 +85,60 @@ function targetsOf(manifest: Record<string, unknown>): string[] {
   collectTargets(manifest.main, targets);
   collectTargets(manifest.bin, targets);
   return targets.filter((target) => target.startsWith("./"));
+}
+
+/** Index just past the comment starting at `start`, or undefined when no comment starts there. */
+function commentEnd(source: string, start: number): number | undefined {
+  if (source.startsWith("//", start)) {
+    const end = source.indexOf("\n", start);
+    return end === -1 ? source.length : end;
+  }
+  if (source.startsWith("/*", start)) {
+    const end = source.indexOf("*/", start + 2);
+    return end === -1 ? source.length : end + 2;
+  }
+  return undefined;
+}
+
+/** Index just past the string or template literal that opens at `start`, honoring backslash escapes. */
+function literalEnd(source: string, start: number): number {
+  const quote = source[start];
+  let index = start + 1;
+  while (index < source.length && source[index] !== quote) {
+    index += source[index] === "\\" ? 2 : 1;
+  }
+  return index + 1;
+}
+
+/**
+ * Remove comments and blank every string or template literal except a module specifier (a quoted
+ * string right after `from` or `import`). Regexes can then read import clauses without matching
+ * example text. A regex literal that contains a quote or `//` can confuse this scan, which is
+ * accepted: the shipped sources are checked against it by `release:check` itself.
+ */
+export function stripNonCode(source: string): string {
+  let code = "";
+  let index = 0;
+  while (index < source.length) {
+    const skipped = commentEnd(source, index);
+    if (skipped !== undefined) {
+      code += " ";
+      index = skipped;
+      continue;
+    }
+    const char = source.charAt(index);
+    if (char !== '"' && char !== "'" && char !== "`") {
+      code += char;
+      index += 1;
+      continue;
+    }
+    const end = literalEnd(source, index);
+    const isSpecifier =
+      char !== "`" && SPECIFIER_LEAD_PATTERN.test(code.slice(-LEAD_WINDOW));
+    code += isSpecifier ? source.slice(index, end) : '""';
+    index = end;
+  }
+  return code;
 }
 
 /** Bundled output names Node modules without the `node:` prefix, so the builtin list is needed too. */
@@ -231,9 +285,7 @@ function auditImports(
     if (!SOURCE_FILE_PATTERN.test(file)) {
       continue;
     }
-    const code = source
-      .replace(BLOCK_COMMENT_PATTERN, "")
-      .replace(LINE_COMMENT_PATTERN, "");
+    const code = stripNonCode(source);
     const specifiers = [
       ...transpiler.scanImports(source).map((entry) => entry.path),
       ...[
@@ -242,10 +294,7 @@ function auditImports(
       ].map((match) => match[1] ?? ""),
     ];
     for (const specifier of specifiers) {
-      // Template text such as `from "${name}"` in generated code is not a package name.
-      const dependency = INVALID_SPECIFIER_PATTERN.test(specifier)
-        ? undefined
-        : packageOfImport(specifier);
+      const dependency = packageOfImport(specifier);
       if (dependency && !declared.has(dependency) && !own.has(dependency)) {
         fail(
           `${file} imports ${dependency}, which package.json does not declare`,

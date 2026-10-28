@@ -145,6 +145,9 @@ test("plugin new scaffolds a workspace that builds and is registered in every ma
     ).json();
     expect(pluginManifest.name).toBe("@bunaway/plugin-demo-widget");
     expect(pluginManifest.dependencies.zod).toBe("4.6.5");
+    expect(pluginManifest.dependencies["@bunaway/plugin-api"]).toBe(
+      "workspace:*",
+    );
     expect(pluginManifest.peerDependencies["@bunaway/plugin"]).toBe("0.0.0");
     expect(Object.keys(pluginManifest.imports)).toEqual([
       "#demo-widget/*",
