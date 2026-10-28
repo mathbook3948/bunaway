@@ -1,7 +1,7 @@
 /**
  * Reduce TypeScript or JavaScript text to its code skeleton for import scanning: comments are
  * removed and every string, template and regular expression literal is blanked, except a quoted
- * string that directly follows `from` or `import`, which is a module specifier. The remaining text
+ * string that directly follows `from`, `import` or `require(`, which is a module specifier. The remaining text
  * can be searched with plain regular expressions without matching example text in literals.
  *
  * This is a lexer, not a parser: it tracks strings, nested template expressions, comments and

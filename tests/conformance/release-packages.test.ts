@@ -393,8 +393,8 @@ test("regular expression and nested template literals do not hide or invent impo
 
 test("the import scan stays linear on a large source", () => {
   const source = 'const a = "x" + b;\n'.repeat(60_000);
-  const started = performance.now();
-  auditPackedPackage(
+  // Quadratic scanning would exceed the default test timeout on this input.
+  const problems = auditPackedPackage(
     packed({
       sources: new Map([
         [
@@ -405,7 +405,13 @@ test("the import scan stays linear on a large source", () => {
     }),
     expected,
   );
-  expect(performance.now() - started).toBeLessThan(5000);
+  expect(problems).toEqual([]);
+});
+
+test("a tarball that holds another package than requested is rejected", () => {
+  expect(
+    auditPackedPackage(packed(), expected, "@bunaway/core").join("\n"),
+  ).toContain("@bunaway/core: tarball holds the package @bunaway/plugin");
 });
 
 test("file: and link: ranges are rejected like workspace: ranges", () => {

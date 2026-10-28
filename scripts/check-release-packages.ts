@@ -1,5 +1,5 @@
 /**
- * Check that every package the framework release publishes is installable from its tarball,
+ * Check that every package the framework release publishes is complete and consistent in its tarball,
  * without publishing anything. The check packs the framework into a temporary directory with
  * `packFramework`, reads each tarball with `tar`, and audits the file list and `package.json`
  * against `framework.json`.
@@ -290,13 +290,17 @@ function auditImports(
   }
 }
 
-/** Problems found in one tarball; an empty list means the package is installable. */
+/** Problems found in one tarball; an empty list means the tarball passed every check. */
 export function auditPackedPackage(
   packed: PackedPackage,
   expected: ReleaseExpectation,
+  requestedName?: string,
 ): string[] {
   const name = String(packed.manifest.name);
   const problems: string[] = [];
+  if (requestedName !== undefined && requestedName !== name) {
+    problems.push(`${requestedName}: tarball holds the package ${name}`);
+  }
   const audit: Audit = {
     packed,
     expected,
@@ -422,12 +426,7 @@ async function main(): Promise<number> {
           `extract-${basename(packageFilename(name, info.version), ".tgz")}`,
         ),
       );
-      if (packed.manifest.name !== name) {
-        problems.push(
-          `${name}: tarball holds the package ${String(packed.manifest.name)}`,
-        );
-      }
-      problems.push(...auditPackedPackage(packed, expected));
+      problems.push(...auditPackedPackage(packed, expected, name));
       pending.set(name, pendingOwnerDecisions(packed.manifest));
     }
   } finally {
