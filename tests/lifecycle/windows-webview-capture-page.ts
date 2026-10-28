@@ -331,16 +331,10 @@ try {
     },
     "oversized region",
   );
-  assert.deepEqual(
-    [
-      edge.width,
-      edge.height,
-    ],
-    [
-      full.width,
-      full.height,
-    ],
-  );
+  // The full capture covers the whole WebView; a region is clipped to the page viewport, which
+  // excludes the vertical scrollbar of the tall test page.
+  assert(edge.width <= full.width && edge.width >= full.width - 40);
+  assert.equal(edge.height, full.height);
   const outside = await failure(
     {
       format: "png",

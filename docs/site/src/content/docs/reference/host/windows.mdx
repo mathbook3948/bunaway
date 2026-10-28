@@ -260,7 +260,7 @@ Windows의 `windows.capturePage({ format?, region? })`는 현재 WebView가 보�
 페이지가 스크롤되어 있어도 보이는 영역을 기준으로 하고, 보이는 영역을 넘는 부분은
 잘라 냅니다. 보이는 영역 밖에만 걸친 영역은 `INVALID_ARGUMENT`입니다.
 스크롤해야 보이는 페이지 전체 캡처, 파일 저장, 클립보드 복사는 제공하지 않습니다.
-받은 `data`를 [storage](/reference/plugins/storage/)의 바이트 쓰기나
+받은 `data`를 `storage`의 바이트 쓰기나
 [clipboard](/reference/plugins/clipboard/)로 넘기면 됩니다.
 
 ```ts
