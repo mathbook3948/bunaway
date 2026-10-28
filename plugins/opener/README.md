@@ -128,7 +128,7 @@ const link = await opener.readShortcutLink("C:\\Users\\me\\Desktop\\App.lnk");
 대상은 호스트가 알려 주는 실행 중인 앱뿐이며 호출자가 경로나 인자를 줄 수 없습니다. `http`, `file`, `javascript`,
 `ms-*` 같은 예약 scheme은 `INVALID_ARGUMENT`입니다. 키의 `BunawayRegistration` 값이 이 앱의 것이고 명령이 이 플러그인이 쓴 그대로일 때만
 소유로 보며(앱이 이동해 낡은 명령은 갱신과 해제 가능), 다른 프로그램이 덮어쓴 키와 소유가 아닌 기존 이름(HKLM 등록과 시스템 ProgId 포함)은 덮거나 지우지 않습니다. 권한은 작업 이름 세 개이며 각각 별개입니다.
-링크로 받은 URL은 신뢰할 수 없는 입력이므로 앱이 검증해야 합니다. 자세한 규칙은 reference 문서를 참고하세요.
+링크로 받은 URL은 신뢰할 수 없는 입력이므로 앱이 검증해야 합니다. 셸은 URL을 이스케이프 없이 `"%1"`에 대입하므로 URL 끝의 `\`는 `"`로 바뀌고 URL 안의 `"`는 인자를 여러 개로 나눕니다(Windows CI에서 `ShellExecuteEx`로 확인). 자세한 규칙은 reference 문서를 참고하세요.
 
 ## 작업 표시줄 Jump List
 
