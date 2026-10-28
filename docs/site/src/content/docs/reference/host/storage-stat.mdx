@@ -34,7 +34,7 @@ if (metadata?.kind === "file") {
 | `modifiedAtMs` | `number \| null` | 수정 시각, UTC Unix epoch 밀리초 |
 | `accessedAtMs` | `number \| null` | 접근 시각, UTC Unix epoch 밀리초 |
 
-Windows의 FILETIME 값이 0이면 해당 시각은 사용할 수 없으므로 `null`입니다. 파일 시스템과 설정에 따라 시각의 정확도가 달라지며, 읽기 작업이 접근 시각을 갱신할 수도 있습니다. `sizeBytes`는 파일에만 제공됩니다. 디렉터리 크기를 계산하거나 내용을 나열하지 않습니다.
+Windows의 FILETIME 값이 0이면 해당 시각은 사용할 수 없으므로 `null`입니다. 파일 시스템과 설정에 따라 시각의 정확도가 달라지며, 읽기 작업이 접근 시각을 갱신할 수도 있습니다. 다른 프로세스의 변경을 쓰기 전에 감지하려면 `modifiedAtMs`와 `sizeBytes`를 함께 비교하며, 한계는 [결정](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0126-storage-concurrent-modification-detection.md)에 있습니다. `sizeBytes`는 파일에만 제공됩니다. 디렉터리 크기를 계산하거나 내용을 나열하지 않습니다.
 
 ## 입력과 권한
 
