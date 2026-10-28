@@ -52,6 +52,21 @@ function probe(label: string, action: () => unknown): void {
 
 const FILE_SYSTEM_KEY = "HKLM\\SYSTEM\\CurrentControlSet\\Control\\FileSystem";
 
+/** Read `LongPathsEnabled` as a number; `reg query` prints `LongPathsEnabled    REG_DWORD    0x1`. */
+function readLongPaths(): number | undefined {
+  const query = Bun.spawnSync([
+    "reg",
+    "query",
+    FILE_SYSTEM_KEY,
+    "/v",
+    "LongPathsEnabled",
+  ]);
+  const value = /REG_DWORD\s+0x([0-9a-f]+)/i.exec(query.stdout.toString())?.[1];
+  return query.exitCode === 0 && value !== undefined
+    ? Number.parseInt(value, 16)
+    : undefined;
+}
+
 /** Set `LongPathsEnabled` for processes started afterwards. Needs an elevated account. */
 function setLongPaths(value: number): boolean {
   return (
@@ -71,7 +86,8 @@ function setLongPaths(value: number): boolean {
 }
 
 if (childRoot !== undefined) {
-  // Child with long paths off: record what each spelling does, no assertions.
+  // Child with long paths off: record what each spelling does, no assertions on the probes.
+  console.log(`CHILD LongPathsEnabled=${readLongPaths()}`);
   const base = `\\\\localhost\\${childRoot.replace(":", "$")}\\child\\${deep}`;
   probe("child storage.writeText", () =>
     storage.writeText({
@@ -178,22 +194,14 @@ try {
     storage.remove(at(moved));
     assert.equal(storage.exists(at(moved)), false);
     await storage.removeRecursive(at(`${uncRoot}\\${top}`));
-    assert.equal(existsSync(`${root}\\${top}`), false);
+    // The extended prefix keeps this check exact when long paths are off for the runner.
+    assert.equal(existsSync(`\\\\?\\${root}\\${top}`), false);
 
     // The runner turns long paths on. Turn them off for a child process to see what the spelling
     // alone provides, then restore the setting.
     // `reg query` prints `LongPathsEnabled    REG_DWORD    0x1`; no value means the setting was never written.
-    const query = Bun.spawnSync([
-      "reg",
-      "query",
-      FILE_SYSTEM_KEY,
-      "/v",
-      "LongPathsEnabled",
-    ]);
-    const previous = /REG_DWORD\s+0x([0-9a-f]+)/i.exec(
-      query.stdout.toString(),
-    )?.[1];
-    if (query.exitCode !== 0 || previous === undefined) {
+    const previous = readLongPaths();
+    if (previous === undefined) {
       console.log("SKIP LongPathsEnabled has no readable value to restore.");
     } else if (setLongPaths(0)) {
       try {
@@ -224,8 +232,15 @@ try {
           out.includes("PROBE child storage.writeText"),
           "The child must report its probes.",
         );
+        assert(
+          out.includes("CHILD LongPathsEnabled=0"),
+          "The child must run with long paths turned off.",
+        );
       } finally {
-        setLongPaths(Number.parseInt(previous, 16));
+        assert(
+          setLongPaths(previous),
+          "The LongPathsEnabled setting must be restored to its previous value.",
+        );
       }
     } else {
       console.log("SKIP LongPathsEnabled cannot be changed on this runner.");
