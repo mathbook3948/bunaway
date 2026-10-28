@@ -1135,7 +1135,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 우선순위 P3. 소유자: 선택 렌더러와 기능 패키지. 출처: [E-view], [E-contents], [E-extensions], [E-texture], [E-ai].
 
 - [x] CEF 등 선택 Chromium 렌더러는 지금 [만들지 않는다](decisions/0125-optional-chromium-renderer-and-renderer-capabilities.md). WebView2로 풀 수 없는 요구가 확인되면 `packages/` 아래 별도 패키지로, 같은 SDK와 정책 계약에 연결하는 결정을 새로 한다. 구현은 남아 있다.
-- [x] renderer capability를 위한 새 조회 계약과 엔진 선택 필드는 [만들지 않는다](decisions/0125-optional-chromium-renderer-and-renderer-capabilities.md). 미지원 기능은 기존 `capabilities()`와 `UNSUPPORTED`로 드러낸다.
+- [x] renderer capability를 위한 새 조회 계약과 엔진 선택 필드는 [만들지 않는다](decisions/0125-optional-chromium-renderer-and-renderer-capabilities.md). 미지원 작업은 기존 `capabilities()`와 `UNSUPPORTED`로 드러낸다.
 - [ ] offscreen rendering의 frame, dirty region과 frame rate를 제공한다.
 - [ ] painting 시작, 중단, 상태 조회와 invalidate를 제공한다.
 - [ ] WebContents clone과 frame subscription의 지원을 결정한다.

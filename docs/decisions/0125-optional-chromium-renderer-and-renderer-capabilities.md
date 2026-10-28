@@ -2,7 +2,7 @@
 status: accepted
 ---
 
-# 선택 Chromium 렌더러는 지금 만들지 않고, 렌더러별 차이는 기존 capabilities와 UNSUPPORTED로 드러낸다
+# 선택 Chromium 렌더러는 지금 만들지 않고, renderer capability 조회 계약과 엔진 선택 필드도 두지 않는다
 
 결정일: 2026-10-28. 검토 기준: main `37221b99`.
 
@@ -23,19 +23,22 @@ status: accepted
 - 렌더러는 `packages/` 아래 별도 패키지로 만든다는 방향이 이미 문서에 있다. 코어는 렌더러 구현을 갖지 않는다.
 - [ADR 0048](./0048-frontend-node-access-and-sync-ipc.md)은 선택 렌더러를 연결해도 Node 접근 금지 경계를 유지하고 렌더러 능력으로
   Node 접근을 드러내지 않는다고 정했다.
-- `@bunaway/plugin-capabilities`의 `capabilities()`는 등록된 플러그인 작업마다 `name`, `support`(`supported`, `experimental`,
-  `unsupported`), 선택적 `reason`을 돌려준다([ADR 0013](./0013-optional-native-plugins.md), [ADR 0026](./0026-single-webview-single-window.md)).
-  미지원 작업은 `UNSUPPORTED`로 실패한다. 플랫폼별 지원 범위는 [플랫폼 지원 문서](../platform-support/README.md)에 있다.
-- 여러 ADR이 "선택 렌더러가 생기면 다시 검토한다"는 단서를 달았다([ADR 0070](./0070-webview-browser-extensions.md),
-  [ADR 0107](./0107-webview-device-chooser-apis.md), [ADR 0124](./0124-app-startup-time-and-renderer-metrics.md) 등).
+- `@bunaway/plugin-capabilities`의 `capabilities()`는 호스트가 등록된 플러그인 작업마다 만든 `name`과 `support`를 돌려준다.
+  스키마는 `supported`, `experimental`, `unsupported`와 선택적 `reason`을 허용하지만 현재 구현은 `supported`와 `unsupported`만
+  내보낸다([ADR 0013](./0013-optional-native-plugins.md), [ADR 0026](./0026-single-webview-single-window.md)). 미지원 작업은
+  `UNSUPPORTED`로 실패한다. 플랫폼별 지원 범위는 [플랫폼 지원 문서](../platform-support/README.md)에 있다.
+- 선택 렌더러 조건을 단 결정이 있다([ADR 0107](./0107-webview-device-chooser-apis.md), [ADR 0124](./0124-app-startup-time-and-renderer-metrics.md)).
+  브라우저 확장은 [ADR 0070](./0070-webview-browser-extensions.md)이 WebView2 기준으로 제공하지 않기로 했고, 선택 렌더러에서의
+  제공 여부는 TODO 항목으로 열려 있다.
 
 비교 기준은 공개 문서에 따른 것이며 이 저장소의 테스트로 검증한 것이 아니다.
 
 - Electron은 Chromium 단일 엔진을 번들하므로 렌더러 선택이 없고, 따라서 렌더러 capability를 조회하는 API도 없다. 기능 차이는
   플랫폼별 문서와 API 오류로 드러난다.
 - Tauri는 플랫폼 WebView(WebView2, WKWebView, WebKitGTK)를 감싸는 계층(wry)을 별도 크레이트로 분리했다. 렌더러가 다르면 지원
-  기능이 달라지지만 앱이 쓰는 capability 조회 API는 두지 않고, 문서와 오류로 알린다. Chromium 계열 런타임 시도는 코어가 아닌
-  별도 크레이트로 있다.
+  기능이 달라지지만, 앱이 렌더러 지원 여부를 조회하는 API는 확인하지 못했고 문서와 오류로 알린다. Tauri의 `capabilities`는
+  명령 권한 설정(ACL)이며 지원 여부 조회가 아니다. Chromium 계열 런타임 시도는 코어가 아닌 별도 크레이트에 있다고 알려져 있으나
+  버전별로 확인하지 않았다.
 
 ## 결정
 
@@ -48,25 +51,27 @@ status: accepted
    - 페이지와 백엔드 사이는 지금과 같은 브리지와 정책(origin, frame, 명령 권한 검사, 스키마 검증)만 거친다. 렌더러 전용 명령
      경로나 정책 우회 경로를 만들지 않는다.
    - 같은 SDK와 같은 앱 정의로 동작한다. 렌더러마다 앱 코드를 나누게 하지 않는다.
-4. renderer capability를 위한 새 조회 계약을 만들지 않는다. 렌더러 때문에 지원이 다른 작업은 지금과 같이 두 곳으로 드러낸다.
-   - 작업 단위: 이미 있는 `capabilities()`의 `support`와 `reason`, 그리고 호출했을 때의 `UNSUPPORTED` 오류.
+4. renderer capability를 위한 새 조회 계약을 만들지 않는다. 지원이 다른 작업은 지금과 같이 두 곳으로 드러낸다.
+   - 작업 단위: 이미 있는 `capabilities()`의 `support`(현재 구현은 `supported`와 `unsupported`를 내보낸다)와 호출했을 때의
+     `UNSUPPORTED` 오류.
    - 문서: 플랫폼 지원 문서와 각 플러그인 참조 문서의 지원 범위.
-   선택 렌더러가 생기면 그 렌더러를 쓰는 앱에서 `capabilities()`의 항목이 실제 렌더러 기준 지원 상태를 돌려주도록 렌더러 패키지가
-   맞춘다. 항목 형식은 바꾸지 않는다.
+   `capabilities()`의 항목 형식과 `support`의 의미(플랫폼 어댑터의 구현 상태)는 이 결정으로 바꾸지 않는다. 선택 렌더러 때문에 이를
+   바꿔야 하면 그 결정에서 코어 계약 변경으로 정한다.
 5. 엔진 선택 필드를 앱 정의에 두지 않는다. 렌더러가 둘 이상일 때만 의미가 있고, 지금은 하나뿐이다. 선택 렌더러를 만드는 결정에서
    선택 방법(앱 정의, 빌드 설정, 패키지 설치 여부 중 어느 것)을 함께 정한다.
-6. 위 ADR들의 "선택 렌더러가 생기면 다시 검토한다"는 단서는 이 결정이 하나로 모은다. 기존 ADR의 문장은 고치지 않는다. 선택 렌더러를
-   만드는 결정이 나면 이 결정이 가리키는 항목(ADR 0048의 경계, 0070 확장, 0107 장치 선택기, 0124 렌더러 지표 등)을 그 결정에서
-   하나씩 다시 검토한다.
+6. 선택 렌더러 조건을 단 결정들(ADR 0107, 0124, 열린 TODO의 브라우저 확장 항목)의 "선택 렌더러가 생기면 다시 검토한다"는 단서는
+   이 결정이 하나로 모은다. 기존 ADR의 문장은 고치지 않는다. 선택 렌더러를 만드는 결정이 나면 그 항목들을 그 결정에서 하나씩
+   다시 검토한다. ADR 0048의 경계는 재검토 대상이 아니라 선택 렌더러가 지켜야 하는 조건이다(결정 3).
 
 ## 근거
 
 - Electron은 렌더러 선택이 없고 Tauri는 WebView 계층을 코어와 분리한다. 코어는 작게 두고 렌더러는 별도 패키지에 둔다는 쪽이 Tauri의
   분리와 맞고, Electron과도 충돌하지 않는다. 두 쪽 모두 앱이 쓰는 렌더러 capability 조회 API를 두지 않으므로 새로 만들지 않는다.
 - 지금 WebView2로 풀 수 없다고 확인된 앱 요구가 없다. 쓰는 곳 없는 구현은 번들 크기, 서명, 라이선스 검토와 유지 비용만 만든다.
-- 지원 여부를 알리는 수단이 이미 있다. `capabilities()`는 작업 단위의 `supported`, `experimental`, `unsupported`와 사유를 돌려주고 호출은
+- 지원 여부를 알리는 수단이 이미 있다. `capabilities()`는 등록된 작업마다 `supported` 또는 `unsupported`를 돌려주고 호출은
   `UNSUPPORTED`로 실패한다. 렌더러 단위 조회를 더하면 앱이 작업 단위 조회와 렌더러 단위 조회 두 가지를 맞춰 읽어야 하고, 코어
-  계약이 모든 앱에 커진다.
+  계약이 모든 앱에 커진다. 렌더러 차이가 주로 드러나는 웹 API(장치 API, 확장 등)는 작업 항목이 아니므로 `capabilities()`가 다루지 않으며,
+  이는 각 API의 결정(ADR 0070, 0107 등)과 문서가 정한다.
 - 엔진 선택 필드는 선택지가 하나일 때 값이 하나뿐인 필드가 된다. 필드를 먼저 두면 렌더러를 만들 때 필드 의미에 구현이 묶인다.
 - 호스트 코드, 스키마, 권한 경계를 바꾸지 않는다.
 
@@ -75,5 +80,5 @@ status: accepted
 - 코드, 스키마, 권한, 이벤트 변경은 없다.
 - `docs/TODO-windows.md`의 두 항목을 결정 완료로 바꾸고 이 결정을 참조한다. 선택 렌더러 구현 자체는 열어 둔 채 위 조건이 생기면
   별도 결정으로 다룬다.
-- 선택 렌더러를 만드는 결정은 이 결정의 조건(WebView2로 풀 수 없는 확인된 요구)을 근거로 삼고, ADR 0048의 경계와 `capabilities()`
-  항목 형식을 유지해야 한다.
+- 선택 렌더러를 만드는 결정은 이 결정의 조건(WebView2로 풀 수 없는 확인된 요구)을 근거로 삼고, ADR 0048의 경계를 유지해야 한다. 렌더러 때문에
+  `capabilities()` 스냅샷의 생성 경로나 `support` 의미를 바꿔야 하면 그 결정에서 코어 계약 변경으로 따로 정한다.
