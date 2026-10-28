@@ -68,6 +68,7 @@ const tail = await storage.readBytes({ path: "C:/notes/data.bin", offset: 2, len
 실패해도 기존 파일이 반쯤 쓰인 상태로 남지 않습니다. 동작과 한계는
 [텍스트 저장의 원자적 저장](/reference/host/storage-write-text/#원자적-저장)과 같습니다.
 `atomic`을 생략하면 같은 파일에 덮어쓰며, append 작업은 `atomic`을 받지 않습니다.
+덮어쓰기 전에 다른 프로세스의 변경을 감지하는 방법과 한계는 [결정](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0126-storage-concurrent-modification-detection.md)에 있습니다.
 
 덮어쓰기와 append, 여러 요청에 걸친 트랜잭션은 원자성을 제공하지 않습니다.
 네이티브 write가 일부만 완료되면 반복해서 남은 내용을 씁니다. 동시에 실행하는 다른 프로세스의
