@@ -231,7 +231,7 @@ function sdkDependencies(pkg: PackageDependencies): [
 }
 
 /** Detect framework package selectors nested anywhere in package-manager override rules. */
-function hasSdkOverride(value: unknown): boolean {
+export function hasSdkOverride(value: unknown): boolean {
   return (
     value !== null &&
     typeof value === "object" &&
