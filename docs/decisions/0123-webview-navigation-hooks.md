@@ -32,7 +32,7 @@ status: accepted
    | `will-frame-navigate`(하위 프레임 탐색 제한) | 같은 `origins` 검사를 프레임 탐색에도 적용한다 |
    | `will-redirect`(redirect 단계별 제한) | redirect 단계마다 `origins`로 판정하고 허용 밖 단계는 취소한다 |
    | 앱 코드의 `loadURL` 호출 검사 | `windows.navigateWebView`의 `origins` 검사. 앱 백엔드는 호출 전에 직접 판단할 수 있다 |
-   | `setWindowOpenHandler`로 새 창 거부 | 현재 구현: 새 창 요청을 모두 취소한다. 계획: 허용 origin 안 URL은 같은 WebView에서 연다(ADR 0026) |
+   | `setWindowOpenHandler`로 새 창 거부 | 현재 구현: 호스트가 받는 새 창 요청은 origin과 무관하게 취소한다. 계획: 허용 origin 안 문서가 시작한 요청 중 허용 origin 안 URL은 같은 WebView에서 연다(ADR 0026) |
    | 거부 뒤 `shell.openExternal`로 외부 링크 열기 | 계획: 뷰 `commands`와 host 권한이 모두 있을 때의 `plugin.opener.openUrl` 대리 호출. 앱 백엔드는 `opener.openUrl`을 직접 호출할 수 있다 |
    | `will-navigate`에서 `target` 없는 외부 `<a href>`를 가로채 `openExternal`로 열기 | 허용 밖 탐색은 취소만 되고 opener로 넘어가지 않는다. 외부 링크 열기는 `target`이 있는 링크의 대리 호출 계획이 맡는다 |
    | `mailto:`, `tel:` 링크 처리 | 차단한다(ADR 0026). `opener.openUrl`은 `http(s)`만 받아 `INVALID_ARGUMENT`로 거부하므로 Electron의 `openExternal("mailto:...")`에 대응하는 수단은 현재 없다 |
@@ -48,7 +48,7 @@ status: accepted
 
 - 두 프레임워크가 같은 방향이다. Electron은 메인 프로세스 훅을, Tauri는 Rust 빌더 훅을 앱 백엔드에 준다. 그럼에도 지금 제공하지 않는 것은 쓰는 곳이 확인되지 않았기 때문이다. 쓰는 곳이 없는 훅으로 코어 계약을 넓히지 않고 보류한다. 훅이 맡을 용도 가운데 지금 닫힌 것은 선언된 `origins`가 맡는 허용 origin 제한, 하위 프레임과 redirect 단계 제한, 호스트 고정 동작인 새 창 차단, 백엔드가 직접 호출하는 `opener.openUrl`이다.
 - 훅은 탐색마다 앱 코드를 왕복해야 하고 탐색 중 동기 판정이 필요하다. 호스트의 UI 스레드를 앱 코드 응답에 묶거나 비동기로 바꾸면 응답 전 요청의 처리 방식, 판정 기한, 기한 초과 때의 기본값(거부)이 새로 필요하다. 세션 철회와 문서 교체 중에 도착하는 판정의 경합도 새로 정의해야 한다. 허용 목록 검사 뒤에 거부만 더하는 형태로 만들면 기존 허용 목록의 보증은 유지할 수 있으나 위 비용은 남는다.
-- ADR 0026 구현 뒤에 닫힐 용도: 새 창 요청(`target="_blank"` 링크와 `window.open`)의 같은 WebView 열기와 외부 URL의 opener 대리 호출(결정 6). 그 전까지 이 요청은 출처와 무관하게 차단만 된다.
+- ADR 0026 구현 뒤에 닫힐 용도: 허용 origin 안 문서가 시작한 새 창 요청(`target="_blank"` 링크와 `window.open`) 중 허용 origin 안 URL의 같은 WebView 열기와 외부 `http(s)` URL의 opener 대리 호출(결정 6). 시작 프레임을 확인할 수 없거나, 뷰 `commands`나 host 권한이 없거나, 다른 scheme이면 구현 뒤에도 차단된다. 구현 전에는 호스트가 받는 새 창 요청이 origin과 무관하게 차단되며, macOS에서 스크립트의 `window.open`이 그 경로에 들어오는지는 확인하지 않았다.
 
 ## 결과
 
