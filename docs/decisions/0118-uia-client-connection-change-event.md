@@ -4,7 +4,7 @@ status: accepted
 
 # UI Automation 클라이언트 연결 변화 이벤트는 제공하지 않는다
 
-결정일: 2026-10-28. 검토 기준: main `5832b295`.
+결정일: 2026-10-28. 검토 기준: main `58ddd4ee`.
 
 ## 배경
 
@@ -13,7 +13,7 @@ status: accepted
 
 - Electron은 `app`의 `accessibility-support-changed` 이벤트와 `app.accessibilitySupportEnabled`로 Chromium의 접근성 모드가
   켜지고 꺼지는 것을 알린다. 이 값은 Chromium 내부 상태이며 앱은 주로 렌더링 최적화를 줄일지 정하는 데 쓴다.
-- Tauri v2와 wry에는 대응하는 이벤트와 조회가 없다([ADR 0056](./0056-accessibility-support-control.md)).
+- Tauri v2와 wry는 접근성 지원 설정 API가 없고([ADR 0056](./0056-accessibility-support-control.md)), 접근성 모드 변화를 알리는 이벤트도 확인되지 않았다.
 - Windows에서 연결 변화를 얻는 수단과 한계는 다음과 같다.
 
 | 수단 | 얻는 것 | 한계 |
@@ -34,8 +34,8 @@ status: accepted
 
 - Windows에는 연결과 해제를 모두 알리는 공개 OS 알림이 없다. 유일한 알림 후보인 `UiaRegisterProviderCallback`은 종료를 알 수 없어
   이벤트로 쓰면 "연결됨" 뒤에 "해제됨"이 오지 않는다. 이벤트로 약속할 수 없는 계약은 두지 않는다.
-- 폴링으로 이벤트를 만들면 앱 전체가 상시 호출 비용을 지고 주기 사이의 변화를 놓친다. 같은 정보는 조회 한 번으로 필요한
-  순간에 얻을 수 있다. 호출 비용이 무시할 만한지는 이 환경에서 측정하지 못했으므로 비용이 작다는 가정에 기대지 않는다.
+- 폴링으로 이벤트를 만들면 주기 사이의 연결과 해제를 놓친다. 같은 정보는 조회 한 번으로 필요한 순간에 얻을 수 있다.
+  호출 비용은 측정하지 않았으므로 결정 근거로 쓰지 않는다.
 - Electron과 Tauri가 다르다. Electron의 이벤트는 Chromium의 접근성 모드 변화를 알리며, `assistiveTechnologyActive`가 읽는
   UI Automation 클라이언트 연결과 의미가 가깝지만 같은 값이라고 보장되지 않는다. 둘이 다를 때는 코어를 작게 두고
   쓰는 곳이 확인될 때 더한다.
@@ -44,7 +44,7 @@ status: accepted
 
 ## 대안
 
-- `appearance`에 `accessibilityClientChanged` 이벤트를 두고 일정 주기로 조회해 바뀔 때 알린다. 주기 사이의 변화를 놓치고 상시 비용이 있으며
+- `appearance`에 `accessibilityClientChanged` 이벤트를 두고 일정 주기로 조회해 바뀔 때 알린다. 주기 사이의 변화를 놓치며
   사용처가 없다.
 - `UiaRegisterProviderCallback`으로 첫 연결만 알리는 이벤트를 둔다. 해제가 없어 상태를 유지할 수 없다.
 

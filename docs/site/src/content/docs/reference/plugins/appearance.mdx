@@ -109,14 +109,14 @@ const { screenReaderEnabled, assistiveTechnologyActive } =
 | screenReaderEnabled | SPI_GETSCREENREADER 설정 플래그. `getPreferences()`의 같은 이름 필드와 같은 값 |
 | assistiveTechnologyActive | uiautomationcore.dll의 `UiaClientsAreListening` 결과. 스크린 리더나 돋보기 같은 UI Automation 클라이언트가 접근성 트리를 구독 중이면 true |
 
-`assistiveTechnologyActive`는 Electron의 `app.accessibilitySupportEnabled`처럼 클라이언트의 실제 연결을
-읽는 값이며 설정 플래그와 독립적입니다. 플래그가 꺼져 있어도 클라이언트가 연결되어 있을 수 있고 그 반대도 가능합니다.
+`assistiveTechnologyActive`는 클라이언트의 실제 연결을
+읽는 값이며 Electron의 `app.accessibilitySupportEnabled`(Chromium 접근성 모드)와 의미가 가깝지만 같은 값은 아니고, 설정 플래그와 독립적입니다. 플래그가 꺼져 있어도 클라이언트가 연결되어 있을 수 있고 그 반대도 가능합니다.
 이 값은 WebView의 접근성 트리 활성 상태를 직접 읽거나 강제로 켜는 기능이 아닙니다.
 WebView 접근성 지원을 강제로 켜거나 끄는 API와 지원 기능을 고르는 API는 제공하지 않습니다. 이 조회는 상태를 읽을 뿐 바꾸지 않습니다.
 uiautomationcore.dll은 첫 조회 때 로드합니다. 이 DLL을 로드하거나 함수를 찾을 수 없는 Windows에서는
 이 조회만 `UNSUPPORTED`이고 `getPreferences()`와 테마 API는 계속 동작합니다. 호스트 종료 뒤 호출은 `CANCELLED`입니다.
 
-UI Automation 클라이언트 연결 변화는 연결과 해제를 모두 알리는 OS 알림이 없고 폴링은 상시 비용을 지며 주기 사이의 변화를 놓치므로
+UI Automation 클라이언트 연결 변화는 연결과 해제를 모두 알리는 OS 알림이 없고 폴링은 주기 사이의 변화를 놓치므로
 전용 이벤트를 제공하지 않습니다([ADR 0118](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0118-uia-client-connection-change-event.md)).
 `screenReaderEnabled`의 변화는 `appearance.changed`로 구독할 수 있으며, 연결 상태는 필요한 시점에 다시 조회합니다.
 실제 스크린 리더 연결 시의 값은 보조 기술이 있는 대화형 세션에서 수동으로 검증해야 하며, 자동 검증은 값의 타입만 확인합니다.
