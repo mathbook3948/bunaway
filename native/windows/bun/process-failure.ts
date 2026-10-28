@@ -38,7 +38,7 @@ const UNRESPONSIVE_EPISODE_GAP_MS = 60_000;
 export class UnresponsiveEpisode {
   private lastReportMs: number | undefined;
 
-  /** Forget the current freeze, as after a new document finished loading or another failure, so the next report starts a new one. */
+  /** Forget the current freeze, as after a new document finished loading, so the next report starts a new one. */
   reset(): void {
     this.lastReportMs = undefined;
   }
@@ -87,8 +87,6 @@ export function planProcessFailure(
       action: "none",
     };
   }
-  // The view is reloaded or closed, so a freeze after that is a new one.
-  episode.reset();
   const browserExited = kind === BROWSER_EXITED_PROCESS_FAILED_KIND;
   const recovery = browserExited ? "close" : "reload";
   return {

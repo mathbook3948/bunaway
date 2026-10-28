@@ -106,7 +106,7 @@ test("repeated unresponsive reports of one freeze count once and a pause starts 
   expect(episode.begins(31_000)).toBe(false);
   expect(episode.begins(150_000)).toBe(true);
   expect(episode.begins(160_000)).toBe(false);
-  // A reload, a navigation or another failure ends the freeze, so a freeze right after it is reported.
+  // A new document that finished loading ends the freeze, so a freeze right after it is reported.
   episode.reset();
   expect(episode.begins(165_000)).toBe(true);
 });
@@ -137,15 +137,18 @@ test("a frozen renderer keeps its page and is reported once; an exited renderer 
     revokeSession: true,
     action: "reload",
   });
-  // The reload ended the freeze, so a freeze right after it is reported again.
-  expect(planProcessFailure(2, false, episode, 21_000).report).toBe("none");
-  expect(planProcessFailure(0, false, episode, 22_000)).toEqual({
+  // The reload is only requested, so the frozen renderer's next report still belongs to the same
+  // freeze until the new document finishes loading and resets the count.
+  expect(planProcessFailure(2, false, episode, 21_000).report).toBe(undefined);
+  episode.reset();
+  expect(planProcessFailure(2, false, episode, 22_000).report).toBe("none");
+  expect(planProcessFailure(0, false, episode, 23_000)).toEqual({
     log: true,
     report: "close",
     revokeSession: true,
     action: "close-window",
   });
-  expect(planProcessFailure(1, true, episode, 23_000).report).toBe(undefined);
+  expect(planProcessFailure(1, true, episode, 24_000).report).toBe(undefined);
 });
 
 test("only the unresponsive kind leaves the page running", () => {
