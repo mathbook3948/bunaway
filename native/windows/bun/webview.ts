@@ -805,6 +805,9 @@ export class WebView {
         return;
       }
       this.loading = false;
+      // The finished navigation replaced the document, so a freeze after it is a new one. A frozen
+      // renderer keeps reporting until then, which a reset at request time would count again.
+      this.unresponsiveEpisode.reset();
       const stopped = this.stoppedNavigationId === id[0];
       this.stoppedNavigationId = undefined;
       const success = new Int32Array(1);
@@ -1285,8 +1288,6 @@ export class WebView {
       ),
       "Navigate",
     );
-    // An app that navigates away from a frozen page starts a fresh document, which can freeze anew.
-    this.unresponsiveEpisode.reset();
   }
 
   /** Move keyboard focus into the page, e.g. after a native popup closed; it does not activate the window. */
@@ -1527,8 +1528,6 @@ export class WebView {
     const webview = this.requireWebView();
     if (!ignoreCache) {
       checkHresult(method(webview, 31, [])(), "Reload");
-      // A reload replaces a frozen document, so a freeze after it is a new one.
-      this.unresponsiveEpisode.reset();
       return;
     }
     this.editCalls.prune();
@@ -1561,7 +1560,6 @@ export class WebView {
         message: `Reload ignoring the cache failed: ${describeDevToolsFailure(error)}`,
       });
     }
-    this.unresponsiveEpisode.reset();
   }
 
   /** Stop completes through the existing NavigationCompleted cancellation path. */
