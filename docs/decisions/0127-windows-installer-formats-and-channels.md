@@ -37,7 +37,7 @@ status: accepted
 
 | 형식과 채널 | 설치와 업데이트(덮어쓰기) | 제거 | 최초 실행 | 자체 updater가 받은 설치 파일 | 상태 |
 | --- | --- | --- | --- | --- | --- |
-| Inno EXE, `win-direct`와 `win-store-unpackaged` | `tests/packaging/windows.test.ts`가 실제 Inno 설치 프로그램을 실행해 덮어쓰기 설치 정책, 바로 가기, 이전 메타데이터가 없는 경우를 확인한다. CI `Windows installer tests` 잡이 `windows-2022`에서 실행한다. | 같은 파일이 `unins000.exe`로 제거 정책(사용자 데이터 보존 포함)을 확인한다. | 설치된 컴파일 앱의 시작은 이 파일의 범위가 아니다. 컴파일된 EXE 시작 검증은 별도 작업(PR #552)에서 다루며 main에는 아직 없다. 남음. | `tests/lifecycle/windows-updater-signature.test.ts`가 내려받기와 서명 확인을 다룬다. 설치 실행은 `updater.install` 구현 항목에서 검증한다. 남음. | 형식 결정 완료, 최초 실행과 설치 실행 검증 남음 |
+| Inno EXE, `win-direct`와 `win-store-unpackaged` | `tests/packaging/windows.test.ts`에 실제 Inno 설치 프로그램을 실행하는 테스트가 있다(덮어쓰기 설치 정책, 바로 가기, 이전 메타데이터가 없는 경우). Inno 컴파일러가 없으면 건너뛰며, CI `Windows installer tests` 잡(`windows-2022`)이 Inno를 설치하고 이 파일을 실행하도록 정의돼 있다. 특정 실행의 통과 기록은 이 문서에 인용하지 않았다. | 같은 파일에 `unins000.exe`로 제거 정책(사용자 데이터 보존 포함)을 확인하는 테스트가 있다. | 설치된 컴파일 앱의 시작은 이 파일의 범위가 아니다. 컴파일된 EXE 시작 검증은 별도 작업(PR #552)에서 다루며 main에는 아직 없다. 남음. | `tests/lifecycle/windows-updater-signature.test.ts`가 내려받기와 게시자 서명 확인을 다룬다. Windows CI 러너에서만 실행되며(`CI` 환경 변수 필요), `tests/lifecycle/run-native.ts`의 Windows native 목록에 등록돼 있다. 설치 실행은 `updater.install` 구현 항목에서 검증한다. 남음. | 형식 결정 완료, 최초 실행과 설치 실행 검증 남음 |
 | MSI | 제공하지 않음 | 제공하지 않음 | 제공하지 않음 | 제공하지 않음 | 제외 |
 | MSIX, `win-store-msix` | 패키지 생성 차단. 설치 검증은 PR #557의 시험이 먼저 필요하다. 남음. | 남음 | 남음 | 해당 없음(Store가 전달, `managedByStore`) | 차단 유지 |
 
@@ -49,7 +49,7 @@ status: accepted
   제공하지만 이 프레임워크는 코어를 작게 두고 설치 형식을 패키징 채널의 책임으로 둔다. 이미 자동 시험, 서명, 업데이터 연동이 붙은
   Inno 경로와 MSI 경로를 함께 유지하면 설치 상태(Run 등록, 파일 연결, 제거 정보, 유지 보수 잠금)를 두 벌 검증해야 한다. 이
   비용에 비해 MSI만 필요한 앱의 수요가 확인되지 않았다.
-- Store는 일반 앱 제출에서 EXE와 MSI를 모두 받으므로 EXE만 만들어도 제출 요건을 채운다.
+- 패키징 README의 Store 일반 앱(EXE/MSI) 제출 요건은 설치 파일 형식이 아니라 오프라인 설치, 서명, 불변 URL, 무인 설치에 대한 것이고, `win-store-unpackaged`가 EXE로 이를 채운다.
 - MSIX는 Electron과 Tauri 모두 지원하는 형식이지만 패키지 ID, 읽기 전용 설치 폴더, Store 전달 업데이트가 앱 동작을 바꾼다.
   검증 없이 열면 앱 데이터 경로와 활성화가 어긋날 수 있어 차단을 유지한다.
 - 이 결정은 코드와 공개 계약을 바꾸지 않는다. 결론이 "MSI 생성 제공"으로 바뀌면 새 채널 계약이므로 별도 결정으로 다룬다.
