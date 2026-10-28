@@ -19,7 +19,7 @@ status: accepted
 
 - Electron은 `fs`를 그대로 노출하며 쓰기 전 변경을 감지하는 기능을 제공하지 않는다. 에디터류 앱은 앱 계층에서 `fs.stat`의
   `mtimeMs`를 저장해 두었다가 쓰기 전에 다시 비교한다.
-- Tauri의 fs 플러그인도 `stat`과 쓰기 API만 주고 조건부 쓰기나 충돌 감지를 제공하지 않는다.
+- Tauri의 fs 플러그인에는 조건부 쓰기나 충돌 감지 API가 없다.
 - 위 Electron과 Tauri 서술은 공개 문서에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다. 아래 저장소 서술은 코드와 문서를 근거로 한다.
 - 이 저장소의 `StorageMetadata`는 파일에 `sizeBytes`와 `modifiedAtMs`를 이미 준다. `modifiedAtMs`는 Node 호환 `stat`의
   나노초 수정 시각을 밀리초로 자른 값이다(`plugins/storage/src/platforms/node-storage.ts`). 파일 시스템이 시각을 기록하지 않거나 값이 안전 정수 범위를 넘으면 `null`이다.
