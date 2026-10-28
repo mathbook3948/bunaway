@@ -3,7 +3,6 @@ import {
   auditPackedPackage,
   type PackedPackage,
   pendingOwnerDecisions,
-  unmatchedExportPatterns,
 } from "../../scripts/check-release-packages.ts";
 
 const expected = {
@@ -116,35 +115,100 @@ test("the audit rejects package.json targets missing from the tarball and a miss
   expect(text).toContain("has no license file");
 });
 
-test("an exports pattern with no packed match is reported but does not fail the audit", () => {
+test("an exports pattern needs a packed match unless the package has no platform adapters", () => {
   const manifest = {
     ...packed().manifest,
     exports: {
       "./native/*": "./dist/native/*.js",
     },
   };
-  const files = [
+  const plain = [
     "package.json",
     "LICENSE.txt",
     "src/index.ts",
   ];
-  const withNative = packed({
-    manifest,
-    files: [
-      ...files,
-      "dist/native/windows.js",
-    ],
-  });
-  const withoutNative = packed({
-    manifest,
-    files,
-  });
-  expect(auditPackedPackage(withNative, expected)).toEqual([]);
-  expect(unmatchedExportPatterns(withNative)).toEqual([]);
-  expect(auditPackedPackage(withoutNative, expected)).toEqual([]);
-  expect(unmatchedExportPatterns(withoutNative)).toEqual([
-    "./dist/native/*.js",
-  ]);
+  const adapters = [
+    ...plain,
+    "src/platforms/windows.ts",
+  ];
+  expect(
+    auditPackedPackage(
+      packed({
+        manifest,
+        files: [
+          ...adapters,
+          "dist/native/windows.js",
+        ],
+      }),
+      expected,
+    ),
+  ).toEqual([]);
+  expect(
+    auditPackedPackage(
+      packed({
+        manifest,
+        files: plain,
+      }),
+      expected,
+    ),
+  ).toEqual([]);
+  expect(
+    auditPackedPackage(
+      packed({
+        manifest,
+        files: adapters,
+      }),
+      expected,
+    ).join("\n"),
+  ).toContain("./dist/native/*.js named by package.json matches no file");
+});
+
+test("type-only imports and non-string ranges are audited", () => {
+  const manifest = {
+    ...packed().manifest,
+    dependencies: {
+      "@bunaway/core": 1,
+    },
+  };
+  const text = auditPackedPackage(
+    packed({
+      manifest,
+      sources: new Map([
+        [
+          "src/types.ts",
+          'import type { A } from "@bunaway/plugin-api/native";\nexport type { B } from "left-pad";\n',
+        ],
+      ]),
+    }),
+    expected,
+  ).join("\n");
+  expect(text).toContain(
+    "dependencies.@bunaway/core is not a version range string",
+  );
+  expect(text).toContain("imports @bunaway/plugin-api");
+  expect(text).toContain("imports left-pad");
+});
+
+test("file: and link: ranges are rejected like workspace: ranges", () => {
+  const manifest = {
+    ...packed().manifest,
+    dependencies: {
+      "@bunaway/core": "file:/tmp/core.tgz",
+      "left-pad": "link:../left-pad",
+    },
+  };
+  const text = auditPackedPackage(
+    packed({
+      manifest,
+    }),
+    expected,
+  ).join("\n");
+  expect(text).toContain(
+    "dependencies.@bunaway/core keeps the unpublishable range file:",
+  );
+  expect(text).toContain(
+    "dependencies.left-pad keeps the unpublishable range link:",
+  );
 });
 
 test("the audit rejects an import that package.json does not declare", () => {
@@ -179,5 +243,7 @@ test("values that wait on the repository owner are reported as pending", () => {
       license: "MIT",
       publishConfig: {},
     }),
-  ).toEqual([]);
+  ).toEqual([
+    "private is not set, so the package is publishable as is",
+  ]);
 });

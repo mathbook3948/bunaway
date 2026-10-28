@@ -10,9 +10,17 @@
  * Exit code 1 lists each problem; 0 means every tarball passed. Values that wait on the
  * repository owner (`private`, license, `publishConfig`) are listed as pending, not as failures.
  */
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+} from "node:fs/promises";
+import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { basename, dirname, relative, resolve } from "node:path";
 import { packageFilename, release } from "#cli/distribution";
 import { packFramework } from "#cli-scripts/pack";
 
@@ -29,6 +37,9 @@ const DEPENDENCY_FIELDS = [
 const FORBIDDEN_FILE_PATTERN =
   /(^|\/)(\.env[^/]*|\.npmrc|[^/]*\.(pem|key|p12|pfx)|[^/]*\.(test|spec)\.[cm]?[jt]sx?)$/;
 const SOURCE_FILE_PATTERN = /\.(ts|tsx|mts|js|mjs)$/;
+/** `import type` and `export type` statements, which the transpiler's import scan drops. */
+const TYPE_IMPORT_PATTERN =
+  /\b(?:import|export)\s+type\b[^"'`;]*?\bfrom\s*["']([^"']+)["']/g;
 
 /** One tarball as read back from disk: its file list and the sources of its code files. */
 export type PackedPackage = {
@@ -69,13 +80,17 @@ function targetsOf(manifest: Record<string, unknown>): string[] {
   return targets.filter((target) => target.startsWith("./"));
 }
 
+/** Bundled output names Node modules without the `node:` prefix, so the builtin list is needed too. */
+const NODE_BUILTINS: ReadonlySet<string> = new Set(builtinModules);
+
 function packageOfImport(specifier: string): string | undefined {
   if (
     specifier.startsWith(".") ||
     specifier.startsWith("#") ||
     specifier.startsWith("node:") ||
     specifier.startsWith("bun:") ||
-    specifier === "bun"
+    specifier === "bun" ||
+    NODE_BUILTINS.has(specifier.split("/")[0] ?? specifier)
   ) {
     return undefined;
   }
@@ -136,9 +151,12 @@ function auditManifest({ packed, expected, name, fail }: Audit): Set<string> {
   }
   const declared = new Set<string>();
   for (const field of DEPENDENCY_FIELDS) {
-    const group = (manifest[field] ?? {}) as Record<string, string>;
-    for (const [dependency, range] of Object.entries(group)) {
+    for (const [dependency, range] of Object.entries(manifest[field] ?? {})) {
       declared.add(dependency);
+      if (typeof range !== "string") {
+        fail(`${field}.${dependency} is not a version range string`);
+        continue;
+      }
       for (const problem of dependencyProblems(
         field,
         dependency,
@@ -156,26 +174,27 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/**
- * Subpath patterns such as `./dist/native/*.js` that match no packed file. A plugin without
- * native adapters keeps the pattern its scaffold writes, so this is reported, not failed.
- */
-export function unmatchedExportPatterns(packed: PackedPackage): string[] {
-  return targetsOf(packed.manifest)
-    .filter((target) => target.includes("*"))
-    .filter((target) => {
-      const pattern = new RegExp(
-        `^${target.slice(2).split("*").map(escapeRegExp).join(".+")}$`,
-      );
-      return !packed.files.some((file) => pattern.test(file));
-    });
+/** Whether a subpath pattern such as `./dist/native/*.js` is matched by any packed file. */
+function patternIsPacked(target: string, files: readonly string[]): boolean {
+  const pattern = new RegExp(
+    `^${target.slice(2).split("*").map(escapeRegExp).join(".+")}$`,
+  );
+  return files.some((file) => pattern.test(file));
 }
 
 /** Check that the tarball holds every file package.json points at and a license, and nothing secret or test-only. */
 function auditFiles({ packed, fail }: Audit): void {
   const present = new Set(packed.files);
+  const hasPlatforms = packed.files.some((file) =>
+    file.startsWith("src/platforms/"),
+  );
   for (const target of targetsOf(packed.manifest)) {
-    if (!target.includes("*") && !present.has(target.slice(2))) {
+    if (target.includes("*")) {
+      // A plugin without native adapters (no `src/platforms/`) keeps the pattern its scaffold writes.
+      if (hasPlatforms && !patternIsPacked(target, packed.files)) {
+        fail(`${target} named by package.json matches no file in the tarball`);
+      }
+    } else if (!present.has(target.slice(2))) {
       fail(`${target} named by package.json is not in the tarball`);
     }
   }
@@ -205,8 +224,14 @@ function auditImports(
     if (!SOURCE_FILE_PATTERN.test(file)) {
       continue;
     }
-    for (const entry of transpiler.scanImports(source)) {
-      const dependency = packageOfImport(entry.path);
+    const specifiers = [
+      ...transpiler.scanImports(source).map((entry) => entry.path),
+      ...[
+        ...source.matchAll(TYPE_IMPORT_PATTERN),
+      ].map((match) => match[1] ?? ""),
+    ];
+    for (const specifier of specifiers) {
+      const dependency = packageOfImport(specifier);
       if (dependency && !declared.has(dependency) && !own.has(dependency)) {
         fail(
           `${file} imports ${dependency}, which package.json does not declare`,
@@ -235,14 +260,17 @@ export function auditPackedPackage(
   return problems;
 }
 
-/** Values that block a real publish until the repository owner decides them. */
+/** Values the repository owner still has to decide before a real publish. */
 export function pendingOwnerDecisions(
   manifest: Record<string, unknown>,
 ): string[] {
   const pending: string[] = [];
-  if (manifest.private === true) {
-    pending.push("private is true");
-  }
+  // Only `private: true` stops a publish; a manifest without it is publishable as it stands.
+  pending.push(
+    manifest.private === true
+      ? "private is true"
+      : "private is not set, so the package is publishable as is",
+  );
   if (manifest.license === "UNLICENSED" || manifest.license === undefined) {
     pending.push("license is not decided");
   }
@@ -252,8 +280,9 @@ export function pendingOwnerDecisions(
   return pending;
 }
 
-async function run(command: string[]): Promise<string> {
+async function run(command: string[], cwd: string): Promise<string> {
   const child = Bun.spawn(command, {
+    cwd,
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -268,34 +297,54 @@ async function run(command: string[]): Promise<string> {
   return out;
 }
 
-/** Read one tarball: normalize the `./` and `package/` prefixes that GNU tar and bsdtar print differently. */
-async function readTarball(path: string): Promise<PackedPackage> {
-  const listing = await run([
-    "tar",
-    "-tzf",
-    path,
-  ]);
-  const files = listing
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^\.\//, "").replace(/^package\//, ""))
-    .filter((line) => line !== "" && !line.endsWith("/") && line !== "package");
-  const read = (file: string) =>
-    run([
+async function listFiles(root: string): Promise<string[]> {
+  const entries = await readdir(root, {
+    recursive: true,
+    withFileTypes: true,
+  });
+  return entries
+    .filter((entry) => entry.isFile())
+    .map((entry) =>
+      relative(root, resolve(entry.parentPath, entry.name)).replaceAll(
+        "\\",
+        "/",
+      ),
+    );
+}
+
+/**
+ * Extract one tarball into `target` and read it back. The archive is named relative to its own
+ * directory so a Windows drive letter is never taken for a remote host by GNU tar, and the
+ * extracted tree gives one listing whatever prefix the tar implementation prints.
+ */
+async function readTarball(
+  path: string,
+  target: string,
+): Promise<PackedPackage> {
+  await mkdir(target);
+  await run(
+    [
       "tar",
-      "-xzOf",
-      path,
-      `package/${file}`,
-    ]);
-  // Only the shipped `src/` tree is scanned: the CLI tarball bundles the whole framework and declares it differently.
+      "-xzf",
+      basename(path),
+      "-C",
+      target,
+    ],
+    dirname(path),
+  );
+  const root = resolve(target, "package");
+  const files = await listFiles(root);
+  // Shipped code is scanned for imports; the CLI tarball bundles the whole framework and declares it differently.
   const sources = new Map<string, string>();
   for (const file of files) {
-    if (file.startsWith("src/") && SOURCE_FILE_PATTERN.test(file)) {
-      sources.set(file, await read(file));
+    const shipped = file.startsWith("src/") || file.startsWith("dist/");
+    if (shipped && SOURCE_FILE_PATTERN.test(file)) {
+      sources.set(file, await readFile(resolve(root, file), "utf8"));
     }
   }
   return {
     files,
-    manifest: JSON.parse(await read("package.json")),
+    manifest: JSON.parse(await readFile(resolve(root, "package.json"), "utf8")),
     sources,
   };
 }
@@ -314,18 +363,23 @@ async function main(): Promise<number> {
   );
   const problems: string[] = [];
   const pending = new Map<string, string[]>();
-  const notes: string[] = [];
   try {
     await packFramework(directory);
     for (const name of expected.names) {
       const packed = await readTarball(
         resolve(directory, packageFilename(name, info.version)),
+        resolve(
+          directory,
+          `extract-${basename(packageFilename(name, info.version), ".tgz")}`,
+        ),
       );
+      if (packed.manifest.name !== name) {
+        problems.push(
+          `${name}: tarball holds the package ${String(packed.manifest.name)}`,
+        );
+      }
       problems.push(...auditPackedPackage(packed, expected));
       pending.set(name, pendingOwnerDecisions(packed.manifest));
-      for (const pattern of unmatchedExportPatterns(packed)) {
-        notes.push(`${name}: export pattern ${pattern} matches no packed file`);
-      }
     }
   } finally {
     await rm(directory, {
@@ -341,9 +395,6 @@ async function main(): Promise<number> {
   }
   for (const [item, count] of pendingCounts) {
     console.log(`pending owner decision: ${item} in ${count} packages`);
-  }
-  for (const note of notes) {
-    console.log(`note: ${note}`);
   }
   for (const problem of problems) {
     console.error(problem);
