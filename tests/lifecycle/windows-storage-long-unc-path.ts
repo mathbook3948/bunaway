@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { WindowsStorage } from "#plugins/storage/src/platforms/windows";
+import { killAfter } from "../fixtures/deadlines";
 
 assert.equal(process.platform, "win32");
 
@@ -181,25 +182,50 @@ try {
 
     // The runner turns long paths on. Turn them off for a child process to see what the spelling
     // alone provides, then restore the setting.
-    const before = Bun.spawnSync([
+    // `reg query` prints `LongPathsEnabled    REG_DWORD    0x1`; no value means the setting was never written.
+    const query = Bun.spawnSync([
       "reg",
       "query",
       FILE_SYSTEM_KEY,
       "/v",
       "LongPathsEnabled",
-    ]).stdout.toString();
-    if (setLongPaths(0)) {
+    ]);
+    const previous = /REG_DWORD\s+0x([0-9a-f]+)/i.exec(
+      query.stdout.toString(),
+    )?.[1];
+    if (query.exitCode !== 0 || previous === undefined) {
+      console.log("SKIP LongPathsEnabled has no readable value to restore.");
+    } else if (setLongPaths(0)) {
       try {
-        const child = Bun.spawnSync([
-          process.execPath,
-          import.meta.path,
-          "child",
-          root,
+        const child = Bun.spawn(
+          [
+            process.execPath,
+            "--no-env-file",
+            import.meta.path,
+            "child",
+            root,
+          ],
+          {
+            stdout: "pipe",
+            stderr: "pipe",
+          },
+        );
+        const timer = killAfter(child, "nativeFixture");
+        const [out, err, code] = await Promise.all([
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+          child.exited,
         ]);
-        console.log(child.stdout.toString().trim());
-        console.log(child.stderr.toString().trim());
+        clearTimeout(timer);
+        console.log(out.trim());
+        console.log(err.trim());
+        assert.equal(code, 0, "The child with long paths off must finish.");
+        assert(
+          out.includes("PROBE child storage.writeText"),
+          "The child must report its probes.",
+        );
       } finally {
-        setLongPaths(before.includes("0x0") ? 0 : 1);
+        setLongPaths(Number.parseInt(previous, 16) === 0 ? 0 : 1);
       }
     } else {
       console.log("SKIP LongPathsEnabled cannot be changed on this runner.");
