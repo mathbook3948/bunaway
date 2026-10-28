@@ -4,7 +4,7 @@ status: accepted
 
 # UI 안에 끼워 넣는 guest WebView(`<webview>` 태그)는 제공하지 않는다
 
-결정일: 2026-10-26. 검토 기준: main `c6b9ecc9`.
+결정일: 2026-10-26. 검토 기준: main `310be4a0`.
 
 ## 배경
 
@@ -18,9 +18,9 @@ status: accepted
 - Tauri에는 UI 안에서 쓰는 guest WebView 태그가 없다. 한 창에 WebView를 더하는 기능은 Rust 쪽 다중 WebView API(실험 기능 플래그 뒤)이고, 페이지 안에 끼워 넣는 방식이 아니다.
 - 이 저장소의 호스트는 창 하나에 WebView 하나만 둔다([ADR 0026](./0026-single-webview-single-window.md)). 같은 ADR은 "창은 하나지만 WebView 여러 개"(Electron `WebContentsView` 방식)를
   기각했다. 다중 창을 나중에 플러그인으로 제공하는 경우의 재제안 조건(실제 앱 사례, 추가 WebView의 세션 발급과 회수 확장점을 정하는 별도 ADR,
-  기본 앱의 계약과 보안 검토 범위를 늘리지 않음)이 같은 ADR에 있고, 추가 WebView도 같은 조건으로 다룬다.
+  기본 앱의 계약과 보안 검토 범위를 늘리지 않음)도 같은 ADR에 있다. 이 ADR은 UI 안의 guest WebView도 추가 WebView의 한 형태로 보고 같은 조건을 적용한다(이 적용은 이 ADR의 판단이다).
 - 호스트가 발급하는 문서 세션은 최상위 문서 단위라 하위 프레임(`<iframe>` 등)은 SDK 세션을 가질 수 없다([ADR 0002](./0002-host-owned-call-context.md)).
-  Windows 호스트는 최상위 문서의 메시지만 받고, 자식 iframe이 보낸 invoke가 백엔드에 도달하지 않는 것을 확인했다(`docs/architecture/windows-host-results.md`의 origin, frame 항목).
+  Windows 호스트는 `FrameWebMessageReceived` 핸들러를 설치하지 않아 최상위 문서의 메시지만 받는다(`native/windows/bun/webview.ts`). 자식 iframe이 보낸 invoke가 백엔드에 도달하지 않는 것도 실행으로 확인했다(`docs/architecture/windows-host-results.md`의 origin, frame 항목).
 - 정책 뷰의 `origins` 밖 `http`, `https` URL은 같은 WebView에서 열지 않고 `opener.openUrl`을 거쳐서만 시스템 기본 브라우저로 넘긴다([ADR 0026](./0026-single-webview-single-window.md)의 `window.open`과 링크 항목).
 
 ## 결정
@@ -32,19 +32,20 @@ status: accepted
    `opener.openUrl`의 호출 조건(뷰 `commands`의 `plugin.opener.openUrl`과 host 권한 `opener.openUrl`)과 링크, `window.open`의 대리 호출은
    ADR 0026이 정한 대로 따르며, 그 구현은 이 결정의 범위 밖이다.
 3. 이 결정은 코어 계약, 권한, 정책 스키마, 이벤트, 네이티브 코드를 바꾸지 않는다. 호스트는 `<webview>` 태그를 위한 속성이나 프로세스 경계를 만들지 않는다.
-4. 사용처가 확인되어 다시 제안할 때는 [ADR 0026](./0026-single-webview-single-window.md)의 재제안 조건(배경 참조)을 먼저 충족해야 하고, 그 ADR에서 다음을 정한다.
+4. 사용처가 확인되어 다시 제안할 때는 위에서 적용한 ADR 0026의 재제안 조건(배경 참조)을 먼저 충족해야 하고, 그때 새로 쓰는 ADR에서 다음을 정한다.
    guest가 호스트 브리지와 앱 권한을 상속하지 않는 경계, 탐색 가능한 origin 제한, 앱 WebView와 분리된 세션(저장소와 쿠키), 새 창과 권한 요청의 처리.
 
 ## 근거
 
 - 쓰는 곳이 없다. 이 프레임워크의 WebView는 앱이 배포한 자체 UI를 표시하고, 외부 페이지를 보여 주는 요구는 시스템 브라우저로 여는 것으로 대신한다.
 - 권한 경계가 보장되지 않는다. guest는 앱 UI와 다른 프로세스에서 임의의 콘텐츠를 실행하므로, 호스트 브리지 노출 여부, 세션 발급과 회수, 탐색 제한을 새로 정의해야 한다.
-  이는 모든 앱의 보안 검토 범위를 늘리는 변경이고, 기본 단일 WebView 앱의 계약을 늘리지 않는다는 ADR 0026의 재제안 조건과 부딪힌다.
+  이는 모든 앱의 보안 검토 범위를 늘리는 변경이고, 계약과 성능, 보안 검토 범위를 늘리지 않는다는 ADR 0026의 재제안 조건과 부딪힌다.
 - 두 프레임워크가 다르다. Electron은 태그를 제공하지만 기본으로 꺼 두고 보안상 쓰지 말라고 권고하며, Tauri는 태그가 없다. 이 결정은 Electron의 기본값(꺼짐)과 권고, Tauri의 구성을 따라
   코어는 작게 두는 쪽을 택했다.
 
 ## 결과
 
 - 이벤트, 권한, 스키마, 네이티브 코드 변경은 없다.
+- 결정은 호스트 계약에 대한 것이라 플랫폼에 공통이다. `docs/TODO-macos.md`의 guest WebView 항목은 extension과 native View tree 수명까지 함께 다루므로 이 문서에서 닫지 않고, guest WebView 부분은 이 결정을 따른다.
 - 이 결정은 한 창의 다중 WebView(`docs/TODO-windows.md`의 WebView 생성과 bounds 항목), WebView reparent, 선택 Chromium 렌더러 항목을 닫지 않는다. 그 항목들은 각자의 결정을 따른다.
 - `docs/TODO-windows.md`의 해당 항목을 완료로 표시하고 이 결정을 참조한다.
