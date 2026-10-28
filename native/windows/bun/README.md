@@ -44,7 +44,9 @@ normal의 WINDOWPLACEMENT 작업 영역 좌표는 화면 좌표로 보정한다.
 `ui.ts`는 `NativeWindow.getBounds`와 `getDpi`를 연결하고 창 플러그인이 공개 단위 변환과
 반올림, 입력 및 대상 창 권한을 검사한다.
 `webview-version.ts`는 시작 때 WebView2Loader로 설치된 런타임 버전을 한 번 조회해 `ctx.app.runtime.webview`에 전달하며,
-`wide-string.ts`는 이 조회에서 쓰는 NUL 종료 UTF-16 문자열 읽기를 제공한다. 조회 실패는 `webview-version-unavailable`로 기록하고 값을 `null`로 둔다.
+`wide-string.ts`는 이 조회에서 쓰는 NUL 종료 UTF-16 문자열 읽기를 제공한다. `webview-version.ts`는 조회에 실패하면 예외를 던지고, 기록과 `null` 처리는 아래 검사와 `entry.ts`가 한다.
+`webview-version-check.ts`는 이 버전을 최소 런타임 버전과 비교하고 결과(`webview-version-unavailable`, `webview-version-too-old`, `webview-version-unparsable` 항목과 시작 실패)를 만든다.
+`entry.ts`는 Worker를 시작하기 전에 이 검사를 하고 항목을 기록한 뒤, 최소보다 낮으면 시작을 실패시키며 해석할 수 없는 문자열은 기록만 하고 계속한다.
 `com.ts`는 COM 참조와 콜백을, `webview.ts`는 WebView 생성과 종료를 관리한다.
 `ui.ts`가 이 자원들의 초기화와 정리 순서를 조정한다. DLL은 창과 COM 정리가 끝난 뒤 닫는다.
 UI 스레드의 수명주기(시작 요청, 시작 탐색, 대기 중인 quit 요청, 종료 확정, 정지)는

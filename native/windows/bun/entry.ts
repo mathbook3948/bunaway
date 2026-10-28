@@ -45,6 +45,7 @@ import {
 } from "./relaunch.ts";
 import { releaseSessionEndWait } from "./session-end.ts";
 import { readWebViewVersion } from "./webview-version.ts";
+import { checkWebViewVersion } from "./webview-version-check.ts";
 
 /** How an orderly shutdown ended: the process exit code and an optional app-requested relaunch. */
 export type WindowsAppResult = {
@@ -179,6 +180,10 @@ export async function runWindowsApp(
   const startHidden = desktopLaunch(launch?.argv ?? []).hidden;
   validateDesktopStartup(config.windows, app.desktop, startHidden);
   config = withDesktopStart(config, app.desktop, startHidden);
+  const webviewVersion = checkWebViewVersion(() =>
+    readWebViewVersion(config.loader),
+  );
+  failure = webviewVersion.failure;
   const worker = new Worker(workerModuleUrl("ui"), {
     workerData: config,
   });
@@ -538,6 +543,13 @@ export async function runWindowsApp(
       ui: "worker",
       runtime: config.runtime,
     });
+    if (webviewVersion.event) {
+      await log.write(webviewVersion.event.name, webviewVersion.event.fields);
+    }
+    // A runtime below the minimum was already recorded as the failure; stop without waiting for the Workers.
+    if (failure) {
+      throw failure;
+    }
     // Wait for both Workers before Core starts routing host calls.
     await Promise.all([
       ready,
@@ -546,7 +558,7 @@ export async function runWindowsApp(
     if (failure) {
       throw failure;
     }
-    const webview = await webViewVersionOrNull(config.loader, log);
+    const webview = webviewVersion.version;
     booting = createCore(app, {
       app: toAppInfo(config.appMetadata, {
         bun: Bun.version,
@@ -883,21 +895,6 @@ function withDesktopStart(
 function workerModuleUrl(name: "ui" | "host-operations"): URL {
   const source = existsSync(resolve(import.meta.dir, `${name}.ts`));
   return new URL(source ? `./${name}.ts` : `./${name}.js`, import.meta.url);
-}
-
-/** The WebView version is informational: failure is logged and exposed as null. */
-async function webViewVersionOrNull(
-  loader: UIConfig["loader"],
-  log: DiagnosticLog,
-): Promise<string | null> {
-  try {
-    return readWebViewVersion(loader);
-  } catch (cause) {
-    await log.write("webview-version-unavailable", {
-      message: cause instanceof Error ? cause.message : String(cause),
-    });
-    return null;
-  }
 }
 
 /** Exit code and, after an approved relaunch, the arguments of the new process. */
