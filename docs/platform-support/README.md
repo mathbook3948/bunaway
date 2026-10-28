@@ -54,6 +54,7 @@ Windows의 선택 [notification 플러그인](../../plugins/notification/README.
 | 플랫폼 | 네이티브 구현 | 검증 환경, 범위 | 미검증, 제약 |
 | --- | --- | --- | --- |
 | Windows x64 | Bun 진입점, 직접 FFI UI Worker, WebView2, 번들 Bun x64 baseline | 로컬 FFI/모달/Host API/복구/종료/독립 CLI 검증([기록](../architecture/windows-bun-results.md)); PR18의 번들 런처 검증은 아래 기록과 분리 | 최소 Windows, CPU, WebView2 설치 경로, 배포, 스토어 적합성 |
+| Windows ARM64 | 네이티브 빌드 없음. Windows 11 ARM64에서 x64 산출물을 에뮬레이션으로 실행하는 것이 지원 목표([결정](../decisions/0097-windows-arm64-scope.md)) | 없음. `windows-11-arm` 러너 시험은 후속 | 실행 검증 전이라 동작을 보장하지 않음. Windows 10 ARM64, 네이티브 Bun 빌드, ARM64 기기에서의 패키징 |
 | macOS arm64 | Bun 진입점, 직접 FFI AppKit/WKWebView, 백엔드 Worker, 창 하나 | 로컬 26.7.1 arm64: 실제 WKWebView 회귀와 compiled 창 API 검사. [Bun FFI 기록](../architecture/macos-bun-results.md)과 [이전 기록](../architecture/macos-native-results.md)을 구분 | Intel, 영속 프로필, 최소 OS, Developer ID, 공증, 설치 |
 | macOS Intel | 고정 Bun 배포물, 해시 없음 | 없음. arm64 빌드 스크립트가 명시적으로 거부 | 별도 pin, 빌드, 실제 실행 검증 필요 |
 | Linux | GTK, WebKitGTK 후보, 호스트 미구현 | Ubuntu 공통 검사, 생성 스키마 검사만 있음 | 네이티브 실행, UI, 프로세스 정리, 패키징 |

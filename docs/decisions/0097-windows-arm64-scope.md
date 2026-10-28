@@ -4,7 +4,7 @@ status: accepted
 
 # Windows ARM64는 x64 에뮬레이션을 지원 목표로 하고 네이티브 ARM64 빌드는 후속으로 둔다
 
-결정일: 2026-10-26. 검토 기준: main `c6b9ecc9`.
+결정일: 2026-10-26. 검토 기준: main `1efc15a3`.
 
 ## 배경
 
@@ -34,7 +34,7 @@ Windows on ARM 기기에서 앱 실행과 CLI 빌드가 어디까지 지원되�
 
 ## 근거
 
-- 이 문서가 저장소 밖의 사실로 전제하는 것은 Inno Setup `x64compatible`이 ARM64 Windows를 포함한다는 점, Windows 10 ARM64가 x86 에뮬레이션만 한다는 점, Electron과 Tauri가 ARM64 빌드를 제공한다는 점이다. 저장소에서 확인한 것은 `inno.ts`의 설정값과 `targetFor`, manifest 구성뿐이다. 실제 설치와 실행은 4번의 검증으로 확인한다.
+- 이 문서가 저장소 밖의 사실로 전제하는 것은 Inno Setup `x64compatible`이 ARM64 Windows를 포함한다는 점, Windows 10 ARM64가 x86 에뮬레이션만 한다는 점, WebView2 x64 런타임이 ARM64 Windows 11의 x64 에뮬레이션에서 기동한다는 점(4번에서 검증하며 기동하지 않으면 1번을 고친다), Electron과 Tauri가 ARM64 빌드를 제공한다는 점이다. 저장소에서 확인한 것은 `inno.ts`의 설정값과 `targetFor`, manifest 구성뿐이다. 실제 설치와 실행은 4번의 검증으로 확인한다.
 
 - Electron과 Tauri가 모두 네이티브 ARM64를 내는 점은 같다. 그러나 bunaway는 런타임 pin과 해시 기록 구조 때문에 네이티브 지원이 코어 빌드 파이프라인 전체에 걸치는 규모다.
   실행해 본 적이 없는 상태에서 manifest와 대상만 추가하면 검증되지 않은 산출물을 지원처럼 보이게 한다.
@@ -43,6 +43,6 @@ Windows on ARM 기기에서 앱 실행과 CLI 빌드가 어디까지 지원되�
 
 ## 결과
 
-- 코드, 스키마, 권한, 빌드 대상과 CI 변경은 없다.
+- 코드, 스키마, 권한, 빌드 대상과 CI 변경은 없다. 지원 범위 표(`docs/platform-support/README.md`, 사이트의 지원 범위와 패키징 설정 문서)에는 Windows ARM64 상태와 `arm64` 선언 거부를 적는다.
 - 이 결정은 에뮬레이션에서 실제로 동작함을 주장하지 않는다. 지원 상태로의 전환은 `windows-11-arm` 시험 결과를 근거로 한다.
 - `docs/TODO-windows.md`의 해당 항목을 완료로 표시하고 이 결정을 참조하며, `windows-11-arm` 러너 시험과 네이티브 ARM64 Bun 빌드를 별도 항목으로 남긴다.

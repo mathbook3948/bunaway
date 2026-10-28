@@ -68,6 +68,7 @@ Windows 앱 실행 파일, 창과 트레이 아이콘은 `app.icon`에 지정합
 
 같은 platform, arch 조합을 중복 선언할 수 없습니다.
 현재 빌드 대상은 **Windows x64와 macOS arm64**입니다.
+Windows arm64 산출물은 만들지 않으므로 Windows 채널에 `arm64`를 선언하면 패키징이 거부됩니다.
 패키징할 때는 현재 머신의 대상과 일치하는 선언을 선택합니다.
 
 ## channels와 signing
