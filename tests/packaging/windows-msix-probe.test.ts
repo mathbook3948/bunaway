@@ -346,10 +346,7 @@ async function measureVariant(
     const target = targets[kind];
     powershell(`Start-Process -FilePath ${quote(target)}`);
     reports[`packaged-${kind}`] = await awaitReport(output, `packaged-${kind}`);
-    reports[`direct-${kind}`] = (await awaitReport(
-      output,
-      `direct-${kind}`,
-    )) as Report;
+    reports[`direct-${kind}`] = await awaitReport(output, `direct-${kind}`);
   }
   const packageData = join(
     process.env.LOCALAPPDATA ?? "",
@@ -502,7 +499,7 @@ describe.skipIf(!enabled)("an installed MSIX package", () => {
         expect(reports["packaged-file"]?.request.files).toHaveLength(1);
       });
 
-      test("every data write lands in one place, recorded for the decision", () => {
+      test("every data write lands in the real or the virtualized folder, recorded for the decision", () => {
         const { local, roaming } = measurements[variant.name];
         for (const data of [
           local,
