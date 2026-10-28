@@ -604,7 +604,7 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
   `assistiveTechnologyActive`(uiautomationcore.dll의 `UiaClientsAreListening`)를 반환한다. 후자는 보조 기술
   클라이언트가 접근성 트리를 구독 중인지를 나타내며 설정 플래그와 구분된다. Electron `app.accessibilitySupportEnabled`(Chromium 접근성 모드)와 의미가 가깝지만 같은 값은 아니다.
   uiautomationcore.dll은 첫 조회 때 로드하며 로드 실패 시 이 조회만 UNSUPPORTED이다.
-- [x] UI Automation 클라이언트 연결 변화 이벤트를 제공한다. 결정 완료: 제공하지 않는다. 연결과 해제를 모두 알리는 OS 알림이 없고
+- [x] UI Automation 클라이언트 연결 변화 이벤트를 제공한다. 결정 완료: 제공하지 않는다. 호스트가 추가 구현 없이 연결과 해제를 모두 알 수 있는 수단이 없고
   폴링은 주기 사이의 변화를 놓친다. 연결 상태는 필요한 시점에 `appearance.getAccessibilityState`로 조회하고
   screenReaderEnabled 변화는 `appearance.changed`가 알린다. [ADR 0118](./decisions/0118-uia-client-connection-change-event.md).
   접근성 지원 강제 활성화는 아래 항목에서 결정했다.
