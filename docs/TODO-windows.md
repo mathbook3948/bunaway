@@ -790,6 +790,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [ ] 속도, 진행률과 완료와 실패 이벤트를 제공한다. 현재 진행 및 종료 상태는 snapshot 조회로 확인한다.
 - [x] `pauseDownload`, `resumeDownload`, `cancelDownload`와 `getDownloads`로 pause, resume, cancel과 재개 가능 여부를 제공한다.
 - [x] 결정 완료: 중단 다운로드의 metadata 저장과 재시작 뒤 재개는 제공하지 않고 같은 WebView 수명 안의 재개만 유지한다. [ADR 0114](./decisions/0114-webview-interrupted-download-resume.md).
+- [ ] 창 종료나 앱 종료로 취소된 WebView 다운로드가 WebView2 쪽에 남기는 부분 파일의 위치와 수명을 CI에서 확인하고, 앱이 정리해야 하면 방침을 정한다.
 - [x] 파일 업로드와 다운로드에 progress, 취소, timeout을 제공한다.
   [`network.download`와 `network.upload`](./site/src/content/docs/reference/plugins/network.mdx)가 `downloadStatus`와 `cancelDownload`,
   `uploadStatus`와 `cancelUpload`, 전체 기한과 무진행 기한을 제공한다.
