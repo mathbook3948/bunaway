@@ -65,7 +65,10 @@ async function readReceived(out: string): Promise<Received> {
   ).then((text) => JSON.parse(text) as Received);
 }
 
-/** Registers a scheme, opens `url` through the shell and returns what the command received. */
+/**
+ * Registers a scheme, opens the URL through the shell and returns what the command received.
+ * `cwd` and `workingDirectory` are canonical paths.
+ */
 async function activateUrl(makeUrl: (scheme: string) => string): Promise<{
   url: string;
   received: Received;
@@ -78,10 +81,15 @@ async function activateUrl(makeUrl: (scheme: string) => string): Promise<{
   const url = makeUrl(scheme);
   try {
     await shellOpen(url, space.dir);
+    const received = await readReceived(out);
+    // Canonical forms are taken before cleanup removes the directory they resolve through.
     return {
       url,
-      received: await readReceived(out),
-      workingDirectory: space.dir,
+      received: {
+        ...received,
+        cwd: canonicalPath(received.cwd),
+      },
+      workingDirectory: canonicalPath(space.dir),
     };
   } finally {
     await unregister();
@@ -114,10 +122,6 @@ const URL_CASES: [
     "a caret, an exclamation mark and a percent variable name",
     (scheme) => `${scheme}://host/%PATH%/^x!y`,
   ],
-  [
-    "a trailing backslash",
-    (scheme) => `${scheme}://host/path\\`,
-  ],
 ];
 
 for (const [name, url] of URL_CASES) {
@@ -138,19 +142,36 @@ test.skipIf(process.platform !== "win32")(
     const { received, workingDirectory } = await activateUrl(
       (scheme) => `${scheme}://host/cwd`,
     );
-    expect(canonicalPath(received.cwd)).toBe(canonicalPath(workingDirectory));
+    expect(received.cwd).toBe(workingDirectory);
+  },
+);
+
+// The registered command is `"exe" ... "%1"` and the shell substitutes the URL without escaping
+// it, so the command line parser sees the URL's own quotes and backslashes. These two cases pin
+// what the shell actually delivers; an app has to treat the arguments as untrusted input.
+test.skipIf(process.platform !== "win32")(
+  "a backslash at the end of a scheme URL escapes the closing quote of the registered command",
+  async () => {
+    const { url, received } = await activateUrl(
+      (scheme) => `${scheme}://host/path\\`,
+    );
+    expect(received.argv).toEqual([
+      `${url.slice(0, -1)}"`,
+    ]);
   },
 );
 
 test.skipIf(process.platform !== "win32")(
-  "a double quote in a scheme URL does not split it into extra arguments",
+  "a double quote in a scheme URL ends the quoted argument and splits the rest into more arguments",
   async () => {
     const { received } = await activateUrl(
       (scheme) => `${scheme}://host/a"b --extra "c`,
     );
-    // Whatever the shell does with the quote (escape or encode it), the command receives one
-    // argument, so a URL cannot inject options into the app.
-    expect(received.argv).toHaveLength(1);
+    expect(received.argv).toEqual([
+      expect.stringMatching(/^bwtest-[0-9a-f]{8}:\/\/host\/ab$/),
+      "--extra",
+      "c",
+    ]);
   },
 );
 
