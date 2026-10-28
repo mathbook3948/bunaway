@@ -27,13 +27,13 @@ UI(WebView)와 앱 백엔드 사이에 `MessagePort`, `MessageChannel`, transfer
 | 요청과 응답 | 등록한 명령을 UI가 `invoke`로 호출한다. |
 | 백엔드에서 UI로 알림 | `context.events.emit`(broadcast 또는 view ID 지정) |
 | 백엔드가 UI의 응답을 원할 때 | 이벤트로 알리고 UI가 명령을 호출한다([ADR 0063](./0063-backend-to-ui-request.md)). |
-| 연속 결과, 대용량 데이터, binary payload | [#81](https://github.com/mathbook3948/bunaway/issues/81)의 stream과 binary 계약에서 다룬다. 그 전에는 JSON 명령과 이벤트로 청크를 나누고 바이너리는 base64 같은 텍스트 인코딩으로 싣는다(크기 증가와 호출당 크기 한도가 따른다). |
+| 연속 결과, 대용량 데이터, binary payload | [TODO-windows.md](../TODO-windows.md)의 binary payload 전송 계약과 channel 또는 stream 전송 항목에서 다룬다. 그 전에는 JSON 명령과 이벤트로 청크를 나누고 바이너리는 base64 같은 텍스트 인코딩으로 싣는다(크기 증가와 호출당 크기 한도가 따른다). |
 | UI의 파일 내용을 백엔드로 | 페이지가 `File`을 `arrayBuffer()`나 `stream()`으로 읽어 위 방식으로 명령에 싣는다. 드롭된 `File`과 OS 경로를 잇는 API는 없다([ADR 0089](./0089-webview-file-drop-and-drag-out.md)). |
 | UI 안의 Worker 사이 포트 | 페이지의 표준 Web API(`MessageChannel`)를 그대로 쓴다. 호스트가 관여하지 않는다. |
 
 3. 페이지가 웹 표준 API로 만드는 `Worker`와 `SharedWorker`는 호스트가 관여하지 않는다([ADR 0086](./0086-webview-workers-and-session-preload.md)). 페이지 안에서 `MessageChannel`로 포트를 만들어 쓰는 것도 호스트 계약 밖이며 이 결정과 무관하다.
 4. native resource handle의 생성, 참조, 해제 계약은 별개 항목이며 이 결정에 포함하지 않는다.
-5. 포트가 꼭 필요한 사용처가 확인되면 #81의 stream 계약을 먼저 본 뒤 별도 결정에서 다시 판단한다. 이때 호스트의 프레임 검증, 호출 컨텍스트, 권한 정책, 문서 교체와 종료 시 수명 정리를 포트에 어떻게 적용할지를 계약으로 먼저 정한다.
+5. 포트가 꼭 필요한 사용처가 확인되면 위 stream과 binary 전송 계약 항목을 먼저 본 뒤 별도 결정에서 다시 판단한다. 이때 호스트의 프레임 검증, 호출 컨텍스트, 권한 정책, 문서 교체와 종료 시 수명 정리를 포트에 어떻게 적용할지를 계약으로 먼저 정한다.
 
 ## 근거
 
