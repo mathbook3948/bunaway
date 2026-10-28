@@ -53,7 +53,7 @@ function probe(label: string, action: () => unknown): void {
 const FILE_SYSTEM_KEY = "HKLM\\SYSTEM\\CurrentControlSet\\Control\\FileSystem";
 
 /** Set `LongPathsEnabled` for processes started afterwards. Needs an elevated account. */
-function setLongPaths(value: 0 | 1): boolean {
+function setLongPaths(value: number): boolean {
   return (
     Bun.spawnSync([
       "reg",
@@ -225,7 +225,7 @@ try {
           "The child must report its probes.",
         );
       } finally {
-        setLongPaths(Number.parseInt(previous, 16) === 0 ? 0 : 1);
+        setLongPaths(Number.parseInt(previous, 16));
       }
     } else {
       console.log("SKIP LongPathsEnabled cannot be changed on this runner.");
