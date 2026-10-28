@@ -30,7 +30,7 @@ WebView의 탐색 history 항목을 읽고, 지우고, 저장했다가 되살리
   프로토콜 메서드는 없다. 항목을 순서대로 `Navigate`하면 항목마다 새 탐색이 쌓여 항목별 `pageState`(스크롤 위치, 폼 상태)를
   되살리지 못한다.
 - 조회가 필요한 앱은 UI(렌더러) 쪽에서 `location`과 탐색 이벤트로 항목 목록을 직접 쌓을 수 있다. 백엔드는 페이지 내 탐색을
-  알리는 호스트 이벤트가 없으므로 UI가 기록해 필요하면 백엔드에 전달한다.
+  알리는 호스트 이벤트가 없으므로([ADR 0078](./0078-webview-navigation-events.md)) UI가 기록해 필요하면 백엔드에 전달한다.
 - macOS 호스트(WKWebView)는 `backForwardList`(읽기 전용)로 항목 조회를 지원한다. `interactionState`(macOS 12 이상)는 웹 뷰의 상호작용
   상태를 다른 웹 뷰에 복원하는 불투명 객체이며, 문서에는 이 객체가 back-forward 목록을 포함하는지 명시되어 있지 않다. 목록을 비우는
   API는 없고, 이 저장소는 둘 다 아직 쓰지 않는다. Android 호스트에는 앱에 노출된 history API가 없다.
@@ -43,8 +43,8 @@ WebView의 탐색 history 항목을 읽고, 지우고, 저장했다가 되살리
    적용한다. Android는 앱에 노출된 history API가 없다.
 2. 앱이 방문 목록을 보여 주거나 마지막 위치를 이어 가야 하면 자신이 URL을 기록한다(예: 저장소 플러그인에 마지막 URL을 쓰고
    다음 실행에서 `navigateWebView`). 이렇게 복원한 화면은 새 탐색 하나이므로 이전 항목으로 돌아가는 `goBack`은 되살려지지 않는다.
-3. 화면에 보이는 history와 별개인 브라우징 데이터(방문 기록 DB, 캐시, 쿠키)의 삭제는 이 결정 범위 밖이며 저장소 종류별
-   삭제 결정에서 다룬다.
+3. 화면에 보이는 history와 별개인 브라우징 데이터(캐시, 쿠키)의 삭제는 이 결정 범위 밖이며
+   [ADR 0081](./0081-webview-browsing-data.md)에서 다룬다. 방문 기록 DB 삭제는 아직 어느 결정에도 없다.
 4. 항목 조회와 복원이 필요한 용도가 확인되면 offset과 index 이동([ADR 0049](./0049-webview-history-offset-navigation.md)의
    결정 4)과 함께 별도 결정에서 플랫폼별 경로(WebView2는 DevTools 프로토콜, WKWebView는 항목 목록, 그리고 `interactionState`가 history를 포함하는지 확인)를 정한다. 복원은 WebView2에
    전용 경로가 없으므로 그때도 Windows에서 같은 의미로 제공할 수 있는지부터 확인한다.
