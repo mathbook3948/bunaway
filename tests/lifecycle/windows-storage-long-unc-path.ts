@@ -5,10 +5,14 @@ import { WindowsStorage } from "#plugins/storage/src/platforms/windows";
 
 assert.equal(process.platform, "win32");
 
-const root = resolve(
-  import.meta.dir,
-  `../../build/wlu-${crypto.randomUUID().slice(0, 8)}`,
-);
+// The parent passes its folder to the child that runs with long paths turned off.
+const childRoot = process.argv[2] === "child" ? process.argv[3] : undefined;
+const root =
+  childRoot ??
+  resolve(
+    import.meta.dir,
+    `../../build/wlu-${crypto.randomUUID().slice(0, 8)}`,
+  );
 const storage = new WindowsStorage();
 const at = (path: string) => ({
   path,
@@ -43,6 +47,52 @@ function probe(label: string, action: () => unknown): void {
   } catch (error) {
     console.log(`PROBE ${label}: ${String(error)}`);
   }
+}
+
+const FILE_SYSTEM_KEY = "HKLM\\SYSTEM\\CurrentControlSet\\Control\\FileSystem";
+
+/** Set `LongPathsEnabled` for processes started afterwards. Needs an elevated account. */
+function setLongPaths(value: 0 | 1): boolean {
+  return (
+    Bun.spawnSync([
+      "reg",
+      "add",
+      FILE_SYSTEM_KEY,
+      "/v",
+      "LongPathsEnabled",
+      "/t",
+      "REG_DWORD",
+      "/d",
+      String(value),
+      "/f",
+    ]).exitCode === 0
+  );
+}
+
+if (childRoot !== undefined) {
+  // Child with long paths off: record what each spelling does, no assertions.
+  const base = `\\\\localhost\\${childRoot.replace(":", "$")}\\child\\${deep}`;
+  probe("child storage.writeText", () =>
+    storage.writeText({
+      path: `${base}\\a.txt`,
+      text,
+    }),
+  );
+  probe("child storage.readText", () => {
+    assert.equal(storage.readText(at(`${base}\\a.txt`)), text);
+  });
+  probe("child raw mkdir without prefix", () =>
+    mkdirSync(`${base}\\raw`, {
+      recursive: true,
+    }),
+  );
+  probe("child raw mkdir with UNC prefix", () =>
+    mkdirSync(`\\\\?\\UNC\\${base.slice(2)}\\raw2`, {
+      recursive: true,
+    }),
+  );
+  storage.dispose();
+  process.exit(0);
 }
 
 try {
@@ -128,6 +178,32 @@ try {
     assert.equal(storage.exists(at(moved)), false);
     await storage.removeRecursive(at(`${uncRoot}\\${top}`));
     assert.equal(existsSync(`${root}\\${top}`), false);
+
+    // The runner turns long paths on. Turn them off for a child process to see what the spelling
+    // alone provides, then restore the setting.
+    const before = Bun.spawnSync([
+      "reg",
+      "query",
+      FILE_SYSTEM_KEY,
+      "/v",
+      "LongPathsEnabled",
+    ]).stdout.toString();
+    if (setLongPaths(0)) {
+      try {
+        const child = Bun.spawnSync([
+          process.execPath,
+          import.meta.path,
+          "child",
+          root,
+        ]);
+        console.log(child.stdout.toString().trim());
+        console.log(child.stderr.toString().trim());
+      } finally {
+        setLongPaths(before.includes("0x0") ? 0 : 1);
+      }
+    } else {
+      console.log("SKIP LongPathsEnabled cannot be changed on this runner.");
+    }
   } else {
     console.log(
       "SKIP the administrative share is not available on this runner.",
