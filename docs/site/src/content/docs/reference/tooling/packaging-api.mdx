@@ -29,6 +29,9 @@ sidebar: { order: 3 }
 | `deriveIdentifier(appId)` | 점이 없으면 `.app`을 붙이는 기본 식별자 |
 | `deriveMsixPackageName(identifier)` | 허용 문자로 바꾸고 최대 50자로 제한한 MSIX 이름 |
 | `resolvePackaging(args)` | 메타데이터, 채널, 서명 해석 Promise |
+| `requiredWindowsTools(config)` | 선언한 Windows 채널이 실행할 `ISCC.exe`와 `signtool.exe` 목록. 채널 없이는 빈 배열 |
+| `findIscc()` | 설치된 Inno Setup 6의 `ISCC.exe` 경로 Promise, 없으면 undefined |
+| `findWindowsKitTool(tool)` | 가장 새로운 Windows SDK x64 도구 경로 Promise, 없으면 undefined |
 
 resolve 인자는 `{ root, config, appId, title, projectVersion, channel }`입니다.
 반환은 `{ metadata: ResolvedPackaging, channel: ResolvedChannel }`입니다.

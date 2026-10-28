@@ -99,6 +99,12 @@ Windows 앱 실행 파일, 창과 트레이 아이콘은 `app.icon`에 지정합
 최상위 `signing`은 기본 서명 설정입니다. 채널 내부 `signing`이 있으면 **객체 전체를 대체**합니다.
 필드별로 병합하지 않으므로 채널에 필요한 서명 필드를 모두 적어야 합니다. 자세한 필드와 실행 조건은 [서명 설정](/reference/packaging/signing/)에 있습니다.
 
+## 필요한 도구
+
+Windows `package`는 선언한 채널에 따라 외부 도구를 실행합니다. `win-direct`와 `win-store-unpackaged`는 Inno Setup 6의 `ISCC.exe`가 필요하고,
+유효한 `signing`이 있거나 `webView2`가 `offline`이면 Windows SDK의 `signtool.exe`도 필요합니다. `win-store-msix`는 외부 도구를 실행하지 않습니다.
+[`bunaway doctor`](/reference/cli/doctor/)가 선언한 채널을 읽어 이 도구가 설치돼 있는지 `package` 전에 알려 줍니다.
+
 ## 관련 문서
 
 - [채널별 옵션, 기본값, 구현 상태](/reference/packaging/channels/)

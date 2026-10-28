@@ -1,5 +1,7 @@
+import type { PackagingConfig } from "@bunaway/packaging";
 import { currentTarget } from "./build.ts";
 import { validateProject } from "./config.ts";
+import { checkDistributionTools } from "./doctor-distribution.ts";
 
 /** Check the project and platform tools, printing each result and returning overall success. */
 export async function doctor(directory: string): Promise<boolean> {
@@ -20,10 +22,12 @@ export async function doctor(directory: string): Promise<boolean> {
   } catch (error) {
     check("target", false, String(error));
   }
+  let bundle: PackagingConfig | undefined;
   try {
-    await validateProject(directory, {
+    const project = await validateProject(directory, {
       development: true,
     });
+    bundle = project.bundle;
     check("configuration/policy", true, "valid");
   } catch (error) {
     check("configuration/policy", false, String(error));
@@ -57,6 +61,9 @@ export async function doctor(directory: string): Promise<boolean> {
       !!version,
       version || "not detected; install Evergreen runtime",
     );
+    for (const result of await checkDistributionTools(bundle)) {
+      check(result.name, result.passed, result.detail);
+    }
   }
   console.log(
     process.platform === "win32"
