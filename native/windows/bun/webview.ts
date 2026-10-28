@@ -805,9 +805,6 @@ export class WebView {
         return;
       }
       this.loading = false;
-      // The finished navigation replaced the document, so a freeze after it is a new one. A frozen
-      // renderer keeps reporting until then, which a reset at request time would count again.
-      this.unresponsiveEpisode.reset();
       const stopped = this.stoppedNavigationId === id[0];
       this.stoppedNavigationId = undefined;
       const success = new Int32Array(1);
@@ -817,6 +814,12 @@ export class WebView {
         ])(ptr(success)),
         "get_IsSuccess",
       );
+      // A navigation that finished loading replaced the document, so a freeze after it is a new one.
+      // A frozen renderer keeps reporting until then, which a reset at request time would count
+      // again. A failed or stopped navigation leaves the frozen document in place.
+      if (success[0] && !stopped) {
+        this.unresponsiveEpisode.reset();
+      }
       this.hooks.log("navigation-completed", {
         success: !!success[0],
         uri: this.webview ? getString(this.webview, 4) : "",
