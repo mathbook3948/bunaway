@@ -61,7 +61,7 @@ ADR 0008 본문은 "CLI와 여섯 SDK"라고 적었으나 지금 SDK 패키지�
 
 ### 공개 전 tarball 검사
 
-`mise run release:check`(`scripts/check-release-packages.ts`)는 `packFramework`로 임시 디렉터리에 tarball을 만들고, 각
+`mise run release:check`(`scripts/check-release-packages.ts`)는 `packFramework`로 임시 디렉터리에 tarball을 만들고(이때 `pack.ts`가 플러그인을 빌드하므로 저장소의 `plugins/*/dist`는 다시 쓰인다), 각
 tarball을 `tar`로 임시 디렉터리에 풀어 파일 목록과 `package.json`을 읽고 검사한다. 네트워크와 로그인은 쓰지 않고, 임시 디렉터리는 항상 지운다.
 `bun pm pack --dry-run`은 JSON 출력이 없고 소스 폴더를 그대로 묶어 pack 결과와 다르므로 쓰지 않는다.
 
@@ -70,13 +70,13 @@ tarball을 `tar`로 임시 디렉터리에 풀어 파일 목록과 `package.json
 - 패키지 이름이 `framework.json`에 있고 버전이 릴리스 버전과 같다.
 - `scripts`, `devDependencies`가 없고, `@bunaway/*` 의존성은 릴리스에 있는 이름이며 정확한 릴리스 버전이다.
 - `workspace:`, `file:`, `link:` 범위가 남아 있지 않다.
-- `exports`, `types`, `main`, `bin`이 가리키는 파일이 tarball에 있다.
+- `exports`, `imports`, `types`, `main`, `bin`, `bunaway.plugin`이 가리키는 파일이 tarball에 있고, 패턴 대상은 맞는 파일이 하나 이상 있다.
 - 시험 파일, `.env*`, `.npmrc`, 키 파일이 들어 있지 않고, 라이선스 파일이 있다.
 - 포함된 `src/`와 `dist/`의 bare import(`import type`, `import { type A }`, `export type`, 선언 파일의 `import("x")` 타입
   참조 포함, 주석과 문자열 안의 예시는 제외)가 `package.json`에 선언된 의존성이거나 패키지
   자신, Node 내장 모듈이다(Bun이 내장으로 나열하지만 Node에서는 npm 패키지인 `ws`, `undici`는 선언해야 한다).
 - `./native/*` 같은 패턴 `exports`는 Windows 어댑터(`*`를 `windows`로 바꾼 파일, 예: `dist/native/windows.js`)로 풀려야
-  한다. Windows가 기본 플랫폼이라 이 파일이 빠지면 설치 후 플러그인 로드가 실패한다. 네이티브 어댑터가 없는
+  한다. Windows가 기본 플랫폼이라 이 파일은 반드시 있어야 한다. CLI는 플러그인이 선언한 모든 플랫폼의 어댑터를 해석하지만 선언은 매니페스트에 없어 검사하지 않으므로, 선언한 다른 플랫폼 파일의 누락은 빌드가 막는다고 가정한다. 네이티브 어댑터가 없는
   `@bunaway/plugin-window-state`만 목록으로 제외한다(플러그인 스캐폴드가 모든 플러그인에 같은 패턴을 쓰기 때문). 다른 플랫폼
   어댑터의 존재는 검사하지 않는다.
 - 의존성 범위 값은 문자열이어야 하고, tarball 안의 이름은 요청한 패키지 이름과 같다.

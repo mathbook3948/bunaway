@@ -56,9 +56,9 @@ peerDependencies에 지정하고 개발할 때도 같은 버전을 설치합니�
   },
   "bunaway": { "plugin": "./dist/index.js" },
   "files": ["dist"],
-  "dependencies": { "@bunaway/plugin-api": "0.0.0", "zod": "4.6.5" },
+  "dependencies": { "zod": "4.6.5" },
   "scripts": { "build": "bunaway plugin build" },
-  "peerDependencies": { "@bunaway/plugin": "0.0.0" },
+  "peerDependencies": { "@bunaway/plugin": "0.0.0", "@bunaway/plugin-api": "0.0.0" },
   "devDependencies": {
     "@bunaway/plugin": "0.0.0",
     "@bunaway/cli": "0.0.0",

@@ -46,7 +46,7 @@ CLI의 실행 파일 컴파일 구현을, `#native/windows/bun/channel`은 Windo
 공개 타입은 같은 별칭의 types 조건으로 dist/types를 읽는다. 원본 구현을 직접 검사하는
 저장소 테스트만 bunaway-source 조건으로 src를 선택한다.
 
-모든 패키지는 비공개다. `protocol`은 스키마, 검증, 직렬화, 버전 협상을 구현했고
+`packages/*`는 `private: true`이고 `plugins/*`에는 `private` 필드가 없다(공개 배포 대상과 소유자 결정 항목은 [ADR 0125](../decisions/0125-public-release-readiness.md)). `protocol`은 스키마, 검증, 직렬화, 버전 협상을 구현했고
 `client-sdk`는 화면용 `invoke`, `listen`와 인자 없는 `createClient()`를
 제공하며 문서별 WebView 연결, hello, 준비 대기, 페이지 종료 시 정리를 내부에서 처리한다.
 명시적 `createClient({ transport, hello })`와 WebView Transport도 제공한다.

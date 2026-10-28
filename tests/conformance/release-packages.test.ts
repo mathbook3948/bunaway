@@ -142,6 +142,28 @@ test("an exports pattern must resolve to the Windows adapter unless the plugin s
     ],
   });
   expect(auditPackedPackage(withWindows, expected)).toEqual([]);
+  // A non-native pattern needs any match, and loose main, bin and plugin entries are checked.
+  const entries = packed({
+    manifest: {
+      ...packed().manifest,
+      main: "dist/index.js",
+      bunaway: {
+        plugin: "dist/plugin.js",
+      },
+      imports: {
+        "#x/*": {
+          types: "./dist/types/*.d.ts",
+          default: "./src/*.ts",
+        },
+      },
+    },
+  });
+  const entryProblems = auditPackedPackage(entries, expected).join("\n");
+  expect(entryProblems).toContain("./dist/index.js named by package.json");
+  expect(entryProblems).toContain("./dist/plugin.js named by package.json");
+  expect(entryProblems).toContain(
+    "./dist/types/*.d.ts named by package.json matches no file",
+  );
   expect(auditPackedPackage(withMacosOnly, expected).join("\n")).toContain(
     "names dist/native/windows.js, which is not in the tarball",
   );
@@ -399,4 +421,11 @@ test("values that wait on the repository owner are reported as pending", () => {
   ).toEqual([
     "private is not set, so the package is publishable as is",
   ]);
+  expect(
+    pendingOwnerDecisions({
+      private: false,
+      license: "MIT",
+      publishConfig: {},
+    }),
+  ).toEqual([]);
 });

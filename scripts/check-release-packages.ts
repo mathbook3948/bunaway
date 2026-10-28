@@ -37,7 +37,7 @@ const DEPENDENCY_FIELDS = [
 ] as const;
 const FORBIDDEN_FILE_PATTERN =
   /(^|\/)(\.env[^/]*|\.npmrc|[^/]*\.(pem|key|p12|pfx)|[^/]*\.(test|spec)\.[cm]?[jt]sx?)$/;
-const SOURCE_FILE_PATTERN = /\.(ts|tsx|mts|js|mjs)$/;
+const SOURCE_FILE_PATTERN = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 /**
  * Static `from "x"` clauses (including `import type` and `import { type A }`), `import("x")` type
  * references and calls, `require("x")` and side-effect imports. `stripNonCode` runs first so text
@@ -78,12 +78,25 @@ function collectTargets(value: unknown, into: string[]): void {
   }
 }
 
+/** Files a manifest points at: `exports` and `imports` targets, `types`, `main`, `bin` and the plugin entry. */
 function targetsOf(manifest: Record<string, unknown>): string[] {
   const targets: string[] = [];
   collectTargets(manifest.exports, targets);
+  collectTargets(manifest.imports, targets);
   collectTargets(manifest.types, targets);
-  collectTargets(manifest.main, targets);
-  collectTargets(manifest.bin, targets);
+  // `main`, `bin` and the plugin entry may omit the leading `./`.
+  const loose: string[] = [];
+  collectTargets(manifest.main, loose);
+  collectTargets(manifest.bin, loose);
+  collectTargets(
+    (manifest.bunaway as Record<string, unknown> | undefined)?.plugin,
+    loose,
+  );
+  targets.push(
+    ...loose.map((target) =>
+      target.startsWith("./") ? target : `./${target}`,
+    ),
+  );
   return targets.filter((target) => target.startsWith("./"));
 }
 
@@ -192,16 +205,45 @@ const PLUGINS_WITHOUT_NATIVE_ADAPTER: ReadonlySet<string> = new Set([
   "@bunaway/plugin-window-state",
 ]);
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * A subpath pattern needs at least one packed match. A native adapter pattern
+ * (`./dist/native/*.js`) must resolve to the Windows adapter, the primary platform.
+ */
+function patternProblems(
+  target: string,
+  files: readonly string[],
+  exempt: boolean,
+): string[] {
+  if (target.includes("/dist/native/")) {
+    const windows = target.replace("*", "windows").slice(2);
+    return exempt || files.includes(windows)
+      ? []
+      : [
+          `${target} names ${windows}, which is not in the tarball`,
+        ];
+  }
+  const pattern = new RegExp(
+    `^${target.slice(2).split("*").map(escapeRegExp).join(".+")}$`,
+  );
+  return files.some((file) => pattern.test(file))
+    ? []
+    : [
+        `${target} named by package.json matches no file in the tarball`,
+      ];
+}
+
 /** Check that the tarball holds every file package.json points at and a license, and nothing secret or test-only. */
 function auditFiles({ packed, name, fail }: Audit): void {
   const present = new Set(packed.files);
   const exempt = PLUGINS_WITHOUT_NATIVE_ADAPTER.has(name);
   for (const target of targetsOf(packed.manifest)) {
     if (target.includes("*")) {
-      // The Windows adapter is the primary platform, so the pattern must resolve to its file.
-      const windows = target.replace("*", "windows").slice(2);
-      if (!exempt && !present.has(windows)) {
-        fail(`${target} names ${windows}, which is not in the tarball`);
+      for (const problem of patternProblems(target, packed.files, exempt)) {
+        fail(problem);
       }
     } else if (!present.has(target.slice(2))) {
       fail(`${target} named by package.json is not in the tarball`);
@@ -274,11 +316,11 @@ export function pendingOwnerDecisions(
 ): string[] {
   const pending: string[] = [];
   // Only `private: true` stops a publish; a manifest without it is publishable as it stands.
-  pending.push(
-    manifest.private === true
-      ? "private is true"
-      : "private is not set, so the package is publishable as is",
-  );
+  if (manifest.private === true) {
+    pending.push("private is true");
+  } else if (manifest.private === undefined) {
+    pending.push("private is not set, so the package is publishable as is");
+  }
   if (manifest.license === "UNLICENSED" || manifest.license === undefined) {
     pending.push("license is not decided");
   }
