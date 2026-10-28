@@ -71,6 +71,9 @@ reads as `null` and deletes as `false`. The implementation zeroes the native blo
 `CredFree`; no test checks that cleanup. The namespace is not an OS principal: other processes of the same user can read the entry.
 Without a host `app.id` these operations fail with `INVALID_ARGUMENT`.
 `tests/lifecycle/windows-safe-storage.test.ts` exercises the real store on Windows CI.
+`tests/lifecycle/windows-safe-storage-cross-user.test.ts` creates a temporary local account on Windows CI and checks
+that neither user can unprotect a DPAPI blob the other protected (`INTERNAL`, no plaintext) while each reads its own.
+Another machine, reinstall, roaming profile and key recovery are not exercised.
 
 ## macOS credential store
 

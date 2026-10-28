@@ -997,7 +997,7 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   Windows에서 지원하며 `safe-storage`의 `setSecret`, `getSecret`, `deleteSecret`이 자격 증명 관리자에
   `bunaway.safe-storage:<app.id>:<key>` 이름의 generic 항목(`CRED_PERSIST_LOCAL_MACHINE`)으로 저장한다.
   `tests/api/safe-storage-credential.test.ts`가 입력 상한과 이름 구성을, `tests/lifecycle/windows-safe-storage.test.ts`가
-  실제 저장소 왕복을 Windows CI에서 확인한다. 다른 사용자, 머신과 로밍 프로필은 검증하지 않았다.
+  실제 저장소 왕복을 Windows CI에서 확인한다. 다른 사용자, 머신과 로밍 프로필은 자격 증명 관리자에서 검증하지 않았다.
 - [ ] Stronghold 방식의 vault, client, key와 record 관리 기능을 제공한다.
 - [ ] vault unlock, lock, save와 암호 변경을 제공한다.
 - [ ] 키 생성과 cryptographic operation을 secret 노출 없이 실행한다.
@@ -1005,6 +1005,9 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
 - [x] 복호화 불가를 평문으로 숨기지 않고 `INTERNAL`로 전달한다. 손상과 다른 사용자, 머신,
   재설치 및 키 일시 문제를 이 코드만으로 구분하지 않는다.
 - [ ] 다른 사용자와 머신, 재설치, roaming profile 및 키 복구 시나리오를 실제로 검증한다.
+  같은 머신의 다른 로컬 사용자는 `tests/lifecycle/windows-safe-storage-cross-user.test.ts`가 Windows CI에서 임시 계정으로
+  확인한다(서로의 DPAPI 암호문을 복호화하지 못하고 `INTERNAL`). 다른 머신, 재설치, roaming profile과 키 복구는 CI 러너 하나로
+  재현할 수 없어 미검증이므로 체크하지 않는다.
 - [x] 일반 평문 store와 암호화 변환을 구분하고 이 플러그인의 묵시적 평문 fallback을 금지한다.
   평문을 저장하려면 앱이 별도 파일 또는 store API를 명시적으로 선택한다.
 - [ ] Windows Hello를 통한 사용자 확인은 추가 기능으로 지원 여부를 결정한다. Tauri 공식 biometric의 모바일 지원과 구분한다.

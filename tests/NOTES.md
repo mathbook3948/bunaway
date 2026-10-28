@@ -922,7 +922,13 @@ Run 값의 등록, 조회, 경로 갱신과 반복 해제를 확인한다. 임�
 반복 dispose와 독립 어댑터, 저장된 암호문의 새 프로세스 복호화를 검사한다.
 `windows-safe-storage.ts`는 실제 WebView2와 I/O Worker에서 동시 요청, UI 타이머 진행,
 손상 입력을 확인하며 `mise run host:windows`에 포함한다.
-다른 사용자나 머신, Windows 키 복구 및 물리 입력 검증은 포함하지 않는다.
+`windows-safe-storage-cross-user.test.ts`는 `BUNAWAY_CROSS_USER_TEST=1`일 때만(host:windows가 별도 프로세스로 설정)
+임시 로컬 계정(`net user`)을 만들어 `Start-Process -Credential`로 두 번째 사용자의 Bun을 실행하고, 첫 사용자가 보호한 blob을
+두 번째 사용자가 복호화하지 못하고(`INTERNAL`, 평문 없음) 그 반대 방향도 같으며 각 사용자는 자기 blob을 복호화함을 확인한다.
+두 번째 사용자의 신원은 프로세스 토큰 기준으로 확인한다. 한도를 넘은 두 번째 사용자 프로세스는 종료하고, 계정, 프로필과
+공유 폴더는 실패 때도 정리하며 정리 실패는 시험 실패로 본다. `INTERNAL`은 손상 입력과 같은 코드라 거부 원인을 사용자 경계로
+좁히는 근거는 각 사용자의 자기 blob 왕복 성공이다.
+다른 머신, 재설치, roaming profile, Windows 키 복구 및 물리 입력 검증은 포함하지 않는다.
 
 `mise run host:windows`와 `mise run host:macos`는 Bun으로
 `tests/lifecycle/run-native.ts`를 실행한다. CLI의 의존성 준비와 네이티브 빌드를
