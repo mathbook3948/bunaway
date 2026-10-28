@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type CommandContext, defineApp } from "@bunaway/backend";
-import { checkHresult } from "@bunaway/plugin/win32";
+import { checkHresult, GDI32, pick, USER32 } from "@bunaway/plugin/win32";
 import windows from "@bunaway/plugin-windows";
 import { BunawayError, type HostContext, type Policy } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
@@ -13,6 +13,7 @@ import { Windows } from "#native/windows/bun/win32";
 import { ole, user } from "#native/windows/bun/win32-bindings";
 import { overlayIconProvider } from "#plugins/windows/src/platforms/windows-overlay-icon";
 import { testAppMetadata } from "../fixtures/app-info.ts";
+import { waitFor } from "../fixtures/deadlines.ts";
 import { bundleNativeWorker } from "../fixtures/native-worker.ts";
 import { trayIco } from "../fixtures/tray-icon.ts";
 import { windowPermissions } from "../fixtures/window-permissions.ts";
@@ -825,6 +826,172 @@ if (!process.argv.includes("--child")) {
       }
       assert.throws(() => nativeWindows.getBackgroundColor(painted));
       assert.throws(() => nativeWindows.setBackgroundColor(painted, "#010203"));
+    }
+    {
+      // A transparent window composes alpha 0 over the desktop: a red window below it must show
+      // through, which a window that is merely erased with the system brush would hide.
+      const screen = dlopen("gdi32.dll", pick(GDI32, "GetPixel"));
+      const screenDc = dlopen("user32.dll", pick(USER32, "GetDC", "ReleaseDC"));
+      /** GetAncestor flag for the top-level window. */
+      const GA_ROOT = 2;
+      /** COLORREF 0x00BBGGRR of the red window below the transparent one. */
+      const RED = 0x0000ff;
+      /** COLORREF 0x00BBGGRR of the opaque control window. */
+      const GREEN = 0x00ff00;
+      const area = {
+        x: 120,
+        y: 120,
+      };
+      const below = nativeWindows.create(
+        "Transparent below",
+        300,
+        300,
+        () => {},
+        true,
+        {
+          ...area,
+          backgroundColor: "#ff0000",
+          titlebar: "custom",
+        },
+      );
+      const clear = nativeWindows.create(
+        "Transparent window",
+        300,
+        300,
+        () => {},
+        true,
+        {
+          ...area,
+          titlebar: "custom",
+          transparent: true,
+        },
+      );
+      const opaque = nativeWindows.create(
+        "Opaque control",
+        300,
+        300,
+        () => {},
+        true,
+        {
+          x: 520,
+          y: 120,
+          titlebar: "custom",
+          backgroundColor: "#00ff00",
+        },
+      );
+      try {
+        assert.equal(nativeWindows.getBackgroundColor(clear), null);
+        assert.throws(
+          () => nativeWindows.setBackgroundColor(clear, "#112233"),
+          (error) =>
+            error instanceof BunawayError && error.code === "UNSUPPORTED",
+        );
+        assert.throws(
+          () => nativeWindows.setBackgroundMaterial(clear, "mica"),
+          (error) =>
+            error instanceof BunawayError && error.code === "UNSUPPORTED",
+        );
+        nativeWindows.setBackgroundMaterial(clear, "none");
+        assert.equal(nativeWindows.getBackgroundMaterial(clear), "none");
+        const dc = screenDc.symbols.GetDC(0n);
+        try {
+          const bounds = nativeWindows.getBounds(clear, "outer");
+          const x = bounds.x + Math.floor(bounds.width / 2);
+          const y = bounds.y + Math.floor(bounds.height / 2);
+          // The red pixel only proves transparency if the transparent window is the one on top.
+          await waitFor(
+            () => {
+              nativeWindows.pump();
+              // POINT is passed by value as one 64-bit register: x in the low half, y in the high half.
+              const hit = driver.symbols.WindowFromPoint(
+                BigInt.asIntN(
+                  64,
+                  (BigInt(y) << 32n) | (BigInt(x) & 0xffff_ffffn),
+                ),
+              );
+              return (
+                hit !== 0n &&
+                driver.symbols.GetAncestor(hit, GA_ROOT) === BigInt(clear)
+              );
+            },
+            {
+              deadline: "inProcess",
+              what: "the transparent window to be the top window at the probe point",
+            },
+          );
+          await waitFor(
+            () => {
+              nativeWindows.pump();
+              return screen.symbols.GetPixel(dc, x, y) === RED;
+            },
+            {
+              deadline: "inProcess",
+              what: "the red window to show through the transparent window",
+            },
+          );
+          const control = nativeWindows.getBounds(opaque, "outer");
+          const controlX = control.x + Math.floor(control.width / 2);
+          const controlY = control.y + Math.floor(control.height / 2);
+          // Opacity and click-through turn on the layered style; the per-pixel alpha must still
+          // compose, so the red window stays visible instead of a dimmed black fill.
+          for (const toggle of [
+            () => nativeWindows.setOpacity(clear, 0.5),
+            () => nativeWindows.setOpacity(clear, 1),
+            () => nativeWindows.setIgnoreMouseEvents(clear, true),
+            () => nativeWindows.setIgnoreMouseEvents(clear, false),
+          ]) {
+            toggle();
+            // Dimming and restoring the control window shows DWM has composed a frame after the
+            // toggle, so the single read below cannot see the frame from before it.
+            nativeWindows.setOpacity(opaque, 0.5);
+            await waitFor(
+              () => {
+                nativeWindows.pump();
+                return (
+                  screen.symbols.GetPixel(dc, controlX, controlY) !== GREEN
+                );
+              },
+              {
+                deadline: "inProcess",
+                what: "DWM to compose the dimmed control window",
+              },
+            );
+            nativeWindows.setOpacity(opaque, 1);
+            await waitFor(
+              () => {
+                nativeWindows.pump();
+                return (
+                  screen.symbols.GetPixel(dc, controlX, controlY) === GREEN
+                );
+              },
+              {
+                deadline: "inProcess",
+                what: "DWM to compose the restored control window",
+              },
+            );
+            assert.equal(
+              screen.symbols.GetPixel(dc, x, y),
+              RED,
+              "the red window stays visible after a layered style change",
+            );
+          }
+        } finally {
+          screenDc.symbols.ReleaseDC(0n, dc);
+        }
+      } finally {
+        nativeWindows.destroy(opaque);
+        nativeWindows.destroy(clear);
+        nativeWindows.destroy(below);
+        screen.close();
+        screenDc.close();
+      }
+      // A destroyed window is forgotten as transparent, so the error is the closed-window one
+      // rather than the transparent-window UNSUPPORTED.
+      assert.throws(
+        () => nativeWindows.setBackgroundColor(clear, "#010203"),
+        (error) =>
+          !(error instanceof BunawayError && error.code === "UNSUPPORTED"),
+      );
     }
     {
       const hwnd = nativeWindows.create(

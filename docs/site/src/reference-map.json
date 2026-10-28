@@ -401,6 +401,7 @@
           "isWindowSizeDimension",
           "WINDOW_BACKGROUND_COLOR_PATTERN",
           "normalizeWindowBackgroundColor",
+          "transparentWindowError",
           "MIN_WINDOW_ASPECT_RATIO",
           "MAX_WINDOW_ASPECT_RATIO",
           "isWindowAspectRatio",

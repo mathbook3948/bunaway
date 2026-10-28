@@ -143,6 +143,7 @@ export class WebView {
   private colorSchemeUnsupportedLogged = false;
   /** Requested opaque `#rrggbb` document background, applied as soon as a controller exists. */
   private backgroundColor: string | undefined;
+  private readonly transparent: boolean;
   private browserToken: bigint | undefined;
   private readonly events: {
     target: Pointer;
@@ -253,6 +254,7 @@ export class WebView {
     profilePath?: string,
   ) {
     this.backgroundColor = spec.window.backgroundColor;
+    this.transparent = spec.window.transparent === true;
     const profile =
       profilePath ??
       resolve(
@@ -1541,26 +1543,35 @@ export class WebView {
     this.backgroundColor = color;
   }
   private applyBackgroundColor(): void {
-    if (this.backgroundColor !== undefined) {
+    if (this.transparent) {
+      // Alpha 0 is one of the two alpha values put_DefaultBackgroundColor accepts.
+      this.putDefaultBackground(0);
+    } else if (this.backgroundColor !== undefined) {
       this.putBackgroundColor(this.backgroundColor);
     }
+  }
+  /** Pack an opaque `#rrggbb` color and set it as the controller's default background. */
+  private putBackgroundColor(color: string): void {
+    const controller = this.controller;
+    assert(controller);
+    const rgb = Number.parseInt(color.slice(1), 16);
+    // COREWEBVIEW2_COLOR is the bytes A, R, G, B in memory, so the little-endian u32 is B, G, R, A from the top.
+    this.putDefaultBackground(
+      (0xff |
+        (((rgb >> 16) & 0xff) << 8) |
+        (((rgb >> 8) & 0xff) << 16) |
+        ((rgb & 0xff) << 24)) >>>
+        0,
+    );
   }
   /**
    * Set the controller's default background and read it back, which catches a mismatched put/get slot.
    * The controller returns the stored value unchanged, so the read-back cannot detect a wrong byte
    * order; a misplaced alpha byte is rejected by put, which accepts only 0 or 255.
    */
-  private putBackgroundColor(color: string): void {
+  private putDefaultBackground(packed: number): void {
     const controller = this.controller;
     assert(controller);
-    const rgb = Number.parseInt(color.slice(1), 16);
-    // COREWEBVIEW2_COLOR is the bytes A, R, G, B in memory, so the little-endian u32 is B, G, R, A from the top.
-    const packed =
-      (0xff |
-        (((rgb >> 16) & 0xff) << 8) |
-        (((rgb >> 8) & 0xff) << 16) |
-        ((rgb & 0xff) << 24)) >>>
-      0;
     const controller2 = query(controller, WEBVIEW_CONTROLLER2_IID);
     try {
       checkHresult(

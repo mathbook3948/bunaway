@@ -200,9 +200,9 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 - [x] 결정 완료: 키오스크를 전체화면과 별도 상태로 제공하지 않는다. 전체화면은 표시 모드이고 OS 수준의 탈출 경로 차단은 창 API로 보장할 수 없으므로, 필요한 앱은 전체화면에 `alwaysOnTop`, `skipTaskbar`, 닫기 요청 거부, 메뉴 숨김을 조합한다. [ADR 0035](./decisions/0035-kiosk-and-fullscreen.md)를 따른다.
 - [x] 창 opacity를 설정하고 조회한다. layered window의 상수 alpha로 WebView를 포함한 창 전체에 적용하며 1이면 layered 스타일을 제거한다.
 - [x] 창 불투명 background color를 제공한다(`window.backgroundColor`, `setBackgroundColor`, `getBackgroundColor`). `#RGB`와 `#RRGGBB`만 받고 창별 `WM_ERASEBKGND`와 WebView2 `DefaultBackgroundColor`를 같은 색으로 맞춘다. macOS는 아직 없다.
-- [ ] 창 투명 배경을 제공한다. 알파 0은 DWM 합성과 layered 스타일(opacity, click-through가 쓰는 스타일 비트)과 함께 정해야 한다.
+- [x] 창 투명 배경을 제공한다. `window.transparent`(선언과 생성 옵션, `titlebar: "custom"` 전제)로 DWM 합성과 `WM_ERASEBKGND`, WebView2 알파 0 배경을 맞춘다. CI는 WebView 없는 창에서 DWM 합성과 layered 스타일 조합(opacity, click-through)을 확인하고, WebView2 알파 0 경로는 확인하지 않는다.
 - [x] shadow의 설정과 조회를 제공한다(`windows.setHasShadow`, `hasShadow`). `titlebar: "custom"` 창은 DWM 비클라이언트 렌더링 정책으로 끄고 같은 값으로 조회하며, 네이티브 제목 표시줄 창은 항상 shadow가 있어 `false` 설정을 `UNSUPPORTED`로 거부한다. macOS는 아직 없다.
-- [x] Windows Mica, Acrylic, Tabbed 배경 material을 `windows.setBackgroundMaterial`, `getBackgroundMaterial`로 제공한다. Electron의 `setBackgroundMaterial`과 같은 이름을 받고 `DWMWA_SYSTEMBACKDROP_TYPE`으로 적용한다. Windows 11 22H2 미만은 DWM 호출을 건너뛰고 성공하며(Electron의 사전 버전 검사와 같음), 단위 테스트가 빌드 경계의 판정 분기를, CI(Windows Server 2022, 빌드 20348)의 native 잡이 실제 HWND에서 요청 값 조회와 창별 격리를 확인한다. 이 러너는 DWM 호출을 건너뛰므로 22H2 이상에서의 실제 DWM 호출과 화면에 그려진 material은 확인하지 않는다. 불투명 WebView 배경이 material을 가리므로 보이려면 WebView 투명 배경이 필요하다(아래 WebView 투명 배경 항목).
+- [x] Windows Mica, Acrylic, Tabbed 배경 material을 `windows.setBackgroundMaterial`, `getBackgroundMaterial`로 제공한다. Electron의 `setBackgroundMaterial`과 같은 이름을 받고 `DWMWA_SYSTEMBACKDROP_TYPE`으로 적용한다. Windows 11 22H2 미만은 DWM 호출을 건너뛰고 성공하며(Electron의 사전 버전 검사와 같음), 단위 테스트가 빌드 경계의 판정 분기를, CI(Windows Server 2022, 빌드 20348)의 native 잡이 실제 HWND에서 요청 값 조회와 창별 격리를 확인한다. 이 러너는 DWM 호출을 건너뛰므로 22H2 이상에서의 실제 DWM 호출과 화면에 그려진 material은 확인하지 않는다. 불투명 WebView 배경이 material을 가리고, `transparent: true` 창은 material을 `auto`와 `none`만 받는다.
 - [ ] 창 accent color(제목 표시줄과 테두리 색)를 제공한다.
 - [x] 결정 완료: 창 shape(Electron `setShape`)는 제공하지 않는다. 근거는 [ADR 0037](./decisions/0037-window-corners-shape-and-creation-styles.md)에 있다.
 - [x] 결정 완료: 둥근 모서리는 제공하고 `titlebar: "custom"` 창에서만 끌 수 있다. corner-smoothing CSS는 렌더러 영역이라 관여하지 않는다. [ADR 0037](./decisions/0037-window-corners-shape-and-creation-styles.md)을 따른다.
@@ -663,7 +663,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [x] title, favicon 변경 이벤트를 제공한다. title은 `windows.documentTitleChanged`, favicon은 `windows.documentFaviconChanged`로 제공한다. Windows CI의 `windows-document-favicon.ts`가 검증한다. preferred-size 변경 이벤트는 제공하지 않기로 했다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
 - [ ] renderer gone, unresponsive와 responsive 이벤트를 제공한다.
 - [x] console 메시지, 스크립트 초기화 실패와 context-menu 이벤트는 제공하지 않기로 결정했다. Electron은 세 이벤트를 제공하고 Tauri는 제공하지 않으며, WebView2에는 전용 console 이벤트가 없어 DevTools 프로토콜 세션이나 페이지 스크립트 래핑이 필요하고 초기화 스크립트 API는 아직 없다. context menu는 페이지의 `contextmenu` 이벤트와 `showContextMenu`로 처리한다. [ADR 0075](./decisions/0075-webview-console-and-context-menu-events.md).
-- [ ] WebView 투명 배경과 scrollbar 옵션을 제공한다. 불투명 배경색은 `window.backgroundColor`가 창과 WebView2에 함께 적용한다.
+- [ ] WebView scrollbar 옵션을 제공한다. 투명 배경은 `window.transparent`가 맡는다. 불투명 배경색은 `window.backgroundColor`가 창과 WebView2에 함께 적용한다.
 - [x] 처음 숨긴 WebView의 paint, visibility와 ready-to-show 관계를 정의한다. 숨긴 창의 문서는 표시 전에 로드, 스크립트 실행, 첫 paint와 프레임 전달을 마치고 문서 준비가 `ready`가 된다. 창 표시 여부는 페이지 쪽 값이 아니라 `windows.isVisible`로 확인한다. Windows CI의 `windows-hidden-paint.ts`가 검증한다.
 - [x] user agent, accept languages, proxy와 incognito 옵션은 제공하지 않기로 결정했다. 앱 백엔드 요청은 `network.request` 헤더로 지정할 수 있지만 WebView 페이지의 값을 바꾸는 수단은 쓰는 곳이 확인될 때까지 제공하지 않는다. 시크릿 모드는 프로필 디렉터리 결정과 함께 다시 다룬다. [ADR 0062](./decisions/0062-webview-network-identity-options.md).
 - [ ] 프로필 디렉터리와 데이터 저장소 선택, 조회와 삭제를 제공한다.

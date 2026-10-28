@@ -166,6 +166,7 @@ import {
   WS_OVERLAPPEDWINDOW,
 } from "./window-style.ts";
 import { WindowTaskbar } from "./window-taskbar.ts";
+import { enableWindowTransparency } from "./window-transparency.ts";
 
 /** Host policy for the message pump, placement retries and title storage. */
 const MAX_MESSAGES_PER_PUMP = 64;
@@ -900,6 +901,7 @@ export class Windows {
         | "skipTaskbar"
         | "contentProtection"
         | "backgroundColor"
+        | "transparent"
       > = {},
   ) {
     const { style, exStyle } = initialWindowStyles(options);
@@ -944,6 +946,11 @@ export class Windows {
       }
       if (options.backgroundColor !== undefined) {
         this.backgrounds.set(window, options.backgroundColor);
+      }
+      if (options.transparent) {
+        // Before the window is first shown, so no opaque frame is ever composed.
+        this.backgrounds.setTransparent(window);
+        enableWindowTransparency(window);
       }
       if (options.titlebar === "custom") {
         // CreateWindowEx can add WS_CAPTION to an overlapped window. Remove it
@@ -1378,6 +1385,17 @@ export class Windows {
   /** Ask DWM to draw a system material behind the window frame. */
   setBackgroundMaterial(window: bigint, material: BackgroundMaterial): void {
     assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    if (
+      this.backgrounds.isTransparent(window) &&
+      material !== "auto" &&
+      material !== "none"
+    ) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message:
+          "A transparent window cannot take a system backdrop material, which would cover the desktop.",
+      });
+    }
     writeWindowBackdrop(window, material);
     if (material === "auto") {
       this.backgroundMaterials.delete(window);
@@ -1392,8 +1410,19 @@ export class Windows {
     return this.backgrounds.get(window);
   }
 
+  /** Reject a color for a transparent window, whose background is the desktop. Callers check before changing the WebView. */
+  assertBackgroundColorSettable(window: bigint): void {
+    if (this.backgrounds.isTransparent(window)) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message: "The background color of a transparent window cannot be set.",
+      });
+    }
+  }
+
   /** Set the window's own erase color. The WebView's matching color is applied by its owner. */
   setBackgroundColor(window: bigint, color: string): void {
+    this.assertBackgroundColorSettable(window);
     this.backgrounds.set(window, color);
   }
 

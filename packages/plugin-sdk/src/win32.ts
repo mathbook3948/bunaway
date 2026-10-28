@@ -550,6 +550,14 @@ export const USER32_MENUS = {
 
 /** gdi32.dll: device contexts, device-independent bitmaps and the objects selected into them. */
 export const GDI32 = {
+  GetPixel: {
+    args: [
+      "u64",
+      "i32",
+      "i32",
+    ],
+    returns: "u32",
+  },
   CreateCompatibleDC: {
     args: [
       "u64",
@@ -564,6 +572,15 @@ export const GDI32 = {
       "ptr",
       "u64",
       "u32",
+    ],
+    returns: "u64",
+  },
+  CreateRectRgn: {
+    args: [
+      "i32",
+      "i32",
+      "i32",
+      "i32",
     ],
     returns: "u64",
   },

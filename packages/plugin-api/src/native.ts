@@ -124,6 +124,27 @@ export function isWindowAspectRatio(value: unknown): value is number | null {
   );
 }
 
+/**
+ * Why a window declaration cannot be transparent, or undefined when it can. A native title bar
+ * is always drawn opaque, and a background color would hide the desktop the declaration asks for.
+ */
+export function transparentWindowError(window: {
+  transparent?: boolean | undefined;
+  titlebar?: string | undefined;
+  backgroundColor?: unknown;
+}): string | undefined {
+  if (window.transparent !== true) {
+    return undefined;
+  }
+  if (window.titlebar !== "custom") {
+    return 'A transparent window requires titlebar "custom".';
+  }
+  if (window.backgroundColor !== undefined) {
+    return "A transparent window cannot declare backgroundColor.";
+  }
+  return undefined;
+}
+
 /** An opaque window background color: `#RGB` or `#RRGGBB`. Alpha forms are rejected because their byte order differs between CSS and Electron. */
 export const WINDOW_BACKGROUND_COLOR_PATTERN =
   /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$(?![\s\S])/;
@@ -229,6 +250,8 @@ export type WindowSpec = {
     contentProtection?: boolean;
     /** Opaque `#RGB` or `#RRGGBB` color shown behind and before the document; absent keeps the system color and the WebView default. Windows only. */
     backgroundColor?: string;
+    /** Let the desktop show through the parts of the page that are not painted, default false. Requires `titlebar: "custom"` and excludes `backgroundColor`. Windows only. */
+    transparent?: boolean;
     /** Start maximized, retaining the initial normal placement for restoration. Windows only. */
     maximized?: boolean;
     /** Start fullscreen. When combined with maximized, exit restores maximized state. Windows only. */
@@ -510,13 +533,13 @@ export type NativeWindow = {
   setRoundedCorners?(rounded: boolean): void;
   /** Reads the requested corner preference, true until squared. Windows only. */
   hasRoundedCorners?(): boolean;
-  /** Requests the system backdrop material (`auto`, `none`, `mica`, `acrylic`, `tabbed`) behind this HWND's frame. A DWM hint that takes effect on Windows 11 22H2 and later; earlier builds skip the DWM call. Windows only. */
+  /** Requests the system backdrop material (`auto`, `none`, `mica`, `acrylic`, `tabbed`) behind this HWND's frame. A DWM hint that takes effect on Windows 11 22H2 and later; earlier builds skip the DWM call. Throws UNSUPPORTED for any value other than `auto` or `none` on a `transparent` window. Windows only. */
   setBackgroundMaterial?(
     material: "auto" | "none" | "mica" | "acrylic" | "tabbed",
   ): void;
   /** Reads the requested backdrop material, `auto` until set. Windows only. */
   getBackgroundMaterial?(): "auto" | "none" | "mica" | "acrylic" | "tabbed";
-  /** Sets the opaque `#rrggbb` color of the window and its WebView for this HWND. Windows only. */
+  /** Sets the opaque `#rrggbb` color of the window and its WebView for this HWND. Throws UNSUPPORTED on a `transparent` window. Windows only. */
   setBackgroundColor?(color: string): void;
   /** Reads the color set by the declaration, creation option or setBackgroundColor; null when none was set. Windows only. */
   getBackgroundColor?(): string | null;
