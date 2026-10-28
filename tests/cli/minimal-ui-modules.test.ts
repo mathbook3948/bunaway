@@ -8,7 +8,7 @@ test.each([
   "windows",
   "macos",
 ] as const)(
-  "minimal %s host omits optional tray, menu and ICO implementations",
+  "minimal %s host omits optional tray and menu implementations",
   async (platform) => {
     const loaded: string[] = [];
     const result = await Bun.build({
@@ -43,12 +43,13 @@ test.each([
     expect(loaded).toEqual([]);
     const bundle = await result.outputs[0]?.text();
     expect(bundle).toBeDefined();
+    // The declared `window.icon` is a creation option of the host itself, so the host keeps the
+    // window ICO provider (`CreateIconFromResourceEx`); the tray and menu implementations stay out.
     for (const implementation of [
       "Shell_NotifyIconW",
       "Shell_NotifyIconGetRect",
       "TrackPopupMenuEx",
       "CreatePopupMenu",
-      "CreateIconFromResourceEx",
       "trayIconImage",
     ]) {
       expect(bundle).not.toContain(implementation);
