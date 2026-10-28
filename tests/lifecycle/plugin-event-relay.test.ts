@@ -92,6 +92,13 @@ test("a full UI lane or a stopping host drops the event without failing the Work
   });
   expect(late.outcome).toBe("relayed");
   expect(late.sent).toEqual([]);
+  // A stopping host does not touch a log that may already be closed.
+  const lateWithDrops = await relay({
+    stopping: () => true,
+    dropped: 3,
+  });
+  expect(lateWithDrops.outcome).toBe("relayed");
+  expect(lateWithDrops.recorded).toEqual([]);
 });
 
 test("a broken UI channel while running is a host failure", async () => {

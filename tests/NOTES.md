@@ -1484,7 +1484,9 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 payload의 동기 거부(`INVALID_ARGUMENT`), 수신 쪽이 승인하지 않을 때 새 이벤트를 버리고 다음 패킷에 버린 횟수를
 싣는 것과 그동안 요청 응답이 계속 도착하는 것, 타이머가 계속 발행하는 중의 종료가 `cleaned`와 종료 코드 0으로
 끝나는 것을 검사한다. `lifecycle/plugin-event-relay.test.ts`는 메인의 중계(UI 레인이 가득 차거나 종료 중이면 이벤트만
-버리고, 그 밖의 채널 오류는 호스트 실패로 두는 것)를, `windows-ui-lifecycle.test.ts`의 한 시나리오는 UI Worker가
-중계받은 이벤트를 구독한 뷰에만 보내고 모르는 필수 작업은 거부하는 것을, `system-events.test.ts`는 필수 작업이 없을 때
+버리고, 그 밖의 채널 오류는 호스트 실패로 두는 것)를, `windows-ui-lifecycle.test.ts`의 두 시나리오는 UI Worker가
+중계받은 이벤트를 구독한 뷰에만 보내고 모르는 필수 작업은 거부하는 것(구독 이름으로 호스트 이벤트 하나를 쓰며, 이름 공간
+검사는 I/O Worker 쪽 시험이 맡는다)과, 수신 쪽이 승인하지 않는 동안 쏟아진 이벤트가 레인의 절반에서 버려지고 세션
+폐기 없이 레인이 비면 다시 배달되는 것을, `system-events.test.ts`는 필수 작업이 없을 때
 구독만 확인하는 것을 검사한다. 모두 Linux 대체 Win32 경계와 가짜 수신자에서 실행하며, 실제 WebView2 문서에 이벤트가
 도착하는 것은 I/O Worker에서 이벤트를 발행하는 플러그인이 생기면 그 플러그인의 Windows native 시험이 확인한다.

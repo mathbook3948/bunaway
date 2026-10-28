@@ -313,6 +313,10 @@ async function startUI(
   const sessionEnd = {
     release: true,
   };
+  /** While set, `native-event` packets are acknowledged only once this promise settles. */
+  const nativeEvents: {
+    gate?: Promise<void> | undefined;
+  } = {};
   let workerError: Error | undefined;
   const rememberError = (error: unknown) => {
     workerError = error instanceof Error ? error : new Error(String(error));
@@ -374,6 +378,9 @@ async function startUI(
             },
           })
           .catch(rememberError);
+      }
+      if (packet.kind === "native-event") {
+        return nativeEvents.gate;
       }
     },
     (error) => {
@@ -475,6 +482,7 @@ async function startUI(
   }
   return {
     sessionEnd,
+    nativeEvents,
     deliverWindowMessage,
     deliverWebRequest,
     parsing,
@@ -2021,6 +2029,64 @@ test(
         },
       ]);
       expect(delivered("probe.changed")).toHaveLength(0);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "a burst of plugin events past half of the native-event lane is dropped without revoking the session or blocking later events",
+  async () => {
+    const { ui, settle } = await startCloseRequestUI();
+    try {
+      const delivered = () =>
+        ui.packets.filter(
+          (packet) =>
+            packet.kind === "native-event" &&
+            packet.event === "windows.closeRequested",
+        );
+      // The receiver acknowledges nothing, so every delivered event stays in flight on the lane.
+      let release!: () => void;
+      ui.nativeEvents.gate = new Promise<void>((done) => {
+        release = done;
+      });
+      const burst = 200;
+      for (let index = 0; index < burst; index++) {
+        await ui.channel.send({
+          kind: "plugin-event",
+          event: "windows.closeRequested",
+          payload: index,
+          requiredOperation: null,
+          dropped: 0,
+        });
+      }
+      await settle();
+      expect(delivered().length).toBeGreaterThan(0);
+      expect(delivered().length).toBeLessThan(burst);
+      release();
+      ui.nativeEvents.gate = undefined;
+      // Once the lane drains, plugin events flow again and no session was failed by the overflow.
+      await ui.waitFor(async () => {
+        const before = delivered().length;
+        await ui.channel.send({
+          kind: "plugin-event",
+          event: "windows.closeRequested",
+          payload: -1,
+          requiredOperation: null,
+          dropped: 0,
+        });
+        await settle();
+        return delivered().length > before;
+      });
+      expect(
+        ui.packets.filter((packet) => packet.kind === "session-failure"),
+      ).toEqual([]);
       await ui.channel.send({
         kind: "shutdown",
       });

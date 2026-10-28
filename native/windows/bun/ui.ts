@@ -2194,6 +2194,7 @@ function sendNativeEvent(
   payload: import("@bunaway/protocol").JsonValue,
   onUndelivered?: () => void,
   onSettled?: () => void,
+  dropWhenBusy = false,
 ): void {
   const route = boundary.eventRoute(event);
   if (!route) {
@@ -2214,6 +2215,10 @@ function sendNativeEvent(
         return;
       }
       if (error instanceof BunawayError && error.code === "BUSY") {
+        if (dropWhenBusy) {
+          // A lossy plugin event never revokes the session that happened to be listening.
+          return;
+        }
         boundary.fail(route, {
           code: "BUSY",
           message: "Native event queue full.",
@@ -2223,6 +2228,34 @@ function sendNativeEvent(
       fail(error);
     })
     .finally(onSettled);
+}
+
+/** Plugin events in flight to the main thread; one event counts once per receiving view. */
+let pluginEventsInFlight = 0;
+
+/**
+ * Plugin events may use only half of the shared native-event lane, so a chatty plugin cannot
+ * make the host's own `windows.*` events fail with BUSY. Excess plugin events are dropped.
+ */
+function sendPluginEvent(
+  boundary: ViewBoundary,
+  event: string,
+  payload: import("@bunaway/protocol").JsonValue,
+): void {
+  if (pluginEventsInFlight >= Math.max(1, Math.floor(maxPending / 2))) {
+    return;
+  }
+  pluginEventsInFlight++;
+  sendNativeEvent(
+    boundary,
+    event,
+    payload,
+    undefined,
+    () => {
+      pluginEventsInFlight--;
+    },
+    true,
+  );
 }
 
 /** Gate each recipient before forwarding plugin events through its current live route. */
@@ -2242,7 +2275,7 @@ function publishPluginSystemEvent(
     event,
     payload,
     requiredOperation,
-    sendNativeEvent,
+    sendPluginEvent,
   );
 }
 

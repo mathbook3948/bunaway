@@ -27,11 +27,11 @@ export async function relayPluginEvent(
   send: (packet: PluginEventPacket) => Promise<void>,
   recordDropped: (dropped: number) => Promise<void>,
 ): Promise<void> {
-  if (packet.dropped > 0) {
-    await recordDropped(packet.dropped);
-  }
   if (stopping()) {
     return;
+  }
+  if (packet.dropped > 0) {
+    await recordDropped(packet.dropped);
   }
   try {
     await send(packet);
