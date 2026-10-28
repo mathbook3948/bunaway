@@ -659,7 +659,9 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
 - [ ] 로컬 파일 로드를 제공할지 결정한다. 현재 탐색 정책은 file URL을 허용하지 않는다.
 - [x] `getWebViewState`로 현재 URL, title과 최상위 loading 상태를 조회한다.
 - [x] `getWebViewState`의 `focused`로 WebView 포커스를, `isOpen`으로 창과 같은 수명의 WebView 열림 상태를 조회한다. 실제 포커스 전환은 CI Windows native integration에서 검증한다.
-- [x] 결정 완료: 탐색 전 허용과 거부, redirect와 popup 새 창 처리를 앱 코드가 판정하는 훅은 지금 제공하지 않는다. 허용 목록은 정책 뷰의 `origins`(하위 프레임 포함, redirect 단계는 Windows의 `NavigationStarting` 재진입 기준)가 맡고, 새 창은 만들지 않는다. 같은 WebView 열기와 `opener.openUrl` 대리 호출은 ADR 0026의 구현 단계로 남아 있고 그 전에는 호스트가 받는 새 창 요청을 차단한다. 페이지 안 탐색의 동적 판정은 닫지 않았다. [ADR 0123](./decisions/0123-webview-navigation-hooks.md).
+- [ ] 페이지 안에서 시작하는 탐색을 URL 경로나 쿼리로 동적으로 판정해야 하는 용도가 확인되면 정책 뷰의 선언형 규칙 확장(경로 접두사, scheme 허용)을 먼저 검토한다. 콜백 훅은 마지막이다. [ADR 0123](./decisions/0123-webview-navigation-hooks.md).
+- [ ] ADR 0026의 같은 WebView 열기와 `plugin.opener.openUrl` 대리 호출을 구현한다. Windows는 시작 프레임 확인 수단이 생길 때까지 새 창 요청이 차단된 상태로 남는다. [ADR 0123](./decisions/0123-webview-navigation-hooks.md).
+- [x] 결정 완료: 탐색 전 허용과 거부, redirect와 popup 새 창 처리를 앱 코드가 판정하는 훅은 지금 제공하지 않는다. 허용 목록은 정책 뷰의 `origins`(하위 프레임 포함, redirect 단계는 Windows의 `NavigationStarting` 재진입 기준)가 맡고, 새 창은 만들지 않는다. 같은 WebView 열기와 `opener.openUrl` 대리 호출은 ADR 0026의 구현 단계로 남아 있고 그 전에는 호스트가 받는 새 창 요청을 차단한다. 페이지 안 탐색의 동적 판정과 위 구현은 앞의 두 항목이 추적한다. [ADR 0123](./decisions/0123-webview-navigation-hooks.md).
 - [x] 결정 완료: 로드 시작, DOM ready, 완료와 실패 이벤트는 새로 제공하지 않고 `windows.readiness`, `getReadiness`, `getWebViewState`의 `loading`과 페이지의 `DOMContentLoaded`, `load`를 쓴다. [ADR 0068](./decisions/0068-webview-load-events.md).
 - [x] 결정 완료: 문서, 프레임과 same-document 탐색 이벤트는 새로 제공하지 않고 `getWebViewState`의 `url`, `loading`, `windows.readiness`와 페이지의 `hashchange`, `popstate`, Navigation API를 쓴다. [ADR 0078](./decisions/0078-webview-navigation-events.md).
 - [x] title, favicon 변경 이벤트를 제공한다. title은 `windows.documentTitleChanged`, favicon은 `windows.documentFaviconChanged`로 제공한다. Windows CI의 `windows-document-favicon.ts`가 검증한다. preferred-size 변경 이벤트는 제공하지 않기로 했다. [ADR 0039](./decisions/0039-webview-rendering-options.md).
