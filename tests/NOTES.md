@@ -107,6 +107,16 @@ WebView2 문서에 browser 인쇄 UI를 요청하고 반복 요청 및 종료 �
 결과는 `build/windows-webview-print-ui-results.json`에 기록한다.
 system UI 사용자 선택과 물리 프린터 출력은 별도 검증이며 테스트가 인쇄 제출을 하지 않는다.
 
+`api/webview-capture-page.test.ts`는 페이지 캡처의 개별 권한, format과 region 입력 경계,
+기본값(png, 전체 영역)과 명시 옵션 전달, 출력 계약, 닫힌 창과 플랫폼 서비스 부재를 확인한다.
+`lifecycle/windows-webview-capture.test.ts`는 Linux에서 이미지 머리말 크기 해석, 영역 자르기와
+스크롤 보정, 크기 초과 오류, 두 프로토콜 호출이 하나의 기한을 나누는 것을 가짜 호출로 확인한다.
+`lifecycle/windows-webview-capture-page.ts`는 `mise run host:windows`에서 실제 WebView2에 PNG와
+JPEG 전체 캡처, 영역 캡처의 크기, 스크롤된 페이지에서 영역의 색, 동시 호출 거부, 닫기 중 거부와
+종료 뒤 native 자원 정리를 확인하고 최소화와 숨김 창의 결과를 기록한다.
+결과는 `build/windows-webview-capture-page-results.json`에 기록한다.
+이미지의 화면 정확성은 색 두 점과 머리말 크기 확인까지만 보장한다.
+
 `lifecycle/macos-webview-controls.test.ts`는 공개 작업 지원 목록, URL과 zoom 경계,
 생성 중과 닫힌 소유자의 거부를 검사한다. `lifecycle/macos-webview-controls.ts`는
 기존 `host:macos`에서 실제 compiled WKWebView와 백엔드 Worker의 공통 SDK를 실행한다.

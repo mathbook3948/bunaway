@@ -126,6 +126,10 @@ export function createWindows(api: NativePluginAPI<Definitions>) {
       input: Input<"showPrintUI"> = {},
       options?: NativeInvokeOptions,
     ) => api.showPrintUI(input, options),
+    capturePage: (
+      input: Input<"capturePage"> = {},
+      options?: NativeInvokeOptions,
+    ) => api.capturePage(input, options),
     waitForLifecycle: (
       input: Input<"waitForLifecycle"> = {},
       options?: NativeInvokeOptions,

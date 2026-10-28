@@ -11,6 +11,8 @@ import {
 import type {
   NativeContentColorScheme,
   NativeMenuEditRole,
+  NativePageCapture,
+  NativePageCaptureOptions,
 } from "@bunaway/plugin-api/native";
 import { BunawayError, type WireError } from "@bunaway/protocol";
 import { AudioChanges, type AudioState } from "./audio-events.ts";
@@ -31,10 +33,16 @@ import {
 } from "./com.ts";
 import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
+import {
+  capturePageImage,
+  type ProtocolOutcome,
+  withCause,
+} from "./webview-capture.ts";
 import { setProfileColorScheme } from "./webview-color-scheme.ts";
 import {
   callDevToolsProtocolMethod,
   DevToolsStartError,
+  RESULT_TOO_LARGE_HRESULT,
 } from "./webview-devtools.ts";
 import { WebViewDownloads } from "./webview-downloads.ts";
 import { EditCommandCalls } from "./webview-edit-calls.ts";
@@ -131,6 +139,24 @@ function describeDevToolsFailure(error: unknown): string {
   }
   return error instanceof Error ? error.message : String(error);
 }
+/** Classify a finished DevTools call by its HRESULT; an oversized reply is reported, never truncated. */
+function protocolOutcome(hresult: number, json: string): ProtocolOutcome {
+  if (hresult === RESULT_TOO_LARGE_HRESULT) {
+    return {
+      kind: "too-large",
+    };
+  }
+  if (hresult < 0) {
+    return {
+      kind: "failed",
+      reason: hresultText(hresult),
+    };
+  }
+  return {
+    kind: "ok",
+    json,
+  };
+}
 // Slots/IIDs are from the pinned WebView2 SDK 1.0.4129.50, Win64 COM ABI.
 /** Own one controller and its callbacks; profile peers share an environment and its final process drain. */
 export class WebView {
@@ -162,6 +188,10 @@ export class WebView {
     abandon: abandonHandlers,
     reclaim: reclaimHandlers,
   });
+  /** Whether a page capture is running; a second one is refused so image data is held once. */
+  private capturing = false;
+  /** Rejects the protocol call of a running page capture; run when the view closes. */
+  private readonly pendingCaptureCalls = new Set<() => void>();
   private creating = 0;
   private closing = false;
   private detached = false;
@@ -1071,6 +1101,126 @@ export class WebView {
     }
   }
 
+  /**
+   * Render the visible page, or a region of it, as an encoded image through the DevTools
+   * protocol, which works with the DevTools UI disabled. One capture runs at a time per view;
+   * a second request fails with BUSY. A pending capture is rejected when the view closes, and
+   * its protocol call stays tracked by `editCalls` until native releases the handler.
+   */
+  capturePage(options: NativePageCaptureOptions): Promise<NativePageCapture> {
+    const webview = this.requireWebView();
+    if (this.capturing) {
+      throw new BunawayError({
+        code: "BUSY",
+        message: "A page capture is already running.",
+      });
+    }
+    // The only prune of a capture: its second protocol call starts after a COM callback and skips it.
+    this.editCalls.prune();
+    this.capturing = true;
+    return capturePageImage(
+      (method, parameters, timeoutMs) =>
+        this.protocolCall(webview, method, parameters, timeoutMs),
+      options,
+    ).finally(() => {
+      this.capturing = false;
+    });
+  }
+
+  /** Start one tracked DevTools call and settle once: with its outcome, a timeout or the view closing. */
+  private protocolCall(
+    webview: Pointer,
+    protocolMethod: string,
+    parameters: object,
+    timeoutMs: number,
+  ): Promise<ProtocolOutcome> {
+    const closed = () =>
+      new BunawayError({
+        code: "INVALID_ARGUMENT",
+        message: "WebView is closed.",
+      });
+    if (this.closing) {
+      return Promise.reject(closed());
+    }
+    if (this.editCalls.isBusy()) {
+      return Promise.reject(
+        new BunawayError({
+          code: "BUSY",
+          message: "Too many WebView DevTools calls are in flight.",
+        }),
+      );
+    }
+    return new Promise((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let settled = false;
+      const settle = (finish: () => void) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        this.pendingCaptureCalls.delete(cancel);
+        finish();
+      };
+      const cancel = () => settle(() => reject(closed()));
+      this.pendingCaptureCalls.add(cancel);
+      timer = setTimeout(
+        () =>
+          settle(() =>
+            reject(
+              new BunawayError({
+                code: "TIMEOUT",
+                message: "The WebView did not produce an image in time.",
+              }),
+            ),
+          ),
+        timeoutMs,
+      );
+      try {
+        this.editCalls.start(
+          protocolMethod,
+          (isActive) =>
+            callDevToolsProtocolMethod(
+              webview,
+              protocolMethod,
+              JSON.stringify(parameters),
+              ({ hresult, json }) => {
+                // A late completion after cleanup or abandonment must touch no view or host state.
+                if (!isActive()) {
+                  return;
+                }
+                settle(() => resolve(protocolOutcome(hresult, json)));
+              },
+            ),
+          {
+            prune: false,
+          },
+        );
+      } catch (error) {
+        settle(() =>
+          reject(
+            withCause(
+              new BunawayError({
+                code: "INTERNAL",
+                message: "Starting the page capture failed.",
+              }),
+              describeDevToolsFailure(error),
+            ),
+          ),
+        );
+      }
+    });
+  }
+
+  /** Reject running page captures because the view is closing. */
+  private cancelPageCaptures() {
+    for (const cancel of [
+      ...this.pendingCaptureCalls,
+    ]) {
+      cancel();
+    }
+  }
+
   /** Download service readiness is independent of the document/SDK handshake. */
   downloadOperations() {
     if (this.closing) {
@@ -1647,6 +1797,7 @@ export class WebView {
   }
   requestClose() {
     this.closing = true;
+    this.cancelPageCaptures();
   }
   /** Old controllers can finish before the last shared owner; retain replacement reservations until its drain completes. */
   canReuseProfile(): boolean {
@@ -1750,6 +1901,7 @@ export class WebView {
    */
   detach(): boolean {
     this.closing = true;
+    this.cancelPageCaptures();
     if (this.creating) {
       return false;
     }

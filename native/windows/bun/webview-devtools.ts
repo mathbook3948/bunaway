@@ -16,7 +16,7 @@ export type DevToolsProtocolResult = {
 };
 
 // E_OUTOFMEMORY, reported when a result exceeds MAX_RESULT_CHARS instead of returning it truncated.
-const RESULT_TOO_LARGE_HRESULT = -2147024882;
+export const RESULT_TOO_LARGE_HRESULT = -2147024882;
 const text = dlopen("kernel32.dll", {
   lstrlenW: {
     args: [

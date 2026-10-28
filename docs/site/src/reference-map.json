@@ -416,6 +416,10 @@
           "MAX_DOWNLOAD_SNAPSHOT_BYTES",
           "isDownloadSnapshotWithinLimits",
           "DOWNLOAD_APPROVAL_TIMEOUT_MS",
+          "MAX_PAGE_CAPTURE_BYTES",
+          "PAGE_CAPTURE_TIMEOUT_MS",
+          "MAX_PAGE_CAPTURE_EDGE",
+          "PAGE_CAPTURE_FORMATS",
           "INT32_MIN",
           "INT32_MAX"
         ],
@@ -804,6 +808,7 @@
       "pages": {
         "reference/tooling/plugin-api": [
           "showPrintUI",
+          "capturePage",
           "downloads",
           "webview",
           "audio",
@@ -1639,6 +1644,7 @@
     ],
     "reference/host/windows": [
       "windows.showPrintUI",
+      "windows.capturePage",
       "windows.setDownloadRequestsEnabled",
       "windows.getDownloads",
       "windows.approveDownload",

@@ -81,6 +81,15 @@ Windows의 선택적 `NativeWindow.showPrintUI(kind)`는 `"browser" | "system"` 
 WebView2 런타임은 `UNSUPPORTED`입니다. 서비스가 없는 플랫폼도 창 플러그인이
 `UNSUPPORTED`로 처리합니다. 호출 권한은 플러그인이 네이티브 진입 전에 검사합니다.
 
+Windows의 선택적 `NativeWindow.capturePage(options)`는 `{ format, region }`을 받아 보이는 페이지를
+PNG 또는 JPEG로 렌더링한 `NativePageCapture`(`mime`, base64 `data`, `width`, `height`)로 확정합니다.
+`format`은 `PAGE_CAPTURE_FORMATS`(`"png"`, `"jpeg"`) 중 하나이고, `region`은 보이는 페이지의
+왼쪽 위에서 잰 CSS 픽셀 사각형이며 각 변은 `MAX_PAGE_CAPTURE_EDGE`(16384) 이하입니다.
+`region`이 `null`이면 보이는 영역 전체입니다. 창마다 하나만 실행하며 `BUSY`, 기한 초과 `TIMEOUT`
+(`PAGE_CAPTURE_TIMEOUT_MS`, 15초), 영역이 보이는 페이지 밖이거나 이미지가
+`MAX_PAGE_CAPTURE_BYTES`(655360)를 넘으면 `INVALID_ARGUMENT`입니다. 창이 닫히면 진행 중인
+캡처를 거부합니다.
+
 선택적 `NativeWindow.downloads`는 Windows의 `NativeDownloads` 서비스입니다.
 `setRequestsEnabled(enabled)`는 요청 수집만 변경하며 `list()`는 WebViewDownload 배열을 반환합니다.
 `approve(id)`, `cancel(id)`, `pause(id)`, `resume(id)`, `forget(id)`는 해당 WebView 수명의

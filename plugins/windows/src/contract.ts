@@ -1,5 +1,8 @@
+import { base64Schema } from "@bunaway/plugin";
 import {
   isDownloadSnapshotWithinLimits,
+  MAX_PAGE_CAPTURE_BYTES,
+  MAX_PAGE_CAPTURE_EDGE,
   MAX_TRAY_ICO_BYTES,
   MAX_WEBVIEW_DOWNLOADS,
   MAX_WINDOW_ASPECT_RATIO,
@@ -9,6 +12,7 @@ import {
   MIN_WINDOW_COORDINATE,
   MIN_WINDOW_DIMENSION,
   NATIVE_THUMBNAIL_BUTTON_LIMIT,
+  PAGE_CAPTURE_FORMATS,
   parseNativeIco,
   WINDOW_BACKGROUND_COLOR_PATTERN,
   type WindowAttentionMode,
@@ -1011,6 +1015,29 @@ export const windowOperations = {
         .exactOptional(),
     }),
     output: z.null(),
+  },
+  // Region is the visible page in CSS pixels from its top-left corner; without it the whole visible page.
+  "windows.capturePage": {
+    input: z.strictObject({
+      format: z.enum(PAGE_CAPTURE_FORMATS).exactOptional(),
+      region: z
+        .strictObject({
+          x: z.int().min(0).max(MAX_PAGE_CAPTURE_EDGE),
+          y: z.int().min(0).max(MAX_PAGE_CAPTURE_EDGE),
+          width: z.int().positive().max(MAX_PAGE_CAPTURE_EDGE),
+          height: z.int().positive().max(MAX_PAGE_CAPTURE_EDGE),
+        })
+        .exactOptional(),
+    }),
+    output: z.strictObject({
+      mime: z.enum([
+        "image/png",
+        "image/jpeg",
+      ]),
+      data: base64Schema(MAX_PAGE_CAPTURE_BYTES),
+      width: z.int().positive(),
+      height: z.int().positive(),
+    }),
   },
   "windows.setDownloadRequestsEnabled": {
     input: z.strictObject({

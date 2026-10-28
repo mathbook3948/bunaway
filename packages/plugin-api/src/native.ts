@@ -433,6 +433,38 @@ export type NativeThumbnailButton = {
   flags: readonly NativeThumbnailButtonFlag[];
 };
 
+/** Longest PNG or JPEG a page capture returns; its base64 form fits one host message. */
+export const MAX_PAGE_CAPTURE_BYTES = 655_360;
+/** How long a page capture waits for the WebView before it fails with TIMEOUT. */
+export const PAGE_CAPTURE_TIMEOUT_MS = 15_000;
+/** Largest region edge, in CSS pixels, a page capture accepts. */
+export const MAX_PAGE_CAPTURE_EDGE = 16_384;
+/** Image formats a page capture can produce. */
+export const PAGE_CAPTURE_FORMATS = [
+  "png",
+  "jpeg",
+] as const;
+/** Rectangle of the visible page in CSS pixels, measured from its top-left corner. */
+export type NativePageCaptureRegion = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+/** Resolved page capture request: a null region means the whole visible page. */
+export type NativePageCaptureOptions = {
+  format: (typeof PAGE_CAPTURE_FORMATS)[number];
+  region: NativePageCaptureRegion | null;
+};
+/** An encoded page image with the pixel size read from its header. */
+export type NativePageCapture = {
+  mime: "image/png" | "image/jpeg";
+  /** Canonical base64 of the encoded image, at most `MAX_PAGE_CAPTURE_BYTES` decoded. */
+  data: string;
+  width: number;
+  height: number;
+};
+
 /**
  * Native controls exposed to an installed window plugin.
  * The plugin rejects minimized/maximized transitions during fullscreen before invoking these controls.
@@ -443,6 +475,15 @@ export type NativeWindow = {
   getMonitor?(): NativeMonitor;
   /** Requests a user-controlled browser or system print dialog; does not report print completion. */
   showPrintUI?(kind: "browser" | "system"): void;
+  /**
+   * Renders the visible page of this window's WebView to an image. Windows only.
+   * Throws synchronously with BUSY while another capture of this window runs and when the view is
+   * closed. Otherwise rejects with TIMEOUT when the WebView produces no image within
+   * `PAGE_CAPTURE_TIMEOUT_MS` (a hidden or minimized window may not render), and INVALID_ARGUMENT
+   * when the region lies outside the visible page or the image exceeds `MAX_PAGE_CAPTURE_BYTES`.
+   * Closing the window rejects a pending capture.
+   */
+  capturePage?(options: NativePageCaptureOptions): Promise<NativePageCapture>;
   /** Trusted-backend download approval and lifetime controls. Windows only. */
   downloads?: NativeDownloads;
   /** Single host-owned WebView controls. Absent on platforms without this service. */

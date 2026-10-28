@@ -76,6 +76,7 @@ export const frameworkPaths = [
   "native/windows/bun/process-failure.ts",
   "native/windows/bun/audio-events.ts",
   "native/windows/bun/clipboard-text.ts",
+  "native/windows/bun/webview-capture.ts",
   "native/windows/bun/webview-devtools.ts",
   "native/windows/bun/webview-edit-calls.ts",
   "native/windows/bun/webview-edit-command.ts",

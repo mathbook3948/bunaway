@@ -56,6 +56,11 @@ ShowPrintUI를 호출한다. optional QueryInterface는 E_NOINTERFACE만 미지�
 다른 HRESULT 실패는 기존 오류 경로를 유지한다. 현재 작업은 browser 또는 system UI의
 시작 요청만 제공하고 프린터 선택과 실제 제출, 인쇄 완료는 사용자와 브라우저가 소유한다.
 
+페이지 캡처는 `NativeWindow.capturePage`로 같은 WebView의 DevTools
+`Page.captureScreenshot`을 호출해 보이는 페이지 또는 region을 PNG/JPEG 바이트로 돌려준다.
+창당 하나만 진행하며(중복은 BUSY), 15초 안에 이미지가 없으면 TIMEOUT이고, 상한은
+`MAX_PAGE_CAPTURE_BYTES`다. 구현은 `webview-capture.ts`다.
+
 DownloadCleanupError는 해당 창의 취소 실패를 나타내며 UI pump의 전체 실패로 전달하지 않는다.
 닫힌 소유자의 controller와 다운로드 참조를 유지하고 50 ms 간격으로 기존 35초 cleanup
 예산 안에서 재시도한다. 다른 창의 메시지와 정리는 계속 처리한다. 기한이 끝나면 소유자를

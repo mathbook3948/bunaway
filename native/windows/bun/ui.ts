@@ -1366,6 +1366,7 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
       return {
         getMonitor: () => windowMonitor(hwnd),
         showPrintUI: (kind) => view.native.showPrintUI(kind),
+        capturePage: (options) => view.native.capturePage(options),
         downloads: {
           setRequestsEnabled: (enabled) =>
             view.native.downloadOperations().setRequestsEnabled(enabled),
