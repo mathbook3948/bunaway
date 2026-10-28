@@ -1275,6 +1275,8 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
   개별 Win32와 WebView2 검사는 통과했지만 전체 호스트 회귀와 단독 재실행에서
   `WebView cleanup timed out` 및 브라우저 자식 프로세스 잔류가 기록됐다.
 - [ ] 최소 지원 OS, CPU와 다른 Job 정책의 환경에서 장애 및 강제 종료 뒤 자원 정리를 검증한다.
+  breakaway를 막는 바깥 Job 안의 시작, 강제 종료, 바깥 Job 닫기 뒤 정리는 windows-native CI의
+  `windows-outer-job-policy.test.ts`로 확인한다. 최소 OS와 CPU 환경은 남아 있다.
 - [ ] 각 플랫폼의 supported/experimental/unsupported와 OS permission 값을 실제 구현에 맞춘다.
 - [ ] 지원 목록, CLI 진단, 문서와 배포 산출물을 같은 릴리스로 갱신한다.
   진행: `bunaway doctor`가 선언한 채널에 따라 Inno Setup `ISCC.exe`와 `signtool.exe` 설치 여부를 검사한다.
