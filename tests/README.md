@@ -21,6 +21,9 @@ Windows CI에서는 실제 Inno Setup 설치기를 실행하는 `tests/packaging
 `windows.test.ts`, `windows-autostart.test.ts`를 `Check (windows-2022)`의 계약 테스트에서 제외하고
 `Windows installer tests` 잡이 실행한다. 두 목록은 `.github/workflows/ci.yml`에서 같아야 한다.
 
+`tests/packaging/windows-msix-probe.test.ts`는 시험용 인증서를 신뢰 저장소에 넣고 실제 MSIX를 설치하므로
+`BUNAWAY_MSIX_PROBE=1`일 때만 실행한다. `Windows MSIX package probe` 잡만 이 값을 설정하고, 다른 잡과 로컬에서는 skip된다.
+
 ## 디렉터리
 
 | 디렉터리 | 내용 |
@@ -48,7 +51,7 @@ Windows CI에서는 실제 Inno Setup 설치기를 실행하는 `tests/packaging
 | 플러그인 SDK, 플러그인 빌드 (`packages/plugin-sdk`, `packages/cli/src/plugin-*`) | `bun test tests/api/native tests/api/plugin tests/cli/plugin-build.test.ts tests/cli/distribution.test.ts`, `bun run plugins:build` | 없음 |
 | CLI 빌드와 개발 서버 (`packages/cli`) | `bun test tests/cli` | 해당 OS에서 `bunaway dev`, `bunaway build` |
 | 앱 템플릿 (`packages/cli/templates`) | `bun test tests/cli/template.test.ts tests/cli/framework-templates.test.ts` | Windows에서 `tests/lifecycle/windows-templates.ts`(`windows-native` 잡) |
-| 패키징 (`packages/packaging`) | `bun test tests/packaging` | Windows 설치기는 CI `Check (windows-2022)`, DMG는 `macos-native` |
+| 패키징 (`packages/packaging`) | `bun test tests/packaging` | Windows 설치기는 CI `Windows installer tests`, MSIX 설치와 활성화는 `Windows MSIX package probe`, DMG는 `macos-native` |
 | Android, iOS (`native/android`, `native/ios`) | `bun test tests/lifecycle/android tests/lifecycle/ios tests/cli/android.test.ts tests/cli/ios.test.ts` | `mise run host:android`, `mise run host:ios -- <Simulator UUID>` |
 | 문서 (`docs/site`, 공개 API 추가) | `bun run docs:check`, `bun run docs:build`, `docs/site/src/reference-map.json` 갱신 | 없음 |
 | 새 플러그인 workspace | `bunaway plugin new <name>`으로 생성, `bun test tests/conformance tests/cli/plugin-new`, `bun run docs:check` | 없음 |
