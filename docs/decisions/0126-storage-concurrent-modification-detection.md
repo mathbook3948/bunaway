@@ -22,7 +22,7 @@ status: accepted
 - Tauri의 fs 플러그인에는 조건부 쓰기나 충돌 감지 API가 없다.
 - 위 Electron과 Tauri 서술은 공개 문서에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다. 아래 저장소 서술은 코드와 문서를 근거로 한다.
 - 이 저장소의 `StorageMetadata`는 파일에 `sizeBytes`와 `modifiedAtMs`를 이미 준다. `modifiedAtMs`는 Node 호환 `stat`의
-  나노초 수정 시각을 밀리초로 자른 값이다(`plugins/storage/src/platforms/node-storage.ts`). 코드는 나노초 값이 0이거나 안전 정수 범위를 넘으면 `null`로 처리한다. Windows에서 시각이 기록되지 않은 파일이 `null`로 오는지는 이 저장소의 테스트로 확인하지 않았다.
+  나노초 수정 시각을 밀리초로 자른 값이다(`plugins/storage/src/platforms/node-storage.ts`). 코드는 나노초 값이 0이거나 밀리초로 바꾼 값이 안전 정수 범위를 넘으면 `null`로 처리한다. Windows에서 시각이 기록되지 않은 파일이 `null`로 오는지는 이 저장소의 테스트로 확인하지 않았다.
   [storage.stat](../site/src/content/docs/reference/host/storage-stat.mdx)가 반환 필드를 설명한다.
 - 쓰기 연산의 입력은 엄격한 스키마라 선택 필드를 더하려면 계약이 바뀐다. 실패 코드에는 충돌을 나타내는 값이 없어
   (b)는 새 오류 코드도 요구한다.
