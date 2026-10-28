@@ -38,11 +38,12 @@ origin과 frame별로 허용하거나 거부할 수 있고, 그 결정을 저장
    등록한 명령과 이벤트로 결과를 받는다. 저장소는 이를 위한 새 연산을 만들지 않는다. 앱이 제공하는 접근 경로는 명령 권한 안에 둔다.
 5. 새 공개 연산, 이벤트, 권한 이름, 설정, `UNSUPPORTED` 항목을 만들지 않는다. 훅을 제공하는 방향으로 바꾸려면 코어 계약과 모든
    앱의 보안 경계가 바뀌므로 별도 설계 결정으로 다룬다.
-6. `docs/TODO-windows.md`의 geolocation, notification, clipboard 항목은 Windows 호스트가 권한 요청을 모두 거부하는 한
-   페이지 권한으로 연결하지 않는다는 결론이 된다. file system access의 파일 선택 범위는 권한 요청이 아니고,
-   display capture, fullscreen, pointer lock, wake lock은 공개 문서 기준 WebView2 권한 종류에 없으며 fullscreen은 별도 경로로
-   처리된다. 이 항목들은 이 결정이 결론을 내리지 않는다. 이 결정은 그 행의
-   체크박스를 바꾸지 않는다. 각 행은 개별 API의 결정이나 앱 경로를 확인한 뒤 닫는다.
+6. 이 결정이 결론을 내리는 대상은 권한 요청을 거부하는 기본값으로 정해지는 부분뿐이다. `docs/TODO-windows.md`의 geolocation,
+   notification, clipboard 읽기 항목은 Windows 호스트가 권한 요청을 모두 거부하는 한 페이지 권한으로 연결하지 않는다는 결론이 된다.
+   결론을 내리지 않는 항목은 다음과 같다. file system access는 WebView2 권한 종류에 파일 읽기와 쓰기가 있지만 파일 선택 범위는
+   거부 기본값만으로 정해지지 않는다. display capture, fullscreen, pointer lock, wake lock은 공개 문서 기준 WebView2 권한 종류에
+   없고, fullscreen은 별도 경로로 처리된다. 이 결정은 이 행들의 체크박스를 바꾸지 않으며, 각 행은 개별 API의 결정이나 앱 경로를
+   확인한 뒤 닫는다.
 7. 카메라와 마이크의 OS 권한, MIDI와 센서와 protected media, WebAuthn, WebRTC는 이 결정에서 다루지 않는다.
 
 ## 근거
