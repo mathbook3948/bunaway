@@ -1056,7 +1056,8 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
   Windows 설치 파일(exe, MSI)의 Authenticode 서명을 `WinVerifyTrust`로 확인한다.
   `tests/api/updater-signature.test.ts`가 설정, 게시자 대조와 실패 계약을, `tests/lifecycle/windows-updater-signature.test.ts`가
   서명한 exe, 서명 없는 파일, 변조한 파일과 신뢰되지 않는 인증서를 실제 `WinVerifyTrust`로 검증한다.
-  서명한 MSI는 실제 서명으로 시험하지 못했다. macOS 서명 검증과 앱 전용 서명 키(minisign 방식)도 남는다.
+  서명한 MSI는 실제 서명으로 시험하지 못했다. Windows Installer COM으로 만든 최소 MSI를 `Set-AuthenticodeSignature`로
+  서명하면 직후 상태가 `HashMismatch`여서(windows-2022 러너) 서명한 정상 MSI를 만들 다른 방법이 필요하다. macOS 서명 검증과 앱 전용 서명 키(minisign 방식)도 남는다.
 - [ ] 설치, 종료 승인과 relaunch를 연결한다.
   [ADR 0054](./decisions/0054-updater-downgrade-rollback-and-store-channels.md)의 조건을 따른다: 실행 직전 SHA-256과 서명 재확인,
   설치 파일 시작 실패의 전달, 재실행 복구를 위한 설치 파일 보존.
