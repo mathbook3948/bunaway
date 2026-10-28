@@ -10,6 +10,7 @@ import windows, {
   windowEvents,
 } from "@bunaway/plugin-windows";
 import {
+  DEFAULT_MAX_PENDING,
   type JsonValue,
   PROTOCOL_VERSION,
   validateValue,
@@ -2067,8 +2068,9 @@ test(
         });
       }
       await settle();
-      expect(delivered().length).toBeGreaterThan(0);
-      expect(delivered().length).toBeLessThan(burst);
+      // The default lane holds 128 packets; plugin events stop at half of it, before BUSY.
+      expect(delivered()).toHaveLength(Math.floor(DEFAULT_MAX_PENDING / 2));
+      expect(burst).toBeGreaterThan(DEFAULT_MAX_PENDING);
       release();
       ui.nativeEvents.gate = undefined;
       // Once the lane drains, plugin events flow again and no session was failed by the overflow.
@@ -2084,9 +2086,10 @@ test(
         await settle();
         return delivered().length > before;
       });
-      expect(
-        ui.packets.filter((packet) => packet.kind === "session-failure"),
-      ).toEqual([]);
+      // A failed session is revoked toward the main thread; overflow must not do that.
+      expect(ui.packets.filter((packet) => packet.kind === "revoke")).toEqual(
+        [],
+      );
       await ui.channel.send({
         kind: "shutdown",
       });
