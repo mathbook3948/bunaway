@@ -837,6 +837,13 @@ function handleHostPacket(packet: Packet) {
     case "cancel-context":
       discardContext(packet.context);
       return;
+    case "plugin-event":
+      publishPluginSystemEvent(
+        packet.event,
+        packet.payload,
+        packet.requiredOperation,
+      );
+      return;
     case "host-result":
       handleHostResult(packet);
       return;
@@ -2222,7 +2229,7 @@ function sendNativeEvent(
 function publishPluginSystemEvent(
   event: string,
   payload: import("@bunaway/protocol").JsonValue,
-  requiredOperation: string,
+  requiredOperation: string | null,
 ): void {
   if (closing()) {
     return;

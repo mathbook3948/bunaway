@@ -14,6 +14,7 @@ import {
 import { Channel, type Packet } from "@bunaway/runtime-bun/worker-channel";
 import { hostResponse } from "./host-response.ts";
 import { loadPluginCatalog } from "./plugin-catalog.ts";
+import { createPluginEvents } from "./plugin-events.ts";
 import { disposeAll, operations } from "./plugins.ts";
 
 assert(parentPort);
@@ -25,6 +26,16 @@ const config = workerData as {
   plugins: NativeRegistration[];
   policy?: Policy;
 };
+// Plugin events leave through the channel below. The adapters exist before it, and an emit made
+// during their setup or after shutdown began is dropped instead of reaching an unusable channel.
+let eventsOpen = false;
+const pluginEvents = createPluginEvents({
+  open: () => eventsOpen,
+  send: (packet) => channel.send(packet),
+  fail(error) {
+    throw error;
+  },
+});
 const adapters = await operations(
   config.plugins,
   config.dataRoot,
@@ -32,6 +43,8 @@ const adapters = await operations(
   undefined,
   await loadPluginCatalog(config.assets),
   config.app,
+  undefined,
+  (pluginName) => pluginEvents.forPlugin(pluginName),
 );
 const queue = new Map<
   string,
@@ -67,6 +80,7 @@ const channel = new Channel(
   undefined,
   maxPending,
 );
+eventsOpen = true;
 /** Ask the policy owner before running any plugin input callbacks. */
 function startNext() {
   if (stopping || active) {
@@ -362,6 +376,7 @@ function cancelContext(
 /** Abort everything and schedule the final cleanup after the shutdown is acknowledged. */
 function beginShutdown() {
   stopping = true;
+  eventsOpen = false;
   for (const call of queue.values()) {
     call.controller.abort();
   }

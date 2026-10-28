@@ -99,6 +99,8 @@ export async function operations(
     NativeEnvironment,
     "events" | "shortcuts" | "menus" | "tray" | "dialogs"
   >,
+  /** Builds the `events` service of one plugin; the I/O Worker scopes each plugin to its own names. */
+  eventsFor?: (pluginName: string) => NonNullable<NativeEnvironment["events"]>,
 ): Promise<PluginOperations> {
   const registry = pluginRegistry(plugins, catalog);
   // Capability discovery and dispatch use the same installed platform support contract.
@@ -162,7 +164,14 @@ export async function operations(
       ) {
         adapters.set(
           plugin.name,
-          (await plugin.operations()).createOperations(environment),
+          (await plugin.operations()).createOperations(
+            eventsFor
+              ? {
+                  ...environment,
+                  events: eventsFor(plugin.name),
+                }
+              : environment,
+          ),
         );
       }
     }

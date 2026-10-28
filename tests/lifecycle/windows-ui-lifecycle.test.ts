@@ -1986,3 +1986,48 @@ test(
   },
   timeoutMs + 5_000,
 );
+
+test(
+  "a plugin event relayed from the I/O Worker reaches only subscribed views, and the operation gate still applies",
+  async () => {
+    const { ui, settle } = await startCloseRequestUI();
+    try {
+      const delivered = (event: string) =>
+        ui.packets.filter(
+          (packet) => packet.kind === "native-event" && packet.event === event,
+        );
+      const relay = (
+        event: string,
+        requiredOperation: string | null,
+        payload: number,
+      ) =>
+        ui.channel.send({
+          kind: "plugin-event",
+          event,
+          payload,
+          requiredOperation,
+          dropped: 0,
+        });
+      // The view listens to windows.closeRequested only; a name nobody listens to goes nowhere.
+      await relay("windows.closeRequested", null, 1);
+      await relay("probe.changed", null, 2);
+      // An operation the registry does not know is refused before any view is checked.
+      await relay("windows.closeRequested", "unknown.read", 3);
+      await settle();
+      await ui.waitFor(() => delivered("windows.closeRequested").length === 1);
+      expect(delivered("windows.closeRequested")).toMatchObject([
+        {
+          payload: 1,
+        },
+      ]);
+      expect(delivered("probe.changed")).toHaveLength(0);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);

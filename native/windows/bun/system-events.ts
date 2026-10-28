@@ -4,7 +4,10 @@ import type {
 } from "@bunaway/plugin-api/native";
 import type { JsonValue, NativeRegistry, Policy } from "@bunaway/protocol";
 
-/** Recheck each live subscription and its independent read-operation grant before delivery. */
+/**
+ * Recheck each live subscription and its independent read-operation grant before delivery. A
+ * `null` operation checks the subscription only, like an event that reports no readable state.
+ */
 export function publishSystemEvent<
   T extends {
     policy: {
@@ -17,19 +20,23 @@ export function publishSystemEvent<
   recipients: Iterable<T>,
   event: string,
   payload: JsonValue,
-  requiredOperation: string,
+  requiredOperation: string | null,
   send: (recipient: T, event: string, payload: JsonValue) => void,
 ): void {
-  if (!registry.operations.has(requiredOperation)) {
+  if (
+    requiredOperation !== null &&
+    !registry.operations.has(requiredOperation)
+  ) {
     return;
   }
   for (const recipient of recipients) {
     if (
       recipient.eventRoute(event) &&
-      registry.allowed(recipient.policy.host, {
-        operation: requiredOperation,
-        payload: null,
-      })
+      (requiredOperation === null ||
+        registry.allowed(recipient.policy.host, {
+          operation: requiredOperation,
+          payload: null,
+        }))
     ) {
       send(recipient, event, payload);
     }

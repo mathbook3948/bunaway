@@ -37,6 +37,7 @@ import {
 import { DevelopmentApp } from "./development-app.ts";
 import type { LaunchArguments, listenForInstances } from "./instance.ts";
 import { activeDescendants, containAppProcess } from "./job.ts";
+import { relayPluginEvent } from "./plugin-event-relay.ts";
 import {
   type HostLaunch,
   relaunchCommand,
@@ -231,6 +232,18 @@ export async function runWindowsApp(
       }
       if (packet.kind === "fatal") {
         fail(new Error(packet.error.message));
+        return;
+      }
+      if (packet.kind === "plugin-event") {
+        await relayPluginEvent(
+          packet,
+          () => stopping,
+          (event) => channel.send(event),
+          (dropped) =>
+            log.write("plugin-events-dropped", {
+              dropped,
+            }),
+        );
         return;
       }
       if (

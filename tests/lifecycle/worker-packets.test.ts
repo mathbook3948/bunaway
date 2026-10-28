@@ -248,6 +248,17 @@ const fixtures = {
     "main",
     "macos-backend",
   ),
+  "plugin-event": fixture(
+    {
+      kind: "plugin-event",
+      event: "example.changed",
+      payload: null,
+      requiredOperation: null,
+      dropped: 0,
+    },
+    "main-io",
+    "ui",
+  ),
   server: fixture(
     {
       kind: "server",
