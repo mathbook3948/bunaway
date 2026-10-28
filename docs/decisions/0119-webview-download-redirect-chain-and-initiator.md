@@ -4,7 +4,7 @@ status: accepted
 
 # WebView 다운로드의 redirect chain과 frame별 initiator를 제공하지 않는다
 
-결정일: 2026-10-28. 검토 기준: main `5832b295`.
+결정일: 2026-10-28. 검토 기준: main `5832b295`, WebView2 SDK 1.0.4129.50.
 
 ## 배경
 
@@ -27,8 +27,8 @@ status: accepted
   이 이벤트를 잇는 공통 식별자가 없어 URL과 시간으로 추정해야 한다. 같은 URL을 동시에 여러 번 요청하거나, 다운로드를 시작한 요청이
   이미 끝난 탐색의 후속 동작이면 짝이 어긋난다. Electron과 Tauri 문서의 서술은 공개 문서에 따른 것이며 이 저장소의 테스트로 검증한 것은 아니다.
 - [ADR 0083](./0083-webview-request-interception.md)은 WebView의 HTTP 요청 단위 가로채기와 요청 결과 이벤트를 제공하지 않기로 했다.
-  호스트는 이미 `NavigationStarting`으로 탐색과 redirect의 origin을 검사하지만, 다운로드와 짝지을 chain을 만들려면
-  `FrameNavigationStarting`과 `WebResourceResponseReceived` 구독을 새로 상시 켜야 하고, 후자는 그 결정이 제공하지 않기로 한 요청 관찰이다.
+  호스트는 이미 `NavigationStarting`과 `FrameNavigationStarting`을 구독해 탐색과 redirect의 origin을 검사하지만(`native/windows/bun/webview.ts`),
+  다운로드와 짝지을 chain을 만들려면 `WebResourceResponseReceived` 구독을 새로 상시 켜야 한다. 이는 그 결정이 제공하지 않기로 한 요청 관찰과 같은 종류다.
 - 앱의 판단 수단은 이미 있다. 승인 요청은 문서 origin과 다운로드 URI를 모두 대상 뷰의 기존 HTTP/HTTPS origin 안에서만 받고, 기본은 거부이며,
   `windows.approveDownload`는 신뢰된 backend만 부른다([windows 계약](../site/src/content/docs/reference/host/windows.mdx)).
 
@@ -48,6 +48,6 @@ status: accepted
 - Electron은 URL chain을 주고 Tauri는 주지 않아 선례가 갈린다. 갈릴 때는 코어는 작게, 기능은 플러그인 쪽을 따른다. WebView2가 값을 직접 주지
   않으므로 Electron의 계약은 요청 관찰로 짜 맞춰야만 지킬 수 있고, 그 값은 정확하지 않을 수 있다. 부정확한 chain을 공개 계약으로 두면
   앱이 안전 판단에 쓰다가 어긋난 값에 속을 수 있다.
-- 짝짓기용 `WebResourceResponseReceived` 관찰은 ADR 0083이 코어에 넣지 않기로 한 방향이다. 다운로드 하나를 위해 모든 리소스 응답에 구독을 켜면 페이지 로드마다 비용이 든다.
+- 짝짓기용 `WebResourceResponseReceived` 관찰은 ADR 0083이 요청 관찰을 코어에 넣지 않기로 한 취지와 맞지 않는다. 다운로드 하나를 위해 모든 리소스 응답에 구독을 켜면 페이지 로드마다 비용이 들 수 있다.
 - frame별 initiator는 Electron의 `DownloadItem`에도 없고 Tauri도 주지 않아 따를 선례가 없다.
 - 호스트 코드와 권한 경계를 바꾸지 않는다.
