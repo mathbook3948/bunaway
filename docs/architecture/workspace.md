@@ -24,9 +24,9 @@ WebView 연결은 Windows WebView2가 `native/windows/bun/webview.ts`, macOS WKW
 | `packages/runtime-bun` | `@bunaway/runtime-bun` | bun | `@bunaway/core`, `@bunaway/protocol` |
 | `packages/packaging` | `@bunaway/packaging` | bun | `@bunaway/protocol` |
 | `packages/cli` | `@bunaway/cli` | bun | `@bunaway/packaging`, `@bunaway/protocol`, `@bunaway/runtime-bun` |
-| `plugins/log` | `@bunaway/plugin-log` | browser, bun | `@bunaway/plugin` |
-| `plugins/storage` | `@bunaway/plugin-storage` | browser, bun | `@bunaway/plugin`, `@bunaway/protocol` |
-| `plugins/capabilities` | `@bunaway/plugin-capabilities` | browser, bun | `@bunaway/plugin` |
+| `plugins/log` | `@bunaway/plugin-log` | browser, bun | `@bunaway/plugin`, `@bunaway/plugin-api`, `@bunaway/protocol` |
+| `plugins/storage` | `@bunaway/plugin-storage` | browser, bun | `@bunaway/plugin`, `@bunaway/plugin-api`, `@bunaway/protocol` |
+| `plugins/capabilities` | `@bunaway/plugin-capabilities` | browser, bun | `@bunaway/plugin`, `@bunaway/plugin-api` |
 | `plugins/windows` | `@bunaway/plugin-windows` | browser, bun | `@bunaway/plugin`, `@bunaway/plugin-api`, `@bunaway/protocol` |
 
 `portable` 설정은 ES2022 표준 라이브러리만 허용한다.

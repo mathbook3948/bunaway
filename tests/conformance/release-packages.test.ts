@@ -115,7 +115,7 @@ test("the audit rejects package.json targets missing from the tarball and a miss
   expect(text).toContain("has no license file");
 });
 
-test("an exports pattern needs a packed match unless the package has no platform adapters", () => {
+test("an exports pattern must resolve to the Windows adapter unless the plugin ships none", () => {
   const manifest = {
     ...packed().manifest,
     exports: {
@@ -127,40 +127,65 @@ test("an exports pattern needs a packed match unless the package has no platform
     "LICENSE.txt",
     "src/index.ts",
   ];
-  const adapters = [
-    ...plain,
-    "src/platforms/windows.ts",
-  ];
+  const withWindows = packed({
+    manifest,
+    files: [
+      ...plain,
+      "dist/native/windows.js",
+    ],
+  });
+  const withMacosOnly = packed({
+    manifest,
+    files: [
+      ...plain,
+      "dist/native/macos.js",
+    ],
+  });
+  expect(auditPackedPackage(withWindows, expected)).toEqual([]);
+  expect(auditPackedPackage(withMacosOnly, expected).join("\n")).toContain(
+    "names dist/native/windows.js, which is not in the tarball",
+  );
+  const windowState = {
+    ...packed({
+      manifest: {
+        ...manifest,
+        name: "@bunaway/plugin-window-state",
+      },
+      files: plain,
+    }),
+  };
   expect(
-    auditPackedPackage(
-      packed({
-        manifest,
-        files: [
-          ...adapters,
-          "dist/native/windows.js",
-        ],
-      }),
-      expected,
-    ),
+    auditPackedPackage(windowState, {
+      ...expected,
+      names: new Set([
+        "@bunaway/plugin-window-state",
+        "@bunaway/core",
+      ]),
+    }),
   ).toEqual([]);
-  expect(
+});
+
+test("Node builtins need no declaration but packages that Bun lists as builtins do", () => {
+  const audit = (source: string) =>
     auditPackedPackage(
       packed({
-        manifest,
-        files: plain,
+        manifest: {
+          ...packed().manifest,
+          dependencies: {},
+        },
+        sources: new Map([
+          [
+            "dist/index.js",
+            source,
+          ],
+        ]),
       }),
       expected,
-    ),
-  ).toEqual([]);
-  expect(
-    auditPackedPackage(
-      packed({
-        manifest,
-        files: adapters,
-      }),
-      expected,
-    ).join("\n"),
-  ).toContain("./dist/native/*.js named by package.json matches no file");
+    ).join("\n");
+  expect(audit('import fs from "fs"; import { join } from "path/posix";')).toBe(
+    "",
+  );
+  expect(audit('import { WebSocket } from "ws";')).toContain("imports ws");
 });
 
 test("type-only imports and non-string ranges are audited", () => {
@@ -291,9 +316,12 @@ test("regular expression and nested template literals do not hide or invent impo
   expect(
     audit('const a = loader.import("theme-dark"); ctx.require("config");'),
   ).toBe("");
-  expect(audit(`const m = ${open}/"/.test(s)};\n${hidden}`)).toContain(
+  expect(audit(`const m = \`${open}/"/.test(s)}\`;\n${hidden}`)).toContain(
     "imports pkg-hidden",
   );
+  expect(
+    audit(`const m = \`${open}/"/.test(s)}\`;\nconst q = "from 'pkg-fake'";`),
+  ).toBe("");
   expect(audit("type X = typeof import(`pkg-tpl`);")).toBe("");
 });
 

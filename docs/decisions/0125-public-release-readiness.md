@@ -74,9 +74,11 @@ tarball을 `tar`로 임시 디렉터리에 풀어 파일 목록과 `package.json
 - 시험 파일, `.env*`, `.npmrc`, 키 파일이 들어 있지 않고, 라이선스 파일이 있다.
 - 포함된 `src/`와 `dist/`의 bare import(`import type`, `import { type A }`, `export type`, 선언 파일의 `import("x")` 타입
   참조 포함, 주석과 문자열 안의 예시는 제외)가 `package.json`에 선언된 의존성이거나 패키지
-  자신, Node 내장 모듈이다.
-- `./native/*` 같은 패턴 `exports`는 맞는 파일이 하나 이상 있어야 한다. 다만 `src/platforms/`가 없는 패키지(네이티브
-  어댑터가 없는 `@bunaway/plugin-window-state`)는 플러그인 스캐폴드가 모든 플러그인에 쓰는 패턴을 그대로 가지므로 제외한다.
+  자신, Node 내장 모듈이다(Bun이 내장으로 나열하지만 Node에서는 npm 패키지인 `ws`, `undici`는 선언해야 한다).
+- `./native/*` 같은 패턴 `exports`는 Windows 어댑터(`*`를 `windows`로 바꾼 파일, 예: `dist/native/windows.js`)로 풀려야
+  한다. Windows가 기본 플랫폼이라 이 파일이 빠지면 설치 후 플러그인 로드가 실패한다. 네이티브 어댑터가 없는
+  `@bunaway/plugin-window-state`만 목록으로 제외한다(플러그인 스캐폴드가 모든 플러그인에 같은 패턴을 쓰기 때문). 다른 플랫폼
+  어댑터의 존재는 검사하지 않는다.
 - 의존성 범위 값은 문자열이어야 하고, tarball 안의 이름은 요청한 패키지 이름과 같다.
 
 `private: true`, 라이선스 `UNLICENSED` 또는 부재, `publishConfig` 부재는 실패가 아니라 "소유자 결정 대기"로 출력한다.
@@ -108,7 +110,7 @@ tarball을 `tar`로 임시 디렉터리에 풀어 파일 목록과 `package.json
   zod를 해석한다. 현재 동작을 기록할 뿐 이 결정에서 바꾸지 않는다.
 - import 검사는 파서가 아니라 렉서(`scripts/strip-non-code.ts`)다. 정규식 리터럴과 나눗셈의 구분은 앞선 토큰에 의존하는
   휴리스틱이라 `if (ok) /re/`, `i++ / 2` 같은 드문 구문에서 틀릴 수 있고, JSX와 백틱 specifier(``import(`x`)``)는 다루지
-  않는다. 현재 출하되는 소스 740개 파일은 AST 기준과 import 집합이 일치하며, 새 구문이 필요해지면 렉서 대신 AST 기반 검사로
+  않는다. 검사가 읽는 출하 소스 698개 파일(SDK 패키지의 `src/`와 플러그인의 `src/`, `dist/`)은 AST 기준과 import 집합이 일치하며, 새 구문이 필요해지면 렉서 대신 AST 기반 검사로
   옮긴다.
 - 이 검사는 `mise run check`에 속하지 않으므로 CI가 실제 tarball을 매번 검사하지는 않는다. 릴리스 자동화를 만들 때 워크플로의
   publish 이전 단계로 연결한다.

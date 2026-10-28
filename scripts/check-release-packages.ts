@@ -88,7 +88,14 @@ function targetsOf(manifest: Record<string, unknown>): string[] {
 }
 
 /** Bundled output names Node modules without the `node:` prefix, so the builtin list is needed too. */
-const NODE_BUILTINS: ReadonlySet<string> = new Set(builtinModules);
+// Bun lists `ws` and `undici` as builtins, but they are npm packages under Node and must be declared.
+const NOT_NODE_BUILTINS: ReadonlySet<string> = new Set([
+  "ws",
+  "undici",
+]);
+const NODE_BUILTINS: ReadonlySet<string> = new Set(
+  builtinModules.filter((name) => !NOT_NODE_BUILTINS.has(name)),
+);
 
 function packageOfImport(specifier: string): string | undefined {
   if (
@@ -177,29 +184,24 @@ function auditManifest({ packed, expected, name, fail }: Audit): Set<string> {
   return declared;
 }
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** Whether a subpath pattern such as `./dist/native/*.js` is matched by any packed file. */
-function patternIsPacked(target: string, files: readonly string[]): boolean {
-  const pattern = new RegExp(
-    `^${target.slice(2).split("*").map(escapeRegExp).join(".+")}$`,
-  );
-  return files.some((file) => pattern.test(file));
-}
+/**
+ * Plugins that ship no native adapter even though the scaffold writes the `./native/*` pattern
+ * into their exports. Every other plugin must ship the Windows adapter that pattern names.
+ */
+const PLUGINS_WITHOUT_NATIVE_ADAPTER: ReadonlySet<string> = new Set([
+  "@bunaway/plugin-window-state",
+]);
 
 /** Check that the tarball holds every file package.json points at and a license, and nothing secret or test-only. */
-function auditFiles({ packed, fail }: Audit): void {
+function auditFiles({ packed, name, fail }: Audit): void {
   const present = new Set(packed.files);
-  const hasPlatforms = packed.files.some((file) =>
-    file.startsWith("src/platforms/"),
-  );
+  const exempt = PLUGINS_WITHOUT_NATIVE_ADAPTER.has(name);
   for (const target of targetsOf(packed.manifest)) {
     if (target.includes("*")) {
-      // A plugin without native adapters (no `src/platforms/`) keeps the pattern its scaffold writes.
-      if (hasPlatforms && !patternIsPacked(target, packed.files)) {
-        fail(`${target} named by package.json matches no file in the tarball`);
+      // The Windows adapter is the primary platform, so the pattern must resolve to its file.
+      const windows = target.replace("*", "windows").slice(2);
+      if (!exempt && !present.has(windows)) {
+        fail(`${target} names ${windows}, which is not in the tarball`);
       }
     } else if (!present.has(target.slice(2))) {
       fail(`${target} named by package.json is not in the tarball`);
