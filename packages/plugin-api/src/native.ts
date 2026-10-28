@@ -454,10 +454,11 @@ export type NativeWindow = {
   showPrintUI?(kind: "browser" | "system"): void;
   /**
    * Renders the visible page of this window's WebView to an image. Windows only.
-   * Rejects with BUSY while another capture of this window runs, TIMEOUT when the WebView produces
-   * no image within `PAGE_CAPTURE_TIMEOUT_MS` (a hidden or minimized window may not render), and
-   * INVALID_ARGUMENT when the region lies outside the visible page or the image exceeds
-   * `MAX_PAGE_CAPTURE_BYTES`. Closing the window rejects a pending capture.
+   * Throws synchronously with BUSY while another capture of this window runs and when the view is
+   * closed. Otherwise rejects with TIMEOUT when the WebView produces no image within
+   * `PAGE_CAPTURE_TIMEOUT_MS` (a hidden or minimized window may not render), and INVALID_ARGUMENT
+   * when the region lies outside the visible page or the image exceeds `MAX_PAGE_CAPTURE_BYTES`.
+   * Closing the window rejects a pending capture.
    */
   capturePage?(options: NativePageCaptureOptions): Promise<NativePageCapture>;
   /** Trusted-backend download approval and lifetime controls. Windows only. */

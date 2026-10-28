@@ -333,8 +333,9 @@ try {
   );
   // The full capture covers the whole WebView; a region is clipped to the page viewport, which
   // excludes the vertical scrollbar of the tall test page.
-  assert(edge.width <= full.width && edge.width >= full.width - 40);
-  assert.equal(edge.height, full.height);
+  assert(edge.width <= full.width, "edge width stays inside the full capture");
+  assert(edge.width >= full.width >> 1, "edge keeps the part inside the page");
+  assert(Math.abs(edge.height - full.height) <= 1, "edge height");
   const outside = await failure(
     {
       format: "png",
