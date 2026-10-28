@@ -1468,6 +1468,11 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 화면 소스 한 파일(vite `src/main.ts`, react `src/App.tsx`, vue `src/App.vue`, svelte `src/App.svelte`)에 표식을 덧붙인 뒤
 `update` 또는 `full-reload` 메시지가 오고, 다시 요청한 변환 모듈에 표식이 들어 있는지 봅니다. 파일 감시가 다른 프로세스의 편집을 잡는지를 보는 시험이며 브라우저는 쓰지 않습니다. 웹 빌드가 실패하면 그 템플릿의 나머지 단계는 건너뜁니다.
 개발 서버는 이 파일이 직접 띄우고 프로세스 트리째 종료하며, 프로젝트 삭제 실패도 단계로 기록합니다.
+마지막 `compiled-exe` 단계는 UI 진입 파일(`src/main.ts` 또는 `src/main.tsx`)에 확인 코드를 덧붙이고(백엔드에 `message.save`로
+저장한 메시지를 `message.read`로 읽어 같을 때만 `window.close()`), 시험용 Bun 캐시를 시드한 뒤 `bun run build`(`bunaway build`)로
+`dist/windows-x64/<appId>.exe`를 만듭니다. EXE 크기와 `manifest.json` 존재를 확인한 다음 EXE를 실행해 종료 코드 0을 기다립니다.
+확인 코드가 백엔드를 거쳐야 창을 닫으므로 종료 코드 0은 컴파일된 EXE, 번들 백엔드와 UI 자산, 실제 호스트와 WebView2가
+시작해 UI 스크립트가 백엔드에 닿았다는 뜻입니다. 기한을 넘기면 프로세스 트리째 종료하고 실패로 기록하며, EXE는 이 실행의 디렉터리를 가리키는 `LOCALAPPDATA`로 시작하며(템플릿의 message 모듈이 그 아래에 씁니다), 종료 코드 0 뒤에 확인 메시지가 그 아래 `bunaway/<appId>/data/messages/current.txt`에 있는지도 확인합니다. 같은 앱의 다른 인스턴스가 떠 있으면 새 EXE가 전달만 하고 코드 0으로 끝나 확인 코드가 실행되지 않기 때문입니다. 호스트 자신의 데이터 루트(WebView2 프로필, 로그, 단일 인스턴스 잠금)는 `LOCALAPPDATA`를 따르지 않고 실제 LocalAppData를 씁니다.
 한 단계가 실패해도 나머지 템플릿을 계속 돌리고 마지막에 실패 단계를 모아 실패하며, 단계별 결과는
-`build/windows-templates-results.json`에 기록합니다. 네이티브 창과 WebView2 실행, HMR 갱신 뒤의 화면 DOM, 설치 파일
-생성은 확인하지 않습니다. Windows native 실행기에 포함합니다.
+`build/windows-templates-results.json`에 기록합니다. HMR 갱신 뒤의 화면 DOM, 설치 파일 생성과 설치 파일 실행, 화면에
+그려진 내용은 확인하지 않습니다. Windows native 실행기에 포함합니다.

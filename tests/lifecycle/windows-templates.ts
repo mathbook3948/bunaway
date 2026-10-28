@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import {
+  appendFile,
+  mkdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { resolve } from "node:path";
 import { type DeadlineName, deadline, waitFor } from "../fixtures/deadlines.ts";
+import { seedWindowsBuildCaches } from "./windows-project-caches.ts";
 
 /**
  * Generates every UI template with the packed CLI on Windows and drives it the way a developer's
@@ -10,12 +19,14 @@ import { type DeadlineName, deadline, waitFor } from "../fixtures/deadlines.ts";
  * `doctor` and the backend run through the verification helper; the dev server is started here so
  * this file owns its whole process tree. After the server answers, one source file is edited and
  * the Vite HMR WebSocket must report the change, which shows that Windows file watching sees an
- * edit made by another process. A failing step does not stop the other templates; the run
+ * edit made by another process. The last step builds the compiled EXE with `bunaway build` and
+ * starts it: a probe appended to the UI entry saves and reads a message through the backend and then
+ * closes the window, so exit code 0 shows that the EXE, its bundled backend and UI assets, the real
+ * host and WebView2 all started. A failing step does not stop the other templates; the run
  * fails at the end and `build/windows-templates-results.json`, which the native job uploads, lists
  * every step.
  *
- * Not covered here: the native window and WebView2 (the other native fixtures run them), the DOM
- * an HMR update produces and installer packaging.
+ * Not covered here: the DOM an HMR update produces and installer packaging.
  */
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
@@ -66,6 +77,29 @@ const HMR_EDITS: Record<
     appended: `\n<p>${HMR_EDIT_MARKER}</p>\n`,
   },
 };
+/** The UI entry each template has; the compiled-EXE probe is appended to whichever exists. */
+const UI_ENTRIES = [
+  "src/main.ts",
+  "src/main.tsx",
+] as const;
+const COMPILED_PROBE_MESSAGE = "compiled template check";
+/**
+ * Appended to the UI entry before the compiled build. It goes through the backend (save, then
+ * read) and closes the window only when the message came back, so a started host that cannot reach
+ * its backend or serve its UI does not end with exit code 0.
+ */
+const COMPILED_PROBE = `
+import { client as compiledProbeClient } from "./client.ts";
+void (async () => {
+  await compiledProbeClient.invoke("message.save", "${COMPILED_PROBE_MESSAGE}");
+  if ((await compiledProbeClient.invoke("message.read", null)) !== "${COMPILED_PROBE_MESSAGE}") {
+    throw new Error("compiled template probe: message did not round-trip");
+  }
+  window.close();
+})();
+`;
+/** The smallest size a compiled Bun host can have; a stub or empty file is far below it. */
+const MIN_COMPILED_EXE_BYTES = 10_000_000;
 /** Packing the framework and a cold install take several times the generic build deadline. */
 const SETUP_DEADLINE_SCALE = 3;
 /** How much of a failed step's output the report keeps. */
@@ -135,9 +169,15 @@ async function execute(
   cwd: string,
   limit: DeadlineName,
   scale = 1,
+  env?: Record<string, string | undefined>,
 ): Promise<Outcome> {
   const child = Bun.spawn(command, {
     cwd,
+    ...(env === undefined
+      ? {}
+      : {
+          env,
+        }),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -204,6 +244,9 @@ const helperCommand = (...args: string[]) => [
 ];
 
 type Settings = {
+  app: {
+    appId: string;
+  };
   build: {
     command?: string[];
   };
@@ -456,6 +499,80 @@ async function webDevServer(
   }
 }
 
+/**
+ * Builds the generated app into a compiled EXE with `bunaway build`, then starts it from the
+ * package directory. The probe appended to the UI entry (see `COMPILED_PROBE`) closes the window
+ * after a backend round trip, which makes the EXE exit with code 0. A launch that outlives its
+ * deadline is killed with its process tree. Exit code 0 alone is not trusted: the message the
+ * probe saved must be in the `LOCALAPPDATA` the EXE was given.
+ */
+async function compiledExe(app: string, appId: string): Promise<Outcome> {
+  const entry = UI_ENTRIES.map((name) => resolve(app, name)).find((path) =>
+    existsSync(path),
+  );
+  assert(entry !== undefined, `no UI entry among ${UI_ENTRIES.join(", ")}`);
+  await appendFile(entry, COMPILED_PROBE);
+  await seedWindowsBuildCaches(app, root);
+  const built = await execute(
+    [
+      process.execPath,
+      "run",
+      "build",
+    ],
+    app,
+    "packagedAudit",
+    SETUP_DEADLINE_SCALE,
+  );
+  if (!built.ok) {
+    return built;
+  }
+  const packageRoot = resolve(app, "dist/windows-x64");
+  const executable = resolve(packageRoot, `${appId}.exe`);
+  const size = existsSync(executable) ? (await stat(executable)).size : 0;
+  assert(
+    size >= MIN_COMPILED_EXE_BYTES,
+    `${executable} is missing or too small (${size} bytes)`,
+  );
+  assert(
+    existsSync(resolve(packageRoot, "manifest.json")),
+    "the package has no manifest.json",
+  );
+  // The template's message module writes under LOCALAPPDATA, so a directory inside this run
+  // keeps the probe's message away from a developer's real app data. The host's own data root
+  // (WebView2 profile, logs, single-instance lock) does not follow this variable.
+  const localAppData = resolve(home, `local-app-data-${appId}`);
+  const launched = await execute(
+    [
+      executable,
+    ],
+    home,
+    "packagedAudit",
+    1,
+    {
+      ...process.env,
+      BUN_OPTIONS: undefined,
+      LOCALAPPDATA: localAppData,
+    },
+  );
+  if (!launched.ok) {
+    return launched;
+  }
+  // A second instance of the same app forwards to the running one and exits 0 without running
+  // the probe, so the saved message, not the exit code alone, shows that this EXE ran it.
+  const saved = resolve(
+    localAppData,
+    "bunaway",
+    appId,
+    "data/messages/current.txt",
+  );
+  assert(
+    existsSync(saved) &&
+      (await readFile(saved, "utf8")) === COMPILED_PROBE_MESSAGE,
+    `the EXE exited 0 but the probe's message is not in ${saved}`,
+  );
+  return launched;
+}
+
 /** Runs every step for one template; a failed step that later steps depend on ends the sequence. */
 async function verifyTemplate(
   template: string,
@@ -509,6 +626,10 @@ async function verifyTemplate(
         webDevServer(settings, app, template),
       );
     }
+    // Last, because it edits the UI entry the earlier steps serve.
+    await record(template, "compiled-exe", () =>
+      compiledExe(app, settings.app.appId),
+    );
   } catch (error) {
     results.push({
       template,
