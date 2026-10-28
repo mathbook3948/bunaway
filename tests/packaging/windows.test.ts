@@ -41,6 +41,7 @@ import { innoIdentity } from "#packaging/channels/windows/inno-identity";
 import { renderAppxManifest } from "#packaging/channels/windows/msix";
 import { signingArgs } from "#packaging/channels/windows/sign";
 import { parseAssociations } from "#packaging/windows-associations";
+import "./windows-installed-app-launch.ts";
 
 const metadata: ResolvedPackaging = {
   root: "C:\\proj",
