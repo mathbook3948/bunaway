@@ -37,9 +37,16 @@ const DEPENDENCY_FIELDS = [
 const FORBIDDEN_FILE_PATTERN =
   /(^|\/)(\.env[^/]*|\.npmrc|[^/]*\.(pem|key|p12|pfx)|[^/]*\.(test|spec)\.[cm]?[jt]sx?)$/;
 const SOURCE_FILE_PATTERN = /\.(ts|tsx|mts|js|mjs)$/;
-/** `import type` and `export type` statements, which the transpiler's import scan drops. */
-const TYPE_IMPORT_PATTERN =
-  /\b(?:import|export)\s+type\b[^"'`;]*?\bfrom\s*["']([^"']+)["']/g;
+/**
+ * Static `from "x"` clauses (including `import type` and `import { type A }`) and `import("x")`
+ * type references, which the transpiler's import scan drops. Comments are removed first so an
+ * example inside a comment is not counted.
+ */
+const FROM_CLAUSE_PATTERN = /\bfrom\s*["']([^"']+)["']/g;
+const IMPORT_TYPE_PATTERN = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
+const INVALID_SPECIFIER_PATTERN = /[${}\s]/;
+const BLOCK_COMMENT_PATTERN = /\/\*[\s\S]*?\*\//g;
+const LINE_COMMENT_PATTERN = /^\s*\/\/.*$/gm;
 
 /** One tarball as read back from disk: its file list and the sources of its code files. */
 export type PackedPackage = {
@@ -224,14 +231,21 @@ function auditImports(
     if (!SOURCE_FILE_PATTERN.test(file)) {
       continue;
     }
+    const code = source
+      .replace(BLOCK_COMMENT_PATTERN, "")
+      .replace(LINE_COMMENT_PATTERN, "");
     const specifiers = [
       ...transpiler.scanImports(source).map((entry) => entry.path),
       ...[
-        ...source.matchAll(TYPE_IMPORT_PATTERN),
+        ...code.matchAll(FROM_CLAUSE_PATTERN),
+        ...code.matchAll(IMPORT_TYPE_PATTERN),
       ].map((match) => match[1] ?? ""),
     ];
     for (const specifier of specifiers) {
-      const dependency = packageOfImport(specifier);
+      // Template text such as `from "${name}"` in generated code is not a package name.
+      const dependency = INVALID_SPECIFIER_PATTERN.test(specifier)
+        ? undefined
+        : packageOfImport(specifier);
       if (dependency && !declared.has(dependency) && !own.has(dependency)) {
         fail(
           `${file} imports ${dependency}, which package.json does not declare`,

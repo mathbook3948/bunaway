@@ -52,8 +52,10 @@ ADR 0008 본문은 "CLI와 여섯 SDK"라고 적었으나 지금 SDK 패키지�
 ### package.json 변경 없음
 
 이 결정은 공개 필드(`files`, `publishConfig`, `private`, `license`)를 바꾸지 않는다. `files`는 pack이 덮어쓰고,
-`publishConfig`는 조직 이름과 레지스트리에 따라 달라지므로 아래의 소유자 결정 항목이다. 검사가 찾은 선언 누락 하나만
-고쳤다: `@bunaway/plugin-clipboard`가 `@bunaway/plugin-api`를 가져오면서 의존성으로 선언하지 않았다.
+`publishConfig`는 조직 이름과 레지스트리에 따라 달라지므로 아래의 소유자 결정 항목이다. 검사가 찾은 선언 누락만
+고쳤다: 플러그인 16개가 `@bunaway/plugin-api`를 소스나 선언 파일에서 가져오면서 의존성으로 선언하지 않았고(`plugin-log`는
+`@bunaway/protocol`도), 각 `package.json`과 `bun.lock`에 `workspace:*` 의존성을 더했다. 모두 타입 참조이거나 번들에서
+외부로 두는 패키지라 런타임 번들은 바뀌지 않는다.
 
 ### 공개 전 tarball 검사
 
@@ -68,7 +70,8 @@ tarball을 `tar`로 임시 디렉터리에 풀어 파일 목록과 `package.json
 - `workspace:`, `file:`, `link:` 범위가 남아 있지 않다.
 - `exports`, `types`, `main`, `bin`이 가리키는 파일이 tarball에 있다.
 - 시험 파일, `.env*`, `.npmrc`, 키 파일이 들어 있지 않고, 라이선스 파일이 있다.
-- 포함된 `src/`와 `dist/`의 bare import(`import type`, `export type` 포함)가 `package.json`에 선언된 의존성이거나 패키지
+- 포함된 `src/`와 `dist/`의 bare import(`import type`, `import { type A }`, `export type`, 선언 파일의 `import("x")` 타입
+  참조 포함, 주석 안의 예시는 제외)가 `package.json`에 선언된 의존성이거나 패키지
   자신, Node 내장 모듈이다.
 - `./native/*` 같은 패턴 `exports`는 맞는 파일이 하나 이상 있어야 한다. 다만 `src/platforms/`가 없는 패키지(네이티브
   어댑터가 없는 `@bunaway/plugin-window-state`)는 플러그인 스캐폴드가 모든 플러그인에 쓰는 패턴을 그대로 가지므로 제외한다.
@@ -83,7 +86,8 @@ tarball을 `tar`로 임시 디렉터리에 풀어 파일 목록과 `package.json
 
 ## 소유자 결정 대기 항목
 
-아래 값은 공개 후 되돌리기 어렵거나 외부 계정에 묶여 있어 이 결정에서 정하지 않는다. 게시를 막는 값은 `private: true` 하나인데, 이
+아래 값은 공개 후 되돌리기 어렵거나 외부 계정에 묶여 있어 이 결정에서 정하지 않는다. 게시를 막는 값은 `private: true` 하나인데(CLI tarball의 `private: true`는 `pack.ts`가 직접 써 넣으므로 `private`을
+바꿀 때는 `pack.ts`의 CLI 매니페스트도 함께 고친다), 이
 값은 `packages/*` 9개에만 있고 `plugins/*` 24개에는 없다. 플러그인은 토큰이 있으면 지금도 그대로 게시되므로, 릴리스 워크플로는
 게시할 패키지를 이름 목록으로 명시해야 한다.
 

@@ -189,6 +189,30 @@ test("type-only imports and non-string ranges are audited", () => {
   expect(text).toContain("imports left-pad");
 });
 
+test("inline import type references, inline type specifiers and comments are handled", () => {
+  const text = auditPackedPackage(
+    packed({
+      manifest: {
+        ...packed().manifest,
+        dependencies: {},
+      },
+      sources: new Map([
+        [
+          "dist/types/a.d.ts",
+          'export declare const x: import("pkg-a").T;\nimport { type B } from "pkg-b";\n// import type { C } from "pkg-c"\n/* export type { D } from "pkg-d" */\nconst template = `from "$' +
+            '{name}"`;\n',
+        ],
+      ]),
+    }),
+    expected,
+  ).join("\n");
+  expect(text).toContain("imports pkg-a");
+  expect(text).toContain("imports pkg-b");
+  expect(text).not.toContain("pkg-c");
+  expect(text).not.toContain("pkg-d");
+  expect(text).not.toContain("{name}");
+});
+
 test("file: and link: ranges are rejected like workspace: ranges", () => {
   const manifest = {
     ...packed().manifest,
