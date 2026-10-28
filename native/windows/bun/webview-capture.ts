@@ -87,7 +87,7 @@ function captureError(
 }
 
 /** Keeps the native failure text for trusted diagnostics; the public message stays generic. */
-function withCause(error: BunawayError, cause: string) {
+export function withCause(error: BunawayError, cause: string) {
   return Object.assign(error, {
     cause,
   });
@@ -322,7 +322,7 @@ export async function capturePageImage(
     if (layout.kind !== "ok") {
       throw withCause(
         captureError("INTERNAL", "Reading the page layout failed."),
-        outcome.kind === "failed" ? outcome.reason : outcome.kind,
+        layout.kind === "failed" ? layout.reason : layout.kind,
       );
     }
     clip = clipForRegion(options.region, parseVisiblePage(layout.json));

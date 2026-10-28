@@ -400,6 +400,28 @@ test("a region outside the page fails before any screenshot is taken", async () 
   ]);
 });
 
+test("a failed layout read is an internal error that keeps the native text in its cause", async () => {
+  const call: ProtocolCall = async () => ({
+    kind: "failed",
+    reason: "RPC_E_DISCONNECTED",
+  });
+  await expect(
+    capturePageImage(call, {
+      format: "png",
+      region: {
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+      },
+    }),
+  ).rejects.toMatchObject({
+    code: "INTERNAL",
+    message: "Reading the page layout failed.",
+    cause: "RPC_E_DISCONNECTED",
+  });
+});
+
 test("both calls share one deadline and the second receives only the time left", async () => {
   let clock = 0;
   const budgets: number[] = [];

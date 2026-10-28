@@ -33,7 +33,11 @@ import {
 } from "./com.ts";
 import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
-import { capturePageImage, type ProtocolOutcome } from "./webview-capture.ts";
+import {
+  capturePageImage,
+  type ProtocolOutcome,
+  withCause,
+} from "./webview-capture.ts";
 import { setProfileColorScheme } from "./webview-color-scheme.ts";
 import {
   callDevToolsProtocolMethod,
@@ -1193,10 +1197,13 @@ export class WebView {
       } catch (error) {
         settle(() =>
           reject(
-            new BunawayError({
-              code: "INTERNAL",
-              message: `Starting the page capture failed: ${describeDevToolsFailure(error)}`,
-            }),
+            withCause(
+              new BunawayError({
+                code: "INTERNAL",
+                message: "Starting the page capture failed.",
+              }),
+              describeDevToolsFailure(error),
+            ),
           ),
         );
       }
