@@ -72,7 +72,7 @@ function moveFailure(code: number): Error {
   if (code === ERROR_NOT_SAME_DEVICE) {
     return new BunawayError({
       code: "UNSUPPORTED",
-      message: "Storage move requires the same filesystem volume.",
+      message: "Storage move across volumes was not completed by the OS.",
     });
   }
   if (code === ERROR_INVALID_NAME || code === ERROR_FILENAME_EXCED_RANGE) {
