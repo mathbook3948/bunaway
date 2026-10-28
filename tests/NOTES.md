@@ -1454,6 +1454,15 @@ Alt와 다른 키의 조합과 Esc, 비활성화, 항목 실행, 메뉴 모드 �
 키가 컨트롤러 accelerator 이벤트로 도착해 메뉴바를 붙이고 떼는지 검사한다. 클릭 시도마다 클릭 지점의 창 클래스와
 클릭 전후 포그라운드 상태를 로그로 남기고, 페이지가 일반 키를 받고 그 키가 메뉴바를 바꾸지 않는지 먼저 확인한다. 입력 데스크톱이 필요하다. 창 틀에서 Alt 뒤에 Windows가 여는 메뉴 모드의 실제 동작은 검증하지 않는다.
 
+`lifecycle/windows-webview-text-input.ts`는 클릭으로 활성화한 실제 WebView2 페이지의 input과 textarea에
+SendInput의 KEYEVENTF_UNICODE로 한글 음절, 서로게이트 쌍과 ZWJ 이모지, 결합 문자(`e` + U+0301)를 보내고, 줄바꿈은
+Enter 키로 보낸다. 페이지가 받은 beforeinput과 input의 insertText 데이터를 이어 붙인 문자열과 최종 value가 보낸
+문자열과 정확히 같은지, 조합 이벤트가 없는지, 포커스가 호스트와 페이지에 남는지 검사한다. 설치된 키보드 레이아웃마다
+ActivateKeyboardLayout로 스레드 입력 로케일을 바꿔 같은 입력을 반복하고 문자 키의 `KeyboardEvent.code`가 레이아웃과
+무관한 `KeyA`인지 본다(en-US는 `key`도 확인). 러너에 레이아웃이 하나뿐이면 전환은 실행되지 않으며 로그에 남긴다.
+레이아웃은 새로 설치하지 않고 시작 때의 값으로 되돌린다. IME 조합(compositionstart/update/end), 후보 창, 레이아웃 전환
+단축키와 IME가 켜진 레이아웃의 변환은 CI 러너에 IME가 없어 검증하지 않는다. 입력 데스크톱이 필요하다.
+
 `api/dialog.test.ts`는 실제 작업 정의로 입력, 개별 권한, 정확한 창 출처, 사용자 취소와
 호출 실패, 정리를 검사한다. 이후 tick에서 Close가 수락되면 앞선 Close 실패보다 우선해
 취소로 처리하는지도 검사한다. `lifecycle/windows-dialog.test.ts`는 실제 UI STA와 COM 파일
