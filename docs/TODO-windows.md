@@ -1148,7 +1148,7 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 - [ ] trusted backend sandbox가 필요한 앱에 별도 프로세스 격리 모델을 제공할지 결정한다.
 - [ ] WebRTC, WebGL, shared worker와 Web API의 엔진별 지원 차이를 검증한다.
 - [ ] Electron localAIHandler와 LanguageModelUtility의 실험 기능에 대응할 필요성을 결정한다.
-- [ ] obsolete BrowserView와 protocol API는 현대 View와 protocol 기능에 매핑하고 구 API 호환 여부를 기록한다.
+- [x] 결정 완료: obsolete BrowserView와 구 protocol API(`register*Protocol`, `intercept*Protocol`)는 구 API 호환을 제공하지 않는다. BrowserView와 WebContentsView는 WebView 하나 모델에서 매핑 대상이 없고, protocol 기능은 제공하게 될 때 현대형 하나만 둔다. [ADR 0120](./decisions/0120-obsolete-browserview-and-protocol-api-mapping.md).
 
 ## 26. macOS와 Linux 전용 기능
 
