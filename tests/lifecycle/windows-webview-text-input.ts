@@ -29,6 +29,8 @@ const caption = "Bunaway text input";
 const STEP_TIMEOUT_MS = deadline("childStep");
 // Time given to the page to report a typed text before the value is compared.
 const TEXT_REPORT_POLL_MS = 25;
+// Time given to the page and the controller to take focus after a click.
+const FOCUS_SETTLE_MS = 750;
 const VK_RETURN = 0x0d;
 const VK_A = 0x41;
 // SendInput structures: INPUT is 40 bytes; the mouse and keyboard members start at offset 8.
@@ -428,6 +430,15 @@ async function reset(target: "a" | "b"): Promise<void> {
     }),
   );
   await pumpUntil(() => resetSeen === seq, `Page reset of ${target}`);
+  // Keys are sent only once the document reports focus on the element, so a key that does not
+  // arrive cannot be a page without focus.
+  const limit = Date.now() + STEP_TIMEOUT_MS;
+  let current = await report(target);
+  while (current.focus !== `focused:${target}` && Date.now() < limit) {
+    await settle(TEXT_REPORT_POLL_MS);
+    current = await report(target);
+  }
+  assert.equal(current.focus, `focused:${target}`, "Page focus after reset");
 }
 
 /** Ask the page for the element value and recorded events once. */
@@ -597,7 +608,9 @@ try {
   // Real input needs the window in the foreground with the page focused.
   step("activate");
   await activateByClick(hwnd);
+  await settle(FOCUS_SETTLE_MS);
   page.moveFocusToContent();
+  await settle(FOCUS_SETTLE_MS);
   await reset("a");
 
   const layouts = installedLayouts();
