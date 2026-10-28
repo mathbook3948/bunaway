@@ -18,6 +18,8 @@ SDK 이름과 명령, 정책, 네이티브 실행 계약은 유지한다. CLI는
 절대 tarball 경로를 사용하며 create --package-dir으로 앱에도 그 위치를 지정한다.
 로컬 묶음은 재설치 시 보관해야 하고 다른 위치로 옮기면 다시 생성한다.
 공개 npm publish, 프레임워크 라이선스 결정은 이번 범위가 아니다.
+2026-10-28 공개 대상과 버전 규칙, 공개 전 tarball 검사는
+[ADR 0125](./0125-public-release-readiness.md)를 따른다.
 
 CLI는 패키지 버전, 해석 경로와 CLI inventory를 검사한다. 앱별 소스 snapshot hash는
 제거하고 설치 재현성은 bun.lock과 패키지 관리자에 맡긴다. Windows 배포 빌드에서는 번들 Bun의

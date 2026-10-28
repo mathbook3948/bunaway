@@ -20,6 +20,10 @@ depends = ["plugins:build"]
 description = "Check all workspace TypeScript types"
 run = ["bun run --workspaces typecheck", "bunx --no-install tsc --project tests/tsconfig.json", "bunx --no-install tsc --project tests/fixtures/android/web/tsconfig.json", "bunx --no-install tsc --project tests/fixtures/ios/web/tsconfig.json"]
 
+[tasks."release:check"]
+description = "Pack every framework package into a temporary directory and audit each tarball without publishing"
+run = "bun scripts/check-release-packages.ts"
+
 [tasks.lint]
 description = "Lint source files without changing them"
 run = "bunx --no-install biome lint --error-on-warnings ."
