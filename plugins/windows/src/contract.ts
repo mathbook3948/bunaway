@@ -371,7 +371,6 @@ const creationResult = {
             contentProtection: z.boolean().exactOptional(),
             backgroundColor: windowBackgroundColor.exactOptional(),
             transparent: z.boolean().exactOptional(),
-            icon: z.string().exactOptional(),
             maximized: z.boolean().exactOptional(),
             fullscreen: z.boolean().exactOptional(),
           })

@@ -45,6 +45,10 @@ test.each([
     expect(bundle).toBeDefined();
     // The declared `window.icon` is a creation option of the host itself, so the host keeps the
     // window ICO provider (`CreateIconFromResourceEx`); the tray and menu implementations stay out.
+    // macOS never loads the Windows provider, so the symbol must stay out of that bundle.
+    if (platform === "macos") {
+      expect(bundle).not.toContain("CreateIconFromResourceEx");
+    }
     for (const implementation of [
       "Shell_NotifyIconW",
       "Shell_NotifyIconGetRect",
