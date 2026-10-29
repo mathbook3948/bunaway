@@ -1299,10 +1299,10 @@ export const windowOperations = {
    * request awaiting approval is reported as `pending` and a cancelled one as `cancelled`. State
    * changes arrive on the next event-loop turn and byte counts at most every 250 ms per download.
    * Each result is the latest snapshot, so changes within one turn merge and an intermediate state
-   * can be skipped; speed is the difference of `receivedBytes` over time. Nothing is sent for a forgotten item, after its
-   * window closes or once shutdown starts. Only recent changes are retained: after a gap in
-   * `sequence`, read `windows.getDownloads` for the current state. Backend only and without a
-   * permission check.
+   * can be skipped; speed is the difference of `receivedBytes` over time. Nothing is sent for a
+   * forgotten item, after its window closes or once shutdown starts. Only recent changes are
+   * retained: after a gap in `sequence`, read `windows.getDownloads` for the current state.
+   * Backend only and without a permission check.
    */
   "windows.waitForDownloadChange": {
     input: z.strictObject({

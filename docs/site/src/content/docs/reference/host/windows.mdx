@@ -347,24 +347,6 @@ multiple-automatic-downloads 권한도 계속 거부하므로 같은 페이지�
 SDK 연결이 종료될 수 있으므로 화면은 클라이언트를 다시 초기화해야 할 수 있습니다.
 pending 항목은 30초 뒤, 새 문서 탐색 또는 요청 수집 비활성화 시 거부합니다.
 
-### 다운로드 변경 알림 (Windows)
-
-백엔드는 `windows.waitForDownloadChange({ after? })`로 `getDownloads`를 반복 조회하지 않고 변경을 받습니다.
-결과는 `{ sequence, windowId, viewId, download }`이고 `download`는 `getDownloads`가 반환하는 항목과 같은 모양의
-snapshot입니다. 속도는 담지 않으므로 받는 쪽이 `receivedBytes`의 차이를 시간으로 나눠 계산합니다.
-
-- 요청이 들어오면 `pending`, 승인하면 `inProgress`, 일시중지나 중단은 `interrupted`(일시중지는 `paused: true`),
-  끝나면 `completed`, 거부하거나 취소하거나 30초가 지나면 `cancelled` snapshot을 전달합니다.
-  승인 대기 요청도 같은 호출로 알 수 있습니다.
-- 상태 변화는 바로 다음 이벤트 루프 턴에, 받은 byte 수 변화는 항목마다 250ms에 한 번 최신 값으로 합칩니다.
-  전달하는 것은 그 시점의 최신 snapshot이므로 한 턴 안에 연달아 일어난 상태 변화(예: 작은 파일이 승인 직후 끝남)는
-  마지막 상태 하나로 합쳐지고 중간 상태는 생략될 수 있습니다. 같은 snapshot은 다시 전달하지 않습니다.
-- `forgetDownload` 뒤, 창을 닫는 중, 앱 종료나 세션 종료가 시작된 뒤에는 전달하지 않습니다.
-- `waitForLifecycle`과 같은 규칙으로 `sequence`를 이어 전달하면 보존된 이력(최근 32개)을 따라가고, 동시에 16개 호출을
-  대기시키며 넘으면 `BUSY`입니다. `sequence`가 건너뛰었다면 이력에서 밀려난 변경이 있으므로 `getDownloads`로
-  현재 상태를 다시 읽습니다.
-- 백엔드 전용이며 권한 검사가 없습니다. 항목은 URL과 저장 경로를 담으므로 화면 문서에는 이벤트로 전달하지 않습니다.
-- macOS는 지원하지 않습니다.
 백엔드가 승인한 다운로드는 문서 탐색 뒤에도 같은 창 수명에
 속하며 창 종료와 재생성에서는 취소하고 참조를 정리합니다.
 
@@ -374,8 +356,8 @@ WebView마다 pending, 활성, 종료된 기록을 합해 최대 32개를 유지
 먼저 취소해야 합니다. WebView2가 중단된 다운로드를 자동 재개할 수 있어 현재 canResume이
 false여도 참조를 유지합니다. 없는 ID와 더 이상 pending이 아닌 ID의 승인은 `INVALID_ARGUMENT`입니다.
 재개할 수 없는 항목의 resume은 `BUSY`입니다. cancel은 반복해도 안전하며 완료된 항목은
-완료 상태를 유지합니다. 진행률과 완료, 실패는 현재 snapshot 조회로 확인합니다.
-별도 이벤트, 속도 계산, 재시작 뒤 중단 파일 복원과 업로드는 아직 제공하지 않습니다.
+완료 상태를 유지합니다. 진행률과 완료, 실패는 snapshot 조회나 아래 변경 알림으로 확인합니다.
+재시작 뒤 중단 파일 복원과 업로드는 아직 제공하지 않습니다.
 
 다운로드 metadata의 URL, MIME, Content-Disposition과 경로는 JSON 인코딩 후 합계 64 KiB까지
 허용합니다. 이스케이프 문자와 UTF-8 크기도 포함합니다. 전체 retained snapshot은 항목별
@@ -385,6 +367,26 @@ false여도 참조를 유지합니다. 없는 ID와 더 이상 pending이 아닌
 유지합니다. `cancelDownload`는 metadata 읽기와 독립적으로 취소하며 네이티브 Cancel 실패는
 항목을 보존해 재시도할 수 있습니다. `paused`는 현재 interrupted 상태의 USER_PAUSED reason에서
 조회하므로 브라우저 UI로 재개해도 최신 상태를 반영합니다.
+
+### 다운로드 변경 알림 (Windows)
+
+백엔드는 `windows.waitForDownloadChange({ after? })`로 `getDownloads`를 반복 조회하지 않고 변경을 받습니다.
+결과는 `{ sequence, windowId, viewId, download }`이고 `download`는 `getDownloads`가 반환하는 항목과 같은 모양의
+snapshot입니다. 속도는 담지 않으므로 받는 쪽이 `receivedBytes`의 차이를 시간으로 나눠 계산합니다.
+
+- 요청이 들어오면 `pending`, 승인하면 `inProgress`, 일시중지나 중단은 `interrupted`(일시중지는 `paused: true`),
+  끝나면 `completed`, 거부하거나 취소하거나 30초가 지나면 `cancelled` snapshot을 전달합니다.
+  승인 대기 요청도 같은 호출로 알 수 있습니다. 출처나 32개 상한 때문에 항목을 만들기 전에 거부한 요청은
+  항목이 없으므로 전달하지 않습니다.
+- 상태 변화는 바로 다음 이벤트 루프 턴에, 받은 byte 수 변화는 항목마다 250ms에 한 번 최신 값으로 합칩니다.
+  전달하는 것은 그 시점의 최신 snapshot이므로 한 턴 안에 연달아 일어난 상태 변화(예: 작은 파일이 승인 직후 끝남)는
+  마지막 상태 하나로 합쳐지고 중간 상태는 생략될 수 있습니다. 같은 snapshot은 다시 전달하지 않습니다.
+- `forgetDownload` 뒤, 창을 닫는 중, 앱 종료나 세션 종료가 시작된 뒤에는 전달하지 않습니다.
+- `waitForLifecycle`과 같은 규칙으로 `sequence`를 이어 전달하면 보존된 이력(최근 32개)을 따라가고, 동시에 16개 호출을
+  대기시키며 넘으면 `BUSY`입니다. `sequence`가 건너뛰었다면 이력에서 밀려난 변경이 있으므로 `getDownloads`로
+  현재 상태를 다시 읽습니다.
+- 백엔드 전용이며 권한 검사가 없습니다. 항목은 URL과 저장 경로를 담으므로 화면 문서에는 이벤트로 전달하지 않습니다.
+- macOS는 지원하지 않습니다.
 
 ### WebView 기본 제어
 
