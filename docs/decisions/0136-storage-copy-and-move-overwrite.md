@@ -42,7 +42,7 @@ status: accepted
 `overwrite: true`이면 대상으로 풀린 실제 파일과 같은 폴더의 임시 파일에 전체를 복사하고 디스크에 반영한 뒤 대상 위에 교체한다.
 `writeBytes`의 `atomic: true`와 같은 교체 절차(임시 파일, 디스크 반영, 교체, 실패 시 정리)를 재사용하며 두 번째 교체 구현을 만들지 않는다.
 다만 지금의 `replaceAtomically`는 바이트 전체를 한 번에 받고, 상위 폴더를 항상 만들고, 권한 비트 읽기와 `W_OK` 검사를 한 함수에서 하므로 그대로는 쓸 수 없다.
-구현은 이 함수를 나눠 조각 단위 복사 원본을 받을 수 있게 하고, 상위 폴더 생성과 권한 비트 이어받기를 호출자가 고르게 하며 `writeBytes`의 동작은 바꾸지 않는다. `copyFile`의 `copyFile`의 기존 입력 규칙은 `overwrite`와 무관하게 유지한다.
+구현은 이 함수를 나눠 조각 단위 복사 원본을 받을 수 있게 하고, 상위 폴더 생성과 권한 비트 이어받기를 호출자가 고르게 하며 `writeBytes`의 동작은 바꾸지 않는다. `copyFile`의 기존 입력 규칙은 `overwrite`와 무관하게 유지한다.
 
 - `to`의 상위 디렉터리가 없으면 `INVALID_ARGUMENT`이고 폴더를 만들지 않는다. `atomic` 쓰기가 상위 폴더를 만드는 동작은 가져오지 않는다.
 - 새 파일의 권한은 `copyFile`의 기존 규칙을 따른다(macOS는 `0600`에 umask, Windows는 상속 ACL). 기존 대상의 POSIX 권한 비트를 이어받는 `atomic` 쓰기의 동작은 가져오지 않는다. 같은 함수(`existingMode`)에 있는 `accessSync(W_OK)` 쓰기 권한 사전 검사는 유지한다. `copyFile`에는 지금 이 검사가 없고, 읽기 전용 대상의 `PERMISSION_DENIED`는 이 검사로 플랫폼과 무관하게 성립한다.
@@ -71,7 +71,7 @@ status: accepted
 - 대상이 이미 있고 다른 볼륨이면 `UNSUPPORTED`이고 원본과 대상 모두 그대로 둔다. 다른 볼륨 이동은 복사 뒤 원본 삭제라 교체가 원자적이지 않고, 중간에 실패하면 대상이 반쯤 쓰인 파일로 바뀔 수 있다. 앱은 `copyFile`의 `overwrite`로 복사한 뒤 원본을 지운다.
 - 원본이 없거나 대상 상위 디렉터리가 없으면 `INVALID_ARGUMENT`이다.
 - 원본과 대상이 같은 경로이거나 대상이 원본의 하위 경로이면 `INVALID_ARGUMENT`이다. 공통 `move`는 지금 하위 경로만 검사하고, 같은 경로는 Windows에서는 덮어쓰기 금지 이름 변경이 실패하며 걸러지며 macOS 어댑터는 `from === to`를 직접 거부한다. 교체 모드는 이 실패에 기대지 못하므로 같은 경로 검사를 공통 `move`에 하나로 두고 어댑터별 검사를 늘리지 않는다. 대상이 있을 때 같은 파일을 가리키는 서로 다른 이름(하드 링크, 링크 경유)도 `INVALID_ARGUMENT`로 거부하고 둘 다 그대로 둔다. 대소문자만 다른 이름(`a.txt`를 `A.txt`로)은 대소문자를 구분하지 않는 파일 시스템에서 같은 파일로 판정되므로 교체 모드에서 이 규칙으로 거부된다. 기본 모드가 이 이름 변경을 허용하는지는 이 저장소에서 확인하지 않았으며, 허용한다면 같은 입력의 결과가 옵션에 따라 달라지는 예외로 구현 항목이 시험하고 문서에 적는다.
-- 읽기 전용 대상과 다른 프로세스가 열어 둔 대상 때문에 교체가 거부되면 `PERMISSION_DENIED`이고 원본과 대상은 그대로다. 지금 `move`의 실패 매핑은 Windows 공유 위반(32)을 `INTERNAL`로 두므로, 교체 모드에서는 `copyFile` 교체가 쓰는 `swapFailure` 매핑(공유 위반 32와 잠금 위반 33을 `PERMISSION_DENIED`로)을 재사용하도록 구현에서 바꾼다(교체 모드에 한정하고 `overwrite`를 주지 않은 호출의 오류는 유지한다). `move`의 다시 시도는 이번 결정에 넣지 않는다.
+- 읽기 전용 대상과 다른 프로세스가 열어 둔 대상 때문에 교체가 거부되면 `PERMISSION_DENIED`이고 원본과 대상은 그대로다. 지금 `move`의 실패 매핑은 Windows 공유 위반(32)을 `INTERNAL`로 두므로, 교체 모드에서는 `copyFile` 교체가 쓰는 `swapFailure` 매핑 중 공유 위반 32와 잠금 위반 33을 `PERMISSION_DENIED`로 바꾸는 부분만 재사용하도록 구현에서 바꾼다. `swapFailure`는 다른 볼륨 오류(17)를 `UNSUPPORTED`로 바꾸지 못하므로, 17은 지금처럼 `moveFailure`가 먼저 `UNSUPPORTED`로 처리한다(교체 모드에 한정하고 `overwrite`를 주지 않은 호출의 오류는 유지한다). `move`의 다시 시도는 이번 결정에 넣지 않는다.
 - macOS의 `rename`은 대상 파일의 쓰기 권한을 보지 않고 교체한다. 읽기 전용 대상의 결과를 Windows와 맞추기 위해 `move` 교체 모드도 위의 `W_OK` 사전 검사를 쓴다.
 
 ### 두 연산 공통
@@ -118,7 +118,7 @@ ADR 0126의 (b)는 쓰기 연산의 입력과 새 오류 코드를 요구하는 
 
 구현은 이 결정이 머지된 뒤 별도 항목으로 고른다. Windows를 먼저 하고 macOS는 같은 계약을 별도 항목으로 따른다. macOS가 구현되기 전에는 macOS에서 `overwrite: true`를 대상 유무와 관계없이 `UNSUPPORTED`로 거부한다. 이는 위의 "대상이 없으면 기본 모드와 같다"에 대한 macOS 과도기 예외이며, macOS 구현 항목이 이 예외를 없앤다. 플랫폼 지원 표에 그 사실을 적는다.
 
-범위: `plugins/storage`의 두 연산 입력 스키마, 공통 기반 `node-storage.ts`(`move`의 같은 경로와 같은 파일 검사, `copyContents`의 교체 분기), Windows 어댑터, macOS 어댑터의 과도기 `UNSUPPORTED` 거부, 참조 문서(전송 문서 106행의 "공유 위반과 일반 I/O 실패는 `INTERNAL`일 수 있습니다"에서 교체 모드의 공유 위반만 `PERMISSION_DENIED`로 분리하고 일반 I/O 실패 서술은 유지), 변경 기록, `docs/TODO-windows.md`, [전송 문서](../site/src/content/docs/reference/host/storage-transfers.mdx). `tests/lifecycle`의 Windows 시나리오로 CI `windows-native`에서 확인할 것:
+범위: `plugins/storage`의 두 연산 입력 스키마, 공통 기반 `node-storage.ts`(`move`의 같은 경로와 같은 파일 검사, `copyContents`의 교체 분기와 `copyFile`의 같은 파일 검사(지금은 `O_EXCL`이 거르므로 교체 모드는 임시 파일로 교체하기 전에 하드 링크와 링크 경유로 같은 파일인지 확인해야 한다)), Windows 어댑터, macOS 어댑터의 과도기 `UNSUPPORTED` 거부, 참조 문서(전송 문서 106행의 "공유 위반과 일반 I/O 실패는 `INTERNAL`일 수 있습니다"에서 교체 모드의 공유 위반만 `PERMISSION_DENIED`로 분리하고 일반 I/O 실패 서술은 유지), 변경 기록, `docs/TODO-windows.md`, [전송 문서](../site/src/content/docs/reference/host/storage-transfers.mdx). `tests/lifecycle`의 Windows 시나리오로 CI `windows-native`에서 확인할 것:
 
 - 교체 성공(내용, 크기, 빈 파일, 1 MiB를 넘는 파일), 기본 모드의 거부 유지
 - 대상이 디렉터리, 읽기 전용, 링크(`copyFile`은 가리키는 파일을 교체, `move`는 `INVALID_ARGUMENT`), 가리키는 곳이 없는 링크, 상위 디렉터리 없음
