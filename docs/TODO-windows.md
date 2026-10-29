@@ -611,7 +611,7 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 - [x] suspend, resume, 화면 잠금과 잠금 해제 이벤트를 제공한다. power.suspended, power.resumed, power.sessionLocked, power.sessionUnlocked는 빈 payload이며 잠금은 호출 프로세스 세션의 WTS 잠금이다. 권한은 power.statusChanged와 같다.
 - [x] Windows AC와 배터리, 충전, 잔량, battery saver 및 수명 추정 상태를 조회한다.
 - [x] AC와 배터리 상태 변경 이벤트를 제공한다. power.statusChanged는 전원 상태 변경 알림과 resume에서 재조회하며 동일 값은 생략한다.
-- [x] Windows 호출 세션의 입력 idle 시간과 지정 기한의 active/idle 상태를 조회한다. 잠금 여부는 별도 작업이다.
+- [x] Windows 호출 세션의 입력 idle 시간과 지정 기한의 active/idle 상태를 조회한다. 잠금 여부는 `power.isSessionLocked`가 별도로 조회한다.
 - [x] Windows 시스템 idle 절전과 화면 꺼짐 방지 요청을 시작, 조회하고 해제한다. 사용자 절전과 OS 전원 정책은 우회하지 않는다.
 - [x] blocker의 반복 요청을 독립 ID로 관리하고 앱 종료 시 native handle을 자동 정리한다.
 - [x] CPU speed-limit, thermal-state와 종료 이벤트의 플랫폼별 지원을 정의한다. `power.getCpuSpeedLimit`은 CallNtPowerInformation(ProcessorInformation)의 프로세서별 MhzLimit/MaxMhz 중 최솟값(0–100 정수)을 반환하며, MaxMhz 0 항목은 건너뛰고 계산할 항목이 없으면 100이다. `speed-limit-change` 이벤트는 제공하지 않고, thermal-state는 macOS 전용 개념이라 Windows 미지원이다. 종료 계열은 기존 suspend, resume, 세션 잠금 이벤트가 범위다.

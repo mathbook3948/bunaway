@@ -110,3 +110,32 @@ export function cpuSpeedLimit(data: Uint8Array): PowerCpuSpeedLimit {
 export function idleSeconds(now: number, lastInput: number): number {
   return Math.floor(((now - lastInput) >>> 0) / 1000);
 }
+/** WTSINFOEXW: DWORD Level, then the 8-byte aligned WTSINFOEX_LEVEL1_W union member. */
+export const WTS_INFO_EX_MIN_BYTES = 20;
+const WTS_INFO_EX_LEVEL_1 = 1;
+const WTS_INFO_EX_FLAGS_OFFSET = 16;
+/** WTS_SESSIONSTATE_LOCK is 0 and WTS_SESSIONSTATE_UNLOCK is 1 since Windows 8. */
+const WTS_SESSIONSTATE_LOCK = 0;
+const WTS_SESSIONSTATE_UNLOCK = 1;
+/**
+ * Decode the SessionFlags of a WTSINFOEXW into a lock state. A level other than 1 or a flag value
+ * other than lock and unlock (WTS_SESSIONSTATE_UNKNOWN, or the swapped meaning older Windows
+ * versions report) is not a state, so it throws instead of reporting an unlocked session.
+ */
+export function sessionLocked(data: Uint8Array): boolean {
+  if (data.byteLength < WTS_INFO_EX_MIN_BYTES) {
+    throw new Error("WTSINFOEXW is shorter than its level 1 data.");
+  }
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  if (view.getUint32(0, true) !== WTS_INFO_EX_LEVEL_1) {
+    throw new Error("WTSINFOEXW does not carry level 1 data.");
+  }
+  const flags = view.getUint32(WTS_INFO_EX_FLAGS_OFFSET, true);
+  if (flags === WTS_SESSIONSTATE_LOCK) {
+    return true;
+  }
+  if (flags === WTS_SESSIONSTATE_UNLOCK) {
+    return false;
+  }
+  throw new Error("The session lock state is unknown.");
+}

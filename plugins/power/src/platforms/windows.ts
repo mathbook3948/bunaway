@@ -89,6 +89,13 @@ export class WindowsPower {
       : ("active" as const);
   }
 
+  isSessionLocked() {
+    this.active();
+    return {
+      locked: this.native.sessionLocked(),
+    };
+  }
+
   startBlocker(input: z.output<typeof blockerInputSchema>) {
     this.active();
     return {

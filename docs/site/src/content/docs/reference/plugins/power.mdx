@@ -9,7 +9,7 @@ description: Windows와 macOS의 전원과 입력 idle 조회, 앱 수명의 절
 Windows는 모든 작업을 지원합니다. macOS는 `getStatus`, `getIdleTime`, `getIdleState`와
 `startBlocker`, `listBlockers`, `isBlockerActive`, `stopBlocker`를 지원하고
 `power.statusChanged`, `power.suspended`, `power.resumed`, `power.sessionLocked`, `power.sessionUnlocked` 이벤트를 제공합니다.
-`getCpuSpeedLimit`는 `UNSUPPORTED`입니다. 다른 플랫폼은 모두 `UNSUPPORTED`입니다.
+`getCpuSpeedLimit`와 `isSessionLocked`는 `UNSUPPORTED`입니다. 다른 플랫폼은 모두 `UNSUPPORTED`입니다.
 각 작업에는 `power.<작업명>` 권한이 필요합니다. 화면에서 직접 호출하면 해당
 `plugin.power.<작업명>` command도 허용합니다. 등록은 권한을 부여하지 않습니다.
 Windows에서 전원 작업은 UI 스레드에서 실행됩니다. 파일 선택이나 메시지 대화상자,
@@ -56,7 +56,26 @@ Windows는 GetLastInputInfo와 GetTickCount의 DWORD tick 차이를 사용하므
 합성 입력의 tick 값과 세션에 따라 달라지며 다른 로그인 세션의 입력은 포함하지 않습니다.
 `power.getIdleState({ thresholdSeconds })`는 idle 시간이 지정한 정수 초 이상이면 idle,
 미만이면 active를 반환합니다. 기한 범위는 1–4294967초입니다.
-화면 잠금 여부와 절전 상태는 판정하지 않습니다.
+화면 잠금 여부와 절전 상태는 판정하지 않습니다. 잠금 여부는 `power.isSessionLocked()`로 따로 조회합니다.
+
+## 세션 잠금 상태
+
+`power.isSessionLocked()`는 앱을 실행한 로그인 세션이 지금 잠겨 있는지 `{ locked }`로 반환합니다.
+Electron은 `powerMonitor.getSystemIdleState()`의 `locked`로 알려 주지만, 여기서는 입력 idle과
+잠금이 독립된 사실이므로 `getIdleState`의 `active`와 `idle` 반환값은 바꾸지 않고 별도 작업으로 둡니다.
+Windows는 `WTSQuerySessionInformationW`의 `WTSSessionInfoEx`에서 현재 세션의
+`SessionFlags`(`WTS_SESSIONSTATE_LOCK`이면 잠김, `WTS_SESSIONSTATE_UNLOCK`이면 해제)를 읽고
+받은 버퍼를 `WTSFreeMemory`로 항상 해제합니다. 다른 로그인 세션의 잠금은 조회하지 않습니다.
+OS 조회가 실패하거나 잠금도 해제도 아닌 값(`WTS_SESSIONSTATE_UNKNOWN` 등)을 받으면 `false`로
+대신하지 않고 `INTERNAL` 오류를 돌려줍니다. `false`로 대신하면 잠긴 동안에도 앱이 작업을 계속하기 때문입니다.
+입력은 `null`이며 `power.isSessionLocked` 권한이 따로 필요합니다. macOS는 `UNSUPPORTED`입니다.
+
+```ts
+const { locked } = await power.isSessionLocked();
+if (locked) {
+  // 잠금이 풀리는 `power.sessionUnlocked` 이벤트까지 동기화를 미룹니다.
+}
+```
 
 ## CPU 속도 제한
 
@@ -146,7 +165,7 @@ Windows에서 로그온 직후 등(예를 들어 Terminal Services가 준비되�
 `power.sessionLocked`와 `power.sessionUnlocked`는 발생하지 않습니다. 조회, blocker와
 `power.suspended`, `power.resumed`는 계속 동작합니다.
 macOS에서 알림 관찰자를 만들지 못하면 전원 어댑터 초기화가 실패하고 오류를 돌려줍니다.
-구독 전의 상태는 replay하지 않으며 현재 잠금 여부를 조회하는 API는 없습니다.
+구독 전의 상태는 replay하지 않습니다. 현재 잠금 여부는 `power.isSessionLocked()`로 조회합니다.
 구독 해제와 플러그인 종료 뒤에는 이벤트를 보내지 않습니다.
 
 ## 절전과 화면 유지 요청

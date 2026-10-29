@@ -1809,6 +1809,7 @@
       "power.getCpuSpeedLimit",
       "power.getIdleTime",
       "power.getIdleState",
+      "power.isSessionLocked",
       "power.startBlocker",
       "power.listBlockers",
       "power.isBlockerActive",

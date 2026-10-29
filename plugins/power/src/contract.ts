@@ -49,6 +49,10 @@ export const idleTimeSchema = z.int().nonnegative().max(MAX_IDLE_SECONDS);
 export const idleThresholdSchema = z.strictObject({
   thresholdSeconds: z.int().min(1).max(MAX_IDLE_SECONDS),
 });
+/** Whether the calling user session is locked; independent of the input idle time. */
+export const sessionLockSchema = z.strictObject({
+  locked: z.boolean(),
+});
 export const blockerInputSchema = z.strictObject({
   type: blockerTypeSchema,
   reason: z
