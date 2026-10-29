@@ -1225,6 +1225,12 @@ Bun 자식으로 검사한다. stdin/stdout/stderr 왕복과 종료 상태, 종�
 손자까지 끝내는지, 가득 찬 stdin 파이프의 write 취소, 대기 중인 write와 `kill`, 읽지 않은 출력의
 배압, 반복 spawn과 `kill` 뒤 핸들 수, 폐기 시 손자 종료를 확인하며 `host:windows`에 포함된다.
 
+`lifecycle/windows-utility-process.test.ts`는 호스트 빌드처럼 entry point 하나로 `bun build --compile`한 실행 파일에서
+스크립트 파일과 Blob URL로 만든 `new Worker`의 왕복 메시지와 `onerror`, `BUN_BE_BUN=1`로 실행한 `Bun.spawn({ ipc })`
+자식의 양방향 메시지와 `onExit` 종료 코드, 자식이 별도 프로세스이고 부모가 유지되는 것을 모든 호스트에서 확인한다.
+실제 호스트 부팅은 거치지 않는다. Windows에서만 앱 Job Object(`containAppProcess`) 안에서 시작한 ipc 자식이 앱 종료 뒤 남지
+않는지 확인한다. 별도 등록 없이 Windows Check 잡의 전체 `bun test`에서 실행된다.
+
 `api/network.test.ts`는 URL, header, bytes 상한과 독립 작업 권한을 검사한다.
 `lifecycle/windows-network.test.ts`는 생성 Windows와 macOS 어댑터 및 실제 loopback HTTP/WebSocket 서버로
 redirect 거부, binary 보존, timeout, 취소, 폐기와 용량을 검사한다. `host:windows`에 포함되며
