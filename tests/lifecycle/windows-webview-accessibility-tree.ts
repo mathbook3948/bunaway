@@ -219,14 +219,22 @@ try {
       intervalMs: 100,
       failed: () => created.failure ?? clientFailure(),
     });
+  /** Write one command line; a client that already died is reported with its exit code and stderr. */
+  const send = (command: string) => {
+    try {
+      client.stdin.write(`${command}\n`);
+      client.stdin.flush();
+    } catch (error) {
+      throw clientFailure() ?? error;
+    }
+  };
   /** Send one command to the client process and pump until it answers with one JSON line. */
   const ask = async (
     command: string,
     retryable = false,
   ): Promise<Record<string, unknown>> => {
     const before = lines.length;
-    client.stdin.write(`${command}\n`);
-    client.stdin.flush();
+    send(command);
     await pump(() => lines.length > before, `client answer to ${command}`);
     const answer = JSON.parse(lines[before] as string) as Record<
       string,
@@ -338,13 +346,20 @@ try {
     },
   ).catch(() => false);
   results.falseAfterRemovingHandlers = released === true;
-  client.stdin.write("quit\n");
-  client.stdin.flush();
+  send("quit");
+  // The client's last UIA calls reach the window on this thread, so keep pumping until it exits.
   assert.equal(
-    await waitFor(() => client.exitCode ?? undefined, {
-      deadline: "childExit",
-      what: "UI Automation client exit",
-    }),
+    await waitFor(
+      () => {
+        windows.pump();
+        return client.exitCode ?? undefined;
+      },
+      {
+        deadline: "childExit",
+        what: "UI Automation client exit",
+        intervalMs: 20,
+      },
+    ),
     0,
   );
   // Windows may keep reporting a listener after the client is gone, so the outcome is recorded.

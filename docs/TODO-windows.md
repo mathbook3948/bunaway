@@ -607,7 +607,7 @@ CI의 `mise run host:windows`에서 SDK와 UI Worker, Win32를 연결해 실행�
 - [ ] UI Automation 클라이언트 연결 변화 이벤트를 제공한다. 연결 변화에 대한 OS 알림이 없고 폴링은 비용이 커서
   보류했다. screenReaderEnabled 변화는 `appearance.changed`가 이미 알린다. 접근성 지원 강제 활성화는 아래 항목에서 결정했다.
 - [x] 접근성 지원 활성화와 비활성화를 제어하고 지원 기능을 선택, 조회한다. 결정 완료: 제공하지 않는다. [E-app-live]의 `setAccessibilitySupportEnabled`와 기능 선택 API에 해당하는 API는 사용처가 없어 두지 않으며, 앱 정의에 브라우저 switch 필드도 두지 않는다(ADR 0030). 프레임워크 API로 접근성 지원 상태를 바꾸지 않고 읽기는 `appearance.getAccessibilityState`가 맡는다. [ADR 0056](./decisions/0056-accessibility-support-control.md).
-- [x] WebView 접근성 트리와 사용자 타이틀바의 키보드 탐색을 검증한다. Windows native 실행의 `windows-webview-titlebar.ts`가 실제 WebView2에서 drag 영역 안 버튼이 접근성 트리에 이름 있는 button으로 남는지와 Tab, Enter, Space 입력이 버튼에 닿는지 확인한다. 키 입력은 DevTools 프로토콜로 렌더러에 직접 전달하고 포커스 에뮬레이션을 켜므로 호스트 창의 키 입력 라우팅과 WebView 포커스 전달은 이 검증에 포함되지 않으며, 물리 키보드와 UI Automation 클라이언트(screen reader) 연결은 CI에서 검증하지 않는다.
+- [x] WebView 접근성 트리와 사용자 타이틀바의 키보드 탐색을 검증한다. Windows native 실행의 `windows-webview-titlebar.ts`가 실제 WebView2에서 drag 영역 안 버튼이 접근성 트리에 이름 있는 button으로 남는지와 Tab, Enter, Space 입력이 버튼에 닿는지 확인한다. 키 입력은 DevTools 프로토콜로 렌더러에 직접 전달하고 포커스 에뮬레이션을 켜므로 호스트 창의 키 입력 라우팅과 WebView 포커스 전달은 이 검증에 포함되지 않으며, 물리 키보드와 실제 스크린 리더(Narrator 등)의 읽기 출력은 CI에서 검증하지 않는다. UI Automation 클라이언트 연결은 `windows-webview-accessibility-tree.ts`가 검증한다.
 - [x] suspend, resume, 화면 잠금과 잠금 해제 이벤트를 제공한다. power.suspended, power.resumed, power.sessionLocked, power.sessionUnlocked는 빈 payload이며 잠금은 호출 프로세스 세션의 WTS 잠금이다. 권한은 power.statusChanged와 같다.
 - [x] Windows AC와 배터리, 충전, 잔량, battery saver 및 수명 추정 상태를 조회한다.
 - [x] AC와 배터리 상태 변경 이벤트를 제공한다. power.statusChanged는 전원 상태 변경 알림과 resume에서 재조회하며 동일 값은 생략한다.
