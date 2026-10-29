@@ -681,7 +681,8 @@ try {
     assert((keyEvents[0]?.key ?? "").length > 0, "The key has a value");
     if ((layout & 0xffffn) === BigInt(LANGUAGE_ENGLISH_US)) {
       assert.equal(keyEvents[0]?.key, "a");
-      assert.equal(letter.value, "a");
+      // The character arrives after the keydown, so wait for the value.
+      assert.equal((await reportValue("a", "a")).value, "a");
     }
     await checkText(name, "a", "Hangul", "한글 입력 테스트");
     await checkText(name, "a", "Emoji", "a😀b👨‍👩‍👧c");

@@ -1459,7 +1459,7 @@ SendInput의 KEYEVENTF_UNICODE로 한글 음절, 서로게이트 쌍과 ZWJ 이�
 Enter 키로 보낸다. 페이지가 받은 beforeinput과 input의 insertText 데이터를 이어 붙인 문자열과 최종 value가 보낸
 문자열과 정확히 같은지, 조합 이벤트가 없는지, 포커스가 호스트와 페이지에 남는지 검사한다. 설치된 키보드 레이아웃마다
 호스트 스레드의 입력 로케일을 ActivateKeyboardLayout로 바꿔 같은 입력을 반복하고, 고정 스캔 코드(A 키 위치)를 보낸 문자 키의
-`KeyboardEvent.code`가 `KeyA`인지 본다(en-US는 `key`도 확인). 중국어, 일본어, 한국어 IME 레이아웃은 건너뛰고 로그에 남긴다.
+`KeyboardEvent.code`가 `KeyA`인지 본다(en-US는 `key`도 확인). 중국어, 일본어, 한국어 주 언어 레이아웃(IME 여부와 무관)은 건너뛰고 로그에 남긴다.
 러너에 레이아웃이 하나뿐이면 전환은 실행되지 않으며 로그의 `Keyboard layouts exercised`로 구분한다. 브라우저 프로세스
 스레드의 로케일까지 바뀌는지는 확인하지 않는다.
 레이아웃은 새로 설치하지 않고 시작 때의 값으로 되돌린다. IME 조합(compositionstart/update/end), 후보 창, 레이아웃 전환
