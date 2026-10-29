@@ -16,8 +16,8 @@ status: accepted
   (`plugins/storage/src/contract.ts`의 `storageMetadataSchema`). 링크는 따라가며, 대상이나 부모 경로가 없을 때(`ENOENT`,
   `ENOTDIR`)만 `null`이다.
 - 운영체제가 접근을 거부하면 조회와 쓰기가 `PERMISSION_DENIED`로 실패하고 `null`로 숨기지 않는다. 조회 경로는 `EACCES`와
-  `EPERM`을, Windows의 이동 경로(`moveFailure`)는 `ERROR_ACCESS_DENIED`를, 교체 경로(`swapFailure`)는 여기에 더해
-  `ERROR_SHARING_VIOLATION`과 `ERROR_LOCK_VIOLATION`을 이 코드로 옮긴다
+  `EPERM`을, Windows의 이동 경로(`moveFailure`)는 `ERROR_ACCESS_DENIED`,
+  `ERROR_SHARING_VIOLATION`, `ERROR_LOCK_VIOLATION`을, 교체 경로(`swapFailure`)는 같은 매핑을 이 코드로 옮긴다
   ([storage.stat](../site/src/content/docs/reference/host/storage-stat.mdx),
   [storage.writeText](../site/src/content/docs/reference/host/storage-write-text.mdx)).
 - Windows 테스트가 확인하는 범위: ACL 거부는 `readText`와 `readBytes`에서 `PERMISSION_DENIED`이고, 읽기 전용 파일과 같은 프로세스의

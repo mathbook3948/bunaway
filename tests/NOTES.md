@@ -1040,10 +1040,13 @@ hardlink의 이름만 삭제를 확인한다. 읽기 전용 hardlink를 지울 �
 해제한 어댑터와 없는 경로는 거부한다.
 `windows-storage-cross-volume-move.ts`는 가상 디스크를 폴더에 마운트하고(`fixtures/windows-virtual-disk.ts`, 마운트 폴더가 다른 볼륨인지 `dev`로 확인) 일반 파일이 유니코드 이름과 함께 양방향으로 옮겨지고 source가 사라지는지,
 기존 대상과 없는 source가 `INVALID_ARGUMENT`이고 양쪽이 그대로인지, 디렉터리와 링크(만들 수 없는 러너에서는 건너뜀)가 `UNSUPPORTED`이고 아무것도 만들어지지 않는지,
-같은 볼륨 이동이 그대로인지 확인한다. 삭제 공유 없이 열린 source는 던지는지와 source가 온전한지만 단언한다. 읽기 전용 source는 실패하면 `PERMISSION_DENIED`와 source 보존을, 성공하면 source 삭제와 내용 일치를 단언한다. 대상이 남는지는 `INFO` 줄로만 출력한다.
+같은 볼륨 이동이 그대로인지 확인한다. 삭제 공유 없이 열린 source는 던지는지와 source가 온전한지만 단언한다(같은 볼륨의 오류 코드는 `windows-storage-move-locked-source.ts`가 확인한다). 읽기 전용 source는 실패하면 `PERMISSION_DENIED`와 source 보존을, 성공하면 source 삭제와 내용 일치를 단언한다. 대상이 남는지는 `INFO` 줄로만 출력한다.
 `CI`가 설정된 환경에서 가상 디스크를 만들 수 없으면 실패한다.
+`windows-storage-move-locked-source.ts`는 같은 볼륨에서 자식 PowerShell이 `FileShare.Read`(삭제 공유 없음)로 연 파일을 `move`하면
+`PERMISSION_DENIED`로 실패하고 source의 이름과 내용이 그대로이며 대상에 아무것도 생기지 않는지, 핸들을 닫은 뒤 같은 호출이 성공하는지(백신이 잠시 잡을 수 있어 재시도),
+핸들이 없는 형제 디렉터리 이동이 영향을 받지 않는지 확인한다. 열린 파일이 든 디렉터리 이동도 같은 코드로 실패하고 디렉터리가 온전하며 대상이 없는지, 핸들을 닫은 뒤 전체가 옮겨지는지 단언한다.
 확인하지 않는 범위: 삭제 중 사라지거나 교체되는 항목, OneDrive 같은 클라우드 동기화 폴더의 삭제(로그인한 동기화 공급자가 필요),
-다른 프로세스가 삭제 공유 없이 연 파일, ACL로 삭제를 막은 항목, Worker 경로의 권한 거부(별도 뷰가 필요해
+ACL로 삭제를 막은 항목, Worker 경로의 권한 거부(별도 뷰가 필요해
 계약 테스트의 독립 권한으로만 확인), 기한(deadline)의 호스트 경로, 10만 개 항목의 실제 순회 시간.
 
 `api/storage-windows-path.test.ts`는 Windows 경로 형식(드라이브와 UNC 허용, 상대 경로와 `.`과 `..`와 예약 이름과
