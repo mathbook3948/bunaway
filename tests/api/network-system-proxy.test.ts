@@ -22,7 +22,10 @@ import type {
   WinHttpApi,
 } from "#plugins/network/src/platforms/resolve-proxy";
 import { SETTING_TOO_LONG_MESSAGE } from "#plugins/network/src/platforms/resolve-proxy";
-import { systemProxyFor } from "#plugins/network/src/platforms/system-proxy";
+import {
+  LookupGate,
+  systemProxyFor,
+} from "#plugins/network/src/platforms/system-proxy";
 import {
   dispose,
   initialize,
@@ -489,6 +492,78 @@ test("a request waiting for a lookup turn leaves at its deadline", async () => {
     viaProxy(),
   );
   expect(bodyOf(after)).toBe("proxied");
+  await dispose(state);
+});
+
+test("waiters that left free their places for the next lookups", async () => {
+  const gate = new LookupGate(2);
+  const open = new AbortController();
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const holders = [
+    1,
+    2,
+  ].map(() => gate.run(open.signal, () => held));
+  const leavers = [
+    1,
+    2,
+    3,
+    4,
+  ].map(() => {
+    const controller = new AbortController();
+    const waiting = gate
+      .run(controller.signal, async () => undefined)
+      .catch((error: unknown) => error);
+    controller.abort(new Error("left"));
+    return waiting;
+  });
+  expect((await Promise.all(leavers)).every((r) => r instanceof Error)).toBe(
+    true,
+  );
+  release();
+  await Promise.all(holders);
+  // Every place is free again: two lookups run at the same time, a third waits.
+  let running = 0;
+  let most = 0;
+  await Promise.all(
+    [
+      1,
+      2,
+      3,
+    ].map(() =>
+      gate.run(open.signal, async () => {
+        running += 1;
+        most = Math.max(most, running);
+        await Bun.sleep(20);
+        running -= 1;
+      }),
+    ),
+  );
+  expect(most).toBe(2);
+});
+
+test("a lookup worker that stays busy ends the request at its deadline with TIMEOUT", async () => {
+  const state = initialize();
+  await expect(
+    runRequest(state, requestFor(`http://${ORIGIN}/`, 300), undefined, () => ({
+      ieProxyConfig: () => ({
+        autoDetect: true,
+        autoConfigUrl: null,
+        proxy: null,
+        bypass: null,
+      }),
+      autoProxyForUrl: async () => {
+        throw new BunawayError({
+          code: "BUSY",
+          message: "Too many proxy lookups.",
+        });
+      },
+    })),
+  ).rejects.toMatchObject({
+    code: "TIMEOUT",
+  });
   await dispose(state);
 });
 

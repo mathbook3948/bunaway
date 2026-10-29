@@ -50,9 +50,10 @@ async function reg(...args: string[]) {
 }
 
 async function readValue(name: string) {
-  const { out, code } = await reg("query", KEY, "/v", name);
+  // Listing the whole key tells "the value is absent" from "the query failed".
+  const { out, code } = await reg("query", KEY);
   if (code !== 0) {
-    return undefined;
+    throw new Error("Could not read Internet Options.");
   }
   const match = new RegExp(`^\\s+${name}\\s+(REG_\\w+)\\s*(.*)$`, "m").exec(
     out,
@@ -193,6 +194,7 @@ test.skipIf(!MAY_CHANGE_INTERNET_OPTIONS)(
       delete process.env[name];
     }
     const saved = await snapshot();
+    let failure: unknown;
     try {
       await configure(`127.0.0.1:${address.port}`);
       const answer = (await call({
@@ -218,18 +220,31 @@ test.skipIf(!MAY_CHANGE_INTERNET_OPTIONS)(
         }),
       ).rejects.toBeTruthy();
       expect(lines).toHaveLength(1);
-    } finally {
-      for (const [name, value] of environment) {
-        if (value !== undefined) {
-          process.env[name] = value;
-        }
+    } catch (error) {
+      failure = error;
+    }
+    for (const [name, value] of environment) {
+      if (value !== undefined) {
+        process.env[name] = value;
       }
-      try {
-        await restore(saved);
-      } finally {
-        proxy.close();
-        await adapter.dispose();
-      }
+    }
+    // Restore first and report both problems: a failed restore must not hide the test's own failure.
+    let restoreFailure: unknown;
+    try {
+      await restore(saved);
+    } catch (error) {
+      restoreFailure = error;
+    }
+    proxy.close();
+    await adapter.dispose();
+    if (failure && restoreFailure) {
+      console.error("The test also failed before the restore:", failure);
+    }
+    if (restoreFailure) {
+      throw restoreFailure;
+    }
+    if (failure) {
+      throw failure;
     }
   },
 );
