@@ -313,6 +313,7 @@ if (target === "windows-x64") {
       "windows-app-reload.ts",
       "windows-baseline.ts",
       "windows-templates.ts",
+      "windows-project-path.ts",
     ]) {
       await test(name);
     }
