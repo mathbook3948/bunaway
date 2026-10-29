@@ -123,14 +123,15 @@ function writeHighContrast(value: HighContrast): boolean {
   info.writeUInt32LE(HIGHCONTRASTW_SIZE);
   info.writeUInt32LE(value.flags, 4);
   info.writeBigUInt64LE(BigInt(ptr(scheme)), 8);
-  return (
-    user.symbols.SystemParametersInfoW(
-      SPI_SETHIGHCONTRAST,
-      HIGHCONTRASTW_SIZE,
-      ptr(info),
-      SPIF_SENDCHANGE,
-    ) !== 0
+  const result = user.symbols.SystemParametersInfoW(
+    SPI_SETHIGHCONTRAST,
+    HIGHCONTRASTW_SIZE,
+    ptr(info),
+    SPIF_SENDCHANGE,
   );
+  // The struct only holds the scheme's address, so keep the buffer reachable until the call returns.
+  assert(scheme.length > 0);
+  return result !== 0;
 }
 
 type Report = {
@@ -278,7 +279,6 @@ try {
     assert.equal(reports[0]?.forced, false, "forced-colors before the change");
     const changesBefore = appearanceChanges().length;
     const reportsBefore = reports.length;
-    changed = true;
     const accepted = writeHighContrast({
       flags: original.flags | HCF_HIGHCONTRASTON | HCF_AVAILABLE,
       scheme: original.scheme || DEFAULT_SCHEME,
@@ -286,6 +286,8 @@ try {
     const afterSet = readHighContrast();
     measured.accepted = accepted;
     measured.afterSet = afterSet;
+    // Only a change that took effect needs restoring; a refused setting leaves nothing to undo.
+    changed = accepted || Boolean(afterSet.flags & HCF_HIGHCONTRASTON);
     if (!accepted || !(afterSet.flags & HCF_HIGHCONTRASTON)) {
       // The runner refused the setting, so there is nothing to compare the page and the plugin with.
       skipped = "runner-rejected-high-contrast";
