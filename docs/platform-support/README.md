@@ -3,7 +3,7 @@
 앱은 선언한 창 하나를 사용하며 창 생성은 그 선언을 따른다. [ADR 0016](../decisions/0016-window-creation-contract.md)은
 Windows의 호출별 표시 옵션 범위를 정의한다. create와 recreate는 `{ options? }`를 받는다.
 제목, 부분 크기와 제약, 표시와 준비 후 표시를 생성마다 병합하고 검증한다. macOS는 title, 크기와 제약, contentProtection, visible, showWhenReady만 받고
-배치, titlebar, alwaysOnTop, skipTaskbar, backgroundColor, focusable, maximized, fullscreen은 기존 창을 닫기 전에 `UNSUPPORTED`로 거부한다.
+배치, titlebar, alwaysOnTop, skipTaskbar, backgroundColor, accentColor, focusable, maximized, fullscreen은 기존 창을 닫기 전에 `UNSUPPORTED`로 거부한다.
 macOS는 `contentProtection`을 `NSWindow.sharingType`으로 지원하지만 macOS 15 이상의 ScreenCaptureKit 기반 캡처는 이를 무시할 수 있다.
 새 옵션의 실제 Windows 검증은 CI의 windows-native 작업에서 수행한다.
 [ADR 0026](../decisions/0026-single-webview-single-window.md)에 따라 앱은 창 하나와 WebView 하나를 가진다.

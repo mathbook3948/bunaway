@@ -102,6 +102,8 @@ export function createWindows(api: NativePluginAPI<Definitions>) {
       api.getBackgroundMaterial(null, options),
     getBackgroundColor: (options?: NativeInvokeOptions) =>
       api.getBackgroundColor(null, options),
+    getAccentColor: (options?: NativeInvokeOptions) =>
+      api.getAccentColor(null, options),
     isIgnoreMouseEvents: (options?: NativeInvokeOptions) =>
       api.isIgnoreMouseEvents(null, options),
     isClosable: (options?: NativeInvokeOptions) =>

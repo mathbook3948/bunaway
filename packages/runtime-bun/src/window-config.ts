@@ -50,6 +50,7 @@ const SIZE_FIELDS = [
   "skipTaskbar",
   "contentProtection",
   "backgroundColor",
+  "accentColor",
   "transparent",
   "icon",
   "maximized",
@@ -228,6 +229,7 @@ function readWindowSize(size: Record<string, unknown>): WindowSpec["window"] {
   }
   const initialState = readInitialState(size);
   const backgroundColor = readBackgroundColor(size.backgroundColor);
+  const accentColor = readAccentColor(size.accentColor);
   const transparent = size.transparent;
   if (transparent !== undefined && typeof transparent !== "boolean") {
     throw new Error("Window transparent must be a boolean.");
@@ -283,6 +285,7 @@ function readWindowSize(size: Record<string, unknown>): WindowSpec["window"] {
     ...initialState,
     ...definedEntries({
       backgroundColor,
+      accentColor,
       transparent,
       icon,
       titlebar,
@@ -311,6 +314,18 @@ function readBackgroundColor(value: unknown): string | undefined {
   const color = normalizeWindowBackgroundColor(value);
   if (color === undefined) {
     throw new Error("Window backgroundColor must be #RGB or #RRGGBB.");
+  }
+  return color;
+}
+
+/** Normalizes an optional `#RGB` or `#RRGGBB` accent color to `#rrggbb`. */
+function readAccentColor(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const color = normalizeWindowBackgroundColor(value);
+  if (color === undefined) {
+    throw new Error("Window accentColor must be #RGB or #RRGGBB.");
   }
   return color;
 }

@@ -63,6 +63,7 @@ export function assertMacosWindowOptions(spec: WindowSpec): void {
       "alwaysOnTop",
       "skipTaskbar",
       "backgroundColor",
+      "accentColor",
       "transparent",
       "icon",
     ].some((key) => Object.hasOwn(spec.window, key))

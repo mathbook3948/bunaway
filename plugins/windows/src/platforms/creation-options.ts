@@ -32,6 +32,10 @@ export function mergeCreationOptions(
   if (backgroundColor !== undefined) {
     window.backgroundColor = backgroundColor;
   }
+  const accentColor = normalizeWindowBackgroundColor(window.accentColor);
+  if (accentColor !== undefined) {
+    window.accentColor = accentColor;
+  }
   const transparentError = transparentWindowError(window);
   if (transparentError !== undefined) {
     throw new BunawayError({

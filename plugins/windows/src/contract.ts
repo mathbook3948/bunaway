@@ -374,6 +374,7 @@ const creationResult = {
             skipTaskbar: z.boolean().exactOptional(),
             contentProtection: z.boolean().exactOptional(),
             backgroundColor: windowBackgroundColor.exactOptional(),
+            accentColor: windowBackgroundColor.exactOptional(),
             transparent: z.boolean().exactOptional(),
             maximized: z.boolean().exactOptional(),
             fullscreen: z.boolean().exactOptional(),
@@ -1433,6 +1434,16 @@ export const windowOperations = {
   "windows.getBackgroundMaterial": {
     input: z.null(),
     output: windowBackgroundMaterial,
+  },
+  "windows.setAccentColor": {
+    input: z.strictObject({
+      color: windowBackgroundColor.nullable(),
+    }),
+    output: z.null(),
+  },
+  "windows.getAccentColor": {
+    input: z.null(),
+    output: windowBackgroundColor.nullable(),
   },
   "windows.setBackgroundColor": {
     input: z.strictObject({

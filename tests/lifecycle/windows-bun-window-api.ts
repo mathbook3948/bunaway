@@ -11,6 +11,11 @@ import { runWindowsApp } from "#native/windows/bun/entry";
 import { monitorServices } from "#native/windows/bun/monitors";
 import { Windows } from "#native/windows/bun/win32";
 import { ole, user } from "#native/windows/bun/win32-bindings";
+import {
+  accentSupported,
+  readWindowAccent,
+} from "#native/windows/bun/window-accent";
+import { tryReadWindowsBuild } from "#native/windows/bun/window-corners";
 import { overlayIconProvider } from "#plugins/windows/src/platforms/windows-overlay-icon";
 import { testAppMetadata } from "../fixtures/app-info.ts";
 import { waitFor } from "../fixtures/deadlines.ts";
@@ -674,6 +679,72 @@ if (!process.argv.includes("--child")) {
       assert.throws(() => nativeWindows.setHasShadow(custom, false));
       assert.throws(() => nativeWindows.hasRoundedCorners(custom));
       assert.throws(() => nativeWindows.setRoundedCorners(custom, false));
+    }
+    {
+      // The accent color is a DWM hint: the requested value is the state, and on a build that
+      // knows the attributes (Windows 11) DWM must also hold the COLORREFs that were set.
+      const dwmKnowsAccent = accentSupported(tryReadWindowsBuild());
+      const refs = (target: bigint) => readWindowAccent(target);
+      const created = nativeWindows.create(
+        "Accent declared",
+        500,
+        400,
+        () => {},
+        true,
+        {
+          accentColor: "#112233",
+        },
+      );
+      const custom = nativeWindows.create(
+        "Accent custom",
+        500,
+        400,
+        () => {},
+        true,
+        {
+          titlebar: "custom",
+        },
+      );
+      const system = nativeWindows.create("Accent system", 500, 400, () => {});
+      try {
+        assert.equal(nativeWindows.getAccentColor(created), "#112233");
+        assert.equal(nativeWindows.getAccentColor(system), null);
+        if (dwmKnowsAccent) {
+          assert.deepEqual(refs(created), {
+            border: 0x332211,
+            caption: 0x332211,
+          });
+        }
+        for (const target of [
+          system,
+          custom,
+        ]) {
+          nativeWindows.setAccentColor(target, "#ff8000");
+          assert.equal(nativeWindows.getAccentColor(target), "#ff8000");
+          if (dwmKnowsAccent) {
+            assert.equal(refs(target).border, 0x0080ff);
+          }
+        }
+        if (dwmKnowsAccent) {
+          assert.equal(refs(system).caption, 0x0080ff);
+        }
+        assert.equal(nativeWindows.getAccentColor(created), "#112233");
+        nativeWindows.setAccentColor(system, null);
+        assert.equal(nativeWindows.getAccentColor(system), null);
+        if (dwmKnowsAccent) {
+          assert.deepEqual(refs(system), {
+            border: 0xffffffff,
+            caption: 0xffffffff,
+          });
+        }
+        assert.equal(nativeWindows.isVisible(custom), true);
+      } finally {
+        nativeWindows.destroy(created);
+        nativeWindows.destroy(system);
+        nativeWindows.destroy(custom);
+      }
+      assert.throws(() => nativeWindows.getAccentColor(custom));
+      assert.throws(() => nativeWindows.setAccentColor(custom, "#ff8000"));
     }
     {
       const gdi = dlopen("gdi32.dll", {

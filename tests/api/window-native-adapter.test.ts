@@ -50,6 +50,7 @@ const MESSAGES = {
     "Window background material is not implemented on this platform.",
   backgroundColor:
     "Window background color is not implemented on this platform.",
+  accentColor: "Window accent color is not implemented on this platform.",
   title: "Window title control is not implemented on this platform.",
   movement: "Window movement controls are not implemented on this platform.",
   aspect: "Window aspect ratio locking is not implemented on this platform.",
@@ -584,6 +585,39 @@ const rows: Row[] = [
     unsupported: MESSAGES.backgroundColor,
   },
   query("getBackgroundColor", "#203040", MESSAGES.backgroundColor),
+  {
+    operation: "windows.setAccentColor",
+    payload: {
+      color: "#ABC",
+    },
+    calls: [
+      [
+        "setAccentColor",
+        [
+          "#aabbcc",
+        ],
+      ],
+    ],
+    result: null,
+    unsupported: MESSAGES.accentColor,
+  },
+  {
+    operation: "windows.setAccentColor",
+    payload: {
+      color: null,
+    },
+    calls: [
+      [
+        "setAccentColor",
+        [
+          null,
+        ],
+      ],
+    ],
+    result: null,
+    unsupported: MESSAGES.accentColor,
+  },
+  query("getAccentColor", "#203040", MESSAGES.accentColor),
   ...flag(
     "setIgnoreMouseEvents",
     "isIgnoreMouseEvents",
@@ -1265,6 +1299,8 @@ function fixture(
     "getBackgroundMaterial",
     "setBackgroundColor",
     "getBackgroundColor",
+    "setAccentColor",
+    "getAccentColor",
     "setIgnoreMouseEvents",
     "isIgnoreMouseEvents",
     "setClosable",

@@ -250,6 +250,8 @@ export type WindowSpec = {
     contentProtection?: boolean;
     /** Opaque `#RGB` or `#RRGGBB` color shown behind and before the document; absent keeps the system color and the WebView default. Windows only. */
     backgroundColor?: string;
+    /** Opaque `#RGB` or `#RRGGBB` color for the title bar and border on Windows 11 and later; absent keeps the system color. Windows only. */
+    accentColor?: string;
     /** Let the desktop show through the parts of the page that are not painted, default false. Requires `titlebar: "custom"` and excludes `backgroundColor`. Windows only. */
     transparent?: boolean;
     /** ICO path relative to the app resources directory, applied when the window is created; absent keeps the executable icon. Windows only. */
@@ -582,6 +584,10 @@ export type NativeWindow = {
   ): void;
   /** Reads the requested backdrop material, `auto` until set. Windows only. */
   getBackgroundMaterial?(): "auto" | "none" | "mica" | "acrylic" | "tabbed";
+  /** Requests the `#rrggbb` color of the title bar and border for this HWND, or the system color for null. A DWM hint that takes effect on Windows 11 and later; earlier builds skip the DWM call, and a custom title bar has only the border. Windows only. */
+  setAccentColor?(color: string | null): void;
+  /** Reads the requested accent color; null for the system color. Windows only. */
+  getAccentColor?(): string | null;
   /** Sets the opaque `#rrggbb` color of the window and its WebView for this HWND. Throws UNSUPPORTED on a `transparent` window. Windows only. */
   setBackgroundColor?(color: string): void;
   /** Reads the color set by the declaration, creation option or setBackgroundColor; null when none was set. Windows only. */
