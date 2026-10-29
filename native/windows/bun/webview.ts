@@ -31,6 +31,11 @@ import {
   reclaimHandlers,
   release,
 } from "./com.ts";
+import {
+  planProcessFailure,
+  UNKNOWN_PROCESS_FAILED_KIND,
+  UnresponsiveEpisode,
+} from "./process-failure.ts";
 import { viewDirName } from "./view-profile.ts";
 import { webAsset } from "./web-assets.ts";
 import {
@@ -197,6 +202,7 @@ export class WebView {
   private detached = false;
   private browserExited = false;
   private browserFailed = false;
+  private readonly unresponsiveEpisode = new UnresponsiveEpisode();
   private finished = false;
   private quiescence:
     | {
@@ -269,7 +275,7 @@ export class WebView {
       /** Optional: only the window host links page fullscreen to the window. */
       htmlFullscreenChanged?(containsFullscreenElement: boolean): void;
       /** Optional: only the window host reports process failures to the backend. */
-      processFailed?(kind: number, recovery: "reload" | "close"): void;
+      processFailed?(kind: number, recovery: "reload" | "close" | "none"): void;
       /** Optional: only the window host reports audio changes to the backend. */
       audioChanged?(state: AudioState): void;
       close(force?: boolean): void;
@@ -808,6 +814,12 @@ export class WebView {
         ])(ptr(success)),
         "get_IsSuccess",
       );
+      // A navigation that finished loading replaced the document, so a freeze after it is a new one.
+      // A frozen renderer keeps reporting until then, which a reset at request time would count
+      // again. A failed or stopped navigation leaves the frozen document in place.
+      if (success[0] && !stopped) {
+        this.unresponsiveEpisode.reset();
+      }
       this.hooks.log("navigation-completed", {
         success: !!success[0],
         uri: this.webview ? getString(this.webview, 4) : "",
@@ -927,21 +939,28 @@ export class WebView {
         ])(ptr(kind)),
         "get_ProcessFailedKind",
       );
-      this.hooks.log("webview-process-failed", {
-        kind: kind[0],
-      });
-      this.hooks.revoke("process-failed");
-      // A view that is already closing neither reloads nor needs a recovery report.
-      if (!this.closing) {
-        this.hooks.processFailed?.(
-          kind[0] ?? 9,
-          kind[0] === 0 ? "close" : "reload",
-        );
+      const failureKind = kind[0] ?? UNKNOWN_PROCESS_FAILED_KIND;
+      const plan = planProcessFailure(
+        failureKind,
+        this.closing,
+        this.unresponsiveEpisode,
+        performance.now(),
+      );
+      if (plan.log) {
+        this.hooks.log("webview-process-failed", {
+          kind: kind[0],
+        });
       }
-      if (kind[0] === 0) {
+      if (plan.revokeSession) {
+        this.hooks.revoke("process-failed");
+      }
+      if (plan.report !== undefined) {
+        this.hooks.processFailed?.(failureKind, plan.report);
+      }
+      if (plan.action === "close-window") {
         this.browserFailed = true;
         this.hooks.close(true);
-      } else {
+      } else if (plan.action === "reload") {
         this.downloads?.operations.revokePending();
         setTimeout(() => {
           if (!this.closing) {

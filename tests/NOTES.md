@@ -1499,7 +1499,7 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 `api/window-html-fullscreen.test.ts`는 `windows.htmlFullscreenChanged`의 스키마와 HTML 전체화면의 창 연동 규칙(진입했을 때만 되돌림, 이미 전체화면이거나 전체화면 불가인 창은 그대로, 앱이 먼저 나온 창은 다시 바꾸지 않음), 마지막 값 하나만 전달하는 병합을 확인한다.
 `lifecycle/windows-html-fullscreen.ts`는 실제 WebView2 문서가 클릭으로 전체화면 요소를 만들면 창이 전체화면이 되고 요소가 끝나면 돌아오는지, 이미 전체화면인 창은 요소가 끝나도 전체화면으로 남는지, 두 경우의 이벤트를 확인한다. Windows native 실행기에 포함한다.
 `api/window-process-failure.test.ts`는 `windows.waitForProcessFailure`의 WebView2 종류 번호 대응(모르는 값은 `unknown-exited`), 결과 스키마, 순서 번호와 커서 재개, 지원하지 않는 플랫폼의 `UNSUPPORTED`를 확인한다.
-`lifecycle/windows-process-failure.ts`는 실제 WebView2 렌더러를 강제 종료해 백엔드가 `renderer-exited`와 `reload`를 받고 뷰가 같은 창에서 다시 로드되는지 확인한다. Windows native 실행기에 포함한다.
+`lifecycle/windows-process-failure.ts`는 실제 WebView2 렌더러를 강제 종료해 백엔드가 `renderer-exited`와 `reload`를 받고 뷰가 같은 창에서 다시 로드되는지 확인한다. 렌더러 멈춤(`renderer-unresponsive`)은 이 실행기에서 유도하지 못했다. 페이지 메인 스레드를 40초 멈추고 창에 실제 클릭을 보내도 CI의 WebView2는 `ProcessFailed`를 발생시키지 않았다. 그래서 멈춤 처리는 `api/window-process-failure.test.ts`가 호스트의 반응 결정(`planProcessFailure`: 멈춤은 세션 유지와 1회 보고, 종료는 세션 철회와 reload 또는 close, 닫히는 뷰는 보고 없음)과 멈춤 구간 판정을 단위로 확인한다. Windows native 실행기에 포함한다.
 `lifecycle/windows-document-title.ts`는 실제 WebView2 문서가 `document.title`을 바꿀 때마다 이벤트가 순서대로 도착하는지(한글, 이모지 경계, 1024 초과 제목 포함)와 네이티브 캡션이 그대로인지 확인한다. Windows native 실행기에 포함한다. 첫 로드의 제목은 구독 전에 도착할 수 있어 검증 대상에서 제외한다.
 `api/window-document-favicon.test.ts`는 `windows.documentFaviconChanged`의 스키마(필수 필드, 2048 초과, 추가 필드)와 주소 길이 제한(초과하면 빈 문자열)을 확인한다.
 `lifecycle/windows-document-favicon.ts`는 실제 WebView2 문서가 `<link rel="icon">`을 바꿀 때(2048 초과 주소 포함) 이벤트가 순서대로 도착하는지와 네이티브 캡션이 그대로인지 확인한다. Windows native 실행기에 포함한다. 첫 로드의 아이콘은 구독 전에 도착할 수 있어 검증 대상에서 제외한다.
