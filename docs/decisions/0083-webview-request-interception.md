@@ -27,8 +27,8 @@ WebView가 보내는 HTTP 요청을 백엔드가 취소, 리다이렉트, URL �
   검증하지 않았다.
   `NavigationCompleted`는 탐색만, `ServerCertificateErrorDetected`는 TLS 인증서 오류만 다룬다. 즉 Electron의 `onCompleted`, `onErrorOccurred`에
   해당하는 전용 이벤트는 호스트 이벤트 목록 기준으로 찾지 못했다.
-- 이 저장소는 탐색마다 `NavigationStarting`에서 허용 origin을 검사하고 redirect도 같은 검사를 거친다. 탐색 허용과 거부의 앱 훅은 별도
-  항목(TODO-windows의 탐색 전 허용과 거부 훅)으로 남아 있다. 백엔드의 HTTP 요청은 선택 플러그인 `network.request`가 제한된 header와 base64
+- 이 저장소는 탐색마다 `NavigationStarting`에서 허용 origin을 검사하고 redirect도 같은 검사를 거친다. 탐색 허용과 거부의 앱 훅은
+  [ADR 0123](./0123-webview-navigation-hooks.md)에서 지금은 제공하지 않기로 했다. 백엔드의 HTTP 요청은 선택 플러그인 `network.request`가 제한된 header와 base64
   body로 제공하고 redirect를 따라가지 않는다([network 계약](../site/src/content/docs/reference/plugins/network.mdx)). 컴파일된 앱의 웹 자산은 `WebResourceRequested`에서
   임베드한 파일로 응답한다고 [ADR 0060](./0060-localhost-asset-server.md)에 기록돼 있다. 후속 결정이 같은 이벤트에 필터를 더하면 이 자산 응답과의 관계를 함께 정해야 한다.
 - 요청마다 백엔드의 응답을 기다리는 훅은 페이지 하나가 많은 하위 리소스를 요청하므로 로드 시간이 백엔드의 응답 시간과 deadline에 묶인다.
@@ -41,7 +41,7 @@ WebView가 보내는 HTTP 요청을 백엔드가 취소, 리다이렉트, URL �
 1. WebView의 HTTP 요청 취소, redirect, URL 필터 훅을 추가하지 않는다.
 2. 요청과 응답 header의 조회와 변경, 응답 stream 대체를 추가하지 않는다.
 3. 요청 완료, 실패, redirect 이벤트를 추가하지 않는다.
-4. 탐색의 허용과 거부는 기존 허용 origin 검사와 탐색 훅 항목이 맡는다. 백엔드가 외부 HTTP를 호출해야 하면 `network.request`를 쓰고, 로컬
+4. 탐색의 허용과 거부는 기존 허용 origin 검사가 맡는다([ADR 0123](./0123-webview-navigation-hooks.md)). 백엔드가 외부 HTTP를 호출해야 하면 `network.request`를 쓰고, 로컬
    콘텐츠는 앱 자산 경로로 제공한다. 페이지가 쓰는 header와 보안 정책은 서버 응답과 앱 CSP 설정이 정한다.
 5. 특정 요청을 막거나 바꿔야 하는 요구가 확인되면 별도 결정에서 다룬다. 이때 대상은 WebView2 `WebResourceRequested` 필터로 URL 패턴, 리소스 종류와 요청 출처를
    한정하고, 백엔드 응답이 없을 때의 기본 동작, 변경 가능한 header의 허용 목록, 서비스 워커 요청의 적용 여부를 계약으로 먼저 정한다.
