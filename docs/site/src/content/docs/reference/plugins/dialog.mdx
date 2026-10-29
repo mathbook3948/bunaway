@@ -36,6 +36,7 @@ dialog.showAbout(input: AboutInput, options?: NativeInvokeOptions): Promise<Reco
 | --- | --- | --- |
 | `title?: string` | 전체 | 1~256자의 제목. NUL은 거부합니다. 메시지 대화상자에서 생략하면 Windows가 실행 파일 이름을 표시합니다. |
 | `defaultDirectory?: string` | 열기, 폴더, 저장 | 처음 표시할 기존 디렉터리. 경로 해석 실패는 오류입니다. |
+| `buttonLabel?: string` | 열기, 폴더, 저장 | 확인 버튼 문구. 1~64자이며 NUL은 거부합니다. 생략하면 OS 기본 문구를 유지합니다. Windows는 `&`를 접근 키 표시로 해석하며 `&Choose`는 버튼 텍스트에 `&Choose`로 남는 것까지 확인했습니다. macOS는 `UNSUPPORTED`입니다. |
 | `showHiddenFiles?: boolean` | 열기, 폴더, 저장 | 기본 `false`. `true`이면 숨김 및 시스템 항목을 강제로 표시합니다. 생략하거나 `false`이면 사용자의 탐색기 설정을 따릅니다. |
 | `confirmOverwrite?: boolean` | 저장 | `true`이면 기존 파일 덮어쓰기 확인을 켜고 `false`이면 끕니다. 생략하면 Windows 기본 확인을 유지합니다. 열기와 폴더에 지정하면 `INVALID_ARGUMENT`입니다. |
 | `multiple?: boolean` | 열기, 폴더 | 기본 `false`. `true`이면 파일 또는 폴더를 여러 개 선택합니다. |
@@ -180,6 +181,7 @@ Windows와 같고 다음이 다릅니다.
 | `showHiddenFiles` | `true`이면 숨김 항목을 표시합니다. 생략하거나 `false`이면 Finder 설정이 아니라 패널 기본값(숨김 항목 비표시)을 씁니다. |
 | `defaultExtension` | 확장자가 없는 `defaultFileName`에 붙입니다. 사용자가 입력한 이름에는 적용하지 않습니다. |
 | `confirmOverwrite` | 저장 패널은 기존 파일을 덮어쓸 때 항상 확인하므로 `false`를 지정해도 확인은 유지합니다. |
+| `buttonLabel` | 패널의 확인 버튼 문구를 바꾸는 바인딩이 없어 패널을 열기 전에 `UNSUPPORTED`로 거부합니다. |
 | `title` | 창 제목과 패널 상단 메시지로 함께 설정합니다. 최신 macOS는 메시지 줄을 표시합니다. |
 | 새 폴더 | 폴더 선택과 저장 패널은 새 폴더 만들기를 허용하고 파일 열기 패널은 허용하지 않습니다. |
 

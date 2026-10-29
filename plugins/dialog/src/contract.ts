@@ -4,6 +4,7 @@ import { z } from "zod";
 export const MAX_DIALOG_PATHS = 128;
 export const MAX_DIALOG_PATH_UNITS = 32767;
 export const MAX_DIALOG_RESULT_UNITS = 131072;
+export const MAX_DIALOG_BUTTON_LABEL_UNITS = 64;
 const text = (max: number) =>
   z
     .string()
@@ -21,6 +22,7 @@ const owner = {
 const base = {
   ...owner,
   defaultDirectory: text(MAX_DIALOG_PATH_UNITS).optional(),
+  buttonLabel: text(MAX_DIALOG_BUTTON_LABEL_UNITS).optional(),
   showHiddenFiles: z.boolean().optional(),
 };
 const file = {
@@ -55,7 +57,9 @@ const file = {
  * omitted or false, the user's Explorer setting decides. `confirmOverwrite` (`saveFile` only): true
  * or false forces the "replace existing file" prompt on or off. When omitted, the Windows default
  * prompt applies. Passing `confirmOverwrite` to `openFile` or `selectFolder` is rejected as
- * INVALID_ARGUMENT. The OS New Folder control cannot be disabled on Windows, so no option exists.
+ * INVALID_ARGUMENT. `buttonLabel` (all three dialogs, 1 to 64 UTF-16 units without NUL) replaces the
+ * text of the confirm button, as in Electron; when omitted the OS default text is kept. Windows
+ * reads `&` in it as an access key. macOS rejects it as UNSUPPORTED. The OS New Folder control cannot be disabled on Windows, so no option exists.
  */
 export const openFileSchema = z.strictObject({
   ...file,
@@ -83,7 +87,6 @@ export const resultSchema = z.discriminatedUnion("cancelled", [
 export const MAX_DIALOG_BUTTONS = 8;
 export const MAX_DIALOG_MESSAGE_UNITS = 4096;
 export const MAX_DIALOG_DETAIL_UNITS = 8192;
-export const MAX_DIALOG_BUTTON_LABEL_UNITS = 64;
 export const MAX_DIALOG_CHECKBOX_LABEL_UNITS = 256;
 const dialogTypes = z.enum([
   "none",

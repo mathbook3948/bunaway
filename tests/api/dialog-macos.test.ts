@@ -244,6 +244,33 @@ test("a chosen path list and a user cancel map to the shared result shape", () =
   });
 });
 
+test("buttonLabel is refused as UNSUPPORTED before any panel is created", () => {
+  const panels = fakePanels([
+    "/tmp/a",
+  ]);
+  const dialogs = new MacosDialogs(panels.factory);
+  for (const kind of [
+    "openFile",
+    "selectFolder",
+    "saveFile",
+  ] as const) {
+    expect(() =>
+      dialogs.show(
+        kind,
+        {
+          buttonLabel: "Import",
+        },
+        "backend",
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: "UNSUPPORTED",
+      }),
+    );
+  }
+  expect(panels.events).toEqual([]);
+});
+
 test("a call aborted before the panel opens never creates a panel", () => {
   const panels = fakePanels([
     "/tmp/a",
