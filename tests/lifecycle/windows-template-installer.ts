@@ -40,6 +40,8 @@ const SILENT_SWITCHES = [
 const UNINSTALL_POLL_MS = 100;
 /** Setup's own file listing the installed files; present only while an installation exists. */
 const UNINSTALLER_NAME = "unins000.exe";
+/** How `execute` in `windows-templates.ts` begins the output of a command that hit its deadline. */
+const TIMED_OUT_PREFIX = "timed out after";
 const INSTALLER_ARTIFACT_PATTERN = /^Artifact: (.+) \(installer\)$/m;
 const INNO_INSTALL_SCRIPT = resolve(
   import.meta.dir,
@@ -118,10 +120,19 @@ async function uninstall(
     return removal;
   }
   try {
+    // Setup deletes the uninstaller first and the folder after it, so both are awaited. A folder
+    // that stays is reported with its contents by `assertNothingLeft`, not by this wait.
     await waitFor(() => !existsSync(uninstaller), {
       deadline: "build",
       what: "the uninstaller to remove the installation",
       intervalMs: UNINSTALL_POLL_MS,
+    });
+    await waitFor(() => !existsSync(installDirectory), {
+      deadline: "childStep",
+      what: "Setup to remove the install folder",
+      intervalMs: UNINSTALL_POLL_MS,
+    }).catch((error: unknown) => {
+      console.log(error instanceof Error ? error.message : String(error));
     });
   } catch (error) {
     return {
@@ -159,9 +170,10 @@ async function assertNothingLeft(
     cwd,
     "childExit",
   );
+  // `reg query` exits 1 for a missing key; a command that timed out says nothing about the key.
   assert(
-    !registration.ok,
-    `the uninstall entry ${uninstallKey} remains after uninstall`,
+    !registration.ok && !registration.output.startsWith(TIMED_OUT_PREFIX),
+    `the uninstall entry ${uninstallKey} remains or could not be queried:\n${registration.output}`,
   );
 }
 

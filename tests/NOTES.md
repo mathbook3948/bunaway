@@ -1496,7 +1496,7 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 `bun run package win-direct`(`bunaway package win-direct`)로 설치 프로그램을 만든 뒤 `/VERYSILENT /DIR=<이 실행의 폴더>`로 설치하고,
 `<appId>.exe`가 설치됐고 `HKCU`의 제거 항목이 등록됐는지 본 다음 설치된 EXE를 `compiled-exe`와 같은 확인 코드(메시지 저장과
 읽기, 종료 코드 0, 별도 `LOCALAPPDATA`의 메시지 파일)로 시작합니다. 마지막으로 `unins000.exe`를 무음으로 실행해 설치 폴더와 제거
-항목이 남지 않는지 확인하며, 시작이 실패해도 제거는 항상 실행하고 제거 실패는 그 단계의 실패로 기록합니다. Inno Setup은
+항목이 남지 않는지 확인하며, 설치 프로그램을 실행한 뒤에는 시작이 실패해도 제거를 항상 실행하고 제거 실패는 그 단계의 실패로 기록합니다. 시작 메뉴 바로 가기(그룹 이름이 무작위 identifier)와 호스트 데이터 폴더는 확인하지 않습니다. 호스트 데이터는 `compiled-exe`와 같이 실제 LocalAppData의 `bunaway/<appId>` 아래에 쌓이며 템플릿의 appId는 바꾸지 않습니다(설치된 EXE 이름이 appId이기 때문입니다). 제거는 사용자 데이터를 기본값대로 보존하므로 지우지 않습니다. Inno Setup은
 `windows-native` 잡에 따로 설치 단계를 두지 않고 시험이 CI(`CI=true`)에서만 `.github/actions/install-inno-setup/install.ps1`(액션과
 같은 고정 버전과 체크섬)로 설치합니다. 개발 기기에서 Inno가 없으면 설치를 시도하지 않고 실패합니다.
 한 단계가 실패해도 나머지 템플릿을 계속 돌리고 마지막에 실패 단계를 모아 실패하며, 단계별 결과는
