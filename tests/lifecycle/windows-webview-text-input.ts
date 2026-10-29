@@ -31,7 +31,6 @@ const STEP_TIMEOUT_MS = deadline("childStep");
 const TEXT_REPORT_POLL_MS = 25;
 // Time given to the page and the controller to take focus after a click.
 const FOCUS_SETTLE_MS = 750;
-const MAPVK_VK_TO_VSC = 0;
 const VK_RETURN = 0x0d;
 const VK_A = 0x41;
 // SendInput structures: INPUT is 40 bytes; the mouse and keyboard members start at offset 8.
@@ -57,6 +56,13 @@ const SWP_NOACTIVATE = 0x0010;
 const POINTER_SETTLE_MS = 150;
 const CLICK_ATTEMPTS = 3;
 const LANGUAGE_ENGLISH_US = 0x0409;
+// Primary language ids whose layouts start an IME (Chinese, Japanese, Korean). IME composition
+// is outside this test, so those layouts are skipped.
+const IME_PRIMARY_LANGUAGES = new Set([
+  0x04,
+  0x11,
+  0x12,
+]);
 
 const user = dlopen("user32.dll", {
   GetClientRect: {
@@ -114,14 +120,6 @@ const user = dlopen("user32.dll", {
       "u32",
       "ptr",
       "i32",
-    ],
-    returns: "u32",
-  },
-  MapVirtualKeyExW: {
-    args: [
-      "u32",
-      "u32",
-      "u64",
     ],
     returns: "u32",
   },
@@ -286,17 +284,16 @@ function sendMouse(screenX: number, screenY: number, flags: number[]): void {
 }
 
 /**
- * Scan code of a virtual key in the active layout. A key event with only a virtual key has no
- * scan code, and the page then reports an empty `KeyboardEvent.code`; a real keyboard always
- * sends the scan code.
+ * Scan codes of the keys the test presses, by physical position. A key event with only a virtual
+ * key has no scan code and the page then reports an empty `KeyboardEvent.code`; a real keyboard
+ * always sends it. The code is fixed, not mapped from the virtual key, so the `code` the page
+ * reports is the same under every layout (the A key of a French layout sits at the Q position).
  */
-function scanCode(virtualKey: number): number {
-  return user.symbols.MapVirtualKeyExW(
-    virtualKey,
-    MAPVK_VK_TO_VSC,
-    user.symbols.GetKeyboardLayout(0),
-  );
-}
+const SCAN_CODES: Record<number, number> = {
+  [VK_A]: 0x1e,
+  [VK_RETURN]: 0x1c,
+};
+const scanCode = (virtualKey: number) => SCAN_CODES[virtualKey] ?? 0;
 
 /** One keyboard input record: a virtual key, or a UTF-16 code unit sent as a Unicode packet. */
 interface KeyRecord {
@@ -645,8 +642,14 @@ try {
       "Only one keyboard layout is installed; the layout switch is not exercised",
     );
   }
+  let exercised = 0;
   for (const layout of layouts) {
     const name = layoutName(layout);
+    if (IME_PRIMARY_LANGUAGES.has(Number(layout & 0x3ffn))) {
+      console.log(`Skipping IME keyboard layout ${name}`);
+      continue;
+    }
+    exercised++;
     step(`layout ${name}`);
     if (layout !== user.symbols.GetKeyboardLayout(0)) {
       assert(
@@ -685,6 +688,8 @@ try {
     await checkText(name, "a", "Combining sequence", "café ñ");
     await checkText(name, "b", "Lines", "첫째 줄\n둘째 줄 😀\né\n");
   }
+  console.log(`Keyboard layouts exercised: ${exercised}`);
+  assert(exercised > 0, "No keyboard layout without an IME was available");
   verified = true;
 } finally {
   if (layoutChanged) {
@@ -718,5 +723,5 @@ try {
 clearTimeout(watchdog);
 assert(verified);
 console.log(
-  "PASS Unicode text typed with SendInput reaches WebView2 inputs unchanged under every installed keyboard layout",
+  "PASS Unicode text typed with SendInput reaches WebView2 inputs unchanged under each installed keyboard layout without an IME",
 );
