@@ -240,6 +240,16 @@ windows-2022 러너에서 측정한 결과는 고대비를 켜면 문서의 `for
 시스템 창 색(`colors.window`)으로 바뀌며, 켤 때와 끌 때 `appearance.changed`가 각각 발행되고, 끄면 문서가 작성자
 지정 배경으로 돌아오는 것이다. 이 시험 뒤 새로 시작한 프로세스에서 appearance의 강조색 조회(`DwmGetColorizationColor`)가
 실패하는 것을 CI에서 확인했기 때문에, 시험은 `run-native.ts`의 마지막에 두어 다른 시험에 영향을 주지 않게 한다.
+`lifecycle/windows-webview-accessibility-tree.ts`는 `mise run host:windows`에서 시험 프로세스가 창과
+실제 WebView2를 열고, 별도 PowerShell 프로세스가 스크린 리더와 같은 관리형 UI Automation 클라이언트로
+(1) `setAccessibleTitle`로 준 읽기용 이름이 창의 MSAA(`IAccessible`) 이름이고 캡션(`getTitle`)은
+그대로이며 빈 문자열로 지우면 캡션으로 돌아오는지(같은 시점의 UIA Name은 캡션 그대로여서 결과 JSON의
+`uiaNameWithAccessibleTitle`에 기록만 한다), (2) 문서의 `aria-label` 버튼, 제목, 텍스트 입력이 각각 Button, Text 또는
+Header, Edit 컨트롤로 이름과 함께 나타나는지, (3) 클라이언트가 이벤트 처리기를 등록한 동안
+`UiaClientsAreListening`이 true인지 확인한다. 처리기 제거 뒤와 클라이언트 종료 뒤의 값은 결과
+`build/windows-webview-accessibility-tree-results.json`의 `falseAfterRemovingHandlers`와
+`falseAfterClientExit`에 기록한다. 접근성 트리가 시간 안에 나타나지 않으면 건너뛰지 않고 실패한다.
+Narrator 같은 실제 스크린 리더의 읽기 출력과 포커스 이동은 포함하지 않는다.
 
 `api/window-taskbar.test.ts`는 작업 표시줄 진행률의 상태별 입력, 출력, SDK 호출 컨텍스트,
 독립 작업 권한, 취소, 닫힌 창과 미지원 플랫폼을 검사한다.
