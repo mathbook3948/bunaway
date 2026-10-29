@@ -296,10 +296,15 @@ export function createDialog(
       ])(flags),
       "SetOptions",
     );
+    // IFileDialog slots: 15 SetFileName, 17 SetTitle, 18 SetOkButtonLabel, 22 SetDefaultExtension.
     for (const [slot, value] of [
       [
         17,
         input.title,
+      ],
+      [
+        18,
+        input.buttonLabel,
       ],
       [
         15,

@@ -204,6 +204,15 @@ test("validates inputs and permissions before allocating a picker", async () => 
     {
       title: "x".repeat(257),
     },
+    {
+      buttonLabel: "",
+    },
+    {
+      buttonLabel: "x".repeat(65),
+    },
+    {
+      buttonLabel: "a\0b",
+    },
   ]) {
     await expect(f.invoke("openFile", input)).rejects.toMatchObject({
       code: "INVALID_ARGUMENT",

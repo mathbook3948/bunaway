@@ -5,6 +5,7 @@ the message dialog `showMessage` and the About panel `showAbout` on Windows and 
 Register the default export and grant each operation independently. See the
 [public reference](../../docs/site/src/content/docs/reference/plugins/dialog.mdx) for inputs,
 owner authorization, cancellation, limits and examples. Choosing paths never grants storage access.
+`buttonLabel` sets the confirm button text through `IFileDialog::SetOkButtonLabel` (slot 18); macOS refuses it as UNSUPPORTED.
 
 The existing UI STA owns each IFileDialog, COM apartment reference, temporary timer HWND and FFI
 binding. Show is synchronous on that worker; the app backend keeps running. A timer polls validated

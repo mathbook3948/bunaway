@@ -106,6 +106,14 @@ test.skipIf(process.platform !== "win32")(
         ],
         returns: "u64",
       },
+      GetWindowTextW: {
+        args: [
+          "u64",
+          "ptr",
+          "i32",
+        ],
+        returns: "i32",
+      },
       PostMessageW: {
         args: [
           "u64",
@@ -132,6 +140,11 @@ test.skipIf(process.platform !== "win32")(
         visible: native.symbols.IsWindowVisible(control),
         enabled: native.symbols.IsWindowEnabled(control),
       };
+    };
+    const controlText = (control: bigint) => {
+      const text = Buffer.alloc(256 * 2);
+      const length = native.symbols.GetWindowTextW(control, ptr(text), 256);
+      return text.toString("utf16le", 0, length * 2);
     };
     const until = async (condition: () => boolean, stage: string) => {
       const deadline = Date.now() + 10000;
@@ -278,7 +291,12 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
           },
         };
       };
-      const dismiss = async (title: string, button: 1 | 2) => {
+      // `confirmText` is the text the OK button must show once the dialog is ready.
+      const dismiss = async (
+        title: string,
+        button: 1 | 2,
+        confirmText?: string,
+      ) => {
         await until(() => {
           const state = buttonState(title, button);
           return (
@@ -292,6 +310,9 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
         const control = BigInt(native.symbols.GetDlgItem(hwnd, button));
         expect(hwnd).not.toBe(0n);
         expect(control).not.toBe(0n);
+        if (confirmText !== undefined) {
+          expect(controlText(control)).toBe(confirmText);
+        }
         // BN_CLICKED carries the control HWND. A null lParam represents a menu command.
         // Native notification injection tests real OK/Cancel processing, not physical input.
         expect(
@@ -304,6 +325,7 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
       const open = invoke("dialog.openFile", {
         defaultDirectory: root,
         defaultFileName: "한글-open.txt",
+        buttonLabel: "가져오기",
         filters: [
           {
             name: "Text",
@@ -313,7 +335,7 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
           },
         ],
       });
-      await dismiss(open.title, 1);
+      await dismiss(open.title, 1, "가져오기");
       expect(await open.result()).toEqual({
         kind: "result",
         payload: {
@@ -323,10 +345,12 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
           ],
         },
       });
+      // An ampersand marks an access key and stays in the control text.
       const folder = invoke("dialog.selectFolder", {
         defaultDirectory: root,
+        buttonLabel: "&Choose",
       });
-      await dismiss(folder.title, 1);
+      await dismiss(folder.title, 1, "&Choose");
       expect(await folder.result()).toEqual({
         kind: "result",
         payload: {
@@ -340,6 +364,7 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
         defaultDirectory: root,
         defaultFileName: "new-file",
         defaultExtension: "txt",
+        buttonLabel: "Export",
         filters: [
           {
             name: "Text",
@@ -349,7 +374,7 @@ export const pluginImports = { dialog: { operations: async () => ({ createOperat
           },
         ],
       });
-      await dismiss(save.title, 1);
+      await dismiss(save.title, 1, "Export");
       const savePath = resolve(root, "new-file.txt");
       expect(await save.result()).toEqual({
         kind: "result",

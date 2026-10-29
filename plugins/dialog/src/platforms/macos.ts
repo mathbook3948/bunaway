@@ -138,6 +138,14 @@ export class MacosDialogs implements DialogInstance {
     _source: string,
     signal?: AbortSignal,
   ): DialogResult {
+    // The panel binding has no way to set the confirm button text, so the field is refused rather
+    // than silently ignored.
+    if (input.buttonLabel !== undefined) {
+      throw new BunawayError({
+        code: "UNSUPPORTED",
+        message: "buttonLabel is not supported on macOS.",
+      });
+    }
     return this.exclusive(signal, () => {
       const panel = this.panels.create(panelSettings(kind, input));
       try {
