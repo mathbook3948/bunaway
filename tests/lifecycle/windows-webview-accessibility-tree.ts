@@ -113,6 +113,8 @@ const client = Bun.spawn(
     "powershell.exe",
     "-NoProfile",
     "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
     "-File",
     clientScript,
   ],
@@ -192,6 +194,13 @@ try {
     },
   );
   const created = webview;
+  /** A client that died before the final quit turns every wait into an immediate, explained failure. */
+  const clientFailure = () =>
+    client.exitCode === null
+      ? undefined
+      : new Error(
+          `UI Automation client exited (${client.exitCode}): ${errors.join("\n")}`,
+        );
   const pump = <T>(done: () => T | false | undefined, what: string) =>
     waitFor(
       () => {
@@ -203,7 +212,7 @@ try {
         deadline: "nativeFixture",
         what,
         intervalMs: 5,
-        failed: () => created.failure,
+        failed: () => created.failure ?? clientFailure(),
       },
     );
   /** Repeat an asynchronous probe that itself pumps messages while it waits for the client. */
@@ -215,7 +224,7 @@ try {
       deadline: "nativeFixture",
       what,
       intervalMs: 100,
-      failed: () => created.failure,
+      failed: () => created.failure ?? clientFailure(),
     });
   /** Send one command to the client process and pump until it answers with one JSON line. */
   const ask = async (command: string): Promise<Record<string, unknown>> => {
@@ -256,7 +265,7 @@ try {
         deadline: "childStep",
         what,
         intervalMs: 100,
-        failed: () => created.failure,
+        failed: () => created.failure ?? clientFailure(),
       },
     ).catch((error: Error) => {
       throw new Error(
@@ -265,9 +274,10 @@ try {
     });
     return seen?.name;
   };
-  results.uiaNameWithAccessibleTitle = await expectMsaaName(
-    READING_NAME,
-    "MSAA name from the accessible title",
+  // The window's UIA Name comes from its caption, not from the accessible title annotation.
+  assert.equal(
+    await expectMsaaName(READING_NAME, "MSAA name from the accessible title"),
+    CAPTION,
   );
   assert.equal(windows.getTitle(hwnd), CAPTION);
   windows.setAccessibleTitle(hwnd, "");
@@ -331,7 +341,10 @@ try {
   results.falseAfterRemovingHandlers = released === true;
   client.stdin.write("quit\n");
   client.stdin.flush();
-  await client.exited;
+  await waitFor(() => client.exitCode ?? undefined, {
+    deadline: "childExit",
+    what: "UI Automation client exit",
+  });
   // Windows may keep reporting a listener after the client is gone, so the outcome is recorded.
   results.falseAfterClientExit =
     released === true ||
@@ -354,34 +367,38 @@ try {
     reading,
     readingErrors,
   ]);
-  if (webview) {
-    webview.requestClose();
-    const closing = webview;
-    const pumpUntil = (done: () => boolean, what: string) =>
-      waitFor(
-        () => {
-          windows.pump();
-          return done() || undefined;
-        },
-        {
-          deadline: "nativeFixture",
-          what,
-          intervalMs: 5,
-        },
-      );
-    await pumpUntil(() => closing.detach(), "controller detach");
-    windows.destroy(hwnd);
-    hwnd = 0n;
-    await pumpUntil(() => closing.finish(), "native resource release");
+  try {
+    if (webview) {
+      webview.requestClose();
+      const closing = webview;
+      const pumpUntil = (done: () => boolean, what: string) =>
+        waitFor(
+          () => {
+            windows.pump();
+            return done() || undefined;
+          },
+          {
+            deadline: "nativeFixture",
+            what,
+            intervalMs: 5,
+          },
+        );
+      await pumpUntil(() => closing.detach(), "controller detach");
+      windows.destroy(hwnd);
+      hwnd = 0n;
+      await pumpUntil(() => closing.finish(), "native resource release");
+    }
+    if (hwnd) {
+      windows.destroy(hwnd);
+    }
+  } finally {
+    // A stuck wait above must not skip releasing the process-wide native state.
+    probe.close();
+    disposeCom();
+    windows.dispose();
+    ole.symbols.CoUninitialize();
+    disposeWin32Bindings();
   }
-  if (hwnd) {
-    windows.destroy(hwnd);
-  }
-  probe.close();
-  disposeCom();
-  windows.dispose();
-  ole.symbols.CoUninitialize();
-  disposeWin32Bindings();
 }
 assert(verified);
 await writeFile(
