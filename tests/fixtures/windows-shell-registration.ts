@@ -1,4 +1,5 @@
 import { realpathSync } from "node:fs";
+import { attemptAllAsync } from "@bunaway/plugin";
 
 /**
  * Registry and shell helpers for tests that make the real Windows shell start a registered
@@ -58,18 +59,26 @@ async function regAdd(key: string, name: string | null, data: string) {
 }
 
 /**
- * Deletes a key tree this test created. A key that is already absent is clean; any other failure
+ * Deletes a key tree this test created. Absence is checked with `reg query`'s exit code rather
+ * than the localized message of `reg delete`; an absent key is clean, and any other delete failure
  * (access denied, a lock) leaves a registration behind and is reported.
  */
 async function regDelete(key: string) {
+  const present = await runTool([
+    "reg",
+    "query",
+    key,
+  ]);
+  if (present.code !== 0) {
+    return;
+  }
   const result = await runTool([
     "reg",
     "delete",
     key,
     "/f",
   ]);
-  const absent = result.code === 1 && /unable to find/i.test(result.stderr);
-  if (result.code !== 0 && !absent) {
+  if (result.code !== 0) {
     throw new Error(`reg delete ${key} failed: ${result.stderr}`);
   }
 }
@@ -80,9 +89,33 @@ export function deleteShellScheme(scheme: string): Promise<void> {
 }
 
 /** Removes the extension and ProgId keys `registerShellExtension` made; safe to repeat. */
-export async function deleteShellExtension(extension: string): Promise<void> {
-  await regDelete(`${CLASSES_KEY}\\${extension}`);
-  await regDelete(`${CLASSES_KEY}\\${extension.slice(1)}-file`);
+export function deleteShellExtension(extension: string): Promise<void> {
+  return attemptAllAsync(
+    [
+      () => regDelete(`${CLASSES_KEY}\\${extension}`),
+      () => regDelete(`${CLASSES_KEY}\\${extension.slice(1)}-file`),
+    ],
+    `Could not remove the ${extension} registration`,
+  );
+}
+
+/** Rethrows `error` after running `cleanup`; a cleanup failure is reported together with it. */
+async function failAfterCleanup(
+  error: unknown,
+  cleanup: () => Promise<void>,
+): Promise<never> {
+  try {
+    await cleanup();
+  } catch (cleanupError) {
+    throw new AggregateError(
+      [
+        error,
+        cleanupError,
+      ],
+      "A registration failed and its partial keys could not be removed",
+    );
+  }
+  throw error;
 }
 
 /**
@@ -113,8 +146,7 @@ export async function registerShellScheme(
     await regAdd(key, "URL Protocol", "");
     await regAdd(`${key}\\shell\\open\\command`, null, command);
   } catch (error) {
-    await deleteShellScheme(scheme);
-    throw error;
+    return failAfterCleanup(error, () => deleteShellScheme(scheme));
   }
   return () => deleteShellScheme(scheme);
 }
@@ -137,8 +169,7 @@ export async function registerShellExtension(
       command,
     );
   } catch (error) {
-    await deleteShellExtension(extension);
-    throw error;
+    return failAfterCleanup(error, () => deleteShellExtension(extension));
   }
   return () => deleteShellExtension(extension);
 }

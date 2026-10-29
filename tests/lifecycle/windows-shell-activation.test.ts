@@ -56,13 +56,54 @@ async function createWorkspace(): Promise<Workspace> {
   };
 }
 
-/** Removes the workspace; the recorder may still hold it as its working directory for a moment. */
-async function removeWorkspace(space: Workspace) {
-  await rm(space.dir, {
-    recursive: true,
-    force: true,
-    maxRetries: SHELL_CWD_RELEASE_RETRIES,
-  });
+/**
+ * Runs `body` in a fresh workspace and removes it afterwards, also when `body` throws. The
+ * recorder may still hold the directory as its working directory for a moment, so removal retries.
+ */
+async function withWorkspace<T>(
+  body: (space: Workspace) => Promise<T>,
+): Promise<T> {
+  const space = await createWorkspace();
+  try {
+    return await body(space);
+  } finally {
+    await rm(space.dir, {
+      recursive: true,
+      force: true,
+      maxRetries: SHELL_CWD_RELEASE_RETRIES,
+    });
+  }
+}
+
+/** Runs `body`, then removes the registration even if `body` fails, reporting both failures. */
+async function withRegistration<T>(
+  unregister: () => Promise<void>,
+  body: () => Promise<T>,
+): Promise<T> {
+  let result: T | undefined;
+  let failure: unknown;
+  try {
+    result = await body();
+  } catch (error) {
+    failure = error;
+  }
+  try {
+    await unregister();
+  } catch (cleanupError) {
+    throw failure === undefined
+      ? cleanupError
+      : new AggregateError(
+          [
+            failure,
+            cleanupError,
+          ],
+          "The test failed and its registration could not be removed",
+        );
+  }
+  if (failure !== undefined) {
+    throw failure;
+  }
+  return result as T;
 }
 
 /** Waits for the recorder to report, then returns what the registered command received. */
@@ -86,27 +127,25 @@ async function activateUrl(makeUrl: (scheme: string) => string): Promise<{
   received: Received;
   workingDirectory: string;
 }> {
-  const space = await createWorkspace();
-  const scheme = newShellTestName();
-  const out = join(space.dir, "received.json");
-  const unregister = await registerShellScheme(scheme, space.command(out));
-  const url = makeUrl(scheme);
-  try {
-    await shellOpen(url, space.dir);
-    const received = await readReceived(out);
-    // Canonical forms are taken before cleanup removes the directory they resolve through.
-    return {
-      url,
-      received: {
-        ...received,
-        cwd: canonicalPath(received.cwd),
-      },
-      workingDirectory: canonicalPath(space.dir),
-    };
-  } finally {
-    await unregister();
-    await removeWorkspace(space);
-  }
+  return withWorkspace(async (space) => {
+    const scheme = newShellTestName();
+    const out = join(space.dir, "received.json");
+    const url = makeUrl(scheme);
+    const unregister = await registerShellScheme(scheme, space.command(out));
+    return withRegistration(unregister, async () => {
+      await shellOpen(url, space.dir);
+      const received = await readReceived(out);
+      // Canonical forms are taken before the workspace removal that follows.
+      return {
+        url,
+        received: {
+          ...received,
+          cwd: canonicalPath(received.cwd),
+        },
+        workingDirectory: canonicalPath(space.dir),
+      };
+    });
+  });
 }
 
 // Each URL reaches the command as exactly one argument, with the characters a shell or a command
@@ -198,26 +237,24 @@ for (const fileName of FILE_NAMES) {
   test.skipIf(process.platform !== "win32")(
     `the shell passes the associated file "${fileName}" as one unchanged path`,
     async () => {
-      const space = await createWorkspace();
-      const extension = `.${newShellTestName()}`;
-      const nested = join(space.dir, "dir with space");
-      await mkdir(nested);
-      const file = join(nested, fileName.replace(".txt", extension));
-      await writeFile(file, "x");
-      const out = join(space.dir, "received.json");
-      const unregister = await registerShellExtension(
-        extension,
-        space.command(out),
-      );
-      try {
-        await shellOpen(file, space.dir);
-        const { argv } = await readReceived(out);
-        expect(argv).toHaveLength(1);
-        expect(canonicalPath(argv[0] ?? "")).toBe(canonicalPath(file));
-      } finally {
-        await unregister();
-        await removeWorkspace(space);
-      }
+      await withWorkspace(async (space) => {
+        const extension = `.${newShellTestName()}`;
+        const nested = join(space.dir, "dir with space");
+        await mkdir(nested);
+        const file = join(nested, fileName.replace(".txt", extension));
+        await writeFile(file, "x");
+        const out = join(space.dir, "received.json");
+        const unregister = await registerShellExtension(
+          extension,
+          space.command(out),
+        );
+        await withRegistration(unregister, async () => {
+          await shellOpen(file, space.dir);
+          const { argv } = await readReceived(out);
+          expect(argv).toHaveLength(1);
+          expect(canonicalPath(argv[0] ?? "")).toBe(canonicalPath(file));
+        });
+      });
     },
   );
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { attemptAllAsync } from "@bunaway/plugin";
 import type { OpenRequest } from "@bunaway/plugin-api";
 import type { HostContext } from "@bunaway/protocol";
 import { runWindowsApp } from "#native/windows/bun/entry";
@@ -210,6 +211,7 @@ if (!process.argv.includes("--child")) {
       killSignal: "SIGKILL",
     },
   );
+  let failure: unknown;
   try {
     const [output, errors, code] = await Promise.all([
       new Response(child.stdout).text(),
@@ -218,15 +220,38 @@ if (!process.argv.includes("--child")) {
     ]);
     assert.equal(code, 0, `${output}\n${errors}`);
     console.log(output.trim());
-  } finally {
-    // The child may have been killed at the deadline, so the registrations are removed here.
-    await deleteShellScheme(scheme);
-    await deleteShellExtension(extension);
-    await rm(root, {
-      recursive: true,
-      force: true,
-      maxRetries: SHELL_CWD_RELEASE_RETRIES,
-    });
+  } catch (error) {
+    failure = error;
+  }
+  // The child may have been killed at the deadline, so the registrations are removed here. Every
+  // step runs even if an earlier one fails, and the run's own failure is reported with them.
+  try {
+    await attemptAllAsync(
+      [
+        () => deleteShellScheme(scheme),
+        () => deleteShellExtension(extension),
+        () =>
+          rm(root, {
+            recursive: true,
+            force: true,
+            maxRetries: SHELL_CWD_RELEASE_RETRIES,
+          }),
+      ],
+      "Could not clean up the shell activation test",
+    );
+  } catch (cleanupError) {
+    throw failure === undefined
+      ? cleanupError
+      : new AggregateError(
+          [
+            failure,
+            cleanupError,
+          ],
+          "The shell activation test failed and its cleanup failed",
+        );
+  }
+  if (failure !== undefined) {
+    throw failure;
   }
 } else {
   await verifyShellActivation(
