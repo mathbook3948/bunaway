@@ -13,5 +13,8 @@ See the [public contract](../../docs/site/src/content/docs/reference/plugins/sto
 results, limits and failures. `tests/api/store.test.ts` covers the contract with real temporary
 directories and an injected rename for the retry policy.
 
-Not provided: a change event pushed to the WebView (the I/O worker adapter has no event service),
-per-store-name permission lists, encryption and migrations.
+`store.changed` goes to views through the event service of the I/O Worker, once per change that alters
+the contents, with `{ name, kind, key? }` and never the value. It needs the view to allow and subscribe
+to the event and to hold `store.keys`. A host without an event service changes silently.
+
+Not provided: per-store-name permission lists, encryption and migrations.

@@ -18,6 +18,8 @@ import {
   MAX_OPEN_STORES,
   MAX_STORE_KEYS,
   MAX_STORE_VALUE_BYTES,
+  STORE_CHANGED_REQUIRED_OPERATION,
+  storeEvents,
 } from "#plugins/store/src/contract";
 import { storeOperations } from "#plugins/store/src/operations";
 import {
@@ -1487,6 +1489,183 @@ test("a reset without defaults that was saved loads as an empty store", () => {
     ...manual,
   });
   expect(second.length("plain")).toBe(0);
+});
+
+type Emitted = {
+  event: string;
+  payload: JsonValue;
+  requiredOperation: string | undefined;
+};
+
+/** A store whose events land in the returned list, standing in for the I/O Worker event channel. */
+function createWithEvents(root: string): {
+  instance: NodeStore;
+  emitted: Emitted[];
+} {
+  const emitted: Emitted[] = [];
+  const instance = new NodeStore(root, undefined, {
+    emit: (event, payload, requiredOperation) => {
+      emitted.push({
+        event,
+        payload,
+        requiredOperation,
+      });
+    },
+  });
+  instances.push(instance);
+  return {
+    instance,
+    emitted,
+  };
+}
+
+test("every change announces one store.changed event with the store, kind and key but no value", () => {
+  const { instance, emitted } = createWithEvents(dataRoot());
+  instance.load({
+    name: "ev",
+    defaults: {
+      a: 1,
+    },
+    ...manual,
+  });
+  expect(emitted).toEqual([]);
+  instance.set("ev", "secret", "hunter2");
+  instance.delete("ev", "secret");
+  instance.set("ev", "b", 2);
+  instance.reset("ev");
+  instance.clear("ev");
+  expect(emitted.map((entry) => entry.payload)).toEqual([
+    {
+      name: "ev",
+      kind: "set",
+      key: "secret",
+    },
+    {
+      name: "ev",
+      kind: "delete",
+      key: "secret",
+    },
+    {
+      name: "ev",
+      kind: "set",
+      key: "b",
+    },
+    {
+      name: "ev",
+      kind: "reset",
+    },
+    {
+      name: "ev",
+      kind: "clear",
+    },
+  ]);
+  expect(JSON.stringify(emitted)).not.toContain("hunter2");
+  for (const entry of emitted) {
+    expect(entry.event).toBe("store.changed");
+    expect(entry.requiredOperation).toBe(STORE_CHANGED_REQUIRED_OPERATION);
+  }
+});
+
+test("a change that leaves the contents as they were announces nothing", () => {
+  const { instance, emitted } = createWithEvents(dataRoot());
+  instance.load({
+    name: "quiet",
+    defaults: {
+      a: 1,
+    },
+    ...manual,
+  });
+  instance.set("quiet", "a", 1);
+  instance.delete("quiet", "missing");
+  instance.reset("quiet");
+  instance.reload("quiet", false);
+  instance.save("quiet");
+  expect(emitted).toEqual([]);
+  instance.set("quiet", "a", 2);
+  expect(emitted).toHaveLength(1);
+  instance.clear("quiet");
+  instance.clear("quiet");
+  expect(emitted).toHaveLength(2);
+});
+
+test("a refused change announces nothing", () => {
+  const { instance, emitted } = createWithEvents(dataRoot());
+  instance.load({
+    name: "refused",
+    ...manual,
+  });
+  expect(() =>
+    instance.set("refused", "big", "x".repeat(MAX_STORE_VALUE_BYTES)),
+  ).toThrow();
+  expect(emitted).toEqual([]);
+});
+
+test("reload announces one event only when the file changed what memory holds", () => {
+  const { instance, emitted } = createWithEvents(dataRoot());
+  instance.load({
+    name: "rl",
+    ...manual,
+  });
+  instance.set("rl", "k", 1);
+  instance.save("rl");
+  instance.set("rl", "k", 2);
+  instance.set("rl", "extra", 3);
+  emitted.length = 0;
+  expect(instance.reload("rl", false).changed).toBe(true);
+  expect(emitted.map((entry) => entry.payload)).toEqual([
+    {
+      name: "rl",
+      kind: "reload",
+    },
+  ]);
+  expect(instance.reload("rl", false).changed).toBe(false);
+  expect(emitted).toHaveLength(1);
+});
+
+test("autosave and save do not announce again", async () => {
+  const root = dataRoot();
+  const { instance, emitted } = createWithEvents(root);
+  instance.load({
+    name: "auto-ev",
+    autosave: 0,
+  });
+  instance.set("auto-ev", "k", 1);
+  await waitFor(
+    () => (existsSync(storeFile(root, "auto-ev")) ? true : undefined),
+    {
+      deadline: "inProcess",
+      what: "autosave write",
+    },
+  );
+  instance.save("auto-ev");
+  expect(emitted).toHaveLength(1);
+});
+
+test("a store without an event service changes silently", () => {
+  const instance = create(dataRoot());
+  instance.load({
+    name: "plain-ev",
+    ...manual,
+  });
+  expect(instance.set("plain-ev", "k", 1).changed).toBe(true);
+  expect(instance.clear("plain-ev").changed).toBe(true);
+});
+
+test("the plugin declares store.changed with the payload the store emits", () => {
+  expect(Object.keys(store._definition.events ?? {})).toEqual([
+    "store.changed",
+  ]);
+  expect(storeEvents["store.changed"].required).toEqual([
+    "name",
+    "kind",
+  ]);
+  expect(storeEvents["store.changed"].properties.kind.enum).toEqual([
+    "set",
+    "delete",
+    "clear",
+    "reset",
+    "reload",
+  ]);
 });
 
 test("the browser bundle of the package carries no node module import", () => {

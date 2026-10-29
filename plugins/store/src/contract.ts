@@ -107,6 +107,52 @@ export type StoreChange = z.infer<typeof changedOutputSchema>;
 /** How `store.load` obtained the contents. */
 export type StoreLoadResult = z.infer<typeof loadOutputSchema>;
 
+/** What changed in a `store.changed` event. */
+export const STORE_CHANGE_KINDS = [
+  "set",
+  "delete",
+  "clear",
+  "reset",
+  "reload",
+] as const;
+export type StoreChangeKind = (typeof STORE_CHANGE_KINDS)[number];
+/**
+ * Operation a view needs to receive `store.changed`. The event names the changed key, so it
+ * reaches only views allowed to list keys.
+ */
+export const STORE_CHANGED_REQUIRED_OPERATION = "store.keys";
+/**
+ * `store.changed` payload. `key` is present for `set` and `delete` only; the value is never sent,
+ * so a receiver reads it with `store.get` under that call's own permission.
+ */
+export const storeEvents = {
+  "store.changed": {
+    type: "object",
+    properties: {
+      name: {
+        type: "string",
+        minLength: 1,
+        maxLength: MAX_STORE_NAME_LENGTH,
+      },
+      kind: {
+        enum: [
+          ...STORE_CHANGE_KINDS,
+        ],
+      },
+      key: {
+        type: "string",
+        minLength: 1,
+        maxLength: MAX_STORE_KEY_LENGTH,
+      },
+    },
+    required: [
+      "name",
+      "kind",
+    ],
+    additionalProperties: false,
+  },
+} as const;
+
 /** What every platform adapter provides; operations are typed by this interface, not by a platform module. */
 export interface StoreInstance {
   load(input: StoreLoadInput): StoreLoadResult;
