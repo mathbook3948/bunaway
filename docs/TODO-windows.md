@@ -1153,8 +1153,8 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 - [ ] painting 시작, 중단, 상태 조회와 invalidate를 제공한다.
 - [ ] WebContents clone과 frame subscription의 지원을 결정한다.
 - [ ] GPU shared texture의 가져오기, 전달, 수명과 동기화를 제공한다.
-- [x] 결정 완료: view tree와 native child view는 제공하지 않는다. 단일 WebView 모델에서 배치할 대상이 없고, 시각 요소는 UI 문서가 그린다. [ADR 0091](./decisions/0091-native-child-view-imageview-and-view-effects.md)을 따른다.
-- [x] 결정 완료: native ImageView와 view 단위 border radius, background blur는 제공하지 않는다. 창 단위 둥근 모서리와 배경 재질은 유지한다. [ADR 0091](./decisions/0091-native-child-view-imageview-and-view-effects.md)을 따른다.
+- [x] 결정 완료: view tree와 native child view는 제공하지 않는다. 단일 WebView 모델에서 배치할 대상이 없고, 시각 요소는 UI 문서가 그린다. [ADR 0129](./decisions/0129-native-child-view-imageview-and-view-effects.md)을 따른다.
+- [x] 결정 완료: native ImageView와 view 단위 border radius, background blur는 제공하지 않는다. 창 단위 둥근 모서리와 배경 재질은 유지한다. [ADR 0129](./decisions/0129-native-child-view-imageview-and-view-effects.md)을 따른다.
 - [ ] `<webview>` 태그와 같은 UI 내 guest WebView의 필요성과 권한 경계를 결정한다.
 - [ ] 선택 Chromium 렌더러에서 브라우저 확장과 Chrome API 호환 subset을 제공할지 결정한다. WebView2 기준으로는 [제공하지 않는다](decisions/0070-webview-browser-extensions.md).
 - [x] 결정 완료: Chromium feature flag, V8 code-cache와 sandbox 설정은 제공하지 않는다. WebView2 기준으로 임의 브라우저 인자 설정은 두지 않고 code-cache는 대체 불가, 렌더러 sandbox를 끄는 설정은 지원하지 않는다. [ADR 0091](./decisions/0091-webview-chromium-flags-code-cache-and-sandbox.md).
