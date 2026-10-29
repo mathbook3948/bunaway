@@ -31,6 +31,7 @@ const STEP_TIMEOUT_MS = deadline("childStep");
 const TEXT_REPORT_POLL_MS = 25;
 // Time given to the page and the controller to take focus after a click.
 const FOCUS_SETTLE_MS = 750;
+const MAPVK_VK_TO_VSC = 0;
 const VK_RETURN = 0x0d;
 const VK_A = 0x41;
 // SendInput structures: INPUT is 40 bytes; the mouse and keyboard members start at offset 8.
@@ -113,6 +114,14 @@ const user = dlopen("user32.dll", {
       "u32",
       "ptr",
       "i32",
+    ],
+    returns: "u32",
+  },
+  MapVirtualKeyExW: {
+    args: [
+      "u32",
+      "u32",
+      "u64",
     ],
     returns: "u32",
   },
@@ -276,6 +285,19 @@ function sendMouse(screenX: number, screenY: number, flags: number[]): void {
   );
 }
 
+/**
+ * Scan code of a virtual key in the active layout. A key event with only a virtual key has no
+ * scan code, and the page then reports an empty `KeyboardEvent.code`; a real keyboard always
+ * sends the scan code.
+ */
+function scanCode(virtualKey: number): number {
+  return user.symbols.MapVirtualKeyExW(
+    virtualKey,
+    MAPVK_VK_TO_VSC,
+    user.symbols.GetKeyboardLayout(0),
+  );
+}
+
 /** One keyboard input record: a virtual key, or a UTF-16 code unit sent as a Unicode packet. */
 interface KeyRecord {
   virtualKey: number;
@@ -305,7 +327,7 @@ function sendText(text: string): void {
   for (let index = 0; index < text.length; index++) {
     const unit = text.charCodeAt(index);
     if (unit === 0x0a) {
-      pair(VK_RETURN, 0, 0);
+      pair(VK_RETURN, scanCode(VK_RETURN), 0);
     } else {
       pair(0, unit, KEYEVENTF_UNICODE);
     }
@@ -334,6 +356,7 @@ function pressKey(virtualKey: number): void {
   ].forEach((flags, index) => {
     events.writeUInt32LE(INPUT_KEYBOARD, INPUT_SIZE * index);
     events.writeUInt16LE(virtualKey, INPUT_SIZE * index + 8);
+    events.writeUInt16LE(scanCode(virtualKey), INPUT_SIZE * index + 10);
     events.writeUInt32LE(flags, INPUT_SIZE * index + 12);
   });
   assert.equal(user.symbols.SendInput(2, ptr(events), INPUT_SIZE), 2);
