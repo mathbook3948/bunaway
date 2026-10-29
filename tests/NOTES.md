@@ -1491,9 +1491,17 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 `dist/windows-x64/<appId>.exe`를 만듭니다. EXE 크기와 `manifest.json` 존재를 확인한 다음 EXE를 실행해 종료 코드 0을 기다립니다.
 확인 코드가 백엔드를 거쳐야 창을 닫으므로 종료 코드 0은 컴파일된 EXE, 번들 백엔드와 UI 자산, 실제 호스트와 WebView2가
 시작해 UI 스크립트가 백엔드에 닿았다는 뜻입니다. 기한을 넘기면 프로세스 트리째 종료하고 실패로 기록하며, EXE는 이 실행의 디렉터리를 가리키는 `LOCALAPPDATA`로 시작하며(템플릿의 message 모듈이 그 아래에 씁니다), 종료 코드 0 뒤에 확인 메시지가 그 아래 `bunaway/<appId>/data/messages/current.txt`에 있는지도 확인합니다. 같은 앱의 다른 인스턴스가 떠 있으면 새 EXE가 전달만 하고 코드 0으로 끝나 확인 코드가 실행되지 않기 때문입니다. 호스트 자신의 데이터 루트(WebView2 프로필, 로그, 단일 인스턴스 잠금)는 `LOCALAPPDATA`를 따르지 않고 실제 LocalAppData를 씁니다.
+`compiled-exe`가 통과한 템플릿은 `package-install` 단계가 이어집니다. 같은 프로젝트의 `bundle.identifier`를 무작위 값으로
+바꾸고(Inno AppId와 제거 항목 키가 거기서 나오므로 다른 설치와 겹치지 않습니다. 나머지 packaging 설정은 템플릿 그대로입니다)
+`bun run package win-direct`(`bunaway package win-direct`)로 설치 프로그램을 만든 뒤 `/VERYSILENT /DIR=<이 실행의 폴더>`로 설치하고,
+`<appId>.exe`가 설치됐고 `HKCU`의 제거 항목이 등록됐는지 본 다음 설치된 EXE를 `compiled-exe`와 같은 확인 코드(메시지 저장과
+읽기, 종료 코드 0, 별도 `LOCALAPPDATA`의 메시지 파일)로 시작합니다. 마지막으로 `unins000.exe`를 무음으로 실행해 설치 폴더와 제거
+항목이 남지 않는지 확인하며, 설치 프로그램을 실행한 뒤에는 시작이 실패해도 제거를 항상 실행하고 제거 실패는 그 단계의 실패로 기록합니다. 시작 메뉴 바로 가기(그룹 이름이 무작위 identifier)와 호스트 데이터 폴더는 확인하지 않습니다. 호스트 데이터는 `compiled-exe`와 같이 실제 LocalAppData의 `bunaway/<appId>` 아래에 쌓이며 템플릿의 appId는 바꾸지 않습니다(설치된 EXE 이름이 appId이기 때문입니다). 제거는 사용자 데이터를 기본값대로 보존하므로 지우지 않습니다. Inno Setup은
+`windows-native` 잡에 따로 설치 단계를 두지 않고 시험이 CI(`CI=true`)에서만 `.github/actions/install-inno-setup/install.ps1`(액션과
+같은 고정 버전과 체크섬)로 설치합니다. 개발 기기에서 Inno가 없으면 설치를 시도하지 않고 실패합니다.
 한 단계가 실패해도 나머지 템플릿을 계속 돌리고 마지막에 실패 단계를 모아 실패하며, 단계별 결과는
-`build/windows-templates-results.json`에 기록합니다. HMR 갱신 뒤의 화면 DOM, 설치 파일 생성과 설치 파일 실행, 화면에
-그려진 내용은 확인하지 않습니다. Windows native 실행기에 포함합니다.
+`build/windows-templates-results.json`에 기록합니다. HMR 갱신 뒤의 화면 DOM, 서명, 덮어쓰기 업데이트, 공백과 한글이 든 설치 폴더,
+화면에 그려진 내용은 확인하지 않습니다(설치 폴더와 서명은 fixture 앱을 쓰는 `tests/packaging/` 시험이 다룹니다). Windows native 실행기에 포함합니다.
 
 `lifecycle/io-worker-plugin-events.test.ts`는 실제 I/O Worker 번들과 시험용 플러그인으로 `environment.events.emit`이
 `plugin-event` 패킷으로 메인에 도착하는 순서와 필드, 다른 플러그인 이름 공간, 잘못된 이름, JSON이 아니거나 1 MiB를 넘는
