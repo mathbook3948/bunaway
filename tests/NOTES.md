@@ -1500,6 +1500,7 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 항목 옆에 복사하고 상대 경로를 넘기는 ASCII 전용 `--compile-executable-path` 우회 포함)를 거쳐 compiled EXE를 만들고,
 공백과 한글이 든 `LOCALAPPDATA`로 실행합니다. 확인 코드가 백엔드에 메시지를 저장하고 읽은 뒤 창을 닫으므로 종료 코드 0과
 그 `LOCALAPPDATA` 아래 메시지 파일이 EXE, 번들 백엔드, 앱 데이터 경로가 이런 경로에서 동작한다는 증거입니다.
+같은 잡에서 `windows-templates.ts`가 먼저 패키징한 프레임워크 tarball이 있으면 읽기만 하고 다시 패키징하지 않으며(`windows-native` 잡 제한 시간 때문), 없으면 직접 패키징합니다.
 시험이 CLI와 앱에 넘기는 경로 문자열에 공백과 비ASCII 문자가 들어 있는지 먼저 단언합니다. 템플릿은 vanilla 한 종만 쓰고
 (5종 반복은 `windows-templates.ts`), 시간을 아끼려 개발 서버 단계는 두지 않습니다. 설치 프로그램, 서명, 개발 서버 HMR,
 8.3 짧은 이름, MAX_PATH를 넘는 프로젝트 경로는 확인하지 않습니다. 호스트 자신의 데이터 루트는 `LOCALAPPDATA`를 따르지 않아

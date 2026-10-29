@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { appendFile, mkdir, readFile, rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { type DeadlineName, deadline } from "../fixtures/deadlines.ts";
@@ -153,8 +153,22 @@ function assertUnicodePaths(): void {
   }
 }
 
-async function verify(): Promise<void> {
-  assertUnicodePaths();
+/**
+ * The framework tarballs the template verification packed earlier in this job, which saves a
+ * second pack of the same checkout; packs here when there are none. The tarballs are only read.
+ */
+async function packedFramework(): Promise<string> {
+  const builds = resolve(root, "build");
+  for (const name of readdirSync(builds)) {
+    const candidate = resolve(builds, name, "packages");
+    if (
+      name.startsWith("windows-templates-") &&
+      existsSync(resolve(candidate, "bunaway-cli-0.0.0.tgz"))
+    ) {
+      console.log(`PASS pack (reused ${candidate})`);
+      return candidate;
+    }
+  }
   const packages = resolve(home, "packages");
   await execute(
     "pack",
@@ -163,6 +177,12 @@ async function verify(): Promise<void> {
     "packagedAudit",
     SETUP_DEADLINE_SCALE,
   );
+  return packages;
+}
+
+async function verify(): Promise<void> {
+  assertUnicodePaths();
+  const packages = await packedFramework();
   await mkdir(PROJECT_PARENT, {
     recursive: true,
   });
