@@ -40,7 +40,7 @@ async function holdOpen(
       "powershell",
       "-NoProfile",
       "-Command",
-      `$f=[IO.File]::Open('${file}','Open','Read','${share}');[IO.File]::WriteAllText('${marker}','1');Start-Sleep -Seconds 120`,
+      `$f=[IO.File]::Open('${file}','Open','Read','${share}');[IO.File]::WriteAllText('${marker}','1');Start-Sleep -Seconds 3600`,
     ],
     {
       stdout: "ignore",
@@ -187,12 +187,18 @@ try {
   }
   assert.equal(existsSync(`${root}/tree`), false);
 } finally {
-  await holder?.stop();
-  storage.dispose();
-  await rm(root, {
-    recursive: true,
-    force: true,
-  });
+  try {
+    await holder?.stop();
+  } finally {
+    storage.dispose();
+    // A scanner may still hold a file that was just released, so the folder removal retries.
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
+  }
 }
 console.log(
   "PASS Windows storage remove of a locked file: removeRecursive and remove fail with PERMISSION_DENIED while another process holds a file without delete sharing, the held file stays, the same call succeeds after the handle closes, and a delete-pending name never produces a false success",
