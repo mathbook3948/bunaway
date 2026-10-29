@@ -54,6 +54,9 @@ export interface WinHttpApi {
   ): Promise<AutoProxyResult | number>;
 }
 
+/** Reported when a configuration string is longer than the plugin reads; the setting was read, but is refused. */
+export const SETTING_TOO_LONG_MESSAGE = "Windows proxy setting is too long.";
+
 function failure(message: string): never {
   throw new BunawayError({
     code: "INTERNAL",
@@ -99,7 +102,7 @@ function takeString(
     while (read.u16(pointer, chars * 2) !== 0) {
       chars += 1;
       if (chars > MAX_CONFIG_CHARS) {
-        return failure("Windows proxy setting is too long.");
+        return failure(SETTING_TOO_LONG_MESSAGE);
       }
     }
     return Buffer.from(toArrayBuffer(pointer, 0, chars * 2)).toString(

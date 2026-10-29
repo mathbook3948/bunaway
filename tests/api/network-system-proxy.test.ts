@@ -10,6 +10,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BunawayError } from "@bunaway/protocol";
 import {
   downloadInputSchema,
   exchangeInputSchema,
@@ -20,6 +21,7 @@ import type {
   IeProxyConfig,
   WinHttpApi,
 } from "#plugins/network/src/platforms/resolve-proxy";
+import { SETTING_TOO_LONG_MESSAGE } from "#plugins/network/src/platforms/resolve-proxy";
 import { systemProxyFor } from "#plugins/network/src/platforms/system-proxy";
 import {
   dispose,
@@ -479,6 +481,67 @@ test("a request waiting for a lookup turn leaves at its deadline", async () => {
     code: "TIMEOUT",
   });
   expect(await Promise.all(holders)).toHaveLength(4);
+  // The waiter that left took no slot with it: the next request gets its turn at once.
+  const after = await runRequest(
+    state,
+    requestFor(`http://${ORIGIN}/after`),
+    undefined,
+    viaProxy(),
+  );
+  expect(bodyOf(after)).toBe("proxied");
+  await dispose(state);
+});
+
+test("a setting that was read but is too long fails the request", async () => {
+  const state = initialize();
+  await expect(
+    runRequest(state, requestFor(`http://${ORIGIN}/`), undefined, () => ({
+      ieProxyConfig: () => {
+        throw new BunawayError({
+          code: "INTERNAL",
+          message: SETTING_TOO_LONG_MESSAGE,
+        });
+      },
+      autoProxyForUrl: async () => 12180,
+    })),
+  ).rejects.toMatchObject({
+    code: "INTERNAL",
+  });
+  await dispose(state);
+});
+
+test("a lookup worker still busy with a caller that left is waited for, not reported as BUSY", async () => {
+  const state = initialize();
+  let tries = 0;
+  const response = await runRequest(
+    state,
+    requestFor(`http://${ORIGIN}/`),
+    undefined,
+    () => ({
+      ieProxyConfig: () => ({
+        autoDetect: true,
+        autoConfigUrl: null,
+        proxy: null,
+        bypass: null,
+      }),
+      autoProxyForUrl: async () => {
+        tries += 1;
+        if (tries <= 2) {
+          throw new BunawayError({
+            code: "BUSY",
+            message: "Too many proxy lookups.",
+          });
+        }
+        return {
+          accessType: 3,
+          proxy: `127.0.0.1:${proxyPort}`,
+          bypass: null,
+        };
+      },
+    }),
+  );
+  expect(bodyOf(response)).toBe("proxied");
+  expect(tries).toBe(3);
   await dispose(state);
 });
 

@@ -3,6 +3,7 @@ import { MAX_AUTO_PROXY_WORKERS } from "#network/platforms/auto-proxy-worker";
 import type { ProxyEntry } from "#network/platforms/proxy-rules";
 import {
   resolveProxy,
+  SETTING_TOO_LONG_MESSAGE,
   type WinHttpApi,
 } from "#network/platforms/resolve-proxy";
 
@@ -81,6 +82,50 @@ export class LookupGate {
   }
 }
 
+/** Pause between tries while every lookup worker is still inside a native call for a caller that left. */
+const WORKER_RETRY_MS = 50;
+
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", stop);
+      resolve();
+    }, ms);
+    const stop = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", stop, {
+      once: true,
+    });
+  });
+}
+
+/**
+ * Run one lookup through the gate. A worker whose caller already left stays inside its native
+ * call until WinHTTP returns and still counts against the worker limit, so `BUSY` here means
+ * "wait": the request tries again until it succeeds or its own deadline or cancellation ends it.
+ */
+async function lookupWhenFree(
+  gate: LookupGate | undefined,
+  lookup: () => Promise<ProxyEntry[]>,
+  signal: AbortSignal,
+): Promise<ProxyEntry[]> {
+  for (;;) {
+    try {
+      return await (gate ? gate.run(signal, lookup) : lookup());
+    } catch (error) {
+      if (
+        !(error instanceof BunawayError && error.code === "BUSY") ||
+        signal.aborted
+      ) {
+        throw error;
+      }
+      await pause(WORKER_RETRY_MS, signal);
+    }
+  }
+}
+
 /**
  * Choose the proxy for a request from the current user's system settings, the way `resolveProxy`
  * reports them: the first HTTP or HTTPS proxy of the route, or none when the route is direct.
@@ -107,6 +152,7 @@ export async function systemProxyFor(
     return undefined;
   }
   url.protocol = secure ? "https:" : "http:";
+  const startedAt = Date.now();
   let entries: ProxyEntry[];
   // Only a failure to read the settings goes direct. Every other failure, such as a list the
   // plugin refuses or a broken lookup worker, fails the request instead of bypassing the route.
@@ -124,16 +170,28 @@ export async function systemProxyFor(
         try {
           return native.ieProxyConfig();
         } catch (error) {
-          unreadable = true;
+          // A setting that was read but is too long is refused, not unreadable.
+          unreadable = !(
+            error instanceof BunawayError &&
+            error.message === SETTING_TOO_LONG_MESSAGE
+          );
           throw error;
         }
       },
       autoProxyForUrl: (...args) => native.autoProxyForUrl(...args),
     };
-    return resolveProxy(guarded, url.href, timeoutMs, signal);
+    // Time spent waiting for a turn is part of the request's deadline.
+    const remainingMs = timeoutMs - (Date.now() - startedAt);
+    if (remainingMs <= 0) {
+      throw new BunawayError({
+        code: "TIMEOUT",
+        message: "Network request timed out.",
+      });
+    }
+    return resolveProxy(guarded, url.href, remainingMs, signal);
   };
   try {
-    entries = await (gate ? gate.run(signal, lookup) : lookup());
+    entries = await lookupWhenFree(gate, lookup, signal);
   } catch (error) {
     if (!unreadable || signal.aborted) {
       throw error;

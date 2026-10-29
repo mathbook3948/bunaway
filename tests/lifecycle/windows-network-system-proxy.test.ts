@@ -74,10 +74,11 @@ async function snapshot(): Promise<Saved> {
 }
 
 async function restore(saved: Saved) {
+  const failures: string[] = [];
   for (const name of VALUES) {
     const value = saved[name];
     if (value) {
-      await reg(
+      const result = await reg(
         "add",
         KEY,
         "/v",
@@ -88,9 +89,21 @@ async function restore(saved: Saved) {
         value.data,
         "/f",
       );
+      if (result.code !== 0) {
+        failures.push(name);
+      }
     } else {
+      // Deleting a value that is already gone exits with 1, so look at the outcome instead.
       await reg("delete", KEY, "/v", name, "/f");
+      if ((await readValue(name)) !== undefined) {
+        failures.push(name);
+      }
     }
+  }
+  if (failures.length > 0) {
+    throw new Error(
+      `Could not restore Internet Options values: ${failures.join(", ")}.`,
+    );
   }
 }
 
@@ -211,9 +224,12 @@ test.skipIf(!MAY_CHANGE_INTERNET_OPTIONS)(
           process.env[name] = value;
         }
       }
-      await adapter.dispose();
-      await restore(saved);
-      proxy.close();
+      try {
+        await restore(saved);
+      } finally {
+        proxy.close();
+        await adapter.dispose();
+      }
     }
   },
 );
