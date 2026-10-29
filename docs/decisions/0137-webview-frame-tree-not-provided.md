@@ -18,10 +18,10 @@ status: accepted
 
 ## 결정
 
-1. WebView의 frame tree 열거, frame의 URL과 origin 조회, frame 하나를 대상으로 하는 작업(JavaScript 실행, 메시지 전달, 초기화 script 적용)을 제공하지 않는다. 같은 이름과 같은 역할의 `WebFrameMain` 대응 API를 만들지 않는다.
+1. WebView의 frame tree 열거, frame의 URL과 origin 조회, frame 하나를 지정해 그 frame에 메시지를 보내거나 호출하는 작업을 제공하지 않는다. 같은 이름과 같은 역할의 `WebFrameMain` 대응 API를 만들지 않는다.
 2. 신뢰 경계는 지금처럼 브리지가 호출마다 도착 frame의 origin과 frame 권한으로 검사하는 방식으로 유지한다. 앱 백엔드가 frame 목록이나 frame 식별자를 알 필요가 없도록 한다.
 3. 페이지 안의 iframe 접근은 페이지 자신의 웹 표준 API(`window.frames`, `postMessage`)로 처리한다. 같은 origin의 frame끼리는 페이지 스크립트가 직접 다루고, 다른 origin의 frame과는 `postMessage`로 통신한다. 백엔드가 필요한 일은 브리지를 통한 명령 호출로 한다.
-4. 이 결정은 JavaScript 실행 계약, 문서 초기화 script와 CSS 삽입, isolated world와 preload(`docs/TODO-windows.md` 694행부터 696행)를 정하지 않는다. 이 항목들은 #158에 그대로 남는다.
+4. 이 결정은 `docs/TODO-windows.md`의 JavaScript 실행 계약, 문서 초기화 script와 CSS 삽입, isolated world와 preload 항목을 정하지 않는다. 이 항목들은 frame별 적용 범위(초기화 script를 하위 frame에 적용할지, frame 하나를 대상으로 JavaScript를 실행할지)를 포함해 #158에 그대로 남는다. 결정 1은 앱이 frame을 열거하고 지정하는 조회와 메시지 API만 다룬다.
 5. 코드, 공개 계약, 스키마, 권한, 이벤트, 네이티브 코드 변경은 없다. 모든 앱의 보안 경계도 바꾸지 않는다.
 
 ## 다시 열 조건
@@ -41,6 +41,6 @@ status: accepted
 
 ## 결과
 
-- `docs/TODO-windows.md`의 해당 항목을 결정 완료로 표시하고 이 결정을 참조한다. 694행부터 696행은 그대로 둔다.
+- `docs/TODO-windows.md`의 해당 항목을 결정 완료로 표시하고 이 결정을 참조한다. JavaScript 실행, 문서 초기화 script, isolated world와 preload 항목은 그대로 둔다.
 - ADR 0106의 다시 열 조건 "frame별 범위"에 이 결정을 연결한다.
-- Electron에서 `WebFrameMain`으로 frame을 다루던 앱은 위 결정 3의 웹 표준 API와 백엔드 명령으로 옮긴다. frame 하나를 대상으로 백엔드가 직접 코드를 실행하는 용도는 #158이 끝날 때까지 지원되지 않는다.
+- Electron에서 `WebFrameMain`으로 frame을 다루던 앱은 위 결정 3의 웹 표준 API와 백엔드 명령으로 옮긴다. frame 하나를 대상으로 백엔드가 직접 코드를 실행하는 용도는 지금 지원되지 않으며, 지원 여부는 #158의 실행 계약과 위 다시 열 조건이 충족될 때 정한다.
