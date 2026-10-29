@@ -1153,10 +1153,10 @@ setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 
 
 - [ ] CEF 등 선택 Chromium 렌더러를 동일한 SDK와 정책 계약에 연결한다. Tauri가 WebView 계층을 별도 크레이트(wry)로 분리한 것처럼 `packages/` 아래 별도 패키지로 새로 만든다.
 - [ ] renderer capability에 따라 미지원 기능을 명시하고 엔진 선택 방법을 제공한다.
-- [ ] offscreen rendering의 frame, dirty region과 frame rate를 제공한다.
-- [ ] painting 시작, 중단, 상태 조회와 invalidate를 제공한다.
-- [ ] WebContents clone과 frame subscription의 지원을 결정한다.
-- [ ] GPU shared texture의 가져오기, 전달, 수명과 동기화를 제공한다.
+- [x] 결정 완료: offscreen rendering의 frame, dirty region과 frame rate는 제공하지 않는다. [ADR 0121](./decisions/0121-webview-offscreen-rendering-and-shared-texture.md).
+- [x] 결정 완료: painting 시작, 중단, 상태 조회와 invalidate는 제공하지 않는다. [ADR 0121](./decisions/0121-webview-offscreen-rendering-and-shared-texture.md).
+- [x] 결정 완료: WebContents clone과 frame subscription은 제공하지 않는다. [ADR 0121](./decisions/0121-webview-offscreen-rendering-and-shared-texture.md).
+- [x] 결정 완료: GPU shared texture의 가져오기, 전달, 수명과 동기화는 제공하지 않는다. [ADR 0121](./decisions/0121-webview-offscreen-rendering-and-shared-texture.md).
 - [ ] View tree와 native child view의 배치, 순서, bounds, clipping과 visibility를 제공한다.
 - [ ] native ImageView, border radius와 background blur의 지원을 결정한다.
 - [ ] `<webview>` 태그와 같은 UI 내 guest WebView의 필요성과 권한 경계를 결정한다.
