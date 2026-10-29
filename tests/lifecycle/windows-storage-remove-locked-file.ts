@@ -17,11 +17,8 @@ const at = (path: string) => ({
   path: `${root}/${path}`,
 });
 
-/** The codes the contract allows for a file another process holds open without delete sharing. */
-const LOCK_CODES = [
-  "BUSY",
-  "PERMISSION_DENIED",
-];
+/** A file another process holds open without delete sharing is an OS access denial. */
+const LOCK_CODE = "PERMISSION_DENIED";
 
 /** A child process that keeps one file open with the given share mode until it is stopped. */
 type Holder = {
@@ -84,8 +81,8 @@ async function rejection(action: () => unknown): Promise<unknown> {
 
 function assertLockFailure(error: unknown): void {
   assert.ok(
-    error instanceof BunawayError && LOCK_CODES.includes(error.code),
-    `A locked file must fail with ${LOCK_CODES.join(" or ")}: ${String(error)}`,
+    error instanceof BunawayError && error.code === LOCK_CODE,
+    `A locked file must fail with ${LOCK_CODE}: ${String(error)}`,
   );
 }
 
@@ -198,5 +195,5 @@ try {
   });
 }
 console.log(
-  "PASS Windows storage remove of a locked file: removeRecursive and remove fail with BUSY or PERMISSION_DENIED while another process holds a file without delete sharing, the held file stays, the same call succeeds after the handle closes, and a delete-pending name never produces a false success",
+  "PASS Windows storage remove of a locked file: removeRecursive and remove fail with PERMISSION_DENIED while another process holds a file without delete sharing, the held file stays, the same call succeeds after the handle closes, and a delete-pending name never produces a false success",
 );
