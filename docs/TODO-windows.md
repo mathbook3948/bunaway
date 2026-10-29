@@ -1098,7 +1098,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [x] Windows의 `windows.changed` native 이벤트를 동일한 typed 구독 API로 전달한다.
 - [ ] binary payload와 JSON 외 데이터의 전송 계약을 추가한다. [#81](https://github.com/mathbook3948/bunaway/issues/81).
 - [ ] 연속 결과와 대용량 데이터의 channel 또는 stream 전송을 제공한다. [#81](https://github.com/mathbook3948/bunaway/issues/81).
-- [ ] MessagePort와 transferable resource에 해당하는 기능을 제공한다.
+- [x] 결정 완료: MessagePort와 transferable resource에 해당하는 공개 기능은 제공하지 않고 명령, 이벤트와 위 binary payload와 stream 전송 계약 항목으로 푼다. [ADR 0112](./decisions/0112-ui-backend-message-port.md).
 - [x] 결정 완료: 백엔드가 UI의 반환값을 기다리는 요청/응답 API는 제공하지 않고 이벤트와 UI의 명령 호출로 푼다. [ADR 0063](./decisions/0063-backend-to-ui-request.md).
 - [ ] native resource handle의 생성, 참조와 해제 계약을 제공한다.
 - [x] UI에 노출할 명령과 이벤트의 타입, 계약과 정책 목록을 생성하는 도구를 제공한다(`bunaway contract`).
