@@ -63,8 +63,8 @@ function moveFailure(code: number): Error {
       message: "Storage destination already exists.",
     });
   }
-  // A file another process holds open without delete sharing fails a rename with a sharing
-  // violation; the same file inside a renamed directory fails with access denied.
+  // A file another process holds open without delete sharing fails a rename with one of these
+  // codes, as a file or inside a renamed directory.
   if (
     code === ERROR_ACCESS_DENIED ||
     code === ERROR_SHARING_VIOLATION ||

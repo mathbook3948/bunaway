@@ -144,7 +144,7 @@ try {
   assert.equal(existsSync(`${root}/moved-dir`), false);
 
   // A directory without any held handle is not affected while the holder is still running.
-  assert.equal(move("free-dir", "moved-free-dir"), null);
+  await moveWhenReleased("free-dir", "moved-free-dir");
   assert.equal(existsSync(`${root}/free-dir`), false);
   assert.equal(
     await readFile(`${root}/moved-free-dir/free.txt`, "utf8"),
