@@ -15,6 +15,6 @@ directories and an injected rename for the retry policy.
 
 `store.changed` goes to views through the event service of the I/O Worker, once per change that alters
 the contents, with `{ name, kind, key? }` and never the value. It needs the view to allow and subscribe
-to the event and to hold `store.keys`. A host without an event service changes silently.
+to the event and to hold `store.keys`. It is raised on Windows only; the macOS adapter runs without the event service and changes silently.
 
 Not provided: per-store-name permission lists, encryption and migrations.

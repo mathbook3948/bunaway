@@ -903,7 +903,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   [읽기 계약](./site/src/content/docs/reference/host/storage-read-text.mdx)을 따른다.
 - [x] store 변경 이벤트, save, reload와 autosave를 제공한다.
   `store.changed`를 선언하고 값이 바뀐 변경마다 I/O Worker의 `environment.events.emit`으로 한 번 발행한다.
-  payload는 `{ name, kind, key? }`이며 값은 싣지 않고 전달 때 `store.keys` 권한을 확인한다.
+  payload는 `{ name, kind, key? }`이며 값은 싣지 않고 전달 때 `store.keys` 권한을 확인한다. macOS 어댑터는 발행하지 않는다.
   `tests/api/store.test.ts`가 발행 조건을, `io-worker-plugin-events.test.ts`가 실제 I/O Worker 경로를 확인한다.
 - [x] Store `defaults`와 저장된 값의 병합 우선순위, 중첩 객체 처리, 기본값 무시 옵션을 정의한다.
   [T-store-live]의 `overrideDefaults`와 reload의 `ignoreDefaults`를 참고하고, 파일 없음,

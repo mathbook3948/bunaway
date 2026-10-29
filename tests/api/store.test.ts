@@ -22,6 +22,7 @@ import {
   storeEvents,
 } from "#plugins/store/src/contract";
 import { storeOperations } from "#plugins/store/src/operations";
+import { initialize as initializeMacos } from "#plugins/store/src/platforms/macos";
 import {
   NodeStore,
   type StoreFileOperations,
@@ -1639,6 +1640,25 @@ test("autosave and save do not announce again", async () => {
   );
   instance.save("auto-ev");
   expect(emitted).toHaveLength(1);
+});
+
+test("the macOS adapter initializes the store without the event service", () => {
+  const emitted: string[] = [];
+  const instance = initializeMacos({
+    dataRoot: dataRoot(),
+    events: {
+      emit: (event) => {
+        emitted.push(event);
+      },
+    },
+  } as never);
+  instances.push(instance);
+  instance.load({
+    name: "mac-ev",
+    ...manual,
+  });
+  instance.set("mac-ev", "k", 1);
+  expect(emitted).toEqual([]);
 });
 
 test("a store without an event service changes silently", () => {
