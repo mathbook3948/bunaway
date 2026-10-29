@@ -356,7 +356,9 @@ WebView마다 pending, 활성, 종료된 기록을 합해 최대 32개를 유지
 false여도 참조를 유지합니다. 없는 ID와 더 이상 pending이 아닌 ID의 승인은 `INVALID_ARGUMENT`입니다.
 재개할 수 없는 항목의 resume은 `BUSY`입니다. cancel은 반복해도 안전하며 완료된 항목은
 완료 상태를 유지합니다. 진행률과 완료, 실패는 현재 snapshot 조회로 확인합니다.
-별도 이벤트, 속도 계산, 재시작 뒤 중단 파일 복원과 업로드는 아직 제공하지 않습니다.
+별도 이벤트, 속도 계산과 업로드는 아직 제공하지 않습니다. 재시작 뒤 중단 다운로드를 이어 받는 기능은
+제공하지 않으며, 앱을 다시 띄운 뒤에는 페이지가 같은 URL의 다운로드를 다시 일으키고
+`approveDownload`로 새 다운로드로 받습니다. 이때도 다운로드 URI는 대상 뷰의 `origins` 안이어야 합니다. 호스트는 남은 부분 파일을 찾아 지우지 않습니다. 이유는 [ADR 0114](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0114-webview-interrupted-download-resume.md)에 있습니다.
 
 다운로드 metadata의 URL, MIME, Content-Disposition과 경로는 JSON 인코딩 후 합계 64 KiB까지
 허용합니다. 이스케이프 문자와 UTF-8 크기도 포함합니다. 전체 retained snapshot은 항목별
