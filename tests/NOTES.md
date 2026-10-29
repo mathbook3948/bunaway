@@ -312,7 +312,7 @@ slot과 인자 순서, 교체 순서, 4096개 한도, HRESULT 실패 때 COM 참
 
 `packaging/windows-installed-app-launch.ts`는 `windows.test.ts`가 불러와 `Windows installer tests` 잡에서 실행한다.
 Inno 설치 프로그램이 `bun build --compile`로 만든 최소 앱을 공백과 한글이 든 설치 폴더에 무음 설치하고,
-시작 메뉴 바로가기의 대상과 작업 폴더가 설치한 EXE와 설치 폴더인지 `WScript.Shell`로 읽는다. 바로가기가 가리키는 대로,
+시작 메뉴 바로가기의 대상과 작업 폴더가 설치한 EXE와 설치 폴더인지 셸 링크 객체(`Shell.Application`)로 읽는다. 바로가기가 가리키는 대로,
 그리고 다른 작업 폴더에서 설치된 EXE를 실제로 실행해 `process.execPath`와 작업 폴더가 기대한 값인지 확인하고,
 제거 뒤 설치 폴더, 바로가기, 제거 레지스트리 키가 남지 않음을 본다. 바로가기는 시험 폴더 안으로 돌려 러너의 시작 메뉴를 쓰지 않는다.
 서명, 업그레이드, WebView 창 표시, 파일 연결, 로그인 자동 실행, 토스트는 확인하지 않는다.

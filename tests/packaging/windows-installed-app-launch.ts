@@ -3,7 +3,7 @@
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { StageContext } from "@bunaway/packaging";
 import { findIscc, must } from "#packaging/channels/windows/common";
 import {
@@ -24,13 +24,13 @@ const powershell = join(
 );
 const psLiteral = (value: string) => `'${value.replaceAll("'", "''")}'`;
 
-/** Reads a .lnk through WScript.Shell, the same COM object Explorer scripts use. */
+/** Reads a .lnk through the shell's own link object, as Explorer does, so Unicode paths resolve. */
 async function readLink(path: string) {
   const output = await must(powershell, [
     "-NoProfile",
     "-NonInteractive",
     "-Command",
-    `[Console]::OutputEncoding=[Text.Encoding]::UTF8; $link=(New-Object -ComObject WScript.Shell).CreateShortcut(${psLiteral(path)}); [Console]::WriteLine((ConvertTo-Json -InputObject @{Target=$link.TargetPath;WorkingDirectory=$link.WorkingDirectory} -Compress))`,
+    `[Console]::OutputEncoding=[Text.Encoding]::UTF8; $folder=(New-Object -ComObject Shell.Application).Namespace(${psLiteral(dirname(path))}); $link=$folder.ParseName(${psLiteral(basename(path))}).GetLink(); [Console]::WriteLine((ConvertTo-Json -InputObject @{Target=$link.Path;WorkingDirectory=$link.WorkingDirectory} -Compress))`,
   ]);
   return JSON.parse(output.stdout.trim()) as {
     Target: string;
