@@ -11,6 +11,7 @@ import {
   renderInnoScript,
 } from "#packaging/channels/windows/inno";
 import { innoIdentity } from "#packaging/channels/windows/inno-identity";
+import { deadline, killAfter, waitFor } from "../fixtures/deadlines.ts";
 
 const iscc = process.platform === "win32" ? await findIscc() : undefined;
 
@@ -85,14 +86,16 @@ test.skipIf(!iscc)(
       ).exited) === 0;
     async function removeInstallation() {
       await must(uninstall, silent);
-      // Inno's launcher exits before its temporary copy finishes uninstalling.
-      for (let retry = 0; retry < 200; retry++) {
-        if (!(await Bun.file(uninstall).exists())) {
-          return;
-        }
-        await Bun.sleep(50);
-      }
-      throw new Error("The uninstaller did not finish.");
+      // Inno's launcher exits before its temporary copy finishes uninstalling. The copy removes
+      // the uninstaller first and the folder last, so wait for the folder itself.
+      await waitFor(
+        async () => (await stat(install).catch(() => undefined)) === undefined,
+        {
+          deadline: "toolchain",
+          what: "the uninstaller to remove the installation folder",
+          intervalMs: 50,
+        },
+      );
     }
     async function launch(executable: string, cwd: string, marker: string) {
       const proc = Bun.spawn(
@@ -106,7 +109,13 @@ test.skipIf(!iscc)(
           stderr: "ignore",
         },
       );
-      expect(await proc.exited).toBe(0);
+      // A hung app would hold the installed EXE and block the cleanup below.
+      const timer = killAfter(proc, "childStep");
+      try {
+        expect(await proc.exited).toBe(0);
+      } finally {
+        clearTimeout(timer);
+      }
       return JSON.parse(await readFile(marker, "utf8")) as Observed;
     }
     try {
@@ -117,16 +126,15 @@ test.skipIf(!iscc)(
       await mkdir(menu);
       const source = join(staging, "app-source.ts");
       await Bun.write(source, appSource);
-      const built = Bun.spawnSync([
-        process.execPath,
+      // `must` carries the compiler's stderr into the failure.
+      await must(process.execPath, [
         "build",
         "--compile",
         source,
         "--outfile",
         join(staging, "app", executableName),
       ]);
-      expect(built.exitCode).toBe(0);
-      const script = renderInnoScript({
+      const generated = renderInnoScript({
         name,
         identifier,
         executableName,
@@ -142,10 +150,14 @@ test.skipIf(!iscc)(
         appDataDir: join(root, "data"),
         preserveUserData: true,
         assetPaths: [],
-      })
-        // Keep the shortcuts inside the test folder, not in the runner's Start menu.
+      });
+      // Keep the shortcuts inside the test folder, not in the runner's Start menu, and skip
+      // Restart Manager's machine-wide scan for a fixture that is not running.
+      const script = generated
         .replaceAll("{group}", menu)
         .replace("CloseApplications=yes", "CloseApplications=no");
+      expect(script).toContain("CloseApplications=no");
+      expect(script).not.toContain("{group}");
       const ctx = {
         input: {},
         staging,
@@ -198,16 +210,21 @@ test.skipIf(!iscc)(
       // Inno removes the folder it created, not the parent the test made.
       expect(await stat(install).catch(() => undefined)).toBeUndefined();
     } finally {
-      if (await Bun.file(uninstall).exists()) {
-        await removeInstallation().catch(() => {});
+      // Cleanup failures are reported but must not replace the failure that got us here.
+      try {
+        if (await Bun.file(uninstall).exists()) {
+          await removeInstallation();
+        }
+        await rm(root, {
+          recursive: true,
+          force: true,
+          maxRetries: 5,
+          retryDelay: 100,
+        });
+      } catch (error) {
+        console.error(`Installed-app launch test cleanup failed: ${error}`);
       }
-      await rm(root, {
-        recursive: true,
-        force: true,
-        maxRetries: 5,
-        retryDelay: 100,
-      });
     }
   },
-  180000,
+  deadline("packagedAudit"),
 );
