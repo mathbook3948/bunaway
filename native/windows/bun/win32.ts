@@ -127,6 +127,7 @@ import {
   WS_MINIMIZEBOX,
   WS_THICKFRAME,
 } from "./win32-constants.ts";
+import { writeWindowAccent } from "./window-accent.ts";
 import {
   type BackgroundMaterial,
   writeWindowBackdrop,
@@ -269,6 +270,8 @@ export class Windows {
   private readonly squareCorners = new Set<bigint>();
   /** Requested backdrop material per window; absence means `auto`. */
   private readonly backgroundMaterials = new Map<bigint, BackgroundMaterial>();
+  /** Requested `#rrggbb` accent color per window; absence means the system color. */
+  private readonly accentColors = new Map<bigint, string>();
   private readonly windowIcons = new WindowIconSet();
   /** Content width / height locked for user resizing; absent when unlocked. */
   private readonly aspectRatios = new Map<bigint, number>();
@@ -901,6 +904,7 @@ export class Windows {
         | "skipTaskbar"
         | "contentProtection"
         | "backgroundColor"
+        | "accentColor"
         | "transparent"
       > = {},
   ) {
@@ -946,6 +950,9 @@ export class Windows {
       }
       if (options.backgroundColor !== undefined) {
         this.backgrounds.set(window, options.backgroundColor);
+      }
+      if (options.accentColor !== undefined) {
+        this.setAccentColor(window, options.accentColor);
       }
       if (options.transparent) {
         // Before the window is first shown, so no opaque frame is ever composed.
@@ -1401,6 +1408,40 @@ export class Windows {
       this.backgroundMaterials.delete(window);
     } else {
       this.backgroundMaterials.set(window, material);
+    }
+  }
+
+  /**
+   * The requested accent color, null for the system color. DWM does not report a skipped
+   * request back and Windows before 11 skip it, so the requested value is the state.
+   */
+  getAccentColor(window: bigint): string | null {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    return this.accentColors.get(window) ?? null;
+  }
+
+  /** Ask DWM to paint the window border and title bar in a color; null restores the system color. */
+  setAccentColor(window: bigint, color: string | null): void {
+    assert(user.symbols.IsWindow(window), "Window is no longer valid.");
+    try {
+      writeWindowAccent(window, color);
+    } catch (error) {
+      // The border and caption are written one after the other; put the remembered color back so DWM and the stored value agree.
+      try {
+        writeWindowAccent(window, this.accentColors.get(window) ?? null);
+      } catch (restoreError) {
+        // The original failure is the one reported; the failed restore is logged so a mixed DWM state is traceable.
+        console.error(
+          "Could not restore the previous accent color.",
+          restoreError,
+        );
+      }
+      throw error;
+    }
+    if (color === null) {
+      this.accentColors.delete(window);
+    } else {
+      this.accentColors.set(window, color);
     }
   }
 
@@ -3386,6 +3427,7 @@ export class Windows {
     this.backgrounds.forget(window);
     this.squareCorners.delete(window);
     this.backgroundMaterials.delete(window);
+    this.accentColors.delete(window);
     try {
       this.accessibleTitles.forget(window);
     } catch (error) {

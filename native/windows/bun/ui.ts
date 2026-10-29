@@ -1488,6 +1488,8 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         setBackgroundMaterial: (material) =>
           nativeWindows.setBackgroundMaterial(hwnd, material),
         getBackgroundMaterial: () => nativeWindows.getBackgroundMaterial(hwnd),
+        setAccentColor: (color) => nativeWindows.setAccentColor(hwnd, color),
+        getAccentColor: () => nativeWindows.getAccentColor(hwnd),
         setIgnoreMouseEvents: (ignore) =>
           nativeWindows.setIgnoreMouseEvents(hwnd, ignore),
         isIgnoreMouseEvents: () => nativeWindows.isIgnoreMouseEvents(hwnd),

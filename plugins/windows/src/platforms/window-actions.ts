@@ -16,12 +16,15 @@ import {
 import { overlayIconProvider } from "#windows/platforms/windows-overlay-icon";
 
 /** The schema has already matched the pattern; a value that still fails to normalize is rejected, never passed on. */
-function requireBackgroundColor(color: string): string {
+function requireWindowColor(
+  color: string,
+  name: "background color" | "accent color",
+): string {
   const normalized = normalizeWindowBackgroundColor(color);
   if (normalized === undefined) {
     throw new BunawayError({
       code: "INVALID_ARGUMENT",
-      message: "Window background color must be #RGB or #RRGGBB.",
+      message: `Window ${name} must be #RGB or #RRGGBB.`,
     });
   }
   return normalized;
@@ -95,6 +98,9 @@ const unsupportedShadow = unsupportedError(
 );
 const unsupportedBackgroundColor = unsupportedError(
   "Window background color is not implemented on this platform.",
+);
+const unsupportedAccentColor = unsupportedError(
+  "Window accent color is not implemented on this platform.",
 );
 const unsupportedMouseEvents = unsupportedError(
   "Ignoring mouse events is not implemented on this platform.",
@@ -491,10 +497,22 @@ function applyUserControls(scope: ActionScope, call: WindowCall): ActionResult {
       supported(
         window.setBackgroundColor,
         unsupportedBackgroundColor,
-      )(requireBackgroundColor(call.payload.color));
+      )(requireWindowColor(call.payload.color, "background color"));
       return null;
     case "windows.getBackgroundColor":
       return supported(window.getBackgroundColor, unsupportedBackgroundColor)();
+    case "windows.setAccentColor":
+      supported(
+        window.setAccentColor,
+        unsupportedAccentColor,
+      )(
+        call.payload.color === null
+          ? null
+          : requireWindowColor(call.payload.color, "accent color"),
+      );
+      return null;
+    case "windows.getAccentColor":
+      return supported(window.getAccentColor, unsupportedAccentColor)();
     case "windows.setIgnoreMouseEvents":
       supported(
         window.setIgnoreMouseEvents,

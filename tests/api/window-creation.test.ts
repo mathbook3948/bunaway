@@ -114,6 +114,11 @@ test.each([
       },
       {
         window: {
+          accentColor: "#ABC",
+        },
+      },
+      {
+        window: {
           x: -1920,
           y: -100,
           useContentSize: false,
@@ -250,6 +255,16 @@ test.each([
         // The window icon is declared in the app definition only.
         window: {
           icon: "icons/other.ico",
+        },
+      },
+      {
+        window: {
+          accentColor: "#11223344",
+        },
+      },
+      {
+        window: {
+          accentColor: null,
         },
       },
     ]) {
@@ -399,4 +414,25 @@ test("a transparent window requires a custom titlebar and no background color", 
       code: "INVALID_ARGUMENT",
     }),
   );
+});
+
+test("accentColor creation options override and normalize the declared color", () => {
+  const declared = {
+    view: "main",
+    title: "Main",
+    home: "https://app.bunaway.local/",
+    window: {
+      width: 800,
+      height: 600,
+      accentColor: "#203040",
+    },
+  };
+  expect(
+    mergeCreationOptions(declared, {
+      window: {
+        accentColor: "#ABC",
+      },
+    }).window.accentColor,
+  ).toBe("#aabbcc");
+  expect(mergeCreationOptions(declared, {}).window.accentColor).toBe("#203040");
 });

@@ -517,6 +517,39 @@ test("icon declarations keep a relative resource path and reject every other for
   }
 });
 
+test("accentColor declarations are normalized to lowercase #rrggbb and reject other forms", () => {
+  const first = specs[0];
+  assert(first);
+  const declare = (accentColor: unknown) =>
+    readWindowSpecs(
+      [
+        {
+          ...first,
+          window: {
+            ...first.window,
+            accentColor,
+          },
+        },
+      ],
+      policy,
+    );
+  expect(declare("#ABC")[0]?.window.accentColor).toBe("#aabbcc");
+  expect(declare("#203040")[0]?.window.accentColor).toBe("#203040");
+  expect(declare(undefined)[0]?.window).not.toHaveProperty("accentColor");
+  for (const invalid of [
+    "#11223344",
+    "112233",
+    "red",
+    "#112233\n",
+    1,
+    null,
+  ]) {
+    expect(() => declare(invalid)).toThrow(
+      "Window accentColor must be #RGB or #RRGGBB.",
+    );
+  }
+});
+
 test("display declarations preserve explicit defaults and reject invalid options", () => {
   const first = specs[0];
   assert(first);

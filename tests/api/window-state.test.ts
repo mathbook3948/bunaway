@@ -135,6 +135,7 @@ function fixture() {
   let backgroundMaterial: "auto" | "none" | "mica" | "acrylic" | "tabbed" =
     "auto";
   let backgroundColor: string | null = null;
+  let accentColor: string | null = null;
   let accessibleTitle: string | null = null;
   const native: NativeWindow = {
     getReadiness() {
@@ -248,6 +249,11 @@ function fixture() {
       backgroundColor = value;
     },
     getBackgroundColor: () => backgroundColor,
+    setAccentColor(value) {
+      apply("setAccentColor");
+      accentColor = value;
+    },
+    getAccentColor: () => accentColor,
     setIgnoreMouseEvents(value) {
       apply("setIgnoreMouseEvents");
       ignoreMouseEvents = value;
@@ -359,6 +365,8 @@ function fixture() {
         | "getBackgroundMaterial"
         | "setBackgroundColor"
         | "getBackgroundColor"
+        | "setAccentColor"
+        | "getAccentColor"
         | "setIgnoreMouseEvents"
         | "isIgnoreMouseEvents"
         | "setTitle"
@@ -1584,6 +1592,72 @@ test("window background color normalizes valid colors, rejects alpha and other f
   });
 });
 
+test("window accent color normalizes valid colors, clears with null, rejects alpha and other forms, and keeps its own permission grants", async () => {
+  const f = fixture();
+  expect(await f.invoke("getAccentColor")).toBeNull();
+  for (const [color, expected] of [
+    [
+      "#203040",
+      "#203040",
+    ],
+    [
+      "#ABC",
+      "#aabbcc",
+    ],
+    [
+      null,
+      null,
+    ],
+  ] as const) {
+    expect(
+      await f.invoke("setAccentColor", {
+        color,
+      }),
+    ).toBeNull();
+    expect(await f.invoke("getAccentColor")).toBe(expected);
+  }
+  for (const color of [
+    "#11223344",
+    "#1234",
+    "112233",
+    "red",
+    " #112233",
+    "#112233\n",
+    "",
+    true,
+    1,
+  ]) {
+    expect(() =>
+      validateWindowCall({
+        operation: "windows.setAccentColor",
+        payload: {
+          color,
+        },
+      }),
+    ).toThrow();
+  }
+  expect(() =>
+    validateWindowCall({
+      operation: "windows.setAccentColor",
+      payload: {},
+    }),
+  ).toThrow();
+  expect(validateWindowOutput("windows.getAccentColor", null)).toBeNull();
+  expect(validateWindowOutput("windows.getAccentColor", "#112233")).toBe(
+    "#112233",
+  );
+  expect(() => validateWindowOutput("windows.getAccentColor", 1)).toThrow();
+  f.permissions.permissions = [];
+  await expect(f.invoke("getAccentColor")).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  f.permissions.permissions = windowPermissions();
+  f.setClosed();
+  await expect(f.invoke("getAccentColor")).rejects.toMatchObject({
+    code: "INVALID_ARGUMENT",
+  });
+});
+
 test("macOS target does not declare the Windows-only background color operations", () => {
   expect(windows._definition.nativePlatforms.macos?.operations).not.toEqual(
     expect.arrayContaining([
@@ -1594,6 +1668,8 @@ test("macOS target does not declare the Windows-only background color operations
     expect.arrayContaining([
       "setBackgroundColor",
       "getBackgroundColor",
+      "setAccentColor",
+      "getAccentColor",
     ]),
   );
 });
