@@ -4,7 +4,7 @@ status: accepted
 
 # WebView의 MIDI, 센서, 보호 미디어 권한과 WebAuthn 선택을 제공하지 않는다
 
-결정일: 2026-10-27.
+결정일: 2026-10-27. 검토 기준: main `32693a1a`.
 
 ## 배경
 
@@ -36,7 +36,7 @@ bunaway가 이런 연산을 제공할지 정해야 했다.
 
 1. MIDI, 센서, 보호 미디어의 권한 요청을 앱이 허용하거나 거부하는 연산, 그리고 WebAuthn authenticator와 계정 선택을 앱이
    처리하는 연산을 코어와 플러그인의 공개 연산, 이벤트, 설정으로 제공하지 않는다. 이 용도의 권한 훅도 두지 않는다. 권한 훅
-   일반과 영속화는 별도 항목에서 정한다.
+   일반과 영속화는 [ADR 0122](./0122-webview-permission-hooks-and-persistence.md)에서 정했다.
 2. 호스트의 기존 동작을 바꾸지 않는다. 권한 요청 거부 경로는 그대로 두며, 권한 종류별 허용 경로를 만들지 않는다. 위
    API들이 그 경로를 거쳐 막히는지, 거치지 않고 WebView2 기본 동작으로 동작하는지는 확인하지 않았다. bunaway는 이
    API들이 WebView에서 쓸 수 있다거나 막힌다고 약속하지 않으며 앱은 이 API에 의존하지 않는다.
@@ -45,8 +45,9 @@ bunaway가 이런 연산을 제공할지 정해야 했다.
    이를 위한 연산을 제공하지 않으며 이 방식이 앱 요구를 채우는지도 검증하지 않았다.
 4. 이 항목들을 위한 `UNSUPPORTED` 표시나 선택 렌더러 요구 사항을 새로 만들지 않는다. 제공하는 공개 연산이 없으므로 표시할
    대상이 없다. 선택 Chromium 렌더러를 연결하는 결정이 나면 권한 훅과 함께 다시 검토한다.
-5. 이 결정은 권한 훅 일반, 카메라와 마이크의 OS 권한, Bluetooth와 USB와 Serial과 HID 장치 선택
-   ([ADR 0107](./0107-webview-device-chooser-apis.md)), WebRTC를 다루지 않는다. 각각 별도 항목에서 정한다.
+5. 이 결정은 권한 훅 일반과 영속화([ADR 0122](./0122-webview-permission-hooks-and-persistence.md)), 카메라와 마이크의 OS 권한,
+   Bluetooth와 USB와 Serial과 HID 장치 선택([ADR 0107](./0107-webview-device-chooser-apis.md)), WebRTC를 다루지 않는다.
+   훅은 ADR 0122, 장치 선택은 ADR 0107이 정했고 나머지는 별도 항목에서 정한다.
 
 ## 근거
 
