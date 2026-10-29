@@ -32,7 +32,7 @@ Electron에서 넘어오는 앱이 preload 스크립트와 `contextBridge`로 �
 사용처가 확인됐을 때 다음을 정한다.
 
 - 주입 시점(문서 생성 시점, DOM 준비 시점)과 주입 단위(창, 세션).
-- frame별 범위(최상위 frame만, 하위 frame 포함)와 하위 frame에서의 권한.
+- frame별 범위(최상위 frame만, 하위 frame 포함)와 하위 frame에서의 권한. frame 열거와 frame별 작업의 제공 여부는 [ADR 0137](./0137-webview-frame-tree-not-provided.md)이 정했다.
 - 문서 초기화 script가 브리지 쪽에 이름을 노출하게 되면 그 이름 규칙과 충돌 처리.
 - 주입된 코드가 페이지 전역과 분리돼야 하는지(isolated world 여부)는 #158 항목에서 정한다.
 
