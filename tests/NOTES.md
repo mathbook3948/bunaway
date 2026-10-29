@@ -228,6 +228,18 @@ OS 설정으로 되돌리는지, 닫는 중 요청이 거부되지 않는지를 
 `build/windows-webview-color-scheme-results.json`이다. 고대비 세션과 같은 프로필을 공유하는 두 창의
 동시 지정과, OS 앱 테마가 dark인 러너에서 플러그인 종료 시 복원(화면 값이 바뀌지 않음)은 포함하지 않는다.
 고대비 세션이나 오래된 런타임에서는 콘텐츠 검증을 건너뛰고 결과 JSON의 `skipped`에 사유를 남긴다.
+`lifecycle/windows-webview-high-contrast.ts`는 같은 방식으로 실제 WebView2 문서를 열고
+`SystemParametersInfoW(SPI_SETHIGHCONTRAST)`(SPIF_SENDCHANGE만, 레지스트리 영구 저장 없음)로 고대비를 켠 뒤
+문서의 `forced-colors: active`가 켜지고 본문 배경색이 시스템 창 색으로 바뀌는지, appearance가
+`highContrast`와 `forcedColors`를 true로 조회하고 `appearance.changed`를 발행하는지 확인한다. 끄면 같은 항목이
+되돌아오는지도 확인한다. 시험은 시작 때 읽은 원래 값으로 어떤 종료 경로에서도 복원하고(복원 실패는 시험 실패로
+보고), 이미 고대비 세션이거나 러너가 설정을 거부하면 변경하지 않거나 건너뛰고 `skipped`에 사유를 남긴다. 결과는
+`build/windows-webview-high-contrast-results.json`이며 측정값(`measured`)도 담는다. 프로세스가 강제 종료되면
+복원하지 못하지만 값을 영구 저장하지 않으므로 러너 세션이 끝나면 사라진다.
+windows-2022 러너에서 측정한 결과는 고대비를 켜면 문서의 `forced-colors: active`가 켜지고 본문 배경이
+시스템 창 색(`colors.window`)으로 바뀌며, 켤 때와 끌 때 `appearance.changed`가 각각 발행되고, 끄면 문서가 작성자
+지정 배경으로 돌아오는 것이다. 이 시험 뒤 새로 시작한 프로세스에서 appearance의 강조색 조회(`DwmGetColorizationColor`)가
+실패하는 것을 CI에서 확인했기 때문에, 시험은 `run-native.ts`의 마지막에 두어 다른 시험에 영향을 주지 않게 한다.
 
 `api/window-taskbar.test.ts`는 작업 표시줄 진행률의 상태별 입력, 출력, SDK 호출 컨텍스트,
 독립 작업 권한, 취소, 닫힌 창과 미지원 플랫폼을 검사한다.

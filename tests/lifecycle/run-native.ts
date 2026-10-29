@@ -331,6 +331,9 @@ if (target === "windows-x64") {
       "--package",
       output,
     ]);
+    // Last: turning high contrast on and off leaves the runner's theme state changed, which makes
+    // the appearance accent color query fail in processes that start afterwards.
+    await test("windows-webview-high-contrast.ts");
   }
 } else {
   const { buildMacosFixture, buildSignedFixture } = await import(
