@@ -229,14 +229,14 @@ if (process.argv[2] === "schedule") {
     };
   }
   // The child may still be scheduling when the parent fails, so wait for it before removing schedules.
-  child?.kill();
-  await child?.exited;
   let cleanupFailure:
     | {
         error: unknown;
       }
     | undefined;
   try {
+    child?.kill();
+    await child?.exited;
     // Remove only this test's schedules and history, also when the failure came before an adapter existed.
     const owned = controller ?? newController(appId);
     try {
@@ -257,7 +257,13 @@ if (process.argv[2] === "schedule") {
       error,
     };
   }
-  await removeShortcut();
+  try {
+    await removeShortcut();
+  } catch (error) {
+    cleanupFailure ??= {
+      error,
+    };
+  }
   // The error that ended the test wins over a cleanup failure, which is only logged then.
   if (failure) {
     if (cleanupFailure) {
