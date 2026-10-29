@@ -90,5 +90,6 @@ status: accepted
 
 - 코드, 정책, 호스트 동작은 바뀌지 않는다.
 - [바이너리 저장과 append](../site/src/content/docs/reference/host/storage-bytes.mdx)의 파일 핸들과 stream I/O가 후속 작업이라는 문장은
-  이 결정에 맞게 고친다.
+  이 결정에 맞게 고친다. 같은 문장이 있는 [복사 문서](../site/src/content/docs/reference/host/storage-transfers.mdx)와
+  [ADR 0126](./0126-storage-concurrent-modification-detection.md) 결정 5도 이 결정으로 연결한다.
   `docs/TODO-windows.md`의 파일 핸들 항목은 이 결정으로 닫고, 동시 수정 감지 항목은 남은 일을 동시 수정 감지로 좁힌다.
