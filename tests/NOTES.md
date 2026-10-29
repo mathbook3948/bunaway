@@ -1397,6 +1397,13 @@ PR #191과 같은 native child observer 및 notification 진단을 사용하고 
 실제 UI Worker fixture는 요청 취소, 컨텍스트 폐기, 세션 실패와 종료 패킷으로
 TrackPopupMenuEx 모달 루프를 끝내고 핸들을 해제한다. 메뉴 막대 진입 전 종료 경합도 포함한다.
 사용자 포인터 메뉴 선택, 물리 키보드 탐색과 혼합 DPI 검증을 대신하지 않는다.
+`lifecycle/windows-window-menu-wrap.test.ts`는 메뉴 항목 24개로 실제 HMENU가 여러 행으로 접힌 창
+(항목 사각형의 서로 다른 윗변 수가 2 이상인지 매번 측정하고, 접히지 않으면 시험을 실패시킨다)에서
+`minWidth`, `minHeight`, `maxWidth`, `maxHeight`가 내용 영역 기준으로 유지되는지 본다.
+`setSize`의 보정, `SetWindowPos`로 줄이거나 늘리는 크기 조정(WM_GETMINMAXINFO), 최소화 복원과 최대화 복원 뒤
+내용 크기와 행 수를 확인한다. 접힌 행만큼 내용 영역이 줄면 제약이 바깥 크기 기준으로 적용되던 어긋남을 이 시험이 찾았고,
+`native/windows/bun/win32.ts`가 실제 접힌 행 높이를 제한값에 더하고 크기 변경 뒤 한 번 더 맞춘다.
+단일 DPI(러너 기본 96)만 다루며 혼합 DPI, 사용자의 테두리 끌기 입력과 항목 글꼴이 다른 러너의 접힘 폭은 확인하지 않는다.
 같은 파일은 auto-hide 메뉴바도 검사한다. 창 프로시저로 보낸 Alt 키 메시지가 HMENU를 연결하고 떼는지,
 Alt와 다른 키의 조합과 Esc, 비활성화, 항목 실행, 메뉴 모드 종료, 메뉴 교체를 다룬다.
 `lifecycle/windows-menu-auto-hide.ts`는 실제 WebView2 페이지를 클릭해 활성화한 뒤 SendInput으로 보낸 Alt와 Esc
