@@ -860,11 +860,12 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   복사는 대상을 배타적으로 만들고 이동은 `MoveFileExW`를 덮어쓰기 없이 호출하므로 기존 destination을 대체하지 않는다.
   `windows-storage-create-new.ts`가 CI windows-native에서 같은 대상으로의 동시 복사는 하나만 성공함을 확인한다.
   [전송 계약](./site/src/content/docs/reference/host/storage-transfers.mdx)을 따른다.
-- [ ] 디렉터리 재귀 copy, 다른 볼륨의 move, 덮어쓰기 및 truncate를 제공한다.
+- [ ] 덮어쓰기 및 truncate를 제공한다(디렉터리 재귀 copy와 다른 볼륨의 일반 파일 move는 구현함).
   디렉터리 재귀 copy는 `storage.copyDirectory`로 구현했다. 아직 없는 대상에 트리를 복사하고 트리 안의 링크는 거부하며
   항목 100,000개와 깊이 64 상한, 항목 사이의 취소를 쓴다. macOS에서도 같은 방식으로 지원한다.
   `windows-storage-copy-directory.ts`가 CI windows-native에서 중첩 트리의 바이트 일치, 자기 하위 대상 거부(junction 경유 포함)와
-  트리 안 junction 거부를 확인한다. 다른 볼륨의 move, 덮어쓰기와 truncate는 남아 있다.
+  트리 안 junction 거부를 확인한다. 다른 볼륨의 일반 파일 move는 `MOVEFILE_COPY_ALLOWED`로 지원하고 `windows-storage-cross-volume-move.ts`가
+  가상 디스크로 CI windows-native에서 확인한다(디렉터리와 링크는 `UNSUPPORTED`). 덮어쓰기와 truncate는 남아 있다.
   [전송 계약](./site/src/content/docs/reference/host/storage-transfers.mdx)을 따른다.
 - [ ] 파일 watch와 recursive watch, 이벤트 구독 해제를 제공한다.
 - [x] 원자적 저장을 제공한다. `storage.writeText`와 `storage.writeBytes`의 `atomic: true`가 같은 폴더의 임시 파일을
