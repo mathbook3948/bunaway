@@ -304,6 +304,7 @@ if (target === "windows-x64") {
       "windows-storage-recursive-list.ts",
       "windows-storage-remove-recursive.ts",
       "windows-storage-cross-volume-move.ts",
+      "windows-storage-move-locked-source.ts",
       "windows-storage-long-path.ts",
       "windows-storage-create-new.ts",
       "windows-storage-atomic-write.ts",

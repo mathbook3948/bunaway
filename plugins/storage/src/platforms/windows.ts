@@ -63,7 +63,13 @@ function moveFailure(code: number): Error {
       message: "Storage destination already exists.",
     });
   }
-  if (code === ERROR_ACCESS_DENIED) {
+  // A file another process holds open without delete sharing fails a rename with a sharing
+  // violation; the same file inside a renamed directory fails with access denied.
+  if (
+    code === ERROR_ACCESS_DENIED ||
+    code === ERROR_SHARING_VIOLATION ||
+    code === ERROR_LOCK_VIOLATION
+  ) {
     return new BunawayError({
       code: "PERMISSION_DENIED",
       message: "Storage access denied.",
@@ -84,15 +90,11 @@ function moveFailure(code: number): Error {
   return new Error(`Storage move failed (${code})`);
 }
 
-/** Sharing and lock violations are access failures that a short wait can clear. */
+/** Replace failures share the move mapping; any other code is a replace failure. */
 function swapFailure(code: number): Error {
-  if (code === ERROR_SHARING_VIOLATION || code === ERROR_LOCK_VIOLATION) {
-    return new BunawayError({
-      code: "PERMISSION_DENIED",
-      message: "Storage access denied.",
-    });
-  }
   return code === ERROR_ACCESS_DENIED ||
+    code === ERROR_SHARING_VIOLATION ||
+    code === ERROR_LOCK_VIOLATION ||
     code === ERROR_FILE_NOT_FOUND ||
     code === ERROR_PATH_NOT_FOUND ||
     code === ERROR_INVALID_NAME ||
