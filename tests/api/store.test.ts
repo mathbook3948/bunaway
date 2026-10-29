@@ -1646,12 +1646,13 @@ test("the macOS adapter initializes the store without the event service", () => 
   const emitted: string[] = [];
   const instance = initializeMacos({
     dataRoot: dataRoot(),
+    capabilities: [],
     events: {
       emit: (event) => {
         emitted.push(event);
       },
     },
-  } as never);
+  });
   instances.push(instance);
   instance.load({
     name: "mac-ev",
