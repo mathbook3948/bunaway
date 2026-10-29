@@ -95,3 +95,4 @@ status: accepted
 - [파일 복사와 대상 이동](../site/src/content/docs/reference/host/storage-transfers.mdx)의 후속 작업 문장은 원자적 저장 부분을 빼서
   이 결정과 어긋나지 않게 했다.
 - `docs/TODO-windows.md`의 충돌 처리 항목은 이 결정으로 닫는다.
+- 복사와 이동의 `overwrite` 옵션은 [ADR 0136](./0136-storage-copy-and-move-overwrite.md)에서 정한다.

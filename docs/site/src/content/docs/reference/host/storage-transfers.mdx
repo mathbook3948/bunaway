@@ -110,7 +110,7 @@ Windows는 일반 파일만 지원합니다. `MOVEFILE_COPY_ALLOWED`로 OS가 �
 두 번째 인자의 signal과 deadline은 [호출 취소와 기한](/reference/client/invoke/)을 따릅니다.
 처리 전 취소는 작업을 막지만 시작한 동기 OS 작업을 중간에 끊거나 되돌리지 않습니다.
 timeout이나 연결 종료 후에도 전송이 완료됐을 수 있습니다. 재시도 전에 두 위치의 실제 상태를 확인하세요.
-덮어쓰기에 대한 충돌 및 복구 계약은 후속 작업입니다. 원자적 저장은 [storage.writeText](/reference/host/storage-write-text/)에서 설명합니다.
+기존 파일을 교체하는 `overwrite` 옵션은 [결정 문서](https://github.com/mathbook3948/bunaway/blob/main/docs/decisions/0136-storage-copy-and-move-overwrite.md)에서 정했고 아직 구현하지 않았습니다. 원자적 저장은 [storage.writeText](/reference/host/storage-write-text/)에서 설명합니다.
 
 ## macOS copyFile
 
