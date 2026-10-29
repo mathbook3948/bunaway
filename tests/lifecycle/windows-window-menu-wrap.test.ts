@@ -194,7 +194,7 @@ test.skipIf(process.platform !== "win32")(
         expect(
           draggedMinimum.height,
           `drag below the minimum height with ${rowsAtMinimum} menu rows`,
-        ).toBeGreaterThanOrEqual(physical(MIN.height));
+        ).toBe(physical(MIN.height));
         dragOuter(4000, 4000);
         const rowsAtMaximum = expectWrapped("drag above the maximum");
         const draggedMaximum = client();
@@ -204,7 +204,7 @@ test.skipIf(process.platform !== "win32")(
         expect(
           draggedMaximum.height,
           `drag above the maximum height with ${rowsAtMaximum} menu rows`,
-        ).toBeLessThanOrEqual(physical(MAX.height));
+        ).toBe(physical(MAX.height));
       });
 
       // Minimize and maximize, then restore: the same content size and row count return,
