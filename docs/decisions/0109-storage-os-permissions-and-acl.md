@@ -15,13 +15,13 @@ status: accepted
 - `storage.stat`은 `kind`, `sizeBytes`, `createdAtMs`, `modifiedAtMs`, `accessedAtMs`만 돌려준다
   (`plugins/storage/src/contract.ts`의 `storageMetadataSchema`). 링크는 따라가며, 대상이나 부모 경로가 없을 때(`ENOENT`,
   `ENOTDIR`)만 `null`이다.
-- 운영체제가 접근을 거부하면 조회와 쓰기가 `PERMISSION_DENIED`로 실패하고 `null`로 숨기지 않는다. 조회 경로는 `EACCES`,
-  `EPERM`, `ELOOP`를, Windows의 이동과 교체 경로는 `ERROR_ACCESS_DENIED`, `ERROR_SHARING_VIOLATION`,
-  `ERROR_LOCK_VIOLATION`을 이 코드로 옮긴다
+- 운영체제가 접근을 거부하면 조회와 쓰기가 `PERMISSION_DENIED`로 실패하고 `null`로 숨기지 않는다. 조회 경로는 `EACCES`와
+  `EPERM`을, Windows의 이동 경로(`moveFailure`)는 `ERROR_ACCESS_DENIED`를, 교체 경로(`swapFailure`)는 여기에 더해
+  `ERROR_SHARING_VIOLATION`과 `ERROR_LOCK_VIOLATION`을 이 코드로 옮긴다
   ([storage.stat](../site/src/content/docs/reference/host/storage-stat.mdx),
   [storage.writeText](../site/src/content/docs/reference/host/storage-write-text.mdx)).
-- Windows 테스트가 확인하는 범위: ACL 거부는 `readText`와 `readBytes`에서 `PERMISSION_DENIED`이고, 읽기 전용 파일과 다른
-  프로세스가 연 파일의 atomic 덮어쓰기도 `PERMISSION_DENIED`다. ACL 거부 상태의 쓰기와 `stat`은 이 저장소의 테스트로
+- Windows 테스트가 확인하는 범위: ACL 거부는 `readText`와 `readBytes`에서 `PERMISSION_DENIED`이고, 읽기 전용 파일과 같은 프로세스의
+  다른 핸들이 열고 있는 파일의 atomic 덮어쓰기도 `PERMISSION_DENIED`다. ACL 거부 상태의 쓰기와 `stat`은 이 저장소의 테스트로
   확인하지 않았고 위 계약과 매핑 코드에 따른다.
 - 경로 제한은 앱 책임이다([ADR 0024](./0024-plugin-path-responsibility.md)).
 
@@ -31,8 +31,7 @@ Node, Electron, Tauri가 제공하는 API와의 비교는 이 저장소의 테�
 
 1. Windows 파일과 디렉터리의 소유자, DACL, SACL 조회 API를 제공하지 않는다. macOS의 POSIX 모드, uid, gid 조회도
    이번에 추가하지 않는다. `storage.stat`의 스키마와 권한 이름은 바꾸지 않는다.
-2. 대상에 접근할 수 있는지는 실제 읽기와 쓰기 호출의 `PERMISSION_DENIED`로 판단한다. `exists`나 `stat`이 성공해도
-   읽기와 쓰기가 가능하다는 뜻은 아니다. 접근 가능 여부를 미리 묻는 별도 API(`access`)도 두지 않는다. 호출 시점과 실제 사용 시점 사이에 상태가 바뀔 수 있어 사전 확인은 보장이 되지 못하고,
+2. 대상에 접근할 수 있는지는 실제 읽기와 쓰기 호출의 `PERMISSION_DENIED`로 판단한다. 접근 가능 여부를 미리 묻는 별도 API(`access`)도 두지 않는다. 호출 시점과 실제 사용 시점 사이에 상태가 바뀔 수 있어 사전 확인은 보장이 되지 못하고,
    실제 호출의 오류가 같은 정보를 정확한 시점에 준다.
 3. 읽기 전용, 숨김, 시스템 같은 파일 속성은 이 결정에서 추가하지 않는다. 필요가 확인되면 `stat` 결과에 불리언 필드로 따로 더한다.
    Windows의 속성 비트를 그대로 노출하지 않고, macOS에서도 같은 뜻을 가질 필드만 고른다.
@@ -41,10 +40,10 @@ Node, Electron, Tauri가 제공하는 API와의 비교는 이 저장소의 테�
 ## 이유
 
 - 코어는 작게 두고 쓰는 곳이 없는 기능은 보류한다는 방침을 따른다.
-- ACL은 SID, 상속, 거부 항목, 계정 이름 해석을 포함해 공개 계약이 크다. 도메인 계정과 로컬 계정을 모두 다뤄야 해서 macOS의 POSIX
+- ACL은 SID, 상속, 거부 항목, 계정 이름 해석을 포함해 공개 계약이 크고 macOS의 POSIX
   모드와 같은 모양으로 맞추기 어렵다고 판단했다.
-- ACL 목록을 UI에 노출하면 계정 이름과 그룹 구성이 WebView 코드에 전달되므로 노출 범위가 커진다. 접근 가능 여부만 필요한 앱은 오류 코드로 충분하다.
-- atomic 덮어쓰기에서 Windows는 읽기 전용과 다른 프로세스의 열림(공유 위반)을 같은 `PERMISSION_DENIED`로
+- 접근 가능 여부만 필요한 앱은 오류 코드로 충분하다고 판단했다.
+- atomic 덮어쓰기에서 Windows는 읽기 전용과 다른 핸들의 열림(공유 위반)을 같은 `PERMISSION_DENIED`로
   돌려주므로 앱이 원인을 구분하지 못하고 쓰기를 시도한 뒤에야 실패를 안다. 이 구분이 필요한 화면은 아래 재검토 조건으로 다룬다.
 
 ## 다시 검토할 조건
