@@ -11,6 +11,7 @@ import {
 import { resolve } from "node:path";
 import { type DeadlineName, deadline, waitFor } from "../fixtures/deadlines.ts";
 import { seedWindowsBuildCaches } from "./windows-project-caches.ts";
+import { packageAndInstall } from "./windows-template-installer.ts";
 
 /**
  * Generates every UI template with the packed CLI on Windows and drives it the way a developer's
@@ -24,9 +25,12 @@ import { seedWindowsBuildCaches } from "./windows-project-caches.ts";
  * closes the window, so exit code 0 shows that the EXE, its bundled backend and UI assets, the real
  * host and WebView2 all started. A failing step does not stop the other templates; the run
  * fails at the end and `build/windows-templates-results.json`, which the native job uploads, lists
- * every step.
+ * every step. Last, `bunaway package win-direct` builds the Inno installer from the same project,
+ * which is installed silently into a folder of this run and must start with the same probe result;
+ * the uninstall then has to leave neither the folder nor the uninstall entry behind.
  *
- * Not covered here: the DOM an HMR update produces and installer packaging.
+ * Not covered here: the DOM an HMR update produces, signing, overwrite updates and installs into
+ * folders with spaces or non-ASCII names (`tests/packaging/` covers installers of a fixture app).
  */
 assert.equal(process.platform, "win32");
 const root = resolve(import.meta.dir, "../..");
@@ -537,10 +541,22 @@ async function compiledExe(app: string, appId: string): Promise<Outcome> {
     existsSync(resolve(packageRoot, "manifest.json")),
     "the package has no manifest.json",
   );
-  // The template's message module writes under LOCALAPPDATA, so a directory inside this run
-  // keeps the probe's message away from a developer's real app data. The host's own data root
-  // (WebView2 profile, logs, single-instance lock) does not follow this variable.
-  const localAppData = resolve(home, `local-app-data-${appId}`);
+  return launchAndVerify(executable, appId, "built");
+}
+
+/**
+ * Starts a compiled EXE with the probe baked in and checks the result. The template's message
+ * module writes under LOCALAPPDATA, so a directory inside this run keeps the probe's message away
+ * from a developer's real app data; `tag` gives each launch of the same app its own directory.
+ * The host's own data root (WebView2 profile, logs, single-instance lock) does not follow this
+ * variable.
+ */
+async function launchAndVerify(
+  executable: string,
+  appId: string,
+  tag: string,
+): Promise<Outcome> {
+  const localAppData = resolve(home, `local-app-data-${appId}-${tag}`);
   const launched = await execute(
     [
       executable,
@@ -627,9 +643,22 @@ async function verifyTemplate(
       );
     }
     // Last, because it edits the UI entry the earlier steps serve.
-    await record(template, "compiled-exe", () =>
+    const compiled = await record(template, "compiled-exe", () =>
       compiledExe(app, settings.app.appId),
     );
+    // Packaging reuses the build output and the probe the compiled step produced.
+    if (compiled) {
+      await record(template, "package-install", () =>
+        packageAndInstall({
+          app,
+          home,
+          appId: settings.app.appId,
+          run: execute,
+          launch: (executable, tag) =>
+            launchAndVerify(executable, settings.app.appId, tag),
+        }),
+      );
+    }
   } catch (error) {
     results.push({
       template,
