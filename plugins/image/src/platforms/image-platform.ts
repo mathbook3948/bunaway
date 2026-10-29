@@ -71,10 +71,12 @@ export class ImagePlatform {
   /**
    * Decode an image file into a resource that fits within `maxDimension` (default: the largest
    * image edge) and the resource pixel limit; platforms without a scaling codec report UNSUPPORTED.
-   * The file is read and decoded before the resource is created, and a late cancellation drops
-   * the result.
+   * The file is read asynchronously, so the thread that runs the plugin keeps serving other work;
+   * the decode and the resource creation then run in one step without yielding. Cancellation is
+   * checked after the read and again when the resource is created, and the capacity is checked
+   * again then too because other calls can fill the pool while the file is read.
    */
-  createFromPath(
+  async createFromPath(
     input: z.output<typeof createFromPathSchema>,
     signal?: AbortSignal,
   ) {
@@ -87,7 +89,9 @@ export class ImagePlatform {
       });
     }
     this.resources.assertCapacity();
-    const file = readImageFile(input.path);
+    const file = await readImageFile(input.path, signal);
+    // The adapter may have been disposed while the file was read.
+    this.active();
     return this.resources.create(
       decodeScaled(
         file.bytes,

@@ -6,6 +6,7 @@ import { crc32, deflateSync } from "node:zlib";
 import { BunawayError } from "@bunaway/protocol";
 import {
   MAX_IMAGE_BYTES,
+  MAX_RESOURCES,
   MAX_SOURCE_DIMENSION,
   MAX_SOURCE_FILE_BYTES,
 } from "#plugins/image/src/contract";
@@ -91,9 +92,9 @@ function columnsPng(
   ]);
 }
 
-function codeOf(action: () => unknown): string {
+async function codeOf(action: () => Promise<unknown>): Promise<string> {
   try {
-    action();
+    await action();
   } catch (error) {
     return error instanceof BunawayError ? error.code : String(error);
   }
@@ -103,7 +104,7 @@ function codeOf(action: () => unknown): string {
 /** Real WIC and file system: scaling happens while decoding, and unsafe files are refused before decoding. */
 test.skipIf(process.platform !== "win32")(
   "createFromPath decodes image files scaled to the requested and resource limits",
-  () => {
+  async () => {
     const root = mkdtempSync(join(tmpdir(), "bunaway-image-file-"));
     const platform = initialize();
     try {
@@ -126,7 +127,7 @@ test.skipIf(process.platform !== "win32")(
           ],
         ),
       );
-      const fitted = platform.createFromPath({
+      const fitted = await platform.createFromPath({
         path: wide,
       });
       expect(fitted.width * fitted.height * 4).toBeLessThanOrEqual(
@@ -144,7 +145,7 @@ test.skipIf(process.platform !== "win32")(
       ]);
 
       // maxDimension bounds the longer edge and keeps the aspect ratio.
-      const thumbnail = platform.createFromPath({
+      const thumbnail = await platform.createFromPath({
         path: wide,
         maxDimension: 64,
       });
@@ -170,7 +171,7 @@ test.skipIf(process.platform !== "win32")(
           ],
         ),
       );
-      const unchanged = platform.createFromPath({
+      const unchanged = await platform.createFromPath({
         path: small,
       });
       expect([
@@ -209,7 +210,7 @@ test.skipIf(process.platform !== "win32")(
               ];
         }),
       );
-      const scaledEdge = platform.createFromPath({
+      const scaledEdge = await platform.createFromPath({
         path: edge,
         maxDimension: 100,
       });
@@ -247,7 +248,7 @@ test.skipIf(process.platform !== "win32")(
           ],
         ),
       );
-      const kept = platform.createFromPath({
+      const kept = await platform.createFromPath({
         path: hidden,
       });
       expect([
@@ -273,7 +274,7 @@ test.skipIf(process.platform !== "win32")(
           "image/bmp",
         ],
       ] as const) {
-        const opaque = platform.createFromPath({
+        const opaque = await platform.createFromPath({
           path: small,
         });
         const encoded = Buffer.from(
@@ -283,7 +284,7 @@ test.skipIf(process.platform !== "win32")(
           }).data,
           "base64",
         );
-        const decoded = platform.createFromPath({
+        const decoded = await platform.createFromPath({
           path: write(name, encoded),
         });
         expect([
@@ -297,7 +298,7 @@ test.skipIf(process.platform !== "win32")(
 
       // Unsafe or unreadable inputs fail before any pixel is decoded.
       expect(
-        codeOf(() =>
+        await codeOf(() =>
           platform.createFromPath({
             path: join(root, "none.png"),
           }),
@@ -306,7 +307,7 @@ test.skipIf(process.platform !== "win32")(
       const directory = join(root, "folder.png");
       mkdirSync(directory);
       expect(
-        codeOf(() =>
+        await codeOf(() =>
           platform.createFromPath({
             path: directory,
           }),
@@ -314,7 +315,7 @@ test.skipIf(process.platform !== "win32")(
       ).toBe("INVALID_ARGUMENT");
       const notImage = write("text.png", Buffer.from("not an image at all"));
       expect(
-        codeOf(() =>
+        await codeOf(() =>
           platform.createFromPath({
             path: notImage,
           }),
@@ -338,7 +339,7 @@ test.skipIf(process.platform !== "win32")(
         ]),
       );
       expect(
-        codeOf(() =>
+        await codeOf(() =>
           platform.createFromPath({
             path: huge,
           }),
@@ -358,7 +359,7 @@ test.skipIf(process.platform !== "win32")(
         ),
       );
       expect(
-        codeOf(() =>
+        await codeOf(() =>
           platform.createFromPath({
             path: tall,
           }),
@@ -366,6 +367,142 @@ test.skipIf(process.platform !== "win32")(
       ).toBe("INVALID_ARGUMENT");
     } finally {
       dispose(platform);
+      dispose(platform);
+      rmSync(root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);
+
+/** Real file system: the read is asynchronous, so the event loop of the plugin thread keeps running during it. */
+test.skipIf(process.platform !== "win32")(
+  "createFromPath reads the file without blocking the event loop of the plugin thread",
+  async () => {
+    const root = mkdtempSync(join(tmpdir(), "bunaway-image-file-async-"));
+    const platform = initialize();
+    try {
+      const path = join(root, "padded.png");
+      // A decodable image followed by padding close to the size limit, so the read has real work.
+      writeFileSync(
+        path,
+        Buffer.concat([
+          solidPng(
+            1,
+            1,
+            [
+              0,
+              0,
+              0,
+              255,
+            ],
+          ),
+          Buffer.alloc(MAX_SOURCE_FILE_BYTES - 1024),
+        ]),
+      );
+      let turns = 0;
+      let spinning = true;
+      const spin = () => {
+        if (spinning) {
+          turns++;
+          setImmediate(spin);
+        }
+      };
+      setImmediate(spin);
+      const pending = platform.createFromPath({
+        path,
+      });
+      // The call returned before the file was read, and the loop turns while it is read.
+      expect(turns).toBe(0);
+      await pending;
+      spinning = false;
+      expect(turns).toBeGreaterThan(0);
+    } finally {
+      dispose(platform);
+      rmSync(root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);
+
+/** A cancelled or overtaken call creates no resource and leaves the file free to be removed. */
+test.skipIf(process.platform !== "win32")(
+  "createFromPath honors cancellation and the capacity limit across the asynchronous read",
+  async () => {
+    const root = mkdtempSync(join(tmpdir(), "bunaway-image-file-cancel-"));
+    const platform = initialize();
+    try {
+      const path = join(root, "one.png");
+      writeFileSync(
+        path,
+        solidPng(
+          2,
+          2,
+          [
+            0,
+            0,
+            0,
+            255,
+          ],
+        ),
+      );
+      const aborted = new AbortController();
+      aborted.abort();
+      expect(
+        await codeOf(() =>
+          platform.createFromPath(
+            {
+              path,
+            },
+            aborted.signal,
+          ),
+        ),
+      ).toBe("CANCELLED");
+      const during = new AbortController();
+      const pending = codeOf(() =>
+        platform.createFromPath(
+          {
+            path,
+          },
+          during.signal,
+        ),
+      );
+      during.abort();
+      expect(await pending).toBe("CANCELLED");
+      // The open handle was closed, so the file can be deleted at once.
+      rmSync(path);
+
+      writeFileSync(
+        path,
+        solidPng(
+          2,
+          2,
+          [
+            0,
+            0,
+            0,
+            255,
+          ],
+        ),
+      );
+      const overtaken = codeOf(() =>
+        platform.createFromPath({
+          path,
+        }),
+      );
+      // Other calls fill the pool while the file is read; the result is refused when it is created.
+      for (let index = 0; index < MAX_RESOURCES; index++) {
+        platform.createRGBA({
+          width: 1,
+          height: 1,
+          rgba: Buffer.alloc(4).toString("base64"),
+        });
+      }
+      expect(await overtaken).toBe("BUSY");
+    } finally {
       dispose(platform);
       rmSync(root, {
         recursive: true,

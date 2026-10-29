@@ -566,7 +566,7 @@ MSIX의 패키지 식별자 연동은 후속 범위다. 공개 계약과 네이�
 - [x] Windows clipboard의 사용자 정의 binary 형식(`application/x-bunaway-binary/...`) 읽기와 쓰기를 제공한다. 형식당 256 KiB, 어댑터 수명마다 서로 다른 이름 64개까지다.
 - [x] Windows clipboard의 변경 이벤트(`clipboard.changed`)와 `waitForChange`를 제공한다. `AddClipboardFormatListener`와 `WM_CLIPBOARDUPDATE`로 감지하며 payload는 내용 없이 `sequence`와 `changedAt`만 담는다. 같은 sequence의 연속 갱신은 합치고 자기 쓰기도 알린다. macOS의 같은 계약은 `changeCount` 비교로 제공한다([계약](../plugins/clipboard/README.md)).
 - [x] Windows `@bunaway/plugin-image`에서 PNG, JPEG와 BMP bytes, RGBA와 data URL로 앱 소유 이미지 리소스를 만든다.
-- [x] 파일 경로에서 이미지 리소스를 읽는다. `image.createFromPath`는 백엔드 전용 작업이며 로컬 드라이브 경로의 PNG, JPEG, BMP를 디코드하면서 `maxDimension`과 리소스 상한으로 축소한다. 허용 폴더는 앱이 정한다([ADR 0053](decisions/0053-backend-only-operations.md)).
+- [x] 파일 경로에서 이미지 리소스를 읽는다. `image.createFromPath`는 백엔드 전용 작업이며 파일은 비동기로 읽고(디코드는 UI 스레드에서 동기) 로컬 드라이브 경로의 PNG, JPEG, BMP를 디코드하면서 `maxDimension`과 리소스 상한으로 축소한다. 허용 폴더는 앱이 정한다([ADR 0053](decisions/0053-backend-only-operations.md)).
 - [x] `image.getInfo`와 `image.getPixels`로 크기, 빈 이미지 여부와 RGBA 픽셀 데이터를 조회한다.
 - [x] `image.exportBytes`와 `image.exportDataURL`로 PNG, JPEG, BMP와 data URL을 내보낸다. PNG는 alpha를 보존하고 JPEG와 BMP는 불투명 픽셀만 받는다.
 - [x] `image.crop`과 `image.resize`로 소스와 분리된 새 이미지 리소스를 만든다. Windows resize는 nearest와 alpha를 고려한 linear filtering을 제공한다.

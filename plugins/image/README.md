@@ -19,7 +19,7 @@ try {
 공개 입력, 반환값, 권한과 오류는 [API 레퍼런스](../../docs/site/src/content/docs/reference/plugins/image.mdx)에 둔다.
 `image.createFromPath`는 백엔드 전용 작업이다(화면에 허용하면 정책 검사가 거부한다). Windows에서
 로컬 드라이브의 PNG, JPEG, BMP 파일을 읽어 `maxDimension`과 리소스 픽셀 상한 안으로 축소해 새
-리소스로 만든다. 읽기는 `image-file.ts`가 열린 파일의 크기와 종류를 확인한 뒤 수행하고, 축소는
+리소스로 만든다. 읽기는 `image-file.ts`가 비동기 파일 핸들로 열린 파일의 크기와 종류를 확인한 뒤 수행하므로 읽는 동안 UI 스레드의 메시지 처리가 멈추지 않고(취소는 각 단계 사이에 확인하고 핸들은 항상 닫는다), 축소는
 `windows-codec.ts`의 `decodeScaled`가 WIC의 Fant 스케일러로 한다. 크기를 줄일 때만 premultiplied BGRA로 변환해 스케일하고, 줄이지 않으면 premultiplied 변환 없이
 8비트 straight BGRA로 변환해 읽는다.
 원본 헤더 크기는 픽셀 디코드 전에 검사한다. 허용 폴더는 앱이 정한다.

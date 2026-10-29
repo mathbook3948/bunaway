@@ -137,17 +137,17 @@ test("fitWithin keeps the aspect ratio, never enlarges and respects the resource
   });
 });
 
-test("createFromPath is rejected when the codec cannot decode files", () => {
+test("createFromPath is rejected when the codec cannot decode files", async () => {
   const codec = {
     dispose() {},
   } as unknown as ImageCodec;
   const platform = new ImagePlatform(codec);
   try {
-    expect(() =>
+    await expect(
       platform.createFromPath({
         path: "C:\\photo.png",
       }),
-    ).toThrow("Image files are not supported on this platform.");
+    ).rejects.toThrow("Image files are not supported on this platform.");
   } finally {
     platform.dispose();
   }

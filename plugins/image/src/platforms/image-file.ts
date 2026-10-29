@@ -1,4 +1,5 @@
-import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
+import { constants } from "node:fs";
+import { type FileHandle, open } from "node:fs/promises";
 import { BunawayError, isRecord } from "@bunaway/protocol";
 import { type ImageMime, MAX_SOURCE_FILE_BYTES } from "#image/contract";
 
@@ -74,26 +75,39 @@ export function sniffImageMime(bytes: Buffer): ImageMime | undefined {
   return undefined;
 }
 
+function assertNotCancelled(signal: AbortSignal | undefined) {
+  if (signal?.aborted) {
+    throw failure("CANCELLED", "Image creation cancelled.");
+  }
+}
+
 /**
- * Read an image file whose path the schema already checked. The size limit applies to the opened
- * descriptor, so the file cannot grow past it between the check and the read, and only a regular
- * file is read. Links are followed, as for the other path-taking plugins. Fails with
+ * Read an image file whose path the schema already checked, without blocking the thread that
+ * runs the plugin: the open, the size check and the reads are asynchronous, so the UI worker keeps
+ * pumping window messages while a slow drive or a large file is read. The size limit applies to
+ * the opened handle, so the file cannot grow past it between the check and the read, and only a
+ * regular file is read. Links are followed, as for the other path-taking plugins. Fails with
  * INVALID_ARGUMENT for a missing file, a directory, a file over the size limit or an
- * unrecognized encoding.
+ * unrecognized encoding, and with CANCELLED when `signal` aborts. A read that has started cannot
+ * be interrupted, so cancellation is observed after each step and the handle is always closed.
  */
-export function readImageFile(path: string): {
+export async function readImageFile(
+  path: string,
+  signal?: AbortSignal,
+): Promise<{
   bytes: Buffer;
   mime: ImageMime;
-} {
+}> {
   const fileSystemPath = `${EXTENDED_PREFIX}${path.replaceAll("/", "\\")}`;
-  let descriptor: number;
+  assertNotCancelled(signal);
+  let handle: FileHandle;
   try {
-    descriptor = openSync(fileSystemPath, constants.O_RDONLY | NONBLOCK);
+    handle = await open(fileSystemPath, constants.O_RDONLY | NONBLOCK);
   } catch (error) {
     throw fileError(error);
   }
   try {
-    const info = fstatSync(descriptor);
+    const info = await handle.stat();
     if (!info.isFile()) {
       throw failure("INVALID_ARGUMENT", "Image path is not a file.");
     }
@@ -103,18 +117,19 @@ export function readImageFile(path: string): {
     const bytes = Buffer.alloc(info.size);
     let offset = 0;
     while (offset < bytes.length) {
-      const count = readSync(
-        descriptor,
+      assertNotCancelled(signal);
+      const { bytesRead } = await handle.read(
         bytes,
         offset,
         bytes.length - offset,
         null,
       );
-      if (count === 0) {
+      if (bytesRead === 0) {
         throw failure("INVALID_ARGUMENT", "Image file changed during read.");
       }
-      offset += count;
+      offset += bytesRead;
     }
+    assertNotCancelled(signal);
     const mime = sniffImageMime(bytes);
     if (!mime) {
       throw failure("INVALID_ARGUMENT", "Image file format is not supported.");
@@ -126,6 +141,6 @@ export function readImageFile(path: string): {
   } catch (error) {
     throw fileError(error);
   } finally {
-    closeSync(descriptor);
+    await handle.close();
   }
 }
