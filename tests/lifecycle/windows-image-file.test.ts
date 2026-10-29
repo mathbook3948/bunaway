@@ -413,8 +413,7 @@ test.skipIf(process.platform !== "win32")(
       const pending = platform.createFromPath({
         path,
       });
-      // The call returned before the file was read, and the loop turns while it is read.
-      expect(turns).toBe(0);
+      // The loop of the plugin thread must turn while the file is read.
       try {
         await pending;
       } finally {
@@ -499,32 +498,121 @@ test.skipIf(process.platform !== "win32")(
   },
 );
 
-/** Disposing the adapter while a file is read ends the call without touching the codec. */
+/** The padded file is the slow read that the calls behind it wait for. */
+function writeQueueFiles(root: string) {
+  const color: Rgba = [
+    0,
+    0,
+    0,
+    255,
+  ];
+  const slow = join(root, "slow.png");
+  writeFileSync(
+    slow,
+    Buffer.concat([
+      solidPng(2, 2, color),
+      Buffer.alloc(MAX_SOURCE_FILE_BYTES - 1024),
+    ]),
+  );
+  const quick = join(root, "quick.png");
+  writeFileSync(quick, solidPng(2, 2, color));
+  return {
+    slow,
+    quick,
+  };
+}
+
+/** Calls read one file at a time in call order, and a call waiting for its turn can still leave. */
 test.skipIf(process.platform !== "win32")(
-  "createFromPath ends with CANCELLED when the adapter is disposed during the read",
+  "createFromPath reads in call order and lets a waiting call leave on cancellation or disposal",
+  async () => {
+    const root = mkdtempSync(join(tmpdir(), "bunaway-image-file-queue-"));
+    const platform = initialize();
+    try {
+      const { slow, quick } = writeQueueFiles(root);
+      // Started together, the small file would finish first if both were read at once.
+      const finishedOrder: string[] = [];
+      const first = platform
+        .createFromPath({
+          path: slow,
+        })
+        .then(() => finishedOrder.push("slow"));
+      const second = platform
+        .createFromPath({
+          path: quick,
+        })
+        .then(() => finishedOrder.push("quick"));
+      await Promise.all([
+        first,
+        second,
+      ]);
+      expect(finishedOrder).toEqual([
+        "slow",
+        "quick",
+      ]);
+
+      // A cancelled call behind a slow read settles before that read does.
+      let slowDone = false;
+      const ahead = platform
+        .createFromPath({
+          path: slow,
+        })
+        .then(() => {
+          slowDone = true;
+        });
+      const leaving = new AbortController();
+      const waiting = codeOf(() =>
+        platform.createFromPath(
+          {
+            path: quick,
+          },
+          leaving.signal,
+        ),
+      );
+      leaving.abort();
+      expect(await waiting).toBe("CANCELLED");
+      expect(slowDone).toBe(false);
+      await ahead;
+
+      // The same when the adapter is disposed: the waiting call ends, and so does the read ahead.
+      const reading = codeOf(() =>
+        platform.createFromPath({
+          path: slow,
+        }),
+      );
+      const queued = codeOf(() =>
+        platform.createFromPath({
+          path: quick,
+        }),
+      );
+      dispose(platform);
+      expect(await queued).toBe("CANCELLED");
+      expect(await reading).toBe("CANCELLED");
+    } finally {
+      dispose(platform);
+      rmSync(root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);
+
+/** Disposing the adapter while a file is read ends the call before the codec is used. */
+test.skipIf(process.platform !== "win32")(
+  "createFromPath ends with CANCELLED when the adapter is disposed while the file is read",
   async () => {
     const root = mkdtempSync(join(tmpdir(), "bunaway-image-file-dispose-"));
     const platform = initialize();
     try {
-      const path = join(root, "one.png");
-      writeFileSync(
-        path,
-        solidPng(
-          2,
-          2,
-          [
-            0,
-            0,
-            0,
-            255,
-          ],
-        ),
-      );
+      const { slow } = writeQueueFiles(root);
       const pending = codeOf(() =>
         platform.createFromPath({
-          path,
+          path: slow,
         }),
       );
+      // One turn of the event loop lets the call take its turn and start the read.
+      await new Promise((resolve) => setImmediate(resolve));
       dispose(platform);
       expect(await pending).toBe("CANCELLED");
     } finally {

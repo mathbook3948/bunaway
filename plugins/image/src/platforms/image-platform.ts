@@ -19,6 +19,8 @@ import { ImageResources } from "#image/platforms/resources";
 export class ImagePlatform {
   private readonly resources = new ImageResources();
   private disposed = false;
+  /** Aborts when the adapter is disposed, so a call waiting for its turn to read ends at once. */
+  private readonly closing = new AbortController();
   /** Ends when the file read ahead of the newest `createFromPath` call finishes; see `createFromPath`. */
   private lastPathRead: Promise<void> = Promise.resolve();
 
@@ -95,12 +97,15 @@ export class ImagePlatform {
     this.resources.assertCapacity();
     const previousRead = this.lastPathRead;
     const finished = Promise.withResolvers<void>();
-    this.lastPathRead = finished.promise;
+    // A call that leaves the line early must not release the next call before the read ahead of
+    // it ends, or two files would be held at once.
+    this.lastPathRead = previousRead.then(() => finished.promise);
     let file: Awaited<ReturnType<typeof readImageFile>>;
     try {
-      await previousRead;
-      // The adapter may have been disposed while the call waited for its turn.
+      await this.waitForTurn(previousRead, signal);
       this.active();
+      // The pool may have filled while the call waited, which would waste the read.
+      this.resources.assertCapacity();
       file = await readImageFile(input.path, signal);
     } finally {
       finished.resolve();
@@ -115,6 +120,49 @@ export class ImagePlatform {
       ),
       signal,
     );
+  }
+
+  /**
+   * Wait for the read ahead in the line, leaving at once with CANCELLED when `signal` aborts or the
+   * adapter is disposed, so a cancelled call does not hold its request slot behind a slow read.
+   */
+  private async waitForTurn(
+    previousRead: Promise<void>,
+    signal: AbortSignal | undefined,
+  ): Promise<void> {
+    const leave = AbortSignal.any(
+      signal
+        ? [
+            signal,
+            this.closing.signal,
+          ]
+        : [
+            this.closing.signal,
+          ],
+    );
+    const cancelled = Promise.withResolvers<never>();
+    const onLeave = () =>
+      cancelled.reject(
+        new BunawayError({
+          code: "CANCELLED",
+          message: "Image operation cancelled.",
+        }),
+      );
+    if (leave.aborted) {
+      onLeave();
+    } else {
+      leave.addEventListener("abort", onLeave, {
+        once: true,
+      });
+    }
+    try {
+      await Promise.race([
+        previousRead,
+        cancelled.promise,
+      ]);
+    } finally {
+      leave.removeEventListener("abort", onLeave);
+    }
   }
 
   /** Create an icon for a file extension; platforms without a source report UNSUPPORTED. */
@@ -228,6 +276,7 @@ export class ImagePlatform {
       return;
     }
     this.disposed = true;
+    this.closing.abort();
     this.resources.dispose();
     this.fileTypeIcons?.dispose();
     this.codec.dispose();
