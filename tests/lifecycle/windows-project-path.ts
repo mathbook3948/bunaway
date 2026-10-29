@@ -50,6 +50,25 @@ const REMOVE_RETRIES = 5;
 const REMOVE_RETRY_DELAY_MS = 500;
 const OUTPUT_TAIL_CHARS = 4_000;
 
+/**
+ * Resolves `expired` after `ms`. `cancel` clears the timer once the race is decided: a pending
+ * `Bun.sleep` keeps the process alive until it fires, which would delay the exit by the whole
+ * deadline after every successful step.
+ */
+function expiresAfter(ms: number): {
+  expired: Promise<undefined>;
+  cancel: () => void;
+} {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<undefined>((done) => {
+    timer = setTimeout(() => done(undefined), ms);
+  });
+  return {
+    expired,
+    cancel: () => clearTimeout(timer),
+  };
+}
+
 /** Ends a process and every child it started; a failed `taskkill` is bounded and logged. */
 async function killTree(pid: number): Promise<void> {
   const killer = Bun.spawn(
@@ -65,10 +84,11 @@ async function killTree(pid: number): Promise<void> {
       stderr: "ignore",
     },
   );
+  const expiry = expiresAfter(deadline("childExit"));
   const finished = await Promise.race([
     killer.exited.then(() => true),
-    Bun.sleep(deadline("childExit")).then(() => false),
-  ]);
+    expiry.expired.then(() => false),
+  ]).finally(expiry.cancel);
   if (!finished) {
     killer.kill();
     console.log(`taskkill for process ${pid} did not finish`);
@@ -100,10 +120,11 @@ async function execute(
     new Response(child.stderr).text(),
     child.exited,
   ]);
+  const expiry = expiresAfter(deadline(limit) * scale);
   const settled = await Promise.race([
     finished,
-    Bun.sleep(deadline(limit) * scale).then(() => undefined),
-  ]);
+    expiry.expired,
+  ]).finally(expiry.cancel);
   if (settled === undefined) {
     await killTree(child.pid);
     throw new Error(`${step} timed out after ${deadline(limit) * scale} ms`);
