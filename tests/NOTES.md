@@ -1247,7 +1247,8 @@ Worker에서 검사한다. 메뉴, 사용자 정의 아이콘, 단축키와 입�
 
 `api/tray.test.ts`는 ICO 범위, UTF-16 tooltip, 권한과 입력 대기의 정리를 검사한다.
 `lifecycle/windows-tray-controls.test.ts`와 `windows-tray-ui.test.ts`는 실제 shell 업데이트와 synthetic mouse/TaskbarCreated 메시지, UI Worker와 HWND 정리를 확인한다. `windows-tray-ui.test.ts`는 `tray.destroy`와 `tray.create`도 확인한다: 제거 뒤 HWND 소멸, keep-alive 종료 메시지 창 유지, 제거 중 `UNSUPPORTED`, 재생성 뒤 새 HWND와 입력 재수신, 중복 `create`의 `INVALID_ARGUMENT`.
-물리 마우스나 실제 Explorer process 재시작은 별도 검증이다.
+물리 마우스는 별도 검증이다.
+`lifecycle/windows-explorer-restart.test.ts`는 실제 `explorer.exe`를 `taskkill`로 끝내고 아이콘 재등록을 확인한다. `BUNAWAY_EXPLORER_RESTART_TEST=1`일 때만 돌며 `run-native.ts`가 GitHub Actions 러너(`GITHUB_ACTIONS=true`)에서만 마지막 단계로 설정한다. 개발자 PC의 `mise run host:windows`는 이 시험을 건너뛰어 데스크톱을 유지한다. 종료 뒤에는 Windows가 셸을 스스로 다시 띄우기를 `inProcess` 한도(기본 2초) 동안 기다리고, 러너가 그러지 않으면 `explorer.exe`를 직접 시작한다(작업 관리자의 "다시 시작"과 같다). 새 셸 프로세스도 새 작업 표시줄에서 `TaskbarCreated`를 보내므로 아이콘 재등록 경로는 같지만, 자동 재시작(Winlogon)과 시작 주체는 다르다. 시험이 어떤 이유로 끝나든 셸이 없으면 `explorer.exe`를 시작한다. 새 작업 표시줄 창이 생긴 뒤 아이콘이 다시 등록되어(`TaskbarCreated` 수신 자체는 관찰하지 않는다) 사각형이 다시 얻어지고 tooltip 갱신이 성공하며 트레이 창이 유지되는 것까지 확인한다. 사각형과 `NIM_MODIFY` 성공은 셸이 아이콘을 받았다는 신호이며 화면에 그려졌다는 증명은 아니다. suspend/resume과 화면 잠금은 러너 세션을 끊을 수 있어 검증하지 않는다.
 `lifecycle/tray-cleanup.test.ts`는 실제 Tray 소유자를 별도 프로세스에 번들하고 Win32
 해제 실패를 주입해 핸들 소유권, 재시도와 종료 중 콜백 차단을 확인한다.
 `windows-ui-lifecycle.test.ts`는 실제 UI Worker에 트레이 해제 실패를 주입해 원래 오류가

@@ -1273,7 +1273,7 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
   [autostart 검증 범위](../plugins/autostart/README.md#검증)를 따른다.
 - [x] Worker로 이관한 opener의 파일 열기와 Explorer 선택을 실제 Windows 및 compiled EXE에서 재검증한다.
   [초기 UI Worker 실행 기록](./architecture/windows-bun-results.md#2026-10-10-opener-파일-작업)과 구분한다.
-- [ ] suspend/resume, 잠금과 Explorer 재시작 후 자원과 구독을 검증한다.
+- [ ] suspend/resume, 잠금과 Explorer 재시작 후 자원과 구독을 검증한다. windows-native CI(windows-2022 러너 한 환경)에서 실제 `explorer.exe`를 끝내고 새 셸을 시작하면 트레이 아이콘이 다시 등록되고(`Shell_NotifyIconGetRect`가 사각형을 돌려주고 tooltip 갱신이 새 셸에 받아들여진다) 트레이 창이 살아 있음을 확인했다. `TaskbarCreated` 메시지 자체는 관찰하지 않았다. 화면에 그려졌는지, 재시작 중 사용자 정의 메뉴, suspend/resume과 화면 잠금(CI에서 만들 수 없음)은 남아 있다.
 - [x] 로컬 Windows x64에서 WebView 장애 복구와 앱 강제 종료 후 Job의 자손 회수를 검증한다.
 - [ ] 최신 Windows 전체 호스트 회귀를 통과하고 WebView 종료와 자식 프로세스 정리를 재검증한다. [#94](https://github.com/mathbook3948/bunaway/issues/94).
   [geometry 설정 검증 기록](./architecture/windows-bun-results.md#2026-10-10-창-geometry-설정-api)의
