@@ -29,7 +29,7 @@ export type RecursiveListRequest = {
  * a few children of a large directory, so building a binary min-heap (linear) and popping the
  * visited ones (logarithmic each) costs less than sorting every child on each page.
  */
-class ChildQueue {
+export class ChildQueue {
   private readonly heap: Dirent[];
 
   constructor(children: Dirent[]) {

@@ -3,6 +3,7 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -19,6 +20,8 @@ import {
   type StorageRecursivePage,
 } from "../../plugins/storage/src/contract.ts";
 import { storageOperations } from "../../plugins/storage/src/operations.ts";
+import { createCheckpoint } from "../../plugins/storage/src/platforms/node-directory.ts";
+import { ChildQueue } from "../../plugins/storage/src/platforms/node-directory-recursive.ts";
 import { NodeStorage } from "../../plugins/storage/src/platforms/node-storage.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
@@ -724,4 +727,75 @@ test("the operation validates its input and output and has its own permission", 
       ),
     ).toBe(target === "storage.readDirectoryRecursive");
   }
+});
+
+test("the child queue hands out names in UTF-16 order for every size and arrival order", () => {
+  for (const size of [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+  ]) {
+    const names = Array.from(
+      {
+        length: size,
+      },
+      (_, index) => `f${index}`,
+    );
+    createTree(names);
+    const found = readdirSync(root, {
+      withFileTypes: true,
+    });
+    for (const arrival of [
+      found,
+      [
+        ...found,
+      ].reverse(),
+    ]) {
+      const queue = new ChildQueue([
+        ...arrival,
+      ]);
+      const taken: string[] = [];
+      for (let child = queue.take(); child; child = queue.take()) {
+        taken.push(child.name);
+      }
+      expect(taken).toEqual(names);
+      expect(queue.take()).toBeUndefined();
+    }
+    for (const name of names) {
+      rmSync(at(name));
+    }
+  }
+});
+
+test("a checkpoint yields only once the interval has passed and still sees an abort after it", async () => {
+  let clock = 0;
+  const controller = new AbortController();
+  const checkpoint = createCheckpoint(
+    controller.signal,
+    () => {},
+    () => clock,
+  );
+  let yielded = false;
+  const timer = setTimeout(() => {
+    yielded = true;
+  }, 0);
+  for (let step = 0; step < 100; step++) {
+    clock += 0.01;
+    await checkpoint();
+  }
+  expect(yielded).toBe(false);
+  clock += 10;
+  await checkpoint();
+  expect(yielded).toBe(true);
+  clearTimeout(timer);
+  controller.abort();
+  await expect(checkpoint()).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
 });
