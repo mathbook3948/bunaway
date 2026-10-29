@@ -258,6 +258,16 @@ Narrator 같은 실제 스크린 리더의 읽기 출력과 포커스 이동은 
 ITaskbarList3의 다섯 상태를 설정한다. 네이티브 재생성 뒤 새 HWND에서도 반복한다.
 `mise run host:windows`에 포함하며 실제 작업 표시줄의 색상, 그룹 표시 또는
 Explorer 프로세스 재시작을 육안으로 검증하지 않는다.
+`lifecycle/windows-taskbar-progress.ts`는 `mise run host:windows`에서 시험 프로세스가 실제 창을 열어
+`none`, `normal`(0.25, 0.75), `paused`, `error`, `indeterminate`, `none`을 차례로 설정하고(버튼 생성 전
+`BUSY`는 재시도), 별도 PowerShell UI Automation 클라이언트가 Explorer 작업 표시줄(`MSTaskListWClass`)에서
+프로세스 단위 그룹 버튼(이름 `Bun - 1 running window`)을 읽는다. 단언은 모든 상태에서 호출이 성공하고
+`Bun - *` 버튼이 정확히 하나이며, 창을 파괴하면 그 버튼이 사라지는 것(다른 Bun 창의 버튼이 아니라는 확인)과
+지원 패턴 읽기 오류가 없는 것까지다. 지원 패턴만 읽으므로 읽기 오류는 실패로 처리한다.
+windows-2022 러너 실행에서 이 버튼은 Name과 Invoke 패턴만 노출했고 RangeValue, Value, LegacyIAccessible은
+지원 패턴 목록에 없었다. 따라서 진행률 값, 상태 색상, 그룹 우선순위는 UI Automation으로 읽을 수 없어
+단언하지 않는다. 읽은 속성은
+`build/windows-taskbar-progress-results.json`의 `exposesProgress`, `distinctReadings`, `results`에 기록한다.
 
 `api/notification.test.ts`는 알림 상태 조회와 Windows 설정 열기의 독립 권한,
 Zod 계약, SDK 컨텍스트와 취소, WinRT 실패 경계와 자원 정리를 검사한다.

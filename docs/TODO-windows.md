@@ -471,6 +471,8 @@ Windows의 비활성화 기록을 수정하지 않는다.
   ITaskbarList3 호출은 기존 `windows-bun-window-api.ts`의 `host:windows` 회귀에 포함한다.
 - [ ] 실제 Windows 작업 표시줄에서 진행률, 상태 색상, 그룹 우선순위와 Explorer 재시작 후 표시를 확인한다.
   네이티브 호출 회귀와 합성 버튼 재생성 검사를 물리 화면의 표시 검증으로 간주하지 않는다.
+  `windows-taskbar-progress.ts`는 모든 상태 호출 뒤 Explorer 작업 표시줄에 창 버튼이 있는 것까지 UI Automation으로
+  확인한다. 그 버튼은 Name과 Invoke만 노출하고 진행률 값이나 색상은 읽을 수 없어 이 항목은 체크하지 않는다.
 - [x] overlay icon과 접근성 설명을 설정한다.
   `windows.setOverlayIcon`은 창별로 `ico`(`tray.setIcon`과 같은 base64 ICO, `null`이면 제거)와
   `description`(`setThumbnailToolTip`과 같은 문자열 규칙, `ico`가 `null`이면 무시)을 받으며 Electron의
