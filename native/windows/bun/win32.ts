@@ -260,6 +260,7 @@ export class Windows {
   >();
   private readonly changingGeometry = new Set<bigint>();
   private readonly refittingMenuHeight = new Set<bigint>();
+  private readonly changingDpi = new Set<bigint>();
   private readonly closeControls = new Map<bigint, boolean>();
   /** Windows that may not enter fullscreen; absence means fullscreenable. */
   private readonly nonFullscreenable = new Set<bigint>();
@@ -696,6 +697,7 @@ export class Windows {
       !constraints ||
       (constraints.minHeight === null && constraints.maxHeight === null) ||
       this.refittingMenuHeight.has(window) ||
+      this.changingDpi.has(window) ||
       !user.symbols.GetMenu(window)
     ) {
       return;
@@ -2657,6 +2659,7 @@ export class Windows {
     exStyle: bigint,
   ) {
     if (
+      this.changingDpi.has(window) ||
       !user.symbols.GetMenu(window) ||
       user.symbols.IsIconic(window) ||
       user.symbols.IsZoomed(window)
@@ -2870,7 +2873,21 @@ export class Windows {
     position.setInt32(28, size.height, true);
   }
 
+  /**
+   * While the DPI changes, the window rectangle still has the previous DPI but the
+   * cached DPI is the new one, so menu bar rows cannot be measured. Refit afterwards.
+   */
   private applyDpiChange(window: bigint, wparam: bigint, lparam: bigint) {
+    this.changingDpi.add(window);
+    try {
+      this.applyDpiChangeNow(window, wparam, lparam);
+    } finally {
+      this.changingDpi.delete(window);
+    }
+    this.refitWrappedMenuHeight(window);
+  }
+
+  private applyDpiChangeNow(window: bigint, wparam: bigint, lparam: bigint) {
     const dpi = Number(wparam & 0xffffn);
     assert(dpi, "WM_DPICHANGED supplied an invalid DPI.");
     const previousDpi = this.dpiByWindow.get(window) ?? this.readDpi(window);
