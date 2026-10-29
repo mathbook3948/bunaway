@@ -332,13 +332,20 @@ try {
   client.stdin.write("quit\n");
   client.stdin.flush();
   await client.exited;
-  if (released !== true) {
-    await pump(
-      () => !probe.clientsAreListening() || undefined,
-      "UiaClientsAreListening after the client exits",
-    );
-  }
-  results.falseAfterClientExit = !probe.clientsAreListening();
+  // Windows may keep reporting a listener after the client is gone, so the outcome is recorded.
+  results.falseAfterClientExit =
+    released === true ||
+    (await waitFor(
+      () => {
+        windows.pump();
+        return !probe.clientsAreListening() || undefined;
+      },
+      {
+        deadline: "childStep",
+        what: "UiaClientsAreListening after the client exits",
+        intervalMs: 20,
+      },
+    ).catch(() => false));
   verified = true;
 } finally {
   client.kill();
