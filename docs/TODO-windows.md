@@ -1000,7 +1000,7 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   실제 저장소 왕복을 Windows CI에서 확인한다. 다른 사용자, 머신과 로밍 프로필은 검증하지 않았다.
 - [x] 결정 완료: Stronghold 방식의 vault, client, key와 record 관리 기능은 제공하지 않는다. 작은 비밀은 `safe-storage`, 앱 정의 암호가 필요한 데이터는 앱이 WebCrypto로 암호화해 `storage`에 저장한다. [ADR 0128](./decisions/0128-app-password-vault-not-provided.md).
 - [x] 결정 완료: vault unlock, lock, save와 암호 변경은 제공하지 않는다. [ADR 0128](./decisions/0128-app-password-vault-not-provided.md).
-- [x] 결정 완료: 앱 암호 기반 키 생성과 cryptographic operation 연산은 제공하지 않는다. 신뢰된 백엔드가 Bun WebCrypto를 직접 쓴다. [ADR 0128](./decisions/0128-app-password-vault-not-provided.md).
+- [x] 결정 완료: 앱 암호 기반 키 생성과 cryptographic operation 실행은 제공하지 않는다. 신뢰된 백엔드가 Bun WebCrypto를 직접 쓴다. [ADR 0128](./decisions/0128-app-password-vault-not-provided.md).
 - [x] 결정 완료: vault 암호 파생 함수와 salt의 설정, 생성과 보관은 제공하지 않는다. 앱이 정한다. [ADR 0128](./decisions/0128-app-password-vault-not-provided.md).
 - [x] 복호화 불가를 평문으로 숨기지 않고 `INTERNAL`로 전달한다. 손상과 다른 사용자, 머신,
   재설치 및 키 일시 문제를 이 코드만으로 구분하지 않는다.
