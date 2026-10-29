@@ -243,5 +243,5 @@ activator 등록 뒤에도 toast 객체 callback이 계속 오는지는 자동 �
 - `bun --no-env-file test tests/lifecycle/windows-toast-scheduled-exit.test.ts`: 자식 Bun 프로세스가 두 알림을
   예약하고 정상 종료한 뒤, 부모가 새 어댑터로 예약을 조회하고 하나를 취소하며 나머지가 표시 시각에 history로
   들어가는 것과 취소한 알림이 시각이 지나도 history에 없는 것을 확인한다. 부모가 먼저 알림 하나를 표시하고 지운 앱 ID를
-  쓰며, 표시한 적 없는 앱 ID의 예약은 CI에서 도착하지 않았다. 강제 종료, 시스템 시계 변경,
+  쓰며, 이 절차 없이 한 번도 표시한 적 없는 앱 ID로 예약한 알림은 CI에서 도착하지 않았다. 강제 종료, 시스템 시계 변경,
   절전 중 도착, 집중 지원은 확인하지 않는다.

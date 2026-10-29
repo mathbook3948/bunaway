@@ -17,8 +17,8 @@ import { createNotificationShortcut } from "./windows-notification-shortcut.ts";
 // A schedule belongs to Windows once it is accepted, so a toast scheduled by a process that has already
 // exited must still arrive, and one the exited process left behind must still be cancellable. The parent
 // owns the Start Menu shortcut and the history; the child only schedules and exits normally.
-// Measured on windows-2022: toasts scheduled for an AppUserModelID that has never shown a toast on the
-// profile leave the schedule at their time without reaching the history, whichever process scheduled
+// Observed on windows-2022: toasts scheduled for an AppUserModelID that had never shown a toast on the
+// profile left the schedule at their time without reaching the history, whichever process scheduled
 // them (observed for the same process, a live child and an exited child). The parent therefore shows and clears one toast first, like an app that has notified before.
 assert.equal(process.platform, "win32");
 const GROUP = "bunaway-test";
@@ -97,6 +97,11 @@ if (process.argv[2] === "schedule") {
   const removeShortcut = await createNotificationShortcut(appId);
   let controller: ReturnType<typeof createToastController> | undefined;
   let child: ReturnType<typeof Bun.spawn> | undefined;
+  let failure:
+    | {
+        error: unknown;
+      }
+    | undefined;
   const history = async (): Promise<string[]> => {
     const probe = Bun.spawn(
       [
@@ -218,6 +223,11 @@ if (process.argv[2] === "schedule") {
     console.log(
       "scheduled toast after the scheduling process exited was delivered and a cancelled one was not",
     );
+  } catch (error) {
+    failure = {
+      error,
+    };
+    throw error;
   } finally {
     // The child may still be scheduling when the parent fails, so wait for it before removing schedules.
     child?.kill();
@@ -238,6 +248,12 @@ if (process.argv[2] === "schedule") {
       } finally {
         await drainToastCleanup(() => owned.dispose());
       }
+    } catch (cleanupError) {
+      // A cleanup failure must not replace the error that ended the test.
+      if (!failure) {
+        throw cleanupError;
+      }
+      console.error("scheduled toast cleanup failed", cleanupError);
     } finally {
       await removeShortcut();
     }
