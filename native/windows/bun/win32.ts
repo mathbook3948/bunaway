@@ -259,6 +259,7 @@ export class Windows {
     }
   >();
   private readonly changingGeometry = new Set<bigint>();
+  private readonly refittingMenuHeight = new Set<bigint>();
   private readonly closeControls = new Map<bigint, boolean>();
   /** Windows that may not enter fullscreen; absence means fullscreenable. */
   private readonly nonFullscreenable = new Set<bigint>();
@@ -654,6 +655,9 @@ export class Windows {
     if (message === WM_WINDOWPOSCHANGED && this.windows.has(window)) {
       this.rememberNormalMonitor(window);
     }
+    if (message === WM_WINDOWPOSCHANGED && this.windows.has(window)) {
+      this.refitWrappedMenuHeight(window);
+    }
     if (message === WM_WINDOWPOSCHANGED) {
       // Z-order and topmost changes from any process arrive here.
       this.observeChanges(window);
@@ -680,6 +684,71 @@ export class Windows {
             WINDOWPLACEMENT_NORMAL_RECT_OFFSET,
           ),
         );
+      }
+    }
+  }
+
+  /**
+   * A size change re-wraps the menu bar after WM_GETMINMAXINFO has already answered
+   * with the previous row count. Move the height back inside the content limits.
+   */
+  private refitWrappedMenuHeight(window: bigint) {
+    const constraints = this.constraints.get(window);
+    if (
+      !constraints ||
+      (constraints.minHeight === null && constraints.maxHeight === null) ||
+      this.refittingMenuHeight.has(window) ||
+      !user.symbols.GetMenu(window)
+    ) {
+      return;
+    }
+    if (
+      // A minimized window, or one still at the collapsed geometry of a restore,
+      // has no settled menu bar to measure.
+      user.symbols.IsIconic(window) ||
+      this.clientSize(window).width === 0 ||
+      user.symbols.IsZoomed(window) ||
+      this.fullscreen.has(window)
+    ) {
+      return;
+    }
+    const dpi = this.getDpi(window);
+    const height = this.clientSize(window).height;
+    const wanted = Math.min(
+      constraints.maxHeight === null
+        ? Number.POSITIVE_INFINITY
+        : physicalPixels(constraints.maxHeight, dpi),
+      Math.max(
+        height,
+        constraints.minHeight === null
+          ? 0
+          : physicalPixels(constraints.minHeight, dpi),
+      ),
+    );
+    if (wanted === height) {
+      return;
+    }
+    const outer = this.getBounds(window, "outer");
+    const nested = this.changingGeometry.has(window);
+    this.changingGeometry.add(window);
+    this.refittingMenuHeight.add(window);
+    try {
+      assert(
+        user.symbols.SetWindowPos(
+          window,
+          0n,
+          0,
+          0,
+          outer.width,
+          outer.height + wanted - height,
+          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+        ),
+      );
+    } finally {
+      this.refittingMenuHeight.delete(window);
+      if (!nested) {
+        this.changingGeometry.delete(window);
+        this.observeChanges(window);
       }
     }
   }
@@ -2579,6 +2648,31 @@ export class Windows {
     placement.writeInt32LE(top + outerSize.height, rectOffset + 12);
   }
 
+  /**
+   * Height of the menu bar rows beyond the first, in physical pixels. The frame
+   * calculation counts one row, but a narrow window wraps the bar onto more.
+   */
+  private wrappedMenuHeight(
+    window: bigint,
+    dpi: number,
+    style: bigint,
+    exStyle: bigint,
+  ) {
+    if (
+      !user.symbols.GetMenu(window) ||
+      user.symbols.IsIconic(window) ||
+      user.symbols.IsZoomed(window)
+    ) {
+      return 0;
+    }
+    const frame = this.outerSizeFor(0, 0, dpi, style, exStyle, true);
+    const outer = this.getBounds(window, "outer");
+    return Math.max(
+      0,
+      outer.height - this.clientSize(window).height - frame.height,
+    );
+  }
+
   private applyMinMaxInfo(window: bigint, lparam: bigint) {
     const initialSize = this.initialOuterSizes.get(window);
     if (initialSize) {
@@ -2628,13 +2722,23 @@ export class Windows {
       exStyle,
       user.symbols.GetMenu(window) !== 0n,
     );
+    const wrapped = this.wrappedMenuHeight(window, dpi, style, exStyle);
+    minimum.height += wrapped;
+    maximum.height += wrapped;
+    // A window that is minimized, or still has the collapsed geometry of the restore
+    // in progress, has no menu bar rows to count. Leave its height limits out so the
+    // restore keeps the saved size; refitWrappedMenuHeight applies them afterwards.
+    const settling =
+      user.symbols.GetMenu(window) !== 0n &&
+      (user.symbols.IsIconic(window) !== 0 ||
+        this.clientSize(window).width === 0);
     const info = new DataView(
       toArrayBuffer(callbackPointer(lparam), 0, MINMAXINFO_SIZE),
     );
     if (constraints.minWidth !== null) {
       info.setInt32(24, Math.max(info.getInt32(24, true), minimum.width), true);
     }
-    if (constraints.minHeight !== null) {
+    if (constraints.minHeight !== null && !settling) {
       info.setInt32(
         28,
         Math.max(info.getInt32(28, true), minimum.height),
@@ -2644,7 +2748,7 @@ export class Windows {
     if (constraints.maxWidth !== null) {
       info.setInt32(32, Math.min(info.getInt32(32, true), maximum.width), true);
     }
-    if (constraints.maxHeight !== null) {
+    if (constraints.maxHeight !== null && !settling) {
       info.setInt32(
         36,
         Math.min(info.getInt32(36, true), maximum.height),
