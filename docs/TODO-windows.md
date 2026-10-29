@@ -1304,6 +1304,7 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
 - [ ] Microsoft Store, Mac App Store, Google Play와 App Store의 채널별 제출 및 배포 완료 조건을 정의한다.
   대상 채널의 정책 검토, 제출 검증, 심사와 실제 설치 결과를 구분해 기록하고 지원 표에 반영한다.
   미제출, 미승인과 제외 채널을 명시하며 패키지 생성만으로 스토어 배포를 완료 처리하지 않는다.
+  Windows: 결정 완료([ADR 0128](./decisions/0128-windows-microsoft-store-completion-conditions.md)). Mac App Store, Google Play, App Store는 남음.
 
 ## 다음 작업 묶음
 
