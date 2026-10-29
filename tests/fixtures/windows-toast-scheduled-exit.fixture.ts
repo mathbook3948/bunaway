@@ -17,7 +17,7 @@ import { createNotificationShortcut } from "./windows-notification-shortcut.ts";
 // A schedule belongs to Windows once it is accepted, so a toast scheduled by a process that has already
 // exited must still arrive, and one the exited process left behind must still be cancellable. The parent
 // owns the Start Menu shortcut and the history; the child only schedules and exits normally.
-// Observed on windows-2022: toasts scheduled for an AppUserModelID that had never shown a toast on the
+// Observed once on windows-2022 (workflow run 40803274060, 2026-10-29): toasts scheduled for an AppUserModelID that had never shown a toast on the
 // profile left the schedule at their time without reaching the history, whichever process scheduled
 // them (observed for the same process, a live child and an exited child). The parent therefore shows and clears one toast first, like an app that has notified before.
 assert.equal(process.platform, "win32");
@@ -260,9 +260,16 @@ if (process.argv[2] === "schedule") {
   try {
     await removeShortcut();
   } catch (error) {
-    cleanupFailure ??= {
-      error,
-    };
+    if (cleanupFailure) {
+      console.error(
+        "shortcut removal failed after an earlier cleanup failure",
+        error,
+      );
+    } else {
+      cleanupFailure = {
+        error,
+      };
+    }
   }
   // The error that ended the test wins over a cleanup failure, which is only logged then.
   if (failure) {

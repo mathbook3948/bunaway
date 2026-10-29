@@ -6,7 +6,7 @@ import { deadline } from "../fixtures/deadlines.ts";
 const REPORT_GRACE_MS = 5000;
 
 test.skipIf(process.platform !== "win32")(
-  "Windows scheduled toast arrives after the scheduling process exited",
+  "Windows scheduled toast of an app id that has shown a toast arrives after the scheduling process exited",
   async () => {
     const child = Bun.spawn(
       [
