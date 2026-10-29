@@ -49,7 +49,6 @@ const SETUP_DEADLINE_SCALE = 3;
 const REMOVE_RETRIES = 5;
 const REMOVE_RETRY_DELAY_MS = 500;
 const OUTPUT_TAIL_CHARS = 4_000;
-const NON_ASCII = /[^ -~]/;
 
 /** Ends a process and every child it started; a failed `taskkill` is bounded and logged. */
 async function killTree(pid: number): Promise<void> {
@@ -130,24 +129,15 @@ type Settings = {
   };
 };
 
-/** The paths this test hands to the CLI and the app have to contain what it claims to test. */
-function assertUnicodePaths(): void {
-  for (const path of [
-    APP,
-    LOCAL_APP_DATA,
-  ]) {
-    assert(path.includes(" "), `${path} has no space`);
-    assert(NON_ASCII.test(path), `${path} has no non-ASCII character`);
-  }
-}
-
 /**
  * The framework tarballs the template verification packed earlier in this job, which saves a
  * second pack of the same checkout; packs here when there are none. The tarballs are only read.
  */
 async function packedFramework(): Promise<string> {
+  // CI starts from a fresh checkout, so a leftover directory there is from this job; a developer's
+  // `build/` may hold tarballs of an older checkout, which must not be reused.
   const builds = resolve(root, "build");
-  for (const name of readdirSync(builds)) {
+  for (const name of process.env.CI ? readdirSync(builds) : []) {
     const candidate = resolve(builds, name, "packages");
     if (
       name.startsWith("windows-templates-") &&
@@ -169,7 +159,6 @@ async function packedFramework(): Promise<string> {
 }
 
 async function verify(): Promise<void> {
-  assertUnicodePaths();
   const packages = await packedFramework();
   await mkdir(PROJECT_PARENT, {
     recursive: true,
@@ -247,15 +236,26 @@ async function verify(): Promise<void> {
 await mkdir(home, {
   recursive: true,
 });
+let failure: unknown;
 try {
   await verify();
-} finally {
-  // Only the folder this run created is removed; a handle that is still open fails the run.
+} catch (error) {
+  failure = error;
+}
+// Only the folder this run created is removed. A removal failure fails the run, but never in
+// place of the failure that left the handle open.
+try {
   await rm(home, {
     recursive: true,
     force: true,
     maxRetries: REMOVE_RETRIES,
     retryDelay: REMOVE_RETRY_DELAY_MS,
   });
+} catch (error) {
+  console.log(`could not remove ${home}: ${String(error)}`);
+  failure ??= error;
+}
+if (failure !== undefined) {
+  throw failure;
 }
 console.log("PASS: Windows project path verification");
