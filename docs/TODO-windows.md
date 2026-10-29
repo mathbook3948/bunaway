@@ -1277,8 +1277,10 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
 - [x] 로컬 Windows x64에서 WebView 장애 복구와 앱 강제 종료 후 Job의 자손 회수를 검증한다.
 - [ ] 최신 Windows 전체 호스트 회귀를 통과하고 WebView 종료와 자식 프로세스 정리를 재검증한다. [#94](https://github.com/mathbook3948/bunaway/issues/94).
   [geometry 설정 검증 기록](./architecture/windows-bun-results.md#2026-10-10-창-geometry-설정-api)의
-  개별 Win32와 WebView2 검사는 통과했지만 전체 호스트 회귀와 단독 재실행에서
-  `WebView cleanup timed out` 및 브라우저 자식 프로세스 잔류가 기록됐다.
+  로컬 전체 호스트 회귀와 단독 재실행에서 `WebView cleanup timed out` 및 브라우저 자식 프로세스 잔류가 기록됐다.
+  2026-10-26 시점 main의 windows-native CI 세 번에서는 전체 회귀가 통과했고 이 오류는 나오지 않았다
+  ([재현 여부 기록](./architecture/windows-bun-results.md#2026-10-27-webview-종료-기한-초과-재현-여부)).
+  원인은 규명하지 못했고 로컬 재실행은 하지 않았으므로 항목은 열어 둔다.
 - [ ] 최소 지원 OS, CPU와 다른 Job 정책의 환경에서 장애 및 강제 종료 뒤 자원 정리를 검증한다.
 - [ ] 각 플랫폼의 supported/experimental/unsupported와 OS permission 값을 실제 구현에 맞춘다.
 - [ ] 지원 목록, CLI 진단, 문서와 배포 산출물을 같은 릴리스로 갱신한다.

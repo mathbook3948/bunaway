@@ -616,3 +616,21 @@ macOS fixture용 symlink를 만들 때 발생한 EPERM이다. 이전 CLI 시간 
 - 이 단계를 처음 연결한 CI 실행은 프로브가 옛 `io` 스레드와 동기 `execute`를 가정해 `UNSUPPORTED`로 실패했다. `worker`와 `await`로 고친 뒤 같은 잡에서 통과했다.
 - 통과한 실행은 GitHub Actions run 40499674577(PR 553, windows-2022 러너, 고정 Bun 1.4.2)이다.
 - 이 프로브는 실제 WebView2 앱 전체, 서명된 앱, MSIX와 Inno 설치 프로그램을 검증한 결과가 아니다.
+
+## 2026-10-27 WebView 종료 기한 초과 재현 여부
+
+2026-10-10 기록의 `WebView cleanup timed out`(`checkShutdownDeadline`, 닫은 뒤 30초)이
+2026-10-26 시점의 main에서 재현되는지 windows-native CI 로그로 확인했다.
+로컬 재실행은 하지 않았다.
+
+- 대상: main의 CI 세 번의 Windows native integration 잡. 커밋 `d6a5d04`(run 40236697052),
+  `1e20a51`(run 40242869068), `c6b9ecc`(run 40256783654). 각 잡은 `mise run host:windows`로
+  `windows-bun-window-api.ts`를 포함한 전체 호스트 회귀를 실행한다.
+- 결과: 세 잡 모두 `PASS Windows public window API: ...` 줄을 포함해 통과했고,
+  `WebView cleanup timed out`은 나오지 않았다.
+- 정리 시간: run 40256783654의 로그에 찍힌 `view-cleaned` 세 줄은 추적한 WebView 프로세스
+  핸들 5개, 5개, 4개를 정리했고, 닫기 요청부터 정리 완료까지 `elapsedMs`는 308ms, 282ms, 477ms였다. 다른 두 run에서는 이 값을 확인하지 않았다.
+- 판단: 이 세 run에서는 재현되지 않았다. 10-10 이후 `webview.ts`와 창 API 시나리오가 여러 번 바뀌어
+  비재현이 코드 변경 덕인지 환경 차이인지는 규명하지 못했다. 그래서 정리 순서와 진단 필드는
+  바꾸지 않았고 기한도 늘리지 않았다. 다시 발생하면 기존 오류 메시지의 `browserExited`와
+  `live` pid로 남은 프로세스를 확인한다.
