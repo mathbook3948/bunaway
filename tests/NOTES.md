@@ -1496,7 +1496,7 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 그려진 내용은 확인하지 않습니다. Windows native 실행기에 포함합니다.
 
 `lifecycle/windows-project-path.ts`는 이름에 공백과 한글이 든 프로젝트 폴더(`<임시>/홍 길동/내 프로젝트/앱 이름`)에서
-패키징한 CLI로 vanilla 템플릿을 생성하고(`create`), 템플릿이 설정한 웹 빌드와 `bun run build`(`bunaway build`, 검증한 Bun을
+패키징한 CLI로 vanilla 템플릿을 생성하고(`create`), `bun run build`(`bunaway build`가 템플릿이 설정한 웹 빌드를 먼저 돌리고, 검증한 Bun을
 항목 옆에 복사하고 상대 경로를 넘기는 ASCII 전용 `--compile-executable-path` 우회 포함)를 거쳐 compiled EXE를 만들고,
 공백과 한글이 든 `LOCALAPPDATA`로 실행합니다. 확인 코드가 백엔드에 메시지를 저장하고 읽은 뒤 창을 닫으므로 종료 코드 0과
 그 `LOCALAPPDATA` 아래 메시지 파일이 EXE, 번들 백엔드, 앱 데이터 경로가 이런 경로에서 동작한다는 증거입니다.

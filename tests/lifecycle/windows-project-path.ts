@@ -85,6 +85,7 @@ async function execute(
   scale = 1,
   env?: Record<string, string | undefined>,
 ): Promise<void> {
+  const started = Date.now();
   const child = Bun.spawn(command, {
     cwd,
     ...(env === undefined
@@ -114,7 +115,7 @@ async function execute(
     0,
     `${step} exited with ${code}:\n${`${out}\n${err}`.slice(-OUTPUT_TAIL_CHARS)}`,
   );
-  console.log(`PASS ${step}`);
+  console.log(`PASS ${step} (${Date.now() - started} ms)`);
 }
 
 const helperCommand = (...args: string[]) => [
@@ -127,20 +128,7 @@ type Settings = {
   app: {
     appId: string;
   };
-  build: {
-    command?: string[];
-  };
 };
-
-/** Replaces the `bun` program name with this run's pinned Bun, as the CLI does. */
-function pinnedBun(command: string[]): string[] {
-  const [program, ...rest] = command;
-  assert(program !== undefined, "an empty command in bunaway.json");
-  return [
-    program === "bun" ? process.execPath : program,
-    ...rest,
-  ];
-}
 
 /** The paths this test hands to the CLI and the app have to contain what it claims to test. */
 function assertUnicodePaths(): void {
@@ -203,9 +191,6 @@ async function verify(): Promise<void> {
   const settings = JSON.parse(
     await readFile(resolve(APP, "src-bunaway/bunaway.json"), "utf8"),
   ) as Settings;
-  if (settings.build.command !== undefined) {
-    await execute("web-build", pinnedBun(settings.build.command), APP, "build");
-  }
   const entry = UI_ENTRIES.map((name) => resolve(APP, name)).find((path) =>
     existsSync(path),
   );
