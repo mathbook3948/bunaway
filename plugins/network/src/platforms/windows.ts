@@ -22,7 +22,11 @@ import {
   runRequest as runSharedRequest,
   runUpload as runSharedUpload,
 } from "#network/platforms/shared";
-import { type ProxyFor, systemProxyFor } from "#network/platforms/system-proxy";
+import {
+  LookupGate,
+  type ProxyFor,
+  systemProxyFor,
+} from "#network/platforms/system-proxy";
 
 export {
   runCancelDownload,
@@ -38,6 +42,8 @@ type SharedState = ReturnType<typeof initializeShared>;
 type WindowsState = SharedState & {
   /** WinHTTP libraries for the settings read, opened by the first proxy lookup and closed on dispose. */
   winhttp: {
+    /** Orders proxy lookups so a burst of requests waits for a worker instead of failing with BUSY. */
+    gate: LookupGate;
     libraries: ReturnType<typeof openWinHttp> | undefined;
     /** Workers running automatic lookups, including ones whose caller already left. */
     workers: Set<Worker>;
@@ -51,6 +57,7 @@ export function initialize(
 ): WindowsState {
   return Object.assign(initializeShared(environment, seams), {
     winhttp: {
+      gate: new LookupGate(),
       libraries: undefined,
       workers: new Set<Worker>(),
     },
@@ -68,7 +75,7 @@ function systemProxy(
   api: () => WinHttpApi = () => systemWinHttp(state),
 ): ProxyFor {
   return (url, timeoutMs, signal) =>
-    systemProxyFor(api, url, timeoutMs, signal);
+    systemProxyFor(api, url, timeoutMs, signal, state.winhttp.gate);
 }
 
 type RequestInput = z.output<typeof requestInputSchema>;

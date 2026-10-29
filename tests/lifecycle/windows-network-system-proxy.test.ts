@@ -125,7 +125,16 @@ async function configure(proxy: string | undefined) {
   );
 }
 
-test.skipIf(process.platform !== "win32")(
+/**
+ * The test rewrites the current user's Internet Options, so it runs on CI runners or when a
+ * developer opts in; an interrupted run on a personal machine would leave a dead proxy behind.
+ */
+const MAY_CHANGE_INTERNET_OPTIONS =
+  process.platform === "win32" &&
+  (Boolean(process.env.CI) ||
+    process.env.BUNAWAY_ALLOW_INTERNET_OPTIONS_TEST === "1");
+
+test.skipIf(!MAY_CHANGE_INTERNET_OPTIONS)(
   "generated Windows network adapter sends requests through the proxy set in Internet Options",
   async () => {
     const lines: string[] = [];
@@ -161,6 +170,15 @@ test.skipIf(process.platform !== "win32")(
         },
       });
     };
+    // A proxy named by the environment would skip the system lookup this test is about.
+    const environment = new Map<string, string | undefined>();
+    for (const name of [
+      "http_proxy",
+      "HTTP_PROXY",
+    ]) {
+      environment.set(name, process.env[name]);
+      delete process.env[name];
+    }
     const saved = await snapshot();
     try {
       await configure(`127.0.0.1:${address.port}`);
@@ -188,8 +206,13 @@ test.skipIf(process.platform !== "win32")(
       ).rejects.toBeTruthy();
       expect(lines).toHaveLength(1);
     } finally {
-      await restore(saved);
+      for (const [name, value] of environment) {
+        if (value !== undefined) {
+          process.env[name] = value;
+        }
+      }
       await adapter.dispose();
+      await restore(saved);
       proxy.close();
     }
   },

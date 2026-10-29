@@ -47,6 +47,8 @@ let mode: Mode = "answer";
 /** The first line of every request the proxy received, such as `GET http://origin.invalid/x HTTP/1.1`. */
 let requestLines: string[] = [];
 let proxyPort = 0;
+/** Whether any request carried proxy credentials. */
+let sawCredentials = false;
 let folder: string;
 const saved = new Map<string, string | undefined>();
 
@@ -72,6 +74,7 @@ function startProxy(): Promise<Server> {
       answered = true;
       const line = head.split("\r\n")[0] ?? "";
       requestLines.push(line);
+      sawCredentials ||= /^proxy-authorization:/im.test(head);
       if (line.startsWith("CONNECT ") || mode === "refuse-tunnel") {
         socket.end(
           "HTTP/1.1 502 Bad Gateway\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
@@ -113,6 +116,7 @@ beforeAll(async () => {
 afterEach(() => {
   mode = "answer";
   requestLines = [];
+  sawCredentials = false;
 });
 
 afterAll(async () => {
@@ -201,6 +205,7 @@ test("a proxy that wants credentials answers with its 407 and no credentials are
     viaProxy(),
   );
   expect(response.status).toBe(407);
+  expect(sawCredentials).toBe(false);
   expect(Object.fromEntries(response.headers)["proxy-authenticate"]).toContain(
     "Basic",
   );
@@ -373,6 +378,108 @@ test("a settings read that fails is logged without the address and the request g
   }
   expect(logged).toHaveLength(1);
   expect(JSON.stringify(logged)).not.toContain(ORIGIN);
+});
+
+test("a list the plugin refuses fails the request instead of bypassing the route", async () => {
+  const state = initialize();
+  await expect(
+    runRequest(
+      state,
+      requestFor(`http://${ORIGIN}/`),
+      undefined,
+      settings({
+        proxy: "user:secret@127.0.0.1:8080",
+      }),
+    ),
+  ).rejects.toMatchObject({
+    code: "INTERNAL",
+  });
+  expect(requestLines).toEqual([]);
+  await dispose(state);
+});
+
+test("a burst of requests under automatic detection queues behind the worker limit", async () => {
+  const state = initialize();
+  let running = 0;
+  let mostRunning = 0;
+  const detecting: () => WinHttpApi = () => ({
+    ieProxyConfig: () => ({
+      autoDetect: true,
+      autoConfigUrl: null,
+      proxy: null,
+      bypass: null,
+    }),
+    autoProxyForUrl: async () => {
+      running += 1;
+      mostRunning = Math.max(mostRunning, running);
+      await Bun.sleep(20);
+      running -= 1;
+      return {
+        accessType: 3,
+        proxy: `127.0.0.1:${proxyPort}`,
+        bypass: null,
+      };
+    },
+  });
+  const answers = await Promise.all(
+    Array.from(
+      {
+        length: 12,
+      },
+      (_, index) =>
+        runRequest(
+          state,
+          requestFor(`http://${ORIGIN}/${index}`),
+          undefined,
+          detecting,
+        ),
+    ),
+  );
+  expect(answers.map((answer) => answer.status)).toEqual(Array(12).fill(200));
+  expect(mostRunning).toBe(4);
+  await dispose(state);
+});
+
+test("a request waiting for a lookup turn leaves at its deadline", async () => {
+  const state = initialize();
+  const stuck: () => WinHttpApi = () => ({
+    ieProxyConfig: () => ({
+      autoDetect: true,
+      autoConfigUrl: null,
+      proxy: null,
+      bypass: null,
+    }),
+    autoProxyForUrl: (_url, _source, _timeoutMs, signal) =>
+      new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
+      }),
+  });
+  const holders = Array.from(
+    {
+      length: 4,
+    },
+    (_, index) =>
+      runRequest(
+        state,
+        requestFor(`http://${ORIGIN}/hold${index}`, 2000),
+        undefined,
+        stuck,
+      ).catch((error: unknown) => error),
+  );
+  await expect(
+    runRequest(
+      state,
+      requestFor(`http://${ORIGIN}/late`, 100),
+      undefined,
+      stuck,
+    ),
+  ).rejects.toMatchObject({
+    code: "TIMEOUT",
+  });
+  expect(await Promise.all(holders)).toHaveLength(4);
+  await dispose(state);
 });
 
 test("the request deadline and cancellation end a lookup that never answers", async () => {

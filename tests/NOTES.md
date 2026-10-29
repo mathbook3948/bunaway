@@ -1238,8 +1238,8 @@ chunked 본문을 보내지 않음, 서버가 읽지 않을 때 읽기가 멈추
 자격 증명 제거, 루프백 직접 연결, 자동 구성 단계의 순서와 기한, 취소와 정리를 가짜 WinHTTP로 검사한다.
 `lifecycle/windows-network-resolve-proxy.test.ts`는 생성 Windows 어댑터의 실제 WinHTTP 호출 형태와, 임시 PAC 파일을 쓰는 실제 WinHTTP 바인딩을 검사한다.
 `api/network-system-proxy.test.ts`는 Windows 어댑터의 네 작업이 가짜 WinHTTP 설정과 로컬 proxy 서버를 거쳐 절대 URL 요청과 CONNECT를 보내는지,
-direct, 예외 목록, loopback, 환경 변수 우선, SOCKS 거부, 조회 실패 처리, 기한과 취소 전달을 검사한다.
-`lifecycle/windows-network-system-proxy.test.ts`는 러너의 HKCU 인터넷 옵션을 임시로 바꿔(끝나면 원래 값으로 복원) 생성 Windows 어댑터의 `network.request`가 실제 WinHTTP 설정을 읽어 proxy를 거치는지 검사한다.
+direct, 예외 목록, loopback, 환경 변수 우선, SOCKS 거부, 자격 증명이 든 목록 거부, 설정 읽기 실패 때만 직접 연결, 자동 감지 조회의 4개 동시 한도와 대기, 기한과 취소 전달을 검사한다.
+`lifecycle/windows-network-system-proxy.test.ts`는 러너의 HKCU 인터넷 옵션을 임시로 바꿔(끝나면 원래 값으로 복원하고 복원 실패는 오류로 낸다. CI 러너나 BUNAWAY_ALLOW_INTERNET_OPTIONS_TEST=1일 때만 실행) 생성 Windows 어댑터의 `network.request`가 실제 WinHTTP 설정을 읽어 proxy를 거치는지 검사한다.
 `cli/network.test.ts`는 isolated tarball 설치의 두 OS native export에서 실제 HTTP를 실행하고
 browser 번들에 Bun 전송 구현이 포함되지 않는지 검사한다. TLS, 외부 proxy 서버 구현과 OS 인증은 검증하지 않는다.
 
