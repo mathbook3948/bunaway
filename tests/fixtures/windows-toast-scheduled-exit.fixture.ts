@@ -19,15 +19,15 @@ import { createNotificationShortcut } from "./windows-notification-shortcut.ts";
 // owns the Start Menu shortcut and the history; the child only schedules and exits normally.
 // Measured on windows-2022: toasts scheduled for an AppUserModelID that has never shown a toast on the
 // profile leave the schedule at their time without reaching the history, whichever process scheduled
-// them. The parent therefore shows and clears one toast first, like an app that has notified before.
+// them (observed for the same process, a live child and an exited child). The parent therefore shows and clears one toast first, like an app that has notified before.
 assert.equal(process.platform, "win32");
 const GROUP = "bunaway-test";
 const DELIVER_ID = "exit-deliver";
 const CANCEL_ID = "exit-cancel";
 const DELIVER_TITLE = "scheduled after exit deliver";
 const CANCEL_TITLE = "scheduled after exit cancel";
-/** Long enough for the child to start, schedule and exit before the first toast is due. */
-const DELIVERY_DELAY_MS = 20000;
+/** Extra time on top of the child step deadline, so a slow runner that scales deadlines still schedules before the due time. */
+const DELIVERY_MARGIN_MS = 10000;
 /** The cancelled toast would be due this long after the delivered one. */
 const CANCELLED_GAP_MS = 1000;
 /** How long past the cancelled toast's time the history is watched for it. */
@@ -146,7 +146,7 @@ if (process.argv[2] === "schedule") {
     warmup.clearAll();
     await drainToastCleanup(() => warmup.dispose());
     controller = undefined;
-    const deliverAt = Date.now() + DELIVERY_DELAY_MS;
+    const deliverAt = Date.now() + deadline("childStep") + DELIVERY_MARGIN_MS;
     child = Bun.spawn(
       [
         process.execPath,
@@ -202,12 +202,11 @@ if (process.argv[2] === "schedule") {
     const delivered = await history();
     assert.equal(delivered.length, 1, JSON.stringify(delivered));
     assert(delivered[0]?.includes(DELIVER_TITLE));
-    // The cancelled toast's time passes without it reaching the notification history.
+    // The cancelled toast would have been due shortly after the delivered one; watch the history for it
+    // from the moment both times have passed, so a late delivery cannot hide a cancel that did not work.
     await Bun.sleep(
-      Math.max(
-        0,
-        deliverAt + CANCELLED_GAP_MS + CANCELLED_WATCH_MS - Date.now(),
-      ),
+      Math.max(0, deliverAt + CANCELLED_GAP_MS - Date.now()) +
+        CANCELLED_WATCH_MS,
     );
     const settled = await history();
     assert.equal(settled.length, 1, JSON.stringify(settled));
@@ -220,10 +219,13 @@ if (process.argv[2] === "schedule") {
       "scheduled toast after the scheduling process exited was delivered and a cancelled one was not",
     );
   } finally {
+    // The child may still be scheduling when the parent fails, so wait for it before removing schedules.
     child?.kill();
+    await child?.exited;
     try {
-      const owned = controller;
-      if (owned) {
+      // Remove only this test's schedules and history, also when the failure came before an adapter existed.
+      const owned = controller ?? newController(appId);
+      try {
         owned.cancelScheduled({
           id: DELIVER_ID,
           group: GROUP,
@@ -233,6 +235,7 @@ if (process.argv[2] === "schedule") {
           group: GROUP,
         });
         owned.clearAll();
+      } finally {
         await drainToastCleanup(() => owned.dispose());
       }
     } finally {

@@ -234,14 +234,14 @@ activator 등록 뒤에도 toast 객체 callback이 계속 오는지는 자동 �
   `clearAll`로 제거해 history가 비는 것도 확인한다. 같은 항목을 `list`가 id/group으로
   돌려주는지도 확인한다. 별도 STA/MTA fixture는 실제 COM marshaling,
   callback 실행 스레드와 지연 Release 정리를 확인한다. `host:windows`에도 포함한다.
-- `bun --no-env-file test tests/lifecycle/windows-toast-scheduled-exit.test.ts`: 자식 Bun 프로세스가 두 알림을
-  예약하고 정상 종료한 뒤, 부모가 새 어댑터로 예약을 조회하고 하나를 취소하며 나머지가 표시 시각에 history로
-  들어가는 것과 취소한 알림이 시각이 지나도 history에 없는 것을 확인한다. 부모가 먼저 알림 하나를 표시하고 지운 앱 ID를
-  쓰며, 표시한 적 없는 앱 ID의 예약은 CI에서 도착하지 않았다. 강제 종료, 시스템 시계 변경,
-  절전 중 도착, 집중 지원은 확인하지 않는다.
   이 검사는 실제 사용자의 클릭이나 종료 상태 activation을 검증하지 않는다. 버튼과 응답 상자가
   있는 toast를 Windows가 접수하고 history에 보존하는지, Activated 인자 파서가 의존하는 인터페이스
   id와 메서드 순서가 Windows 메타데이터와 같은지, 실제 ValueSet에서 응답 문자열을 읽고 문자열이 아닌
   값과 없는 키를 구분하는지는 확인한다. 실제 버튼 클릭에서 인자 객체를 읽는 경로는 GUI 입력이
   필요해 자동 검증하지 않으며, `tests/api/notification-toast.test.ts`의 가짜 COM 객체와
   `tests/api/notification-actions.test.ts`의 계약 시험으로 해석과 자원 해제를 검사한다.
+- `bun --no-env-file test tests/lifecycle/windows-toast-scheduled-exit.test.ts`: 자식 Bun 프로세스가 두 알림을
+  예약하고 정상 종료한 뒤, 부모가 새 어댑터로 예약을 조회하고 하나를 취소하며 나머지가 표시 시각에 history로
+  들어가는 것과 취소한 알림이 시각이 지나도 history에 없는 것을 확인한다. 부모가 먼저 알림 하나를 표시하고 지운 앱 ID를
+  쓰며, 표시한 적 없는 앱 ID의 예약은 CI에서 도착하지 않았다. 강제 종료, 시스템 시계 변경,
+  절전 중 도착, 집중 지원은 확인하지 않는다.

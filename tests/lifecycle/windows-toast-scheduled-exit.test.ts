@@ -2,6 +2,9 @@ import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { deadline } from "../fixtures/deadlines.ts";
 
+/** The fixture itself runs for the native fixture deadline; the test waits slightly longer for its report. */
+const REPORT_GRACE_MS = 5000;
+
 test.skipIf(process.platform !== "win32")(
   "Windows scheduled toast arrives after the scheduling process exited",
   async () => {
@@ -29,5 +32,5 @@ test.skipIf(process.platform !== "win32")(
     ]);
     expect(code, `${stdout}\n${stderr}`).toBe(0);
   },
-  deadline("nativeFixture") + 5000,
+  deadline("nativeFixture") + REPORT_GRACE_MS,
 );
