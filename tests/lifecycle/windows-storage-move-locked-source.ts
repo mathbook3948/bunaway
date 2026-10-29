@@ -132,33 +132,16 @@ try {
   assert.equal(existsSync(`${root}/locked.txt`), false);
   assert.equal(await readFile(`${root}/moved.txt`, "utf8"), "locked content");
 
-  // A directory with a held file inside: the rename either fails with the same code and leaves
-  // the directory whole with nothing at the destination, or the OS allowed it. Which one
-  // happens is recorded, and a move that reports success must have moved the whole directory.
+  // A directory with a held file inside is refused the same way: the directory stays whole and
+  // nothing appears at the destination.
   holder = await holdOpen("dir/locked.txt", "dir.ready");
-  let dirOutcome: string;
-  try {
-    move("dir", "moved-dir");
-    dirOutcome = "moved";
-    assert.equal(existsSync(`${root}/dir`), false);
-    assert.equal(
-      await readFile(`${root}/moved-dir/inner/free.txt`, "utf8"),
-      "free",
-    );
-  } catch (error) {
-    if (error instanceof assert.AssertionError) {
-      throw error;
-    }
-    assertLockFailure(error);
-    dirOutcome = `rejected ${LOCK_CODE}`;
-    assert.equal(
-      await readFile(`${root}/dir/locked.txt`, "utf8"),
-      "dir locked content",
-    );
-    assert.equal(await readFile(`${root}/dir/inner/free.txt`, "utf8"), "free");
-    assert.equal(existsSync(`${root}/moved-dir`), false);
-  }
-  console.log(`INFO directory with a held file: ${dirOutcome}`);
+  assertLockFailure(thrown(() => move("dir", "moved-dir")));
+  assert.equal(
+    await readFile(`${root}/dir/locked.txt`, "utf8"),
+    "dir locked content",
+  );
+  assert.equal(await readFile(`${root}/dir/inner/free.txt`, "utf8"), "free");
+  assert.equal(existsSync(`${root}/moved-dir`), false);
 
   // A directory without any held handle is not affected while the holder is still running.
   assert.equal(move("free-dir", "moved-free-dir"), null);
@@ -168,12 +151,10 @@ try {
     "free sibling",
   );
 
-  // After the holder closes, the directory moves whole (or already moved).
+  // After the holder closes, the directory moves whole.
   await holder.stop();
   holder = undefined;
-  if (existsSync(`${root}/dir`)) {
-    await moveWhenReleased("dir", "moved-dir");
-  }
+  await moveWhenReleased("dir", "moved-dir");
   assert.equal(existsSync(`${root}/dir`), false);
   assert.equal(
     await readFile(`${root}/moved-dir/locked.txt`, "utf8"),
@@ -198,5 +179,5 @@ try {
   }
 }
 console.log(
-  "PASS Windows storage move of a locked source: a same-volume move fails with PERMISSION_DENIED while another process holds the file without delete sharing, the source stays whole with nothing at the destination, an unheld sibling directory moves, and the same call succeeds after the handle closes",
+  "PASS Windows storage move of a locked source: a same-volume move of the file or of a directory holding it fails with PERMISSION_DENIED while another process holds the file without delete sharing, the source stays whole with nothing at the destination, an unheld sibling directory moves, and the same call succeeds after the handle closes",
 );
