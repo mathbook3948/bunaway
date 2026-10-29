@@ -227,35 +227,45 @@ if (process.argv[2] === "schedule") {
     failure = {
       error,
     };
-    throw error;
-  } finally {
-    // The child may still be scheduling when the parent fails, so wait for it before removing schedules.
-    child?.kill();
-    await child?.exited;
+  }
+  // The child may still be scheduling when the parent fails, so wait for it before removing schedules.
+  child?.kill();
+  await child?.exited;
+  let cleanupFailure:
+    | {
+        error: unknown;
+      }
+    | undefined;
+  try {
+    // Remove only this test's schedules and history, also when the failure came before an adapter existed.
+    const owned = controller ?? newController(appId);
     try {
-      // Remove only this test's schedules and history, also when the failure came before an adapter existed.
-      const owned = controller ?? newController(appId);
-      try {
-        owned.cancelScheduled({
-          id: DELIVER_ID,
-          group: GROUP,
-        });
-        owned.cancelScheduled({
-          id: CANCEL_ID,
-          group: GROUP,
-        });
-        owned.clearAll();
-      } finally {
-        await drainToastCleanup(() => owned.dispose());
-      }
-    } catch (cleanupError) {
-      // A cleanup failure must not replace the error that ended the test.
-      if (!failure) {
-        throw cleanupError;
-      }
-      console.error("scheduled toast cleanup failed", cleanupError);
+      owned.cancelScheduled({
+        id: DELIVER_ID,
+        group: GROUP,
+      });
+      owned.cancelScheduled({
+        id: CANCEL_ID,
+        group: GROUP,
+      });
+      owned.clearAll();
     } finally {
-      await removeShortcut();
+      await drainToastCleanup(() => owned.dispose());
     }
+  } catch (error) {
+    cleanupFailure = {
+      error,
+    };
+  }
+  await removeShortcut();
+  // The error that ended the test wins over a cleanup failure, which is only logged then.
+  if (failure) {
+    if (cleanupFailure) {
+      console.error("scheduled toast cleanup failed", cleanupFailure.error);
+    }
+    throw failure.error;
+  }
+  if (cleanupFailure) {
+    throw cleanupFailure.error;
   }
 }
