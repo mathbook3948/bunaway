@@ -600,13 +600,17 @@ manifest 생성과 카탈로그 로딩에서 작업 이름만 전달하며 작�
   클라이언트 기본 연결의 지연 초기화, 문서/HMR 공유, 구독 해제, 실패, 취소, 문서 종료 정리.
 - `core/`: 명령, 상태, 이벤트, 플러그인.
 - `conformance/`: 네이티브 호스트 간 공통 계약.
-  `windows-capability-docs.test.ts`는 각 플러그인의 `src/index.ts`를 불러 Windows 어댑터가 등록한
-  연산 이름을 읽고(어댑터를 실행하거나 초기화하지 않는다), `docs/site/src/content/docs/reference/plugins/<plugin>.mdx`
-  본문의 `plugin.operation` 표기와 비교한다. Windows 어댑터가 등록한 연산이 문서에 없거나, 문서가
-  Windows 연산도 이벤트도 아닌 이름을 쓰면 그 이름을 찍고 실패한다. macOS 전용 연산은 제목에 macOS가
-  들어간 절 안에서만 허용한다. 사유가 붙은 예외 목록(연산별 페이지가 reference/host에 있는 플러그인,
-  공개 API 별칭과 Node.js 네임스페이스 이름)은 줄어들기만 한다. 연산의 동작, 호출 권한, OS 동의 상태,
-  문서 문장의 정확성은 확인하지 않는다.
+  `windows-capability-docs.test.ts`는 각 플러그인의 `src/index.ts`를 불러(모듈 그래프를 평가하지만
+  어댑터의 `create`와 `initialize`는 호출하지 않는다) Windows 어댑터가 등록한 연산 이름을 읽고,
+  `docs/site/src/content/docs/reference/plugins/<plugin>.mdx` 본문의 `plugin.operation` 표기와 비교한다.
+  등록된 연산 이름이 문서에 한 번도 나오지 않거나, 문서가 Windows 연산도 이벤트도 아닌 이름을 쓰면 그
+  이름을 찍고 실패한다. 이름이 나오는 위치(macOS 절, 코드 예시, 제공하지 않는다는 문장)는 구분하지 않는다.
+  macOS 전용 연산은 제목이 macOS로 시작하는 절 안에서만 허용한다. 불러오지 못하거나 Windows 연산이
+  없는 플러그인은 실패하며, 연산이 없다고 이름 붙인 `window-state`만 건너뛴다. 연산 페이지가
+  `reference/host`에 있는 `log`, `storage`, `windows`는 비교하지 않는다. 사유가 붙은 예외 목록(그 세
+  플러그인, 공개 API 별칭과 Node.js 네임스페이스 이름)은 항목 수 상한이 있어 늘지 못하고 줄어들기만
+  한다. 연산의 동작, 호출 권한, OS 동의 상태, 문서 문장의 정확성, `safeStorage.encryptString` 같은
+  camelCase 호출 표기는 확인하지 않는다.
 - `security/`: 권한, origin, 세션, 파일 범위.
 - `lifecycle/`: 종료, 재연결, 모바일 수명주기.
   `webview-session.test.ts`는 WebView 전송, Windows 메시지 경계와 실제 Core를 연결해

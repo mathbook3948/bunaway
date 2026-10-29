@@ -26,15 +26,24 @@ interface Mention {
 }
 
 /**
- * Plugins whose operations are not documented in `reference/plugins/<plugin>.mdx`; each has one
- * page per operation under `reference/host`. The list only shrinks: once `<plugin>.mdx` exists the
- * entry is reported as stale and the plugin is compared like the others.
+ * Plugins with no `reference/plugins/<plugin>.mdx`; their operations are documented under
+ * `reference/host` instead (`log-write.mdx`, `storage-*.mdx`, `windows.mdx`), which this test does
+ * not compare. The list only shrinks: once `<plugin>.mdx` exists the entry is reported as stale
+ * and the plugin is compared like the others. `MAX_DOCUMENTED_ELSEWHERE` stops it from growing.
  */
 const OPERATIONS_DOCUMENTED_ELSEWHERE: Record<string, string> = {
-  log: "Each operation has its own page under reference/host.",
-  storage: "Each operation has its own page under reference/host.",
-  windows:
-    "Window operations are documented under reference/host and the window guides.",
+  log: "Documented on a reference/host page, not a plugin page.",
+  storage: "Documented on reference/host pages, not a plugin page.",
+  windows: "Documented on the reference/host windows page, not a plugin page.",
+};
+const MAX_DOCUMENTED_ELSEWHERE = 3;
+/**
+ * Plugins that register no Windows operation. The test skips them instead of failing on an empty
+ * or unreadable operation list. Any other plugin without a readable Windows list fails the test.
+ */
+const REGISTERS_NO_WINDOWS_OPERATIONS: Record<string, string> = {
+  "window-state":
+    "Declares no native operations; every call goes through the window and store plugins.",
 };
 /**
  * Dotted names in a plugin page that are neither Windows operations nor events, with the reason
@@ -49,14 +58,42 @@ const NAMED_NON_OPERATIONS: Record<string, string> = {
   "path.posix": "Name of the Node.js path namespace the page follows.",
   "path.win32": "Name of the Node.js path namespace the page follows.",
 };
+const MAX_NAMED_NON_OPERATIONS = 6;
+/** Extensions of file names such as `tray.ico`, which are not operation names. */
+const FILE_EXTENSIONS = new Set([
+  "ico",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "svg",
+  "ts",
+  "js",
+  "json",
+  "env",
+  "md",
+  "mdx",
+  "exe",
+  "dll",
+  "plist",
+  "log",
+  "txt",
+]);
 
-/** Read the registered operations of one plugin without running its native adapters. */
-async function pluginShape(
-  directory: string,
-): Promise<PluginShape | undefined> {
+/**
+ * Read the registered operations of one plugin. Importing evaluates the plugin's module graph but
+ * never calls an adapter's `create` or `initialize`. A string result is why the plugin could not be read.
+ */
+async function pluginShape(directory: string): Promise<PluginShape | string> {
+  let importFailure = "";
   const loaded: unknown = await import(
     resolve(plugins, directory, "src/index.ts")
-  ).catch(() => undefined);
+  ).catch((error: unknown) => {
+    importFailure = `import failed: ${String(error).split("\n")[0]}`;
+  });
+  if (importFailure !== "") {
+    return importFailure;
+  }
   const api = isRecord(loaded) ? loaded.default : undefined;
   // The default export is the plugin's public API, a function or an object, with the registration
   // metadata attached as a non-enumerable `_definition`.
@@ -65,7 +102,7 @@ async function pluginShape(
       ? Reflect.get(api, "_definition")
       : undefined;
   if (!isRecord(definition)) {
-    return undefined;
+    return "default export has no registration metadata";
   }
   const name = String(definition.name);
   const platforms = definition.nativePlatforms;
@@ -102,7 +139,7 @@ function mentions(text: string, plugin: string): Mention[] {
   const headings: string[] = [];
   let fenced = false;
   for (const line of text.split("\n")) {
-    if (line.startsWith("```")) {
+    if (/^\s*(```|~~~)/.test(line)) {
       fenced = !fenced;
     }
     const heading = fenced ? null : /^(#{2,6})\s+(.*)$/.exec(line);
@@ -111,8 +148,11 @@ function mentions(text: string, plugin: string): Mention[] {
       headings.length = heading[1].length - 2;
       headings.push(heading[2]);
     }
-    const macosSection = headings.some((title) => title.includes("macOS"));
+    const macosSection = headings.some((title) => title.startsWith("macOS"));
     for (const match of line.matchAll(pattern)) {
+      if (FILE_EXTENSIONS.has(match[1] ?? "")) {
+        continue;
+      }
       found.push({
         name: `${plugin}.${match[1]}`,
         macosSection,
@@ -160,6 +200,7 @@ test("plugin pages name every Windows operation and no operation Windows lacks",
   })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
+  const unreadable: string[] = [];
   const undocumented: string[] = [];
   const unregistered: string[] = [];
   const staleOperationsExceptions: string[] = [];
@@ -167,7 +208,13 @@ test("plugin pages name every Windows operation and no operation Windows lacks",
   let compared = 0;
   for (const directory of directories) {
     const shape = await pluginShape(directory);
-    if (shape === undefined || shape.windows.size === 0) {
+    const readable = typeof shape === "string" ? undefined : shape;
+    if (readable === undefined || readable.windows.size === 0) {
+      if (!(directory in REGISTERS_NO_WINDOWS_OPERATIONS)) {
+        unreadable.push(
+          `${directory}: ${readable === undefined ? shape : "registers no Windows operations"}`,
+        );
+      }
       continue;
     }
     const page = Bun.file(resolve(docs, `${directory}.mdx`));
@@ -183,7 +230,7 @@ test("plugin pages name every Windows operation and no operation Windows lacks",
       continue;
     }
     compared++;
-    const result = compare(shape, await page.text());
+    const result = compare(readable, await page.text());
     undocumented.push(
       ...result.undocumented.map(
         (operation) => `${directory}: ${operation} is registered on Windows`,
@@ -199,6 +246,15 @@ test("plugin pages name every Windows operation and no operation Windows lacks",
     }
   }
   expect(compared).toBeGreaterThan(MIN_COMPARED_PLUGINS);
+  // A plugin that cannot be read is a failure, not a silent skip: fix the import or list it in
+  // REGISTERS_NO_WINDOWS_OPERATIONS if it truly registers none.
+  expect(unreadable).toEqual([]);
+  expect(
+    Object.keys(OPERATIONS_DOCUMENTED_ELSEWHERE).length,
+  ).toBeLessThanOrEqual(MAX_DOCUMENTED_ELSEWHERE);
+  expect(Object.keys(NAMED_NON_OPERATIONS).length).toBeLessThanOrEqual(
+    MAX_NAMED_NON_OPERATIONS,
+  );
   // Document the operation in its plugin page, or remove it from the Windows adapter.
   expect(undocumented).toEqual([]);
   // Correct the page to the operations the Windows adapter registers.
@@ -216,13 +272,18 @@ test("the mention scan reads dotted names but not paths, config keys or file nam
   const text = [
     "## Windows",
     "`tray.get` and tray.setTooltip({ tooltip }).",
-    "`desktop.tray.icon` and resources/tray.ico and tests/windows-tray.test.ts.",
+    "`desktop.tray.icon` and resources/tray.ico and tests/windows-tray.test.ts and tray.ico.",
     "## macOS 메뉴 막대",
     "`tray.setTitle`",
-    "```ts",
-    "// ## not a heading",
-    "await tray.waitForEvent(null);",
-    "```",
+    "  ```ts",
+    "  // ## not a heading",
+    "  await tray.waitForEvent(null);",
+    "  ```",
+    "~~~",
+    "## also not a heading",
+    "~~~",
+    "## Windows와 macOS 차이",
+    "tray.after",
   ].join("\n");
   expect(
     mentions(text, "tray").map(({ name, macosSection }) => [
@@ -245,6 +306,10 @@ test("the mention scan reads dotted names but not paths, config keys or file nam
     [
       "tray.waitForEvent",
       true,
+    ],
+    [
+      "tray.after",
+      false,
     ],
   ]);
 });
