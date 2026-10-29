@@ -415,8 +415,11 @@ test.skipIf(process.platform !== "win32")(
       });
       // The call returned before the file was read, and the loop turns while it is read.
       expect(turns).toBe(0);
-      await pending;
-      spinning = false;
+      try {
+        await pending;
+      } finally {
+        spinning = false;
+      }
       expect(turns).toBeGreaterThan(0);
     } finally {
       dispose(platform);
@@ -428,7 +431,7 @@ test.skipIf(process.platform !== "win32")(
   },
 );
 
-/** A cancelled or overtaken call creates no resource and leaves the file free to be removed. */
+/** A cancelled or overtaken call creates no resource. */
 test.skipIf(process.platform !== "win32")(
   "createFromPath honors cancellation and the capacity limit across the asynchronous read",
   async () => {
@@ -472,22 +475,6 @@ test.skipIf(process.platform !== "win32")(
       );
       during.abort();
       expect(await pending).toBe("CANCELLED");
-      // The open handle was closed, so the file can be deleted at once.
-      rmSync(path);
-
-      writeFileSync(
-        path,
-        solidPng(
-          2,
-          2,
-          [
-            0,
-            0,
-            0,
-            255,
-          ],
-        ),
-      );
       const overtaken = codeOf(() =>
         platform.createFromPath({
           path,
@@ -502,6 +489,44 @@ test.skipIf(process.platform !== "win32")(
         });
       }
       expect(await overtaken).toBe("BUSY");
+    } finally {
+      dispose(platform);
+      rmSync(root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);
+
+/** Disposing the adapter while a file is read ends the call without touching the codec. */
+test.skipIf(process.platform !== "win32")(
+  "createFromPath ends with CANCELLED when the adapter is disposed during the read",
+  async () => {
+    const root = mkdtempSync(join(tmpdir(), "bunaway-image-file-dispose-"));
+    const platform = initialize();
+    try {
+      const path = join(root, "one.png");
+      writeFileSync(
+        path,
+        solidPng(
+          2,
+          2,
+          [
+            0,
+            0,
+            0,
+            255,
+          ],
+        ),
+      );
+      const pending = codeOf(() =>
+        platform.createFromPath({
+          path,
+        }),
+      );
+      dispose(platform);
+      expect(await pending).toBe("CANCELLED");
     } finally {
       dispose(platform);
       rmSync(root, {

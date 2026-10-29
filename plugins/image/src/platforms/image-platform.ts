@@ -19,6 +19,8 @@ import { ImageResources } from "#image/platforms/resources";
 export class ImagePlatform {
   private readonly resources = new ImageResources();
   private disposed = false;
+  /** Ends when the file read ahead of the newest `createFromPath` call finishes; see `createFromPath`. */
+  private lastPathRead: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly codec: ImageCodec,
@@ -74,7 +76,9 @@ export class ImagePlatform {
    * The file is read asynchronously, so the thread that runs the plugin keeps serving other work;
    * the decode and the resource creation then run in one step without yielding. Cancellation is
    * checked after the read and again when the resource is created, and the capacity is checked
-   * again then too because other calls can fill the pool while the file is read.
+   * again then too because other calls can fill the pool while the file is read. Calls read one
+   * file at a time, in call order, so the memory held for file contents stays within one file
+   * (`MAX_SOURCE_FILE_BYTES`) however many calls are pending.
    */
   async createFromPath(
     input: z.output<typeof createFromPathSchema>,
@@ -89,7 +93,18 @@ export class ImagePlatform {
       });
     }
     this.resources.assertCapacity();
-    const file = await readImageFile(input.path, signal);
+    const previousRead = this.lastPathRead;
+    const finished = Promise.withResolvers<void>();
+    this.lastPathRead = finished.promise;
+    let file: Awaited<ReturnType<typeof readImageFile>>;
+    try {
+      await previousRead;
+      // The adapter may have been disposed while the call waited for its turn.
+      this.active();
+      file = await readImageFile(input.path, signal);
+    } finally {
+      finished.resolve();
+    }
     // The adapter may have been disposed while the file was read.
     this.active();
     return this.resources.create(
