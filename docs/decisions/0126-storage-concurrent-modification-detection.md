@@ -92,7 +92,7 @@ status: accepted
 - 코드, 정책, 호스트 동작은 바뀌지 않는다.
 - [storage.stat](../site/src/content/docs/reference/host/storage-stat.mdx), [storage.writeText](../site/src/content/docs/reference/host/storage-write-text.mdx),
   [바이너리 저장과 append](../site/src/content/docs/reference/host/storage-bytes.mdx)가 이 결정으로 연결한다.
-- [파일 복사와 대상 이동](../site/src/content/docs/reference/host/storage-transfers.mdx)의 후속 작업 문장은 원자적 저장 부분을 빼서
-  이 결정과 어긋나지 않게 했다.
+- [파일 복사와 대상 이동](../site/src/content/docs/reference/host/storage-transfers.mdx)의 후속 작업 문장은 이 결정 당시 원자적 저장 부분을 빼서
+  이 결정과 어긋나지 않게 했다(이후 [ADR 0136](./0136-storage-copy-and-move-overwrite.md)이 그 문장을 `overwrite` 결정으로 연결되는 문장으로 바꿨다).
 - `docs/TODO-windows.md`의 충돌 처리 항목은 이 결정으로 닫는다.
 - 복사와 이동의 `overwrite` 옵션은 [ADR 0136](./0136-storage-copy-and-move-overwrite.md)에서 정한다.

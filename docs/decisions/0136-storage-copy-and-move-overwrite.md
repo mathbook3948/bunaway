@@ -32,7 +32,7 @@ status: accepted
 1. 덮어쓰기를 제공한다. 기본값은 지금과 같은 "기존 대상 거부"이고 교체는 호출마다 명시한다. Electron과 Tauri는 기본이 덮어쓰기이지만, 이 프레임워크는 복사와 이동 결과가 사용자 파일을 조용히 없앨 수 있다는 이유로 거부를 기본으로 유지한다. 옵션을 주지 않는 기존 호출의 동작과 오류는 바뀌지 않는다.
 2. 옵션 모양은 `overwrite?: boolean`이다. 상태가 "실패"와 "교체" 둘뿐이라 `onExists: "fail" | "replace"`가 주는 선택지가 없다. `overwrite`가 `true`가 아니면 지금과 같이 거부한다. 새 오류 코드는 만들지 않는다.
 3. 교체 대상은 일반 파일로 한정한다(`copyFile`은 링크가 가리키는 일반 파일 포함). 디렉터리 트리의 합치기와 교체, `copyDirectory`의 덮어쓰기는 이번 결정에 포함하지 않는다.
-4. 코어, 프로토콜, 호스트 전송 계약은 바꾸지 않는다. 변경은 storage 플러그인 안(두 연산 입력 스키마, 공통 기반 `node-storage.ts`의 `move`와 `copyContents`, 플랫폼 어댑터)과 참조 문서에 한정한다. 연산 권한 이름도 늘리지 않는다(아래 "권한").
+4. 코어, 프로토콜, 호스트 전송 계약은 바꾸지 않는다. 변경은 storage 플러그인 안(두 연산 입력 스키마, 공통 기반 `node-storage.ts`의 `move`와 `copyContents`, 교체 절차를 담은 `node-atomic-write.ts`, 플랫폼 어댑터)과 참조 문서에 한정한다. 연산 권한 이름도 늘리지 않는다(아래 "권한").
 5. 경로 제한은 앱 책임이다. 앱 명령은 `from`과 `to` 두 위치를 모두 검사하고, `overwrite`를 받는 앱 명령은 `to`의 쓰기 규칙을 `writeText`와 같은 기준으로 적용한다.
 
 ## 연산별 계약
@@ -40,7 +40,9 @@ status: accepted
 ### copyFile
 
 `overwrite: true`이면 대상으로 풀린 실제 파일과 같은 폴더의 임시 파일에 전체를 복사하고 디스크에 반영한 뒤 대상 위에 교체한다.
-`writeBytes`의 `atomic: true`와 같은 교체 경로를 재사용하며 새 교체 구현을 만들지 않는다. 다만 `copyFile`의 기존 입력 규칙은 `overwrite`와 무관하게 유지한다.
+`writeBytes`의 `atomic: true`와 같은 교체 절차(임시 파일, 디스크 반영, 교체, 실패 시 정리)를 재사용하며 두 번째 교체 구현을 만들지 않는다.
+다만 지금의 `replaceAtomically`는 바이트 전체를 한 번에 받고, 상위 폴더를 항상 만들고, 권한 비트 읽기와 `W_OK` 검사를 한 함수에서 하므로 그대로는 쓸 수 없다.
+구현은 이 함수를 나눠 조각 단위 복사 원본을 받을 수 있게 하고, 상위 폴더 생성과 권한 비트 이어받기를 호출자가 고르게 하며 `writeBytes`의 동작은 바꾸지 않는다. `copyFile`의 `copyFile`의 기존 입력 규칙은 `overwrite`와 무관하게 유지한다.
 
 - `to`의 상위 디렉터리가 없으면 `INVALID_ARGUMENT`이고 폴더를 만들지 않는다. `atomic` 쓰기가 상위 폴더를 만드는 동작은 가져오지 않는다.
 - 새 파일의 권한은 `copyFile`의 기존 규칙을 따른다(macOS는 `0600`에 umask, Windows는 상속 ACL). 기존 대상의 POSIX 권한 비트를 이어받는 `atomic` 쓰기의 동작은 가져오지 않는다. 같은 함수(`existingMode`)에 있는 `accessSync(W_OK)` 쓰기 권한 사전 검사는 유지한다. `copyFile`에는 지금 이 검사가 없고, 읽기 전용 대상의 `PERMISSION_DENIED`는 이 검사로 플랫폼과 무관하게 성립한다.
@@ -116,7 +118,7 @@ ADR 0126의 (b)는 쓰기 연산의 입력과 새 오류 코드를 요구하는 
 
 구현은 이 결정이 머지된 뒤 별도 항목으로 고른다. Windows를 먼저 하고 macOS는 같은 계약을 별도 항목으로 따른다. macOS가 구현되기 전에는 macOS에서 `overwrite: true`를 대상 유무와 관계없이 `UNSUPPORTED`로 거부한다. 이는 위의 "대상이 없으면 기본 모드와 같다"에 대한 macOS 과도기 예외이며, macOS 구현 항목이 이 예외를 없앤다. 플랫폼 지원 표에 그 사실을 적는다.
 
-범위: `plugins/storage`의 두 연산 입력 스키마, 공통 기반 `node-storage.ts`(`move`의 같은 경로와 같은 파일 검사, `copyContents`의 교체 분기), Windows 어댑터, macOS 어댑터의 과도기 `UNSUPPORTED` 거부, 참조 문서(전송 문서 104행의 "공유 위반은 `INTERNAL`일 수 있습니다"를 교체 모드 매핑에 맞게 고침), 변경 기록, `docs/TODO-windows.md`, [전송 문서](../site/src/content/docs/reference/host/storage-transfers.mdx). `tests/lifecycle`의 Windows 시나리오로 CI `windows-native`에서 확인할 것:
+범위: `plugins/storage`의 두 연산 입력 스키마, 공통 기반 `node-storage.ts`(`move`의 같은 경로와 같은 파일 검사, `copyContents`의 교체 분기), Windows 어댑터, macOS 어댑터의 과도기 `UNSUPPORTED` 거부, 참조 문서(전송 문서 106행의 "공유 위반과 일반 I/O 실패는 `INTERNAL`일 수 있습니다"에서 교체 모드의 공유 위반만 `PERMISSION_DENIED`로 분리하고 일반 I/O 실패 서술은 유지), 변경 기록, `docs/TODO-windows.md`, [전송 문서](../site/src/content/docs/reference/host/storage-transfers.mdx). `tests/lifecycle`의 Windows 시나리오로 CI `windows-native`에서 확인할 것:
 
 - 교체 성공(내용, 크기, 빈 파일, 1 MiB를 넘는 파일), 기본 모드의 거부 유지
 - 대상이 디렉터리, 읽기 전용, 링크(`copyFile`은 가리키는 파일을 교체, `move`는 `INVALID_ARGUMENT`), 가리키는 곳이 없는 링크, 상위 디렉터리 없음
@@ -124,7 +126,7 @@ ADR 0126의 (b)는 쓰기 연산의 입력과 새 오류 코드를 요구하는 
 - 다른 프로세스가 대상을 열어 둔 상태에서의 `PERMISSION_DENIED`와 대상 불변, 임시 파일 정리
 - 복사 도중 원본이 줄어드는 실패에서 대상 불변
 - 원본과 대상이 같은 파일로 풀리는 경우(하드 링크와 링크 경유)
-- 다른 볼륨 `move`의 `UNSUPPORTED`와 양쪽 불변. CI 러너에 두 번째 볼륨이 있는지 먼저 확인하고, 없으면 시험하지 못한 항목으로 적는다
+- 다른 볼륨 `move`의 `UNSUPPORTED`와 양쪽 불변. 기존 `tests/lifecycle/windows-storage-cross-volume-move.ts`의 가상 디스크 fixture(`tests/fixtures/windows-virtual-disk.ts`)를 쓰며, `diskpart`를 쓸 수 없어 fixture가 건너뛴 경우만 시험하지 못한 항목으로 적는다
 - `move`의 같은 경로 거부와 대소문자만 다른 이름, 교체 모드의 공유 위반과 잠금 위반이 `PERMISSION_DENIED`로 매핑되는지
 
 CI로 확인할 수 없는 것: 전원 차단 뒤의 내구성(`WRITE_THROUGH`가 실제로 디스크까지 가는지), 네트워크 파일 시스템의 교체 동작, 프로세스 강제 종료로 임시 파일이 남는 경우의 정리(남을 수 있다고 문서에 적는다).
@@ -132,6 +134,6 @@ CI로 확인할 수 없는 것: 전원 차단 뒤의 내구성(`WRITE_THROUGH`�
 ## 영향
 
 - 코드, 정책, 호스트 동작은 바뀌지 않는다.
-- [파일 복사와 대상 이동](../site/src/content/docs/reference/host/storage-transfers.mdx)의 "덮어쓰기에 대한 충돌 및 복구 계약은 후속 작업" 문장이 이 결정으로 연결된다.
+- [파일 복사와 대상 이동](../site/src/content/docs/reference/host/storage-transfers.mdx)의 "덮어쓰기에 대한 충돌 및 복구 계약은 후속 작업" 문장을 이 결정으로 연결되는 문장("`overwrite` 옵션은 결정 문서에서 정했고 아직 구현하지 않았습니다")으로 바꿨다. 구현 항목이 옵션을 문서화할 때 이 문장도 고친다.
 - `docs/TODO-windows.md`의 덮어쓰기 항목은 구현 전으로 표기하고 체크하지 않는다.
 - ADR 0126에는 이 결정으로 가는 링크 한 줄만 더한다.
