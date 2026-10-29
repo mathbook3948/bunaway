@@ -1,4 +1,5 @@
 import { defineNativePlugin } from "@bunaway/plugin";
+import { storeEvents } from "#store/contract";
 import { storeOperations } from "#store/operations";
 import {
   dispose as disposeMacos,
@@ -9,6 +10,7 @@ import { dispose, initialize } from "#store/platforms/windows";
 /** Keep app settings as named JSON key-value stores in the app's data directory. */
 export default defineNativePlugin({
   name: "store",
+  events: storeEvents,
   platforms: {
     macos: {
       initialize: initializeMacos,
@@ -25,6 +27,7 @@ export default defineNativePlugin({
 
 export type {
   StoreChange,
+  StoreChangeKind,
   StoreGetResult,
   StoreLoadInput,
   StoreLoadResult,

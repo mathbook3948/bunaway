@@ -904,11 +904,10 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   앱 입력의 접두사 거부와 공개 계약은 그대로다.
   `windows-storage-long-path.ts`가 CI windows-native에서 긴 경로의 동작을 확인한다.
   [읽기 계약](./site/src/content/docs/reference/host/storage-read-text.mdx)을 따른다.
-- [ ] store 변경 이벤트, save, reload와 autosave를 제공한다.
-  save, reload, autosave는 구현했다. 남은 범위는 화면으로 보내는 변경 이벤트이며,
-  I/O Worker 플러그인이 `environment.events.emit`으로 이벤트를 보내는 경로는 갖췄다.
-  `store`가 이벤트를 선언하고 발행하는 일이 남는다.
-  지금은 변경 함수가 `changed`를 반환한다.
+- [x] store 변경 이벤트, save, reload와 autosave를 제공한다.
+  `store.changed`를 선언하고 값이 바뀐 변경마다 I/O Worker의 `environment.events.emit`으로 한 번 발행한다.
+  payload는 `{ name, kind, key? }`이며 값은 싣지 않고 전달 때 `store.keys` 권한을 확인한다. macOS 어댑터는 발행하지 않는다.
+  `tests/api/store.test.ts`가 발행 조건을, `io-worker-plugin-events.test.ts`가 실제 I/O Worker 경로를 확인한다.
 - [x] Store `defaults`와 저장된 값의 병합 우선순위, 중첩 객체 처리, 기본값 무시 옵션을 정의한다.
   [T-store-live]의 `overrideDefaults`와 reload의 `ignoreDefaults`를 참고하고, 파일 없음,
   누락 키, 충돌 키와 중첩 객체를 load/reload하여 결과와 저장 시점을 검증한다.

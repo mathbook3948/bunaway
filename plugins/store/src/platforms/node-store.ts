@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
-import type { NativeEnvironment } from "@bunaway/plugin";
+import type { NativeEnvironment, NativeEventServices } from "@bunaway/plugin";
 import { attemptAll, failWithCleanup } from "@bunaway/plugin";
 import { BunawayError, isRecord, MAX_JSON_DEPTH } from "@bunaway/protocol";
 import {
@@ -21,7 +21,9 @@ import {
   MAX_STORE_KEY_LENGTH,
   MAX_STORE_KEYS,
   MAX_STORE_VALUE_BYTES,
+  STORE_CHANGED_REQUIRED_OPERATION,
   type StoreChange,
+  type StoreChangeKind,
   type StoreGetResult,
   type StoreInstance,
   type StoreLoadInput,
@@ -316,6 +318,7 @@ export class NodeStore implements StoreInstance {
   constructor(
     dataRoot: string,
     private readonly files: StoreFileOperations = systemOperations,
+    private readonly events?: NativeEventServices,
   ) {
     this.directory = resolve(dataRoot, "data", "stores");
   }
@@ -448,6 +451,7 @@ export class NodeStore implements StoreInstance {
       throw error;
     }
     this.markDirty(store);
+    this.announce(name, "set", key);
     return {
       changed: true,
     };
@@ -461,19 +465,25 @@ export class NodeStore implements StoreInstance {
       };
     }
     this.markDirty(store);
+    this.announce(name, "delete", key);
     return {
       changed: true,
     };
   }
 
   clear(name: string): StoreChange {
-    return this.replace(this.open(name), new Map());
+    return this.replace(name, "clear", this.open(name), new Map());
   }
 
   /** Back to the defaults given to `load`, or empty when there were none. */
   reset(name: string): StoreChange {
     const store = this.open(name);
-    return this.replace(store, new Map(Object.entries(store.defaults ?? {})));
+    return this.replace(
+      name,
+      "reset",
+      store,
+      new Map(Object.entries(store.defaults ?? {})),
+    );
   }
 
   /** Read the file again, dropping unsaved changes. `ignoreDefaults` keeps only what the file holds. */
@@ -488,8 +498,12 @@ export class NodeStore implements StoreInstance {
     if (contents.source === "reset") {
       this.markDirty(store);
     }
+    const changed = serialize(store.data) !== before;
+    if (changed) {
+      this.announce(name, "reload");
+    }
     return {
-      changed: serialize(store.data) !== before,
+      changed,
     };
   }
 
@@ -555,6 +569,8 @@ export class NodeStore implements StoreInstance {
 
   /** Swap the contents for `next`, reporting whether they differ. */
   private replace(
+    name: string,
+    kind: StoreChangeKind,
     store: OpenStore,
     next: Map<string, StoreValue>,
   ): StoreChange {
@@ -565,9 +581,32 @@ export class NodeStore implements StoreInstance {
     }
     store.data = next;
     this.markDirty(store);
+    this.announce(name, kind);
     return {
       changed: true,
     };
+  }
+
+  /**
+   * Tell views the contents changed, once per change and right after memory changes, whatever the
+   * autosave state. The payload names the store and key, never the value. Without an event service
+   * (a host that has none) the change goes unannounced.
+   */
+  private announce(name: string, kind: StoreChangeKind, key?: string): void {
+    this.events?.emit(
+      "store.changed",
+      key === undefined
+        ? {
+            name,
+            kind,
+          }
+        : {
+            name,
+            kind,
+            key,
+          },
+      STORE_CHANGED_REQUIRED_OPERATION,
+    );
   }
 
   /** Contents for a fresh load or a reload: the file over the defaults, per key. */
@@ -696,7 +735,7 @@ export class NodeStore implements StoreInstance {
 
 /** Create the store registry for the app's data directory. */
 export function initialize(environment: NativeEnvironment): NodeStore {
-  return new NodeStore(environment.dataRoot);
+  return new NodeStore(environment.dataRoot, undefined, environment.events);
 }
 
 /** Save unsaved stores and release their timers at shutdown. */

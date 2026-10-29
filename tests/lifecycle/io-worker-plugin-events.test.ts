@@ -24,6 +24,14 @@ const operations = [
   "probe.start",
 ];
 
+/** Replaces the probe plugin with another plugin built into the same Worker. */
+type WorkerTarget = {
+  name?: string;
+  operations?: string[];
+  /** Module source that exports `pluginImports` for the plugin. */
+  source?: string;
+};
+
 type PluginEvent = Extract<
   Packet,
   {
@@ -36,18 +44,19 @@ type PluginEvent = Extract<
  * and plays the main thread: it answers the authorization handshake and records what the Worker
  * sends. `holdEvents` keeps plugin events unacknowledged, like a UI thread that is slow to accept.
  */
-async function startWorker() {
+async function startWorker(target: WorkerTarget = {}) {
   const assets = resolve(
     import.meta.dir,
     "../../build",
     `plugin-events-${crypto.randomUUID()}`,
   );
+  const hostedOperations = target.operations ?? operations;
   const plugin = {
-    name: "probe",
+    name: target.name ?? "probe",
     version: "development",
     thread: "worker" as const,
     native: {
-      operations: operations.map((name) => ({
+      operations: hostedOperations.map((name) => ({
         name,
       })),
     },
@@ -57,7 +66,8 @@ async function startWorker() {
     [
       plugin,
     ],
-    `
+    target.source ??
+      `
     import { defineNativePlugin } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/plugin-sdk/src/index.ts"))};
     import { z } from "zod";
     const definitions = {
@@ -112,7 +122,7 @@ async function startWorker() {
           version: 1,
           views: [],
           backend: {
-            permissions: operations,
+            permissions: hostedOperations,
           },
         },
         plugins: [
@@ -499,5 +509,111 @@ test("plugin event packets are accepted only between the I/O Worker and the UI p
     },
   ]) {
     expect(() => validatePacket(invalid, "main-io")).toThrow();
+  }
+});
+
+test("the store plugin raises store.changed from the I/O Worker with the permission to list keys", async () => {
+  const host = await startWorker({
+    name: "store",
+    operations: [
+      "store.load",
+      "store.set",
+      "store.delete",
+      "store.clear",
+    ],
+    source: `
+      import store from ${JSON.stringify(resolve(import.meta.dir, "../../plugins/store/src/index.ts"))};
+      export const pluginImports = {store:{operations:async()=>({createOperations:store._definition.nativePlatforms.windows.create})}};
+    `,
+  });
+  try {
+    await host.waitFor(
+      () => host.packets.some((p) => p.kind === "ready"),
+      "ready",
+    );
+    const calls: Array<
+      [
+        string,
+        string,
+        unknown,
+      ]
+    > = [
+      [
+        "load",
+        "store.load",
+        {
+          name: "settings",
+          autosave: false,
+        },
+      ],
+      [
+        "set",
+        "store.set",
+        {
+          name: "settings",
+          key: "theme",
+          value: "dark",
+        },
+      ],
+      [
+        "same",
+        "store.set",
+        {
+          name: "settings",
+          key: "theme",
+          value: "dark",
+        },
+      ],
+      [
+        "delete",
+        "store.delete",
+        {
+          name: "settings",
+          key: "theme",
+        },
+      ],
+      [
+        "clear",
+        "store.clear",
+        {
+          name: "settings",
+        },
+      ],
+    ];
+    for (const [id, operation, payload] of calls) {
+      expect(await host.run(id, operation, payload)).toMatchObject({
+        response: {
+          kind: "result",
+        },
+      });
+    }
+    await host.waitFor(() => host.events().length === 2, "two store events");
+    expect(host.events()).toEqual([
+      {
+        kind: "plugin-event",
+        event: "store.changed",
+        payload: {
+          name: "settings",
+          kind: "set",
+          key: "theme",
+        },
+        requiredOperation: "store.keys",
+        dropped: 0,
+      },
+      {
+        kind: "plugin-event",
+        event: "store.changed",
+        payload: {
+          name: "settings",
+          kind: "delete",
+          key: "theme",
+        },
+        requiredOperation: "store.keys",
+        dropped: 0,
+      },
+    ]);
+    expect(host.failure()).toBeUndefined();
+  } finally {
+    await host.stop();
   }
 });
