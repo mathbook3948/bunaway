@@ -129,7 +129,8 @@ Electron `safeStorage`는 암호화만 하고 저장 위치를 앱에 맡기며 
 이 작업은 둘에 없는 기능이고 vault, 암호 파생과 키 생성은 범위 밖입니다.
 Windows CI(`tests/lifecycle/windows-safe-storage.test.ts`)가 실제 자격 증명 관리자로 저장, 교체, 조회, 삭제,
 앱 간 분리, 저장 형식(`CRED_PERSIST_LOCAL_MACHINE`, UTF-16LE)과 어댑터 재생성 뒤 조회를 확인합니다.
-다른 사용자, 다른 머신, 로밍 프로필과 자격 증명 관리자 서비스 중단은 검증하지 않았습니다.
+`tests/lifecycle/windows-safe-storage-cross-user.test.ts`는 임시 로컬 계정을 만들어, 한 사용자가 `encryptString`으로 만든 암호문을 다른 로컬 사용자가 복호화하지 못하고(`INTERNAL`, 평문 없음) 각 사용자는 자기 암호문을 복호화함을 확인합니다.
+자격 증명 관리자는 이 시험 범위에 없고, 다른 머신, 재설치, 로밍 프로필과 자격 증명 관리자 서비스 중단은 검증하지 않았습니다.
 macOS CI(`tests/lifecycle/macos-keychain-native.test.ts`)는 임시 private Keychain에서 저장, 교체, 조회, 삭제, 다른 `app.id`와의 분리와
 같은 실행 파일의 재시작 뒤 조회를 공유 Bun과 ad-hoc compiled 실행 파일로 확인하고, `macos-safe-storage-host.ts`는
 공개 backend API와 실제 호스트로 재시작을 가로지른 저장, 조회, 삭제를 확인합니다. 사용자의 login Keychain, 시스템 UI와 다른 서명 빌드는 검증하지 않았습니다.

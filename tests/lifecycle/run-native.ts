@@ -248,6 +248,22 @@ if (target === "windows-x64") {
         BUNAWAY_OPENER_FILES_TEST: "1",
       },
     );
+    // Own process: the probe creates a local account, logs it on and removes its profile.
+    await run(
+      [
+        inputs.bun,
+        "--no-env-file",
+        "test",
+        resolve(
+          root,
+          "tests/lifecycle/windows-safe-storage-cross-user.test.ts",
+        ),
+      ],
+      root,
+      {
+        BUNAWAY_CROSS_USER_TEST: "1",
+      },
+    );
     for (const scenario of [
       "hide",
       "autostart",
