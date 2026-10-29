@@ -118,7 +118,7 @@ uiautomationcore.dll은 첫 조회 때 로드합니다. 이 DLL을 로드하거�
 
 UI Automation 클라이언트 연결 변화는 OS 알림이 없고 폴링 비용이 커서 전용 이벤트를 제공하지 않습니다.
 `screenReaderEnabled`의 변화는 `appearance.changed`로 구독할 수 있으며, 연결 상태는 필요한 시점에 다시 조회합니다.
-실제 스크린 리더 연결 시의 값은 보조 기술이 있는 대화형 세션에서 수동으로 검증해야 하며, 자동 검증은 값의 타입만 확인합니다.
+Windows CI는 UI Automation 클라이언트 프로세스를 실제로 연결해 이벤트 처리기를 등록한 동안 `assistiveTechnologyActive`가 읽는 `UiaClientsAreListening`이 `true`인지, WebView2 문서의 컨트롤이 이름과 함께 UI Automation 트리에 나타나는지 확인합니다. Narrator 같은 실제 스크린 리더의 읽기 출력은 보조 기술이 있는 대화형 세션에서 수동으로 검증해야 합니다.
 
 ## Windows 앱 테마
 
