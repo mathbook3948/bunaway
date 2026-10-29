@@ -32,6 +32,8 @@ key를 두며, vault 파일을 저장한다. TODO는 같은 범위를 네 가지
 
 ## 결정
 
+이 결정은 플랫폼 중립이다. 근거 서술은 Windows 동작(DPAPI, 자격 증명 관리자) 기준으로 적었고 macOS에도 같은 결정을 적용한다.
+
 1. vault, client, key, record 관리 연산을 코어나 플러그인의 공개 연산으로 제공하지 않는다.
 2. vault unlock, lock, save와 암호 변경을 제공하지 않는다.
 3. 앱 암호 기반 키 생성과 cryptographic operation 연산을 제공하지 않는다.
@@ -50,7 +52,7 @@ key를 두며, vault 파일을 저장한다. TODO는 같은 범위를 네 가지
 ## 근거
 
 - Electron은 vault를 제공하지 않고 OS 키 기반 암호화만 준다. 이 저장소의 `safe-storage`가 같은 범위를 이미 제공하며 Windows
-  자격 증명 관리자 항목까지 더했다. vault는 Tauri에만 있는 기능이므로 두 선례가 다르고, 그럴 때는 Electron 쪽을 따르고 코어를 작게 둔다.
+  자격 증명 관리자 항목까지 더했다. vault는 Tauri에만 있는 기능이므로 두 선례가 다르고, 이 결정에서는 Electron 쪽을 따르고 코어를 작게 둔다.
 - 앱 암호로 여는 vault는 파생 함수와 매개변수 선택, salt와 vault 파일 형식의 버전 관리, 잠금 해제 UI와 실패 횟수 정책,
   암호 변경 시 전체 재암호화, 암호 분실 복구 같은 보안 설계를 프레임워크가 소유하게 만든다. 형식이나 매개변수 결함은 모든
   앱의 저장 데이터에 영향을 주고 한 번 정한 형식은 바꾸기 어렵다.
@@ -65,7 +67,7 @@ key를 두며, vault 파일을 저장한다. TODO는 같은 범위를 네 가지
 - 앱 암호 기반 암호화 helper만 제공(파생과 AES-GCM 래퍼): WebCrypto 호출 몇 줄을 감싸는 것에 그친다. 매개변수를 고정하면 나중에
   바꾸기 어렵다.
 - 앱 정의 암호를 DPAPI optional entropy로 함께 쓰기: `safe-storage`의 현재 계약은 entropy를 받지 않는다. 필요가 확인되면
-  `safe-storage` 계약 확대 항목으로 따로 다룬다.
+  그때 새로 결정한다.
 
 ## 결과
 
