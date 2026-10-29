@@ -654,8 +654,6 @@ export class Windows {
     }
     if (message === WM_WINDOWPOSCHANGED && this.windows.has(window)) {
       this.rememberNormalMonitor(window);
-    }
-    if (message === WM_WINDOWPOSCHANGED && this.windows.has(window)) {
       this.refitWrappedMenuHeight(window);
     }
     if (message === WM_WINDOWPOSCHANGED) {

@@ -360,7 +360,7 @@ content/outer/normal 조회는 기본적으로 물리 픽셀을 반환하며 `un
 
 공유 메뉴 계약과 트레이 연결은 [menu API](./site/src/content/docs/reference/plugins/menu.mdx)를 따른다.
 실제 HMENU와 창 없는 UI Worker 회귀, 창 메뉴바 연결과 분리, 실제 Worker 컨텍스트 팝업 취소 회귀를 Windows 테스트에 포함한다.
-메뉴바 자동 숨김과 accelerator 등록은 미구현이다. 다중 행 메뉴바의 최소/최대 크기와 최소화와 최대화 복원은 `windows-window-menu-wrap.test.ts`가 검증한다. 혼합 DPI는 별도 검증이 남아 있다.
+메뉴바 자동 숨김과 accelerator 등록은 미구현이다. 다중 행 메뉴바의 최소/최대 크기와 최소화와 최대화 복원은 `windows-window-menu-wrap.test.ts`가 단일 DPI에서 검증한다. 혼합 DPI와 최대화 상태의 높이 제한은 별도 검증이 남아 있다.
 사용자 포인터와 키보드 메뉴 조작, Explorer 재시작 중 사용자 정의 메뉴는 수동 검증이 남아 있다.
 
 ## 08. 로그인 시 자동 실행
