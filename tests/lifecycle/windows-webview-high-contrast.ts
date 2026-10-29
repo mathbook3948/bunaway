@@ -295,8 +295,6 @@ try {
       const preferences = reader.read();
       assert.equal(preferences.highContrast, true);
       assert.equal(preferences.forcedColors, true);
-      measured.window = preferences.colors.window;
-      const windowColor = asRgb(preferences.colors.window);
       // The page's own report, not the host's state, proves what the document saw.
       const firstForced = await reportAfter(
         reportsBefore,
@@ -305,11 +303,20 @@ try {
       );
       // Recorded so the documentation states what the first report showed, not an assumption.
       measured.firstForcedBackground = firstForced?.background;
-      await reportAfter(
-        reportsBefore,
-        "forced colors replace the page background with the window color",
-        (report) => report.forced && report.background === windowColor,
-      );
+      // GetSysColor and the page's colors settle independently after the broadcast, so compare the
+      // page's latest report with the system color read now until the two agree.
+      await pump(() => {
+        const latest = reports.at(-1);
+        const windowColor = reader.read().colors.window;
+        measured.window = windowColor;
+        measured.background = latest?.background;
+        return (
+          reports.length > reportsBefore &&
+          latest?.forced === true &&
+          latest.background !== PAGE_BACKGROUND &&
+          latest.background === asRgb(windowColor)
+        );
+      }, "forced colors replace the page background with the window color");
       await pump(
         () => appearanceChanges().length > changesBefore,
         "appearance.changed for high contrast",
