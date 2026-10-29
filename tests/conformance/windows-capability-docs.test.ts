@@ -38,13 +38,16 @@ const OPERATIONS_DOCUMENTED_ELSEWHERE: Record<string, string> = {
 };
 const MAX_DOCUMENTED_ELSEWHERE = 3;
 /**
- * Plugins that register no Windows operation. The test skips them instead of failing on an empty
- * or unreadable operation list. Any other plugin without a readable Windows list fails the test.
+ * Plugins that declare no native platform, so there is nothing to register or import. The source
+ * must still declare `platforms: {}`; a plugin that gains operations fails as stale. Any other
+ * plugin without a readable Windows operation list fails the test. The list never grows.
  */
-const REGISTERS_NO_WINDOWS_OPERATIONS: Record<string, string> = {
+const DECLARES_NO_PLATFORMS: Record<string, string> = {
   "window-state":
     "Declares no native operations; every call goes through the window and store plugins.",
 };
+const MAX_DECLARES_NO_PLATFORMS = 1;
+const NO_PLATFORMS_DECLARATION = /\bplatforms:\s*\{\s*\}/;
 /**
  * Dotted names in a plugin page that are neither Windows operations nor events, with the reason
  * each is allowed. The list only shrinks: a name the page no longer mentions is reported as stale.
@@ -130,19 +133,29 @@ async function pluginShape(directory: string): Promise<PluginShape | string> {
  * Dotted `plugin.name` mentions in a page. Paths, config keys (`desktop.tray.icon`) and file names
  * (`tray.ico`, `windows-tray.test.ts`) are not mentions, and headings inside code fences are text.
  */
-function mentions(text: string, plugin: string): Mention[] {
+function mentions(
+  text: string,
+  plugin: string,
+  known: ReadonlySet<string> = new Set(),
+): Mention[] {
   const pattern = new RegExp(
     `(?<![\\w./-])${plugin.replaceAll("-", "\\-")}\\.([A-Za-z]\\w*)(?!\\.?[\\w-])`,
     "g",
   );
   const found: Mention[] = [];
   const headings: string[] = [];
-  let fenced = false;
+  // The marker of the open code fence; only a marker of the same character, at least as long, closes it.
+  let fence = "";
   for (const line of text.split("\n")) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced;
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker !== undefined) {
+      if (fence === "") {
+        fence = marker;
+      } else if (marker[0] === fence[0] && marker.length >= fence.length) {
+        fence = "";
+      }
     }
-    const heading = fenced ? null : /^(#{2,6})\s+(.*)$/.exec(line);
+    const heading = fence !== "" ? null : /^(#{2,6})\s+(.*)$/.exec(line);
     if (heading?.[1] !== undefined && heading[2] !== undefined) {
       // A heading closes every heading of its depth or deeper.
       headings.length = heading[1].length - 2;
@@ -150,11 +163,12 @@ function mentions(text: string, plugin: string): Mention[] {
     }
     const macosSection = headings.some((title) => title.startsWith("macOS"));
     for (const match of line.matchAll(pattern)) {
-      if (FILE_EXTENSIONS.has(match[1] ?? "")) {
+      const name = `${plugin}.${match[1]}`;
+      if (FILE_EXTENSIONS.has(match[1] ?? "") && !known.has(name)) {
         continue;
       }
       found.push({
-        name: `${plugin}.${match[1]}`,
+        name,
         macosSection,
       });
     }
@@ -164,7 +178,15 @@ function mentions(text: string, plugin: string): Mention[] {
 
 /** Differences between one page and the plugin's Windows registration. */
 function compare(shape: PluginShape, page: string) {
-  const found = mentions(page, shape.name);
+  const found = mentions(
+    page,
+    shape.name,
+    new Set([
+      ...shape.windows,
+      ...shape.macos,
+      ...shape.events,
+    ]),
+  );
   const named = new Set(found.map((mention) => mention.name));
   const undocumented = [
     ...shape.windows,
@@ -207,14 +229,21 @@ test("plugin pages name every Windows operation and no operation Windows lacks",
   const usedExceptions = new Set<string>();
   let compared = 0;
   for (const directory of directories) {
+    if (directory in DECLARES_NO_PLATFORMS) {
+      const source = await Bun.file(
+        resolve(plugins, directory, "src/index.ts"),
+      ).text();
+      if (!NO_PLATFORMS_DECLARATION.test(source)) {
+        unreadable.push(`${directory}: no longer declares \`platforms: {}\``);
+      }
+      continue;
+    }
     const shape = await pluginShape(directory);
     const readable = typeof shape === "string" ? undefined : shape;
     if (readable === undefined || readable.windows.size === 0) {
-      if (!(directory in REGISTERS_NO_WINDOWS_OPERATIONS)) {
-        unreadable.push(
-          `${directory}: ${readable === undefined ? shape : "registers no Windows operations"}`,
-        );
-      }
+      unreadable.push(
+        `${directory}: ${readable === undefined ? shape : "registers no Windows operations"}`,
+      );
       continue;
     }
     const page = Bun.file(resolve(docs, `${directory}.mdx`));
@@ -247,11 +276,14 @@ test("plugin pages name every Windows operation and no operation Windows lacks",
   }
   expect(compared).toBeGreaterThan(MIN_COMPARED_PLUGINS);
   // A plugin that cannot be read is a failure, not a silent skip: fix the import or list it in
-  // REGISTERS_NO_WINDOWS_OPERATIONS if it truly registers none.
+  // DECLARES_NO_PLATFORMS if it truly declares none.
   expect(unreadable).toEqual([]);
   expect(
     Object.keys(OPERATIONS_DOCUMENTED_ELSEWHERE).length,
   ).toBeLessThanOrEqual(MAX_DOCUMENTED_ELSEWHERE);
+  expect(Object.keys(DECLARES_NO_PLATFORMS).length).toBeLessThanOrEqual(
+    MAX_DECLARES_NO_PLATFORMS,
+  );
   expect(Object.keys(NAMED_NON_OPERATIONS).length).toBeLessThanOrEqual(
     MAX_NAMED_NON_OPERATIONS,
   );
@@ -284,6 +316,11 @@ test("the mention scan reads dotted names but not paths, config keys or file nam
     "~~~",
     "## Windows와 macOS 차이",
     "tray.after",
+    "````md",
+    "```",
+    "## inside four backticks",
+    "````",
+    "tray.last",
   ].join("\n");
   expect(
     mentions(text, "tray").map(({ name, macosSection }) => [
@@ -311,6 +348,25 @@ test("the mention scan reads dotted names but not paths, config keys or file nam
       "tray.after",
       false,
     ],
+    [
+      "tray.last",
+      false,
+    ],
+  ]);
+});
+
+test("a registered operation named like a file extension is still a mention", () => {
+  const text = "`tray.log` writes, tray.png is a file.";
+  expect(
+    mentions(
+      text,
+      "tray",
+      new Set([
+        "tray.log",
+      ]),
+    ).map(({ name }) => name),
+  ).toEqual([
+    "tray.log",
   ]);
 });
 
