@@ -869,6 +869,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   `windows-storage-copy-directory.ts`가 CI windows-native에서 중첩 트리의 바이트 일치, 자기 하위 대상 거부(junction 경유 포함)와
   트리 안 junction 거부를 확인한다. 다른 볼륨의 일반 파일 move는 `MOVEFILE_COPY_ALLOWED`로 지원하고 `windows-storage-cross-volume-move.ts`가
   가상 디스크로 CI windows-native에서 확인한다(디렉터리와 링크는 `UNSUPPORTED`). 덮어쓰기와 truncate는 남아 있다.
+  대소문자만 다른 이름 바꾸기는 `windows-storage-case-only-move.ts`가 CI windows-native에서 확인한다.
   [전송 계약](./site/src/content/docs/reference/host/storage-transfers.mdx)을 따른다.
 - [ ] 파일 watch와 recursive watch, 이벤트 구독 해제를 제공한다.
 - [x] 원자적 저장을 제공한다. `storage.writeText`와 `storage.writeBytes`의 `atomic: true`가 같은 폴더의 임시 파일을
