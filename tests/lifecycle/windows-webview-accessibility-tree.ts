@@ -125,20 +125,13 @@ const client = Bun.spawn(
   },
 );
 const errors: string[] = [];
-const collect = async (
-  stream: ReadableStream<Uint8Array>,
-  into: string[],
-  split: boolean,
-) => {
+const collect = async (stream: ReadableStream<Uint8Array>, into: string[]) => {
   const decoder = new TextDecoder();
   let pending = "";
   for await (const chunk of stream) {
     pending += decoder.decode(chunk, {
       stream: true,
     });
-    if (!split) {
-      continue;
-    }
     const parts = pending.split("\n");
     pending = parts.pop() ?? "";
     into.push(...parts.filter((part) => part.trim()));
@@ -147,8 +140,8 @@ const collect = async (
     into.push(pending);
   }
 };
-const reading = collect(client.stdout, lines, true);
-const readingErrors = collect(client.stderr, errors, true);
+const reading = collect(client.stdout, lines);
+const readingErrors = collect(client.stderr, errors);
 const results: Record<string, unknown> = {};
 try {
   hwnd = windows.create(CAPTION, 640, 480, () => {});
@@ -227,7 +220,10 @@ try {
       failed: () => created.failure ?? clientFailure(),
     });
   /** Send one command to the client process and pump until it answers with one JSON line. */
-  const ask = async (command: string): Promise<Record<string, unknown>> => {
+  const ask = async (
+    command: string,
+    retryable = false,
+  ): Promise<Record<string, unknown>> => {
     const before = lines.length;
     client.stdin.write(`${command}\n`);
     client.stdin.flush();
@@ -236,8 +232,11 @@ try {
       string,
       unknown
     >;
-    assert.equal(answer.error, undefined, `${command}: ${answer.error}`);
     lines.splice(before, 1);
+    // While the tree is still being built the client can hit transient UIA errors, which a polling caller retries.
+    if (!retryable) {
+      assert.equal(answer.error, undefined, `${command}: ${answer.error}`);
+    }
     return answer;
   };
   await pump(() => lines.length >= 1, "client process start");
@@ -258,7 +257,7 @@ try {
     let seen: WindowNames | undefined;
     await waitFor(
       async () => {
-        seen = (await ask("window")) as WindowNames;
+        seen = (await ask("window", true)) as WindowNames;
         return seen.msaa === expected || undefined;
       },
       {
@@ -289,7 +288,7 @@ try {
 
   // (2) The document's controls reach the UIA tree with their roles and names.
   const baseline = probe.clientsAreListening();
-  results.listeningBeforeClient = baseline;
+  results.listeningBeforeHandler = baseline;
   await ask("listen");
   type Node = {
     type: string;
@@ -314,7 +313,7 @@ try {
     has(list, inputTypes, INPUT_NAME);
   // Chromium builds its accessibility tree after a client connects, so the nodes arrive late.
   await retry(async () => {
-    tree = (await ask("tree")).nodes as Node[];
+    tree = ((await ask("tree", true)).nodes as Node[] | undefined) ?? [];
     return complete(tree) || undefined;
   }, "WebView2 accessibility tree nodes");
   results.treeNodes = tree.length;
@@ -341,10 +340,13 @@ try {
   results.falseAfterRemovingHandlers = released === true;
   client.stdin.write("quit\n");
   client.stdin.flush();
-  await waitFor(() => client.exitCode ?? undefined, {
-    deadline: "childExit",
-    what: "UI Automation client exit",
-  });
+  assert.equal(
+    await waitFor(() => client.exitCode ?? undefined, {
+      deadline: "childExit",
+      what: "UI Automation client exit",
+    }),
+    0,
+  );
   // Windows may keep reporting a listener after the client is gone, so the outcome is recorded.
   results.falseAfterClientExit =
     released === true ||

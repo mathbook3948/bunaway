@@ -243,8 +243,7 @@ windows-2022 러너에서 측정한 결과는 고대비를 켜면 문서의 `for
 `lifecycle/windows-webview-accessibility-tree.ts`는 `mise run host:windows`에서 시험 프로세스가 창과
 실제 WebView2를 열고, 별도 PowerShell 프로세스가 스크린 리더와 같은 관리형 UI Automation 클라이언트로
 (1) `setAccessibleTitle`로 준 읽기용 이름이 창의 MSAA(`IAccessible`) 이름이고 캡션(`getTitle`)은
-그대로이며 빈 문자열로 지우면 캡션으로 돌아오는지(같은 시점의 UIA Name은 캡션 그대로여서 결과 JSON의
-`uiaNameWithAccessibleTitle`에 기록만 한다), (2) 문서의 `aria-label` 버튼, 제목, 텍스트 입력이 각각 Button, Text 또는
+그대로이며 빈 문자열로 지우면 캡션으로 돌아오는지(같은 시점의 UIA Name은 캡션 그대로이며 이를 단언한다), (2) 문서의 `aria-label` 버튼, 제목, 텍스트 입력이 각각 Button, Text 또는
 Header, Edit 컨트롤로 이름과 함께 나타나는지, (3) 클라이언트가 이벤트 처리기를 등록한 동안
 `UiaClientsAreListening`이 true인지 확인한다. 처리기 제거 뒤와 클라이언트 종료 뒤의 값은 결과
 `build/windows-webview-accessibility-tree-results.json`의 `falseAfterRemovingHandlers`와
