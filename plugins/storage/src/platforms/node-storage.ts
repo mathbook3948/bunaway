@@ -108,6 +108,9 @@ function mappedFailure(code: unknown): BunawayError | undefined {
       return failure("INVALID_ARGUMENT", "Storage path is too long.");
     case "EACCES":
     case "EPERM":
+    // A file another process holds open without delete sharing reports EBUSY on Windows. Like
+    // every other lock the adapter meets, it is an OS access denial and not a new public code.
+    case "EBUSY":
     case "ELOOP":
       return failure("PERMISSION_DENIED", "Storage access denied.");
     case "EXDEV":

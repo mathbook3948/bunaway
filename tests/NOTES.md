@@ -1040,6 +1040,14 @@ UTF-16 순서), 페이지 크기별 커서 이어 읽기가 한 번에 읽은 �
 이름으로 복사하면 `PERMISSION_DENIED`이고, 마지막 핸들을 닫은 뒤에는 같은 이름으로 복사된다는 것도 확인한다.
 네트워크 파일 시스템, 볼륨 종류(NTFS와 ReFS), POSIX 방식 삭제, 다른 프로세스가 연 핸들로 인한 삭제 대기는 확인하지 않는다.
 
+`windows-storage-remove-locked-file.ts`는 자식 PowerShell이 `FileShare.Read`로 연 파일이 든 트리에 대해
+`removeRecursive`와 `remove`가 `PERMISSION_DENIED`로 실패하고, 열린 파일의 내용이 남으며,
+자식이 핸들을 닫은 뒤 같은 `removeRecursive` 호출이 트리 전체를 지우는지 확인한다. 열려 있지 않은 형제 항목이
+먼저 지워졌는지는 순회 순서에 달려 있어 `INFO` 줄로만 출력한다. 자식이 `FileShare.Delete`를 허용해 연 파일(삭제 대기 이름)은
+호출이 성공했다면 트리가 실제로 사라졌는지, 실패했다면 `BunawayError`인지만 단언하고 결과는 `INFO` 줄로 남긴다. 핸들을 닫은 직후에는
+백신이 잠시 파일을 잡을 수 있어 재호출은 기한 안에서 `PERMISSION_DENIED`일 때만 반복한다. 시험은 자기 임시 폴더 안에서만 지우고
+finally에서 자식을 종료한다. ACL 거부, 클라우드 동기화 폴더, 삭제 중 교체는 확인하지 않는다.
+
 `windows-storage-remove-recursive.ts`는 실제 Windows 파일 시스템으로 유니코드 중첩 트리와 빈 디렉터리 삭제 및 형제 유지,
 1500개 항목 삭제, 읽기 전용 파일과 디렉터리 삭제, 루트가 파일인 경우,
 hardlink의 이름만 삭제를 확인한다. 읽기 전용 hardlink를 지울 때 다른 이름의 속성이 바뀌는지는 확인하지 않는다. 트리 안의 junction, 디렉터리 symlink와
