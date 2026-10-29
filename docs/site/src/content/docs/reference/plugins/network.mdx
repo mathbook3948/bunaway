@@ -38,8 +38,18 @@ async function readReport(urlText: string) {
 
 신뢰된 백엔드의 일반 네트워크 작업에는 Bun의 `fetch`와 `WebSocket`을 직접 사용해도 됩니다.
 이 플러그인은 WebView cookie를 공유하지 않고 OS의 NTLM이나 integrated authentication을
-제공하지 않습니다. proxy는 Bun이 실행 환경에서 읽는 신뢰된 설정을 따릅니다. 호출자가
-proxy, TLS 검증 해제나 인증 설정을 바꾸는 입력은 없습니다.
+제공하지 않습니다. Windows에서 `request`, `exchange`, `download`, `upload`는 `resolveProxy`와 같은
+조회로 현재 사용자의 시스템 proxy(인터넷 옵션, 자동 감지, PAC 스크립트)를 따릅니다. 요청 scheme에
+해당하는 `HTTP_PROXY`나 `HTTPS_PROXY` 환경 변수(소문자 포함)가 비어 있지 않으면 시스템 조회 없이
+그 설정이 우선하며, Bun `WebSocket`은 환경 변수를 읽지 않으므로 이때 `exchange`는 직접 연결합니다.
+경로가 direct이거나 예외 목록이나 loopback에 해당하면 직접 연결합니다. 첫 번째 HTTP나 HTTPS proxy만
+쓰고 장애 시 다음 항목으로 넘어가지 않습니다. SOCKS proxy만 지정된 경로는 우회하지 않고
+`INTERNAL`로 실패합니다. 설정을 읽지 못하면 오류를 남기고 직접 연결하며, 조회가 기한을 넘기거나
+취소되거나 조회 worker 한도를 넘으면 해당 코드(`TIMEOUT`, `CANCELLED`, `BUSY`)로 실패합니다.
+proxy 인증(NTLM, Kerberos)은 지원하지 않으며 proxy의 407은 응답 status로 그대로 돌아옵니다.
+PAC나 자동 감지 조회는 요청마다 실행되고 전송의 유휴 제한 안에서 흐릅니다. proxy가 이름 해석을
+대신하므로 앱이 `resolveHost`로 IP 범위를 검사해도 실제 접속 주소와 다를 수 있습니다. 호출자가
+proxy, TLS 검증 해제나 인증 설정을 바꾸는 입력은 없습니다. macOS는 이 동작을 바꾸지 않습니다.
 
 ## HTTP 요청
 

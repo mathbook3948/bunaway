@@ -21,7 +21,7 @@ PAC string. It reads the current user's Internet Options through WinHTTP: loopba
 automatic detection, the configured script and the manual proxy list with its bypass list apply. Proxy credentials are
 never returned. Automatic detection and script lookups block inside WinHTTP, so they run in a worker thread:
 cancellation and the deadline end the caller's wait at once, a lookup already inside WinHTTP holds one of four worker
-slots until the call returns (so its handles are closed), and `BUSY` is reported beyond that. It does not change how `network.request` connects.
+slots until the call returns (so its handles are closed), and `BUSY` is reported beyond that. On Windows, `network.request`, `network.exchange`, `network.download` and `network.upload` use the same lookup and send the request through the first HTTP or HTTPS proxy of the route; a proxy named by `HTTP_PROXY` or `HTTPS_PROXY` takes priority and skips the lookup, a SOCKS-only route fails with `INTERNAL`, and proxy credentials are not supported (a 407 is returned as the response status).
 
 HTTP uses Bun fetch with manual redirects, omitted browser credentials and bounded decompressed response reads.
 WebSocket exchanges own one connection through close, error, timeout or cancellation. They send bounded text and

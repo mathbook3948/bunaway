@@ -78,8 +78,14 @@ export async function readBoundedResponse(
 export async function request(
   input: z.output<typeof requestInputSchema>,
   signal: AbortSignal,
+  proxy?: string,
 ) {
   const response = await fetch(input.url, {
+    ...(proxy === undefined
+      ? {}
+      : {
+          proxy,
+        }),
     method: input.method,
     headers: input.headers,
     ...(input.bodyBase64 === undefined

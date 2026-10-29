@@ -1,6 +1,12 @@
 import type { NativeEnvironment } from "@bunaway/plugin";
 import type { z } from "zod";
-import type { resolveProxyInputSchema } from "#network/contract";
+import type {
+  downloadInputSchema,
+  exchangeInputSchema,
+  requestInputSchema,
+  resolveProxyInputSchema,
+  uploadInputSchema,
+} from "#network/contract";
 import {
   openWinHttp,
   resolveProxy,
@@ -11,18 +17,19 @@ import {
   dispose as disposeShared,
   initialize as initializeShared,
   run,
+  runDownload as runSharedDownload,
+  runExchange as runSharedExchange,
+  runRequest as runSharedRequest,
+  runUpload as runSharedUpload,
 } from "#network/platforms/shared";
+import { type ProxyFor, systemProxyFor } from "#network/platforms/system-proxy";
 
 export {
   runCancelDownload,
   runCancelUpload,
-  runDownload,
   runDownloadStatus,
-  runExchange,
   runIsOnline,
-  runRequest,
   runResolveHost,
-  runUpload,
   runUploadStatus,
 } from "#network/platforms/shared";
 
@@ -53,6 +60,69 @@ export function initialize(
 function systemWinHttp(state: WindowsState): WinHttpApi {
   state.winhttp.libraries ??= openWinHttp();
   return winHttpApi(state.winhttp.libraries, state.winhttp.workers);
+}
+
+/** The proxy choice each outgoing request makes: environment variables first, then the system settings. */
+function systemProxy(
+  state: WindowsState,
+  api: () => WinHttpApi = () => systemWinHttp(state),
+): ProxyFor {
+  return (url, timeoutMs, signal) =>
+    systemProxyFor(api, url, timeoutMs, signal);
+}
+
+type RequestInput = z.output<typeof requestInputSchema>;
+type ExchangeInput = z.output<typeof exchangeInputSchema>;
+type DownloadInput = z.output<typeof downloadInputSchema>;
+type UploadInput = z.output<typeof uploadInputSchema>;
+type LookupApi = () => WinHttpApi;
+
+/** Read a bounded response, through the system proxy when the settings name one. */
+export function runRequest(
+  state: WindowsState,
+  input: RequestInput,
+  signal?: AbortSignal,
+  api?: LookupApi,
+) {
+  return runSharedRequest(state, input, signal, systemProxy(state, api));
+}
+
+/** Exchange WebSocket messages, through the system proxy when the settings name one. */
+export function runExchange(
+  state: WindowsState,
+  input: ExchangeInput,
+  signal?: AbortSignal,
+  api?: LookupApi,
+) {
+  return runSharedExchange(state, input, signal, systemProxy(state, api));
+}
+
+/** Save a response body to a file, through the system proxy when the settings name one. */
+export function runDownload(
+  state: WindowsState,
+  source: string,
+  input: DownloadInput,
+  signal?: AbortSignal,
+  api?: LookupApi,
+) {
+  return runSharedDownload(
+    state,
+    source,
+    input,
+    signal,
+    systemProxy(state, api),
+  );
+}
+
+/** Send a file as a request body, through the system proxy when the settings name one. */
+export function runUpload(
+  state: WindowsState,
+  source: string,
+  input: UploadInput,
+  signal?: AbortSignal,
+  api?: LookupApi,
+) {
+  return runSharedUpload(state, source, input, signal, systemProxy(state, api));
 }
 
 /** Look up the system proxy route for a URL under the shared request limit; at most 16 requests run at once. */

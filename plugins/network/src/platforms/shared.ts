@@ -25,6 +25,7 @@ import {
   resolveHost,
   systemLookup,
 } from "#network/platforms/resolve-host";
+import type { ProxyFor } from "#network/platforms/system-proxy";
 import { type UploadEntry, upload } from "#network/platforms/upload";
 import { exchange } from "#network/platforms/websocket";
 
@@ -187,9 +188,14 @@ export function runRequest(
   state: ReturnType<typeof initialize>,
   input: RequestInput,
   signal?: AbortSignal,
+  proxyFor?: ProxyFor,
 ) {
-  return run(state, input.timeoutMs, signal, (activeSignal) =>
-    request(input, activeSignal),
+  return run(state, input.timeoutMs, signal, async (activeSignal) =>
+    request(
+      input,
+      activeSignal,
+      await proxyFor?.(input.url, input.timeoutMs, activeSignal),
+    ),
   );
 }
 
@@ -197,9 +203,14 @@ export function runExchange(
   state: ReturnType<typeof initialize>,
   input: ExchangeInput,
   signal?: AbortSignal,
+  proxyFor?: ProxyFor,
 ) {
-  return run(state, input.timeoutMs, signal, (activeSignal) =>
-    exchange(input, activeSignal),
+  return run(state, input.timeoutMs, signal, async (activeSignal) =>
+    exchange(
+      input,
+      activeSignal,
+      await proxyFor?.(input.url, input.timeoutMs, activeSignal),
+    ),
   );
 }
 
@@ -364,6 +375,7 @@ export async function runDownload(
   source: string,
   input: DownloadInput,
   requestSignal?: AbortSignal,
+  proxyFor?: ProxyFor,
 ) {
   requireOpen(state);
   return runTransfer(
@@ -383,7 +395,14 @@ export async function runDownload(
       receivedBytes: 0,
       totalBytes: null,
     }),
-    (signal, entry, touch) => download(input, signal, entry, touch),
+    async (signal, entry, touch) =>
+      download(
+        input,
+        signal,
+        entry,
+        touch,
+        await proxyFor?.(input.url, input.timeoutMs, signal),
+      ),
   );
 }
 
@@ -397,6 +416,7 @@ export async function runUpload(
   source: string,
   input: UploadInput,
   requestSignal?: AbortSignal,
+  proxyFor?: ProxyFor,
 ) {
   requireOpen(state);
   return runTransfer(
@@ -416,7 +436,14 @@ export async function runUpload(
       sentBytes: 0,
       totalBytes: null,
     }),
-    (signal, entry, touch) => upload(input, signal, entry, touch),
+    async (signal, entry, touch) =>
+      upload(
+        input,
+        signal,
+        entry,
+        touch,
+        await proxyFor?.(input.url, input.timeoutMs, signal),
+      ),
   );
 }
 

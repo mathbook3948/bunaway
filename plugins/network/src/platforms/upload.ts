@@ -163,6 +163,7 @@ export async function upload(
     totalBytes: number | null;
   },
   touch: () => void,
+  proxy?: string,
 ) {
   const { file, size } = await openSource(input.path);
   const state: StreamState = {
@@ -176,6 +177,11 @@ export async function upload(
     let response: Response;
     try {
       response = await fetch(input.url, {
+        ...(proxy === undefined
+          ? {}
+          : {
+              proxy,
+            }),
         method: input.method,
         headers: [
           ...input.headers,
