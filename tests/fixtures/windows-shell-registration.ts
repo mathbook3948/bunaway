@@ -59,26 +59,26 @@ async function regAdd(key: string, name: string | null, data: string) {
 }
 
 /**
- * Deletes a key tree this test created. Absence is checked with `reg query`'s exit code rather
- * than the localized message of `reg delete`; an absent key is clean, and any other delete failure
- * (access denied, a lock) leaves a registration behind and is reported.
+ * Deletes a key tree this test created. `reg delete` runs first; when it fails, `reg query` tells
+ * an absent key (already clean) from a key that is still there, so the check does not depend on
+ * the language of the messages. A failure that leaves the key behind is reported.
  */
 async function regDelete(key: string) {
-  const present = await runTool([
-    "reg",
-    "query",
-    key,
-  ]);
-  if (present.code !== 0) {
-    return;
-  }
   const result = await runTool([
     "reg",
     "delete",
     key,
     "/f",
   ]);
-  if (result.code !== 0) {
+  if (result.code === 0) {
+    return;
+  }
+  const remaining = await runTool([
+    "reg",
+    "query",
+    key,
+  ]);
+  if (remaining.code === 0) {
     throw new Error(`reg delete ${key} failed: ${result.stderr}`);
   }
 }
@@ -99,23 +99,40 @@ export function deleteShellExtension(extension: string): Promise<void> {
   );
 }
 
-/** Rethrows `error` after running `cleanup`; a cleanup failure is reported together with it. */
-async function failAfterCleanup(
-  error: unknown,
+/**
+ * Runs `body`, then `cleanup` whether or not `body` failed, and returns the result of `body`. A
+ * failure of `body` is rethrown after the cleanup; when the cleanup fails too, both are reported
+ * together so neither hides the other.
+ */
+export async function runThenClean<T>(
+  body: () => Promise<T>,
   cleanup: () => Promise<void>,
-): Promise<never> {
+  message: string,
+): Promise<T> {
+  let result: T | undefined;
+  let failure: unknown;
+  try {
+    result = await body();
+  } catch (error) {
+    failure = error;
+  }
   try {
     await cleanup();
   } catch (cleanupError) {
-    throw new AggregateError(
-      [
-        error,
-        cleanupError,
-      ],
-      "A registration failed and its partial keys could not be removed",
-    );
+    throw failure === undefined
+      ? cleanupError
+      : new AggregateError(
+          [
+            failure,
+            cleanupError,
+          ],
+          message,
+        );
   }
-  throw error;
+  if (failure !== undefined) {
+    throw failure;
+  }
+  return result as T;
 }
 
 /**
@@ -146,7 +163,11 @@ export async function registerShellScheme(
     await regAdd(key, "URL Protocol", "");
     await regAdd(`${key}\\shell\\open\\command`, null, command);
   } catch (error) {
-    return failAfterCleanup(error, () => deleteShellScheme(scheme));
+    return runThenClean(
+      () => Promise.reject(error),
+      () => deleteShellScheme(scheme),
+      "A registration failed and its partial keys could not be removed",
+    );
   }
   return () => deleteShellScheme(scheme);
 }
@@ -169,7 +190,11 @@ export async function registerShellExtension(
       command,
     );
   } catch (error) {
-    return failAfterCleanup(error, () => deleteShellExtension(extension));
+    return runThenClean(
+      () => Promise.reject(error),
+      () => deleteShellExtension(extension),
+      "A registration failed and its partial keys could not be removed",
+    );
   }
   return () => deleteShellExtension(extension);
 }

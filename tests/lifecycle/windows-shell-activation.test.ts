@@ -9,6 +9,7 @@ import {
   newShellTestName,
   registerShellExtension,
   registerShellScheme,
+  runThenClean,
   shellCommand,
   shellOpen,
 } from "../fixtures/windows-shell-registration.ts";
@@ -64,46 +65,28 @@ async function withWorkspace<T>(
   body: (space: Workspace) => Promise<T>,
 ): Promise<T> {
   const space = await createWorkspace();
-  try {
-    return await body(space);
-  } finally {
-    await rm(space.dir, {
-      recursive: true,
-      force: true,
-      maxRetries: SHELL_CWD_RELEASE_RETRIES,
-    });
-  }
+  return runThenClean(
+    () => body(space),
+    () =>
+      rm(space.dir, {
+        recursive: true,
+        force: true,
+        maxRetries: SHELL_CWD_RELEASE_RETRIES,
+      }),
+    "The test failed and its workspace could not be removed",
+  );
 }
 
-/** Runs `body`, then removes the registration even if `body` fails, reporting both failures. */
-async function withRegistration<T>(
+/** Runs `body`, then removes the registration even if `body` fails. */
+function withRegistration<T>(
   unregister: () => Promise<void>,
   body: () => Promise<T>,
 ): Promise<T> {
-  let result: T | undefined;
-  let failure: unknown;
-  try {
-    result = await body();
-  } catch (error) {
-    failure = error;
-  }
-  try {
-    await unregister();
-  } catch (cleanupError) {
-    throw failure === undefined
-      ? cleanupError
-      : new AggregateError(
-          [
-            failure,
-            cleanupError,
-          ],
-          "The test failed and its registration could not be removed",
-        );
-  }
-  if (failure !== undefined) {
-    throw failure;
-  }
-  return result as T;
+  return runThenClean(
+    body,
+    unregister,
+    "The test failed and its registration could not be removed",
+  );
 }
 
 /** Waits for the recorder to report, then returns what the registered command received. */

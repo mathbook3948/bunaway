@@ -20,6 +20,7 @@ import {
   newShellTestName,
   registerShellExtension,
   registerShellScheme,
+  runThenClean,
   shellCommand,
   shellOpen,
 } from "../fixtures/windows-shell-registration.ts";
@@ -211,48 +212,34 @@ if (!process.argv.includes("--child")) {
       killSignal: "SIGKILL",
     },
   );
-  let failure: unknown;
-  try {
-    const [output, errors, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    assert.equal(code, 0, `${output}\n${errors}`);
-    console.log(output.trim());
-  } catch (error) {
-    failure = error;
-  }
   // The child may have been killed at the deadline, so the registrations are removed here. Every
-  // step runs even if an earlier one fails, and the run's own failure is reported with them.
-  try {
-    await attemptAllAsync(
-      [
-        () => deleteShellScheme(scheme),
-        () => deleteShellExtension(extension),
-        () =>
-          rm(root, {
-            recursive: true,
-            force: true,
-            maxRetries: SHELL_CWD_RELEASE_RETRIES,
-          }),
-      ],
-      "Could not clean up the shell activation test",
-    );
-  } catch (cleanupError) {
-    throw failure === undefined
-      ? cleanupError
-      : new AggregateError(
-          [
-            failure,
-            cleanupError,
-          ],
-          "The shell activation test failed and its cleanup failed",
-        );
-  }
-  if (failure !== undefined) {
-    throw failure;
-  }
+  // cleanup step runs even if an earlier one fails, and the run's own failure is reported with it.
+  await runThenClean(
+    async () => {
+      const [output, errors, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      assert.equal(code, 0, `${output}\n${errors}`);
+      console.log(output.trim());
+    },
+    () =>
+      attemptAllAsync(
+        [
+          () => deleteShellScheme(scheme),
+          () => deleteShellExtension(extension),
+          () =>
+            rm(root, {
+              recursive: true,
+              force: true,
+              maxRetries: SHELL_CWD_RELEASE_RETRIES,
+            }),
+        ],
+        "Could not clean up the shell activation test",
+      ),
+    "The shell activation test failed and its cleanup failed",
+  );
 } else {
   await verifyShellActivation(
     repo,

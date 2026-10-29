@@ -382,7 +382,7 @@ raw 모드와 자동 실행 prefix를 함께 사용해 `launchReason`, 앱 argv�
 그대로 고정한다. `windows-shell-activation-instance.ts`는 같은 등록 명령이 실행 중인 실제 Windows host의 인스턴스
 pipe로 인자를 전달해 onOpen의 argv, cwd와 onOpenUrls의 정규화된 URL, 파일 URL로 도착하는지 확인한다. 사용자의 기본 앱
 선택(UserChoice), SmartScreen과 보안 경고 대화상자, 브라우저가 링크를 여는 경로는 확인하지 않는다. 시험은 이름이 무작위인
-키만 만들고 지우며 기존 사용자 등록을 바꾸지 않는다.
+키만 만들고 시험이 끝나면 지우며 기존 사용자 등록을 바꾸지 않는다. 시험 프로세스가 강제 종료되면 키가 남을 수 있고, 인스턴스 시험은 부모 프로세스가 키를 지운다.
 
 공식 플러그인은 `src/index.ts`에서 선언을 조립하고 `src/contract.ts`에 계약을 둔다.
 `api/plugin-contracts.test.ts`는 OS 자원 없이 네이티브 입력 검증을 실행해 모르는 작업의
