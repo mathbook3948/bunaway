@@ -481,6 +481,7 @@ Range 응답, 누락 파일과 웹 경계 밖 요청의 404, 웹 Worker 스크�
 패키징 해시와 파일 변조 거부, 개발 서버 실행과 종료를 통과했다.
 Bun 1.4.2의 compile-executable-path 옵션에 한글 절대 경로를 넘기면 ENOENT가 발생해,
 검증한 Bun을 빌드 임시 폴더로 복사하고 상대 경로를 넘긴다.
+CI의 `windows-project-path` 시험이 공백과 한글이 든 프로젝트 경로에서 같은 생성, build, 실행을 반복한다.
 hide, veto, dev-veto, dev-hide와 dev-pending의 실제 데스크톱 회귀도 통과했다.
 
 Inno Setup이 없어 설치 프로그램 생성과 설치, 제거는 실행하지 않았다.

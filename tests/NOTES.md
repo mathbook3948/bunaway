@@ -1515,6 +1515,18 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 `build/windows-templates-results.json`에 기록합니다. HMR 갱신 뒤의 화면 DOM, 서명, 덮어쓰기 업데이트, 공백과 한글이 든 설치 폴더,
 화면에 그려진 내용은 확인하지 않습니다(설치 폴더와 서명은 fixture 앱을 쓰는 `tests/packaging/` 시험이 다룹니다). Windows native 실행기에 포함합니다.
 
+`lifecycle/windows-project-path.ts`는 이름에 공백과 한글이 든 프로젝트 폴더(`<임시>/홍 길동/내 프로젝트/앱 이름`)에서
+패키징한 CLI로 vanilla 템플릿을 생성하고(`create`), `bun run build`(`bunaway build`가 템플릿이 설정한 웹 빌드를 먼저 돌리고, 검증한 Bun을
+항목 옆에 복사하고 상대 경로를 넘기는 ASCII 전용 `--compile-executable-path` 우회 포함)를 거쳐 compiled EXE를 만들고,
+공백과 한글이 든 `LOCALAPPDATA`로 실행합니다. 확인 코드가 백엔드에 메시지를 저장하고 읽은 뒤 창을 닫으므로 종료 코드 0과
+그 `LOCALAPPDATA` 아래 메시지 파일이 EXE, 번들 백엔드, 앱 데이터 경로가 이런 경로에서 동작한다는 증거입니다.
+`CI`가 설정된 환경에서는 `windows-templates.ts`가 먼저 패키징한 프레임워크 tarball이 있으면 읽기만 하고 다시 패키징하지 않으며(`windows-native` 잡 제한 시간 때문), 없거나 `CI`가 아니면 직접 패키징합니다.
+경로에 공백과 한글이 실제로 전달됐다는 증거는 그 경로 아래에서 생성, 빌드, 실행, 메시지 파일 읽기가 끝난다는 사실입니다.
+`--compile-executable-path` 우회가 실행됐는지는 따로 단언하지 않고 EXE가 만들어지는지로 봅니다. 템플릿은 vanilla 한 종만 쓰고
+(5종 반복은 `windows-templates.ts`), 시간을 아끼려 개발 서버 단계는 두지 않습니다. 설치 프로그램, 서명, 개발 서버 HMR,
+8.3 짧은 이름, MAX_PATH를 넘는 프로젝트 경로는 확인하지 않습니다. 호스트 자신의 데이터 루트는 `LOCALAPPDATA`를 따르지 않아
+실제 LocalAppData를 씁니다. 시험이 만든 `build/` 아래 폴더만 지웁니다. Windows native 실행기에 포함합니다.
+
 `lifecycle/io-worker-plugin-events.test.ts`는 실제 I/O Worker 번들과 시험용 플러그인으로 `environment.events.emit`이
 `plugin-event` 패킷으로 메인에 도착하는 순서와 필드, 다른 플러그인 이름 공간, 잘못된 이름, JSON이 아니거나 1 MiB를 넘는
 payload의 동기 거부(`INVALID_ARGUMENT`), 수신 쪽이 승인하지 않을 때 새 이벤트를 버리고 다음 패킷에 버린 횟수를
