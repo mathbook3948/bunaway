@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { StageContext } from "@bunaway/packaging";
+import { attemptAllAsync } from "@bunaway/plugin";
 import { findIscc, must } from "#packaging/channels/windows/common";
 import {
   compileInno,
@@ -66,6 +67,7 @@ test.skipIf(!iscc)(
     const menu = join(root, "시작 메뉴 폴더");
     const uninstall = join(install, "unins000.exe");
     const staging = join(root, "staging");
+    let passed = false;
     const silent = [
       "/VERYSILENT",
       "/SUPPRESSMSGBOXES",
@@ -209,20 +211,34 @@ test.skipIf(!iscc)(
       expect(await registered()).toBe(false);
       // Inno removes the folder it created, not the parent the test made.
       expect(await stat(install).catch(() => undefined)).toBeUndefined();
+      passed = true;
     } finally {
-      // Cleanup failures are reported but must not replace the failure that got us here.
+      // Both steps run even if the first fails. A cleanup failure fails a passing test, since a
+      // leftover installation is what this test guards against, but never replaces the failure
+      // that got us here.
       try {
-        if (await Bun.file(uninstall).exists()) {
-          await removeInstallation();
-        }
-        await rm(root, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 100,
-        });
+        await attemptAllAsync(
+          [
+            async () => {
+              if (await Bun.file(uninstall).exists()) {
+                await removeInstallation();
+              }
+            },
+            () =>
+              rm(root, {
+                recursive: true,
+                force: true,
+                maxRetries: 5,
+                retryDelay: 100,
+              }),
+          ],
+          "Test cleanup failed.",
+        );
       } catch (error) {
-        console.error(`Installed-app launch test cleanup failed: ${error}`);
+        if (passed) {
+          throw error;
+        }
+        console.error(String(error));
       }
     }
   },
