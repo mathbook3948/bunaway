@@ -1122,12 +1122,12 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [x] `openDevTools`로 개발 모드에서 DevTools를 연다. 작업 권한으로 프로덕션 설정을 우회할 수 없다.
 - [ ] DevTools 닫기, 상태 조회와 이벤트 API를 제공한다.
 - [x] 요소, service worker와 shared worker 검사 API는 제공하지 않기로 결정했다. 열린 DevTools 안에서 요소 선택과 worker 대상 선택을 쓴다 ([ADR 0117](decisions/0117-webview-element-and-worker-inspection.md)).
-- [ ] DevTools workspace의 추가와 제거, dock 위치, 별도 창과 title을 설정한다.
-- [ ] device emulation의 viewport, 화면 배율과 입력 설정을 제공한다.
-- [ ] debugger protocol 연결, 명령 실행과 이벤트를 제공한다.
-- [ ] 개발 도구 확장 설치와 실행 범위를 제공한다.
 - [x] 결정 완료: startup, CPU, 메모리, GPU와 렌더러 지표 중 [`os.listAppProcesses`](./site/src/content/docs/reference/plugins/os.mdx)가 앱 프로세스 트리(앱, WebView2, 기타 자식)의 프로세스별 working set과 누적 CPU 시간을 제공한다. 호스트가 측정하는 startup 시간과 렌더러 내부 지표는 제공하지 않으며 앱이 readiness 이벤트와 `performance` API로 직접 잰다. [ADR 0124](./decisions/0124-app-startup-time-and-renderer-metrics.md).
 - [ ] GPU 정보, hardware acceleration 상태와 변경 옵션을 제공한다. [`os.listGpus`](./site/src/content/docs/reference/plugins/os.mdx)가 DXGI 어댑터 목록(이름, 벤더 ID, 장치 ID, 전용 비디오 메모리, 소프트웨어 여부)을 제공한다. hardware acceleration 설정은 남아 있다. 렌더러 지표는 제공하지 않는다([ADR 0124](./decisions/0124-app-startup-time-and-renderer-metrics.md)).
+- [x] 결정 완료: DevTools workspace의 추가와 제거, dock 위치, 별도 창과 title 설정은 제공하지 않는다. WebView2가 설정을 노출하지 않는다. [ADR 0094](./decisions/0094-webview-devtools-protocol-emulation-and-extensions.md).
+- [x] 결정 완료: device emulation의 viewport, 화면 배율과 입력 설정은 제공하지 않는다. 개발 중에는 DevTools의 장치 모드를 쓴다. [ADR 0094](./decisions/0094-webview-devtools-protocol-emulation-and-extensions.md).
+- [x] 결정 완료: debugger protocol 연결, 명령 실행과 이벤트는 제공하지 않는다. 요청 가로채기, cookie, 네트워크 emulation 결정을 우회하는 통로가 된다. [ADR 0094](./decisions/0094-webview-devtools-protocol-emulation-and-extensions.md).
+- [x] 결정 완료: 개발 도구 확장 설치와 실행 범위는 제공하지 않는다. [ADR 0070](./decisions/0070-webview-browser-extensions.md)과 [ADR 0094](./decisions/0094-webview-devtools-protocol-emulation-and-extensions.md).
 - [ ] tracing category 조회, 기록 시작와 중단과 buffer usage를 제공한다.
 - [x] network log 시작, 종료와 결과 경로는 [제공하지 않는다](decisions/0082-webview-preconnect-connections-and-net-log.md). WebView2는 network log를 환경 생성 때의 브라우저 플래그로만 켜므로 모든 앱의 WebView 생성 경로를 바꿔야 한다. 같은 결정을 733행이 기록한다.
 - [ ] crash report, minidump와 최근 crash 조회를 제공한다.
