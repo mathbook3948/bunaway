@@ -92,6 +92,6 @@ status: accepted
 - 코드, 정책, 호스트 동작은 바뀌지 않는다.
 - [storage.stat](../site/src/content/docs/reference/host/storage-stat.mdx), [storage.writeText](../site/src/content/docs/reference/host/storage-write-text.mdx),
   [바이너리 저장과 append](../site/src/content/docs/reference/host/storage-bytes.mdx)가 이 결정으로 연결한다.
-- [파일 복사와 대상 이동](../site/src/content/docs/reference/host/storage-transfers.mdx)의 후속 작업 문장은 원자적 저장 부분을 빼서
-  이 결정과 어긋나지 않게 했다.
+- [파일 복사와 대상 이동](../site/src/content/docs/reference/host/storage-transfers.mdx)의 stream 복사 문장은 파일 핸들과 stream I/O를 제공하지 않는다는
+  [ADR 0111](./0111-storage-file-handle-and-stream-io.md)에 맞게 고쳤다.
 - `docs/TODO-windows.md`의 충돌 처리 항목은 이 결정으로 닫는다.

@@ -40,14 +40,14 @@ status: accepted
    - 쓰기: 첫 조각은 `writeBytes`로 대체하고 나머지는 `appendBytes`로 이어 붙인다. 중간 실패나 취소는 지금까지 쓴 부분을
      되돌리지 않는다. 원자적 교체(`atomic: true`)는 한 번에 보내는 256 KiB 이하의 `writeBytes`에서만 쓸 수 있다.
    - 복사: 호스트 쪽 `copyFile`로 한 번에 복사한다. 내용이 화면을 지나지 않는다. 대상이 이미 있으면 거부하고, 도중에 실패하면 부분 파일이
-     남을 수 있다.
+     남을 수 있고, 시작한 뒤에는 취소할 수 없으며 같은 I/O Worker의 다른 호출을 지연시킨다.
    - 반복 호출 사이에 파일이 바뀌면 조각이 서로 맞지 않을 수 있다. 이를 막는 잠금이나 변경 감지는 이 결정이 약속하지 않는다.
 3. 파일을 열어 둔 채 위치를 옮기며 읽고 쓰는 처리는 `storage`로 하지 않는다. 이런 처리가 필요한 앱은 백엔드에서 `node:fs`의
    `FileHandle`로 직접 처리하고, 화면에는 앱이 정한 명령(시작, 결과)과 이벤트(진행)를 등록한다. 대용량 처리는 같은 프로세스 안에서 stream으로 이어지므로 256 KiB 전송 상한을 받지 않는다.
 4. 화면에서 대용량 파일을 바로 받아야 하는 경우의 전송 방식(바이너리 프레임, 분할 전송)은 이 결정이 정하지 않는다. 그런 요구는
    별도 항목으로 전송 계약과 함께 다룬다.
-5. 이 결정은 핸들과 핸들 기반 stream만 닫는다. 핸들 없이 호출 하나로 끝나는 덮어쓰기와 truncate 연산(`docs/TODO-windows.md`의 해당 항목)과
-   동시 수정 감지는 약속하지 않으며 각각 별도 항목에서 정한다. `UNSUPPORTED` 항목이나 오류 코드를 새로 만들지 않는다. 제공하는 연산이 없으므로 표시할 대상이 없다.
+5. 이 결정은 핸들과 핸들 기반 stream만 닫는다. 핸들 없이 호출 하나로 끝나는 덮어쓰기와 truncate 연산(`docs/TODO-windows.md`의 해당 항목)은
+   약속하지 않으며 별도 항목에서 정한다. 동시 수정 감지는 [ADR 0126](./0126-storage-concurrent-modification-detection.md)에서 정했다. `UNSUPPORTED` 항목이나 오류 코드를 새로 만들지 않는다. 제공하는 연산이 없으므로 표시할 대상이 없다.
 6. 쓰는 곳이 확인되고 아래 전제를 모두 갖출 수 있으면 이 결정을 다시 검토한다.
 
 ## 핸들을 제공할 때 필요한 전제
@@ -92,4 +92,4 @@ status: accepted
 - [바이너리 저장과 append](../site/src/content/docs/reference/host/storage-bytes.mdx)의 파일 핸들과 stream I/O가 후속 작업이라는 문장은
   이 결정에 맞게 고친다. 같은 문장이 있는 [복사 문서](../site/src/content/docs/reference/host/storage-transfers.mdx)와
   [ADR 0126](./0126-storage-concurrent-modification-detection.md) 결정 5도 이 결정으로 연결한다.
-  `docs/TODO-windows.md`의 파일 핸들 항목은 이 결정으로 닫고, 동시 수정 감지 항목은 남은 일을 동시 수정 감지로 좁힌다.
+  `docs/TODO-windows.md`의 파일 핸들 항목은 이 결정으로 닫는다. 동시 수정 감지 항목은 ADR 0126이 닫고, 그 항목의 stream I/O 문장만 이 결정으로 연결한다.
