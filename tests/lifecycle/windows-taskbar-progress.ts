@@ -286,10 +286,23 @@ try {
   );
   client.stdin.write("quit\n");
   client.stdin.flush();
-  assert.equal(
-    await pump(() => client.exitCode ?? undefined, "client exit"),
-    0,
+  // The client's last UI Automation calls reach this thread's windows, so keep pumping until it exits.
+  const exit = await waitFor(
+    () => {
+      host.pump();
+      return client.exitCode === null
+        ? undefined
+        : {
+            code: client.exitCode,
+          };
+    },
+    {
+      deadline: "childExit",
+      what: "UI Automation client exit",
+      intervalMs: 20,
+    },
   );
+  assert.equal(exit.code, 0, errors.join("\n"));
   quit = true;
 } finally {
   const host = windows;
