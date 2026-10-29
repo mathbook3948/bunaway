@@ -236,12 +236,14 @@ async function verify(): Promise<void> {
 await mkdir(home, {
   recursive: true,
 });
+const startedAt = Date.now();
 let failure: unknown;
 try {
   await verify();
 } catch (error) {
   failure = error;
 }
+const verifiedAt = Date.now();
 // Only the folder this run created is removed. A removal failure fails the run, but never in
 // place of the failure that left the handle open.
 try {
@@ -258,4 +260,6 @@ try {
 if (failure !== undefined) {
   throw failure;
 }
-console.log("PASS: Windows project path verification");
+console.log(
+  `PASS: Windows project path verification (${verifiedAt - startedAt} ms, cleanup ${Date.now() - verifiedAt} ms)`,
+);
