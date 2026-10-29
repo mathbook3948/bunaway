@@ -41,9 +41,9 @@ status: accepted
 | MSI | 제공하지 않음 | 제공하지 않음 | 제공하지 않음 | 제공하지 않음 | 제외 |
 | MSIX, `win-store-msix` | 패키지 생성 차단. 설치 검증은 PR #557의 시험이 먼저 필요하다. 남음. | 남음 | 남음 | 해당 없음(Store가 전달, `managedByStore`) | 차단 유지 |
 
-Microsoft Store 배포 완료 조건은 [ADR 0128](./0128-windows-microsoft-store-completion-conditions.md)에서 정한다.
-
 위 표의 PR #552와 #557은 이 결정 시점에 main에 합쳐지지 않았다. 합쳐진 뒤 표의 위치를 갱신한다.
+
+Microsoft Store 배포 완료 조건은 [ADR 0128](./0128-windows-microsoft-store-completion-conditions.md)에서 정한다.
 
 ## 근거
 
