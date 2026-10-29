@@ -103,6 +103,15 @@ WebView audio는 ICoreWebView2_8의 IsMuted와 IsDocumentPlayingAudio를 같은 
 하나이며 HWND 파괴 전에 제거한다. 전송 용량과 복구는
 [공개 창 이벤트 계약](../../../docs/site/src/content/docs/reference/host/windows.mdx)을 따른다.
 
+I/O Worker에서 도는 플러그인은 `environment.events.emit`으로 이벤트를 보낸다. `plugin-events.ts`가 이름을
+`<plugin>.` 접두사로 제한하고 JSON과 크기를 검사해 `plugin-event` 패킷으로 만들며, 메인은 `plugin-event-relay.ts`로
+그대로 UI Worker에 넘기고 `ui.ts`가 `windows.*` 시스템 이벤트와 같은 `publishSystemEvent`로 구독과 화면 정책을
+다시 확인해 배달한다. 이름 공간 제한은 I/O Worker 안의 `emit`이 맡고, UI Worker는 구독과 화면 정책만 확인한다.
+I/O Worker가 레인이 가득 차서 버린 횟수는 다음 패킷에 실어 메인 진단 로그에 남긴다(메인과 UI Worker에서 버린 이벤트는
+세지 않는다). UI Worker는 배달 중인 플러그인 이벤트가 `native-event` 레인의 절반을 넘으면 새 이벤트를 버리고, 레인이
+가득 차 BUSY가 나도 플러그인 이벤트는 세션을 폐기하지 않고 버리기만 한다. 요청과 응답 레인을 막지 않으며 이벤트와
+명령 결과 사이의 순서는 보장하지 않는다. 종료가 시작된 뒤의 발행은 오류 없이 버린다.
+
 트레이 구현과 전용 상수는 `plugins/tray/src/platforms/windows-tray.ts`, Job 객체 상수는 `job.ts`에 둔다. 개발 CLI와 공유하는
 종료 메시지와 창 클래스 접두어는 `runtime-bun/windows-control`의 단일 정의를 사용한다.
 Worker 패킷은 `runtime-bun/worker-channel`의 공통 구현을 사용한다.

@@ -10,6 +10,7 @@ import windows, {
   windowEvents,
 } from "@bunaway/plugin-windows";
 import {
+  DEFAULT_MAX_PENDING,
   type JsonValue,
   PROTOCOL_VERSION,
   validateValue,
@@ -313,6 +314,10 @@ async function startUI(
   const sessionEnd = {
     release: true,
   };
+  /** While set, `native-event` packets are acknowledged only once this promise settles. */
+  const nativeEvents: {
+    gate?: Promise<void> | undefined;
+  } = {};
   let workerError: Error | undefined;
   const rememberError = (error: unknown) => {
     workerError = error instanceof Error ? error : new Error(String(error));
@@ -374,6 +379,9 @@ async function startUI(
             },
           })
           .catch(rememberError);
+      }
+      if (packet.kind === "native-event") {
+        return nativeEvents.gate;
       }
     },
     (error) => {
@@ -475,6 +483,7 @@ async function startUI(
   }
   return {
     sessionEnd,
+    nativeEvents,
     deliverWindowMessage,
     deliverWebRequest,
     parsing,
@@ -1976,6 +1985,111 @@ test(
           timedOut: true,
         },
       });
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "a plugin event relayed from the I/O Worker reaches only subscribed views, and the operation gate still applies",
+  async () => {
+    const { ui, settle } = await startCloseRequestUI();
+    try {
+      const delivered = (event: string) =>
+        ui.packets.filter(
+          (packet) => packet.kind === "native-event" && packet.event === event,
+        );
+      const relay = (
+        event: string,
+        requiredOperation: string | null,
+        payload: number,
+      ) =>
+        ui.channel.send({
+          kind: "plugin-event",
+          event,
+          payload,
+          requiredOperation,
+          dropped: 0,
+        });
+      // The view listens to windows.closeRequested only; a name nobody listens to goes nowhere.
+      await relay("windows.closeRequested", null, 1);
+      await relay("probe.changed", null, 2);
+      // An operation the registry does not know is refused before any view is checked.
+      await relay("windows.closeRequested", "unknown.read", 3);
+      await settle();
+      await ui.waitFor(() => delivered("windows.closeRequested").length === 1);
+      expect(delivered("windows.closeRequested")).toMatchObject([
+        {
+          payload: 1,
+        },
+      ]);
+      expect(delivered("probe.changed")).toHaveLength(0);
+      await ui.channel.send({
+        kind: "shutdown",
+      });
+      expect(await ui.exited).toBe(0);
+    } finally {
+      await ui.close();
+    }
+  },
+  timeoutMs + 5_000,
+);
+
+test(
+  "a burst of plugin events past half of the native-event lane is dropped without revoking the session or blocking later events",
+  async () => {
+    const { ui, settle } = await startCloseRequestUI();
+    try {
+      const delivered = () =>
+        ui.packets.filter(
+          (packet) =>
+            packet.kind === "native-event" &&
+            packet.event === "windows.closeRequested",
+        );
+      // The receiver acknowledges nothing, so every delivered event stays in flight on the lane.
+      let release!: () => void;
+      ui.nativeEvents.gate = new Promise<void>((done) => {
+        release = done;
+      });
+      const burst = 200;
+      for (let index = 0; index < burst; index++) {
+        await ui.channel.send({
+          kind: "plugin-event",
+          event: "windows.closeRequested",
+          payload: index,
+          requiredOperation: null,
+          dropped: 0,
+        });
+      }
+      await settle();
+      // The default lane holds 128 packets; plugin events stop at half of it, before BUSY.
+      expect(delivered()).toHaveLength(Math.floor(DEFAULT_MAX_PENDING / 2));
+      expect(burst).toBeGreaterThan(DEFAULT_MAX_PENDING);
+      release();
+      ui.nativeEvents.gate = undefined;
+      // Once the lane drains, plugin events flow again and no session was failed by the overflow.
+      await ui.waitFor(async () => {
+        const before = delivered().length;
+        await ui.channel.send({
+          kind: "plugin-event",
+          event: "windows.closeRequested",
+          payload: -1,
+          requiredOperation: null,
+          dropped: 0,
+        });
+        await settle();
+        return delivered().length > before;
+      });
+      // A failed session is revoked toward the main thread; overflow must not do that.
+      expect(ui.packets.filter((packet) => packet.kind === "revoke")).toEqual(
+        [],
+      );
       await ui.channel.send({
         kind: "shutdown",
       });

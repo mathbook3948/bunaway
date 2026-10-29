@@ -84,7 +84,11 @@ export type NativeEnvironment = {
   windows?: import("@bunaway/plugin-api/native").NativeWindowServices;
   /** Optional global shortcut message-window and event services on the native UI thread. */
   shortcuts?: import("@bunaway/plugin-api/native").NativeShortcutServices;
-  /** Optional event delivery on the macOS host; the Windows host uses its dedicated services. */
+  /**
+   * Optional event delivery to the app's WebViews. A plugin that runs on the Windows I/O Worker
+   * may emit only names that start with `<plugin>.`, and delivery is best effort: an event is
+   * dropped when the host is slower than the plugin or is shutting down.
+   */
   events?: NativeEventServices;
   /** Optional UI-thread menu integration, absent on platforms without native menus. */
   menus?: import("@bunaway/plugin-api/native").NativeMenuServices;

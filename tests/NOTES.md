@@ -1478,3 +1478,16 @@ WM_APPCOMMAND와 제목 표시줄 WM_CONTEXTMENU의 전달, 알 수 없는 코�
 한 단계가 실패해도 나머지 템플릿을 계속 돌리고 마지막에 실패 단계를 모아 실패하며, 단계별 결과는
 `build/windows-templates-results.json`에 기록합니다. HMR 갱신 뒤의 화면 DOM, 설치 파일 생성과 설치 파일 실행, 화면에
 그려진 내용은 확인하지 않습니다. Windows native 실행기에 포함합니다.
+
+`lifecycle/io-worker-plugin-events.test.ts`는 실제 I/O Worker 번들과 시험용 플러그인으로 `environment.events.emit`이
+`plugin-event` 패킷으로 메인에 도착하는 순서와 필드, 다른 플러그인 이름 공간, 잘못된 이름, JSON이 아니거나 1 MiB를 넘는
+payload의 동기 거부(`INVALID_ARGUMENT`), 수신 쪽이 승인하지 않을 때 새 이벤트를 버리고 다음 패킷에 버린 횟수를
+싣는 것과 그동안 요청 응답이 계속 도착하는 것, 타이머가 계속 발행하는 중의 종료가 `cleaned`와 종료 코드 0으로
+끝나는 것을 검사한다. `lifecycle/plugin-event-relay.test.ts`는 메인의 중계(UI 레인이 가득 차거나 종료 중이면 이벤트만
+버리고, 그 밖의 채널 오류는 호스트 실패로 두는 것)를, `windows-ui-lifecycle.test.ts`의 두 시나리오는 UI Worker가
+중계받은 이벤트를 구독한 뷰에만 보내고 모르는 필수 작업은 거부하는 것(구독 이름으로 호스트 이벤트 하나를 쓰며, 이름 공간
+검사는 I/O Worker 쪽 시험이 맡는다)과, 수신 쪽 ack가 늦는 동안 쏟아진 이벤트가 레인의 절반(64개)에서 버려지고 `revoke`
+없이 레인이 비면 다시 배달되는 것을(절반 제한이 먼저 걸려 플러그인 이벤트만으로는 BUSY에 닿지 않으므로, BUSY를
+버리기만 하는 분기는 다른 이벤트가 레인을 채운 경우의 방어이며 이 시험이 직접 확인하지는 않는다), `system-events.test.ts`는 필수 작업이 없을 때
+구독만 확인하는 것을 검사한다. 모두 Linux 대체 Win32 경계와 가짜 수신자에서 실행하며, 실제 WebView2 문서에 이벤트가
+도착하는 것은 I/O Worker에서 이벤트를 발행하는 플러그인이 생기면 그 플러그인의 Windows native 시험이 확인한다.

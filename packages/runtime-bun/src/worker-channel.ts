@@ -143,6 +143,18 @@ function processExitCode(value: unknown): asserts value is number {
     throw new Error("Invalid process exit code");
   }
 }
+/** An operation name the receiving view must also hold, or `null` when only the subscription is checked. */
+function nullableOperation(value: unknown): asserts value is string | null {
+  if (value !== null) {
+    identifier(value);
+  }
+}
+/** Events the I/O Worker discarded since its previous plugin event. */
+function droppedCount(value: unknown): asserts value is number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+    throw new Error("Invalid dropped event count");
+  }
+}
 function flag(value: unknown): asserts value is boolean {
   if (typeof value !== "boolean") {
     throw new Error("Invalid Worker flag");
@@ -520,6 +532,23 @@ const packetDefinitions = {
     [
       "main",
       "macos-backend",
+    ],
+    "native-event",
+  ),
+  /**
+   * A plugin event raised on the I/O Worker. The main thread forwards it unchanged to the UI
+   * Worker, which owns the view policy and subscriptions that decide who receives it.
+   */
+  "plugin-event": definePacket(
+    {
+      event: identifier,
+      payload: jsonValue,
+      requiredOperation: nullableOperation,
+      dropped: droppedCount,
+    },
+    [
+      "main-io",
+      "ui",
     ],
     "native-event",
   ),

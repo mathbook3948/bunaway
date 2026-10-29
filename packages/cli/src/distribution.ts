@@ -111,6 +111,7 @@ export const frameworkPaths = [
   "native/windows/bun/window-placement.ts",
   "native/windows/bun/window-events.ts",
   "native/windows/bun/system-events.ts",
+  "native/windows/bun/plugin-event-relay.ts",
   "native/windows/bun/appearance.ts",
   "native/windows/bun/session-notifications.ts",
   "native/windows/bun/window-readiness.ts",
@@ -124,6 +125,7 @@ export const frameworkPaths = [
   "native/host-api/bun/host-response.ts",
   "native/host-api/bun/native-requests.ts",
   "native/host-api/bun/polled-observers.ts",
+  "native/host-api/bun/plugin-events.ts",
   "native/host-api/bun/io-worker.ts",
   "native/windows/bun/README.md",
   ...[

@@ -899,7 +899,8 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   [읽기 계약](./site/src/content/docs/reference/host/storage-read-text.mdx)을 따른다.
 - [ ] store 변경 이벤트, save, reload와 autosave를 제공한다.
   save, reload, autosave는 구현했다. 남은 범위는 화면으로 보내는 변경 이벤트이며,
-  I/O Worker 어댑터에 이벤트 서비스를 제공하는 호스트 변경이 먼저 필요하다.
+  I/O Worker 플러그인이 `environment.events.emit`으로 이벤트를 보내는 경로는 갖췄다.
+  `store`가 이벤트를 선언하고 발행하는 일이 남는다.
   지금은 변경 함수가 `changed`를 반환한다.
 - [x] Store `defaults`와 저장된 값의 병합 우선순위, 중첩 객체 처리, 기본값 무시 옵션을 정의한다.
   [T-store-live]의 `overrideDefaults`와 reload의 `ignoreDefaults`를 참고하고, 파일 없음,
@@ -952,7 +953,7 @@ Bun의 trusted backend는 이미 기본 fetch, WebSocket, 파일 I/O와 프로�
   `process.run`의 제한된 binary stdin, stdout/stderr 캡처, PID와 완료 결과는 구현했다.
   장기 실행은 `process.spawn`이 핸들을 발급하고 `read`(출력과 종료 상태), `write`,
   `closeStdin`, `kill`로 다룬다. 출력은 이벤트가 아니라 `read`로 당겨 읽는다. Windows 호스트에는
-  플러그인이 쓸 수 있는 일반 이벤트 서비스가 없고 이벤트는 구독한 모든 뷰에 전달되기 때문이다.
+  이벤트는 구독한 모든 뷰에 전달되어 `spawn`을 요청한 뷰만 받게 할 수 없기 때문이다.
   Windows 종료 상태에 signal은 없어 `signal`은 `null`이다.
 - [x] process kill, timeout과 앱 종료 시 process tree 정리를 연결한다.
   호출 취소, timeout, 출력 초과와 어댑터 폐기는 호출별 Job Object로 자손까지 종료하고

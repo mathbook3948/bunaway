@@ -372,6 +372,20 @@ test("publication requires a registered read operation, a current event route an
   expect(sent).toEqual([
     "allowed",
   ]);
+  // Without a required operation only the live subscription decides, so the recipient that lacks
+  // the read grant also receives the event.
+  sent.length = 0;
+  publishSystemEvent(
+    registry,
+    recipients,
+    "test.changed",
+    null,
+    null,
+    (recipient) => sent.push(recipient.id),
+  );
+  expect(sent).toEqual([
+    "read-denied",
+  ]);
 });
 
 test("failed WTS unregister and native destruction remain retryable through their owning disposer", () => {
