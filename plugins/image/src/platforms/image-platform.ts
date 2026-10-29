@@ -19,6 +19,10 @@ import { ImageResources } from "#image/platforms/resources";
 export class ImagePlatform {
   private readonly resources = new ImageResources();
   private disposed = false;
+  /** Aborts when the adapter is disposed, so a call waiting for its turn to read ends at once. */
+  private readonly closing = new AbortController();
+  /** Ends when the file read ahead of the newest `createFromPath` call finishes; see `createFromPath`. */
+  private lastPathRead: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly codec: ImageCodec,
@@ -71,10 +75,14 @@ export class ImagePlatform {
   /**
    * Decode an image file into a resource that fits within `maxDimension` (default: the largest
    * image edge) and the resource pixel limit; platforms without a scaling codec report UNSUPPORTED.
-   * The file is read and decoded before the resource is created, and a late cancellation drops
-   * the result.
+   * The file is read asynchronously, so the thread that runs the plugin keeps serving other work;
+   * the decode and the resource creation then run in one step without yielding. Cancellation is
+   * checked after the read and again when the resource is created, and the capacity is checked
+   * again then too because other calls can fill the pool while the file is read. Calls read one
+   * file at a time, in call order, so the memory held for file contents stays within one file
+   * (`MAX_SOURCE_FILE_BYTES`) however many calls are pending.
    */
-  createFromPath(
+  async createFromPath(
     input: z.output<typeof createFromPathSchema>,
     signal?: AbortSignal,
   ) {
@@ -87,7 +95,23 @@ export class ImagePlatform {
       });
     }
     this.resources.assertCapacity();
-    const file = readImageFile(input.path);
+    const previousRead = this.lastPathRead;
+    const finished = Promise.withResolvers<void>();
+    // A call that leaves the line early must not release the next call before the read ahead of
+    // it ends, or two files would be held at once.
+    this.lastPathRead = previousRead.then(() => finished.promise);
+    let file: Awaited<ReturnType<typeof readImageFile>>;
+    try {
+      await this.waitForTurn(previousRead, signal);
+      this.active();
+      // The pool may have filled while the call waited, which would waste the read.
+      this.resources.assertCapacity();
+      file = await readImageFile(input.path, signal);
+    } finally {
+      finished.resolve();
+    }
+    // The adapter may have been disposed while the file was read.
+    this.active();
     return this.resources.create(
       decodeScaled(
         file.bytes,
@@ -96,6 +120,49 @@ export class ImagePlatform {
       ),
       signal,
     );
+  }
+
+  /**
+   * Wait for the read ahead in the line, leaving at once with CANCELLED when `signal` aborts or the
+   * adapter is disposed, so a cancelled call does not hold its request slot behind a slow read.
+   */
+  private async waitForTurn(
+    previousRead: Promise<void>,
+    signal: AbortSignal | undefined,
+  ): Promise<void> {
+    const leave = AbortSignal.any(
+      signal
+        ? [
+            signal,
+            this.closing.signal,
+          ]
+        : [
+            this.closing.signal,
+          ],
+    );
+    const cancelled = Promise.withResolvers<never>();
+    const onLeave = () =>
+      cancelled.reject(
+        new BunawayError({
+          code: "CANCELLED",
+          message: "Image operation cancelled.",
+        }),
+      );
+    if (leave.aborted) {
+      onLeave();
+    } else {
+      leave.addEventListener("abort", onLeave, {
+        once: true,
+      });
+    }
+    try {
+      await Promise.race([
+        previousRead,
+        cancelled.promise,
+      ]);
+    } finally {
+      leave.removeEventListener("abort", onLeave);
+    }
   }
 
   /** Create an icon for a file extension; platforms without a source report UNSUPPORTED. */
@@ -209,6 +276,7 @@ export class ImagePlatform {
       return;
     }
     this.disposed = true;
+    this.closing.abort();
     this.resources.dispose();
     this.fileTypeIcons?.dispose();
     this.codec.dispose();
