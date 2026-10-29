@@ -125,6 +125,7 @@ if (target === "windows-x64") {
     await test("windows-document-title.ts");
     await test("windows-document-favicon.ts");
     await test("windows-web-api-probe.ts");
+    await test("windows-webview-permission-denial.ts");
     await test("windows-html-fullscreen.ts");
     await test("windows-process-failure.ts");
     await test("windows-hidden-paint.ts");
