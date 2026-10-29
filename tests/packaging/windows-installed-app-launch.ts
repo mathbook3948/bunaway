@@ -67,7 +67,6 @@ test.skipIf(!iscc)(
     const menu = join(root, "시작 메뉴 폴더");
     const uninstall = join(install, "unins000.exe");
     const staging = join(root, "staging");
-    let passed = false;
     const silent = [
       "/VERYSILENT",
       "/SUPPRESSMSGBOXES",
@@ -120,6 +119,25 @@ test.skipIf(!iscc)(
       }
       return JSON.parse(await readFile(marker, "utf8")) as Observed;
     }
+    // Both steps run even if the first fails.
+    const cleanup = () =>
+      attemptAllAsync(
+        [
+          async () => {
+            if (await Bun.file(uninstall).exists()) {
+              await removeInstallation();
+            }
+          },
+          () =>
+            rm(root, {
+              recursive: true,
+              force: true,
+              maxRetries: 5,
+              retryDelay: 100,
+            }),
+        ],
+        "Test cleanup failed.",
+      );
     try {
       await mkdir(join(staging, "app"), {
         recursive: true,
@@ -211,36 +229,15 @@ test.skipIf(!iscc)(
       expect(await registered()).toBe(false);
       // Inno removes the folder it created, not the parent the test made.
       expect(await stat(install).catch(() => undefined)).toBeUndefined();
-      passed = true;
-    } finally {
-      // Both steps run even if the first fails. A cleanup failure fails a passing test, since a
-      // leftover installation is what this test guards against, but never replaces the failure
-      // that got us here.
-      try {
-        await attemptAllAsync(
-          [
-            async () => {
-              if (await Bun.file(uninstall).exists()) {
-                await removeInstallation();
-              }
-            },
-            () =>
-              rm(root, {
-                recursive: true,
-                force: true,
-                maxRetries: 5,
-                retryDelay: 100,
-              }),
-          ],
-          "Test cleanup failed.",
-        );
-      } catch (error) {
-        if (passed) {
-          throw error;
-        }
-        console.error(String(error));
-      }
+    } catch (error) {
+      // A cleanup failure must not replace the failure that got us here.
+      await cleanup().catch((cleanupError) => {
+        console.error(String(cleanupError));
+      });
+      throw error;
     }
+    // A cleanup failure fails a passing test: a leftover installation is what this test guards against.
+    await cleanup();
   },
   deadline("packagedAudit"),
 );
