@@ -1139,7 +1139,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [x] 결정 완료: device emulation의 viewport, 화면 배율과 입력 설정은 제공하지 않는다. 개발 중에는 DevTools의 장치 모드를 쓴다. [ADR 0094](./decisions/0094-webview-devtools-protocol-emulation-and-extensions.md).
 - [x] 결정 완료: debugger protocol 연결, 명령 실행과 이벤트는 제공하지 않는다. 요청 가로채기, cookie, 네트워크 emulation 결정을 우회하는 통로가 된다. [ADR 0094](./decisions/0094-webview-devtools-protocol-emulation-and-extensions.md).
 - [x] 결정 완료: 개발 도구 확장 설치와 실행 범위는 제공하지 않는다. [ADR 0070](./decisions/0070-webview-browser-extensions.md)과 [ADR 0094](./decisions/0094-webview-devtools-protocol-emulation-and-extensions.md).
-- [ ] tracing category 조회, 기록 시작와 중단과 buffer usage를 제공한다.
+- [x] 결정 완료: tracing category 조회, 기록 시작과 중단과 buffer usage는 제공하지 않는다. [ADR 0095](./decisions/0095-webview-tracing-and-advanced-diagnostics.md).
 - [x] network log 시작, 종료와 결과 경로는 [제공하지 않는다](decisions/0082-webview-preconnect-connections-and-net-log.md). WebView2는 network log를 환경 생성 때의 브라우저 플래그로만 켜므로 모든 앱의 WebView 생성 경로를 바꿔야 한다. 같은 결정을 733행이 기록한다.
 - [ ] crash report, minidump와 최근 crash 조회를 제공한다.
 - [ ] crash metadata와 사용자가 선택하는 업로드를 제공한다. 기본 외부 전송은 비활성화한다.
@@ -1147,7 +1147,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [x] 시작 시간, 유휴 메모리, 패키지 크기와 명령 지연의 기준 측정을 기록한다. [`scripts/measure-baseline.ts`](../scripts/measure-baseline.ts)가 측정하고 수치는 [Windows Bun FFI 실행 기록](./architecture/windows-bun-results.md)에 있다. 기록용이며 통과 기준은 없다.
 - [x] 각 UI 템플릿의 실제 Windows dev, HMR, build와 package 실행을 검증한다.
   - 완료: `lifecycle/windows-templates.ts`가 템플릿 5종을 Windows에서 생성하고 웹 빌드, doctor, 백엔드 실행(검증 도구가 호스트 역할을 대신하므로 실제 Windows 호스트와 WebView2는 포함하지 않음), 템플릿이 설정한 개발 서버 명령의 응답과 HMR 편집 반영(vanilla 제외, 화면 소스 한 파일을 고친 뒤 HMR WebSocket 메시지와 변환 모듈을 확인하며 `bunaway dev` 자체는 아님)까지 확인하고, 마지막 단계에서 `bunaway build`로 compiled EXE를 만들어 실행한다(UI 진입 파일에 덧붙인 확인 코드가 백엔드로 메시지를 저장하고 읽은 뒤 창을 닫아 종료 코드 0을 확인하므로 EXE, 번들 백엔드와 UI 자산, 실제 호스트와 WebView2의 시작을 포함). 이어서 같은 프로젝트로 `bunaway package win-direct`가 만든 Inno 설치 프로그램을 이 실행의 폴더에 무음 설치해 설치된 EXE가 같은 확인 코드로 시작되는지 보고, 제거 뒤 설치 폴더와 제거 항목이 남지 않는지 확인한다. 서명, 덮어쓰기 업데이트, 공백과 한글 설치 폴더는 이 단계의 범위가 아니다.
-- [ ] 고급 process crash, hang, heap snapshot과 JavaScript stack 수집의 지원 범위를 결정한다.
+- [x] 결정 완료: hang, heap snapshot과 JavaScript stack 수집 API는 제공하지 않는다. 응답 없는 렌더러는 `windows.waitForProcessFailure`가 보고한다. process crash 수집은 crash report 항목에서 다룬다. [ADR 0095](./decisions/0095-webview-tracing-and-advanced-diagnostics.md).
 
 명령 교체는 Windows 개발 모드에만 적용한다. 모듈 변수는 새로 초기화되며 플러그인
 setup 교체와 임의 자원 이전, 상태 마이그레이션은 제공하지 않는다. 공통 계약이나
