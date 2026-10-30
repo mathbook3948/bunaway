@@ -203,6 +203,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-menu-icon.test.ts",
           "tests/lifecycle/windows-menu-accelerator.test.ts",
           "tests/lifecycle/windows-window-menu.test.ts",
+          "tests/lifecycle/windows-window-menu-wrap.test.ts",
           "tests/lifecycle/windows-menu-ui.test.ts",
           "tests/lifecycle/windows-tray-balloon.test.ts",
           "tests/lifecycle/windows-tray-controls.test.ts",
