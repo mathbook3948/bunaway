@@ -1298,6 +1298,8 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
   ([재현 여부 기록](./architecture/windows-bun-results.md#2026-10-27-webview-종료-기한-초과-재현-여부)).
   원인은 규명하지 못했고 로컬 재실행은 하지 않았으므로 항목은 열어 둔다.
 - [ ] 최소 지원 OS, CPU와 다른 Job 정책의 환경에서 장애 및 강제 종료 뒤 자원 정리를 검증한다.
+  breakaway를 막는 바깥 Job 안의 시작, 강제 종료, 바깥 Job 닫기 뒤 정리는 windows-native CI의
+  `windows-outer-job-policy.test.ts`로 확인한다. 최소 OS와 CPU 환경은 남아 있다.
 - [ ] 각 플랫폼의 supported/experimental/unsupported와 OS permission 값을 실제 구현에 맞춘다.
   진행: `tests/conformance/windows-capability-docs.test.ts`가 Windows 어댑터가 등록한 연산 이름과
   `reference/plugins` 문서의 연산 표기를 비교한다. `support` 값과 OS permission 값의 비교는 남아 있다.

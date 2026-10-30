@@ -229,8 +229,10 @@ function environmentBlock(env: RelaunchCommand["env"]): Buffer {
 
 /**
  * Starts a process that is not part of this app's Job, so it survives this host's exit.
- * The Job is made breakaway-capable only for this call. Throws when Windows refuses, for example
- * because an outer Job (a CI runner or launcher) forbids breakaway; the caller then reports the
+ * The Job is made breakaway-capable only for this call. Windows checks that permission only for
+ * the Job this process is directly in, so an outer Job (a CI runner or launcher) that forbids
+ * breakaway does not refuse the launch: the new process leaves the app Job but stays in the outer
+ * Job and ends with it. Throws when Windows refuses for another reason; the caller then reports the
  * failure and exits without a new process. Requires an active app Job.
  *
  * Returns the error when the process started but the Job's breakaway permission could not be

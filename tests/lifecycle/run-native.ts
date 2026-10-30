@@ -221,6 +221,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-appearance-accessibility.test.ts",
           "tests/lifecycle/windows-opener.test.ts",
           "tests/lifecycle/windows-opener-job.test.ts",
+          "tests/lifecycle/windows-outer-job-policy.test.ts",
           "tests/lifecycle/windows-opener-selected-app.test.ts",
           "tests/lifecycle/windows-opener-recent.test.ts",
           "tests/lifecycle/windows-opener-url-handler.test.ts",
