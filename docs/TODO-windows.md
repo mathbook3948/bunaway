@@ -783,7 +783,7 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
 - [ ] MIDI, sensors와 protected media 권한의 지원 범위를 결정한다.
 - [ ] WebAuthn authenticator와 account 선택의 지원 범위를 결정한다.
 - [ ] WebView2가 제공하지 않는 장치 API는 선택 렌더러 필요 여부 또는 `UNSUPPORTED`를 명시한다. Bluetooth, USB, Serial, HID는 공개 문서 기준으로 공개 연산이 없으므로 `UNSUPPORTED`나 선택 렌더러 요구 사항을 만들지 않고 앱은 이 API에 의존하지 않는다. MIDI, sensors와 protected media 권한, WebAuthn 몫은 각 항목의 결정 뒤에 남아 있다 ([ADR 0107](decisions/0107-webview-device-chooser-apis.md)).
-- [ ] WebRTC IP handling policy와 UDP port range 설정의 지원을 결정한다.
+- [x] WebRTC IP handling policy와 UDP port range 설정은 [제공하지 않는다](decisions/0091-webview-webrtc-network-policy.md). WebView2에는 런타임 설정 API가 없고 브라우저 인자는 같은 사용자 데이터 폴더의 환경 전체에 적용된다.
 
 ## 18. 다운로드, 인쇄와 캡처
 
