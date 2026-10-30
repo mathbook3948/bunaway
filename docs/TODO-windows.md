@@ -1277,18 +1277,13 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
   [창 이벤트 검증 기록](./architecture/windows-bun-results.md#2026-10-10-창-이벤트와-구독-수명)과
   [네이티브 모달 이벤트 전송 기록](./architecture/windows-bun-results.md#2026-10-10-네이티브-모달-이벤트-전송-보완)을 따른다.
   후속 물리 조작 검증에서 focus/blur와 물리 드래그를 확인했다. 다중 물리 모니터 이동은 미검증이다.
-<<<<<<< HEAD
 - [ ] IME, keyboard layout과 스크린 리더 회귀를 검증한다.
   스크린 리더 경로는 `tests/lifecycle/windows-webview-accessibility-tree.ts`가 MSAA 창 이름, UI Automation의
   WebView2 컨트롤 트리와 클라이언트 연결 상태를 읽어 검증한다. `setAccessibleTitle`은 UIA `Name`을 바꾸지 않는다.
 - [x] 고대비가 켜지면 실제 WebView2 문서의 `forced-colors: active`와 본문 배경색이 시스템 창 색을 따르고, appearance
   조회와 `appearance.changed`가 OS 상태를 따르는지 Windows CI에서 검증한다.
   (`tests/lifecycle/windows-webview-high-contrast.ts`, 대화형 세션의 시각 확인은 대신하지 않는다.)
-- [ ] tray, autostart, file association과 toast를 깨끗한 Windows 설치에서 검증한다.
-=======
-- [ ] IME, keyboard layout, 고대비와 스크린 리더 회귀를 검증한다.
 - [ ] tray, autostart, file association과 toast를 깨끗한 Windows 설치에서 검증한다. (일부: Inno 설치 프로그램이 공백과 한글이 든 폴더에 설치한 compiled 앱의 실행과 제거 뒤 정리는 `tests/packaging/windows-installed-app-launch.ts`가 확인한다. tray, autostart, file association, toast는 남음)
->>>>>>> ca841ddd (tests: verify the installed app launches from a folder with spaces and Korean and leaves nothing after uninstall)
 - [ ] autostart를 등록한 뒤 실제 로그아웃과 로그인에서 앱 실행 및 인자 전달을 검증한다.
   Run 값 등록과 저장 명령줄의 CreateProcessW 실행 검사는 실제 로그인 실행을 검증한 결과가 아니다.
   [autostart 검증 범위](../plugins/autostart/README.md#검증)를 따른다.
