@@ -7,7 +7,8 @@
         "reference/client/create-client": ["createClient"],
         "reference/client/transport": [
           "createWebViewTransport",
-          "createMockTransport"
+          "createMockTransport",
+          "createMockClient"
         ],
         "reference/client/is-bunaway": ["isBunaway"],
         "reference/client/invoke": ["invoke"],

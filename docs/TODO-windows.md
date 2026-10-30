@@ -1114,7 +1114,7 @@ PRD의 첫 릴리스에는 자동 업데이트 서비스가 포함되지 않는�
 - [ ] native resource handle의 생성, 참조와 해제 계약을 제공한다.
 - [x] UI에 노출할 명령과 이벤트의 타입, 계약과 정책 목록을 생성하는 도구를 제공한다(`bunaway contract`).
 - [x] 브라우저 테스트용 transport를 제공한다(`createMockTransport`).
-- [ ] 앱 정의에서 mock 핸들러를 생성하는 mock API를 제공한다.
+- [x] 앱 정의 타입으로 핸들러를 받는 mock 클라이언트를 제공한다(`createMockClient`: 앱 정의의 `CommandsOf`/`EventsOf` 타입 사용).
 - [x] context bridge와 preload는 SDK 클라이언트와 명령 정책으로 [대체하고](decisions/0106-context-bridge-and-preload-replacement.md) 같은 이름의 기능은 제공하지 않는다. 문서 로드 전 주입은 현재 제공하지 않으며 문서 초기화 script 항목이 다룬다.
 - [x] 동기 IPC와 프런트엔드의 임의 Node/Bun 접근은 PRD와 충돌하므로 제공하지 않기로 결정했다. 모든 명령 호출은 Promise로 완료된다. [ADR 0048](decisions/0048-frontend-node-access-and-sync-ipc.md).
 
