@@ -292,7 +292,12 @@ getter와 FFI 값을 비교하며 고유 tag/group의 임시 알림은 finally�
 조회, 취소, 종료 후 유지를 가짜 driver로 검사하고 `fixtures/notification-scheduled-ffi.ts`가 실제 vtable
 slot과 인자 순서, 교체 순서, 4096개 한도, HRESULT 실패 때 COM 참조와 HSTRING 정리를 가짜 COM으로 검사한다.
 `windows-toast.fixture.ts`의 예약 단계는 실제 WinRT로 예약, 교체, 조회, 취소와 약 8초 뒤의 표시 시각
-도착을 확인하며 앱 프로세스가 종료된 상태의 표시는 확인하지 않는다.
+도착을 확인한다. `lifecycle/windows-toast-scheduled-exit.test.ts`는 자식 Bun 프로세스가 같은 어댑터로 두 알림을
+예약하고 정상 종료한 뒤, 부모가 새 어댑터에서 두 예약을 조회하고 하나를 취소하며 나머지가 표시 시각에 알림 센터
+기록으로 들어가고 예약 목록에서 사라지는 것과 취소한 알림이 시각이 지나도 기록에 없는 것을 확인한다.
+이 시험은 부모가 먼저 알림 하나를 표시하고 지운 앱 ID를 쓴다. windows-2022의 워크플로 run 40803274060(2026-10-29)에서 한 번도 알림을 표시한 적 없는 앱 ID로
+예약한 알림은 예약 시각에 예약 목록에서 사라지지만 기록에 들어오지 않았고(같은 프로세스, 살아 있는 자식, 종료한 자식에서 모두 관찰한 일회성 CI 실험 결과이며 이 시험은 그 경우를 실행하지 않는다), 소리와 popup을 억제한 알림을 먼저 표시하고 지운 뒤에는 도착했다.
+강제 종료(TerminateProcess), 시스템 시계 변경, 절전 중 도착, 집중 지원 모드는 확인하지 않는다.
 
 `api/notification-cold-activation.test.ts`는 앱이 꺼진 뒤의 클릭을 받는 toast activator의 Linux 계약 시험이다.
 활성화 인수 형식의 허용과 거부, 다른 앱 ID 거부, 첫 `takeActivations` 전 보관과 16건 한도, 이번 실행 toast의

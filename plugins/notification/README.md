@@ -240,3 +240,8 @@ activator 등록 뒤에도 toast 객체 callback이 계속 오는지는 자동 �
   값과 없는 키를 구분하는지는 확인한다. 실제 버튼 클릭에서 인자 객체를 읽는 경로는 GUI 입력이
   필요해 자동 검증하지 않으며, `tests/api/notification-toast.test.ts`의 가짜 COM 객체와
   `tests/api/notification-actions.test.ts`의 계약 시험으로 해석과 자원 해제를 검사한다.
+- `bun --no-env-file test tests/lifecycle/windows-toast-scheduled-exit.test.ts`: 자식 Bun 프로세스가 두 알림을
+  예약하고 정상 종료한 뒤, 부모가 새 어댑터로 예약을 조회하고 하나를 취소하며 나머지가 표시 시각에 history로
+  들어가는 것과 취소한 알림이 시각이 지나도 history에 없는 것을 확인한다. 부모가 먼저 알림 하나를 표시하고 지운 앱 ID를
+  쓰며, 알림을 한 번도 표시하지 않은 앱 ID의 예약은 확인 범위에 넣지 않는다. 강제 종료, 시스템 시계 변경,
+  절전 중 도착, 집중 지원은 확인하지 않는다.
