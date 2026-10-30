@@ -43,6 +43,8 @@ status: accepted
 
 위 표의 PR #552와 #557은 이 결정 시점에 main에 합쳐지지 않았다. 합쳐진 뒤 표의 위치를 갱신한다.
 
+Microsoft Store 배포 완료 조건은 [ADR 0128](./0128-windows-microsoft-store-completion-conditions.md)에서 정한다.
+
 ## 근거
 
 - Electron의 도구(Forge, builder)는 Squirrel, WiX MSI, NSIS, MSIX를 모두 지원하고, Tauri는 NSIS와 WiX MSI를 지원한다. 둘 다 MSI를
