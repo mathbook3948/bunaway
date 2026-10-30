@@ -733,7 +733,7 @@ WebView 접근성 트리 및 실제 보조 기술 검증은 미완료다.
   Electron `net.isOnline()`에 대응해 루프백과 link-local이 아닌 주소를 가진 활성 인터페이스 유무만 보고 인터넷 도달은 판단하지 않는다.
   Windows에서는 2초 주기 확인으로 변경 이벤트를 보낸다. host resolve `network.resolveHost`는 Electron `net.resolveHost()`에 대응해
   시스템 리졸버(getaddrinfo)로 구현했다. proxy resolve `network.resolveProxy`는 Electron `session.resolveProxy()`에 대응해
-  WinHTTP로 사용자 인터넷 옵션(자동 감지, PAC, 수동 목록과 예외 목록)을 적용한 구조화 목록을 돌려준다. 쿼리 유형(`queryType`)은 제공한다. `source`, cache와 secure DNS 옵션은 Windows 시스템 리졸버에 대응이 없어 미지원이다.
+  WinHTTP로 사용자 인터넷 옵션(자동 감지, PAC, 수동 목록과 예외 목록)을 적용한 구조화 목록을 돌려준다. 쿼리 유형(`queryType`)은 제공한다. `source`, cache와 secure DNS 옵션은 Windows 시스템 리졸버에 대응이 없어 미지원이다. Windows의 `network.request`, `exchange`, `download`, `upload`는 같은 조회로 시스템 proxy를 따른다(환경 변수 proxy 우선, SOCKS만 있으면 실패).
 - [x] 오프라인, latency와 bandwidth emulation은 [제공하지 않는다](decisions/0071-webview-network-emulation.md). Electron은 문서상 세션 단위로 제공하지만 소스상 적용되지 않을 가능성이 있고 Tauri에는 없으며, WebView2는 DevTools 프로토콜로만 가능하며 Chromium 소스상 호출한 WebView의 최상위 target에만 적용되는 것으로 보이고(추론) 그 메서드는 deprecated다.
 - [x] preconnect, 연결 정리와 network log는 [제공하지 않는다](decisions/0082-webview-preconnect-connections-and-net-log.md). Electron은 세션 단위로 제공하지만 Tauri에는 없고, WebView2에는 preconnect와 연결 정리 API가 없으며 network log는 환경 생성 때만 켤 수 있다.
 - [ ] 사용자 정의 앱 protocol의 등록, 해제와 등록 상태 조회를 제공한다. [#158](https://github.com/mathbook3948/bunaway/issues/158).

@@ -341,10 +341,16 @@ export async function download(
     totalBytes: number | null;
   },
   touch: () => void,
+  proxy?: string,
 ) {
   await checkTarget(input.path, input.overwrite);
   signal.throwIfAborted();
   const response = await fetch(input.url, {
+    ...(proxy === undefined
+      ? {}
+      : {
+          proxy,
+        }),
     method: "GET",
     // Stored as sent, so the announced length is the size the file will have.
     headers: [

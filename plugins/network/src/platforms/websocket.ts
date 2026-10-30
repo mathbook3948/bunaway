@@ -11,10 +11,18 @@ type ExchangeResult = z.output<typeof exchangeResultSchema>;
 export function exchange(
   input: z.output<typeof exchangeInputSchema>,
   signal: AbortSignal,
+  proxy?: string,
 ): Promise<ExchangeResult> {
   return new Promise((resolve, reject) => {
     signal.throwIfAborted();
-    const socket = new WebSocket(input.url);
+    const socket = new WebSocket(
+      input.url,
+      proxy === undefined
+        ? undefined
+        : {
+            proxy,
+          },
+    );
     socket.binaryType = "arraybuffer";
     const messages: ExchangeResult["messages"] = [];
     let bytes = 0;

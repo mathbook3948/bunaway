@@ -192,6 +192,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-network-online.test.ts",
           "tests/lifecycle/windows-network-resolve-host.test.ts",
           "tests/lifecycle/windows-network-resolve-proxy.test.ts",
+          "tests/lifecycle/windows-network-system-proxy.test.ts",
           "tests/lifecycle/windows-updater-signature.test.ts",
           "tests/lifecycle/windows-updater-msix.test.ts",
           "tests/lifecycle/windows-global-shortcut.test.ts",
