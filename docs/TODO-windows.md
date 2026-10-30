@@ -1283,7 +1283,7 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
 - [x] 고대비가 켜지면 실제 WebView2 문서의 `forced-colors: active`와 본문 배경색이 시스템 창 색을 따르고, appearance
   조회와 `appearance.changed`가 OS 상태를 따르는지 Windows CI에서 검증한다.
   (`tests/lifecycle/windows-webview-high-contrast.ts`, 대화형 세션의 시각 확인은 대신하지 않는다.)
-- [ ] tray, autostart, file association과 toast를 깨끗한 Windows 설치에서 검증한다.
+- [ ] tray, autostart, file association과 toast를 깨끗한 Windows 설치에서 검증한다. (일부: Inno 설치 프로그램이 공백과 한글이 든 폴더에 설치한 compiled 앱의 실행과 제거 뒤 정리는 `tests/packaging/windows-installed-app-launch.ts`가 확인한다. tray, autostart, file association, toast는 남음)
 - [ ] autostart를 등록한 뒤 실제 로그아웃과 로그인에서 앱 실행 및 인자 전달을 검증한다.
   Run 값 등록과 저장 명령줄의 CreateProcessW 실행 검사는 실제 로그인 실행을 검증한 결과가 아니다.
   [autostart 검증 범위](../plugins/autostart/README.md#검증)를 따른다.
