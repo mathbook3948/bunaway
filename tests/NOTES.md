@@ -1057,7 +1057,13 @@ UTF-16 순서), 페이지 크기별 커서 이어 읽기가 한 번에 읽은 �
 
 `windows-storage-long-path.ts`는 실제 Windows 파일 시스템에서 400자를 넘는 경로에 쓰기(상위 폴더 생성 포함), 읽기, 존재와 stat,
 목록(접두사 없는 이름), directorySize, 복사, 덮어쓰지 않는 이동, 자기 하위로의 이동 거부, 삭제와 removeRecursive를 확인한다.
-`LongPathsEnabled`를 끈 환경은 러너 설정에 의존하므로 확인하지 않는다.
+이 드라이브 경로 테스트는 `LongPathsEnabled`를 끈 환경을 확인하지 않는다.
+
+`windows-storage-long-unc-path.ts`는 비슷한 확인을 관리 공유(`\\localhost\D$`) UNC 경로에서 한다. 400자를 넘는 UNC 경로의 쓰기, 읽기, stat, 목록, directorySize,
+복사, 덮어쓰지 않는 이동, 삭제와 removeRecursive를 확인하고, 접두사 유무에 따른 원시 파일 시스템 동작은 기록만 한다. 관리 공유가 없는 러너는
+건너뛴다. removeRecursive 뒤의 삭제 확인은 `\\?\` 접두사 경로로 해서 경로 길이 제한 때문에 폴더가 보이지 않는 일이 없게 한다. `LongPathsEnabled`를 끈 자식 프로세스는 자식이 읽은 레지스트리 값이 0인지와 종료 코드,
+기록 출력을 확인하고 각 원시 호출의 성공 여부는 판정하지 않는다. 부모는 읽어 둔 값 그대로 복구되었는지 단언한다. 레지스트리 값을 읽을 수 없거나 바꿀 수 없는 러너는 그 단계를 건너뛴다.
+이 테스트는 러너의 `LongPathsEnabled=1`에 의존한다(UNC 경로는 접두사 없이 전달되므로).
 
 `windows-storage-create-new.ts`는 실제 Windows 로컬 파일 시스템에서 별도 프로세스 6개가 같은 시각에 같은 대상으로
 `copyFile`(16 MiB 원본)을 호출하는 경합을 5회 반복한다. 모든 자식이 시작 시각 전에 준비됐고 매 회 패자 중 하나 이상이 승자의

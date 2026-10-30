@@ -903,7 +903,8 @@ CSP와 자산 응답 보안은 [PRD](./PRD.md)의 5절 권한과 보안 모델�
   [store 계약](./site/src/content/docs/reference/plugins/store.mdx)을 따른다.
 - [x] storage가 260자 이상인 Windows 드라이브 경로를 다룬다.
   플러그인이 검사를 통과한 드라이브 경로에 파일 시스템 호출 직전에 `\\?\` 접두사를 붙이며
-  드라이브 경로에 대해서는 Node와 같다. UNC 경로는 접두사 없이 그대로 두므로 긴 UNC 경로는 남은 범위다.
+  드라이브 경로에 대해서는 Node와 같다. UNC 경로는 접두사 없이 그대로 두며,
+  긴 UNC 경로는 `windows-storage-long-unc-path.ts`가 관리 공유로 확인한다.
   앱 입력의 접두사 거부와 공개 계약은 그대로다.
   `windows-storage-long-path.ts`가 CI windows-native에서 긴 경로의 동작을 확인한다.
   [읽기 계약](./site/src/content/docs/reference/host/storage-read-text.mdx)을 따른다.

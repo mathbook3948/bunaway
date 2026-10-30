@@ -315,6 +315,7 @@ if (target === "windows-x64") {
       "windows-storage-move-locked-source.ts",
       "windows-storage-case-only-move.ts",
       "windows-storage-long-path.ts",
+      "windows-storage-long-unc-path.ts",
       "windows-storage-create-new.ts",
       "windows-storage-atomic-write.ts",
       "windows-path.ts",
