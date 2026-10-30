@@ -39,6 +39,15 @@ export const PERMISSION_PROBES = [
 
 export type PermissionProbeName = (typeof PERMISSION_PROBES)[number];
 
+/**
+ * Probes whose grant is not the host's to refuse: WebView2 has no permission kind for the screen
+ * wake lock and raises no `PermissionRequested` event for it, so Chromium answers on its own. The
+ * outcome is still recorded and printed, but a grant is not a failure.
+ */
+const HOST_UNCONTROLLED_PROBES: readonly PermissionProbeName[] = [
+  "wakeLock",
+];
+
 export type PermissionReport = {
   userAgent: string;
   origin: string;
@@ -71,7 +80,7 @@ function isOutcome(value: unknown): value is PermissionOutcome {
 
 /**
  * Lists everything wrong with a report: a malformed shape, a missing or unknown probe, a page on
- * another origin, a request that was granted (the host must refuse every page permission), a
+ * another origin, a request that was granted (the host must refuse every page permission it is asked about), a
  * request that hung on a prompt, or a host log without any refusal.
  */
 export function checkReport(report: unknown, origin: string): string[] {
@@ -109,7 +118,10 @@ export function checkReport(report: unknown, origin: string): string[] {
     const outcome = entries[name];
     if (!isOutcome(outcome)) {
       problems.push(`probe ${name} is missing or malformed`);
-    } else if (outcome.result === "granted") {
+    } else if (
+      outcome.result === "granted" &&
+      !HOST_UNCONTROLLED_PROBES.includes(name)
+    ) {
       problems.push(`${name} was granted: ${outcome.detail}`);
     } else if (outcome.result === "timeout") {
       problems.push(`${name} did not end: ${outcome.detail}`);

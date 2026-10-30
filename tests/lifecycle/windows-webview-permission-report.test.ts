@@ -86,6 +86,23 @@ test("a granted request fails the report", () => {
   ]);
 });
 
+test("a granted wake lock is recorded but does not fail the report", () => {
+  const granted: PermissionOutcome = {
+    result: "granted",
+    detail: "screen",
+    ms: 1,
+    hostDenials: 0,
+  };
+  expect(
+    checkReport(
+      report({
+        wakeLock: granted,
+      }),
+      ORIGIN,
+    ),
+  ).toEqual([]);
+});
+
 test("a request that never ends fails the report", () => {
   const hung: PermissionOutcome = {
     result: "timeout",
