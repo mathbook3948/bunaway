@@ -120,6 +120,7 @@ if (target === "windows-x64") {
     await test("windows-taskbar-progress.ts");
     await test("windows-menu-roles.ts");
     await test("windows-menu-auto-hide.ts");
+    await test("windows-webview-text-input.ts");
     await test("windows-initial-placement.ts");
     await test("windows-window-events.ts");
     await test("windows-window-state.ts");
