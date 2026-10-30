@@ -38,6 +38,7 @@ status: accepted
    언어를 앱이 정하는 수단은 제공하지 않고, 페이지는 WebView2 기본 동작을 따른다.
 3. proxy는 호스트가 브라우저 인자를 넘기지 않는 방침(ADR 0030 결정 4)을 유지하므로 제공하지 않는다.
 4. 시크릿 모드는 프로필 디렉터리와 데이터 저장소 선택 항목이 정해질 때 그 결정에 포함해 다시 다룬다.
+   [ADR 0135](./0135-webview-profile-directory-and-private-mode.md)이 그 항목을 정했고 시크릿 모드는 제공하지 않는다.
 5. 쓰는 곳이 확인되면 별도 결정에서 다시 다룬다. 그때 user agent는 `ICoreWebView2Settings2::UserAgent`로
    대응하는 방안부터 검토하고, 언어는 환경 옵션(`Language`) 도입 여부를 함께 정한다.
 
