@@ -1,0 +1,76 @@
+---
+title: crash-report
+description: Windows에서 앱 호스트 프로세스의 비정상 종료 덤프를 앱 데이터 폴더에 남기고 다음 실행에서 목록을 조회합니다.
+sidebar: { order: 22 }
+---
+
+기본 export(`default`)를 `crashReport`로 가져와 앱에 등록하고 호출합니다.
+
+`@bunaway/plugin-crash-report` 패키지를 설치하고 앱의 `plugins`에 `crashReport`를 등록합니다. Windows에서만
+제공하며 macOS에서는 모든 작업이 `UNSUPPORTED`입니다. Windows Error Reporting의 앱별 로컬 덤프 등록
+(`WerRegisterAppLocalDump`)을 써서, 등록한 프로세스가 비정상 종료할 때 덤프 파일을 앱 데이터 폴더에 남깁니다.
+Electron의 `crashReporter`가 주는 로컬 덤프 보관과 `getLastCrashReport`에 가깝고, 서버로 업로드하는 기능은
+없습니다. 크래시 이벤트, 덤프 내용 읽기, 덤프 경로 조회, 덤프 내보내기도 제공하지 않습니다.
+
+```ts
+import crashReport from "@bunaway/plugin-crash-report";
+
+// 실행할 때마다 호출합니다. 등록은 프로세스가 끝나면 사라집니다.
+await crashReport.enable(null);
+
+// 다음 실행에서 지난 크래시의 덤프를 조회합니다.
+const dumps = await crashReport.list(null);
+for (const dump of dumps) {
+  console.log(dump.id, dump.kind, dump.sizeBytes, new Date(dump.createdAtMs));
+}
+await crashReport.remove({ id: dumps[0].id });
+```
+
+| 함수 | 입력 | 결과 | 권한 |
+| --- | --- | --- | --- |
+| `crashReport.enable` | `null` | `Promise<null>` | `crashReport.enable` |
+| `crashReport.disable` | `null` | `Promise<null>` | `crashReport.disable` |
+| `crashReport.list` | `null` | `Promise<CrashDump[]>` | `crashReport.list` |
+| `crashReport.remove` | `CrashReportRemoveInput` | `Promise<CrashReportRemoveResult>` | `crashReport.remove` |
+
+## 등록
+
+`enable`은 `<앱 데이터 폴더>\crash-dumps`를 만들고, 오래된 덤프를 정리한 뒤 이 프로세스를 그 폴더에 등록합니다.
+폴더는 호스트가 정하며 호출자가 경로를 고를 수 없습니다. 이미 등록했으면 아무것도 하지 않습니다. 기본은 꺼짐이므로
+덤프가 필요한 앱은 실행할 때마다 `enable`을 호출해야 하고, 호출하기 전에 난 크래시는 남지 않습니다.
+
+`disable`은 등록을 풀며 이미 남은 덤프는 지우지 않습니다. 어댑터가 dispose되어도 등록은 풀지 않아서 종료 중에 난
+크래시도 남습니다. 등록은 Windows가 프로세스 단위로 관리합니다.
+
+Windows Error Reporting은 `%LOCALAPPDATA%` 기준 상대 경로만 받습니다. 앱 데이터 폴더가 그 밖에 있으면 어댑터를
+만들 때 `UNSUPPORTED`입니다. 이 API가 없는 Windows 빌드도 `UNSUPPORTED`입니다. Windows가 등록을 거부하면
+`INTERNAL`이고 메시지에 HRESULT가 들어 있습니다.
+
+## 목록과 삭제
+
+`list`는 최신순으로 `{ id, createdAtMs, sizeBytes, kind }` 배열을 돌려줍니다.
+
+- `id`는 호스트가 파일 이름, 수정 시각, 크기로 만든 32자리 16진수 값입니다. 파일 이름과 경로는 돌려주지 않습니다.
+- `kind`는 파일 머리말로 정합니다. `"mini"`는 minidump, `"full"`은 프로세스 메모리 전체를 담은 덤프, `"unknown"`은
+  minidump 머리말이 아닌 파일입니다.
+- 폴더 바로 아래의 `.dmp` 일반 파일만 대상입니다. 심볼릭 링크, junction 같은 reparse point, 폴더는 따라가지
+  않고 목록에도 넣지 않습니다. 한 번에 최대 1000개 항목만 살핍니다.
+
+`remove({ id })`는 그 `id`의 덤프 하나를 지우고 `{ removed: true }`를 돌려줍니다. 없는 `id`(이미 정리된 덤프
+포함)는 오류 없이 `{ removed: false }`입니다. `id`는 32자리 16진수가 아니면 `INVALID_ARGUMENT`입니다.
+
+`enable`과 `list`는 최신 덤프 10개만 남기고 나머지를 지웁니다. 남기는 덤프의 크기 합이 256 MiB를 넘으면 오래된
+것부터 더 지우며, 가장 최신 덤프 하나는 항상 남깁니다.
+
+## 개인정보
+
+덤프는 크래시 시점의 프로세스 메모리를 담으므로 토큰, 비밀번호, 사용자 데이터가 평문으로 들어 있을 수 있고
+앱 데이터 폴더에 사용자 권한의 평범한 파일로 남습니다. 이 플러그인은 덤프 내용과 경로를 앱에 주지 않아서 앱의
+화면과 백엔드가 덤프를 읽거나 복사하는 경로를 만들지 않습니다. 네 작업은 서로 독립된 권한이고 `enable`을 허용한
+앱만 덤프가 생깁니다. 사용자에게 알리고 동의를 받은 앱에서만 켭니다. 뷰에서 직접 호출하려면 `commands`에
+`plugin.crashReport.*`를 허용해야 하는데, 기본 권장은 신뢰된 백엔드 명령에서만 호출하는 것입니다.
+
+화면 함수의 마지막 인자는 `NativeInvokeOptions`이며 `signal`과 `deadline`은 [invoke](/reference/client/invoke/)의
+규칙을 따릅니다. 폴더 정리와 목록은 호스트의 I/O Worker에서 동기로 실행합니다. 잘못된 입력은 `INVALID_ARGUMENT`,
+권한 거부는 `PERMISSION_DENIED`, 등록하지 않은 플랫폼은 `UNSUPPORTED`, 종료된 어댑터와 취소는 `CANCELLED`,
+호출 기한 초과는 `TIMEOUT`입니다.
