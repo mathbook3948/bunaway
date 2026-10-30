@@ -57,6 +57,7 @@ Windows CI에서는 실제 Inno Setup 설치기를 실행하는 `tests/packaging
 | 새 플러그인 workspace | `bunaway plugin new <name>`으로 생성, `bun test tests/conformance tests/cli/plugin-new`, `bun run docs:check` | 없음 |
 | `framework.json`, 루트 `package.json`, `biome.json`, workspace tsconfig | `bun test tests/conformance` | 없음 |
 | 테스트 추가, 기한 변경 | `bun test tests/conformance/test-deadlines`, 바뀐 테스트 파일 | 해당 OS의 fixture는 그 OS에서 |
+| 플러그인 연산 추가, 삭제, 이름 변경과 `reference/plugins/*.mdx`의 연산 표기 | `bun test tests/conformance/windows-capability-docs`(Windows 어댑터가 등록한 연산과 문서의 `plugin.operation` 표기 비교), `bun run docs:check` | 없음 |
 | 배포 묶음 (`packages/cli/scripts/pack.ts`, 패키지와 플러그인의 `package.json`, `scripts/check-release-packages.ts`) | `bun test tests/conformance/release-packages`, `mise run release:check`(전체 pack, CI 밖) | 없음 |
 | 모든 변경 | `bun test tests/docs` (텍스트 스타일), `mise run check` | 해당 없음 |
 

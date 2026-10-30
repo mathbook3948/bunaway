@@ -1294,6 +1294,8 @@ ARM64는 런타임 해시와 APK 포함만 확인했으며 실기기 실행과 �
   원인은 규명하지 못했고 로컬 재실행은 하지 않았으므로 항목은 열어 둔다.
 - [ ] 최소 지원 OS, CPU와 다른 Job 정책의 환경에서 장애 및 강제 종료 뒤 자원 정리를 검증한다.
 - [ ] 각 플랫폼의 supported/experimental/unsupported와 OS permission 값을 실제 구현에 맞춘다.
+  진행: `tests/conformance/windows-capability-docs.test.ts`가 Windows 어댑터가 등록한 연산 이름과
+  `reference/plugins` 문서의 연산 표기를 비교한다. `support` 값과 OS permission 값의 비교는 남아 있다.
 - [ ] 지원 목록, CLI 진단, 문서와 배포 산출물을 같은 릴리스로 갱신한다.
   진행: `bunaway doctor`가 선언한 채널에 따라 Inno Setup `ISCC.exe`와 `signtool.exe` 설치 여부를 검사한다.
 - [ ] 플랫폼별 설치 패키지 형식과 배포 채널을 확정하고 [PRD](./PRD.md)의 9절 출시 기준 및
