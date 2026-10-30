@@ -173,9 +173,15 @@ JSON escape와 UTF-8 metadata 한도, 만료 retained 항목의 aggregate 예산
 renderer에 모든 다운로드 권한을 허용해도 작업이 실행되지 않으며 호출자가 임의 저장 경로를
 전달할 수 없는지 검사한다. `lifecycle/downloads.test.ts`는 pending 승인 기한, 상한과 슬롯 회수,
 탐색 시 pending 거부, 승인된 작업의 수명, pause/resume과 종료 기록 및 실패 시 자원 정리를 확인한다.
+같은 파일은 변경 알림도 다룬다. pending, 승인, 완료, 취소의 순서와 한 번씩만 전달하기, 진행 알림의 간격 합치기,
+상태 변화의 즉시 전달, forget과 종료 뒤 무알림, 알림 중 읽기 실패의 전달 경로를 가짜 operation으로 검사한다.
+`api/window-download-change.test.ts`는 `windows.waitForDownloadChange`의 결과 스키마와 크기 상한,
+순서 번호와 커서 재개, 지원하지 않는 플랫폼의 `UNSUPPORTED`를 확인한다.
 `lifecycle/windows-webview-downloads.ts`는 `mise run host:windows`에서 실제 UI Worker와
 WebView2 다운로드를 실행한다. 기본 거부, renderer 권한 거부, 항목별 승인과 거부, 실제 파일
 내용과 byte 진행, pause/resume/cancel, 승인 기한, 탐색 및 종료 시 pending 정리를 검증한다.
+같은 실행에서 `windows.waitForDownloadChange`가 pending, 진행, 일시중지, 완료와 거부된 요청의 취소를
+순서대로 한 번씩 전달하고 forget 뒤에는 더 전달하지 않는지도 확인한다.
 승인된 전송과 pending 요청이 함께 있는 브라우저를 종료해 죽은 broker에 작업을 보내지 않고
 COM 참조, timer와 창 자원을 정리하는지도 확인한다.
 기존 multiple-automatic-downloads 권한 거부를 유지하며 제어 시나리오는 새 WebView에서

@@ -12,11 +12,13 @@ import {
   serializeProcessFrame,
 } from "@bunaway/protocol";
 import {
+  type DownloadChangeKind,
   DownloadCleanupError,
   DownloadCleanupRetries,
   type DownloadResource,
   Downloads,
 } from "#native/windows/bun/downloads";
+import { waitFor } from "../fixtures/deadlines.ts";
 
 /** A controllable native operation, with observable decisions and resource releases. */
 function resource() {
@@ -38,6 +40,7 @@ function resource() {
   let failure: Error | undefined;
   let readFailure: Error | undefined;
   let cancelFailure: Error | undefined;
+  let notify: ((kind: DownloadChangeKind) => void) | undefined;
   const native: DownloadResource = {
     read() {
       if (readFailure) {
@@ -72,9 +75,13 @@ function resource() {
       state.canResume = false;
       state.interruptReason = null;
     },
+    subscribe(callback) {
+      notify = callback;
+    },
     dispose(browserGone = false) {
       disposed++;
       abandoned = browserGone;
+      notify = undefined;
     },
   };
   return {
@@ -90,6 +97,10 @@ function resource() {
     get abandoned() {
       return abandoned;
     },
+    /** The native event handler; absent before approval and after disposal. */
+    get notify() {
+      return notify;
+    },
     fail: (error: Error) => {
       failure = error;
     },
@@ -102,14 +113,18 @@ function resource() {
   };
 }
 
-function fixture(timeoutMs = 30_000) {
+function fixture(timeoutMs = 30_000, progressIntervalMs = 250) {
   const failures: unknown[] = [];
+  const reports: WebViewDownload[] = [];
   const downloads = new Downloads(
     (url, source) =>
       url.startsWith("https://app.bunaway.local/") &&
       source.startsWith("https://app.bunaway.local/"),
     timeoutMs,
     (error) => failures.push(error),
+    undefined,
+    (download) => reports.push(download),
+    progressIntervalMs,
   );
   const offer = (
     item: ReturnType<typeof resource>,
@@ -119,6 +134,7 @@ function fixture(timeoutMs = 30_000) {
     downloads,
     offer,
     failures,
+    reports,
   };
 }
 
@@ -599,4 +615,209 @@ test("download cleanup failures are typed and rate-limited per closing owner unt
   active.failCancel();
   owner.downloads.dispose();
   expect(active.disposed).toBe(1);
+});
+
+/** Let queued zero-delay reports run. */
+const settle = () => Bun.sleep(5);
+
+test("a request, its approval and its completion are each reported once, in order", async () => {
+  const f = fixture();
+  f.downloads.setRequestsEnabled(true);
+  const item = resource();
+  const id = f.offer(item);
+  if (!id) {
+    throw new Error("Missing request");
+  }
+  await settle();
+  expect(f.reports.map((report) => report.state)).toEqual([
+    "pending",
+  ]);
+  f.downloads.approve(id);
+  await settle();
+  expect(f.reports.map((report) => report.state)).toEqual([
+    "pending",
+    "inProgress",
+  ]);
+  item.state.receivedBytes = 100;
+  item.state.state = "completed";
+  item.notify?.("state");
+  // Native duplicates of a delivered state add nothing.
+  item.notify?.("state");
+  await settle();
+  expect(
+    f.reports.map((report) => [
+      report.state,
+      report.receivedBytes,
+    ]),
+  ).toEqual([
+    [
+      "pending",
+      0,
+    ],
+    [
+      "inProgress",
+      0,
+    ],
+    [
+      "completed",
+      100,
+    ],
+  ]);
+  // Completion released the operation, and a later native event is not followed up.
+  expect(item.disposed).toBe(1);
+  expect(item.notify).toBeUndefined();
+  expect(f.failures).toEqual([]);
+  f.downloads.dispose();
+});
+
+test("progress is merged per interval while a state change is reported at once", async () => {
+  const f = fixture(30_000, 40);
+  f.downloads.setRequestsEnabled(true);
+  const item = resource();
+  const id = f.offer(item);
+  if (!id) {
+    throw new Error("Missing request");
+  }
+  f.downloads.approve(id);
+  await settle();
+  const before = f.reports.length;
+  for (const received of [
+    10,
+    20,
+    30,
+  ]) {
+    item.state.receivedBytes = received;
+    item.notify?.("progress");
+  }
+  // The burst waits out the interval, then reports only the latest count.
+  expect(f.reports.length).toBe(before);
+  await waitFor(() => (f.reports.length > before ? true : undefined), {
+    deadline: "inProcess",
+    what: "the merged progress report",
+  });
+  expect(f.reports.slice(before).map((report) => report.receivedBytes)).toEqual(
+    [
+      30,
+    ],
+  );
+  // A pause arriving inside the next interval is not delayed by pending progress.
+  item.state.receivedBytes = 40;
+  item.notify?.("progress");
+  item.state.state = "interrupted";
+  item.state.canResume = true;
+  item.state.interruptReason = 28;
+  item.notify?.("state");
+  await settle();
+  expect(f.reports.at(-1)).toMatchObject({
+    state: "interrupted",
+    paused: true,
+    receivedBytes: 40,
+  });
+  f.downloads.dispose();
+});
+
+test("a state read by an API call is still reported once to subscribers", async () => {
+  const f = fixture();
+  f.downloads.setRequestsEnabled(true);
+  const item = resource();
+  const id = f.offer(item);
+  if (!id) {
+    throw new Error("Missing request");
+  }
+  f.downloads.approve(id);
+  await settle();
+  item.state.receivedBytes = 100;
+  item.state.state = "completed";
+  // list() observes completion and releases the operation before any native event is handled.
+  expect(f.downloads.list()[0]?.state).toBe("completed");
+  await settle();
+  expect(f.reports.at(-1)).toMatchObject({
+    state: "completed",
+    receivedBytes: 100,
+  });
+  f.downloads.dispose();
+});
+
+test("cancellation and approval expiry are reported as cancelled", async () => {
+  const f = fixture(5);
+  f.downloads.setRequestsEnabled(true);
+  const expired = resource();
+  f.offer(expired);
+  await waitFor(
+    () =>
+      f.reports.some((report) => report.state === "cancelled")
+        ? true
+        : undefined,
+    {
+      deadline: "inProcess",
+      what: "the expiry report",
+    },
+  );
+  const g = fixture();
+  g.downloads.setRequestsEnabled(true);
+  const active = resource();
+  const id = g.offer(active);
+  if (!id) {
+    throw new Error("Missing request");
+  }
+  g.downloads.approve(id);
+  g.downloads.cancel(id);
+  await settle();
+  expect(g.reports.at(-1)).toMatchObject({
+    state: "cancelled",
+    canResume: false,
+  });
+  expect(active.notify).toBeUndefined();
+  f.downloads.dispose();
+  g.downloads.dispose();
+});
+
+test("forgetting, closing and a failed read send nothing misleading", async () => {
+  const f = fixture();
+  f.downloads.setRequestsEnabled(true);
+  const finished = resource();
+  const id = f.offer(finished);
+  if (!id) {
+    throw new Error("Missing request");
+  }
+  f.downloads.approve(id);
+  finished.state.state = "completed";
+  finished.state.receivedBytes = 100;
+  await settle();
+  const count = f.reports.length;
+  f.downloads.forget(id);
+  await settle();
+  expect(f.reports.length).toBe(count);
+
+  const open = resource();
+  const openId = f.offer(open);
+  if (!openId) {
+    throw new Error("Missing request");
+  }
+  f.downloads.approve(openId);
+  await settle();
+  const beforeClose = f.reports.length;
+  // Closing cancels the operation, but a closing WebView reports no further changes.
+  f.downloads.dispose();
+  await settle();
+  expect(f.reports.length).toBe(beforeClose);
+  open.notify?.("state");
+  await settle();
+  expect(f.reports.length).toBe(beforeClose);
+
+  const g = fixture();
+  g.downloads.setRequestsEnabled(true);
+  const failing = resource();
+  const failingId = g.offer(failing);
+  if (!failingId) {
+    throw new Error("Missing request");
+  }
+  g.downloads.approve(failingId);
+  await settle();
+  failing.failRead(new Error("native read failed"));
+  failing.notify?.("state");
+  await settle();
+  // A failed read in a native event is routed to the owner, like an expiry that cannot cancel.
+  expect(g.failures).toHaveLength(1);
+  g.downloads.dispose();
 });

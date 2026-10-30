@@ -142,6 +142,10 @@ export function createWindows(api: NativePluginAPI<Definitions>) {
       input: Input<"waitForAudioChange"> = {},
       options?: NativeInvokeOptions,
     ) => api.waitForAudioChange(input, options),
+    waitForDownloadChange: (
+      input: Input<"waitForDownloadChange"> = {},
+      options?: NativeInvokeOptions,
+    ) => api.waitForDownloadChange(input, options),
     create: (input: Input<"create"> = {}, options?: NativeInvokeOptions) =>
       api.create(input, options),
     recreate: (input: Input<"recreate"> = {}, options?: NativeInvokeOptions) =>

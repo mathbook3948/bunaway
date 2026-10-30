@@ -7,6 +7,7 @@ import { overlayIconProvider } from "@bunaway/plugin/windows-icon-provider";
 import type {
   NativeTrayOwner,
   WindowAudioChangeEvent,
+  WindowDownloadChangeEvent,
   WindowLifecycleEvent,
   WindowProcessFailureEvent,
   WindowReadiness,
@@ -412,6 +413,9 @@ type ViewState = {
 const views = new Map<string, ViewState>();
 const lifecycleListeners = new Set<(event: WindowLifecycleEvent) => void>();
 const audioChangeListeners = new Set<(event: WindowAudioChangeEvent) => void>();
+const downloadChangeListeners = new Set<
+  (event: WindowDownloadChangeEvent) => void
+>();
 const processFailureListeners = new Set<
   (event: WindowProcessFailureEvent) => void
 >();
@@ -651,7 +655,8 @@ function isBackendOpenOperation(
     context === config.backendContext &&
     (operation === "windows.waitForLifecycle" ||
       operation === "windows.waitForProcessFailure" ||
-      operation === "windows.waitForAudioChange")
+      operation === "windows.waitForAudioChange" ||
+      operation === "windows.waitForDownloadChange")
   );
 }
 /** An invalid call, a stopping host or a missing permission all deny the request. */
@@ -1319,6 +1324,12 @@ const windowServices: import("@bunaway/plugin-api/native").NativeWindowServices 
         audioChangeListeners.delete(listener);
       };
     },
+    onDownloadChange(listener) {
+      downloadChangeListeners.add(listener);
+      return () => {
+        downloadChangeListeners.delete(listener);
+      };
+    },
     onProcessFailure(listener) {
       processFailureListeners.add(listener);
       return () => {
@@ -1974,6 +1985,25 @@ function createWindow(
               windowId,
               viewId,
               ...state,
+            });
+          }
+        },
+        downloadChanged: (download) => {
+          if (
+            stopping() ||
+            shutdownCommitted() ||
+            views.get(instanceKey)?.native !== native
+          ) {
+            return;
+          }
+          const { windowId, viewId } = readiness.snapshot();
+          for (const listener of [
+            ...downloadChangeListeners,
+          ]) {
+            listener({
+              windowId,
+              viewId,
+              download,
             });
           }
         },

@@ -345,6 +345,14 @@ export type WindowAudioChangeEvent = {
   playing: boolean;
 };
 
+/** A WebView download after a change, as published by `windows.waitForDownloadChange`. */
+export type WindowDownloadChangeEvent = {
+  windowId: string;
+  viewId: string;
+  /** The same snapshot `NativeDownloads.list` returns for this item. */
+  download: WebViewDownload;
+};
+
 /** A current desktop display snapshot. IDs are device names, not persistent hardware identities. */
 export type NativeMonitor = {
   id: string;
@@ -974,6 +982,13 @@ export type NativeWindowServices = {
    * shutdown starts. Returns a function that removes the listener. Absent when the host reports none.
    */
   onAudioChange?(listener: (event: WindowAudioChangeEvent) => void): () => void;
+  /**
+   * Observe each progress or state change of a WebView download, in order and never after
+   * shutdown starts. Returns a function that removes the listener. Absent when the host reports none.
+   */
+  onDownloadChange?(
+    listener: (event: WindowDownloadChangeEvent) => void,
+  ): () => void;
   /**
    * Observe each WebView process failure the host handles, in order and never after shutdown starts.
    * Returns a function that removes the listener. Absent when the host reports none.

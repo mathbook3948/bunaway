@@ -13,6 +13,7 @@ import type {
   NativeMenuEditRole,
   NativePageCapture,
   NativePageCaptureOptions,
+  WebViewDownload,
 } from "@bunaway/plugin-api/native";
 import { BunawayError, type WireError } from "@bunaway/protocol";
 import { AudioChanges, type AudioState } from "./audio-events.ts";
@@ -272,6 +273,8 @@ export class WebView {
       processFailed?(kind: number, recovery: "reload" | "close"): void;
       /** Optional: only the window host reports audio changes to the backend. */
       audioChanged?(state: AudioState): void;
+      /** Optional: only the window host reports download progress and state to the backend. */
+      downloadChanged?(download: WebViewDownload): void;
       close(force?: boolean): void;
       ready(): void;
       documentComplete(error: WireError | null): void;
@@ -611,6 +614,12 @@ export class WebView {
         this.hooks.log("download-rejected", {
           url,
         }),
+      (download) => {
+        // Reports queued before the close request fire later; a closing WebView sends none.
+        if (!this.closing) {
+          this.hooks.downloadChanged?.(download);
+        }
+      },
     );
     const settings = getObject(this.webview, 3);
     try {

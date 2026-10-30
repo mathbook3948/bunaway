@@ -272,7 +272,29 @@ if (!process.argv.includes("--child")) {
     paths.add(found.path);
     return found;
   };
+  /** Every `windows.waitForDownloadChange` result in publication order. */
+  const changes: Awaited<ReturnType<typeof windows.waitForDownloadChange>>[] =
+    [];
+  const changesFor = (id: string) =>
+    changes.filter((change) => change.download.id === id);
+  async function collectChanges() {
+    let after = 0;
+    // The loop ends when the window closes at the end of the run and the wait is cancelled.
+    for (;;) {
+      const change = await windows.waitForDownloadChange({
+        after,
+      });
+      assert(change.sequence > after, "Download changes repeated a sequence");
+      after = change.sequence;
+      changes.push(change);
+    }
+  }
   async function exercise() {
+    void collectChanges().catch((error: unknown) => {
+      if (!completed) {
+        failure = error;
+      }
+    });
     await waitFor(
       () => arrivals.size >= 1,
       "Renderer did not verify backend-only authority",
@@ -306,6 +328,17 @@ if (!process.argv.includes("--child")) {
     });
     assert.equal((await item(denied.id)).state, "cancelled");
     assert.equal(await Bun.file(denied.path).exists(), false);
+    await waitFor(
+      () => changesFor(denied.id).some((c) => c.download.state === "cancelled"),
+      "Rejected request did not report cancellation",
+    );
+    // The rejected request ends cancelled and never reports a transfer state.
+    const rejected = changesFor(denied.id).map((c) => c.download.state);
+    assert.equal(rejected.at(-1), "cancelled");
+    assert(
+      rejected.every((state) => state === "pending" || state === "cancelled"),
+      "A rejected request reported a transfer state",
+    );
     await assert.rejects(
       windows.approveDownload({
         id: denied.id,
@@ -338,6 +371,11 @@ if (!process.argv.includes("--child")) {
       "Paused download was not resumable",
     );
     assert.equal((await item(accepted.id)).paused, true);
+    // The paused state persists until resume, so its report cannot be merged away.
+    await waitFor(
+      () => changesFor(accepted.id).some((c) => c.download.paused),
+      "Pause was not reported",
+    );
     await windows.resumeDownload({
       id: accepted.id,
     });
@@ -353,11 +391,38 @@ if (!process.argv.includes("--child")) {
     paths.add(saved.path);
     assert.equal(saved.receivedBytes, content.length);
     assert.deepEqual(await readFile(saved.path), content);
+    // The same transitions arrive as events, ending in one completed report with the full count.
+    await waitFor(
+      () =>
+        changesFor(accepted.id).some((c) => c.download.state === "completed"),
+      "Completion was not reported",
+    );
+    const reported = changesFor(accepted.id);
+    // A request and its approval can merge into one report, so the first is never a later state.
+    assert(
+      [
+        "pending",
+        "inProgress",
+      ].includes(reported[0]?.download.state ?? ""),
+      "The first report was not the request or its approval",
+    );
+    assert.equal(reported.at(-1)?.download.state, "completed");
+    assert.equal(reported.at(-1)?.download.receivedBytes, content.length);
+    assert.equal(
+      reported.filter((c) => c.download.state === "completed").length,
+      1,
+    );
     await windows.forgetDownload({
       id: accepted.id,
     });
+    const reportedCount = reported.length;
 
     await freshView();
+    assert.equal(
+      changesFor(accepted.id).length,
+      reportedCount,
+      "A forgotten download reported again",
+    );
     const interrupted = await request("cancelled");
     await windows.approveDownload({
       id: interrupted.id,

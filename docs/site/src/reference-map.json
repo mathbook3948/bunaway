@@ -1031,6 +1031,7 @@
           "tick",
           "onLifecycle",
           "onAudioChange",
+          "onDownloadChange",
           "onProcessFailure",
           "creationSettled",
           "monitors"
@@ -1789,6 +1790,7 @@
       "windows.isOpen",
       "windows.waitForLifecycle",
       "windows.waitForAudioChange",
+      "windows.waitForDownloadChange",
       "windows.waitForProcessFailure",
       "windows.getMonitors",
       "windows.getMonitorSnapshot",
