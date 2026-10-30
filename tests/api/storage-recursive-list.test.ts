@@ -3,6 +3,7 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -19,6 +20,8 @@ import {
   type StorageRecursivePage,
 } from "../../plugins/storage/src/contract.ts";
 import { storageOperations } from "../../plugins/storage/src/operations.ts";
+import { createCheckpoint } from "../../plugins/storage/src/platforms/node-directory.ts";
+import { ChildQueue } from "../../plugins/storage/src/platforms/node-directory-recursive.ts";
 import { NodeStorage } from "../../plugins/storage/src/platforms/node-storage.ts";
 import { pluginParsers } from "../fixtures/plugin-parsers.ts";
 
@@ -193,6 +196,41 @@ test("pages of any size concatenate to the unpaged listing and the last page end
   }
   // A page that ends on the last entry reports no next page.
   expect((await readAllPages(12)).length).toBe(1);
+});
+
+test("many children created out of order are listed in UTF-16 order at every page size", async () => {
+  // 37 is coprime with 101, so the creation order is a permutation unrelated to the name order.
+  const names = Array.from(
+    {
+      length: 101,
+    },
+    (_, index) => `n${(index * 37) % 101}`,
+  );
+  createTree(
+    names.flatMap((name) => [
+      `${name}/inner-${name}`,
+      "z-last",
+    ]),
+  );
+  const expected = [
+    ...new Set(names),
+  ]
+    .sort()
+    .flatMap((name) => [
+      name,
+      `${name}/inner-${name}`,
+    ]);
+  expected.push("z-last");
+  const whole = await list(undefined, MAX_DIRECTORY_ENTRIES);
+  expect(paths(whole.entries)).toEqual(expected);
+  for (const limit of [
+    1,
+    7,
+    50,
+  ]) {
+    const pages = await readAllPages(limit);
+    expect(pages.flatMap((page) => paths(page.entries))).toEqual(expected);
+  }
 });
 
 test("a cursor need not name an existing path and continues after its position", async () => {
@@ -689,4 +727,75 @@ test("the operation validates its input and output and has its own permission", 
       ),
     ).toBe(target === "storage.readDirectoryRecursive");
   }
+});
+
+test("the child queue hands out names in UTF-16 order for every size and arrival order", () => {
+  for (const size of [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+  ]) {
+    const names = Array.from(
+      {
+        length: size,
+      },
+      (_, index) => `f${index}`,
+    );
+    createTree(names);
+    const found = readdirSync(root, {
+      withFileTypes: true,
+    });
+    for (const arrival of [
+      found,
+      [
+        ...found,
+      ].reverse(),
+    ]) {
+      const queue = new ChildQueue([
+        ...arrival,
+      ]);
+      const taken: string[] = [];
+      for (let child = queue.take(); child; child = queue.take()) {
+        taken.push(child.name);
+      }
+      expect(taken).toEqual(names);
+      expect(queue.take()).toBeUndefined();
+    }
+    for (const name of names) {
+      rmSync(at(name));
+    }
+  }
+});
+
+test("a checkpoint yields only once the interval has passed and still sees an abort after it", async () => {
+  let clock = 0;
+  const controller = new AbortController();
+  const checkpoint = createCheckpoint(
+    controller.signal,
+    () => {},
+    () => clock,
+  );
+  let yielded = false;
+  const timer = setTimeout(() => {
+    yielded = true;
+  }, 0);
+  for (let step = 0; step < 100; step++) {
+    clock += 0.01;
+    await checkpoint();
+  }
+  expect(yielded).toBe(false);
+  clock += 10;
+  await checkpoint();
+  expect(yielded).toBe(true);
+  clearTimeout(timer);
+  controller.abort();
+  await expect(checkpoint()).rejects.toMatchObject({
+    code: "CANCELLED",
+  });
 });
