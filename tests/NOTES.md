@@ -411,6 +411,16 @@ onOpenUrls에 전달되는지도 별도 자식 프로세스에서 확인한다. 
 raw 모드와 자동 실행 prefix를 함께 사용해 `launchReason`, 앱 argv와 숨김 전달의 표시 상태가
 유지되는지 확인한다. 실제 Windows CLI 초기 요청에서도 자동 실행 prefix를 제거한 앱 인자를 검사한다.
 
+`windows-shell-activation.test.ts`는 무작위 이름의 URL scheme과 파일 확장자를 `HKCU\Software\Classes`에 설치
+등록과 같은 모양(`"실행 파일" ... "%1"`)으로 쓰고, `Start-Process`(`ShellExecuteEx`)로 열어 셸이 시작한 Bun
+프로세스가 받은 argv와 작업 디렉터리를 확인한다. 공백, `&`, `=`, `%20`, `%PATH%`, `^`, `!`, 한글과 이모지가 든 URL과
+파일 경로는 한 인자로 그대로 도착한다. URL 끝의 `\`는 닫는 따옴표를 이스케이프해 `"`로 바뀌고, URL 안의 `"`는
+인자를 끊어 `--extra` 같은 추가 인자가 된다. 셸이 URL을 이스케이프 없이 대입하기 때문이며 시험은 이 전달 결과를
+그대로 고정한다. `windows-shell-activation-instance.ts`는 같은 등록 명령이 실행 중인 실제 Windows host의 인스턴스
+pipe로 인자를 전달해 onOpen의 argv, cwd와 onOpenUrls의 정규화된 URL, 파일 URL로 도착하는지 확인한다. 사용자의 기본 앱
+선택(UserChoice), SmartScreen과 보안 경고 대화상자, 브라우저가 링크를 여는 경로는 확인하지 않는다. 시험은 이름이 무작위인
+키만 만들고 시험이 끝나면 지우며 기존 사용자 등록을 바꾸지 않는다. 시험 프로세스가 강제 종료되면 키가 남을 수 있고, 인스턴스 시험은 부모 프로세스가 키를 지운다.
+
 공식 플러그인은 `src/index.ts`에서 선언을 조립하고 `src/contract.ts`에 계약을 둔다.
 `api/plugin-contracts.test.ts`는 OS 자원 없이 네이티브 입력 검증을 실행해 모르는 작업의
 UNSUPPORTED, 잘못된 입력의 INVALID_ARGUMENT과 입력 스냅샷을 확인한다.

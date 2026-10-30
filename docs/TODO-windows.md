@@ -431,7 +431,7 @@ Windows의 비활성화 기록을 수정하지 않는다.
   이모지 패널은 Windows에 공식 API가 없고 Win+. 키 합성만 가능하므로 지원하지 않는다.
   Windows 실행은 `host:windows`의 `windows-os` 회귀에서 호출 성공만 확인하며 실제 소리 출력은 검증하지 않는다.
 - [x] URL scheme을 등록, 해제하고 기본 처리 앱 여부를 조회한다.
-  설치의 opt-in 처리 후보 등록과 제거는 구현했다. `opener.registerUrlScheme`, `unregisterUrlScheme`, `isUrlSchemeRegistered`는 `HKCU\Software\Classes`에 이 앱의 소유 표식과 명령을 쓰고, 조회는 그 등록이 온전한지만 읽는다. 사용자의 기본 앱 선택을 반영한 실제 처리 앱은 `getUrlHandler`가 알려 준다.
+  설치의 opt-in 처리 후보 등록과 제거는 구현했다. `opener.registerUrlScheme`, `unregisterUrlScheme`, `isUrlSchemeRegistered`는 `HKCU\Software\Classes`에 이 앱의 소유 표식과 명령을 쓰고, 조회는 그 등록이 온전한지만 읽는다. 사용자의 기본 앱 선택을 반영한 실제 처리 앱은 `getUrlHandler`가 알려 준다. Windows CI는 같은 모양의 등록 명령을 셸(`ShellExecuteEx`)로 실행해 argv와 실행 중인 host의 onOpen, onOpenUrls 전달까지 확인한다(`windows-shell-activation.test.ts`).
 - [x] 파일 확장자, MIME, 표시 이름과 앱 EXE의 파일 아이콘을 설치에 등록한다.
   실행 중 앱이 확장자를 등록하는 런타임 API는 제공하지 않는다([ADR 0093](./decisions/0093-runtime-file-association-registration.md)).
 - [x] 설치와 제거에서 앱이 소유한 처리 후보를 정리하고 기존 기본 앱 설정을 존중한다.
