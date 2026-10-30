@@ -1509,6 +1509,9 @@ Windows native 실행기에 포함하며 결과는 `build/windows-webview-titleb
 빌드해 5회 실행하고 시작 시간, 유휴 working set, 패키지 크기, 명령 왕복 지연을
 `build/windows-baseline-results.json`에 기록합니다. 값은 기록만 하며 통과 기준으로 쓰지 않습니다.
 Windows native 실행기에 포함하고, 결과 파일은 `windows-native-diagnostics` 아티팩트에 올라갑니다.
+`lifecycle/windows-sidecar.ts`는 `build.resources`로 실행 파일(Bun 복사본)과 라이선스 파일을 담아 빌드하고,
+패키지된 앱의 backend가 `ctx.app.paths.resources` 경로로 `processes.spawn`을 호출해 그 파일이 실행됐는지
+(출력된 자기 경로가 패키지 안 경로와 같은지) 확인합니다. 설치 파일 설치와 서명은 범위 밖입니다.
 
 `api/window-input-events.test.ts`는 WM_APPCOMMAND의 명령 코드와 장치 비트 분리, 게시하지 않는 코드, 이름 목록의
 도달 가능성, 부호 있는 화면 좌표와 키보드 호출(-1) 처리, 시스템 메뉴 영역 판별 및 두 이벤트의 스키마를 확인한다.

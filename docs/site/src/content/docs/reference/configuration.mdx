@@ -65,6 +65,8 @@ Electron의 `extraResources`나 Tauri의 `bundle.resources`처럼 지정한 파�
 복사 대상에 이미 파일이 있으면 덮어쓰지 않고 빌드를 중단합니다. Windows 8.3 짧은 이름으로 다른 파일을 가리킬 수 있는 `~숫자` 세그먼트도 거부합니다.
 디렉터리 항목은 숨김 파일과 `.env`, `.git` 같은 점 파일도 그대로 복사하므로 필요한 파일만 담은 디렉터리를 선언하세요.
 복사한 파일은 매니페스트 해시 검증 대상이 아닙니다.
+앱과 함께 배포할 실행 파일도 이 항목으로 담고 `ctx.app.paths.resources`에서 만든 경로로 실행합니다.
+서명과 라이선스 고지 규칙은 [process 플러그인](/reference/plugins/process/)을 참고하세요.
 
 웹 도구와 앱 CLI의 스크립트 이름을 구분하세요. 예를 들어 웹 `build`를 `build:web`으로 옮기고 앱의 `build`를 `bunaway build`로 연결합니다.
 웹 `dev`도 `dev:web`으로 구분해 `dev.command`에 연결합니다. 스크립트 이름은 앱에서 정하며 설정의 실행 명령과 일치해야 합니다.

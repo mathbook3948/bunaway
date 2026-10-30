@@ -320,6 +320,7 @@ if (target === "windows-x64") {
       "windows-bun-cli.ts",
       "windows-app-reload.ts",
       "windows-baseline.ts",
+      "windows-sidecar.ts",
       "windows-templates.ts",
       "windows-project-path.ts",
     ]) {
