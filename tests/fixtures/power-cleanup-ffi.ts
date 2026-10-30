@@ -12,6 +12,24 @@ export function ptr(_buffer: ArrayBufferView): number {
   return 1;
 }
 
+/** Pointer readers used only by the session lock query, which this regression never calls. */
+export const read = {
+  ptr(_address: number, _offset: number): number {
+    return 0;
+  },
+  u32(_address: number, _offset: number): number {
+    return 0;
+  },
+};
+
+export function toArrayBuffer(
+  _address: number,
+  _offset: number,
+  length: number,
+): ArrayBuffer {
+  return new ArrayBuffer(length);
+}
+
 export function dlopen(library: string) {
   return {
     symbols: {

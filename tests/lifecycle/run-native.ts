@@ -213,6 +213,7 @@ if (target === "windows-x64") {
           "tests/lifecycle/windows-host-shutdown.test.ts",
           "tests/lifecycle/windows-power.test.ts",
           "tests/lifecycle/windows-power-cpu-speed-limit.test.ts",
+          "tests/lifecycle/windows-power-session-lock.test.ts",
           "tests/lifecycle/windows-power-ui.test.ts",
           "tests/lifecycle/windows-appearance.test.ts",
           "tests/lifecycle/windows-appearance-accessibility.test.ts",

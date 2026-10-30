@@ -9,6 +9,7 @@ import {
   idleTimeSchema,
   MAX_POWER_BLOCKERS,
   type MacosPowerInstance,
+  sessionLockSchema,
   statusSchema,
 } from "#power/contract";
 import type { WindowsPower } from "#power/platforms/windows";
@@ -82,6 +83,11 @@ export const powerOperations = {
     ]),
     handler: ({ thresholdSeconds }, { instance }) =>
       instance.getIdleState(thresholdSeconds),
+  }),
+  isSessionLocked: operation({
+    input: z.null(),
+    output: sessionLockSchema,
+    handler: (_input, { instance }) => instance.isSessionLocked(),
   }),
   startBlocker: operation({
     input: blockerInputSchema,

@@ -1138,6 +1138,11 @@ DIB의 행 방향과 padding, alpha 및 잘못된 profile, mask, 크기를 확�
 public 요청 해제와 활성 rollback 해제가 함께 실패해도 모든 handle을 재시도하고,
 미해제 handle이 있는 동안 DLL을 유지하며 두 단계의 오류를 보고하는지 검사한다.
 `cli/power.test.ts`는 isolated tarball 설치와 UI 어댑터 발견, browser의 FFI 제외를 검사한다.
+`api/power-session-lock.test.ts`는 WTSINFOEXW의 잠금, 해제, 알 수 없는 값, 다른 level과 짧은 버퍼 해석,
+입력과 출력 스키마, 연산별 권한과 macOS 미등록을 검사한다.
+`windows-power-session-lock.test.ts`는 실제 WTSQuerySessionInformationW가 boolean을 돌려주고 200번 반복해도
+같은 값을 유지하며 dispose 뒤 `CANCELLED`로 실패하는지 확인한다. CI는 세션을 실제로 잠글 수 없으므로
+잠긴 상태의 실제 조회는 검증하지 않고, 그 값은 위 해석 시험이 맡는다.
 `windows-power.test.ts`는 실제 GetSystemPowerStatus와 session idle query, PowerCreateRequest,
 system/display 활성 및 GetHandleInformation으로 명시 해제와 종료 시 handle 정리를 확인한다.
 `windows-power-ui.test.ts`는 빌드한 공개 power API에서 실제 UI Worker까지 상태와 idle,
